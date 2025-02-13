@@ -27,7 +27,9 @@ set(CCEC_COMPILER_OPTIONS
     -I${CMAKE_SOURCE_DIR}/include
     -L${ASCEND_HOME_PATH}/lib64
     -Wno-macro-redefined
-    -lruntime -lstdc++ -lascendcl -lm -ltiling_api -lplatform -lc_sec
+    -lruntime -lstdc++ -lascendcl -ltiling_api -lregister -lplatform -lascendalog -ldl
+    -lascendc_runtime -lerror_manager -lprofapi -lge_common_base -lmmpa -lascend_dump -lc_sec
+    -lruntime -lstdc++ -lascendcl
 )
 
 file(GLOB_RECURSE ACOT_INCLUDE_FILES ${CMAKE_SOURCE_DIR}/include/*.hpp)
@@ -52,6 +54,8 @@ foreach(EXAMPLE
     00_basic_matmul
     01_grouped_matmul
     02_optimized_matmul
+    03_gemm # 添加示例代码目录
+    04_gemv_aiv # 添加示例代码目录
 )
-    add_subdirectory(${EXAMPLE})
+add_subdirectory(${EXAMPLE})
 endforeach()

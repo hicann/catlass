@@ -190,6 +190,7 @@ public:
     {
         AscendC::TBuf<AscendC::TPosition::VECIN> tbufVECIN;
         GetTPipePtr()->InitBuffer(tbufVECIN, ArchTag::UB_SIZE);
+        // GetTPipePtr()->InitBuffer(tbufVECIN, ArchTag::UBIN_SIZE);
         tensor = tbufVECIN.Get<uint8_t>();
     }
 };
@@ -206,7 +207,8 @@ public:
     LocalTensorBuffer()
     {
         AscendC::TBuf<AscendC::TPosition::VECOUT> tbufVECOUT;
-        GetTPipePtr()->InitBuffer(tbufVECOUT, ArchTag::UB_SIZE);
+        // GetTPipePtr()->InitBuffer(tbufVECIN, ArchTag::UB_SIZE);
+        GetTPipePtr()->InitBuffer(tbufVECOUT, ArchTag::UBOUT_SIZE);
         tensor = tbufVECOUT.Get<uint8_t>();
     }
 };
@@ -223,7 +225,8 @@ public:
     LocalTensorBuffer()
     {
         AscendC::TBuf<AscendC::TPosition::VECCALC> tbufVECCALC;
-        GetTPipePtr()->InitBuffer(tbufVECCALC, ArchTag::UB_SIZE);
+        // GetTPipePtr()->InitBuffer(tbufVECIN, ArchTag::UB_SIZE);
+        GetTPipePtr()->InitBuffer(tbufVECCALC, ArchTag::UBWS_SIZE);
         tensor = tbufVECCALC.Get<uint8_t>();
     }
 };

@@ -25,8 +25,11 @@ public:
     LocalTensorBuffer<ArchTag, AscendC::TPosition::A2> l0ABuf;
     LocalTensorBuffer<ArchTag, AscendC::TPosition::B2> l0BBuf;
     LocalTensorBuffer<ArchTag, AscendC::TPosition::CO1> l0CBuf;
-    LocalTensorBuffer<ArchTag, AscendC::TPosition::VECCALC> ubBuf;
-
+    LocalTensorBuffer<ArchTag, AscendC::TPosition::VECIN> ubBuf;
+    // LocalTensorBuffer<ArchTag, AscendC::TPosition::VECIN> ubABuf;
+    // LocalTensorBuffer<ArchTag, AscendC::TPosition::VECIN> ubXBuf;
+    // LocalTensorBuffer<ArchTag, AscendC::TPosition::VECOUT> ubYBuf;
+    // LocalTensorBuffer<ArchTag, AscendC::TPosition::VECCALC> ubWBuf;
     ACOT_DEVICE
     Resource()
     {

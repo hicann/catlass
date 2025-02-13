@@ -1,0 +1,2 @@
+add_subdirectory(01_fp16_rm_gemm)
+add_subdirectory(02_bf16_rm_gemm)
