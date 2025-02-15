@@ -1,2 +1,3 @@
 add_subdirectory(01_fp16_rm_gemv_aiv)
+add_subdirectory(01_fp16_cm_gemv_aiv)
 # add_subdirectory(02_bf16_rm_gemm)

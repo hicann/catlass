@@ -60,6 +60,7 @@
 
      
      // Methods
+     //我现在把构造函数blockGemv(resource)放这里
      ACOT_DEVICE
      KernelGemv():resource(), blockGemv(resource) {
      }

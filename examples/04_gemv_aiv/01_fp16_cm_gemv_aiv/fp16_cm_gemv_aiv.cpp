@@ -21,19 +21,19 @@ using namespace acot;
 // 已经进入核函数了
 // 单纯行优先
 ACOT_GLOBAL
-void FP16RMGemvAiv(
+void FP16CMGemvAiv(
     MatmulCoord problemShape,
-    GM_ADDR gmA, layout::RowMajor layoutA,
-    GM_ADDR gmX, layout::RowMajor layoutX,
-    GM_ADDR gmY, layout::RowMajor layoutY
+    __gm__ half* gmA, layout::ColumnMajor layoutA,
+    __gm__ half* gmX, layout::ColumnMajor layoutX,
+    __gm__ half* gmY, layout::ColumnMajor layoutY
 ){
     using ArchTag = arch::AtlasA2;
     using DispatchPolicy = gemv::MmadAtlasA2Pingpong<true>;
-    using UBTileShape = MatmulShape<32, 512, 1>;
+    using UBTileShape = MatmulShape<512, 32, 1>;
 
-    using AType = gemv::GemvType<half, layout::RowMajor>;
-    using XType = gemv::GemvType<half, layout::RowMajor>;
-    using YType = gemv::GemvType<half, layout::RowMajor>;
+    using AType = gemv::GemvType<half, layout::ColumnMajor>;
+    using XType = gemv::GemvType<half, layout::ColumnMajor>;
+    using YType = gemv::GemvType<half, layout::ColumnMajor>;
 
     // 调用block层函数
     using GemvBlock = gemv::block::BlockGemv<DispatchPolicy, UBTileShape, AType, XType, YType>;
@@ -47,13 +47,13 @@ void FP16RMGemvAiv(
 
     // call a kernel
     GemvKernel gemv;
-    
+
     gemv(params);
 
 }
 
 typedef struct Options{
-    const std::string HELPER = "04_gemv_aiv/01_fp16_rm_gemv_aiv m n [device_id]";
+    const std::string HELPER = "04_gemv_aiv/01_fp16_cm_gemv_aiv m n [device_id]";
 
     uint32_t M = 32;
     uint32_t N = 32;
@@ -103,30 +103,30 @@ void Run(Options options){
     size_t sizeX = lenX * sizeof(half);
     size_t sizeY = lenY * sizeof(half);
     
-    layout::RowMajor layoutA{m, n};
-    layout::RowMajor layoutX{n, 1};
-    layout::RowMajor layoutY{m, 1};
+    layout::ColumnMajor layoutA{m, n};
+    layout::ColumnMajor layoutX{n, 1};
+    layout::ColumnMajor layoutY{m, 1};
 
     half* hostA;
     ACL_CHECK(aclrtMallocHost((void**)(&hostA),sizeA));
     ReadFile("./data/input/matrix_gm.bin", sizeA, hostA, sizeA);
-    uint8_t *deviceA{nullptr};
+    half *deviceA{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA, sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
 
     half* hostX;
     ACL_CHECK(aclrtMallocHost((void**)(&hostX), sizeX));
     ReadFile("./data/input/vector_gm.bin", sizeX, hostX, sizeX);
-    uint8_t *deviceX{nullptr};
+    half *deviceX{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceX), sizeX, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceX, sizeX, hostX, sizeX, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceY{nullptr};
+    half *deviceY{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceY), sizeY, ACL_MEM_MALLOC_HUGE_FIRST));
     
     // 获得当前核心数
     auto aicCoreNum = arch::AscendC910B3::MaxBlock;
-    FP16RMGemvAiv<<<aicCoreNum, nullptr, stream>>>(
+    FP16CMGemvAiv<<<aicCoreNum, nullptr, stream>>>(
         options.problemShape,
         deviceA, layoutA,
         deviceX, layoutX,

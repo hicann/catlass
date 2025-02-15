@@ -24,9 +24,6 @@ def compareOutputData(M, N):
         print("Total Count:", allCnt, file=f)
         print("Accuracy: {:.2f}%".format(((allCnt - false_count) / allCnt) * 100), file=f)
         print("===========================================================", file=f)
-        # 找出错误的行数
-        error_rows = np.where(~compare_res)[0]
-        print("错误的行数:", error_rows, file=f)
         # print("\n", file=f)
         # print(h_res.reshape((M,N)), file=f)
         # print("\n", file=f)

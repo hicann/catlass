@@ -155,11 +155,12 @@
                     (ElementY)0.0,
                     actualShape.m()
                 );
-                AscendC::PipeBarrier<PIPE_V>();
+                
             }
 
             AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((event_t)(UbInAEventList[UbInListId]));  
             AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((event_t)(UbInXEventList[UbInListId]));
+            AscendC::PipeBarrier<PIPE_V>();
             tileVmad(
                 UbYTensorList[UbOutListId],
                 UbXTensorList[UbInListId],
