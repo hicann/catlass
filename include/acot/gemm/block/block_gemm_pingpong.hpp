@@ -92,9 +92,6 @@ public:
             // 使能MTE2搬运单元
             AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)i);
             AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(i + 2));
-        }
-        // 安排L0空间的流水
-        for(uint32_t i = 0; i < STAGES; i++){
             // 使能MTE1搬运单元
             AscendC::SetFlag<AscendC::HardEvent::M_MTE1>((int32_t)i);
             AscendC::SetFlag<AscendC::HardEvent::M_MTE1>((int32_t)(i + 2));
@@ -109,9 +106,6 @@ public:
             // 使能MTE1搬运单元
             AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>((int32_t)i);
             AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>((int32_t)(i + 2));
-        }
-        // 安排L1空间的流水
-        for(uint32_t i = 0; i < STAGES; i++){
             // 使能MTE2搬运单元
             AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)i);
             AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(i + 2));
