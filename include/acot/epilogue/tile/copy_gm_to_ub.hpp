@@ -75,6 +75,7 @@ struct CopyGm2Ub<arch::AscendC910B3, gemm::GemmType<Element, layout::RowMajor>> 
         uint32_t MActual = layoutSrc.shape(0);
         uint32_t NActual = layoutSrc.shape(1);
         uint32_t stride = layoutSrc.stride(0); // RowMajor
+        // uint32_t NRound = layoutDst.shape(1);  // 方法2
         uint32_t NRound = RoundUp(NActual, NAlignment);
         // AscendC::DataCopyParams params;
         // for(uint32_t MIdx = 0; MIdx < MActual; MIdx++){ // 一行一行的搬运

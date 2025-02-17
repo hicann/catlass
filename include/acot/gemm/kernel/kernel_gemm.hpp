@@ -28,6 +28,11 @@ public:
     static constexpr bool RowOrColumn = std::is_same<LayoutA, acot::layout::RowMajor>::value && std::is_same<LayoutB, acot::layout::RowMajor>::value;
     using TileScheduler = TileScheduler_;
 
+    const uint32_t maxMPerBlock = L1TileShape::M;
+    const uint32_t maxNPerBlock = L1TileShape::N;
+    const uint32_t cSize = maxMPerBlock * maxNPerBlock;
+    const uint32_t l0CBlockNum = ArchTag::L0CSize / (cSize * sizeof(ElementAccumulator));
+
     typedef struct Params{
         MatmulCoord problemShape;
         GM_ADDR ptrA;
@@ -49,7 +54,18 @@ public:
     }Params;
 
     ACOT_DEVICE
-    KernelGemm(){}
+    KernelGemm(){
+        // for(uint32_t i = 0; i < l0CBlockNum; i++){
+        //     AscendC::SetFlag<AscendC::HardEvent::FIX_M>((int32_t)i);
+        // }
+    }
+
+    ACOT_DEVICE
+    ~KernelGemm(){
+        // for(uint32_t i = 0; i < l0CBlockNum; i++){
+        //     AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((int32_t)i);
+        // }
+    }
 
     template<int32_t CORE_TYPE = g_coreType>
     ACOT_DEVICE
@@ -99,6 +115,7 @@ public:
                     actualShape, singleIdx
                 );
             }
+            // AscendC::PipeBarrier<PIPE_ALL>();
             AscendC::SetFlag<AscendC::HardEvent::FIX_M>((int32_t)(loopIdx % l0CBlockNum));
             singleIdx += 1;
         }

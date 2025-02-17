@@ -25,8 +25,8 @@ def calc_expect_func(M, N, K):
     # print(C)
     tmp = np.matmul(A.astype(DATA_TYPE),B.astype(DATA_TYPE)).astype(NP_DATA_TYPE)
     # D = alpha * A * B + beta * C
-    # expect_res = np.array(tmp * alpha.astype(DATA_TYPE) + beta.astype(DATA_TYPE) * C.astype(DATA_TYPE)).astype(NP_DATA_TYPE)
-    expect_res = np.array(beta.astype(NP_DATA_TYPE) * C.astype(NP_DATA_TYPE)).astype(NP_DATA_TYPE)
+    expect_res = np.array(tmp * alpha.astype(DATA_TYPE) + beta.astype(DATA_TYPE) * C.astype(DATA_TYPE)).astype(NP_DATA_TYPE)
+    # expect_res = np.array(beta.astype(NP_DATA_TYPE) * C.astype(NP_DATA_TYPE)).astype(NP_DATA_TYPE)
     # expect_res = C
     expect_res.tofile("./data/output/exp_res.bin")
 

@@ -10,8 +10,8 @@ def calc_expect_func(M, N, K):
     matSizeA = (K, M)
     matSizeB = (N, K) # 首先全是行优先
     matSizeC = (N, M)
-    alpha = np.random.uniform(-1, 1, 1).astype(NP_DATA_TYPE)
-    beta  = np.random.uniform(-1, 1, 1).astype(NP_DATA_TYPE)
+    alpha = np.random.uniform(0, 1, 1).astype(NP_DATA_TYPE)
+    beta  = np.random.uniform(0, 1, 1).astype(NP_DATA_TYPE)
     A = np.random.uniform(-5,5,size=matSizeA).astype(NP_DATA_TYPE)
     B = np.random.uniform(-5,5,size=matSizeB).astype(NP_DATA_TYPE)
     C = np.random.uniform(-5,5,size=matSizeC).astype(NP_DATA_TYPE)
@@ -25,8 +25,8 @@ def calc_expect_func(M, N, K):
     # print(C)
     tmp = np.matmul(B.astype(DATA_TYPE),A.astype(DATA_TYPE)).astype(NP_DATA_TYPE)
     # D = alpha * B * A + beta * C
-    # expect_res = np.array(tmp * alpha.astype(DATA_TYPE) + beta.astype(DATA_TYPE) * C.astype(DATA_TYPE)).astype(NP_DATA_TYPE)
-    expect_res = np.array(beta.astype(NP_DATA_TYPE) * C.astype(NP_DATA_TYPE)).astype(NP_DATA_TYPE)
+    expect_res = np.array(tmp * alpha.astype(DATA_TYPE) + beta.astype(DATA_TYPE) * C.astype(DATA_TYPE)).astype(NP_DATA_TYPE)
+    # expect_res = np.array(beta.astype(NP_DATA_TYPE) * C.astype(NP_DATA_TYPE)).astype(NP_DATA_TYPE)
     expect_res.tofile("./data/output/exp_res.bin")
 
 

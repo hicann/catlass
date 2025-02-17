@@ -10,8 +10,8 @@
 
 set(ACOT_EXAMPLES_COMMON_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/common)
 set(CCEC_COMPILER_OPTIONS
-    # -O2 -std=c++17 -xcce --cce-aicore-arch=dav-c220
-    -O2 -std=c++17 -xcce --cce-aicore-arch=dav-c220-vec # 只能启动AIV核心
+    -O2 -std=c++17 -xcce --cce-aicore-arch=dav-c220
+    # -O2 -std=c++17 -xcce --cce-aicore-arch=dav-c220-vec # 只能启动AIV核心
     -mllvm -cce-aicore-stack-size=0x8000
     -mllvm -cce-aicore-function-stack-size=0x8000
     -mllvm -cce-aicore-record-overflow=true

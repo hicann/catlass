@@ -16,24 +16,27 @@ def compareOutputData(M, N, K):
         h_exp = np.fromfile("./data/output/exp_res.bin", dtype=NP_DATA_TYPE)
         h_res = np.fromfile("./data/output/our_res.bin", dtype=NP_DATA_TYPE)
         
-        allCnt = M * N
-        false_count = 0
-        errors = []
-        # 古法比较
-        for i in range(allCnt):
-            diff = abs(h_exp[i] - h_res[i])
-            tolerance = 1e-3 + 1e-3 * abs(h_exp[i])
-            if diff > tolerance:
-                false_count += 1
-            errors.append(diff)
+        # 先转换为 float32 避免 bfloat16 计算精度问题
+        h_exp = h_exp.astype(np.float32)
+        h_res = h_res.astype(np.float32)
         
-        errors = np.array(errors)
+        allCnt = M * N
+        compare_res = np.isclose(h_exp, h_res, atol=1e-3, rtol=1e-3, equal_nan=False)
+        
+        false_count = np.sum(~compare_res)  # 误差超过阈值的个数
+        # errors = np.abs(h_exp - h_res)
+        # mean_error = np.mean(errors)
+        # max_error = np.max(errors)
+        # std_error = np.std(errors)
         accuracy = ((allCnt - false_count) / allCnt) * 100
         
         print("===========================================================", file=f)
         print("errorCnt:", false_count, file=f)
         print("Total Count:", allCnt, file=f)
         print("Accuracy: {:.2f}%".format(accuracy), file=f)
+        # print("Mean Error: {:.6f}".format(mean_error), file=f)
+        # print("Max Error: {:.6f}".format(max_error), file=f)
+        # print("Std Dev Error: {:.6f}".format(std_error), file=f)
         print("===========================================================", file=f)
     
     print("--- Test End ---\n")

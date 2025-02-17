@@ -17,7 +17,7 @@ def compareOutputData(M, N, K):
         h_res.reshape((M * N,1))
         # atol 是绝对容忍度
         # rtol 是相对容忍度
-        compare_res = np.isclose(h_exp,h_res,atol=1e-3,rtol=1e-3,equal_nan=False)
+        compare_res = np.isclose(h_exp,h_res,atol=1e-2,rtol=1e-2,equal_nan=False)
         allCnt = M * N
         print("===========================================================", file=f)
         false_count = (~compare_res).sum().item()

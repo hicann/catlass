@@ -1,7 +1,7 @@
 import numpy as np
 import argparse
 import sys
-DATA_TYPE = float
+DATA_TYPE = np.float32
 NP_DATA_TYPE = np.float32
 
 # 定义生成数据函数

@@ -8,6 +8,7 @@
 #include "acot/matmul_coord.hpp"
 #include "acot/gemm/dispatch_policy.hpp"
 
+// 流水修改
 namespace acot::gemm::block{
 template<
     bool ENABLE_UNIT_FLAG_,
@@ -88,28 +89,28 @@ public:
         layoutC = layoutC_;
         Resource();
         // 安排L1空间的流水
-        for(uint32_t i = 0; i < STAGES; i++){
-            // 使能MTE2搬运单元
-            AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)i);
-            AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(i + 2));
-            // 使能MTE1搬运单元
-            AscendC::SetFlag<AscendC::HardEvent::M_MTE1>((int32_t)i);
-            AscendC::SetFlag<AscendC::HardEvent::M_MTE1>((int32_t)(i + 2));
-        }
+        // for(uint32_t i = 0; i < STAGES; i++){
+        //     // 使能MTE2搬运单元
+        //     AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)i);
+        //     AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(i + 2));
+        //     // 使能MTE1搬运单元
+        //     AscendC::SetFlag<AscendC::HardEvent::M_MTE1>((int32_t)i);
+        //     AscendC::SetFlag<AscendC::HardEvent::M_MTE1>((int32_t)(i + 2));
+        // }
     }
 
     // destroy function
     ACOT_DEVICE
     ~BlockGemm(){
         // 安排L0空间的流水
-        for(uint32_t i = 0; i < STAGES; i++){
-            // 使能MTE1搬运单元
-            AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>((int32_t)i);
-            AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>((int32_t)(i + 2));
-            // 使能MTE2搬运单元
-            AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)i);
-            AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(i + 2));
-        }
+        // for(uint32_t i = 0; i < STAGES; i++){
+        //     // 使能MTE1搬运单元
+        //     AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>((int32_t)i);
+        //     AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>((int32_t)(i + 2));
+        //     // 使能MTE2搬运单元
+        //     AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)i);
+        //     AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(i + 2));
+        // }
         // 释放内存
         pipe.Destroy();
     }
@@ -192,6 +193,14 @@ private:
         MatmulCoord actualShape, // 传递真实矩阵大小
         uint32_t singleIdx
     ){
+        for(uint32_t i = 0; i < STAGES; i++){
+            // 使能MTE2搬运单元
+            AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)i);
+            AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(i + 2));
+            // 使能MTE1搬运单元
+            AscendC::SetFlag<AscendC::HardEvent::M_MTE1>((int32_t)i);
+            AscendC::SetFlag<AscendC::HardEvent::M_MTE1>((int32_t)(i + 2));
+        }
         // 不管是行优先还是列优先都是按照K方向进行切割的
         if constexpr (RowOrColumn){
             // 先实现行优先
@@ -277,17 +286,27 @@ private:
                         KL0Actual,
                         (KIdx == 0) && (KL0Idx == 0)
                     );
+                    AscendC::PipeBarrier<PIPE_ALL>();
                     AscendC::SetFlag<AscendC::HardEvent::M_MTE1>((int32_t)(KL0Idx % STAGES));
                     AscendC::SetFlag<AscendC::HardEvent::M_MTE1>((int32_t)(KL0Idx % STAGES + 2));
                 }
                 // 方便下次循环的使用
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(KIdx % STAGES));
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(KIdx % STAGES + 2));
-                if(KIdx == KLoops - 1){
-                    // 最后一个循环节点，进行搬运活动
-                    AscendC::SetFlag<AscendC::HardEvent::M_FIX>((int32_t)-1);
-                }
+                // if(KIdx == KLoops - 1){
+                //     // 最后一个循环节点，进行搬运活动
+                //     AscendC::SetFlag<AscendC::HardEvent::M_FIX>((int32_t)-1);
+                // }
             }
+            for(uint32_t i = 0; i < STAGES; i++){
+                // 使能MTE1搬运单元
+                AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>((int32_t)i);
+                AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>((int32_t)(i + 2));
+                // 使能MTE2搬运单元
+                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)i);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(i + 2));
+            }
+            AscendC::SetFlag<AscendC::HardEvent::M_FIX>((int32_t)-1);
             AscendC::WaitFlag<AscendC::HardEvent::M_FIX>((int32_t)-1);
             LayoutC layoutBlock = layoutC.GetTileLayout(MakeCoord(actualShape.m(), actualShape.n()));
             copyL0CToGm(
@@ -373,17 +392,27 @@ private:
                         KL0Actual,
                         (KIdx == 0) && (KL0Idx == 0)
                     );
+                    AscendC::PipeBarrier<PIPE_ALL>();
                     AscendC::SetFlag<AscendC::HardEvent::M_MTE1>((int32_t)(KL0Idx % STAGES));
                     AscendC::SetFlag<AscendC::HardEvent::M_MTE1>((int32_t)(KL0Idx % STAGES + 2));
                 }
                 // 方便下次循环的使用
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(KIdx % STAGES));
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(KIdx % STAGES + 2));
-                if(KIdx == KLoops - 1){
-                    // 最后一个循环节点，进行搬运活动
-                    AscendC::SetFlag<AscendC::HardEvent::M_FIX>((int32_t)-1);
-                }
+                // if(KIdx == KLoops - 1){
+                //     // 最后一个循环节点，进行搬运活动
+                //     AscendC::SetFlag<AscendC::HardEvent::M_FIX>((int32_t)-1);
+                // }
             }
+            for(uint32_t i = 0; i < STAGES; i++){
+                // 使能MTE1搬运单元
+                AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>((int32_t)i);
+                AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>((int32_t)(i + 2));
+                // 使能MTE2搬运单元
+                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)i);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(i + 2));
+            }
+            AscendC::SetFlag<AscendC::HardEvent::M_FIX>((int32_t)-1);
             AscendC::WaitFlag<AscendC::HardEvent::M_FIX>((int32_t)-1);
             LayoutC layoutBlock = layoutC.GetTileLayout(MakeCoord(actualShape.m(), actualShape.n()));
             copyL0CToGm(
