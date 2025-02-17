@@ -9,7 +9,7 @@
 
 
 
-acot_example_add_executable(
+actlass_example_add_executable(
     00_basic_matmul
     basic_matmul.cpp
 )

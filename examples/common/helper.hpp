@@ -17,21 +17,25 @@
 #include "tiling/platform/platform_ascendc.h"
 
 // Macro function for unwinding acl errors.
-#define ACL_CHECK(status)                                                                    \
-    do {                                                                                     \
-        aclError error = status;                                                             \
-        if (error != ACL_ERROR_NONE) {                                                       \
-            std::cerr << __FILE__ << ":" << __LINE__ << " aclError:" << error << std::endl;  \
-        }                                                                                    \
+#define ACL_CHECK(status)                                                                   \
+    do                                                                                      \
+    {                                                                                       \
+        aclError error = status;                                                            \
+        if (error != ACL_ERROR_NONE)                                                        \
+        {                                                                                   \
+            std::cerr << __FILE__ << ":" << __LINE__ << " aclError:" << error << std::endl; \
+        }                                                                                   \
     } while (0)
 
 // Macro function for unwinding rt errors.
-#define RT_CHECK(status)                                                                     \
-    do {                                                                                     \
-        rtError_t error = status;                                                            \
-        if (error != RT_ERROR_NONE) {                                                        \
-            std::cerr << __FILE__ << ":" << __LINE__ << " rtError:" << error << std::endl;   \
-        }                                                                                    \
+#define RT_CHECK(status)                                                                   \
+    do                                                                                     \
+    {                                                                                      \
+        rtError_t error = status;                                                          \
+        if (error != RT_ERROR_NONE)                                                        \
+        {                                                                                  \
+            std::cerr << __FILE__ << ":" << __LINE__ << " rtError:" << error << std::endl; \
+        }                                                                                  \
     } while (0)
 
-#endif  // EXAMPLES_COMMON_HELPER_HPP
+#endif // EXAMPLES_COMMON_HELPER_HPP

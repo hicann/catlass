@@ -14,16 +14,16 @@
 #include "helper.hpp"
 #include "golden.hpp"
 
-#include "acot/acot.hpp"
-#include "acot/arch/arch.hpp"
-#include "acot/matmul/block/block_mmad.hpp"
-#include "acot/matmul/block/block_swizzle.hpp"
-#include "acot/matmul/dispatch_policy.hpp"
-#include "acot/matmul/kernel/grouped_matmul.hpp"
-#include "acot/matmul/matmul_type.hpp"
-#include "acot/layout/layout.hpp"
+#include "actlass/actlass.hpp"
+#include "actlass/arch/arch.hpp"
+#include "actlass/matmul/block/block_mmad.hpp"
+#include "actlass/matmul/block/block_swizzle.hpp"
+#include "actlass/matmul/dispatch_policy.hpp"
+#include "actlass/matmul/kernel/grouped_matmul.hpp"
+#include "actlass/matmul/matmul_type.hpp"
+#include "actlass/layout/layout.hpp"
 
-using namespace acot;
+using namespace actlass;
 
 constexpr float DATA_UPPER_BOUND = 5;
 constexpr float DATA_LOWER_BOUND = -5;
@@ -33,7 +33,7 @@ template <
     class LayoutB,
     class LayoutC
 >
-ACOT_GLOBAL
+ACTLASS_GLOBAL
 void GroupedMatmul(
     uint32_t problemCount, GM_ADDR ptrProblemShape,
     GM_ADDR ptrA, GM_ADDR ptrLayoutA,

@@ -13,23 +13,23 @@
 #include "helper.hpp"
 #include "golden.hpp"
 
-#include "acot/acot.hpp"
-#include "acot/arch/arch.hpp"
-#include "acot/matmul/block/block_mmad.hpp"
-#include "acot/matmul/block/block_swizzle.hpp"
-#include "acot/matmul/dispatch_policy.hpp"
-#include "acot/matmul/kernel/matmul_universal.hpp"
-#include "acot/matmul/matmul_type.hpp"
-#include "acot/layout/layout.hpp"
+#include "actlass/actlass.hpp"
+#include "actlass/arch/arch.hpp"
+#include "actlass/matmul/block/block_mmad.hpp"
+#include "actlass/matmul/block/block_swizzle.hpp"
+#include "actlass/matmul/dispatch_policy.hpp"
+#include "actlass/matmul/kernel/matmul_universal.hpp"
+#include "actlass/matmul/matmul_type.hpp"
+#include "actlass/layout/layout.hpp"
 
-using namespace acot;
+using namespace actlass;
 
 template <
     class LayoutA,
     class LayoutB,
     class LayoutC
 >
-ACOT_GLOBAL
+ACTLASS_GLOBAL
 void BasicMatmul(
     MatmulCoord problemShape,
     GM_ADDR gmA, LayoutA layoutA,
@@ -86,8 +86,8 @@ struct Options {
 
     int Parse(int argc, const char **argv)
     {
-        enum ArgsIndex {
-            M_INDEX = 1,
+        enum ArgsIndex {    //输入参数的位置，3个必选参数，1个可选参数(device_id)
+            M_INDEX = 1,    //表示命令行参数中的第1个参数（索引从0开始，argv[0]通常为程序名称）
             N_INDEX,
             K_INDEX,
             DEVICE_ID_INDEX,

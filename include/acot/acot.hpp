@@ -17,13 +17,14 @@
 #include "acot/detail/dependent_false.hpp"
 #include "acot/detail/macros.hpp"
 
-namespace acot {
+namespace acot
+{
 
-constexpr uint32_t BYTE_PER_BLK = 32;
-constexpr uint32_t BYTE_PER_C0 = 32;
-constexpr uint32_t BYTE_PER_FRACTAL = 512;
-constexpr uint32_t C0_NUM_PER_FRACTAL = 16;
+    constexpr uint32_t BYTE_PER_BLK = 32;
+    constexpr uint32_t BYTE_PER_C0 = 32;
+    constexpr uint32_t BYTE_PER_FRACTAL = 512;
+    constexpr uint32_t C0_NUM_PER_FRACTAL = 16;
 
-}  // namespace acot
+} // namespace acot
 
-#endif  // ACOT_ACOT_HPP
+#endif // ACOT_ACOT_HPP

@@ -1,136 +1,136 @@
-/*
- * Copyright (c) 2024 Huawei Technologies Co., Ltd.
- * This file is a part of the CANN Open Software.
- * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR dataA PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
- */
-#ifndef EXAMPLES_COMMON_GOLDEN_MATMUL_HPP
-#define EXAMPLES_COMMON_GOLDEN_MATMUL_HPP
+// /*
+//  * Copyright (c) 2024 Huawei Technologies Co., Ltd.
+//  * This file is a part of the CANN Open Software.
+//  * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
+//  * Please refer to the License for details. You may not use this file except in compliance with the License.
+//  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+//  * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR dataA PARTICULAR PURPOSE.
+//  * See LICENSE in the root of the software repository for the full text of the License.
+//  */
+// #ifndef EXAMPLES_COMMON_GOLDEN_MATMUL_HPP
+// #define EXAMPLES_COMMON_GOLDEN_MATMUL_HPP
 
-#include <vector>
+// #include <vector>
 
-#include "acot/layout/layout.hpp"
+// #include "acot/layout/layout.hpp"
 
-namespace acot::golden {
+// namespace acot::golden {
 
-// simple matmul
-template<class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementGolden, class LayoutGolden>
-void ComputeMatmul(
-    const MatmulCoord &problemShape,
-    const std::vector<ElementA> &dataA, const LayoutA &layoutA,
-    const std::vector<ElementB> &dataB, const LayoutB &layoutB,
-    std::vector<ElementGolden> &dataGolden, const LayoutGolden &layoutGolden
-)
-{
-    for (uint32_t i = 0; i < problemShape.m(); ++i) {
-        for (uint32_t j = 0; j < problemShape.n(); ++j) {
-            size_t offsetGolden = layoutGolden.GetOffset(MakeCoord(i, j));
-            ElementGolden accumaulator = 0;
-            for (uint32_t k = 0; k < problemShape.k(); ++k) {
-                size_t offsetA = layoutA.GetOffset(MakeCoord(i, k));
-                size_t offsetB = layoutB.GetOffset(MakeCoord(k, j));
-                accumaulator += static_cast<ElementGolden>(dataA[offsetA]) * static_cast<ElementGolden>(dataB[offsetB]);
-            }
-            dataGolden[offsetGolden] = static_cast<ElementGolden>(accumaulator);
-        }
-    }
-}
+// // simple matmul
+// template<class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementGolden, class LayoutGolden>
+// void ComputeMatmul(
+//     const MatmulCoord &problemShape,
+//     const std::vector<ElementA> &dataA, const LayoutA &layoutA,
+//     const std::vector<ElementB> &dataB, const LayoutB &layoutB,
+//     std::vector<ElementGolden> &dataGolden, const LayoutGolden &layoutGolden
+// )
+// {
+//     for (uint32_t i = 0; i < problemShape.m(); ++i) {
+//         for (uint32_t j = 0; j < problemShape.n(); ++j) {
+//             size_t offsetGolden = layoutGolden.GetOffset(MakeCoord(i, j));
+//             ElementGolden accumaulator = 0;
+//             for (uint32_t k = 0; k < problemShape.k(); ++k) {
+//                 size_t offsetA = layoutA.GetOffset(MakeCoord(i, k));
+//                 size_t offsetB = layoutB.GetOffset(MakeCoord(k, j));
+//                 accumaulator += static_cast<ElementGolden>(dataA[offsetA]) * static_cast<ElementGolden>(dataB[offsetB]);
+//             }
+//             dataGolden[offsetGolden] = static_cast<ElementGolden>(accumaulator);
+//         }
+//     }
+// }
 
-// simple batched matmul
-template<class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementGolden, class LayoutGolden>
-void ComputeBatchedMatmul(
-    const uint32_t batchedCount, const MatmulCoord &problemShape,
-    const std::vector<ElementA> &dataA, const LayoutA &layoutA,
-    const std::vector<ElementB> &dataB, const LayoutB &layoutB,
-    std::vector<ElementGolden> &dataC, const LayoutGolden &layoutGolden
-)
-{
-    for (uint32_t batchId = 0; batchId < batchedCount; ++batchId) {
-        size_t batchOffsetA = static_cast<size_t>(problemShape.m()) * problemShape.k() * batchId;
-        size_t batchOffsetB = static_cast<size_t>(problemShape.k()) * problemShape.n() * batchId;
-        size_t batchoffsetGolden = static_cast<size_t>(problemShape.m()) * problemShape.n() * batchId;
-        for (uint32_t i = 0; i < problemShape.m(); ++i) {
-            for (uint32_t j = 0; j < problemShape.n(); ++j) {
-                size_t offsetGolden = layoutGolden.GetOffset(MakeCoord(i, j)) + batchoffsetGolden;
-                ElementGolden accumaulator = 0;
-                for (uint32_t k = 0; k < problemShape.k(); ++k) {
-                    size_t offsetA = layoutA.GetOffset(MakeCoord(i, k)) + batchOffsetA;
-                    size_t offsetB = layoutB.GetOffset(MakeCoord(k, j)) + batchOffsetB;
-                    accumaulator += static_cast<ElementGolden>(dataA[offsetA]) *
-                        static_cast<ElementGolden>(dataB[offsetB]);
-                }
-                dataC[offsetGolden] = static_cast<ElementGolden>(accumaulator);
-            }
-        }
-    }
-}
+// // simple batched matmul
+// template<class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementGolden, class LayoutGolden>
+// void ComputeBatchedMatmul(
+//     const uint32_t batchedCount, const MatmulCoord &problemShape,
+//     const std::vector<ElementA> &dataA, const LayoutA &layoutA,
+//     const std::vector<ElementB> &dataB, const LayoutB &layoutB,
+//     std::vector<ElementGolden> &dataC, const LayoutGolden &layoutGolden
+// )
+// {
+//     for (uint32_t batchId = 0; batchId < batchedCount; ++batchId) {
+//         size_t batchOffsetA = static_cast<size_t>(problemShape.m()) * problemShape.k() * batchId;
+//         size_t batchOffsetB = static_cast<size_t>(problemShape.k()) * problemShape.n() * batchId;
+//         size_t batchoffsetGolden = static_cast<size_t>(problemShape.m()) * problemShape.n() * batchId;
+//         for (uint32_t i = 0; i < problemShape.m(); ++i) {
+//             for (uint32_t j = 0; j < problemShape.n(); ++j) {
+//                 size_t offsetGolden = layoutGolden.GetOffset(MakeCoord(i, j)) + batchoffsetGolden;
+//                 ElementGolden accumaulator = 0;
+//                 for (uint32_t k = 0; k < problemShape.k(); ++k) {
+//                     size_t offsetA = layoutA.GetOffset(MakeCoord(i, k)) + batchOffsetA;
+//                     size_t offsetB = layoutB.GetOffset(MakeCoord(k, j)) + batchOffsetB;
+//                     accumaulator += static_cast<ElementGolden>(dataA[offsetA]) *
+//                         static_cast<ElementGolden>(dataB[offsetB]);
+//                 }
+//                 dataC[offsetGolden] = static_cast<ElementGolden>(accumaulator);
+//             }
+//         }
+//     }
+// }
 
-// simple grouped matmul
-template<class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementGolden, class LayoutGolden>
-void ComputeGroupedMatmul(
-    uint32_t problemCount,
-    const std::vector<MatmulCoord> &problemShapeList,
-    const std::vector<ElementA> &dataA, const std::vector<LayoutA> &layoutAList,
-    const std::vector<ElementB> &dataB, const std::vector<LayoutB> &layoutBList,
-    std::vector<ElementGolden> &dataGolden, const std::vector<LayoutGolden> &layoutGoldenList
-)
-{
-    size_t inGroupOffsetA = 0;
-    size_t inGroupOffsetB = 0;
-    size_t inGroupOffsetGolden = 0;
-    for (uint32_t inGroupId = 0; inGroupId < problemCount; ++inGroupId) {
-        MatmulCoord problemShape = problemShapeList[inGroupId];
-        for (uint32_t i = 0; i < problemShape.m(); ++i) {
-            for (uint32_t j = 0; j < problemShape.n(); ++j) {
-                size_t offsetGolden = inGroupOffsetGolden + layoutGoldenList[inGroupId].GetOffset(MakeCoord(i, j));
-                ElementGolden accumaulator = 0;
-                for (uint32_t k = 0; k < problemShape.k(); ++k) {
-                    size_t offsetA = inGroupOffsetA + layoutAList[inGroupId].GetOffset(MakeCoord(i, k));
-                    size_t offsetB = inGroupOffsetB + layoutBList[inGroupId].GetOffset(MakeCoord(k, j));
-                    accumaulator += static_cast<ElementGolden>(dataA[offsetA]) *
-                        static_cast<ElementGolden>(dataB[offsetB]);
-                }
-                dataGolden[offsetGolden] = static_cast<ElementGolden>(accumaulator);
-            }
-        }
-        inGroupOffsetA += static_cast<size_t>(problemShape.m()) * problemShape.k();
-        inGroupOffsetB += static_cast<size_t>(problemShape.k()) * problemShape.n();
-        inGroupOffsetGolden += static_cast<size_t>(problemShape.m()) * problemShape.n();
-    }
-}
+// // simple grouped matmul
+// template<class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementGolden, class LayoutGolden>
+// void ComputeGroupedMatmul(
+//     uint32_t problemCount,
+//     const std::vector<MatmulCoord> &problemShapeList,
+//     const std::vector<ElementA> &dataA, const std::vector<LayoutA> &layoutAList,
+//     const std::vector<ElementB> &dataB, const std::vector<LayoutB> &layoutBList,
+//     std::vector<ElementGolden> &dataGolden, const std::vector<LayoutGolden> &layoutGoldenList
+// )
+// {
+//     size_t inGroupOffsetA = 0;
+//     size_t inGroupOffsetB = 0;
+//     size_t inGroupOffsetGolden = 0;
+//     for (uint32_t inGroupId = 0; inGroupId < problemCount; ++inGroupId) {
+//         MatmulCoord problemShape = problemShapeList[inGroupId];
+//         for (uint32_t i = 0; i < problemShape.m(); ++i) {
+//             for (uint32_t j = 0; j < problemShape.n(); ++j) {
+//                 size_t offsetGolden = inGroupOffsetGolden + layoutGoldenList[inGroupId].GetOffset(MakeCoord(i, j));
+//                 ElementGolden accumaulator = 0;
+//                 for (uint32_t k = 0; k < problemShape.k(); ++k) {
+//                     size_t offsetA = inGroupOffsetA + layoutAList[inGroupId].GetOffset(MakeCoord(i, k));
+//                     size_t offsetB = inGroupOffsetB + layoutBList[inGroupId].GetOffset(MakeCoord(k, j));
+//                     accumaulator += static_cast<ElementGolden>(dataA[offsetA]) *
+//                         static_cast<ElementGolden>(dataB[offsetB]);
+//                 }
+//                 dataGolden[offsetGolden] = static_cast<ElementGolden>(accumaulator);
+//             }
+//         }
+//         inGroupOffsetA += static_cast<size_t>(problemShape.m()) * problemShape.k();
+//         inGroupOffsetB += static_cast<size_t>(problemShape.k()) * problemShape.n();
+//         inGroupOffsetGolden += static_cast<size_t>(problemShape.m()) * problemShape.n();
+//     }
+// }
 
-// matmul add
-template<
-    class ElementA, class LayoutA,
-    class ElementB, class LayoutB,
-    class ElementX,  // Layout X must be same as LayoutGolden
-    class ElementGolden, class LayoutGolden
->
-void ComputeMatmulElemWiseAdd(
-    const MatmulCoord &problemShape,
-    const std::vector<ElementA> &dataA, const LayoutA &layoutA,
-    const std::vector<ElementB> &dataB, const LayoutB &layoutB,
-    const std::vector<ElementX> &dataX,  // layoutX must be same as layoutGolden
-    std::vector<ElementGolden> &dataGolden, const LayoutGolden &layoutGolden
-)
-{
-    for (uint32_t i = 0; i < problemShape.m(); ++i) {
-        for (uint32_t j = 0; j < problemShape.n(); ++j) {
-            ElementGolden accumaulator = 0;
-            for (uint32_t k = 0; k < problemShape.k(); ++k) {
-                size_t offsetA = layoutA.GetOffset(MakeCoord(i, k));
-                size_t offsetB = layoutB.GetOffset(MakeCoord(k, j));
-                accumaulator += static_cast<ElementGolden>(dataA[offsetA]) * static_cast<ElementGolden>(dataB[offsetB]);
-            }
-            size_t offsetGolden = layoutGolden.GetOffset(MakeCoord(i, j));
-            dataGolden[offsetGolden] = accumaulator + static_cast<ElementGolden>(dataX[offsetGolden]);
-        }
-    }
-}
+// // matmul add
+// template<
+//     class ElementA, class LayoutA,
+//     class ElementB, class LayoutB,
+//     class ElementX,  // Layout X must be same as LayoutGolden
+//     class ElementGolden, class LayoutGolden
+// >
+// void ComputeMatmulElemWiseAdd(
+//     const MatmulCoord &problemShape,
+//     const std::vector<ElementA> &dataA, const LayoutA &layoutA,
+//     const std::vector<ElementB> &dataB, const LayoutB &layoutB,
+//     const std::vector<ElementX> &dataX,  // layoutX must be same as layoutGolden
+//     std::vector<ElementGolden> &dataGolden, const LayoutGolden &layoutGolden
+// )
+// {
+//     for (uint32_t i = 0; i < problemShape.m(); ++i) {
+//         for (uint32_t j = 0; j < problemShape.n(); ++j) {
+//             ElementGolden accumaulator = 0;
+//             for (uint32_t k = 0; k < problemShape.k(); ++k) {
+//                 size_t offsetA = layoutA.GetOffset(MakeCoord(i, k));
+//                 size_t offsetB = layoutB.GetOffset(MakeCoord(k, j));
+//                 accumaulator += static_cast<ElementGolden>(dataA[offsetA]) * static_cast<ElementGolden>(dataB[offsetB]);
+//             }
+//             size_t offsetGolden = layoutGolden.GetOffset(MakeCoord(i, j));
+//             dataGolden[offsetGolden] = accumaulator + static_cast<ElementGolden>(dataX[offsetGolden]);
+//         }
+//     }
+// }
 
-} // namespace acot::golden
+// } // namespace acot::golden
 
-#endif // EXAMPLES_COMMON_GOLDEN_MATMUL_HPP
+// #endif // EXAMPLES_COMMON_GOLDEN_MATMUL_HPP
