@@ -10,7 +10,8 @@
 
 set(ACOT_EXAMPLES_COMMON_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/common)
 set(CCEC_COMPILER_OPTIONS
-    -O2 -std=c++17 -xcce --cce-aicore-arch=dav-c220
+    # -O2 -std=c++17 -xcce --cce-aicore-arch=dav-c220
+    -O2 -std=c++17 -xcce --cce-aicore-arch=dav-c220-vec # 只能启动AIV核心
     -mllvm -cce-aicore-stack-size=0x8000
     -mllvm -cce-aicore-function-stack-size=0x8000
     -mllvm -cce-aicore-record-overflow=true
@@ -27,7 +28,25 @@ set(CCEC_COMPILER_OPTIONS
     -I${CMAKE_SOURCE_DIR}/include
     -L${ASCEND_HOME_PATH}/lib64
     -Wno-macro-redefined
-    -lruntime -lstdc++ -lascendcl -lm -ltiling_api -lplatform -lc_sec
+    -lruntime -lstdc++ -lascendcl -ltiling_api -lregister -lplatform -lascendalog -ldl
+    -lascendc_runtime -lerror_manager -lprofapi -lge_common_base -lmmpa -lascend_dump -lc_sec
+    -lruntime -lstdc++ -lascendcl
+    # -mllvm -cce-aicore-stack-size=0x8000
+    # -mllvm -cce-aicore-function-stack-size=0x8000
+    # -mllvm -cce-aicore-record-overflow=true
+    # -mllvm -cce-aicore-addr-transform
+    # -mllvm -cce-aicore-dcci-insert-for-scalar=false
+    # -I${ASCEND_HOME_PATH}/compiler/tikcpp
+    # -I${ASCEND_HOME_PATH}/compiler/tikcpp/tikcfw
+    # -I${ASCEND_HOME_PATH}/compiler/tikcpp/tikcfw/impl
+    # -I${ASCEND_HOME_PATH}/compiler/tikcpp/tikcfw/interface
+    # -I${ASCEND_HOME_PATH}/include
+    # -I${ASCEND_HOME_PATH}/include/experiment/runtime
+    # -I${ASCEND_HOME_PATH}/include/experiment/msprof
+    # -I${ACOT_EXAMPLES_COMMON_SOURCE_DIR}
+    # -I${CMAKE_SOURCE_DIR}/include
+    # -L${ASCEND_HOME_PATH}/lib64
+    # -lruntime -lstdc++ -lascendcl -lm
 )
 
 file(GLOB_RECURSE ACOT_INCLUDE_FILES ${CMAKE_SOURCE_DIR}/include/*.hpp)
@@ -52,6 +71,7 @@ foreach(EXAMPLE
     00_basic_matmul
     01_grouped_matmul
     02_optimized_matmul
+    03_gemm # 添加示例代码目录
 )
-    add_subdirectory(${EXAMPLE})
+add_subdirectory(${EXAMPLE})
 endforeach()
