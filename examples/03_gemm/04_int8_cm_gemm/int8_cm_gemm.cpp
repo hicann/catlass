@@ -35,8 +35,8 @@ void INT8Gemm(
     using BType = gemm::GemmType<int8_t, LayoutB>;
     using CType = gemm::GemmType<int32_t, LayoutC>;
     // 使用Coord来传递值
-    using L1TileShape = MatmulShape<128, 128, 256>;
-    using L0TileShape = MatmulShape<128, 128, 64>;
+    using L1TileShape = MatmulShape<128, 256, 256>;
+    using L0TileShape = MatmulShape<128, 256, 64>;
 
     // 调用block层函数
     using GemmBlock = gemm::block::BlockGemm<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;

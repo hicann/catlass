@@ -10,8 +10,8 @@ def calc_expect_func(M, N, K):
     matSizeA = (K, M)
     matSizeB = (N, K) # 首先全是行优先
 
-    A = np.random.uniform(-5,5,size=matSizeA).astype(NP_DATA_TYPE)
-    B = np.random.uniform(-5,5,size=matSizeB).astype(NP_DATA_TYPE)
+    A = np.random.uniform(-1,1,size=matSizeA).astype(NP_DATA_TYPE)
+    B = np.random.uniform(-1,1,size=matSizeB).astype(NP_DATA_TYPE)
 
     A.tofile("./data/input/A.bin")
     B.tofile("./data/input/B.bin")

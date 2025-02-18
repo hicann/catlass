@@ -201,6 +201,9 @@ private:
             AscendC::SetFlag<AscendC::HardEvent::M_MTE1>((int32_t)i);
             AscendC::SetFlag<AscendC::HardEvent::M_MTE1>((int32_t)(i + 2));
         }
+        auto layoutAInL1 = LayoutAInL1::template MakeLayout<ElementA>(L1TileShape::M, L1TileShape::K);
+        auto layoutBInL1 = LayoutBInL1::template MakeLayout<ElementB>(L1TileShape::K, L1TileShape::N);
+        auto layoutInL0C = LayoutCInL0::MakeLayoutInL0C(MakeCoord(L1TileShape::M, L1TileShape::N)); // 获得MNCoord
         // 不管是行优先还是列优先都是按照K方向进行切割的
         if constexpr (RowOrColumn){
             // 先实现行优先
@@ -216,9 +219,6 @@ private:
             uint32_t K = actualShape.k();
             uint32_t maxKPerBlock = L1TileShape::K;
             uint32_t KLoops = CeilDiv(K, maxKPerBlock);
-            auto layoutAInL1 = LayoutAInL1::template MakeLayout<ElementA>(L1TileShape::M, L1TileShape::K);
-            auto layoutBInL1 = LayoutBInL1::template MakeLayout<ElementB>(L1TileShape::K, L1TileShape::N);
-            auto layoutInL0C = LayoutCInL0::MakeLayoutInL0C(MakeCoord(L1TileShape::M, L1TileShape::N)); // 获得MNCoord
             // 进行切分操作
             for(uint32_t KIdx = 0; KIdx < KLoops; KIdx++){
                 uint32_t KGmActual = (KIdx == KLoops - 1) ? (K - KIdx * maxKPerBlock) : maxKPerBlock;
@@ -298,22 +298,6 @@ private:
                 //     AscendC::SetFlag<AscendC::HardEvent::M_FIX>((int32_t)-1);
                 // }
             }
-            for(uint32_t i = 0; i < STAGES; i++){
-                // 使能MTE1搬运单元
-                AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>((int32_t)i);
-                AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>((int32_t)(i + 2));
-                // 使能MTE2搬运单元
-                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)i);
-                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(i + 2));
-            }
-            AscendC::SetFlag<AscendC::HardEvent::M_FIX>((int32_t)-1);
-            AscendC::WaitFlag<AscendC::HardEvent::M_FIX>((int32_t)-1);
-            LayoutC layoutBlock = layoutC.GetTileLayout(MakeCoord(actualShape.m(), actualShape.n()));
-            copyL0CToGm(
-                cGm[offsetC],
-                l0CTensor[(singleIdx * cSize) % l0CBlockNum],
-                layoutBlock, layoutInL0C
-            );
         }else{
             uint32_t MAlignment = C0_NUM_PER_FRACTAL; // 对齐32byte
             if constexpr (std::is_same<ElementA, int8_t>::value){
@@ -327,9 +311,6 @@ private:
             uint32_t K = actualShape.k();
             uint32_t maxKPerBlock = L1TileShape::K;
             uint32_t KLoops = CeilDiv(K, maxKPerBlock);
-            auto layoutAInL1 = LayoutAInL1::template MakeLayout<ElementA>(L1TileShape::M, L1TileShape::K);
-            auto layoutBInL1 = LayoutBInL1::template MakeLayout<ElementB>(L1TileShape::K, L1TileShape::N);
-            auto layoutInL0C = LayoutCInL0::MakeLayoutInL0C(MakeCoord(L1TileShape::M, L1TileShape::N)); // 获得MNCoord
             for(uint32_t KIdx = 0; KIdx < KLoops; KIdx++){
                 uint32_t KGmActual = (KIdx == KLoops - 1) ? (K - KIdx * maxKPerBlock) : maxKPerBlock;
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(KIdx % STAGES));
@@ -404,22 +385,22 @@ private:
                 //     AscendC::SetFlag<AscendC::HardEvent::M_FIX>((int32_t)-1);
                 // }
             }
-            for(uint32_t i = 0; i < STAGES; i++){
-                // 使能MTE1搬运单元
-                AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>((int32_t)i);
-                AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>((int32_t)(i + 2));
-                // 使能MTE2搬运单元
-                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)i);
-                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(i + 2));
-            }
-            AscendC::SetFlag<AscendC::HardEvent::M_FIX>((int32_t)-1);
-            AscendC::WaitFlag<AscendC::HardEvent::M_FIX>((int32_t)-1);
-            LayoutC layoutBlock = layoutC.GetTileLayout(MakeCoord(actualShape.m(), actualShape.n()));
-            copyL0CToGm(
-                cGm[offsetC],
-                l0CTensor[(singleIdx * cSize) % l0CBlockNum],
-                layoutBlock, layoutInL0C
-            );
+        }
+        AscendC::SetFlag<AscendC::HardEvent::M_FIX>((int32_t)-1);
+        AscendC::WaitFlag<AscendC::HardEvent::M_FIX>((int32_t)-1);
+        LayoutC layoutBlock = layoutC.GetTileLayout(MakeCoord(actualShape.m(), actualShape.n()));
+        copyL0CToGm(
+            cGm[offsetC],
+            l0CTensor[(singleIdx * cSize) % l0CBlockNum],
+            layoutBlock, layoutInL0C
+        );
+        for(uint32_t i = 0; i < STAGES; i++){
+            // 使能MTE1搬运单元
+            AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>((int32_t)i);
+            AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>((int32_t)(i + 2));
+            // 使能MTE2搬运单元
+            AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)i);
+            AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(i + 2));
         }
     }
 };
