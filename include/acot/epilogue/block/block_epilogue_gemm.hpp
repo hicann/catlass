@@ -340,6 +340,7 @@ private:
     ){
         if constexpr (RowOrColumn){
             // 搬运时需要对齐32Byte的
+            // 搬运时需要对齐32Byte的
             uint32_t MActual = actualShape.m();
             uint32_t NActual = actualShape.n(); // 这里也要对齐
             // 行优先部分对M进行切分处理
@@ -363,6 +364,8 @@ private:
             AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(aivIndex % STAGES + 4));
             AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(aivIndex % STAGES + 4));
             // 流水控制
+            // 进行计算
+            // 先进行乘法 alpha * A * B
             // 进行计算
             // 先进行乘法 alpha * A * B
             tileElemWiseEpilogueMul(
@@ -494,6 +497,7 @@ private:
             );
         }
     }
+    
 };
 }
 
