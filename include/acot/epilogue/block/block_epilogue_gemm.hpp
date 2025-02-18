@@ -46,13 +46,25 @@ public:
     const uint32_t UBSize = ArchTag::UBSize;
     static constexpr bool RowOrColumn = std::is_same<LayoutC, acot::layout::RowMajor>::value && std::is_same<LayoutX, acot::layout::RowMajor>::value;
 
+    static constexpr uint32_t COMPUTE_LENGTH = TileElemWiseEpilogueAdd::COMPUTE_LENGTH;
+    static constexpr uint32_t OPERANDS_NUM = DispatchPolicy::OPERANDS_NUM;
+
+    // Check the element type of C, X and D
+    static_assert(std::is_same_v<ElementC, ElementD> && std::is_same_v<ElementX, ElementD>,
+        "Element type of C, X and D must be the same");
+    using ElementCompute = ElementD;
+
+    // Check if ArchTag is matched
+    static_assert(std::is_same_v<typename TileElemWiseEpilogueAdd::ArchTag, ArchTag>, "Tile epilogue's ArchTag mismatch");
+    static_assert(std::is_same_v<typename TileElemWiseEpilogueMul::ArchTag, ArchTag>, "Tile epilogue's ArchTag mismatch");
+    // Check if compute length is valid
+    static_assert(COMPUTE_LENGTH * OPERANDS_NUM * sizeof(ElementCompute) <= ArchTag::UBSize, "UB out of bounds");
+
     typedef struct Params{
         ElementScalar alpha;
         ElementScalar beta;
         GM_ADDR ptrX;
         LayoutX layoutX; // 有stride的信息
-        GM_ADDR ptrC;
-        LayoutC layoutC;
         GM_ADDR ptrD;
         LayoutD layoutD;
 
@@ -61,16 +73,14 @@ public:
         Params() {}
 
         ACOT_DEVICE
-        Params(ElementScalar alpha_, ElementScalar beta_, GM_ADDR ptrX_, LayoutX layoutX_, GM_ADDR ptrC_, LayoutC layoutC_, GM_ADDR ptrD_, LayoutD layoutD_)
-        : alpha(alpha_), beta(beta_), ptrX(ptrX_), layoutX(layoutX_) ,ptrC(ptrC_), layoutC(layoutC_), ptrD(ptrD_), layoutD(layoutD_){}
+        Params(ElementScalar alpha_, ElementScalar beta_, GM_ADDR ptrX_, LayoutX layoutX_, GM_ADDR ptrD_, LayoutD layoutD_)
+        : alpha(alpha_), beta(beta_), ptrX(ptrX_), layoutX(layoutX_), ptrD(ptrD_), layoutD(layoutD_){}
     }Params;
 
     // 管理内存的
     ACOT_DEVICE
     BlockEpilogue(MatmulCoord blockShape_, Params params_) : blockShape(blockShape_), params(params_){
-        // 分配内存
-        cGm.SetGlobalBuffer((__gm__ ElementC*)params.ptrC); // 强制类型转换
-        xGm.SetGlobalBuffer((__gm__ ElementX*)params.ptrX);
+        cGm.SetGlobalBuffer((__gm__ ElementX*)params.ptrX);
         dGm.SetGlobalBuffer((__gm__ ElementD*)params.ptrD);
         Resource();
         // 开启流水控制
@@ -94,17 +104,22 @@ public:
 
     ACOT_DEVICE
     void operator()(
-        uint32_t offsetC,
-        uint32_t offsetX,
-        uint32_t offsetD,
+        uint32_t offsetC, // A * B 矩阵
+        // uint32_t offsetX, // C 矩阵
+        uint32_t offsetD, // 最后结果
+        AscendC::GlobalTensor<ElementCompute> gmBlockX,
+        LayoutC layoutX,
         MatmulCoord actualShape
         // uint32_t singleIdx
     ){ // 进行操作 先实现行优先
-        AlphaDotBeta0(
+        // 分配内存
+        xGm = gmBlockX;
+        AlphaDotBeta1( // 使用第三种方法
             offsetC,
-            offsetX,
+            // offsetX,
             offsetD,
-            actualShape
+            actualShape,
+            layoutX
             // singleIdx
         );
     }
@@ -315,84 +330,168 @@ private:
         }
     }
 
-    // 两个方法，慢慢修正
     ACOT_DEVICE
     void AlphaDotBeta1(
         uint32_t offsetC,
-        uint32_t offsetX,
+        // uint32_t offsetX,
         uint32_t offsetD,
         MatmulCoord actualShape,
-        uint32_t singleIdx
+        LayoutC layoutC
     ){
-        uint32_t maxMPerBlock = blockShape.m();
-        uint32_t maxNPerBlock = blockShape.n();
-        uint32_t aivNum = AscendC::GetSubBlockNum(); // 910B3 AIV核为2
-        uint32_t maxMPerBlockAIV = maxMPerBlock / aivNum;
-        uint32_t maxNPerBlockAIV = maxNPerBlock / aivNum;
         if constexpr (RowOrColumn){
+            // 搬运时需要对齐32Byte的
             uint32_t MActual = actualShape.m();
             uint32_t NActual = actualShape.n(); // 这里也要对齐
-            uint32_t NAlignment = BYTE_PER_C0 / sizeof(ElementC);
-            uint32_t NRound = RoundUp(NActual, NAlignment);
-            auto layoutCInUb = params.layoutC.GetTileLayout(MakeCoord(maxMPerBlockAIV, NRound)); // 这个应该是对齐的长度
-            auto layoutXInUb = params.layoutX.GetTileLayout(MakeCoord(maxMPerBlockAIV, NRound));
-            auto layoutDInUb = params.layoutD.GetTileLayout(MakeCoord(maxMPerBlockAIV, NRound));
-            // 流水控制
-            AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((int32_t)(singleIdx % STAGES));
-            auto layoutTileX = params.layoutX.GetTileLayout(MakeCoord(MActual, NActual));
+            // 行优先部分对M进行切分处理
+            uint32_t maxMPerBlock = blockShape.m() / STAGES; // 对着M方向进行切分 肯定会对齐32Byte
+            uint32_t maxNPerBlock = blockShape.n(); 
+            auto layoutCInUb = layoutC.GetTileLayout(MakeCoord(maxMPerBlock, maxNPerBlock));
+            auto layoutXInUb = params.layoutX.GetTileLayout(MakeCoord(maxMPerBlock, maxNPerBlock));
+            auto layoutDInGm = params.layoutD.GetTileLayout(MakeCoord(maxMPerBlock, maxNPerBlock));
+            uint32_t aivIndex = AscendC::GetSubBlockIdx(); // 0 或 1
+            uint32_t MActualAIV0 = (MActual < maxMPerBlock) ? MActual : maxMPerBlock;
+            uint32_t MActualAIV1 = (MActual < maxMPerBlock) ? 0 : (MActual - maxMPerBlock);
+            uint32_t MUbActual = aivIndex ? MActualAIV1 : MActualAIV0;
+            AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((int32_t)(aivIndex % STAGES));
+            auto layoutTileX = params.layoutX.GetTileLayout(MakeCoord(MUbActual, NActual));
             copyGmToUbX(
-                ubXTensor[singleIdx % STAGES],
-                xGm[offsetX],
+                ubXTensor[aivIndex % STAGES],
+                // xGm[offsetX + aivIndex * maxMPerBlock * params.layoutX.stride(0)],
+                xGm[aivIndex * maxMPerBlock * params.layoutX.stride(0)],
                 layoutXInUb, layoutTileX
             );
-            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(singleIdx % STAGES + 4));
-            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(singleIdx % STAGES + 4));
+            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(aivIndex % STAGES + 4));
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(aivIndex % STAGES + 4));
             // 流水控制
+            // 进行计算
+            // 先进行乘法 alpha * A * B
             tileElemWiseEpilogueMul(
-                ubXTensor[singleIdx % STAGES],
-                ubXTensor[singleIdx % STAGES],
+                ubXTensor[aivIndex % STAGES],
+                ubXTensor[aivIndex % STAGES],
                 params.alpha
             );
-            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(singleIdx % STAGES));
-            // 流水控制
-            AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((int32_t)(singleIdx % STAGES + 2));
-            auto layoutTileC = params.layoutC.GetTileLayout(MakeCoord(MActual, NActual));
+            // AscendC::PipeBarrier<PIPE_ALL>();
+            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(aivIndex % STAGES));
+
+            // 现在单纯测试C矩阵的搬运  AIV核出现问题
+            AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((int32_t)(aivIndex % STAGES + 2));
+            auto layoutTileC = layoutC.GetTileLayout(MakeCoord(MUbActual, NActual));
             copyGmToUbC(
-                ubCTensor[singleIdx % STAGES],
-                cGm[offsetC],
+                ubCTensor[aivIndex % STAGES],
+                cGm[offsetC + aivIndex * maxMPerBlock * layoutC.stride(0)],
                 layoutCInUb, layoutTileC
             );
-            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(singleIdx % STAGES + 6));
-            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(singleIdx % STAGES + 6));
-            // 流水控制
+            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(aivIndex % STAGES + 6));
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(aivIndex % STAGES + 6));
+            // 进行乘法 beta * C
             tileElemWiseEpilogueMul(
-                ubCTensor[singleIdx % STAGES],
-                ubCTensor[singleIdx % STAGES],
+                ubCTensor[aivIndex % STAGES],
+                ubCTensor[aivIndex % STAGES],
                 params.beta // 获取参数内容
             );
-            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(singleIdx % STAGES + 2));
-            // 流水控制
-            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(singleIdx % STAGES));
-            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(singleIdx % STAGES + 2));
+            // AscendC::PipeBarrier<PIPE_ALL>();
+            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(aivIndex % STAGES + 2));
+            // 等待计算
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(aivIndex % STAGES));
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(aivIndex % STAGES + 2));
+            // 进行加法 alpha * A * B + beta * C
             tileElemWiseEpilogueAdd( // ubXTensor 数据不干净导致的数据异常
-                ubDTensor[singleIdx % STAGES],
-                ubXTensor[singleIdx % STAGES],
-                ubCTensor[singleIdx % STAGES]
+                ubDTensor[aivIndex % STAGES],
+                ubXTensor[aivIndex % STAGES],
+                ubCTensor[aivIndex % STAGES]
             );
-            AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((int32_t)(singleIdx % STAGES));
-            AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((int32_t)(singleIdx % STAGES + 2));
+            // AscendC::PipeBarrier<PIPE_ALL>();
+            // ubX和ubC使用完了
+            AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((int32_t)(aivIndex % STAGES));
+            AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((int32_t)(aivIndex % STAGES + 2));
             // 流水控制
-            AscendC::SetFlag<AscendC::HardEvent::V_MTE3>((int32_t)(singleIdx % STAGES));
-            AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>((int32_t)(singleIdx % STAGES));
-            auto layoutDInGm = params.layoutD.GetTileLayout(MakeCoord(MActual, NActual));
+            // 搬到Gm中
+            AscendC::SetFlag<AscendC::HardEvent::V_MTE3>((int32_t)(aivIndex % STAGES));
+            AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>((int32_t)(aivIndex % STAGES));
+            auto layoutTileD = params.layoutD.GetTileLayout(MakeCoord(MUbActual, NActual));
             copyUbToGmD(
-                dGm[offsetD],
-                ubDTensor[singleIdx % STAGES],
-                // ubCTensor[singleIdx % STAGES],
-                layoutDInGm, layoutDInUb
+                dGm[offsetD + aivIndex * maxMPerBlock * params.layoutX.stride(0)],
+                ubDTensor[aivIndex % STAGES],
+                // ubCTensor[MIdx % STAGES],
+                layoutDInGm, layoutTileD
             );
-        }else{
+        }else{ // 对着N方向进行切分处理
+            // 搬运时需要对齐32Byte的
+            uint32_t MActual = actualShape.m();
+            uint32_t NActual = actualShape.n(); // 这里也要对齐
+            // 行优先部分对M进行切分处理
+            uint32_t maxMPerBlock = blockShape.m(); // 对着M方向进行切分 肯定会对齐32Byte
+            uint32_t maxNPerBlock = blockShape.n() / STAGES; 
+            auto layoutCInUb = layoutC.GetTileLayout(MakeCoord(maxMPerBlock, maxNPerBlock));
+            auto layoutXInUb = params.layoutX.GetTileLayout(MakeCoord(maxMPerBlock, maxNPerBlock));
+            auto layoutDInGm = params.layoutD.GetTileLayout(MakeCoord(maxMPerBlock, maxNPerBlock));
+            uint32_t aivIndex = AscendC::GetSubBlockIdx();
+            uint32_t NActualAIV0 = (NActual < maxNPerBlock) ? NActual : maxNPerBlock;
+            uint32_t NActualAIV1 = (NActual < maxNPerBlock) ? 0 : (NActual - maxNPerBlock);
+            uint32_t NUbActual = aivIndex ? NActualAIV1 : NActualAIV0;
+            AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((int32_t)(aivIndex % STAGES));
+            auto layoutTileX = params.layoutX.GetTileLayout(MakeCoord(MActual, NUbActual));
+            copyGmToUbX(
+                ubXTensor[aivIndex % STAGES],
+                // xGm[offsetX + aivIndex * maxNPerBlock * params.layoutX.stride(1)],
+                xGm[aivIndex * maxNPerBlock * params.layoutX.stride(1)],
+                layoutXInUb, layoutTileX
+            );
+            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(aivIndex % STAGES + 4));
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(aivIndex % STAGES + 4));
+            // 流水控制
+            // 进行计算
+            // 先进行乘法 alpha * A * B
+            tileElemWiseEpilogueMul(
+                ubXTensor[aivIndex % STAGES],
+                ubXTensor[aivIndex % STAGES],
+                params.alpha
+            );
+            // AscendC::PipeBarrier<PIPE_ALL>();
+            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(aivIndex % STAGES));
 
+            // 现在单纯测试C矩阵的搬运  AIV核出现问题
+            AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((int32_t)(aivIndex % STAGES + 2));
+            auto layoutTileC = layoutC.GetTileLayout(MakeCoord(MActual, NUbActual));
+            copyGmToUbC(
+                ubCTensor[aivIndex % STAGES],
+                cGm[offsetC + aivIndex * maxNPerBlock * layoutC.stride(1)],
+                layoutCInUb, layoutTileC
+            );
+            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(aivIndex % STAGES + 6));
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(aivIndex % STAGES + 6));
+            // 进行乘法 beta * C
+            tileElemWiseEpilogueMul(
+                ubCTensor[aivIndex % STAGES],
+                ubCTensor[aivIndex % STAGES],
+                params.beta // 获取参数内容
+            );
+            // AscendC::PipeBarrier<PIPE_ALL>();
+            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(aivIndex % STAGES + 2));
+            // 等待计算
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(aivIndex % STAGES));
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(aivIndex % STAGES + 2));
+            // 进行加法 alpha * A * B + beta * C
+            tileElemWiseEpilogueAdd(
+                ubDTensor[aivIndex % STAGES],
+                ubXTensor[aivIndex % STAGES],
+                ubCTensor[aivIndex % STAGES]
+            );
+            // AscendC::PipeBarrier<PIPE_ALL>();
+            // ubX和ubC使用完了
+            AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((int32_t)(aivIndex % STAGES));
+            AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((int32_t)(aivIndex % STAGES + 2));
+            // 流水控制
+            // 搬到Gm中
+            AscendC::SetFlag<AscendC::HardEvent::V_MTE3>((int32_t)(aivIndex % STAGES));
+            AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>((int32_t)(aivIndex % STAGES));
+            auto layoutTileD = params.layoutD.GetTileLayout(MakeCoord(MActual, NUbActual));
+            copyUbToGmD(
+                dGm[offsetD + aivIndex * maxNPerBlock * params.layoutD.stride(1)],
+                ubDTensor[aivIndex % STAGES],
+                // ubCTensor[aivIndex % STAGES],
+                layoutDInGm, layoutTileD
+            );
         }
     }
 };

@@ -19,7 +19,9 @@ template<
     class TileCopy_ = acot::gemm::tile::TileCopy<typename DispatchPolicy_::ArchTag, AType_, BType_, CType_, BiasType_>,
     class TileMmad_ = acot::gemm::tile::TileMmad<typename DispatchPolicy_::ArchTag, AType_, BType_, CType_, BiasType_>
 >
-struct BlockGemm{};
+struct BlockGemm{
+    static_assert(DEPENDENT_FALSE<DispatchPolicy_>, "BlockMmad is not implemented for this DispatchPolicy");
+};
 
 }
 

@@ -24,20 +24,17 @@ using ScalarType = float;
 template <
     class LayoutA,
     class LayoutB,
-    class LayoutC,
-    class LayoutX,
-    class LayoutD
+    class LayoutC
 >
 ACOT_GLOBAL
-void FP32EpiGemm(
+void FP16EpiGemm(
     uint64_t fftsAddr,
     ScalarType alpha, ScalarType beta,
     MatmulCoord problemShape,
     GM_ADDR gmA, LayoutA layoutA,
     GM_ADDR gmB, LayoutB layoutB,
     GM_ADDR gmC, LayoutC layoutC,
-    GM_ADDR gmX, LayoutX layoutX,
-    GM_ADDR gmD, LayoutD layoutD
+    GM_ADDR gmWorkspace
 ){
     // Set FFTS address
     AscendC::SetSyncBaseAddr(fftsAddr);
@@ -48,16 +45,16 @@ void FP32EpiGemm(
     using AType = gemm::GemmType<float, LayoutA>;
     using BType = gemm::GemmType<float, LayoutB>;
     using CType = gemm::GemmType<float, LayoutC>;
-    using XType = gemm::GemmType<float, LayoutX>; // A * B 
-    using DType = gemm::GemmType<float, LayoutD>;
     // 使用Coord来传递值
     using L1TileShape = MatmulShape<128, 128, 128>;
     using L0TileShape = MatmulShape<128, 128, 64>;
 
     // 调用block层函数
-    using GemmBlock = gemm::block::BlockGemm<GemmBlockDispatchPolicy, L1TileShape, L0TileShape, AType, BType, XType>; // 这个还是乘法
+    using GemmBlock = gemm::block::BlockGemm<GemmBlockDispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>; // 这个还是乘法
     // using TileElemWiseEpilogue = void;
-    using ComputeType = DType;
+    using XType = CType;
+    using DType = CType;
+    using ComputeType = CType;
     constexpr uint32_t computeLength = 8192; // 128 * 128 / 2 开启双缓冲机制
     // 后处理部分
     using TileElemWiseAddGemm = epilogue::tile::TileElemWiseAddGemm<ArchTag, ComputeType, computeLength>;
@@ -66,10 +63,10 @@ void FP32EpiGemm(
     using EpilogueTileCopy = epilogue::tile::TileCopy<ArchTag, CType, XType, DType>;
     // 实例化Epilogue部分
     using EpilogueBlock = epilogue::block::BlockEpilogue<EpilogueBlockDispatchPolicy, CType, XType, DType, TileElemWiseAddGemm, TileElemWiseMulGemm, EpilogueTileCopy>;
-    typename EpilogueBlock::Params epilogueParams{alpha, beta, gmX, layoutX, gmC, layoutC, gmD, layoutD}; // x只是传了一个地址
+    typename EpilogueBlock::Params epilogueParams{alpha, beta, gmC, layoutC, gmC, layoutC}; // x只是传了一个地址
     // 实例化Gemm部分
     using GemmKernel = gemm::kernel::KernelGemmEpilogue<GemmBlock, EpilogueBlock>;
-    typename GemmKernel::Params params{problemShape, gmA, layoutA, gmB, layoutB, gmX, layoutX, epilogueParams}; // 这里得修改 gmX保存A * B
+    typename GemmKernel::Params params{problemShape, gmA, layoutA, gmB, layoutB, gmWorkspace, epilogueParams}; // 这里得修改 gmX保存A * B
     // 调用核函数
     GemmKernel gemm;
     gemm(params);
@@ -120,19 +117,19 @@ void Run(Options options){
     size_t lenB = static_cast<size_t>(k) * n;
     size_t lenC = static_cast<size_t>(m) * n;
     size_t lenX = lenC; // A * B  
-    size_t lenD = lenX; // 最后的大小
+    // size_t lenD = lenX; // 最后的大小
     
     size_t sizeA = lenA * sizeof(float);
     size_t sizeB = lenB * sizeof(float);
     size_t sizeC = lenC * sizeof(float);
     size_t sizeX = sizeC;
-    size_t sizeD = sizeX;
+    // size_t sizeD = sizeX;
 
     layout::RowMajor layoutA{m, k};
     layout::RowMajor layoutB{k, n};
     layout::RowMajor layoutC{m, n};
-    layout::RowMajor layoutX{m, n};
-    layout::RowMajor layoutD{m, n}; // 最后的答案矩阵
+    // layout::RowMajor layoutX{m, n};
+    // layout::RowMajor layoutD{m, n}; // 最后的答案矩阵
 
     size_t scalarSize = 1 * sizeof(float);
     float* alpha;
@@ -164,11 +161,11 @@ void Run(Options options){
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceC, sizeC, hostC, sizeC, ACL_MEMCPY_HOST_TO_DEVICE));
     
-    float *deviceX{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceX), sizeX, ACL_MEM_MALLOC_HUGE_FIRST));
+    float *gmWorkspace{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&gmWorkspace), sizeX, ACL_MEM_MALLOC_HUGE_FIRST));
     
-    float *deviceD{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceD), sizeD, ACL_MEM_MALLOC_HUGE_FIRST));
+    // float *deviceD{nullptr};
+    // ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceD), sizeD, ACL_MEM_MALLOC_HUGE_FIRST));
 
     // Prepare FFTS address
     uint64_t fftsAddr{0};
@@ -177,30 +174,32 @@ void Run(Options options){
 
     // 获得当前核心数
     auto aicCoreNum = arch::AscendC910B3::MaxBlock;
-    FP32EpiGemm<<<aicCoreNum, nullptr, stream>>>(
+    FP16EpiGemm<<<aicCoreNum, nullptr, stream>>>(
         fftsAddr,
         alpha[0], beta[0],
         options.problemShape,
         (uint8_t*)deviceA, layoutA,
         (uint8_t*)deviceB, layoutB,
         (uint8_t*)deviceC, layoutC,
-        (uint8_t*)deviceX, layoutX,
-        (uint8_t*)deviceD, layoutD);
+        (uint8_t*)gmWorkspace);
+        // (uint8_t*)deviceX, layoutX,
+        // (uint8_t*)deviceD, layoutD);
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
-    float* hostD;
-    ACL_CHECK(aclrtMallocHost((void**)(&hostD), sizeD));
-    ACL_CHECK(aclrtMemcpy(hostD, sizeD, deviceD, sizeD, ACL_MEMCPY_DEVICE_TO_HOST));
-    WriteFile("./data/output/our_res.bin",hostD,sizeD);
+    // float* hostD;
+    // ACL_CHECK(aclrtMallocHost((void**)(&hostD), sizeD));
+    ACL_CHECK(aclrtMemcpy(hostC, sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
+    WriteFile("./data/output/our_res.bin",hostC,sizeC);
 
     ACL_CHECK(aclrtFree(deviceA));
     ACL_CHECK(aclrtFree(deviceB));
     ACL_CHECK(aclrtFree(deviceC));
-    ACL_CHECK(aclrtFree(deviceD));
+    // ACL_CHECK(aclrtFree(deviceD));
+    ACL_CHECK(aclrtFree(gmWorkspace));
     ACL_CHECK(aclrtFreeHost(hostA));
     ACL_CHECK(aclrtFreeHost(hostB));
     ACL_CHECK(aclrtFreeHost(hostC));
-    ACL_CHECK(aclrtFreeHost(hostD));
+    // ACL_CHECK(aclrtFreeHost(hostD));
 
     ACL_CHECK(aclrtDestroyStream(stream));
     ACL_CHECK(aclrtResetDevice(options.deviceId));

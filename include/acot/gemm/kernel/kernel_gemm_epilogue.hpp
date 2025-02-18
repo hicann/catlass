@@ -41,8 +41,7 @@ public:
         LayoutA layoutA;
         GM_ADDR ptrB;
         LayoutB layoutB;
-        GM_ADDR ptrX;
-        LayoutC layoutX;
+        GM_ADDR gmWorkspace;
         EpilogueParams epilogueParams;
 
         // Methods
@@ -51,9 +50,9 @@ public:
 
         ACOT_DEVICE
         Params(MatmulCoord problemShape_, GM_ADDR ptrA_, LayoutA layoutA_,
-            GM_ADDR ptrB_, LayoutB layoutB_, GM_ADDR ptrX_, LayoutC layoutX_, EpilogueParams epilogueParams_)
+            GM_ADDR ptrB_, LayoutB layoutB_, GM_ADDR gmWorkspace_, EpilogueParams epilogueParams_)
                 : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), 
-                ptrB(ptrB_), layoutB(layoutB_), ptrX(ptrX_), layoutX(layoutX_), epilogueParams(epilogueParams_){}
+                ptrB(ptrB_), layoutB(layoutB_), gmWorkspace(gmWorkspace_), epilogueParams(epilogueParams_){}
     }Params;
 
     ACOT_DEVICE
@@ -70,8 +69,6 @@ public:
     ACOT_DEVICE
     void operator()<AscendC::AIC>(Params &params){ // 先进行Matmul操作
         // // 先实例化BlockGemm对象
-        BlockGemm blockGemm(params.ptrA, params.ptrB, params.ptrX, params.layoutA, params.layoutB, params.layoutX);
-
         uint32_t maxMPerBlock = L1TileShape::M;
         uint32_t maxNPerBlock = L1TileShape::N;
         uint32_t M = params.problemShape.m();
@@ -87,34 +84,52 @@ public:
         uint32_t NLoops = CeilDiv(N, maxNPerBlock);
         uint32_t coreLoops = MLoops * NLoops;
         uint32_t singleIdx = 0;
-        for(uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()){
-            uint32_t MGmBlockIdx = loopIdx / NLoops;
-            uint32_t NGmBlockIdx = loopIdx % NLoops;
-            uint32_t MGmActual = (MGmBlockIdx == MLoops - 1) ? (M - MGmBlockIdx * maxMPerBlock) : maxMPerBlock;
-            uint32_t NGmActual = (NGmBlockIdx == NLoops - 1) ? (N - NGmBlockIdx * maxNPerBlock) : maxNPerBlock;
-            MatmulCoord actualShape{MGmActual, NGmActual, K};
-            AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((int32_t)(loopIdx % l0CBlockNum));
-            // 这里进行特判操作，因为不熟悉coord getoffset的API,而且这个API好像不符合我的要求
-            if constexpr (RowOrColumn){ // 这里需要进行核间流水 使用API  CrossCoreSetFlag  面向分离架构的API
+        if constexpr (RowOrColumn){
+            layout::RowMajor layoutC(params.problemShape.m(), params.problemShape.n());
+            BlockGemm blockGemm(params.ptrA, params.ptrB, params.gmWorkspace, params.layoutA, params.layoutB, layoutC);
+            for(uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()){
+                uint32_t MGmBlockIdx = loopIdx / NLoops;
+                uint32_t NGmBlockIdx = loopIdx % NLoops;
+                uint32_t MGmActual = (MGmBlockIdx == MLoops - 1) ? (M - MGmBlockIdx * maxMPerBlock) : maxMPerBlock;
+                uint32_t NGmActual = (NGmBlockIdx == NLoops - 1) ? (N - NGmBlockIdx * maxNPerBlock) : maxNPerBlock;
+                MatmulCoord actualShape{MGmActual, NGmActual, K};
+                AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((int32_t)(loopIdx % l0CBlockNum));
+                // 这里进行特判操作，因为不熟悉coord getoffset的API,而且这个API好像不符合我的要求
                 blockGemm(
                     MGmBlockIdx * params.layoutA.stride(0) * maxMPerBlock,
                     NGmBlockIdx * maxNPerBlock, // 将目前需要转移的数据块的首地址传入就行
-                    MGmBlockIdx * params.layoutX.stride(0) * maxMPerBlock  + NGmBlockIdx * maxNPerBlock,
+                    MGmBlockIdx * layoutC.stride(0) * maxMPerBlock  + NGmBlockIdx * maxNPerBlock,
                     actualShape, singleIdx
                 );
-            }else{
+                // 上面处理完，就放到AIV上进行处理
+                // sync.SetFlag((int8_t)(loopIdx % STAGES));
+                arch::CrossCoreSetFlagWithReverse<0x2, PIPE_FIX>(flagAicFinishStore);
+                AscendC::SetFlag<AscendC::HardEvent::FIX_M>((int32_t)(loopIdx % l0CBlockNum));
+                singleIdx += 1;
+            }
+        }else{
+            layout::ColumnMajor layoutC(params.problemShape.m(), params.problemShape.n());
+            BlockGemm blockGemm(params.ptrA, params.ptrB, params.gmWorkspace, params.layoutA, params.layoutB, layoutC);
+            for(uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()){
+                uint32_t MGmBlockIdx = loopIdx / NLoops;
+                uint32_t NGmBlockIdx = loopIdx % NLoops;
+                uint32_t MGmActual = (MGmBlockIdx == MLoops - 1) ? (M - MGmBlockIdx * maxMPerBlock) : maxMPerBlock;
+                uint32_t NGmActual = (NGmBlockIdx == NLoops - 1) ? (N - NGmBlockIdx * maxNPerBlock) : maxNPerBlock;
+                MatmulCoord actualShape{MGmActual, NGmActual, K};
+                AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((int32_t)(loopIdx % l0CBlockNum));
+                // 这里进行特判操作，因为不熟悉coord getoffset的API,而且这个API好像不符合我的要求
                 blockGemm(
                     MGmBlockIdx * maxMPerBlock,
                     NGmBlockIdx * maxNPerBlock * params.layoutB.stride(1), // 将目前需要转移的数据块的首地址传入就行
-                    MGmBlockIdx * maxMPerBlock + NGmBlockIdx * maxNPerBlock * params.layoutX.stride(1),
+                    MGmBlockIdx * maxMPerBlock + NGmBlockIdx * maxNPerBlock * layoutC.stride(1),
                     actualShape, singleIdx
                 );
+                // 上面处理完，就放到AIV上进行处理
+                // sync.SetFlag((int8_t)(loopIdx % STAGES));
+                arch::CrossCoreSetFlagWithReverse<0x2, PIPE_FIX>(flagAicFinishStore);
+                AscendC::SetFlag<AscendC::HardEvent::FIX_M>((int32_t)(loopIdx % l0CBlockNum));
+                singleIdx += 1;
             }
-            // 上面处理完，就放到AIV上进行处理
-            // sync.SetFlag((int8_t)(loopIdx % STAGES));
-            arch::CrossCoreSetFlagWithReverse<0x2, PIPE_FIX>(flagAicFinishStore);
-            AscendC::SetFlag<AscendC::HardEvent::FIX_M>((int32_t)(loopIdx % l0CBlockNum));
-            singleIdx += 1;
         }
         #pragma unroll
         for(uint32_t i = 0; i < l0CBlockNum; i++){
@@ -145,9 +160,8 @@ public:
         uint32_t aivNum = AscendC::GetSubBlockNum(); // 910B3 AIV核为2
         uint32_t aivIndex = AscendC::GetBlockIdx();
         uint32_t aicoreIndex = aivIndex / aivNum;
-        // 获取AIC核的数量
-        uint32_t maxMPerBlockAIV = maxMPerBlock / aivNum;
-        uint32_t maxNPerBlockAIV = maxNPerBlock / aivNum;
+        AscendC::GlobalTensor<ElementC> gmC;
+        gmC.SetGlobalBuffer((__gm__ ElementC *)params.gmWorkspace);
         for(uint32_t loopIdx = aicoreIndex; loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()){ // 换一下切分方式，一个AIC对应两个AIV核 blockNum是AIV核数 
             uint32_t MGmBlockIdx = loopIdx / NLoops;
             uint32_t NGmBlockIdx = loopIdx % NLoops;
@@ -156,53 +170,27 @@ public:
             MatmulCoord actualShape{MGmActual, NGmActual, K};
             // sync.WaitFlag((int8_t)(loopIdx % STAGES));
             arch::CrossCoreWaitFlagWithReverse<0x2, PIPE_MTE3>(flagAicFinishStore);
-            // if(AscendC::GetSubBlockIdx() == 0){ // 只用一个AIV
-                if constexpr (RowOrColumn){ // 行优先  这个现在正确率高
-                    blockEpilogue( // 传入偏移量
-                        MGmBlockIdx * params.layoutX.stride(0) * maxMPerBlock  + NGmBlockIdx * maxNPerBlock, // offsetX
-                        MGmBlockIdx * params.layoutX.stride(0) * maxMPerBlock  + NGmBlockIdx * maxNPerBlock, // offsetC
-                        MGmBlockIdx * params.layoutX.stride(0) * maxMPerBlock  + NGmBlockIdx * maxNPerBlock, // offsetD
-                        actualShape
-                    );
-                }else{ // 列优先
-                    blockEpilogue(
-                        MGmBlockIdx * maxMPerBlock + NGmBlockIdx * maxNPerBlock * params.layoutX.stride(1),
-                        MGmBlockIdx * maxMPerBlock + NGmBlockIdx * maxNPerBlock * params.layoutX.stride(1),
-                        MGmBlockIdx * maxMPerBlock + NGmBlockIdx * maxNPerBlock * params.layoutX.stride(1),
-                        actualShape
-                    );
-                }
-            // }
-            // 按照一个AIC对应两个AIV来写
-            // arch::CrossCoreWaitFlagWithReverse<0x2, PIPE_MTE3>(flagAicFinishStore);
-            // 行优先按照M方向进行切分
-            // if constexpr (RowOrColumn){
-            //     uint32_t MGmActualAIC = (MGmBlockIdx == MLoops - 1) ? (M - MGmBlockIdx * maxMPerBlock) : maxMPerBlock;
-            //     uint32_t NGmActualAIC = (NGmBlockIdx == NLoops - 1) ? (N - NGmBlockIdx * maxNPerBlock) : maxNPerBlock;
-            //     uint32_t MGmActualAIV0 = (MGmActualAIC < maxMPerBlockAIV) ? MGmActualAIC : maxMPerBlockAIV;
-            //     uint32_t MGmActualAIV1 = (MGmActualAIC < maxMPerBlockAIV) ? 0 : (MGmActualAIC - maxMPerBlockAIV);
-            //     if(AscendC::GetSubBlockIdx() == 0){ // 分成两个AIV核
-            //         MatmulCoord actualShape{MGmActualAIV0, NGmActualAIC, K};
-            //         blockEpilogue(
-            //             MGmBlockIdx * params.layoutX.stride(0) * maxMPerBlock  + NGmBlockIdx * maxNPerBlock,
-            //             MGmBlockIdx * params.layoutX.stride(0) * maxMPerBlock  + NGmBlockIdx * maxNPerBlock,
-            //             MGmBlockIdx * params.layoutX.stride(0) * maxMPerBlock  + NGmBlockIdx * maxNPerBlock,
-            //             actualShape, AscendC::GetSubBlockIdx()  // 0
-            //         );
-            //     }else{
-            //         if(MGmActualAIV1){
-            //             MatmulCoord actualShape{MGmActualAIV1, NGmActualAIC, K};
-            //             blockEpilogue(
-            //                 MGmBlockIdx * params.layoutX.stride(0) * (maxMPerBlock + maxMPerBlockAIV)  + NGmBlockIdx * maxNPerBlock,
-            //                 MGmBlockIdx * params.layoutX.stride(0) * (maxMPerBlock + maxMPerBlockAIV)  + NGmBlockIdx * maxNPerBlock,
-            //                 MGmBlockIdx * params.layoutX.stride(0) * (maxMPerBlock + maxMPerBlockAIV)  + NGmBlockIdx * maxNPerBlock,
-            //                 actualShape, AscendC::GetSubBlockIdx() // 1
-            //             );
-            //         }
-            //     }
-            // }else{
-
-            // }
+            if constexpr (RowOrColumn){ // 行优先  这个现在正确率高
+                layout::RowMajor layoutC(params.problemShape.m(), params.problemShape.n());
+                blockEpilogue( // 传入偏移量
+                    MGmBlockIdx * layoutC.stride(0) * maxMPerBlock  + NGmBlockIdx * maxNPerBlock, // offsetC
+                    // MGmBlockIdx * layoutC.stride(0) * maxMPerBlock  + NGmBlockIdx * maxNPerBlock, // offsetX
+                    MGmBlockIdx * layoutC.stride(0) * maxMPerBlock  + NGmBlockIdx * maxNPerBlock, // offsetD
+                    gmC[MGmBlockIdx * layoutC.stride(0) * maxMPerBlock  + NGmBlockIdx * maxNPerBlock],
+                    layoutC,
+                    actualShape
+                );
+            }else{ // 列优先
+                layout::ColumnMajor layoutC(params.problemShape.m(), params.problemShape.n());
+                blockEpilogue(
+                    MGmBlockIdx * maxMPerBlock + NGmBlockIdx * maxNPerBlock * layoutC.stride(1),
+                    // MGmBlockIdx * maxMPerBlock + NGmBlockIdx * maxNPerBlock * layoutC.stride(1),
+                    MGmBlockIdx * maxMPerBlock + NGmBlockIdx * maxNPerBlock * layoutC.stride(1),
+                    gmC[MGmBlockIdx * maxMPerBlock + NGmBlockIdx * maxNPerBlock * layoutC.stride(1)],
+                    layoutC,
+                    actualShape
+                );
+            }
         }
     }
 private:
