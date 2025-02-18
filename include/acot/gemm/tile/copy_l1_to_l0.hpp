@@ -215,7 +215,7 @@ struct CopyL1ToL0B<acot::arch::AscendC910B3, acot::gemm::GemmType<float, layout:
         AscendC::LocalTensor<float> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t NAlignment = BYTE_PER_C0 / sizeof(float);
+        uint32_t NAlignment = C0_NUM_PER_FRACTAL; // 25.02.18 修改的地方 16 对 16
         uint32_t KAlignment = C0_NUM_PER_FRACTAL;
         uint32_t NActual = layoutDst.orgShape(1);
         uint32_t NRound = RoundUp(NActual, NAlignment);

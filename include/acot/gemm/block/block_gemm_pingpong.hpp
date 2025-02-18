@@ -286,7 +286,7 @@ private:
                         KL0Actual,
                         (KIdx == 0) && (KL0Idx == 0)
                     );
-                    AscendC::PipeBarrier<PIPE_ALL>();
+                    AscendC::PipeBarrier<PIPE_ALL>();  // 优化点
                     AscendC::SetFlag<AscendC::HardEvent::M_MTE1>((int32_t)(KL0Idx % STAGES));
                     AscendC::SetFlag<AscendC::HardEvent::M_MTE1>((int32_t)(KL0Idx % STAGES + 2));
                 }
