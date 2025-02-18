@@ -128,7 +128,8 @@
      void operator()(
          AscendC::LocalTensor<Element> const &dstTensor,
          AscendC::GlobalTensor<Element> const &srcTensor,
-         LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+         LayoutDst const &layoutDst, LayoutSrc const &layoutSrc
+        )
      {
         uint32_t m_actual = layoutSrc.shape(0);
         uint32_t n_actual = layoutSrc.shape(1);

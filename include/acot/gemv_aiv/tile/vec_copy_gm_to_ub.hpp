@@ -35,7 +35,7 @@
      void operator()(
         AscendC::LocalTensor<Element> dstTensor,
         AscendC::GlobalTensor<Element> srcTensor,
-        uint32_t const &len
+        uint32_t len
     ) {
         AscendC::DataCopyParams params;
         params.blockCount = 1;  //连续传输数据块个数

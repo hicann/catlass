@@ -46,28 +46,29 @@
          LayoutA layoutA;
          GM_ADDR ptrX;
          GM_ADDR ptrY;
+         GM_ADDR ptrY_read;
+         float alpha;
+         float beta;
  
          // Methods
          ACOT_DEVICE
          Params() {}
  
          ACOT_DEVICE
-         Params(MatmulCoord const &problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrX_,
-            GM_ADDR ptrY_)
+         Params(MatmulCoord const &problemShape_,  GM_ADDR ptrA_, LayoutA layoutA_,  GM_ADDR ptrX_,
+            GM_ADDR ptrY_,GM_ADDR ptrY_read_,float alpha_,float beta_)
              : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrX(ptrX_),
-               ptrY(ptrY_) {}
+               ptrY(ptrY_),ptrY_read(ptrY_read_),alpha(alpha_),beta(beta_) {}
      };
 
      
      // Methods
-     //我现在把构造函数blockGemv(resource)放这里
-     ACOT_DEVICE
-     KernelGemv():resource(), blockGemv(resource) {
-     }
-     ACOT_DEVICE
-     void init(){
-        // blockGemv = BlockGemv();
-     }
+    //  ACOT_DEVICE
+    //  KernelGemv(){
+    //     blockGemv = BlockGemv(resource);
+    //  }
+    //  KernelGemv():resource(), blockGemv(resource) {
+    //  }
 
      template <int32_t CORE_TYPE = g_coreType>
      ACOT_DEVICE
@@ -85,11 +86,12 @@
      ACOT_DEVICE
      void operator()<AscendC::AIV>(Params const &params) {
         // TileScheduler matmulTileScheduler(params.problemShape, MakeCoord(UBTileShape::M, UBTileShape::N));
-        
+        arch::Resource<ArchTag> resource;
+        BlockGemv blockGemv(resource);
          uint32_t align = BYTE_PER_C0 / sizeof(ElementA);
          uint32_t maxmPerBlock_round = RoundUp(UBTileShape::M,align);
          uint32_t maxnPerBlock_round = RoundUp(UBTileShape::N,align);
-         uint32_t loopnum = CeilDiv(params.problemShape.m(),UBTileShape::M);
+         uint32_t loopnum = CeilDiv(params.problemShape.m(),maxmPerBlock_round);
 
          uint32_t element_stride_matrix = sizeof(ElementA) / sizeof(uint8_t);
          uint32_t element_stride_vector_out = sizeof(ElementY) / sizeof(uint8_t);
@@ -103,17 +105,19 @@
          gmX.SetGlobalBuffer((__gm__ ElementX *)params.ptrX);
          AscendC::GlobalTensor<ElementY> gmY;
          gmY.SetGlobalBuffer((__gm__ ElementY *)params.ptrY);
-         for(uint32_t i = 0;i < 4;i++){
-            AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((event_t)(i));
-        }
-        for(uint32_t i = 0;i < 2;i++){
-            AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>((event_t)(i));
-        }
+         AscendC::GlobalTensor<ElementY> gmY_read;
+         gmY_read.SetGlobalBuffer((__gm__ ElementY *)params.ptrY_read);
+        //  for(uint32_t i = 0;i < 4;i++){
+        //     AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((event_t)(i));
+        // }
+        // for(uint32_t i = 0;i < 2;i++){
+        //     AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>((event_t)(i));
+        // }
          for(uint32_t loop_id = 0;loop_id < loopnum;loop_id++){
-            // uint32_t aiv_id = AscendC::GetBlockIdx()*2+AscendC::GetSubBlockIdx();
-            // uint32_t aiv_num = AscendC::GetBlockNum() * AscendC::GetSubBlockNum();
-            uint32_t aiv_id = AscendC::GetBlockIdx();
-            uint32_t aiv_num = AscendC::GetBlockNum() * AscendC::GetTaskRation();
+            uint32_t aiv_id = AscendC::GetBlockIdx()/2+AscendC::GetSubBlockIdx();
+            uint32_t aiv_num = AscendC::GetBlockNum()/2 * AscendC::GetSubBlockNum();
+            // uint32_t aiv_id = AscendC::GetBlockIdx();
+            // uint32_t aiv_num = AscendC::GetBlockNum() * AscendC::GetTaskRation();
             if(loop_id % aiv_num != aiv_id)continue;
 
             if constexpr (std::is_same_v<LayoutA, acot::layout::ColumnMajor>) {
@@ -131,18 +135,21 @@
             blockGemv(gmA[offset_matrix], params.layoutA,
                 gmX, 
                 gmY[offset_vector_out], 
-                actualBlockShape);
+                gmY_read[offset_vector_out],
+                actualBlockShape,
+                params.alpha,
+                params.beta
+            );
         }
-        for(uint32_t i = 0;i < 4;i++){
-            AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((event_t)(i));
-        }
-        for(uint32_t i = 0;i < 2;i++){
-            AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>((event_t)(i));
-        }
+        // for(uint32_t i = 0;i < 4;i++){
+        //     AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((event_t)(i));
+        // }
+        // for(uint32_t i = 0;i < 2;i++){
+        //     AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>((event_t)(i));
+        // }
      }
      private:
-        arch::Resource<ArchTag> resource;
-        BlockGemv blockGemv;
+     
  };
  
  } // namespace acot::matmul::kernel

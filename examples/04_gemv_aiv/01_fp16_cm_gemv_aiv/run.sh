@@ -8,19 +8,19 @@ CURRENT_DIR=$(
     cd $(dirname ${BASH_SOURCE:-$0})
     pwd
 ); cd $CURRENT_DIR
-# A 矩阵的形状 M * K
-# B 矩阵的形状 N * K
 M=${1}
 N=${2}
-deviceId=${3}
+alpha=${3}
+beta=${4}
+deviceId=${5}
 
 set -e
 CANN_DIR=${ASCEND_HOME_PATH}
 # 生成测试数据
-python3 ./scripts/gen_data.py $M $N
+python3 ./scripts/gen_data.py $M $N $alpha $beta
 ../../../scripts/build.sh 01_fp16_cm_gemv_aiv
 # msprof op --output=./prof ../../../build/bin/01_fp16_rm_gemm $M $N $K $deviceId
-../../../build/bin/01_fp16_cm_gemv_aiv $M $N $deviceId
+../../../build/bin/01_fp16_cm_gemv_aiv $M $N $alpha $beta $deviceId
 # 验证数据
 python3 ./scripts/verify_data.py $M $N
 # 性能测试 注意路径问题

@@ -36,7 +36,7 @@
      void operator()(
         AscendC::GlobalTensor<Element> dstTensor,
         AscendC::LocalTensor<Element> srcTensor,
-        uint32_t const &len
+        uint32_t len
     ) {
         AscendC::DataCopyExtParams params;
         params.blockCount = 1;

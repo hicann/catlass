@@ -25,7 +25,9 @@ void FP16RMGemvAiv(
     MatmulCoord problemShape,
     GM_ADDR gmA, layout::RowMajor layoutA,
     GM_ADDR gmX, layout::RowMajor layoutX,
-    GM_ADDR gmY, layout::RowMajor layoutY
+    GM_ADDR gmY, layout::RowMajor layoutY,
+    GM_ADDR gmY_read,
+    float alpha,float beta
 ){
     using ArchTag = arch::AtlasA2;
     using DispatchPolicy = gemv::MmadAtlasA2Pingpong<true>;
@@ -42,7 +44,7 @@ void FP16RMGemvAiv(
 
     // kernel level
     using GemvKernel = gemv::kernel::KernelGemv<GemvBlock, BlockEpilogue, TileScheduler>;
-    typename GemvKernel::Params params{problemShape, gmA, layoutA, gmX, gmY};
+    typename GemvKernel::Params params{problemShape, gmA, layoutA, gmX, gmY,gmY_read,alpha,beta};
     
 
     // call a kernel
@@ -57,6 +59,8 @@ typedef struct Options{
 
     uint32_t M = 32;
     uint32_t N = 32;
+    float alpha = 1.0; 
+    float beta = 1.0;
 
     Options() = default;
     
@@ -67,16 +71,20 @@ typedef struct Options{
         enum ArgsIndex{
             M_INDEX = 1,
             N_INDEX,
+            alpha_INDEX,
+            beta_INDEX,
             DEVICE_ID_INDEX,
             ARGS_MAX
         };
-        if(argc > ARGS_MAX || argc <= N_INDEX){
+        if(argc > ARGS_MAX || argc <= beta_INDEX){
             std::cerr << HELPER << std::endl;
             return -1;
         }
         // 设置矩阵形状 + 矩阵步长
         problemShape.m() = std::atoi(argv[M_INDEX]);
         problemShape.n() = std::atoi(argv[N_INDEX]);
+        alpha = std::stof(argv[alpha_INDEX]);
+        beta = std::stof(argv[beta_INDEX]);
         problemShape.k() = 1;
         if(argc == ARGS_MAX){
             deviceId = std::atoi(argv[DEVICE_ID_INDEX]);
@@ -121,6 +129,13 @@ void Run(Options options){
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceX), sizeX, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceX, sizeX, hostX, sizeX, ACL_MEMCPY_HOST_TO_DEVICE));
 
+    float* hostY_read;
+    ACL_CHECK(aclrtMallocHost((void**)(&hostY_read), sizeY));
+    ReadFile("./data/input/vector_y_gm.bin", sizeY, hostY_read, sizeY);
+    uint8_t *deviceY_read{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceY_read), sizeY, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMemcpy(deviceY_read, sizeY, hostY_read, sizeY, ACL_MEMCPY_HOST_TO_DEVICE));
+
     uint8_t *deviceY{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceY), sizeY, ACL_MEM_MALLOC_HUGE_FIRST));
     
@@ -130,7 +145,10 @@ void Run(Options options){
         options.problemShape,
         deviceA, layoutA,
         deviceX, layoutX,
-        deviceY, layoutY);
+        deviceY, layoutY,
+        deviceY_read,
+        options.alpha,options.beta
+    );
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
     half* hostY;
@@ -141,9 +159,11 @@ void Run(Options options){
     ACL_CHECK(aclrtFree(deviceA));
     ACL_CHECK(aclrtFree(deviceX));
     ACL_CHECK(aclrtFree(deviceY));
+    ACL_CHECK(aclrtFree(deviceY_read));
     ACL_CHECK(aclrtFreeHost(hostA));
     ACL_CHECK(aclrtFreeHost(hostX));
     ACL_CHECK(aclrtFreeHost(hostY));
+    ACL_CHECK(aclrtFreeHost(hostY_read));
 
     ACL_CHECK(aclrtDestroyStream(stream));
     ACL_CHECK(aclrtResetDevice(options.deviceId));

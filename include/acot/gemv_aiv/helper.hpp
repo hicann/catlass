@@ -44,6 +44,11 @@ struct ElementAccumulatorSelector<half, half> {
 };
 
 template<>
+struct ElementAccumulatorSelector<float, float> {
+    using ElementAccumulator = float;
+};
+
+template<>
 struct ElementAccumulatorSelector<uint8_t, uint8_t> {
     using ElementAccumulator = int32_t;
 };
