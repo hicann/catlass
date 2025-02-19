@@ -1,6 +1,10 @@
 #!/bin/bash
 # 不需要TIK打印出内存信息
+clear
+export ASCEND_HOME_DIR=/home/workspace/gpf/CANN/ascend-toolkit/latest
+source /home/workspace/gpf/CANN/ascend-toolkit/set_env.sh
 export PRINT_TIK_MEM_ACCESS=FALSE
+export ASCEND_SLOG_PRINT_TO_STDOUT=1
 
 # 编译文件
 bash ../../../scripts/build.sh 03_fp32_rm_gemv

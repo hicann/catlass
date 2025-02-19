@@ -14,36 +14,37 @@
 #include "acot/epilogue/tile/copy_gm_to_ub.hpp"
 #include "acot/epilogue/tile/copy_ub_to_gm.hpp"
 
-namespace acot::epilogue::tile {
+namespace acot::epilogue::tile
+{
 
-template <
-    /// Tag indicating architecture
-    class ArchTag,
-    class... Args
->
-struct TileCopy {
-    static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported tile copy, can not find the specialization.");
-};
+    template <
+        /// Tag indicating architecture
+        class ArchTag,
+        class... Args>
+    struct TileCopy
+    {
+        static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported tile copy, can not find the specialization.");
+    };
 
-template <
-    class ArchTag,
-    /// MatmulType for C matrix operand
-    class CType,
-    /// MatmulType for X matrix operand
-    class XType,
-    /// MatmulType for D matrix operand
-    class DType
->
-struct TileCopy<ArchTag, CType, XType, DType> {
-    using ElementC = typename CType::Element;
-    using ElementX = typename XType::Element;
-    using ElementD = typename DType::Element;
+    template <
+        class ArchTag,
+        /// GemvType for Y matrix operand
+        class YType,
+        /// GemvType for Temp matrix operand
+        class TempType,
+        /// GemvType for Z matrix operand
+        class ZType>
+    struct TileCopy<ArchTag, YType, TempType, ZType>
+    {
+        using ElementY = typename YType::Element;
+        using ElementTemp = typename TempType::Element;
+        using ElementZ = typename ZType::Element;
 
-    using CopyGmToUbC = CopyGm2Ub<ArchTag, CType>;
-    using CopyGmToUbX = CopyGm2Ub<ArchTag, XType>;
-    using CopyUbToGmD = CopyUb2Gm<ArchTag, DType>;
-};
+        using CopyGmToUbY = CopyGm2Ub<ArchTag, YType>;
+        using CopyGmToUbTemp = CopyGm2Ub<ArchTag, TempType>;
+        using CopyUbToGmZ = CopyUb2Gm<ArchTag, ZType>;
+    };
 
 } // namespace acot::epilogue::tile
 
-#endif  // ACOT_EPILOGUE_TILE_TILE_COPY_HPP
+#endif // ACOT_EPILOGUE_TILE_TILE_COPY_HPP

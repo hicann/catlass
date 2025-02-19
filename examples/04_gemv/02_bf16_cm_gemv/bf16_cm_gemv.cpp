@@ -222,7 +222,6 @@ void Run(Options const &options)
     std::cout << "问题矩阵大小为：" << "m：" << m << " " << "n：" << n << std::endl;
 
     layout::RowMajor layoutx(1, n);
-    // layout::ColumnMajor layoutA(n, m);
     layout::ColumnMajor layoutA(m, n);
     layout::RowMajor layouty(m, 1);
 

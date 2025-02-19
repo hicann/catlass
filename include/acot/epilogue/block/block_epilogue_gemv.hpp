@@ -1,303 +1,225 @@
-#ifndef ACOT_EPILOGUE_BLOCK_EPILOGUE_GEMM_HPP
-#define ACOT_EPILOGUE_BLOCK_EPILOGUE_GEMM_HPP
+#ifndef ACOT_EPILOGUE_BLOCK_EPILOGUE_GEMV_HPP
+#define ACOT_EPILOGUE_BLOCK_EPILOGUE_GEMV_HPP
 
 #include "acot/acot.hpp"
+#include "acot/arch/resource.hpp"
 #include "acot/epilogue/dispatch_policy.hpp"
 #include "acot/gemv_coord.hpp"
 #include "acot/matrix_coord.hpp"
-#include "acot/epilogue/tile/tile_copy.hpp"
+#include "acot/layout/layout.hpp"
 
-namespace acot::epilogue::block {
-template<
-    class CType_, // C 矩阵
-    class XType_, // A * B 矩阵
-    class DType_, // D 矩阵
-    class TileElemWiseEpilogueAdd_, // 单块元素的处理 包括加法和乘法
-    class TileElemWiseEpilogueMul_, // 乘法的后处理
-    class TileCopy_
->
-class BlockEpilogue<
-    EpilogueAscendC910B3Gemm,
-    CType_,
-    XType_,
-    DType_,
-    TileElemWiseEpilogueAdd_,
-    TileElemWiseEpilogueMul_,
-    TileCopy_
->{
-public:
-    // Type aliases
-    using DispatchPolicy = EpilogueAscendC910B3Gemm;
-    using ArchTag = typename DispatchPolicy::ArchTag;
-    using ElementScalar = typename CType_::Element; // 标量的数据类型
-    using ElementC = typename CType_::Element; // 只是获取类型名
-    using LayoutC = typename CType_::Layout;
-    using ElementX = typename XType_::Element;
-    using LayoutX = typename XType_::Layout;
-    using ElementD = typename DType_::Element;
-    using LayoutD = typename DType_::Layout;
-    using TileElemWiseEpilogueAdd = TileElemWiseEpilogueAdd_;
-    using TileElemWiseEpilogueMul = TileElemWiseEpilogueMul_;
-    using CopyGmToUbC = typename TileCopy_::CopyGmToUbC;
-    using CopyGmToUbX = typename TileCopy_::CopyGmToUbX;
-    using CopyUbToGmD = typename TileCopy_::CopyUbToGmD;
-    
-    static constexpr uint32_t STAGES = DispatchPolicy::STAGES; // 开启双缓冲机制的
-    const uint32_t UBSize = ArchTag::UBSize;
-    static constexpr bool RowOrColumn = std::is_same<LayoutC, acot::layout::RowMajor>::value && std::is_same<LayoutX, acot::layout::RowMajor>::value;
+namespace acot::epilogue::block
+{
+    template <
+        class tempType_,                // y 向量(矩阵表示)
+        class YType_,                   // A * x向量(矩阵表示)
+        class ZType_,                   // z向量(矩阵表示)
+        class TileElemWiseEpilogueAdd_, // 单块元素的处理，包括加法和乘法
+        class TileElemWiseEpilogueMul_, // 乘法的后处理
+        class TileCopy_>
+    class BlockEpilogue<
+        EpilogueAtlasA2Gemv,
+        tempType_,
+        YType_,
+        ZType_,
+        TileElemWiseEpilogueAdd_,
+        TileElemWiseEpilogueMul_,
+        TileCopy_>
+    {
+    public:
+        // Type aliases
+        // temp = A*x
+        // Z = α * temp + β * Y
+        using DispatchPolicy = EpilogueAtlasA2Gemv;
+        using ArchTag = typename DispatchPolicy::ArchTag;
 
-    typedef struct Params{
-        ElementScalar alpha;
-        ElementScalar beta;
-        GM_ADDR ptrX;
-        LayoutX layoutX; // 有stride的信息
-        GM_ADDR ptrC;
-        LayoutC layoutC;
-        GM_ADDR ptrD;
-        LayoutD layoutD;
+        using ElementTemp = typename tempType_::Element;
+        using LayoutTemp = typename tempType_::Layout;
+        using ElementY = typename YType_::Element;
+        using LayoutY = typename YType_::Layout;
+        using ElementZ = typename ZType_::Element;
+        using LayoutZ = typename ZType_::Layout;
+        using ElementScalar = typename YType_::Element;
 
-        // Methods
+        using TileElemWiseEpilogueAdd = TileElemWiseEpilogueAdd_;
+        using TileElemWiseEpilogueMul = TileElemWiseEpilogueMul_;
+
+        using CopyGmToUbY = typename TileCopy_::CopyGmToUbY;       // 传入y  gm->ub
+        using CopyGmToUbTemp = typename TileCopy_::CopyGmToUbTemp; // 传入temp  gm->ub
+        using CopyUbToGmZ = typename TileCopy_::CopyUbToGmZ;       // 传出z  ub->gm
+
+        static constexpr uint32_t COMPUTE_LENGTH = TileElemWiseEpilogueMul::COMPUTE_LENGTH;
+        static constexpr uint32_t OPERANDS_NUM = DispatchPolicy::OPERANDS_NUM;
+
+        // Check the element type of Temp, Y and Z
+        static_assert(std::is_same_v<ElementY, ElementTemp> && std::is_same_v<ElementY, ElementZ>,
+                      "Element type of Y, Temp and Z must be the same");
+        using ElementCompute = ElementZ;
+
+        // Check the layout type of Y, Temp and Z
+        static_assert(std::is_same_v<LayoutY, layout::RowMajor> && std::is_same_v<LayoutTemp, layout::RowMajor> &&
+                          std::is_same_v<LayoutZ, layout::RowMajor>,
+                      "Layout type of Y, Temp and Z must be RowMajor");
+        using LayoutComputeInUb = layout::RowMajor;
+
+        // Check if ArchTag is matched
+        static_assert(std::is_same_v<typename TileElemWiseEpilogueMul::ArchTag, ArchTag>, "Tile epilogue's ArchTag mismatch");
+        // Check if compute length is valid
+        static_assert(COMPUTE_LENGTH * OPERANDS_NUM * sizeof(ElementCompute) <= ArchTag::UB_SIZE, "UB out of bounds");
+
+        struct Params
+        {
+            ElementScalar alpha;
+            ElementScalar beta;
+            GM_ADDR ptrY;
+            LayoutY layoutY;
+
+            GM_ADDR ptrZ;
+            LayoutZ layoutZ;
+
+            // Methods
+            ACOT_DEVICE
+            Params() {}
+
+            ACOT_DEVICE
+            Params(ElementScalar alpha_, ElementScalar beta_, GM_ADDR ptrY_, LayoutTemp layoutY_, GM_ADDR ptrZ_, LayoutZ layoutZ_) : alpha(alpha_), beta(beta_), ptrY(ptrY_), layoutY(layoutY_), ptrZ(ptrZ_), layoutZ(layoutZ_) {}
+        };
+
         ACOT_DEVICE
-        Params() {}
+        BlockEpilogue(arch::Resource<ArchTag> &resource, Params const &params) : params(params) // 对应temp = Ax，不分配空间, 作为参数在operator()中作为参数输入
+        {
+            ubTemp = resource.ubBuf.template GetBufferByByte<ElementTemp>(0);
+            ubY = resource.ubBuf.template GetBufferByByte<ElementY>(COMPUTE_LENGTH * sizeof(ElementTemp));
+            ubZ = resource.ubBuf.template GetBufferByByte<ElementZ>(
+                COMPUTE_LENGTH * sizeof(ElementY) + COMPUTE_LENGTH * sizeof(ElementTemp));
+
+            AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
+        }
 
         ACOT_DEVICE
-        Params(ElementScalar alpha_, ElementScalar beta_, GM_ADDR ptrX_, LayoutX layoutX_, GM_ADDR ptrC_, LayoutC layoutC_, GM_ADDR ptrD_, LayoutD layoutD_)
-        : alpha(alpha_), beta(beta_), ptrX(ptrX_), layoutX(layoutX_) ,ptrC(ptrC_), layoutC(layoutC_), ptrD(ptrD_), layoutD(layoutD_){}
-    }Params;
-
-    // 管理内存的
-    ACOT_DEVICE
-    BlockEpilogue(MatmulCoord blockShape_, Params params_) : blockShape(blockShape_), params(params_){
-        // 分配内存
-        cGm.SetGlobalBuffer((__gm__ ElementC*)params.ptrC); // 强制类型转换
-        xGm.SetGlobalBuffer((__gm__ ElementX*)params.ptrX);
-        dGm.SetGlobalBuffer((__gm__ ElementD*)params.ptrD);
-        Resource();
-        // 开启流水控制
-        for(uint32_t i = 0; i < STAGES; i++){
-            // 使能MTE2
-            AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((int32_t)i);
-            AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((int32_t)(i + 2));
+        ~BlockEpilogue()
+        {
+            AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
         }
-    }
 
-    ACOT_DEVICE
-    ~BlockEpilogue(){
-        // 关闭流水
-        for(uint32_t i = 0; i < STAGES; i++){
-            AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((int32_t)i);
-            AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((int32_t)(i + 2));
-        }
-        // 销毁内存
-        pipe.Destroy();
-    }
+        ACOT_DEVICE
+        void operator()(
+            GemvCoord const &blockShapeMN,
+            GemvCoord const &blockCoordMN,
+            GemvCoord const &actualBlockShapeMN,
+            AscendC::GlobalTensor<ElementCompute> const &gmBlockTemp,
+            LayoutY const &layoutBlockTemp) // temp通过外部传入
+        {                                   // 进行操作，先实现行优先
 
-    ACOT_DEVICE
-    void operator()(
-        uint32_t offsetC,
-        uint32_t offsetX,
-        uint32_t offsetD,
-        MatmulCoord actualShape
-    ){ // 进行操作 先实现行优先
-        if constexpr (RowOrColumn){
-            // 搬运时需要对齐32Byte的
-            uint32_t MActual = actualShape.m();
-            uint32_t NActual = actualShape.n(); // 这里也要对齐
-            // 行优先部分对M进行切分处理
-            uint32_t maxMPerBlock = blockShape.m() / STAGES; // 对着M方向进行切分 肯定会对齐32Byte
-            uint32_t maxNPerBlock = blockShape.n(); 
-            uint32_t MLoops = CeilDiv(MActual, maxMPerBlock);
-            auto layoutCInUb = params.layoutC.GetTileLayout(MakeCoord(maxMPerBlock, maxNPerBlock));
-            auto layoutXInUb = params.layoutX.GetTileLayout(MakeCoord(maxMPerBlock, maxNPerBlock));
-            auto layoutDInGm = params.layoutD.GetTileLayout(MakeCoord(maxMPerBlock, maxNPerBlock));
-            for(uint32_t MIdx = 0; MIdx < MLoops; MIdx++){
-                uint32_t MUbActual = (MIdx == MLoops - 1) ? (MActual - MIdx * maxMPerBlock) : maxMPerBlock;
-                AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((int32_t)(MIdx % STAGES));
-                // auto layoutTileX = params.layoutX.GetTileLayout(MakeCoord(MUbActual, NActual));
-                // copyGmToUbX(
-                //     ubXTensor[MIdx % STAGES],
-                //     xGm[offsetX + MIdx * maxMPerBlock * params.layoutX.stride(0)],
-                //     layoutXInUb, layoutTileX
-                // );
-                // AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(MIdx % STAGES + 4));
-                // AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(MIdx % STAGES + 4));
-                // // 流水控制
-                // // 进行计算
-                // // 先进行乘法 alpha * A * B
-                // tileElemWiseEpilogueMul(
-                //     ubXTensor[MIdx % STAGES],
-                //     ubXTensor[MIdx % STAGES],
-                //     params.alpha
-                // );
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(MIdx % STAGES));
+            // Calculate the offset of the current block
+            MatrixCoord blockShape = blockShapeMN.GetCoordMN();
+            MatrixCoord blockCoord = blockCoordMN.GetCoordMN();
+            MatrixCoord actualBlockShape = actualBlockShapeMN.GetCoordMN();
+            MatrixCoord blockOffset = blockCoord * blockShape; // coord级别的乘法，算出行偏移和列偏移
 
-                // 现在单纯测试C矩阵的搬运  AIV核出现问题
-                AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((int32_t)(MIdx % STAGES + 2));
-                auto layoutTileC = params.layoutC.GetTileLayout(MakeCoord(MUbActual, NActual));
-                copyGmToUbC(
-                    ubCTensor[MIdx % STAGES],
-                    cGm[offsetC + MIdx * maxMPerBlock * params.layoutC.stride(0)],
-                    layoutCInUb, layoutTileC
-                );
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(MIdx % STAGES + 6));
-                AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(MIdx % STAGES + 6));
-                // 进行乘法 beta * C
-                tileElemWiseEpilogueMul(
-                    ubCTensor[MIdx % STAGES],
-                    ubCTensor[MIdx % STAGES],
-                    params.beta // 获取参数内容
-                );
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(MIdx % STAGES + 2));
-                // 等待计算
-                AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(MIdx % STAGES));
-                AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(MIdx % STAGES + 2));
-                // 进行加法 alpha * A * B + beta * C
-                // tileElemWiseEpilogueAdd( // ubXTensor 数据不干净导致的数据异常
-                //     ubDTensor[MIdx % STAGES],
-                //     ubXTensor[MIdx % STAGES],
-                //     ubCTensor[MIdx % STAGES]
-                // );
-                // ubX和ubC使用完了
-                AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((int32_t)(MIdx % STAGES));
-                AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((int32_t)(MIdx % STAGES + 2));
-                // 流水控制
-                // 搬到Gm中
-                AscendC::SetFlag<AscendC::HardEvent::V_MTE3>((int32_t)(MIdx % STAGES));
-                AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>((int32_t)(MIdx % STAGES));
-                auto layoutTileD = params.layoutD.GetTileLayout(MakeCoord(MUbActual, NActual));
-                copyUbToGmD(
-                    dGm[offsetD + MIdx * maxMPerBlock * params.layoutX.stride(0)],
-                    // ubDTensor[MIdx % STAGES],
-                    ubCTensor[MIdx % STAGES],
-                    layoutDInGm, layoutTileD
-                );
-            }
-        }else{ // 对着N方向进行切分处理
-            // 搬运时需要对齐32Byte的
-            uint32_t MActual = actualShape.m();
-            uint32_t NActual = actualShape.n(); // 这里也要对齐
-            // 行优先部分对M进行切分处理
-            uint32_t maxMPerBlock = blockShape.m(); // 对着M方向进行切分 肯定会对齐32Byte
-            uint32_t maxNPerBlock = blockShape.n() / STAGES; 
-            uint32_t NLoops = CeilDiv(NActual, maxNPerBlock);
-            auto layoutCInUb = params.layoutC.GetTileLayout(MakeCoord(maxMPerBlock, maxNPerBlock));
-            auto layoutXInUb = params.layoutX.GetTileLayout(MakeCoord(maxMPerBlock, maxNPerBlock));
-            auto layoutDInGm = params.layoutD.GetTileLayout(MakeCoord(maxMPerBlock, maxNPerBlock));
-            for(uint32_t NIdx = 0; NIdx < NLoops; NIdx++){
-                uint32_t NUbActual = (NIdx == NLoops - 1) ? (NActual - NIdx * maxNPerBlock) : maxNPerBlock;
-                AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((int32_t)(NIdx % STAGES));
-                // auto layoutTileX = params.layoutX.GetTileLayout(MakeCoord(MActual, NUbActual));
-                // copyGmToUbX(
-                //     ubXTensor[NIdx % STAGES],
-                //     xGm[offsetX + NIdx * maxNPerBlock * params.layoutX.stride(1)],
-                //     layoutXInUb, layoutTileX
-                // );
-                // AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(NIdx % STAGES + 4));
-                // AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(NIdx % STAGES + 4));
-                // // 流水控制
-                // // 进行计算
-                // // 先进行乘法 alpha * A * B
-                // tileElemWiseEpilogueMul(
-                //     ubXTensor[NIdx % STAGES],
-                //     ubXTensor[NIdx % STAGES],
-                //     params.alpha
-                // );
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(NIdx % STAGES));
+            // 算出当前子块的offset和shape
+            // 对行方向，根据aiv核数划分
+            MatrixCoord subblockShape{
+                actualBlockShape.row(),
+                CeilDiv(actualBlockShape.column(), static_cast<uint32_t>(AscendC::GetSubBlockNum()))};
 
-                // 现在单纯测试C矩阵的搬运  AIV核出现问题
-                AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((int32_t)(NIdx % STAGES + 2));
-                auto layoutTileC = params.layoutC.GetTileLayout(MakeCoord(MActual, NUbActual));
-                copyGmToUbC(
-                    ubCTensor[NIdx % STAGES],
-                    cGm[offsetC + NIdx * maxNPerBlock * params.layoutC.stride(1)],
-                    layoutCInUb, layoutTileC
-                );
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(NIdx % STAGES + 6));
-                AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(NIdx % STAGES + 6));
-                // 进行乘法 beta * C
-                tileElemWiseEpilogueMul(
-                    ubCTensor[NIdx % STAGES],
-                    ubCTensor[NIdx % STAGES],
-                    params.beta // 获取参数内容
-                );
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(NIdx % STAGES + 2));
-                // 等待计算
-                AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(NIdx % STAGES));
-                AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(NIdx % STAGES + 2));
-                // 进行加法 alpha * A * B + beta * C
-                // tileElemWiseEpilogueAdd(
-                //     ubDTensor[NIdx % STAGES],
-                //     ubXTensor[NIdx % STAGES],
-                //     ubCTensor[NIdx % STAGES]
-                // );
-                // ubX和ubC使用完了
-                AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((int32_t)(NIdx % STAGES));
-                AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((int32_t)(NIdx % STAGES + 2));
-                // 流水控制
-                // 搬到Gm中
-                AscendC::SetFlag<AscendC::HardEvent::V_MTE3>((int32_t)(NIdx % STAGES));
-                AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>((int32_t)(NIdx % STAGES));
-                auto layoutTileD = params.layoutD.GetTileLayout(MakeCoord(MActual, NUbActual));
-                copyUbToGmD(
-                    dGm[offsetD + NIdx * maxNPerBlock * params.layoutD.stride(1)],
-                    // ubDTensor[NIdx % STAGES],
-                    ubCTensor[NIdx % STAGES],
-                    layoutDInGm, layoutTileD
-                );
-            }
-        }
-    }
-private:
-    MatmulCoord blockShape;
-    Params params;
+            // MatrixCoord subblockShape{
+            //     actualBlockShape.column(),
+            //     CeilDiv(actualBlockShape.row(), static_cast<uint32_t>(AscendC::GetSubBlockNum()))};
 
-    AscendC::TPipe pipe;
-    AscendC::GlobalTensor<ElementC> cGm;
-    AscendC::GlobalTensor<ElementX> xGm;
-    AscendC::GlobalTensor<ElementD> dGm;
-    AscendC::TQue<AscendC::TPosition::VECCALC, 1> VECQueue; // 只开一个全空间的 
-    // 开启双缓冲空间
-    AscendC::LocalTensor<ElementC> ubCTensor[STAGES];
-    AscendC::LocalTensor<ElementX> ubXTensor[STAGES];
-    AscendC::LocalTensor<ElementD> ubDTensor[STAGES];
+            // MatrixCoord subblockCoord{AscendC::GetSubBlockIdx(), 0}; // 子块起始地址坐标就是(aiv核序号，0)
+            MatrixCoord subblockCoord{0, AscendC::GetSubBlockIdx()};
 
-    // 搬运函数
-    CopyGmToUbC copyGmToUbC;
-    CopyGmToUbX copyGmToUbX;
-    CopyUbToGmD copyUbToGmD;
+            MatrixCoord actualSubblockShape = MatrixCoord::Min(subblockShape, actualBlockShape - subblockCoord * subblockShape); // 这里实际上就是获取每个subBlockIdx对应的blockshape
+            MatrixCoord subblockOffset = subblockCoord * subblockShape;                                                          // coord级别的乘法，算出行偏移和列偏移
 
-    // 计算函数
-    TileElemWiseEpilogueAdd tileElemWiseEpilogueAdd;
-    TileElemWiseEpilogueMul tileElemWiseEpilogueMul;
+            // Get the data and layout of Temp 外部输入 子偏移
+            auto gmSubblockTemp = gmBlockTemp[layoutBlockTemp.GetOffset(subblockOffset)];
+            auto layoutSubblockTemp = layoutBlockTemp.GetTileLayout(actualSubblockShape);
 
-    ACOT_DEVICE
-    void Resource(){
-        // 分配内存 分成三块
-        uint32_t maxMPerBlock = blockShape.m();
-        uint32_t maxNPerBlock = blockShape.n() / STAGES;
-        uint32_t tileSize = maxMPerBlock * maxNPerBlock;
-        uint32_t ubCSize = tileSize * sizeof(ElementC);
-        uint32_t ubXSize = tileSize * sizeof(ElementX);
-        uint32_t ubDSize = tileSize * sizeof(ElementD);
-        // 三个数据，要分成6份数据块
-        uint32_t ubByteStart = 0;
-        pipe.InitBuffer(VECQueue, 1, UBSize);
-        AscendC::LocalTensor<uint8_t> ubTensor = VECQueue.AllocTensor<uint8_t>();
-        // 双缓冲空间 128 * 128 * 4 * 3 = 196,608 = 192 * 1024 能存下 极限情况
-        ubCTensor[0] = ubTensor[ubByteStart].template ReinterpretCast<ElementC>(); 
-        ubByteStart += ubCSize;
-        ubCTensor[1] = ubTensor[ubByteStart].template ReinterpretCast<ElementC>(); 
-        ubByteStart += ubCSize;
-        ubXTensor[0] = ubTensor[ubByteStart].template ReinterpretCast<ElementX>();
-        ubByteStart += ubXSize;
-        ubXTensor[1] = ubTensor[ubByteStart].template ReinterpretCast<ElementX>();
-        ubByteStart += ubXSize;
-        ubDTensor[0] = ubTensor[ubByteStart].template ReinterpretCast<ElementD>();
-        ubByteStart += ubDSize;
-        ubDTensor[1] = ubTensor[ubByteStart].template ReinterpretCast<ElementD>();
-        ubByteStart += ubDSize;
-    }
-};
-}
+            // Get the data and layout of y 全局的原始数据  全局偏移
+            AscendC::GlobalTensor<ElementY> gmY;
+            gmY.SetGlobalBuffer(reinterpret_cast<__gm__ ElementY *>(params.ptrY));
+            auto gmSubblockY = gmY[params.layoutY.GetOffset(blockOffset + subblockOffset)];
+            auto layoutSubblockY = params.layoutY.GetTileLayout(actualSubblockShape);
 
-#endif // ACOT_EPILOGUE_BLOCK_EPILOGUE_GEMM_HPP
+            // Get the data and layout of Z 全局的原始数据
+            AscendC::GlobalTensor<ElementZ> gmZ;
+            gmZ.SetGlobalBuffer(reinterpret_cast<__gm__ ElementZ *>(params.ptrZ));
+            auto gmSubblockZ = gmZ[params.layoutZ.GetOffset(blockOffset + subblockOffset)];
+            auto layoutSubblockZ = params.layoutZ.GetTileLayout(actualSubblockShape);
+
+            // get the layout on UB
+            auto layoutComputeInUb = LayoutComputeInUb::template MakeLayoutInUb<ElementCompute>(actualSubblockShape); // 对列方向进行了32B对齐
+
+            // copy the data of Y and Temp
+            AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
+            AscendC::DataCopyExtParams dataCopyParams0(
+                layoutSubblockY.shape(0),
+                layoutSubblockY.shape(1) * sizeof(ElementCompute),
+                0,
+                0,
+                0);
+            AscendC::DataCopyPadExtParams<ElementCompute> padParams(false, 0, 0, 0);
+            AscendC::DataCopyPad(ubY, gmSubblockY, dataCopyParams0, padParams);
+
+            AscendC::DataCopyExtParams dataCopyParams1(
+                layoutSubblockTemp.shape(0),
+                layoutSubblockTemp.shape(1) * sizeof(ElementCompute),
+                0,
+                0,
+                0);
+            // AscendC::DataCopyPadExtParams<Element> padParams(false, 0, 0, 0);
+            AscendC::DataCopyPad(ubTemp, gmSubblockTemp, dataCopyParams1, padParams);
+            // copyGmToUbY(ubY, gmSubblockY, layoutComputeInUb, layoutSubblockY);
+            // AscendC::PipeBarrier<PIPE_MTE2>();
+            // copyGmToUbTemp(ubTemp, gmSubblockTemp, layoutComputeInUb, layoutSubblockTemp);
+            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
+
+            // 同时算β * Y 和 α * Temp
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
+            AscendC::PipeBarrier<PIPE_V>();
+            AscendC::Muls(ubY, ubY, params.beta, actualBlockShape.column());
+            // tileEpilogueMul(ubY, ubY, params.beta);
+            AscendC::PipeBarrier<PIPE_V>();
+            AscendC::Muls(ubTemp, ubTemp, params.alpha, actualBlockShape.column());
+            // tileEpilogueMul(ubTemp, ubTemp, params.alpha);
+            AscendC::PipeBarrier<PIPE_V>();
+            AscendC::Add(ubZ, ubTemp, ubY, actualBlockShape.column());
+            // tileEpilogueAdd(ubZ, ubTemp, ubY);
+            AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
+
+            // copy the data of Z
+            AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
+            AscendC::DataCopyExtParams dataCopyParams2(
+                layoutSubblockZ.shape(0),
+                layoutSubblockZ.shape(1) * sizeof(ElementCompute),
+                0,
+                0,
+                0);
+            AscendC::DataCopyPad(gmSubblockZ, ubZ, dataCopyParams2);
+            // copyUbToGmZ(gmSubblockZ, ubZ, layoutSubblockZ, layoutComputeInUb);
+
+            AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
+        };
+
+    private:
+        Params params;
+
+        AscendC::LocalTensor<ElementY> ubY;
+        AscendC::LocalTensor<ElementTemp> ubTemp;
+        AscendC::LocalTensor<ElementZ> ubZ;
+
+        // TileElemWiseEpilogue tileEpilogue;
+
+        TileElemWiseEpilogueAdd tileEpilogueAdd;
+        TileElemWiseEpilogueMul tileEpilogueMul;
+
+        CopyGmToUbY copyGmToUbY;
+        CopyGmToUbTemp copyGmToUbTemp;
+        CopyUbToGmZ copyUbToGmZ;
+    };
+
+} // namespace acot::epilogue::block
+
+#endif // ACOT_EPILOGUE_BLOCK_EPILOGUE_GEMV_HPP

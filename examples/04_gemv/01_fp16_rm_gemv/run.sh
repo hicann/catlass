@@ -1,5 +1,8 @@
 #!/bin/bash
 # 不需要TIK打印出内存信息
+clear
+export ASCEND_HOME_DIR=/home/workspace/gpf/CANN/ascend-toolkit/latest
+source /home/workspace/gpf/CANN/ascend-toolkit/set_env.sh
 export PRINT_TIK_MEM_ACCESS=FALSE
 
 # 编译文件

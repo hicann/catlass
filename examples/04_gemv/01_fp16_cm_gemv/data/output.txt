@@ -1,9 +1,13 @@
 ---- FP16 -- ColumnMajor -- Gemv ---- 
 
-  M : 32 , N : 32 
+  M : 12008 , N : 10086 
 
 ===========================================================
-errorCnt: 0
-Total Count: 32
-Accuracy: 100.00%
+errorCnt: 3
+Total Count: 12008
+Accuracy: 99.98%
 ===========================================================
+Errors at the following indices and values:
+Index: 59, Expected: -1.3525390625, Got: -1.349609375
+Index: 8598, Expected: -0.1630859375, Got: -0.1605224609375
+Index: 11751, Expected: -1.5263671875, Got: -1.5224609375

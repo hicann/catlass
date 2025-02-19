@@ -13,34 +13,48 @@
 
 #include "acot/arch/arch.hpp"
 
-namespace acot::epilogue {
+namespace acot::epilogue
+{
 
-// For AtlasA2, an element wise epilogue of the form D = C + X, where X is an additional source
-struct EpilogueAtlasA2ElemWiseOneSource {
-    using ArchTag = arch::AtlasA2;
-    // Number of operands. Including C, X, and D 3 operands
-    static constexpr uint32_t OPERANDS_NUM = 3;
-};
+    // For AtlasA2, an element wise epilogue of the form D = C + X, where X is an additional source
+    struct EpilogueAtlasA2ElemWiseOneSource
+    {
+        using ArchTag = arch::AtlasA2;
+        // Number of operands. Including C, X, and D 3 operands
+        static constexpr uint32_t OPERANDS_NUM = 3;
+    };
 
-// AscendC910B3的Epiligue部分
-struct EpilogueAscendC910B3Gemm {
-    using ArchTag = arch::AscendC910B3;
-    // 默认开启双缓冲
-    static constexpr uint32_t STAGES = 2;
-    // 设计三个数据处理 a*b 和 c  最后d
-    static constexpr uint32_t OPERANDS_NUM = 3;
-};
+    // AscendC910B3的Epiligue部分
+    // struct EpilogueAscendC910B3Gemm {
+    //     using ArchTag = arch::AscendC910B3;
+    //     // 默认开启双缓冲
+    //     static constexpr uint32_t STAGES = 2;
+    //     // 设计三个数据处理 a*b 和 c  最后d
+    //     static constexpr uint32_t OPERANDS_NUM = 3;
+    // };
 
-// For AtlasA2, FA Softmax
-struct EpilogueAtlasA2FASoftmax {
-    using ArchTag = arch::AtlasA2;
-};
+    struct EpilogueAtlasA2Gemv
+    {
+        using ArchTag = arch::AtlasA2;
+        // Number of operands. Including y, Temp, and z 3 operands
+        static constexpr uint32_t OPERANDS_NUM = 3;
 
-// For AtlasA2, FA RescaleO
-struct EpilogueAtlasA2FARescaleO {
-    using ArchTag = arch::AtlasA2;
-};
+        // 默认开启双缓冲
+        static constexpr uint32_t STAGES = 2;
+    };
 
-}  // namespace acot::epilogue
+    // For AtlasA2, FA Softmax
+    struct EpilogueAtlasA2FASoftmax
+    {
+        using ArchTag = arch::AtlasA2;
+    };
 
-#endif  // ACOT_EPILOGUE_DISPATCH_POLICY_HPP
+    // For AtlasA2, FA RescaleO
+    struct EpilogueAtlasA2FARescaleO
+    {
+        using ArchTag = arch::AtlasA2;
+    };
+
+} // namespace acot::epilogue
+
+#endif // ACOT_EPILOGUE_DISPATCH_POLICY_HPP
