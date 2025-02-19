@@ -26,12 +26,10 @@ struct CopyGmToL1A<acot::arch::AscendC910B3, acot::gemm::GemmType<Element, acot:
         AscendC::GlobalTensor<Element> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t MAlignment = C0_NUM_PER_FRACTAL;   
-        uint32_t KAlignment = BYTE_PER_C0 / sizeof(Element);
         uint32_t MActual = layoutSrc.shape(0);
-        uint32_t MRound = RoundUp(MActual, MAlignment);
+        uint32_t MRound = layoutDst.shape(1) * layoutDst.shape(0);
         uint32_t KActual = layoutSrc.shape(1);
-        uint32_t KRound = RoundUp(KActual, KAlignment);
+        uint32_t KRound = layoutDst.shape(2) * layoutDst.shape(3);
         uint32_t stride = layoutSrc.stride(0); // 注意layoutSrc的构造函数 
         AscendC::Nd2NzParams params;
         params.ndNum = 1;
@@ -61,14 +59,13 @@ struct CopyGmToL1A<acot::arch::AscendC910B3, acot::gemm::GemmType<Element, acot:
         AscendC::GlobalTensor<Element> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t MAlignment = C0_NUM_PER_FRACTAL; // 对齐32byte
-        uint32_t KAlignment = C0_NUM_PER_FRACTAL;
+        uint32_t KAlignment = layoutDst.shape(0);
         uint32_t MActual = layoutSrc.shape(0);
-        uint32_t MRound = RoundUp(MActual, MAlignment);
+        uint32_t MRound = layoutDst.shape(0) * layoutDst.shape(1);
         uint32_t KActual = layoutSrc.shape(1);
         uint32_t KRound = RoundUp(KActual, KAlignment);
         uint32_t stride = layoutSrc.stride(1); // ColumnMajor
-        uint32_t KL1AlignmentA = C0_NUM_PER_FRACTAL;
+        uint32_t KL1AlignmentA = layoutDst.shape(0);
         uint32_t KL1Loops = CeilDiv(KActual, KL1AlignmentA);
         AscendC::Nd2NzParams params;
         for(uint32_t kL1AIdx = 0; kL1AIdx < KL1Loops; kL1AIdx++){ // 16行进行切分，变成zZ
@@ -102,8 +99,8 @@ struct CopyGmToL1A<acot::arch::AscendC910B3, acot::gemm::GemmType<int8_t, acot::
         AscendC::GlobalTensor<int8_t> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t MAlignment = BYTE_PER_C0 / sizeof(int8_t); // 对齐32byte
-        uint32_t KAlignment = C0_NUM_PER_FRACTAL * 2;
+        uint32_t MAlignment = layoutDst.shape(2); // 对齐32byte
+        uint32_t KAlignment = layoutDst.shape(0) * 2;
         uint32_t MActual = layoutSrc.shape(0);
         uint32_t MRound = RoundUp(MActual, MAlignment);
         uint32_t KActual = layoutSrc.shape(1);
@@ -143,17 +140,16 @@ struct CopyGmToL1B<arch::AscendC910B3, gemm::GemmType<Element, acot::layout::Row
         AscendC::GlobalTensor<Element> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t NAlignment = BYTE_PER_C0 / sizeof(Element);
+        uint32_t NAlignment = layoutDst.shape(2);
         if constexpr (std::is_same<Element, float>::value){
-            NAlignment = C0_NUM_PER_FRACTAL;
+            NAlignment = layoutDst.shape(0);
         }
-        uint32_t KAlignment = C0_NUM_PER_FRACTAL;
         uint32_t NActual = layoutSrc.shape(1);
         uint32_t NRound = RoundUp(NActual, NAlignment);
         uint32_t KActual = layoutSrc.shape(0);
-        uint32_t KRound = RoundUp(KActual, KAlignment);
+        uint32_t KRound = layoutDst.shape(1) * layoutDst.shape(0);
         uint32_t stride = layoutSrc.stride(0);
-        uint32_t KL1AlignmentB = C0_NUM_PER_FRACTAL;
+        uint32_t KL1AlignmentB = layoutDst.shape(0);
         uint32_t KL1Loops = CeilDiv(KActual, KL1AlignmentB);
         // K 方向的切分
         // for循环放进来
@@ -189,12 +185,10 @@ struct CopyGmToL1B<arch::AscendC910B3, gemm::GemmType<int8_t, acot::layout::RowM
         AscendC::GlobalTensor<int8_t> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t NAlignment = BYTE_PER_C0 / sizeof(int8_t);
-        uint32_t KAlignment = C0_NUM_PER_FRACTAL * 2;
         uint32_t NActual = layoutSrc.shape(1);
-        uint32_t NRound = RoundUp(NActual, NAlignment);
+        uint32_t NRound = layoutDst.shape(2) * layoutDst.shape(3);
         uint32_t KActual = layoutSrc.shape(0);
-        uint32_t KRound = RoundUp(KActual, KAlignment);
+        uint32_t KRound = RoundUp(KActual, layoutDst.shape(0) * 2);
         uint32_t stride = layoutSrc.stride(0);
         AscendC::Nd2NzParams params;
         params.ndNum = 1;
@@ -223,12 +217,10 @@ struct CopyGmToL1B<arch::AscendC910B3, gemm::GemmType<Element, acot::layout::Col
         AscendC::GlobalTensor<Element> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t NAlignment = C0_NUM_PER_FRACTAL;
-        uint32_t KAlignment = BYTE_PER_C0 / sizeof(Element);
         uint32_t NActual = layoutSrc.shape(1);
-        uint32_t NRound = RoundUp(NActual, NAlignment);
+        uint32_t NRound = layoutDst.shape(2) * layoutDst.shape(3);
         uint32_t KActual = layoutSrc.shape(0);
-        uint32_t KRound = RoundUp(KActual, KAlignment);
+        uint32_t KRound = layoutDst.shape(0) * layoutDst.shape(1);
         uint32_t stride = layoutSrc.stride(1); // ColumnMajor
         AscendC::Nd2NzParams params;
         params.ndNum = 1;

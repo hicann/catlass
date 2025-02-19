@@ -366,8 +366,6 @@ private:
             // 流水控制
             // 进行计算
             // 先进行乘法 alpha * A * B
-            // 进行计算
-            // 先进行乘法 alpha * A * B
             tileElemWiseEpilogueMul(
                 ubXTensor[aivIndex % STAGES],
                 ubXTensor[aivIndex % STAGES],

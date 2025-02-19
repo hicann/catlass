@@ -26,14 +26,10 @@ struct CopyL1ToL0A<acot::arch::AscendC910B3, acot::gemm::GemmType<Element, layou
         AscendC::LocalTensor<Element> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t MAlignment = C0_NUM_PER_FRACTAL;
-        uint32_t KAlignment = BYTE_PER_C0 / sizeof(Element);
-        uint32_t MActual = layoutDst.orgShape(0);
-        uint32_t MRound = RoundUp(MActual, MAlignment);
-        uint32_t KActual = layoutDst.orgShape(1);
-        uint32_t KRound = RoundUp(KActual, KAlignment);
-        uint32_t ML0Alignment = C0_NUM_PER_FRACTAL;
-        uint32_t KL0Alignment = BYTE_PER_C0 / sizeof(Element);
+        uint32_t MRound = layoutDst.shape(0) * layoutDst.shape(1);
+        uint32_t KRound = layoutDst.shape(2) * layoutDst.shape(3);
+        uint32_t ML0Alignment = layoutDst.shape(0);
+        uint32_t KL0Alignment = layoutDst.shape(2);
         uint32_t MLoops = CeilDiv(MRound, ML0Alignment);
         AscendC::LoadData2DParams params;
         for(uint32_t i = 0; i < MLoops; i++){
@@ -63,14 +59,12 @@ struct CopyL1ToL0A<acot::arch::AscendC910B3, acot::gemm::GemmType<Element, layou
         AscendC::LocalTensor<Element> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t MAlignment = C0_NUM_PER_FRACTAL;
-        uint32_t KAlignment = C0_NUM_PER_FRACTAL;
-        uint32_t MActual = layoutDst.orgShape(0);
-        uint32_t MRound = RoundUp(MActual, MAlignment);
+        uint32_t KAlignment = layoutSrc.shape(0);
+        uint32_t MRound = layoutSrc.shape(0) * layoutSrc.shape(1);
         uint32_t KActual = layoutDst.orgShape(1);
         uint32_t KRound = RoundUp(KActual, KAlignment);
-        uint32_t ML0Alignment = BYTE_PER_C0 / sizeof(Element);
-        uint32_t KL0Alignment = C0_NUM_PER_FRACTAL;
+        uint32_t ML0Alignment = layoutSrc.shape(2);
+        uint32_t KL0Alignment = layoutSrc.shape(0);
         uint32_t KLoops = CeilDiv(KRound, KL0Alignment);
         AscendC::LoadData2DParams params;
         for(uint32_t i = 0; i < KLoops; i++){
@@ -100,14 +94,12 @@ struct CopyL1ToL0A<acot::arch::AscendC910B3, acot::gemm::GemmType<float, layout:
         AscendC::LocalTensor<float> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t MAlignment = C0_NUM_PER_FRACTAL;
-        uint32_t KAlignment = C0_NUM_PER_FRACTAL;
-        uint32_t MActual = layoutDst.orgShape(0);
-        uint32_t MRound = RoundUp(MActual, MAlignment);
+        uint32_t KAlignment = layoutSrc.shape(0);
+        uint32_t MRound = layoutSrc.shape(0) * layoutSrc.shape(1);
         uint32_t KActual = layoutDst.orgShape(1);
         uint32_t KRound = RoundUp(KActual, KAlignment);
-        uint32_t ML0Alignment = BYTE_PER_C0 * 2 / sizeof(float);
-        uint32_t KL0Alignment = C0_NUM_PER_FRACTAL;
+        uint32_t ML0Alignment = layoutSrc.shape(2) * 2;
+        uint32_t KL0Alignment = layoutSrc.shape(0);
         uint32_t KLoops = CeilDiv(KRound, KL0Alignment);
         AscendC::LoadData2dTransposeParams params;
         for(uint32_t i = 0; i < KLoops; i++){ // k方向切割
@@ -135,14 +127,14 @@ struct CopyL1ToL0A<acot::arch::AscendC910B3, acot::gemm::GemmType<int8_t, layout
         AscendC::LocalTensor<int8_t> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t MAlignment = BYTE_PER_C0 / sizeof(int8_t);
-        uint32_t KAlignment = C0_NUM_PER_FRACTAL * 2;
+        uint32_t MAlignment = layoutSrc.shape(2);
+        uint32_t KAlignment = layoutSrc.shape(0) * 2;
         uint32_t MActual = layoutDst.orgShape(0);
         uint32_t MRound = RoundUp(MActual, MAlignment);
         uint32_t KActual = layoutDst.orgShape(1);
         uint32_t KRound = RoundUp(KActual, KAlignment);
-        uint32_t ML0Alignment = BYTE_PER_C0 / sizeof(int8_t); // 32个元素
-        uint32_t KL0Alignment = C0_NUM_PER_FRACTAL * 2; // 32个元素对齐
+        uint32_t ML0Alignment = layoutSrc.shape(2); // 32个元素
+        uint32_t KL0Alignment = layoutSrc.shape(0) * 2; // 32个元素对齐
         uint32_t KLoops = CeilDiv(KRound, KL0Alignment);
         AscendC::LoadData2dTransposeParams params;
         for(uint32_t i = 0; i < KLoops; i++){
@@ -177,15 +169,11 @@ struct CopyL1ToL0B<acot::arch::AscendC910B3, acot::gemm::GemmType<Element, layou
         AscendC::LocalTensor<Element> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t NAlignment = BYTE_PER_C0 / sizeof(Element);
-        uint32_t KAlignment = C0_NUM_PER_FRACTAL;
-        uint32_t NActual = layoutDst.orgShape(1);
-        uint32_t NRound = RoundUp(NActual, NAlignment);
-        uint32_t KActual = layoutDst.orgShape(0);
-        uint32_t KRound = RoundUp(KActual, KAlignment);
+        uint32_t NRound = layoutDst.shape(0) * layoutDst.shape(1);
+        uint32_t KRound = layoutDst.shape(2) * layoutDst.shape(3);
         // 16 字节的
-        uint32_t NL0Alignment = BYTE_PER_C0 / sizeof(Element);
-        uint32_t KL0Alignment = C0_NUM_PER_FRACTAL; // 保证了方阵
+        uint32_t NL0Alignment = layoutDst.shape(0);
+        uint32_t KL0Alignment = layoutDst.shape(2); // 保证了方阵
         uint32_t KLoops = CeilDiv(KRound, KL0Alignment);
         AscendC::LoadData2DParams params;
         for(uint32_t i = 0; i < KLoops; i++){ // 还是k方向进行切割
@@ -215,14 +203,13 @@ struct CopyL1ToL0B<acot::arch::AscendC910B3, acot::gemm::GemmType<float, layout:
         AscendC::LocalTensor<float> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t NAlignment = C0_NUM_PER_FRACTAL; // 25.02.18 修改的地方 16 对 16
-        uint32_t KAlignment = C0_NUM_PER_FRACTAL;
+        uint32_t KAlignment = layoutDst.shape(2);
         uint32_t NActual = layoutDst.orgShape(1);
-        uint32_t NRound = RoundUp(NActual, NAlignment);
+        uint32_t NRound = layoutDst.shape(2) * layoutDst.shape(3);
         uint32_t KActual = layoutDst.orgShape(0);
         uint32_t KRound = RoundUp(KActual, KAlignment);
-        uint32_t NL0Alignment = BYTE_PER_C0 * 2 / sizeof(float); // 16 原来的NRound就已经向16对齐了
-        uint32_t KL0Alignment = C0_NUM_PER_FRACTAL; // 保证了方阵
+        uint32_t NL0Alignment = layoutDst.shape(0) * 2; // 16 原来的NRound就已经向16对齐了
+        uint32_t KL0Alignment = layoutDst.shape(2); // 保证了方阵
         uint32_t KLoops = CeilDiv(KRound, KL0Alignment);  // 这里还是向K方向进行切割处理
         AscendC::LoadData2dTransposeParams params;
         for(uint32_t i = 0; i < KLoops; i++){ // k方向切割
@@ -250,14 +237,14 @@ struct CopyL1ToL0B<acot::arch::AscendC910B3, acot::gemm::GemmType<int8_t, layout
         AscendC::LocalTensor<int8_t> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t NAlignment = BYTE_PER_C0 / sizeof(int8_t);
-        uint32_t KAlignment = C0_NUM_PER_FRACTAL * 2;
+        uint32_t NAlignment = layoutDst.shape(0);
+        uint32_t KAlignment = layoutDst.shape(2) * 2;
         uint32_t NActual = layoutDst.orgShape(1);
         uint32_t NRound = RoundUp(NActual, NAlignment);
         uint32_t KActual = layoutDst.orgShape(0);
         uint32_t KRound = RoundUp(KActual, KAlignment);
-        uint32_t NL0Alignment = BYTE_PER_C0 / sizeof(int8_t); // 32个元素
-        uint32_t KL0Alignment = C0_NUM_PER_FRACTAL * 2; // 32个元素对齐
+        uint32_t NL0Alignment = layoutDst.shape(0); // 32个元素
+        uint32_t KL0Alignment = layoutDst.shape(2) * 2; // 32个元素对齐
         uint32_t KLoops = CeilDiv(KRound, KL0Alignment);
         AscendC::LoadData2dTransposeParams params;
         for(uint32_t i = 0; i < KLoops; i++){
@@ -285,14 +272,10 @@ struct CopyL1ToL0B<acot::arch::AscendC910B3, acot::gemm::GemmType<Element, layou
         AscendC::LocalTensor<Element> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t NAlignment = C0_NUM_PER_FRACTAL;
-        uint32_t KAlignment = BYTE_PER_C0 / sizeof(Element);
-        uint32_t NActual = layoutDst.orgShape(1);
-        uint32_t NRound = RoundUp(NActual, NAlignment);
-        uint32_t KActual = layoutDst.orgShape(0);
-        uint32_t KRound = RoundUp(KActual, KAlignment);
-        uint32_t NL0Alignment = C0_NUM_PER_FRACTAL;
-        uint32_t KL0Alignment = BYTE_PER_C0 / sizeof(Element);
+        uint32_t NRound = layoutSrc.shape(0) * layoutSrc.shape(1);
+        uint32_t KRound = layoutSrc.shape(2) * layoutSrc.shape(3);
+        uint32_t NL0Alignment = layoutSrc.shape(2);
+        uint32_t KL0Alignment = layoutSrc.shape(0);
         uint32_t NLoops = CeilDiv(NRound, NL0Alignment);
         AscendC::LoadData2DParams params;
         for(uint32_t i = 0; i < NLoops; i++){

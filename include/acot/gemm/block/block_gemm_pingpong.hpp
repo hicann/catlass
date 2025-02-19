@@ -186,6 +186,214 @@ private:
     }
     
     ACOT_DEVICE
+    void MatmulRowMajor(
+        uint32_t offsetA,
+        uint32_t offsetB,
+        uint32_t offsetC,
+        MatmulCoord actualShape, // 传递真实矩阵大小
+        uint32_t singleIdx
+    ){
+        // 先实现行优先
+        uint32_t MAlignment = C0_NUM_PER_FRACTAL;
+        uint32_t NAlignment = BYTE_PER_C0 / sizeof(ElementB);
+        if constexpr (std::is_same<ElementB, float>::value){
+            NAlignment = C0_NUM_PER_FRACTAL; // N方向向16对齐
+        }
+        uint32_t MActual = actualShape.m();
+        uint32_t NActual = actualShape.n();
+        uint32_t MRound = RoundUp(MActual, MAlignment);
+        uint32_t NRound = RoundUp(NActual, NAlignment);
+        uint32_t K = actualShape.k();
+        uint32_t maxKPerBlock = L1TileShape::K;
+        uint32_t KLoops = CeilDiv(K, maxKPerBlock);
+        // 进行切分操作
+        for(uint32_t KIdx = 0; KIdx < KLoops; KIdx++){
+            uint32_t KGmActual = (KIdx == KLoops - 1) ? (K - KIdx * maxKPerBlock) : maxKPerBlock;
+            AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(KIdx % STAGES));
+            auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShape.m(), KGmActual));
+            auto layoutAInL1 = LayoutAInL1::template MakeLayout<ElementA>(actualShape.m(), KGmActual);
+            // 对齐API
+            copyGmToL1A(
+                l1ATensor[KIdx % STAGES],
+                aGm[offsetA + KIdx * maxKPerBlock],
+                layoutAInL1, layoutTileA
+            );
+            AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>((int32_t)(KIdx % STAGES));
+            AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(KIdx % STAGES + 2));
+            auto layoutTileB = layoutB.GetTileLayout(MakeCoord(KGmActual, actualShape.n()));
+            auto layoutBInL1 = LayoutBInL1::template MakeLayout<ElementB>(KGmActual, actualShape.n());
+            // 不同的数据类型，有不同的搬运方式，所以进行特化处理
+            copyGmToL1B(
+                l1BTensor[KIdx % STAGES],
+                bGm[offsetB + KIdx * maxKPerBlock * layoutB.stride(0)],
+                layoutBInL1, layoutTileB
+            );
+            AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>((int32_t)(KIdx % STAGES + 2));
+
+            // 在K方向再进行一次切分处理
+            uint32_t KL0TileSize = L0TileShape::K;
+            uint32_t KL0Loops = CeilDiv(KGmActual, KL0TileSize);
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>((int32_t)(KIdx % STAGES));
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>((int32_t)(KIdx % STAGES + 2));
+            for(uint32_t KL0Idx = 0; KL0Idx < KL0Loops; KL0Idx++){
+                uint32_t KL0Actual = (KL0Idx == KL0Loops - 1) ? (KGmActual - KL0Idx * KL0TileSize) : KL0TileSize;
+                AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>((int32_t)(KL0Idx % STAGES));
+                auto layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(actualShape.m(), KL0Actual);
+                copyL1ToL0A(
+                    l0ATensor[KL0Idx % STAGES],
+                    l1ATensor[KIdx % STAGES][KL0Idx * KL0TileSize * MRound],
+                    layoutAInL0, layoutAInL1
+                );
+                AscendC::SetFlag<AscendC::HardEvent::MTE1_M>((int32_t)(KL0Idx % STAGES));
+                AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>((int32_t)(KL0Idx % STAGES + 2));
+                // 偏移量不一样
+                if constexpr (std::is_same<ElementB, int8_t>::value){
+                    auto layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(KGmActual, actualShape.n());
+                    copyL1ToL0B(
+                        l0BTensor[KL0Idx % STAGES],
+                        l1BTensor[KIdx % STAGES][KL0Idx * KL0TileSize * NAlignment],
+                        layoutBInL0, layoutBInL1
+                    );
+                }else{
+                    auto layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(KL0Actual, actualShape.n());
+                    copyL1ToL0B(
+                        l0BTensor[KL0Idx % STAGES],
+                        l1BTensor[KIdx % STAGES][KL0Idx * KL0TileSize * NRound],
+                        layoutBInL0, layoutBInL1
+                    );
+                }
+                AscendC::SetFlag<AscendC::HardEvent::MTE1_M>((int32_t)(KL0Idx % STAGES + 2));
+                // 进行计算
+                AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>((int32_t)(KL0Idx % STAGES));
+                AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>((int32_t)(KL0Idx % STAGES + 2));
+                tileMmad(
+                    l0CTensor[(singleIdx * cSize) % l0CBlockNum],
+                    l0ATensor[KL0Idx % STAGES],
+                    l0BTensor[KL0Idx % STAGES],
+                    MRound,
+                    NRound,
+                    KL0Actual,
+                    (KIdx == 0) && (KL0Idx == 0)
+                );
+                // if(MActual != MRound || NActual != NRound){
+                //     AscendC::PipeBarrier<PIPE_M>();  // 优化点
+                // }
+                AscendC::PipeBarrier<PIPE_ALL>();  // 优化点
+                AscendC::SetFlag<AscendC::HardEvent::M_MTE1>((int32_t)(KL0Idx % STAGES));
+                AscendC::SetFlag<AscendC::HardEvent::M_MTE1>((int32_t)(KL0Idx % STAGES + 2));
+            }
+            // 方便下次循环的使用
+            AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(KIdx % STAGES));
+            AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(KIdx % STAGES + 2));
+            // if(KIdx == KLoops - 1){
+            //     // 最后一个循环节点，进行搬运活动
+            //     AscendC::SetFlag<AscendC::HardEvent::M_FIX>((int32_t)-1);
+            // }
+        }
+    }
+
+    ACOT_DEVICE
+    void MatmulColumnMajor(
+        uint32_t offsetA,
+        uint32_t offsetB,
+        uint32_t offsetC,
+        MatmulCoord actualShape, // 传递真实矩阵大小
+        uint32_t singleIdx  
+    ){
+        uint32_t MAlignment = C0_NUM_PER_FRACTAL; // 对齐32byte
+        if constexpr (std::is_same<ElementA, int8_t>::value){
+            MAlignment = BYTE_PER_C0 / sizeof(ElementA);
+        }
+        uint32_t NAlignment = C0_NUM_PER_FRACTAL; // 对齐16行
+        uint32_t MActual = actualShape.m();
+        uint32_t NActual = actualShape.n();
+        uint32_t MRound = RoundUp(MActual, MAlignment);
+        uint32_t NRound = RoundUp(NActual, NAlignment);
+        uint32_t K = actualShape.k();
+        uint32_t maxKPerBlock = L1TileShape::K;
+        uint32_t KLoops = CeilDiv(K, maxKPerBlock);
+        for(uint32_t KIdx = 0; KIdx < KLoops; KIdx++){
+            uint32_t KGmActual = (KIdx == KLoops - 1) ? (K - KIdx * maxKPerBlock) : maxKPerBlock;
+            AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(KIdx % STAGES));
+            auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShape.m(), KGmActual));
+            auto layoutAInL1 = LayoutAInL1::template MakeLayout<ElementA>(actualShape.m(), KGmActual);
+            copyGmToL1A(
+                l1ATensor[KIdx % STAGES],
+                aGm[offsetA + KIdx * maxKPerBlock * layoutA.stride(1)],
+                layoutAInL1, layoutTileA
+            );
+            AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>((int32_t)(KIdx % STAGES));
+            AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(KIdx % STAGES + 2));
+            auto layoutTileB = layoutB.GetTileLayout(MakeCoord(KGmActual, actualShape.n()));
+            auto layoutBInL1 = LayoutBInL1::template MakeLayout<ElementB>(KGmActual, actualShape.n());
+            copyGmToL1B(
+                l1BTensor[KIdx % STAGES],
+                bGm[offsetB + KIdx * maxKPerBlock],
+                layoutBInL1, layoutTileB
+            );
+            AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>((int32_t)(KIdx % STAGES + 2));
+
+            uint32_t KL0TileSize = L0TileShape::K;
+            uint32_t KL0Loops = CeilDiv(KGmActual, KL0TileSize);
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>((int32_t)(KIdx % STAGES));
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>((int32_t)(KIdx % STAGES + 2));
+            for(uint32_t KL0Idx = 0; KL0Idx < KL0Loops; KL0Idx++){
+                uint32_t KL0Actual = (KL0Idx == KL0Loops - 1) ? (KGmActual - KL0Idx * KL0TileSize) : KL0TileSize;
+                AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>((int32_t)(KL0Idx % STAGES));
+                if constexpr (std::is_same<ElementA, int8_t>::value){
+                    auto layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(actualShape.m(), KGmActual);
+                    copyL1ToL0A(
+                        l0BTensor[KL0Idx % STAGES], // B2硬件位置 nZ
+                        l1ATensor[KIdx % STAGES][KL0Idx * KL0TileSize * MAlignment],
+                        layoutAInL0, layoutAInL1
+                    );
+                }else{
+                    auto layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(actualShape.m(), KL0Actual);
+                    copyL1ToL0A(
+                        l0BTensor[KL0Idx % STAGES],
+                        l1ATensor[KIdx % STAGES][KL0Idx * KL0TileSize * MRound],
+                        layoutAInL0, layoutAInL1
+                    );
+                }
+                AscendC::SetFlag<AscendC::HardEvent::MTE1_M>((int32_t)(KL0Idx % STAGES));
+                AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>((int32_t)(KL0Idx % STAGES + 2));
+                auto layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(KL0Actual, actualShape.n());
+                copyL1ToL0B(
+                    l0ATensor[KL0Idx % STAGES],
+                    l1BTensor[KIdx % STAGES][KL0Idx * KL0TileSize * NRound],
+                    layoutBInL0, layoutBInL1
+                );
+                AscendC::SetFlag<AscendC::HardEvent::MTE1_M>((int32_t)(KL0Idx % STAGES + 2));
+                // 进行计算
+                AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>((int32_t)(KL0Idx % STAGES));
+                AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>((int32_t)(KL0Idx % STAGES + 2));
+                tileMmad(
+                    l0CTensor[(singleIdx * cSize) % l0CBlockNum],
+                    l0ATensor[KL0Idx % STAGES],
+                    l0BTensor[KL0Idx % STAGES],
+                    NRound,
+                    MRound,
+                    KL0Actual,
+                    (KIdx == 0) && (KL0Idx == 0)
+                );
+                // if(MActual != MRound || NActual != NRound){
+                //     AscendC::PipeBarrier<PIPE_M>();  // 优化点
+                // }
+                AscendC::PipeBarrier<PIPE_ALL>();  // 优化点
+                AscendC::SetFlag<AscendC::HardEvent::M_MTE1>((int32_t)(KL0Idx % STAGES));
+                AscendC::SetFlag<AscendC::HardEvent::M_MTE1>((int32_t)(KL0Idx % STAGES + 2));
+            }
+            // 方便下次循环的使用
+            AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(KIdx % STAGES));
+            AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(KIdx % STAGES + 2));
+            // if(KIdx == KLoops - 1){
+            //     // 最后一个循环节点，进行搬运活动
+            //     AscendC::SetFlag<AscendC::HardEvent::M_FIX>((int32_t)-1);
+            // }
+        }
+    }
+
+    ACOT_DEVICE
     void Matmul(
         uint32_t offsetA,
         uint32_t offsetB,
@@ -201,190 +409,14 @@ private:
             AscendC::SetFlag<AscendC::HardEvent::M_MTE1>((int32_t)i);
             AscendC::SetFlag<AscendC::HardEvent::M_MTE1>((int32_t)(i + 2));
         }
-        auto layoutAInL1 = LayoutAInL1::template MakeLayout<ElementA>(L1TileShape::M, L1TileShape::K);
-        auto layoutBInL1 = LayoutBInL1::template MakeLayout<ElementB>(L1TileShape::K, L1TileShape::N);
+        // auto layoutAInL1 = LayoutAInL1::template MakeLayout<ElementA>(L1TileShape::M, L1TileShape::K);
+        // auto layoutBInL1 = LayoutBInL1::template MakeLayout<ElementB>(L1TileShape::K, L1TileShape::N);
         auto layoutInL0C = LayoutCInL0::MakeLayoutInL0C(MakeCoord(L1TileShape::M, L1TileShape::N)); // 获得MNCoord
         // 不管是行优先还是列优先都是按照K方向进行切割的
-        if constexpr (RowOrColumn){
-            // 先实现行优先
-            uint32_t MAlignment = C0_NUM_PER_FRACTAL;
-            uint32_t NAlignment = BYTE_PER_C0 / sizeof(ElementB);
-            if constexpr (std::is_same<ElementB, float>::value){
-                NAlignment = C0_NUM_PER_FRACTAL; // N方向向16对齐
-            }
-            uint32_t MActual = actualShape.m();
-            uint32_t NActual = actualShape.n();
-            uint32_t MRound = RoundUp(MActual, MAlignment);
-            uint32_t NRound = RoundUp(NActual, NAlignment);
-            uint32_t K = actualShape.k();
-            uint32_t maxKPerBlock = L1TileShape::K;
-            uint32_t KLoops = CeilDiv(K, maxKPerBlock);
-            // 进行切分操作
-            for(uint32_t KIdx = 0; KIdx < KLoops; KIdx++){
-                uint32_t KGmActual = (KIdx == KLoops - 1) ? (K - KIdx * maxKPerBlock) : maxKPerBlock;
-                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(KIdx % STAGES));
-                auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShape.m(), KGmActual));
-                // 对齐API
-                copyGmToL1A(
-                    l1ATensor[KIdx % STAGES],
-                    aGm[offsetA + KIdx * maxKPerBlock],
-                    layoutAInL1, layoutTileA
-                );
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>((int32_t)(KIdx % STAGES));
-                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(KIdx % STAGES + 2));
-                auto layoutTileB = layoutB.GetTileLayout(MakeCoord(KGmActual, actualShape.n()));
-                // 不同的数据类型，有不同的搬运方式，所以进行特化处理
-                copyGmToL1B(
-                    l1BTensor[KIdx % STAGES],
-                    bGm[offsetB + KIdx * maxKPerBlock * layoutB.stride(0)],
-                    layoutBInL1, layoutTileB
-                );
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>((int32_t)(KIdx % STAGES + 2));
-
-                // 在K方向再进行一次切分处理
-                uint32_t KL0TileSize = L0TileShape::K;
-                uint32_t KL0Loops = CeilDiv(KGmActual, KL0TileSize);
-                AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>((int32_t)(KIdx % STAGES));
-                AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>((int32_t)(KIdx % STAGES + 2));
-                for(uint32_t KL0Idx = 0; KL0Idx < KL0Loops; KL0Idx++){
-                    uint32_t KL0Actual = (KL0Idx == KL0Loops - 1) ? (KGmActual - KL0Idx * KL0TileSize) : KL0TileSize;
-                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>((int32_t)(KL0Idx % STAGES));
-                    auto layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(actualShape.m(), KL0Actual);
-                    copyL1ToL0A(
-                        l0ATensor[KL0Idx % STAGES],
-                        l1ATensor[KIdx % STAGES][KL0Idx * KL0TileSize * MRound],
-                        layoutAInL0, layoutAInL1
-                    );
-                    AscendC::SetFlag<AscendC::HardEvent::MTE1_M>((int32_t)(KL0Idx % STAGES));
-                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>((int32_t)(KL0Idx % STAGES + 2));
-                    // 偏移量不一样
-                    if constexpr (std::is_same<ElementB, int8_t>::value){
-                        auto layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(KGmActual, actualShape.n());
-                        copyL1ToL0B(
-                            l0BTensor[KL0Idx % STAGES],
-                            l1BTensor[KIdx % STAGES][KL0Idx * KL0TileSize * NAlignment],
-                            layoutBInL0, layoutBInL1
-                        );
-                    }else{
-                        auto layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(KL0Actual, actualShape.n());
-                        copyL1ToL0B(
-                            l0BTensor[KL0Idx % STAGES],
-                            l1BTensor[KIdx % STAGES][KL0Idx * KL0TileSize * NRound],
-                            layoutBInL0, layoutBInL1
-                        );
-                    }
-                    AscendC::SetFlag<AscendC::HardEvent::MTE1_M>((int32_t)(KL0Idx % STAGES + 2));
-                    // 进行计算
-                    AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>((int32_t)(KL0Idx % STAGES));
-                    AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>((int32_t)(KL0Idx % STAGES + 2));
-                    tileMmad(
-                        l0CTensor[(singleIdx * cSize) % l0CBlockNum],
-                        l0ATensor[KL0Idx % STAGES],
-                        l0BTensor[KL0Idx % STAGES],
-                        MRound,
-                        NRound,
-                        KL0Actual,
-                        (KIdx == 0) && (KL0Idx == 0)
-                    );
-                    AscendC::PipeBarrier<PIPE_ALL>();  // 优化点
-                    AscendC::SetFlag<AscendC::HardEvent::M_MTE1>((int32_t)(KL0Idx % STAGES));
-                    AscendC::SetFlag<AscendC::HardEvent::M_MTE1>((int32_t)(KL0Idx % STAGES + 2));
-                }
-                // 方便下次循环的使用
-                AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(KIdx % STAGES));
-                AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(KIdx % STAGES + 2));
-                // if(KIdx == KLoops - 1){
-                //     // 最后一个循环节点，进行搬运活动
-                //     AscendC::SetFlag<AscendC::HardEvent::M_FIX>((int32_t)-1);
-                // }
-            }
+        if constexpr (RowOrColumn){ // 想改成结构体  不知道怎么修改
+            MatmulRowMajor(offsetA, offsetB, offsetC, actualShape, singleIdx);
         }else{
-            uint32_t MAlignment = C0_NUM_PER_FRACTAL; // 对齐32byte
-            if constexpr (std::is_same<ElementA, int8_t>::value){
-                MAlignment = BYTE_PER_C0 / sizeof(ElementA);
-            }
-            uint32_t NAlignment = C0_NUM_PER_FRACTAL; // 对齐16行
-            uint32_t MActual = actualShape.m();
-            uint32_t NActual = actualShape.n();
-            uint32_t MRound = RoundUp(MActual, MAlignment);
-            uint32_t NRound = RoundUp(NActual, NAlignment);
-            uint32_t K = actualShape.k();
-            uint32_t maxKPerBlock = L1TileShape::K;
-            uint32_t KLoops = CeilDiv(K, maxKPerBlock);
-            for(uint32_t KIdx = 0; KIdx < KLoops; KIdx++){
-                uint32_t KGmActual = (KIdx == KLoops - 1) ? (K - KIdx * maxKPerBlock) : maxKPerBlock;
-                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(KIdx % STAGES));
-                auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShape.m(), KGmActual));
-                copyGmToL1A(
-                    l1ATensor[KIdx % STAGES],
-                    aGm[offsetA + KIdx * maxKPerBlock * layoutA.stride(1)],
-                    layoutAInL1, layoutTileA
-                );
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>((int32_t)(KIdx % STAGES));
-                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(KIdx % STAGES + 2));
-                auto layoutTileB = layoutB.GetTileLayout(MakeCoord(KGmActual, actualShape.n()));
-                copyGmToL1B(
-                    l1BTensor[KIdx % STAGES],
-                    bGm[offsetB + KIdx * maxKPerBlock],
-                    layoutBInL1, layoutTileB
-                );
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>((int32_t)(KIdx % STAGES + 2));
-
-                uint32_t KL0TileSize = L0TileShape::K;
-                uint32_t KL0Loops = CeilDiv(KGmActual, KL0TileSize);
-                AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>((int32_t)(KIdx % STAGES));
-                AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>((int32_t)(KIdx % STAGES + 2));
-                for(uint32_t KL0Idx = 0; KL0Idx < KL0Loops; KL0Idx++){
-                    uint32_t KL0Actual = (KL0Idx == KL0Loops - 1) ? (KGmActual - KL0Idx * KL0TileSize) : KL0TileSize;
-                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>((int32_t)(KL0Idx % STAGES));
-                    if constexpr (std::is_same<ElementA, int8_t>::value){
-                        auto layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(actualShape.m(), KGmActual);
-                        copyL1ToL0A(
-                            l0BTensor[KL0Idx % STAGES], // B2硬件位置 nZ
-                            l1ATensor[KIdx % STAGES][KL0Idx * KL0TileSize * MAlignment],
-                            layoutAInL0, layoutAInL1
-                        );
-                    }else{
-                        auto layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(actualShape.m(), KL0Actual);
-                        copyL1ToL0A(
-                            l0BTensor[KL0Idx % STAGES],
-                            l1ATensor[KIdx % STAGES][KL0Idx * KL0TileSize * MRound],
-                            layoutAInL0, layoutAInL1
-                        );
-                    }
-                    AscendC::SetFlag<AscendC::HardEvent::MTE1_M>((int32_t)(KL0Idx % STAGES));
-                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>((int32_t)(KL0Idx % STAGES + 2));
-                    auto layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(KL0Actual, actualShape.n());
-                    copyL1ToL0B(
-                        l0ATensor[KL0Idx % STAGES],
-                        l1BTensor[KIdx % STAGES][KL0Idx * KL0TileSize * NRound],
-                        layoutBInL0, layoutBInL1
-                    );
-                    AscendC::SetFlag<AscendC::HardEvent::MTE1_M>((int32_t)(KL0Idx % STAGES + 2));
-                    // 进行计算
-                    AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>((int32_t)(KL0Idx % STAGES));
-                    AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>((int32_t)(KL0Idx % STAGES + 2));
-                    tileMmad(
-                        l0CTensor[(singleIdx * cSize) % l0CBlockNum],
-                        l0ATensor[KL0Idx % STAGES],
-                        l0BTensor[KL0Idx % STAGES],
-                        NRound,
-                        MRound,
-                        KL0Actual,
-                        (KIdx == 0) && (KL0Idx == 0)
-                    );
-                    AscendC::PipeBarrier<PIPE_ALL>();
-                    AscendC::SetFlag<AscendC::HardEvent::M_MTE1>((int32_t)(KL0Idx % STAGES));
-                    AscendC::SetFlag<AscendC::HardEvent::M_MTE1>((int32_t)(KL0Idx % STAGES + 2));
-                }
-                // 方便下次循环的使用
-                AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(KIdx % STAGES));
-                AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(KIdx % STAGES + 2));
-                // if(KIdx == KLoops - 1){
-                //     // 最后一个循环节点，进行搬运活动
-                //     AscendC::SetFlag<AscendC::HardEvent::M_FIX>((int32_t)-1);
-                // }
-            }
+            MatmulColumnMajor(offsetA, offsetB, offsetC, actualShape, singleIdx);
         }
         AscendC::SetFlag<AscendC::HardEvent::M_FIX>((int32_t)-1);
         AscendC::WaitFlag<AscendC::HardEvent::M_FIX>((int32_t)-1);
