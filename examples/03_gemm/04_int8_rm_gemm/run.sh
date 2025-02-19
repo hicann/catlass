@@ -24,6 +24,7 @@ python3 ./scripts/gen_data.py $M $N $K
 ../../../build/bin/04_int8_rm_gemm $M $N $K $deviceId
 # 验证数据
 python3 ./scripts/verify_data.py $M $N $K
+rm -rf ./data/input ./data/output
 # 性能测试 注意路径问题
 # cd ./examples/03_gemm/04_int8_rm_gemm/
 # msprof op simulator --output=../prof ./main

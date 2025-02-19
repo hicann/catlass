@@ -165,6 +165,8 @@ struct CopyL0CToGm<acot::arch::AscendC910B3, ElementAccumulator_,
         ScaleGranularity::NO_QUANT>::VALUE;
     static constexpr auto reluEn = ReluEnable_;
 
+    static constexpr uint32_t ELE_NUM_PER_C0 =  BYTE_PER_C0 / sizeof(ElementDst);
+
     ACOT_DEVICE
     CopyL0CToGm(){}
 
@@ -174,11 +176,11 @@ struct CopyL0CToGm<acot::arch::AscendC910B3, ElementAccumulator_,
         AscendC::LocalTensor<ElementSrc> srcTensor,
         LayoutDst const &dstLayout, LayoutSrc const &srcLayout, uint8_t unitFlag = 0
     ){
-        uint32_t MAlignment = C0_NUM_PER_FRACTAL; // 对齐32byte
+        uint32_t MAlignment = srcLayout.shape(0); // 对齐32byte
         if constexpr (std::is_same<ElementDst, int32_t>::value){
-            MAlignment = BYTE_PER_C0 / sizeof(int8_t);
+            MAlignment = ELE_NUM_PER_C0;
         }
-        uint32_t NAlignment = C0_NUM_PER_FRACTAL; // 对齐16行
+        uint32_t NAlignment = srcLayout.shape(0); // 对齐16行
         uint32_t MActual = dstLayout.shape(0);
         uint32_t NActual = dstLayout.shape(1);
         uint32_t MRound = RoundUp(MActual, MAlignment);

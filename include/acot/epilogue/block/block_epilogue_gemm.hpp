@@ -331,7 +331,7 @@ private:
     }
 
     ACOT_DEVICE
-    void AlphaDotBeta1(
+    void AlphaDotBeta1( // 还未开启双缓冲机制 行优先 M方向切割给AIV进行切割 N方向开启双缓冲 列优先 N方向切割给AIV进行切割 M方向开启双缓冲 由于行优先和列优先偏移量不一样，可能还是分开写
         uint32_t offsetC,
         // uint32_t offsetX,
         uint32_t offsetD,

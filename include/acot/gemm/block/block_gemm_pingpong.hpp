@@ -315,8 +315,8 @@ private:
         for(uint32_t KIdx = 0; KIdx < KLoops; KIdx++){
             uint32_t KGmActual = (KIdx == KLoops - 1) ? (K - KIdx * maxKPerBlock) : maxKPerBlock;
             AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(KIdx % STAGES));
-            auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShape.m(), KGmActual));
-            auto layoutAInL1 = LayoutAInL1::template MakeLayout<ElementA>(actualShape.m(), KGmActual);
+            auto layoutTileA = layoutA.GetTileLayout(MakeCoord(KGmActual, actualShape.m()));
+            auto layoutAInL1 = LayoutAInL1::template MakeLayout<ElementA>(KGmActual, actualShape.m());
             copyGmToL1A(
                 l1ATensor[KIdx % STAGES],
                 aGm[offsetA + KIdx * maxKPerBlock * layoutA.stride(1)],
@@ -324,8 +324,8 @@ private:
             );
             AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>((int32_t)(KIdx % STAGES));
             AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(KIdx % STAGES + 2));
-            auto layoutTileB = layoutB.GetTileLayout(MakeCoord(KGmActual, actualShape.n()));
-            auto layoutBInL1 = LayoutBInL1::template MakeLayout<ElementB>(KGmActual, actualShape.n());
+            auto layoutTileB = layoutB.GetTileLayout(MakeCoord(actualShape.n(), KGmActual));
+            auto layoutBInL1 = LayoutBInL1::template MakeLayout<ElementB>(actualShape.n(), KGmActual);
             copyGmToL1B(
                 l1BTensor[KIdx % STAGES],
                 bGm[offsetB + KIdx * maxKPerBlock],
@@ -341,14 +341,14 @@ private:
                 uint32_t KL0Actual = (KL0Idx == KL0Loops - 1) ? (KGmActual - KL0Idx * KL0TileSize) : KL0TileSize;
                 AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>((int32_t)(KL0Idx % STAGES));
                 if constexpr (std::is_same<ElementA, int8_t>::value){
-                    auto layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(actualShape.m(), KGmActual);
+                    auto layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(KGmActual, actualShape.m());
                     copyL1ToL0A(
                         l0BTensor[KL0Idx % STAGES], // B2硬件位置 nZ
                         l1ATensor[KIdx % STAGES][KL0Idx * KL0TileSize * MAlignment],
                         layoutAInL0, layoutAInL1
                     );
                 }else{
-                    auto layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(actualShape.m(), KL0Actual);
+                    auto layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(KL0Actual, actualShape.m());
                     copyL1ToL0A(
                         l0BTensor[KL0Idx % STAGES],
                         l1ATensor[KIdx % STAGES][KL0Idx * KL0TileSize * MRound],
@@ -357,7 +357,7 @@ private:
                 }
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_M>((int32_t)(KL0Idx % STAGES));
                 AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>((int32_t)(KL0Idx % STAGES + 2));
-                auto layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(KL0Actual, actualShape.n());
+                auto layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(actualShape.n(), KL0Actual);
                 copyL1ToL0B(
                     l0ATensor[KL0Idx % STAGES],
                     l1BTensor[KIdx % STAGES][KL0Idx * KL0TileSize * NRound],

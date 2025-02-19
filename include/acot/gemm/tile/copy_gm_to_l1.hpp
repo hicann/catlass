@@ -28,7 +28,6 @@ struct CopyGmToL1A<acot::arch::AscendC910B3, acot::gemm::GemmType<Element, acot:
     ){
         uint32_t MActual = layoutSrc.shape(0);
         uint32_t MRound = layoutDst.shape(1) * layoutDst.shape(0);
-        uint32_t KActual = layoutSrc.shape(1);
         uint32_t KRound = layoutDst.shape(2) * layoutDst.shape(3);
         uint32_t stride = layoutSrc.stride(0); // 注意layoutSrc的构造函数 
         AscendC::Nd2NzParams params;
@@ -59,11 +58,11 @@ struct CopyGmToL1A<acot::arch::AscendC910B3, acot::gemm::GemmType<Element, acot:
         AscendC::GlobalTensor<Element> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t KAlignment = layoutDst.shape(0);
-        uint32_t MActual = layoutSrc.shape(0);
-        uint32_t MRound = layoutDst.shape(0) * layoutDst.shape(1);
-        uint32_t KActual = layoutSrc.shape(1);
-        uint32_t KRound = RoundUp(KActual, KAlignment);
+        uint32_t MAlignment = layoutDst.shape(0); // 对齐32byte
+        uint32_t MActual = layoutSrc.shape(1);
+        uint32_t MRound = RoundUp(MActual, MAlignment);
+        uint32_t KRound = layoutDst.shape(0) * layoutDst.shape(1);
+        uint32_t KActual = layoutSrc.shape(0);
         uint32_t stride = layoutSrc.stride(1); // ColumnMajor
         uint32_t KL1AlignmentA = layoutDst.shape(0);
         uint32_t KL1Loops = CeilDiv(KActual, KL1AlignmentA);
@@ -99,11 +98,9 @@ struct CopyGmToL1A<acot::arch::AscendC910B3, acot::gemm::GemmType<int8_t, acot::
         AscendC::GlobalTensor<int8_t> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t MAlignment = layoutDst.shape(2); // 对齐32byte
         uint32_t KAlignment = layoutDst.shape(0) * 2;
-        uint32_t MActual = layoutSrc.shape(0);
-        uint32_t MRound = RoundUp(MActual, MAlignment);
-        uint32_t KActual = layoutSrc.shape(1);
+        uint32_t MRound = layoutDst.shape(2) * layoutDst.shape(3);
+        uint32_t KActual = layoutSrc.shape(0);
         uint32_t KRound = RoundUp(KActual, KAlignment);
         uint32_t stride = layoutSrc.stride(1); // ColumnMajor
         AscendC::Nd2NzParams params;
@@ -205,7 +202,7 @@ struct CopyGmToL1B<arch::AscendC910B3, gemm::GemmType<int8_t, acot::layout::RowM
 
 template<class Element>
 struct CopyGmToL1B<arch::AscendC910B3, gemm::GemmType<Element, acot::layout::ColumnMajor>>{
-    using LayoutDst = layout::nZ;
+    using LayoutDst = layout::zN;
     using LayoutSrc = layout::ColumnMajor;
 
     ACOT_DEVICE
@@ -217,10 +214,9 @@ struct CopyGmToL1B<arch::AscendC910B3, gemm::GemmType<Element, acot::layout::Col
         AscendC::GlobalTensor<Element> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t NActual = layoutSrc.shape(1);
-        uint32_t NRound = layoutDst.shape(2) * layoutDst.shape(3);
-        uint32_t KActual = layoutSrc.shape(0);
-        uint32_t KRound = layoutDst.shape(0) * layoutDst.shape(1);
+        uint32_t NActual = layoutSrc.shape(0);
+        uint32_t NRound = layoutDst.shape(0) * layoutDst.shape(1);
+        uint32_t KRound = layoutDst.shape(2) * layoutDst.shape(3);
         uint32_t stride = layoutSrc.stride(1); // ColumnMajor
         AscendC::Nd2NzParams params;
         params.ndNum = 1;
