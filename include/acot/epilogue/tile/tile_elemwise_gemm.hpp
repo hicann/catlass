@@ -1,6 +1,8 @@
 #ifndef ACOT_EPILOGUE_TILE_TILE_ELEMWISE_ADD_GEMM_HPP
 #define ACOT_EPILOGUE_TILE_TILE_ELEMWISE_ADD_GEMM_HPP
 
+#include "acot/epilogue/helper.hpp"
+
 namespace acot::epilogue::tile{
 // 包括乘法和加法
 template<

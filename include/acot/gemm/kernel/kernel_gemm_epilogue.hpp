@@ -160,8 +160,8 @@ public:
         uint32_t aivNum = AscendC::GetSubBlockNum(); // 910B3 AIV核为2
         uint32_t aivIndex = AscendC::GetBlockIdx();
         uint32_t aicoreIndex = aivIndex / aivNum;
-        AscendC::GlobalTensor<ElementC> gmC;
-        gmC.SetGlobalBuffer((__gm__ ElementC *)params.gmWorkspace);
+        AscendC::GlobalTensor<ElementC> gmX; // fp32
+        gmX.SetGlobalBuffer((__gm__ ElementC*)params.gmWorkspace);
         for(uint32_t loopIdx = aicoreIndex; loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()){ // 换一下切分方式，一个AIC对应两个AIV核 blockNum是AIV核数 
             uint32_t MGmBlockIdx = loopIdx / NLoops;
             uint32_t NGmBlockIdx = loopIdx % NLoops;
@@ -171,23 +171,21 @@ public:
             // sync.WaitFlag((int8_t)(loopIdx % STAGES));
             arch::CrossCoreWaitFlagWithReverse<0x2, PIPE_MTE3>(flagAicFinishStore);
             if constexpr (RowOrColumn){ // 行优先  这个现在正确率高
-                layout::RowMajor layoutC(params.problemShape.m(), params.problemShape.n());
+                layout::RowMajor layoutX(params.problemShape.m(), params.problemShape.n());
                 blockEpilogue( // 传入偏移量
-                    MGmBlockIdx * layoutC.stride(0) * maxMPerBlock  + NGmBlockIdx * maxNPerBlock, // offsetC
-                    // MGmBlockIdx * layoutC.stride(0) * maxMPerBlock  + NGmBlockIdx * maxNPerBlock, // offsetX
-                    MGmBlockIdx * layoutC.stride(0) * maxMPerBlock  + NGmBlockIdx * maxNPerBlock, // offsetD
-                    gmC[MGmBlockIdx * layoutC.stride(0) * maxMPerBlock  + NGmBlockIdx * maxNPerBlock],
-                    layoutC,
+                    MGmBlockIdx * layoutX.stride(0) * maxMPerBlock  + NGmBlockIdx * maxNPerBlock, // offsetC
+                    MGmBlockIdx * layoutX.stride(0) * maxMPerBlock  + NGmBlockIdx * maxNPerBlock, // offsetD
+                    gmX[MGmBlockIdx * layoutX.stride(0) * maxMPerBlock  + NGmBlockIdx * maxNPerBlock],
+                    layoutX,
                     actualShape
                 );
             }else{ // 列优先
-                layout::ColumnMajor layoutC(params.problemShape.m(), params.problemShape.n());
+                layout::ColumnMajor layoutX(params.problemShape.m(), params.problemShape.n());
                 blockEpilogue(
-                    MGmBlockIdx * maxMPerBlock + NGmBlockIdx * maxNPerBlock * layoutC.stride(1),
-                    // MGmBlockIdx * maxMPerBlock + NGmBlockIdx * maxNPerBlock * layoutC.stride(1),
-                    MGmBlockIdx * maxMPerBlock + NGmBlockIdx * maxNPerBlock * layoutC.stride(1),
-                    gmC[MGmBlockIdx * maxMPerBlock + NGmBlockIdx * maxNPerBlock * layoutC.stride(1)],
-                    layoutC,
+                    MGmBlockIdx * maxMPerBlock + NGmBlockIdx * maxNPerBlock * layoutX.stride(1),
+                    MGmBlockIdx * maxMPerBlock + NGmBlockIdx * maxNPerBlock * layoutX.stride(1),
+                    gmX[MGmBlockIdx * maxMPerBlock + NGmBlockIdx * maxNPerBlock * layoutX.stride(1)],
+                    layoutX,
                     actualShape
                 );
             }

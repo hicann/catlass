@@ -61,6 +61,15 @@ struct CopyL0CToGmQuantMode<
     static constexpr auto VALUE = QuantMode_t::NoQuant;
 };
 
+template <>
+struct CopyL0CToGmQuantMode<
+    acot::arch::AscendC910B3,
+    int32_t, half,
+    ScaleGranularity::NO_QUANT
+> {
+    static constexpr auto VALUE = QuantMode_t::DEQF16;
+};
+
 // CopyL0CToGm cast int32_t to fp16
 template <>
 struct CopyL0CToGmQuantMode<

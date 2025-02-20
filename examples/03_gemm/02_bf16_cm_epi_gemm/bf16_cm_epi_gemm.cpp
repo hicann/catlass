@@ -18,7 +18,7 @@
 
 using namespace acot;
 
-using ScalarType = half;
+using ScalarType = float;
 
 // 已经进入核函数了
 template <
@@ -42,12 +42,12 @@ void FP16EpiGemm(
     // 开启pingpong机制
     using GemmBlockDispatchPolicy = gemm::GemmAscendC910B3Pingpong<true>;
     using EpilogueBlockDispatchPolicy = epilogue::EpilogueAscendC910B3Gemm;
-    using AType = gemm::GemmType<int8_t, LayoutA>;
-    using BType = gemm::GemmType<int8_t, LayoutB>;
-    using CType = gemm::GemmType<int8_t, LayoutC>;
-    using XType = gemm::GemmType<half, LayoutC>;
+    using AType = gemm::GemmType<bfloat16_t, LayoutA>;
+    using BType = gemm::GemmType<bfloat16_t, LayoutB>;
+    using CType = gemm::GemmType<bfloat16_t, LayoutC>;
+    using XType = gemm::GemmType<float, LayoutC>;
     // 使用Coord来传递值
-    using L1TileShape = MatmulShape<128, 128, 256>;
+    using L1TileShape = MatmulShape<128, 128, 128>;
     using L0TileShape = MatmulShape<128, 128, 64>;
 
     // 调用block层函数
@@ -73,7 +73,7 @@ void FP16EpiGemm(
 }
 
 typedef struct Options{
-    const std::string HELPER = "03_gemm/04_int8_rm_epi_gemm m n k [device_id]";
+    const std::string HELPER = "03_gemm/02_bf16_cm_epi_gemm m n k [device_id]";
 
     MatmulCoord problemShape{128, 128, 128};
     int32_t deviceId{0}; // 成员变量
@@ -119,52 +119,52 @@ void Run(Options options){
     size_t lenX = lenC; // A * B  
     // size_t lenD = lenX; // 最后的大小
     
-    size_t sizeA = lenA * sizeof(int8_t);
-    size_t sizeB = lenB * sizeof(int8_t);
-    size_t sizeC = lenC * sizeof(int8_t);
-    size_t sizeX = lenX * sizeof(half);
+    size_t sizeA = lenA * sizeof(bfloat16_t);
+    size_t sizeB = lenB * sizeof(bfloat16_t);
+    size_t sizeC = lenC * sizeof(bfloat16_t);
+    size_t sizeX = lenX * sizeof(float);
     // size_t sizeD = sizeX;
 
-    layout::RowMajor layoutA{m, k};
-    layout::RowMajor layoutB{k, n};
-    layout::RowMajor layoutC{m, n};
+    layout::ColumnMajor layoutA{m, k};
+    layout::ColumnMajor layoutB{k, n};
+    layout::ColumnMajor layoutC{m, n};
     // layout::RowMajor layoutX{m, n};
     // layout::RowMajor layoutD{m, n}; // 最后的答案矩阵
 
-    size_t scalarSize = 1 * sizeof(half);
-    half* alpha;
+    size_t scalarSize = 1 * sizeof(float);
+    float* alpha;
     ACL_CHECK(aclrtMallocHost((void**)(&alpha), scalarSize));
     ReadFile("./data/input/alpha.bin", scalarSize, alpha, scalarSize);
     
-    half* beta;
+    float* beta;
     ACL_CHECK(aclrtMallocHost((void**)(&beta), scalarSize));
     ReadFile("./data/input/beta.bin", scalarSize, beta, scalarSize);
 
-    int8_t* hostA;
+    bfloat16_t* hostA;
     ACL_CHECK(aclrtMallocHost((void**)(&hostA), sizeA));
     ReadFile("./data/input/A.bin", sizeA, hostA, sizeA);
-    int8_t *deviceA{nullptr};
+    bfloat16_t *deviceA{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA, sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    int8_t* hostB;
+    bfloat16_t* hostB;
     ACL_CHECK(aclrtMallocHost((void**)(&hostB), sizeB));
     ReadFile("./data/input/B.bin", sizeB, hostB, sizeB);
-    int8_t *deviceB{nullptr};
+    bfloat16_t *deviceB{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB, sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    int8_t* hostC;
+    bfloat16_t* hostC;
     ACL_CHECK(aclrtMallocHost((void**)(&hostC), sizeC));
     ReadFile("./data/input/C.bin", sizeC, hostC, sizeC);
-    int8_t *deviceC{nullptr};
+    bfloat16_t *deviceC{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceC, sizeC, hostC, sizeC, ACL_MEMCPY_HOST_TO_DEVICE));
     
-    half *gmWorkspace{nullptr};
+    float *gmWorkspace{nullptr}; // 存储空间
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&gmWorkspace), sizeX, ACL_MEM_MALLOC_HUGE_FIRST));
     
-    // int8_t *deviceD{nullptr};
+    // bfloat16_t *deviceD{nullptr};
     // ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceD), sizeD, ACL_MEM_MALLOC_HUGE_FIRST));
 
     // Prepare FFTS address
@@ -182,11 +182,9 @@ void Run(Options options){
         (uint8_t*)deviceB, layoutB,
         (uint8_t*)deviceC, layoutC,
         (uint8_t*)gmWorkspace);
-        // (uint8_t*)deviceX, layoutX,
-        // (uint8_t*)deviceD, layoutD);
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
-    // int8_t* hostD;
+    // bfloat16_t* hostD;
     // ACL_CHECK(aclrtMallocHost((void**)(&hostD), sizeD));
     ACL_CHECK(aclrtMemcpy(hostC, sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
     WriteFile("./data/output/our_res.bin",hostC,sizeC);

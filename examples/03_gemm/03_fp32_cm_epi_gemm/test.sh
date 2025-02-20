@@ -10,5 +10,5 @@ do
     num2=$[ ($RANDOM % 256 + 1) * 64]
     num3=$[ ($RANDOM % 256 + 1) * 64]
     echo $num1 $num2 $num3
-    ./run.sh $num1 $num2 $num3 $5
+    ./run.sh $num1 $num2 $num3 1
 done

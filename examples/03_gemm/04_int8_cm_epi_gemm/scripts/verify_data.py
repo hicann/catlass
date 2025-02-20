@@ -1,7 +1,7 @@
 import numpy as np
 import argparse
 import sys
-NP_DATA_TYPE = np.int32
+NP_DATA_TYPE = np.int8
 
 def compareOutputData(M, N, K):
     print("--- Test Begin ---\n")
