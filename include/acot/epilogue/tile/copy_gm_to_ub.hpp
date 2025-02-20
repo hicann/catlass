@@ -75,16 +75,7 @@ struct CopyGm2Ub<arch::AscendC910B3, gemm::GemmType<Element, layout::RowMajor>> 
         uint32_t MActual = layoutSrc.shape(0);
         uint32_t NActual = layoutSrc.shape(1);
         uint32_t stride = layoutSrc.stride(0); // RowMajor
-        // uint32_t NRound = layoutDst.shape(1);  // 方法2
         uint32_t NRound = RoundUp(NActual, NAlignment);
-        // AscendC::DataCopyParams params;
-        // for(uint32_t MIdx = 0; MIdx < MActual; MIdx++){ // 一行一行的搬运
-        //     params.blockCount = 1; // 对齐
-        //     params.blockLen = NRound / NAlignment;
-        //     params.srcStride = 0;
-        //     params.dstStride = 0;
-        //     AscendC::DataCopy(dstTensor[MIdx * NRound], srcTensor[MIdx * stride], params);
-        // } 
         // 更换搬运参数
         AscendC::DataCopyExtParams params;
         AscendC::DataCopyPadExtParams<Element> padParams(false, 0, 0, 0);
@@ -115,18 +106,10 @@ struct CopyGm2Ub<arch::AscendC910B3, gemm::GemmType<Element, layout::ColumnMajor
     {
         // // 进行循环
         uint32_t MAlignment = BYTE_PER_C0 / sizeof(Element); // 对齐32Byte
-        uint32_t MActual = layoutSrc.shape(0);
-        uint32_t NActual = layoutSrc.shape(1);
+        uint32_t MActual = layoutSrc.shape(1);
+        uint32_t NActual = layoutSrc.shape(0);
         uint32_t stride = layoutSrc.stride(1); // RowMajor
         uint32_t MRound = RoundUp(MActual, MAlignment);
-        // AscendC::DataCopyParams params;
-        // for(uint32_t NIdx = 0; NIdx < NActual; NIdx++){ // 一行一行的搬运
-        //     params.blockCount = 1; // 对齐
-        //     params.blockLen = MRound / MAlignment;
-        //     params.srcStride = 0;
-        //     params.dstStride = 0;
-        //     AscendC::DataCopy(dstTensor[NIdx * MRound], srcTensor[NIdx * stride], params);
-        // } 
         // 更换搬运参数
         AscendC::DataCopyExtParams params;
         AscendC::DataCopyPadExtParams<Element> padParams(false, 0, 0, 0);

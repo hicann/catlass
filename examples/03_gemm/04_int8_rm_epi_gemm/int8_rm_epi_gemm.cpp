@@ -55,7 +55,7 @@ void FP16EpiGemm(
     using XType = CType;
     using DType = CType;
     using ComputeType = CType;
-    constexpr uint32_t computeLength = 8192; // 128 * 128 / 2 开启双缓冲机制
+    constexpr uint32_t computeLength = 4096; // 128 * 128 / 2 开启双缓冲机制
     // 后处理部分
     using TileElemWiseAddGemm = epilogue::tile::TileElemWiseAddGemm<ArchTag, ComputeType, computeLength>;
     using TileElemWiseMulGemm = epilogue::tile::TileElemWiseMulGemm<ArchTag, ComputeType, computeLength>;

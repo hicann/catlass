@@ -71,20 +71,9 @@ struct CopyUb2Gm<arch::AscendC910B3, gemm::GemmType<Element, layout::RowMajor>> 
     {
         uint32_t MActual = layoutSrc.shape(0);
         uint32_t NActual = layoutSrc.shape(1);
-        // uint32_t MActual = layoutDst.shape(0); // 方法2
-        // uint32_t NActual = layoutDst.shape(1);
         uint32_t NAlignment = BYTE_PER_C0 / sizeof(Element);
         uint32_t NRound = RoundUp(NActual, NAlignment);
-        // uint32_t NRound = layoutSrc.shape(1); // 方法2
         uint32_t stride = layoutSrc.stride(0); // RowMajor
-        // AscendC::DataCopyParams params;
-        // for(uint32_t MIdx = 0; MIdx < MActual; MIdx++){
-        //     params.blockCount = 1;
-        //     params.blockLen = NRound / NAlignment;
-        //     params.srcStride = 0;
-        //     params.dstStride = 0;
-        //     AscendC::DataCopy(dstTensor[MIdx * stride], srcTensor[MIdx * NRound], params);
-        // }
         AscendC::DataCopyExtParams params;
         for(uint32_t MIdx = 0; MIdx < MActual; MIdx++){
             params.blockCount = 1;
@@ -111,19 +100,11 @@ struct CopyUb2Gm<arch::AscendC910B3, gemm::GemmType<Element, layout::ColumnMajor
         LayoutDst const &layoutDst,
         LayoutSrc const &layoutSrc)
     {
-        uint32_t MActual = layoutSrc.shape(0);
-        uint32_t NActual = layoutSrc.shape(1);
+        uint32_t MActual = layoutSrc.shape(1);
+        uint32_t NActual = layoutSrc.shape(0);
         uint32_t MAlignment = BYTE_PER_C0 / sizeof(Element);
         uint32_t MRound = RoundUp(MActual, MAlignment);
         uint32_t stride = layoutSrc.stride(1); // ColumnMajor
-        // AscendC::DataCopyParams params;
-        // for(uint32_t NIdx = 0; NIdx < NActual; NIdx++){
-        //     params.blockCount = 1;
-        //     params.blockLen = MRound / MAlignment;
-        //     params.srcStride = 0;
-        //     params.dstStride = 0;
-        //     AscendC::DataCopy(dstTensor[NIdx * stride], srcTensor[NIdx * MRound], params);
-        // }
         AscendC::DataCopyExtParams params;
         for(uint32_t NIdx = 0; NIdx < NActual; NIdx++){
             params.blockCount = 1;
