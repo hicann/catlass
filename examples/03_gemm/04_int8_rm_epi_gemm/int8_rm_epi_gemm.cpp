@@ -18,7 +18,7 @@
 
 using namespace acot;
 
-using ScalarType = half;
+using ScalarType = int32_t;
 
 // 已经进入核函数了
 template <
@@ -44,8 +44,8 @@ void FP16EpiGemm(
     using EpilogueBlockDispatchPolicy = epilogue::EpilogueAscendC910B3Gemm;
     using AType = gemm::GemmType<int8_t, LayoutA>;
     using BType = gemm::GemmType<int8_t, LayoutB>;
-    using CType = gemm::GemmType<int8_t, LayoutC>;
-    using XType = gemm::GemmType<half, LayoutC>;
+    using CType = gemm::GemmType<int32_t, LayoutC>;
+    using XType = gemm::GemmType<int32_t, LayoutC>;
     // 使用Coord来传递值
     using L1TileShape = MatmulShape<128, 128, 256>;
     using L0TileShape = MatmulShape<128, 128, 64>;
@@ -73,7 +73,7 @@ void FP16EpiGemm(
 }
 
 typedef struct Options{
-    const std::string HELPER = "03_gemm/04_int8_rm_epi_gemm m n k [device_id]";
+    const std::string HELPER = "03_gemm/04_int8_cm_epi_gemm m n k [device_id]";
 
     MatmulCoord problemShape{128, 128, 128};
     int32_t deviceId{0}; // 成员变量
@@ -121,8 +121,8 @@ void Run(Options options){
     
     size_t sizeA = lenA * sizeof(int8_t);
     size_t sizeB = lenB * sizeof(int8_t);
-    size_t sizeC = lenC * sizeof(int8_t);
-    size_t sizeX = lenX * sizeof(half);
+    size_t sizeC = lenC * sizeof(int32_t);
+    size_t sizeX = lenX * sizeof(int32_t);
     // size_t sizeD = sizeX;
 
     layout::RowMajor layoutA{m, k};
@@ -131,12 +131,12 @@ void Run(Options options){
     // layout::RowMajor layoutX{m, n};
     // layout::RowMajor layoutD{m, n}; // 最后的答案矩阵
 
-    size_t scalarSize = 1 * sizeof(half);
-    half* alpha;
+    size_t scalarSize = 1 * sizeof(int32_t);
+    int32_t* alpha;
     ACL_CHECK(aclrtMallocHost((void**)(&alpha), scalarSize));
     ReadFile("./data/input/alpha.bin", scalarSize, alpha, scalarSize);
     
-    half* beta;
+    int32_t* beta;
     ACL_CHECK(aclrtMallocHost((void**)(&beta), scalarSize));
     ReadFile("./data/input/beta.bin", scalarSize, beta, scalarSize);
 
@@ -154,14 +154,14 @@ void Run(Options options){
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB, sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    int8_t* hostC;
+    int32_t* hostC;
     ACL_CHECK(aclrtMallocHost((void**)(&hostC), sizeC));
     ReadFile("./data/input/C.bin", sizeC, hostC, sizeC);
-    int8_t *deviceC{nullptr};
+    int32_t *deviceC{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceC, sizeC, hostC, sizeC, ACL_MEMCPY_HOST_TO_DEVICE));
     
-    half *gmWorkspace{nullptr};
+    int32_t *gmWorkspace{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&gmWorkspace), sizeX, ACL_MEM_MALLOC_HUGE_FIRST));
     
     // int8_t *deviceD{nullptr};

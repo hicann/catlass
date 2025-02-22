@@ -420,19 +420,22 @@ private:
         }
         AscendC::SetFlag<AscendC::HardEvent::M_FIX>((int32_t)-1);
         AscendC::WaitFlag<AscendC::HardEvent::M_FIX>((int32_t)-1);
+        // AscendC::PipeBarrier<PIPE_ALL>();
         LayoutC layoutBlock = layoutC.GetTileLayout(MakeCoord(actualShape.m(), actualShape.n()));
         copyL0CToGm(
             cGm[offsetC],
             l0CTensor[(singleIdx * cSize) % l0CBlockNum],
             layoutBlock, layoutInL0C
         );
+        // AscendC::SetFlag<AscendC::HardEvent::FIX_MTE2>((int32_t)8);
+        // AscendC::WaitFlag<AscendC::HardEvent::FIX_MTE2>((int32_t)8);
         for(uint32_t i = 0; i < STAGES; i++){
             // 使能MTE1搬运单元
             AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>((int32_t)i);
             AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>((int32_t)(i + 2));
             // 使能MTE2搬运单元
             AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)i);
-            AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(i + 2));
+            AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>((int32_t)(i + 2)); 
         }
     }
 };

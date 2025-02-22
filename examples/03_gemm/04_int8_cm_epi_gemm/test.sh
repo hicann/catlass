@@ -8,7 +8,7 @@ for (( i=1; i<=3; i++ ))
 do
     num1=$[ $RANDOM % 10000 + 1 ]
     num2=$[ $RANDOM % 10000 + 1 ]
-    num3=$[ $RANDOM % 3000 + 1 ]
+    num3=$[ $RANDOM % 10000 + 1 ]
     echo $num1 $num2 $num3
-    ./run.sh $num1 $num2 $num3 $1
+    ./run.sh $num1 $num2 $num3 1
 done

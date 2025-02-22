@@ -5,7 +5,7 @@ NP_DATA_TYPE = np.int32
 
 def compareOutputData(M, N, K):
     print("--- Test Begin ---\n")
-    with open("./data/output.txt","w") as f:
+    with open("./data/output.txt","a") as f:
         print("---- INT8 -- ColumnMajor -- Gemm ---- \n", file = f)
         print("  M : {} , N : {} , K : {} \n".format(M , N, K), file = f)
         np.set_printoptions(threshold=np.inf)

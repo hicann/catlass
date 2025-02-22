@@ -16,6 +16,8 @@
 #include "acot/matmul/matmul_type.hpp"
 #include "acot/gemm/gemm_type.hpp"
 
+constexpr uint32_t STRIDE_LIMIT = 65536;
+
 namespace acot::epilogue::tile {
 
 template <
@@ -61,6 +63,8 @@ struct CopyGm2Ub<arch::AscendC910B3, gemm::GemmType<Element, layout::RowMajor>> 
     using LayoutSrc = layout::RowMajor;
     using LayoutDst = layout::RowMajor;
 
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+
     ACOT_DEVICE
     CopyGm2Ub() = default;
 
@@ -70,12 +74,11 @@ struct CopyGm2Ub<arch::AscendC910B3, gemm::GemmType<Element, layout::RowMajor>> 
         AscendC::GlobalTensor<Element> srcTensor,
         LayoutSrc layoutDst, LayoutDst layoutSrc)
     {
-        // // 进行循环
-        uint32_t NAlignment = BYTE_PER_C0 / sizeof(Element); // 对齐32Byte
         uint32_t MActual = layoutSrc.shape(0);
         uint32_t NActual = layoutSrc.shape(1);
         uint32_t stride = layoutSrc.stride(0); // RowMajor
-        uint32_t NRound = RoundUp(NActual, NAlignment);
+        uint32_t NRound = layoutDst.shape(1);
+        // uint32_t NRound = RoundUp(NActual, ELE_NUM_PER_C0);
         // 更换搬运参数
         AscendC::DataCopyExtParams params;
         AscendC::DataCopyPadExtParams<Element> padParams(false, 0, 0, 0);
@@ -95,6 +98,8 @@ struct CopyGm2Ub<arch::AscendC910B3, gemm::GemmType<Element, layout::ColumnMajor
     using LayoutSrc = layout::ColumnMajor;
     using LayoutDst = layout::ColumnMajor;
 
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+
     ACOT_DEVICE
     CopyGm2Ub() = default;
 
@@ -104,12 +109,11 @@ struct CopyGm2Ub<arch::AscendC910B3, gemm::GemmType<Element, layout::ColumnMajor
         AscendC::GlobalTensor<Element> srcTensor,
         LayoutSrc layoutDst, LayoutDst layoutSrc)
     {
-        // // 进行循环
-        uint32_t MAlignment = BYTE_PER_C0 / sizeof(Element); // 对齐32Byte
         uint32_t MActual = layoutSrc.shape(1);
         uint32_t NActual = layoutSrc.shape(0);
         uint32_t stride = layoutSrc.stride(1); // RowMajor
-        uint32_t MRound = RoundUp(MActual, MAlignment);
+        uint32_t MRound = layoutDst.shape(1);
+        // uint32_t MRound = RoundUp(MActual, ELE_NUM_PER_C0);
         // 更换搬运参数
         AscendC::DataCopyExtParams params;
         AscendC::DataCopyPadExtParams<Element> padParams(false, 0, 0, 0);

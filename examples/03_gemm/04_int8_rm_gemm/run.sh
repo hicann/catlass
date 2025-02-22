@@ -1,6 +1,6 @@
 #!/bin/bash
 # 不需要TIK打印出内存信息
-rm -rf ./prof ./data
+rm -rf ./prof
 mkdir -p ./prof ./data ./data/input ./data/output
 export PRINT_TIK_MEM_ACCESS=FALSE
 OP_NAME=GEMM
@@ -19,7 +19,7 @@ set -e
 CANN_DIR=${ASCEND_HOME_PATH}
 # 生成测试数据
 python3 ./scripts/gen_data.py $M $N $K
-../../../scripts/build.sh 04_int8_rm_gemm
+# ../../../scripts/build.sh 04_int8_rm_gemm
 # msprof op --output=./prof ../../../build/bin/04_int8_rm_gemm $M $N $K $deviceId
 ../../../build/bin/04_int8_rm_gemm $M $N $K $deviceId
 # 验证数据

@@ -19,7 +19,7 @@ set -e
 CANN_DIR=${ASCEND_HOME_PATH}
 # 生成测试数据
 python3 ./scripts/gen_data.py $M $N $K
-../../../scripts/build.sh 03_fp32_cm_gemm
+# ../../../scripts/build.sh 03_fp32_cm_gemm
 # msprof op --output=./prof ../../../build/bin/03_fp32_cm_gemm $M $N $K $deviceId
 ../../../build/bin/03_fp32_cm_gemm $M $N $K $deviceId
 # 验证数据

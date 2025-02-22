@@ -114,12 +114,10 @@ public:
     ACOT_DEVICE
     void operator()(
         uint32_t offsetC, // A * B 矩阵
-        // uint32_t offsetX, // C 矩阵
         uint32_t offsetD, // 最后结果
         AscendC::GlobalTensor<ElementX> gmBlockX,
         LayoutX layoutX,
         MatmulCoord actualShape
-        // uint32_t singleIdx
     ){ // 进行操作 先实现行优先
         // 分配内存
         xGm = gmBlockX;
@@ -212,14 +210,14 @@ private:
         uint32_t aivIndex = AscendC::GetSubBlockIdx(); // 0 或 1
         uint32_t MActualAIV0 = (MActual < maxMPerBlock) ? MActual : maxMPerBlock;
         uint32_t MActualAIV1 = (MActual < maxMPerBlock) ? 0 : (MActual - maxMPerBlock);
-        uint32_t MUbActual = aivIndex ? MActualAIV1 : MActualAIV0;
+        uint32_t MUbActual = aivIndex == 1 ? MActualAIV1 : MActualAIV0;
         uint32_t aivNum = AscendC::GetSubBlockNum(); // 910B3 AIV核为2
         // 对N方向进行切割
         uint32_t NLoops = CeilDiv(NActual, maxNPerBlock);
         for(uint32_t NIdx = 0; NIdx < NLoops; NIdx++){
             uint32_t NUbActual = (NIdx == NLoops - 1) ? (NActual - NIdx * maxNPerBlock) : maxNPerBlock;
             AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((int32_t)((aivIndex * DOUBLESTAGES) + NIdx));
-            auto layoutXInUb = layoutX.GetTileLayout(MakeCoord(MUbActual, NUbActual));
+            auto layoutXInUb = layoutX.GetTileLayout(MakeCoord(maxMPerBlock, maxNPerBlock));
             auto layoutTileX = layoutX.GetTileLayout(MakeCoord(MUbActual, NUbActual));
             copyGmToUbX(
                 ubXTensor[NIdx % STAGES],
@@ -237,7 +235,7 @@ private:
 
             AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((int32_t)((aivIndex * DOUBLESTAGES) + NIdx + 2));
             auto layoutTileC = params.layoutC.GetTileLayout(MakeCoord(MUbActual, NUbActual));
-            auto layoutCInUb = params.layoutC.GetTileLayout(MakeCoord(MUbActual, NUbActual));
+            auto layoutCInUb = params.layoutC.GetTileLayout(MakeCoord(maxMPerBlock, maxNPerBlock));
             copyGmToUbC(
                 ubCTensor[NIdx % STAGES],
                 cGm[offsetC + aivIndex * maxMPerBlock * params.layoutC.stride(0) + NIdx * maxNPerBlock],
@@ -289,9 +287,9 @@ private:
             }
             // 流水控制
             // 搬到Gm中
-            AscendC::SetFlag<AscendC::HardEvent::V_MTE3>((int32_t)-1);
-            AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>((int32_t)-1);
-            auto layoutTileD = params.layoutD.GetTileLayout(MakeCoord(MUbActual, NUbActual));
+            AscendC::SetFlag<AscendC::HardEvent::V_MTE3>((int32_t)-(aivIndex * DOUBLESTAGES));
+            AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>((int32_t)-(aivIndex * DOUBLESTAGES));
+            auto layoutTileD = params.layoutD.GetTileLayout(MakeCoord(maxMPerBlock, maxNPerBlock));
             auto layoutDInGm = params.layoutD.GetTileLayout(MakeCoord(MUbActual, NUbActual));
             copyUbToGmD(
                 dGm[offsetD + aivIndex * maxMPerBlock * params.layoutD.stride(0) + NIdx * maxNPerBlock],
@@ -317,14 +315,14 @@ private:
         uint32_t aivIndex = AscendC::GetSubBlockIdx();
         uint32_t NActualAIV0 = (NActual < maxNPerBlock) ? NActual : maxNPerBlock;
         uint32_t NActualAIV1 = (NActual < maxNPerBlock) ? 0 : (NActual - maxNPerBlock);
-        uint32_t NUbActual = aivIndex ? NActualAIV1 : NActualAIV0;
+        uint32_t NUbActual = aivIndex == 1 ? NActualAIV1 : NActualAIV0;
         uint32_t aivNum = AscendC::GetSubBlockNum(); // 910B3 AIV核为2
         //对M方向进行切割
         uint32_t MLoops = CeilDiv(MActual, maxMPerBlock);
         for(uint32_t MIdx = 0; MIdx < MLoops; MIdx++){
             uint32_t MUbActual = (MIdx == MLoops - 1) ? (MActual - MIdx * maxMPerBlock) : maxMPerBlock;
             AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((int32_t)((aivIndex * DOUBLESTAGES) + MIdx));
-            auto layoutXInUb = layoutX.GetTileLayout(MakeCoord(NUbActual, MUbActual));
+            auto layoutXInUb = layoutX.GetTileLayout(MakeCoord(maxNPerBlock, maxMPerBlock));
             auto layoutTileX = layoutX.GetTileLayout(MakeCoord(NUbActual, MUbActual));
             copyGmToUbX(
                 ubXTensor[MIdx % STAGES],
@@ -342,7 +340,7 @@ private:
 
             AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((int32_t)((aivIndex * DOUBLESTAGES) + MIdx + 2));
             auto layoutTileC = params.layoutC.GetTileLayout(MakeCoord(NUbActual, MUbActual));
-            auto layoutCInUb = params.layoutC.GetTileLayout(MakeCoord(NUbActual, MUbActual));
+            auto layoutCInUb = params.layoutC.GetTileLayout(MakeCoord(maxNPerBlock, maxMPerBlock));
             copyGmToUbC(
                 ubCTensor[MIdx % STAGES],
                 cGm[offsetC + aivIndex * maxNPerBlock * params.layoutC.stride(1) + MIdx * maxMPerBlock],
@@ -397,9 +395,9 @@ private:
             }
             // 流水控制
             // 搬到Gm中
-            AscendC::SetFlag<AscendC::HardEvent::V_MTE3>((int32_t)-1);
-            AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>((int32_t)-1);
-            auto layoutTileD = params.layoutD.GetTileLayout(MakeCoord(NUbActual, MUbActual));
+            AscendC::SetFlag<AscendC::HardEvent::V_MTE3>((int32_t)-(aivIndex * DOUBLESTAGES));
+            AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>((int32_t)-(aivIndex * DOUBLESTAGES));
+            auto layoutTileD = params.layoutD.GetTileLayout(MakeCoord(maxNPerBlock, maxMPerBlock));
             auto layoutDInGm = params.layoutD.GetTileLayout(MakeCoord(NUbActual, MUbActual));
             copyUbToGmD(
                 dGm[offsetD + aivIndex * maxNPerBlock * params.layoutD.stride(1) + MIdx * maxMPerBlock],

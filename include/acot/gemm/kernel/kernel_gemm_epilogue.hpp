@@ -24,7 +24,7 @@ public:
     using LayoutA = typename BlockGemm::LayoutA;
     using ElementB = typename BlockGemm::ElementB;
     using LayoutB = typename BlockGemm::LayoutB;
-    using ElementC = typename BlockGemm::ElementC;
+    using ElementX = typename BlockGemm::ElementC;
     using LayoutC = typename BlockGemm::LayoutC;
     using ElementAccumulator = typename BlockGemm::ElementAccumulator;
 
@@ -160,8 +160,8 @@ public:
         uint32_t aivNum = AscendC::GetSubBlockNum(); // 910B3 AIV核为2
         uint32_t aivIndex = AscendC::GetBlockIdx();
         uint32_t aicoreIndex = aivIndex / aivNum;
-        AscendC::GlobalTensor<ElementC> gmX; // fp32
-        gmX.SetGlobalBuffer((__gm__ ElementC*)params.gmWorkspace);
+        AscendC::GlobalTensor<ElementX> gmX; // fp32
+        gmX.SetGlobalBuffer((__gm__ ElementX*)params.gmWorkspace);
         for(uint32_t loopIdx = aicoreIndex; loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()){ // 换一下切分方式，一个AIC对应两个AIV核 blockNum是AIV核数 
             uint32_t MGmBlockIdx = loopIdx / NLoops;
             uint32_t NGmBlockIdx = loopIdx % NLoops;

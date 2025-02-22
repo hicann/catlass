@@ -2,7 +2,6 @@ import numpy as np
 import argparse
 import sys
 DATA_TYPE = np.int32
-CAST_DATA_TYPE = np.half
 NP_DATA_TYPE = np.int8
 
 # 定义生成数据函数
@@ -11,13 +10,11 @@ def calc_expect_func(M, N, K):
     matSizeA = (K, M)
     matSizeB = (N, K) # 首先全是行优先
     matSizeC = (N, M)
-    alpha = np.random.uniform(-1,1, 1).astype(DATA_TYPE)
-    alpha = alpha.astype(CAST_DATA_TYPE)
-    beta  = np.random.uniform(-1,1, 1).astype(DATA_TYPE)
-    beta = alpha.astype(CAST_DATA_TYPE)
-    A = np.random.uniform(-1,1,size=matSizeA).astype(NP_DATA_TYPE)
-    B = np.random.uniform(-1,1,size=matSizeB).astype(NP_DATA_TYPE)
-    C = np.random.uniform(-1,1,size=matSizeC).astype(NP_DATA_TYPE)
+    alpha = np.random.uniform(-2,2, 1).astype(DATA_TYPE)
+    beta  = np.random.uniform(-2,2, 1).astype(DATA_TYPE)
+    A = np.random.uniform(-2,2,size=matSizeA).astype(NP_DATA_TYPE)
+    B = np.random.uniform(-2,2,size=matSizeB).astype(NP_DATA_TYPE)
+    C = np.random.uniform(-2,2,size=matSizeC).astype(DATA_TYPE)
     alpha.tofile("./data/input/alpha.bin")
     beta.tofile("./data/input/beta.bin")
     A.tofile("./data/input/A.bin")
@@ -28,7 +25,7 @@ def calc_expect_func(M, N, K):
     # print(C)
     tmp = np.matmul(B.astype(DATA_TYPE),A.astype(DATA_TYPE)).astype(DATA_TYPE)
     # D = alpha * A * B + beta * C
-    expect_res = np.array(tmp * alpha.astype(DATA_TYPE) + beta.astype(DATA_TYPE) * C.astype(DATA_TYPE)).astype(NP_DATA_TYPE)
+    expect_res = np.array(tmp * alpha.astype(DATA_TYPE) + beta.astype(DATA_TYPE) * C.astype(DATA_TYPE)).astype(DATA_TYPE)
     # expect_res = np.array(beta.astype(NP_DATA_TYPE) * C.astype(NP_DATA_TYPE)).astype(NP_DATA_TYPE)
     # expect_res = C
     expect_res.tofile("./data/output/exp_res.bin")

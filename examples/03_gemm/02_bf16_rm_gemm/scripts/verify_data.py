@@ -5,7 +5,7 @@ from ml_dtypes import bfloat16
 
 NP_DATA_TYPE = bfloat16
 
-def get_thresholds(M, N, K, dtype=NP_DATA_TYPE):
+def get_thresholds(M, N, K, dtype=np.half):
     """根据 calc_times (M * N * K) 计算 atol 和 rtol"""
     calc_times = M * N * K
     
@@ -25,16 +25,18 @@ def get_thresholds(M, N, K, dtype=NP_DATA_TYPE):
             atol = 1.0 / (1 << 7)
         rtol = 1.0 / (1 << 10)
     
-    elif dtype == bfloat16: # 沿用相同的
+    elif dtype == bfloat16:
         if calc_times < 2048:
+            atol = 1.0 / (1 << 9)  # 比 float32 宽松但比 float16 严格
+        elif calc_times < 16384:
             atol = 1.0 / (1 << 8)
         else:
             atol = 1.0 / (1 << 7)
-        rtol = 1.0 / (1 << 10)
+        rtol = 1.0 / (1 << 12)  # 介于 float32 和 float16 之间
     
     else:
         raise ValueError("Unsupported data type!")
-
+    
     return atol, rtol
 
 def compareOutputData(M, N, K):
