@@ -1,7 +1,7 @@
 #!/bin/bash
 # 不需要TIK打印出内存信息
 rm -rf ./prof
-mkdir -p ./prof
+mkdir -p ./prof ./data ./data/input ./data/output
 export PRINT_TIK_MEM_ACCESS=FALSE
 OP_NAME=GEMV_AIV
 CURRENT_DIR=$(
@@ -18,11 +18,12 @@ set -e
 CANN_DIR=${ASCEND_HOME_PATH}
 # 生成测试数据
 python3 ./scripts/gen_data.py $M $N $alpha $beta
-../../../scripts/build.sh 02_fp32_cm_gemv_aiv
+
 # msprof op --output=./prof ../../../build/bin/01_fp16_rm_gemm $M $N $K $deviceId
 ../../../build/bin/02_fp32_cm_gemv_aiv $M $N $alpha $beta $deviceId
 # 验证数据
 python3 ./scripts/verify_data.py $M $N
+rm -rf ./data/input ./data/output
 # 性能测试 注意路径问题
 # cd ./examples/03_gemm/01_fp16_rm_gemm/
 # msprof op simulator --output=../prof ./main

@@ -14,7 +14,7 @@
  #include "acot/acot.hpp"
  #include "acot/gemv_aiv/tile/tile_copy.hpp"
  #include "acot/gemv_aiv/tile/tile_vmad.hpp"
- 
+ #include "acot/gemv_aiv/tile/tile_vmuls.hpp"
  namespace acot::gemv::block {
  
  template <
@@ -25,7 +25,8 @@
      class YType,
      class BiasType = void,
      class TileCopy = gemv::tile::TileCopy<typename DispatchPolicy::ArchTag, AType, XType, YType, BiasType>,
-     class TileVmad = gemv::tile::TileVmad<typename DispatchPolicy::ArchTag, AType, XType, YType, BiasType>
+     class TileVmad = gemv::tile::TileVmad<typename DispatchPolicy::ArchTag, AType, XType, YType, BiasType>,
+     class TileVmuls = gemv::tile::TileVmuls<typename DispatchPolicy::ArchTag, typename AType::Element>
  >
  struct BlockGemv {
      static_assert(DEPENDENT_FALSE<DispatchPolicy>, "BlockVmad is not implemented for this DispatchPolicy");

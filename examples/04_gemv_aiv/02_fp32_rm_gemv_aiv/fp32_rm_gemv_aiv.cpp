@@ -22,7 +22,7 @@ using namespace acot;
 // 单纯行优先
 ACOT_GLOBAL
 void FP32RMGemvAiv(
-    MatmulCoord problemShape,
+    GemvCoord problemShape,
     GM_ADDR gmA, layout::RowMajor layoutA,
     GM_ADDR gmX, layout::RowMajor layoutX,
     GM_ADDR gmY, layout::RowMajor layoutY,
@@ -31,7 +31,7 @@ void FP32RMGemvAiv(
 ){
     using ArchTag = arch::AtlasA2;
     using DispatchPolicy = gemv::MmadAtlasA2Pingpong<true>;
-    using UBTileShape = MatmulShape<32, 512, 1>;
+    using UBTileShape = GemvShape<32, 512>;
 
     using AType = gemv::GemvType<float, layout::RowMajor>;
     using XType = gemv::GemvType<float, layout::RowMajor>;
@@ -64,7 +64,7 @@ typedef struct Options{
 
     Options() = default;
     
-    MatmulCoord problemShape{M, N, 1};
+    GemvCoord problemShape{M, N};
     int32_t deviceId{0}; // 成员变量
 
     int Parse(int argc, const char **argv){
@@ -85,7 +85,6 @@ typedef struct Options{
         problemShape.n() = std::atoi(argv[N_INDEX]);
         alpha = std::stof(argv[alpha_INDEX]);
         beta = std::stof(argv[beta_INDEX]);
-        problemShape.k() = 1;
         if(argc == ARGS_MAX){
             deviceId = std::atoi(argv[DEVICE_ID_INDEX]);
         }
@@ -101,7 +100,6 @@ void Run(Options options){
 
     uint32_t m = options.problemShape.m();
     uint32_t n = options.problemShape.n();
-    uint32_t k = 1;
 
     size_t lenA = static_cast<size_t>(m) * n;
     size_t lenX = static_cast<size_t>(n) * 1;

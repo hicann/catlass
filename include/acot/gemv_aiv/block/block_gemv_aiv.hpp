@@ -14,7 +14,7 @@
  #include "acot/acot.hpp"
  #include "acot/arch/resource.hpp"
  #include "acot/coord.hpp"
- #include "acot/matmul_coord.hpp"
+ #include "acot/gemv_coord.hpp"
  #include "acot/gemv_aiv/dispatch_policy.hpp"
  #include "acot/gemv_aiv/helper.hpp"
  #include "acot/detail/alignment.hpp"
@@ -27,7 +27,8 @@
      class YType_,
      class BiasType_,
      class TileCopy_,
-     class TileVmad_
+     class TileVmad_,
+     class TileVmuls_
  >
  struct BlockGemv <
      MmadAtlasA2Pingpong<ENABLE_UNIT_FLAG_>,
@@ -37,7 +38,8 @@
      YType_,
      BiasType_,
      TileCopy_,
-     TileVmad_
+     TileVmad_,
+     TileVmuls_
  > {
  public:
      // Type Aliases
@@ -49,6 +51,7 @@
      using ElementX = typename XType_::Element;
      using ElementY = typename YType_::Element;
      using TileVmad = TileVmad_;
+     using TileVmuls = TileVmuls_;
      using VecCopyGmToUb = typename TileCopy_::VecCopyGmToUb;
      using VecCopyUbToGm = typename TileCopy_::VecCopyUbToGm;
      using MatrixCopyGmToUb = typename TileCopy_::MatrixCopyGmToUb;
@@ -58,7 +61,6 @@
      using UBAlignHelper = gemv::helper::UBAlignHelper<ElementA, LayoutA>;
  
      static constexpr bool ENABLE_UNIT_FLAG = DispatchPolicy::ENABLE_UNIT_FLAG;
-
      static constexpr uint32_t STAGES = DispatchPolicy::STAGES;
      //这里是把UB总共192KB分给了多个数据！
      static constexpr uint32_t Abuf_SIZE_ = 128 * 1024;  //矩阵A
@@ -120,7 +122,7 @@
          AscendC::GlobalTensor<ElementX> const &gmX,
          AscendC::GlobalTensor<ElementY> const &gmY,
          AscendC::GlobalTensor<ElementY> const &gmY_read,
-         MatmulCoord const &actualShape,
+         GemvCoord const &actualShape,
          float alpha,
          float beta
         )
@@ -129,7 +131,7 @@
         vecCopyGmToUb(UbYTensorList[UbOutListId], gmY_read,actualShape.m());
         AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((event_t)(UbOutEventList[UbOutListId]));  
         AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((event_t)(UbOutEventList[UbOutListId]));
-        AscendC::Muls(
+        tileVmuls(
             UbYTensorList[UbOutListId], 
             UbYTensorList[UbOutListId], 
             (ElementY)beta,
@@ -156,7 +158,7 @@
             vecCopyGmToUb(UbXTensorList[UbInListId], gmX[i * TileNRound],x_actual);
             AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((event_t)(UbInXEventList[UbInListId]));
             AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((event_t)(UbInXEventList[UbInListId]));
-            AscendC::Muls(
+            tileVmuls(
                 UbXTensorList[UbInListId], 
                 UbXTensorList[UbInListId], 
                 (ElementX)alpha,
@@ -215,9 +217,11 @@
      uint32_t strideA;
 
      TileVmad tileVmad;
+     TileVmuls tileVmuls;
      MatrixCopyGmToUb matrixCopyGmToUb;
      VecCopyGmToUb vecCopyGmToUb;
      VecCopyUbToGm vecCopyUbToGm;
+     
  };
  
  } // namespace acot::matmul::block

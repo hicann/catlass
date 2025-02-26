@@ -14,9 +14,10 @@
  #include "acot/acot.hpp"
  #include "acot/arch/resource.hpp"
  #include "acot/coord.hpp"
- #include "acot/matmul_coord.hpp"
+//  #include "acot/matmul_coord.hpp"
  #include "acot/matrix_coord.hpp"
- 
+ #include "acot/gemv_coord.hpp"
+
  namespace acot::gemv::kernel {
  
  // Template for Matmul kernel. Compute C = A * B
@@ -41,7 +42,7 @@
      /// Parameters structure
      struct Params {
          // Data members
-         MatmulCoord problemShape;
+         GemvCoord problemShape;
          GM_ADDR ptrA;
          LayoutA layoutA;
          GM_ADDR ptrX;
@@ -55,7 +56,7 @@
          Params() {}
  
          ACOT_DEVICE
-         Params(MatmulCoord const &problemShape_,  GM_ADDR ptrA_, LayoutA layoutA_,  GM_ADDR ptrX_,
+         Params(GemvCoord const &problemShape_,  GM_ADDR ptrA_, LayoutA layoutA_,  GM_ADDR ptrX_,
             GM_ADDR ptrY_,GM_ADDR ptrY_read_,float alpha_,float beta_)
              : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrX(ptrX_),
                ptrY(ptrY_),ptrY_read(ptrY_read_),alpha(alpha_),beta(beta_) {}
@@ -129,8 +130,7 @@
             }
             uint32_t m_actual = (loop_id == loopnum - 1) ? params.problemShape.m() - (loop_id * maxmPerBlock_round) : maxmPerBlock_round;
             uint32_t n_actual = params.problemShape.n();
-            
-            MatmulCoord actualBlockShape = MatmulCoord{m_actual,n_actual,1};
+            GemvCoord actualBlockShape = GemvCoord{m_actual,n_actual};
             // Compute block-scoped matrix multiply-add
             blockGemv(gmA[offset_matrix], params.layoutA,
                 gmX, 

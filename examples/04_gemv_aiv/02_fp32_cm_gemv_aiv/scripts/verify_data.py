@@ -33,7 +33,7 @@ def calculate_thresholds(M):
 
 def compareOutputData(M, N):
     thres, eb_thres = calculate_thresholds(M)
-    with open("./data/output.txt", "w") as f:
+    with open("./data/output.txt", "a") as f:
         print("---- FP32 -- ColomnMajor -- Gemv_aiv ---- \n", file=f)
         print("  M : {} , N : {} \n".format(M, N), file=f)
         np.set_printoptions(threshold=np.inf)
