@@ -27,7 +27,7 @@ template <
     class LayoutC
 >
 ACOT_GLOBAL
-void FP16EpiGemm(
+void FP32RMGemm(
     uint64_t fftsAddr,
     ScalarType alpha, ScalarType beta,
     MatmulCoord problemShape,
@@ -174,7 +174,7 @@ void Run(Options options){
 
     // 获得当前核心数
     auto aicCoreNum = arch::AscendC910B3::MaxBlock;
-    FP16EpiGemm<<<aicCoreNum, nullptr, stream>>>(
+    FP32RMGemm<<<aicCoreNum, nullptr, stream>>>(
         fftsAddr,
         alpha[0], beta[0],
         options.problemShape,

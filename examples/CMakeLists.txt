@@ -72,6 +72,7 @@ foreach(EXAMPLE
     01_grouped_matmul
     02_optimized_matmul
     03_gemm # 添加示例代码目录
+    04_groupgemm
 )
 add_subdirectory(${EXAMPLE})
 endforeach()

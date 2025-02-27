@@ -25,11 +25,21 @@ def calc_expect_func(M, N, K):
     # A = np.random.uniform(-1,1,size=matSizeA).astype(NP_DATA_TYPE)
     # B = np.random.uniform(-1,1,size=matSizeB).astype(NP_DATA_TYPE)
     # C = np.random.uniform(-1,1,size=matSizeC).astype(NP_DATA_TYPE)
-    alpha.tofile("./data/input/alpha.bin")
-    beta.tofile("./data/input/beta.bin")
-    A.tofile("./data/input/A.bin")
-    B.tofile("./data/input/B.bin")
-    C.tofile("./data/input/C.bin")
+    with open("./data/input/alpha.bin", "w") as alpha_file:
+        alpha.tofile(alpha_file)
+    
+    with open("./data/input/beta.bin", "w") as beta_file:
+        beta.tofile(beta_file)
+
+    with open("./data/input/A.bin", "w") as A_file:
+        A.tofile(A_file)
+
+    with open("./data/input/B.bin", "w") as B_file:
+        B.tofile(B_file)
+
+    with open("./data/input/C.bin", "w") as C_file:
+        C.tofile(C_file)
+
     # print(A)
     # print(B)
     # print(C)
@@ -38,7 +48,8 @@ def calc_expect_func(M, N, K):
     expect_res = np.array(tmp * alpha.astype(DATA_TYPE) + beta.astype(DATA_TYPE) * C.astype(DATA_TYPE)).astype(NP_DATA_TYPE)
     # expect_res = np.array(beta.astype(NP_DATA_TYPE) * C.astype(NP_DATA_TYPE)).astype(NP_DATA_TYPE)
     # expect_res = C
-    expect_res.tofile("./data/output/exp_res.bin")
+    with open("./data/output/exp_res.bin", "w") as exp_res_file:
+        expect_res.tofile(exp_res_file)
 
 
 if __name__ == "__main__":
