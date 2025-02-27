@@ -1,0 +1,36 @@
+import csv
+import sys
+import os
+import ast
+import numpy as np
+# 这个文件存在问题
+size = len(sys.argv) - 1
+M = int(sys.argv[size - 2])
+N = int(sys.argv[size - 1])
+K = int(sys.argv[size])
+print(sys.argv)
+time_us_total = 0
+ 
+with open(sys.argv[1], newline='') as csvfile:
+    reader = csv.DictReader(csvfile, skipinitialspace=True)
+    time_us_list = [float(row['Task Duration(us)']) for row in reader]
+    
+    time_us = sum(time_us_list[0:]) / len(time_us_list[0:])
+
+    time_us_total += time_us
+
+aic_mac_ratio_total = 0
+
+with open(sys.argv[2], newline='') as csvfile: # 一共两个文件内容
+    reader = csv.DictReader(csvfile, skipinitialspace=True)
+
+    aic_mac_ratio_list = [float(row['aic_cube_ratio']) for row in reader if row['sub_block_id'] == "cube0"]
+    
+    aic_mac_ratio = sum(aic_mac_ratio_list[0:]) / len(aic_mac_ratio_list[0:])
+
+    aic_mac_ratio_total += aic_mac_ratio
+
+
+Mflops = M * N * K * 1e-6
+
+print("M:", M, "N: ", N, "K: ", K, "time_us: ", time_us_total, "Tflops: ", Mflops / time_us_total, "aic_mac_ratio: ", aic_mac_ratio_total * 100, "%") 
