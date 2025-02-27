@@ -22,6 +22,15 @@ struct EpilogueAtlasA2ElemWiseOneSource {
     static constexpr uint32_t OPERANDS_NUM = 3;
 };
 
+// AscendC910B3的Epiligue部分
+struct EpilogueAscendC910B3Gemm {
+    using ArchTag = arch::AscendC910B3;
+    // 默认开启双缓冲
+    static constexpr uint32_t STAGES = 2;
+    // 设计三个数据处理 a*b 和 c  最后d
+    static constexpr uint32_t OPERANDS_NUM = 3;
+};
+
 // For AtlasA2, FA Softmax
 struct EpilogueAtlasA2FASoftmax {
     using ArchTag = arch::AtlasA2;

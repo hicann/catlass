@@ -14,6 +14,7 @@
 #include "acot/acot.hpp"
 #include "acot/layout/layout.hpp"
 #include "acot/matmul/matmul_type.hpp"
+#include "acot/gemm/gemm_type.hpp"
 
 namespace acot::epilogue::tile {
 
@@ -50,6 +51,72 @@ struct CopyUb2Gm<arch::AtlasA2, matmul::MatmulType<Element, layout::RowMajor>> {
             0
         );
         AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams);
+    }
+};
+
+template <typename Element>
+struct CopyUb2Gm<arch::AscendC910B3, gemm::GemmType<Element, layout::RowMajor>> {
+    using LayoutDst = layout::RowMajor;
+    using LayoutSrc = layout::RowMajor;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+
+    ACOT_DEVICE
+    CopyUb2Gm() = default;
+
+    ACOT_DEVICE
+    void operator()(
+        AscendC::GlobalTensor<Element> const &dstTensor,
+        AscendC::LocalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst,
+        LayoutSrc const &layoutSrc)
+    {
+        uint32_t MActual = layoutDst.shape(0);
+        uint32_t NActual = layoutDst.shape(1);
+        uint32_t NRound = layoutSrc.shape(1);
+        // uint32_t NRound = RoundUp(NActual, ELE_NUM_PER_C0);
+        uint32_t stride = layoutSrc.stride(0); // RowMajor
+        AscendC::DataCopyExtParams params;
+        for(uint32_t MIdx = 0; MIdx < MActual; MIdx++){
+            params.blockCount = 1;
+            params.blockLen = NActual * sizeof(Element);
+            params.srcStride = 0;
+            params.dstStride = 0;
+            AscendC::DataCopyPad(dstTensor[MIdx * stride], srcTensor[MIdx * NRound], params);
+        }
+    }
+};
+
+template <typename Element>
+struct CopyUb2Gm<arch::AscendC910B3, gemm::GemmType<Element, layout::ColumnMajor>> {
+    using LayoutDst = layout::ColumnMajor;
+    using LayoutSrc = layout::ColumnMajor;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+
+    ACOT_DEVICE
+    CopyUb2Gm() = default;
+
+    ACOT_DEVICE
+    void operator()(
+        AscendC::GlobalTensor<Element> const &dstTensor,
+        AscendC::LocalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst,
+        LayoutSrc const &layoutSrc)
+    {
+        uint32_t MActual = layoutDst.shape(1);
+        uint32_t NActual = layoutDst.shape(0);
+        uint32_t MRound = layoutSrc.shape(1);
+        // uint32_t MRound = RoundUp(MActual, ELE_NUM_PER_C0);
+        uint32_t stride = layoutSrc.stride(1); // ColumnMajor
+        AscendC::DataCopyExtParams params;
+        for(uint32_t NIdx = 0; NIdx < NActual; NIdx++){
+            params.blockCount = 1;
+            params.blockLen = MActual * sizeof(Element);
+            params.srcStride = 0;
+            params.dstStride = 0;
+            AscendC::DataCopyPad(dstTensor[NIdx * stride], srcTensor[NIdx * MRound], params);
+        }
     }
 };
 
