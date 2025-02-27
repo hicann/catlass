@@ -240,13 +240,13 @@ namespace acot::gemv::block
         AscendC::LocalTensor<ElementA> l0BTensorList[STAGES];
         AscendC::LocalTensor<ElementAccumulator> l0CTensor;
 
-        // Multi-stage event id list 目前还没考虑流水，未使用
+        // Multi-stage event id list
         int32_t l1AEventList[STAGES];
         int32_t l1BEventList[STAGES];
         int32_t l0AEventList[STAGES];
         int32_t l0BEventList[STAGES];
 
-        // The id of current stage目前还没考虑流水，未使用
+        // The id of current
         uint32_t l1ListId{0};
         uint32_t l0AListId{0};
         uint32_t l0BListId{0};
