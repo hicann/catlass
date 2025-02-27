@@ -6,8 +6,8 @@ os.environ["OMP_NUM_THREADS"] = "16"
 def gen_golden_data(M, N):
     gm_dtype = np.float32
 
-    matrix_gm = np.random.uniform(-5, 5, size=(N,M)).astype(gm_dtype)
-    vector_gm = np.random.uniform(-5, 5, size=(1,N)).astype(gm_dtype)
+    matrix_gm = np.random.uniform(-1, 1, size=(N,M)).astype(gm_dtype)
+    vector_gm = np.random.uniform(-1, 1, size=(1,N)).astype(gm_dtype)
     golden = np.matmul(vector_gm.astype(np.float32), matrix_gm.astype(np.float32)).astype(gm_dtype)
 
 

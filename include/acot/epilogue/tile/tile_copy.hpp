@@ -40,9 +40,12 @@ namespace acot::epilogue::tile
         using ElementTemp = typename TempType::Element;
         using ElementZ = typename ZType::Element;
 
-        using CopyGmToUbY = CopyGm2Ub<ArchTag, YType>;
-        using CopyGmToUbTemp = CopyGm2Ub<ArchTag, TempType>;
-        using CopyUbToGmZ = CopyUb2Gm<ArchTag, ZType>;
+        // using CopyGmToUbY = CopyGm2Ub<ArchTag, YType>;
+        // using CopyGmToUbTemp = CopyGm2Ub<ArchTag, TempType>;
+        // using CopyUbToGmZ = CopyUb2Gm<ArchTag, ZType>;
+        using CopyGmToUbY = VecCopyGm2Ub<ArchTag, YType>;
+        using CopyGmToUbTemp = VecCopyGm2Ub<ArchTag, TempType>;
+        using CopyUbToGmZ = VecCopyUb2Gm<ArchTag, ZType>;
     };
 
 } // namespace acot::epilogue::tile

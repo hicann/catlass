@@ -3,6 +3,8 @@
 clear
 export ASCEND_HOME_DIR=/home/workspace/gpf/CANN/ascend-toolkit/latest
 source /home/workspace/gpf/CANN/ascend-toolkit/set_env.sh
+export ASCEND_SLOG_PRINT_TO_STDOUT=1
+
 export PRINT_TIK_MEM_ACCESS=FALSE
 
 # 编译文件

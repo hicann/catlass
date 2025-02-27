@@ -4,7 +4,7 @@ import sys
 NP_DATA_TYPE = np.float32
 
 def compareOutputData(M, N):
-    with open("./data/output.txt","w") as f:
+    with open("./data/output.txt","a") as f:
         print("---- FP32 -- ColumnMajor -- Gemv ---- \n", file=f)
         print("  M : {} , N : {} \n".format(M , N), file=f)
         np.set_printoptions(threshold=np.inf)
