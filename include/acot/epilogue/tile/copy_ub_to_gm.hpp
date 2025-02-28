@@ -54,6 +54,42 @@ namespace acot::epilogue::tile
         }
     };
 
+    //重写了一个用于vector的copyUb2Gm的搬运函数，用于连续搬运，而不考虑对齐
+        template <
+        class ArchTag,
+        class GmType>
+    struct VecCopyUb2Gm
+    {
+        static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy ub to gm, can not find the specialization.");
+    };
+
+    template <typename Element>
+    struct VecCopyUb2Gm<arch::AtlasA2, gemv::GemvType<Element, layout::RowMajor>>
+    {
+        using LayoutDst = layout::RowMajor;
+        using LayoutSrc = layout::RowMajor;
+
+        static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+
+        ACOT_DEVICE
+        VecCopyUb2Gm() = default;
+
+        ACOT_DEVICE
+        void operator()(
+            AscendC::GlobalTensor<Element> const &dstTensor,
+            AscendC::LocalTensor<Element> const &srcTensor,
+            layout::RowMajor const &layoutDst,
+            layout::RowMajor const &layoutSrc)
+        {
+            AscendC::DataCopyExtParams dataCopyParams(
+                layoutDst.shape(0),
+                layoutDst.shape(1) * sizeof(Element),
+                0,
+                0,
+                0);
+            AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams);
+        }
+    };
 } // acot::epilogue::tile
 
 #endif

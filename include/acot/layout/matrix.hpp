@@ -512,15 +512,15 @@ namespace acot::layout
             return zN(orgRows,
                       orgCols,
 
-                      C0_NUM_PER_FRACTAL,
-                      rowsRound / C0_NUM_PER_FRACTAL,
-                      ELE_NUM_PER_C0,
-                      colsRound / ELE_NUM_PER_C0,
+                      C0_NUM_PER_FRACTAL,   //分形行长度
+                      rowsRound / C0_NUM_PER_FRACTAL,   //行方向分形个数
+                      ELE_NUM_PER_C0,       //分形列长度
+                      colsRound / ELE_NUM_PER_C0,       //列方向分形个数
 
-                      ELE_NUM_PER_C0,
-                      ELE_NUM_PER_FRACTAL,
-                      1,
-                      rowsRound * ELE_NUM_PER_C0);
+                      ELE_NUM_PER_C0,               //分形内行步长
+                      ELE_NUM_PER_FRACTAL,          //分形间行步长
+                      1,                            //分形内列步长
+                      rowsRound * ELE_NUM_PER_C0);  //分形间列步长
         }
 
         ACOT_HOST_DEVICE
@@ -528,10 +528,12 @@ namespace acot::layout
         {
             return zN(shape.row(),
                       shape.column(),
+
                       C0_NUM_PER_FRACTAL,
                       CeilDiv<C0_NUM_PER_FRACTAL>(shape.row()),
                       C0_NUM_PER_FRACTAL,
                       CeilDiv<C0_NUM_PER_FRACTAL>(shape.column()),
+                      
                       C0_NUM_PER_FRACTAL,
                       C0_NUM_PER_FRACTAL * C0_NUM_PER_FRACTAL,
                       1,

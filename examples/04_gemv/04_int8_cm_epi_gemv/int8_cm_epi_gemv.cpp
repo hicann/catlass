@@ -78,7 +78,7 @@ ACOT_GLOBAL void INT8CMEPIGEMV(
     using yType = TempType;
     using zType = TempType;
     using ComputeType = TempType;
-    constexpr uint32_t computeLength = 8192; // 这里算长度
+    constexpr uint32_t computeLength = 8192; // 这里算长度，这里虽然vector的长度是32，但是就算计算的结果超出了，也可以
 
     using TileElemWiseAddGemv = epilogue::tile::TileElemWiseAddGemv<ArchTag, ComputeType, computeLength>;
     using TileElemWiseMulGemv = epilogue::tile::TileElemWiseMulGemv<ArchTag, ComputeType, computeLength>;

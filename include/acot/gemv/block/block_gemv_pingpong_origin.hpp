@@ -113,21 +113,15 @@ namespace acot::gemv::block
                 l0BTensorList[i] = resource.l0BBuf.template GetBufferByByte<ElementA>(L0B_PINGPONG_BUF_SIZE * i);
 
                 // todo:分配流水。先用pipeall
-                l1AEventList[i] = i;          // 0, 1
-                l1BEventList[i] = i + STAGES; // 2, 3
-                l0AEventList[i] = i;          // 0, 1
-                l0BEventList[i] = i + STAGES; // 2, 3
-
-                // The event id that needs to be set before the loop
-                AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[i]);
-                AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[i]);
-                AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[i]);
-                AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[i]);
+                // l1AEventList[i] = i;                // 0, 1
+                // l1BEventList[i] = i + STAGES;       // 2, 3
+                // l0AEventList[i] = i;                // 0, 1
+                // l0BEventList[i] = i + STAGES;       // 2, 3
             }
             l0CTensor = resource.l0CBuf.template GetBufferByByte<ElementAccumulator>(0);
 
             // todo:分配流水。先用pipeall
-            // AscendC::SetFlag<AscendC::HardEvent::FIX_M>(EVENT_ID0);
+            AscendC::PipeBarrier<PIPE_ALL>();
         }
 
         /// Destructor
@@ -135,13 +129,13 @@ namespace acot::gemv::block
         ~BlockGemv()
         {
             // todo:释放流水。先用pipeall
-            for (uint32_t i = 0; i < STAGES; i++)
-            {
-                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[i]);
-                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[i]);
-                AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[i]);
-                AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[i]);
-            }
+            // for (uint32_t i = 0; i < STAGES; i++)
+            // {
+            //     // AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[i]);
+            //     // AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[i]);
+            //     // AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[i]);
+            //     // AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[i]);
+            // }
             // AscendC::WaitFlag<AscendC::HardEvent::FIX_M>(EVENT_ID0);
         }
 
@@ -153,10 +147,12 @@ namespace acot::gemv::block
             AscendC::GlobalTensor<Elementy> const &gmy, Layouty const &layouty,
             GemvCoord const &actualShape, uint32_t singleIdx)
         {
-            auto layoutxInL1 = LayoutxInL1::template MakeLayout<Elementx>(L1XAlignHelper::M_ALIGNED, L1TileShape::N); // 16, N
-            auto layoutAInL1 = LayoutAInL1::template MakeLayout<ElementA>(L1TileShape::M, L1TileShape::N);            // M,N 行优先，列优先也是这个
-            auto layoutInL0C = LayoutyInL0::MakeLayoutInL0C(MatrixCoord(L1XAlignHelper::M_ALIGNED, actualShape.m()));
+            auto layoutxInL1 = LayoutxInL1::template MakeLayout<Elementx>(16, L1TileShape::N);             // 16, N
+            auto layoutAInL1 = LayoutAInL1::template MakeLayout<ElementA>(L1TileShape::M, L1TileShape::N); // M,N 行优先，列优先也是这个
+            // auto layoutInL0C = LayoutyInL0::MakeLayoutInL0C(MatrixCoord(16, actualShape.m()));
+            auto layoutInL0C = LayoutyInL0::template MakeLayout<ElementAccumulator>(16, actualShape.m());
 
+            // 找到问题了，是这个mRound存在问题
             // uint32_t mRound = RoundUp<L1AAlignHelper::M_ALIGNED>(actualShape.m()); // m方向要和16或者32对齐，判断条件具体和数据类型有关
 
             // main loop, GM->L1, N方向做切分
@@ -180,39 +176,30 @@ namespace acot::gemv::block
 
                 // load vector x tile from GM to L1
                 auto layoutTilex = layoutx.GetTileLayout(MakeCoord(uint32_t(1), nRound));
-
-                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);
                 copyGmToL1A(l1ATensor, gmTilex, layoutxInL1, layoutTilex);
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListId]);
 
                 // load Matrix A tile from GM to L1
+                // auto layoutTileA = layoutA.GetTileLayout(MakeCoord(mRound, nActual));
                 auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShape.m(), nActual));
-
-                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
                 copyGmToL1B(l1BTensor, gmTileA, layoutAInL1, layoutTileA);
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
 
-                // AscendC::PipeBarrier<PIPE_ALL>();
-
-                AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListId]);
-                AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
+                AscendC::PipeBarrier<PIPE_ALL>();
 
                 uint32_t nPartLoop = CeilDiv<L0TileShape::N>(nRound);
+
                 for (uint32_t nPartIdx = 0; nPartIdx < nPartLoop; nPartIdx++)
                 {
                     uint32_t nPartActual = (nPartIdx < nPartLoop - 1) ? L0TileShape::N : (nRound - nPartIdx * L0TileShape::N);
 
                     // Locate the current tile on L0A
                     auto l0ATile = l0ATensorList[nPartIdx % STAGES];
-                    LayoutxInL0 layoutxInL0 = LayoutxInL0::template MakeLayout<Elementx>(L1XAlignHelper::M_ALIGNED, nPartActual);
+                    LayoutxInL0 layoutxInL0 = LayoutxInL0::template MakeLayout<Elementx>(16, nPartActual);
 
                     MatrixCoord l1xOffset{0, nPartIdx * L0TileShape::N};
                     auto l1ATile = l1ATensor[layoutxInL1.GetOffset(l1xOffset)]; // 没细看，但是理论上感觉应该没错吧
 
-                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0AListId]);
                     // Load current tile from L1 to L0A
                     copyL1ToL0A(l0ATile, l1ATile, layoutxInL0, layoutxInL1);
-                    AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0AListId]);
 
                     // Locate the current tile on L0B
                     auto l0BTile = l0BTensorList[nPartIdx % STAGES];
@@ -223,53 +210,34 @@ namespace acot::gemv::block
                     MatrixCoord l1AOffset{0, nPartIdx * L0TileShape::N};
                     auto l1BTile = l1BTensor[layoutAInL1.GetOffset(l1AOffset)];
 
-                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0BListId]);
                     // Load current tile from L1 to L0B
                     copyL1ToL0B(l0BTile, l1BTile, layoutAInL0, layoutAInL1);
-                    AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0BListId]);
 
                     AscendC::PipeBarrier<PIPE_ALL>();
 
                     // auto l0CTile = l0CTensor[(singleIdx * L0C_TILE_SIZE) % L0C_TILE_NUM];
                     auto l0CTile = l0CTensor;
-
                     // If the current tile is the first tile on the k axis, the accumulator needs to be reset to 0
                     bool initC = ((nLoopIdx == 0) && (nPartIdx == 0));
 
-                    AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0BListId]);
-                    AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0AListId]);
-                    tileMmad(l0CTile, l0ATile, l0BTile, L1XAlignHelper::M_ALIGNED, L0TileShape::M, nPartActual, initC);
-                    AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0AListId]);
-                    AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0BListId]);
+                    tileMmad(l0CTile, l0ATile, l0BTile, 16, L0TileShape::M, nPartActual, initC);
+                    // tileMmad(l0CTile, l0ATile, l0BTile, 16, L0TileShape::M, nPartActual, initC);
 
-                    // 更新l0BListId 和 l0AListId
-                    l0AListId = (l0AListId + 1) % STAGES;
-                    l0BListId = (l0BListId + 1) % STAGES;
-
-                    // AscendC::PipeBarrier<PIPE_ALL>();
+                    AscendC::PipeBarrier<PIPE_ALL>();
                 }
-                // AscendC::PipeBarrier<PIPE_ALL>();
-
-                AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);
-                AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
-
-                // 更新l1ListId
-                l1ListId = (l1ListId + 1) % STAGES;
+                AscendC::PipeBarrier<PIPE_ALL>();
             }
-            // AscendC::PipeBarrier<PIPE_ALL>();
+            AscendC::PipeBarrier<PIPE_ALL>();
 
             // auto l0CTile = l0CTensor[(singleIdx * L0C_TILE_SIZE) % L0C_TILE_NUM];
-            auto l0CTile = l0CTensor;
 
+            auto l0CTile = l0CTensor;
             // copy block out
             Layouty layoutBlock = layouty.GetTileLayout(MakeCoord(uint32_t(1), actualShape.m()));
 
-            AscendC::SetFlag<AscendC::HardEvent::M_FIX>(EVENT_ID0);
-            AscendC::WaitFlag<AscendC::HardEvent::M_FIX>(EVENT_ID0);
-
             copyL0CToGm(gmy, l0CTile, layoutBlock, layoutInL0C);
 
-            // AscendC::PipeBarrier<PIPE_ALL>();
+            AscendC::PipeBarrier<PIPE_ALL>();
         }
 
     protected:
@@ -280,13 +248,13 @@ namespace acot::gemv::block
         AscendC::LocalTensor<ElementA> l0BTensorList[STAGES];
         AscendC::LocalTensor<ElementAccumulator> l0CTensor;
 
-        // Multi-stage event id list
+        // Multi-stage event id list 目前还没考虑流水，未使用
         int32_t l1AEventList[STAGES];
         int32_t l1BEventList[STAGES];
         int32_t l0AEventList[STAGES];
         int32_t l0BEventList[STAGES];
 
-        // The id of current stage
+        // The id of current stage目前还没考虑流水，未使用
         uint32_t l1ListId{0};
         uint32_t l0AListId{0};
         uint32_t l0BListId{0};

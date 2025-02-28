@@ -78,7 +78,7 @@ ACOT_GLOBAL void FP32RMEPIGEMV(
     using yType = TempType;
     using zType = TempType;
     using ComputeType = TempType;
-    constexpr uint32_t computeLength = 8192; // 这里算长度
+    constexpr uint32_t computeLength = 32; // 这里算长度
 
     using TileElemWiseAddGemv = epilogue::tile::TileElemWiseAddGemv<ArchTag, ComputeType, computeLength>;
     using TileElemWiseMulGemv = epilogue::tile::TileElemWiseMulGemv<ArchTag, ComputeType, computeLength>;

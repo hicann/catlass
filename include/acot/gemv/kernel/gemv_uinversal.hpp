@@ -120,7 +120,7 @@ namespace acot::gemv::kernel
                 int gmOffsetA;
                 int gmOffsety;
 
-                if constexpr (std::is_same<LayoutA, acot::layout::RowMajor>::value) // 行优先情况
+                if constexpr (std::is_same_v<LayoutA, acot::layout::RowMajor>) // 行优先情况
                 {
                     gmOffsetx = 0;
                     gmOffsetA = MGmBlockIdx * maxMPerBlock * params.layoutA.stride(0);

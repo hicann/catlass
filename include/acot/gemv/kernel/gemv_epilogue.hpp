@@ -32,6 +32,7 @@ namespace acot::gemv::kernel
         using BlockGemv = BlockGemv_;
         using ArchTag = typename BlockGemv::ArchTag;
         using L1TileShape = typename BlockGemv::L1TileShape;
+        using L0TileShape = typename BlockGemv::L0TileShape;
 
         using Elementx = typename BlockGemv::Elementx;
         using Layoutx = typename BlockGemv::Layoutx;
@@ -45,6 +46,9 @@ namespace acot::gemv::kernel
         using Elementz = typename BlockEpilogue::ElementZ;
         using Layoutz = typename BlockEpilogue::LayoutZ;
         using EpilogueParams = typename BlockEpilogue::Params;
+
+        // 计算时，L0C的数据类型
+        using ElementAccumulator = typename gemv::helper::ElementAccumulatorSelector<ElementA, Elementx>::ElementAccumulator;
 
         using TileScheduler = TileScheduler_;
 
@@ -114,6 +118,17 @@ namespace acot::gemv::kernel
             uint32_t coreLoops = MLoops;
             uint32_t singleIdx = 0;
 
+            static constexpr uint32_t L0C_SIZE = ArchTag::L0C_SIZE;
+            static constexpr uint32_t L0C_TILE_SIZE = L0TileShape::M * L0TileShape::N * sizeof(ElementAccumulator);
+            static constexpr uint32_t L0C_TILE_NUM = L0C_SIZE / L0C_TILE_SIZE;
+
+            //初始化核间流水
+            #pragma unroll
+            for(uint32_t i = 0; i < L0C_TILE_NUM; i++)
+            {
+                AscendC::SetFlag<AscendC::HardEvent::FIX_M>((event_t) i);
+            }
+
             for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum())
             {
 
@@ -138,16 +153,26 @@ namespace acot::gemv::kernel
                 }
 
                 GemvCoord actualBlockShape = GemvCoord(MGmActual, NGmActual);
-
+                
+                AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((event_t) singleIdx % L0C_TILE_NUM);
+                
                 // Compute block-scoped matrix multiply-add
                 blockGemv(gmx[gmOffsetx], params.layoutX,
                           gmA[gmOffsetA], params.layoutA,
                           gmy[gmOffsety], layouty,
                           actualBlockShape, singleIdx);
+                AscendC::SetFlag<AscendC::HardEvent::FIX_M>((event_t) singleIdx % L0C_TILE_NUM);
 
-                AscendC::PipeBarrier<PIPE_ALL>();
-                arch::CrossCoreSetFlagWithReverse<0x2, PIPE_FIX>(flagAicFinishStore); // 这行是啥，暂时没懂
+                // AscendC::PipeBarrier<PIPE_ALL>();
+
+                arch::CrossCoreSetFlagWithReverse<0x2, PIPE_FIX>(flagAicFinishStore); 
                 singleIdx++;
+            }
+
+            #pragma unroll
+            for(uint32_t i = 0; i < L0C_TILE_NUM; i++)
+            {
+                AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((event_t) i);
             }
         }
 
@@ -194,18 +219,23 @@ namespace acot::gemv::kernel
                 uint32_t MGmActual = (loopIdx == coreLoops) ? M - loopIdx * maxMPerBlock : maxMPerBlock;
                 uint32_t NGmActual = 1;
 
-                // GemvCoord actualBlockShape =GemvCoord(MGmActual, NGmActual); // 这里的n是错的，已修正
                 GemvCoord actualBlockShape = GemvCoord(NGmActual, MGmActual);
 
+                // Get the offset
+                MatrixCoord blockOffset = blockCoord.GetCoordMN() * blockShape.GetCoordMN();
+
                 // Get the data and layout of y under the current basic block
-                auto gmBlocky = gmy[layouty.GetOffset(blockCoord.GetCoordMN() * blockShape.GetCoordMN())];
+                auto gmBlocky = gmy[layouty.GetOffset(blockOffset)];
                 auto layoutBlocky = layouty.GetTileLayout(actualBlockShape.GetCoordMN());
+
 
                 // Synchronize cross core
                 arch::CrossCoreWaitFlagWithReverse<0x2, PIPE_MTE3>(flagAicFinishStore);
 
                 // Actual calculatioin logic for performing block-scoped epilogue
-                blockEpilogue(blockShape, blockCoord, actualBlockShape, gmBlocky, layoutBlocky);
+                // blockEpilogue(blockShape, blockCoord, actualBlockShape, gmBlocky, layoutBlocky);
+                // Actual calculatioin logic for performing block-scoped epilogue
+                blockEpilogue(blockOffset, actualBlockShape, gmBlocky, layoutBlocky);
             }
         }
 

@@ -104,23 +104,31 @@ namespace acot::epilogue::block
 
         ACOT_DEVICE
         void operator()(
-            MatrixCoord const &blockOffsetMN,
+            GemvCoord const &blockShapeMN,
+            GemvCoord const &blockCoordMN,
             GemvCoord const &actualBlockShapeMN,
             AscendC::GlobalTensor<ElementCompute> const &gmBlockTemp,
             LayoutY const &layoutBlockTemp) // temp通过外部传入
         {                                   // 进行操作，先实现行优先
 
-
+            // Calculate the offset of the current block
+            MatrixCoord blockShape = blockShapeMN.GetCoordMN();
+            MatrixCoord blockCoord = blockCoordMN.GetCoordMN();
             MatrixCoord actualBlockShape = actualBlockShapeMN.GetCoordMN();
-            MatrixCoord blockOffset = blockOffsetMN;
-
+            MatrixCoord blockOffset = blockCoord * blockShape; // coord级别的乘法，算出行偏移和列偏移
 
             // 算出当前子块的offset和shape
             // 对行方向，根据aiv核数划分
             MatrixCoord subblockShape{
                 actualBlockShape.row(),
                 CeilDiv(actualBlockShape.column(), static_cast<uint32_t>(AscendC::GetSubBlockNum()))};
-            MatrixCoord subblockCoord{0, AscendC::GetSubBlockIdx()};// 子块起始地址坐标就是(aiv核序号，0)
+
+            // MatrixCoord subblockShape{
+            //     actualBlockShape.column(),
+            //     CeilDiv(actualBlockShape.row(), static_cast<uint32_t>(AscendC::GetSubBlockNum()))};
+
+            // MatrixCoord subblockCoord{AscendC::GetSubBlockIdx(), 0}; // 子块起始地址坐标就是(aiv核序号，0)
+            MatrixCoord subblockCoord{0, AscendC::GetSubBlockIdx()};
 
             MatrixCoord actualSubblockShape = MatrixCoord::Min(subblockShape, actualBlockShape - subblockCoord * subblockShape); // 这里实际上就是获取每个subBlockIdx对应的blockshape
             MatrixCoord subblockOffset = subblockCoord * subblockShape;                                                          // coord级别的乘法，算出行偏移和列偏移
@@ -146,23 +154,52 @@ namespace acot::epilogue::block
 
             // copy the data of Y and Temp
             AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
-            copyGmToUbY(ubY, gmSubblockY, layoutComputeInUb, layoutSubblockY);
-            copyGmToUbTemp(ubTemp, gmSubblockTemp, layoutComputeInUb, layoutSubblockTemp);
+            AscendC::DataCopyExtParams dataCopyParams0(
+                layoutSubblockY.shape(0),
+                layoutSubblockY.shape(1) * sizeof(ElementCompute),
+                0,
+                0,
+                0);
+            AscendC::DataCopyPadExtParams<ElementCompute> padParams(false, 0, 0, 0);
+            AscendC::DataCopyPad(ubY, gmSubblockY, dataCopyParams0, padParams);
+
+            AscendC::DataCopyExtParams dataCopyParams1(
+                layoutSubblockTemp.shape(0),
+                layoutSubblockTemp.shape(1) * sizeof(ElementCompute),
+                0,
+                0,
+                0);
+            // AscendC::DataCopyPadExtParams<Element> padParams(false, 0, 0, 0);
+            AscendC::DataCopyPad(ubTemp, gmSubblockTemp, dataCopyParams1, padParams);
+            // copyGmToUbY(ubY, gmSubblockY, layoutComputeInUb, layoutSubblockY);
+            // AscendC::PipeBarrier<PIPE_MTE2>();
+            // copyGmToUbTemp(ubTemp, gmSubblockTemp, layoutComputeInUb, layoutSubblockTemp);
             AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
 
             // 同时算β * Y 和 α * Temp
             AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
             AscendC::PipeBarrier<PIPE_V>();
-            tileEpilogueMul(ubY, ubY, params.beta);
+            AscendC::Muls(ubY, ubY, params.beta, actualBlockShape.column());
+            // tileEpilogueMul(ubY, ubY, params.beta);
             AscendC::PipeBarrier<PIPE_V>();
-            tileEpilogueMul(ubTemp, ubTemp, params.alpha);
+            AscendC::Muls(ubTemp, ubTemp, params.alpha, actualBlockShape.column());
+            // tileEpilogueMul(ubTemp, ubTemp, params.alpha);
             AscendC::PipeBarrier<PIPE_V>();
-            tileEpilogueAdd(ubZ, ubTemp, ubY);
+            AscendC::Add(ubZ, ubTemp, ubY, actualBlockShape.column());
+            // tileEpilogueAdd(ubZ, ubTemp, ubY);
             AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
 
             // copy the data of Z
             AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
-            copyUbToGmZ(gmSubblockZ, ubZ, layoutSubblockZ, layoutComputeInUb);
+            AscendC::DataCopyExtParams dataCopyParams2(
+                layoutSubblockZ.shape(0),
+                layoutSubblockZ.shape(1) * sizeof(ElementCompute),
+                0,
+                0,
+                0);
+            AscendC::DataCopyPad(gmSubblockZ, ubZ, dataCopyParams2);
+            // copyUbToGmZ(gmSubblockZ, ubZ, layoutSubblockZ, layoutComputeInUb);
+
             AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
         };
 
@@ -172,6 +209,8 @@ namespace acot::epilogue::block
         AscendC::LocalTensor<ElementY> ubY;
         AscendC::LocalTensor<ElementTemp> ubTemp;
         AscendC::LocalTensor<ElementZ> ubZ;
+
+        // TileElemWiseEpilogue tileEpilogue;
 
         TileElemWiseEpilogueAdd tileEpilogueAdd;
         TileElemWiseEpilogueMul tileEpilogueMul;

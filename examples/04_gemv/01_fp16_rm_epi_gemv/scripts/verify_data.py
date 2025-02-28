@@ -33,7 +33,7 @@ def compareOutputData(M, N):
 
     atol, rtol = get_thresholds(M, N, dtype=NP_DATA_TYPE)  # 计算 atol 和 rtol
 
-    with open("./data/output.txt", "w") as f:
+    with open("./data/output.txt", "a") as f:
         print("---- FP16 -- RowMajor -- EpilogueGemv ---- \n", file=f)
         print(f"  M : {M} , N : {N} \n", file=f)
         np.set_printoptions(threshold=np.inf, precision=3, suppress=True)
