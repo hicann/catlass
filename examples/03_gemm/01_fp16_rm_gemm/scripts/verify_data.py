@@ -41,7 +41,9 @@ def compareOutputData(M, N, K):
         # 读取二进制文件
         h_exp = np.fromfile("./data/output/exp_res.bin", dtype=NP_DATA_TYPE)
         h_res = np.fromfile("./data/output/our_res.bin", dtype=NP_DATA_TYPE)
-
+        
+        # print(h_exp, file=f)
+        # print(h_res, file=f)
         # 重新调整形状
         h_exp = h_exp.reshape((M * N, 1))
         h_res = h_res.reshape((M * N, 1))

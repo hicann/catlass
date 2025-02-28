@@ -74,16 +74,15 @@ struct CopyUb2Gm<arch::AscendC910B3, gemm::GemmType<Element, layout::RowMajor>> 
         uint32_t MActual = layoutDst.shape(0);
         uint32_t NActual = layoutDst.shape(1);
         uint32_t NRound = layoutSrc.shape(1);
-        // uint32_t NRound = RoundUp(NActual, ELE_NUM_PER_C0);
         uint32_t stride = layoutSrc.stride(0); // RowMajor
-        AscendC::DataCopyExtParams params;
-        for(uint32_t MIdx = 0; MIdx < MActual; MIdx++){
-            params.blockCount = 1;
-            params.blockLen = NActual * sizeof(Element);
-            params.srcStride = 0;
-            params.dstStride = 0;
-            AscendC::DataCopyPad(dstTensor[MIdx * stride], srcTensor[MIdx * NRound], params);
-        }
+        AscendC::DataCopyExtParams dataCopyParams(
+            MActual,
+            NActual * sizeof(Element),
+            (NRound - NActual) / ELE_NUM_PER_C0,
+            (stride - NActual) * sizeof(Element),
+            0
+        );
+        AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams);
     }
 };
 
@@ -107,16 +106,15 @@ struct CopyUb2Gm<arch::AscendC910B3, gemm::GemmType<Element, layout::ColumnMajor
         uint32_t MActual = layoutDst.shape(1);
         uint32_t NActual = layoutDst.shape(0);
         uint32_t MRound = layoutSrc.shape(1);
-        // uint32_t MRound = RoundUp(MActual, ELE_NUM_PER_C0);
         uint32_t stride = layoutSrc.stride(1); // ColumnMajor
-        AscendC::DataCopyExtParams params;
-        for(uint32_t NIdx = 0; NIdx < NActual; NIdx++){
-            params.blockCount = 1;
-            params.blockLen = MActual * sizeof(Element);
-            params.srcStride = 0;
-            params.dstStride = 0;
-            AscendC::DataCopyPad(dstTensor[NIdx * stride], srcTensor[NIdx * MRound], params);
-        }
+        AscendC::DataCopyExtParams dataCopyParams(
+            NActual,
+            MActual * sizeof(Element),
+            (MRound - MActual) / ELE_NUM_PER_C0,
+            (stride - MActual) * sizeof(Element),
+            0
+        );
+        AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams);
     }
 };
 

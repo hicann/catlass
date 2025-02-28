@@ -44,7 +44,7 @@ public:
     
     static constexpr uint32_t STAGES = DispatchPolicy::STAGES; // 开启双缓冲机制的 两个AIV核
     static constexpr uint32_t DOUBLESTAGES = DispatchPolicy::STAGES * DispatchPolicy::STAGES;
-    const uint32_t UBSize = ArchTag::UBSize;
+    const uint32_t UBSize = ArchTag::UB_SIZE;
     static constexpr bool RowOrColumn = std::is_same<LayoutC, acot::layout::RowMajor>::value && std::is_same<LayoutX, acot::layout::RowMajor>::value;
     static constexpr bool isNeedCast = std::is_same<ElementC, ElementX>::value;
     static constexpr uint32_t COMPUTE_LENGTH = TileElemWiseEpilogueAdd::COMPUTE_LENGTH;
@@ -58,7 +58,7 @@ public:
     static_assert(std::is_same_v<typename TileElemWiseEpilogueAdd::ArchTag, ArchTag>, "Tile epilogue's ArchTag mismatch");
     static_assert(std::is_same_v<typename TileElemWiseEpilogueMul::ArchTag, ArchTag>, "Tile epilogue's ArchTag mismatch");
     // Check if compute length is valid
-    static_assert(COMPUTE_LENGTH * OPERANDS_NUM * sizeof(ElementCompute) <= ArchTag::UBSize, "UB out of bounds");
+    static_assert(COMPUTE_LENGTH * OPERANDS_NUM * sizeof(ElementCompute) <= ArchTag::UB_SIZE, "UB out of bounds");
 
     typedef struct Params{
         ElementScalar alpha;
@@ -73,7 +73,7 @@ public:
         Params() {}
 
         ACOT_DEVICE
-        Params(ElementScalar alpha_, ElementScalar beta_, GM_ADDR ptrC_, LayoutX layoutC_, GM_ADDR ptrD_, LayoutD layoutD_)
+        Params(ElementScalar alpha_, ElementScalar beta_, GM_ADDR ptrC_, LayoutC layoutC_, GM_ADDR ptrD_, LayoutD layoutD_)
         : alpha(alpha_), beta(beta_), ptrC(ptrC_), layoutC(layoutC_), ptrD(ptrD_), layoutD(layoutD_){}
     }Params;
 
@@ -83,29 +83,18 @@ public:
         cGm.SetGlobalBuffer((__gm__ ElementC*)params.ptrC);
         dGm.SetGlobalBuffer((__gm__ ElementD*)params.ptrD);
         Resource();
-        // 开启流水控制
-        // for(uint32_t i = 0; i < STAGES; i++){
-        //     // 使能MTE2
-        //     AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((int32_t)i);
-        //     AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((int32_t)(i + 2));
-        // }
-        for(uint32_t i = 0; i < DOUBLESTAGES; i++){
+        for(uint32_t i = 0; i < STAGES; i++){
             // 使能MTE2
             AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((int32_t)i);
-            AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((int32_t)(i + DOUBLESTAGES));
+            AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((int32_t)(i + STAGES));
         }
     }
 
     ACOT_DEVICE
     ~BlockEpilogue(){
-        // 关闭流水
-        // for(uint32_t i = 0; i < STAGES; i++){
-        //     AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((int32_t)i);
-        //     AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((int32_t)(i + 2));
-        // }
-        for(uint32_t i = 0; i < DOUBLESTAGES; i++){
+        for(uint32_t i = 0; i < STAGES; i++){
             AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((int32_t)i);
-            AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((int32_t)(i + DOUBLESTAGES));
+            AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((int32_t)(i + STAGES));
         }
         // 销毁内存
         pipe.Destroy();
@@ -157,7 +146,6 @@ private:
     void Resource(){
         // 分配内存 分成三块
         uint32_t maxMPerBlock = blockShape.m() / STAGES; // M 和 N方向都切一刀
-        // uint32_t maxMPerBlock = blockShape.m();
         uint32_t maxNPerBlock = blockShape.n() / STAGES;
         uint32_t tileSize = maxMPerBlock * maxNPerBlock;
         uint32_t ubCSize = tileSize * sizeof(ElementC);
@@ -169,7 +157,6 @@ private:
         uint32_t ubByteStart = 0;
         pipe.InitBuffer(VECQueue, 1, UBSize);
         AscendC::LocalTensor<uint8_t> ubTensor = VECQueue.AllocTensor<uint8_t>();
-        // 双缓冲空间 128 * 128 * 4 * 3 = 196,608 = 192 * 1024 能存下 极限情况
         ubCTensor[0] = ubTensor[ubByteStart].template ReinterpretCast<ElementC>(); 
         ubByteStart += ubCSize;
         ubCTensor[1] = ubTensor[ubByteStart].template ReinterpretCast<ElementC>(); 
@@ -200,11 +187,8 @@ private:
         MatmulCoord actualShape,
         LayoutX layoutX
     ){
-        // 搬运时需要对齐32Byte的
-        // 搬运时需要对齐32Byte的
         uint32_t MActual = actualShape.m();
         uint32_t NActual = actualShape.n(); // 这里也要对齐
-        // 行优先部分对M进行切分处理
         uint32_t maxMPerBlock = blockShape.m() / STAGES; // 对着M方向进行切分 肯定会对齐32Byte
         uint32_t maxNPerBlock = blockShape.n() / STAGES; 
         uint32_t aivIndex = AscendC::GetSubBlockIdx(); // 0 或 1
@@ -212,11 +196,10 @@ private:
         uint32_t MActualAIV1 = (MActual < maxMPerBlock) ? 0 : (MActual - maxMPerBlock);
         uint32_t MUbActual = aivIndex == 1 ? MActualAIV1 : MActualAIV0;
         uint32_t aivNum = AscendC::GetSubBlockNum(); // 910B3 AIV核为2
-        // 对N方向进行切割
         uint32_t NLoops = CeilDiv(NActual, maxNPerBlock);
         for(uint32_t NIdx = 0; NIdx < NLoops; NIdx++){
             uint32_t NUbActual = (NIdx == NLoops - 1) ? (NActual - NIdx * maxNPerBlock) : maxNPerBlock;
-            AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((int32_t)((aivIndex * DOUBLESTAGES) + NIdx));
+            AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((int32_t)NIdx);
             auto layoutXInUb = layoutX.GetTileLayout(MakeCoord(maxMPerBlock, maxNPerBlock));
             auto layoutTileX = layoutX.GetTileLayout(MakeCoord(MUbActual, NUbActual));
             copyGmToUbX(
@@ -224,16 +207,16 @@ private:
                 xGm[aivIndex * maxMPerBlock * layoutX.stride(0) + NIdx * maxNPerBlock],
                 layoutXInUb, layoutTileX
             );
-            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(-((aivIndex * DOUBLESTAGES) + NIdx + 8)));
-            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(-((aivIndex * DOUBLESTAGES) + NIdx + 8)));
+            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)NIdx);
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)NIdx);
             tileElemWiseEpilogueMul(
                 ubXTensor[NIdx % STAGES],
                 ubXTensor[NIdx % STAGES],
                 params.alpha
             );
-            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)((aivIndex * DOUBLESTAGES) + NIdx));
-
-            AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((int32_t)((aivIndex * DOUBLESTAGES) + NIdx + 2));
+            AscendC::PipeBarrier<PIPE_V>();
+            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)NIdx);
+            AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((int32_t)(NIdx + STAGES));
             auto layoutTileC = params.layoutC.GetTileLayout(MakeCoord(MUbActual, NUbActual));
             auto layoutCInUb = params.layoutC.GetTileLayout(MakeCoord(maxMPerBlock, maxNPerBlock));
             copyGmToUbC(
@@ -241,13 +224,12 @@ private:
                 cGm[offsetC + aivIndex * maxMPerBlock * params.layoutC.stride(0) + NIdx * maxNPerBlock],
                 layoutCInUb, layoutTileC
             );
-            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)((aivIndex * DOUBLESTAGES) + NIdx + 10));
-            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)((aivIndex * DOUBLESTAGES) + NIdx + 10));
-            // 进行cast操作
+            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(NIdx + STAGES));
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(NIdx + STAGES));
             if constexpr (!isNeedCast){
                 AscendC::Cast<ElementCompute, ElementC>(ubCTensorCast[NIdx % STAGES], ubCTensor[NIdx % STAGES], AscendC::RoundMode::CAST_NONE, COMPUTE_LENGTH);
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(-((aivIndex * DOUBLESTAGES) + NIdx + 10)));
-                AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(-((aivIndex * DOUBLESTAGES) + NIdx + 10)));
+                AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(NIdx + STAGES));
+                AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(NIdx + STAGES));
                 tileElemWiseEpilogueMul(
                     ubCTensorCast[NIdx % STAGES],
                     ubCTensorCast[NIdx % STAGES],
@@ -260,11 +242,10 @@ private:
                     params.beta
                 );
             }
-            // AscendC::PipeBarrier<PIPE_ALL>();
-            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)((aivIndex * DOUBLESTAGES) + NIdx + 2));
-            // 等待计算
-            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)((aivIndex * DOUBLESTAGES) + NIdx));
-            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)((aivIndex * DOUBLESTAGES) + NIdx + 2));
+            AscendC::PipeBarrier<PIPE_V>();
+            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(NIdx + STAGES));
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(NIdx + STAGES));
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)NIdx);
             if constexpr (!isNeedCast){
                 tileElemWiseEpilogueAdd(
                     ubDTensorCast[NIdx % STAGES],
@@ -278,17 +259,16 @@ private:
                     ubCTensor[NIdx % STAGES]
                 );
             }
-            AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((int32_t)((aivIndex * DOUBLESTAGES) + NIdx));
-            AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((int32_t)((aivIndex * DOUBLESTAGES) + NIdx + 2));
+            AscendC::PipeBarrier<PIPE_V>();
+            AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((int32_t)NIdx);
+            AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((int32_t)(NIdx + STAGES));
             if constexpr (!isNeedCast){
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(-((aivIndex * DOUBLESTAGES) + NIdx + 6)));
-                AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(-((aivIndex * DOUBLESTAGES) + NIdx + 6)));
+                AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
                 AscendC::Cast<ElementD, ElementCompute>(ubDTensor[NIdx % STAGES], ubDTensorCast[NIdx % STAGES], AscendC::RoundMode::CAST_RINT, COMPUTE_LENGTH);
             }
-            // 流水控制
-            // 搬到Gm中
-            AscendC::SetFlag<AscendC::HardEvent::V_MTE3>((int32_t)-(aivIndex * DOUBLESTAGES));
-            AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>((int32_t)-(aivIndex * DOUBLESTAGES));
+            AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
+            AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
             auto layoutTileD = params.layoutD.GetTileLayout(MakeCoord(maxMPerBlock, maxNPerBlock));
             auto layoutDInGm = params.layoutD.GetTileLayout(MakeCoord(MUbActual, NUbActual));
             copyUbToGmD(
@@ -306,10 +286,8 @@ private:
         MatmulCoord actualShape,
         LayoutX layoutX
     ){
-        // 搬运时需要对齐32Byte的
         uint32_t MActual = actualShape.m();
         uint32_t NActual = actualShape.n(); // 这里也要对齐
-        // 行优先部分对M进行切分处理
         uint32_t maxMPerBlock = blockShape.m() / STAGES; // 对着M方向进行切分 肯定会对齐32Byte
         uint32_t maxNPerBlock = blockShape.n() / STAGES; 
         uint32_t aivIndex = AscendC::GetSubBlockIdx();
@@ -317,11 +295,10 @@ private:
         uint32_t NActualAIV1 = (NActual < maxNPerBlock) ? 0 : (NActual - maxNPerBlock);
         uint32_t NUbActual = aivIndex == 1 ? NActualAIV1 : NActualAIV0;
         uint32_t aivNum = AscendC::GetSubBlockNum(); // 910B3 AIV核为2
-        //对M方向进行切割
         uint32_t MLoops = CeilDiv(MActual, maxMPerBlock);
         for(uint32_t MIdx = 0; MIdx < MLoops; MIdx++){
             uint32_t MUbActual = (MIdx == MLoops - 1) ? (MActual - MIdx * maxMPerBlock) : maxMPerBlock;
-            AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((int32_t)((aivIndex * DOUBLESTAGES) + MIdx));
+            AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((int32_t)MIdx);
             auto layoutXInUb = layoutX.GetTileLayout(MakeCoord(maxNPerBlock, maxMPerBlock));
             auto layoutTileX = layoutX.GetTileLayout(MakeCoord(NUbActual, MUbActual));
             copyGmToUbX(
@@ -329,16 +306,16 @@ private:
                 xGm[aivIndex * maxNPerBlock * layoutX.stride(1) + MIdx * maxMPerBlock],
                 layoutXInUb, layoutTileX
             );
-            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(-((aivIndex * DOUBLESTAGES) + MIdx + 8)));
-            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(-((aivIndex * DOUBLESTAGES) + MIdx + 8)));
+            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)MIdx);
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)MIdx);
             tileElemWiseEpilogueMul(
                 ubXTensor[MIdx % STAGES],
                 ubXTensor[MIdx % STAGES],
                 params.alpha
             );
-            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)((aivIndex * DOUBLESTAGES) + MIdx));
-
-            AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((int32_t)((aivIndex * DOUBLESTAGES) + MIdx + 2));
+            AscendC::PipeBarrier<PIPE_V>();
+            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)MIdx);
+            AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((int32_t)(MIdx + STAGES));
             auto layoutTileC = params.layoutC.GetTileLayout(MakeCoord(NUbActual, MUbActual));
             auto layoutCInUb = params.layoutC.GetTileLayout(MakeCoord(maxNPerBlock, maxMPerBlock));
             copyGmToUbC(
@@ -346,13 +323,12 @@ private:
                 cGm[offsetC + aivIndex * maxNPerBlock * params.layoutC.stride(1) + MIdx * maxMPerBlock],
                 layoutCInUb, layoutTileC
             );
-            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)((aivIndex * DOUBLESTAGES) + MIdx + 10));
-            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)((aivIndex * DOUBLESTAGES) + MIdx + 10));
+            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(MIdx + STAGES));
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(MIdx + STAGES));
             if constexpr (!isNeedCast){
-                // 进行cast操作
                 AscendC::Cast<ElementCompute, ElementC>(ubCTensorCast[MIdx % STAGES], ubCTensor[MIdx % STAGES], AscendC::RoundMode::CAST_NONE, COMPUTE_LENGTH);
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(-((aivIndex * DOUBLESTAGES) + MIdx + 10)));
-                AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(-((aivIndex * DOUBLESTAGES) + MIdx + 10)));
+                AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(MIdx + STAGES));
+                AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(MIdx + STAGES));
                 tileElemWiseEpilogueMul(
                     ubCTensorCast[MIdx % STAGES],
                     ubCTensorCast[MIdx % STAGES],
@@ -365,12 +341,10 @@ private:
                     params.beta
                 );
             }
-            // AscendC::PipeBarrier<PIPE_ALL>();
-            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)((aivIndex * DOUBLESTAGES) + MIdx + 2));
-
-            // 等待计算
-            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)((aivIndex * DOUBLESTAGES) + MIdx));
-            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)((aivIndex * DOUBLESTAGES) + MIdx + 2));
+            AscendC::PipeBarrier<PIPE_V>();
+            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(MIdx + STAGES));
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(MIdx + STAGES));
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)MIdx);
             if constexpr (!isNeedCast){
                 tileElemWiseEpilogueAdd(
                     ubDTensorCast[MIdx % STAGES],
@@ -384,19 +358,16 @@ private:
                     ubCTensor[MIdx % STAGES]
                 );
             }
-            // AscendC::PipeBarrier<PIPE_ALL>();
-            // ubX和ubC使用完了
-            AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((int32_t)((aivIndex * DOUBLESTAGES) + MIdx));
-            AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((int32_t)((aivIndex * DOUBLESTAGES) + MIdx + 2));
+            AscendC::PipeBarrier<PIPE_V>();
+            AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((int32_t)MIdx);
+            AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((int32_t)(MIdx + STAGES));
             if constexpr (!isNeedCast){
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)(-((aivIndex * DOUBLESTAGES) + MIdx + 6)));
-                AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)(-((aivIndex * DOUBLESTAGES) + MIdx + 6)));
+                AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
                 AscendC::Cast<ElementD, ElementCompute>(ubDTensor[MIdx % STAGES], ubDTensorCast[MIdx % STAGES], AscendC::RoundMode::CAST_RINT, COMPUTE_LENGTH);
             }
-            // 流水控制
-            // 搬到Gm中
-            AscendC::SetFlag<AscendC::HardEvent::V_MTE3>((int32_t)-(aivIndex * DOUBLESTAGES));
-            AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>((int32_t)-(aivIndex * DOUBLESTAGES));
+            AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
+            AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
             auto layoutTileD = params.layoutD.GetTileLayout(MakeCoord(maxNPerBlock, maxMPerBlock));
             auto layoutDInGm = params.layoutD.GetTileLayout(MakeCoord(NUbActual, MUbActual));
             copyUbToGmD(

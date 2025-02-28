@@ -16,7 +16,7 @@
 #include "acot/matmul/matmul_type.hpp"
 #include "acot/gemm/gemm_type.hpp"
 
-constexpr uint32_t STRIDE_LIMIT = 65536;
+// constexpr uint32_t STRIDE_LIMIT = 65536;
 
 namespace acot::epilogue::tile {
 
@@ -78,18 +78,15 @@ struct CopyGm2Ub<arch::AscendC910B3, gemm::GemmType<Element, layout::RowMajor>> 
         uint32_t NActual = layoutSrc.shape(1);
         uint32_t stride = layoutSrc.stride(0); // RowMajor
         uint32_t NRound = layoutDst.shape(1);
-        // uint32_t NRound = RoundUp(NActual, ELE_NUM_PER_C0);
-        // 更换搬运参数
-        AscendC::DataCopyExtParams params;
+        AscendC::DataCopyExtParams dataCopyParams(
+            MActual,
+            NActual * sizeof(Element),
+            (stride - NActual) * sizeof(Element),
+            (NRound - NActual) / ELE_NUM_PER_C0,
+            0
+        );
         AscendC::DataCopyPadExtParams<Element> padParams(false, 0, 0, 0);
-        for(uint32_t MIdx = 0; MIdx < MActual; MIdx++){
-            params.blockCount = 1;
-            params.blockLen = NRound * sizeof(Element);
-            params.srcStride = 0;
-            params.dstStride = 0; // 只搬运一个
-            params.rsv = 0;
-            AscendC::DataCopyPad(dstTensor[MIdx * NRound], srcTensor[MIdx * stride], params, padParams);
-        }
+        AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams, padParams);
     };
 };
 
@@ -113,18 +110,15 @@ struct CopyGm2Ub<arch::AscendC910B3, gemm::GemmType<Element, layout::ColumnMajor
         uint32_t NActual = layoutSrc.shape(0);
         uint32_t stride = layoutSrc.stride(1); // RowMajor
         uint32_t MRound = layoutDst.shape(1);
-        // uint32_t MRound = RoundUp(MActual, ELE_NUM_PER_C0);
-        // 更换搬运参数
-        AscendC::DataCopyExtParams params;
+        AscendC::DataCopyExtParams dataCopyParams(
+            NActual,
+            MActual * sizeof(Element),
+            (stride - MActual) * sizeof(Element),
+            (MRound - MActual) / ELE_NUM_PER_C0,
+            0
+        );
         AscendC::DataCopyPadExtParams<Element> padParams(false, 0, 0, 0);
-        for(uint32_t NIdx = 0; NIdx < NActual; NIdx++){
-            params.blockCount = 1;
-            params.blockLen = MRound * sizeof(Element);
-            params.srcStride = 0;
-            params.dstStride = 0; // 只搬运一个
-            params.rsv = 0;
-            AscendC::DataCopyPad(dstTensor[NIdx * MRound], srcTensor[NIdx * stride], params, padParams);
-        }
+        AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams, padParams);
     };
 };
 

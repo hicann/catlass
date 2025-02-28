@@ -2,7 +2,10 @@
 #define ACOT_GEMM_KERNEL_GEMM_HPP
 
 #include "acot/acot.hpp"
+#include "acot/arch/resource.hpp"
+#include "acot/coord.hpp"
 #include "acot/matmul_coord.hpp"
+#include "acot/matrix_coord.hpp"
 
 using namespace acot;
 
@@ -30,8 +33,8 @@ public:
 
     const uint32_t maxMPerBlock = L1TileShape::M;
     const uint32_t maxNPerBlock = L1TileShape::N;
-    const uint32_t cSize = maxMPerBlock * maxNPerBlock;
-    const uint32_t l0CBlockNum = ArchTag::L0CSize / (cSize * sizeof(ElementAccumulator));
+    const uint32_t cSize = maxMPerBlock * maxNPerBlock * sizeof(ElementAccumulator);
+    const uint32_t l0CBlockNum = ArchTag::L0C_SIZE / cSize;
 
     typedef struct Params{
         MatmulCoord problemShape;
@@ -54,18 +57,10 @@ public:
     }Params;
 
     ACOT_DEVICE
-    KernelGemm(){
-        // for(uint32_t i = 0; i < l0CBlockNum; i++){
-        //     AscendC::SetFlag<AscendC::HardEvent::FIX_M>((int32_t)i);
-        // }
-    }
+    KernelGemm(){}
 
     ACOT_DEVICE
-    ~KernelGemm(){
-        // for(uint32_t i = 0; i < l0CBlockNum; i++){
-        //     AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((int32_t)i);
-        // }
-    }
+    ~KernelGemm(){}
 
     template<int32_t CORE_TYPE = g_coreType>
     ACOT_DEVICE
@@ -75,15 +70,18 @@ public:
     ACOT_DEVICE
     void operator()<AscendC::AIC>(Params &params){
         // 先实例化BlockGemm对象
-        BlockGemm blockGemm(params.ptrA, params.ptrB, params.ptrC, params.layoutA, params.layoutB, params.layoutC);
-
-        uint32_t maxMPerBlock = L1TileShape::M;
-        uint32_t maxNPerBlock = L1TileShape::N;
+        arch::Resource<ArchTag> resource;
+        BlockGemm blockGemm(resource);
+        // Represent the full gm
+        AscendC::GlobalTensor<ElementA> gmA;
+        gmA.SetGlobalBuffer((__gm__ ElementA *)params.ptrA);
+        AscendC::GlobalTensor<ElementB> gmB;
+        gmB.SetGlobalBuffer((__gm__ ElementB *)params.ptrB);
+        AscendC::GlobalTensor<ElementC> gmC;
+        gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrC);
         uint32_t M = params.problemShape.m();
         uint32_t N = params.problemShape.n();
         uint32_t K = params.problemShape.k();
-        uint32_t cSize = maxMPerBlock * maxNPerBlock;
-        uint32_t l0CBlockNum = ArchTag::L0CSize / (cSize * sizeof(ElementAccumulator));
         #pragma unroll
         for(uint32_t i = 0; i < l0CBlockNum; i++){
             AscendC::SetFlag<AscendC::HardEvent::FIX_M>((int32_t)i);
@@ -98,26 +96,24 @@ public:
             uint32_t MGmActual = (MGmBlockIdx == MLoops - 1) ? (M - MGmBlockIdx * maxMPerBlock) : maxMPerBlock;
             uint32_t NGmActual = (NGmBlockIdx == NLoops - 1) ? (N - NGmBlockIdx * maxNPerBlock) : maxNPerBlock;
             MatmulCoord actualShape{MGmActual, NGmActual, K};
-            AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((int32_t)(loopIdx % l0CBlockNum));
-            // 这里进行特判操作，因为不熟悉coord getoffset的API,而且这个API好像不符合我的要求
+            AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((int32_t)(singleIdx % l0CBlockNum));
             if constexpr (RowOrColumn){
                 blockGemm(
-                    MGmBlockIdx * params.layoutA.stride(0) * maxMPerBlock,
-                    NGmBlockIdx * maxNPerBlock, // 将目前需要转移的数据块的首地址传入就行
-                    MGmBlockIdx * params.layoutC.stride(0) * maxMPerBlock  + NGmBlockIdx * maxNPerBlock,
+                    gmA[MGmBlockIdx * params.layoutA.stride(0) * maxMPerBlock], params.layoutA,
+                    gmB[NGmBlockIdx * maxNPerBlock], params.layoutB,
+                    gmC[MGmBlockIdx * params.layoutC.stride(0) * maxMPerBlock  + NGmBlockIdx * maxNPerBlock], params.layoutC,
                     actualShape, singleIdx
                 );
             }else{
                 blockGemm(
-                    MGmBlockIdx * maxMPerBlock,
-                    NGmBlockIdx * maxNPerBlock * params.layoutB.stride(1), // 将目前需要转移的数据块的首地址传入就行
-                    MGmBlockIdx * maxMPerBlock + NGmBlockIdx * maxNPerBlock * params.layoutC.stride(1), 
+                    gmA[MGmBlockIdx * maxMPerBlock], params.layoutA,
+                    gmB[NGmBlockIdx * maxNPerBlock * params.layoutB.stride(1)], params.layoutB,
+                    gmC[MGmBlockIdx * maxMPerBlock + NGmBlockIdx * maxNPerBlock * params.layoutC.stride(1)], params.layoutC,
                     actualShape, singleIdx
                 );
             }
-            // AscendC::PipeBarrier<PIPE_ALL>();
-            AscendC::SetFlag<AscendC::HardEvent::FIX_M>((int32_t)(loopIdx % l0CBlockNum));
-            singleIdx += 1;
+            AscendC::SetFlag<AscendC::HardEvent::FIX_M>((int32_t)(singleIdx % l0CBlockNum));
+            singleIdx++;
         }
         #pragma unroll
         for(uint32_t i = 0; i < l0CBlockNum; i++){
@@ -127,9 +123,7 @@ public:
 
     template<>
     ACOT_DEVICE
-    void operator()<AscendC::AIV>(Params &params){
-        
-    }
+    void operator()<AscendC::AIV>(Params &params){}
 };
 }
 
