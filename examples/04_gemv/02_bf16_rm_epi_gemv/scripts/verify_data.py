@@ -23,6 +23,15 @@ def get_thresholds(M, N, dtype=np.half):
         else:
             atol = 1.0 / (1 << 7)
         rtol = 1.0 / (1 << 10)
+
+    elif dtype == bfloat16:
+        if calc_times < 2048:
+            atol = 1.0 / (1 << 9)  # 比 float32 宽松但比 float16 严格
+        elif calc_times < 16384:
+            atol = 1.0 / (1 << 8)
+        else:
+            atol = 1.0 / (1 << 7)
+        rtol = 1.0 / (1 << 12)  # 介于 float32 和 float16 之间
     
     else:
         raise ValueError("Unsupported data type!")
@@ -34,7 +43,7 @@ def compareOutputData(M, N):
 
     atol, rtol = get_thresholds(M, N, dtype=NP_DATA_TYPE)  # 计算 atol 和 rtol
 
-    with open("./data/output.txt", "w") as f:
+    with open("./data/output.txt", "a") as f:
         print("---- BF16 -- RowMajor -- EpilogueGemv ---- \n", file=f)
         print(f"  M : {M} , N : {N} \n", file=f)
         np.set_printoptions(threshold=np.inf, precision=3, suppress=True)

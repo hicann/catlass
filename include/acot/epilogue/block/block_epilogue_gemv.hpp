@@ -7,6 +7,7 @@
 #include "acot/gemv_coord.hpp"
 #include "acot/matrix_coord.hpp"
 #include "acot/layout/layout.hpp"
+#include "acot/epilogue/helper.hpp"
 
 namespace acot::epilogue::block
 {
@@ -19,9 +20,9 @@ namespace acot::epilogue::block
         class TileCopy_>
     class BlockEpilogue<
         EpilogueAtlasA2Gemv,
-        tempType_,
-        YType_,
-        ZType_,
+        tempType_, // fp32
+        YType_,    // bf16
+        ZType_,    // fp32
         TileElemWiseEpilogueAdd_,
         TileElemWiseEpilogueMul_,
         TileCopy_>
@@ -39,7 +40,6 @@ namespace acot::epilogue::block
         using LayoutY = typename YType_::Layout;
         using ElementZ = typename ZType_::Element;
         using LayoutZ = typename ZType_::Layout;
-        using ElementScalar = typename YType_::Element;
 
         using TileElemWiseEpilogueAdd = TileElemWiseEpilogueAdd_;
         using TileElemWiseEpilogueMul = TileElemWiseEpilogueMul_;
@@ -51,10 +51,25 @@ namespace acot::epilogue::block
         static constexpr uint32_t COMPUTE_LENGTH = TileElemWiseEpilogueMul::COMPUTE_LENGTH;
         static constexpr uint32_t OPERANDS_NUM = DispatchPolicy::OPERANDS_NUM;
 
+        static constexpr bool noNeedCast = std::is_same<ElementTemp, ElementY>::value; // 如果是1，说明不需要转换。如果是0，说明需要转换
+
         // Check the element type of Temp, Y and Z
-        static_assert(std::is_same_v<ElementY, ElementTemp> && std::is_same_v<ElementY, ElementZ>,
-                      "Element type of Y, Temp and Z must be the same");
-        using ElementCompute = ElementZ;
+        // static_assert(std::is_same_v<ElementY, ElementTemp> && std::is_same_v<ElementY, ElementZ>,
+        //               "Element type of Y, Temp and Z must be the same");
+
+        // debug,确认了ElementY是bf16类型
+        // static_assert(std::is_same_v<ElementY, bfloat16_t>,
+        //               "Element type of Y 不是 bf16类型");
+
+        // static_assert(std::is_same_v<ElementY, bfloat16_t>,
+        //               "Element type of Y 不是 bf16类型");
+
+        using ElementCompute = typename acot::epilogue::helper::ElementAccumulatorSelector<ElementY, ElementZ>::ElementAccumulator;
+        using ElementScalar = ElementCompute;
+
+        // // debug,确认了ElementCompute是float类型
+        // static_assert(std::is_same_v<ElementCompute, float>,
+        //               "Element type of compute 不是 float");
 
         // Check the layout type of Y, Temp and Z
         static_assert(std::is_same_v<LayoutY, layout::RowMajor> && std::is_same_v<LayoutTemp, layout::RowMajor> &&
@@ -89,8 +104,13 @@ namespace acot::epilogue::block
         BlockEpilogue(arch::Resource<ArchTag> &resource, Params const &params) : params(params) // 对应temp = Ax，不分配空间, 作为参数在operator()中作为参数输入
         {
             ubTemp = resource.ubBuf.template GetBufferByByte<ElementTemp>(0);
+
             ubY = resource.ubBuf.template GetBufferByByte<ElementY>(COMPUTE_LENGTH * sizeof(ElementTemp));
+            ubYCast = resource.ubBuf.template GetBufferByByte<ElementCompute>(COMPUTE_LENGTH * sizeof(ElementTemp));
+
             ubZ = resource.ubBuf.template GetBufferByByte<ElementZ>(
+                COMPUTE_LENGTH * sizeof(ElementY) + COMPUTE_LENGTH * sizeof(ElementTemp));
+            ubZCast = resource.ubBuf.template GetBufferByByte<ElementCompute>(
                 COMPUTE_LENGTH * sizeof(ElementY) + COMPUTE_LENGTH * sizeof(ElementTemp));
 
             AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
@@ -107,20 +127,18 @@ namespace acot::epilogue::block
             MatrixCoord const &blockOffsetMN,
             GemvCoord const &actualBlockShapeMN,
             AscendC::GlobalTensor<ElementCompute> const &gmBlockTemp,
-            LayoutY const &layoutBlockTemp) // temp通过外部传入
-        {                                   // 进行操作，先实现行优先
-
+            LayoutTemp const &layoutBlockTemp) // temp通过外部传入
+        {                                      // 进行操作，先实现行优先
 
             MatrixCoord actualBlockShape = actualBlockShapeMN.GetCoordMN();
             MatrixCoord blockOffset = blockOffsetMN;
-
 
             // 算出当前子块的offset和shape
             // 对行方向，根据aiv核数划分
             MatrixCoord subblockShape{
                 actualBlockShape.row(),
                 CeilDiv(actualBlockShape.column(), static_cast<uint32_t>(AscendC::GetSubBlockNum()))};
-            MatrixCoord subblockCoord{0, AscendC::GetSubBlockIdx()};// 子块起始地址坐标就是(aiv核序号，0)
+            MatrixCoord subblockCoord{0, AscendC::GetSubBlockIdx()}; // 子块起始地址坐标就是(aiv核序号，0)
 
             MatrixCoord actualSubblockShape = MatrixCoord::Min(subblockShape, actualBlockShape - subblockCoord * subblockShape); // 这里实际上就是获取每个subBlockIdx对应的blockshape
             MatrixCoord subblockOffset = subblockCoord * subblockShape;                                                          // coord级别的乘法，算出行偏移和列偏移
@@ -144,24 +162,61 @@ namespace acot::epilogue::block
             // get the layout on UB
             auto layoutComputeInUb = LayoutComputeInUb::template MakeLayoutInUb<ElementCompute>(actualSubblockShape); // 对列方向进行了32B对齐
 
-            // copy the data of Y and Temp
+            // load Temp(A*x) from gm to ub
             AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
-            copyGmToUbY(ubY, gmSubblockY, layoutComputeInUb, layoutSubblockY);
             copyGmToUbTemp(ubTemp, gmSubblockTemp, layoutComputeInUb, layoutSubblockTemp);
             AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
-
-            // 同时算β * Y 和 α * Temp
             AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
-            AscendC::PipeBarrier<PIPE_V>();
-            tileEpilogueMul(ubY, ubY, params.beta);
-            AscendC::PipeBarrier<PIPE_V>();
-            tileEpilogueMul(ubTemp, ubTemp, params.alpha);
-            AscendC::PipeBarrier<PIPE_V>();
-            tileEpilogueAdd(ubZ, ubTemp, ubY);
-            AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
 
-            // copy the data of Z
+            // compute Temp * alpha
+            tileEpilogueMul(ubTemp, ubTemp, params.alpha);
+
+            AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
+            AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
+
+            // load Y from gm to ub
+            copyGmToUbY(ubY, gmSubblockY, layoutComputeInUb, layoutSubblockY);
+
+            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
+
+            // compute Y * beta
+            if constexpr (!noNeedCast)
+            {
+                // AscendC::Cast<float, ElementTemp>(ubTemp, ubTemp, AscendC::RoundMode::CAST_NONE, COMPUTE_LENGTH);
+                AscendC::Cast<ElementCompute, ElementY>(ubYCast, ubY, AscendC::RoundMode::CAST_NONE, COMPUTE_LENGTH);
+                AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0); // 存疑。cast对应的流水是这样的吗
+                AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
+                tileEpilogueMul(ubYCast, ubYCast, params.beta);
+                AscendC::PipeBarrier<PIPE_V>();
+            }
+            else
+            {
+                tileEpilogueMul(ubY, ubY, params.beta);
+                AscendC::PipeBarrier<PIPE_V>();
+            }
+
+            // 加法操作
+            if constexpr (!noNeedCast)
+            {
+                tileEpilogueAdd(ubZCast, ubTemp, ubYCast);
+            }
+            else
+            {
+                tileEpilogueAdd(ubZ, ubTemp, ubY);
+            }
+
+            // 这里需要判断加法存到位置是ubZ还是ubZCast, 如果在ubZCast, 需要先转类型存回ubZ
+            if constexpr (!noNeedCast)
+            {
+                AscendC::PipeBarrier<PIPE_V>(); // 个人理解
+                AscendC::Cast<ElementZ, ElementCompute>(ubZ, ubZCast, AscendC::RoundMode::CAST_RINT, COMPUTE_LENGTH);
+                AscendC::PipeBarrier<PIPE_V>(); // 个人理解
+            }
+
+            AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
             AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
+
             copyUbToGmZ(gmSubblockZ, ubZ, layoutSubblockZ, layoutComputeInUb);
             AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
         };
@@ -170,8 +225,10 @@ namespace acot::epilogue::block
         Params params;
 
         AscendC::LocalTensor<ElementY> ubY;
+        AscendC::LocalTensor<ElementCompute> ubYCast;
         AscendC::LocalTensor<ElementTemp> ubTemp;
         AscendC::LocalTensor<ElementZ> ubZ;
+        AscendC::LocalTensor<ElementCompute> ubZCast;
 
         TileElemWiseEpilogueAdd tileEpilogueAdd;
         TileElemWiseEpilogueMul tileEpilogueMul;

@@ -11,11 +11,27 @@ def calc_expect_func(M, N):
     Sizex = (1, N)
     SizeA = (M, N) # 首先全是行优先
     Sizey = (1, M)
-    alpha = np.random.uniform(-1,1, 1).astype(NP_DATA_TYPE)
-    beta  = np.random.uniform(-1,1, 1).astype(NP_DATA_TYPE)
-    x = np.random.uniform(-1,1,size=Sizex).astype(NP_DATA_TYPE)
-    A = np.random.uniform(-1,1,size=SizeA).astype(NP_DATA_TYPE)
-    y = np.random.uniform(-1,1,size=Sizey).astype(NP_DATA_TYPE)
+    # alpha = np.random.uniform(-1,1, 1).astype(DATA_TYPE)
+    # beta  = np.random.uniform(-1,1, 1).astype(DATA_TYPE)
+    # x = np.random.uniform(-1,1,size=Sizex).astype(NP_DATA_TYPE)
+    # A = np.random.uniform(-1,1,size=SizeA).astype(NP_DATA_TYPE)
+    # y = np.random.uniform(-1,1,size=Sizey).astype(NP_DATA_TYPE)
+
+    # alpha = np.random.uniform(-0.5,0.5, 1).astype(DATA_TYPE)
+    # beta  = np.random.uniform(-0.5,0.5, 1).astype(DATA_TYPE)
+    # x = np.random.uniform(-0.5,0.5,size=Sizex).astype(NP_DATA_TYPE)
+    # A = np.random.uniform(-0.5,0.5,size=SizeA).astype(NP_DATA_TYPE)
+    # y = np.random.uniform(-0.5,0.5,size=Sizey).astype(NP_DATA_TYPE)
+
+
+    alpha = np.random.uniform(-0.25,0.25, 1).astype(DATA_TYPE)
+    beta  = np.random.uniform(-0.25,0.25, 1).astype(DATA_TYPE)
+    x = np.random.uniform(-0.25,0.25,size=Sizex).astype(NP_DATA_TYPE)
+    A = np.random.uniform(-0.25,0.25,size=SizeA).astype(NP_DATA_TYPE)
+    y = np.random.uniform(-0.25,0.25,size=Sizey).astype(NP_DATA_TYPE)
+
+
+
     alpha.tofile("./data/input/alpha.bin")
     beta.tofile("./data/input/beta.bin")
     x.tofile("./data/input/X.bin")

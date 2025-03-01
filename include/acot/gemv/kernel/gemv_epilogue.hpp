@@ -20,7 +20,6 @@
 namespace acot::gemv::kernel
 {
 
-    // Template for matmul add kernel. Compute D = A * B + X
     // tmeplate for gemv kernle, Compute z = αAx + βy
     template <
         class BlockGemv_,
@@ -52,9 +51,9 @@ namespace acot::gemv::kernel
 
         using TileScheduler = TileScheduler_;
 
-        static_assert(std::is_same_v<typename BlockEpilogue::ElementY, Elementy> &&
-                          std::is_same_v<typename BlockEpilogue::LayoutY, Layouty>,
-                      "The yType of Gemv and Epilogue should be consistent.");
+        // static_assert(std::is_same_v<typename BlockEpilogue::ElementY, Elementy> &&
+        //                   std::is_same_v<typename BlockEpilogue::LayoutY, Layouty>,
+        //               "The yType of Gemv and Epilogue should be consistent.");
 
         /// Parameters structure
         struct Params
@@ -122,11 +121,11 @@ namespace acot::gemv::kernel
             static constexpr uint32_t L0C_TILE_SIZE = L0TileShape::M * L0TileShape::N * sizeof(ElementAccumulator);
             static constexpr uint32_t L0C_TILE_NUM = L0C_SIZE / L0C_TILE_SIZE;
 
-            //初始化核间流水
-            #pragma unroll
-            for(uint32_t i = 0; i < L0C_TILE_NUM; i++)
+// 初始化核间流水
+#pragma unroll
+            for (uint32_t i = 0; i < L0C_TILE_NUM; i++)
             {
-                AscendC::SetFlag<AscendC::HardEvent::FIX_M>((event_t) i);
+                AscendC::SetFlag<AscendC::HardEvent::FIX_M>((event_t)i);
             }
 
             for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum())
@@ -153,26 +152,26 @@ namespace acot::gemv::kernel
                 }
 
                 GemvCoord actualBlockShape = GemvCoord(MGmActual, NGmActual);
-                
-                AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((event_t) singleIdx % L0C_TILE_NUM);
-                
+
+                AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((event_t)singleIdx % L0C_TILE_NUM);
+
                 // Compute block-scoped matrix multiply-add
                 blockGemv(gmx[gmOffsetx], params.layoutX,
                           gmA[gmOffsetA], params.layoutA,
                           gmy[gmOffsety], layouty,
                           actualBlockShape, singleIdx);
-                AscendC::SetFlag<AscendC::HardEvent::FIX_M>((event_t) singleIdx % L0C_TILE_NUM);
+                AscendC::SetFlag<AscendC::HardEvent::FIX_M>((event_t)singleIdx % L0C_TILE_NUM);
 
                 // AscendC::PipeBarrier<PIPE_ALL>();
 
-                arch::CrossCoreSetFlagWithReverse<0x2, PIPE_FIX>(flagAicFinishStore); 
+                arch::CrossCoreSetFlagWithReverse<0x2, PIPE_FIX>(flagAicFinishStore);
                 singleIdx++;
             }
 
-            #pragma unroll
-            for(uint32_t i = 0; i < L0C_TILE_NUM; i++)
+#pragma unroll
+            for (uint32_t i = 0; i < L0C_TILE_NUM; i++)
             {
-                AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((event_t) i);
+                AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((event_t)i);
             }
         }
 
@@ -227,7 +226,6 @@ namespace acot::gemv::kernel
                 // Get the data and layout of y under the current basic block
                 auto gmBlocky = gmy[layouty.GetOffset(blockOffset)];
                 auto layoutBlocky = layouty.GetTileLayout(actualBlockShape.GetCoordMN());
-
 
                 // Synchronize cross core
                 arch::CrossCoreWaitFlagWithReverse<0x2, PIPE_MTE3>(flagAicFinishStore);

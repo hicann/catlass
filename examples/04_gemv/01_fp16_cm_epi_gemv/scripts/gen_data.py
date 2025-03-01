@@ -1,17 +1,17 @@
 import numpy as np
 import argparse
 import sys
-DATA_TYPE = float
+DATA_TYPE = np.float32
 NP_DATA_TYPE = np.half
 
 # 定义生成数据函数
 def calc_expect_func(M, N):
     # 设置默认矩阵形状
     Sizex = (1, N)
-    SizeA = (N, M) # 首先全是行优先
+    SizeA = (N, M) # 列优先
     Sizey = (1, M)
-    alpha = np.random.uniform(-1,1, 1).astype(NP_DATA_TYPE)
-    beta  = np.random.uniform(-1,1, 1).astype(NP_DATA_TYPE)
+    alpha = np.random.uniform(-1,1, 1).astype(DATA_TYPE)
+    beta  = np.random.uniform(-1,1, 1).astype(DATA_TYPE)
     x = np.random.uniform(-1,1,size=Sizex).astype(NP_DATA_TYPE)
     A = np.random.uniform(-1,1,size=SizeA).astype(NP_DATA_TYPE)
     y = np.random.uniform(-1,1,size=Sizey).astype(NP_DATA_TYPE)
@@ -23,7 +23,7 @@ def calc_expect_func(M, N):
     # print(A)
     # print(B)
     # print(C)
-    tmp = np.matmul(x.astype(DATA_TYPE),A.astype(DATA_TYPE)).astype(NP_DATA_TYPE)
+    tmp = np.matmul(x.astype(DATA_TYPE),A.astype(DATA_TYPE)).astype(DATA_TYPE)
     # D = alpha * A * x + beta * y
     expect_res = np.array(tmp * alpha.astype(DATA_TYPE) + beta.astype(DATA_TYPE) * y.astype(DATA_TYPE)).astype(NP_DATA_TYPE)
     # expect_res = np.array(beta.astype(NP_DATA_TYPE) * C.astype(NP_DATA_TYPE)).astype(NP_DATA_TYPE)

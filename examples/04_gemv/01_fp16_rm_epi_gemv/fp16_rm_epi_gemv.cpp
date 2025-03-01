@@ -43,7 +43,7 @@ using namespace acot;
 
 #define ERROR_LOG(fmt, args...) fprintf(stdout, "[ERROR]  " fmt "\n", ##args)
 
-using ScalarType = half;
+using ScalarType = float;
 
 template <
     class Layoutx,
@@ -70,13 +70,13 @@ ACOT_GLOBAL void FP16RMEPIGEMV(
     using L0TileShape = GemvShape<32, 512>;
     using xType = gemv::GemvType<half, Layoutx>;
     using AType = gemv::GemvType<half, LayoutA>;
-    using TempType = gemv::GemvType<half, LayoutTemp>;
+    using TempType = gemv::GemvType<float, LayoutTemp>;
     using BlockGemv = gemv::block::BlockGemv<DispatchPolicy, L1TileShape, L0TileShape, xType, AType, TempType>;
 
     // Block level, define BlockEpilogue
     using EpilogueDispatchPolicy = epilogue::EpilogueAtlasA2Gemv;
-    using yType = TempType;
-    using zType = TempType;
+    using yType = gemv::GemvType<half, LayoutTemp>;
+    using zType = gemv::GemvType<half, LayoutTemp>;
     using ComputeType = TempType;
     constexpr uint32_t computeLength = 8192; // 这里算长度
 
@@ -245,8 +245,8 @@ void Run(Options const &options)
     size_t sizex = lenx * sizeof(half);
     size_t sizeA = lenA * sizeof(half);
     size_t sizez = lenz * sizeof(half);
-    size_t sizey = sizez;
-    size_t sizeWorkspace = sizez;
+    size_t sizey = leny * sizeof(half);
+    size_t sizeWorkspace = lenz * sizeof(float);
 
     layout::RowMajor layoutx(1, n);
     // layout::ColumnMajor layoutA(n, m);
@@ -254,12 +254,12 @@ void Run(Options const &options)
     layout::RowMajor layoutz(1, m);
 
     // 生成α和β
-    size_t scalarSize = 1 * sizeof(half);
-    half *alpha;
+    size_t scalarSize = 1 * sizeof(float);
+    float *alpha;
     ACL_CHECK(aclrtMallocHost((void **)(&alpha), scalarSize));
     ReadFile("./data/input/alpha.bin", scalarSize, alpha, scalarSize);
 
-    half *beta;
+    float *beta;
     ACL_CHECK(aclrtMallocHost((void **)(&beta), scalarSize));
     ReadFile("./data/input/beta.bin", scalarSize, beta, scalarSize);
 

@@ -1,7 +1,7 @@
 import numpy as np
 import argparse
 import sys
-DATA_TYPE = float
+DATA_TYPE = np.float32
 NP_DATA_TYPE = np.half
 
 # 定义生成数据函数
@@ -10,11 +10,15 @@ def calc_expect_func(M, N):
     Sizex = (1, N)
     SizeA = (M, N) # 首先全是行优先
     Sizey = (1, M)
-    alpha = np.random.uniform(-1,1, 1).astype(NP_DATA_TYPE)
-    beta  = np.random.uniform(-1,1, 1).astype(NP_DATA_TYPE)
+
+    alpha = np.random.uniform(-1,1, 1).astype(DATA_TYPE)
+    beta  = np.random.uniform(-1,1, 1).astype(DATA_TYPE)
+
     x = np.random.uniform(-1,1,size=Sizex).astype(NP_DATA_TYPE)
     A = np.random.uniform(-1,1,size=SizeA).astype(NP_DATA_TYPE)
     y = np.random.uniform(-1,1,size=Sizey).astype(NP_DATA_TYPE)
+
+
     alpha.tofile("./data/input/alpha.bin")
     beta.tofile("./data/input/beta.bin")
     x.tofile("./data/input/X.bin")
@@ -23,7 +27,7 @@ def calc_expect_func(M, N):
     # print(A)
     # print(B)
     # print(C)
-    tmp = np.matmul(A.astype(DATA_TYPE),x.astype(DATA_TYPE).T).astype(NP_DATA_TYPE)
+    tmp = np.matmul(A.astype(DATA_TYPE),x.astype(DATA_TYPE).T).astype(DATA_TYPE)
     tmp = tmp.T
     # D = alpha * A * x + beta * y
     expect_res = np.array(tmp * alpha.astype(DATA_TYPE) + beta.astype(DATA_TYPE) * y.astype(DATA_TYPE)).astype(NP_DATA_TYPE)

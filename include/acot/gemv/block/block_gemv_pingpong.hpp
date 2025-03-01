@@ -228,7 +228,7 @@ namespace acot::gemv::block
                     copyL1ToL0B(l0BTile, l1BTile, layoutAInL0, layoutAInL1);
                     AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0BListId]);
 
-                    AscendC::PipeBarrier<PIPE_ALL>();
+                    // AscendC::PipeBarrier<PIPE_ALL>();
 
                     // auto l0CTile = l0CTensor[(singleIdx * L0C_TILE_SIZE) % L0C_TILE_NUM];
                     auto l0CTile = l0CTensor;
@@ -246,7 +246,7 @@ namespace acot::gemv::block
                     l0AListId = (l0AListId + 1) % STAGES;
                     l0BListId = (l0BListId + 1) % STAGES;
 
-                    // AscendC::PipeBarrier<PIPE_ALL>();
+                    AscendC::PipeBarrier<PIPE_ALL>(); // 不加这个会报错，但是还不知道如何优化
                 }
                 // AscendC::PipeBarrier<PIPE_ALL>();
 

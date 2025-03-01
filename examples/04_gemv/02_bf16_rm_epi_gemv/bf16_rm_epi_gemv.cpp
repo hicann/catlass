@@ -43,7 +43,7 @@ using namespace acot;
 
 #define ERROR_LOG(fmt, args...) fprintf(stdout, "[ERROR]  " fmt "\n", ##args)
 
-using ScalarType = bfloat16_t;
+using ScalarType = float;
 
 template <
     class Layoutx,
@@ -70,14 +70,14 @@ ACOT_GLOBAL void BF16RMEPIGEMV(
     using L0TileShape = GemvShape<32, 512>;
     using xType = gemv::GemvType<bfloat16_t, Layoutx>;
     using AType = gemv::GemvType<bfloat16_t, LayoutA>;
-    using TempType = gemv::GemvType<bfloat16_t, LayoutTemp>; // A*x
+    using TempType = gemv::GemvType<float, LayoutTemp>; // A*x
     using BlockGemv = gemv::block::BlockGemv<DispatchPolicy, L1TileShape, L0TileShape, xType, AType, TempType>;
 
     // Block level, define BlockEpilogue
     using EpilogueDispatchPolicy = epilogue::EpilogueAtlasA2Gemv;
     using yType = gemv::GemvType<bfloat16_t, LayoutTemp>; // 外部输入，用于加的那个向量
     using zType = gemv::GemvType<bfloat16_t, LayoutTemp>;
-    using ComputeType = yType;
+    using ComputeType = TempType;
     constexpr uint32_t computeLength = 8192; // 这里算长度
 
     using TileElemWiseAddGemv = epilogue::tile::TileElemWiseAddGemv<ArchTag, ComputeType, computeLength>;
@@ -246,19 +246,19 @@ void Run(Options const &options)
     size_t sizeA = lenA * sizeof(bfloat16_t);
     size_t sizez = lenz * sizeof(bfloat16_t);
     size_t sizey = leny * sizeof(bfloat16_t);
-    size_t sizeWorkspace = lenz * sizeof(bfloat16_t);
+    size_t sizeWorkspace = lenz * sizeof(float);
 
     layout::RowMajor layoutx(1, n);
     layout::RowMajor layoutA(m, n);
     layout::RowMajor layoutz(1, m);
 
     // 生成α和β
-    size_t scalarSize = 1 * sizeof(bfloat16_t);
-    bfloat16_t *alpha;
+    size_t scalarSize = 1 * sizeof(float);
+    float *alpha;
     ACL_CHECK(aclrtMallocHost((void **)(&alpha), scalarSize));
     ReadFile("./data/input/alpha.bin", scalarSize, alpha, scalarSize);
 
-    bfloat16_t *beta;
+    float *beta;
     ACL_CHECK(aclrtMallocHost((void **)(&beta), scalarSize));
     ReadFile("./data/input/beta.bin", scalarSize, beta, scalarSize);
 

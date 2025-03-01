@@ -6,6 +6,8 @@ add_subdirectory(01_fp16_cm_epi_gemv)
 
 add_subdirectory(02_bf16_rm_gemv)
 add_subdirectory(02_bf16_cm_gemv)
+add_subdirectory(02_bf16_rm_epi_gemv)
+add_subdirectory(02_bf16_cm_epi_gemv)
 
 
 add_subdirectory(03_fp32_rm_gemv) 

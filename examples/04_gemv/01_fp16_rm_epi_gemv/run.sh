@@ -5,7 +5,7 @@
 # source /home/workspace/gpf/CANN/ascend-toolkit/set_env.sh
 export PRINT_TIK_MEM_ACCESS=FALSE
 
-export ASCEND_SLOG_PRINT_TO_STDOUT=0
+export ASCEND_SLOG_PRINT_TO_STDOUT=1
 # 编译文件
 # bash ../../../scripts/build.sh 01_fp16_rm_epi_gemv
 
