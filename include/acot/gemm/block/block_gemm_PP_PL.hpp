@@ -111,10 +111,13 @@ public:
         AscendC::GlobalTensor<ElementA> const &gmA, LayoutA const &layoutA,
         AscendC::GlobalTensor<ElementB> const &gmB, LayoutB const &layoutB,
         AscendC::GlobalTensor<ElementC> const &gmC, LayoutC const &layoutC,
-        MatmulCoord const &actualShape, uint32_t singleIdx
+        AscendC::GlobalTensor<ElementA> const &gmNextBlockA,
+        AscendC::GlobalTensor<ElementB> const &gmNextBlockB,
+        MatmulCoord const &actualShape, MatmulCoord const &actualShapeNext,
+        bool isFirstBlock, bool hasNextBlock, uint32_t singleIdx
     ){
         // 这一部分完成矩阵乘法
-        Matmul(gmA, layoutA, gmB, layoutB, gmC, layoutC, actualShape, singleIdx);
+        Matmul(gmA, layoutA, gmB, layoutB, gmC, layoutC, gmNextBlockA, gmNextBlockB, actualShape, actualShapeNext, isFirstBlock, hasNextBlock, singleIdx);
     }
 private:
     // 双缓冲区
@@ -146,7 +149,10 @@ private:
         AscendC::GlobalTensor<ElementA> const &gmA, LayoutA const &layoutA,
         AscendC::GlobalTensor<ElementB> const &gmB, LayoutB const &layoutB,
         AscendC::GlobalTensor<ElementC> const &gmC, LayoutC const &layoutC,
-        MatmulCoord const &actualShape, uint32_t singleIdx
+        AscendC::GlobalTensor<ElementA> const &gmNextBlockA,
+        AscendC::GlobalTensor<ElementB> const &gmNextBlockB,
+        MatmulCoord const &actualShape, MatmulCoord const &actualShapeNext,
+        bool isFirstBlock, bool hasNextBlock, uint32_t singleIdx
     ){
         // 先实现行优先
         uint32_t MAlignment = C0_NUM_PER_FRACTAL;
@@ -233,7 +239,10 @@ private:
         AscendC::GlobalTensor<ElementA> const &gmA, LayoutA const &layoutA,
         AscendC::GlobalTensor<ElementB> const &gmB, LayoutB const &layoutB,
         AscendC::GlobalTensor<ElementC> const &gmC, LayoutC const &layoutC,
-        MatmulCoord const &actualShape, uint32_t singleIdx
+        AscendC::GlobalTensor<ElementA> const &gmNextBlockA,
+        AscendC::GlobalTensor<ElementB> const &gmNextBlockB,
+        MatmulCoord const &actualShape, MatmulCoord const &actualShapeNext,
+        bool isFirstBlock, bool hasNextBlock, uint32_t singleIdx
     ){
         uint32_t MAlignment = C0_NUM_PER_FRACTAL; // 对齐32byte
         if constexpr (std::is_same<ElementA, int8_t>::value){
@@ -315,13 +324,16 @@ private:
         AscendC::GlobalTensor<ElementA> const &gmA, LayoutA const &layoutA,
         AscendC::GlobalTensor<ElementB> const &gmB, LayoutB const &layoutB,
         AscendC::GlobalTensor<ElementC> const &gmC, LayoutC const &layoutC,
-        MatmulCoord const &actualShape, uint32_t singleIdx
+        AscendC::GlobalTensor<ElementA> const &gmNextBlockA,
+        AscendC::GlobalTensor<ElementB> const &gmNextBlockB,
+        MatmulCoord const &actualShape, MatmulCoord const &actualShapeNext,
+        bool isFirstBlock, bool hasNextBlock, uint32_t singleIdx
     ){
         auto layoutInL0C = LayoutCInL0::MakeLayoutInL0C(MakeCoord(L1TileShape::M, L1TileShape::N)); // 获得MNCoord
         if constexpr (RowOrColumn){
-            MatmulRowMajor(gmA, layoutA, gmB, layoutB, gmC, layoutC, actualShape, singleIdx);
+            MatmulRowMajor(gmA, layoutA, gmB, layoutB, gmC, layoutC, gmNextBlockA, gmNextBlockB, actualShape, actualShapeNext, isFirstBlock, hasNextBlock, singleIdx);
         }else{
-            MatmulColumnMajor(gmA, layoutA, gmB, layoutB, gmC, layoutC, actualShape, singleIdx);
+            MatmulColumnMajor(gmA, layoutA, gmB, layoutB, gmC, layoutC, gmNextBlockA, gmNextBlockB, actualShape, actualShapeNext, isFirstBlock, hasNextBlock, singleIdx);
         }
         AscendC::SetFlag<AscendC::HardEvent::M_FIX>((int32_t)(singleIdx % l0CBlockNum));
         AscendC::WaitFlag<AscendC::HardEvent::M_FIX>((int32_t)(singleIdx % l0CBlockNum));

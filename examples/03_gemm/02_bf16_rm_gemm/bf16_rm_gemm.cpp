@@ -35,7 +35,7 @@ void BF16Gemm(
     using BType = gemm::GemmType<bfloat16_t, LayoutB>;
     using CType = gemm::GemmType<bfloat16_t, LayoutC>;
     // 使用Coord来传递值
-    using L1TileShape = MatmulShape<128, 256, 128>;
+    using L1TileShape = MatmulShape<128, 256, 256>;
     using L0TileShape = MatmulShape<128, 256, 64>;
 
     // 调用block层函数

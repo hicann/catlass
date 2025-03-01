@@ -83,19 +83,14 @@ public:
         cGm.SetGlobalBuffer((__gm__ ElementC*)params.ptrC);
         dGm.SetGlobalBuffer((__gm__ ElementD*)params.ptrD);
         Resource();
-        for(uint32_t i = 0; i < STAGES; i++){
-            // 使能MTE2
-            AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((int32_t)i);
-            AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((int32_t)(i + STAGES));
-        }
+        AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID1);
+        AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
     }
 
     ACOT_DEVICE
     ~BlockEpilogue(){
-        for(uint32_t i = 0; i < STAGES; i++){
-            AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((int32_t)i);
-            AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((int32_t)(i + STAGES));
-        }
+        AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID1);
+        AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
         // 销毁内存
         pipe.Destroy();
     }
@@ -223,23 +218,22 @@ private:
         auto layoutDInGm = params.layoutD.GetTileLayout(MakeCoord(MUbActual, NUbActual));
         copyUbToGmD(dGm[offsetD + aivIndex * maxMPerBlock * params.layoutD.stride(0)],ubDTensor,layoutDInGm, layoutTileD);
     }
-
+    
     ACOT_DEVICE
     void EpilogueColumnMajor(uint32_t offsetC,uint32_t offsetD,MatmulCoord actualShape,LayoutX layoutX){
         uint32_t MActual = actualShape.m();
         uint32_t NActual = actualShape.n(); // 这里也要对齐
-        uint32_t maxMPerBlock = blockShape.m(); // 对着M方向进行切分 肯定会对齐32Byte
-        uint32_t maxNPerBlock = blockShape.n() / STAGES; 
-        uint32_t aivIndex = AscendC::GetSubBlockIdx(); // 不是只有0和1吗
-        uint32_t NActualAIV0 = (NActual < maxNPerBlock) ? NActual : maxNPerBlock;
-        uint32_t NActualAIV1 = (NActual < maxNPerBlock) ? 0 : (NActual - maxNPerBlock);
-        uint32_t NUbActual = aivIndex == 1 ? NActualAIV1 : NActualAIV0;
-        uint32_t MUbActual = MActual;
-        // C处理的部分
+        uint32_t maxMPerBlock = blockShape.m() / STAGES; // 对着M方向进行切分 肯定会对齐32Byte
+        uint32_t maxNPerBlock = blockShape.n(); 
+        uint32_t aivIndex = AscendC::GetSubBlockIdx(); // 0 或 1
+        uint32_t MActualAIV0 = (MActual < maxMPerBlock) ? MActual : maxMPerBlock;
+        uint32_t MActualAIV1 = (MActual < maxMPerBlock) ? 0 : (MActual - maxMPerBlock);
+        uint32_t MUbActual = aivIndex == 1 ? MActualAIV1 : MActualAIV0;
+        uint32_t NUbActual = NActual;
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID1);
         auto layoutTileC = params.layoutC.GetTileLayout(MakeCoord(NUbActual, MUbActual));
         auto layoutCInUb = params.layoutC.GetTileLayout(MakeCoord(maxNPerBlock, maxMPerBlock));
-        copyGmToUbC(ubCTensor,cGm[offsetC + aivIndex * maxNPerBlock * params.layoutC.stride(1)],layoutCInUb, layoutTileC);
+        copyGmToUbC(ubCTensor,cGm[offsetC + aivIndex * maxMPerBlock],layoutCInUb, layoutTileC);
         AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
         AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
         if constexpr (!isNeedCast){
@@ -253,18 +247,16 @@ private:
         AscendC::PipeBarrier<PIPE_V>();
         AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
         arch::CrossCoreWaitFlagWithReverse<0x2, PIPE_MTE3>(flagAicFinishStore); // 没这个变量
-        // X处理的部分
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
         auto layoutXInUb = layoutX.GetTileLayout(MakeCoord(maxNPerBlock, maxMPerBlock));
         auto layoutTileX = layoutX.GetTileLayout(MakeCoord(NUbActual, MUbActual));
-        copyGmToUbX(ubXTensor,xGm[aivIndex * maxNPerBlock * layoutX.stride(1)],layoutXInUb, layoutTileX);
+        copyGmToUbX(ubXTensor,xGm[aivIndex * maxMPerBlock],layoutXInUb, layoutTileX);
         AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
         AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
         tileElemWiseEpilogueMul(ubXTensor,ubXTensor,params.alpha);
         AscendC::PipeBarrier<PIPE_V>();
         AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
 
-        // 进行加和处理
         AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
         AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
         if constexpr (!isNeedCast){
@@ -273,8 +265,8 @@ private:
             tileElemWiseEpilogueAdd(ubDTensor,ubXTensor,ubCTensor);
         }
         AscendC::PipeBarrier<PIPE_V>();
-        AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID1);
         AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
+        AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID1);
         if constexpr (!isNeedCast){
             AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((int32_t)-1);
             AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((int32_t)-1);
@@ -284,9 +276,9 @@ private:
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
         auto layoutTileD = params.layoutD.GetTileLayout(MakeCoord(maxNPerBlock, maxMPerBlock));
         auto layoutDInGm = params.layoutD.GetTileLayout(MakeCoord(NUbActual, MUbActual));
-        copyUbToGmD(dGm[offsetD + aivIndex * maxNPerBlock * params.layoutD.stride(1)],ubDTensor,layoutDInGm, layoutTileD);
+        copyUbToGmD(dGm[offsetD + aivIndex * maxMPerBlock],ubDTensor,layoutDInGm, layoutTileD);
     }
-    
+
     ACOT_DEVICE
     void EpilogueGemm(uint32_t offsetC,uint32_t offsetD,MatmulCoord actualShape,LayoutX layoutX){
         if constexpr (RowOrColumn){ // 开启双缓冲

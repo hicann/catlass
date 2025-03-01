@@ -47,7 +47,7 @@ void FP16CMGemm(
     using CType = gemm::GemmType<half, LayoutC>;
     using XType = gemm::GemmType<half, LayoutC>;
     // 使用Coord来传递值
-    using L1TileShape = MatmulShape<128, 256, 128>;
+    using L1TileShape = MatmulShape<128, 256, 256>;
     using L0TileShape = MatmulShape<128, 256, 64>;
 
     // 调用block层函数
@@ -98,8 +98,8 @@ typedef struct Options{
         problemShape.m() = std::atoi(argv[M_INDEX]);
         problemShape.n() = std::atoi(argv[N_INDEX]);
         problemShape.k() = std::atoi(argv[K_INDEX]);
-        mode = std::atoi(argv[MODE_INDEX]);
-        if(argc == ARGS_MAX){
+        if(argc >= ARGS_MAX - 1){
+            mode = std::atoi(argv[MODE_INDEX]);
             deviceId = std::atoi(argv[DEVICE_ID_INDEX]);
         }
         return 0;

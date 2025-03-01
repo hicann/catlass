@@ -50,6 +50,8 @@ struct CopyL1ToL0A<acot::arch::AscendC910B3, acot::gemm::GemmType<Element, layou
     using LayoutDst = layout::nZ;
     using LayoutSrc = layout::zZ;
 
+    static constexpr uint32_t ELE_NUM_PER_C0 =  BYTE_PER_C0 / sizeof(Element);
+
     ACOT_DEVICE
     CopyL1ToL0A(){}
 
@@ -59,21 +61,21 @@ struct CopyL1ToL0A<acot::arch::AscendC910B3, acot::gemm::GemmType<Element, layou
         AscendC::LocalTensor<Element> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t MRound = layoutDst.shape(2) * layoutDst.shape(3);
-        uint32_t KRound = layoutSrc.shape(0) * layoutSrc.shape(1);
-        uint32_t ML0Alignment = layoutDst.shape(0);
-        uint32_t KL0Alignment = layoutDst.shape(2);
-        uint32_t KLoops = CeilDiv(KRound, KL0Alignment);
+        uint32_t MActual = layoutDst.orgShape(1);
+        uint32_t MRound = RoundUp(MActual, ELE_NUM_PER_C0);
+        uint32_t KActual = layoutDst.orgShape(0);
+        uint32_t KRound = RoundUp(KActual, C0_NUM_PER_FRACTAL);
+        uint32_t KLoops = CeilDiv(KRound, C0_NUM_PER_FRACTAL);
         AscendC::LoadData2DParams params;
         params.startIndex = 0;
-        params.repeatTimes = static_cast<uint8_t>(MRound / ML0Alignment); // 单位为512B
+        params.repeatTimes = static_cast<uint8_t>(MRound / ELE_NUM_PER_C0); // 单位为512B
         params.srcStride = 1;
         params.sid = 0;
         params.dstGap = 0;
         params.ifTranspose = true;
         params.addrMode = 0;
         for(uint32_t i = 0; i < KLoops; i++){
-            AscendC::LoadData(dstTensor[i * KL0Alignment * MRound], srcTensor[i * KL0Alignment * MRound], params);
+            AscendC::LoadData(dstTensor[i * C0_NUM_PER_FRACTAL * MRound], srcTensor[i * C0_NUM_PER_FRACTAL * MRound], params);
         }
     }
 };
@@ -82,6 +84,8 @@ template<>
 struct CopyL1ToL0A<acot::arch::AscendC910B3, acot::gemm::GemmType<float, layout::ColumnMajor>>{
     using LayoutDst = layout::nZ;
     using LayoutSrc = layout::zZ;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 =  BYTE_PER_C0 / sizeof(float);
 
     ACOT_DEVICE
     CopyL1ToL0A(){}
@@ -92,13 +96,12 @@ struct CopyL1ToL0A<acot::arch::AscendC910B3, acot::gemm::GemmType<float, layout:
         AscendC::LocalTensor<float> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t KAlignment = layoutDst.shape(2);
-        uint32_t MRound = layoutDst.shape(2) * layoutDst.shape(3);
+        uint32_t MActual = layoutDst.orgShape(1);
+        uint32_t MRound = RoundUp(MActual, C0_NUM_PER_FRACTAL);
         uint32_t KActual = layoutDst.orgShape(0);
-        uint32_t KRound = RoundUp(KActual, KAlignment);
-        uint32_t ML0Alignment = layoutDst.shape(0) * 2;
-        uint32_t KL0Alignment = layoutDst.shape(2);
-        uint32_t KLoops = CeilDiv(KRound, KL0Alignment);
+        uint32_t KRound = RoundUp(KActual, C0_NUM_PER_FRACTAL);
+        uint32_t ML0Alignment = ELE_NUM_PER_C0 * 2;
+        uint32_t KLoops = CeilDiv(KRound, C0_NUM_PER_FRACTAL);
         AscendC::LoadData2dTransposeParams params;
         params.startIndex = 0;
         params.repeatTimes = static_cast<uint8_t>(MRound / ML0Alignment); // 16 * 16 * 4B 为单位
@@ -106,7 +109,7 @@ struct CopyL1ToL0A<acot::arch::AscendC910B3, acot::gemm::GemmType<float, layout:
         params.dstGap = 0;
         params.dstFracGap = static_cast<uint16_t>(MRound / ML0Alignment) - 1;
         for(uint32_t i = 0; i < KLoops; i++){ // k方向切割
-            AscendC::LoadDataWithTranspose(dstTensor[i * MRound * KL0Alignment], srcTensor[i * KL0Alignment * MRound], params);
+            AscendC::LoadDataWithTranspose(dstTensor[i * MRound * C0_NUM_PER_FRACTAL], srcTensor[i * C0_NUM_PER_FRACTAL * MRound], params);
         }
     }
 };
@@ -115,6 +118,8 @@ template<>
 struct CopyL1ToL0A<acot::arch::AscendC910B3, acot::gemm::GemmType<int8_t, layout::ColumnMajor>>{
     using LayoutDst = layout::nZ;
     using LayoutSrc = layout::zN;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 =  BYTE_PER_C0 / sizeof(int8_t);
 
     ACOT_DEVICE
     CopyL1ToL0A(){}
@@ -125,21 +130,21 @@ struct CopyL1ToL0A<acot::arch::AscendC910B3, acot::gemm::GemmType<int8_t, layout
         AscendC::LocalTensor<int8_t> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t KAlignment = layoutSrc.shape(0) * 2;
-        uint32_t MRound = layoutSrc.shape(2) * layoutSrc.shape(3);
-        uint32_t KActual = layoutSrc.orgShape(0);
+        uint32_t KAlignment = C0_NUM_PER_FRACTAL * 2;
+        uint32_t MActual = layoutDst.orgShape(1);
+        uint32_t MRound = RoundUp(MActual, ELE_NUM_PER_C0);
+        uint32_t KActual = layoutSrc.orgShape(0); // 这个重要点
         uint32_t KRound = RoundUp(KActual, KAlignment);
-        uint32_t ML0Alignment = layoutSrc.shape(2); // 32个元素
-        uint32_t KL0Alignment = layoutSrc.shape(0) * 2; // 32个元素对齐
+        uint32_t KL0Alignment = C0_NUM_PER_FRACTAL * 2; // 32个元素对齐
         uint32_t KLoops = CeilDiv(KRound, KL0Alignment);
         AscendC::LoadData2dTransposeParams params;
         params.startIndex = 0;
-        params.repeatTimes = static_cast<uint8_t>(MRound / ML0Alignment); // 单位为32 * 32 * 1B
+        params.repeatTimes = static_cast<uint8_t>(MRound / ELE_NUM_PER_C0); // 单位为32 * 32 * 1B
         params.srcStride = static_cast<uint16_t>(KRound / KL0Alignment); // 对齐单位 32 * 32 * 1B
         params.dstGap = 1; // 单位为512B
         params.dstFracGap = 0;
         for(uint32_t i = 0; i < KLoops; i++){
-            AscendC::LoadDataWithTranspose(dstTensor[i * MRound * KL0Alignment],srcTensor[i * KL0Alignment * ML0Alignment],params);
+            AscendC::LoadDataWithTranspose(dstTensor[i * MRound * KL0Alignment],srcTensor[i * KL0Alignment * ELE_NUM_PER_C0],params);
         }
     }
 };
@@ -236,23 +241,21 @@ struct CopyL1ToL0B<acot::arch::AscendC910B3, acot::gemm::GemmType<int8_t, layout
         AscendC::LocalTensor<int8_t> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t NAlignment = ELE_NUM_PER_C0;
-        uint32_t KAlignment = layoutDst.shape(2) * 2;
+        uint32_t KAlignment = C0_NUM_PER_FRACTAL * 2;
         uint32_t NActual = layoutDst.orgShape(1);
-        uint32_t NRound = RoundUp(NActual, NAlignment);
+        uint32_t NRound = RoundUp(NActual, ELE_NUM_PER_C0);
         uint32_t KActual = layoutSrc.orgShape(0);
         uint32_t KRound = RoundUp(KActual, KAlignment);
-        uint32_t NL0Alignment = ELE_NUM_PER_C0; // 32个元素
-        uint32_t KL0Alignment = layoutDst.shape(2) * 2; // 32个元素对齐
+        uint32_t KL0Alignment = C0_NUM_PER_FRACTAL * 2; // 32个元素对齐
         uint32_t KLoops = CeilDiv(KRound, KL0Alignment);
         AscendC::LoadData2dTransposeParams params;
         params.startIndex = 0;
-        params.repeatTimes = static_cast<uint8_t>(NRound / NL0Alignment); // 单位为32 * 32 * 1B
+        params.repeatTimes = static_cast<uint8_t>(NRound / ELE_NUM_PER_C0); // 单位为32 * 32 * 1B
         params.srcStride = static_cast<uint16_t>(KRound / KL0Alignment); // 对齐单位 32 * 32 * 1B
         params.dstGap = 1; // 单位为512B
         params.dstFracGap = 0;
         for(uint32_t i = 0; i < KLoops; i++){
-            AscendC::LoadDataWithTranspose(dstTensor[i * NRound * KL0Alignment],srcTensor[i * KL0Alignment * NL0Alignment],params);
+            AscendC::LoadDataWithTranspose(dstTensor[i * NRound * KL0Alignment],srcTensor[i * KL0Alignment * ELE_NUM_PER_C0],params);
         }
     }
 };

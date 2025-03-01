@@ -74,15 +74,15 @@ struct CopyGm2Ub<arch::AscendC910B3, gemm::GemmType<Element, layout::RowMajor>> 
         AscendC::GlobalTensor<Element> srcTensor,
         LayoutSrc layoutDst, LayoutDst layoutSrc)
     {
-        uint32_t MActual = layoutSrc.shape(0);
-        uint32_t NActual = layoutSrc.shape(1);
-        uint32_t stride = layoutSrc.stride(0); // RowMajor
-        uint32_t NRound = layoutDst.shape(1);
+        // uint32_t MActual = layoutSrc.shape(0);
+        // uint32_t NActual = layoutSrc.shape(1);
+        // uint32_t stride = layoutSrc.stride(0); // RowMajor
+        // uint32_t NRound = layoutDst.shape(1);
         AscendC::DataCopyExtParams dataCopyParams(
-            MActual,
-            NActual * sizeof(Element),
-            (stride - NActual) * sizeof(Element),
-            (NRound - NActual) / ELE_NUM_PER_C0,
+            layoutSrc.shape(0),
+            layoutSrc.shape(1) * sizeof(Element),
+            (layoutSrc.stride(0) - layoutSrc.shape(1)) * sizeof(Element),
+            (layoutDst.shape(1) - layoutSrc.shape(1)) / ELE_NUM_PER_C0,
             0
         );
         AscendC::DataCopyPadExtParams<Element> padParams(false, 0, 0, 0);
@@ -106,15 +106,15 @@ struct CopyGm2Ub<arch::AscendC910B3, gemm::GemmType<Element, layout::ColumnMajor
         AscendC::GlobalTensor<Element> srcTensor,
         LayoutSrc layoutDst, LayoutDst layoutSrc)
     {
-        uint32_t MActual = layoutSrc.shape(1);
-        uint32_t NActual = layoutSrc.shape(0);
-        uint32_t stride = layoutSrc.stride(1); // RowMajor
-        uint32_t MRound = layoutDst.shape(1);
+        // uint32_t MActual = layoutSrc.shape(1);
+        // uint32_t NActual = layoutSrc.shape(0);
+        // uint32_t stride = layoutSrc.stride(1); // RowMajor
+        // uint32_t MRound = layoutDst.shape(1);
         AscendC::DataCopyExtParams dataCopyParams(
-            NActual,
-            MActual * sizeof(Element),
-            (stride - MActual) * sizeof(Element),
-            (MRound - MActual) / ELE_NUM_PER_C0,
+            layoutSrc.shape(0),
+            layoutSrc.shape(1) * sizeof(Element),
+            (layoutSrc.stride(1) - layoutSrc.shape(1)) * sizeof(Element),
+            (layoutDst.shape(1) - layoutSrc.shape(1)) / ELE_NUM_PER_C0,
             0
         );
         AscendC::DataCopyPadExtParams<Element> padParams(false, 0, 0, 0);

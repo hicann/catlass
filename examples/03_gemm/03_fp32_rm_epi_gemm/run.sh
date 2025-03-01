@@ -14,7 +14,12 @@ M=${1}
 N=${2}
 K=${3}
 deviceId=${4}
-mode=${5}
+arg_count=$#
+if [ $arg_count -lt 5 ]; then
+    mode=0
+else
+    mode=${5}
+fi
 set -e
 CANN_DIR=${ASCEND_HOME_PATH}
 # 生成测试数据
