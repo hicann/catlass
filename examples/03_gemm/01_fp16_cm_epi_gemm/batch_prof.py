@@ -23,7 +23,7 @@ def run(times, device, mode):
         col2 = row.iloc[1]
         col3 = row.iloc[2]
 
-        command = "./run_profiling.sh {} {} {} {}".format(col1, col2, col3, device) # M N K device
+        command = "./run_profiling.sh {} {} {} {} {}".format(col1, col2, col3, device, mode) # M N K device mode
         result = subprocess.run(command, shell=True, capture_output=True, text=True)
         last_line1 = result.stdout.strip().splitlines()[-1]
         parts = last_line1.split()  

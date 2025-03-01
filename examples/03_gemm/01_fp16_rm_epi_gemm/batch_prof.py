@@ -17,13 +17,13 @@ def run(times, device, mode):
     results = pd.DataFrame(columns=["M", "N", "K", "time_us", "Tflops", "utilization_ratio"])
     prof_data_path = "./batch_prof_data.csv"
     for index, row in data.iterrows():
-        if index > 0:  # 获取中间数据
-            break
+        # if index > 0:  # 获取中间数据
+        #     break
         col1 = row.iloc[0]
         col2 = row.iloc[1]
         col3 = row.iloc[2]
 
-        command = "./run_profiling.sh {} {} {} {}".format(col1, col2, col3, device) # M N K device
+        command = "./run_profiling.sh {} {} {} {} {}".format(col1, col2, col3, device, mode) # M N K device mode
         result = subprocess.run(command, shell=True, capture_output=True, text=True)
         last_line1 = result.stdout.strip().splitlines()[-1]
         parts = last_line1.split()  

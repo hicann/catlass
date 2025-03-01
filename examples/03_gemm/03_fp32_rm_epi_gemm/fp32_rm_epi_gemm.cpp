@@ -55,7 +55,7 @@ void FP32RMGemm(
     // using TileElemWiseEpilogue = void;
     using DType = CType;
     using ComputeType = XType;
-    constexpr uint32_t computeLength = 4096; // 128 * 128 / 2 开启双缓冲机制
+    constexpr uint32_t computeLength = 16384; // 128 * 128 / 2 开启双缓冲机制
     // 后处理部分
     using TileElemWiseAddGemm = epilogue::tile::TileElemWiseAddGemm<ArchTag, ComputeType, computeLength>;
     using TileElemWiseMulGemm = epilogue::tile::TileElemWiseMulGemm<ArchTag, ComputeType, computeLength>;
@@ -77,7 +77,7 @@ typedef struct Options{
 
     MatmulCoord problemShape{128, 128, 128};
     int32_t deviceId{0}; // 成员变量
-
+    uint32_t mode{0};
     Options() = default;
 
     int Parse(int argc, const char **argv){
@@ -86,6 +86,7 @@ typedef struct Options{
             N_INDEX,
             K_INDEX,
             DEVICE_ID_INDEX,
+            MODE_INDEX,
             ARGS_MAX
         };
         if(argc > ARGS_MAX || argc <= K_INDEX){
@@ -96,6 +97,7 @@ typedef struct Options{
         problemShape.m() = std::atoi(argv[M_INDEX]);
         problemShape.n() = std::atoi(argv[N_INDEX]);
         problemShape.k() = std::atoi(argv[K_INDEX]);
+        mode = std::atoi(argv[MODE_INDEX]);
         if(argc == ARGS_MAX){
             deviceId = std::atoi(argv[DEVICE_ID_INDEX]);
         }
@@ -134,29 +136,27 @@ void Run(Options options){
     size_t scalarSize = 1 * sizeof(float);
     float* alpha;
     ACL_CHECK(aclrtMallocHost((void**)(&alpha), scalarSize));
-    ReadFile("./data/input/alpha.bin", scalarSize, alpha, scalarSize);
-    
     float* beta;
     ACL_CHECK(aclrtMallocHost((void**)(&beta), scalarSize));
-    ReadFile("./data/input/beta.bin", scalarSize, beta, scalarSize);
-
     float* hostA;
     ACL_CHECK(aclrtMallocHost((void**)(&hostA), sizeA));
-    ReadFile("./data/input/A.bin", sizeA, hostA, sizeA);
+    float* hostB;
+    ACL_CHECK(aclrtMallocHost((void**)(&hostB), sizeB));
+    float* hostC;
+    ACL_CHECK(aclrtMallocHost((void**)(&hostC), sizeC));
+    if(options.mode == 0){
+        ReadFile("./data/input/alpha.bin", scalarSize, alpha, scalarSize);
+        ReadFile("./data/input/beta.bin", scalarSize, beta, scalarSize);
+        ReadFile("./data/input/A.bin", sizeA, hostA, sizeA);
+        ReadFile("./data/input/B.bin", sizeB, hostB, sizeB);
+        ReadFile("./data/input/C.bin", sizeC, hostC, sizeC);
+    }
     float *deviceA{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA, sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
-
-    float* hostB;
-    ACL_CHECK(aclrtMallocHost((void**)(&hostB), sizeB));
-    ReadFile("./data/input/B.bin", sizeB, hostB, sizeB);
     float *deviceB{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB, sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
-
-    float* hostC;
-    ACL_CHECK(aclrtMallocHost((void**)(&hostC), sizeC));
-    ReadFile("./data/input/C.bin", sizeC, hostC, sizeC);
     float *deviceC{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceC, sizeC, hostC, sizeC, ACL_MEMCPY_HOST_TO_DEVICE));

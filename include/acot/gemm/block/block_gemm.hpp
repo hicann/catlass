@@ -26,5 +26,6 @@ struct BlockGemm{
 }
 
 #include "acot/gemm/block/block_gemm_pingpong.hpp"
+#include "acot/gemm/block/block_gemm_PP_PL.hpp"
 
 #endif // ACOT_GEMM_BLOCK_BLOCK_GEMM_HPP

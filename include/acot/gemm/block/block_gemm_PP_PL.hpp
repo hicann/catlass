@@ -191,35 +191,20 @@ private:
             AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
             for(uint32_t KL0Idx = 0; KL0Idx < KL0Loops; KL0Idx++){
                 uint32_t KL0Actual = (KL0Idx == KL0Loops - 1) ? (KGmActual - KL0Idx * KL0TileSize) : KL0TileSize;
-                if(KL0Idx % 1 == 0){ // ABBA
-                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0AListId]);
-                    auto layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(actualShape.m(), KL0Actual);
-                    copyL1ToL0A(l0ATensor[KL0Idx % STAGES],l1ATensor[KIdx % STAGES][KL0Idx * KL0TileSize * MRound],layoutAInL0, layoutAInL1);
-                    AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0AListId]);
-                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0BListId]);
-                    auto layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(KL0Actual, actualShape.n());
-                    // 偏移量不一样
-                    if constexpr (std::is_same<ElementB, int8_t>::value){
-                        copyL1ToL0B(l0BTensor[KL0Idx % STAGES],l1BTensor[KIdx % STAGES][KL0Idx * KL0TileSize * NAlignment],layoutBInL0, layoutBInL1);
-                    }else{
-                        copyL1ToL0B(l0BTensor[KL0Idx % STAGES],l1BTensor[KIdx % STAGES][KL0Idx * KL0TileSize * NRound],layoutBInL0, layoutBInL1);
-                    }
-                    AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0BListId]);
+                AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0AListId]);
+                auto layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(actualShape.m(), KL0Actual);
+                copyL1ToL0A(l0ATensor[KL0Idx % STAGES],l1ATensor[KIdx % STAGES][KL0Idx * KL0TileSize * MRound],layoutAInL0, layoutAInL1);
+                AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0AListId]);
+                AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0BListId]);
+                auto layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(KL0Actual, actualShape.n());
+                // 偏移量不一样
+                if constexpr (std::is_same<ElementB, int8_t>::value){
+                    copyL1ToL0B(l0BTensor[KL0Idx % STAGES],l1BTensor[KIdx % STAGES][KL0Idx * KL0TileSize * NAlignment],layoutBInL0, layoutBInL1);
                 }else{
-                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0BListId]);
-                    auto layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(KL0Actual, actualShape.n());
-                    // 偏移量不一样
-                    if constexpr (std::is_same<ElementB, int8_t>::value){
-                        copyL1ToL0B(l0BTensor[KL0Idx % STAGES],l1BTensor[KIdx % STAGES][KL0Idx * KL0TileSize * NAlignment],layoutBInL0, layoutBInL1);
-                    }else{
-                        copyL1ToL0B(l0BTensor[KL0Idx % STAGES],l1BTensor[KIdx % STAGES][KL0Idx * KL0TileSize * NRound],layoutBInL0, layoutBInL1);
-                    }
-                    AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0BListId]);
-                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0AListId]);
-                    auto layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(actualShape.m(), KL0Actual);
-                    copyL1ToL0A(l0ATensor[KL0Idx % STAGES],l1ATensor[KIdx % STAGES][KL0Idx * KL0TileSize * MRound],layoutAInL0, layoutAInL1);
-                    AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0AListId]);
+                    copyL1ToL0B(l0BTensor[KL0Idx % STAGES],l1BTensor[KIdx % STAGES][KL0Idx * KL0TileSize * NRound],layoutBInL0, layoutBInL1);
                 }
+                AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0BListId]);
+                
                 // 进行计算
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0BListId]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0AListId]);
@@ -290,34 +275,18 @@ private:
             AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
             for(uint32_t KL0Idx = 0; KL0Idx < KL0Loops; KL0Idx++){
                 uint32_t KL0Actual = (KL0Idx == KL0Loops - 1) ? (KGmActual - KL0Idx * KL0TileSize) : KL0TileSize;
-                // 改成ABBA的结构
-                if(KL0Idx % 1 == 0){
-                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0AListId]);
-                    auto layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(KL0Actual, actualShape.m());
-                    if constexpr (std::is_same<ElementA, int8_t>::value){
-                        copyL1ToL0A(l0BTensor[KL0Idx % STAGES],l1ATensor[KIdx % STAGES][KL0Idx * KL0TileSize * MAlignment],layoutAInL0, layoutAInL1);
-                    }else{
-                        copyL1ToL0A(l0BTensor[KL0Idx % STAGES],l1ATensor[KIdx % STAGES][KL0Idx * KL0TileSize * MRound],layoutAInL0, layoutAInL1);
-                    }
-                    AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0AListId]);
-                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0BListId]);
-                    auto layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(actualShape.n(), KL0Actual);
-                    copyL1ToL0B(l0ATensor[KL0Idx % STAGES],l1BTensor[KIdx % STAGES][KL0Idx * KL0TileSize * NRound],layoutBInL0, layoutBInL1);
-                    AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0BListId]);
+                AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0AListId]);
+                auto layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(KL0Actual, actualShape.m());
+                if constexpr (std::is_same<ElementA, int8_t>::value){
+                    copyL1ToL0A(l0BTensor[KL0Idx % STAGES],l1ATensor[KIdx % STAGES][KL0Idx * KL0TileSize * MAlignment],layoutAInL0, layoutAInL1);
                 }else{
-                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0BListId]);
-                    auto layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(actualShape.n(), KL0Actual);
-                    copyL1ToL0B(l0ATensor[KL0Idx % STAGES],l1BTensor[KIdx % STAGES][KL0Idx * KL0TileSize * NRound],layoutBInL0, layoutBInL1);
-                    AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0BListId]);
-                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0AListId]);
-                    auto layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(KL0Actual, actualShape.m());
-                    if constexpr (std::is_same<ElementA, int8_t>::value){
-                        copyL1ToL0A(l0BTensor[KL0Idx % STAGES],l1ATensor[KIdx % STAGES][KL0Idx * KL0TileSize * MAlignment],layoutAInL0, layoutAInL1);
-                    }else{
-                        copyL1ToL0A(l0BTensor[KL0Idx % STAGES],l1ATensor[KIdx % STAGES][KL0Idx * KL0TileSize * MRound],layoutAInL0, layoutAInL1);
-                    }
-                    AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0AListId]);
+                    copyL1ToL0A(l0BTensor[KL0Idx % STAGES],l1ATensor[KIdx % STAGES][KL0Idx * KL0TileSize * MRound],layoutAInL0, layoutAInL1);
                 }
+                AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0AListId]);
+                AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0BListId]);
+                auto layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(actualShape.n(), KL0Actual);
+                copyL1ToL0B(l0ATensor[KL0Idx % STAGES],l1BTensor[KIdx % STAGES][KL0Idx * KL0TileSize * NRound],layoutBInL0, layoutBInL1);
+                AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0BListId]);
                 // 进行计算
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0BListId]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0AListId]);
@@ -370,5 +339,4 @@ private:
     2. PreLoad 
     3. Double Buffer 已经加上了
     4. Swizzle
-    5. padding 
 */

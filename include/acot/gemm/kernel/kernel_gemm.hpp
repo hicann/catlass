@@ -89,31 +89,31 @@ public:
         uint32_t MLoops = CeilDiv(M, maxMPerBlock);
         uint32_t NLoops = CeilDiv(N, maxNPerBlock);
         uint32_t coreLoops = MLoops * NLoops;
-        uint32_t singleIdx = 0;
+        // uint32_t singleIdx = 0;
         for(uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()){
             uint32_t MGmBlockIdx = loopIdx / NLoops;
             uint32_t NGmBlockIdx = loopIdx % NLoops;
             uint32_t MGmActual = (MGmBlockIdx == MLoops - 1) ? (M - MGmBlockIdx * maxMPerBlock) : maxMPerBlock;
             uint32_t NGmActual = (NGmBlockIdx == NLoops - 1) ? (N - NGmBlockIdx * maxNPerBlock) : maxNPerBlock;
             MatmulCoord actualShape{MGmActual, NGmActual, K};
-            AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((int32_t)(singleIdx % l0CBlockNum));
+            AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((int32_t)(loopIdx % l0CBlockNum));
             if constexpr (RowOrColumn){
                 blockGemm(
                     gmA[MGmBlockIdx * params.layoutA.stride(0) * maxMPerBlock], params.layoutA,
                     gmB[NGmBlockIdx * maxNPerBlock], params.layoutB,
                     gmC[MGmBlockIdx * params.layoutC.stride(0) * maxMPerBlock  + NGmBlockIdx * maxNPerBlock], params.layoutC,
-                    actualShape, singleIdx
+                    actualShape, loopIdx % l0CBlockNum
                 );
             }else{
                 blockGemm(
                     gmA[MGmBlockIdx * maxMPerBlock], params.layoutA,
                     gmB[NGmBlockIdx * maxNPerBlock * params.layoutB.stride(1)], params.layoutB,
                     gmC[MGmBlockIdx * maxMPerBlock + NGmBlockIdx * maxNPerBlock * params.layoutC.stride(1)], params.layoutC,
-                    actualShape, singleIdx
+                    actualShape, loopIdx % l0CBlockNum
                 );
             }
-            AscendC::SetFlag<AscendC::HardEvent::FIX_M>((int32_t)(singleIdx % l0CBlockNum));
-            singleIdx++;
+            AscendC::SetFlag<AscendC::HardEvent::FIX_M>((int32_t)(loopIdx % l0CBlockNum));
+            // singleIdx++;
         }
         #pragma unroll
         for(uint32_t i = 0; i < l0CBlockNum; i++){

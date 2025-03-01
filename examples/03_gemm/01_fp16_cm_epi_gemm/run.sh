@@ -14,13 +14,13 @@ M=${1}
 N=${2}
 K=${3}
 deviceId=${4}
-
+mode=${5}
 set -e
 CANN_DIR=${ASCEND_HOME_PATH}
 # 生成测试数据
 python3 ./scripts/gen_data.py $M $N $K
 
-../../../build/bin/01_fp16_cm_epi_gemm $M $N $K $deviceId
+../../../build/bin/01_fp16_cm_epi_gemm $M $N $K $deviceId $mode
 # 验证数据
 python3 ./scripts/verify_data.py $M $N $K
 # ../../../scripts/build.sh 01_fp16_cm_epi_gemm 

@@ -45,6 +45,12 @@ struct TileMmad{
             src1Tensor,
             params
         );
+
+        const uint32_t PIPE_M_BARRIER_THRESHOLD = 10;
+        if ((m / C0_NUM_PER_FRACTAL) * (n / C0_NUM_PER_FRACTAL) < PIPE_M_BARRIER_THRESHOLD)
+        {
+            AscendC::PipeBarrier<PIPE_M>();
+        }
     }
 };
 }
