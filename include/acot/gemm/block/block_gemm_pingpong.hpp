@@ -130,9 +130,9 @@ private:
     int32_t l0BEventList[STAGES];
 
     // The id of current stage
-    uint32_t l1ListId{0};
-    uint32_t l0AListId{0};
-    uint32_t l0BListId{0};
+    // uint32_t l1ListId{0};
+    // uint32_t l0AListId{0};
+    // uint32_t l0BListId{0};
 
     TileMmad tileMmad;
     CopyGmToL1A copyGmToL1A;
@@ -169,34 +169,34 @@ private:
             auto layoutTileB = layoutB.GetTileLayout(MakeCoord(KGmActual, actualShape.n()));
             auto layoutBInL1 = LayoutBInL1::template MakeLayout<ElementB>(KGmActual, actualShape.n());
             if(KIdx % 1 == 0){ // ABBA
-                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);  // 涉及太多计算 减少计算
+                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[KIdx % STAGES]);  // 涉及太多计算 减少计算
                 copyGmToL1A(l1ATensor[KIdx % STAGES],gmA[KIdx * maxKPerBlock],layoutAInL1, layoutTileA);
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListId]);
-                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
+                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[KIdx % STAGES]);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[KIdx % STAGES]);
                 copyGmToL1B(l1BTensor[KIdx % STAGES],gmB[KIdx * maxKPerBlock * layoutB.stride(0)],layoutBInL1, layoutTileB);
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
+                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[KIdx % STAGES]);
             }else{
-                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[KIdx % STAGES]);
                 copyGmToL1B(l1BTensor[KIdx % STAGES],gmB[KIdx * maxKPerBlock * layoutB.stride(0)],layoutBInL1, layoutTileB);
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
-                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);
+                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[KIdx % STAGES]);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[KIdx % STAGES]);
                 copyGmToL1A(l1ATensor[KIdx % STAGES],gmA[KIdx * maxKPerBlock],layoutAInL1, layoutTileA);
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListId]);
+                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[KIdx % STAGES]);
             }
 
             // 在K方向再进行一次切分处理
             uint32_t KL0TileSize = L0TileShape::K;
             uint32_t KL0Loops = CeilDiv(KGmActual, KL0TileSize);
-            AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListId]);
-            AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[KIdx % STAGES]);
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[KIdx % STAGES]);
             for(uint32_t KL0Idx = 0; KL0Idx < KL0Loops; KL0Idx++){
                 uint32_t KL0Actual = (KL0Idx == KL0Loops - 1) ? (KGmActual - KL0Idx * KL0TileSize) : KL0TileSize;
                 if(KL0Idx % 1 == 0){ // ABBA
-                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0AListId]);
+                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[KL0Idx % STAGES]);
                     auto layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(actualShape.m(), KL0Actual);
                     copyL1ToL0A(l0ATensor[KL0Idx % STAGES],l1ATensor[KIdx % STAGES][KL0Idx * KL0TileSize * MRound],layoutAInL0, layoutAInL1);
-                    AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0AListId]);
-                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0BListId]);
+                    AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[KL0Idx % STAGES]);
+                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[KL0Idx % STAGES]);
                     auto layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(KL0Actual, actualShape.n());
                     // 偏移量不一样
                     if constexpr (std::is_same<ElementB, int8_t>::value){
@@ -204,9 +204,9 @@ private:
                     }else{
                         copyL1ToL0B(l0BTensor[KL0Idx % STAGES],l1BTensor[KIdx % STAGES][KL0Idx * KL0TileSize * NRound],layoutBInL0, layoutBInL1);
                     }
-                    AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0BListId]);
+                    AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[KL0Idx % STAGES]);
                 }else{
-                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0BListId]);
+                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[KL0Idx % STAGES]);
                     auto layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(KL0Actual, actualShape.n());
                     // 偏移量不一样
                     if constexpr (std::is_same<ElementB, int8_t>::value){
@@ -214,32 +214,32 @@ private:
                     }else{
                         copyL1ToL0B(l0BTensor[KL0Idx % STAGES],l1BTensor[KIdx % STAGES][KL0Idx * KL0TileSize * NRound],layoutBInL0, layoutBInL1);
                     }
-                    AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0BListId]);
-                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0AListId]);
+                    AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[KL0Idx % STAGES]);
+                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[KL0Idx % STAGES]);
                     auto layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(actualShape.m(), KL0Actual);
                     copyL1ToL0A(l0ATensor[KL0Idx % STAGES],l1ATensor[KIdx % STAGES][KL0Idx * KL0TileSize * MRound],layoutAInL0, layoutAInL1);
-                    AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0AListId]);
+                    AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[KL0Idx % STAGES]);
                 }
                 // 进行计算
-                AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0BListId]);
-                AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0AListId]);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[KL0Idx % STAGES]);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[KL0Idx % STAGES]);
                 tileMmad(l0CTensor[(singleIdx % l0CBlockNum) * BlockCnt],l0ATensor[KL0Idx % STAGES],l0BTensor[KL0Idx % STAGES],MRound,NRound,KL0Actual,(KIdx == 0) && (KL0Idx == 0));
                 // if(MActual != MRound || NActual != NRound){
                 //     AscendC::PipeBarrier<PIPE_M>();  // 优化点
                 // }
-                AscendC::PipeBarrier<PIPE_ALL>();  // 优化点 这里必须是all 不知道为啥
+                // AscendC::PipeBarrier<PIPE_ALL>();  // 优化点 这里必须是all 不知道为啥
                 // AscendC::PipeBarrier<PIPE_M>();  // 优化点
-                AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0AListId]);
-                AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0BListId]);
+                AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[KL0Idx % STAGES]);
+                AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[KL0Idx % STAGES]);
                 //更新l0BListId 和 l0AListId
-                l0AListId = 1 - l0AListId;
-                l0BListId = 1 - l0BListId;
+                // l0AListId = 1 - l0AListId;
+                // l0BListId = 1 - l0BListId;
             }
             // 方便下次循环的使用
-            AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);
-            AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
+            AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[KIdx % STAGES]);
+            AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[KIdx % STAGES]);
             //更新l1ListId
-            l1ListId = 1 - l1ListId;
+            // l1ListId = 1 - l1ListId;
         }
     }
 
@@ -269,75 +269,75 @@ private:
             auto layoutTileB = layoutB.GetTileLayout(MakeCoord(actualShape.n(), KGmActual));
             auto layoutBInL1 = LayoutBInL1::template MakeLayout<ElementB>(actualShape.n(), KGmActual);
             if(KIdx % 1 == 0){ // ABBA
-                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[KIdx % STAGES]);
                 copyGmToL1A(l1ATensor[KIdx % STAGES],gmA[KIdx * maxKPerBlock * layoutA.stride(1)],layoutAInL1, layoutTileA);
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListId]);
-                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
+                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[KIdx % STAGES]);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[KIdx % STAGES]);
                 copyGmToL1B(l1BTensor[KIdx % STAGES],gmB[KIdx * maxKPerBlock],layoutBInL1, layoutTileB);
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
+                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[KIdx % STAGES]);
             }else{
-                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[KIdx % STAGES]);
                 copyGmToL1B(l1BTensor[KIdx % STAGES],gmB[KIdx * maxKPerBlock],layoutBInL1, layoutTileB);
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
-                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);
+                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[KIdx % STAGES]);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[KIdx % STAGES]);
                 copyGmToL1A(l1ATensor[KIdx % STAGES],gmA[KIdx * maxKPerBlock * layoutA.stride(1)],layoutAInL1, layoutTileA);
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListId]);
+                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[KIdx % STAGES]);
             }
             
             uint32_t KL0TileSize = L0TileShape::K;
             uint32_t KL0Loops = CeilDiv(KGmActual, KL0TileSize);
-            AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListId]);
-            AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[KIdx % STAGES]);
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[KIdx % STAGES]);
             for(uint32_t KL0Idx = 0; KL0Idx < KL0Loops; KL0Idx++){
                 uint32_t KL0Actual = (KL0Idx == KL0Loops - 1) ? (KGmActual - KL0Idx * KL0TileSize) : KL0TileSize;
                 // 改成ABBA的结构
                 if(KL0Idx % 1 == 0){
-                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0AListId]);
+                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[KL0Idx % STAGES]);
                     auto layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(KL0Actual, actualShape.m());
                     if constexpr (std::is_same<ElementA, int8_t>::value){
                         copyL1ToL0A(l0BTensor[KL0Idx % STAGES],l1ATensor[KIdx % STAGES][KL0Idx * KL0TileSize * MAlignment],layoutAInL0, layoutAInL1);
                     }else{
                         copyL1ToL0A(l0BTensor[KL0Idx % STAGES],l1ATensor[KIdx % STAGES][KL0Idx * KL0TileSize * MRound],layoutAInL0, layoutAInL1);
                     }
-                    AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0AListId]);
-                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0BListId]);
+                    AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[KL0Idx % STAGES]);
+                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[KL0Idx % STAGES]);
                     auto layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(actualShape.n(), KL0Actual);
                     copyL1ToL0B(l0ATensor[KL0Idx % STAGES],l1BTensor[KIdx % STAGES][KL0Idx * KL0TileSize * NRound],layoutBInL0, layoutBInL1);
-                    AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0BListId]);
+                    AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[KL0Idx % STAGES]);
                 }else{
-                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0BListId]);
+                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[KL0Idx % STAGES]);
                     auto layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(actualShape.n(), KL0Actual);
                     copyL1ToL0B(l0ATensor[KL0Idx % STAGES],l1BTensor[KIdx % STAGES][KL0Idx * KL0TileSize * NRound],layoutBInL0, layoutBInL1);
-                    AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0BListId]);
-                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0AListId]);
+                    AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[KL0Idx % STAGES]);
+                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[KL0Idx % STAGES]);
                     auto layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(KL0Actual, actualShape.m());
                     if constexpr (std::is_same<ElementA, int8_t>::value){
                         copyL1ToL0A(l0BTensor[KL0Idx % STAGES],l1ATensor[KIdx % STAGES][KL0Idx * KL0TileSize * MAlignment],layoutAInL0, layoutAInL1);
                     }else{
                         copyL1ToL0A(l0BTensor[KL0Idx % STAGES],l1ATensor[KIdx % STAGES][KL0Idx * KL0TileSize * MRound],layoutAInL0, layoutAInL1);
                     }
-                    AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0AListId]);
+                    AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[KL0Idx % STAGES]);
                 }
                 // 进行计算
-                AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0BListId]);
-                AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0AListId]);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[KL0Idx % STAGES]);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[KL0Idx % STAGES]);
                 tileMmad(l0CTensor[(singleIdx % l0CBlockNum) * BlockCnt],l0ATensor[KL0Idx % STAGES],l0BTensor[KL0Idx % STAGES],NRound,MRound,KL0Actual,(KIdx == 0) && (KL0Idx == 0));
                 // if(MActual != MRound || NActual != NRound){
                 //     AscendC::PipeBarrier<PIPE_M>();  // 优化点
                 // }
-                AscendC::PipeBarrier<PIPE_ALL>();  // 优化点
+                // AscendC::PipeBarrier<PIPE_ALL>();  // 优化点
                 // AscendC::PipeBarrier<PIPE_M>();  // 优化点
-                AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0AListId]);
-                AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0BListId]);
+                AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[KL0Idx % STAGES]);
+                AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[KL0Idx % STAGES]);
                 //更新l0BListId 和 l0AListId
-                l0AListId = 1 - l0AListId;
-                l0BListId = 1 - l0BListId;
+                // l0AListId = 1 - l0AListId;
+                // l0BListId = 1 - l0BListId;
             }
             // 方便下次循环的使用
-            AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);
-            AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
+            AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[KIdx % STAGES]);
+            AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[KIdx % STAGES]);
             //更新l1ListId
-            l1ListId = 1 - l1ListId;
+            // l1ListId = 1 - l1ListId;
         }
     }
 
