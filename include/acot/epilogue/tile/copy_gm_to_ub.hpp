@@ -82,7 +82,7 @@ struct CopyGm2Ub<arch::AscendC910B3, gemm::GemmType<Element, layout::RowMajor>> 
             layoutSrc.shape(0),
             layoutSrc.shape(1) * sizeof(Element),
             (layoutSrc.stride(0) - layoutSrc.shape(1)) * sizeof(Element),
-            (layoutDst.shape(1) - layoutSrc.shape(1)) / ELE_NUM_PER_C0,
+            (layoutDst.stride(0) - layoutSrc.shape(1)) / ELE_NUM_PER_C0,
             0
         );
         AscendC::DataCopyPadExtParams<Element> padParams(false, 0, 0, 0);
@@ -111,10 +111,10 @@ struct CopyGm2Ub<arch::AscendC910B3, gemm::GemmType<Element, layout::ColumnMajor
         // uint32_t stride = layoutSrc.stride(1); // RowMajor
         // uint32_t MRound = layoutDst.shape(1);
         AscendC::DataCopyExtParams dataCopyParams(
-            layoutSrc.shape(0),
-            layoutSrc.shape(1) * sizeof(Element),
-            (layoutSrc.stride(1) - layoutSrc.shape(1)) * sizeof(Element),
-            (layoutDst.shape(1) - layoutSrc.shape(1)) / ELE_NUM_PER_C0,
+            layoutSrc.shape(1),
+            layoutSrc.shape(0) * sizeof(Element),
+            (layoutSrc.stride(1) - layoutSrc.shape(0)) * sizeof(Element),
+            (layoutDst.stride(1) - layoutSrc.shape(0)) / ELE_NUM_PER_C0,
             0
         );
         AscendC::DataCopyPadExtParams<Element> padParams(false, 0, 0, 0);

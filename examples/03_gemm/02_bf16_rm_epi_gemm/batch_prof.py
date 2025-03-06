@@ -17,6 +17,8 @@ def run(times, device, mode):
     results = pd.DataFrame(columns=["M", "N", "K", "time_us", "Tflops", "utilization_ratio"])
     prof_data_path = "./batch_prof_data.csv"
     for index, row in data.iterrows():
+        if index >= 100:
+            break
         col1 = row.iloc[0]
         col2 = row.iloc[1]
         col3 = row.iloc[2]

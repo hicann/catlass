@@ -1,5 +1,5 @@
-#ifndef ACOT_GEMM_BLOCK_BLOCK_GEMM_PP_PL_HPP
-#define ACOT_GEMM_BLOCK_BLOCK_GEMM_PP_PL_HPP
+#ifndef ACOT_GEMM_BLOCK_BLOCK_GEMM_PP_PL_PA_HPP
+#define ACOT_GEMM_BLOCK_BLOCK_GEMM_PP_PL_PA_HPP
 
 #include "acot/acot.hpp"
 #include "acot/gemm/helper.hpp"
@@ -168,7 +168,7 @@ private:
         uint32_t maxKPerBlock = L1TileShape::K;
         uint32_t KLoops = CeilDiv(K, maxKPerBlock);
         // 进行preload操作
-        uint32_t firstTileIdx = 0;
+        uint32_t firstTileIdx = 0; // 先添加padding操作，在添加shuffleK操作
         uint32_t lastTileIdx = KLoops - 1; // 最后一块
         // 进行切分操作
         uint32_t KGmActual = min(K, maxKPerBlock); // 第一块
@@ -325,7 +325,7 @@ private:
             if(shuffleKIdx != lastTileIdx){
                 uint32_t shuffleKIdxNext = KIdx + 1;
                 KGmActualNext = (shuffleKIdxNext == KLoops - 1) ? (K - shuffleKIdxNext * maxKPerBlock) : maxKPerBlock; // 远远不是最后一次
-                auto layoutTileA = layoutA.GetTileLayout(MakeCoord(KGmActualNext, actualShape.m()));
+                auto layoutTileA = layoutA.GetTileLayout(MakeCoord(KGmActualNext, actualShape.m())); // 只对stride进行了padding操作
                 auto layoutAInL1 = LayoutAInL1::template MakeLayout<ElementA>(KGmActualNext, actualShape.m());
                 auto layoutTileB = layoutB.GetTileLayout(MakeCoord(actualShape.n(), KGmActualNext));
                 auto layoutBInL1 = LayoutBInL1::template MakeLayout<ElementB>(actualShape.n(), KGmActualNext);
@@ -437,7 +437,7 @@ private:
 };
 }
 
-#endif // ACOT_GEMM_BLOCK_BLOCK_GEMM_PP_PL_HPP
+#endif // ACOT_GEMM_BLOCK_BLOCK_GEMM_PP_PL_PA_HPP
 
 /*
 优化点：

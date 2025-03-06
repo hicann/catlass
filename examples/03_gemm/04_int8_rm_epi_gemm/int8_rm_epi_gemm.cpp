@@ -6,7 +6,7 @@
 #include "acot/acot.hpp"
 #include "acot/arch/arch.hpp"
 #include "acot/gemm/block/block_gemm.hpp"
-#include "acot/gemm/kernel/kernel_gemm_epilogue.hpp"
+#include "acot/gemm/kernel/kernel_gemm_PL_PA_epilogue.hpp"
 #include "acot/gemm/gemm_type.hpp"
 #include "acot/layout/layout.hpp"
 #include "acot/matmul_coord.hpp"
@@ -34,13 +34,17 @@ void INT8RMGemm(
     GM_ADDR gmA, LayoutA layoutA,
     GM_ADDR gmB, LayoutB layoutB,
     GM_ADDR gmC, LayoutC layoutC,
+    GM_ADDR gmWA, LayoutA layoutWA,
+    GM_ADDR gmWB, LayoutB layoutWB,
     GM_ADDR gmWorkspace
 ){
     // Set FFTS address
     AscendC::SetSyncBaseAddr(fftsAddr);
     using ArchTag = arch::AscendC910B3;
     // 开启pingpong机制
-    using GemmBlockDispatchPolicy = gemm::GemmAscendC910B3Pingpong<true>;
+    constexpr bool enableUnitFlag = true;
+    constexpr bool enableShuffleK = true;
+    using GemmBlockDispatchPolicy = gemm::GemmAscendC910B3Preload<enableUnitFlag, enableShuffleK>;
     using EpilogueBlockDispatchPolicy = epilogue::EpilogueAscendC910B3Gemm;
     using AType = gemm::GemmType<int8_t, LayoutA>;
     using BType = gemm::GemmType<int8_t, LayoutB>;
@@ -48,7 +52,7 @@ void INT8RMGemm(
     using XType = gemm::GemmType<int32_t, LayoutC>;
     // 使用Coord来传递值
     using L1TileShape = MatmulShape<256, 128, 256>;
-    using L0TileShape = MatmulShape<256, 128, 64>;
+    using L0TileShape = MatmulShape<256, 128, 128>;
 
     // 调用block层函数
     using GemmBlock = gemm::block::BlockGemm<GemmBlockDispatchPolicy, L1TileShape, L0TileShape, AType, BType, XType>; // 这个还是乘法
@@ -66,7 +70,7 @@ void INT8RMGemm(
     typename EpilogueBlock::Params epilogueParams{alpha, beta, gmC, layoutC, gmC, layoutC}; // x只是传了一个地址
     // 实例化Gemm部分
     using GemmKernel = gemm::kernel::KernelGemmEpilogue<GemmBlock, EpilogueBlock>;
-    typename GemmKernel::Params params{problemShape, gmA, layoutA, gmB, layoutB, gmWorkspace, epilogueParams}; // 这里得修改 gmX保存A * B
+    typename GemmKernel::Params params{problemShape, gmA, layoutA, gmB, layoutB, gmWorkspace, gmWA, layoutWA, gmWB, layoutWB, epilogueParams}; // 这里得修改 gmX保存A * B
     // 调用核函数
     GemmKernel gemm;
     gemm(params);
@@ -105,6 +109,44 @@ typedef struct Options{
     }
 }Options;
 
+layout::RowMajor GetWorkspaceLayout(layout::RowMajor layout, uint32_t align)
+{
+    if (align == 0) {
+        return layout;
+    }
+    return layout::RowMajor(layout.shape(0), layout.shape(1),
+        RoundUp(layout.shape(1), align));
+}
+
+layout::ColumnMajor GetWorkspaceLayout(layout::ColumnMajor layout, uint32_t align)
+{
+    if (align == 0) {
+        return layout;
+    }
+    return layout::ColumnMajor(layout.shape(0), layout.shape(1),
+        RoundUp(layout.shape(0), align));
+}
+
+size_t GetWorkspaceLen(layout::RowMajor layout)
+{
+    return layout.shape(0) * layout.stride(0);
+}
+
+size_t GetWorkspaceLen(layout::ColumnMajor layout)
+{
+    return layout.shape(1) * layout.stride(1);
+}
+
+bool IsSameStride(layout::RowMajor layout1, layout::RowMajor layout2)
+{
+    return layout1.stride(0) == layout2.stride(0);
+}
+
+bool IsSameStride(layout::ColumnMajor layout1, layout::ColumnMajor layout2)
+{
+    return layout1.stride(1) == layout2.stride(1);
+}
+
 void Run(Options options){
     aclrtStream stream{nullptr};
     ACL_CHECK(aclInit(nullptr));
@@ -119,19 +161,23 @@ void Run(Options options){
     size_t lenB = static_cast<size_t>(k) * n;
     size_t lenC = static_cast<size_t>(m) * n;
     size_t lenX = lenC; // A * B  
-    // size_t lenD = lenX; // 最后的大小
     
     size_t sizeA = lenA * sizeof(int8_t);
     size_t sizeB = lenB * sizeof(int8_t);
     size_t sizeC = lenC * sizeof(int32_t);
     size_t sizeX = lenX * sizeof(int32_t);
-    // size_t sizeD = sizeX;
 
-    layout::RowMajor layoutA{m, k};
-    layout::RowMajor layoutB{k, n};
-    layout::RowMajor layoutC{m, n};
-    // layout::RowMajor layoutX{m, n};
-    // layout::RowMajor layoutD{m, n}; // 最后的答案矩阵
+    const uint32_t align = 256; //M 和 K的L1切分粒度
+    using LayoutA = layout::RowMajor;
+    using LayoutB = layout::RowMajor;
+    using LayoutC = layout::RowMajor;
+    LayoutA layoutA{m, k};
+    LayoutB layoutB{k, n};
+    LayoutC layoutC{m, n};
+    LayoutA layoutWA = GetWorkspaceLayout(layoutA, align); // 就是stride方向进行padding操作
+    LayoutB layoutWB = GetWorkspaceLayout(layoutB, align);
+    size_t sizeWA = GetWorkspaceLen(layoutWA) * sizeof(int8_t);
+    size_t sizeWB = GetWorkspaceLen(layoutWB) * sizeof(int8_t);
 
     size_t scalarSize = 1 * sizeof(int32_t);
     int32_t* alpha;
@@ -154,9 +200,21 @@ void Run(Options options){
     int8_t *deviceA{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA, sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
+    int8_t *deviceWA{nullptr};
+    if (IsSameStride(layoutWA, layoutA)) {
+        deviceWA = deviceA;
+    } else {
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWA), sizeWA, ACL_MEM_MALLOC_HUGE_FIRST));
+    }
     int8_t *deviceB{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB, sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
+    int8_t *deviceWB{nullptr};
+    if (IsSameStride(layoutWB, layoutB)) {
+        deviceWB = deviceB;
+    } else {
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWB), sizeWB, ACL_MEM_MALLOC_HUGE_FIRST));
+    }
     int32_t *deviceC{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceC, sizeC, hostC, sizeC, ACL_MEMCPY_HOST_TO_DEVICE));
@@ -181,15 +239,17 @@ void Run(Options options){
         (uint8_t*)deviceA, layoutA,
         (uint8_t*)deviceB, layoutB,
         (uint8_t*)deviceC, layoutC,
+        (uint8_t*)deviceWA, layoutWA,
+        (uint8_t*)deviceWB, layoutWB,
         (uint8_t*)gmWorkspace);
-        // (uint8_t*)deviceX, layoutX,
-        // (uint8_t*)deviceD, layoutD);
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
     // int8_t* hostD;
     // ACL_CHECK(aclrtMallocHost((void**)(&hostD), sizeD));
     ACL_CHECK(aclrtMemcpy(hostC, sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
-    WriteFile("./data/output/our_res.bin",hostC,sizeC);
+    if(options.mode == 0){
+        WriteFile("./data/output/our_res.bin",hostC,sizeC);
+    }
 
     ACL_CHECK(aclrtFree(deviceA));
     ACL_CHECK(aclrtFree(deviceB));

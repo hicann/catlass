@@ -93,7 +93,7 @@ public:
         uint32_t MLoops = CeilDiv(M, maxMPerBlock);
         uint32_t NLoops = CeilDiv(N, maxNPerBlock);
         uint32_t coreLoops = MLoops * NLoops;
-        // uint32_t singleIdx = 0;
+        uint32_t singleIdx = 0;
         if constexpr (RowOrColumn){
             layout::RowMajor layoutC(params.problemShape.m(), params.problemShape.n());
             for(uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()){
@@ -102,16 +102,16 @@ public:
                 uint32_t MGmActual = (MGmBlockIdx == MLoops - 1) ? (M - MGmBlockIdx * maxMPerBlock) : maxMPerBlock;
                 uint32_t NGmActual = (NGmBlockIdx == NLoops - 1) ? (N - NGmBlockIdx * maxNPerBlock) : maxNPerBlock;
                 MatmulCoord actualShape{MGmActual, NGmActual, K};
-                AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((int32_t)(loopIdx % l0CBlockNum));
+                AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((int32_t)(singleIdx % l0CBlockNum));
                 blockGemm(
                     gmA[MGmBlockIdx * params.layoutA.stride(0) * maxMPerBlock], params.layoutA,
                     gmB[NGmBlockIdx * maxNPerBlock], params.layoutB, // 将目前需要转移的数据块的首地址传入就行
                     gmX[MGmBlockIdx * layoutC.stride(0) * maxMPerBlock  + NGmBlockIdx * maxNPerBlock], layoutC,
-                    actualShape, loopIdx % l0CBlockNum
+                    actualShape, singleIdx % l0CBlockNum
                 );
                 arch::CrossCoreSetFlagWithReverse<0x2, PIPE_FIX>(flagAicFinishStore);
-                AscendC::SetFlag<AscendC::HardEvent::FIX_M>((int32_t)(loopIdx % l0CBlockNum));
-                // singleIdx++;
+                AscendC::SetFlag<AscendC::HardEvent::FIX_M>((int32_t)(singleIdx % l0CBlockNum));
+                singleIdx++;
             }
         }else{
             layout::ColumnMajor layoutC(params.problemShape.m(), params.problemShape.n());
@@ -121,16 +121,16 @@ public:
                 uint32_t MGmActual = (MGmBlockIdx == MLoops - 1) ? (M - MGmBlockIdx * maxMPerBlock) : maxMPerBlock;
                 uint32_t NGmActual = (NGmBlockIdx == NLoops - 1) ? (N - NGmBlockIdx * maxNPerBlock) : maxNPerBlock;
                 MatmulCoord actualShape{MGmActual, NGmActual, K};
-                AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((int32_t)(loopIdx % l0CBlockNum));
+                AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((int32_t)(singleIdx % l0CBlockNum));
                 blockGemm(
                     gmA[MGmBlockIdx * maxMPerBlock], params.layoutA,
                     gmB[NGmBlockIdx * maxNPerBlock * params.layoutB.stride(1)], params.layoutB, // 将目前需要转移的数据块的首地址传入就行
                     gmX[MGmBlockIdx * maxMPerBlock + NGmBlockIdx * maxNPerBlock * layoutC.stride(1)], layoutC,
-                    actualShape, loopIdx % l0CBlockNum
+                    actualShape, singleIdx % l0CBlockNum
                 );
                 arch::CrossCoreSetFlagWithReverse<0x2, PIPE_FIX>(flagAicFinishStore);
-                AscendC::SetFlag<AscendC::HardEvent::FIX_M>((int32_t)(loopIdx % l0CBlockNum));
-                // singleIdx++;
+                AscendC::SetFlag<AscendC::HardEvent::FIX_M>((int32_t)(singleIdx % l0CBlockNum));
+                singleIdx++;
             }
         }
         #pragma unroll

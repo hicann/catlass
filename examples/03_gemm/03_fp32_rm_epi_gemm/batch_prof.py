@@ -10,13 +10,15 @@ def run(times, device, mode):
     # command = "../../../scripts/build.sh 01_fp16_rm_epi_gemm"
     # result = subprocess.run(command, shell=True, capture_output=True, text=True)
 
-    data = pd.read_csv('./params/fp32GemmCM_Test.csv') # 245组
+    data = pd.read_csv('./params/fp32GemmRM_Test.csv') # 245组
 
     operator_path = os.getcwd()
 
     results = pd.DataFrame(columns=["M", "N", "K", "time_us", "Tflops", "utilization_ratio"])
     prof_data_path = "./batch_prof_data.csv"
     for index, row in data.iterrows():
+        if index >= 100:
+            break
         col1 = row.iloc[0]
         col2 = row.iloc[1]
         col3 = row.iloc[2]
@@ -41,8 +43,8 @@ def run(times, device, mode):
         else:
             frame.to_csv(prof_data_path, mode='a', header=not os.path.exists(prof_data_path), index=False)
         
-    command = "rm -rf ./prof/*"
-    subprocess.run(command, shell=True, capture_output=True, text=True)
+    # command = "rm -rf ./prof/*"
+    # subprocess.run(command, shell=True, capture_output=True, text=True)
 
 if __name__ == "__main__":
     times = int(sys.argv[1])

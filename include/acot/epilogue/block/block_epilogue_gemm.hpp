@@ -43,7 +43,6 @@ public:
     using CopyUbToGmD = typename TileCopy_::CopyUbToGmD;
     
     static constexpr uint32_t STAGES = DispatchPolicy::STAGES; // 开启双缓冲机制的 两个AIV核
-    static constexpr uint32_t DOUBLESTAGES = DispatchPolicy::STAGES * DispatchPolicy::STAGES;
     const uint32_t UBSize = ArchTag::UB_SIZE;
     static constexpr bool RowOrColumn = std::is_same<LayoutC, acot::layout::RowMajor>::value && std::is_same<LayoutX, acot::layout::RowMajor>::value;
     static constexpr bool isNeedCast = std::is_same<ElementC, ElementX>::value;
@@ -172,14 +171,14 @@ private:
         uint32_t NUbActual = NActual;
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID1);
         auto layoutTileC = params.layoutC.GetTileLayout(MakeCoord(MUbActual, NUbActual));
-        auto layoutCInUb = params.layoutC.GetTileLayout(MakeCoord(maxMPerBlock, maxNPerBlock));
+        // auto layoutCInUb = params.layoutC.GetTileLayout(MakeCoord(maxMPerBlock, maxNPerBlock));
+        LayoutC layoutCInUb{maxMPerBlock, maxNPerBlock};
         copyGmToUbC(ubCTensor,cGm[offsetC + aivIndex * maxMPerBlock * params.layoutC.stride(0)],layoutCInUb, layoutTileC);
         AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
         AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
         if constexpr (!isNeedCast){
             AscendC::Cast<ElementCompute, ElementC>(ubCTensorCast, ubCTensor, AscendC::RoundMode::CAST_NONE, COMPUTE_LENGTH);
-            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
-            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
+            AscendC::PipeBarrier<PIPE_V>();
             tileElemWiseEpilogueMul(ubCTensorCast,ubCTensorCast,params.beta);
         }else{
             tileElemWiseEpilogueMul(ubCTensor,ubCTensor,params.beta);
@@ -188,7 +187,8 @@ private:
         AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
         arch::CrossCoreWaitFlagWithReverse<0x2, PIPE_MTE3>(flagAicFinishStore); // 没这个变量
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
-        auto layoutXInUb = layoutX.GetTileLayout(MakeCoord(maxMPerBlock, maxNPerBlock));
+        // auto layoutXInUb = layoutX.GetTileLayout(MakeCoord(maxMPerBlock, maxNPerBlock));
+        LayoutX layoutXInUb{maxMPerBlock, maxNPerBlock};
         auto layoutTileX = layoutX.GetTileLayout(MakeCoord(MUbActual, NUbActual));
         copyGmToUbX(ubXTensor,xGm[aivIndex * maxMPerBlock * layoutX.stride(0)],layoutXInUb, layoutTileX);
         AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
@@ -214,32 +214,33 @@ private:
         }
         AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
-        auto layoutTileD = params.layoutD.GetTileLayout(MakeCoord(maxMPerBlock, maxNPerBlock));
+        // auto layoutTileD = params.layoutD.GetTileLayout(MakeCoord(maxMPerBlock, maxNPerBlock));
+        LayoutD layoutTileD{maxMPerBlock, maxNPerBlock};
         auto layoutDInGm = params.layoutD.GetTileLayout(MakeCoord(MUbActual, NUbActual));
         copyUbToGmD(dGm[offsetD + aivIndex * maxMPerBlock * params.layoutD.stride(0)],ubDTensor,layoutDInGm, layoutTileD);
     }
-    
+
     ACOT_DEVICE
     void EpilogueColumnMajor(uint32_t offsetC,uint32_t offsetD,MatmulCoord actualShape,LayoutX layoutX){
         uint32_t MActual = actualShape.m();
         uint32_t NActual = actualShape.n(); // 这里也要对齐
-        uint32_t maxMPerBlock = blockShape.m() / STAGES; // 对着M方向进行切分 肯定会对齐32Byte
-        uint32_t maxNPerBlock = blockShape.n(); 
+        uint32_t maxMPerBlock = blockShape.m(); // 对着M方向进行切分 肯定会对齐32Byte
+        uint32_t maxNPerBlock = blockShape.n() / STAGES; 
         uint32_t aivIndex = AscendC::GetSubBlockIdx(); // 0 或 1
-        uint32_t MActualAIV0 = (MActual < maxMPerBlock) ? MActual : maxMPerBlock;
-        uint32_t MActualAIV1 = (MActual < maxMPerBlock) ? 0 : (MActual - maxMPerBlock);
-        uint32_t MUbActual = aivIndex == 1 ? MActualAIV1 : MActualAIV0;
-        uint32_t NUbActual = NActual;
+        uint32_t NActualAIV0 = (NActual < maxNPerBlock) ? NActual : maxNPerBlock;
+        uint32_t NActualAIV1 = (NActual < maxNPerBlock) ? 0 : (NActual - maxNPerBlock);
+        uint32_t NUbActual = aivIndex == 1 ? NActualAIV1 : NActualAIV0;
+        uint32_t MUbActual = MActual;
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID1);
-        auto layoutTileC = params.layoutC.GetTileLayout(MakeCoord(NUbActual, MUbActual));
-        auto layoutCInUb = params.layoutC.GetTileLayout(MakeCoord(maxNPerBlock, maxMPerBlock));
-        copyGmToUbC(ubCTensor,cGm[offsetC + aivIndex * maxMPerBlock],layoutCInUb, layoutTileC);
+        auto layoutTileC = params.layoutC.GetTileLayout(MakeCoord(MUbActual, NUbActual));
+        // auto layoutCInUb = params.layoutC.GetTileLayout(MakeCoord(maxNPerBlock, maxMPerBlock));
+        LayoutC layoutCInUb{maxMPerBlock, maxNPerBlock};
+        copyGmToUbC(ubCTensor,cGm[offsetC + aivIndex * maxNPerBlock * params.layoutC.stride(1)],layoutCInUb, layoutTileC);
         AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
         AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
         if constexpr (!isNeedCast){
             AscendC::Cast<ElementCompute, ElementC>(ubCTensorCast, ubCTensor, AscendC::RoundMode::CAST_NONE, COMPUTE_LENGTH);
-            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
-            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
+            AscendC::PipeBarrier<PIPE_V>();
             tileElemWiseEpilogueMul(ubCTensorCast,ubCTensorCast,params.beta);
         }else{
             tileElemWiseEpilogueMul(ubCTensor,ubCTensor,params.beta);
@@ -248,9 +249,10 @@ private:
         AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
         arch::CrossCoreWaitFlagWithReverse<0x2, PIPE_MTE3>(flagAicFinishStore); // 没这个变量
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
-        auto layoutXInUb = layoutX.GetTileLayout(MakeCoord(maxNPerBlock, maxMPerBlock));
-        auto layoutTileX = layoutX.GetTileLayout(MakeCoord(NUbActual, MUbActual));
-        copyGmToUbX(ubXTensor,xGm[aivIndex * maxMPerBlock],layoutXInUb, layoutTileX);
+        // auto layoutXInUb = layoutX.GetTileLayout(MakeCoord(maxNPerBlock, maxMPerBlock));
+        LayoutX layoutXInUb{maxMPerBlock, maxNPerBlock};
+        auto layoutTileX = layoutX.GetTileLayout(MakeCoord(MUbActual, NUbActual));
+        copyGmToUbX(ubXTensor,xGm[aivIndex * maxNPerBlock * layoutX.stride(1)],layoutXInUb, layoutTileX);
         AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
         AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
         tileElemWiseEpilogueMul(ubXTensor,ubXTensor,params.alpha);
@@ -274,9 +276,10 @@ private:
         }
         AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
-        auto layoutTileD = params.layoutD.GetTileLayout(MakeCoord(maxNPerBlock, maxMPerBlock));
-        auto layoutDInGm = params.layoutD.GetTileLayout(MakeCoord(NUbActual, MUbActual));
-        copyUbToGmD(dGm[offsetD + aivIndex * maxMPerBlock],ubDTensor,layoutDInGm, layoutTileD);
+        // auto layoutTileD = params.layoutD.GetTileLayout(MakeCoord(maxMPerBlock, maxNPerBlock));
+        LayoutD layoutTileD{maxMPerBlock, maxNPerBlock};
+        auto layoutDInGm = params.layoutD.GetTileLayout(MakeCoord(MUbActual, NUbActual));
+        copyUbToGmD(dGm[offsetD + aivIndex * maxNPerBlock * params.layoutD.stride(1)],ubDTensor,layoutDInGm, layoutTileD);
     }
 
     ACOT_DEVICE
