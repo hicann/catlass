@@ -10,7 +10,7 @@
 
  #ifndef ACOT_GEMV_KERNEL_GEMV_HPP
  #define ACOT_GEMV_KERNEL_GEMV_HPP
- 
+ #include "acot/arch/cross_core_sync.hpp"
  #include "acot/acot.hpp"
  #include "acot/arch/resource.hpp"
  #include "acot/coord.hpp"
@@ -48,8 +48,8 @@
          GM_ADDR ptrX;
          GM_ADDR ptrY;
          GM_ADDR ptrY_read;
-         float alpha;
-         float beta;
+         ElementA alpha;
+         ElementY beta;
  
          // Methods
          ACOT_DEVICE
@@ -57,7 +57,7 @@
  
          ACOT_DEVICE
          Params(GemvCoord const &problemShape_,  GM_ADDR ptrA_, LayoutA layoutA_,  GM_ADDR ptrX_,
-            GM_ADDR ptrY_,GM_ADDR ptrY_read_,float alpha_,float beta_)
+            GM_ADDR ptrY_,GM_ADDR ptrY_read_,ElementA alpha_,ElementY beta_)
              : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrX(ptrX_),
                ptrY(ptrY_),ptrY_read(ptrY_read_),alpha(alpha_),beta(beta_) {}
      };
@@ -80,12 +80,22 @@
      template <>
      ACOT_DEVICE
      void operator()<AscendC::AIC>(Params const &params) {
-        
+        arch::Resource<ArchTag> resource;
+        AscendC::GlobalTensor<ElementA> gmA;
+         gmA.SetGlobalBuffer((__gm__ ElementA *)params.ptrA);
+
+        AscendC::LocalTensor<ElementA> srcTensor;
+        srcTensor = resource.ubBuf.template GetBufferByByte<ElementA>(0);
+        AscendC::DataCopy(srcTensor, gmA, 5);
+        AscendC::DataCopy(gmA, srcTensor, 5);
+        // arch::CrossCoreSetFlagWithReverse<0x2, PIPE_FIX>(flagAicFinishStore);
+
      }
  
      template <>
      ACOT_DEVICE
      void operator()<AscendC::AIV>(Params const &params) {
+        // arch::CrossCoreWaitFlagWithReverse<0x2, PIPE_MTE3>(flagAicFinishStore); // 没这个变量
         // TileScheduler matmulTileScheduler(params.problemShape, MakeCoord(UBTileShape::M, UBTileShape::N));
         arch::Resource<ArchTag> resource;
         BlockGemv blockGemv(resource);
@@ -114,13 +124,18 @@
         // for(uint32_t i = 0;i < 2;i++){
         //     AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>((event_t)(i));
         // }
-         for(uint32_t loop_id = 0;loop_id < loopnum;loop_id++){
-            uint32_t aiv_id = AscendC::GetBlockIdx()/2+AscendC::GetSubBlockIdx();
-            uint32_t aiv_num = AscendC::GetBlockNum()/2 * AscendC::GetSubBlockNum();
-            // uint32_t aiv_id = AscendC::GetBlockIdx();
-            // uint32_t aiv_num = AscendC::GetBlockNum() * AscendC::GetTaskRation();
-            if(loop_id % aiv_num != aiv_id)continue;
 
+        // Get aicore information 获取核idx，核数，子核idx
+        // uint32_t aicoreIndex = AscendC::GetBlockIdx() / AscendC::GetSubBlockNum(); // 0-19
+        // // uint32_t aicoreIndex = AscendC::GetBlockIdx(); // 0-19
+        // uint32_t aicoreNum = AscendC::GetBlockNum();                               // 20
+
+         for(uint32_t loop_id = 0;loop_id < loopnum;loop_id++){
+            // uint32_t aiv_id = AscendC::GetBlockIdx()/2+AscendC::GetSubBlockIdx();
+            // uint32_t aiv_num = AscendC::GetBlockNum()/2 * AscendC::GetSubBlockNum();
+            uint32_t aiv_id = AscendC::GetBlockIdx();
+            uint32_t aiv_num = AscendC::GetBlockNum() * AscendC::GetTaskRation();
+            if(loop_id % aiv_num != aiv_id)continue;
             if constexpr (std::is_same_v<LayoutA, acot::layout::ColumnMajor>) {
                 offset_matrix = loop_id * maxmPerBlock_round;
                 offset_vector_out = loop_id * maxmPerBlock_round;
@@ -140,6 +155,7 @@
                 params.alpha,
                 params.beta
             );
+
         }
         // for(uint32_t i = 0;i < 4;i++){
         //     AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((event_t)(i));
@@ -149,7 +165,9 @@
         // }
      }
      private:
-     
+        // static constexpr arch::FlagID FLAG_AIC_FINISH_STORE = 0;
+        // static constexpr arch::FlagID RV_FLAG_AIC_FINISH_STORE = 1;
+        // arch::CrossCoreFlagWithReverse<> flagAicFinishStore{FLAG_AIC_FINISH_STORE, RV_FLAG_AIC_FINISH_STORE};
  };
  
  } // namespace acot::matmul::kernel

@@ -5,7 +5,12 @@ DATA_TYPE = np.float32
 NP_DATA_TYPE = np.float32
 
 # 定义生成数据函数
-def calc_expect_func(M, N,alpha,beta):
+def calc_expect_func(M, N):
+    alpha = np.random.uniform(-0.5,0.5, 1).astype(NP_DATA_TYPE)
+    beta  = np.random.uniform(-0.5,0.5, 1).astype(NP_DATA_TYPE)
+    alpha.tofile("./data/input/alpha.bin")
+    beta.tofile("./data/input/beta.bin")
+    
     matrix_gm = np.random.uniform(-1, 1, (M, N)).astype(NP_DATA_TYPE)
     vector_gm = np.random.uniform(-1, 1, (N, 1)).astype(NP_DATA_TYPE)
     vector_y_gm = np.random.uniform(-1, 1, (M, 1)).astype(NP_DATA_TYPE)
@@ -29,14 +34,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('M', action='store', type=int)
     parser.add_argument('N', action='store', type=int)
-    parser.add_argument('alpha', action='store', type=np.float32)
-    parser.add_argument('beta', action='store', type=np.float32)
 
     args = parser.parse_args()
 
     M = args.M
     N = args.N
-    alpha = args.alpha
-    beta = args.beta
 
-    calc_expect_func(M, N,alpha,beta)
+    calc_expect_func(M, N)

@@ -1,0 +1,3 @@
+[info] 13386:  pipe: 5 push_isa, pc:0x1168bdf0, id:401
+[info] 13643:  pipe: 5 push_isa, pc:0x1168be84, id:438
+[info] ++++++++++++++++++++++core: 11, start: 11690, tick: 14929, kernal: 0, blkID 11 of blkdim 20, streamId 0, taskId 0, subtaskId 0, threadId 0, done++++++++++++++++++++++.

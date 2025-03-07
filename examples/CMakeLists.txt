@@ -10,8 +10,8 @@
 
 set(ACOT_EXAMPLES_COMMON_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/common)
 set(CCEC_COMPILER_OPTIONS
-    -O2 -std=c++17 -xcce --cce-aicore-arch=dav-c220-vec
-    # -O2 -std=c++17 -xcce --cce-aicore-arch=dav-c220
+    # -O2 -std=c++17 -xcce --cce-aicore-arch=dav-c220-vec
+    -O2 -std=c++17 -xcce --cce-aicore-arch=dav-c220
     -mllvm -cce-aicore-stack-size=0x8000
     -mllvm -cce-aicore-function-stack-size=0x8000
     -mllvm -cce-aicore-record-overflow=true
@@ -31,6 +31,10 @@ set(CCEC_COMPILER_OPTIONS
     -lruntime -lstdc++ -lascendcl -ltiling_api -lregister -lplatform -lascendalog -ldl
     -lascendc_runtime -lerror_manager -lprofapi -lge_common_base -lmmpa -lascend_dump -lc_sec
     -lruntime -lstdc++ -lascendcl
+    # -L${ASCEND_HOME_PATH}/tools/simulator/Ascend910B1/lib 
+    # -lnpu_drv -lnpu_drv_camodel -lstars -lffts -lruntime_camodel
+    # -lpem_davinci -lmodel_top -lmcu_wrapper -lmcu_loop 
+
 )
 
 file(GLOB_RECURSE ACOT_INCLUDE_FILES ${CMAKE_SOURCE_DIR}/include/*.hpp)

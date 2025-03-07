@@ -17,7 +17,7 @@
 
 
 using namespace acot;
-
+using ScalarType = float;
 // 已经进入核函数了
 // 单纯行优先
 ACOT_GLOBAL
@@ -27,7 +27,7 @@ void FP32RMGemvAiv(
     GM_ADDR gmX, layout::RowMajor layoutX,
     GM_ADDR gmY, layout::RowMajor layoutY,
     GM_ADDR gmY_read,
-    float alpha,float beta
+    ScalarType alpha,ScalarType beta
 ){
     using ArchTag = arch::AtlasA2;
     using DispatchPolicy = gemv::MmadAtlasA2Pingpong<true>;
@@ -59,8 +59,7 @@ typedef struct Options{
 
     uint32_t M = 32;
     uint32_t N = 32;
-    float alpha = 1.0; 
-    float beta = 1.0;
+    uint32_t mode{0};
 
     Options() = default;
     
@@ -71,21 +70,19 @@ typedef struct Options{
         enum ArgsIndex{
             M_INDEX = 1,
             N_INDEX,
-            alpha_INDEX,
-            beta_INDEX,
             DEVICE_ID_INDEX,
+            MODE_INDEX,
             ARGS_MAX
         };
-        if(argc > ARGS_MAX || argc <= beta_INDEX){
+        if(argc > ARGS_MAX || argc <= N_INDEX){
             std::cerr << HELPER << std::endl;
             return -1;
         }
         // 设置矩阵形状 + 矩阵步长
         problemShape.m() = std::atoi(argv[M_INDEX]);
         problemShape.n() = std::atoi(argv[N_INDEX]);
-        alpha = std::stof(argv[alpha_INDEX]);
-        beta = std::stof(argv[beta_INDEX]);
-        if(argc == ARGS_MAX){
+        if(argc >= ARGS_MAX - 1){
+            mode = std::atoi(argv[MODE_INDEX]);
             deviceId = std::atoi(argv[DEVICE_ID_INDEX]);
         }
         return 0;
@@ -113,23 +110,37 @@ void Run(Options options){
     layout::RowMajor layoutX{n, 1};
     layout::RowMajor layoutY{m, 1};
 
+    size_t scalarSize = 1 * sizeof(float);
+    float* alpha;
+    ACL_CHECK(aclrtMallocHost((void**)(&alpha), scalarSize));
+    float* beta;
+    ACL_CHECK(aclrtMallocHost((void**)(&beta), scalarSize));
+
     float* hostA;
     ACL_CHECK(aclrtMallocHost((void**)(&hostA),sizeA));
-    ReadFile("./data/input/matrix_gm.bin", sizeA, hostA, sizeA);
+
+    float* hostX;
+    ACL_CHECK(aclrtMallocHost((void**)(&hostX), sizeX));
+    
+    float* hostY_read;
+    ACL_CHECK(aclrtMallocHost((void**)(&hostY_read), sizeY));
+    
+    if(options.mode == 0){
+        ReadFile("./data/input/alpha.bin", scalarSize, alpha, scalarSize);
+        ReadFile("./data/input/beta.bin", scalarSize, beta, scalarSize);
+        ReadFile("./data/input/matrix_gm.bin", sizeA, hostA, sizeA);
+        ReadFile("./data/input/vector_gm.bin", sizeX, hostX, sizeX);
+        ReadFile("./data/input/vector_y_gm.bin", sizeY, hostY_read, sizeY);
+    }
+
     uint8_t *deviceA{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA, sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    float* hostX;
-    ACL_CHECK(aclrtMallocHost((void**)(&hostX), sizeX));
-    ReadFile("./data/input/vector_gm.bin", sizeX, hostX, sizeX);
     uint8_t *deviceX{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceX), sizeX, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceX, sizeX, hostX, sizeX, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    float* hostY_read;
-    ACL_CHECK(aclrtMallocHost((void**)(&hostY_read), sizeY));
-    ReadFile("./data/input/vector_y_gm.bin", sizeY, hostY_read, sizeY);
     uint8_t *deviceY_read{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceY_read), sizeY, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceY_read, sizeY, hostY_read, sizeY, ACL_MEMCPY_HOST_TO_DEVICE));
@@ -145,14 +156,16 @@ void Run(Options options){
         deviceX, layoutX,
         deviceY, layoutY,
         deviceY_read,
-        options.alpha,options.beta
+        alpha[0], beta[0]
     );
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
     float* hostY;
     ACL_CHECK(aclrtMallocHost((void**)(&hostY), sizeY));
     ACL_CHECK(aclrtMemcpy(hostY, sizeY, deviceY, sizeY, ACL_MEMCPY_DEVICE_TO_HOST));
-    WriteFile("./data/output/our_res.bin",hostY,sizeY);
+    if(options.mode == 0){
+        WriteFile("./data/output/our_res.bin",hostY,sizeY);
+    }
 
     ACL_CHECK(aclrtFree(deviceA));
     ACL_CHECK(aclrtFree(deviceX));

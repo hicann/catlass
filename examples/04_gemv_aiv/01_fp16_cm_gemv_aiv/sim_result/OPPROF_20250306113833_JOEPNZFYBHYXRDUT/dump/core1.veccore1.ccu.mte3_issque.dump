@@ -1,0 +1,7 @@
+[info] 13368:  pipe: 5 push_isa, pc:0x1168bdf0, id:379
+[info] 13628:  pipe: 5 push_isa, pc:0x1168be84, id:416
+[info] 73557:  pipe: 5 push_isa, pc:0x1168bfc8, id:28090
+[info] 73590:  pipe: 5 push_isa, pc:0x1168c1d8, id:28116
+[info] 73608:  pipe: 5 push_isa, pc:0x1168c000, id:28129
+[info] 74671:  pipe: 5 retire_isa, pc:0x1168c1d8, id:28116
+[info] ++++++++++++++++++++++core: 1, start: 11656, tick: 74740, kernal: 0, blkID 1 of blkdim 20, streamId 0, taskId 0, subtaskId 0, threadId 0, done++++++++++++++++++++++.

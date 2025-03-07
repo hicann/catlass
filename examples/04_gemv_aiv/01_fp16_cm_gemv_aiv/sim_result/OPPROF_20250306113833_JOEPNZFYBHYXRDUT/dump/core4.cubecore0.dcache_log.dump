@@ -1,0 +1,2350 @@
+[info] 12037: calc_req_addr. req pc :0x1168b030,idx_addr: 0x38,tag_addr:0x106b7, aligned_addr_:0x106b7e00,ofst_addr_:0x8 
+[info] 12037: create_dc_req. req_pc:0x1168b030, req_mem:1,req_size:8,req_addr:0x106b7e08, req_data0:0x0,req_data1:0x0.
+[info] 12038: lookup_tag is MISS. req pc :0x1168b030.
+[info] 12040: create_rd_biu_req. ll_req_id:288230376151716633,rd_req_addr_: 0x106b7e00
+[info] 12041: send_rd_biu_req. req_id:288230376151716633,req_rd_addr:0x106b7e00.
+[info] 12043: calc_req_addr. req pc :0x1168b050,idx_addr: 0x3b,tag_addr:0x2127, aligned_addr_:0x2127ec0,ofst_addr_:0x0 
+[info] 12043: create_dc_req. req_pc:0x1168b050, req_mem:1,req_size:4,req_addr:0x2127ec0, req_data0:0x7ff80,req_data1:0x0.
+[info] 12044: lookup_tag is MISS. req pc :0x1168b050.
+[info] 12044: calc_req_addr. req pc :0x1168b054,idx_addr: 0x29,tag_addr:0x2127, aligned_addr_:0x2127a40,ofst_addr_:0x38 
+[info] 12044: create_dc_req. req_pc:0x1168b054, req_mem:1,req_size:8,req_addr:0x2127a78, req_data0:0x0,req_data1:0x0.
+[info] 12045: lookup_tag is MISS. req pc :0x1168b054.
+[info] 12045: calc_req_addr. req pc :0x1168b05c,idx_addr: 0x2a,tag_addr:0x2127, aligned_addr_:0x2127a80,ofst_addr_:0x4 
+[info] 12045: create_dc_req. req_pc:0x1168b05c, req_mem:1,req_size:4,req_addr:0x2127a84, req_data0:0x0,req_data1:0x0.
+[info] 12046: lookup_tag is MISS. req pc :0x1168b05c.
+[info] 12046: calc_req_addr. req pc :0x1168b060,idx_addr: 0x2a,tag_addr:0x2127, aligned_addr_:0x2127a80,ofst_addr_:0x8 
+[info] 12046: create_dc_req. req_pc:0x1168b060, req_mem:1,req_size:8,req_addr:0x2127a88, req_data0:0x0,req_data1:0x0.
+[info] 12046: push req to stb. req_pc:0x1168b050,stb_main_entry_id:0,aligned_addr_:0x2127ec0,mem: 1,stb_sub_entry_size:1,store_data0:0x7ff80, store_data1:0x0, strb size:4
+[info] 12047: lookup_tag is MISS. req pc :0x1168b060.
+[debug] 12047: stb not empty. size:0x1
+[info] 12047: calc_req_addr. req pc :0x1168b064,idx_addr: 0x26,tag_addr:0x2127, aligned_addr_:0x2127980,ofst_addr_:0x38 
+[info] 12047: create_dc_req. req_pc:0x1168b064, req_mem:1,req_size:8,req_addr:0x21279b8, req_data0:0x0,req_data1:0x0.
+[info] 12047: push req to stb. req_pc:0x1168b054,stb_main_entry_id:1,aligned_addr_:0x2127a40,mem: 1,stb_sub_entry_size:1,store_data0:0x0, store_data1:0x0, strb size:8
+[debug] 12048: stb not empty. size:0x2
+[info] 12048: lookup_tag is MISS. req pc :0x1168b064.
+[info] 12048: push req to stb. req_pc:0x1168b05c,stb_main_entry_id:2,aligned_addr_:0x2127a80,mem: 1,stb_sub_entry_size:1,store_data0:0x0, store_data1:0x0, strb size:4
+[debug] 12049: stb not empty. size:0x3
+[info] 12049: calc_req_addr. req pc :0x1168b06c,idx_addr: 0x27,tag_addr:0x2127, aligned_addr_:0x21279c0,ofst_addr_:0x0 
+[info] 12049: create_dc_req. req_pc:0x1168b06c, req_mem:1,req_size:8,req_addr:0x21279c0, req_data0:0x0,req_data1:0x0.
+[info] 12049: push req to stb. req_pc:0x1168b060,stb_main_entry_id:2,aligned_addr_:0x2127a80,mem: 1,stb_sub_entry_size:2,store_data0:0x0, store_data1:0x0, strb size:20
+[debug] 12050: stb not empty. size:0x3
+[info] 12050: lookup_tag is MISS. req pc :0x1168b06c.
+[info] 12050: push req to stb. req_pc:0x1168b064,stb_main_entry_id:3,aligned_addr_:0x2127980,mem: 1,stb_sub_entry_size:1,store_data0:0x0, store_data1:0x0, strb size:8
+[debug] 12051: stb not empty. size:0x4
+[info] 12051: calc_req_addr. req pc :0x1168b07c,idx_addr: 0x27,tag_addr:0x2127, aligned_addr_:0x21279c0,ofst_addr_:0x18 
+[info] 12051: create_dc_req. req_pc:0x1168b07c, req_mem:1,req_size:8,req_addr:0x21279d8, req_data0:0x0,req_data1:0x0.
+[debug] 12052: stb not empty. size:0x4
+[info] 12052: lookup_tag is MISS. req pc :0x1168b07c.
+[info] 12052: calc_req_addr. req pc :0x1168b080,idx_addr: 0x27,tag_addr:0x2127, aligned_addr_:0x21279c0,ofst_addr_:0x28 
+[info] 12052: create_dc_req. req_pc:0x1168b080, req_mem:1,req_size:8,req_addr:0x21279e8, req_data0:0x0,req_data1:0x0.
+[info] 12052: push req to stb. req_pc:0x1168b06c,stb_main_entry_id:4,aligned_addr_:0x21279c0,mem: 1,stb_sub_entry_size:1,store_data0:0x0, store_data1:0x0, strb size:16
+[debug] 12053: stb not empty. size:0x5
+[info] 12053: lookup_tag is MISS. req pc :0x1168b080.
+[debug] 12054: stb not empty. size:0x5
+[info] 12054: push req to stb. req_pc:0x1168b07c,stb_main_entry_id:4,aligned_addr_:0x21279c0,mem: 1,stb_sub_entry_size:2,store_data0:0x0, store_data1:0x0, strb size:32
+[debug] 12055: stb not empty. size:0x5
+[info] 12055: calc_req_addr. req pc :0x1168b088,idx_addr: 0x27,tag_addr:0x2127, aligned_addr_:0x21279c0,ofst_addr_:0x38 
+[info] 12055: calc_req_addr. req pc :0x1168b088,idx_addr: 0x28,tag_addr:0x2127, aligned_addr_:0x2127a00,ofst_addr_:0x0 
+[info] 12055: create_dc_req. req_pc:0x1168b088, req_mem:1,req_size:8,req_addr:0x21279f8, req_data0:0x0,req_data1:0x0.
+[info] 12055: push req to stb. req_pc:0x1168b080,stb_main_entry_id:4,aligned_addr_:0x21279c0,mem: 1,stb_sub_entry_size:3,store_data0:0x0, store_data1:0x0, strb size:48
+[debug] 12056: stb not empty. size:0x5
+[info] 12056: lookup_tag is MISS. req pc :0x1168b088.
+[info] 12056: calc_req_addr. req pc :0x1168b08c,idx_addr: 0x28,tag_addr:0x2127, aligned_addr_:0x2127a00,ofst_addr_:0x8 
+[info] 12056: create_dc_req. req_pc:0x1168b08c, req_mem:1,req_size:8,req_addr:0x2127a08, req_data0:0x0,req_data1:0x0.
+[debug] 12057: stb not empty. size:0x5
+[info] 12057: lookup_tag is MISS. req pc :0x1168b088.
+[info] 12057: calc_req_addr. req pc :0x1168b090,idx_addr: 0x28,tag_addr:0x2127, aligned_addr_:0x2127a00,ofst_addr_:0x18 
+[info] 12057: create_dc_req. req_pc:0x1168b090, req_mem:1,req_size:8,req_addr:0x2127a18, req_data0:0x0,req_data1:0x0.
+[debug] 12058: stb not empty. size:0x5
+[info] 12058: lookup_tag is MISS. req pc :0x1168b08c.
+[info] 12058: calc_req_addr. req pc :0x1168b09c,idx_addr: 0x28,tag_addr:0x2127, aligned_addr_:0x2127a00,ofst_addr_:0x28 
+[info] 12058: create_dc_req. req_pc:0x1168b09c, req_mem:1,req_size:8,req_addr:0x2127a28, req_data0:0x0,req_data1:0x0.
+[info] 12058: push req to stb. req_pc:0x1168b088,stb_main_entry_id:4,aligned_addr_:0x21279c0,mem: 1,stb_sub_entry_size:4,store_data0:0x0, store_data1:0x0, strb size:56
+[debug] 12059: stb not empty. size:0x5
+[info] 12059: lookup_tag is MISS. req pc :0x1168b090.
+[info] 12059: push req to stb. req_pc:0x1168b088,stb_main_entry_id:5,aligned_addr_:0x2127a00,mem: 1,stb_sub_entry_size:1,store_data0:0x0, store_data1:0x0, strb size:8
+[debug] 12060: stb not empty. size:0x6
+[info] 12060: lookup_tag is MISS. req pc :0x1168b09c.
+[info] 12060: push req to stb. req_pc:0x1168b08c,stb_main_entry_id:5,aligned_addr_:0x2127a00,mem: 1,stb_sub_entry_size:2,store_data0:0x0, store_data1:0x0, strb size:24
+[debug] 12061: stb not empty. size:0x6
+[info] 12061: push req to stb. req_pc:0x1168b090,stb_main_entry_id:5,aligned_addr_:0x2127a00,mem: 1,stb_sub_entry_size:3,store_data0:0x0, store_data1:0x0, strb size:40
+[debug] 12062: stb not empty. size:0x6
+[info] 12062: calc_req_addr. req pc :0x1168b0a0,idx_addr: 0x28,tag_addr:0x2127, aligned_addr_:0x2127a00,ofst_addr_:0x38 
+[info] 12062: calc_req_addr. req pc :0x1168b0a0,idx_addr: 0x29,tag_addr:0x2127, aligned_addr_:0x2127a40,ofst_addr_:0x0 
+[info] 12062: create_dc_req. req_pc:0x1168b0a0, req_mem:1,req_size:8,req_addr:0x2127a38, req_data0:0x0,req_data1:0x0.
+[info] 12062: push req to stb. req_pc:0x1168b09c,stb_main_entry_id:5,aligned_addr_:0x2127a00,mem: 1,stb_sub_entry_size:4,store_data0:0x0, store_data1:0x0, strb size:56
+[debug] 12063: stb not empty. size:0x6
+[info] 12063: lookup_tag is MISS. req pc :0x1168b0a0.
+[info] 12063: calc_req_addr. req pc :0x1168b0a8,idx_addr: 0x29,tag_addr:0x2127, aligned_addr_:0x2127a40,ofst_addr_:0x8 
+[info] 12063: create_dc_req. req_pc:0x1168b0a8, req_mem:1,req_size:8,req_addr:0x2127a48, req_data0:0x0,req_data1:0x0.
+[debug] 12064: stb not empty. size:0x6
+[info] 12064: lookup_tag is MISS. req pc :0x1168b0a0.
+[info] 12064: calc_req_addr. req pc :0x1168b0ac,idx_addr: 0x29,tag_addr:0x2127, aligned_addr_:0x2127a40,ofst_addr_:0x18 
+[info] 12064: create_dc_req. req_pc:0x1168b0ac, req_mem:1,req_size:8,req_addr:0x2127a58, req_data0:0x0,req_data1:0x0.
+[debug] 12065: stb not empty. size:0x6
+[info] 12065: lookup_tag is MISS. req pc :0x1168b0a8.
+[info] 12065: calc_req_addr. req pc :0x1168b0b0,idx_addr: 0x29,tag_addr:0x2127, aligned_addr_:0x2127a40,ofst_addr_:0x28 
+[info] 12065: create_dc_req. req_pc:0x1168b0b0, req_mem:1,req_size:8,req_addr:0x2127a68, req_data0:0x0,req_data1:0x0.
+[info] 12065: push req to stb. req_pc:0x1168b0a0,stb_main_entry_id:5,aligned_addr_:0x2127a00,mem: 1,stb_sub_entry_size:5,store_data0:0x0, store_data1:0x0, strb size:64
+[info] 12066: create_rd_biu_req. ll_req_id:288230376151716711,rd_req_addr_: 0x2127a00
+[info] 12066: stb_create_rd_req. req_pc:0x1168b088,aligned_addr_:0x2127a00,mem: 1 
+[debug] 12066: stb not empty. size:0x6
+[info] 12066: lookup_tag is MISS. req pc :0x1168b0ac.
+[info] 12066: push req to stb. req_pc:0x1168b0a0,stb_main_entry_id:1,aligned_addr_:0x2127a40,mem: 1,stb_sub_entry_size:2,store_data0:0x0, store_data1:0x0, strb size:16
+[debug] 12067: stb not empty. size:0x6
+[info] 12067: lookup_tag is MISS. req pc :0x1168b0b0.
+[info] 12067: calc_req_addr. req pc :0x1168b0c4,idx_addr: 0x3a,tag_addr:0x2127, aligned_addr_:0x2127e80,ofst_addr_:0x18 
+[info] 12067: create_dc_req. req_pc:0x1168b0c4, req_mem:1,req_size:4,req_addr:0x2127e98, req_data0:0xffffffff,req_data1:0x0.
+[info] 12067: push req to stb. req_pc:0x1168b0a8,stb_main_entry_id:1,aligned_addr_:0x2127a40,mem: 1,stb_sub_entry_size:3,store_data0:0x0, store_data1:0x0, strb size:32
+[info] 12067: send_rd_biu_req. req_id:288230376151716711,req_rd_addr:0x2127a00.
+[debug] 12068: stb not empty. size:0x6
+[info] 12068: lookup_tag is MISS. req pc :0x1168b0c4.
+[info] 12068: calc_req_addr. req pc :0x1168b0c8,idx_addr: 0x3a,tag_addr:0x2127, aligned_addr_:0x2127e80,ofst_addr_:0x20 
+[info] 12068: create_dc_req. req_pc:0x1168b0c8, req_mem:1,req_size:4,req_addr:0x2127ea0, req_data0:0xffffffff,req_data1:0x0.
+[info] 12068: push req to stb. req_pc:0x1168b0ac,stb_main_entry_id:1,aligned_addr_:0x2127a40,mem: 1,stb_sub_entry_size:4,store_data0:0x0, store_data1:0x0, strb size:48
+[debug] 12069: stb not empty. size:0x6
+[info] 12069: lookup_tag is MISS. req pc :0x1168b0c8.
+[info] 12069: calc_req_addr. req pc :0x1168b0cc,idx_addr: 0x3a,tag_addr:0x2127, aligned_addr_:0x2127e80,ofst_addr_:0x1c 
+[info] 12069: create_dc_req. req_pc:0x1168b0cc, req_mem:1,req_size:4,req_addr:0x2127e9c, req_data0:0xffffffff,req_data1:0x0.
+[info] 12069: push req to stb. req_pc:0x1168b0b0,stb_main_entry_id:1,aligned_addr_:0x2127a40,mem: 1,stb_sub_entry_size:5,store_data0:0x0, store_data1:0x0, strb size:64
+[info] 12070: create_rd_biu_req. ll_req_id:288230376151716717,rd_req_addr_: 0x2127a40
+[info] 12070: stb_create_rd_req. req_pc:0x1168b054,aligned_addr_:0x2127a40,mem: 1 
+[debug] 12070: stb not empty. size:0x6
+[info] 12070: lookup_tag is MISS. req pc :0x1168b0cc.
+[info] 12070: push req to stb. req_pc:0x1168b0c4,stb_main_entry_id:6,aligned_addr_:0x2127e80,mem: 1,stb_sub_entry_size:1,store_data0:0xffffffff, store_data1:0x0, strb size:4
+[debug] 12071: stb not empty. size:0x7
+[info] 12071: push req to stb. req_pc:0x1168b0c8,stb_main_entry_id:6,aligned_addr_:0x2127e80,mem: 1,stb_sub_entry_size:2,store_data0:0xffffffff, store_data1:0x0, strb size:8
+[info] 12071: send_rd_biu_req. req_id:288230376151716717,req_rd_addr:0x2127a40.
+[debug] 12072: stb not empty. size:0x7
+[info] 12072: push req to stb. req_pc:0x1168b0cc,stb_main_entry_id:6,aligned_addr_:0x2127e80,mem: 1,stb_sub_entry_size:3,store_data0:0xffffffff, store_data1:0x0, strb size:12
+[debug] 12073: stb not empty. size:0x7
+[debug] 12074: stb not empty. size:0x7
+[debug] 12075: stb not empty. size:0x7
+[info] 12075: calc_req_addr. req pc :0x1168b0e8,idx_addr: 0x27,tag_addr:0x2127, aligned_addr_:0x21279c0,ofst_addr_:0x10 
+[info] 12075: create_dc_req. req_pc:0x1168b0e8, req_mem:1,req_size:8,req_addr:0x21279d0, req_data0:0x7,req_data1:0x0.
+[debug] 12076: stb not empty. size:0x7
+[info] 12076: lookup_tag is MISS. req pc :0x1168b0e8.
+[debug] 12077: stb not empty. size:0x7
+[info] 12078: create_rd_biu_req. ll_req_id:288230376151716721,rd_req_addr_: 0x2127ec0
+[info] 12078: stb_create_rd_req. req_pc:0x1168b050,aligned_addr_:0x2127ec0,mem: 1 
+[debug] 12078: stb not empty. size:0x7
+[info] 12078: push req to stb. req_pc:0x1168b0e8,stb_main_entry_id:4,aligned_addr_:0x21279c0,mem: 1,stb_sub_entry_size:5,store_data0:0x7, store_data1:0x0, strb size:64
+[info] 12079: create_rd_biu_req. ll_req_id:288230376151716722,rd_req_addr_: 0x21279c0
+[info] 12079: stb_create_rd_req. req_pc:0x1168b06c,aligned_addr_:0x21279c0,mem: 1 
+[debug] 12079: stb not empty. size:0x7
+[info] 12079: send_rd_biu_req. req_id:288230376151716721,req_rd_addr:0x2127ec0.
+[info] 12080: create_rd_biu_req. ll_req_id:288230376151716723,rd_req_addr_: 0x2127a80
+[info] 12080: stb_create_rd_req. req_pc:0x1168b05c,aligned_addr_:0x2127a80,mem: 1 
+[debug] 12080: stb not empty. size:0x7
+[info] 12080: send_rd_biu_req. req_id:288230376151716722,req_rd_addr:0x21279c0.
+[debug] 12081: stb not empty. size:0x7
+[info] 12081: calc_req_addr. req pc :0x1168b10c,idx_addr: 0x0,tag_addr:0x2120, aligned_addr_:0x2120000,ofst_addr_:0x0 
+[info] 12081: create_dc_req. req_pc:0x1168b10c, req_mem:1,req_size:8,req_addr:0x2120000, req_data0:0x1279b8,req_data1:0x0.
+[info] 12081: send_rd_biu_req. req_id:288230376151716723,req_rd_addr:0x2127a80.
+[info] 12082: create_rd_biu_req. ll_req_id:288230376151716726,rd_req_addr_: 0x2127980
+[info] 12082: stb_create_rd_req. req_pc:0x1168b064,aligned_addr_:0x2127980,mem: 1 
+[debug] 12082: stb not empty. size:0x7
+[info] 12082: lookup_tag is MISS. req pc :0x1168b10c.
+[debug] 12083: stb not empty. size:0x7
+[info] 12083: send_rd_biu_req. req_id:288230376151716726,req_rd_addr:0x2127980.
+[debug] 12084: stb not empty. size:0x7
+[info] 12084: push req to stb. req_pc:0x1168b10c,stb_main_entry_id:7,aligned_addr_:0x2120000,mem: 1,stb_sub_entry_size:1,store_data0:0x1279b8, store_data1:0x0, strb size:8
+[debug] 12085: stb not empty. size:0x8
+[info] 12085: calc_req_addr. req pc :0x1168b128,idx_addr: 0x2a,tag_addr:0x2127, aligned_addr_:0x2127a80,ofst_addr_:0x18 
+[info] 12085: create_dc_req. req_pc:0x1168b128, req_mem:1,req_size:1,req_addr:0x2127a98, req_data0:0x0,req_data1:0x0.
+[debug] 12086: stb not empty. size:0x8
+[info] 12086: lookup_tag is MISS. req pc :0x1168b128.
+[info] 12086: calc_req_addr. req pc :0x1168b12c,idx_addr: 0x2a,tag_addr:0x2127, aligned_addr_:0x2127a80,ofst_addr_:0x1a 
+[info] 12086: create_dc_req. req_pc:0x1168b12c, req_mem:1,req_size:2,req_addr:0x2127a9a, req_data0:0xffff,req_data1:0x0.
+[debug] 12087: stb not empty. size:0x8
+[info] 12087: lookup_tag is MISS. req pc :0x1168b12c.
+[info] 12087: calc_req_addr. req pc :0x1168b130,idx_addr: 0x2a,tag_addr:0x2127, aligned_addr_:0x2127a80,ofst_addr_:0x1c 
+[info] 12087: create_dc_req. req_pc:0x1168b130, req_mem:1,req_size:4,req_addr:0x2127a9c, req_data0:0x0,req_data1:0x0.
+[debug] 12088: stb not empty. size:0x8
+[info] 12088: lookup_tag is MISS. req pc :0x1168b130.
+[info] 12088: calc_req_addr. req pc :0x1168b134,idx_addr: 0x2a,tag_addr:0x2127, aligned_addr_:0x2127a80,ofst_addr_:0x0 
+[info] 12088: create_dc_req. req_pc:0x1168b134, req_mem:1,req_size:4,req_addr:0x2127a80, req_data0:0x80000,req_data1:0x0.
+[info] 12088: push req to stb. req_pc:0x1168b128,stb_main_entry_id:2,aligned_addr_:0x2127a80,mem: 1,stb_sub_entry_size:3,store_data0:0x0, store_data1:0x0, strb size:21
+[debug] 12089: stb not empty. size:0x8
+[info] 12089: lookup_tag is MISS. req pc :0x1168b134.
+[info] 12089: calc_req_addr. req pc :0x1168b138,idx_addr: 0x2a,tag_addr:0x2127, aligned_addr_:0x2127a80,ofst_addr_:0x20 
+[info] 12089: create_dc_req. req_pc:0x1168b138, req_mem:1,req_size:8,req_addr:0x2127aa0, req_data0:0xffffffff00080000,req_data1:0x0.
+[info] 12089: push req to stb. req_pc:0x1168b12c,stb_main_entry_id:2,aligned_addr_:0x2127a80,mem: 1,stb_sub_entry_size:4,store_data0:0xffff, store_data1:0x0, strb size:23
+[debug] 12090: stb not empty. size:0x8
+[info] 12090: lookup_tag is MISS. req pc :0x1168b138.
+[info] 12090: calc_req_addr. req pc :0x1168b13c,idx_addr: 0x3b,tag_addr:0x2127, aligned_addr_:0x2127ec0,ofst_addr_:0x8 
+[info] 12090: create_dc_req. req_pc:0x1168b13c, req_mem:1,req_size:8,req_addr:0x2127ec8, req_data0:0x80000,req_data1:0x127a98.
+[info] 12090: push req to stb. req_pc:0x1168b130,stb_main_entry_id:2,aligned_addr_:0x2127a80,mem: 1,stb_sub_entry_size:5,store_data0:0x0, store_data1:0x0, strb size:27
+[debug] 12091: stb not empty. size:0x8
+[info] 12091: lookup_tag is MISS. req pc :0x1168b13c.
+[info] 12091: calc_req_addr. req pc :0x1168b140,idx_addr: 0x2a,tag_addr:0x2127, aligned_addr_:0x2127a80,ofst_addr_:0x4 
+[info] 12091: create_dc_req. req_pc:0x1168b140, req_mem:1,req_size:4,req_addr:0x2127a84, req_data0:0x0,req_data1:0x0.
+[info] 12091: push req to stb. req_pc:0x1168b134,stb_main_entry_id:2,aligned_addr_:0x2127a80,mem: 1,stb_sub_entry_size:6,store_data0:0x80000, store_data1:0x0, strb size:31
+[debug] 12092: stb not empty. size:0x8
+[info] 12092: lookup_tag is MISS. req pc :0x1168b140.
+[info] 12092: push req to stb. req_pc:0x1168b138,stb_main_entry_id:2,aligned_addr_:0x2127a80,mem: 1,stb_sub_entry_size:7,store_data0:0xffffffff00080000, store_data1:0x0, strb size:39
+[debug] 12093: stb not empty. size:0x8
+[info] 12093: push req to stb. req_pc:0x1168b13c,stb_main_entry_id:0,aligned_addr_:0x2127ec0,mem: 1,stb_sub_entry_size:2,store_data0:0x80000, store_data1:0x127a98, strb size:20
+[debug] 12094: stb not empty. size:0x8
+[info] 12094: read_stb. req_pc:0x1168b140, req_size:4,match_stb_id:2.
+[info] 12094: retire_read_instr(match stb). isa_pc:0x1168b140.
+[debug] 12095: stb not empty. size:0x8
+[debug] 12096: stb not empty. size:0x8
+[debug] 12097: stb not empty. size:0x8
+[debug] 12098: stb not empty. size:0x8
+[info] 12098: calc_req_addr. req pc :0x1168b154,idx_addr: 0x3b,tag_addr:0x2127, aligned_addr_:0x2127ec0,ofst_addr_:0x18 
+[info] 12098: create_dc_req. req_pc:0x1168b154, req_mem:1,req_size:1,req_addr:0x2127ed8, req_data0:0x1,req_data1:0x0.
+[debug] 12099: stb not empty. size:0x8
+[info] 12099: lookup_tag is MISS. req pc :0x1168b154.
+[info] 12099: calc_req_addr. req pc :0x1168b158,idx_addr: 0x2a,tag_addr:0x2127, aligned_addr_:0x2127a80,ofst_addr_:0x28 
+[info] 12099: create_dc_req. req_pc:0x1168b158, req_mem:1,req_size:1,req_addr:0x2127aa8, req_data0:0x0,req_data1:0x0.
+[debug] 12100: stb not empty. size:0x8
+[info] 12100: lookup_tag is MISS. req pc :0x1168b158.
+[info] 12100: calc_req_addr. req pc :0x1168b15c,idx_addr: 0x2a,tag_addr:0x2127, aligned_addr_:0x2127a80,ofst_addr_:0x2a 
+[info] 12100: create_dc_req. req_pc:0x1168b15c, req_mem:1,req_size:2,req_addr:0x2127aaa, req_data0:0xffff,req_data1:0x0.
+[debug] 12101: stb not empty. size:0x8
+[info] 12101: lookup_tag is MISS. req pc :0x1168b15c.
+[info] 12101: calc_req_addr. req pc :0x1168b164,idx_addr: 0x2a,tag_addr:0x2127, aligned_addr_:0x2127a80,ofst_addr_:0x4 
+[info] 12101: create_dc_req. req_pc:0x1168b164, req_mem:1,req_size:4,req_addr:0x2127a84, req_data0:0x10000,req_data1:0x0.
+[info] 12101: push req to stb. req_pc:0x1168b154,stb_main_entry_id:0,aligned_addr_:0x2127ec0,mem: 1,stb_sub_entry_size:3,store_data0:0x1, store_data1:0x0, strb size:21
+[info] 12102: create_rd_biu_req. ll_req_id:288230376151716732,rd_req_addr_: 0x2127e80
+[info] 12102: stb_create_rd_req. req_pc:0x1168b0c4,aligned_addr_:0x2127e80,mem: 1 
+[debug] 12102: stb not empty. size:0x8
+[info] 12102: lookup_tag is MISS. req pc :0x1168b164.
+[info] 12102: push req to stb. req_pc:0x1168b158,stb_main_entry_id:2,aligned_addr_:0x2127a80,mem: 1,stb_sub_entry_size:8,store_data0:0x0, store_data1:0x0, strb size:40
+[debug] 12103: stb not empty. size:0x8
+[info] 12103: calc_req_addr. req pc :0x1168b170,idx_addr: 0x2a,tag_addr:0x2127, aligned_addr_:0x2127a80,ofst_addr_:0x2c 
+[info] 12103: create_dc_req. req_pc:0x1168b170, req_mem:1,req_size:4,req_addr:0x2127aac, req_data0:0x0,req_data1:0x0.
+[info] 12103: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b164
+[info] 12103: replay_M1.req_que_issue_ptr_:2.
+[info] 12103: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[info] 12103: replay_M2.req_que_issue_ptr_:1.
+[info] 12103: send_rd_biu_req. req_id:288230376151716732,req_rd_addr:0x2127e80.
+[debug] 12104: stb not empty. size:0x8
+[info] 12104: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12104: pipe_stall_M0.
+[debug] 12105: stb not empty. size:0x8
+[info] 12105: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12105: pipe_stall_M0.
+[debug] 12106: stb not empty. size:0x8
+[info] 12106: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12106: pipe_stall_M0.
+[debug] 12107: stb not empty. size:0x8
+[info] 12107: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12107: pipe_stall_M0.
+[debug] 12108: stb not empty. size:0x8
+[info] 12108: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12108: pipe_stall_M0.
+[debug] 12109: stb not empty. size:0x8
+[info] 12109: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12109: pipe_stall_M0.
+[debug] 12110: stb not empty. size:0x8
+[info] 12110: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12110: pipe_stall_M0.
+[debug] 12111: stb not empty. size:0x8
+[info] 12111: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12111: pipe_stall_M0.
+[debug] 12112: stb not empty. size:0x8
+[info] 12112: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12112: pipe_stall_M0.
+[debug] 12113: stb not empty. size:0x8
+[info] 12113: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12113: pipe_stall_M0.
+[debug] 12114: stb not empty. size:0x8
+[info] 12114: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12114: pipe_stall_M0.
+[debug] 12115: stb not empty. size:0x8
+[info] 12115: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12115: pipe_stall_M0.
+[info] 12116: create_rd_biu_req. ll_req_id:288230376151716736,rd_req_addr_: 0x2120000
+[info] 12116: stb_create_rd_req. req_pc:0x1168b10c,aligned_addr_:0x2120000,mem: 1 
+[debug] 12116: stb not empty. size:0x8
+[info] 12116: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12116: pipe_stall_M0.
+[debug] 12117: stb not empty. size:0x8
+[info] 12117: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12117: pipe_stall_M0.
+[debug] 12118: stb not empty. size:0x8
+[info] 12118: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12118: pipe_stall_M0.
+[debug] 12119: stb not empty. size:0x8
+[info] 12119: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12119: pipe_stall_M0.
+[debug] 12120: stb not empty. size:0x8
+[info] 12120: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12120: pipe_stall_M0.
+[debug] 12121: stb not empty. size:0x8
+[info] 12121: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12121: pipe_stall_M0.
+[debug] 12122: stb not empty. size:0x8
+[info] 12122: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12122: pipe_stall_M0.
+[debug] 12123: stb not empty. size:0x8
+[info] 12123: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12123: pipe_stall_M0.
+[debug] 12124: stb not empty. size:0x8
+[info] 12124: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12124: pipe_stall_M0.
+[debug] 12125: stb not empty. size:0x8
+[info] 12125: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12125: pipe_stall_M0.
+[debug] 12126: stb not empty. size:0x8
+[info] 12126: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12126: pipe_stall_M0.
+[debug] 12127: stb not empty. size:0x8
+[info] 12127: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12127: pipe_stall_M0.
+[debug] 12128: stb not empty. size:0x8
+[info] 12128: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12128: pipe_stall_M0.
+[debug] 12129: stb not empty. size:0x8
+[info] 12129: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12129: pipe_stall_M0.
+[debug] 12130: stb not empty. size:0x8
+[info] 12130: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12130: pipe_stall_M0.
+[debug] 12131: stb not empty. size:0x8
+[info] 12131: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12131: pipe_stall_M0.
+[debug] 12132: stb not empty. size:0x8
+[info] 12132: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12132: pipe_stall_M0.
+[debug] 12133: stb not empty. size:0x8
+[info] 12133: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12133: pipe_stall_M0.
+[debug] 12134: stb not empty. size:0x8
+[info] 12134: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12134: pipe_stall_M0.
+[debug] 12135: stb not empty. size:0x8
+[info] 12135: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12135: pipe_stall_M0.
+[debug] 12136: stb not empty. size:0x8
+[info] 12136: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12136: pipe_stall_M0.
+[debug] 12137: stb not empty. size:0x8
+[info] 12137: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12137: pipe_stall_M0.
+[debug] 12138: stb not empty. size:0x8
+[info] 12138: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12138: pipe_stall_M0.
+[debug] 12139: stb not empty. size:0x8
+[info] 12139: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12139: pipe_stall_M0.
+[debug] 12140: stb not empty. size:0x8
+[info] 12140: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12140: pipe_stall_M0.
+[debug] 12141: stb not empty. size:0x8
+[info] 12141: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12141: pipe_stall_M0.
+[debug] 12142: stb not empty. size:0x8
+[info] 12142: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12142: pipe_stall_M0.
+[debug] 12143: stb not empty. size:0x8
+[info] 12143: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12143: pipe_stall_M0.
+[debug] 12144: stb not empty. size:0x8
+[info] 12144: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12144: pipe_stall_M0.
+[debug] 12145: stb not empty. size:0x8
+[info] 12145: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12145: pipe_stall_M0.
+[debug] 12146: stb not empty. size:0x8
+[info] 12146: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12146: pipe_stall_M0.
+[debug] 12147: stb not empty. size:0x8
+[info] 12147: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12147: pipe_stall_M0.
+[debug] 12148: stb not empty. size:0x8
+[info] 12148: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12148: pipe_stall_M0.
+[debug] 12149: stb not empty. size:0x8
+[info] 12149: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12149: pipe_stall_M0.
+[debug] 12150: stb not empty. size:0x8
+[info] 12150: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12150: pipe_stall_M0.
+[debug] 12151: stb not empty. size:0x8
+[info] 12151: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12151: pipe_stall_M0.
+[debug] 12152: stb not empty. size:0x8
+[info] 12152: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12152: pipe_stall_M0.
+[debug] 12153: stb not empty. size:0x8
+[info] 12153: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12153: pipe_stall_M0.
+[debug] 12154: stb not empty. size:0x8
+[info] 12154: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12154: pipe_stall_M0.
+[debug] 12155: stb not empty. size:0x8
+[info] 12155: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12155: pipe_stall_M0.
+[debug] 12156: stb not empty. size:0x8
+[info] 12156: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12156: pipe_stall_M0.
+[debug] 12157: stb not empty. size:0x8
+[info] 12157: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12157: pipe_stall_M0.
+[debug] 12158: stb not empty. size:0x8
+[info] 12158: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12158: pipe_stall_M0.
+[debug] 12159: stb not empty. size:0x8
+[info] 12159: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12159: pipe_stall_M0.
+[debug] 12160: stb not empty. size:0x8
+[info] 12160: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12160: pipe_stall_M0.
+[debug] 12161: stb not empty. size:0x8
+[info] 12161: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12161: pipe_stall_M0.
+[debug] 12162: stb not empty. size:0x8
+[info] 12162: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12162: pipe_stall_M0.
+[debug] 12163: stb not empty. size:0x8
+[info] 12163: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12163: pipe_stall_M0.
+[debug] 12164: stb not empty. size:0x8
+[info] 12164: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12164: pipe_stall_M0.
+[debug] 12165: stb not empty. size:0x8
+[info] 12165: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12165: pipe_stall_M0.
+[debug] 12166: stb not empty. size:0x8
+[info] 12166: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12166: pipe_stall_M0.
+[debug] 12167: stb not empty. size:0x8
+[info] 12167: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12167: pipe_stall_M0.
+[debug] 12168: stb not empty. size:0x8
+[info] 12168: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12168: pipe_stall_M0.
+[debug] 12169: stb not empty. size:0x8
+[info] 12169: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12169: pipe_stall_M0.
+[debug] 12170: stb not empty. size:0x8
+[info] 12170: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12170: pipe_stall_M0.
+[debug] 12171: stb not empty. size:0x8
+[info] 12171: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12171: pipe_stall_M0.
+[debug] 12172: stb not empty. size:0x8
+[info] 12172: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12172: pipe_stall_M0.
+[debug] 12173: stb not empty. size:0x8
+[info] 12173: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12173: pipe_stall_M0.
+[debug] 12174: stb not empty. size:0x8
+[info] 12174: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12174: pipe_stall_M0.
+[debug] 12175: stb not empty. size:0x8
+[info] 12175: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12175: pipe_stall_M0.
+[debug] 12176: stb not empty. size:0x8
+[info] 12176: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12176: pipe_stall_M0.
+[debug] 12177: stb not empty. size:0x8
+[info] 12177: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12177: pipe_stall_M0.
+[debug] 12178: stb not empty. size:0x8
+[info] 12178: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12178: pipe_stall_M0.
+[debug] 12179: stb not empty. size:0x8
+[info] 12179: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12179: pipe_stall_M0.
+[debug] 12180: stb not empty. size:0x8
+[info] 12180: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12180: pipe_stall_M0.
+[debug] 12181: stb not empty. size:0x8
+[info] 12181: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12181: pipe_stall_M0.
+[debug] 12182: stb not empty. size:0x8
+[info] 12182: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12182: pipe_stall_M0.
+[debug] 12183: stb not empty. size:0x8
+[info] 12183: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12183: pipe_stall_M0.
+[debug] 12184: stb not empty. size:0x8
+[info] 12184: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12184: pipe_stall_M0.
+[debug] 12185: stb not empty. size:0x8
+[info] 12185: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12185: pipe_stall_M0.
+[debug] 12186: stb not empty. size:0x8
+[info] 12186: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12186: pipe_stall_M0.
+[debug] 12187: stb not empty. size:0x8
+[info] 12187: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12187: pipe_stall_M0.
+[debug] 12188: stb not empty. size:0x8
+[info] 12188: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12188: pipe_stall_M0.
+[debug] 12189: stb not empty. size:0x8
+[info] 12189: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12189: pipe_stall_M0.
+[debug] 12190: stb not empty. size:0x8
+[info] 12190: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12190: pipe_stall_M0.
+[debug] 12191: stb not empty. size:0x8
+[info] 12191: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12191: pipe_stall_M0.
+[debug] 12192: stb not empty. size:0x8
+[info] 12192: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12192: pipe_stall_M0.
+[debug] 12193: stb not empty. size:0x8
+[info] 12193: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12193: pipe_stall_M0.
+[debug] 12194: stb not empty. size:0x8
+[info] 12194: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12194: pipe_stall_M0.
+[debug] 12195: stb not empty. size:0x8
+[info] 12195: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12195: pipe_stall_M0.
+[debug] 12196: stb not empty. size:0x8
+[info] 12196: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12196: pipe_stall_M0.
+[debug] 12197: stb not empty. size:0x8
+[info] 12197: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12197: pipe_stall_M0.
+[debug] 12198: stb not empty. size:0x8
+[info] 12198: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12198: pipe_stall_M0.
+[debug] 12199: stb not empty. size:0x8
+[info] 12199: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12199: pipe_stall_M0.
+[debug] 12200: stb not empty. size:0x8
+[info] 12200: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12200: pipe_stall_M0.
+[debug] 12201: stb not empty. size:0x8
+[info] 12201: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12201: pipe_stall_M0.
+[debug] 12202: stb not empty. size:0x8
+[info] 12202: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12202: pipe_stall_M0.
+[debug] 12203: stb not empty. size:0x8
+[info] 12203: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12203: pipe_stall_M0.
+[debug] 12204: stb not empty. size:0x8
+[info] 12204: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12204: pipe_stall_M0.
+[debug] 12205: stb not empty. size:0x8
+[info] 12205: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12205: pipe_stall_M0.
+[debug] 12206: stb not empty. size:0x8
+[info] 12206: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12206: pipe_stall_M0.
+[debug] 12207: stb not empty. size:0x8
+[info] 12207: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12207: pipe_stall_M0.
+[debug] 12208: stb not empty. size:0x8
+[info] 12208: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12208: pipe_stall_M0.
+[debug] 12209: stb not empty. size:0x8
+[info] 12209: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12209: pipe_stall_M0.
+[debug] 12210: stb not empty. size:0x8
+[info] 12210: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12210: pipe_stall_M0.
+[debug] 12211: stb not empty. size:0x8
+[info] 12211: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12211: pipe_stall_M0.
+[debug] 12212: stb not empty. size:0x8
+[info] 12212: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12212: pipe_stall_M0.
+[debug] 12213: stb not empty. size:0x8
+[info] 12213: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12213: pipe_stall_M0.
+[debug] 12214: stb not empty. size:0x8
+[info] 12214: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12214: pipe_stall_M0.
+[debug] 12215: stb not empty. size:0x8
+[info] 12215: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12215: pipe_stall_M0.
+[debug] 12216: stb not empty. size:0x8
+[info] 12216: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12216: pipe_stall_M0.
+[debug] 12217: stb not empty. size:0x8
+[info] 12217: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12217: pipe_stall_M0.
+[debug] 12218: stb not empty. size:0x8
+[info] 12218: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12218: pipe_stall_M0.
+[debug] 12219: stb not empty. size:0x8
+[info] 12219: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12219: pipe_stall_M0.
+[debug] 12220: stb not empty. size:0x8
+[info] 12220: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12220: pipe_stall_M0.
+[debug] 12221: stb not empty. size:0x8
+[info] 12221: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12221: pipe_stall_M0.
+[debug] 12222: stb not empty. size:0x8
+[info] 12222: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12222: pipe_stall_M0.
+[debug] 12223: stb not empty. size:0x8
+[info] 12223: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12223: pipe_stall_M0.
+[debug] 12224: stb not empty. size:0x8
+[info] 12224: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12224: pipe_stall_M0.
+[debug] 12225: stb not empty. size:0x8
+[info] 12225: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12225: pipe_stall_M0.
+[debug] 12226: stb not empty. size:0x8
+[info] 12226: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12226: pipe_stall_M0.
+[debug] 12227: stb not empty. size:0x8
+[info] 12227: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12227: pipe_stall_M0.
+[debug] 12228: stb not empty. size:0x8
+[info] 12228: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12228: pipe_stall_M0.
+[debug] 12229: stb not empty. size:0x8
+[info] 12229: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12229: pipe_stall_M0.
+[debug] 12230: stb not empty. size:0x8
+[info] 12230: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12230: pipe_stall_M0.
+[debug] 12231: stb not empty. size:0x8
+[info] 12231: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12231: pipe_stall_M0.
+[debug] 12232: stb not empty. size:0x8
+[info] 12232: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12232: pipe_stall_M0.
+[debug] 12233: stb not empty. size:0x8
+[info] 12233: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12233: pipe_stall_M0.
+[debug] 12234: stb not empty. size:0x8
+[info] 12234: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12234: pipe_stall_M0.
+[debug] 12235: stb not empty. size:0x8
+[info] 12235: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12235: pipe_stall_M0.
+[debug] 12236: stb not empty. size:0x8
+[info] 12236: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12236: pipe_stall_M0.
+[debug] 12237: stb not empty. size:0x8
+[info] 12237: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12237: pipe_stall_M0.
+[debug] 12238: stb not empty. size:0x8
+[info] 12238: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12238: pipe_stall_M0.
+[debug] 12239: stb not empty. size:0x8
+[info] 12239: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12239: pipe_stall_M0.
+[debug] 12240: stb not empty. size:0x8
+[info] 12240: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12240: pipe_stall_M0.
+[debug] 12241: stb not empty. size:0x8
+[info] 12241: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12241: pipe_stall_M0.
+[debug] 12242: stb not empty. size:0x8
+[info] 12242: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12242: pipe_stall_M0.
+[debug] 12243: stb not empty. size:0x8
+[info] 12243: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12243: pipe_stall_M0.
+[debug] 12244: stb not empty. size:0x8
+[info] 12244: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12244: pipe_stall_M0.
+[debug] 12245: stb not empty. size:0x8
+[info] 12245: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12245: pipe_stall_M0.
+[debug] 12246: stb not empty. size:0x8
+[info] 12246: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12246: pipe_stall_M0.
+[debug] 12247: stb not empty. size:0x8
+[info] 12247: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12247: pipe_stall_M0.
+[debug] 12248: stb not empty. size:0x8
+[info] 12248: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12248: pipe_stall_M0.
+[debug] 12249: stb not empty. size:0x8
+[info] 12249: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12249: pipe_stall_M0.
+[debug] 12250: stb not empty. size:0x8
+[info] 12250: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12250: pipe_stall_M0.
+[debug] 12251: stb not empty. size:0x8
+[info] 12251: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12251: pipe_stall_M0.
+[debug] 12252: stb not empty. size:0x8
+[info] 12252: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12252: pipe_stall_M0.
+[debug] 12253: stb not empty. size:0x8
+[info] 12253: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12253: pipe_stall_M0.
+[debug] 12254: stb not empty. size:0x8
+[info] 12254: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12254: pipe_stall_M0.
+[debug] 12255: stb not empty. size:0x8
+[info] 12255: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12255: pipe_stall_M0.
+[debug] 12256: stb not empty. size:0x8
+[info] 12256: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12256: pipe_stall_M0.
+[debug] 12257: stb not empty. size:0x8
+[info] 12257: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12257: pipe_stall_M0.
+[debug] 12258: stb not empty. size:0x8
+[info] 12258: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12258: pipe_stall_M0.
+[debug] 12259: stb not empty. size:0x8
+[info] 12259: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12259: pipe_stall_M0.
+[debug] 12260: stb not empty. size:0x8
+[info] 12260: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12260: pipe_stall_M0.
+[debug] 12261: stb not empty. size:0x8
+[info] 12261: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12261: pipe_stall_M0.
+[debug] 12262: stb not empty. size:0x8
+[info] 12262: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12262: pipe_stall_M0.
+[debug] 12263: stb not empty. size:0x8
+[info] 12263: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12263: pipe_stall_M0.
+[debug] 12264: stb not empty. size:0x8
+[info] 12264: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12264: pipe_stall_M0.
+[debug] 12265: stb not empty. size:0x8
+[info] 12265: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12265: pipe_stall_M0.
+[debug] 12266: stb not empty. size:0x8
+[info] 12266: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12266: pipe_stall_M0.
+[debug] 12267: stb not empty. size:0x8
+[info] 12267: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12267: pipe_stall_M0.
+[debug] 12268: stb not empty. size:0x8
+[info] 12268: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12268: pipe_stall_M0.
+[debug] 12269: stb not empty. size:0x8
+[info] 12269: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12269: pipe_stall_M0.
+[debug] 12270: stb not empty. size:0x8
+[info] 12270: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12270: pipe_stall_M0.
+[debug] 12271: stb not empty. size:0x8
+[info] 12271: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12271: pipe_stall_M0.
+[debug] 12272: stb not empty. size:0x8
+[info] 12272: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12272: pipe_stall_M0.
+[debug] 12273: stb not empty. size:0x8
+[info] 12273: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12273: pipe_stall_M0.
+[debug] 12274: stb not empty. size:0x8
+[info] 12274: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12274: pipe_stall_M0.
+[debug] 12275: stb not empty. size:0x8
+[info] 12275: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12275: pipe_stall_M0.
+[debug] 12276: stb not empty. size:0x8
+[info] 12276: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12276: pipe_stall_M0.
+[debug] 12277: stb not empty. size:0x8
+[info] 12277: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12277: pipe_stall_M0.
+[debug] 12278: stb not empty. size:0x8
+[info] 12278: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12278: pipe_stall_M0.
+[debug] 12279: stb not empty. size:0x8
+[info] 12279: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12279: pipe_stall_M0.
+[debug] 12280: stb not empty. size:0x8
+[info] 12280: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12280: pipe_stall_M0.
+[debug] 12281: stb not empty. size:0x8
+[info] 12281: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12281: pipe_stall_M0.
+[debug] 12282: stb not empty. size:0x8
+[info] 12282: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12282: pipe_stall_M0.
+[debug] 12283: stb not empty. size:0x8
+[info] 12283: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12283: pipe_stall_M0.
+[debug] 12284: stb not empty. size:0x8
+[info] 12284: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12284: pipe_stall_M0.
+[debug] 12285: stb not empty. size:0x8
+[info] 12285: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12285: pipe_stall_M0.
+[debug] 12286: stb not empty. size:0x8
+[info] 12286: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12286: pipe_stall_M0.
+[debug] 12287: stb not empty. size:0x8
+[info] 12287: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12287: pipe_stall_M0.
+[debug] 12288: stb not empty. size:0x8
+[info] 12288: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12288: pipe_stall_M0.
+[debug] 12289: stb not empty. size:0x8
+[info] 12289: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12289: pipe_stall_M0.
+[debug] 12290: stb not empty. size:0x8
+[info] 12290: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12290: pipe_stall_M0.
+[debug] 12291: stb not empty. size:0x8
+[info] 12291: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12291: pipe_stall_M0.
+[debug] 12292: stb not empty. size:0x8
+[info] 12292: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12292: pipe_stall_M0.
+[debug] 12293: stb not empty. size:0x8
+[info] 12293: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12293: pipe_stall_M0.
+[debug] 12294: stb not empty. size:0x8
+[info] 12294: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12294: pipe_stall_M0.
+[debug] 12295: stb not empty. size:0x8
+[info] 12295: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12295: pipe_stall_M0.
+[debug] 12296: stb not empty. size:0x8
+[info] 12296: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12296: pipe_stall_M0.
+[debug] 12297: stb not empty. size:0x8
+[info] 12297: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12297: pipe_stall_M0.
+[debug] 12298: stb not empty. size:0x8
+[info] 12298: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12298: pipe_stall_M0.
+[debug] 12299: stb not empty. size:0x8
+[info] 12299: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12299: pipe_stall_M0.
+[debug] 12300: stb not empty. size:0x8
+[info] 12300: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12300: pipe_stall_M0.
+[debug] 12301: stb not empty. size:0x8
+[info] 12301: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12301: pipe_stall_M0.
+[debug] 12302: stb not empty. size:0x8
+[info] 12302: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12302: pipe_stall_M0.
+[debug] 12303: stb not empty. size:0x8
+[info] 12303: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12303: pipe_stall_M0.
+[debug] 12304: stb not empty. size:0x8
+[info] 12304: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12304: pipe_stall_M0.
+[debug] 12305: stb not empty. size:0x8
+[info] 12305: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12305: pipe_stall_M0.
+[debug] 12306: stb not empty. size:0x8
+[info] 12306: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12306: pipe_stall_M0.
+[debug] 12307: stb not empty. size:0x8
+[info] 12307: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12307: pipe_stall_M0.
+[debug] 12308: stb not empty. size:0x8
+[info] 12308: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12308: pipe_stall_M0.
+[debug] 12309: stb not empty. size:0x8
+[info] 12309: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12309: pipe_stall_M0.
+[debug] 12310: stb not empty. size:0x8
+[info] 12310: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12310: pipe_stall_M0.
+[debug] 12311: stb not empty. size:0x8
+[info] 12311: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12311: pipe_stall_M0.
+[debug] 12312: stb not empty. size:0x8
+[info] 12312: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12312: pipe_stall_M0.
+[debug] 12313: stb not empty. size:0x8
+[info] 12313: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12313: pipe_stall_M0.
+[debug] 12314: stb not empty. size:0x8
+[info] 12314: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12314: pipe_stall_M0.
+[debug] 12315: stb not empty. size:0x8
+[info] 12315: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12315: pipe_stall_M0.
+[debug] 12316: stb not empty. size:0x8
+[info] 12316: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12316: pipe_stall_M0.
+[debug] 12317: stb not empty. size:0x8
+[info] 12317: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12317: pipe_stall_M0.
+[debug] 12318: stb not empty. size:0x8
+[info] 12318: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12318: pipe_stall_M0.
+[info] 12318: recv_rd_biu_rsp(stb). rsp_id:288230376151716711,aligned_addr_: 0x2127a00, entry_id:5
+[info] 12318: get_victim invalid. way_id:0,idx_addr: 0x28,mem:1, is_dirty:0.
+[info] 12318: refill data to cache_ram. way_id:0,tag_addr:0x2127,idx_addr: 0x28,mem:1, is_dirty:1.
+[info] 12318: retire_stb_instr. isa_pc:0x1168b088
+[info] 12318: retire_stb_instr. isa_pc:0x1168b08c
+[info] 12318: retire_stb_instr. isa_pc:0x1168b090
+[info] 12318: retire_stb_instr. isa_pc:0x1168b09c
+[info] 12318: retire_stb_instr. isa_pc:0x1168b0a0
+[info] 12318: send_rd_biu_req. req_id:288230376151716736,req_rd_addr:0x2120000.
+[debug] 12319: stb not empty. size:0x7
+[info] 12319: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12319: pipe_stall_M0.
+[debug] 12320: stb not empty. size:0x7
+[info] 12320: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12320: pipe_stall_M0.
+[debug] 12321: stb not empty. size:0x7
+[info] 12321: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12321: pipe_stall_M0.
+[debug] 12322: stb not empty. size:0x7
+[info] 12322: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12322: pipe_stall_M0.
+[debug] 12323: stb not empty. size:0x7
+[info] 12323: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12323: pipe_stall_M0.
+[info] 12323: recv_rd_biu_rsp(stb). rsp_id:288230376151716717,aligned_addr_: 0x2127a40, entry_id:1
+[info] 12323: get_victim invalid. way_id:0,idx_addr: 0x29,mem:1, is_dirty:0.
+[info] 12323: refill data to cache_ram. way_id:0,tag_addr:0x2127,idx_addr: 0x29,mem:1, is_dirty:1.
+[info] 12323: retire_stb_instr. isa_pc:0x1168b054
+[info] 12323: retire_stb_instr. isa_pc:0x1168b0a0
+[info] 12323: retire_stb_instr. isa_pc:0x1168b0a8
+[info] 12323: retire_stb_instr. isa_pc:0x1168b0ac
+[info] 12323: retire_stb_instr. isa_pc:0x1168b0b0
+[debug] 12324: stb not empty. size:0x6
+[info] 12324: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12324: pipe_stall_M0.
+[debug] 12325: stb not empty. size:0x6
+[info] 12325: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12325: pipe_stall_M0.
+[debug] 12326: stb not empty. size:0x6
+[info] 12326: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12326: pipe_stall_M0.
+[debug] 12327: stb not empty. size:0x6
+[info] 12327: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12327: pipe_stall_M0.
+[debug] 12328: stb not empty. size:0x6
+[info] 12328: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12328: pipe_stall_M0.
+[info] 12328: recv_rd_biu_rsp(stb). rsp_id:288230376151716722,aligned_addr_: 0x21279c0, entry_id:3
+[info] 12328: get_victim invalid. way_id:0,idx_addr: 0x27,mem:1, is_dirty:0.
+[info] 12328: refill data to cache_ram. way_id:0,tag_addr:0x2127,idx_addr: 0x27,mem:1, is_dirty:1.
+[info] 12328: retire_stb_instr. isa_pc:0x1168b06c
+[info] 12328: retire_stb_instr. isa_pc:0x1168b07c
+[info] 12328: retire_stb_instr. isa_pc:0x1168b080
+[info] 12328: retire_stb_instr. isa_pc:0x1168b088
+[info] 12328: retire_stb_instr. isa_pc:0x1168b0e8
+[debug] 12329: stb not empty. size:0x5
+[info] 12329: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12329: pipe_stall_M0.
+[info] 12329: recv_rd_biu_rsp(stb). rsp_id:288230376151716721,aligned_addr_: 0x2127ec0, entry_id:0
+[info] 12329: get_victim invalid. way_id:0,idx_addr: 0x3b,mem:1, is_dirty:0.
+[info] 12329: refill data to cache_ram. way_id:0,tag_addr:0x2127,idx_addr: 0x3b,mem:1, is_dirty:1.
+[info] 12329: retire_stb_instr. isa_pc:0x1168b050
+[info] 12329: retire_stb_instr. isa_pc:0x1168b13c
+[info] 12329: retire_stb_instr. isa_pc:0x1168b154
+[debug] 12330: stb not empty. size:0x4
+[info] 12330: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12330: pipe_stall_M0.
+[debug] 12331: stb not empty. size:0x4
+[info] 12331: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12331: pipe_stall_M0.
+[debug] 12332: stb not empty. size:0x4
+[info] 12332: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b15c
+[debug] 12332: pipe_stall_M0.
+[info] 12332: recv_rd_biu_rsp(stb). rsp_id:288230376151716723,aligned_addr_: 0x2127a80, entry_id:0
+[info] 12332: get_victim invalid. way_id:0,idx_addr: 0x2a,mem:1, is_dirty:0.
+[info] 12332: refill data to cache_ram. way_id:0,tag_addr:0x2127,idx_addr: 0x2a,mem:1, is_dirty:1.
+[info] 12332: retire_stb_instr. isa_pc:0x1168b05c
+[info] 12332: retire_stb_instr. isa_pc:0x1168b060
+[info] 12332: retire_stb_instr. isa_pc:0x1168b128
+[info] 12332: retire_stb_instr. isa_pc:0x1168b12c
+[info] 12332: retire_stb_instr. isa_pc:0x1168b130
+[info] 12332: retire_stb_instr. isa_pc:0x1168b134
+[info] 12332: retire_stb_instr. isa_pc:0x1168b138
+[info] 12332: retire_stb_instr. isa_pc:0x1168b158
+[debug] 12333: stb not empty. size:0x3
+[info] 12333: lookup_tag is HIT. req pc :0x1168b15c, idx_addr: 0x2a, tag_addr: 0x2127, aligned_addr_: 0x2127a80,hit_pos: 0 
+[info] 12333: calc_req_addr. req pc :0x1168b174,idx_addr: 0x2a,tag_addr:0x2127, aligned_addr_:0x2127a80,ofst_addr_:0x30 
+[info] 12333: create_dc_req. req_pc:0x1168b174, req_mem:1,req_size:8,req_addr:0x2127ab0, req_data0:0xffffffff00010000,req_data1:0x0.
+[info] 12333: recv_rd_biu_rsp(stb). rsp_id:288230376151716726,aligned_addr_: 0x2127980, entry_id:0
+[info] 12333: get_victim invalid. way_id:0,idx_addr: 0x26,mem:1, is_dirty:0.
+[info] 12333: refill data to cache_ram. way_id:0,tag_addr:0x2127,idx_addr: 0x26,mem:1, is_dirty:1.
+[info] 12333: replay_M1.req_que_issue_ptr_:1.
+[info] 12333: retire_stb_instr. isa_pc:0x1168b064
+[debug] 12334: stb not empty. size:0x2
+[info] 12334: lookup_tag is HIT. req pc :0x1168b15c, idx_addr: 0x2a, tag_addr: 0x2127, aligned_addr_: 0x2127a80,hit_pos: 0 
+[info] 12334: calc_req_addr. req pc :0x1168b178,idx_addr: 0x3b,tag_addr:0x2127, aligned_addr_:0x2127ec0,ofst_addr_:0x20 
+[info] 12334: create_dc_req. req_pc:0x1168b178, req_mem:1,req_size:4,req_addr:0x2127ee0, req_data0:0x10000,req_data1:0x0.
+[debug] 12335: stb not empty. size:0x2
+[info] 12335: lookup_tag is HIT. req pc :0x1168b164, idx_addr: 0x2a, tag_addr: 0x2127, aligned_addr_: 0x2127a80,hit_pos: 0 
+[info] 12335: calc_req_addr. req pc :0x1168b17c,idx_addr: 0x3b,tag_addr:0x2127, aligned_addr_:0x2127ec0,ofst_addr_:0x28 
+[info] 12335: create_dc_req. req_pc:0x1168b17c, req_mem:1,req_size:8,req_addr:0x2127ee8, req_data0:0x127aa8,req_data1:0x0.
+[debug] 12336: stb not empty. size:0x2
+[info] 12336: lookup_tag is HIT. req pc :0x1168b170, idx_addr: 0x2a, tag_addr: 0x2127, aligned_addr_: 0x2127a80,hit_pos: 0 
+[info] 12336: calc_req_addr. req pc :0x1168b180,idx_addr: 0x2a,tag_addr:0x2127, aligned_addr_:0x2127a80,ofst_addr_:0x8 
+[info] 12336: create_dc_req. req_pc:0x1168b180, req_mem:1,req_size:4,req_addr:0x2127a88, req_data0:0x0,req_data1:0x0.
+[info] 12336: push req to stb. req_pc:0x1168b15c,stb_main_entry_id:2,aligned_addr_:0x2127a80,mem: 1,stb_sub_entry_size:1,store_data0:0xffff, store_data1:0x0, strb size:2
+[debug] 12337: stb not empty. size:0x3
+[info] 12337: lookup_tag is HIT. req pc :0x1168b174, idx_addr: 0x2a, tag_addr: 0x2127, aligned_addr_: 0x2127a80,hit_pos: 0 
+[info] 12337: calc_req_addr. req pc :0x1168b188,idx_addr: 0x2a,tag_addr:0x2127, aligned_addr_:0x2127a80,ofst_addr_:0x38 
+[info] 12337: create_dc_req. req_pc:0x1168b188, req_mem:1,req_size:1,req_addr:0x2127ab8, req_data0:0x0,req_data1:0x0.
+[info] 12337: push req to stb. req_pc:0x1168b164,stb_main_entry_id:2,aligned_addr_:0x2127a80,mem: 1,stb_sub_entry_size:2,store_data0:0x10000, store_data1:0x0, strb size:6
+[debug] 12338: stb not empty. size:0x3
+[info] 12338: lookup_tag is HIT. req pc :0x1168b178, idx_addr: 0x3b, tag_addr: 0x2127, aligned_addr_: 0x2127ec0,hit_pos: 0 
+[info] 12338: push req to stb. req_pc:0x1168b170,stb_main_entry_id:2,aligned_addr_:0x2127a80,mem: 1,stb_sub_entry_size:3,store_data0:0x0, store_data1:0x0, strb size:10
+[debug] 12339: stb not empty. size:0x3
+[info] 12339: lookup_tag is HIT. req pc :0x1168b17c, idx_addr: 0x3b, tag_addr: 0x2127, aligned_addr_: 0x2127ec0,hit_pos: 0 
+[info] 12339: push req to stb. req_pc:0x1168b174,stb_main_entry_id:2,aligned_addr_:0x2127a80,mem: 1,stb_sub_entry_size:4,store_data0:0xffffffff00010000, store_data1:0x0, strb size:18
+[debug] 12340: stb not empty. size:0x3
+[info] 12340: lookup_tag is HIT. req pc :0x1168b180, idx_addr: 0x2a, tag_addr: 0x2127, aligned_addr_: 0x2127a80,hit_pos: 0 
+[info] 12340: push req to stb. req_pc:0x1168b178,stb_main_entry_id:3,aligned_addr_:0x2127ec0,mem: 1,stb_sub_entry_size:1,store_data0:0x10000, store_data1:0x0, strb size:8
+[debug] 12341: stb not empty. size:0x4
+[info] 12341: lookup_tag is HIT. req pc :0x1168b188, idx_addr: 0x2a, tag_addr: 0x2127, aligned_addr_: 0x2127a80,hit_pos: 0 
+[info] 12341: push req to stb. req_pc:0x1168b17c,stb_main_entry_id:3,aligned_addr_:0x2127ec0,mem: 1,stb_sub_entry_size:2,store_data0:0x127aa8, store_data1:0x0, strb size:16
+[debug] 12342: stb not empty. size:0x4
+[info] 12342: read_instr_hit. isa_pc:0x1168b180.
+[debug] 12343: stb not empty. size:0x4
+[info] 12343: push req to stb. req_pc:0x1168b188,stb_main_entry_id:2,aligned_addr_:0x2127a80,mem: 1,stb_sub_entry_size:5,store_data0:0x0, store_data1:0x0, strb size:19
+[debug] 12344: stb not empty. size:0x4
+[debug] 12345: stb not empty. size:0x4
+[debug] 12346: stb not empty. size:0x4
+[debug] 12347: stb not empty. size:0x4
+[debug] 12348: stb not empty. size:0x4
+[info] 12348: calc_req_addr. req pc :0x1168b190,idx_addr: 0x3b,tag_addr:0x2127, aligned_addr_:0x2127ec0,ofst_addr_:0x30 
+[info] 12348: create_dc_req. req_pc:0x1168b190, req_mem:1,req_size:1,req_addr:0x2127ef0, req_data0:0x2,req_data1:0x0.
+[debug] 12349: stb not empty. size:0x4
+[info] 12349: lookup_tag is HIT. req pc :0x1168b190, idx_addr: 0x3b, tag_addr: 0x2127, aligned_addr_: 0x2127ec0,hit_pos: 0 
+[info] 12349: calc_req_addr. req pc :0x1168b194,idx_addr: 0x2a,tag_addr:0x2127, aligned_addr_:0x2127a80,ofst_addr_:0x3a 
+[info] 12349: create_dc_req. req_pc:0x1168b194, req_mem:1,req_size:2,req_addr:0x2127aba, req_data0:0xffff,req_data1:0x0.
+[debug] 12350: stb not empty. size:0x4
+[info] 12350: lookup_tag is HIT. req pc :0x1168b194, idx_addr: 0x2a, tag_addr: 0x2127, aligned_addr_: 0x2127a80,hit_pos: 0 
+[info] 12350: calc_req_addr. req pc :0x1168b198,idx_addr: 0x2a,tag_addr:0x2127, aligned_addr_:0x2127a80,ofst_addr_:0x8 
+[info] 12350: create_dc_req. req_pc:0x1168b198, req_mem:1,req_size:4,req_addr:0x2127a88, req_data0:0x10000,req_data1:0x0.
+[debug] 12351: stb not empty. size:0x4
+[info] 12351: lookup_tag is HIT. req pc :0x1168b198, idx_addr: 0x2a, tag_addr: 0x2127, aligned_addr_: 0x2127a80,hit_pos: 0 
+[info] 12351: push req to stb. req_pc:0x1168b190,stb_main_entry_id:3,aligned_addr_:0x2127ec0,mem: 1,stb_sub_entry_size:3,store_data0:0x2, store_data1:0x0, strb size:17
+[debug] 12352: stb not empty. size:0x4
+[info] 12352: calc_req_addr. req pc :0x1168b1a4,idx_addr: 0x2a,tag_addr:0x2127, aligned_addr_:0x2127a80,ofst_addr_:0x3c 
+[info] 12352: create_dc_req. req_pc:0x1168b1a4, req_mem:1,req_size:4,req_addr:0x2127abc, req_data0:0x0,req_data1:0x0.
+[info] 12352: push req to stb. req_pc:0x1168b194,stb_main_entry_id:2,aligned_addr_:0x2127a80,mem: 1,stb_sub_entry_size:6,store_data0:0xffff, store_data1:0x0, strb size:21
+[debug] 12353: stb not empty. size:0x4
+[info] 12353: lookup_tag is HIT. req pc :0x1168b1a4, idx_addr: 0x2a, tag_addr: 0x2127, aligned_addr_: 0x2127a80,hit_pos: 0 
+[info] 12353: calc_req_addr. req pc :0x1168b1a8,idx_addr: 0x2b,tag_addr:0x2127, aligned_addr_:0x2127ac0,ofst_addr_:0x0 
+[info] 12353: create_dc_req. req_pc:0x1168b1a8, req_mem:1,req_size:8,req_addr:0x2127ac0, req_data0:0xffffffff00010000,req_data1:0x0.
+[info] 12353: recv_rd_biu_rsp(stb). rsp_id:288230376151716732,aligned_addr_: 0x2127e80, entry_id:0
+[info] 12353: get_victim invalid. way_id:0,idx_addr: 0x3a,mem:1, is_dirty:0.
+[info] 12353: refill data to cache_ram. way_id:0,tag_addr:0x2127,idx_addr: 0x3a,mem:1, is_dirty:1.
+[info] 12353: replay_M2.req_que_issue_ptr_:11.
+[info] 12353: retire_stb_instr. isa_pc:0x1168b0c4
+[info] 12353: retire_stb_instr. isa_pc:0x1168b0c8
+[info] 12353: retire_stb_instr. isa_pc:0x1168b0cc
+[debug] 12354: stb not empty. size:0x3
+[info] 12354: lookup_tag is HIT. req pc :0x1168b198, idx_addr: 0x2a, tag_addr: 0x2127, aligned_addr_: 0x2127a80,hit_pos: 0 
+[info] 12354: calc_req_addr. req pc :0x1168b1ac,idx_addr: 0x3b,tag_addr:0x2127, aligned_addr_:0x2127ec0,ofst_addr_:0x38 
+[info] 12354: create_dc_req. req_pc:0x1168b1ac, req_mem:1,req_size:4,req_addr:0x2127ef8, req_data0:0x10000,req_data1:0x0.
+[debug] 12355: stb not empty. size:0x3
+[info] 12355: lookup_tag is HIT. req pc :0x1168b1a4, idx_addr: 0x2a, tag_addr: 0x2127, aligned_addr_: 0x2127a80,hit_pos: 0 
+[info] 12355: calc_req_addr. req pc :0x1168b1b0,idx_addr: 0x3c,tag_addr:0x2127, aligned_addr_:0x2127f00,ofst_addr_:0x0 
+[info] 12355: create_dc_req. req_pc:0x1168b1b0, req_mem:1,req_size:8,req_addr:0x2127f00, req_data0:0x127ab8,req_data1:0x0.
+[debug] 12356: stb not empty. size:0x3
+[info] 12356: lookup_tag is MISS. req pc :0x1168b1a8.
+[info] 12356: calc_req_addr. req pc :0x1168b1b4,idx_addr: 0x2a,tag_addr:0x2127, aligned_addr_:0x2127a80,ofst_addr_:0xc 
+[info] 12356: create_dc_req. req_pc:0x1168b1b4, req_mem:1,req_size:4,req_addr:0x2127a8c, req_data0:0x0,req_data1:0x0.
+[info] 12356: push req to stb. req_pc:0x1168b198,stb_main_entry_id:1,aligned_addr_:0x2127a80,mem: 1,stb_sub_entry_size:7,store_data0:0x10000, store_data1:0x0, strb size:25
+[debug] 12357: stb not empty. size:0x3
+[info] 12357: lookup_tag is HIT. req pc :0x1168b1ac, idx_addr: 0x3b, tag_addr: 0x2127, aligned_addr_: 0x2127ec0,hit_pos: 0 
+[info] 12357: push req to stb. req_pc:0x1168b1a4,stb_main_entry_id:1,aligned_addr_:0x2127a80,mem: 1,stb_sub_entry_size:8,store_data0:0x0, store_data1:0x0, strb size:29
+[debug] 12358: stb_sub_entry id:1, sub_entry_size:8,req_pc:0x1168b15c.
+[debug] 12358: st_hit_write_cache stb_sub_entry id:1, sub_entry_size:8,req_pc:0x1168b15c.
+[info] 12358: find_cache_way_id:0,tag_addr:0x2127,idx_addr:42.
+[info] 12358: stb_write_dcache. isa_pc:0x1168b15c, tag_addr:0x2127,idx_addr:0x2a,write_dcache_way:0, stb_entry_id:1.
+[info] 12358: retire_stb_instr. isa_pc:0x1168b15c
+[info] 12358: retire_stb_instr. isa_pc:0x1168b164
+[info] 12358: retire_stb_instr. isa_pc:0x1168b170
+[info] 12358: retire_stb_instr. isa_pc:0x1168b174
+[info] 12358: retire_stb_instr. isa_pc:0x1168b188
+[info] 12358: retire_stb_instr. isa_pc:0x1168b194
+[info] 12358: retire_stb_instr. isa_pc:0x1168b198
+[info] 12358: retire_stb_instr. isa_pc:0x1168b1a4
+[info] 12358: rm_entry. way_id:1,addr:0x2127a80
+[debug] 12358: stb not empty. size:0x2
+[info] 12358: lookup_tag is MISS. req pc :0x1168b1b0.
+[info] 12358: push req to stb. req_pc:0x1168b1a8,stb_main_entry_id:2,aligned_addr_:0x2127ac0,mem: 1,stb_sub_entry_size:1,store_data0:0xffffffff00010000, store_data1:0x0, strb size:8
+[debug] 12359: stb not empty. size:0x3
+[info] 12359: lookup_tag is HIT. req pc :0x1168b1b4, idx_addr: 0x2a, tag_addr: 0x2127, aligned_addr_: 0x2127a80,hit_pos: 0 
+[info] 12359: push req to stb. req_pc:0x1168b1ac,stb_main_entry_id:1,aligned_addr_:0x2127ec0,mem: 1,stb_sub_entry_size:4,store_data0:0x10000, store_data1:0x0, strb size:25
+[debug] 12360: stb not empty. size:0x3
+[info] 12360: push req to stb. req_pc:0x1168b1b0,stb_main_entry_id:3,aligned_addr_:0x2127f00,mem: 1,stb_sub_entry_size:1,store_data0:0x127ab8, store_data1:0x0, strb size:8
+[debug] 12361: stb not empty. size:0x4
+[info] 12361: read_instr_hit. isa_pc:0x1168b1b4.
+[debug] 12362: stb not empty. size:0x4
+[debug] 12363: stb not empty. size:0x4
+[debug] 12364: stb not empty. size:0x4
+[debug] 12365: stb not empty. size:0x4
+[debug] 12366: stb not empty. size:0x4
+[debug] 12367: stb not empty. size:0x4
+[debug] 12368: stb not empty. size:0x4
+[debug] 12369: stb not empty. size:0x4
+[debug] 12370: stb not empty. size:0x4
+[info] 12370: calc_req_addr. req pc :0x1168b1cc,idx_addr: 0x3c,tag_addr:0x2127, aligned_addr_:0x2127f00,ofst_addr_:0x8 
+[info] 12370: create_dc_req. req_pc:0x1168b1cc, req_mem:1,req_size:1,req_addr:0x2127f08, req_data0:0x4,req_data1:0x0.
+[debug] 12371: stb not empty. size:0x4
+[info] 12371: lookup_tag is MISS. req pc :0x1168b1cc.
+[info] 12371: calc_req_addr. req pc :0x1168b1d0,idx_addr: 0x2b,tag_addr:0x2127, aligned_addr_:0x2127ac0,ofst_addr_:0x8 
+[info] 12371: create_dc_req. req_pc:0x1168b1d0, req_mem:1,req_size:1,req_addr:0x2127ac8, req_data0:0x0,req_data1:0x0.
+[debug] 12372: stb_sub_entry id:1, sub_entry_size:4,req_pc:0x1168b178.
+[debug] 12372: st_hit_write_cache stb_sub_entry id:1, sub_entry_size:4,req_pc:0x1168b178.
+[info] 12372: find_cache_way_id:0,tag_addr:0x2127,idx_addr:59.
+[info] 12372: stb_write_dcache. isa_pc:0x1168b178, tag_addr:0x2127,idx_addr:0x3b,write_dcache_way:0, stb_entry_id:1.
+[info] 12372: retire_stb_instr. isa_pc:0x1168b178
+[info] 12372: retire_stb_instr. isa_pc:0x1168b17c
+[info] 12372: retire_stb_instr. isa_pc:0x1168b190
+[info] 12372: retire_stb_instr. isa_pc:0x1168b1ac
+[info] 12372: rm_entry. way_id:1,addr:0x2127ec0
+[debug] 12372: stb not empty. size:0x3
+[info] 12372: lookup_tag is MISS. req pc :0x1168b1d0.
+[info] 12372: calc_req_addr. req pc :0x1168b1d4,idx_addr: 0x2b,tag_addr:0x2127, aligned_addr_:0x2127ac0,ofst_addr_:0xa 
+[info] 12372: create_dc_req. req_pc:0x1168b1d4, req_mem:1,req_size:2,req_addr:0x2127aca, req_data0:0xffff,req_data1:0x0.
+[debug] 12373: stb not empty. size:0x3
+[info] 12373: lookup_tag is MISS. req pc :0x1168b1d4.
+[info] 12373: calc_req_addr. req pc :0x1168b1dc,idx_addr: 0x2a,tag_addr:0x2127, aligned_addr_:0x2127a80,ofst_addr_:0xc 
+[info] 12373: create_dc_req. req_pc:0x1168b1dc, req_mem:1,req_size:4,req_addr:0x2127a8c, req_data0:0x20000,req_data1:0x0.
+[info] 12373: push req to stb. req_pc:0x1168b1cc,stb_main_entry_id:2,aligned_addr_:0x2127f00,mem: 1,stb_sub_entry_size:2,store_data0:0x4, store_data1:0x0, strb size:9
+[debug] 12374: stb not empty. size:0x3
+[info] 12374: lookup_tag is HIT. req pc :0x1168b1dc, idx_addr: 0x2a, tag_addr: 0x2127, aligned_addr_: 0x2127a80,hit_pos: 0 
+[info] 12374: push req to stb. req_pc:0x1168b1d0,stb_main_entry_id:1,aligned_addr_:0x2127ac0,mem: 1,stb_sub_entry_size:2,store_data0:0x0, store_data1:0x0, strb size:9
+[debug] 12375: stb not empty. size:0x3
+[info] 12375: calc_req_addr. req pc :0x1168b1e8,idx_addr: 0x2b,tag_addr:0x2127, aligned_addr_:0x2127ac0,ofst_addr_:0xc 
+[info] 12375: create_dc_req. req_pc:0x1168b1e8, req_mem:1,req_size:4,req_addr:0x2127acc, req_data0:0x0,req_data1:0x0.
+[info] 12375: push req to stb. req_pc:0x1168b1d4,stb_main_entry_id:1,aligned_addr_:0x2127ac0,mem: 1,stb_sub_entry_size:3,store_data0:0xffff, store_data1:0x0, strb size:11
+[debug] 12376: stb not empty. size:0x3
+[info] 12376: lookup_tag is MISS. req pc :0x1168b1e8.
+[info] 12376: calc_req_addr. req pc :0x1168b1ec,idx_addr: 0x2b,tag_addr:0x2127, aligned_addr_:0x2127ac0,ofst_addr_:0x10 
+[info] 12376: create_dc_req. req_pc:0x1168b1ec, req_mem:1,req_size:8,req_addr:0x2127ad0, req_data0:0xffffffff00020000,req_data1:0x0.
+[info] 12376: push req to stb. req_pc:0x1168b1dc,stb_main_entry_id:3,aligned_addr_:0x2127a80,mem: 1,stb_sub_entry_size:1,store_data0:0x20000, store_data1:0x0, strb size:4
+[debug] 12377: stb not empty. size:0x4
+[info] 12377: lookup_tag is MISS. req pc :0x1168b1ec.
+[info] 12377: calc_req_addr. req pc :0x1168b1f0,idx_addr: 0x3c,tag_addr:0x2127, aligned_addr_:0x2127f00,ofst_addr_:0x10 
+[info] 12377: create_dc_req. req_pc:0x1168b1f0, req_mem:1,req_size:4,req_addr:0x2127f10, req_data0:0x20000,req_data1:0x0.
+[debug] 12378: stb not empty. size:0x4
+[info] 12378: lookup_tag is MISS. req pc :0x1168b1f0.
+[info] 12378: calc_req_addr. req pc :0x1168b1f4,idx_addr: 0x3c,tag_addr:0x2127, aligned_addr_:0x2127f00,ofst_addr_:0x20 
+[info] 12378: create_dc_req. req_pc:0x1168b1f4, req_mem:1,req_size:1,req_addr:0x2127f20, req_data0:0x7,req_data1:0x0.
+[info] 12378: push req to stb. req_pc:0x1168b1e8,stb_main_entry_id:1,aligned_addr_:0x2127ac0,mem: 1,stb_sub_entry_size:4,store_data0:0x0, store_data1:0x0, strb size:15
+[debug] 12379: stb not empty. size:0x4
+[info] 12379: lookup_tag is MISS. req pc :0x1168b1f4.
+[info] 12379: calc_req_addr. req pc :0x1168b1f8,idx_addr: 0x29,tag_addr:0x2127, aligned_addr_:0x2127a40,ofst_addr_:0x3c 
+[info] 12379: create_dc_req. req_pc:0x1168b1f8, req_mem:1,req_size:4,req_addr:0x2127a7c, req_data0:0x0,req_data1:0x0.
+[info] 12379: push req to stb. req_pc:0x1168b1ec,stb_main_entry_id:1,aligned_addr_:0x2127ac0,mem: 1,stb_sub_entry_size:5,store_data0:0xffffffff00020000, store_data1:0x0, strb size:23
+[debug] 12380: stb not empty. size:0x4
+[info] 12380: lookup_tag is HIT. req pc :0x1168b1f8, idx_addr: 0x29, tag_addr: 0x2127, aligned_addr_: 0x2127a40,hit_pos: 0 
+[info] 12380: push req to stb. req_pc:0x1168b1f0,stb_main_entry_id:2,aligned_addr_:0x2127f00,mem: 1,stb_sub_entry_size:3,store_data0:0x20000, store_data1:0x0, strb size:17
+[debug] 12381: stb not empty. size:0x4
+[info] 12381: push req to stb. req_pc:0x1168b1f4,stb_main_entry_id:2,aligned_addr_:0x2127f00,mem: 1,stb_sub_entry_size:4,store_data0:0x7, store_data1:0x0, strb size:18
+[debug] 12382: stb not empty. size:0x4
+[info] 12382: read_instr_hit. isa_pc:0x1168b1f8.
+[debug] 12383: stb not empty. size:0x4
+[debug] 12384: stb not empty. size:0x4
+[debug] 12385: stb not empty. size:0x4
+[info] 12385: calc_req_addr. req pc :0x1168b208,idx_addr: 0x3c,tag_addr:0x2127, aligned_addr_:0x2127f00,ofst_addr_:0x18 
+[info] 12385: create_dc_req. req_pc:0x1168b208, req_mem:1,req_size:8,req_addr:0x2127f18, req_data0:0x127ac8,req_data1:0x0.
+[debug] 12386: stb not empty. size:0x4
+[info] 12386: lookup_tag is MISS. req pc :0x1168b208.
+[info] 12386: calc_req_addr. req pc :0x1168b20c,idx_addr: 0x2b,tag_addr:0x2127, aligned_addr_:0x2127ac0,ofst_addr_:0x18 
+[info] 12386: create_dc_req. req_pc:0x1168b20c, req_mem:1,req_size:1,req_addr:0x2127ad8, req_data0:0x0,req_data1:0x0.
+[debug] 12387: stb not empty. size:0x4
+[info] 12387: lookup_tag is MISS. req pc :0x1168b20c.
+[info] 12387: calc_req_addr. req pc :0x1168b210,idx_addr: 0x2b,tag_addr:0x2127, aligned_addr_:0x2127ac0,ofst_addr_:0x1a 
+[info] 12387: create_dc_req. req_pc:0x1168b210, req_mem:1,req_size:2,req_addr:0x2127ada, req_data0:0xffff,req_data1:0x0.
+[debug] 12388: stb not empty. size:0x4
+[info] 12388: lookup_tag is MISS. req pc :0x1168b210.
+[info] 12388: calc_req_addr. req pc :0x1168b214,idx_addr: 0x29,tag_addr:0x2127, aligned_addr_:0x2127a40,ofst_addr_:0x3c 
+[info] 12388: create_dc_req. req_pc:0x1168b214, req_mem:1,req_size:4,req_addr:0x2127a7c, req_data0:0x30000,req_data1:0x0.
+[info] 12388: push req to stb. req_pc:0x1168b208,stb_main_entry_id:2,aligned_addr_:0x2127f00,mem: 1,stb_sub_entry_size:5,store_data0:0x127ac8, store_data1:0x0, strb size:26
+[debug] 12389: stb not empty. size:0x4
+[info] 12389: lookup_tag is HIT. req pc :0x1168b214, idx_addr: 0x29, tag_addr: 0x2127, aligned_addr_: 0x2127a40,hit_pos: 0 
+[info] 12389: push req to stb. req_pc:0x1168b20c,stb_main_entry_id:1,aligned_addr_:0x2127ac0,mem: 1,stb_sub_entry_size:6,store_data0:0x0, store_data1:0x0, strb size:24
+[info] 12390: create_rd_biu_req. ll_req_id:288230376151716751,rd_req_addr_: 0x2127ac0
+[info] 12390: stb_create_rd_req. req_pc:0x1168b1a8,aligned_addr_:0x2127ac0,mem: 1 
+[debug] 12390: stb not empty. size:0x4
+[info] 12390: push req to stb. req_pc:0x1168b210,stb_main_entry_id:1,aligned_addr_:0x2127ac0,mem: 1,stb_sub_entry_size:7,store_data0:0xffff, store_data1:0x0, strb size:26
+[debug] 12391: stb not empty. size:0x4
+[info] 12391: calc_req_addr. req pc :0x1168b228,idx_addr: 0x3b,tag_addr:0x2127, aligned_addr_:0x2127ec0,ofst_addr_:0x4 
+[info] 12391: create_dc_req. req_pc:0x1168b228, req_mem:1,req_size:2,req_addr:0x2127ec4, req_data0:0x105,req_data1:0x0.
+[info] 12391: push req to stb. req_pc:0x1168b214,stb_main_entry_id:4,aligned_addr_:0x2127a40,mem: 1,stb_sub_entry_size:1,store_data0:0x30000, store_data1:0x0, strb size:4
+[info] 12391: send_rd_biu_req. req_id:288230376151716751,req_rd_addr:0x2127ac0.
+[info] 12392: create_rd_biu_req. ll_req_id:288230376151716752,rd_req_addr_: 0x2127f00
+[info] 12392: stb_create_rd_req. req_pc:0x1168b1b0,aligned_addr_:0x2127f00,mem: 1 
+[debug] 12392: stb not empty. size:0x5
+[info] 12392: lookup_tag is HIT. req pc :0x1168b228, idx_addr: 0x3b, tag_addr: 0x2127, aligned_addr_: 0x2127ec0,hit_pos: 0 
+[info] 12392: calc_req_addr. req pc :0x1168b230,idx_addr: 0x2b,tag_addr:0x2127, aligned_addr_:0x2127ac0,ofst_addr_:0x1c 
+[info] 12392: create_dc_req. req_pc:0x1168b230, req_mem:1,req_size:4,req_addr:0x2127adc, req_data0:0x0,req_data1:0x0.
+[debug] 12393: stb not empty. size:0x5
+[info] 12393: lookup_tag is MISS. req pc :0x1168b230.
+[info] 12393: calc_req_addr. req pc :0x1168b234,idx_addr: 0x2b,tag_addr:0x2127, aligned_addr_:0x2127ac0,ofst_addr_:0x20 
+[info] 12393: create_dc_req. req_pc:0x1168b234, req_mem:1,req_size:8,req_addr:0x2127ae0, req_data0:0xffffffff00030000,req_data1:0x0.
+[info] 12393: send_rd_biu_req. req_id:288230376151716752,req_rd_addr:0x2127f00.
+[debug] 12394: stb not empty. size:0x5
+[info] 12394: lookup_tag is MISS. req pc :0x1168b234.
+[info] 12394: calc_req_addr. req pc :0x1168b238,idx_addr: 0x3c,tag_addr:0x2127, aligned_addr_:0x2127f00,ofst_addr_:0x28 
+[info] 12394: create_dc_req. req_pc:0x1168b238, req_mem:1,req_size:4,req_addr:0x2127f28, req_data0:0x30000,req_data1:0x0.
+[info] 12394: push req to stb. req_pc:0x1168b228,stb_main_entry_id:5,aligned_addr_:0x2127ec0,mem: 1,stb_sub_entry_size:1,store_data0:0x105, store_data1:0x0, strb size:2
+[debug] 12395: stb not empty. size:0x6
+[info] 12395: lookup_tag is MISS. req pc :0x1168b238.
+[info] 12395: push req to stb. req_pc:0x1168b230,stb_main_entry_id:1,aligned_addr_:0x2127ac0,mem: 1,stb_sub_entry_size:8,store_data0:0x0, store_data1:0x0, strb size:30
+[debug] 12396: stb not empty. size:0x6
+[info] 12396: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[info] 12396: replay_M2.req_que_issue_ptr_:16.
+[debug] 12397: stb not empty. size:0x6
+[info] 12397: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12397: pipe_stall_M0.
+[debug] 12398: stb not empty. size:0x6
+[info] 12398: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12398: pipe_stall_M0.
+[debug] 12399: stb not empty. size:0x6
+[info] 12399: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12399: pipe_stall_M0.
+[debug] 12400: stb not empty. size:0x6
+[info] 12400: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12400: pipe_stall_M0.
+[debug] 12401: stb not empty. size:0x6
+[info] 12401: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12401: pipe_stall_M0.
+[debug] 12402: stb not empty. size:0x6
+[info] 12402: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12402: pipe_stall_M0.
+[debug] 12403: stb not empty. size:0x6
+[info] 12403: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12403: pipe_stall_M0.
+[debug] 12404: stb not empty. size:0x6
+[info] 12404: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12404: pipe_stall_M0.
+[debug] 12405: stb not empty. size:0x6
+[info] 12405: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12405: pipe_stall_M0.
+[debug] 12406: stb not empty. size:0x6
+[info] 12406: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12406: pipe_stall_M0.
+[debug] 12407: stb not empty. size:0x6
+[info] 12407: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12407: pipe_stall_M0.
+[debug] 12408: stb_sub_entry id:3, sub_entry_size:1,req_pc:0x1168b1dc.
+[debug] 12408: st_hit_write_cache stb_sub_entry id:3, sub_entry_size:1,req_pc:0x1168b1dc.
+[info] 12408: find_cache_way_id:0,tag_addr:0x2127,idx_addr:42.
+[info] 12408: stb_write_dcache. isa_pc:0x1168b1dc, tag_addr:0x2127,idx_addr:0x2a,write_dcache_way:0, stb_entry_id:3.
+[info] 12408: retire_stb_instr. isa_pc:0x1168b1dc
+[info] 12408: rm_entry. way_id:3,addr:0x2127a80
+[debug] 12408: stb not empty. size:0x5
+[info] 12408: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12408: pipe_stall_M0.
+[debug] 12409: stb not empty. size:0x5
+[info] 12409: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12409: pipe_stall_M0.
+[debug] 12410: stb not empty. size:0x5
+[info] 12410: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12410: pipe_stall_M0.
+[debug] 12411: stb not empty. size:0x5
+[info] 12411: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12411: pipe_stall_M0.
+[debug] 12412: stb not empty. size:0x5
+[info] 12412: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12412: pipe_stall_M0.
+[debug] 12413: stb not empty. size:0x5
+[info] 12413: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12413: pipe_stall_M0.
+[debug] 12414: stb not empty. size:0x5
+[info] 12414: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12414: pipe_stall_M0.
+[debug] 12415: stb not empty. size:0x5
+[info] 12415: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12415: pipe_stall_M0.
+[debug] 12416: stb not empty. size:0x5
+[info] 12416: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12416: pipe_stall_M0.
+[debug] 12417: stb not empty. size:0x5
+[info] 12417: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12417: pipe_stall_M0.
+[debug] 12418: stb not empty. size:0x5
+[info] 12418: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12418: pipe_stall_M0.
+[debug] 12419: stb not empty. size:0x5
+[info] 12419: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12419: pipe_stall_M0.
+[debug] 12420: stb not empty. size:0x5
+[info] 12420: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12420: pipe_stall_M0.
+[debug] 12421: stb not empty. size:0x5
+[info] 12421: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12421: pipe_stall_M0.
+[debug] 12422: stb not empty. size:0x5
+[info] 12422: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12422: pipe_stall_M0.
+[debug] 12423: stb_sub_entry id:3, sub_entry_size:1,req_pc:0x1168b214.
+[debug] 12423: st_hit_write_cache stb_sub_entry id:3, sub_entry_size:1,req_pc:0x1168b214.
+[info] 12423: find_cache_way_id:0,tag_addr:0x2127,idx_addr:41.
+[info] 12423: stb_write_dcache. isa_pc:0x1168b214, tag_addr:0x2127,idx_addr:0x29,write_dcache_way:0, stb_entry_id:3.
+[info] 12423: retire_stb_instr. isa_pc:0x1168b214
+[info] 12423: rm_entry. way_id:3,addr:0x2127a40
+[debug] 12423: stb not empty. size:0x4
+[info] 12423: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12423: pipe_stall_M0.
+[debug] 12424: stb not empty. size:0x4
+[info] 12424: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12424: pipe_stall_M0.
+[info] 12424: recv_rd_biu_rsp(mshr). rsp_id:288230376151716633,aligned_addr_: 0x106b7e00
+[info] 12424: get_victim invalid. way_id:0,idx_addr: 0x38,mem:1, is_dirty:0.
+[info] 12424: refill data to cache_ram. way_id:0,tag_addr:0x106b7,idx_addr: 0x38,mem:1, is_dirty:0.
+[info] 12424: retire_mshr_instr. isa_pc:0x1168b030
+[debug] 12425: stb not empty. size:0x4
+[info] 12425: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12425: pipe_stall_M0.
+[debug] 12426: stb_sub_entry id:3, sub_entry_size:1,req_pc:0x1168b228.
+[debug] 12426: st_hit_write_cache stb_sub_entry id:3, sub_entry_size:1,req_pc:0x1168b228.
+[info] 12426: find_cache_way_id:0,tag_addr:0x2127,idx_addr:59.
+[info] 12426: stb_write_dcache. isa_pc:0x1168b228, tag_addr:0x2127,idx_addr:0x3b,write_dcache_way:0, stb_entry_id:3.
+[info] 12426: retire_stb_instr. isa_pc:0x1168b228
+[info] 12426: rm_entry. way_id:3,addr:0x2127ec0
+[debug] 12426: stb not empty. size:0x3
+[info] 12426: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12426: pipe_stall_M0.
+[debug] 12427: stb not empty. size:0x3
+[info] 12427: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12427: pipe_stall_M0.
+[debug] 12428: stb not empty. size:0x3
+[info] 12428: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12428: pipe_stall_M0.
+[debug] 12429: stb not empty. size:0x3
+[info] 12429: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12429: pipe_stall_M0.
+[debug] 12430: stb not empty. size:0x3
+[info] 12430: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12430: pipe_stall_M0.
+[debug] 12431: stb not empty. size:0x3
+[info] 12431: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12431: pipe_stall_M0.
+[debug] 12432: stb not empty. size:0x3
+[info] 12432: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12432: pipe_stall_M0.
+[debug] 12433: stb not empty. size:0x3
+[info] 12433: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12433: pipe_stall_M0.
+[debug] 12434: stb not empty. size:0x3
+[info] 12434: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12434: pipe_stall_M0.
+[debug] 12435: stb not empty. size:0x3
+[info] 12435: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12435: pipe_stall_M0.
+[debug] 12436: stb not empty. size:0x3
+[info] 12436: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12436: pipe_stall_M0.
+[debug] 12437: stb not empty. size:0x3
+[info] 12437: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12437: pipe_stall_M0.
+[debug] 12438: stb not empty. size:0x3
+[info] 12438: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12438: pipe_stall_M0.
+[debug] 12439: stb not empty. size:0x3
+[info] 12439: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12439: pipe_stall_M0.
+[debug] 12440: stb not empty. size:0x3
+[info] 12440: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12440: pipe_stall_M0.
+[debug] 12441: stb not empty. size:0x3
+[info] 12441: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12441: pipe_stall_M0.
+[debug] 12442: stb not empty. size:0x3
+[info] 12442: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12442: pipe_stall_M0.
+[debug] 12443: stb not empty. size:0x3
+[info] 12443: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12443: pipe_stall_M0.
+[debug] 12444: stb not empty. size:0x3
+[info] 12444: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12444: pipe_stall_M0.
+[debug] 12445: stb not empty. size:0x3
+[info] 12445: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12445: pipe_stall_M0.
+[debug] 12446: stb not empty. size:0x3
+[info] 12446: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12446: pipe_stall_M0.
+[debug] 12447: stb not empty. size:0x3
+[info] 12447: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12447: pipe_stall_M0.
+[debug] 12448: stb not empty. size:0x3
+[info] 12448: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12448: pipe_stall_M0.
+[debug] 12449: stb not empty. size:0x3
+[info] 12449: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12449: pipe_stall_M0.
+[debug] 12450: stb not empty. size:0x3
+[info] 12450: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12450: pipe_stall_M0.
+[debug] 12451: stb not empty. size:0x3
+[info] 12451: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12451: pipe_stall_M0.
+[debug] 12452: stb not empty. size:0x3
+[info] 12452: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12452: pipe_stall_M0.
+[debug] 12453: stb not empty. size:0x3
+[info] 12453: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12453: pipe_stall_M0.
+[debug] 12454: stb not empty. size:0x3
+[info] 12454: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12454: pipe_stall_M0.
+[debug] 12455: stb not empty. size:0x3
+[info] 12455: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12455: pipe_stall_M0.
+[debug] 12456: stb not empty. size:0x3
+[info] 12456: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12456: pipe_stall_M0.
+[debug] 12457: stb not empty. size:0x3
+[info] 12457: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12457: pipe_stall_M0.
+[debug] 12458: stb not empty. size:0x3
+[info] 12458: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12458: pipe_stall_M0.
+[debug] 12459: stb not empty. size:0x3
+[info] 12459: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12459: pipe_stall_M0.
+[debug] 12460: stb not empty. size:0x3
+[info] 12460: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12460: pipe_stall_M0.
+[debug] 12461: stb not empty. size:0x3
+[info] 12461: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12461: pipe_stall_M0.
+[debug] 12462: stb not empty. size:0x3
+[info] 12462: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12462: pipe_stall_M0.
+[debug] 12463: stb not empty. size:0x3
+[info] 12463: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12463: pipe_stall_M0.
+[debug] 12464: stb not empty. size:0x3
+[info] 12464: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12464: pipe_stall_M0.
+[debug] 12465: stb not empty. size:0x3
+[info] 12465: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12465: pipe_stall_M0.
+[debug] 12466: stb not empty. size:0x3
+[info] 12466: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12466: pipe_stall_M0.
+[debug] 12467: stb not empty. size:0x3
+[info] 12467: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12467: pipe_stall_M0.
+[debug] 12468: stb not empty. size:0x3
+[info] 12468: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12468: pipe_stall_M0.
+[debug] 12469: stb not empty. size:0x3
+[info] 12469: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12469: pipe_stall_M0.
+[debug] 12470: stb not empty. size:0x3
+[info] 12470: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12470: pipe_stall_M0.
+[debug] 12471: stb not empty. size:0x3
+[info] 12471: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12471: pipe_stall_M0.
+[debug] 12472: stb not empty. size:0x3
+[info] 12472: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12472: pipe_stall_M0.
+[debug] 12473: stb not empty. size:0x3
+[info] 12473: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12473: pipe_stall_M0.
+[debug] 12474: stb not empty. size:0x3
+[info] 12474: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12474: pipe_stall_M0.
+[debug] 12475: stb not empty. size:0x3
+[info] 12475: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12475: pipe_stall_M0.
+[debug] 12476: stb not empty. size:0x3
+[info] 12476: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12476: pipe_stall_M0.
+[debug] 12477: stb not empty. size:0x3
+[info] 12477: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12477: pipe_stall_M0.
+[debug] 12478: stb not empty. size:0x3
+[info] 12478: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12478: pipe_stall_M0.
+[debug] 12479: stb not empty. size:0x3
+[info] 12479: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12479: pipe_stall_M0.
+[debug] 12480: stb not empty. size:0x3
+[info] 12480: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12480: pipe_stall_M0.
+[debug] 12481: stb not empty. size:0x3
+[info] 12481: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12481: pipe_stall_M0.
+[debug] 12482: stb not empty. size:0x3
+[info] 12482: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12482: pipe_stall_M0.
+[debug] 12483: stb not empty. size:0x3
+[info] 12483: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12483: pipe_stall_M0.
+[debug] 12484: stb not empty. size:0x3
+[info] 12484: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12484: pipe_stall_M0.
+[debug] 12485: stb not empty. size:0x3
+[info] 12485: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12485: pipe_stall_M0.
+[debug] 12486: stb not empty. size:0x3
+[info] 12486: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12486: pipe_stall_M0.
+[debug] 12487: stb not empty. size:0x3
+[info] 12487: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12487: pipe_stall_M0.
+[debug] 12488: stb not empty. size:0x3
+[info] 12488: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12488: pipe_stall_M0.
+[debug] 12489: stb not empty. size:0x3
+[info] 12489: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12489: pipe_stall_M0.
+[debug] 12490: stb not empty. size:0x3
+[info] 12490: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12490: pipe_stall_M0.
+[debug] 12491: stb not empty. size:0x3
+[info] 12491: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12491: pipe_stall_M0.
+[debug] 12492: stb not empty. size:0x3
+[info] 12492: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12492: pipe_stall_M0.
+[debug] 12493: stb not empty. size:0x3
+[info] 12493: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12493: pipe_stall_M0.
+[debug] 12494: stb not empty. size:0x3
+[info] 12494: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12494: pipe_stall_M0.
+[debug] 12495: stb not empty. size:0x3
+[info] 12495: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12495: pipe_stall_M0.
+[debug] 12496: stb not empty. size:0x3
+[info] 12496: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12496: pipe_stall_M0.
+[debug] 12497: stb not empty. size:0x3
+[info] 12497: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12497: pipe_stall_M0.
+[debug] 12498: stb not empty. size:0x3
+[info] 12498: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12498: pipe_stall_M0.
+[debug] 12499: stb not empty. size:0x3
+[info] 12499: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12499: pipe_stall_M0.
+[debug] 12500: stb not empty. size:0x3
+[info] 12500: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12500: pipe_stall_M0.
+[debug] 12501: stb not empty. size:0x3
+[info] 12501: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12501: pipe_stall_M0.
+[debug] 12502: stb not empty. size:0x3
+[info] 12502: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12502: pipe_stall_M0.
+[debug] 12503: stb not empty. size:0x3
+[info] 12503: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12503: pipe_stall_M0.
+[debug] 12504: stb not empty. size:0x3
+[info] 12504: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12504: pipe_stall_M0.
+[debug] 12505: stb not empty. size:0x3
+[info] 12505: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12505: pipe_stall_M0.
+[debug] 12506: stb not empty. size:0x3
+[info] 12506: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12506: pipe_stall_M0.
+[debug] 12507: stb not empty. size:0x3
+[info] 12507: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12507: pipe_stall_M0.
+[debug] 12508: stb not empty. size:0x3
+[info] 12508: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12508: pipe_stall_M0.
+[debug] 12509: stb not empty. size:0x3
+[info] 12509: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12509: pipe_stall_M0.
+[debug] 12510: stb not empty. size:0x3
+[info] 12510: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12510: pipe_stall_M0.
+[debug] 12511: stb not empty. size:0x3
+[info] 12511: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12511: pipe_stall_M0.
+[debug] 12512: stb not empty. size:0x3
+[info] 12512: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12512: pipe_stall_M0.
+[debug] 12513: stb not empty. size:0x3
+[info] 12513: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12513: pipe_stall_M0.
+[debug] 12514: stb not empty. size:0x3
+[info] 12514: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12514: pipe_stall_M0.
+[debug] 12515: stb not empty. size:0x3
+[info] 12515: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12515: pipe_stall_M0.
+[debug] 12516: stb not empty. size:0x3
+[info] 12516: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12516: pipe_stall_M0.
+[debug] 12517: stb not empty. size:0x3
+[info] 12517: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12517: pipe_stall_M0.
+[debug] 12518: stb not empty. size:0x3
+[info] 12518: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12518: pipe_stall_M0.
+[debug] 12519: stb not empty. size:0x3
+[info] 12519: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12519: pipe_stall_M0.
+[debug] 12520: stb not empty. size:0x3
+[info] 12520: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12520: pipe_stall_M0.
+[debug] 12521: stb not empty. size:0x3
+[info] 12521: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12521: pipe_stall_M0.
+[debug] 12522: stb not empty. size:0x3
+[info] 12522: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12522: pipe_stall_M0.
+[debug] 12523: stb not empty. size:0x3
+[info] 12523: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12523: pipe_stall_M0.
+[debug] 12524: stb not empty. size:0x3
+[info] 12524: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12524: pipe_stall_M0.
+[debug] 12525: stb not empty. size:0x3
+[info] 12525: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12525: pipe_stall_M0.
+[debug] 12526: stb not empty. size:0x3
+[info] 12526: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12526: pipe_stall_M0.
+[debug] 12527: stb not empty. size:0x3
+[info] 12527: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12527: pipe_stall_M0.
+[debug] 12528: stb not empty. size:0x3
+[info] 12528: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12528: pipe_stall_M0.
+[debug] 12529: stb not empty. size:0x3
+[info] 12529: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12529: pipe_stall_M0.
+[debug] 12530: stb not empty. size:0x3
+[info] 12530: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12530: pipe_stall_M0.
+[debug] 12531: stb not empty. size:0x3
+[info] 12531: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12531: pipe_stall_M0.
+[debug] 12532: stb not empty. size:0x3
+[info] 12532: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12532: pipe_stall_M0.
+[debug] 12533: stb not empty. size:0x3
+[info] 12533: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12533: pipe_stall_M0.
+[debug] 12534: stb not empty. size:0x3
+[info] 12534: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12534: pipe_stall_M0.
+[debug] 12535: stb not empty. size:0x3
+[info] 12535: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12535: pipe_stall_M0.
+[debug] 12536: stb not empty. size:0x3
+[info] 12536: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12536: pipe_stall_M0.
+[debug] 12537: stb not empty. size:0x3
+[info] 12537: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12537: pipe_stall_M0.
+[debug] 12538: stb not empty. size:0x3
+[info] 12538: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12538: pipe_stall_M0.
+[debug] 12539: stb not empty. size:0x3
+[info] 12539: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12539: pipe_stall_M0.
+[debug] 12540: stb not empty. size:0x3
+[info] 12540: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12540: pipe_stall_M0.
+[debug] 12541: stb not empty. size:0x3
+[info] 12541: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12541: pipe_stall_M0.
+[debug] 12542: stb not empty. size:0x3
+[info] 12542: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12542: pipe_stall_M0.
+[debug] 12543: stb not empty. size:0x3
+[info] 12543: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12543: pipe_stall_M0.
+[debug] 12544: stb not empty. size:0x3
+[info] 12544: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12544: pipe_stall_M0.
+[debug] 12545: stb not empty. size:0x3
+[info] 12545: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12545: pipe_stall_M0.
+[debug] 12546: stb not empty. size:0x3
+[info] 12546: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12546: pipe_stall_M0.
+[debug] 12547: stb not empty. size:0x3
+[info] 12547: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12547: pipe_stall_M0.
+[debug] 12548: stb not empty. size:0x3
+[info] 12548: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12548: pipe_stall_M0.
+[debug] 12549: stb not empty. size:0x3
+[info] 12549: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12549: pipe_stall_M0.
+[debug] 12550: stb not empty. size:0x3
+[info] 12550: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12550: pipe_stall_M0.
+[debug] 12551: stb not empty. size:0x3
+[info] 12551: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12551: pipe_stall_M0.
+[debug] 12552: stb not empty. size:0x3
+[info] 12552: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12552: pipe_stall_M0.
+[debug] 12553: stb not empty. size:0x3
+[info] 12553: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12553: pipe_stall_M0.
+[debug] 12554: stb not empty. size:0x3
+[info] 12554: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12554: pipe_stall_M0.
+[debug] 12555: stb not empty. size:0x3
+[info] 12555: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12555: pipe_stall_M0.
+[debug] 12556: stb not empty. size:0x3
+[info] 12556: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12556: pipe_stall_M0.
+[debug] 12557: stb not empty. size:0x3
+[info] 12557: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12557: pipe_stall_M0.
+[debug] 12558: stb not empty. size:0x3
+[info] 12558: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12558: pipe_stall_M0.
+[debug] 12559: stb not empty. size:0x3
+[info] 12559: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12559: pipe_stall_M0.
+[debug] 12560: stb not empty. size:0x3
+[info] 12560: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12560: pipe_stall_M0.
+[debug] 12561: stb not empty. size:0x3
+[info] 12561: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12561: pipe_stall_M0.
+[debug] 12562: stb not empty. size:0x3
+[info] 12562: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12562: pipe_stall_M0.
+[debug] 12563: stb not empty. size:0x3
+[info] 12563: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12563: pipe_stall_M0.
+[debug] 12564: stb not empty. size:0x3
+[info] 12564: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12564: pipe_stall_M0.
+[debug] 12565: stb not empty. size:0x3
+[info] 12565: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12565: pipe_stall_M0.
+[debug] 12566: stb not empty. size:0x3
+[info] 12566: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12566: pipe_stall_M0.
+[debug] 12567: stb not empty. size:0x3
+[info] 12567: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12567: pipe_stall_M0.
+[debug] 12568: stb not empty. size:0x3
+[info] 12568: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12568: pipe_stall_M0.
+[debug] 12569: stb not empty. size:0x3
+[info] 12569: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12569: pipe_stall_M0.
+[debug] 12570: stb not empty. size:0x3
+[info] 12570: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12570: pipe_stall_M0.
+[info] 12570: recv_rd_biu_rsp(stb). rsp_id:288230376151716736,aligned_addr_: 0x2120000, entry_id:0
+[info] 12570: get_victim invalid. way_id:0,idx_addr: 0x0,mem:1, is_dirty:0.
+[info] 12570: refill data to cache_ram. way_id:0,tag_addr:0x2120,idx_addr: 0x0,mem:1, is_dirty:1.
+[info] 12570: retire_stb_instr. isa_pc:0x1168b10c
+[debug] 12571: stb not empty. size:0x2
+[info] 12571: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12571: pipe_stall_M0.
+[debug] 12572: stb not empty. size:0x2
+[info] 12572: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12572: pipe_stall_M0.
+[debug] 12573: stb not empty. size:0x2
+[info] 12573: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12573: pipe_stall_M0.
+[debug] 12574: stb not empty. size:0x2
+[info] 12574: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12574: pipe_stall_M0.
+[debug] 12575: stb not empty. size:0x2
+[info] 12575: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12575: pipe_stall_M0.
+[debug] 12576: stb not empty. size:0x2
+[info] 12576: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12576: pipe_stall_M0.
+[debug] 12577: stb not empty. size:0x2
+[info] 12577: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12577: pipe_stall_M0.
+[debug] 12578: stb not empty. size:0x2
+[info] 12578: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12578: pipe_stall_M0.
+[debug] 12579: stb not empty. size:0x2
+[info] 12579: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12579: pipe_stall_M0.
+[debug] 12580: stb not empty. size:0x2
+[info] 12580: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12580: pipe_stall_M0.
+[debug] 12581: stb not empty. size:0x2
+[info] 12581: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12581: pipe_stall_M0.
+[debug] 12582: stb not empty. size:0x2
+[info] 12582: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12582: pipe_stall_M0.
+[debug] 12583: stb not empty. size:0x2
+[info] 12583: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12583: pipe_stall_M0.
+[debug] 12584: stb not empty. size:0x2
+[info] 12584: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12584: pipe_stall_M0.
+[debug] 12585: stb not empty. size:0x2
+[info] 12585: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12585: pipe_stall_M0.
+[debug] 12586: stb not empty. size:0x2
+[info] 12586: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12586: pipe_stall_M0.
+[debug] 12587: stb not empty. size:0x2
+[info] 12587: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12587: pipe_stall_M0.
+[debug] 12588: stb not empty. size:0x2
+[info] 12588: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12588: pipe_stall_M0.
+[debug] 12589: stb not empty. size:0x2
+[info] 12589: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12589: pipe_stall_M0.
+[debug] 12590: stb not empty. size:0x2
+[info] 12590: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12590: pipe_stall_M0.
+[debug] 12591: stb not empty. size:0x2
+[info] 12591: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12591: pipe_stall_M0.
+[debug] 12592: stb not empty. size:0x2
+[info] 12592: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12592: pipe_stall_M0.
+[debug] 12593: stb not empty. size:0x2
+[info] 12593: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12593: pipe_stall_M0.
+[debug] 12594: stb not empty. size:0x2
+[info] 12594: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12594: pipe_stall_M0.
+[debug] 12595: stb not empty. size:0x2
+[info] 12595: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12595: pipe_stall_M0.
+[debug] 12596: stb not empty. size:0x2
+[info] 12596: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12596: pipe_stall_M0.
+[debug] 12597: stb not empty. size:0x2
+[info] 12597: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12597: pipe_stall_M0.
+[debug] 12598: stb not empty. size:0x2
+[info] 12598: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12598: pipe_stall_M0.
+[debug] 12599: stb not empty. size:0x2
+[info] 12599: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12599: pipe_stall_M0.
+[debug] 12600: stb not empty. size:0x2
+[info] 12600: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12600: pipe_stall_M0.
+[debug] 12601: stb not empty. size:0x2
+[info] 12601: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12601: pipe_stall_M0.
+[debug] 12602: stb not empty. size:0x2
+[info] 12602: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12602: pipe_stall_M0.
+[debug] 12603: stb not empty. size:0x2
+[info] 12603: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12603: pipe_stall_M0.
+[debug] 12604: stb not empty. size:0x2
+[info] 12604: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12604: pipe_stall_M0.
+[debug] 12605: stb not empty. size:0x2
+[info] 12605: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12605: pipe_stall_M0.
+[debug] 12606: stb not empty. size:0x2
+[info] 12606: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12606: pipe_stall_M0.
+[debug] 12607: stb not empty. size:0x2
+[info] 12607: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12607: pipe_stall_M0.
+[debug] 12608: stb not empty. size:0x2
+[info] 12608: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12608: pipe_stall_M0.
+[debug] 12609: stb not empty. size:0x2
+[info] 12609: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12609: pipe_stall_M0.
+[debug] 12610: stb not empty. size:0x2
+[info] 12610: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12610: pipe_stall_M0.
+[debug] 12611: stb not empty. size:0x2
+[info] 12611: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12611: pipe_stall_M0.
+[debug] 12612: stb not empty. size:0x2
+[info] 12612: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12612: pipe_stall_M0.
+[debug] 12613: stb not empty. size:0x2
+[info] 12613: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12613: pipe_stall_M0.
+[debug] 12614: stb not empty. size:0x2
+[info] 12614: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12614: pipe_stall_M0.
+[debug] 12615: stb not empty. size:0x2
+[info] 12615: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12615: pipe_stall_M0.
+[debug] 12616: stb not empty. size:0x2
+[info] 12616: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12616: pipe_stall_M0.
+[debug] 12617: stb not empty. size:0x2
+[info] 12617: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12617: pipe_stall_M0.
+[debug] 12618: stb not empty. size:0x2
+[info] 12618: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12618: pipe_stall_M0.
+[debug] 12619: stb not empty. size:0x2
+[info] 12619: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12619: pipe_stall_M0.
+[debug] 12620: stb not empty. size:0x2
+[info] 12620: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12620: pipe_stall_M0.
+[debug] 12621: stb not empty. size:0x2
+[info] 12621: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12621: pipe_stall_M0.
+[debug] 12622: stb not empty. size:0x2
+[info] 12622: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12622: pipe_stall_M0.
+[debug] 12623: stb not empty. size:0x2
+[info] 12623: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12623: pipe_stall_M0.
+[debug] 12624: stb not empty. size:0x2
+[info] 12624: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12624: pipe_stall_M0.
+[debug] 12625: stb not empty. size:0x2
+[info] 12625: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12625: pipe_stall_M0.
+[debug] 12626: stb not empty. size:0x2
+[info] 12626: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12626: pipe_stall_M0.
+[debug] 12627: stb not empty. size:0x2
+[info] 12627: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12627: pipe_stall_M0.
+[debug] 12628: stb not empty. size:0x2
+[info] 12628: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12628: pipe_stall_M0.
+[debug] 12629: stb not empty. size:0x2
+[info] 12629: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12629: pipe_stall_M0.
+[debug] 12630: stb not empty. size:0x2
+[info] 12630: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12630: pipe_stall_M0.
+[debug] 12631: stb not empty. size:0x2
+[info] 12631: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12631: pipe_stall_M0.
+[debug] 12632: stb not empty. size:0x2
+[info] 12632: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12632: pipe_stall_M0.
+[debug] 12633: stb not empty. size:0x2
+[info] 12633: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12633: pipe_stall_M0.
+[debug] 12634: stb not empty. size:0x2
+[info] 12634: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12634: pipe_stall_M0.
+[debug] 12635: stb not empty. size:0x2
+[info] 12635: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12635: pipe_stall_M0.
+[debug] 12636: stb not empty. size:0x2
+[info] 12636: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12636: pipe_stall_M0.
+[debug] 12637: stb not empty. size:0x2
+[info] 12637: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12637: pipe_stall_M0.
+[debug] 12638: stb not empty. size:0x2
+[info] 12638: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12638: pipe_stall_M0.
+[debug] 12639: stb not empty. size:0x2
+[info] 12639: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12639: pipe_stall_M0.
+[debug] 12640: stb not empty. size:0x2
+[info] 12640: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12640: pipe_stall_M0.
+[debug] 12641: stb not empty. size:0x2
+[info] 12641: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12641: pipe_stall_M0.
+[debug] 12642: stb not empty. size:0x2
+[info] 12642: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12642: pipe_stall_M0.
+[debug] 12643: stb not empty. size:0x2
+[info] 12643: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12643: pipe_stall_M0.
+[debug] 12644: stb not empty. size:0x2
+[info] 12644: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12644: pipe_stall_M0.
+[debug] 12645: stb not empty. size:0x2
+[info] 12645: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12645: pipe_stall_M0.
+[debug] 12646: stb not empty. size:0x2
+[info] 12646: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12646: pipe_stall_M0.
+[debug] 12647: stb not empty. size:0x2
+[info] 12647: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12647: pipe_stall_M0.
+[debug] 12648: stb not empty. size:0x2
+[info] 12648: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12648: pipe_stall_M0.
+[debug] 12649: stb not empty. size:0x2
+[info] 12649: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12649: pipe_stall_M0.
+[debug] 12650: stb not empty. size:0x2
+[info] 12650: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12650: pipe_stall_M0.
+[debug] 12651: stb not empty. size:0x2
+[info] 12651: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12651: pipe_stall_M0.
+[debug] 12652: stb not empty. size:0x2
+[info] 12652: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12652: pipe_stall_M0.
+[debug] 12653: stb not empty. size:0x2
+[info] 12653: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12653: pipe_stall_M0.
+[debug] 12654: stb not empty. size:0x2
+[info] 12654: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12654: pipe_stall_M0.
+[debug] 12655: stb not empty. size:0x2
+[info] 12655: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12655: pipe_stall_M0.
+[debug] 12656: stb not empty. size:0x2
+[info] 12656: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12656: pipe_stall_M0.
+[debug] 12657: stb not empty. size:0x2
+[info] 12657: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12657: pipe_stall_M0.
+[debug] 12658: stb not empty. size:0x2
+[info] 12658: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12658: pipe_stall_M0.
+[debug] 12659: stb not empty. size:0x2
+[info] 12659: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12659: pipe_stall_M0.
+[debug] 12660: stb not empty. size:0x2
+[info] 12660: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12660: pipe_stall_M0.
+[debug] 12661: stb not empty. size:0x2
+[info] 12661: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12661: pipe_stall_M0.
+[debug] 12662: stb not empty. size:0x2
+[info] 12662: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12662: pipe_stall_M0.
+[debug] 12663: stb not empty. size:0x2
+[info] 12663: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12663: pipe_stall_M0.
+[debug] 12664: stb not empty. size:0x2
+[info] 12664: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12664: pipe_stall_M0.
+[debug] 12665: stb not empty. size:0x2
+[info] 12665: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12665: pipe_stall_M0.
+[debug] 12666: stb not empty. size:0x2
+[info] 12666: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12666: pipe_stall_M0.
+[debug] 12667: stb not empty. size:0x2
+[info] 12667: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12667: pipe_stall_M0.
+[debug] 12668: stb not empty. size:0x2
+[info] 12668: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12668: pipe_stall_M0.
+[debug] 12669: stb not empty. size:0x2
+[info] 12669: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12669: pipe_stall_M0.
+[debug] 12670: stb not empty. size:0x2
+[info] 12670: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12670: pipe_stall_M0.
+[debug] 12671: stb not empty. size:0x2
+[info] 12671: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12671: pipe_stall_M0.
+[debug] 12672: stb not empty. size:0x2
+[info] 12672: write_req_stall:1,stb_full:1,stb_forbid:0,evic_haz:0, req_pc:0x1168b234
+[debug] 12672: pipe_stall_M0.
+[info] 12672: recv_rd_biu_rsp(stb). rsp_id:288230376151716751,aligned_addr_: 0x2127ac0, entry_id:0
+[info] 12672: get_victim invalid. way_id:0,idx_addr: 0x2b,mem:1, is_dirty:0.
+[info] 12672: refill data to cache_ram. way_id:0,tag_addr:0x2127,idx_addr: 0x2b,mem:1, is_dirty:1.
+[info] 12672: retire_stb_instr. isa_pc:0x1168b1a8
+[info] 12672: retire_stb_instr. isa_pc:0x1168b1d0
+[info] 12672: retire_stb_instr. isa_pc:0x1168b1d4
+[info] 12672: retire_stb_instr. isa_pc:0x1168b1e8
+[info] 12672: retire_stb_instr. isa_pc:0x1168b1ec
+[info] 12672: retire_stb_instr. isa_pc:0x1168b20c
+[info] 12672: retire_stb_instr. isa_pc:0x1168b210
+[info] 12672: retire_stb_instr. isa_pc:0x1168b230
+[debug] 12673: stb not empty. size:0x1
+[info] 12673: lookup_tag is HIT. req pc :0x1168b234, idx_addr: 0x2b, tag_addr: 0x2127, aligned_addr_: 0x2127ac0,hit_pos: 0 
+[info] 12673: calc_req_addr. req pc :0x1168b250,idx_addr: 0x3c,tag_addr:0x2127, aligned_addr_:0x2127f00,ofst_addr_:0x30 
+[info] 12673: create_dc_req. req_pc:0x1168b250, req_mem:1,req_size:8,req_addr:0x2127f30, req_data0:0x127ad8,req_data1:0x0.
+[debug] 12674: stb not empty. size:0x1
+[info] 12674: lookup_tag is MISS. req pc :0x1168b238.
+[info] 12674: calc_req_addr. req pc :0x1168b254,idx_addr: 0x3c,tag_addr:0x2127, aligned_addr_:0x2127f00,ofst_addr_:0x38 
+[info] 12674: create_dc_req. req_pc:0x1168b254, req_mem:1,req_size:1,req_addr:0x2127f38, req_data0:0x9,req_data1:0x0.
+[info] 12674: recv_rd_biu_rsp(stb). rsp_id:288230376151716752,aligned_addr_: 0x2127f00, entry_id:0
+[info] 12674: get_victim invalid. way_id:0,idx_addr: 0x3c,mem:1, is_dirty:0.
+[info] 12674: refill data to cache_ram. way_id:0,tag_addr:0x2127,idx_addr: 0x3c,mem:1, is_dirty:1.
+[info] 12674: replay_M1.req_que_issue_ptr_:16.
+[info] 12674: retire_stb_instr. isa_pc:0x1168b1b0
+[info] 12674: retire_stb_instr. isa_pc:0x1168b1cc
+[info] 12674: retire_stb_instr. isa_pc:0x1168b1f0
+[info] 12674: retire_stb_instr. isa_pc:0x1168b1f4
+[info] 12674: retire_stb_instr. isa_pc:0x1168b208
+[info] 12675: lookup_tag is HIT. req pc :0x1168b234, idx_addr: 0x2b, tag_addr: 0x2127, aligned_addr_: 0x2127ac0,hit_pos: 0 
+[info] 12675: calc_req_addr. req pc :0x1168b284,idx_addr: 0x2a,tag_addr:0x2127, aligned_addr_:0x2127a80,ofst_addr_:0x1b 
+[info] 12675: create_dc_req. req_pc:0x1168b284, req_mem:1,req_size:1,req_addr:0x2127a9b, req_data0:0x0,req_data1:0x0.
+[info] 12676: lookup_tag is HIT. req pc :0x1168b238, idx_addr: 0x3c, tag_addr: 0x2127, aligned_addr_: 0x2127f00,hit_pos: 0 
+[info] 12677: lookup_tag is HIT. req pc :0x1168b250, idx_addr: 0x3c, tag_addr: 0x2127, aligned_addr_: 0x2127f00,hit_pos: 0 
+[info] 12677: push req to stb. req_pc:0x1168b234,stb_main_entry_id:0,aligned_addr_:0x2127ac0,mem: 1,stb_sub_entry_size:1,store_data0:0xffffffff00030000, store_data1:0x0, strb size:8
+[info] 12678: lookup_tag is HIT. req pc :0x1168b254, idx_addr: 0x3c, tag_addr: 0x2127, aligned_addr_: 0x2127f00,hit_pos: 0 
+[debug] 12678: stb not empty. size:0x1
+[info] 12678: push req to stb. req_pc:0x1168b238,stb_main_entry_id:1,aligned_addr_:0x2127f00,mem: 1,stb_sub_entry_size:1,store_data0:0x30000, store_data1:0x0, strb size:8
+[info] 12679: lookup_tag is HIT. req pc :0x1168b284, idx_addr: 0x2a, tag_addr: 0x2127, aligned_addr_: 0x2127a80,hit_pos: 0 
+[debug] 12679: stb not empty. size:0x2
+[info] 12679: push req to stb. req_pc:0x1168b250,stb_main_entry_id:1,aligned_addr_:0x2127f00,mem: 1,stb_sub_entry_size:2,store_data0:0x127ad8, store_data1:0x0, strb size:16
+[debug] 12680: stb not empty. size:0x2
+[info] 12680: push req to stb. req_pc:0x1168b254,stb_main_entry_id:1,aligned_addr_:0x2127f00,mem: 1,stb_sub_entry_size:3,store_data0:0x9, store_data1:0x0, strb size:17
+[debug] 12681: stb not empty. size:0x2
+[info] 12681: read_instr_hit. isa_pc:0x1168b284.
+[debug] 12682: stb not empty. size:0x2
+[debug] 12683: stb not empty. size:0x2
+[debug] 12684: stb not empty. size:0x2
+[debug] 12685: stb not empty. size:0x2
+[debug] 12686: stb not empty. size:0x2
+[debug] 12687: stb not empty. size:0x2
+[debug] 12688: stb not empty. size:0x2
+[debug] 12689: stb not empty. size:0x2
+[debug] 12690: stb not empty. size:0x2
+[debug] 12691: stb not empty. size:0x2
+[debug] 12692: stb not empty. size:0x2
+[debug] 12693: stb not empty. size:0x2
+[debug] 12694: stb not empty. size:0x2
+[debug] 12695: stb not empty. size:0x2
+[debug] 12696: stb not empty. size:0x2
+[debug] 12697: stb not empty. size:0x2
+[debug] 12698: stb not empty. size:0x2
+[debug] 12699: stb not empty. size:0x2
+[debug] 12700: stb not empty. size:0x2
+[debug] 12701: stb not empty. size:0x2
+[debug] 12702: stb not empty. size:0x2
+[info] 12702: calc_req_addr. req pc :0x1168b284,idx_addr: 0x2a,tag_addr:0x2127, aligned_addr_:0x2127a80,ofst_addr_:0x2b 
+[info] 12702: create_dc_req. req_pc:0x1168b284, req_mem:1,req_size:1,req_addr:0x2127aab, req_data0:0x0,req_data1:0x0.
+[debug] 12703: stb not empty. size:0x2
+[info] 12703: lookup_tag is HIT. req pc :0x1168b284, idx_addr: 0x2a, tag_addr: 0x2127, aligned_addr_: 0x2127a80,hit_pos: 0 
+[debug] 12704: stb not empty. size:0x2
+[debug] 12705: stb not empty. size:0x2
+[info] 12705: read_instr_hit. isa_pc:0x1168b284.
+[debug] 12706: stb not empty. size:0x2
+[debug] 12707: stb not empty. size:0x2
+[debug] 12708: stb not empty. size:0x2
+[debug] 12709: stb_sub_entry id:0, sub_entry_size:1,req_pc:0x1168b234.
+[debug] 12709: st_hit_write_cache stb_sub_entry id:0, sub_entry_size:1,req_pc:0x1168b234.
+[info] 12709: find_cache_way_id:0,tag_addr:0x2127,idx_addr:43.
+[info] 12709: stb_write_dcache. isa_pc:0x1168b234, tag_addr:0x2127,idx_addr:0x2b,write_dcache_way:0, stb_entry_id:0.
+[info] 12709: retire_stb_instr. isa_pc:0x1168b234
+[info] 12709: rm_entry. way_id:0,addr:0x2127ac0
+[debug] 12709: stb not empty. size:0x1
+[debug] 12710: stb_sub_entry id:0, sub_entry_size:3,req_pc:0x1168b238.
+[debug] 12710: st_hit_write_cache stb_sub_entry id:0, sub_entry_size:3,req_pc:0x1168b238.
+[info] 12710: find_cache_way_id:0,tag_addr:0x2127,idx_addr:60.
+[info] 12710: stb_write_dcache. isa_pc:0x1168b238, tag_addr:0x2127,idx_addr:0x3c,write_dcache_way:0, stb_entry_id:0.
+[info] 12710: retire_stb_instr. isa_pc:0x1168b238
+[info] 12710: retire_stb_instr. isa_pc:0x1168b250
+[info] 12710: retire_stb_instr. isa_pc:0x1168b254
+[info] 12710: rm_entry. way_id:0,addr:0x2127f00
+[info] 12722: calc_req_addr. req pc :0x1168b284,idx_addr: 0x2a,tag_addr:0x2127, aligned_addr_:0x2127a80,ofst_addr_:0x3b 
+[info] 12722: create_dc_req. req_pc:0x1168b284, req_mem:1,req_size:1,req_addr:0x2127abb, req_data0:0x0,req_data1:0x0.
+[info] 12723: lookup_tag is HIT. req pc :0x1168b284, idx_addr: 0x2a, tag_addr: 0x2127, aligned_addr_: 0x2127a80,hit_pos: 0 
+[info] 12725: read_instr_hit. isa_pc:0x1168b284.
+[info] 12744: calc_req_addr. req pc :0x1168b284,idx_addr: 0x2b,tag_addr:0x2127, aligned_addr_:0x2127ac0,ofst_addr_:0xb 
+[info] 12744: create_dc_req. req_pc:0x1168b284, req_mem:1,req_size:1,req_addr:0x2127acb, req_data0:0x0,req_data1:0x0.
+[info] 12745: lookup_tag is HIT. req pc :0x1168b284, idx_addr: 0x2b, tag_addr: 0x2127, aligned_addr_: 0x2127ac0,hit_pos: 0 
+[info] 12747: read_instr_hit. isa_pc:0x1168b284.
+[info] 12764: calc_req_addr. req pc :0x1168b284,idx_addr: 0x2b,tag_addr:0x2127, aligned_addr_:0x2127ac0,ofst_addr_:0x1b 
+[info] 12764: create_dc_req. req_pc:0x1168b284, req_mem:1,req_size:1,req_addr:0x2127adb, req_data0:0x0,req_data1:0x0.
+[info] 12765: lookup_tag is HIT. req pc :0x1168b284, idx_addr: 0x2b, tag_addr: 0x2127, aligned_addr_: 0x2127ac0,hit_pos: 0 
+[info] 12767: read_instr_hit. isa_pc:0x1168b284.
+[info] 12786: calc_req_addr. req pc :0x1168b4e4,idx_addr: 0x27,tag_addr:0x2127, aligned_addr_:0x21279c0,ofst_addr_:0x10 
+[info] 12786: create_dc_req. req_pc:0x1168b4e4, req_mem:1,req_size:8,req_addr:0x21279d0, req_data0:0x0,req_data1:0x0.
+[info] 12787: lookup_tag is HIT. req pc :0x1168b4e4, idx_addr: 0x27, tag_addr: 0x2127, aligned_addr_: 0x21279c0,hit_pos: 0 
+[info] 12789: read_instr_hit. isa_pc:0x1168b4e4.
+[info] 12793: calc_req_addr. req pc :0x1168b4f4,idx_addr: 0x27,tag_addr:0x2127, aligned_addr_:0x21279c0,ofst_addr_:0x10 
+[info] 12793: create_dc_req. req_pc:0x1168b4f4, req_mem:1,req_size:8,req_addr:0x21279d0, req_data0:0x6,req_data1:0x0.
+[info] 12794: lookup_tag is HIT. req pc :0x1168b4f4, idx_addr: 0x27, tag_addr: 0x2127, aligned_addr_: 0x21279c0,hit_pos: 0 
+[info] 12794: calc_req_addr. req pc :0x1168b4f8,idx_addr: 0x27,tag_addr:0x2127, aligned_addr_:0x21279c0,ofst_addr_:0x10 
+[info] 12794: create_dc_req. req_pc:0x1168b4f8, req_mem:1,req_size:8,req_addr:0x21279d0, req_data0:0x0,req_data1:0x0.
+[info] 12795: lookup_tag is HIT. req pc :0x1168b4f8, idx_addr: 0x27, tag_addr: 0x2127, aligned_addr_: 0x21279c0,hit_pos: 0 
+[info] 12796: push req to stb. req_pc:0x1168b4f4,stb_main_entry_id:0,aligned_addr_:0x21279c0,mem: 1,stb_sub_entry_size:1,store_data0:0x6, store_data1:0x0, strb size:8
+[debug] 12797: stb not empty. size:0x1
+[info] 12797: read_stb. req_pc:0x1168b4f8, req_size:8,match_stb_id:0.
+[info] 12797: read_instr_hit. isa_pc:0x1168b4f8.
+[debug] 12798: stb not empty. size:0x1
+[debug] 12799: stb not empty. size:0x1
+[debug] 12800: stb not empty. size:0x1
+[debug] 12801: stb not empty. size:0x1
+[info] 12801: calc_req_addr. req pc :0x1168b508,idx_addr: 0x27,tag_addr:0x2127, aligned_addr_:0x21279c0,ofst_addr_:0x10 
+[info] 12801: create_dc_req. req_pc:0x1168b508, req_mem:1,req_size:8,req_addr:0x21279d0, req_data0:0x4,req_data1:0x0.
+[debug] 12802: stb not empty. size:0x1
+[info] 12802: lookup_tag is HIT. req pc :0x1168b508, idx_addr: 0x27, tag_addr: 0x2127, aligned_addr_: 0x21279c0,hit_pos: 0 
+[info] 12802: calc_req_addr. req pc :0x1168b50c,idx_addr: 0x27,tag_addr:0x2127, aligned_addr_:0x21279c0,ofst_addr_:0x10 
+[info] 12802: create_dc_req. req_pc:0x1168b50c, req_mem:1,req_size:8,req_addr:0x21279d0, req_data0:0x0,req_data1:0x0.
+[debug] 12803: stb not empty. size:0x1
+[info] 12803: lookup_tag is HIT. req pc :0x1168b50c, idx_addr: 0x27, tag_addr: 0x2127, aligned_addr_: 0x21279c0,hit_pos: 0 
+[debug] 12804: stb not empty. size:0x1
+[info] 12804: push req to stb. req_pc:0x1168b508,stb_main_entry_id:0,aligned_addr_:0x21279c0,mem: 1,stb_sub_entry_size:2,store_data0:0x4, store_data1:0x0, strb size:8
+[debug] 12805: stb not empty. size:0x1
+[info] 12805: read_stb. req_pc:0x1168b50c, req_size:8,match_stb_id:0.
+[info] 12805: read_instr_hit. isa_pc:0x1168b50c.
+[debug] 12806: stb not empty. size:0x1
+[debug] 12807: stb not empty. size:0x1
+[debug] 12808: stb not empty. size:0x1
+[debug] 12809: stb not empty. size:0x1
+[info] 12809: calc_req_addr. req pc :0x1168b51c,idx_addr: 0x27,tag_addr:0x2127, aligned_addr_:0x21279c0,ofst_addr_:0x10 
+[info] 12809: create_dc_req. req_pc:0x1168b51c, req_mem:1,req_size:8,req_addr:0x21279d0, req_data0:0x0,req_data1:0x0.
+[debug] 12810: stb not empty. size:0x1
+[info] 12810: lookup_tag is HIT. req pc :0x1168b51c, idx_addr: 0x27, tag_addr: 0x2127, aligned_addr_: 0x21279c0,hit_pos: 0 
+[debug] 12811: stb not empty. size:0x1
+[debug] 12812: stb not empty. size:0x1
+[info] 12812: push req to stb. req_pc:0x1168b51c,stb_main_entry_id:0,aligned_addr_:0x21279c0,mem: 1,stb_sub_entry_size:3,store_data0:0x0, store_data1:0x0, strb size:8
+[debug] 12813: stb not empty. size:0x1
+[debug] 12814: stb not empty. size:0x1
+[debug] 12815: stb not empty. size:0x1
+[debug] 12816: stb not empty. size:0x1
+[debug] 12817: stb not empty. size:0x1
+[debug] 12818: stb not empty. size:0x1
+[debug] 12819: stb not empty. size:0x1
+[debug] 12820: stb not empty. size:0x1
+[debug] 12821: stb not empty. size:0x1
+[debug] 12822: stb not empty. size:0x1
+[debug] 12823: stb not empty. size:0x1
+[debug] 12824: stb not empty. size:0x1
+[debug] 12825: stb not empty. size:0x1
+[debug] 12826: stb not empty. size:0x1
+[debug] 12827: stb not empty. size:0x1
+[debug] 12828: stb_sub_entry id:0, sub_entry_size:3,req_pc:0x1168b4f4.
+[debug] 12828: st_hit_write_cache stb_sub_entry id:0, sub_entry_size:3,req_pc:0x1168b4f4.
+[info] 12828: find_cache_way_id:0,tag_addr:0x2127,idx_addr:39.
+[info] 12828: stb_write_dcache. isa_pc:0x1168b4f4, tag_addr:0x2127,idx_addr:0x27,write_dcache_way:0, stb_entry_id:0.
+[info] 12828: retire_stb_instr. isa_pc:0x1168b4f4
+[info] 12828: retire_stb_instr. isa_pc:0x1168b508
+[info] 12828: retire_stb_instr. isa_pc:0x1168b51c
+[info] 12828: rm_entry. way_id:0,addr:0x21279c0
+[info] 12834: calc_req_addr. req pc :0x1168b524,idx_addr: 0x3c,tag_addr:0x2127, aligned_addr_:0x2127f00,ofst_addr_:0x38 
+[info] 12834: create_dc_req. req_pc:0x1168b524, req_mem:1,req_size:1,req_addr:0x2127f38, req_data0:0x0,req_data1:0x0.
+[info] 12835: lookup_tag is HIT. req pc :0x1168b524, idx_addr: 0x3c, tag_addr: 0x2127, aligned_addr_: 0x2127f00,hit_pos: 0 
+[info] 12837: read_instr_hit. isa_pc:0x1168b524.
+[info] 12845: calc_req_addr. req pc :0x1168b57c,idx_addr: 0x3b,tag_addr:0x2127, aligned_addr_:0x2127ec0,ofst_addr_:0x5 
+[info] 12845: create_dc_req. req_pc:0x1168b57c, req_mem:1,req_size:1,req_addr:0x2127ec5, req_data0:0x0,req_data1:0x0.
+[info] 12846: lookup_tag is HIT. req pc :0x1168b57c, idx_addr: 0x3b, tag_addr: 0x2127, aligned_addr_: 0x2127ec0,hit_pos: 0 
+[info] 12848: read_instr_hit. isa_pc:0x1168b57c.
+[info] 12859: calc_req_addr. req pc :0x1168b860,idx_addr: 0x3f,tag_addr:0x2107, aligned_addr_:0x2107fc0,ofst_addr_:0x30 
+[info] 12859: create_dc_req. req_pc:0x1168b860, req_mem:1,req_size:8,req_addr:0x2107ff0, req_data0:0x0,req_data1:0x0.
+[info] 12860: lookup_tag is MISS. req pc :0x1168b860.
+[info] 12862: create_rd_biu_req. ll_req_id:288230376151716972,rd_req_addr_: 0x2107fc0
+[info] 12863: send_rd_biu_req. req_id:288230376151716972,req_rd_addr:0x2107fc0.
+[info] 13116: recv_rd_biu_rsp(mshr). rsp_id:288230376151716972,aligned_addr_: 0x2107fc0
+[info] 13116: get_victim invalid. way_id:0,idx_addr: 0x3f,mem:1, is_dirty:0.
+[info] 13116: refill data to cache_ram. way_id:0,tag_addr:0x2107,idx_addr: 0x3f,mem:1, is_dirty:0.
+[info] 13116: retire_mshr_instr. isa_pc:0x1168b860
+[info] 13120: calc_req_addr. req pc :0x1168b874,idx_addr: 0x3f,tag_addr:0x2107, aligned_addr_:0x2107fc0,ofst_addr_:0x30 
+[info] 13120: create_dc_req. req_pc:0x1168b874, req_mem:1,req_size:8,req_addr:0x2107ff0, req_data0:0x0,req_data1:0x0.
+[info] 13121: lookup_tag is HIT. req pc :0x1168b874, idx_addr: 0x3f, tag_addr: 0x2107, aligned_addr_: 0x2107fc0,hit_pos: 0 
+[info] 13121: calc_req_addr. req pc :0x1168b878,idx_addr: 0x3f,tag_addr:0x2107, aligned_addr_:0x2107fc0,ofst_addr_:0x20 
+[info] 13121: create_dc_req. req_pc:0x1168b878, req_mem:1,req_size:8,req_addr:0x2107fe0, req_data0:0x0,req_data1:0x0.
+[info] 13122: lookup_tag is HIT. req pc :0x1168b878, idx_addr: 0x3f, tag_addr: 0x2107, aligned_addr_: 0x2107fc0,hit_pos: 0 
+[info] 13123: push req to stb. req_pc:0x1168b874,stb_main_entry_id:0,aligned_addr_:0x2107fc0,mem: 1,stb_sub_entry_size:1,store_data0:0x0, store_data1:0x0, strb size:8
+[debug] 13124: stb not empty. size:0x1
+[info] 13124: read_instr_hit. isa_pc:0x1168b878.
+[debug] 13125: stb not empty. size:0x1
+[debug] 13126: stb not empty. size:0x1
+[debug] 13127: stb not empty. size:0x1
+[debug] 13128: stb not empty. size:0x1
+[debug] 13129: stb not empty. size:0x1
+[debug] 13130: stb not empty. size:0x1
+[debug] 13131: stb not empty. size:0x1
+[debug] 13132: stb not empty. size:0x1
+[info] 13132: calc_req_addr. req pc :0x1168b8d4,idx_addr: 0x0,tag_addr:0x0, aligned_addr_:0x0,ofst_addr_:0x0 
+[info] 13132: create_dc_req. req_pc:0x1168b8d4, req_mem:4,req_size:0,req_addr:0x0, req_data0:0x0,req_data1:0x0.
+[debug] 13133: stb not empty. size:0x1
+[info] 13133: dcci_stall:0x1168b8d4.
+[debug] 13134: stb not empty. size:0x1
+[info] 13134: dcci_stall:0x1168b8d4.
+[debug] 13135: stb not empty. size:0x1
+[info] 13135: dcci_stall:0x1168b8d4.
+[debug] 13136: stb not empty. size:0x1
+[info] 13136: dcci_stall:0x1168b8d4.
+[debug] 13137: stb not empty. size:0x1
+[info] 13137: dcci_stall:0x1168b8d4.
+[debug] 13138: stb not empty. size:0x1
+[info] 13138: dcci_stall:0x1168b8d4.
+[debug] 13139: stb not empty. size:0x1
+[info] 13139: dcci_stall:0x1168b8d4.
+[debug] 13140: stb not empty. size:0x1
+[info] 13140: dcci_stall:0x1168b8d4.
+[debug] 13141: stb not empty. size:0x1
+[info] 13141: dcci_stall:0x1168b8d4.
+[debug] 13142: stb not empty. size:0x1
+[info] 13142: dcci_stall:0x1168b8d4.
+[debug] 13143: stb not empty. size:0x1
+[info] 13143: dcci_stall:0x1168b8d4.
+[debug] 13144: stb not empty. size:0x1
+[info] 13144: dcci_stall:0x1168b8d4.
+[debug] 13145: stb not empty. size:0x1
+[info] 13145: dcci_stall:0x1168b8d4.
+[debug] 13146: stb not empty. size:0x1
+[info] 13146: dcci_stall:0x1168b8d4.
+[debug] 13147: stb not empty. size:0x1
+[info] 13147: dcci_stall:0x1168b8d4.
+[debug] 13148: stb not empty. size:0x1
+[info] 13148: dcci_stall:0x1168b8d4.
+[debug] 13149: stb not empty. size:0x1
+[info] 13149: dcci_stall:0x1168b8d4.
+[debug] 13150: stb not empty. size:0x1
+[info] 13150: dcci_stall:0x1168b8d4.
+[debug] 13151: stb not empty. size:0x1
+[info] 13151: dcci_stall:0x1168b8d4.
+[debug] 13152: stb not empty. size:0x1
+[info] 13152: dcci_stall:0x1168b8d4.
+[debug] 13153: stb not empty. size:0x1
+[info] 13153: dcci_stall:0x1168b8d4.
+[debug] 13154: stb not empty. size:0x1
+[info] 13154: dcci_stall:0x1168b8d4.
+[debug] 13155: stb_sub_entry id:0, sub_entry_size:1,req_pc:0x1168b874.
+[debug] 13155: st_hit_write_cache stb_sub_entry id:0, sub_entry_size:1,req_pc:0x1168b874.
+[info] 13155: find_cache_way_id:0,tag_addr:0x2107,idx_addr:63.
+[info] 13155: stb_write_dcache. isa_pc:0x1168b874, tag_addr:0x2107,idx_addr:0x3f,write_dcache_way:0, stb_entry_id:0.
+[info] 13155: retire_stb_instr. isa_pc:0x1168b874
+[info] 13155: rm_entry. way_id:0,addr:0x2107fc0
+[info] 13157: create_write_data_to_ddr_req.write_addr_is:0x2120000
+[info] 13157: dcci_all clean_and_invalid. req_pc:0x1168b8d4, req->mem:2, way_id:0, idx:0,tga_addr:0x2120.
+[info] 13157: create_write_data_to_ddr_req.write_addr_is:0x2127980
+[info] 13157: dcci_all clean_and_invalid. req_pc:0x1168b8d4, req->mem:2, way_id:0, idx:38,tga_addr:0x2127.
+[info] 13157: create_write_data_to_ddr_req.write_addr_is:0x21279c0
+[info] 13157: dcci_all clean_and_invalid. req_pc:0x1168b8d4, req->mem:2, way_id:0, idx:39,tga_addr:0x2127.
+[info] 13157: create_write_data_to_ddr_req.write_addr_is:0x2127a00
+[info] 13157: dcci_all clean_and_invalid. req_pc:0x1168b8d4, req->mem:2, way_id:0, idx:40,tga_addr:0x2127.
+[info] 13157: create_write_data_to_ddr_req.write_addr_is:0x2127a40
+[info] 13157: dcci_all clean_and_invalid. req_pc:0x1168b8d4, req->mem:2, way_id:0, idx:41,tga_addr:0x2127.
+[info] 13157: create_write_data_to_ddr_req.write_addr_is:0x2127a80
+[info] 13157: dcci_all clean_and_invalid. req_pc:0x1168b8d4, req->mem:2, way_id:0, idx:42,tga_addr:0x2127.
+[info] 13157: create_write_data_to_ddr_req.write_addr_is:0x2127ac0
+[info] 13157: dcci_all clean_and_invalid. req_pc:0x1168b8d4, req->mem:2, way_id:0, idx:43,tga_addr:0x2127.
+[info] 13157: dcci_all_invalid. req_pc:0x1168b8d4, req->mem:2.way_id:0, idx:56,tag_addr:0x106b7.
+[info] 13157: create_write_data_to_ddr_req.write_addr_is:0x2127e80
+[info] 13157: dcci_all clean_and_invalid. req_pc:0x1168b8d4, req->mem:2, way_id:0, idx:58,tga_addr:0x2127.
+[info] 13157: create_write_data_to_ddr_req.write_addr_is:0x2127ec0
+[info] 13157: dcci_all clean_and_invalid. req_pc:0x1168b8d4, req->mem:2, way_id:0, idx:59,tga_addr:0x2127.
+[info] 13157: create_write_data_to_ddr_req.write_addr_is:0x2127f00
+[info] 13157: dcci_all clean_and_invalid. req_pc:0x1168b8d4, req->mem:2, way_id:0, idx:60,tga_addr:0x2127.
+[info] 13157: create_write_data_to_ddr_req.write_addr_is:0x2107fc0
+[info] 13157: dcci_all clean_and_invalid. req_pc:0x1168b8d4, req->mem:2, way_id:0, idx:63,tga_addr:0x2107.
+[info] 13158: send_wr_biu_req. ll_req_id:288230376151717209,aligned_addr_: 0x2120000
+[info] 13159: send_wr_biu_req. ll_req_id:288230376151717210,aligned_addr_: 0x2127980
+[info] 13160: send_wr_biu_req. ll_req_id:288230376151717211,aligned_addr_: 0x21279c0
+[info] 13161: send_wr_biu_req. ll_req_id:288230376151717212,aligned_addr_: 0x2127a00
+[info] 13272: recv_wr_biu_rsp.rsp_id:288230376151717209,rsp_addr:0x2120000.
+[info] 13272: find_cache_way_id:0,tag_addr:0x2120,idx_addr:0.
+[info] 13272: send_wr_biu_req. ll_req_id:288230376151717213,aligned_addr_: 0x2127a40
+[info] 13273: recv_wr_biu_rsp.rsp_id:288230376151717210,rsp_addr:0x2127980.
+[info] 13273: find_cache_way_id:0,tag_addr:0x2127,idx_addr:38.
+[info] 13273: send_wr_biu_req. ll_req_id:288230376151717214,aligned_addr_: 0x2127a80
+[info] 13274: recv_wr_biu_rsp.rsp_id:288230376151717211,rsp_addr:0x21279c0.
+[info] 13274: find_cache_way_id:0,tag_addr:0x2127,idx_addr:39.
+[info] 13274: send_wr_biu_req. ll_req_id:288230376151717215,aligned_addr_: 0x2127ac0
+[info] 13275: recv_wr_biu_rsp.rsp_id:288230376151717212,rsp_addr:0x2127a00.
+[info] 13275: find_cache_way_id:0,tag_addr:0x2127,idx_addr:40.
+[info] 13275: send_wr_biu_req. ll_req_id:288230376151717216,aligned_addr_: 0x2127e80
+[info] 13386: recv_wr_biu_rsp.rsp_id:288230376151717214,rsp_addr:0x2127a80.
+[info] 13386: find_cache_way_id:0,tag_addr:0x2127,idx_addr:42.
+[info] 13386: send_wr_biu_req. ll_req_id:288230376151717217,aligned_addr_: 0x2127ec0
+[info] 13387: recv_wr_biu_rsp.rsp_id:288230376151717213,rsp_addr:0x2127a40.
+[info] 13387: find_cache_way_id:0,tag_addr:0x2127,idx_addr:41.
+[info] 13387: send_wr_biu_req. ll_req_id:288230376151717218,aligned_addr_: 0x2127f00
+[info] 13388: recv_wr_biu_rsp.rsp_id:288230376151717215,rsp_addr:0x2127ac0.
+[info] 13388: find_cache_way_id:0,tag_addr:0x2127,idx_addr:43.
+[info] 13388: send_wr_biu_req. ll_req_id:288230376151717219,aligned_addr_: 0x2107fc0
+[info] 13389: recv_wr_biu_rsp.rsp_id:288230376151717216,rsp_addr:0x2127e80.
+[info] 13389: find_cache_way_id:0,tag_addr:0x2127,idx_addr:58.
+[info] 13498: recv_wr_biu_rsp.rsp_id:288230376151717217,rsp_addr:0x2127ec0.
+[info] 13498: find_cache_way_id:0,tag_addr:0x2127,idx_addr:59.
+[info] 13499: recv_wr_biu_rsp.rsp_id:288230376151717219,rsp_addr:0x2107fc0.
+[info] 13499: find_cache_way_id:0,tag_addr:0x2107,idx_addr:63.
+[info] 13501: recv_wr_biu_rsp.rsp_id:288230376151717218,rsp_addr:0x2127f00.
+[info] 13501: find_cache_way_id:0,tag_addr:0x2127,idx_addr:60.
+[info] ++++++++++++++++++++++core: 4, start: 11655, tick: 13533, kernal: 0, blkID 4 of blkdim 20, streamId 0, taskId 0, subtaskId 0, threadId 0, done++++++++++++++++++++++.

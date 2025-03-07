@@ -10,17 +10,16 @@ CURRENT_DIR=$(
 ); cd $CURRENT_DIR
 M=${1}
 N=${2}
-alpha=${3}
-beta=${4}
-deviceId=${5}
+deviceId=${3}
+mode=${4}
 
 set -e
 CANN_DIR=${ASCEND_HOME_PATH}
 # 生成测试数据
-python3 ./scripts/gen_data.py $M $N $alpha $beta
+python3 ./scripts/gen_data.py $M $N
 
 # msprof op --output=./prof ../../../build/bin/01_fp16_rm_gemm $M $N $K $deviceId
-../../../build/bin/02_fp32_rm_gemv_aiv $M $N $alpha $beta $deviceId
+../../../build/bin/02_fp32_rm_gemv_aiv $M $N $deviceId $mode
 # 验证数据
 python3 ./scripts/verify_data.py $M $N
 rm -rf ./data/input ./data/output

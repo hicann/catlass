@@ -1,0 +1,13 @@
+[info] 12291:  pipe: 1 push_isa, pc:0x1168b908, id:11
+[info] 12291:  pipe: 1 push_isa, pc:0x1168b90c, id:12
+[info] 12308:  pipe: 1 retire_isa, pc:0x1168b908, id:11
+[info] 12309:  pipe: 1 retire_isa, pc:0x1168b90c, id:12
+[info] 12991:  pipe: 1 push_isa, pc:0x1168ba20, id:81
+[info] 12996:  pipe: 1 push_isa, pc:0x1168ba3c, id:88
+[info] 13008:  pipe: 1 retire_isa, pc:0x1168ba20, id:81
+[info] 13013:  pipe: 1 retire_isa, pc:0x1168ba3c, id:88
+[info] 13608:  pipe: 1 push_isa, pc:0x1168bddc, id:403
+[info] 13610:  pipe: 1 push_isa, pc:0x1168bde4, id:405
+[info] 13641:  pipe: 1 push_isa, pc:0x1168be78, id:442
+[info] 13870:  pipe: 1 push_isa, pc:0x1168be80, id:444
+[info] ++++++++++++++++++++++core: 14, start: 11918, tick: 15053, kernal: 0, blkID 14 of blkdim 20, streamId 0, taskId 0, subtaskId 0, threadId 0, done++++++++++++++++++++++.

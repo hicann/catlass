@@ -1,0 +1,13 @@
+[network.stream2.task0.subtask0.thread0]
+	stream_id = 2
+	task_id = 0
+	subtask_id = 0
+	thread_id = 0
+	thread_dim = 1
+    type = "MIXAIC"
+    block_dim = 20
+    core_list = [0, 5, 3, 13, 10, 1, 8, 15, 4, 9, 2, 11, 14, 7, 12, 18, 6, 17, 19, 16]
+	start_cycle = 11446
+	end_cycle = 85070
+	duration = 73624
+	first_blk_start_cycle = 11458

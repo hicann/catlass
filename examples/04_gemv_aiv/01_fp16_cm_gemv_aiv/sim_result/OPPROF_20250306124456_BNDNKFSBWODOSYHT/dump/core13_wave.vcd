@@ -1,0 +1,212 @@
+$date
+    Mar 06, 2025       12:45:00
+$end
+
+$version
+    vcd_version : 1
+$end
+
+$timescale
+    1 tick
+$end
+
+$scope module AiCore $end
+$scope module fixp $end
+$var wire    1  aaaaa  fixp_l0c_read       $end
+$var wire    1  aaaao  fixp_su_busy       $end
+$upscope $end
+$scope module mte $end
+$var wire    1  aaaab  mte3_suv1_busy       $end
+$var wire    1  aaaac  mte2_suv1_busy       $end
+$var wire    1  aaaak  mte1_su_busy       $end
+$var wire    1  aaaal  mte3_su_busy       $end
+$var wire    1  aaaam  mte2_su_busy       $end
+$var wire    1  aaaan  mte3_suv0_busy       $end
+$var wire    1  aaaaq  mte2_suv0_busy       $end
+$upscope $end
+$scope module cube $end
+$var wire    1  aaaad  cube_busy       $end
+$upscope $end
+$scope module suv0 $end
+$var wire    1  aaaae  suv0_busy       $end
+$upscope $end
+$scope module vec0 $end
+$var wire    1  aaaaf  vec0_busy       $end
+$var wire    1  aaaap  vec0_ub_write       $end
+$upscope $end
+$scope module vec1 $end
+$var wire    1  aaaag  vec1_ub_write       $end
+$var wire    1  aaaah  vec1_busy       $end
+$upscope $end
+$scope module su $end
+$var wire    1  aaaai  su_busy       $end
+$upscope $end
+$scope module suv1 $end
+$var wire    1  aaaaj  suv1_busy       $end
+$upscope $end
+$upscope $end
+$enddefinitions  $end
+
+$comment
+    all initial values are dumped below at time : tick = 0
+$end
+$dumpvars
+0aaaaa
+0aaaab
+0aaaac
+0aaaad
+0aaaae
+0aaaaf
+0aaaag
+0aaaah
+0aaaai
+0aaaaj
+0aaaak
+0aaaal
+0aaaam
+0aaaan
+0aaaao
+0aaaap
+0aaaaq
+$end
+
+#12256
+1aaaai
+#12263
+0aaaai
+#12264
+1aaaai
+#12270
+1aaaak
+1aaaam
+#12275
+0aaaam
+#12276
+0aaaak
+#12278
+1aaaaj
+#12280
+1aaaae
+#12281
+0aaaae
+#12283
+0aaaaj
+#12288
+1aaaae
+#12290
+0aaaae
+#12292
+1aaaaj
+#12294
+1aaaae
+0aaaaj
+#12296
+0aaaae
+1aaaah
+1aaaaj
+#12303
+1aaaae
+#12305
+0aaaae
+#12306
+1aaaae
+#12307
+1aaaaf
+#12310
+0aaaah
+#12321
+0aaaaf
+#12923
+0aaaai
+#12925
+1aaaai
+#12930
+0aaaai
+#12931
+1aaaai
+#12932
+0aaaai
+#12937
+1aaaai
+#12940
+0aaaai
+#12945
+1aaaai
+#12950
+0aaaai
+#12951
+1aaaai
+#12952
+0aaaai
+#12957
+1aaaai
+#12960
+0aaaai
+#12965
+1aaaai
+#12970
+0aaaai
+#12971
+1aaaai
+#12972
+0aaaai
+#12977
+1aaaai
+#12980
+0aaaai
+#12987
+1aaaai
+#12992
+0aaaai
+#12994
+1aaaah
+#12995
+1aaaaf
+#12996
+1aaaai
+#13012
+0aaaah
+#13013
+0aaaaf
+#13036
+0aaaai
+#13038
+1aaaai
+#13043
+0aaaai
+#13045
+1aaaai
+#13047
+0aaaai
+#13049
+1aaaai
+#13054
+0aaaai
+#13061
+1aaaai
+#13319
+0aaaai
+#13320
+1aaaai
+#13566
+0aaaae
+#13568
+1aaaae
+#13576
+0aaaaj
+#13578
+1aaaaj
+#13702
+0aaaai
+#14334
+0aaaae
+#14335
+1aaaae
+#14340
+0aaaaj
+#14341
+1aaaaj
+#15056
+0aaaae
+#15065
+0aaaaj

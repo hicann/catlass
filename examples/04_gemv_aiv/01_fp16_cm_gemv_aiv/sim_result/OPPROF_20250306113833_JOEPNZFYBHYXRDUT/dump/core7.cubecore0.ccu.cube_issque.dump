@@ -1,0 +1,4 @@
+[info] 12076:  pipe: 2 push_isa, pc:0x1168b0d0, id:53
+[info] 12082:  pipe: 2 push_isa, pc:0x1168b0f0, id:61
+[info] 12086:  pipe: 2 push_isa, pc:0x1168b108, id:67
+[info] ++++++++++++++++++++++core: 7, start: 11661, tick: 13543, kernal: 0, blkID 7 of blkdim 20, streamId 0, taskId 0, subtaskId 0, threadId 0, done++++++++++++++++++++++.

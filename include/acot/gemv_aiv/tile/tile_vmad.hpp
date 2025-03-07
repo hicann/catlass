@@ -322,6 +322,7 @@ template <
         uint32_t elem_repeat_size = BYTE_PER_C0 * 8 / sizeof(ElementA);
         uint32_t mask = temp_repeat_size;
         uint32_t repeattimes = CeilDiv(m_actual,temp_repeat_size);
+        
         AscendC::UnaryRepeatParams params;
           params.dstBlkStride = 1;
           params.srcBlkStride = 1;
@@ -336,12 +337,19 @@ template <
             8   //repstride
           );
           AscendC::PipeBarrier<PIPE_V>();
+
           AscendC::SetFlag<AscendC::HardEvent::V_S>((event_t)(0));
+        AscendC::WaitFlag<AscendC::HardEvent::V_S>((event_t)(0));
+        auto pix = srcTensor_v.GetValue(0);
+        AscendC::SetFlag<AscendC::HardEvent::S_V>((event_t)(0));
+        AscendC::WaitFlag<AscendC::HardEvent::S_V>((event_t)(0));
+
+          // AscendC::SetFlag<AscendC::HardEvent::V_S>((event_t)(0));
           for(uint32_t i = 0;i < n_actual;i++){
-            AscendC::WaitFlag<AscendC::HardEvent::V_S>((event_t)(0));
+            // AscendC::WaitFlag<AscendC::HardEvent::V_S>((event_t)(0));
             auto pix = srcTensor_v.GetValue(i);
-            AscendC::SetFlag<AscendC::HardEvent::S_V>((event_t)(0));
-            AscendC::WaitFlag<AscendC::HardEvent::S_V>((event_t)(0));
+            // AscendC::SetFlag<AscendC::HardEvent::S_V>((event_t)(0));
+            // AscendC::WaitFlag<AscendC::HardEvent::S_V>((event_t)(0));
             AscendC::Axpy<ElementAccumulator,ElementA,true>(
               temp,
               srcTensor_m[i*m_round],
@@ -351,9 +359,9 @@ template <
               repeattimes,
               params
             );
-            AscendC::SetFlag<AscendC::HardEvent::V_S>((event_t)(0));
+            // AscendC::SetFlag<AscendC::HardEvent::V_S>((event_t)(0));
           }
-          AscendC::WaitFlag<AscendC::HardEvent::V_S>((event_t)(0));
+          // AscendC::WaitFlag<AscendC::HardEvent::V_S>((event_t)(0));
           AscendC::PipeBarrier<PIPE_V>();
           params.dstRepStride = 4;  //以数据类型大的为准，即以float为准
           params.srcRepStride = 8;  
@@ -419,17 +427,22 @@ template <
         uint32_t elem_repeat_size = BYTE_PER_C0 * 8 / sizeof(ElementA);
         uint32_t mask = elem_repeat_size;
         uint32_t repeattimes = CeilDiv(m_actual,elem_repeat_size);
+        AscendC::SetFlag<AscendC::HardEvent::V_S>((event_t)(0));
+        AscendC::WaitFlag<AscendC::HardEvent::V_S>((event_t)(0));
+        auto pix = srcTensor_v.GetValue(0);
+        AscendC::SetFlag<AscendC::HardEvent::S_V>((event_t)(0));
+        AscendC::WaitFlag<AscendC::HardEvent::S_V>((event_t)(0));
         AscendC::UnaryRepeatParams params;
           params.dstBlkStride = 1;
           params.srcBlkStride = 1;
           params.dstRepStride = 8;
           params.srcRepStride = 8;
-          AscendC::SetFlag<AscendC::HardEvent::V_S>((event_t)(0));
+          // AscendC::SetFlag<AscendC::HardEvent::V_S>((event_t)(0));
           for(uint32_t i = 0;i < n_actual;i++){
-            AscendC::WaitFlag<AscendC::HardEvent::V_S>((event_t)(0));
-            auto pix = srcTensor_v.GetValue(i);
-            AscendC::SetFlag<AscendC::HardEvent::S_V>((event_t)(0));
-            AscendC::WaitFlag<AscendC::HardEvent::S_V>((event_t)(0));
+            // AscendC::WaitFlag<AscendC::HardEvent::V_S>((event_t)(0));
+            // auto pix = srcTensor_v.GetValue(i);
+            // AscendC::SetFlag<AscendC::HardEvent::S_V>((event_t)(0));
+            // AscendC::WaitFlag<AscendC::HardEvent::S_V>((event_t)(0));
             AscendC::Axpy<ElementY,ElementA,true>(  //vaxpy
               dstTensor,
               srcTensor_m[i*m_round],
@@ -438,9 +451,10 @@ template <
               repeattimes,
               params
             );
-            AscendC::SetFlag<AscendC::HardEvent::V_S>((event_t)(0));
+            // AscendC:Pipebarried
+            // AscendC::SetFlag<AscendC::HardEvent::V_S>((event_t)(0));
           }
-          AscendC::WaitFlag<AscendC::HardEvent::V_S>((event_t)(0));
+          // AscendC::WaitFlag<AscendC::HardEvent::V_S>((event_t)(0));
     }
   };
 }
