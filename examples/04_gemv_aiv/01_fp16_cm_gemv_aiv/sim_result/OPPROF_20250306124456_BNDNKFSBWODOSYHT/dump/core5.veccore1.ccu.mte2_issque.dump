@@ -1,0 +1,7 @@
+[info] 13980:  pipe: 4 push_isa, pc:0x1168beb8, id:611
+[info] 13982:  pipe: 4 push_isa, pc:0x1168bec0, id:613
+[info] 13986:  pipe: 4 push_isa, pc:0x1168becc, id:616
+[info] 13988:  pipe: 4 push_isa, pc:0x1168bed4, id:618
+[info] 13990:  pipe: 4 push_isa, pc:0x1168bee0, id:621
+[info] 13996:  pipe: 4 push_isa, pc:0x1168beec, id:624
+[info] ++++++++++++++++++++++core: 5, start: 11893, tick: 15128, kernal: 0, blkID 5 of blkdim 20, streamId 0, taskId 0, subtaskId 0, threadId 0, done++++++++++++++++++++++.

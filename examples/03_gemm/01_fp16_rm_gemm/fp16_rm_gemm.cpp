@@ -1,0 +1,156 @@
+#include <iostream>
+#include <vector>
+#include <iostream>
+
+#include "data_utils.hpp"
+
+#include "acot/acot.hpp"
+#include "acot/arch/arch.hpp"
+#include "acot/gemm/block/block_gemm.hpp"
+#include "acot/gemm/kernel/kernel_gemm.hpp"
+#include "acot/gemm/gemm_type.hpp"
+#include "acot/layout/layout.hpp"
+#include "acot/gemm_shape.hpp"
+
+
+using namespace acot;
+
+// 已经进入核函数了
+// 单纯行优先
+ACOT_GLOBAL
+void FP16RMGemm(
+    GemmShape problemShape,
+    GemmShapeStride strideShape,
+    __gm__ half* gmA, layout::RowMajor layoutA,
+    __gm__ half* gmB, layout::RowMajor layoutB,
+    __gm__ half* gmC, layout::RowMajor layoutC
+){
+    using ArchTag = arch::AscendC910B3;
+    using AType = gemm::GemmType<half, layout::RowMajor>;
+    using BType = gemm::GemmType<half, layout::RowMajor>;
+    using CType = gemm::GemmType<half, layout::RowMajor>;
+
+    L1TileShape l1TileShape{256, 128, 128};
+
+    // 调用block层函数
+    using GemmBlock = gemm::block::BlockGemm<ArchTag, AType, BType, CType, 256, 128, 128>;
+    using GemmKernel = gemm::kernel::KernelGemm<GemmBlock>;
+    typename GemmKernel::Params params{problemShape, l1TileShape, strideShape, gmA, layoutA, gmB, layoutB, gmC, layoutC};
+    // 调用核函数
+    GemmKernel gemm;
+    gemm(params);
+}
+
+typedef struct Options{
+    const std::string HELPER = "03_gemm/01_fp16_rm_gemm m n k [device_id]";
+
+    uint32_t M = 32;
+    uint32_t N = 32;
+    uint32_t K = 32;
+
+    Options() = default;
+    
+    GemmShape problemShape{M, N, K};
+    GemmShapeStride strideShape{K, N, N}; // 行优先
+    int32_t deviceId{0}; // 成员变量
+
+    int Parse(int argc, const char **argv){
+        enum ArgsIndex{
+            M_INDEX = 1,
+            N_INDEX,
+            K_INDEX,
+            DEVICE_ID_INDEX,
+            ARGS_MAX
+        };
+        if(argc > ARGS_MAX || argc <= K_INDEX){
+            std::cerr << HELPER << std::endl;
+            return -1;
+        }
+        // 设置矩阵形状 + 矩阵步长
+        problemShape.M = std::atoi(argv[M_INDEX]);
+        problemShape.N = std::atoi(argv[N_INDEX]);
+        problemShape.K = std::atoi(argv[K_INDEX]);
+        strideShape.strideA = problemShape.K; // 行优先
+        strideShape.strideB = problemShape.N;
+        strideShape.strideC = problemShape.N;
+        if(argc == ARGS_MAX){
+            deviceId = std::atoi(argv[DEVICE_ID_INDEX]);
+        }
+        return 0;
+    }
+}Options;
+
+void Run(Options options){
+    aclrtStream stream{nullptr};
+    ACL_CHECK(aclInit(nullptr));
+    ACL_CHECK(aclrtSetDevice(options.deviceId));
+    ACL_CHECK(aclrtCreateStream(&stream));
+
+    uint32_t m = options.problemShape.M;
+    uint32_t n = options.problemShape.N;
+    uint32_t k = options.problemShape.K;
+
+    size_t lenA = static_cast<size_t>(m) * k;
+    size_t lenB = static_cast<size_t>(k) * n;
+    size_t lenC = static_cast<size_t>(m) * n;
+
+    size_t sizeA = lenA * sizeof(half);
+    size_t sizeB = lenB * sizeof(half);
+    size_t sizeC = lenC * sizeof(half);
+
+    layout::RowMajor layoutA{m, k};
+    layout::RowMajor layoutB{k, n};
+    layout::RowMajor layoutC{m, n};
+
+    half* hostA;
+    ACL_CHECK(aclrtMallocHost((void**)(&hostA),sizeA));
+    ReadFile("./data/input/A.bin", sizeA, hostA, sizeA);
+    half *deviceA{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA, sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
+
+    half* hostB;
+    ACL_CHECK(aclrtMallocHost((void**)(&hostB), sizeB));
+    ReadFile("./data/input/B.bin", sizeB, hostB, sizeB);
+    half *deviceB{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB, sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
+
+    half *deviceC{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
+    
+    // 获得当前核心数
+    auto aicCoreNum = arch::AscendC910B3::MaxBlock;
+    FP16RMGemm<<<aicCoreNum, nullptr, stream>>>(
+        options.problemShape,
+        options.strideShape,
+        deviceA, layoutA,
+        deviceB, layoutB,
+        deviceC, layoutC);
+    ACL_CHECK(aclrtSynchronizeStream(stream));
+
+    half* hostC;
+    ACL_CHECK(aclrtMallocHost((void**)(&hostC), sizeC));
+    ACL_CHECK(aclrtMemcpy(hostC, sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
+    WriteFile("./data/output/our_res.bin",hostC,sizeC);
+
+    ACL_CHECK(aclrtFree(deviceA));
+    ACL_CHECK(aclrtFree(deviceB));
+    ACL_CHECK(aclrtFree(deviceC));
+    ACL_CHECK(aclrtFreeHost(hostA));
+    ACL_CHECK(aclrtFreeHost(hostB));
+    ACL_CHECK(aclrtFreeHost(hostC));
+
+    ACL_CHECK(aclrtDestroyStream(stream));
+    ACL_CHECK(aclrtResetDevice(options.deviceId));
+    ACL_CHECK(aclFinalize());
+}
+
+int main(int argc, const char **argv){
+    Options options;
+    if(options.Parse(argc, argv) != 0){
+        return -1;
+    }
+    Run(options);
+    return 0;
+}

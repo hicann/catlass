@@ -14,7 +14,7 @@
 #include <iostream>
 #include <acl/acl.h>
 #include <runtime/rt_ffts.h>
-#include "tiling/platform/platform_ascendc.h"
+// #include "tiling/platform/platform_ascendc.h"
 
 // Macro function for unwinding acl errors.
 #define ACL_CHECK(status)                                                                    \

@@ -1,0 +1,7 @@
+[info] 14004:  pipe: 4 push_isa, pc:0x1168beb8, id:635
+[info] 14006:  pipe: 4 push_isa, pc:0x1168bec0, id:637
+[info] 14010:  pipe: 4 push_isa, pc:0x1168becc, id:640
+[info] 14012:  pipe: 4 push_isa, pc:0x1168bed4, id:642
+[info] 14014:  pipe: 4 push_isa, pc:0x1168bee0, id:645
+[info] 14020:  pipe: 4 push_isa, pc:0x1168beec, id:648
+[info] ++++++++++++++++++++++core: 19, start: 11927, tick: 15060, kernal: 0, blkID 19 of blkdim 20, streamId 0, taskId 0, subtaskId 0, threadId 0, done++++++++++++++++++++++.

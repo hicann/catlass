@@ -1,0 +1,4 @@
+[info] 12312:  pipe: 2 push_isa, pc:0x1168b0d0, id:52
+[info] 12318:  pipe: 2 push_isa, pc:0x1168b0f0, id:61
+[info] 12322:  pipe: 2 push_isa, pc:0x1168b108, id:67
+[info] ++++++++++++++++++++++core: 12, start: 11892, tick: 13787, kernal: 0, blkID 12 of blkdim 20, streamId 0, taskId 0, subtaskId 0, threadId 0, done++++++++++++++++++++++.

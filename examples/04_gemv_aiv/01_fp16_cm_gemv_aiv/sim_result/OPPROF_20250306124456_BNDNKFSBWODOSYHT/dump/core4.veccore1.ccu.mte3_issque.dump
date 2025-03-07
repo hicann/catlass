@@ -1,0 +1,3 @@
+[info] 13591:  pipe: 5 push_isa, pc:0x1168bdf0, id:413
+[info] 13850:  pipe: 5 push_isa, pc:0x1168be8c, id:452
+[info] ++++++++++++++++++++++core: 4, start: 11889, tick: 15122, kernal: 0, blkID 4 of blkdim 20, streamId 0, taskId 0, subtaskId 0, threadId 0, done++++++++++++++++++++++.
