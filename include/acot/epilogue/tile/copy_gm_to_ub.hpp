@@ -72,10 +72,6 @@
          AscendC::GlobalTensor<Element> srcTensor,
          LayoutSrc layoutDst, LayoutDst layoutSrc)
      {
-         // uint32_t MActual = layoutSrc.shape(0);
-         // uint32_t NActual = layoutSrc.shape(1);
-         // uint32_t stride = layoutSrc.stride(0); // RowMajor
-         // uint32_t NRound = layoutDst.shape(1);
          AscendC::DataCopyExtParams dataCopyParams(
              layoutSrc.shape(0),
              layoutSrc.shape(1) * sizeof(Element),
@@ -104,10 +100,6 @@
          AscendC::GlobalTensor<Element> srcTensor,
          LayoutSrc layoutDst, LayoutDst layoutSrc)
      {
-         // uint32_t MActual = layoutSrc.shape(1);
-         // uint32_t NActual = layoutSrc.shape(0);
-         // uint32_t stride = layoutSrc.stride(1); // RowMajor
-         // uint32_t MRound = layoutDst.shape(1);
          AscendC::DataCopyExtParams dataCopyParams(
              layoutSrc.shape(1),
              layoutSrc.shape(0) * sizeof(Element),

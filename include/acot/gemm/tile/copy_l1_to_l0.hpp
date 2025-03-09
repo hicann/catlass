@@ -137,7 +137,7 @@ struct CopyL1ToL0A<acot::arch::AscendC910B3, acot::gemm::GemmType<int8_t, layout
         params.dstGap = 1; // 单位为512B
         params.dstFracGap = 0;
         for(uint32_t i = 0; i < KLoops; i++){
-            AscendC::LoadDataWithTranspose(dstTensor[i * MRound * KL0Alignment],srcTensor[i * KL0Alignment * ELE_NUM_PER_C0],params);
+            AscendC::LoadDataWithTranspose(dstTensor[i * MRound * KL0Alignment], srcTensor[i * KL0Alignment * ELE_NUM_PER_C0], params);
         }
     }
 };
@@ -209,7 +209,7 @@ struct CopyL1ToL0B<acot::arch::AscendC910B3, acot::gemm::GemmType<float, layout:
         params.dstGap = 0;
         params.dstFracGap = static_cast<uint16_t>(NRound / NL0Alignment) - 1;
         for(uint32_t i = 0; i < KLoops; i++){ // k方向切割
-            AscendC::LoadDataWithTranspose(dstTensor[i * NRound * C0_NUM_PER_FRACTAL],srcTensor[i * C0_NUM_PER_FRACTAL * NRound],params);
+            AscendC::LoadDataWithTranspose(dstTensor[i * NRound * C0_NUM_PER_FRACTAL], srcTensor[i * C0_NUM_PER_FRACTAL * NRound], params);
         }
     }
 };
@@ -241,7 +241,7 @@ struct CopyL1ToL0B<acot::arch::AscendC910B3, acot::gemm::GemmType<int8_t, layout
         params.dstGap = 1; // 单位为512B
         params.dstFracGap = 0;
         for(uint32_t i = 0; i < KLoops; i++){
-            AscendC::LoadDataWithTranspose(dstTensor[i * NRound * KL0Alignment],srcTensor[i * KL0Alignment * ELE_NUM_PER_C0],params);
+            AscendC::LoadDataWithTranspose(dstTensor[i * NRound * KL0Alignment], srcTensor[i * KL0Alignment * ELE_NUM_PER_C0], params);
         }
     }
 };

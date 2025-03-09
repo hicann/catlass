@@ -135,8 +135,6 @@ private:
 
     // The id of current stage
     uint32_t l1ListId{0};
-    // uint32_t l0AListId{0};
-    // uint32_t l0BListId{0};
 
     TileMmad tileMmad;
     CopyGmToL1A copyGmToL1A;
@@ -231,10 +229,11 @@ private:
             uint32_t l0ListId = 0;
             for(uint32_t KL0Idx = 0; KL0Idx < KL0Loops; KL0Idx++){ // 同样能开始预取环节 先测试性能
                 uint32_t KL0Actual = (KL0Idx == KL0Loops - 1) ? (KGmActual - KL0Idx * KL0TileSize) : KL0TileSize;
+                auto layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(actualShape.m(), KL0Actual);
+                auto layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(actualShape.n(), KL0Actual); // 因为是nZ了，需要进行变换
                 if(shuffleKIdx % 2 == 0){ // AB BA
                     if(KL0Idx % 2 == 0){ // ABBA
                         AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0ListId]);
-                        auto layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(actualShape.n(), KL0Actual); // 因为是nZ了，需要进行变换
                         // 偏移量不一样
                         if constexpr (std::is_same<ElementB, int8_t>::value){
                             copyL1ToL0B(l0BTensor[l0ListId], l1BTensor[l1ListId][KL0Idx * KL0TileSize * BYTE_PER_C0 / sizeof(ElementB)], layoutBInL0, layoutBInL1);
@@ -243,16 +242,13 @@ private:
                         }
                         AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0ListId]);
                         AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0ListId]);
-                        auto layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(actualShape.m(), KL0Actual);
                         copyL1ToL0A(l0ATensor[l0ListId], l1ATensor[l1ListId][KL0Idx * KL0TileSize * L1TileShape::M], layoutAInL0, layoutAInL1);
                         AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0ListId]);
                     }else{
                         AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0ListId]);
-                        auto layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(actualShape.m(), KL0Actual);
                         copyL1ToL0A(l0ATensor[l0ListId], l1ATensor[l1ListId][KL0Idx * KL0TileSize * L1TileShape::M], layoutAInL0, layoutAInL1);
                         AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0ListId]);
                         AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0ListId]);
-                        auto layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(actualShape.n(), KL0Actual); // 因为是nZ了，需要进行变换
                         // 偏移量不一样
                         if constexpr (std::is_same<ElementB, int8_t>::value){
                             copyL1ToL0B(l0BTensor[l0ListId], l1BTensor[l1ListId][KL0Idx * KL0TileSize * BYTE_PER_C0 / sizeof(ElementB)], layoutBInL0, layoutBInL1);
@@ -264,11 +260,9 @@ private:
                 }else{
                     if(KL0Idx % 2 == 0){ // ABBA
                         AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0ListId]);
-                        auto layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(actualShape.m(), KL0Actual);
                         copyL1ToL0A(l0ATensor[l0ListId], l1ATensor[l1ListId][KL0Idx * KL0TileSize * L1TileShape::M], layoutAInL0, layoutAInL1);
                         AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0ListId]);
                         AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0ListId]);
-                        auto layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(actualShape.n(), KL0Actual); // 因为是nZ了，需要进行变换
                         // 偏移量不一样
                         if constexpr (std::is_same<ElementB, int8_t>::value){
                             copyL1ToL0B(l0BTensor[l0ListId], l1BTensor[l1ListId][KL0Idx * KL0TileSize * BYTE_PER_C0 / sizeof(ElementB)], layoutBInL0, layoutBInL1);
@@ -278,7 +272,6 @@ private:
                         AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0ListId]);
                     }else{
                         AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0ListId]);
-                        auto layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(actualShape.n(), KL0Actual); // 因为是nZ了，需要进行变换
                         // 偏移量不一样
                         if constexpr (std::is_same<ElementB, int8_t>::value){
                             copyL1ToL0B(l0BTensor[l0ListId], l1BTensor[l1ListId][KL0Idx * KL0TileSize * BYTE_PER_C0 / sizeof(ElementB)], layoutBInL0, layoutBInL1);
@@ -287,7 +280,6 @@ private:
                         }
                         AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0ListId]);
                         AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0ListId]);
-                        auto layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(actualShape.m(), KL0Actual);
                         copyL1ToL0A(l0ATensor[l0ListId], l1ATensor[l1ListId][KL0Idx * KL0TileSize * L1TileShape::M], layoutAInL0, layoutAInL1);
                         AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0ListId]);
                     }
@@ -391,14 +383,14 @@ private:
             uint32_t l0ListId = 0;
             for(uint32_t KL0Idx = 0; KL0Idx < KL0Loops; KL0Idx++){
                 uint32_t KL0Actual = (KL0Idx == KL0Loops - 1) ? (KGmActual - KL0Idx * KL0TileSize) : KL0TileSize;
+                auto layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(actualShape.m(), KL0Actual);
+                auto layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(actualShape.n(), KL0Actual);
                 if(shuffleKIdx % 2 == 0){
                     if(KL0Idx % 2 == 0){
                         AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0ListId]);
-                        auto layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(actualShape.n(), KL0Actual);
                         copyL1ToL0B(l0ATensor[l0ListId], l1BTensor[l1ListId][KL0Idx * KL0TileSize * L1TileShape::N], layoutBInL0, layoutBInL1);
                         AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0ListId]);
                         AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0ListId]);
-                        auto layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(actualShape.m(), KL0Actual);
                         if constexpr (std::is_same<ElementA, int8_t>::value){
                             copyL1ToL0A(l0BTensor[l0ListId], l1ATensor[l1ListId][KL0Idx * KL0TileSize * BYTE_PER_C0 / sizeof(ElementA)], layoutAInL0, layoutAInL1);
                         }else{
@@ -407,7 +399,6 @@ private:
                         AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0ListId]);
                     }else{
                         AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0ListId]);
-                        auto layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(actualShape.m(), KL0Actual);
                         if constexpr (std::is_same<ElementA, int8_t>::value){
                             copyL1ToL0A(l0BTensor[l0ListId], l1ATensor[l1ListId][KL0Idx * KL0TileSize * BYTE_PER_C0 / sizeof(ElementA)], layoutAInL0, layoutAInL1);
                         }else{
@@ -415,14 +406,12 @@ private:
                         }
                         AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0ListId]);
                         AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0ListId]);
-                        auto layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(actualShape.n(), KL0Actual);
                         copyL1ToL0B(l0ATensor[l0ListId], l1BTensor[l1ListId][KL0Idx * KL0TileSize * L1TileShape::N], layoutBInL0, layoutBInL1);
                         AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0ListId]);
                     }
                 }else{
                     if(KL0Idx % 2 == 0){
                         AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0ListId]);
-                        auto layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(actualShape.m(), KL0Actual);
                         if constexpr (std::is_same<ElementA, int8_t>::value){
                             copyL1ToL0A(l0BTensor[l0ListId], l1ATensor[l1ListId][KL0Idx * KL0TileSize * BYTE_PER_C0 / sizeof(ElementA)], layoutAInL0, layoutAInL1);
                         }else{
@@ -430,16 +419,13 @@ private:
                         }
                         AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0ListId]);
                         AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0ListId]);
-                        auto layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(actualShape.n(), KL0Actual);
                         copyL1ToL0B(l0ATensor[l0ListId], l1BTensor[l1ListId][KL0Idx * KL0TileSize * L1TileShape::N], layoutBInL0, layoutBInL1);
                         AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0ListId]);
                     }else{
                         AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0ListId]);
-                        auto layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(actualShape.n(), KL0Actual);
                         copyL1ToL0B(l0ATensor[l0ListId], l1BTensor[l1ListId][KL0Idx * KL0TileSize * L1TileShape::N], layoutBInL0, layoutBInL1);
                         AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0ListId]);
                         AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0ListId]);
-                        auto layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(actualShape.m(), KL0Actual);
                         if constexpr (std::is_same<ElementA, int8_t>::value){
                             copyL1ToL0A(l0BTensor[l0ListId], l1ATensor[l1ListId][KL0Idx * KL0TileSize * BYTE_PER_C0 / sizeof(ElementA)], layoutAInL0, layoutAInL1);
                         }else{
@@ -498,5 +484,5 @@ private:
     2. PreLoad 加上了
     3. Double Buffer 已经加上了
     4. Swizzle
-    5. padding 
+    5. padding 已经加上了
 */

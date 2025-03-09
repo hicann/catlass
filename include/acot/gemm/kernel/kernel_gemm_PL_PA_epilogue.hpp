@@ -94,20 +94,16 @@ public:
                 if (tileLen - inTileLoopIdx * COMPUTE_LENGTH < COMPUTE_LENGTH) { // 相当于处理到了一行的最后一个
                     actualDataNum = tileLen - inTileLoopIdx * COMPUTE_LENGTH;
                 }
-
                 AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[bufferIndex]);
                 ComputeLayout dstLayout = computeLayoutDst.GetTileLayout(MatrixCoord(1, actualDataNum)); // row column 这个地方有问题
                 ComputeLayout srcLayout = computeLayoutSrc.GetTileLayout(MatrixCoord(1, actualDataNum));
                 ComputeLayout &ubLayout = dstLayout;
-
                 copyGm2Ub(inputBuffer[bufferIndex], src[gmSrcOffset], ubLayout, srcLayout);
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE3>(eventIds[bufferIndex]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE3>(eventIds[bufferIndex]);
-
                 uint64_t gmDstOffset = computeLayoutDst.GetOffset(blockOffset + loopOffset);
                 copyUb2Gm(dst[gmDstOffset], inputBuffer[bufferIndex], dstLayout, ubLayout);
                 AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[bufferIndex]);
-
                 bufferIndex = 1 - bufferIndex;
             }
         } else {
@@ -122,20 +118,16 @@ public:
                 if (tilesPerAiv - tileIdx < tilesPerLoop) { // 最后一次太够了，减少
                     actualTilesNum = tilesPerAiv - tileIdx;
                 }
-
                 AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[bufferIndex]);
                 ComputeLayout dstLayout = computeLayoutDst.GetTileLayout(MatrixCoord(actualTilesNum, tileLen)); // Row column
                 ComputeLayout srcLayout = computeLayoutSrc.GetTileLayout(MatrixCoord(actualTilesNum, tileLen));
                 ComputeLayout &ubLayout = dstLayout;
-
                 copyGm2Ub(inputBuffer[bufferIndex], src[gmSrcOffset], ubLayout, srcLayout);
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE3>(eventIds[bufferIndex]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE3>(eventIds[bufferIndex]);
-
                 uint64_t gmDstOffset = computeLayoutDst.GetOffset(blockOffset + tileOffset);
                 copyUb2Gm(dst[gmDstOffset], inputBuffer[bufferIndex], dstLayout, ubLayout);
                 AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[bufferIndex]);
-
                 bufferIndex = 1 - bufferIndex;
             }
         }
@@ -368,7 +360,7 @@ public:
         }
         // 后进行后处理过程
         MatmulCoord blockShape = L1TileShape::ToCoord();
-        BlockEpilogue blockEpilogue(blockShape, params.epilogueParams);
+        BlockEpilogue blockEpilogue(resource, blockShape, params.epilogueParams);
         uint32_t M = params.problemShape.m();
         uint32_t N = params.problemShape.n();
         uint32_t K = params.problemShape.k();

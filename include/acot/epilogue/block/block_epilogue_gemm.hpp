@@ -78,10 +78,30 @@ public:
 
     // 管理内存的
     ACOT_DEVICE
-    BlockEpilogue(MatmulCoord blockShape_, Params params_) : blockShape(blockShape_), params(params_){
+    BlockEpilogue(arch::Resource<ArchTag> &resource, MatmulCoord blockShape_, Params params_, uint32_t ubByteStart = 0) : blockShape(blockShape_), params(params_){
+        uint32_t maxMPerBlock = blockShape.m(); // M 和 N方向都切一刀
+        uint32_t maxNPerBlock = blockShape.n();
+        uint32_t tileSize = maxMPerBlock * maxNPerBlock / STAGES;
+        uint32_t ubCSize = tileSize * sizeof(ElementC);
+        uint32_t ubXSize = tileSize * sizeof(ElementX);
+        uint32_t ubDSize = tileSize * sizeof(ElementD);
+        uint32_t ubCSizeCast = tileSize * sizeof(ElementCompute);
+        uint32_t ubDSizeCast = tileSize * sizeof(ElementCompute);
         cGm.SetGlobalBuffer((__gm__ ElementC*)params.ptrC);
         dGm.SetGlobalBuffer((__gm__ ElementD*)params.ptrD);
-        Resource();
+        ubCTensor = resource.ubBuf.template GetBufferByByte<ElementC>(ubByteStart);
+        ubByteStart += ubCSize;
+        ubXTensor = resource.ubBuf.template GetBufferByByte<ElementX>(ubByteStart);
+        ubByteStart += ubXSize;
+        ubDTensor = resource.ubBuf.template GetBufferByByte<ElementD>(ubByteStart);
+        ubByteStart += ubDSize;
+        // 转换的空间
+        if constexpr (!isNeedCast){
+            ubCTensorCast = resource.ubBuf.template GetBufferByByte<ElementCompute>(ubByteStart);
+            ubByteStart += ubCSizeCast;
+            ubDTensorCast = resource.ubBuf.template GetBufferByByte<ElementCompute>(ubByteStart);;
+            ubByteStart += ubDSizeCast;
+        }
         AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID1);
         AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
     }
@@ -90,8 +110,6 @@ public:
     ~BlockEpilogue(){
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID1);
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
-        // 销毁内存
-        pipe.Destroy();
     }
 
     ACOT_DEVICE
@@ -104,11 +122,9 @@ private:
     MatmulCoord blockShape;
     Params params;
 
-    AscendC::TPipe pipe;
     AscendC::GlobalTensor<ElementC> cGm;
     AscendC::GlobalTensor<ElementX> xGm;
     AscendC::GlobalTensor<ElementD> dGm;
-    AscendC::TQue<AscendC::TPosition::VECCALC, 1> VECQueue; // 只开一个全空间的 
     AscendC::LocalTensor<ElementC> ubCTensor;
     AscendC::LocalTensor<ElementX> ubXTensor;
     AscendC::LocalTensor<ElementD> ubDTensor;
@@ -129,36 +145,6 @@ private:
     arch::CrossCoreFlagWithReverse<> flagAicFinishStore{FLAG_AIC_FINISH_STORE, RV_FLAG_AIC_FINISH_STORE};
 
     ACOT_DEVICE
-    void Resource(){
-        uint32_t maxMPerBlock = blockShape.m(); // M 和 N方向都切一刀
-        uint32_t maxNPerBlock = blockShape.n();
-        uint32_t tileSize = maxMPerBlock * maxNPerBlock / STAGES;
-        uint32_t ubCSize = tileSize * sizeof(ElementC);
-        uint32_t ubXSize = tileSize * sizeof(ElementX);
-        uint32_t ubDSize = tileSize * sizeof(ElementD);
-        uint32_t ubCSizeCast = tileSize * sizeof(ElementCompute);
-        uint32_t ubDSizeCast = tileSize * sizeof(ElementCompute);
-        // 三个数据，要分成6份数据块
-        uint32_t ubByteStart = 0;
-        pipe.InitBuffer(VECQueue, 1, UBSize);
-        AscendC::LocalTensor<uint8_t> ubTensor = VECQueue.AllocTensor<uint8_t>();
-        // 开单缓冲空间
-        ubCTensor = ubTensor[ubByteStart].template ReinterpretCast<ElementC>(); 
-        ubByteStart += ubCSize;
-        ubXTensor = ubTensor[ubByteStart].template ReinterpretCast<ElementX>();
-        ubByteStart += ubXSize;
-        ubDTensor = ubTensor[ubByteStart].template ReinterpretCast<ElementD>();
-        ubByteStart += ubDSize;
-        // 转换的空间
-        if constexpr (!isNeedCast){
-            ubCTensorCast = ubTensor[ubByteStart].template ReinterpretCast<ElementCompute>();
-            ubByteStart += ubCSizeCast;
-            ubDTensorCast = ubTensor[ubByteStart].template ReinterpretCast<ElementCompute>();
-            ubByteStart += ubDSizeCast;
-        }
-    }
-
-    ACOT_DEVICE
     void EpilogueRowMajor(uint32_t offsetC,uint32_t offsetD,MatmulCoord actualShape,LayoutX layoutX){
         uint32_t MActual = actualShape.m();
         uint32_t NActual = actualShape.n(); // 这里也要对齐
@@ -171,7 +157,6 @@ private:
         uint32_t NUbActual = NActual;
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID1);
         auto layoutTileC = params.layoutC.GetTileLayout(MakeCoord(MUbActual, NUbActual));
-        // auto layoutCInUb = params.layoutC.GetTileLayout(MakeCoord(maxMPerBlock, maxNPerBlock));
         LayoutC layoutCInUb{maxMPerBlock, maxNPerBlock};
         copyGmToUbC(ubCTensor,cGm[offsetC + aivIndex * maxMPerBlock * params.layoutC.stride(0)],layoutCInUb, layoutTileC);
         AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
@@ -187,7 +172,6 @@ private:
         AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
         arch::CrossCoreWaitFlagWithReverse<0x2, PIPE_MTE3>(flagAicFinishStore); // 没这个变量
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
-        // auto layoutXInUb = layoutX.GetTileLayout(MakeCoord(maxMPerBlock, maxNPerBlock));
         LayoutX layoutXInUb{maxMPerBlock, maxNPerBlock};
         auto layoutTileX = layoutX.GetTileLayout(MakeCoord(MUbActual, NUbActual));
         copyGmToUbX(ubXTensor,xGm[aivIndex * maxMPerBlock * layoutX.stride(0)],layoutXInUb, layoutTileX);
@@ -214,7 +198,6 @@ private:
         }
         AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
-        // auto layoutTileD = params.layoutD.GetTileLayout(MakeCoord(maxMPerBlock, maxNPerBlock));
         LayoutD layoutTileD{maxMPerBlock, maxNPerBlock};
         auto layoutDInGm = params.layoutD.GetTileLayout(MakeCoord(MUbActual, NUbActual));
         copyUbToGmD(dGm[offsetD + aivIndex * maxMPerBlock * params.layoutD.stride(0)],ubDTensor,layoutDInGm, layoutTileD);
@@ -233,7 +216,6 @@ private:
         uint32_t MUbActual = MActual;
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID1);
         auto layoutTileC = params.layoutC.GetTileLayout(MakeCoord(MUbActual, NUbActual));
-        // auto layoutCInUb = params.layoutC.GetTileLayout(MakeCoord(maxNPerBlock, maxMPerBlock));
         LayoutC layoutCInUb{maxMPerBlock, maxNPerBlock};
         copyGmToUbC(ubCTensor,cGm[offsetC + aivIndex * maxNPerBlock * params.layoutC.stride(1)],layoutCInUb, layoutTileC);
         AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
@@ -249,7 +231,6 @@ private:
         AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
         arch::CrossCoreWaitFlagWithReverse<0x2, PIPE_MTE3>(flagAicFinishStore); // 没这个变量
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
-        // auto layoutXInUb = layoutX.GetTileLayout(MakeCoord(maxNPerBlock, maxMPerBlock));
         LayoutX layoutXInUb{maxMPerBlock, maxNPerBlock};
         auto layoutTileX = layoutX.GetTileLayout(MakeCoord(MUbActual, NUbActual));
         copyGmToUbX(ubXTensor,xGm[aivIndex * maxNPerBlock * layoutX.stride(1)],layoutXInUb, layoutTileX);
@@ -276,7 +257,6 @@ private:
         }
         AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
-        // auto layoutTileD = params.layoutD.GetTileLayout(MakeCoord(maxMPerBlock, maxNPerBlock));
         LayoutD layoutTileD{maxMPerBlock, maxNPerBlock};
         auto layoutDInGm = params.layoutD.GetTileLayout(MakeCoord(MUbActual, NUbActual));
         copyUbToGmD(dGm[offsetD + aivIndex * maxNPerBlock * params.layoutD.stride(1)],ubDTensor,layoutDInGm, layoutTileD);

@@ -71,10 +71,6 @@
          LayoutDst const &layoutDst,
          LayoutSrc const &layoutSrc)
      {
-         // uint32_t MActual = layoutDst.shape(0);
-         // uint32_t NActual = layoutDst.shape(1);
-         // uint32_t NRound = layoutSrc.shape(1);
-         // uint32_t stride = layoutSrc.stride(0); // RowMajor
          AscendC::DataCopyExtParams dataCopyParams(
              layoutDst.shape(0),
              layoutDst.shape(1) * sizeof(Element),
@@ -103,10 +99,6 @@
          LayoutDst const &layoutDst,
          LayoutSrc const &layoutSrc)
      {
-         // uint32_t MActual = layoutDst.shape(1);
-         // uint32_t NActual = layoutDst.shape(0);
-         // uint32_t MRound = layoutSrc.shape(1);
-         // uint32_t stride = layoutSrc.stride(1); // ColumnMajor
          AscendC::DataCopyExtParams dataCopyParams(
              layoutDst.shape(1),
              layoutDst.shape(0) * sizeof(Element),
