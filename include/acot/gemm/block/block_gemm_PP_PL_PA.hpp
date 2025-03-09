@@ -159,15 +159,16 @@ private:
         uint32_t maxKPerBlock = L1TileShape::K;
         uint32_t KLoops = CeilDiv(K, maxKPerBlock);
         // 进行preload操作
-        uint32_t firstTileIdx = 0; // 先添加padding操作，在添加shuffleK操作
-        uint32_t lastTileIdx = KLoops - 1; // 最后一块
+        uint32_t startTileIdx = AscendC::GetBlockIdx();
+        uint32_t firstTileIdx = startTileIdx % KLoops; // 先添加padding操作，在添加shuffleK操作
+        uint32_t lastTileIdx = (startTileIdx + KLoops - 1) % KLoops; // 最后一块
         // 进行切分操作
         uint32_t KGmActual = min(K, maxKPerBlock); // 第一块 只有stride 进行了padding操作
         auto layoutAInL1 = LayoutAInL1::template MakeLayout<ElementA>(L1TileShape::M, L1TileShape::K);
         auto layoutBInL1 = LayoutBInL1::template MakeLayout<ElementB>(L1TileShape::K, L1TileShape::N);
         for(uint32_t KIdx = 0; KIdx < KLoops; KIdx++){
             // 进行preload操作
-            uint32_t shuffleKIdx = KIdx;
+            uint32_t shuffleKIdx = (startTileIdx + KIdx) % KLoops;
             if(shuffleKIdx == firstTileIdx && isFirstBlock){ // 第一块搬运空间 和平常搬运是一样的
                 auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShape.m(), KGmActual)); // 生成子块
                 auto layoutTileB = layoutB.GetTileLayout(MakeCoord(KGmActual, actualShape.n()));
@@ -181,7 +182,7 @@ private:
             uint32_t l1ListIdNext = 1 - l1ListId;
             uint32_t KGmActualNext = 0; // 初始化
             if(shuffleKIdx != lastTileIdx){ // 中间过程 这里使用到了双缓冲
-                uint32_t shuffleKIdxNext = KIdx + 1;
+                uint32_t shuffleKIdxNext = (startTileIdx + KIdx + 1) % KLoops;
                 KGmActualNext = (shuffleKIdxNext == KLoops - 1) ? (K - shuffleKIdxNext * maxKPerBlock) : maxKPerBlock; // 远远不是最后一次
                 auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShape.m(), KGmActualNext)); // 生成子块
                 auto layoutTileB = layoutB.GetTileLayout(MakeCoord(KGmActualNext, actualShape.n()));
@@ -318,18 +319,17 @@ private:
         MatmulCoord const &actualShape, MatmulCoord const &actualShapeNext,
         bool isFirstBlock, bool hasNextBlock, uint32_t singleIdx
     ){
-        // uint32_t MActual = actualShape.m();
-        // uint32_t NActual = actualShape.n();
         uint32_t K = actualShape.k();
         uint32_t maxKPerBlock = L1TileShape::K;
         uint32_t KLoops = CeilDiv(K, maxKPerBlock);
-        uint32_t firstTileIdx = 0;
-        uint32_t lastTileIdx = KLoops - 1; // 最后一块
+        uint32_t startTileIdx = AscendC::GetBlockIdx();
+        uint32_t firstTileIdx = startTileIdx % KLoops;
+        uint32_t lastTileIdx =(startTileIdx + KLoops - 1) % KLoops; // 最后一块
         uint32_t KGmActual = min(K, maxKPerBlock); // 第一块
         auto layoutAInL1 = LayoutAInL1::template MakeLayout<ElementA>(L1TileShape::K, L1TileShape::M);
         auto layoutBInL1 = LayoutBInL1::template MakeLayout<ElementB>(L1TileShape::N, L1TileShape::K);
         for(uint32_t KIdx = 0; KIdx < KLoops; KIdx++){
-            uint32_t shuffleKIdx = KIdx;
+            uint32_t shuffleKIdx = (startTileIdx + KIdx) % KLoops;
             if(shuffleKIdx == firstTileIdx && isFirstBlock){ // 这个应该没问题
                 auto layoutTileA = layoutA.GetTileLayout(MakeCoord(KGmActual, actualShape.m()));
                 auto layoutTileB = layoutB.GetTileLayout(MakeCoord(actualShape.n(), KGmActual));
@@ -343,7 +343,7 @@ private:
             uint32_t l1ListIdNext = 1 - l1ListId;
             uint32_t KGmActualNext = 0; // 初始化
             if(shuffleKIdx != lastTileIdx){
-                uint32_t shuffleKIdxNext = KIdx + 1;
+                uint32_t shuffleKIdxNext = (startTileIdx + KIdx + 1) % KLoops;
                 KGmActualNext = (shuffleKIdxNext == KLoops - 1) ? (K - shuffleKIdxNext * maxKPerBlock) : maxKPerBlock; // 远远不是最后一次
                 auto layoutTileA = layoutA.GetTileLayout(MakeCoord(KGmActualNext, actualShape.m())); // 只对stride进行了padding操作
                 auto layoutTileB = layoutB.GetTileLayout(MakeCoord(actualShape.n(), KGmActualNext));
