@@ -8,116 +8,117 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ACOT_EPILOGUE_TILE_TILE_COPY_UB_TO_GM_HPP
-#define ACOT_EPILOGUE_TILE_TILE_COPY_UB_TO_GM_HPP
-
-#include "acot/acot.hpp"
-#include "acot/layout/layout.hpp"
-#include "acot/matmul/matmul_type.hpp"
-#include "acot/gemm/gemm_type.hpp"
-
-namespace acot::epilogue::tile {
-
-template <
-    class ArchTag,
-    class GmType
->
-struct CopyUb2Gm {
-    static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy ub to gm, can not find the specialization.");
-};
-
-template <typename Element>
-struct CopyUb2Gm<arch::AtlasA2, matmul::MatmulType<Element, layout::RowMajor>> {
-    using LayoutDst = layout::RowMajor;
-    using LayoutSrc = layout::RowMajor;
-
-    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-
-    ACOT_DEVICE
-    CopyUb2Gm() = default;
-
-    ACOT_DEVICE
-    void operator()(
-        AscendC::GlobalTensor<Element> const &dstTensor,
-        AscendC::LocalTensor<Element> const &srcTensor,
-        layout::RowMajor const &layoutDst,
-        layout::RowMajor const &layoutSrc)
-    {
-        AscendC::DataCopyExtParams dataCopyParams(
-            layoutDst.shape(0),
-            layoutDst.shape(1) * sizeof(Element),
-            (layoutSrc.stride(0) - layoutSrc.shape(1)) / ELE_NUM_PER_C0,
-            (layoutDst.stride(0) - layoutDst.shape(1)) * sizeof(Element),
-            0
-        );
-        AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams);
-    }
-};
-
-template <typename Element>
-struct CopyUb2Gm<arch::AscendC910B3, gemm::GemmType<Element, layout::RowMajor>> {
-    using LayoutDst = layout::RowMajor;
-    using LayoutSrc = layout::RowMajor;
-
-    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-
-    ACOT_DEVICE
-    CopyUb2Gm() = default;
-
-    ACOT_DEVICE
-    void operator()(
-        AscendC::GlobalTensor<Element> const &dstTensor,
-        AscendC::LocalTensor<Element> const &srcTensor,
-        LayoutDst const &layoutDst,
-        LayoutSrc const &layoutSrc)
-    {
-        // uint32_t MActual = layoutDst.shape(0);
-        // uint32_t NActual = layoutDst.shape(1);
-        // uint32_t NRound = layoutSrc.shape(1);
-        // uint32_t stride = layoutSrc.stride(0); // RowMajor
-        AscendC::DataCopyExtParams dataCopyParams(
-            layoutDst.shape(0),
-            layoutDst.shape(1) * sizeof(Element),
-            (layoutSrc.stride(0) - layoutDst.shape(1)) / ELE_NUM_PER_C0,
-            (layoutDst.stride(0) - layoutDst.shape(1)) * sizeof(Element),
-            0
-        );
-        AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams);
-    }
-};
-
-template <typename Element>
-struct CopyUb2Gm<arch::AscendC910B3, gemm::GemmType<Element, layout::ColumnMajor>> {
-    using LayoutDst = layout::ColumnMajor;
-    using LayoutSrc = layout::ColumnMajor;
-
-    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-
-    ACOT_DEVICE
-    CopyUb2Gm() = default;
-
-    ACOT_DEVICE
-    void operator()(
-        AscendC::GlobalTensor<Element> const &dstTensor,
-        AscendC::LocalTensor<Element> const &srcTensor,
-        LayoutDst const &layoutDst,
-        LayoutSrc const &layoutSrc)
-    {
-        // uint32_t MActual = layoutDst.shape(1);
-        // uint32_t NActual = layoutDst.shape(0);
-        // uint32_t MRound = layoutSrc.shape(1);
-        // uint32_t stride = layoutSrc.stride(1); // ColumnMajor
-        AscendC::DataCopyExtParams dataCopyParams(
-            layoutDst.shape(1),
-            layoutDst.shape(0) * sizeof(Element),
-            (layoutSrc.stride(1) - layoutDst.shape(0)) / ELE_NUM_PER_C0,
-            (layoutDst.stride(1) - layoutDst.shape(0)) * sizeof(Element),
-            0
-        );
-        AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams);
-    }
-};
-
-}  // acot::epilogue::tile
-
-#endif
+ #ifndef ACOT_EPILOGUE_TILE_TILE_COPY_UB_TO_GM_HPP
+ #define ACOT_EPILOGUE_TILE_TILE_COPY_UB_TO_GM_HPP
+ 
+ #include "acot/acot.hpp"
+ #include "acot/layout/layout.hpp"
+ #include "acot/matmul/matmul_type.hpp"
+ #include "acot/gemm/gemm_type.hpp"
+ 
+ namespace acot::epilogue::tile {
+ 
+ template <
+     class ArchTag,
+     class GmType
+ >
+ struct CopyUb2Gm {
+     static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy ub to gm, can not find the specialization.");
+ };
+ 
+ template <typename Element>
+ struct CopyUb2Gm<arch::AtlasA2, matmul::MatmulType<Element, layout::RowMajor>> {
+     using LayoutDst = layout::RowMajor;
+     using LayoutSrc = layout::RowMajor;
+ 
+     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+ 
+     ACOT_DEVICE
+     CopyUb2Gm() = default;
+ 
+     ACOT_DEVICE
+     void operator()(
+         AscendC::GlobalTensor<Element> const &dstTensor,
+         AscendC::LocalTensor<Element> const &srcTensor,
+         layout::RowMajor const &layoutDst,
+         layout::RowMajor const &layoutSrc)
+     {
+         AscendC::DataCopyExtParams dataCopyParams(
+             layoutDst.shape(0),
+             layoutDst.shape(1) * sizeof(Element),
+             (layoutSrc.stride(0) - layoutSrc.shape(1)) / ELE_NUM_PER_C0,
+             (layoutDst.stride(0) - layoutDst.shape(1)) * sizeof(Element),
+             0
+         );
+         AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams);
+     }
+ };
+ 
+ template <typename Element>
+ struct CopyUb2Gm<arch::AscendC910B3, gemm::GemmType<Element, layout::RowMajor>> {
+     using LayoutDst = layout::RowMajor;
+     using LayoutSrc = layout::RowMajor;
+ 
+     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+ 
+     ACOT_DEVICE
+     CopyUb2Gm() = default;
+ 
+     ACOT_DEVICE
+     void operator()(
+         AscendC::GlobalTensor<Element> const &dstTensor,
+         AscendC::LocalTensor<Element> const &srcTensor,
+         LayoutDst const &layoutDst,
+         LayoutSrc const &layoutSrc)
+     {
+         // uint32_t MActual = layoutDst.shape(0);
+         // uint32_t NActual = layoutDst.shape(1);
+         // uint32_t NRound = layoutSrc.shape(1);
+         // uint32_t stride = layoutSrc.stride(0); // RowMajor
+         AscendC::DataCopyExtParams dataCopyParams(
+             layoutDst.shape(0),
+             layoutDst.shape(1) * sizeof(Element),
+             (layoutSrc.stride(0) - layoutDst.shape(1)) / ELE_NUM_PER_C0,
+             (layoutDst.stride(0) - layoutDst.shape(1)) * sizeof(Element),
+             0
+         );
+         AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams);
+     }
+ };
+ 
+ template <typename Element>
+ struct CopyUb2Gm<arch::AscendC910B3, gemm::GemmType<Element, layout::ColumnMajor>> {
+     using LayoutDst = layout::ColumnMajor;
+     using LayoutSrc = layout::ColumnMajor;
+ 
+     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+ 
+     ACOT_DEVICE
+     CopyUb2Gm() = default;
+ 
+     ACOT_DEVICE
+     void operator()(
+         AscendC::GlobalTensor<Element> const &dstTensor,
+         AscendC::LocalTensor<Element> const &srcTensor,
+         LayoutDst const &layoutDst,
+         LayoutSrc const &layoutSrc)
+     {
+         // uint32_t MActual = layoutDst.shape(1);
+         // uint32_t NActual = layoutDst.shape(0);
+         // uint32_t MRound = layoutSrc.shape(1);
+         // uint32_t stride = layoutSrc.stride(1); // ColumnMajor
+         AscendC::DataCopyExtParams dataCopyParams(
+             layoutDst.shape(1),
+             layoutDst.shape(0) * sizeof(Element),
+             (layoutSrc.stride(1) - layoutDst.shape(0)) / ELE_NUM_PER_C0,
+             (layoutDst.stride(1) - layoutDst.shape(0)) * sizeof(Element),
+             0
+         );
+         AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams);
+     }
+ };
+ 
+ }  // acot::epilogue::tile
+ 
+ #endif
+ 

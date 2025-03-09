@@ -36,7 +36,7 @@ public:
     PaddingMatrix(arch::Resource<ArchTag> &resource){
         int64_t bufferOffset = 0;
         for (uint32_t i = 0; i < BUFFER_NUM; i++) { // 
-            inputBuffer[i] = resource.ubBuf.template GetBufferByByte<Element>(bufferOffset * sizeof(Element));
+            inputBuffer[i] = resource.ubBuf.template GetBufferByByte<Element>(bufferOffset * sizeof(Element)); // ubBuf是int8_t的内容
             bufferOffset += COMPUTE_LENGTH;
         }
     }
@@ -96,7 +96,7 @@ public:
                 }
 
                 AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[bufferIndex]);
-                ComputeLayout dstLayout = computeLayoutDst.GetTileLayout(MatrixCoord(1, actualDataNum)); // row column
+                ComputeLayout dstLayout = computeLayoutDst.GetTileLayout(MatrixCoord(1, actualDataNum)); // row column 这个地方有问题
                 ComputeLayout srcLayout = computeLayoutSrc.GetTileLayout(MatrixCoord(1, actualDataNum));
                 ComputeLayout &ubLayout = dstLayout;
 
@@ -108,7 +108,7 @@ public:
                 copyUb2Gm(dst[gmDstOffset], inputBuffer[bufferIndex], dstLayout, ubLayout);
                 AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[bufferIndex]);
 
-                bufferIndex = (bufferIndex + 1) % BUFFER_NUM;
+                bufferIndex = 1 - bufferIndex;
             }
         } else {
             // Handle multiple tile each loop.
@@ -136,7 +136,7 @@ public:
                 copyUb2Gm(dst[gmDstOffset], inputBuffer[bufferIndex], dstLayout, ubLayout);
                 AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[bufferIndex]);
 
-                bufferIndex = (bufferIndex + 1) % BUFFER_NUM;
+                bufferIndex = 1 - bufferIndex;
             }
         }
         AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[0]); // 相当于析构函数中
@@ -250,12 +250,12 @@ public:
         BlockGemm blockGemm(resource);
         // Represent the full gm
         AscendC::GlobalTensor<ElementA> gmA;
-        gmA.SetGlobalBuffer((__gm__ ElementA *)params.ptrWA);
+        gmA.SetGlobalBuffer((__gm__ ElementA*)params.ptrWA);
         AscendC::GlobalTensor<ElementB> gmB;
-        gmB.SetGlobalBuffer((__gm__ ElementB *)params.ptrWB);
+        gmB.SetGlobalBuffer((__gm__ ElementB*)params.ptrWB);
         AscendC::GlobalTensor<ElementX> gmX;
-        gmX.SetGlobalBuffer((__gm__ ElementX *)params.gmWorkspace);
-        uint32_t M = params.problemShape.m();
+        gmX.SetGlobalBuffer((__gm__ ElementX*)params.gmWorkspace);
+        uint32_t M = params.problemShape.m(); // 这些参数都没有进行padding操作，只有stride进行padding操作
         uint32_t N = params.problemShape.n();
         uint32_t K = params.problemShape.k();
         #pragma unroll
@@ -289,7 +289,7 @@ public:
                 MatmulCoord actualShape{MGmActual, NGmActual, K};
                 AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((int32_t)singleIdx);
                 blockGemm(
-                    gmA[MGmBlockIdx * params.layoutWA.stride(0) * maxMPerBlock], params.layoutWA,
+                    gmA[MGmBlockIdx * params.layoutWA.stride(0) * maxMPerBlock], params.layoutWA, // row col stride不一样了
                     gmB[NGmBlockIdx * maxNPerBlock], params.layoutWB,
                     gmX[MGmBlockIdx * layoutC.stride(0) * maxMPerBlock  + NGmBlockIdx * maxNPerBlock], layoutC,
                     gmA[MNextGmBlockIdx * params.layoutWA.stride(0) * maxMPerBlock], gmB[NNextGmBlockIdx * maxNPerBlock],
@@ -347,8 +347,8 @@ public:
         if (!IsSameStride(params.layoutWA, params.layoutA)) {
             AscendC::GlobalTensor<ElementA> gmA;
             AscendC::GlobalTensor<ElementA> gmWA;
-            gmA.SetGlobalBuffer(reinterpret_cast<__gm__ ElementA *>(params.ptrA));
-            gmWA.SetGlobalBuffer(reinterpret_cast<__gm__ ElementA *>(params.ptrWA));
+            gmA.SetGlobalBuffer(reinterpret_cast<__gm__ ElementA*>(params.ptrA));
+            gmWA.SetGlobalBuffer(reinterpret_cast<__gm__ ElementA*>(params.ptrWA));
             PaddingA paddingA(resource);
             paddingA(gmWA, gmA, params.layoutWA, params.layoutA); // 两个AIV核
         }
@@ -356,8 +356,8 @@ public:
         if (!IsSameStride(params.layoutWB, params.layoutB)) {
             AscendC::GlobalTensor<ElementB> gmB;
             AscendC::GlobalTensor<ElementB> gmWB;
-            gmB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB *>(params.ptrB));
-            gmWB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB *>(params.ptrWB));
+            gmB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB*>(params.ptrB));
+            gmWB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB*>(params.ptrWB));
             PaddingB paddingB(resource);
             paddingB(gmWB, gmB, params.layoutWB, params.layoutB);
             // 0x0 synchronization control between AI Core
@@ -412,9 +412,11 @@ public:
         }
     }
 private:
+    // AIC同步
     static constexpr arch::FlagID FLAG_AIC_FINISH_STORE = 0;
     static constexpr arch::FlagID RV_FLAG_AIC_FINISH_STORE = 1;
     arch::CrossCoreFlagWithReverse<> flagAicFinishStore{FLAG_AIC_FINISH_STORE, RV_FLAG_AIC_FINISH_STORE};
+    // AIV同步
     static constexpr arch::FlagID FLAG_AIV_FINISH_STORE = 0;
     arch::CrossCoreFlag flagAivFinishPadding{FLAG_AIV_FINISH_STORE};
 };

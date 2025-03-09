@@ -128,23 +128,16 @@ struct CopyL0CToGm<acot::arch::AscendC910B3, ElementAccumulator_,
         AscendC::LocalTensor<ElementSrc> srcTensor,
         LayoutDst const &dstLayout, LayoutSrc const &srcLayout, uint8_t unitFlag = 0
     ){
-        uint32_t MAlignment = srcLayout.shape(0);
-        uint32_t NAlignment = ELE_NUM_PER_C0;
-        if constexpr (std::is_same<ElementSrc, float>::value && std::is_same<ElementDst, float>::value){
-            // 说明原来的一定是float数据类型
-            NAlignment = srcLayout.shape(0);
-        }
         uint32_t MActual = dstLayout.shape(0);
         uint32_t NActual = dstLayout.shape(1);
-        uint32_t MRound = RoundUp(MActual, MAlignment);
-        uint32_t NRound = RoundUp(NActual, NAlignment);
+        uint32_t MRound = srcLayout.shape(0) * srcLayout.shape(1);
         uint32_t strideC = dstLayout.stride(0);
         AscendC::DataCopyCO12DstParams params;
         // 一定是Nz2Nd的，而且L0C一定是行优先的
         params.nSize = NActual; // 参数写反了  解决了问题
         params.mSize = MActual;
         params.dstStride = strideC;
-        params.srcStride = MRound;
+        params.srcStride = MRound; // 这个参数存疑
         params.quantPre = quantPre;
         params.reluPre = 0;
         params.channelSplit = false;
@@ -185,15 +178,9 @@ struct CopyL0CToGm<acot::arch::AscendC910B3, ElementAccumulator_,
         AscendC::LocalTensor<ElementSrc> srcTensor,
         LayoutDst const &dstLayout, LayoutSrc const &srcLayout, uint8_t unitFlag = 0
     ){
-        uint32_t MAlignment = srcLayout.shape(0); // 对齐32byte
-        if constexpr (std::is_same<ElementDst, int32_t>::value){
-            MAlignment = ELE_NUM_PER_C0;
-        }
-        uint32_t NAlignment = srcLayout.shape(0); // 对齐16行
         uint32_t MActual = dstLayout.shape(0);
         uint32_t NActual = dstLayout.shape(1);
-        uint32_t MRound = RoundUp(MActual, MAlignment);
-        uint32_t NRound = RoundUp(NActual, NAlignment);
+        uint32_t NRound = srcLayout.shape(2) * srcLayout.shape(3);
         uint32_t strideC = dstLayout.stride(1);
         AscendC::DataCopyCO12DstParams params;
         // 一定是Nz2Nd的，而且L0C一定是行优先的

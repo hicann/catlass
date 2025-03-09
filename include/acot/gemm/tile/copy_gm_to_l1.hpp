@@ -29,13 +29,13 @@ struct CopyGmToL1A<acot::arch::AscendC910B3, acot::gemm::GemmType<Element, acot:
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
         uint32_t MActual = layoutSrc.shape(0);
-        uint32_t MRound = layoutDst.shape(1) * layoutDst.shape(0);
+        uint32_t MRound = layoutDst.shape(0) * layoutDst.shape(1);
         uint32_t KRound = layoutDst.shape(2) * layoutDst.shape(3);
         uint32_t stride = layoutSrc.stride(0); // 注意layoutSrc的构造函数 
         AscendC::Nd2NzParams params;
         params.ndNum = 1;
         params.nValue = MActual;
-        params.dValue = KRound; // 这里直接搬整数倍
+        params.dValue = KRound;
         params.srcNdMatrixStride = 0;
         params.srcDValue = stride;
         params.dstNzC0Stride = MRound; // 这边进行填充操作
@@ -60,10 +60,8 @@ struct CopyGmToL1A<acot::arch::AscendC910B3, acot::gemm::GemmType<Element, acot:
         AscendC::GlobalTensor<Element> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t MActual = layoutSrc.shape(1);
-        uint32_t MRound = RoundUp(MActual, C0_NUM_PER_FRACTAL);
+        uint32_t MRound = layoutDst.shape(2) * layoutDst.shape(3);
         uint32_t KActual = layoutSrc.shape(0);
-        uint32_t KRound = RoundUp(KActual, C0_NUM_PER_FRACTAL);
         uint32_t stride = layoutSrc.stride(1); // ColumnMajor
         uint32_t ndNum = KActual / C0_NUM_PER_FRACTAL;
         uint32_t remains = KActual % C0_NUM_PER_FRACTAL;
@@ -116,23 +114,6 @@ struct CopyGmToL1A<acot::arch::AscendC910B3, acot::gemm::GemmType<Element, acot:
                 params.dstNzMatrixStride = 1;
                 AscendC::DataCopy(dstTensor[ndNum * MRound * C0_NUM_PER_FRACTAL], srcTensor[ndNum * C0_NUM_PER_FRACTAL * stride], params);
             }
-        }else{
-            uint32_t KL1AlignmentA = C0_NUM_PER_FRACTAL;
-            uint32_t KL1Loops = CeilDiv(KActual, KL1AlignmentA);
-            AscendC::Nd2NzParams params;
-            params.ndNum = 1;
-            params.dValue = MRound;
-            params.srcNdMatrixStride = 0;
-            params.srcDValue = stride;
-            params.dstNzNStride = 1;
-            params.dstNzMatrixStride = 1;
-            for(uint32_t kL1AIdx = 0; kL1AIdx < KL1Loops; kL1AIdx++){ // 16行进行切分，变成zZ
-                uint32_t KGmAActual = (kL1AIdx == KL1Loops - 1) ? (KActual - kL1AIdx * KL1AlignmentA) : KL1AlignmentA;
-                uint32_t KGmARound = RoundUp(KGmAActual, KL1AlignmentA);
-                params.nValue = KGmAActual; 
-                params.dstNzC0Stride = KGmARound; // 填充操作 
-                AscendC::DataCopy(dstTensor[kL1AIdx * KL1AlignmentA * MRound], srcTensor[kL1AIdx * KL1AlignmentA * stride], params);
-            }
         }
     }
 };
@@ -152,10 +133,9 @@ struct CopyGmToL1A<acot::arch::AscendC910B3, acot::gemm::GemmType<int8_t, acot::
         AscendC::GlobalTensor<int8_t> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t KAlignment = layoutDst.shape(0) * 2;
         uint32_t MRound = layoutDst.shape(2) * layoutDst.shape(3);
         uint32_t KActual = layoutSrc.shape(0);
-        uint32_t KRound = RoundUp(KActual, KAlignment);
+        uint32_t KRound = layoutDst.shape(0) * layoutDst.shape(1);
         uint32_t stride = layoutSrc.stride(1); // ColumnMajor
         AscendC::Nd2NzParams params;
         params.ndNum = 1;
@@ -191,10 +171,9 @@ struct CopyGmToL1B<arch::AscendC910B3, gemm::GemmType<Element, acot::layout::Row
         AscendC::GlobalTensor<Element> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t NActual = layoutSrc.shape(1);
-        uint32_t NRound = RoundUp(NActual, C0_NUM_PER_FRACTAL);
+        uint32_t NRound = layoutDst.shape(2) * layoutDst.shape(3);
         uint32_t KActual = layoutSrc.shape(0);
-        uint32_t stride = layoutSrc.stride(0);
+        uint32_t stride = layoutSrc.stride(0); // 这个变了
         uint32_t ndNum = KActual / C0_NUM_PER_FRACTAL;
         uint32_t remains = KActual % C0_NUM_PER_FRACTAL;
         uint32_t srcNdStride = stride * C0_NUM_PER_FRACTAL;
@@ -246,23 +225,6 @@ struct CopyGmToL1B<arch::AscendC910B3, gemm::GemmType<Element, acot::layout::Row
                 params.dstNzMatrixStride = 1;
                 AscendC::DataCopy(dstTensor[ndNum * NRound * C0_NUM_PER_FRACTAL], srcTensor[ndNum * C0_NUM_PER_FRACTAL * stride], params);
             }
-        }else{
-            uint32_t KL1AlignmentB = C0_NUM_PER_FRACTAL;
-            uint32_t KL1Loops = CeilDiv(KActual, KL1AlignmentB);
-            AscendC::Nd2NzParams params;
-            params.ndNum = 1;
-            params.dValue = NRound; // 这里直接搬16倍数据内容
-            params.srcNdMatrixStride = 0;
-            params.srcDValue = stride;
-            params.dstNzNStride = 1;
-            params.dstNzMatrixStride = 1;
-            for(uint32_t kL1BIdx = 0; kL1BIdx < KL1Loops; kL1BIdx++){ // 没问题了
-                uint32_t KGmBActual = (kL1BIdx == KL1Loops - 1) ? (KActual - kL1BIdx * KL1AlignmentB) : KL1AlignmentB;
-                uint32_t KGmBRound = RoundUp(KGmBActual, KL1AlignmentB);
-                params.nValue = KGmBActual;
-                params.dstNzC0Stride = KGmBRound;  // 这里对齐16 这里会进行填充操作
-                AscendC::DataCopy(dstTensor[kL1BIdx * KL1AlignmentB * NRound], srcTensor[kL1BIdx * KL1AlignmentB * stride], params);
-            }
         }
     }
 };
@@ -282,10 +244,9 @@ struct CopyGmToL1B<arch::AscendC910B3, gemm::GemmType<int8_t, acot::layout::RowM
         AscendC::GlobalTensor<int8_t> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t NActual = layoutSrc.shape(1);
-        uint32_t NRound = layoutDst.shape(2) * layoutDst.shape(3);
+        uint32_t NRound = layoutDst.shape(2) * layoutDst.shape(3); 
         uint32_t KActual = layoutSrc.shape(0);
-        uint32_t KRound = RoundUp(KActual, layoutDst.shape(0) * 2);
+        uint32_t KRound = layoutDst.shape(0) * layoutDst.shape(1); // 组成方阵
         uint32_t stride = layoutSrc.stride(0);
         AscendC::Nd2NzParams params;
         params.ndNum = 1;

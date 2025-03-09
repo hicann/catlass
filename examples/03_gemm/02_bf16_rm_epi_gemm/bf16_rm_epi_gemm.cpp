@@ -51,8 +51,8 @@ void BF16RMGemm(
     using CType = gemm::GemmType<bfloat16_t, LayoutC>;
     using XType = gemm::GemmType<float, LayoutC>;
     // 使用Coord来传递值
-    using L1TileShape = MatmulShape<128, 192, 256>;
-    using L0TileShape = MatmulShape<128, 192, 64>;
+    using L1TileShape = MatmulShape<96, 256, 256>;
+    using L0TileShape = MatmulShape<96, 256, 64>;
 
     // 调用block层函数
     using GemmBlock = gemm::block::BlockGemm<GemmBlockDispatchPolicy, L1TileShape, L0TileShape, AType, BType, XType>; // 这个还是乘法
