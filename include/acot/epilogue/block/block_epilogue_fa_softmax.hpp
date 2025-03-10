@@ -15,7 +15,7 @@
 #include "acot/arch/cross_core_sync.hpp"
 #include "acot/arch/resource.hpp"
 #include "acot/epilogue/dispatch_policy.hpp"
-#include "acot/matmul_coord.hpp"
+#include "acot/gemv_coord.hpp"
 #include "acot/matrix_coord.hpp"
 #include "acot/epilogue/tile/tile_copy.hpp"
 

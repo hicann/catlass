@@ -11,17 +11,19 @@
 #ifndef ACOT_ARCH_ARCH_HPP
 #define ACOT_ARCH_ARCH_HPP
 
-namespace acot::arch {
+namespace acot::arch
+{
 
-struct AtlasA2 {
-    static constexpr uint32_t BIAS_SIZE = 1024;
-    static constexpr uint32_t FIXBUF_SIZE = 7 * 1024;
-    static constexpr uint32_t UB_SIZE = 192 * 1024;
-    static constexpr uint32_t L1_SIZE = 512 * 1024;
-    static constexpr uint32_t L0A_SIZE = 64 * 1024;
-    static constexpr uint32_t L0B_SIZE = 64 * 1024;
-    static constexpr uint32_t L0C_SIZE = 128 * 1024;
-};
+    struct AtlasA2
+    {
+        static constexpr uint32_t BIAS_SIZE = 1024;
+        static constexpr uint32_t FIXBUF_SIZE = 7 * 1024;
+        static constexpr uint32_t UB_SIZE = 192 * 1024;
+        static constexpr uint32_t L1_SIZE = 512 * 1024;
+        static constexpr uint32_t L0A_SIZE = 64 * 1024;
+        static constexpr uint32_t L0B_SIZE = 64 * 1024;
+        static constexpr uint32_t L0C_SIZE = 128 * 1024;
+    };
 
 } // namespace acot::arch
 

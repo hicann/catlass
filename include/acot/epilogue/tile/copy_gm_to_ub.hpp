@@ -13,47 +13,86 @@
 
 #include "acot/acot.hpp"
 #include "acot/layout/layout.hpp"
-#include "acot/matmul/matmul_type.hpp"
+#include "acot/gemv/gemv_type.hpp"
 
-namespace acot::epilogue::tile {
+namespace acot::epilogue::tile
+{
 
-template <
-    class ArchTag,
-    class GmType
->
-struct CopyGm2Ub {
-    static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy gm to ub, can not find the specialization.");
-};
-
-template <typename Element>
-struct CopyGm2Ub<arch::AtlasA2, matmul::MatmulType<Element, layout::RowMajor>> {
-    using LayoutSrc = layout::RowMajor;
-    using LayoutDst = layout::RowMajor;
-
-    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-
-    ACOT_DEVICE
-    CopyGm2Ub() = default;
-
-    ACOT_DEVICE
-    void operator()(
-        AscendC::LocalTensor<Element> const &dstTensor,
-        AscendC::GlobalTensor<Element> const &srcTensor,
-        layout::RowMajor const &layoutDst,
-        layout::RowMajor const &layoutSrc)
+    template <
+        class ArchTag,
+        class GmType>
+    struct CopyGm2Ub
     {
-        AscendC::DataCopyExtParams dataCopyParams(
-            layoutSrc.shape(0),
-            layoutSrc.shape(1) * sizeof(Element),
-            (layoutSrc.stride(0) - layoutSrc.shape(1)) * sizeof(Element),
-            (layoutDst.stride(0) - layoutDst.shape(1)) / ELE_NUM_PER_C0,
-            0
-        );
-        AscendC::DataCopyPadExtParams<Element> padParams(false, 0, 0, 0);
-        AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams, padParams);
+        static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy gm to ub, can not find the specialization.");
     };
-};
 
-}  // acot::epilogue::tile
+    template <typename Element>
+    struct CopyGm2Ub<arch::AtlasA2, gemv::GemvType<Element, layout::RowMajor>>
+    {
+        using LayoutSrc = layout::RowMajor;
+        using LayoutDst = layout::RowMajor;
+
+        static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+
+        ACOT_DEVICE
+        CopyGm2Ub() = default;
+
+        ACOT_DEVICE
+        void operator()(
+            AscendC::LocalTensor<Element> const &dstTensor,
+            AscendC::GlobalTensor<Element> const &srcTensor,
+            layout::RowMajor const &layoutDst,
+            layout::RowMajor const &layoutSrc)
+        {
+            AscendC::DataCopyExtParams dataCopyParams(
+                layoutSrc.shape(0),
+                layoutSrc.shape(1) * sizeof(Element),
+                (layoutSrc.stride(0) - layoutSrc.shape(1)) * sizeof(Element),
+                (layoutDst.stride(0) - layoutDst.shape(1)) / ELE_NUM_PER_C0,
+                0);
+            AscendC::DataCopyPadExtParams<Element> padParams(false, 0, 0, 0);
+            AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams, padParams);
+        };
+    };
+
+    //重构了一个传vec的copyGm2Ub，因为vector传入的时候，可以直接连续传入，不需要再对齐，所以其实layout感觉没有啥用
+        template <
+        class ArchTag,
+        class GmType>
+    struct VecCopyGm2Ub
+    {
+        static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy gm to ub, can not find the specialization.");
+    };
+
+    template <typename Element>
+    struct VecCopyGm2Ub<arch::AtlasA2, gemv::GemvType<Element, layout::RowMajor>>
+    {
+        using LayoutSrc = layout::RowMajor;
+        using LayoutDst = layout::RowMajor;
+
+        static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+
+        ACOT_DEVICE
+        VecCopyGm2Ub() = default;
+
+        ACOT_DEVICE
+        void operator()(
+            AscendC::LocalTensor<Element> const &dstTensor,
+            AscendC::GlobalTensor<Element> const &srcTensor,
+            layout::RowMajor const &layoutDst,
+            layout::RowMajor const &layoutSrc)
+        {
+            AscendC::DataCopyExtParams dataCopyParams(  //连续搬运
+                layoutSrc.shape(0),
+                layoutSrc.shape(1) * sizeof(Element),
+                0,
+                0,
+                0);
+            AscendC::DataCopyPadExtParams<Element> padParams(false, 0, 0, 0);
+            AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams, padParams);
+        };
+    };
+
+} // acot::epilogue::tile
 
 #endif

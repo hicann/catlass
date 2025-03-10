@@ -14,48 +14,42 @@
 #include "acot/detail/macros.hpp"
 
 template <uint32_t ALIGN, typename T>
-ACOT_HOST_DEVICE
-constexpr T RoundUp(const T &val)
+ACOT_HOST_DEVICE constexpr T RoundUp(const T &val)
 {
     static_assert(ALIGN != 0, "ALIGN must not be 0");
     return (val + ALIGN - 1) / ALIGN * ALIGN;
 }
 
 template <class T>
-ACOT_HOST_DEVICE
-constexpr T RoundUp(const T &val, const T align)
+ACOT_HOST_DEVICE constexpr T RoundUp(const T &val, const T align)
 {
     return (val + align - 1) / align * align;
 }
 
 template <uint32_t ALIGN, typename T>
-ACOT_HOST_DEVICE
-constexpr T RoundDown(const T val)
+ACOT_HOST_DEVICE constexpr T RoundDown(const T val)
 {
     static_assert(ALIGN != 0, "ALIGN must not be 0");
     return val / ALIGN * ALIGN;
 }
 
 template <class T>
-ACOT_HOST_DEVICE
-constexpr T RoundDown(const T val, const T align)
+ACOT_HOST_DEVICE constexpr T RoundDown(const T val, const T align)
 {
     return val / align * align;
 }
 
 template <uint32_t DIVISOP, typename T>
-ACOT_HOST_DEVICE
-constexpr T CeilDiv(const T dividend)
+ACOT_HOST_DEVICE constexpr T CeilDiv(const T dividend)
 {
     static_assert(DIVISOP != 0, "DIVISOP must not be 0");
     return (dividend + DIVISOP - 1) / DIVISOP;
 }
 
 template <class T>
-ACOT_HOST_DEVICE
-constexpr T CeilDiv(const T dividend, const T divisor)
+ACOT_HOST_DEVICE constexpr T CeilDiv(const T dividend, const T divisor)
 {
     return (dividend + divisor - 1) / divisor;
 }
 
-#endif  // ACOT_ALIGNMENT_HPP
+#endif // ACOT_ALIGNMENT_HPP

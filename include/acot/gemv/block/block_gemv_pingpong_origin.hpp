@@ -1,0 +1,272 @@
+#ifndef ACOT_GEMV_BLOCK_BLOCK_GEMV_PINGPONG_HPP
+#define ACOT_GEMV_BLOCK_BLOCK_GEMV_PINGPONG_HPP
+
+#include "acot/acot.hpp"
+#include "acot/gemv/dispatch_policy.hpp"
+#include "acot/arch/resource.hpp"
+#include "acot/coord.hpp"
+// #include "acot/matmul_coord.hpp"
+
+#include "acot/gemv_coord.hpp"
+
+#include "acot/gemv/dispatch_policy.hpp"
+#include "acot/gemv/helper.hpp"
+
+namespace acot::gemv::block
+{
+
+    template <
+        bool ENABLE_UNIT_FLAG_,
+        class L1TileShape_, // 需要看怎么将maxNPerBlock用进这里面
+        class L0TileShape_, // 待使用, 存在问题，在调用时要关注参数的使用
+        class xType_,       // 向量x
+        class AType_,       // 里面有成员elemenet, layout
+        class yType_,       // 向量y
+        class BiasType_,
+        class TileCopy_,
+        class TileMmad_> // BiasType, TileCopy, TileMmad这三个参数采用默认值，在block_gemv.hpp文件中
+    struct BlockGemv<
+        GemvAtlasA2Pingpong<ENABLE_UNIT_FLAG_>,
+        L1TileShape_,
+        L0TileShape_,
+        xType_,
+        AType_,
+        yType_,
+        BiasType_,
+        TileCopy_,
+        TileMmad_>
+    {
+    public:
+        // Type Aliases
+        using DispatchPolicy = GemvAtlasA2Pingpong<ENABLE_UNIT_FLAG_>;
+        using ArchTag = typename DispatchPolicy::ArchTag;
+
+        using L1TileShape = L1TileShape_;
+        using L0TileShape = L0TileShape_;
+
+        // 矩阵、向量数据数据类型、排布方式
+        using ElementA = typename AType_::Element;
+        using LayoutA = typename AType_::Layout;
+        using Elementx = typename xType_::Element;
+        using Layoutx = typename xType_::Layout;
+        using Elementy = typename yType_::Element;
+        using Layouty = typename yType_::Layout;
+
+        // tile层搬运函数
+        using TileMmad = TileMmad_;
+        using CopyGmToL1A = typename TileCopy_::CopyGmToL1A;
+        using CopyGmToL1B = typename TileCopy_::CopyGmToL1B;
+        using CopyL1ToL0A = typename TileCopy_::CopyL1ToL0A;
+        using CopyL1ToL0B = typename TileCopy_::CopyL1ToL0B;
+        using CopyL0CToGm = typename TileCopy_::CopyL0CToGm;
+
+        // 计算时，L0C的数据类型
+        using ElementAccumulator = typename gemv::helper::ElementAccumulatorSelector<ElementA, Elementx>::ElementAccumulator;
+
+        using LayoutxInL1 = typename CopyL1ToL0A::LayoutSrc;
+        using LayoutAInL1 = typename CopyL1ToL0B::LayoutSrc;
+        using LayoutxInL0 = typename CopyL1ToL0A::LayoutDst;
+        using LayoutAInL0 = typename CopyL1ToL0B::LayoutDst;
+        using LayoutyInL0 = layout::zN; // 这里应该是默认
+
+        // x和A的对齐方式不同
+        using L1AAlignHelper = gemv::helper::L1AlignHelper<ElementA, LayoutA>;
+        using L1XAlignHelper = gemv::helper::L1AlignHelper<Elementx, Layoutx>;
+
+        static constexpr bool ENABLE_UNIT_FLAG = DispatchPolicy::ENABLE_UNIT_FLAG; // 使能单元标志？
+        static constexpr uint32_t STAGES = DispatchPolicy::STAGES;                 // 双流水
+
+        static constexpr uint32_t L1A_SIZE = ArchTag::L1_SIZE / 2 / STAGES;
+        static constexpr uint32_t L1B_SIZE = ArchTag::L1_SIZE / 2 / STAGES;
+        static constexpr uint32_t L0A_SIZE = ArchTag::L0A_SIZE;
+        static constexpr uint32_t L0B_SIZE = ArchTag::L0B_SIZE;
+        static constexpr uint32_t L0C_SIZE = ArchTag::L0C_SIZE;
+
+        static constexpr uint32_t L0C_TILE_SIZE = L0TileShape::M * L0TileShape::N * sizeof(ElementAccumulator);
+        static constexpr uint32_t L0C_TILE_NUM = L0C_SIZE / L0C_TILE_SIZE;
+
+        // 默认L0A,L0B划分出两片空间，单位：字节
+        static constexpr uint32_t L0A_PINGPONG_BUF_SIZE = L0A_SIZE / STAGES;
+        static constexpr uint32_t L0B_PINGPONG_BUF_SIZE = L0B_SIZE / STAGES;
+
+        // Check L1TileShape
+        static_assert((L1A_SIZE * STAGES + L1B_SIZE * STAGES) <= ArchTag::L1_SIZE, "L1TileShape exceeding the L1 space!");
+
+        static constexpr uint32_t L0A_TILE_SIZE = 16 * L0TileShape::N * sizeof(Elementx);
+        static constexpr uint32_t L0B_TILE_SIZE = L0TileShape::M * L0TileShape::N * sizeof(ElementA);
+        static_assert((L0A_TILE_SIZE * STAGES) <= L0A_SIZE, "L0TileShape exceeding the L0A space!");
+        static_assert((L0B_TILE_SIZE * STAGES) <= L0B_SIZE, "L0TileShape exceeding the L0B space!");
+
+        /// Construct
+        ACOT_DEVICE
+        BlockGemv(arch::Resource<ArchTag> &resource, uint32_t l1BufAddrStart = 0)
+        {
+            uint32_t l1AOffset = l1BufAddrStart;
+            uint32_t l1BOffset = l1BufAddrStart + L1A_SIZE * STAGES;
+            // Init buffers
+            for (uint32_t i = 0; i < STAGES; i++)
+            {
+                // Assign L1/L0A/L0B space for each stages 为双缓冲分配空间
+                l1ATensorList[i] = resource.l1Buf.template GetBufferByByte<Elementx>(l1AOffset + L1A_SIZE * i);
+                l1BTensorList[i] = resource.l1Buf.template GetBufferByByte<ElementA>(l1BOffset + L1B_SIZE * i);
+                l0ATensorList[i] = resource.l0ABuf.template GetBufferByByte<Elementx>(L0A_PINGPONG_BUF_SIZE * i);
+                l0BTensorList[i] = resource.l0BBuf.template GetBufferByByte<ElementA>(L0B_PINGPONG_BUF_SIZE * i);
+
+                // todo:分配流水。先用pipeall
+                // l1AEventList[i] = i;                // 0, 1
+                // l1BEventList[i] = i + STAGES;       // 2, 3
+                // l0AEventList[i] = i;                // 0, 1
+                // l0BEventList[i] = i + STAGES;       // 2, 3
+            }
+            l0CTensor = resource.l0CBuf.template GetBufferByByte<ElementAccumulator>(0);
+
+            // todo:分配流水。先用pipeall
+            AscendC::PipeBarrier<PIPE_ALL>();
+        }
+
+        /// Destructor
+        ACOT_DEVICE
+        ~BlockGemv()
+        {
+            // todo:释放流水。先用pipeall
+            // for (uint32_t i = 0; i < STAGES; i++)
+            // {
+            //     // AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[i]);
+            //     // AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[i]);
+            //     // AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[i]);
+            //     // AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[i]);
+            // }
+            // AscendC::WaitFlag<AscendC::HardEvent::FIX_M>(EVENT_ID0);
+        }
+
+        /// Perform a block-scoped vector-matrix multiply-accumulate
+        ACOT_DEVICE
+        void operator()(
+            AscendC::GlobalTensor<Elementx> const &gmx, Layoutx const &layoutx,
+            AscendC::GlobalTensor<ElementA> const &gmA, LayoutA const &layoutA,
+            AscendC::GlobalTensor<Elementy> const &gmy, Layouty const &layouty,
+            GemvCoord const &actualShape, uint32_t singleIdx)
+        {
+            auto layoutxInL1 = LayoutxInL1::template MakeLayout<Elementx>(16, L1TileShape::N);             // 16, N
+            auto layoutAInL1 = LayoutAInL1::template MakeLayout<ElementA>(L1TileShape::M, L1TileShape::N); // M,N 行优先，列优先也是这个
+            // auto layoutInL0C = LayoutyInL0::MakeLayoutInL0C(MatrixCoord(16, actualShape.m()));
+            auto layoutInL0C = LayoutyInL0::template MakeLayout<ElementAccumulator>(16, actualShape.m());
+
+            // 找到问题了，是这个mRound存在问题
+            // uint32_t mRound = RoundUp<L1AAlignHelper::M_ALIGNED>(actualShape.m()); // m方向要和16或者32对齐，判断条件具体和数据类型有关
+
+            // main loop, GM->L1, N方向做切分
+            uint32_t nTileCount = CeilDiv<L1TileShape::N>(actualShape.n()); // 实际上L1TileShape::N是maxNPerBlock, actualShape.n()是传入的n，在单核外没做切分
+            for (uint32_t nLoopIdx = 0; nLoopIdx < nTileCount; nLoopIdx++)
+            {
+                uint32_t nActual = (nLoopIdx < nTileCount - 1) ? L1TileShape::N : (actualShape.n() - nLoopIdx * L1TileShape::N);
+                // 需要对齐，因为在列优先中，矩阵A的列方向默认对齐16，向量x的列方向默认对齐32B/sizeof。因此不同数据之间会存在对不齐的情况
+                uint32_t nRound = RoundUp<L1AAlignHelper::N_ALIGNED>(nActual); // 这里需要重点检查
+
+                // Get L1 tensor
+                auto l1ATensor = l1ATensorList[nLoopIdx % STAGES];
+                auto l1BTensor = l1BTensorList[nLoopIdx % STAGES];
+
+                // Get GM tile 算偏移量
+                MatrixCoord gmTileAOffset{0, nLoopIdx * L1TileShape::N}; // row major column Major应该支持
+                MatrixCoord gmTilexOffset{0, nLoopIdx * L1TileShape::N}; // 因为在Kernel端layoutx也是写成了row major的形式(1, n)， 对向量应该也行
+
+                auto gmTileA = gmA[layoutA.GetOffset(gmTileAOffset)]; // layoutA是rowMajor, 已确定
+                auto gmTilex = gmx[layoutx.GetOffset(gmTilexOffset)]; // layoutx是rowMajor
+
+                // load vector x tile from GM to L1
+                auto layoutTilex = layoutx.GetTileLayout(MakeCoord(uint32_t(1), nRound));
+                copyGmToL1A(l1ATensor, gmTilex, layoutxInL1, layoutTilex);
+
+                // load Matrix A tile from GM to L1
+                // auto layoutTileA = layoutA.GetTileLayout(MakeCoord(mRound, nActual));
+                auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShape.m(), nActual));
+                copyGmToL1B(l1BTensor, gmTileA, layoutAInL1, layoutTileA);
+
+                AscendC::PipeBarrier<PIPE_ALL>();
+
+                uint32_t nPartLoop = CeilDiv<L0TileShape::N>(nRound);
+
+                for (uint32_t nPartIdx = 0; nPartIdx < nPartLoop; nPartIdx++)
+                {
+                    uint32_t nPartActual = (nPartIdx < nPartLoop - 1) ? L0TileShape::N : (nRound - nPartIdx * L0TileShape::N);
+
+                    // Locate the current tile on L0A
+                    auto l0ATile = l0ATensorList[nPartIdx % STAGES];
+                    LayoutxInL0 layoutxInL0 = LayoutxInL0::template MakeLayout<Elementx>(16, nPartActual);
+
+                    MatrixCoord l1xOffset{0, nPartIdx * L0TileShape::N};
+                    auto l1ATile = l1ATensor[layoutxInL1.GetOffset(l1xOffset)]; // 没细看，但是理论上感觉应该没错吧
+
+                    // Load current tile from L1 to L0A
+                    copyL1ToL0A(l0ATile, l1ATile, layoutxInL0, layoutxInL1);
+
+                    // Locate the current tile on L0B
+                    auto l0BTile = l0BTensorList[nPartIdx % STAGES];
+                    // LayoutAInL0 layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(nPartActual, L0TileShape::M);
+                    LayoutAInL0 layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(L0TileShape::M, nPartActual);
+
+                    // MatrixCoord l1AOffset{nPartIdx * L0TileShape::N, 0};
+                    MatrixCoord l1AOffset{0, nPartIdx * L0TileShape::N};
+                    auto l1BTile = l1BTensor[layoutAInL1.GetOffset(l1AOffset)];
+
+                    // Load current tile from L1 to L0B
+                    copyL1ToL0B(l0BTile, l1BTile, layoutAInL0, layoutAInL1);
+
+                    AscendC::PipeBarrier<PIPE_ALL>();
+
+                    // auto l0CTile = l0CTensor[(singleIdx * L0C_TILE_SIZE) % L0C_TILE_NUM];
+                    auto l0CTile = l0CTensor;
+                    // If the current tile is the first tile on the k axis, the accumulator needs to be reset to 0
+                    bool initC = ((nLoopIdx == 0) && (nPartIdx == 0));
+
+                    tileMmad(l0CTile, l0ATile, l0BTile, 16, L0TileShape::M, nPartActual, initC);
+                    // tileMmad(l0CTile, l0ATile, l0BTile, 16, L0TileShape::M, nPartActual, initC);
+
+                    AscendC::PipeBarrier<PIPE_ALL>();
+                }
+                AscendC::PipeBarrier<PIPE_ALL>();
+            }
+            AscendC::PipeBarrier<PIPE_ALL>();
+
+            // auto l0CTile = l0CTensor[(singleIdx * L0C_TILE_SIZE) % L0C_TILE_NUM];
+
+            auto l0CTile = l0CTensor;
+            // copy block out
+            Layouty layoutBlock = layouty.GetTileLayout(MakeCoord(uint32_t(1), actualShape.m()));
+
+            copyL0CToGm(gmy, l0CTile, layoutBlock, layoutInL0C);
+
+            AscendC::PipeBarrier<PIPE_ALL>();
+        }
+
+    protected:
+        // Multi-stage tensors list
+        AscendC::LocalTensor<Elementx> l1ATensorList[STAGES];
+        AscendC::LocalTensor<ElementA> l1BTensorList[STAGES];
+        AscendC::LocalTensor<Elementx> l0ATensorList[STAGES];
+        AscendC::LocalTensor<ElementA> l0BTensorList[STAGES];
+        AscendC::LocalTensor<ElementAccumulator> l0CTensor;
+
+        // Multi-stage event id list 目前还没考虑流水，未使用
+        int32_t l1AEventList[STAGES];
+        int32_t l1BEventList[STAGES];
+        int32_t l0AEventList[STAGES];
+        int32_t l0BEventList[STAGES];
+
+        // The id of current stage目前还没考虑流水，未使用
+        uint32_t l1ListId{0};
+        uint32_t l0AListId{0};
+        uint32_t l0BListId{0};
+
+        TileMmad tileMmad;
+        CopyGmToL1A copyGmToL1A;
+        CopyGmToL1B copyGmToL1B;
+        CopyL1ToL0A copyL1ToL0A;
+        CopyL1ToL0B copyL1ToL0B;
+        CopyL0CToGm copyL0CToGm;
+    };
+
+} // namespace acot::gemv::block
+
+#endif // ACOT_GEMV_BLOCK_BLOCK_GEMV_PINGPONG_HPP

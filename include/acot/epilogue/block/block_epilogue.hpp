@@ -13,20 +13,22 @@
 
 #include "acot/acot.hpp"
 
-namespace acot::epilogue::block {
+namespace acot::epilogue::block
+{
 
-template <
-    class DispatchPolicy,
-    class... Args
->
-class BlockEpilogue {
-    static_assert(DEPENDENT_FALSE<DispatchPolicy>, "Could not find an epilogue specialization");
-};
+    template <
+        class DispatchPolicy,
+        class... Args>
+    class BlockEpilogue
+    {
+        static_assert(DEPENDENT_FALSE<DispatchPolicy>, "Could not find an epilogue specialization");
+    };
 
-}  // namespace acot::epilogue::block
+} // namespace acot::epilogue::block
 
-#include "acot/epilogue/block/block_epilogue_elemwise_one_source.hpp"
-#include "acot/epilogue/block/block_epilogue_fa_softmax.hpp"
-#include "acot/epilogue/block/block_epilogue_fa_rescal_o.hpp"
+// #include "acot/epilogue/block/block_epilogue_elemwise_one_source.hpp"
+// #include "acot/epilogue/block/block_epilogue_fa_softmax.hpp"
+// #include "acot/epilogue/block/block_epilogue_fa_rescal_o.hpp"
+#include "acot/epilogue/block/block_epilogue_gemv.hpp"
 
-#endif  // ACOT_EPILOGUE_BLOCK_BLOCK_EPILOGUE_HPP
+#endif // ACOT_EPILOGUE_BLOCK_BLOCK_EPILOGUE_HPP

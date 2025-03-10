@@ -15,4 +15,4 @@
 #include "acot/layout/matrix.hpp"
 #include "acot/layout/vector.hpp"
 
-#endif  // ACOT_LAYOUT_LAYOUT_HPP
+#endif // ACOT_LAYOUT_LAYOUT_HPP

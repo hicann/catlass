@@ -14,17 +14,19 @@
 #include <cstdlib>
 #include <ctime>
 
-namespace acot::golden {
-
-template <class Element>
-void FillRandomData(std::vector<Element>& data, float low, float high, uint64_t seed = time(0))
+namespace acot::golden
 {
-    srand(seed);
-    for (uint64_t i = 0; i < data.size(); ++i) {
-        Element randomValue = static_cast<Element>(static_cast<float>(rand()) / static_cast<float>(RAND_MAX));
-        data[i] = low + randomValue * (high - low);
+
+    template <class Element>
+    void FillRandomData(std::vector<Element> &data, float low, float high, uint64_t seed = time(0))
+    {
+        srand(seed);
+        for (uint64_t i = 0; i < data.size(); ++i)
+        {
+            Element randomValue = static_cast<Element>(static_cast<float>(rand()) / static_cast<float>(RAND_MAX));
+            data[i] = low + randomValue * (high - low);
+        }
     }
-}
 
 } // namespace acot::golden
 
