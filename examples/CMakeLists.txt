@@ -28,6 +28,11 @@ set(CCEC_COMPILER_OPTIONS
     -L${ASCEND_HOME_PATH}/lib64
     -Wno-macro-redefined
     -lruntime -lstdc++ -lascendcl -lm -ltiling_api -lplatform -lc_sec
+    #111
+    # -L${ASCEND_HOME_PATH}/tools/simulator/Ascend910B1/lib 
+    # -lnpu_drv -lnpu_drv_camodel -lstars -lffts -lruntime_camodel
+    # -lpem_davinci -lmodel_top -lmcu_wrapper -lmcu_loop 
+
 )
 
 file(GLOB_RECURSE ACTLASS_INCLUDE_FILES ${CMAKE_SOURCE_DIR}/include/*.hpp)

@@ -41,3 +41,23 @@ __pycache__/
 
 # user define
 build/
+
+# mime sh
+*.sh
+
+# prof 文件
+examples/**/prof/
+
+# params 文件
+examples/**/params
+
+# bin文件
+examples/**/data/input
+examples/**/data/output
+
+
+# csv 文件
+*.csv
+
+# sim文件
+examples/**/sim_result/

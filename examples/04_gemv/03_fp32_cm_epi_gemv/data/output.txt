@@ -248,3 +248,15 @@ Total Count: 3520
 Accuracy: 100.00%
 ===========================================================
 错误的行数: []
+---- FP32 -- RowMajor -- EpilogueGemv ---- 
+
+  M : 5497 , N : 9063 
+
+---- FP32 -- RowMajor -- EpilogueGemv ---- 
+
+  M : 5497 , N : 9063 
+
+---- FP32 -- RowMajor -- EpilogueGemv ---- 
+
+  M : 5497 , N : 9063 
+

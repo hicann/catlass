@@ -24,7 +24,7 @@ namespace acot::gemv::block
     };
 } // namespace acot::gemv::block
 
-#include "acot/gemv/block/block_gemv_pingpong.hpp"
+#include "acot/gemv/block/block_gemv_pingpong_PL.hpp"
 #include "acot/gemv/block/block_swizzle.hpp"
 
 #endif // ACOT_GEMV_BLOCK_BLOCK_GEMV_HPP

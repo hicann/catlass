@@ -1,13 +1,3 @@
-/*
- * Copyright (c) 2024 Huawei Technologies Co., Ltd.
- * This file is a part of the CANN Open Software.
- * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
- */
-
 #ifndef ACOT_GEMV_KERNLE_GEMV_EPILOGUE_HPP
 #define ACOT_GEMV_KERNLE_GEMV_EPILOGUE_HPP
 
@@ -153,18 +143,19 @@ namespace acot::gemv::kernel
 
                 GemvCoord actualBlockShape = GemvCoord(MGmActual, NGmActual);
 
-                AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((event_t)singleIdx % L0C_TILE_NUM);
+                AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((int32_t)singleIdx % L0C_TILE_NUM);
 
                 // Compute block-scoped matrix multiply-add
                 blockGemv(gmx[gmOffsetx], params.layoutX,
                           gmA[gmOffsetA], params.layoutA,
                           gmy[gmOffsety], layouty,
-                          actualBlockShape, singleIdx);
-                AscendC::SetFlag<AscendC::HardEvent::FIX_M>((event_t)singleIdx % L0C_TILE_NUM);
+                          actualBlockShape, singleIdx % L0C_TILE_NUM);
 
                 // AscendC::PipeBarrier<PIPE_ALL>();
 
                 arch::CrossCoreSetFlagWithReverse<0x2, PIPE_FIX>(flagAicFinishStore);
+                AscendC::SetFlag<AscendC::HardEvent::FIX_M>((int32_t)singleIdx % L0C_TILE_NUM);
+
                 singleIdx++;
             }
 
@@ -238,10 +229,14 @@ namespace acot::gemv::kernel
         }
 
     private:
-        // ID used for inter-core synchronization
+        // ID used for inter-core synchronization  AIC同步
         static constexpr arch::FlagID FLAG_AIC_FINISH_STORE = 0;
         static constexpr arch::FlagID RV_FLAG_AIC_FINISH_STORE = 1;
         arch::CrossCoreFlagWithReverse<> flagAicFinishStore{FLAG_AIC_FINISH_STORE, RV_FLAG_AIC_FINISH_STORE};
+
+        // AIV同步
+        static constexpr arch::FlagID FLAG_AIV_FINISH_STORE = 0;
+        arch::CrossCoreFlag flagAivFinishPadding{FLAG_AIV_FINISH_STORE};
         arch::Resource<ArchTag> resource;
     };
 

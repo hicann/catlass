@@ -5,15 +5,11 @@ source /home/workspace/gpf/CANN/ascend-toolkit/set_env.sh
 # ../../../scripts/build.sh 01_fp16_rm_epi_gemv
 bash ../../../scripts/build.sh 03_fp32_rm_epi_gemv
 
-./run.sh 4833 8015
+# ./run.sh 16256  768
+# ./run.sh 4672 1088
+./run.sh 12480 256
 
 
-
-
-# 4833 8004 报错，最后一个数完全算错 aclError:507015
-# 4833 8003 报错，最后一个数完全算错 aclError:507015
-# 4833 8005 报错，最后一个数完全算错 aclError:507015
-# 4833 8006 报错，最后一个数完全算错 aclError:507015
-# 4833 8007 报错，最后一个数完全算错 aclError:507015
-
-# 4833 8002 正确
+#   M : 16256 , N : 768 
+#   M : 4672 , N : 1088 
+#   M : 12480 , N : 256 

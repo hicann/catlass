@@ -185,8 +185,7 @@ namespace acot::epilogue::block
             {
                 // AscendC::Cast<float, ElementTemp>(ubTemp, ubTemp, AscendC::RoundMode::CAST_NONE, COMPUTE_LENGTH);
                 AscendC::Cast<ElementCompute, ElementY>(ubYCast, ubY, AscendC::RoundMode::CAST_NONE, COMPUTE_LENGTH);
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0); // 存疑。cast对应的流水是这样的吗
-                AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
+                AscendC::PipeBarrier<PIPE_V>();
                 tileEpilogueMul(ubYCast, ubYCast, params.beta);
                 AscendC::PipeBarrier<PIPE_V>();
             }

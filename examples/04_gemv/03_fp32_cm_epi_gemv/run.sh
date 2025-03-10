@@ -5,9 +5,9 @@
 # source /home/workspace/gpf/CANN/ascend-toolkit/set_env.sh
 export PRINT_TIK_MEM_ACCESS=FALSE
 
-export ASCEND_SLOG_PRINT_TO_STDOUT=1
+export ASCEND_SLOG_PRINT_TO_STDOUT=0
 # 编译文件
-# bash ../../../scripts/build.sh 03_fp32_cm_epi_gemv
+bash ../../../scripts/build.sh 03_fp32_cm_epi_gemv
 
 # 生成测试数据
 python3 ./scripts/gen_data.py $1 $2

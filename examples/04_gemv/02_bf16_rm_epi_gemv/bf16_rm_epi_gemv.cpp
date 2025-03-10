@@ -106,6 +106,7 @@ struct Options
 
     GemvCoord problemShape{128, 128};
     int32_t deviceId{0};
+    uint32_t mode{0}; // 默认测数据
 
     Options() = default;
 
@@ -116,6 +117,7 @@ struct Options
             M_INDEX = 1,
             N_INDEX,
             DEVICE_ID_INDEX,
+            MODE_INDEX,
             ARGS_MAX
         };
 
@@ -133,9 +135,10 @@ struct Options
         {
             problemShape.n() = std::stoi(argv[N_INDEX]);
         }
-        if (argc > DEVICE_ID_INDEX)
+        if (argc >= ARGS_MAX - 1)
         {
-            deviceId = std::stoi(argv[DEVICE_ID_INDEX]);
+            mode = std::atoi(argv[MODE_INDEX]);
+            deviceId = std::atoi(argv[DEVICE_ID_INDEX]);
         }
 
         return 0;
@@ -256,24 +259,32 @@ void Run(Options const &options)
     size_t scalarSize = 1 * sizeof(float);
     float *alpha;
     ACL_CHECK(aclrtMallocHost((void **)(&alpha), scalarSize));
-    ReadFile("./data/input/alpha.bin", scalarSize, alpha, scalarSize);
+    // ReadFile("./data/input/alpha.bin", scalarSize, alpha, scalarSize);
 
     float *beta;
     ACL_CHECK(aclrtMallocHost((void **)(&beta), scalarSize));
-    ReadFile("./data/input/beta.bin", scalarSize, beta, scalarSize);
+    // ReadFile("./data/input/beta.bin", scalarSize, beta, scalarSize);
 
     bfloat16_t *hostx;
     bfloat16_t *hostA;
     bfloat16_t *hosty;
 
     ACL_CHECK(aclrtMallocHost((void **)(&hostx), sizex));
-    ReadFile("./data/input/X.bin", sizex, hostx, sizex);
+    // ReadFile("./data/input/X.bin", sizex, hostx, sizex);
 
     ACL_CHECK(aclrtMallocHost((void **)(&hostA), sizeA));
-    ReadFile("./data/input/A.bin", sizeA, hostA, sizeA);
+    // ReadFile("./data/input/A.bin", sizeA, hostA, sizeA);
 
     ACL_CHECK(aclrtMallocHost((void **)(&hosty), sizez));
-    ReadFile("./data/input/Y.bin", sizey, hosty, sizey);
+    if (options.mode == 0)
+    {
+        ReadFile("./data/input/alpha.bin", scalarSize, alpha, scalarSize);
+        ReadFile("./data/input/beta.bin", scalarSize, beta, scalarSize);
+        ReadFile("./data/input/X.bin", sizex, hostx, sizex);
+        ReadFile("./data/input/A.bin", sizeA, hostA, sizeA);
+        ReadFile("./data/input/Y.bin", sizey, hosty, sizey);
+    }
+    // ReadFile("./data/input/Y.bin", sizey, hosty, sizey);
 
     uint8_t *deviceA{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
@@ -316,9 +327,10 @@ void Run(Options const &options)
     bfloat16_t *hostz;
     ACL_CHECK(aclrtMallocHost((void **)(&hostz), sizez));
     ACL_CHECK(aclrtMemcpy(hostz, sizez, devicez, sizez, ACL_MEMCPY_DEVICE_TO_HOST));
-
-    WriteFile("./data/output/our_res.bin", hostz, sizez);
-
+    if (options.mode == 0)
+    {
+        WriteFile("./data/output/our_res.bin", hostz, sizez);
+    }
     ACL_CHECK(aclrtFree(devicex));
     ACL_CHECK(aclrtFree(deviceA));
     ACL_CHECK(aclrtFree(devicez));
