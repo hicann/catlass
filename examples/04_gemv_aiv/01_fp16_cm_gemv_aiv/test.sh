@@ -5,7 +5,7 @@ clear;
 rm -rf ./data/output.txt
 touch ./data/output.txt
 ../../../scripts/build.sh 01_fp16_cm_gemv_aiv
-for (( i=1; i<=5; i++ ))
+for (( i=1; i<=50; i++ ))
 do
     num1=$[ ($RANDOM % 10000 + 1) ]
     num2=$[ ($RANDOM % 10000 + 1) ]

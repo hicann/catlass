@@ -1,8 +1,0 @@
-[info] 12063:  pipe: 3 push_isa, pc:0x1168b048, id:18
-[info] 12063:  pipe: 3 push_isa, pc:0x1168b04c, id:19
-[info] 12068:  pipe: 3 retire_isa, pc:0x1168b048, id:18
-[info] 12069:  pipe: 3 retire_isa, pc:0x1168b04c, id:19
-[info] 12807:  pipe: 3 push_isa, pc:0x1168b4fc, id:434
-[info] 12815:  pipe: 3 push_isa, pc:0x1168b510, id:439
-[info] 12820:  pipe: 3 push_isa, pc:0x1168b518, id:441
-[info] ++++++++++++++++++++++core: 12, start: 11671, tick: 13546, kernal: 0, blkID 12 of blkdim 20, streamId 0, taskId 0, subtaskId 0, threadId 0, done++++++++++++++++++++++.

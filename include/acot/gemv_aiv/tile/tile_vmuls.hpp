@@ -15,37 +15,44 @@
  #include "acot/layout/layout.hpp"
  #include "acot/gemv_aiv/gemv_type.hpp"
  
+ namespace acot::gemv::tile
+ {
  
- namespace acot::gemv::tile {
+     template <
+         class ArchTag,
+         typename Element>
+     struct TileVmuls
+     {
+         static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element); // 32B,一个block的大小
  
- template <
-     class ArchTag,
-     typename Element
- >
- struct TileVmuls {
-     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);      //32B,一个block的大小
+         // Mehtods
  
-     // Mehtods
+         ACOT_DEVICE
+         TileVmuls() {};
  
-     ACOT_DEVICE
-     TileVmuls() {};
- 
-     ACOT_DEVICE
-     void operator()(
-        AscendC::LocalTensor<Element> dstTensor,
-        AscendC::LocalTensor<Element> srcTensor,
-        Element scalar,
-        uint32_t len
-    ) {
-        //连续模式
-        AscendC::Muls(
-            dstTensor, 
-            srcTensor, 
-            scalar,
-            len
-        );
-    }
- };
+         ACOT_DEVICE
+         void operator()(
+             AscendC::LocalTensor<Element> dstTensor,
+             AscendC::LocalTensor<Element> srcTensor,
+             Element scalar,
+             uint32_t len)
+         {
+            AscendC::SetMaskCount();
+            AscendC::SetVectorMask<Element, AscendC::MaskMode::COUNTER>(len);  // 设置counter模式
+            // AscendC::UnaryRepeatParams params{1,1,8,8};
+             // 连续模式
+             AscendC::Muls<Element,false>(
+                 dstTensor,
+                 srcTensor,
+                 scalar,
+                 AscendC::MASK_PLACEHOLDER,
+                 1,
+                 AscendC::UnaryRepeatParams{}
+                );
+            AscendC::SetMaskNorm();
+            AscendC::ResetMask();  // 还原mask值
+         }
+     };
  } // namespace acot::matmul::tile
  
  #endif // ACOT_MATMUL_TILE_COPY_GM_TO_L1_HPP

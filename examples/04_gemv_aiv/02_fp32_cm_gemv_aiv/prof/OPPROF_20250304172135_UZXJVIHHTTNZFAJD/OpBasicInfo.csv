@@ -1,2 +1,0 @@
-Op Name,Op Type,Task Duration(us),Block Dim,Mix Block Dim,Device Id,Pid,Current Freq,Rated Freq,
-FP32CMGemvAiv,mix,494.239990,20,40,6,309894,N/A,1800,

@@ -123,8 +123,8 @@
          AscendC::GlobalTensor<ElementY> const &gmY,
          AscendC::GlobalTensor<ElementY> const &gmY_read,
          GemvCoord const &actualShape,
-         ElementX alpha,
-         ElementY beta
+         float alpha,
+         float beta
         )
      {
         AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>((event_t)(UbOutEventList[UbOutListId]));
@@ -134,7 +134,7 @@
         tileVmuls(
             UbYTensorList[UbOutListId], 
             UbYTensorList[UbOutListId], 
-            beta,
+            (ElementY)beta,
             actualShape.m()
         );
         AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((event_t)(UbOutEventList[UbOutListId]));  
@@ -187,25 +187,15 @@
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((event_t)(UbInAEventList[UbInListIdNext]));
                  
             }
-            // AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((event_t)(UbInXEventList[UbInListId]));
-            // vecCopyGmToUb(UbXTensorList[UbInListId], gmX[LoopIdx * TileNRound],x_actual);
-            // AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((event_t)(UbInXEventList[UbInListId]));
             AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((event_t)(UbInXEventList[UbInListId]));
-            // AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((event_t)(UbInXEventList[UbInListId]));
-            // AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((event_t)(UbInXEventList[UbInListId]));
             tileVmuls(
                 UbXTensorList[UbInListId], 
                 UbXTensorList[UbInListId], 
-                alpha,
+                (ElementA)alpha,
                 x_actual
             );
             AscendC::PipeBarrier<PIPE_V>();
 
-            // auto layoutAInUb = layoutA.GetTileLayout(MakeCoord(TileMRound, TileNRound));
-            // auto layoutTileA = layoutA.GetTileLayout(MakeCoord(m_actual, n_actual));
-            // AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((event_t)(UbInAEventList[UbInListId]));
-            // matrixCopyGmToUb(UbATensorList[UbInListId], gmA[LoopIdx * strideA], layoutAInUb, layoutTileA);
-            // AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((event_t)(UbInAEventList[UbInListId]));
             AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((event_t)(UbInAEventList[UbInListId])); 
             tileVmad(
                 UbYTensorList[UbOutListId],
@@ -224,7 +214,8 @@
         AscendC::SetFlag<AscendC::HardEvent::V_MTE3>((event_t)(UbOutEventList[UbOutListId]));
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>((event_t)(UbOutEventList[UbOutListId]));
         //把结果传回gm
-        vecCopyUbToGm(gmY, UbYTensorList[UbOutListId],y_actual);
+        bool is_atoadd = std::is_same_v<LayoutA, acot::layout::ColumnMajor>;
+        vecCopyUbToGm(gmY, UbYTensorList[UbOutListId],y_actual,is_atoadd);
         AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>((event_t)(UbOutEventList[UbOutListId]));
         UbOutListId = (UbOutListId + 1 < STAGES) ? (UbOutListId + 1) : 0;
      }

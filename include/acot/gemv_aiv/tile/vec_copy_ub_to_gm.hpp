@@ -36,8 +36,12 @@
      void operator()(
         AscendC::GlobalTensor<Element> dstTensor,
         AscendC::LocalTensor<Element> srcTensor,
-        uint32_t len
+        uint32_t len,
+        bool is_atoadd
     ) {
+        if(is_atoadd){
+            AscendC::SetAtomicAdd<Element>();
+        }
         AscendC::DataCopyExtParams params;
         params.blockCount = 1;
         params.blockLen = len * sizeof(Element);
@@ -50,6 +54,10 @@
             params
             // Padparams
         );
+        if(is_atoadd){
+            AscendC::SetAtomicNone();
+        }
+        
     }
  };
  } // namespace acot::matmul::tile

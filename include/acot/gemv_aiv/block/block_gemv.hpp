@@ -32,9 +32,10 @@
      static_assert(DEPENDENT_FALSE<DispatchPolicy>, "BlockVmad is not implemented for this DispatchPolicy");
  };
  
- } // namespace acot::matmul::block
+ } 
  
- #include "acot/gemv_aiv/block/block_gemv_aiv.hpp"
- 
- #endif // ACOT_MATMUL_BLOCK_BLOCK_MMAD_HPP
+//  #include "acot/gemv_aiv/block/block_gemv_aiv.hpp"
+ #include "acot/gemv_aiv/block/block_gemv_aiv_Splitk.hpp"
+
+ #endif 
  

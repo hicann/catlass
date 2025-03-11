@@ -15,7 +15,7 @@ def run(times, device, mode):
     operator_path = os.getcwd()
 
     results = pd.DataFrame(columns=["M", "N", "time_us", "Tflops", "utilization_ratio"])
-    prof_data_path = "./batch_prof_data.csv"
+    prof_data_path = "./batch_prof_data1.csv"
     for index, row in data.iterrows():
         if index > 100:
             break

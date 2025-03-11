@@ -17,8 +17,8 @@
 
 
 using namespace acot;
-
-using ScalarType = half;
+using UBTileShape = GemvShape<32,512>;
+using ScalarType = float;
 // 已经进入核函数了
 // 单纯行优先
 ACOT_GLOBAL
@@ -28,11 +28,12 @@ void FP16RMGemvAiv(
     GM_ADDR gmX, layout::RowMajor layoutX,
     GM_ADDR gmY, layout::RowMajor layoutY,
     GM_ADDR gmY_read,
-    ScalarType alpha,ScalarType beta
+    ScalarType alpha,ScalarType beta,
+    uint32_t SPLIT
 ){
     using ArchTag = arch::AtlasA2;
     using DispatchPolicy = gemv::MmadAtlasA2Pingpong<true>;
-    using UBTileShape = GemvShape<32,512>;
+    
 
     using AType = gemv::GemvType<half, layout::RowMajor>;
     using XType = gemv::GemvType<half, layout::RowMajor>;
@@ -45,7 +46,7 @@ void FP16RMGemvAiv(
 
     // kernel level
     using GemvKernel = gemv::kernel::KernelGemv<GemvBlock, BlockEpilogue, TileScheduler>;
-    typename GemvKernel::Params params{problemShape, gmA, layoutA, gmX, gmY,gmY_read,alpha,beta};
+    typename GemvKernel::Params params{problemShape, gmA, layoutA, gmX, gmY,gmY_read,alpha,beta,SPLIT};
     
 
     // call a kernel
@@ -98,7 +99,11 @@ void Run(Options options){
 
     uint32_t m = options.problemShape.m();
     uint32_t n = options.problemShape.n();
-    // uint32_t k = 1;
+    //获取split k的数
+    uint32_t maxSplict = 40;
+    uint32_t const SPLIT = getSplictNum(false, m, n, UBTileShape::M, UBTileShape::N, maxSplict);
+    // uint32_t const SPLIT = 1;
+    // printf("%d",SPLIT);
 
     size_t lenA = static_cast<size_t>(m) * n;
     size_t lenX = static_cast<size_t>(n) * 1;
@@ -112,21 +117,17 @@ void Run(Options options){
     layout::RowMajor layoutX{n, 1};
     layout::RowMajor layoutY{m, 1};
 
-    size_t scalarSize = 1 * sizeof(half);
-    half* alpha;
+    size_t scalarSize = 1 * sizeof(ScalarType);
+    ScalarType* alpha;
     ACL_CHECK(aclrtMallocHost((void**)(&alpha), scalarSize));
-    half* beta;
+    ScalarType* beta;
     ACL_CHECK(aclrtMallocHost((void**)(&beta), scalarSize));
 
     half* hostA;
     ACL_CHECK(aclrtMallocHost((void**)(&hostA),sizeA));
 
-    
-
     half* hostX;
     ACL_CHECK(aclrtMallocHost((void**)(&hostX), sizeX));
-
-    
 
     float* hostY_read;
     ACL_CHECK(aclrtMallocHost((void**)(&hostY_read), sizeY));
@@ -152,16 +153,18 @@ void Run(Options options){
 
     uint8_t *deviceY{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceY), sizeY, ACL_MEM_MALLOC_HUGE_FIRST));
+    // ACL_CHECK(aclrtMemcpy(deviceY, sizeY, hostY_read, sizeY, ACL_MEMCPY_HOST_TO_DEVICE));
     
     // 获得当前核心数
-    auto aicCoreNum = arch::AscendC910B3::MaxBlock;
+    auto aicCoreNum = arch::AscendC910B3::MaxAivBlock;
     FP16RMGemvAiv<<<aicCoreNum, nullptr, stream>>>(
         options.problemShape,
         deviceA, layoutA,
         deviceX, layoutX,
         deviceY, layoutY,
         deviceY_read,
-        alpha[0], beta[0]
+        alpha[0], beta[0],
+        SPLIT
     );
     ACL_CHECK(aclrtSynchronizeStream(stream));
 

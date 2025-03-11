@@ -1,7 +1,0 @@
-[info] 13971:  pipe: 4 push_isa, pc:0x1168beb8, id:648
-[info] 13973:  pipe: 4 push_isa, pc:0x1168bec0, id:650
-[info] 13977:  pipe: 4 push_isa, pc:0x1168becc, id:653
-[info] 13979:  pipe: 4 push_isa, pc:0x1168bed4, id:655
-[info] 13981:  pipe: 4 push_isa, pc:0x1168bee0, id:658
-[info] 13987:  pipe: 4 push_isa, pc:0x1168beec, id:661
-[info] ++++++++++++++++++++++core: 7, start: 11901, tick: 15130, kernal: 0, blkID 7 of blkdim 20, streamId 0, taskId 0, subtaskId 0, threadId 0, done++++++++++++++++++++++.

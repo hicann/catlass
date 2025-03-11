@@ -17,6 +17,7 @@
 
 
 using namespace acot;
+using UBTileShape = GemvShape<1024, 16>;
 using ScalarType = float;
 // 已经进入核函数了
 // 单纯行优先
@@ -27,11 +28,12 @@ void FP32CMGemvAiv(
     GM_ADDR gmX, layout::ColumnMajor layoutX,
     GM_ADDR gmY, layout::ColumnMajor layoutY,
     GM_ADDR gmY_read,
-    ScalarType alpha,ScalarType beta
+    ScalarType alpha,ScalarType beta,
+    uint32_t SPLIT
 ){
     using ArchTag = arch::AtlasA2;
     using DispatchPolicy = gemv::MmadAtlasA2Pingpong<true>;
-    using UBTileShape = GemvShape<512, 32>;
+    
 
     using AType = gemv::GemvType<float, layout::ColumnMajor>;
     using XType = gemv::GemvType<float, layout::ColumnMajor>;
@@ -44,7 +46,7 @@ void FP32CMGemvAiv(
 
     // kernel level
     using GemvKernel = gemv::kernel::KernelGemv<GemvBlock, BlockEpilogue, TileScheduler>;
-    typename GemvKernel::Params params{problemShape, gmA, layoutA, gmX, gmY,gmY_read,alpha,beta};
+    typename GemvKernel::Params params{problemShape, gmA, layoutA, gmX, gmY,gmY_read,alpha,beta,SPLIT};
     
 
     // call a kernel
@@ -96,6 +98,11 @@ void Run(Options options){
 
     uint32_t m = options.problemShape.m();
     uint32_t n = options.problemShape.n();
+    //获取split k的数
+    uint32_t maxSplict = 40;
+    uint32_t const SPLIT = getSplictNum(true, m, n, UBTileShape::M, UBTileShape::N, maxSplict);
+    // printf("%d",SPLIT);
+    // uint32_t SPLIT = 16;
 
     size_t lenA = static_cast<size_t>(m) * n;
     size_t lenX = static_cast<size_t>(n) * 1;
@@ -147,16 +154,18 @@ void Run(Options options){
 
     uint8_t *deviceY{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceY), sizeY, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMemcpy(deviceY, sizeY, hostY_read, sizeY, ACL_MEMCPY_HOST_TO_DEVICE));
     
     // 获得当前核心数
-    auto aicCoreNum = arch::AscendC910B3::MaxBlock;
+    auto aicCoreNum = arch::AscendC910B3::MaxAivBlock;
     FP32CMGemvAiv<<<aicCoreNum, nullptr, stream>>>(
         options.problemShape,
         deviceA, layoutA,
         deviceX, layoutX,
         deviceY, layoutY,
         deviceY_read,
-        alpha[0], beta[0]
+        alpha[0], beta[0],
+        SPLIT
     );
     ACL_CHECK(aclrtSynchronizeStream(stream));
 

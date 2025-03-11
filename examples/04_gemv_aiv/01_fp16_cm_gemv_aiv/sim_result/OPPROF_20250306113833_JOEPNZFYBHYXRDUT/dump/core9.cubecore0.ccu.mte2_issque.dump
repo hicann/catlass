@@ -1,3 +1,0 @@
-[info] 12057:  pipe: 4 push_isa, pc:0x1168b04c, id:19
-[info] 12062:  pipe: 4 retire_isa, pc:0x1168b04c, id:19
-[info] ++++++++++++++++++++++core: 9, start: 11665, tick: 13533, kernal: 0, blkID 9 of blkdim 20, streamId 0, taskId 0, subtaskId 0, threadId 0, done++++++++++++++++++++++.

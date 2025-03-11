@@ -7,6 +7,8 @@ cd ascendc-operator-templates-gemv/examples/04_gemv_aiv
 cd /01_fp16_cm_gemv_aiv
 3. 验证正确性可以通过调用make.sh或者run.sh $M $N $deviceId $mode
 4. 调用msprof验证可以调用 run_profiling.sh $M $N $deviceId $mode
+
+## 注意：example里面只有04_gemv_aiv是有效的，其他为保留项
 # 仓库日记
 25.01.08
 

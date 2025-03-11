@@ -1,7 +1,0 @@
-Op Name=FP32RMGemvAiv
-Block Dim=20
-Run Soc Version=Ascend910B3
-Device Id=0
-Pid=744284
-Current Freq=N/A
-Rated Freq=1800

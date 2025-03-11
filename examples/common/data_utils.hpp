@@ -103,4 +103,47 @@ bool WriteFile(const std::string &filePath, const void *buffer, size_t size)
     return true;
 }
 
+uint32_t getSplictNum(bool trans, uint32_t M, uint32_t N, uint32_t M1, uint32_t N1, uint32_t maxSplict)
+{
+    uint32_t CORENUM = 20;
+    uint32_t splitNum = 1;
+    uint32_t maxOccupancy = 0; 
+    uint32_t blockNum = (M - 1) / M1 + 1;
+    if (!trans)
+    {
+        splitNum = 1;
+    }
+    else{
+        uint32_t splitNum1 = 1, splitNum2 = 1;
+        for (uint32_t i = 1; i <= maxSplict; i += 1)
+        {
+            uint32_t occupancy = (i * blockNum) % (CORENUM * 2);
+            if (!occupancy)
+                occupancy = (CORENUM * 2);
+            if (occupancy > maxOccupancy)
+            {
+                maxOccupancy = occupancy;
+                splitNum1 = i;
+            }
+        }
+        maxOccupancy = 0;
+        for (uint32_t i = 1; i <= maxSplict; i <<= 1)
+        {
+            uint32_t occupancy = (i * blockNum) % (CORENUM * 2);
+            if (!occupancy)
+                occupancy = (CORENUM * 2);
+            if (occupancy > maxOccupancy)
+            {
+                maxOccupancy = occupancy;
+                splitNum2 = i;
+            }
+        }
+        splitNum = (splitNum1 - splitNum2) > 4 ? splitNum1 : splitNum2;
+        // splitNum = splitNum2;
+    }
+
+    // printf("split = %d\n", splitNum);
+    return splitNum;
+}
+
 #endif // EXAMPLES_COMMON_DATA_UTILS_HPP

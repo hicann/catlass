@@ -14,13 +14,12 @@
  #include "acot/acot.hpp"
  #include "acot/arch/resource.hpp"
  #include "acot/coord.hpp"
-//  #include "acot/matmul_coord.hpp"
  #include "acot/matrix_coord.hpp"
  #include "acot/gemv_coord.hpp"
 
  namespace acot::gemv::kernel {
  
- // Template for Matmul kernel. Compute C = A * B
+ // Template for Gemv kernel. Compute Y = αA * x + βY
  template <
      class BlockGemv_,
      class BlockEpilogue_,
@@ -48,8 +47,9 @@
          GM_ADDR ptrX;
          GM_ADDR ptrY;
          GM_ADDR ptrY_read;
-         ElementA alpha;
-         ElementY beta;
+         float alpha;
+         float beta;
+         uint32_t SPLIT;
  
          // Methods
          ACOT_DEVICE
@@ -57,19 +57,16 @@
  
          ACOT_DEVICE
          Params(GemvCoord const &problemShape_,  GM_ADDR ptrA_, LayoutA layoutA_,  GM_ADDR ptrX_,
-            GM_ADDR ptrY_,GM_ADDR ptrY_read_,ElementA alpha_,ElementY beta_)
+            GM_ADDR ptrY_,GM_ADDR ptrY_read_,float alpha_,float beta_,uint32_t SPLIT_)
              : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrX(ptrX_),
-               ptrY(ptrY_),ptrY_read(ptrY_read_),alpha(alpha_),beta(beta_) {}
+               ptrY(ptrY_),ptrY_read(ptrY_read_),alpha(alpha_),beta(beta_),SPLIT(SPLIT_) {}
      };
 
      
      // Methods
-    //  ACOT_DEVICE
-    //  KernelGemv(){
-    //     blockGemv = BlockGemv(resource);
-    //  }
-    //  KernelGemv():resource(), blockGemv(resource) {
-    //  }
+     ACOT_DEVICE
+     KernelGemv(){
+     }
 
      template <int32_t CORE_TYPE = g_coreType>
      ACOT_DEVICE
@@ -80,21 +77,12 @@
      template <>
      ACOT_DEVICE
      void operator()<AscendC::AIC>(Params const &params) {
-        arch::Resource<ArchTag> resource;
-        AscendC::GlobalTensor<ElementA> gmA;
-         gmA.SetGlobalBuffer((__gm__ ElementA *)params.ptrA);
-
-        AscendC::LocalTensor<ElementA> srcTensor;
-        srcTensor = resource.ubBuf.template GetBufferByByte<ElementA>(0);
-        AscendC::DataCopy(srcTensor, gmA, 5);
-        AscendC::DataCopy(gmA, srcTensor, 5);
-        // arch::CrossCoreSetFlagWithReverse<0x2, PIPE_FIX>(flagAicFinishStore);
-
      }
  
      template <>
      ACOT_DEVICE
      void operator()<AscendC::AIV>(Params const &params) {
+        AscendC::SetAtomicNone();
         // arch::CrossCoreWaitFlagWithReverse<0x2, PIPE_MTE3>(flagAicFinishStore); // 没这个变量
         // TileScheduler matmulTileScheduler(params.problemShape, MakeCoord(UBTileShape::M, UBTileShape::N));
         arch::Resource<ArchTag> resource;
@@ -102,12 +90,23 @@
          uint32_t align = BYTE_PER_C0 / sizeof(ElementA);
          uint32_t maxmPerBlock_round = RoundUp(UBTileShape::M,align);
          uint32_t maxnPerBlock_round = RoundUp(UBTileShape::N,align);
-         uint32_t loopnum = CeilDiv(params.problemShape.m(),maxmPerBlock_round);
 
-         uint32_t element_stride_matrix = sizeof(ElementA) / sizeof(uint8_t);
-         uint32_t element_stride_vector_out = sizeof(ElementY) / sizeof(uint8_t);
+        //增加split k
+         uint32_t N_Split = RoundDown(params.problemShape.n(),params.SPLIT)/params.SPLIT;
+         uint32_t Mloopnum = CeilDiv(params.problemShape.m(),maxmPerBlock_round);
+         //因为下面有减法，防止出现负数，所以改成有符号整形
+         int32_t loopnum;
+        float Realbeta= params.beta;
+         if constexpr (std::is_same_v<LayoutA, acot::layout::ColumnMajor>){
+            loopnum = Mloopnum * params.SPLIT;
+            Realbeta = params.beta - 1.0f;
+         }else{
+            loopnum = Mloopnum;
+         }
+         
          uint32_t offset_matrix;
          uint32_t offset_vector_out;
+         uint32_t offset_vector_in = 0;
 
          // Represent the full gm
          AscendC::GlobalTensor<ElementA> gmA;
@@ -118,58 +117,50 @@
          gmY.SetGlobalBuffer((__gm__ ElementY *)params.ptrY);
          AscendC::GlobalTensor<ElementY> gmY_read;
          gmY_read.SetGlobalBuffer((__gm__ ElementY *)params.ptrY_read);
-        //  for(uint32_t i = 0;i < 4;i++){
-        //     AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((event_t)(i));
-        // }
-        // for(uint32_t i = 0;i < 2;i++){
-        //     AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>((event_t)(i));
-        // }
-
-        // Get aicore information 获取核idx，核数，子核idx
-        // uint32_t aicoreIndex = AscendC::GetBlockIdx() / AscendC::GetSubBlockNum(); // 0-19
-        // // uint32_t aicoreIndex = AscendC::GetBlockIdx(); // 0-19
-        // uint32_t aicoreNum = AscendC::GetBlockNum();                               // 20
-
+        // uint32_t aiv_num = AscendC::GetBlockNum();
+         uint32_t aiv_num = AscendC::GetBlockNum()*AscendC::GetTaskRation();
          for(uint32_t loop_id = 0;loop_id < loopnum;loop_id++){
             // uint32_t aiv_id = AscendC::GetBlockIdx()/2+AscendC::GetSubBlockIdx();
             // uint32_t aiv_num = AscendC::GetBlockNum()/2 * AscendC::GetSubBlockNum();
-            uint32_t aiv_id = AscendC::GetBlockIdx();
-            uint32_t aiv_num = AscendC::GetBlockNum() * AscendC::GetTaskRation();
+            uint32_t aiv_id = AscendC::GetBlockIdx();   //0-39
             if(loop_id % aiv_num != aiv_id)continue;
+            uint32_t m_actual = ((int32_t)loop_id > (int32_t)(loopnum - params.SPLIT - 1) ) ? params.problemShape.m() - ((loop_id/params.SPLIT) * maxmPerBlock_round) : maxmPerBlock_round;
+            uint32_t n_actual = params.problemShape.n();
+
             if constexpr (std::is_same_v<LayoutA, acot::layout::ColumnMajor>) {
-                offset_matrix = loop_id * maxmPerBlock_round;
-                offset_vector_out = loop_id * maxmPerBlock_round;
+                offset_matrix = (loop_id % params.SPLIT) * N_Split*params.problemShape.m()+(loop_id/params.SPLIT) * maxmPerBlock_round;
+                offset_vector_out = (loop_id/params.SPLIT) * maxmPerBlock_round;
+                offset_vector_in = (loop_id % params.SPLIT) * N_Split; // 执行原子加每行内的偏移值
+                //计算n方向上的分块长度
+                if((loop_id%params.SPLIT) == params.SPLIT - 1){
+                    n_actual = params.problemShape.n() - N_Split * (params.SPLIT - 1);
+                }
+                else{
+                    n_actual = N_Split;
+                }
             } else {
                 offset_matrix = loop_id * maxmPerBlock_round * params.problemShape.n();
                 offset_vector_out = loop_id * maxmPerBlock_round;
             }
-            uint32_t m_actual = (loop_id == loopnum - 1) ? params.problemShape.m() - (loop_id * maxmPerBlock_round) : maxmPerBlock_round;
-            uint32_t n_actual = params.problemShape.n();
             GemvCoord actualBlockShape = GemvCoord{m_actual,n_actual};
-            // Compute block-scoped matrix multiply-add
+            
+            Realbeta = (loop_id % params.SPLIT == 0) ? Realbeta:0.0f;
+
             blockGemv(gmA[offset_matrix], params.layoutA,
-                gmX, 
+                gmX[offset_vector_in], 
                 gmY[offset_vector_out], 
                 gmY_read[offset_vector_out],
                 actualBlockShape,
                 params.alpha,
-                params.beta
+                Realbeta
+                // params.beta
             );
 
         }
-        // for(uint32_t i = 0;i < 4;i++){
-        //     AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((event_t)(i));
-        // }
-        // for(uint32_t i = 0;i < 2;i++){
-        //     AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>((event_t)(i));
-        // }
      }
      private:
-        // static constexpr arch::FlagID FLAG_AIC_FINISH_STORE = 0;
-        // static constexpr arch::FlagID RV_FLAG_AIC_FINISH_STORE = 1;
-        // arch::CrossCoreFlagWithReverse<> flagAicFinishStore{FLAG_AIC_FINISH_STORE, RV_FLAG_AIC_FINISH_STORE};
  };
  
- } // namespace acot::matmul::kernel
+ } 
  
- #endif // ACOT_MATMUL_KERNEL_MATMUL_HPP
+ #endif // ACOT_GEMV_KERNEL_GEMV_HPP

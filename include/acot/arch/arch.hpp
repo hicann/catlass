@@ -39,6 +39,7 @@ struct AscendC910B3{
     static uint32_t const L0BSize = 64 * 1024;
     static uint32_t const L0CSize = 128 * 1024;
     static uint32_t const MaxBlock = 20;
+    static uint32_t const MaxAivBlock = 40;
     static uint32_t const L2CacheByte = 192 * 1024 * 1024;
 };
 
