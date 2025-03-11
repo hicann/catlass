@@ -32,11 +32,31 @@ struct BlockMmad {
     static_assert(DEPENDENT_FALSE<DispatchPolicy>, "BlockMmad is not implemented for this DispatchPolicy");
 };
 
+template <
+    class DispatchPolicy,
+    class L1TileShape,
+    class L0TileShape,
+    class TensorA,
+    class TensorB,
+    class TensorC,
+    class TensorBias = void,
+    class TileCopy = matmul::tile::PackedTileCopyV2<typename DispatchPolicy::ArchTag, TensorA, layout::RowMajor,
+        TensorB, layout::RowMajor, TensorC, layout::RowMajor, TensorBias, layout::RowMajor>,
+    class TileMmad = matmul::tile::TileMmadV2<typename DispatchPolicy::ArchTag, typename TileCopy::TensorL0A,
+        typename TileCopy::TensorL0B, typename TileCopy::TensorL0C>
+>
+struct BlockMmadV2 {
+    static_assert(DEPENDENT_FALSE<DispatchPolicy>, "BlockMmadV2 is not implemented for this DispatchPolicy");
+};
+
 } // namespace acot::matmul::block
 
 #include "acot/matmul/block/block_mmad_pingpong.hpp"
 #include "acot/matmul/block/block_mmad_fa_qk.hpp"
 #include "acot/matmul/block/block_mmad_fa_pv.hpp"
 #include "acot/matmul/block/block_mmad_preload.hpp"
+#include "acot/matmul/block/block_mmad_preload_async.hpp"
+#include "acot/matmul/block/block_mmad_pingpong_v2.hpp"
+#include "acot/matmul/block/block_mmad_preload_v2.hpp"
 
 #endif // ACOT_MATMUL_BLOCK_BLOCK_MMAD_HPP

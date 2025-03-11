@@ -70,8 +70,7 @@ public:
     ACOT_HOST_DEVICE
     RowMajor GetTileLayout(MatrixCoord const &tileShape) const
     {
-        return RowMajor(MakeCoord(tileShape.row(), tileShape.column()),
-                        stride());
+        return RowMajor(tileShape, stride());
     }
 
     /// Returns the shape of the layout
@@ -189,8 +188,7 @@ public:
     ACOT_HOST_DEVICE
     ColumnMajor GetTileLayout(MatrixCoord const &tileShape) const
     {
-        return ColumnMajor(MakeCoord(tileShape.row(), tileShape.column()),
-                           stride());
+        return ColumnMajor(tileShape, stride());
     }
 
     /// Returns the shape of the layout
@@ -289,7 +287,7 @@ public:
     // Methods
 
     /// Constructor
-    ACOT_HOST_DEVICE
+    ACOT_HOST_DEVICE constexpr
     nZ(Index orgRows = 0,                 /// Number of rows of origin matrices
        Index orgCols = 0,                 /// Number of cols of origin matrices
        Index rowsInFractal = 0,           /// Number of rows inside the fractal
@@ -305,16 +303,16 @@ public:
           stride_(MakeCoord(strideRowsInFractal, strideRowsByFractal, strideColsInFractal, strideColsByFractal)) {}
 
     /// Ctor
-    ACOT_HOST_DEVICE
+    ACOT_HOST_DEVICE constexpr
     nZ(OrgShape orgShape, Shape shape, Stride stride) : orgShape_(orgShape), shape_(shape), stride_(stride) {}
 
     /// Make the layout of a coordinate (row, column)
     template <class Element>
-    ACOT_HOST_DEVICE
+    ACOT_HOST_DEVICE constexpr
     static nZ MakeLayout(Index orgRows, Index orgCols)
     {
-        static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-        static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
+        constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+        constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
         Index rowsRound = RoundUp<ELE_NUM_PER_C0>(orgRows);
         Index colsRound = RoundUp<C0_NUM_PER_FRACTAL>(orgCols);
         return nZ(orgRows,
@@ -446,7 +444,7 @@ public:
     // Methods
 
     /// Constructor
-    ACOT_HOST_DEVICE
+    ACOT_HOST_DEVICE constexpr
     zN(Index orgRows = 0,                 /// Number of rows of origin matrices
        Index orgCols = 0,                 /// Number of cols of origin matrices
        Index rowsInFractal = 0,           /// Number of rows inside the fractal
@@ -462,16 +460,16 @@ public:
           stride_(MakeCoord(strideRowsInFractal, strideRowsByFractal, strideColsInFractal, strideColsByFractal)) {}
 
     /// Ctor
-    ACOT_HOST_DEVICE
+    ACOT_HOST_DEVICE constexpr
     zN(OrgShape orgShape, Shape shape, Stride stride) : orgShape_(orgShape), shape_(shape), stride_(stride) {}
 
     /// Make the layout of a coordinate (row, column)
     template <class Element>
-    ACOT_HOST_DEVICE
+    ACOT_HOST_DEVICE constexpr
     static zN MakeLayout(Index orgRows, Index orgCols)
     {
-        static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-        static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
+        constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+        constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
         Index rowsRound = RoundUp<C0_NUM_PER_FRACTAL>(orgRows);
         Index colsRound = RoundUp<ELE_NUM_PER_C0>(orgCols);
         return zN(orgRows,
@@ -511,13 +509,13 @@ public:
 
     /// Returns the layout of a tile.
     ACOT_HOST_DEVICE
-    zN GetTileLayout(MatrixCoord const &tileShape) const
+    zN GetTileLayout(MatrixCoord const &tileOriShape) const
     {
-        return zN(MakeCoord(tileShape.row(), tileShape.column()),
-            MakeCoord(shape(0), CeilDiv(tileShape.row(), shape(0)),
-                      shape(2), CeilDiv(tileShape.column(), shape(2))),
-            stride()
+        auto tileShape = MakeCoord(
+            shape(0), CeilDiv(tileOriShape.row(), shape(0)),
+            shape(2), CeilDiv(tileOriShape.column(), shape(2))
         );
+        return zN(tileOriShape, tileShape, stride());
     }
 
     /// Returns the origin shape of the layout
@@ -629,7 +627,7 @@ public:
     // Methods
 
     /// Constructor
-    ACOT_HOST_DEVICE
+    ACOT_HOST_DEVICE constexpr
     zZ(Index orgRows = 0,                 /// Number of rows of origin matrices
        Index orgCols = 0,                 /// Number of cols of origin matrices
        Index rowsInFractal = 0,           /// Number of rows inside the fractal
@@ -645,16 +643,16 @@ public:
           stride_(MakeCoord(strideRowsInFractal, strideRowsByFractal, strideColsInFractal, strideColsByFractal)) {}
 
     /// Ctor
-    ACOT_HOST_DEVICE
+    ACOT_HOST_DEVICE constexpr
     zZ(OrgShape orgShape, Shape shape, Stride stride) : orgShape_(orgShape), shape_(shape), stride_(stride) {}
 
     /// Make the layout of a coordinate (row, column)
     template <class Element>
-    ACOT_HOST_DEVICE
+    ACOT_HOST_DEVICE constexpr
     static zZ MakeLayout(Index orgRows, Index orgCols)
     {
-        static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-        static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
+        constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+        constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
         Index rowsRound = RoundUp<C0_NUM_PER_FRACTAL>(orgRows);
         Index colsRound = RoundUp<ELE_NUM_PER_C0>(orgCols);
         return zZ(orgRows,
@@ -748,6 +746,284 @@ public:
     }
 
 private:
+    /// Origin Shape data member
+    OrgShape orgShape_;
+
+    /// Shape data member
+    Shape shape_;
+
+    /// Stride data member
+    Stride stride_;
+};
+
+/// Mapping function for padding rowmajor matrices
+/// A special data layout designed to improve the efficiency of matrix operations in non-512B aligned scenarios.
+/// This layout is row-major within blocks and also row-major between blocks.
+struct PaddingRowMajor {
+public:
+    /// Logical rank of tensor
+    static constexpr int RANK = 4;
+
+    /// Logical rank of orgshape
+    static constexpr int ORG_SHAPE_RANK = 2;
+
+    /// Index type used for coordinates
+    using Index = uint32_t;
+
+    /// Long index type used for offsets
+    using LongIndex = int64_t;
+
+    /// Logical coordinate
+    using OrgShape = Coord<ORG_SHAPE_RANK, Index>;
+
+    /// Logical coordinate
+    using Shape = Coord<RANK, Index>;
+
+    /// Stride vector
+    using Stride = Coord<RANK, LongIndex>;
+
+public:
+    /// Constructor
+    ACOT_HOST_DEVICE
+    PaddingRowMajor(Index orgRows, Index orgCols, Index blockRows, Index blockCols) :
+        orgShape_(MakeCoord(orgRows, orgCols)),
+        shape_(MakeCoord(blockRows, CeilDiv(orgRows, blockRows), blockCols, CeilDiv(orgCols, blockCols))),
+        stride_(MakeCoord((LongIndex)blockCols, (LongIndex)blockRows * (LongIndex)RoundUp(orgCols, blockCols),
+        (LongIndex)1, (LongIndex)blockRows * (LongIndex)blockCols)) {}
+
+    /// Returns the offset of a coordinate in linear memory.
+    /// Assumes coordinate has convention (row, column)
+    ACOT_HOST_DEVICE
+    LongIndex GetOffset(MatrixCoord const &coord) const
+    {
+        LongIndex blockRows = (LongIndex)shape_[0];
+        LongIndex blockCols = (LongIndex)shape_[2];
+        return (LongIndex)coord.row() / blockRows * stride_[1]
+            + (LongIndex)coord.column() / blockCols * stride_[3]
+            + (LongIndex)coord.row() % blockRows * stride_[0]
+            + (LongIndex)coord.column() % blockCols;
+    }
+
+    ACOT_HOST_DEVICE
+    PaddingRowMajor GetTileLayout(MatrixCoord const &tileShape) const
+    {
+        return PaddingRowMajor(tileShape.row(), tileShape.column(), shape_[0], shape_[2]);
+    }
+
+    /// Returns the origin shape of the layout
+    ACOT_HOST_DEVICE
+    typename OrgShape::Index orgShape(int idx) const
+    {
+        return orgShape_[idx];
+    }
+
+    /// Returns the origin shape of the layout
+    ACOT_HOST_DEVICE
+    typename OrgShape::Index &orgShape(int idx)
+    {
+        return orgShape_[idx];
+    }
+
+    /// Returns the shape of the layout
+    ACOT_HOST_DEVICE
+    Shape shape() const
+    {
+        return shape_;
+    }
+
+    /// Returns the shape of the layout
+    ACOT_HOST_DEVICE
+    Shape &shape()
+    {
+        return shape_;
+    }
+
+    /// Returns the shape of the layout
+    ACOT_HOST_DEVICE
+    typename Shape::Index shape(int idx) const
+    {
+        return shape_[idx];
+    }
+
+    /// Returns the shape of the layout
+    ACOT_HOST_DEVICE
+    typename Shape::Index &shape(int idx)
+    {
+        return shape_[idx];
+    }
+
+    /// Returns the stride of the layout
+    ACOT_HOST_DEVICE
+    Stride stride() const
+    {
+        return stride_;
+    }
+
+    /// Returns the stride of the layout
+    ACOT_HOST_DEVICE
+    Stride &stride()
+    {
+        return stride_;
+    }
+
+    /// Returns the stride of the layout
+    ACOT_HOST_DEVICE
+    typename Stride::Index stride(int idx) const
+    {
+        return stride_[idx];
+    }
+
+    /// Returns the stride of the layout
+    ACOT_HOST_DEVICE
+    typename Stride::Index &stride(int idx)
+    {
+        return stride_[idx];
+    }
+
+private:
+    //
+    // Data members
+    //
+
+    /// Origin Shape data member
+    OrgShape orgShape_;
+
+    /// Shape data member
+    Shape shape_;
+
+    /// Stride data member
+    Stride stride_;
+};
+
+/// Mapping function for padding columnmajor matrices
+/// A special data layout designed to improve the efficiency of matrix operations in non-512B aligned scenarios.
+/// This layout is column-major within blocks and also column-major between blocks.
+struct PaddingColumnMajor {
+public:
+    /// Logical rank of tensor
+    static constexpr int RANK = 4;
+
+    /// Logical rank of orgshape
+    static constexpr int ORG_SHAPE_RANK = 2;
+
+    /// Index type used for coordinates
+    using Index = uint32_t;
+
+    /// Long index type used for offsets
+    using LongIndex = int64_t;
+
+    /// Logical coordinate
+    using OrgShape = Coord<ORG_SHAPE_RANK, Index>;
+
+    /// Logical coordinate
+    using Shape = Coord<RANK, Index>;
+
+    /// Stride vector
+    using Stride = Coord<RANK, LongIndex>;
+
+public:
+    /// Constructor
+    ACOT_HOST_DEVICE
+    PaddingColumnMajor(Index orgRows, Index orgCols, Index blockRows, Index blockCols) :
+        orgShape_(MakeCoord(orgRows, orgCols)),
+        shape_(MakeCoord(blockRows, CeilDiv(orgRows, blockRows), blockCols, CeilDiv(orgCols, blockCols))),
+        stride_(MakeCoord((LongIndex)1, (LongIndex)blockRows * (LongIndex)blockCols, (LongIndex)blockRows,
+        (LongIndex)RoundUp(orgRows, blockRows) * (LongIndex)blockCols)) {}
+
+    /// Returns the offset of a coordinate in linear memory.
+    /// Assumes coordinate has convention (row, column)
+    ACOT_HOST_DEVICE
+    LongIndex GetOffset(MatrixCoord const &coord) const
+    {
+        LongIndex blockRows = (LongIndex)shape_[0];
+        LongIndex blockCols = (LongIndex)shape_[2];
+        return (LongIndex)coord.row() / blockRows * stride_[1]
+            + (LongIndex)coord.column() / blockCols * stride_[3]
+            + (LongIndex)coord.row() % blockRows
+            + (LongIndex)coord.column() % blockCols * stride_[2];
+    }
+
+    ACOT_HOST_DEVICE
+    PaddingColumnMajor GetTileLayout(MatrixCoord const &tileShape) const
+    {
+        return PaddingColumnMajor(tileShape.row(), tileShape.column(), shape_[0], shape_[2]);
+    }
+
+    /// Returns the origin shape of the layout
+    ACOT_HOST_DEVICE
+    typename OrgShape::Index orgShape(int idx) const
+    {
+        return orgShape_[idx];
+    }
+
+    /// Returns the origin shape of the layout
+    ACOT_HOST_DEVICE
+    typename OrgShape::Index &orgShape(int idx)
+    {
+        return orgShape_[idx];
+    }
+
+    /// Returns the shape of the layout
+    ACOT_HOST_DEVICE
+    Shape shape() const
+    {
+        return shape_;
+    }
+
+    /// Returns the shape of the layout
+    ACOT_HOST_DEVICE
+    Shape &shape()
+    {
+        return shape_;
+    }
+
+    /// Returns the shape of the layout
+    ACOT_HOST_DEVICE
+    typename Shape::Index shape(int idx) const
+    {
+        return shape_[idx];
+    }
+
+    /// Returns the shape of the layout
+    ACOT_HOST_DEVICE
+    typename Shape::Index &shape(int idx)
+    {
+        return shape_[idx];
+    }
+
+    /// Returns the stride of the layout
+    ACOT_HOST_DEVICE
+    Stride stride() const
+    {
+        return stride_;
+    }
+
+    /// Returns the stride of the layout
+    ACOT_HOST_DEVICE
+    Stride &stride()
+    {
+        return stride_;
+    }
+
+    /// Returns the stride of the layout
+    ACOT_HOST_DEVICE
+    typename Stride::Index stride(int idx) const
+    {
+        return stride_[idx];
+    }
+
+    /// Returns the stride of the layout
+    ACOT_HOST_DEVICE
+    typename Stride::Index &stride(int idx)
+    {
+        return stride_[idx];
+    }
+
+private:
+    //
+    // Data members
+    //
+
     /// Origin Shape data member
     OrgShape orgShape_;
 

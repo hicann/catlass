@@ -23,6 +23,30 @@ struct AtlasA2 {
     static constexpr uint32_t L0C_SIZE = 128 * 1024;
 };
 
+struct PositionGM {
+    static constexpr AscendC::TPosition POSITION = AscendC::TPosition::GM;
+};
+
+struct PositionL1 {
+    static constexpr AscendC::TPosition POSITION = AscendC::TPosition::A1;
+};
+
+struct PositionL0A {
+    static constexpr AscendC::TPosition POSITION = AscendC::TPosition::A2;
+};
+
+struct PositionL0B {
+    static constexpr AscendC::TPosition POSITION = AscendC::TPosition::B2;
+};
+
+struct PositionL0C {
+    static constexpr AscendC::TPosition POSITION = AscendC::TPosition::CO1;
+};
+
+struct PositionUB {
+    static constexpr AscendC::TPosition POSITION = AscendC::TPosition::VECCALC;
+};
+
 } // namespace acot::arch
 
 #endif // ACOT_ARCH_ARCH_HPP

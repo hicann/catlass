@@ -17,19 +17,19 @@
 
 namespace acot::golden {
 
-constexpr uint32_t COMPUTE_NUM_THRESHOLD = 2048;
-constexpr float RTOL_GENERAL = 1.0f / 256;
-constexpr float RTOL_OVER_THRESHOLD = 1.0f / 128;
-
 template<class ElementResult, class ElementCompare>
 std::vector<uint64_t> CompareData(const std::vector<ElementResult>& result, const std::vector<ElementCompare>& expect,
     uint32_t computeNum)
 {
-    float rtol = computeNum < COMPUTE_NUM_THRESHOLD ? RTOL_GENERAL : RTOL_OVER_THRESHOLD;
+    const uint32_t computeNumThreshold = 2048;
+    const float rtolGeneral = 1.0f / 256;
+    const float rtolOverThreshold = 1.0f / 128;
+
+    float rtol = computeNum < computeNumThreshold ? rtolGeneral : rtolOverThreshold;
     std::vector<uint64_t> errorIndices;
     for (uint64_t i = 0; i < result.size(); ++i) {
         ElementCompare actualValue = static_cast<ElementCompare>(result[i]);
-        ElementCompare expectValue = static_cast<ElementCompare>(expect[i]);
+        ElementCompare expectValue = expect[i];
         ElementCompare diff = std::fabs(actualValue - expectValue);
         if (diff > rtol * std::max(1.0f, std::fabs(expectValue))) {
             errorIndices.push_back(i);

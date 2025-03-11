@@ -13,6 +13,7 @@
 
 #include "acot/acot.hpp"
 #include "acot/layout/layout.hpp"
+#include "tla/layout.hpp"
 
 namespace acot::matmul::helper {
 
@@ -31,6 +32,22 @@ struct L1AlignHelper<Element, layout::RowMajor> {
 
 template<class Element>
 struct L1AlignHelper<Element, layout::ColumnMajor> {
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+    static constexpr uint32_t M_ALIGNED = ELE_NUM_PER_C0;
+    static constexpr uint32_t K_ALIGNED = ELE_NUM_PER_C0;
+    static constexpr uint32_t N_ALIGNED = C0_NUM_PER_FRACTAL;
+};
+
+template<class Element>
+struct L1AlignHelper<Element, layout::PaddingRowMajor> {
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+    static constexpr uint32_t M_ALIGNED = C0_NUM_PER_FRACTAL;
+    static constexpr uint32_t K_ALIGNED = ELE_NUM_PER_C0;
+    static constexpr uint32_t N_ALIGNED = ELE_NUM_PER_C0;
+};
+
+template<class Element>
+struct L1AlignHelper<Element, layout::PaddingColumnMajor> {
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
     static constexpr uint32_t M_ALIGNED = ELE_NUM_PER_C0;
     static constexpr uint32_t K_ALIGNED = ELE_NUM_PER_C0;
@@ -65,13 +82,91 @@ struct ElementAccumulatorSelector<half, half> {
 };
 
 template<>
-struct ElementAccumulatorSelector<uint8_t, uint8_t> {
+struct ElementAccumulatorSelector<int8_t, int8_t> {
     using ElementAccumulator = int32_t;
 };
 
 template<>
 struct ElementAccumulatorSelector<bfloat16_t, bfloat16_t> {
     using ElementAccumulator = float;
+};
+
+template<class GmAType>
+struct L1ATypeSelector {
+    static_assert(DEPENDENT_FALSE<GmAType>,
+        "Unsupported layout selector, can not find the specialization.");
+};
+
+template<class Element>
+struct L1ATypeSelector<matmul::MatmulType<Element, layout::RowMajor>> {
+    using L1AType = matmul::MatmulType<Element, layout::zN>;
+};
+
+template<class Element>
+struct L1ATypeSelector<matmul::MatmulType<Element, layout::PaddingRowMajor>> {
+    using L1AType = matmul::MatmulType<Element, layout::zN>;
+};
+
+template<class Element>
+struct L1ATypeSelector<matmul::MatmulType<Element, layout::ColumnMajor>> {
+    using L1AType = matmul::MatmulType<Element, layout::nZ>;
+};
+
+template<class Element>
+struct L1ATypeSelector<matmul::MatmulType<Element, layout::PaddingColumnMajor>> {
+    using L1AType = matmul::MatmulType<Element, layout::nZ>;
+};
+
+template<class GmBType>
+struct L1BTypeSelector {
+    static_assert(DEPENDENT_FALSE<GmBType>,
+        "Unsupported layout selector, can not find the specialization.");
+};
+
+template<class Element>
+struct L1BTypeSelector<matmul::MatmulType<Element, layout::RowMajor>> {
+    using L1BType = matmul::MatmulType<Element, layout::zN>;
+};
+
+template<class Element>
+struct L1BTypeSelector<matmul::MatmulType<Element, layout::zN>> {
+    using L1BType = matmul::MatmulType<Element, layout::zN>;
+};
+
+template<class Element>
+struct L1BTypeSelector<matmul::MatmulType<Element, layout::PaddingRowMajor>> {
+    using L1BType = matmul::MatmulType<Element, layout::zN>;
+};
+
+template<class Element>
+struct L1BTypeSelector<matmul::MatmulType<Element, layout::ColumnMajor>> {
+    using L1BType = matmul::MatmulType<Element, layout::nZ>;
+};
+
+template<class Element>
+struct L1BTypeSelector<matmul::MatmulType<Element, layout::PaddingColumnMajor>> {
+    using L1BType = matmul::MatmulType<Element, layout::nZ>;
+};
+
+template<class Element, class Layout, class Enable = void>
+struct L1AlignHelperV2 {
+    static_assert(DEPENDENT_FALSE<Element>, "Unsupported align helper v2, can not find the specialization.");
+};
+
+template<class Element, class Layout>
+struct L1AlignHelperV2<Element, Layout, std::enable_if_t<tla::detail::isRowMajor<Layout>::value>> {
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+    static constexpr uint32_t M_ALIGNED = C0_NUM_PER_FRACTAL;
+    static constexpr uint32_t K_ALIGNED = ELE_NUM_PER_C0;
+    static constexpr uint32_t N_ALIGNED = ELE_NUM_PER_C0;
+};
+
+template<class Element, class Layout>
+struct L1AlignHelperV2<Element, Layout, std::enable_if_t<tla::detail::isColumnMajor<Layout>::value>> {
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+    static constexpr uint32_t M_ALIGNED = ELE_NUM_PER_C0;
+    static constexpr uint32_t K_ALIGNED = ELE_NUM_PER_C0;
+    static constexpr uint32_t N_ALIGNED = C0_NUM_PER_FRACTAL;
 };
 
 } // namespace acot::matmul::helper

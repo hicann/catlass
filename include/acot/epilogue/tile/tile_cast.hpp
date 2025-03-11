@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ACOT_EPILOGUE_TILE_TILE_ELEMWISE_ADD_HPP
-#define ACOT_EPILOGUE_TILE_TILE_ELEMWISE_ADD_HPP
+#ifndef ACOT_EPILOGUE_TILE_TILE_CAST_HPP
+#define ACOT_EPILOGUE_TILE_TILE_CAST_HPP
 
 #include "acot/acot.hpp"
 
@@ -19,28 +19,27 @@ template <
     /// Tag indicating architecture
     class ArchTag_,
     /// Compute data type
-    class ComputeType_,
+    class DstType_,
+    class SrcType_,
     /// Length of the compute buffer
-    uint32_t COMPUTE_LENGTH_
+    class TileShape_
 >
-struct TileElemWiseAdd {
+struct TileCast {
     using ArchTag = ArchTag_;
-    using ElementCompute = typename ComputeType_::Element;
-
-    static constexpr uint32_t COMPUTE_LENGTH = COMPUTE_LENGTH_;
+    using ElementDst = typename DstType_::Element;
+    using ElementSrc = typename SrcType_::Element;
+    using TileShape = TileShape_;
 
     ACOT_DEVICE
-    TileElemWiseAdd() {}
+    TileCast() {}
 
     ACOT_DEVICE
     void operator()(
-        AscendC::LocalTensor<ElementCompute> const &ubOut,
-        AscendC::LocalTensor<ElementCompute> const &ubIn0,
-        AscendC::LocalTensor<ElementCompute> const &ubIn1
+        AscendC::LocalTensor<ElementDst> const &ubOut,
+        AscendC::LocalTensor<ElementSrc> const &ubIn
     )
     {
-        // Do the calculation
-        AscendC::Add(ubOut, ubIn0, ubIn1, COMPUTE_LENGTH);
+        AscendC::Cast(ubOut, ubIn, AscendC::RoundMode::CAST_RINT, TileShape::COUNT);
     }
 };
 

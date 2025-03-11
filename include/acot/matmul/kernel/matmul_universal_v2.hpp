@@ -8,24 +8,25 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ACOT_MATMUL_KERNEL_BATCHED_MATMUL_HPP
-#define ACOT_MATMUL_KERNEL_BATCHED_MATMUL_HPP
+#ifndef ACOT_MATMUL_KERNEL_MATMUL_V2_HPP
+#define ACOT_MATMUL_KERNEL_MATMUL_V2_HPP
 
 #include "acot/acot.hpp"
 #include "acot/arch/resource.hpp"
 #include "acot/coord.hpp"
 #include "acot/matmul_coord.hpp"
 #include "acot/matrix_coord.hpp"
+#include "tla/tensor.hpp"
 
 namespace acot::matmul::kernel {
 
-// Template for Batched Matmul kernel. Compute batched C = A * B
+// Template for Matmul kernel. Compute C = A * B
 template <
     class BlockMmad_,
     class BlockEpilogue_,
-    class TileScheduler_
+    class BlockScheduler_
 >
-class BatchedMatmul {
+class MatmulUniversalV2 {
 public:
     using BlockMmad = BlockMmad_;
     using ArchTag = typename BlockMmad::ArchTag;
@@ -38,52 +39,48 @@ public:
     using LayoutC = typename BlockMmad::LayoutC;
     using ElementAccumulator = typename BlockMmad::ElementAccumulator;
 
-    using TileScheduler = TileScheduler_;
+    using BlockScheduler = BlockScheduler_;
+
+    static constexpr uint32_t L1_TILE_M = get<0>(L1TileShape{});
+    static constexpr uint32_t L1_TILE_N = get<1>(L1TileShape{});
+    static constexpr uint32_t L1_TILE_K = get<2>(L1TileShape{});
 
     /// Parameters structure
     struct Params {
         // Data members
-        uint32_t batchCount;
         MatmulCoord problemShape;
         GM_ADDR ptrA;
         LayoutA layoutA;
-        int64_t strideA;
         GM_ADDR ptrB;
         LayoutB layoutB;
-        int64_t strideB;
         GM_ADDR ptrC;
         LayoutC layoutC;
-        int64_t strideC;
 
         // Methods
         ACOT_DEVICE
         Params() {}
 
         ACOT_DEVICE
-        Params(uint32_t batchCount_, MatmulCoord const &problemShape_,
-               GM_ADDR ptrA_, LayoutA layoutA_, int64_t strideA_,
-               GM_ADDR ptrB_, LayoutB layoutB_, int64_t strideB_,
-               GM_ADDR ptrC_, LayoutC layoutC_, int64_t strideC_)
-            : batchCount(batchCount_), problemShape(problemShape_),
-              ptrA(ptrA_), layoutA(layoutA_), strideA(strideA_),
-              ptrB(ptrB_), layoutB(layoutB_), strideB(strideB_),
-              ptrC(ptrC_), layoutC(layoutC_), strideC(strideC_) {}
+        Params(MatmulCoord const &problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_,
+               LayoutB layoutB_, GM_ADDR ptrC_, LayoutC layoutC_)
+            : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_), layoutB(layoutB_),
+              ptrC(ptrC_), layoutC(layoutC_) {}
     };
 
     // Methods
     ACOT_DEVICE
-    BatchedMatmul() {}
+    MatmulUniversalV2() {}
 
     template <int32_t CORE_TYPE = g_coreType>
     ACOT_DEVICE
     void operator()(Params const &params);
 
-    /// Executes one GEMM
+    /// Executes one Matmul
     template <>
     ACOT_DEVICE
     void operator()<AscendC::AIC>(Params const &params) {
-        TileScheduler matmulTileScheduler(params.problemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
-        uint32_t coreLoops = params.batchCount * matmulTileScheduler.GetCoreLoops();
+        BlockScheduler matmulBlockScheduler(params.problemShape, MakeCoord(L1_TILE_M, L1_TILE_N));
+        uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
 
         arch::Resource<ArchTag> resource;
         BlockMmad blockMmad(resource);
@@ -96,31 +93,29 @@ public:
         AscendC::GlobalTensor<ElementC> gmC;
         gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrC);
 
+        // Represent the full tensors
+        auto tensorA = MakeTensor(gmA, params.layoutA, arch::PositionGM{});
+        auto tensorB = MakeTensor(gmB, params.layoutB, arch::PositionGM{});
+        auto tensorC = MakeTensor(gmC, params.layoutC, arch::PositionGM{});
+
         for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()) {
             // Compute block location
-            uint32_t batchIdx = matmulTileScheduler.GetBatchIdx(loopIdx);
-            MatmulCoord blockCoord = matmulTileScheduler.GetBlockCoord(loopIdx);
-            MatmulCoord actualBlockShape = matmulTileScheduler.GetActualBlockShape(blockCoord);
+            MatmulCoord blockCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
+            MatmulCoord actualBlockShape = matmulBlockScheduler.GetActualBlockShape(blockCoord);
 
-            // batchOffset
-            int64_t batchOffsetA = batchIdx * params.strideA;
-            int64_t batchOffsetB = batchIdx * params.strideB;
-            int64_t batchOffsetC = batchIdx * params.strideC;
-
-            // Compute initial location in logical coordinates
-            MatrixCoord offsetA{blockCoord.m() * L1TileShape::M, blockCoord.k() * L1TileShape::K};
-            MatrixCoord offsetB{blockCoord.k() * L1TileShape::K, blockCoord.n() * L1TileShape::N};
-            MatrixCoord offsetC{blockCoord.m() * L1TileShape::M, blockCoord.n() * L1TileShape::N};
-            int64_t gmOffsetA = params.layoutA.GetOffset(offsetA);
-            int64_t gmOffsetB = params.layoutB.GetOffset(offsetB);
-            int64_t gmOffsetC = params.layoutC.GetOffset(offsetC);
+            // Make tiled views
+            auto tensorBlockA = GetTile(tensorA,
+                                        tla::MakeCoord(blockCoord.m() * L1_TILE_M, blockCoord.k() * L1_TILE_K),
+                                        MakeShape(actualBlockShape.m(), actualBlockShape.k()));
+            auto tensorBlockB = GetTile(tensorB,
+                                        tla::MakeCoord(blockCoord.k() * L1_TILE_K, blockCoord.n() * L1_TILE_N),
+                                        MakeShape(actualBlockShape.k(), actualBlockShape.n()));
+            auto tensorBlockC = GetTile(tensorC,
+                                        tla::MakeCoord(blockCoord.m() * L1_TILE_M, blockCoord.n() * L1_TILE_N),
+                                        MakeShape(actualBlockShape.m(), actualBlockShape.n()));
 
             // Compute block-scoped matrix multiply-add
-            blockMmad(
-                gmA[batchOffsetA + gmOffsetA], params.layoutA,
-                gmB[batchOffsetB + gmOffsetB], params.layoutB,
-                gmC[batchOffsetC + gmOffsetC], params.layoutC,
-                actualBlockShape);
+            blockMmad(tensorBlockA, tensorBlockB, tensorBlockC);
         }
     }
 
@@ -131,4 +126,4 @@ public:
 
 } // namespace acot::matmul::kernel
 
-#endif // ACOT_MATMUL_KERNEL_BATCHED_MATMUL_HPP
+#endif // ACOT_MATMUL_KERNEL_MATMUL_V2_HPP

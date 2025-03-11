@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ACOT_MATMUL_KERNEL_PADDING_MATMUL_HPP
-#define ACOT_MATMUL_KERNEL_PADDING_MATMUL_HPP
+#ifndef ACOT_MATMUL_KERNEL_OPTIMIZED_MATMUL_HPP
+#define ACOT_MATMUL_KERNEL_OPTIMIZED_MATMUL_HPP
 
 #include "acot/acot.hpp"
 #include "acot/coord.hpp"
@@ -19,152 +19,9 @@
 #include "acot/arch/cross_core_sync.hpp"
 #include "acot/epilogue/tile/copy_gm_to_ub.hpp"
 #include "acot/epilogue/tile/copy_ub_to_gm.hpp"
+#include "acot/matmul/kernel/padding_matmul.hpp"
 
 namespace acot::matmul::kernel {
-
-template<
-    class ArchTag_,
-    class Element_,
-    class Layout_,
-    uint32_t COMPUTE_LENGTH
->
-struct PaddingMatrix {
-public:
-    using ArchTag = ArchTag_;
-    using Element = Element_;
-    using Layout = Layout_;
-    using CopyGm2Ub = acot::epilogue::tile::CopyGm2Ub<
-        ArchTag, matmul::MatmulType<Element, acot::layout::RowMajor>>;
-    using CopyUb2Gm = acot::epilogue::tile::CopyUb2Gm<
-        ArchTag, matmul::MatmulType<Element, acot::layout::RowMajor>>;
-    using ComputeLayout = acot::layout::RowMajor;
-
-    CopyGm2Ub copyGm2Ub;
-    CopyUb2Gm copyUb2Gm;
-
-    ACOT_DEVICE
-    PaddingMatrix(arch::Resource<ArchTag> &resource)
-    {
-        int64_t bufferOffset = 0;
-        for (uint32_t i = 0; i < BUFFER_NUM; i++) {
-            inputBuffer[i] = resource.ubBuf.template GetBufferByByte<Element>(bufferOffset * sizeof(Element));
-            bufferOffset += COMPUTE_LENGTH;
-        }
-    }
-
-    ACOT_DEVICE
-    ComputeLayout GetPaddingComputeLayout(layout::RowMajor const &layout)
-    {
-        return ComputeLayout(layout.shape(0), layout.shape(1), layout.stride(0));
-    }
-
-    ACOT_DEVICE
-    ComputeLayout GetPaddingComputeLayout(layout::ColumnMajor const &layout)
-    {
-        return ComputeLayout(layout.shape(1), layout.shape(0), layout.stride(1));
-    }
-
-    ACOT_DEVICE
-    void operator()(AscendC::GlobalTensor<Element> const &dst,
-                    AscendC::GlobalTensor<Element> const &src,
-                    Layout layoutDst, Layout layoutSrc)
-    {
-        ComputeLayout computeLayoutSrc = GetPaddingComputeLayout(layoutSrc);
-        ComputeLayout computeLayoutDst = GetPaddingComputeLayout(layoutDst);
-
-        uint32_t aivNum = AscendC::GetBlockNum() * AscendC::GetSubBlockNum();
-        uint32_t aivId = AscendC::GetBlockIdx();
-
-        // Each line is a tile.
-        uint32_t tilesNum = computeLayoutSrc.shape(0);
-        uint32_t tileLen = computeLayoutSrc.shape(1);
-        uint32_t paddingStride = computeLayoutDst.stride(0);
-
-        uint32_t tilesPerAiv = tilesNum / aivNum;
-        uint32_t tileRemain = tilesNum % aivNum;
-        if (aivId < tileRemain) {
-            tilesPerAiv++;
-        }
-        uint32_t mIdx = aivId * tilesPerAiv;
-        if (aivId >= tileRemain) {
-            mIdx += tileRemain;
-        }
-        MatrixCoord blockOffset(mIdx, 0);
-
-        AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[0]);
-        AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[1]);
-        uint32_t coreLoops{ 0 };
-        if (paddingStride > COMPUTE_LENGTH) {
-            // Handle the same tile on multiple loops.
-            uint32_t loopsPerTile = (tileLen + COMPUTE_LENGTH - 1) / COMPUTE_LENGTH;
-            coreLoops = tilesPerAiv * loopsPerTile;
-            for (uint32_t loopIdx = 0; loopIdx < coreLoops; ++loopIdx) {
-                uint32_t tileIdx = loopIdx / loopsPerTile;
-                uint32_t inTileLoopIdx = loopIdx % loopsPerTile;
-                MatrixCoord loopOffset(tileIdx, inTileLoopIdx * COMPUTE_LENGTH);
-                uint64_t gmSrcOffset = computeLayoutSrc.GetOffset(blockOffset + loopOffset);
-                uint32_t actualDataNum = COMPUTE_LENGTH;
-                if (tileLen - inTileLoopIdx * COMPUTE_LENGTH < COMPUTE_LENGTH) {
-                    actualDataNum = tileLen - inTileLoopIdx * COMPUTE_LENGTH;
-                }
-
-                AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[bufferIndex]);
-                ComputeLayout dstLayout = computeLayoutDst.GetTileLayout(MatrixCoord(1, actualDataNum));
-                ComputeLayout srcLayout = computeLayoutSrc.GetTileLayout(MatrixCoord(1, actualDataNum));
-                ComputeLayout &ubLayout = dstLayout;
-
-                copyGm2Ub(inputBuffer[bufferIndex], src[gmSrcOffset], ubLayout, srcLayout);
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE3>(eventIds[bufferIndex]);
-                AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE3>(eventIds[bufferIndex]);
-
-                uint64_t gmDstOffset = computeLayoutDst.GetOffset(blockOffset + loopOffset);
-                copyUb2Gm(dst[gmDstOffset], inputBuffer[bufferIndex], dstLayout, ubLayout);
-                AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[bufferIndex]);
-
-                bufferIndex = (bufferIndex + 1) % BUFFER_NUM;
-            }
-        } else {
-            // Handle multiple tile each loop.
-            uint32_t tilesPerLoop = COMPUTE_LENGTH / paddingStride;
-            coreLoops = (tilesPerAiv + tilesPerLoop - 1) / tilesPerLoop;
-            for (uint32_t loopIdx = 0; loopIdx < coreLoops; ++loopIdx) {
-                uint32_t tileIdx = loopIdx * tilesPerLoop;
-                MatrixCoord tileOffset(tileIdx, 0);
-                uint64_t gmSrcOffset = computeLayoutSrc.GetOffset(blockOffset + tileOffset);
-                uint32_t actualTilesNum = tilesPerLoop;
-                if (tilesPerAiv - tileIdx < tilesPerLoop) {
-                    actualTilesNum = tilesPerAiv - tileIdx;
-                }
-
-                AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[bufferIndex]);
-                ComputeLayout dstLayout = computeLayoutDst.GetTileLayout(MatrixCoord(actualTilesNum, tileLen));
-                ComputeLayout srcLayout = computeLayoutSrc.GetTileLayout(MatrixCoord(actualTilesNum, tileLen));
-                ComputeLayout &ubLayout = dstLayout;
-
-                copyGm2Ub(inputBuffer[bufferIndex], src[gmSrcOffset], ubLayout, srcLayout);
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE3>(eventIds[bufferIndex]);
-                AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE3>(eventIds[bufferIndex]);
-
-                uint64_t gmDstOffset = computeLayoutDst.GetOffset(blockOffset + tileOffset);
-                copyUb2Gm(dst[gmDstOffset], inputBuffer[bufferIndex], dstLayout, ubLayout);
-                AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[bufferIndex]);
-
-                bufferIndex = (bufferIndex + 1) % BUFFER_NUM;
-            }
-        }
-        AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[0]);
-        AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[1]);
-    }
-
-    ACOT_DEVICE
-    ~PaddingMatrix() {}
-private:
-    static const uint32_t BUFFER_NUM = 2;
-    AscendC::LocalTensor<Element> inputBuffer[BUFFER_NUM];
-    AscendC::TEventID eventIds[BUFFER_NUM] = {EVENT_ID0, EVENT_ID1};
-    uint32_t bufferIndex{ 0 };
-    static_assert(BUFFER_NUM * COMPUTE_LENGTH * sizeof(Element) <= ArchTag::UB_SIZE, "Excedding the UB space!");
-};
 
 template <
     class BlockMmad_,
@@ -177,13 +34,18 @@ public:
     using ArchTag = typename BlockMmad::ArchTag;
     using ElementA = typename BlockMmad::ElementA;
     using ElementB = typename BlockMmad::ElementB;
-    using LayoutA = typename BlockMmad::LayoutA;
-    using LayoutB = typename BlockMmad::LayoutB;
+    using LayoutWA = typename BlockMmad::LayoutA;
+    using LayoutWB = typename BlockMmad::LayoutB;
+
+    using LayoutA = std::conditional_t<std::is_same_v<LayoutWA, layout::RowMajor> ||
+        std::is_same_v<LayoutWA, layout::PaddingRowMajor>, layout::RowMajor, layout::ColumnMajor>;
+    using LayoutB = std::conditional_t<std::is_same_v<LayoutWB, layout::RowMajor> ||
+        std::is_same_v<LayoutWB, layout::PaddingRowMajor>, layout::RowMajor, layout::ColumnMajor>;
 
     static const uint32_t COMPUTE_LENGTH_A = 96 * 1024 / sizeof(ElementA);
-    using PaddingA = PaddingMatrix<ArchTag, ElementA, LayoutA, COMPUTE_LENGTH_A>;
+    using PaddingA = PaddingMatrixBlockND<ArchTag, ElementA, LayoutA, LayoutWA, COMPUTE_LENGTH_A>;
     static const uint32_t COMPUTE_LENGTH_B = 96 * 1024 / sizeof(ElementB);
-    using PaddingB = PaddingMatrix<ArchTag, ElementB, LayoutB, COMPUTE_LENGTH_B>;
+    using PaddingB = PaddingMatrixBlockND<ArchTag, ElementB, LayoutB, LayoutWB, COMPUTE_LENGTH_B>;
 
     using L1TileShape = typename BlockMmad::L1TileShape;
     using ElementC = typename BlockMmad::ElementC;
@@ -202,9 +64,9 @@ public:
         GM_ADDR ptrC;
         LayoutC layoutC;
         GM_ADDR ptrWA;
-        LayoutA layoutWA;
+        LayoutWA layoutWA;
         GM_ADDR ptrWB;
-        LayoutB layoutWB;
+        LayoutWB layoutWB;
 
         // Methods
         ACOT_DEVICE
@@ -213,7 +75,7 @@ public:
         ACOT_DEVICE
         Params(MatmulCoord const &problemShape_,
                GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_, LayoutB layoutB_, GM_ADDR ptrC_, LayoutC layoutC_,
-               GM_ADDR ptrWA_, LayoutA layoutWA_, GM_ADDR ptrWB_, LayoutB layoutWB_)
+               GM_ADDR ptrWA_, LayoutWA layoutWA_, GM_ADDR ptrWB_, LayoutWB layoutWB_)
             : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_), layoutB(layoutB_),
               ptrC(ptrC_), layoutC(layoutC_), ptrWA(ptrWA_), layoutWA(layoutWA_), ptrWB(ptrWB_), layoutWB(layoutWB_) {}
     };
@@ -221,17 +83,6 @@ public:
     // Methods
     ACOT_DEVICE
     OptimizedMatmul() {}
-
-    ACOT_DEVICE
-    bool IsSameStride(layout::RowMajor layout1, layout::RowMajor layout2)
-    {
-        return layout1.stride(0) == layout2.stride(0);
-    }
-    ACOT_DEVICE
-    bool IsSameStride(layout::ColumnMajor layout1, layout::ColumnMajor layout2)
-    {
-        return layout1.stride(1) == layout2.stride(1);
-    }
 
     template <int32_t CORE_TYPE = g_coreType>
     ACOT_DEVICE
@@ -241,7 +92,7 @@ public:
     ACOT_DEVICE
     void operator()<AscendC::AIV>(Params const &params)
     {
-        if (!IsSameStride(params.layoutWA, params.layoutA)) {
+        if (params.ptrA != params.ptrWA) {
             AscendC::GlobalTensor<ElementA> gmA;
             AscendC::GlobalTensor<ElementA> gmWA;
             gmA.SetGlobalBuffer(reinterpret_cast<__gm__ ElementA *>(params.ptrA));
@@ -250,7 +101,7 @@ public:
             paddingA(gmWA, gmA, params.layoutWA, params.layoutA);
         }
 
-        if (!IsSameStride(params.layoutWB, params.layoutB)) {
+        if (params.ptrB != params.ptrWB) {
             AscendC::GlobalTensor<ElementB> gmB;
             AscendC::GlobalTensor<ElementB> gmWB;
             gmB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB *>(params.ptrB));
@@ -259,7 +110,7 @@ public:
             paddingB(gmWB, gmB, params.layoutWB, params.layoutB);
             // 0x0 synchronization control between AI Core
         }
-        if (!IsSameStride(params.layoutWA, params.layoutA) || !IsSameStride(params.layoutWB, params.layoutB)) {
+        if ((params.ptrA != params.ptrWA) || (params.ptrB != params.ptrWB)) {
             acot::arch::CrossCoreBarrier<0x0, PIPE_MTE3>();
             acot::arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(flagAivFinishPadding);
         }
@@ -270,7 +121,7 @@ public:
     ACOT_DEVICE
     void operator()<AscendC::AIC>(Params const &params)
     {
-        if (!IsSameStride(params.layoutWA, params.layoutA) || !IsSameStride(params.layoutWB, params.layoutB)) {
+        if ((params.ptrA != params.ptrWA) || (params.ptrB != params.ptrWB)) {
             acot::arch::CrossCoreWaitFlag(flagAivFinishPadding);
         }
 
@@ -332,4 +183,4 @@ private:
 
 } // namespace acot::matmul::kernel
 
-#endif // ACOT_MATMUL_KERNEL_PADDING_MATMUL_HPP
+#endif // ACOT_MATMUL_KERNEL_OPTIMIZED_MATMUL_HPP

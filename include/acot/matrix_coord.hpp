@@ -15,6 +15,23 @@
 
 namespace acot {
 
+template <
+    uint32_t ROW_ = 1,
+    uint32_t COLUMN_ = 1
+>
+struct MatrixShape {
+    static constexpr uint32_t ROW = ROW_;
+    static constexpr uint32_t COLUMN = COLUMN_;
+
+    static constexpr int64_t COUNT = ROW * COLUMN;
+
+    ACOT_HOST_DEVICE
+    static Coord<2> ToCoord()
+    {
+        return MakeCoord(ROW, COLUMN);
+    }
+};
+
 /// MatrixCoord wraps Coord<2, uint32_t> to provide a helper for accessing named dimensions. Classes
 /// expecting a coordinate in the rank=2 index space of a matrix should use MatrixCoord.
 struct MatrixCoord : public Coord<2, uint32_t> {

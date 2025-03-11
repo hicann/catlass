@@ -187,6 +187,66 @@ struct CopyL0CToGm<acot::arch::AtlasA2,
     }
 };
 
+///////////////////////////////////////////CopyL0CToGmV2/////////////////////////////////////////////////
+template <
+    class ArchTag,
+    class TensorSrc,
+    class TensorDst,
+    ScaleGranularity DEQUANT_GRANULARITY = ScaleGranularity::NO_QUANT,
+    bool ReluEnable = false,
+    class Enable = void
+>
+struct CopyL0CToGmV2 {
+    static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy l0c to gm, can not find the specialization.");
+};
+
+template <
+    class TensorSrc_,
+    class ElementDst_,
+    class LayoutDst_,
+    bool ReluEnable_
+>
+struct CopyL0CToGmV2<acot::arch::AtlasA2,
+                   TensorSrc_,
+                   Tensor<AscendC::GlobalTensor<ElementDst_>, LayoutDst_, AscendC::TPosition::GM>,
+                   ScaleGranularity::NO_QUANT,
+                   ReluEnable_,
+                   std::enable_if_t<tla::detail::isRowMajor<LayoutDst_>::value>>
+{
+    using ArchTag = acot::arch::AtlasA2;
+    using TensorDst = Tensor<AscendC::GlobalTensor<ElementDst_>, LayoutDst_, AscendC::TPosition::GM>;
+    using ElementDst = ElementDst_;
+    using TensorSrc = TensorSrc_;
+    using ElementSrc = typename TensorSrc::Element;
+    static constexpr auto quantPre = CopyL0CToGmQuantMode<ArchTag, ElementSrc, ElementDst,
+        ScaleGranularity::NO_QUANT>::VALUE;
+    static constexpr auto reluEn = ReluEnable_;
+
+    ACOT_DEVICE
+    void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor, uint8_t unitFlag = 0)
+    {
+        AscendC::FixpipeParamsV220 intriParams;
+
+        // Fixpipe layout information
+        intriParams.nSize = get<1>(dstTensor.shape());
+        intriParams.mSize = get<0>(dstTensor.shape());
+        intriParams.srcStride = get<1, 1>(srcTensor.stride()) / get<0, 0>(srcTensor.stride());
+        intriParams.dstStride = get<0>(dstTensor.stride());
+
+        // Fixpipe auxiliary arguments
+        intriParams.quantPre = quantPre;
+        intriParams.reluEn = reluEn;
+        intriParams.unitFlag = unitFlag;
+
+        // Call AscendC Fixpipe
+        AscendC::Fixpipe<ElementDst, ElementSrc, AscendC::CFG_ROW_MAJOR>(
+            dstTensor.data(), srcTensor.data(), intriParams);
+    }
+};
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 }  // namespace acot::matmul::tile
 
 #endif // ACOT_MATMUL_TILE_COPY_L0C_TO_GM_HPP

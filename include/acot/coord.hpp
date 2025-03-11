@@ -33,7 +33,7 @@ public:
     using LongIndex = LongIndex_;
 
     // Default ctor initializes uniformly
-    ACOT_HOST_DEVICE
+    ACOT_HOST_DEVICE constexpr
     explicit Coord(Index value = Index(0))
     {
         for (int i = 0; i < RANK; ++i) {
@@ -42,7 +42,7 @@ public:
     }
 
     // Constructs from an array of integers
-    ACOT_HOST_DEVICE
+    ACOT_HOST_DEVICE constexpr
     Coord(Index const (&idx_)[RANK])
     {
         for (int i = 0; i < RANK; ++i) {
@@ -259,7 +259,8 @@ public:
     ACOT_HOST_DEVICE
     auto GetCoordByAxis() const
     {
-        return Coord<sizeof...(Is), Index, LongIndex>{{idx[Is]...}};
+        Index idx_[sizeof...(Is)]{idx[Is]...};
+        return Coord<sizeof...(Is), Index, LongIndex>{idx_};
     }
 
     ACOT_HOST_DEVICE
@@ -279,7 +280,7 @@ private:
 
 // Helper to make a 1-element coordinate
 template <class T>
-ACOT_HOST_DEVICE
+ACOT_HOST_DEVICE constexpr
 Coord<1, T> MakeCoord(T dim0)
 {
     T values[1] = {dim0};
@@ -288,7 +289,7 @@ Coord<1, T> MakeCoord(T dim0)
 
 /// Helper to make a 2-element coordinate
 template <class T>
-ACOT_HOST_DEVICE
+ACOT_HOST_DEVICE constexpr
 Coord<2, T> MakeCoord(T dim0, T dim1)
 {
     T values[2] = {dim0, dim1};
@@ -297,7 +298,7 @@ Coord<2, T> MakeCoord(T dim0, T dim1)
 
 /// Helper to make a 3-element coordinate
 template <class T>
-ACOT_HOST_DEVICE
+ACOT_HOST_DEVICE constexpr
 Coord<3, T> MakeCoord(T dim0, T dim1, T dim2)
 {
     T values[3] = {dim0, dim1, dim2};
@@ -306,7 +307,7 @@ Coord<3, T> MakeCoord(T dim0, T dim1, T dim2)
 
 /// Helper to make a 4-element coordinate
 template <class T>
-ACOT_HOST_DEVICE
+ACOT_HOST_DEVICE constexpr
 Coord<4, T> MakeCoord(T dim0, T dim1, T dim2, T dim3)
 {
     T values[4] = {dim0, dim1, dim2, dim3};

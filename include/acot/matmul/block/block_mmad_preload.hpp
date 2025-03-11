@@ -73,7 +73,7 @@ public:
     using L1BAlignHelper = matmul::helper::L1AlignHelper<ElementB, LayoutB>;
 
     static constexpr bool ENABLE_UNIT_FLAG = DispatchPolicy::ENABLE_UNIT_FLAG;
-    static constexpr bool ENABLE_SHUFFLE_K = DispatchPolicy::ENABLE_UNIT_FLAG;
+    static constexpr bool ENABLE_SHUFFLE_K = DispatchPolicy::ENABLE_SHUFFLE_K;
     static constexpr uint32_t STAGES = DispatchPolicy::STAGES;
     static constexpr uint32_t L1A_SIZE = L1TileShape::M * L1TileShape::K * sizeof(ElementA);
     static constexpr uint32_t L1B_SIZE = L1TileShape::N * L1TileShape::K * sizeof(ElementB);
@@ -141,9 +141,12 @@ public:
         MatmulCoord const &actualShape, MatmulCoord const &actualShapeNext,
         bool isFirstBlock, bool hasNextBlock)
     {
+        uint32_t mRound = RoundUp<L1AAlignHelper::M_ALIGNED>(actualShape.m());
+        uint32_t nRound = RoundUp<L1BAlignHelper::N_ALIGNED>(actualShape.n());
+
         auto layoutAInL1 = LayoutAInL1::template MakeLayout<ElementA>(L1TileShape::M, L1TileShape::K);
         auto layoutBInL1 = LayoutBInL1::template MakeLayout<ElementB>(L1TileShape::K, L1TileShape::N);
-        auto layoutInL0C = LayoutCInL0::MakeLayoutInL0C(actualShape.GetCoordMN());
+        auto layoutInL0C = LayoutCInL0::MakeLayoutInL0C(MakeCoord(mRound, nRound));
 
         uint32_t kTileCount = CeilDiv<L1TileShape::K>(actualShape.k());
 
@@ -156,7 +159,11 @@ public:
         }
         uint32_t firstTileIdx = startTileIdx % kTileCount;
         uint32_t lastTileIdx = (startTileIdx + kTileCount - 1) % kTileCount;
-        uint32_t kActual = min(actualShape.k(), L1TileShape::K);
+        uint32_t kActual = 
+            (firstTileIdx < kTileCount - 1) ? L1TileShape::K : (actualShape.k() - firstTileIdx * L1TileShape::K);
+
+        uint32_t mPartLoop = CeilDiv<L0TileShape::M>(mRound);
+        uint32_t nPartLoop = CeilDiv<L0TileShape::N>(nRound);
 
         // k loop
         for (uint32_t kLoopIdx = 0; kLoopIdx < kTileCount; kLoopIdx++) {
@@ -214,7 +221,8 @@ public:
                 auto l1ATensor = l1ATensorList[l1ListIdNext];
                 auto l1BTensor = l1BTensorList[l1ListIdNext];
                 // Get GM tensor for next stage
-                kActualNext = min(actualShapeNext.k(), L1TileShape::K);
+                kActualNext = (firstTileIdx < kTileCount - 1) ?
+                    L1TileShape::K : (actualShape.k() - firstTileIdx * L1TileShape::K);
                 MatrixCoord gmTileAOffset{0, firstTileIdx * L1TileShape::K};
                 MatrixCoord gmTileBOffset{firstTileIdx * L1TileShape::K, 0};
                 auto gmTileA = gmNextBlockA[layoutA.GetOffset(gmTileAOffset)];
@@ -236,11 +244,7 @@ public:
             auto l1ATensor = l1ATensorList[l1ListId];
             auto l1BTensor = l1BTensorList[l1ListId];
 
-            uint32_t mRound = RoundUp<L1AAlignHelper::M_ALIGNED>(actualShape.m());
-            uint32_t nRound = RoundUp<L1BAlignHelper::N_ALIGNED>(actualShape.n());
             // Get the loop nums on L0
-            uint32_t mPartLoop = CeilDiv<L0TileShape::M>(mRound);
-            uint32_t nPartLoop = CeilDiv<L0TileShape::N>(nRound);
             uint32_t kPartLoop = CeilDiv<L0TileShape::K>(kActual);
 
             uint32_t l0ABufId = 0;
@@ -376,4 +380,3 @@ protected:
 } // namespace acot::matmul::block
 
 #endif // ACOT_MATMUL_BLOCK_BLOCK_MMAD_PRELOAD_HPP
-

@@ -65,6 +65,57 @@ struct TileMmad {
     }
 };
 
+///////////////////////////////////////////TileMmadV2/////////////////////////////////////////////////
+
+template <
+    /// Tag indicating architecture
+    class ArchTag_,
+    /// Tensor type for A matrix operand
+    class TensorA,
+    /// Tensor type for B matrix operand
+    class TensorB,
+    /// Tensor type for C matrix operand
+    class TensorC,
+    /// Tensor type for Bias operand
+    class TensorBias = void
+>
+struct TileMmadV2 {
+    // Methods
+
+    ACOT_DEVICE
+    TileMmadV2() {}
+
+    ACOT_DEVICE
+    void operator()(TensorC const &l0CTensor,
+         TensorA const &l0ATensor,
+         TensorB const &l0BTensor,
+         bool initC = true, uint8_t unitFlag = 0)
+    {
+        const uint32_t m = get<0>(l0ATensor.orgShape());
+        const uint32_t n = get<1>(l0BTensor.orgShape());
+        const uint32_t k = get<1>(l0ATensor.orgShape());
+
+        AscendC::MmadParams mmadParams;
+        mmadParams.m = m;
+        mmadParams.n = n;
+        mmadParams.k = k;
+        mmadParams.unitFlag = unitFlag;
+        mmadParams.cmatrixInitVal = initC;
+
+        AscendC::Mmad(l0CTensor.data(),
+                      l0ATensor.data(),
+                      l0BTensor.data(),
+                      mmadParams);
+
+        const uint32_t PIPE_M_BARRIER_THRESHOLD = 10;
+        if ((m / C0_NUM_PER_FRACTAL) * (n / C0_NUM_PER_FRACTAL) < PIPE_M_BARRIER_THRESHOLD) {
+            AscendC::PipeBarrier<PIPE_M>();
+        }
+    }
+};
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 } // namespace acot::matmul::tile
 
 #endif // ACOT_MATMUL_TILE_TILE_MMAD_HPP

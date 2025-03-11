@@ -129,6 +129,12 @@ public:
         uint32_t startCoreIdx = 0;
         for (uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx) {
             MatmulCoord problemShape = problemShapeList[groupIdx];
+            if (problemShape.k() == 0 || problemShape.m() == 0 || problemShape.n() == 0) {
+                inGroupOffsetA += problemShape.m() * problemShape.k();
+                inGroupOffsetB += problemShape.k() * problemShape.n();
+                inGroupOffsetC += problemShape.m() * problemShape.n();
+                continue;
+            }
             LayoutA layoutA = layoutAList[groupIdx];
             LayoutB layoutB = layoutBList[groupIdx];
             LayoutC layoutC = layoutCList[groupIdx];

@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ACOT_EPILOGUE_TILE_TILE_ELEMWISE_ADD_HPP
-#define ACOT_EPILOGUE_TILE_TILE_ELEMWISE_ADD_HPP
+#ifndef ACOT_EPILOGUE_TILE_TILE_BROADCAST_INPLACE_BY_ROW_HPP
+#define ACOT_EPILOGUE_TILE_TILE_BROADCAST_INPLACE_BY_ROW_HPP
 
 #include "acot/acot.hpp"
 
@@ -21,26 +21,35 @@ template <
     /// Compute data type
     class ComputeType_,
     /// Length of the compute buffer
-    uint32_t COMPUTE_LENGTH_
+    class TileShape_
 >
-struct TileElemWiseAdd {
+struct TileBroadcastInplaceByRow {
     using ArchTag = ArchTag_;
     using ElementCompute = typename ComputeType_::Element;
-
-    static constexpr uint32_t COMPUTE_LENGTH = COMPUTE_LENGTH_;
+    using TileShape = TileShape_;
 
     ACOT_DEVICE
-    TileElemWiseAdd() {}
+    TileBroadcastInplaceByRow() {}
 
     ACOT_DEVICE
     void operator()(
-        AscendC::LocalTensor<ElementCompute> const &ubOut,
-        AscendC::LocalTensor<ElementCompute> const &ubIn0,
-        AscendC::LocalTensor<ElementCompute> const &ubIn1
+        AscendC::LocalTensor<ElementCompute> const &ubInOut
     )
     {
-        // Do the calculation
-        AscendC::Add(ubOut, ubIn0, ubIn1, COMPUTE_LENGTH);
+        constexpr uint32_t eleNumPerVectorFractal = BYTE_PER_VECTOR_FRACTAL / sizeof(ElementCompute);
+
+        constexpr uint64_t mask = eleNumPerVectorFractal;
+        constexpr uint8_t repeatTimes = TileShape::COLUMN / eleNumPerVectorFractal;
+
+        AscendC::CopyRepeatParams repeatParams;
+        repeatParams.dstStride = 1;
+        repeatParams.srcStride = 1;
+        repeatParams.dstRepeatSize = BLK_NUM_PER_VECTOR_FRACTAL;
+        repeatParams.srcRepeatSize = BLK_NUM_PER_VECTOR_FRACTAL;
+
+        for (uint32_t rowOffset = 1; rowOffset < TileShape::ROW; ++rowOffset) {
+            AscendC::Copy(ubInOut[rowOffset * TileShape::COLUMN], ubInOut, mask, repeatTimes, repeatParams);
+        }
     }
 };
 

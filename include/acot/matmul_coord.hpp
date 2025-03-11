@@ -42,6 +42,24 @@ struct MatmulShape {
     {
         return MakeCoord(M, N, K);
     }
+
+    ACOT_HOST_DEVICE
+    static Coord<2> ToCoordMN()
+    {
+        return MakeCoord(M, N);
+    }
+
+    ACOT_HOST_DEVICE
+    static Coord<2> ToCoordMK()
+    {
+        return MakeCoord(M, K);
+    }
+
+    ACOT_HOST_DEVICE
+    static Coord<2> ToCoordKN()
+    {
+        return MakeCoord(K, N);
+    }
 };
 
 /// MatmulCoord is a structure derived from Coord<3> that specifies a location within the

@@ -28,13 +28,13 @@ void ComputeMatmul(
     for (uint32_t i = 0; i < problemShape.m(); ++i) {
         for (uint32_t j = 0; j < problemShape.n(); ++j) {
             size_t offsetGolden = layoutGolden.GetOffset(MakeCoord(i, j));
-            ElementGolden accumaulator = 0;
+            ElementGolden accumulator = 0;
             for (uint32_t k = 0; k < problemShape.k(); ++k) {
                 size_t offsetA = layoutA.GetOffset(MakeCoord(i, k));
                 size_t offsetB = layoutB.GetOffset(MakeCoord(k, j));
-                accumaulator += static_cast<ElementGolden>(dataA[offsetA]) * static_cast<ElementGolden>(dataB[offsetB]);
+                accumulator += static_cast<ElementGolden>(dataA[offsetA]) * static_cast<ElementGolden>(dataB[offsetB]);
             }
-            dataGolden[offsetGolden] = static_cast<ElementGolden>(accumaulator);
+            dataGolden[offsetGolden] = static_cast<ElementGolden>(accumulator);
         }
     }
 }
@@ -55,14 +55,14 @@ void ComputeBatchedMatmul(
         for (uint32_t i = 0; i < problemShape.m(); ++i) {
             for (uint32_t j = 0; j < problemShape.n(); ++j) {
                 size_t offsetGolden = layoutGolden.GetOffset(MakeCoord(i, j)) + batchoffsetGolden;
-                ElementGolden accumaulator = 0;
+                ElementGolden accumulator = 0;
                 for (uint32_t k = 0; k < problemShape.k(); ++k) {
                     size_t offsetA = layoutA.GetOffset(MakeCoord(i, k)) + batchOffsetA;
                     size_t offsetB = layoutB.GetOffset(MakeCoord(k, j)) + batchOffsetB;
-                    accumaulator += static_cast<ElementGolden>(dataA[offsetA]) *
+                    accumulator += static_cast<ElementGolden>(dataA[offsetA]) *
                         static_cast<ElementGolden>(dataB[offsetB]);
                 }
-                dataC[offsetGolden] = static_cast<ElementGolden>(accumaulator);
+                dataC[offsetGolden] = static_cast<ElementGolden>(accumulator);
             }
         }
     }
@@ -86,14 +86,14 @@ void ComputeGroupedMatmul(
         for (uint32_t i = 0; i < problemShape.m(); ++i) {
             for (uint32_t j = 0; j < problemShape.n(); ++j) {
                 size_t offsetGolden = inGroupOffsetGolden + layoutGoldenList[inGroupId].GetOffset(MakeCoord(i, j));
-                ElementGolden accumaulator = 0;
+                ElementGolden accumulator = 0;
                 for (uint32_t k = 0; k < problemShape.k(); ++k) {
                     size_t offsetA = inGroupOffsetA + layoutAList[inGroupId].GetOffset(MakeCoord(i, k));
                     size_t offsetB = inGroupOffsetB + layoutBList[inGroupId].GetOffset(MakeCoord(k, j));
-                    accumaulator += static_cast<ElementGolden>(dataA[offsetA]) *
+                    accumulator += static_cast<ElementGolden>(dataA[offsetA]) *
                         static_cast<ElementGolden>(dataB[offsetB]);
                 }
-                dataGolden[offsetGolden] = static_cast<ElementGolden>(accumaulator);
+                dataGolden[offsetGolden] = static_cast<ElementGolden>(accumulator);
             }
         }
         inGroupOffsetA += static_cast<size_t>(problemShape.m()) * problemShape.k();
@@ -119,15 +119,92 @@ void ComputeMatmulElemWiseAdd(
 {
     for (uint32_t i = 0; i < problemShape.m(); ++i) {
         for (uint32_t j = 0; j < problemShape.n(); ++j) {
-            ElementGolden accumaulator = 0;
+            ElementGolden accumulator = 0;
             for (uint32_t k = 0; k < problemShape.k(); ++k) {
                 size_t offsetA = layoutA.GetOffset(MakeCoord(i, k));
                 size_t offsetB = layoutB.GetOffset(MakeCoord(k, j));
-                accumaulator += static_cast<ElementGolden>(dataA[offsetA]) * static_cast<ElementGolden>(dataB[offsetB]);
+                accumulator += static_cast<ElementGolden>(dataA[offsetA]) * static_cast<ElementGolden>(dataB[offsetB]);
             }
             size_t offsetGolden = layoutGolden.GetOffset(MakeCoord(i, j));
-            dataGolden[offsetGolden] = accumaulator + static_cast<ElementGolden>(dataX[offsetGolden]);
+            dataGolden[offsetGolden] = accumulator + static_cast<ElementGolden>(dataX[offsetGolden]);
         }
+    }
+}
+
+template <
+    class ElementGroupList, class ElementScale,
+    class LayoutB, class LayoutScale, class LayoutPerTokenScale
+>
+void ComputeGroupedMatmulPerTokenDequant(
+    const MatmulCoord &problemShape, uint32_t problemCount, const std::vector<ElementGroupList> &groupList,
+    const std::vector<int8_t> &dataA, const layout::RowMajor &layoutA,
+    const std::vector<int8_t> &dataB, const LayoutB &layoutB,
+    const std::vector<ElementScale> &dataScale, const LayoutScale &,
+    const std::vector<ElementScale> &dataPerTokenScale, const LayoutPerTokenScale &,
+    std::vector<float> &dataGolden, const layout::RowMajor &layoutGolden
+)
+{
+    size_t groupOffsetB = 0;
+    size_t groupOffsetScale = 0;
+    uint32_t startRow = 0;
+    for (uint32_t inGroupId = 0; inGroupId < problemCount; ++inGroupId) {
+        for (uint32_t i = startRow; i < groupList[inGroupId]; ++i) {
+            for (uint32_t j = 0; j < problemShape.n(); ++j) {
+                size_t offsetGolden = layoutGolden.GetOffset(MakeCoord(i, j));
+                int32_t accumulator = 0;
+                for (uint32_t k = 0; k < problemShape.k(); ++k) {
+                    size_t offsetA = layoutA.GetOffset(MakeCoord(i, k));
+                    size_t offsetB = groupOffsetB + layoutB.GetOffset(MakeCoord(k, j));
+                    accumulator += static_cast<int32_t>(dataA[offsetA]) * static_cast<int32_t>(dataB[offsetB]);
+                }
+                dataGolden[offsetGolden] = static_cast<float>(accumulator) *
+                    static_cast<float>(dataScale[groupOffsetScale + j]) *
+                    static_cast<float>(dataPerTokenScale[i]);
+            }
+        }
+        groupOffsetB += static_cast<size_t>(problemShape.k()) * problemShape.n();
+        groupOffsetScale += static_cast<size_t>(problemShape.n());
+        startRow = groupList[inGroupId];
+    }
+}
+
+
+template <
+    class ElementGroupList, class ElementScale, class LayoutScale, class LayoutPerTokenScale
+>
+void ComputeGroupedMatmulKPerTokenDequant(
+    const MatmulCoord &problemShape, uint32_t problemCount, const std::vector<ElementGroupList> &groupList,
+    const std::vector<int8_t> &dataA, const layout::ColumnMajor &layoutA,
+    const std::vector<int8_t> &dataB, const layout::RowMajor &layoutB,
+    const std::vector<ElementScale> &dataScale, const LayoutScale &,
+    const std::vector<ElementScale> &dataPerTokenScale, const LayoutPerTokenScale &,
+    std::vector<float> &dataGolden, const layout::RowMajor &layoutGolden
+)
+{
+    size_t groupOffsetD = 0;
+    size_t groupOffsetScale = 0;
+    size_t groupOffsetPerTokenScale = 0;
+    uint32_t startRow = 0;
+    for (uint32_t inGroupId = 0; inGroupId < problemCount; ++inGroupId) {
+        for (uint32_t i = 0; i < problemShape.m(); ++i) {
+            for (uint32_t j = 0; j < problemShape.n(); ++j) {
+                size_t offsetGolden = layoutGolden.GetOffset(MakeCoord(i, j));
+                int32_t accumulator = 0;
+                for (uint32_t k = startRow; k < groupList[inGroupId]; ++k) {
+                    size_t offsetA = layoutA.GetOffset(MakeCoord(i, k));
+                    size_t offsetB = layoutB.GetOffset(MakeCoord(k, j));
+                    accumulator += static_cast<int32_t>(dataA[offsetA]) * static_cast<int32_t>(dataB[offsetB]);
+                }
+                dataGolden[groupOffsetD+offsetGolden] = static_cast<float>(accumulator) *
+                    static_cast<float>(dataScale[groupOffsetScale + j]) *
+                    static_cast<float>(dataPerTokenScale[groupOffsetPerTokenScale + i]);
+            }
+        }
+        
+        groupOffsetD += static_cast<size_t>(problemShape.m()) * problemShape.n();
+        groupOffsetScale += static_cast<size_t>(problemShape.n());
+        groupOffsetPerTokenScale += static_cast<size_t>(problemShape.m());
+        startRow = groupList[inGroupId];
     }
 }
 

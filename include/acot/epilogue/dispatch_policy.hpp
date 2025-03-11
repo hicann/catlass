@@ -32,6 +32,13 @@ struct EpilogueAtlasA2FARescaleO {
     using ArchTag = arch::AtlasA2;
 };
 
+// For AtlasA2, per token dequant
+template <uint32_t UB_STAGES_>
+struct EpilogueAtlasA2PerTokenDequant {
+    using ArchTag = arch::AtlasA2;
+    static constexpr uint32_t UB_STAGES = UB_STAGES_;
+};
+
 }  // namespace acot::epilogue
 
 #endif  // ACOT_EPILOGUE_DISPATCH_POLICY_HPP

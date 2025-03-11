@@ -44,6 +44,44 @@ struct TileCopy<ArchTag, CType, XType, DType> {
     using CopyUbToGmD = CopyUb2Gm<ArchTag, DType>;
 };
 
+template <
+    class ArchTag,
+    class CType,
+    class XType,
+    class YType,
+    class DType
+>
+struct TileCopy<ArchTag, CType, XType, YType, DType> {
+    using ElementC = typename CType::Element;
+    using ElementX = typename XType::Element;
+    using ElementY = typename YType::Element;
+    using ElementD = typename DType::Element;
+
+    using CopyGmToUbC = CopyGm2Ub<ArchTag, CType>;
+    using CopyGmToUbX = CopyGm2Ub<ArchTag, XType>;
+    using CopyGmToUbY = CopyGm2Ub<ArchTag, YType>;
+    using CopyUbToGmD = CopyUb2Gm<ArchTag, DType>;
+};
+
+template <
+    class ArchTag,
+    class CType,
+    class ScaleType,
+    class PerTokenScaleType,
+    class DType
+>
+struct TileCopyPerTokenDequant {
+    using ElementC = typename CType::Element;
+    using ElementScale = typename ScaleType::Element;
+    using ElementPerTokenScale = typename PerTokenScaleType::Element;
+    using ElementD = typename DType::Element;
+
+    using CopyGmToUbC = CopyGm2Ub<ArchTag, CType>;
+    using CopyGmToUbScale = CopyGm2Ub<ArchTag, ScaleType>;
+    using CopyGmToUbPerTokenScale = CopyPerTokenScale2Ub<ArchTag, PerTokenScaleType>;
+    using CopyUbToGmD = CopyUb2Gm<ArchTag, DType>;
+};
+
 } // namespace acot::epilogue::tile
 
 #endif  // ACOT_EPILOGUE_TILE_TILE_COPY_HPP
