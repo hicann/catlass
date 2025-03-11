@@ -45,7 +45,7 @@ def compareOutputData(M, N, K):
     atol, rtol = get_thresholds(M, N, K, dtype=NP_DATA_TYPE)  # 计算 atol 和 rtol
 
     with open("./data/output.txt", "a") as f:
-        print("---- BF16 -- ColumnMajor -- Gemm ---- \n", file=f)
+        print("---- BF16 -- ColumnMajor -- EpilogueGemm ---- \n", file=f)
         print(f"  M : {M} , N : {N} , K : {K} \n", file=f)
         np.set_printoptions(threshold=np.inf, precision=3, suppress=True)
 

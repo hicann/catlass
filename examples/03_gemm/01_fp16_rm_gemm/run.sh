@@ -14,6 +14,12 @@ M=${1}
 N=${2}
 K=${3}
 deviceId=${4}
+arg_count=$#
+if [ $arg_count -lt 5 ]; then
+    mode=0
+else
+    mode=${5}
+fi
 
 set -e
 CANN_DIR=${ASCEND_HOME_PATH}
@@ -21,7 +27,7 @@ CANN_DIR=${ASCEND_HOME_PATH}
 python3 ./scripts/gen_data.py $M $N $K
 # ../../../scripts/build.sh 01_fp16_rm_gemm
 # msprof op --output=./prof ../../../build/bin/01_fp16_rm_gemm $M $N $K $deviceId
-../../../build/bin/01_fp16_rm_gemm $M $N $K $deviceId
+../../../build/bin/01_fp16_rm_gemm $M $N $K $deviceId $mode
 # 验证数据
 python3 ./scripts/verify_data.py $M $N $K
 rm -rf ./data/input ./data/output

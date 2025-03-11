@@ -34,14 +34,15 @@ def compareOutputData(M, N, K):
     atol, rtol = get_thresholds(M, N, K, dtype=NP_DATA_TYPE)  # 计算 atol 和 rtol
 
     with open("./data/output.txt", "a") as f:
-        print("---- FP16 -- ColumnMajor -- Gemm ---- \n", file=f)
+        print("---- FP16 -- ColumnMajor -- EpilogueGemm ---- \n", file=f)
         print(f"  M : {M} , N : {N} , K : {K} \n", file=f)
         np.set_printoptions(threshold=np.inf, precision=3, suppress=True)
 
         # 读取二进制文件
         h_exp = np.fromfile("./data/output/exp_res.bin", dtype=NP_DATA_TYPE)
         h_res = np.fromfile("./data/output/our_res.bin", dtype=NP_DATA_TYPE)
-
+        # print(h_exp, file=f)
+        # print(h_res, file=f)
         # 重新调整形状
         h_exp = h_exp.reshape((M * N, 1))
         h_res = h_res.reshape((M * N, 1))

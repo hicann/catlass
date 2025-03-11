@@ -3,7 +3,7 @@ import sys
 
 NP_DATA_TYPE = np.float32  # 选择 FP16 数据类型
 
-def get_thresholds(M, N, K, dtype=np.float32):
+def get_thresholds(M, N, K, dtype=np.half):
     """根据 calc_times (M * N * K) 计算 atol 和 rtol"""
     calc_times = M * N * K
     
@@ -34,7 +34,7 @@ def compareOutputData(M, N, K):
     atol, rtol = get_thresholds(M, N, K, dtype=NP_DATA_TYPE)  # 计算 atol 和 rtol
 
     with open("./data/output.txt", "a") as f:
-        print("---- FP32 -- RowMajor -- Gemm ---- \n", file=f)
+        print("---- FP32 -- RowMajor -- EpilogueGemm ---- \n", file=f)
         print(f"  M : {M} , N : {N} , K : {K} \n", file=f)
         np.set_printoptions(threshold=np.inf, precision=3, suppress=True)
 
