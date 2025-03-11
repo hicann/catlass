@@ -47,7 +47,7 @@ build/
 examples/**/prof/
 
 # params 文件
-examples/**/params
+examples/**/**/params
 
 # bin文件
 examples/**/data/input
@@ -55,7 +55,6 @@ examples/**/data/output
 
 # csv 文件
 *.csv
-examples/*/*.csv
 
 # sim文件
 examples/**/sim_result/
