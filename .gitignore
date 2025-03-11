@@ -53,11 +53,10 @@ examples/**/params/
 examples/**/data/input
 examples/**/data/output
 
-# # csv 文件
-# *.csv
+# csv 文件
+*.csv
+examples/*/*.csv
 
 # sim文件
 examples/**/sim_result/
 
-# csv文件
-examples/*/*.csv
