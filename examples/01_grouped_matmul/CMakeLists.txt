@@ -7,6 +7,6 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 
 acot_example_add_executable(
-    02_grouped_matmul
+    01_grouped_matmul
     grouped_matmul.cpp
 )
