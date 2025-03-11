@@ -1,0 +1,8 @@
+add_subdirectory(01_fp16_cm_epi_groupgemm)
+add_subdirectory(01_fp16_rm_epi_groupgemm)
+add_subdirectory(02_bf16_cm_epi_groupgemm)
+add_subdirectory(02_bf16_rm_epi_groupgemm)
+add_subdirectory(03_fp32_rm_epi_groupgemm)
+add_subdirectory(03_fp32_cm_epi_groupgemm)
+add_subdirectory(04_int8_rm_epi_groupgemm)
+add_subdirectory(04_int8_cm_epi_groupgemm)

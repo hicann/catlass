@@ -1,0 +1,8 @@
+add_subdirectory(01_fp16_cm_gemm)
+add_subdirectory(01_fp16_rm_gemm)
+add_subdirectory(02_bf16_cm_gemm)
+add_subdirectory(02_bf16_rm_gemm)
+add_subdirectory(03_fp32_cm_gemm)
+add_subdirectory(03_fp32_rm_gemm)
+add_subdirectory(04_int8_cm_gemm)
+add_subdirectory(04_int8_rm_gemm)

@@ -23,6 +23,19 @@ struct AtlasA2 {
     static constexpr uint32_t L0C_SIZE = 128 * 1024;
 };
 
+struct AscendC910B3{
+    static constexpr uint32_t BIAS_SIZE = 1024;
+    static constexpr uint32_t FIXBUF_SIZE = 7 * 1024;
+    static constexpr uint32_t UB_SIZE = 192 * 1024;
+    static constexpr uint32_t L1_SIZE = 512 * 1024;
+    static constexpr uint32_t L0A_SIZE = 64 * 1024;
+    static constexpr uint32_t L0B_SIZE = 64 * 1024;
+    static constexpr uint32_t L0C_SIZE = 128 * 1024;
+    static constexpr uint32_t MaxBlock = 20;
+    static constexpr uint32_t L2CacheByte = 192 * 1024 * 1024;
+};
+
+
 } // namespace acot::arch
 
 #endif // ACOT_ARCH_ARCH_HPP
