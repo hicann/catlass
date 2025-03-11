@@ -108,8 +108,8 @@ namespace acot::gemv::kernel
             uint32_t singleIdx = 0;
 
             static constexpr uint32_t L0C_SIZE = ArchTag::L0C_SIZE;
-            static constexpr uint32_t L0C_TILE_SIZE = L0TileShape::M * L0TileShape::N * sizeof(ElementAccumulator);
-            static constexpr uint32_t L0C_TILE_NUM = L0C_SIZE / L0C_TILE_SIZE;
+            static constexpr uint32_t L0C_TILE_SIZE = L0TileShape::M * L0TileShape::N;
+            static constexpr uint32_t L0C_TILE_NUM = L0C_SIZE / L0C_TILE_SIZE / sizeof(ElementAccumulator);
 
 // 初始化核间流水
 #pragma unroll
@@ -120,14 +120,18 @@ namespace acot::gemv::kernel
 
             for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum())
             {
-
+                // Compute Block location
                 uint32_t MGmBlockIdx = loopIdx;
                 uint32_t MGmActual = (MGmBlockIdx == MLoops - 1) ? (M - MGmBlockIdx * maxMPerBlock) : maxMPerBlock;
                 uint32_t NGmActual = N;
-                int gmOffsetx;
-                int gmOffsetA;
-                int gmOffsety;
+                int64_t gmOffsetx;
+                int64_t gmOffsetA;
+                int64_t gmOffsety;
+                int64_t gmOffsetNextx;
+                int64_t gmOffsetNextA;
+                int64_t gmOffsetNexty;
 
+                // 计算A，x，y的当前块的偏移量
                 if constexpr (std::is_same<LayoutA, acot::layout::RowMajor>::value) // 行优先情况
                 {
                     gmOffsetx = 0;
@@ -141,20 +145,50 @@ namespace acot::gemv::kernel
                     gmOffsety = MGmBlockIdx * maxMPerBlock;
                 }
 
-                GemvCoord actualBlockShape = GemvCoord(MGmActual, NGmActual);
+                bool isFirstBlock = (loopIdx == AscendC::GetBlockIdx());
+                bool hasNextBlock = false;
+                uint32_t MNextGmBlockIdx;                         // 下一个块的M方向的偏移
+                GemvCoord nextActualBlockShape;                   // 下一个块的实际shape
+                if (loopIdx + AscendC::GetBlockNum() < coreLoops) // 预加载下一块
+                {
+                    hasNextBlock = true;
+                    uint32_t nextLoopIdx = loopIdx + AscendC::GetBlockNum();
+                    MNextGmBlockIdx = nextLoopIdx;
+                    uint32_t MNextGmActual = (MNextGmBlockIdx == MLoops - 1) ? (M - MNextGmBlockIdx * maxMPerBlock) : maxMPerBlock;
+                    uint32_t NNextGmActual = N;
+                    nextActualBlockShape = GemvCoord(MNextGmActual, NNextGmActual);
+                }
+                // 计算A，x，y的下一块的偏移量
+                if constexpr (std::is_same<LayoutA, acot::layout::RowMajor>::value) // 行优先情况
+                {
+                    gmOffsetNextx = 0;
+                    gmOffsetNextA = MNextGmBlockIdx * maxMPerBlock * params.layoutA.stride(0);
+                    gmOffsetNexty = MNextGmBlockIdx * maxMPerBlock;
+                }
+                else // 列优先情况
+                {
+                    gmOffsetNextx = 0;
+                    gmOffsetNextA = MNextGmBlockIdx * maxMPerBlock;
+                    gmOffsetNexty = MNextGmBlockIdx * maxMPerBlock;
+                }
 
-                AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((int32_t)singleIdx % L0C_TILE_NUM);
+                GemvCoord actualBlockShape = GemvCoord(MGmActual, NGmActual); // 当前块的实际shape
+
+                AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((event_t)singleIdx % L0C_TILE_NUM);
 
                 // Compute block-scoped matrix multiply-add
                 blockGemv(gmx[gmOffsetx], params.layoutX,
                           gmA[gmOffsetA], params.layoutA,
                           gmy[gmOffsety], layouty,
-                          actualBlockShape, singleIdx % L0C_TILE_NUM);
+                          gmx[gmOffsetNextx],
+                          gmA[gmOffsetNextA],
+                          actualBlockShape, nextActualBlockShape, isFirstBlock, hasNextBlock,
+                          singleIdx);
 
                 // AscendC::PipeBarrier<PIPE_ALL>();
 
                 arch::CrossCoreSetFlagWithReverse<0x2, PIPE_FIX>(flagAicFinishStore);
-                AscendC::SetFlag<AscendC::HardEvent::FIX_M>((int32_t)singleIdx % L0C_TILE_NUM);
+                AscendC::SetFlag<AscendC::HardEvent::FIX_M>((event_t)singleIdx % L0C_TILE_NUM);
 
                 singleIdx++;
             }
@@ -229,14 +263,10 @@ namespace acot::gemv::kernel
         }
 
     private:
-        // ID used for inter-core synchronization  AIC同步
+        // ID used for inter-core synchronization
         static constexpr arch::FlagID FLAG_AIC_FINISH_STORE = 0;
         static constexpr arch::FlagID RV_FLAG_AIC_FINISH_STORE = 1;
         arch::CrossCoreFlagWithReverse<> flagAicFinishStore{FLAG_AIC_FINISH_STORE, RV_FLAG_AIC_FINISH_STORE};
-
-        // AIV同步
-        static constexpr arch::FlagID FLAG_AIV_FINISH_STORE = 0;
-        arch::CrossCoreFlag flagAivFinishPadding{FLAG_AIV_FINISH_STORE};
         arch::Resource<ArchTag> resource;
     };
 

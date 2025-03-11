@@ -143,18 +143,19 @@ namespace acot::gemv::kernel
 
                 GemvCoord actualBlockShape = GemvCoord(MGmActual, NGmActual);
 
-                AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((event_t)singleIdx % L0C_TILE_NUM);
+                AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((int32_t)singleIdx % L0C_TILE_NUM);
 
                 // Compute block-scoped matrix multiply-add
                 blockGemv(gmx[gmOffsetx], params.layoutX,
                           gmA[gmOffsetA], params.layoutA,
                           gmy[gmOffsety], layouty,
-                          actualBlockShape, singleIdx);
-                AscendC::SetFlag<AscendC::HardEvent::FIX_M>((event_t)singleIdx % L0C_TILE_NUM);
+                          actualBlockShape, singleIdx % L0C_TILE_NUM);
 
                 // AscendC::PipeBarrier<PIPE_ALL>();
 
                 arch::CrossCoreSetFlagWithReverse<0x2, PIPE_FIX>(flagAicFinishStore);
+                AscendC::SetFlag<AscendC::HardEvent::FIX_M>((int32_t)singleIdx % L0C_TILE_NUM);
+
                 singleIdx++;
             }
 
@@ -228,10 +229,14 @@ namespace acot::gemv::kernel
         }
 
     private:
-        // ID used for inter-core synchronization
+        // ID used for inter-core synchronization  AIC同步
         static constexpr arch::FlagID FLAG_AIC_FINISH_STORE = 0;
         static constexpr arch::FlagID RV_FLAG_AIC_FINISH_STORE = 1;
         arch::CrossCoreFlagWithReverse<> flagAicFinishStore{FLAG_AIC_FINISH_STORE, RV_FLAG_AIC_FINISH_STORE};
+
+        // AIV同步
+        static constexpr arch::FlagID FLAG_AIV_FINISH_STORE = 0;
+        arch::CrossCoreFlag flagAivFinishPadding{FLAG_AIV_FINISH_STORE};
         arch::Resource<ArchTag> resource;
     };
 

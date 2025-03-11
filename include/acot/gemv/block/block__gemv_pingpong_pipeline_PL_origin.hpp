@@ -82,8 +82,8 @@ namespace acot::gemv::block
         static constexpr uint32_t L0B_SIZE = ArchTag::L0B_SIZE;
         static constexpr uint32_t L0C_SIZE = ArchTag::L0C_SIZE;
 
-        static constexpr uint32_t L0C_TILE_SIZE = L0TileShape::M * L0TileShape::N * sizeof(ElementAccumulator);
-        static constexpr uint32_t L0C_TILE_NUM = L0C_SIZE / L0C_TILE_SIZE;
+        static constexpr uint32_t L0C_TILE_SIZE = L0TileShape::M * L0TileShape::N;
+        static constexpr uint32_t L0C_TILE_NUM = L0C_SIZE / L0C_TILE_SIZE / sizeof(ElementAccumulator);
 
         // 默认L0A,L0B划分出两片空间，单位：字节
         static constexpr uint32_t L0A_PINGPONG_BUF_SIZE = L0A_SIZE / STAGES;
@@ -227,6 +227,7 @@ namespace acot::gemv::block
                 uint32_t nPartLoop = CeilDiv<L0TileShape::N>(nRound);
                 for (uint32_t nPartIdx = 0; nPartIdx < nPartLoop; nPartIdx++)
                 {
+                    // l0ListId = nPartIdx % STAGES;
                     uint32_t nPartActual = (nPartIdx < nPartLoop - 1) ? L0TileShape::N : (nRound - nPartIdx * L0TileShape::N);
 
                     // Locate the current tile on L0A
@@ -257,8 +258,8 @@ namespace acot::gemv::block
 
                     // AscendC::PipeBarrier<PIPE_ALL>();
 
-                    // auto l0CTile = l0CTensor[(singleIdx * L0C_TILE_SIZE) % L0C_TILE_NUM];
-                    auto l0CTile = l0CTensor;
+                    auto l0CTile = l0CTensor[(singleIdx % L0C_TILE_NUM) * L0C_TILE_SIZE];
+                    // auto l0CTile = l0CTensor;
 
                     // If the current tile is the first tile on the k axis, the accumulator needs to be reset to 0
                     bool initC = ((nLoopIdx == 0) && (nPartIdx == 0));
@@ -272,8 +273,6 @@ namespace acot::gemv::block
                     // 更新l0BListId 和 l0AListId
                     l0AListId = (l0AListId + 1) % STAGES;
                     l0BListId = (l0BListId + 1) % STAGES;
-
-                    // AscendC::PipeBarrier<PIPE_ALL>(); // 不加这个会报错，但是还不知道如何优化
                 }
                 // AscendC::PipeBarrier<PIPE_ALL>();
 
@@ -285,14 +284,13 @@ namespace acot::gemv::block
             }
             // AscendC::PipeBarrier<PIPE_ALL>();
 
-            // auto l0CTile = l0CTensor[(singleIdx * L0C_TILE_SIZE) % L0C_TILE_NUM];
-            auto l0CTile = l0CTensor;
+            auto l0CTile = l0CTensor[(singleIdx % L0C_TILE_NUM) * L0C_TILE_SIZE];
 
             // copy block out
             Layouty layoutBlock = layouty.GetTileLayout(MakeCoord(uint32_t(1), actualShape.m()));
 
-            AscendC::SetFlag<AscendC::HardEvent::M_FIX>(EVENT_ID0);
-            AscendC::WaitFlag<AscendC::HardEvent::M_FIX>(EVENT_ID0);
+            AscendC::SetFlag<AscendC::HardEvent::M_FIX>((int32_t)(singleIdx % L0C_TILE_NUM));
+            AscendC::WaitFlag<AscendC::HardEvent::M_FIX>((int32_t)(singleIdx % L0C_TILE_NUM));
 
             copyL0CToGm(gmy, l0CTile, layoutBlock, layoutInL0C);
 
@@ -315,6 +313,7 @@ namespace acot::gemv::block
 
         // The id of current stage
         uint32_t l1ListId{0};
+
         uint32_t l0AListId{0};
         uint32_t l0BListId{0};
 

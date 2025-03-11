@@ -108,8 +108,8 @@ namespace acot::gemv::kernel
             uint32_t singleIdx = 0;
 
             static constexpr uint32_t L0C_SIZE = ArchTag::L0C_SIZE;
-            static constexpr uint32_t L0C_TILE_SIZE = L0TileShape::M * L0TileShape::N * sizeof(ElementAccumulator);
-            static constexpr uint32_t L0C_TILE_NUM = L0C_SIZE / L0C_TILE_SIZE;
+            static constexpr uint32_t L0C_TILE_SIZE = L0TileShape::M * L0TileShape::N;
+            static constexpr uint32_t L0C_TILE_NUM = L0C_SIZE / L0C_TILE_SIZE / sizeof(ElementAccumulator);
 
 // 初始化核间流水
 #pragma unroll
@@ -124,12 +124,12 @@ namespace acot::gemv::kernel
                 uint32_t MGmBlockIdx = loopIdx;
                 uint32_t MGmActual = (MGmBlockIdx == MLoops - 1) ? (M - MGmBlockIdx * maxMPerBlock) : maxMPerBlock;
                 uint32_t NGmActual = N;
-                int gmOffsetx;
-                int gmOffsetA;
-                int gmOffsety;
-                int gmOffsetNextx;
-                int gmOffsetNextA;
-                int gmOffsetNexty;
+                int64_t gmOffsetx;
+                int64_t gmOffsetA;
+                int64_t gmOffsety;
+                int64_t gmOffsetNextx;
+                int64_t gmOffsetNextA;
+                int64_t gmOffsetNexty;
 
                 // 计算A，x，y的当前块的偏移量
                 if constexpr (std::is_same<LayoutA, acot::layout::RowMajor>::value) // 行优先情况
@@ -156,9 +156,8 @@ namespace acot::gemv::kernel
                     MNextGmBlockIdx = nextLoopIdx;
                     uint32_t MNextGmActual = (MNextGmBlockIdx == MLoops - 1) ? (M - MNextGmBlockIdx * maxMPerBlock) : maxMPerBlock;
                     uint32_t NNextGmActual = N;
-                    nextActualBlockShape = MakeCoord(MNextGmActual, NNextGmActual);
+                    nextActualBlockShape = GemvCoord(MNextGmActual, NNextGmActual);
                 }
-
                 // 计算A，x，y的下一块的偏移量
                 if constexpr (std::is_same<LayoutA, acot::layout::RowMajor>::value) // 行优先情况
                 {
@@ -177,7 +176,7 @@ namespace acot::gemv::kernel
 
                 AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((event_t)singleIdx % L0C_TILE_NUM);
 
-                // Compute block-scoped matrix multiply-add 新增参数
+                // Compute block-scoped matrix multiply-add
                 blockGemv(gmx[gmOffsetx], params.layoutX,
                           gmA[gmOffsetA], params.layoutA,
                           gmy[gmOffsety], layouty,

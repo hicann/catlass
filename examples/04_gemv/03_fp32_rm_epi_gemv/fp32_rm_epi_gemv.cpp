@@ -64,8 +64,10 @@ ACOT_GLOBAL void FP32RMEPIGEMV(
 
     // Block level, define BlockGemv
     constexpr bool enableUnitFlag = true;
+    constexpr bool enableShuffleK = true;
     using ArchTag = arch::AtlasA2;
-    using DispatchPolicy = gemv::GemvAtlasA2Pingpong<enableUnitFlag>;
+    // using DispatchPolicy = gemv::GemvAtlasA2Pingpong<enableUnitFlag>;
+    using DispatchPolicy = gemv::GemvAtlasA2Preload<enableUnitFlag, enableShuffleK>;
     using L1TileShape = GemvShape<32, 256>;
     using L0TileShape = GemvShape<32, 256>;
     using xType = gemv::GemvType<float, Layoutx>;

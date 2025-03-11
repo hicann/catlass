@@ -1,5 +1,5 @@
-#ifndef ACOT_GEMV_BLOCK_BLOCK_GEMV_PINGPONG_PL_HPP
-#define ACOT_GEMV_BLOCK_BLOCK_GEMV_PINGPONG_PL_HPP
+#ifndef ACOT_GEMV_BLOCK_BLOCK_GEMV_PINGPONG_HPP
+#define ACOT_GEMV_BLOCK_BLOCK_GEMV_PINGPONG_HPP
 
 #include "acot/acot.hpp"
 #include "acot/gemv/dispatch_policy.hpp"
@@ -18,16 +18,17 @@ namespace acot::gemv::block
     template <
         bool ENABLE_UNIT_FLAG_,
         bool ENABLE_SHUFFLE_K_,
-        class L1TileShape_,
-        class L0TileShape_,
-        class xType_, // 向量x
-        class AType_, // 里面有成员elemenet, layout
-        class yType_, // 向量y
+        class L1TileShape_, // 需要看怎么将maxNPerBlock用进这里面
+        class L0TileShape_, // 待使用, 存在问题，在调用时要关注参数的使用
+        class xType_,       // 向量x
+        class AType_,       // 里面有成员elemenet, layout
+        class yType_,       // 向量y
         class BiasType_,
         class TileCopy_,
         class TileMmad_> // BiasType, TileCopy, TileMmad这三个参数采用默认值，在block_gemv.hpp文件中
     struct BlockGemv<
         // GemvAtlasA2Pingpong<ENABLE_UNIT_FLAG_>,
+
         GemvAtlasA2Preload<ENABLE_UNIT_FLAG_, ENABLE_SHUFFLE_K_>,
         L1TileShape_,
         L0TileShape_,
@@ -86,8 +87,8 @@ namespace acot::gemv::block
         static constexpr uint32_t L0B_SIZE = ArchTag::L0B_SIZE;
         static constexpr uint32_t L0C_SIZE = ArchTag::L0C_SIZE;
 
-        static constexpr uint32_t L0C_TILE_SIZE = L0TileShape::M * L0TileShape::N * sizeof(ElementAccumulator);
-        static constexpr uint32_t L0C_TILE_NUM = L0C_SIZE / L0C_TILE_SIZE;
+        static constexpr uint32_t L0C_TILE_SIZE = L0TileShape::M * L0TileShape::N;
+        static constexpr uint32_t L0C_TILE_NUM = L0C_SIZE / L0C_TILE_SIZE / sizeof(ElementAccumulator);
 
         // 默认L0A,L0B划分出两片空间，单位：字节
         static constexpr uint32_t L0A_PINGPONG_BUF_SIZE = L0A_SIZE / STAGES;
@@ -169,13 +170,16 @@ namespace acot::gemv::block
 
             uint32_t nTileCount = CeilDiv<L1TileShape::N>(actualShape.n()); // 实际上L1TileShape::N是maxNPerBlock, actualShape.n()是传入的n，在单核外没做切分
 
+            // Optimize points：ShuffleK
             uint32_t startTileIdx = 0;
-            if constexpr (ENABLE_SHUFFLE_K)
+            if constexpr (ENABLE_SHUFFLE_K_)
             {
-                startTileIdx = AscendC::GetBlockIdx(); // 对于不同的AIC，读取的起始矩阵块不同
+                // startTileIdx = AscendC::GetBlockIdx();
+                startTileIdx = 0;
             }
             uint32_t firstTileIdx = startTileIdx % nTileCount;
             uint32_t lastTileIdx = (startTileIdx + nTileCount - 1) % nTileCount;
+
             uint32_t nActual = min(actualShape.n(), L1TileShape::N);
             uint32_t nRound = RoundUp<L1AAlignHelper::N_ALIGNED>(nActual);
 
@@ -185,8 +189,10 @@ namespace acot::gemv::block
                 uint32_t shuffleKIdx = (startTileIdx + nLoopIdx) % nTileCount;
                 if (shuffleKIdx == firstTileIdx && isFirstBlock)
                 {
+                    // Get GM tile 算偏移量
                     MatrixCoord gmTileAOffset{0, shuffleKIdx * L1TileShape::N};
                     MatrixCoord gmTilexOffset{0, shuffleKIdx * L1TileShape::N};
+
                     auto gmTileA = gmBlockA[layoutA.GetOffset(gmTileAOffset)];
                     auto gmTilex = gmBlockx[layoutx.GetOffset(gmTilexOffset)];
 
@@ -206,15 +212,11 @@ namespace acot::gemv::block
                 uint32_t l1ListIdNext = (l1ListId + 1) % STAGES;
                 uint32_t nActualNext{0};
                 uint32_t nRoundNext{0};
-                // uint32_t nActual = (nLoopIdx < nTileCount - 1) ? L1TileShape::N : (actualShape.n() - nLoopIdx * L1TileShape::N);
-
-                uint32_t nRound = RoundUp<L1AAlignHelper::N_ALIGNED>(nActual);
 
                 // preload next tile from GM to L1
                 if (shuffleKIdx != lastTileIdx)
                 {
                     uint32_t shuffleKIdxNext = (shuffleKIdx + 1) % nTileCount;
-                    // uint32_t shuffleKIdxNext = (startTileIdx + nLoopIdx + 1) % nTileCount;
                     nActualNext = (shuffleKIdxNext < nTileCount - 1) ? L1TileShape::N : (actualShape.n() - shuffleKIdxNext * L1TileShape::N);
                     // 需要对齐，因为在列优先中，矩阵A的列方向默认对齐16，向量x的列方向默认对齐32B/sizeof。因此不同数据之间会存在对不齐的情况
                     nRoundNext = RoundUp<L1AAlignHelper::N_ALIGNED>(nActualNext);
@@ -230,13 +232,13 @@ namespace acot::gemv::block
                     auto gmTileA = gmBlockA[layoutA.GetOffset(gmTileAOffset)];
                     auto gmTilex = gmBlockx[layoutx.GetOffset(gmTilexOffset)];
 
-                    // load next vector x tile from GM to L1
+                    // load vector x tile from GM to L1
                     AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListIdNext]);
                     auto layoutTilex = layoutx.GetTileLayout(MakeCoord(uint32_t(1), nRoundNext));
                     copyGmToL1A(l1ATensor, gmTilex, layoutxInL1, layoutTilex);
                     AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListIdNext]);
 
-                    // load next Matrix A tile from GM to L1
+                    // load Matrix A tile from GM to L1
                     AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListIdNext]);
                     auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShape.m(), nActualNext));
                     copyGmToL1B(l1BTensor, gmTileA, layoutAInL1, layoutTileA);
@@ -244,27 +246,30 @@ namespace acot::gemv::block
                 }
                 if (shuffleKIdx == lastTileIdx && hasNextBlock)
                 {
-                    // Get L1 tensor for next stage
+                    // Get L1 tensor
                     auto l1ATensor = l1ATensorList[l1ListIdNext];
                     auto l1BTensor = l1BTensorList[l1ListIdNext];
+
                     // Get GM tensor for next stage
                     nActualNext = min(actualShapeNext.n(), L1TileShape::N);
                     nRoundNext = RoundUp<L1AAlignHelper::N_ALIGNED>(nActualNext);
 
+                    // Get GM tile 算偏移量
                     MatrixCoord gmTileAOffset{0, firstTileIdx * L1TileShape::N};
                     MatrixCoord gmTilexOffset{0, firstTileIdx * L1TileShape::N};
-                    auto gmTileA = gmBlockA[layoutA.GetOffset(gmTileAOffset)];
-                    auto gmTilex = gmBlockx[layoutx.GetOffset(gmTilexOffset)];
 
-                    // load next vector x tile from GM to L1
+                    auto gmTileA = gmNextBlockA[layoutA.GetOffset(gmTileAOffset)];
+                    auto gmTilex = gmNextBlockx[layoutx.GetOffset(gmTilexOffset)];
+
+                    // load vector x tile from GM to L1
                     AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListIdNext]);
                     auto layoutTilex = layoutx.GetTileLayout(MakeCoord(uint32_t(1), nRoundNext));
                     copyGmToL1A(l1ATensor, gmTilex, layoutxInL1, layoutTilex);
                     AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListIdNext]);
 
-                    // load next Matrix A tile from GM to L1
+                    // load Matrix A tile from GM to L1
                     AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListIdNext]);
-                    auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShape.m(), nActualNext));
+                    auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShapeNext.m(), nActualNext));
                     copyGmToL1B(l1BTensor, gmTileA, layoutAInL1, layoutTileA);
                     AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListIdNext]);
                 }
@@ -279,6 +284,7 @@ namespace acot::gemv::block
                 uint32_t nPartLoop = CeilDiv<L0TileShape::N>(nRound);
                 for (uint32_t nPartIdx = 0; nPartIdx < nPartLoop; nPartIdx++)
                 {
+                    // l0ListId = nPartIdx % STAGES;
                     uint32_t nPartActual = (nPartIdx < nPartLoop - 1) ? L0TileShape::N : (nRound - nPartIdx * L0TileShape::N);
 
                     // Locate the current tile on L0A
@@ -295,8 +301,10 @@ namespace acot::gemv::block
 
                     // Locate the current tile on L0B
                     auto l0BTile = l0BTensorList[l0BListId];
+                    // LayoutAInL0 layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(nPartActual, L0TileShape::M);
                     LayoutAInL0 layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(L0TileShape::M, nPartActual);
 
+                    // MatrixCoord l1AOffset{nPartIdx * L0TileShape::N, 0};
                     MatrixCoord l1AOffset{0, nPartIdx * L0TileShape::N};
                     auto l1BTile = l1BTensor[layoutAInL1.GetOffset(l1AOffset)];
 
@@ -305,9 +313,10 @@ namespace acot::gemv::block
                     copyL1ToL0B(l0BTile, l1BTile, layoutAInL0, layoutAInL1);
                     AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0BListId]);
 
-                    // auto l0CTile = l0CTensor[(singleIdx * L0C_TILE_SIZE) % L0C_TILE_NUM];
-                    // auto l0CTile = l0CTensor[(singleIdx % L0C_TILE_NUM) * L0C_TILE_SIZE];
-                    auto l0CTile = l0CTensor;
+                    // AscendC::PipeBarrier<PIPE_ALL>();
+
+                    auto l0CTile = l0CTensor[(singleIdx % L0C_TILE_NUM) * L0C_TILE_SIZE];
+                    // auto l0CTile = l0CTensor;
 
                     // If the current tile is the first tile on the k axis, the accumulator needs to be reset to 0
                     bool initC = ((nLoopIdx == 0) && (nPartIdx == 0));
@@ -321,8 +330,6 @@ namespace acot::gemv::block
                     // 更新l0BListId 和 l0AListId
                     l0AListId = (l0AListId + 1) % STAGES;
                     l0BListId = (l0BListId + 1) % STAGES;
-
-                    // AscendC::PipeBarrier<PIPE_ALL>(); // 不加这个会报错，但是还不知道如何优化
                 }
                 // AscendC::PipeBarrier<PIPE_ALL>();
 
@@ -331,17 +338,19 @@ namespace acot::gemv::block
 
                 // 更新l1ListId
                 l1ListId = l1ListIdNext;
+
+                // 更新 nActual, 从而也实现nRound的更新
                 nActual = nActualNext;
             }
+            // AscendC::PipeBarrier<PIPE_ALL>();
 
-            // auto l0CTile = l0CTensor[(singleIdx % L0C_TILE_NUM) * L0C_TILE_SIZE];
-            auto l0CTile = l0CTensor;
+            auto l0CTile = l0CTensor[(singleIdx % L0C_TILE_NUM) * L0C_TILE_SIZE];
 
             // copy block out
             Layouty layoutBlock = layouty.GetTileLayout(MakeCoord(uint32_t(1), actualShape.m()));
 
-            AscendC::SetFlag<AscendC::HardEvent::M_FIX>(EVENT_ID0);
-            AscendC::WaitFlag<AscendC::HardEvent::M_FIX>(EVENT_ID0);
+            AscendC::SetFlag<AscendC::HardEvent::M_FIX>((int32_t)(singleIdx % L0C_TILE_NUM));
+            AscendC::WaitFlag<AscendC::HardEvent::M_FIX>((int32_t)(singleIdx % L0C_TILE_NUM));
 
             copyL0CToGm(gmBlocky, l0CTile, layoutBlock, layoutInL0C);
 
@@ -364,6 +373,7 @@ namespace acot::gemv::block
 
         // The id of current stage
         uint32_t l1ListId{0};
+
         uint32_t l0AListId{0};
         uint32_t l0BListId{0};
 
@@ -377,4 +387,4 @@ namespace acot::gemv::block
 
 } // namespace acot::gemv::block
 
-#endif // ACOT_GEMV_BLOCK_BLOCK_GEMV_PINGPONG_PL_HPP
+#endif // ACOT_GEMV_BLOCK_BLOCK_GEMV_PINGPONG_HPP

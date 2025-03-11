@@ -17,6 +17,7 @@ namespace acot::gemv::block
 
     template <
         bool ENABLE_UNIT_FLAG_,
+        bool ENABLE_SHUFFLE_K_,
         class L1TileShape_, // 需要看怎么将maxNPerBlock用进这里面
         class L0TileShape_, // 待使用, 存在问题，在调用时要关注参数的使用
         class xType_,       // 向量x
@@ -26,7 +27,9 @@ namespace acot::gemv::block
         class TileCopy_,
         class TileMmad_> // BiasType, TileCopy, TileMmad这三个参数采用默认值，在block_gemv.hpp文件中
     struct BlockGemv<
-        GemvAtlasA2Pingpong<ENABLE_UNIT_FLAG_>,
+        // GemvAtlasA2Pingpong<ENABLE_UNIT_FLAG_>,
+
+        GemvAtlasA2Preload<ENABLE_UNIT_FLAG_, ENABLE_SHUFFLE_K_>,
         L1TileShape_,
         L0TileShape_,
         xType_,
@@ -38,7 +41,8 @@ namespace acot::gemv::block
     {
     public:
         // Type Aliases
-        using DispatchPolicy = GemvAtlasA2Pingpong<ENABLE_UNIT_FLAG_>;
+        // using DispatchPolicy = GemvAtlasA2Pingpong<ENABLE_UNIT_FLAG_>;
+        using DispatchPolicy = GemvAtlasA2Preload<ENABLE_UNIT_FLAG_, ENABLE_SHUFFLE_K_>;
         using ArchTag = typename DispatchPolicy::ArchTag;
 
         using L1TileShape = L1TileShape_;
@@ -73,7 +77,8 @@ namespace acot::gemv::block
         using L1AAlignHelper = gemv::helper::L1AlignHelper<ElementA, LayoutA>;
         using L1XAlignHelper = gemv::helper::L1AlignHelper<Elementx, Layoutx>;
 
-        static constexpr bool ENABLE_UNIT_FLAG = DispatchPolicy::ENABLE_UNIT_FLAG; // 使能单元标志？
+        static constexpr bool ENABLE_UNIT_FLAG = DispatchPolicy::ENABLE_UNIT_FLAG; // 使能单元标志
+        static constexpr bool ENABLE_SHUFFLE_K = DispatchPolicy::ENABLE_SHUFFLE_K; // ShuffleK开启标志
         static constexpr uint32_t STAGES = DispatchPolicy::STAGES;                 // 双流水
 
         static constexpr uint32_t L1A_SIZE = ArchTag::L1_SIZE / 2 / STAGES;
@@ -148,59 +153,84 @@ namespace acot::gemv::block
         /// Perform a block-scoped vector-matrix multiply-accumulate
         ACOT_DEVICE
         void operator()(
-            AscendC::GlobalTensor<Elementx> const &gmx, Layoutx const &layoutx,
-            AscendC::GlobalTensor<ElementA> const &gmA, LayoutA const &layoutA,
-            AscendC::GlobalTensor<Elementy> const &gmy, Layouty const &layouty,
-            GemvCoord const &actualShape, uint32_t singleIdx)
+            AscendC::GlobalTensor<Elementx> const &gmBlockx, Layoutx const &layoutx,
+            AscendC::GlobalTensor<ElementA> const &gmBlockA, LayoutA const &layoutA,
+            AscendC::GlobalTensor<Elementy> const &gmBlocky, Layouty const &layouty,
+            AscendC::GlobalTensor<Elementx> const &gmNextBlockx,
+            AscendC::GlobalTensor<ElementA> const &gmNextBlockA,
+            GemvCoord const &actualShape, GemvCoord const &actualShapeNext,
+            bool isFirstBlock, bool hasNextBlock,
+            uint32_t singleIdx)
         {
             auto layoutxInL1 = LayoutxInL1::template MakeLayout<Elementx>(L1XAlignHelper::M_ALIGNED, L1TileShape::N); // 16, N
             auto layoutAInL1 = LayoutAInL1::template MakeLayout<ElementA>(L1TileShape::M, L1TileShape::N);            // M,N 行优先，列优先也是这个
-            auto layoutInL0C = LayoutyInL0::MakeLayoutInL0C(MatrixCoord(L1XAlignHelper::M_ALIGNED, actualShape.m()));
+            auto layoutInL0C = LayoutyInL0::MakeLayoutInL0C(MatrixCoord(L1XAlignHelper::M_ALIGNED, actualShape.m())); // 16, M
 
             // uint32_t mRound = RoundUp<L1AAlignHelper::M_ALIGNED>(actualShape.m()); // m方向要和16或者32对齐，判断条件具体和数据类型有关
 
-            // TODO: 修改代码，实现预取功能
+            uint32_t nTileCount = CeilDiv<L1TileShape::N>(actualShape.n()); // 实际上L1TileShape::N是maxNPerBlock, actualShape.n()是传入的n，在单核外没做切分
+
+            // Optimize points：ShuffleK
+            uint32_t startTileIdx = 0;
+            if constexpr (ENABLE_SHUFFLE_K_)
+            {
+                startTileIdx = AscendC::GetBlockIdx();
+                // startTileIdx = 0;
+            }
+            uint32_t firstTileIdx = startTileIdx % nTileCount;
+            uint32_t lastTileIdx = (startTileIdx + nTileCount - 1) % nTileCount;
+
             uint32_t nActual = min(actualShape.n(), L1TileShape::N);
             uint32_t nRound = RoundUp<L1AAlignHelper::N_ALIGNED>(nActual);
 
-            // load first vector x tile from GM to L1
-            AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);
-            auto layoutTilex = layoutx.GetTileLayout(MakeCoord(uint32_t(1), nRound));
-            copyGmToL1A(l1ATensorList[l1ListId], gmx, layoutxInL1, layoutTilex);
-            AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListId]);
-
-            // load first matrix A tile from GM to L1
-            AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
-            auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShape.m(), nActual));
-            copyGmToL1B(l1BTensorList[l1ListId], gmA, layoutAInL1, layoutTileA);
-            AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
-
             // main loop, GM->L1, N方向做切分
-            uint32_t nTileCount = CeilDiv<L1TileShape::N>(actualShape.n()); // 实际上L1TileShape::N是maxNPerBlock, actualShape.n()是传入的n，在单核外没做切分
             for (uint32_t nLoopIdx = 0; nLoopIdx < nTileCount; nLoopIdx++)
             {
+                uint32_t shuffleKIdx = (startTileIdx + nLoopIdx) % nTileCount;
+                if (shuffleKIdx == firstTileIdx && isFirstBlock)
+                {
+                    // Get GM tile 算偏移量
+                    MatrixCoord gmTileAOffset{0, shuffleKIdx * L1TileShape::N};
+                    MatrixCoord gmTilexOffset{0, shuffleKIdx * L1TileShape::N};
+
+                    auto gmTileA = gmBlockA[layoutA.GetOffset(gmTileAOffset)];
+                    auto gmTilex = gmBlockx[layoutx.GetOffset(gmTilexOffset)];
+
+                    // load first vector x tile from GM to L1
+                    AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);
+                    auto layoutTilex = layoutx.GetTileLayout(MakeCoord(uint32_t(1), nRound));
+                    copyGmToL1A(l1ATensorList[l1ListId], gmTilex, layoutxInL1, layoutTilex);
+                    AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListId]);
+
+                    // load first matrix A tile from GM to L1
+                    AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
+                    auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShape.m(), nActual));
+                    copyGmToL1B(l1BTensorList[l1ListId], gmTileA, layoutAInL1, layoutTileA);
+                    AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
+                }
+
                 uint32_t l1ListIdNext = (l1ListId + 1) % STAGES;
-                uint32_t nActual = (nLoopIdx < nTileCount - 1) ? L1TileShape::N : (actualShape.n() - nLoopIdx * L1TileShape::N);
-                uint32_t nRound = RoundUp<L1AAlignHelper::N_ALIGNED>(nActual);
+                uint32_t nActualNext{0};
+                uint32_t nRoundNext{0};
 
                 // preload next tile from GM to L1
-                if (nLoopIdx < nTileCount - 1)
+                if (shuffleKIdx != lastTileIdx)
                 {
-                    uint32_t nLoopIdxNext = nLoopIdx + 1;
-                    uint32_t nActualNext = (nLoopIdxNext < nTileCount - 1) ? L1TileShape::N : (actualShape.n() - nLoopIdxNext * L1TileShape::N);
+                    uint32_t shuffleKIdxNext = (startTileIdx + nLoopIdx + 1) % nTileCount;
+                    nActualNext = (shuffleKIdxNext < nTileCount - 1) ? L1TileShape::N : (actualShape.n() - shuffleKIdxNext * L1TileShape::N);
                     // 需要对齐，因为在列优先中，矩阵A的列方向默认对齐16，向量x的列方向默认对齐32B/sizeof。因此不同数据之间会存在对不齐的情况
-                    uint32_t nRoundNext = RoundUp<L1AAlignHelper::N_ALIGNED>(nActualNext);
+                    nRoundNext = RoundUp<L1AAlignHelper::N_ALIGNED>(nActualNext);
 
                     // Get L1 tensor
                     auto l1ATensor = l1ATensorList[l1ListIdNext];
                     auto l1BTensor = l1BTensorList[l1ListIdNext];
 
                     // Get GM tile 算偏移量
-                    MatrixCoord gmTileAOffset{0, nLoopIdxNext * L1TileShape::N};
-                    MatrixCoord gmTilexOffset{0, nLoopIdxNext * L1TileShape::N};
+                    MatrixCoord gmTileAOffset{0, shuffleKIdxNext * L1TileShape::N};
+                    MatrixCoord gmTilexOffset{0, shuffleKIdxNext * L1TileShape::N};
 
-                    auto gmTileA = gmA[layoutA.GetOffset(gmTileAOffset)];
-                    auto gmTilex = gmx[layoutx.GetOffset(gmTilexOffset)];
+                    auto gmTileA = gmBlockA[layoutA.GetOffset(gmTileAOffset)];
+                    auto gmTilex = gmBlockx[layoutx.GetOffset(gmTilexOffset)];
 
                     // load vector x tile from GM to L1
                     AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListIdNext]);
@@ -214,8 +244,35 @@ namespace acot::gemv::block
                     copyGmToL1B(l1BTensor, gmTileA, layoutAInL1, layoutTileA);
                     AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListIdNext]);
                 }
+                if (shuffleKIdx == lastTileIdx && hasNextBlock)
+                {
+                    // Get L1 tensor
+                    auto l1ATensor = l1ATensorList[l1ListIdNext];
+                    auto l1BTensor = l1BTensorList[l1ListIdNext];
 
-                // AscendC::PipeBarrier<PIPE_ALL>();
+                    // Get GM tensor for next stage
+                    nActualNext = min(actualShapeNext.n(), L1TileShape::N);
+                    nRoundNext = RoundUp<L1AAlignHelper::N_ALIGNED>(nActualNext);
+
+                    // Get GM tile 算偏移量
+                    MatrixCoord gmTileAOffset{0, firstTileIdx * L1TileShape::N};
+                    MatrixCoord gmTilexOffset{0, firstTileIdx * L1TileShape::N};
+
+                    auto gmTileA = gmNextBlockA[layoutA.GetOffset(gmTileAOffset)];
+                    auto gmTilex = gmNextBlockx[layoutx.GetOffset(gmTilexOffset)];
+
+                    // load vector x tile from GM to L1
+                    AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListIdNext]);
+                    auto layoutTilex = layoutx.GetTileLayout(MakeCoord(uint32_t(1), nRoundNext));
+                    copyGmToL1A(l1ATensor, gmTilex, layoutxInL1, layoutTilex);
+                    AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListIdNext]);
+
+                    // load Matrix A tile from GM to L1
+                    AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListIdNext]);
+                    auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShapeNext.m(), nActualNext));
+                    copyGmToL1B(l1BTensor, gmTileA, layoutAInL1, layoutTileA);
+                    AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListIdNext]);
+                }
 
                 // get L1 Tensor for current stage
                 auto l1ATensor = l1ATensorList[l1ListId];
@@ -224,6 +281,7 @@ namespace acot::gemv::block
                 AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListId]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
 
+                uint32_t nRound = RoundUp<L1AAlignHelper::N_ALIGNED>(nActual);
                 uint32_t nPartLoop = CeilDiv<L0TileShape::N>(nRound);
                 for (uint32_t nPartIdx = 0; nPartIdx < nPartLoop; nPartIdx++)
                 {
@@ -281,6 +339,9 @@ namespace acot::gemv::block
 
                 // 更新l1ListId
                 l1ListId = l1ListIdNext;
+
+                // 更新 nActual, 从而也实现nRound的更新
+                nActual = nActualNext;
             }
             // AscendC::PipeBarrier<PIPE_ALL>();
 
@@ -292,7 +353,7 @@ namespace acot::gemv::block
             AscendC::SetFlag<AscendC::HardEvent::M_FIX>((int32_t)(singleIdx % L0C_TILE_NUM));
             AscendC::WaitFlag<AscendC::HardEvent::M_FIX>((int32_t)(singleIdx % L0C_TILE_NUM));
 
-            copyL0CToGm(gmy, l0CTile, layoutBlock, layoutInL0C);
+            copyL0CToGm(gmBlocky, l0CTile, layoutBlock, layoutInL0C);
 
             // AscendC::PipeBarrier<PIPE_ALL>();
         }
