@@ -47,7 +47,7 @@ build/
 examples/**/prof/
 
 # params 文件
-examples/**/params/
+examples/**/params
 
 # bin文件
 examples/**/data/input
