@@ -6,8 +6,8 @@ NP_DATA_TYPE = np.float16
 
 # 定义生成数据函数
 def calc_expect_func(M, N):
-    alpha = np.random.uniform(-0.5,0.5, 1).astype(DATA_TYPE)
-    beta  = np.random.uniform(-0.5,0.5, 1).astype(DATA_TYPE)
+    alpha = np.random.uniform(2,2.1, 1).astype(DATA_TYPE)
+    beta  = np.random.uniform(2,2.1, 1).astype(DATA_TYPE)
     alpha.tofile("./data/input/alpha.bin")
     beta.tofile("./data/input/beta.bin")
     

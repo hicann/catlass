@@ -99,7 +99,7 @@ void Run(Options options){
     uint32_t m = options.problemShape.m();
     uint32_t n = options.problemShape.n();
     //获取split k的数
-    uint32_t maxSplict = 40;
+    uint32_t maxSplict = 20;
     uint32_t const SPLIT = getSplictNum(true, m, n, UBTileShape::M, UBTileShape::N, maxSplict);
     // printf("%d",SPLIT);
     // uint32_t SPLIT = 16;

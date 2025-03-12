@@ -99,7 +99,7 @@ void Run(Options options){
 
     uint32_t m = options.problemShape.m();
     uint32_t n = options.problemShape.n();
-    uint32_t maxSplict = 40;
+    uint32_t maxSplict = 20;
     uint32_t const SPLIT = getSplictNum(false, m, n, UBTileShape::M, UBTileShape::N, maxSplict);
 
     size_t lenA = static_cast<size_t>(m) * n;

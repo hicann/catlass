@@ -144,7 +144,7 @@
             }
             GemvCoord actualBlockShape = GemvCoord{m_actual,n_actual};
             
-            Realbeta = (loop_id % params.SPLIT == 0) ? Realbeta:0.0f;
+            float realbeta = (loop_id % params.SPLIT == 0) ? Realbeta:0.0f;
 
             blockGemv(gmA[offset_matrix], params.layoutA,
                 gmX[offset_vector_in], 
@@ -152,7 +152,7 @@
                 gmY_read[offset_vector_out],
                 actualBlockShape,
                 params.alpha,
-                Realbeta
+                realbeta
                 // params.beta
             );
 
