@@ -14,7 +14,7 @@
  #include "acot/acot.hpp"
  #include "acot/layout/layout.hpp"
  #include "acot/matmul/matmul_type.hpp"
- #include "acot/gemm/gemm_type.hpp"
+//  #include "acot/gemm/gemm_type.hpp"
  
  namespace acot::epilogue::tile {
  
@@ -55,35 +55,7 @@
  };
  
  template <typename Element>
- struct CopyUb2Gm<arch::AscendC910B3, gemm::GemmType<Element, layout::RowMajor>> {
-     using LayoutDst = layout::RowMajor;
-     using LayoutSrc = layout::RowMajor;
- 
-     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
- 
-     ACOT_DEVICE
-     CopyUb2Gm() = default;
- 
-     ACOT_DEVICE
-     void operator()(
-         AscendC::GlobalTensor<Element> const &dstTensor,
-         AscendC::LocalTensor<Element> const &srcTensor,
-         LayoutDst const &layoutDst,
-         LayoutSrc const &layoutSrc)
-     {
-         AscendC::DataCopyExtParams dataCopyParams(
-             layoutDst.shape(0),
-             layoutDst.shape(1) * sizeof(Element),
-             (layoutSrc.stride(0) - layoutDst.shape(1)) / ELE_NUM_PER_C0,
-             (layoutDst.stride(0) - layoutDst.shape(1)) * sizeof(Element),
-             0
-         );
-         AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams);
-     }
- };
- 
- template <typename Element>
- struct CopyUb2Gm<arch::AscendC910B3, gemm::GemmType<Element, layout::ColumnMajor>> {
+ struct CopyUb2Gm<arch::AtlasA2, matmul::MatmulType<Element, layout::ColumnMajor>> {
      using LayoutDst = layout::ColumnMajor;
      using LayoutSrc = layout::ColumnMajor;
  
@@ -99,14 +71,14 @@
          LayoutDst const &layoutDst,
          LayoutSrc const &layoutSrc)
      {
-         AscendC::DataCopyExtParams dataCopyParams(
-             layoutDst.shape(1),
-             layoutDst.shape(0) * sizeof(Element),
-             (layoutSrc.stride(1) - layoutDst.shape(0)) / ELE_NUM_PER_C0,
-             (layoutDst.stride(1) - layoutDst.shape(0)) * sizeof(Element),
-             0
-         );
-         AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams);
+        AscendC::DataCopyExtParams dataCopyParams(
+            layoutDst.shape(1),
+            layoutDst.shape(0) * sizeof(Element),
+            (layoutSrc.stride(1) - layoutSrc.shape(0)) / ELE_NUM_PER_C0,
+            (layoutDst.stride(1) - layoutDst.shape(0)) * sizeof(Element),
+            0
+        );
+        AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams);
      }
  };
  

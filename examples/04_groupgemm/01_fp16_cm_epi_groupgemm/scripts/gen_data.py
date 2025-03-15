@@ -36,8 +36,8 @@ def gen_data(groupCnt):
             C.tofile(c)
         
         # alpha 和 beta 是标量，可以直接生成并写入文件
-        alpha = np.random.uniform(-1, 1, 1).astype(DATA_TYPE)
-        beta = np.random.uniform(-1, 1, 1).astype(DATA_TYPE)
+        alpha = np.random.uniform(0, 0, 1).astype(DATA_TYPE)
+        beta = np.random.uniform(-0.125, 0.125, 1).astype(DATA_TYPE)
         
         with open("./data/input/alpha.bin", "a") as alpha_a:
             alpha.tofile(alpha_a)

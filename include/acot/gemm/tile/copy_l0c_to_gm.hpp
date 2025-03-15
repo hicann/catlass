@@ -1,7 +1,7 @@
 #ifndef ACOT_GEMM_TILE_COPY_L0C_TO_GM_HPP
 #define ACOT_GEMM_TILE_COPY_L0C_TO_GM_HPP
 
-#include "acot/gemm/gemm_type.hpp"
+#include "acot/matmul/matmul_type.hpp"
 
 namespace acot::gemm::tile{
 
@@ -24,7 +24,7 @@ struct CopyL0CToGmQuantMode {};
 // CopyL0CToGm cast fp32 to fp16
 template <>
 struct CopyL0CToGmQuantMode<
-    acot::arch::AscendC910B3,
+    acot::arch::AtlasA2,
     float, half,
     ScaleGranularity::NO_QUANT
 > {
@@ -34,7 +34,7 @@ struct CopyL0CToGmQuantMode<
 // CopyL0CToGm cast fp32 to bf16
 template <>
 struct CopyL0CToGmQuantMode<
-    acot::arch::AscendC910B3,
+    acot::arch::AtlasA2,
     float, bfloat16_t,
     ScaleGranularity::NO_QUANT
 > {
@@ -44,7 +44,7 @@ struct CopyL0CToGmQuantMode<
 // CopyL0CToGm output fp32
 template <>
 struct CopyL0CToGmQuantMode<
-    acot::arch::AscendC910B3,
+    acot::arch::AtlasA2,
     float, float,
     ScaleGranularity::NO_QUANT
 > {
@@ -54,7 +54,7 @@ struct CopyL0CToGmQuantMode<
 // CopyL0CToGm output int32
 template <>
 struct CopyL0CToGmQuantMode<
-    acot::arch::AscendC910B3,
+    acot::arch::AtlasA2,
     int32_t, int32_t,
     ScaleGranularity::NO_QUANT
 > {
@@ -63,7 +63,7 @@ struct CopyL0CToGmQuantMode<
 
 template <>
 struct CopyL0CToGmQuantMode<
-    acot::arch::AscendC910B3,
+    acot::arch::AtlasA2,
     int32_t, half,
     ScaleGranularity::NO_QUANT
 > {
@@ -73,7 +73,7 @@ struct CopyL0CToGmQuantMode<
 // CopyL0CToGm cast int32_t to fp16
 template <>
 struct CopyL0CToGmQuantMode<
-    acot::arch::AscendC910B3,
+    acot::arch::AtlasA2,
     int32_t, half,
     ScaleGranularity::PER_TENSOR
 > {
@@ -82,7 +82,7 @@ struct CopyL0CToGmQuantMode<
 
 template <>
 struct CopyL0CToGmQuantMode<
-    acot::arch::AscendC910B3,
+    acot::arch::AtlasA2,
     int32_t, half,
     ScaleGranularity::PER_CHANNEL
 > {
@@ -103,12 +103,12 @@ template <
     class ElementDst_,
     bool ReluEnable_
 >
-struct CopyL0CToGm<acot::arch::AscendC910B3, ElementAccumulator_,
-    acot::gemm::GemmType<ElementDst_, layout::RowMajor>,
+struct CopyL0CToGm<acot::arch::AtlasA2, ElementAccumulator_,
+    acot::matmul::MatmulType<ElementDst_, layout::RowMajor>,
     ScaleGranularity::NO_QUANT,
     ReluEnable_>
 {
-    using ArchTag = acot::arch::AscendC910B3;
+    using ArchTag = acot::arch::AtlasA2;
     using ElementDst = ElementDst_;
     using ElementSrc = ElementAccumulator_;
     using LayoutSrc = acot::layout::zN;
@@ -153,12 +153,12 @@ template <
     class ElementDst_,
     bool ReluEnable_
 >
-struct CopyL0CToGm<acot::arch::AscendC910B3, ElementAccumulator_,
-    acot::gemm::GemmType<ElementDst_, layout::ColumnMajor>,
+struct CopyL0CToGm<acot::arch::AtlasA2, ElementAccumulator_,
+    acot::matmul::MatmulType<ElementDst_, layout::ColumnMajor>,
     ScaleGranularity::NO_QUANT,
     ReluEnable_>
 {
-    using ArchTag = acot::arch::AscendC910B3;
+    using ArchTag = acot::arch::AtlasA2;
     using ElementDst = ElementDst_;
     using ElementSrc = ElementAccumulator_;
     using LayoutSrc = acot::layout::zN;

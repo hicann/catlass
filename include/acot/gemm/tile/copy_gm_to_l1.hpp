@@ -3,7 +3,7 @@
 
 #include "acot/acot.hpp"
 #include "acot/layout/layout.hpp"
-#include "acot/gemm/gemm_type.hpp"
+#include "acot/matmul/matmul_type.hpp"
 
 constexpr uint32_t STRIDE_LIMIT = 65536;
 
@@ -15,7 +15,7 @@ template<
 struct CopyGmToL1A{};
 
 template<class Element>
-struct CopyGmToL1A<acot::arch::AscendC910B3, acot::gemm::GemmType<Element, acot::layout::RowMajor>>{
+struct CopyGmToL1A<acot::arch::AtlasA2, acot::matmul::MatmulType<Element, acot::layout::RowMajor>>{
     using LayoutDst = layout::zN;
     using LayoutSrc = layout::RowMajor;
 
@@ -47,8 +47,8 @@ struct CopyGmToL1A<acot::arch::AscendC910B3, acot::gemm::GemmType<Element, acot:
 
 // int8_t 需要特例化
 template<class Element>
-struct CopyGmToL1A<acot::arch::AscendC910B3, acot::gemm::GemmType<Element, acot::layout::ColumnMajor>>{
-    using LayoutDst = layout::zZ;
+struct CopyGmToL1A<acot::arch::AtlasA2, acot::matmul::MatmulType<Element, acot::layout::ColumnMajor>>{
+    using LayoutDst = layout::nN; // 修改点
     using LayoutSrc = layout::ColumnMajor;
 
     ACOT_DEVICE
@@ -60,8 +60,8 @@ struct CopyGmToL1A<acot::arch::AscendC910B3, acot::gemm::GemmType<Element, acot:
         AscendC::GlobalTensor<Element> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t MRound = layoutDst.shape(2) * layoutDst.shape(3);
-        uint32_t KActual = layoutSrc.shape(0);
+        uint32_t MRound = layoutDst.shape(0) * layoutDst.shape(1);
+        uint32_t KActual = layoutSrc.shape(1);
         uint32_t stride = layoutSrc.stride(1); // ColumnMajor
         uint32_t ndNum = KActual / C0_NUM_PER_FRACTAL;
         uint32_t remains = KActual % C0_NUM_PER_FRACTAL;
@@ -120,8 +120,8 @@ struct CopyGmToL1A<acot::arch::AscendC910B3, acot::gemm::GemmType<Element, acot:
 
 // 特例化int8_t
 template<>
-struct CopyGmToL1A<acot::arch::AscendC910B3, acot::gemm::GemmType<int8_t, acot::layout::ColumnMajor>>{
-    using LayoutDst = layout::zN;
+struct CopyGmToL1A<acot::arch::AtlasA2, acot::matmul::MatmulType<int8_t, acot::layout::ColumnMajor>>{
+    using LayoutDst = layout::nZ;
     using LayoutSrc = layout::ColumnMajor;
 
     ACOT_DEVICE
@@ -133,8 +133,8 @@ struct CopyGmToL1A<acot::arch::AscendC910B3, acot::gemm::GemmType<int8_t, acot::
         AscendC::GlobalTensor<int8_t> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t MRound = layoutDst.shape(2) * layoutDst.shape(3);
-        uint32_t KActual = layoutSrc.shape(0);
+        uint32_t MRound = layoutDst.shape(0) * layoutDst.shape(1);
+        uint32_t KActual = layoutSrc.shape(1);
         uint32_t KRound = layoutDst.shape(0) * layoutDst.shape(1);
         uint32_t stride = layoutSrc.stride(1); // ColumnMajor
         AscendC::Nd2NzParams params;
@@ -158,7 +158,7 @@ template<
 struct CopyGmToL1B{};
 
 template<class Element>
-struct CopyGmToL1B<arch::AscendC910B3, gemm::GemmType<Element, acot::layout::RowMajor>>{
+struct CopyGmToL1B<arch::AtlasA2, acot::matmul::MatmulType<Element, acot::layout::RowMajor>>{
     using LayoutDst = layout::zZ;
     using LayoutSrc = layout::RowMajor;
 
@@ -231,7 +231,7 @@ struct CopyGmToL1B<arch::AscendC910B3, gemm::GemmType<Element, acot::layout::Row
 
 // 特例化int8_t
 template<>
-struct CopyGmToL1B<arch::AscendC910B3, gemm::GemmType<int8_t, acot::layout::RowMajor>>{
+struct CopyGmToL1B<arch::AtlasA2, acot::matmul::MatmulType<int8_t, acot::layout::RowMajor>>{
     using LayoutDst = layout::zN;
     using LayoutSrc = layout::RowMajor;
 
@@ -262,8 +262,8 @@ struct CopyGmToL1B<arch::AscendC910B3, gemm::GemmType<int8_t, acot::layout::RowM
 };
 
 template<class Element>
-struct CopyGmToL1B<arch::AscendC910B3, gemm::GemmType<Element, acot::layout::ColumnMajor>>{
-    using LayoutDst = layout::zN;
+struct CopyGmToL1B<arch::AtlasA2, matmul::MatmulType<Element, acot::layout::ColumnMajor>>{
+    using LayoutDst = layout::nZ;
     using LayoutSrc = layout::ColumnMajor;
 
     ACOT_DEVICE
@@ -275,9 +275,9 @@ struct CopyGmToL1B<arch::AscendC910B3, gemm::GemmType<Element, acot::layout::Col
         AscendC::GlobalTensor<Element> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t NActual = layoutSrc.shape(0);
-        uint32_t NRound = layoutDst.shape(0) * layoutDst.shape(1);
-        uint32_t KRound = layoutDst.shape(2) * layoutDst.shape(3);
+        uint32_t NActual = layoutSrc.shape(1);
+        uint32_t NRound = layoutDst.shape(2) * layoutDst.shape(3);
+        uint32_t KRound = layoutDst.shape(0) * layoutDst.shape(1);
         uint32_t stride = layoutSrc.stride(1); // ColumnMajor
         AscendC::Nd2NzParams params;
         params.ndNum = 1;

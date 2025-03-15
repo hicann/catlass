@@ -7,10 +7,10 @@
 #include "acot/arch/arch.hpp"
 #include "acot/gemm/block/block_gemm.hpp"
 #include "acot/gemm/kernel/kernel_gemm_PL_PA_epilogue.hpp"
-#include "acot/gemm/gemm_type.hpp"
+#include "acot/matmul/matmul_type.hpp"
 #include "acot/layout/layout.hpp"
 #include "acot/matmul_coord.hpp"
-#include "acot/gemm/dispatch_policy.hpp"
+#include "acot/matmul/dispatch_policy.hpp"
 #include "acot/epilogue/dispatch_policy.hpp"
 #include "acot/epilogue/tile/tile_copy.hpp"
 #include "acot/epilogue/tile/tile_elemwise_gemm.hpp"
@@ -18,7 +18,7 @@
 
 using namespace acot;
 
-using ScalarType = half;
+using ScalarType = float;
 
 // 已经进入核函数了
 template <
@@ -27,7 +27,7 @@ template <
     class LayoutC
 >
 ACOT_GLOBAL
-void FP16RMGemm(
+void FP16CMGemm(
     uint64_t fftsAddr,
     ScalarType alpha, ScalarType beta,
     MatmulCoord problemShape,
@@ -40,19 +40,18 @@ void FP16RMGemm(
 ){
     // Set FFTS address
     AscendC::SetSyncBaseAddr(fftsAddr);
-    using ArchTag = arch::AscendC910B3;
+    using ArchTag = arch::AtlasA2;
     // 开启pingpong机制
-    // 开启shuffleK机制
     constexpr bool enableUnitFlag = true;
     constexpr bool enableShuffleK = true;
-    using GemmBlockDispatchPolicy = gemm::GemmAscendC910B3Preload<enableUnitFlag, enableShuffleK>;
-    using EpilogueBlockDispatchPolicy = epilogue::EpilogueAscendC910B3Gemm;
-    using AType = gemm::GemmType<half, LayoutA>;
-    using BType = gemm::GemmType<half, LayoutB>;
-    using CType = gemm::GemmType<half, LayoutC>;
-    using XType = gemm::GemmType<half, LayoutC>;
+    using GemmBlockDispatchPolicy = matmul::MmadAtlasA2Preload<enableUnitFlag, enableShuffleK>;
+    using EpilogueBlockDispatchPolicy = epilogue::EpilogueAtlasA2ElemWiseOneSource;
+    using AType = matmul::MatmulType<half, LayoutA>;
+    using BType = matmul::MatmulType<half, LayoutB>;
+    using CType = matmul::MatmulType<half, LayoutC>;
+    using XType = matmul::MatmulType<half, LayoutC>;
     // 使用Coord来传递值
-    using L1TileShape = MatmulShape<128, 256, 256>;
+    using L1TileShape = MatmulShape<128, 256, 256>; // M 和 K的切分粒度相同
     using L0TileShape = MatmulShape<128, 256, 64>;
 
     // 调用block层函数
@@ -68,21 +67,22 @@ void FP16RMGemm(
     using EpilogueTileCopy = epilogue::tile::TileCopy<ArchTag, CType, XType, DType>;
     // 实例化Epilogue部分
     using EpilogueBlock = epilogue::block::BlockEpilogue<EpilogueBlockDispatchPolicy, CType, XType, DType, TileElemWiseAddGemm, TileElemWiseMulGemm, EpilogueTileCopy>;
-    typename EpilogueBlock::Params epilogueParams{alpha, beta, gmC, layoutC, gmC, layoutC}; // x只是传了一个地址
+    // typename EpilogueBlock::Params epilogueParams{alpha, beta, gmC, layoutC, gmC, layoutC}; // x只是传了一个地址
     // 实例化Gemm部分
     using GemmKernel = gemm::kernel::KernelGemmEpilogue<GemmBlock, EpilogueBlock>;
-    typename GemmKernel::Params params{problemShape, gmA, layoutA, gmB, layoutB, gmWorkspace, gmWA, layoutWA, gmWB, layoutWB, epilogueParams}; // 这里得修改 gmX保存A * B
+    typename GemmKernel::Params params{problemShape, gmA, layoutA, gmB, layoutB, gmWorkspace, gmWA, layoutWA, gmWB, layoutWB, alpha, beta, gmC, gmC}; // 这里得修改 gmX保存A * B
     // 调用核函数
     GemmKernel gemm;
     gemm(params);
 }
 
 typedef struct Options{
-    const std::string HELPER = "03_gemm/01_fp16_rm_gemm m n k [device_id]";
+    const std::string HELPER = "03_gemm/01_fp16_cm_gemm m n k [device_id]";
 
     MatmulCoord problemShape{128, 128, 128};
     int32_t deviceId{0}; // 成员变量
-    uint32_t mode{0}; // 默认测数据
+    uint32_t mode{0};
+
     Options() = default;
 
     int Parse(int argc, const char **argv){
@@ -102,7 +102,7 @@ typedef struct Options{
         problemShape.m() = std::atoi(argv[M_INDEX]);
         problemShape.n() = std::atoi(argv[N_INDEX]);
         problemShape.k() = std::atoi(argv[K_INDEX]);
-        if(argc >=  ARGS_MAX - 1){
+        if(argc >= ARGS_MAX - 1){
             mode = std::atoi(argv[MODE_INDEX]);
             deviceId = std::atoi(argv[DEVICE_ID_INDEX]);
         }
@@ -162,18 +162,16 @@ void Run(Options options){
     size_t lenB = static_cast<size_t>(k) * n;
     size_t lenC = static_cast<size_t>(m) * n;
     size_t lenX = lenC; // A * B  
-    // size_t lenD = lenX; // 最后的大小
     
     size_t sizeA = lenA * sizeof(half);
     size_t sizeB = lenB * sizeof(half);
     size_t sizeC = lenC * sizeof(half);
     size_t sizeX = lenX * sizeof(half);
 
-    const uint32_t align = 256;
+    const uint32_t align = 256; //M 和 K的L1切分粒度
     using LayoutA = layout::RowMajor;
     using LayoutB = layout::RowMajor;
     using LayoutC = layout::RowMajor;
-
     LayoutA layoutA{m, k};
     LayoutB layoutB{k, n};
     LayoutC layoutC{m, n};
@@ -182,10 +180,10 @@ void Run(Options options){
     size_t sizeWA = GetWorkspaceLen(layoutWA) * sizeof(half);
     size_t sizeWB = GetWorkspaceLen(layoutWB) * sizeof(half);
 
-    size_t scalarSize = 1 * sizeof(half);
-    half* alpha;
+    size_t scalarSize = 1 * sizeof(float);
+    float* alpha;
     ACL_CHECK(aclrtMallocHost((void**)(&alpha), scalarSize));
-    half* beta;
+    float* beta;
     ACL_CHECK(aclrtMallocHost((void**)(&beta), scalarSize));
     half* hostA;
     ACL_CHECK(aclrtMallocHost((void**)(&hostA), sizeA));
@@ -193,7 +191,7 @@ void Run(Options options){
     ACL_CHECK(aclrtMallocHost((void**)(&hostB), sizeB));
     half* hostC;
     ACL_CHECK(aclrtMallocHost((void**)(&hostC), sizeC));
-    if(options.mode == 0){ // 测数据
+    if(options.mode == 0){
         ReadFile("./data/input/alpha.bin", scalarSize, alpha, scalarSize);
         ReadFile("./data/input/beta.bin", scalarSize, beta, scalarSize);
         ReadFile("./data/input/A.bin", sizeA, hostA, sizeA);
@@ -224,9 +222,6 @@ void Run(Options options){
     
     half *gmWorkspace{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&gmWorkspace), sizeX, ACL_MEM_MALLOC_HUGE_FIRST));
-    
-    // half *deviceD{nullptr};
-    // ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceD), sizeD, ACL_MEM_MALLOC_HUGE_FIRST));
 
     // Prepare FFTS address
     uint64_t fftsAddr{0};
@@ -235,7 +230,7 @@ void Run(Options options){
 
     // 获得当前核心数
     auto aicCoreNum = arch::AscendC910B3::MaxBlock;
-    FP16RMGemm<<<aicCoreNum, nullptr, stream>>>(
+    FP16CMGemm<<<aicCoreNum, nullptr, stream>>>(
         fftsAddr,
         alpha[0], beta[0],
         options.problemShape,
@@ -247,8 +242,6 @@ void Run(Options options){
         (uint8_t*)gmWorkspace);
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
-    // half* hostD;
-    // ACL_CHECK(aclrtMallocHost((void**)(&hostD), sizeD));
     ACL_CHECK(aclrtMemcpy(hostC, sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
     if(options.mode == 0){
         WriteFile("./data/output/our_res.bin",hostC,sizeC);
@@ -257,12 +250,10 @@ void Run(Options options){
     ACL_CHECK(aclrtFree(deviceA));
     ACL_CHECK(aclrtFree(deviceB));
     ACL_CHECK(aclrtFree(deviceC));
-    // ACL_CHECK(aclrtFree(deviceD));
     ACL_CHECK(aclrtFree(gmWorkspace));
     ACL_CHECK(aclrtFreeHost(hostA));
     ACL_CHECK(aclrtFreeHost(hostB));
     ACL_CHECK(aclrtFreeHost(hostC));
-    // ACL_CHECK(aclrtFreeHost(hostD));
 
     ACL_CHECK(aclrtDestroyStream(stream));
     ACL_CHECK(aclrtResetDevice(options.deviceId));

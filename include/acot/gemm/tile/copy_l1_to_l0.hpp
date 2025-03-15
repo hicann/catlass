@@ -3,7 +3,7 @@
 
 #include "acot/acot.hpp"
 #include "acot/layout/layout.hpp"
-#include "acot/gemm/gemm_type.hpp"
+#include "acot/matmul/matmul_type.hpp"
 
 namespace acot::gemm::tile{
 template<
@@ -13,7 +13,7 @@ template<
 struct CopyL1ToL0A{};
 
 template<class Element>
-struct CopyL1ToL0A<acot::arch::AscendC910B3, acot::gemm::GemmType<Element, layout::RowMajor>>{
+struct CopyL1ToL0A<acot::arch::AtlasA2, acot::matmul::MatmulType<Element, layout::RowMajor>>{
     using LayoutDst = layout::zZ;
     using LayoutSrc = layout::zN;
 
@@ -46,9 +46,9 @@ struct CopyL1ToL0A<acot::arch::AscendC910B3, acot::gemm::GemmType<Element, layou
 };
 
 template<class Element>
-struct CopyL1ToL0A<acot::arch::AscendC910B3, acot::gemm::GemmType<Element, layout::ColumnMajor>>{
+struct CopyL1ToL0A<acot::arch::AtlasA2, acot::matmul::MatmulType<Element, layout::ColumnMajor>>{
     using LayoutDst = layout::nZ;
-    using LayoutSrc = layout::zZ;
+    using LayoutSrc = layout::nN;
 
     static constexpr uint32_t ELE_NUM_PER_C0 =  BYTE_PER_C0 / sizeof(Element);
 
@@ -61,7 +61,7 @@ struct CopyL1ToL0A<acot::arch::AscendC910B3, acot::gemm::GemmType<Element, layou
         AscendC::LocalTensor<Element> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t MRound = layoutSrc.shape(2) * layoutSrc.shape(3);
+        uint32_t MRound = layoutSrc.shape(0) * layoutSrc.shape(1);
         uint32_t KRound = layoutDst.shape(2) * layoutDst.shape(3);
         uint32_t KLoops = CeilDiv(KRound, C0_NUM_PER_FRACTAL);
         AscendC::LoadData2DParams params;
@@ -79,9 +79,9 @@ struct CopyL1ToL0A<acot::arch::AscendC910B3, acot::gemm::GemmType<Element, layou
 };
 
 template<>
-struct CopyL1ToL0A<acot::arch::AscendC910B3, acot::gemm::GemmType<float, layout::ColumnMajor>>{
+struct CopyL1ToL0A<acot::arch::AtlasA2, acot::matmul::MatmulType<float, layout::ColumnMajor>>{
     using LayoutDst = layout::nZ;
-    using LayoutSrc = layout::zZ;
+    using LayoutSrc = layout::nN;
 
     static constexpr uint32_t ELE_NUM_PER_C0 =  BYTE_PER_C0 / sizeof(float);
 
@@ -94,7 +94,7 @@ struct CopyL1ToL0A<acot::arch::AscendC910B3, acot::gemm::GemmType<float, layout:
         AscendC::LocalTensor<float> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t MRound = layoutSrc.shape(2) * layoutSrc.shape(3);
+        uint32_t MRound = layoutSrc.shape(0) * layoutSrc.shape(1);
         uint32_t KRound = layoutDst.shape(2) * layoutDst.shape(3);
         uint32_t ML0Alignment = ELE_NUM_PER_C0 * 2;
         uint32_t KLoops = CeilDiv(KRound, C0_NUM_PER_FRACTAL);
@@ -111,9 +111,9 @@ struct CopyL1ToL0A<acot::arch::AscendC910B3, acot::gemm::GemmType<float, layout:
 };
 
 template<>
-struct CopyL1ToL0A<acot::arch::AscendC910B3, acot::gemm::GemmType<int8_t, layout::ColumnMajor>>{
+struct CopyL1ToL0A<acot::arch::AtlasA2, acot::matmul::MatmulType<int8_t, layout::ColumnMajor>>{
     using LayoutDst = layout::nZ;
-    using LayoutSrc = layout::zN;
+    using LayoutSrc = layout::nZ;
 
     static constexpr uint32_t ELE_NUM_PER_C0 =  BYTE_PER_C0 / sizeof(int8_t);
 
@@ -126,8 +126,8 @@ struct CopyL1ToL0A<acot::arch::AscendC910B3, acot::gemm::GemmType<int8_t, layout
         AscendC::LocalTensor<int8_t> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t MRound = layoutSrc.shape(2) * layoutSrc.shape(3);
-        uint32_t KRound = layoutSrc.shape(0) * layoutSrc.shape(1);
+        uint32_t MRound = layoutSrc.shape(0) * layoutSrc.shape(1);
+        uint32_t KRound = layoutSrc.shape(2) * layoutSrc.shape(3);
         uint32_t KL0Alignment = C0_NUM_PER_FRACTAL * 2; // 32个元素对齐
         uint32_t KLoops = CeilDiv(KRound, KL0Alignment);
         AscendC::LoadData2dTransposeParams params;
@@ -150,7 +150,7 @@ template<
 struct CopyL1ToL0B{};
 
 template<class Element>
-struct CopyL1ToL0B<acot::arch::AscendC910B3, acot::gemm::GemmType<Element, layout::RowMajor>>{
+struct CopyL1ToL0B<acot::arch::AtlasA2, acot::matmul::MatmulType<Element, layout::RowMajor>>{
     using LayoutDst = layout::nZ;
     using LayoutSrc = layout::zZ;
 
@@ -183,7 +183,7 @@ struct CopyL1ToL0B<acot::arch::AscendC910B3, acot::gemm::GemmType<Element, layou
 };
 
 template<>
-struct CopyL1ToL0B<acot::arch::AscendC910B3, acot::gemm::GemmType<float, layout::RowMajor>>{
+struct CopyL1ToL0B<acot::arch::AtlasA2, acot::matmul::MatmulType<float, layout::RowMajor>>{
     using LayoutDst = layout::nZ;
     using LayoutSrc = layout::zZ;
 
@@ -215,7 +215,7 @@ struct CopyL1ToL0B<acot::arch::AscendC910B3, acot::gemm::GemmType<float, layout:
 };
 
 template<>
-struct CopyL1ToL0B<acot::arch::AscendC910B3, acot::gemm::GemmType<int8_t, layout::RowMajor>>{
+struct CopyL1ToL0B<acot::arch::AtlasA2, acot::matmul::MatmulType<int8_t, layout::RowMajor>>{
     using LayoutDst = layout::nZ;
     using LayoutSrc = layout::zN;
 
@@ -247,9 +247,9 @@ struct CopyL1ToL0B<acot::arch::AscendC910B3, acot::gemm::GemmType<int8_t, layout
 };
 
 template<class Element>
-struct CopyL1ToL0B<acot::arch::AscendC910B3, acot::gemm::GemmType<Element, layout::ColumnMajor>>{
+struct CopyL1ToL0B<acot::arch::AtlasA2, acot::matmul::MatmulType<Element, layout::ColumnMajor>>{
     using LayoutDst = layout::zZ;
-    using LayoutSrc = layout::zN;
+    using LayoutSrc = layout::nZ;
 
     static constexpr uint32_t ELE_NUM_PER_C0 =  BYTE_PER_C0 / sizeof(Element);
 
@@ -262,7 +262,7 @@ struct CopyL1ToL0B<acot::arch::AscendC910B3, acot::gemm::GemmType<Element, layou
         AscendC::LocalTensor<Element> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t NRound = layoutSrc.shape(0) * layoutSrc.shape(1);
+        uint32_t NRound = layoutSrc.shape(2) * layoutSrc.shape(3);
         uint32_t KRound = layoutDst.shape(2) * layoutDst.shape(3);
         uint32_t NLoops = CeilDiv(NRound, C0_NUM_PER_FRACTAL);
         AscendC::LoadData2DParams params;

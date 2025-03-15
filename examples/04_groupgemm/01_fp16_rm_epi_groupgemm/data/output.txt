@@ -1,137 +1,450 @@
-  M : 6060 , N : 7267 , K : 1434 , groupIdx : 0 
+  M : 6214 , N : 3442 , K : 6745 , groupIdx : 0 
 
-  M : 6357 , N : 3669 , K : 6517 , groupIdx : 1 
+  M : 4095 , N : 593 , K : 4195 , groupIdx : 1 
 
-  M : 7806 , N : 9825 , K : 5103 , groupIdx : 2 
+  M : 2004 , N : 1744 , K : 3710 , groupIdx : 2 
 
-  M : 4674 , N : 3238 , K : 3270 , groupIdx : 3 
+  M : 1952 , N : 6457 , K : 6804 , groupIdx : 3 
 
-  M : 3181 , N : 6711 , K : 2266 , groupIdx : 4 
+  M : 381 , N : 8995 , K : 8541 , groupIdx : 4 
+
+  M : 9257 , N : 6252 , K : 6364 , groupIdx : 5 
+
+  M : 2233 , N : 8992 , K : 3407 , groupIdx : 6 
+
+  M : 8246 , N : 3233 , K : 465 , groupIdx : 7 
+
+  M : 5054 , N : 9888 , K : 6574 , groupIdx : 8 
+
+  M : 7075 , N : 6950 , K : 9354 , groupIdx : 9 
+
+  M : 4173 , N : 1012 , K : 8608 , groupIdx : 10 
+
+  M : 3225 , N : 3762 , K : 124 , groupIdx : 11 
+
+  M : 8099 , N : 6807 , K : 4274 , groupIdx : 12 
+
+  M : 792 , N : 2605 , K : 4383 , groupIdx : 13 
+
+  M : 9498 , N : 5737 , K : 4190 , groupIdx : 14 
+
+  M : 2153 , N : 9807 , K : 324 , groupIdx : 15 
+
+  M : 42 , N : 7391 , K : 6850 , groupIdx : 16 
+
+  M : 5696 , N : 5978 , K : 1404 , groupIdx : 17 
+
+  M : 9833 , N : 8240 , K : 7768 , groupIdx : 18 
+
+  M : 2807 , N : 3877 , K : 912 , groupIdx : 19 
+
+  M : 3322 , N : 1010 , K : 258 , groupIdx : 20 
+
+  M : 9994 , N : 2025 , K : 4364 , groupIdx : 21 
+
+  M : 1572 , N : 1650 , K : 4826 , groupIdx : 22 
+
+  M : 9808 , N : 890 , K : 7022 , groupIdx : 23 
+
+  M : 3708 , N : 3892 , K : 1385 , groupIdx : 24 
+
+  M : 8563 , N : 9556 , K : 2751 , groupIdx : 25 
+
+  M : 3991 , N : 2858 , K : 5776 , groupIdx : 26 
+
+  M : 9788 , N : 6999 , K : 1025 , groupIdx : 27 
+
+  M : 8944 , N : 9113 , K : 4302 , groupIdx : 28 
+
+  M : 7866 , N : 7390 , K : 1790 , groupIdx : 29 
 
 ===========================================================
 errorCnt: 0
-Total Count: 180537906
+Total Count: 873246779
 Accuracy: 100.00%
 ===========================================================
-  M : 1089 , N : 6392 , K : 3055 , groupIdx : 0 
+  M : 6237 , N : 962 , K : 4653 , groupIdx : 0 
 
-  M : 1204 , N : 3958 , K : 2063 , groupIdx : 1 
+  M : 7328 , N : 9597 , K : 3861 , groupIdx : 1 
 
-  M : 5798 , N : 6082 , K : 5602 , groupIdx : 2 
+  M : 855 , N : 1812 , K : 3182 , groupIdx : 2 
 
-  M : 7794 , N : 9333 , K : 1987 , groupIdx : 3 
+  M : 8573 , N : 8776 , K : 9769 , groupIdx : 3 
 
-  M : 8094 , N : 8859 , K : 4043 , groupIdx : 4 
+  M : 1580 , N : 531 , K : 8218 , groupIdx : 4 
 
-  M : 7632 , N : 9396 , K : 4334 , groupIdx : 5 
+  M : 697 , N : 4701 , K : 8616 , groupIdx : 5 
 
-  M : 6057 , N : 7129 , K : 7146 , groupIdx : 6 
+  M : 8418 , N : 3236 , K : 113 , groupIdx : 6 
 
-  M : 1399 , N : 3750 , K : 7189 , groupIdx : 7 
+  M : 170 , N : 6476 , K : 6466 , groupIdx : 7 
 
-  M : 7135 , N : 9672 , K : 5593 , groupIdx : 8 
+  M : 2330 , N : 9952 , K : 5908 , groupIdx : 8 
 
-  M : 2190 , N : 5786 , K : 36 , groupIdx : 9 
+  M : 2989 , N : 1657 , K : 5448 , groupIdx : 9 
 
-  M : 4736 , N : 8174 , K : 9342 , groupIdx : 10 
+  M : 8052 , N : 8825 , K : 3343 , groupIdx : 10 
 
-  M : 55 , N : 2825 , K : 6674 , groupIdx : 11 
+  M : 1852 , N : 1195 , K : 4924 , groupIdx : 11 
 
-  M : 3558 , N : 7274 , K : 7231 , groupIdx : 12 
+  M : 5261 , N : 7618 , K : 9696 , groupIdx : 12 
 
-  M : 2025 , N : 3518 , K : 335 , groupIdx : 13 
+  M : 5403 , N : 5358 , K : 9843 , groupIdx : 13 
 
-  M : 278 , N : 9945 , K : 7991 , groupIdx : 14 
+  M : 2742 , N : 3439 , K : 5416 , groupIdx : 14 
 
-  M : 9553 , N : 5359 , K : 6139 , groupIdx : 15 
+  M : 5740 , N : 4412 , K : 2797 , groupIdx : 15 
 
-  M : 9826 , N : 936 , K : 484 , groupIdx : 16 
+  M : 1173 , N : 1705 , K : 473 , groupIdx : 16 
 
-  M : 7877 , N : 6471 , K : 6393 , groupIdx : 17 
+  M : 4076 , N : 6073 , K : 7035 , groupIdx : 17 
 
-  M : 4513 , N : 3298 , K : 5728 , groupIdx : 18 
+  M : 7336 , N : 6275 , K : 618 , groupIdx : 18 
 
-  M : 4240 , N : 351 , K : 9582 , groupIdx : 19 
+  M : 7259 , N : 6373 , K : 3890 , groupIdx : 19 
 
-  M : 7342 , N : 2079 , K : 7716 , groupIdx : 20 
+  M : 8026 , N : 2038 , K : 3673 , groupIdx : 20 
 
-  M : 2738 , N : 9799 , K : 5782 , groupIdx : 21 
+  M : 808 , N : 8842 , K : 1001 , groupIdx : 21 
 
-  M : 1570 , N : 4250 , K : 6615 , groupIdx : 22 
+  M : 6975 , N : 9053 , K : 4607 , groupIdx : 22 
 
-  M : 8219 , N : 9853 , K : 9783 , groupIdx : 23 
+  M : 1902 , N : 771 , K : 8656 , groupIdx : 23 
 
-  M : 2680 , N : 8499 , K : 9633 , groupIdx : 24 
+  M : 4118 , N : 806 , K : 478 , groupIdx : 24 
 
-  M : 1720 , N : 9483 , K : 4436 , groupIdx : 25 
+  M : 9509 , N : 9941 , K : 4857 , groupIdx : 25 
 
-  M : 2609 , N : 1519 , K : 4921 , groupIdx : 26 
+  M : 9892 , N : 5500 , K : 2365 , groupIdx : 26 
+
+  M : 2666 , N : 710 , K : 6406 , groupIdx : 27 
+
+  M : 5970 , N : 4554 , K : 9069 , groupIdx : 28 
+
+  M : 596 , N : 8556 , K : 160 , groupIdx : 29 
 
 ===========================================================
-errorCnt: 2752
-Total Count: 768425812
+errorCnt: 5125148
+Total Count: 784359680
+Accuracy: 99.35%
+===========================================================
+  M : 2766 , N : 757 , K : 7103 , groupIdx : 0 
+
+  M : 1053 , N : 4484 , K : 1671 , groupIdx : 1 
+
+  M : 8799 , N : 631 , K : 2135 , groupIdx : 2 
+
+  M : 5947 , N : 2493 , K : 4633 , groupIdx : 3 
+
+  M : 6630 , N : 698 , K : 9114 , groupIdx : 4 
+
+  M : 7287 , N : 7211 , K : 6985 , groupIdx : 5 
+
+  M : 1963 , N : 1326 , K : 4176 , groupIdx : 6 
+
+  M : 3339 , N : 1689 , K : 5121 , groupIdx : 7 
+
+  M : 451 , N : 3276 , K : 4554 , groupIdx : 8 
+
+  M : 1237 , N : 1759 , K : 712 , groupIdx : 9 
+
+  M : 9508 , N : 8837 , K : 7437 , groupIdx : 10 
+
+  M : 6763 , N : 5655 , K : 2418 , groupIdx : 11 
+
+  M : 2949 , N : 3810 , K : 121 , groupIdx : 12 
+
+  M : 545 , N : 3617 , K : 4328 , groupIdx : 13 
+
+  M : 1934 , N : 8099 , K : 1791 , groupIdx : 14 
+
+  M : 2879 , N : 9672 , K : 7365 , groupIdx : 15 
+
+  M : 3004 , N : 5315 , K : 9007 , groupIdx : 16 
+
+  M : 4127 , N : 851 , K : 3607 , groupIdx : 17 
+
+  M : 5241 , N : 4421 , K : 5206 , groupIdx : 18 
+
+  M : 9294 , N : 6129 , K : 5340 , groupIdx : 19 
+
+  M : 111 , N : 2971 , K : 6942 , groupIdx : 20 
+
+  M : 3879 , N : 9572 , K : 997 , groupIdx : 21 
+
+  M : 9160 , N : 8067 , K : 1015 , groupIdx : 22 
+
+  M : 639 , N : 3664 , K : 4287 , groupIdx : 23 
+
+  M : 9337 , N : 8884 , K : 9494 , groupIdx : 24 
+
+  M : 8930 , N : 4133 , K : 2804 , groupIdx : 25 
+
+  M : 7428 , N : 6708 , K : 3868 , groupIdx : 26 
+
+  M : 953 , N : 7288 , K : 757 , groupIdx : 27 
+
+  M : 9759 , N : 1525 , K : 8228 , groupIdx : 28 
+
+  M : 1481 , N : 2719 , K : 355 , groupIdx : 29 
+
+===========================================================
+errorCnt: 572849813
+Total Count: 684092498
+Accuracy: 16.26%
+===========================================================
+  M : 7965 , N : 2702 , K : 356 , groupIdx : 0 
+
+  M : 7885 , N : 516 , K : 9129 , groupIdx : 1 
+
+  M : 8150 , N : 2745 , K : 4587 , groupIdx : 2 
+
+  M : 7154 , N : 6932 , K : 2200 , groupIdx : 3 
+
+  M : 9522 , N : 1355 , K : 2692 , groupIdx : 4 
+
+  M : 5788 , N : 520 , K : 1421 , groupIdx : 5 
+
+  M : 3984 , N : 7600 , K : 117 , groupIdx : 6 
+
+  M : 8217 , N : 8918 , K : 1605 , groupIdx : 7 
+
+  M : 5200 , N : 4312 , K : 7181 , groupIdx : 8 
+
+  M : 1486 , N : 1662 , K : 8959 , groupIdx : 9 
+
+===========================================================
+errorCnt: 223282190
+Total Count: 241915176
+Accuracy: 7.70%
+===========================================================
+  M : 9646 , N : 9192 , K : 5700 , groupIdx : 0 
+
+  M : 1497 , N : 3338 , K : 1016 , groupIdx : 1 
+
+  M : 1399 , N : 9295 , K : 1610 , groupIdx : 2 
+
+  M : 3160 , N : 8916 , K : 8865 , groupIdx : 3 
+
+  M : 9778 , N : 4305 , K : 9691 , groupIdx : 4 
+
+  M : 8428 , N : 4062 , K : 2788 , groupIdx : 5 
+
+  M : 597 , N : 3950 , K : 2754 , groupIdx : 6 
+
+  M : 9192 , N : 299 , K : 7706 , groupIdx : 7 
+
+  M : 6159 , N : 8841 , K : 3988 , groupIdx : 8 
+
+  M : 3510 , N : 6706 , K : 2346 , groupIdx : 9 
+
+===========================================================
+errorCnt: 2928568
+Total Count: 294266446
+Accuracy: 99.00%
+===========================================================
+  M : 9008 , N : 1890 , K : 4165 , groupIdx : 0 
+
+  M : 3289 , N : 970 , K : 5098 , groupIdx : 1 
+
+  M : 8333 , N : 5408 , K : 3174 , groupIdx : 2 
+
+  M : 6186 , N : 6981 , K : 5122 , groupIdx : 3 
+
+  M : 4221 , N : 7293 , K : 4710 , groupIdx : 4 
+
+  M : 2525 , N : 11 , K : 3843 , groupIdx : 5 
+
+  M : 4849 , N : 4153 , K : 2187 , groupIdx : 6 
+
+  M : 5777 , N : 9037 , K : 3864 , groupIdx : 7 
+
+  M : 5553 , N : 339 , K : 8731 , groupIdx : 8 
+
+  M : 4668 , N : 4126 , K : 8039 , groupIdx : 9 
+
+===========================================================
+errorCnt: 0
+Total Count: 232763589
 Accuracy: 100.00%
 ===========================================================
-  M : 7457 , N : 2749 , K : 4548 , groupIdx : 0 
+  M : 5589 , N : 6627 , K : 1627 , groupIdx : 0 
 
-  M : 3266 , N : 4517 , K : 5865 , groupIdx : 1 
+  M : 4944 , N : 5172 , K : 6662 , groupIdx : 1 
 
-  M : 6038 , N : 93 , K : 779 , groupIdx : 2 
+  M : 2870 , N : 7201 , K : 3903 , groupIdx : 2 
 
-  M : 3413 , N : 4992 , K : 4506 , groupIdx : 3 
+  M : 8608 , N : 8818 , K : 7704 , groupIdx : 3 
 
-  M : 9023 , N : 2206 , K : 5321 , groupIdx : 4 
+  M : 4389 , N : 1923 , K : 7028 , groupIdx : 4 
 
-  M : 9439 , N : 4240 , K : 7894 , groupIdx : 5 
+  M : 2491 , N : 3102 , K : 2660 , groupIdx : 5 
 
-  M : 3349 , N : 7936 , K : 5289 , groupIdx : 6 
+  M : 4821 , N : 6367 , K : 953 , groupIdx : 6 
 
-  M : 375 , N : 3919 , K : 346 , groupIdx : 7 
+  M : 4927 , N : 9178 , K : 8382 , groupIdx : 7 
 
-  M : 9656 , N : 5578 , K : 1811 , groupIdx : 8 
+  M : 3673 , N : 2802 , K : 7652 , groupIdx : 8 
 
-  M : 773 , N : 4899 , K : 5053 , groupIdx : 9 
-
-  M : 3181 , N : 4036 , K : 4402 , groupIdx : 10 
-
-  M : 9094 , N : 5248 , K : 2572 , groupIdx : 11 
-
-  M : 8092 , N : 889 , K : 5140 , groupIdx : 12 
-
-  M : 2018 , N : 4604 , K : 4001 , groupIdx : 13 
-
-  M : 5327 , N : 8686 , K : 4230 , groupIdx : 14 
-
-  M : 9245 , N : 7678 , K : 9919 , groupIdx : 15 
-
-  M : 3894 , N : 2673 , K : 5152 , groupIdx : 16 
-
-  M : 9507 , N : 9137 , K : 4488 , groupIdx : 17 
-
-  M : 8337 , N : 4478 , K : 6986 , groupIdx : 18 
-
-  M : 535 , N : 9523 , K : 4185 , groupIdx : 19 
-
-  M : 6913 , N : 1097 , K : 8791 , groupIdx : 20 
-
-  M : 5564 , N : 3369 , K : 7630 , groupIdx : 21 
-
-  M : 6422 , N : 7272 , K : 86 , groupIdx : 22 
-
-  M : 1397 , N : 828 , K : 6554 , groupIdx : 23 
-
-  M : 819 , N : 8963 , K : 1787 , groupIdx : 24 
-
-  M : 5199 , N : 9428 , K : 206 , groupIdx : 25 
-
-  M : 7444 , N : 5212 , K : 7317 , groupIdx : 26 
-
-  M : 9124 , N : 1335 , K : 3584 , groupIdx : 27 
-
-  M : 584 , N : 5889 , K : 5979 , groupIdx : 28 
+  M : 8598 , N : 1989 , K : 3941 , groupIdx : 9 
 
 ===========================================================
-errorCnt: 838
-Total Count: 717437349
+errorCnt: 1493106
+Total Count: 278656495
+Accuracy: 99.46%
+===========================================================
+  M : 8793 , N : 3608 , K : 8188 , groupIdx : 0 
+
+  M : 8383 , N : 8125 , K : 4290 , groupIdx : 1 
+
+  M : 2111 , N : 5170 , K : 5677 , groupIdx : 2 
+
+  M : 6714 , N : 7973 , K : 1567 , groupIdx : 3 
+
+  M : 8475 , N : 3428 , K : 723 , groupIdx : 4 
+
+  M : 4040 , N : 2179 , K : 5624 , groupIdx : 5 
+
+  M : 7047 , N : 2544 , K : 6478 , groupIdx : 6 
+
+  M : 8303 , N : 2599 , K : 3024 , groupIdx : 7 
+
+  M : 6342 , N : 9219 , K : 9639 , groupIdx : 8 
+
+  M : 4086 , N : 3081 , K : 4892 , groupIdx : 9 
+
+===========================================================
+errorCnt: 0
+Total Count: 312700000
 Accuracy: 100.00%
+===========================================================
+  M : 6460 , N : 8648 , K : 3823 , groupIdx : 0 
+
+  M : 925 , N : 2289 , K : 3543 , groupIdx : 1 
+
+  M : 1286 , N : 9755 , K : 7342 , groupIdx : 2 
+
+  M : 5335 , N : 1332 , K : 8501 , groupIdx : 3 
+
+  M : 2199 , N : 9872 , K : 6511 , groupIdx : 4 
+
+  M : 382 , N : 5708 , K : 8985 , groupIdx : 5 
+
+  M : 2599 , N : 5804 , K : 9883 , groupIdx : 6 
+
+  M : 7069 , N : 7310 , K : 118 , groupIdx : 7 
+
+  M : 9780 , N : 5777 , K : 3177 , groupIdx : 8 
+
+  M : 6061 , N : 5276 , K : 475 , groupIdx : 9 
+
+  M : 4197 , N : 2879 , K : 6488 , groupIdx : 10 
+
+  M : 362 , N : 4218 , K : 2642 , groupIdx : 11 
+
+  M : 3965 , N : 1414 , K : 6712 , groupIdx : 12 
+
+  M : 6672 , N : 6704 , K : 8927 , groupIdx : 13 
+
+  M : 2083 , N : 3965 , K : 7950 , groupIdx : 14 
+
+  M : 8517 , N : 1425 , K : 2759 , groupIdx : 15 
+
+  M : 370 , N : 2173 , K : 6075 , groupIdx : 16 
+
+  M : 2612 , N : 2838 , K : 298 , groupIdx : 17 
+
+  M : 7211 , N : 2980 , K : 4772 , groupIdx : 18 
+
+  M : 3802 , N : 2646 , K : 3253 , groupIdx : 19 
+
+  M : 7313 , N : 7547 , K : 3327 , groupIdx : 20 
+
+  M : 2643 , N : 6874 , K : 238 , groupIdx : 21 
+
+  M : 7017 , N : 5552 , K : 2573 , groupIdx : 22 
+
+  M : 5744 , N : 6782 , K : 3401 , groupIdx : 23 
+
+  M : 1244 , N : 7445 , K : 2936 , groupIdx : 24 
+
+  M : 9411 , N : 9199 , K : 5261 , groupIdx : 25 
+
+  M : 386 , N : 278 , K : 9794 , groupIdx : 26 
+
+  M : 1525 , N : 9879 , K : 2722 , groupIdx : 27 
+
+  M : 2498 , N : 1019 , K : 2176 , groupIdx : 28 
+
+  M : 2230 , N : 135 , K : 4842 , groupIdx : 29 
+
+===========================================================
+errorCnt: 10081
+Total Count: 645992705
+Accuracy: 100.00%
+===========================================================
+  M : 3541 , N : 284 , K : 7799 , groupIdx : 0 
+
+  M : 9878 , N : 209 , K : 5402 , groupIdx : 1 
+
+  M : 8874 , N : 9657 , K : 5874 , groupIdx : 2 
+
+  M : 4159 , N : 4864 , K : 4056 , groupIdx : 3 
+
+  M : 2216 , N : 8226 , K : 1569 , groupIdx : 4 
+
+  M : 6199 , N : 3533 , K : 6115 , groupIdx : 5 
+
+  M : 2591 , N : 7247 , K : 9753 , groupIdx : 6 
+
+  M : 5454 , N : 9749 , K : 8651 , groupIdx : 7 
+
+  M : 8443 , N : 6048 , K : 4152 , groupIdx : 8 
+
+  M : 7620 , N : 4227 , K : 4448 , groupIdx : 9 
+
+  M : 8384 , N : 4725 , K : 7349 , groupIdx : 10 
+
+  M : 8838 , N : 5120 , K : 8997 , groupIdx : 11 
+
+  M : 1331 , N : 4782 , K : 5340 , groupIdx : 12 
+
+  M : 7247 , N : 2 , K : 811 , groupIdx : 13 
+
+  M : 6792 , N : 1515 , K : 5153 , groupIdx : 14 
+
+  M : 2255 , N : 7219 , K : 9182 , groupIdx : 15 
+
+  M : 7882 , N : 6229 , K : 6092 , groupIdx : 16 
+
+  M : 7581 , N : 3298 , K : 2515 , groupIdx : 17 
+
+  M : 5373 , N : 9806 , K : 7892 , groupIdx : 18 
+
+  M : 2392 , N : 9497 , K : 6635 , groupIdx : 19 
+
+  M : 5458 , N : 232 , K : 7250 , groupIdx : 20 
+
+  M : 4437 , N : 3538 , K : 5926 , groupIdx : 21 
+
+  M : 3834 , N : 1708 , K : 9465 , groupIdx : 22 
+
+  M : 3846 , N : 9232 , K : 1544 , groupIdx : 23 
+
+  M : 9084 , N : 6080 , K : 1273 , groupIdx : 24 
+
+  M : 9171 , N : 8686 , K : 3392 , groupIdx : 25 
+
+  M : 5206 , N : 3442 , K : 6524 , groupIdx : 26 
+
+  M : 4515 , N : 5689 , K : 9913 , groupIdx : 27 
+
+  M : 7924 , N : 15 , K : 4714 , groupIdx : 28 
+
+  M : 4681 , N : 4019 , K : 9845 , groupIdx : 29 
+
+===========================================================
+errorCnt: 176458206
+Total Count: 828109067
+Accuracy: 78.69%
 ===========================================================

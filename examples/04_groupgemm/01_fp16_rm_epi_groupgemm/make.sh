@@ -3,4 +3,5 @@ clear;
 export ASCEND_HOME_DIR=/home/workspace/gpf/CANN/ascend-toolkit/latest
 source /home/workspace/gpf/CANN/ascend-toolkit/set_env.sh
 ../../../scripts/build.sh 01_fp16_rm_epi_groupgemm
-./run.sh 20 1 # 存在爆内存的情况 M 或 N 655 感觉像是流水的问题 
+rm -rf ./data/input/* rm -rf ./data/output/* 
+./run.sh 30 2 # 存在爆内存的情况 M 或 N 655 感觉像是流水的问题 

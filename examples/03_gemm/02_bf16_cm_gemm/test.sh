@@ -10,5 +10,5 @@ do
     num2=$[ $RANDOM % 10000 + 1 ]
     num3=$[ $RANDOM % 10000 + 1 ]
     echo $num1 $num2 $num3
-    ./run.sh $num1 $num2 $num3 2 0
+    ./run.sh $num1 $num2 $num3 3 0
 done

@@ -7,10 +7,10 @@
 #include "acot/arch/arch.hpp"
 #include "acot/gemm/block/block_gemm.hpp"
 #include "acot/gemm/kernel/kernel_gemm_PL_PA_epilogue.hpp"
-#include "acot/gemm/gemm_type.hpp"
+#include "acot/matmul/matmul_type.hpp"
 #include "acot/layout/layout.hpp"
 #include "acot/matmul_coord.hpp"
-#include "acot/gemm/dispatch_policy.hpp"
+#include "acot/matmul/dispatch_policy.hpp"
 #include "acot/epilogue/dispatch_policy.hpp"
 #include "acot/epilogue/tile/tile_copy.hpp"
 #include "acot/epilogue/tile/tile_elemwise_gemm.hpp"
@@ -18,7 +18,7 @@
 
 using namespace acot;
 
-using ScalarType = half;
+using ScalarType = float;
 
 // 已经进入核函数了
 template <
@@ -40,16 +40,16 @@ void FP16CMGemm(
 ){
     // Set FFTS address
     AscendC::SetSyncBaseAddr(fftsAddr);
-    using ArchTag = arch::AscendC910B3;
+    using ArchTag = arch::AtlasA2;
     // 开启pingpong机制
     constexpr bool enableUnitFlag = true;
     constexpr bool enableShuffleK = true;
-    using GemmBlockDispatchPolicy = gemm::GemmAscendC910B3Preload<enableUnitFlag, enableShuffleK>;
-    using EpilogueBlockDispatchPolicy = epilogue::EpilogueAscendC910B3Gemm;
-    using AType = gemm::GemmType<half, LayoutA>;
-    using BType = gemm::GemmType<half, LayoutB>;
-    using CType = gemm::GemmType<half, LayoutC>;
-    using XType = gemm::GemmType<half, LayoutC>;
+    using GemmBlockDispatchPolicy = matmul::MmadAtlasA2Preload<enableUnitFlag, enableShuffleK>;
+    using EpilogueBlockDispatchPolicy = epilogue::EpilogueAtlasA2ElemWiseOneSource;
+    using AType = matmul::MatmulType<half, LayoutA>;
+    using BType = matmul::MatmulType<half, LayoutB>;
+    using CType = matmul::MatmulType<half, LayoutC>;
+    using XType = matmul::MatmulType<half, LayoutC>;
     // 使用Coord来传递值
     using L1TileShape = MatmulShape<256, 128, 256>; // M 和 K的切分粒度相同
     using L0TileShape = MatmulShape<256, 128, 64>;
@@ -67,10 +67,10 @@ void FP16CMGemm(
     using EpilogueTileCopy = epilogue::tile::TileCopy<ArchTag, CType, XType, DType>;
     // 实例化Epilogue部分
     using EpilogueBlock = epilogue::block::BlockEpilogue<EpilogueBlockDispatchPolicy, CType, XType, DType, TileElemWiseAddGemm, TileElemWiseMulGemm, EpilogueTileCopy>;
-    typename EpilogueBlock::Params epilogueParams{alpha, beta, gmC, layoutC, gmC, layoutC}; // x只是传了一个地址
+    // typename EpilogueBlock::Params epilogueParams{alpha, beta, gmC, layoutC, gmC, layoutC}; // x只是传了一个地址
     // 实例化Gemm部分
     using GemmKernel = gemm::kernel::KernelGemmEpilogue<GemmBlock, EpilogueBlock>;
-    typename GemmKernel::Params params{problemShape, gmA, layoutA, gmB, layoutB, gmWorkspace, gmWA, layoutWA, gmWB, layoutWB, epilogueParams}; // 这里得修改 gmX保存A * B
+    typename GemmKernel::Params params{problemShape, gmA, layoutA, gmB, layoutB, gmWorkspace, gmWA, layoutWA, gmWB, layoutWB, alpha, beta, gmC, gmC}; // 这里得修改 gmX保存A * B
     // 调用核函数
     GemmKernel gemm;
     gemm(params);
@@ -180,10 +180,10 @@ void Run(Options options){
     size_t sizeWA = GetWorkspaceLen(layoutWA) * sizeof(half);
     size_t sizeWB = GetWorkspaceLen(layoutWB) * sizeof(half);
 
-    size_t scalarSize = 1 * sizeof(half);
-    half* alpha;
+    size_t scalarSize = 1 * sizeof(float);
+    float* alpha;
     ACL_CHECK(aclrtMallocHost((void**)(&alpha), scalarSize));
-    half* beta;
+    float* beta;
     ACL_CHECK(aclrtMallocHost((void**)(&beta), scalarSize));
     half* hostA;
     ACL_CHECK(aclrtMallocHost((void**)(&hostA), sizeA));

@@ -7,6 +7,7 @@
 #include "acot/matrix_coord.hpp"
 #include "acot/epilogue/tile/copy_gm_to_ub.hpp"
 #include "acot/epilogue/tile/copy_ub_to_gm.hpp"
+#include "acot/gemm/helper.hpp"
 
 using namespace acot;
 
@@ -24,9 +25,9 @@ public:
     using Element = Element_;
     using Layout = Layout_;
     using CopyGm2Ub = acot::epilogue::tile::CopyGm2Ub<
-        ArchTag, gemm::GemmType<Element, acot::layout::RowMajor>>;
+        ArchTag, matmul::MatmulType<Element, acot::layout::RowMajor>>;
     using CopyUb2Gm = acot::epilogue::tile::CopyUb2Gm<
-        ArchTag, gemm::GemmType<Element, acot::layout::RowMajor>>;
+        ArchTag, matmul::MatmulType<Element, acot::layout::RowMajor>>;
     using ComputeLayout = acot::layout::RowMajor; // 都是RowMajor处理
 
     CopyGm2Ub copyGm2Ub;
@@ -95,7 +96,7 @@ public:
                     actualDataNum = tileLen - inTileLoopIdx * COMPUTE_LENGTH;
                 }
                 AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[bufferIndex]);
-                ComputeLayout dstLayout = computeLayoutDst.GetTileLayout(MatrixCoord(1, actualDataNum)); // row column 这个地方有问题
+                ComputeLayout dstLayout = computeLayoutDst.GetTileLayout(MatrixCoord(1, actualDataNum)); // row column 
                 ComputeLayout srcLayout = computeLayoutSrc.GetTileLayout(MatrixCoord(1, actualDataNum));
                 ComputeLayout &ubLayout = dstLayout;
                 copyGm2Ub(inputBuffer[bufferIndex], src[gmSrcOffset], ubLayout, srcLayout);
@@ -160,20 +161,23 @@ public:
     using LayoutA = typename BlockGemm::LayoutA;
     using ElementB = typename BlockGemm::ElementB;
     using LayoutB = typename BlockGemm::LayoutB;
-    using ElementX = typename BlockGemm::ElementC;
-    using LayoutC = typename BlockGemm::LayoutC;
+    using ElementX = typename BlockGemm::ElementX;
+    using LayoutX = typename BlockGemm::LayoutX;
     using ElementAccumulator = typename BlockGemm::ElementAccumulator;
 
     using BlockEpilogue = BlockEpilogue_;
-    using EpilogueParams = typename BlockEpilogue::Params;
+    using ElementC = typename BlockEpilogue::ElementC;
+    using ElementD = typename BlockEpilogue::ElementD;
 
     const uint32_t maxMPerBlock = L1TileShape::M;
     const uint32_t maxNPerBlock = L1TileShape::N;
     const uint32_t cSize = maxMPerBlock * maxNPerBlock * sizeof(ElementAccumulator);
-    const uint32_t l0CBlockNum = ArchTag::L0C_SIZE / cSize;
-
+    const uint32_t l0XBlockNum = ArchTag::L0C_SIZE / cSize;
+    using ElementCompute =
+        typename acot::gemm::helper::ElementAccumulatorSelector<ElementC, ElementD>::ElementAccumulator;
+    using ElementScalar = ElementCompute; // 标量的数据类型
     static constexpr uint32_t STAGES = BlockGemm::STAGES; // 开启双缓冲机制的
-    static constexpr bool RowOrColumn = std::is_same<LayoutA, acot::layout::RowMajor>::value && std::is_same<LayoutB, acot::layout::RowMajor>::value;
+    // static constexpr bool RowOrColumn = std::is_same<LayoutA, acot::layout::RowMajor>::value && std::is_same<LayoutB, acot::layout::RowMajor>::value;
     using TileScheduler = TileScheduler_;
     
     // 进行Padding操作
@@ -193,7 +197,10 @@ public:
         LayoutA layoutWA; // padding
         GM_ADDR ptrWB;
         LayoutB layoutWB;
-        EpilogueParams epilogueParams;
+        ElementScalar alpha;
+        ElementScalar beta;
+        GM_ADDR ptrC;
+        GM_ADDR ptrD;
 
         // Methods
         ACOT_DEVICE
@@ -202,10 +209,12 @@ public:
         ACOT_DEVICE
         Params(MatmulCoord problemShape_, GM_ADDR ptrA_, LayoutA layoutA_,
             GM_ADDR ptrB_, LayoutB layoutB_, GM_ADDR gmWorkspace_, 
-            GM_ADDR ptrWA_, LayoutA layoutWA_, GM_ADDR ptrWB_, LayoutB layoutWB_, EpilogueParams epilogueParams_)
+            GM_ADDR ptrWA_, LayoutA layoutWA_, GM_ADDR ptrWB_, LayoutB layoutWB_, 
+            ElementScalar alpha_, ElementScalar beta_, GM_ADDR ptrC_, GM_ADDR ptrD_)
                 : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), 
                 ptrB(ptrB_), layoutB(layoutB_), gmWorkspace(gmWorkspace_), 
-                ptrWA(ptrWA_), layoutWA(layoutWA_), ptrWB(ptrWB_), layoutWB(layoutWB_), epilogueParams(epilogueParams_){}
+                ptrWA(ptrWA_), layoutWA(layoutWA_), ptrWB(ptrWB_), layoutWB(layoutWB_), 
+                alpha(alpha_), beta(beta_), ptrC(ptrC_), ptrD(ptrD_){}
     }Params;
 
     ACOT_DEVICE
@@ -251,82 +260,57 @@ public:
         uint32_t N = params.problemShape.n();
         uint32_t K = params.problemShape.k();
         #pragma unroll
-        for(uint32_t i = 0; i < l0CBlockNum; i++){
+        for(uint32_t i = 0; i < l0XBlockNum; i++){
             AscendC::SetFlag<AscendC::HardEvent::FIX_M>((int32_t)i);
         }
         uint32_t MLoops = CeilDiv(M, maxMPerBlock);
         uint32_t NLoops = CeilDiv(N, maxNPerBlock);
         uint32_t coreLoops = MLoops * NLoops;
         uint32_t singleIdx = 0;
-        if constexpr (RowOrColumn){
-            layout::RowMajor layoutC(params.problemShape.m(), params.problemShape.n());
-            for(uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()){
-                uint32_t MGmBlockIdx = loopIdx / NLoops;
-                uint32_t NGmBlockIdx = loopIdx % NLoops;
-                uint32_t MGmActual = (MGmBlockIdx == MLoops - 1) ? (M - MGmBlockIdx * maxMPerBlock) : maxMPerBlock;
-                uint32_t NGmActual = (NGmBlockIdx == NLoops - 1) ? (N - NGmBlockIdx * maxNPerBlock) : maxNPerBlock;
-                bool isFirstBlock = (loopIdx == AscendC::GetBlockIdx());
-                bool hasNextBlock = false;
-                MatmulCoord nextActualShape;
-                uint32_t MNextGmBlockIdx = 0; uint32_t NNextGmBlockIdx = 0;
-                if(loopIdx + AscendC::GetBlockNum() < coreLoops){
-                    hasNextBlock = true;
-                    uint32_t nextLoopIdx = loopIdx + AscendC::GetBlockNum();
-                    MNextGmBlockIdx = nextLoopIdx / NLoops;
-                    NNextGmBlockIdx = nextLoopIdx % NLoops;
-                    uint32_t MNextGmActual = (MNextGmBlockIdx == MLoops - 1) ? (M - MNextGmBlockIdx * maxMPerBlock) : maxMPerBlock;
-                    uint32_t NNextGmActual = (NNextGmBlockIdx == NLoops - 1) ? (N - NNextGmBlockIdx * maxNPerBlock) : maxNPerBlock;
-                    nextActualShape = MakeCoord(MNextGmActual, NNextGmActual, K); // 构建下一次的形状
-                }
-                MatmulCoord actualShape{MGmActual, NGmActual, K};
-                AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((int32_t)singleIdx);
-                blockGemm(
-                    gmA[MGmBlockIdx * params.layoutWA.stride(0) * maxMPerBlock], params.layoutWA, // row col stride不一样了
-                    gmB[NGmBlockIdx * maxNPerBlock], params.layoutWB,
-                    gmX[MGmBlockIdx * layoutC.stride(0) * maxMPerBlock  + NGmBlockIdx * maxNPerBlock], layoutC,
-                    gmA[MNextGmBlockIdx * params.layoutWA.stride(0) * maxMPerBlock], gmB[NNextGmBlockIdx * maxNPerBlock],
-                    actualShape, nextActualShape, isFirstBlock, hasNextBlock, singleIdx
-                );
-                arch::CrossCoreSetFlagWithReverse<0x2, PIPE_FIX>(flagAicFinishStore);
-                AscendC::SetFlag<AscendC::HardEvent::FIX_M>((int32_t)singleIdx);
-                singleIdx = (singleIdx + 1) % l0CBlockNum;
+        LayoutX layoutX(params.problemShape.m(), params.problemShape.n());
+        for(uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()){
+            uint32_t MGmBlockIdx = loopIdx / NLoops;
+            uint32_t NGmBlockIdx = loopIdx % NLoops;
+            uint32_t MGmActual = (MGmBlockIdx == MLoops - 1) ? (M - MGmBlockIdx * maxMPerBlock) : maxMPerBlock;
+            uint32_t NGmActual = (NGmBlockIdx == NLoops - 1) ? (N - NGmBlockIdx * maxNPerBlock) : maxNPerBlock;
+            bool isFirstBlock = (loopIdx == AscendC::GetBlockIdx());
+            bool hasNextBlock = false;
+            MatmulCoord nextActualShape;
+            uint32_t MNextGmBlockIdx = 0; uint32_t NNextGmBlockIdx = 0;
+            if(loopIdx + AscendC::GetBlockNum() < coreLoops){
+                hasNextBlock = true;
+                uint32_t nextLoopIdx = loopIdx + AscendC::GetBlockNum();
+                MNextGmBlockIdx = nextLoopIdx / NLoops;
+                NNextGmBlockIdx = nextLoopIdx % NLoops;
+                uint32_t MNextGmActual = (MNextGmBlockIdx == MLoops - 1) ? (M - MNextGmBlockIdx * maxMPerBlock) : maxMPerBlock;
+                uint32_t NNextGmActual = (NNextGmBlockIdx == NLoops - 1) ? (N - NNextGmBlockIdx * maxNPerBlock) : maxNPerBlock;
+                nextActualShape = MakeCoord(MNextGmActual, NNextGmActual, K); // 构建下一次的形状
             }
-        }else{
-            layout::ColumnMajor layoutC(params.problemShape.m(), params.problemShape.n());
-            for(uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()){
-                uint32_t MGmBlockIdx = loopIdx / NLoops;
-                uint32_t NGmBlockIdx = loopIdx % NLoops;
-                uint32_t MGmActual = (MGmBlockIdx == MLoops - 1) ? (M - MGmBlockIdx * maxMPerBlock) : maxMPerBlock;
-                uint32_t NGmActual = (NGmBlockIdx == NLoops - 1) ? (N - NGmBlockIdx * maxNPerBlock) : maxNPerBlock;
-                bool isFirstBlock = (loopIdx == AscendC::GetBlockIdx());
-                bool hasNextBlock = false;
-                MatmulCoord nextActualShape;
-                uint32_t MNextGmBlockIdx = 0; uint32_t NNextGmBlockIdx = 0;
-                if(loopIdx + AscendC::GetBlockNum() < coreLoops){
-                    hasNextBlock = true;
-                    uint32_t nextLoopIdx = loopIdx + AscendC::GetBlockNum();
-                    MNextGmBlockIdx = nextLoopIdx / NLoops;
-                    NNextGmBlockIdx = nextLoopIdx % NLoops;
-                    uint32_t MNextGmActual = (MNextGmBlockIdx == MLoops - 1) ? (M - MNextGmBlockIdx * maxMPerBlock) : maxMPerBlock;
-                    uint32_t NNextGmActual = (NNextGmBlockIdx == NLoops - 1) ? (N - NNextGmBlockIdx * maxNPerBlock) : maxNPerBlock;
-                    nextActualShape = MakeCoord(MNextGmActual, NNextGmActual, K); 
-                }
-                MatmulCoord actualShape{MGmActual, NGmActual, K};
-                AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((int32_t)singleIdx);
-                blockGemm(
-                    gmA[MGmBlockIdx * maxMPerBlock], params.layoutWA,
-                    gmB[NGmBlockIdx * maxNPerBlock * params.layoutWB.stride(1)], params.layoutWB,
-                    gmX[MGmBlockIdx * maxMPerBlock + NGmBlockIdx * maxNPerBlock * layoutC.stride(1)], layoutC,
-                    gmA[MNextGmBlockIdx * maxMPerBlock], gmB[NNextGmBlockIdx * maxNPerBlock * params.layoutWB.stride(1)],
-                    actualShape, nextActualShape, isFirstBlock, hasNextBlock, singleIdx
-                );
-                arch::CrossCoreSetFlagWithReverse<0x2, PIPE_FIX>(flagAicFinishStore);
-                AscendC::SetFlag<AscendC::HardEvent::FIX_M>((int32_t)singleIdx);
-                singleIdx = (singleIdx + 1) % l0CBlockNum;
-            }
+            MatmulCoord actualShape{MGmActual, NGmActual, K};
+            AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((int32_t)singleIdx);
+            MatrixCoord gmTileAOffset{MGmBlockIdx * maxMPerBlock, 0}; // gm中的偏移量
+            auto gmTileA = gmA[params.layoutWA.GetOffset(gmTileAOffset)];
+            MatrixCoord gmTileBOffset{0, NGmBlockIdx * maxNPerBlock}; // gm中的偏移量
+            auto gmTileB = gmB[params.layoutWB.GetOffset(gmTileBOffset)];
+            MatrixCoord gmTileXOffset{MGmBlockIdx * maxMPerBlock, NGmBlockIdx * maxNPerBlock}; // gm中的偏移量
+            auto gmTileX = gmX[layoutX.GetOffset(gmTileXOffset)];
+            MatrixCoord gmTileNextAOffset{MNextGmBlockIdx * maxMPerBlock, 0}; // gm中的偏移量
+            auto gmTileNextA = gmA[params.layoutWA.GetOffset(gmTileNextAOffset)];
+            MatrixCoord gmTileNextBOffset{0, NNextGmBlockIdx * maxNPerBlock}; // gm中的偏移量
+            auto gmTileNextB = gmB[params.layoutWB.GetOffset(gmTileNextBOffset)];
+            blockGemm(
+                gmTileA, params.layoutWA, // row col stride不一样了
+                gmTileB, params.layoutWB,
+                gmTileX, layoutX,
+                gmTileNextA, gmTileNextB,
+                actualShape, nextActualShape, isFirstBlock, hasNextBlock, singleIdx
+            );
+            arch::CrossCoreSetFlagWithReverse<0x2, PIPE_FIX>(flagAicFinishStore);
+            AscendC::SetFlag<AscendC::HardEvent::FIX_M>((int32_t)singleIdx);
+            singleIdx = (singleIdx + 1) % l0XBlockNum;
         }
         #pragma unroll
-        for(uint32_t i = 0; i < l0CBlockNum; i++){
+        for(uint32_t i = 0; i < l0XBlockNum; i++){
             AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((int32_t)i);
         }
     } 
@@ -360,7 +344,7 @@ public:
         }
         // 后进行后处理过程
         MatmulCoord blockShape = L1TileShape::ToCoord();
-        BlockEpilogue blockEpilogue(resource, blockShape, params.epilogueParams);
+        BlockEpilogue blockEpilogue(resource, blockShape);
         uint32_t M = params.problemShape.m();
         uint32_t N = params.problemShape.n();
         uint32_t K = params.problemShape.k();
@@ -373,34 +357,27 @@ public:
         uint32_t aicoreIndex = aivIndex / aivNum;
         AscendC::GlobalTensor<ElementX> gmX; // fp32
         gmX.SetGlobalBuffer((__gm__ ElementX*)params.gmWorkspace);
+        AscendC::GlobalTensor<ElementC> gmC;
+        gmC.SetGlobalBuffer((__gm__ ElementC*)params.ptrC);
+        AscendC::GlobalTensor<ElementD> gmD;
+        gmD.SetGlobalBuffer((__gm__ ElementD*)params.ptrD);
         for(uint32_t loopIdx = aicoreIndex; loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()){
             uint32_t MGmBlockIdx = loopIdx / NLoops;
             uint32_t NGmBlockIdx = loopIdx % NLoops;
             uint32_t MGmActual = (MGmBlockIdx == MLoops - 1) ? (M - MGmBlockIdx * maxMPerBlock) : maxMPerBlock;
             uint32_t NGmActual = (NGmBlockIdx == NLoops - 1) ? (N - NGmBlockIdx * maxNPerBlock) : maxNPerBlock;
             MatmulCoord actualShape{MGmActual, NGmActual, K};
-            // arch::CrossCoreWaitFlagWithReverse<0x2, PIPE_MTE3>(flagAicFinishStore);
-            if constexpr (RowOrColumn){
-                layout::RowMajor layoutX(params.problemShape.m(), params.problemShape.n());
-                uint32_t offsetX = MGmBlockIdx * layoutX.stride(0) * maxMPerBlock  + NGmBlockIdx * maxNPerBlock;
-                blockEpilogue( // 传入偏移量
-                    offsetX, // offsetC
-                    offsetX, // offsetD
-                    gmX[offsetX],
-                    layoutX,
-                    actualShape
-                );
-            }else{ // 列优先
-                layout::ColumnMajor layoutX(params.problemShape.m(), params.problemShape.n());
-                uint32_t offsetX = MGmBlockIdx * maxMPerBlock + NGmBlockIdx * maxNPerBlock * layoutX.stride(1);
-                blockEpilogue(
-                    offsetX,
-                    offsetX,
-                    gmX[offsetX],
-                    layoutX,
-                    actualShape
-                );
-            }
+            LayoutX layoutX(params.problemShape.m(), params.problemShape.n());
+            arch::CrossCoreWaitFlagWithReverse<0x2, PIPE_MTE3>(flagAicFinishStore); // 没这个变量
+            MatrixCoord gmTileOffset{MGmBlockIdx * maxMPerBlock, NGmBlockIdx * maxNPerBlock}; // gm中的偏移量
+            auto offsetX = layoutX.GetOffset(gmTileOffset);
+            blockEpilogue( // 传入偏移量
+                params.alpha, params.beta,
+                gmC[offsetX], layoutX,
+                gmD[offsetX], layoutX,
+                gmX[offsetX], layoutX,
+                actualShape
+            );
         }
     }
 private:
