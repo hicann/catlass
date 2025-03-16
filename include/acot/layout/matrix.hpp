@@ -895,6 +895,170 @@ private:
     Stride stride_;
 };
 
+
+struct nN
+ {
+ public:
+     /// Logical rank of tensor
+     static constexpr int RANK = 4;
+
+     /// Index type used for coordinates
+     using Index = uint32_t;
+
+     /// Long index type used for offsets
+     using LongIndex = int64_t;
+
+     /// Logical rank of orgshape
+     static constexpr int ORG_SHAPE_RANK = 2;
+
+     /// Logical coordinate
+     using OrgShape = Coord<ORG_SHAPE_RANK, Index>;
+
+     /// Logical coordinate
+     using Shape = Coord<RANK, Index>;
+
+     /// Stride vector
+     using Stride = Coord<RANK, LongIndex>;
+
+ public:
+     // Methods
+
+     /// Constructor
+     ACOT_HOST_DEVICE
+     nN(Index orgRows = 0, /// Number of rows of origin matrices
+     Index orgCols = 0, /// Number of cols of origin matrices
+
+     Index rowsInFractal = 0, /// Number of rows inside the fractal
+     Index rowsByFractal = 0, /// number of rows by the fractal
+     Index colsInFractal = 0, /// number of cols inside the fractal
+     Index colsByFractal = 0, /// number of cols by the fractal
+
+     LongIndex strideRowsInFractal = 0, /// number of elements between adjacent rows inside the fractal
+     LongIndex strideRowsByFractal = 0, /// number of elements between adjacent fractal rows
+     LongIndex strideColsInFractal = 0, /// number of elements between adjacent cols inside the fractal
+     LongIndex strideColsByFractal = 0) /// number of elements between adjacent fractal cols
+         : orgShape_(MakeCoord(orgRows, orgCols)),
+         shape_(MakeCoord(rowsInFractal, rowsByFractal, colsInFractal, colsByFractal)),
+         stride_(MakeCoord(strideRowsInFractal, strideRowsByFractal, strideColsInFractal, strideColsByFractal))
+     {
+     }
+
+     /// Ctor
+     ACOT_HOST_DEVICE
+     nN(OrgShape orgShape, Shape shape, Stride stride) : orgShape_(orgShape), shape_(shape), stride_(stride) {}
+
+     /// Make the layout of a coordinate (row, column)
+     // 主要是关注这里，nN的分形内结构和分形间结构，这些都是固定的
+     template <class Element>
+     ACOT_HOST_DEVICE static nN MakeLayout(Index orgRows, Index orgCols)
+     {
+         static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+         static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
+         Index rowsRound = RoundUp<ELE_NUM_PER_C0>(orgRows);     // 行方向对齐32B/sizeof(element)
+         Index colsRound = RoundUp<C0_NUM_PER_FRACTAL>(orgCols); // 列方向对齐16
+         return nN(orgRows,
+                 orgCols,
+
+                 ELE_NUM_PER_C0,                 // 分形内行数，32B/sizeof(element)
+                 rowsRound / ELE_NUM_PER_C0,     // 分形间行方向的分形数
+                 C0_NUM_PER_FRACTAL,             // 分形内列数，16
+                 colsRound / C0_NUM_PER_FRACTAL, // 分形间列方向的分形数
+
+                 1,                               // 分形内的行步长，因为分形内是列优先，所以是1
+                 ELE_NUM_PER_FRACTAL,             // 分形间的行步长，就是一个分形的元素数
+                 ELE_NUM_PER_C0,                  // 分形内的列步长
+                 rowsRound * C0_NUM_PER_FRACTAL); // 分形间的列步长，列方向上相邻两个分形的起始地址之间的距离，就是分形数乘以nN矩阵的列数
+     }
+
+     /// Returns the offset of a coordinate in linear memory.
+     /// Assumes coordinate has convention (row, column) 这里的算法, nN 和zZ 应该是一样的
+     ACOT_HOST_DEVICE
+     LongIndex GetOffset(MatrixCoord const &coord) const
+     {
+         return LongIndex(coord.row()) / shape_[0] * stride_[1] + LongIndex(coord.column()) / shape_[2] * stride_[3];
+     }
+
+     /// Returns the origin shape of the layout
+     ACOT_HOST_DEVICE
+     typename OrgShape::Index orgShape(int idx) const
+     {
+         return orgShape_[idx];
+     }
+
+     /// Returns the origin shape of the layout
+     ACOT_HOST_DEVICE
+     typename OrgShape::Index &orgShape(int idx)
+     {
+         return orgShape_[idx];
+     }
+
+     /// Returns the shape of the layout
+     ACOT_HOST_DEVICE
+     Shape shape() const
+     {
+         return shape_;
+     }
+
+     /// Returns the shape of the layout
+     ACOT_HOST_DEVICE
+     Shape &shape()
+     {
+         return shape_;
+     }
+
+     /// Returns the shape of the layout
+     ACOT_HOST_DEVICE
+     typename Shape::Index shape(int idx) const
+     {
+         return shape_[idx];
+     }
+
+     /// Returns the shape of the layout
+     ACOT_HOST_DEVICE
+     typename Shape::Index &shape(int idx)
+     {
+         return shape_[idx];
+     }
+
+     /// Returns the stride of the layout
+     ACOT_HOST_DEVICE
+     Stride stride() const
+     {
+         return stride_;
+     }
+
+     /// Returns the stride of the layout
+     ACOT_HOST_DEVICE
+     Stride &stride()
+     {
+         return stride_;
+     }
+
+     /// Returns the stride of the layout
+     ACOT_HOST_DEVICE
+     typename Stride::Index stride(int idx) const
+     {
+         return stride_[idx];
+     }
+
+     /// Returns the stride of the layout
+     ACOT_HOST_DEVICE
+     typename Stride::Index &stride(int idx)
+     {
+         return stride_[idx];
+     }
+
+ private:
+     /// Origin Shape data member
+     OrgShape orgShape_;
+
+     /// Shape data member
+     Shape shape_;
+
+     /// Stride data member
+     Stride stride_;
+ };
+
 /// Mapping function for padding columnmajor matrices
 /// A special data layout designed to improve the efficiency of matrix operations in non-512B aligned scenarios.
 /// This layout is column-major within blocks and also column-major between blocks.

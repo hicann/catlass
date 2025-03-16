@@ -39,6 +39,31 @@ void ComputeMatmul(
     }
 }
 
+// simple gemm
+template<typename Element, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC, class ElementGolden, class LayoutGolden>
+void ComputeGemm(
+    const MatmulCoord &problemShape,
+    Element alpha, Element beta,
+    const std::vector<ElementA> &dataA, const LayoutA &layoutA,
+    const std::vector<ElementB> &dataB, const LayoutB &layoutB,
+    const std::vector<ElementC> &dataC, const LayoutC &layoutC,
+    std::vector<ElementGolden> &dataGolden, const LayoutGolden &layoutGolden
+)
+{
+    for (uint32_t i = 0; i < problemShape.m(); ++i) {
+        for (uint32_t j = 0; j < problemShape.n(); ++j) {
+            size_t offsetGolden = layoutGolden.GetOffset(MakeCoord(i, j));
+            ElementGolden accumulator = 0;
+            for (uint32_t k = 0; k < problemShape.k(); ++k) {
+                size_t offsetA = layoutA.GetOffset(MakeCoord(i, k));
+                size_t offsetB = layoutB.GetOffset(MakeCoord(k, j));
+                accumulator += static_cast<ElementGolden>(alpha) * static_cast<ElementGolden>(dataA[offsetA]) * static_cast<ElementGolden>(dataB[offsetB]);
+            }
+            dataGolden[offsetGolden] = static_cast<ElementGolden>(beta) * static_cast<ElementGolden>(dataC[offsetGolden]) + static_cast<ElementGolden>(accumulator);
+        }
+    }
+}
+
 // simple batched matmul
 template<class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementGolden, class LayoutGolden>
 void ComputeBatchedMatmul(
