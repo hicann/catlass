@@ -151,7 +151,6 @@
         matrixCopyGmToUb(UbATensorList[UbInListId], gmA, layoutAInUb, layoutTileA);
         AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((event_t)(UbInAEventList[UbInListId]));
          // main loop
-        //N维度上切分
         uint32_t Nloop = CeilDiv(actualShape.n(),TileNRound);
         for(uint32_t LoopIdx = 0;LoopIdx < Nloop; LoopIdx++){
             
@@ -210,8 +209,7 @@
         AscendC::SetFlag<AscendC::HardEvent::V_MTE3>((event_t)(UbOutEventList[UbOutListId]));
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>((event_t)(UbOutEventList[UbOutListId]));
         //把结果传回gm
-        bool is_atoadd = std::is_same_v<LayoutA, acot::layout::ColumnMajor>;
-        vecCopyUbToGm(gmY, UbYTensorList[UbOutListId],y_actual,is_atoadd);
+        vecCopyUbToGm(gmY, UbYTensorList[UbOutListId],y_actual);
         AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>((event_t)(UbOutEventList[UbOutListId]));
         UbOutListId = (UbOutListId + 1 < STAGES) ? (UbOutListId + 1) : 0;
      }

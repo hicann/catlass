@@ -39,7 +39,7 @@
              typename gemv::helper::ElementAccumulatorSelector<ElementA, ElementX>::ElementAccumulator;
  
          using VecCopyGmToUb = gemv::tile::VecCopyGmToUB<ArchTag, ElementX>;
-         using VecCopyUbToGm = gemv::tile::VecCopyUBToGm<ArchTag, ElementY>;
+         using VecCopyUbToGm = gemv::tile::VecCopyUBToGm<ArchTag, YType>;
          using MatrixCopyGmToUb = gemv::tile::MatrixCopyGmToUB<ArchTag, AType>;
      };
  

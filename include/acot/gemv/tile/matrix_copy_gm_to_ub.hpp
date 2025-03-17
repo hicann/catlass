@@ -28,7 +28,6 @@
          static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy gm to UB, can not find the specialization.");
      };
  
-     /// Partial specialization for AtlasA2, RowMajor in and zN out.
      template <class Element>
      struct MatrixCopyGmToUB<arch::AtlasA2, gemv::GemvType<Element, layout::RowMajor>>
      {
@@ -117,8 +116,7 @@
      };
  
      /// Partial specialization for AtlasA2, ColumnMajor in and nZ out.
-     template <
-         class Element>
+     template <class Element>
      struct MatrixCopyGmToUB<arch::AtlasA2, gemv::GemvType<Element, layout::ColumnMajor>>
      {
          using LayoutDst = layout::ColumnMajor;

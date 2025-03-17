@@ -112,11 +112,8 @@
          gmY.SetGlobalBuffer((__gm__ ElementY *)params.ptrY);
          AscendC::GlobalTensor<ElementY> gmY_read;
          gmY_read.SetGlobalBuffer((__gm__ ElementY *)params.ptrY_read);
-        // uint32_t aiv_num = AscendC::GetBlockNum();
          uint32_t aiv_num = AscendC::GetBlockNum()*AscendC::GetTaskRation();
          for(uint32_t loop_id = 0;loop_id < loopnum;loop_id++){
-            // uint32_t aiv_id = AscendC::GetBlockIdx()/2+AscendC::GetSubBlockIdx();
-            // uint32_t aiv_num = AscendC::GetBlockNum()/2 * AscendC::GetSubBlockNum();
             uint32_t aiv_id = AscendC::GetBlockIdx();   //0-39
             if(loop_id % aiv_num != aiv_id)continue;
             uint32_t m_actual = ((int32_t)loop_id > (int32_t)(loopnum - params.SPLIT - 1) ) ? params.problemShape.m() - ((loop_id/params.SPLIT) * maxmPerBlock_round) : maxmPerBlock_round;
@@ -148,7 +145,6 @@
                 actualBlockShape,
                 params.alpha,
                 realbeta
-                // params.beta
             );
 
         }

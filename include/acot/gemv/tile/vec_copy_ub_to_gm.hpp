@@ -14,52 +14,84 @@
  #include "acot/acot.hpp"
  #include "acot/layout/layout.hpp"
  #include "acot/gemv/gemv_type.hpp"
-
  
- namespace acot::gemv::tile {
+ namespace acot::gemv::tile
+ {
  
- template <
-     class ArchTag,
-     /// MatmulType for matrix operand
-     typename Element
- >
- struct VecCopyUBToGm {
+     template <
+         class ArchTag,
+         class GmType>
+     struct VecCopyUBToGm
+     {
+         static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy UB to gm, can not find the specialization.");
+     };
  
-     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);      //32B,一个block的大小
+     template <class Element>
+     struct VecCopyUBToGm<arch::AtlasA2, gemv::GemvType<Element, layout::RowMajor>>
+     {
  
-     // Mehtods
+         static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element); // 32B,一个block的大小
  
-     ACOT_DEVICE
-     VecCopyUBToGm() {};
+         // Mehtods
  
-     ACOT_DEVICE
-     void operator()(
-        AscendC::GlobalTensor<Element> dstTensor,
-        AscendC::LocalTensor<Element> srcTensor,
-        uint32_t len,
-        bool is_atoadd
-    ) {
-        if(is_atoadd){
-            AscendC::SetAtomicAdd<Element>();
-        }
-        AscendC::DataCopyExtParams params;
-        params.blockCount = 1;
-        params.blockLen = len * sizeof(Element);
-        params.srcStride = 0;
-        params.dstStride = 0;
-        params.rsv = 0;
-        AscendC::DataCopyPad(
-            dstTensor,
-            srcTensor,
-            params
-            // Padparams
-        );
-        if(is_atoadd){
-            AscendC::SetAtomicNone();
-        }
-        
-    }
- };
+         ACOT_DEVICE
+         VecCopyUBToGm() {};
+ 
+         ACOT_DEVICE
+         void operator()(
+             AscendC::GlobalTensor<Element> dstTensor,
+             AscendC::LocalTensor<Element> srcTensor,
+             uint32_t len)
+         {
+             AscendC::DataCopyExtParams params;
+             params.blockCount = 1;
+             params.blockLen = len * sizeof(Element);
+             params.srcStride = 0;
+             params.dstStride = 0;
+             params.rsv = 0;
+             AscendC::DataCopyPad(
+                 dstTensor,
+                 srcTensor,
+                 params
+                 // Padparams
+             );
+         }
+     };
+ 
+     template <class Element>
+     struct VecCopyUBToGm<arch::AtlasA2, gemv::GemvType<Element, layout::ColumnMajor>>
+     {
+ 
+         static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element); // 32B,一个block的大小
+ 
+         // Mehtods
+ 
+         ACOT_DEVICE
+         VecCopyUBToGm() {};
+ 
+         ACOT_DEVICE
+         void operator()(
+             AscendC::GlobalTensor<Element> dstTensor,
+             AscendC::LocalTensor<Element> srcTensor,
+             uint32_t len)
+         {
+             AscendC::SetAtomicAdd<Element>();
+             AscendC::DataCopyExtParams params;
+             params.blockCount = 1;
+             params.blockLen = len * sizeof(Element);
+             params.srcStride = 0;
+             params.dstStride = 0;
+             params.rsv = 0;
+             AscendC::DataCopyPad(
+                 dstTensor,
+                 srcTensor,
+                 params
+                 // Padparams
+             );
+             AscendC::SetAtomicNone();
+         }
+     };
+ 
  } // namespace acot::matmul::tile
  
  #endif // ACOT_MATMUL_TILE_COPY_GM_TO_L1_HPP
