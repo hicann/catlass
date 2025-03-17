@@ -8,7 +8,8 @@
 
 set(ACOT_EXAMPLES_COMMON_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/common)
 set(CCEC_COMPILER_OPTIONS
-    -O2 -std=c++17 -xcce --cce-aicore-arch=dav-c220
+    -O2 -std=c++17 -xcce --cce-aicore-arch=dav-c220-vec
+    # -O2 -std=c++17 -xcce --cce-aicore-arch=dav-c220
     -mllvm -cce-aicore-stack-size=0x8000
     -mllvm -cce-aicore-function-stack-size=0x8000
     -mllvm -cce-aicore-record-overflow=true
@@ -52,6 +53,8 @@ foreach(EXAMPLE
     01_grouped_matmul
     02_optimized_matmul
     03_gemm
+    # 04_groupgemm
+    05_gemv_aiv
 )
     add_subdirectory(${EXAMPLE})
 endforeach()

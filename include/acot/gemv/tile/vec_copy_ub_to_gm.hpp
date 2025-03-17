@@ -1,0 +1,66 @@
+/*
+ * Copyright (c) 2024 Huawei Technologies Co., Ltd.
+ * This file is a part of the CANN Open Software.
+ * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
+ */
+
+ #ifndef ACOT_GEMV_TILE_VEC_COPY_UB_TO_GM_HPP
+ #define ACOT_GEMV_TILE_VEC_COPY_UB_TO_GM_HPP
+ 
+ #include "acot/acot.hpp"
+ #include "acot/layout/layout.hpp"
+ #include "acot/gemv/gemv_type.hpp"
+
+ 
+ namespace acot::gemv::tile {
+ 
+ template <
+     class ArchTag,
+     /// MatmulType for matrix operand
+     typename Element
+ >
+ struct VecCopyUBToGm {
+ 
+     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);      //32B,一个block的大小
+ 
+     // Mehtods
+ 
+     ACOT_DEVICE
+     VecCopyUBToGm() {};
+ 
+     ACOT_DEVICE
+     void operator()(
+        AscendC::GlobalTensor<Element> dstTensor,
+        AscendC::LocalTensor<Element> srcTensor,
+        uint32_t len,
+        bool is_atoadd
+    ) {
+        if(is_atoadd){
+            AscendC::SetAtomicAdd<Element>();
+        }
+        AscendC::DataCopyExtParams params;
+        params.blockCount = 1;
+        params.blockLen = len * sizeof(Element);
+        params.srcStride = 0;
+        params.dstStride = 0;
+        params.rsv = 0;
+        AscendC::DataCopyPad(
+            dstTensor,
+            srcTensor,
+            params
+            // Padparams
+        );
+        if(is_atoadd){
+            AscendC::SetAtomicNone();
+        }
+        
+    }
+ };
+ } // namespace acot::matmul::tile
+ 
+ #endif // ACOT_MATMUL_TILE_COPY_GM_TO_L1_HPP
+ 

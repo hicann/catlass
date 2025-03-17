@@ -1,0 +1,160 @@
+/*
+ * Copyright (c) 2024 Huawei Technologies Co., Ltd.
+ * This file is a part of the CANN Open Software.
+ * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
+ */
+
+ #ifndef ACOT_GEMV_KERNEL_GEMV_HPP
+ #define ACOT_GEMV_KERNEL_GEMV_HPP
+ #include "acot/acot.hpp"
+ #include "acot/arch/resource.hpp"
+ #include "acot/coord.hpp"
+ #include "acot/matrix_coord.hpp"
+ #include "acot/gemv_coord.hpp"
+
+ namespace acot::gemv::kernel {
+ 
+ // Template for Gemv kernel. Compute Y = αA * x + βY
+ template <
+     class BlockGemv_,
+     class BlockEpilogue_
+ >
+ class KernelGemv {
+ public:
+     using BlockGemv = BlockGemv_;
+     using ArchTag = typename BlockGemv::ArchTag;
+     using UBTileShape = typename BlockGemv::UBTileShape;
+     using ElementA = typename BlockGemv::ElementA;
+     using LayoutA = typename BlockGemv::LayoutA;
+     using ElementX = typename BlockGemv::ElementX;
+     using ElementY = typename BlockGemv::ElementY;
+     using ElementAccumulator = typename BlockGemv::ElementAccumulator;
+ 
+ 
+     /// Parameters structure
+     struct Params {
+         // Data members
+         GemvCoord problemShape;
+         GM_ADDR ptrA;
+         LayoutA layoutA;
+         GM_ADDR ptrX;
+         GM_ADDR ptrY;
+         GM_ADDR ptrY_read;
+         float alpha;
+         float beta;
+         uint32_t SPLIT;
+ 
+         // Methods
+         ACOT_DEVICE
+         Params() {}
+ 
+         ACOT_DEVICE
+         Params(GemvCoord const &problemShape_,  GM_ADDR ptrA_, LayoutA layoutA_,  GM_ADDR ptrX_,
+            GM_ADDR ptrY_,GM_ADDR ptrY_read_,float alpha_,float beta_,uint32_t SPLIT_)
+             : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrX(ptrX_),
+               ptrY(ptrY_),ptrY_read(ptrY_read_),alpha(alpha_),beta(beta_),SPLIT(SPLIT_) {}
+     };
+
+     
+     // Methods
+     ACOT_DEVICE
+     KernelGemv(){
+     }
+
+     template <int32_t CORE_TYPE = g_coreType>
+     ACOT_DEVICE
+     void operator()(Params const &params){
+     };
+ 
+     /// Executes one Matmul
+     template <>
+     ACOT_DEVICE
+     void operator()<AscendC::AIC>(Params const &params) {
+     }
+ 
+     template <>
+     ACOT_DEVICE
+     void operator()<AscendC::AIV>(Params const &params) {
+        AscendC::SetAtomicNone();
+        arch::Resource<ArchTag> resource;
+        BlockGemv blockGemv(resource);
+         uint32_t align = BYTE_PER_C0 / sizeof(ElementA);
+         uint32_t maxmPerBlock_round = RoundUp(UBTileShape::M,align);
+         uint32_t maxnPerBlock_round = RoundUp(UBTileShape::N,align);
+
+        //增加split k
+         uint32_t N_Split = RoundDown(params.problemShape.n(),params.SPLIT)/params.SPLIT;
+         uint32_t Mloopnum = CeilDiv(params.problemShape.m(),maxmPerBlock_round);
+         //因为下面有减法，防止出现负数，所以改成有符号整形
+         int32_t loopnum;
+        float Realbeta= params.beta;
+         if constexpr (std::is_same_v<LayoutA, acot::layout::ColumnMajor>){
+            loopnum = Mloopnum * params.SPLIT;
+            Realbeta = params.beta - 1.0f;
+         }else{
+            loopnum = Mloopnum;
+         }
+         
+         uint32_t offset_matrix;
+         uint32_t offset_vector_out;
+         uint32_t offset_vector_in = 0;
+
+         // Represent the full gm
+         AscendC::GlobalTensor<ElementA> gmA;
+         gmA.SetGlobalBuffer((__gm__ ElementA *)params.ptrA);
+         AscendC::GlobalTensor<ElementX> gmX;
+         gmX.SetGlobalBuffer((__gm__ ElementX *)params.ptrX);
+         AscendC::GlobalTensor<ElementY> gmY;
+         gmY.SetGlobalBuffer((__gm__ ElementY *)params.ptrY);
+         AscendC::GlobalTensor<ElementY> gmY_read;
+         gmY_read.SetGlobalBuffer((__gm__ ElementY *)params.ptrY_read);
+        // uint32_t aiv_num = AscendC::GetBlockNum();
+         uint32_t aiv_num = AscendC::GetBlockNum()*AscendC::GetTaskRation();
+         for(uint32_t loop_id = 0;loop_id < loopnum;loop_id++){
+            // uint32_t aiv_id = AscendC::GetBlockIdx()/2+AscendC::GetSubBlockIdx();
+            // uint32_t aiv_num = AscendC::GetBlockNum()/2 * AscendC::GetSubBlockNum();
+            uint32_t aiv_id = AscendC::GetBlockIdx();   //0-39
+            if(loop_id % aiv_num != aiv_id)continue;
+            uint32_t m_actual = ((int32_t)loop_id > (int32_t)(loopnum - params.SPLIT - 1) ) ? params.problemShape.m() - ((loop_id/params.SPLIT) * maxmPerBlock_round) : maxmPerBlock_round;
+            uint32_t n_actual = params.problemShape.n();
+
+            if constexpr (std::is_same_v<LayoutA, acot::layout::ColumnMajor>) {
+                offset_matrix = (loop_id % params.SPLIT) * N_Split*params.problemShape.m()+(loop_id/params.SPLIT) * maxmPerBlock_round;
+                offset_vector_out = (loop_id/params.SPLIT) * maxmPerBlock_round;
+                offset_vector_in = (loop_id % params.SPLIT) * N_Split; // 执行原子加每行内的偏移值
+                //计算n方向上的分块长度
+                if((loop_id%params.SPLIT) == params.SPLIT - 1){
+                    n_actual = params.problemShape.n() - N_Split * (params.SPLIT - 1);
+                }
+                else{
+                    n_actual = N_Split;
+                }
+            } else {
+                offset_matrix = loop_id * maxmPerBlock_round * params.problemShape.n();
+                offset_vector_out = loop_id * maxmPerBlock_round;
+            }
+            GemvCoord actualBlockShape = GemvCoord{m_actual,n_actual};
+            
+            float realbeta = (loop_id % params.SPLIT == 0) ? Realbeta:0.0f;
+
+            blockGemv(gmA[offset_matrix], params.layoutA,
+                gmX[offset_vector_in], 
+                gmY[offset_vector_out], 
+                gmY_read[offset_vector_out],
+                actualBlockShape,
+                params.alpha,
+                realbeta
+                // params.beta
+            );
+
+        }
+     }
+ };
+ 
+ } 
+ 
+ #endif // ACOT_GEMV_KERNEL_GEMV_HPP

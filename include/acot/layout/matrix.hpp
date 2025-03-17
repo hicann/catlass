@@ -15,7 +15,7 @@
 #include "acot/coord.hpp"
 #include "acot/detail/alignment.hpp"
 #include "acot/matrix_coord.hpp"
-
+#include "acot/gemv_coord.hpp"
 namespace acot::layout {
 
 /// Mapping function for row-major matrices

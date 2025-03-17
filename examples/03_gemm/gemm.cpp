@@ -48,13 +48,13 @@ void Gemm(
     constexpr bool enableShuffleK = true;
     using GemmBlockDispatchPolicy = matmul::MmadAtlasA2Preload<enableUnitFlag, enableShuffleK>;
     using EpilogueBlockDispatchPolicy = epilogue::EpilogueAtlasA2ElemWiseOneSource;
-    using AType = matmul::MatmulType<half, LayoutA>;
-    using BType = matmul::MatmulType<half, LayoutB>;
-    using CType = matmul::MatmulType<half, LayoutC>;
-    using XType = matmul::MatmulType<half, LayoutC>;
-    using L1TileShape = MatmulShape<128, 256, 256>;
-    using L0TileShape = MatmulShape<128, 256, 64>;
-    using TileShapeCast = MatrixShape<64, 256>;
+    using AType = matmul::MatmulType<float, LayoutA>;
+    using BType = matmul::MatmulType<float, LayoutB>;
+    using CType = matmul::MatmulType<float, LayoutC>;
+    using XType = matmul::MatmulType<float, LayoutC>;
+    using L1TileShape = MatmulShape<128, 128, 128>;
+    using L0TileShape = MatmulShape<128, 128, 64>;
+    using TileShapeCast = MatrixShape<64, 128>;
     using GemmBlock = gemm::block::BlockGemm<GemmBlockDispatchPolicy, L1TileShape, L0TileShape, AType, BType, XType>;
     using DType = CType;
     using ComputeType = XType;
@@ -155,12 +155,12 @@ void Run(Options options){
     size_t lenX = lenC; 
     size_t scalarLen = 1;
     
-    size_t sizeA = lenA * sizeof(half);
-    size_t sizeB = lenB * sizeof(half);
-    size_t sizeC = lenC * sizeof(half);
-    size_t sizeX = lenX * sizeof(half);
+    size_t sizeA = lenA * sizeof(float);
+    size_t sizeB = lenB * sizeof(float);
+    size_t sizeC = lenC * sizeof(float);
+    size_t sizeX = lenX * sizeof(float);
 
-    const uint32_t align = 256;
+    const uint32_t align = 128;
     using LayoutA = layout::RowMajor;
     using LayoutB = layout::RowMajor;
     using LayoutC = layout::RowMajor;
@@ -169,43 +169,43 @@ void Run(Options options){
     LayoutC layoutC{m, n};
     LayoutA layoutWA = GetWorkspaceLayout(layoutA, align);
     LayoutB layoutWB = GetWorkspaceLayout(layoutB, align);
-    size_t sizeWA = GetWorkspaceLen(layoutWA) * sizeof(half);
-    size_t sizeWB = GetWorkspaceLen(layoutWB) * sizeof(half);
+    size_t sizeWA = GetWorkspaceLen(layoutWA) * sizeof(float);
+    size_t sizeWB = GetWorkspaceLen(layoutWB) * sizeof(float);
 
     size_t scalarSize = scalarLen * sizeof(ScalarType);
     std::vector<ScalarType> hostAlpha(scalarLen);
     std::vector<ScalarType> hostBeta(scalarLen);
-    golden::FillRandomData(hostAlpha, -5.0f, 5.0f);
-    golden::FillRandomData(hostBeta, -5.0f, 5.0f);
-    std::vector<half> hostA(lenA);
-    std::vector<half> hostB(lenB);
-    std::vector<half> hostC(lenC);
-    golden::FillRandomData(hostA, -5.0f, 5.0f);
-    golden::FillRandomData(hostB, -5.0f, 5.0f);
-    golden::FillRandomData(hostC, -5.0f, 5.0f);
-    half *deviceA{nullptr};
+    golden::FillRandomData(hostAlpha,  -1.0f, 1.0f);
+    golden::FillRandomData(hostBeta,  -1.0f, 1.0f);
+    std::vector<float> hostA(lenA);
+    std::vector<float> hostB(lenB);
+    std::vector<float> hostC(lenC);
+    golden::FillRandomData(hostA,  -1.0f, 1.0f);
+    golden::FillRandomData(hostB,  -1.0f, 1.0f);
+    golden::FillRandomData(hostC,  -1.0f, 1.0f);
+    float *deviceA{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
-    half *deviceWA{nullptr};
+    float *deviceWA{nullptr};
     if (IsSameStride(layoutWA, layoutA)) {
         deviceWA = deviceA;
     } else {
         ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWA), sizeWA, ACL_MEM_MALLOC_HUGE_FIRST));
     }
-    half *deviceB{nullptr};
+    float *deviceB{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
-    half *deviceWB{nullptr};
+    float *deviceWB{nullptr};
     if (IsSameStride(layoutWB, layoutB)) {
         deviceWB = deviceB;
     } else {
         ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWB), sizeWB, ACL_MEM_MALLOC_HUGE_FIRST));
     }
-    half *deviceC{nullptr};
+    float *deviceC{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceC, sizeC, hostC.data(), sizeC, ACL_MEMCPY_HOST_TO_DEVICE));
     
-    half *gmWorkspace{nullptr};
+    float *gmWorkspace{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&gmWorkspace), sizeX, ACL_MEM_MALLOC_HUGE_FIRST));
 
     // Prepare FFTS address
@@ -226,7 +226,7 @@ void Run(Options options){
         (uint8_t*)gmWorkspace);
     ACL_CHECK(aclrtSynchronizeStream(stream));
     
-    std::vector<half> hostRes(lenC);
+    std::vector<float> hostRes(lenC);
     ACL_CHECK(aclrtMemcpy(hostRes.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
     std::vector<float> hostGolden(lenC);
     golden::ComputeGemm(options.problemShape, hostAlpha[0], hostBeta[0], hostA, layoutA, hostB, layoutB, hostC, layoutC, hostGolden, layoutC);

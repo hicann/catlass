@@ -60,6 +60,8 @@ public:
     using LayoutXInL0 = layout::zN;
 
     static constexpr uint32_t STAGES = DispatchPolicy::STAGES; // 开启双缓冲机制的
+    static constexpr bool ENABLE_UNIT_FLAG = DispatchPolicy::ENABLE_UNIT_FLAG;
+    static constexpr bool ENABLE_SHUFFLE_K = DispatchPolicy::ENABLE_SHUFFLE_K;
     const uint32_t L1Size = ArchTag::L1_SIZE;
     const uint32_t L1ASize = L1TileShape::M * L1TileShape::K * sizeof(ElementA);
     const uint32_t L1BSize = L1TileShape::K * L1TileShape::N * sizeof(ElementB);
@@ -120,7 +122,7 @@ public:
         uint32_t maxKPerBlock = L1TileShape::K;
         uint32_t KLoops = CeilDiv(K, maxKPerBlock);
         uint32_t startTileIdx{0};
-        if constexpr(!std::is_same<ElementA, float>::value){ // 特例优化
+        if constexpr(!std::is_same<ElementA, float>::value && ENABLE_SHUFFLE_K){ // 特例优化
             startTileIdx = AscendC::GetBlockIdx(); // shuffleK
         }
         // uint32_t startTileIdx = AscendC::GetBlockIdx();

@@ -133,7 +133,7 @@ struct CopyGmToL1A<acot::arch::AtlasA2, acot::matmul::MatmulType<int8_t, acot::l
     ){
         uint32_t MRound = layoutDst.shape(0) * layoutDst.shape(1);
         uint32_t KActual = layoutSrc.shape(1);
-        uint32_t KRound = layoutDst.shape(0) * layoutDst.shape(1);
+        uint32_t KRound = layoutDst.shape(2) * layoutDst.shape(3);
         uint32_t stride = layoutSrc.stride(1);
         AscendC::Nd2NzParams params;
         params.ndNum = 1;
