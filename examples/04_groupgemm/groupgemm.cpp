@@ -324,7 +324,7 @@ void Run(Options& options){
     RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
     
     // 获得当前核心数
-    printf("11\n");
+    // printf("11\n");
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
     GroupGemm<LayoutA, LayoutB, LayoutC><<<aicCoreNum, nullptr, stream>>>(
         groupCnt,
@@ -338,7 +338,7 @@ void Run(Options& options){
         (uint8_t*)deviceWB, layoutWBListDevice,
         (uint8_t*)gmWorkspace);
     ACL_CHECK(aclrtSynchronizeStream(stream));
-    printf("22\n");
+    // printf("22\n");
     std::vector<float> hostRes(allMNCnt);
     ACL_CHECK(aclrtMemcpy(hostRes.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
     std::vector<float> hostGolden(allMNCnt);

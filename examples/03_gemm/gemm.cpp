@@ -231,7 +231,7 @@ void Run(Options options){
     std::vector<float> hostGolden(lenC);
     golden::ComputeGemm(options.problemShape, hostAlpha[0], hostBeta[0], hostA, layoutA, hostB, layoutB, hostC, layoutC, hostGolden, layoutC);
 
-    std::vector<uint64_t> errorIndices = golden::CompareData(hostRes, hostGolden, m * n * k);
+    std::vector<uint64_t> errorIndices = golden::CompareData(hostRes, hostGolden, m * n);
     if (errorIndices.empty()) {
         std::cout << "Compare success." << std::endl;
     } else {
