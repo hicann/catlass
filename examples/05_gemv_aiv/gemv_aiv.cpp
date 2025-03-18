@@ -11,6 +11,10 @@
 #include "acot/gemv/block/block_gemv.hpp"
 #include "acot/matmul/matmul_type.hpp"
 #include "acot/layout/layout.hpp"
+#include "acot/gemv/tile/tile_copy.hpp"
+#include "acot/gemv/tile/tile_vmad.hpp"
+#include "acot/gemv/tile/tile_vmuls.hpp"
+
 using namespace acot;
 using UBTileShape = GemvShape<32,512>;
 using ScalarType = float;
@@ -32,9 +36,13 @@ void GemvAiv(
     using AType = matmul::MatmulType<float, layout::RowMajor>;
     using XType = matmul::MatmulType<float, layout::RowMajor>;
     using YType = matmul::MatmulType<float, layout::RowMajor>;
+    using BiasType = void;
+    using TileCopy = gemv::tile::TileCopy<typename DispatchPolicy::ArchTag, AType, XType, YType, BiasType>;
+    using TileVmad = gemv::tile::TileVmad<typename DispatchPolicy::ArchTag, AType, XType, YType, BiasType>;
+    using TileVmuls = gemv::tile::TileVmuls<typename DispatchPolicy::ArchTag, typename AType::Element>;
 
     // 调用block层函数
-    using GemvBlock = gemv::block::BlockGemv<DispatchPolicy, UBTileShape, AType, XType, YType>;
+    using GemvBlock = gemv::block::BlockGemv<DispatchPolicy, UBTileShape, AType, XType, YType,BiasType,TileCopy,TileVmad,TileVmuls>;
     using BlockEpilogue = void;
 
     // kernel level
@@ -44,7 +52,6 @@ void GemvAiv(
     GemvKernel gemv;
     
     gemv(params);
-
 }
 
 typedef struct Options{

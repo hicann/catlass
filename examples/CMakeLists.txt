@@ -55,6 +55,7 @@ foreach(EXAMPLE
     03_gemm
     04_groupgemm
     05_gemv_aiv
+    06_gemv_aic
 )
     add_subdirectory(${EXAMPLE})
 endforeach()

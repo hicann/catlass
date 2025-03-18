@@ -15,29 +15,37 @@
 
 #include "acot/matmul_coord.hpp"
 
-namespace acot::golden {
-
-template<class ElementResult, class ElementCompare>
-std::vector<uint64_t> CompareData(const std::vector<ElementResult>& result, const std::vector<ElementCompare>& expect,
-    uint32_t computeNum)
+namespace acot::golden
 {
-    const uint32_t computeNumThreshold = 2048;
-    const float rtolGeneral = 1.0f / 256;
-    const float rtolOverThreshold = 1.0f / 128;
 
-    float rtol = computeNum < computeNumThreshold ? rtolGeneral : rtolOverThreshold;
-    std::vector<uint64_t> errorIndices;
-    for (uint64_t i = 0; i < result.size(); ++i) {
-        ElementCompare actualValue = static_cast<ElementCompare>(result[i]);
-        ElementCompare expectValue = expect[i];
-        ElementCompare diff = std::fabs(actualValue - expectValue);
-        if (diff > rtol * std::max(1.0f, std::fabs(expectValue))) {
-            errorIndices.push_back(i);
+    template <class ElementResult, class ElementCompare>
+    std::vector<uint64_t> CompareData(const std::vector<ElementResult> &result, const std::vector<ElementCompare> &expect,
+                                      uint32_t computeNum)
+    {
+        const uint32_t computeNumThreshold = 2048;
+        const float rtolGeneral = 1.0f / 256;
+        const float rtolOverThreshold = 1.0f / 128;
+
+        float rtol = computeNum < computeNumThreshold ? rtolGeneral : rtolOverThreshold;
+        std::vector<uint64_t> errorIndices;
+        for (uint64_t i = 0; i < result.size(); ++i)
+        {
+            ElementCompare actualValue = static_cast<ElementCompare>(result[i]);
+            ElementCompare expectValue = expect[i];
+
+            // // 打印出来
+            // std::cout << "id:" << i << " ";
+            // std::cout << "res:" << actualValue << "    " << "golden:" << expectValue << std::endl;
+
+            ElementCompare diff = std::fabs(actualValue - expectValue);
+            if (diff > rtol * std::max(1.0f, std::fabs(expectValue)))
+            {
+                errorIndices.push_back(i);
+            }
         }
+        return errorIndices;
     }
-    return errorIndices;
-}
 
-}  // namespace acot::golden
+} // namespace acot::golden
 
-#endif  // EXAMPLES_COMMON_GOLDEN_COMPARE_DATA_HPP
+#endif // EXAMPLES_COMMON_GOLDEN_COMPARE_DATA_HPP

@@ -17,7 +17,8 @@
  #include "acot/gemv_coord.hpp"
  #include "acot/gemv/helper.hpp"
  #include "acot/detail/alignment.hpp"
-  #include "acot/matmul/dispatch_policy.hpp"
+ #include "acot/matmul/dispatch_policy.hpp"
+
  namespace acot::gemv::block {
  template <
      bool ENABLE_UNIT_FLAG_,

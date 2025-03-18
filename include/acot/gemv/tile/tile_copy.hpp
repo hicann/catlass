@@ -8,42 +8,52 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
- #ifndef ACOT_GEMV_TILE_TILE_COPY_HPP
- #define ACOT_GEMV_TILE_TILE_COPY_HPP
- 
- #include "acot/gemv/tile/vec_copy_gm_to_ub.hpp"
- #include "acot/gemv/tile/vec_copy_ub_to_gm.hpp"
- #include "acot/gemv/tile/matrix_copy_gm_to_ub.hpp"
- #include "acot/gemv/helper.hpp"
- 
- namespace acot::gemv::tile
- {
- 
-     template <
-         /// Tag indicating architecture
-         class ArchTag,
-         /// MatmulType for A matrix operand
-         class AType,
-         /// MatmulType type for B matrix operand
-         class XType,
-         /// MatmulType type for C matrix operand
-         class YType,
-         /// MatmulTpe type for Bias operand
-         class BiasType = void>
-     struct TileCopy
-     {
-         using ElementA = typename AType::Element;
-         using ElementX = typename XType::Element;
-         using ElementY = typename YType::Element;
-         using ElementAccumulator =
-             typename gemv::helper::ElementAccumulatorSelector<ElementA, ElementX>::ElementAccumulator;
- 
-         using VecCopyGmToUb = gemv::tile::VecCopyGmToUB<ArchTag, ElementX>;
-         using VecCopyUbToGm = gemv::tile::VecCopyUBToGm<ArchTag, YType>;
-         using MatrixCopyGmToUb = gemv::tile::MatrixCopyGmToUB<ArchTag, AType>;
-     };
- 
- } // namespace acot::matmul::tile
- 
- #endif // ACOT_MATMUL_TILE_TILE_COPY_HPP
- 
+#ifndef ACOT_GEMV_TILE_TILE_COPY_HPP
+#define ACOT_GEMV_TILE_TILE_COPY_HPP
+
+#include "acot/gemv/tile/vec_copy_gm_to_ub.hpp"
+#include "acot/gemv/tile/vec_copy_ub_to_gm.hpp"
+#include "acot/gemv/tile/matrix_copy_gm_to_ub.hpp"
+#include "acot/gemv/tile/copy_gm_to_l1.hpp"
+#include "acot/gemv/tile/copy_l0c_to_gm.hpp"
+#include "acot/gemv/tile/copy_l1_to_l0.hpp"
+#include "acot/gemv/helper.hpp"
+
+namespace acot::gemv::tile
+{
+
+    template <
+        /// Tag indicating architecture
+        class ArchTag,
+        /// MatmulType for A matrix operand
+        class AType,
+        /// MatmulType type for B matrix operand
+        class XType,
+        /// MatmulType type for C matrix operand
+        class YType,
+        /// MatmulTpe type for Bias operand
+        class BiasType = void>
+    struct TileCopy
+    {
+        using ElementA = typename AType::Element;
+        using ElementX = typename XType::Element;
+        using ElementY = typename YType::Element;
+        using ElementAccumulator =
+            typename gemv::helper::ElementAccumulatorSelector<ElementA, ElementX>::ElementAccumulator;
+
+        // the function of aiv
+        using VecCopyGmToUb = gemv::tile::VecCopyGmToUB<ArchTag, ElementX>;
+        using VecCopyUbToGm = gemv::tile::VecCopyUBToGm<ArchTag, YType>;
+        using MatrixCopyGmToUb = gemv::tile::MatrixCopyGmToUB<ArchTag, AType>;
+
+        // the function of aic
+        using CopyGmToL1A = gemv::tile::CopyGmToL1A<ArchTag, XType>;
+        using CopyGmToL1B = gemv::tile::CopyGmToL1B<ArchTag, AType>;
+        using CopyL1ToL0A = gemv::tile::CopyL1ToL0A<ArchTag, XType>;
+        using CopyL1ToL0B = gemv::tile::CopyL1BToL0B<ArchTag, AType>; // 补充 nZ->nZ搬运函数，nN-> zN
+        using CopyL0CToGm = gemv::tile::CopyL0CToGm<ArchTag, ElementAccumulator, YType>;
+    };
+
+} // namespace acot::matmul::tile
+
+#endif // ACOT_MATMUL_TILE_TILE_COPY_HPP

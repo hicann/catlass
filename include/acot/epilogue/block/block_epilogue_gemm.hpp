@@ -50,7 +50,7 @@ public:
     
     static constexpr uint32_t STAGES = 2;
     const uint32_t UBSize = ArchTag::UB_SIZE;
-    static constexpr bool RowOrColumn = std::is_same<LayoutC, acot::layout::RowMajor>::value && std::is_same<LayoutX, acot::layout::RowMajor>::value;
+    // static constexpr bool RowOrColumn = std::is_same<LayoutC, acot::layout::RowMajor>::value && std::is_same<LayoutX, acot::layout::RowMajor>::value;
     static constexpr bool isNeedCast = std::is_same<ElementC, bfloat16_t>::value; 
     static constexpr uint32_t COMPUTE_LENGTH = TileElemWiseEpilogueAdd::COMPUTE_LENGTH;
     static constexpr uint32_t OPERANDS_NUM = DispatchPolicy::OPERANDS_NUM;
@@ -105,117 +105,60 @@ public:
         AscendC::GlobalTensor<ElementX> gmBlockX, LayoutX layoutX, 
         MatmulCoord actualShape
     ){ 
-        if constexpr(RowOrColumn){
-            uint32_t MActual = actualShape.m();
-            uint32_t NActual = actualShape.n(); 
-            uint32_t maxMPerBlock = blockShape.m() / STAGES; 
-            uint32_t maxNPerBlock = blockShape.n(); 
-            uint32_t aivIndex = AscendC::GetSubBlockIdx(); 
-            uint32_t MActualAIV0 = (MActual < maxMPerBlock) ? MActual : maxMPerBlock;
-            uint32_t MActualAIV1 = (MActual < maxMPerBlock) ? 0 : (MActual - maxMPerBlock);
-            uint32_t MUbActual = aivIndex == 1 ? MActualAIV1 : MActualAIV0;
-            uint32_t NUbActual = NActual;
-            LayoutC layoutInUb{maxMPerBlock, maxNPerBlock};
-            AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID1);
-            auto layoutTileC = layoutC.GetTileLayout(MakeCoord(MUbActual, NUbActual));
-            auto layoutCInUb = layoutInUb.GetTileLayout(MakeCoord(MUbActual, NUbActual));
-            MatrixCoord gmTileCOffset{aivIndex * maxMPerBlock, 0};
-            auto gmTileC = gmBlockC[layoutC.GetOffset(gmTileCOffset)];
-            copyGmToUbC(ubCTensor, gmTileC, layoutCInUb, layoutTileC);
-            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
-            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
-            if constexpr (isNeedCast){
-                tileElemWiseCastC(ubCTensorCast, ubCTensor);
-                AscendC::PipeBarrier<PIPE_V>();
-                tileElemWiseEpilogueMul(ubCTensorCast,ubCTensorCast, (ElementCompute)beta);
-            }else{
-                tileElemWiseEpilogueMul(ubCTensor,ubCTensor, (ElementC)beta);
-            }
+        uint32_t MActual = actualShape.m();
+        uint32_t NActual = actualShape.n(); 
+        uint32_t maxMPerBlock = blockShape.m() / STAGES; 
+        uint32_t maxNPerBlock = blockShape.n(); 
+        uint32_t aivIndex = AscendC::GetSubBlockIdx(); 
+        uint32_t MActualAIV0 = (MActual < maxMPerBlock) ? MActual : maxMPerBlock;
+        uint32_t MActualAIV1 = (MActual < maxMPerBlock) ? 0 : (MActual - maxMPerBlock);
+        uint32_t MUbActual = aivIndex == 1 ? MActualAIV1 : MActualAIV0;
+        uint32_t NUbActual = NActual;
+        LayoutC layoutInUb{maxMPerBlock, maxNPerBlock};
+        AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID1);
+        auto layoutTileC = layoutC.GetTileLayout(MakeCoord(MUbActual, NUbActual));
+        auto layoutCInUb = layoutInUb.GetTileLayout(MakeCoord(MUbActual, NUbActual));
+        MatrixCoord gmTileCOffset{aivIndex * maxMPerBlock, 0};
+        auto gmTileC = gmBlockC[layoutC.GetOffset(gmTileCOffset)];
+        copyGmToUbC(ubCTensor, gmTileC, layoutCInUb, layoutTileC);
+        AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
+        AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
+        if constexpr (isNeedCast){
+            tileElemWiseCastC(ubCTensorCast, ubCTensor);
             AscendC::PipeBarrier<PIPE_V>();
-            AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
-            auto layoutTileX = layoutX.GetTileLayout(MakeCoord(MUbActual, NUbActual));
-            auto layoutXInUb = layoutInUb.GetTileLayout(MakeCoord(MUbActual, NUbActual));
-            MatrixCoord gmTileXOffset{aivIndex * maxMPerBlock, 0}; 
-            auto gmTileX = gmBlockX[layoutX.GetOffset(gmTileXOffset)];
-            copyGmToUbX(ubXTensor, gmTileX, layoutXInUb, layoutTileX);
-            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
-            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
-            tileElemWiseEpilogueMul(ubXTensor, ubXTensor, (ElementX)alpha);
-            AscendC::PipeBarrier<PIPE_V>();
-            if constexpr (isNeedCast){
-                tileElemWiseEpilogueAdd(ubDTensorCast,ubXTensor,ubCTensorCast);
-            }else{
-                tileElemWiseEpilogueAdd(ubDTensor,ubXTensor,ubCTensor);
-            }
-            AscendC::PipeBarrier<PIPE_V>();
-            if constexpr (isNeedCast){
-                tileElemWiseCastD(ubDTensor, ubDTensorCast);
-            }
-            AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
-            AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
-            auto layoutDInGm = layoutD.GetTileLayout(MakeCoord(MUbActual, NUbActual));
-            auto layoutTileD = layoutInUb.GetTileLayout(MakeCoord(MUbActual, NUbActual));
-            MatrixCoord gmTileDOffset{aivIndex * maxMPerBlock, 0}; 
-            auto gmTileD = gmBlockD[layoutD.GetOffset(gmTileDOffset)];
-            copyUbToGmD(gmTileD, ubDTensor, layoutDInGm, layoutTileD);
-            AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID1);
-            AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
-        }else{ // 优化手段不一样
-            uint32_t MActual = actualShape.m();
-            uint32_t NActual = actualShape.n(); 
-            uint32_t maxMPerBlock = blockShape.m(); 
-            uint32_t maxNPerBlock = blockShape.n() / STAGES; 
-            uint32_t aivIndex = AscendC::GetSubBlockIdx(); 
-            uint32_t NActualAIV0 = (NActual < maxNPerBlock) ? NActual : maxNPerBlock;
-            uint32_t NActualAIV1 = (NActual < maxNPerBlock) ? 0 : (NActual - maxNPerBlock);
-            uint32_t NUbActual = aivIndex == 1 ? NActualAIV1 : NActualAIV0;
-            uint32_t MUbActual = MActual;
-            LayoutC layoutInUb{maxMPerBlock, maxNPerBlock};
-            AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID1);
-            auto layoutTileC = layoutC.GetTileLayout(MakeCoord(MUbActual, NUbActual));
-            auto layoutCInUb = layoutInUb.GetTileLayout(MakeCoord(MUbActual, NUbActual));
-            MatrixCoord gmTileCOffset{0, aivIndex * maxNPerBlock}; 
-            auto gmTileC = gmBlockC[layoutC.GetOffset(gmTileCOffset)];
-            copyGmToUbC(ubCTensor,gmTileC,layoutCInUb, layoutTileC);
-            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
-            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
-            if constexpr (isNeedCast){
-                tileElemWiseCastC(ubCTensorCast, ubCTensor);
-                AscendC::PipeBarrier<PIPE_V>();
-                tileElemWiseEpilogueMul(ubCTensorCast,ubCTensorCast,(ElementCompute)beta);
-            }else{
-                tileElemWiseEpilogueMul(ubCTensor,ubCTensor,(ElementC)beta);
-            }
-            AscendC::PipeBarrier<PIPE_V>();
-            AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
-            auto layoutTileX = layoutX.GetTileLayout(MakeCoord(MUbActual, NUbActual));
-            auto layoutXInUb = layoutInUb.GetTileLayout(MakeCoord(MUbActual, NUbActual));
-            MatrixCoord gmTileXOffset{0, aivIndex * maxNPerBlock}; 
-            auto gmTileX = gmBlockX[layoutX.GetOffset(gmTileXOffset)];
-            copyGmToUbX(ubXTensor,gmTileX,layoutXInUb, layoutTileX);
-            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
-            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
-            tileElemWiseEpilogueMul(ubXTensor,ubXTensor,(ElementX)alpha);
-            AscendC::PipeBarrier<PIPE_V>();
-            if constexpr (isNeedCast){
-                tileElemWiseEpilogueAdd(ubDTensorCast,ubXTensor,ubCTensorCast);
-            }else{
-                tileElemWiseEpilogueAdd(ubDTensor,ubXTensor,ubCTensor);
-            }
-            AscendC::PipeBarrier<PIPE_V>();
-            if constexpr (isNeedCast){
-                tileElemWiseCastD(ubDTensor, ubDTensorCast);
-            }
-            AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
-            AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
-            auto layoutDInGm = layoutD.GetTileLayout(MakeCoord(MUbActual, NUbActual));
-            auto layoutTileD = layoutInUb.GetTileLayout(MakeCoord(MUbActual, NUbActual));
-            MatrixCoord gmTileDOffset{0, aivIndex * maxNPerBlock}; 
-            auto gmTileD = gmBlockD[layoutD.GetOffset(gmTileDOffset)];
-            copyUbToGmD(gmTileD,ubDTensor,layoutDInGm, layoutTileD);
-            AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID1);
-            AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
+            tileElemWiseEpilogueMul(ubCTensorCast,ubCTensorCast, (ElementCompute)beta);
+        }else{
+            tileElemWiseEpilogueMul(ubCTensor,ubCTensor, (ElementC)beta);
         }
+        AscendC::PipeBarrier<PIPE_V>();
+        AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
+        auto layoutTileX = layoutX.GetTileLayout(MakeCoord(MUbActual, NUbActual));
+        auto layoutXInUb = layoutInUb.GetTileLayout(MakeCoord(MUbActual, NUbActual));
+        MatrixCoord gmTileXOffset{aivIndex * maxMPerBlock, 0}; 
+        auto gmTileX = gmBlockX[layoutX.GetOffset(gmTileXOffset)];
+        copyGmToUbX(ubXTensor, gmTileX, layoutXInUb, layoutTileX);
+        AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
+        AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
+        tileElemWiseEpilogueMul(ubXTensor, ubXTensor, (ElementX)alpha);
+        AscendC::PipeBarrier<PIPE_V>();
+        if constexpr (isNeedCast){
+            tileElemWiseEpilogueAdd(ubDTensorCast,ubXTensor,ubCTensorCast);
+        }else{
+            tileElemWiseEpilogueAdd(ubDTensor,ubXTensor,ubCTensor);
+        }
+        AscendC::PipeBarrier<PIPE_V>();
+        if constexpr (isNeedCast){
+            tileElemWiseCastD(ubDTensor, ubDTensorCast);
+        }
+        AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
+        AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
+        auto layoutDInGm = layoutD.GetTileLayout(MakeCoord(MUbActual, NUbActual));
+        auto layoutTileD = layoutInUb.GetTileLayout(MakeCoord(MUbActual, NUbActual));
+        MatrixCoord gmTileDOffset{aivIndex * maxMPerBlock, 0}; 
+        auto gmTileD = gmBlockD[layoutD.GetOffset(gmTileDOffset)];
+        copyUbToGmD(gmTileD, ubDTensor, layoutDInGm, layoutTileD);
+        AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID1);
+        AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
     }
 private:
     MatmulCoord blockShape;

@@ -8,33 +8,27 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
- #ifndef ACOT_GEMV_BLOCK_BLOCK_GEMV_HPP
- #define ACOT_GEMV_BLOCK_BLOCK_GEMV_HPP
- 
- #include "acot/acot.hpp"
- #include "acot/gemv/tile/tile_copy.hpp"
- #include "acot/gemv/tile/tile_vmad.hpp"
- #include "acot/gemv/tile/tile_vmuls.hpp"
- namespace acot::gemv::block {
- 
- template <
-     class DispatchPolicy,
-     class UBTileShape,
-     class AType,
-     class XType,
-     class YType,
-     class BiasType = void,
-     class TileCopy = gemv::tile::TileCopy<typename DispatchPolicy::ArchTag, AType, XType, YType, BiasType>,
-     class TileVmad = gemv::tile::TileVmad<typename DispatchPolicy::ArchTag, AType, XType, YType, BiasType>,
-     class TileVmuls = gemv::tile::TileVmuls<typename DispatchPolicy::ArchTag, typename AType::Element>
- >
- struct BlockGemv {
-     static_assert(DEPENDENT_FALSE<DispatchPolicy>, "BlockVmad is not implemented for this DispatchPolicy");
- };
- 
- } 
- 
- #include "acot/gemv/block/block_gemv_aiv_Splitk.hpp"
+#ifndef ACOT_GEMV_BLOCK_BLOCK_GEMV_HPP
+#define ACOT_GEMV_BLOCK_BLOCK_GEMV_HPP
 
- #endif 
- 
+#include "acot/acot.hpp"
+#include "acot/gemv/tile/tile_copy.hpp"
+#include "acot/gemv/tile/tile_vmad.hpp"
+#include "acot/gemv/tile/tile_vmuls.hpp"
+namespace acot::gemv::block
+{
+
+    template <
+        class DispatchPolicy,
+        class... Args>
+    struct BlockGemv
+    {
+        static_assert(DEPENDENT_FALSE<DispatchPolicy>, "BlockVmad is not implemented for this DispatchPolicy");
+    };
+}
+
+#include "acot/gemv/block/block_gemv_aiv.hpp"
+#include "acot/gemv/block/block_gemv_aic.hpp"
+#include "acot/gemv/block/block_swizzle.hpp"
+
+#endif
