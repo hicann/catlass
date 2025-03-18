@@ -13,7 +13,6 @@
  
  #include "acot/acot.hpp"
  #include "acot/layout/layout.hpp"
- #include "acot/gemv/gemv_type.hpp"
  
  namespace acot::gemv::tile
  {

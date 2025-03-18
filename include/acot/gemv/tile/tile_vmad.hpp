@@ -13,7 +13,7 @@
  
  #include "acot/acot.hpp"
  #include "acot/layout/layout.hpp"
- #include "acot/gemv/gemv_type.hpp"
+ #include "acot/matmul/matmul_type.hpp"
  
  namespace acot::gemv::tile
  {
@@ -21,13 +21,9 @@
      template <
          /// Tag indicating architecture
          class ArchTag,
-         /// MatmulType for A matrix operand
          class AType,
-         /// MatmulType type for B matrix operand
          class XType,
-         /// MatmulType type for C matrix operand
          class YType,
-         /// MatmulTpe type for Bias operand
          class BiasType = void>
  
      struct TileVmad
@@ -36,9 +32,9 @@
      };
      template <>
      struct TileVmad<arch::AtlasA2,
-                     gemv::GemvType<half, layout::RowMajor>,
-                     gemv::GemvType<half, layout::RowMajor>,
-                     gemv::GemvType<half, layout::RowMajor>,
+                     matmul::MatmulType<half, layout::RowMajor>,
+                     matmul::MatmulType<half, layout::RowMajor>,
+                     matmul::MatmulType<half, layout::RowMajor>,
                      void>
      {
          using ElementA = half;
@@ -176,9 +172,9 @@
          class ElementY>
  
      struct TileVmad<arch::AtlasA2,
-                     gemv::GemvType<ElementA, layout::RowMajor>,
-                     gemv::GemvType<ElementX, layout::RowMajor>,
-                     gemv::GemvType<ElementY, layout::RowMajor>,
+                     matmul::MatmulType<ElementA, layout::RowMajor>,
+                     matmul::MatmulType<ElementX, layout::RowMajor>,
+                     matmul::MatmulType<ElementY, layout::RowMajor>,
                      void>
      {
          using ElementAccumulator =
@@ -320,9 +316,9 @@
      template <>
      /// Partial specialization for AtlasA2, RowMajor in and zN out.
      struct TileVmad<arch::AtlasA2,
-                     gemv::GemvType<half, layout::ColumnMajor>,
-                     gemv::GemvType<half, layout::ColumnMajor>,
-                     gemv::GemvType<half, layout::ColumnMajor>,
+                     matmul::MatmulType<half, layout::ColumnMajor>,
+                     matmul::MatmulType<half, layout::ColumnMajor>,
+                     matmul::MatmulType<half, layout::ColumnMajor>,
                      void>
      {
          using ElementA = half;
@@ -461,9 +457,9 @@
          class ElementY>
      /// Partial specialization for AtlasA2, RowMajor in and zN out.
      struct TileVmad<arch::AtlasA2,
-                     gemv::GemvType<ElementA, layout::ColumnMajor>,
-                     gemv::GemvType<ElementX, layout::ColumnMajor>,
-                     gemv::GemvType<ElementY, layout::ColumnMajor>,
+                     matmul::MatmulType<ElementA, layout::ColumnMajor>,
+                     matmul::MatmulType<ElementX, layout::ColumnMajor>,
+                     matmul::MatmulType<ElementY, layout::ColumnMajor>,
                      void>
      {
          using ElementAccumulator =

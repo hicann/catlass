@@ -13,7 +13,6 @@
  
  #include "acot/acot.hpp"
  #include "acot/layout/layout.hpp"
- #include "acot/gemv/gemv_type.hpp"
  
  constexpr uint32_t STRIDE_LIMIT = 65536;
  

@@ -13,15 +13,15 @@
  
  #include "acot/acot.hpp"
  #include "acot/layout/layout.hpp"
- #include "acot/gemv/gemv_type.hpp"
+ #include "acot/matmul/matmul_type.hpp"
  
  namespace acot::gemv::tile
  {
  
      template <
          class ArchTag,
-         /// MatmulType for matrix operand
-         class GmType>
+         class GmType
+         >
  
      struct MatrixCopyGmToUB
      {
@@ -29,7 +29,7 @@
      };
  
      template <class Element>
-     struct MatrixCopyGmToUB<arch::AtlasA2, gemv::GemvType<Element, layout::RowMajor>>
+     struct MatrixCopyGmToUB<arch::AtlasA2, matmul::MatmulType<Element, layout::RowMajor>>
      {
          using LayoutDst = layout::RowMajor;
          using LayoutSrc = layout::RowMajor;
@@ -117,7 +117,7 @@
  
      /// Partial specialization for AtlasA2, ColumnMajor in and nZ out.
      template <class Element>
-     struct MatrixCopyGmToUB<arch::AtlasA2, gemv::GemvType<Element, layout::ColumnMajor>>
+     struct MatrixCopyGmToUB<arch::AtlasA2, matmul::MatmulType<Element, layout::ColumnMajor>>
      {
          using LayoutDst = layout::ColumnMajor;
          using LayoutSrc = layout::ColumnMajor;

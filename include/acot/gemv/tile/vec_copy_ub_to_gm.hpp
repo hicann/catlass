@@ -13,7 +13,7 @@
  
  #include "acot/acot.hpp"
  #include "acot/layout/layout.hpp"
- #include "acot/gemv/gemv_type.hpp"
+ #include "acot/matmul/matmul_type.hpp"
  
  namespace acot::gemv::tile
  {
@@ -27,7 +27,7 @@
      };
  
      template <class Element>
-     struct VecCopyUBToGm<arch::AtlasA2, gemv::GemvType<Element, layout::RowMajor>>
+     struct VecCopyUBToGm<arch::AtlasA2, matmul::MatmulType<Element, layout::RowMajor>>
      {
  
          static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element); // 32B,一个block的大小
@@ -59,7 +59,7 @@
      };
  
      template <class Element>
-     struct VecCopyUBToGm<arch::AtlasA2, gemv::GemvType<Element, layout::ColumnMajor>>
+     struct VecCopyUBToGm<arch::AtlasA2, matmul::MatmulType<Element, layout::ColumnMajor>>
      {
  
          static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element); // 32B,一个block的大小

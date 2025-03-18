@@ -10,8 +10,8 @@
 #include "acot/gemv/kernel/kernel_gemv_aiv.hpp"
 #include "acot/gemv/block/block_gemv.hpp"
 #include "acot/gemv/gemv_type.hpp"
+#include "acot/matmul/matmul_type.hpp"
 #include "acot/layout/layout.hpp"
-#include "acot/matmul_coord.hpp"
 using namespace acot;
 using UBTileShape = GemvShape<32,512>;
 using ScalarType = float;
@@ -30,9 +30,9 @@ void FP16RMGemvAiv(
     using DispatchPolicy = matmul::MmadAtlasA2Pingpong<true>;
     
 
-    using AType = gemv::GemvType<float, layout::RowMajor>;
-    using XType = gemv::GemvType<float, layout::RowMajor>;
-    using YType = gemv::GemvType<float, layout::RowMajor>;
+    using AType = matmul::MatmulType<float, layout::RowMajor>;
+    using XType = matmul::MatmulType<float, layout::RowMajor>;
+    using YType = matmul::MatmulType<float, layout::RowMajor>;
 
     // 调用block层函数
     using GemvBlock = gemv::block::BlockGemv<DispatchPolicy, UBTileShape, AType, XType, YType>;
