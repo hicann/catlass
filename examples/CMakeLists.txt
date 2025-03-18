@@ -53,7 +53,7 @@ foreach(EXAMPLE
     01_grouped_matmul
     02_optimized_matmul
     03_gemm
-    # 04_groupgemm
+    04_groupgemm
     05_gemv_aiv
 )
     add_subdirectory(${EXAMPLE})

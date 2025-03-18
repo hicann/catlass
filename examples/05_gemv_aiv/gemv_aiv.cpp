@@ -9,7 +9,6 @@
 #include "acot/matmul/dispatch_policy.hpp"
 #include "acot/gemv/kernel/kernel_gemv_aiv.hpp"
 #include "acot/gemv/block/block_gemv.hpp"
-#include "acot/gemv/gemv_type.hpp"
 #include "acot/matmul/matmul_type.hpp"
 #include "acot/layout/layout.hpp"
 using namespace acot;
@@ -17,7 +16,7 @@ using UBTileShape = GemvShape<32,512>;
 using ScalarType = float;
 
 ACOT_GLOBAL
-void FP16RMGemvAiv(
+void GemvAiv(
     GemvCoord problemShape,
     GM_ADDR gmA, layout::RowMajor layoutA,
     GM_ADDR gmX, layout::RowMajor layoutX,
@@ -175,8 +174,8 @@ void Run(Options options){
     ACL_CHECK(aclrtMemcpy(deviceY, sizeY, hostY_read.data(), sizeY, ACL_MEMCPY_HOST_TO_DEVICE));
     
     // 获得当前核心数
-    auto aicCoreNum = 40;
-    FP16RMGemvAiv<<<aicCoreNum, nullptr, stream>>>(
+    auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAiv();
+    GemvAiv<<<aicCoreNum, nullptr, stream>>>(
         options.problemShape,
         deviceA, layoutA,
         deviceX, layoutX,

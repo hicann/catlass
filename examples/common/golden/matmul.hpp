@@ -63,6 +63,53 @@ void ComputeGemm(
         }
     }
 }
+
+// simple grouped gemm
+template<typename Element, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC, class ElementGolden, class LayoutGolden>
+void ComputeGroupGemm(
+    uint32_t problemCount,
+    const std::vector<MatmulCoord> &problemShapeList,
+    const std::vector<Element> &alphaList,
+    const std::vector<Element> &betaList,
+    const std::vector<ElementA> &dataA, const std::vector<LayoutA> &layoutAList,
+    const std::vector<ElementB> &dataB, const std::vector<LayoutB> &layoutBList,
+    const std::vector<ElementC> &dataC, const std::vector<LayoutC> &layoutCList,
+    std::vector<ElementGolden> &dataGolden, const std::vector<LayoutGolden> &layoutGoldenList
+)
+{
+    size_t inGroupOffsetA = 0;
+    size_t inGroupOffsetB = 0;
+    size_t inGroupOffsetC = 0;
+    size_t inGroupOffsetGolden = 0;
+
+    for (uint32_t inGroupId = 0; inGroupId < problemCount; ++inGroupId) {
+        MatmulCoord problemShape = problemShapeList[inGroupId];
+        Element alpha = alphaList[inGroupId];
+        Element beta = betaList[inGroupId];
+
+        for (uint32_t i = 0; i < problemShape.m(); ++i) {
+            for (uint32_t j = 0; j < problemShape.n(); ++j) {
+                size_t offsetGolden = inGroupOffsetGolden + layoutGoldenList[inGroupId].GetOffset(MakeCoord(i, j));
+                ElementGolden accumulator = 0;
+
+                for (uint32_t k = 0; k < problemShape.k(); ++k) {
+                    size_t offsetA = inGroupOffsetA + layoutAList[inGroupId].GetOffset(MakeCoord(i, k));
+                    size_t offsetB = inGroupOffsetB + layoutBList[inGroupId].GetOffset(MakeCoord(k, j));
+                    accumulator += static_cast<ElementGolden>(alpha) * static_cast<ElementGolden>(dataA[offsetA]) * static_cast<ElementGolden>(dataB[offsetB]);
+                }
+
+                size_t offsetC = inGroupOffsetC + layoutCList[inGroupId].GetOffset(MakeCoord(i, j));
+                dataGolden[offsetGolden] = static_cast<ElementGolden>(beta) * static_cast<ElementGolden>(dataC[offsetC]) + static_cast<ElementGolden>(accumulator);
+            }
+        }
+
+        inGroupOffsetA += static_cast<size_t>(problemShape.m()) * problemShape.k();
+        inGroupOffsetB += static_cast<size_t>(problemShape.k()) * problemShape.n();
+        inGroupOffsetC += static_cast<size_t>(problemShape.m()) * problemShape.n();
+        inGroupOffsetGolden += static_cast<size_t>(problemShape.m()) * problemShape.n();
+    }
+}
+
 // Gemv 计算函数
 template<typename Element, class ElementA, class LayoutA, class ElementX, class LayoutX, class ElementY, class LayoutY, class ElementGolden, class LayoutGolden>
 void ComputeGemv(
