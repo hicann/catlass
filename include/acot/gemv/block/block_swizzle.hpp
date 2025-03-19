@@ -28,33 +28,33 @@ namespace acot::gemv::block
         /// Data members
 
         GemvCoord problemShape;
-        MatrixCoord tileMN;        // 矩阵和向量分块的大小
-        MatrixCoord loopsMN;       // 分块后的矩阵和向量的循环次数
+        MatrixCoord tileMN;        
+        MatrixCoord loopsMN;      
         uint32_t splitKSlices = 1; // splite k dim into virtual cores
 
         /// Methods
 
         ACOT_DEVICE
-        GemvIdentityBlockSwizzle() {} // 默认构造函数
+        GemvIdentityBlockSwizzle() {} 
 
-        ACOT_DEVICE // 传入tileMN，并通过problemShape和tileMN来算loopsMN
+        ACOT_DEVICE 
         GemvIdentityBlockSwizzle(GemvCoord const &problemShape_, MatrixCoord const &tileMN_, uint32_t splitKSlices_ = 1)
             : problemShape(problemShape_), tileMN(tileMN_), splitKSlices(splitKSlices_)
         {
             loopsMN = CeilDiv(MatrixCoord(problemShape.GetCoordMN()), tileMN);
         }
 
-        ACOT_DEVICE // 显性传入loopsMN,即已经计算好的循环次数
+        ACOT_DEVICE
         GemvIdentityBlockSwizzle(GemvCoord const &problemShape_, MatrixCoord const &tileMN_,
                                  MatrixCoord const &loopsMN_, uint32_t splitKSlices_ = 1)
             : problemShape(problemShape_), tileMN(tileMN_), loopsMN(loopsMN_), splitKSlices(splitKSlices_)
         {
         }
 
-        ACOT_DEVICE // 更新各个参数值，并重算loopsMN，这个函数允许动态更新矩阵形状和块大小
+        ACOT_DEVICE 
             void
             Update(GemvCoord const &problemShape_, MatrixCoord const &tileMN_, uint32_t splitKSlices_ = 1)
-        { // 重算loopsMN
+        {
             problemShape = problemShape_;
             tileMN = tileMN_;
             splitKSlices = splitKSlices_;
@@ -65,7 +65,7 @@ namespace acot::gemv::block
         ACOT_DEVICE
         void Update(GemvCoord const &problemShape_, MatrixCoord const &tileMN_, MatrixCoord const &loopsMN_,
                     uint32_t splitKSlices_ = 1)
-        { // 重传各参数和loopsMN
+        { 
             problemShape = problemShape_;
             tileMN = tileMN_;
             loopsMN = loopsMN_;
@@ -73,22 +73,22 @@ namespace acot::gemv::block
         }
 
         ACOT_DEVICE
-        uint32_t GetCoreLoops() const // 总循环次数：行方向切分的循环数 * 列方向切分的循环数
+        uint32_t GetCoreLoops() const 
         {
             return loopsMN.row() * loopsMN.column(); //
         }
 
         ACOT_DEVICE
-        uint32_t GetBatchIdx(uint32_t taskIdx) // 返回当前任务的批次索引。
+        uint32_t GetBatchIdx(uint32_t taskIdx) 
         {
             return taskIdx / (GetCoreLoops() * splitKSlices);
         }
 
         ACOT_DEVICE
-        GemvCoord GetBlockCoord(uint32_t taskIdx) // 给定的任务索引 taskIdx，返回当前任务所在的块的坐标
+        GemvCoord GetBlockCoord(uint32_t taskIdx) 
         {
             uint32_t kIdx = taskIdx % (GetCoreLoops() * splitKSlices) / GetCoreLoops();
-            uint32_t innerIdx = taskIdx % GetCoreLoops(); // 计算当前任务在矩阵和向量块中的位置
+            uint32_t innerIdx = taskIdx % GetCoreLoops(); 
             if constexpr (SwizzleDirection == 0)
             { // Zn
                 uint32_t tileBlockLoop = CeilDiv(loopsMN.row(), SwizzleOffset);
@@ -125,7 +125,6 @@ namespace acot::gemv::block
                 {
                     mIdx = loopsMN.row() - mIdx - 1;
                 }
-                // return GemvCoord{mIdx, nIdx, kIdx};
                 return GemvCoord{mIdx, nIdx};
             }
         }
@@ -133,10 +132,8 @@ namespace acot::gemv::block
         ACOT_DEVICE
         GemvCoord GetActualBlockShape(GemvCoord blockCoord)
         {
-            // uint32_t splitKLen = problemShape.k() / splitKSlices;
             uint32_t mActual = (blockCoord.m() == (loopsMN.row() - 1)) ? (problemShape.m() - blockCoord.m() * tileMN.row()) : tileMN.row();
             uint32_t nActual = (blockCoord.n() == (loopsMN.column() - 1)) ? (problemShape.n() - blockCoord.n() * tileMN.column()) : tileMN.column();
-            // uint32_t kActual = (blockCoord.k() == (splitKSlices - 1)) ? (problemShape.k() - blockCoord.k() * splitKLen) : splitKLen;
             return GemvCoord{mActual, nActual};
         }
     };

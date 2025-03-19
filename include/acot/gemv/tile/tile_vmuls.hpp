@@ -22,7 +22,7 @@
          typename Element>
      struct TileVmuls
      {
-         static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element); // 32B,一个block的大小
+         static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element); 
  
          // Mehtods
  
@@ -37,9 +37,7 @@
              uint32_t len)
          {
             AscendC::SetMaskCount();
-            AscendC::SetVectorMask<Element, AscendC::MaskMode::COUNTER>(len);  // 设置counter模式
-            // AscendC::UnaryRepeatParams params{1,1,8,8};
-             // 连续模式
+            AscendC::SetVectorMask<Element, AscendC::MaskMode::COUNTER>(len); 
              AscendC::Muls<Element,false>(
                  dstTensor,
                  srcTensor,
@@ -49,10 +47,10 @@
                  AscendC::UnaryRepeatParams{}
                 );
             AscendC::SetMaskNorm();
-            AscendC::ResetMask();  // 还原mask值
+            AscendC::ResetMask(); 
          }
      };
- } // namespace acot::matmul::tile
+ } // namespace acot::gemv::tile
  
- #endif // ACOT_MATMUL_TILE_COPY_GM_TO_L1_HPP
+ #endif // ACOT_GEMV_TILE_VMULS_HPP
  

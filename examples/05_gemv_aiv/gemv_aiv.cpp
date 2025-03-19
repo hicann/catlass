@@ -1,3 +1,13 @@
+/*
+ * Copyright (c) 2024 Huawei Technologies Co., Ltd.
+ * This file is a part of the CANN Open Software.
+ * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
+ */
+
 #include <iostream>
 #include <vector>
 
@@ -41,7 +51,6 @@ void GemvAiv(
     using TileVmad = gemv::tile::TileVmad<typename DispatchPolicy::ArchTag, AType, XType, YType, BiasType>;
     using TileVmuls = gemv::tile::TileVmuls<typename DispatchPolicy::ArchTag, typename AType::Element>;
 
-    // 调用block层函数
     using GemvBlock = gemv::block::BlockGemv<DispatchPolicy, UBTileShape, AType, XType, YType,BiasType,TileCopy,TileVmad,TileVmuls>;
     using BlockEpilogue = void;
 
@@ -76,7 +85,6 @@ typedef struct Options{
             std::cerr << HELPER << std::endl;
             return -1;
         }
-        // 设置矩阵形状 + 矩阵步长
         problemShape.m() = std::atoi(argv[M_INDEX]);
         problemShape.n() = std::atoi(argv[N_INDEX]);
         if(argc == ARGS_MAX){
@@ -180,7 +188,6 @@ void Run(Options options){
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceY), sizeY, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceY, sizeY, hostY_read.data(), sizeY, ACL_MEMCPY_HOST_TO_DEVICE));
     
-    // 获得当前核心数
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAiv();
     GemvAiv<<<aicCoreNum, nullptr, stream>>>(
         options.problemShape,

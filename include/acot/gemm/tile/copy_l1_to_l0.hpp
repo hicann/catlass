@@ -1,3 +1,13 @@
+/*
+ * Copyright (c) 2024 Huawei Technologies Co., Ltd.
+ * This file is a part of the CANN Open Software.
+ * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
+ */
+
 #ifndef ACOT_GEMM_TILE_COPY_L1_TO_L0_HPP
 #define ACOT_GEMM_TILE_COPY_L1_TO_L0_HPP
 
@@ -134,7 +144,7 @@ struct CopyL1ToL0A<acot::arch::AtlasA2, acot::matmul::MatmulType<int8_t, layout:
         params.startIndex = 0;
         params.repeatTimes = static_cast<uint8_t>(MRound / ELE_NUM_PER_C0); 
         params.srcStride = static_cast<uint16_t>(KRound / KL0Alignment); 
-        params.dstGap = 1; // 单位为512B
+        params.dstGap = 1; 
         params.dstFracGap = 0;
         for(uint32_t i = 0; i < KLoops; i++){
             AscendC::LoadDataWithTranspose(dstTensor[i * MRound * KL0Alignment], srcTensor[i * KL0Alignment * ELE_NUM_PER_C0], params);
@@ -142,7 +152,6 @@ struct CopyL1ToL0A<acot::arch::AtlasA2, acot::matmul::MatmulType<int8_t, layout:
     }
 };
 
-// 各种数据类型进行特例化处理
 template<
     class ArchTag,
     class GmType

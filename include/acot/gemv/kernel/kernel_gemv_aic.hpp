@@ -1,3 +1,12 @@
+/*
+ * Copyright (c) 2024 Huawei Technologies Co., Ltd.
+ * This file is a part of the CANN Open Software.
+ * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
+ */
 #ifndef ACOT_GEMV_KERNLE_GEMV_EPILOGUE_HPP
 #define ACOT_GEMV_KERNLE_GEMV_EPILOGUE_HPP
 
@@ -37,7 +46,6 @@ namespace acot::gemv::kernel
         using LayoutZ = typename BlockEpilogue::LayoutZ;
         using EpilogueParams = typename BlockEpilogue::Params;
 
-        // 计算时，L0C的数据类型
         using ElementAccumulator = typename gemv::helper::ElementAccumulatorSelector<ElementA, ElementX>::ElementAccumulator;
 
         using TileScheduler = TileScheduler_;
@@ -104,7 +112,6 @@ namespace acot::gemv::kernel
             static constexpr uint32_t L0C_TILE_SIZE = L0TileShape::M * L0TileShape::N;
             static constexpr uint32_t L0C_TILE_NUM = L0C_SIZE / L0C_TILE_SIZE / sizeof(ElementAccumulator);
 
-// 初始化核间流水
 #pragma unroll
             for (uint32_t i = 0; i < L0C_TILE_NUM; i++)
             {
@@ -124,15 +131,14 @@ namespace acot::gemv::kernel
                 int64_t gmOffsetNextA;
                 int64_t gmOffsetNextY;
 
-                // 计算A，x，y的当前块的偏移量
-                if constexpr (std::is_same<LayoutA, acot::layout::RowMajor>::value) // 行优先情况
+                if constexpr (std::is_same<LayoutA, acot::layout::RowMajor>::value)
                 {
                     gmOffsetX = 0;
                     gmOffsetA = MGmBlockIdx * maxMPerBlock * params.layoutA.stride(0);
 
                     gmOffsetY = MGmBlockIdx * maxMPerBlock;
                 }
-                else // 列优先情况
+                else
                 {
                     gmOffsetX = 0;
                     gmOffsetA = MGmBlockIdx * maxMPerBlock;
@@ -141,9 +147,9 @@ namespace acot::gemv::kernel
 
                 bool isFirstBlock = (loopIdx == AscendC::GetBlockIdx());
                 bool hasNextBlock = false;
-                uint32_t MNextGmBlockIdx;                         // 下一个块的M方向的偏移
-                GemvCoord nextActualBlockShape;                   // 下一个块的实际shape
-                if (loopIdx + AscendC::GetBlockNum() < coreLoops) // 预加载下一块
+                uint32_t MNextGmBlockIdx;
+                GemvCoord nextActualBlockShape;
+                if (loopIdx + AscendC::GetBlockNum() < coreLoops)
                 {
                     hasNextBlock = true;
                     uint32_t nextLoopIdx = loopIdx + AscendC::GetBlockNum();
@@ -152,23 +158,22 @@ namespace acot::gemv::kernel
                     uint32_t NNextGmActual = N;
                     nextActualBlockShape = GemvCoord(MNextGmActual, NNextGmActual);
                 }
-                // 计算A，x，y的下一块的偏移量
-                if constexpr (std::is_same<LayoutA, acot::layout::RowMajor>::value) // 行优先情况
+
+                if constexpr (std::is_same<LayoutA, acot::layout::RowMajor>::value)
                 {
                     gmOffsetNextX = 0;
-                    // gmOffsetNextA = MNextGmBlockIdx * maxMPerBlock * params.layoutWA.stride(0);
                     gmOffsetNextA = MNextGmBlockIdx * maxMPerBlock * params.layoutA.stride(0);
 
                     gmOffsetNextY = MNextGmBlockIdx * maxMPerBlock;
                 }
-                else // 列优先情况
+                else
                 {
                     gmOffsetNextX = 0;
                     gmOffsetNextA = MNextGmBlockIdx * maxMPerBlock;
                     gmOffsetNextY = MNextGmBlockIdx * maxMPerBlock;
                 }
 
-                GemvCoord actualBlockShape = GemvCoord(MGmActual, NGmActual); // 当前块的实际shape
+                GemvCoord actualBlockShape = GemvCoord(MGmActual, NGmActual);
 
                 AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((event_t)singleIdx % L0C_TILE_NUM);
 
@@ -197,24 +202,6 @@ namespace acot::gemv::kernel
         template <>
         ACOT_DEVICE void operator()<AscendC::AIV>(Params const &params)
         {
-            // 对x和A进行padding操作
-            // AscendC::GlobalTensor<ElementX> gmX;
-            // AscendC::GlobalTensor<ElementX> gmWX;
-            // gmX.SetGlobalBuffer(reinterpret_cast<__gm__ ElementX *>(params.ptrX));
-            // gmWX.SetGlobalBuffer(reinterpret_cast<__gm__ ElementX *>(params.ptrWX));
-            // Paddingx paddingx(resource);
-            // paddingx(gmWX, gmX, params.layoutWX, params.layoutX);
-
-            // AscendC::GlobalTensor<ElementA> gmA;
-            // AscendC::GlobalTensor<ElementA> gmWA;
-            // gmA.SetGlobalBuffer(reinterpret_cast<__gm__ ElementA *>(params.ptrA));
-            // gmWA.SetGlobalBuffer(reinterpret_cast<__gm__ ElementA *>(params.ptrWA));
-            // PaddingA paddingA(resource);
-            // paddingA(gmWA, gmA, params.layoutWA, params.layoutA);
-
-            // // 0x0 synchronization control between AI Core
-            // acot::arch::CrossCoreBarrier<0x0, PIPE_MTE3>();
-            // acot::arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(flagAivFinishPadding);
 
             TileScheduler matmulTileScheduler(params.problemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
             BlockEpilogue blockEpilogue(resource, params.epilogueParams);
@@ -225,12 +212,11 @@ namespace acot::gemv::kernel
 
             layout::RowMajor layouty(1, params.problemShape.m());
 
-            // Get aicore information 获取核idx，核数，子核idx
-            uint32_t aicoreIndex = AscendC::GetBlockIdx() / AscendC::GetSubBlockNum(); // 0-19
-            uint32_t aicoreNum = AscendC::GetBlockNum();                               // 20
+            // Get aicore information
+            uint32_t aicoreIndex = AscendC::GetBlockIdx() / AscendC::GetSubBlockNum();
+            uint32_t aicoreNum = AscendC::GetBlockNum();
             uint32_t subcoreIndex = AscendC::GetSubBlockIdx();
 
-            // 计算总共需要的循环次数
             uint32_t maxMPerBlock = L1TileShape::M;
             uint32_t maxNPerBlock = L1TileShape::N;
             uint32_t M = params.problemShape.m();
@@ -239,15 +225,11 @@ namespace acot::gemv::kernel
             uint32_t coreLoops = MLoops;
 
             // Loop through the epilogue calculations of each basic block
-            // GemvCoord blockShape = L1TileShape::ToCoord(); // blockshape就是l1中矩阵的大小
             GemvCoord blockShape{L1TileShape::N, L1TileShape::M};
 
             for (uint32_t loopIdx = aicoreIndex; loopIdx < coreLoops; loopIdx += aicoreNum)
             {
                 // Compute block location
-                // GemvCoord blockCoord = matmulTileScheduler.GetBlockCoord(loopIdx);
-                // MatmulCoord actualBlockShape = matmulTileScheduler.GetActualBlockShape(blockCoord);
-                // GemvCoord blockCoord = GemvCoord(loopIdx, 0);
                 GemvCoord blockCoord = GemvCoord(0, loopIdx);
                 uint32_t MGmActual = (loopIdx == coreLoops) ? M - loopIdx * maxMPerBlock : maxMPerBlock;
                 uint32_t NGmActual = 1;
@@ -264,8 +246,6 @@ namespace acot::gemv::kernel
                 // Synchronize cross core
                 arch::CrossCoreWaitFlagWithReverse<0x2, PIPE_MTE3>(flagAicFinishStore);
 
-                // Actual calculatioin logic for performing block-scoped epilogue
-                // blockEpilogue(blockShape, blockCoord, actualBlockShape, gmBlocky, layoutBlocky);
                 // Actual calculatioin logic for performing block-scoped epilogue
                 blockEpilogue(blockOffset, actualBlockShape, gmBlocky, layoutBlocky);
             }

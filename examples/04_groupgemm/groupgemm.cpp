@@ -1,3 +1,13 @@
+/*
+ * Copyright (c) 2024 Huawei Technologies Co., Ltd.
+ * This file is a part of the CANN Open Software.
+ * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
+ */
+
 #include <iostream>
 #include <string>
 #include <vector>
@@ -48,7 +58,6 @@ void GroupGemm(
     // Set FFTS address
     AscendC::SetSyncBaseAddr(fftsAddr);
     using ArchTag = arch::AtlasA2;
-    // 开启pingpong机制s
     constexpr bool enableUnitFlag = true;
     constexpr bool enableShuffleK = true;
     using GemmBlockDispatchPolicy = matmul::MmadAtlasA2Preload<enableUnitFlag, enableShuffleK>;
@@ -57,35 +66,33 @@ void GroupGemm(
     using BType = matmul::MatmulType<float, LayoutB>;
     using CType = matmul::MatmulType<float, LayoutC>;
     using XType = matmul::MatmulType<float, LayoutC>;
-    // 使用Coord来传递值
+    
     using L1TileShape = MatmulShape<128, 128, 128>;
     using L0TileShape = MatmulShape<128, 128, 64>;
     using TileShapeCast = MatrixShape<64, 128>;
 
-    // 调用block层函数
-    using GemmBlock = gemm::block::BlockGemm<GemmBlockDispatchPolicy, L1TileShape, L0TileShape, AType, BType, XType>; // 这个还是乘法
-    // using TileElemWiseEpilogue = void;
+    using GemmBlock = gemm::block::BlockGemm<GemmBlockDispatchPolicy, L1TileShape, L0TileShape, AType, BType, XType>; 
+    
     using DType = CType;
     using ComputeType = XType;
     constexpr uint32_t computeLength = L1TileShape::MN / 2;
-    // 后处理部分
+
     using TileElemWiseAddGemm = epilogue::tile::TileElemWiseAdd<ArchTag, ComputeType, computeLength>;
     using TileElemWiseMulGemm = epilogue::tile::TileElemWiseMul<ArchTag, ComputeType, computeLength>;
     using TileElemWistCastC = epilogue::tile::TileCast<ArchTag, ComputeType, CType, TileShapeCast>;
     using TileElemWistCastD = epilogue::tile::TileCast<ArchTag, DType, ComputeType, TileShapeCast>;
-    // 拷贝函数实例化
+
     using EpilogueTileCopy = epilogue::tile::TileCopy<ArchTag, CType, XType, DType>;
-    // 实例化Epilogue部分
+
     using EpilogueBlock = epilogue::block::BlockEpilogue<EpilogueBlockDispatchPolicy, CType, XType, DType, TileElemWiseAddGemm, TileElemWiseMulGemm, TileElemWistCastC, TileElemWistCastD, EpilogueTileCopy>;
-    // 实例化Gemm部分
+
     using GroupGemmKernel = gemm::kernel::KernelGroupGemmEpilogue<GemmBlock, EpilogueBlock>;
     typename GroupGemmKernel::Params params{problemCount,ptrProblemShape, alpha, beta, gmA, ptrLayoutA, gmB, ptrLayoutB, gmWorkspace, ptrLayoutC,gmWA, ptrlayoutWA, gmWB, ptrlayoutWB, gmC, gmC}; // 这里得修改 gmX保存A * B
-    // 调用核函数
+
     GroupGemmKernel groupgemm;
     groupgemm(params);
 }
 
-// 定义 Options 结构体
 typedef struct Options {
     const std::string HELPER = "04_groupgemm groupCnt mlist nlist klist [deviceId]";
     uint32_t groupCnt = 8;
@@ -111,23 +118,16 @@ typedef struct Options {
             return -1;
         }
 
-        // 解析 groupCnt
         groupCnt = std::atoi(argv[GROUPCNT_INDEX]);
-
-        // 解析 mList
         parseList(argv[MLIST_INDEX], mList);
-        // 解析 nList
         parseList(argv[NLIST_INDEX], nList);
-        // 解析 kList
         parseList(argv[KLIST_INDEX], kList);
 
-        // 检查列表长度是否与 groupCnt 一致
         if (mList.size() != groupCnt || nList.size() != groupCnt || kList.size() != groupCnt) {
             std::cerr << "List lengths do not match groupCnt." << std::endl;
             return -1;
         }
 
-        // 解析 deviceId
         if (argc == ARGS_MAX) {
             deviceId = std::atoi(argv[DEVICE_ID_INDEX]);
         }
@@ -136,7 +136,6 @@ typedef struct Options {
     }
 
 private:
-    // 辅助函数：解析逗号分隔的列表
     void parseList(const char* str, std::vector<uint32_t>& list) {
         char* copy = strdup(str);
         char* token = std::strtok(copy, ",");
@@ -203,7 +202,7 @@ void Run(Options& options){
         K_array[i] = options.kList[i];
     }
     
-    const uint32_t align = 128; //M 和 K的L1切分粒度
+    const uint32_t align = 128; 
     using LayoutA = layout::RowMajor;
     using LayoutB = layout::RowMajor;
     using LayoutC = layout::RowMajor;
@@ -322,9 +321,7 @@ void Run(Options& options){
     uint64_t fftsAddr{0};
     uint32_t fftsLen{0};
     RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
-    
-    // 获得当前核心数
-    // printf("11\n");
+
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
     GroupGemm<LayoutA, LayoutB, LayoutC><<<aicCoreNum, nullptr, stream>>>(
         groupCnt,
@@ -338,7 +335,7 @@ void Run(Options& options){
         (uint8_t*)deviceWB, layoutWBListDevice,
         (uint8_t*)gmWorkspace);
     ACL_CHECK(aclrtSynchronizeStream(stream));
-    // printf("22\n");
+
     std::vector<float> hostRes(allMNCnt);
     ACL_CHECK(aclrtMemcpy(hostRes.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
     std::vector<float> hostGolden(allMNCnt);
@@ -366,7 +363,6 @@ void Run(Options& options){
     ACL_CHECK(aclrtFree(layoutWAListDevice));
     ACL_CHECK(aclrtFree(layoutWBListDevice));
     ACL_CHECK(aclrtFree(gmWorkspace));
-    // 释放内存
     delete[] M_array;
     delete[] N_array;
     delete[] K_array;

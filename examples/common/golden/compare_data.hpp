@@ -33,10 +33,6 @@ namespace acot::golden
             ElementCompare actualValue = static_cast<ElementCompare>(result[i]);
             ElementCompare expectValue = expect[i];
 
-            // // 打印出来
-            // std::cout << "id:" << i << " ";
-            // std::cout << "res:" << actualValue << "    " << "golden:" << expectValue << std::endl;
-
             ElementCompare diff = std::fabs(actualValue - expectValue);
             if (diff > rtol * std::max(1.0f, std::fabs(expectValue)))
             {

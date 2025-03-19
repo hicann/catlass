@@ -948,30 +948,29 @@ struct nN
      nN(OrgShape orgShape, Shape shape, Stride stride) : orgShape_(orgShape), shape_(shape), stride_(stride) {}
 
      /// Make the layout of a coordinate (row, column)
-     // 主要是关注这里，nN的分形内结构和分形间结构，这些都是固定的
      template <class Element>
      ACOT_HOST_DEVICE static nN MakeLayout(Index orgRows, Index orgCols)
      {
          static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
          static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
-         Index rowsRound = RoundUp<ELE_NUM_PER_C0>(orgRows);     // 行方向对齐32B/sizeof(element)
-         Index colsRound = RoundUp<C0_NUM_PER_FRACTAL>(orgCols); // 列方向对齐16
+         Index rowsRound = RoundUp<ELE_NUM_PER_C0>(orgRows);  
+         Index colsRound = RoundUp<C0_NUM_PER_FRACTAL>(orgCols);
          return nN(orgRows,
                  orgCols,
 
-                 ELE_NUM_PER_C0,                 // 分形内行数，32B/sizeof(element)
-                 rowsRound / ELE_NUM_PER_C0,     // 分形间行方向的分形数
-                 C0_NUM_PER_FRACTAL,             // 分形内列数，16
-                 colsRound / C0_NUM_PER_FRACTAL, // 分形间列方向的分形数
+                 ELE_NUM_PER_C0,              
+                 rowsRound / ELE_NUM_PER_C0,
+                 C0_NUM_PER_FRACTAL,        
+                 colsRound / C0_NUM_PER_FRACTAL, 
 
-                 1,                               // 分形内的行步长，因为分形内是列优先，所以是1
-                 ELE_NUM_PER_FRACTAL,             // 分形间的行步长，就是一个分形的元素数
-                 ELE_NUM_PER_C0,                  // 分形内的列步长
-                 rowsRound * C0_NUM_PER_FRACTAL); // 分形间的列步长，列方向上相邻两个分形的起始地址之间的距离，就是分形数乘以nN矩阵的列数
-     }
+                 1,                            
+                 ELE_NUM_PER_FRACTAL,          
+                 ELE_NUM_PER_C0,            
+                 rowsRound * C0_NUM_PER_FRACTAL); 
+  }
 
      /// Returns the offset of a coordinate in linear memory.
-     /// Assumes coordinate has convention (row, column) 这里的算法, nN 和zZ 应该是一样的
+     /// Assumes coordinate has convention (row, column) 
      ACOT_HOST_DEVICE
      LongIndex GetOffset(MatrixCoord const &coord) const
      {

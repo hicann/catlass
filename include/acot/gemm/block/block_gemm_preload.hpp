@@ -1,3 +1,13 @@
+/*
+ * Copyright (c) 2024 Huawei Technologies Co., Ltd.
+ * This file is a part of the CANN Open Software.
+ * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
+ */
+
 #ifndef ACOT_GEMM_BLOCK_BLOCK_GEMM_PRELOAD
 #define ACOT_GEMM_BLOCK_BLOCK_GEMM_PRELOAD
 
@@ -59,7 +69,7 @@ public:
     using LayoutBInL0 = typename CopyL1ToL0B::LayoutDst;
     using LayoutXInL0 = layout::zN;
 
-    static constexpr uint32_t STAGES = DispatchPolicy::STAGES; // 开启双缓冲机制的
+    static constexpr uint32_t STAGES = DispatchPolicy::STAGES;
     static constexpr bool ENABLE_UNIT_FLAG = DispatchPolicy::ENABLE_UNIT_FLAG;
     static constexpr bool ENABLE_SHUFFLE_K = DispatchPolicy::ENABLE_SHUFFLE_K;
     const uint32_t L1Size = ArchTag::L1_SIZE;
@@ -117,33 +127,29 @@ public:
         AscendC::GlobalTensor<ElementB> const &gmNextBlockB,
         MatmulCoord const &actualShape, MatmulCoord const &actualShapeNext,
         bool isFirstBlock, bool hasNextBlock, uint32_t singleIdx
-    ){  // 主体合二为一
+    ){ 
         uint32_t K = actualShape.k();
         uint32_t maxKPerBlock = L1TileShape::K;
         uint32_t KLoops = CeilDiv(K, maxKPerBlock);
         uint32_t startTileIdx{0};
-        if constexpr(!std::is_same<ElementA, float>::value && ENABLE_SHUFFLE_K){ // 特例优化
-            startTileIdx = AscendC::GetBlockIdx(); // shuffleK
+        if constexpr(!std::is_same<ElementA, float>::value && ENABLE_SHUFFLE_K){
+            startTileIdx = AscendC::GetBlockIdx();
         }
-        // uint32_t startTileIdx = AscendC::GetBlockIdx();
-        uint32_t firstTileIdx = startTileIdx % KLoops; // 先添加padding操作，在添加shuffleK操作
-        uint32_t lastTileIdx = (startTileIdx + KLoops - 1) % KLoops; // 最后一块
-        // 进行切分操作
-        // uint32_t KGmActual = min(K, maxKPerBlock); // 第一块 只有stride 进行了padding操作
+        uint32_t firstTileIdx = startTileIdx % KLoops; 
+        uint32_t lastTileIdx = (startTileIdx + KLoops - 1) % KLoops; 
         uint32_t KGmActual = (firstTileIdx == KLoops - 1) ? (K - firstTileIdx * maxKPerBlock) : maxKPerBlock;
         auto layoutAInL1 = LayoutAInL1::template MakeLayout<ElementA>(L1TileShape::M, L1TileShape::K);
         auto layoutBInL1 = LayoutBInL1::template MakeLayout<ElementB>(L1TileShape::K, L1TileShape::N);
         for(uint32_t KIdx = 0; KIdx < KLoops; KIdx++){
-            // 进行preload操作
             uint32_t shuffleKIdx = (startTileIdx + KIdx) % KLoops;
-            if(shuffleKIdx == firstTileIdx && isFirstBlock){ // 第一块搬运空间 和平常搬运是一样的
-                auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShape.m(), KGmActual)); // 生成子块
+            if(shuffleKIdx == firstTileIdx && isFirstBlock){ 
+                auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShape.m(), KGmActual)); 
                 auto layoutTileB = layoutB.GetTileLayout(MakeCoord(KGmActual, actualShape.n()));
-                MatrixCoord gmTileAOffset{0, shuffleKIdx * maxKPerBlock}; // gm中的偏移量
+                MatrixCoord gmTileAOffset{0, shuffleKIdx * maxKPerBlock}; 
                 auto gmTileA = gmA[layoutA.GetOffset(gmTileAOffset)];
-                MatrixCoord gmTileBOffset{shuffleKIdx * maxKPerBlock, 0}; // gm中的偏移量
+                MatrixCoord gmTileBOffset{shuffleKIdx * maxKPerBlock, 0}; 
                 auto gmTileB = gmB[layoutB.GetOffset(gmTileBOffset)];
-                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);  // 涉及太多计算 减少计算
+                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]); 
                 copyGmToL1A(l1ATensor[l1ListId], gmTileA, layoutAInL1, layoutTileA);
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListId]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
@@ -151,17 +157,17 @@ public:
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
             }
             l1ListIdNext = 1 - l1ListId;
-            uint32_t KGmActualNext = 0; // 初始化
-            if(shuffleKIdx != lastTileIdx){ // 中间过程 这里使用到了双缓冲
+            uint32_t KGmActualNext = 0; 
+            if(shuffleKIdx != lastTileIdx){ 
                 uint32_t shuffleKIdxNext = (startTileIdx + KIdx + 1) % KLoops;
-                KGmActualNext = (shuffleKIdxNext == KLoops - 1) ? (K - shuffleKIdxNext * maxKPerBlock) : maxKPerBlock; // 远远不是最后一次
-                auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShape.m(), KGmActualNext)); // 生成子块
+                KGmActualNext = (shuffleKIdxNext == KLoops - 1) ? (K - shuffleKIdxNext * maxKPerBlock) : maxKPerBlock; 
+                auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShape.m(), KGmActualNext)); 
                 auto layoutTileB = layoutB.GetTileLayout(MakeCoord(KGmActualNext, actualShape.n()));
-                MatrixCoord gmTileAOffset{0, shuffleKIdxNext * maxKPerBlock}; // gm中的偏移量
+                MatrixCoord gmTileAOffset{0, shuffleKIdxNext * maxKPerBlock}; 
                 auto gmTileA = gmA[layoutA.GetOffset(gmTileAOffset)];
-                MatrixCoord gmTileBOffset{shuffleKIdxNext * maxKPerBlock, 0}; // gm中的偏移量
+                MatrixCoord gmTileBOffset{shuffleKIdxNext * maxKPerBlock, 0}; 
                 auto gmTileB = gmB[layoutB.GetOffset(gmTileBOffset)];
-                if(shuffleKIdxNext % 2 == 1){ // ABBA
+                if(shuffleKIdxNext % 2 == 1){ 
                     AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListIdNext]);
                     copyGmToL1B(l1BTensor[l1ListIdNext], gmTileB, layoutBInL1, layoutTileB);
                     AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListIdNext]);
@@ -177,15 +183,15 @@ public:
                     AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListIdNext]);
                 }
             }
-            if(shuffleKIdx == lastTileIdx && hasNextBlock){ // 这个循环的最后一个 读下一个块的内容 K是相同的
+            if(shuffleKIdx == lastTileIdx && hasNextBlock){ 
                 KGmActualNext = (firstTileIdx == KLoops - 1) ? (K - firstTileIdx * maxKPerBlock) : maxKPerBlock;
-                auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShapeNext.m(), KGmActualNext)); // 生成子块
+                auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShapeNext.m(), KGmActualNext)); 
                 auto layoutTileB = layoutB.GetTileLayout(MakeCoord(KGmActualNext, actualShapeNext.n()));
-                MatrixCoord gmTileAOffset{0, firstTileIdx * maxKPerBlock}; // gm中的偏移量
+                MatrixCoord gmTileAOffset{0, firstTileIdx * maxKPerBlock}; 
                 auto gmNextTileA = gmNextBlockA[layoutA.GetOffset(gmTileAOffset)];
-                MatrixCoord gmTileBOffset{firstTileIdx * maxKPerBlock, 0}; // gm中的偏移量
+                MatrixCoord gmTileBOffset{firstTileIdx * maxKPerBlock, 0}; 
                 auto gmNextTileB = gmNextBlockB[layoutB.GetOffset(gmTileBOffset)];
-                if(shuffleKIdx % 2 == 0){ // AB BA
+                if(shuffleKIdx % 2 == 0){ 
                     AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListIdNext]);
                     copyGmToL1B(l1BTensor[l1ListIdNext], gmNextTileB, layoutBInL1, layoutTileB);
                     AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListIdNext]);
@@ -202,7 +208,6 @@ public:
                 }
             }
 
-            // 在K方向再进行一次切分处理
             uint32_t KL0TileSize = L0TileShape::K;
             uint32_t KL0Loops = CeilDiv(KGmActual, KL0TileSize);
             AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListId]);
@@ -211,8 +216,7 @@ public:
             auto l1BTile = l1BTensor[l1ListId];
             uint32_t MActual{0};
             uint32_t NActual{0};
-            // 后面的内容
-            for(uint32_t KL0Idx = 0; KL0Idx < KL0Loops; KL0Idx++){ // 同样能开始预取环节 先测试性能
+            for(uint32_t KL0Idx = 0; KL0Idx < KL0Loops; KL0Idx++){
                 uint32_t KL0Actual = (KL0Idx == KL0Loops - 1) ? (KGmActual - KL0Idx * KL0TileSize) : KL0TileSize;
                 auto layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(actualShape.m(), KL0Actual);
                 auto layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(actualShape.n(), KL0Actual);
@@ -233,7 +237,7 @@ public:
                     MActual = L1TileShape::N;
                 }
                 if(shuffleKIdx % 2 == 0){
-                    if(KL0Idx % 2 == 0){ // ABBA
+                    if(KL0Idx % 2 == 0){ 
                         AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0ListId]);
                         copyL1ToL0B(l0TileB, l1TileB, layoutBInL0, layoutBInL1);
                         AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0ListId]);
@@ -249,7 +253,7 @@ public:
                         AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0ListId]);
                     }
                 }else{
-                    if(KL0Idx % 2 == 0){ // ABBA
+                    if(KL0Idx % 2 == 0){
                         AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0ListId]);
                         copyL1ToL0A(l0TileA, l1TileA, layoutAInL0, layoutAInL1);
                         AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0ListId]);
@@ -265,14 +269,12 @@ public:
                         AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0ListId]);
                     }
                 }
-                if(KL0Idx == KL0Loops - 1){ // 最后一次直接放开waitflag
+                if(KL0Idx == KL0Loops - 1){ 
                     AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);
                     AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
-                    //更新l1ListId
                     l1ListId = l1ListIdNext;
                     KGmActual = KGmActualNext;
                 }
-                // 进行计算
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0ListId]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0ListId]);
                 tileMmad(l0XTensor[(singleIdx % l0XBlockNum) * BlockCnt], l0TileA, l0TileB, MActual, NActual, KL0Actual, (KIdx == 0) && (KL0Idx == 0));
@@ -283,12 +285,11 @@ public:
         }
         AscendC::SetFlag<AscendC::HardEvent::M_FIX>((int32_t)(singleIdx % l0XBlockNum));
         AscendC::WaitFlag<AscendC::HardEvent::M_FIX>((int32_t)(singleIdx % l0XBlockNum));
-        auto layoutInL0X = LayoutXInL0::MakeLayoutInL0C(MakeCoord(L1TileShape::M, L1TileShape::N)); // 获得MNCoord
+        auto layoutInL0X = LayoutXInL0::MakeLayoutInL0C(MakeCoord(L1TileShape::M, L1TileShape::N)); 
         LayoutX layoutBlock = layoutX.GetTileLayout(MakeCoord(actualShape.m(), actualShape.n()));
         copyL0CToGm(gmX, l0XTensor[(singleIdx % l0XBlockNum) * BlockCnt], layoutBlock, layoutInL0X);
     }
 private:
-    // 双缓冲区
     AscendC::LocalTensor<ElementA> l1ATensor[STAGES];
     AscendC::LocalTensor<ElementB> l1BTensor[STAGES];
     AscendC::LocalTensor<ElementA> l0ATensor[STAGES];

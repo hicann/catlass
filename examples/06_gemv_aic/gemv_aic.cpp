@@ -1,3 +1,13 @@
+/*
+ * Copyright (c) 2024 Huawei Technologies Co., Ltd.
+ * This file is a part of the CANN Open Software.
+ * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
+ */
+
 #include <iostream>
 #include <vector>
 
@@ -6,7 +16,6 @@
 
 #include "acot/acot.hpp"
 #include "acot/arch/arch.hpp"
-// #include "acot/gemv/block/block_gemv_aic.hpp"
 #include "acot/gemv/block/block_gemv.hpp"
 #include "acot/gemv/block/block_swizzle.hpp"
 
@@ -73,7 +82,7 @@ ACOT_GLOBAL void GemvAic(
 
     using BlockEpilogue = epilogue::block::BlockEpilogue<EpilogueBlockDispatchPolicy, TempType, YType, ZType, TileElemWiseAddGemv, TileElemWiseMulGemv, EpilogueTileCopy>;
 
-    using TileScheduler = typename gemv::block::GemvIdentityBlockSwizzle<3, 0>; // 暂时未使用
+    using TileScheduler = typename gemv::block::GemvIdentityBlockSwizzle<3, 0>;
 
     // kernle levels
     using GemvKernel = gemv::kernel::GemvEpilogue<BlockGemv, BlockEpilogue, TileScheduler>;
@@ -201,7 +210,7 @@ void Run(Options options)
 
     std::vector<float> hostA(lenA);
     std::vector<float> hostX(lenX);
-    std::vector<float> hostY(lenY); // 输入
+    std::vector<float> hostY(lenY);
     golden::FillRandomData(hostA, -1.0f, 1.0f);
     golden::FillRandomData(hostX, -1.0f, 1.0f);
     golden::FillRandomData(hostY, -1.0f, 1.0f);

@@ -86,10 +86,9 @@
          uint32_t maxmPerBlock_round = RoundUp(UBTileShape::M,align);
          uint32_t maxnPerBlock_round = RoundUp(UBTileShape::N,align);
 
-        //增加split k
+        //add split k
          uint32_t N_Split = RoundDown(params.problemShape.n(),params.SPLIT)/params.SPLIT;
          uint32_t Mloopnum = CeilDiv(params.problemShape.m(),maxmPerBlock_round);
-         //因为下面有减法，防止出现负数，所以改成有符号整形
          int32_t loopnum;
         float Realbeta= params.beta;
          if constexpr (std::is_same_v<LayoutA, acot::layout::ColumnMajor>){
@@ -114,7 +113,7 @@
          gmY_read.SetGlobalBuffer((__gm__ ElementY *)params.ptrY_read);
          uint32_t aiv_num = AscendC::GetBlockNum()*AscendC::GetTaskRation();
          for(uint32_t loop_id = 0;loop_id < loopnum;loop_id++){
-            uint32_t aiv_id = AscendC::GetBlockIdx();   //0-39
+            uint32_t aiv_id = AscendC::GetBlockIdx();   
             if(loop_id % aiv_num != aiv_id)continue;
             uint32_t m_actual = ((int32_t)loop_id > (int32_t)(loopnum - params.SPLIT - 1) ) ? params.problemShape.m() - ((loop_id/params.SPLIT) * maxmPerBlock_round) : maxmPerBlock_round;
             uint32_t n_actual = params.problemShape.n();
@@ -122,8 +121,8 @@
             if constexpr (std::is_same_v<LayoutA, acot::layout::ColumnMajor>) {
                 offset_matrix = (loop_id % params.SPLIT) * N_Split*params.problemShape.m()+(loop_id/params.SPLIT) * maxmPerBlock_round;
                 offset_vector_out = (loop_id/params.SPLIT) * maxmPerBlock_round;
-                offset_vector_in = (loop_id % params.SPLIT) * N_Split; // 执行原子加每行内的偏移值
-                //计算n方向上的分块长度
+                offset_vector_in = (loop_id % params.SPLIT) * N_Split; 
+                
                 if((loop_id%params.SPLIT) == params.SPLIT - 1){
                     n_actual = params.problemShape.n() - N_Split * (params.SPLIT - 1);
                 }

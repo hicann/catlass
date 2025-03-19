@@ -113,7 +113,7 @@ struct CopyGm2Ub<arch::AtlasA2, matmul::MatmulType<Element, layout::ColumnMajor>
     };
 
     // 重构了一个传vec的copyGm2Ub，因为vector传入的时候，可以直接连续传入，不需要再对齐
-    // 后续可能会改成华为提供的VectorLayout版本，主要是因为之前的实现中，向量都直接默认为了RowLayout的形式，目前不太方便直接使用
+    // 后续可能会改成华为提供的VectorLayout版本，主要是因为之前的实现中，向量都直接默认为了RowMajor的形式，目前不太方便直接使用
     template <
         class ArchTag,
         class GmType>

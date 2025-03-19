@@ -110,7 +110,7 @@ void ComputeGroupGemm(
     }
 }
 
-// Gemv 计算函数
+// simple gemv
 template<typename Element, class ElementA, class LayoutA, class ElementX, class LayoutX, class ElementY, class LayoutY, class ElementGolden, class LayoutGolden>
 void ComputeGemv(
     const acot::GemvCoord &problemShape,

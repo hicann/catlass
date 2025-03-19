@@ -27,9 +27,9 @@ namespace acot::gemv::tile
         class ArchTag,
         /// MatmulType for A matrix operand
         class AType,
-        /// MatmulType type for B matrix operand
+        /// MatmulType type for X matrix operand
         class XType,
-        /// MatmulType type for C matrix operand
+        /// MatmulType type for Y matrix operand
         class YType,
         /// MatmulTpe type for Bias operand
         class BiasType = void>
@@ -50,10 +50,10 @@ namespace acot::gemv::tile
         using CopyGmToL1A = gemv::tile::CopyGmToL1A<ArchTag, XType>;
         using CopyGmToL1B = gemv::tile::CopyGmToL1B<ArchTag, AType>;
         using CopyL1ToL0A = gemv::tile::CopyL1ToL0A<ArchTag, XType>;
-        using CopyL1ToL0B = gemv::tile::CopyL1BToL0B<ArchTag, AType>; // 补充 nZ->nZ搬运函数，nN-> zN
+        using CopyL1ToL0B = gemv::tile::CopyL1BToL0B<ArchTag, AType>; 
         using CopyL0CToGm = gemv::tile::CopyL0CToGm<ArchTag, ElementAccumulator, YType>;
     };
 
-} // namespace acot::matmul::tile
+} // namespace acot::gemv::tile
 
-#endif // ACOT_MATMUL_TILE_TILE_COPY_HPP
+#endif // ACOT_GEMV_TILE_TILE_COPY_HPP

@@ -30,7 +30,7 @@
      struct VecCopyUBToGm<arch::AtlasA2, matmul::MatmulType<Element, layout::RowMajor>>
      {
  
-         static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element); // 32B,一个block的大小
+         static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element); 
  
          // Mehtods
  
@@ -53,7 +53,6 @@
                  dstTensor,
                  srcTensor,
                  params
-                 // Padparams
              );
          }
      };
@@ -62,7 +61,7 @@
      struct VecCopyUBToGm<arch::AtlasA2, matmul::MatmulType<Element, layout::ColumnMajor>>
      {
  
-         static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element); // 32B,一个block的大小
+         static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element); 
  
          // Mehtods
  
@@ -86,13 +85,12 @@
                  dstTensor,
                  srcTensor,
                  params
-                 // Padparams
              );
              AscendC::SetAtomicNone();
          }
      };
  
- } // namespace acot::matmul::tile
+ } // namespace acot::gemv::tile
  
- #endif // ACOT_MATMUL_TILE_COPY_GM_TO_L1_HPP
+ #endif // ACOT_GEMV_TILE_VEC_COPY_UB_TO_GM_HPP
  

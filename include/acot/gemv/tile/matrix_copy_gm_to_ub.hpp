@@ -34,7 +34,7 @@
          using LayoutDst = layout::RowMajor;
          using LayoutSrc = layout::RowMajor;
  
-         static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element); // 32B,一个block的大小
+         static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element); 
  
          // Mehtods
  
@@ -115,7 +115,6 @@
          }
      };
  
-     /// Partial specialization for AtlasA2, ColumnMajor in and nZ out.
      template <class Element>
      struct MatrixCopyGmToUB<arch::AtlasA2, matmul::MatmulType<Element, layout::ColumnMajor>>
      {
@@ -139,7 +138,7 @@
              uint32_t n_actual = layoutSrc.shape(1);
              uint32_t m_round = layoutDst.shape(0);
              uint32_t n_round = layoutDst.shape(1);
-             uint32_t stride = layoutSrc.stride(1); // 列优先
+             uint32_t stride = layoutSrc.stride(1); 
  
              AscendC::DataCopyParams params;
              if ((m_actual % ELE_NUM_PER_C0 == 0) && (stride % ELE_NUM_PER_C0 == 0) && (stride < STRIDE_LIMIT))
@@ -203,7 +202,7 @@
          }
      };
  
- } // namespace acot::matmul::tile
+ } // namespace acot::gemv::tile
  
- #endif // ACOT_MATMUL_TILE_COPY_GM_TO_L1_HPP
+ #endif // ACOT_GEMV_TILE_MATRIX_COPY_GM_TO_UB_HPP
  

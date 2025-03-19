@@ -63,11 +63,10 @@
  
      static constexpr bool ENABLE_UNIT_FLAG = DispatchPolicy::ENABLE_UNIT_FLAG;
      static constexpr uint32_t STAGES = DispatchPolicy::STAGES;
-     //这里是把UB总共192KB分给了多个数据！
-     static constexpr uint32_t Abuf_SIZE_ = 128 * 1024;  //矩阵A
-     static constexpr uint32_t Xbuf_SIZE_ = 16 * 1024;  //向量X
-     static constexpr uint32_t Ybuf_SIZE_ = 16 * 1024;  //向量Y
-     static constexpr uint32_t workspace_SIZE_ = 32 * 1024;  //中间结果
+     static constexpr uint32_t Abuf_SIZE_ = 128 * 1024; 
+     static constexpr uint32_t Xbuf_SIZE_ = 16 * 1024;  
+     static constexpr uint32_t Ybuf_SIZE_ = 16 * 1024;  
+     static constexpr uint32_t workspace_SIZE_ = 32 * 1024; 
      ACOT_DEVICE
      BlockGemv(){}
      /// Construct
@@ -112,7 +111,6 @@
          
      }
  
-     /// Perform a block-scoped matrix multiply-accumulate
      ACOT_DEVICE
      void operator()(
          AscendC::GlobalTensor<ElementA> const &gmA, LayoutA const &layoutA,
@@ -154,14 +152,11 @@
          // main loop
         uint32_t Nloop = CeilDiv(actualShape.n(),TileNRound);
         for(uint32_t LoopIdx = 0;LoopIdx < Nloop; LoopIdx++){
-            
-            //如果是最后一次，计算出实际大小
             m_actual = (actualShape.m() < TileMRound) ? actualShape.m():TileMRound;
             n_actual = (LoopIdx == Nloop - 1) ? (actualShape.n() - LoopIdx * TileNRound) : TileNRound;
             y_actual = m_actual;
             x_actual = n_actual;
-            //把矩阵A和向量x传到UB
-            // 异步预取下一个阶段
+
             uint32_t UbInListIdNext = (UbInListId + 1 < STAGES) ? (UbInListId + 1) : 0;
             if(LoopIdx < Nloop - 1) {
                 uint32_t LoopIdxNext = LoopIdx + 1;
@@ -209,7 +204,6 @@
         }
         AscendC::SetFlag<AscendC::HardEvent::V_MTE3>((event_t)(UbOutEventList[UbOutListId]));
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>((event_t)(UbOutEventList[UbOutListId]));
-        //把结果传回gm
         vecCopyUbToGm(gmY, UbYTensorList[UbOutListId],y_actual);
         AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>((event_t)(UbOutEventList[UbOutListId]));
         UbOutListId = (UbOutListId + 1 < STAGES) ? (UbOutListId + 1) : 0;
@@ -217,7 +211,6 @@
  
  protected:
      // Multi-stage tensors list
-     // 分配LocalTensor空间
      AscendC::LocalTensor<ElementA> UbATensorList[STAGES];
      AscendC::LocalTensor<ElementX> UbXTensorList[STAGES];
      AscendC::LocalTensor<ElementY> UbYTensorList[STAGES];
@@ -244,7 +237,7 @@
      
  };
  
- } // namespace acot::matmul::block
+ } // namespace acot::gemv::block
  
- #endif // ACOT_MATMUL_BLOCK_BLOCK_MMAD_PINGPONG_HPP
+ #endif // ACOT_GEMV_BLOCK_BLOCK_GEMV_AIV_HPP
  

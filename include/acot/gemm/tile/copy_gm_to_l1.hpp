@@ -1,3 +1,13 @@
+/*
+ * Copyright (c) 2024 Huawei Technologies Co., Ltd.
+ * This file is a part of the CANN Open Software.
+ * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
+ */
+
 #ifndef ACOT_GEMM_TILE_COPY_GM_TO_L1_HPP
 #define ACOT_GEMM_TILE_COPY_GM_TO_L1_HPP
 
@@ -141,7 +151,7 @@ struct CopyGmToL1A<acot::arch::AtlasA2, acot::matmul::MatmulType<int8_t, acot::l
         params.dValue = MRound;
         params.srcNdMatrixStride = 0;
         params.srcDValue = stride;
-        params.dstNzC0Stride = KRound; // 填充操作
+        params.dstNzC0Stride = KRound;
         params.dstNzNStride = 1;
         params.dstNzMatrixStride = 1;
         AscendC::DataCopy(dstTensor, srcTensor, params);
@@ -226,7 +236,6 @@ struct CopyGmToL1B<arch::AtlasA2, acot::matmul::MatmulType<Element, acot::layout
     }
 };
 
-// 特例化int8_t
 template<>
 struct CopyGmToL1B<arch::AtlasA2, acot::matmul::MatmulType<int8_t, acot::layout::RowMajor>>{
     using LayoutDst = layout::zN;
@@ -275,7 +284,7 @@ struct CopyGmToL1B<arch::AtlasA2, matmul::MatmulType<Element, acot::layout::Colu
         uint32_t NActual = layoutSrc.shape(1);
         uint32_t NRound = layoutDst.shape(2) * layoutDst.shape(3);
         uint32_t KRound = layoutDst.shape(0) * layoutDst.shape(1);
-        uint32_t stride = layoutSrc.stride(1); // ColumnMajor
+        uint32_t stride = layoutSrc.stride(1); 
         AscendC::Nd2NzParams params;
         params.ndNum = 1;
         params.nValue = NActual;

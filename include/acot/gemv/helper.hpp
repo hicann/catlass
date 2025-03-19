@@ -39,14 +39,12 @@
  };
 
 
- // aic
  template <class Element, class Layout>
  struct L1AlignHelper
  {
      static_assert(DEPENDENT_FALSE<Element>, "Unsupported align helper, can not find the specialization.");
  };
 
- // 下列的各项行优先、列优先的对齐维度，需要在具体实现单核算子的时候重新review
  template <class Element>
  struct L1AlignHelper<Element, layout::RowMajor>
  {
@@ -61,16 +59,15 @@
  {
      static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
 
-     // 使用函数来根据类型确定 N_ALIGNED
      static constexpr uint32_t getNAligned()
      {
          if constexpr (std::is_same<Element, int8_t>::value)
          {
-             return ELE_NUM_PER_C0 / sizeof(Element); // 对于 int8 类型，对齐32
+             return ELE_NUM_PER_C0 / sizeof(Element); 
          }
          else
          {
-             return C0_NUM_PER_FRACTAL; // 对于其他类型，对齐16
+             return C0_NUM_PER_FRACTAL; 
          }
      }
 
@@ -78,15 +75,14 @@
      {
          if constexpr (std::is_same<Element, int8_t>::value)
          {
-             return ELE_NUM_PER_C0 / sizeof(Element); // 对于 int8 类型，对齐32
+             return ELE_NUM_PER_C0 / sizeof(Element); 
          }
          else
          {
-             return C0_NUM_PER_FRACTAL; // 对于其他类型，对齐16
+             return C0_NUM_PER_FRACTAL; 
          }
      }
 
-     // 提供一个静态常量，调用 getNAligned 函数来初始化 N_ALIGNED
      static constexpr uint32_t N_ALIGNED = getNAligned();
      static constexpr uint32_t M_ALIGNED = getMAligned();
  };
@@ -109,8 +105,6 @@
      static constexpr uint32_t N_ALIGNED = C0_NUM_PER_FRACTAL;
  };
 
- // 模板特例化
- // 根据输入矩阵、向量类型，选择对应的L0C中的数据类型
  template<>
  struct ElementAccumulatorSelector<half, half> {
      using ElementAccumulator = float;
@@ -137,7 +131,7 @@
      using ElementAccumulator = float;
  };
  
- } // namespace acot::matmul::helper
+ } // namespace acot::gemv::helper
  
- #endif // ACOT_MATMUL_HELPER_HPP
+ #endif // ACOT_GEMV_HELPER_HPP
  

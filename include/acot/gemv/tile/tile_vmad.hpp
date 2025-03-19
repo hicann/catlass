@@ -43,7 +43,7 @@ namespace acot::gemv::tile
         using ElementAccumulator =
             typename gemv::helper::ElementAccumulatorSelector<half, half>::ElementAccumulator;
 
-        static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementA); // 32B,一个block的大小
+        static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementA);
 
         // Mehtods
 
@@ -65,13 +65,13 @@ namespace acot::gemv::tile
             uint32_t elem_repeat_size = ELE_NUM_PER_C0 * 8;
             uint32_t mask = temp_repeat_size;
             uint32_t repeattimes = CeilDiv(m_actual, temp_repeat_size);
-            AscendC::Duplicate<ElementAccumulator>( // VEC_DUP
+            AscendC::Duplicate<ElementAccumulator>( 
                 temp,
                 (ElementAccumulator)0.0,
-                temp_repeat_size,                                      // mask
-                CeilDiv(m_round * temp_repeat_size, temp_repeat_size), // repeattimes
-                1,                                                     // blkstride
-                8                                                      // repstride
+                temp_repeat_size,                                    
+                CeilDiv(m_round * temp_repeat_size, temp_repeat_size), 
+                1,                                                     
+                8                                                     
             );
 
             uint32_t repeat_num = n_actual / temp_repeat_size;
@@ -82,14 +82,14 @@ namespace acot::gemv::tile
             params.dstBlkStride = 1;
             params.src0BlkStride = 1;
             params.src1BlkStride = 1;
-            params.dstRepStride = RoundUp(temp_repeat_size, temp_repeat_size) / (BYTE_PER_C0 / sizeof(ElementAccumulator)); // 8
+            params.dstRepStride = RoundUp(temp_repeat_size, temp_repeat_size) / (BYTE_PER_C0 / sizeof(ElementAccumulator));
             params.src0RepStride = RoundUp(n_round, elem_repeat_size) / ELE_NUM_PER_C0;
             params.src1RepStride = 0;
             AscendC::SetMaskCount();
-            AscendC::SetVectorMask<ElementAccumulator, AscendC::MaskMode::COUNTER>(m_actual * temp_repeat_size); // 设置counter模式
+            AscendC::SetVectorMask<ElementAccumulator, AscendC::MaskMode::COUNTER>(m_actual * temp_repeat_size);
             for (uint32_t i = 0; i < repeat_num; i++)
             {
-                uint32_t offset = i * temp_repeat_size; // 保留意见
+                uint32_t offset = i * temp_repeat_size; 
                 AscendC::MulAddDst<ElementAccumulator, ElementA, false>(
                     temp,
                     srcTensor_m[offset],
@@ -97,17 +97,11 @@ namespace acot::gemv::tile
                     AscendC::MASK_PLACEHOLDER,
                     1,
                     params);
-                //  AscendC::MulAddDst<ElementAccumulator, ElementA, true>(
-                //      temp,
-                //      srcTensor_m[offset],
-                //      srcTensor_v[offset],
-                //      temp_repeat_size,
-                //      m_actual,
-                //      params);
+
                 AscendC::PipeBarrier<PIPE_V>();
             }
             AscendC::SetMaskNorm();
-            AscendC::ResetMask(); // 还原mask值
+            AscendC::ResetMask(); 
 
             if (remain > 0)
             {
@@ -116,7 +110,7 @@ namespace acot::gemv::tile
                 {
                     remain = n_round - offset;
                 }
-                uint64_t remain_mask = remain; // 保留
+                uint64_t remain_mask = remain; 
                 AscendC::MulAddDst<ElementAccumulator, ElementA, true>(
                     temp,
                     srcTensor_m[offset],
@@ -126,7 +120,6 @@ namespace acot::gemv::tile
                     params);
             }
 
-            // 修正Reduce和Add操作
             uint64_t reduce_mask = (repeat_num == 0) ? remain : temp_repeat_size;
             AscendC::PipeBarrier<PIPE_V>();
             AscendC::WholeReduceSum<ElementAccumulator, true>(
@@ -141,7 +134,7 @@ namespace acot::gemv::tile
             AscendC::UnaryRepeatParams castparams;
             castparams.dstBlkStride = 1;
             castparams.srcBlkStride = 1;
-            castparams.dstRepStride = 4; // 以数据类型大的为准，即以float为准
+            castparams.dstRepStride = 4; 
             castparams.srcRepStride = 8;
             AscendC::Cast<ElementA, ElementAccumulator, true>(
                 srcTensor_m,
@@ -180,7 +173,7 @@ namespace acot::gemv::tile
         using ElementAccumulator =
             typename gemv::helper::ElementAccumulatorSelector<ElementA, ElementX>::ElementAccumulator;
 
-        static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementA); // 32B,一个block的大小
+        static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementA); 
 
         // Mehtods
 
@@ -198,7 +191,7 @@ namespace acot::gemv::tile
             uint32_t m_round,
             uint32_t n_round)
         {
-            uint32_t repeat_size = ELE_NUM_PER_C0 * 8; // 每个repeat处理8个block
+            uint32_t repeat_size = ELE_NUM_PER_C0 * 8; 
             uint32_t mask = repeat_size;
             uint32_t repeat_num = n_actual / repeat_size;
             uint32_t remain = n_actual % repeat_size;
@@ -211,7 +204,7 @@ namespace acot::gemv::tile
             params.src0RepStride = RoundUp(n_round, repeat_size) / ELE_NUM_PER_C0;
             params.src1RepStride = 0;
             AscendC::SetMaskCount();
-            AscendC::SetVectorMask<ElementA, AscendC::MaskMode::COUNTER>(m_actual * repeat_size); // 设置counter模式
+            AscendC::SetVectorMask<ElementA, AscendC::MaskMode::COUNTER>(m_actual * repeat_size);
             for (uint32_t i = 0; i < repeat_num; i++)
             {
                 uint32_t offset = i * repeat_size;
@@ -224,13 +217,6 @@ namespace acot::gemv::tile
                         AscendC::MASK_PLACEHOLDER,
                         1,
                         params);
-                    //  AscendC::Mul<ElementA, true>(
-                    //      srcTensor_m,
-                    //      srcTensor_m,
-                    //      srcTensor_v,
-                    //      mask,
-                    //      m_actual,
-                    //      params);
                 }
                 else
                 {
@@ -241,18 +227,11 @@ namespace acot::gemv::tile
                         AscendC::MASK_PLACEHOLDER,
                         1,
                         params);
-                    //  AscendC::MulAddDst<ElementA, ElementA, true>(
-                    //      srcTensor_m,
-                    //      srcTensor_m[offset],
-                    //      srcTensor_v[offset],
-                    //      mask,
-                    //      m_actual,
-                    //      params);
                 }
                 AscendC::PipeBarrier<PIPE_V>();
             }
             AscendC::SetMaskNorm();
-            AscendC::ResetMask(); // 还原mask值
+            AscendC::ResetMask(); 
 
             if (remain > 0)
             {
@@ -284,7 +263,6 @@ namespace acot::gemv::tile
                 }
             }
 
-            // 修正Reduce和Add操作
             uint64_t reduce_mask = (repeat_num == 0) ? remain : repeat_size;
             AscendC::PipeBarrier<PIPE_V>();
             AscendC::WholeReduceSum<ElementA, true>(
@@ -307,13 +285,12 @@ namespace acot::gemv::tile
                 srcTensor_m,
                 dstTensor,
                 add_mask,
-                CeilDiv(m_round, repeat_size), // 修正为m_round
+                CeilDiv(m_round, repeat_size), 
                 params);
         }
     };
 
     template <>
-    /// Partial specialization for AtlasA2, RowMajor in and zN out.
     struct TileVmad<arch::AtlasA2,
                     matmul::MatmulType<half, layout::ColumnMajor>,
                     matmul::MatmulType<half, layout::ColumnMajor>,
@@ -326,7 +303,7 @@ namespace acot::gemv::tile
         using ElementAccumulator =
             typename gemv::helper::ElementAccumulatorSelector<half, half>::ElementAccumulator;
 
-        static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementA); // 32B,一个block的大小
+        static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementA); 
 
         // Mehtods
 
@@ -344,29 +321,16 @@ namespace acot::gemv::tile
             uint32_t m_round,
             uint32_t n_round)
         {
-            //  uint32_t temp_repeat_size = BYTE_PER_C0 * 8 / sizeof(ElementAccumulator);
-            //  uint32_t elem_repeat_size = BYTE_PER_C0 * 8 / sizeof(ElementA);
-            //  uint32_t mask = temp_repeat_size;
-            //  uint32_t repeattimes = CeilDiv(m_actual, temp_repeat_size);
             AscendC::SetMaskCount();
-            AscendC::SetVectorMask<ElementAccumulator, AscendC::MaskMode::COUNTER>(m_actual); // 设置counter模式
-            AscendC::Duplicate<ElementAccumulator, false>(                                    // VEC_DUP
+            AscendC::SetVectorMask<ElementAccumulator, AscendC::MaskMode::COUNTER>(m_actual); 
+            AscendC::Duplicate<ElementAccumulator, false>(                                 
                 temp,
                 (ElementAccumulator)0.0,
-                AscendC::MASK_PLACEHOLDER, // mask
-                1,                         // repeattimes
-                1,                         // blkstride
-                8                          // repstride
+                AscendC::MASK_PLACEHOLDER,
+                1,                      
+                1,                   
+                8                          
             );
-            //  AscendC::Duplicate<ElementAccumulator,false>( // VEC_DUP
-            //      temp,
-            //      (ElementAccumulator)0.0,
-            //      temp_repeat_size,                   // mask
-            //      CeilDiv(m_round, temp_repeat_size), // repeattimes
-            //      1,                                  // blkstride
-            //      8                                   // repstride
-            //  );
-
             AscendC::PipeBarrier<PIPE_V>();
 
             ElementX pix[32];
@@ -383,7 +347,7 @@ namespace acot::gemv::tile
             params.dstBlkStride = 1;
             params.srcBlkStride = 1;
             params.dstRepStride = 8;
-            params.srcRepStride = 4; // mix运算,后四个block不会算
+            params.srcRepStride = 4; 
             for (uint32_t i = 0; i < n_actual; i++)
             {
                 AscendC::Axpy<ElementAccumulator, ElementA, false>(
@@ -393,17 +357,9 @@ namespace acot::gemv::tile
                     AscendC::MASK_PLACEHOLDER,
                     1,
                     params);
-                //  AscendC::Axpy<ElementAccumulator, ElementA, true>(
-                //      temp,
-                //      srcTensor_m[i * m_round],
-                //      // mTensor[i*m_round],
-                //      pix[i],
-                //      (uint64_t)mask,
-                //      repeattimes,
-                //      params);
                 AscendC::PipeBarrier<PIPE_V>();
             }
-            params.dstRepStride = 4; // 以数据类型大的为准，即以float为准
+            params.dstRepStride = 4; 
             params.srcRepStride = 8;
             AscendC::Cast<ElementA, ElementAccumulator, false>(
                 srcTensor_m,
@@ -412,14 +368,6 @@ namespace acot::gemv::tile
                 AscendC::MASK_PLACEHOLDER,
                 1,
                 params);
-
-            //  AscendC::Cast<ElementA, ElementAccumulator, true>(
-            //      srcTensor_m,
-            //      temp,
-            //      AscendC::RoundMode::CAST_NONE,
-            //      (uint64_t)mask,
-            //      repeattimes,
-            //      params);
             AscendC::BinaryRepeatParams addparams;
             addparams.dstBlkStride = 1;
             addparams.src0BlkStride = 1;
@@ -436,22 +384,14 @@ namespace acot::gemv::tile
                 1,
                 addparams);
             AscendC::SetMaskNorm();
-            AscendC::ResetMask(); // 还原mask值
-                                  //  AscendC::Add<ElementA, true>(
-                                  //      dstTensor,
-                                  //      srcTensor_m,
-                                  //      dstTensor,
-                                  //      (uint64_t)elem_repeat_size,
-                                  //      CeilDiv(m_round, elem_repeat_size),
-                                  //      addparams);
+            AscendC::ResetMask(); 
         }
     };
-    /// Partial specialization for AtlasA2, ColumnMajor in and nZ out.
+
     template <
         class ElementA,
         class ElementX,
         class ElementY>
-    /// Partial specialization for AtlasA2, RowMajor in and zN out.
     struct TileVmad<arch::AtlasA2,
                     matmul::MatmulType<ElementA, layout::ColumnMajor>,
                     matmul::MatmulType<ElementX, layout::ColumnMajor>,
@@ -461,7 +401,7 @@ namespace acot::gemv::tile
         using ElementAccumulator =
             typename gemv::helper::ElementAccumulatorSelector<ElementA, ElementX>::ElementAccumulator;
 
-        static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementA); // 32B,一个block的大小
+        static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementA); 
 
         // Mehtods
 
@@ -479,10 +419,6 @@ namespace acot::gemv::tile
             uint32_t m_round,
             uint32_t n_round)
         {
-
-            //  uint32_t elem_repeat_size = BYTE_PER_C0 * 8 / sizeof(ElementA);
-            //  uint32_t mask = elem_repeat_size;
-            //  uint32_t repeattimes = CeilDiv(m_actual, elem_repeat_size);
             ElementX pix[32];
             AscendC::SetFlag<AscendC::HardEvent::V_S>((event_t)(0));
             AscendC::WaitFlag<AscendC::HardEvent::V_S>((event_t)(0));
@@ -498,10 +434,10 @@ namespace acot::gemv::tile
             params.dstRepStride = 8;
             params.srcRepStride = 8;
             AscendC::SetMaskCount();
-            AscendC::SetVectorMask<ElementA, AscendC::MaskMode::COUNTER>(m_actual); // 设置counter模式
+            AscendC::SetVectorMask<ElementA, AscendC::MaskMode::COUNTER>(m_actual); 
             for (uint32_t i = 0; i < n_actual; i++)
             {
-                AscendC::Axpy<ElementY, ElementA, false>( // vaxpy
+                AscendC::Axpy<ElementY, ElementA, false>( 
                     dstTensor,
                     srcTensor_m[i * m_round],
                     pix[i],
@@ -511,7 +447,7 @@ namespace acot::gemv::tile
                 AscendC::PipeBarrier<PIPE_V>();
             }
             AscendC::SetMaskNorm();
-            AscendC::ResetMask(); // 还原mask值
+            AscendC::ResetMask();
         }
     };
 
@@ -566,4 +502,4 @@ namespace acot::gemv::tile
     };
 }
 
-#endif // ACOT_MATMUL_TILE_COPY_GM_TO_L1_HPP
+#endif // ACOT_GEMV_TILE_TILE_VMAD_HPP

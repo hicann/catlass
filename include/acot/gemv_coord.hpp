@@ -104,4 +104,4 @@ namespace acot
 
 } // namespace acot
 
-#endif // ACOT_MATMUL_COORD_HPP
+#endif // ACOT_GEMV_COORD_HPP

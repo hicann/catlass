@@ -23,7 +23,7 @@
      typename Element
  >
  struct VecCopyGmToUB {
-     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);      //32B,一个block的大小
+     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
  
      // Mehtods
  
@@ -37,17 +37,17 @@
         uint32_t len
     ) {
         AscendC::DataCopyParams params;
-        params.blockCount = 1;  //连续传输数据块个数
-        params.blockLen = CeilDiv(len, ELE_NUM_PER_C0);  //每个连续传输数据块长度
-        params.srcStride = 0;  //源操作数，相邻连续数据块的间隔
-        params.dstStride = 0;  //目的操作数，相邻连续数据块间的间隔
+        params.blockCount = 1;
+        params.blockLen = CeilDiv(len, ELE_NUM_PER_C0); 
+        params.srcStride = 0; 
+        params.dstStride = 0;  
         AscendC::DataCopy(
             dstTensor, 
             srcTensor, 
             params);
     }
  };
- } // namespace acot::matmul::tile
+ } // namespace acot::gemv::tile
  
- #endif // ACOT_MATMUL_TILE_COPY_GM_TO_L1_HPP
+ #endif // ACOT_GEMV_TILE_VEC_COPY_GM_TO_UB_HPP
  
