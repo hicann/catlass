@@ -29,5 +29,7 @@ class BlockEpilogue {
 #include "acot/epilogue/block/block_epilogue_fa_softmax.hpp"
 #include "acot/epilogue/block/block_epilogue_fa_rescal_o.hpp"
 #include "acot/epilogue/block/block_epilogue_per_token_dequant.hpp"
+#include "acot/epilogue/block/block_epilogue_gemm.hpp"
+#include "acot/epilogue/block/block_epilogue_gemv.hpp"
 
 #endif  // ACOT_EPILOGUE_BLOCK_BLOCK_EPILOGUE_HPP

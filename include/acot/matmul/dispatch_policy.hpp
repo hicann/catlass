@@ -40,6 +40,10 @@ struct MmadAtlasA2Preload : public MmadAtlasA2 {
     static constexpr bool ENABLE_SHUFFLE_K = ENABLE_SHUFFLE_K_;
 };
 
+struct GemvAtlasA2 : public MmadAtlasA2 {
+    static constexpr uint32_t STAGES = 2;
+};
+
 struct MmadAtlasA2FAQK : public MmadAtlasA2 {
     static constexpr uint32_t STAGES = 2;
 };

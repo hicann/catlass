@@ -5,9 +5,9 @@
 # THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 # See LICENSE in the root of the software repository for the full text of the License.
-
 set(ACOT_EXAMPLES_COMMON_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/common)
 set(CCEC_COMPILER_OPTIONS
+    # -O2 -std=c++17 -xcce --cce-aicore-arch=dav-c220-vec
     -O2 -std=c++17 -xcce --cce-aicore-arch=dav-c220
     -mllvm -cce-aicore-stack-size=0x8000
     -mllvm -cce-aicore-function-stack-size=0x8000
@@ -51,6 +51,10 @@ foreach(EXAMPLE
     00_basic_matmul
     01_grouped_matmul
     02_optimized_matmul
+    03_gemm
+    04_groupgemm
+    05_gemv_aiv
+    06_gemv_aic
 )
     add_subdirectory(${EXAMPLE})
 endforeach()
