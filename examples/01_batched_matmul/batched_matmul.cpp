@@ -22,73 +22,14 @@
 #include "AscendCT/gemm/matmul_type.hpp"
 #include "AscendCT/layout/layout.hpp"
 
+#include "AscendCT/status.hpp"
+#include "AscendCT/gemm/device/matmul_universal_adapter.hpp"
+
 using namespace AscendCT;
 using fp16_t = op::fp16_t;
 
 constexpr float DATA_UPPER_BOUND = 5;
 constexpr float DATA_LOWER_BOUND = -5;
-
-template <class LayoutA, class LayoutB, class LayoutC>
-ASCENDCT_GLOBAL
-void BatchedMatmul(uint32_t batchCount, MatmulCoord problemShape,
-                   GM_ADDR gmA, LayoutA layoutA,
-                   GM_ADDR gmB, LayoutB layoutB,
-                   GM_ADDR gmC, LayoutC layoutC)
-{
-    using ArchTag = arch::AtlasA2;
-    using DispatchPolicy = gemm::MmadAtlasA2Pingpong<true>;
-    using L1TileShape = MatmulShape<128, 256, 256>;
-    using L0TileShape = MatmulShape<128, 256, 64>;
-
-    using AType = gemm::MatmulType<half, LayoutA>;
-    using BType = gemm::MatmulType<half, LayoutB>;
-    using CType = gemm::MatmulType<half, LayoutC>;
-
-    using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
-    using BlockEpilogue = void;
-
-    if (problemShape.m() > problemShape.n()) {
-        // Swizzle offset is 3 and direction is 0.
-        using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 0>;
-
-        // kernel level
-        using MatmulKernel = gemm::kernel::BatchedMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
-
-        int64_t strideA = problemShape.m() * problemShape.k();
-        int64_t strideB = problemShape.k() * problemShape.n();
-        int64_t strideC = problemShape.m() * problemShape.n();
-        typename MatmulKernel::Params params{
-            batchCount, problemShape,
-            gmA, layoutA, strideA,
-            gmB, layoutB, strideB,
-            gmC, layoutC, strideC
-        };
-
-        // call a kernel
-        MatmulKernel matmul;
-        matmul(params);
-    } else {
-        // Swizzle offset is 3 and direction is 1.
-        using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 1>;
-
-        // kernel level
-        using MatmulKernel = gemm::kernel::BatchedMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
-
-        int64_t strideA = problemShape.m() * problemShape.k();
-        int64_t strideB = problemShape.k() * problemShape.n();
-        int64_t strideC = problemShape.m() * problemShape.n();
-        typename MatmulKernel::Params params{
-            batchCount, problemShape,
-            gmA, layoutA, strideA,
-            gmB, layoutB, strideB,
-            gmC, layoutC, strideC
-        };
-
-        // call a kernel
-        MatmulKernel matmul;
-        matmul(params);
-    }
-}
 
 struct Options {
     const std::string HELPER = "01_batched_matmul b m n k [device_id]";
@@ -199,9 +140,34 @@ void Run(Options const &options)
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
-    BatchedMatmul<<<aicCoreNum, nullptr, stream>>>(batchCount, problemShape,
-        deviceA, layoutA, deviceB, layoutB, deviceC, layoutC);
+    using ArchTag = arch::AtlasA2;
+    using DispatchPolicy = gemm::MmadAtlasA2Pingpong<true>;
+    using L1TileShape = MatmulShape<128, 256, 256>;
+    using L0TileShape = MatmulShape<128, 256, 64>;
+
+    using AType = gemm::MatmulType<half, LayoutA>;
+    using BType = gemm::MatmulType<half, LayoutB>;
+    using CType = gemm::MatmulType<half, LayoutC>;
+
+    using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+    using BlockEpilogue = void;
+
+    // Swizzle offset is 3 and direction is 0.
+    using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 0>;
+
+    // kernel level
+    using MatmulKernel = gemm::kernel::BatchedMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
+
+    using MatmulAdapter = gemm::device::MatmulUniversalAdapter<MatmulKernel>;
+    MatmulKernel::Arguments arguments{batchCount, problemShape,
+        deviceA, deviceB, deviceC};
+    MatmulAdapter matmul_op;
+
+    uint8_t *deviceWorkspace{nullptr};
+    matmul_op.Initialize(arguments, deviceWorkspace);
+    matmul_op(stream, aicCoreNum);
     ACL_CHECK(aclrtSynchronizeStream(stream));
+    
     ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
 
     // comparison of precision with matmul computed on cpu

@@ -27,82 +27,13 @@
 #include "AscendCT/gemm/matmul_type.hpp"
 #include "AscendCT/layout/layout.hpp"
 
+#include "AscendCT/status.hpp"
+#include "AscendCT/gemm/device/matmul_universal_adapter.hpp"
+
 using namespace AscendCT;
 using fp16_t = op::fp16_t;
 
-template <
-    class LayoutA,
-    class LayoutB,
-    class LayoutC
->
-ASCENDCT_GLOBAL
-void MatmulAdd(
-    uint64_t fftsAddr,
-    MatmulCoord problemShape,
-    GM_ADDR gmA, LayoutA layoutA,
-    GM_ADDR gmB, LayoutB layoutB,
-    GM_ADDR gmD, LayoutC layoutD,
-    GM_ADDR gmWorkspace
-)
-{
-    // Set FFTS address
-    AscendC::SetSyncBaseAddr(fftsAddr);
-    // Define ArchTag
-    using ArchTag = arch::AtlasA2;
 
-    // Block level, define BlockMmad
-    constexpr bool enableUnitFlag = true;
-    using MmadDispatchPolicy = gemm::MmadAtlasA2Pingpong<enableUnitFlag>;
-    using L1TileShape = MatmulShape<128, 256, 256>;
-    using L0TileShape = MatmulShape<128, 256, 64>;
-    using AType = gemm::MatmulType<half, LayoutA>;
-    using BType = gemm::MatmulType<half, LayoutB>;
-    using CType = gemm::MatmulType<half, LayoutC>;
-    using BlockMmad = gemm::block::BlockMmad<MmadDispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
-
-    // Block level, define BlockEpilogue
-    using EpilogueDispatchPolicy = epilogue::EpilogueAtlasA2ElemWiseOneSource;
-    using XType = CType;
-    using DType = CType;
-    using ComputeType = CType;
-    constexpr uint32_t computeLength = 16384;
-    using TileElemWiseEpilogue = epilogue::tile::TileElemWiseAdd<ArchTag, ComputeType, computeLength>;
-    using EpilogueTileCopy = epilogue::tile::TileCopy<ArchTag, CType, XType, DType>;
-    using BlockEpilogue = epilogue::block::BlockEpilogue<EpilogueDispatchPolicy, CType, XType, DType,
-        TileElemWiseEpilogue, EpilogueTileCopy>;
-
-    if (problemShape.m() > problemShape.n()) {
-        // Define BlockScheduler
-        // Swizzle offset is 3 and direction is 0.
-        using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 0>;
-
-        // Kernel level
-        using MatmulKernel = gemm::kernel::MatmulEpilogue<BlockMmad, BlockEpilogue, BlockScheduler>;
-
-        // Prepare params
-        typename BlockEpilogue::Params epilogueParams{gmD, layoutD, gmD, layoutD};
-        typename MatmulKernel::Params params{problemShape, gmA, layoutA, gmB, layoutB, gmWorkspace, epilogueParams};
-
-        // call kernel
-        MatmulKernel matmul;
-        matmul(params);
-    } else {
-        // Define BlockScheduler
-        // Swizzle offset is 3 and direction is 1.
-        using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 1>;
-
-        // Kernel level
-        using MatmulKernel = gemm::kernel::MatmulEpilogue<BlockMmad, BlockEpilogue, BlockScheduler>;
-
-        // Prepare params
-        typename BlockEpilogue::Params epilogueParams{gmD, layoutD, gmD, layoutD};
-        typename MatmulKernel::Params params{problemShape, gmA, layoutA, gmB, layoutB, gmWorkspace, epilogueParams};
-
-        // call kernel
-        MatmulKernel matmul;
-        matmul(params);
-    }
-}
 
 struct Options {
     const std::string HELPER = "03_matmul_add m n k [device_id]";
@@ -158,12 +89,14 @@ void Run(Options const &options)
     size_t sizeA = lenA * sizeof(fp16_t);
     size_t sizeB = lenB * sizeof(fp16_t);
     size_t sizeD = lenD * sizeof(fp16_t);
-    size_t sizeWorkspace = sizeD;
 
     // Define the layout of each matrix
-    layout::RowMajor layoutA{m, k};
-    layout::RowMajor layoutB{k, n};
-    layout::RowMajor layoutD{m, n};
+    using LayoutA = layout::RowMajor;
+    using LayoutB = layout::RowMajor;
+    using LayoutC = layout::RowMajor;
+    LayoutA layoutA{m, k};
+    LayoutB layoutB{k, n};
+    LayoutC layoutD{m, n};
 
     // Prepare input data A, B, and X
     std::vector<fp16_t> hostA(lenA);
@@ -187,9 +120,6 @@ void Run(Options const &options)
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceD), sizeD, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceD, sizeD, hostX.data(), sizeD, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceWorkspace{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
-
     // Prepare FFTS address
     uint64_t fftsAddr{0};
     uint32_t fftsLen{0};
@@ -198,10 +128,54 @@ void Run(Options const &options)
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
-    // Launch the kernel
-    MatmulAdd<<<aicCoreNum, nullptr, stream>>>(
-        fftsAddr, options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceD, layoutD, deviceWorkspace);
+    // Define ArchTag
+    using ArchTag = arch::AtlasA2;
+
+    // Block level, define BlockMmad
+    constexpr bool enableUnitFlag = true;
+    using MmadDispatchPolicy = gemm::MmadAtlasA2Pingpong<enableUnitFlag>;
+    using L1TileShape = MatmulShape<128, 256, 256>;
+    using L0TileShape = MatmulShape<128, 256, 64>;
+    using AType = gemm::MatmulType<half, LayoutA>;
+    using BType = gemm::MatmulType<half, LayoutB>;
+    using CType = gemm::MatmulType<half, LayoutC>;
+    using BlockMmad = gemm::block::BlockMmad<MmadDispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+
+    // Block level, define BlockEpilogue
+    using EpilogueDispatchPolicy = epilogue::EpilogueAtlasA2ElemWiseOneSource;
+    using XType = CType;
+    using DType = CType;
+    using ComputeType = CType;
+    constexpr uint32_t computeLength = 16384;
+    using TileElemWiseEpilogue = epilogue::tile::TileElemWiseAdd<ArchTag, ComputeType, computeLength>;
+    using EpilogueTileCopy = epilogue::tile::TileCopy<ArchTag, CType, XType, DType>;
+    using BlockEpilogue = epilogue::block::BlockEpilogue<EpilogueDispatchPolicy, CType, XType, DType,
+        TileElemWiseEpilogue, EpilogueTileCopy>;
+
+    // Define BlockScheduler
+    // Swizzle offset is 3 and direction is 0.
+    using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 0>;
+
+    // Kernel level
+    using MatmulKernel = gemm::kernel::MatmulEpilogue<BlockMmad, BlockEpilogue, BlockScheduler>;
+
+    // Prepare params
+    typename MatmulKernel::Arguments arguments{
+        options.problemShape, sizeof(half), deviceA, deviceB, deviceD};
+    using MatmulAdapter = gemm::device::MatmulUniversalAdapter<MatmulKernel>;
+    MatmulAdapter matmul_op;
+    size_t sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
+    uint8_t *deviceWorkspace{nullptr};
+    if (sizeWorkspace > 0) {
+        ACL_CHECK(
+            aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace,ACL_MEM_MALLOC_HUGE_FIRST));
+    }
+    matmul_op.Initialize(arguments, deviceWorkspace);
+    matmul_op(stream, aicCoreNum, fftsAddr);
     ACL_CHECK(aclrtSynchronizeStream(stream));
+    if (sizeWorkspace > 0) {
+        ACL_CHECK(aclrtFree(deviceWorkspace));
+    }
 
     // Copy the result from device to host
     std::vector<fp16_t> hostD(lenD);
@@ -222,7 +196,6 @@ void Run(Options const &options)
     ACL_CHECK(aclrtFree(deviceA));
     ACL_CHECK(aclrtFree(deviceB));
     ACL_CHECK(aclrtFree(deviceD));
-    ACL_CHECK(aclrtFree(deviceWorkspace));
 
     ACL_CHECK(aclrtDestroyStream(stream));
     ACL_CHECK(aclrtResetDevice(options.deviceId));

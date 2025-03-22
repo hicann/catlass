@@ -226,6 +226,71 @@ void FreeMem(uint8_t *host, uint8_t *device)
     ACL_CHECK(aclrtFree(device));
 }
 
+
+void RunFA(uint64_t fftsAddr,
+           uint8_t *q, uint8_t *k, uint8_t *v,
+           uint8_t *mask, uint8_t *o, uint8_t *s,
+           uint8_t *p, uint8_t *oTmp, uint8_t *tiling, aclrtStream stream)
+{
+
+    using ArchTag = arch::AtlasA2;
+    using ElementQ = half;
+    using LayoutQ = layout::RowMajor;
+    using ElementK = half;
+    using LayoutK = layout::ColumnMajor;
+    using ElementV = half;
+    using LayoutV = layout::RowMajor;
+    using ElementS = half;
+    using LayoutS = layout::RowMajor;
+    using ElementP = half;
+    using LayoutP = layout::RowMajor;
+    using ElementO = half;
+    using LayoutO = layout::RowMajor;
+    using ElementMask = half;
+    using LayoutMask = layout::RowMajor;
+    using ElementOTmp = float;
+    using LayoutOTmp = layout::RowMajor;
+
+    // L1TileShape::K must be embdding
+    using L1TileShape = MatmulShape<128, 128, 128>;
+    using L0TileShape = L1TileShape;
+
+    // Mmadqk
+    using DispatchPolicyQK = gemm::MmadAtlasA2FAQK;
+    using QType = gemm::MatmulType<ElementQ, LayoutQ>;
+    using KType = gemm::MatmulType<ElementK, LayoutK>;
+    using SType = gemm::MatmulType<ElementS, LayoutS>;
+    using BlockMmadQK = gemm::block::BlockMmad<DispatchPolicyQK, L1TileShape, L0TileShape, QType, KType, SType>;
+    // EpilogueSoftmax
+    using PType = gemm::MatmulType<ElementP, LayoutP>;
+    using MaskType = gemm::MatmulType<ElementMask, LayoutMask>;
+    using EpilogueFASoftmax =
+        epilogue::block::BlockEpilogue<epilogue::EpilogueAtlasA2FASoftmax, PType, SType, MaskType>;
+
+    // Mmadpv
+    using DispatchPolicyPV = gemm::MmadAtlasA2FAPV;
+    using VType = gemm::MatmulType<ElementV, LayoutV>;
+    using OTmpType = gemm::MatmulType<ElementOTmp, LayoutOTmp>;
+    using BlockMmadPV = gemm::block::BlockMmad<DispatchPolicyPV, L1TileShape, L0TileShape, PType, VType, OTmpType>;
+    // EpilogueRescaleO
+    using OType = gemm::MatmulType<ElementO, LayoutO>;
+    using EpilogueFARescaleO =
+        epilogue::block::BlockEpilogue<epilogue::EpilogueAtlasA2FARescaleO, OType, OTmpType>;
+
+    // Kernel level
+    using FAKernel = FAKernel<BlockMmadQK, BlockMmadPV, EpilogueFASoftmax, EpilogueFARescaleO>;
+    typename FAKernel::Arguments arguments{q, k, v, mask, o, s, p, oTmp, tiling};
+    using FaAdapter = gemm::device::MatmulUniversalAdapter<FAKernel>;
+    FaAdapter fa_op;
+
+    uint8_t *deviceWorkspace = nullptr;
+    fa_op.Initialize(arguments, deviceWorkspace);
+    auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
+    fa_op(stream, aicCoreNum, fftsAddr);
+
+    ACL_CHECK(aclrtSynchronizeStream(stream));
+}
+
 // Allocate several matrices in NPU device memory and call a
 // ASCENDCT FA kernel.
 void Run(const Options &options)
@@ -350,9 +415,7 @@ void Run(const Options &options)
     uint32_t fftsLen{0};
     RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
 
-    FA<<<blockDim, nullptr, stream>>>(
-        fftsAddr, qDevice, kDevice, vDevice, maskDevice, oDevice, sDevice, pDevice, oTmpDevice, tilingDevice);
-    ACL_CHECK(aclrtSynchronizeStream(stream));
+    RunFA(fftsAddr, qDevice, kDevice, vDevice, maskDevice, oDevice, sDevice, pDevice, oTmpDevice, tilingDevice, stream);
 
     // Copy the result from device to host
     vector<fp16_t> oHost(qoSize / sizeof(fp16_t));

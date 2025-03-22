@@ -29,87 +29,12 @@
 #include "AscendCT/gemm/matmul_type.hpp"
 #include "AscendCT/layout/layout.hpp"
 
+#include "AscendCT/status.hpp"
+#include "AscendCT/gemm/device/matmul_universal_adapter.hpp"
+
 using namespace AscendCT;
 using bfloat16 = op::bfloat16;
 
-ASCENDCT_GLOBAL
-void GroupedMatmulKPerTokenDequant(
-    uint64_t fftsAddr,
-    MatmulCoord problemShape,
-    uint32_t problemCount, GM_ADDR gmGroupList,
-    GM_ADDR gmA, layout::ColumnMajor layoutA,
-    GM_ADDR gmB, layout::RowMajor layoutB,
-    GM_ADDR gmScale, layout::VectorLayout layoutScale,
-    GM_ADDR gmPerTokenScale, layout::VectorLayout layoutPerTokenScale,
-    GM_ADDR gmD, layout::RowMajor layoutD,
-    GM_ADDR gmWorkspace
-)
-{
-    AscendC::SetSyncBaseAddr(fftsAddr);
-    using ArchTag = arch::AtlasA2;
-    constexpr uint32_t preloadStages = 1;
-    constexpr uint32_t l1Stages = 2;
-    constexpr uint32_t l0AStages = 2;
-    constexpr uint32_t l0BStages = 4;
-    constexpr uint32_t l0CStages = 1;
-    constexpr bool enableUnitFlag = false;
-    constexpr bool enableShuffleK = true;
-    using DispatchPolicy = gemm::MmadAtlasA2PreloadAsync<
-        preloadStages,
-        l1Stages, l0AStages, l0BStages, l0CStages,
-        enableUnitFlag, enableShuffleK
-    >;
-    using L1TileShape = MatmulShape<128, 256, 256>;
-    using L0TileShape = MatmulShape<128, 256, 64>;
-
-    using AType = gemm::MatmulType<int8_t, layout::ColumnMajor>;
-    using BType = gemm::MatmulType<int8_t, layout::RowMajor>;
-    using CType = gemm::MatmulType<int32_t, layout::RowMajor>;
-
-    using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
-
-    constexpr uint32_t ubStages = 2;
-    using EpilogueDispatchPolicy = epilogue::EpilogueAtlasA2PerTokenDequant<ubStages>;
-    using ScaleType = gemm::MatmulType<bfloat16_t, layout::VectorLayout>;
-    using PerTokenScaleType = gemm::MatmulType<bfloat16_t, layout::VectorLayout>;
-    using DType = gemm::MatmulType<bfloat16_t, layout::RowMajor>;
-
-    using RowBroadcastMulType = gemm::MatmulType<float, layout::RowMajor>;
-    using BroadcastOneBlkType = gemm::MatmulType<float, layout::RowMajor>;
-    using OneBlkColumnBroadcastMulType = gemm::MatmulType<float, layout::RowMajor>;
-
-    using EpilogueTileShape = MatrixShape<32, 256>;
-    using TileRowBroadcastMul = epilogue::tile::TileRowBroadcastMul<ArchTag, RowBroadcastMulType, EpilogueTileShape>;
-    using TileBroadcastOneBlk = epilogue::tile::TileBroadcastOneBlk<ArchTag, BroadcastOneBlkType,
-        EpilogueTileShape::ROW>;
-    using TileOneBlkColumnBroadcastMul = epilogue::tile::TileOneBlkColumnBroadcastMul<ArchTag,
-        OneBlkColumnBroadcastMulType, EpilogueTileShape>;
-    using TileCopy = epilogue::tile::TileCopy<ArchTag, CType, ScaleType, PerTokenScaleType, DType>;
-    using TileScheduler = epilogue::tile::EpilogueHorizontalTileSwizzle;
-
-    using BlockEpilogue = epilogue::block::BlockEpilogue<EpilogueDispatchPolicy, CType, ScaleType, PerTokenScaleType,
-        DType, TileRowBroadcastMul, TileBroadcastOneBlk, TileOneBlkColumnBroadcastMul, TileCopy, TileScheduler>;
-
-    using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 0>;
-
-    // kernel level
-    using MatmulKernel = gemm::kernel::GroupedMatmulKPerTokenDequant<BlockMmad, BlockEpilogue, BlockScheduler,
-        int64_t>;
-
-    typename MatmulKernel::Params params{
-        problemShape, problemCount, gmGroupList,
-        gmA, layoutA,
-        gmB, layoutB,
-        gmScale, layoutScale,
-        gmPerTokenScale, layoutPerTokenScale,
-        gmD, layoutD,
-        gmWorkspace
-    };
-
-    // call a kernel
-    MatmulKernel matmul;
-    matmul(params);
-}
 
 struct Options {
     const std::string HELPER = "11_grouped_matmul_k_per_token_dequant_bf16 group_count m n k [device_id]";
@@ -164,14 +89,13 @@ void Run(Options const & options)
     size_t lenScale = static_cast<size_t>(n) * problemCount;
     size_t lenPerTokenScale = static_cast<size_t>(m) * problemCount;
     size_t lenD = static_cast<size_t>(m) * n * problemCount;
-    size_t lenWorkspace = lenD;
 
     size_t sizeA = lenA * sizeof(int8_t);
     size_t sizeB = lenB * sizeof(int8_t);
     size_t sizeScale = lenScale * sizeof(bfloat16);
     size_t sizePerTokenScale = lenPerTokenScale * sizeof(bfloat16);
     size_t sizeD = lenD * sizeof(bfloat16);
-    size_t sizeWorkspace = lenWorkspace * sizeof(uint32_t);
+    size_t sizeWorkspace;
 
     std::vector<int8_t> hostA(lenA);
     std::vector<int8_t> hostB(lenB);
@@ -210,7 +134,6 @@ void Run(Options const & options)
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceD), sizeD, ACL_MEM_MALLOC_HUGE_FIRST));
 
     uint8_t *deviceWorkspace{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
 
     layout::ColumnMajor layoutA{m, k};
     layout::RowMajor layoutB{k, n};
@@ -225,16 +148,73 @@ void Run(Options const & options)
 
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
-    GroupedMatmulKPerTokenDequant<<<aicCoreNum, nullptr, stream>>>(
-        fftsAddr,
-        options.problemShape, problemCount, deviceGroupList,
-        deviceA, layoutA,
-        deviceB, layoutB,
-        deviceScale, layoutScale,
-        devicePerTokenScale, layoutPerTokenScale,
-        deviceD, layoutD,
-        deviceWorkspace
-    );
+    using ArchTag = arch::AtlasA2;
+    constexpr uint32_t preloadStages = 1;
+    constexpr uint32_t l1Stages = 2;
+    constexpr uint32_t l0AStages = 2;
+    constexpr uint32_t l0BStages = 4;
+    constexpr uint32_t l0CStages = 1;
+    constexpr bool enableUnitFlag = false;
+    constexpr bool enableShuffleK = true;
+    using DispatchPolicy = gemm::MmadAtlasA2PreloadAsync<
+        preloadStages,
+        l1Stages, l0AStages, l0BStages, l0CStages,
+        enableUnitFlag, enableShuffleK
+    >;
+    using L1TileShape = MatmulShape<128, 256, 256>;
+    using L0TileShape = MatmulShape<128, 256, 64>;
+
+    using AType = gemm::MatmulType<int8_t, layout::ColumnMajor>;
+    using BType = gemm::MatmulType<int8_t, layout::RowMajor>;
+    using CType = gemm::MatmulType<int32_t, layout::RowMajor>;
+
+    using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+
+    constexpr uint32_t ubStages = 2;
+    using EpilogueDispatchPolicy = epilogue::EpilogueAtlasA2PerTokenDequant<ubStages>;
+    using ScaleType = gemm::MatmulType<uint16_t, layout::VectorLayout>;
+    using PerTokenScaleType = gemm::MatmulType<uint16_t, layout::VectorLayout>;
+    using DType = gemm::MatmulType<uint16_t, layout::RowMajor>;
+
+    using RowBroadcastMulType = gemm::MatmulType<float, layout::RowMajor>;
+    using BroadcastOneBlkType = gemm::MatmulType<float, layout::RowMajor>;
+    using OneBlkColumnBroadcastMulType = gemm::MatmulType<float, layout::RowMajor>;
+
+    using EpilogueTileShape = MatrixShape<32, 256>;
+    using TileRowBroadcastMul = epilogue::tile::TileRowBroadcastMul<ArchTag, RowBroadcastMulType, EpilogueTileShape>;
+    using TileBroadcastOneBlk = epilogue::tile::TileBroadcastOneBlk<ArchTag, BroadcastOneBlkType,
+        EpilogueTileShape::ROW>;
+    using TileOneBlkColumnBroadcastMul = epilogue::tile::TileOneBlkColumnBroadcastMul<ArchTag,
+        OneBlkColumnBroadcastMulType, EpilogueTileShape>;
+    using TileCopy = epilogue::tile::TileCopyBf16<ArchTag, CType, ScaleType, PerTokenScaleType, DType>;
+    using TileScheduler = epilogue::tile::EpilogueHorizontalTileSwizzle;
+
+    using BlockEpilogue = epilogue::block::BlockEpilogue<EpilogueDispatchPolicy, CType, ScaleType, PerTokenScaleType,
+        DType, TileRowBroadcastMul, TileBroadcastOneBlk, TileOneBlkColumnBroadcastMul, TileCopy, TileScheduler>;
+
+    using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 0>;
+
+    // kernel level
+    using MatmulKernel = gemm::kernel::GroupedMatmulKPerTokenDequant<BlockMmad, BlockEpilogue, BlockScheduler,
+        int64_t>;
+
+    using MatmulAdapter = gemm::device::MatmulUniversalAdapter<MatmulKernel>;
+    
+    MatmulKernel::Arguments arguments{
+        options.problemShape, problemCount, deviceGroupList, deviceA, deviceB,
+        deviceScale, devicePerTokenScale, deviceD};
+
+    MatmulAdapter matmul_op;
+    matmul_op.CanImplement(arguments);
+    sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
+    if (sizeWorkspace > 0) {
+        ACL_CHECK(
+            aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
+        );
+    }
+    matmul_op.Initialize(arguments, deviceWorkspace);
+    matmul_op(stream, aicCoreNum, fftsAddr);
+
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
     std::vector<bfloat16> hostD(lenD);
@@ -261,7 +241,9 @@ void Run(Options const & options)
     ACL_CHECK(aclrtFree(deviceScale));
     ACL_CHECK(aclrtFree(devicePerTokenScale));
     ACL_CHECK(aclrtFree(deviceD));
-    ACL_CHECK(aclrtFree(deviceWorkspace));
+    if (sizeWorkspace > 0) {
+        ACL_CHECK(aclrtFree(deviceWorkspace));
+    }
     ACL_CHECK(aclrtFree(deviceGroupList));
 
     ACL_CHECK(aclrtDestroyStream(stream));

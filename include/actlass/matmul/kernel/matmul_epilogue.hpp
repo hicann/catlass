@@ -60,10 +60,10 @@ public:
         EpilogueParams epilogueParams;
 
         // Methods
-        ASCENDCT_DEVICE
+        ASCENDCT_HOST_DEVICE
         Params() {}
 
-        ASCENDCT_DEVICE
+        ASCENDCT_HOST_DEVICE
         Params(
             MatmulCoord const &problemShape_,
             GM_ADDR ptrA_, LayoutA const &layoutA_,
@@ -72,6 +72,38 @@ public:
         ) : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_), layoutB(layoutB_),
             ptrWorkspace(ptrWorkspace_), epilogueParams(epilogueParams_) {}
     };
+ 
+    struct Arguments {
+        MatmulCoord problemShape;
+        size_t elementSize;
+        GM_ADDR ptrA;
+        GM_ADDR ptrB;
+        GM_ADDR ptrC;
+    };
+
+    static bool CanImplement(const Arguments &args)
+    {
+        return true;
+    }
+
+    static size_t GetWorkspaceSize(const Arguments &args)
+    {
+        return args.elementSize * args.problemShape.m() * args.problemShape.n();
+    }
+
+    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    {
+        MatmulCoord problemShape = args.problemShape;
+        uint32_t m = problemShape.m();
+        uint32_t n = problemShape.n();
+        uint32_t k = problemShape.k();
+        LayoutA layoutA{m, k};
+        LayoutB layoutB{k, n};
+        LayoutC layoutC{m, n};
+        typename BlockEpilogue::Params epilogueParams{args.ptrC, layoutC, args.ptrC, layoutC};
+        Params params{problemShape, args.ptrA, layoutA, args.ptrB, layoutB, workspace, epilogueParams};
+        return params;
+    }
 
     // Methods
     ASCENDCT_DEVICE

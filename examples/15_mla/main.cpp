@@ -366,6 +366,94 @@ void FreeMem(uint8_t *host, uint8_t *device)
     ACL_CHECK(aclrtFree(device));
 }
 
+template <typename IO_DTYPE = half>
+void RunMLA(uint64_t fftsAddr,
+    uint8_t * q,
+    uint8_t * qRope,
+    uint8_t * k,
+    uint8_t * kRope,
+    uint8_t * blockTables,
+    uint8_t * o,
+    uint8_t * s,
+    uint8_t * p,
+    uint8_t * oTmp,
+    uint8_t * oUpdate,
+    uint8_t * oCoreTmp,
+    uint8_t * l,
+    uint8_t * tiling, aclrtStream stream)
+{
+    using ArchTag = arch::AtlasA2;
+    using ElementQ = IO_DTYPE;
+    using LayoutQ = layout::RowMajor;
+    using ElementK = IO_DTYPE;
+    using LayoutK = layout::ColumnMajor;
+    using ElementV = IO_DTYPE;
+    using LayoutV = layout::RowMajor;
+    using ElementS = float;
+    using LayoutS = layout::RowMajor;
+    using ElementP = IO_DTYPE;
+    using LayoutP = layout::RowMajor;
+    using ElementO = IO_DTYPE;
+    using LayoutO = layout::RowMajor;
+    using ElementMask = IO_DTYPE;
+    using LayoutMask = layout::RowMajor;
+    using ElementOTmp = float;
+    using LayoutOTmp = layout::RowMajor;
+    using ElementUpdate = float;
+    using LayoutUpdate = layout::RowMajor;
+
+    // L1TileShape::K must be embdding
+    using L1TileShape = MatmulShape<128, 128, 576>;
+    using L0TileShape = L1TileShape;
+
+    // Mmadqk
+    using DispatchPolicyQK = gemm::MmadAtlasA2MLAQK;
+    using QType = gemm::MatmulType<ElementQ, LayoutQ>;
+    using KType = gemm::MatmulType<ElementK, LayoutK>;
+    using SType = gemm::MatmulType<ElementS, LayoutS>;
+    using BlockMmadQK = gemm::block::BlockMmad<DispatchPolicyQK, L1TileShape, L0TileShape, QType, KType, SType>;
+
+    // EpilogueSoftmax
+    using PType = gemm::MatmulType<ElementP, LayoutP>;
+    using MaskType = gemm::MatmulType<ElementMask, LayoutMask>;
+    using EpilogueMLASoftmax =
+        epilogue::block::BlockEpilogue<epilogue::EpilogueAtlasA2MLASoftmax, PType, SType, MaskType>;
+
+    // Mmadpv
+    using DispatchPolicyPV = gemm::MmadAtlasA2MLAPV;
+    using VType = gemm::MatmulType<ElementV, LayoutV>;
+    using OTmpType = gemm::MatmulType<ElementOTmp, LayoutOTmp>;
+    using BlockMmadPV = gemm::block::BlockMmad<DispatchPolicyPV, L1TileShape, L0TileShape, PType, VType, OTmpType>;
+
+    // EpilogueRescaleO
+    using OType = gemm::MatmulType<ElementO, LayoutO>;
+    using OUpdateType = gemm::MatmulType<ElementUpdate, LayoutUpdate>;
+    using EpilogueMLARescaleO =
+        epilogue::block::BlockEpilogue<epilogue::EpilogueAtlasA2MLARescaleO, OType, OUpdateType, OTmpType>;
+
+    // EpilogueFDRescaleO
+    using OType = gemm::MatmulType<ElementO, LayoutO>;
+    using lType = gemm::MatmulType<ElementUpdate, LayoutUpdate>;
+    constexpr uint32_t ComputeEleNum = 6144;
+    using EpilogueMLAFDRescaleO =
+        epilogue::block::BlockEpilogue<epilogue::EpilogueAtlasA2MLAFDRescaleO<ComputeEleNum>, OType, lType>;
+
+    // Kernel level
+    using MLAKernel = MLAKernel<BlockMmadQK, BlockMmadPV, EpilogueMLASoftmax,
+                                EpilogueMLARescaleO, EpilogueMLAFDRescaleO>;
+    typename MLAKernel::Arguments arguments{q, qRope, k, kRope, blockTables, o, s, p, oTmp, oUpdate, oCoreTmp, l, tiling};
+
+    using MLAAdapter = gemm::device::MatmulUniversalAdapter<MLAKernel>;
+    MLAAdapter mla_op;
+    // call kernel
+    uint8_t *deviceWorkspace = nullptr;
+    mla_op.Initialize(arguments, deviceWorkspace);
+    auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
+    mla_op(stream, aicCoreNum, fftsAddr);
+
+    ACL_CHECK(aclrtSynchronizeStream(stream));
+}
+
 // Allocate several matrices in NPU device memory and call a
 // ASCENDCT MLA kernel.
 void Run(const Options &options)
@@ -520,10 +608,9 @@ void Run(const Options &options)
     uint32_t fftsLen{0};
     RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
 
-    MLA<half><<<blockDim, nullptr, stream>>>(
+    RunMLA<half>(
         fftsAddr, qDevice, qRopeDevice, kDevice, kRopeDevice,
-        blockTableDevice, oDevice, sDevice, pDevice, oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
-    ACL_CHECK(aclrtSynchronizeStream(stream));
+        blockTableDevice, oDevice, sDevice, pDevice, oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice, stream);
 
     // Copy the result from device to host
     vector<fp16_t> oHost(qoSize / sizeof(fp16_t));

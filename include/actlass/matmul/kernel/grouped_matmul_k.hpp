@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ASCENDCT_MATMUL_KERNEL_GROUPED_MATMUL_HPP
-#define ASCENDCT_MATMUL_KERNEL_GROUPED_MATMUL_HPP
+#ifndef ASCENDCT_MATMUL_KERNEL_GROUPED_MATMUL_K_HPP
+#define ASCENDCT_MATMUL_KERNEL_GROUPED_MATMUL_K_HPP
 
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/arch/resource.hpp"
@@ -19,26 +19,14 @@
 
 namespace AscendCT::gemm::kernel {
 
-namespace detail {
-
-template <class T>
-ASCENDCT_DEVICE
-void UnpackListParam(T *const dst, GM_ADDR src, uint32_t len)
-{
-    for (uint32_t i = 0; i * sizeof(uint64_t) < len * sizeof(T); ++i) {
-        reinterpret_cast<uint64_t *>(dst)[i] = reinterpret_cast<__gm__ uint64_t *>(src)[i];
-    }
-}
-
-}  // namespace detail
-
 // Template for grouped matmul kernel. Compute grouped C = A * B
 template <
     class BlockMmad_,
     class BlockEpilogue_,
-    class TileScheduler_
+    class BlockScheduler_,
+    class ElementGroupList_
 >
-class GroupedMatmul {
+class GroupedMatmulK {
 public:
     using BlockMmad = BlockMmad_;
     using ArchTag = typename BlockMmad::ArchTag;
@@ -50,43 +38,79 @@ public:
     using ElementC = typename BlockMmad::ElementC;
     using LayoutC = typename BlockMmad::LayoutC;
     using ElementAccumulator = typename BlockMmad::ElementAccumulator;
+    using ElementGroupList = ElementGroupList_;
 
-    using TileScheduler = TileScheduler_;
-    static constexpr uint32_t MAX_TENSOR_COUNT = 256;
+    using BlockScheduler = BlockScheduler_;
 
     /// Parameters structure
     struct Params {
         // Data members
+        MatmulCoord problemShape;
         uint32_t problemCount;
-        GM_ADDR ptrProblemShape;
-        GM_ADDR ptrA;
-        GM_ADDR ptrLayoutA;
-        GM_ADDR ptrB;
-        GM_ADDR ptrLayoutB;
-        GM_ADDR ptrC;
-        GM_ADDR ptrLayoutC;
+        __gm__ ElementGroupList *ptrGroupList;
+        __gm__ ElementA *ptrA;
+        LayoutA layoutA;
+        __gm__ ElementB *ptrB;
+        LayoutB layoutB;
+        __gm__ ElementC *ptrC;
+        LayoutC layoutC;
 
         // Methods
-        ASCENDCT_DEVICE
+        ASCENDCT_HOST_DEVICE
         Params() {}
 
-        ASCENDCT_DEVICE
+        ASCENDCT_HOST_DEVICE
         Params(
-            uint32_t problemCount_, GM_ADDR ptrProblemShape_,
-            GM_ADDR ptrA_, GM_ADDR ptrLayoutA_,
-            GM_ADDR ptrB_, GM_ADDR ptrLayoutB_,
-            GM_ADDR ptrC_, GM_ADDR ptrLayoutC_
-        ) : problemCount(problemCount_), ptrProblemShape(ptrProblemShape_),
-            ptrA(ptrA_), ptrLayoutA(ptrLayoutA_),
-            ptrB(ptrB_), ptrLayoutB(ptrLayoutB_),
-            ptrC(ptrC_), ptrLayoutC(ptrLayoutC_)
+            MatmulCoord const &problemShape_, uint32_t problemCount_, GM_ADDR ptrGroupList_,
+            GM_ADDR ptrA_, LayoutA const &layoutA_,
+            GM_ADDR ptrB_, LayoutB const &layoutB_,
+            GM_ADDR ptrC_, LayoutC const &layoutC_
+        ) : problemShape(problemShape_),
+            problemCount(problemCount_), ptrGroupList(reinterpret_cast<__gm__ ElementGroupList *>(ptrGroupList_)),
+            ptrA(reinterpret_cast<__gm__ ElementA *>(ptrA_)), layoutA(layoutA_),
+            ptrB(reinterpret_cast<__gm__ ElementB *>(ptrB_)), layoutB(layoutB_),
+            ptrC(reinterpret_cast<__gm__ ElementC *>(ptrC_)), layoutC(layoutC_)
         {
         }
     };
 
+    struct Arguments{
+        MatmulCoord problemShape;
+        uint32_t problemCount;
+        uint8_t *ptrGroupList;
+        uint8_t *ptrA;
+        uint8_t *ptrB;
+        uint8_t *ptrC;
+    };
+    static bool CanImplement(const Arguments &args)
+    {
+        return true;
+    }
+    static size_t GetWorkspaceSize(const Arguments &args)
+    {
+        return 0;
+    }
+    static Params ToUnderlyingArguments(const Arguments &args, void* workspace)
+    {
+        uint32_t m = args.problemShape.m();
+        uint32_t n = args.problemShape.n();
+        uint32_t k = args.problemShape.k();
+        LayoutA layoutA{m, k};
+        LayoutB layoutB{k, n};
+        LayoutC layoutC{m, n};
+        Params params{args.problemShape, args.problemCount, args.ptrGroupList,
+            args.ptrA, layoutA,
+            args.ptrB, layoutB,
+            args.ptrC, layoutC};
+        return params;
+    }
+
     // Methods
     ASCENDCT_DEVICE
-    GroupedMatmul() {}
+    GroupedMatmulK() {}
+
+    ASCENDCT_DEVICE
+    ~GroupedMatmulK() {}
 
     template <int32_t CORE_TYPE = g_coreType>
     ASCENDCT_DEVICE
@@ -97,18 +121,7 @@ public:
     ASCENDCT_DEVICE
     void operator()<AscendC::AIC>(Params const &params)
     {
-        MatmulCoord problemShapeList[MAX_TENSOR_COUNT];
-        LayoutA layoutAList[MAX_TENSOR_COUNT];
-        LayoutB layoutBList[MAX_TENSOR_COUNT];
-        LayoutC layoutCList[MAX_TENSOR_COUNT];
-
-        // Get matmul information from parameters
-        detail::UnpackListParam(problemShapeList, params.ptrProblemShape, params.problemCount);
-        detail::UnpackListParam(layoutAList, params.ptrLayoutA, params.problemCount);
-        detail::UnpackListParam(layoutBList, params.ptrLayoutB, params.problemCount);
-        detail::UnpackListParam(layoutCList, params.ptrLayoutC, params.problemCount);
-
-        TileScheduler matmulTileScheduler;
+        BlockScheduler blockScheduler;
         arch::Resource<ArchTag> resource;
         BlockMmad blockMmad(resource);
 
@@ -119,6 +132,8 @@ public:
         gmB.SetGlobalBuffer((__gm__ ElementB *)params.ptrB);
         AscendC::GlobalTensor<ElementC> gmC;
         gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrC);
+        AscendC::GlobalTensor<ElementGroupList> groupList;
+        groupList.SetGlobalBuffer(params.ptrGroupList);
 
         uint32_t coreIdx = AscendC::GetBlockIdx();
         uint32_t coreNum = AscendC::GetBlockNum();
@@ -128,13 +143,16 @@ public:
 
         uint32_t startCoreIdx = 0;
         for (uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx) {
-            MatmulCoord problemShape = problemShapeList[groupIdx];
-            LayoutA layoutA = layoutAList[groupIdx];
-            LayoutB layoutB = layoutBList[groupIdx];
-            LayoutC layoutC = layoutCList[groupIdx];
+            uint32_t currentK = (groupIdx == 0) ? groupList.GetValue(groupIdx) :
+                (groupList.GetValue(groupIdx) - groupList.GetValue(groupIdx - 1));
+            MatmulCoord problemShape{params.problemShape.m(), params.problemShape.n(), currentK};
 
-            matmulTileScheduler.Update(problemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
-            uint32_t coreLoops = matmulTileScheduler.GetCoreLoops();
+            LayoutA layoutA = params.layoutA.GetTileLayout(problemShape.GetCoordMK());
+            LayoutB layoutB = params.layoutB.GetTileLayout(problemShape.GetCoordKN());
+            LayoutC layoutC = params.layoutC;
+
+            blockScheduler.Update(problemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
+            uint32_t coreLoops = blockScheduler.GetCoreLoops();
 
             // Determine the starting loopIdx of the current core under the current groupIdx
             uint32_t startLoopIdx;
@@ -146,8 +164,8 @@ public:
             // Loop through the matmul of each groupIdx
             for (uint32_t loopIdx = startLoopIdx; loopIdx < coreLoops; loopIdx += coreNum) {
                 // Compute block location
-                MatmulCoord blockCoord = matmulTileScheduler.GetBlockCoord(loopIdx);
-                MatmulCoord actualBlockShape = matmulTileScheduler.GetActualBlockShape(blockCoord);
+                MatmulCoord blockCoord = blockScheduler.GetBlockCoord(loopIdx);
+                MatmulCoord actualBlockShape = blockScheduler.GetActualBlockShape(blockCoord);
 
                 // Compute initial location in logical coordinates
                 MatrixCoord offsetA{blockCoord.m() * L1TileShape::M, blockCoord.k() * L1TileShape::K};
@@ -184,4 +202,4 @@ public:
 
 } // namespace AscendCT::gemm::kernel
 
-#endif // ASCENDCT_MATMUL_KERNEL_GROUPED_MATMUL_HPP
+#endif // ASCENDCT_MATMUL_KERNEL_GROUPED_MATMUL_K_HPP

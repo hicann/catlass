@@ -20,6 +20,10 @@
 #include "AscendCT/epilogue/block/block_epilogue.hpp"
 #include "AscendCT/epilogue/dispatch_policy.hpp"
 
+#include "AscendCT/status.hpp"
+#include "AscendCT/gemm/device/matmul_universal_adapter.hpp"
+#include "helper.hpp"
+
 using namespace AscendCT;
 
 constexpr uint32_t QK_READY_ID = 1;
@@ -77,14 +81,42 @@ public:
         GM_ADDR tiling;
 
         // Methods
-        ASCENDCT_DEVICE
+        ASCENDCT_HOST_DEVICE
         Params() {}
 
-        ASCENDCT_DEVICE
+        ASCENDCT_HOST_DEVICE
         Params(GM_ADDR q_, GM_ADDR k_, GM_ADDR v_, GM_ADDR mask_, GM_ADDR o_, GM_ADDR s_,
                GM_ADDR p_, GM_ADDR oTmp_, GM_ADDR tiling_)
             : q(q_), k(k_), v(v_), mask(mask_), o(o_), s(s_), p(p_), oTmp(oTmp_), tiling(tiling_) {}
     };
+
+    struct Arguments {
+        GM_ADDR q;
+        GM_ADDR k;
+        GM_ADDR v;
+        GM_ADDR mask;
+        GM_ADDR o;
+        GM_ADDR s;
+        GM_ADDR p;
+        GM_ADDR oTmp;
+        GM_ADDR tiling;
+    };
+
+    static bool CanImplement(const Arguments &args)
+    {
+        return true;
+    }
+
+    static size_t GetWorkspaceSize(const Arguments &args)
+    {
+        return 0;
+    }
+
+    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    {
+        Params params{args.q, args.k, args.v, args.mask, args.o, args.s, args.p, args.oTmp, args.tiling};
+        return params;
+    }
 
     // Methods
     ASCENDCT_DEVICE
@@ -449,65 +481,3 @@ private:
     arch::CrossCoreFlag softmaxReady{SOFTMAX_READY_ID};
     arch::CrossCoreFlag pvReady{PV_READY_ID};
 };
-
-ASCENDCT_GLOBAL
-void FA(uint64_t fftsAddr,
-        GM_ADDR q, GM_ADDR k, GM_ADDR v,
-        GM_ADDR mask, GM_ADDR o, GM_ADDR s,
-        GM_ADDR p, GM_ADDR oTmp, GM_ADDR tiling)
-{
-    // Set FFTS address
-    AscendC::SetSyncBaseAddr(fftsAddr);
-
-    using ArchTag = arch::AtlasA2;
-    using ElementQ = half;
-    using LayoutQ = layout::RowMajor;
-    using ElementK = half;
-    using LayoutK = layout::ColumnMajor;
-    using ElementV = half;
-    using LayoutV = layout::RowMajor;
-    using ElementS = half;
-    using LayoutS = layout::RowMajor;
-    using ElementP = half;
-    using LayoutP = layout::RowMajor;
-    using ElementO = half;
-    using LayoutO = layout::RowMajor;
-    using ElementMask = half;
-    using LayoutMask = layout::RowMajor;
-    using ElementOTmp = float;
-    using LayoutOTmp = layout::RowMajor;
-
-    // L1TileShape::K must be embdding
-    using L1TileShape = MatmulShape<128, 128, 128>;
-    using L0TileShape = L1TileShape;
-
-    // Mmadqk
-    using DispatchPolicyQK = gemm::MmadAtlasA2FAQK;
-    using QType = gemm::MatmulType<ElementQ, LayoutQ>;
-    using KType = gemm::MatmulType<ElementK, LayoutK>;
-    using SType = gemm::MatmulType<ElementS, LayoutS>;
-    using BlockMmadQK = gemm::block::BlockMmad<DispatchPolicyQK, L1TileShape, L0TileShape, QType, KType, SType>;
-    // EpilogueSoftmax
-    using PType = gemm::MatmulType<ElementP, LayoutP>;
-    using MaskType = gemm::MatmulType<ElementMask, LayoutMask>;
-    using EpilogueFASoftmax =
-        epilogue::block::BlockEpilogue<epilogue::EpilogueAtlasA2FASoftmax, PType, SType, MaskType>;
-
-    // Mmadpv
-    using DispatchPolicyPV = gemm::MmadAtlasA2FAPV;
-    using VType = gemm::MatmulType<ElementV, LayoutV>;
-    using OTmpType = gemm::MatmulType<ElementOTmp, LayoutOTmp>;
-    using BlockMmadPV = gemm::block::BlockMmad<DispatchPolicyPV, L1TileShape, L0TileShape, PType, VType, OTmpType>;
-    // EpilogueRescaleO
-    using OType = gemm::MatmulType<ElementO, LayoutO>;
-    using EpilogueFARescaleO =
-        epilogue::block::BlockEpilogue<epilogue::EpilogueAtlasA2FARescaleO, OType, OTmpType>;
-
-    // Kernel level
-    using FAKernel = FAKernel<BlockMmadQK, BlockMmadPV, EpilogueFASoftmax, EpilogueFARescaleO>;
-    typename FAKernel::Params params{q, k, v, mask, o, s, p, oTmp, tiling};
-
-    // call kernel
-    FAKernel fa;
-    fa(params);
-}

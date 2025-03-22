@@ -17,6 +17,7 @@
 #include "AscendCT/matmul_coord.hpp"
 #include "AscendCT/matrix_coord.hpp"
 #include "tla/tensor.hpp"
+#include "tla/layout.hpp"
 
 namespace AscendCT::gemm::kernel {
 
@@ -57,19 +58,51 @@ public:
         LayoutC layoutC;
 
         // Methods
-        ASCENDCT_DEVICE
+        ASCENDCT_HOST_DEVICE
         Params() {}
 
-        ASCENDCT_DEVICE
+        ASCENDCT_HOST_DEVICE
         Params(MatmulCoord const &problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_,
                LayoutB layoutB_, GM_ADDR ptrC_, LayoutC layoutC_)
             : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_), layoutB(layoutB_),
               ptrC(ptrC_), layoutC(layoutC_) {}
     };
 
+    struct Arguments {
+        MatmulCoord problemShape;
+        uint8_t *ptrA; LayoutA layoutA;
+        uint8_t *ptrB; LayoutB layoutB;
+        uint8_t *ptrC; LayoutC layoutC;
+    };
+
+    static bool CanImplement(const Arguments &args)
+    {
+        return true;
+    }
+
+    static size_t GetWorkspaceSize(const Arguments &args)
+    {
+        return 0;
+    }
+
+    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    {
+        uint32_t m = args.problemShape.m();
+        uint32_t n = args.problemShape.n();
+        uint32_t k = args.problemShape.k();
+        Params params{args.problemShape,
+            args.ptrA, args.layoutA,
+            args.ptrB, args.layoutB,
+            args.ptrC, args.layoutC};
+        return params;
+    }
+
     // Methods
     ASCENDCT_DEVICE
     BasicMatmulTla() {}
+
+    ASCENDCT_DEVICE
+    ~BasicMatmulTla() {}
 
     template <int32_t CORE_TYPE = g_coreType>
     ASCENDCT_DEVICE

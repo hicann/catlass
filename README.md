@@ -26,7 +26,7 @@ Atlas A2服务器
 
 - 平台：aarch64
 - 配套软件
-    CANN 8.0.0.alpha002及之后版本（参考《[CANN软件安装指南](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/800alpha002/softwareinst/instg/instg_0001.html?Mode=PmIns&OS=Ubuntu&Software=cannToolKit)》安装CANN开发套件包以及配套固件和驱动）  
+    注意：该分支特性需要250315之后的CANN包支持，如有需要请联系相关接口人  
 cmake >= 3.15
 ## 快速上手
 详细请参考[quickstart](docs/quickstart.md)  

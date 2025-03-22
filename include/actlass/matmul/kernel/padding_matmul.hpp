@@ -381,16 +381,91 @@ public:
         LayoutB layoutWB;
 
         // Methods
-        ASCENDCT_DEVICE
+        ASCENDCT_HOST_DEVICE
         Params() {}
 
-        ASCENDCT_DEVICE
+        ASCENDCT_HOST_DEVICE
         Params(MatmulCoord const &problemShape_,
                GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_, LayoutB layoutB_, GM_ADDR ptrC_, LayoutC layoutC_,
                GM_ADDR ptrWA_, LayoutA layoutWA_, GM_ADDR ptrWB_, LayoutB layoutWB_)
             : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_), layoutB(layoutB_),
               ptrC(ptrC_), layoutC(layoutC_), ptrWA(ptrWA_), layoutWA(layoutWA_), ptrWB(ptrWB_), layoutWB(layoutWB_) {}
     };
+
+    struct Arguments {
+        MatmulCoord problemShape;
+        uint32_t align;
+        size_t elementSize;
+        GM_ADDR ptrA;
+        GM_ADDR ptrB;
+        GM_ADDR ptrC;
+    };
+
+    static bool CanImplement(const Arguments &args)
+    {
+        return true;
+    }
+
+    static layout::RowMajor GetWorkspaceLayout(layout::RowMajor layout, uint32_t align)
+    {
+        // prevent division of 0
+        if (align == 0) {
+            return 0;
+        }
+        return layout::RowMajor(layout.shape(0), layout.shape(1),
+            (layout.shape(1) + align - 1) / align * align);
+    }
+
+    static layout::ColumnMajor GetWorkspaceLayout(layout::ColumnMajor layout, uint32_t align)
+    {
+        return layout::ColumnMajor(layout.shape(0), layout.shape(1),
+            (layout.shape(0) + align - 1) / align * align);
+    }
+
+    static size_t GetWorkspaceLen(layout::RowMajor layout)
+    {
+        return layout.shape(0) * layout.stride(0);
+    }
+
+    static size_t GetWorkspaceLen(layout::ColumnMajor layout)
+    {
+        return layout.shape(1) * layout.stride(1);
+    }
+
+    static size_t GetWorkspaceSize(const Arguments &args)
+    {
+        MatmulCoord problemShape = args.problemShape;
+        LayoutA layoutA{problemShape.m(), problemShape.k()};
+        LayoutB layoutB{problemShape.k(), problemShape.n()};
+        size_t sizeWA = GetWorkspaceLen(GetWorkspaceLayout(layoutA, args.align)) * args.elementSize;
+        size_t sizeWB = GetWorkspaceLen(GetWorkspaceLayout(layoutB, args.align)) * args.elementSize;
+        return sizeWA + sizeWB;
+    }
+
+    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace) 
+    {
+        MatmulCoord problemShape = args.problemShape;
+        uint32_t m = problemShape.m();
+        uint32_t n = problemShape.n();
+        uint32_t k = problemShape.k();
+        LayoutA layoutA{m, k};
+        LayoutB layoutB{k, n};
+        LayoutC layoutC{m, n};
+        size_t sizeWA = GetWorkspaceLen(GetWorkspaceLayout(layoutA, args.align)) * args.elementSize;
+        uint8_t *workspaceWB = workspace + sizeWA;
+        Params params{problemShape,
+            args.ptrA,
+            layoutA,
+            args.ptrB,
+            layoutB,
+            args.ptrC,
+            layoutC,
+            workspace,
+            GetWorkspaceLayout(layoutA, args.align),
+            workspaceWB,
+            GetWorkspaceLayout(layoutB, args.align)};
+        return params;
+    }
 
     // Methods
     ASCENDCT_DEVICE

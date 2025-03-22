@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ASCENDCT_MATMUL_KERNEL_MATMUL_HPP
-#define ASCENDCT_MATMUL_KERNEL_MATMUL_HPP
+#ifndef ASCENDCT_MATMUL_KERNEL_BATCHED_MATMUL_HPP
+#define ASCENDCT_MATMUL_KERNEL_BATCHED_MATMUL_HPP
 
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/arch/resource.hpp"
@@ -19,13 +19,13 @@
 
 namespace AscendCT::gemm::kernel {
 
-// Template for Matmul kernel. Compute C = A * B
+// Template for Batched Matmul kernel. Compute batched C = A * B
 template <
     class BlockMmad_,
     class BlockEpilogue_,
     class BlockScheduler_
 >
-class BasicMatmul {
+class BatchedMatmul {
 public:
     using BlockMmad = BlockMmad_;
     using ArchTag = typename BlockMmad::ArchTag;
@@ -43,39 +43,93 @@ public:
     /// Parameters structure
     struct Params {
         // Data members
+        uint32_t batchCount;
         MatmulCoord problemShape;
         GM_ADDR ptrA;
         LayoutA layoutA;
+        int64_t strideA;
         GM_ADDR ptrB;
         LayoutB layoutB;
+        int64_t strideB;
         GM_ADDR ptrC;
         LayoutC layoutC;
+        int64_t strideC;
 
         // Methods
-        ASCENDCT_DEVICE
-        Params() {}
+        ASCENDCT_HOST_DEVICE
+        Params()
+        {}
 
-        ASCENDCT_DEVICE
-        Params(MatmulCoord const &problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_,
-               LayoutB layoutB_, GM_ADDR ptrC_, LayoutC layoutC_)
-            : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_), layoutB(layoutB_),
-              ptrC(ptrC_), layoutC(layoutC_) {}
+        ASCENDCT_HOST_DEVICE
+        Params(uint32_t batchCount_, MatmulCoord const &problemShape_,
+               GM_ADDR ptrA_, LayoutA layoutA_, int64_t strideA_,
+               GM_ADDR ptrB_, LayoutB layoutB_, int64_t strideB_,
+               GM_ADDR ptrC_, LayoutC layoutC_, int64_t strideC_)
+            : batchCount(batchCount_), problemShape(problemShape_),
+              ptrA(ptrA_), layoutA(layoutA_), strideA(strideA_),
+              ptrB(ptrB_), layoutB(layoutB_), strideB(strideB_),
+              ptrC(ptrC_), layoutC(layoutC_), strideC(strideC_) {}
     };
+
+    struct Arguments {
+        uint32_t batchCount;
+        MatmulCoord problemShape;
+        GM_ADDR ptrA;
+        GM_ADDR ptrB;
+        GM_ADDR ptrC;
+    };
+
+    static bool CanImplement(const Arguments &args)
+    {
+        return true;
+    }
+
+    static size_t GetWorkspaceSize(const Arguments &args)
+    {
+        return 0;
+    }
+
+    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    {
+        MatmulCoord problemShape = args.problemShape;
+        uint32_t m = problemShape.m();
+        uint32_t n = problemShape.n();
+        uint32_t k = problemShape.k();
+        int64_t strideA = problemShape.m() * problemShape.k();
+        int64_t strideB = problemShape.k() * problemShape.n();
+        int64_t strideC = problemShape.m() * problemShape.n();
+        LayoutA layoutA{args.problemShape.m(), args.problemShape.k()};
+        LayoutB layoutB{args.problemShape.k(), args.problemShape.n()};
+        LayoutC layoutC{args.problemShape.m(), args.problemShape.n()};
+        Params params{args.batchCount,
+            problemShape,
+            args.ptrA,
+            layoutA,
+            strideA,
+            args.ptrB,
+            layoutB,
+            strideB,
+            args.ptrC,
+            layoutC,
+            strideC};
+        return params;
+    }
 
     // Methods
     ASCENDCT_DEVICE
-    BasicMatmul() {}
+    BatchedMatmul()
+    {}
 
     template <int32_t CORE_TYPE = g_coreType>
     ASCENDCT_DEVICE
     void operator()(Params const &params);
 
-    /// Executes one Matmul
+    /// Executes one GEMM
     template <>
     ASCENDCT_DEVICE
     void operator()<AscendC::AIC>(Params const &params) {
         BlockScheduler matmulBlockScheduler(params.problemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
-        uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
+        uint32_t coreLoops = params.batchCount * matmulBlockScheduler.GetCoreLoops();
 
         arch::Resource<ArchTag> resource;
         BlockMmad blockMmad(resource);
@@ -90,8 +144,14 @@ public:
 
         for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()) {
             // Compute block location
+            uint32_t batchIdx = matmulBlockScheduler.GetBatchIdx(loopIdx);
             MatmulCoord blockCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
             MatmulCoord actualBlockShape = matmulBlockScheduler.GetActualBlockShape(blockCoord);
+
+            // batchOffset
+            int64_t batchOffsetA = batchIdx * params.strideA;
+            int64_t batchOffsetB = batchIdx * params.strideB;
+            int64_t batchOffsetC = batchIdx * params.strideC;
 
             // Compute initial location in logical coordinates
             MatrixCoord offsetA{blockCoord.m() * L1TileShape::M, blockCoord.k() * L1TileShape::K};
@@ -102,10 +162,11 @@ public:
             int64_t gmOffsetC = params.layoutC.GetOffset(offsetC);
 
             // Compute block-scoped matrix multiply-add
-            blockMmad(gmA[gmOffsetA], params.layoutA,
-                      gmB[gmOffsetB], params.layoutB,
-                      gmC[gmOffsetC], params.layoutC,
-                      actualBlockShape);
+            blockMmad(
+                gmA[batchOffsetA + gmOffsetA], params.layoutA,
+                gmB[batchOffsetB + gmOffsetB], params.layoutB,
+                gmC[batchOffsetC + gmOffsetC], params.layoutC,
+                actualBlockShape);
         }
     }
 
@@ -116,4 +177,4 @@ public:
 
 } // namespace AscendCT::gemm::kernel
 
-#endif // ASCENDCT_MATMUL_KERNEL_MATMUL_HPP
+#endif // ASCENDCT_MATMUL_KERNEL_BATCHED_MATMUL_HPP

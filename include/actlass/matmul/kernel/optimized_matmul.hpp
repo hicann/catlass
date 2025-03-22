@@ -69,16 +69,124 @@ public:
         LayoutWB layoutWB;
 
         // Methods
-        ASCENDCT_DEVICE
+        ASCENDCT_HOST_DEVICE
         Params() {}
 
-        ASCENDCT_DEVICE
+        ASCENDCT_HOST_DEVICE
         Params(MatmulCoord const &problemShape_,
                GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_, LayoutB layoutB_, GM_ADDR ptrC_, LayoutC layoutC_,
                GM_ADDR ptrWA_, LayoutWA layoutWA_, GM_ADDR ptrWB_, LayoutWB layoutWB_)
             : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_), layoutB(layoutB_),
               ptrC(ptrC_), layoutC(layoutC_), ptrWA(ptrWA_), layoutWA(layoutWA_), ptrWB(ptrWB_), layoutWB(layoutWB_) {}
     };
+
+    struct Arguments {
+        MatmulCoord problemShape;
+        uint32_t align;
+        size_t elementSize;
+        LayoutWA layoutWA;
+        LayoutWB layoutWB;
+        GM_ADDR ptrA;
+        GM_ADDR ptrB;
+        GM_ADDR ptrC;
+    };
+
+    static bool CanImplement(const Arguments &args)
+    {
+        return true;
+    }
+
+    static bool IfNeedPadding(layout::RowMajor layout, uint32_t align)
+    {
+        // prevent division by zero
+        if (align == 0) {
+            return false;
+        }
+        // If the stride is greater than 65536, padding is required to reduce the stride.
+        if (layout.stride(0) < 65536) {
+            return layout.stride(0) % align != 0;
+        } else {
+            return true;
+        }
+    }
+
+    static bool IfNeedPadding(layout::ColumnMajor layout, uint32_t align)
+    {
+        // prevent division by zero
+        if (align == 0) {
+            return false;
+        }
+        // If the stride is greater than 65536, padding is required to reduce the stride.
+        if (layout.stride(1) < 65536) {
+            return layout.stride(1) % align != 0;
+        } else {
+            return true;
+        }
+    }
+
+    template<class Layout>
+    static size_t GetWorkspaceLen(Layout layout, size_t blockRows, size_t blockCols)
+    {
+        return RoundUp(static_cast<size_t>(layout.shape(0)), blockRows) *
+                RoundUp(static_cast<size_t>(layout.shape(1)), blockRows);
+    }
+
+    static size_t GetWorkspaceSize(const Arguments &args)
+    {
+        size_t workspaceSize = 0;
+        LayoutA layoutA{args.problemShape.m(), args.problemShape.k()};
+        LayoutB layoutB{args.problemShape.k(), args.problemShape.n()};
+        if (IfNeedPadding(layoutA, args.align)) {
+            workspaceSize +=
+                GetWorkspaceLen(layoutA, args.layoutWA.shape(0), args.layoutWA.shape(2)) * args.elementSize;
+        }
+        if (IfNeedPadding(layoutB, args.align)) {
+            workspaceSize +=
+                GetWorkspaceLen(layoutB, args.layoutWB.shape(0), args.layoutWB.shape(2)) * args.elementSize;
+        }
+        return workspaceSize;
+    }
+
+    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    {
+        using LayoutPaddingA = std::conditional_t<std::is_same_v<LayoutA, layout::RowMajor>,
+            layout::PaddingRowMajor, layout::PaddingColumnMajor>;
+        using LayoutPaddingB = std::conditional_t<std::is_same_v<LayoutB, layout::RowMajor>,
+            layout::PaddingRowMajor, layout::PaddingColumnMajor>;
+        LayoutA layoutA{args.problemShape.m(), args.problemShape.k()};
+        LayoutB layoutB{args.problemShape.k(), args.problemShape.n()};
+        LayoutC layoutC{args.problemShape.m(), args.problemShape.n()};
+        bool isPaddingA = IfNeedPadding(layoutA, args.align);
+        bool isPaddingB = IfNeedPadding(layoutB, args.align);
+
+        uint8_t *gmWA = nullptr;
+        uint8_t *gmWB = nullptr;
+        size_t sizeWA = 0;
+
+        if (isPaddingA) {
+            gmWA = workspace;
+            sizeWA = GetWorkspaceLen(layoutA, args.layoutWA.shape(0), args.layoutWA.shape(2)) * args.elementSize;
+        } else {
+            gmWA = args.ptrA;
+        }
+        if (isPaddingB) {
+            gmWB = workspace + sizeWA;
+        } else {
+            gmWB = args.ptrB;
+        }
+        Params params{args.problemShape,
+            args.ptrA,
+            layoutA,
+            args.ptrB,
+            layoutB,
+            args.ptrC,
+            layoutC,
+            gmWA,
+            args.layoutWA,
+            gmWB,
+            args.layoutWB};
+        return params;
+    }
 
     // Methods
     ASCENDCT_DEVICE
