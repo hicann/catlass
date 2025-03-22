@@ -42,6 +42,10 @@ struct TileCopy<ArchTag, CType, XType, DType> {
     using CopyGmToUbC = CopyGm2Ub<ArchTag, CType>;
     using CopyGmToUbX = CopyGm2Ub<ArchTag, XType>;
     using CopyUbToGmD = CopyUb2Gm<ArchTag, DType>;
+
+    // using CopyGmToUbY = VecCopyGm2Ub<ArchTag, CType>;
+    // using CopyGmToUbTemp = VecCopyGm2Ub<ArchTag, XType>;
+    // using CopyUbToGmZ = VecCopyUb2Gm<ArchTag, DType>; 
 };
 
 template <

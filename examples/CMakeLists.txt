@@ -65,6 +65,8 @@ foreach(EXAMPLE
     14_optimized_matmul_tla
     15_mla
     16_grouped_matmul_k
+    17_gemm
+    18_groupgemm
 )
     add_subdirectory(${EXAMPLE})
 endforeach()

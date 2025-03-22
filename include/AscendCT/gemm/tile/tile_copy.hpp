@@ -79,6 +79,36 @@ struct TileCopy {
     using CopyL0CToGm = gemm::tile::CopyL0CToGm<ArchTag, ElementAccumulator, CType>;
 };
 
+/// new add
+template <
+    /// Tag indicating architecture
+    class ArchTag,
+    /// MatmulType for A matrix operand
+    class AType,
+    /// MatmulType type for B matrix operand
+    class BType,
+    /// MatmulType type for C matrix operand
+    class CType,
+    /// MatmulTpe type for Bias operand
+    class BiasType = void
+>
+struct TileCopyGemm {
+    using ElementA = typename AType::Element;
+    using ElementB = typename BType::Element;
+    using ElementAccumulator =
+        typename gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
+    // change structual
+    using L1AType = typename helper::L1ATypeSelector<AType>::L1AType;
+    using L1BType = typename helper::L1BTypeSelector<BType>::L1BType;
+    using L0AType = typename helper::L0ATypeSelector<L1AType>::L0AType;
+    using L0BType = typename helper::L0BTypeSelector<L1BType>::L0BType;
+    using CopyGmToL1A = gemm::tile::CopyGmToL1<ArchTag, AType, L1AType>;
+    using CopyGmToL1B = gemm::tile::CopyGmToL1<ArchTag, BType, L1BType>;
+    using CopyL1ToL0A = gemm::tile::CopyL1ToL0A<ArchTag, L1AType, L0AType>;
+    using CopyL1ToL0B = gemm::tile::CopyL1ToL0B<ArchTag, L1BType, L0BType>;
+    using CopyL0CToGm = gemm::tile::CopyL0CToGm<ArchTag, ElementAccumulator, CType>;
+};
+
 template <
     /// Tag indicating architecture
     class ArchTag,

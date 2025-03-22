@@ -54,6 +54,35 @@ struct CopyGm2Ub<arch::AtlasA2, gemm::MatmulType<Element, layout::RowMajor>> {
     };
 };
 
+// new add
+template <typename Element>
+struct CopyGm2Ub<arch::AtlasA2, gemm::MatmulType<Element, layout::ColumnMajor>> {
+   using LayoutSrc = layout::ColumnMajor;
+   using LayoutDst = layout::ColumnMajor;
+
+   static constexpr uint32_t ELE_NUM_PER_BLK = BYTE_PER_BLK / sizeof(Element);
+
+   ASCENDCT_DEVICE
+   CopyGm2Ub() = default;
+
+   ASCENDCT_DEVICE
+   void operator()(
+       AscendC::LocalTensor<Element> dstTensor,
+       AscendC::GlobalTensor<Element> srcTensor,
+       LayoutSrc layoutDst, LayoutDst layoutSrc)
+   {
+      AscendC::DataCopyExtParams dataCopyParams(
+          layoutSrc.shape(1),
+          layoutSrc.shape(0) * sizeof(Element),
+          (layoutSrc.stride(1) - layoutSrc.shape(0)) * sizeof(Element),
+          (layoutDst.stride(1) - layoutDst.shape(0)) / ELE_NUM_PER_BLK,
+          0
+      );
+      AscendC::DataCopyPadExtParams<Element> padParams(false, 0, 0, 0);
+      AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams, padParams);
+   }
+};
+
 template <typename Element>
 struct CopyGm2Ub<arch::AtlasA2, gemm::MatmulType<Element, layout::VectorLayout>> {
     using LayoutSrc = layout::VectorLayout;

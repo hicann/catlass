@@ -22,10 +22,146 @@ namespace AscendCT::gemm::tile {
 
 template <
     class ArchTag,
-    class L1Type
+    class L1Type,
+    class L0Type = void
 >
 struct CopyL1ToL0B {
     static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy l1 to l0, can not find the specialization.");
+};
+
+// RowMajor
+template<class ArchTag, class Element>
+struct CopyL1ToL0B<ArchTag, AscendCT::gemm::MatmulType<Element, layout::zZ>, AscendCT::gemm::MatmulType<Element, layout::nZ>>{
+    using LayoutDst = layout::nZ;
+    using LayoutSrc = layout::zZ;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 =  BYTE_PER_C0 / sizeof(Element);
+
+    ASCENDCT_DEVICE
+    CopyL1ToL0B(){}
+
+    ASCENDCT_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> dstTensor,
+        AscendC::LocalTensor<Element> srcTensor,
+        LayoutDst layoutDst, LayoutSrc layoutSrc
+    ){
+        uint32_t NRound = layoutSrc.shape(2) * layoutSrc.shape(3);
+        uint32_t KRound = layoutDst.shape(2) * layoutDst.shape(3);
+        uint32_t KLoops = CeilDiv(KRound, C0_NUM_PER_FRACTAL);
+        AscendC::LoadData2DParams params;
+        params.startIndex = 0;
+        params.repeatTimes = static_cast<uint8_t>(NRound / ELE_NUM_PER_C0);
+        params.srcStride = 1;
+        params.sid = 0;
+        params.dstGap = 0;
+        params.ifTranspose = true;
+        params.addrMode = 0;
+        for(uint32_t i = 0; i < KLoops; i++){ 
+            AscendC::LoadData(dstTensor[i * NRound * C0_NUM_PER_FRACTAL], srcTensor[i * NRound * C0_NUM_PER_FRACTAL], params);
+        }
+    }
+};
+
+// RowMajor
+template<class ArchTag>
+struct CopyL1ToL0B<ArchTag, AscendCT::gemm::MatmulType<float, layout::zZ>, AscendCT::gemm::MatmulType<float, layout::nZ>>{
+    using LayoutDst = layout::nZ;
+    using LayoutSrc = layout::zZ;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 =  BYTE_PER_C0 / sizeof(float);
+
+    ASCENDCT_DEVICE
+    CopyL1ToL0B(){}
+
+    ASCENDCT_DEVICE
+    void operator()(
+        AscendC::LocalTensor<float> dstTensor,
+        AscendC::LocalTensor<float> srcTensor,
+        LayoutDst layoutDst, LayoutSrc layoutSrc
+    ){
+        uint32_t NRound = layoutSrc.shape(2) * layoutSrc.shape(3);
+        uint32_t KRound = layoutDst.shape(2) * layoutDst.shape(3);
+        uint32_t NL0Alignment = ELE_NUM_PER_C0 * 2; 
+        uint32_t KLoops = CeilDiv(KRound, C0_NUM_PER_FRACTAL); 
+        AscendC::LoadData2dTransposeParams params;
+        params.startIndex = 0;
+        params.repeatTimes = static_cast<uint8_t>(NRound / NL0Alignment); 
+        params.srcStride = 1;
+        params.dstGap = 0;
+        params.dstFracGap = static_cast<uint16_t>(NRound / NL0Alignment) - 1;
+        for(uint32_t i = 0; i < KLoops; i++){
+            AscendC::LoadDataWithTranspose(dstTensor[i * NRound * C0_NUM_PER_FRACTAL], srcTensor[i * C0_NUM_PER_FRACTAL * NRound], params);
+        }
+    }
+};
+
+// RowMajor
+template<class ArchTag>
+struct CopyL1ToL0B<ArchTag, AscendCT::gemm::MatmulType<int8_t, layout::zN>, AscendCT::gemm::MatmulType<int8_t, layout::nZ>>{
+    using Element = int8_t;
+    using LayoutDst = layout::nZ;
+    using LayoutSrc = layout::zN;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 =  BYTE_PER_C0 / sizeof(Element);
+
+    ASCENDCT_DEVICE
+    CopyL1ToL0B(){}
+
+    ASCENDCT_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> dstTensor,
+        AscendC::LocalTensor<Element> srcTensor,
+        LayoutDst layoutDst, LayoutSrc layoutSrc
+    ){
+        uint32_t NRound = layoutSrc.shape(2) * layoutSrc.shape(3);
+        uint32_t KRound = layoutSrc.shape(0) * layoutSrc.shape(1);
+        uint32_t KL0Alignment = C0_NUM_PER_FRACTAL * 2; 
+        uint32_t KLoops = CeilDiv(KRound, KL0Alignment);
+        AscendC::LoadData2dTransposeParams params;
+        params.startIndex = 0;
+        params.repeatTimes = static_cast<uint8_t>(NRound / ELE_NUM_PER_C0); 
+        params.srcStride = static_cast<uint16_t>(KRound / KL0Alignment);
+        params.dstGap = 1; // 单位为512B
+        params.dstFracGap = 0;
+        for(uint32_t i = 0; i < KLoops; i++){
+            AscendC::LoadDataWithTranspose(dstTensor[i * NRound * KL0Alignment], srcTensor[i * KL0Alignment * ELE_NUM_PER_C0], params);
+        }
+    }
+};
+
+// ColumnMajor
+template<class ArchTag, class Element>
+struct CopyL1ToL0B<ArchTag, AscendCT::gemm::MatmulType<Element, layout::nZ>, AscendCT::gemm::MatmulType<Element, layout::nN>>{
+    using LayoutDst = layout::nN;
+    using LayoutSrc = layout::nZ;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 =  BYTE_PER_C0 / sizeof(Element);
+
+    ASCENDCT_DEVICE
+    CopyL1ToL0B(){}
+
+    ASCENDCT_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> dstTensor,
+        AscendC::LocalTensor<Element> srcTensor,
+        LayoutDst layoutDst, LayoutSrc layoutSrc
+    ){
+        uint32_t NRound = layoutSrc.shape(2) * layoutSrc.shape(3);
+        uint32_t KRound = layoutDst.shape(0) * layoutDst.shape(1);
+        uint32_t NLoops = CeilDiv(NRound, C0_NUM_PER_FRACTAL);
+        AscendC::LoadData2DParams params;
+        params.startIndex = 0;
+        params.repeatTimes = static_cast<uint8_t>(KRound / ELE_NUM_PER_C0);
+        params.srcStride = NRound / C0_NUM_PER_FRACTAL;
+        params.sid = 0;
+        params.dstGap = 0;
+        params.ifTranspose = false;
+        params.addrMode = 0;
+        for(uint32_t i = 0; i < NLoops; i++){
+            AscendC::LoadData(dstTensor[i * C0_NUM_PER_FRACTAL * KRound], srcTensor[i * C0_NUM_PER_FRACTAL * ELE_NUM_PER_C0], params);
+        }
+    }
 };
 
 /// Partial specialization for int8_t, zN in and nZ out.

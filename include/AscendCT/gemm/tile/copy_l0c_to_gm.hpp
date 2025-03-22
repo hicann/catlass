@@ -145,6 +145,54 @@ struct CopyL0CToGm<AscendCT::arch::AtlasA2,
     }
 };
 
+// new add code, for the ColumnMajor l0c->GM
+template <
+    class ElementAccumulator_,
+    class ElementDst_,
+    bool ReluEnable_
+>
+struct CopyL0CToGm<AscendCT::arch::AtlasA2, ElementAccumulator_,
+                AscendCT::gemm::MatmulType<ElementDst_, layout::ColumnMajor>,
+                ScaleGranularity::NO_QUANT,
+                ReluEnable_>
+{
+    using ArchTag = AscendCT::arch::AtlasA2;
+    using ElementDst = ElementDst_;
+    using ElementSrc = ElementAccumulator_;
+    using LayoutSrc = AscendCT::layout::zN;
+    using LayoutDst = AscendCT::layout::ColumnMajor;
+    static constexpr auto quantPre = CopyL0CToGmQuantMode<ArchTag, ElementSrc, ElementDst,
+        ScaleGranularity::NO_QUANT>::VALUE;
+    static constexpr auto reluEn = ReluEnable_;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 =  BYTE_PER_C0 / sizeof(ElementDst);
+
+    ASCENDCT_DEVICE
+    CopyL0CToGm(){}
+
+    ASCENDCT_DEVICE
+    void operator()(
+        AscendC::GlobalTensor<ElementDst> dstTensor,
+        AscendC::LocalTensor<ElementSrc> srcTensor,
+        LayoutDst const &dstLayout, LayoutSrc const &srcLayout, uint8_t unitFlag = 0
+    ){
+        uint32_t MActual = dstLayout.shape(0);
+        uint32_t NActual = dstLayout.shape(1);
+        uint32_t NRound = srcLayout.shape(2) * srcLayout.shape(3);
+        uint32_t strideC = dstLayout.stride(1);
+        AscendC::DataCopyCO12DstParams params;
+        params.nSize = MActual;
+        params.mSize = NActual;
+        params.dstStride = strideC;
+        params.srcStride = NRound;
+        params.quantPre = quantPre;
+        params.reluPre = 0;
+        params.channelSplit = false;
+        params.nz2ndEn = true;
+        AscendC::DataCopy(dstTensor, srcTensor, params);
+    }
+};
+
 template <
     class ElementAccumulator_,
     class ElementDst_,
