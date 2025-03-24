@@ -13,7 +13,7 @@
 
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/coord.hpp"
-#include "AscendCT/matmul_coord.hpp"
+#include "AscendCT/gemm_coord.hpp"
 #include "AscendCT/matrix_coord.hpp"
 #include "AscendCT/arch/resource.hpp"
 #include "AscendCT/arch/cross_core_sync.hpp"
@@ -56,7 +56,7 @@ public:
     /// Parameters structure
     struct Params {
         // Data members
-        MatmulCoord problemShape;
+        GemmCoord problemShape;
         GM_ADDR ptrA;
         LayoutA layoutA;
         GM_ADDR ptrB;
@@ -73,7 +73,7 @@ public:
         Params() {}
 
         ASCENDCT_DEVICE
-        Params(MatmulCoord const &problemShape_,
+        Params(GemmCoord const &problemShape_,
                GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_, LayoutB layoutB_, GM_ADDR ptrC_, LayoutC layoutC_,
                GM_ADDR ptrWA_, LayoutWA layoutWA_, GM_ADDR ptrWB_, LayoutWB layoutWB_)
             : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_), layoutB(layoutB_),
@@ -140,8 +140,8 @@ public:
 
         for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()) {
             // Compute block location
-            MatmulCoord blockIdxCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
-            MatmulCoord actualBlockShape = matmulBlockScheduler.GetActualBlockShape(blockIdxCoord);
+            GemmCoord blockIdxCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
+            GemmCoord actualBlockShape = matmulBlockScheduler.GetActualBlockShape(blockIdxCoord);
 
             // Compute initial location in logical coordinates
             MatrixCoord offsetA{blockIdxCoord.m() * L1TileShape::M, blockIdxCoord.k() * L1TileShape::K};
@@ -153,8 +153,8 @@ public:
 
             bool isFirstBlock = (loopIdx == AscendC::GetBlockIdx());
             bool hasNextBlock = false;
-            MatmulCoord nextBlockIdCoord;
-            MatmulCoord nextActualBlockShape;
+            GemmCoord nextBlockIdCoord;
+            GemmCoord nextActualBlockShape;
             if (loopIdx + AscendC::GetBlockNum() < coreLoops) {
                 hasNextBlock = true;
                 nextBlockIdCoord = matmulBlockScheduler.GetBlockCoord(loopIdx + AscendC::GetBlockNum());

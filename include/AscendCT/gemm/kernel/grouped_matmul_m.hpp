@@ -14,7 +14,7 @@
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/arch/resource.hpp"
 #include "AscendCT/coord.hpp"
-#include "AscendCT/matmul_coord.hpp"
+#include "AscendCT/gemm_coord.hpp"
 #include "AscendCT/matrix_coord.hpp"
 
 __gm__ struct OpSystemRunCfg g_opSystemRunCfg{L2_OFFSET};
@@ -48,7 +48,7 @@ public:
     /// Parameters structure
     struct Params {
         // Data members
-        MatmulCoord problemShape;
+        GemmCoord problemShape;
         uint32_t problemCount;
         __gm__ ElementGroupList *ptrGroupList;
         __gm__ ElementA *ptrA;
@@ -64,7 +64,7 @@ public:
 
         ASCENDCT_DEVICE
         Params(
-            MatmulCoord const &problemShape_, uint32_t problemCount_, GM_ADDR ptrGroupList_,
+            GemmCoord const &problemShape_, uint32_t problemCount_, GM_ADDR ptrGroupList_,
             GM_ADDR ptrA_, LayoutA const &layoutA_,
             GM_ADDR ptrB_, LayoutB const &layoutB_,
             GM_ADDR ptrC_, LayoutC const &layoutC_
@@ -111,7 +111,7 @@ public:
         for (uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx) {
             uint32_t currentM = (groupIdx == 0) ? groupList.GetValue(groupIdx) :
                 (groupList.GetValue(groupIdx) - groupList.GetValue(groupIdx - 1));
-            MatmulCoord inGroupProblemShape{currentM, params.problemShape.n(), params.problemShape.k()};
+            GemmCoord inGroupProblemShape{currentM, params.problemShape.n(), params.problemShape.k()};
 
             LayoutA layoutA = params.layoutA.GetTileLayout(inGroupProblemShape.GetCoordMK());
             LayoutB layoutB = params.layoutB;
@@ -136,8 +136,8 @@ public:
             // Loop through the matmul of each groupIdx
             for (uint32_t loopIdx = startLoopIdx; loopIdx < coreLoops; loopIdx += coreNum) {
                 // Compute block location
-                MatmulCoord blockCoord = blockScheduler.GetBlockCoord(loopIdx);
-                MatmulCoord actualBlockShape = blockScheduler.GetActualBlockShape(blockCoord);
+                GemmCoord blockCoord = blockScheduler.GetBlockCoord(loopIdx);
+                GemmCoord actualBlockShape = blockScheduler.GetActualBlockShape(blockCoord);
 
                 // Compute initial location in logical coordinates
                 MatrixCoord offsetA{blockCoord.m() * L1TileShape::M, blockCoord.k() * L1TileShape::K};

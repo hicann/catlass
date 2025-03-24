@@ -14,7 +14,7 @@
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/arch/resource.hpp"
 #include "AscendCT/coord.hpp"
-#include "AscendCT/matmul_coord.hpp"
+#include "AscendCT/gemm_coord.hpp"
 #include "AscendCT/matrix_coord.hpp"
 
 namespace AscendCT::gemm::kernel {
@@ -44,7 +44,7 @@ public:
     struct Params {
         // Data members
         uint32_t batchCount;
-        MatmulCoord problemShape;
+        GemmCoord problemShape;
         GM_ADDR ptrA;
         LayoutA layoutA;
         int64_t strideA;
@@ -60,7 +60,7 @@ public:
         Params() {}
 
         ASCENDCT_DEVICE
-        Params(uint32_t batchCount_, MatmulCoord const &problemShape_,
+        Params(uint32_t batchCount_, GemmCoord const &problemShape_,
                GM_ADDR ptrA_, LayoutA layoutA_, int64_t strideA_,
                GM_ADDR ptrB_, LayoutB layoutB_, int64_t strideB_,
                GM_ADDR ptrC_, LayoutC layoutC_, int64_t strideC_)
@@ -99,8 +99,8 @@ public:
         for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()) {
             // Compute block location
             uint32_t batchIdx = matmulBlockScheduler.GetBatchIdx(loopIdx);
-            MatmulCoord blockCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
-            MatmulCoord actualBlockShape = matmulBlockScheduler.GetActualBlockShape(blockCoord);
+            GemmCoord blockCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
+            GemmCoord actualBlockShape = matmulBlockScheduler.GetActualBlockShape(blockCoord);
 
             // batchOffset
             int64_t batchOffsetA = batchIdx * params.strideA;

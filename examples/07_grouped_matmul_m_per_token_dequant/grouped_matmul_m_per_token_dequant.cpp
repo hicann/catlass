@@ -36,7 +36,7 @@ template <class LayoutB>
 ASCENDCT_GLOBAL
 void GroupedMatmulPerTokenDequant(
     uint64_t fftsAddr,
-    MatmulCoord problemShape,
+    GemmCoord problemShape,
     uint32_t problemCount, GM_ADDR gmGroupList,
     GM_ADDR gmA, layout::RowMajor layoutA,
     GM_ADDR gmB, LayoutB layoutB,
@@ -60,8 +60,8 @@ void GroupedMatmulPerTokenDequant(
         l1Stages, l0AStages, l0BStages, l0CStages,
         enableUnitFlag, enableShuffleK
     >;
-    using L1TileShape = MatmulShape<128, 256, 256>;
-    using L0TileShape = MatmulShape<128, 256, 64>;
+    using L1TileShape = GemmShape<128, 256, 256>;
+    using L0TileShape = GemmShape<128, 256, 64>;
 
     using AType = gemm::MatmulType<int8_t, layout::RowMajor>;
     using BType = gemm::MatmulType<int8_t, LayoutB>;
@@ -116,7 +116,7 @@ struct Options {
     const std::string HELPER = "07_grouped_matmul_m_per_token_dequant group_count m n k [device_id]";
 
     uint32_t groupCount{1};
-    MatmulCoord problemShape{128, 128, 128};
+    GemmCoord problemShape{128, 128, 128};
     int32_t deviceId{0};
 
     Options() = default;

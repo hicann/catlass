@@ -16,7 +16,7 @@
 #include "AscendCT/arch/resource.hpp"
 #include "AscendCT/coord.hpp"
 #include "AscendCT/detail/callback.hpp"
-#include "AscendCT/matmul_coord.hpp"
+#include "AscendCT/gemm_coord.hpp"
 #include "AscendCT/matrix_coord.hpp"
 
 namespace AscendCT::gemm::kernel {
@@ -83,7 +83,7 @@ public:
     /// Parameters structure
     struct Params {
         // Data members
-        MatmulCoord problemShape;
+        GemmCoord problemShape;
         uint32_t problemCount;
         __gm__ ElementGroupList *ptrGroupList;
         __gm__ ElementA *ptrA;
@@ -104,7 +104,7 @@ public:
 
         ASCENDCT_DEVICE
         Params(
-            MatmulCoord problemShape_, uint32_t problemCount_, GM_ADDR ptrGroupList_,
+            GemmCoord problemShape_, uint32_t problemCount_, GM_ADDR ptrGroupList_,
             GM_ADDR ptrA_, LayoutA layoutA_,
             GM_ADDR ptrB_, LayoutB layoutB_,
             GM_ADDR ptrScale_, LayoutScale layoutScale_,
@@ -160,7 +160,7 @@ public:
         for (uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx) {
             uint32_t currentM = (groupIdx == 0) ? groupList.GetValue(groupIdx) :
                 (groupList.GetValue(groupIdx) - groupList.GetValue(groupIdx - 1));
-            MatmulCoord inGroupProblemShape{currentM, params.problemShape.n(), params.problemShape.k()};
+            GemmCoord inGroupProblemShape{currentM, params.problemShape.n(), params.problemShape.k()};
 
             LayoutA layoutA = params.layoutA.GetTileLayout(inGroupProblemShape.GetCoordMK());
             LayoutB layoutB = params.layoutB;
@@ -174,8 +174,8 @@ public:
             // Loop through the matmul of each groupIdx
             for (uint32_t loopIdx = startLoopIdx; loopIdx < coreLoops; loopIdx += coreNum) {
                 // Compute block location
-                MatmulCoord blockCoord = blockScheduler.GetBlockCoord(loopIdx);
-                MatmulCoord actualBlockShape = blockScheduler.GetActualBlockShape(blockCoord);
+                GemmCoord blockCoord = blockScheduler.GetBlockCoord(loopIdx);
+                GemmCoord actualBlockShape = blockScheduler.GetActualBlockShape(blockCoord);
 
                 // Compute initial location in logical coordinates
                 MatrixCoord offsetA{blockCoord.m() * L1TileShape::M, blockCoord.k() * L1TileShape::K};
@@ -240,7 +240,7 @@ public:
         for (uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx) {
             uint32_t currentM = (groupIdx == 0) ? groupList.GetValue(groupIdx) :
                 (groupList.GetValue(groupIdx) - groupList.GetValue(groupIdx - 1));
-            MatmulCoord inGroupProblemShape{currentM, params.problemShape.n(), params.problemShape.k()};
+            GemmCoord inGroupProblemShape{currentM, params.problemShape.n(), params.problemShape.k()};
 
             LayoutC layoutC = LayoutC(inGroupProblemShape.m(), inGroupProblemShape.n());
             LayoutScale layoutScale = params.layoutScale;
@@ -258,11 +258,11 @@ public:
             blockEpilogue.UpdateParams(epilogueParams);
             uint32_t coreLoops = blockScheduler.GetCoreLoops();
 
-            MatmulCoord blockShapeMNK = L1TileShape::ToCoord();
+            GemmCoord blockShapeMNK = L1TileShape::ToCoord();
             uint32_t startLoopIdx = ((coreIdx < startCoreIdx) ? (coreIdx + coreNum) : coreIdx) - startCoreIdx;
             for (uint32_t loopIdx = startLoopIdx; loopIdx < coreLoops; loopIdx += coreNum) {
-                MatmulCoord blockCoordMNK = blockScheduler.GetBlockCoord(loopIdx);
-                MatmulCoord actualBlockShapeMNK = blockScheduler.GetActualBlockShape(blockCoordMNK);
+                GemmCoord blockCoordMNK = blockScheduler.GetBlockCoord(loopIdx);
+                GemmCoord actualBlockShapeMNK = blockScheduler.GetActualBlockShape(blockCoordMNK);
 
                 int64_t gmInGroupOffsetC = layoutC.GetOffset(blockCoordMNK.GetCoordMN() * blockShapeMNK.GetCoordMN());
                 auto gmBlockC = gmC[gmGroupOffsetC + gmInGroupOffsetC];

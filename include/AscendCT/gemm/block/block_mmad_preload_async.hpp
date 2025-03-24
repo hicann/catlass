@@ -15,7 +15,7 @@
 #include "AscendCT/arch/resource.hpp"
 #include "AscendCT/coord.hpp"
 #include "AscendCT/detail/callback.hpp"
-#include "AscendCT/matmul_coord.hpp"
+#include "AscendCT/gemm_coord.hpp"
 #include "AscendCT/gemm/dispatch_policy.hpp"
 #include "AscendCT/gemm/helper.hpp"
 
@@ -161,7 +161,7 @@ public:
         AscendC::GlobalTensor<ElementA> const &gmBlockA, LayoutA const &layoutA,
         AscendC::GlobalTensor<ElementB> const &gmBlockB, LayoutB const &layoutB,
         AscendC::GlobalTensor<ElementC> const &gmBlockC, LayoutC const &layoutC,
-        MatmulCoord const &actualShape, Callback &&callback = Callback{}
+        GemmCoord const &actualShape, Callback &&callback = Callback{}
     )
     {
         uint32_t kTileCount = CeilDiv<L1TileShape::K>(actualShape.k());

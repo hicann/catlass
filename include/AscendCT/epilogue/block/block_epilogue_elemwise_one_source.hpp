@@ -14,7 +14,7 @@
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/arch/resource.hpp"
 #include "AscendCT/epilogue/dispatch_policy.hpp"
-#include "AscendCT/matmul_coord.hpp"
+#include "AscendCT/gemm_coord.hpp"
 #include "AscendCT/matrix_coord.hpp"
 #include "AscendCT/layout/layout.hpp"
 
@@ -104,9 +104,9 @@ public:
 
     ASCENDCT_DEVICE
     void operator() (
-        MatmulCoord const &blockShapeMNK,
-        MatmulCoord const &blockCoordMNK,
-        MatmulCoord const &actualBlockShapeMNK,
+        GemmCoord const &blockShapeMNK,
+        GemmCoord const &blockCoordMNK,
+        GemmCoord const &actualBlockShapeMNK,
         AscendC::GlobalTensor<ElementCompute> const &gmBlockC,
         LayoutX const &layoutBlockC
     )

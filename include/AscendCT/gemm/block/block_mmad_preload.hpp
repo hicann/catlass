@@ -14,7 +14,7 @@
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/arch/resource.hpp"
 #include "AscendCT/coord.hpp"
-#include "AscendCT/matmul_coord.hpp"
+#include "AscendCT/gemm_coord.hpp"
 #include "AscendCT/gemm/dispatch_policy.hpp"
 #include "AscendCT/gemm/helper.hpp"
 
@@ -141,7 +141,7 @@ public:
         AscendC::GlobalTensor<ElementC> const &gmBlockC, LayoutC const &layoutC,
         AscendC::GlobalTensor<ElementA> const &gmNextBlockA,
         AscendC::GlobalTensor<ElementB> const &gmNextBlockB,
-        MatmulCoord const &actualShape, MatmulCoord const &actualShapeNext,
+        GemmCoord const &actualShape, GemmCoord const &actualShapeNext,
         bool isFirstBlock, bool hasNextBlock)
     {
         uint32_t mRound = RoundUp<L1AAlignHelper::M_ALIGNED>(actualShape.m());

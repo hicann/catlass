@@ -24,7 +24,7 @@ template <
     /// Inner dimension of matrix product
     uint32_t K_ = 1
 >
-struct MatmulShape {
+struct GemmShape {
     static constexpr uint32_t M = M_;
     static constexpr uint32_t N = N_;
     static constexpr uint32_t K = K_;
@@ -62,9 +62,9 @@ struct MatmulShape {
     }
 };
 
-/// MatmulCoord is a structure derived from Coord<3> that specifies a location within the
+/// GemmCoord is a structure derived from Coord<3> that specifies a location within the
 /// coordinate space of a Matmul problem.
-struct MatmulCoord : public Coord<3, uint32_t> {
+struct GemmCoord : public Coord<3, uint32_t> {
     /// Integer-valued index
     using Index = uint32_t;
 
@@ -82,15 +82,15 @@ struct MatmulCoord : public Coord<3, uint32_t> {
 
     /// Default ctor
     ASCENDCT_HOST_DEVICE
-    MatmulCoord() {}
+    GemmCoord() {}
 
     /// Constructs from Coord<3> and a batch
     ASCENDCT_HOST_DEVICE
-    MatmulCoord(Coord<3, Index> const &coord) : Base(coord) {}
+    GemmCoord(Coord<3, Index> const &coord) : Base(coord) {}
 
     /// Helper to construct from a K, N, M, batch variables
     ASCENDCT_HOST_DEVICE
-    MatmulCoord(Index m, Index n, Index k) : Base(MakeCoord(m, n, k)) {}
+    GemmCoord(Index m, Index n, Index k) : Base(MakeCoord(m, n, k)) {}
 
     /// Returns the Matmul M coordinate
     ASCENDCT_HOST_DEVICE

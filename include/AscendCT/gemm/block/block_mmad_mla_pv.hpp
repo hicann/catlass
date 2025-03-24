@@ -17,7 +17,7 @@
 #include "AscendCT/coord.hpp"
 #include "AscendCT/gemm/dispatch_policy.hpp"
 #include "AscendCT/gemm/helper.hpp"
-#include "AscendCT/matmul_coord.hpp"
+#include "AscendCT/gemm_coord.hpp"
 
 ////////////////////////////////////////////////////////////////////
 
@@ -110,7 +110,7 @@ public:
         AscendC::GlobalTensor<ElementA> gA,
         AscendC::GlobalTensor<ElementC> gC,
         LayoutA layoutA, LayoutB layoutB, LayoutC layoutC,
-        MatmulCoord actualShape, uint32_t &nIdx, arch::CrossCoreFlag softmaxReady)
+        GemmCoord actualShape, uint32_t &nIdx, arch::CrossCoreFlag softmaxReady)
     {
         uint32_t rowNum = actualShape.m();
         uint32_t vSeqTile = actualShape.k();

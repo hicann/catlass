@@ -14,7 +14,7 @@
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/arch/resource.hpp"
 #include "AscendCT/epilogue/dispatch_policy.hpp"
-#include "AscendCT/matmul_coord.hpp"
+#include "AscendCT/gemm_coord.hpp"
 #include "AscendCT/matrix_coord.hpp"
 #include "AscendCT/epilogue/tile/tile_copy.hpp"
 
@@ -294,7 +294,7 @@ public:
         AscendC::GlobalTensor<ElementInput> gInput,
         const LayoutOutput &layoutOutput,
         const LayoutInput &layoutInput,
-        MatmulCoord actualBlockShape,
+        GemmCoord actualBlockShape,
         uint32_t nIdx, uint32_t isLast)
     {
         uint32_t mActual = actualBlockShape.m();

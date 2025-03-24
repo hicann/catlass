@@ -210,7 +210,7 @@ public:
             uint32_t qkN = (qkNIdx == (nLoop - 1)) ? kvSeqlen : nTile;
             uint32_t qkNRound = (qkN + ALIGNED - 1) / ALIGNED * ALIGNED;
 
-            MatmulCoord actualBlockShapeQK{m, qkN, embd};
+            GemmCoord actualBlockShapeQK{m, qkN, embd};
             LayoutS layoutS(m, qkN, qkNRound);
             int64_t gmOffsetQ = qAddr + layoutQ.GetOffset(offsetQ);
             int64_t gmOffsetK = kAddr + layoutK.GetOffset(offsetK);
@@ -237,7 +237,7 @@ public:
                         qkNRound = (qkN + ALIGNED - 1) / ALIGNED * ALIGNED;
                     }
 
-                    MatmulCoord actualBlockShapeQKNext{m, qkN, embd};
+                    GemmCoord actualBlockShapeQKNext{m, qkN, embd};
                     LayoutS layoutSNext(m, qkN, qkNRound);
                     offsetK += blockOffsetK;
                     gmOffsetK = kAddr + layoutK.GetOffset(offsetK);
@@ -256,7 +256,7 @@ public:
                     svNRound = (svN + ALIGNED - 1) / ALIGNED * ALIGNED;
                 }
 
-                MatmulCoord actualBlockShapePV{m, embd, svN};
+                GemmCoord actualBlockShapePV{m, embd, svN};
                 LayoutP layoutP(m, svN, svNRound);
                 LayoutOTmp layoutOTmp(m, embd, embdAligned);
                 int64_t gmOffsetP = (int64_t)coreIdx * WORKSPACE_ELENUM + pPingpongFlag * WORKSPACE_ELENUM / 2;
@@ -380,7 +380,7 @@ public:
             uint32_t qkN = (qkNIdx == (nLoop - 1)) ? kvSeqlen : nTile;
             uint32_t qkNRound = (qkN + ALIGNED - 1) / ALIGNED * ALIGNED;
 
-            MatmulCoord actualBlockShapeQK{m, qkN, embd};
+            GemmCoord actualBlockShapeQK{m, qkN, embd};
             LayoutP layoutP(m, qkN, qkNRound);
             LayoutS layoutS(m, qkN, qkNRound);
             int64_t gmOffsetMask = maskBatchOffset + mIdx * mTile * maxSeqlen;
@@ -411,7 +411,7 @@ public:
                         qkNRound = (qkN + ALIGNED - 1) / ALIGNED * ALIGNED;
                     }
 
-                    MatmulCoord actualBlockShapeQKNext{m, qkN, embd};
+                    GemmCoord actualBlockShapeQKNext{m, qkN, embd};
                     LayoutP layoutPNext(m, qkN, qkNRound);
                     LayoutS layoutSNext(m, qkN, qkNRound);
                     gmOffsetMask += nTile;
@@ -431,7 +431,7 @@ public:
                     svN = kvSeqlen - svNIdx * nTile;
                 }
 
-                MatmulCoord actualBlockShapePV{m, embd, svN};
+                GemmCoord actualBlockShapePV{m, embd, svN};
                 int64_t gmOffsetOTmp = (int64_t)coreIdx * WORKSPACE_ELENUM + oTmpPingpongFlag * WORKSPACE_ELENUM / 2;
                 arch::CrossCoreWaitFlag(pvReady);
                 epilogueFARescaleO(
@@ -478,7 +478,7 @@ void FA(uint64_t fftsAddr,
     using LayoutOTmp = layout::RowMajor;
 
     // L1TileShape::K must be embdding
-    using L1TileShape = MatmulShape<128, 128, 128>;
+    using L1TileShape = GemmShape<128, 128, 128>;
     using L0TileShape = L1TileShape;
 
     // Mmadqk

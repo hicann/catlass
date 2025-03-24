@@ -18,7 +18,7 @@
 
 void BasicMatmul(uint32_t blockNum, aclrtStream stream, KernelExecInfo kernelExecInfo, AscendCTInfo AscendCTInfo)
 {
-    AscendCT::MatmulCoord problemShape{AscendCTInfo.m, AscendCTInfo.n, AscendCTInfo.k};
+    AscendCT::GemmCoord problemShape{AscendCTInfo.m, AscendCTInfo.n, AscendCTInfo.k};
     using LayoutA = layout::RowMajor;
     using LayoutB = layout::RowMajor;
     using LayoutC = layout::RowMajor;
@@ -49,7 +49,7 @@ void GroupedMatmul(uint32_t blockNum, aclrtStream stream, KernelExecInfo kernelE
     uint32_t n = AscendCTInfo.n;
     uint32_t k = AscendCTInfo.k;
 
-    MatmulCoord problemShape{m, n, k};
+    GemmCoord problemShape{m, n, k};
     LayoutA layoutA{m, k};
     LayoutB layoutB{k, n};
     LayoutC layoutC{m, n};
@@ -80,7 +80,7 @@ void OptimizedMatmul(uint32_t blockNum, aclrtStream stream, KernelExecInfo kerne
     uint32_t n = AscendCTInfo.n;
     uint32_t k = AscendCTInfo.k;
 
-    MatmulCoord problemShape{AscendCTInfo.m, AscendCTInfo.n, AscendCTInfo.k};
+    GemmCoord problemShape{AscendCTInfo.m, AscendCTInfo.n, AscendCTInfo.k};
 
     using LayoutA = layout::RowMajor;
     using LayoutB = layout::RowMajor;
@@ -94,10 +94,10 @@ void OptimizedMatmul(uint32_t blockNum, aclrtStream stream, KernelExecInfo kerne
     bool isNeedPaddingB = IsNeedPadding(layoutB, align);
 
     // if LayoutA and LayoutB is both ColumnMajor,
-    // L1TileShape using MatmulShape<256, 128, 256> can achieve better performance.
+    // L1TileShape using GemmShape<256, 128, 256> can achieve better performance.
     using L1TileShape =
         std::conditional_t<std::is_same_v<LayoutA, layout::ColumnMajor> && std::is_same_v<LayoutB, layout::ColumnMajor>,
-                           MatmulShape<256, 128, 256>, MatmulShape<128, 256, 256>>;
+                           GemmShape<256, 128, 256>, GemmShape<128, 256, 256>>;
 
     uint8_t *deviceA = kernelExecInfo.inputAddr.at(0);
     uint8_t *deviceB = kernelExecInfo.inputAddr.at(1);

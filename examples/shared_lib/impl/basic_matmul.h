@@ -23,13 +23,13 @@
 using namespace AscendCT;
 
 template <class LayoutA, class LayoutB, class LayoutC, typename IN_TYPE, typename OUT_TYPE>
-ASCENDCT_DEVICE void basic_matmul_kernel(MatmulCoord problemShape, GM_ADDR gmA, LayoutA layoutA, GM_ADDR gmB,
+ASCENDCT_DEVICE void basic_matmul_kernel(GemmCoord problemShape, GM_ADDR gmA, LayoutA layoutA, GM_ADDR gmB,
                                         LayoutB layoutB, GM_ADDR gmC, LayoutC layoutC)
 {
     using ArchTag = arch::AtlasA2;
     using DispatchPolicy = gemm::MmadAtlasA2Pingpong<true>;
-    using L1TileShape = MatmulShape<128, 256, 256>;
-    using L0TileShape = MatmulShape<128, 256, 64>;
+    using L1TileShape = GemmShape<128, 256, 256>;
+    using L0TileShape = GemmShape<128, 256, 64>;
 
     using AType = gemm::MatmulType<IN_TYPE, LayoutA>;
     using BType = gemm::MatmulType<IN_TYPE, LayoutB>;
@@ -66,7 +66,7 @@ ASCENDCT_DEVICE void basic_matmul_kernel(MatmulCoord problemShape, GM_ADDR gmA, 
 }
 
 template <class LayoutA, class LayoutB, class LayoutC, aclDataType IN_TYPE, aclDataType OUT_TYPE>
-ASCENDCT_GLOBAL void basic_matmul(MatmulCoord problemShape, GM_ADDR gmA, LayoutA layoutA, GM_ADDR gmB, LayoutB layoutB,
+ASCENDCT_GLOBAL void basic_matmul(GemmCoord problemShape, GM_ADDR gmA, LayoutA layoutA, GM_ADDR gmB, LayoutB layoutB,
                                  GM_ADDR gmC, LayoutC layoutC)
 {
     if constexpr (IN_TYPE == ACL_FLOAT16 && OUT_TYPE == ACL_FLOAT16) {

@@ -14,7 +14,7 @@
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/arch/resource.hpp"
 #include "AscendCT/coord.hpp"
-#include "AscendCT/matmul_coord.hpp"
+#include "AscendCT/gemm_coord.hpp"
 #include "AscendCT/matrix_coord.hpp"
 #include "tla/tensor.hpp"
 
@@ -48,7 +48,7 @@ public:
     /// Parameters structure
     struct Params {
         // Data members
-        MatmulCoord problemShape;
+        GemmCoord problemShape;
         GM_ADDR ptrA;
         LayoutA layoutA;
         GM_ADDR ptrB;
@@ -61,7 +61,7 @@ public:
         Params() {}
 
         ASCENDCT_DEVICE
-        Params(MatmulCoord const &problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_,
+        Params(GemmCoord const &problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_,
                LayoutB layoutB_, GM_ADDR ptrC_, LayoutC layoutC_)
             : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_), layoutB(layoutB_),
               ptrC(ptrC_), layoutC(layoutC_) {}
@@ -100,8 +100,8 @@ public:
 
         for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()) {
             // Compute block location
-            MatmulCoord blockCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
-            MatmulCoord actualBlockShape = matmulBlockScheduler.GetActualBlockShape(blockCoord);
+            GemmCoord blockCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
+            GemmCoord actualBlockShape = matmulBlockScheduler.GetActualBlockShape(blockCoord);
 
             // Make tiled views
             auto tensorBlockA = GetTile(tensorA,

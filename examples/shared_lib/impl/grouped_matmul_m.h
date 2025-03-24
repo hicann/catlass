@@ -21,7 +21,7 @@
 #include "AscendCT/gemm/kernel/grouped_matmul_m.hpp"
 #include "AscendCT/gemm/matmul_type.hpp"
 template <class LayoutA, class LayoutB, class LayoutC>
-ASCENDCT_GLOBAL void grouped_matmul_m(MatmulCoord problemShape, uint32_t problemCount, GM_ADDR gmGroupList, GM_ADDR gmA,
+ASCENDCT_GLOBAL void grouped_matmul_m(GemmCoord problemShape, uint32_t problemCount, GM_ADDR gmGroupList, GM_ADDR gmA,
                                      LayoutA layoutA, GM_ADDR gmB, LayoutB layoutB, GM_ADDR gmC, LayoutC layoutC)
 {
     if (problemShape.k() > problemShape.n()) {
@@ -36,8 +36,8 @@ ASCENDCT_GLOBAL void grouped_matmul_m(MatmulCoord problemShape, uint32_t problem
         using ArchTag = arch::AtlasA2;
         using DispatchPolicy = gemm::MmadAtlasA2PreloadAsync<preloadStages, l1Stages, l0AStages, l0BStages, l0CStages,
                                                                enableUnitFlag, enableShuffleK>;
-        using L1TileShape = MatmulShape<256, 128, 256>;
-        using L0TileShape = MatmulShape<256, 128, 64>;
+        using L1TileShape = GemmShape<256, 128, 256>;
+        using L0TileShape = GemmShape<256, 128, 64>;
 
         using AType = gemm::MatmulType<half, LayoutA>;
         using BType = gemm::MatmulType<half, LayoutB>;
@@ -68,8 +68,8 @@ ASCENDCT_GLOBAL void grouped_matmul_m(MatmulCoord problemShape, uint32_t problem
         using ArchTag = arch::AtlasA2;
         using DispatchPolicy = gemm::MmadAtlasA2PreloadAsync<preloadStages, l1Stages, l0AStages, l0BStages, l0CStages,
                                                                enableUnitFlag, enableShuffleK>;
-        using L1TileShape = MatmulShape<128, 256, 256>;
-        using L0TileShape = MatmulShape<128, 256, 64>;
+        using L1TileShape = GemmShape<128, 256, 256>;
+        using L0TileShape = GemmShape<128, 256, 64>;
 
         using AType = gemm::MatmulType<half, LayoutA>;
         using BType = gemm::MatmulType<half, LayoutB>;

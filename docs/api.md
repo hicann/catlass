@@ -1,7 +1,7 @@
 # AscendC Template Matmul API
 
 AscendC Template针对NPU上不同层级上执行的矩阵乘累加（MMAD）操作，提供了一个统一的编程模型。AscendC Template的Matmul API对应于以下分层，由高到低分别是：
-![image](images/api_level.png) 
+![image](images/api_level.png)
 
 
 # AscendC Template Matmul模型
@@ -24,7 +24,7 @@ for (int block_m = 0; block_m < MatmulM; block_m += BlockTileM) {
       // TileMmad使用硬件指令 AscendC::Mmad
       for (int tile_mma_m = 0; tile_mma_m < m; tile_mma_m++) {
         for (int tile_mma_n = 0; tile_mma_n < n; tile_mma_n++) {
-          for (int tile_mma_k = 0; tile_mma_k < k; tile_mma_k++) {            
+          for (int tile_mma_k = 0; tile_mma_k < k; tile_mma_k++) {
             mmad.call(c, a, b);
           } // tile_mma_k
         } // tile_mma_n
@@ -56,10 +56,10 @@ AscendC Template使用以下组件表达上述循环嵌套，这些组件针对�
 在AscendC Template 中，我们通过首先在Kernel层组合Block主循环和Block后处理，然后用主机侧适配器包装它们来组装内核。
 
 
-用户使用这些组件组装内核时，需要通过以下顺序实例化。  
-1. 组装所需的Block主循环和Block后处理。  
-2. 将Blocks组合在一起构建成Kernel。  
-3. 用Device层适配器包装Kernel。  
+用户使用这些组件组装内核时，需要通过以下顺序实例化。
+1. 组装所需的Block主循环和Block后处理。
+2. 将Blocks组合在一起构建成Kernel。
+3. 用Device层适配器包装Kernel。
 
 这个顺序也反映在AscendC Template的示例中[examples/00_basic_matmul](../examples/00_basic_matmul)，如下文摘录所示。
 
@@ -68,8 +68,8 @@ AscendC Template使用以下组件表达上述循环嵌套，这些组件针对�
 // 第一步: 创建所需的特化block层mmad
 // 参数
 using DispatchPolicy = gemm::MmadAtlasA2Pingpong<true>;
-using L1TileShape = MatmulShape<128, 256, 256>;
-using L0TileShape = MatmulShape<128, 256, 64>;
+using L1TileShape = GemmShape<128, 256, 256>;
+using L0TileShape = GemmShape<128, 256, 64>;
 using AType = gemm::MatmulType<ElementA, LayoutA>;
 using BType = gemm::MatmulType<ElementB, LayoutB>;
 using CType = gemm::MatmulType<ElementC, LayoutC>;
@@ -184,7 +184,7 @@ struct MmadAtlasA2Pingpong {
 ## Kernel API
 
 Kernel对应了所有Block在NPU上执行逻辑的集合。Kernel层BasicMatmul承担以下功能：
-- 对包含的不同Block的逻辑进行组合，加入必要的同步逻辑。 
+- 对包含的不同Block的逻辑进行组合，加入必要的同步逻辑。
 - 不同Block和处理全局内存上数据的对应关系（Swizzling）。
 - 将输入数据在Block粒度分片。
 
@@ -247,16 +247,16 @@ Basic层级API封装了实际的硬件指令调用，这些指令加速了MMAD�
 
 
 ## 版权声明
-Copyright (c) 2024 Huawei Technologies Co., Ltd. 
+Copyright (c) 2024 Huawei Technologies Co., Ltd.
 
-This file is a part of the CANN Open Software.  
-Licensed under CANN Open Software License Agreement Version 1.0 (the "License").  
-Please refer to the License for details. You may not use this file except in compliance with the License.  
+This file is a part of the CANN Open Software.
+Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
 
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,   
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
 EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,     
-MERCHANTABILITY, OR FITNESS FOR A PARTICULAR   PURPOSE.  
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+MERCHANTABILITY, OR FITNESS FOR A PARTICULAR   PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 
 ## 许可证

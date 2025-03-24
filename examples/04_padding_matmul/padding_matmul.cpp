@@ -34,7 +34,7 @@ template <
 ASCENDCT_GLOBAL
 void PaddingMatmul(
     uint64_t fftsAddr,
-    MatmulCoord problemShape,
+    GemmCoord problemShape,
     GM_ADDR gmA, LayoutA layoutA,
     GM_ADDR gmB, LayoutB layoutB,
     GM_ADDR gmC, LayoutC layoutC,
@@ -46,8 +46,8 @@ void PaddingMatmul(
     AscendC::SetSyncBaseAddr(fftsAddr);
     constexpr bool enableUnitFlag = true;
     using DispatchPolicy = gemm::MmadAtlasA2Pingpong<enableUnitFlag>;
-    using L1TileShape = MatmulShape<128, 256, 256>;
-    using L0TileShape = MatmulShape<128, 256, 64>;
+    using L1TileShape = GemmShape<128, 256, 256>;
+    using L0TileShape = GemmShape<128, 256, 64>;
 
     using AType = gemm::MatmulType<half, LayoutA>;
     using BType = gemm::MatmulType<half, LayoutB>;
@@ -86,7 +86,7 @@ void PaddingMatmul(
 struct Options {
     const std::string HELPER = "04_padding_matmul m n k [device_id]";
 
-    MatmulCoord problemShape{128, 128, 128};
+    GemmCoord problemShape{128, 128, 128};
     int32_t deviceId{0};
 
     Options() = default;

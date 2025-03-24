@@ -14,7 +14,7 @@
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/arch/resource.hpp"
 #include "AscendCT/coord.hpp"
-#include "AscendCT/matmul_coord.hpp"
+#include "AscendCT/gemm_coord.hpp"
 #include "AscendCT/matrix_coord.hpp"
 
 namespace AscendCT::gemm::kernel {
@@ -97,7 +97,7 @@ public:
     ASCENDCT_DEVICE
     void operator()<AscendC::AIC>(Params const &params)
     {
-        MatmulCoord problemShapeList[MAX_TENSOR_COUNT];
+        GemmCoord problemShapeList[MAX_TENSOR_COUNT];
         LayoutA layoutAList[MAX_TENSOR_COUNT];
         LayoutB layoutBList[MAX_TENSOR_COUNT];
         LayoutC layoutCList[MAX_TENSOR_COUNT];
@@ -128,7 +128,7 @@ public:
 
         uint32_t startCoreIdx = 0;
         for (uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx) {
-            MatmulCoord problemShape = problemShapeList[groupIdx];
+            GemmCoord problemShape = problemShapeList[groupIdx];
             LayoutA layoutA = layoutAList[groupIdx];
             LayoutB layoutB = layoutBList[groupIdx];
             LayoutC layoutC = layoutCList[groupIdx];
@@ -146,8 +146,8 @@ public:
             // Loop through the matmul of each groupIdx
             for (uint32_t loopIdx = startLoopIdx; loopIdx < coreLoops; loopIdx += coreNum) {
                 // Compute block location
-                MatmulCoord blockCoord = matmulTileScheduler.GetBlockCoord(loopIdx);
-                MatmulCoord actualBlockShape = matmulTileScheduler.GetActualBlockShape(blockCoord);
+                GemmCoord blockCoord = matmulTileScheduler.GetBlockCoord(loopIdx);
+                GemmCoord actualBlockShape = matmulTileScheduler.GetActualBlockShape(blockCoord);
 
                 // Compute initial location in logical coordinates
                 MatrixCoord offsetA{blockCoord.m() * L1TileShape::M, blockCoord.k() * L1TileShape::K};

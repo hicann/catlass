@@ -34,7 +34,7 @@ template <
 >
 ASCENDCT_GLOBAL
 void GroupedMatmul(
-    MatmulCoord problemShape,
+    GemmCoord problemShape,
     uint32_t problemCount, GM_ADDR gmGroupList,
     GM_ADDR gmA, LayoutA layoutA,
     GM_ADDR gmB, LayoutB layoutB,
@@ -55,8 +55,8 @@ void GroupedMatmul(
         l1Stages, l0AStages, l0BStages, l0CStages,
         enableUnitFlag, enableShuffleK
     >;
-    using L1TileShape = MatmulShape<128, 256, 256>;
-    using L0TileShape = MatmulShape<128, 256, 64>;
+    using L1TileShape = GemmShape<128, 256, 256>;
+    using L0TileShape = GemmShape<128, 256, 64>;
 
     using AType = gemm::MatmulType<half, LayoutA>;
     using BType = gemm::MatmulType<half, LayoutB>;
@@ -82,7 +82,7 @@ struct Options {
     const std::string HELPER = "16_grouped_matmul_k group_count m n k [device_id]";
 
     uint32_t groupCount{1};
-    MatmulCoord problemShape{128, 128, 128};
+    GemmCoord problemShape{128, 128, 128};
     int32_t deviceId{0};
 
     Options() = default;
@@ -180,13 +180,13 @@ void Run(Options const &options)
     std::vector<fp16_t> hostC(lenC);
     ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
 
-    std::vector<MatmulCoord> problemShapeList(problemCount);
+    std::vector<GemmCoord> problemShapeList(problemCount);
     std::vector<LayoutA> layoutAList(problemCount);
     std::vector<LayoutB> layoutBList(problemCount);
     std::vector<LayoutC> layoutCList(problemCount);
     for (uint32_t i = 0; i < problemCount; ++i) {
         uint32_t currentK = (i == 0) ? groupList[0] : (groupList[i] - groupList[i - 1]);
-        problemShapeList[i] = MatmulCoord{m, n, currentK};
+        problemShapeList[i] = GemmCoord{m, n, currentK};
         layoutAList[i] = LayoutA{m, currentK};
         layoutBList[i] = LayoutB{currentK, n};
         layoutCList[i] = LayoutC{m, n};

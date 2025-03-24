@@ -12,7 +12,7 @@
 #define ASCENDCT_MATMUL_TILE_TILE_COPY_HPP
 
 #include "AscendCT/AscendCT.hpp"
-#include "AscendCT/detail/layout.hpp"
+#include "AscendCT/detail/tag_to_layout.hpp"
 
 namespace AscendCT::gemm::tile {
 
@@ -162,7 +162,7 @@ struct PaddingPackedTileCopyTla {
     using L1AAlignHelper = gemm::helper::L1AlignHelper<ElementA, LayoutTagA>;
     using L1BAlignHelper = gemm::helper::L1AlignHelper<ElementB, LayoutTagB>;
 
-    using LayoutPaddingTagA = std::conditional_t<std::is_same_v<LayoutTagA, layout::RowMajor>, 
+    using LayoutPaddingTagA = std::conditional_t<std::is_same_v<LayoutTagA, layout::RowMajor>,
         layout::PaddingRowMajor, layout::PaddingColumnMajor>;
     using LayoutPaddingTagB = std::conditional_t<std::is_same_v<LayoutTagB, layout::RowMajor>,
         layout::PaddingRowMajor, layout::PaddingColumnMajor>;

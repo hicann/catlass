@@ -16,7 +16,7 @@
 #include "AscendCT/arch/resource.hpp"
 #include "AscendCT/coord.hpp"
 #include "AscendCT/detail/callback.hpp"
-#include "AscendCT/matmul_coord.hpp"
+#include "AscendCT/gemm_coord.hpp"
 #include "AscendCT/matrix_coord.hpp"
 
 namespace AscendCT::gemm::kernel {
@@ -55,7 +55,7 @@ public:
     /// Parameters structure
     struct Params {
         // Data members
-        MatmulCoord problemShape;
+        GemmCoord problemShape;
         __gm__ ElementA *ptrA;
         LayoutA layoutA;
         __gm__ ElementB *ptrB;
@@ -74,7 +74,7 @@ public:
 
         ASCENDCT_DEVICE
         Params(
-            MatmulCoord problemShape_,
+            GemmCoord problemShape_,
             GM_ADDR ptrA_, LayoutA layoutA_,
             GM_ADDR ptrB_, LayoutB layoutB_,
             GM_ADDR ptrScale_, LayoutScale layoutScale_,
@@ -139,8 +139,8 @@ public:
         // Loop through the matmul of each groupIdx
         for (uint32_t loopIdx = coreIdx; loopIdx < coreLoops; loopIdx += coreNum) {
             // Compute block location
-            MatmulCoord blockCoord = blockScheduler.GetBlockCoord(loopIdx);
-            MatmulCoord actualBlockShape = blockScheduler.GetActualBlockShape(blockCoord);
+            GemmCoord blockCoord = blockScheduler.GetBlockCoord(loopIdx);
+            GemmCoord actualBlockShape = blockScheduler.GetActualBlockShape(blockCoord);
 
             Callback callbackBeforeFixpipe{};
             if (stageUsed == WORKSPACE_STAGES) {
@@ -208,7 +208,7 @@ public:
         auto layoutC = layout::RowMajor{L1TileShape::M * coreNum * WORKSPACE_STAGES, L1TileShape::N};
 
         uint32_t stageId = 0;
-        
+
         LayoutScale layoutScale = params.layoutScale;
         LayoutPerTokenScale layoutPerTokenScale =
             params.layoutPerTokenScale.GetTileLayout(params.problemShape.template GetCoordByAxis<0>());
@@ -224,10 +224,10 @@ public:
         blockEpilogue.UpdateParams(epilogueParams);
         uint32_t coreLoops = blockScheduler.GetCoreLoops();
 
-        MatmulCoord blockShapeMNK = L1TileShape::ToCoord();
+        GemmCoord blockShapeMNK = L1TileShape::ToCoord();
         for (uint32_t loopIdx = coreIdx; loopIdx < coreLoops; loopIdx += coreNum) {
-            MatmulCoord blockCoordMNK = blockScheduler.GetBlockCoord(loopIdx);
-            MatmulCoord actualBlockShapeMNK = blockScheduler.GetActualBlockShape(blockCoordMNK);
+            GemmCoord blockCoordMNK = blockScheduler.GetBlockCoord(loopIdx);
+            GemmCoord actualBlockShapeMNK = blockScheduler.GetActualBlockShape(blockCoordMNK);
 
             MatrixCoord offsetC{(stageId * coreNum + coreIdx) * L1TileShape::M, 0};
             int64_t gmOffsetC = layoutC.GetOffset(offsetC);

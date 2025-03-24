@@ -14,7 +14,7 @@
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/arch/resource.hpp"
 #include "AscendCT/coord.hpp"
-#include "AscendCT/matmul_coord.hpp"
+#include "AscendCT/gemm_coord.hpp"
 #include "AscendCT/matrix_coord.hpp"
 
 namespace AscendCT::gemm::kernel {
@@ -39,7 +39,7 @@ struct ReduceAdd {
             bufferOffset += COMPUTE_LENGTH * sizeof(ElementAccumulator);
             accumulatorBuffer[i] = resource.ubBuf.template GetBufferByByte<ElementAccumulator>(bufferOffset);
             bufferOffset += COMPUTE_LENGTH * sizeof(ElementAccumulator);
-            outputBuffer[i] = resource.ubBuf.template GetBufferByByte<ElementOut>(bufferOffset); 
+            outputBuffer[i] = resource.ubBuf.template GetBufferByByte<ElementOut>(bufferOffset);
             bufferOffset += COMPUTE_LENGTH * sizeof(ElementOut);
         }
     }
@@ -73,7 +73,7 @@ struct ReduceAdd {
         constexpr uint32_t ELE_PER_VECOTR_BLOCK = 256 / sizeof(ElementAccumulator);
         uint32_t aivNum = AscendC::GetBlockNum() * AscendC::GetSubBlockNum();
         uint32_t aivId = AscendC::GetBlockIdx();
-        uint64_t taskPerAiv = 
+        uint64_t taskPerAiv =
             (elementCount / aivNum + ELE_PER_VECOTR_BLOCK - 1) / ELE_PER_VECOTR_BLOCK * ELE_PER_VECOTR_BLOCK;
         if (taskPerAiv == 0) taskPerAiv = ELE_PER_VECOTR_BLOCK;
         uint32_t tileLen;
@@ -82,7 +82,7 @@ struct ReduceAdd {
         } else {
             tileLen = taskPerAiv;
         }
-        
+
         AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(inputEventIds[0]);
         AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(inputEventIds[1]);
         AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(outputEventIds[0]);
@@ -108,8 +108,8 @@ struct ReduceAdd {
                     src[sliceIdx * elementCount + loopIdx * tileLen], actualTileLen);
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(inputEventIds[bufferIndex]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(inputEventIds[bufferIndex]);
-                
-                AscendC::Add(accumulatorBuffer[bufferIndex], 
+
+                AscendC::Add(accumulatorBuffer[bufferIndex],
                     accumulatorBuffer[bufferIndex], inputBuffer[bufferIndex], actualTileLen);
                 AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(inputEventIds[bufferIndex]);
             }
@@ -133,7 +133,7 @@ struct ReduceAdd {
             AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(outputEventIds[bufferIndex]);
             Ub2Gm(dst[loopIdx * tileLen], outputBuffer[bufferIndex], actualTileLen);
             AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(outputEventIds[bufferIndex]);
-            
+
             bufferIndex = (bufferIndex + 1) % BUFFER_NUM;
         }
 
@@ -184,7 +184,7 @@ public:
     /// Parameters structure
     struct Params {
         // Data members
-        MatmulCoord problemShape;
+        GemmCoord problemShape;
         GM_ADDR ptrA;
         LayoutA layoutA;
         GM_ADDR ptrB;
@@ -199,7 +199,7 @@ public:
         Params() {}
 
         ASCENDCT_DEVICE
-        Params(MatmulCoord const &problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_,
+        Params(GemmCoord const &problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_,
                LayoutB layoutB_, GM_ADDR ptrC_, LayoutC layoutC_, GM_ADDR ptrWorkspace_, uint32_t splitkFactor_)
             : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_), layoutB(layoutB_),
               ptrC(ptrC_), layoutC(layoutC_), ptrWorkspace(ptrWorkspace_), splitkFactor(splitkFactor_) {}
@@ -219,7 +219,7 @@ public:
     void operator()<AscendC::AIC>(Params const &params)
     {
         BlockScheduler matmulBlockScheduler(params.problemShape,
-            MatmulCoord(L1TileShape::M, L1TileShape::N, L1TileShape::K), params.splitkFactor);
+            GemmCoord(L1TileShape::M, L1TileShape::N, L1TileShape::K), params.splitkFactor);
         uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
 
         arch::Resource<ArchTag> resource;
@@ -235,8 +235,8 @@ public:
 
         for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()) {
             // Compute block location
-            MatmulCoord blockCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
-            MatmulCoord actualBlockShape = matmulBlockScheduler.GetActualBlockShape(
+            GemmCoord blockCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
+            GemmCoord actualBlockShape = matmulBlockScheduler.GetActualBlockShape(
                 blockCoord, matmulBlockScheduler.GetSplitkSliceIdx(loopIdx));
 
             // Compute initial location in logical coordinates

@@ -33,7 +33,7 @@
 using namespace AscendCT;
 using bfloat16 = op::bfloat16;
 
-using L1TileShape = MatmulShape<128, 256, 512>;
+using L1TileShape = GemmShape<128, 256, 512>;
 constexpr uint32_t workspaceStages = 2;
 
 template <
@@ -43,7 +43,7 @@ template <
 ASCENDCT_GLOBAL
 void QuantMatmul(
     uint64_t fftsAddr,
-    MatmulCoord problemShape,
+    GemmCoord problemShape,
     GM_ADDR gmA, LayoutA layoutA,
     GM_ADDR gmB, LayoutB layoutB,
     GM_ADDR gmScale, layout::VectorLayout layoutScale,
@@ -66,7 +66,7 @@ void QuantMatmul(
         l1Stages, l0AStages, l0BStages, l0CStages,
         enableUnitFlag, enableShuffleK
     >;
-    using L0TileShape = MatmulShape<128, 256, 128>;
+    using L0TileShape = GemmShape<128, 256, 128>;
 
     using AType = gemm::MatmulType<int8_t, LayoutA>;
     using BType = gemm::MatmulType<int8_t, LayoutB>;
@@ -142,7 +142,7 @@ void QuantMatmul(
 struct Options {
     const std::string HELPER = "12_quant_matmul m n k [device_id]";
 
-    MatmulCoord problemShape{128, 128, 128};
+    GemmCoord problemShape{128, 128, 128};
     int32_t deviceId{0};
 
     Options() = default;

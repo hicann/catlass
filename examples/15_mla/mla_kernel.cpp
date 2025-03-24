@@ -265,7 +265,7 @@ public:
                     LayoutK layoutK(embed, kSeqTile);
                     LayoutK layoutKRope(embedRope, kSeqTile);
                     LayoutS layoutS(rowNumRound, kSeqTileRound);
-                    MatmulCoord actualBlockShapeQK{rowNum, kSeqTile, embed + embedRope};
+                    GemmCoord actualBlockShapeQK{rowNum, kSeqTile, embed + embedRope};
                     MatrixCoord qShapeSingleNd{qHeadSplitSizeActual, embed};
                     uint32_t qkPingPongFlag = nIdx % 2;
                     int32_t blockTableId =
@@ -294,7 +294,7 @@ public:
                     LayoutP layoutP(rowNum, vSeqTile, vSeqTileRound);
                     LayoutV layoutV(embed, vSeqTile);
                     LayoutOTmp layoutOTmp(rowNumRound, embedRound);
-                    MatmulCoord actualBlockShapePV{rowNum, embed, vSeqTile};
+                    GemmCoord actualBlockShapePV{rowNum, embed, vSeqTile};
                     uint32_t pvPingPongFlag = (nIdx - 1) % 2;
                     uint64_t gPOffset = (uint64_t)coreIdx * TMP_SIZE + (uint64_t)pvPingPongFlag * TMP_SIZE / 2;
                     uint64_t gOTmpOffset = (uint64_t)coreIdx * TMP_SIZE * 2 + (uint64_t)pvPingPongFlag * TMP_SIZE;
@@ -464,7 +464,7 @@ public:
 
                     LayoutP layoutP(rowNum, kSeqTile, kSeqTileRound);
                     LayoutS layoutS(rowNumRound, kSeqTile, kSeqTileRound);
-                    MatmulCoord actualBlockShapeQK{rowNum, kSeqTile, embedRound};
+                    GemmCoord actualBlockShapeQK{rowNum, kSeqTile, embedRound};
                     uint32_t softmaxPingPongFlag = nIdx % 2;
                     uint64_t gmOffsetP = (uint64_t)coreIdx * TMP_SIZE + softmaxPingPongFlag * TMP_SIZE / 2;
                     uint64_t gmOffsetS =
@@ -488,7 +488,7 @@ public:
                     LayoutO layoutO(tokenNumPerHead, strideQO);
                     LayoutOTmp layoutOTmp(rowNum, embed, embedRound);
                     LayoutUpdate layoutUpdate(rowNum, embed, embedRound);
-                    MatmulCoord actualBlockShapePV{rowNum, embed, vSeqTile};
+                    GemmCoord actualBlockShapePV{rowNum, embed, vSeqTile};
                     uint32_t rescaleOPingPongFlag = (nIdx - 1) % 2;
                     uint64_t gmOffsetOTmp = (uint64_t)(coreIdx * TMP_SIZE * 2 + rescaleOPingPongFlag * TMP_SIZE);
                     uint64_t gmOffsetUpdate = (uint64_t)(coreIdx * TMP_SIZE);
@@ -616,7 +616,7 @@ ASCENDCT_GLOBAL void MLA(uint64_t fftsAddr,
     using LayoutUpdate = layout::RowMajor;
 
     // L1TileShape::K must be embdding
-    using L1TileShape = MatmulShape<128, 128, 576>;
+    using L1TileShape = GemmShape<128, 128, 576>;
     using L0TileShape = L1TileShape;
 
     // Mmadqk

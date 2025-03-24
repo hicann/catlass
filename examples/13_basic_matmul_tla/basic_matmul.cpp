@@ -37,7 +37,7 @@ template <
 >
 ASCENDCT_GLOBAL
 void BasicMatmul(
-    MatmulCoord problemShape,
+    GemmCoord problemShape,
     GM_ADDR gmA, LayoutTagA tagA,
     GM_ADDR gmB, LayoutTagB tagB,
     GM_ADDR gmC, LayoutTagC tagC
@@ -96,7 +96,7 @@ void BasicMatmul(
 struct Options {
     const std::string HELPER = "00_basic_matmul m n k [device_id]";
 
-    MatmulCoord problemShape{128, 128, 128};
+    GemmCoord problemShape{128, 128, 128};
     int32_t deviceId{0};
 
     Options() = default;
