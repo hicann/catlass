@@ -11,7 +11,7 @@
 #ifndef ASCENDCT_GEMM_TILE_COPY_L0C_TO_GM_HPP
 #define ASCENDCT_GEMM_TILE_COPY_L0C_TO_GM_HPP
 
-#include "AscendCT/gemm/GemmType"
+#include "AscendCT/gemm/gemm_type.hpp"
 
 namespace AscendCT::gemm::tile {
 

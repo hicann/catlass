@@ -18,7 +18,7 @@
 #include "AscendCT/gemm/block/block_swizzle.hpp"
 #include "AscendCT/gemm/dispatch_policy.hpp"
 #include "AscendCT/gemm/kernel/basic_matmul.hpp"
-#include "AscendCT/gemm/GemmType"
+#include "AscendCT/gemm/gemm_type.hpp"
 
 using namespace AscendCT;
 

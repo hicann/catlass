@@ -13,7 +13,7 @@
 
 #include "AscendCT/gemm/block/block_mmad.hpp"
 #include "AscendCT/gemm/dispatch_policy.hpp"
-#include "AscendCT/gemm/GemmType"
+#include "AscendCT/gemm/gemm_type.hpp"
 
 #include "AscendCT/arch/cross_core_sync.hpp"
 #include "AscendCT/arch/resource.hpp"

@@ -18,7 +18,7 @@
 #include "AscendCT/gemm/block/block_swizzle.hpp"
 #include "AscendCT/gemm/dispatch_policy.hpp"
 #include "AscendCT/gemm/kernel/grouped_matmul_k.hpp"
-#include "AscendCT/gemm/GemmType"
+#include "AscendCT/gemm/gemm_type.hpp"
 
 template <class LayoutA, class LayoutB, class LayoutC>
 ASCENDCT_GLOBAL void grouped_matmul_k(GemmCoord problemShape, uint32_t problemCount, GM_ADDR gmGroupList, GM_ADDR gmA,

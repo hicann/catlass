@@ -27,7 +27,7 @@
 #include "AscendCT/gemm/block/block_swizzle.hpp"
 #include "AscendCT/gemm/dispatch_policy.hpp"
 #include "AscendCT/gemm/kernel/quant_matmul_multistage_workspace.hpp"
-#include "AscendCT/gemm/GemmType"
+#include "AscendCT/gemm/gemm_type.hpp"
 #include "AscendCT/layout/layout.hpp"
 
 using namespace AscendCT;

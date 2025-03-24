@@ -13,7 +13,7 @@
 
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/layout/layout.hpp"
-#include "AscendCT/gemm/GemmType"
+#include "AscendCT/gemm/gemm_type.hpp"
 #include "tla/tensor.hpp"
 
 using namespace tla;
