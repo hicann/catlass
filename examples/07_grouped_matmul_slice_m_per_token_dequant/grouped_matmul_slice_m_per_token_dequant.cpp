@@ -13,7 +13,7 @@
 
 #include "helper.hpp"
 #include "golden.hpp"
-#include "bfloat16.h"
+#include "fp16_t.h"
 
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/arch/arch.hpp"
@@ -25,19 +25,16 @@
 #include "AscendCT/gemm/block/block_mmad.hpp"
 #include "AscendCT/gemm/block/block_swizzle.hpp"
 #include "AscendCT/gemm/dispatch_policy.hpp"
-#include "AscendCT/gemm/kernel/grouped_matmul_m_per_token_dequant_multistage_workspace.hpp"
+#include "AscendCT/gemm/kernel/grouped_matmul_slice_m_per_token_dequant.hpp"
 #include "AscendCT/gemm/matmul_type.hpp"
 #include "AscendCT/layout/layout.hpp"
 
 using namespace AscendCT;
-using bfloat16 = op::bfloat16;
-
-using L1TileShape = MatmulShape<128, 256, 512>;
-constexpr uint32_t workspaceStages = 2;
+using fp16_t = op::fp16_t;
 
 template <class LayoutB>
 ASCENDCT_GLOBAL
-void GroupedMatmulMPerTokenDequant(
+void GroupedMatmulPerTokenDequant(
     uint64_t fftsAddr,
     MatmulCoord problemShape,
     uint32_t problemCount, GM_ADDR gmGroupList,
@@ -54,16 +51,17 @@ void GroupedMatmulMPerTokenDequant(
     constexpr uint32_t preloadStages = 1;
     constexpr uint32_t l1Stages = 2;
     constexpr uint32_t l0AStages = 2;
-    constexpr uint32_t l0BStages = 2;
+    constexpr uint32_t l0BStages = 4;
     constexpr uint32_t l0CStages = 1;
     constexpr bool enableUnitFlag = false;
     constexpr bool enableShuffleK = true;
-    using DispatchPolicy = gemm::MmadAtlasA2PreloadAsyncWithCallback<
+    using DispatchPolicy = gemm::MmadAtlasA2PreloadAsync<
         preloadStages,
         l1Stages, l0AStages, l0BStages, l0CStages,
         enableUnitFlag, enableShuffleK
     >;
-    using L0TileShape = MatmulShape<128, 256, 128>;
+    using L1TileShape = MatmulShape<128, 256, 256>;
+    using L0TileShape = MatmulShape<128, 256, 64>;
 
     using AType = gemm::MatmulType<int8_t, layout::RowMajor>;
     using BType = gemm::MatmulType<int8_t, LayoutB>;
@@ -73,9 +71,9 @@ void GroupedMatmulMPerTokenDequant(
 
     constexpr uint32_t ubStages = 2;
     using EpilogueDispatchPolicy = epilogue::EpilogueAtlasA2PerTokenDequant<ubStages>;
-    using ScaleType = gemm::MatmulType<bfloat16_t, layout::VectorLayout>;
-    using PerTokenScaleType = gemm::MatmulType<bfloat16_t, layout::VectorLayout>;
-    using DType = gemm::MatmulType<bfloat16_t, layout::RowMajor>;
+    using ScaleType = gemm::MatmulType<float, layout::VectorLayout>;
+    using PerTokenScaleType = gemm::MatmulType<float, layout::VectorLayout>;
+    using DType = gemm::MatmulType<half, layout::RowMajor>;
 
     using RowBroadcastMulType = gemm::MatmulType<float, layout::RowMajor>;
     using BroadcastOneBlkType = gemm::MatmulType<float, layout::RowMajor>;
@@ -96,9 +94,8 @@ void GroupedMatmulMPerTokenDequant(
     using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 0>;
 
     // kernel level
-    using ElementGroupList = int64_t;
-    using MatmulKernel = gemm::kernel::GroupedMatmulMPerTokenDequantMultiStageWorkspace<BlockMmad, BlockEpilogue,
-        BlockScheduler, workspaceStages, ElementGroupList>;
+    using MatmulKernel = gemm::kernel::GroupedMatmulSliceMPerTokenDequant<BlockMmad, BlockEpilogue, BlockScheduler,
+        int32_t>;
 
     typename MatmulKernel::Params params{
         problemShape, problemCount, gmGroupList,
@@ -116,7 +113,7 @@ void GroupedMatmulMPerTokenDequant(
 }
 
 struct Options {
-    const std::string HELPER = "10_grouped_matmul_m_per_token_dequant_bf16 group_count m n k [device_id]";
+    const std::string HELPER = "07_grouped_matmul_slice_m_per_token_dequant group_count m n k [device_id]";
 
     uint32_t groupCount{1};
     MatmulCoord problemShape{128, 128, 128};
@@ -163,33 +160,31 @@ void Run(Options const & options)
     uint32_t n = options.problemShape.n();
     uint32_t k = options.problemShape.k();
 
-    auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
-
     size_t lenA = static_cast<size_t>(m) * k;
     size_t lenB = static_cast<size_t>(k) * n * problemCount;
     size_t lenScale = static_cast<size_t>(n) * problemCount;
     size_t lenPerTokenScale = static_cast<size_t>(m);
     size_t lenD = static_cast<size_t>(m) * n;
-    size_t lenWorkspace = static_cast<size_t>(L1TileShape::M) * L1TileShape::N * aicCoreNum * workspaceStages;
+    size_t lenWorkspace = lenD;
 
     size_t sizeA = lenA * sizeof(int8_t);
     size_t sizeB = lenB * sizeof(int8_t);
-    size_t sizeScale = lenScale * sizeof(bfloat16);
-    size_t sizePerTokenScale = lenPerTokenScale * sizeof(bfloat16);
-    size_t sizeD = lenD * sizeof(bfloat16);
+    size_t sizeScale = lenScale * sizeof(float);
+    size_t sizePerTokenScale = lenPerTokenScale * sizeof(float);
+    size_t sizeD = lenD * sizeof(fp16_t);
     size_t sizeWorkspace = lenWorkspace * sizeof(uint32_t);
 
     std::vector<int8_t> hostA(lenA);
     std::vector<int8_t> hostB(lenB);
-    std::vector<bfloat16> hostScale(lenScale);
-    std::vector<bfloat16> hostPerTokenScale(lenPerTokenScale);
+    std::vector<float> hostScale(lenScale);
+    std::vector<float> hostPerTokenScale(lenPerTokenScale);
     golden::FillRandomData(hostA, -16, 16);
     golden::FillRandomData(hostB, -16, 16);
     golden::FillRandomData(hostScale, 0.0, 1.0);
     golden::FillRandomData(hostPerTokenScale, 0.0, 1.0);
-    std::vector<int64_t> groupList = golden::GenerateGroupList<int64_t>(m, problemCount);
+    auto groupList = golden::GenerateGroupList(m, problemCount);
 
-    size_t sizeGroupList = problemCount * sizeof(int64_t);
+    size_t sizeGroupList = problemCount * sizeof(uint32_t);
     uint8_t *deviceGroupList{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceGroupList), sizeGroupList, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceGroupList, sizeGroupList, groupList.data(), sizeGroupList, ACL_MEMCPY_HOST_TO_DEVICE));
@@ -229,7 +224,9 @@ void Run(Options const & options)
     uint32_t fftsLen{0};
     RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
 
-    GroupedMatmulMPerTokenDequant<<<aicCoreNum, nullptr, stream>>>(
+    auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
+
+    GroupedMatmulPerTokenDequant<<<aicCoreNum, nullptr, stream>>>(
         fftsAddr,
         options.problemShape, problemCount, deviceGroupList,
         deviceA, layoutA,
@@ -241,7 +238,7 @@ void Run(Options const & options)
     );
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
-    std::vector<bfloat16> hostD(lenD);
+    std::vector<fp16_t> hostD(lenD);
     ACL_CHECK(aclrtMemcpy(hostD.data(), sizeD, deviceD, sizeD, ACL_MEMCPY_DEVICE_TO_HOST));
 
     std::vector<float> hostGolden(lenD);

@@ -12,8 +12,8 @@
 
 #include "AscendCT_kernel.h"
 #include "basic_matmul.h"
-#include "grouped_matmul_k.h"
-#include "grouped_matmul_m.h"
+#include "grouped_matmul_slice_k.h"
+#include "grouped_matmul_slice_m.h"
 #include "optimized_matmul.h"
 
 void BasicMatmul(uint32_t blockNum, aclrtStream stream, KernelExecInfo kernelExecInfo, AscendCTInfo AscendCTInfo)
@@ -63,11 +63,11 @@ void GroupedMatmul(uint32_t blockNum, aclrtStream stream, KernelExecInfo kernelE
 
     // execution
     if (AscendCTInfo.split == AscendCTInfo::GMMSplit::SPLIT_M) {
-        grouped_matmul_m<LayoutA, LayoutB, LayoutC><<<blockNum, nullptr, stream>>>(
+        grouped_matmul_slice_m<LayoutA, LayoutB, LayoutC><<<blockNum, nullptr, stream>>>(
             problemShape, problemCount, groupListDevice, kernelExecInfo.inputAddr.at(0), layoutA,
             kernelExecInfo.inputAddr.at(1), layoutB, kernelExecInfo.outputAddr.at(0), layoutC);
     } else if (AscendCTInfo.split == AscendCTInfo::GMMSplit::SPLIT_K) {
-        grouped_matmul_k<LayoutA, LayoutB, LayoutC><<<blockNum, nullptr, stream>>>(
+        grouped_matmul_slice_k<LayoutA, LayoutB, LayoutC><<<blockNum, nullptr, stream>>>(
             problemShape, problemCount, groupListDevice, kernelExecInfo.inputAddr.at(0), layoutA,
             kernelExecInfo.inputAddr.at(1), layoutB, kernelExecInfo.outputAddr.at(0), layoutC);
     }

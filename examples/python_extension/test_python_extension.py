@@ -40,7 +40,7 @@ class AscendCTTest(TestCase):
         golden = torch.mm(a, b)
         self.assertRtolEqual(result, golden)
 
-    def test_grouped_matmul_m_pybind(self):
+    def test_grouped_matmul_slice_m_pybind(self):
         m_list = [16, 32, 64]
         k, n = 16, 16
         a_list = [torch.ones((m, k)).to(torch.float16).npu() for m in m_list]
@@ -50,7 +50,7 @@ class AscendCTTest(TestCase):
         for i in range(len(m_list)):
             self.assertRtolEqual(result[i], golden[i])
 
-    def test_grouped_matmul_k_pybind(self):
+    def test_grouped_matmul_slice_k_pybind(self):
         k_list = [16, 32, 64]
         m, n = 16, 16
         a_list = [torch.ones((m, k)).to(torch.float16).npu() for k in k_list]

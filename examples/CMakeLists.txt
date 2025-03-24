@@ -50,21 +50,21 @@ endfunction()
 foreach(EXAMPLE
     00_basic_matmul
     01_batched_matmul
-    02_grouped_matmul_m
+    02_grouped_matmul_slice_m
     03_matmul_add
     04_padding_matmul
     05_fa
     06_optimized_matmul
-    07_grouped_matmul_m_per_token_dequant
+    07_grouped_matmul_slice_m_per_token_dequant
     08_grouped_matmul
     09_splitk_matmul
-    10_grouped_matmul_m_per_token_dequant_bf16
-    11_grouped_matmul_k_per_token_dequant_bf16
+    10_grouped_matmul_slice_m_per_token_dequant_bf16
+    11_grouped_matmul_slice_k_per_token_dequant_bf16
     12_quant_matmul
     13_basic_matmul_tla
     14_optimized_matmul_tla
     15_mla
-    16_grouped_matmul_k
+    16_grouped_matmul_slice_k
 )
     add_subdirectory(${EXAMPLE})
 endforeach()

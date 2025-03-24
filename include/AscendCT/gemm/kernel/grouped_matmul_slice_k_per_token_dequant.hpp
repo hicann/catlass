@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ASCENDCT_MATMUL_KERNEL_GROUPED_MATMUL_M_PER_TOKEN_DEQUANT_HPP
-#define ASCENDCT_MATMUL_KERNEL_GROUPED_MATMUL_M_PER_TOKEN_DEQUANT_HPP
+#ifndef ASCENDCT_MATMUL_KERNEL_GROUPED_MATMUL_K_PER_TOKEN_DEQUANT_HPP
+#define ASCENDCT_MATMUL_KERNEL_GROUPED_MATMUL_K_PER_TOKEN_DEQUANT_HPP
 
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/arch/cross_core_sync.hpp"
@@ -27,7 +27,7 @@ template <
     class BlockScheduler_,
     class ElementGroupList_
 >
-class GroupedMatmulMPerTokenDequant {
+class GroupedMatmulSliceKPerTokenDequant {
 public:
     using BlockMmad = BlockMmad_;
     using ArchTag = typename BlockMmad::ArchTag;
@@ -57,7 +57,7 @@ public:
     friend class AivWaitSync;
 
     struct AicFinishSync {
-        using MatmulKernel = GroupedMatmulMPerTokenDequant<BlockMmad, BlockEpilogue, BlockScheduler, ElementGroupList>;
+        using MatmulKernel = GroupedMatmulSliceKPerTokenDequant<BlockMmad, BlockEpilogue, BlockScheduler, ElementGroupList>;
 
         ASCENDCT_DEVICE
         void operator()() const
@@ -69,7 +69,7 @@ public:
     };
 
     struct AivWaitSync {
-        using MatmulKernel = GroupedMatmulMPerTokenDequant<BlockMmad, BlockEpilogue, BlockScheduler, ElementGroupList>;
+        using MatmulKernel = GroupedMatmulSliceKPerTokenDequant<BlockMmad, BlockEpilogue, BlockScheduler, ElementGroupList>;
 
         ASCENDCT_DEVICE
         void operator()() const
@@ -126,7 +126,7 @@ public:
 
     // Methods
     ASCENDCT_DEVICE
-    GroupedMatmulMPerTokenDequant() {}
+    GroupedMatmulSliceKPerTokenDequant() {}
 
     template <int32_t CORE_TYPE = g_coreType>
     ASCENDCT_DEVICE
@@ -156,14 +156,15 @@ public:
         int64_t gmGroupOffsetC = 0;
 
         AicFinishSync aicFinishSync{this};
+
         uint32_t startCoreIdx = 0;
         for (uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx) {
-            uint32_t currentM = (groupIdx == 0) ? groupList.GetValue(groupIdx) :
+            uint32_t currentK = (groupIdx == 0) ? groupList.GetValue(groupIdx) :
                 (groupList.GetValue(groupIdx) - groupList.GetValue(groupIdx - 1));
-            MatmulCoord inGroupProblemShape{currentM, params.problemShape.n(), params.problemShape.k()};
+            MatmulCoord inGroupProblemShape{params.problemShape.m(), params.problemShape.n(), currentK};
 
             LayoutA layoutA = params.layoutA.GetTileLayout(inGroupProblemShape.GetCoordMK());
-            LayoutB layoutB = params.layoutB;
+            LayoutB layoutB = params.layoutB.GetTileLayout(inGroupProblemShape.GetCoordKN());
             LayoutC layoutC = LayoutC(inGroupProblemShape.m(), inGroupProblemShape.n());
 
             blockScheduler.Update(inGroupProblemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
@@ -236,11 +237,12 @@ public:
         groupList.SetGlobalBuffer(params.ptrGroupList);
 
         AivWaitSync aicFinishSync{this};
+
         uint32_t startCoreIdx = 0;
         for (uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx) {
-            uint32_t currentM = (groupIdx == 0) ? groupList.GetValue(groupIdx) :
+            uint32_t currentK = (groupIdx == 0) ? groupList.GetValue(groupIdx) :
                 (groupList.GetValue(groupIdx) - groupList.GetValue(groupIdx - 1));
-            MatmulCoord inGroupProblemShape{currentM, params.problemShape.n(), params.problemShape.k()};
+            MatmulCoord inGroupProblemShape{params.problemShape.m(), params.problemShape.n(), currentK};
 
             LayoutC layoutC = LayoutC(inGroupProblemShape.m(), inGroupProblemShape.n());
             LayoutScale layoutScale = params.layoutScale;
@@ -293,4 +295,4 @@ private:
 
 } // namespace AscendCT::gemm::kernel
 
-#endif // ASCENDCT_MATMUL_KERNEL_GROUPED_MATMUL_M_PER_TOKEN_DEQUANT_HPP
+#endif // ASCENDCT_MATMUL_KERNEL_GROUPED_MATMUL_K_PER_TOKEN_DEQUANT_HPP

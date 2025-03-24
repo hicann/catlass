@@ -17,11 +17,11 @@
 #include "AscendCT/gemm/block/block_mmad.hpp"
 #include "AscendCT/gemm/block/block_swizzle.hpp"
 #include "AscendCT/gemm/dispatch_policy.hpp"
-#include "AscendCT/gemm/kernel/grouped_matmul_k.hpp"
+#include "AscendCT/gemm/kernel/grouped_matmul_slice_k.hpp"
 #include "AscendCT/gemm/matmul_type.hpp"
 
 template <class LayoutA, class LayoutB, class LayoutC>
-ASCENDCT_GLOBAL void grouped_matmul_k(MatmulCoord problemShape, uint32_t problemCount, GM_ADDR gmGroupList, GM_ADDR gmA,
+ASCENDCT_GLOBAL void grouped_matmul_slice_k(MatmulCoord problemShape, uint32_t problemCount, GM_ADDR gmGroupList, GM_ADDR gmA,
                                      LayoutA layoutA, GM_ADDR gmB, LayoutB layoutB, GM_ADDR gmC, LayoutC layoutC)
 {
     constexpr uint32_t preloadStages = 1;
@@ -47,7 +47,7 @@ ASCENDCT_GLOBAL void grouped_matmul_k(MatmulCoord problemShape, uint32_t problem
     using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 1>;
 
     // kernel level
-    using MatmulKernel = gemm::kernel::GroupedMatmulK<BlockMmad, BlockEpilogue, BlockScheduler, int32_t>;
+    using MatmulKernel = gemm::kernel::GroupedMatmulSliceK<BlockMmad, BlockEpilogue, BlockScheduler, int32_t>;
 
     typename MatmulKernel::Params params{problemShape, problemCount, gmGroupList, gmA,    layoutA,
                                          gmB,          layoutB,      gmC,         layoutC};
