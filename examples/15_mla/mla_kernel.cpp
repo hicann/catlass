@@ -13,7 +13,7 @@
 
 #include "AscendCT/gemm/block/block_mmad.hpp"
 #include "AscendCT/gemm/dispatch_policy.hpp"
-#include "AscendCT/gemm/matmul_type.hpp"
+#include "AscendCT/gemm/gemm_type.hpp"
 
 #include "AscendCT/arch/cross_core_sync.hpp"
 #include "AscendCT/arch/resource.hpp"
@@ -265,7 +265,7 @@ public:
                     LayoutK layoutK(embed, kSeqTile);
                     LayoutK layoutKRope(embedRope, kSeqTile);
                     LayoutS layoutS(rowNumRound, kSeqTileRound);
-                    MatmulCoord actualBlockShapeQK{rowNum, kSeqTile, embed + embedRope};
+                    GemmCoord actualBlockShapeQK{rowNum, kSeqTile, embed + embedRope};
                     MatrixCoord qShapeSingleNd{qHeadSplitSizeActual, embed};
                     uint32_t qkPingPongFlag = nIdx % 2;
                     int32_t blockTableId =
@@ -294,7 +294,7 @@ public:
                     LayoutP layoutP(rowNum, vSeqTile, vSeqTileRound);
                     LayoutV layoutV(embed, vSeqTile);
                     LayoutOTmp layoutOTmp(rowNumRound, embedRound);
-                    MatmulCoord actualBlockShapePV{rowNum, embed, vSeqTile};
+                    GemmCoord actualBlockShapePV{rowNum, embed, vSeqTile};
                     uint32_t pvPingPongFlag = (nIdx - 1) % 2;
                     uint64_t gPOffset = (uint64_t)coreIdx * TMP_SIZE + (uint64_t)pvPingPongFlag * TMP_SIZE / 2;
                     uint64_t gOTmpOffset = (uint64_t)coreIdx * TMP_SIZE * 2 + (uint64_t)pvPingPongFlag * TMP_SIZE;
@@ -464,7 +464,7 @@ public:
 
                     LayoutP layoutP(rowNum, kSeqTile, kSeqTileRound);
                     LayoutS layoutS(rowNumRound, kSeqTile, kSeqTileRound);
-                    MatmulCoord actualBlockShapeQK{rowNum, kSeqTile, embedRound};
+                    GemmCoord actualBlockShapeQK{rowNum, kSeqTile, embedRound};
                     uint32_t softmaxPingPongFlag = nIdx % 2;
                     uint64_t gmOffsetP = (uint64_t)coreIdx * TMP_SIZE + softmaxPingPongFlag * TMP_SIZE / 2;
                     uint64_t gmOffsetS =
@@ -488,7 +488,7 @@ public:
                     LayoutO layoutO(tokenNumPerHead, strideQO);
                     LayoutOTmp layoutOTmp(rowNum, embed, embedRound);
                     LayoutUpdate layoutUpdate(rowNum, embed, embedRound);
-                    MatmulCoord actualBlockShapePV{rowNum, embed, vSeqTile};
+                    GemmCoord actualBlockShapePV{rowNum, embed, vSeqTile};
                     uint32_t rescaleOPingPongFlag = (nIdx - 1) % 2;
                     uint64_t gmOffsetOTmp = (uint64_t)(coreIdx * TMP_SIZE * 2 + rescaleOPingPongFlag * TMP_SIZE);
                     uint64_t gmOffsetUpdate = (uint64_t)(coreIdx * TMP_SIZE);
@@ -616,37 +616,37 @@ ASCENDCT_GLOBAL void MLA(uint64_t fftsAddr,
     using LayoutUpdate = layout::RowMajor;
 
     // L1TileShape::K must be embdding
-    using L1TileShape = MatmulShape<128, 128, 576>;
+    using L1TileShape = GemmShape<128, 128, 576>;
     using L0TileShape = L1TileShape;
 
     // Mmadqk
     using DispatchPolicyQK = gemm::MmadAtlasA2MLAQK;
-    using QType = gemm::MatmulType<ElementQ, LayoutQ>;
-    using KType = gemm::MatmulType<ElementK, LayoutK>;
-    using SType = gemm::MatmulType<ElementS, LayoutS>;
+    using QType = gemm::GemmType<ElementQ, LayoutQ>;
+    using KType = gemm::GemmType<ElementK, LayoutK>;
+    using SType = gemm::GemmType<ElementS, LayoutS>;
     using BlockMmadQK = gemm::block::BlockMmad<DispatchPolicyQK, L1TileShape, L0TileShape, QType, KType, SType>;
 
     // EpilogueSoftmax
-    using PType = gemm::MatmulType<ElementP, LayoutP>;
-    using MaskType = gemm::MatmulType<ElementMask, LayoutMask>;
+    using PType = gemm::GemmType<ElementP, LayoutP>;
+    using MaskType = gemm::GemmType<ElementMask, LayoutMask>;
     using EpilogueMLASoftmax =
         epilogue::block::BlockEpilogue<epilogue::EpilogueAtlasA2MLASoftmax, PType, SType, MaskType>;
 
     // Mmadpv
     using DispatchPolicyPV = gemm::MmadAtlasA2MLAPV;
-    using VType = gemm::MatmulType<ElementV, LayoutV>;
-    using OTmpType = gemm::MatmulType<ElementOTmp, LayoutOTmp>;
+    using VType = gemm::GemmType<ElementV, LayoutV>;
+    using OTmpType = gemm::GemmType<ElementOTmp, LayoutOTmp>;
     using BlockMmadPV = gemm::block::BlockMmad<DispatchPolicyPV, L1TileShape, L0TileShape, PType, VType, OTmpType>;
 
     // EpilogueRescaleO
-    using OType = gemm::MatmulType<ElementO, LayoutO>;
-    using OUpdateType = gemm::MatmulType<ElementUpdate, LayoutUpdate>;
+    using OType = gemm::GemmType<ElementO, LayoutO>;
+    using OUpdateType = gemm::GemmType<ElementUpdate, LayoutUpdate>;
     using EpilogueMLARescaleO =
         epilogue::block::BlockEpilogue<epilogue::EpilogueAtlasA2MLARescaleO, OType, OUpdateType, OTmpType>;
 
     // EpilogueFDRescaleO
-    using OType = gemm::MatmulType<ElementO, LayoutO>;
-    using lType = gemm::MatmulType<ElementUpdate, LayoutUpdate>;
+    using OType = gemm::GemmType<ElementO, LayoutO>;
+    using lType = gemm::GemmType<ElementUpdate, LayoutUpdate>;
     constexpr uint32_t ComputeEleNum = 6144;
     using EpilogueMLAFDRescaleO =
         epilogue::block::BlockEpilogue<epilogue::EpilogueAtlasA2MLAFDRescaleO<ComputeEleNum>, OType, lType>;

@@ -8,15 +8,15 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ASCENDCT_MATMUL_MATMUL_TYPE_HPP
-#define ASCENDCT_MATMUL_MATMUL_TYPE_HPP
+#ifndef ASCENDCT_GEMM_GEMM_TYPE_HPP
+#define ASCENDCT_GEMM_GEMM_TYPE_HPP
 
 namespace AscendCT::gemm {
 
 ////////////////////////////////////////////////////////////////////
 
 template <class Element_, class Layout_, AscendC::TPosition POSITION_ = AscendC::TPosition::GM>
-struct MatmulType {
+struct GemmType {
     using Element = Element_;
     using Layout = Layout_;
     static constexpr AscendC::TPosition POSITION = POSITION_;
@@ -24,4 +24,4 @@ struct MatmulType {
 
 } // namespace AscendCT::gemm
 
-#endif // ASCENDCT_MATMUL_MATMUL_TYPE_HPP
+#endif // ASCENDCT_GEMM_GEMM_TYPE_HPP

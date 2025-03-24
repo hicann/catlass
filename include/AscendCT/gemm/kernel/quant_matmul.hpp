@@ -8,15 +8,15 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ASCENDCT_MATMUL_KERNEL_QUANT_MATMUL_HPP
-#define ASCENDCT_MATMUL_KERNEL_QUANT_MATMUL_HPP
+#ifndef ASCENDCT_GEMM_KERNEL_QUANT_MATMUL_HPP
+#define ASCENDCT_GEMM_KERNEL_QUANT_MATMUL_HPP
 
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/arch/cross_core_sync.hpp"
 #include "AscendCT/arch/resource.hpp"
 #include "AscendCT/coord.hpp"
 #include "AscendCT/detail/callback.hpp"
-#include "AscendCT/matmul_coord.hpp"
+#include "AscendCT/gemm_coord.hpp"
 #include "AscendCT/matrix_coord.hpp"
 
 namespace AscendCT::gemm::kernel {
@@ -80,7 +80,7 @@ public:
     /// Parameters structure
     struct Params {
         // Data members
-        MatmulCoord problemShape;
+        GemmCoord problemShape;
         __gm__ ElementA *ptrA;
         LayoutA layoutA;
         __gm__ ElementB *ptrB;
@@ -99,7 +99,7 @@ public:
 
         ASCENDCT_DEVICE
         Params(
-            MatmulCoord problemShape_,
+            GemmCoord problemShape_,
             GM_ADDR ptrA_, LayoutA layoutA_,
             GM_ADDR ptrB_, LayoutB layoutB_,
             GM_ADDR ptrScale_, LayoutScale layoutScale_,
@@ -151,8 +151,8 @@ public:
 
         for (uint32_t loopIdx = coreIdx; loopIdx < coreLoops; loopIdx += coreNum) {
             // Compute block location
-            MatmulCoord blockCoord = blockScheduler.GetBlockCoord(loopIdx);
-            MatmulCoord actualBlockShape = blockScheduler.GetActualBlockShape(blockCoord);
+            GemmCoord blockCoord = blockScheduler.GetBlockCoord(loopIdx);
+            GemmCoord actualBlockShape = blockScheduler.GetActualBlockShape(blockCoord);
 
             // Compute initial location in logical coordinates
             MatrixCoord offsetA{blockCoord.m() * L1TileShape::M, blockCoord.k() * L1TileShape::K};
@@ -201,7 +201,7 @@ public:
         gmC.SetGlobalBuffer(reinterpret_cast<__gm__ ElementC *>(params.ptrWorkspace));
 
         AivWaitSync aicFinishSync{this};
-        
+
         LayoutC layoutC = LayoutC(params.problemShape.m(), params.problemShape.n());
         LayoutScale layoutScale = params.layoutScale;
         LayoutPerTokenScale layoutPerTokenScale =
@@ -218,10 +218,10 @@ public:
         blockEpilogue.UpdateParams(epilogueParams);
         uint32_t coreLoops = blockScheduler.GetCoreLoops();
 
-        MatmulCoord blockShapeMNK = L1TileShape::ToCoord();
+        GemmCoord blockShapeMNK = L1TileShape::ToCoord();
         for (uint32_t loopIdx = coreIdx; loopIdx < coreLoops; loopIdx += coreNum) {
-            MatmulCoord blockCoordMNK = blockScheduler.GetBlockCoord(loopIdx);
-            MatmulCoord actualBlockShapeMNK = blockScheduler.GetActualBlockShape(blockCoordMNK);
+            GemmCoord blockCoordMNK = blockScheduler.GetBlockCoord(loopIdx);
+            GemmCoord actualBlockShapeMNK = blockScheduler.GetActualBlockShape(blockCoordMNK);
 
             auto gmBlockC = gmC[layoutC.GetOffset(blockCoordMNK.GetCoordMN() * blockShapeMNK.GetCoordMN())];
             auto layoutBlockC = layoutC.GetTileLayout(actualBlockShapeMNK.GetCoordMN());
@@ -243,4 +243,4 @@ private:
 
 } // namespace AscendCT::gemm::kernel
 
-#endif // ASCENDCT_MATMUL_KERNEL_QUANT_MATMUL_HPP
+#endif // ASCENDCT_GEMM_KERNEL_QUANT_MATMUL_HPP

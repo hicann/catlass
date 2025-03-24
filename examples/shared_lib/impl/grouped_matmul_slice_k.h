@@ -19,7 +19,6 @@
 #include "AscendCT/gemm/dispatch_policy.hpp"
 #include "AscendCT/gemm/kernel/grouped_matmul_slice_k.hpp"
 #include "AscendCT/gemm/matmul_type.hpp"
-
 template <class LayoutA, class LayoutB, class LayoutC>
 ASCENDCT_GLOBAL void grouped_matmul_slice_k(MatmulCoord problemShape, uint32_t problemCount, GM_ADDR gmGroupList, GM_ADDR gmA,
                                      LayoutA layoutA, GM_ADDR gmB, LayoutB layoutB, GM_ADDR gmC, LayoutC layoutC)
@@ -35,16 +34,16 @@ ASCENDCT_GLOBAL void grouped_matmul_slice_k(MatmulCoord problemShape, uint32_t p
     using ArchTag = arch::AtlasA2;
     using DispatchPolicy = gemm::MmadAtlasA2PreloadAsync<preloadStages, l1Stages, l0AStages, l0BStages, l0CStages,
                                                            enableUnitFlag, enableShuffleK>;
-    using L1TileShape = MatmulShape<128, 256, 256>;
-    using L0TileShape = MatmulShape<128, 256, 64>;
+    using L1TileShape = GemmShape<128, 256, 256>;
+    using L0TileShape = GemmShape<128, 256, 64>;
 
-    using AType = gemm::MatmulType<half, LayoutA>;
-    using BType = gemm::MatmulType<half, LayoutB>;
-    using CType = gemm::MatmulType<half, LayoutC>;
+    using AType = gemm::GemmType<half, LayoutA>;
+    using BType = gemm::GemmType<half, LayoutB>;
+    using CType = gemm::GemmType<half, LayoutC>;
 
     using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
     using BlockEpilogue = void;
-    using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 1>;
+    using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 1>;
 
     // kernel level
     using MatmulKernel = gemm::kernel::GroupedMatmulSliceK<BlockMmad, BlockEpilogue, BlockScheduler, int32_t>;

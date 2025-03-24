@@ -20,7 +20,7 @@
 #include "AscendCT/gemm/block/block_swizzle.hpp"
 #include "AscendCT/gemm/dispatch_policy.hpp"
 #include "AscendCT/gemm/kernel/optimized_matmul.hpp"
-#include "AscendCT/gemm/matmul_type.hpp"
+#include "AscendCT/gemm/gemm_type.hpp"
 #include "AscendCT/AscendCT.hpp"
 
 using namespace AscendCT;
@@ -36,7 +36,7 @@ template <
 >
 ASCENDCT_DEVICE
 void LaunchMatmulDynamicSwizzle(
-    MatmulCoord problemShape,
+    GemmCoord problemShape,
     GM_ADDR gmA, LayoutA layoutA,
     GM_ADDR gmB, LayoutB layoutB,
     GM_ADDR gmC, LayoutC layoutC,
@@ -45,7 +45,7 @@ void LaunchMatmulDynamicSwizzle(
 )
 {
     if (problemShape.m() > problemShape.n()) {
-        using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 0>;
+        using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 0>;
         using BlockEpilogue = void;
         // kernel level
         using MatmulKernel = gemm::kernel::OptimizedMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
@@ -55,7 +55,7 @@ void LaunchMatmulDynamicSwizzle(
         MatmulKernel matmul;
         matmul(params);
     } else {
-        using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 1>;
+        using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 1>;
         using BlockEpilogue = void;
         // kernel level
         using MatmulKernel = gemm::kernel::OptimizedMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
@@ -76,7 +76,7 @@ template <
 ASCENDCT_GLOBAL
 void OptimizedMatmul(
     uint64_t fftsAddr,
-    MatmulCoord problemShape,
+    GemmCoord problemShape,
     GM_ADDR gmA, LayoutA layoutA,
     GM_ADDR gmB, LayoutB layoutB,
     GM_ADDR gmC, LayoutC layoutC,
@@ -91,18 +91,18 @@ void OptimizedMatmul(
     using DispatchPolicy = gemm::MmadAtlasA2Preload<enableUnitFlag, enableShuffleK>;
 
     // if LayoutA and LayoutB is both ColumnMajor,
-    // L1TileShape using MatmulShape<256, 128, 256> can achieve better performance.
+    // L1TileShape using GemmShape<256, 128, 256> can achieve better performance.
     using L1TileShape = std::conditional_t<std::is_same_v<LayoutA, layout::ColumnMajor> &&
-        std::is_same_v<LayoutB, layout::ColumnMajor>, MatmulShape<256, 128, 256>, MatmulShape<128, 256, 256>>;
+        std::is_same_v<LayoutB, layout::ColumnMajor>, GemmShape<256, 128, 256>, GemmShape<128, 256, 256>>;
     using L0TileShape = std::conditional_t<std::is_same_v<LayoutA, layout::ColumnMajor> &&
-        std::is_same_v<LayoutB, layout::ColumnMajor>, MatmulShape<256, 128, 64>, MatmulShape<128, 256, 64>>;;
+        std::is_same_v<LayoutB, layout::ColumnMajor>, GemmShape<256, 128, 64>, GemmShape<128, 256, 64>>;;
     if (gmA == gmWA && gmB == gmWB) {
         // no need to padding A and B.
         using LayoutWA = LayoutA;
         using LayoutWB = LayoutB;
-        using AType = gemm::MatmulType<half, LayoutWA>;
-        using BType = gemm::MatmulType<half, LayoutWB>;
-        using CType = gemm::MatmulType<half, LayoutC>;
+        using AType = gemm::GemmType<half, LayoutWA>;
+        using BType = gemm::GemmType<half, LayoutWB>;
+        using CType = gemm::GemmType<half, LayoutC>;
         using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
         LayoutWA layoutWA = LayoutWA(layoutA.shape(0), layoutA.shape(1));
         LayoutWB layoutWB = LayoutWB(layoutB.shape(0), layoutB.shape(1));
@@ -113,22 +113,22 @@ void OptimizedMatmul(
         using LayoutWA = LayoutA;
         using LayoutWB = std::conditional_t<std::is_same_v<LayoutB, layout::RowMajor>,
             layout::PaddingRowMajor, layout::PaddingColumnMajor>;
-        using AType = gemm::MatmulType<half, LayoutWA>;
-        using BType = gemm::MatmulType<half, LayoutWB>;
-        using CType = gemm::MatmulType<half, LayoutC>;
+        using AType = gemm::GemmType<half, LayoutWA>;
+        using BType = gemm::GemmType<half, LayoutWB>;
+        using CType = gemm::GemmType<half, LayoutC>;
         using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
         LayoutWA layoutWA = LayoutWA(layoutA.shape(0), layoutA.shape(1));
         LayoutWB layoutWB = LayoutWB(layoutB.shape(0), layoutB.shape(1), L1TileShape::K, L1TileShape::N);
         LaunchMatmulDynamicSwizzle<LayoutA, LayoutB, LayoutC, LayoutWA, LayoutWB, BlockMmad>(problemShape,
-            gmA, layoutA, gmB, layoutB, gmC, layoutC, gmWA, layoutWA, gmWB, layoutWB); 
+            gmA, layoutA, gmB, layoutB, gmC, layoutC, gmWA, layoutWA, gmWB, layoutWB);
     } else if (gmA != gmWA && gmB == gmWB) {
         // no need to padding B, but A needs padding.
         using LayoutWA = std::conditional_t<std::is_same_v<LayoutA, layout::RowMajor>,
             layout::PaddingRowMajor, layout::PaddingColumnMajor>;
         using LayoutWB = LayoutB;
-        using AType = gemm::MatmulType<half, LayoutWA>;
-        using BType = gemm::MatmulType<half, LayoutWB>;
-        using CType = gemm::MatmulType<half, LayoutC>;
+        using AType = gemm::GemmType<half, LayoutWA>;
+        using BType = gemm::GemmType<half, LayoutWB>;
+        using CType = gemm::GemmType<half, LayoutC>;
         using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
         LayoutWA layoutWA = LayoutWA(layoutA.shape(0), layoutA.shape(1), L1TileShape::M, L1TileShape::K);
         LayoutWB layoutWB = LayoutWB(layoutB.shape(0), layoutB.shape(1));
@@ -140,9 +140,9 @@ void OptimizedMatmul(
             layout::PaddingRowMajor, layout::PaddingColumnMajor>;
         using LayoutWB = std::conditional_t<std::is_same_v<LayoutB, layout::RowMajor>,
             layout::PaddingRowMajor, layout::PaddingColumnMajor>;
-        using AType = gemm::MatmulType<half, LayoutWA>;
-        using BType = gemm::MatmulType<half, LayoutWB>;
-        using CType = gemm::MatmulType<half, LayoutC>;
+        using AType = gemm::GemmType<half, LayoutWA>;
+        using BType = gemm::GemmType<half, LayoutWB>;
+        using CType = gemm::GemmType<half, LayoutC>;
         using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
         LayoutWA layoutWA = LayoutWA(layoutA.shape(0), layoutA.shape(1), L1TileShape::M, L1TileShape::K);
         LayoutWB layoutWB = LayoutWB(layoutB.shape(0), layoutB.shape(1), L1TileShape::K, L1TileShape::N);
@@ -154,7 +154,7 @@ void OptimizedMatmul(
 struct Options {
     const std::string HELPER = "06_optimizd_matmul m n k [device_id]";
 
-    MatmulCoord problemShape{128, 128, 128};
+    GemmCoord problemShape{128, 128, 128};
     int32_t deviceId{0};
 
     Options() = default;
@@ -242,9 +242,9 @@ void Run(Options const &options)
     bool isNeedPaddingB = IsNeedPadding(layoutB, align);
 
     // if LayoutA and LayoutB is both ColumnMajor,
-    // L1TileShape using MatmulShape<256, 128, 256> can achieve better performance.
-    using L1TileShape = std::conditional_t<std::is_same_v<LayoutA, layout::ColumnMajor> && 
-        std::is_same_v<LayoutB, layout::ColumnMajor>, MatmulShape<256, 128, 256>, MatmulShape<128, 256, 256>>;
+    // L1TileShape using GemmShape<256, 128, 256> can achieve better performance.
+    using L1TileShape = std::conditional_t<std::is_same_v<LayoutA, layout::ColumnMajor> &&
+        std::is_same_v<LayoutB, layout::ColumnMajor>, GemmShape<256, 128, 256>, GemmShape<128, 256, 256>>;
     size_t sizeWA = GetWorkspaceLen(layoutA, L1TileShape::M, L1TileShape::K) * sizeof(fp16_t);
     size_t sizeWB = GetWorkspaceLen(layoutB, L1TileShape::K, L1TileShape::N) * sizeof(fp16_t);
 
@@ -265,7 +265,7 @@ void Run(Options const &options)
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
     uint8_t *deviceWA{nullptr};
-    if (isNeedPaddingA) {  
+    if (isNeedPaddingA) {
         ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWA), sizeWA, ACL_MEM_MALLOC_HUGE_FIRST));
     } else {
         // no need to padding A

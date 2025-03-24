@@ -56,16 +56,16 @@ void GroupedMatmulSliceM(
             l1Stages, l0AStages, l0BStages, l0CStages,
             enableUnitFlag, enableShuffleK
         >;
-        using L1TileShape = MatmulShape<256, 128, 256>;
-        using L0TileShape = MatmulShape<256, 128, 64>;
+        using L1TileShape = GemmShape<256, 128, 256>;
+        using L0TileShape = GemmShape<256, 128, 64>;
 
-        using AType = gemm::MatmulType<half, LayoutA>;
-        using BType = gemm::MatmulType<half, LayoutB>;
-        using CType = gemm::MatmulType<half, LayoutC>;
+        using AType = gemm::GemmType<half, LayoutA>;
+        using BType = gemm::GemmType<half, LayoutB>;
+        using CType = gemm::GemmType<half, LayoutC>;
 
         using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
         using BlockEpilogue = void;
-        using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 0>;
+        using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 0>;
 
         // kernel level
         using MatmulKernel = gemm::kernel::GroupedMatmulSliceM<BlockMmad, BlockEpilogue, BlockScheduler, int64_t>;
@@ -92,16 +92,16 @@ void GroupedMatmulSliceM(
             l1Stages, l0AStages, l0BStages, l0CStages,
             enableUnitFlag, enableShuffleK
         >;
-        using L1TileShape = MatmulShape<128, 256, 256>;
-        using L0TileShape = MatmulShape<128, 256, 64>;
+        using L1TileShape = GemmShape<128, 256, 256>;
+        using L0TileShape = GemmShape<128, 256, 64>;
 
-        using AType = gemm::MatmulType<half, LayoutA>;
-        using BType = gemm::MatmulType<half, LayoutB>;
-        using CType = gemm::MatmulType<half, LayoutC>;
+        using AType = gemm::GemmType<half, LayoutA>;
+        using BType = gemm::GemmType<half, LayoutB>;
+        using CType = gemm::GemmType<half, LayoutC>;
 
         using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
         using BlockEpilogue = void;
-        using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 1>;
+        using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 1>;
 
         // kernel level
         using MatmulKernel = gemm::kernel::GroupedMatmulSliceM<BlockMmad, BlockEpilogue, BlockScheduler, int64_t>;
@@ -120,7 +120,7 @@ struct Options {
     const std::string HELPER = "02_grouped_matmul_slice_m group_count m n k [device_id]";
 
     uint32_t groupCount{1};
-    MatmulCoord problemShape{128, 128, 128};
+    GemmCoord problemShape{128, 128, 128};
     int32_t deviceId{0};
 
     Options() = default;
@@ -215,13 +215,13 @@ void Run(Options const &options)
     std::vector<fp16_t> hostC(lenC);
     ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
 
-    std::vector<MatmulCoord> problemShapeList(problemCount);
+    std::vector<GemmCoord> problemShapeList(problemCount);
     std::vector<LayoutA> layoutAList(problemCount);
     std::vector<LayoutB> layoutBList(problemCount);
     std::vector<LayoutC> layoutCList(problemCount);
     for (uint32_t i = 0; i < problemCount; ++i) {
         uint32_t currentM = (i == 0) ? groupList[0] : (groupList[i] - groupList[i - 1]);
-        problemShapeList[i] = MatmulCoord{currentM, n, k};
+        problemShapeList[i] = GemmCoord{currentM, n, k};
         layoutAList[i] = LayoutA{currentM, k};
         layoutBList[i] = LayoutB{k, n};
         layoutCList[i] = LayoutC{currentM, n};

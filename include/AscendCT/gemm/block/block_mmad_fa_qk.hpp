@@ -8,15 +8,15 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ASCENDCT_MATMUL_BLOCK_BLOCK_MMAD_FA_QK_HPP
-#define ASCENDCT_MATMUL_BLOCK_BLOCK_MMAD_FA_QK_HPP
+#ifndef ASCENDCT_GEMM_BLOCK_BLOCK_MMAD_FA_QK_HPP
+#define ASCENDCT_GEMM_BLOCK_BLOCK_MMAD_FA_QK_HPP
 
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/arch/resource.hpp"
 #include "AscendCT/coord.hpp"
 #include "AscendCT/gemm/dispatch_policy.hpp"
 #include "AscendCT/gemm/helper.hpp"
-#include "AscendCT/matmul_coord.hpp"
+#include "AscendCT/gemm_coord.hpp"
 
 ////////////////////////////////////////////////////////////////////
 
@@ -122,7 +122,7 @@ public:
         AscendC::GlobalTensor<ElementB> gB,
         AscendC::GlobalTensor<ElementC> gC,
         LayoutA layoutA, LayoutB layoutB, LayoutC layoutC,
-        MatmulCoord actualShape, uint32_t &pingpongFlag, bool isFirst)
+        GemmCoord actualShape, uint32_t &pingpongFlag, bool isFirst)
     {
         LayoutAInL1 layoutAInL1 = LayoutAInL1::template MakeLayout<ElementA>(L1TileShape::M, L1TileShape::K);
         LayoutBInL1 layoutBInL1 = LayoutBInL1::template MakeLayout<ElementB>(L1TileShape::K, L1TileShape::N);
@@ -192,4 +192,4 @@ protected:
 
 }  // namespace AscendCT::gemm::block
 
-#endif  // ASCENDCT_MATMUL_BLOCK_BLOCK_MMAD_FA_QK_HPP
+#endif  // ASCENDCT_GEMM_BLOCK_BLOCK_MMAD_FA_QK_HPP

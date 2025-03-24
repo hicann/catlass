@@ -27,11 +27,11 @@ struct TileCopy {
 
 template <
     class ArchTag,
-    /// MatmulType for C matrix operand
+    /// GemmType for C matrix operand
     class CType,
-    /// MatmulType for X matrix operand
+    /// GemmType for X matrix operand
     class XType,
-    /// MatmulType for D matrix operand
+    /// GemmType for D matrix operand
     class DType
 >
 struct TileCopy<ArchTag, CType, XType, DType> {

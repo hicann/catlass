@@ -20,7 +20,7 @@
 #include "AscendCT/gemm/block/block_swizzle.hpp"
 #include "AscendCT/gemm/dispatch_policy.hpp"
 #include "AscendCT/gemm/kernel/splitk_matmul.hpp"
-#include "AscendCT/gemm/matmul_type.hpp"
+#include "AscendCT/gemm/gemm_type.hpp"
 #include "AscendCT/layout/layout.hpp"
 
 using namespace AscendCT;
@@ -34,7 +34,7 @@ template <
 ASCENDCT_GLOBAL
 void SplitkMatmul(
     uint64_t fftsAddr,
-    MatmulCoord problemShape,
+    GemmCoord problemShape,
     GM_ADDR gmA, LayoutA layoutA,
     GM_ADDR gmB, LayoutB layoutB,
     GM_ADDR gmC, LayoutC layoutC,
@@ -44,12 +44,12 @@ void SplitkMatmul(
     AscendC::SetSyncBaseAddr(fftsAddr);
     using ArchTag = arch::AtlasA2;
     using DispatchPolicy = gemm::MmadAtlasA2Pingpong<true>;
-    using L1TileShape = MatmulShape<128, 256, 256>;
-    using L0TileShape = MatmulShape<128, 256, 64>;
+    using L1TileShape = GemmShape<128, 256, 256>;
+    using L0TileShape = GemmShape<128, 256, 64>;
 
-    using AType = gemm::MatmulType<half, LayoutA>;
-    using BType = gemm::MatmulType<half, LayoutB>;
-    using CType = gemm::MatmulType<float, LayoutC>;
+    using AType = gemm::GemmType<half, LayoutA>;
+    using BType = gemm::GemmType<half, LayoutB>;
+    using CType = gemm::GemmType<float, LayoutC>;
 
     using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
     using BlockEpilogue = void;
@@ -60,7 +60,7 @@ void SplitkMatmul(
 
     if (problemShape.m() > problemShape.n()) {
         // Swizzle offset is 3 and direction is 0.
-        using BlockScheduler = typename gemm::block::SplitkMatmulIdentityBlockSwizzle<3, 0>;
+        using BlockScheduler = typename gemm::block::SplitkGemmIdentityBlockSwizzle<3, 0>;
 
         // kernel level
         using MatmulKernel = gemm::kernel::SplitkMatmul<BlockMmad, BlockEpilogue, BlockScheduler, ReduceAdd>;
@@ -74,7 +74,7 @@ void SplitkMatmul(
         matmul(params);
     } else {
         // Swizzle offset is 3 and direction is 1.
-        using BlockScheduler = typename gemm::block::SplitkMatmulIdentityBlockSwizzle<3, 1>;
+        using BlockScheduler = typename gemm::block::SplitkGemmIdentityBlockSwizzle<3, 1>;
 
         // kernel level
         using MatmulKernel = gemm::kernel::SplitkMatmul<BlockMmad, BlockEpilogue, BlockScheduler, ReduceAdd>;
@@ -92,7 +92,7 @@ void SplitkMatmul(
 struct Options {
     const std::string HELPER = "09_splitk_matmul m n k [device_id]";
 
-    MatmulCoord problemShape{128, 128, 128};
+    GemmCoord problemShape{128, 128, 128};
     int32_t deviceId{0};
 
     Options() = default;
@@ -186,7 +186,7 @@ void Run(Options const &options)
     uint32_t n = options.problemShape.n();
     uint32_t k = options.problemShape.k();
 
-    using L1TileShape = MatmulShape<128, 256, 256>;
+    using L1TileShape = GemmShape<128, 256, 256>;
     // Divide into s parts, using the K-direction tile block as the splitting unit.
     uint32_t splitkFactor = GetSplitkFactor(m, n, k, L1TileShape::M, L1TileShape::N, L1TileShape::K, aicCoreNum);
 

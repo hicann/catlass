@@ -13,7 +13,7 @@
 
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/layout/layout.hpp"
-#include "AscendCT/gemm/matmul_type.hpp"
+#include "AscendCT/gemm/gemm_type.hpp"
 
 namespace AscendCT::epilogue::tile {
 
@@ -26,7 +26,7 @@ struct CopyGm2Ub {
 };
 
 template <typename Element>
-struct CopyGm2Ub<arch::AtlasA2, gemm::MatmulType<Element, layout::RowMajor>> {
+struct CopyGm2Ub<arch::AtlasA2, gemm::GemmType<Element, layout::RowMajor>> {
     using LayoutSrc = layout::RowMajor;
     using LayoutDst = layout::RowMajor;
 
@@ -55,7 +55,7 @@ struct CopyGm2Ub<arch::AtlasA2, gemm::MatmulType<Element, layout::RowMajor>> {
 };
 
 template <typename Element>
-struct CopyGm2Ub<arch::AtlasA2, gemm::MatmulType<Element, layout::VectorLayout>> {
+struct CopyGm2Ub<arch::AtlasA2, gemm::GemmType<Element, layout::VectorLayout>> {
     using LayoutSrc = layout::VectorLayout;
     using LayoutDst = layout::VectorLayout;
 
@@ -137,7 +137,7 @@ struct CopyGm2UbAligned {
 };
 
 template <typename Element>
-struct CopyGm2UbAligned<arch::AtlasA2, gemm::MatmulType<Element, layout::RowMajor>> {
+struct CopyGm2UbAligned<arch::AtlasA2, gemm::GemmType<Element, layout::RowMajor>> {
     using LayoutSrc = layout::RowMajor;
     using LayoutDst = layout::RowMajor;
 

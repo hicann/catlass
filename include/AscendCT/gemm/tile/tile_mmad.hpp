@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ASCENDCT_MATMUL_TILE_TILE_MMAD_HPP
-#define ASCENDCT_MATMUL_TILE_TILE_MMAD_HPP
+#ifndef ASCENDCT_GEMM_TILE_TILE_MMAD_HPP
+#define ASCENDCT_GEMM_TILE_TILE_MMAD_HPP
 
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/gemm/helper.hpp"
@@ -21,11 +21,11 @@ namespace AscendCT::gemm::tile {
 template <
     /// Tag indicating architecture
     class ArchTag_,
-    /// MatmulType for A matrix operand
+    /// GemmType for A matrix operand
     class AType_,
-    /// MatmulType type for B matrix operand
+    /// GemmType type for B matrix operand
     class BType_,
-    /// MatmulType type for Bias operand
+    /// GemmType type for Bias operand
     class BiasType_
 >
 struct TileMmad {
@@ -118,4 +118,4 @@ struct TileMmadTla {
 
 } // namespace AscendCT::gemm::tile
 
-#endif // ASCENDCT_MATMUL_TILE_TILE_MMAD_HPP
+#endif // ASCENDCT_GEMM_TILE_TILE_MMAD_HPP

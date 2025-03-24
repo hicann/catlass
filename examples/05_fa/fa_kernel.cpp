@@ -12,7 +12,7 @@
 #include "AscendCT/layout/layout.hpp"
 
 #include "AscendCT/gemm/dispatch_policy.hpp"
-#include "AscendCT/gemm/matmul_type.hpp"
+#include "AscendCT/gemm/gemm_type.hpp"
 #include "AscendCT/gemm/block/block_mmad.hpp"
 
 #include "AscendCT/arch/resource.hpp"
@@ -210,7 +210,7 @@ public:
             uint32_t qkN = (qkNIdx == (nLoop - 1)) ? kvSeqlen : nTile;
             uint32_t qkNRound = (qkN + ALIGNED - 1) / ALIGNED * ALIGNED;
 
-            MatmulCoord actualBlockShapeQK{m, qkN, embd};
+            GemmCoord actualBlockShapeQK{m, qkN, embd};
             LayoutS layoutS(m, qkN, qkNRound);
             int64_t gmOffsetQ = qAddr + layoutQ.GetOffset(offsetQ);
             int64_t gmOffsetK = kAddr + layoutK.GetOffset(offsetK);
@@ -237,7 +237,7 @@ public:
                         qkNRound = (qkN + ALIGNED - 1) / ALIGNED * ALIGNED;
                     }
 
-                    MatmulCoord actualBlockShapeQKNext{m, qkN, embd};
+                    GemmCoord actualBlockShapeQKNext{m, qkN, embd};
                     LayoutS layoutSNext(m, qkN, qkNRound);
                     offsetK += blockOffsetK;
                     gmOffsetK = kAddr + layoutK.GetOffset(offsetK);
@@ -256,7 +256,7 @@ public:
                     svNRound = (svN + ALIGNED - 1) / ALIGNED * ALIGNED;
                 }
 
-                MatmulCoord actualBlockShapePV{m, embd, svN};
+                GemmCoord actualBlockShapePV{m, embd, svN};
                 LayoutP layoutP(m, svN, svNRound);
                 LayoutOTmp layoutOTmp(m, embd, embdAligned);
                 int64_t gmOffsetP = (int64_t)coreIdx * WORKSPACE_ELENUM + pPingpongFlag * WORKSPACE_ELENUM / 2;
@@ -380,7 +380,7 @@ public:
             uint32_t qkN = (qkNIdx == (nLoop - 1)) ? kvSeqlen : nTile;
             uint32_t qkNRound = (qkN + ALIGNED - 1) / ALIGNED * ALIGNED;
 
-            MatmulCoord actualBlockShapeQK{m, qkN, embd};
+            GemmCoord actualBlockShapeQK{m, qkN, embd};
             LayoutP layoutP(m, qkN, qkNRound);
             LayoutS layoutS(m, qkN, qkNRound);
             int64_t gmOffsetMask = maskBatchOffset + mIdx * mTile * maxSeqlen;
@@ -411,7 +411,7 @@ public:
                         qkNRound = (qkN + ALIGNED - 1) / ALIGNED * ALIGNED;
                     }
 
-                    MatmulCoord actualBlockShapeQKNext{m, qkN, embd};
+                    GemmCoord actualBlockShapeQKNext{m, qkN, embd};
                     LayoutP layoutPNext(m, qkN, qkNRound);
                     LayoutS layoutSNext(m, qkN, qkNRound);
                     gmOffsetMask += nTile;
@@ -431,7 +431,7 @@ public:
                     svN = kvSeqlen - svNIdx * nTile;
                 }
 
-                MatmulCoord actualBlockShapePV{m, embd, svN};
+                GemmCoord actualBlockShapePV{m, embd, svN};
                 int64_t gmOffsetOTmp = (int64_t)coreIdx * WORKSPACE_ELENUM + oTmpPingpongFlag * WORKSPACE_ELENUM / 2;
                 arch::CrossCoreWaitFlag(pvReady);
                 epilogueFARescaleO(
@@ -478,28 +478,28 @@ void FA(uint64_t fftsAddr,
     using LayoutOTmp = layout::RowMajor;
 
     // L1TileShape::K must be embdding
-    using L1TileShape = MatmulShape<128, 128, 128>;
+    using L1TileShape = GemmShape<128, 128, 128>;
     using L0TileShape = L1TileShape;
 
     // Mmadqk
     using DispatchPolicyQK = gemm::MmadAtlasA2FAQK;
-    using QType = gemm::MatmulType<ElementQ, LayoutQ>;
-    using KType = gemm::MatmulType<ElementK, LayoutK>;
-    using SType = gemm::MatmulType<ElementS, LayoutS>;
+    using QType = gemm::GemmType<ElementQ, LayoutQ>;
+    using KType = gemm::GemmType<ElementK, LayoutK>;
+    using SType = gemm::GemmType<ElementS, LayoutS>;
     using BlockMmadQK = gemm::block::BlockMmad<DispatchPolicyQK, L1TileShape, L0TileShape, QType, KType, SType>;
     // EpilogueSoftmax
-    using PType = gemm::MatmulType<ElementP, LayoutP>;
-    using MaskType = gemm::MatmulType<ElementMask, LayoutMask>;
+    using PType = gemm::GemmType<ElementP, LayoutP>;
+    using MaskType = gemm::GemmType<ElementMask, LayoutMask>;
     using EpilogueFASoftmax =
         epilogue::block::BlockEpilogue<epilogue::EpilogueAtlasA2FASoftmax, PType, SType, MaskType>;
 
     // Mmadpv
     using DispatchPolicyPV = gemm::MmadAtlasA2FAPV;
-    using VType = gemm::MatmulType<ElementV, LayoutV>;
-    using OTmpType = gemm::MatmulType<ElementOTmp, LayoutOTmp>;
+    using VType = gemm::GemmType<ElementV, LayoutV>;
+    using OTmpType = gemm::GemmType<ElementOTmp, LayoutOTmp>;
     using BlockMmadPV = gemm::block::BlockMmad<DispatchPolicyPV, L1TileShape, L0TileShape, PType, VType, OTmpType>;
     // EpilogueRescaleO
-    using OType = gemm::MatmulType<ElementO, LayoutO>;
+    using OType = gemm::GemmType<ElementO, LayoutO>;
     using EpilogueFARescaleO =
         epilogue::block::BlockEpilogue<epilogue::EpilogueAtlasA2FARescaleO, OType, OTmpType>;
 

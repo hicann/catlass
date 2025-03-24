@@ -8,12 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ASCENDCT_MATMUL_KERNEL_OPTIMIZED_MATMUL_TLA_HPP
-#define ASCENDCT_MATMUL_KERNEL_OPTIMIZED_MATMUL_TLA_HPP
+#ifndef ASCENDCT_GEMM_KERNEL_OPTIMIZED_MATMUL_TLA_HPP
+#define ASCENDCT_GEMM_KERNEL_OPTIMIZED_MATMUL_TLA_HPP
 
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/coord.hpp"
-#include "AscendCT/matmul_coord.hpp"
+#include "AscendCT/gemm_coord.hpp"
 #include "AscendCT/matrix_coord.hpp"
 #include "AscendCT/arch/resource.hpp"
 #include "AscendCT/arch/cross_core_sync.hpp"
@@ -98,7 +98,7 @@ public:
         uint32_t aivId = AscendC::GetBlockIdx();
 
         // Each line is a tile.
-        uint32_t tilesNum = get<0>(paddingTensorSrc.shape()); 
+        uint32_t tilesNum = get<0>(paddingTensorSrc.shape());
         uint32_t tileLen = get<1>(paddingTensorSrc.shape());
         uint32_t roundTileLen = RoundUp<BYTE_PER_BLK / sizeof(Element)>(get<1>(paddingTensorSrc.shape()));
 
@@ -272,7 +272,7 @@ public:
     /// Parameters structure
     struct Params {
         // Data members
-        MatmulCoord problemShape;
+        GemmCoord problemShape;
         GM_ADDR ptrA;
         LayoutA layoutA;
         GM_ADDR ptrB;
@@ -289,7 +289,7 @@ public:
         Params() {}
 
         ASCENDCT_DEVICE
-        Params(MatmulCoord const &problemShape_,
+        Params(GemmCoord const &problemShape_,
                GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_, LayoutB layoutB_, GM_ADDR ptrC_, LayoutC layoutC_,
                GM_ADDR ptrWA_, LayoutWA layoutWA_, GM_ADDR ptrWB_, LayoutWB layoutWB_)
             : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_), layoutB(layoutB_),
@@ -371,8 +371,8 @@ public:
 
         for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()) {
             // Compute block location
-            MatmulCoord blockCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
-            MatmulCoord actualBlockShape = matmulBlockScheduler.GetActualBlockShape(blockCoord);
+            GemmCoord blockCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
+            GemmCoord actualBlockShape = matmulBlockScheduler.GetActualBlockShape(blockCoord);
 
             // Compute initial location in logical coordinates
             auto tensorBlockA = GetTile(
@@ -393,8 +393,8 @@ public:
 
             bool isFirstBlock = (loopIdx == AscendC::GetBlockIdx());
             bool hasNextBlock = false;
-            MatmulCoord nextBlockCoord;
-            MatmulCoord nextActualBlockShape;
+            GemmCoord nextBlockCoord;
+            GemmCoord nextActualBlockShape;
             if (loopIdx + AscendC::GetBlockNum() < coreLoops) {
                 hasNextBlock = true;
                 nextBlockCoord = matmulBlockScheduler.GetBlockCoord(loopIdx + AscendC::GetBlockNum());
@@ -428,4 +428,4 @@ private:
 
 } // namespace AscendCT::gemm::kernel
 
-#endif // ASCENDCT_MATMUL_KERNEL_OPTIMIZED_MATMUL_TLA_HPP
+#endif // ASCENDCT_GEMM_KERNEL_OPTIMIZED_MATMUL_TLA_HPP

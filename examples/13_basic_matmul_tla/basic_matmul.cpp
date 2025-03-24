@@ -16,7 +16,7 @@
 
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/arch/arch.hpp"
-#include "AscendCT/gemm/matmul_type.hpp"
+#include "AscendCT/gemm/gemm_type.hpp"
 #include "AscendCT/gemm/block/block_mmad.hpp"
 #include "AscendCT/gemm/block/block_swizzle.hpp"
 #include "AscendCT/gemm/dispatch_policy.hpp"
@@ -37,7 +37,7 @@ template <
 >
 ASCENDCT_GLOBAL
 void BasicMatmul(
-    MatmulCoord problemShape,
+    GemmCoord problemShape,
     GM_ADDR gmA, LayoutTagA tagA,
     GM_ADDR gmB, LayoutTagB tagB,
     GM_ADDR gmC, LayoutTagC tagC
@@ -68,7 +68,7 @@ void BasicMatmul(
 
     if (problemShape.m() > problemShape.n()) {
         // Swizzle offset is 3 and direction is 0.
-        using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 0>;
+        using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 0>;
 
         // kernel level
         using MatmulKernel = gemm::kernel::BasicMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler>;
@@ -80,7 +80,7 @@ void BasicMatmul(
         matmul(params);
     } else {
         // Swizzle offset is 3 and direction is 1.
-        using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 1>;
+        using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 1>;
 
         // kernel level
         using MatmulKernel = gemm::kernel::BasicMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler>;
@@ -96,7 +96,7 @@ void BasicMatmul(
 struct Options {
     const std::string HELPER = "00_basic_matmul m n k [device_id]";
 
-    MatmulCoord problemShape{128, 128, 128};
+    GemmCoord problemShape{128, 128, 128};
     int32_t deviceId{0};
 
     Options() = default;

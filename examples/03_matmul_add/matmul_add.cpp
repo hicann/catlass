@@ -24,7 +24,7 @@
 #include "AscendCT/gemm/block/block_swizzle.hpp"
 #include "AscendCT/gemm/dispatch_policy.hpp"
 #include "AscendCT/gemm/kernel/matmul_epilogue.hpp"
-#include "AscendCT/gemm/matmul_type.hpp"
+#include "AscendCT/gemm/gemm_type.hpp"
 #include "AscendCT/layout/layout.hpp"
 
 using namespace AscendCT;
@@ -38,7 +38,7 @@ template <
 ASCENDCT_GLOBAL
 void MatmulAdd(
     uint64_t fftsAddr,
-    MatmulCoord problemShape,
+    GemmCoord problemShape,
     GM_ADDR gmA, LayoutA layoutA,
     GM_ADDR gmB, LayoutB layoutB,
     GM_ADDR gmD, LayoutC layoutD,
@@ -53,11 +53,11 @@ void MatmulAdd(
     // Block level, define BlockMmad
     constexpr bool enableUnitFlag = true;
     using MmadDispatchPolicy = gemm::MmadAtlasA2Pingpong<enableUnitFlag>;
-    using L1TileShape = MatmulShape<128, 256, 256>;
-    using L0TileShape = MatmulShape<128, 256, 64>;
-    using AType = gemm::MatmulType<half, LayoutA>;
-    using BType = gemm::MatmulType<half, LayoutB>;
-    using CType = gemm::MatmulType<half, LayoutC>;
+    using L1TileShape = GemmShape<128, 256, 256>;
+    using L0TileShape = GemmShape<128, 256, 64>;
+    using AType = gemm::GemmType<half, LayoutA>;
+    using BType = gemm::GemmType<half, LayoutB>;
+    using CType = gemm::GemmType<half, LayoutC>;
     using BlockMmad = gemm::block::BlockMmad<MmadDispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
 
     // Block level, define BlockEpilogue
@@ -74,7 +74,7 @@ void MatmulAdd(
     if (problemShape.m() > problemShape.n()) {
         // Define BlockScheduler
         // Swizzle offset is 3 and direction is 0.
-        using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 0>;
+        using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 0>;
 
         // Kernel level
         using MatmulKernel = gemm::kernel::MatmulEpilogue<BlockMmad, BlockEpilogue, BlockScheduler>;
@@ -89,7 +89,7 @@ void MatmulAdd(
     } else {
         // Define BlockScheduler
         // Swizzle offset is 3 and direction is 1.
-        using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 1>;
+        using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 1>;
 
         // Kernel level
         using MatmulKernel = gemm::kernel::MatmulEpilogue<BlockMmad, BlockEpilogue, BlockScheduler>;
@@ -107,7 +107,7 @@ void MatmulAdd(
 struct Options {
     const std::string HELPER = "03_matmul_add m n k [device_id]";
 
-    MatmulCoord problemShape{128, 128, 128};
+    GemmCoord problemShape{128, 128, 128};
     int32_t deviceId{0};
 
     Options() = default;

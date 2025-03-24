@@ -19,7 +19,7 @@ namespace AscendCT::golden {
 // simple matmul
 template<class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementGolden, class LayoutGolden>
 void ComputeMatmul(
-    const MatmulCoord &problemShape,
+    const GemmCoord &problemShape,
     const std::vector<ElementA> &dataA, const LayoutA &layoutA,
     const std::vector<ElementB> &dataB, const LayoutB &layoutB,
     std::vector<ElementGolden> &dataGolden, const LayoutGolden &layoutGolden
@@ -42,7 +42,7 @@ void ComputeMatmul(
 // simple batched matmul
 template<class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementGolden, class LayoutGolden>
 void ComputeBatchedMatmul(
-    const uint32_t batchedCount, const MatmulCoord &problemShape,
+    const uint32_t batchedCount, const GemmCoord &problemShape,
     const std::vector<ElementA> &dataA, const LayoutA &layoutA,
     const std::vector<ElementB> &dataB, const LayoutB &layoutB,
     std::vector<ElementGolden> &dataC, const LayoutGolden &layoutGolden
@@ -72,7 +72,7 @@ void ComputeBatchedMatmul(
 template<class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementGolden, class LayoutGolden>
 void ComputeGroupedMatmul(
     uint32_t problemCount,
-    const std::vector<MatmulCoord> &problemShapeList,
+    const std::vector<GemmCoord> &problemShapeList,
     const std::vector<ElementA> &dataA, const std::vector<LayoutA> &layoutAList,
     const std::vector<ElementB> &dataB, const std::vector<LayoutB> &layoutBList,
     std::vector<ElementGolden> &dataGolden, const std::vector<LayoutGolden> &layoutGoldenList
@@ -82,7 +82,7 @@ void ComputeGroupedMatmul(
     size_t inGroupOffsetB = 0;
     size_t inGroupOffsetGolden = 0;
     for (uint32_t inGroupId = 0; inGroupId < problemCount; ++inGroupId) {
-        MatmulCoord problemShape = problemShapeList[inGroupId];
+        GemmCoord problemShape = problemShapeList[inGroupId];
         for (uint32_t i = 0; i < problemShape.m(); ++i) {
             for (uint32_t j = 0; j < problemShape.n(); ++j) {
                 size_t offsetGolden = inGroupOffsetGolden + layoutGoldenList[inGroupId].GetOffset(MakeCoord(i, j));
@@ -110,7 +110,7 @@ template<
     class ElementGolden, class LayoutGolden
 >
 void ComputeMatmulElemWiseAdd(
-    const MatmulCoord &problemShape,
+    const GemmCoord &problemShape,
     const std::vector<ElementA> &dataA, const LayoutA &layoutA,
     const std::vector<ElementB> &dataB, const LayoutB &layoutB,
     const std::vector<ElementX> &dataX,  // layoutX must be same as layoutGolden
@@ -136,7 +136,7 @@ template <
     class LayoutB, class LayoutScale, class LayoutPerTokenScale
 >
 void ComputeGroupedMatmulPerTokenDequant(
-    const MatmulCoord &problemShape, uint32_t problemCount, const std::vector<ElementGroupList> &groupList,
+    const GemmCoord &problemShape, uint32_t problemCount, const std::vector<ElementGroupList> &groupList,
     const std::vector<int8_t> &dataA, const layout::RowMajor &layoutA,
     const std::vector<int8_t> &dataB, const LayoutB &layoutB,
     const std::vector<ElementScale> &dataScale, const LayoutScale &,
@@ -174,7 +174,7 @@ template <
     class ElementScale
 >
 void QuantMatmul(
-    const MatmulCoord &problemShape,
+    const GemmCoord &problemShape,
     const std::vector<int8_t> &dataA, const LayoutA &layoutA,
     const std::vector<int8_t> &dataB, const LayoutB &layoutB,
     const std::vector<ElementScale> &dataScale, const layout::VectorLayout &layoutScale,
@@ -229,7 +229,7 @@ void ComputeGroupedMatmulSliceKPerTokenDequant(
                     static_cast<float>(dataPerTokenScale[groupOffsetPerTokenScale + i]);
             }
         }
-        
+
         groupOffsetD += static_cast<size_t>(problemShape.m()) * problemShape.n();
         groupOffsetScale += static_cast<size_t>(problemShape.n());
         groupOffsetPerTokenScale += static_cast<size_t>(problemShape.m());

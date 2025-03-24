@@ -35,7 +35,7 @@ using bfloat16 = op::bfloat16;
 ASCENDCT_GLOBAL
 void GroupedMatmulSliceKPerTokenDequant(
     uint64_t fftsAddr,
-    MatmulCoord problemShape,
+    GemmCoord problemShape,
     uint32_t problemCount, GM_ADDR gmGroupList,
     GM_ADDR gmA, layout::ColumnMajor layoutA,
     GM_ADDR gmB, layout::RowMajor layoutB,
@@ -59,24 +59,24 @@ void GroupedMatmulSliceKPerTokenDequant(
         l1Stages, l0AStages, l0BStages, l0CStages,
         enableUnitFlag, enableShuffleK
     >;
-    using L1TileShape = MatmulShape<128, 256, 256>;
-    using L0TileShape = MatmulShape<128, 256, 64>;
+    using L1TileShape = GemmShape<128, 256, 256>;
+    using L0TileShape = GemmShape<128, 256, 64>;
 
-    using AType = gemm::MatmulType<int8_t, layout::ColumnMajor>;
-    using BType = gemm::MatmulType<int8_t, layout::RowMajor>;
-    using CType = gemm::MatmulType<int32_t, layout::RowMajor>;
+    using AType = gemm::GemmType<int8_t, layout::ColumnMajor>;
+    using BType = gemm::GemmType<int8_t, layout::RowMajor>;
+    using CType = gemm::GemmType<int32_t, layout::RowMajor>;
 
     using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
 
     constexpr uint32_t ubStages = 2;
     using EpilogueDispatchPolicy = epilogue::EpilogueAtlasA2PerTokenDequant<ubStages>;
-    using ScaleType = gemm::MatmulType<bfloat16_t, layout::VectorLayout>;
-    using PerTokenScaleType = gemm::MatmulType<bfloat16_t, layout::VectorLayout>;
-    using DType = gemm::MatmulType<bfloat16_t, layout::RowMajor>;
+    using ScaleType = gemm::GemmType<bfloat16_t, layout::VectorLayout>;
+    using PerTokenScaleType = gemm::GemmType<bfloat16_t, layout::VectorLayout>;
+    using DType = gemm::GemmType<bfloat16_t, layout::RowMajor>;
 
-    using RowBroadcastMulType = gemm::MatmulType<float, layout::RowMajor>;
-    using BroadcastOneBlkType = gemm::MatmulType<float, layout::RowMajor>;
-    using OneBlkColumnBroadcastMulType = gemm::MatmulType<float, layout::RowMajor>;
+    using RowBroadcastMulType = gemm::GemmType<float, layout::RowMajor>;
+    using BroadcastOneBlkType = gemm::GemmType<float, layout::RowMajor>;
+    using OneBlkColumnBroadcastMulType = gemm::GemmType<float, layout::RowMajor>;
 
     using EpilogueTileShape = MatrixShape<32, 256>;
     using TileRowBroadcastMul = epilogue::tile::TileRowBroadcastMul<ArchTag, RowBroadcastMulType, EpilogueTileShape>;
@@ -90,7 +90,7 @@ void GroupedMatmulSliceKPerTokenDequant(
     using BlockEpilogue = epilogue::block::BlockEpilogue<EpilogueDispatchPolicy, CType, ScaleType, PerTokenScaleType,
         DType, TileRowBroadcastMul, TileBroadcastOneBlk, TileOneBlkColumnBroadcastMul, TileCopy, TileScheduler>;
 
-    using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 0>;
+    using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 0>;
 
     // kernel level
     using MatmulKernel = gemm::kernel::GroupedMatmulSliceKPerTokenDequant<BlockMmad, BlockEpilogue, BlockScheduler,
@@ -115,7 +115,7 @@ struct Options {
     const std::string HELPER = "11_grouped_matmul_slice_k_per_token_dequant_bf16 group_count m n k [device_id]";
 
     uint32_t groupCount{1};
-    MatmulCoord problemShape{128, 128, 128};
+    GemmCoord problemShape{128, 128, 128};
     int32_t deviceId{0};
 
     Options() = default;

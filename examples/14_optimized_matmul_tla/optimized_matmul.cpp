@@ -16,7 +16,7 @@
 
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/arch/arch.hpp"
-#include "AscendCT/gemm/matmul_type.hpp"
+#include "AscendCT/gemm/gemm_type.hpp"
 #include "AscendCT/gemm/block/block_mmad.hpp"
 #include "AscendCT/gemm/block/block_swizzle.hpp"
 #include "AscendCT/gemm/dispatch_policy.hpp"
@@ -40,7 +40,7 @@ template <
 >
 ASCENDCT_DEVICE
 void LaunchMatmulDynamicSwizzle(
-    MatmulCoord problemShape,
+    GemmCoord problemShape,
     GM_ADDR gmA, LayoutA layoutA,
     GM_ADDR gmB, LayoutB layoutB,
     GM_ADDR gmC, LayoutC layoutC,
@@ -49,22 +49,22 @@ void LaunchMatmulDynamicSwizzle(
 )
 {
     if (problemShape.m() > problemShape.n()) {
-        using TileScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 0>;
+        using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 0>;
         using BlockEpilogue = void;
         // kernel level
         using MatmulKernel = gemm::kernel::OptimizedMatmulTla<
-            BlockMmad, BlockEpilogue, TileScheduler, PaddingA, PaddingB>;
+            BlockMmad, BlockEpilogue, BlockScheduler, PaddingA, PaddingB>;
         typename MatmulKernel::Params params{problemShape, gmA, layoutA, gmB, layoutB, gmC, layoutC,
             gmWA, layoutWA, gmWB, layoutWB};
         // call a kernel
         MatmulKernel matmul;
         matmul(params);
     } else {
-        using TileScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 1>;
+        using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 1>;
         using BlockEpilogue = void;
         // kernel level
         using MatmulKernel = gemm::kernel::OptimizedMatmulTla<
-            BlockMmad, BlockEpilogue, TileScheduler, PaddingA, PaddingB>;
+            BlockMmad, BlockEpilogue, BlockScheduler, PaddingA, PaddingB>;
         typename MatmulKernel::Params params{problemShape, gmA, layoutA, gmB, layoutB, gmC, layoutC,
             gmWA, layoutWA, gmWB, layoutWB};
 
@@ -83,7 +83,7 @@ auto GetPaddingLayout(Layout layout, uint32_t blockRows, uint32_t blockCols)
             MakeShape(blockCols, CeilDiv(layout.shape(1), blockCols)));
         auto stride = MakeStride(
             MakeStride(
-                static_cast<int64_t>(blockCols), 
+                static_cast<int64_t>(blockCols),
                 static_cast<int64_t>(blockRows) * RoundUp(layout.shape(1), blockCols)
             ),
             MakeStride(Int<1>{}, static_cast<int64_t>(blockRows) * blockCols)
@@ -95,7 +95,7 @@ auto GetPaddingLayout(Layout layout, uint32_t blockRows, uint32_t blockCols)
         auto stride = MakeStride(
             MakeStride(Int<1>{}, static_cast<int64_t>(blockRows) * blockCols),
             MakeStride(
-                static_cast<int64_t>(blockRows), 
+                static_cast<int64_t>(blockRows),
                 RoundUp(layout.shape(0), blockRows) * static_cast<int64_t>(blockCols)
             )
         );
@@ -113,7 +113,7 @@ template <
 ASCENDCT_GLOBAL
 void OptimizedMatmul(
     uint64_t fftsAddr,
-    MatmulCoord problemShape,
+    GemmCoord problemShape,
     GM_ADDR gmA, LayoutTagA tagA,
     GM_ADDR gmB, LayoutTagB tagB,
     GM_ADDR gmC, LayoutTagC tagC,
@@ -138,7 +138,7 @@ void OptimizedMatmul(
     using TensorC = Tensor<AscendC::GlobalTensor<ElementC>, decltype(layoutC), AscendC::TPosition::GM>;
 
     // if LayoutA and LayoutB is both ColumnMajor,
-    // L1TileShape using MatmulShape<256, 128, 256> can achieve better performance.
+    // L1TileShape using GemmShape<256, 128, 256> can achieve better performance.
     using L1TileShape = std::conditional_t<std::is_same_v<LayoutTagA, layout::ColumnMajor> &&
         std::is_same_v<LayoutTagB, layout::ColumnMajor>, Shape<_256, _128, _256>, Shape<_128, _256, _256>>;
     using L0TileShape = std::conditional_t<std::is_same_v<LayoutTagA, layout::ColumnMajor> &&
@@ -194,7 +194,7 @@ void OptimizedMatmul(
             BlockMmad, PaddingA, PaddingB
         >(problemShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, gmWA, layoutWA, gmWB, layoutWB);
     } else {
-        // Both A and B need padding. 
+        // Both A and B need padding.
         auto layoutWA = GetPaddingLayout(tagA, get<0>(L1TileShape{}), get<2>(L1TileShape{}));
         auto layoutWB = GetPaddingLayout(tagB, get<2>(L1TileShape{}), get<1>(L1TileShape{}));
         using TensorWA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutWA), AscendC::TPosition::GM>;
@@ -217,7 +217,7 @@ void OptimizedMatmul(
 struct Options {
     const std::string HELPER = "14_optimizd_matmul_tla m n k [device_id]";
 
-    MatmulCoord problemShape{128, 128, 128};
+    GemmCoord problemShape{128, 128, 128};
     int32_t deviceId{0};
 
     Options() = default;
@@ -305,8 +305,8 @@ void Run(Options const &options)
     bool isNeedPaddingB = IsNeedPadding(layoutB, align);
 
     // if LayoutA and LayoutB is both ColumnMajor,
-    // L1TileShape using MatmulShape<256, 128, 256> can achieve better performance.
-    using L1TileShape = std::conditional_t<std::is_same_v<LayoutA, layout::ColumnMajor> && 
+    // L1TileShape using GemmShape<256, 128, 256> can achieve better performance.
+    using L1TileShape = std::conditional_t<std::is_same_v<LayoutA, layout::ColumnMajor> &&
         std::is_same_v<LayoutB, layout::ColumnMajor>, Shape<_256, _128, _256>, Shape<_128, _256, _256>>;
     size_t sizeWA = GetWorkspaceLen(layoutA, get<0>(L1TileShape{}), get<2>(L1TileShape{})) * sizeof(fp16_t);
     size_t sizeWB = GetWorkspaceLen(layoutB, get<2>(L1TileShape{}), get<1>(L1TileShape{})) * sizeof(fp16_t);
@@ -328,7 +328,7 @@ void Run(Options const &options)
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
     uint8_t *deviceWA{nullptr};
-    if (isNeedPaddingA) {  
+    if (isNeedPaddingA) {
         ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWA), sizeWA, ACL_MEM_MALLOC_HUGE_FIRST));
     } else {
         // no need to padding A
