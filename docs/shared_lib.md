@@ -42,7 +42,7 @@ template <
 >
 ASCENDCT_GLOBAL
 void custom_matmul(
-    MatmulCoord problemShape,
+    GemmCoord problemShape,
     GM_ADDR gmA, LayoutA layoutA,
     GM_ADDR gmB, LayoutB layoutB,
     GM_ADDR gmC, LayoutC layoutC

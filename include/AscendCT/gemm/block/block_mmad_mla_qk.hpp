@@ -8,15 +8,15 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ASCENDCT_MATMUL_BLOCK_BLOCK_MMAD_MLA_QK_HPP
-#define ASCENDCT_MATMUL_BLOCK_BLOCK_MMAD_MLA_QK_HPP
+#ifndef ASCENDCT_GEMM_BLOCK_BLOCK_MMAD_MLA_QK_HPP
+#define ASCENDCT_GEMM_BLOCK_BLOCK_MMAD_MLA_QK_HPP
 
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/arch/resource.hpp"
 #include "AscendCT/coord.hpp"
 #include "AscendCT/gemm/dispatch_policy.hpp"
 #include "AscendCT/gemm/helper.hpp"
-#include "AscendCT/matmul_coord.hpp"
+#include "AscendCT/gemm_coord.hpp"
 
 ////////////////////////////////////////////////////////////////////
 
@@ -111,7 +111,7 @@ public:
         AscendC::GlobalTensor<ElementB> gBRope,
         AscendC::GlobalTensor<ElementC> gC,
         LayoutA layoutA, LayoutA layoutARope, LayoutB layoutB, LayoutB layoutBRope, LayoutC layoutC,
-        MatmulCoord actualShape, MatrixCoord qShapeSingleNd,
+        GemmCoord actualShape, MatrixCoord qShapeSingleNd,
         uint32_t &qHeads, uint32_t &nIdx)
     {
         uint32_t rowNum = actualShape.m();
@@ -225,4 +225,4 @@ protected:
 
 } // namespace AscendCT::gemm::block
 
-#endif // ASCENDCT_MATMUL_BLOCK_BLOCK_MMAD_MLA_QK_HPP
+#endif // ASCENDCT_GEMM_BLOCK_BLOCK_MMAD_MLA_QK_HPP

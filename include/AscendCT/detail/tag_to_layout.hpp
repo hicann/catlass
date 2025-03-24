@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ASCENDCT_DETAIL_LAYOUT_HPP
-#define ASCENDCT_DETAIL_LAYOUT_HPP
+#ifndef ASCENDCT_DETAIL_TAG_TO_LAYOUT_HPP
+#define ASCENDCT_DETAIL_TAG_TO_LAYOUT_HPP
 
 #include "AscendCT/layout/layout.hpp"
 #include "tla/layout.hpp"
@@ -78,4 +78,4 @@ using LayoutL0C = Layout<Shape<Shape<Int<C0_NUM_PER_FRACTAL>, uint32_t>, Shape<I
 
 } // namespace AscendCT::detail
 
-#endif // ASCENDCT_DETAIL_LAYOUT_HPP
+#endif // ASCENDCT_DETAIL_TAG_TO_LAYOUT_HPP

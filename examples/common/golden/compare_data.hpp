@@ -13,7 +13,7 @@
 #include <cmath>
 #include <vector>
 
-#include "AscendCT/matmul_coord.hpp"
+#include "AscendCT/gemm_coord.hpp"
 
 namespace AscendCT::golden {
 

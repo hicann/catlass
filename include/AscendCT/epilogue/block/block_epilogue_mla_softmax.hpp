@@ -16,7 +16,7 @@
 #include "AscendCT/arch/resource.hpp"
 #include "AscendCT/epilogue/dispatch_policy.hpp"
 #include "AscendCT/epilogue/tile/tile_copy.hpp"
-#include "AscendCT/matmul_coord.hpp"
+#include "AscendCT/gemm_coord.hpp"
 #include "AscendCT/matrix_coord.hpp"
 
 namespace AscendCT::epilogue::block {
@@ -381,7 +381,7 @@ public:
         AscendC::GlobalTensor<ElementInput> gInput,
         const LayoutOutput &layoutOutput,
         const LayoutInput &layoutInput,
-        MatmulCoord actualBlockShape,
+        GemmCoord actualBlockShape,
         uint32_t nIdx,
         uint32_t curHeadNum,
         uint32_t softmaxPingPongFlag,

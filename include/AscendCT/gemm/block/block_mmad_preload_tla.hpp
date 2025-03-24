@@ -8,13 +8,13 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ASCENDCT_MATMUL_BLOCK_BLOCK_MMAD_PRELOAD_TLA_HPP
-#define ASCENDCT_MATMUL_BLOCK_BLOCK_MMAD_PRELOAD_TLA_HPP
+#ifndef ASCENDCT_GEMM_BLOCK_BLOCK_MMAD_PRELOAD_TLA_HPP
+#define ASCENDCT_GEMM_BLOCK_BLOCK_MMAD_PRELOAD_TLA_HPP
 
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/arch/resource.hpp"
 #include "AscendCT/coord.hpp"
-#include "AscendCT/matmul_coord.hpp"
+#include "AscendCT/gemm_coord.hpp"
 #include "AscendCT/gemm/dispatch_policy.hpp"
 #include "AscendCT/gemm/helper.hpp"
 
@@ -424,4 +424,4 @@ protected:
 
 } // namespace AscendCT::gemm::block
 
-#endif // ASCENDCT_MATMUL_BLOCK_BLOCK_MMAD_PRELOAD_TLA_HPP
+#endif // ASCENDCT_GEMM_BLOCK_BLOCK_MMAD_PRELOAD_TLA_HPP

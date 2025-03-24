@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ASCENDCT_MATMUL_DISPATCH_POLICY_HPP
-#define ASCENDCT_MATMUL_DISPATCH_POLICY_HPP
+#ifndef ASCENDCT_GEMM_DISPATCH_POLICY_HPP
+#define ASCENDCT_GEMM_DISPATCH_POLICY_HPP
 
 #include "AscendCT/AscendCT.hpp"
 
@@ -84,4 +84,4 @@ struct MmadAtlasA2PreloadAsyncWithCallback :
 
 }  // namespace AscendCT::gemm
 
-#endif  // ASCENDCT_MATMUL_DISPATCH_POLICY_HPP
+#endif  // ASCENDCT_GEMM_DISPATCH_POLICY_HPP

@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ASCENDCT_MATMUL_BLOCK_BLOCK_MMAD_HPP
-#define ASCENDCT_MATMUL_BLOCK_BLOCK_MMAD_HPP
+#ifndef ASCENDCT_GEMM_BLOCK_BLOCK_MMAD_HPP
+#define ASCENDCT_GEMM_BLOCK_BLOCK_MMAD_HPP
 
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/gemm/tile/tile_copy.hpp"
@@ -62,4 +62,4 @@ struct BlockMmadTla {
 #include "AscendCT/gemm/block/block_mmad_preload_tla.hpp"
 #include "AscendCT/gemm/block/block_mmad_preload_async_with_callback.hpp"
 
-#endif // ASCENDCT_MATMUL_BLOCK_BLOCK_MMAD_HPP
+#endif // ASCENDCT_GEMM_BLOCK_BLOCK_MMAD_HPP

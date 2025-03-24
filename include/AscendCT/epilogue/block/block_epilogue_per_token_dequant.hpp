@@ -14,7 +14,7 @@
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/arch/resource.hpp"
 #include "AscendCT/epilogue/dispatch_policy.hpp"
-#include "AscendCT/matmul_coord.hpp"
+#include "AscendCT/gemm_coord.hpp"
 #include "AscendCT/matrix_coord.hpp"
 #include "AscendCT/layout/layout.hpp"
 #include "AscendCT/detail/callback.hpp"
@@ -187,9 +187,9 @@ public:
 
     ASCENDCT_DEVICE
     void operator() (
-        MatmulCoord const &blockShapeMNK,
-        MatmulCoord const &blockCoordMNK,
-        MatmulCoord const &actualBlockShapeMNK,
+        GemmCoord const &blockShapeMNK,
+        GemmCoord const &blockCoordMNK,
+        GemmCoord const &actualBlockShapeMNK,
         AscendC::GlobalTensor<ElementC> const &gmBlockC,
         LayoutC const &layoutBlockC, Callback &&callback = Callback{}
     )
@@ -349,8 +349,8 @@ template <
 class BlockEpilogue <
     EpilogueAtlasA2PerTokenDequant<UB_STAGES_>,
     CType_,
-    gemm::MatmulType<float, LayoutScale_>,
-    gemm::MatmulType<float, LayoutPerTokenScale_>,
+    gemm::GemmType<float, LayoutScale_>,
+    gemm::GemmType<float, LayoutPerTokenScale_>,
     DType_,
     TileRowBroadcastMul_,
     TileBroadcastOneBlk_,
@@ -495,9 +495,9 @@ public:
 
     ASCENDCT_DEVICE
     void operator() (
-        MatmulCoord const &blockShapeMNK,
-        MatmulCoord const &blockCoordMNK,
-        MatmulCoord const &actualBlockShapeMNK,
+        GemmCoord const &blockShapeMNK,
+        GemmCoord const &blockCoordMNK,
+        GemmCoord const &actualBlockShapeMNK,
         AscendC::GlobalTensor<ElementC> const &gmBlockC,
         LayoutC const &layoutBlockC, Callback &&callback = Callback{}
     )

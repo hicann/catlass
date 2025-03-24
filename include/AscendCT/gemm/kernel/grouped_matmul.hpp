@@ -8,13 +8,13 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ASCENDCT_MATMUL_KERNEL_GROUPED_MATMUL_HPP
-#define ASCENDCT_MATMUL_KERNEL_GROUPED_MATMUL_HPP
+#ifndef ASCENDCT_GEMM_KERNEL_GROUPED_MATMUL_HPP
+#define ASCENDCT_GEMM_KERNEL_GROUPED_MATMUL_HPP
 
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/arch/resource.hpp"
 #include "AscendCT/coord.hpp"
-#include "AscendCT/matmul_coord.hpp"
+#include "AscendCT/gemm_coord.hpp"
 #include "AscendCT/matrix_coord.hpp"
 
 namespace AscendCT::gemm::kernel {
@@ -36,7 +36,7 @@ void UnpackListParam(T *const dst, GM_ADDR src, uint32_t len)
 template <
     class BlockMmad_,
     class BlockEpilogue_,
-    class TileScheduler_
+    class BlockScheduler_
 >
 class GroupedMatmul {
 public:
@@ -51,7 +51,7 @@ public:
     using LayoutC = typename BlockMmad::LayoutC;
     using ElementAccumulator = typename BlockMmad::ElementAccumulator;
 
-    using TileScheduler = TileScheduler_;
+    using BlockScheduler = BlockScheduler_;
     static constexpr uint32_t MAX_TENSOR_COUNT = 256;
 
     /// Parameters structure
@@ -97,7 +97,7 @@ public:
     ASCENDCT_DEVICE
     void operator()<AscendC::AIC>(Params const &params)
     {
-        MatmulCoord problemShapeList[MAX_TENSOR_COUNT];
+        GemmCoord problemShapeList[MAX_TENSOR_COUNT];
         LayoutA layoutAList[MAX_TENSOR_COUNT];
         LayoutB layoutBList[MAX_TENSOR_COUNT];
         LayoutC layoutCList[MAX_TENSOR_COUNT];
@@ -108,7 +108,7 @@ public:
         detail::UnpackListParam(layoutBList, params.ptrLayoutB, params.problemCount);
         detail::UnpackListParam(layoutCList, params.ptrLayoutC, params.problemCount);
 
-        TileScheduler matmulTileScheduler;
+        BlockScheduler matmulBlockScheduler;
         arch::Resource<ArchTag> resource;
         BlockMmad blockMmad(resource);
 
@@ -128,13 +128,13 @@ public:
 
         uint32_t startCoreIdx = 0;
         for (uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx) {
-            MatmulCoord problemShape = problemShapeList[groupIdx];
+            GemmCoord problemShape = problemShapeList[groupIdx];
             LayoutA layoutA = layoutAList[groupIdx];
             LayoutB layoutB = layoutBList[groupIdx];
             LayoutC layoutC = layoutCList[groupIdx];
 
-            matmulTileScheduler.Update(problemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
-            uint32_t coreLoops = matmulTileScheduler.GetCoreLoops();
+            matmulBlockScheduler.Update(problemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
+            uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
 
             // Determine the starting loopIdx of the current core under the current groupIdx
             uint32_t startLoopIdx;
@@ -146,8 +146,8 @@ public:
             // Loop through the matmul of each groupIdx
             for (uint32_t loopIdx = startLoopIdx; loopIdx < coreLoops; loopIdx += coreNum) {
                 // Compute block location
-                MatmulCoord blockCoord = matmulTileScheduler.GetBlockCoord(loopIdx);
-                MatmulCoord actualBlockShape = matmulTileScheduler.GetActualBlockShape(blockCoord);
+                GemmCoord blockCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
+                GemmCoord actualBlockShape = matmulBlockScheduler.GetActualBlockShape(blockCoord);
 
                 // Compute initial location in logical coordinates
                 MatrixCoord offsetA{blockCoord.m() * L1TileShape::M, blockCoord.k() * L1TileShape::K};
@@ -184,4 +184,4 @@ public:
 
 } // namespace AscendCT::gemm::kernel
 
-#endif // ASCENDCT_MATMUL_KERNEL_GROUPED_MATMUL_HPP
+#endif // ASCENDCT_GEMM_KERNEL_GROUPED_MATMUL_HPP

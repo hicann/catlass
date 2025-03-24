@@ -8,10 +8,10 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ASCENDCT_MATMUL_TILE_COPY_L0C_TO_GM_HPP
-#define ASCENDCT_MATMUL_TILE_COPY_L0C_TO_GM_HPP
+#ifndef ASCENDCT_GEMM_TILE_COPY_L0C_TO_GM_HPP
+#define ASCENDCT_GEMM_TILE_COPY_L0C_TO_GM_HPP
 
-#include "AscendCT/gemm/matmul_type.hpp"
+#include "AscendCT/gemm/gemm_type.hpp"
 
 namespace AscendCT::gemm::tile {
 
@@ -110,7 +110,7 @@ template <
 >
 struct CopyL0CToGm<AscendCT::arch::AtlasA2,
                    ElementAccumulator_,
-                   gemm::MatmulType<ElementDst_, layout::RowMajor>,
+                   gemm::GemmType<ElementDst_, layout::RowMajor>,
                    ScaleGranularity::NO_QUANT,
                    ReluEnable_>
 {
@@ -152,7 +152,7 @@ template <
 >
 struct CopyL0CToGm<AscendCT::arch::AtlasA2,
                    ElementAccumulator_,
-                   gemm::MatmulType<ElementDst_, layout::zN>,
+                   gemm::GemmType<ElementDst_, layout::zN>,
                    ScaleGranularity::NO_QUANT,
                    ReluEnable_>
 {
@@ -249,4 +249,4 @@ struct CopyL0CToGmTla<AscendCT::arch::AtlasA2,
 
 }  // namespace AscendCT::gemm::tile
 
-#endif // ASCENDCT_MATMUL_TILE_COPY_L0C_TO_GM_HPP
+#endif // ASCENDCT_GEMM_TILE_COPY_L0C_TO_GM_HPP

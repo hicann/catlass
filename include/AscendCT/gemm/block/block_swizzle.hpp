@@ -8,46 +8,46 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ASCENDCT_MATMUL_BLOCK_BLOCK_SWIZZLE_HPP
-#define ASCENDCT_MATMUL_BLOCK_BLOCK_SWIZZLE_HPP
+#ifndef ASCENDCT_GEMM_BLOCK_BLOCK_SWIZZLE_HPP
+#define ASCENDCT_GEMM_BLOCK_BLOCK_SWIZZLE_HPP
 
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/detail/alignment.hpp"
-#include "AscendCT/matmul_coord.hpp"
+#include "AscendCT/gemm_coord.hpp"
 #include "AscendCT/matrix_coord.hpp"
 
 namespace AscendCT::gemm::block {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// Block swizzling function for Matmuls
+/// Block swizzling function for Gemms
 template <uint32_t SwizzleOffset = 1, uint32_t SwizzleDirection = 0>
-struct MatmulIdentityBlockSwizzle {
+struct GemmIdentityBlockSwizzle {
     /// Data members
 
-    MatmulCoord problemShape;
+    GemmCoord problemShape;
     MatrixCoord tileMN;
     MatrixCoord loopsMN;
 
     /// Methods
 
     ASCENDCT_DEVICE
-    MatmulIdentityBlockSwizzle() {}
+    GemmIdentityBlockSwizzle() {}
 
     ASCENDCT_DEVICE
-    MatmulIdentityBlockSwizzle(MatmulCoord const &problemShape_, MatrixCoord const &tileMN_)
+    GemmIdentityBlockSwizzle(GemmCoord const &problemShape_, MatrixCoord const &tileMN_)
         : problemShape(problemShape_), tileMN(tileMN_)
     {
         loopsMN = CeilDiv(MatrixCoord(problemShape.GetCoordMN()), tileMN);
     }
 
     ASCENDCT_DEVICE
-    MatmulIdentityBlockSwizzle(MatmulCoord const &problemShape_, MatrixCoord const &tileMN_,
+    GemmIdentityBlockSwizzle(GemmCoord const &problemShape_, MatrixCoord const &tileMN_,
         MatrixCoord const &loopsMN_)
         : problemShape(problemShape_), tileMN(tileMN_), loopsMN(loopsMN_) {}
 
     ASCENDCT_DEVICE
-    void Update(MatmulCoord const &problemShape_, MatrixCoord const &tileMN_)
+    void Update(GemmCoord const &problemShape_, MatrixCoord const &tileMN_)
     {
         problemShape = problemShape_;
         tileMN = tileMN_;
@@ -56,7 +56,7 @@ struct MatmulIdentityBlockSwizzle {
     }
 
     ASCENDCT_DEVICE
-    void Update(MatmulCoord const &problemShape_, MatrixCoord const &tileMN_, MatrixCoord const &loopsMN_)
+    void Update(GemmCoord const &problemShape_, MatrixCoord const &tileMN_, MatrixCoord const &loopsMN_)
     {
         problemShape = problemShape_;
         tileMN = tileMN_;
@@ -76,7 +76,7 @@ struct MatmulIdentityBlockSwizzle {
     }
 
     ASCENDCT_DEVICE
-    MatmulCoord GetBlockCoord(uint32_t taskIdx)
+    GemmCoord GetBlockCoord(uint32_t taskIdx)
     {
         uint32_t innerIdx = taskIdx % GetCoreLoops();
         if constexpr (SwizzleDirection == 0) { // Zn
@@ -93,7 +93,7 @@ struct MatmulIdentityBlockSwizzle {
             if (tileBlockIdx % 2 == 1) {
                 nIdx = loopsMN.column() - nIdx - 1;
             }
-            return MatmulCoord{mIdx, nIdx, 0};
+            return GemmCoord{mIdx, nIdx, 0};
         } else if constexpr (SwizzleDirection == 1) { // Nz
             uint32_t tileBlockLoop = CeilDiv(loopsMN.column(), SwizzleOffset);
             uint32_t tileBlockIdx = innerIdx / (SwizzleOffset * loopsMN.row());
@@ -108,40 +108,40 @@ struct MatmulIdentityBlockSwizzle {
             if (tileBlockIdx % 2 == 1) {
                 mIdx = loopsMN.row() - mIdx - 1;
             }
-            return MatmulCoord{mIdx, nIdx, 0};
+            return GemmCoord{mIdx, nIdx, 0};
         }
     }
 
     ASCENDCT_DEVICE
-    MatmulCoord GetActualBlockShape(MatmulCoord blockCoord)
+    GemmCoord GetActualBlockShape(GemmCoord blockCoord)
     {
         uint32_t mActual = (blockCoord.m() == (loopsMN.row() - 1)) ?
             (problemShape.m() - blockCoord.m() * tileMN.row()) : tileMN.row();
         uint32_t nActual = (blockCoord.n() == (loopsMN.column() - 1)) ?
             (problemShape.n() - blockCoord.n() * tileMN.column()) : tileMN.column();
         uint32_t kActual = problemShape.k();
-        return MatmulCoord{mActual, nActual, kActual};
+        return GemmCoord{mActual, nActual, kActual};
     }
 };
 
-/// Block swizzling function for Splitk Matmuls
+/// Block swizzling function for Splitk Gemms
 template <uint32_t SwizzleOffset = 1, uint32_t SwizzleDirection = 0>
-struct SplitkMatmulIdentityBlockSwizzle {
+struct SplitkGemmIdentityBlockSwizzle {
     /// Data members
 
-    MatmulCoord problemShape;
-    MatmulCoord tileShape;
-    MatmulCoord loopsMNK;
+    GemmCoord problemShape;
+    GemmCoord tileShape;
+    GemmCoord loopsMNK;
     uint32_t splitkFactor = 1;  // splite k dim into virtual cores
 
     /// Methods
 
     ASCENDCT_DEVICE
-    SplitkMatmulIdentityBlockSwizzle() {}
+    SplitkGemmIdentityBlockSwizzle() {}
 
     ASCENDCT_DEVICE
-    SplitkMatmulIdentityBlockSwizzle(
-        MatmulCoord const &problemShape_, MatmulCoord const &tileShape_, uint32_t splitkFactor_ = 1
+    SplitkGemmIdentityBlockSwizzle(
+        GemmCoord const &problemShape_, GemmCoord const &tileShape_, uint32_t splitkFactor_ = 1
     ) : problemShape(problemShape_), tileShape(tileShape_), splitkFactor(splitkFactor_)
     {
         loopsMNK = CeilDiv(problemShape, tileShape);
@@ -177,7 +177,7 @@ struct SplitkMatmulIdentityBlockSwizzle {
     }
 
     ASCENDCT_DEVICE
-    MatmulCoord GetBlockCoord(uint32_t taskIdx)
+    GemmCoord GetBlockCoord(uint32_t taskIdx)
     {
         uint32_t splitkSliceIdx = GetSplitkSliceIdx(taskIdx);
         uint32_t kIdx = GetKIdxBySplitkSliceIdx(splitkSliceIdx);
@@ -197,7 +197,7 @@ struct SplitkMatmulIdentityBlockSwizzle {
             if (tileBlockIdx % 2 == 1) {
                 nIdx = loopsMNK.n() - nIdx - 1;
             }
-            return MatmulCoord{mIdx, nIdx, kIdx};
+            return GemmCoord{mIdx, nIdx, kIdx};
         } else if constexpr (SwizzleDirection == 1) { // Nz
             uint32_t tileBlockLoop = CeilDiv(loopsMNK.n(), SwizzleOffset);
             uint32_t tileBlockIdx = innerIdx / (SwizzleOffset * loopsMNK.m());
@@ -212,12 +212,12 @@ struct SplitkMatmulIdentityBlockSwizzle {
             if (tileBlockIdx % 2 == 1) {
                 mIdx = loopsMNK.m() - mIdx - 1;
             }
-            return MatmulCoord{mIdx, nIdx, kIdx};
+            return GemmCoord{mIdx, nIdx, kIdx};
         }
     }
 
     ASCENDCT_DEVICE
-    MatmulCoord GetActualBlockShape(MatmulCoord blockCoord, uint32_t splitkSliceIdx)
+    GemmCoord GetActualBlockShape(GemmCoord blockCoord, uint32_t splitkSliceIdx)
     {
         uint32_t splitkSliceLen;
         if (splitkSliceIdx < loopsMNK.k() % splitkFactor) {
@@ -231,10 +231,10 @@ struct SplitkMatmulIdentityBlockSwizzle {
             (problemShape.n() - blockCoord.n() * tileShape.n()) : tileShape.n();
         uint32_t kActual = (splitkSliceIdx == (splitkFactor - 1)) ?
             (problemShape.k() - blockCoord.k() * tileShape.k()) : splitkSliceLen;
-        return MatmulCoord{mActual, nActual, kActual};
+        return GemmCoord{mActual, nActual, kActual};
     }
 };
 
 }  // namespace AscendCT::gemm::block
 
-#endif  // ASCENDCT_MATMUL_BLOCK_BLOCK_SWIZZLE_HPP
+#endif  // ASCENDCT_GEMM_BLOCK_BLOCK_SWIZZLE_HPP
