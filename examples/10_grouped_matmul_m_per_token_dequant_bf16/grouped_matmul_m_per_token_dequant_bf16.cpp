@@ -93,12 +93,12 @@ void GroupedMatmulMPerTokenDequant(
     using BlockEpilogue = epilogue::block::BlockEpilogue<EpilogueDispatchPolicy, CType, ScaleType, PerTokenScaleType,
         DType, TileRowBroadcastMul, TileBroadcastOneBlk, TileOneBlkColumnBroadcastMul, TileCopy, BlockScheduler>;
 
-    using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 0>;
+    using MatmulBlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 0>;
 
     // kernel level
     using ElementGroupList = int64_t;
     using MatmulKernel = gemm::kernel::GroupedMatmulMPerTokenDequantMultiStageWorkspace<BlockMmad, BlockEpilogue,
-        BlockScheduler, workspaceStages, ElementGroupList>;
+        MatmulBlockScheduler, workspaceStages, ElementGroupList>;
 
     typename MatmulKernel::Params params{
         problemShape, problemCount, gmGroupList,
