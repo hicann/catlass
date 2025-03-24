@@ -91,10 +91,10 @@ void QuantMatmul(
     using TileOneBlkColumnBroadcastMul = epilogue::tile::TileOneBlkColumnBroadcastMul<ArchTag,
         OneBlkColumnBroadcastMulType, EpilogueTileShape>;
     using TileCopy = epilogue::tile::TileCopy<ArchTag, CType, ScaleType, PerTokenScaleType, DType>;
-    using TileScheduler = epilogue::tile::EpilogueHorizontalTileSwizzle;
+    using BlockScheduler = epilogue::tile::EpilogueHorizontalTileSwizzle;
 
     using BlockEpilogue = epilogue::block::BlockEpilogue<EpilogueDispatchPolicy, CType, ScaleType, PerTokenScaleType,
-        DType, TileRowBroadcastMul, TileBroadcastOneBlk, TileOneBlkColumnBroadcastMul, TileCopy, TileScheduler>;
+        DType, TileRowBroadcastMul, TileBroadcastOneBlk, TileOneBlkColumnBroadcastMul, TileCopy, BlockScheduler>;
 
     if (problemShape.m() > problemShape.n()) {
         using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 0>;

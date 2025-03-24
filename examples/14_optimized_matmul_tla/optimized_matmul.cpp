@@ -49,22 +49,22 @@ void LaunchMatmulDynamicSwizzle(
 )
 {
     if (problemShape.m() > problemShape.n()) {
-        using TileScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 0>;
+        using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 0>;
         using BlockEpilogue = void;
         // kernel level
         using MatmulKernel = gemm::kernel::OptimizedMatmulTla<
-            BlockMmad, BlockEpilogue, TileScheduler, PaddingA, PaddingB>;
+            BlockMmad, BlockEpilogue, BlockScheduler, PaddingA, PaddingB>;
         typename MatmulKernel::Params params{problemShape, gmA, layoutA, gmB, layoutB, gmC, layoutC,
             gmWA, layoutWA, gmWB, layoutWB};
         // call a kernel
         MatmulKernel matmul;
         matmul(params);
     } else {
-        using TileScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 1>;
+        using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 1>;
         using BlockEpilogue = void;
         // kernel level
         using MatmulKernel = gemm::kernel::OptimizedMatmulTla<
-            BlockMmad, BlockEpilogue, TileScheduler, PaddingA, PaddingB>;
+            BlockMmad, BlockEpilogue, BlockScheduler, PaddingA, PaddingB>;
         typename MatmulKernel::Params params{problemShape, gmA, layoutA, gmB, layoutB, gmC, layoutC,
             gmWA, layoutWA, gmWB, layoutWB};
 

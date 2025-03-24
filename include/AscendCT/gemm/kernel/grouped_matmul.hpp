@@ -36,7 +36,7 @@ void UnpackListParam(T *const dst, GM_ADDR src, uint32_t len)
 template <
     class BlockMmad_,
     class BlockEpilogue_,
-    class TileScheduler_
+    class BlockScheduler_
 >
 class GroupedMatmul {
 public:
@@ -51,7 +51,7 @@ public:
     using LayoutC = typename BlockMmad::LayoutC;
     using ElementAccumulator = typename BlockMmad::ElementAccumulator;
 
-    using TileScheduler = TileScheduler_;
+    using BlockScheduler = BlockScheduler_;
     static constexpr uint32_t MAX_TENSOR_COUNT = 256;
 
     /// Parameters structure
@@ -108,7 +108,7 @@ public:
         detail::UnpackListParam(layoutBList, params.ptrLayoutB, params.problemCount);
         detail::UnpackListParam(layoutCList, params.ptrLayoutC, params.problemCount);
 
-        TileScheduler matmulTileScheduler;
+        BlockScheduler matmulBlockScheduler;
         arch::Resource<ArchTag> resource;
         BlockMmad blockMmad(resource);
 
@@ -133,8 +133,8 @@ public:
             LayoutB layoutB = layoutBList[groupIdx];
             LayoutC layoutC = layoutCList[groupIdx];
 
-            matmulTileScheduler.Update(problemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
-            uint32_t coreLoops = matmulTileScheduler.GetCoreLoops();
+            matmulBlockScheduler.Update(problemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
+            uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
 
             // Determine the starting loopIdx of the current core under the current groupIdx
             uint32_t startLoopIdx;
@@ -146,8 +146,8 @@ public:
             // Loop through the matmul of each groupIdx
             for (uint32_t loopIdx = startLoopIdx; loopIdx < coreLoops; loopIdx += coreNum) {
                 // Compute block location
-                GemmCoord blockCoord = matmulTileScheduler.GetBlockCoord(loopIdx);
-                GemmCoord actualBlockShape = matmulTileScheduler.GetActualBlockShape(blockCoord);
+                GemmCoord blockCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
+                GemmCoord actualBlockShape = matmulBlockScheduler.GetActualBlockShape(blockCoord);
 
                 // Compute initial location in logical coordinates
                 MatrixCoord offsetA{blockCoord.m() * L1TileShape::M, blockCoord.k() * L1TileShape::K};

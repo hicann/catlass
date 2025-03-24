@@ -1,6 +1,6 @@
 # AscendC Template Gemm API
 
-AscendC Template针对NPU上不同层级上执行的矩阵乘累加（MMAD）操作，提供了一个统一的编程模型。AscendC Template的Matmul API对应于以下分层，由高到低分别是：
+AscendC Template针对NPU上不同层级上执行的矩阵乘累加（MMAD）操作，提供了一个统一的编程模型。AscendC Template的Gemm API对应于以下分层，由高到低分别是：
 ![image](images/api_level.png)
 
 
@@ -47,7 +47,7 @@ AscendC Template使用以下组件表达上述循环嵌套，这些组件针对�
 
 | API 层级             | API 类 和/或 函数 名称                   |
 | ---                  | ---                                               |
-| Device               | `AscendCT::gemm::device::MatmulUniversalAdapter`     |
+| Device               | `AscendCT::gemm::device::DeviceGemm`     |
 | Kernel               | `AscendCT::gemm::kernel::BasicMatmul`            |
 | Block           | `AscendCT::gemm::block:BlockMmad` <br /> `AscendCT::epilogue::block::BlockEpilogue` <br />|
 | Tile (MMAD and Copy) | `TileMmad` and `TileCopy` <br /> |
@@ -85,14 +85,14 @@ using BlockMmad = gemm::block::BlockMmad<DispatchPolicy,
 using BlockEpilogue = void;
 
 // 第三步：指定计算时的数据走位方式
-using TileScheduler = typename gemm::block::GemmIdentityBlockSwizzle<>;
+using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<>;
 
 
 // 第四步：在kernel层将mmad和后处理组合到一起
-using MatmulKernel = gemm::kernel::BasicMatmul<BlockMmad, BlockEpilogue, TileScheduler>;
+using MatmulKernel = gemm::kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 
 // 第四步：将kernel放入device适配器中，host侧处理kernel使用
-using MatmulHandle = AscendCT::gemm::device::MatmulUniversalAdapter<MatmulKernel>;
+using MatmulDevice = AscendCT::gemm::device::DeviceGemm<MatmulKernel>;
 ```
 
 
@@ -178,7 +178,7 @@ struct MmadAtlasA2Pingpong {
 ### Epilogue
 
 
-尾处理实现了涉及输出矩阵的逐元素操作。用户可以提供自定义的尾处理，或者使用标准尾处理之一。这些尾处理位于目录include/AscendCT/epilogue/block/中，包括像`AscendCT::epilogue::block::BlockEpilogue`这样的类。AscendC Template提供的尾处理不在include/AscendCT/gemm目录下，也不在`AscendCT::gemm`命名空间中，因为它们可以用于除Matmul之外的其他计算。
+尾处理实现了涉及输出矩阵的逐元素操作。用户可以提供自定义的尾处理，或者使用标准尾处理之一。这些尾处理位于目录include/AscendCT/epilogue/block/中，包括像`AscendCT::epilogue::block::BlockEpilogue`这样的类。AscendC Template提供的尾处理不在include/AscendCT/gemm目录下，也不在`AscendCT::gemm`命名空间中，因为它们可以用于除Gemm之外的其他计算。
 
 
 ## Kernel API
@@ -202,7 +202,7 @@ namespace AscendCT::gemm::kernel {
 template <
   class BlockMmad_,
   class BlockEpilogue_,
-  class TileScheduler_
+  class BlockScheduler_
 >
 class BasicMatmul;
 } // namespace AscendCT::gemm::kernel
@@ -221,16 +221,16 @@ Device层是Host侧调用的入口，在这一层屏蔽调用Device侧函数的�
 ```
 using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
 using BlockEpilogue = void;
-using TileScheduler = typename gemm::block::GemmIdentityBlockSwizzle<>;
+using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<>;
 
 // kernel
-using MatmulKernel = gemm::kernel::BasicMatmul<BlockMmad, BlockEpilogue, TileScheduler>;
+using MatmulKernel = gemm::kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 
 // device
-using MatmulUniversalAdapter = gemm::device::MatmulUniversalAdapter<MatmulKernel>;
-MatmulUniversalAdapter matmulAdapter;
+using Matmul = gemm::device::DeviceGemm<MatmulKernel>;
+Matmul matmulOp;
 // args为维度信息等参数的封装结构体
-matmulAdapter(args, workspace, stream);
+matmulOp(args, workspace, stream);
 ```
 
 ## Tile MMAD and Copy

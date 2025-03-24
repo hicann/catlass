@@ -23,7 +23,7 @@ namespace AscendCT::gemm::kernel {
 template <
     class BlockMmad_,
     class BlockEpilogue_,
-    class TileScheduler_
+    class BlockScheduler_
 >
 class MatmulEpilogue {
 public:
@@ -42,7 +42,7 @@ public:
     using LayoutD = typename BlockEpilogue::LayoutD;
     using EpilogueParams = typename BlockEpilogue::Params;
 
-    using TileScheduler = TileScheduler_;
+    using BlockScheduler = BlockScheduler_;
 
     static_assert(std::is_same_v<typename BlockEpilogue::ElementC, ElementC> &&
         std::is_same_v<typename BlockEpilogue::LayoutC, LayoutC>,
@@ -85,8 +85,8 @@ public:
     ASCENDCT_DEVICE
     void operator()<AscendC::AIC>(Params const &params)
     {
-        TileScheduler matmulTileScheduler(params.problemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
-        uint32_t coreLoops = matmulTileScheduler.GetCoreLoops();
+        BlockScheduler matmulBlockScheduler(params.problemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
+        uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
 
         BlockMmad blockMmad(resource);
 
@@ -101,8 +101,8 @@ public:
 
         for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()) {
             // Compute block location
-            GemmCoord blockCoord = matmulTileScheduler.GetBlockCoord(loopIdx);
-            GemmCoord actualBlockShape = matmulTileScheduler.GetActualBlockShape(blockCoord);
+            GemmCoord blockCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
+            GemmCoord actualBlockShape = matmulBlockScheduler.GetActualBlockShape(blockCoord);
 
             // Compute initial location in logical coordinates
             MatrixCoord offsetA{blockCoord.m() * L1TileShape::M, blockCoord.k() * L1TileShape::K};
@@ -127,8 +127,8 @@ public:
     ASCENDCT_DEVICE
     void operator()<AscendC::AIV>(Params const &params)
     {
-        TileScheduler matmulTileScheduler(params.problemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
-        uint32_t coreLoops = matmulTileScheduler.GetCoreLoops();
+        BlockScheduler matmulBlockScheduler(params.problemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
+        uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
 
         BlockEpilogue blockEpilogue(resource, params.epilogueParams);
 
@@ -146,8 +146,8 @@ public:
         GemmCoord blockShape = L1TileShape::ToCoord();
         for (uint32_t loopIdx = aicoreIndex; loopIdx < coreLoops; loopIdx += aicoreNum) {
             // Compute block location
-            GemmCoord blockCoord = matmulTileScheduler.GetBlockCoord(loopIdx);
-            GemmCoord actualBlockShape = matmulTileScheduler.GetActualBlockShape(blockCoord);
+            GemmCoord blockCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
+            GemmCoord actualBlockShape = matmulBlockScheduler.GetActualBlockShape(blockCoord);
             // Get the data and layout of C under the current basic block
             auto gmBlockC = gmC[layoutC.GetOffset(blockCoord.GetCoordMN() * blockShape.GetCoordMN())];
             auto layoutBlockC = layoutC.GetTileLayout(actualBlockShape.GetCoordMN());
