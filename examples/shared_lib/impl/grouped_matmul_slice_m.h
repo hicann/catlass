@@ -19,9 +19,9 @@
 #include "AscendCT/gemm/block/block_swizzle.hpp"
 #include "AscendCT/gemm/dispatch_policy.hpp"
 #include "AscendCT/gemm/kernel/grouped_matmul_slice_m.hpp"
-#include "AscendCT/gemm/matmul_type.hpp"
+#include "AscendCT/gemm/gemm_type.hpp"
 template <class LayoutA, class LayoutB, class LayoutC>
-ASCENDCT_GLOBAL void grouped_matmul_slice_m(MatmulCoord problemShape, uint32_t problemCount, GM_ADDR gmGroupList, GM_ADDR gmA,
+ASCENDCT_GLOBAL void grouped_matmul_slice_m(GemmCoord problemShape, uint32_t problemCount, GM_ADDR gmGroupList, GM_ADDR gmA,
     LayoutA layoutA, GM_ADDR gmB, LayoutB layoutB, GM_ADDR gmC, LayoutC layoutC)
 {
     if (problemShape.k() > problemShape.n()) {

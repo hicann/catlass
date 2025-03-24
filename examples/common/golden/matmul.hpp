@@ -202,7 +202,7 @@ template <
     class ElementGroupList, class ElementScale, class LayoutScale, class LayoutPerTokenScale
 >
 void ComputeGroupedMatmulSliceKPerTokenDequant(
-    const MatmulCoord &problemShape, uint32_t problemCount, const std::vector<ElementGroupList> &groupList,
+    const GemmCoord &problemShape, uint32_t problemCount, const std::vector<ElementGroupList> &groupList,
     const std::vector<int8_t> &dataA, const layout::ColumnMajor &layoutA,
     const std::vector<int8_t> &dataB, const layout::RowMajor &layoutB,
     const std::vector<ElementScale> &dataScale, const LayoutScale &,
