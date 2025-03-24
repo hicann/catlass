@@ -18,11 +18,11 @@
 #include "AscendCT/gemm/block/block_mmad.hpp"
 #include "AscendCT/gemm/block/block_swizzle.hpp"
 #include "AscendCT/gemm/dispatch_policy.hpp"
-#include "AscendCT/gemm/kernel/grouped_matmul_m.hpp"
+#include "AscendCT/gemm/kernel/grouped_matmul_slice_m.hpp"
 #include "AscendCT/gemm/gemm_type.hpp"
 template <class LayoutA, class LayoutB, class LayoutC>
-ASCENDCT_GLOBAL void grouped_matmul_m(GemmCoord problemShape, uint32_t problemCount, GM_ADDR gmGroupList, GM_ADDR gmA,
-                                     LayoutA layoutA, GM_ADDR gmB, LayoutB layoutB, GM_ADDR gmC, LayoutC layoutC)
+ASCENDCT_GLOBAL void grouped_matmul_slice_m(GemmCoord problemShape, uint32_t problemCount, GM_ADDR gmGroupList, GM_ADDR gmA,
+    LayoutA layoutA, GM_ADDR gmB, LayoutB layoutB, GM_ADDR gmC, LayoutC layoutC)
 {
     if (problemShape.k() > problemShape.n()) {
         constexpr uint32_t preloadStages = 1;
@@ -48,7 +48,7 @@ ASCENDCT_GLOBAL void grouped_matmul_m(GemmCoord problemShape, uint32_t problemCo
         using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 0>;
 
         // kernel level
-        using MatmulKernel = gemm::kernel::GroupedMatmulM<BlockMmad, BlockEpilogue, BlockScheduler, int32_t>;
+        using MatmulKernel = gemm::kernel::GroupedMatmulSliceM<BlockMmad, BlockEpilogue, BlockScheduler, int32_t>;
 
         typename MatmulKernel::Params params{problemShape, problemCount, gmGroupList, gmA,    layoutA,
                                              gmB,          layoutB,      gmC,         layoutC};
@@ -80,7 +80,7 @@ ASCENDCT_GLOBAL void grouped_matmul_m(GemmCoord problemShape, uint32_t problemCo
         using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 1>;
 
         // kernel level
-        using MatmulKernel = gemm::kernel::GroupedMatmulM<BlockMmad, BlockEpilogue, BlockScheduler, int64_t>;
+        using MatmulKernel = gemm::kernel::GroupedMatmulSliceM<BlockMmad, BlockEpilogue, BlockScheduler, int64_t>;
 
         typename MatmulKernel::Params params{problemShape, problemCount, gmGroupList, gmA,    layoutA,
                                              gmB,          layoutB,      gmC,         layoutC};

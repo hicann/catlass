@@ -28,7 +28,7 @@ template <
     class BlockScheduler_,
     class ElementGroupList_
 >
-class GroupedMatmulM {
+class GroupedMatmulSliceM {
 public:
     using BlockMmad = BlockMmad_;
     using ArchTag = typename BlockMmad::ArchTag;
@@ -79,7 +79,7 @@ public:
 
     // Methods
     ASCENDCT_DEVICE
-    GroupedMatmulM() {}
+    GroupedMatmulSliceM() {}
 
     template <int32_t CORE_TYPE = g_coreType>
     ASCENDCT_DEVICE

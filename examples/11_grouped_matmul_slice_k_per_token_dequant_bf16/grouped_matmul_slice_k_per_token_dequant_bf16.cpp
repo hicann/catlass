@@ -25,7 +25,7 @@
 #include "AscendCT/gemm/block/block_mmad.hpp"
 #include "AscendCT/gemm/block/block_swizzle.hpp"
 #include "AscendCT/gemm/dispatch_policy.hpp"
-#include "AscendCT/gemm/kernel/grouped_matmul_k_per_token_dequant.hpp"
+#include "AscendCT/gemm/kernel/grouped_matmul_slice_k_per_token_dequant.hpp"
 #include "AscendCT/gemm/gemm_type.hpp"
 #include "AscendCT/layout/layout.hpp"
 
@@ -33,7 +33,7 @@ using namespace AscendCT;
 using bfloat16 = op::bfloat16;
 
 ASCENDCT_GLOBAL
-void GroupedMatmulKPerTokenDequant(
+void GroupedMatmulSliceKPerTokenDequant(
     uint64_t fftsAddr,
     GemmCoord problemShape,
     uint32_t problemCount, GM_ADDR gmGroupList,
@@ -93,7 +93,7 @@ void GroupedMatmulKPerTokenDequant(
     using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 0>;
 
     // kernel level
-    using MatmulKernel = gemm::kernel::GroupedMatmulKPerTokenDequant<BlockMmad, BlockEpilogue, BlockScheduler,
+    using MatmulKernel = gemm::kernel::GroupedMatmulSliceKPerTokenDequant<BlockMmad, BlockEpilogue, BlockScheduler,
         int64_t>;
 
     typename MatmulKernel::Params params{
@@ -112,7 +112,7 @@ void GroupedMatmulKPerTokenDequant(
 }
 
 struct Options {
-    const std::string HELPER = "11_grouped_matmul_k_per_token_dequant_bf16 group_count m n k [device_id]";
+    const std::string HELPER = "11_grouped_matmul_slice_k_per_token_dequant_bf16 group_count m n k [device_id]";
 
     uint32_t groupCount{1};
     GemmCoord problemShape{128, 128, 128};
@@ -225,7 +225,7 @@ void Run(Options const & options)
 
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
-    GroupedMatmulKPerTokenDequant<<<aicCoreNum, nullptr, stream>>>(
+    GroupedMatmulSliceKPerTokenDequant<<<aicCoreNum, nullptr, stream>>>(
         fftsAddr,
         options.problemShape, problemCount, deviceGroupList,
         deviceA, layoutA,
@@ -241,7 +241,7 @@ void Run(Options const & options)
     ACL_CHECK(aclrtMemcpy(hostD.data(), sizeD, deviceD, sizeD, ACL_MEMCPY_DEVICE_TO_HOST));
 
     std::vector<float> hostGolden(lenD);
-    golden::ComputeGroupedMatmulKPerTokenDequant(
+    golden::ComputeGroupedMatmulSliceKPerTokenDequant(
         options.problemShape, problemCount, groupList,
         hostA, layoutA,
         hostB, layoutB,

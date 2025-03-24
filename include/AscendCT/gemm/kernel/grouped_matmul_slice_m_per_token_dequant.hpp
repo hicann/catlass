@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ASCENDCT_GEMM_KERNEL_GROUPED_MATMUL_M_PER_TOKEN_DEQUANT_MULTISTAGE_WORKSPACE_HPP
-#define ASCENDCT_GEMM_KERNEL_GROUPED_MATMUL_M_PER_TOKEN_DEQUANT_MULTISTAGE_WORKSPACE_HPP
+#ifndef ASCENDCT_GEMM_KERNEL_GROUPED_MATMUL_M_PER_TOKEN_DEQUANT_HPP
+#define ASCENDCT_GEMM_KERNEL_GROUPED_MATMUL_M_PER_TOKEN_DEQUANT_HPP
 
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/arch/cross_core_sync.hpp"
@@ -25,10 +25,9 @@ template <
     class BlockMmad_,
     class BlockEpilogue_,
     class BlockScheduler_,
-    uint32_t WORKSPACE_STAGES_,
     class ElementGroupList_
 >
-class GroupedMatmulMPerTokenDequantMultiStageWorkspace {
+class GroupedMatmulSliceMPerTokenDequant {
 public:
     using BlockMmad = BlockMmad_;
     using ArchTag = typename BlockMmad::ArchTag;
@@ -50,16 +49,43 @@ public:
     using LayoutD = typename BlockEpilogue::LayoutD;
     using EpilogueParams = typename BlockEpilogue::Params;
 
-    using BlockScheduler = BlockScheduler_;
-    static constexpr uint32_t WORKSPACE_STAGES = WORKSPACE_STAGES_;
     using ElementGroupList = ElementGroupList_;
+
+    using BlockScheduler = BlockScheduler_;
+
+    friend class AicFinishSync;
+    friend class AivWaitSync;
+
+    struct AicFinishSync {
+        using MatmulKernel = GroupedMatmulSliceMPerTokenDequant<BlockMmad, BlockEpilogue, BlockScheduler, ElementGroupList>;
+
+        ASCENDCT_DEVICE
+        void operator()() const
+        {
+            arch::CrossCoreSetFlagWithReverse<0x2, PIPE_FIX>(ptr->flagAicFinishStore);
+        }
+
+        MatmulKernel *ptr;
+    };
+
+    struct AivWaitSync {
+        using MatmulKernel = GroupedMatmulSliceMPerTokenDequant<BlockMmad, BlockEpilogue, BlockScheduler, ElementGroupList>;
+
+        ASCENDCT_DEVICE
+        void operator()() const
+        {
+            arch::CrossCoreWaitFlagWithReverse<0x2, PIPE_MTE3>(ptr->flagAicFinishStore);
+        }
+
+        MatmulKernel *ptr;
+    };
 
     /// Parameters structure
     struct Params {
         // Data members
         GemmCoord problemShape;
         uint32_t problemCount;
-        __gm__ ElementGroupList_ *ptrGroupList;
+        __gm__ ElementGroupList *ptrGroupList;
         __gm__ ElementA *ptrA;
         LayoutA layoutA;
         __gm__ ElementB *ptrB;
@@ -100,16 +126,7 @@ public:
 
     // Methods
     ASCENDCT_DEVICE
-    GroupedMatmulMPerTokenDequantMultiStageWorkspace()
-    {
-        arch::FlagID flagId = 0;
-        for (uint32_t stageId = 0; stageId < WORKSPACE_STAGES; ++stageId) {
-            flagAicFinishStoreList[stageId] = arch::CrossCoreFlag(flagId++);
-            flagAivFinishComputeList[stageId] = arch::CrossCoreFlag(flagId++);\
-            aicWaitFuncList[stageId] = {this, stageId};
-            aicSetFuncList[stageId] = {this, stageId};
-        }
-    }
+    GroupedMatmulSliceMPerTokenDequant() {}
 
     template <int32_t CORE_TYPE = g_coreType>
     ASCENDCT_DEVICE
@@ -127,6 +144,8 @@ public:
         gmA.SetGlobalBuffer(params.ptrA);
         AscendC::GlobalTensor<ElementB> gmB;
         gmB.SetGlobalBuffer(params.ptrB);
+        AscendC::GlobalTensor<ElementC> gmC;
+        gmC.SetGlobalBuffer(reinterpret_cast<__gm__ ElementC *>(params.ptrWorkspace));
         AscendC::GlobalTensor<ElementGroupList> groupList;
         groupList.SetGlobalBuffer(params.ptrGroupList);
 
@@ -134,13 +153,9 @@ public:
         uint32_t coreNum = AscendC::GetBlockNum();
         int64_t gmGroupOffsetA = 0;
         int64_t gmGroupOffsetB = 0;
+        int64_t gmGroupOffsetC = 0;
 
-        AscendC::GlobalTensor<ElementC> gmC;
-        gmC.SetGlobalBuffer(reinterpret_cast<__gm__ ElementC *>(params.ptrWorkspace));
-        auto layoutC = layout::RowMajor{L1TileShape::M * coreNum * WORKSPACE_STAGES, L1TileShape::N};
-
-        uint32_t stageId = 0;
-        uint32_t stageUsed = 0;
+        AicFinishSync aicFinishSync{this};
         uint32_t startCoreIdx = 0;
         for (uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx) {
             uint32_t currentM = (groupIdx == 0) ? groupList.GetValue(groupIdx) :
@@ -149,6 +164,7 @@ public:
 
             LayoutA layoutA = params.layoutA.GetTileLayout(inGroupProblemShape.GetCoordMK());
             LayoutB layoutB = params.layoutB;
+            LayoutC layoutC = LayoutC(inGroupProblemShape.m(), inGroupProblemShape.n());
 
             blockScheduler.Update(inGroupProblemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
             uint32_t coreLoops = blockScheduler.GetCoreLoops();
@@ -161,18 +177,10 @@ public:
                 GemmCoord blockCoord = blockScheduler.GetBlockCoord(loopIdx);
                 GemmCoord actualBlockShape = blockScheduler.GetActualBlockShape(blockCoord);
 
-                Callback callbackBeforeFixpipe{};
-                if (stageUsed == WORKSPACE_STAGES) {
-                    callbackBeforeFixpipe = MakeCallback(&aicWaitFuncList[stageId]);
-                } else {
-                    ++stageUsed;
-                }
-                Callback callbackAfterFixpipe = MakeCallback(&aicSetFuncList[stageId]);
-
                 // Compute initial location in logical coordinates
                 MatrixCoord offsetA{blockCoord.m() * L1TileShape::M, blockCoord.k() * L1TileShape::K};
                 MatrixCoord offsetB{blockCoord.k() * L1TileShape::K, blockCoord.n() * L1TileShape::N};
-                MatrixCoord offsetC{(stageId * coreNum + coreIdx) * L1TileShape::M, 0};
+                MatrixCoord offsetC{blockCoord.m() * L1TileShape::M, blockCoord.n() * L1TileShape::N};
                 int64_t gmOffsetA = layoutA.GetOffset(offsetA);
                 int64_t gmOffsetB = layoutB.GetOffset(offsetB);
                 int64_t gmOffsetC = layoutC.GetOffset(offsetC);
@@ -182,39 +190,29 @@ public:
                     blockMmad(
                         gmA[gmGroupOffsetA + gmOffsetA], layoutA,
                         gmB[gmGroupOffsetB + gmOffsetB], layoutB,
-                        gmC[gmOffsetC], layoutC,
-                        actualBlockShape,
-                        callbackBeforeFixpipe, callbackAfterFixpipe
+                        gmC[gmGroupOffsetC + gmOffsetC], layoutC,
+                        actualBlockShape, MakeCallback(&aicFinishSync)
                     );
                 } else {
-                    callbackBeforeFixpipe();
                     blockMmad(
                         gmA[gmGroupOffsetA + gmOffsetA], layoutA,
                         gmB[gmGroupOffsetB + gmOffsetB], layoutB,
-                        gmC[gmOffsetC], layoutC,
+                        gmC[gmGroupOffsetC + gmOffsetC], layoutC,
                         actualBlockShape
                     );
-                    callbackAfterFixpipe();
+                    aicFinishSync();
                 }
-
-                stageId = (stageId + 1 < WORKSPACE_STAGES) ? (stageId + 1) : 0;
             }
 
             gmGroupOffsetA += inGroupProblemShape.m() * inGroupProblemShape.k();
             gmGroupOffsetB += inGroupProblemShape.k() * inGroupProblemShape.n();
+            gmGroupOffsetC += inGroupProblemShape.m() * inGroupProblemShape.n();
 
             startCoreIdx = (startCoreIdx + coreLoops) % coreNum;
         }
 
         if constexpr (BlockMmad::DispatchPolicy::ASYNC) {
             blockMmad.SynchronizeBlock();
-        }
-
-        while (stageUsed > 0) {
-            uint32_t aivComputeStageId = (stageId >= stageUsed) ?
-                (stageId - stageUsed) : (stageId + WORKSPACE_STAGES - stageUsed);
-            arch::CrossCoreWaitFlag(flagAivFinishComputeList[aivComputeStageId]);
-            --stageUsed;
         }
     }
 
@@ -227,24 +225,24 @@ public:
 
         uint32_t coreIdx = AscendC::GetBlockIdx() / AscendC::GetSubBlockNum();
         uint32_t coreNum = AscendC::GetBlockNum();
+        int64_t gmGroupOffsetC = 0;
         int64_t gmGroupOffsetScale = 0;
         int64_t gmGroupOffsetPerTokenScale = 0;
         int64_t gmGroupOffsetD = 0;
 
+        AscendC::GlobalTensor<ElementC> gmC;
+        gmC.SetGlobalBuffer(reinterpret_cast<__gm__ ElementC *>(params.ptrWorkspace));
         AscendC::GlobalTensor<ElementGroupList> groupList;
         groupList.SetGlobalBuffer(params.ptrGroupList);
 
-        AscendC::GlobalTensor<ElementC> gmC;
-        gmC.SetGlobalBuffer(reinterpret_cast<__gm__ ElementC *>(params.ptrWorkspace));
-        auto layoutC = layout::RowMajor{L1TileShape::M * coreNum * WORKSPACE_STAGES, L1TileShape::N};
-
-        uint32_t stageId = 0;
+        AivWaitSync aicFinishSync{this};
         uint32_t startCoreIdx = 0;
         for (uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx) {
             uint32_t currentM = (groupIdx == 0) ? groupList.GetValue(groupIdx) :
                 (groupList.GetValue(groupIdx) - groupList.GetValue(groupIdx - 1));
             GemmCoord inGroupProblemShape{currentM, params.problemShape.n(), params.problemShape.k()};
 
+            LayoutC layoutC = LayoutC(inGroupProblemShape.m(), inGroupProblemShape.n());
             LayoutScale layoutScale = params.layoutScale;
             LayoutPerTokenScale layoutPerTokenScale =
                 params.layoutPerTokenScale.GetTileLayout(inGroupProblemShape.template GetCoordByAxis<0>());
@@ -266,18 +264,18 @@ public:
                 GemmCoord blockCoordMNK = blockScheduler.GetBlockCoord(loopIdx);
                 GemmCoord actualBlockShapeMNK = blockScheduler.GetActualBlockShape(blockCoordMNK);
 
-                MatrixCoord offsetC{(stageId * coreNum + coreIdx) * L1TileShape::M, 0};
-                int64_t gmOffsetC = layoutC.GetOffset(offsetC);
-                auto gmBlockC = gmC[gmOffsetC];
+                int64_t gmInGroupOffsetC = layoutC.GetOffset(blockCoordMNK.GetCoordMN() * blockShapeMNK.GetCoordMN());
+                auto gmBlockC = gmC[gmGroupOffsetC + gmInGroupOffsetC];
                 auto layoutBlockC = layoutC.GetTileLayout(actualBlockShapeMNK.GetCoordMN());
 
-                arch::CrossCoreWaitFlag(flagAicFinishStoreList[stageId]);
-                blockEpilogue(blockShapeMNK, blockCoordMNK, actualBlockShapeMNK, gmBlockC, layoutBlockC);
-                arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(flagAivFinishComputeList[stageId]);
-
-                stageId = (stageId + 1 < WORKSPACE_STAGES) ? (stageId + 1) : 0;
+                blockEpilogue(
+                    blockShapeMNK, blockCoordMNK,
+                    actualBlockShapeMNK, gmBlockC,
+                    layoutBlockC, MakeCallback(&aicFinishSync)
+                );
             }
 
+            gmGroupOffsetC += inGroupProblemShape.m() * inGroupProblemShape.n();
             gmGroupOffsetScale += inGroupProblemShape.n();
             gmGroupOffsetPerTokenScale += inGroupProblemShape.m();
             gmGroupOffsetD += inGroupProblemShape.m() * inGroupProblemShape.n();
@@ -287,51 +285,12 @@ public:
     }
 
 private:
-    friend struct AicWaitFunc;
-    friend struct AicSetFunc;
-
-    struct AicWaitFunc {
-        using MatmulKernel = GroupedMatmulMPerTokenDequantMultiStageWorkspace<BlockMmad, BlockEpilogue, BlockScheduler,
-            WORKSPACE_STAGES, ElementGroupList>;
-
-        ASCENDCT_DEVICE
-        AicWaitFunc() = default;
-
-        ASCENDCT_DEVICE
-        void operator()() const
-        {
-            arch::CrossCoreWaitFlag(ptr->flagAivFinishComputeList[stageId]);
-        }
-
-        MatmulKernel *ptr{nullptr};
-        uint32_t stageId;
-    };
-
-    struct AicSetFunc {
-        using MatmulKernel = GroupedMatmulMPerTokenDequantMultiStageWorkspace<BlockMmad, BlockEpilogue, BlockScheduler,
-            WORKSPACE_STAGES, ElementGroupList>;
-
-        ASCENDCT_DEVICE
-        AicSetFunc() = default;
-
-        ASCENDCT_DEVICE
-        void operator()() const
-        {
-            arch::CrossCoreSetFlag<0x2, PIPE_FIX>(ptr->flagAicFinishStoreList[stageId]);
-        }
-
-        MatmulKernel *ptr{nullptr};
-        uint32_t stageId;
-    };
-
-    arch::CrossCoreFlag flagAicFinishStoreList[WORKSPACE_STAGES];
-    arch::CrossCoreFlag flagAivFinishComputeList[WORKSPACE_STAGES];
-
-    AicWaitFunc aicWaitFuncList[WORKSPACE_STAGES];
-    AicSetFunc aicSetFuncList[WORKSPACE_STAGES];
+    static constexpr arch::FlagID FLAG_AIC_FINISH_STORE = 0;
+    static constexpr arch::FlagID RV_FLAG_AIC_FINISH_STORE = 1;
+    arch::CrossCoreFlagWithReverse<> flagAicFinishStore{FLAG_AIC_FINISH_STORE, RV_FLAG_AIC_FINISH_STORE};
     arch::Resource<ArchTag> resource;
 };
 
 } // namespace AscendCT::gemm::kernel
 
-#endif // ASCENDCT_GEMM_KERNEL_GROUPED_MATMUL_M_PER_TOKEN_DEQUANT_MULTISTAGE_WORKSPACE_HPP
+#endif // ASCENDCT_GEMM_KERNEL_GROUPED_MATMUL_M_PER_TOKEN_DEQUANT_HPP

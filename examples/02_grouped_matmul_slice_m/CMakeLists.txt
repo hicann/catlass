@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Huawei Technologies Co., Ltd.
+# Copyright (c) 2024 Huawei Technologies Co., Ltd.
 # This file is a part of the CANN Open Software.
 # Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -7,6 +7,6 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 
 AscendCT_example_add_executable(
-    11_grouped_matmul_k_per_token_dequant_bf16
-    grouped_matmul_k_per_token_dequant_bf16.cpp
+    02_grouped_matmul_slice_m
+    grouped_matmul_slice_m.cpp
 )
