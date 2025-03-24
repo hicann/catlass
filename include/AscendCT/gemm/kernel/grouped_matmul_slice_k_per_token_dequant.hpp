@@ -27,7 +27,7 @@ template <
     class BlockScheduler_,
     class ElementGroupList_
 >
-class GroupedMatmulKPerTokenDequant {
+class GroupedMatmulSliceKPerTokenDequant {
 public:
     using BlockMmad = BlockMmad_;
     using ArchTag = typename BlockMmad::ArchTag;
@@ -57,7 +57,7 @@ public:
     friend class AivWaitSync;
 
     struct AicFinishSync {
-        using MatmulKernel = GroupedMatmulKPerTokenDequant<BlockMmad, BlockEpilogue, BlockScheduler, ElementGroupList>;
+        using MatmulKernel = GroupedMatmulSliceKPerTokenDequant<BlockMmad, BlockEpilogue, BlockScheduler, ElementGroupList>;
 
         ASCENDCT_DEVICE
         void operator()() const
@@ -69,7 +69,7 @@ public:
     };
 
     struct AivWaitSync {
-        using MatmulKernel = GroupedMatmulKPerTokenDequant<BlockMmad, BlockEpilogue, BlockScheduler, ElementGroupList>;
+        using MatmulKernel = GroupedMatmulSliceKPerTokenDequant<BlockMmad, BlockEpilogue, BlockScheduler, ElementGroupList>;
 
         ASCENDCT_DEVICE
         void operator()() const
@@ -126,7 +126,7 @@ public:
 
     // Methods
     ASCENDCT_DEVICE
-    GroupedMatmulKPerTokenDequant() {}
+    GroupedMatmulSliceKPerTokenDequant() {}
 
     template <int32_t CORE_TYPE = g_coreType>
     ASCENDCT_DEVICE

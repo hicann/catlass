@@ -20,7 +20,7 @@
 #include "AscendCT/gemm/block/block_mmad.hpp"
 #include "AscendCT/gemm/block/block_swizzle.hpp"
 #include "AscendCT/gemm/dispatch_policy.hpp"
-#include "AscendCT/gemm/kernel/grouped_matmul_m.hpp"
+#include "AscendCT/gemm/kernel/grouped_matmul_slice_m.hpp"
 #include "AscendCT/gemm/gemm_type.hpp"
 #include "AscendCT/layout/layout.hpp"
 
@@ -33,7 +33,7 @@ template <
     class LayoutC
 >
 ASCENDCT_GLOBAL
-void GroupedMatmulM(
+void GroupedMatmulSliceM(
     GemmCoord problemShape,
     uint32_t problemCount, GM_ADDR gmGroupList,
     GM_ADDR gmA, LayoutA layoutA,
@@ -68,7 +68,7 @@ void GroupedMatmulM(
         using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 0>;
 
         // kernel level
-        using MatmulKernel = gemm::kernel::GroupedMatmulM<BlockMmad, BlockEpilogue, BlockScheduler, int64_t>;
+        using MatmulKernel = gemm::kernel::GroupedMatmulSliceM<BlockMmad, BlockEpilogue, BlockScheduler, int64_t>;
 
         typename MatmulKernel::Params params{
             problemShape, problemCount, gmGroupList, gmA, layoutA, gmB, layoutB, gmC, layoutC
@@ -104,7 +104,7 @@ void GroupedMatmulM(
         using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 1>;
 
         // kernel level
-        using MatmulKernel = gemm::kernel::GroupedMatmulM<BlockMmad, BlockEpilogue, BlockScheduler, int64_t>;
+        using MatmulKernel = gemm::kernel::GroupedMatmulSliceM<BlockMmad, BlockEpilogue, BlockScheduler, int64_t>;
 
         typename MatmulKernel::Params params{
             problemShape, problemCount, gmGroupList, gmA, layoutA, gmB, layoutB, gmC, layoutC
@@ -117,7 +117,7 @@ void GroupedMatmulM(
 }
 
 struct Options {
-    const std::string HELPER = "02_grouped_matmul_m group_count m n k [device_id]";
+    const std::string HELPER = "02_grouped_matmul_slice_m group_count m n k [device_id]";
 
     uint32_t groupCount{1};
     GemmCoord problemShape{128, 128, 128};
@@ -205,7 +205,7 @@ void Run(Options const &options)
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
-    GroupedMatmulM<<<aicCoreNum, nullptr, stream>>>(
+    GroupedMatmulSliceM<<<aicCoreNum, nullptr, stream>>>(
         options.problemShape, problemCount, deviceGroupList,
         deviceA, layoutA,
         deviceB, layoutB,

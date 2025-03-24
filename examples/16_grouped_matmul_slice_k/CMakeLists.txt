@@ -7,6 +7,6 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 
 AscendCT_example_add_executable(
-    10_grouped_matmul_m_per_token_dequant_bf16
-    grouped_matmul_m_per_token_dequant_bf16.cpp
+    16_grouped_matmul_slice_k
+    grouped_matmul_slice_k.cpp
 )
