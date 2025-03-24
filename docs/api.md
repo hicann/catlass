@@ -1,11 +1,11 @@
-# AscendC Template Gemm API
+# Ascend C Template Gemm API
 
-AscendC Template针对NPU上不同层级上执行的矩阵乘累加（MMAD）操作，提供了一个统一的编程模型。AscendC Template的Gemm API对应于以下分层，由高到低分别是：
+Ascend C Template针对NPU上不同层级上执行的矩阵乘累加（MMAD）操作，提供了一个统一的编程模型。Ascend C Template的Gemm API对应于以下分层，由高到低分别是：
 ![image](images/api_level.png)
 
 
-# AscendC Template Gemm模型
-AscendC Template基于上述的分层结构，实现了经典“三层嵌套循环”的矩阵乘算法。
+# Ascend C Template Gemm模型
+Ascend C Template基于上述的分层结构，实现了经典“三层嵌套循环”的矩阵乘算法。
 
 以下伪代码描述了针对像`mmad`这样的单核内同步矩阵乘法指令的Matmul 内核的模型。整个算子被称为“Matmul”，这是伪代码，仅用于说明哪些层次的部分对应于矩阵乘的内部或外部循环。
 
@@ -39,10 +39,10 @@ for (int block_m = 0; block_m < MatmulM; block_m += BlockTileM) {
 在两重嵌套的 `for`循环内部，将全局内存分片，然后将分片搬运到更“局部”的内存（如L1 Buffer或L0 Buffer）并执行MMAD计算。这些分片拷贝和分片MMAD计算的迭代通常是完全静态的，并且完全展开。
 
 
-# AscendC Template Gemm组件
+# Ascend C Template Gemm组件
 
 
-AscendC Template使用以下组件表达上述循环嵌套，这些组件针对数据类型、数据排布和数学指令进行特化。
+Ascend C Template使用以下组件表达上述循环嵌套，这些组件针对数据类型、数据排布和数学指令进行特化。
 
 
 | API 层级             | API 类 和/或 函数 名称                   |
@@ -53,7 +53,7 @@ AscendC Template使用以下组件表达上述循环嵌套，这些组件针对�
 | Tile (MMAD and Copy) | `TileMmad` and `TileCopy` <br /> |
 | Basic                 | `AscendC::Mmad` and `AscendC::DataCopy` |
 
-在AscendC Template 中，我们通过首先在Kernel层组合Block主循环和Block后处理，然后用主机侧适配器包装它们来组装内核。
+在Ascend C Template 中，我们通过首先在Kernel层组合Block主循环和Block后处理，然后用主机侧适配器包装它们来组装内核。
 
 
 用户使用这些组件组装内核时，需要通过以下顺序实例化。
@@ -61,7 +61,7 @@ AscendC Template使用以下组件表达上述循环嵌套，这些组件针对�
 2. 将Blocks组合在一起构建成Kernel。
 3. 用Device层适配器包装Kernel。
 
-这个顺序也反映在AscendC Template的示例中[examples/00_basic_matmul](../examples/00_basic_matmul)，如下文摘录所示。
+这个顺序也反映在Ascend C Template的示例中[examples/00_basic_matmul](../examples/00_basic_matmul)，如下文摘录所示。
 
 
 ```c++
@@ -92,7 +92,7 @@ using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<>;
 using MatmulKernel = gemm::kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 
 // 第四步：将kernel放入device适配器中，host侧处理kernel使用
-using MatmulDevice = AscendCT::gemm::device::DeviceGemm<MatmulKernel>;
+using Matmul = AscendCT::gemm::device::DeviceGemm<MatmulKernel>;
 ```
 
 
@@ -149,7 +149,7 @@ struct BlockMmad {};
 ### Block Dispatch Policies
 
 `BlockMmad`的实现不是通用的。相反，它们必须针对每个算法和NPU架构特例化。用户可以通过选择与该特例化匹配的模板参数来调度到`BlockMmad`的特例化。
-AscendC Template 采用基于标签的调度策略类型来特例化Block层Mmad实现，并为其提供调优能力。
+Ascend C Template 采用基于标签的调度策略类型来特例化Block层Mmad实现，并为其提供调优能力。
 
 以下给出了一个Dispatch Policy的样例，对应AtlasA2的架构下，采用L1 Buffer上pingpong Buffer，启用unitflag优化：
 
@@ -178,7 +178,7 @@ struct MmadAtlasA2Pingpong {
 ### Epilogue
 
 
-尾处理实现了涉及输出矩阵的逐元素操作。用户可以提供自定义的尾处理，或者使用标准尾处理之一。这些尾处理位于目录include/AscendCT/epilogue/block/中，包括像`AscendCT::epilogue::block::BlockEpilogue`这样的类。AscendC Template提供的尾处理不在include/AscendCT/gemm目录下，也不在`AscendCT::gemm`命名空间中，因为它们可以用于除Gemm之外的其他计算。
+尾处理实现了涉及输出矩阵的逐元素操作。用户可以提供自定义的尾处理，或者使用标准尾处理之一。这些尾处理位于目录include/AscendCT/epilogue/block/中，包括像`AscendCT::epilogue::block::BlockEpilogue`这样的类。Ascend C Template提供的尾处理不在include/AscendCT/gemm目录下，也不在`AscendCT::gemm`命名空间中，因为它们可以用于除Gemm之外的其他计算。
 
 
 ## Kernel API

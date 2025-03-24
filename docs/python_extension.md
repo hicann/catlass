@@ -1,13 +1,13 @@
 # python扩展
 
-为方便开发者使用AscendC Template算子，代码仓基于pybind11和torch提供了使用python调用AscendC Template算子的示例.
+为方便开发者使用Ascend C Template算子，代码仓基于pybind11和torch提供了使用python调用Ascend C Template算子的示例.
 
 - 注意：建议使用pybind扩展.目前纯torch扩展不支持NPU，在使用torch扩展时，实际上会把NPU Tensor转换到CPU Tensor，再把CPU Tensor转换回NPU Tensor，因此性能会有较大影响.
 
 ## 代码结构
 
 ```bash
-python_extension                     
+python_extension
 ├── CMakeLists.txt              # CMake构建脚本
 ├── AscendCT_kernel_wrapper.cpp  # 将at::Tensor类型的输入转换为kernel输入
 ├── AscendCT_kernel_wrapper.h    # 头文件
@@ -79,7 +79,7 @@ class AscendCTTest(TestCase):
         result = torch.ops.AscendCTTorch.basic_matmul(a,b,"float16")
         golden = torch.mm(a,b)
         self.assertRtolEqual(result,golden)
-        
+
 if __name__ == "__main__":
     run_tests()
 ```

@@ -88,17 +88,17 @@ void GroupedMatmulMPerTokenDequant(
     using TileOneBlkColumnBroadcastMul = epilogue::tile::TileOneBlkColumnBroadcastMul<ArchTag,
         OneBlkColumnBroadcastMulType, EpilogueTileShape>;
     using TileCopy = epilogue::tile::TileCopy<ArchTag, CType, ScaleType, PerTokenScaleType, DType>;
-    using BlockScheduler = epilogue::tile::EpilogueHorizontalTileSwizzle;
+    using TileScheduler = epilogue::tile::EpilogueHorizontalTileSwizzle;
 
     using BlockEpilogue = epilogue::block::BlockEpilogue<EpilogueDispatchPolicy, CType, ScaleType, PerTokenScaleType,
-        DType, TileRowBroadcastMul, TileBroadcastOneBlk, TileOneBlkColumnBroadcastMul, TileCopy, BlockScheduler>;
+        DType, TileRowBroadcastMul, TileBroadcastOneBlk, TileOneBlkColumnBroadcastMul, TileCopy, TileScheduler>;
 
-    using MatmulBlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 0>;
+    using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 0>;
 
     // kernel level
     using ElementGroupList = int64_t;
     using MatmulKernel = gemm::kernel::GroupedMatmulMPerTokenDequantMultiStageWorkspace<BlockMmad, BlockEpilogue,
-        MatmulBlockScheduler, workspaceStages, ElementGroupList>;
+        BlockScheduler, workspaceStages, ElementGroupList>;
 
     typename MatmulKernel::Params params{
         problemShape, problemCount, gmGroupList,

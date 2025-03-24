@@ -49,7 +49,7 @@ include目录下的头文件是按照如下的文件层级进行组织的。
 │       │   │   ├── matmul_epilogue.hpp // kernel层的带后处理的matmul（如matmul+add）的实现
 │       │   │   ├── basic_matmul.hpp // kernel层的matmul实现
 │       │   │   └── padding_matmul.hpp  // kernel层的paddingMatmul实现
-│       │   ├── GemmType // GemmType的定义
+│       │   ├── gemm_type.hpp // GemmType的定义
 │       │   └── tile
 │       │       ├── copy_gm_to_l1.hpp // tile层GM到L1搬运的具体实现
 │       │       ├── copy_l0c_to_gm.hpp // tile层L0c到GM搬运的具体实现
