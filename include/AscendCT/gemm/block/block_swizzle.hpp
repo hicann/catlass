@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ASCENDCT_MATMUL_BLOCK_BLOCK_SWIZZLE_HPP
-#define ASCENDCT_MATMUL_BLOCK_BLOCK_SWIZZLE_HPP
+#ifndef ASCENDCT_GEMM_BLOCK_BLOCK_SWIZZLE_HPP
+#define ASCENDCT_GEMM_BLOCK_BLOCK_SWIZZLE_HPP
 
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/detail/alignment.hpp"
@@ -20,9 +20,9 @@ namespace AscendCT::gemm::block {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// Block swizzling function for Matmuls
+/// Block swizzling function for Gemms
 template <uint32_t SwizzleOffset = 1, uint32_t SwizzleDirection = 0>
-struct MatmulIdentityBlockSwizzle {
+struct GemmIdentityBlockSwizzle {
     /// Data members
 
     GemmCoord problemShape;
@@ -32,17 +32,17 @@ struct MatmulIdentityBlockSwizzle {
     /// Methods
 
     ASCENDCT_DEVICE
-    MatmulIdentityBlockSwizzle() {}
+    GemmIdentityBlockSwizzle() {}
 
     ASCENDCT_DEVICE
-    MatmulIdentityBlockSwizzle(GemmCoord const &problemShape_, MatrixCoord const &tileMN_)
+    GemmIdentityBlockSwizzle(GemmCoord const &problemShape_, MatrixCoord const &tileMN_)
         : problemShape(problemShape_), tileMN(tileMN_)
     {
         loopsMN = CeilDiv(MatrixCoord(problemShape.GetCoordMN()), tileMN);
     }
 
     ASCENDCT_DEVICE
-    MatmulIdentityBlockSwizzle(GemmCoord const &problemShape_, MatrixCoord const &tileMN_,
+    GemmIdentityBlockSwizzle(GemmCoord const &problemShape_, MatrixCoord const &tileMN_,
         MatrixCoord const &loopsMN_)
         : problemShape(problemShape_), tileMN(tileMN_), loopsMN(loopsMN_) {}
 
@@ -124,9 +124,9 @@ struct MatmulIdentityBlockSwizzle {
     }
 };
 
-/// Block swizzling function for Splitk Matmuls
+/// Block swizzling function for Splitk Gemms
 template <uint32_t SwizzleOffset = 1, uint32_t SwizzleDirection = 0>
-struct SplitkMatmulIdentityBlockSwizzle {
+struct SplitkGemmIdentityBlockSwizzle {
     /// Data members
 
     GemmCoord problemShape;
@@ -137,10 +137,10 @@ struct SplitkMatmulIdentityBlockSwizzle {
     /// Methods
 
     ASCENDCT_DEVICE
-    SplitkMatmulIdentityBlockSwizzle() {}
+    SplitkGemmIdentityBlockSwizzle() {}
 
     ASCENDCT_DEVICE
-    SplitkMatmulIdentityBlockSwizzle(
+    SplitkGemmIdentityBlockSwizzle(
         GemmCoord const &problemShape_, GemmCoord const &tileShape_, uint32_t splitkFactor_ = 1
     ) : problemShape(problemShape_), tileShape(tileShape_), splitkFactor(splitkFactor_)
     {
@@ -237,4 +237,4 @@ struct SplitkMatmulIdentityBlockSwizzle {
 
 }  // namespace AscendCT::gemm::block
 
-#endif  // ASCENDCT_MATMUL_BLOCK_BLOCK_SWIZZLE_HPP
+#endif  // ASCENDCT_GEMM_BLOCK_BLOCK_SWIZZLE_HPP

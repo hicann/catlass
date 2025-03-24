@@ -26,7 +26,7 @@
 #include "AscendCT/gemm/block/block_swizzle.hpp"
 #include "AscendCT/gemm/dispatch_policy.hpp"
 #include "AscendCT/gemm/kernel/grouped_matmul_m_per_token_dequant_multistage_workspace.hpp"
-#include "AscendCT/gemm/matmul_type.hpp"
+#include "AscendCT/gemm/GemmType"
 #include "AscendCT/layout/layout.hpp"
 
 using namespace AscendCT;
@@ -65,21 +65,21 @@ void GroupedMatmulMPerTokenDequant(
     >;
     using L0TileShape = GemmShape<128, 256, 128>;
 
-    using AType = gemm::MatmulType<int8_t, layout::RowMajor>;
-    using BType = gemm::MatmulType<int8_t, LayoutB>;
-    using CType = gemm::MatmulType<int32_t, layout::RowMajor>;
+    using AType = gemm::GemmType<int8_t, layout::RowMajor>;
+    using BType = gemm::GemmType<int8_t, LayoutB>;
+    using CType = gemm::GemmType<int32_t, layout::RowMajor>;
 
     using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
 
     constexpr uint32_t ubStages = 2;
     using EpilogueDispatchPolicy = epilogue::EpilogueAtlasA2PerTokenDequant<ubStages>;
-    using ScaleType = gemm::MatmulType<bfloat16_t, layout::VectorLayout>;
-    using PerTokenScaleType = gemm::MatmulType<bfloat16_t, layout::VectorLayout>;
-    using DType = gemm::MatmulType<bfloat16_t, layout::RowMajor>;
+    using ScaleType = gemm::GemmType<bfloat16_t, layout::VectorLayout>;
+    using PerTokenScaleType = gemm::GemmType<bfloat16_t, layout::VectorLayout>;
+    using DType = gemm::GemmType<bfloat16_t, layout::RowMajor>;
 
-    using RowBroadcastMulType = gemm::MatmulType<float, layout::RowMajor>;
-    using BroadcastOneBlkType = gemm::MatmulType<float, layout::RowMajor>;
-    using OneBlkColumnBroadcastMulType = gemm::MatmulType<float, layout::RowMajor>;
+    using RowBroadcastMulType = gemm::GemmType<float, layout::RowMajor>;
+    using BroadcastOneBlkType = gemm::GemmType<float, layout::RowMajor>;
+    using OneBlkColumnBroadcastMulType = gemm::GemmType<float, layout::RowMajor>;
 
     using EpilogueTileShape = MatrixShape<32, 256>;
     using TileRowBroadcastMul = epilogue::tile::TileRowBroadcastMul<ArchTag, RowBroadcastMulType, EpilogueTileShape>;
@@ -93,7 +93,7 @@ void GroupedMatmulMPerTokenDequant(
     using BlockEpilogue = epilogue::block::BlockEpilogue<EpilogueDispatchPolicy, CType, ScaleType, PerTokenScaleType,
         DType, TileRowBroadcastMul, TileBroadcastOneBlk, TileOneBlkColumnBroadcastMul, TileCopy, TileScheduler>;
 
-    using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 0>;
+    using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 0>;
 
     // kernel level
     using ElementGroupList = int64_t;

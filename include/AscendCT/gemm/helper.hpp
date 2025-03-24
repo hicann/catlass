@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ASCENDCT_MATMUL_HELPER_HPP
-#define ASCENDCT_MATMUL_HELPER_HPP
+#ifndef ASCENDCT_GEMM_HELPER_HPP
+#define ASCENDCT_GEMM_HELPER_HPP
 
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/layout/layout.hpp"
@@ -103,23 +103,23 @@ struct L1ATypeSelector {
 };
 
 template<class Element>
-struct L1ATypeSelector<gemm::MatmulType<Element, layout::RowMajor>> {
-    using L1AType = gemm::MatmulType<Element, layout::zN>;
+struct L1ATypeSelector<gemm::GemmType<Element, layout::RowMajor>> {
+    using L1AType = gemm::GemmType<Element, layout::zN>;
 };
 
 template<class Element>
-struct L1ATypeSelector<gemm::MatmulType<Element, layout::PaddingRowMajor>> {
-    using L1AType = gemm::MatmulType<Element, layout::zN>;
+struct L1ATypeSelector<gemm::GemmType<Element, layout::PaddingRowMajor>> {
+    using L1AType = gemm::GemmType<Element, layout::zN>;
 };
 
 template<class Element>
-struct L1ATypeSelector<gemm::MatmulType<Element, layout::ColumnMajor>> {
-    using L1AType = gemm::MatmulType<Element, layout::nZ>;
+struct L1ATypeSelector<gemm::GemmType<Element, layout::ColumnMajor>> {
+    using L1AType = gemm::GemmType<Element, layout::nZ>;
 };
 
 template<class Element>
-struct L1ATypeSelector<gemm::MatmulType<Element, layout::PaddingColumnMajor>> {
-    using L1AType = gemm::MatmulType<Element, layout::nZ>;
+struct L1ATypeSelector<gemm::GemmType<Element, layout::PaddingColumnMajor>> {
+    using L1AType = gemm::GemmType<Element, layout::nZ>;
 };
 
 template<class GmBType>
@@ -129,28 +129,28 @@ struct L1BTypeSelector {
 };
 
 template<class Element>
-struct L1BTypeSelector<gemm::MatmulType<Element, layout::RowMajor>> {
-    using L1BType = gemm::MatmulType<Element, layout::zN>;
+struct L1BTypeSelector<gemm::GemmType<Element, layout::RowMajor>> {
+    using L1BType = gemm::GemmType<Element, layout::zN>;
 };
 
 template<class Element>
-struct L1BTypeSelector<gemm::MatmulType<Element, layout::zN>> {
-    using L1BType = gemm::MatmulType<Element, layout::zN>;
+struct L1BTypeSelector<gemm::GemmType<Element, layout::zN>> {
+    using L1BType = gemm::GemmType<Element, layout::zN>;
 };
 
 template<class Element>
-struct L1BTypeSelector<gemm::MatmulType<Element, layout::PaddingRowMajor>> {
-    using L1BType = gemm::MatmulType<Element, layout::zN>;
+struct L1BTypeSelector<gemm::GemmType<Element, layout::PaddingRowMajor>> {
+    using L1BType = gemm::GemmType<Element, layout::zN>;
 };
 
 template<class Element>
-struct L1BTypeSelector<gemm::MatmulType<Element, layout::ColumnMajor>> {
-    using L1BType = gemm::MatmulType<Element, layout::nZ>;
+struct L1BTypeSelector<gemm::GemmType<Element, layout::ColumnMajor>> {
+    using L1BType = gemm::GemmType<Element, layout::nZ>;
 };
 
 template<class Element>
-struct L1BTypeSelector<gemm::MatmulType<Element, layout::PaddingColumnMajor>> {
-    using L1BType = gemm::MatmulType<Element, layout::nZ>;
+struct L1BTypeSelector<gemm::GemmType<Element, layout::PaddingColumnMajor>> {
+    using L1BType = gemm::GemmType<Element, layout::nZ>;
 };
 
 template<class Element, class Layout, class Enable = void>
@@ -176,4 +176,4 @@ struct L1AlignHelperTla<Element, Layout, std::enable_if_t<tla::detail::isColumnM
 
 } // namespace AscendCT::gemm::helper
 
-#endif // ASCENDCT_MATMUL_HELPER_HPP
+#endif // ASCENDCT_GEMM_HELPER_HPP

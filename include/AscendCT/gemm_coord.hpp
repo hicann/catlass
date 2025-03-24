@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ASCENDCT_MATMUL_COORD_HPP
-#define ASCENDCT_MATMUL_COORD_HPP
+#ifndef ASCENDCT_GEMM_COORD_HPP
+#define ASCENDCT_GEMM_COORD_HPP
 
 #include "AscendCT/coord.hpp"
 
@@ -63,7 +63,7 @@ struct GemmShape {
 };
 
 /// GemmCoord is a structure derived from Coord<3> that specifies a location within the
-/// coordinate space of a Matmul problem.
+/// coordinate space of a Gemm problem.
 struct GemmCoord : public Coord<3, uint32_t> {
     /// Integer-valued index
     using Index = uint32_t;
@@ -71,13 +71,13 @@ struct GemmCoord : public Coord<3, uint32_t> {
     /// Base type is a Coord of rank=3
     using Base = Coord<3, Index>;
 
-    /// Matmul M dimension - rows of the output C matrix
+    /// Gemm M dimension - rows of the output C matrix
     static constexpr int M_INDEX = 0;
 
-    /// Matmul N dimension - columns of the output C matrix
+    /// Gemm N dimension - columns of the output C matrix
     static constexpr int N_INDEX = 1;
 
-    /// Matmul K dimension - inner dimension of the Matmul problem
+    /// Gemm K dimension - inner dimension of the Gemm problem
     static constexpr int K_INDEX = 2;
 
     /// Default ctor
@@ -92,42 +92,42 @@ struct GemmCoord : public Coord<3, uint32_t> {
     ASCENDCT_HOST_DEVICE
     GemmCoord(Index m, Index n, Index k) : Base(MakeCoord(m, n, k)) {}
 
-    /// Returns the Matmul M coordinate
+    /// Returns the Gemm M coordinate
     ASCENDCT_HOST_DEVICE
     Index const &m() const
     {
         return this->At(M_INDEX);
     }
 
-    /// Returns reference to the Matmul M coordinate
+    /// Returns reference to the Gemm M coordinate
     ASCENDCT_HOST_DEVICE
     Index &m()
     {
         return this->At(M_INDEX);
     }
 
-    /// Returns the Matmul N coordinate
+    /// Returns the Gemm N coordinate
     ASCENDCT_HOST_DEVICE
     Index const &n() const
     {
         return this->At(N_INDEX);
     }
 
-    /// Returns reference to the Matmul N coordinate
+    /// Returns reference to the Gemm N coordinate
     ASCENDCT_HOST_DEVICE
     Index &n()
     {
         return this->At(N_INDEX);
     }
 
-    /// Returns the Matmul K coordinate
+    /// Returns the Gemm K coordinate
     ASCENDCT_HOST_DEVICE
     Index const &k() const
     {
         return this->At(K_INDEX);
     }
 
-    /// Returns reference to the Matmul K coordinate
+    /// Returns reference to the Gemm K coordinate
     ASCENDCT_HOST_DEVICE
     Index &k()
     {
@@ -155,4 +155,4 @@ struct GemmCoord : public Coord<3, uint32_t> {
 
 } // namespace AscendCT
 
-#endif  // ASCENDCT_MATMUL_COORD_HPP
+#endif  // ASCENDCT_GEMM_COORD_HPP

@@ -18,7 +18,7 @@
 #include "AscendCT/gemm/block/block_swizzle.hpp"
 #include "AscendCT/gemm/dispatch_policy.hpp"
 #include "AscendCT/gemm/kernel/optimized_matmul.hpp"
-#include "AscendCT/gemm/matmul_type.hpp"
+#include "AscendCT/gemm/GemmType"
 
 using namespace AscendCT;
 
@@ -54,7 +54,7 @@ ASCENDCT_DEVICE void LaunchMatmulDynamicSwizzle(GemmCoord problemShape, GM_ADDR 
                                                LayoutWA layoutWA, GM_ADDR gmWB, LayoutWB layoutWB)
 {
     if (problemShape.m() > problemShape.n()) {
-        using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 0>;
+        using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 0>;
         using BlockEpilogue = void;
         // kernel level
         using MatmulKernel = gemm::kernel::OptimizedMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
@@ -64,7 +64,7 @@ ASCENDCT_DEVICE void LaunchMatmulDynamicSwizzle(GemmCoord problemShape, GM_ADDR 
         MatmulKernel matmul;
         matmul(params);
     } else {
-        using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 1>;
+        using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 1>;
         using BlockEpilogue = void;
         // kernel level
         using MatmulKernel = gemm::kernel::OptimizedMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
@@ -102,9 +102,9 @@ ASCENDCT_GLOBAL void optimized_matmul(uint64_t fftsAddr, GemmCoord problemShape,
         // no need to padding A and B.
         using LayoutWA = LayoutA;
         using LayoutWB = LayoutB;
-        using AType = gemm::MatmulType<half, LayoutWA>;
-        using BType = gemm::MatmulType<half, LayoutWB>;
-        using CType = gemm::MatmulType<half, LayoutC>;
+        using AType = gemm::GemmType<half, LayoutWA>;
+        using BType = gemm::GemmType<half, LayoutWB>;
+        using CType = gemm::GemmType<half, LayoutC>;
         using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
         LayoutWA layoutWA = LayoutWA(layoutA.shape(0), layoutA.shape(1));
         LayoutWB layoutWB = LayoutWB(layoutB.shape(0), layoutB.shape(1));
@@ -115,9 +115,9 @@ ASCENDCT_GLOBAL void optimized_matmul(uint64_t fftsAddr, GemmCoord problemShape,
         using LayoutWA = LayoutA;
         using LayoutWB = std::conditional_t<std::is_same_v<LayoutB, layout::RowMajor>, layout::PaddingRowMajor,
                                             layout::PaddingColumnMajor>;
-        using AType = gemm::MatmulType<half, LayoutWA>;
-        using BType = gemm::MatmulType<half, LayoutWB>;
-        using CType = gemm::MatmulType<half, LayoutC>;
+        using AType = gemm::GemmType<half, LayoutWA>;
+        using BType = gemm::GemmType<half, LayoutWB>;
+        using CType = gemm::GemmType<half, LayoutC>;
         using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
         LayoutWA layoutWA = LayoutWA(layoutA.shape(0), layoutA.shape(1));
         LayoutWB layoutWB = LayoutWB(layoutB.shape(0), layoutB.shape(1), L1TileShape::K, L1TileShape::N);
@@ -128,9 +128,9 @@ ASCENDCT_GLOBAL void optimized_matmul(uint64_t fftsAddr, GemmCoord problemShape,
         using LayoutWA = std::conditional_t<std::is_same_v<LayoutA, layout::RowMajor>, layout::PaddingRowMajor,
                                             layout::PaddingColumnMajor>;
         using LayoutWB = LayoutB;
-        using AType = gemm::MatmulType<half, LayoutWA>;
-        using BType = gemm::MatmulType<half, LayoutWB>;
-        using CType = gemm::MatmulType<half, LayoutC>;
+        using AType = gemm::GemmType<half, LayoutWA>;
+        using BType = gemm::GemmType<half, LayoutWB>;
+        using CType = gemm::GemmType<half, LayoutC>;
         using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
         LayoutWA layoutWA = LayoutWA(layoutA.shape(0), layoutA.shape(1), L1TileShape::M, L1TileShape::K);
         LayoutWB layoutWB = LayoutWB(layoutB.shape(0), layoutB.shape(1));
@@ -142,9 +142,9 @@ ASCENDCT_GLOBAL void optimized_matmul(uint64_t fftsAddr, GemmCoord problemShape,
                                             layout::PaddingColumnMajor>;
         using LayoutWB = std::conditional_t<std::is_same_v<LayoutB, layout::RowMajor>, layout::PaddingRowMajor,
                                             layout::PaddingColumnMajor>;
-        using AType = gemm::MatmulType<half, LayoutWA>;
-        using BType = gemm::MatmulType<half, LayoutWB>;
-        using CType = gemm::MatmulType<half, LayoutC>;
+        using AType = gemm::GemmType<half, LayoutWA>;
+        using BType = gemm::GemmType<half, LayoutWB>;
+        using CType = gemm::GemmType<half, LayoutC>;
         using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
         LayoutWA layoutWA = LayoutWA(layoutA.shape(0), layoutA.shape(1), L1TileShape::M, L1TileShape::K);
         LayoutWB layoutWB = LayoutWB(layoutB.shape(0), layoutB.shape(1), L1TileShape::K, L1TileShape::N);

@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ASCENDCT_MATMUL_KERNEL_MATMUL_TLA_HPP
-#define ASCENDCT_MATMUL_KERNEL_MATMUL_TLA_HPP
+#ifndef ASCENDCT_GEMM_KERNEL_MATMUL_TLA_HPP
+#define ASCENDCT_GEMM_KERNEL_MATMUL_TLA_HPP
 
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/arch/resource.hpp"
@@ -126,4 +126,4 @@ public:
 
 } // namespace AscendCT::gemm::kernel
 
-#endif // ASCENDCT_MATMUL_KERNEL_MATMUL_TLA_HPP
+#endif // ASCENDCT_GEMM_KERNEL_MATMUL_TLA_HPP

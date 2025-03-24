@@ -18,7 +18,7 @@
 #include "AscendCT/gemm/block/block_swizzle.hpp"
 #include "AscendCT/gemm/dispatch_policy.hpp"
 #include "AscendCT/gemm/kernel/basic_matmul.hpp"
-#include "AscendCT/gemm/matmul_type.hpp"
+#include "AscendCT/gemm/GemmType"
 
 using namespace AscendCT;
 
@@ -31,16 +31,16 @@ ASCENDCT_DEVICE void basic_matmul_kernel(GemmCoord problemShape, GM_ADDR gmA, La
     using L1TileShape = GemmShape<128, 256, 256>;
     using L0TileShape = GemmShape<128, 256, 64>;
 
-    using AType = gemm::MatmulType<IN_TYPE, LayoutA>;
-    using BType = gemm::MatmulType<IN_TYPE, LayoutB>;
-    using CType = gemm::MatmulType<OUT_TYPE, LayoutC>;
+    using AType = gemm::GemmType<IN_TYPE, LayoutA>;
+    using BType = gemm::GemmType<IN_TYPE, LayoutB>;
+    using CType = gemm::GemmType<OUT_TYPE, LayoutC>;
 
     using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
     using BlockEpilogue = void;
 
     if (problemShape.m() > problemShape.n()) {
         // Swizzle offset is 3 and direction is 0.
-        using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 0>;
+        using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 0>;
 
         // kernel level
         using MatmulKernel = gemm::kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
@@ -52,7 +52,7 @@ ASCENDCT_DEVICE void basic_matmul_kernel(GemmCoord problemShape, GM_ADDR gmA, La
         matmul(params);
     } else {
         // Swizzle offset is 3 and direction is 1.
-        using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 1>;
+        using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 1>;
 
         // kernel level
         using MatmulKernel = gemm::kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;

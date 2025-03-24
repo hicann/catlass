@@ -349,8 +349,8 @@ template <
 class BlockEpilogue <
     EpilogueAtlasA2PerTokenDequant<UB_STAGES_>,
     CType_,
-    gemm::MatmulType<float, LayoutScale_>,
-    gemm::MatmulType<float, LayoutPerTokenScale_>,
+    gemm::GemmType<float, LayoutScale_>,
+    gemm::GemmType<float, LayoutPerTokenScale_>,
     DType_,
     TileRowBroadcastMul_,
     TileBroadcastOneBlk_,

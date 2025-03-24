@@ -21,7 +21,7 @@
 #include "AscendCT/gemm/block/block_swizzle.hpp"
 #include "AscendCT/gemm/dispatch_policy.hpp"
 #include "AscendCT/gemm/kernel/grouped_matmul_m.hpp"
-#include "AscendCT/gemm/matmul_type.hpp"
+#include "AscendCT/gemm/GemmType"
 #include "AscendCT/layout/layout.hpp"
 
 using namespace AscendCT;
@@ -59,13 +59,13 @@ void GroupedMatmulM(
         using L1TileShape = GemmShape<256, 128, 256>;
         using L0TileShape = GemmShape<256, 128, 64>;
 
-        using AType = gemm::MatmulType<half, LayoutA>;
-        using BType = gemm::MatmulType<half, LayoutB>;
-        using CType = gemm::MatmulType<half, LayoutC>;
+        using AType = gemm::GemmType<half, LayoutA>;
+        using BType = gemm::GemmType<half, LayoutB>;
+        using CType = gemm::GemmType<half, LayoutC>;
 
         using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
         using BlockEpilogue = void;
-        using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 0>;
+        using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 0>;
 
         // kernel level
         using MatmulKernel = gemm::kernel::GroupedMatmulM<BlockMmad, BlockEpilogue, BlockScheduler, int64_t>;
@@ -95,13 +95,13 @@ void GroupedMatmulM(
         using L1TileShape = GemmShape<128, 256, 256>;
         using L0TileShape = GemmShape<128, 256, 64>;
 
-        using AType = gemm::MatmulType<half, LayoutA>;
-        using BType = gemm::MatmulType<half, LayoutB>;
-        using CType = gemm::MatmulType<half, LayoutC>;
+        using AType = gemm::GemmType<half, LayoutA>;
+        using BType = gemm::GemmType<half, LayoutB>;
+        using CType = gemm::GemmType<half, LayoutC>;
 
         using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
         using BlockEpilogue = void;
-        using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 1>;
+        using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 1>;
 
         // kernel level
         using MatmulKernel = gemm::kernel::GroupedMatmulM<BlockMmad, BlockEpilogue, BlockScheduler, int64_t>;

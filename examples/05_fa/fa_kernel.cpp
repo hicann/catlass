@@ -12,7 +12,7 @@
 #include "AscendCT/layout/layout.hpp"
 
 #include "AscendCT/gemm/dispatch_policy.hpp"
-#include "AscendCT/gemm/matmul_type.hpp"
+#include "AscendCT/gemm/GemmType"
 #include "AscendCT/gemm/block/block_mmad.hpp"
 
 #include "AscendCT/arch/resource.hpp"
@@ -483,23 +483,23 @@ void FA(uint64_t fftsAddr,
 
     // Mmadqk
     using DispatchPolicyQK = gemm::MmadAtlasA2FAQK;
-    using QType = gemm::MatmulType<ElementQ, LayoutQ>;
-    using KType = gemm::MatmulType<ElementK, LayoutK>;
-    using SType = gemm::MatmulType<ElementS, LayoutS>;
+    using QType = gemm::GemmType<ElementQ, LayoutQ>;
+    using KType = gemm::GemmType<ElementK, LayoutK>;
+    using SType = gemm::GemmType<ElementS, LayoutS>;
     using BlockMmadQK = gemm::block::BlockMmad<DispatchPolicyQK, L1TileShape, L0TileShape, QType, KType, SType>;
     // EpilogueSoftmax
-    using PType = gemm::MatmulType<ElementP, LayoutP>;
-    using MaskType = gemm::MatmulType<ElementMask, LayoutMask>;
+    using PType = gemm::GemmType<ElementP, LayoutP>;
+    using MaskType = gemm::GemmType<ElementMask, LayoutMask>;
     using EpilogueFASoftmax =
         epilogue::block::BlockEpilogue<epilogue::EpilogueAtlasA2FASoftmax, PType, SType, MaskType>;
 
     // Mmadpv
     using DispatchPolicyPV = gemm::MmadAtlasA2FAPV;
-    using VType = gemm::MatmulType<ElementV, LayoutV>;
-    using OTmpType = gemm::MatmulType<ElementOTmp, LayoutOTmp>;
+    using VType = gemm::GemmType<ElementV, LayoutV>;
+    using OTmpType = gemm::GemmType<ElementOTmp, LayoutOTmp>;
     using BlockMmadPV = gemm::block::BlockMmad<DispatchPolicyPV, L1TileShape, L0TileShape, PType, VType, OTmpType>;
     // EpilogueRescaleO
-    using OType = gemm::MatmulType<ElementO, LayoutO>;
+    using OType = gemm::GemmType<ElementO, LayoutO>;
     using EpilogueFARescaleO =
         epilogue::block::BlockEpilogue<epilogue::EpilogueAtlasA2FARescaleO, OType, OTmpType>;
 

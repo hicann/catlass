@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ASCENDCT_MATMUL_TILE_TILE_COPY_HPP
-#define ASCENDCT_MATMUL_TILE_TILE_COPY_HPP
+#ifndef ASCENDCT_GEMM_TILE_TILE_COPY_HPP
+#define ASCENDCT_GEMM_TILE_TILE_COPY_HPP
 
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/detail/tag_to_layout.hpp"
@@ -55,13 +55,13 @@ namespace AscendCT::gemm::tile {
 template <
     /// Tag indicating architecture
     class ArchTag,
-    /// MatmulType for A matrix operand
+    /// GemmType for A matrix operand
     class AType,
-    /// MatmulType type for B matrix operand
+    /// GemmType type for B matrix operand
     class BType,
-    /// MatmulType type for C matrix operand
+    /// GemmType type for C matrix operand
     class CType,
-    /// MatmulTpe type for Bias operand
+    /// GemmType type for Bias operand
     class BiasType = void
 >
 struct TileCopy {
@@ -98,9 +98,9 @@ struct PackedTileCopyTla {
         typename gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
 
     using LayoutL1A = detail::TagToLayout_t<ElementA,
-        typename helper::L1ATypeSelector<gemm::MatmulType<ElementA, LayoutTagA>>::L1AType::Layout>;
+        typename helper::L1ATypeSelector<gemm::GemmType<ElementA, LayoutTagA>>::L1AType::Layout>;
     using LayoutL1B = detail::TagToLayout_t<ElementB,
-        typename helper::L1BTypeSelector<gemm::MatmulType<ElementB, LayoutTagB>>::L1BType::Layout>;
+        typename helper::L1BTypeSelector<gemm::GemmType<ElementB, LayoutTagB>>::L1BType::Layout>;
     using LayoutL0A = detail::TagToLayout_t<ElementA, layout::zZ>;
     using LayoutL0B = detail::TagToLayout_t<ElementB, layout::nZ>;
     using LayoutL0C = typename detail::LayoutL0C;
@@ -145,8 +145,8 @@ struct PaddingPackedTileCopyTla {
     using ElementAccumulator =
         typename gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
 
-    using LayoutTagL1A = typename helper::L1ATypeSelector<gemm::MatmulType<ElementA, LayoutTagA>>::L1AType::Layout;
-    using LayoutTagL1B = typename helper::L1BTypeSelector<gemm::MatmulType<ElementB, LayoutTagB>>::L1BType::Layout;
+    using LayoutTagL1A = typename helper::L1ATypeSelector<gemm::GemmType<ElementA, LayoutTagA>>::L1AType::Layout;
+    using LayoutTagL1B = typename helper::L1BTypeSelector<gemm::GemmType<ElementB, LayoutTagB>>::L1BType::Layout;
     using LayoutL1A = detail::TagToLayout_t<ElementA, LayoutTagL1A>;
     using LayoutL1B = detail::TagToLayout_t<ElementB, LayoutTagL1B>;
     using LayoutL0A = detail::TagToLayout_t<ElementA, layout::zZ>;
@@ -185,4 +185,4 @@ struct PaddingPackedTileCopyTla {
 
 } // namespace AscendCT::gemm::tile
 
-#endif // ASCENDCT_MATMUL_TILE_TILE_COPY_HPP
+#endif // ASCENDCT_GEMM_TILE_TILE_COPY_HPP

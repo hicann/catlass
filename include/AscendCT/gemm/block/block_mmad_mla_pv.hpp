@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ASCENDCT_MATMUL_BLOCK_BLOCK_MMAD_MLA_PV_HPP
-#define ASCENDCT_MATMUL_BLOCK_BLOCK_MMAD_MLA_PV_HPP
+#ifndef ASCENDCT_GEMM_BLOCK_BLOCK_MMAD_MLA_PV_HPP
+#define ASCENDCT_GEMM_BLOCK_BLOCK_MMAD_MLA_PV_HPP
 
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/arch/cross_core_sync.hpp"
@@ -194,4 +194,4 @@ protected:
 
 } // namespace AscendCT::gemm::block
 
-#endif // ASCENDCT_MATMUL_BLOCK_BLOCK_MMAD_MLA_PV_HPP
+#endif // ASCENDCT_GEMM_BLOCK_BLOCK_MMAD_MLA_PV_HPP

@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ASCENDCT_MATMUL_KERNEL_PADDING_MATMUL_HPP
-#define ASCENDCT_MATMUL_KERNEL_PADDING_MATMUL_HPP
+#ifndef ASCENDCT_GEMM_KERNEL_PADDING_MATMUL_HPP
+#define ASCENDCT_GEMM_KERNEL_PADDING_MATMUL_HPP
 
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/coord.hpp"
@@ -38,9 +38,9 @@ public:
     using ComputeLayout = AscendCT::layout::RowMajor;
     using ComputeLayoutDst = AscendCT::layout::PaddingRowMajor;
     using CopyGm2Ub = AscendCT::epilogue::tile::CopyGm2Ub<
-        ArchTag, gemm::MatmulType<Element, ComputeLayout>>;
+        ArchTag, gemm::GemmType<Element, ComputeLayout>>;
     using CopyUb2Gm = AscendCT::epilogue::tile::CopyUb2Gm<
-        ArchTag, gemm::MatmulType<Element, ComputeLayout>>;
+        ArchTag, gemm::GemmType<Element, ComputeLayout>>;
 
     CopyGm2Ub copyGm2Ub;
     CopyUb2Gm copyUb2Gm;
@@ -208,9 +208,9 @@ public:
     using Element = Element_;
     using Layout = Layout_;
     using CopyGm2Ub = AscendCT::epilogue::tile::CopyGm2Ub<
-        ArchTag, gemm::MatmulType<Element, AscendCT::layout::RowMajor>>;
+        ArchTag, gemm::GemmType<Element, AscendCT::layout::RowMajor>>;
     using CopyUb2Gm = AscendCT::epilogue::tile::CopyUb2Gm<
-        ArchTag, gemm::MatmulType<Element, AscendCT::layout::RowMajor>>;
+        ArchTag, gemm::GemmType<Element, AscendCT::layout::RowMajor>>;
     using ComputeLayout = AscendCT::layout::RowMajor;
 
     CopyGm2Ub copyGm2Ub;
@@ -473,4 +473,4 @@ private:
 
 } // namespace AscendCT::gemm::kernel
 
-#endif // ASCENDCT_MATMUL_KERNEL_PADDING_MATMUL_HPP
+#endif // ASCENDCT_GEMM_KERNEL_PADDING_MATMUL_HPP

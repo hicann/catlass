@@ -20,7 +20,7 @@
 #include "AscendCT/gemm/block/block_swizzle.hpp"
 #include "AscendCT/gemm/dispatch_policy.hpp"
 #include "AscendCT/gemm/kernel/optimized_matmul.hpp"
-#include "AscendCT/gemm/matmul_type.hpp"
+#include "AscendCT/gemm/GemmType"
 #include "AscendCT/AscendCT.hpp"
 
 using namespace AscendCT;
@@ -45,7 +45,7 @@ void LaunchMatmulDynamicSwizzle(
 )
 {
     if (problemShape.m() > problemShape.n()) {
-        using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 0>;
+        using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 0>;
         using BlockEpilogue = void;
         // kernel level
         using MatmulKernel = gemm::kernel::OptimizedMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
@@ -55,7 +55,7 @@ void LaunchMatmulDynamicSwizzle(
         MatmulKernel matmul;
         matmul(params);
     } else {
-        using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 1>;
+        using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 1>;
         using BlockEpilogue = void;
         // kernel level
         using MatmulKernel = gemm::kernel::OptimizedMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
@@ -100,9 +100,9 @@ void OptimizedMatmul(
         // no need to padding A and B.
         using LayoutWA = LayoutA;
         using LayoutWB = LayoutB;
-        using AType = gemm::MatmulType<half, LayoutWA>;
-        using BType = gemm::MatmulType<half, LayoutWB>;
-        using CType = gemm::MatmulType<half, LayoutC>;
+        using AType = gemm::GemmType<half, LayoutWA>;
+        using BType = gemm::GemmType<half, LayoutWB>;
+        using CType = gemm::GemmType<half, LayoutC>;
         using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
         LayoutWA layoutWA = LayoutWA(layoutA.shape(0), layoutA.shape(1));
         LayoutWB layoutWB = LayoutWB(layoutB.shape(0), layoutB.shape(1));
@@ -113,9 +113,9 @@ void OptimizedMatmul(
         using LayoutWA = LayoutA;
         using LayoutWB = std::conditional_t<std::is_same_v<LayoutB, layout::RowMajor>,
             layout::PaddingRowMajor, layout::PaddingColumnMajor>;
-        using AType = gemm::MatmulType<half, LayoutWA>;
-        using BType = gemm::MatmulType<half, LayoutWB>;
-        using CType = gemm::MatmulType<half, LayoutC>;
+        using AType = gemm::GemmType<half, LayoutWA>;
+        using BType = gemm::GemmType<half, LayoutWB>;
+        using CType = gemm::GemmType<half, LayoutC>;
         using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
         LayoutWA layoutWA = LayoutWA(layoutA.shape(0), layoutA.shape(1));
         LayoutWB layoutWB = LayoutWB(layoutB.shape(0), layoutB.shape(1), L1TileShape::K, L1TileShape::N);
@@ -126,9 +126,9 @@ void OptimizedMatmul(
         using LayoutWA = std::conditional_t<std::is_same_v<LayoutA, layout::RowMajor>,
             layout::PaddingRowMajor, layout::PaddingColumnMajor>;
         using LayoutWB = LayoutB;
-        using AType = gemm::MatmulType<half, LayoutWA>;
-        using BType = gemm::MatmulType<half, LayoutWB>;
-        using CType = gemm::MatmulType<half, LayoutC>;
+        using AType = gemm::GemmType<half, LayoutWA>;
+        using BType = gemm::GemmType<half, LayoutWB>;
+        using CType = gemm::GemmType<half, LayoutC>;
         using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
         LayoutWA layoutWA = LayoutWA(layoutA.shape(0), layoutA.shape(1), L1TileShape::M, L1TileShape::K);
         LayoutWB layoutWB = LayoutWB(layoutB.shape(0), layoutB.shape(1));
@@ -140,9 +140,9 @@ void OptimizedMatmul(
             layout::PaddingRowMajor, layout::PaddingColumnMajor>;
         using LayoutWB = std::conditional_t<std::is_same_v<LayoutB, layout::RowMajor>,
             layout::PaddingRowMajor, layout::PaddingColumnMajor>;
-        using AType = gemm::MatmulType<half, LayoutWA>;
-        using BType = gemm::MatmulType<half, LayoutWB>;
-        using CType = gemm::MatmulType<half, LayoutC>;
+        using AType = gemm::GemmType<half, LayoutWA>;
+        using BType = gemm::GemmType<half, LayoutWB>;
+        using CType = gemm::GemmType<half, LayoutC>;
         using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
         LayoutWA layoutWA = LayoutWA(layoutA.shape(0), layoutA.shape(1), L1TileShape::M, L1TileShape::K);
         LayoutWB layoutWB = LayoutWB(layoutB.shape(0), layoutB.shape(1), L1TileShape::K, L1TileShape::N);

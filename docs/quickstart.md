@@ -24,9 +24,9 @@ Kernel层模板由Block层组件构成。这里首先定义三个Block层组件�
 using DispatchPolicy = AscendCT::gemm::MmadAtlasA2Pingpong<true>; //流水排布使用
 using L1TileShape = AscendCT::GemmShape<128, 256, 256>; // L1基本块
 using L0TileShape = AscendCT::GemmShape<128, 256, 64>; // L0基本块
-using AType = AscendCT::gemm::MatmulType<ElementA, LayoutA>;     //封装了A矩阵的数据类型和排布信息
-using BType = AscendCT::gemm::MatmulType<ElementB, LayoutB>;     //封装了B矩阵的数据类型和排布信息
-using CType = AscendCT::gemm::MatmulType<ElementC, LayoutC>;     //封装了C矩阵的数据类型和排布信息
+using AType = AscendCT::gemm::GemmType<ElementA, LayoutA>;     //封装了A矩阵的数据类型和排布信息
+using BType = AscendCT::gemm::GemmType<ElementB, LayoutB>;     //封装了B矩阵的数据类型和排布信息
+using CType = AscendCT::gemm::GemmType<ElementC, LayoutC>;     //封装了C矩阵的数据类型和排布信息
 
 using BlockMmad = AscendCT::gemm::block::BlockMmad<DispatchPolicy,
     L1TileShape,
@@ -39,9 +39,9 @@ using BlockMmad = AscendCT::gemm::block::BlockMmad<DispatchPolicy,
 ```
 using BlockEpilogue = void;
 ```
-3. `TileScheduler_`该模板类定义数据走位方式，提供计算offset的方法。此处使用定义好的MatmulIdentityBlockSwizzle。参考[Swizzle策略说明](swizzle_explanation.md)文档了解更多swizzle信息。
+3. `TileScheduler_`该模板类定义数据走位方式，提供计算offset的方法。此处使用定义好的GemmIdentityBlockSwizzle。参考[Swizzle策略说明](swizzle_explanation.md)文档了解更多swizzle信息。
 ```
-using TileScheduler = typename AscendCT::gemm::block::MatmulIdentityBlockSwizzle<>;
+using TileScheduler = typename AscendCT::gemm::block::GemmIdentityBlockSwizzle<>;
 ```
 4. 基于上述组件即可完成BasicMatmul示例的Kernel层组装。
 ```

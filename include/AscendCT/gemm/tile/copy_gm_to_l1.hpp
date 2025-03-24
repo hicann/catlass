@@ -8,12 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ASCENDCT_MATMUL_TILE_COPY_GM_TO_L1_HPP
-#define ASCENDCT_MATMUL_TILE_COPY_GM_TO_L1_HPP
+#ifndef ASCENDCT_GEMM_TILE_COPY_GM_TO_L1_HPP
+#define ASCENDCT_GEMM_TILE_COPY_GM_TO_L1_HPP
 
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/layout/layout.hpp"
-#include "AscendCT/gemm/matmul_type.hpp"
+#include "AscendCT/gemm/GemmType"
 #include "tla/tensor.hpp"
 
 using namespace tla;
@@ -22,7 +22,7 @@ namespace AscendCT::gemm::tile {
 
 template <
     class ArchTag,
-    /// MatmulType for matrix operand
+    /// GemmType for matrix operand
     class GmType,
     class L1Type = void
 >
@@ -32,7 +32,7 @@ struct CopyGmToL1 {
 
 /// Partial specialization for AtlasA2, RowMajor in and zN out.
 template <class Element>
-struct CopyGmToL1<arch::AtlasA2, gemm::MatmulType<Element, layout::RowMajor>> {
+struct CopyGmToL1<arch::AtlasA2, gemm::GemmType<Element, layout::RowMajor>> {
     using LayoutDst = layout::zN;
     using LayoutSrc = layout::RowMajor;
 
@@ -109,7 +109,7 @@ struct CopyGmToL1<arch::AtlasA2, gemm::MatmulType<Element, layout::RowMajor>> {
 template <
     class Element
 >
-struct CopyGmToL1<arch::AtlasA2, gemm::MatmulType<Element, layout::ColumnMajor>> {
+struct CopyGmToL1<arch::AtlasA2, gemm::GemmType<Element, layout::ColumnMajor>> {
     using LayoutDst = layout::nZ;
     using LayoutSrc = layout::ColumnMajor;
 
@@ -155,7 +155,7 @@ template <
     class ArchTag,
     class Element
 >
-struct CopyGmToL1<ArchTag, gemm::MatmulType<Element, layout::zN>> {
+struct CopyGmToL1<ArchTag, gemm::GemmType<Element, layout::zN>> {
     using LayoutDst = layout::zN;
     using LayoutSrc = layout::zN;
 
@@ -202,7 +202,7 @@ template <
     class ArchTag,
     class Element
 >
-struct CopyGmToL1<ArchTag, gemm::MatmulType<Element, layout::nZ>> {
+struct CopyGmToL1<ArchTag, gemm::GemmType<Element, layout::nZ>> {
     using LayoutDst = layout::nZ;
     using LayoutSrc = layout::nZ;
 
@@ -246,7 +246,7 @@ struct CopyGmToL1<ArchTag, gemm::MatmulType<Element, layout::nZ>> {
 
 /// Partial specialization for AtlasA2, PaddingRowMajor in and zN out.
 template <class Element>
-struct CopyGmToL1<arch::AtlasA2, gemm::MatmulType<Element, layout::PaddingRowMajor>> {
+struct CopyGmToL1<arch::AtlasA2, gemm::GemmType<Element, layout::PaddingRowMajor>> {
     using LayoutDst = layout::zN;
     using LayoutSrc = layout::PaddingRowMajor;
 
@@ -282,7 +282,7 @@ struct CopyGmToL1<arch::AtlasA2, gemm::MatmulType<Element, layout::PaddingRowMaj
 template <
     class Element
 >
-struct CopyGmToL1<arch::AtlasA2, gemm::MatmulType<Element, layout::PaddingColumnMajor>> {
+struct CopyGmToL1<arch::AtlasA2, gemm::GemmType<Element, layout::PaddingColumnMajor>> {
     using LayoutDst = layout::nZ;
     using LayoutSrc = layout::PaddingColumnMajor;
 
@@ -316,8 +316,8 @@ struct CopyGmToL1<arch::AtlasA2, gemm::MatmulType<Element, layout::PaddingColumn
 
 /// Partial specialization for AtlasA2, RowMajor in and RowMajor out.
 template <class Element>
-struct CopyGmToL1<arch::AtlasA2, gemm::MatmulType<Element, layout::RowMajor>,
-    gemm::MatmulType<Element, layout::RowMajor>> {
+struct CopyGmToL1<arch::AtlasA2, gemm::GemmType<Element, layout::RowMajor>,
+    gemm::GemmType<Element, layout::RowMajor>> {
     using LayoutDst = layout::RowMajor;
     using LayoutSrc = layout::RowMajor;
 
@@ -540,4 +540,4 @@ struct TileCopyTlaExt<arch::AtlasA2, Tensor<AscendC::GlobalTensor<ElementSrc>, L
 
 } // namespace AscendCT::gemm::tile
 
-#endif // ASCENDCT_MATMUL_TILE_COPY_GM_TO_L1_HPP
+#endif // ASCENDCT_GEMM_TILE_COPY_GM_TO_L1_HPP

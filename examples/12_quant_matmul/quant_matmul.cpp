@@ -27,7 +27,7 @@
 #include "AscendCT/gemm/block/block_swizzle.hpp"
 #include "AscendCT/gemm/dispatch_policy.hpp"
 #include "AscendCT/gemm/kernel/quant_matmul_multistage_workspace.hpp"
-#include "AscendCT/gemm/matmul_type.hpp"
+#include "AscendCT/gemm/GemmType"
 #include "AscendCT/layout/layout.hpp"
 
 using namespace AscendCT;
@@ -68,21 +68,21 @@ void QuantMatmul(
     >;
     using L0TileShape = GemmShape<128, 256, 128>;
 
-    using AType = gemm::MatmulType<int8_t, LayoutA>;
-    using BType = gemm::MatmulType<int8_t, LayoutB>;
-    using CType = gemm::MatmulType<int32_t, layout::RowMajor>;
+    using AType = gemm::GemmType<int8_t, LayoutA>;
+    using BType = gemm::GemmType<int8_t, LayoutB>;
+    using CType = gemm::GemmType<int32_t, layout::RowMajor>;
 
     using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
 
     constexpr uint32_t ubStages = 2;
     using EpilogueDispatchPolicy = epilogue::EpilogueAtlasA2PerTokenDequant<ubStages>;
-    using ScaleType = gemm::MatmulType<bfloat16_t, layout::VectorLayout>;
-    using PerTokenScaleType = gemm::MatmulType<bfloat16_t, layout::VectorLayout>;
-    using DType = gemm::MatmulType<bfloat16_t, layout::RowMajor>;
+    using ScaleType = gemm::GemmType<bfloat16_t, layout::VectorLayout>;
+    using PerTokenScaleType = gemm::GemmType<bfloat16_t, layout::VectorLayout>;
+    using DType = gemm::GemmType<bfloat16_t, layout::RowMajor>;
 
-    using RowBroadcastMulType = gemm::MatmulType<float, layout::RowMajor>;
-    using BroadcastOneBlkType = gemm::MatmulType<float, layout::RowMajor>;
-    using OneBlkColumnBroadcastMulType = gemm::MatmulType<float, layout::RowMajor>;
+    using RowBroadcastMulType = gemm::GemmType<float, layout::RowMajor>;
+    using BroadcastOneBlkType = gemm::GemmType<float, layout::RowMajor>;
+    using OneBlkColumnBroadcastMulType = gemm::GemmType<float, layout::RowMajor>;
 
     using EpilogueTileShape = MatrixShape<32, 256>;
     using TileRowBroadcastMul = epilogue::tile::TileRowBroadcastMul<ArchTag, RowBroadcastMulType, EpilogueTileShape>;
@@ -97,7 +97,7 @@ void QuantMatmul(
         DType, TileRowBroadcastMul, TileBroadcastOneBlk, TileOneBlkColumnBroadcastMul, TileCopy, TileScheduler>;
 
     if (problemShape.m() > problemShape.n()) {
-        using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 0>;
+        using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 0>;
 
         // kernel level
         using MatmulKernel = gemm::kernel::QuantMatmulMultiStageWorkspace<BlockMmad, BlockEpilogue,
@@ -117,7 +117,7 @@ void QuantMatmul(
         MatmulKernel matmul;
         matmul(params);
     } else {
-        using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 1>;
+        using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 1>;
 
         // kernel level
         using MatmulKernel = gemm::kernel::QuantMatmulMultiStageWorkspace<BlockMmad, BlockEpilogue,

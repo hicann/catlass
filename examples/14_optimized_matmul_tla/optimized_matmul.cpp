@@ -16,7 +16,7 @@
 
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/arch/arch.hpp"
-#include "AscendCT/gemm/matmul_type.hpp"
+#include "AscendCT/gemm/GemmType"
 #include "AscendCT/gemm/block/block_mmad.hpp"
 #include "AscendCT/gemm/block/block_swizzle.hpp"
 #include "AscendCT/gemm/dispatch_policy.hpp"
@@ -49,7 +49,7 @@ void LaunchMatmulDynamicSwizzle(
 )
 {
     if (problemShape.m() > problemShape.n()) {
-        using TileScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 0>;
+        using TileScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 0>;
         using BlockEpilogue = void;
         // kernel level
         using MatmulKernel = gemm::kernel::OptimizedMatmulTla<
@@ -60,7 +60,7 @@ void LaunchMatmulDynamicSwizzle(
         MatmulKernel matmul;
         matmul(params);
     } else {
-        using TileScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 1>;
+        using TileScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 1>;
         using BlockEpilogue = void;
         // kernel level
         using MatmulKernel = gemm::kernel::OptimizedMatmulTla<

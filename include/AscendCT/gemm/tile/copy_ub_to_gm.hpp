@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ASCENDCT_MATMUL_TILE_COPY_UB_TO_GM_HPP
-#define ASCENDCT_MATMUL_TILE_COPY_UB_TO_GM_HPP
+#ifndef ASCENDCT_GEMM_TILE_COPY_UB_TO_GM_HPP
+#define ASCENDCT_GEMM_TILE_COPY_UB_TO_GM_HPP
 
 #include "AscendCT/AscendCT.hpp"
 #include "tla/tensor.hpp"
@@ -81,4 +81,4 @@ struct TileCopyTlaExt<arch::AtlasA2, Tensor<AscendC::LocalTensor<ElementSrc>, La
 
 }  // AscendCT::gemm::tile
 
-#endif // ASCENDCT_MATMUL_TILE_COPY_UB_TO_GM_HPP
+#endif // ASCENDCT_GEMM_TILE_COPY_UB_TO_GM_HPP

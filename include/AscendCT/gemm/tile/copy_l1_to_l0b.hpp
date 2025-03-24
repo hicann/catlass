@@ -8,12 +8,12 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ASCENDCT_MATMUL_TILE_COPY_L1_TO_L0B_HPP
-#define ASCENDCT_MATMUL_TILE_COPY_L1_TO_L0B_HPP
+#ifndef ASCENDCT_GEMM_TILE_COPY_L1_TO_L0B_HPP
+#define ASCENDCT_GEMM_TILE_COPY_L1_TO_L0B_HPP
 
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/layout/layout.hpp"
-#include "AscendCT/gemm/matmul_type.hpp"
+#include "AscendCT/gemm/GemmType"
 #include "tla/tensor.hpp"
 
 using namespace tla;
@@ -30,7 +30,7 @@ struct CopyL1ToL0B {
 
 /// Partial specialization for int8_t, zN in and nZ out.
 template <class ArchTag>
-struct CopyL1ToL0B<ArchTag, gemm::MatmulType<int8_t, layout::zN>> {
+struct CopyL1ToL0B<ArchTag, gemm::GemmType<int8_t, layout::zN>> {
     using Element = int8_t;
     using LayoutDst = layout::nZ;
     using LayoutSrc = layout::zN;
@@ -67,7 +67,7 @@ struct CopyL1ToL0B<ArchTag, gemm::MatmulType<int8_t, layout::zN>> {
 
 /// Partial specialization for zN in and nZ out.
 template <class ArchTag, class Element>
-struct CopyL1ToL0B<ArchTag, gemm::MatmulType<Element, layout::zN>> {
+struct CopyL1ToL0B<ArchTag, gemm::GemmType<Element, layout::zN>> {
     using LayoutDst = layout::nZ;
     using LayoutSrc = layout::zN;
 
@@ -103,7 +103,7 @@ struct CopyL1ToL0B<ArchTag, gemm::MatmulType<Element, layout::zN>> {
 
 /// Partial specialization for nZ in and nZ out. (Transpose B)
 template <class ArchTag, class Element>
-struct CopyL1ToL0B<ArchTag, gemm::MatmulType<Element, layout::nZ>> {
+struct CopyL1ToL0B<ArchTag, gemm::GemmType<Element, layout::nZ>> {
     using LayoutDst = layout::nZ;
     using LayoutSrc = layout::nZ;
 
@@ -279,4 +279,4 @@ struct TileCopyTla<arch::AtlasA2, Tensor<AscendC::LocalTensor<int8_t>, LayoutSrc
 
 } // namespace AscendCT::gemm::tile
 
-#endif // ASCENDCT_MATMUL_TILE_COPY_L1_TO_L0B_HPP
+#endif // ASCENDCT_GEMM_TILE_COPY_L1_TO_L0B_HPP

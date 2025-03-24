@@ -1,10 +1,10 @@
-# AscendC Template Matmul API
+# AscendC Template Gemm API
 
 AscendC Template针对NPU上不同层级上执行的矩阵乘累加（MMAD）操作，提供了一个统一的编程模型。AscendC Template的Matmul API对应于以下分层，由高到低分别是：
 ![image](images/api_level.png)
 
 
-# AscendC Template Matmul模型
+# AscendC Template Gemm模型
 AscendC Template基于上述的分层结构，实现了经典“三层嵌套循环”的矩阵乘算法。
 
 以下伪代码描述了针对像`mmad`这样的单核内同步矩阵乘法指令的Matmul 内核的模型。整个算子被称为“Matmul”，这是伪代码，仅用于说明哪些层次的部分对应于矩阵乘的内部或外部循环。
@@ -39,7 +39,7 @@ for (int block_m = 0; block_m < MatmulM; block_m += BlockTileM) {
 在两重嵌套的 `for`循环内部，将全局内存分片，然后将分片搬运到更“局部”的内存（如L1 Buffer或L0 Buffer）并执行MMAD计算。这些分片拷贝和分片MMAD计算的迭代通常是完全静态的，并且完全展开。
 
 
-# AscendC Template Matmul组件
+# AscendC Template Gemm组件
 
 
 AscendC Template使用以下组件表达上述循环嵌套，这些组件针对数据类型、数据排布和数学指令进行特化。
@@ -70,9 +70,9 @@ AscendC Template使用以下组件表达上述循环嵌套，这些组件针对�
 using DispatchPolicy = gemm::MmadAtlasA2Pingpong<true>;
 using L1TileShape = GemmShape<128, 256, 256>;
 using L0TileShape = GemmShape<128, 256, 64>;
-using AType = gemm::MatmulType<ElementA, LayoutA>;
-using BType = gemm::MatmulType<ElementB, LayoutB>;
-using CType = gemm::MatmulType<ElementC, LayoutC>;
+using AType = gemm::GemmType<ElementA, LayoutA>;
+using BType = gemm::GemmType<ElementB, LayoutB>;
+using CType = gemm::GemmType<ElementC, LayoutC>;
 
 using BlockMmad = gemm::block::BlockMmad<DispatchPolicy,
     L1TileShape,
@@ -85,7 +85,7 @@ using BlockMmad = gemm::block::BlockMmad<DispatchPolicy,
 using BlockEpilogue = void;
 
 // 第三步：指定计算时的数据走位方式
-using TileScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<>;
+using TileScheduler = typename gemm::block::GemmIdentityBlockSwizzle<>;
 
 
 // 第四步：在kernel层将mmad和后处理组合到一起
@@ -141,7 +141,7 @@ struct BlockMmad {};
 
 - `DispatchPolicy` 是Block层重要的参数之一，下一节会详细介绍。
 - `L1TileShape` 和 `L0TileShape` 对应L1 Buffer和L0 Buffer上使用的基本块大小，后续详细介绍。
-- `AType`、`BType`、`CType`、`BiasType` 是 `MatmulType` 的实例，其中包含了全局内存上A、B、C矩阵和Bias向量的数据类型和数据排布。
+- `AType`、`BType`、`CType`、`BiasType` 是 `GemmType` 的实例，其中包含了全局内存上A、B、C矩阵和Bias向量的数据类型和数据排布。
 - `TileCopy` 是 `tile::TileCopy`的实例，包含了不同访存层级间的块粒度数据拷贝，如全局内存到L1 Buffer，L1 Buffer到L0 Buffer等。
 - `TileMmad` 是 `tile::TileMmad`的实例，完成L0上基本块粒度的矩阵乘累加运算。
 
@@ -221,7 +221,7 @@ Device层是Host侧调用的入口，在这一层屏蔽调用Device侧函数的�
 ```
 using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
 using BlockEpilogue = void;
-using TileScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<>;
+using TileScheduler = typename gemm::block::GemmIdentityBlockSwizzle<>;
 
 // kernel
 using MatmulKernel = gemm::kernel::BasicMatmul<BlockMmad, BlockEpilogue, TileScheduler>;

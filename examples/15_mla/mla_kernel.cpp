@@ -13,7 +13,7 @@
 
 #include "AscendCT/gemm/block/block_mmad.hpp"
 #include "AscendCT/gemm/dispatch_policy.hpp"
-#include "AscendCT/gemm/matmul_type.hpp"
+#include "AscendCT/gemm/GemmType"
 
 #include "AscendCT/arch/cross_core_sync.hpp"
 #include "AscendCT/arch/resource.hpp"
@@ -621,32 +621,32 @@ ASCENDCT_GLOBAL void MLA(uint64_t fftsAddr,
 
     // Mmadqk
     using DispatchPolicyQK = gemm::MmadAtlasA2MLAQK;
-    using QType = gemm::MatmulType<ElementQ, LayoutQ>;
-    using KType = gemm::MatmulType<ElementK, LayoutK>;
-    using SType = gemm::MatmulType<ElementS, LayoutS>;
+    using QType = gemm::GemmType<ElementQ, LayoutQ>;
+    using KType = gemm::GemmType<ElementK, LayoutK>;
+    using SType = gemm::GemmType<ElementS, LayoutS>;
     using BlockMmadQK = gemm::block::BlockMmad<DispatchPolicyQK, L1TileShape, L0TileShape, QType, KType, SType>;
 
     // EpilogueSoftmax
-    using PType = gemm::MatmulType<ElementP, LayoutP>;
-    using MaskType = gemm::MatmulType<ElementMask, LayoutMask>;
+    using PType = gemm::GemmType<ElementP, LayoutP>;
+    using MaskType = gemm::GemmType<ElementMask, LayoutMask>;
     using EpilogueMLASoftmax =
         epilogue::block::BlockEpilogue<epilogue::EpilogueAtlasA2MLASoftmax, PType, SType, MaskType>;
 
     // Mmadpv
     using DispatchPolicyPV = gemm::MmadAtlasA2MLAPV;
-    using VType = gemm::MatmulType<ElementV, LayoutV>;
-    using OTmpType = gemm::MatmulType<ElementOTmp, LayoutOTmp>;
+    using VType = gemm::GemmType<ElementV, LayoutV>;
+    using OTmpType = gemm::GemmType<ElementOTmp, LayoutOTmp>;
     using BlockMmadPV = gemm::block::BlockMmad<DispatchPolicyPV, L1TileShape, L0TileShape, PType, VType, OTmpType>;
 
     // EpilogueRescaleO
-    using OType = gemm::MatmulType<ElementO, LayoutO>;
-    using OUpdateType = gemm::MatmulType<ElementUpdate, LayoutUpdate>;
+    using OType = gemm::GemmType<ElementO, LayoutO>;
+    using OUpdateType = gemm::GemmType<ElementUpdate, LayoutUpdate>;
     using EpilogueMLARescaleO =
         epilogue::block::BlockEpilogue<epilogue::EpilogueAtlasA2MLARescaleO, OType, OUpdateType, OTmpType>;
 
     // EpilogueFDRescaleO
-    using OType = gemm::MatmulType<ElementO, LayoutO>;
-    using lType = gemm::MatmulType<ElementUpdate, LayoutUpdate>;
+    using OType = gemm::GemmType<ElementO, LayoutO>;
+    using lType = gemm::GemmType<ElementUpdate, LayoutUpdate>;
     constexpr uint32_t ComputeEleNum = 6144;
     using EpilogueMLAFDRescaleO =
         epilogue::block::BlockEpilogue<epilogue::EpilogueAtlasA2MLAFDRescaleO<ComputeEleNum>, OType, lType>;
