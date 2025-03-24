@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
- #ifndef ASCENDCT_EPILOGUE_TILE_TILE_ELEMWISE_ADD_GEMM_HPP
- #define ASCENDCT_EPILOGUE_TILE_TILE_ELEMWISE_ADD_GEMM_HPP
+ #ifndef ASCENDCT_EPILOGUE_TILE_TILE_ELEMWISE_MULS_HPP
+ #define ASCENDCT_EPILOGUE_TILE_TILE_ELEMWISE_MULS_HPP
  
  #include "AscendCT/gemm/helper.hpp"
  
@@ -39,4 +39,4 @@
  };
  }
  
- #endif // ASCENDCT_EPILOGUE_TILE_TILE_ELEMWISE_ADD_GEMM_HPP
+ #endif // ASCENDCT_EPILOGUE_TILE_TILE_ELEMWISE_MULS_HPP

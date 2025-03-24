@@ -14,6 +14,7 @@
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/layout/layout.hpp"
 #include "AscendCT/gemm/matmul_type.hpp"
+#include "AscendCT/gemm/matmul_type.hpp"
 
 namespace AscendCT::epilogue::tile {
 
@@ -81,6 +82,35 @@ struct CopyUb2Gm<arch::AtlasA2, gemm::MatmulType<Element, layout::ColumnMajor>> 
     }
 };
 
+template <typename Element>
+struct CopyUb2Gm<arch::AtlasA2, gemm::MatmulType<Element, layout::VectorLayout>> {
+    using LayoutSrc = layout::VectorLayout;
+    using LayoutDst = layout::VectorLayout;
+
+    static constexpr uint32_t ELE_NUM_PER_BLK = BYTE_PER_BLK / sizeof(Element);
+
+    ASCENDCT_DEVICE
+    CopyUb2Gm() = default;
+
+    ASCENDCT_DEVICE
+    void operator()(
+        AscendC::GlobalTensor<Element> const &dstTensor,
+        AscendC::LocalTensor<Element> const &srcTensor,
+        layout::VectorLayout const &layoutDst,
+        layout::VectorLayout const &layoutSrc)
+    {
+        AscendC::DataCopyExtParams dataCopyParams(
+            1,
+            layoutDst.shape(0) * sizeof(Element),
+            0,
+            0,
+            0
+        );
+        AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams);
+    };
+};
+
+
 template <
     class ArchTag,
     class GmType
@@ -133,6 +163,42 @@ struct CopyUb2GmAligned<arch::AtlasA2, gemm::MatmulType<Element, layout::RowMajo
         }
     };
 };
+
+
+// template <
+//     class ArchTag,
+//     class GmType
+// >
+// struct VecCopyUb2Gm{
+//     static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy ub to gm, can not find the specialization.");
+// };
+
+// template <typename Element>
+// struct VecCopyUb2Gm<arch::AtlasA2, gemm::MatmulType<Element, layout::RowMajor>>{
+//     using LayoutDst = layout::RowMajor;
+//     using LayoutSrc = layout::RowMajor;
+
+//     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+
+//     ASCENDCT_DEVICE
+//     VecCopyUb2Gm() = default;
+
+//     ASCENDCT_DEVICE
+//     void operator()(
+//         AscendC::GlobalTensor<Element> const &dstTensor,
+//         AscendC::LocalTensor<Element> const &srcTensor,
+//         layout::RowMajor const &layoutDst,
+//         layout::RowMajor const &layoutSrc)
+//     {
+//         AscendC::DataCopyExtParams dataCopyParams(
+//             layoutDst.shape(0),
+//             layoutDst.shape(1) * sizeof(Element),
+//             0,
+//             0,
+//             0);
+//         AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams);
+//     }
+// };
 
 }  // AscendCT::epilogue::tile
 

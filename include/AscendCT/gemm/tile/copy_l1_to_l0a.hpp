@@ -36,6 +36,7 @@ struct CopyL1ToL0A<ArchTag, AscendCT::gemm::MatmulType<Element, layout::zN>, Asc
     using LayoutSrc = layout::zN;
 
     static constexpr uint32_t ELE_NUM_PER_C0 =  BYTE_PER_C0 / sizeof(Element);
+    static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
 
     ASCENDCT_DEVICE
     CopyL1ToL0A(){}
@@ -46,19 +47,17 @@ struct CopyL1ToL0A<ArchTag, AscendCT::gemm::MatmulType<Element, layout::zN>, Asc
         AscendC::LocalTensor<Element> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t MRound = layoutSrc.shape(0) * layoutSrc.shape(1);
-        uint32_t KRound = layoutDst.shape(2) * layoutDst.shape(3);
-        uint32_t MLoops = CeilDiv(MRound, C0_NUM_PER_FRACTAL);
-        AscendC::LoadData2DParams params;
-        params.startIndex = 0;
-        params.repeatTimes = static_cast<uint8_t>(KRound / ELE_NUM_PER_C0);
-        params.srcStride = MRound / C0_NUM_PER_FRACTAL;
-        params.sid = 0;
-        params.dstGap = 0;
-        params.ifTranspose = false;
-        params.addrMode = 0;
-        for(uint32_t i = 0; i < MLoops; i++){
-            AscendC::LoadData(dstTensor[i * C0_NUM_PER_FRACTAL * KRound], srcTensor[i * ELE_NUM_PER_C0 * C0_NUM_PER_FRACTAL], params);
+        AscendC::LoadData2DParams loadDataParams;
+        loadDataParams.startIndex = 0;
+        loadDataParams.repeatTimes = static_cast<uint16_t>(layoutDst.shape(3));
+        loadDataParams.srcStride = layoutSrc.stride(3) / ELE_NUM_PER_FRACTAL;
+        loadDataParams.sid = 0;
+        loadDataParams.dstGap = layoutDst.stride(3) / ELE_NUM_PER_FRACTAL - 1;
+        loadDataParams.ifTranspose = false;
+        loadDataParams.addrMode = 0;
+
+        for (uint32_t i = 0; i < layoutDst.shape(1); i++) {
+            AscendC::LoadData(dstTensor[i * layoutDst.stride(1)], srcTensor[i * layoutSrc.stride(1)], loadDataParams);
         }
     }
 };
@@ -80,19 +79,16 @@ struct CopyL1ToL0A<ArchTag, AscendCT::gemm::MatmulType<Element, layout::nN>, Asc
         AscendC::LocalTensor<Element> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t MRound = layoutSrc.shape(0) * layoutSrc.shape(1);
-        uint32_t KRound = layoutDst.shape(0) * layoutDst.shape(1);
-        uint32_t KLoops = CeilDiv(KRound, C0_NUM_PER_FRACTAL);
-        AscendC::LoadData2DParams params;
-        params.startIndex = 0;
-        params.repeatTimes = static_cast<uint8_t>(MRound / ELE_NUM_PER_C0); 
-        params.srcStride = 1;
-        params.sid = 0;
-        params.dstGap = 0;
-        params.ifTranspose = true;
-        params.addrMode = 0;
-        for(uint32_t i = 0; i < KLoops; i++){
-            AscendC::LoadData(dstTensor[i * C0_NUM_PER_FRACTAL * MRound], srcTensor[i * C0_NUM_PER_FRACTAL * MRound], params);
+        AscendC::LoadData2DParams loadDataParams;
+        loadDataParams.startIndex = 0;
+        loadDataParams.repeatTimes = static_cast<uint8_t>(layoutSrc.shape(1)); 
+        loadDataParams.srcStride = 1;
+        loadDataParams.sid = 0;
+        loadDataParams.dstGap = 0;
+        loadDataParams.ifTranspose = true;
+        loadDataParams.addrMode = 0;
+        for(uint32_t i = 0; i < layoutDst.shape(1); i++){
+            AscendC::LoadData(dstTensor[i * layoutSrc.stride(3)], srcTensor[i * layoutSrc.stride(3)], loadDataParams);
         }
     }
 };
@@ -100,32 +96,29 @@ struct CopyL1ToL0A<ArchTag, AscendCT::gemm::MatmulType<Element, layout::nN>, Asc
 // ColumnMajor
 template<class ArchTag>
 struct CopyL1ToL0A<ArchTag, AscendCT::gemm::MatmulType<float, layout::nN>, AscendCT::gemm::MatmulType<float, layout::zN>>{
+    using Element = float;
     using LayoutDst = layout::zN;
     using LayoutSrc = layout::nN;
 
-    static constexpr uint32_t ELE_NUM_PER_C0 =  BYTE_PER_C0 / sizeof(float);
+    static constexpr uint32_t ELE_NUM_PER_C0 =  BYTE_PER_C0 / sizeof(Element);
 
     ASCENDCT_DEVICE
     CopyL1ToL0A(){}
 
     ASCENDCT_DEVICE
     void operator()(
-        AscendC::LocalTensor<float> dstTensor,
-        AscendC::LocalTensor<float> srcTensor,
+        AscendC::LocalTensor<Element> dstTensor,
+        AscendC::LocalTensor<Element> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        uint32_t MRound = layoutSrc.shape(0) * layoutSrc.shape(1);
-        uint32_t KRound = layoutDst.shape(0) * layoutDst.shape(1);
-        uint32_t ML0Alignment = ELE_NUM_PER_C0 * 2;
-        uint32_t KLoops = CeilDiv(KRound, C0_NUM_PER_FRACTAL);
-        AscendC::LoadData2dTransposeParams params;
-        params.startIndex = 0;
-        params.repeatTimes = static_cast<uint8_t>(MRound / ML0Alignment); 
-        params.srcStride = 1;
-        params.dstGap = 0;
-        params.dstFracGap = static_cast<uint16_t>(MRound / ML0Alignment) - 1;
-        for(uint32_t i = 0; i < KLoops; i++){ 
-            AscendC::LoadDataWithTranspose(dstTensor[i * MRound * C0_NUM_PER_FRACTAL], srcTensor[i * C0_NUM_PER_FRACTAL * MRound], params);
+        AscendC::LoadData2dTransposeParams loadDataParams;
+        loadDataParams.startIndex = 0;
+        loadDataParams.repeatTimes = static_cast<uint8_t>(layoutSrc.shape(1) / 2); 
+        loadDataParams.srcStride = 1;
+        loadDataParams.dstGap = 0;
+        loadDataParams.dstFracGap = static_cast<uint16_t>(layoutSrc.shape(1) / 2) - 1;
+        for(uint32_t i = 0; i < layoutDst.shape(1); i++){ 
+            AscendC::LoadDataWithTranspose(dstTensor[i * layoutSrc.stride(3)], srcTensor[i * layoutSrc.stride(3)], loadDataParams);
         }
     }
 };
@@ -152,18 +145,20 @@ struct CopyL1ToL0A<ArchTag, AscendCT::gemm::MatmulType<int8_t, layout::nZ>, Asce
         uint32_t KRound = layoutSrc.shape(2) * layoutSrc.shape(3);
         uint32_t KL0Alignment = C0_NUM_PER_FRACTAL * 2; 
         uint32_t KLoops = CeilDiv(KRound, KL0Alignment);
-        AscendC::LoadData2dTransposeParams params;
-        params.startIndex = 0;
-        params.repeatTimes = static_cast<uint8_t>(MRound / ELE_NUM_PER_C0); 
-        params.srcStride = static_cast<uint16_t>(KRound / KL0Alignment); 
-        params.dstGap = 1; 
-        params.dstFracGap = 0;
+        AscendC::LoadData2dTransposeParams loadDataParams;
+        loadDataParams.startIndex = 0;
+        loadDataParams.repeatTimes = static_cast<uint8_t>(MRound / ELE_NUM_PER_C0); 
+        loadDataParams.srcStride = static_cast<uint16_t>(KRound / KL0Alignment); 
+        loadDataParams.dstGap = 1; 
+        loadDataParams.dstFracGap = 0;
         for(uint32_t i = 0; i < KLoops; i++){
-            AscendC::LoadDataWithTranspose(dstTensor[i * MRound * KL0Alignment], srcTensor[i * KL0Alignment * ELE_NUM_PER_C0], params);
+            AscendC::LoadDataWithTranspose(dstTensor[i * MRound * KL0Alignment], srcTensor[i * KL0Alignment * ELE_NUM_PER_C0], loadDataParams);
         }
     }
 };
 
+
+//华为实现   AIC直接使用
 /// Partial specialization for zN in and zZ out.
 template <class ArchTag, class Element>
 struct CopyL1ToL0A<ArchTag, gemm::MatmulType<Element, layout::zN>> {

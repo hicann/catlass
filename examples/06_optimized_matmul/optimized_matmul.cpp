@@ -196,6 +196,8 @@ void Run(Options const &options)
                 layoutA.shape(0), layoutA.shape(1), L1TileShape::M, L1TileShape::K);
             LayoutPaddingB layoutWB = LayoutPaddingB(
                 layoutB.shape(0), layoutB.shape(1), L1TileShape::K, L1TileShape::N);
+
+                
             MatmulKernel::Arguments arguments{
                 options.problemShape, align, sizeof(ElementWorkspace),
                 layoutWA, layoutWB, deviceA, deviceB, deviceC};

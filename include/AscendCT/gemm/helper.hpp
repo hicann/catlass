@@ -102,7 +102,6 @@ struct L1ATypeSelector {
         "Unsupported layout selector, can not find the specialization.");
 };
 
-// confirm
 template<class Element>
 struct L1ATypeSelector<gemm::MatmulType<Element, layout::RowMajor>> {
     using L1AType = gemm::MatmulType<Element, layout::zN>;
@@ -123,25 +122,6 @@ struct L1ATypeSelector<gemm::MatmulType<Element, layout::PaddingColumnMajor>> {
     using L1AType = gemm::MatmulType<Element, layout::nZ>;
 };
 
-// for the reason that the conflict on the idea, so i have to add some special Element to avoid conflict
-// new add
-template<>
-struct L1ATypeSelector<gemm::MatmulType<half, layout::ColumnMajor>> {
-    using L1AType = gemm::MatmulType<half, layout::nN>;
-};
-
-// new add
-template<>
-struct L1ATypeSelector<gemm::MatmulType<bfloat16_t, layout::ColumnMajor>> {
-    using L1AType = gemm::MatmulType<bfloat16_t, layout::nN>;
-};
-
-// new add
-template<>
-struct L1ATypeSelector<gemm::MatmulType<float, layout::ColumnMajor>> {
-    using L1AType = gemm::MatmulType<float, layout::nN>;
-};
-
 template<class GmBType>
 struct L1BTypeSelector {
     static_assert(DEPENDENT_FALSE<GmBType>,
@@ -151,25 +131,6 @@ struct L1BTypeSelector {
 template<class Element>
 struct L1BTypeSelector<gemm::MatmulType<Element, layout::RowMajor>> {
     using L1BType = gemm::MatmulType<Element, layout::zN>;
-};
-
-// for the reason that the conflict on the idea, so i have to add some special Element to avoid conflict
-// new add
-template<>
-struct L1BTypeSelector<gemm::MatmulType<half, layout::RowMajor>> {
-    using L1BType = gemm::MatmulType<half, layout::zZ>;
-};
-
-// new add
-template<>
-struct L1BTypeSelector<gemm::MatmulType<bfloat16_t, layout::RowMajor>> {
-    using L1BType = gemm::MatmulType<bfloat16_t, layout::zZ>;
-};
-
-// new add
-template<>
-struct L1BTypeSelector<gemm::MatmulType<float, layout::RowMajor>> {
-    using L1BType = gemm::MatmulType<float, layout::zZ>;
 };
 
 template<class Element>
@@ -182,7 +143,6 @@ struct L1BTypeSelector<gemm::MatmulType<Element, layout::PaddingRowMajor>> {
     using L1BType = gemm::MatmulType<Element, layout::zN>;
 };
 
-// confirm
 template<class Element>
 struct L1BTypeSelector<gemm::MatmulType<Element, layout::ColumnMajor>> {
     using L1BType = gemm::MatmulType<Element, layout::nZ>;
@@ -190,6 +150,54 @@ struct L1BTypeSelector<gemm::MatmulType<Element, layout::ColumnMajor>> {
 
 template<class Element>
 struct L1BTypeSelector<gemm::MatmulType<Element, layout::PaddingColumnMajor>> {
+    using L1BType = gemm::MatmulType<Element, layout::nZ>;
+};
+
+
+// 我们新增
+template<class GmAType>
+struct L1ATypeSelectorGemm {
+    static_assert(DEPENDENT_FALSE<GmAType>,
+        "Unsupported layout selector, can not find the specialization.");
+};
+// for the reason that the conflict on the idea, so i have to add some special Element to avoid conflict
+// new add
+template<class Element>
+struct L1ATypeSelectorGemm<gemm::MatmulType<Element, layout::ColumnMajor>> {
+    using L1AType = gemm::MatmulType<Element, layout::nN>;
+};
+// int8_t
+template<>
+struct L1ATypeSelectorGemm<gemm::MatmulType<int8_t, layout::ColumnMajor>> {
+    using L1AType = gemm::MatmulType<int8_t, layout::nZ>;
+};
+
+template<class Element>
+struct L1ATypeSelectorGemm<gemm::MatmulType<Element, layout::RowMajor>> {
+    using L1AType = gemm::MatmulType<Element, layout::zN>;
+};
+
+
+template<class GmBType>
+struct L1BTypeSelectorGemm {
+    static_assert(DEPENDENT_FALSE<GmBType>,
+        "Unsupported layout selector, can not find the specialization.");
+};
+
+// for the reason that the conflict on the idea, so i have to add some special Element to avoid conflict
+// new add
+template<class Element>
+struct L1BTypeSelectorGemm<gemm::MatmulType<Element, layout::RowMajor>> {
+    using L1BType = gemm::MatmulType<Element, layout::zZ>;
+};
+
+template<>
+struct L1BTypeSelectorGemm<gemm::MatmulType<int8_t, layout::RowMajor>> {
+    using L1BType = gemm::MatmulType<int8_t, layout::zN>;
+};
+
+template<class Element>
+struct L1BTypeSelectorGemm<gemm::MatmulType<Element, layout::ColumnMajor>> {
     using L1BType = gemm::MatmulType<Element, layout::nZ>;
 };
 
@@ -212,31 +220,33 @@ struct L0ATypeSelector<gemm::MatmulType<Element, layout::nN>>{
 };
 
 /// ColumnMajor int8_t
+///这里和gemv一样，可去掉后缀
 template<>
 struct L0ATypeSelector<gemm::MatmulType<int8_t, layout::nZ>>{
     using L0AType = gemm::MatmulType<int8_t, layout::zN>;
 };
 
 template<class L1Type>
-struct L0BTypeSelector{};
+struct L0BTypeSelectorGemm{};
 
 // RowMajor
 template<class Element>
-struct L0BTypeSelector<gemm::MatmulType<Element, layout::zZ>>{
+struct L0BTypeSelectorGemm<gemm::MatmulType<Element, layout::zZ>>{
     using L0BType = gemm::MatmulType<Element, layout::nZ>;
 };
 
 // RowMajor int8_t
 template<>
-struct L0BTypeSelector<gemm::MatmulType<int8_t, layout::zN>>{
+struct L0BTypeSelectorGemm<gemm::MatmulType<int8_t, layout::zN>>{
     using L0BType = gemm::MatmulType<int8_t, layout::nZ>;
 };
 
 // ColumnMajor
 template<class Element>
-struct L0BTypeSelector<gemm::MatmulType<Element, layout::nZ>>{
+struct L0BTypeSelectorGemm<gemm::MatmulType<Element, layout::nZ>>{
     using L0BType = gemm::MatmulType<Element, layout::nN>;
 };
+
 
 template<class Element, class Layout, class Enable = void>
 struct L1AlignHelperTla {

@@ -33,5 +33,6 @@ class BlockEpilogue {
 #include "AscendCT/epilogue/block/block_epilogue_mla_fd_rescal_o.hpp"
 #include "AscendCT/epilogue/block/block_epilogue_per_token_dequant.hpp"
 #include "AscendCT/epilogue/block/block_epilogue_gemm.hpp"
+#include "AscendCT/epilogue/block/block_epilogue_gemv.hpp"
 
 #endif  // ASCENDCT_EPILOGUE_BLOCK_BLOCK_EPILOGUE_HPP

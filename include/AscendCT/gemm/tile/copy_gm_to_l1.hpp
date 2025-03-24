@@ -50,57 +50,31 @@ struct CopyGmToL1<ArchTag, gemm::MatmulType<Element, layout::RowMajor>, gemm::Ma
         AscendC::GlobalTensor<Element> const &srcTensor,
         LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
     {
-        uint32_t MActual = layoutSrc.shape(0);
-        uint32_t MRound = layoutDst.shape(0) * layoutDst.shape(1);
-        uint32_t KRound = layoutDst.shape(2) * layoutDst.shape(3);
-        uint32_t stride = layoutSrc.stride(0); 
-        AscendC::Nd2NzParams params;
-        params.ndNum = 1;
-        params.nValue = MActual;
-        params.dValue = KRound;
-        params.srcNdMatrixStride = 0;
-        params.srcDValue = stride;
-        params.dstNzC0Stride = MRound;
-        params.dstNzNStride = 1;
-        params.dstNzMatrixStride = 1;
-        AscendC::DataCopy(dstTensor, srcTensor, params);
+        AscendC::Nd2NzParams intriParams;
+
+        intriParams.ndNum = 1;
+        intriParams.dValue = layoutSrc.shape(1);
+        intriParams.srcNdMatrixStride = 0;
+        intriParams.dstNzC0Stride = layoutDst.stride(3) / ELE_NUM_PER_C0;
+        intriParams.dstNzMatrixStride = 0;
+
+        if (layoutSrc.stride(0) < STRIDE_LIMIT) {
+            intriParams.nValue = layoutSrc.shape(0);
+            intriParams.srcDValue = layoutSrc.stride(0);
+            intriParams.dstNzNStride = layoutDst.stride(0) / ELE_NUM_PER_C0;
+            AscendC::DataCopy(dstTensor, srcTensor, intriParams);
+        } else {
+            intriParams.nValue = 1;
+            intriParams.srcDValue = 0;
+            intriParams.dstNzNStride = 0;
+            for (uint32_t i = 0; i < layoutSrc.shape(0); i++) {
+                AscendC::DataCopy(dstTensor[i * ELE_NUM_PER_C0], srcTensor[i * layoutSrc.stride(0)], intriParams);
+            }
+        }
     }
 };
 
-/// Matrix B int8_t
-template<class ArchTag>
-struct CopyGmToL1<ArchTag, gemm::MatmulType<int8_t, layout::RowMajor>, gemm::MatmulType<int8_t, layout::zN>>{
-    using Element = int8_t;
-    using LayoutDst = layout::zN;
-    using LayoutSrc = layout::RowMajor;
-
-    ASCENDCT_DEVICE
-    CopyGmToL1(){}
-    
-    ASCENDCT_DEVICE
-    void operator()(
-        AscendC::LocalTensor<Element> dstTensor,
-        AscendC::GlobalTensor<Element> srcTensor,
-        LayoutDst layoutDst, LayoutSrc layoutSrc
-    ){
-        uint32_t NRound = layoutDst.shape(2) * layoutDst.shape(3); 
-        uint32_t KActual = layoutSrc.shape(0);
-        uint32_t KRound = layoutDst.shape(0) * layoutDst.shape(1); 
-        uint32_t stride = layoutSrc.stride(0);
-        AscendC::Nd2NzParams params;
-        params.ndNum = 1;
-        params.nValue = KActual;
-        params.dValue = NRound; 
-        params.srcNdMatrixStride = 0;
-        params.srcDValue = stride;
-        params.dstNzC0Stride = KRound; 
-        params.dstNzNStride = 1;
-        params.dstNzMatrixStride = 1;
-        AscendC::DataCopy(dstTensor, srcTensor, params);
-    }
-};
-
-/// Matrix B new add
+/// Matrix B new add K N k N
 template <class ArchTag, class Element>
 struct CopyGmToL1<ArchTag, gemm::MatmulType<Element, layout::RowMajor>, gemm::MatmulType<Element, layout::zZ>> {
     using LayoutDst = layout::zZ;
@@ -119,65 +93,95 @@ struct CopyGmToL1<ArchTag, gemm::MatmulType<Element, layout::RowMajor>, gemm::Ma
         AscendC::GlobalTensor<Element> const &srcTensor,
         LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
     {
-        uint32_t NRound = layoutDst.shape(2) * layoutDst.shape(3);
-        uint32_t KActual = layoutSrc.shape(0);
-        uint32_t stride = layoutSrc.stride(0); 
-        uint32_t ndNum = KActual / C0_NUM_PER_FRACTAL;
-        uint32_t remains = KActual % C0_NUM_PER_FRACTAL;
-        uint32_t srcNdStride = stride * C0_NUM_PER_FRACTAL;
-        if(srcNdStride < STRIDE_LIMIT){
-            AscendC::Nd2NzParams params;
-            if(ndNum){ 
-                params.ndNum = ndNum;
-                params.nValue = C0_NUM_PER_FRACTAL;
-                params.dValue = NRound;
-                params.srcNdMatrixStride = stride * C0_NUM_PER_FRACTAL;
-                params.srcDValue = stride;
-                params.dstNzC0Stride = C0_NUM_PER_FRACTAL;
-                params.dstNzNStride = 1;
-                params.dstNzMatrixStride = NRound * C0_NUM_PER_FRACTAL;
-                AscendC::DataCopy(dstTensor, srcTensor, params);
+        AscendC::Nd2NzParams intriParams;
+        // 按列方向切分
+        uint32_t srcNdStride = C0_NUM_PER_FRACTAL * layoutSrc.stride(0);
+        uint32_t ndNum = layoutSrc.shape(0) / C0_NUM_PER_FRACTAL;
+        uint32_t remains = layoutSrc.shape(0) % C0_NUM_PER_FRACTAL;
+        if (srcNdStride < STRIDE_LIMIT) {
+            if (ndNum) {
+                intriParams.ndNum = ndNum;
+                intriParams.nValue = C0_NUM_PER_FRACTAL;
+                intriParams.dValue = layoutSrc.shape(1);
+                intriParams.srcNdMatrixStride = srcNdStride;
+                intriParams.srcDValue = layoutSrc.stride(0);
+
+                intriParams.dstNzC0Stride = layoutDst.stride(3) / ELE_NUM_PER_C0;
+                intriParams.dstNzNStride = layoutDst.stride(0) / ELE_NUM_PER_C0;
+
+                intriParams.dstNzMatrixStride = layoutDst.stride(1);
+
+                AscendC::DataCopy(dstTensor, srcTensor, intriParams);
             }
-            if(remains){
-                params.ndNum = 1;
-                params.nValue = remains;
-                params.dValue = NRound;
-                params.srcNdMatrixStride = 0;
-                params.srcDValue = stride;
-                params.dstNzC0Stride = C0_NUM_PER_FRACTAL;
-                params.dstNzNStride = 1;
-                params.dstNzMatrixStride = 1;
-                AscendC::DataCopy(dstTensor[ndNum * NRound * C0_NUM_PER_FRACTAL], srcTensor[ndNum * C0_NUM_PER_FRACTAL * stride], params);
+
+            if (remains) {
+                AscendC::Nd2NzParams tailParams;
+                tailParams.ndNum = 1;
+                tailParams.nValue = remains;
+                tailParams.dValue = layoutSrc.shape(1);
+                tailParams.srcNdMatrixStride = srcNdStride;
+                tailParams.srcDValue = layoutSrc.stride(0);
+
+                tailParams.dstNzC0Stride = layoutDst.stride(3) / ELE_NUM_PER_C0;
+                tailParams.dstNzNStride = layoutDst.stride(0) / ELE_NUM_PER_C0;
+                tailParams.dstNzMatrixStride = 0;  //`
+
+                AscendC::DataCopy(dstTensor[ndNum * layoutDst.stride(1)], srcTensor[ndNum * srcNdStride], tailParams);
             }
-        }else if(stride < STRIDE_LIMIT){
-            AscendC::Nd2NzParams params;
-            params.ndNum = 1;
-            params.nValue = C0_NUM_PER_FRACTAL;
-            params.dValue = NRound;
-            params.srcNdMatrixStride = 0;
-            params.srcDValue = stride;
-            params.dstNzC0Stride = C0_NUM_PER_FRACTAL;
-            params.dstNzNStride = 1;
-            params.dstNzMatrixStride = 1;
-            for(uint32_t i = 0; i < ndNum; i++){
-                AscendC::DataCopy(dstTensor[i * NRound * C0_NUM_PER_FRACTAL], srcTensor[i * C0_NUM_PER_FRACTAL * stride], params);
+        } else if (layoutSrc.stride(0) < STRIDE_LIMIT) {
+            for (uint32_t i = 0; i < ndNum; i++) {
+                AscendC::Nd2NzParams intriParams;
+                intriParams.ndNum = 1;
+                intriParams.nValue = C0_NUM_PER_FRACTAL;
+                intriParams.dValue = layoutSrc.shape(1);
+                intriParams.srcNdMatrixStride = 0;
+                intriParams.srcDValue = layoutSrc.stride(0);
+
+                intriParams.dstNzC0Stride = layoutDst.stride(3) / ELE_NUM_PER_C0;
+                intriParams.dstNzNStride = layoutDst.stride(0) / ELE_NUM_PER_C0;
+                intriParams.dstNzMatrixStride = 0;
+
+                AscendC::DataCopy(dstTensor[i * layoutDst.stride(1)], srcTensor[i * srcNdStride], intriParams);
             }
-            if(remains){
-                params.ndNum = 1;
-                params.nValue = remains;
-                params.dValue = NRound;
-                params.srcNdMatrixStride = 0;
-                params.srcDValue = stride;
-                params.dstNzC0Stride = C0_NUM_PER_FRACTAL;
-                params.dstNzNStride = 1;
-                params.dstNzMatrixStride = 1;
-                AscendC::DataCopy(dstTensor[ndNum * NRound * C0_NUM_PER_FRACTAL], srcTensor[ndNum * C0_NUM_PER_FRACTAL * stride], params);
+            if (remains) {
+                AscendC::Nd2NzParams tailParams;
+                tailParams.ndNum = 1;
+                tailParams.nValue = remains;
+                tailParams.dValue = layoutSrc.shape(1);
+                tailParams.srcNdMatrixStride = 0;
+                tailParams.srcDValue = layoutSrc.stride(0);
+
+                tailParams.dstNzC0Stride = layoutDst.stride(3) / ELE_NUM_PER_C0;
+                tailParams.dstNzNStride = layoutDst.stride(0) / ELE_NUM_PER_C0;
+                tailParams.dstNzMatrixStride = 0;
+
+                AscendC::DataCopy(dstTensor[ndNum * layoutDst.stride(1)], srcTensor[ndNum * srcNdStride], tailParams);
+            }
+        } else {
+            for (uint32_t i = 0; i < layoutSrc.shape(0); i++) {
+                uint32_t idxR0 = i / C0_NUM_PER_FRACTAL;
+                uint32_t idxInR0 = i % C0_NUM_PER_FRACTAL;
+
+                AscendC::Nd2NzParams intriParams;
+                intriParams.ndNum = 1;
+                intriParams.nValue = 1;
+                intriParams.dValue = layoutSrc.shape(1);
+                intriParams.srcNdMatrixStride = 0;
+                intriParams.srcDValue = 0;
+
+                intriParams.dstNzC0Stride = layoutDst.stride(3) / ELE_NUM_PER_C0;
+                intriParams.dstNzNStride = 0;
+                intriParams.dstNzMatrixStride = 0;
+
+                uint32_t offsetDst = i * idxR0 * layoutDst.stride(1) + idxInR0 * ELE_NUM_PER_C0;
+                uint32_t offsetSrc = i * layoutSrc.stride(0);
+                AscendC::DataCopy(dstTensor[offsetDst], srcTensor[offsetSrc], intriParams);
             }
         }
     }
 };
 
-/// Matrix A  new add
+/// Matrix A  new add M K M K
 template <class ArchTag, class Element>
 struct CopyGmToL1<ArchTag, gemm::MatmulType<Element, layout::ColumnMajor>, gemm::MatmulType<Element, layout::nN>> {
     using LayoutDst = layout::nN;
@@ -196,98 +200,91 @@ struct CopyGmToL1<ArchTag, gemm::MatmulType<Element, layout::ColumnMajor>, gemm:
         AscendC::GlobalTensor<Element> const &srcTensor,
         LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
     {
-        uint32_t MRound = layoutDst.shape(0) * layoutDst.shape(1);
-        uint32_t KActual = layoutSrc.shape(1);
-        uint32_t stride = layoutSrc.stride(1); 
-        uint32_t ndNum = KActual / C0_NUM_PER_FRACTAL;
-        uint32_t remains = KActual % C0_NUM_PER_FRACTAL;
-        uint32_t srcNdStride = stride * C0_NUM_PER_FRACTAL;
-        if(srcNdStride < STRIDE_LIMIT){
-            AscendC::Nd2NzParams params;
-            if(ndNum){ 
-                params.ndNum = ndNum;
-                params.nValue = C0_NUM_PER_FRACTAL;
-                params.dValue = MRound;
-                params.srcNdMatrixStride = stride * C0_NUM_PER_FRACTAL;
-                params.srcDValue = stride;
-                params.dstNzC0Stride = C0_NUM_PER_FRACTAL;
-                params.dstNzNStride = 1;
-                params.dstNzMatrixStride = MRound * C0_NUM_PER_FRACTAL;
-                AscendC::DataCopy(dstTensor, srcTensor, params);
+        AscendC::Nd2NzParams intriParams;
+        // 按列方向切分
+        uint32_t srcNdStride = C0_NUM_PER_FRACTAL * layoutSrc.stride(1);
+        uint32_t ndNum = layoutSrc.shape(1) / C0_NUM_PER_FRACTAL;
+        uint32_t remains = layoutSrc.shape(1) % C0_NUM_PER_FRACTAL;
+        if (srcNdStride < STRIDE_LIMIT) {
+            if (ndNum) {
+                intriParams.ndNum = ndNum;
+                intriParams.nValue = C0_NUM_PER_FRACTAL;
+                intriParams.dValue = layoutSrc.shape(0);
+                intriParams.srcNdMatrixStride = srcNdStride;
+                intriParams.srcDValue = layoutSrc.stride(1);
+
+                intriParams.dstNzC0Stride = layoutDst.stride(1) / ELE_NUM_PER_C0;
+                intriParams.dstNzNStride = layoutDst.stride(2) / ELE_NUM_PER_C0;
+
+                intriParams.dstNzMatrixStride = layoutDst.stride(3);
+
+                AscendC::DataCopy(dstTensor, srcTensor, intriParams);
             }
-            if(remains){
-                params.ndNum = 1;
-                params.nValue = remains;
-                params.dValue = MRound;
-                params.srcNdMatrixStride = 0;
-                params.srcDValue = stride;
-                params.dstNzC0Stride = C0_NUM_PER_FRACTAL;
-                params.dstNzNStride = 1;
-                params.dstNzMatrixStride = 1;
-                AscendC::DataCopy(dstTensor[ndNum * MRound * C0_NUM_PER_FRACTAL], srcTensor[ndNum * C0_NUM_PER_FRACTAL * stride], params);
+
+            if (remains) {
+                AscendC::Nd2NzParams tailParams;
+                tailParams.ndNum = 1;
+                tailParams.nValue = remains;
+                tailParams.dValue = layoutSrc.shape(0);
+                tailParams.srcNdMatrixStride = srcNdStride;
+                tailParams.srcDValue = layoutSrc.stride(1);
+
+                tailParams.dstNzC0Stride = layoutDst.stride(1) / ELE_NUM_PER_C0;
+                tailParams.dstNzNStride = layoutDst.stride(2) / ELE_NUM_PER_C0;
+                tailParams.dstNzMatrixStride = 0;  //`
+
+                AscendC::DataCopy(dstTensor[ndNum * layoutDst.stride(3)], srcTensor[ndNum * srcNdStride], tailParams);
             }
-        }else if(stride < STRIDE_LIMIT){
-            AscendC::Nd2NzParams params;
-            params.ndNum = 1;
-            params.nValue = C0_NUM_PER_FRACTAL;
-            params.dValue = MRound;
-            params.srcNdMatrixStride = 0;
-            params.srcDValue = stride;
-            params.dstNzC0Stride = C0_NUM_PER_FRACTAL;
-            params.dstNzNStride = 1;
-            params.dstNzMatrixStride = 1;
-            for(uint32_t i = 0; i < ndNum; i++){
-                AscendC::DataCopy(dstTensor[i * MRound * C0_NUM_PER_FRACTAL], srcTensor[i * C0_NUM_PER_FRACTAL * stride], params);
+        } else if (layoutSrc.stride(1) < STRIDE_LIMIT) {
+            for (uint32_t i = 0; i < ndNum; i++) {
+                AscendC::Nd2NzParams intriParams;
+                intriParams.ndNum = 1;
+                intriParams.nValue = C0_NUM_PER_FRACTAL;
+                intriParams.dValue = layoutSrc.shape(0);
+                intriParams.srcNdMatrixStride = 0;
+                intriParams.srcDValue = layoutSrc.stride(1);
+
+                intriParams.dstNzC0Stride = layoutDst.stride(1) / ELE_NUM_PER_C0;
+                intriParams.dstNzNStride = layoutDst.stride(2) / ELE_NUM_PER_C0;
+                intriParams.dstNzMatrixStride = 0;
+
+                AscendC::DataCopy(dstTensor[i * layoutDst.stride(3)], srcTensor[i * srcNdStride], intriParams);
             }
-            if(remains){
-                params.ndNum = 1;
-                params.nValue = remains;
-                params.dValue = MRound;
-                params.srcNdMatrixStride = 0;
-                params.srcDValue = stride;
-                params.dstNzC0Stride = C0_NUM_PER_FRACTAL;
-                params.dstNzNStride = 1;
-                params.dstNzMatrixStride = 1;
-                AscendC::DataCopy(dstTensor[ndNum * MRound * C0_NUM_PER_FRACTAL], srcTensor[ndNum * C0_NUM_PER_FRACTAL * stride], params);
+            if (remains) {
+                AscendC::Nd2NzParams tailParams;
+                tailParams.ndNum = 1;
+                tailParams.nValue = remains;
+                tailParams.dValue = layoutSrc.shape(0);
+                tailParams.srcNdMatrixStride = 0;
+                tailParams.srcDValue = layoutSrc.stride(1);
+
+                tailParams.dstNzC0Stride = layoutDst.stride(1) / ELE_NUM_PER_C0;
+                tailParams.dstNzNStride = layoutDst.stride(2) / ELE_NUM_PER_C0;
+                tailParams.dstNzMatrixStride = 0;
+
+                AscendC::DataCopy(dstTensor[ndNum * layoutDst.stride(3)], srcTensor[ndNum * srcNdStride], tailParams);
+            }
+        } else {
+            for (uint32_t i = 0; i < layoutSrc.shape(1); i++) {
+                uint32_t idxR0 = i / C0_NUM_PER_FRACTAL;
+                uint32_t idxInR0 = i % C0_NUM_PER_FRACTAL;
+
+                AscendC::Nd2NzParams intriParams;
+                intriParams.ndNum = 1;
+                intriParams.nValue = 1;
+                intriParams.dValue = layoutSrc.shape(0);
+                intriParams.srcNdMatrixStride = 0;
+                intriParams.srcDValue = 0;
+
+                intriParams.dstNzC0Stride = layoutDst.stride(1) / ELE_NUM_PER_C0;
+                intriParams.dstNzNStride = 0;
+                intriParams.dstNzMatrixStride = 0;
+
+                uint32_t offsetDst = i * idxR0 * layoutDst.stride(3) + idxInR0 * ELE_NUM_PER_C0;
+                uint32_t offsetSrc = i * layoutSrc.stride(1);
+                AscendC::DataCopy(dstTensor[offsetDst], srcTensor[offsetSrc], intriParams);
             }
         }
-    }
-};
-
-/// matrix A int8_t
-template <class ArchTag>
-struct CopyGmToL1<ArchTag, gemm::MatmulType<int8_t, layout::ColumnMajor>, gemm::MatmulType<int8_t, layout::nZ>> {
-    using Element = int8_t;
-    using LayoutDst = layout::nZ;
-    using LayoutSrc = layout::ColumnMajor;
-
-    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-
-    // Mehtods
-
-    ASCENDCT_DEVICE
-    CopyGmToL1() {};
-
-    ASCENDCT_DEVICE
-    void operator()(
-        AscendC::LocalTensor<Element> const &dstTensor,
-        AscendC::GlobalTensor<Element> const &srcTensor,
-        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
-    {
-        uint32_t MRound = layoutDst.shape(0) * layoutDst.shape(1);
-        uint32_t KActual = layoutSrc.shape(1);
-        uint32_t KRound = layoutDst.shape(2) * layoutDst.shape(3);
-        uint32_t stride = layoutSrc.stride(1);
-        AscendC::Nd2NzParams params;
-        params.ndNum = 1;
-        params.nValue = KActual;
-        params.dValue = MRound;
-        params.srcNdMatrixStride = 0;
-        params.srcDValue = stride;
-        params.dstNzC0Stride = KRound;
-        params.dstNzNStride = 1;
-        params.dstNzMatrixStride = 1;
-        AscendC::DataCopy(dstTensor, srcTensor, params);
     }
 };
 
@@ -310,23 +307,32 @@ struct CopyGmToL1<ArchTag, gemm::MatmulType<Element, layout::ColumnMajor>, gemm:
         AscendC::GlobalTensor<Element> const &srcTensor,
         LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
     {
-        uint32_t NActual = layoutSrc.shape(1);
-        uint32_t NRound = layoutDst.shape(2) * layoutDst.shape(3);
-        uint32_t KRound = layoutDst.shape(0) * layoutDst.shape(1);
-        uint32_t stride = layoutSrc.stride(1); 
-        AscendC::Nd2NzParams params;
-        params.ndNum = 1;
-        params.nValue = NActual;
-        params.dValue = KRound;
-        params.srcNdMatrixStride = 0;
-        params.srcDValue = stride;
-        params.dstNzC0Stride = NRound;
-        params.dstNzNStride = 1;
-        params.dstNzMatrixStride = 1;
-        AscendC::DataCopy(dstTensor, srcTensor, params);
+        AscendC::Nd2NzParams intriParams;
+
+        intriParams.ndNum = 1;
+        intriParams.dValue = layoutSrc.shape(0);
+        intriParams.srcNdMatrixStride = 0;
+        intriParams.dstNzC0Stride = layoutDst.stride(1) / ELE_NUM_PER_C0;
+        intriParams.dstNzMatrixStride = 0;
+
+        if (layoutSrc.stride(1) < STRIDE_LIMIT) {
+            intriParams.nValue = layoutSrc.shape(1);
+            intriParams.srcDValue = layoutSrc.stride(1);
+            intriParams.dstNzNStride = layoutDst.stride(2) / ELE_NUM_PER_C0;
+            AscendC::DataCopy(dstTensor, srcTensor, intriParams);
+        } else {
+            intriParams.nValue = 1;
+            intriParams.srcDValue = 0;
+            intriParams.dstNzNStride = 0;
+            for (uint32_t i = 0; i < layoutSrc.shape(1); i++) {
+                AscendC::DataCopy(dstTensor[i * ELE_NUM_PER_C0], srcTensor[i * layoutSrc.stride(1)], intriParams);
+            }
+        }
     }
 };
 
+
+// GEMV_AIC使用到了，左向量行优先GM->L1时使用，GEMM可以后续验证是否可以直接使用
 /// Partial specialization for AtlasA2, RowMajor in and zN out.
 template <class Element>
 struct CopyGmToL1<arch::AtlasA2, gemm::MatmulType<Element, layout::RowMajor>> {

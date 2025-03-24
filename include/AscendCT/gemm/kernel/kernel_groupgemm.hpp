@@ -176,21 +176,23 @@ template<
     class BlockEpilogue_ ,// 在后处理阶段进行操作beta alpha操作
     class TileScheduler_ = void
 >
-class KernelGroupGemmEpilogue{
+class KernelGroupGemm{
 public:
     using BlockGemm = BlockGemm_;
     using ArchTag = typename BlockGemm::ArchTag;
     using L1TileShape = typename BlockGemm::L1TileShape;
     using ElementA = typename BlockGemm::ElementA;
     using LayoutA = typename BlockGemm::LayoutA;
+    using LayoutWA = typename BlockGemm::LayoutA;
     using ElementB = typename BlockGemm::ElementB;
     using LayoutB = typename BlockGemm::LayoutB;
+    using LayoutWB = typename BlockGemm::LayoutB;
     using ElementX = typename BlockGemm::ElementX;
     using LayoutX = typename BlockGemm::LayoutX;
     using ElementAccumulator = typename BlockGemm::ElementAccumulator;
     
     using BlockEpilogue = BlockEpilogue_;
-    // using EpilogueParams = typename BlockEpilogue::Params;
+    using EpilogueParams = typename BlockEpilogue::Params;
     using ElementC = typename BlockEpilogue::ElementC;
     using ElementD = typename BlockEpilogue::ElementD;
     using ElementCompute =
@@ -204,7 +206,6 @@ public:
     const uint32_t l0CBlockNum = ArchTag::L0C_SIZE / cSize;
 
     static constexpr uint32_t STAGES = BlockGemm::STAGES; // 开启双缓冲机制的
-    // static constexpr bool RowOrColumn = std::is_same<LayoutA, AscendCT::layout::RowMajor>::value && std::is_same<LayoutB, AscendCT::layout::RowMajor>::value;
     using TileScheduler = TileScheduler_;
     
     // 进行Padding操作
@@ -234,10 +235,10 @@ public:
         
 
         // Methods
-        ASCENDCT_DEVICE
+        ASCENDCT_HOST_DEVICE
         Params() {}
 
-        ASCENDCT_DEVICE
+        ASCENDCT_HOST_DEVICE
         Params(
             uint32_t problemCount_, GM_ADDR ptrProblemShape_,
             GM_ADDR alpha_, GM_ADDR beta_,
@@ -255,15 +256,24 @@ public:
                 ptrWB(ptrWB_), ptrlayoutWB(ptrlayoutWB_),ptrC(ptrC_), ptrD(ptrD_){}
     }Params;
 
-    ASCENDCT_DEVICE
-    KernelGroupGemmEpilogue(){
-
-    }
-
-    ASCENDCT_DEVICE
-    ~KernelGroupGemmEpilogue(){
-        
-    }
+    struct Arguments{
+        uint32_t problemCount;
+        GM_ADDR ptrProblemShape;
+        GM_ADDR alpha;
+        GM_ADDR beta;
+        GM_ADDR ptrA;
+        GM_ADDR ptrLayoutA;
+        GM_ADDR ptrB;
+        GM_ADDR ptrLayoutB;
+        GM_ADDR ptrWorkspace;
+        GM_ADDR ptrLayoutWorkspace;
+        GM_ADDR ptrWA;
+        GM_ADDR ptrlayoutWA; // padding
+        GM_ADDR ptrWB;
+        GM_ADDR ptrlayoutWB;
+        GM_ADDR ptrC;
+        GM_ADDR ptrD;
+    };
 
     // 比较两者的步长
     ASCENDCT_DEVICE
@@ -286,6 +296,28 @@ public:
     {
         return layout.shape(1) * layout.stride(1);
     }
+
+    static bool CanImplement(const Arguments &args){
+        return true;
+    }
+
+    static size_t GetWorkspaceSize(const Arguments &args)
+    {
+        return 0;
+    }
+
+    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace){
+        Params params{args.problemCount, args.ptrProblemShape, args.alpha, args.beta, args.ptrA, args.ptrLayoutA, args.ptrB, args.ptrLayoutB,
+                    args.ptrWorkspace, args.ptrLayoutWorkspace, args.ptrWA, args.ptrlayoutWA, args.ptrWB, args.ptrlayoutWB, 
+                    args.ptrC, args.ptrD};
+        return params;
+    }
+
+    ASCENDCT_DEVICE
+    KernelGroupGemm(){}
+
+    ASCENDCT_DEVICE
+    ~KernelGroupGemm(){}
 
     template<int32_t CORE_TYPE = g_coreType>
     ASCENDCT_DEVICE
@@ -444,13 +476,6 @@ public:
         uint32_t startLoopIdx;
         MatmulCoord blockShape = L1TileShape::ToCoord();
         arch::Resource<ArchTag> resource;
-        BlockEpilogue blockEpilogue(resource, blockShape);
-        AscendC::GlobalTensor<ElementX> gmX;
-        gmX.SetGlobalBuffer((__gm__ ElementX*)params.ptrWorkspace);
-        AscendC::GlobalTensor<ElementC> gmC;
-        gmC.SetGlobalBuffer((__gm__ ElementC*)params.ptrC);
-        AscendC::GlobalTensor<ElementD> gmD;
-        gmD.SetGlobalBuffer((__gm__ ElementD*)params.ptrD);
         AscendC::GlobalTensor<ElementA> gmA;
         AscendC::GlobalTensor<ElementA> gmWA;
         gmA.SetGlobalBuffer(reinterpret_cast<__gm__ ElementA*>(params.ptrA));
@@ -481,7 +506,10 @@ public:
                 AscendCT::arch::CrossCoreBarrier<0x0, PIPE_MTE3>();
                 AscendCT::arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(flagAivFinishPadding);
             }
-            
+            AscendC::GlobalTensor<ElementX> gmX;
+            gmX.SetGlobalBuffer((__gm__ ElementX*)params.ptrWorkspace);
+            EpilogueParams epilogueParams{alpha_, beta_, params.ptrC, layoutWorkspace, params.ptrD, layoutWorkspace};
+            BlockEpilogue blockEpilogue(resource, blockShape, epilogueParams);
             uint32_t M = problemShape.m();
             uint32_t N = problemShape.n();
             uint32_t K = problemShape.k();
@@ -502,13 +530,7 @@ public:
                 arch::CrossCoreWaitFlagWithReverse<0x2, PIPE_MTE3>(flagAicFinishStore); // 没这个变量
                 MatrixCoord gmTileOffset{MGmBlockIdx * maxMPerBlock, NGmBlockIdx * maxNPerBlock}; // gm中的偏移量
                 auto offsetX = layoutWorkspace.GetOffset(gmTileOffset);
-                blockEpilogue( // 传入偏移量
-                    alpha_, beta_,
-                    gmC[inGroupOffsetWorkspace + offsetX], layoutWorkspace,
-                    gmD[inGroupOffsetWorkspace + offsetX], layoutWorkspace,
-                    gmX[inGroupOffsetWorkspace + offsetX], layoutWorkspace,
-                    actualShape
-                );
+                blockEpilogue(inGroupOffsetWorkspace + offsetX, gmX[inGroupOffsetWorkspace + offsetX], layoutWorkspace, actualShape);
             }
             inGroupOffsetA += problemShape.m() * problemShape.k();
             inGroupOffsetWA += GetWorkspaceLen(layoutWA);

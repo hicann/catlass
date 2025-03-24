@@ -167,13 +167,16 @@ public:
     using L1TileShape = typename BlockGemm::L1TileShape;
     using ElementA = typename BlockGemm::ElementA;
     using LayoutA = typename BlockGemm::LayoutA;
+    using LayoutWA = typename BlockGemm::LayoutA;
     using ElementB = typename BlockGemm::ElementB;
     using LayoutB = typename BlockGemm::LayoutB;
+    using LayoutWB = typename BlockGemm::LayoutB;
     using ElementX = typename BlockGemm::ElementX;
     using LayoutX = typename BlockGemm::LayoutX;
     using ElementAccumulator = typename BlockGemm::ElementAccumulator;
 
     using BlockEpilogue = BlockEpilogue_;
+    using EpilogueParams = typename BlockEpilogue::Params;
     using ElementC = typename BlockEpilogue::ElementC;
     using ElementD = typename BlockEpilogue::ElementD;
 
@@ -203,31 +206,32 @@ public:
         LayoutA layoutWA; 
         GM_ADDR ptrWB;
         LayoutB layoutWB;
-        ElementScalar alpha;
-        ElementScalar beta;
-        GM_ADDR ptrC;
-        GM_ADDR ptrD;
+        EpilogueParams epilogueParams;
 
         // Methods
-        ASCENDCT_DEVICE
+        ASCENDCT_HOST_DEVICE
         Params() {}
 
-        ASCENDCT_DEVICE
+        ASCENDCT_HOST_DEVICE
         Params(MatmulCoord problemShape_, GM_ADDR ptrA_, LayoutA layoutA_,
             GM_ADDR ptrB_, LayoutB layoutB_, GM_ADDR gmWorkspace_, 
             GM_ADDR ptrWA_, LayoutA layoutWA_, GM_ADDR ptrWB_, LayoutB layoutWB_, 
-            ElementScalar alpha_, ElementScalar beta_, GM_ADDR ptrC_, GM_ADDR ptrD_)
-                : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), 
+            EpilogueParams epilogueParams_) : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), 
                 ptrB(ptrB_), layoutB(layoutB_), gmWorkspace(gmWorkspace_), 
                 ptrWA(ptrWA_), layoutWA(layoutWA_), ptrWB(ptrWB_), layoutWB(layoutWB_), 
-                alpha(alpha_), beta(beta_), ptrC(ptrC_), ptrD(ptrD_){}
+                epilogueParams(epilogueParams_){} 
     }Params;
 
-    ASCENDCT_DEVICE
-    KernelGemm(){}
-
-    ASCENDCT_DEVICE
-    ~KernelGemm(){}
+    struct Arguments{
+        MatmulCoord problemShape;
+        uint32_t align;
+        GM_ADDR ptrA;
+        GM_ADDR ptrB;
+        GM_ADDR gmWorkspace;
+        GM_ADDR ptrWA;
+        GM_ADDR ptrWB;
+        EpilogueParams epilogueParams;
+    };
     
     ASCENDCT_DEVICE
     bool IsSameStride(layout::RowMajor layout1, layout::RowMajor layout2)
@@ -239,6 +243,49 @@ public:
     {
         return layout1.stride(1) == layout2.stride(1);
     }
+
+    static layout::RowMajor GetWorkspaceLayout(layout::RowMajor layout, uint32_t align)
+    {
+        if (align == 0) {
+            return layout;
+        }
+        return layout::RowMajor(layout.shape(0), layout.shape(1),
+            RoundUp(layout.shape(1), align));
+    }
+    
+    static layout::ColumnMajor GetWorkspaceLayout(layout::ColumnMajor layout, uint32_t align)
+    {
+        if (align == 0) {
+            return layout;
+        }
+        return layout::ColumnMajor(layout.shape(0), layout.shape(1),
+            RoundUp(layout.shape(0), align));
+    }
+
+    static bool CanImplement(const Arguments &args){
+        return true;
+    }
+
+    static size_t GetWorkspaceSize(const Arguments &args)
+    {
+        return 0;
+    }
+
+    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace){
+        LayoutA layoutA{args.problemShape.m(), args.problemShape.k()};
+        LayoutB layoutB{args.problemShape.k(), args.problemShape.n()};
+        LayoutWA layoutWA = GetWorkspaceLayout(layoutA, args.align);
+        LayoutWB layoutWB = GetWorkspaceLayout(layoutA, args.align);
+        Params params{args.problemShape, args.ptrA, layoutA, args.ptrB, layoutB, args.gmWorkspace,
+                    args.ptrWA, layoutWA, args.ptrWB, layoutWB, args.epilogueParams};
+        return params;
+    }
+
+    ASCENDCT_DEVICE
+    KernelGemm(){}
+
+    ASCENDCT_DEVICE
+    ~KernelGemm(){}
 
     template<int32_t CORE_TYPE = g_coreType>
     ASCENDCT_DEVICE
@@ -345,7 +392,7 @@ public:
         AscendCT::arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(flagAivFinishPadding);
         }
         MatmulCoord blockShape = L1TileShape::ToCoord();
-        BlockEpilogue blockEpilogue(resource, blockShape);
+        BlockEpilogue blockEpilogue(resource, blockShape, params.epilogueParams);
         uint32_t M = params.problemShape.m();
         uint32_t N = params.problemShape.n();
         uint32_t K = params.problemShape.k();
@@ -357,10 +404,6 @@ public:
         uint32_t aicoreIndex = aivIndex / aivNum;
         AscendC::GlobalTensor<ElementX> gmX;
         gmX.SetGlobalBuffer((__gm__ ElementX*)params.gmWorkspace);
-        AscendC::GlobalTensor<ElementC> gmC;
-        gmC.SetGlobalBuffer((__gm__ ElementC*)params.ptrC);
-        AscendC::GlobalTensor<ElementD> gmD;
-        gmD.SetGlobalBuffer((__gm__ ElementD*)params.ptrD);
         for(uint32_t loopIdx = aicoreIndex; loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()){
             uint32_t MGmBlockIdx = loopIdx / NLoops;
             uint32_t NGmBlockIdx = loopIdx % NLoops;
@@ -371,13 +414,7 @@ public:
             arch::CrossCoreWaitFlagWithReverse<0x2, PIPE_MTE3>(flagAicFinishStore); 
             MatrixCoord gmTileOffset{MGmBlockIdx * maxMPerBlock, NGmBlockIdx * maxNPerBlock}; 
             auto offsetX = layoutX.GetOffset(gmTileOffset);
-            blockEpilogue( 
-                params.alpha, params.beta,
-                gmC[offsetX], layoutX,
-                gmD[offsetX], layoutX,
-                gmX[offsetX], layoutX,
-                actualShape
-            );
+            blockEpilogue(offsetX, gmX[offsetX], layoutX, actualShape);
         }
     }
 private:
