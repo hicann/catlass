@@ -12,14 +12,15 @@
 #include <torch/extension.h>
 #include <torch_npu/csrc/core/npu/NPUStream.h>
 
-#include "AscendCT_kernel.h"
-#include "AscendCT_kernel_wrapper.h"
+#include "AscendCTKernel.h"
+#include "AscendCTKernelWrapper.h"
 
 namespace py = pybind11;
+using namespace AscendCTKernelWrapper;
 
-PYBIND11_MODULE(torch_AscendCT, m) {
-    m.doc() = "Python bindings for torch_AscendCT";
-    m.def("basic_matmul", &AscendCT::RunBasicMatmul, "")
-    .def("grouped_matmul", &AscendCT::RunGroupedMatmul, "")
-    .def("optimized_matmul", &AscendCT::RunOptimizedMatmul, "");
+PYBIND11_MODULE(torch_ascendct, m) {
+    m.doc() = "Python bindings for AscendCTKernel";
+    m.def("basic_matmul", &RunBasicMatmul, "")
+    .def("grouped_matmul", &RunGroupedMatmul, "")
+    .def("optimized_matmul", &RunOptimizedMatmul, "");
 }

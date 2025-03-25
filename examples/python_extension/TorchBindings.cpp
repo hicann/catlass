@@ -10,11 +10,13 @@
 
 #include <torch/extension.h>
 
-#include "AscendCT_kernel_wrapper.h"
+#include "AscendCTKernelWrapper.h"
+
+using namespace AscendCTKernelWrapper;
 
 at::Tensor RunBasicMatmulTorch(const at::Tensor &mat1, const at::Tensor &mat2, const std::string &outDType)
 {
-    return AscendCT::RunBasicMatmul(mat1.to(AscendCT::GetAtDevice()), mat2.to(AscendCT::GetAtDevice()), outDType);
+    return RunBasicMatmul(mat1.to(GetAtDevice()), mat2.to(GetAtDevice()), outDType);
 }
 
 TORCH_LIBRARY(AscendCTTorch, m) { m.def("basic_matmul(Tensor mat1, Tensor mat2, str c) -> Tensor"); }

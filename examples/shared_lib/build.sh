@@ -19,7 +19,7 @@ do
             OUTPUT_PATH="${i#*=}"
             shift # past argument=value
         ;;
-        --AscendCT_src_dir=*)
+        --ascendct_src_dir=*)
             ASCENDCT_SRC_DIR="${i#*=}"
     esac
 done
@@ -48,5 +48,5 @@ bisheng -O2 -fPIC -std=c++17 -xcce --cce-aicore-arch=dav-c220 \
 -Wno-macro-redefined -Wno-ignored-attributes \
 -L$ASCEND_HOME_PATH/lib64 \
 -lruntime \
-$SHARED_LIB_SRC_DIR/AscendCT_kernel.cpp --shared -o $OUTPUT_PATH/libAscendCT_kernel.so
-cp $SHARED_LIB_SRC_DIR/AscendCT_kernel.h $OUTPUT_PATH/
+$SHARED_LIB_SRC_DIR/AscendCTKernel.cpp --shared -o $OUTPUT_PATH/libascendct_kernel.so
+cp $SHARED_LIB_SRC_DIR/AscendCTKernel.h $OUTPUT_PATH/
