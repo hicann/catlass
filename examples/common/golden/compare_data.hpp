@@ -30,9 +30,9 @@ std::vector<uint64_t> CompareData(const std::vector<ElementResult>& result, cons
     for (uint64_t i = 0; i < result.size(); ++i) {
         ElementCompare actualValue = static_cast<ElementCompare>(result[i]);
         ElementCompare expectValue = expect[i];
-        // std::cout << "actualVal : " << actualValue << " " << "expectVal : " << expectValue << std::endl;
         ElementCompare diff = std::fabs(actualValue - expectValue);
         if (diff > rtol * std::max(1.0f, std::fabs(expectValue))) {
+            // std::cout << "i : " << i  << " " <<  "actualVal : " << actualValue << " " << "expectVal : " << expectValue << std::endl;
             errorIndices.push_back(i);
         }
     }

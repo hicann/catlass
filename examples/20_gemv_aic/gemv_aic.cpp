@@ -32,83 +32,71 @@
 #include "AscendCT/epilogue/tile/tile_elemwise_muls.hpp"
 
 #include "AscendCT/layout/layout.hpp"
+#include "AscendCT/gemv/device/gemv_universal_adapter.hpp"
+#include "AscendCT/status.hpp"
+
 
 using namespace AscendCT;
 
 using ScalarType = float;
+using ArchTag = arch::AtlasA2;
 
-template <
-    class LayoutA,
-    class LayoutX,
-    class LayoutZ>
-ASCENDCT_GLOBAL void GemvAic(
-    uint64_t fftsAddr,
-    ScalarType alpha,
-    ScalarType beta,
-    GemvCoord problemShape,
-    GM_ADDR gmA,
-    LayoutA layoutA,
-    GM_ADDR gmX,
-    LayoutX layoutX,
-    GM_ADDR gmZ,
-    LayoutZ layoutZ,
-    GM_ADDR gmWorkspace) {
-    // Set FFTS address
-    AscendC::SetSyncBaseAddr(fftsAddr);
-    using ArchTag = arch::AtlasA2;
-    using LayoutTemp = layout::RowMajor;
-    using TempType = gemm::MatmulType<float, LayoutTemp>;
+// Block level, define BlockGemv
+constexpr bool enableUnitFlag = true;
+constexpr bool enableShuffleK = true;
+using DispatchPolicy = gemm::MmadAtlasA2Preload<enableUnitFlag, enableShuffleK>;
 
-    // Block level, define BlockGemv
-    constexpr bool enableUnitFlag = true;
-    constexpr bool enableShuffleK = true;
-    using DispatchPolicy = gemm::MmadAtlasA2Preload<enableUnitFlag, enableShuffleK>;
-    using L1TileShape = GemvShape<32, 512>;
-    using L0TileShape = GemvShape<32, 256>;
-    using AType = gemm::MatmulType<float, LayoutA>;
-    using XType = gemm::MatmulType<float, LayoutX>;
-    using TempType = gemm::MatmulType<float, LayoutTemp>;
-    using BiasType = void;
-    using TileCopy = gemv::tile::TileCopyGemvAic<typename DispatchPolicy::ArchTag, AType, XType, TempType, BiasType>;
-    using TileMmad = gemm::tile::TileMmad<typename DispatchPolicy::ArchTag, XType, AType, BiasType>;
+using LayoutX = layout::RowMajor;
+using LayoutA = layout::RowMajor;
+using LayoutTemp = layout::RowMajor;
+using LayoutZ = layout::VectorLayout;
 
-    using BlockGemv = gemv::block::BlockGemv<DispatchPolicy, L1TileShape, L0TileShape, AType, XType, TempType, BiasType, TileCopy, TileMmad>;
+using L1TileShape = GemvShape<32, 512>;
+using L0TileShape = GemvShape<32, 256>;
+using AType = gemm::MatmulType<float, LayoutA>;
+using XType = gemm::MatmulType<float, LayoutX>;
+using TempType = gemm::MatmulType<float, LayoutTemp>;
+using BiasType = void;
+using TileCopy = gemv::tile::TileCopyGemvAic<typename DispatchPolicy::ArchTag, AType, XType, TempType, BiasType>;
+using TileMmad = gemm::tile::TileMmad<typename DispatchPolicy::ArchTag, XType, AType, BiasType>;
 
-    // Block level, define BlockEpilogue
-    using EpilogueBlockDispatchPolicy = epilogue::EpilogueAtlasA2ElemWiseOneSource;
-    using YType = gemm::MatmulType<float, LayoutZ>;
-    using ZType = gemm::MatmulType<float, LayoutZ>;
-    using AXType = gemm::MatmulType<float, LayoutZ>;
+using BlockGemv = gemv::block::BlockGemv<DispatchPolicy, L1TileShape, L0TileShape, AType, XType, TempType, BiasType, TileCopy, TileMmad>;
 
-    using ComputeType = AXType;
-    constexpr uint32_t computeLength = 8192;
+// Block level, define BlockEpilogue
+using EpilogueBlockDispatchPolicy = epilogue::EpilogueAtlasA2ElemWiseOneSource;
+using YType = gemm::MatmulType<float, LayoutZ>;
+using ZType = gemm::MatmulType<float, LayoutZ>;
+using AXType = gemm::MatmulType<float, LayoutZ>;
 
-    using TileElemWiseAddGemv = epilogue::tile::TileElemWiseAdd<ArchTag, ComputeType, computeLength>;
-    using TileElemWiseMulsGemv = epilogue::tile::TileElemWiseMuls<ArchTag, ComputeType, computeLength>;
+using ComputeType = AXType;
+constexpr uint32_t computeLength = 8192;
 
-    using EpilogueTileCopy = epilogue::tile::TileCopy<ArchTag, YType, AXType, ZType>;
+using TileElemWiseAddGemv = epilogue::tile::TileElemWiseAdd<ArchTag, ComputeType, computeLength>;
+using TileElemWiseMulsGemv = epilogue::tile::TileElemWiseMuls<ArchTag, ComputeType, computeLength>;
 
-    using BlockEpilogue = epilogue::block::BlockEpilogue<EpilogueBlockDispatchPolicy, AXType, YType, ZType, TileElemWiseAddGemv, TileElemWiseMulsGemv, EpilogueTileCopy>;
+using EpilogueTileCopy = epilogue::tile::TileCopy<ArchTag, YType, AXType, ZType>;
 
-    using TileScheduler = typename gemv::block::GemvIdentityBlockSwizzle<3, 0>;
+using BlockEpilogue = epilogue::block::BlockEpilogue<EpilogueBlockDispatchPolicy, AXType, YType, ZType, TileElemWiseAddGemv, TileElemWiseMulsGemv, EpilogueTileCopy>;
 
-    // kernle levels
-    using GemvKernel = gemv::kernel::GemvEpilogue<BlockGemv, BlockEpilogue, TileScheduler>;
+using TileScheduler = typename gemv::block::GemvIdentityBlockSwizzle<3, 0>;
 
-    // Prepare params
-    typename BlockEpilogue::Params epilogueParams{alpha, beta, gmZ, layoutZ, gmZ, layoutZ};
-    typename GemvKernel::Params params{problemShape, gmX, layoutX, gmA, layoutA, gmWorkspace, epilogueParams};
+// kernle levels
+using GemvKernel = gemv::kernel::GemvEpilogue<BlockGemv, BlockEpilogue, TileScheduler>;
 
-    // call a kernel
-    GemvKernel gemv;
-    gemv(params);
-}
+// // Prepare params
+// typename BlockEpilogue::Params epilogueParams{alpha, beta, gmZ, layoutZ, gmZ, layoutZ};
+// typename GemvKernel::Params params{problemShape, gmX, layoutX, gmA, layoutA, gmWorkspace, epilogueParams};
+
+// // call a kernel
+// GemvKernel gemv;
+// gemv(params);
+// }
 
 typedef struct Options {
     const std::string HELPER = "20_gemv_aic m n [device_id]";
 
     GemvCoord problemShape{128, 128};
-    int32_t deviceId{7};
+    int32_t deviceId{1};
 
     Options() = default;
 
@@ -132,36 +120,21 @@ typedef struct Options {
     }
 } Options;
 
-layout::RowMajor GetWorkspaceLayout(layout::RowMajor layout, uint32_t align) {
-    if (align == 0) {
-        return layout;
+template <class Adapter>
+void RunAdapter(Adapter matmul_op, typename Adapter::Arguments args, aclrtStream stream,
+    uint32_t aicCoreNum, uint64_t fftsAddr)
+{
+    size_t sizeWorkspace = matmul_op.GetWorkspaceSize(args);
+    uint8_t *deviceWorkspace = nullptr;
+    if (sizeWorkspace > 0) {
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
     }
-    return layout::RowMajor(layout.shape(0), layout.shape(1),
-                            RoundUp(layout.shape(1), align));
-}
-
-layout::ColumnMajor GetWorkspaceLayout(layout::ColumnMajor layout, uint32_t align) {
-    if (align == 0) {
-        return layout;
+    matmul_op.Initialize(args, deviceWorkspace);
+    matmul_op(stream, aicCoreNum, fftsAddr);
+    ACL_CHECK(aclrtSynchronizeStream(stream));
+    if (sizeWorkspace > 0) {
+        ACL_CHECK(aclrtFree(deviceWorkspace));
     }
-    return layout::ColumnMajor(layout.shape(0), layout.shape(1),
-                               RoundUp(layout.shape(0), align));
-}
-
-size_t GetWorkspaceLen(layout::RowMajor layout) {
-    return layout.shape(0) * layout.stride(0);
-}
-
-size_t GetWorkspaceLen(layout::ColumnMajor layout) {
-    return layout.shape(1) * layout.stride(1);
-}
-
-bool IsSameStride(layout::RowMajor layout1, layout::RowMajor layout2) {
-    return layout1.stride(0) == layout2.stride(0);
-}
-
-bool IsSameStride(layout::ColumnMajor layout1, layout::ColumnMajor layout2) {
-    return layout1.stride(1) == layout2.stride(1);
 }
 
 void Run(Options options) {
@@ -183,10 +156,10 @@ void Run(Options options) {
     size_t sizeX = lenX * sizeof(float);
     size_t sizeZ = lenZ * sizeof(float);
     size_t sizeY = lenY * sizeof(float);
-    size_t sizeWorkspace = lenZ * sizeof(float);
+    size_t sizeWorkspace;
 
     using LayoutX = layout::RowMajor;
-    using LayoutA = layout::ColumnMajor;
+    using LayoutA = layout::RowMajor;
     using LayoutZ = layout::VectorLayout;
     using LayoutY = layout::RowMajor;
 
@@ -221,8 +194,9 @@ void Run(Options options) {
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceZ), sizeZ, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceZ, sizeZ, hostY.data(), sizeZ, ACL_MEMCPY_HOST_TO_DEVICE));
 
+    // uint8_t *deviceWorkspace{nullptr};
+    // ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
     uint8_t* deviceWorkspace{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
 
     // Prepare FFTS address
     uint64_t fftsAddr{0};
@@ -230,15 +204,31 @@ void Run(Options options) {
     RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
 
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
-    GemvAic<<<aicCoreNum, nullptr, stream>>>(
-        fftsAddr,
-        hostAlpha[0], hostBeta[0],
-        options.problemShape,
-        deviceA, layoutA,
-        deviceX, layoutX,
-        deviceZ, layoutZ,
-        deviceWorkspace);
-    ACL_CHECK(aclrtSynchronizeStream(stream));
+
+    // TODO:  use adapter to activate the kernel
+    using GemvAdapter = gemv::device::GemvUniversalAdapter<GemvKernel>;
+    GemvKernel::Arguments arguments{options.problemShape, hostAlpha[0], hostBeta[0], sizeof(float), deviceX, deviceA, deviceZ};
+    GemvAdapter gemv_op;
+    RunAdapter(gemv_op, arguments, stream, aicCoreNum, fftsAddr);
+    // gemv_op.CanImplement(arguments);
+    // sizeWorkspace = gemv_op.GetWorkspaceSize(arguments);
+    // if (sizeWorkspace > 0) {
+    //     ACL_CHECK(
+    //         aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+    // }
+    // gemv_op.Initialize(arguments, deviceWorkspace);
+    // gemv_op(stream, aicCoreNum, fftsAddr);
+    // ACL_CHECK(aclrtSynchronizeStream(stream));
+
+    // GemvAic<<<aicCoreNum, nullptr, stream>>>(
+    //     fftsAddr,
+    //     hostAlpha[0], hostBeta[0],
+    //     options.problemShape,
+    //     deviceA, layoutA,
+    //     deviceX, layoutX,
+    //     deviceZ, layoutZ,
+    //     deviceWorkspace);
+    // ACL_CHECK(aclrtSynchronizeStream(stream));
 
     std::vector<float> hostRes(lenZ);
     ACL_CHECK(aclrtMemcpy(hostRes.data(), sizeZ, deviceZ, sizeZ, ACL_MEMCPY_DEVICE_TO_HOST));
@@ -257,7 +247,10 @@ void Run(Options options) {
     ACL_CHECK(aclrtFree(deviceA));
     ACL_CHECK(aclrtFree(deviceX));
     ACL_CHECK(aclrtFree(deviceZ));
-    ACL_CHECK(aclrtFree(deviceWorkspace));
+
+    if (sizeWorkspace > 0) {
+        ACL_CHECK(aclrtFree(deviceWorkspace));
+    }
 
     ACL_CHECK(aclrtDestroyStream(stream));
     ACL_CHECK(aclrtResetDevice(options.deviceId));

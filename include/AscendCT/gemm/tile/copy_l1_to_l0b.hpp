@@ -109,20 +109,6 @@ struct CopyL1ToL0B<ArchTag, AscendCT::gemm::MatmulType<int8_t, layout::zN>, Asce
         AscendC::LocalTensor<Element> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
-        // AscendC::LoadData2dTransposeParams loadDataParams;
-
-        // loadDataParams.startIndex = 0;
-        // loadDataParams.repeatTimes = static_cast<uint16_t>(CeilDiv<ELE_NUM_PER_C0>(layoutDst.orgShape(1)));
-        // loadDataParams.srcStride = layoutSrc.stride(3) / ELE_NUM_PER_FRACTAL / 2;
-        // loadDataParams.dstGap = 1;
-        // loadDataParams.dstFracGap = 0;
-
-        // for (uint32_t i = 0; i < CeilDiv<ELE_NUM_PER_C0>(layoutDst.orgShape(0)); i++) {
-        //     AscendC::LoadDataWithTranspose(
-        //         dstTensor[i * layoutDst.stride(1)],
-        //         srcTensor[i * layoutSrc.stride(1) * 2],
-        //         loadDataParams);
-        // }
         uint32_t NRound = layoutSrc.shape(2) * layoutSrc.shape(3);
         uint32_t KRound = layoutSrc.shape(0) * layoutSrc.shape(1);
         uint32_t KL0Alignment = C0_NUM_PER_FRACTAL * 2; // 32个元素对齐
@@ -302,19 +288,22 @@ struct CopyL1ToL0B<ArchTag, gemm::MatmulType<int8_t, layout::RowMajor>> {
         AscendC::LocalTensor<Element> const& srcTensor,
         LayoutDst const& layoutDst, LayoutSrc const& layoutSrc) 
     {
+        uint32_t MRound = layoutDst.orgShape(0);
+        uint32_t NRound = layoutDst.orgShape(1);
+        uint32_t stride = layoutSrc.stride(3) / ELE_NUM_PER_FRACTAL / 2;
+        uint32_t Nloop = static_cast<uint32_t>(CeilDiv(NRound, ELE_NUM_PER_C0));
+        uint32_t Mloop = static_cast<uint32_t>(CeilDiv(MRound, ELE_NUM_PER_C0));
+        uint32_t dstOffset = layoutDst.stride(1);
         AscendC::LoadData2dTransposeParams loadDataParams;
 
         loadDataParams.startIndex = 0;
-        loadDataParams.repeatTimes = static_cast<uint16_t>(CeilDiv<ELE_NUM_PER_C0>(layoutDst.orgShape(1)));
-        loadDataParams.srcStride = layoutSrc.stride(3) / ELE_NUM_PER_FRACTAL / 2;
+        loadDataParams.repeatTimes = Nloop;
+        loadDataParams.srcStride = stride;
         loadDataParams.dstGap = 1;
         loadDataParams.dstFracGap = 0;
 
-        for (uint32_t i = 0; i < CeilDiv<ELE_NUM_PER_C0>(layoutDst.orgShape(0)); i++) {
-            AscendC::LoadDataWithTranspose(
-                dstTensor[i * layoutDst.stride(1)],
-                srcTensor[i * layoutSrc.stride(1) * 2],
-                loadDataParams);
+        for (uint32_t i = 0; i < Mloop; i++) {
+            AscendC::LoadDataWithTranspose(dstTensor[i * dstOffset], srcTensor[i * dstOffset * 2], loadDataParams);
         }
     }
 };

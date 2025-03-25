@@ -91,10 +91,10 @@ public:
         LayoutZ layoutZ;
 
         // Methods
-        ASCENDCT_DEVICE
+        ASCENDCT_HOST_DEVICE
         Params() {}
 
-        ASCENDCT_DEVICE
+        ASCENDCT_HOST_DEVICE
         Params(ElementScalar alpha_, ElementScalar beta_, GM_ADDR ptrY_, LayoutTemp layoutY_, GM_ADDR ptrZ_, LayoutZ layoutZ_)
             : alpha(alpha_), beta(beta_), ptrY(ptrY_), layoutY(layoutY_), ptrZ(ptrZ_), layoutZ(layoutZ_) {}
     };

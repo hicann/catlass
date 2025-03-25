@@ -176,15 +176,11 @@ struct CopyL0CToGm<AscendCT::arch::AtlasA2, ElementAccumulator_,
         AscendC::LocalTensor<ElementSrc> srcTensor,
         LayoutDst const &dstLayout, LayoutSrc const &srcLayout, uint8_t unitFlag = 0
     ){
-        uint32_t MActual = dstLayout.shape(0);
-        uint32_t NActual = dstLayout.shape(1);
-        uint32_t NRound = srcLayout.shape(2) * srcLayout.shape(3);
-        uint32_t strideC = dstLayout.stride(1);
         AscendC::DataCopyCO12DstParams params;
-        params.nSize = MActual;
-        params.mSize = NActual;
-        params.dstStride = strideC;
-        params.srcStride = NRound;
+        params.nSize = dstLayout.shape(0);
+        params.mSize = dstLayout.shape(1);
+        params.dstStride = dstLayout.stride(1);
+        params.srcStride = srcLayout.shape(2) * srcLayout.shape(3);
         params.quantPre = quantPre;
         params.reluPre = 0;
         params.channelSplit = false;

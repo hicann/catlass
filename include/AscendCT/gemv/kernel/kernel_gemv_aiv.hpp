@@ -52,21 +52,53 @@
          uint32_t SPLIT;
  
          // Methods
-         ASCENDCT_DEVICE
+         ASCENDCT_HOST_DEVICE
          Params() {}
  
-         ASCENDCT_DEVICE
+         ASCENDCT_HOST_DEVICE
          Params(GemvCoord const &problemShape_,  GM_ADDR ptrA_, LayoutA layoutA_,  GM_ADDR ptrX_,LayoutX layoutX_,
             GM_ADDR ptrY_,LayoutY layoutY_,GM_ADDR ptrY_read_,float alpha_,float beta_,uint32_t SPLIT_)
              : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrX(ptrX_),layoutX(layoutX_),
                ptrY(ptrY_),layoutY(layoutY_),ptrY_read(ptrY_read_),alpha(alpha_),beta(beta_),SPLIT(SPLIT_) {}
      };
 
-     
+     //TODO: add arguments
+    struct Arguments {
+        GemvCoord problemShape;
+        ElementY alpha;
+        ElementY beta;
+        GM_ADDR ptrA;
+        GM_ADDR ptrX;
+        GM_ADDR ptrY;
+        GM_ADDR ptrY_read;
+        uint32_t SPLIT;
+    };
+
+    static bool CanImplement(const Arguments &args)
+    {
+        return true;
+    }
+
+    static size_t GetWorkspaceSize(const Arguments &args)
+    {
+        return sizeof(ElementY) * args.problemShape.m();
+    }
+
+    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    {
+        GemvCoord problemShape = args.problemShape;
+        uint32_t m = problemShape.m();
+        uint32_t n = problemShape.n();
+        LayoutA layoutA{m, n};
+        LayoutX layoutX{n};
+        LayoutY layoutY{m};
+        Params params{problemShape, args.ptrA, layoutA, args.ptrX, layoutX, args.ptrY, layoutY, args.ptrY_read, args.alpha, args.beta, args.SPLIT};
+        return params;
+    }
+    
      // Methods
      ASCENDCT_DEVICE
-     KernelGemv(){
-     }
+     KernelGemv(){}
 
      template <int32_t CORE_TYPE = g_coreType>
      ASCENDCT_DEVICE

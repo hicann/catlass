@@ -94,12 +94,12 @@ public:
 
     static size_t GetWorkspaceSize(const Arguments &args)
     {
-        return args.elementSize * args.problemShape.m() * args.problemShape.n();
+        return args.elementSize * args.problemShape.m();
     }
 
     static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
     {
-        MatmulCoord problemShape = args.problemShape;
+        GemvCoord problemShape = args.problemShape;
         uint32_t m = problemShape.m();
         uint32_t n = problemShape.n();
         LayoutX layoutX{1, n};

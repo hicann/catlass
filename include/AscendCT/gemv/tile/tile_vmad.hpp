@@ -464,56 +464,6 @@ namespace AscendCT::gemv::tile
             AscendC::ResetMask();
         }
     };
-
-    // the following function is mmad which using by aic
-    ///////////////////////////////////////////////////////////
-    template <
-        /// Tag indicating architecture
-        class ArchTag_,
-        /// MatmulType for A matrix operand
-        class AType_,
-        /// MatmulType type for B matrix operand
-        class BType_,
-        /// MatmulType type for Bias operand
-        class BiasType_>
-    struct TileMmad
-    {
-        using ElementA = typename AType_::Element;
-        using ElementB = typename BType_::Element;
-        using ElementAccumulator =
-            typename gemv::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
-
-        // Methods
-
-        ASCENDCT_DEVICE
-        TileMmad() {}
-
-        ASCENDCT_DEVICE
-        void operator()(AscendC::LocalTensor<ElementAccumulator> const &l0CTensor,
-                        AscendC::LocalTensor<ElementA> const &l0ATensor,
-                        AscendC::LocalTensor<ElementB> const &l0BTensor,
-                        uint32_t m, uint32_t n, uint32_t k,
-                        bool initC = true, uint8_t unitFlag = 0)
-        {
-            AscendC::MmadParams mmadParams;
-            mmadParams.m = m;
-            mmadParams.n = n;
-            mmadParams.k = k;
-            mmadParams.unitFlag = unitFlag; 
-            mmadParams.cmatrixInitVal = initC;
-
-            AscendC::Mmad(l0CTensor,
-                          l0ATensor,
-                          l0BTensor,
-                          mmadParams);
-
-            const uint32_t PIPE_M_BARRIER_THRESHOLD = 10;
-            if ((m / C0_NUM_PER_FRACTAL) * (n / C0_NUM_PER_FRACTAL) < PIPE_M_BARRIER_THRESHOLD)
-            {
-                AscendC::PipeBarrier<PIPE_M>();
-            }
-        }
-    };
 }
 
 #endif // ASCENDCT_GEMV_TILE_TILE_VMAD_HPP
