@@ -35,7 +35,7 @@ function build_python_extension() {
 if [[ "$TARGET" == "shared_lib" ]]; then
     build_shared_lib
 elif [[ "$TARGET" == "python_extension" ]]; then
-    # build_shared_lib
+    build_shared_lib
     build_python_extension
 elif [[ "$TARGET" == "examples" ]]; then
     cmake --no-warn-unused-cli -S$CMAKE_SOURCE_PATH -B$CMAKE_BUILD_PATH
