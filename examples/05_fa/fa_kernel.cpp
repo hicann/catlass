@@ -7,20 +7,20 @@
  * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
  * See LICENSE in the root of the software repository for the full text of the License.
  */
-#include "AscendCT/AscendCT.hpp"
-#include "AscendCT/arch/arch.hpp"
-#include "AscendCT/layout/layout.hpp"
+#include "act/act.hpp"
+#include "act/arch/arch.hpp"
+#include "act/layout/layout.hpp"
 
-#include "AscendCT/gemm/dispatch_policy.hpp"
-#include "AscendCT/gemm/gemm_type.hpp"
-#include "AscendCT/gemm/block/block_mmad.hpp"
+#include "act/gemm/dispatch_policy.hpp"
+#include "act/gemm/gemm_type.hpp"
+#include "act/gemm/block/block_mmad.hpp"
 
-#include "AscendCT/arch/resource.hpp"
-#include "AscendCT/arch/cross_core_sync.hpp"
-#include "AscendCT/epilogue/block/block_epilogue.hpp"
-#include "AscendCT/epilogue/dispatch_policy.hpp"
+#include "act/arch/resource.hpp"
+#include "act/arch/cross_core_sync.hpp"
+#include "act/epilogue/block/block_epilogue.hpp"
+#include "act/epilogue/dispatch_policy.hpp"
 
-using namespace AscendCT;
+using namespace Act;
 
 constexpr uint32_t QK_READY_ID = 1;
 constexpr uint32_t SOFTMAX_READY_ID = 2;
@@ -77,25 +77,25 @@ public:
         GM_ADDR tiling;
 
         // Methods
-        ASCENDCT_DEVICE
+        ACT_DEVICE
         Params() {}
 
-        ASCENDCT_DEVICE
+        ACT_DEVICE
         Params(GM_ADDR q_, GM_ADDR k_, GM_ADDR v_, GM_ADDR mask_, GM_ADDR o_, GM_ADDR s_,
                GM_ADDR p_, GM_ADDR oTmp_, GM_ADDR tiling_)
             : q(q_), k(k_), v(v_), mask(mask_), o(o_), s(s_), p(p_), oTmp(oTmp_), tiling(tiling_) {}
     };
 
     // Methods
-    ASCENDCT_DEVICE
+    ACT_DEVICE
     FAKernel() {}
 
     template <int32_t CORE_TYPE = g_coreType>
-    ASCENDCT_DEVICE
+    ACT_DEVICE
     void operator()(Params const &params);
 
     template <>
-    ASCENDCT_DEVICE
+    ACT_DEVICE
     void operator()<AscendC::AIC>(Params const &params)
     {
         // Represent the full gm
@@ -219,7 +219,7 @@ public:
                 gQ[gmOffsetQ], gK[gmOffsetK], gS[gmOffsetS],
                 layoutQ, layoutK, layoutS,
                 actualBlockShapeQK, blockMmadpingpongFlag, 1);
-            arch::CrossCoreSetFlag<0x2, PIPE_FIX>(qkReady);
+            Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(qkReady);
             sPingpongFlag = 1 - sPingpongFlag;
             qkNIdx++;
 
@@ -246,7 +246,7 @@ public:
                         gQ[gmOffsetQ], gK[gmOffsetK], gS[gmOffsetS],
                         layoutQ, layoutK, layoutSNext,
                         actualBlockShapeQKNext, blockMmadpingpongFlag, 0);
-                    arch::CrossCoreSetFlag<0x2, PIPE_FIX>(qkReady);
+                    Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(qkReady);
                     sPingpongFlag = 1 - sPingpongFlag;
                     qkNIdx++;
                 }
@@ -269,13 +269,13 @@ public:
                 offsetV += blockOffsetV;
                 pPingpongFlag = 1 - pPingpongFlag;
                 oTmpPingpongFlag = 1 - oTmpPingpongFlag;
-                arch::CrossCoreSetFlag<0x2, PIPE_FIX>(pvReady);
+                Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(pvReady);
             }
         }
     }
 
     template <>
-    ASCENDCT_DEVICE
+    ACT_DEVICE
     void operator()<AscendC::AIV>(Params const &params)
     {
         // Represent the full gm
@@ -393,7 +393,7 @@ public:
             sPingpongFlag = 1 - sPingpongFlag;
             pPingpongFlag = 1 - pPingpongFlag;
             qkNIdx++;
-            arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(softmaxReady);
+            Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(softmaxReady);
 
             // mainloop
             uint32_t nEnd = nLoop;
@@ -424,7 +424,7 @@ public:
                     sPingpongFlag = 1 - sPingpongFlag;
                     pPingpongFlag = 1 - pPingpongFlag;
                     qkNIdx++;
-                    arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(softmaxReady);
+                    Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(softmaxReady);
                 }
 
                 if (svNIdx == (nLoop - 1)) {
@@ -433,7 +433,7 @@ public:
 
                 GemmCoord actualBlockShapePV{m, embd, svN};
                 int64_t gmOffsetOTmp = (int64_t)coreIdx * WORKSPACE_ELENUM + oTmpPingpongFlag * WORKSPACE_ELENUM / 2;
-                arch::CrossCoreWaitFlag(pvReady);
+                Arch::CrossCoreWaitFlag(pvReady);
                 epilogueFARescaleO(
                     gO[gmOffsetO], gOTmp[gmOffsetOTmp],
                     layoutO, layoutOTmp,
@@ -444,13 +444,13 @@ public:
     }
 
 private:
-    arch::Resource<ArchTag> resource;
-    arch::CrossCoreFlag qkReady{QK_READY_ID};
-    arch::CrossCoreFlag softmaxReady{SOFTMAX_READY_ID};
-    arch::CrossCoreFlag pvReady{PV_READY_ID};
+    Arch::Resource<ArchTag> resource;
+    Arch::CrossCoreFlag qkReady{QK_READY_ID};
+    Arch::CrossCoreFlag softmaxReady{SOFTMAX_READY_ID};
+    Arch::CrossCoreFlag pvReady{PV_READY_ID};
 };
 
-ASCENDCT_GLOBAL
+ACT_GLOBAL
 void FA(uint64_t fftsAddr,
         GM_ADDR q, GM_ADDR k, GM_ADDR v,
         GM_ADDR mask, GM_ADDR o, GM_ADDR s,
@@ -459,7 +459,7 @@ void FA(uint64_t fftsAddr,
     // Set FFTS address
     AscendC::SetSyncBaseAddr(fftsAddr);
 
-    using ArchTag = arch::AtlasA2;
+    using ArchTag = Arch::AtlasA2;
     using ElementQ = half;
     using LayoutQ = layout::RowMajor;
     using ElementK = half;
@@ -482,26 +482,26 @@ void FA(uint64_t fftsAddr,
     using L0TileShape = L1TileShape;
 
     // Mmadqk
-    using DispatchPolicyQK = gemm::MmadAtlasA2FAQK;
-    using QType = gemm::GemmType<ElementQ, LayoutQ>;
-    using KType = gemm::GemmType<ElementK, LayoutK>;
-    using SType = gemm::GemmType<ElementS, LayoutS>;
-    using BlockMmadQK = gemm::block::BlockMmad<DispatchPolicyQK, L1TileShape, L0TileShape, QType, KType, SType>;
+    using DispatchPolicyQK = Gemm::MmadAtlasA2FAQK;
+    using QType = Gemm::GemmType<ElementQ, LayoutQ>;
+    using KType = Gemm::GemmType<ElementK, LayoutK>;
+    using SType = Gemm::GemmType<ElementS, LayoutS>;
+    using BlockMmadQK = Gemm::Block::BlockMmad<DispatchPolicyQK, L1TileShape, L0TileShape, QType, KType, SType>;
     // EpilogueSoftmax
-    using PType = gemm::GemmType<ElementP, LayoutP>;
-    using MaskType = gemm::GemmType<ElementMask, LayoutMask>;
+    using PType = Gemm::GemmType<ElementP, LayoutP>;
+    using MaskType = Gemm::GemmType<ElementMask, LayoutMask>;
     using EpilogueFASoftmax =
-        epilogue::block::BlockEpilogue<epilogue::EpilogueAtlasA2FASoftmax, PType, SType, MaskType>;
+        Epilogue::Block::BlockEpilogue<Epilogue::EpilogueAtlasA2FASoftmax, PType, SType, MaskType>;
 
     // Mmadpv
-    using DispatchPolicyPV = gemm::MmadAtlasA2FAPV;
-    using VType = gemm::GemmType<ElementV, LayoutV>;
-    using OTmpType = gemm::GemmType<ElementOTmp, LayoutOTmp>;
-    using BlockMmadPV = gemm::block::BlockMmad<DispatchPolicyPV, L1TileShape, L0TileShape, PType, VType, OTmpType>;
+    using DispatchPolicyPV = Gemm::MmadAtlasA2FAPV;
+    using VType = Gemm::GemmType<ElementV, LayoutV>;
+    using OTmpType = Gemm::GemmType<ElementOTmp, LayoutOTmp>;
+    using BlockMmadPV = Gemm::Block::BlockMmad<DispatchPolicyPV, L1TileShape, L0TileShape, PType, VType, OTmpType>;
     // EpilogueRescaleO
-    using OType = gemm::GemmType<ElementO, LayoutO>;
+    using OType = Gemm::GemmType<ElementO, LayoutO>;
     using EpilogueFARescaleO =
-        epilogue::block::BlockEpilogue<epilogue::EpilogueAtlasA2FARescaleO, OType, OTmpType>;
+        Epilogue::Block::BlockEpilogue<Epilogue::EpilogueAtlasA2FARescaleO, OType, OTmpType>;
 
     // Kernel level
     using FAKernel = FAKernel<BlockMmadQK, BlockMmadPV, EpilogueFASoftmax, EpilogueFARescaleO>;

@@ -14,18 +14,18 @@
 #include "golden.hpp"
 #include "fp16_t.h"
 
-#include "AscendCT/AscendCT.hpp"
-#include "AscendCT/arch/arch.hpp"
-#include "AscendCT/gemm/gemm_type.hpp"
-#include "AscendCT/gemm/block/block_mmad.hpp"
-#include "AscendCT/gemm/block/block_swizzle.hpp"
-#include "AscendCT/gemm/dispatch_policy.hpp"
-#include "AscendCT/gemm/kernel/optimized_matmul_tla.hpp"
+#include "act/act.hpp"
+#include "act/arch/arch.hpp"
+#include "act/gemm/gemm_type.hpp"
+#include "act/gemm/block/block_mmad.hpp"
+#include "act/gemm/block/block_swizzle.hpp"
+#include "act/gemm/dispatch_policy.hpp"
+#include "act/gemm/kernel/optimized_matmul_tla.hpp"
 
 #include "tla/layout.hpp"
 #include "tla/tensor.hpp"
 
-using namespace AscendCT;
+using namespace Act;
 using fp16_t = op::fp16_t;
 
 template <
@@ -38,7 +38,7 @@ template <
     class PaddingA,
     class PaddingB
 >
-ASCENDCT_DEVICE
+ACT_DEVICE
 void LaunchMatmulDynamicSwizzle(
     GemmCoord problemShape,
     GM_ADDR gmA, LayoutA layoutA,
@@ -49,10 +49,10 @@ void LaunchMatmulDynamicSwizzle(
 )
 {
     if (problemShape.m() > problemShape.n()) {
-        using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 0>;
+        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
         using BlockEpilogue = void;
         // kernel level
-        using MatmulKernel = gemm::kernel::OptimizedMatmulTla<
+        using MatmulKernel = Gemm::Kernel::OptimizedMatmulTla<
             BlockMmad, BlockEpilogue, BlockScheduler, PaddingA, PaddingB>;
         typename MatmulKernel::Params params{problemShape, gmA, layoutA, gmB, layoutB, gmC, layoutC,
             gmWA, layoutWA, gmWB, layoutWB};
@@ -60,10 +60,10 @@ void LaunchMatmulDynamicSwizzle(
         MatmulKernel matmul;
         matmul(params);
     } else {
-        using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 1>;
+        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
         using BlockEpilogue = void;
         // kernel level
-        using MatmulKernel = gemm::kernel::OptimizedMatmulTla<
+        using MatmulKernel = Gemm::Kernel::OptimizedMatmulTla<
             BlockMmad, BlockEpilogue, BlockScheduler, PaddingA, PaddingB>;
         typename MatmulKernel::Params params{problemShape, gmA, layoutA, gmB, layoutB, gmC, layoutC,
             gmWA, layoutWA, gmWB, layoutWB};
@@ -75,7 +75,7 @@ void LaunchMatmulDynamicSwizzle(
 }
 
 template<class Layout>
-ASCENDCT_DEVICE
+ACT_DEVICE
 auto GetPaddingLayout(Layout layout, uint32_t blockRows, uint32_t blockCols)
 {
     if constexpr (std::is_same_v<Layout, layout::RowMajor>) {
@@ -110,7 +110,7 @@ template <
     bool IS_PADDING_A,
     bool IS_PADDING_B
 >
-ASCENDCT_GLOBAL
+ACT_GLOBAL
 void OptimizedMatmul(
     uint64_t fftsAddr,
     GemmCoord problemShape,
@@ -123,12 +123,12 @@ void OptimizedMatmul(
     using ElementA = half;
     using ElementB = half;
     using ElementC = half;
-    using ArchTag = arch::AtlasA2;
+    using ArchTag = Arch::AtlasA2;
     AscendC::SetSyncBaseAddr(fftsAddr);
 
     constexpr bool enableUnitFlag = true;
     constexpr bool enableShuffleK = true;
-    using DispatchPolicy = gemm::MmadAtlasA2Preload<enableUnitFlag, enableShuffleK>;
+    using DispatchPolicy = Gemm::MmadAtlasA2Preload<enableUnitFlag, enableShuffleK>;
 
     auto layoutA = MakeLayoutFromTag(tagA);
     auto layoutB = MakeLayoutFromTag(tagB);
@@ -149,9 +149,9 @@ void OptimizedMatmul(
         auto layoutWB = MakeLayout(layoutB.shape(), layoutB.stride());
         using TensorWA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutWA), AscendC::TPosition::GM>;
         using TensorWB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutWB), AscendC::TPosition::GM>;
-        using TileCopy = gemm::tile::PaddingPackedTileCopyTla<ArchTag, TensorWA, LayoutTagA, TensorWB, LayoutTagB,
+        using TileCopy = Gemm::Tile::PaddingPackedTileCopyTla<ArchTag, TensorWA, LayoutTagA, TensorWB, LayoutTagB,
             TensorC, LayoutTagC, void, void, false, false>;
-        using BlockMmad = gemm::block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB,
+        using BlockMmad = Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB,
             TensorC, void, TileCopy>;
         using PaddingA = void;
         using PaddingB = void;
@@ -165,13 +165,13 @@ void OptimizedMatmul(
         auto layoutWB = GetPaddingLayout(tagB, get<2>(L1TileShape{}), get<1>(L1TileShape{}));
         using TensorWA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutWA), AscendC::TPosition::GM>;
         using TensorWB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutWB), AscendC::TPosition::GM>;
-        using TileCopy = gemm::tile::PaddingPackedTileCopyTla<ArchTag, TensorWA, LayoutTagA, TensorWB, LayoutTagB,
+        using TileCopy = Gemm::Tile::PaddingPackedTileCopyTla<ArchTag, TensorWA, LayoutTagA, TensorWB, LayoutTagB,
             TensorC, LayoutTagC, void, void, false, true>;
-        using BlockMmad = gemm::block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB,
+        using BlockMmad = Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB,
             TensorC, void, TileCopy>;
         using PaddingA = void;
         constexpr const uint32_t computeLengthB = 96 * 1024 / sizeof(ElementB);
-        using PaddingB = AscendCT::gemm::kernel::PaddingMatrixBlockND<ArchTag, TensorB, TensorWB, computeLengthB>;
+        using PaddingB = Act::Gemm::Kernel::PaddingMatrixBlockND<ArchTag, TensorB, TensorWB, computeLengthB>;
         LaunchMatmulDynamicSwizzle<
             decltype(layoutA), decltype(layoutB), decltype(layoutC), decltype(layoutWA), decltype(layoutWB),
             BlockMmad, PaddingA, PaddingB
@@ -182,12 +182,12 @@ void OptimizedMatmul(
         auto layoutWB = MakeLayout(layoutB.shape(), layoutB.stride());
         using TensorWA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutWA), AscendC::TPosition::GM>;
         using TensorWB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutWB), AscendC::TPosition::GM>;
-        using TileCopy = gemm::tile::PaddingPackedTileCopyTla<ArchTag, TensorWA, LayoutTagA, TensorWB, LayoutTagB,
+        using TileCopy = Gemm::Tile::PaddingPackedTileCopyTla<ArchTag, TensorWA, LayoutTagA, TensorWB, LayoutTagB,
             TensorC, LayoutTagC, void, void, true, false>;
-        using BlockMmad = gemm::block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB,
+        using BlockMmad = Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB,
             TensorC, void, TileCopy>;
         constexpr const uint32_t computeLengthA = 96 * 1024 / sizeof(ElementA);
-        using PaddingA = AscendCT::gemm::kernel::PaddingMatrixBlockND<ArchTag, TensorA, TensorWA, computeLengthA>;
+        using PaddingA = Act::Gemm::Kernel::PaddingMatrixBlockND<ArchTag, TensorA, TensorWA, computeLengthA>;
         using PaddingB = void;
         LaunchMatmulDynamicSwizzle<
             decltype(layoutA), decltype(layoutB), decltype(layoutC), decltype(layoutWA), decltype(layoutWB),
@@ -199,14 +199,14 @@ void OptimizedMatmul(
         auto layoutWB = GetPaddingLayout(tagB, get<2>(L1TileShape{}), get<1>(L1TileShape{}));
         using TensorWA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutWA), AscendC::TPosition::GM>;
         using TensorWB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutWB), AscendC::TPosition::GM>;
-        using TileCopy = gemm::tile::PaddingPackedTileCopyTla<ArchTag, TensorWA, LayoutTagA, TensorWB, LayoutTagB,
+        using TileCopy = Gemm::Tile::PaddingPackedTileCopyTla<ArchTag, TensorWA, LayoutTagA, TensorWB, LayoutTagB,
             TensorC, LayoutTagC, void, void, true, true>;
-        using BlockMmad = gemm::block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB,
+        using BlockMmad = Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB,
             TensorC, void, TileCopy>;
         constexpr const uint32_t computeLengthA = 96 * 1024 / sizeof(ElementA);
-        using PaddingA = AscendCT::gemm::kernel::PaddingMatrixBlockND<ArchTag, TensorA, TensorWA, computeLengthA>;
+        using PaddingA = Act::Gemm::Kernel::PaddingMatrixBlockND<ArchTag, TensorA, TensorWA, computeLengthA>;
         constexpr const uint32_t computeLengthB = 96 * 1024 / sizeof(ElementB);
-        using PaddingB = AscendCT::gemm::kernel::PaddingMatrixBlockND<ArchTag, TensorB, TensorWB, computeLengthB>;
+        using PaddingB = Act::Gemm::Kernel::PaddingMatrixBlockND<ArchTag, TensorB, TensorWB, computeLengthB>;
         LaunchMatmulDynamicSwizzle<
             decltype(layoutA), decltype(layoutB), decltype(layoutC), decltype(layoutWA), decltype(layoutWB),
             BlockMmad, PaddingA, PaddingB

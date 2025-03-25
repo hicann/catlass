@@ -6,7 +6,7 @@
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 # See LICENSE in the root of the software repository for the full text of the License.
 
-set(ASCENDCT_EXAMPLES_COMMON_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/common)
+set(ACT_EXAMPLES_COMMON_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/common)
 set(CCEC_COMPILER_OPTIONS
     -O2 -std=c++17 -xcce --cce-aicore-arch=dav-c220
     -mllvm -cce-aicore-stack-size=0x8000
@@ -22,29 +22,29 @@ set(CCEC_COMPILER_OPTIONS
     -I${ASCEND_HOME_PATH}/include
     -I${ASCEND_HOME_PATH}/include/experiment/runtime
     -I${ASCEND_HOME_PATH}/include/experiment/msprof
-    -I${ASCENDCT_EXAMPLES_COMMON_SOURCE_DIR}
+    -I${ACT_EXAMPLES_COMMON_SOURCE_DIR}
     -I${CMAKE_SOURCE_DIR}/include
     -L${ASCEND_HOME_PATH}/lib64
     -Wno-macro-redefined -Wno-ignored-attributes
     -lruntime -lstdc++ -lascendcl -lm -ltiling_api -lplatform -lc_sec -ldl -lnnopbase
 )
 
-file(GLOB_RECURSE ASCENDCT_INCLUDE_FILES ${CMAKE_SOURCE_DIR}/include/*.hpp)
-file(GLOB_RECURSE ASCENDCT_EXAMPLES_COMMON_INCLUDE_FILES ${ASCENDCT_EXAMPLES_COMMON_SOURCE_DIR}/*.hpp)
+file(GLOB_RECURSE ACT_INCLUDE_FILES ${CMAKE_SOURCE_DIR}/include/*.hpp)
+file(GLOB_RECURSE ACT_EXAMPLES_COMMON_INCLUDE_FILES ${ACT_EXAMPLES_COMMON_SOURCE_DIR}/*.hpp)
 
-add_custom_target(AscendCT_examples)
+add_custom_target(act_examples)
 
-function(AscendCT_example_add_executable NAME)
+function(act_example_add_executable NAME)
     add_custom_command(
         OUTPUT ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${NAME}
         COMMAND ${CMAKE_CCEC_COMPILER} ${CCEC_COMPILER_OPTIONS} ${ARGN} -o ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${NAME}
-        DEPENDS ${ARGN} ${ASCENDCT_INCLUDE_FILES} ${ASCENDCT_EXAMPLES_COMMON_INCLUDE_FILES}
+        DEPENDS ${ARGN} ${ACT_INCLUDE_FILES} ${ACT_EXAMPLES_COMMON_INCLUDE_FILES}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         COMMENT "Compiling executable kernel: ${NAME}"
     )
 
     add_custom_target(${NAME} ALL DEPENDS ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${NAME})
-    add_dependencies(AscendCT_examples ${NAME})
+    add_dependencies(act_examples ${NAME})
 endfunction()
 
 foreach(EXAMPLE

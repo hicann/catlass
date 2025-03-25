@@ -15,24 +15,24 @@
 #include "golden.hpp"
 #include "bfloat16.h"
 
-#include "AscendCT/AscendCT.hpp"
-#include "AscendCT/arch/arch.hpp"
-#include "AscendCT/epilogue/block/block_epilogue.hpp"
-#include "AscendCT/epilogue/dispatch_policy.hpp"
-#include "AscendCT/epilogue/tile/tile_broadcast_mul.hpp"
-#include "AscendCT/epilogue/tile/tile_broadcast_one_blk.hpp"
-#include "AscendCT/epilogue/tile/tile_swizzle.hpp"
-#include "AscendCT/gemm/block/block_mmad.hpp"
-#include "AscendCT/gemm/block/block_swizzle.hpp"
-#include "AscendCT/gemm/dispatch_policy.hpp"
-#include "AscendCT/gemm/kernel/grouped_matmul_slice_k_per_token_dequant.hpp"
-#include "AscendCT/gemm/gemm_type.hpp"
-#include "AscendCT/layout/layout.hpp"
+#include "act/act.hpp"
+#include "act/arch/arch.hpp"
+#include "act/epilogue/block/block_epilogue.hpp"
+#include "act/epilogue/dispatch_policy.hpp"
+#include "act/epilogue/tile/tile_broadcast_mul.hpp"
+#include "act/epilogue/tile/tile_broadcast_one_blk.hpp"
+#include "act/epilogue/tile/tile_swizzle.hpp"
+#include "act/gemm/block/block_mmad.hpp"
+#include "act/gemm/block/block_swizzle.hpp"
+#include "act/gemm/dispatch_policy.hpp"
+#include "act/gemm/kernel/grouped_matmul_slice_k_per_token_dequant.hpp"
+#include "act/gemm/gemm_type.hpp"
+#include "act/layout/layout.hpp"
 
-using namespace AscendCT;
+using namespace Act;
 using bfloat16 = op::bfloat16;
 
-ASCENDCT_GLOBAL
+ACT_GLOBAL
 void GroupedMatmulSliceKPerTokenDequant(
     uint64_t fftsAddr,
     GemmCoord problemShape,
@@ -46,7 +46,7 @@ void GroupedMatmulSliceKPerTokenDequant(
 )
 {
     AscendC::SetSyncBaseAddr(fftsAddr);
-    using ArchTag = arch::AtlasA2;
+    using ArchTag = Arch::AtlasA2;
     constexpr uint32_t preloadStages = 1;
     constexpr uint32_t l1Stages = 2;
     constexpr uint32_t l0AStages = 2;
@@ -54,7 +54,7 @@ void GroupedMatmulSliceKPerTokenDequant(
     constexpr uint32_t l0CStages = 1;
     constexpr bool enableUnitFlag = false;
     constexpr bool enableShuffleK = true;
-    using DispatchPolicy = gemm::MmadAtlasA2PreloadAsync<
+    using DispatchPolicy = Gemm::MmadAtlasA2PreloadAsync<
         preloadStages,
         l1Stages, l0AStages, l0BStages, l0CStages,
         enableUnitFlag, enableShuffleK
@@ -62,38 +62,38 @@ void GroupedMatmulSliceKPerTokenDequant(
     using L1TileShape = GemmShape<128, 256, 256>;
     using L0TileShape = GemmShape<128, 256, 64>;
 
-    using AType = gemm::GemmType<int8_t, layout::ColumnMajor>;
-    using BType = gemm::GemmType<int8_t, layout::RowMajor>;
-    using CType = gemm::GemmType<int32_t, layout::RowMajor>;
+    using AType = Gemm::GemmType<int8_t, layout::ColumnMajor>;
+    using BType = Gemm::GemmType<int8_t, layout::RowMajor>;
+    using CType = Gemm::GemmType<int32_t, layout::RowMajor>;
 
-    using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+    using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
 
     constexpr uint32_t ubStages = 2;
-    using EpilogueDispatchPolicy = epilogue::EpilogueAtlasA2PerTokenDequant<ubStages>;
-    using ScaleType = gemm::GemmType<bfloat16_t, layout::VectorLayout>;
-    using PerTokenScaleType = gemm::GemmType<bfloat16_t, layout::VectorLayout>;
-    using DType = gemm::GemmType<bfloat16_t, layout::RowMajor>;
+    using EpilogueDispatchPolicy = Epilogue::EpilogueAtlasA2PerTokenDequant<ubStages>;
+    using ScaleType = Gemm::GemmType<bfloat16_t, layout::VectorLayout>;
+    using PerTokenScaleType = Gemm::GemmType<bfloat16_t, layout::VectorLayout>;
+    using DType = Gemm::GemmType<bfloat16_t, layout::RowMajor>;
 
-    using RowBroadcastMulType = gemm::GemmType<float, layout::RowMajor>;
-    using BroadcastOneBlkType = gemm::GemmType<float, layout::RowMajor>;
-    using OneBlkColumnBroadcastMulType = gemm::GemmType<float, layout::RowMajor>;
+    using RowBroadcastMulType = Gemm::GemmType<float, layout::RowMajor>;
+    using BroadcastOneBlkType = Gemm::GemmType<float, layout::RowMajor>;
+    using OneBlkColumnBroadcastMulType = Gemm::GemmType<float, layout::RowMajor>;
 
     using EpilogueTileShape = MatrixShape<32, 256>;
-    using TileRowBroadcastMul = epilogue::tile::TileRowBroadcastMul<ArchTag, RowBroadcastMulType, EpilogueTileShape>;
-    using TileBroadcastOneBlk = epilogue::tile::TileBroadcastOneBlk<ArchTag, BroadcastOneBlkType,
+    using TileRowBroadcastMul = Epilogue::Tile::TileRowBroadcastMul<ArchTag, RowBroadcastMulType, EpilogueTileShape>;
+    using TileBroadcastOneBlk = Epilogue::Tile::TileBroadcastOneBlk<ArchTag, BroadcastOneBlkType,
         EpilogueTileShape::ROW>;
-    using TileOneBlkColumnBroadcastMul = epilogue::tile::TileOneBlkColumnBroadcastMul<ArchTag,
+    using TileOneBlkColumnBroadcastMul = Epilogue::Tile::TileOneBlkColumnBroadcastMul<ArchTag,
         OneBlkColumnBroadcastMulType, EpilogueTileShape>;
-    using TileCopy = epilogue::tile::TileCopy<ArchTag, CType, ScaleType, PerTokenScaleType, DType>;
-    using TileScheduler = epilogue::tile::EpilogueHorizontalTileSwizzle;
+    using TileCopy = Epilogue::Tile::TileCopy<ArchTag, CType, ScaleType, PerTokenScaleType, DType>;
+    using TileScheduler = Epilogue::Tile::EpilogueHorizontalTileSwizzle;
 
-    using BlockEpilogue = epilogue::block::BlockEpilogue<EpilogueDispatchPolicy, CType, ScaleType, PerTokenScaleType,
+    using BlockEpilogue = Epilogue::Block::BlockEpilogue<EpilogueDispatchPolicy, CType, ScaleType, PerTokenScaleType,
         DType, TileRowBroadcastMul, TileBroadcastOneBlk, TileOneBlkColumnBroadcastMul, TileCopy, TileScheduler>;
 
-    using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 0>;
+    using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
 
     // kernel level
-    using MatmulKernel = gemm::kernel::GroupedMatmulSliceKPerTokenDequant<BlockMmad, BlockEpilogue, BlockScheduler,
+    using MatmulKernel = Gemm::Kernel::GroupedMatmulSliceKPerTokenDequant<BlockMmad, BlockEpilogue, BlockScheduler,
         int64_t>;
 
     typename MatmulKernel::Params params{

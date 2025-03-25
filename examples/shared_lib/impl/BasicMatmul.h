@@ -11,39 +11,39 @@
 #ifndef SHARED_LIB_IMPL_BASIC_MATMUL_H
 #define SHARED_LIB_IMPL_BASIC_MATMUL_H
 
-#include "AscendCT/AscendCT.hpp"
-#include "AscendCT/arch/arch.hpp"
-#include "AscendCT/layout/layout.hpp"
-#include "AscendCT/gemm/block/block_mmad.hpp"
-#include "AscendCT/gemm/block/block_swizzle.hpp"
-#include "AscendCT/gemm/dispatch_policy.hpp"
-#include "AscendCT/gemm/kernel/basic_matmul.hpp"
-#include "AscendCT/gemm/gemm_type.hpp"
+#include "act/act.hpp"
+#include "act/arch/arch.hpp"
+#include "act/layout/layout.hpp"
+#include "act/gemm/block/block_mmad.hpp"
+#include "act/gemm/block/block_swizzle.hpp"
+#include "act/gemm/dispatch_policy.hpp"
+#include "act/gemm/kernel/basic_matmul.hpp"
+#include "act/gemm/gemm_type.hpp"
 
-using namespace AscendCT;
+using namespace Act;
 
 template <class LayoutA, class LayoutB, class LayoutC, typename IN_TYPE, typename OUT_TYPE>
-ASCENDCT_DEVICE void basic_matmul_kernel(GemmCoord problemShape, GM_ADDR gmA, LayoutA layoutA, GM_ADDR gmB,
+ACT_DEVICE void basic_matmul_kernel(GemmCoord problemShape, GM_ADDR gmA, LayoutA layoutA, GM_ADDR gmB,
                                         LayoutB layoutB, GM_ADDR gmC, LayoutC layoutC)
 {
-    using ArchTag = arch::AtlasA2;
-    using DispatchPolicy = gemm::MmadAtlasA2Pingpong<true>;
+    using ArchTag = Arch::AtlasA2;
+    using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
     using L1TileShape = GemmShape<128, 256, 256>;
     using L0TileShape = GemmShape<128, 256, 64>;
 
-    using AType = gemm::GemmType<IN_TYPE, LayoutA>;
-    using BType = gemm::GemmType<IN_TYPE, LayoutB>;
-    using CType = gemm::GemmType<OUT_TYPE, LayoutC>;
+    using AType = Gemm::GemmType<IN_TYPE, LayoutA>;
+    using BType = Gemm::GemmType<IN_TYPE, LayoutB>;
+    using CType = Gemm::GemmType<OUT_TYPE, LayoutC>;
 
-    using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+    using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
     using BlockEpilogue = void;
 
     if (problemShape.m() > problemShape.n()) {
         // Swizzle offset is 3 and direction is 0.
-        using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 0>;
+        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
 
         // kernel level
-        using MatmulKernel = gemm::kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
+        using MatmulKernel = Gemm::Kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 
         typename MatmulKernel::Params params{problemShape, gmA, layoutA, gmB, layoutB, gmC, layoutC};
 
@@ -52,10 +52,10 @@ ASCENDCT_DEVICE void basic_matmul_kernel(GemmCoord problemShape, GM_ADDR gmA, La
         matmul(params);
     } else {
         // Swizzle offset is 3 and direction is 1.
-        using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 1>;
+        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
 
         // kernel level
-        using MatmulKernel = gemm::kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
+        using MatmulKernel = Gemm::Kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 
         typename MatmulKernel::Params params{problemShape, gmA, layoutA, gmB, layoutB, gmC, layoutC};
 
@@ -66,7 +66,7 @@ ASCENDCT_DEVICE void basic_matmul_kernel(GemmCoord problemShape, GM_ADDR gmA, La
 }
 
 template <class LayoutA, class LayoutB, class LayoutC, aclDataType IN_TYPE, aclDataType OUT_TYPE>
-ASCENDCT_GLOBAL void basic_matmul(GemmCoord problemShape, GM_ADDR gmA, LayoutA layoutA, GM_ADDR gmB, LayoutB layoutB,
+ACT_GLOBAL void basic_matmul(GemmCoord problemShape, GM_ADDR gmA, LayoutA layoutA, GM_ADDR gmB, LayoutB layoutB,
                                  GM_ADDR gmC, LayoutC layoutC)
 {
     if constexpr (IN_TYPE == ACL_FLOAT16 && OUT_TYPE == ACL_FLOAT16) {

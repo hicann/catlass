@@ -13,46 +13,46 @@
 #include "golden.hpp"
 #include "fp16_t.h"
 
-#include "AscendCT/AscendCT.hpp"
-#include "AscendCT/arch/arch.hpp"
-#include "AscendCT/gemm/block/block_mmad.hpp"
-#include "AscendCT/gemm/block/block_swizzle.hpp"
-#include "AscendCT/gemm/dispatch_policy.hpp"
-#include "AscendCT/gemm/kernel/batched_matmul.hpp"
-#include "AscendCT/gemm/gemm_type.hpp"
-#include "AscendCT/layout/layout.hpp"
+#include "act/act.hpp"
+#include "act/arch/arch.hpp"
+#include "act/gemm/block/block_mmad.hpp"
+#include "act/gemm/block/block_swizzle.hpp"
+#include "act/gemm/dispatch_policy.hpp"
+#include "act/gemm/kernel/batched_matmul.hpp"
+#include "act/gemm/gemm_type.hpp"
+#include "act/layout/layout.hpp"
 
-using namespace AscendCT;
+using namespace Act;
 using fp16_t = op::fp16_t;
 
 constexpr float DATA_UPPER_BOUND = 5;
 constexpr float DATA_LOWER_BOUND = -5;
 
 template <class LayoutA, class LayoutB, class LayoutC>
-ASCENDCT_GLOBAL
+ACT_GLOBAL
 void BatchedMatmul(uint32_t batchCount, GemmCoord problemShape,
                    GM_ADDR gmA, LayoutA layoutA,
                    GM_ADDR gmB, LayoutB layoutB,
                    GM_ADDR gmC, LayoutC layoutC)
 {
-    using ArchTag = arch::AtlasA2;
-    using DispatchPolicy = gemm::MmadAtlasA2Pingpong<true>;
+    using ArchTag = Arch::AtlasA2;
+    using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
     using L1TileShape = GemmShape<128, 256, 256>;
     using L0TileShape = GemmShape<128, 256, 64>;
 
-    using AType = gemm::GemmType<half, LayoutA>;
-    using BType = gemm::GemmType<half, LayoutB>;
-    using CType = gemm::GemmType<half, LayoutC>;
+    using AType = Gemm::GemmType<half, LayoutA>;
+    using BType = Gemm::GemmType<half, LayoutB>;
+    using CType = Gemm::GemmType<half, LayoutC>;
 
-    using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+    using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
     using BlockEpilogue = void;
 
     if (problemShape.m() > problemShape.n()) {
         // Swizzle offset is 3 and direction is 0.
-        using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 0>;
+        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
 
         // kernel level
-        using MatmulKernel = gemm::kernel::BatchedMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
+        using MatmulKernel = Gemm::Kernel::BatchedMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 
         int64_t strideA = problemShape.m() * problemShape.k();
         int64_t strideB = problemShape.k() * problemShape.n();
@@ -69,10 +69,10 @@ void BatchedMatmul(uint32_t batchCount, GemmCoord problemShape,
         matmul(params);
     } else {
         // Swizzle offset is 3 and direction is 1.
-        using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 1>;
+        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
 
         // kernel level
-        using MatmulKernel = gemm::kernel::BatchedMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
+        using MatmulKernel = Gemm::Kernel::BatchedMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 
         int64_t strideA = problemShape.m() * problemShape.k();
         int64_t strideB = problemShape.k() * problemShape.n();

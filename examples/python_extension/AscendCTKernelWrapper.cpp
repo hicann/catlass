@@ -258,4 +258,4 @@ at::Tensor RunOptimizedMatmul(const at::Tensor &mat1, const at::Tensor &mat2, co
     (void)aclrtSynchronizeStream(stream);
     return result;
 }
-} // namespace AscendCT
+} // namespace Act

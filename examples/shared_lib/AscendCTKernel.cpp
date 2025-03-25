@@ -20,7 +20,7 @@ namespace AscendCTKernel {
 
 void BasicMatmul(uint32_t blockNum, aclrtStream stream, KernelInfo kernelInfo)
 {
-    AscendCT::GemmCoord problemShape{kernelInfo.m, kernelInfo.n, kernelInfo.k};
+    Act::GemmCoord problemShape{kernelInfo.m, kernelInfo.n, kernelInfo.k};
     using LayoutA = layout::RowMajor;
     using LayoutB = layout::RowMajor;
     using LayoutC = layout::RowMajor;

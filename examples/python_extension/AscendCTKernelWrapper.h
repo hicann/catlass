@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef PY_EXT_ASCENDCT_KERNEL_WRAPPER_H
-#define PY_EXT_ASCENDCT_KERNEL_WRAPPER_H
+#ifndef PY_EXT_ACT_KERNEL_WRAPPER_H
+#define PY_EXT_ACT_KERNEL_WRAPPER_H
 
 #include <pybind11/stl.h>
 #include <torch/extension.h>
@@ -25,4 +25,4 @@ at::Tensor RunOptimizedMatmul(const at::Tensor &mat1, const at::Tensor &mat2, co
 
 } // namespace AscendCTKernelWrapper
 
-#endif // PY_EXT_ASCENDCT_KERNEL_WRAPPER_H
+#endif // PY_EXT_ACT_KERNEL_WRAPPER_H

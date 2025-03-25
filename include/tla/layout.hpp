@@ -11,12 +11,12 @@
 #ifndef TLA_LAYOUT_HPP
 #define TLA_LAYOUT_HPP
 
-#include "AscendCT/AscendCT.hpp"
+#include "act/act.hpp"
 #include "tla/numeric/integral_constant.hpp"
 #include "tla/tuple.hpp"
 #include "tla/int_tuple.hpp"
 
-using namespace AscendCT;
+using namespace Act;
 
 namespace tla {
 
@@ -32,17 +32,17 @@ template <class... Coords>
 using Coord = tla::tuple<Coords...>;
 
 template <class... Ts>
-ASCENDCT_HOST_DEVICE constexpr
+ACT_HOST_DEVICE constexpr
 Shape<Ts...> MakeShape(Ts const&... t) {
     return {t...};
 }
 template <class... Ts>
-ASCENDCT_HOST_DEVICE constexpr
+ACT_HOST_DEVICE constexpr
 Stride<Ts...> MakeStride(Ts const&... t) {
     return {t...};
 }
 template <class... Ts>
-ASCENDCT_HOST_DEVICE constexpr
+ACT_HOST_DEVICE constexpr
 Coord<Ts...> MakeCoord(Ts const&... t) {
     return {t...};
 }
@@ -54,7 +54,7 @@ Coord<Ts...> MakeCoord(Ts const&... t) {
 template <class Shape, class Stride, class OrgShape>
 struct Layout : private tla::tuple<Shape, Stride, OrgShape> {
     // NOTE: This defaults static Shapes/Strides correctly, but not dynamic
-    ASCENDCT_HOST_DEVICE constexpr
+    ACT_HOST_DEVICE constexpr
     Layout(Shape  const& shape  = {}, Stride const& stride = {}, OrgShape const& orgShape = {})
         : tla::tuple<Shape, Stride, OrgShape>(shape, stride, orgShape) {}
 
@@ -66,49 +66,49 @@ struct Layout : private tla::tuple<Shape, Stride, OrgShape> {
     static constexpr int depth  = depth_v<Stride>;
 
     template <int... I>
-    ASCENDCT_HOST_DEVICE constexpr
+    ACT_HOST_DEVICE constexpr
     decltype(auto) shape()
     {
         return get<0, I...>(static_cast<tla::tuple<Shape, Stride, OrgShape>&>(*this));
     }
 
     template <int... I>
-    ASCENDCT_HOST_DEVICE constexpr
+    ACT_HOST_DEVICE constexpr
     decltype(auto) shape() const
     {
         return get<0, I...>(static_cast<tla::tuple<Shape, Stride, OrgShape> const&>(*this));
     }
 
     template <int... I>
-    ASCENDCT_HOST_DEVICE constexpr
+    ACT_HOST_DEVICE constexpr
     decltype(auto) stride()
     {
         return get<1, I...>(static_cast<tla::tuple<Shape, Stride, OrgShape>&>(*this));
     }
 
     template <int... I>
-    ASCENDCT_HOST_DEVICE constexpr
+    ACT_HOST_DEVICE constexpr
     decltype(auto) stride() const
     {
         return get<1, I...>(static_cast<tla::tuple<Shape, Stride, OrgShape> const&>(*this));
     }
 
     template <int... I>
-    ASCENDCT_HOST_DEVICE constexpr
+    ACT_HOST_DEVICE constexpr
     decltype(auto) orgShape()
     {
         return get<2, I...>(static_cast<tla::tuple<Shape, Stride, OrgShape>&>(*this));
     }
 
     template <int... I>
-    ASCENDCT_HOST_DEVICE constexpr
+    ACT_HOST_DEVICE constexpr
     decltype(auto) orgShape() const
     {
         return get<2, I...>(static_cast<tla::tuple<Shape, Stride, OrgShape> const&>(*this));
     }
 
     template <class Coord>
-    ASCENDCT_HOST_DEVICE constexpr
+    ACT_HOST_DEVICE constexpr
     auto operator()(Coord const& coord) const
     {
         return crd2idx(coord, shape(), stride());
@@ -118,7 +118,7 @@ struct Layout : private tla::tuple<Shape, Stride, OrgShape> {
 // Layout construction
 
 template <class Shape, class Stride, class OrgShape>
-ASCENDCT_HOST_DEVICE constexpr
+ACT_HOST_DEVICE constexpr
 auto MakeLayout(Shape const& shape, Stride const& stride, OrgShape const& orgShape)
 {
     static_assert(is_tuple<Shape>::value || is_integral<Shape>::value);
@@ -129,14 +129,14 @@ auto MakeLayout(Shape const& shape, Stride const& stride, OrgShape const& orgSha
 
 struct UnpackedMakeShape {
     template <class... T>
-    ASCENDCT_HOST_DEVICE constexpr
+    ACT_HOST_DEVICE constexpr
     Shape<T...> operator()(T const&... v) const {
         return {v...};
     }
 };
 
 template <class Shape, class Stride>
-ASCENDCT_HOST_DEVICE constexpr
+ACT_HOST_DEVICE constexpr
 auto MakeLayout(Shape const& shape, Stride const& stride)
 {
     static_assert(is_tuple<Shape>::value || is_integral<Shape>::value);
@@ -148,7 +148,7 @@ auto MakeLayout(Shape const& shape, Stride const& stride)
 // Convenience tags for common layouts
 
 template <class LayoutTag>
-ASCENDCT_HOST_DEVICE constexpr
+ACT_HOST_DEVICE constexpr
 auto MakeLayoutFromTag(LayoutTag const& tag)
 {
     static_assert(std::is_same_v<LayoutTag, layout::RowMajor> || std::is_same_v<LayoutTag, layout::ColumnMajor>,
@@ -163,14 +163,14 @@ auto MakeLayoutFromTag(LayoutTag const& tag)
 
 // Return the shape of a mode
 template <int... Is, class Shape, class Stride, class OrgShape>
-ASCENDCT_HOST_DEVICE constexpr
+ACT_HOST_DEVICE constexpr
 decltype(auto) shape(Layout<Shape, Stride, OrgShape>& layout)
 {
     return layout.template shape<Is...>();
 }
 
 template <int... Is, class Shape, class Stride, class OrgShape>
-ASCENDCT_HOST_DEVICE constexpr
+ACT_HOST_DEVICE constexpr
 decltype(auto) shape(Layout<Shape, Stride, OrgShape> const& layout)
 {
     return layout.template shape<Is...>();
@@ -178,14 +178,14 @@ decltype(auto) shape(Layout<Shape, Stride, OrgShape> const& layout)
 
 // Return the stride of a mode
 template <int... Is, class Shape, class Stride, class OrgShape>
-ASCENDCT_HOST_DEVICE constexpr
+ACT_HOST_DEVICE constexpr
 decltype(auto) stride(Layout<Shape, Stride, OrgShape>& layout)
 {
     return layout.template stride<Is...>();
 }
 
 template <int... Is, class Shape, class Stride, class OrgShape>
-ASCENDCT_HOST_DEVICE constexpr
+ACT_HOST_DEVICE constexpr
 decltype(auto) stride(Layout<Shape, Stride, OrgShape> const& layout)
 {
     return layout.template stride<Is...>();
@@ -193,14 +193,14 @@ decltype(auto) stride(Layout<Shape, Stride, OrgShape> const& layout)
 
 // Return the orgShape of a mode
 template <int... Is, class Shape, class Stride, class OrgShape>
-ASCENDCT_HOST_DEVICE constexpr
+ACT_HOST_DEVICE constexpr
 decltype(auto) orgShape(Layout<Shape, Stride, OrgShape>& layout)
 {
     return layout.template orgShape<Is...>();
 }
 
 template <int... Is, class Shape, class Stride, class OrgShape>
-ASCENDCT_HOST_DEVICE constexpr
+ACT_HOST_DEVICE constexpr
 decltype(auto) orgShape(Layout<Shape, Stride, OrgShape> const& layout)
 {
     return layout.template orgShape<Is...>();
@@ -208,7 +208,7 @@ decltype(auto) orgShape(Layout<Shape, Stride, OrgShape> const& layout)
 
 // Return the rank of layout
 template <int... Is, class Shape, class Stride, class OrgShape>
-ASCENDCT_HOST_DEVICE constexpr
+ACT_HOST_DEVICE constexpr
 auto rank(Layout<Shape, Stride, OrgShape> const& layout)
 {
     return rank(shape<Is...>(layout));
@@ -216,7 +216,7 @@ auto rank(Layout<Shape, Stride, OrgShape> const& layout)
 
 // Return the depth of the layout
 template <int... Is, class Shape, class Stride, class OrgShape>
-ASCENDCT_HOST_DEVICE constexpr
+ACT_HOST_DEVICE constexpr
 auto depth(Layout<Shape, Stride, OrgShape> const& layout)
 {
     return depth(shape<Is...>(layout));
@@ -224,7 +224,7 @@ auto depth(Layout<Shape, Stride, OrgShape> const& layout)
 
 // Return the offset of coord
 template <class Coord, class Shape, class Stride>
-ASCENDCT_HOST_DEVICE constexpr
+ACT_HOST_DEVICE constexpr
 auto crd2idx(Coord const& coord, Shape const& shape, Stride const& stride)
 {
     static_assert(is_tuple<Coord>::value && depth_v<Coord> == 1 && rank_v<Coord> == 2);
@@ -323,7 +323,7 @@ struct isnZ<Element, Layout, std::enable_if_t<Layout::depth == 2 && Layout::rank
 // Advanced Layout constructions
 // Make a inner layout with Rows and Cols.
 template <class Element, class Layout>
-ASCENDCT_HOST_DEVICE constexpr
+ACT_HOST_DEVICE constexpr
 auto MakeLayout(uint32_t const& rows, uint32_t const& cols)
 {
     static_assert(detail::iszN<Element, Layout>::value || detail::iszZ<Element, Layout>::value ||
@@ -358,7 +358,7 @@ auto MakeLayout(uint32_t const& rows, uint32_t const& cols)
 }
 
 template <class Layout, class ShapeNew>
-ASCENDCT_HOST_DEVICE constexpr
+ACT_HOST_DEVICE constexpr
 auto MakeLayoutTile(Layout const& layout, ShapeNew const& shapeNew)
 {
     static_assert(is_tuple<ShapeNew>::value && depth_v<ShapeNew> == 1 && rank_v<ShapeNew> == 2);
@@ -389,7 +389,7 @@ auto MakeLayoutTile(Layout const& layout, ShapeNew const& shapeNew)
     }
 }
 
-ASCENDCT_HOST_DEVICE constexpr auto MakeLayoutL0C(uint32_t const& rows, uint32_t const& cols)
+ACT_HOST_DEVICE constexpr auto MakeLayoutL0C(uint32_t const& rows, uint32_t const& cols)
 {
     constexpr uint32_t ELE_NUM_PER_FRACTAL = 256;
     return MakeLayout(

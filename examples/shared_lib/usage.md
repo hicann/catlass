@@ -31,17 +31,17 @@ output/shared_lib
 在`shared_lib/impl`文件夹中创建`CustomMatmul.h`，内容可参考`BasicMatmul.h`，大致如下：
 
 ```cpp
-#include "AscendCT/AscendCT.hpp"
-// AscendCT头文件...
+#include "act/act.hpp"
+// act头文件...
 
-using namespace AscendCT;
+using namespace Act;
 
 template <
     class LayoutA,
     class LayoutB,
     class LayoutC
 >
-ASCENDCT_GLOBAL
+ACT_GLOBAL
 void custom_matmul(
     GemmCoord problemShape,
     GM_ADDR gmA, LayoutA layoutA,
@@ -56,11 +56,11 @@ void custom_matmul(
 - 你可以在模板参数中传入数据类型，但目前版本编译器暂不支持在内核调用符上使用bfloat16_t. 若需要通过模板特化bfloat16_t相关的核函数，可参考下面的示例：
 ```cpp
 template<typename T>
-ASCENDCT_DEVICE void real_kernel(...){
+ACT_DEVICE void real_kernel(...){
     //...
 }
 template<aclDataType T>
-ASCENDCT_GLOBAL void kernel(...){
+ACT_GLOBAL void kernel(...){
     if constexpr (T == ACL_BF16){
         real_kernel<bfloat16_t>(...);
     }

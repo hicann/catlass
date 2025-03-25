@@ -14,7 +14,7 @@
 #include <cstdlib>
 #include <ctime>
 
-namespace AscendCT::golden {
+namespace Act::golden {
 
 template <class Element, class ElementRandom>
 void FillRandomData(std::vector<Element>& data, ElementRandom low, ElementRandom high)
@@ -78,6 +78,6 @@ std::vector<T> GenerateGroupList(uint32_t m, uint32_t problemCount)
     return groupList;
 }
 
-} // namespace AscendCT::golden
+} // namespace Act::golden
 
 #endif // EXAMPLES_COMMON_GOLDEN_FILL_DATA_HPP

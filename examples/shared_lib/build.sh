@@ -20,7 +20,7 @@ do
             shift # past argument=value
         ;;
         --ascendct_src_dir=*)
-            ASCENDCT_SRC_DIR="${i#*=}"
+            ACT_SRC_DIR="${i#*=}"
     esac
 done
 
@@ -37,7 +37,7 @@ bisheng -O2 -fPIC -std=c++17 -xcce --cce-aicore-arch=dav-c220 \
 -I$ASCEND_HOME_PATH/include/experiment/msprof \
 -I$SHARED_LIB_SRC_DIR \
 -I$SHARED_LIB_SRC_DIR/impl \
--I$ASCENDCT_SRC_DIR/include \
+-I$ACT_SRC_DIR/include \
 -DL2_CACHE_HINT \
 -mllvm -cce-aicore-stack-size=0x8000 \
 -mllvm -cce-aicore-function-stack-size=0x8000 \
@@ -61,7 +61,7 @@ bisheng -O2 -fPIC -std=c++17 -xcce --cce-aicore-arch=dav-c220 \
 -I$ASCEND_HOME_PATH/include/experiment/msprof \
 -I$SHARED_LIB_SRC_DIR \
 -I$SHARED_LIB_SRC_DIR/impl \
--I$ASCENDCT_SRC_DIR/include \
+-I$ACT_SRC_DIR/include \
 -DL2_CACHE_HINT \
 -mllvm -cce-aicore-stack-size=0x8000 \
 -mllvm -cce-aicore-function-stack-size=0x8000 \

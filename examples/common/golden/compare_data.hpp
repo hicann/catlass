@@ -13,9 +13,9 @@
 #include <cmath>
 #include <vector>
 
-#include "AscendCT/gemm_coord.hpp"
+#include "act/gemm_coord.hpp"
 
-namespace AscendCT::golden {
+namespace Act::golden {
 
 template<class ElementResult, class ElementCompare>
 std::vector<uint64_t> CompareData(const std::vector<ElementResult>& result, const std::vector<ElementCompare>& expect,
@@ -38,6 +38,6 @@ std::vector<uint64_t> CompareData(const std::vector<ElementResult>& result, cons
     return errorIndices;
 }
 
-}  // namespace AscendCT::golden
+}  // namespace Act::golden
 
 #endif  // EXAMPLES_COMMON_GOLDEN_COMPARE_DATA_HPP
