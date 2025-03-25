@@ -184,9 +184,10 @@ public:
     const uint32_t maxNPerBlock = L1TileShape::N;
     const uint32_t cSize = maxMPerBlock * maxNPerBlock * sizeof(ElementAccumulator);
     const uint32_t l0XBlockNum = ArchTag::L0C_SIZE / cSize;
-    using ElementCompute =
-        typename AscendCT::gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
-    using ElementScalar = ElementCompute; 
+    using TensorCoord = layout::VectorLayout::TensorCoord;
+    // using ElementCompute =
+    //     typename AscendCT::gemm::helper::ElementAccumulatorSelector<ElementC, ElementD>::ElementAccumulator;
+    // using ElementScalar = ElementCompute; 
     static constexpr uint32_t STAGES = BlockGemm::STAGES; 
     using TileScheduler = TileScheduler_;
     
@@ -412,9 +413,15 @@ public:
             MatmulCoord actualShape{MGmActual, NGmActual, K};
             LayoutX layoutX(params.problemShape.m(), params.problemShape.n());
             arch::CrossCoreWaitFlagWithReverse<0x2, PIPE_MTE3>(flagAicFinishStore); 
-            MatrixCoord gmTileOffset{MGmBlockIdx * maxMPerBlock, NGmBlockIdx * maxNPerBlock}; 
-            auto offsetX = layoutX.GetOffset(gmTileOffset);
-            blockEpilogue(offsetX, gmX[offsetX], layoutX, actualShape);
+            MatrixCoord gmTileXOffset{MGmBlockIdx * maxMPerBlock, NGmBlockIdx * maxNPerBlock}; 
+            auto offsetX = layoutX.GetOffset(gmTileXOffset);
+            TensorCoord gmTileScaleOffset{NGmBlockIdx * maxNPerBlock};
+            auto offsetScale = params.epilogueParams.layoutScale.GetOffset(gmTileScaleOffset);
+            TensorCoord gmTilePerTokenScaleOffset{MGmBlockIdx * maxMPerBlock};
+            auto offsetPerTokenScale = params.epilogueParams.layoutPerTokenScale.GetOffset(gmTilePerTokenScaleOffset);
+            TensorCoord gmTileBiasOffset{NGmBlockIdx * maxNPerBlock};
+            auto offsetBias = params.epilogueParams.layoutBias.GetOffset(gmTileBiasOffset);
+            blockEpilogue(offsetX, offsetScale, offsetPerTokenScale, offsetBias, gmX[offsetX], layoutX, actualShape);
         }
     }
 private:

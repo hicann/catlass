@@ -193,10 +193,10 @@ public:
     
     using BlockEpilogue = BlockEpilogue_;
     using EpilogueParams = typename BlockEpilogue::Params;
-    using ElementC = typename BlockEpilogue::ElementC;
-    using ElementD = typename BlockEpilogue::ElementD;
+    // using ElementC = typename BlockEpilogue::ElementC;
+    // using ElementD = typename BlockEpilogue::ElementD;
     using ElementCompute =
-        typename AscendCT::gemm::helper::ElementAccumulatorSelector<ElementC, ElementD>::ElementAccumulator;
+        typename AscendCT::gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
     using ElementScalar = ElementCompute; // 标量的数据类型
     static constexpr uint32_t MAX_TENSOR_COUNT = 32;
 
@@ -365,9 +365,10 @@ public:
             LayoutA layoutWA = layoutWAList[groupIdx];
             LayoutB layoutWB = layoutWBList[groupIdx];
             // 等待Padding操作 只padding stride padding操作没问题
-            if (!IsSameStride(layoutWA, layoutA) || !IsSameStride(layoutWB, layoutB)) {
-                arch::CrossCoreWaitFlag(flagAivFinishPadding);
-            }
+            arch::CrossCoreWaitFlag(flagAivFinishPadding);
+            // if (!IsSameStride(layoutWA, layoutA) || !IsSameStride(layoutWB, layoutB)) {
+            //     arch::CrossCoreWaitFlag(flagAivFinishPadding);
+            // }
             // 先实例化BlockGemm对象
             AscendC::GlobalTensor<ElementX> gmX;
             gmX.SetGlobalBuffer((__gm__ ElementX*)params.ptrWorkspace);
@@ -484,6 +485,8 @@ public:
         AscendC::GlobalTensor<ElementB> gmWB;
         gmB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB*>(params.ptrB));
         gmWB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB*>(params.ptrWB));
+        PaddingA paddingA(resource);
+        PaddingB paddingB(resource);
         for(uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx){
             MatmulCoord problemShape = problemShapeList[groupIdx];
             LayoutA layoutA = layoutAList[groupIdx];
@@ -493,19 +496,23 @@ public:
             ElementScalar beta_ = betaList[groupIdx];
             LayoutA layoutWA = layoutWAList[groupIdx];
             LayoutB layoutWB = layoutWBList[groupIdx];
-            if (!IsSameStride(layoutWA, layoutA)) {
-                PaddingA paddingA(resource);
-                paddingA(gmWA[inGroupOffsetWA], gmA[inGroupOffsetA], layoutWA, layoutA); // 两个AIV核
-            }
+            paddingA(gmWA[inGroupOffsetWA], gmA[inGroupOffsetA], layoutWA, layoutA); // 两个AIV核
+            paddingB(gmWB[inGroupOffsetWB], gmB[inGroupOffsetB], layoutWB, layoutB);
+            AscendCT::arch::CrossCoreBarrier<0x0, PIPE_MTE3>();
+            AscendCT::arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(flagAivFinishPadding);
+            // if (!IsSameStride(layoutWA, layoutA)) {
+            //     PaddingA paddingA(resource);
+            //     paddingA(gmWA[inGroupOffsetWA], gmA[inGroupOffsetA], layoutWA, layoutA); // 两个AIV核
+            // }
 
-            if (!IsSameStride(layoutWB, layoutB)) {
-                PaddingB paddingB(resource);
-                paddingB(gmWB[inGroupOffsetWB], gmB[inGroupOffsetB], layoutWB, layoutB);
-            }
-            if (!IsSameStride(layoutWA, layoutA) || !IsSameStride(layoutWB, layoutB)) {
-                AscendCT::arch::CrossCoreBarrier<0x0, PIPE_MTE3>();
-                AscendCT::arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(flagAivFinishPadding);
-            }
+            // if (!IsSameStride(layoutWB, layoutB)) {
+            //     PaddingB paddingB(resource);
+            //     paddingB(gmWB[inGroupOffsetWB], gmB[inGroupOffsetB], layoutWB, layoutB);
+            // }
+            // if (!IsSameStride(layoutWA, layoutA) || !IsSameStride(layoutWB, layoutB)) {
+            //     AscendCT::arch::CrossCoreBarrier<0x0, PIPE_MTE3>();
+            //     AscendCT::arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(flagAivFinishPadding);
+            // }
             AscendC::GlobalTensor<ElementX> gmX;
             gmX.SetGlobalBuffer((__gm__ ElementX*)params.ptrWorkspace);
             EpilogueParams epilogueParams{alpha_, beta_, params.ptrC, layoutWorkspace, params.ptrD, layoutWorkspace};

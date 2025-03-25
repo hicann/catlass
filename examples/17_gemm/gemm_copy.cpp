@@ -71,10 +71,10 @@ void Gemm(
     constexpr uint32_t computeLength = L1TileShape::MN / 2;
     using TileElemWiseAddGemm = epilogue::tile::TileElemWiseAdd<ArchTag, ComputeType, computeLength>;
     using TileElemWiseMulsGemm = epilogue::tile::TileElemWiseMuls<ArchTag, ComputeType, computeLength>;
-    using TileElemWistCastC = epilogue::tile::TileCast<ArchTag, ComputeType, CType, TileShapeCast>;
-    using TileElemWistCastD = epilogue::tile::TileCast<ArchTag, DType, ComputeType, TileShapeCast>;
+    using TileElemWiseCastC = epilogue::tile::TileCast<ArchTag, ComputeType, CType, TileShapeCast>;
+    using TileElemWiseCastD = epilogue::tile::TileCast<ArchTag, DType, ComputeType, TileShapeCast>;
     using EpilogueTileCopy = epilogue::tile::TileCopy<ArchTag, CType, XType, DType>;
-    using EpilogueBlock = epilogue::block::BlockEpilogue<EpilogueBlockDispatchPolicy, CType, XType, DType, TileElemWiseAddGemm, TileElemWiseMulsGemm, TileElemWistCastC, TileElemWistCastD, EpilogueTileCopy>;
+    using EpilogueBlock = epilogue::block::BlockEpilogue<EpilogueBlockDispatchPolicy, CType, XType, DType, TileElemWiseAddGemm, TileElemWiseMulsGemm, TileElemWiseCastC, TileElemWiseCastD, EpilogueTileCopy>;
     typename EpilogueBlock::Params epilogueParams{alpha, beta, gmC, layoutC, gmC, layoutC};
     using GemmKernel = gemm::kernel::KernelGemm<GemmBlock, EpilogueBlock>;
     typename GemmKernel::Params params{problemShape, gmA, layoutA, gmB, layoutB, gmWorkspace, gmWA, layoutWA, gmWB, layoutWB, epilogueParams}; // 这里得修改 gmX保存A * B
