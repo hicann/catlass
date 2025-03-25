@@ -103,8 +103,8 @@ public:
         uint32_t ubCSize = tileSize * sizeof(ElementC);
         uint32_t ubXSize = tileSize * sizeof(ElementX);
         uint32_t ubTempSize = tileSize * sizeof(ElementTemp); // cast的空间
-        uint32_t ubScaleSize = maxMPerBlock * sizeof(ElementScale);
-        uint32_t ubPerTokenScaleSize = maxNPerBlock * sizeof(ElementPerTokenScale);
+        uint32_t ubScaleSize = maxNPerBlock * sizeof(ElementScale);
+        uint32_t ubPerTokenScaleSize = maxMPerBlock * sizeof(ElementPerTokenScale);
         uint32_t ubBiasSize = maxNPerBlock * sizeof(ElementBias);
         ubCTensor = resource.ubBuf.template GetBufferByByte<ElementC>(ubByteStart);
         ubByteStart += ubCSize;
@@ -114,12 +114,18 @@ public:
         ubByteStart += ubTempSize;
         ubScaleTensor = resource.ubBuf.template GetBufferByByte<ElementScale>(ubByteStart);
         ubByteStart += ubScaleSize;
+        ubScaleTensorFP32 = resource.ubBuf.template GetBufferByByte<float>(ubByteStart);
+        ubByteStart += maxNPerBlock * sizeof(float);
         ubPerTokenScaleTensor = resource.ubBuf.template GetBufferByByte<ElementPerTokenScale>(ubByteStart);
         ubByteStart += ubPerTokenScaleSize;
-        ubPerTokenScaleBrcbTensor = resource.ubBuf.template GetBufferByByte<ElementPerTokenScale>(ubByteStart);
+        ubPerTokenScaleTensorFP32 = resource.ubBuf.template GetBufferByByte<float>(ubByteStart);
+        ubByteStart += maxMPerBlock * sizeof(float);
+        ubPerTokenScaleBrcbTensor = resource.ubBuf.template GetBufferByByte<float>(ubByteStart);
         ubByteStart += TileShape::ROW * BYTE_PER_BLK;
         ubBiasTensor = resource.ubBuf.template GetBufferByByte<ElementBias>(ubByteStart);
         ubByteStart += ubBiasSize;
+        ubBiasTensorFP32 = resource.ubBuf.template GetBufferByByte<float>(ubByteStart);
+        ubByteStart += maxNPerBlock * sizeof(float);
         AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID1);
         AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
     }
@@ -160,7 +166,6 @@ public:
             MatrixCoord gmTileXOffset{aivIndex * maxMPerBlock, 0};
             auto gmTileX = gmBlockX[layoutX.GetOffset(gmTileXOffset)];
             copyGmToUbX(ubXTensor, gmTileX, layoutXInUb, layoutTileX);
-            // begin cast
             AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
             AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
             tileElemWiseCastTemp(ubTempTensor, ubXTensor); // fp32
@@ -183,15 +188,36 @@ public:
             auto gmTileBias = gmBlockBias[offsetBias + params.layoutBias.GetOffset(gmTileBiasOffset)];
             copyGmToUbBias(ubBiasTensor, gmTileBias, layoutBiasInUb, layoutTileBias);
             AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
-            // AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0 + 2);
-            // start compute
             AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
-            tileRowBroadcastMul(ubTempTensor, ubTempTensor, ubScaleTensor);
-            tileBroadcastOneBlk(ubPerTokenScaleBrcbTensor, ubPerTokenScaleTensor);
+            // AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0 + 2);
+            // cast
+            AscendC::Cast<ElementTemp, ElementScale>(ubScaleTensorFP32 ,ubScaleTensor, AscendC::RoundMode::CAST_NONE, maxNPerBlock);
             AscendC::PipeBarrier<PIPE_V>();
+            AscendC::Cast<ElementTemp, ElementPerTokenScale>(ubPerTokenScaleTensorFP32 ,ubPerTokenScaleTensor, AscendC::RoundMode::CAST_NONE, maxMPerBlock);
+            AscendC::PipeBarrier<PIPE_V>();
+            AscendC::Cast<ElementTemp, ElementBias>(ubBiasTensorFP32 ,ubBiasTensor, AscendC::RoundMode::CAST_NONE, maxNPerBlock);
+            AscendC::PipeBarrier<PIPE_V>();
+            // start compute
+            tileRowBroadcastMul(ubTempTensor, ubTempTensor, ubScaleTensorFP32);
+            // AscendC::PipeBarrier<PIPE_V>();
+            tileBroadcastOneBlk(ubPerTokenScaleBrcbTensor, ubPerTokenScaleTensorFP32);
             tileOneBlkColumnBroadcastMul(ubTempTensor, ubTempTensor, ubPerTokenScaleBrcbTensor);
             AscendC::PipeBarrier<PIPE_V>();
-            tileRowBroadcastAdd(ubTempTensor, ubTempTensor, ubBiasTensor);
+            // for pertokenscale
+            // AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
+            // float pix[128];
+            // for(uint32_t i = 0; i < maxMPerBlock; i++){
+            //     pix[i] = ubPerTokenScaleTensorFP32.GetValue(i);
+            // }
+            // AscendC::SetFlag<AscendC::HardEvent::S_V>(EVENT_ID1);
+            // AscendC::WaitFlag<AscendC::HardEvent::S_V>(EVENT_ID1);
+            // for(uint32_t i = 0; i < maxMPerBlock; i++){
+            //     MatrixCoord ubTileTempOffset{0, i * maxNPerBlock};
+            //     auto ubTileTemp = ubTempTensor[layoutX.GetOffset(ubTileTempOffset)];
+            //     AscendC::Muls(ubTileTemp, ubTileTemp, pix[i], maxNPerBlock);
+            //     AscendC::PipeBarrier<PIPE_V>();
+            // }
+            tileRowBroadcastAdd(ubTempTensor, ubTempTensor, ubBiasTensorFP32);
             AscendC::PipeBarrier<PIPE_V>();
             tileElemWiseCastC(ubCTensor, ubTempTensor); // bf16
             AscendC::PipeBarrier<PIPE_V>();
@@ -217,9 +243,12 @@ private:
     AscendC::LocalTensor<ElementTemp> ubTempTensor;
     AscendC::LocalTensor<ElementX> ubXTensor;
     AscendC::LocalTensor<ElementScale> ubScaleTensor;
+    AscendC::LocalTensor<float> ubScaleTensorFP32;
     AscendC::LocalTensor<ElementPerTokenScale> ubPerTokenScaleTensor;
-    AscendC::LocalTensor<ElementPerTokenScale> ubPerTokenScaleBrcbTensor;
+    AscendC::LocalTensor<float> ubPerTokenScaleTensorFP32;
+    AscendC::LocalTensor<float> ubPerTokenScaleBrcbTensor;
     AscendC::LocalTensor<ElementBias> ubBiasTensor;
+    AscendC::LocalTensor<float> ubBiasTensorFP32;
 
     CopyGmToUbX copyGmToUbX;
     CopyGmToUbScale copyGmToUbScale;

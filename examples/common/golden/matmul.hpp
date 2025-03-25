@@ -361,6 +361,8 @@ void QuantGemm(
             dataGolden[offsetGolden] = static_cast<float>(accumulator) *
                 static_cast<float>(dataScale[j]) *
                 static_cast<float>(dataPerTokenScale[i]) + static_cast<float>(dataBias[j]);
+            // dataGolden[offsetGolden] = static_cast<float>(accumulator) *
+            //     static_cast<float>(dataScale[j]) + static_cast<float>(dataBias[j]);
         }
     }
 }
