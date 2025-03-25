@@ -20,7 +20,7 @@ python_extension
 
 ```bash
 output/python_extension
-├── libAscendct_torch.so                             # torch动态链接库
+├── libascendct_torch.so                             # torch动态链接库
 └── torch_ascendct.cpython-3xx-aarch64-linux-gnu.so  # pybind11动态链接库
 ```
 
@@ -73,15 +73,6 @@ class AscendCTTest(TestCase):
         golden = torch.mm(a, b)
         self.assertRtolEqual(result, golden)
     def test_basic_matmul_torch_lib(self):
-<<<<<<< HEAD:docs/python_extension.md
-        a = torch.ones((2,3)).to(torch.float16).npu()
-        b = torch.ones((3,4)).to(torch.float16).npu()
-        torch.ops.load_library("../../output/python_extension/libAscendCT_torch.so")
-        result = torch.ops.AscendCTTorch.basic_matmul(a,b,"float16")
-        golden = torch.mm(a,b)
-        self.assertRtolEqual(result,golden)
-
-=======
         a = torch.ones((2, 3)).to(torch.float16).npu()
         b = torch.ones((3, 4)).to(torch.float16).npu()
         torch.ops.load_library("../../output/python_extension/libascendct_torch.so")
@@ -89,7 +80,6 @@ class AscendCTTest(TestCase):
         golden = torch.mm(a, b)
         self.assertRtolEqual(result, golden)
         
->>>>>>> e65bb1e (mov docs):examples/python_extension/usage.md
 if __name__ == "__main__":
     run_tests()
 ```
