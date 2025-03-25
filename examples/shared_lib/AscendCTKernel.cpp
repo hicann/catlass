@@ -10,29 +10,17 @@
 #include <acl/acl.h>
 #include <runtime/rt_ffts.h>
 
-<<<<<<<< HEAD:examples/shared_lib/AscendCT_kernel.cpp
-#include "AscendCT_kernel.h"
-#include "basic_matmul.h"
-#include "grouped_matmul_slice_k.h"
-#include "grouped_matmul_slice_m.h"
-#include "optimized_matmul.h"
-========
 #include "AscendCTKernel.h"
 #include "BasicMatmul.h"
-#include "GroupedMatmulK.h"
-#include "GroupedMatmulM.h"
+#include "GroupedMatmulSliceK.h"
+#include "GroupedMatmulSliceM.h"
 #include "OptimizedMatmul.h"
->>>>>>>> 941c9cf (merge kernelInfo):examples/shared_lib/AscendCTKernel.cpp
 
 namespace AscendCTKernel {
 
 void BasicMatmul(uint32_t blockNum, aclrtStream stream, KernelInfo kernelInfo)
 {
-<<<<<<<< HEAD:examples/shared_lib/AscendCT_kernel.cpp
-    AscendCT::GemmCoord problemShape{AscendCTInfo.m, AscendCTInfo.n, AscendCTInfo.k};
-========
-    AscendCT::MatmulCoord problemShape{kernelInfo.m, kernelInfo.n, kernelInfo.k};
->>>>>>>> 941c9cf (merge kernelInfo):examples/shared_lib/AscendCTKernel.cpp
+    AscendCT::GemmCoord problemShape{kernelInfo.m, kernelInfo.n, kernelInfo.k};
     using LayoutA = layout::RowMajor;
     using LayoutB = layout::RowMajor;
     using LayoutC = layout::RowMajor;
@@ -76,25 +64,14 @@ void GroupedMatmul(uint32_t blockNum, aclrtStream stream, KernelInfo kernelInfo)
     aclrtMemcpy(groupListDevice, sizeGroupListDevice, groupList.data(), sizeGroupListDevice, ACL_MEMCPY_HOST_TO_DEVICE);
 
     // execution
-<<<<<<<< HEAD:examples/shared_lib/AscendCT_kernel.cpp
-    if (AscendCTInfo.split == AscendCTInfo::GMMSplit::SPLIT_M) {
-        grouped_matmul_slice_m<LayoutA, LayoutB, LayoutC><<<blockNum, nullptr, stream>>>(
-            problemShape, problemCount, groupListDevice, kernelExecInfo.inputAddr.at(0), layoutA,
-            kernelExecInfo.inputAddr.at(1), layoutB, kernelExecInfo.outputAddr.at(0), layoutC);
-    } else if (AscendCTInfo.split == AscendCTInfo::GMMSplit::SPLIT_K) {
-        grouped_matmul_slice_k<LayoutA, LayoutB, LayoutC><<<blockNum, nullptr, stream>>>(
-            problemShape, problemCount, groupListDevice, kernelExecInfo.inputAddr.at(0), layoutA,
-            kernelExecInfo.inputAddr.at(1), layoutB, kernelExecInfo.outputAddr.at(0), layoutC);
-========
     if (kernelInfo.split == KernelInfo::GMMSplit::SPLIT_M) {
-        grouped_matmul_m<LayoutA, LayoutB, LayoutC><<<blockNum, nullptr, stream>>>(
+        grouped_matmul_slice_m<LayoutA, LayoutB, LayoutC><<<blockNum, nullptr, stream>>>(
             problemShape, problemCount, groupListDevice, kernelInfo.inputAddr.at(0), layoutA,
             kernelInfo.inputAddr.at(1), layoutB, kernelInfo.outputAddr.at(0), layoutC);
     } else if (kernelInfo.split == KernelInfo::GMMSplit::SPLIT_K) {
-        grouped_matmul_k<LayoutA, LayoutB, LayoutC><<<blockNum, nullptr, stream>>>(
+        grouped_matmul_slice_k<LayoutA, LayoutB, LayoutC><<<blockNum, nullptr, stream>>>(
             problemShape, problemCount, groupListDevice, kernelInfo.inputAddr.at(0), layoutA,
             kernelInfo.inputAddr.at(1), layoutB, kernelInfo.outputAddr.at(0), layoutC);
->>>>>>>> 941c9cf (merge kernelInfo):examples/shared_lib/AscendCTKernel.cpp
     }
     aclrtFree(groupListDevice);
 }
@@ -105,11 +82,7 @@ void OptimizedMatmul(uint32_t blockNum, aclrtStream stream, KernelInfo kernelInf
     uint32_t n = kernelInfo.n;
     uint32_t k = kernelInfo.k;
 
-<<<<<<<< HEAD:examples/shared_lib/AscendCT_kernel.cpp
-    GemmCoord problemShape{AscendCTInfo.m, AscendCTInfo.n, AscendCTInfo.k};
-========
-    MatmulCoord problemShape{kernelInfo.m, kernelInfo.n, kernelInfo.k};
->>>>>>>> 941c9cf (merge kernelInfo):examples/shared_lib/AscendCTKernel.cpp
+    GemmCoord problemShape{kernelInfo.m, kernelInfo.n, kernelInfo.k};
 
     using LayoutA = layout::RowMajor;
     using LayoutB = layout::RowMajor;

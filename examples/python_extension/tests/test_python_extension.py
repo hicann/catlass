@@ -7,7 +7,7 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 
 import sys
-sys.path.append("../../output/python_extension")  # 注意更新so的路径
+sys.path.append("../../../output/python_extension")  # 注意更新so的路径
 from torch_npu.testing.testcase import TestCase, run_tests
 import torch_npu
 import torch
@@ -35,7 +35,7 @@ class AscendCTTest(TestCase):
         a = torch.ones((2, 3)).to(torch.float16).npu()
         b = torch.ones((3, 4)).to(torch.float16).npu()
         torch.ops.load_library(
-            "../../output/python_extension/libAscendCT_torch.so")
+            "../../../output/python_extension/libAscendCT_torch.so")
         result = torch.ops.AscendCTTorch.basic_matmul(a, b, "float16")
         golden = torch.mm(a, b)
         self.assertRtolEqual(result, golden)
