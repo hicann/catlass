@@ -35,7 +35,7 @@ class AscendCTTest(TestCase):
         a = torch.ones((2, 3)).to(torch.float16).npu()
         b = torch.ones((3, 4)).to(torch.float16).npu()
         torch.ops.load_library(
-            "../../../output/python_extension/libAscendCT_torch.so")
+            "../../../output/python_extension/libascendct_torch.so")
         result = torch.ops.AscendCTTorch.basic_matmul(a, b, "float16")
         golden = torch.mm(a, b)
         self.assertRtolEqual(result, golden)
