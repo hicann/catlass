@@ -21,7 +21,7 @@ mkdir -p $CMAKE_BUILD_PATH
 
 function build_shared_lib() {
     SHARED_LIB_SRC_DIR=$CMAKE_SOURCE_PATH/examples/shared_lib
-    bash $SHARED_LIB_SRC_DIR/build.sh --shared_lib_src_dir=$SHARED_LIB_SRC_DIR --output_path=$OUTPUT_PATH/shared_lib --AscendCT_src_dir=$CMAKE_SOURCE_PATH
+    bash $SHARED_LIB_SRC_DIR/build.sh --shared_lib_src_dir=$SHARED_LIB_SRC_DIR --output_path=$OUTPUT_PATH/shared_lib --ascendct_src_dir=$CMAKE_SOURCE_PATH
 }
 
 function build_python_extension() {
@@ -34,9 +34,12 @@ function build_python_extension() {
 
 if [[ "$TARGET" == "shared_lib" ]]; then
     build_shared_lib
-elif [[  "$TARGET" == "python_extension" ]]; then
+elif [[ "$TARGET" == "python_extension" ]]; then
     build_shared_lib
     build_python_extension
+elif [[ "$TARGET" == "examples" ]]; then
+    cmake --no-warn-unused-cli -S$CMAKE_SOURCE_PATH -B$CMAKE_BUILD_PATH
+    cmake --build $CMAKE_BUILD_PATH -j
 else
     cmake --no-warn-unused-cli -S$CMAKE_SOURCE_PATH -B$CMAKE_BUILD_PATH
     cmake --build $CMAKE_BUILD_PATH --target $TARGET

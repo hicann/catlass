@@ -14,15 +14,15 @@
 #include <pybind11/stl.h>
 #include <torch/extension.h>
 
-#include "AscendCT_kernel_wrapper.h"
+#include "AscendCTKernel.h"
 
-namespace AscendCT {
+namespace AscendCTKernelWrapper {
 at::Device GetAtDevice();
 at::Tensor RunBasicMatmul(const at::Tensor &mat1, const at::Tensor &mat2, const std::string &outDType);
 std::vector<at::Tensor> RunGroupedMatmul(const std::vector<at::Tensor> &mat1, const std::vector<at::Tensor> &mat2,
                                          const std::string &outDType, const bool &splitK);
 at::Tensor RunOptimizedMatmul(const at::Tensor &mat1, const at::Tensor &mat2, const std::string &outDType);
 
-} // namespace AscendCT
+} // namespace AscendCTKernelWrapper
 
 #endif // PY_EXT_ASCENDCT_KERNEL_WRAPPER_H

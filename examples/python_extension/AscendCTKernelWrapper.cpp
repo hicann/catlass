@@ -9,7 +9,10 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#include "AscendCT_kernel_wrapper.h"
+#include <numeric>
+#include <sstream>
+#include <stdexcept>
+#include <unordered_map>
 
 #include <tiling/platform/platform_ascendc.h>
 #include <torch/torch.h>
@@ -17,16 +20,13 @@
 #include <torch_npu/csrc/core/npu/NPUFunctions.h>
 #include <torch_npu/csrc/core/npu/NPUStream.h>
 
-#include <numeric>
-#include <sstream>
-#include <stdexcept>
-#include <unordered_map>
-
-#include "AscendCT_kernel.h"
+#include "AscendCTKernel.h"
+#include "AscendCTKernelWrapper.h"
 
 namespace py = pybind11;
+using namespace AscendCTKernel;
 
-namespace AscendCT {
+namespace AscendCTKernelWrapper {
 at::Device GetAtDevice()
 {
     int32_t deviceId;
@@ -79,28 +79,28 @@ std::vector<int64_t> InferShape(at::IntArrayRef matAShape, at::IntArrayRef matBS
     return {m, n};
 }
 
-AscendCTInfo GetAscendCTInfo(const at::Tensor &mat1, const at::Tensor &mat2, const std::string &outDType)
+KernelInfo GetKernelInfo(const at::Tensor &mat1, const at::Tensor &mat2, const std::string &outDType)
 {
-    AscendCTInfo info;
+    KernelInfo kernelInfo;
     int64_t m = mat1.sizes().at(0);
     int64_t k1 = mat1.sizes().at(1);
     int64_t n = mat2.sizes().at(1);
-    info.m = m;
-    info.k = k1;
-    info.n = n;
-    info.inputDataType = TorchDtypeToAclDtype(mat1.scalar_type());
-    info.outputDataType = TorchDtypeToAclDtype(TypeStrToTorchDtype(outDType), info.inputDataType);
-    return info;
+    kernelInfo.m = m;
+    kernelInfo.k = k1;
+    kernelInfo.n = n;
+    kernelInfo.inputDataType = TorchDtypeToAclDtype(mat1.scalar_type());
+    kernelInfo.outputDataType = TorchDtypeToAclDtype(TypeStrToTorchDtype(outDType), kernelInfo.inputDataType);
+    return kernelInfo;
 };
 
-template <AscendCTInfo::GMMSplit SPLIT_TYPE>
-AscendCTInfo GetGroupedAscendCTInfo(const std::vector<at::Tensor> &mat1, const std::vector<at::Tensor> &mat2,
+template <KernelInfo::GMMSplit SPLIT_TYPE>
+KernelInfo GetGroupedKernelInfo(const std::vector<at::Tensor> &mat1, const std::vector<at::Tensor> &mat2,
                                   const std::string &outDType, std::vector<int64_t> &totalSizeList)
 {
     if (mat1.size() != mat2.size()) {
         throw std::runtime_error("");
     }
-    AscendCTInfo info = GetAscendCTInfo(mat1.at(0), mat2.at(0), outDType);
+    KernelInfo kernelInfo = GetKernelInfo(mat1.at(0), mat2.at(0), outDType);
     int64_t m;
     int64_t k1;
     int64_t k2;
@@ -109,8 +109,8 @@ AscendCTInfo GetGroupedAscendCTInfo(const std::vector<at::Tensor> &mat1, const s
     int64_t totalSizeA{0};
     int64_t totalSizeB{0};
     int64_t totalSizeC{0};
-    size_t inputElemSize = aclDataTypeSize(info.inputDataType);
-    size_t outputElemSize = aclDataTypeSize(info.outputDataType);
+    size_t inputElemSize = aclDataTypeSize(kernelInfo.inputDataType);
+    size_t outputElemSize = aclDataTypeSize(kernelInfo.outputDataType);
     for (size_t i = 0; i < mat1.size(); i++) {
         m = mat1[i].sizes().at(0);
         k1 = mat1[i].sizes().at(1);
@@ -119,14 +119,14 @@ AscendCTInfo GetGroupedAscendCTInfo(const std::vector<at::Tensor> &mat1, const s
         if (k1 != k2) {
             throw std::runtime_error("k1 != k2");
         }
-        if (n != info.n) {
+        if (n != kernelInfo.n) {
             throw std::runtime_error("n is not equal");
         }
-        if constexpr (SPLIT_TYPE == AscendCTInfo::GMMSplit::SPLIT_M) {
+        if constexpr (SPLIT_TYPE == KernelInfo::GMMSplit::SPLIT_M) {
             groupedDims.push_back(static_cast<int32_t>(m));
         }
-        if constexpr (SPLIT_TYPE == AscendCTInfo::GMMSplit::SPLIT_K) {
-            if (m != info.m) {
+        if constexpr (SPLIT_TYPE == KernelInfo::GMMSplit::SPLIT_K) {
+            if (m != kernelInfo.m) {
                 throw std::runtime_error("split k, but m is not equal");
             }
             groupedDims.push_back(static_cast<int32_t>(k1));
@@ -139,25 +139,24 @@ AscendCTInfo GetGroupedAscendCTInfo(const std::vector<at::Tensor> &mat1, const s
     totalSizeList[0] = totalSizeA;
     totalSizeList[1] = totalSizeB;
     totalSizeList[2] = totalSizeC;
-    info.groupList.resize(groupedDims.size());
-    std::partial_sum(groupedDims.begin(), groupedDims.end(), info.groupList.begin());
-    return info;
+    kernelInfo.groupList.resize(groupedDims.size());
+    std::partial_sum(groupedDims.begin(), groupedDims.end(), kernelInfo.groupList.begin());
+    return kernelInfo;
 };
 
 at::Tensor RunBasicMatmul(const at::Tensor &mat1, const at::Tensor &mat2, const std::string &outDType)
 {
-    AscendCTInfo info = GetAscendCTInfo(mat1, mat2, outDType);
-    KernelExecInfo kernelExecInfo;
-    kernelExecInfo.inputAddr.resize(2);
-    kernelExecInfo.inputAddr[0] = static_cast<uint8_t *>(const_cast<void *>(mat1.storage().data()));
-    kernelExecInfo.inputAddr[1] = static_cast<uint8_t *>(const_cast<void *>(mat2.storage().data()));
+    KernelInfo kernelInfo = GetKernelInfo(mat1, mat2, outDType);
+    kernelInfo.inputAddr.resize(2);
+    kernelInfo.inputAddr[0] = static_cast<uint8_t *>(const_cast<void *>(mat1.storage().data()));
+    kernelInfo.inputAddr[1] = static_cast<uint8_t *>(const_cast<void *>(mat2.storage().data()));
     torch::Dtype outputDataType = TypeStrToTorchDtype(outDType, mat1.scalar_type());
     at::Tensor result = at::empty(InferShape(mat1.sizes(), mat2.sizes()), outputDataType).to(GetAtDevice());
-    kernelExecInfo.outputAddr.resize(1);
-    kernelExecInfo.outputAddr.at(0) = static_cast<uint8_t *>(const_cast<void *>(result.storage().data()));
+    kernelInfo.outputAddr.resize(1);
+    kernelInfo.outputAddr.at(0) = static_cast<uint8_t *>(const_cast<void *>(result.storage().data()));
     aclrtStream stream = c10_npu::getCurrentNPUStream().stream(false);
     uint32_t aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
-    BasicMatmul(aicCoreNum, stream, kernelExecInfo, info);
+    BasicMatmul(aicCoreNum, stream, kernelInfo);
     (void)aclrtSynchronizeStream(stream);
     return result;
 }
@@ -165,18 +164,18 @@ at::Tensor RunBasicMatmul(const at::Tensor &mat1, const at::Tensor &mat2, const 
 std::vector<at::Tensor> RunGroupedMatmul(const std::vector<at::Tensor> &mat1, const std::vector<at::Tensor> &mat2,
                                          const std::string &outDType, const bool &splitK)
 {
-    AscendCTInfo info;
+    KernelInfo kernelInfo;
     std::vector<int64_t> totalSizeList;
     // make grouped list from input shapes
     // and calculate the size of matA, B, C
     if (splitK) {
-        info = GetGroupedAscendCTInfo<AscendCTInfo::GMMSplit::SPLIT_K>(mat1, mat2, outDType, totalSizeList);
-        info.split = AscendCTInfo::GMMSplit::SPLIT_K;
+        kernelInfo = GetGroupedKernelInfo<KernelInfo::GMMSplit::SPLIT_K>(mat1, mat2, outDType, totalSizeList);
+        kernelInfo.split = KernelInfo::GMMSplit::SPLIT_K;
     } else {
-        info = GetGroupedAscendCTInfo<AscendCTInfo::GMMSplit::SPLIT_M>(mat1, mat2, outDType, totalSizeList);
-        info.split = AscendCTInfo::GMMSplit::SPLIT_M;
+        kernelInfo = GetGroupedKernelInfo<KernelInfo::GMMSplit::SPLIT_M>(mat1, mat2, outDType, totalSizeList);
+        kernelInfo.split = KernelInfo::GMMSplit::SPLIT_M;
     }
-    const size_t problemCount = info.groupList.size();
+    const size_t problemCount = kernelInfo.groupList.size();
 
     // allocate contiguous memory for matA, B, C
     uint8_t *deviceA{nullptr};
@@ -205,18 +204,17 @@ std::vector<at::Tensor> RunGroupedMatmul(const std::vector<at::Tensor> &mat1, co
         deviceB += currentMat2Size;
     }
 
-    // prepare kernenExecInfo
-    KernelExecInfo kernelExecInfo;
-    kernelExecInfo.inputAddr.resize(2);
-    kernelExecInfo.inputAddr[0] = baseDeviceA;
-    kernelExecInfo.inputAddr[1] = baseDeviceB;
-    kernelExecInfo.outputAddr.resize(1);
-    kernelExecInfo.outputAddr[0] = baseDeviceC;
+    // prepare kernelInfo
+    kernelInfo.inputAddr.resize(2);
+    kernelInfo.inputAddr[0] = baseDeviceA;
+    kernelInfo.inputAddr[1] = baseDeviceB;
+    kernelInfo.outputAddr.resize(1);
+    kernelInfo.outputAddr[0] = baseDeviceC;
     aclrtStream stream = c10_npu::getCurrentNPUStream().stream(false);
     uint32_t aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
     // execution
-    GroupedMatmul(aicCoreNum, stream, kernelExecInfo, info);
+    GroupedMatmul(aicCoreNum, stream, kernelInfo);
 
     // after execution, the contiguous memory of input will not be used anymore, can be free
     aclrtFree(baseDeviceA);
@@ -246,18 +244,17 @@ std::vector<at::Tensor> RunGroupedMatmul(const std::vector<at::Tensor> &mat1, co
 
 at::Tensor RunOptimizedMatmul(const at::Tensor &mat1, const at::Tensor &mat2, const std::string &outDType)
 {
-    AscendCTInfo info = GetAscendCTInfo(mat1, mat2, outDType);
-    KernelExecInfo kernelExecInfo;
-    kernelExecInfo.inputAddr.resize(2);
-    kernelExecInfo.inputAddr[0] = static_cast<uint8_t *>(const_cast<void *>(mat1.storage().data()));
-    kernelExecInfo.inputAddr[1] = static_cast<uint8_t *>(const_cast<void *>(mat2.storage().data()));
+    KernelInfo kernelInfo = GetKernelInfo(mat1, mat2, outDType);
+    kernelInfo.inputAddr.resize(2);
+    kernelInfo.inputAddr[0] = static_cast<uint8_t *>(const_cast<void *>(mat1.storage().data()));
+    kernelInfo.inputAddr[1] = static_cast<uint8_t *>(const_cast<void *>(mat2.storage().data()));
     torch::Dtype outputDataType = TypeStrToTorchDtype(outDType, mat1.scalar_type());
     at::Tensor result = at::empty(InferShape(mat1.sizes(), mat2.sizes()), outputDataType).to(GetAtDevice());
-    kernelExecInfo.outputAddr.resize(1);
-    kernelExecInfo.outputAddr.at(0) = static_cast<uint8_t *>(const_cast<void *>(result.storage().data()));
+    kernelInfo.outputAddr.resize(1);
+    kernelInfo.outputAddr.at(0) = static_cast<uint8_t *>(const_cast<void *>(result.storage().data()));
     aclrtStream stream = c10_npu::getCurrentNPUStream().stream(false);
     uint32_t aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
-    OptimizedMatmul(aicCoreNum, stream, kernelExecInfo, info);
+    OptimizedMatmul(aicCoreNum, stream, kernelInfo);
     (void)aclrtSynchronizeStream(stream);
     return result;
 }

@@ -16,7 +16,9 @@
 
 #include <vector>
 
-struct AscendCTInfo {
+namespace AscendCTKernel {
+
+struct KernelInfo {
     enum class GMMSplit : uint32_t { SPLIT_M = 0, SPLIT_K = 1, SPLIT_N = 2 };
     aclDataType inputDataType = aclDataType::ACL_FLOAT16;
     aclDataType outputDataType = aclDataType::ACL_FLOAT16;
@@ -29,14 +31,14 @@ struct AscendCTInfo {
     bool transB = false;
     std::vector<int32_t> groupList;
     GMMSplit split = GMMSplit::SPLIT_M;
-};
-struct KernelExecInfo {
     std::vector<uint8_t *> inputAddr;
     std::vector<uint8_t *> outputAddr;
 };
 
-void BasicMatmul(uint32_t blockNum, aclrtStream stream, KernelExecInfo kernelExecInfo, AscendCTInfo AscendCTInfo);
-void GroupedMatmul(uint32_t blockNum, aclrtStream stream, KernelExecInfo kernelExecInfo, AscendCTInfo AscendCTInfo);
-void OptimizedMatmul(uint32_t blockNum, aclrtStream stream, KernelExecInfo kernelExecInfo, AscendCTInfo AscendCTInfo);
+void BasicMatmul(uint32_t blockNum, aclrtStream stream, KernelInfo kernelInfo);
+void GroupedMatmul(uint32_t blockNum, aclrtStream stream, KernelInfo kernelInfo);
+void OptimizedMatmul(uint32_t blockNum, aclrtStream stream, KernelInfo kernelInfo);
+
+}
 
 #endif // SHARED_LIB_ASCENDCT_KERNEL_H

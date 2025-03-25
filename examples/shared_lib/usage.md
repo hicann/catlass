@@ -6,19 +6,20 @@
 
 ```bash
 examples/shared_lib
-├── AscendCT_kernel.cpp      # host算子入口实现
-├── AscendCT_kernel.h        # host使用的参数结构体、算子入口
+├── AscendCTKernel.cpp      # host算子入口实现
+├── AscendCTKernel.h        # host使用的参数结构体、算子入口
 ├── build.sh                # 编译脚本
 └── impl                    # 算子核函数实现
-        └── basic_matmul.h  # 示例：basic_matmul
+        ├── BasicMatmul.h  # 示例：basic_matmul
+        └── ...
 ```
 
 ## 编译产物结构
 
 ```bash
 output/shared_lib
-├── AscendCT_kernel.h        # 动态链接库头文件
-└── libAscendCT_kernel.so    # 动态链接库
+├── AscendCTKernel.h        # 动态链接库头文件
+└── libascendct_kernel.so    # 动态链接库
 ```
 
 ## 使用说明
@@ -27,7 +28,7 @@ output/shared_lib
 
 ### 算子kernel实现
 
-在`shared_lib/impl`文件夹中创建`custom_matmul.h`，内容可参考`basic_matmul.h`，大致如下：
+在`shared_lib/impl`文件夹中创建`CustomMatmul.h`，内容可参考`BasicMatmul.h`，大致如下：
 
 ```cpp
 #include "AscendCT/AscendCT.hpp"
@@ -71,15 +72,14 @@ void kernel_host(...){
 即：device侧的特化要在device侧实现.
 ### 算子host接口实现
 
-参考`shared_lib/AscendCT_kernel.cpp`增加host接口.
+参考`shared_lib/AscendCTKernel.cpp`增加host接口.
 推荐参数列表如下：
 
 | 参数名           | 类型             | 作用               |
 | ---------------- | ---------------- | ------------------ |
 | `blockNum`       | `uint32_t`       | 设定aiCore个数     |
 | `stream`         | `aclrtStream`    | NPU流              |
-| `kernelExecInfo` | `KernelExecInfo` | 算子执行的数据地址 |
-| `AscendCTInfo`    | `AscendCTInfo`    | 算子执行的数据信息 |
+| `kernelInfo` | `KernelInfo` | 算子执行的数据地址和输入详细情况，如mnk等维度的大小 |
 
 同时，更新`shared_lib/AscendCT_kernel.h`中的对外接口.
 
@@ -91,7 +91,7 @@ bash scripts/build.sh shared_lib
 
 ## 注意事项
 - 我们目前提供了三种典型算子作为示例：
-  - `basic_matmul`：基本矩阵乘法，并实现了类型模板的实现方法
-  - `grouped_matmul`：分组矩阵乘法，提供分组输入输出示例
-  - `optimized_matmul`：优化矩阵乘法，提供CV融合的示例
+  - `BasicMatmul`：基本矩阵乘法，并实现了类型模板的实现方法
+  - `GroupedMatmul`：分组矩阵乘法，提供分组输入输出示例
+  - `OptimizedMatmul`：优化矩阵乘法，提供CV融合的示例
 - 本节是算子打包成动态库的一个示例，可根据需要自行扩展功能，并不仅局限于已有的代码.
