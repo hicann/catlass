@@ -19,14 +19,14 @@ do
             OUTPUT_PATH="${i#*=}"
             shift # past argument=value
         ;;
-        --ascendct_src_dir=*)
-            ASCENDCT_SRC_DIR="${i#*=}"
+        --act_src_dir=*)
+            ACT_SRC_DIR="${i#*=}"
     esac
 done
 
 mkdir -p $OUTPUT_PATH
 
-echo -e "[ 50%] \033[32mBuilding CXX shared library libascendct_kernel.so"
+echo -e "[ 50%] \033[32mBuilding CXX shared library libact_kernel.so"
 bisheng -O2 -fPIC -std=c++17 -xcce --cce-aicore-arch=dav-c220 \
 -I$ASCEND_HOME_PATH/compiler/tikcpp \
 -I$ASCEND_HOME_PATH/compiler/tikcpp/tikcfw \
@@ -37,7 +37,7 @@ bisheng -O2 -fPIC -std=c++17 -xcce --cce-aicore-arch=dav-c220 \
 -I$ASCEND_HOME_PATH/include/experiment/msprof \
 -I$SHARED_LIB_SRC_DIR \
 -I$SHARED_LIB_SRC_DIR/impl \
--I$ASCENDCT_SRC_DIR/include \
+-I$ACT_SRC_DIR/include \
 -DL2_CACHE_HINT \
 -mllvm -cce-aicore-stack-size=0x8000 \
 -mllvm -cce-aicore-function-stack-size=0x8000 \
@@ -47,10 +47,10 @@ bisheng -O2 -fPIC -std=c++17 -xcce --cce-aicore-arch=dav-c220 \
 -Wno-macro-redefined -Wno-ignored-attributes \
 -L$ASCEND_HOME_PATH/lib64 \
 -lruntime \
-$SHARED_LIB_SRC_DIR/AscendCTKernel.cpp --shared -o $OUTPUT_PATH/libascendct_kernel.so
-echo -e "[ 50%] Built libascendct_kernel.so"
+$SHARED_LIB_SRC_DIR/act_kernel.cpp --shared -o $OUTPUT_PATH/libact_kernel.so
+echo -e "[ 50%] Built libact_kernel.so"
 
-echo -e "[100%] \033[32mBuilding CXX static library libascendct_kernel.a"
+echo -e "[100%] \033[32mBuilding CXX static library libact_kernel.a"
 bisheng -O2 -fPIC -std=c++17 -xcce --cce-aicore-arch=dav-c220 \
 -I$ASCEND_HOME_PATH/compiler/tikcpp \
 -I$ASCEND_HOME_PATH/compiler/tikcpp/tikcfw \
@@ -61,7 +61,7 @@ bisheng -O2 -fPIC -std=c++17 -xcce --cce-aicore-arch=dav-c220 \
 -I$ASCEND_HOME_PATH/include/experiment/msprof \
 -I$SHARED_LIB_SRC_DIR \
 -I$SHARED_LIB_SRC_DIR/impl \
--I$ASCENDCT_SRC_DIR/include \
+-I$ACT_SRC_DIR/include \
 -DL2_CACHE_HINT \
 -mllvm -cce-aicore-stack-size=0x8000 \
 -mllvm -cce-aicore-function-stack-size=0x8000 \
@@ -71,6 +71,6 @@ bisheng -O2 -fPIC -std=c++17 -xcce --cce-aicore-arch=dav-c220 \
 -Wno-macro-redefined -Wno-ignored-attributes \
 -L$ASCEND_HOME_PATH/lib64 \
 -lruntime \
-$SHARED_LIB_SRC_DIR/AscendCTKernel.cpp --cce-build-static-lib -o $OUTPUT_PATH/libascendct_kernel.a
-echo -e "[100%] Built libascendct_kernel.a"
-cp $SHARED_LIB_SRC_DIR/AscendCTKernel.h $OUTPUT_PATH/
+$SHARED_LIB_SRC_DIR/act_kernel.cpp --cce-build-static-lib -o $OUTPUT_PATH/libact_kernel.a
+echo -e "[100%] Built libact_kernel.a"
+cp $SHARED_LIB_SRC_DIR/act_kernel.h $OUTPUT_PATH/

@@ -14,20 +14,20 @@
 #include "golden.hpp"
 #include "fp16_t.h"
 
-#include "AscendCT/AscendCT.hpp"
-#include "AscendCT/arch/arch.hpp"
-#include "AscendCT/epilogue/dispatch_policy.hpp"
-#include "AscendCT/epilogue/block/block_epilogue.hpp"
-#include "AscendCT/epilogue/tile/tile_copy.hpp"
-#include "AscendCT/epilogue/tile/tile_elemwise_add.hpp"
-#include "AscendCT/gemm/block/block_mmad.hpp"
-#include "AscendCT/gemm/block/block_swizzle.hpp"
-#include "AscendCT/gemm/dispatch_policy.hpp"
-#include "AscendCT/gemm/kernel/matmul_epilogue.hpp"
-#include "AscendCT/gemm/gemm_type.hpp"
-#include "AscendCT/layout/layout.hpp"
+#include "act/act.hpp"
+#include "act/arch/arch.hpp"
+#include "act/epilogue/dispatch_policy.hpp"
+#include "act/epilogue/block/block_epilogue.hpp"
+#include "act/epilogue/tile/tile_copy.hpp"
+#include "act/epilogue/tile/tile_elemwise_add.hpp"
+#include "act/gemm/block/block_mmad.hpp"
+#include "act/gemm/block/block_swizzle.hpp"
+#include "act/gemm/dispatch_policy.hpp"
+#include "act/gemm/kernel/matmul_epilogue.hpp"
+#include "act/gemm/gemm_type.hpp"
+#include "act/layout/layout.hpp"
 
-using namespace AscendCT;
+using namespace Act;
 using fp16_t = op::fp16_t;
 
 template <
@@ -35,7 +35,7 @@ template <
     class LayoutB,
     class LayoutC
 >
-ASCENDCT_GLOBAL
+ACT_GLOBAL
 void MatmulAdd(
     uint64_t fftsAddr,
     GemmCoord problemShape,
@@ -48,36 +48,36 @@ void MatmulAdd(
     // Set FFTS address
     AscendC::SetSyncBaseAddr(fftsAddr);
     // Define ArchTag
-    using ArchTag = arch::AtlasA2;
+    using ArchTag = Arch::AtlasA2;
 
     // Block level, define BlockMmad
     constexpr bool enableUnitFlag = true;
-    using MmadDispatchPolicy = gemm::MmadAtlasA2Pingpong<enableUnitFlag>;
+    using MmadDispatchPolicy = Gemm::MmadAtlasA2Pingpong<enableUnitFlag>;
     using L1TileShape = GemmShape<128, 256, 256>;
     using L0TileShape = GemmShape<128, 256, 64>;
-    using AType = gemm::GemmType<half, LayoutA>;
-    using BType = gemm::GemmType<half, LayoutB>;
-    using CType = gemm::GemmType<half, LayoutC>;
-    using BlockMmad = gemm::block::BlockMmad<MmadDispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+    using AType = Gemm::GemmType<half, LayoutA>;
+    using BType = Gemm::GemmType<half, LayoutB>;
+    using CType = Gemm::GemmType<half, LayoutC>;
+    using BlockMmad = Gemm::Block::BlockMmad<MmadDispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
 
     // Block level, define BlockEpilogue
-    using EpilogueDispatchPolicy = epilogue::EpilogueAtlasA2ElemWiseOneSource;
+    using EpilogueDispatchPolicy = Epilogue::EpilogueAtlasA2ElemWiseOneSource;
     using XType = CType;
     using DType = CType;
     using ComputeType = CType;
     constexpr uint32_t computeLength = 16384;
-    using TileElemWiseEpilogue = epilogue::tile::TileElemWiseAdd<ArchTag, ComputeType, computeLength>;
-    using EpilogueTileCopy = epilogue::tile::TileCopy<ArchTag, CType, XType, DType>;
-    using BlockEpilogue = epilogue::block::BlockEpilogue<EpilogueDispatchPolicy, CType, XType, DType,
+    using TileElemWiseEpilogue = Epilogue::Tile::TileElemWiseAdd<ArchTag, ComputeType, computeLength>;
+    using EpilogueTileCopy = Epilogue::Tile::TileCopy<ArchTag, CType, XType, DType>;
+    using BlockEpilogue = Epilogue::Block::BlockEpilogue<EpilogueDispatchPolicy, CType, XType, DType,
         TileElemWiseEpilogue, EpilogueTileCopy>;
 
     if (problemShape.m() > problemShape.n()) {
         // Define BlockScheduler
         // Swizzle offset is 3 and direction is 0.
-        using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 0>;
+        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
 
         // Kernel level
-        using MatmulKernel = gemm::kernel::MatmulEpilogue<BlockMmad, BlockEpilogue, BlockScheduler>;
+        using MatmulKernel = Gemm::Kernel::MatmulEpilogue<BlockMmad, BlockEpilogue, BlockScheduler>;
 
         // Prepare params
         typename BlockEpilogue::Params epilogueParams{gmD, layoutD, gmD, layoutD};
@@ -89,10 +89,10 @@ void MatmulAdd(
     } else {
         // Define BlockScheduler
         // Swizzle offset is 3 and direction is 1.
-        using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 1>;
+        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
 
         // Kernel level
-        using MatmulKernel = gemm::kernel::MatmulEpilogue<BlockMmad, BlockEpilogue, BlockScheduler>;
+        using MatmulKernel = Gemm::Kernel::MatmulEpilogue<BlockMmad, BlockEpilogue, BlockScheduler>;
 
         // Prepare params
         typename BlockEpilogue::Params epilogueParams{gmD, layoutD, gmD, layoutD};

@@ -14,21 +14,21 @@ chmod +x Ascend-cann-toolkit_<version>_linux-<arch>.run
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
 ```
 
-## 使用ASCENDCT开发Matmul算子
-本示例主要展示如何基于ASCENDCT快速搭建一个NPU上的BasicMatmul实现。示例中使用已提供的下层基础组件完成Device层和Kernel层组装，并调用算子输出结果。ASCENDCT分层示意图见[api文档](api.md)。
+## 使用ASCENDC Templates开发Matmul算子
+本示例主要展示如何基于ASCENDC Templates快速搭建一个NPU上的BasicMatmul实现。示例中使用已提供的下层基础组件完成Device层和Kernel层组装，并调用算子输出结果。ASCENDC Templates分层示意图见[api文档](api.md)。
 ### Kernel层算子定义
 Kernel层模板由Block层组件构成。这里首先定义三个Block层组件。
 `<class BlockMmad_, class BlockEpilogue_, class BlockScheduler_>`。
 1. `BlockMmad_`为block层mmad计算接口，定义方式如下：
 ```
-using DispatchPolicy = AscendCT::gemm::MmadAtlasA2Pingpong<true>; //流水排布使用
-using L1TileShape = AscendCT::GemmShape<128, 256, 256>; // L1基本块
-using L0TileShape = AscendCT::GemmShape<128, 256, 64>; // L0基本块
-using AType = AscendCT::gemm::GemmType<ElementA, LayoutA>;     //封装了A矩阵的数据类型和排布信息
-using BType = AscendCT::gemm::GemmType<ElementB, LayoutB>;     //封装了B矩阵的数据类型和排布信息
-using CType = AscendCT::gemm::GemmType<ElementC, LayoutC>;     //封装了C矩阵的数据类型和排布信息
+using DispatchPolicy = Act::Gemm::MmadAtlasA2Pingpong<true>; //流水排布使用
+using L1TileShape = Act::GemmShape<128, 256, 256>; // L1基本块
+using L0TileShape = Act::GemmShape<128, 256, 64>; // L0基本块
+using AType = Act::Gemm::GemmType<ElementA, LayoutA>;     //封装了A矩阵的数据类型和排布信息
+using BType = Act::Gemm::GemmType<ElementB, LayoutB>;     //封装了B矩阵的数据类型和排布信息
+using CType = Act::Gemm::GemmType<ElementC, LayoutC>;     //封装了C矩阵的数据类型和排布信息
 
-using BlockMmad = AscendCT::gemm::block::BlockMmad<DispatchPolicy,
+using BlockMmad = Act::Gemm::Block::BlockMmad<DispatchPolicy,
     L1TileShape,
     L0TileShape,
     AType,
@@ -41,22 +41,22 @@ using BlockEpilogue = void;
 ```
 3. `BlockScheduler_`该模板类定义数据走位方式，提供计算offset的方法。此处使用定义好的GemmIdentityBlockSwizzle。参考[Swizzle策略说明](swizzle_explanation.md)文档了解更多swizzle信息。
 ```
-using BlockScheduler = typename AscendCT::gemm::block::GemmIdentityBlockSwizzle<>;
+using BlockScheduler = typename Act::Gemm::Block::GemmIdentityBlockSwizzle<>;
 ```
 4. 基于上述组件即可完成BasicMatmul示例的Kernel层组装。
 ```
-using MatmulKernel = AscendCT::gemm::kernel::BasicMatmul<BlockMmad, void, TileSchedule>;
+using MatmulKernel = Act::Gemm::Kernel::BasicMatmul<BlockMmad, void, TileSchedule>;
 ```
 ### Device层算子定义
 基于Kernel层组装的算子，完成核函数的编写。
-1. 使用ASCENDCT_GLOBAL修饰符定义Matmul函数，并传入算子的类型参数。
+1. 使用ACT_GLOBAL修饰符定义Matmul函数，并传入算子的类型参数。
 ```
 template <
     class LayoutA,
     class LayoutB,
     class LayoutC
 >
-ASCENDCT_GLOBAL
+ACT_GLOBAL
 void BasicMatmul(
     GemmCoord problemShape,
     GM_ADDR gmA, LayoutA layoutA,
@@ -79,10 +79,10 @@ BasicMatmul<<<BLOCK_NUM, nullptr, stream>>>(
         options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC);
 ```
 ### 算子编译
-使用cmake，调用`AscendCT_example_add_executable`函数指定target名称和编译文件。如下所示，00_basic_matmul为target名称，basic_matmul.cpp为需要编译的文件。
+使用cmake，调用`act_example_add_executable`函数指定target名称和编译文件。如下所示，00_basic_matmul为target名称，basic_matmul.cpp为需要编译的文件。
 ```
 # CMakeLists.txt
-AscendCT_example_add_executable(
+act_example_add_executable(
     00_basic_matmul
     basic_matmul.cpp
 )
@@ -90,7 +90,7 @@ AscendCT_example_add_executable(
 在项目目录下，调用`build.sh`，即可编译examples中的kernel代码。
 ```
 # 编译examples内所有用例
-bash scripts/build.sh AscendCT_examples
+bash scripts/build.sh act_examples
 # 编译指定用例
 bash scripts/build.sh 00_basic_matmul
 ```
@@ -101,7 +101,7 @@ cd build/bin
 # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID（可选）
 ./00_basic_matmul 256 512 1024 0
 ```
-执行结果如下，表明基于ASCENDCT编写的Kernel已经成功执行。
+执行结果如下，表明基于ASCENDC Templates编写的Kernel已经成功执行。
 ```
 Compare success.
 ```

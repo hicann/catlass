@@ -11,12 +11,12 @@ Ascend C Template基于上述的分层结构，实现了经典“三层嵌套循
 
 
 ```c++
-// AscendCT::gemm::kernel::BasicMatmul: BlockTileM 和 BlockTileN 循环
+// Act::Gemm::Kernel::BasicMatmul: BlockTileM 和 BlockTileN 循环
 // 在AICores上并行
 for (int block_m = 0; block_m < MatmulM; block_m += BlockTileM) {
   for (int block_n = 0; block_n < MatmulN; block_n += BlockTileN) {
 
-    // AscendCT::gemm::block::BlockMmad: 在k-tile上迭代的主循环
+    // Act::Gemm::Block::BlockMmad: 在k-tile上迭代的主循环
     // 在这个阶段没有循环展开
     for (int k_tile = 0; k_tile < MatmulK; k_tile++) {
 
@@ -47,9 +47,9 @@ Ascend C Template使用以下组件表达上述循环嵌套，这些组件针对
 
 | API 层级             | API 类 和/或 函数 名称                   |
 | ---                  | ---                                               |
-| Device               | `AscendCT::gemm::device::DeviceGemm`     |
-| Kernel               | `AscendCT::gemm::kernel::BasicMatmul`            |
-| Block           | `AscendCT::gemm::block:BlockMmad` <br /> `AscendCT::epilogue::block::BlockEpilogue` <br />|
+| Device               | `Act::Gemm::Device::DeviceGemm`     |
+| Kernel               | `Act::Gemm::Kernel::BasicMatmul`            |
+| Block           | `Act::Gemm::Block::BlockMmad` <br /> `Act::Epilogue::Block::BlockEpilogue` <br />|
 | Tile (MMAD and Copy) | `TileMmad` and `TileCopy` <br /> |
 | Basic                 | `AscendC::Mmad` and `AscendC::DataCopy` |
 
@@ -67,14 +67,14 @@ Ascend C Template使用以下组件表达上述循环嵌套，这些组件针对
 ```c++
 // 第一步: 创建所需的特化block层mmad
 // 参数
-using DispatchPolicy = gemm::MmadAtlasA2Pingpong<true>;
+using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
 using L1TileShape = GemmShape<128, 256, 256>;
 using L0TileShape = GemmShape<128, 256, 64>;
-using AType = gemm::GemmType<ElementA, LayoutA>;
-using BType = gemm::GemmType<ElementB, LayoutB>;
-using CType = gemm::GemmType<ElementC, LayoutC>;
+using AType = Gemm::GemmType<ElementA, LayoutA>;
+using BType = Gemm::GemmType<ElementB, LayoutB>;
+using CType = Gemm::GemmType<ElementC, LayoutC>;
 
-using BlockMmad = gemm::block::BlockMmad<DispatchPolicy,
+using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy,
     L1TileShape,
     L0TileShape,
     AType,
@@ -85,14 +85,14 @@ using BlockMmad = gemm::block::BlockMmad<DispatchPolicy,
 using BlockEpilogue = void;
 
 // 第三步：指定计算时的数据走位方式
-using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<>;
+using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<>;
 
 
 // 第四步：在kernel层将mmad和后处理组合到一起
-using MatmulKernel = gemm::kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
+using MatmulKernel = Gemm::Kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 
 // 第四步：将kernel放入device适配器中，host侧处理kernel使用
-using Matmul = AscendCT::gemm::device::DeviceGemm<MatmulKernel>;
+using Matmul = Act::Gemm::Device::DeviceGemm<MatmulKernel>;
 ```
 
 
@@ -107,17 +107,17 @@ Block在昇腾NPU的SPMD编程模型中指一个Process，是逻辑核的概念�
 
 Block使用`TileMma`和`TileCopy` API（见下文）来执行分片粒度的数据拷贝和MMAD运算。
 
-Block中的不同硬件流水线（例如，MTE1、MTE2或FixPipe）提供不同能力，不同的硬件流水线间需要共享数据并协调对共享数据的访问。例如，MTE2讲数据从全局内存拷贝到L1 Buffer后，需要让MTE1知道输入已准备好。我们将这与`kernel::`层API对比，后者调度独立的Block分片。
+Block中的不同硬件流水线（例如，MTE1、MTE2或FixPipe）提供不同能力，不同的硬件流水线间需要共享数据并协调对共享数据的访问。例如，MTE2讲数据从全局内存拷贝到L1 Buffer后，需要让MTE1知道输入已准备好。我们将这与`Kernel::`层API对比，后者调度独立的Block分片。
 
 ### Block Mmad
 
-`AscendCT::gemm::block::BlockMmad`Block矩阵乘累加（MMAD）主循环的主要接口。
+`Act::Gemm::Block::BlockMmad`Block矩阵乘累加（MMAD）主循环的主要接口。
 
 The `BlockMmad` 类定义在头文件中
-[include/AscendCT/gemm/block/block_mmad.hpp](../include/AscendCT/gemm/block/block_mmad.hpp).
+[include/act/gemm/block/block_mmad.hpp](../include/act/gemm/block/block_mmad.hpp).
 
 ```c++
-namespace AscendCT::gemm::block {
+namespace Act::Gemm::Block {
 ////////////////////////////////////////////////////////////////////
 
 template <
@@ -128,22 +128,22 @@ template <
     class BType,
     class CType,
     class BiasType = void,
-    class TileCopy = gemm::tile::TileCopy<typename DispatchPolicy::ArchTag, AType, BType, CType, BiasType>,
-    class TileMmad = gemm::tile::TileMmad<typename DispatchPolicy::ArchTag, AType, BType, BiasType>
+    class TileCopy = Gemm::Tile::TileCopy<typename DispatchPolicy::ArchTag, AType, BType, CType, BiasType>,
+    class TileMmad = Gemm::Tile::TileMmad<typename DispatchPolicy::ArchTag, AType, BType, BiasType>
 >
 struct BlockMmad {};
 
 ////////////////////////////////////////////////////////////////////
 
-} // namespace AscendCT::gemm::block
+} // namespace Act::Gemm::Block
 
 ```
 
 - `DispatchPolicy` 是Block层重要的参数之一，下一节会详细介绍。
 - `L1TileShape` 和 `L0TileShape` 对应L1 Buffer和L0 Buffer上使用的基本块大小，后续详细介绍。
 - `AType`、`BType`、`CType`、`BiasType` 是 `GemmType` 的实例，其中包含了全局内存上A、B、C矩阵和Bias向量的数据类型和数据排布。
-- `TileCopy` 是 `tile::TileCopy`的实例，包含了不同访存层级间的块粒度数据拷贝，如全局内存到L1 Buffer，L1 Buffer到L0 Buffer等。
-- `TileMmad` 是 `tile::TileMmad`的实例，完成L0上基本块粒度的矩阵乘累加运算。
+- `TileCopy` 是 `Tile::TileCopy`的实例，包含了不同访存层级间的块粒度数据拷贝，如全局内存到L1 Buffer，L1 Buffer到L0 Buffer等。
+- `TileMmad` 是 `Tile::TileMmad`的实例，完成L0上基本块粒度的矩阵乘累加运算。
 
 
 ### Block Dispatch Policies
@@ -157,7 +157,7 @@ Ascend C Template 采用基于标签的调度策略类型来特例化Block层Mma
 // 2-Buffer in L1 Buffer ,
 // unitflag enable
 struct MmadAtlasA2Pingpong {
-    using ArchTag = arch::AtlasA2;
+    using ArchTag = Arch::AtlasA2;
     static constexpr uint32_t STAGES = 2;
     static constexpr bool ENABLE_UNIT_FLAG = True;
 };
@@ -178,7 +178,7 @@ struct MmadAtlasA2Pingpong {
 ### Epilogue
 
 
-尾处理实现了涉及输出矩阵的逐元素操作。用户可以提供自定义的尾处理，或者使用标准尾处理之一。这些尾处理位于目录include/AscendCT/epilogue/block/中，包括像`AscendCT::epilogue::block::BlockEpilogue`这样的类。Ascend C Template提供的尾处理不在include/AscendCT/gemm目录下，也不在`AscendCT::gemm`命名空间中，因为它们可以用于除Gemm之外的其他计算。
+尾处理实现了涉及输出矩阵的逐元素操作。用户可以提供自定义的尾处理，或者使用标准尾处理之一。这些尾处理位于目录include/act/epilogue/block/中，包括像`Act::Epilogue::Block::BlockEpilogue`这样的类。Ascend C Template提供的尾处理不在include/act/gemm目录下，也不在`Act::Gemm`命名空间中，因为它们可以用于除Gemm之外的其他计算。
 
 
 ## Kernel API
@@ -191,21 +191,21 @@ Kernel对应了所有Block在NPU上执行逻辑的集合。Kernel层BasicMatmul�
 Kernel层API是设备侧调用的入口，也是融合连续矩阵乘、尾处理或其他操作的组合点。
 
 Kernel API 入口在
-`AscendCT::gemm::kernel::BasicMatmul`, 位于头文件
-[include/AscendCT/gemm/kernel/basic_matmul.hpp](/include/AscendCT/gemm/kernel/basic_matmul.hpp).
+`Act::Gemm::Kernel::BasicMatmul`, 位于头文件
+[include/act/gemm/kernel/basic_matmul.hpp](/include/act/gemm/kernel/basic_matmul.hpp).
 `BasicMatmul` 是一个无状态的设备侧内核，实现的矩阵乘运算由两部分组成：
 * Block Mmad
 * Block Epilogue
 
 ```cpp
-namespace AscendCT::gemm::kernel {
+namespace Act::Gemm::Kernel {
 template <
   class BlockMmad_,
   class BlockEpilogue_,
   class BlockScheduler_
 >
 class BasicMatmul;
-} // namespace AscendCT::gemm::kernel
+} // namespace Act::Gemm::Kernel
 ```
 
 注：无状态指调用者管理着内核的状态。例如，上述描述的设备API。内核仅接收输入和输出参数 (`Params`).
@@ -219,15 +219,15 @@ class BasicMatmul;
 
 Device层是Host侧调用的入口，在这一层屏蔽调用Device侧函数的差异。用户定义完Kernel结构之后放入Device层模板，便可以执行算子。
 ```
-using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
 using BlockEpilogue = void;
-using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<>;
+using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<>;
 
 // kernel
-using MatmulKernel = gemm::kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
+using MatmulKernel = Gemm::Kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 
 // device
-using Matmul = gemm::device::DeviceGemm<MatmulKernel>;
+using Matmul = Gemm::Device::DeviceGemm<MatmulKernel>;
 Matmul matmulOp;
 // args为维度信息等参数的封装结构体
 matmulOp(args, workspace, stream);
@@ -237,7 +237,7 @@ matmulOp(args, workspace, stream);
 
 Tile粒度的MMAD和Copy是对基础API的MMAD和数据拷贝接口的组合，这一层的目的是构建可组合的NPU微内核，这些微内核由硬件加速的数学运算和数据拷贝操作组成，每个操作都有其数据类型和排布。Tile粒度的MMAD和Copy提供了不同硬件上完成相同计算或数据拷贝语义的统一API。
 
-用户可以在本文档顶部的三重嵌套循环伪代码的“内层”循环中使用`tile::TileMmad()` 或`tile::CopyGmToL1()` 、`tile::CopyGmToL1()` 等来调用这些操作。
+用户可以在本文档顶部的三重嵌套循环伪代码的“内层”循环中使用`Tile::TileMmad()` 或`Tile::CopyGmToL1()` 、`Tile::CopyGmToL1()` 等来调用这些操作。
 
 我们将这个API层级称为“Tile”，因为它使用基础API提供的原子能力去构建更大粒度的操作，作为一个可重用组件，它就像将单独的瓷砖拼接在一起构建成马赛克的图案。
 

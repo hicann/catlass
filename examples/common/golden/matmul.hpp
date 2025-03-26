@@ -12,9 +12,9 @@
 
 #include <vector>
 
-#include "AscendCT/layout/layout.hpp"
+#include "act/layout/layout.hpp"
 
-namespace AscendCT::golden {
+namespace Act::golden {
 
 // simple matmul
 template<class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementGolden, class LayoutGolden>
@@ -237,6 +237,6 @@ void ComputeGroupedMatmulSliceKPerTokenDequant(
     }
 }
 
-} // namespace AscendCT::golden
+} // namespace Act::golden
 
 #endif // EXAMPLES_COMMON_GOLDEN_MATMUL_HPP

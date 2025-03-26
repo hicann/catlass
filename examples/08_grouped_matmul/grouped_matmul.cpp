@@ -15,16 +15,16 @@
 #include "golden.hpp"
 #include "fp16_t.h"
 
-#include "AscendCT/AscendCT.hpp"
-#include "AscendCT/arch/arch.hpp"
-#include "AscendCT/gemm/block/block_mmad.hpp"
-#include "AscendCT/gemm/block/block_swizzle.hpp"
-#include "AscendCT/gemm/dispatch_policy.hpp"
-#include "AscendCT/gemm/kernel/grouped_matmul.hpp"
-#include "AscendCT/gemm/gemm_type.hpp"
-#include "AscendCT/layout/layout.hpp"
+#include "act/act.hpp"
+#include "act/arch/arch.hpp"
+#include "act/gemm/block/block_mmad.hpp"
+#include "act/gemm/block/block_swizzle.hpp"
+#include "act/gemm/dispatch_policy.hpp"
+#include "act/gemm/kernel/grouped_matmul.hpp"
+#include "act/gemm/gemm_type.hpp"
+#include "act/layout/layout.hpp"
 
-using namespace AscendCT;
+using namespace Act;
 using fp16_t = op::fp16_t;
 
 template <
@@ -32,7 +32,7 @@ template <
     class LayoutB,
     class LayoutC
 >
-ASCENDCT_GLOBAL
+ACT_GLOBAL
 void GroupedMatmul(
     uint32_t problemCount, GM_ADDR ptrProblemShape,
     GM_ADDR ptrA, GM_ADDR ptrLayoutA,
@@ -48,8 +48,8 @@ void GroupedMatmul(
     constexpr bool enableUnitFlag = true;
     constexpr bool enableShuffleK = true;
 
-    using ArchTag = arch::AtlasA2;
-    using DispatchPolicy = gemm::MmadAtlasA2PreloadAsync<
+    using ArchTag = Arch::AtlasA2;
+    using DispatchPolicy = Gemm::MmadAtlasA2PreloadAsync<
         preloadStages,
         l1Stages, l0AStages, l0BStages, l0CStages,
         enableUnitFlag, enableShuffleK
@@ -57,16 +57,16 @@ void GroupedMatmul(
     using L1TileShape = GemmShape<128, 256, 256>;
     using L0TileShape = GemmShape<128, 256, 64>;
 
-    using AType = gemm::GemmType<half, LayoutA>;
-    using BType = gemm::GemmType<half, LayoutB>;
-    using CType = gemm::GemmType<half, LayoutC>;
+    using AType = Gemm::GemmType<half, LayoutA>;
+    using BType = Gemm::GemmType<half, LayoutB>;
+    using CType = Gemm::GemmType<half, LayoutC>;
 
-    using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+    using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
     using BlockEpilogue = void;
-    using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 1>;
+    using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
 
     // kernel level
-    using MatmulKernel = gemm::kernel::GroupedMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
+    using MatmulKernel = Gemm::Kernel::GroupedMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 
     typename MatmulKernel::Params params{
         problemCount, ptrProblemShape, ptrA, ptrLayoutA, ptrB, ptrLayoutB, ptrC, ptrLayoutC

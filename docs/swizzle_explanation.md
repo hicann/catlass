@@ -7,18 +7,18 @@ Swizzle策略决定了当前AI Core以哪种顺序计算哪些基本块。调整
 默认参数为SwizzleOffset=1，SwizzleDirection=0，如图所示：
 
 ```c++
- using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<>;
+ using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<>;
 ```
 
 ![图1](./images/swizzle10.png)
 
 ```c++
- using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 0>;
+ using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
 ```
 ![图1](./images/swizzle30.png)
 
 ```c++
- using BlockScheduler = typename gemm::block::GemmIdentityBlockSwizzle<3, 1>;
+ using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
 ```
 ![图1](./images/swizzle31.png)
 

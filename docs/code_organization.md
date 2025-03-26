@@ -10,8 +10,8 @@
 include目录下的头文件是按照如下的文件层级进行组织的。
 ```
 ├── include
-│   └── AscendCT
-│       ├── AscendCT.hpp // 定义了基本的数据信息，如基本块长度等
+│   └── act
+│       ├── act.hpp // 定义了基本的数据信息，如基本块长度等
 │       ├── arch
 │       │   ├── arch.hpp // 定义了架构相关的基本数据信息，如L1/L0大小，UB大小等
 │       │   ├── cross_core_sync.hpp // 核间同步操作

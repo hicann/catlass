@@ -14,16 +14,16 @@
 #include "golden.hpp"
 #include "fp16_t.h"
 
-#include "AscendCT/AscendCT.hpp"
-#include "AscendCT/arch/arch.hpp"
-#include "AscendCT/gemm/block/block_mmad.hpp"
-#include "AscendCT/gemm/block/block_swizzle.hpp"
-#include "AscendCT/gemm/dispatch_policy.hpp"
-#include "AscendCT/gemm/kernel/splitk_matmul.hpp"
-#include "AscendCT/gemm/gemm_type.hpp"
-#include "AscendCT/layout/layout.hpp"
+#include "act/act.hpp"
+#include "act/arch/arch.hpp"
+#include "act/gemm/block/block_mmad.hpp"
+#include "act/gemm/block/block_swizzle.hpp"
+#include "act/gemm/dispatch_policy.hpp"
+#include "act/gemm/kernel/splitk_matmul.hpp"
+#include "act/gemm/gemm_type.hpp"
+#include "act/layout/layout.hpp"
 
-using namespace AscendCT;
+using namespace Act;
 using fp16_t = op::fp16_t;
 
 template <
@@ -31,7 +31,7 @@ template <
     class LayoutB,
     class LayoutC
 >
-ASCENDCT_GLOBAL
+ACT_GLOBAL
 void SplitkMatmul(
     uint64_t fftsAddr,
     GemmCoord problemShape,
@@ -42,28 +42,28 @@ void SplitkMatmul(
 )
 {
     AscendC::SetSyncBaseAddr(fftsAddr);
-    using ArchTag = arch::AtlasA2;
-    using DispatchPolicy = gemm::MmadAtlasA2Pingpong<true>;
+    using ArchTag = Arch::AtlasA2;
+    using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
     using L1TileShape = GemmShape<128, 256, 256>;
     using L0TileShape = GemmShape<128, 256, 64>;
 
-    using AType = gemm::GemmType<half, LayoutA>;
-    using BType = gemm::GemmType<half, LayoutB>;
-    using CType = gemm::GemmType<float, LayoutC>;
+    using AType = Gemm::GemmType<half, LayoutA>;
+    using BType = Gemm::GemmType<half, LayoutB>;
+    using CType = Gemm::GemmType<float, LayoutC>;
 
-    using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+    using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
     using BlockEpilogue = void;
 
     // After the Matmul computation is completed, launch the ReduceAdd kernel to accumulate the partial sums.
     constexpr uint32_t computeLength = 32 * 1024 / sizeof(float);
-    using ReduceAdd = AscendCT::gemm::kernel::ReduceAdd<ArchTag, float, half, computeLength>;
+    using ReduceAdd = Act::Gemm::Kernel::ReduceAdd<ArchTag, float, half, computeLength>;
 
     if (problemShape.m() > problemShape.n()) {
         // Swizzle offset is 3 and direction is 0.
-        using BlockScheduler = typename gemm::block::SplitkGemmIdentityBlockSwizzle<3, 0>;
+        using BlockScheduler = typename Gemm::Block::SplitkGemmIdentityBlockSwizzle<3, 0>;
 
         // kernel level
-        using MatmulKernel = gemm::kernel::SplitkMatmul<BlockMmad, BlockEpilogue, BlockScheduler, ReduceAdd>;
+        using MatmulKernel = Gemm::Kernel::SplitkMatmul<BlockMmad, BlockEpilogue, BlockScheduler, ReduceAdd>;
 
         typename MatmulKernel::Params params{
             problemShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, gmWorkspace, splitkFactor
@@ -74,10 +74,10 @@ void SplitkMatmul(
         matmul(params);
     } else {
         // Swizzle offset is 3 and direction is 1.
-        using BlockScheduler = typename gemm::block::SplitkGemmIdentityBlockSwizzle<3, 1>;
+        using BlockScheduler = typename Gemm::Block::SplitkGemmIdentityBlockSwizzle<3, 1>;
 
         // kernel level
-        using MatmulKernel = gemm::kernel::SplitkMatmul<BlockMmad, BlockEpilogue, BlockScheduler, ReduceAdd>;
+        using MatmulKernel = Gemm::Kernel::SplitkMatmul<BlockMmad, BlockEpilogue, BlockScheduler, ReduceAdd>;
 
         typename MatmulKernel::Params params{
             problemShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, gmWorkspace, splitkFactor

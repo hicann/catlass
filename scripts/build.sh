@@ -21,7 +21,7 @@ mkdir -p $CMAKE_BUILD_PATH
 
 function build_shared_lib() {
     SHARED_LIB_SRC_DIR=$CMAKE_SOURCE_PATH/examples/shared_lib
-    bash $SHARED_LIB_SRC_DIR/build.sh --shared_lib_src_dir=$SHARED_LIB_SRC_DIR --output_path=$OUTPUT_PATH/shared_lib --ascendct_src_dir=$CMAKE_SOURCE_PATH
+    bash $SHARED_LIB_SRC_DIR/build.sh --shared_lib_src_dir=$SHARED_LIB_SRC_DIR --output_path=$OUTPUT_PATH/shared_lib --act_src_dir=$CMAKE_SOURCE_PATH
 }
 
 function build_python_extension() {
