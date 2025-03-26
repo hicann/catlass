@@ -7,6 +7,6 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 
 act_example_add_executable(
-    05_fa
-    main.cpp
+    15_grouped_matmul_slice_k
+    grouped_matmul_slice_k.cpp
 )

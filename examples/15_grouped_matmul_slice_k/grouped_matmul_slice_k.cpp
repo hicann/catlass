@@ -79,7 +79,7 @@ void GroupedMatmul(
 }
 
 struct Options {
-    const std::string HELPER = "16_grouped_matmul_slice_k group_count m n k [device_id]";
+    const std::string HELPER = "15_grouped_matmul_slice_k group_count m n k [device_id]";
 
     uint32_t groupCount{1};
     GemmCoord problemShape{128, 128, 128};

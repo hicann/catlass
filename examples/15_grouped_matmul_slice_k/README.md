@@ -1,7 +1,7 @@
 # GroupedMatmulSliceK Example Readme
 ## 代码组织
 ```
-├── 16_grouped_matmul_slice_k
+├── 15_grouped_matmul_slice_k
 │   ├── CMakeLists.txt     # CMake编译文件
 │   ├── README.md
 │   └── grouped_matmul_slice_k.cpp # 主文件
@@ -12,7 +12,7 @@
 ```
 # cd [代码仓路径]/build/bin
 # 可执行文件名 group数量|m轴|n轴|k轴|Device ID
-./16_grouped_matmul_slice_k 128 512 1024 2048 0
+./15_grouped_matmul_slice_k 128 512 1024 2048 0
 ```
 执行结果如下，说明精度比对成功。
 ```

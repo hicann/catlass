@@ -53,7 +53,7 @@ foreach(EXAMPLE
     02_grouped_matmul_slice_m
     03_matmul_add
     04_padding_matmul
-    05_fa
+    05_mla
     06_optimized_matmul
     07_grouped_matmul_slice_m_per_token_dequant
     08_grouped_matmul
@@ -63,8 +63,7 @@ foreach(EXAMPLE
     12_quant_matmul
     13_basic_matmul_tla
     14_optimized_matmul_tla
-    15_mla
-    16_grouped_matmul_slice_k
+    15_grouped_matmul_slice_k
 )
     add_subdirectory(${EXAMPLE})
 endforeach()
