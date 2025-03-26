@@ -46,7 +46,7 @@ public:
     PaddingMatrix(arch::Resource<ArchTag> &resource){
         int64_t bufferOffset = 0;
         for (uint32_t i = 0; i < BUFFER_NUM; i++) { // 
-            inputBuffer[i] = resource.ubBuf.template GetBufferByByte<Element>(bufferOffset * sizeof(Element)); // ubBuf是int8_t的内容
+            inputBuffer[i] = resource.ubBuf.template GetBufferByByte<Element>(bufferOffset * sizeof(Element)); 
             bufferOffset += COMPUTE_LENGTH;
         }
     }
@@ -160,7 +160,7 @@ template<
     class BlockEpilogue_ ,
     class TileScheduler_ = void
 >
-class KernelGemm{
+class KernelQuantGemm{
 public:
     using BlockGemm = BlockGemm_;
     using ArchTag = typename BlockGemm::ArchTag;
@@ -177,17 +177,12 @@ public:
 
     using BlockEpilogue = BlockEpilogue_;
     using EpilogueParams = typename BlockEpilogue::Params;
-    // using ElementC = typename BlockEpilogue::ElementC;
-    // using ElementD = typename BlockEpilogue::ElementD;
 
     const uint32_t maxMPerBlock = L1TileShape::M;
     const uint32_t maxNPerBlock = L1TileShape::N;
     const uint32_t cSize = maxMPerBlock * maxNPerBlock * sizeof(ElementAccumulator);
     const uint32_t l0XBlockNum = ArchTag::L0C_SIZE / cSize;
     using TensorCoord = layout::VectorLayout::TensorCoord;
-    // using ElementCompute =
-    //     typename AscendCT::gemm::helper::ElementAccumulatorSelector<ElementC, ElementD>::ElementAccumulator;
-    // using ElementScalar = ElementCompute; 
     static constexpr uint32_t STAGES = BlockGemm::STAGES; 
     using TileScheduler = TileScheduler_;
     
@@ -283,10 +278,10 @@ public:
     }
 
     ASCENDCT_DEVICE
-    KernelGemm(){}
+    KernelQuantGemm(){}
 
     ASCENDCT_DEVICE
-    ~KernelGemm(){}
+    ~KernelQuantGemm(){}
 
     template<int32_t CORE_TYPE = g_coreType>
     ASCENDCT_DEVICE

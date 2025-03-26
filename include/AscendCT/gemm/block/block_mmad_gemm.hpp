@@ -219,8 +219,6 @@ public:
             uint32_t NActual{0};
             for(uint32_t KL0Idx = 0; KL0Idx < KL0Loops; KL0Idx++){
                 uint32_t KL0Actual = (KL0Idx == KL0Loops - 1) ? (KGmActual - KL0Idx * KL0TileSize) : KL0TileSize;
-                // LayoutAInL0 layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(actualShape.m(), KL0Actual);
-                // LayoutBInL0 layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(actualShape.n(), KL0Actual);
                 LayoutAInL0 layoutAInL0; LayoutBInL0 layoutBInL0;
                 uint32_t l1TileAOffset = layoutAInL1.GetOffset(MatrixCoord(0, KL0Idx * KL0TileSize));
                 uint32_t l1TileBOffset = layoutBInL1.GetOffset(MatrixCoord(KL0Idx * KL0TileSize, 0));

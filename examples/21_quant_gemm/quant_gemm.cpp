@@ -261,7 +261,7 @@ void Run(Options options){
         TileRowBroadcastMul, TileBroadcastOneBlk, TileOneBlkColumnBroadcastMul, TileRowBroadcastAdd, TileOneBlkColumnBroadcastAdd, 
         TileElemWiseCastTemp, TileElemWiseCastC, EpilogueTileCopy, TileScheduler>;
     typename EpilogueBlock::Params epilogueParams{(uint8_t*)deviceScale, layoutScale, (uint8_t*)devicePerTokenScale, layoutPerTokenScale, (uint8_t*)deviceBias, layoutBias, (uint8_t*)deviceC, layoutC};
-    using QuantGemmKernel = gemm::kernel::KernelGemm<GemmBlock, EpilogueBlock>;
+    using QuantGemmKernel = gemm::kernel::KernelQuantGemm<GemmBlock, EpilogueBlock>;
     typename QuantGemmKernel::Arguments arguments{options.problemShape, align, (uint8_t*)deviceA, (uint8_t*)deviceB, (uint8_t*)gmWorkspace, (uint8_t*)deviceWA, (uint8_t*)deviceWB, epilogueParams};
     using QuantGemmAdapter = gemm::device::MatmulUniversalAdapter<QuantGemmKernel>;
     QuantGemmAdapter quantgemm_op;

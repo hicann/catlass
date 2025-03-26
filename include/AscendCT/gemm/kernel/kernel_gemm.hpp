@@ -177,8 +177,6 @@ public:
 
     using BlockEpilogue = BlockEpilogue_;
     using EpilogueParams = typename BlockEpilogue::Params;
-    // using ElementC = typename BlockEpilogue::ElementC;
-    // using ElementD = typename BlockEpilogue::ElementD;
 
     const uint32_t maxMPerBlock = L1TileShape::M;
     const uint32_t maxNPerBlock = L1TileShape::N;

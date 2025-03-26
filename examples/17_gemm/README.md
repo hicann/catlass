@@ -1,9 +1,21 @@
-## 程序运行步骤
-
-## 1.编译指令 
-../../scripts/build.sh 03_gemm
-## 2.运行指令：其中，m,n,k分别是两个矩阵的维度，device_id为运行的npu设备号
-../../build/bin/03_gemm m n k deviceId
-
-## 注意：examples/CMakeLists.txt里CCEC_COMPILER_OPTIONS若为-O2 -std=c++17 -xcce --cce-aicore-arch=dav-c220-vec不能直接运行
-## 需要修改为-O2 -std=c++17 -xcce --cce-aicore-arch=dav-c220
+# BasicMatmul Example Readme
+## 代码组织
+```
+├── 03_gemm
+│   ├── CMakeLists.txt   # CMake编译文件
+│   ├── README.md
+│   └── gemm.cpp # 主文件
+```
+## 使用示例
+- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/quickstart.md#算子编译)
+- 执行算子
+```
+# cd [代码仓路径]/build/bin
+# 可执行文件名 |矩阵m轴|n轴|k轴|Device ID
+# Device ID可选，默认为0
+./03_gemm 256 512 1024 0
+```
+执行结果如下，说明精度比对成功。
+```
+Compare success.
+```

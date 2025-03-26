@@ -1,3 +1,13 @@
+/*
+* Copyright (c) 2024 Huawei Technologies Co., Ltd.
+* This file is a part of the CANN Open Software.
+* Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
+* Please refer to the License for details. You may not use this file except in compliance with the License.
+* THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+* INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+* See LICENSE in the root of the software repository for the full text of the License.
+*/
+
 #ifndef ASCENDCT_EPILOGUE_BLOCK_EPILOGUE_GEMM_DEQUANT_HPP
 #define ASCENDCT_EPILOGUE_BLOCK_EPILOGUE_GEMM_DEQUANT_HPP
 
@@ -28,7 +38,7 @@ template<
 >
 class BlockEpilogue<
     epilogue::EpilogueAtlasA2ElemWiseOneSource,
-    XType_, // A * B 矩阵
+    XType_,
     ScaleType_,
     PerTokenScaleType_,
     BiasType_,
@@ -47,16 +57,16 @@ public:
     // Type aliases
     using DispatchPolicy = epilogue::EpilogueAtlasA2ElemWiseOneSource;
     using ArchTag = typename DispatchPolicy::ArchTag;
-    using ElementC = typename CType_::Element; // bf16
+    using ElementC = typename CType_::Element; 
     using LayoutC = typename CType_::Layout;
-    using ElementTemp = float; // fp32
-    using ElementX = typename XType_::Element; // int32
+    using ElementTemp = float; 
+    using ElementX = typename XType_::Element; 
     using LayoutX = typename XType_::Layout;
-    using ElementScale = typename ScaleType_::Element; // fp32
+    using ElementScale = typename ScaleType_::Element; 
     using LayoutScale = typename ScaleType_::Layout;
-    using ElementPerTokenScale = typename PerTokenScaleType_::Element; // bf16
+    using ElementPerTokenScale = typename PerTokenScaleType_::Element; 
     using LayoutPerTokenScale = typename PerTokenScaleType_::Layout;
-    using ElementBias = typename BiasType_::Element; // bf16
+    using ElementBias = typename BiasType_::Element; 
     using LayoutBias = typename BiasType_::Layout;
     using TileRowBroadcastMul = TileRowBroadcastMul_;
     using TileBroadcastOneBlk = TileBroadcastOneBlk_;
@@ -64,7 +74,7 @@ public:
     using TileRowBroadcastAdd = TileRowBroadcastAdd_;
     using TileOneBlkColumnBroadcastAdd = TileOneBlkColumnBroadcastAdd_;
     using TileElemWiseCastTemp = TileElemWiseCastTemp_;
-    using TileElemWiseCastC = TileElemWiseCastC_; // 这个需要进行新增
+    using TileElemWiseCastC = TileElemWiseCastC_; 
     using EpilogueTileSwizzle = EpilogueTileSwizzle_;
     using CopyGmToUbX = typename TileCopy_::CopyGmToUbX;
     using CopyGmToUbScale = typename TileCopy_::CopyGmToUbScale;
@@ -73,7 +83,7 @@ public:
     using CopyUbToGmC = typename TileCopy_::CopyUbToGmC;
     using TileShape = typename TileRowBroadcastMul::TileShape;
     using TensorCoord = layout::VectorLayout::TensorCoord;
-    static constexpr uint32_t STAGES = 2; // 两个AIV核
+    static constexpr uint32_t STAGES = 2; 
     const uint32_t UBSize = ArchTag::UB_SIZE;
     static constexpr bool RowOrColumn = std::is_same<LayoutC, AscendCT::layout::RowMajor>::value && std::is_same<LayoutX, AscendCT::layout::RowMajor>::value;
 
@@ -105,7 +115,7 @@ public:
         uint32_t tileSize = maxMPerBlock * maxNPerBlock / STAGES;
         uint32_t ubCSize = tileSize * sizeof(ElementC);
         uint32_t ubXSize = tileSize * sizeof(ElementX);
-        uint32_t ubTempSize = tileSize * sizeof(ElementTemp); // cast的空间
+        uint32_t ubTempSize = tileSize * sizeof(ElementTemp); 
         uint32_t ubScaleSize = maxNPerBlock * sizeof(ElementScale);
         uint32_t ubPerTokenScaleSize = maxMPerBlock * sizeof(ElementPerTokenScale);
         uint32_t ubBiasSize = maxNPerBlock * sizeof(ElementBias);
@@ -190,7 +200,7 @@ public:
             AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
             AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
             // cast
-            tileElemWiseCastTemp(ubTempTensor, ubXTensor); // fp32
+            tileElemWiseCastTemp(ubTempTensor, ubXTensor); 
             AscendC::PipeBarrier<PIPE_V>();
             AscendC::Cast<ElementTemp, ElementScale>(ubScaleTensorFP32 ,ubScaleTensor, AscendC::RoundMode::CAST_NONE, maxNPerBlock);
             AscendC::PipeBarrier<PIPE_V>();
@@ -206,7 +216,7 @@ public:
             AscendC::PipeBarrier<PIPE_V>();
             tileRowBroadcastAdd(ubTempTensor, ubTempTensor, ubBiasTensorFP32);
             AscendC::PipeBarrier<PIPE_V>();
-            tileElemWiseCastC(ubCTensor, ubTempTensor); // bf16
+            tileElemWiseCastC(ubCTensor, ubTempTensor); 
             AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
             AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
             auto layoutCInGm = params.layoutC.GetTileLayout(MakeCoord(MUbActual, NUbActual));
@@ -217,10 +227,10 @@ public:
             AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
         }else{
             uint32_t MActual = actualShape.m();
-            uint32_t NActual = actualShape.n(); // 这里也要对齐
-            uint32_t maxMPerBlock = blockShape.m(); // 对着M方向进行切分 肯定会对齐32Byte
+            uint32_t NActual = actualShape.n();
+            uint32_t maxMPerBlock = blockShape.m();
             uint32_t maxNPerBlock = blockShape.n() / STAGES; 
-            uint32_t aivIndex = AscendC::GetSubBlockIdx(); // 0 或 1
+            uint32_t aivIndex = AscendC::GetSubBlockIdx();
             uint32_t NActualAIV0 = (NActual < maxNPerBlock) ? NActual : maxNPerBlock;
             uint32_t NActualAIV1 = (NActual < maxNPerBlock) ? 0 : (NActual - maxNPerBlock);
             uint32_t NUbActual = aivIndex == 1 ? NActualAIV1 : NActualAIV0;
@@ -251,7 +261,7 @@ public:
             AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
             AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
             // cast
-            tileElemWiseCastTemp(ubTempTensor, ubXTensor); // fp32
+            tileElemWiseCastTemp(ubTempTensor, ubXTensor); 
             AscendC::PipeBarrier<PIPE_V>();
             AscendC::Cast<ElementTemp, ElementScale>(ubScaleTensorFP32 ,ubScaleTensor, AscendC::RoundMode::CAST_NONE, maxNPerBlock);
             AscendC::PipeBarrier<PIPE_V>();
@@ -268,7 +278,7 @@ public:
             tileBroadcastOneBlk(ubBiasBrcbTensor, ubBiasTensorFP32);
             tileOneBlkColumnBroadcastAdd(ubTempTensor, ubTempTensor, ubBiasBrcbTensor);
             AscendC::PipeBarrier<PIPE_V>();
-            tileElemWiseCastC(ubCTensor, ubTempTensor); // bf16
+            tileElemWiseCastC(ubCTensor, ubTempTensor);
             AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
             AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
             auto layoutCInGm = params.layoutC.GetTileLayout(MakeCoord(MUbActual, NUbActual));
