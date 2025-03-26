@@ -318,7 +318,7 @@ struct Options {
     uint32_t kvHeads{1};
     uint32_t embeddingSize{512};
     uint32_t embeddingSizeRope{64};
-    string dataPath = "../../examples/15_mla/data";
+    string dataPath = "../../examples/05_mla/data";
 
     Options() = default;
 
