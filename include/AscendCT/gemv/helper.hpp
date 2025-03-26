@@ -140,6 +140,12 @@
      using ElementAccumulator = int32_t;
  };
 
+ template <>
+ struct ElementAccumulatorSelector<int32_t, int32_t>
+ {
+     using ElementAccumulator = int32_t;
+ };
+
  template<>
  struct ElementAccumulatorSelector<bfloat16_t, bfloat16_t> {
      using ElementAccumulator = float;

@@ -248,6 +248,27 @@ struct L0BTypeSelectorGemm<gemm::MatmulType<Element, layout::nZ>>{
 };
 
 
+template<class L1Type>
+struct L0BTypeSelectorGemv{};
+
+// RowMajor zN->zN
+template<class Element>
+struct L0BTypeSelectorGemv<gemm::MatmulType<Element, layout::zN>>{
+    using L0BType = gemm::MatmulType<Element, layout::zN>;
+};
+
+// ColumnMajor fp16 bf16 float(函数内特化)    nN->zN
+template<class Element>
+struct L0BTypeSelectorGemv<gemm::MatmulType<Element, layout::nN>>{
+    using L0BType = gemm::MatmulType<Element, layout::zN>;
+};
+
+// ColumnMajor int8_t   nZ -> zN
+template<>
+struct L0BTypeSelectorGemv<gemm::MatmulType<int8_t, layout::nZ>>{
+    using L0BType = gemm::MatmulType<int8_t, layout::zN>;
+};
+
 template<class Element, class Layout, class Enable = void>
 struct L1AlignHelperTla {
     static_assert(DEPENDENT_FALSE<Element>, "Unsupported align helper tla, can not find the specialization.");

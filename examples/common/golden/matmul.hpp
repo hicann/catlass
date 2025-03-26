@@ -365,6 +365,37 @@ void QuantGemm(
     }
 }
 
+
+template <
+    class LayoutA,
+    class LayoutX,
+    class LayoutY,
+    class ElementScale
+>
+void QuantGemv(
+    const GemvCoord &problemShape,
+    const std::vector<int8_t> &dataA, const LayoutA &layoutA,
+    const std::vector<int8_t> &dataX, const LayoutX &layoutX,
+    const std::vector<ElementScale> &dataScale,
+    float dataPerTokenScale,
+    const std::vector<ElementScale> &dataBias,
+    std::vector<float> &dataGolden, const LayoutY &layoutGolden
+)
+{
+    for (uint32_t i = 0; i < problemShape.m(); ++i) {
+        size_t offsetGolden = layoutGolden.GetOffset(MakeCoord(i, uint32_t(0)));
+        int32_t accumulator = 0;
+        for (uint32_t k = 0; k < problemShape.n(); ++k) {
+            size_t offsetA = layoutA.GetOffset(MakeCoord(i, k));
+            size_t offsetX = layoutX.GetOffset(MakeCoord(k, uint32_t(0)));
+            accumulator += static_cast<int32_t>(dataA[offsetA]) * static_cast<int32_t>(dataX[offsetX]);
+        }
+        dataGolden[offsetGolden] = static_cast<float>(accumulator) *
+            static_cast<float>(dataScale[i]) *
+            static_cast<float>(dataPerTokenScale) + static_cast<float>(dataBias[i]);    
+    }
+}
+
 template <
     class ElementGroupList, class ElementScale, class LayoutScale, class LayoutPerTokenScale
 >

@@ -113,16 +113,16 @@ typedef struct Options {
 } Options;
 
 template <class Adapter>
-void RunAdapter(Adapter matmul_op, typename Adapter::Arguments args, aclrtStream stream,
+void RunAdapter(Adapter gemv_op, typename Adapter::Arguments args, aclrtStream stream,
     uint32_t aicCoreNum, uint64_t fftsAddr)
 {
-    size_t sizeWorkspace = matmul_op.GetWorkspaceSize(args);
+    size_t sizeWorkspace = gemv_op.GetWorkspaceSize(args);
     uint8_t *deviceWorkspace = nullptr;
     if (sizeWorkspace > 0) {
         ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
     }
-    matmul_op.Initialize(args, deviceWorkspace);
-    matmul_op(stream, aicCoreNum, fftsAddr);
+    gemv_op.Initialize(args, deviceWorkspace);
+    gemv_op(stream, aicCoreNum, fftsAddr);
     ACL_CHECK(aclrtSynchronizeStream(stream));
     if (sizeWorkspace > 0) {
         ACL_CHECK(aclrtFree(deviceWorkspace));

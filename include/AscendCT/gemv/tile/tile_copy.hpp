@@ -85,8 +85,12 @@ namespace AscendCT::gemv::tile
     using CopyGmToL1B = gemm::tile::CopyGmToL1<ArchTag, AType, L1AType>;    //已检查，能对应上
 
 
-    using CopyL1ToL0A = gemm::tile::CopyL1ToL0A<ArchTag, L1XType>;
-    using CopyL1ToL0B = gemm::tile::CopyL1ToL0B<ArchTag, AType>; 
+    using L0AType = typename gemm::helper::L0ATypeSelector<L1XType>::L0AType; // zN -> zZ
+    using L0BType = typename gemm::helper::L0BTypeSelectorGemv<L1AType>::L0BType;
+
+    // using CopyL1ToL0A = gemm::tile::CopyL1ToL0A<ArchTag, L1XType>;
+    using CopyL1ToL0A = gemm::tile::CopyL1ToL0A<ArchTag, L1XType, L0AType>;
+    using CopyL1ToL0B = gemm::tile::CopyL1ToL0B<ArchTag, L1AType, L0BType>; 
     using CopyL0CToGm = gemm::tile::CopyL0CToGm<ArchTag, ElementAccumulator, YType>;
 
     };

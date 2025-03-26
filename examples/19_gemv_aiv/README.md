@@ -11,7 +11,7 @@
 - 执行算子
 ```
 # cd [代码仓路径]/build/bin
-# 可执行文件名 |矩阵m轴|n轴|k轴|Device ID
+# 可执行文件名 |矩阵m轴|n轴|Device ID
 # Device ID可选，默认为0
 ./19_gemv_aiv 256 512 0
 ```

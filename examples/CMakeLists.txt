@@ -98,6 +98,7 @@ foreach(EXAMPLE
     19_gemv_aiv
     20_gemv_aic
     21_quant_gemm
+    22_quant_gemv
 )
     add_subdirectory(${EXAMPLE})
 endforeach()

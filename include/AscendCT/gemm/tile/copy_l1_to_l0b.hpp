@@ -125,6 +125,43 @@ struct CopyL1ToL0B<ArchTag, AscendCT::gemm::MatmulType<int8_t, layout::zN>, Asce
     }
 };
 
+// 模仿上面那段代码造一个L1B -> L0B rowMajor, zN-> zN
+template <class ArchTag, class Element>
+struct CopyL1ToL0B<ArchTag, AscendCT::gemm::MatmulType<Element, layout::zN>, AscendCT::gemm::MatmulType<Element, layout::zN>>{
+    using LayoutDst = layout::zN;
+    using LayoutSrc = layout::zN;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+    static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
+
+    // Methods
+
+    ASCENDCT_DEVICE
+    CopyL1ToL0B() {};
+
+    ASCENDCT_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::LocalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+    {
+        AscendC::LoadData2DParams loadDataParams;
+
+        loadDataParams.startIndex = 0;
+        loadDataParams.repeatTimes = static_cast<uint16_t>(layoutDst.shape(1)); // 分形间的行个数
+        loadDataParams.srcStride = layoutSrc.stride(1) / ELE_NUM_PER_FRACTAL;   // 分形间的行步长
+        loadDataParams.sid = 0;
+        loadDataParams.dstGap = layoutDst.stride(1) / ELE_NUM_PER_FRACTAL - 1;
+        loadDataParams.ifTranspose = false;
+        loadDataParams.addrMode = 0;
+
+        for (uint32_t i = 0; i < layoutDst.shape(3); i++)
+        {
+            AscendC::LoadData(dstTensor[i * layoutDst.stride(3)], srcTensor[i * layoutSrc.stride(3)], loadDataParams);
+        }
+    }
+};
+
 // ColumnMajor
 template<class ArchTag, class Element>
 struct CopyL1ToL0B<ArchTag, AscendCT::gemm::MatmulType<Element, layout::nZ>, AscendCT::gemm::MatmulType<Element, layout::nN>>{
@@ -156,7 +193,125 @@ struct CopyL1ToL0B<ArchTag, AscendCT::gemm::MatmulType<Element, layout::nZ>, Asc
     }
 };
 
-//华为实现   AIC使用
+
+// L1B -> L0B colummMajor, nN -> zN
+// fp16或bf16使用
+template <class ArchTag, class Element>
+struct CopyL1ToL0B<ArchTag, AscendCT::gemm::MatmulType<Element, layout::nN>, AscendCT::gemm::MatmulType<Element, layout::zN>>
+{
+    using LayoutDst = layout::zN;
+    using LayoutSrc = layout::nN;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+    static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
+
+    // Methods
+
+    ASCENDCT_DEVICE
+    CopyL1ToL0B() {};
+
+    ASCENDCT_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::LocalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+    {
+        AscendC::LoadData2DParams loadDataParams;
+
+        loadDataParams.startIndex = 0;
+        loadDataParams.repeatTimes = layoutDst.shape(1) * layoutDst.shape(3);
+        loadDataParams.srcStride = layoutSrc.stride(1) / ELE_NUM_PER_FRACTAL; // 分形间的行步长
+        loadDataParams.sid = 0;
+        loadDataParams.dstGap = layoutDst.stride(1) / ELE_NUM_PER_FRACTAL - 1;
+        loadDataParams.ifTranspose = true;
+        loadDataParams.addrMode = 0;
+        AscendC::LoadData(dstTensor, srcTensor, loadDataParams);
+    };
+};
+
+
+// L1B -> L0B colummMajor, nN -> zN
+// fp32使用
+template <class ArchTag>
+struct CopyL1ToL0B<ArchTag, AscendCT::gemm::MatmulType<float, layout::nN>, AscendCT::gemm::MatmulType<float, layout::zN>>{
+    using LayoutDst = layout::zN;
+    using LayoutSrc = layout::nN;
+    using Element = float;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);           // 32 / 4 = 8
+    static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element); // 512 / 4 = 128
+
+    // Methods
+
+    ASCENDCT_DEVICE
+    CopyL1ToL0B() {};
+
+    ASCENDCT_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::LocalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+    {
+        AscendC::LoadData2dTransposeParams loadDataParams;
+
+        loadDataParams.startIndex = 0;
+        loadDataParams.repeatTimes = static_cast<uint16_t>(CeilDiv<C0_NUM_PER_FRACTAL>(layoutDst.orgShape(0))); // 迭代次数，行方向分形数/2，因为一次迭代是对2个分形操作
+        loadDataParams.srcStride = 1;                                                                           // 相邻迭代间，源操作数前一个方块矩阵与后一个方块矩阵起始地址的间隔，单位是(16*16*4B))
+        loadDataParams.dstGap = 0;                                                                              // 相邻迭代间，目的操作数前一个迭代第一个分形的结束地址到下一个迭代第一个分形起始地址的间隔为1（单位：512B）
+        loadDataParams.dstFracGap = CeilDiv<C0_NUM_PER_FRACTAL>(layoutDst.orgShape(0)) - 1;                     // 每个迭代内目的操作数前一个分形结束地址与后一个分形起始地址的间隔为（单位：512B）。
+
+        for (uint32_t i = 0; i < CeilDiv<2 * ELE_NUM_PER_C0>(layoutDst.orgShape(1)); i++)
+        {
+            AscendC::LoadDataWithTranspose(
+                dstTensor[i * layoutDst.stride(3) * 2], // i * 分形间的列步长
+                srcTensor[i * layoutSrc.stride(3)],     // i * 分形间的列步长
+                loadDataParams);
+        }
+    };
+};
+
+
+// L1B -> L0B colummMajor, nZ -> zN   int8_t
+// int8使用
+template <class ArchTag>
+struct CopyL1ToL0B<ArchTag, AscendCT::gemm::MatmulType<int8_t, layout::nZ>, AscendCT::gemm::MatmulType<int8_t, layout::zN>>{
+    using LayoutDst = layout::zN;
+    using LayoutSrc = layout::nZ;
+    using Element = int8_t;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);           // 32 / 1 = 32
+    static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element); // 512 / 1 = 512
+
+    // Methods
+
+    ASCENDCT_DEVICE
+    CopyL1ToL0B() {};
+
+    ASCENDCT_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::LocalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+    {
+        AscendC::LoadData2dTransposeParams loadDataParams;
+
+        loadDataParams.startIndex = 0;
+        loadDataParams.repeatTimes = static_cast<uint16_t>(CeilDiv<ELE_NUM_PER_C0>(layoutDst.orgShape(0))); // 迭代次数，行方向分形数/2，因为一次迭代是对2个分形操作
+        loadDataParams.srcStride = layoutSrc.stride(1) / ELE_NUM_PER_FRACTAL / 2;                           // 相邻迭代间，源操作数前一个方块矩阵与后一个方块矩阵起始地址的间隔，单位是(32*32*1B))
+        loadDataParams.dstGap = 1;                                                                          // 相邻迭代间，目的操作数前一个迭代第一个分形的结束地址到下一个迭代第一个分形起始地址的间隔为1（单位：512B）
+        loadDataParams.dstFracGap = 0;                                                                      // 每个迭代内目的操作数前一个分形结束地址与后一个分形起始地址的间隔为（单位：512B）。
+
+        for (uint32_t i = 0; i < CeilDiv<ELE_NUM_PER_C0>(layoutDst.orgShape(1)); i++)
+        {
+            AscendC::LoadDataWithTranspose(
+                dstTensor[i * layoutDst.stride(3)],     // i * 分形间的列步长
+                srcTensor[i * layoutSrc.stride(3) * 2], // i * 分形间的列步长
+                loadDataParams);
+        }
+    }
+};
+
+
 /// Partial specialization for int8_t, zN in and nZ out.
 template <class ArchTag>
 struct CopyL1ToL0B<ArchTag, gemm::MatmulType<int8_t, layout::zN>> {
@@ -262,194 +417,6 @@ struct CopyL1ToL0B<ArchTag, gemm::MatmulType<Element, layout::nZ>> {
 
         for (uint32_t i = 0; i < layoutDst.shape(1); i++) {
             AscendC::LoadData(dstTensor[i * layoutDst.stride(1)], srcTensor[i * layoutSrc.stride(1)], loadDataParams);
-        }
-    }
-};
-
-
-/// Partial specialization for int8_t, zN in and nZ out.
-template <class ArchTag>
-struct CopyL1ToL0B<ArchTag, gemm::MatmulType<int8_t, layout::RowMajor>> {
-    using Element = int8_t;
-    using LayoutDst = layout::nZ;
-    using LayoutSrc = layout::zN;
-
-    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-    static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
-
-    // Methods
-
-    ASCENDCT_DEVICE
-    CopyL1ToL0B() {};
-
-    ASCENDCT_DEVICE
-    void operator()(
-        AscendC::LocalTensor<Element> const& dstTensor,
-        AscendC::LocalTensor<Element> const& srcTensor,
-        LayoutDst const& layoutDst, LayoutSrc const& layoutSrc) 
-    {
-        uint32_t MRound = layoutDst.orgShape(0);
-        uint32_t NRound = layoutDst.orgShape(1);
-        uint32_t stride = layoutSrc.stride(3) / ELE_NUM_PER_FRACTAL / 2;
-        uint32_t Nloop = static_cast<uint32_t>(CeilDiv(NRound, ELE_NUM_PER_C0));
-        uint32_t Mloop = static_cast<uint32_t>(CeilDiv(MRound, ELE_NUM_PER_C0));
-        uint32_t dstOffset = layoutDst.stride(1);
-        AscendC::LoadData2dTransposeParams loadDataParams;
-
-        loadDataParams.startIndex = 0;
-        loadDataParams.repeatTimes = Nloop;
-        loadDataParams.srcStride = stride;
-        loadDataParams.dstGap = 1;
-        loadDataParams.dstFracGap = 0;
-
-        for (uint32_t i = 0; i < Mloop; i++) {
-            AscendC::LoadDataWithTranspose(dstTensor[i * dstOffset], srcTensor[i * dstOffset * 2], loadDataParams);
-        }
-    }
-};
-
-/// Partial specialization for zN in and zN out.
-template <class ArchTag, class Element>
-struct CopyL1ToL0B<ArchTag, gemm::MatmulType<Element, layout::RowMajor>> {
-    using LayoutDst = layout::zN;
-    using LayoutSrc = layout::zN;
-
-    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-    static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
-
-    // Methods
-
-    ASCENDCT_DEVICE
-    CopyL1ToL0B() {};
-
-    ASCENDCT_DEVICE
-    void operator()(
-        AscendC::LocalTensor<Element> const& dstTensor,
-        AscendC::LocalTensor<Element> const& srcTensor,
-        LayoutDst const& layoutDst, LayoutSrc const& layoutSrc) 
-    {
-        AscendC::LoadData2DParams loadDataParams;
-
-        loadDataParams.startIndex = 0;
-        loadDataParams.repeatTimes = static_cast<uint16_t>(layoutDst.shape(1));
-        loadDataParams.srcStride = layoutSrc.stride(1) / ELE_NUM_PER_FRACTAL;
-        loadDataParams.sid = 0;
-        loadDataParams.dstGap = layoutDst.stride(1) / ELE_NUM_PER_FRACTAL - 1;
-        loadDataParams.ifTranspose = false;
-        loadDataParams.addrMode = 0;
-
-        for (uint32_t i = 0; i < layoutDst.shape(3); i++) {
-            AscendC::LoadData(dstTensor[i * layoutDst.stride(3)], srcTensor[i * layoutSrc.stride(3)], loadDataParams);
-        }
-    }
-};
-
-// L1B -> L0B colummMajor, nN -> zN
-template <class ArchTag, class Element>
-struct CopyL1ToL0B<ArchTag, gemm::MatmulType<Element, layout::ColumnMajor>> {
-    using LayoutDst = layout::zN;
-    using LayoutSrc = layout::nN;
-
-    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-    static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
-
-    // Methods
-
-    ASCENDCT_DEVICE
-    CopyL1ToL0B() {};
-
-    ASCENDCT_DEVICE
-    void operator()(
-        AscendC::LocalTensor<Element> const& dstTensor,
-        AscendC::LocalTensor<Element> const& srcTensor,
-        LayoutDst const& layoutDst, LayoutSrc const& layoutSrc) 
-    {
-        AscendC::LoadData2DParams loadDataParams;
-
-        loadDataParams.startIndex = 0;
-        loadDataParams.repeatTimes = layoutDst.shape(1) * layoutDst.shape(3);
-        loadDataParams.srcStride = layoutSrc.stride(1) / ELE_NUM_PER_FRACTAL;
-        loadDataParams.sid = 0;
-        loadDataParams.dstGap = layoutDst.stride(1) / ELE_NUM_PER_FRACTAL - 1;
-        loadDataParams.ifTranspose = true;
-        loadDataParams.addrMode = 0;
-
-        AscendC::LoadData(dstTensor, srcTensor, loadDataParams);
-    };
-};
-
-// L1B -> L0B colummMajor, nN -> zN, float
-template <class ArchTag>
-struct CopyL1ToL0B<ArchTag, gemm::MatmulType<float, layout::ColumnMajor>> {
-    using LayoutDst = layout::zN;
-    using LayoutSrc = layout::nN;
-    using Element = float;
-
-    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);            // 32 / 4 = 8
-    static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);  // 512 / 4 = 128
-
-    // Methods
-
-    ASCENDCT_DEVICE
-    CopyL1ToL0B() {};
-
-    ASCENDCT_DEVICE
-    void operator()(
-        AscendC::LocalTensor<Element> const& dstTensor,
-        AscendC::LocalTensor<Element> const& srcTensor,
-        LayoutDst const& layoutDst, LayoutSrc const& layoutSrc) 
-    {
-        AscendC::LoadData2dTransposeParams loadDataParams;
-
-        loadDataParams.startIndex = 0;
-        loadDataParams.repeatTimes = static_cast<uint16_t>(CeilDiv<C0_NUM_PER_FRACTAL>(layoutDst.orgShape(0)));
-        loadDataParams.srcStride = 1;
-        loadDataParams.dstGap = 0;
-        loadDataParams.dstFracGap = CeilDiv<C0_NUM_PER_FRACTAL>(layoutDst.orgShape(0)) - 1;
-
-        for (uint32_t i = 0; i < CeilDiv<2 * ELE_NUM_PER_C0>(layoutDst.orgShape(1)); i++) {
-            AscendC::LoadDataWithTranspose(
-                dstTensor[i * layoutDst.stride(3) * 2],
-                srcTensor[i * layoutSrc.stride(3)],
-                loadDataParams);
-        }
-    };
-};
-
-// L1B -> L0B colummMajor, nZ -> zN   int8_t
-template <class ArchTag>
-struct CopyL1ToL0B<ArchTag, gemm::MatmulType<int8_t, layout::ColumnMajor>> {
-    using LayoutDst = layout::zN;
-    using LayoutSrc = layout::nZ;
-    using Element = int8_t;
-
-    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-    static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
-
-    // Methods
-
-    ASCENDCT_DEVICE
-    CopyL1ToL0B() {};
-
-    ASCENDCT_DEVICE
-    void operator()(
-        AscendC::LocalTensor<Element> const& dstTensor,
-        AscendC::LocalTensor<Element> const& srcTensor,
-        LayoutDst const& layoutDst, LayoutSrc const& layoutSrc) 
-    {
-        AscendC::LoadData2dTransposeParams loadDataParams;
-
-        loadDataParams.startIndex = 0;
-        loadDataParams.repeatTimes = static_cast<uint16_t>(CeilDiv<ELE_NUM_PER_C0>(layoutDst.orgShape(0)));
-        loadDataParams.srcStride = layoutSrc.stride(1) / ELE_NUM_PER_FRACTAL / 2;
-        loadDataParams.dstGap = 1;
-        loadDataParams.dstFracGap = 0;
-
-        for (uint32_t i = 0; i < CeilDiv<ELE_NUM_PER_C0>(layoutDst.orgShape(1)); i++) {
-            AscendC::LoadDataWithTranspose(
-                dstTensor[i * layoutDst.stride(3)],
-                srcTensor[i * layoutSrc.stride(3) * 2],
-                loadDataParams);
         }
     }
 };
