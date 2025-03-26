@@ -25,8 +25,7 @@ Ascend C Templates，中文名为Ascend C模板库，是一个聚焦于提供高
 Atlas A2服务器
 
 - 平台：aarch64
-- 配套软件
-    CANN 8.0.0.alpha002及之后版本（参考《[CANN软件安装指南](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/800alpha002/softwareinst/instg/instg_0001.html?Mode=PmIns&OS=Ubuntu&Software=cannToolKit)》安装CANN开发套件包以及配套固件和驱动）  
+- 配套软件：CANN 8.0.0.beta1及之后版本（参考《[CANN软件安装指南](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/800alpha002/softwareinst/instg/instg_0001.html?Mode=PmIns&OS=Ubuntu&Software=cannToolKit)》安装CANN开发套件包以及配套固件和驱动）  
 cmake >= 3.15
 ## 快速上手
 详细请参考[quickstart](docs/quickstart.md)  
@@ -139,13 +138,6 @@ cd build/bin
         <td>int32</td>
     </tr>
     <tr>
-        <td>fa</td>
-        <td>half</td>
-        <td>half</td>
-        <td>（Q，V tensor）rowMajor；（K tensor） columnMajor</td>
-        <td>rowMajor</td>
-    </tr>
-    <tr>
         <td rowspan="4">optimized_matmul</td>
         <td>half</td>
         <td>half</td>
@@ -174,6 +166,9 @@ cd build/bin
 </table>
 
 参考[推荐使用配置](docs/recommended_configuration.md)了解如何达到最佳性能。
+
+## 合作贡献者
+华南理工大学 陆璐教授团队
 
 ## 版权声明
 Copyright (c) 2025 Huawei Technologies Co., Ltd. 
