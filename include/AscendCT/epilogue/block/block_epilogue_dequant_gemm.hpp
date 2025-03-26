@@ -133,14 +133,12 @@ public:
         ubByteStart += TileShape::COLUMN * BYTE_PER_BLK;
         ubBiasBrcbTensor = resource.ubBuf.template GetBufferByByte<float>(ubByteStart);
         ubByteStart += TileShape::COLUMN * BYTE_PER_BLK;
-        AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID1);
         AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
     }
 
     ASCENDCT_DEVICE
     ~BlockEpilogue(){
         AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
-        AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID1);
     }
 
     ASCENDCT_DEVICE
@@ -173,12 +171,7 @@ public:
             MatrixCoord gmTileXOffset{aivIndex * maxMPerBlock, 0};
             auto gmTileX = gmBlockX[layoutX.GetOffset(gmTileXOffset)];
             copyGmToUbX(ubXTensor, gmTileX, layoutXInUb, layoutTileX);
-            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
-            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
-            tileElemWiseCastTemp(ubTempTensor, ubXTensor); // fp32
-            AscendC::PipeBarrier<PIPE_V>();
             // copy
-            AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID1);
             auto layoutTileScale = params.layoutScale.GetTileLayout(MakeCoord(NUbActual));
             auto layoutScaleInUb = params.layoutScale.GetTileLayout(MakeCoord(NUbActual));
             TensorCoord gmTileScaleOffset{0};
@@ -197,6 +190,8 @@ public:
             AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
             AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
             // cast
+            tileElemWiseCastTemp(ubTempTensor, ubXTensor); // fp32
+            AscendC::PipeBarrier<PIPE_V>();
             AscendC::Cast<ElementTemp, ElementScale>(ubScaleTensorFP32 ,ubScaleTensor, AscendC::RoundMode::CAST_NONE, maxNPerBlock);
             AscendC::PipeBarrier<PIPE_V>();
             AscendC::Cast<ElementTemp, ElementPerTokenScale>(ubPerTokenScaleTensorFP32 ,ubPerTokenScaleTensor, AscendC::RoundMode::CAST_NONE, maxMPerBlock);
@@ -212,7 +207,6 @@ public:
             tileRowBroadcastAdd(ubTempTensor, ubTempTensor, ubBiasTensorFP32);
             AscendC::PipeBarrier<PIPE_V>();
             tileElemWiseCastC(ubCTensor, ubTempTensor); // bf16
-            AscendC::PipeBarrier<PIPE_V>();
             AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
             AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
             auto layoutCInGm = params.layoutC.GetTileLayout(MakeCoord(MUbActual, NUbActual));
@@ -220,7 +214,6 @@ public:
             MatrixCoord gmTileCOffset{aivIndex * maxMPerBlock, 0}; 
             auto gmTileC = gmBlockC[offsetC + params.layoutC.GetOffset(gmTileCOffset)];
             copyUbToGmC(gmTileC, ubCTensor, layoutCInGm, layoutTileC);
-            AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID1);
             AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
         }else{
             uint32_t MActual = actualShape.m();
@@ -239,12 +232,7 @@ public:
             MatrixCoord gmTileXOffset{0, aivIndex * maxNPerBlock};
             auto gmTileX = gmBlockX[layoutX.GetOffset(gmTileXOffset)];
             copyGmToUbX(ubXTensor, gmTileX, layoutXInUb, layoutTileX);
-            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
-            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
-            tileElemWiseCastTemp(ubTempTensor, ubXTensor); // fp32
-            AscendC::PipeBarrier<PIPE_V>();
             // copy
-            AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID1);
             auto layoutTileScale = params.layoutScale.GetTileLayout(MakeCoord(NUbActual));
             auto layoutScaleInUb = params.layoutScale.GetTileLayout(MakeCoord(NUbActual));
             TensorCoord gmTileScaleOffset{aivIndex * maxNPerBlock};
@@ -263,6 +251,8 @@ public:
             AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
             AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
             // cast
+            tileElemWiseCastTemp(ubTempTensor, ubXTensor); // fp32
+            AscendC::PipeBarrier<PIPE_V>();
             AscendC::Cast<ElementTemp, ElementScale>(ubScaleTensorFP32 ,ubScaleTensor, AscendC::RoundMode::CAST_NONE, maxNPerBlock);
             AscendC::PipeBarrier<PIPE_V>();
             AscendC::Cast<ElementTemp, ElementPerTokenScale>(ubPerTokenScaleTensorFP32 ,ubPerTokenScaleTensor, AscendC::RoundMode::CAST_NONE, maxMPerBlock);
@@ -279,7 +269,6 @@ public:
             tileOneBlkColumnBroadcastAdd(ubTempTensor, ubTempTensor, ubBiasBrcbTensor);
             AscendC::PipeBarrier<PIPE_V>();
             tileElemWiseCastC(ubCTensor, ubTempTensor); // bf16
-            AscendC::PipeBarrier<PIPE_V>();
             AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
             AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
             auto layoutCInGm = params.layoutC.GetTileLayout(MakeCoord(MUbActual, NUbActual));
@@ -287,7 +276,6 @@ public:
             MatrixCoord gmTileCOffset{0, aivIndex * maxNPerBlock}; 
             auto gmTileC = gmBlockC[offsetC + params.layoutC.GetOffset(gmTileCOffset)];
             copyUbToGmC(gmTileC, ubCTensor, layoutCInGm, layoutTileC);
-            AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID1);
             AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
         }
     }

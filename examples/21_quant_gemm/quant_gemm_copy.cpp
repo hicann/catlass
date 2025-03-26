@@ -18,7 +18,7 @@
 #include "AscendCT/AscendCT.hpp"
 #include "AscendCT/arch/arch.hpp"
 #include "AscendCT/gemm/block/block_mmad.hpp"
-#include "AscendCT/gemm/kernel/kernel_dequant_gemm.hpp"
+#include "AscendCT/gemm/kernel/kernel_quant_gemm.hpp"
 #include "AscendCT/gemm/matmul_type.hpp"
 #include "AscendCT/layout/layout.hpp"
 #include "AscendCT/matmul_coord.hpp"
