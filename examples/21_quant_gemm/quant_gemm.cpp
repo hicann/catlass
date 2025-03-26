@@ -26,10 +26,6 @@
 #include "AscendCT/gemm/dispatch_policy.hpp"
 #include "AscendCT/epilogue/dispatch_policy.hpp"
 #include "AscendCT/epilogue/tile/tile_copy.hpp"
-// #include "AscendCT/epilogue/tile/tile_elemwise_adds.hpp"
-// #include "AscendCT/epilogue/tile/tile_elemwise_add.hpp"
-// #include "AscendCT/epilogue/tile/tile_elemwise_muls.hpp"
-// #include "AscendCT/epilogue/tile/tile_elemwise_mul.hpp"
 #include "AscendCT/epilogue/tile/tile_broadcast_mul.hpp"
 #include "AscendCT/epilogue/tile/tile_broadcast_add.hpp"
 #include "AscendCT/epilogue/tile/tile_broadcast_one_blk.hpp"
@@ -37,73 +33,11 @@
 #include "AscendCT/epilogue/block/block_epilogue.hpp"
 #include "AscendCT/epilogue/tile/tile_swizzle.hpp"
 
+#include "AscendCT/status.hpp"
+#include "AscendCT/gemm/device/matmul_universal_adapter.hpp"
+
 using namespace AscendCT;
 using bfloat16 = op::bfloat16;
-
-template <
-    class LayoutA,
-    class LayoutB,
-    class LayoutScale,
-    class LayoutPerTokenScale,
-    class LayoutBias,
-    class LayoutC
->
-ASCENDCT_GLOBAL
-void QuantGemm(
-    uint64_t fftsAddr,
-    MatmulCoord problemShape,
-    GM_ADDR gmA, LayoutA layoutA,
-    GM_ADDR gmB, LayoutB layoutB,
-    GM_ADDR gmWA, LayoutA layoutWA,
-    GM_ADDR gmWB, LayoutB layoutWB,
-    GM_ADDR gmScale, LayoutScale layoutScale,
-    GM_ADDR gmPerTokenScale, LayoutPerTokenScale layoutPerTokenScale,
-    GM_ADDR gmBias, LayoutBias layoutBias,
-    GM_ADDR gmC, LayoutC layoutC,
-    GM_ADDR gmWorkspace
-){
-    // Set FFTS address
-    AscendC::SetSyncBaseAddr(fftsAddr);
-    using ArchTag = arch::AtlasA2;
-    constexpr bool enableUnitFlag = true;
-    constexpr bool enableShuffleK = true;
-    using GemmBlockDispatchPolicy = AscendCT::gemm::MmadAtlasA2Preload<enableUnitFlag, enableShuffleK>;
-    using EpilogueBlockDispatchPolicy = AscendCT::epilogue::EpilogueAtlasA2ElemWiseOneSource;
-    using AType = gemm::MatmulType<int8_t, LayoutA>;
-    using BType = gemm::MatmulType<int8_t, LayoutB>;
-    using CType = gemm::MatmulType<bfloat16_t, LayoutC>;
-    using XType = gemm::MatmulType<int32_t, LayoutC>;
-    using ScaleType = gemm::MatmulType<bfloat16_t, LayoutScale>;
-    using PerTokenScaleType = gemm::MatmulType<bfloat16_t, LayoutPerTokenScale>;
-    using BiasType = gemm::MatmulType<bfloat16_t, LayoutBias>;
-    using TempType = gemm::MatmulType<float, LayoutC>;
-    using L1TileShape = MatmulShape<256, 128, 256>;
-    using L0TileShape = MatmulShape<256, 128, 128>;
-    using TileCastShape = MatrixShape<L1TileShape::M / 2, L1TileShape::N>;
-    using GemmBlock = gemm::block::BlockGemm<GemmBlockDispatchPolicy, L1TileShape, L0TileShape, AType, BType, XType>;
-    using RowBroadcastMulType = gemm::MatmulType<float, LayoutC>;
-    using RowBroadcastAddType = gemm::MatmulType<float, LayoutC>;
-    using BroadcastOneBlkType = gemm::MatmulType<float, LayoutC>;
-    using OneBlkColumnBroadcastMulType = gemm::MatmulType<float, LayoutC>;
-    using EpilogueTileShape = MatrixShape<L1TileShape::M / 2, L1TileShape::N>;
-    using TileRowBroadcastMul = epilogue::tile::TileRowBroadcastMul<ArchTag, RowBroadcastMulType, EpilogueTileShape>;
-    using TileBroadcastOneBlk = epilogue::tile::TileBroadcastOneBlk<ArchTag, BroadcastOneBlkType,
-        EpilogueTileShape::ROW>;
-    using TileOneBlkColumnBroadcastMul = epilogue::tile::TileOneBlkColumnBroadcastMul<ArchTag,
-        OneBlkColumnBroadcastMulType, EpilogueTileShape>;
-    using TileRowBroadcastAdd = epilogue::tile::TileRowBroadcastAdd<ArchTag, RowBroadcastAddType, EpilogueTileShape>;
-    using TileElemWiseCastTemp = epilogue::tile::TileCast<ArchTag, TempType, XType, TileCastShape>;
-    using TileElemWiseCastC = epilogue::tile::TileCast<ArchTag, CType, TempType, TileCastShape>;
-    using EpilogueTileCopy = epilogue::tile::TileCopyPerTokenDequantGemm<ArchTag, XType, ScaleType, PerTokenScaleType, BiasType, CType>;
-    using TileScheduler = epilogue::tile::EpilogueHorizontalTileSwizzle;
-    using EpilogueBlock = epilogue::block::BlockEpilogue<EpilogueBlockDispatchPolicy, XType, ScaleType, PerTokenScaleType, BiasType, CType, 
-        TileRowBroadcastMul, TileBroadcastOneBlk, TileOneBlkColumnBroadcastMul, TileRowBroadcastAdd, TileElemWiseCastTemp, TileElemWiseCastC, EpilogueTileCopy, TileScheduler>;
-    typename EpilogueBlock::Params epilogueParams{gmScale, layoutScale, gmPerTokenScale, layoutPerTokenScale, gmBias, layoutBias, gmC, layoutC};
-    using GemmKernel = gemm::kernel::KernelGemm<GemmBlock, EpilogueBlock>;
-    typename GemmKernel::Params params{problemShape, gmA, layoutA, gmB, layoutB, gmWorkspace, gmWA, layoutWA, gmWB, layoutWB, epilogueParams}; // 这里得修改 gmX保存A * B
-    GemmKernel gemm;
-    gemm(params);
-}
 
 typedef struct Options{
     const std::string HELPER = "21_quantgemm m n k [device_id]";
@@ -171,6 +105,23 @@ bool IsSameStride(layout::RowMajor layout1, layout::RowMajor layout2)
 bool IsSameStride(layout::ColumnMajor layout1, layout::ColumnMajor layout2)
 {
     return layout1.stride(1) == layout2.stride(1);
+}
+
+template <class Adapter>
+void RunAdapter(Adapter matmul_op, typename Adapter::Arguments args, aclrtStream stream,
+    uint32_t aicCoreNum, uint64_t fftsAddr)
+{
+    size_t sizeWorkspace = matmul_op.GetWorkspaceSize(args);
+    uint8_t *deviceWorkspace = nullptr;
+    if (sizeWorkspace > 0) {
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+    }
+    matmul_op.Initialize(args, deviceWorkspace);
+    matmul_op(stream, aicCoreNum, fftsAddr);
+    ACL_CHECK(aclrtSynchronizeStream(stream));
+    if (sizeWorkspace > 0) {
+        ACL_CHECK(aclrtFree(deviceWorkspace));
+    }
 }
 
 void Run(Options options){
@@ -270,25 +221,56 @@ void Run(Options options){
     RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
 
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
-    QuantGemm<<<aicCoreNum, nullptr, stream>>>(
-        fftsAddr,
-        options.problemShape,
-        (uint8_t*)deviceA, layoutA,
-        (uint8_t*)deviceB, layoutB,
-        (uint8_t*)deviceWA, layoutWA,
-        (uint8_t*)deviceWB, layoutWB,
-        (uint8_t*)deviceScale, layoutScale,
-        (uint8_t*)devicePerTokenScale, layoutPerTokenScale,
-        (uint8_t*)deviceBias, layoutBias,
-        (uint8_t*)deviceC, layoutC,
-        (uint8_t*)gmWorkspace);
-    ACL_CHECK(aclrtSynchronizeStream(stream));
+    
+    using ArchTag = arch::AtlasA2;
+    constexpr bool enableUnitFlag = true;
+    constexpr bool enableShuffleK = true;
+    using GemmBlockDispatchPolicy = AscendCT::gemm::MmadAtlasA2Preload<enableUnitFlag, enableShuffleK>;
+    using EpilogueBlockDispatchPolicy = AscendCT::epilogue::EpilogueAtlasA2ElemWiseOneSource;
+    using AType = gemm::MatmulType<int8_t, LayoutA>;
+    using BType = gemm::MatmulType<int8_t, LayoutB>;
+    using CType = gemm::MatmulType<bfloat16_t, LayoutC>;
+    using XType = gemm::MatmulType<int32_t, LayoutC>;
+    using ScaleType = gemm::MatmulType<bfloat16_t, LayoutScale>;
+    using PerTokenScaleType = gemm::MatmulType<bfloat16_t, LayoutPerTokenScale>;
+    using BiasType = gemm::MatmulType<bfloat16_t, LayoutBias>;
+    using TempType = gemm::MatmulType<float, LayoutC>;
+    using L1TileShape = MatmulShape<256, 128, 256>;
+    using L0TileShape = MatmulShape<256, 128, 128>;
+    using TileCastShape = MatrixShape<L1TileShape::M / 2, L1TileShape::N>;
+    using GemmBlock = gemm::block::BlockGemm<GemmBlockDispatchPolicy, L1TileShape, L0TileShape, AType, BType, XType>;
+    using RowBroadcastMulType = gemm::MatmulType<float, LayoutC>;
+    using RowBroadcastAddType = gemm::MatmulType<float, LayoutC>;
+    using OneBlkColumnBroadcastAddType = gemm::MatmulType<float, LayoutC>;
+    using BroadcastOneBlkType = gemm::MatmulType<float, LayoutC>;
+    using OneBlkColumnBroadcastMulType = gemm::MatmulType<float, LayoutC>;
+    using EpilogueTileShape = MatrixShape<L1TileShape::M / 2, L1TileShape::N>;
+    using TileRowBroadcastMul = epilogue::tile::TileRowBroadcastMul<ArchTag, RowBroadcastMulType, EpilogueTileShape>;
+    using TileBroadcastOneBlk = epilogue::tile::TileBroadcastOneBlk<ArchTag, BroadcastOneBlkType,
+        EpilogueTileShape::ROW>;
+    using TileOneBlkColumnBroadcastMul = epilogue::tile::TileOneBlkColumnBroadcastMul<ArchTag,
+        OneBlkColumnBroadcastMulType, EpilogueTileShape>;
+    using TileRowBroadcastAdd = epilogue::tile::TileRowBroadcastAdd<ArchTag, RowBroadcastAddType, EpilogueTileShape>;
+    using TileOneBlkColumnBroadcastAdd = epilogue::tile::TileOneBlkColumnBroadcastAdd<ArchTag,
+        OneBlkColumnBroadcastAddType, EpilogueTileShape>;
+    using TileElemWiseCastTemp = epilogue::tile::TileCast<ArchTag, TempType, XType, TileCastShape>;
+    using TileElemWiseCastC = epilogue::tile::TileCast<ArchTag, CType, TempType, TileCastShape>;
+    using EpilogueTileCopy = epilogue::tile::TileCopyPerTokenDequantGemm<ArchTag, XType, ScaleType, PerTokenScaleType, BiasType, CType>;
+    using TileScheduler = epilogue::tile::EpilogueHorizontalTileSwizzle;
+    using EpilogueBlock = epilogue::block::BlockEpilogue<EpilogueBlockDispatchPolicy, XType, ScaleType, PerTokenScaleType, BiasType, CType, 
+        TileRowBroadcastMul, TileBroadcastOneBlk, TileOneBlkColumnBroadcastMul, TileRowBroadcastAdd, TileOneBlkColumnBroadcastAdd, 
+        TileElemWiseCastTemp, TileElemWiseCastC, EpilogueTileCopy, TileScheduler>;
+    typename EpilogueBlock::Params epilogueParams{(uint8_t*)deviceScale, layoutScale, (uint8_t*)devicePerTokenScale, layoutPerTokenScale, (uint8_t*)deviceBias, layoutBias, (uint8_t*)deviceC, layoutC};
+    using QuantGemmKernel = gemm::kernel::KernelGemm<GemmBlock, EpilogueBlock>;
+    typename QuantGemmKernel::Arguments arguments{options.problemShape, align, (uint8_t*)deviceA, (uint8_t*)deviceB, (uint8_t*)gmWorkspace, (uint8_t*)deviceWA, (uint8_t*)deviceWB, epilogueParams};
+    using QuantGemmAdapter = gemm::device::MatmulUniversalAdapter<QuantGemmKernel>;
+    QuantGemmAdapter quantgemm_op;
+    quantgemm_op.CanImplement(arguments);
+    RunAdapter(quantgemm_op, arguments, stream, aicCoreNum, fftsAddr);
     
     std::vector<bfloat16> hostRes(lenC);
     ACL_CHECK(aclrtMemcpy(hostRes.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
-    // for(uint32_t i = 0; i < lenC; i++){
-    //     std::cout << i << " : " << hostRes[i] << std::endl; 
-    // }
+
     std::vector<float> hostGolden(lenC);
     golden::QuantGemm(
         options.problemShape,
@@ -298,7 +280,6 @@ void Run(Options options){
         hostPerTokenScale, layoutPerTokenScale,
         hostBias, layoutBias,
         hostGolden, layoutC);
-    // golden::ComputeMatmul(options.problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);
     std::vector<uint64_t> errorIndices = golden::CompareData(hostRes, hostGolden, m * n);
     if (errorIndices.empty()) {
         std::cout << "Compare success." << std::endl;

@@ -26,10 +26,6 @@
 #include "AscendCT/gemm/dispatch_policy.hpp"
 #include "AscendCT/epilogue/dispatch_policy.hpp"
 #include "AscendCT/epilogue/tile/tile_copy.hpp"
-// #include "AscendCT/epilogue/tile/tile_elemwise_adds.hpp"
-// #include "AscendCT/epilogue/tile/tile_elemwise_add.hpp"
-// #include "AscendCT/epilogue/tile/tile_elemwise_muls.hpp"
-// #include "AscendCT/epilogue/tile/tile_elemwise_mul.hpp"
 #include "AscendCT/epilogue/tile/tile_broadcast_mul.hpp"
 #include "AscendCT/epilogue/tile/tile_broadcast_add.hpp"
 #include "AscendCT/epilogue/tile/tile_broadcast_one_blk.hpp"
@@ -73,9 +69,9 @@ void QuantGemm(
     using BType = gemm::MatmulType<int8_t, LayoutB>;
     using CType = gemm::MatmulType<bfloat16_t, LayoutC>;
     using XType = gemm::MatmulType<int32_t, LayoutC>;
-    using ScaleType = gemm::MatmulType<float, LayoutScale>;
-    using PerTokenScaleType = gemm::MatmulType<float, LayoutPerTokenScale>;
-    using BiasType = gemm::MatmulType<float, LayoutBias>;
+    using ScaleType = gemm::MatmulType<bfloat16_t, LayoutScale>;
+    using PerTokenScaleType = gemm::MatmulType<bfloat16_t, LayoutPerTokenScale>;
+    using BiasType = gemm::MatmulType<bfloat16_t, LayoutBias>;
     using TempType = gemm::MatmulType<float, LayoutC>;
     using L1TileShape = MatmulShape<256, 128, 256>;
     using L0TileShape = MatmulShape<256, 128, 128>;
@@ -83,6 +79,7 @@ void QuantGemm(
     using GemmBlock = gemm::block::BlockGemm<GemmBlockDispatchPolicy, L1TileShape, L0TileShape, AType, BType, XType>;
     using RowBroadcastMulType = gemm::MatmulType<float, LayoutC>;
     using RowBroadcastAddType = gemm::MatmulType<float, LayoutC>;
+    using OneBlkColumnBroadcastAddType = gemm::MatmulType<float, LayoutC>;
     using BroadcastOneBlkType = gemm::MatmulType<float, LayoutC>;
     using OneBlkColumnBroadcastMulType = gemm::MatmulType<float, LayoutC>;
     using EpilogueTileShape = MatrixShape<L1TileShape::M / 2, L1TileShape::N>;
@@ -92,12 +89,15 @@ void QuantGemm(
     using TileOneBlkColumnBroadcastMul = epilogue::tile::TileOneBlkColumnBroadcastMul<ArchTag,
         OneBlkColumnBroadcastMulType, EpilogueTileShape>;
     using TileRowBroadcastAdd = epilogue::tile::TileRowBroadcastAdd<ArchTag, RowBroadcastAddType, EpilogueTileShape>;
+    using TileOneBlkColumnBroadcastAdd = epilogue::tile::TileOneBlkColumnBroadcastAdd<ArchTag,
+        OneBlkColumnBroadcastAddType, EpilogueTileShape>;
     using TileElemWiseCastTemp = epilogue::tile::TileCast<ArchTag, TempType, XType, TileCastShape>;
     using TileElemWiseCastC = epilogue::tile::TileCast<ArchTag, CType, TempType, TileCastShape>;
     using EpilogueTileCopy = epilogue::tile::TileCopyPerTokenDequantGemm<ArchTag, XType, ScaleType, PerTokenScaleType, BiasType, CType>;
     using TileScheduler = epilogue::tile::EpilogueHorizontalTileSwizzle;
     using EpilogueBlock = epilogue::block::BlockEpilogue<EpilogueBlockDispatchPolicy, XType, ScaleType, PerTokenScaleType, BiasType, CType, 
-        TileRowBroadcastMul, TileBroadcastOneBlk, TileOneBlkColumnBroadcastMul, TileRowBroadcastAdd, TileElemWiseCastTemp, TileElemWiseCastC, EpilogueTileCopy, TileScheduler>;
+        TileRowBroadcastMul, TileBroadcastOneBlk, TileOneBlkColumnBroadcastMul, TileRowBroadcastAdd, TileOneBlkColumnBroadcastAdd, 
+        TileElemWiseCastTemp, TileElemWiseCastC, EpilogueTileCopy, TileScheduler>;
     typename EpilogueBlock::Params epilogueParams{gmScale, layoutScale, gmPerTokenScale, layoutPerTokenScale, gmBias, layoutBias, gmC, layoutC};
     using GemmKernel = gemm::kernel::KernelGemm<GemmBlock, EpilogueBlock>;
     typename GemmKernel::Params params{problemShape, gmA, layoutA, gmB, layoutB, gmWorkspace, gmWA, layoutWA, gmWB, layoutWB, epilogueParams}; // 这里得修改 gmX保存A * B
@@ -195,9 +195,9 @@ void Run(Options options){
     size_t sizeB = lenB * sizeof(int8_t);
     size_t sizeC = lenC * sizeof(bfloat16_t);
     size_t sizeX = lenX * sizeof(int32_t);
-    size_t sizeScale = lenScale * sizeof(float);
-    size_t sizePerTokenScale = lenPerTokenScale * sizeof(float);
-    size_t sizeBias = lenBias * sizeof(float);
+    size_t sizeScale = lenScale * sizeof(bfloat16_t);
+    size_t sizePerTokenScale = lenPerTokenScale * sizeof(bfloat16_t);
+    size_t sizeBias = lenBias * sizeof(bfloat16_t);
 
     const uint32_t align = 256;
     using LayoutA = layout::RowMajor;
@@ -219,9 +219,9 @@ void Run(Options options){
 
     std::vector<int8_t> hostA(lenA);
     std::vector<int8_t> hostB(lenB);
-    std::vector<float> hostScale(lenScale);
-    std::vector<float> hostPerTokenScale(lenPerTokenScale);
-    std::vector<float> hostBias(lenBias);
+    std::vector<bfloat16> hostScale(lenScale);
+    std::vector<bfloat16> hostPerTokenScale(lenPerTokenScale);
+    std::vector<bfloat16> hostBias(lenBias);
     golden::FillRandomData(hostA,  -16, 16);
     golden::FillRandomData(hostB,  -16, 16);
     golden::FillRandomData(hostScale, 0.0, 1.0);
@@ -246,15 +246,15 @@ void Run(Options options){
     } else {
         ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWB), sizeWB, ACL_MEM_MALLOC_HUGE_FIRST));
     }
-    float* deviceScale{nullptr};
+    bfloat16* deviceScale{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceScale), sizeScale, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceScale, sizeScale, hostScale.data(), sizeScale, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    float* devicePerTokenScale{nullptr};
+    bfloat16* devicePerTokenScale{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&devicePerTokenScale), sizePerTokenScale, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(devicePerTokenScale, sizePerTokenScale, hostPerTokenScale.data(), sizePerTokenScale, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    float* deviceBias{nullptr};
+    bfloat16* deviceBias{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceBias), sizeBias, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceBias, sizeBias, hostBias.data(), sizeBias, ACL_MEMCPY_HOST_TO_DEVICE));
 
@@ -298,6 +298,7 @@ void Run(Options options){
         hostPerTokenScale, layoutPerTokenScale,
         hostBias, layoutBias,
         hostGolden, layoutC);
+    // golden::ComputeMatmul(options.problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);
     std::vector<uint64_t> errorIndices = golden::CompareData(hostRes, hostGolden, m * n);
     if (errorIndices.empty()) {
         std::cout << "Compare success." << std::endl;
