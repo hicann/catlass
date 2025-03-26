@@ -247,7 +247,7 @@ Basic层级API封装了实际的硬件指令调用，这些指令加速了MMAD�
 
 
 ## 版权声明
-Copyright (c) 2024 Huawei Technologies Co., Ltd.
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
 
 This file is a part of the CANN Open Software.
 Licensed under CANN Open Software License Agreement Version 1.0 (the "License").

@@ -174,7 +174,7 @@ Layout a0  = MakeLayoutTile(a, MakeShape(2, 2)); // ((4,1),(4,1)):((4,16),(1,32)
 `MakeLayoutTile`接口主要改变了原本layout的shape和orgshape，不改变stride。
 
 ## 版权声明
-Copyright (c) 2024 Huawei Technologies Co., Ltd.
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
 
 This file is a part of the CANN Open Software.
 Licensed under CANN Open Software License Agreement Version 1.0 (the "License").

@@ -60,7 +60,7 @@ FA
 
 注[2]：例如AI_CORE数目为20，则代码中BLOCK_NUM设置为20。AI_CORE数量可在`${CANN_INSTALL_PATH}/${arch}/data/platform_config/<chip_type>.ini`文件中的`ai_core_cnt`字段找到。`CANN_INSTALL_PATH`为cann包安装路径；`arch`为服务器cpu架构；`chip_type`为npu芯片型号，可通过执行`npu-smi info`查询。
 ## 版权声明
-Copyright (c) 2024 Huawei Technologies Co., Ltd.
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
 
 This file is a part of the CANN Open Software.
 Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
