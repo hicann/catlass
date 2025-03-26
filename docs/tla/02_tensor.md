@@ -52,7 +52,7 @@ auto tensor_tile = GetTile(tensor_8x16, MakeCoord(2, 4), MakeShape(4, 8)); // (4
 ```
 
 ## 版权声明
-Copyright (c) 2024 Huawei Technologies Co., Ltd.
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
 
 This file is a part of the CANN Open Software.
 Licensed under CANN Open Software License Agreement Version 1.0 (the "License").

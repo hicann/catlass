@@ -25,7 +25,7 @@ Swizzle策略决定了当前AI Core以哪种顺序计算哪些基本块。调整
 如果C矩阵的的大小为M x N，经验而言，当M >= N时，采用SwizzleOffset=3，SwizzleDirection=0，可以达到较好的矩阵计算性能。当M < N时，采用SwizzleOffset=3，SwizzleDirection=1，可以达到较好的矩阵计算性能。可以探索其他参数设置以达到更高的缓存命中率，从而进一步提高矩阵计算性能。
 
 ## 版权声明
-Copyright (c) 2024 Huawei Technologies Co., Ltd.
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
 
 This file is a part of the CANN Open Software.
 Licensed under CANN Open Software License Agreement Version 1.0 (the "License").

@@ -95,7 +95,7 @@ scripts文件夹下包含样例构建脚本。
 │   └── build.sh // 基础构建脚本
 ```
 ## 版权声明
-Copyright (c) 2024 Huawei Technologies Co., Ltd.
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
 
 This file is a part of the CANN Open Software.
 Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
