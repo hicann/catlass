@@ -10,13 +10,13 @@
 #include <acl/acl.h>
 #include <runtime/rt_ffts.h>
 
-#include "AscendCTKernel.h"
+#include "act_kernel.h"
 #include "BasicMatmul.h"
 #include "GroupedMatmulSliceK.h"
 #include "GroupedMatmulSliceM.h"
 #include "OptimizedMatmul.h"
 
-namespace AscendCTKernel {
+namespace ActKernel {
 
 void BasicMatmul(uint32_t blockNum, aclrtStream stream, KernelInfo kernelInfo)
 {
@@ -140,4 +140,4 @@ void OptimizedMatmul(uint32_t blockNum, aclrtStream stream, KernelInfo kernelInf
         aclrtFree(deviceWB);
     }
 }
-} // namespace AscendCTKernel
+} // namespace ActKernel

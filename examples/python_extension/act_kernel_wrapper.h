@@ -14,15 +14,15 @@
 #include <pybind11/stl.h>
 #include <torch/extension.h>
 
-#include "AscendCTKernel.h"
+#include "act_kernel.h"
 
-namespace AscendCTKernelWrapper {
+namespace ActKernelWrapper {
 at::Device GetAtDevice();
 at::Tensor RunBasicMatmul(const at::Tensor &mat1, const at::Tensor &mat2, const std::string &outDType);
 std::vector<at::Tensor> RunGroupedMatmul(const std::vector<at::Tensor> &mat1, const std::vector<at::Tensor> &mat2,
                                          const std::string &outDType, const bool &splitK);
 at::Tensor RunOptimizedMatmul(const at::Tensor &mat1, const at::Tensor &mat2, const std::string &outDType);
 
-} // namespace AscendCTKernelWrapper
+} // namespace ActKernelWrapper
 
 #endif // PY_EXT_ACT_KERNEL_WRAPPER_H

@@ -12,13 +12,13 @@
 
 #include "act_kernel_wrapper.h"
 
-using namespace AscendCTKernelWrapper;
+using namespace ActKernelWrapper;
 
 at::Tensor RunBasicMatmulTorch(const at::Tensor &mat1, const at::Tensor &mat2, const std::string &outDType)
 {
     return RunBasicMatmul(mat1.to(GetAtDevice()), mat2.to(GetAtDevice()), outDType);
 }
 
-TORCH_LIBRARY(AscendCTTorch, m) { m.def("basic_matmul(Tensor mat1, Tensor mat2, str c) -> Tensor"); }
+TORCH_LIBRARY(ActTorch, m) { m.def("basic_matmul(Tensor mat1, Tensor mat2, str c) -> Tensor"); }
 
-TORCH_LIBRARY_IMPL(AscendCTTorch, CPU, m) { m.impl("basic_matmul", &RunBasicMatmulTorch); }
+TORCH_LIBRARY_IMPL(ActTorch, CPU, m) { m.impl("basic_matmul", &RunBasicMatmulTorch); }

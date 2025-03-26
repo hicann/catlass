@@ -20,13 +20,13 @@
 #include <torch_npu/csrc/core/npu/NPUFunctions.h>
 #include <torch_npu/csrc/core/npu/NPUStream.h>
 
-#include "AscendCTKernel.h"
+#include "act_kernel.h"
 #include "act_kernel_wrapper.h"
 
 namespace py = pybind11;
-using namespace AscendCTKernel;
+using namespace ActKernel;
 
-namespace AscendCTKernelWrapper {
+namespace ActKernelWrapper {
 at::Device GetAtDevice()
 {
     int32_t deviceId;

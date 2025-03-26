@@ -6,8 +6,8 @@
 
 ```bash
 examples/shared_lib
-├── AscendCTKernel.cpp      # host算子入口实现
-├── AscendCTKernel.h        # host使用的参数结构体、算子入口
+├── act_kernel.cpp      # host算子入口实现
+├── act_kernel.h        # host使用的参数结构体、算子入口
 ├── build.sh                # 编译脚本
 └── impl                    # 算子核函数实现
         ├── BasicMatmul.h  # 示例：basic_matmul
@@ -18,8 +18,8 @@ examples/shared_lib
 
 ```bash
 output/shared_lib
-├── AscendCTKernel.h        # 动态链接库头文件
-└── libascendct_kernel.so    # 动态链接库
+├── act_kernel.h        # 动态链接库头文件
+└── libact_kernel.so    # 动态链接库
 ```
 
 ## 使用说明
@@ -50,7 +50,7 @@ void custom_matmul(
     // 按需定义输入参数...
 )
 {
-    // 使用AscendCT api定义算子...
+    // 使用Act api定义算子...
 }
 ```
 - 你可以在模板参数中传入数据类型，但目前版本编译器暂不支持在内核调用符上使用bfloat16_t. 若需要通过模板特化bfloat16_t相关的核函数，可参考下面的示例：
@@ -72,7 +72,7 @@ void kernel_host(...){
 即：device侧的特化要在device侧实现.
 ### 算子host接口实现
 
-参考`shared_lib/AscendCTKernel.cpp`增加host接口.
+参考`shared_lib/act_kernel.cpp`增加host接口.
 推荐参数列表如下：
 
 | 参数名           | 类型             | 作用               |
@@ -81,7 +81,7 @@ void kernel_host(...){
 | `stream`         | `aclrtStream`    | NPU流              |
 | `kernelInfo` | `KernelInfo` | 算子执行的数据地址和输入详细情况，如mnk等维度的大小 |
 
-同时，更新`shared_lib/AscendCT_kernel.h`中的对外接口.
+同时，更新`shared_lib/Act_kernel.h`中的对外接口.
 
 ### 编译
 
