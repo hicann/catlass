@@ -14,26 +14,26 @@
 #include "golden.hpp"
 #include "fp16_t.h"
 
-#include "AscendCT/AscendCT.hpp"
-#include "AscendCT/arch/arch.hpp"
-#include "AscendCT/gemm/block/block_mmad.hpp"
-#include "AscendCT/gemm/block/block_swizzle.hpp"
-#include "AscendCT/gemm/dispatch_policy.hpp"
-#include "AscendCT/gemm/kernel/splitk_matmul.hpp"
-#include "AscendCT/gemm/matmul_type.hpp"
-#include "AscendCT/layout/layout.hpp"
+#include "act/act.hpp"
+#include "act/arch/arch.hpp"
+#include "act/gemm/block/block_mmad.hpp"
+#include "act/gemm/block/block_swizzle.hpp"
+#include "act/gemm/dispatch_policy.hpp"
+#include "act/gemm/kernel/splitk_matmul.hpp"
+#include "act/gemm/gemm_type.hpp"
+#include "act/layout/layout.hpp"
 
-#include "AscendCT/status.hpp"
-#include "AscendCT/gemm/device/matmul_universal_adapter.hpp"
+#include "act/status.hpp"
+#include "act/gemm/device/matmul_universal_adapter.hpp"
 
-using namespace AscendCT;
+using namespace Act;
 using fp16_t = op::fp16_t;
 
 
 struct Options {
     const std::string HELPER = "09_splitk_matmul m n k [device_id]";
 
-    MatmulCoord problemShape{128, 128, 128};
+    GemmCoord problemShape{128, 128, 128};
     int32_t deviceId{0};
 
     Options() = default;
@@ -85,7 +85,7 @@ void Run(Options const &options)
     uint32_t n = options.problemShape.n();
     uint32_t k = options.problemShape.k();
 
-    using L1TileShape = MatmulShape<128, 256, 256>;
+    using L1TileShape = GemmShape<128, 256, 256>;
 
     size_t lenA = static_cast<size_t>(m) * k;
     size_t lenB = static_cast<size_t>(k) * n;
@@ -118,29 +118,29 @@ void Run(Options const &options)
     uint8_t *deviceC{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
-    using ArchTag = arch::AtlasA2;
-    using DispatchPolicy = gemm::MmadAtlasA2Pingpong<true>;
-    using L1TileShape = MatmulShape<128, 256, 256>;
-    using L0TileShape = MatmulShape<128, 256, 64>;
+    using ArchTag = Arch::AtlasA2;
+    using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
+    using L1TileShape = GemmShape<128, 256, 256>;
+    using L0TileShape = GemmShape<128, 256, 64>;
 
-    using AType = gemm::MatmulType<half, LayoutA>;
-    using BType = gemm::MatmulType<half, LayoutB>;
-    using CType = gemm::MatmulType<float, LayoutC>;
+    using AType = Gemm::GemmType<half, LayoutA>;
+    using BType = Gemm::GemmType<half, LayoutB>;
+    using CType = Gemm::GemmType<float, LayoutC>;
 
-    using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+    using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
     using BlockEpilogue = void;
 
     // After the Matmul computation is completed, launch the ReduceAdd kernel to accumulate the partial sums.
     constexpr uint32_t computeLength = 32 * 1024 / sizeof(float);
-    using ReduceAdd = AscendCT::gemm::kernel::ReduceAdd<ArchTag, float, half, computeLength>;
+    using ReduceAdd = Act::Gemm::Kernel::ReduceAdd<ArchTag, float, half, computeLength>;
 
     // Swizzle offset is 3 and direction is 0.
-    using BlockScheduler = typename gemm::block::SplitkMatmulIdentityBlockSwizzle<3, 0>;
+    using BlockScheduler = typename Gemm::Block::SplitkGemmIdentityBlockSwizzle<3, 0>;
 
     // kernel level
-    using MatmulKernel = gemm::kernel::SplitkMatmul<BlockMmad, BlockEpilogue, BlockScheduler, ReduceAdd>;
+    using MatmulKernel = Gemm::Kernel::SplitkMatmul<BlockMmad, BlockEpilogue, BlockScheduler, ReduceAdd>;
 
-    using MatmulAdapter = gemm::device::MatmulUniversalAdapter<MatmulKernel>;
+    using MatmulAdapter = Gemm::device::MatmulUniversalAdapter<MatmulKernel>;
     MatmulKernel::Arguments arguments{options.problemShape,
         aicCoreNum,
         sizeof(float),

@@ -15,25 +15,25 @@
 #include "golden.hpp"
 #include "fp16_t.h"
 
-#include "AscendCT/AscendCT.hpp"
-#include "AscendCT/arch/arch.hpp"
-#include "AscendCT/gemm/block/block_mmad.hpp"
-#include "AscendCT/gemm/block/block_swizzle.hpp"
-#include "AscendCT/gemm/dispatch_policy.hpp"
-#include "AscendCT/gemm/kernel/grouped_matmul.hpp"
-#include "AscendCT/status.hpp"
-#include "AscendCT/gemm/device/matmul_universal_adapter.hpp"
-#include "AscendCT/gemm/matmul_type.hpp"
-#include "AscendCT/layout/layout.hpp"
+#include "act/act.hpp"
+#include "act/arch/arch.hpp"
+#include "act/gemm/block/block_mmad.hpp"
+#include "act/gemm/block/block_swizzle.hpp"
+#include "act/gemm/dispatch_policy.hpp"
+#include "act/gemm/kernel/grouped_matmul.hpp"
+#include "act/status.hpp"
+#include "act/gemm/device/matmul_universal_adapter.hpp"
+#include "act/gemm/gemm_type.hpp"
+#include "act/layout/layout.hpp"
 
-using namespace AscendCT;
+using namespace Act;
 using fp16_t = op::fp16_t;
 
 struct Options {
     const std::string HELPER = "08_grouped_matmul group_count m n k [device_id]";
 
     uint32_t groupCount{1};
-    MatmulCoord problemShape{128, 128, 128};
+    GemmCoord problemShape{128, 128, 128};
     int32_t deviceId{0};
 
     Options() = default;
@@ -98,13 +98,13 @@ void Run(Options const &options)
     auto groupList = golden::GenerateGroupList(k, problemCount);
 
     // crate grouped matmul problem shapes and layouts
-    std::vector<MatmulCoord> problemShapeList(problemCount);
+    std::vector<GemmCoord> problemShapeList(problemCount);
     std::vector<LayoutA> layoutAList(problemCount);
     std::vector<LayoutB> layoutBList(problemCount);
     std::vector<LayoutC> layoutCList(problemCount);
     for (uint32_t i = 0; i < problemCount; ++i) {
         uint32_t currentK = (i == 0) ? groupList[0] : (groupList[i] - groupList[i - 1]);
-        problemShapeList[i] = MatmulCoord{m, n, currentK};
+        problemShapeList[i] = GemmCoord{m, n, currentK};
         layoutAList[i] = LayoutA{m, currentK};
         layoutBList[i] = LayoutB{currentK, n};
         layoutCList[i] = LayoutC{m, n};
@@ -122,7 +122,7 @@ void Run(Options const &options)
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
     uint8_t *problemShapeListDevice{nullptr};
-    size_t sizeProblemShapeList = problemShapeList.size() * sizeof(MatmulCoord);
+    size_t sizeProblemShapeList = problemShapeList.size() * sizeof(GemmCoord);
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&problemShapeListDevice), sizeProblemShapeList,
         ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(problemShapeListDevice, sizeProblemShapeList,
@@ -157,27 +157,27 @@ void Run(Options const &options)
     constexpr bool enableUnitFlag = true;
     constexpr bool enableShuffleK = true;
 
-    using ArchTag = arch::AtlasA2;
-    using DispatchPolicy = gemm::MmadAtlasA2PreloadAsync<
+    using ArchTag = Arch::AtlasA2;
+    using DispatchPolicy = Gemm::MmadAtlasA2PreloadAsync<
         preloadStages,
         l1Stages, l0AStages, l0BStages, l0CStages,
         enableUnitFlag, enableShuffleK
     >;
-    using L1TileShape = MatmulShape<128, 256, 256>;
-    using L0TileShape = MatmulShape<128, 256, 64>;
+    using L1TileShape = GemmShape<128, 256, 256>;
+    using L0TileShape = GemmShape<128, 256, 64>;
 
-    using AType = gemm::MatmulType<half, LayoutA>;
-    using BType = gemm::MatmulType<half, LayoutB>;
-    using CType = gemm::MatmulType<half, LayoutC>;
+    using AType = Gemm::GemmType<half, LayoutA>;
+    using BType = Gemm::GemmType<half, LayoutB>;
+    using CType = Gemm::GemmType<half, LayoutC>;
 
-    using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+    using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
     using BlockEpilogue = void;
-    using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 1>;
+    using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
 
     // kernel level
-    using MatmulKernel = gemm::kernel::GroupedMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
+    using MatmulKernel = Gemm::Kernel::GroupedMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 
-    using MatmulAdapter = gemm::device::MatmulUniversalAdapter<MatmulKernel>;
+    using MatmulAdapter = Gemm::device::MatmulUniversalAdapter<MatmulKernel>;
     typename MatmulKernel::Arguments arguments{
         problemCount, problemShapeListDevice, 
         deviceA, layoutAListDevice, 

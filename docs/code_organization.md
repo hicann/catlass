@@ -1,17 +1,17 @@
 # 代码组织结构
-## 昇腾算子模板库代码组织结构  
+## 昇腾算子模板库代码组织结构
 这篇文档描述了昇腾算子模板库的代码仓结构，主要包含的内容如下：
 - include包含每层分层的代码头文件
 - examples包含基于模板库的算子编程代码示例和相关组件
 - docs包含昇腾算子模板库的相关介绍文档
 - scripts包含模板库样例的构建脚本
 ## include
-昇腾算子模板库是一套基于AscendC开发的算子模板库，提供昇腾硬件上Matmul算子定制化开发的极致性能。代码仓提供的能力对标硬件的不同层级展开。block层对应于NPU的单核单基块的层级，tile层对应于分片粒度的数据搬运和计算的层级，basic对应于基础API的层级。这些组件可以在相应的算子内的不同运算层级被使用。  
+昇腾算子模板库是一套基于AscendC开发的算子模板库，提供昇腾硬件上Matmul算子定制化开发的极致性能。代码仓提供的能力对标硬件的不同层级展开。block层对应于NPU的单核单基块的层级，tile层对应于分片粒度的数据搬运和计算的层级，basic对应于基础API的层级。这些组件可以在相应的算子内的不同运算层级被使用。
 include目录下的头文件是按照如下的文件层级进行组织的。
 ```
 ├── include
-│   └── AscendCT
-│       ├── AscendCT.hpp // 定义了基本的数据信息，如基本块长度等
+│   └── act
+│       ├── act.hpp // 定义了基本的数据信息，如基本块长度等
 │       ├── arch
 │       │   ├── arch.hpp // 定义了架构相关的基本数据信息，如L1/L0大小，UB大小等
 │       │   ├── cross_core_sync.hpp // 核间同步操作
@@ -49,14 +49,14 @@ include目录下的头文件是按照如下的文件层级进行组织的。
 │       │   │   ├── matmul_epilogue.hpp // kernel层的带后处理的matmul（如matmul+add）的实现
 │       │   │   ├── basic_matmul.hpp // kernel层的matmul实现
 │       │   │   └── padding_matmul.hpp  // kernel层的paddingMatmul实现
-│       │   ├── matmul_type.hpp // matmulType的定义
+│       │   ├── gemm_type.hpp // GemmType的定义
 │       │   └── tile
 │       │       ├── copy_gm_to_l1.hpp // tile层GM到L1搬运的具体实现
 │       │       ├── copy_l0c_to_gm.hpp // tile层L0c到GM搬运的具体实现
 │       │       ├── copy_l1_to_l0.hpp // tile层L1到L0搬运的具体实现
 │       │       ├── tile_copy.hpp // tilecopy的头文件定义
 │       │       └── tile_mmad.hpp // tile_mmad对基础api的封装
-│       ├── matmul_coord.hpp // 矩阵运算的基础坐标运算封装
+│       ├── gemm_coord.hpp // 矩阵运算的基础坐标运算封装
 │       └── matrix_coord.hpp
 ├── CMakeLists.txt
 ├── LICENSE
@@ -95,16 +95,16 @@ scripts文件夹下包含样例构建脚本。
 │   └── build.sh // 基础构建脚本
 ```
 ## 版权声明
-Copyright (c) 2024 Huawei Technologies Co., Ltd. 
+Copyright (c) 2024 Huawei Technologies Co., Ltd.
 
-This file is a part of the CANN Open Software.  
-Licensed under CANN Open Software License Agreement Version 1.0 (the "License").  
-Please refer to the License for details. You may not use this file except in compliance with the License.  
+This file is a part of the CANN Open Software.
+Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
 
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,   
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
 EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,     
-MERCHANTABILITY, OR FITNESS FOR A PARTICULAR   PURPOSE.  
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+MERCHANTABILITY, OR FITNESS FOR A PARTICULAR   PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 
 ## 许可证

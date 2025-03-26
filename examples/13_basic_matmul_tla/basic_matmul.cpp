@@ -14,29 +14,29 @@
 #include "golden.hpp"
 #include "fp16_t.h"
 
-#include "AscendCT/AscendCT.hpp"
-#include "AscendCT/arch/arch.hpp"
-#include "AscendCT/gemm/matmul_type.hpp"
-#include "AscendCT/gemm/block/block_mmad.hpp"
-#include "AscendCT/gemm/block/block_swizzle.hpp"
-#include "AscendCT/gemm/dispatch_policy.hpp"
-#include "AscendCT/gemm/kernel/basic_matmul_tla.hpp"
-#include "AscendCT/layout/layout.hpp"
+#include "act/act.hpp"
+#include "act/arch/arch.hpp"
+#include "act/gemm/gemm_type.hpp"
+#include "act/gemm/block/block_mmad.hpp"
+#include "act/gemm/block/block_swizzle.hpp"
+#include "act/gemm/dispatch_policy.hpp"
+#include "act/gemm/kernel/basic_matmul_tla.hpp"
+#include "act/layout/layout.hpp"
 
-#include "AscendCT/status.hpp"
-#include "AscendCT/gemm/device/matmul_universal_adapter.hpp"
+#include "act/status.hpp"
+#include "act/gemm/device/matmul_universal_adapter.hpp"
 
 #include "tla/layout.hpp"
 #include "tla/tensor.hpp"
 
-using namespace AscendCT;
+using namespace Act;
 using namespace tla;
 using fp16_t = op::fp16_t;
 
 struct Options {
     const std::string HELPER = "00_basic_matmul m n k [device_id]";
 
-    MatmulCoord problemShape{128, 128, 128};
+    GemmCoord problemShape{128, 128, 128};
     int32_t deviceId{0};
 
     Options() = default;
@@ -115,8 +115,8 @@ void Run(Options const &options)
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
-    using ArchTag = arch::AtlasA2;
-    using DispatchPolicy = gemm::MmadAtlasA2Pingpong<true>;
+    using ArchTag = Arch::AtlasA2;
+    using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
     using L1TileShape = Shape<_128, _256, _256>;
     using L0TileShape = Shape<_128, _256, _64>;
 
@@ -132,20 +132,20 @@ void Run(Options const &options)
     using TensorB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutB), AscendC::TPosition::GM>;
     using TensorC = Tensor<AscendC::GlobalTensor<ElementC>, decltype(layoutC), AscendC::TPosition::GM>;
     using TileCopy =
-        gemm::tile::PackedTileCopyTla<ArchTag, TensorA, LayoutTagA, TensorB, LayoutTagB, TensorC, LayoutTagC>;
+        Gemm::Tile::PackedTileCopyTla<ArchTag, TensorA, LayoutTagA, TensorB, LayoutTagB, TensorC, LayoutTagC>;
     using BlockMmad =
-        gemm::block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape,
+        Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape,
                                     TensorA, TensorB, TensorC, void, TileCopy>;
     using BlockEpilogue = void;
 
     if (options.problemShape.m() > options.problemShape.n()) {
         // Swizzle offset is 3 and direction is 0.
-        using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 0>;
+        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
 
         // kernel level
-        using MatmulKernel = gemm::kernel::BasicMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler>;
+        using MatmulKernel = Gemm::Kernel::BasicMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler>;
 
-        using MatmulAdapter = gemm::device::MatmulUniversalAdapter<MatmulKernel>;
+        using MatmulAdapter = Gemm::device::MatmulUniversalAdapter<MatmulKernel>;
     
         MatmulKernel::Arguments arguments{
             options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC};
@@ -162,12 +162,12 @@ void Run(Options const &options)
         matmul_op(stream, aicCoreNum);
     } else {
         // Swizzle offset is 3 and direction is 1.
-        using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 1>;
+        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
 
         // kernel level
-        using MatmulKernel = gemm::kernel::BasicMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler>;
+        using MatmulKernel = Gemm::Kernel::BasicMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler>;
 
-        using MatmulAdapter = gemm::device::MatmulUniversalAdapter<MatmulKernel>;
+        using MatmulAdapter = Gemm::device::MatmulUniversalAdapter<MatmulKernel>;
     
         MatmulKernel::Arguments arguments{
             options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC};

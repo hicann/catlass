@@ -46,12 +46,12 @@
 
 注[1]：列方向定义。A矩阵transA=False时，列方向为k轴；transA=True时，列方向为m轴。B矩阵transB=False时，列方向为n轴；transB=True时，列方向为k轴。
 
-## 其他配置 
+## 其他配置
 Matmul
 - BLOCK_NUM的值设置为与AI_CORE的数目相等<sup>[2]</sup>。
-- Swizzle配置  
-m>n时，使用MatmulIdentityBlockSwizzle<3,0>。  
-m<=n时，使用MatmulIdentityBlockSwizzle<3,1>。  
+- Swizzle配置
+m>n时，使用GemmIdentityBlockSwizzle<3,0>。
+m<=n时，使用GemmIdentityBlockSwizzle<3,1>。
 Swizzle详细使用方法，请参考[Swizzle策略说明](swizzle_explanation.md)。
 
 FA
@@ -60,16 +60,16 @@ FA
 
 注[2]：例如AI_CORE数目为20，则代码中BLOCK_NUM设置为20。AI_CORE数量可在`${CANN_INSTALL_PATH}/${arch}/data/platform_config/<chip_type>.ini`文件中的`ai_core_cnt`字段找到。`CANN_INSTALL_PATH`为cann包安装路径；`arch`为服务器cpu架构；`chip_type`为npu芯片型号，可通过执行`npu-smi info`查询。
 ## 版权声明
-Copyright (c) 2024 Huawei Technologies Co., Ltd. 
+Copyright (c) 2024 Huawei Technologies Co., Ltd.
 
-This file is a part of the CANN Open Software.  
-Licensed under CANN Open Software License Agreement Version 1.0 (the "License").  
-Please refer to the License for details. You may not use this file except in compliance with the License.  
+This file is a part of the CANN Open Software.
+Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
 
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,   
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
 EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,     
-MERCHANTABILITY, OR FITNESS FOR A PARTICULAR   PURPOSE.  
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+MERCHANTABILITY, OR FITNESS FOR A PARTICULAR   PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 
 ## 许可证

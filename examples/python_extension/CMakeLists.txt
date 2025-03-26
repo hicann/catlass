@@ -34,7 +34,7 @@ message(${CMAKE_PREFIX_PATH})
 find_package(pybind11 REQUIRED)
 find_package(Torch REQUIRED)
 
-include_directories(torch_AscendCT PRIVATE
+include_directories(
     ${PYTHON_INCLUDE_PATH}
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${TORCH_INCLUDE_DIRS}
@@ -42,16 +42,17 @@ include_directories(torch_AscendCT PRIVATE
     ${SHARED_LIB_DIR}
     ${ASCEND_HOME_PATH}/include)
 
-link_directories(${ASCEND_HOME_PATH}/lib64
+link_directories(
+    ${ASCEND_HOME_PATH}/lib64
     ${CMAKE_BINARY_DIR}
     ${PYTHON_SITE_PACKAGES}/torch_npu/lib
     ${SHARED_LIB_DIR})
 
-link_libraries(AscendCT_kernel "${TORCH_LIBRARIES}" torch_npu tiling_api)
+link_libraries(act_kernel "${TORCH_LIBRARIES}" torch_npu tiling_api)
 
-pybind11_add_module(torch_AscendCT SHARED AscendCT_kernel_wrapper.cpp pybind_bindings.cpp)
-add_library(AscendCT_torch SHARED AscendCT_kernel_wrapper.cpp torch_bindings.cpp)
+pybind11_add_module(torch_act SHARED act_kernel_wrapper.cpp pybind_bindings.cpp)
+add_library(act_torch SHARED act_kernel_wrapper.cpp torch_bindings.cpp)
 
-install(TARGETS torch_AscendCT DESTINATION .)
-install(TARGETS AscendCT_torch DESTINATION .)
+install(TARGETS torch_act DESTINATION .)
+install(TARGETS act_torch DESTINATION .)
 install(FILES set_env.sh DESTINATION .)
