@@ -14,13 +14,13 @@
 #include "golden.hpp"
 #include "fp16_t.h"
 
-#include "AscendCT/AscendCT.hpp"
-#include "AscendCT/arch/arch.hpp"
-#include "AscendCT/gemm/matmul_type.hpp"
-#include "AscendCT/gemm/block/block_mmad.hpp"
-#include "AscendCT/gemm/block/block_swizzle.hpp"
-#include "AscendCT/gemm/dispatch_policy.hpp"
-#include "AscendCT/gemm/kernel/optimized_matmul_tla.hpp"
+#include "act/act.hpp"
+#include "act/arch/arch.hpp"
+#include "act/gemm/gemm_type.hpp"
+#include "act/gemm/block/block_mmad.hpp"
+#include "act/gemm/block/block_swizzle.hpp"
+#include "act/gemm/dispatch_policy.hpp"
+#include "act/gemm/kernel/optimized_matmul_tla.hpp"
 
 #include "AscendCT/status.hpp"
 #include "AscendCT/gemm/device/matmul_universal_adapter.hpp"
@@ -28,9 +28,8 @@
 #include "tla/layout.hpp"
 #include "tla/tensor.hpp"
 
-using namespace AscendCT;
+using namespace Act;
 using fp16_t = op::fp16_t;
-
 
 template<class Layout>
 ASCENDCT_HOST_DEVICE
@@ -41,7 +40,7 @@ auto GetPaddingLayout(Layout layout, uint32_t blockRows, uint32_t blockCols)
             MakeShape(blockCols, CeilDiv(layout.shape(1), blockCols)));
         auto stride = MakeStride(
             MakeStride(
-                static_cast<int64_t>(blockCols), 
+                static_cast<int64_t>(blockCols),
                 static_cast<int64_t>(blockRows) * RoundUp(layout.shape(1), blockCols)
             ),
             MakeStride(Int<1>{}, static_cast<int64_t>(blockRows) * blockCols)
@@ -53,7 +52,7 @@ auto GetPaddingLayout(Layout layout, uint32_t blockRows, uint32_t blockCols)
         auto stride = MakeStride(
             MakeStride(Int<1>{}, static_cast<int64_t>(blockRows) * blockCols),
             MakeStride(
-                static_cast<int64_t>(blockRows), 
+                static_cast<int64_t>(blockRows),
                 RoundUp(layout.shape(0), blockRows) * static_cast<int64_t>(blockCols)
             )
         );
@@ -61,11 +60,10 @@ auto GetPaddingLayout(Layout layout, uint32_t blockRows, uint32_t blockCols)
     }
 }
 
-
 struct Options {
     const std::string HELPER = "14_optimizd_matmul_tla m n k [device_id]";
 
-    MatmulCoord problemShape{128, 128, 128};
+    GemmCoord problemShape{128, 128, 128};
     int32_t deviceId{0};
 
     Options() = default;
@@ -177,7 +175,7 @@ void Run(Options const &options)
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
     uint8_t *deviceWA{nullptr};
-    if (isNeedPaddingA) {  
+    if (isNeedPaddingA) {
         ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWA), sizeWA, ACL_MEM_MALLOC_HUGE_FIRST));
     } else {
         // no need to padding A

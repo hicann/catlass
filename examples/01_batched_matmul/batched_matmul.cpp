@@ -13,14 +13,14 @@
 #include "golden.hpp"
 #include "fp16_t.h"
 
-#include "AscendCT/AscendCT.hpp"
-#include "AscendCT/arch/arch.hpp"
-#include "AscendCT/gemm/block/block_mmad.hpp"
-#include "AscendCT/gemm/block/block_swizzle.hpp"
-#include "AscendCT/gemm/dispatch_policy.hpp"
-#include "AscendCT/gemm/kernel/batched_matmul.hpp"
-#include "AscendCT/gemm/matmul_type.hpp"
-#include "AscendCT/layout/layout.hpp"
+#include "act/act.hpp"
+#include "act/arch/arch.hpp"
+#include "act/gemm/block/block_mmad.hpp"
+#include "act/gemm/block/block_swizzle.hpp"
+#include "act/gemm/dispatch_policy.hpp"
+#include "act/gemm/kernel/batched_matmul.hpp"
+#include "act/gemm/gemm_type.hpp"
+#include "act/layout/layout.hpp"
 
 #include "AscendCT/status.hpp"
 #include "AscendCT/gemm/device/matmul_universal_adapter.hpp"
@@ -101,7 +101,7 @@ void Run(Options const &options)
     uint32_t m = options.m;
     uint32_t n = options.n;
     uint32_t k = options.k;
-    MatmulCoord problemShape{m, n, k};
+    GemmCoord problemShape{m, n, k};
 
     size_t lenA = static_cast<size_t>(m) * k * batchCount;
     size_t lenB = static_cast<size_t>(k) * n * batchCount;

@@ -25,10 +25,10 @@ struct Tensor {
     using Layout = Layout_;
     static constexpr AscendC::TPosition position = Position;
 
-    ASCENDCT_HOST_DEVICE constexpr
+    ACT_HOST_DEVICE constexpr
     Tensor() {}
 
-    ASCENDCT_HOST_DEVICE constexpr
+    ACT_HOST_DEVICE constexpr
     Tensor(BuiltinTensor const& builtinTensor, Layout const& layout)
         : rep_(builtinTensor, layout) {}
 
@@ -38,43 +38,43 @@ struct Tensor {
 
     static constexpr int rank  = Layout::rank;
 
-    ASCENDCT_HOST_DEVICE constexpr
+    ACT_HOST_DEVICE constexpr
     decltype(auto) tensor() const
     {
         return *this;
     }
 
-    ASCENDCT_HOST_DEVICE constexpr
+    ACT_HOST_DEVICE constexpr
     decltype(auto) data() const
     {
         return get<0>(rep_);
     }
 
-    ASCENDCT_HOST_DEVICE constexpr
+    ACT_HOST_DEVICE constexpr
     decltype(auto) data()
     {
         return get<0>(rep_);
     }
 
-    ASCENDCT_HOST_DEVICE constexpr
+    ACT_HOST_DEVICE constexpr
     decltype(auto) layout() const
     {
         return get<1>(rep_);
     }
 
-    ASCENDCT_HOST_DEVICE constexpr
+    ACT_HOST_DEVICE constexpr
     decltype(auto) shape() const
     {
         return layout().shape();
     }
 
-    ASCENDCT_HOST_DEVICE constexpr
+    ACT_HOST_DEVICE constexpr
     decltype(auto) stride() const
     {
         return layout().stride();
     }
 
-    ASCENDCT_HOST_DEVICE constexpr
+    ACT_HOST_DEVICE constexpr
     decltype(auto) orgShape() const
     {
         return layout().orgShape();
@@ -84,21 +84,21 @@ struct Tensor {
 };
 
 template <class BuiltinTensor, class Layout, AscendC::TPosition Position>
-ASCENDCT_HOST_DEVICE constexpr
+ACT_HOST_DEVICE constexpr
 auto MakeTensor(BuiltinTensor const& builtinTensor, Layout const& layout)
 {
     return Tensor<BuiltinTensor, Layout, Position>(builtinTensor, layout);
 }
 
 template <class BuiltinTensor, class Layout, class PositionType>
-ASCENDCT_HOST_DEVICE constexpr
+ACT_HOST_DEVICE constexpr
 auto MakeTensor(BuiltinTensor const& builtinTensor, Layout const& layout, PositionType)
 {
     return Tensor<BuiltinTensor, Layout, PositionType::POSITION>(builtinTensor, layout);
 }
 
 template <class Tensor, class Coord, class Shape>
-ASCENDCT_DEVICE constexpr
+ACT_DEVICE constexpr
 auto GetTile(Tensor const& tensor, Coord const& coord, Shape const& shape)
 {
     auto layout = tensor.layout();

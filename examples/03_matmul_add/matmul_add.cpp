@@ -14,18 +14,18 @@
 #include "golden.hpp"
 #include "fp16_t.h"
 
-#include "AscendCT/AscendCT.hpp"
-#include "AscendCT/arch/arch.hpp"
-#include "AscendCT/epilogue/dispatch_policy.hpp"
-#include "AscendCT/epilogue/block/block_epilogue.hpp"
-#include "AscendCT/epilogue/tile/tile_copy.hpp"
-#include "AscendCT/epilogue/tile/tile_elemwise_add.hpp"
-#include "AscendCT/gemm/block/block_mmad.hpp"
-#include "AscendCT/gemm/block/block_swizzle.hpp"
-#include "AscendCT/gemm/dispatch_policy.hpp"
-#include "AscendCT/gemm/kernel/matmul_epilogue.hpp"
-#include "AscendCT/gemm/matmul_type.hpp"
-#include "AscendCT/layout/layout.hpp"
+#include "act/act.hpp"
+#include "act/arch/arch.hpp"
+#include "act/epilogue/dispatch_policy.hpp"
+#include "act/epilogue/block/block_epilogue.hpp"
+#include "act/epilogue/tile/tile_copy.hpp"
+#include "act/epilogue/tile/tile_elemwise_add.hpp"
+#include "act/gemm/block/block_mmad.hpp"
+#include "act/gemm/block/block_swizzle.hpp"
+#include "act/gemm/dispatch_policy.hpp"
+#include "act/gemm/kernel/matmul_epilogue.hpp"
+#include "act/gemm/gemm_type.hpp"
+#include "act/layout/layout.hpp"
 
 #include "AscendCT/status.hpp"
 #include "AscendCT/gemm/device/matmul_universal_adapter.hpp"
@@ -38,7 +38,7 @@ using fp16_t = op::fp16_t;
 struct Options {
     const std::string HELPER = "03_matmul_add m n k [device_id]";
 
-    MatmulCoord problemShape{128, 128, 128};
+    GemmCoord problemShape{128, 128, 128};
     int32_t deviceId{0};
 
     Options() = default;

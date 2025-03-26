@@ -1,16 +1,17 @@
-# AscendC templates
-## AscendC模板库简介
-AscendC templates，中文名为AscendC模板库，是一个聚焦于提供高性能矩阵乘类算子基础模板的代码库。  
+# Ascend C Templates
+## Ascend C模板库简介
+Ascend C Templates，中文名为Ascend C模板库，是一个聚焦于提供高性能矩阵乘类算子基础模板的代码库。  
 
 通过抽象分层的方式将矩阵类算子代码模板化。算子计算逻辑可以进行白盒化组装，让算子代码可复用，可替换，可局部修改。针对昇腾硬件特点进行设计，可以支持复杂场景流水排布，如FA等。在上层代码逻辑共享的同时，可以支持底层硬件差异特化。 
 
-本代码仓为AscendC模板库联创代码仓。结合昇腾生态力量，共同设计研发算子模板，并提供典型算子的高性能实现代码样例
+本代码仓为Ascend C模板库联创代码仓。结合昇腾生态力量，共同设计研发算子模板，并提供典型算子的高性能实现代码样例
 
 ## 模板分层设计
 
 ![image](docs/images/api_level.png) 
 
 分层详细介绍和各层级api，见[api](docs/api.md)文档。
+补充说明：当前CANN社区版/商用版版本暂不支持device层实现，device层特性需获取最新CANN POC版本。详见device-layer分支
 
 ## 目录结构说明
 详细介绍见[code_organization](docs/code_organization.md)
@@ -139,13 +140,6 @@ cd build/bin
         <td>int32</td>
     </tr>
     <tr>
-        <td>fa</td>
-        <td>half</td>
-        <td>half</td>
-        <td>（Q，V tensor）rowMajor；（K tensor） columnMajor</td>
-        <td>rowMajor</td>
-    </tr>
-    <tr>
         <td rowspan="4">optimized_matmul</td>
         <td>half</td>
         <td>half</td>
@@ -164,16 +158,12 @@ cd build/bin
         <td>int8</td>
         <td>int32</td>
     </tr>
-    <tr>
-        <td>grouped_matmul int8量化</td>
-        <td>int8</td>
-        <td>half</td>
-        <td>（A矩阵）rowMajor；（B矩阵）rowMajor/columnMajor</td>
-        <td>rowMajor</td>
-    </tr>
 </table>
 
 参考[推荐使用配置](docs/recommended_configuration.md)了解如何达到最佳性能。
+
+## 合作贡献者
+华南理工大学 陆璐教授团队
 
 ## 版权声明
 Copyright (c) 2025 Huawei Technologies Co., Ltd. 

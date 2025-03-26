@@ -16,19 +16,19 @@
 #include "golden.hpp"
 #include "bfloat16.h"
 
-#include "AscendCT/AscendCT.hpp"
-#include "AscendCT/arch/arch.hpp"
-#include "AscendCT/epilogue/block/block_epilogue.hpp"
-#include "AscendCT/epilogue/dispatch_policy.hpp"
-#include "AscendCT/epilogue/tile/tile_broadcast_mul.hpp"
-#include "AscendCT/epilogue/tile/tile_broadcast_one_blk.hpp"
-#include "AscendCT/epilogue/tile/tile_swizzle.hpp"
-#include "AscendCT/gemm/block/block_mmad.hpp"
-#include "AscendCT/gemm/block/block_swizzle.hpp"
-#include "AscendCT/gemm/dispatch_policy.hpp"
-#include "AscendCT/gemm/kernel/quant_matmul_multistage_workspace.hpp"
-#include "AscendCT/gemm/matmul_type.hpp"
-#include "AscendCT/layout/layout.hpp"
+#include "act/act.hpp"
+#include "act/arch/arch.hpp"
+#include "act/epilogue/block/block_epilogue.hpp"
+#include "act/epilogue/dispatch_policy.hpp"
+#include "act/epilogue/tile/tile_broadcast_mul.hpp"
+#include "act/epilogue/tile/tile_broadcast_one_blk.hpp"
+#include "act/epilogue/tile/tile_swizzle.hpp"
+#include "act/gemm/block/block_mmad.hpp"
+#include "act/gemm/block/block_swizzle.hpp"
+#include "act/gemm/dispatch_policy.hpp"
+#include "act/gemm/kernel/quant_matmul_multistage_workspace.hpp"
+#include "act/gemm/gemm_type.hpp"
+#include "act/layout/layout.hpp"
 
 #include "AscendCT/status.hpp"
 #include "AscendCT/gemm/device/matmul_universal_adapter.hpp"
@@ -36,13 +36,13 @@
 using namespace AscendCT;
 using bfloat16 = op::bfloat16;
 
-using L1TileShape = MatmulShape<128, 256, 512>;
+using L1TileShape = GemmShape<128, 256, 512>;
 constexpr uint32_t workspaceStages = 2;
 
 struct Options {
     const std::string HELPER = "12_quant_matmul m n k [device_id]";
 
-    MatmulCoord problemShape{128, 128, 128};
+    GemmCoord problemShape{128, 128, 128};
     int32_t deviceId{0};
 
     Options() = default;

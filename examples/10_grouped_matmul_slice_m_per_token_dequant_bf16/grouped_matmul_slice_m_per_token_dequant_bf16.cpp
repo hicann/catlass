@@ -1,0 +1,264 @@
+/*
+ * Copyright (c) 2024 Huawei Technologies Co., Ltd.
+ * This file is a part of the CANN Open Software.
+ * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
+ */
+#include <iostream>
+#include <vector>
+#include <cstdlib>
+
+#include "helper.hpp"
+#include "golden.hpp"
+#include "bfloat16.h"
+
+#include "act/act.hpp"
+#include "act/arch/arch.hpp"
+#include "act/epilogue/block/block_epilogue.hpp"
+#include "act/epilogue/dispatch_policy.hpp"
+#include "act/epilogue/tile/tile_broadcast_mul.hpp"
+#include "act/epilogue/tile/tile_broadcast_one_blk.hpp"
+#include "act/epilogue/tile/tile_swizzle.hpp"
+#include "act/gemm/block/block_mmad.hpp"
+#include "act/gemm/block/block_swizzle.hpp"
+#include "act/gemm/dispatch_policy.hpp"
+#include "act/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp"
+#include "act/gemm/gemm_type.hpp"
+#include "act/layout/layout.hpp"
+
+#include "AscendCT/status.hpp"
+#include "AscendCT/gemm/device/matmul_universal_adapter.hpp"
+
+using namespace AscendCT;
+using bfloat16 = op::bfloat16;
+
+using L1TileShape = GemmShape<128, 256, 512>;
+constexpr uint32_t workspaceStages = 2;
+
+struct Options {
+    const std::string HELPER = "10_grouped_matmul_slice_m_per_token_dequant_bf16 group_count m n k [device_id]";
+
+    uint32_t groupCount{1};
+    GemmCoord problemShape{128, 128, 128};
+    int32_t deviceId{0};
+
+    Options() = default;
+
+    int Parse(int argc, const char **argv)
+    {
+        enum ArgsIndex {
+            GROUP_COUNT_INDEX = 1,
+            M_INDEX,
+            N_INDEX,
+            K_INDEX,
+            DEVICE_ID_INDEX,
+            ARGS_MAX
+        };
+
+        if (argc > ARGS_MAX || argc <= K_INDEX) {
+            std::cerr << HELPER << std::endl;
+            return -1;
+        }
+
+        groupCount = std::atoi(argv[GROUP_COUNT_INDEX]);
+        problemShape.m() = std::atoi(argv[M_INDEX]);
+        problemShape.n() = std::atoi(argv[N_INDEX]);
+        problemShape.k() = std::atoi(argv[K_INDEX]);
+        if (argc == ARGS_MAX) {
+            deviceId = std::atoi(argv[DEVICE_ID_INDEX]);
+        }
+        return 0;
+    }
+};
+
+void Run(Options const & options)
+{
+    aclrtStream stream{nullptr};
+    ACL_CHECK(aclInit(nullptr));
+    ACL_CHECK(aclrtSetDevice(options.deviceId));
+    ACL_CHECK(aclrtCreateStream(&stream));
+
+    uint32_t problemCount = options.groupCount;
+    uint32_t m = options.problemShape.m();
+    uint32_t n = options.problemShape.n();
+    uint32_t k = options.problemShape.k();
+
+    auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
+
+    size_t lenA = static_cast<size_t>(m) * k;
+    size_t lenB = static_cast<size_t>(k) * n * problemCount;
+    size_t lenScale = static_cast<size_t>(n) * problemCount;
+    size_t lenPerTokenScale = static_cast<size_t>(m);
+    size_t lenD = static_cast<size_t>(m) * n;
+
+    size_t sizeA = lenA * sizeof(int8_t);
+    size_t sizeB = lenB * sizeof(int8_t);
+    size_t sizeScale = lenScale * sizeof(bfloat16);
+    size_t sizePerTokenScale = lenPerTokenScale * sizeof(bfloat16);
+    size_t sizeD = lenD * sizeof(bfloat16);
+    size_t sizeWorkspace;
+
+    std::vector<int8_t> hostA(lenA);
+    std::vector<int8_t> hostB(lenB);
+    std::vector<bfloat16> hostScale(lenScale);
+    std::vector<bfloat16> hostPerTokenScale(lenPerTokenScale);
+    golden::FillRandomData(hostA, -16, 16);
+    golden::FillRandomData(hostB, -16, 16);
+    golden::FillRandomData(hostScale, 0.0, 1.0);
+    golden::FillRandomData(hostPerTokenScale, 0.0, 1.0);
+    std::vector<int64_t> groupList = golden::GenerateGroupList<int64_t>(m, problemCount);
+
+    size_t sizeGroupList = problemCount * sizeof(int64_t);
+    uint8_t *deviceGroupList{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceGroupList), sizeGroupList, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMemcpy(deviceGroupList, sizeGroupList, groupList.data(), sizeGroupList, ACL_MEMCPY_HOST_TO_DEVICE));
+
+    uint8_t *deviceA{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
+
+    uint8_t *deviceB{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
+
+    uint8_t *deviceScale{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceScale), sizeScale, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMemcpy(deviceScale, sizeScale, hostScale.data(), sizeScale, ACL_MEMCPY_HOST_TO_DEVICE));
+
+    uint8_t *devicePerTokenScale{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&devicePerTokenScale), sizePerTokenScale,
+        ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMemcpy(devicePerTokenScale, sizePerTokenScale, hostPerTokenScale.data(), sizePerTokenScale,
+        ACL_MEMCPY_HOST_TO_DEVICE));
+
+    uint8_t *deviceD{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceD), sizeD, ACL_MEM_MALLOC_HUGE_FIRST));
+
+    uint8_t *deviceWorkspace{nullptr};
+
+    using LayoutB = layout::RowMajor;
+    layout::RowMajor layoutA{m, k};
+    LayoutB layoutB{k, n};
+    layout::VectorLayout layoutScale{n};
+    layout::VectorLayout layoutPerTokenScale{m};
+    layout::RowMajor layoutD{m, n};
+
+    // Prepare FFTS address
+    uint64_t fftsAddr{0};
+    uint32_t fftsLen{0};
+    RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
+
+    using ArchTag = arch::AtlasA2;
+    constexpr uint32_t preloadStages = 1;
+    constexpr uint32_t l1Stages = 2;
+    constexpr uint32_t l0AStages = 2;
+    constexpr uint32_t l0BStages = 2;
+    constexpr uint32_t l0CStages = 1;
+    constexpr bool enableUnitFlag = false;
+    constexpr bool enableShuffleK = true;
+    using DispatchPolicy = gemm::MmadAtlasA2PreloadAsyncWithCallback<
+        preloadStages,
+        l1Stages, l0AStages, l0BStages, l0CStages,
+        enableUnitFlag, enableShuffleK
+    >;
+    using L0TileShape = MatmulShape<128, 256, 128>;
+
+    using AType = gemm::MatmulType<int8_t, layout::RowMajor>;
+    using BType = gemm::MatmulType<int8_t, LayoutB>;
+    using CType = gemm::MatmulType<int32_t, layout::RowMajor>;
+
+    using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+
+    constexpr uint32_t ubStages = 2;
+    using EpilogueDispatchPolicy = epilogue::EpilogueAtlasA2PerTokenDequant<ubStages>;
+    using ScaleType = gemm::MatmulType<uint16_t, layout::VectorLayout>;
+    using PerTokenScaleType = gemm::MatmulType<uint16_t, layout::VectorLayout>;
+    using DType = gemm::MatmulType<uint16_t, layout::RowMajor>;
+
+    using RowBroadcastMulType = gemm::MatmulType<float, layout::RowMajor>;
+    using BroadcastOneBlkType = gemm::MatmulType<float, layout::RowMajor>;
+    using OneBlkColumnBroadcastMulType = gemm::MatmulType<float, layout::RowMajor>;
+
+    using EpilogueTileShape = MatrixShape<32, 256>;
+    using TileRowBroadcastMul = epilogue::tile::TileRowBroadcastMul<ArchTag, RowBroadcastMulType, EpilogueTileShape>;
+    using TileBroadcastOneBlk = epilogue::tile::TileBroadcastOneBlk<ArchTag, BroadcastOneBlkType,
+        EpilogueTileShape::ROW>;
+    using TileOneBlkColumnBroadcastMul = epilogue::tile::TileOneBlkColumnBroadcastMul<ArchTag,
+        OneBlkColumnBroadcastMulType, EpilogueTileShape>;
+    using TileCopy = epilogue::tile::TileCopyBf16<ArchTag, CType, ScaleType, PerTokenScaleType, DType>;
+    using TileScheduler = epilogue::tile::EpilogueHorizontalTileSwizzle;
+
+    using BlockEpilogue = epilogue::block::BlockEpilogue<EpilogueDispatchPolicy, CType, ScaleType, PerTokenScaleType,
+        DType, TileRowBroadcastMul, TileBroadcastOneBlk, TileOneBlkColumnBroadcastMul, TileCopy, TileScheduler>;
+
+    using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 0>;
+
+    // kernel level
+    using ElementGroupList = int64_t;
+    using MatmulKernel = gemm::kernel::GroupedMatmulMPerTokenDequantMultiStageWorkspace<BlockMmad, BlockEpilogue,
+        BlockScheduler, workspaceStages, ElementGroupList>;
+
+    using MatmulAdapter = gemm::device::MatmulUniversalAdapter<MatmulKernel>;
+    
+    MatmulKernel::Arguments arguments{
+        options.problemShape, problemCount, aicCoreNum, deviceGroupList, deviceA, deviceB, deviceScale,
+        devicePerTokenScale, deviceD};
+
+    MatmulAdapter matmul_op;
+    matmul_op.CanImplement(arguments);
+    sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
+    if (sizeWorkspace > 0) {
+        ACL_CHECK(
+            aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
+        );
+    }
+    matmul_op.Initialize(arguments, deviceWorkspace);
+    matmul_op(stream, aicCoreNum, fftsAddr);
+
+    ACL_CHECK(aclrtSynchronizeStream(stream));
+
+    std::vector<bfloat16> hostD(lenD);
+    ACL_CHECK(aclrtMemcpy(hostD.data(), sizeD, deviceD, sizeD, ACL_MEMCPY_DEVICE_TO_HOST));
+
+    std::vector<float> hostGolden(lenD);
+    golden::ComputeGroupedMatmulPerTokenDequant(
+        options.problemShape, problemCount, groupList,
+        hostA, layoutA,
+        hostB, layoutB,
+        hostScale, layoutScale,
+        hostPerTokenScale, layoutPerTokenScale,
+        hostGolden, layoutD);
+
+    std::vector<uint64_t> errorIndices = golden::CompareData(hostD, hostGolden, k);
+    if (errorIndices.empty()) {
+        std::cout << "Compare success." << std::endl;
+    } else {
+        std::cerr << "Compare failed. Error count: " << errorIndices.size() << std::endl;
+    }
+
+    ACL_CHECK(aclrtFree(deviceA));
+    ACL_CHECK(aclrtFree(deviceB));
+    ACL_CHECK(aclrtFree(deviceScale));
+    ACL_CHECK(aclrtFree(devicePerTokenScale));
+    ACL_CHECK(aclrtFree(deviceD));
+    if (sizeWorkspace > 0) {
+        ACL_CHECK(aclrtFree(deviceWorkspace));
+    }
+    ACL_CHECK(aclrtFree(deviceGroupList));
+
+    ACL_CHECK(aclrtDestroyStream(stream));
+    ACL_CHECK(aclrtResetDevice(options.deviceId));
+    ACL_CHECK(aclFinalize());
+}
+
+int main(int argc, const char **argv)
+{
+    Options options;
+    if (options.Parse(argc, argv) == 0) {
+        Run(options);
+    }
+    return 0;
+}
