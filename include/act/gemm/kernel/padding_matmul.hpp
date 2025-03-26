@@ -20,7 +20,7 @@
 #include "act/epilogue/tile/copy_gm_to_ub.hpp"
 #include "act/epilogue/tile/copy_ub_to_gm.hpp"
 
-namespace Act::Gemm::kernel {
+namespace Act::Gemm::Kernel {
 
 template<
     class ArchTag_,
@@ -471,6 +471,6 @@ private:
     Arch::Resource<ArchTag> resource;
 };
 
-} // namespace Act::Gemm::kernel
+} // namespace Act::Gemm::Kernel
 
 #endif // ACT_GEMM_KERNEL_PADDING_MATMUL_HPP

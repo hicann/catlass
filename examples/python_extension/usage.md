@@ -9,11 +9,11 @@
 ```bash
 python_extension
 ├── CMakeLists.txt              # CMake构建脚本
-├── AscendCTKernelWrapper.cpp  # 将at::Tensor类型的输入转换为kernel输入
-├── AscendCTKernelWrapper.h    # 头文件
-├── PybindBindings.cpp         # pybind绑定
+├── act_kernel_wrapper.cpp  # 将at::Tensor类型的输入转换为kernel输入
+├── act_kernel_wrapper.h    # 头文件
+├── pybind_bindings.cpp         # pybind绑定
 ├── set_env.sh                  # 环境变量设定
-└── TorchBindings.cpp          # torch绑定
+└── torch_bindings.cpp          # torch绑定
 ```
 
 ## 编译产物结构

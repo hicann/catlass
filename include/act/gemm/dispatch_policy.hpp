@@ -13,7 +13,7 @@
 
 #include "act/act.hpp"
 
-namespace Act::gemm {
+namespace Act::Gemm {
 
 // Block Mmad Policies
 
@@ -82,6 +82,6 @@ struct MmadAtlasA2PreloadAsyncWithCallback :
     > {
 };
 
-}  // namespace Act::gemm
+}  // namespace Act::Gemm
 
 #endif  // ACT_GEMM_DISPATCH_POLICY_HPP

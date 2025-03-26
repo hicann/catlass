@@ -17,7 +17,7 @@
 #include "act/gemm_coord.hpp"
 #include "act/matrix_coord.hpp"
 
-namespace Act::Gemm::kernel {
+namespace Act::Gemm::Kernel {
 
 // Template for Batched Matmul kernel. Compute batched C = A * B
 template <
@@ -129,6 +129,6 @@ public:
     void operator()<AscendC::AIV>(Params const &params) {}
 };
 
-} // namespace Act::Gemm::kernel
+} // namespace Act::Gemm::Kernel
 
 #endif // ACT_GEMM_KERNEL_BATCHED_MATMUL_HPP

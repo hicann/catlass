@@ -21,7 +21,7 @@
 #include "act/epilogue/tile/copy_ub_to_gm.hpp"
 #include "act/gemm/kernel/padding_matmul.hpp"
 
-namespace Act::Gemm::kernel {
+namespace Act::Gemm::Kernel {
 
 template <
     class BlockMmad_,
@@ -181,6 +181,6 @@ private:
     Arch::Resource<ArchTag> resource;
 };
 
-} // namespace Act::Gemm::kernel
+} // namespace Act::Gemm::Kernel
 
 #endif // ACT_GEMM_KERNEL_OPTIMIZED_MATMUL_HPP

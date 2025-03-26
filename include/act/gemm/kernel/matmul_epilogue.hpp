@@ -17,7 +17,7 @@
 #include "act/gemm_coord.hpp"
 #include "act/matrix_coord.hpp"
 
-namespace Act::Gemm::kernel {
+namespace Act::Gemm::Kernel {
 
 // Template for matmul add kernel. Compute D = A * B + X
 template <
@@ -166,6 +166,6 @@ private:
     Arch::Resource<ArchTag> resource;
 };
 
-} // namespace Act::Gemm::kernel
+} // namespace Act::Gemm::Kernel
 
 #endif // ACT_GEMM_KERNEL_MATMUL_EPILOGUE_HPP

@@ -18,7 +18,7 @@
 #include "act/arch/resource.hpp"
 #include "act/arch/cross_core_sync.hpp"
 
-namespace Act::Gemm::kernel {
+namespace Act::Gemm::Kernel {
 
 template<
     class ArchTag_,
@@ -426,6 +426,6 @@ private:
     Arch::Resource<ArchTag> resource;
 };
 
-} // namespace Act::Gemm::kernel
+} // namespace Act::Gemm::Kernel
 
 #endif // ACT_GEMM_KERNEL_OPTIMIZED_MATMUL_TLA_HPP

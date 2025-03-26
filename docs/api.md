@@ -178,7 +178,7 @@ struct MmadAtlasA2Pingpong {
 ### Epilogue
 
 
-尾处理实现了涉及输出矩阵的逐元素操作。用户可以提供自定义的尾处理，或者使用标准尾处理之一。这些尾处理位于目录include/act/epilogue/block/中，包括像`Act::Epilogue::Block::BlockEpilogue`这样的类。Ascend C Template提供的尾处理不在include/act/gemm目录下，也不在`Act::gemm`命名空间中，因为它们可以用于除Gemm之外的其他计算。
+尾处理实现了涉及输出矩阵的逐元素操作。用户可以提供自定义的尾处理，或者使用标准尾处理之一。这些尾处理位于目录include/act/epilogue/block/中，包括像`Act::Epilogue::Block::BlockEpilogue`这样的类。Ascend C Template提供的尾处理不在include/act/gemm目录下，也不在`Act::Gemm`命名空间中，因为它们可以用于除Gemm之外的其他计算。
 
 
 ## Kernel API
@@ -198,14 +198,14 @@ Kernel API 入口在
 * Block Epilogue
 
 ```cpp
-namespace Act::Gemm::kernel {
+namespace Act::Gemm::Kernel {
 template <
   class BlockMmad_,
   class BlockEpilogue_,
   class BlockScheduler_
 >
 class BasicMatmul;
-} // namespace Act::Gemm::kernel
+} // namespace Act::Gemm::Kernel
 ```
 
 注：无状态指调用者管理着内核的状态。例如，上述描述的设备API。内核仅接收输入和输出参数 (`Params`).

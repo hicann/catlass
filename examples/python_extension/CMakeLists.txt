@@ -50,8 +50,8 @@ link_directories(
 
 link_libraries(ascendct_kernel "${TORCH_LIBRARIES}" torch_npu tiling_api)
 
-pybind11_add_module(torch_ascendct SHARED AscendCTKernelWrapper.cpp PybindBindings.cpp)
-add_library(ascendct_torch SHARED AscendCTKernelWrapper.cpp TorchBindings.cpp)
+pybind11_add_module(torch_ascendct SHARED act_kernel_wrapper.cpp pybind_bindings.cpp)
+add_library(ascendct_torch SHARED act_kernel_wrapper.cpp torch_bindings.cpp)
 
 install(TARGETS torch_ascendct DESTINATION .)
 install(TARGETS ascendct_torch DESTINATION .)

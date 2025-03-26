@@ -13,7 +13,7 @@
 
 #include "act/act.hpp"
 
-namespace act {
+namespace Act {
 
 /// Statically-sized array specifying Coords within a tensor
 template <

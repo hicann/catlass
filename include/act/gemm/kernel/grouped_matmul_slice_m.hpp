@@ -19,7 +19,7 @@
 
 __gm__ struct OpSystemRunCfg g_opSystemRunCfg{L2_OFFSET};
 
-namespace Act::Gemm::kernel {
+namespace Act::Gemm::Kernel {
 
 // Template for grouped matmul kernel. Compute grouped C = A * B
 template <
@@ -175,6 +175,6 @@ public:
     }
 };
 
-} // namespace Act::Gemm::kernel
+} // namespace Act::Gemm::Kernel
 
 #endif // ACT_GEMM_KERNEL_GROUPED_MATMUL_HPP

@@ -11,9 +11,9 @@
 #ifndef ACT_GEMM_COORD_HPP
 #define ACT_GEMM_COORD_HPP
 
-#include "Act/coord.hpp"
+#include "act/coord.hpp"
 
-namespace act {
+namespace Act {
 
 /// Shape of a matrix multiply-add operation
 template <

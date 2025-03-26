@@ -8,17 +8,19 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+#include <pybind11/pybind11.h>
 #include <torch/extension.h>
+#include <torch_npu/csrc/core/npu/NPUStream.h>
 
-#include "AscendCTKernelWrapper.h"
+#include "AscendCTKernel.h"
+#include "act_kernel_wrapper.h"
 
+namespace py = pybind11;
 using namespace AscendCTKernelWrapper;
 
-at::Tensor RunBasicMatmulTorch(const at::Tensor &mat1, const at::Tensor &mat2, const std::string &outDType)
-{
-    return RunBasicMatmul(mat1.to(GetAtDevice()), mat2.to(GetAtDevice()), outDType);
+PYBIND11_MODULE(torch_ascendct, m) {
+    m.doc() = "Python bindings for AscendCTKernel";
+    m.def("basic_matmul", &RunBasicMatmul, "")
+    .def("grouped_matmul", &RunGroupedMatmul, "")
+    .def("optimized_matmul", &RunOptimizedMatmul, "");
 }
-
-TORCH_LIBRARY(AscendCTTorch, m) { m.def("basic_matmul(Tensor mat1, Tensor mat2, str c) -> Tensor"); }
-
-TORCH_LIBRARY_IMPL(AscendCTTorch, CPU, m) { m.impl("basic_matmul", &RunBasicMatmulTorch); }

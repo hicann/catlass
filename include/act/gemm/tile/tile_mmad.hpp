@@ -11,8 +11,8 @@
 #ifndef ACT_GEMM_TILE_TILE_MMAD_HPP
 #define ACT_GEMM_TILE_TILE_MMAD_HPP
 
-#include "Act/Act.hpp"
-#include "Act/gemm/helper.hpp"
+#include "act/act.hpp"
+#include "act/gemm/helper.hpp"
 
 namespace Act::Gemm::Tile {
 

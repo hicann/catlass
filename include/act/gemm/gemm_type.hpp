@@ -11,7 +11,7 @@
 #ifndef ACT_GEMM_GEMM_TYPE_HPP
 #define ACT_GEMM_GEMM_TYPE_HPP
 
-namespace Act::gemm {
+namespace Act::Gemm {
 
 ////////////////////////////////////////////////////////////////////
 
@@ -22,6 +22,6 @@ struct GemmType {
     static constexpr AscendC::TPosition POSITION = POSITION_;
 };
 
-} // namespace Act::gemm
+} // namespace Act::Gemm
 
 #endif // ACT_GEMM_GEMM_TYPE_HPP

@@ -11,12 +11,12 @@
 #ifndef ACT_EPILOGUE_BLOCK_EPILOGUE_ELEMWISE_ONE_SOURCE_HPP
 #define ACT_EPILOGUE_BLOCK_EPILOGUE_ELEMWISE_ONE_SOURCE_HPP
 
-#include "Act/Act.hpp"
-#include "Act/arch/resource.hpp"
-#include "Act/epilogue/dispatch_policy.hpp"
-#include "Act/gemm_coord.hpp"
-#include "Act/matrix_coord.hpp"
-#include "Act/layout/layout.hpp"
+#include "act/act.hpp"
+#include "act/arch/resource.hpp"
+#include "act/epilogue/dispatch_policy.hpp"
+#include "act/gemm_coord.hpp"
+#include "act/matrix_coord.hpp"
+#include "act/layout/layout.hpp"
 
 namespace Act::Epilogue::Block {
 

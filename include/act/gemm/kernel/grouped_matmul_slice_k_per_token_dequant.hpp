@@ -19,7 +19,7 @@
 #include "act/gemm_coord.hpp"
 #include "act/matrix_coord.hpp"
 
-namespace Act::Gemm::kernel {
+namespace Act::Gemm::Kernel {
 
 template <
     class BlockMmad_,
@@ -293,6 +293,6 @@ private:
     Arch::Resource<ArchTag> resource;
 };
 
-} // namespace Act::Gemm::kernel
+} // namespace Act::Gemm::Kernel
 
 #endif // ACT_GEMM_KERNEL_GROUPED_MATMUL_K_PER_TOKEN_DEQUANT_HPP
