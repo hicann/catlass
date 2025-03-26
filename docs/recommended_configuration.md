@@ -33,10 +33,6 @@
         <td>2000 < m, n, k < 65536</td>
     </tr>
     <tr>
-        <td>fa</td>
-        <td>batch <= 64; headnum = 8, 32, 128; headdim = 72, 80, 128; seq_len = [256,16384] </td>
-    </tr>
-    <tr>
         <td>grouped_matmul_per_token_dequant</td>
         <td>GroupNum = 160; m=280; n = 4096 k = 512 或 n = 512 k = 4096</td>
     </tr>
@@ -54,9 +50,6 @@ m>n时，使用GemmIdentityBlockSwizzle<3,0>。
 m<=n时，使用GemmIdentityBlockSwizzle<3,1>。
 Swizzle详细使用方法，请参考[Swizzle策略说明](swizzle_explanation.md)。
 
-FA
-- `faInfo.isTriuMask`设置为1时，开启下三角优化。当前默认开启，可参考[fa_kernel.cpp](../examples/05_fa/fa_kernel.cpp)中isTriuMask的配置。
-- 当前fa样例暂不支持moe的相关配置。
 
 注[2]：例如AI_CORE数目为20，则代码中BLOCK_NUM设置为20。AI_CORE数量可在`${CANN_INSTALL_PATH}/${arch}/data/platform_config/<chip_type>.ini`文件中的`ai_core_cnt`字段找到。`CANN_INSTALL_PATH`为cann包安装路径；`arch`为服务器cpu架构；`chip_type`为npu芯片型号，可通过执行`npu-smi info`查询。
 ## 版权声明
