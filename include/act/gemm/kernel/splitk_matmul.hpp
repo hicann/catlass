@@ -199,14 +199,14 @@ public:
         Params() {}
 
         ACT_HOST_DEVICE
-        Params(MatmulCoord const &problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_,
+        Params(GemmCoord const &problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_,
                LayoutB layoutB_, GM_ADDR ptrC_, LayoutC layoutC_, GM_ADDR ptrWorkspace_, uint32_t splitkFactor_)
             : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_), layoutB(layoutB_),
               ptrC(ptrC_), layoutC(layoutC_), ptrWorkspace(ptrWorkspace_), splitkFactor(splitkFactor_) {}
     };
 
     struct Arguments {
-        MatmulCoord problemShape;
+        GemmCoord problemShape;
         uint32_t aicCoreNum;
         size_t workspaceElementSize;
         GM_ADDR ptrA;

@@ -8,15 +8,15 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ASCENDCT_MATMUL_DEVICE_MATMUL_UNIVERSAL_ADAPTER_HPP
-#define ASCENDCT_MATMUL_DEVICE_MATMUL_UNIVERSAL_ADAPTER_HPP
+#ifndef Act_MATMUL_DEVICE_MATMUL_UNIVERSAL_ADAPTER_HPP
+#define Act_MATMUL_DEVICE_MATMUL_UNIVERSAL_ADAPTER_HPP
 
-#include "AscendCT/AscendCT.hpp"
-#include "AscendCT/status.hpp"
-#include "AscendCT/gemm/device/kernel_adapter.hpp"
+#include "act/act.hpp"
+#include "act/status.hpp"
+#include "act/gemm/device/kernel_adapter.hpp"
 
 
-namespace AscendCT::gemm::device {
+namespace Act::Gemm::device {
 
 template <class MatmulKernel>
 class MatmulUniversalAdapter {
@@ -65,14 +65,14 @@ public:
     }
 
     /// Primary run() entry point API that is static allowing users to create and manage their own params.
-    /// Supplied params struct must be construct by calling matmul kernel::to_underling arguments
+    /// Supplied params struct must be construct by calling matmul Kernel::to_underling arguments
     inline Status Run(aclrtStream stream, uint32_t blockDim, uint64_t fftsAddr)
     {
         if (fftsAddr == 0) {
-            AscendCT::KernelAdapter<MatmulKernel><<<blockDim, nullptr, stream>>>(params_);
+            Act::KernelAdapter<MatmulKernel><<<blockDim, nullptr, stream>>>(params_);
         }
         else {
-            AscendCT::KernelAdapter<MatmulKernel><<<blockDim, nullptr, stream>>>(params_, fftsAddr);
+            Act::KernelAdapter<MatmulKernel><<<blockDim, nullptr, stream>>>(params_, fftsAddr);
         }
         return Status::kSuccess;
     }
@@ -90,5 +90,5 @@ public:
 };
 ///////////////////////////////////////////////////////////////////////////////////
 
-} // namespace AscendCT::gemm::device
+} // namespace Act::Gemm::device
 #endif

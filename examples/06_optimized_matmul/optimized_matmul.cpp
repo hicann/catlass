@@ -23,13 +23,13 @@
 #include "act/gemm/kernel/optimized_matmul.hpp"
 #include "act/gemm/gemm_type.hpp"
 
-#include "AscendCT/status.hpp"
-#include "AscendCT/gemm/device/matmul_universal_adapter.hpp"
+#include "act/status.hpp"
+#include "act/gemm/device/matmul_universal_adapter.hpp"
 
-using namespace AscendCT;
+using namespace Act;
 using fp16_t = op::fp16_t;
 
-using ArchTag = arch::AtlasA2;
+using ArchTag = Arch::AtlasA2;
 
 constexpr bool ENABLE_UNIT_FLAG = true;
 constexpr bool ENABLE_SHUFFLE_K = true;
@@ -44,21 +44,21 @@ using LayoutPaddingA = std::conditional_t<std::is_same_v<LayoutA, layout::RowMaj
             layout::PaddingRowMajor, layout::PaddingColumnMajor>;
 using LayoutPaddingB = std::conditional_t<std::is_same_v<LayoutB, layout::RowMajor>,
             layout::PaddingRowMajor, layout::PaddingColumnMajor>;
-using AType = gemm::MatmulType<ElementA, LayoutA>;
-using BType = gemm::MatmulType<ElementB, LayoutB>;
-using CType = gemm::MatmulType<ElementC, LayoutC>;
-using ATypePadding = gemm::MatmulType<ElementA, LayoutPaddingA>;
-using BTypePadding = gemm::MatmulType<ElementB, LayoutPaddingB>;
-using DispatchPolicy = gemm::MmadAtlasA2Preload<ENABLE_UNIT_FLAG, ENABLE_SHUFFLE_K>;
+using AType = Gemm::GemmType<ElementA, LayoutA>;
+using BType = Gemm::GemmType<ElementB, LayoutB>;
+using CType = Gemm::GemmType<ElementC, LayoutC>;
+using ATypePadding = Gemm::GemmType<ElementA, LayoutPaddingA>;
+using BTypePadding = Gemm::GemmType<ElementB, LayoutPaddingB>;
+using DispatchPolicy = Gemm::MmadAtlasA2Preload<ENABLE_UNIT_FLAG, ENABLE_SHUFFLE_K>;
 
 // if LayoutA and LayoutB is both ColumnMajor,
-// L1TileShape using MatmulShape<256, 128, 256> can achieve better performance.
+// L1TileShape using GemmShape<256, 128, 256> can achieve better performance.
 using L1TileShape = std::conditional_t<std::is_same_v<LayoutA, layout::ColumnMajor> &&
-    std::is_same_v<LayoutB, layout::ColumnMajor>, MatmulShape<256, 128, 256>, MatmulShape<128, 256, 256>>;
+    std::is_same_v<LayoutB, layout::ColumnMajor>, GemmShape<256, 128, 256>, GemmShape<128, 256, 256>>;
 using L0TileShape = std::conditional_t<std::is_same_v<LayoutA, layout::ColumnMajor> &&
-    std::is_same_v<LayoutB, layout::ColumnMajor>, MatmulShape<256, 128, 64>, MatmulShape<128, 256, 64>>;
-using BlockScheduler30 = typename gemm::block::MatmulIdentityBlockSwizzle<3, 0>;
-using BlockScheduler31 = typename gemm::block::MatmulIdentityBlockSwizzle<3, 1>;
+    std::is_same_v<LayoutB, layout::ColumnMajor>, GemmShape<256, 128, 64>, GemmShape<128, 256, 64>>;
+using BlockScheduler30 = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
+using BlockScheduler31 = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
 using BlockEpilogue = void;
 
 struct Options {
@@ -159,9 +159,9 @@ void Run(Options const &options)
     bool isNeedPaddingB = IsNeedPadding(layoutB, align);
 
     // if LayoutA and LayoutB is both ColumnMajor,
-    // L1TileShape using MatmulShape<256, 128, 256> can achieve better performance.
+    // L1TileShape using GemmShape<256, 128, 256> can achieve better performance.
     using L1TileShape = std::conditional_t<std::is_same_v<LayoutA, layout::ColumnMajor> && 
-        std::is_same_v<LayoutB, layout::ColumnMajor>, MatmulShape<256, 128, 256>, MatmulShape<128, 256, 256>>;
+        std::is_same_v<LayoutB, layout::ColumnMajor>, GemmShape<256, 128, 256>, GemmShape<128, 256, 256>>;
 
     std::vector<fp16_t> hostA(lenA);
     std::vector<fp16_t> hostB(lenB);
@@ -189,9 +189,9 @@ void Run(Options const &options)
 
     if (m > n) {
         if (isNeedPaddingA && isNeedPaddingB) {
-            using BlockMmadOpt = gemm::block::BlockMmad<
+            using BlockMmadOpt = Gemm::Block::BlockMmad<
                 DispatchPolicy, L1TileShape, L0TileShape, ATypePadding, BTypePadding, CType>;
-            using MatmulKernel = gemm::kernel::OptimizedMatmul<BlockMmadOpt, BlockEpilogue, BlockScheduler30>;
+            using MatmulKernel = Gemm::Kernel::OptimizedMatmul<BlockMmadOpt, BlockEpilogue, BlockScheduler30>;
             LayoutPaddingA layoutWA = LayoutPaddingA(
                 layoutA.shape(0), layoutA.shape(1), L1TileShape::M, L1TileShape::K);
             LayoutPaddingB layoutWB = LayoutPaddingB(
@@ -199,49 +199,49 @@ void Run(Options const &options)
             MatmulKernel::Arguments arguments{
                 options.problemShape, align, sizeof(ElementWorkspace),
                 layoutWA, layoutWB, deviceA, deviceB, deviceC};
-            using MatmulAdapter = gemm::device::MatmulUniversalAdapter<MatmulKernel>;
+            using MatmulAdapter = Gemm::device::MatmulUniversalAdapter<MatmulKernel>;
             MatmulAdapter matmul_op;
             RunAdapter(matmul_op, arguments, stream, aicCoreNum, fftsAddr);
         } else if (isNeedPaddingA) {
-            using BlockMmadOpt = gemm::block::BlockMmad<
+            using BlockMmadOpt = Gemm::Block::BlockMmad<
                 DispatchPolicy, L1TileShape, L0TileShape, ATypePadding, BType, CType>;
-            using MatmulKernel = gemm::kernel::OptimizedMatmul<BlockMmadOpt, BlockEpilogue, BlockScheduler30>;
+            using MatmulKernel = Gemm::Kernel::OptimizedMatmul<BlockMmadOpt, BlockEpilogue, BlockScheduler30>;
             LayoutPaddingA layoutWA = LayoutPaddingA(
                 layoutA.shape(0), layoutA.shape(1), L1TileShape::M, L1TileShape::K);
             MatmulKernel::Arguments arguments{
                 options.problemShape, align, sizeof(ElementWorkspace),
                 layoutWA, layoutB, deviceA, deviceB, deviceC};
-            using MatmulAdapter = gemm::device::MatmulUniversalAdapter<MatmulKernel>;
+            using MatmulAdapter = Gemm::device::MatmulUniversalAdapter<MatmulKernel>;
             MatmulAdapter matmul_op;
             RunAdapter(matmul_op, arguments, stream, aicCoreNum, fftsAddr);
         } else if (isNeedPaddingB) {
-            using BlockMmadOpt = gemm::block::BlockMmad<
+            using BlockMmadOpt = Gemm::Block::BlockMmad<
                 DispatchPolicy, L1TileShape, L0TileShape, AType, BTypePadding, CType>;
-            using MatmulKernel = gemm::kernel::OptimizedMatmul<BlockMmadOpt, BlockEpilogue, BlockScheduler30>;
+            using MatmulKernel = Gemm::Kernel::OptimizedMatmul<BlockMmadOpt, BlockEpilogue, BlockScheduler30>;
             LayoutPaddingB layoutWB = LayoutPaddingB(
                 layoutB.shape(0), layoutB.shape(1), L1TileShape::K, L1TileShape::N);
             MatmulKernel::Arguments arguments{
                 options.problemShape, align, sizeof(ElementWorkspace),
                 layoutA, layoutWB, deviceA, deviceB, deviceC};
-            using MatmulAdapter = gemm::device::MatmulUniversalAdapter<MatmulKernel>;
+            using MatmulAdapter = Gemm::device::MatmulUniversalAdapter<MatmulKernel>;
             MatmulAdapter matmul_op;
             RunAdapter(matmul_op, arguments, stream, aicCoreNum, fftsAddr);
         } else {
-            using BlockMmadOpt = gemm::block::BlockMmad<
+            using BlockMmadOpt = Gemm::Block::BlockMmad<
                 DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
-            using MatmulKernel = gemm::kernel::OptimizedMatmul<BlockMmadOpt, BlockEpilogue, BlockScheduler30>;
+            using MatmulKernel = Gemm::Kernel::OptimizedMatmul<BlockMmadOpt, BlockEpilogue, BlockScheduler30>;
             MatmulKernel::Arguments arguments{
                 options.problemShape, align, sizeof(ElementWorkspace),
                 layoutA, layoutB, deviceA, deviceB, deviceC};
-            using MatmulAdapter = gemm::device::MatmulUniversalAdapter<MatmulKernel>;
+            using MatmulAdapter = Gemm::device::MatmulUniversalAdapter<MatmulKernel>;
             MatmulAdapter matmul_op;
             RunAdapter(matmul_op, arguments, stream, aicCoreNum, fftsAddr);
         }
     } else {
         if (isNeedPaddingA && isNeedPaddingB) {
-            using BlockMmadOpt = gemm::block::BlockMmad<
+            using BlockMmadOpt = Gemm::Block::BlockMmad<
                 DispatchPolicy, L1TileShape, L0TileShape, ATypePadding, BTypePadding, CType>;
-            using MatmulKernel = gemm::kernel::OptimizedMatmul<BlockMmadOpt, BlockEpilogue, BlockScheduler31>;
+            using MatmulKernel = Gemm::Kernel::OptimizedMatmul<BlockMmadOpt, BlockEpilogue, BlockScheduler31>;
             LayoutPaddingA layoutWA = LayoutPaddingA(
                 layoutA.shape(0), layoutA.shape(1), L1TileShape::M, L1TileShape::K);
             LayoutPaddingB layoutWB = LayoutPaddingB(
@@ -249,41 +249,41 @@ void Run(Options const &options)
             MatmulKernel::Arguments arguments{
                 options.problemShape, align, sizeof(ElementWorkspace),
                 layoutWA, layoutWB, deviceA, deviceB, deviceC};
-            using MatmulAdapter = gemm::device::MatmulUniversalAdapter<MatmulKernel>;
+            using MatmulAdapter = Gemm::device::MatmulUniversalAdapter<MatmulKernel>;
             MatmulAdapter matmul_op;
             RunAdapter(matmul_op, arguments, stream, aicCoreNum, fftsAddr);
         } else if (isNeedPaddingA) {
-            using BlockMmadOpt = gemm::block::BlockMmad<
+            using BlockMmadOpt = Gemm::Block::BlockMmad<
                 DispatchPolicy, L1TileShape, L0TileShape, ATypePadding, BType, CType>;
-            using MatmulKernel = gemm::kernel::OptimizedMatmul<BlockMmadOpt, BlockEpilogue, BlockScheduler31>;
+            using MatmulKernel = Gemm::Kernel::OptimizedMatmul<BlockMmadOpt, BlockEpilogue, BlockScheduler31>;
             LayoutPaddingA layoutWA = LayoutPaddingA(
                 layoutA.shape(0), layoutA.shape(1), L1TileShape::M, L1TileShape::K);
             MatmulKernel::Arguments arguments{
                 options.problemShape, align, sizeof(ElementWorkspace),
                 layoutWA, layoutB, deviceA, deviceB, deviceC};
-            using MatmulAdapter = gemm::device::MatmulUniversalAdapter<MatmulKernel>;
+            using MatmulAdapter = Gemm::device::MatmulUniversalAdapter<MatmulKernel>;
             MatmulAdapter matmul_op;
             RunAdapter(matmul_op, arguments, stream, aicCoreNum, fftsAddr);
         } else if (isNeedPaddingB) {
-            using BlockMmadOpt = gemm::block::BlockMmad<
+            using BlockMmadOpt = Gemm::Block::BlockMmad<
                 DispatchPolicy, L1TileShape, L0TileShape, AType, BTypePadding, CType>;
-            using MatmulKernel = gemm::kernel::OptimizedMatmul<BlockMmadOpt, BlockEpilogue, BlockScheduler31>;
+            using MatmulKernel = Gemm::Kernel::OptimizedMatmul<BlockMmadOpt, BlockEpilogue, BlockScheduler31>;
             LayoutPaddingB layoutWB = LayoutPaddingB(
                 layoutB.shape(0), layoutB.shape(1), L1TileShape::K, L1TileShape::N);
             MatmulKernel::Arguments arguments{
                 options.problemShape, align, sizeof(ElementWorkspace),
                 layoutA, layoutWB, deviceA, deviceB, deviceC};
-            using MatmulAdapter = gemm::device::MatmulUniversalAdapter<MatmulKernel>;
+            using MatmulAdapter = Gemm::device::MatmulUniversalAdapter<MatmulKernel>;
             MatmulAdapter matmul_op;
             RunAdapter(matmul_op, arguments, stream, aicCoreNum, fftsAddr);
         } else {
-            using BlockMmadOpt = gemm::block::BlockMmad<
+            using BlockMmadOpt = Gemm::Block::BlockMmad<
                 DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
-            using MatmulKernel = gemm::kernel::OptimizedMatmul<BlockMmadOpt, BlockEpilogue, BlockScheduler31>;
+            using MatmulKernel = Gemm::Kernel::OptimizedMatmul<BlockMmadOpt, BlockEpilogue, BlockScheduler31>;
             MatmulKernel::Arguments arguments{
                 options.problemShape, align, sizeof(ElementWorkspace),
                 layoutA, layoutB, deviceA, deviceB, deviceC};
-            using MatmulAdapter = gemm::device::MatmulUniversalAdapter<MatmulKernel>;
+            using MatmulAdapter = Gemm::device::MatmulUniversalAdapter<MatmulKernel>;
             MatmulAdapter matmul_op;
             RunAdapter(matmul_op, arguments, stream, aicCoreNum, fftsAddr);
         }

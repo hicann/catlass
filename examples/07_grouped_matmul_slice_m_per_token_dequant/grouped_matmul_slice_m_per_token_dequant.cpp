@@ -29,10 +29,10 @@
 #include "act/gemm/gemm_type.hpp"
 #include "act/layout/layout.hpp"
 
-#include "AscendCT/status.hpp"
-#include "AscendCT/gemm/device/matmul_universal_adapter.hpp"
+#include "act/status.hpp"
+#include "act/gemm/device/matmul_universal_adapter.hpp"
 
-using namespace AscendCT;
+using namespace Act;
 using fp16_t = op::fp16_t;
 
 
@@ -151,7 +151,7 @@ void Run(Options const & options)
 
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
-    using ArchTag = arch::AtlasA2;
+    using ArchTag = Arch::AtlasA2;
     constexpr uint32_t preloadStages = 1;
     constexpr uint32_t l1Stages = 2;
     constexpr uint32_t l0AStages = 2;
@@ -159,49 +159,49 @@ void Run(Options const & options)
     constexpr uint32_t l0CStages = 1;
     constexpr bool enableUnitFlag = false;
     constexpr bool enableShuffleK = true;
-    using DispatchPolicy = gemm::MmadAtlasA2PreloadAsync<
+    using DispatchPolicy = Gemm::MmadAtlasA2PreloadAsync<
         preloadStages,
         l1Stages, l0AStages, l0BStages, l0CStages,
         enableUnitFlag, enableShuffleK
     >;
-    using L1TileShape = MatmulShape<128, 256, 256>;
-    using L0TileShape = MatmulShape<128, 256, 64>;
+    using L1TileShape = GemmShape<128, 256, 256>;
+    using L0TileShape = GemmShape<128, 256, 64>;
 
-    using AType = gemm::MatmulType<int8_t, layout::RowMajor>;
-    using BType = gemm::MatmulType<int8_t, LayoutB>;
-    using CType = gemm::MatmulType<int32_t, layout::RowMajor>;
+    using AType = Gemm::GemmType<int8_t, layout::RowMajor>;
+    using BType = Gemm::GemmType<int8_t, LayoutB>;
+    using CType = Gemm::GemmType<int32_t, layout::RowMajor>;
 
-    using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+    using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
 
     constexpr uint32_t ubStages = 2;
-    using EpilogueDispatchPolicy = epilogue::EpilogueAtlasA2PerTokenDequant<ubStages>;
-    using ScaleType = gemm::MatmulType<float, layout::VectorLayout>;
-    using PerTokenScaleType = gemm::MatmulType<float, layout::VectorLayout>;
-    using DType = gemm::MatmulType<half, layout::RowMajor>;
+    using EpilogueDispatchPolicy = Epilogue::EpilogueAtlasA2PerTokenDequant<ubStages>;
+    using ScaleType = Gemm::GemmType<float, layout::VectorLayout>;
+    using PerTokenScaleType = Gemm::GemmType<float, layout::VectorLayout>;
+    using DType = Gemm::GemmType<half, layout::RowMajor>;
 
-    using RowBroadcastMulType = gemm::MatmulType<float, layout::RowMajor>;
-    using BroadcastOneBlkType = gemm::MatmulType<float, layout::RowMajor>;
-    using OneBlkColumnBroadcastMulType = gemm::MatmulType<float, layout::RowMajor>;
+    using RowBroadcastMulType = Gemm::GemmType<float, layout::RowMajor>;
+    using BroadcastOneBlkType = Gemm::GemmType<float, layout::RowMajor>;
+    using OneBlkColumnBroadcastMulType = Gemm::GemmType<float, layout::RowMajor>;
 
     using EpilogueTileShape = MatrixShape<32, 256>;
-    using TileRowBroadcastMul = epilogue::tile::TileRowBroadcastMul<ArchTag, RowBroadcastMulType, EpilogueTileShape>;
-    using TileBroadcastOneBlk = epilogue::tile::TileBroadcastOneBlk<ArchTag, BroadcastOneBlkType,
+    using TileRowBroadcastMul = Epilogue::Tile::TileRowBroadcastMul<ArchTag, RowBroadcastMulType, EpilogueTileShape>;
+    using TileBroadcastOneBlk = Epilogue::Tile::TileBroadcastOneBlk<ArchTag, BroadcastOneBlkType,
         EpilogueTileShape::ROW>;
-    using TileOneBlkColumnBroadcastMul = epilogue::tile::TileOneBlkColumnBroadcastMul<ArchTag,
+    using TileOneBlkColumnBroadcastMul = Epilogue::Tile::TileOneBlkColumnBroadcastMul<ArchTag,
         OneBlkColumnBroadcastMulType, EpilogueTileShape>;
-    using TileCopy = epilogue::tile::TileCopy<ArchTag, CType, ScaleType, PerTokenScaleType, DType>;
-    using TileScheduler = epilogue::tile::EpilogueHorizontalTileSwizzle;
+    using TileCopy = Epilogue::Tile::TileCopy<ArchTag, CType, ScaleType, PerTokenScaleType, DType>;
+    using TileScheduler = Epilogue::Tile::EpilogueHorizontalTileSwizzle;
 
-    using BlockEpilogue = epilogue::block::BlockEpilogue<EpilogueDispatchPolicy, CType, ScaleType, PerTokenScaleType,
+    using BlockEpilogue = Epilogue::Block::BlockEpilogue<EpilogueDispatchPolicy, CType, ScaleType, PerTokenScaleType,
         DType, TileRowBroadcastMul, TileBroadcastOneBlk, TileOneBlkColumnBroadcastMul, TileCopy, TileScheduler>;
 
-    using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 0>;
+    using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
 
     // kernel level
-    using MatmulKernel = gemm::kernel::GroupedMatmulMPerTokenDequant<BlockMmad, BlockEpilogue, BlockScheduler,
+    using MatmulKernel = Gemm::Kernel::GroupedMatmulSliceMPerTokenDequant<BlockMmad, BlockEpilogue, BlockScheduler,
         ElementGroupList>;
 
-    using MatmulAdapter = gemm::device::MatmulUniversalAdapter<MatmulKernel>;
+    using MatmulAdapter = Gemm::device::MatmulUniversalAdapter<MatmulKernel>;
     MatmulKernel::Arguments arguments{
         options.problemShape, problemCount, deviceGroupList,
         deviceA, 

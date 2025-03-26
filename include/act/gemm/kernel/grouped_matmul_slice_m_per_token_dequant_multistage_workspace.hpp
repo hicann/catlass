@@ -99,7 +99,7 @@ public:
     };
 
     struct Arguments {
-        MatmulCoord problemShape;
+        GemmCoord problemShape;
         uint32_t problemCount;
         uint32_t aicCoreNum;
         uint8_t *ptrGroupList;

@@ -23,10 +23,10 @@
 #include "act/gemm/gemm_type.hpp"
 #include "act/layout/layout.hpp"
 
-#include "AscendCT/status.hpp"
-#include "AscendCT/gemm/device/matmul_universal_adapter.hpp"
+#include "act/status.hpp"
+#include "act/gemm/device/matmul_universal_adapter.hpp"
 
-using namespace AscendCT;
+using namespace Act;
 using fp16_t = op::fp16_t;
    
 
@@ -116,25 +116,25 @@ void Run(Options const &options)
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
-    using ArchTag = arch::AtlasA2;
+    using ArchTag = Arch::AtlasA2;
     constexpr bool enableUnitFlag = true;
-    using DispatchPolicy = gemm::MmadAtlasA2Pingpong<enableUnitFlag>;
-    using L1TileShape = MatmulShape<128, 256, 256>;
-    using L0TileShape = MatmulShape<128, 256, 64>;
+    using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<enableUnitFlag>;
+    using L1TileShape = GemmShape<128, 256, 256>;
+    using L0TileShape = GemmShape<128, 256, 64>;
 
-    using AType = gemm::MatmulType<half, LayoutA>;
-    using BType = gemm::MatmulType<half, LayoutB>;
-    using CType = gemm::MatmulType<half, LayoutC>;
+    using AType = Gemm::GemmType<half, LayoutA>;
+    using BType = Gemm::GemmType<half, LayoutB>;
+    using CType = Gemm::GemmType<half, LayoutC>;
 
-    using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+    using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
     using BlockEpilogue = void;
 
     // Swizzle offset is 3 and direction is 0.
-    using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 0>;
+    using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
     // kernel level
-    using MatmulKernel = gemm::kernel::PaddingMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
+    using MatmulKernel = Gemm::Kernel::PaddingMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 
-    using MatmulAdapter = gemm::device::MatmulUniversalAdapter<MatmulKernel>;
+    using MatmulAdapter = Gemm::device::MatmulUniversalAdapter<MatmulKernel>;
     MatmulKernel::Arguments arguments{
         options.problemShape, align, sizeof(float), deviceA, deviceB, deviceC};
     MatmulAdapter matmul_op;

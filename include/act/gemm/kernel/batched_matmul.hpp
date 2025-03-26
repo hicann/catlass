@@ -61,7 +61,7 @@ public:
         {}
 
         ACT_HOST_DEVICE
-        Params(uint32_t batchCount_, MatmulCoord const &problemShape_,
+        Params(uint32_t batchCount_, GemmCoord const &problemShape_,
                GM_ADDR ptrA_, LayoutA layoutA_, int64_t strideA_,
                GM_ADDR ptrB_, LayoutB layoutB_, int64_t strideB_,
                GM_ADDR ptrC_, LayoutC layoutC_, int64_t strideC_)
@@ -73,7 +73,7 @@ public:
 
     struct Arguments {
         uint32_t batchCount;
-        MatmulCoord problemShape;
+        GemmCoord problemShape;
         GM_ADDR ptrA;
         GM_ADDR ptrB;
         GM_ADDR ptrC;
@@ -91,7 +91,7 @@ public:
 
     static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
     {
-        MatmulCoord problemShape = args.problemShape;
+        GemmCoord problemShape = args.problemShape;
         uint32_t m = problemShape.m();
         uint32_t n = problemShape.n();
         uint32_t k = problemShape.k();

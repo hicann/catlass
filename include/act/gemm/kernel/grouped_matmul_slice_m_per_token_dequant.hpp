@@ -128,7 +128,7 @@ public:
         //
         // Data members
         //
-        MatmulCoord problemShape;
+        GemmCoord problemShape;
         uint32_t problemCount;
         uint8_t *ptrGroupList;
         uint8_t *ptrA;
@@ -176,7 +176,7 @@ public:
     GroupedMatmulSliceMPerTokenDequant() {}
 
     ACT_DEVICE
-    ~GroupedMatmulMPerTokenDequant(){}
+    ~GroupedMatmulSliceMPerTokenDequant(){}
 
     template <int32_t CORE_TYPE = g_coreType>
     ACT_DEVICE

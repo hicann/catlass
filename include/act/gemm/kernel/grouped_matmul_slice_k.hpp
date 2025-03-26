@@ -75,7 +75,7 @@ public:
     };
 
     struct Arguments{
-        MatmulCoord problemShape;
+        GemmCoord problemShape;
         uint32_t problemCount;
         uint8_t *ptrGroupList;
         uint8_t *ptrA;
@@ -110,7 +110,7 @@ public:
     GroupedMatmulSliceK() {}
 
     ACT_DEVICE
-    ~GroupedMatmulK() {}
+    ~GroupedMatmulSliceK() {}
 
     template <int32_t CORE_TYPE = g_coreType>
     ACT_DEVICE

@@ -73,7 +73,7 @@ public:
         Params() {}
 
         ACT_HOST_DEVICE
-        Params(MatmulCoord const &problemShape_,
+        Params(GemmCoord const &problemShape_,
                GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_, LayoutB layoutB_, GM_ADDR ptrC_, LayoutC layoutC_,
                GM_ADDR ptrWA_, LayoutWA layoutWA_, GM_ADDR ptrWB_, LayoutWB layoutWB_)
             : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_), layoutB(layoutB_),
@@ -81,7 +81,7 @@ public:
     };
 
     struct Arguments {
-        MatmulCoord problemShape;
+        GemmCoord problemShape;
         uint32_t align;
         size_t elementSize;
         LayoutWA layoutWA;

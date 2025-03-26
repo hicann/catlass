@@ -74,7 +74,7 @@ public:
     };
  
     struct Arguments {
-        MatmulCoord problemShape;
+        GemmCoord problemShape;
         size_t elementSize;
         GM_ADDR ptrA;
         GM_ADDR ptrB;
@@ -93,7 +93,7 @@ public:
 
     static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
     {
-        MatmulCoord problemShape = args.problemShape;
+        GemmCoord problemShape = args.problemShape;
         uint32_t m = problemShape.m();
         uint32_t n = problemShape.n();
         uint32_t k = problemShape.k();

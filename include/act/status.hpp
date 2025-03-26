@@ -8,13 +8,13 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ASCENDCT_STATUS_HPP
-#define ASCENDCT_STATUS_HPP
+#ifndef Act_STATUS_HPP
+#define Act_STATUS_HPP
 
-namespace AscendCT{
+namespace Act{
 
 enum class Status{ kSuccess, kInvalid };
 
-} // namespace AscendCT
+} // namespace Act
 
-#endif // ASCENDCT_STATUS_HPP
+#endif // Act_STATUS_HPP

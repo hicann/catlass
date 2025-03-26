@@ -27,10 +27,10 @@
 #include "act/gemm/gemm_type.hpp"
 #include "act/layout/layout.hpp"
 
-#include "AscendCT/status.hpp"
-#include "AscendCT/gemm/device/matmul_universal_adapter.hpp"
+#include "act/status.hpp"
+#include "act/gemm/device/matmul_universal_adapter.hpp"
 
-using namespace AscendCT;
+using namespace Act;
 using fp16_t = op::fp16_t;
 
 
@@ -129,40 +129,40 @@ void Run(Options const &options)
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
     // Define ArchTag
-    using ArchTag = arch::AtlasA2;
+    using ArchTag = Arch::AtlasA2;
 
     // Block level, define BlockMmad
     constexpr bool enableUnitFlag = true;
-    using MmadDispatchPolicy = gemm::MmadAtlasA2Pingpong<enableUnitFlag>;
-    using L1TileShape = MatmulShape<128, 256, 256>;
-    using L0TileShape = MatmulShape<128, 256, 64>;
-    using AType = gemm::MatmulType<half, LayoutA>;
-    using BType = gemm::MatmulType<half, LayoutB>;
-    using CType = gemm::MatmulType<half, LayoutC>;
-    using BlockMmad = gemm::block::BlockMmad<MmadDispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+    using MmadDispatchPolicy = Gemm::MmadAtlasA2Pingpong<enableUnitFlag>;
+    using L1TileShape = GemmShape<128, 256, 256>;
+    using L0TileShape = GemmShape<128, 256, 64>;
+    using AType = Gemm::GemmType<half, LayoutA>;
+    using BType = Gemm::GemmType<half, LayoutB>;
+    using CType = Gemm::GemmType<half, LayoutC>;
+    using BlockMmad = Gemm::Block::BlockMmad<MmadDispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
 
     // Block level, define BlockEpilogue
-    using EpilogueDispatchPolicy = epilogue::EpilogueAtlasA2ElemWiseOneSource;
+    using EpilogueDispatchPolicy = Epilogue::EpilogueAtlasA2ElemWiseOneSource;
     using XType = CType;
     using DType = CType;
     using ComputeType = CType;
     constexpr uint32_t computeLength = 16384;
-    using TileElemWiseEpilogue = epilogue::tile::TileElemWiseAdd<ArchTag, ComputeType, computeLength>;
-    using EpilogueTileCopy = epilogue::tile::TileCopy<ArchTag, CType, XType, DType>;
-    using BlockEpilogue = epilogue::block::BlockEpilogue<EpilogueDispatchPolicy, CType, XType, DType,
+    using TileElemWiseEpilogue = Epilogue::Tile::TileElemWiseAdd<ArchTag, ComputeType, computeLength>;
+    using EpilogueTileCopy = Epilogue::Tile::TileCopy<ArchTag, CType, XType, DType>;
+    using BlockEpilogue = Epilogue::Block::BlockEpilogue<EpilogueDispatchPolicy, CType, XType, DType,
         TileElemWiseEpilogue, EpilogueTileCopy>;
 
     // Define BlockScheduler
     // Swizzle offset is 3 and direction is 0.
-    using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 0>;
+    using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
 
     // Kernel level
-    using MatmulKernel = gemm::kernel::MatmulEpilogue<BlockMmad, BlockEpilogue, BlockScheduler>;
+    using MatmulKernel = Gemm::Kernel::MatmulEpilogue<BlockMmad, BlockEpilogue, BlockScheduler>;
 
     // Prepare params
     typename MatmulKernel::Arguments arguments{
         options.problemShape, sizeof(half), deviceA, deviceB, deviceD};
-    using MatmulAdapter = gemm::device::MatmulUniversalAdapter<MatmulKernel>;
+    using MatmulAdapter = Gemm::device::MatmulUniversalAdapter<MatmulKernel>;
     MatmulAdapter matmul_op;
     size_t sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
     uint8_t *deviceWorkspace{nullptr};

@@ -15,17 +15,17 @@
 #include "golden.hpp"
 #include "fp16_t.h"
 
-#include "AscendCT/AscendCT.hpp"
-#include "AscendCT/arch/arch.hpp"
-#include "AscendCT/gemm/block/block_mmad.hpp"
-#include "AscendCT/gemm/block/block_swizzle.hpp"
-#include "AscendCT/gemm/dispatch_policy.hpp"
-#include "AscendCT/gemm/kernel/grouped_matmul_m.hpp"
-#include "AscendCT/gemm/matmul_type.hpp"
-#include "AscendCT/layout/layout.hpp"
-#include "AscendCT/status.hpp"
-#include "AscendCT/gemm/device/matmul_universal_adapter.hpp"
-using namespace AscendCT;
+#include "act/act.hpp"
+#include "act/arch/arch.hpp"
+#include "act/gemm/block/block_mmad.hpp"
+#include "act/gemm/block/block_swizzle.hpp"
+#include "act/gemm/dispatch_policy.hpp"
+#include "act/gemm/kernel/grouped_matmul_slice_m.hpp"
+#include "act/gemm/gemm_type.hpp"
+#include "act/layout/layout.hpp"
+#include "act/status.hpp"
+#include "act/gemm/device/matmul_universal_adapter.hpp"
+using namespace Act;
 using fp16_t = op::fp16_t;
 
 struct Options {
@@ -125,26 +125,26 @@ void Run(Options const &options)
         constexpr bool enableUnitFlag = true;
         constexpr bool enableShuffleK = true;
 
-        using ArchTag = arch::AtlasA2;
-        using DispatchPolicy = gemm::MmadAtlasA2PreloadAsync<
+        using ArchTag = Arch::AtlasA2;
+        using DispatchPolicy = Gemm::MmadAtlasA2PreloadAsync<
             preloadStages,
             l1Stages, l0AStages, l0BStages, l0CStages,
             enableUnitFlag, enableShuffleK
         >;
-        using L1TileShape = MatmulShape<256, 128, 256>;
-        using L0TileShape = MatmulShape<256, 128, 64>;
+        using L1TileShape = GemmShape<256, 128, 256>;
+        using L0TileShape = GemmShape<256, 128, 64>;
 
-        using AType = gemm::MatmulType<half, LayoutA>;
-        using BType = gemm::MatmulType<half, LayoutB>;
-        using CType = gemm::MatmulType<half, LayoutC>;
+        using AType = Gemm::GemmType<half, LayoutA>;
+        using BType = Gemm::GemmType<half, LayoutB>;
+        using CType = Gemm::GemmType<half, LayoutC>;
 
-        using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+        using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
         using BlockEpilogue = void;
-        using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 0>;
+        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
 
         // kernel level
-        using MatmulKernel = gemm::kernel::GroupedMatmulM<BlockMmad, BlockEpilogue, BlockScheduler, int64_t>;
-        using MatmulAdapter = gemm::device::MatmulUniversalAdapter<MatmulKernel>;
+        using MatmulKernel = Gemm::Kernel::GroupedMatmulSliceM<BlockMmad, BlockEpilogue, BlockScheduler, int64_t>;
+        using MatmulAdapter = Gemm::device::MatmulUniversalAdapter<MatmulKernel>;
         MatmulKernel::Arguments arguments{
             options.problemShape, problemCount, deviceGroupList, deviceA, deviceB, deviceC
         };
@@ -173,27 +173,27 @@ void Run(Options const &options)
         constexpr bool enableUnitFlag = true;
         constexpr bool enableShuffleK = true;
 
-        using ArchTag = arch::AtlasA2;
-        using DispatchPolicy = gemm::MmadAtlasA2PreloadAsync<
+        using ArchTag = Arch::AtlasA2;
+        using DispatchPolicy = Gemm::MmadAtlasA2PreloadAsync<
             preloadStages,
             l1Stages, l0AStages, l0BStages, l0CStages,
             enableUnitFlag, enableShuffleK
         >;
-        using L1TileShape = MatmulShape<128, 256, 256>;
-        using L0TileShape = MatmulShape<128, 256, 64>;
+        using L1TileShape = GemmShape<128, 256, 256>;
+        using L0TileShape = GemmShape<128, 256, 64>;
 
-        using AType = gemm::MatmulType<half, LayoutA>;
-        using BType = gemm::MatmulType<half, LayoutB>;
-        using CType = gemm::MatmulType<half, LayoutC>;
+        using AType = Gemm::GemmType<half, LayoutA>;
+        using BType = Gemm::GemmType<half, LayoutB>;
+        using CType = Gemm::GemmType<half, LayoutC>;
 
-        using BlockMmad = gemm::block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+        using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
         using BlockEpilogue = void;
-        using BlockScheduler = typename gemm::block::MatmulIdentityBlockSwizzle<3, 1>;
+        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
 
         // kernel level
-        using MatmulKernel = gemm::kernel::GroupedMatmulM<BlockMmad, BlockEpilogue, BlockScheduler, int64_t>;
+        using MatmulKernel = Gemm::Kernel::GroupedMatmulSliceM<BlockMmad, BlockEpilogue, BlockScheduler, int64_t>;
 
-        using MatmulAdapter = gemm::device::MatmulUniversalAdapter<MatmulKernel>;
+        using MatmulAdapter = Gemm::device::MatmulUniversalAdapter<MatmulKernel>;
 
         MatmulKernel::Arguments arguments{
             options.problemShape, problemCount, deviceGroupList, deviceA, deviceB, deviceC
