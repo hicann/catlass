@@ -18,14 +18,14 @@ include目录下的头文件是按照如下的文件层级进行组织的。
 |            |── resource.hpp   // 包含Tpipe和核内的各层级内存资源
 |        |── detail
 |            |── alignment.hpp   // 用于对齐计算的基本函数，如RoundUp，CeilDiv等
-|            |── callback.hpp
+|            |── callback.hpp    // 回调函数
 |            |── dependent_false.hpp  // 用于static_assert的检查函数的信息
 |            |── macros.hpp         // 辅助宏的定义
 |            |── tag_to_layout.hpp   // layout构造
 |        |── epilogue
 |            |── block
 |                |── block_epilogue.hpp  //block层后处理操作
-|                |── block_epilogue_elemwise_one_source.hpp 带有add操作的后处理模板实现
+|                |── block_epilogue_elemwise_one_source.hpp  //带有add操作的后处理模板实现
 |                |── block_epilogue_fa_rescal_o.hpp      //fa的recale_o后融合操作
 |                |── block_epilogue_fa_softmax.hpp   //fa的softmax后融合操作
 |                |── block_epilogue_mla_fd_rescal_o.hpp   //mla_fd的recale_o后融合操作
@@ -35,8 +35,8 @@ include目录下的头文件是按照如下的文件层级进行组织的。
 |            |── tile
 |                |── copy_gm_to_ub.hpp      // tile层gm到ub数据搬运操作实现
 |                |── copy_ub_to_gm.hpp      // tile层ub到gm数据搬运操作实现
-|                |── tile_broadcast_inplace_by_column.hpp   // 
-|                |── tile_broadcast_inplace_by_row.hpp     //
+|                |── tile_broadcast_inplace_by_column.hpp   // tile层将一列广播为矩阵
+|                |── tile_broadcast_inplace_by_row.hpp     //  tile层将一行广播为矩阵
 |                |── tile_broadcast_mul.hpp      //tile层mul计算广播操作
 |                |── tile_broadcast_one_blk.hpp // tile层单基块广播操作
 |                |── tile_cast.hpp          // cast操作后融合封装
