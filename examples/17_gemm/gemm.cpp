@@ -227,18 +227,6 @@ void Run(Options options){
     GemmAdapter gemm_op;
     gemm_op.CanImplement(arguments);
     RunAdapter(gemm_op, arguments, stream, aicCoreNum, fftsAddr);
-    // size_t sizeWorkspace = gemm_op.GetWorkspaceSize(arguments);
-    // uint8_t* deviceWorkspace = nullptr;
-    // if(sizeWorkspace > 0){
-    //     ACL_CHECK(
-    //         aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
-    // }
-    // gemm_op.Initialize(arguments, deviceWorkspace);
-    // gemm_op(stream, aicCoreNum, fftsAddr);
-    // ACL_CHECK(aclrtSynchronizeStream(stream));
-    // if (sizeWorkspace > 0) {
-    //     ACL_CHECK(aclrtFree(deviceWorkspace));
-    // }
 
     std::vector<float> hostRes(lenC);
     ACL_CHECK(aclrtMemcpy(hostRes.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));

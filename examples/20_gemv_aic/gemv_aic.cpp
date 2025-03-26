@@ -83,14 +83,6 @@ using TileScheduler = typename gemv::block::GemvIdentityBlockSwizzle<3, 0>;
 // kernle levels
 using GemvKernel = gemv::kernel::GemvEpilogue<BlockGemv, BlockEpilogue, TileScheduler>;
 
-// // Prepare params
-// typename BlockEpilogue::Params epilogueParams{alpha, beta, gmZ, layoutZ, gmZ, layoutZ};
-// typename GemvKernel::Params params{problemShape, gmX, layoutX, gmA, layoutA, gmWorkspace, epilogueParams};
-
-// // call a kernel
-// GemvKernel gemv;
-// gemv(params);
-// }
 
 typedef struct Options {
     const std::string HELPER = "20_gemv_aic m n [device_id]";
@@ -194,8 +186,6 @@ void Run(Options options) {
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceZ), sizeZ, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceZ, sizeZ, hostY.data(), sizeZ, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    // uint8_t *deviceWorkspace{nullptr};
-    // ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
     uint8_t* deviceWorkspace{nullptr};
 
     // Prepare FFTS address
@@ -210,25 +200,6 @@ void Run(Options options) {
     GemvKernel::Arguments arguments{options.problemShape, hostAlpha[0], hostBeta[0], sizeof(float), deviceX, deviceA, deviceZ};
     GemvAdapter gemv_op;
     RunAdapter(gemv_op, arguments, stream, aicCoreNum, fftsAddr);
-    // gemv_op.CanImplement(arguments);
-    // sizeWorkspace = gemv_op.GetWorkspaceSize(arguments);
-    // if (sizeWorkspace > 0) {
-    //     ACL_CHECK(
-    //         aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
-    // }
-    // gemv_op.Initialize(arguments, deviceWorkspace);
-    // gemv_op(stream, aicCoreNum, fftsAddr);
-    // ACL_CHECK(aclrtSynchronizeStream(stream));
-
-    // GemvAic<<<aicCoreNum, nullptr, stream>>>(
-    //     fftsAddr,
-    //     hostAlpha[0], hostBeta[0],
-    //     options.problemShape,
-    //     deviceA, layoutA,
-    //     deviceX, layoutX,
-    //     deviceZ, layoutZ,
-    //     deviceWorkspace);
-    // ACL_CHECK(aclrtSynchronizeStream(stream));
 
     std::vector<float> hostRes(lenZ);
     ACL_CHECK(aclrtMemcpy(hostRes.data(), sizeZ, deviceZ, sizeZ, ACL_MEMCPY_DEVICE_TO_HOST));
