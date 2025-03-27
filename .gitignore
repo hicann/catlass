@@ -42,3 +42,13 @@ __pycache__/
 # user define
 build/
 output/
+
+# sh脚本
+*.sh
+
+# log文件
+*.log
+
+# 不要的文件
+examples/21_quant_gemm/*
+examples/22_quant_gemv/*

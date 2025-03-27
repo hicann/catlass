@@ -39,49 +39,7 @@
 using namespace AscendCT;
 
 using ScalarType = float;
-using ArchTag = arch::AtlasA2;
 
-// Block level, define BlockGemv
-constexpr bool enableUnitFlag = true;
-constexpr bool enableShuffleK = true;
-using DispatchPolicy = gemm::MmadAtlasA2Preload<enableUnitFlag, enableShuffleK>;
-
-using LayoutX = layout::RowMajor;
-using LayoutA = layout::RowMajor;
-using LayoutTemp = layout::RowMajor;
-using LayoutZ = layout::VectorLayout;
-
-using L1TileShape = GemvShape<32, 512>;
-using L0TileShape = GemvShape<32, 256>;
-using AType = gemm::MatmulType<float, LayoutA>;
-using XType = gemm::MatmulType<float, LayoutX>;
-using TempType = gemm::MatmulType<float, LayoutTemp>;
-using BiasType = void;
-using TileCopy = gemv::tile::TileCopyGemvAic<typename DispatchPolicy::ArchTag, AType, XType, TempType, BiasType>;
-using TileMmad = gemm::tile::TileMmad<typename DispatchPolicy::ArchTag, XType, AType, BiasType>;
-
-using BlockGemv = gemv::block::BlockGemv<DispatchPolicy, L1TileShape, L0TileShape, AType, XType, TempType, BiasType, TileCopy, TileMmad>;
-
-// Block level, define BlockEpilogue
-using EpilogueBlockDispatchPolicy = epilogue::EpilogueAtlasA2ElemWiseOneSource;
-using YType = gemm::MatmulType<float, LayoutZ>;
-using ZType = gemm::MatmulType<float, LayoutZ>;
-using AXType = gemm::MatmulType<float, LayoutZ>;
-
-using ComputeType = AXType;
-constexpr uint32_t computeLength = 8192;
-
-using TileElemWiseAddGemv = epilogue::tile::TileElemWiseAdd<ArchTag, ComputeType, computeLength>;
-using TileElemWiseMulsGemv = epilogue::tile::TileElemWiseMuls<ArchTag, ComputeType, computeLength>;
-
-using EpilogueTileCopy = epilogue::tile::TileCopy<ArchTag, YType, AXType, ZType>;
-
-using BlockEpilogue = epilogue::block::BlockEpilogue<EpilogueBlockDispatchPolicy, AXType, YType, ZType, TileElemWiseAddGemv, TileElemWiseMulsGemv, EpilogueTileCopy>;
-
-using TileScheduler = typename gemv::block::GemvIdentityBlockSwizzle<3, 0>;
-
-// kernle levels
-using GemvKernel = gemv::kernel::GemvEpilogue<BlockGemv, BlockEpilogue, TileScheduler>;
 
 
 typedef struct Options {
@@ -194,6 +152,50 @@ void Run(Options options) {
     RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
 
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
+
+    using ArchTag = arch::AtlasA2;
+
+    // Block level, define BlockGemv
+    constexpr bool enableUnitFlag = true;
+    constexpr bool enableShuffleK = true;
+    using DispatchPolicy = gemm::MmadAtlasA2Preload<enableUnitFlag, enableShuffleK>;
+
+    using LayoutX = layout::RowMajor;
+    using LayoutA = layout::RowMajor;
+    using LayoutTemp = layout::RowMajor;
+    using LayoutZ = layout::VectorLayout;
+
+    using L1TileShape = GemvShape<32, 512>;
+    using L0TileShape = GemvShape<32, 256>;
+    using AType = gemm::MatmulType<float, LayoutA>;
+    using XType = gemm::MatmulType<float, LayoutX>;
+    using TempType = gemm::MatmulType<float, LayoutTemp>;
+    using BiasType = void;
+    using TileCopy = gemv::tile::TileCopyGemvAic<typename DispatchPolicy::ArchTag, AType, XType, TempType, BiasType>;
+    using TileMmad = gemm::tile::TileMmad<typename DispatchPolicy::ArchTag, XType, AType, BiasType>;
+
+    using BlockGemv = gemv::block::BlockGemv<DispatchPolicy, L1TileShape, L0TileShape, AType, XType, TempType, BiasType, TileCopy, TileMmad>;
+
+    // Block level, define BlockEpilogue
+    using EpilogueBlockDispatchPolicy = epilogue::EpilogueAtlasA2ElemWiseOneSource;
+    using YType = gemm::MatmulType<float, LayoutZ>;
+    using ZType = gemm::MatmulType<float, LayoutZ>;
+    using AXType = gemm::MatmulType<float, LayoutZ>;
+
+    using ComputeType = AXType;
+    constexpr uint32_t computeLength = 8192;
+
+    using TileElemWiseAddGemv = epilogue::tile::TileElemWiseAdd<ArchTag, ComputeType, computeLength>;
+    using TileElemWiseMulsGemv = epilogue::tile::TileElemWiseMuls<ArchTag, ComputeType, computeLength>;
+
+    using EpilogueTileCopy = epilogue::tile::TileCopy<ArchTag, YType, AXType, ZType>;
+
+    using BlockEpilogue = epilogue::block::BlockEpilogue<EpilogueBlockDispatchPolicy, AXType, YType, ZType, TileElemWiseAddGemv, TileElemWiseMulsGemv, EpilogueTileCopy>;
+
+    using TileScheduler = typename gemv::block::GemvIdentityBlockSwizzle<3, 0>;
+
+    // kernle levels
+    using GemvKernel = gemv::kernel::GemvEpilogue<BlockGemv, BlockEpilogue, TileScheduler>;
 
     // TODO:  use adapter to activate the kernel
     using GemvAdapter = gemv::device::GemvUniversalAdapter<GemvKernel>;
