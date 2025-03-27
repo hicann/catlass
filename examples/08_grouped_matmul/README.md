@@ -22,3 +22,22 @@ bash scripts/build.sh 08_grouped_matmul
 ```
 Compare success.
 ```
+- 运行自动寻优，
+```
+# python3 grouped_matmul_autotune.py
+```
+可能的执行结果如下，
+```
+No.0: 112.092μs, {'L1TileShape': 'GemmShape<64, 64, 64>', 'L0TileShape': 'GemmShape<64, 64, 64>'}
+No.1: 97.674μs, {'L1TileShape': 'GemmShape<64, 64, 128>', 'L0TileShape': 'GemmShape<64, 64, 64>'}
+No.3: 68.534μs, {'L1TileShape': 'GemmShape<128, 128, 128>', 'L0TileShape': 'GemmShape<128, 128, 64>'}
+No.4: 80.810μs, {'L1TileShape': 'GemmShape<128, 64, 128>', 'L0TileShape': 'GemmShape<128, 64, 64>'}
+No.2: 73.630μs, {'L1TileShape': 'GemmShape<64, 128, 128>', 'L0TileShape': 'GemmShape<64, 128, 64>'}
+Best config: No.3
+compare success.
+```
+该结果表示在`grouped_matmul_autotune.py`中预设搜索空间中的最优参数组合为：
+```
+L1TileShape: GemmShape<128, 128, 128>
+L0TileShape: GemmShape<128, 128, 64>
+```

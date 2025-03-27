@@ -108,6 +108,10 @@ Compare success.
 ### 代码样例
 完整的基础matmul样例参照[examples/00_basic_matmul/basic_matmul.cpp](../examples/00_basic_matmul/basic_matmul.cpp)。
 该示例支持A/B矩阵为rowMajor数据排布输入。
+### 性能调优
+算子的运行性能与算子定义相关，比如matmul在Kernel层算子定义中使用不同的L1TileShape和L0TileShape参数时，算子的性能会有显著差异。
+为协助开发者高效寻出目标场景下的最优参数组合，可使用mskpp库的autotune接口来实现kernel参数组合的自动寻优。
+样例代码参照[examples/00_basic_matmul/basic_matmul_autotune.py](../examples/00_basic_matmul/basic_matmul_autotune.py)。
 
 ## 版权声明
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
