@@ -24,7 +24,7 @@
 #include "act/gemm/gemm_type.hpp"
 #include "act/layout/layout.hpp"
 #include "act/status.hpp"
-#include "act/gemm/device/matmul_universal_adapter.hpp"
+#include "act/gemm/device/device_gemm.hpp"
 using namespace Act;
 using fp16_t = op::fp16_t;
 
@@ -144,7 +144,7 @@ void Run(Options const &options)
 
         // kernel level
         using MatmulKernel = Gemm::Kernel::GroupedMatmulSliceM<BlockMmad, BlockEpilogue, BlockScheduler, int64_t>;
-        using MatmulAdapter = Gemm::device::MatmulUniversalAdapter<MatmulKernel>;
+        using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
         MatmulKernel::Arguments arguments{
             options.problemShape, problemCount, deviceGroupList, deviceA, deviceB, deviceC
         };
@@ -193,7 +193,7 @@ void Run(Options const &options)
         // kernel level
         using MatmulKernel = Gemm::Kernel::GroupedMatmulSliceM<BlockMmad, BlockEpilogue, BlockScheduler, int64_t>;
 
-        using MatmulAdapter = Gemm::device::MatmulUniversalAdapter<MatmulKernel>;
+        using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
 
         MatmulKernel::Arguments arguments{
             options.problemShape, problemCount, deviceGroupList, deviceA, deviceB, deviceC

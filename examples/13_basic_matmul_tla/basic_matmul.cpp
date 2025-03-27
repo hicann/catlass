@@ -24,7 +24,7 @@
 #include "act/layout/layout.hpp"
 
 #include "act/status.hpp"
-#include "act/gemm/device/matmul_universal_adapter.hpp"
+#include "act/gemm/device/device_gemm.hpp"
 
 #include "tla/layout.hpp"
 #include "tla/tensor.hpp"
@@ -145,7 +145,7 @@ void Run(Options const &options)
         // kernel level
         using MatmulKernel = Gemm::Kernel::BasicMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler>;
 
-        using MatmulAdapter = Gemm::device::MatmulUniversalAdapter<MatmulKernel>;
+        using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
     
         MatmulKernel::Arguments arguments{
             options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC};
@@ -167,7 +167,7 @@ void Run(Options const &options)
         // kernel level
         using MatmulKernel = Gemm::Kernel::BasicMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler>;
 
-        using MatmulAdapter = Gemm::device::MatmulUniversalAdapter<MatmulKernel>;
+        using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
     
         MatmulKernel::Arguments arguments{
             options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC};

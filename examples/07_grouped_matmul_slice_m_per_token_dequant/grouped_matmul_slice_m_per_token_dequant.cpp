@@ -30,7 +30,7 @@
 #include "act/layout/layout.hpp"
 
 #include "act/status.hpp"
-#include "act/gemm/device/matmul_universal_adapter.hpp"
+#include "act/gemm/device/device_gemm.hpp"
 
 using namespace Act;
 using fp16_t = op::fp16_t;
@@ -201,7 +201,7 @@ void Run(Options const & options)
     using MatmulKernel = Gemm::Kernel::GroupedMatmulSliceMPerTokenDequant<BlockMmad, BlockEpilogue, BlockScheduler,
         ElementGroupList>;
 
-    using MatmulAdapter = Gemm::device::MatmulUniversalAdapter<MatmulKernel>;
+    using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
     MatmulKernel::Arguments arguments{
         options.problemShape, problemCount, deviceGroupList,
         deviceA, 
