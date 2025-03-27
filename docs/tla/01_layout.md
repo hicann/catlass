@@ -1,6 +1,6 @@
 # TLA Layouts
 
-这篇文档描述了昇腾算子模板库的TLA(Tensor Layout Abstraction)下的`Layout`。
+这篇文档描述了Ascend C模板库的TLA(Tensor Layout Abstraction)下的`Layout`。
 简单地讲，`Layout`提供了多维坐标与内存的映射关系。
 
 `Layout`为多维数组的访问提供了一个通用接口，它将数组元素在内存中的组织细节抽象化。这使得用户能够编写通用的多维数组访问算法，从而在布局发生变化时，无需修改用户代码。

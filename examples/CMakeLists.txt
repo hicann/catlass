@@ -59,7 +59,7 @@ foreach(EXAMPLE
     08_grouped_matmul
     09_splitk_matmul
     10_grouped_matmul_slice_m_per_token_dequant
-    11_grouped_matmul_slice_k_per_token_dequant_bf16
+    11_grouped_matmul_slice_k_per_token_dequant
     12_quant_matmul
     13_basic_matmul_tla
     14_optimized_matmul_tla

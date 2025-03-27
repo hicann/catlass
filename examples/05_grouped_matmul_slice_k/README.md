@@ -6,6 +6,8 @@
 │   ├── README.md
 │   └── grouped_matmul_slice_k.cpp # 主文件
 ```
+## 功能介绍
+该算子支持A矩阵在k轴切分，和B矩阵按照group分组进行矩阵乘
 ## 使用示例
 - 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/quickstart.md#算子编译)
 - 执行算子

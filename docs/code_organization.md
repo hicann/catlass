@@ -1,12 +1,12 @@
 # 代码组织结构
-## 昇腾算子模板库代码组织结构
-这篇文档描述了昇腾算子模板库的代码仓结构，主要包含的内容如下：
-- include包含每层分层的代码头文件
-- examples包含基于模板库的算子编程代码示例和相关组件
-- docs包含昇腾算子模板库的相关介绍文档
+## Ascend C模板库代码组织结构
+这篇文档描述了Ascend C模板库的代码仓结构，主要包含的内容如下：
+- include包含模块分层的相关实现
+- examples包含基于模板库的算子编程代码示例
+- docs包含模板库的相关介绍文档
 - scripts包含模板库样例的构建脚本
 ## include
-昇腾算子模板库是一套基于AscendC开发的算子模板库，提供昇腾硬件上Matmul算子定制化开发的极致性能。代码仓提供的能力对标硬件的不同层级展开。block层对应于NPU的单核单基块的层级，tile层对应于分片粒度的数据搬运和计算的层级，basic对应于基础API的层级。这些组件可以在相应的算子内的不同运算层级被使用。
+Ascend C模板库是一套基于Ascend C开发的算子模板库，提供昇腾硬件Gemm类算子定制化开发的极致性能。模板库的分层对应硬件的不同层级展开。block层对应于NPU的单核单基块的层级，tile层对应于分片粒度的数据搬运和计算的层级，basic对应于基础API的层级。这些组件可以在相应的算子内的不同运算层级被使用。
 include目录下的头文件是按照如下的文件层级进行组织的。
 ```
 |── include
@@ -118,11 +118,11 @@ examples文件夹下提供了当前基于分层组件所构建的示例，展示
     |── 04_padding_matmul               // padding-matmul
     |── 05_grouped_matmul_slice_k       // grouped matmul k切分
     |── 06_optimized_matmul             // 集成性能优化点matmul
-    |── 07_grouped_matmul_slice_m_per_token_dequant   // group matmul m切分量化
+    |── 07_grouped_matmul_slice_m_per_token_dequant_moe   // group matmul m切分量化,提供某些moe场景使用
     |── 08_grouped_matmul               // group matmul
     |── 09_splitk_matmul                // splitk优化 matmul
-    |── 10_grouped_matmul_slice_m_per_token_dequant_bf16 // group matmul m轴切分量化
-    |── 11_grouped_matmul_slice_k_per_token_dequant_bf16 // group matmul k轴切分量化
+    |── 10_grouped_matmul_slice_m_per_token_dequant // group matmul m轴切分量化
+    |── 11_grouped_matmul_slice_k_per_token_dequant // group matmul k轴切分量化
     |── 12_quant_matmul                // 量化matmul
     |── 13_basic_matmul_tla            // 基于tla的basic matmul
     |── 14_optimized_matmul_tla        // 基于tla的optimized matmul
@@ -146,7 +146,6 @@ docs文件夹下包含项目的所有文档。
     |—— api.md                    // api接口介绍
     |—— code_organization.md      // 文件组织介绍
     |—— quickstart.md             // 搭建指南
-    |—— recommended_configuration.md   // 推荐配置
     |—— swizzle_explanation.md         // swizzle解释
 ```
 ## scripts

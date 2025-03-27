@@ -14,8 +14,8 @@ chmod +x Ascend-cann-toolkit_<version>_linux-<arch>.run
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
 ```
 
-## 使用AscendC Templates开发Matmul算子
-本示例主要展示如何基于AscendC Templates快速搭建一个NPU上的BasicMatmul实现。示例中使用已提供的下层基础组件完成Device层和Kernel层组装，并调用算子输出结果。AscendC Templates分层示意图见[api文档](api.md)。
+## 使用Ascend C Templates开发Matmul算子
+本示例主要展示如何基于Ascend C Templates快速搭建一个NPU上的BasicMatmul实现。示例中使用已提供的下层基础组件完成Device层和Kernel层组装，并调用算子输出结果。AscendC Templates分层示意图见[api文档](api.md)。
 ### Kernel层算子定义
 Kernel层模板由Block层组件构成。这里首先定义三个Block层组件。
 `<class BlockMmad_, class BlockEpilogue_, class BlockScheduler_>`。
