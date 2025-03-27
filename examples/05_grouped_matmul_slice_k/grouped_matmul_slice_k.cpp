@@ -30,59 +30,8 @@
 using namespace Act;
 using fp16_t = op::fp16_t;
 
-template <
-    class LayoutA,
-    class LayoutB,
-    class LayoutC
->
-ACT_GLOBAL
-void GroupedMatmul(
-    GemmCoord problemShape,
-    uint32_t problemCount, GM_ADDR gmGroupList,
-    GM_ADDR gmA, LayoutA layoutA,
-    GM_ADDR gmB, LayoutB layoutB,
-    GM_ADDR gmC, LayoutC layoutC
-)
-{
-    constexpr uint32_t preloadStages = 1;
-    constexpr uint32_t l1Stages = 2;
-    constexpr uint32_t l0AStages = 4;
-    constexpr uint32_t l0BStages = 2;
-    constexpr uint32_t l0CStages = 1;
-    constexpr bool enableUnitFlag = true;
-    constexpr bool enableShuffleK = true;
-
-    using ArchTag = Arch::AtlasA2;
-    using DispatchPolicy = Gemm::MmadAtlasA2PreloadAsync<
-        preloadStages,
-        l1Stages, l0AStages, l0BStages, l0CStages,
-        enableUnitFlag, enableShuffleK
-    >;
-    using L1TileShape = GemmShape<128, 256, 256>;
-    using L0TileShape = GemmShape<128, 256, 64>;
-
-    using AType = Gemm::GemmType<half, LayoutA>;
-    using BType = Gemm::GemmType<half, LayoutB>;
-    using CType = Gemm::GemmType<half, LayoutC>;
-
-    using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
-    using BlockEpilogue = void;
-    using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
-
-    // kernel level
-    using MatmulKernel = Gemm::Kernel::GroupedMatmulSliceK<BlockMmad, BlockEpilogue, BlockScheduler, int64_t>;
-
-    typename MatmulKernel::Params params{
-        problemShape, problemCount, gmGroupList, gmA, layoutA, gmB, layoutB, gmC, layoutC
-    };
-
-    // call a kernel
-    MatmulKernel matmul;
-    matmul(params);
-}
-
 struct Options {
-    const std::string HELPER = "15_grouped_matmul_slice_k group_count m n k [device_id]";
+    const std::string HELPER = "05_grouped_matmul_slice_k group_count m n k [device_id]";
 
     uint32_t groupCount{1};
     GemmCoord problemShape{128, 128, 128};
