@@ -44,76 +44,6 @@ using bfloat16 = op::bfloat16;
 
 using ScalarType = float;
 
-// template <
-//     class LayoutA,
-//     class LayoutX,
-//     class LayoutZ>
-// ASCENDCT_GLOBAL void QuantGemv(
-    // uint64_t fftsAddr,
-    // GM_ADDR Scale, LayoutZ layoutScale,
-    // ScalarType PerTokenScale, 
-    // GM_ADDR Bias, LayoutZ layoutBias,
-    // GemvCoord problemShape, 
-    // GM_ADDR gmA, LayoutA layoutA,
-    // GM_ADDR gmX, LayoutX layoutX,
-    // GM_ADDR gmZ, LayoutZ layoutZ,
-    // GM_ADDR gmWorkspace) {
-    // Set FFTS address
-    // AscendC::SetSyncBaseAddr(fftsAddr);
-    // using ArchTag = arch::AtlasA2;
-    // using LayoutTemp = layout::RowMajor;
-
-    // // Block level, define BlockGemv
-    // constexpr bool enableUnitFlag = true;
-    // constexpr bool enableShuffleK = true;
-    // using DispatchPolicy = gemm::MmadAtlasA2Preload<enableUnitFlag, enableShuffleK>;
-    // using L1TileShape = GemvShape<32, 1024>;
-    // using L0TileShape = GemvShape<32, 512>;
-    // using AType = gemm::MatmulType<int8_t, LayoutA>;
-    // using XType = gemm::MatmulType<int8_t, LayoutX>;
-    // using TempType = gemm::MatmulType<int32_t, LayoutTemp>;
-    // using BiasType = void;
-    // using TileCopy = gemv::tile::TileCopyGemvAic<typename DispatchPolicy::ArchTag, AType, XType, TempType, BiasType>;
-    // using TileMmad = gemm::tile::TileMmad<typename DispatchPolicy::ArchTag, XType, AType, BiasType>;
-
-    // using BlockGemv = gemv::block::BlockGemv<DispatchPolicy, L1TileShape, L0TileShape, AType, XType, TempType, BiasType, TileCopy, TileMmad>;
-
-    // // Block level, define BlockEpilogue
-    // constexpr uint32_t ubStages = 2;
-    // using EpilogueDispatchPolicy = epilogue::EpilogueAtlasA2PerTokenDequant<ubStages>;
-    // using ScaleType = gemm::MatmulType<bfloat16_t, layout::VectorLayout>;
-    // using biasType = gemm::MatmulType<bfloat16_t, layout::VectorLayout>;
-
-    // using ZType = gemm::MatmulType<bfloat16_t, LayoutZ>;
-    // using AXType = gemm::MatmulType<int32_t, LayoutZ>;
-
-    // using ComputeType = gemm::MatmulType<float, LayoutZ>;
-    // constexpr uint32_t computeLength = 4096;
-
-    // using TileElemWiseAddGemv = epilogue::tile::TileElemWiseAdd<ArchTag, ComputeType, computeLength>;
-    // using TileElemWiseMulsGemv = epilogue::tile::TileElemWiseMuls<ArchTag, ComputeType, computeLength>;
-    // using RowBroadcastMulType = gemm::MatmulType<float, layout::VectorLayout>;
-
-    // using EpilogueTileShape = MatrixShape<1, 32>;
-    // using TileRowBroadcastMul = epilogue::tile::TileRowBroadcastMul<ArchTag, RowBroadcastMulType, EpilogueTileShape>;
-
-    // using EpilogueTileCopy = epilogue::tile::TileCopyBf16<ArchTag, AXType, ScaleType, biasType, ZType>;
-
-    // using BlockEpilogue = epilogue::block::BlockEpilogue<EpilogueDispatchPolicy, AXType, ScaleType, biasType, ZType, TileRowBroadcastMul, TileElemWiseAddGemv, TileElemWiseMulsGemv, EpilogueTileCopy>;
-
-    // using TileScheduler = typename gemv::block::GemvIdentityBlockSwizzle<3, 0>;
-
-    // kernle levels
-    // using GemvKernel = gemv::kernel::GemvEpilogue<BlockGemv, BlockEpilogue, TileScheduler>;
-
-    // // Prepare params
-    // typename BlockEpilogue::Params epilogueParams{Scale, layoutScale, PerTokenScale, Bias, layoutBias, gmZ, layoutZ};
-    // typename GemvKernel::Params params{problemShape, gmX, layoutX, gmA, layoutA, gmWorkspace, epilogueParams};
-
-    // call a kernel
-    // GemvKernel gemv;
-    // gemv(params);
-// }
 
 typedef struct Options {
     const std::string HELPER = "22_quant_gemv m n [device_id]";
@@ -304,17 +234,6 @@ void Run(Options options) {
     GemvKernel::Arguments arguments{options.problemShape, deviceScale, layoutScale, hostPerTokenScale[0], deviceBias, layoutBias, sizeof(int32_t), deviceX, deviceA, deviceZ, epilogueParams};
     GemvAdapter gemv_op;
     RunAdapter(gemv_op, arguments, stream, aicCoreNum, fftsAddr);
-    // QuantGemv<<<aicCoreNum, nullptr, stream>>>(
-    //     fftsAddr,
-    //     deviceScale, layoutScale,
-    //     hostPerTokenScale[0], 
-    //     deviceBias, layoutBias,
-    //     options.problemShape,
-    //     deviceA, layoutA,
-    //     deviceX, layoutX,
-    //     deviceZ, layoutZ,
-    //     deviceWorkspace);
-    // ACL_CHECK(aclrtSynchronizeStream(stream));
 
     std::vector<bfloat16> hostRes(lenZ);
     ACL_CHECK(aclrtMemcpy(hostRes.data(), sizeZ, deviceZ, sizeZ, ACL_MEMCPY_DEVICE_TO_HOST));
