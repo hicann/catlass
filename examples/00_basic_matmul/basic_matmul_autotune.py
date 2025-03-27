@@ -12,15 +12,12 @@ import numpy as np
 import mskpp
 
 sys.path.append("../")
-from common.act_type import GemmCoord, RowMajor, ColumnMajor
-import common.ascendc_runtime as ascendc_runtime
-
+from common.act_type import GemmCoord, RowMajor
 
 def get_kernel():
-    kernel_file = "optimized_matmul.cpp"
-    kernel_name = "OptimizedMatmul"
+    kernel_file = "basic_matmul.cpp"
+    kernel_name = "BasicMatmul"
     build_script = "../../scripts/jit_build.sh" # kernel compile script
-
     config = mskpp.KernelInvokeConfig(kernel_file, kernel_name)
     gen_file = mskpp.Launcher(config).code_gen()
     kernel = mskpp.compile(build_script=build_script, launch_src_file=gen_file)
@@ -28,42 +25,25 @@ def get_kernel():
 
 
 """
-To enable the autotune feature, it is required to adjust line breaks and add the "// tunable: alias" marker at
-the end of the code lines in "optimized_matmul.cpp". The marked line will be entirely replaced, e.g.
+To enable the autotune feature, it is required to add the "// tunable" marker to
+the code lines in "basic_matmul.cpp", e.g.
     ...
-    95    using L1TileShape = std::conditional_t<std::is_same_v<LayoutA, layout::ColumnMajor> &&
-    96        std::is_same_v<LayoutB, layout::ColumnMajor>,
-    97        GemmShape<256, 128, 256>, GemmShape<128, 256, 256> // tunable: alias1
-    98        >;
-    99    using L0TileShape = std::conditional_t<std::is_same_v<LayoutA, layout::ColumnMajor> &&
-    100       std::is_same_v<LayoutB, layout::ColumnMajor>,
-    101       GemmShape<256, 128, 64>, GemmShape<128, 256, 64> // tunable: alias2
-    102       >;
+    44    using L1TileShape = GemmShape<128, 256, 256>; // tunable
+    45    using L0TileShape = GemmShape<128, 256, 64>; // tunable
 """
-@mskpp.autotune(configs=[ # add and try your own config here for a better kernel performance
-    {'alias1': 'GemmShape<256, 128, 256>, GemmShape<128, 256, 256>',
-     'alias2': 'GemmShape<256, 128, 64>, GemmShape<128, 256, 64>'},
-    {'alias1': 'GemmShape<64, 256, 256>, GemmShape<256, 64, 256>',
-     'alias2': 'GemmShape<64, 256, 64>, GemmShape<256, 64, 64>'},
-], warmup=1000, repeat=10, device_ids=[1]) # set kernel warmup 1000us, avg of repeat 10 times
-def optimized_matmul(ffts_addr, problem_shape, a, layout_a, b, layout_b, c, layout_c,
-        workspace_a, workspace_b):
+@mskpp.autotune(configs=[
+    {'L1TileShape': 'GemmShape<64, 64, 64>', 'L0TileShape': 'GemmShape<64, 64, 64>'},
+    {'L1TileShape': 'GemmShape<64, 64, 128>', 'L0TileShape': 'GemmShape<64, 64, 64>'},
+    {'L1TileShape': 'GemmShape<64, 128, 128>', 'L0TileShape': 'GemmShape<64, 128, 64>'},
+    {'L1TileShape': 'GemmShape<128, 128, 128>', 'L0TileShape': 'GemmShape<128, 128, 64>'},
+    {'L1TileShape': 'GemmShape<128, 64, 128>', 'L0TileShape': 'GemmShape<128, 64, 64>'},
+], warmup=1000, repeat=10, device_ids=[1])
+def basic_matmul(problem_shape, a, layout_a, b, layout_b, c, layout_c):
     # This function's input arguments must exactly match the kernel function.
     kernel = get_kernel()
     blockdim = 20
-    return kernel[blockdim](ffts_addr, problem_shape, a, layout_a, b, layout_b, c, layout_c,
-        workspace_a, workspace_b) # invoke the kernel
+    return kernel[blockdim](problem_shape, a, layout_a, b, layout_b, c, layout_c) # invoke the kernel
 
-
-def data_compare(a, b):
-    rtol = 1.0 / 256
-    bool_matrix = np.abs(a - b) < rtol
-    result = "success" if bool_matrix.all() else "failed"
-    print("compare {}.".format(result))
-
-
-def round_up(val, align):
-    return (val + align - 1) // align * align
 
 if __name__ == "__main__":
 
@@ -71,30 +51,19 @@ if __name__ == "__main__":
     n = 512
     k = 1024
 
-    # 创建kernel入参
     problem_shape = GemmCoord(m, n, k)
     layout_a = RowMajor(m, k)
-    layout_b = ColumnMajor(k, n)
+    layout_b = RowMajor(k, n)
     layout_c = RowMajor(m, n)
 
-    align = 256
-    is_need_padding_a = True if layout_a.stride[0] < 65536 else (layout_a.stride[0] % align) != 0
-    is_need_padding_b = True if layout_b.stride[1] < 65536 else (layout_b.stride[1] % align) != 0
+    a = np.random.randint(1, 2, [m, k]).astype(np.half)
+    b = np.random.randint(1, 2, [k, n]).astype(np.half)
+    c = np.zeros([m, n]).astype(np.half)
 
-    # assume m, n, k of L1TileShape are not larger than 256
-    sizeWA = round_up(layout_a.shape[0], 256) * round_up(layout_a.shape[1], 256)
-    sizeWB = round_up(layout_b.shape[0], 256) * round_up(layout_b.shape[1], 256)
+    basic_matmul(problem_shape, a, layout_a, b, layout_b, c, layout_c)
 
-    a = np.random.randint(-5, 5, [m, k]).astype(np.half)
-    b = np.random.randint(-5, 5, [k, n]).astype(np.half)
-    c = np.zeros([m * n]).astype(np.half)
-    
-    workspace_a = np.random.randint(-5, 5, [sizeWA]).astype(np.half) if is_need_padding_a else a
-    workspace_b = np.random.randint(-5, 5, [sizeWB]).astype(np.half) if is_need_padding_b else b
-    ffts_addr, _ = ascendc_runtime.get_ascendc_sync_base_addr()
-
-    optimized_matmul(ffts_addr, problem_shape, a, layout_a, b, layout_b, c, layout_c,
-        workspace_a, workspace_b)
-
-    gen_golden = np.matmul(a, b.reshape(n, k).T).reshape([m * n])
-    data_compare(gen_golden, c)
+    # check if the output tensor c is consistent with the golden data
+    golden = np.matmul(a, b)
+    is_equal = np.array_equal(c, golden)
+    result = "success" if is_equal else "failed"
+    print("compare {}.".format(result))
