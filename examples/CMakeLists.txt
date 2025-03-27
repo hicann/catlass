@@ -55,11 +55,11 @@ foreach(EXAMPLE
     04_padding_matmul
     05_grouped_matmul_slice_k
     06_optimized_matmul
-    07_grouped_matmul_slice_m_per_token_dequant
+    07_grouped_matmul_slice_m_per_token_dequant_moe
     08_grouped_matmul
     09_splitk_matmul
-    10_grouped_matmul_slice_m_per_token_dequant_bf16
-    11_grouped_matmul_slice_k_per_token_dequant_bf16
+    10_grouped_matmul_slice_m_per_token_dequant
+    11_grouped_matmul_slice_k_per_token_dequant
     12_quant_matmul
     13_basic_matmul_tla
     14_optimized_matmul_tla

@@ -8,5 +8,5 @@
 
 act_example_add_executable(
     14_optimized_matmul_tla
-    optimized_matmul.cpp
+    optimized_matmul_tla.cpp
 )

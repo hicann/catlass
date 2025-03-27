@@ -8,5 +8,5 @@
 
 act_example_add_executable(
     13_basic_matmul_tla
-    basic_matmul.cpp
+    basic_matmul_tla.cpp
 )

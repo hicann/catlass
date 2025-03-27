@@ -1,6 +1,6 @@
 # TLA Tensors
 
-这篇文档描述了昇腾算子模板库的TLA(Tensor Layout Abstraction)下的`Tensor`。
+这篇文档描述了Ascend C模板库的TLA(Tensor Layout Abstraction)下的`Tensor`。
 
 本质上，`Tensor` （张量）表示一个多维数组。Tensor 抽象了数组元素在内存中的组织方式与存储方式的细节。这使得用户能够编写通用地访问多维数组的算法，并可根据张量的特性（traits）对算法进行特化。如张量的depth、rank、Layout、数据的类型、位置等。
 
