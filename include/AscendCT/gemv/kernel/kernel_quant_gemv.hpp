@@ -28,6 +28,7 @@ template <
     class TileScheduler_
 >
 class QuantGemv {
+public:
     using BlockGemv = BlockGemv_;
     using ArchTag = typename BlockGemv::ArchTag;
     using L1TileShape = typename BlockGemv::L1TileShape;
@@ -100,6 +101,7 @@ class QuantGemv {
         GM_ADDR ptrX;
         GM_ADDR ptrA;
         GM_ADDR ptrZ;
+        EpilogueParams epilogueParams;
     };
 
     static bool CanImplement(const Arguments &args){
@@ -118,15 +120,15 @@ class QuantGemv {
         LayoutA layoutA{m, n};
         LayoutZ layoutZ{m};
 
-        typename BlockEpilogue::Params epilogueParams{
-            reinterpret_cast<__gm__ ElementScale *>(args.ptrScale),
-            args.layoutScale,
-            PerTokenScale,
-            reinterpret_cast<__gm__ ElementBias *>(args.ptrBias),
-            args.layoutBias,
-            args.ptrZ, layoutZ};
+        // typename BlockEpilogue::Params epilogueParams{
+        //     reinterpret_cast<__gm__ ElementScale *>(args.ptrScale),
+        //     args.layoutScale,
+        //     args.PerTokenScale,
+        //     reinterpret_cast<__gm__ ElementBias *>(args.ptrBias),
+        //     args.layoutBias,
+        //     args.ptrZ, layoutZ};
 
-        Params params{problemShape, args.ptrX, layoutX, args.ptrA, layoutA, workspace, epilogueParams};
+        Params params{problemShape, args.ptrX, layoutX, args.ptrA, layoutA, workspace, args.epilogueParams};
 
         return params;
     }

@@ -11,11 +11,11 @@
  #ifndef ASCENDCT_GEMV_TILE_MATRIX_COPY_GM_TO_UB_HPP
  #define ASCENDCT_GEMV_TILE_MATRIX_COPY_GM_TO_UB_HPP
  
- #include "AscendCT/AscendCT.hpp"
- #include "AscendCT/layout/layout.hpp"
- #include "AscendCT/gemm/matmul_type.hpp"
+ #include "acot/acot.hpp"
+ #include "acot/layout/layout.hpp"
+ #include "acot/matmul/matmul_type.hpp"
  
- namespace AscendCT::gemv::tile
+ namespace acot::gemv::tile
  {
  
      template <
@@ -38,10 +38,10 @@
  
          // Mehtods
  
-         ASCENDCT_DEVICE
+         ACOT_DEVICE
          MatrixCopyGmToUB() {};
  
-         ASCENDCT_DEVICE
+         ACOT_DEVICE
          void operator()(
              AscendC::LocalTensor<Element> dstTensor,
              AscendC::GlobalTensor<Element> srcTensor,
@@ -125,10 +125,10 @@
  
          // Mehtods
  
-         ASCENDCT_DEVICE
+         ACOT_DEVICE
          MatrixCopyGmToUB() {};
  
-         ASCENDCT_DEVICE
+         ACOT_DEVICE
          void operator()(
              AscendC::LocalTensor<Element> const &dstTensor,
              AscendC::GlobalTensor<Element> const &srcTensor,
