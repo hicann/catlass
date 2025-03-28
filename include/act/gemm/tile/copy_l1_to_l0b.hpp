@@ -30,7 +30,7 @@ struct CopyL1ToL0B {
 
 /// Partial specialization for int8_t, zN in and nZ out.
 template <class ArchTag>
-struct CopyL1ToL0B<ArchTag, Gemm::GemmType<int8_t, layout::zN>> {
+struct CopyL1ToL0B<ArchTag, Gemm::GemmType<int8_t, layout::zN, AscendC::TPosition::A1>> {
     using Element = int8_t;
     using LayoutDst = layout::nZ;
     using LayoutSrc = layout::zN;
@@ -67,7 +67,7 @@ struct CopyL1ToL0B<ArchTag, Gemm::GemmType<int8_t, layout::zN>> {
 
 /// Partial specialization for zN in and nZ out.
 template <class ArchTag, class Element>
-struct CopyL1ToL0B<ArchTag, Gemm::GemmType<Element, layout::zN>> {
+struct CopyL1ToL0B<ArchTag, Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>> {
     using LayoutDst = layout::nZ;
     using LayoutSrc = layout::zN;
 
@@ -103,7 +103,7 @@ struct CopyL1ToL0B<ArchTag, Gemm::GemmType<Element, layout::zN>> {
 
 /// Partial specialization for nZ in and nZ out. (Transpose B)
 template <class ArchTag, class Element>
-struct CopyL1ToL0B<ArchTag, Gemm::GemmType<Element, layout::nZ>> {
+struct CopyL1ToL0B<ArchTag, Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::A1>> {
     using LayoutDst = layout::nZ;
     using LayoutSrc = layout::nZ;
 
