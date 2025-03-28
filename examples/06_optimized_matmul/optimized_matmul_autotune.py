@@ -13,7 +13,7 @@ import mskpp
 
 sys.path.append("../")
 from common.act_type import GemmCoord, RowMajor, ColumnMajor
-import common.ascendc_runtime as ascendc_runtime
+import common.helper as helper
 
 
 def get_kernel():
@@ -45,7 +45,7 @@ the end of the code lines in "optimized_matmul.cpp". The marked line will be ent
      'alias2': 'GemmShape<256, 128, 64>, GemmShape<128, 256, 64>'},
     {'alias1': 'GemmShape<64, 256, 256>, GemmShape<256, 64, 256>',
      'alias2': 'GemmShape<64, 256, 64>, GemmShape<256, 64, 64>'},
-], warmup=1000, repeat=10, device_ids=[1]) # set kernel warmup 1000us, avg of repeat 10 times
+], warmup=1000, repeat=10, device_ids=[0]) # set kernel warmup 1000us
 def optimized_matmul(ffts_addr, problem_shape, a, layout_a, b, layout_b, c, layout_c,
         workspace_a, workspace_b):
     # This function's input arguments must exactly match the kernel function.
@@ -91,7 +91,7 @@ if __name__ == "__main__":
     
     workspace_a = np.random.randint(-5, 5, [sizeWA]).astype(np.half) if is_need_padding_a else a
     workspace_b = np.random.randint(-5, 5, [sizeWB]).astype(np.half) if is_need_padding_b else b
-    ffts_addr, _ = ascendc_runtime.get_ascendc_sync_base_addr()
+    ffts_addr, _ = helper.get_ascendc_sync_base_addr()
 
     optimized_matmul(ffts_addr, problem_shape, a, layout_a, b, layout_b, c, layout_c,
         workspace_a, workspace_b)

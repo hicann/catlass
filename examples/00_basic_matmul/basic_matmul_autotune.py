@@ -25,19 +25,19 @@ def get_kernel():
 
 
 """
-To enable the autotune feature, it is required to add the "// tunable" marker to
-the code lines in "basic_matmul.cpp", e.g.
+To enable the autotune feature, it is required to add the "// tunable" marker at the end of
+the code lines in "basic_matmul.cpp" to replace the original shape, e.g.
     ...
     44    using L1TileShape = GemmShape<128, 256, 256>; // tunable
     45    using L0TileShape = GemmShape<128, 256, 64>; // tunable
 """
-@mskpp.autotune(configs=[
+@mskpp.autotune(configs=[ # add and try your own config here for a better kernel performance
     {'L1TileShape': 'GemmShape<64, 64, 64>', 'L0TileShape': 'GemmShape<64, 64, 64>'},
     {'L1TileShape': 'GemmShape<64, 64, 128>', 'L0TileShape': 'GemmShape<64, 64, 64>'},
     {'L1TileShape': 'GemmShape<64, 128, 128>', 'L0TileShape': 'GemmShape<64, 128, 64>'},
     {'L1TileShape': 'GemmShape<128, 128, 128>', 'L0TileShape': 'GemmShape<128, 128, 64>'},
     {'L1TileShape': 'GemmShape<128, 64, 128>', 'L0TileShape': 'GemmShape<128, 64, 64>'},
-], warmup=1000, repeat=10, device_ids=[1])
+], warmup=1000, repeat=10, device_ids=[0]) # set kernel warmup 1000us
 def basic_matmul(problem_shape, a, layout_a, b, layout_b, c, layout_c):
     # This function's input arguments must exactly match the kernel function.
     kernel = get_kernel()

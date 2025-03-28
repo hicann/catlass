@@ -27,19 +27,19 @@ def get_kernel():
 
 
 """
-To enable the autotune feature, it is required to add the "// tunable" marker to
-the code lines in "grouped_matmul.cpp", e.g.
+To enable the autotune feature, it is required to add the "// tunable" marker at the end of
+the code lines in "grouped_matmul.cpp" to replace the original shape, e.g.
     ...
     57    using L1TileShape = GemmShape<128, 256, 256>; // tunable
     58    using L0TileShape = GemmShape<128, 256, 64>; // tunable
 """
-@mskpp.autotune(configs=[
+@mskpp.autotune(configs=[ # add and try your own config here for a better kernel performance
     {'L1TileShape': 'GemmShape<64, 64, 64>', 'L0TileShape': 'GemmShape<64, 64, 64>'},
     {'L1TileShape': 'GemmShape<64, 64, 128>', 'L0TileShape': 'GemmShape<64, 64, 64>'},
     {'L1TileShape': 'GemmShape<64, 128, 128>', 'L0TileShape': 'GemmShape<64, 128, 64>'},
     {'L1TileShape': 'GemmShape<128, 128, 128>', 'L0TileShape': 'GemmShape<128, 128, 64>'},
     {'L1TileShape': 'GemmShape<128, 64, 128>', 'L0TileShape': 'GemmShape<128, 64, 64>'},
-], warmup=1000, repeat=10, device_ids=[0])
+], warmup=1000, repeat=10, device_ids=[0]) # set kernel warmup 1000us
 def grouped_matmul(problem_count, problem_shape_list,
         a, layout_a_list,
         b, layout_b_list,

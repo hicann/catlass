@@ -8,6 +8,8 @@
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 # See LICENSE in the root of the software repository for the full text of the License.
 
+# The kernel compile options in this jit-build script will be integrated in ../examples/CMakeLists.txt in the future.
+
 # default input
 LAUNCH_SRC_FILE="_gen_launch.cpp"
 OUTPUT_LIB_FILE="_gen_module.so"
@@ -32,6 +34,7 @@ bisheng -O2 -std=c++17 -xcce --cce-aicore-arch=dav-c220 \
     -mllvm -cce-aicore-record-overflow=true \
     -mllvm -cce-aicore-addr-transform \
     -mllvm -cce-aicore-dcci-insert-for-scalar=false \
+    -DL2_CACHE_HINT \
     -I$ASCEND_HOME_PATH/compiler/tikcpp \
     -I$ASCEND_HOME_PATH/compiler/tikcpp/tikcfw \
     -I$ASCEND_HOME_PATH/compiler/tikcpp/tikcfw/impl \
