@@ -317,7 +317,7 @@ struct CopyGmToL1<Arch::AtlasA2, Gemm::GemmType<Element, layout::PaddingColumnMa
 /// Partial specialization for AtlasA2, RowMajor in and RowMajor out.
 template <class Element>
 struct CopyGmToL1<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>,
-    Gemm::GemmType<Element, layout::RowMajor>> {
+    Gemm::GemmType<Element, layout::RowMajor, AscendC::TPosition::A1>> {
     using LayoutDst = layout::RowMajor;
     using LayoutSrc = layout::RowMajor;
 

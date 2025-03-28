@@ -104,22 +104,22 @@ struct L1ATypeSelector {
 
 template<class Element>
 struct L1ATypeSelector<Gemm::GemmType<Element, layout::RowMajor>> {
-    using L1AType = Gemm::GemmType<Element, layout::zN>;
+    using L1AType = Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>;
 };
 
 template<class Element>
 struct L1ATypeSelector<Gemm::GemmType<Element, layout::PaddingRowMajor>> {
-    using L1AType = Gemm::GemmType<Element, layout::zN>;
+    using L1AType = Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>;
 };
 
 template<class Element>
 struct L1ATypeSelector<Gemm::GemmType<Element, layout::ColumnMajor>> {
-    using L1AType = Gemm::GemmType<Element, layout::nZ>;
+    using L1AType = Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::A1>;
 };
 
 template<class Element>
 struct L1ATypeSelector<Gemm::GemmType<Element, layout::PaddingColumnMajor>> {
-    using L1AType = Gemm::GemmType<Element, layout::nZ>;
+    using L1AType = Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::A1>;
 };
 
 template<class GmBType>
@@ -130,27 +130,27 @@ struct L1BTypeSelector {
 
 template<class Element>
 struct L1BTypeSelector<Gemm::GemmType<Element, layout::RowMajor>> {
-    using L1BType = Gemm::GemmType<Element, layout::zN>;
+    using L1BType = Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>;
 };
 
 template<class Element>
 struct L1BTypeSelector<Gemm::GemmType<Element, layout::zN>> {
-    using L1BType = Gemm::GemmType<Element, layout::zN>;
+    using L1BType = Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>;
 };
 
 template<class Element>
 struct L1BTypeSelector<Gemm::GemmType<Element, layout::PaddingRowMajor>> {
-    using L1BType = Gemm::GemmType<Element, layout::zN>;
+    using L1BType = Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>;
 };
 
 template<class Element>
 struct L1BTypeSelector<Gemm::GemmType<Element, layout::ColumnMajor>> {
-    using L1BType = Gemm::GemmType<Element, layout::nZ>;
+    using L1BType = Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::A1>;
 };
 
 template<class Element>
 struct L1BTypeSelector<Gemm::GemmType<Element, layout::PaddingColumnMajor>> {
-    using L1BType = Gemm::GemmType<Element, layout::nZ>;
+    using L1BType = Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::A1>;
 };
 
 template<class Element, class Layout, class Enable = void>
