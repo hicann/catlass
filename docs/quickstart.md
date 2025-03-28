@@ -110,7 +110,9 @@ Compare success.
 该示例支持A/B矩阵为rowMajor数据排布输入。
 ### AutoTune
 算子的运行性能与算子定义相关，比如matmul在Kernel层算子定义中使用不同的L1TileShape和L0TileShape参数时，算子的性能会有显著差异。
-为协助开发者高效寻出目标场景下的最优参数组合，可使用mskpp库的autotune接口来实现kernel参数组合的自动寻优。
+为协助开发者高效寻出目标场景下的最优参数组合，可使用mskpp库提供的autotune接口来实现kernel参数组合的自动寻优。
+autotune接口会遍历预设的搜索空间，用备选参数替换被标记为"// tunable"的Kernel代码行中的参数，并行完成应用不同参数配置的Kernel编译与下发，
+最终展示不同参数配置下的kernel运行耗时，供开发者选出最优参数组合。
 样例代码参照[examples/00_basic_matmul/basic_matmul_autotune.py](../examples/00_basic_matmul/basic_matmul_autotune.py)。
 
 ## 版权声明
