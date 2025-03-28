@@ -35,7 +35,7 @@ No.4: 21.540μs, {'L1TileShape': 'GemmShape<128, 64, 128>', 'L0TileShape': 'Gemm
 Best config: No.2
 compare success.
 ```
-该结果表示在`optimized_matmul_autotune.py`中预设搜索空间中的最优参数组合为：
+该结果表示在`basic_matmul_autotune.py`中预设搜索空间中的最优参数组合为：
 ```
 L1TileShape: GemmShape<64, 128, 128>
 L0TileShape: GemmShape<64, 128, 64>
