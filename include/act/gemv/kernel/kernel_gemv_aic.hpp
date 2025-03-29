@@ -18,13 +18,12 @@
 #include "act/gemv_coord.hpp"
 #include "act/matrix_coord.hpp"
 
-namespace Act::Gemv::kernel {
+namespace Act::Gemv::Kernel {
 
 // tmeplate for gemv kernle, Compute z = αAx + βy
 template <
     class BlockGemv_,
-    class BlockEpilogue_,
-    class TileScheduler_
+    class BlockEpilogue_
 >
 class GemvEpilogue {
 public:
@@ -48,7 +47,6 @@ public:
 
     using ElementAccumulator = typename Gemv::helper::ElementAccumulatorSelector<ElementA, ElementX>::ElementAccumulator;
 
-    using TileScheduler = TileScheduler_;
 
     struct Params {
         // Data members
@@ -124,8 +122,6 @@ public:
     ACT_DEVICE 
     void operator()<AscendC::AIC>(Params const& params) 
     {
-        TileScheduler matmulTileScheduler(params.problemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
-        // Arch::Resource<ArchTag> resource;
         BlockGemv blockGemv(resource);
         // Represent the full gm
         AscendC::GlobalTensor<ElementX> gmX;
@@ -233,7 +229,6 @@ public:
     ACT_DEVICE 
     void operator()<AscendC::AIV>(Params const& params) 
     {
-        TileScheduler matmulTileScheduler(params.problemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
         BlockEpilogue blockEpilogue(resource, params.epilogueParams);
 
         // Represent the full gm
@@ -256,21 +251,16 @@ public:
         uint32_t coreLoops = MLoops;
 
         // Loop through the epilogue calculations of each basic block
-        // GemvCoord blockShape{L1TileShape::N, L1TileShape::M};
         layout::VectorLayout::TensorCoord blockShape{L1TileShape::M};
 
         for (uint32_t loopIdx = aicoreIndex; loopIdx < coreLoops; loopIdx += aicoreNum) {
             // Compute block location
-            // GemvCoord blockCoord = GemvCoord(0, loopIdx);
             layout::VectorLayout::TensorCoord blockCoord{loopIdx};
             uint32_t MGmActual = (loopIdx == coreLoops) ? M - loopIdx * maxMPerBlock : maxMPerBlock;
-            // uint32_t NGmActual = 1;
 
-            // GemvCoord actualBlockShape = GemvCoord(NGmActual, MGmActual);
             layout::VectorLayout::TensorCoord actualBlockShape{MGmActual};
 
             // Get the offset
-            // MatrixCoord blockOffset = blockCoord.GetCoordMN() * blockShape.GetCoordMN();
             layout::VectorLayout::TensorCoord blockOffset = blockCoord * blockShape;
 
             // Get the data and layout of y under the current basic block

@@ -21,7 +21,7 @@
 
 using namespace Act;
 
-namespace Act::Gemm::kernel{
+namespace Act::Gemm::Kernel{
 template<
     class ArchTag_,
     class Element_,
@@ -46,7 +46,7 @@ public:
     PaddingMatrix(Arch::Resource<ArchTag> &resource){
         int64_t bufferOffset = 0;
         for (uint32_t i = 0; i < BUFFER_NUM; i++) { // 
-            inputBuffer[i] = resource.ubBuf.template GetBufferByByte<Element>(bufferOffset * sizeof(Element)); // ubBuf是int8_t的内容
+            inputBuffer[i] = resource.ubBuf.template GetBufferByByte<Element>(bufferOffset * sizeof(Element));
             bufferOffset += COMPUTE_LENGTH;
         }
     }

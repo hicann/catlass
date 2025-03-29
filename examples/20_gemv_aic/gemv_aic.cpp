@@ -17,7 +17,6 @@
 #include "act/act.hpp"
 #include "act/arch/arch.hpp"
 #include "act/gemv/block/block_gemv.hpp"
-#include "act/gemv/block/block_swizzle.hpp"
 
 #include "act/gemv/kernel/kernel_gemv_aic.hpp"
 #include "act/gemv/tile/tile_copy.hpp"
@@ -192,10 +191,8 @@ void Run(Options options) {
 
     using BlockEpilogue = Epilogue::Block::BlockEpilogue<EpilogueBlockDispatchPolicy, AXType, YType, ZType, TileElemWiseAddGemv, TileElemWiseMulsGemv, EpilogueTileCopy>;
 
-    using TileScheduler = typename Gemv::Block::GemvIdentityBlockSwizzle<3, 0>;
-
     // kernle levels
-    using GemvKernel = Gemv::kernel::GemvEpilogue<BlockGemv, BlockEpilogue, TileScheduler>;
+    using GemvKernel = Gemv::Kernel::GemvEpilogue<BlockGemv, BlockEpilogue>;
 
     // TODO:  use adapter to activate the kernel
     using GemvAdapter = Gemv::Device::DeviceGemv<GemvKernel>;

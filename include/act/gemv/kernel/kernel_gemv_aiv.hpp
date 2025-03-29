@@ -15,7 +15,7 @@
  #include "act/coord.hpp"
  #include "act/gemv_coord.hpp"
 
- namespace Act::Gemv::kernel {
+ namespace Act::Gemv::Kernel {
  
  // Template for Gemv kernel. Compute Y = αA * x + βY
  template <

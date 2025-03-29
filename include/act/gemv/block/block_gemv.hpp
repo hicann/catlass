@@ -25,6 +25,5 @@ struct BlockGemv {
 
 #include "act/gemv/block/block_gemv_aiv.hpp"
 #include "act/gemv/block/block_gemv_aic.hpp"
-#include "act/gemv/block/block_swizzle.hpp"
 
 #endif

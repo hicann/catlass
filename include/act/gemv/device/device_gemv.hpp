@@ -65,7 +65,7 @@ public:
     }
 
     /// Primary run() entry point API that is static allowing users to create and manage their own params.
-    /// Supplied params struct must be construct by calling matmul kernel::to_underling arguments
+    /// Supplied params struct must be construct by calling matmul Kernel::to_underling arguments
     inline Status Run(aclrtStream stream, uint32_t blockDim, uint64_t fftsAddr)
     {
         if (fftsAddr == 0) {

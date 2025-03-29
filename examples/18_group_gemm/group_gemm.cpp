@@ -21,7 +21,7 @@
 #include "act/act.hpp"
 #include "act/arch/arch.hpp"
 #include "act/gemm/block/block_mmad.hpp"
-#include "act/gemm/kernel/kernel_groupgemm.hpp"
+#include "act/gemm/kernel/kernel_group_gemm.hpp"
 #include "act/gemm/gemm_type.hpp"
 #include "act/layout/layout.hpp"
 #include "act/gemm_coord.hpp"
@@ -41,7 +41,7 @@ using namespace Act;
 using ScalarType = float;
 
 typedef struct Options {
-    const std::string HELPER = "18_groupgemm groupCnt mlist nlist klist [deviceId]";
+    const std::string HELPER = "18_group_gemm groupCnt mlist nlist klist [deviceId]";
     uint32_t groupCnt = 8;
     std::vector<uint32_t> mList;
     std::vector<uint32_t> nList;
@@ -308,7 +308,7 @@ void Run(Options& options){
     using TileElemWistCastD = Epilogue::Tile::TileCast<ArchTag, DType, ComputeType, TileShapeCast>;
     using EpilogueTileCopy = Epilogue::Tile::TileCopy<ArchTag, CType, XType, DType>;
     using EpilogueBlock = Epilogue::Block::BlockEpilogue<EpilogueBlockDispatchPolicy, CType, XType, DType, TileElemWiseAddGemm, TileElemWiseMulsGemm, TileElemWistCastC, TileElemWistCastD, EpilogueTileCopy>;
-    using GroupGemmKernel = Gemm::kernel::KernelGroupGemm<GemmBlock, EpilogueBlock>;
+    using GroupGemmKernel = Gemm::Kernel::KernelGroupGemm<GemmBlock, EpilogueBlock>;
     typename GroupGemmKernel::Arguments arguments{groupCnt, problemShapeListDevice, (uint8_t*)deviceAlpha, (uint8_t*)deviceBeta, (uint8_t*)deviceA, layoutAListDevice,
         (uint8_t*)deviceB, layoutBListDevice, (uint8_t*)gmWorkspace, layoutCListDevice, (uint8_t*)deviceWA, layoutWAListDevice, (uint8_t*)deviceWB, layoutWBListDevice,
         (uint8_t*)deviceC, (uint8_t*)deviceC};

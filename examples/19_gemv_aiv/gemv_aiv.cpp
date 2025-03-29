@@ -187,7 +187,7 @@ void Run(Options options){
     uint32_t maxSplict = 20;
     uint32_t const SPLIT = getSplictNum(is_spiltk, m, n, UBTileShape::M, UBTileShape::N, maxSplict);
 
-    using TileCopy = Gemv::Tile::TileCopy<typename DispatchPolicy::ArchTag, AType, XType, YType, BiasType>;
+    using TileCopy = Gemv::Tile::TileCopyGemvAiv<typename DispatchPolicy::ArchTag, AType, XType, YType, BiasType>;
     using TileVmad = Gemv::Tile::TileVmad<typename DispatchPolicy::ArchTag, AType, XType, YType, BiasType>;
     using TileVmuls = Gemv::Tile::TileVmuls<typename DispatchPolicy::ArchTag, XType>;
 
@@ -195,7 +195,7 @@ void Run(Options options){
     using BlockEpilogue = void;
 
     // kernel level
-    using GemvKernel = Gemv::kernel::KernelGemv<GemvBlock, BlockEpilogue>;
+    using GemvKernel = Gemv::Kernel::KernelGemv<GemvBlock, BlockEpilogue>;
     typename GemvKernel::Arguments arguments{options.problemShape, hostAlpha[0], hostBeta[0], (uint8_t*)deviceA, (uint8_t*)deviceX, (uint8_t*)deviceY, (uint8_t*)deviceY_read, SPLIT};
     using GemvAdapter = Gemv::Device::DeviceGemv<GemvKernel>;
     GemvAdapter gemv_op;

@@ -1,7 +1,7 @@
-# BasicMatmul Example Readme
+# Gemm Example Readme
 ## 代码组织
 ```
-├── 03_gemm
+├── 17_gemm
 │   ├── CMakeLists.txt   # CMake编译文件
 │   ├── README.md
 │   └── gemm.cpp # 主文件
@@ -13,7 +13,7 @@
 # cd [代码仓路径]/build/bin
 # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID
 # Device ID可选，默认为0
-./03_gemm 256 512 1024 0
+./17_gemm 256 512 1024 0
 ```
 执行结果如下，说明精度比对成功。
 ```

@@ -332,7 +332,6 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::ColumnMajor>, Gemm::G
 };
 
 
-// GEMV_AIC使用到了，左向量行优先GM->L1时使用，GEMM可以后续验证是否可以直接使用
 /// Partial specialization for AtlasA2, RowMajor in and zN out.
 template <class Element>
 struct CopyGmToL1<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>> {

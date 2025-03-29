@@ -40,9 +40,9 @@ namespace Act::Gemv::Tile
         /// MatmulType type for Y vector operand
         class YType,
         /// MatmulTpe type for Bias operand
-        class BiasType = void>
-    struct TileCopy
-    {
+        class BiasType = void
+    >
+    struct TileCopyGemvAiv {
         using ElementA = typename AType::Element;
         using ElementX = typename XType::Element;
         using ElementY = typename YType::Element;
@@ -57,8 +57,6 @@ namespace Act::Gemv::Tile
     };
 
 
-    
-    /// new add
     template <
     /// Tag indicating architecture
     class ArchTag,
@@ -81,8 +79,8 @@ namespace Act::Gemv::Tile
     using L1XType = typename Gemm::helper::L1ATypeSelectorGemm<XType>::L1AType;
     using L1AType = typename Gemm::helper::L1ATypeSelectorGemm<AType>::L1AType;
 
-    using CopyGmToL1A = Gemm::Tile::CopyGmToL1<ArchTag, XType, L1XType>;   //能对应上，始终是行优先 
-    using CopyGmToL1B = Gemm::Tile::CopyGmToL1<ArchTag, AType, L1AType>;    //已检查，能对应上
+    using CopyGmToL1A = Gemm::Tile::CopyGmToL1<ArchTag, XType, L1XType>;   
+    using CopyGmToL1B = Gemm::Tile::CopyGmToL1<ArchTag, AType, L1AType>;   
 
 
     using L0AType = typename Gemm::helper::L0ATypeSelector<L1XType>::L0AType; // zN -> zZ

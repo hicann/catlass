@@ -131,11 +131,7 @@ public:
         uint32_t K = actualShape.k();
         uint32_t maxKPerBlock = L1TileShape::K;
         uint32_t KLoops = CeilDiv(K, maxKPerBlock);
-        // uint32_t startTileIdx{0};
         uint32_t startTileIdx = AscendC::GetBlockIdx();
-        // if constexpr(!std::is_same<ElementA, float>::value && ENABLE_SHUFFLE_K){
-        //     startTileIdx = AscendC::GetBlockIdx();
-        // }
         uint32_t firstTileIdx = startTileIdx % KLoops; 
         uint32_t lastTileIdx = (startTileIdx + KLoops - 1) % KLoops; 
         uint32_t KGmActual = (firstTileIdx == KLoops - 1) ? (K - firstTileIdx * maxKPerBlock) : maxKPerBlock;

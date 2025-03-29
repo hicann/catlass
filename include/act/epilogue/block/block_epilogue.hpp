@@ -34,7 +34,5 @@ class BlockEpilogue {
 #include "act/epilogue/block/block_epilogue_per_token_dequant.hpp"
 #include "act/epilogue/block/block_epilogue_gemm.hpp"
 #include "act/epilogue/block/block_epilogue_gemv.hpp"
-#include "act/epilogue/block/block_epilogue_gemm_dequant.hpp"
-#include "act/epilogue/block/block_epilogue_gemv_dequant.hpp"
 
 #endif  // ACT_EPILOGUE_BLOCK_BLOCK_EPILOGUE_HPP

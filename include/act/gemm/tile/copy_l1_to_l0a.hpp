@@ -158,7 +158,6 @@ struct CopyL1ToL0A<ArchTag, Act::Gemm::GemmType<int8_t, layout::nZ>, Act::Gemm::
 };
 
 
-//华为实现   AIC直接使用
 /// Partial specialization for zN in and zZ out.
 template <class ArchTag, class Element>
 struct CopyL1ToL0A<ArchTag, Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>> {

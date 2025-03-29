@@ -90,7 +90,7 @@ struct CopyL1ToL0B<ArchTag, Act::Gemm::GemmType<float, layout::zZ>, Act::Gemm::G
     }
 };
 
-// RowMajor conflict
+// RowMajor 
 template<class ArchTag>
 struct CopyL1ToL0B<ArchTag, Act::Gemm::GemmType<int8_t, layout::zN>, Act::Gemm::GemmType<int8_t, layout::nZ>>{
     using Element = int8_t;
@@ -125,7 +125,6 @@ struct CopyL1ToL0B<ArchTag, Act::Gemm::GemmType<int8_t, layout::zN>, Act::Gemm::
     }
 };
 
-// 模仿上面那段代码造一个L1B -> L0B rowMajor, zN-> zN
 template <class ArchTag, class Element>
 struct CopyL1ToL0B<ArchTag, Act::Gemm::GemmType<Element, layout::zN>, Act::Gemm::GemmType<Element, layout::zN>>{
     using LayoutDst = layout::zN;
@@ -148,8 +147,8 @@ struct CopyL1ToL0B<ArchTag, Act::Gemm::GemmType<Element, layout::zN>, Act::Gemm:
         AscendC::LoadData2DParams loadDataParams;
 
         loadDataParams.startIndex = 0;
-        loadDataParams.repeatTimes = static_cast<uint16_t>(layoutDst.shape(1)); // 分形间的行个数
-        loadDataParams.srcStride = layoutSrc.stride(1) / ELE_NUM_PER_FRACTAL;   // 分形间的行步长
+        loadDataParams.repeatTimes = static_cast<uint16_t>(layoutDst.shape(1));
+        loadDataParams.srcStride = layoutSrc.stride(1) / ELE_NUM_PER_FRACTAL; 
         loadDataParams.sid = 0;
         loadDataParams.dstGap = layoutDst.stride(1) / ELE_NUM_PER_FRACTAL - 1;
         loadDataParams.ifTranspose = false;
@@ -195,7 +194,6 @@ struct CopyL1ToL0B<ArchTag, Act::Gemm::GemmType<Element, layout::nZ>, Act::Gemm:
 
 
 // L1B -> L0B colummMajor, nN -> zN
-// fp16或bf16使用
 template <class ArchTag, class Element>
 struct CopyL1ToL0B<ArchTag, Act::Gemm::GemmType<Element, layout::nN>, Act::Gemm::GemmType<Element, layout::zN>>
 {
@@ -220,7 +218,7 @@ struct CopyL1ToL0B<ArchTag, Act::Gemm::GemmType<Element, layout::nN>, Act::Gemm:
 
         loadDataParams.startIndex = 0;
         loadDataParams.repeatTimes = layoutDst.shape(1) * layoutDst.shape(3);
-        loadDataParams.srcStride = layoutSrc.stride(1) / ELE_NUM_PER_FRACTAL; // 分形间的行步长
+        loadDataParams.srcStride = layoutSrc.stride(1) / ELE_NUM_PER_FRACTAL; 
         loadDataParams.sid = 0;
         loadDataParams.dstGap = layoutDst.stride(1) / ELE_NUM_PER_FRACTAL - 1;
         loadDataParams.ifTranspose = true;
@@ -231,15 +229,14 @@ struct CopyL1ToL0B<ArchTag, Act::Gemm::GemmType<Element, layout::nN>, Act::Gemm:
 
 
 // L1B -> L0B colummMajor, nN -> zN
-// fp32使用
 template <class ArchTag>
 struct CopyL1ToL0B<ArchTag, Act::Gemm::GemmType<float, layout::nN>, Act::Gemm::GemmType<float, layout::zN>>{
     using LayoutDst = layout::zN;
     using LayoutSrc = layout::nN;
     using Element = float;
 
-    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);           // 32 / 4 = 8
-    static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element); // 512 / 4 = 128
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);          
+    static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
 
     // Methods
 
@@ -255,16 +252,16 @@ struct CopyL1ToL0B<ArchTag, Act::Gemm::GemmType<float, layout::nN>, Act::Gemm::G
         AscendC::LoadData2dTransposeParams loadDataParams;
 
         loadDataParams.startIndex = 0;
-        loadDataParams.repeatTimes = static_cast<uint16_t>(CeilDiv<C0_NUM_PER_FRACTAL>(layoutDst.orgShape(0))); // 迭代次数，行方向分形数/2，因为一次迭代是对2个分形操作
-        loadDataParams.srcStride = 1;                                                                           // 相邻迭代间，源操作数前一个方块矩阵与后一个方块矩阵起始地址的间隔，单位是(16*16*4B))
-        loadDataParams.dstGap = 0;                                                                              // 相邻迭代间，目的操作数前一个迭代第一个分形的结束地址到下一个迭代第一个分形起始地址的间隔为1（单位：512B）
-        loadDataParams.dstFracGap = CeilDiv<C0_NUM_PER_FRACTAL>(layoutDst.orgShape(0)) - 1;                     // 每个迭代内目的操作数前一个分形结束地址与后一个分形起始地址的间隔为（单位：512B）。
+        loadDataParams.repeatTimes = static_cast<uint16_t>(CeilDiv<C0_NUM_PER_FRACTAL>(layoutDst.orgShape(0))); 
+        loadDataParams.srcStride = 1;                                                                         
+        loadDataParams.dstGap = 0;                                                                              
+        loadDataParams.dstFracGap = CeilDiv<C0_NUM_PER_FRACTAL>(layoutDst.orgShape(0)) - 1;                  
 
         for (uint32_t i = 0; i < CeilDiv<2 * ELE_NUM_PER_C0>(layoutDst.orgShape(1)); i++)
         {
             AscendC::LoadDataWithTranspose(
-                dstTensor[i * layoutDst.stride(3) * 2], // i * 分形间的列步长
-                srcTensor[i * layoutSrc.stride(3)],     // i * 分形间的列步长
+                dstTensor[i * layoutDst.stride(3) * 2],
+                srcTensor[i * layoutSrc.stride(3)],   
                 loadDataParams);
         }
     };
@@ -272,15 +269,14 @@ struct CopyL1ToL0B<ArchTag, Act::Gemm::GemmType<float, layout::nN>, Act::Gemm::G
 
 
 // L1B -> L0B colummMajor, nZ -> zN   int8_t
-// int8使用
 template <class ArchTag>
 struct CopyL1ToL0B<ArchTag, Act::Gemm::GemmType<int8_t, layout::nZ>, Act::Gemm::GemmType<int8_t, layout::zN>>{
     using LayoutDst = layout::zN;
     using LayoutSrc = layout::nZ;
     using Element = int8_t;
 
-    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);           // 32 / 1 = 32
-    static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element); // 512 / 1 = 512
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);         
+    static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
 
     // Methods
 
@@ -296,16 +292,16 @@ struct CopyL1ToL0B<ArchTag, Act::Gemm::GemmType<int8_t, layout::nZ>, Act::Gemm::
         AscendC::LoadData2dTransposeParams loadDataParams;
 
         loadDataParams.startIndex = 0;
-        loadDataParams.repeatTimes = static_cast<uint16_t>(CeilDiv<ELE_NUM_PER_C0>(layoutDst.orgShape(0))); // 迭代次数，行方向分形数/2，因为一次迭代是对2个分形操作
-        loadDataParams.srcStride = layoutSrc.stride(1) / ELE_NUM_PER_FRACTAL / 2;                           // 相邻迭代间，源操作数前一个方块矩阵与后一个方块矩阵起始地址的间隔，单位是(32*32*1B))
-        loadDataParams.dstGap = 1;                                                                          // 相邻迭代间，目的操作数前一个迭代第一个分形的结束地址到下一个迭代第一个分形起始地址的间隔为1（单位：512B）
-        loadDataParams.dstFracGap = 0;                                                                      // 每个迭代内目的操作数前一个分形结束地址与后一个分形起始地址的间隔为（单位：512B）。
+        loadDataParams.repeatTimes = static_cast<uint16_t>(CeilDiv<ELE_NUM_PER_C0>(layoutDst.orgShape(0))); 
+        loadDataParams.srcStride = layoutSrc.stride(1) / ELE_NUM_PER_FRACTAL / 2;                       
+        loadDataParams.dstGap = 1;                                                                        
+        loadDataParams.dstFracGap = 0;                                                                     
 
         for (uint32_t i = 0; i < CeilDiv<ELE_NUM_PER_C0>(layoutDst.orgShape(1)); i++)
         {
             AscendC::LoadDataWithTranspose(
-                dstTensor[i * layoutDst.stride(3)],     // i * 分形间的列步长
-                srcTensor[i * layoutSrc.stride(3) * 2], // i * 分形间的列步长
+                dstTensor[i * layoutDst.stride(3)],   
+                srcTensor[i * layoutSrc.stride(3) * 2], 
                 loadDataParams);
         }
     }

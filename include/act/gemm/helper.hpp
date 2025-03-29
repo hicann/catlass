@@ -153,14 +153,11 @@ struct L1BTypeSelector<Gemm::GemmType<Element, layout::PaddingColumnMajor>> {
     using L1BType = Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::A1>;
 };
 
-
-// 我们新增
 template<class GmAType>
 struct L1ATypeSelectorGemm {
     static_assert(DEPENDENT_FALSE<GmAType>,
         "Unsupported layout selector, can not find the specialization.");
 };
-// for the reason that the conflict on the idea, so i have to add some special Element to avoid conflict
 // new add
 template<class Element>
 struct L1ATypeSelectorGemm<Gemm::GemmType<Element, layout::ColumnMajor>> {
@@ -184,7 +181,6 @@ struct L1BTypeSelectorGemm {
         "Unsupported layout selector, can not find the specialization.");
 };
 
-// for the reason that the conflict on the idea, so i have to add some special Element to avoid conflict
 // new add
 template<class Element>
 struct L1BTypeSelectorGemm<Gemm::GemmType<Element, layout::RowMajor>> {
@@ -201,8 +197,6 @@ struct L1BTypeSelectorGemm<Gemm::GemmType<Element, layout::ColumnMajor>> {
     using L1BType = Gemm::GemmType<Element, layout::nZ>;
 };
 
-/// the following code is added on 2025.03.21, for the solution of conflict about the different idea on the process of trans
-/// add tutor wrq 万仁棋
 // add L0TypeSelector
 template<class L1Type>
 struct L0ATypeSelector{};
@@ -220,7 +214,6 @@ struct L0ATypeSelector<Gemm::GemmType<Element, layout::nN>>{
 };
 
 /// ColumnMajor int8_t
-///这里和gemv一样，可去掉后缀
 template<>
 struct L0ATypeSelector<Gemm::GemmType<int8_t, layout::nZ>>{
     using L0AType = Gemm::GemmType<int8_t, layout::zN>;

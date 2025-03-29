@@ -21,7 +21,7 @@
 
 using namespace Act;
 
-namespace Act::Gemm::kernel{
+namespace Act::Gemm::Kernel{
 
     namespace detail {
 
@@ -36,7 +36,7 @@ namespace Act::Gemm::kernel{
         
     }  // namespace detail
 
-// 进行padding操作
+
 template<
     class ArchTag_,
     class Element_,
@@ -52,7 +52,7 @@ public:
         ArchTag, Gemm::GemmType<Element, Act::layout::RowMajor>>;
     using CopyUb2Gm = Act::Epilogue::Tile::CopyUb2Gm<
         ArchTag, Gemm::GemmType<Element, Act::layout::RowMajor>>;
-    using ComputeLayout = Act::layout::RowMajor; // 都是RowMajor处理
+    using ComputeLayout = Act::layout::RowMajor; 
 
     CopyGm2Ub copyGm2Ub;
     CopyUb2Gm copyUb2Gm;
@@ -61,19 +61,19 @@ public:
     PaddingMatrix(Arch::Resource<ArchTag> &resource){
         int64_t bufferOffset = 0;
         for (uint32_t i = 0; i < BUFFER_NUM; i++) { // 
-            inputBuffer[i] = resource.ubBuf.template GetBufferByByte<Element>(bufferOffset * sizeof(Element)); // ubBuf是int8_t的内容
+            inputBuffer[i] = resource.ubBuf.template GetBufferByByte<Element>(bufferOffset * sizeof(Element));
             bufferOffset += COMPUTE_LENGTH;
         }
     }
 
     ACT_DEVICE
-    ComputeLayout GetPaddingComputeLayout(layout::RowMajor const &layout){ // 最后都是RowMajor 
-        return ComputeLayout(layout.shape(0), layout.shape(1), layout.stride(0)); // Row Column stride
+    ComputeLayout GetPaddingComputeLayout(layout::RowMajor const &layout){ 
+        return ComputeLayout(layout.shape(0), layout.shape(1), layout.stride(0)); 
     }
 
     ACT_DEVICE
-    ComputeLayout GetPaddingComputeLayout(layout::ColumnMajor const &layout){ // 最后都是RowMajor
-        return ComputeLayout(layout.shape(1), layout.shape(0), layout.stride(1)); // Column Row stride  相当于进行了转置处理
+    ComputeLayout GetPaddingComputeLayout(layout::ColumnMajor const &layout){
+        return ComputeLayout(layout.shape(1), layout.shape(0), layout.stride(1)); 
     }
 
     ACT_DEVICE
@@ -84,43 +84,42 @@ public:
         ComputeLayout computeLayoutSrc = GetPaddingComputeLayout(layoutSrc);
         ComputeLayout computeLayoutDst = GetPaddingComputeLayout(layoutDst);
 
-        uint32_t aivNum = AscendC::GetBlockNum() * AscendC::GetSubBlockNum(); // 20 * 2 = 40
-        uint32_t aivId = AscendC::GetBlockIdx(); // 获取当前AIV的核心号 0 ~ 39
+        uint32_t aivNum = AscendC::GetBlockNum() * AscendC::GetSubBlockNum(); 
+        uint32_t aivId = AscendC::GetBlockIdx(); 
 
         // Each line is a tile.
-        uint32_t tilesNum = computeLayoutSrc.shape(0); // Row
-        uint32_t tileLen = computeLayoutSrc.shape(1); // Col
-        uint32_t paddingStride = computeLayoutDst.stride(0); // 目标padding stride
+        uint32_t tilesNum = computeLayoutSrc.shape(0); 
+        uint32_t tileLen = computeLayoutSrc.shape(1); 
+        uint32_t paddingStride = computeLayoutDst.stride(0); 
 
-        uint32_t tilesPerAiv = tilesNum / aivNum; // 方便批次处理
         uint32_t tileRemain = tilesNum % aivNum;
         if (aivId < tileRemain) {
-            tilesPerAiv++; // 前面的核多处理一行
+            tilesPerAiv++; 
         }
-        uint32_t mIdx = aivId * tilesPerAiv; // 第几轮
+        uint32_t mIdx = aivId * tilesPerAiv;
         if (aivId >= tileRemain) {
-            mIdx += tileRemain; // 均分任务
+            mIdx += tileRemain;
         }
         MatrixCoord blockOffset(mIdx, 0);
 
         AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[0]);
-        AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[1]); // 相当于构造函数中
+        AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[1]); 
         uint32_t coreLoops{ 0 };
-        if (paddingStride > COMPUTE_LENGTH) { // 一次处理不了 只能一行一行处理
+        if (paddingStride > COMPUTE_LENGTH) { 
             // Handle the same tile on multiple loops.
-            uint32_t loopsPerTile = CeilDiv(tileLen, COMPUTE_LENGTH); // 处理轮次 横向切割
-            coreLoops = tilesPerAiv * loopsPerTile;  // 总轮次数
+            uint32_t loopsPerTile = CeilDiv(tileLen, COMPUTE_LENGTH); 
+            coreLoops = tilesPerAiv * loopsPerTile;  
             for (uint32_t loopIdx = 0; loopIdx < coreLoops; ++loopIdx) {
                 uint32_t tileIdx = loopIdx / loopsPerTile;
                 uint32_t inTileLoopIdx = loopIdx % loopsPerTile;
                 MatrixCoord loopOffset(tileIdx, inTileLoopIdx * COMPUTE_LENGTH);
                 uint64_t gmSrcOffset = computeLayoutSrc.GetOffset(blockOffset + loopOffset);
                 uint32_t actualDataNum = COMPUTE_LENGTH;
-                if (tileLen - inTileLoopIdx * COMPUTE_LENGTH < COMPUTE_LENGTH) { // 相当于处理到了一行的最后一个
+                if (tileLen - inTileLoopIdx * COMPUTE_LENGTH < COMPUTE_LENGTH) { 
                     actualDataNum = tileLen - inTileLoopIdx * COMPUTE_LENGTH;
                 }
                 AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[bufferIndex]);
-                ComputeLayout dstLayout = computeLayoutDst.GetTileLayout(MatrixCoord(1, actualDataNum)); // row column 
+                ComputeLayout dstLayout = computeLayoutDst.GetTileLayout(MatrixCoord(1, actualDataNum)); 
                 ComputeLayout srcLayout = computeLayoutSrc.GetTileLayout(MatrixCoord(1, actualDataNum));
                 ComputeLayout &ubLayout = dstLayout;
                 copyGm2Ub(inputBuffer[bufferIndex], src[gmSrcOffset], ubLayout, srcLayout);
@@ -133,18 +132,18 @@ public:
             }
         } else {
             // Handle multiple tile each loop.
-            uint32_t tilesPerLoop = COMPUTE_LENGTH / paddingStride; // 可以同时处理几批次
+            uint32_t tilesPerLoop = COMPUTE_LENGTH / paddingStride; 
             coreLoops = CeilDiv(tilesPerAiv, tilesPerLoop);
-            for (uint32_t loopIdx = 0; loopIdx < coreLoops; ++loopIdx) { // 可以多次处理内容
+            for (uint32_t loopIdx = 0; loopIdx < coreLoops; ++loopIdx) { 
                 uint32_t tileIdx = loopIdx * tilesPerLoop;
                 MatrixCoord tileOffset(tileIdx, 0);
                 uint64_t gmSrcOffset = computeLayoutSrc.GetOffset(blockOffset + tileOffset);
                 uint32_t actualTilesNum = tilesPerLoop;
-                if (tilesPerAiv - tileIdx < tilesPerLoop) { // 最后一次太够了，减少
+                if (tilesPerAiv - tileIdx < tilesPerLoop) { 
                     actualTilesNum = tilesPerAiv - tileIdx;
                 }
                 AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[bufferIndex]);
-                ComputeLayout dstLayout = computeLayoutDst.GetTileLayout(MatrixCoord(actualTilesNum, tileLen)); // Row column
+                ComputeLayout dstLayout = computeLayoutDst.GetTileLayout(MatrixCoord(actualTilesNum, tileLen)); 
                 ComputeLayout srcLayout = computeLayoutSrc.GetTileLayout(MatrixCoord(actualTilesNum, tileLen));
                 ComputeLayout &ubLayout = dstLayout;
                 copyGm2Ub(inputBuffer[bufferIndex], src[gmSrcOffset], ubLayout, srcLayout);
@@ -156,7 +155,7 @@ public:
                 bufferIndex = 1 - bufferIndex;
             }
         }
-        AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[0]); // 相当于析构函数中
+        AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[0]); 
         AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[1]);
     }
 
@@ -170,10 +169,10 @@ private:
     static_assert(BUFFER_NUM * COMPUTE_LENGTH * sizeof(Element) <= ArchTag::UB_SIZE, "Excedding the UB space!");
 };
 
-// 保持接口统一
+
 template<
     class BlockGemm_,
-    class BlockEpilogue_ ,// 在后处理阶段进行操作beta alpha操作
+    class BlockEpilogue_ ,
     class TileScheduler_ = void
 >
 class KernelGroupGemm{
@@ -195,7 +194,7 @@ public:
     using EpilogueParams = typename BlockEpilogue::Params;
     using ElementCompute =
         typename Act::Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
-    using ElementScalar = ElementCompute; // 标量的数据类型
+    using ElementScalar = ElementCompute; 
     static constexpr uint32_t MAX_TENSOR_COUNT = 32;
 
     const uint32_t maxMPerBlock = L1TileShape::M;
@@ -203,11 +202,10 @@ public:
     const uint32_t cSize = maxMPerBlock * maxNPerBlock * sizeof(ElementAccumulator);
     const uint32_t l0CBlockNum = ArchTag::L0C_SIZE / cSize;
 
-    static constexpr uint32_t STAGES = BlockGemm::STAGES; // 开启双缓冲机制的
+    static constexpr uint32_t STAGES = BlockGemm::STAGES; 
     using TileScheduler = TileScheduler_;
     
-    // 进行Padding操作
-    static const uint32_t COMPUTE_LENGTH_A = 96 * 1024 / sizeof(ElementA); // UB_SIZE 192 * 1024 / 2 的内容 对半分
+    static const uint32_t COMPUTE_LENGTH_A = 96 * 1024 / sizeof(ElementA); 
     using PaddingA = PaddingMatrix<ArchTag, ElementA, LayoutA, COMPUTE_LENGTH_A>;
     static const uint32_t COMPUTE_LENGTH_B = 96 * 1024 / sizeof(ElementB);
     using PaddingB = PaddingMatrix<ArchTag, ElementB, LayoutB, COMPUTE_LENGTH_B>;
@@ -225,7 +223,7 @@ public:
         GM_ADDR ptrWorkspace;
         GM_ADDR ptrLayoutWorkspace;
         GM_ADDR ptrWA;
-        GM_ADDR ptrlayoutWA; // padding
+        GM_ADDR ptrlayoutWA;
         GM_ADDR ptrWB;
         GM_ADDR ptrlayoutWB;
         GM_ADDR ptrC;
@@ -266,14 +264,13 @@ public:
         GM_ADDR ptrWorkspace;
         GM_ADDR ptrLayoutWorkspace;
         GM_ADDR ptrWA;
-        GM_ADDR ptrlayoutWA; // padding
+        GM_ADDR ptrlayoutWA; 
         GM_ADDR ptrWB;
         GM_ADDR ptrlayoutWB;
         GM_ADDR ptrC;
         GM_ADDR ptrD;
     };
 
-    // 比较两者的步长
     ACT_DEVICE
     bool IsSameStride(layout::RowMajor layout1, layout::RowMajor layout2)
     {
@@ -328,7 +325,6 @@ public:
         LayoutA layoutAList[MAX_TENSOR_COUNT];
         LayoutB layoutBList[MAX_TENSOR_COUNT];
         LayoutX layoutWorkspaceList[MAX_TENSOR_COUNT];
-        //增加WA和WB
         LayoutA layoutWAList[MAX_TENSOR_COUNT];
         LayoutB layoutWBList[MAX_TENSOR_COUNT];
 
@@ -337,7 +333,6 @@ public:
         detail::UnpackListParam(layoutAList, params.ptrLayoutA, params.problemCount);
         detail::UnpackListParam(layoutBList, params.ptrLayoutB, params.problemCount);
         detail::UnpackListParam(layoutWorkspaceList, params.ptrLayoutWorkspace, params.problemCount);
-        //增加WA和WB
         detail::UnpackListParam(layoutWAList, params.ptrlayoutWA, params.problemCount);
         detail::UnpackListParam(layoutWBList, params.ptrlayoutWB, params.problemCount);
 
@@ -354,17 +349,13 @@ public:
         BlockGemm blockGemm(resource);
         
         for(uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx){
-            // // 先实例化BlockGemm对象
             GemmCoord problemShape = problemShapeList[groupIdx];
             LayoutA layoutA = layoutAList[groupIdx];
             LayoutB layoutB = layoutBList[groupIdx];
             LayoutX layoutWorkspace = layoutWorkspaceList[groupIdx];
-            //增加WA和WB
             LayoutA layoutWA = layoutWAList[groupIdx];
             LayoutB layoutWB = layoutWBList[groupIdx];
-            // 等待Padding操作 只padding stride padding操作没问题
             Arch::CrossCoreWaitFlag(flagAivFinishPadding);
-            // 先实例化BlockGemm对象
             AscendC::GlobalTensor<ElementX> gmX;
             gmX.SetGlobalBuffer((__gm__ ElementX*)params.ptrWorkspace);
             AscendC::GlobalTensor<ElementA> gmA;
@@ -406,22 +397,22 @@ public:
                     NNextGmBlockIdx = nextLoopIdx % NLoops;
                     uint32_t MNextGmActual = (MNextGmBlockIdx == MLoops - 1) ? (M - MNextGmBlockIdx * maxMPerBlock) : maxMPerBlock;
                     uint32_t NNextGmActual = (NNextGmBlockIdx == NLoops - 1) ? (N - NNextGmBlockIdx * maxNPerBlock) : maxNPerBlock;
-                    nextActualShape = MakeCoord(MNextGmActual, NNextGmActual, K); // 构建下一次的形状
+                    nextActualShape = MakeCoord(MNextGmActual, NNextGmActual, K); 
                 }
                 GemmCoord actualShape{MGmActual, NGmActual, K};
                 AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((int32_t)singleIdx);
-                MatrixCoord gmTileAOffset{MGmBlockIdx * maxMPerBlock, 0}; // gm中的偏移量
+                MatrixCoord gmTileAOffset{MGmBlockIdx * maxMPerBlock, 0}; 
                 auto gmTileA = gmA[inGroupOffsetA + layoutWA.GetOffset(gmTileAOffset)];
-                MatrixCoord gmTileBOffset{0, NGmBlockIdx * maxNPerBlock}; // gm中的偏移量
+                MatrixCoord gmTileBOffset{0, NGmBlockIdx * maxNPerBlock}; 
                 auto gmTileB = gmB[inGroupOffsetB + layoutWB.GetOffset(gmTileBOffset)];
-                MatrixCoord gmTileXOffset{MGmBlockIdx * maxMPerBlock, NGmBlockIdx * maxNPerBlock}; // gm中的偏移量
+                MatrixCoord gmTileXOffset{MGmBlockIdx * maxMPerBlock, NGmBlockIdx * maxNPerBlock}; 
                 auto gmTileX = gmX[inGroupOffsetWorkspace + layoutWorkspace.GetOffset(gmTileXOffset)];
-                MatrixCoord gmTileNextAOffset{MNextGmBlockIdx * maxMPerBlock, 0}; // gm中的偏移量
+                MatrixCoord gmTileNextAOffset{MNextGmBlockIdx * maxMPerBlock, 0}; 
                 auto gmTileNextA = gmA[inGroupOffsetA + layoutWA.GetOffset(gmTileNextAOffset)];
-                MatrixCoord gmTileNextBOffset{0, NNextGmBlockIdx * maxNPerBlock}; // gm中的偏移量
+                MatrixCoord gmTileNextBOffset{0, NNextGmBlockIdx * maxNPerBlock};
                 auto gmTileNextB = gmB[inGroupOffsetB + layoutWB.GetOffset(gmTileNextBOffset)];
                 blockGemm(
-                    gmTileA, layoutWA, // row col stride不一样了
+                    gmTileA, layoutWA, 
                     gmTileB, layoutWB,
                     gmTileX, layoutWorkspace,
                     gmTileNextA, gmTileNextB,
@@ -491,7 +482,7 @@ public:
             ElementScalar beta_ = betaList[groupIdx];
             LayoutA layoutWA = layoutWAList[groupIdx];
             LayoutB layoutWB = layoutWBList[groupIdx];
-            paddingA(gmWA[inGroupOffsetWA], gmA[inGroupOffsetA], layoutWA, layoutA); // 两个AIV核
+            paddingA(gmWA[inGroupOffsetWA], gmA[inGroupOffsetA], layoutWA, layoutA); 
             paddingB(gmWB[inGroupOffsetWB], gmB[inGroupOffsetB], layoutWB, layoutB);
             Act::Arch::CrossCoreBarrier<0x0, PIPE_MTE3>();
             Act::Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(flagAivFinishPadding);
@@ -516,8 +507,8 @@ public:
                 uint32_t MGmActual = (MGmBlockIdx == MLoops - 1) ? (M - MGmBlockIdx * maxMPerBlock) : maxMPerBlock;
                 uint32_t NGmActual = (NGmBlockIdx == NLoops - 1) ? (N - NGmBlockIdx * maxNPerBlock) : maxNPerBlock;
                 GemmCoord actualShape{MGmActual, NGmActual, K};
-                Arch::CrossCoreWaitFlagWithReverse<0x2, PIPE_MTE3>(flagAicFinishStore); // 没这个变量
-                MatrixCoord gmTileOffset{MGmBlockIdx * maxMPerBlock, NGmBlockIdx * maxNPerBlock}; // gm中的偏移量
+                Arch::CrossCoreWaitFlagWithReverse<0x2, PIPE_MTE3>(flagAicFinishStore); 
+                MatrixCoord gmTileOffset{MGmBlockIdx * maxMPerBlock, NGmBlockIdx * maxNPerBlock}; 
                 auto offsetX = layoutWorkspace.GetOffset(gmTileOffset);
                 blockEpilogue(inGroupOffsetWorkspace + offsetX, gmX[inGroupOffsetWorkspace + offsetX], layoutWorkspace, actualShape);
             }
@@ -532,11 +523,9 @@ public:
         
     }
 private:
-    // AIC同步
     static constexpr Arch::FlagID FLAG_AIC_FINISH_STORE = 0;
     static constexpr Arch::FlagID RV_FLAG_AIC_FINISH_STORE = 1;
     Arch::CrossCoreFlagWithReverse<> flagAicFinishStore{FLAG_AIC_FINISH_STORE, RV_FLAG_AIC_FINISH_STORE};
-    // AIV同步
     static constexpr Arch::FlagID FLAG_AIV_FINISH_STORE = 0;
     Arch::CrossCoreFlag flagAivFinishPadding{FLAG_AIV_FINISH_STORE};
 };

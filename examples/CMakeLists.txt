@@ -91,7 +91,7 @@ foreach(EXAMPLE
     13_basic_matmul_tla
     14_optimized_matmul_tla
     17_gemm
-    18_groupgemm
+    18_group_gemm
     19_gemv_aiv
     20_gemv_aic
 )

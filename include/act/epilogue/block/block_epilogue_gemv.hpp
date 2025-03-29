@@ -65,11 +65,6 @@ public:
     using ElementScalar = ElementCompute;
     using TensorCoord = layout::VectorLayout::TensorCoord;
 
-    // Check the layout type of Y, Temp and Z
-    // static_assert(std::is_same_v<LayoutY, layout::RowMajor> && std::is_same_v<LayoutTemp, layout::RowMajor> &&
-    //                   std::is_same_v<LayoutZ, layout::RowMajor>,
-    //               "Layout type of Y, Temp and Z must be RowMajor");
-
     static_assert(std::is_same_v<LayoutY, layout::VectorLayout> && std::is_same_v<LayoutTemp, layout::VectorLayout> &&
         std::is_same_v<LayoutZ, layout::VectorLayout>,
     "Layout type of Y, Temp and Z must be VectorLayout");

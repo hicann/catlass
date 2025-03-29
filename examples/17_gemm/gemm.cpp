@@ -220,7 +220,7 @@ void Run(Options options){
     using TileElemWiseCastD = Epilogue::Tile::TileCast<ArchTag, DType, ComputeType, TileShapeCast>;
     using EpilogueTileCopy = Epilogue::Tile::TileCopy<ArchTag, CType, XType, DType>;
     using EpilogueBlock = Epilogue::Block::BlockEpilogue<EpilogueBlockDispatchPolicy, CType, XType, DType, TileElemWiseAddGemm, TileElemWiseMulsGemm, TileElemWiseCastC, TileElemWiseCastD, EpilogueTileCopy>;
-    using GemmKernel = Gemm::kernel::KernelGemm<GemmBlock, EpilogueBlock>;
+    using GemmKernel = Gemm::Kernel::KernelGemm<GemmBlock, EpilogueBlock>;
     typename EpilogueBlock::Params epilogueParams{hostAlpha[0], hostBeta[0], (uint8_t*)deviceC, layoutC, (uint8_t*)deviceC, layoutC};
     typename GemmKernel::Arguments arguments{options.problemShape, align, (uint8_t*)deviceA, (uint8_t*)deviceB, (uint8_t*)gmWorkspace, (uint8_t*)deviceWA, (uint8_t*)deviceWB, epilogueParams};
     using GemmAdapter = Gemm::Device::DeviceGemm<GemmKernel>;

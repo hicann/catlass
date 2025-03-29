@@ -20,12 +20,11 @@
 #include "act/matrix_coord.hpp"
 
 
-namespace Act::Gemv::kernel {
+namespace Act::Gemv::Kernel {
 
 template <
     class BlockGemv_,
     class BlockEpilogue_,
-    class TileScheduler_
 >
 class QuantGemv {
 public:
@@ -57,7 +56,6 @@ public:
 
     using ElementAccumulator = typename Gemv::helper::ElementAccumulatorSelector<ElementA, ElementX>::ElementAccumulator;
 
-    using TileScheduler = TileScheduler_;
     using TensorCoord = layout::VectorLayout::TensorCoord;
 
     struct Params {
@@ -145,8 +143,6 @@ public:
     ACT_DEVICE 
     void operator()<AscendC::AIC>(Params const& params) 
     {
-        TileScheduler matmulTileScheduler(params.problemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
-        // Arch::Resource<ArchTag> resource;
         BlockGemv blockGemv(resource);
         // Represent the full gm
         AscendC::GlobalTensor<ElementX> gmX;
