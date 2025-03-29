@@ -17,7 +17,7 @@
 #include "act/act.hpp"
 #include "act/arch/arch.hpp"
 #include "act/gemm/block/block_mmad.hpp"
-#include "act/gemm/kernel/kernel_gemm.hpp"
+#include "act/gemm/kernel/gemm.hpp"
 #include "act/gemm/gemm_type.hpp"
 #include "act/layout/layout.hpp"
 #include "act/gemm_coord.hpp"
