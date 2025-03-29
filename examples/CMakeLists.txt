@@ -7,7 +7,7 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 
 set(ACT_EXAMPLES_COMMON_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/common)
-set(CCEC_COMPILER_OPTIONS_BASE
+set(CCEC_COMPILER_OPTIONS
     -O2 -std=c++17 -xcce --cce-aicore-arch=dav-c220
     -mllvm -cce-aicore-stack-size=0x8000
     -mllvm -cce-aicore-function-stack-size=0x8000
@@ -59,7 +59,7 @@ function(act_example_add_executable NAME)
     if (${NAME} STREQUAL "17_gemv_aiv")
         set(CCEC_COMPILER_OPTIONS ${CCEC_COMPILER_OPTIONS_17_GEMV_AIV})
     else()
-        set(CCEC_COMPILER_OPTIONS ${CCEC_COMPILER_OPTIONS_BASE})
+        set(CCEC_COMPILER_OPTIONS ${CCEC_COMPILER_OPTIONS})
     endif()
 
     add_custom_command(

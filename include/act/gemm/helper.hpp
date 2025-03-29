@@ -153,6 +153,33 @@
      using L1BType = Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::A1>;
  };
  
+ template<class Element, class Layout, class Enable = void>
+ struct L1AlignHelperTla {
+     static_assert(DEPENDENT_FALSE<Element>, "Unsupported align helper tla, can not find the specialization.");
+ };
+ 
+ template<class Element, class Layout>
+ struct L1AlignHelperTla<Element, Layout, std::enable_if_t<tla::detail::isRowMajor<Layout>::value>> {
+     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+     static constexpr uint32_t M_ALIGNED = C0_NUM_PER_FRACTAL;
+     static constexpr uint32_t K_ALIGNED = ELE_NUM_PER_C0;
+     static constexpr uint32_t N_ALIGNED = ELE_NUM_PER_C0;
+ };
+ 
+ template<class Element, class Layout>
+ struct L1AlignHelperTla<Element, Layout, std::enable_if_t<tla::detail::isColumnMajor<Layout>::value>> {
+     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+     static constexpr uint32_t M_ALIGNED = ELE_NUM_PER_C0;
+     static constexpr uint32_t K_ALIGNED = ELE_NUM_PER_C0;
+     static constexpr uint32_t N_ALIGNED = C0_NUM_PER_FRACTAL;
+ };
+
+
+
+
+///////////////////////////////////////////
+// new add
+
  template<class GmAType>
  struct L1ATypeSelectorGemm {
      static_assert(DEPENDENT_FALSE<GmAType>,
@@ -262,26 +289,6 @@
      using L0BType = Gemm::GemmType<int8_t, layout::zN>;
  };
  
- template<class Element, class Layout, class Enable = void>
- struct L1AlignHelperTla {
-     static_assert(DEPENDENT_FALSE<Element>, "Unsupported align helper tla, can not find the specialization.");
- };
- 
- template<class Element, class Layout>
- struct L1AlignHelperTla<Element, Layout, std::enable_if_t<tla::detail::isRowMajor<Layout>::value>> {
-     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-     static constexpr uint32_t M_ALIGNED = C0_NUM_PER_FRACTAL;
-     static constexpr uint32_t K_ALIGNED = ELE_NUM_PER_C0;
-     static constexpr uint32_t N_ALIGNED = ELE_NUM_PER_C0;
- };
- 
- template<class Element, class Layout>
- struct L1AlignHelperTla<Element, Layout, std::enable_if_t<tla::detail::isColumnMajor<Layout>::value>> {
-     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-     static constexpr uint32_t M_ALIGNED = ELE_NUM_PER_C0;
-     static constexpr uint32_t K_ALIGNED = ELE_NUM_PER_C0;
-     static constexpr uint32_t N_ALIGNED = C0_NUM_PER_FRACTAL;
- };
  
  } // namespace Act::Gemm::helper
  
