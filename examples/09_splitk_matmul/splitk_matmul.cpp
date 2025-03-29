@@ -23,71 +23,12 @@
 #include "act/gemm/gemm_type.hpp"
 #include "act/layout/layout.hpp"
 
+#include "act/status.hpp"
+#include "act/gemm/device/device_gemm.hpp"
+
 using namespace Act;
 using fp16_t = op::fp16_t;
 
-template <
-    class LayoutA,
-    class LayoutB,
-    class LayoutC
->
-ACT_GLOBAL
-void SplitkMatmul(
-    uint64_t fftsAddr,
-    GemmCoord problemShape,
-    GM_ADDR gmA, LayoutA layoutA,
-    GM_ADDR gmB, LayoutB layoutB,
-    GM_ADDR gmC, LayoutC layoutC,
-    GM_ADDR gmWorkspace, uint32_t splitkFactor
-)
-{
-    AscendC::SetSyncBaseAddr(fftsAddr);
-    using ArchTag = Arch::AtlasA2;
-    using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
-    using L1TileShape = GemmShape<128, 256, 256>;
-    using L0TileShape = GemmShape<128, 256, 64>;
-
-    using AType = Gemm::GemmType<half, LayoutA>;
-    using BType = Gemm::GemmType<half, LayoutB>;
-    using CType = Gemm::GemmType<float, LayoutC>;
-
-    using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
-    using BlockEpilogue = void;
-
-    // After the Matmul computation is completed, launch the ReduceAdd kernel to accumulate the partial sums.
-    constexpr uint32_t computeLength = 32 * 1024 / sizeof(float);
-    using ReduceAdd = Act::Gemm::Kernel::ReduceAdd<ArchTag, float, half, computeLength>;
-
-    if (problemShape.m() > problemShape.n()) {
-        // Swizzle offset is 3 and direction is 0.
-        using BlockScheduler = typename Gemm::Block::SplitkGemmIdentityBlockSwizzle<3, 0>;
-
-        // kernel level
-        using MatmulKernel = Gemm::Kernel::SplitkMatmul<BlockMmad, BlockEpilogue, BlockScheduler, ReduceAdd>;
-
-        typename MatmulKernel::Params params{
-            problemShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, gmWorkspace, splitkFactor
-        };
-
-        // call a kernel
-        MatmulKernel matmul;
-        matmul(params);
-    } else {
-        // Swizzle offset is 3 and direction is 1.
-        using BlockScheduler = typename Gemm::Block::SplitkGemmIdentityBlockSwizzle<3, 1>;
-
-        // kernel level
-        using MatmulKernel = Gemm::Kernel::SplitkMatmul<BlockMmad, BlockEpilogue, BlockScheduler, ReduceAdd>;
-
-        typename MatmulKernel::Params params{
-            problemShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, gmWorkspace, splitkFactor
-        };
-
-        // call a kernel
-        MatmulKernel matmul;
-        matmul(params);
-    }
-}
 
 struct Options {
     const std::string HELPER = "09_splitk_matmul m n k [device_id]";
@@ -122,49 +63,7 @@ struct Options {
     }
 };
 
-// A splitk strategy, which may not be the optimal one.
-uint32_t GetSplitkFactor(uint32_t m, uint32_t n, uint32_t k, uint32_t m0, uint32_t n0, uint32_t k0, uint32_t aicCoreNum)
-{
-    uint32_t maxSplitkFactor;
-    if (k <= 1024) {
-        // When k is less than or equal to 1024, it can be divided into at most 2 parts.
-        maxSplitkFactor = 2;
-    } else if (k <= 2048) {
-        // When k is less than or equal to 2048, it can be divided into at most 4 parts.
-        maxSplitkFactor = 4;
-    } else if (k <= 4096) {
-        // When k is less than or equal to 4096, it can be divided into at most 8 parts.
-        maxSplitkFactor = 8;
-    } else {
-        // else it can be divided into at most 16 parts.
-        maxSplitkFactor = 16;
-    }
-    uint32_t splitkFactor = 1;
-    uint32_t baseTilesCount = CeilDiv(m, m0) * CeilDiv(n, n0);
-    splitkFactor = std::min(aicCoreNum / baseTilesCount, maxSplitkFactor);
-    // Prevent the split factor form being less than 1
-    splitkFactor = std::max(splitkFactor, static_cast<uint32_t>(1));
-    if (baseTilesCount < aicCoreNum) {
-        while (splitkFactor + 1 <= maxSplitkFactor &&
-            CeilDiv(baseTilesCount * splitkFactor, aicCoreNum) >= CeilDiv(baseTilesCount, aicCoreNum) * splitkFactor) {
-            splitkFactor += 1;
-        }
-    }
-    // Ensure that splitkFactor is less than the number of base tiels in the k direction.
-    splitkFactor = std::min(CeilDiv(k, k0), splitkFactor);
-    // If k is very large, splitting k can lead to better cache utilization.
-    // If k is greater than 8192.
-    if (k > 8192) {
-        // split the k direction into at least 2 parts.
-        splitkFactor = std::max(splitkFactor, static_cast<uint32_t>(2));
-    }
-    // If k is greater than 32768.
-    if (k > 32768) {
-        // split the k direction into at least 4 parts.
-        splitkFactor = std::max(splitkFactor, static_cast<uint32_t>(4));
-    }
-    return splitkFactor;
-}
+
 
 void Run(Options const &options)
 {
@@ -187,22 +86,21 @@ void Run(Options const &options)
     uint32_t k = options.problemShape.k();
 
     using L1TileShape = GemmShape<128, 256, 256>;
-    // Divide into s parts, using the K-direction tile block as the splitting unit.
-    uint32_t splitkFactor = GetSplitkFactor(m, n, k, L1TileShape::M, L1TileShape::N, L1TileShape::K, aicCoreNum);
 
     size_t lenA = static_cast<size_t>(m) * k;
     size_t lenB = static_cast<size_t>(k) * n;
     size_t lenC = static_cast<size_t>(m) * n;
-    size_t lenWorkspace = static_cast<size_t>(m) * n * splitkFactor;
 
     size_t sizeA = lenA * sizeof(fp16_t);
     size_t sizeB = lenB * sizeof(fp16_t);
     size_t sizeC = lenC * sizeof(fp16_t);
-    size_t sizeWorkspace = lenWorkspace * sizeof(float);
 
-    layout::RowMajor layoutA{m, k};
-    layout::ColumnMajor layoutB{k, n};
-    layout::RowMajor layoutC{m, n};
+    using LayoutA = layout::RowMajor;
+    using LayoutB = layout::ColumnMajor;
+    using LayoutC = layout::RowMajor;
+    LayoutA layoutA{m, k};
+    LayoutB layoutB{k, n};
+    LayoutC layoutC{m, n};
 
     std::vector<fp16_t> hostA(lenA);
     std::vector<fp16_t> hostB(lenB);
@@ -220,15 +118,51 @@ void Run(Options const &options)
     uint8_t *deviceC{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
-    uint8_t *deviceWorkspace{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+    using ArchTag = Arch::AtlasA2;
+    using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
+    using L1TileShape = GemmShape<128, 256, 256>;
+    using L0TileShape = GemmShape<128, 256, 64>;
 
-    SplitkMatmul<<<aicCoreNum, nullptr, stream>>>(
-        fftsAddr,
-        options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC,
-        deviceWorkspace, splitkFactor
-    );
+    using AType = Gemm::GemmType<half, LayoutA>;
+    using BType = Gemm::GemmType<half, LayoutB>;
+    using CType = Gemm::GemmType<float, LayoutC>;
+
+    using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+    using BlockEpilogue = void;
+
+    // After the Matmul computation is completed, launch the ReduceAdd kernel to accumulate the partial sums.
+    constexpr uint32_t computeLength = 32 * 1024 / sizeof(float);
+    using ReduceAdd = Act::Gemm::Kernel::ReduceAdd<ArchTag, float, half, computeLength>;
+
+    // Swizzle offset is 3 and direction is 0.
+    using BlockScheduler = typename Gemm::Block::SplitkGemmIdentityBlockSwizzle<3, 0>;
+
+    // kernel level
+    using MatmulKernel = Gemm::Kernel::SplitkMatmul<BlockMmad, BlockEpilogue, BlockScheduler, ReduceAdd>;
+
+    using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
+    MatmulKernel::Arguments arguments{options.problemShape,
+        aicCoreNum,
+        sizeof(float),
+        deviceA,
+        deviceB,
+        deviceC};
+    MatmulAdapter matmul_op;
+    matmul_op.CanImplement(arguments);
+
+    size_t sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
+    uint8_t *deviceWorkspace = nullptr;
+    if (sizeWorkspace > 0) {
+        ACL_CHECK(
+            aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
+        );
+    }
+    matmul_op.Initialize(arguments, deviceWorkspace);
+    matmul_op(stream, aicCoreNum, fftsAddr);
     ACL_CHECK(aclrtSynchronizeStream(stream));
+    if (sizeWorkspace > 0) {
+        ACL_CHECK(aclrtFree(deviceWorkspace));
+    }
 
     std::vector<fp16_t> hostC(lenC);
     ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
@@ -246,7 +180,6 @@ void Run(Options const &options)
     ACL_CHECK(aclrtFree(deviceA));
     ACL_CHECK(aclrtFree(deviceB));
     ACL_CHECK(aclrtFree(deviceC));
-    ACL_CHECK(aclrtFree(deviceWorkspace));
 
     ACL_CHECK(aclrtDestroyStream(stream));
     ACL_CHECK(aclrtResetDevice(options.deviceId));

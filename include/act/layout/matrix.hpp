@@ -785,7 +785,7 @@ public:
 public:
     /// Constructor
     ACT_HOST_DEVICE
-    PaddingRowMajor(Index orgRows, Index orgCols, Index blockRows, Index blockCols) :
+    PaddingRowMajor(Index orgRows = 0, Index orgCols = 0, Index blockRows = 0, Index blockCols = 0) :
         orgShape_(MakeCoord(orgRows, orgCols)),
         shape_(MakeCoord(blockRows, CeilDiv(orgRows, blockRows), blockCols, CeilDiv(orgCols, blockCols))),
         stride_(MakeCoord((LongIndex)blockCols, (LongIndex)blockRows * (LongIndex)RoundUp(orgCols, blockCols),
@@ -924,7 +924,7 @@ public:
 public:
     /// Constructor
     ACT_HOST_DEVICE
-    PaddingColumnMajor(Index orgRows, Index orgCols, Index blockRows, Index blockCols) :
+    PaddingColumnMajor(Index orgRows = 0, Index orgCols = 0, Index blockRows = 0, Index blockCols = 0) :
         orgShape_(MakeCoord(orgRows, orgCols)),
         shape_(MakeCoord(blockRows, CeilDiv(orgRows, blockRows), blockCols, CeilDiv(orgCols, blockCols))),
         stride_(MakeCoord((LongIndex)1, (LongIndex)blockRows * (LongIndex)blockCols, (LongIndex)blockRows,
