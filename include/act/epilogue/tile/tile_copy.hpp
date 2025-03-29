@@ -66,6 +66,25 @@ struct TileCopy<ArchTag, CType, XType, YType, DType> {
 template <
     class ArchTag,
     class CType,
+    class XType,
+    class YType,
+    class DType
+>
+struct TileCopyBf16 {
+    using ElementC = typename CType::Element;
+    using ElementX = bfloat16_t;
+    using ElementY = bfloat16_t;
+    using ElementD = bfloat16_t;
+
+    using CopyGmToUbC = CopyGm2Ub<ArchTag, CType>;
+    using CopyGmToUbX = CopyGm2Ub<ArchTag, Gemm::GemmType<bfloat16_t, typename XType::Layout>>;
+    using CopyGmToUbY = CopyGm2Ub<ArchTag, Gemm::GemmType<bfloat16_t, typename YType::Layout>>;
+    using CopyUbToGmD = CopyUb2Gm<ArchTag, Gemm::GemmType<bfloat16_t, typename DType::Layout>>;
+};
+
+template <
+    class ArchTag,
+    class CType,
     class ScaleType,
     class PerTokenScaleType,
     class DType

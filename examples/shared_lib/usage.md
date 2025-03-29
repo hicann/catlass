@@ -81,7 +81,7 @@ void kernel_host(...){
 | `stream`         | `aclrtStream`    | NPU流              |
 | `kernelInfo` | `KernelInfo` | 算子执行的数据地址和输入详细情况，如mnk等维度的大小 |
 
-同时，更新`shared_lib/Act_kernel.h`中的对外接口.
+同时，更新`shared_lib/act_kernel.h`中的对外接口.
 
 ### 编译
 
