@@ -23,7 +23,7 @@
 #include "act/layout/layout.hpp"
 
 #include "act/status.hpp"
-#include "act/gemm/device/matmul_universal_adapter.hpp"
+#include "act/gemm/device/device_gemm.hpp"
 
 using namespace Act;
 using fp16_t = op::fp16_t;
@@ -158,7 +158,7 @@ void Run(Options const &options)
     // kernel level
     using MatmulKernel = Gemm::Kernel::BatchedMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 
-    using MatmulAdapter = Gemm::device::MatmulUniversalAdapter<MatmulKernel>;
+    using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
     MatmulKernel::Arguments arguments{batchCount, problemShape,
         deviceA, deviceB, deviceC};
     MatmulAdapter matmul_op;

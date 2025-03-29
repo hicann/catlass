@@ -22,7 +22,7 @@
 #include "act/gemm/dispatch_policy.hpp"
 #include "act/gemm/kernel/grouped_matmul.hpp"
 #include "act/status.hpp"
-#include "act/gemm/device/matmul_universal_adapter.hpp"
+#include "act/gemm/device/device_gemm.hpp"
 #include "act/gemm/gemm_type.hpp"
 #include "act/layout/layout.hpp"
 
@@ -177,7 +177,7 @@ void Run(Options const &options)
     // kernel level
     using MatmulKernel = Gemm::Kernel::GroupedMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 
-    using MatmulAdapter = Gemm::device::MatmulUniversalAdapter<MatmulKernel>;
+    using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
     typename MatmulKernel::Arguments arguments{
         problemCount, problemShapeListDevice, 
         deviceA, layoutAListDevice, 

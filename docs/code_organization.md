@@ -24,7 +24,7 @@ include目录下的头文件是按照如下的文件层级进行组织的。
 |            |── tag_to_layout.hpp   // layout构造
 |        |── device
 |            |── kernel_adapter.hpp   // device层调用接口
-|            |── matmul_universal_adapter.hpp    // device层通用适配器
+|            |── device_gemm.hpp    // device层通用适配器
 |        |── epilogue
 |            |── block
 |                |── block_epilogue.hpp  //block层后处理操作

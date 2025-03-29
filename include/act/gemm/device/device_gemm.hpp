@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef Act_MATMUL_DEVICE_MATMUL_UNIVERSAL_ADAPTER_HPP
-#define Act_MATMUL_DEVICE_MATMUL_UNIVERSAL_ADAPTER_HPP
+#ifndef ACT_GEMM_DEVICE_DEVICE_GEMM_HPP
+#define ACT_GEMM_DEVICE_DEVICE_GEMM_HPP
 
 #include "act/act.hpp"
 #include "act/status.hpp"
@@ -18,13 +18,13 @@
 
 namespace Act::Gemm::Device {
 
-template <class MatmulKernel>
+template <class GemmKernel>
 class DeviceGemm {
 public:
     /// Argument structure: User API
-    using Arguments = typename MatmulKernel::Arguments;
+    using Arguments = typename GemmKernel::Arguments;
     /// Argument structure: Kernel API
-    using Params = typename MatmulKernel::Params;
+    using Params = typename GemmKernel::Params;
 private:
     /// kernel API parameters object
     Params params_;
@@ -41,7 +41,7 @@ public:
     /// Determines whether the GEMM can execute the given problem.
     static Status CanImplement(Arguments const &args)
     {
-        if (MatmulKernel::CanImplement(args)) {
+        if (GemmKernel::CanImplement(args)) {
             return Status::kSuccess;
         } else {
             return Status::kInvalid;
@@ -52,7 +52,7 @@ public:
     static size_t GetWorkspaceSize(Arguments const &args)
     {
         size_t workspace_bytes = 0;
-        workspace_bytes += MatmulKernel::GetWorkspaceSize(args);
+        workspace_bytes += GemmKernel::GetWorkspaceSize(args);
         return workspace_bytes;
     }
 
@@ -60,7 +60,7 @@ public:
     Status Initialize(Arguments const &args, uint8_t *workspace = nullptr, aclrtStream stream = nullptr)
     {
         // Initialize the Params structure
-        params_ = MatmulKernel::ToUnderlyingArguments(args, workspace);
+        params_ = GemmKernel::ToUnderlyingArguments(args, workspace);
         return Status::kSuccess;
     }
 
@@ -69,10 +69,10 @@ public:
     inline Status Run(aclrtStream stream, uint32_t blockDim, uint64_t fftsAddr)
     {
         if (fftsAddr == 0) {
-            Act::KernelAdapter<MatmulKernel><<<blockDim, nullptr, stream>>>(params_);
+            Act::KernelAdapter<GemmKernel><<<blockDim, nullptr, stream>>>(params_);
         }
         else {
-            Act::KernelAdapter<MatmulKernel><<<blockDim, nullptr, stream>>>(params_, fftsAddr);
+            Act::KernelAdapter<GemmKernel><<<blockDim, nullptr, stream>>>(params_, fftsAddr);
         }
         return Status::kSuccess;
     }
@@ -90,5 +90,5 @@ public:
 };
 ///////////////////////////////////////////////////////////////////////////////////
 
-} // namespace Act::Gemm::device
+} // namespace Act::Gemm::Device
 #endif
