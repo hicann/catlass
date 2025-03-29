@@ -31,10 +31,37 @@ set(CCEC_COMPILER_OPTIONS
 
 file(GLOB_RECURSE ACT_INCLUDE_FILES ${CMAKE_SOURCE_DIR}/include/*.hpp)
 file(GLOB_RECURSE ACT_EXAMPLES_COMMON_INCLUDE_FILES ${ACT_EXAMPLES_COMMON_SOURCE_DIR}/*.hpp)
+set(CCEC_COMPILER_OPTIONS_17_GEMV_AIV
+    -O2 -std=c++17 -xcce --cce-aicore-arch=dav-c220-vec
+    -mllvm -cce-aicore-stack-size=0x8000
+    -mllvm -cce-aicore-function-stack-size=0x8000
+    -mllvm -cce-aicore-record-overflow=true
+    -mllvm -cce-aicore-addr-transform
+    -mllvm -cce-aicore-dcci-insert-for-scalar=false
+    -DL2_CACHE_HINT
+    -I${ASCEND_HOME_PATH}/compiler/tikcpp
+    -I${ASCEND_HOME_PATH}/compiler/tikcpp/tikcfw
+    -I${ASCEND_HOME_PATH}/compiler/tikcpp/tikcfw/impl
+    -I${ASCEND_HOME_PATH}/compiler/tikcpp/tikcfw/interface
+    -I${ASCEND_HOME_PATH}/include
+    -I${ASCEND_HOME_PATH}/include/experiment/runtime
+    -I${ASCEND_HOME_PATH}/include/experiment/msprof
+    -I${ACT_EXAMPLES_COMMON_SOURCE_DIR}
+    -I${CMAKE_SOURCE_DIR}/include
+    -L${ASCEND_HOME_PATH}/lib64
+    -Wno-macro-redefined -Wno-ignored-attributes
+    -lruntime -lstdc++ -lascendcl -lm -ltiling_api -lplatform -lc_sec -ldl -lnnopbase
+)
 
 add_custom_target(act_examples)
 
 function(act_example_add_executable NAME)
+    if (${NAME} STREQUAL "17_gemv_aiv")
+        set(CCEC_COMPILER_OPTIONS ${CCEC_COMPILER_OPTIONS_17_GEMV_AIV})
+    else()
+        set(CCEC_COMPILER_OPTIONS ${CCEC_COMPILER_OPTIONS})
+    endif()
+
     add_custom_command(
         OUTPUT ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${NAME}
         COMMAND ${CMAKE_CCEC_COMPILER} ${CCEC_COMPILER_OPTIONS} ${ARGN} -o ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${NAME}
@@ -63,6 +90,10 @@ foreach(EXAMPLE
     12_quant_matmul
     13_basic_matmul_tla
     14_optimized_matmul_tla
+    15_gemm
+    16_group_gemm
+    17_gemv_aiv
+    18_gemv_aic
 )
     add_subdirectory(${EXAMPLE})
 endforeach()
