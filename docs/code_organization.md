@@ -22,6 +22,9 @@ include目录下的头文件是按照如下的文件层级进行组织的。
 |            |── dependent_false.hpp  // 用于static_assert的检查函数的信息
 |            |── macros.hpp         // 辅助宏的定义
 |            |── tag_to_layout.hpp   // layout构造
+|        |── device
+|            |── device_gemm.hpp    // device层通用适配器
+|            |── kernel_adapter.hpp   // device层调用接口
 |        |── epilogue
 |            |── block
 |                |── block_epilogue.hpp  //block层后处理操作
@@ -96,6 +99,7 @@ include目录下的头文件是按照如下的文件层级进行组织的。
 |        |── coord.hpp
 |        |── gemm_coord.hpp                  // 矩阵运算的基础坐标运算封装
 |        |── matrix_coord.hpp                // 矩阵运算坐标封装
+|        |── status.hpp                     // 状态码
 |    |── tla
 |        |── numeric
 |            |── integer_sequence.hpp        // integer_sequence定义

@@ -285,10 +285,10 @@ public:
         LayoutWB layoutWB;
 
         // Methods
-        ACT_DEVICE
+        ACT_HOST_DEVICE
         Params() {}
 
-        ACT_DEVICE
+        ACT_HOST_DEVICE
         Params(GemmCoord const &problemShape_,
                GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_, LayoutB layoutB_, GM_ADDR ptrC_, LayoutC layoutC_,
                GM_ADDR ptrWA_, LayoutWA layoutWA_, GM_ADDR ptrWB_, LayoutWB layoutWB_)
@@ -296,9 +296,43 @@ public:
               ptrC(ptrC_), layoutC(layoutC_), ptrWA(ptrWA_), layoutWA(layoutWA_), ptrWB(ptrWB_), layoutWB(layoutWB_) {}
     };
 
+    struct Arguments {
+        GemmCoord problemShape;
+        uint8_t *ptrA; LayoutA layoutA;
+        uint8_t *ptrB; LayoutB layoutB;
+        uint8_t *ptrC; LayoutC layoutC;
+        uint8_t *ptrWA; LayoutWA layoutWA;
+        uint8_t *ptrWB; LayoutWB layoutWB;
+    };
+
+    static bool CanImplement(const Arguments &args)
+    {
+        return true;
+    }
+
+    static size_t GetWorkspaceSize(const Arguments &args)
+    {
+        return 0;
+    }
+
+    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    {
+        Params params{args.problemShape,
+            args.ptrA, args.layoutA,
+            args.ptrB, args.layoutB,
+            args.ptrC, args.layoutC,
+            args.ptrWA, args.layoutWA,
+            args.ptrWB, args.layoutWB
+            };
+        return params;
+    }
+
     // Methods
     ACT_DEVICE
     OptimizedMatmulTla() {}
+
+    ACT_DEVICE
+    ~OptimizedMatmulTla() {}
 
     template <int32_t CORE_TYPE = g_coreType>
     ACT_DEVICE
