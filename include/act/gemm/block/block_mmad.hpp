@@ -32,6 +32,23 @@ struct BlockMmad {
     static_assert(DEPENDENT_FALSE<DispatchPolicy>, "BlockMmad is not implemented for this DispatchPolicy");
 };
 
+/// new add for the reason that i am using the dispatchpolicy which is same as the policy of the optimized_matmul
+// so i add a new one class to avoid the conflict
+template <
+    class DispatchPolicy,
+    class L1TileShape,
+    class L0TileShape,
+    class AType,
+    class BType,
+    class CType,
+    class BiasType = void,
+    class TileCopy = Gemm::Tile::TileCopyGemm<typename DispatchPolicy::ArchTag, AType, BType, CType, BiasType>,  // change the name
+    class TileMmad = Gemm::Tile::TileMmad<typename DispatchPolicy::ArchTag, AType, BType, BiasType>
+>
+struct BlockGemm {
+    static_assert(DEPENDENT_FALSE<DispatchPolicy>, "BlockMmad is not implemented for this DispatchPolicy");
+};
+
 template <
     class DispatchPolicy,
     class L1TileShape,
@@ -61,5 +78,6 @@ struct BlockMmadTla {
 #include "act/gemm/block/block_mmad_pingpong_tla.hpp"
 #include "act/gemm/block/block_mmad_preload_tla.hpp"
 #include "act/gemm/block/block_mmad_preload_async_with_callback.hpp"
+#include "act/gemm/block/block_mmad_gemm.hpp"
 
 #endif // ACT_GEMM_BLOCK_BLOCK_MMAD_HPP
