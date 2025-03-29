@@ -75,10 +75,10 @@ public:
         GM_ADDR ptrD;
         LayoutD layoutD;
 
-        ACT_HOST_DEVICE
+        ACT_DEVICE
         Params() {}
 
-        ACT_HOST_DEVICE
+        ACT_DEVICE
         Params(GM_ADDR ptrX_, LayoutX const &layoutX_, GM_ADDR ptrD_, LayoutD const &layoutD_)
             : ptrX(ptrX_), layoutX(layoutX_), ptrD(ptrD_), layoutD(layoutD_) {}
     };
