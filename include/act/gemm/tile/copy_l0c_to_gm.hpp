@@ -145,6 +145,50 @@ struct CopyL0CToGm<Act::Arch::AtlasA2,
     }
 };
 
+// new add code, for the ColumnMajor l0c->GM
+template <
+    class ElementAccumulator_,
+    class ElementDst_,
+    bool ReluEnable_
+>
+struct CopyL0CToGm<Act::Arch::AtlasA2, ElementAccumulator_,
+                Act::Gemm::GemmType<ElementDst_, layout::ColumnMajor>,
+                ScaleGranularity::NO_QUANT,
+                ReluEnable_>
+{
+    using ArchTag = Act::Arch::AtlasA2;
+    using ElementDst = ElementDst_;
+    using ElementSrc = ElementAccumulator_;
+    using LayoutSrc = Act::layout::zN;
+    using LayoutDst = Act::layout::ColumnMajor;
+    static constexpr auto quantPre = CopyL0CToGmQuantMode<ArchTag, ElementSrc, ElementDst,
+        ScaleGranularity::NO_QUANT>::VALUE;
+    static constexpr auto reluEn = ReluEnable_;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 =  BYTE_PER_C0 / sizeof(ElementDst);
+
+    ACT_DEVICE
+    CopyL0CToGm(){}
+
+    ACT_DEVICE
+    void operator()(
+        AscendC::GlobalTensor<ElementDst> dstTensor,
+        AscendC::LocalTensor<ElementSrc> srcTensor,
+        LayoutDst const &dstLayout, LayoutSrc const &srcLayout, uint8_t unitFlag = 0
+    ){
+        AscendC::DataCopyCO12DstParams params;
+        params.nSize = dstLayout.shape(0);
+        params.mSize = dstLayout.shape(1);
+        params.dstStride = dstLayout.stride(1);
+        params.srcStride = srcLayout.shape(2) * srcLayout.shape(3);
+        params.quantPre = quantPre;
+        params.reluPre = 0;
+        params.channelSplit = false;
+        params.nz2ndEn = true;
+        AscendC::DataCopy(dstTensor, srcTensor, params);
+    }
+};
+
 template <
     class ElementAccumulator_,
     class ElementDst_,

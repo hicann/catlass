@@ -67,10 +67,10 @@ public:
         GM_ADDR ptrLayoutC;
 
         // Methods
-        ACT_DEVICE
+        ACT_HOST_DEVICE
         Params() {}
 
-        ACT_DEVICE
+        ACT_HOST_DEVICE
         Params(
             uint32_t problemCount_, GM_ADDR ptrProblemShape_,
             GM_ADDR ptrA_, GM_ADDR ptrLayoutA_,
@@ -83,11 +83,40 @@ public:
         {
         }
     };
+    struct Arguments{
+        uint32_t problemCount;
+        uint8_t *ptrProblemShape;
+        uint8_t *ptrA;
+        uint8_t *ptrLayoutA;
+        uint8_t *ptrB;
+        uint8_t *ptrLayoutB;
+        uint8_t *ptrC;
+        uint8_t *ptrLayoutC;
+    };
+    static bool CanImplement(const Arguments &args)
+    {
+        return true;
+    }
+    static size_t GetWorkspaceSize(const Arguments &args)
+    {
+        return 0;
+    }
+    static Params ToUnderlyingArguments(const Arguments &args, void* workspace)
+    {
+        Params params{
+            args.problemCount,
+            args.ptrProblemShape,
+            args.ptrA, args.ptrLayoutA,
+            args.ptrB, args.ptrLayoutB,
+            args.ptrC, args.ptrLayoutC};
+        return params;
+    }
 
     // Methods
-    ACT_DEVICE
+    ACT_HOST_DEVICE
     GroupedMatmul() {}
-
+    ACT_HOST_DEVICE
+    ~GroupedMatmul() {}
     template <int32_t CORE_TYPE = g_coreType>
     ACT_DEVICE
     void operator()(Params const &params);
@@ -171,7 +200,7 @@ public:
 
             startCoreIdx = (startCoreIdx + coreLoops) % coreNum;
         }
-
+        
         if constexpr (BlockMmad::DispatchPolicy::ASYNC) {
             blockMmad.SynchronizeBlock();
         }

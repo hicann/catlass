@@ -53,6 +53,63 @@ struct CopyUb2Gm<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>> {
     }
 };
 
+template <typename Element>
+struct CopyUb2Gm<Arch::AtlasA2, Gemm::GemmType<Element, layout::ColumnMajor>> {
+    using LayoutDst = layout::ColumnMajor;
+    using LayoutSrc = layout::ColumnMajor;
+
+    static constexpr uint32_t ELE_NUM_PER_BLK = BYTE_PER_C0 / sizeof(Element);
+
+    ACT_DEVICE
+    CopyUb2Gm() = default;
+
+    ACT_DEVICE
+    void operator()(
+        AscendC::GlobalTensor<Element> const &dstTensor,
+        AscendC::LocalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst,
+        LayoutSrc const &layoutSrc)
+    {
+    AscendC::DataCopyExtParams dataCopyParams(
+        layoutDst.shape(1),
+        layoutDst.shape(0) * sizeof(Element),
+        (layoutSrc.stride(1) - layoutSrc.shape(0)) / ELE_NUM_PER_BLK,
+        (layoutDst.stride(1) - layoutDst.shape(0)) * sizeof(Element),
+        0
+    );
+    AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams);
+    }
+};
+
+template <typename Element>
+struct CopyUb2Gm<Arch::AtlasA2, Gemm::GemmType<Element, layout::VectorLayout>> {
+    using LayoutSrc = layout::VectorLayout;
+    using LayoutDst = layout::VectorLayout;
+
+    static constexpr uint32_t ELE_NUM_PER_BLK = BYTE_PER_BLK / sizeof(Element);
+
+    ACT_DEVICE
+    CopyUb2Gm() = default;
+
+    ACT_DEVICE
+    void operator()(
+        AscendC::GlobalTensor<Element> const &dstTensor,
+        AscendC::LocalTensor<Element> const &srcTensor,
+        layout::VectorLayout const &layoutDst,
+        layout::VectorLayout const &layoutSrc)
+    {
+        AscendC::DataCopyExtParams dataCopyParams(
+            1,
+            layoutDst.shape(0) * sizeof(Element),
+            0,
+            0,
+            0
+        );
+        AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams);
+    };
+};
+
+
 template <
     class ArchTag,
     class GmType
@@ -105,6 +162,42 @@ struct CopyUb2GmAligned<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>
         }
     };
 };
+
+
+// template <
+//     class ArchTag,
+//     class GmType
+// >
+// struct VecCopyUb2Gm{
+//     static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy ub to gm, can not find the specialization.");
+// };
+
+// template <typename Element>
+// struct VecCopyUb2Gm<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>>{
+//     using LayoutDst = layout::RowMajor;
+//     using LayoutSrc = layout::RowMajor;
+
+//     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+
+//     ACT_DEVICE
+//     VecCopyUb2Gm() = default;
+
+//     ACT_DEVICE
+//     void operator()(
+//         AscendC::GlobalTensor<Element> const &dstTensor,
+//         AscendC::LocalTensor<Element> const &srcTensor,
+//         layout::RowMajor const &layoutDst,
+//         layout::RowMajor const &layoutSrc)
+//     {
+//         AscendC::DataCopyExtParams dataCopyParams(
+//             layoutDst.shape(0),
+//             layoutDst.shape(1) * sizeof(Element),
+//             0,
+//             0,
+//             0);
+//         AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams);
+//     }
+// };
 
 }  // Act::Epilogue::Tile
 
