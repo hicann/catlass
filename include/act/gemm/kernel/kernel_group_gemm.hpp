@@ -92,6 +92,7 @@ public:
         uint32_t tileLen = computeLayoutSrc.shape(1); 
         uint32_t paddingStride = computeLayoutDst.stride(0); 
 
+        uint32_t tilesPerAiv = tilesNum / aivNum; 
         uint32_t tileRemain = tilesNum % aivNum;
         if (aivId < tileRemain) {
             tilesPerAiv++; 

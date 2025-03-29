@@ -1,7 +1,7 @@
 # BasicMatmul Example Readme
 ## 代码组织
 ```
-├── 19_gemv_aiv
+├── 17_gemv_aiv
 │   ├── CMakeLists.txt   # CMake编译文件
 │   ├── README.md
 │   └── gemv_aiv.cpp # 主文件
@@ -13,7 +13,7 @@
 # cd [代码仓路径]/build/bin
 # 可执行文件名 |矩阵m轴|n轴|Device ID
 # Device ID可选，默认为0
-./19_gemv_aiv 256 512 0
+./17_gemv_aiv 256 512 0
 ```
 执行结果如下，说明精度比对成功。
 ```

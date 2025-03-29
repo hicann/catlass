@@ -1,4 +1,4 @@
 act_example_add_executable(
-    17_gemm
+    15_gemm
     gemm.cpp
 )

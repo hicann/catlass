@@ -1,5 +1,5 @@
 act_example_add_executable(
-    20_gemv_aic
+    18_gemv_aic
     gemv_aic.cpp
 
 )

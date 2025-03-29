@@ -31,7 +31,7 @@ set(CCEC_COMPILER_OPTIONS_BASE
 
 file(GLOB_RECURSE ACT_INCLUDE_FILES ${CMAKE_SOURCE_DIR}/include/*.hpp)
 file(GLOB_RECURSE ACT_EXAMPLES_COMMON_INCLUDE_FILES ${ACT_EXAMPLES_COMMON_SOURCE_DIR}/*.hpp)
-set(CCEC_COMPILER_OPTIONS_05_GEMV_AIV
+set(CCEC_COMPILER_OPTIONS_17_GEMV_AIV
     -O2 -std=c++17 -xcce --cce-aicore-arch=dav-c220-vec
     -mllvm -cce-aicore-stack-size=0x8000
     -mllvm -cce-aicore-function-stack-size=0x8000
@@ -56,8 +56,8 @@ set(CCEC_COMPILER_OPTIONS_05_GEMV_AIV
 add_custom_target(act_examples)
 
 function(act_example_add_executable NAME)
-    if (${NAME} STREQUAL "19_gemv_aiv")
-        set(CCEC_COMPILER_OPTIONS ${CCEC_COMPILER_OPTIONS_05_GEMV_AIV})
+    if (${NAME} STREQUAL "17_gemv_aiv")
+        set(CCEC_COMPILER_OPTIONS ${CCEC_COMPILER_OPTIONS_17_GEMV_AIV})
     else()
         set(CCEC_COMPILER_OPTIONS ${CCEC_COMPILER_OPTIONS_BASE})
     endif()
@@ -90,10 +90,10 @@ foreach(EXAMPLE
     12_quant_matmul
     13_basic_matmul_tla
     14_optimized_matmul_tla
-    17_gemm
-    18_group_gemm
-    19_gemv_aiv
-    20_gemv_aic
+    15_gemm
+    16_group_gemm
+    17_gemv_aiv
+    18_gemv_aic
 )
     add_subdirectory(${EXAMPLE})
 endforeach()

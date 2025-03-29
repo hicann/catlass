@@ -8,28 +8,65 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#include <iostream>
-#include <vector>
-
-#include "helper.hpp"
-#include "golden.hpp"
-
-#include "act/act.hpp"
-#include "act/arch/arch.hpp"
-#include "act/gemm/dispatch_policy.hpp"
-#include "act/gemv/kernel/kernel_gemv_aiv.hpp"
-#include "act/gemv/block/block_gemv.hpp"
-#include "act/gemm/gemm_type.hpp"
-#include "act/layout/layout.hpp"
-#include "act/gemv/tile/tile_copy.hpp"
-#include "act/gemv/tile/tile_vmad.hpp"
-#include "act/gemv/tile/tile_vmuls.hpp"
-#include "act/gemv/device/device_gemv.hpp"
-#include "act/status.hpp"
+ #include <iostream>
+ #include <vector>
+ 
+ #include "helper.hpp"
+ #include "golden.hpp"
+ 
+ #include "act/act.hpp"
+ #include "act/arch/arch.hpp"
+ #include "act/gemm/dispatch_policy.hpp"
+ #include "act/gemv/kernel/kernel_gemv_aiv.hpp"
+ #include "act/gemv/block/block_gemv.hpp"
+ #include "act/gemm/gemm_type.hpp"
+ #include "act/layout/layout.hpp"
+ #include "act/gemv/tile/tile_copy.hpp"
+ #include "act/gemv/tile/tile_vmad.hpp"
+ #include "act/gemv/tile/tile_vmuls.hpp"
 
 using namespace Act;
-
+using UBTileShape = GemvShape<32,512>;
 using ScalarType = float;
+
+template <
+    class LayoutA,
+    class LayoutX,
+    class LayoutY
+>
+ACT_GLOBAL
+void GemvAiv(
+    GemvCoord problemShape,
+    GM_ADDR gmA, LayoutA layoutA,
+    GM_ADDR gmX, LayoutX layoutX,
+    GM_ADDR gmY, LayoutY layoutY,
+    GM_ADDR gmY_read,
+    ScalarType alpha,ScalarType beta,
+    uint32_t SPLIT
+){
+    using ArchTag = Arch::AtlasA2;
+    using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
+    
+
+    using AType = Gemm::GemmType<float, LayoutA>;
+    using XType = Gemm::GemmType<float, LayoutX>;
+    using YType = Gemm::GemmType<float, LayoutY>;
+    using BiasType = void;
+    using TileCopy = Gemv::Tile::TileCopyGemvAiv<typename DispatchPolicy::ArchTag, AType, XType, YType, BiasType>;
+    using TileVmad = Gemv::Tile::TileVmad<typename DispatchPolicy::ArchTag, AType, XType, YType, BiasType>;
+    using TileVmuls = Gemv::Tile::TileVmuls<typename DispatchPolicy::ArchTag, XType>;
+
+    using GemvBlock = Gemv::Block::BlockGemv<DispatchPolicy, UBTileShape, AType, XType, YType,BiasType,TileCopy,TileVmad,TileVmuls>;
+    using BlockEpilogue = void;
+
+    // kernel level
+    using GemvKernel = Gemv::Kernel::KernelGemv<GemvBlock, BlockEpilogue>;
+    typename GemvKernel::Params params{problemShape, gmA, layoutA, gmX, layoutX, gmY, layoutY, gmY_read,alpha,beta,SPLIT};
+    // call a kernel
+    GemvKernel gemv;
+    
+    gemv(params);
+}
 
 typedef struct Options{
     const std::string HELPER = "05_gemv_aiv m n [device_id]";
@@ -102,23 +139,6 @@ uint32_t getSplictNum(bool trans, uint32_t M, uint32_t N, uint32_t M1, uint32_t 
     return splitNum;
 }
 
-template <class Adapter>
-void RunAdapter(Adapter gemv_op, typename Adapter::Arguments args, aclrtStream stream,
-    uint32_t aicCoreNum)
-{
-    size_t sizeWorkspace = gemv_op.GetWorkspaceSize(args);
-    uint8_t *deviceWorkspace = nullptr;
-    if (sizeWorkspace > 0) {
-        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
-    }
-    gemv_op.Initialize(args, deviceWorkspace);
-    gemv_op(stream, aicCoreNum);
-    ACL_CHECK(aclrtSynchronizeStream(stream));
-    if (sizeWorkspace > 0) {
-        ACL_CHECK(aclrtFree(deviceWorkspace));
-    }
-}
-
 void Run(Options options){
     aclrtStream stream{nullptr};
     ACL_CHECK(aclInit(nullptr));
@@ -127,6 +147,9 @@ void Run(Options options){
 
     uint32_t m = options.problemShape.m();
     uint32_t n = options.problemShape.n();
+    
+    uint32_t maxSplict = 20;
+    uint32_t const SPLIT = getSplictNum(false, m, n, UBTileShape::M, UBTileShape::N, maxSplict);
 
     size_t lenA = static_cast<size_t>(m) * n;
     size_t lenX = static_cast<size_t>(n) * 1;
@@ -140,7 +163,7 @@ void Run(Options options){
     using LayoutA = layout::RowMajor;
     using LayoutX = layout::VectorLayout;
     using LayoutY = layout::VectorLayout;
-    bool is_spiltk = std::is_same_v<LayoutA, layout::ColumnMajor>;
+    
     LayoutA layoutA{m, n};
     LayoutX layoutX{n};
     LayoutY layoutY{m};
@@ -172,35 +195,19 @@ void Run(Options options){
 
     uint8_t *deviceY{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceY), sizeY, ACL_MEM_MALLOC_HUGE_FIRST));
-    if(is_spiltk){
-        ACL_CHECK(aclrtMemcpy(deviceY, sizeY, hostY_read.data(), sizeY, ACL_MEMCPY_HOST_TO_DEVICE));
-    }
+    ACL_CHECK(aclrtMemcpy(deviceY, sizeY, hostY_read.data(), sizeY, ACL_MEMCPY_HOST_TO_DEVICE));
     
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAiv();
-    using ArchTag = Arch::AtlasA2;
-    using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
-    using AType = Gemm::GemmType<float, LayoutA>;
-    using XType = Gemm::GemmType<float, LayoutX>;
-    using YType = Gemm::GemmType<float, LayoutY>;
-    using BiasType = void;
-    using UBTileShape = GemvShape<32,512>;
-    uint32_t maxSplict = 20;
-    uint32_t const SPLIT = getSplictNum(is_spiltk, m, n, UBTileShape::M, UBTileShape::N, maxSplict);
-
-    using TileCopy = Gemv::Tile::TileCopyGemvAiv<typename DispatchPolicy::ArchTag, AType, XType, YType, BiasType>;
-    using TileVmad = Gemv::Tile::TileVmad<typename DispatchPolicy::ArchTag, AType, XType, YType, BiasType>;
-    using TileVmuls = Gemv::Tile::TileVmuls<typename DispatchPolicy::ArchTag, XType>;
-
-    using GemvBlock = Gemv::Block::BlockGemv<DispatchPolicy, UBTileShape, AType, XType, YType,BiasType,TileCopy,TileVmad,TileVmuls>;
-    using BlockEpilogue = void;
-
-    // kernel level
-    using GemvKernel = Gemv::Kernel::KernelGemv<GemvBlock, BlockEpilogue>;
-    typename GemvKernel::Arguments arguments{options.problemShape, hostAlpha[0], hostBeta[0], (uint8_t*)deviceA, (uint8_t*)deviceX, (uint8_t*)deviceY, (uint8_t*)deviceY_read, SPLIT};
-    using GemvAdapter = Gemv::Device::DeviceGemv<GemvKernel>;
-    GemvAdapter gemv_op;
-    gemv_op.CanImplement(arguments);
-    RunAdapter(gemv_op, arguments, stream, aicCoreNum);
+    GemvAiv<<<aicCoreNum, nullptr, stream>>>(
+        options.problemShape,
+        deviceA, layoutA,
+        deviceX, layoutX,
+        deviceY, layoutY,
+        deviceY_read,
+        hostAlpha[0], hostBeta[0],
+        SPLIT
+    );
+    ACL_CHECK(aclrtSynchronizeStream(stream));
 
     std::vector<float> hostRes(lenY);
     ACL_CHECK(aclrtMemcpy(hostRes.data(), sizeY, deviceY, sizeY, ACL_MEMCPY_DEVICE_TO_HOST));
