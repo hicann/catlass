@@ -144,6 +144,40 @@ public:
 
     // Methods
     ACT_DEVICE
+    GroupedMatmulMPerTokenDequantMultiStageWorkspace()
+    {
+        return true;
+    }
+
+    static size_t GetWorkspaceSize(const Arguments &args)
+    {
+        size_t lenWorkspace = static_cast<size_t>(L1TileShape::M) * L1TileShape::N *
+            args.aicCoreNum * WORKSPACE_STAGES;
+        size_t sizeWorkspace = lenWorkspace * sizeof(uint32_t);
+        return sizeWorkspace;
+    }
+
+    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    {
+        uint32_t m = args.problemShape.m();
+        uint32_t n = args.problemShape.n();
+        uint32_t k = args.problemShape.k();
+        LayoutA layoutA{m, k};
+        LayoutB layoutB{k, n};
+        LayoutScale layoutScale{n};
+        LayoutPerTokenScale layoutPerTokenScale{m};
+        LayoutD layoutD{m, n};
+        Params params{args.problemShape, args.problemCount, args.ptrGroupList,
+            args.ptrA, layoutA,
+            args.ptrB, layoutB,
+            args.ptrScale, layoutScale,
+            args.ptrPerTokenScale, layoutPerTokenScale,
+            args.ptrD, layoutD, workspace};
+        return params;
+    }
+
+    // Methods
+    ACT_DEVICE
     GroupedMatmulSliceMPerTokenDequantMultiStageWorkspace()
     {
         Arch::FlagID flagId = 0;

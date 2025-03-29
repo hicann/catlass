@@ -153,6 +153,122 @@ struct L1BTypeSelector<Gemm::GemmType<Element, layout::PaddingColumnMajor>> {
     using L1BType = Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::A1>;
 };
 
+
+// 我们新增
+template<class GmAType>
+struct L1ATypeSelectorGemm {
+    static_assert(DEPENDENT_FALSE<GmAType>,
+        "Unsupported layout selector, can not find the specialization.");
+};
+// for the reason that the conflict on the idea, so i have to add some special Element to avoid conflict
+// new add
+template<class Element>
+struct L1ATypeSelectorGemm<Gemm::GemmType<Element, layout::ColumnMajor>> {
+    using L1AType = Gemm::GemmType<Element, layout::nN>;
+};
+// int8_t
+template<>
+struct L1ATypeSelectorGemm<Gemm::GemmType<int8_t, layout::ColumnMajor>> {
+    using L1AType = Gemm::GemmType<int8_t, layout::nZ>;
+};
+
+template<class Element>
+struct L1ATypeSelectorGemm<Gemm::GemmType<Element, layout::RowMajor>> {
+    using L1AType = Gemm::GemmType<Element, layout::zN>;
+};
+
+
+template<class GmBType>
+struct L1BTypeSelectorGemm {
+    static_assert(DEPENDENT_FALSE<GmBType>,
+        "Unsupported layout selector, can not find the specialization.");
+};
+
+// for the reason that the conflict on the idea, so i have to add some special Element to avoid conflict
+// new add
+template<class Element>
+struct L1BTypeSelectorGemm<Gemm::GemmType<Element, layout::RowMajor>> {
+    using L1BType = Gemm::GemmType<Element, layout::zZ>;
+};
+
+template<>
+struct L1BTypeSelectorGemm<Gemm::GemmType<int8_t, layout::RowMajor>> {
+    using L1BType = Gemm::GemmType<int8_t, layout::zN>;
+};
+
+template<class Element>
+struct L1BTypeSelectorGemm<Gemm::GemmType<Element, layout::ColumnMajor>> {
+    using L1BType = Gemm::GemmType<Element, layout::nZ>;
+};
+
+/// the following code is added on 2025.03.21, for the solution of conflict about the different idea on the process of trans
+/// add tutor wrq 万仁棋
+// add L0TypeSelector
+template<class L1Type>
+struct L0ATypeSelector{};
+
+// RowMajor
+template<class Element>
+struct L0ATypeSelector<Gemm::GemmType<Element, layout::zN>>{
+    using L0AType = Gemm::GemmType<Element, layout::zZ>;
+};
+
+/// ColumnMajor
+template<class Element>
+struct L0ATypeSelector<Gemm::GemmType<Element, layout::nN>>{
+    using L0AType = Gemm::GemmType<Element, layout::zN>;
+};
+
+/// ColumnMajor int8_t
+///这里和gemv一样，可去掉后缀
+template<>
+struct L0ATypeSelector<Gemm::GemmType<int8_t, layout::nZ>>{
+    using L0AType = Gemm::GemmType<int8_t, layout::zN>;
+};
+
+template<class L1Type>
+struct L0BTypeSelectorGemm{};
+
+// RowMajor
+template<class Element>
+struct L0BTypeSelectorGemm<Gemm::GemmType<Element, layout::zZ>>{
+    using L0BType = Gemm::GemmType<Element, layout::nZ>;
+};
+
+// RowMajor int8_t
+template<>
+struct L0BTypeSelectorGemm<Gemm::GemmType<int8_t, layout::zN>>{
+    using L0BType = Gemm::GemmType<int8_t, layout::nZ>;
+};
+
+// ColumnMajor
+template<class Element>
+struct L0BTypeSelectorGemm<Gemm::GemmType<Element, layout::nZ>>{
+    using L0BType = Gemm::GemmType<Element, layout::nN>;
+};
+
+
+template<class L1Type>
+struct L0BTypeSelectorGemv{};
+
+// RowMajor zN->zN
+template<class Element>
+struct L0BTypeSelectorGemv<Gemm::GemmType<Element, layout::zN>>{
+    using L0BType = Gemm::GemmType<Element, layout::zN>;
+};
+
+// ColumnMajor fp16 bf16 float(函数内特化)    nN->zN
+template<class Element>
+struct L0BTypeSelectorGemv<Gemm::GemmType<Element, layout::nN>>{
+    using L0BType = Gemm::GemmType<Element, layout::zN>;
+};
+
+// ColumnMajor int8_t   nZ -> zN
+template<>
+struct L0BTypeSelectorGemv<Gemm::GemmType<int8_t, layout::nZ>>{
+    using L0BType = Gemm::GemmType<int8_t, layout::zN>;
+};
+
 template<class Element, class Layout, class Enable = void>
 struct L1AlignHelperTla {
     static_assert(DEPENDENT_FALSE<Element>, "Unsupported align helper tla, can not find the specialization.");
