@@ -273,7 +273,7 @@ public:
         LayoutA layoutA{args.problemShape.m(), args.problemShape.k()};
         LayoutB layoutB{args.problemShape.k(), args.problemShape.n()};
         LayoutWA layoutWA = GetWorkspaceLayout(layoutA, args.align);
-        LayoutWB layoutWB = GetWorkspaceLayout(layoutA, args.align);
+        LayoutWB layoutWB = GetWorkspaceLayout(layoutB, args.align);
         Params params{args.problemShape, args.ptrA, layoutA, args.ptrB, layoutB, args.gmWorkspace,
                     args.ptrWA, layoutWA, args.ptrWB, layoutWB, args.epilogueParams};
         return params;

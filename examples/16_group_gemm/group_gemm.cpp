@@ -94,7 +94,7 @@ void GroupGemm(
 }
 
 typedef struct Options {
-    const std::string HELPER = "04_groupgemm groupCnt mlist nlist klist [deviceId]";
+    const std::string HELPER = "16_group_gemm groupCnt mlist nlist klist [deviceId]";
     uint32_t groupCnt = 8;
     std::vector<uint32_t> mList;
     std::vector<uint32_t> nList;
