@@ -79,6 +79,38 @@ struct TileCopy {
     using CopyL0CToGm = Gemm::Tile::CopyL0CToGm<ArchTag, ElementAccumulator, CType>;
 };
 
+/// new add
+template <
+    /// Tag indicating architecture
+    class ArchTag,
+    /// GemmType for A matrix operand
+    class AType,
+    /// GemmType type for B matrix operand
+    class BType,
+    /// GemmType type for C matrix operand
+    class CType,
+    /// GemmTpe type for Bias operand
+    class BiasType = void
+>
+struct TileCopyGemm {
+    using ElementA = typename AType::Element;
+    using ElementB = typename BType::Element;
+    using ElementAccumulator =
+        typename Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
+    // change structual
+    using L1AType = typename helper::L1ATypeSelectorGemm<AType>::L1AType;
+    using L1BType = typename helper::L1BTypeSelectorGemm<BType>::L1BType;
+    using L0AType = typename helper::L0ATypeSelector<L1AType>::L0AType;
+    using L0BType = typename helper::L0BTypeSelectorGemm<L1BType>::L0BType;
+
+    using CopyGmToL1A = Gemm::Tile::CopyGmToL1<ArchTag, AType, L1AType>;    
+    using CopyGmToL1B = Gemm::Tile::CopyGmToL1<ArchTag, BType, L1BType>;
+    using CopyL1ToL0A = Gemm::Tile::CopyL1ToL0A<ArchTag, L1AType, L0AType>;
+    using CopyL1ToL0B = Gemm::Tile::CopyL1ToL0B<ArchTag, L1BType, L0BType>;
+    using CopyL0CToGm = Gemm::Tile::CopyL0CToGm<ArchTag, ElementAccumulator, CType>;
+};
+
+
 template <
     /// Tag indicating architecture
     class ArchTag,
@@ -162,7 +194,7 @@ struct PaddingPackedTileCopyTla {
     using L1AAlignHelper = Gemm::helper::L1AlignHelper<ElementA, LayoutTagA>;
     using L1BAlignHelper = Gemm::helper::L1AlignHelper<ElementB, LayoutTagB>;
 
-    using LayoutPaddingTagA = std::conditional_t<std::is_same_v<LayoutTagA, layout::RowMajor>,
+    using LayoutPaddingTagA = std::conditional_t<std::is_same_v<LayoutTagA, layout::RowMajor>, 
         layout::PaddingRowMajor, layout::PaddingColumnMajor>;
     using LayoutPaddingTagB = std::conditional_t<std::is_same_v<LayoutTagB, layout::RowMajor>,
         layout::PaddingRowMajor, layout::PaddingColumnMajor>;

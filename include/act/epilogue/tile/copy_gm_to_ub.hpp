@@ -54,6 +54,35 @@ struct CopyGm2Ub<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>> {
     };
 };
 
+// new add
+template <typename Element>
+struct CopyGm2Ub<Arch::AtlasA2, Gemm::GemmType<Element, layout::ColumnMajor>> {
+   using LayoutSrc = layout::ColumnMajor;
+   using LayoutDst = layout::ColumnMajor;
+
+   static constexpr uint32_t ELE_NUM_PER_BLK = BYTE_PER_BLK / sizeof(Element);
+
+   ACT_DEVICE
+   CopyGm2Ub() = default;
+
+   ACT_DEVICE
+   void operator()(
+       AscendC::LocalTensor<Element> dstTensor,
+       AscendC::GlobalTensor<Element> srcTensor,
+       LayoutSrc layoutDst, LayoutDst layoutSrc)
+   {
+      AscendC::DataCopyExtParams dataCopyParams(
+          layoutSrc.shape(1),
+          layoutSrc.shape(0) * sizeof(Element),
+          (layoutSrc.stride(1) - layoutSrc.shape(0)) * sizeof(Element),
+          (layoutDst.stride(1) - layoutDst.shape(0)) / ELE_NUM_PER_BLK,
+          0
+      );
+      AscendC::DataCopyPadExtParams<Element> padParams(false, 0, 0, 0);
+      AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams, padParams);
+   }
+};
+
 template <typename Element>
 struct CopyGm2Ub<Arch::AtlasA2, Gemm::GemmType<Element, layout::VectorLayout>> {
     using LayoutSrc = layout::VectorLayout;
@@ -82,6 +111,42 @@ struct CopyGm2Ub<Arch::AtlasA2, Gemm::GemmType<Element, layout::VectorLayout>> {
         AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams, padParams);
     };
 };
+
+// template <
+//     class ArchTag,
+//     class GmType
+// >
+// struct VecCopyGm2Ub{
+//     static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy gm to ub, can not find the specialization.");
+// };
+
+// template <typename Element>
+// struct VecCopyGm2Ub<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>>{
+//     using LayoutSrc = layout::RowMajor;
+//     using LayoutDst = layout::RowMajor;
+
+//     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+
+//     ACT_DEVICE
+//     VecCopyGm2Ub() = default;
+
+//     ACT_DEVICE
+//     void operator()(
+//         AscendC::LocalTensor<Element> const &dstTensor,
+//         AscendC::GlobalTensor<Element> const &srcTensor,
+//         layout::RowMajor const &layoutDst,
+//         layout::RowMajor const &layoutSrc)
+//     {
+//         AscendC::DataCopyExtParams dataCopyParams( // 连续搬运
+//             layoutSrc.shape(0),
+//             layoutSrc.shape(1) * sizeof(Element),
+//             0,
+//             0,
+//             0);
+//         AscendC::DataCopyPadExtParams<Element> padParams(false, 0, 0, 0);
+//         AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams, padParams);
+//     };
+// };
 
 /// @brief This copy instruction used to copy per token scale from GM to UB.
 /// Copy the scale of shape (m,1) on GM to the first column of shape (m,n) on UB,

@@ -174,6 +174,117 @@ struct L1AlignHelperTla<Element, Layout, std::enable_if_t<tla::detail::isColumnM
     static constexpr uint32_t N_ALIGNED = C0_NUM_PER_FRACTAL;
 };
 
+///////////////////////////////////////////
+// new add
+
+template<class GmAType>
+struct L1ATypeSelectorGemm {
+    static_assert(DEPENDENT_FALSE<GmAType>,
+        "Unsupported layout selector, can not find the specialization.");
+};
+// new add
+template<class Element>
+struct L1ATypeSelectorGemm<Gemm::GemmType<Element, layout::ColumnMajor>> {
+    using L1AType = Gemm::GemmType<Element, layout::nN>;
+};
+// int8_t
+template<>
+struct L1ATypeSelectorGemm<Gemm::GemmType<int8_t, layout::ColumnMajor>> {
+    using L1AType = Gemm::GemmType<int8_t, layout::nZ>;
+};
+
+template<class Element>
+struct L1ATypeSelectorGemm<Gemm::GemmType<Element, layout::RowMajor>> {
+    using L1AType = Gemm::GemmType<Element, layout::zN>;
+};
+
+
+template<class GmBType>
+struct L1BTypeSelectorGemm {
+    static_assert(DEPENDENT_FALSE<GmBType>,
+        "Unsupported layout selector, can not find the specialization.");
+};
+
+// new add
+template<class Element>
+struct L1BTypeSelectorGemm<Gemm::GemmType<Element, layout::RowMajor>> {
+    using L1BType = Gemm::GemmType<Element, layout::zZ>;
+};
+
+template<>
+struct L1BTypeSelectorGemm<Gemm::GemmType<int8_t, layout::RowMajor>> {
+    using L1BType = Gemm::GemmType<int8_t, layout::zN>;
+};
+
+template<class Element>
+struct L1BTypeSelectorGemm<Gemm::GemmType<Element, layout::ColumnMajor>> {
+    using L1BType = Gemm::GemmType<Element, layout::nZ>;
+};
+
+// add L0TypeSelector
+template<class L1Type>
+struct L0ATypeSelector{};
+
+// RowMajor
+template<class Element>
+struct L0ATypeSelector<Gemm::GemmType<Element, layout::zN>>{
+    using L0AType = Gemm::GemmType<Element, layout::zZ>;
+};
+
+/// ColumnMajor
+template<class Element>
+struct L0ATypeSelector<Gemm::GemmType<Element, layout::nN>>{
+    using L0AType = Gemm::GemmType<Element, layout::zN>;
+};
+
+/// ColumnMajor int8_t
+template<>
+struct L0ATypeSelector<Gemm::GemmType<int8_t, layout::nZ>>{
+    using L0AType = Gemm::GemmType<int8_t, layout::zN>;
+};
+
+template<class L1Type>
+struct L0BTypeSelectorGemm{};
+
+// RowMajor
+template<class Element>
+struct L0BTypeSelectorGemm<Gemm::GemmType<Element, layout::zZ>>{
+    using L0BType = Gemm::GemmType<Element, layout::nZ>;
+};
+
+// RowMajor int8_t
+template<>
+struct L0BTypeSelectorGemm<Gemm::GemmType<int8_t, layout::zN>>{
+    using L0BType = Gemm::GemmType<int8_t, layout::nZ>;
+};
+
+// ColumnMajor
+template<class Element>
+struct L0BTypeSelectorGemm<Gemm::GemmType<Element, layout::nZ>>{
+    using L0BType = Gemm::GemmType<Element, layout::nN>;
+};
+
+
+template<class L1Type>
+struct L0BTypeSelectorGemv{};
+
+// RowMajor zN->zN
+template<class Element>
+struct L0BTypeSelectorGemv<Gemm::GemmType<Element, layout::zN>>{
+    using L0BType = Gemm::GemmType<Element, layout::zN>;
+};
+
+// ColumnMajor fp16 bf16 float(函数内特化)    nN->zN
+template<class Element>
+struct L0BTypeSelectorGemv<Gemm::GemmType<Element, layout::nN>>{
+    using L0BType = Gemm::GemmType<Element, layout::zN>;
+};
+
+// ColumnMajor int8_t   nZ -> zN
+template<>
+struct L0BTypeSelectorGemv<Gemm::GemmType<int8_t, layout::nZ>>{
+    using L0BType = Gemm::GemmType<int8_t, layout::zN>;
+};
 } // namespace Act::Gemm::helper
 
 #endif // ACT_GEMM_HELPER_HPP
