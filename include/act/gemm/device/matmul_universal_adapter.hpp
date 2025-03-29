@@ -16,7 +16,7 @@
 #include "act/gemm/device/kernel_adapter.hpp"
 
 
-namespace Act::Gemm::device {
+namespace Act::Gemm::Device {
 
 template <class MatmulKernel>
 class MatmulUniversalAdapter {
