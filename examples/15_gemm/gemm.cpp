@@ -38,7 +38,7 @@ using namespace Act;
 using ScalarType = float;
 
 typedef struct Options{
-    const std::string HELPER = "17_gemm m n k [device_id]";
+    const std::string HELPER = "15_gemm m n k [device_id]";
 
     GemmCoord problemShape{128, 128, 128};
     int32_t deviceId{0};

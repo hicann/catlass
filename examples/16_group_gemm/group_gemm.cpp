@@ -41,7 +41,7 @@ using namespace Act;
 using ScalarType = float;
 
 typedef struct Options {
-    const std::string HELPER = "18_group_gemm groupCnt mlist nlist klist [deviceId]";
+    const std::string HELPER = "16_group_gemm groupCnt mlist nlist klist [deviceId]";
     uint32_t groupCnt = 8;
     std::vector<uint32_t> mList;
     std::vector<uint32_t> nList;
