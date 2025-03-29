@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef Act_STATUS_HPP
-#define Act_STATUS_HPP
+#ifndef ACT_STATUS_HPP
+#define ACT_STATUS_HPP
 
 namespace Act{
 
@@ -17,4 +17,4 @@ enum class Status{ kSuccess, kInvalid };
 
 } // namespace Act
 
-#endif // Act_STATUS_HPP
+#endif // ACT_STATUS_HPP
