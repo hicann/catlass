@@ -23,75 +23,15 @@
 #include "act/gemm/kernel/basic_matmul_tla.hpp"
 #include "act/layout/layout.hpp"
 
+#include "act/status.hpp"
+#include "act/gemm/device/matmul_universal_adapter.hpp"
+
 #include "tla/layout.hpp"
 #include "tla/tensor.hpp"
 
 using namespace Act;
 using namespace tla;
 using fp16_t = op::fp16_t;
-
-template <
-    class LayoutTagA,
-    class LayoutTagB,
-    class LayoutTagC
->
-ACT_GLOBAL
-void BasicMatmul(
-    GemmCoord problemShape,
-    GM_ADDR gmA, LayoutTagA tagA,
-    GM_ADDR gmB, LayoutTagB tagB,
-    GM_ADDR gmC, LayoutTagC tagC
-)
-{
-    using ArchTag = Arch::AtlasA2;
-    using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
-    using L1TileShape = Shape<_128, _256, _256>;
-    using L0TileShape = Shape<_128, _256, _64>;
-
-    using ElementA = half;
-    using ElementB = half;
-    using ElementC = half;
-
-    auto layoutA = MakeLayoutFromTag(tagA);
-    auto layoutB = MakeLayoutFromTag(tagB);
-    auto layoutC = MakeLayoutFromTag(tagC);
-
-    using TensorA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutA), AscendC::TPosition::GM>;
-    using TensorB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutB), AscendC::TPosition::GM>;
-    using TensorC = Tensor<AscendC::GlobalTensor<ElementC>, decltype(layoutC), AscendC::TPosition::GM>;
-    using TileCopy =
-        Gemm::Tile::PackedTileCopyTla<ArchTag, TensorA, LayoutTagA, TensorB, LayoutTagB, TensorC, LayoutTagC>;
-    using BlockMmad =
-        Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape,
-                                    TensorA, TensorB, TensorC, void, TileCopy>;
-    using BlockEpilogue = void;
-
-    if (problemShape.m() > problemShape.n()) {
-        // Swizzle offset is 3 and direction is 0.
-        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
-
-        // kernel level
-        using MatmulKernel = Gemm::Kernel::BasicMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler>;
-
-        typename MatmulKernel::Params params{problemShape, gmA, layoutA, gmB, layoutB, gmC, layoutC};
-
-        // call a kernel
-        MatmulKernel matmul;
-        matmul(params);
-    } else {
-        // Swizzle offset is 3 and direction is 1.
-        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
-
-        // kernel level
-        using MatmulKernel = Gemm::Kernel::BasicMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler>;
-
-        typename MatmulKernel::Params params{problemShape, gmA, layoutA, gmB, layoutB, gmC, layoutC};
-
-        // call a kernel
-        MatmulKernel matmul;
-        matmul(params);
-    }
-}
 
 struct Options {
     const std::string HELPER = "00_basic_matmul m n k [device_id]";
@@ -145,10 +85,14 @@ void Run(Options const &options)
     size_t sizeA = lenA * sizeof(fp16_t);
     size_t sizeB = lenB * sizeof(fp16_t);
     size_t sizeC = lenC * sizeof(fp16_t);
+    size_t sizeWorkspace;
 
-    layout::RowMajor layoutA{m, k};
-    layout::RowMajor layoutB{k, n};
-    layout::RowMajor layoutC{m, n};
+    using LayoutTagA = layout::RowMajor;
+    using LayoutTagB = layout::RowMajor;
+    using LayoutTagC = layout::RowMajor;
+    LayoutTagA tagA{m, k};
+    LayoutTagB tagB{k, n};
+    LayoutTagC tagC{m, n};
 
     std::vector<fp16_t> hostA(lenA);
     std::vector<fp16_t> hostB(lenB);
@@ -166,18 +110,87 @@ void Run(Options const &options)
     uint8_t *deviceC{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
+    uint8_t *deviceWorkspace{nullptr};
+
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
-    BasicMatmul<<<aicCoreNum, nullptr, stream>>>(
-        options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC);
+    using ArchTag = Arch::AtlasA2;
+    using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
+    using L1TileShape = Shape<_128, _256, _256>;
+    using L0TileShape = Shape<_128, _256, _64>;
+
+    using ElementA = half;
+    using ElementB = half;
+    using ElementC = half;
+
+    auto layoutA = MakeLayoutFromTag(tagA);
+    auto layoutB = MakeLayoutFromTag(tagB);
+    auto layoutC = MakeLayoutFromTag(tagC);
+
+    using TensorA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutA), AscendC::TPosition::GM>;
+    using TensorB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutB), AscendC::TPosition::GM>;
+    using TensorC = Tensor<AscendC::GlobalTensor<ElementC>, decltype(layoutC), AscendC::TPosition::GM>;
+    using TileCopy =
+        Gemm::Tile::PackedTileCopyTla<ArchTag, TensorA, LayoutTagA, TensorB, LayoutTagB, TensorC, LayoutTagC>;
+    using BlockMmad =
+        Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape,
+                                    TensorA, TensorB, TensorC, void, TileCopy>;
+    using BlockEpilogue = void;
+
+    if (options.problemShape.m() > options.problemShape.n()) {
+        // Swizzle offset is 3 and direction is 0.
+        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
+
+        // kernel level
+        using MatmulKernel = Gemm::Kernel::BasicMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler>;
+
+        using MatmulAdapter = Gemm::device::MatmulUniversalAdapter<MatmulKernel>;
+    
+        MatmulKernel::Arguments arguments{
+            options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC};
+
+        MatmulAdapter matmul_op;
+        matmul_op.CanImplement(arguments);
+        sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
+        if (sizeWorkspace > 0) {
+            ACL_CHECK(
+                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
+            );
+        }
+        matmul_op.Initialize(arguments, deviceWorkspace);
+        matmul_op(stream, aicCoreNum);
+    } else {
+        // Swizzle offset is 3 and direction is 1.
+        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
+
+        // kernel level
+        using MatmulKernel = Gemm::Kernel::BasicMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler>;
+
+        using MatmulAdapter = Gemm::device::MatmulUniversalAdapter<MatmulKernel>;
+    
+        MatmulKernel::Arguments arguments{
+            options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC};
+
+        MatmulAdapter matmul_op;
+        matmul_op.CanImplement(arguments);
+        sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
+        if (sizeWorkspace > 0) {
+            ACL_CHECK(
+                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
+            );
+        }
+        matmul_op.Initialize(arguments, deviceWorkspace);
+        matmul_op(stream, aicCoreNum);
+    }
+
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
     std::vector<fp16_t> hostC(lenC);
     ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
 
     std::vector<float> hostGolden(lenC);
-    golden::ComputeMatmul(options.problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);
+    golden::ComputeMatmul(options.problemShape, hostA, tagA, hostB, tagB, hostGolden, tagC);
 
     std::vector<uint64_t> errorIndices = golden::CompareData(hostC, hostGolden, k);
     if (errorIndices.empty()) {
@@ -189,6 +202,9 @@ void Run(Options const &options)
     ACL_CHECK(aclrtFree(deviceA));
     ACL_CHECK(aclrtFree(deviceB));
     ACL_CHECK(aclrtFree(deviceC));
+    if (sizeWorkspace > 0) {
+        ACL_CHECK(aclrtFree(deviceWorkspace));
+    }
 
     ACL_CHECK(aclrtDestroyStream(stream));
     ACL_CHECK(aclrtResetDevice(options.deviceId));
