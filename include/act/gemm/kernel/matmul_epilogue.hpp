@@ -106,11 +106,8 @@ public:
     }
 
     // Methods
-    ACT_HOST_DEVICE
+    ACT_DEVICE
     MatmulEpilogue() {}
-    
-    ACT_HOST_DEVICE
-    ~MatmulEpilogue() {}
 
     template <int32_t CORE_TYPE = g_coreType>
     ACT_DEVICE
