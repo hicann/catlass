@@ -43,8 +43,5 @@ __pycache__/
 build/
 output/
 
-# sh脚本
-*.sh
-
 # log文件
 *.log
