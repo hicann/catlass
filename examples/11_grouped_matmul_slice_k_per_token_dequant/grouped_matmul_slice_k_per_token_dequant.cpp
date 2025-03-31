@@ -229,7 +229,7 @@ void Run(Options const & options)
         hostPerTokenScale, layoutPerTokenScale,
         hostGolden, layoutD);
 
-    std::vector<uint64_t> errorIndices = golden::CompareData(hostD, hostGolden, k);
+    std::vector<uint64_t> errorIndices = golden::CompareData(hostD, hostGolden, k, groupList, m * n);
     if (errorIndices.empty()) {
         std::cout << "Compare success." << std::endl;
     } else {
