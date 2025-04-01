@@ -4,7 +4,8 @@
 ├── 00_basic_matmul
 │   ├── CMakeLists.txt   # CMake编译文件
 │   ├── README.md
-│   └── basic_matmul.cpp # 主文件
+│   ├── basic_matmul.cpp # 主文件
+│   └── basic_matmul_autotune.py # 自动寻优示例文件
 ```
 ## 使用示例
 - 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/quickstart.md#算子编译)

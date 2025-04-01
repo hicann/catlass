@@ -4,7 +4,8 @@
 ├── 08_grouped_matmul
 │   ├── CMakeLists.txt     # CMake编译文件
 │   ├── README.md
-│   └── grouped_matmul.cpp # 主文件
+│   ├── grouped_matmul.cpp # 主文件
+│   └── grouped_matmul_autotune.py # 自动寻优示例文件
 ```
 ## 示例说明
 - 本grouped_matmul为通用kernel，示例内部为切k情况下的使用
