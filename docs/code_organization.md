@@ -124,6 +124,7 @@ include目录下的头文件是按照如下的文件层级进行组织的。
 |        |── gemm_coord.hpp                  // gemm的基础坐标运算封装
 |        |── gemv_coord.hpp                  // gemv的基础坐标运算封装
 |        |── matrix_coord.hpp                // 矩阵运算坐标封装
+|        |── status.hpp                      // 状态码
 |    |── tla
 |        |── numeric
 |            |── integer_sequence.hpp        // integer_sequence定义
