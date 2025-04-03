@@ -192,7 +192,7 @@ void Run(Options const &options)
     golden::ComputeGroupedMatmul(problemCount, problemShapeList, hostA, layoutAList,
         hostB, layoutBList, hostGolden, layoutCList);
 
-    std::vector<uint64_t> errorIndices = golden::CompareData(hostC, hostGolden, k);
+    std::vector<uint64_t> errorIndices = golden::CompareData(hostC, hostGolden, k, groupList, m * n);
     if (errorIndices.empty()) {
         std::cout << "Compare success." << std::endl;
     } else {
