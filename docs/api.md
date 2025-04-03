@@ -107,7 +107,7 @@ Block在昇腾NPU的SPMD编程模型中指一个Process，是逻辑核的概念�
 
 Block使用`TileMma`和`TileCopy` API（见下文）来执行分片粒度的数据拷贝和MMAD运算。
 
-Block中的不同硬件流水线（例如，MTE1、MTE2或FixPipe）提供不同能力，不同的硬件流水线间需要共享数据并协调对共享数据的访问。例如，MTE2讲数据从全局内存拷贝到L1 Buffer后，需要让MTE1知道输入已准备好。我们将这与`Kernel::`层API对比，后者调度独立的Block分片。
+Block中的不同硬件流水线（例如，MTE1、MTE2或FixPipe）提供不同能力，不同的硬件流水线间需要共享数据并协调对共享数据的访问。例如，MTE2将数据从全局内存拷贝到L1 Buffer后，需要让MTE1知道输入已准备好。这里`Kernel::`层负责对`Block::`层接口进行调用，`Block::`层接口负责独立的C矩阵分块计算。
 
 ### Block Mmad
 
