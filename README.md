@@ -22,10 +22,10 @@ Ascend C Templates，中文名为Ascend C模板库，是一个聚焦于提供高
 └── scripts  // 相关脚本
 ```
 ## 软件硬件配套说明
-- 硬件型号支持  
-Atlas A2服务器
-
-- 平台：aarch64
+- 硬件型号支持 
+  - Atlas 800T A2 服务器
+  - Atlas 200T A2 Box16服务器
+- 平台：aarch64/x86
 - 配套软件：CANN 8.0.0.beta1及之后版本（参考《[CANN软件安装指南](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/800alpha002/softwareinst/instg/instg_0001.html?Mode=PmIns&OS=Ubuntu&Software=cannToolKit)》安装CANN开发套件包以及配套固件和驱动）  
 cmake >= 3.15
 ## 快速上手
@@ -46,120 +46,6 @@ cd build/bin
 # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID（可选）
 ./00_basic_matmul 256 512 1024 0
 ```
-## 算子kernel列表
-<table>
-    <tr>
-        <th>算子名称</th>
-        <th>支持输入数据类型</th>
-        <th>支持输出数据类型</th>
-        <th>支持输入数据排布</th>
-        <th>支持输出数据排布</th>
-    </tr>
-    <tr>
-        <td rowspan="4">basic_matmul</td>
-        <td>half</td>
-        <td>half</td>
-        <td rowspan="4">rowMajor/columnMajor</td>
-        <td rowspan="4">rowMajor</td>
-    </tr>
-    <tr>
-        <td>half</td>
-        <td>float</td>
-    </tr>
-    <tr>
-        <td>bfloat16</td>
-        <td>bfloat16</td>
-    </tr>
-    <tr>
-        <td>int8</td>
-        <td>int32</td>
-    </tr>
-    <tr>
-        <td rowspan="4">batched_matmul</td>
-        <td>half</td>
-        <td>half</td>
-        <td rowspan="4">rowMajor/columnMajor</td>
-        <td rowspan="4">rowMajor</td>
-    </tr>
-    <tr>
-        <td>half</td>
-        <td>float</td>
-    </tr>
-    <tr>
-        <td>bfloat16</td>
-        <td>bfloat16</td>
-    </tr>
-    <tr>
-        <td>int8</td>
-        <td>int32</td>
-    </tr>
-    <tr>
-        <td rowspan="4">grouped_matmul</td>
-        <td>half</td>
-        <td>half</td>
-        <td rowspan="4">（A矩阵）rowMajor；（B矩阵）rowMajor/columnMajor</td>
-        <td rowspan="4">rowMajor</td>
-    </tr>
-    <tr>
-        <td>half</td>
-        <td>float</td>
-    </tr>
-    <tr>
-        <td>bfloat16</td>
-        <td>bfloat16</td>
-    </tr>
-    <tr>
-        <td>int8</td>
-        <td>int32</td>
-    </tr>
-    <tr>
-        <td>matmul_add</td>
-        <td>half</td>
-        <td>half</td>
-        <td>rowMajor/columnMajor</td>
-        <td>rowMajor</td>
-    </tr>
-    <tr>
-        <td rowspan="4">padding_matmul</td>
-        <td>half</td>
-        <td>half</td>
-        <td rowspan="4">rowMajor/columnMajor</td>
-        <td rowspan="4">rowMajor</td>
-    </tr>
-    <tr>
-        <td>half</td>
-        <td>float</td>
-    </tr>
-    <tr>
-        <td>bfloat16</td>
-        <td>bfloat16</td>
-    </tr>
-    <tr>
-        <td>int8</td>
-        <td>int32</td>
-    </tr>
-    <tr>
-        <td rowspan="4">optimized_matmul</td>
-        <td>half</td>
-        <td>half</td>
-        <td rowspan="4">rowMajor/columnMajor</td>
-        <td rowspan="4">rowMajor</td>
-    </tr>
-    <tr>
-        <td>half</td>
-        <td>float</td>
-    </tr>
-    <tr>
-        <td>bfloat16</td>
-        <td>bfloat16</td>
-    </tr>
-    <tr>
-        <td>int8</td>
-        <td>int32</td>
-    </tr>
-</table>
-
-参考[推荐使用配置](docs/recommended_configuration.md)了解如何达到最佳性能。
 
 ## 合作贡献者
 华南理工大学 陆璐教授团队
