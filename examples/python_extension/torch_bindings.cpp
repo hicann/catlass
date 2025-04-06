@@ -12,13 +12,9 @@
 
 #include "act_kernel_wrapper.h"
 
+#define NPU PrivateUse1
+
 using namespace ActKernelWrapper;
-
-at::Tensor RunBasicMatmulTorch(const at::Tensor &mat1, const at::Tensor &mat2, const std::string &outDType)
-{
-    return RunBasicMatmul(mat1.to(GetAtDevice()), mat2.to(GetAtDevice()), outDType);
-}
-
 TORCH_LIBRARY(ActTorch, m) { m.def("basic_matmul(Tensor mat1, Tensor mat2, str c) -> Tensor"); }
 
-TORCH_LIBRARY_IMPL(ActTorch, CPU, m) { m.impl("basic_matmul", &RunBasicMatmulTorch); }
+TORCH_LIBRARY_IMPL(ActTorch, NPU, m) { m.impl("basic_matmul", &RunBasicMatmul); }

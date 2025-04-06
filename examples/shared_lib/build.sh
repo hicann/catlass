@@ -26,7 +26,7 @@ done
 
 mkdir -p $OUTPUT_PATH
 
-echo -e "[ 50%] \033[32mBuilding CXX shared library libact_kernel.so"
+echo -e "[ 50%] \033[32mBuilding CXX shared library libact_kernel.so\e[0m"
 bisheng -O2 -fPIC -std=c++17 -xcce --cce-aicore-arch=dav-c220 \
 -I$ASCEND_HOME_PATH/compiler/tikcpp \
 -I$ASCEND_HOME_PATH/compiler/tikcpp/tikcfw \
@@ -50,7 +50,7 @@ bisheng -O2 -fPIC -std=c++17 -xcce --cce-aicore-arch=dav-c220 \
 $SHARED_LIB_SRC_DIR/act_kernel.cpp --shared -o $OUTPUT_PATH/libact_kernel.so
 echo -e "[ 50%] Built libact_kernel.so"
 
-echo -e "[100%] \033[32mBuilding CXX static library libact_kernel.a"
+echo -e "[100%] \033[32mBuilding CXX static library libact_kernel.a\e[0m"
 bisheng -O2 -fPIC -std=c++17 -xcce --cce-aicore-arch=dav-c220 \
 -I$ASCEND_HOME_PATH/compiler/tikcpp \
 -I$ASCEND_HOME_PATH/compiler/tikcpp/tikcfw \
