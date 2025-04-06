@@ -11,47 +11,39 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 project(python_extension)
+message("Using python: ${Python3_EXECUTABLE}")
+find_package(Python3 COMPONENTS Interpreter Development)
 if(NOT DEFINED ENV{ASCEND_HOME_PATH})
     message(FATAL_ERROR "Cannot find ASCEND_HOME_PATH, please run set_env.sh.")
 else()
     set(ASCEND_HOME_PATH $ENV{ASCEND_HOME_PATH})
 endif()
 
-execute_process(
-    COMMAND "${Python3_EXECUTABLE}" "-c" "import sysconfig; print(sysconfig.get_paths()['purelib'])"
-    OUTPUT_VARIABLE PYTHON_SITE_PACKAGES
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-
-execute_process(
-    COMMAND "${Python3_EXECUTABLE}" "-c" "import sysconfig; print(sysconfig.get_path('include'))"
-    OUTPUT_VARIABLE PYTHON_INCLUDE_PATH
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-
-list(APPEND CMAKE_PREFIX_PATH "${PYTHON_SITE_PACKAGES}")
+list(APPEND CMAKE_PREFIX_PATH "${Python3_SITELIB}")
 message(${CMAKE_PREFIX_PATH})
 find_package(pybind11 REQUIRED)
 find_package(Torch REQUIRED)
 
-include_directories(
-    ${PYTHON_INCLUDE_PATH}
+include_directories(torch_act PRIVATE
+    ${Python3_INCLUDE_DIRS}
+    ${Python3_SITELIB}/torch_npu/include
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${TORCH_INCLUDE_DIRS}
-    ${PYTHON_SITE_PACKAGES}/torch_npu/include
     ${SHARED_LIB_DIR}
     ${ASCEND_HOME_PATH}/include)
 
-link_directories(
-    ${ASCEND_HOME_PATH}/lib64
+link_directories(${ASCEND_HOME_PATH}/lib64
     ${CMAKE_BINARY_DIR}
-    ${PYTHON_SITE_PACKAGES}/torch_npu/lib
+    ${Python3_SITELIB}/torch_npu/lib
     ${SHARED_LIB_DIR})
 
 link_libraries(act_kernel "${TORCH_LIBRARIES}" torch_npu tiling_api)
 
-pybind11_add_module(torch_act SHARED act_kernel_wrapper.cpp pybind_bindings.cpp)
-add_library(act_torch SHARED act_kernel_wrapper.cpp torch_bindings.cpp)
+add_library(act_kernel_wrapper OBJECT act_kernel_wrapper.cpp)
+target_compile_options(act_kernel_wrapper PRIVATE -fPIC)
+
+pybind11_add_module(torch_act SHARED pybind_bindings.cpp $<TARGET_OBJECTS:act_kernel_wrapper>)
+add_library(act_torch SHARED torch_bindings.cpp $<TARGET_OBJECTS:act_kernel_wrapper>)
 
 install(TARGETS torch_act DESTINATION .)
 install(TARGETS act_torch DESTINATION .)

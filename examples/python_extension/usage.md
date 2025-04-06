@@ -42,14 +42,14 @@ output/python_extension
 
 | 依赖              | 版本               | 安装指令                      |
 | ----------------- | ------------------ | ----------------------------- |
-| `build-essential` | gcc版本为9以上     | `apt install build-essential` |
+| `build-essential` | gcc版本为7.5以上(建议使用9以上版本)     | `apt install build-essential` |
 | `cmake`           | `>=3.16`           | `apt install cmake`           |
 | `CANN`            | `>=8.0.0.alpha002` | run包安装                     |
 | `pybind11`        | 无要求             | `pip install pybind11`        |
-| `torch`           | 无要求             | `pip install torch`           |
-| `torch_npu`       | 无要求             | `pip install torch_npu`       |
+| `torch`           | 无要求(建议使用2.1+)             | `pip install torch`           |
+| `torch_npu`       | 无要求(最新post版本)             | `pip install torch_npu`       |
 
-- 虽然`torch`的版本没有要求，可沿用现有环境，但是为保证能够调用`torch_npu`的接口，`torch_npu`需要安装大版本下的**最新post**版本。你可以根据`CANN`版本和`torch`版本，在[Ascend/pytorch](https://gitee.com/ascend/pytorch)查询适合的`torch_npu`版本。
+- 虽然`torch`的版本没有要求，可沿用现有环境，但是为保证能够正确调用`torch_npu`的接口，`torch_npu`需要安装大版本下的**最新post**版本。你可以根据`CANN`版本和`torch`版本，在[Ascend/pytorch](https://gitee.com/ascend/pytorch)查询适合的`torch_npu`版本。
 
 ### 设置环境变量
 
@@ -75,7 +75,7 @@ class ActTest(TestCase):
     def test_basic_matmul_torch_lib(self):
         a = torch.ones((2, 3)).to(torch.float16).npu()
         b = torch.ones((3, 4)).to(torch.float16).npu()
-        torch.ops.load_library("../../output/python_extension/libact_torch.so")
+        torch.ops.load_library("../../output/python_extension/libact_torch.so") # 确保加载正确路径
         result = torch.ops.ActTorch.basic_matmul(a, b, "float16")
         golden = torch.mm(a, b)
         self.assertRtolEqual(result, golden)

@@ -11,6 +11,9 @@
 #ifndef SHARED_LIB_IMPL_GROUPED_MATMUL_K_H
 #define SHARED_LIB_IMPL_GROUPED_MATMUL_K_H
 
+// for supporting older gcc, to find the reason
+#include <iostream>
+
 #include "act/act.hpp"
 #include "act/arch/arch.hpp"
 #include "act/layout/layout.hpp"
