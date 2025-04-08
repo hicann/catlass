@@ -61,8 +61,8 @@ public:
         ubOffset += COMPUTE_ELE_NUM * sizeof(float);
         oSum = resource.ubBuf.template GetBufferByByte<float>(ubOffset);
         ubOffset += COMPUTE_ELE_NUM * sizeof(float);
-        out = resource.ubBuf.template GetBufferByByte<half>(ubOffset);
-        ubOffset += COMPUTE_ELE_NUM * sizeof(half);
+        out = resource.ubBuf.template GetBufferByByte<ElementOutput>(ubOffset);
+        ubOffset += COMPUTE_ELE_NUM * sizeof(ElementOutput);
         lIn = resource.ubBuf.template GetBufferByByte<float>(ubOffset);
         ubOffset += KV_SPLIT_MAX * HEADS_PROCESS_MAX * sizeof(float);
         lExp = resource.ubBuf.template GetBufferByByte<float>(ubOffset);
@@ -88,6 +88,7 @@ public:
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID1);
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID2);
     }
+    
     ACT_DEVICE
     void SetMask(int32_t len)
     {
@@ -272,7 +273,11 @@ public:
         }
 
         AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
-        AscendC::Cast(out, oSum, AscendC::RoundMode::CAST_NONE, actualHeads * headSize);
+        if (std::is_same<ElementOutput, bfloat16_t>::value) {
+            AscendC::Cast(out, oSum, AscendC::RoundMode::CAST_RINT, actualHeads * headSize);
+        } else {
+            AscendC::Cast(out, oSum, AscendC::RoundMode::CAST_NONE, actualHeads * headSize);
+        }
 
         AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
@@ -285,7 +290,7 @@ public:
 
 private:
     uint32_t kvSplitCoreNum = 1;
-    AscendC::LocalTensor<half> out;
+    AscendC::LocalTensor<ElementOutput> out;
     AscendC::LocalTensor<float> oIn[STAGES];
     AscendC::LocalTensor<float> oTemp[STAGES];
     AscendC::LocalTensor<float> lBrcb[STAGES];

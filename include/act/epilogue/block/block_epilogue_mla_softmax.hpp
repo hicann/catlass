@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ACT_EPILOGUE_BLOCK_BLOCK_EPILOGUE_PA_MLA_SOFTMAX_HPP
-#define ACT_EPILOGUE_BLOCK_BLOCK_EPILOGUE_PA_MLA_SOFTMAX_HPP
+#ifndef ACT_EPILOGUE_BLOCK_BLOCK_EPILOGUE_MLA_SOFTMAX_HPP
+#define ACT_EPILOGUE_BLOCK_BLOCK_EPILOGUE_MLA_SOFTMAX_HPP
 
 #include "act/act.hpp"
 #include "act/arch/cross_core_sync.hpp"
@@ -62,11 +62,13 @@ public:
     static constexpr uint32_t UB_UINT8_LINE_SIZE = 512;
     static constexpr uint32_t UB_UINT8_BLOCK_SIZE_MLA = 16384;
     static constexpr uint32_t HALF_DM_UB_SIZE = 128;
+    static constexpr uint32_t VECTOR_SIZE = 128;
     static constexpr uint32_t HALF_LL_UB_SIZE = 256;
 
     ACT_DEVICE
     BlockEpilogue(Arch::Resource<ArchTag> &resource, half tor_, uint32_t kvSplitCoreNum_)
     {
+        // Allocate UB space
         constexpr uint32_t LS_UB_TENSOR_OFFSET = 0;
         constexpr uint32_t LP_UB_TENSOR_OFFSET = 2 * UB_UINT8_BLOCK_SIZE_MLA;
         constexpr uint32_t LM_UB_TENSOR_OFFSET = 6 * UB_UINT8_BLOCK_SIZE_MLA;
@@ -78,7 +80,7 @@ public:
 
         tor = tor_;
         kvSplitCoreNum = kvSplitCoreNum_;
-        tvUbTensor16 = resource.ubBuf.template GetBufferByByte<half>(LP_UB_TENSOR_OFFSET);
+        tvUbTensor16 = resource.ubBuf.template GetBufferByByte<ElementOutput>(LP_UB_TENSOR_OFFSET);
         lpUbTensor32 = resource.ubBuf.template GetBufferByByte<float>(LP_UB_TENSOR_OFFSET);
         lsUbTensor = resource.ubBuf.template GetBufferByByte<float>(LS_UB_TENSOR_OFFSET);
         lmUbTensor = resource.ubBuf.template GetBufferByByte<float>(LM_UB_TENSOR_OFFSET);
@@ -97,18 +99,18 @@ public:
     ACT_DEVICE
     void SetMask(int32_t len)
     {
-        const int32_t MAX_MASK_LEN = 128;
-        const int32_t HALF_MASK_LEN = 64;
-        if (len >= MAX_MASK_LEN) {
-            AscendC::SetVectorMask<int8_t>((uint64_t)-1, (uint64_t)-1);
-            return;
+        uint64_t mask = 0;
+        uint64_t one = 1;
+        uint64_t temp = len % FLOAT_VECTOR_SIZE;
+        for (int64_t i = 0; i < temp; i++) {
+            mask |= one << i;
         }
-        int32_t highMask = len - HALF_MASK_LEN > 0 ? len - HALF_MASK_LEN : 0;
-        int32_t lowMask = len - HALF_MASK_LEN >= 0 ? HALF_MASK_LEN : len;
-        if (len < HALF_MASK_LEN) {
-            AscendC::SetVectorMask<int8_t>(0x0, ((uint64_t)1 << lowMask) - 1);
+        if (len == VECTOR_SIZE) {
+            AscendC::SetVectorMask<int8_t>((uint64_t)-1, (uint64_t)-1);
+        } else if (len >= FLOAT_VECTOR_SIZE) {
+            AscendC::SetVectorMask<int8_t>(mask, (uint64_t)-1);
         } else {
-            AscendC::SetVectorMask<int8_t>(((uint64_t)1 << highMask) - 1, 0xffffffffffffffff);
+            AscendC::SetVectorMask<int8_t>(0x0, mask);
         }
     }
 
@@ -244,7 +246,7 @@ public:
     }
 
     ACT_DEVICE
-    void subCoreCompute(
+    void SubCoreCompute(
         AscendC::GlobalTensor<ElementOutput> gOutput,
         AscendC::GlobalTensor<ElementInput> gInput,
         const LayoutOutput &layoutOutput,
@@ -260,13 +262,14 @@ public:
         uint32_t sub_m_d64 = (curRowNum + 63) / 64; // up aligned to 128
         uint64_t dmUbOffsetCurCycle = (uint64_t)(softmaxPingPongFlag * HALF_DM_UB_SIZE);
         uint64_t llUbOffsetCurCycle = (uint64_t)(softmaxPingPongFlag * HALF_LL_UB_SIZE);
-        AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
+        AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID2);
         AscendC::DataCopy(lsUbTensor, gInput,
                           AscendC::DataCopyParams(1, curRowNum * kSeqTileRound / FLOAT_BLOCK_SIZE, 0, 0));
 
         AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
         AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
 
+        // muls scale_value
         for (uint32_t mulsIdx = 0; mulsIdx < kSeqTile / FLOAT_VECTOR_SIZE; ++mulsIdx) {
             AscendC::Muls<float, false>(
                 lsUbTensor[mulsIdx * FLOAT_VECTOR_SIZE],
@@ -343,13 +346,17 @@ public:
 
         AscendC::PipeBarrier<PIPE_V>();
         // *** lp = castfp32to16(ls)
-        AscendC::Cast<half, float, false>(
-            tvUbTensor16,
-            lsUbTensor,
-            AscendC::RoundMode::CAST_NONE,
-            (uint64_t)0,
-            (curRowNum * kSeqTileRound + FLOAT_VECTOR_SIZE - 1) / FLOAT_VECTOR_SIZE,
-            AscendC::UnaryRepeatParams(1, 1, 4, 8));
+        if (std::is_same<ElementOutput, bfloat16_t>::value) {
+            AscendC::Cast<ElementOutput, float, false>(
+                tvUbTensor16, lsUbTensor, AscendC::RoundMode::CAST_RINT, (uint64_t)0,
+                (curRowNum * kSeqTileRound + FLOAT_VECTOR_SIZE - 1) / FLOAT_VECTOR_SIZE,
+                AscendC::UnaryRepeatParams(1, 1, 4, 8));
+        } else {
+            AscendC::Cast<ElementOutput, float, false>(
+                tvUbTensor16, lsUbTensor, AscendC::RoundMode::CAST_NONE, (uint64_t)0,
+                (curRowNum * kSeqTileRound + FLOAT_VECTOR_SIZE - 1) / FLOAT_VECTOR_SIZE,
+                AscendC::UnaryRepeatParams(1, 1, 4, 8));
+        }
 
         AscendC::PipeBarrier<PIPE_V>();
 
@@ -371,7 +378,7 @@ public:
 
         // *** ll = rowsum(ls32)
         ReduceSumRepeatM(llUbTensor[llUbOffsetCurCycle], lsUbTensor, curRowNum, kSeqTile, kSeqTileRound);
-        AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
+        AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID2);
         AscendC::PipeBarrier<PIPE_V>();
     }
 
@@ -407,7 +414,7 @@ public:
             int64_t offsetOutput = layoutOutput.GetOffset(MatrixCoord(rowOffsetSubBlock, 0));
             auto gOutputThisSubBlock = gOutput[offsetOutput];
             auto layoutOutputThisSubBlock = layoutOutput.GetTileLayout(MatrixCoord(rowActualThisSubBlock, nActual));
-            subCoreCompute(gOutputThisSubBlock, gInputThisSubBlock, layoutOutputThisSubBlock, layoutInputThisSubBlock,
+            SubCoreCompute(gOutputThisSubBlock, gInputThisSubBlock, layoutOutputThisSubBlock, layoutInputThisSubBlock,
                            nIdx, softmaxPingPongFlag, glFlag);
         }
     }
@@ -416,7 +423,7 @@ private:
     float tor;
     uint32_t pingpongFlag = 0;
     uint32_t kvSplitCoreNum = 1;
-    AscendC::LocalTensor<half> tvUbTensor16;
+    AscendC::LocalTensor<ElementOutput> tvUbTensor16;
     AscendC::LocalTensor<float> lpUbTensor32;
     AscendC::LocalTensor<float> lsUbTensor;
     AscendC::LocalTensor<float> lmUbTensor;
@@ -433,4 +440,4 @@ private:
 
 } // namespace Act::Epilogue::Block
 
-#endif // ACT_EPILOGUE_BLOCK_BLOCK_EPILOGUE_PA_MLA_SOFTMAX_HPP
+#endif // ACT_EPILOGUE_BLOCK_BLOCK_EPILOGUE_MLA_SOFTMAX_HPP

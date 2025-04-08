@@ -411,9 +411,30 @@ struct CopyL1ToL0B<ArchTag, Gemm::GemmType<Element, layout::nZ, AscendC::TPositi
         loadDataParams.ifTranspose = false;
         loadDataParams.addrMode = 0;
 
-        for (uint32_t i = 0; i < layoutDst.shape(1); i++) {
-            AscendC::LoadData(dstTensor[i * layoutDst.stride(1)], srcTensor[i * layoutSrc.stride(1)], loadDataParams);
+        if (layoutSrc.shape(3) == layoutDst.shape(3)) {
+            loadDataParams.startIndex = 0;
+            loadDataParams.repeatTimes = static_cast<uint16_t>(layoutDst.shape(1) * layoutDst.shape(3));
+            loadDataParams.srcStride = 1;
+            loadDataParams.sid = 0;
+            loadDataParams.dstGap = 0;
+            loadDataParams.ifTranspose = false;
+            loadDataParams.addrMode = 0;
+
+            AscendC::LoadData(dstTensor, srcTensor, loadDataParams);
+        } else {
+            loadDataParams.startIndex = 0;
+            loadDataParams.repeatTimes = static_cast<uint16_t>(layoutDst.shape(3));
+            loadDataParams.srcStride = layoutSrc.stride(3) / ELE_NUM_PER_FRACTAL;
+            loadDataParams.sid = 0;
+            loadDataParams.dstGap = layoutDst.stride(3) / ELE_NUM_PER_FRACTAL - 1;
+            loadDataParams.ifTranspose = false;
+            loadDataParams.addrMode = 0;
+
+            for (uint32_t i = 0; i < layoutDst.shape(1); i++) {
+                AscendC::LoadData(dstTensor[i * layoutDst.stride(1)], srcTensor[i * layoutSrc.stride(1)], loadDataParams);
+            }
         }
+        
     }
 };
 
