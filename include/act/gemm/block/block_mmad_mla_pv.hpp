@@ -92,6 +92,7 @@ public:
     ACT_DEVICE
     BlockMmad(Arch::Resource<ArchTag> &resource, uint32_t l1BufAddrStart = 0)
     {
+        // Allocate L1 memory space
         l1ATensor =
             resource.l1Buf.template GetBufferByByte<ElementA>(l1BufAddrStart + L1A_SIZE + L1B_SIZE * STAGES);
         for (uint32_t i = 0; i < STAGES; i++) {
@@ -132,6 +133,7 @@ public:
             AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(L0BPingPongFlag + 2);
             LayoutBInL1 layoutBInL1 = LayoutBInL1::template MakeLayout<ElementB>(vSeqTile, embed);
             LayoutBInL0 layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(vSeqTile, embedSplitSize);
+            // copy V from L1 to L0B
             copyL1ToL0B(
                 l0BTensor[L0BPingPongFlag],
                 l1BTensor[L1BPingPongFlag][embedSplitIdx * vSeqTileRound * EMBED_SPLIT_SIZE],
@@ -144,6 +146,7 @@ public:
                 LayoutAInL1 layoutAInL1 = LayoutAInL1::template MakeLayout<ElementA>(rowNum, vSeqTile);
                 Arch::CrossCoreWaitFlag(softmaxReady);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(EVENT_ID7);
+                // copy P to L1
                 copyGmToL1A(l1ATensor, gA, layoutAInL1, layoutA);
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(EVENT_ID7);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(EVENT_ID7);
@@ -157,6 +160,7 @@ public:
             AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(L0BPingPongFlag);
             AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>(L0BPingPongFlag);
             AscendC::WaitFlag<AscendC::HardEvent::FIX_M>(L0CPingPongFlag);
+            // mmad
             tileMmad(
                 l0CTensor[L0CPingPongFlag], l0ATensor[L0APingPongFlag], l0BTensor[L0BPingPongFlag],
                 rowNumRound, embedSplitSize, vSeqTile);
@@ -170,6 +174,7 @@ public:
             auto blockShape = MakeCoord(rowNum, embedSplitSize);
             auto layoutInL0C = LayoutCInL0::MakeLayoutInL0C(blockShape);
             auto layoutCSplitK = layoutC.GetTileLayout(MakeCoord(rowNumRound, embedSplitSizeRound));
+            // copy Otmp to gm
             copyL0CToGm(
                 gC[embedSplitIdx * embedSplitSizeRound], l0CTensor[L0CPingPongFlag],
                 layoutCSplitK, layoutInL0C);

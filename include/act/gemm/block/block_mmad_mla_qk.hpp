@@ -91,6 +91,7 @@ public:
     ACT_DEVICE
     BlockMmad(Arch::Resource<ArchTag> &resource, uint32_t l1BufAddrStart = 0)
     {
+        // Allocate L1 memory space
         l1ATensor = resource.l1Buf.template GetBufferByByte<ElementA>(l1BufAddrStart);
         for (uint32_t i = 0; i < STAGES; i++) {
             l1BTensor[i] =
@@ -131,6 +132,7 @@ public:
         uint32_t l1KvPingPongFlag = nIdx % 2;
 
         if (nIdx == 0) {
+            // copy Q to L1
             auto layoutASingleNd = layoutA.GetTileLayout(MakeCoord(curHeadNum, embed));
             LayoutAInL1 layoutAInL1 = LayoutAInL1::template MakeLayout<ElementA>(rowNum, embed);
             copyGmToL1A(
@@ -138,6 +140,7 @@ public:
                 layoutAInL1, layoutASingleNd,
                 tokenNumPerHead, qHeads * embed, tokenNumPerHead, BLOCK_SIZE, rowNumRound);
 
+            // copy QRope to L1
             auto layoutARopeSingleNd = layoutARope.GetTileLayout(MakeCoord(curHeadNum, embedRope));
             LayoutAInL1 layoutARopeInL1 = LayoutAInL1::template MakeLayout<ElementA>(rowNum, embedRope);
             copyGmToL1A(
@@ -149,11 +152,13 @@ public:
         }
 
         AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1KvPingPongFlag);
+        // copy K to L1
         LayoutBInL1 layoutBInL1 = LayoutBInL1::template MakeLayout<ElementB>(embed, kSeqTile);
         copyGmToL1B(l1BTensor[l1KvPingPongFlag], gB, layoutBInL1, layoutB);
         AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1KvPingPongFlag);
 
         AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1KvPingPongFlag + 2);
+        // copy KRope to L1
         LayoutBInL1 layoutBRopeInL1 = LayoutBInL1::template MakeLayout<ElementB>(embedRope, kSeqTile);
         copyGmToL1B(l1BTensor[l1KvPingPongFlag][kSeqTileRound * embed], gBRope, layoutBRopeInL1, layoutBRope);
         AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1KvPingPongFlag + 2);
@@ -163,7 +168,7 @@ public:
             if (embedSplitIdx == embedSplitLoopK - 1) {
                 embedSplitSize = embedRope;
             }
-            // copy Q to l0a
+            // copy Q from L1 to l0a
             AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0ABPingPongFlag);
             LayoutAInL1 layoutACatInL1 = LayoutAInL1::template MakeLayout<ElementA>(rowNum, embedCat);
             LayoutAInL0 layoutACatInL0 = LayoutAInL0::template MakeLayout<ElementA>(rowNum, embedSplitSize);
@@ -171,13 +176,14 @@ public:
                 l0ATensor[l0ABPingPongFlag], l1ATensor[embedSplitIdx * rowNumRound * EMBED_SPLIT_SIZE],
                 layoutACatInL0, layoutACatInL1);
             AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0ABPingPongFlag);
-            // copy K to l0b
+
             if (embedSplitIdx == 0) {
                 AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1KvPingPongFlag);
             } else if (embedSplitIdx == embedSplitLoopK - 1) {
                 AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1KvPingPongFlag + 2);
             }
             AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0ABPingPongFlag + 2);
+            // copy K from L1 to l0b
             LayoutBInL1 layoutBCatInL1 = LayoutBInL1::template MakeLayout<ElementB>(embedCat, kSeqTile);
             LayoutBInL0 layoutBCatInL0 = LayoutBInL0::template MakeLayout<ElementB>(embedSplitSize, kSeqTile);
             copyL1ToL0B(l0BTensor[l0ABPingPongFlag],
@@ -193,6 +199,7 @@ public:
             if (embedSplitIdx == 0) {
                 AscendC::WaitFlag<AscendC::HardEvent::FIX_M>(l1KvPingPongFlag);
             }
+            // mmad
             tileMmad(
                 l0CTensor[l1KvPingPongFlag], l0ATensor[l0ABPingPongFlag], l0BTensor[l0ABPingPongFlag],
                 rowNumRound, kSeqTile, embedSplitSize, embedSplitIdx == 0);
@@ -204,6 +211,7 @@ public:
         AscendC::WaitFlag<AscendC::HardEvent::M_FIX>(l1KvPingPongFlag);
         auto blockShape = MakeCoord(rowNum, kSeqTile);
         auto layoutInL0C = LayoutCInL0::MakeLayoutInL0C(blockShape);
+        // copy L0C to gm
         copyL0CToGm(gC, l0CTensor[l1KvPingPongFlag], layoutC, layoutInL0C);
         AscendC::SetFlag<AscendC::HardEvent::FIX_M>(l1KvPingPongFlag);
     }

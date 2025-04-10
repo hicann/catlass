@@ -73,6 +73,8 @@ struct BlockGemm {
 #include "act/gemm/block/block_mmad_fa_pv.hpp"
 #include "act/gemm/block/block_mmad_mla_qk.hpp"
 #include "act/gemm/block/block_mmad_mla_pv.hpp"
+#include "act/gemm/block/block_mmad_mla_qk_tp1_spec.hpp"
+#include "act/gemm/block/block_mmad_mla_pv_tp1_spec.hpp"
 #include "act/gemm/block/block_mmad_preload.hpp"
 #include "act/gemm/block/block_mmad_preload_async.hpp"
 #include "act/gemm/block/block_mmad_pingpong_tla.hpp"
