@@ -85,6 +85,9 @@ public:
     static constexpr uint32_t EMBED_SPLIT_SIZE = 128;
     static constexpr uint32_t EMBED_SPLIT_LOOP = 4;
 
+    // Check LayoutC
+    static_assert(std::is_same_v<LayoutC, layout::RowMajor>, "LayoutC only support RowMajor yet!");
+    
     /// Construct
     ACT_DEVICE
     BlockMmad(Arch::Resource<ArchTag> &resource, uint32_t l1BufAddrStart = 0)

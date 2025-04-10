@@ -8,17 +8,13 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#include <torch/extension.h>
+ #include <torch/extension.h>
 
-#include "act_kernel_wrapper.h"
-
-using namespace ActKernelWrapper;
-
-at::Tensor RunBasicMatmulTorch(const at::Tensor &mat1, const at::Tensor &mat2, const std::string &outDType)
-{
-    return RunBasicMatmul(mat1.to(GetAtDevice()), mat2.to(GetAtDevice()), outDType);
-}
-
-TORCH_LIBRARY(ActTorch, m) { m.def("basic_matmul(Tensor mat1, Tensor mat2, str c) -> Tensor"); }
-
-TORCH_LIBRARY_IMPL(ActTorch, CPU, m) { m.impl("basic_matmul", &RunBasicMatmulTorch); }
+ #include "act_kernel_wrapper.h"
+ 
+ #define NPU PrivateUse1
+ 
+ using namespace ActKernelWrapper;
+ TORCH_LIBRARY(ActTorch, m) { m.def("basic_matmul(Tensor mat1, Tensor mat2, str c) -> Tensor"); }
+ 
+ TORCH_LIBRARY_IMPL(ActTorch, NPU, m) { m.impl("basic_matmul", &RunBasicMatmul); }

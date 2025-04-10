@@ -28,6 +28,8 @@ include目录下的头文件是按照如下的文件层级进行组织的。
 |                |── block_epilogue_elemwise_one_source.hpp  //带有add操作的后处理模板实现
 |                |── block_epilogue_fa_rescal_o.hpp      //fa的recale_o后融合操作
 |                |── block_epilogue_fa_softmax.hpp   //fa的softmax后融合操作
+|                |── block_epilogue_gemm.hpp           //gemm的epilogue实现
+|                |── block_epilogue_gemv.hpp           //gemv的epilogue实现
 |                |── block_epilogue_mla_fd_rescal_o.hpp   //mla_fd的recale_o后融合操作
 |                |── block_epilogue_mla_rescal_o.hpp // mla的rescale后融合操作
 |                |── block_epilogue_mla_softmax.hpp  // mla的softmax后融合操作
@@ -43,6 +45,7 @@ include目录下的头文件是按照如下的文件层级进行组织的。
 |                |── tile_copy.hpp          // tile层搬运接口定义         
 |                |── tile_elemwise_add.hpp  // tile层add计算操作实现
 |                |── tile_elemwise_mul.hpp  // tile层mul计算操作实现
+|                |── tile_elemwise_muls.hpp  // tile层muls计算操作实现
 |                |── tile_swizzle.hpp       // tile层后融合swizzle操作
 |            |── dispatch_policy.hpp
 |        |── gemm
@@ -50,6 +53,7 @@ include目录下的头文件是按照如下的文件层级进行组织的。
 |                |── block_mmad.hpp              // block层的模板定义
 |                |── block_mmad_fa_pv.hpp        // block层pv实现
 |                |── block_mmad_fa_qk.hpp        // block层qk实现
+|                |── block_mmad_gemm.hpp        // block层gemm实现
 |                |── block_mmad_mla_pv.hpp       // block层mla pv实现
 |                |── block_mmad_mla_qk.hpp       // block层mla qk实现
 |                |── block_mmad_pingpong.hpp     // / block层的模板实现，包括doublebuffer的相应实现
@@ -63,6 +67,7 @@ include目录下的头文件是按照如下的文件层级进行组织的。
 |                |── basic_matmul.hpp             // kernel层basic_matmul
 |                |── basic_matmul_tla.hpp         // kernel层基于tla的basic_matmul
 |                |── batched_matmul.hpp           // kernel层batched_matmul
+|                |── gemm.hpp                     // kernel层gemm实现
 |                |── grouped_matmul.hpp           // kernel层grouped_matmul
 |                |── grouped_matmul_slice_k.hpp   // kernel层k轴切分groupMatmul
 |                |── grouped_matmul_slice_k_per_token_dequant.hpp // kernfel层k轴切分groupMatmul量化实现
@@ -88,13 +93,30 @@ include目录下的头文件是按照如下的文件层级进行组织的。
 |            |── dispatch_policy.hpp          // DispatchPolicy定义
 |            |── gemm_type.hpp                // GemmType的定义
 |            |── helper.hpp                   // 辅助函数
+|        |── gemv
+|            |── block
+|                |── block_gemv.hpp           //gemv的block层实现
+|                |── block_aic.hpp            //gemv_aic的block层实现
+|                |── block_aiv.hpp            //gemv_aiv的block层实现
+|            |── kernel
+|                |── kernel_gemv_aic.hpp      //gemv_aic的kernel层实现
+|                |── kernel_gemv_aiv.hpp      //gemv_aiv的kernel层实现
+|            |── tile
+|                |── matrix_copy_gm_to_ub.hpp //copy_gm_to_ub的tile层实现
+|                |── tile_copy.hpp            //gemv的tile copy实现
+|                |── tile_vmad.hpp            //gemv的tile vmad实现
+|                |── tile_vmuls.hpp           //gemv的tile vmuls实现
+|                |── vec_copy_gm_to_ub.hpp    //gemv的tile gm_to_ub实现
+|                |── vec_copy_ub_to_gm.hpp    //gemv的tile ub_to_gm实现
+|            |── helper.hpp                   // 辅助函数
 |        |── layout
 |            |── layout.hpp                   // layout头文件，主要包含matrix和vector相关layout的定义
 |            |── matrix.hpp                   //包含矩阵运算的layout的定义
 |            |── vector.hpp                   //vector相关的layout定义
 |        |── act.hpp                 // 定义了基本的数据信息，如基本块长度等
 |        |── coord.hpp
-|        |── gemm_coord.hpp                  // 矩阵运算的基础坐标运算封装
+|        |── gemm_coord.hpp                  // gemm的基础坐标运算封装
+|        |── gemv_coord.hpp                  // gemv的基础坐标运算封装
 |        |── matrix_coord.hpp                // 矩阵运算坐标封装
 |    |── tla
 |        |── numeric
@@ -125,7 +147,10 @@ examples文件夹下提供了当前基于分层组件所构建的示例，展示
     |── 11_grouped_matmul_slice_k_per_token_dequant // group matmul k轴切分量化
     |── 12_quant_matmul                // 量化matmul
     |── 13_basic_matmul_tla            // 基于tla的basic matmul
-    |── 14_optimized_matmul_tla        // 基于tla的optimized matmul
+    |── 15_gemm                        // gemm模板样例实现
+    |── 16_group_gemm                  // group_gemm模板样例实现
+    |── 17_gemv_aiv                    // gemv_aiv模板样例实现
+    |── 18_gemv_aic                    // gemv_aic模板样例实现
     |── common                         // 辅助函数
     |── python_extension               // python接入示例
     |── shared_lib                     // 静态编译接入示例
