@@ -53,6 +53,33 @@ struct CopyUb2Gm<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>> {
     }
 };
 
+template <typename Element>
+struct CopyUb2Gm<Arch::AtlasA2, Gemm::GemmType<Element, layout::ColumnMajor>> {
+    using LayoutDst = layout::ColumnMajor;
+    using LayoutSrc = layout::ColumnMajor;
+
+    static constexpr uint32_t ELE_NUM_PER_BLK = BYTE_PER_C0 / sizeof(Element);
+
+    ACT_DEVICE
+    CopyUb2Gm() = default;
+
+    ACT_DEVICE
+    void operator()(
+        AscendC::GlobalTensor<Element> const &dstTensor,
+        AscendC::LocalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst,
+        LayoutSrc const &layoutSrc)
+    {
+    AscendC::DataCopyExtParams dataCopyParams(
+        layoutDst.shape(1),
+        layoutDst.shape(0) * sizeof(Element),
+        (layoutSrc.stride(1) - layoutSrc.shape(0)) / ELE_NUM_PER_BLK,
+        (layoutDst.stride(1) - layoutDst.shape(0)) * sizeof(Element),
+        0
+    );
+    AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams);
+    }
+};
 
 // new add vectorlayout version
 template <typename Element>

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This file is a part of the CANN Open Software.
  * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -27,71 +27,68 @@
 #include "act/gemv/helper.hpp"
 #include "act/gemm/gemm_type.hpp"
 
-namespace Act::Gemv::Tile
-{
+namespace Act::Gemv::Tile {
 
-    template <
-        /// Tag indicating architecture
-        class ArchTag,
-        /// MatmulType for A matrix operand
-        class AType,
-        /// MatmulType type for X vector operand
-        class XType,
-        /// MatmulType type for Y vector operand
-        class YType,
-        /// MatmulTpe type for Bias operand
-        class BiasType = void
-    >
-    struct TileCopyGemvAiv {
-        using ElementA = typename AType::Element;
-        using ElementX = typename XType::Element;
-        using ElementY = typename YType::Element;
-        using ElementAccumulator =
-            typename Gemv::helper::ElementAccumulatorSelector<ElementA, ElementX>::ElementAccumulator;
-
-        // the function of aiv
-        using VecCopyGmToUb = Gemv::Tile::VecCopyGmToUB<ArchTag, XType>;
-        static constexpr bool is_atoadd = helper::IsAtoaddSelector<AType>::value;
-        using VecCopyUbToGm = Gemv::Tile::VecCopyUBToGm<ArchTag, YType,is_atoadd>;
-        using MatrixCopyGmToUb = Gemv::Tile::MatrixCopyGmToUB<ArchTag, AType>;
-    };
-
-
-    template <
+template <
     /// Tag indicating architecture
     class ArchTag,
     /// MatmulType for A matrix operand
     class AType,
-    /// MatmulType type for X matrix operand
+    /// MatmulType type for X vector operand
     class XType,
-    /// MatmulType type for Y matrix operand
+    /// MatmulType type for Y vector operand
     class YType,
     /// MatmulTpe type for Bias operand
     class BiasType = void
-    >
-    struct TileCopyGemvAic {
+>
+struct TileCopyGemvAiv {
+    using ElementA = typename AType::Element;
+    using ElementX = typename XType::Element;
+    using ElementY = typename YType::Element;
+    using ElementAccumulator =
+        typename Gemm::helper::ElementAccumulatorSelector<ElementA, ElementX>::ElementAccumulator;
+
+    // the function of aiv
+    using VecCopyGmToUb = Gemv::Tile::VecCopyGmToUB<ArchTag, XType>;
+    static constexpr bool is_atoadd = Gemv::helper::AtomicAddSelector<AType>::value;
+    using VecCopyUbToGm = Gemv::Tile::VecCopyUBToGm<ArchTag, YType,is_atoadd>;
+    using MatrixCopyGmToUb = Gemv::Tile::MatrixCopyGmToUB<ArchTag, AType>;
+};
+
+
+template <
+    /// Tag indicating architecture
+    class ArchTag,
+    /// MatmulType for A matrix operand
+    class AType,
+    /// MatmulType type for X vector operand
+    class XType,
+    /// MatmulType type for Y vector operand
+    class YType,
+    /// MatmulTpe type for Bias operand
+    class BiasType = void
+>
+struct TileCopyGemvAic {
     using ElementA = typename AType::Element;
     using ElementX = typename XType::Element;
     using ElementAccumulator =
         typename Gemm::helper::ElementAccumulatorSelector<ElementA, ElementX>::ElementAccumulator;
 
-    // change structual
-    using L1XType = typename Gemm::helper::L1ATypeSelectorGemm<XType>::L1AType;
-    using L1AType = typename Gemm::helper::L1ATypeSelectorGemm<AType>::L1AType;
+    // the function of aic
+    using L1XType = typename Gemm::helper::L1AndL0TypeSelectorGemv<XType, AType>::L1AType;
+    using L1AType = typename Gemm::helper::L1AndL0TypeSelectorGemv<XType, AType>::L1BType;
+    using L0AType = typename Gemm::helper::L1AndL0TypeSelectorGemv<XType, AType>::L0AType;
+    using L0BType = typename Gemm::helper::L1AndL0TypeSelectorGemv<XType, AType>::L0BType;
+
 
     using CopyGmToL1A = Gemm::Tile::CopyGmToL1<ArchTag, XType, L1XType>;   
     using CopyGmToL1B = Gemm::Tile::CopyGmToL1<ArchTag, AType, L1AType>;   
 
-
-    using L0AType = typename Gemm::helper::L0ATypeSelector<L1XType>::L0AType; // zN -> zZ
-    using L0BType = typename Gemm::helper::L0BTypeSelectorGemv<L1AType>::L0BType;
-
-    // using CopyL1ToL0A = Gemm::Tile::CopyL1ToL0A<ArchTag, L1XType>;
     using CopyL1ToL0A = Gemm::Tile::CopyL1ToL0A<ArchTag, L1XType, L0AType>;
     using CopyL1ToL0B = Gemm::Tile::CopyL1ToL0B<ArchTag, L1AType, L0BType>; 
     using CopyL0CToGm = Gemm::Tile::CopyL0CToGm<ArchTag, ElementAccumulator, YType>;
 
-    };
+};
 
 } // namespace Act::Gemv::Tile
 

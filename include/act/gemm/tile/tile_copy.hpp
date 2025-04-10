@@ -98,10 +98,10 @@ struct TileCopyGemm {
     using ElementAccumulator =
         typename Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
     // change structual
-    using L1AType = typename helper::L1ATypeSelectorGemm<AType>::L1AType;
-    using L1BType = typename helper::L1BTypeSelectorGemm<BType>::L1BType;
-    using L0AType = typename helper::L0ATypeSelector<L1AType>::L0AType;
-    using L0BType = typename helper::L0BTypeSelectorGemm<L1BType>::L0BType;
+    using L1AType = typename helper::L1AndL0TypeSelectorGemm<AType, BType>::L1AType;
+    using L1BType = typename helper::L1AndL0TypeSelectorGemm<AType, BType>::L1BType;
+    using L0AType = typename helper::L1AndL0TypeSelectorGemm<AType, BType>::L0AType;
+    using L0BType = typename helper::L1AndL0TypeSelectorGemm<AType, BType>::L0BType;
 
     using CopyGmToL1A = Gemm::Tile::CopyGmToL1<ArchTag, AType, L1AType>;    
     using CopyGmToL1B = Gemm::Tile::CopyGmToL1<ArchTag, BType, L1BType>;

@@ -31,7 +31,7 @@ struct CopyL1ToL0A {
 
 // RowMajor
 template<class ArchTag, class Element>
-struct CopyL1ToL0A<ArchTag, Act::Gemm::GemmType<Element, layout::zN>, Act::Gemm::GemmType<Element, layout::zZ>>{
+struct CopyL1ToL0A<ArchTag, Act::Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>, Act::Gemm::GemmType<Element, layout::zZ, AscendC::TPosition::A2>>{
     using LayoutDst = layout::zZ;
     using LayoutSrc = layout::zN;
 
@@ -43,9 +43,9 @@ struct CopyL1ToL0A<ArchTag, Act::Gemm::GemmType<Element, layout::zN>, Act::Gemm:
 
     ACT_DEVICE
     void operator()(
-        AscendC::LocalTensor<Element> dstTensor,
-        AscendC::LocalTensor<Element> srcTensor,
-        LayoutDst layoutDst, LayoutSrc layoutSrc
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::LocalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc
     ){
         AscendC::LoadData2DParams loadDataParams;
         loadDataParams.startIndex = 0;
@@ -64,7 +64,7 @@ struct CopyL1ToL0A<ArchTag, Act::Gemm::GemmType<Element, layout::zN>, Act::Gemm:
 
 // ColumnMajor
 template<class ArchTag, class Element>
-struct CopyL1ToL0A<ArchTag, Act::Gemm::GemmType<Element, layout::nN>, Act::Gemm::GemmType<Element, layout::zN>>{
+struct CopyL1ToL0A<ArchTag, Act::Gemm::GemmType<Element, layout::nN, AscendC::TPosition::B1>, Act::Gemm::GemmType<Element, layout::zN, AscendC::TPosition::B2>>{
     using LayoutDst = layout::zN;
     using LayoutSrc = layout::nN;
 
@@ -75,13 +75,13 @@ struct CopyL1ToL0A<ArchTag, Act::Gemm::GemmType<Element, layout::nN>, Act::Gemm:
 
     ACT_DEVICE
     void operator()(
-        AscendC::LocalTensor<Element> dstTensor,
-        AscendC::LocalTensor<Element> srcTensor,
-        LayoutDst layoutDst, LayoutSrc layoutSrc
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::LocalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc
     ){
         AscendC::LoadData2DParams loadDataParams;
         loadDataParams.startIndex = 0;
-        loadDataParams.repeatTimes = static_cast<uint8_t>(layoutSrc.shape(1)); 
+        loadDataParams.repeatTimes = static_cast<uint16_t>(layoutSrc.shape(1)); 
         loadDataParams.srcStride = 1;
         loadDataParams.sid = 0;
         loadDataParams.dstGap = 0;
@@ -95,7 +95,7 @@ struct CopyL1ToL0A<ArchTag, Act::Gemm::GemmType<Element, layout::nN>, Act::Gemm:
 
 // ColumnMajor
 template<class ArchTag>
-struct CopyL1ToL0A<ArchTag, Act::Gemm::GemmType<float, layout::nN>, Act::Gemm::GemmType<float, layout::zN>>{
+struct CopyL1ToL0A<ArchTag, Act::Gemm::GemmType<float, layout::nN, AscendC::TPosition::B1>, Act::Gemm::GemmType<float, layout::zN, AscendC::TPosition::B2>>{
     using Element = float;
     using LayoutDst = layout::zN;
     using LayoutSrc = layout::nN;
@@ -107,13 +107,13 @@ struct CopyL1ToL0A<ArchTag, Act::Gemm::GemmType<float, layout::nN>, Act::Gemm::G
 
     ACT_DEVICE
     void operator()(
-        AscendC::LocalTensor<Element> dstTensor,
-        AscendC::LocalTensor<Element> srcTensor,
-        LayoutDst layoutDst, LayoutSrc layoutSrc
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::LocalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc
     ){
         AscendC::LoadData2dTransposeParams loadDataParams;
         loadDataParams.startIndex = 0;
-        loadDataParams.repeatTimes = static_cast<uint8_t>(layoutSrc.shape(1) / 2); 
+        loadDataParams.repeatTimes = static_cast<uint16_t>(layoutSrc.shape(1) / 2); 
         loadDataParams.srcStride = 1;
         loadDataParams.dstGap = 0;
         loadDataParams.dstFracGap = static_cast<uint16_t>(layoutSrc.shape(1) / 2) - 1;
@@ -125,7 +125,7 @@ struct CopyL1ToL0A<ArchTag, Act::Gemm::GemmType<float, layout::nN>, Act::Gemm::G
 
 // ColumnMajor
 template<class ArchTag>
-struct CopyL1ToL0A<ArchTag, Act::Gemm::GemmType<int8_t, layout::nZ>, Act::Gemm::GemmType<int8_t, layout::zN>>{
+struct CopyL1ToL0A<ArchTag, Act::Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::B1>, Act::Gemm::GemmType<int8_t, layout::zN, AscendC::TPosition::B2>>{
     using Element = int8_t;
     using LayoutDst = layout::zN;
     using LayoutSrc = layout::nZ;
@@ -137,9 +137,9 @@ struct CopyL1ToL0A<ArchTag, Act::Gemm::GemmType<int8_t, layout::nZ>, Act::Gemm::
 
     ACT_DEVICE
     void operator()(
-        AscendC::LocalTensor<Element> dstTensor,
-        AscendC::LocalTensor<Element> srcTensor,
-        LayoutDst layoutDst, LayoutSrc layoutSrc
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::LocalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc
     ){
         uint32_t MRound = layoutSrc.shape(0) * layoutSrc.shape(1);
         uint32_t KRound = layoutSrc.shape(2) * layoutSrc.shape(3);
@@ -147,7 +147,7 @@ struct CopyL1ToL0A<ArchTag, Act::Gemm::GemmType<int8_t, layout::nZ>, Act::Gemm::
         uint32_t KLoops = CeilDiv(KRound, KL0Alignment);
         AscendC::LoadData2dTransposeParams loadDataParams;
         loadDataParams.startIndex = 0;
-        loadDataParams.repeatTimes = static_cast<uint8_t>(MRound / ELE_NUM_PER_C0); 
+        loadDataParams.repeatTimes = static_cast<uint16_t>(MRound / ELE_NUM_PER_C0); 
         loadDataParams.srcStride = static_cast<uint16_t>(KRound / KL0Alignment); 
         loadDataParams.dstGap = 1; 
         loadDataParams.dstFracGap = 0;

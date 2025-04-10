@@ -77,26 +77,16 @@ void ComputeGemvAiv(
     std::vector<ElementGolden> &dataGolden, const LayoutGolden &layoutGolden
 )
 {
-    uint32_t m = problemShape.m();
-    uint32_t n = problemShape.n();
-    
-    for (uint32_t i = 0; i < m; ++i) {
-        // 一维坐标计算
+    for (uint32_t i = 0; i < problemShape.m(); ++i) {
         size_t offsetGolden = layoutGolden.GetOffset(MakeCoord(i));
         ElementGolden accumulator = 0;
-        
-        for (uint32_t k = 0; k < n; ++k) {
-            // 矩阵A的一维索引：i * n + k
+        for (uint32_t k = 0; k < problemShape.n(); ++k) {
             size_t offsetA = layoutA.GetOffset(MakeCoord(i, k));
-            // 向量X的一维索引：k
             size_t offsetX = layoutX.GetOffset(MakeCoord(k));
-            
             accumulator += static_cast<ElementGolden>(alpha) * 
                           static_cast<ElementGolden>(dataA[offsetA]) * 
                           static_cast<ElementGolden>(dataX[offsetX]);
         }
-        
-        // 向量Y的一维索引：i
         size_t offsetY = layoutY.GetOffset(MakeCoord(i));
         dataGolden[offsetGolden] = static_cast<ElementGolden>(beta) * 
                                   static_cast<ElementGolden>(dataY[offsetY]) + 
@@ -116,17 +106,16 @@ void ComputeGemvAic(
 )
 {
     for (uint32_t i = 0; i < problemShape.m(); ++i) {
-        size_t offsetGolden = layoutGolden.GetOffset(MakeCoord(i, uint32_t(0)));
+        size_t offsetGolden = layoutGolden.GetOffset(MakeCoord(i));
         ElementGolden accumulator = 0;
         for (uint32_t k = 0; k < problemShape.n(); ++k) {
             size_t offsetA = layoutA.GetOffset(MakeCoord(i, k));
-            size_t offsetX = layoutX.GetOffset(MakeCoord(k, uint32_t(0)));
+            size_t offsetX = layoutX.GetOffset(MakeCoord(uint32_t(0), k));
             accumulator += static_cast<ElementGolden>(alpha) * static_cast<ElementGolden>(dataA[offsetA]) * static_cast<ElementGolden>(dataX[offsetX]);
         }
         dataGolden[offsetGolden] = static_cast<ElementGolden>(beta) * static_cast<ElementGolden>(dataY[offsetGolden]) + static_cast<ElementGolden>(accumulator);
     }
 }
-
 
 // simple grouped gemm
 template<typename Element, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC, class ElementGolden, class LayoutGolden>

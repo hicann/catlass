@@ -49,8 +49,7 @@ struct BlockMmadTla {
     static_assert(DEPENDENT_FALSE<DispatchPolicy>, "BlockMmadTla is not implemented for this DispatchPolicy");
 };
 
-/// new add for the reason that i am using the dispatchpolicy which is same as the policy of the optimized_matmul
-// so i add a new one class to avoid the conflict
+// tilecopy is different from the one in the optimized_matmul
 template <
     class DispatchPolicy,
     class L1TileShape,

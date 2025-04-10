@@ -33,7 +33,7 @@ struct CopyGmToL1 {
 /// Partial specialization for AtlasA2, RowMajor in and zN out.
 /// Matrix A confirm
 template <class ArchTag, class Element>
-struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::RowMajor>, Gemm::GemmType<Element, layout::zN>> {
+struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::RowMajor>, Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>> {
     using LayoutDst = layout::zN;
     using LayoutSrc = layout::RowMajor;
 
@@ -76,7 +76,7 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::RowMajor>, Gemm::Gemm
 
 /// Matrix B new add K N k N
 template <class ArchTag, class Element>
-struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::RowMajor>, Gemm::GemmType<Element, layout::zZ>> {
+struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::RowMajor>, Gemm::GemmType<Element, layout::zZ, AscendC::TPosition::B1>> {
     using LayoutDst = layout::zZ;
     using LayoutSrc = layout::RowMajor;
 
@@ -94,7 +94,6 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::RowMajor>, Gemm::Gemm
         LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
     {
         AscendC::Nd2NzParams intriParams;
-        // 按列方向切分
         uint32_t srcNdStride = C0_NUM_PER_FRACTAL * layoutSrc.stride(0);
         uint32_t ndNum = layoutSrc.shape(0) / C0_NUM_PER_FRACTAL;
         uint32_t remains = layoutSrc.shape(0) % C0_NUM_PER_FRACTAL;
@@ -183,7 +182,7 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::RowMajor>, Gemm::Gemm
 
 /// Matrix A  new add M K M K
 template <class ArchTag, class Element>
-struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::ColumnMajor>, Gemm::GemmType<Element, layout::nN>> {
+struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::ColumnMajor>, Gemm::GemmType<Element, layout::nN, AscendC::TPosition::B1>> {
     using LayoutDst = layout::nN;
     using LayoutSrc = layout::ColumnMajor;
 
@@ -201,7 +200,6 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::ColumnMajor>, Gemm::G
         LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
     {
         AscendC::Nd2NzParams intriParams;
-        // 按列方向切分
         uint32_t srcNdStride = C0_NUM_PER_FRACTAL * layoutSrc.stride(1);
         uint32_t ndNum = layoutSrc.shape(1) / C0_NUM_PER_FRACTAL;
         uint32_t remains = layoutSrc.shape(1) % C0_NUM_PER_FRACTAL;
@@ -290,7 +288,7 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::ColumnMajor>, Gemm::G
 
 /// Matrix B
 template <class ArchTag, class Element>
-struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::ColumnMajor>, Gemm::GemmType<Element, layout::nZ>> {
+struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::ColumnMajor>, Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::A1>> {
     using LayoutDst = layout::nZ;
     using LayoutSrc = layout::ColumnMajor;
 
@@ -331,6 +329,91 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::ColumnMajor>, Gemm::G
     }
 };
 
+// new add gemm matrix B
+template <class ArchTag, class Element>
+struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::ColumnMajor>, Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::B1>> {
+    using LayoutDst = layout::nZ;
+    using LayoutSrc = layout::ColumnMajor;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+
+    // Mehtods
+
+    ACT_DEVICE
+    CopyGmToL1() {};
+
+    ACT_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::GlobalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+    {
+        AscendC::Nd2NzParams intriParams;
+
+        intriParams.ndNum = 1;
+        intriParams.dValue = layoutSrc.shape(0);
+        intriParams.srcNdMatrixStride = 0;
+        intriParams.dstNzC0Stride = layoutDst.stride(1) / ELE_NUM_PER_C0;
+        intriParams.dstNzMatrixStride = 0;
+
+        if (layoutSrc.stride(1) < STRIDE_LIMIT) {
+            intriParams.nValue = layoutSrc.shape(1);
+            intriParams.srcDValue = layoutSrc.stride(1);
+            intriParams.dstNzNStride = layoutDst.stride(2) / ELE_NUM_PER_C0;
+            AscendC::DataCopy(dstTensor, srcTensor, intriParams);
+        } else {
+            intriParams.nValue = 1;
+            intriParams.srcDValue = 0;
+            intriParams.dstNzNStride = 0;
+            for (uint32_t i = 0; i < layoutSrc.shape(1); i++) {
+                AscendC::DataCopy(dstTensor[i * ELE_NUM_PER_C0], srcTensor[i * layoutSrc.stride(1)], intriParams);
+            }
+        }
+    }
+};
+
+// new add gemv Matrix A
+template <class ArchTag, class Element>
+struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::RowMajor>, Gemm::GemmType<Element, layout::zN, AscendC::TPosition::B1>> {
+    using LayoutDst = layout::zN;
+    using LayoutSrc = layout::RowMajor;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+
+    // Methods
+
+    ACT_DEVICE
+    CopyGmToL1() {};
+
+    ACT_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::GlobalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+    {
+        AscendC::Nd2NzParams intriParams;
+
+        intriParams.ndNum = 1;
+        intriParams.dValue = layoutSrc.shape(1);
+        intriParams.srcNdMatrixStride = 0;
+        intriParams.dstNzC0Stride = layoutDst.stride(3) / ELE_NUM_PER_C0;
+        intriParams.dstNzMatrixStride = 0;
+
+        if (layoutSrc.stride(0) < STRIDE_LIMIT) {
+            intriParams.nValue = layoutSrc.shape(0);
+            intriParams.srcDValue = layoutSrc.stride(0);
+            intriParams.dstNzNStride = layoutDst.stride(0) / ELE_NUM_PER_C0;
+            AscendC::DataCopy(dstTensor, srcTensor, intriParams);
+        } else {
+            intriParams.nValue = 1;
+            intriParams.srcDValue = 0;
+            intriParams.dstNzNStride = 0;
+            for (uint32_t i = 0; i < layoutSrc.shape(0); i++) {
+                AscendC::DataCopy(dstTensor[i * ELE_NUM_PER_C0], srcTensor[i * layoutSrc.stride(0)], intriParams);
+            }
+        }
+    }
+};
 
 /// Partial specialization for AtlasA2, RowMajor in and zN out.
 template <class Element>

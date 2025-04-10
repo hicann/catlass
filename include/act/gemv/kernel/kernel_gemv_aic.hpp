@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This file is a part of the CANN Open Software.
  * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ template <
     class BlockGemv_,
     class BlockEpilogue_
 >
-class GemvEpilogue {
+class KernelGemvAic {
 public:
     using BlockGemv = BlockGemv_;
     using ArchTag = typename BlockGemv::ArchTag;
@@ -45,7 +45,7 @@ public:
     using LayoutZ = typename BlockEpilogue::LayoutZ;
     using EpilogueParams = typename BlockEpilogue::Params;
 
-    using ElementAccumulator = typename Gemv::helper::ElementAccumulatorSelector<ElementA, ElementX>::ElementAccumulator;
+    using ElementAccumulator = typename Gemm::helper::ElementAccumulatorSelector<ElementA, ElementX>::ElementAccumulator;
 
 
     struct Params {
@@ -76,7 +76,7 @@ public:
 
     // Methods
     ACT_DEVICE
-    GemvEpilogue() {}
+    KernelGemvAic() {}
 
     template <int32_t CORE_TYPE = g_coreType>
     ACT_DEVICE 
@@ -199,7 +199,6 @@ public:
         AscendC::GlobalTensor<ElementY> gmY;
         gmY.SetGlobalBuffer((__gm__ ElementY*)params.ptrWorkspace);
 
-        // layout::RowMajor layoutY(1, params.problemShape.m());
         layout::VectorLayout layoutY(params.problemShape.m());
 
         // Get aicore information
@@ -208,9 +207,7 @@ public:
         uint32_t subcoreIndex = AscendC::GetSubBlockIdx();
 
         uint32_t maxMPerBlock = L1TileShape::M;
-        // uint32_t maxNPerBlock = L1TileShape::N;
         uint32_t M = params.problemShape.m();
-        // uint32_t N = params.problemShape.n();
         uint32_t MLoops = CeilDiv(M, maxMPerBlock);
         uint32_t coreLoops = MLoops;
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This file is a part of the CANN Open Software.
  * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -39,24 +39,23 @@ using ScalarType = float;
 template <
     class LayoutA,
     class LayoutX,
-    class LayoutZ>
-ACT_GLOBAL void GemvAic(
+    class LayoutZ
+>
+ACT_GLOBAL 
+void GemvAic(
     uint64_t fftsAddr,
-    ScalarType alpha,
-    ScalarType beta,
+    ScalarType alpha, ScalarType beta,
     GemvCoord problemShape,
-    GM_ADDR gmA,
-    LayoutA layoutA,
-    GM_ADDR gmX,
-    LayoutX layoutX,
-    GM_ADDR gmZ,
-    LayoutZ layoutZ,
-    GM_ADDR gmWorkspace) {
+    GM_ADDR gmA, LayoutA layoutA,
+    GM_ADDR gmX, LayoutX layoutX,
+    GM_ADDR gmZ, LayoutZ layoutZ,
+    GM_ADDR gmWorkspace
+) 
+{
     // Set FFTS address
     AscendC::SetSyncBaseAddr(fftsAddr);
     using ArchTag = Arch::AtlasA2;
-    using LayoutTemp = layout::RowMajor;
-    using TempType = Gemm::GemmType<float, LayoutTemp>;
+    using LayoutC = layout::RowMajor;   
 
     // Block level, define BlockGemv
     constexpr bool enableUnitFlag = true;
@@ -66,18 +65,18 @@ ACT_GLOBAL void GemvAic(
     using L0TileShape = GemvShape<32, 256>;
     using AType = Gemm::GemmType<float, LayoutA>;
     using XType = Gemm::GemmType<float, LayoutX>;
-    using TempType = Gemm::GemmType<float, LayoutTemp>;
+    using CType = Gemm::GemmType<float, LayoutC>;
     using BiasType = void;
-    using TileCopy = Gemv::Tile::TileCopyGemvAic<typename DispatchPolicy::ArchTag, AType, XType, TempType, BiasType>;
+    using TileCopy = Gemv::Tile::TileCopyGemvAic<typename DispatchPolicy::ArchTag, AType, XType, CType, BiasType>;
     using TileMmad = Gemm::Tile::TileMmad<typename DispatchPolicy::ArchTag, XType, AType, BiasType>;
 
-    using BlockGemv = Gemv::Block::BlockGemv<DispatchPolicy, L1TileShape, L0TileShape, AType, XType, TempType, BiasType, TileCopy, TileMmad>;
+    using BlockGemv = Gemv::Block::BlockGemv<DispatchPolicy, L1TileShape, L0TileShape, AType, XType, CType, BiasType, TileCopy, TileMmad>;
 
     // Block level, define BlockEpilogue
-    using EpilogueBlockDispatchPolicy = Epilogue::EpilogueAtlasA2ElemWiseOneSource;
+    using EpilogueBlockDispatchPolicy = Epilogue::EpilogueAtlasA2Gemv;
     using YType = Gemm::GemmType<float, LayoutZ>;
     using ZType = Gemm::GemmType<float, LayoutZ>;
-    using AXType = Gemm::GemmType<float, LayoutZ>;
+    using AXType = Gemm::GemmType<float, LayoutZ>; 
 
     using ComputeType = AXType;
     constexpr uint32_t computeLength = 8192;
@@ -91,7 +90,7 @@ ACT_GLOBAL void GemvAic(
 
 
     // kernle levels
-    using GemvKernel = Gemv::Kernel::GemvEpilogue<BlockGemv, BlockEpilogue>;
+    using GemvKernel = Gemv::Kernel::KernelGemvAic<BlockGemv, BlockEpilogue>;
 
     // Prepare params
     typename BlockEpilogue::Params epilogueParams{alpha, beta, gmZ, layoutZ, gmZ, layoutZ};
@@ -102,7 +101,7 @@ ACT_GLOBAL void GemvAic(
     gemv(params);
 }
 
-typedef struct Options {
+struct Options {
     const std::string HELPER = "20_gemv_aic m n [device_id]";
 
     GemvCoord problemShape{128, 128};
@@ -110,7 +109,8 @@ typedef struct Options {
 
     Options() = default;
 
-    int Parse(int argc, const char** argv) {
+    int Parse(int argc, const char** argv) 
+    {
         enum ArgsIndex {
             M_INDEX = 1,
             N_INDEX,
@@ -128,9 +128,10 @@ typedef struct Options {
         }
         return 0;
     }
-} Options;
+};
 
-layout::RowMajor GetWorkspaceLayout(layout::RowMajor layout, uint32_t align) {
+layout::RowMajor GetWorkspaceLayout(layout::RowMajor layout, uint32_t align) 
+{
     if (align == 0) {
         return layout;
     }
@@ -138,7 +139,8 @@ layout::RowMajor GetWorkspaceLayout(layout::RowMajor layout, uint32_t align) {
                             RoundUp(layout.shape(1), align));
 }
 
-layout::ColumnMajor GetWorkspaceLayout(layout::ColumnMajor layout, uint32_t align) {
+layout::ColumnMajor GetWorkspaceLayout(layout::ColumnMajor layout, uint32_t align) 
+{
     if (align == 0) {
         return layout;
     }
@@ -146,23 +148,34 @@ layout::ColumnMajor GetWorkspaceLayout(layout::ColumnMajor layout, uint32_t alig
                                RoundUp(layout.shape(0), align));
 }
 
-size_t GetWorkspaceLen(layout::RowMajor layout) {
+size_t GetWorkspaceLen(layout::RowMajor layout) 
+{
     return layout.shape(0) * layout.stride(0);
 }
 
-size_t GetWorkspaceLen(layout::ColumnMajor layout) {
+size_t GetWorkspaceLen(layout::ColumnMajor layout) 
+{
     return layout.shape(1) * layout.stride(1);
 }
 
-bool IsSameStride(layout::RowMajor layout1, layout::RowMajor layout2) {
+bool IsSameStride(layout::RowMajor layout1, layout::RowMajor layout2) 
+{
     return layout1.stride(0) == layout2.stride(0);
 }
 
-bool IsSameStride(layout::ColumnMajor layout1, layout::ColumnMajor layout2) {
+bool IsSameStride(layout::ColumnMajor layout1, layout::ColumnMajor layout2) 
+{
     return layout1.stride(1) == layout2.stride(1);
 }
 
-void Run(Options options) {
+template<class ElementRandom>
+void FillRandomScalarData(ElementRandom &scalarData, ElementRandom low, ElementRandom high)
+{
+    scalarData = static_cast<ElementRandom>(low + (static_cast<ElementRandom>(rand()) / static_cast<ElementRandom>(RAND_MAX)) * (high - low));
+}
+
+void Run(Options options) 
+{
     aclrtStream stream{nullptr};
     ACL_CHECK(aclInit(nullptr));
     ACL_CHECK(aclrtSetDevice(options.deviceId));
@@ -175,7 +188,6 @@ void Run(Options options) {
     size_t lenX = static_cast<size_t>(n) * 1;
     size_t lenY = static_cast<size_t>(m) * 1;
     size_t lenZ = static_cast<size_t>(m) * 1;
-    size_t scalarLen = 1;
 
     size_t sizeA = lenA * sizeof(float);
     size_t sizeX = lenX * sizeof(float);
@@ -185,21 +197,17 @@ void Run(Options options) {
 
     using LayoutX = layout::RowMajor;
     using LayoutA = layout::ColumnMajor;
-    using LayoutZ = layout::VectorLayout;
     using LayoutY = layout::RowMajor;
+    using LayoutZ = layout::VectorLayout;
 
     LayoutX layoutX{1, n};
     LayoutA layoutA{m, n};
     LayoutZ layoutZ{m};
 
-    LayoutY layoutY_r{m, 1};
-    LayoutX layoutX_r{n, 1};
-
-    size_t scalarSize = scalarLen * sizeof(ScalarType);
-    std::vector<ScalarType> hostAlpha(scalarLen);
-    std::vector<ScalarType> hostBeta(scalarLen);
-    golden::FillRandomData(hostAlpha, -1.0f, 1.0f);
-    golden::FillRandomData(hostBeta, -1.0f, 1.0f);
+    ScalarType alpha{0};
+    ScalarType beta{0};
+    FillRandomScalarData(alpha, -1.0f, 1.0f);
+    FillRandomScalarData(beta, -1.0f, 1.0f);
 
     std::vector<float> hostA(lenA);
     std::vector<float> hostX(lenX);
@@ -230,7 +238,7 @@ void Run(Options options) {
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
     GemvAic<<<aicCoreNum, nullptr, stream>>>(
         fftsAddr,
-        hostAlpha[0], hostBeta[0],
+        alpha, beta,
         options.problemShape,
         deviceA, layoutA,
         deviceX, layoutX,
@@ -243,7 +251,8 @@ void Run(Options options) {
 
     std::vector<float> hostGolden(lenZ);
 
-    golden::ComputeGemvAic(options.problemShape, hostAlpha[0], hostBeta[0], hostA, layoutA, hostX, layoutX_r, hostY, layoutY_r, hostGolden, layoutY_r);
+    golden::ComputeGemvAic(options.problemShape, alpha, beta, hostA, layoutA, hostX, layoutX, hostY, layoutZ, hostGolden, layoutZ);
+
     std::vector<uint64_t> errorIndices = golden::CompareData(hostRes, hostGolden, m);
 
     if (errorIndices.empty()) {
