@@ -93,9 +93,13 @@ void OptimizedMatmul(
     // if LayoutA and LayoutB is both ColumnMajor,
     // L1TileShape using GemmShape<256, 128, 256> can achieve better performance.
     using L1TileShape = std::conditional_t<std::is_same_v<LayoutA, layout::ColumnMajor> &&
-        std::is_same_v<LayoutB, layout::ColumnMajor>, GemmShape<256, 128, 256>, GemmShape<128, 256, 256>>;
+        std::is_same_v<LayoutB, layout::ColumnMajor>, GemmShape<256, 128, 256>,
+        GemmShape<128, 256, 256> // tunable
+        >;
     using L0TileShape = std::conditional_t<std::is_same_v<LayoutA, layout::ColumnMajor> &&
-        std::is_same_v<LayoutB, layout::ColumnMajor>, GemmShape<256, 128, 64>, GemmShape<128, 256, 64>>;;
+        std::is_same_v<LayoutB, layout::ColumnMajor>, GemmShape<256, 128, 64>,
+        GemmShape<128, 256, 64> // tunable
+        >;
     if (gmA == gmWA && gmB == gmWB) {
         // no need to padding A and B.
         using LayoutWA = LayoutA;
