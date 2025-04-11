@@ -402,15 +402,6 @@ struct CopyL1ToL0B<ArchTag, Gemm::GemmType<Element, layout::nZ, AscendC::TPositi
         LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
     {
         AscendC::LoadData2DParams loadDataParams;
-
-        loadDataParams.startIndex = 0;
-        loadDataParams.repeatTimes = static_cast<uint16_t>(layoutDst.shape(3));
-        loadDataParams.srcStride = layoutSrc.stride(3) / ELE_NUM_PER_FRACTAL;
-        loadDataParams.sid = 0;
-        loadDataParams.dstGap = layoutDst.stride(3) / ELE_NUM_PER_FRACTAL - 1;
-        loadDataParams.ifTranspose = false;
-        loadDataParams.addrMode = 0;
-
         if (layoutSrc.shape(3) == layoutDst.shape(3)) {
             loadDataParams.startIndex = 0;
             loadDataParams.repeatTimes = static_cast<uint16_t>(layoutDst.shape(1) * layoutDst.shape(3));
