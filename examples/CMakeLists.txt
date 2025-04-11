@@ -74,6 +74,10 @@ function(act_example_add_executable NAME)
     add_dependencies(act_examples ${NAME})
 endfunction()
 
+if(ENABLE_LIB)
+    add_subdirectory(lib_cmake)
+else()
+
 foreach(EXAMPLE
     00_basic_matmul
     01_batched_matmul
@@ -98,3 +102,5 @@ foreach(EXAMPLE
 )
     add_subdirectory(${EXAMPLE})
 endforeach()
+
+endif()

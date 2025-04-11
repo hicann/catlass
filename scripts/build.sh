@@ -52,6 +52,9 @@ function build_python_extension() {
 
 if [[ "$TARGET" == "shared_lib" ]]; then
     build_shared_lib
+elif [[  "$TARGET" == "lib_cmake" ]]; then
+    cmake -DENABLE_LIB=ON -S $CMAKE_SOURCE_PATH -B $CMAKE_BUILD_PATH
+    cmake --build $CMAKE_BUILD_PATH
 elif [[ "$TARGET" == "python_extension" ]]; then
     build_shared_lib
     build_python_extension
