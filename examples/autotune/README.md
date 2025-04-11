@@ -50,7 +50,7 @@ compare success.
 L1TileShape: GemmShape<64, 128, 256>，
 L0TileShape: GemmShape<64, 128, 128>，
 性能提升如下图所示，算子运行提速25.7%。
-![basic_matmul_autotune_speedup](images/basic_matmul_autotune_speedup.png)
+![basic_matmul_autotune_speedup](./images/basic_matmul_autotune_speedup.png)
 
 - 运行06_optimized_matmul_autotune自动寻优，
 ```
@@ -80,7 +80,7 @@ compare success.
 L1TileShape: GemmShape<128, 128, 256>，
 L0TileShape: GemmShape<128, 128, 128>,
 性能提升如下图所示，算子运行提速18.3%。
-![optimized_matmul_autotune_speedup](images/optimized_matmul_autotune_speedup.png)
+![optimized_matmul_autotune_speedup](./images/optimized_matmul_autotune_speedup.png)
 
 - 运行08_grouped_matmul_autotune自动寻优，
 ```
