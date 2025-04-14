@@ -302,8 +302,8 @@ uint32_t GetKVSplitParamSpec(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_
     // Set lOffsetInfo and OfdOffsetInfo
     AddrOffsets addrOffsets;
     int32_t prevTaskNum = 0;
-    for (int32_t seqIdx = 0; seqIdx < mmInfo.batch; seqIdx++) {
-        int32_t qSeqLen = mmInfo.qSeqLen == nullptr ? 1 : *(mmInfo.qSeqLen + seqIdx);
+    for (int32_t seqIdx = 0; seqIdx < mlaInfo.batch; seqIdx++) {
+        int32_t qSeqLen = mlaInfo.qSeqLen == nullptr ? 1 : *(mlaInfo.qSeqLen + seqIdx);
         for (int32_t qSeq = 0; qSeq < qSeqLen; qSeq++) {
             int32_t tilingOffset = TILING_HEAD_SIZE + PARA_TILING_ELENUM_SPEC * prevTaskNum;
             tilingHost[tilingOffset + NUM11] = GetHigh32Bit(addrOffsets.addrLSeqOffset);

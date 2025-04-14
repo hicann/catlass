@@ -161,8 +161,8 @@ public:
         BlockMmadPV blockMmadPV(resource);
 
         // Go through tail task
-        uint32_t tailprocessNum = tailTaskNum * kvSplitCoreNum;
-        for (uint32_t process = coreIdx; process < tailprocessNum; process += uint32_t(coreNum)) {
+        uint32_t tailProcessNum = tailTaskNum * kvSplitCoreNum;
+        for (uint32_t process = coreIdx; process < tailProcessNum; process += uint32_t(coreNum)) {
             // Get the offset of each core on the GM
             uint32_t taskIdx = process / kvSplitCoreNum + formerTaskNum;
             uint32_t offsetTiling = tilingHeadSize + tilingParaSize * taskIdx;
@@ -395,8 +395,8 @@ public:
         EpilogueMLARescaleO epilogueMLATP1RescaleO(resource, kvSplitCoreNum);
 
         // Go through tail task
-        uint32_t tailprocessNum = tailTaskNum * kvSplitCoreNum;
-        for (uint32_t process = coreIdx; process < tailprocessNum; process += uint32_t(coreNum)) {
+        uint32_t tailProcessNum = tailTaskNum * kvSplitCoreNum;
+        for (uint32_t process = coreIdx; process < tailProcessNum; process += uint32_t(coreNum)) {
             // Get the offset of each core on the GM
             uint32_t taskIdx = process / kvSplitCoreNum + formerTaskNum;
             uint32_t offsetTiling = tilingHeadSize + tilingParaSize * taskIdx;
@@ -491,7 +491,7 @@ public:
         epilogueMLATP1Softmax.SetkvSplitCoreNum(1);
         epilogueMLATP1RescaleO.SetkvSplitCoreNum(1);
         // Go through former task
-        for (uint32_t process = coreIdx; process < tailprocessNum; process += uint32_t(coreNum)) {
+        for (uint32_t process = coreIdx; process < formerTaskNum; process += uint32_t(coreNum)) {
             // Get the offset of each core on the GM
             uint32_t offsetTiling = tilingHeadSize + tilingParaSize * process;
             uint32_t curBatch = gTiling.GetValue(offsetTiling);
@@ -549,7 +549,7 @@ public:
                     uint64_t gmOffsetUpdate = (uint64_t)(coreIdx * TMP_SIZE);
                     // Softmax two-stage update
                     epilogueMLATP1RescaleO(gOTmp[gmOffsetOTmp], gOUpdate[gmOffsetUpdate], gO[gmOffsetO],
-                                           gOCoreTmp[oFdOffset], gl[lOffset], layoutOTmp,
+                                           gOCoreTmp[0], gl[0], layoutOTmp,
                                            layoutUpdate, layoutO, actualBlockShapePV, nIdx, isLastNTile,
                                            rescaleOPingPongFlag, glFlag);
                 }
