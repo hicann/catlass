@@ -37,8 +37,10 @@ const int32_t TILING_KVSPLIT = 15;
 const int32_t TILING_KVCORENUM = 16;
 const int32_t TILING_MAX_QSEQLEN = 17;
 const int32_t TILING_TOTAL_QTOKENS = 18;
+const int32_t TILING_FORMERTASKNUM = 19;
+const int32_t TILING_TAILTASKNUM = 20;
 
-const int32_t TILING_HEAD_SIZE = 20;
+const int32_t TILING_HEAD_SIZE = 24;
 const int32_t TILING_PARA_SIZE = 17;
 
 const int32_t PARA_TILING_ELENUM_SPEC = 17;
@@ -253,6 +255,70 @@ uint32_t GetKVSplitParam(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *t
     return decoderBatch * kvSplitCoreNum;
 }
 
+uint32_t GetKVSplitParamSpec(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *tilingHost)
+{
+    // Tp1 senario specialization
+    // Calculate the tiling parameters related to flash decoding
+    uint32_t totalTaskNumSpec = tilingHost[TILING_TOTAL_QTOKENS];
+
+    uint32_t formerTaskNum = totalTaskNumSpec;
+    uint32_t tailTaskNum = 0;
+
+    uint32_t processLoop = totalTaskNumSpec / blockDim;
+    formerTaskNum = processLoop * blockDim;
+    tailTaskNum = totalTaskNumSpec - formerTaskNum;
+
+    if (tailTaskNum >= blockDim * SPLITKV_RATION) {
+        formerTaskNum = totalTaskNumSpec;
+        tailTaskNum = 0;
+    }
+
+    tilingHost[TILING_FORMERTASKNUM] = formerTaskNum;
+    tilingHost[TILING_TAILTASKNUM] = tailTaskNum;
+    std::cout << "TILING_FORMERTASKNUM = " << tilingHost[TILING_FORMERTASKNUM] << std::endl;
+    std::cout << "TILING_TAILTASKNUM = " << tilingHost[TILING_TAILTASKNUM] << std::endl;
+
+    if (tailTaskNum == 0) {
+        tilingHost[TILING_KVCORENUM] = 1;
+        tilingHost[TILING_KVSPLIT] = tilingHost[TILING_MAX_KVSEQLEN];
+        std::cout << "TILING_KVSPLIT = " << tilingHost[TILING_KVSPLIT] << std::endl;
+        std::cout << "TILING_KVCORENUM = " << tilingHost[TILING_KVCORENUM] << std::endl;
+        return blockDim;
+    }
+
+    uint32_t process = Lcm(tailTaskNum, blockDim);
+    uint32_t kvSplitCoreNum = process / tailTaskNum;
+
+    uint32_t kvSeqlenMaxAlign = RoundUp(tilingHost[TILING_MAX_KVSEQLEN], static_cast<uint32_t>(mlaInfo.blockSize));
+    uint32_t kvSeqBlockNum = kvSeqlenMaxAlign / mlaInfo.blockSize;
+    uint32_t kvBlockPerCore = CeilDiv(kvSeqBlockNum, kvSplitCoreNum);
+    uint32_t kvSplitPerCore = kvBlockPerCore * mlaInfo.blockSize;
+
+    tilingHost[TILING_KVSPLIT] = kvSplitPerCore;
+    tilingHost[TILING_KVCORENUM] = kvSplitCoreNum;
+    std::cout << "TILING_KVSPLIT = " << tilingHost[TILING_KVSPLIT] << std::endl;
+    std::cout << "TILING_KVCORENUM = " << tilingHost[TILING_KVCORENUM] << std::endl;
+
+    // Set lOffsetInfo and OfdOffsetInfo
+    AddrOffsets addrOffsets;
+    int32_t prevTaskNum = 0;
+    for (int32_t seqIdx = 0; seqIdx < mmInfo.batch; seqIdx++) {
+        int32_t qSeqLen = mmInfo.qSeqLen == nullptr ? 1 : *(mmInfo.qSeqLen + seqIdx);
+        for (int32_t qSeq = 0; qSeq < qSeqLen; qSeq++) {
+            int32_t tilingOffset = TILING_HEAD_SIZE + PARA_TILING_ELENUM_SPEC * prevTaskNum;
+            tilingHost[tilingOffset + NUM11] = GetHigh32Bit(addrOffsets.addrLSeqOffset);
+            tilingHost[tilingOffset + NUM12] = GetLow32Bit(addrOffsets.addrLSeqOffset);
+            tilingHost[tilingOffset + NUM13] = GetHigh32Bit(addrOffsets.addrOFdSeqOffset);
+            tilingHost[tilingOffset + NUM14] = GetLow32Bit(addrOffsets.addrOFdSeqOffset);
+            addrOffsets.addrLSeqOffset += static_cast<uint64_t>(mlaInfo.numHeads * kvSplitCoreNum);
+            addrOffsets.addrOFdSeqOffset += static_cast<uint64_t>(mlaInfo.numHeads * mlaInfo.embeddingSize);
+            prevTaskNum++;
+        }
+    }
+
+    return tailTaskNum * kvSplitCoreNum;
+}
+
 int32_t GetMLATilingParam(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *tilingHost)
 {
     if (tilingHost == nullptr || mlaInfo.qSeqLen == nullptr || mlaInfo.kvSeqLen == nullptr) {
@@ -288,7 +354,11 @@ int32_t GetMLATilingParam(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *
         GetMLATilingCommon(mlaInfo, blockDim, tilingHost);
     }
     GetTilingHead(mlaInfo, tilingHost, torPtr, maxQseqlen, specStrategyFlag);
-    GetKVSplitParam(mlaInfo, blockDim, tilingHost);
+    if (specStrategyFlag) {
+        GetKVSplitParamSpec(mlaInfo, blockDim, tilingHost);
+    } else {
+        GetKVSplitParam(mlaInfo, blockDim, tilingHost);
+    }
     return 0;
 }
 } // namespace MLATiling
