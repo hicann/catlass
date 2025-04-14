@@ -152,6 +152,7 @@ examples文件夹下提供了当前基于分层组件所构建的示例，展示
     |── 17_gemv_aiv                    // gemv_aiv模板样例实现
     |── 18_gemv_aic                    // gemv_aic模板样例实现
     |── common                         // 辅助函数
+    │── lib_cmake                      // 使用cmake构建动/静态库示例
     |── python_extension               // python接入示例
     |── shared_lib                     // 静态编译接入示例
     |── CMakeLists.txt                 // CMake文件
