@@ -149,6 +149,11 @@ struct L1BTypeSelector<Gemm::GemmType<Element, layout::ColumnMajor>> {
 };
 
 template<class Element>
+struct L1BTypeSelector<Gemm::GemmType<Element, layout::nZ>> {
+    using L1BType = Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::A1>;
+};
+
+template<class Element>
 struct L1BTypeSelector<Gemm::GemmType<Element, layout::PaddingColumnMajor>> {
     using L1BType = Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::A1>;
 };

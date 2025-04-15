@@ -483,7 +483,7 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::zN>> {
             repeatParams.blockCount = blockCount;
             repeatParams.blockLen = blockLen;
             repeatParams.srcStride = layoutSrc.stride(3) / ELE_NUM_PER_C0 - blockLen;
-            repeatParams.dstStride = 0;
+            repeatParams.dstStride = layoutDst.stride(3) / ELE_NUM_PER_C0 - blockLen;
             AscendC::DataCopy(dstTensor, srcTensor, repeatParams);
         } else {
             repeatParams.blockCount = 1;
@@ -530,7 +530,7 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::nZ>> {
             repeatParams.blockCount = blockCount;
             repeatParams.blockLen = blockLen;
             repeatParams.srcStride = layoutSrc.stride(1) / ELE_NUM_PER_C0 - blockLen;
-            repeatParams.dstStride = 0;
+            repeatParams.dstStride = layoutDst.stride(1) / ELE_NUM_PER_C0 - blockLen;
             AscendC::DataCopy(dstTensor, srcTensor, repeatParams);
         } else {
             repeatParams.blockCount = 1;
