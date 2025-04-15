@@ -238,7 +238,7 @@ public:
         return layout1.stride(1) == layout2.stride(1);
     }
 
-    template<int32_t CORE_TYPE = g_coreType>
+    template<int32_t CORE_TYPE = g_coreTypeTest>
     ACT_DEVICE
     void operator()(Params &params){}
 

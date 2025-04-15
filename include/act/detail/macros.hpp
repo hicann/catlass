@@ -11,8 +11,12 @@
 #ifndef ACT_DETAIL_MACROS_HPP
 #define ACT_DETAIL_MACROS_HPP
 
-#define ACT_DEVICE __forceinline__ [aicore]
-#define ACT_HOST_DEVICE __forceinline__ [host, aicore]
-#define ACT_GLOBAL __global__ [aicore]
+// #define ACT_DEVICE __forceinline__ [aicore]
+// #define ACT_HOST_DEVICE __forceinline__ [host, aicore]
+// #define ACT_GLOBAL __global__ [aicore]
+
+#define ACT_DEVICE inline __aicore__
+#define ACT_HOST_DEVICE inline __host_aicore__
+#define ACT_GLOBAL inline __global__ __aicore__
 
 #endif  // ACT_DETAIL_MACROS_HPP

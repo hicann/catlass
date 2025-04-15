@@ -70,7 +70,7 @@ template <uint8_t MODE, pipe_t PIPE>
 ACT_DEVICE
 void CrossCoreBarrier()
 {
-    constexpr FlagID flagId = BarrierFlag<MODE, g_coreType>::ID;
+    constexpr FlagID flagId = BarrierFlag<MODE, g_coreTypeTest>::ID;
     AscendC::CrossCoreSetFlag<MODE, PIPE>(flagId);
     AscendC::CrossCoreWaitFlag(flagId);
 }
