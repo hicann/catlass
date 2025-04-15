@@ -23,6 +23,8 @@
 #include "act/gemm/gemm_type.hpp"
 #include "act/layout/layout.hpp"
 
+#include "kernel_operator.h"
+
 using namespace Act;
 using fp16_t = op::fp16_t;
 

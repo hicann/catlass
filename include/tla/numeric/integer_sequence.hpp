@@ -16,35 +16,53 @@
 
 namespace tla {
 
-template <typename T, T... Ns>
-struct IntegerSequence {
-    using value_type = T;
-    static constexpr size_t size() { return sizeof...(Ns); }
+namespace Impl {
+    constexpr size_t MaxIntegerSequenceSize = 64;
+    constexpr size_t SpiltSize = 2;
 };
 
-template <typename Sequence, typename T, size_t N>
-struct MakeIntegerSequenceImpl;
+template <class T, T... Ns> struct IntegerSequence {
+    using type = IntegerSequence;
+    using valueType = T;
+    static_assert((0 <= sizeof...(Ns) && sizeof...(Ns) <= Impl::MaxIntegerSequenceSize), "Std::index_sequence size must be within [0,64].");
+    __aicore__ inline static constexpr size_t size() { return sizeof...(Ns); }
+};
+        
+namespace Impl {
+    template <class T, class Seq0, class Seq1> struct MergeSeq {};
+    template <class T, T... Ns0, T... Ns1>
+    struct MergeSeq<T, IntegerSequence<T, Ns0...>, IntegerSequence<T, Ns1...>>
+        : IntegerSequence<T, Ns0..., (sizeof...(Ns0) + Ns1)...> {};
+    
+    template <class T, size_t N>
+    struct MakeIntegerSequence
+        : Impl::MergeSeq<T, typename MakeIntegerSequence<T, N / SpiltSize>::type,
+                            typename MakeIntegerSequence<T, N - N / SpiltSize>::type> {
+    };
+        
+    template <class T> struct MakeIntegerSequence<T, 0> : IntegerSequence<T> {};
+    template <class T> struct MakeIntegerSequence<T, 1> : IntegerSequence<T, 0> {};
+}; // namespace Impl
 
-template <typename T, size_t... Ns>
-struct MakeIntegerSequenceImpl<IntegerSequence<T, Ns...>, T, 0> {
-    typedef IntegerSequence<T, Ns...> type;
+template <class T, T N>
+using MakeIntegerSequenceNoChecked =
+    typename Impl::MakeIntegerSequence<T, N>::type;
+template <class T, T N> struct MakeIntegerSequenceChecked {
+    static_assert(0 <= N && N <= Impl::MaxIntegerSequenceSize,
+                "Std::make_index_sequence must be within [0,64].");
+    typedef MakeIntegerSequenceNoChecked<T, 0 <= N ? N : 0> type;
 };
 
-template <typename T, size_t N, size_t... Ns>
-struct MakeIntegerSequenceImpl<IntegerSequence<T, Ns...>, T, N> {
-    typedef typename MakeIntegerSequenceImpl<IntegerSequence<T, N - 1, Ns...>, T, N - 1>::type type;
-};
-
-template <typename T, T N>
-using MakeIntegerSequence = typename MakeIntegerSequenceImpl<IntegerSequence<T>, T, N>::type;
+template <class T, T N>
+using MakeIntegerSequence = typename MakeIntegerSequenceChecked<T, N>::type;
 
 
-// index_sequence
-template <size_t... Ints>
-using index_sequence = IntegerSequence<size_t, Ints...>;
+template <size_t... Idx>
+using index_sequence = IntegerSequence<size_t, Idx...>;
 
 template <size_t N>
 using make_index_sequence = MakeIntegerSequence<size_t, N>;
+
 
 // int_sequence
 template <int... Ints>

@@ -94,7 +94,7 @@ public:
     ACT_DEVICE
     MLAKernelTp1Spec() {}
 
-    template <int32_t CORE_TYPE = g_coreType> ACT_DEVICE void operator()(Params const &params);
+    template <int32_t CORE_TYPE = g_coreTypeTest> ACT_DEVICE void operator()(Params const &params);
 
     template <> ACT_DEVICE void operator()<AscendC::AIC>(Params const &params)
     {

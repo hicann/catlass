@@ -98,7 +98,7 @@ public:
     ACT_DEVICE
     MLAKernel() {}
 
-    template <int32_t CORE_TYPE = g_coreType>
+    template <int32_t CORE_TYPE = g_coreTypeTest>
     ACT_DEVICE void operator()(Params const &params);
 
     template <>
