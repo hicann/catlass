@@ -30,7 +30,7 @@ python_extension
 ```bash
 output/python_extension
 ├── libact_torch.so                             # torch动态链接库
-└── torch_act-0.1.0.20250330120000.cp310-cp310-linux-x86_64.so  # pybind11动态链接库的wheel包
+└── torch_act-0.1.0.20250330120000.cp310-cp310-linux-x86_64.whl  # pybind11动态链接库的wheel包
 ```
 
 ## 使用说明
