@@ -132,7 +132,7 @@ void OptimizedMatmul(uint32_t blockNum, aclrtStream stream, KernelInfo kernelInf
 
     optimized_matmul<<<blockNum, nullptr, stream>>>(fftsAddr, problemShape, deviceA, layoutA, deviceB, layoutB, deviceC,
                                                     layoutC, deviceWA, deviceWB);
-
+    aclrtSynchronizeStream(stream);
     if (isNeedPaddingA) {
         aclrtFree(deviceWA);
     }

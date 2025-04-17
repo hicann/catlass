@@ -2,18 +2,27 @@
 
 为方便开发者使用Ascend C Template算子，代码仓基于pybind11和torch提供了使用python调用Ascend C Template算子的示例.
 
-- 注意：建议使用pybind扩展. 目前纯torch扩展不支持NPU，在使用torch扩展时，实际上会把NPU Tensor转换到CPU Tensor，再把CPU Tensor转换回NPU Tensor，因此性能会有较大影响.
-
 ## 代码结构
 
 ```bash
 python_extension
-├── CMakeLists.txt              # CMake构建脚本
-├── act_kernel_wrapper.cpp  # 将at::Tensor类型的输入转换为kernel输入
-├── act_kernel_wrapper.h    # 头文件
-├── pybind_bindings.cpp         # pybind绑定
-├── set_env.sh                  # 环境变量设定
-└── torch_bindings.cpp          # torch绑定
+├── CMakeLists.txt                      # CMake配置文件
+├── README.md                           # 说明文档
+├── pyproject.toml                      # 项目配置文件
+├── setup.py                            # 安装脚本
+├── src
+│   ├── bindings
+│   │   ├── pybind_bindings.cpp         # pybind11绑定文件
+│   │   └── torch_bindings.cpp          # torch绑定文件
+│   ├── include
+│   │   └── wrapper
+│   │       └── act_kernel_wrapper.h    # wrapper头文件
+│   └── wrapper
+│       └── act_kernel_wrapper.cpp      # act算子wrapper文件
+├── tests
+│   └── test_python_extension.py        # 测试脚本
+└── torch_act                       
+    └── __init__.py                     # 初始化入口，用于打包
 ```
 
 ## 编译产物结构
@@ -21,7 +30,7 @@ python_extension
 ```bash
 output/python_extension
 ├── libact_torch.so                             # torch动态链接库
-└── torch_act.cpython-3xx-aarch64-linux-gnu.so  # pybind11动态链接库
+└── torch_act-0.1.0.20250330120000.cp310-cp310-linux-x86_64.so  # pybind11动态链接库的wheel包
 ```
 
 ## 使用说明
@@ -49,17 +58,19 @@ output/python_extension
 | `torch`           | 无要求(建议使用2.1+)             | `pip install torch`           |
 | `torch_npu`       | 无要求(最新post版本)             | `pip install torch_npu`       |
 
-- 虽然`torch`的版本没有要求，可沿用现有环境，但是为保证能够正确调用`torch_npu`的接口，`torch_npu`需要安装大版本下的**最新post**版本。你可以根据`CANN`版本和`torch`版本，在[Ascend/pytorch](https://gitee.com/ascend/pytorch)查询适合的`torch_npu`版本。
+- 虽然`torch`的版本没有要求，可沿用现有环境，但是为保证能够正确调用`torch_npu`的接口，`torch_npu`需要安装大版本下的**最新post**版本。你可以根据`CANN`版本和`torch`版本，在[Ascend/pytorch](https://gitee.com/ascend/pytorch)查询适合的`torch_npu`版本.
 
-### 设置环境变量
+### 安装
 
-- 多数情况下，你需要在运行前使用`output/python_extension/set_env.sh`补全系统的链接路径变量，这样程序才能找到torch的cpp库.
+- 对于torch扩展，你只需要在使用算子前增加如下代码加载：
+```python
+torch.ops.load_library("output/python_extension/libact_torch.so")
+```
+- 对于pybind扩展，编译产物即为一个wheel包，执行`pip install torch_act-xxxxx.whl`即可.
 
 ### 运行
 
 ```python
-import sys
-sys.path.append("../../output/python_extension") # 确保编译出的pybind so文件在path内
 import torch_act
 import torch
 import torch_npu

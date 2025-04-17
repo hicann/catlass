@@ -26,51 +26,42 @@ done
 
 mkdir -p $OUTPUT_PATH
 
-echo -e "[ 50%] \033[32mBuilding CXX shared library libact_kernel.so\e[0m"
-bisheng -O2 -fPIC -std=c++17 -xcce --cce-aicore-arch=dav-c220 \
--I$ASCEND_HOME_PATH/compiler/tikcpp \
--I$ASCEND_HOME_PATH/compiler/tikcpp/tikcfw \
--I$ASCEND_HOME_PATH/compiler/tikcpp/tikcfw/impl \
--I$ASCEND_HOME_PATH/compiler/tikcpp/tikcfw/interface \
--I$ASCEND_HOME_PATH/include \
--I$ASCEND_HOME_PATH/include/experiment/runtime \
--I$ASCEND_HOME_PATH/include/experiment/msprof \
--I$SHARED_LIB_SRC_DIR \
--I$SHARED_LIB_SRC_DIR/impl \
--I$ACT_SRC_DIR/include \
--DL2_CACHE_HINT \
--mllvm -cce-aicore-stack-size=0x8000 \
--mllvm -cce-aicore-function-stack-size=0x8000 \
--mllvm -cce-aicore-record-overflow=true \
--mllvm -cce-aicore-addr-transform \
--mllvm -cce-aicore-dcci-insert-for-scalar=false \
--Wno-macro-redefined -Wno-ignored-attributes \
--L$ASCEND_HOME_PATH/lib64 \
--lruntime \
-$SHARED_LIB_SRC_DIR/act_kernel.cpp --shared -o $OUTPUT_PATH/libact_kernel.so
-echo -e "[ 50%] Built libact_kernel.so"
+function build_lib() {
+    TYPE=$1
+    if [[ $TYPE == "static" ]]; then
+        OUTPUT_NAME=libact_kernel.a
+        COMPILE_OPTION="--cce-build-static-lib"
+    elif [[ $TYPE == "shared" ]]; then
+        OUTPUT_NAME=libact_kernel.so
+        COMPILE_OPTION="--shared"
+    else
+        echo "Unknown type: $TYPE"
+        exit 1
+    fi
+    echo -e "Building CXX shared library $OUTPUT_NAME"
+    bisheng -O2 -fPIC -std=c++17 -xcce --cce-aicore-arch=dav-c220 \
+    -I$ASCEND_HOME_PATH/compiler/tikcpp \
+    -I$ASCEND_HOME_PATH/compiler/tikcpp/tikcfw \
+    -I$ASCEND_HOME_PATH/compiler/tikcpp/tikcfw/impl \
+    -I$ASCEND_HOME_PATH/compiler/tikcpp/tikcfw/interface \
+    -I$ASCEND_HOME_PATH/include \
+    -I$ASCEND_HOME_PATH/include/experiment/runtime \
+    -I$ASCEND_HOME_PATH/include/experiment/msprof \
+    -I$SHARED_LIB_SRC_DIR \
+    -I$SHARED_LIB_SRC_DIR/impl \
+    -I$ACT_SRC_DIR/include \
+    -DL2_CACHE_HINT \
+    -mllvm -cce-aicore-stack-size=0x8000 \
+    -mllvm -cce-aicore-function-stack-size=0x8000 \
+    -mllvm -cce-aicore-record-overflow=true \
+    -mllvm -cce-aicore-addr-transform \
+    -mllvm -cce-aicore-dcci-insert-for-scalar=false \
+    -Wno-macro-redefined -Wno-ignored-attributes \
+    -L$ASCEND_HOME_PATH/lib64 \
+    -lruntime \
+    $SHARED_LIB_SRC_DIR/act_kernel.cpp $COMPILE_OPTION -o $OUTPUT_PATH/$OUTPUT_NAME
+    echo -e "Built $OUTPUT_NAME"
+}
 
-echo -e "[100%] \033[32mBuilding CXX static library libact_kernel.a\e[0m"
-bisheng -O2 -fPIC -std=c++17 -xcce --cce-aicore-arch=dav-c220 \
--I$ASCEND_HOME_PATH/compiler/tikcpp \
--I$ASCEND_HOME_PATH/compiler/tikcpp/tikcfw \
--I$ASCEND_HOME_PATH/compiler/tikcpp/tikcfw/impl \
--I$ASCEND_HOME_PATH/compiler/tikcpp/tikcfw/interface \
--I$ASCEND_HOME_PATH/include \
--I$ASCEND_HOME_PATH/include/experiment/runtime \
--I$ASCEND_HOME_PATH/include/experiment/msprof \
--I$SHARED_LIB_SRC_DIR \
--I$SHARED_LIB_SRC_DIR/impl \
--I$ACT_SRC_DIR/include \
--DL2_CACHE_HINT \
--mllvm -cce-aicore-stack-size=0x8000 \
--mllvm -cce-aicore-function-stack-size=0x8000 \
--mllvm -cce-aicore-record-overflow=true \
--mllvm -cce-aicore-addr-transform \
--mllvm -cce-aicore-dcci-insert-for-scalar=false \
--Wno-macro-redefined -Wno-ignored-attributes \
--L$ASCEND_HOME_PATH/lib64 \
--lruntime \
-$SHARED_LIB_SRC_DIR/act_kernel.cpp --cce-build-static-lib -o $OUTPUT_PATH/libact_kernel.a
-echo -e "[100%] Built libact_kernel.a"
 cp $SHARED_LIB_SRC_DIR/act_kernel.h $OUTPUT_PATH/
+build_lib shared & build_lib static

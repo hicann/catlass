@@ -29,6 +29,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --clean)
             rm -rf build
+            rm -rf output
             ;;
         --*)
             echo "Unknown option: $1"
@@ -44,9 +45,11 @@ function build_shared_lib() {
 
 function build_python_extension() {
     cd $CMAKE_SOURCE_PATH/examples/python_extension
-    cmake --no-warn-unused-cli -B build -DSHARED_LIB_DIR=$OUTPUT_PATH/shared_lib -DPython3_EXECUTABLE=$(which python3) -DCMAKE_INSTALL_PREFIX=$OUTPUT_PATH/python_extension
+    cmake --no-warn-unused-cli -B build -DPython3_EXECUTABLE=$(which python3) -DCMAKE_INSTALL_PREFIX=$OUTPUT_PATH/python_extension -DBUILD_TORCH=True
     cmake --build build -j
     cmake --install build
+
+    python3 setup.py bdist_wheel --dist-dir $OUTPUT_PATH/python_extension
     cd $CMAKE_SOURCE_PATH
 }
 
@@ -56,7 +59,7 @@ elif [[  "$TARGET" == "lib_cmake" ]]; then
     cmake -DENABLE_LIB=ON -S $CMAKE_SOURCE_PATH -B $CMAKE_BUILD_PATH
     cmake --build $CMAKE_BUILD_PATH
 elif [[ "$TARGET" == "python_extension" ]]; then
-    build_shared_lib
+    # build_shared_lib
     build_python_extension
 else
     cmake --no-warn-unused-cli -S$CMAKE_SOURCE_PATH -B$CMAKE_BUILD_PATH
