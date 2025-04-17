@@ -12,7 +12,7 @@ import mskpp
 from helper.act_type import GemmCoord, RowMajor, ColumnMajor
 from helper.helper import get_ascendc_sync_base_addr, AIC_CORE_NUM_ATLAS_A2_910B4
 
-device_id = 1
+device_id = 0
 
 def get_kernel():
     kernel_file = "../06_optimized_matmul/optimized_matmul.cpp"
@@ -61,7 +61,7 @@ def optimized_matmul(ffts_addr, problem_shape, a, layout_a, b, layout_b, c, layo
     kernel = get_kernel()
     blockdim = AIC_CORE_NUM_ATLAS_A2_910B4 # choose the aic number that matches your hardware in helper/helper.py
     return kernel[blockdim](ffts_addr, problem_shape, a, layout_a, b, layout_b, c, layout_c,
-        workspace_a, workspace_b) # invoke the kernel
+        workspace_a, workspace_b, device_id=device_id) # invoke the kernel
 
 
 if __name__ == "__main__":
