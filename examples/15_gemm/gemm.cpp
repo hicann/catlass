@@ -183,7 +183,7 @@ void Run(Options options)
 
     const uint32_t align = 128;
     using LayoutA = layout::RowMajor;
-    using LayoutB = layout::ColumnMajor;
+    using LayoutB = layout::RowMajor;
     using LayoutX = layout::RowMajor;
     LayoutA layoutA{m, k};
     LayoutB layoutB{k, n};

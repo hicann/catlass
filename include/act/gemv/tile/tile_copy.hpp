@@ -75,10 +75,10 @@ struct TileCopyGemvAic {
         typename Gemm::helper::ElementAccumulatorSelector<ElementA, ElementX>::ElementAccumulator;
 
     // the function of aic
-    using L1XType = typename Gemm::helper::L1AndL0TypeSelectorGemv<XType, AType>::L1AType;
-    using L1AType = typename Gemm::helper::L1AndL0TypeSelectorGemv<XType, AType>::L1BType;
-    using L0AType = typename Gemm::helper::L1AndL0TypeSelectorGemv<XType, AType>::L0AType;
-    using L0BType = typename Gemm::helper::L1AndL0TypeSelectorGemv<XType, AType>::L0BType;
+    using L1XType = typename Gemv::helper::L1AndL0TypeSelectorGemv<XType, AType>::L1AType;
+    using L1AType = typename Gemv::helper::L1AndL0TypeSelectorGemv<XType, AType>::L1BType;
+    using L0AType = typename Gemv::helper::L1AndL0TypeSelectorGemv<XType, AType>::L0AType;
+    using L0BType = typename Gemv::helper::L1AndL0TypeSelectorGemv<XType, AType>::L0BType;
 
 
     using CopyGmToL1A = Gemm::Tile::CopyGmToL1<ArchTag, XType, L1XType>;   

@@ -285,7 +285,6 @@ public:
         LayoutC layoutWorkspaceList[MAX_TENSOR_COUNT];
         LayoutA layoutWAList[MAX_TENSOR_COUNT];
         LayoutB layoutWBList[MAX_TENSOR_COUNT];
-
         // Get matmul information from parameters
         detail::UnpackListParam(problemShapeList, params.ptrProblemShape, params.problemCount);
         detail::UnpackListParam(layoutAList, params.ptrLayoutA, params.problemCount);
@@ -293,19 +292,15 @@ public:
         detail::UnpackListParam(layoutWorkspaceList, params.ptrLayoutWorkspace, params.problemCount);
         detail::UnpackListParam(layoutWAList, params.ptrLayoutWA, params.problemCount);
         detail::UnpackListParam(layoutWBList, params.ptrLayoutWB, params.problemCount);
-
         uint32_t coreIdx = AscendC::GetBlockIdx();
         uint32_t coreNum = AscendC::GetBlockNum();
         uint64_t inGroupOffsetA = 0;
         uint64_t inGroupOffsetB = 0;
         uint64_t inGroupOffsetWorkspace = 0;
-
         uint32_t startCoreIdx = 0;
         uint32_t startLoopIdx;
-        
         Arch::Resource<ArchTag> resource;
         BlockGemm blockGemm(resource);
-        
         for (uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx)
         {
             GemmCoord problemShape = problemShapeList[groupIdx];
@@ -329,11 +324,9 @@ public:
             {
                 AscendC::SetFlag<AscendC::HardEvent::FIX_M>((int32_t)i);
             }
-
             uint32_t mLoops = CeilDiv(M, maxMPerBlock);
             uint32_t nLoops = CeilDiv(N, maxNPerBlock);
             uint32_t coreLoops = mLoops * nLoops;
-
             // Determine the starting loopIdx of the current core under the current groupIdx
             if (coreIdx < startCoreIdx) {
                 startLoopIdx = coreIdx + coreNum - startCoreIdx;

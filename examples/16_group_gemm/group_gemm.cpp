@@ -198,20 +198,10 @@ void Run(Options& options){
     ACL_CHECK(aclrtCreateStream(&stream));
 
     uint32_t groupCnt = options.groupCnt;
-    using arrayType = uint32_t;
-    std::vector<arrayType> mArray(groupCnt);
-    std::vector<arrayType> nArray(groupCnt);
-    std::vector<arrayType> kArray(groupCnt);
-    for (uint32_t i = 0; i < groupCnt; ++i) 
-    {
-        mArray[i] = options.mList[i];
-        nArray[i] = options.nList[i];
-        kArray[i] = options.kList[i];
-    }
     
     const uint32_t align = 128; 
     using LayoutA = layout::RowMajor;
-    using LayoutB = layout::ColumnMajor;
+    using LayoutB = layout::RowMajor;
     using LayoutX = layout::RowMajor;
 
     // crate grouped matmul problem shapes and layouts
@@ -229,15 +219,15 @@ void Run(Options& options){
     uint64_t allKNCntPadding = 0;
     for (uint32_t i = 0; i < groupCnt; ++i) 
     {
-        problemShapeList[i] = GemmCoord{mArray[i], nArray[i], kArray[i]};
-        layoutAList[i] = LayoutA{mArray[i], kArray[i]};
-        layoutBList[i] = LayoutB{kArray[i], nArray[i]};
-        layoutXList[i] = LayoutX{mArray[i], nArray[i]};
+        problemShapeList[i] = GemmCoord{options.mList[i], options.nList[i], options.kList[i]};
+        layoutAList[i] = LayoutA{options.mList[i], options.kList[i]};
+        layoutBList[i] = LayoutB{options.kList[i], options.nList[i]};
+        layoutXList[i] = LayoutX{options.mList[i], options.nList[i]};
         layoutWAList[i] = GetWorkspaceLayout(layoutAList[i], align);
         layoutWBList[i] = GetWorkspaceLayout(layoutBList[i], align);
-        allMKCnt += mArray[i] * kArray[i];
-        allKNCnt += kArray[i] * nArray[i];
-        allMNCnt += mArray[i] * nArray[i];
+        allMKCnt += options.mList[i] * options.kList[i];
+        allKNCnt += options.kList[i] * options.nList[i];
+        allMNCnt += options.mList[i] * options.nList[i];
         allMKCntPadding += GetWorkspaceLen(layoutWAList[i]);
         allKNCntPadding += GetWorkspaceLen(layoutWBList[i]);
     }

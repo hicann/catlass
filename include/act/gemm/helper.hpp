@@ -16,7 +16,7 @@
 #include "tla/layout.hpp"
 
 namespace Act::Gemm::helper {
-
+ 
 template<class Element, class Layout>
 struct L1AlignHelper {
     static_assert(DEPENDENT_FALSE<Element>, "Unsupported align helper, can not find the specialization.");
@@ -149,6 +149,11 @@ struct L1BTypeSelector<Gemm::GemmType<Element, layout::ColumnMajor>> {
 };
 
 template<class Element>
+struct L1BTypeSelector<Gemm::GemmType<Element, layout::nZ>> {
+    using L1BType = Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::A1>;
+};
+
+template<class Element>
 struct L1BTypeSelector<Gemm::GemmType<Element, layout::PaddingColumnMajor>> {
     using L1BType = Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::A1>;
 };
@@ -175,8 +180,6 @@ struct L1AlignHelperTla<Element, Layout, std::enable_if_t<tla::detail::isColumnM
 };
 
 
-
-
 ///////////////////////////////////////////
 // new add
 template<>
@@ -184,7 +187,6 @@ struct ElementAccumulatorSelector<int32_t, int32_t> {
     using ElementAccumulator = int32_t;
 };
 
-// new add gemm selector
 template<class GmAType, class GmBType>
 struct L1AndL0TypeSelectorGemm{
     static_assert(DEPENDENT_FALSE<GmAType>,
@@ -211,18 +213,18 @@ struct L1AndL0TypeSelectorGemm<Gemm::GemmType<int8_t, layout::RowMajor>, Gemm::G
 
 template<class Element>
 struct L1AndL0TypeSelectorGemm<Gemm::GemmType<Element, layout::ColumnMajor>, Gemm::GemmType<Element, layout::ColumnMajor>>{
-    using L1AType = Gemm::GemmType<Element, layout::nN, AscendC::TPosition::B1>;
-    using L1BType = Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::A1>;
-    using L0AType = Gemm::GemmType<Element, layout::zN, AscendC::TPosition::B2>;
-    using L0BType = Gemm::GemmType<Element, layout::nN, AscendC::TPosition::A2>;
+    using L1AType = Gemm::GemmType<Element, layout::nN, AscendC::TPosition::A1>;
+    using L1BType = Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::B1>;
+    using L0AType = Gemm::GemmType<Element, layout::zZ, AscendC::TPosition::A2>;
+    using L0BType = Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::B2>;
 };
 
 template<>
 struct L1AndL0TypeSelectorGemm<Gemm::GemmType<int8_t, layout::ColumnMajor>, Gemm::GemmType<int8_t, layout::ColumnMajor>>{
-    using L1AType = Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::B1>;
-    using L1BType = Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::A1>;
-    using L0AType = Gemm::GemmType<int8_t, layout::zN, AscendC::TPosition::B2>;
-    using L0BType = Gemm::GemmType<int8_t, layout::nN, AscendC::TPosition::A2>;
+    using L1AType = Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::A1>;
+    using L1BType = Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::B1>;
+    using L0AType = Gemm::GemmType<int8_t, layout::zZ, AscendC::TPosition::A2>;
+    using L0BType = Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::B2>;
 };
 
 template<class Element>
@@ -233,40 +235,21 @@ struct L1AndL0TypeSelectorGemm<Gemm::GemmType<Element, layout::RowMajor>, Gemm::
     using L0BType = Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::B2>;
 };
 
-////////////////////////////////
-// new add  gemvaic selector
-template<class GmAType, class GmBType>
-struct L1AndL0TypeSelectorGemv{
-    static_assert(DEPENDENT_FALSE<GmAType>,
-        "Unsupported layout selector, can not find the specialization.");
-    static_assert(DEPENDENT_FALSE<GmBType>,
-        "Unsupported layout selector, can not find the specialization.");
-};
-
 template<class Element>
-struct L1AndL0TypeSelectorGemv<Gemm::GemmType<Element, layout::RowMajor>, Gemm::GemmType<Element, layout::RowMajor>>{
-    using L1AType = Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>;
-    using L1BType = Gemm::GemmType<Element, layout::zN, AscendC::TPosition::B1>;
+struct L1AndL0TypeSelectorGemm<Gemm::GemmType<Element, layout::ColumnMajor>, Gemm::GemmType<Element, layout::RowMajor>>{
+    using L1AType = Gemm::GemmType<Element, layout::nN, AscendC::TPosition::A1>;
+    using L1BType = Gemm::GemmType<Element, layout::zZ, AscendC::TPosition::B1>;
     using L0AType = Gemm::GemmType<Element, layout::zZ, AscendC::TPosition::A2>;
-    using L0BType = Gemm::GemmType<Element, layout::zN, AscendC::TPosition::B2>;
-};
-
-template<class Element>
-struct L1AndL0TypeSelectorGemv<Gemm::GemmType<Element, layout::RowMajor>, Gemm::GemmType<Element, layout::ColumnMajor>>{
-    using L1AType = Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>;
-    using L1BType = Gemm::GemmType<Element, layout::nN, AscendC::TPosition::B1>;
-    using L0AType = Gemm::GemmType<Element, layout::zZ, AscendC::TPosition::A2>;
-    using L0BType = Gemm::GemmType<Element, layout::zN, AscendC::TPosition::B2>;
+    using L0BType = Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::B2>;
 };
 
 template<>
-struct L1AndL0TypeSelectorGemv<Gemm::GemmType<int8_t, layout::RowMajor>, Gemm::GemmType<int8_t, layout::ColumnMajor>>{
-    using L1AType = Gemm::GemmType<int8_t, layout::zN, AscendC::TPosition::A1>;
-    using L1BType = Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::B1>;
+struct L1AndL0TypeSelectorGemm<Gemm::GemmType<int8_t, layout::ColumnMajor>, Gemm::GemmType<int8_t, layout::RowMajor>>{
+    using L1AType = Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::A1>;
+    using L1BType = Gemm::GemmType<int8_t, layout::zN, AscendC::TPosition::B1>;
     using L0AType = Gemm::GemmType<int8_t, layout::zZ, AscendC::TPosition::A2>;
-    using L0BType = Gemm::GemmType<int8_t, layout::zN, AscendC::TPosition::B2>;
+    using L0BType = Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::B2>;
 };
-
 } // namespace Act::Gemm::helper
 
 #endif // ACT_GEMM_HELPER_HPP

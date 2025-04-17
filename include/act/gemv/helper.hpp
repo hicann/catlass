@@ -81,8 +81,41 @@ struct L1AlignHelper<Element, layout::ColumnMajor>
     static constexpr uint32_t N_ALIGNED = getNAligned();
     static constexpr uint32_t M_ALIGNED = getMAligned();
 };
+
+////////////////////////////////
+// new add  gemvaic selector
+template<class GmAType, class GmBType>
+struct L1AndL0TypeSelectorGemv{
+    static_assert(DEPENDENT_FALSE<GmAType>,
+        "Unsupported layout selector, can not find the specialization.");
+    static_assert(DEPENDENT_FALSE<GmBType>,
+        "Unsupported layout selector, can not find the specialization.");
+};
+
+template<class Element>
+struct L1AndL0TypeSelectorGemv<Gemm::GemmType<Element, layout::RowMajor>, Gemm::GemmType<Element, layout::RowMajor>>{
+    using L1AType = Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>;
+    using L1BType = Gemm::GemmType<Element, layout::zN, AscendC::TPosition::B1>;
+    using L0AType = Gemm::GemmType<Element, layout::zZ, AscendC::TPosition::A2>;
+    using L0BType = Gemm::GemmType<Element, layout::zN, AscendC::TPosition::B2>;
+};
+
+template<class Element>
+struct L1AndL0TypeSelectorGemv<Gemm::GemmType<Element, layout::RowMajor>, Gemm::GemmType<Element, layout::ColumnMajor>>{
+    using L1AType = Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>;
+    using L1BType = Gemm::GemmType<Element, layout::nN, AscendC::TPosition::B1>;
+    using L0AType = Gemm::GemmType<Element, layout::zZ, AscendC::TPosition::A2>;
+    using L0BType = Gemm::GemmType<Element, layout::zN, AscendC::TPosition::B2>;
+};
+
+template<>
+struct L1AndL0TypeSelectorGemv<Gemm::GemmType<int8_t, layout::RowMajor>, Gemm::GemmType<int8_t, layout::ColumnMajor>>{
+    using L1AType = Gemm::GemmType<int8_t, layout::zN, AscendC::TPosition::A1>;
+    using L1BType = Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::B1>;
+    using L0AType = Gemm::GemmType<int8_t, layout::zZ, AscendC::TPosition::A2>;
+    using L0BType = Gemm::GemmType<int8_t, layout::zN, AscendC::TPosition::B2>;
+};
  
 } // namespace Act::Gemv::helper
  
 #endif // ACT_GEMV_HELPER_HPP
- 

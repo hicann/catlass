@@ -332,7 +332,19 @@ public:
     ACT_HOST_DEVICE
     LongIndex GetOffset(MatrixCoord const &coord) const
     {
-        return LongIndex(coord.row()) / shape_[0] * stride_[1] + LongIndex(coord.column()) / shape_[2] * stride_[3];
+        return LongIndex(coord.row()) / shape_[0] * stride_[1] + LongIndex(coord.column()) / shape_[2] * stride_[3] +
+            (LongIndex(coord.row()) % shape_[0]) * stride_[0] + (LongIndex(coord.column()) % shape_[2]) * stride_[2];
+    }
+
+    /// Returns the layout of a tile.
+    ACT_HOST_DEVICE
+    nZ GetTileLayout(MatrixCoord const &tileOriShape) const
+    {
+        auto tileShape = MakeCoord(
+            shape(0), CeilDiv(tileOriShape.row(), shape(0)),
+            shape(2), CeilDiv(tileOriShape.column(), shape(2))
+        );
+        return nZ(tileOriShape, tileShape, stride());
     }
 
     /// Returns the origin shape of the layout
@@ -504,7 +516,8 @@ public:
     ACT_HOST_DEVICE
     LongIndex GetOffset(MatrixCoord const &coord) const
     {
-        return LongIndex(coord.row()) / shape_[0] * stride_[1] + LongIndex(coord.column()) / shape_[2] * stride_[3];
+        return LongIndex(coord.row()) / shape_[0] * stride_[1] + LongIndex(coord.column()) / shape_[2] * stride_[3] +
+            (LongIndex(coord.row()) % shape_[0]) * stride_[0] + (LongIndex(coord.column()) % shape_[2]) * stride_[2];
     }
 
     /// Returns the layout of a tile.

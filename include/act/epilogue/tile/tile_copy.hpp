@@ -100,7 +100,6 @@ struct TileCopyPerTokenDequant {
     using CopyGmToUbPerTokenScale = CopyPerTokenScale2Ub<ArchTag, PerTokenScaleType>;
     using CopyUbToGmD = CopyUb2Gm<ArchTag, DType>;
 };
-
 } // namespace Act::Epilogue::Tile
 
 #endif  // ACT_EPILOGUE_TILE_TILE_COPY_HPP

@@ -79,6 +79,10 @@ function(act_example_add_vec_executable NAME)
     add_dependencies(act_examples ${NAME})
 endfunction()
 
+if(ENABLE_LIB)
+    add_subdirectory(lib_cmake)
+else()
+
 foreach(EXAMPLE
     00_basic_matmul
     01_batched_matmul
@@ -99,6 +103,9 @@ foreach(EXAMPLE
     16_group_gemm
     17_gemv_aiv
     18_gemv_aic
+    19_mla
 )
     add_subdirectory(${EXAMPLE})
 endforeach()
+
+endif()

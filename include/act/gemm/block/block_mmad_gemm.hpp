@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef ACT_GEMM_BLOCK_BLOCK_GEMM_PRELOAD
-#define ACT_GEMM_BLOCK_BLOCK_GEMM_PRELOAD
+#ifndef ACT_BLOCK_BLOCK_MMAD_GEMM_HPP
+#define ACT_BLOCK_BLOCK_MMAD_GEMM_HPP
 
 #include "act/act.hpp"
 #include "act/gemm/helper.hpp"
@@ -83,8 +83,9 @@ public:
     const uint32_t L0CSize = ArchTag::L0C_SIZE;
     const uint32_t L0A_PINGPONG_BUF_LEN = (L0ASize / STAGES);
     const uint32_t L0B_PINGPONG_BUF_LEN = (L0BSize / STAGES);
-    static constexpr bool RowOrColumn = std::is_same<LayoutA, layout::RowMajor>::value && std::is_same<LayoutB, layout::RowMajor>::value;
     const uint32_t l0CBlockNum = ArchTag::L0C_SIZE / cSize;
+
+    static_assert(std::is_same_v<LayoutC, layout::RowMajor>, "LayoutC only support RowMajor yet!");
     
     ACT_DEVICE
     BlockGemm(Arch::Resource<ArchTag> &resource, uint32_t l1BufAddrStart = 0)
@@ -225,37 +226,16 @@ public:
             for (uint32_t kL0Idx = 0; kL0Idx < kL0Loops; kL0Idx++)
             {
                 uint32_t kL0Actual = (kL0Idx == kL0Loops - 1) ? (kGmActual - kL0Idx * kL0TileSize) : kL0TileSize;
-                LayoutAInL0 layoutAInL0; LayoutBInL0 layoutBInL0;
+                LayoutAInL0 layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(L1TileShape::M, kL0Actual);
+                LayoutBInL0 layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(kL0Actual, L1TileShape::N);
                 uint32_t l1TileAOffset = layoutAInL1.GetOffset(MatrixCoord(0, kL0Idx * kL0TileSize));
                 uint32_t l1TileBOffset = layoutBInL1.GetOffset(MatrixCoord(kL0Idx * kL0TileSize, 0));
-                AscendC::LocalTensor<ElementA> l0TileA;  AscendC::LocalTensor<ElementB> l0TileB;
                 auto l1TileA = l1ATile[l1TileAOffset];
                 auto l1TileB = l1BTile[l1TileBOffset];
-                if constexpr(std::is_same<LayoutA, layout::RowMajor>::value && std::is_same<LayoutB, layout::RowMajor>::value) 
-                {
-                    l0TileA = l0ATensor[l0ListId];
-                    l0TileB = l0BTensor[l0ListId];
-                    mActual = L1TileShape::M;
-                    nActual = L1TileShape::N;
-                    layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(L1TileShape::M, kL0Actual);
-                    layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(L1TileShape::N, kL0Actual);
-                } else if constexpr (std::is_same<LayoutA, layout::ColumnMajor>::value && std::is_same<LayoutB, layout::ColumnMajor>::value) 
-                {
-                    l0TileA = l0BTensor[l0ListId];
-                    l0TileB = l0ATensor[l0ListId];
-                    nActual = L1TileShape::M;
-                    mActual = L1TileShape::N;
-                    layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(kL0Actual, L1TileShape::M);
-                    layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(kL0Actual, L1TileShape::N);
-                } else if constexpr (std::is_same<LayoutA, layout::RowMajor>::value && std::is_same<LayoutB, layout::ColumnMajor>::value)
-                {
-                    l0TileA = l0ATensor[l0ListId];
-                    l0TileB = l0BTensor[l0ListId];
-                    mActual = L1TileShape::M;
-                    nActual = L1TileShape::N;
-                    layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(L1TileShape::M, kL0Actual);
-                    layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(kL0Actual, L1TileShape::N);
-                }
+                auto l0TileA = l0ATensor[l0ListId];
+                auto l0TileB = l0BTensor[l0ListId];
+                mActual = L1TileShape::M;
+                nActual = L1TileShape::N;
                 if (shuffleKIdx % 2 == 0)
                 {
                     if (kL0Idx % 2 == 0) { 
@@ -337,4 +317,4 @@ private:
 };
 }
 
-#endif // ACT_GEMM_BLOCK_BLOCK_GEMM_PRELOAD
+#endif // ACT_BLOCK_BLOCK_MMAD_GEMM_HPP

@@ -113,7 +113,6 @@ public:
 
     // Check LayoutC
     static_assert(std::is_same_v<LayoutC, layout::RowMajor>, "LayoutC only support RowMajor yet!");
-    
     // Check L1TileShape
     static_assert((L1A_TILE_SIZE + L1B_TILE_SIZE) * L1_STAGES <= ArchTag::L1_SIZE,
         "L1TileShape exceeding the L1 space!");
