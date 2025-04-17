@@ -53,7 +53,6 @@ struct CopyUb2Gm<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>> {
     }
 };
 
-
 template <typename Element>
 struct CopyUb2Gm<Arch::AtlasA2, Gemm::GemmType<Element, layout::VectorLayout>> {
     using LayoutSrc = layout::VectorLayout;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This file is a part of the CANN Open Software.
  * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -61,7 +61,7 @@ public:
 
     static constexpr bool noNeedCast = std::is_same<ElementTemp, ElementY>::value;
 
-    using ElementCompute = typename Act::Gemv::helper::ElementAccumulatorSelector<ElementY, ElementZ>::ElementAccumulator;
+    using ElementCompute = typename Act::Gemm::helper::ElementAccumulatorSelector<ElementY, ElementZ>::ElementAccumulator;
     using ElementScalar = ElementCompute;
     using TensorCoord = layout::VectorLayout::TensorCoord;
 

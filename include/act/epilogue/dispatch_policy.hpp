@@ -32,6 +32,16 @@ struct EpilogueAtlasA2FARescaleO {
     using ArchTag = Arch::AtlasA2;
 };
 
+// For AtlasA2, GEMM
+struct EpilogueAtlasA2Gemm {
+    using ArchTag = Arch::AtlasA2;
+};
+
+// For AtlasA2, GEMV
+struct EpilogueAtlasA2Gemv {
+    using ArchTag = Arch::AtlasA2;
+};
+
 // For AtlasA2, MLA Softmax
 struct EpilogueAtlasA2MLASoftmax {
     using ArchTag = Arch::AtlasA2;

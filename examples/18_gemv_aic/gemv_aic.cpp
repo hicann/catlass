@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This file is a part of the CANN Open Software.
  * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -41,7 +41,7 @@ using ScalarType = float;
 
 
 
-typedef struct Options {
+struct Options {
     const std::string HELPER = "20_gemv_aic m n [device_id]";
 
     GemvCoord problemShape{128, 128};
@@ -67,7 +67,7 @@ typedef struct Options {
         }
         return 0;
     }
-} Options;
+};
 
 template <class Adapter>
 void RunAdapter(Adapter gemv_op, typename Adapter::Arguments args, aclrtStream stream,
