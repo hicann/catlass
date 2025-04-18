@@ -18,7 +18,7 @@
 namespace py = pybind11;
 using namespace ActKernelWrapper;
 
-PYBIND11_MODULE(torch_act, m) {
+PYBIND11_MODULE(_C, m) {
     m.doc() = "Python bindings for ActKernel";
     m.def("basic_matmul", &RunBasicMatmul, "")
     .def("grouped_matmul", &RunGroupedMatmul, "")
