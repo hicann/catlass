@@ -80,8 +80,8 @@ if __name__ == "__main__":
     layout_c = RowMajor(m, n)
 
     align = 256
-    is_need_padding_a = True if layout_a.stride[0] < 65536 else (layout_a.stride[0] % align) != 0
-    is_need_padding_b = True if layout_b.stride[1] < 65536 else (layout_b.stride[1] % align) != 0
+    is_need_padding_a = True if layout_a.stride[0] >= 65536 else (layout_a.stride[0] % align) != 0
+    is_need_padding_b = True if layout_b.stride[1] >= 65536 else (layout_b.stride[1] % align) != 0
 
     # assume m, n, k of L1TileShape are not larger than 1024
     sizeWA = round_up(layout_a.shape[0], 1024) * round_up(layout_a.shape[1], 1024)
