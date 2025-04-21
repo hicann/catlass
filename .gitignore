@@ -45,3 +45,6 @@ output/
 
 # log文件
 *.log
+
+# sh文件
+*.sh

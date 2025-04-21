@@ -60,7 +60,7 @@ void GemvAiv(
     using BlockEpilogue = void;
 
     // kernel level
-    using GemvKernel = Gemv::Kernel::KernelGemv<GemvBlock, BlockEpilogue>;
+    using GemvKernel = Gemv::Kernel::KernelGemvAiv<GemvBlock, BlockEpilogue>;
     typename GemvKernel::Params params{problemShape, gmA, layoutA, gmX, layoutX, gmY, layoutY, gmYCopy,alpha,beta,split};
     // call a kernel
     GemvKernel gemv;
