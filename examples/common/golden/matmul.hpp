@@ -116,11 +116,11 @@ void ComputeGemvAic(
 )
 {
     for (uint32_t i = 0; i < problemShape.m(); ++i) {
-        size_t offsetGolden = layoutGolden.GetOffset(MakeCoord(i, uint32_t(0)));
+        size_t offsetGolden = layoutGolden.GetOffset(MakeCoord(i));
         ElementGolden accumulator = 0;
         for (uint32_t k = 0; k < problemShape.n(); ++k) {
             size_t offsetA = layoutA.GetOffset(MakeCoord(i, k));
-            size_t offsetX = layoutX.GetOffset(MakeCoord(k, uint32_t(0)));
+            size_t offsetX = layoutX.GetOffset(MakeCoord(uint32_t(0), k));
             accumulator += static_cast<ElementGolden>(alpha) * static_cast<ElementGolden>(dataA[offsetA]) * static_cast<ElementGolden>(dataX[offsetX]);
         }
         dataGolden[offsetGolden] = static_cast<ElementGolden>(beta) * static_cast<ElementGolden>(dataY[offsetGolden]) + static_cast<ElementGolden>(accumulator);

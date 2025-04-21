@@ -86,6 +86,12 @@ void RunAdapter(Adapter gemv_op, typename Adapter::Arguments args, aclrtStream s
     }
 }
 
+template<class ElementRandom>
+void FillRandomScalarData(ElementRandom &scalarData, ElementRandom low, ElementRandom high)
+{
+    scalarData = static_cast<ElementRandom>(low + (static_cast<ElementRandom>(rand()) / static_cast<ElementRandom>(RAND_MAX)) * (high - low));
+}
+
 void Run(Options options) {
     aclrtStream stream{nullptr};
     ACL_CHECK(aclInit(nullptr));
@@ -99,7 +105,6 @@ void Run(Options options) {
     size_t lenX = static_cast<size_t>(n) * 1;
     size_t lenY = static_cast<size_t>(m) * 1;
     size_t lenZ = static_cast<size_t>(m) * 1;
-    size_t scalarLen = 1;
 
     size_t sizeA = lenA * sizeof(float);
     size_t sizeX = lenX * sizeof(float);
@@ -116,14 +121,10 @@ void Run(Options options) {
     LayoutA layoutA{m, n};
     LayoutZ layoutZ{m};
 
-    LayoutY layoutY_r{m, 1};
-    LayoutX layoutX_r{n, 1};
-
-    size_t scalarSize = scalarLen * sizeof(ScalarType);
-    std::vector<ScalarType> hostAlpha(scalarLen);
-    std::vector<ScalarType> hostBeta(scalarLen);
-    golden::FillRandomData(hostAlpha, -1.0f, 1.0f);
-    golden::FillRandomData(hostBeta, -1.0f, 1.0f);
+    ScalarType alpha{0};
+    ScalarType beta{0};
+    FillRandomScalarData(alpha, -1.0f, 1.0f);
+    FillRandomScalarData(beta, -1.0f, 1.0f);
 
     std::vector<float> hostA(lenA);
     std::vector<float> hostX(lenX);
@@ -153,6 +154,7 @@ void Run(Options options) {
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
     using ArchTag = Arch::AtlasA2;
+    using LayoutC = layout::RowMajor;
 
     // Block level, define BlockGemv
     constexpr bool enableUnitFlag = true;
@@ -161,22 +163,21 @@ void Run(Options options) {
 
     using LayoutX = layout::RowMajor;
     using LayoutA = layout::RowMajor;
-    using LayoutTemp = layout::RowMajor;
     using LayoutZ = layout::VectorLayout;
 
     using L1TileShape = GemvShape<32, 512>;
     using L0TileShape = GemvShape<32, 256>;
     using AType = Gemm::GemmType<float, LayoutA>;
     using XType = Gemm::GemmType<float, LayoutX>;
-    using TempType = Gemm::GemmType<float, LayoutTemp>;
+    using CType = Gemm::GemmType<float, LayoutC>;
     using BiasType = void;
-    using TileCopy = Gemv::Tile::TileCopyGemvAic<typename DispatchPolicy::ArchTag, AType, XType, TempType, BiasType>;
+    using TileCopy = Gemv::Tile::TileCopyGemvAic<typename DispatchPolicy::ArchTag, AType, XType, CType, BiasType>;
     using TileMmad = Gemm::Tile::TileMmad<typename DispatchPolicy::ArchTag, XType, AType, BiasType>;
 
-    using BlockGemv = Gemv::Block::BlockGemv<DispatchPolicy, L1TileShape, L0TileShape, AType, XType, TempType, BiasType, TileCopy, TileMmad>;
+    using BlockGemv = Gemv::Block::BlockGemv<DispatchPolicy, L1TileShape, L0TileShape, AType, XType, CType, BiasType, TileCopy, TileMmad>;
 
     // Block level, define BlockEpilogue
-    using EpilogueBlockDispatchPolicy = Epilogue::EpilogueAtlasA2ElemWiseOneSource;
+    using EpilogueBlockDispatchPolicy = Epilogue::EpilogueAtlasA2Gemv;
     using YType = Gemm::GemmType<float, LayoutZ>;
     using ZType = Gemm::GemmType<float, LayoutZ>;
     using AXType = Gemm::GemmType<float, LayoutZ>;
@@ -192,11 +193,11 @@ void Run(Options options) {
     using BlockEpilogue = Epilogue::Block::BlockEpilogue<EpilogueBlockDispatchPolicy, AXType, YType, ZType, TileElemWiseAddGemv, TileElemWiseMulsGemv, EpilogueTileCopy>;
 
     // kernle levels
-    using GemvKernel = Gemv::Kernel::GemvEpilogue<BlockGemv, BlockEpilogue>;
+    using GemvKernel = Gemv::Kernel::KernelGemvAic<BlockGemv, BlockEpilogue>;
 
     // TODO:  use adapter to activate the kernel
     using GemvAdapter = Gemv::Device::DeviceGemv<GemvKernel>;
-    GemvKernel::Arguments arguments{options.problemShape, hostAlpha[0], hostBeta[0], sizeof(float), deviceX, deviceA, deviceZ};
+    GemvKernel::Arguments arguments{options.problemShape, alpha, beta, sizeof(float), deviceX, deviceA, deviceZ};
     GemvAdapter gemv_op;
     RunAdapter(gemv_op, arguments, stream, aicCoreNum, fftsAddr);
 
@@ -205,7 +206,8 @@ void Run(Options options) {
 
     std::vector<float> hostGolden(lenZ);
 
-    golden::ComputeGemvAic(options.problemShape, hostAlpha[0], hostBeta[0], hostA, layoutA, hostX, layoutX_r, hostY, layoutY_r, hostGolden, layoutY_r);
+    golden::ComputeGemvAic(options.problemShape, alpha, beta, hostA, layoutA, hostX, layoutX, hostY, layoutZ, hostGolden, layoutZ);
+
     std::vector<uint64_t> errorIndices = golden::CompareData(hostRes, hostGolden, m);
 
     if (errorIndices.empty()) {

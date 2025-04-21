@@ -25,7 +25,7 @@ template <
     class BlockGemv_,
     class BlockEpilogue_
 >
-class GemvEpilogue {
+class KernelGemvAic {
 public:
     using BlockGemv = BlockGemv_;
     using ArchTag = typename BlockGemv::ArchTag;
@@ -112,7 +112,7 @@ public:
 
     // Methods
     ACT_DEVICE
-    GemvEpilogue() {}
+    KernelGemvAic() {}
 
     template <int32_t CORE_TYPE = g_coreType>
     ACT_DEVICE 

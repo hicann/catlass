@@ -22,7 +22,7 @@
      class BlockGemv_,
      class BlockEpilogue_
  >
- class KernelGemv {
+ class KernelGemvAiv {
  public:
      using BlockGemv = BlockGemv_;
      using ArchTag = typename BlockGemv::ArchTag;
@@ -98,7 +98,7 @@
     
      // Methods
      ACT_DEVICE
-     KernelGemv(){}
+     KernelGemvAiv(){}
 
      template <int32_t CORE_TYPE = g_coreType>
      ACT_DEVICE

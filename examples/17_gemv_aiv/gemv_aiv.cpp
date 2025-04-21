@@ -206,7 +206,7 @@ void Run(Options options){
     using BlockEpilogue = void;
 
     // kernel level
-    using GemvKernel = Gemv::Kernel::KernelGemv<GemvBlock, BlockEpilogue>;
+    using GemvKernel = Gemv::Kernel::KernelGemvAiv<GemvBlock, BlockEpilogue>;
     typename GemvKernel::Arguments arguments{options.problemShape, alpha, beta, (uint8_t*)deviceA, (uint8_t*)deviceX, (uint8_t*)deviceY, (uint8_t*)deviceYCopy, split};
     using GemvAdapter = Gemv::Device::DeviceGemv<GemvKernel>;
     GemvAdapter gemv_op;
