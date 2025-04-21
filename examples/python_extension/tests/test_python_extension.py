@@ -7,7 +7,7 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 
 import sys
-sys.path.append("../../../output/python_extension")  # 注意更新so的路径
+sys.path.append("../../../output/python_extension")
 from torch_npu.testing.testcase import TestCase, run_tests
 import torch_npu
 import torch
@@ -15,7 +15,6 @@ import torch_act
 
 
 class ActTest(TestCase):
-    # 使用pybind调用（推荐）
     def test_basic_matmul_pybind(self):
         a = torch.ones((2, 3)).to(torch.float16).npu()
         b = torch.ones((3, 4)).to(torch.float16).npu()
@@ -30,7 +29,6 @@ class ActTest(TestCase):
         golden = torch.mm(a, b)
         self.assertRtolEqual(result.to(torch.float32), golden.to(torch.float32))
 
-    # 使用torch.ops.load_library实现，存在额外转换，暂不推荐
     def test_basic_matmul_torch_lib(self):
         a = torch.ones((2, 3)).to(torch.float16).npu()
         b = torch.ones((3, 4)).to(torch.float16).npu()

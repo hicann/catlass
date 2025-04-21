@@ -51,6 +51,16 @@ struct EpilogueAtlasA2MLAFDRescaleO {
     static constexpr uint32_t COMPUTE_ELE_NUM = COMPUTE_ELE_NUM_;
 };
 
+// For AtlasA2, MLA TP1 Softmax
+struct EpilogueAtlasA2MLATP1Softmax {
+    using ArchTag = Arch::AtlasA2;
+};
+
+// For AtlasA2, MLA TP1 RescaleO
+struct EpilogueAtlasA2MLATP1RescaleO {
+    using ArchTag = Arch::AtlasA2;
+};
+
 // For AtlasA2, per token dequant
 template <uint32_t UB_STAGES_>
 struct EpilogueAtlasA2PerTokenDequant {

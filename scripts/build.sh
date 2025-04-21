@@ -15,9 +15,27 @@ CMAKE_BUILD_PATH=$CMAKE_SOURCE_PATH/build
 
 OUTPUT_PATH=$CMAKE_SOURCE_PATH/output
 
-TARGET=$1
+if [[ $# -eq 0 ]]; then
+    echo "Usage: bash build.sh [--clean] [target]"
+    exit 0
+fi
+
+TARGET=${!#}
+echo "Target is: $TARGET"
 
 mkdir -p $CMAKE_BUILD_PATH
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --clean)
+            rm -rf build
+            ;;
+        --*)
+            echo "Unknown option: $1"
+            ;;
+    esac
+    shift
+done
 
 function build_shared_lib() {
     SHARED_LIB_SRC_DIR=$CMAKE_SOURCE_PATH/examples/shared_lib
@@ -34,14 +52,14 @@ function build_python_extension() {
 
 if [[ "$TARGET" == "shared_lib" ]]; then
     build_shared_lib
+elif [[  "$TARGET" == "lib_cmake" ]]; then
+    cmake -DENABLE_LIB=ON -S $CMAKE_SOURCE_PATH -B $CMAKE_BUILD_PATH
+    cmake --build $CMAKE_BUILD_PATH
 elif [[ "$TARGET" == "python_extension" ]]; then
     build_shared_lib
     build_python_extension
-elif [[ "$TARGET" == "examples" ]]; then
-    cmake --no-warn-unused-cli -S$CMAKE_SOURCE_PATH -B$CMAKE_BUILD_PATH
-    cmake --build $CMAKE_BUILD_PATH -j
 else
     cmake --no-warn-unused-cli -S$CMAKE_SOURCE_PATH -B$CMAKE_BUILD_PATH
-    cmake --build $CMAKE_BUILD_PATH --target $TARGET
+    cmake --build $CMAKE_BUILD_PATH --target $TARGET -j
 fi
 

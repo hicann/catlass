@@ -8,13 +8,9 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#include <torch/extension.h>
+int MatmulAddMain(int argc, const char **argv);
 
-#include "act_kernel_wrapper.h"
-
-#define NPU PrivateUse1
-
-using namespace ActKernelWrapper;
-TORCH_LIBRARY(ActTorch, m) { m.def("basic_matmul(Tensor mat1, Tensor mat2, str c) -> Tensor"); }
-
-TORCH_LIBRARY_IMPL(ActTorch, NPU, m) { m.impl("basic_matmul", &RunBasicMatmul); }
+int main(int argc, const char **argv)
+{
+    return MatmulAddMain(argc, argv);
+}
