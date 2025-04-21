@@ -42,3 +42,9 @@ __pycache__/
 # user define
 build/
 output/
+
+# sh文件
+*.sh
+
+# log文件
+*.log

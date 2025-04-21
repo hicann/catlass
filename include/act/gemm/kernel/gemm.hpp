@@ -1,12 +1,12 @@
 /*
-* Copyright (c) 2024 Huawei Technologies Co., Ltd.
-* This file is a part of the CANN Open Software.
-* Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
-* Please refer to the License for details. You may not use this file except in compliance with the License.
-* THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-* INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-* See LICENSE in the root of the software repository for the full text of the License.
-*/
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * This file is a part of the CANN Open Software.
+ * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
+ */
 
 #ifndef ACT_GEMM_KERNEL_GEMM_HPP
 #define ACT_GEMM_KERNEL_GEMM_HPP
@@ -158,7 +158,7 @@ private:
 template<
     class BlockGemm_,
     class BlockEpilogue_ ,
-    class TileScheduler_ = void
+    class BlockScheduler_ = void
 >
 class KernelGemm{
 public:
@@ -171,8 +171,8 @@ public:
     using ElementB = typename BlockGemm::ElementB;
     using LayoutB = typename BlockGemm::LayoutB;
     using LayoutWB = typename BlockGemm::LayoutB;
-    using ElementX = typename BlockGemm::ElementX;
-    using LayoutX = typename BlockGemm::LayoutX;
+    using ElementC = typename BlockGemm::ElementC;
+    using LayoutC = typename BlockGemm::LayoutC;
     using ElementAccumulator = typename BlockGemm::ElementAccumulator;
 
     using BlockEpilogue = BlockEpilogue_;
@@ -186,14 +186,14 @@ public:
         typename Act::Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
     using ElementScalar = ElementCompute; 
     static constexpr uint32_t STAGES = BlockGemm::STAGES; 
-    using TileScheduler = TileScheduler_;
+    using BlockScheduler = BlockScheduler_;
     
     static const uint32_t COMPUTE_LENGTH_A = 96 * 1024 / sizeof(ElementA); 
     using PaddingA = PaddingMatrix<ArchTag, ElementA, LayoutA, COMPUTE_LENGTH_A>;
     static const uint32_t COMPUTE_LENGTH_B = 96 * 1024 / sizeof(ElementB);
     using PaddingB = PaddingMatrix<ArchTag, ElementB, LayoutB, COMPUTE_LENGTH_B>;
 
-    typedef struct Params{
+    struct Params{
         GemmCoord problemShape;
         GM_ADDR ptrA;
         LayoutA layoutA;
@@ -218,7 +218,7 @@ public:
                 ptrB(ptrB_), layoutB(layoutB_), gmWorkspace(gmWorkspace_), 
                 ptrWA(ptrWA_), layoutWA(layoutWA_), ptrWB(ptrWB_), layoutWB(layoutWB_), 
                 epilogueParams(epilogueParams_){} 
-    }Params;
+    };
 
     struct Arguments{
         GemmCoord problemShape;
@@ -291,7 +291,8 @@ public:
 
     template<>
     ACT_DEVICE
-    void operator()<AscendC::AIC>(Params &params){
+    void operator()<AscendC::AIC>(Params &params)
+    {
         if (!IsSameStride(params.layoutWA, params.layoutA) || !IsSameStride(params.layoutWB, params.layoutB)) {
             Arch::CrossCoreWaitFlag(flagAivFinishPadding);
         }
@@ -302,21 +303,23 @@ public:
         gmA.SetGlobalBuffer((__gm__ ElementA*)params.ptrWA);
         AscendC::GlobalTensor<ElementB> gmB;
         gmB.SetGlobalBuffer((__gm__ ElementB*)params.ptrWB);
-        AscendC::GlobalTensor<ElementX> gmX;
-        gmX.SetGlobalBuffer((__gm__ ElementX*)params.gmWorkspace);
+        AscendC::GlobalTensor<ElementC> gmC;
+        gmC.SetGlobalBuffer((__gm__ ElementC*)params.gmWorkspace);
         uint32_t M = params.problemShape.m();
         uint32_t N = params.problemShape.n();
         uint32_t K = params.problemShape.k();
         #pragma unroll
-        for(uint32_t i = 0; i < l0XBlockNum; i++){
+        for (uint32_t i = 0; i < l0XBlockNum; i++) 
+        {
             AscendC::SetFlag<AscendC::HardEvent::FIX_M>((int32_t)i);
         }
         uint32_t MLoops = CeilDiv(M, maxMPerBlock);
         uint32_t NLoops = CeilDiv(N, maxNPerBlock);
         uint32_t coreLoops = MLoops * NLoops;
         uint32_t singleIdx = 0;
-        LayoutX layoutX(params.problemShape.m(), params.problemShape.n());
-        for(uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()){
+        LayoutC layoutC(params.problemShape.m(), params.problemShape.n());
+        for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum())
+        {
             uint32_t MGmBlockIdx = loopIdx / NLoops;
             uint32_t NGmBlockIdx = loopIdx % NLoops;
             uint32_t MGmActual = (MGmBlockIdx == MLoops - 1) ? (M - MGmBlockIdx * maxMPerBlock) : maxMPerBlock;
@@ -325,7 +328,8 @@ public:
             bool hasNextBlock = false;
             GemmCoord nextActualShape;
             uint32_t MNextGmBlockIdx = 0; uint32_t NNextGmBlockIdx = 0;
-            if(loopIdx + AscendC::GetBlockNum() < coreLoops){
+            if (loopIdx + AscendC::GetBlockNum() < coreLoops) 
+            {
                 hasNextBlock = true;
                 uint32_t nextLoopIdx = loopIdx + AscendC::GetBlockNum();
                 MNextGmBlockIdx = nextLoopIdx / NLoops;
@@ -340,8 +344,8 @@ public:
             auto gmTileA = gmA[params.layoutWA.GetOffset(gmTileAOffset)];
             MatrixCoord gmTileBOffset{0, NGmBlockIdx * maxNPerBlock}; 
             auto gmTileB = gmB[params.layoutWB.GetOffset(gmTileBOffset)];
-            MatrixCoord gmTileXOffset{MGmBlockIdx * maxMPerBlock, NGmBlockIdx * maxNPerBlock}; 
-            auto gmTileX = gmX[layoutX.GetOffset(gmTileXOffset)];
+            MatrixCoord gmTileCOffset{MGmBlockIdx * maxMPerBlock, NGmBlockIdx * maxNPerBlock}; 
+            auto gmTileC = gmC[layoutC.GetOffset(gmTileCOffset)];
             MatrixCoord gmTileNextAOffset{MNextGmBlockIdx * maxMPerBlock, 0}; 
             auto gmTileNextA = gmA[params.layoutWA.GetOffset(gmTileNextAOffset)];
             MatrixCoord gmTileNextBOffset{0, NNextGmBlockIdx * maxNPerBlock}; 
@@ -349,7 +353,7 @@ public:
             blockGemm(
                 gmTileA, params.layoutWA,
                 gmTileB, params.layoutWB,
-                gmTileX, layoutX,
+                gmTileC, layoutC,
                 gmTileNextA, gmTileNextB,
                 actualShape, nextActualShape, isFirstBlock, hasNextBlock, singleIdx
             );
@@ -365,8 +369,10 @@ public:
 
     template<>
     ACT_DEVICE
-    void operator()<AscendC::AIV>(Params &params){
+    void operator()<AscendC::AIV>(Params &params)
+    {
         Arch::Resource<ArchTag> resource;
+        uint64_t inGroupOffsetWorkspace = 0;
         if (!IsSameStride(params.layoutWA, params.layoutA)) {
             AscendC::GlobalTensor<ElementA> gmA;
             AscendC::GlobalTensor<ElementA> gmWA;
@@ -400,20 +406,21 @@ public:
         uint32_t aivNum = AscendC::GetSubBlockNum();
         uint32_t aivIndex = AscendC::GetBlockIdx();
         uint32_t aicoreIndex = aivIndex / aivNum;
-        AscendC::GlobalTensor<ElementX> gmX;
-        gmX.SetGlobalBuffer((__gm__ ElementX*)params.gmWorkspace);
-        for(uint32_t loopIdx = aicoreIndex; loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()){
+        AscendC::GlobalTensor<ElementC> gmC;
+        gmC.SetGlobalBuffer((__gm__ ElementC*)params.gmWorkspace);
+        for (uint32_t loopIdx = aicoreIndex; loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum())
+        {
             uint32_t MGmBlockIdx = loopIdx / NLoops;
             uint32_t NGmBlockIdx = loopIdx % NLoops;
             uint32_t MGmActual = (MGmBlockIdx == MLoops - 1) ? (M - MGmBlockIdx * maxMPerBlock) : maxMPerBlock;
             uint32_t NGmActual = (NGmBlockIdx == NLoops - 1) ? (N - NGmBlockIdx * maxNPerBlock) : maxNPerBlock;
             GemmCoord actualShape{MGmActual, NGmActual, K};
-            LayoutX layoutX(params.problemShape.m(), params.problemShape.n());
+            GemmCoord blockCoord{MGmBlockIdx, NGmBlockIdx, 0};
+            LayoutC layoutC(params.problemShape.m(), params.problemShape.n());
             Arch::CrossCoreWaitFlagWithReverse<0x2, PIPE_MTE3>(flagAicFinishStore); 
-            MatrixCoord gmTileOffset{MGmBlockIdx * maxMPerBlock, NGmBlockIdx * maxNPerBlock}; 
-            auto offsetX = layoutX.GetOffset(gmTileOffset);
-            blockEpilogue(offsetX, gmX[offsetX], layoutX, actualShape);
+            blockEpilogue(actualShape, blockCoord, gmC, layoutC, inGroupOffsetWorkspace);
         }
+        inGroupOffsetWorkspace += params.problemShape.m() * params.problemShape.n();
     }
 private:
     static constexpr Arch::FlagID FLAG_AIC_FINISH_STORE = 0;
