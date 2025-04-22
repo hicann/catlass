@@ -29,8 +29,6 @@
 #include "tla/layout.hpp"
 #include "tla/tensor.hpp"
 
-using namespace Act;
-using namespace tla;
 using fp16_t = op::fp16_t;
 
 struct Options {
@@ -87,9 +85,9 @@ void Run(Options const &options)
     size_t sizeC = lenC * sizeof(fp16_t);
     size_t sizeWorkspace;
 
-    using LayoutTagA = layout::RowMajor;
-    using LayoutTagB = layout::RowMajor;
-    using LayoutTagC = layout::RowMajor;
+    using LayoutTagA = Act::layout::RowMajor;
+    using LayoutTagB = Act::layout::RowMajor;
+    using LayoutTagC = Act::layout::RowMajor;
     LayoutTagA tagA{m, k};
     LayoutTagB tagB{k, n};
     LayoutTagC tagC{m, n};
@@ -115,37 +113,37 @@ void Run(Options const &options)
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
-    using ArchTag = Arch::AtlasA2;
-    using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
-    using L1TileShape = Shape<_128, _256, _256>;
-    using L0TileShape = Shape<_128, _256, _64>;
+    using ArchTag = Act::Arch::AtlasA2;
+    using DispatchPolicy = Act::Gemm::MmadAtlasA2Pingpong<true>;
+    using L1TileShape = tla::Shape<_128, _256, _256>;
+    using L0TileShape = tla::Shape<_128, _256, _64>;
 
     using ElementA = half;
     using ElementB = half;
     using ElementC = half;
 
-    auto layoutA = MakeLayoutFromTag(tagA);
-    auto layoutB = MakeLayoutFromTag(tagB);
-    auto layoutC = MakeLayoutFromTag(tagC);
+    auto layoutA = tla::MakeLayoutFromTag(tagA);
+    auto layoutB = tla::MakeLayoutFromTag(tagB);
+    auto layoutC = tla::MakeLayoutFromTag(tagC);
 
-    using TensorA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutA), AscendC::TPosition::GM>;
-    using TensorB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutB), AscendC::TPosition::GM>;
-    using TensorC = Tensor<AscendC::GlobalTensor<ElementC>, decltype(layoutC), AscendC::TPosition::GM>;
+    using TensorA = tla::Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutA), AscendC::TPosition::GM>;
+    using TensorB = tla::Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutB), AscendC::TPosition::GM>;
+    using TensorC = tla::Tensor<AscendC::GlobalTensor<ElementC>, decltype(layoutC), AscendC::TPosition::GM>;
     using TileCopy =
-        Gemm::Tile::PackedTileCopyTla<ArchTag, TensorA, LayoutTagA, TensorB, LayoutTagB, TensorC, LayoutTagC>;
+        Act::Gemm::Tile::PackedTileCopyTla<ArchTag, TensorA, LayoutTagA, TensorB, LayoutTagB, TensorC, LayoutTagC>;
     using BlockMmad =
-        Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape,
+        Act::Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape,
                                     TensorA, TensorB, TensorC, void, TileCopy>;
     using BlockEpilogue = void;
 
     if (options.problemShape.m() > options.problemShape.n()) {
         // Swizzle offset is 3 and direction is 0.
-        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
+        using BlockScheduler = typename Act::Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
 
         // kernel level
-        using MatmulKernel = Gemm::Kernel::BasicMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler>;
+        using MatmulKernel = Act::Gemm::Kernel::BasicMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler>;
 
-        using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
+        using MatmulAdapter = Act::Gemm::Device::DeviceGemm<MatmulKernel>;
     
         MatmulKernel::Arguments arguments{
             options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC};
@@ -162,12 +160,12 @@ void Run(Options const &options)
         matmul_op(stream, aicCoreNum);
     } else {
         // Swizzle offset is 3 and direction is 1.
-        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
+        using BlockScheduler = typename Act::Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
 
         // kernel level
-        using MatmulKernel = Gemm::Kernel::BasicMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler>;
+        using MatmulKernel = Act::Gemm::Kernel::BasicMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler>;
 
-        using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
+        using MatmulAdapter = Act::Gemm::Device::DeviceGemm<MatmulKernel>;
     
         MatmulKernel::Arguments arguments{
             options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC};

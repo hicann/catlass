@@ -33,16 +33,15 @@
 #include "act/status.hpp"
 #include "act/gemm/device/device_gemm.hpp"
 
-using namespace Act;
 using bfloat16 = op::bfloat16;
 
-using L1TileShape = GemmShape<128, 256, 512>;
+using L1TileShape = Act::GemmShape<128, 256, 512>;
 constexpr uint32_t workspaceStages = 2;
 
 struct Options {
     const std::string HELPER = "12_quant_matmul m n k [device_id]";
 
-    GemmCoord problemShape{128, 128, 128};
+    Act::GemmCoord problemShape{128, 128, 128};
     int32_t deviceId{0};
 
     Options() = default;
@@ -129,20 +128,20 @@ void Run(Options const & options)
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceD), sizeD, ACL_MEM_MALLOC_HUGE_FIRST));
 
     uint8_t *deviceWorkspace{nullptr};
-    using LayoutA = layout::RowMajor;
-    using LayoutB = layout::ColumnMajor;
+    using LayoutA = Act::layout::RowMajor;
+    using LayoutB = Act::layout::ColumnMajor;
     LayoutA layoutA{m, k};
     LayoutB layoutB{k, n};
-    layout::VectorLayout layoutScale{n};
-    layout::VectorLayout layoutPerTokenScale{m};
-    layout::RowMajor layoutD{m, n};
+    Act::layout::VectorLayout layoutScale{n};
+    Act::layout::VectorLayout layoutPerTokenScale{m};
+    Act::layout::RowMajor layoutD{m, n};
 
     // Prepare FFTS address
     uint64_t fftsAddr{0};
     uint32_t fftsLen{0};
     RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
 
-    using ArchTag = Arch::AtlasA2;
+    using ArchTag = Act::Arch::AtlasA2;
     constexpr uint32_t preloadStages = 1;
     constexpr uint32_t l1Stages = 2;
     constexpr uint32_t l0AStages = 2;
@@ -150,49 +149,49 @@ void Run(Options const & options)
     constexpr uint32_t l0CStages = 1;
     constexpr bool enableUnitFlag = false;
     constexpr bool enableShuffleK = true;
-    using DispatchPolicy = Gemm::MmadAtlasA2PreloadAsyncWithCallback<
+    using DispatchPolicy = Act::Gemm::MmadAtlasA2PreloadAsyncWithCallback<
         preloadStages,
         l1Stages, l0AStages, l0BStages, l0CStages,
         enableUnitFlag, enableShuffleK
     >;
-    using L0TileShape = GemmShape<128, 256, 128>;
+    using L0TileShape = Act::GemmShape<128, 256, 128>;
 
-    using AType = Gemm::GemmType<int8_t, LayoutA>;
-    using BType = Gemm::GemmType<int8_t, LayoutB>;
-    using CType = Gemm::GemmType<int32_t, layout::RowMajor>;
+    using AType = Act::Gemm::GemmType<int8_t, LayoutA>;
+    using BType = Act::Gemm::GemmType<int8_t, LayoutB>;
+    using CType = Act::Gemm::GemmType<int32_t, layout::RowMajor>;
 
-    using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+    using BlockMmad = Act::Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
 
     constexpr uint32_t ubStages = 2;
-    using EpilogueDispatchPolicy = Epilogue::EpilogueAtlasA2PerTokenDequant<ubStages>;
-    using ScaleType = Gemm::GemmType<uint16_t, layout::VectorLayout>;
-    using PerTokenScaleType = Gemm::GemmType<uint16_t, layout::VectorLayout>;
-    using DType = Gemm::GemmType<uint16_t, layout::RowMajor>;
+    using EpilogueDispatchPolicy = Act::Epilogue::EpilogueAtlasA2PerTokenDequant<ubStages>;
+    using ScaleType = Act::Gemm::GemmType<uint16_t, layout::VectorLayout>;
+    using PerTokenScaleType = Act::Gemm::GemmType<uint16_t, layout::VectorLayout>;
+    using DType = Act::Gemm::GemmType<uint16_t, layout::RowMajor>;
 
-    using RowBroadcastMulType = Gemm::GemmType<float, layout::RowMajor>;
-    using BroadcastOneBlkType = Gemm::GemmType<float, layout::RowMajor>;
-    using OneBlkColumnBroadcastMulType = Gemm::GemmType<float, layout::RowMajor>;
+    using RowBroadcastMulType = Act::Gemm::GemmType<float, layout::RowMajor>;
+    using BroadcastOneBlkType = Act::Gemm::GemmType<float, layout::RowMajor>;
+    using OneBlkColumnBroadcastMulType = Act::Gemm::GemmType<float, layout::RowMajor>;
 
-    using EpilogueTileShape = MatrixShape<32, 256>;
-    using TileRowBroadcastMul = Epilogue::Tile::TileRowBroadcastMul<ArchTag, RowBroadcastMulType, EpilogueTileShape>;
-    using TileBroadcastOneBlk = Epilogue::Tile::TileBroadcastOneBlk<ArchTag, BroadcastOneBlkType,
+    using EpilogueTileShape = Act::MatrixShape<32, 256>;
+    using TileRowBroadcastMul = Act::Epilogue::Tile::TileRowBroadcastMul<ArchTag, RowBroadcastMulType, EpilogueTileShape>;
+    using TileBroadcastOneBlk = Act::Epilogue::Tile::TileBroadcastOneBlk<ArchTag, BroadcastOneBlkType,
         EpilogueTileShape::ROW>;
-    using TileOneBlkColumnBroadcastMul = Epilogue::Tile::TileOneBlkColumnBroadcastMul<ArchTag,
+    using TileOneBlkColumnBroadcastMul = Act::Epilogue::Tile::TileOneBlkColumnBroadcastMul<ArchTag,
         OneBlkColumnBroadcastMulType, EpilogueTileShape>;
-    using TileCopy = Epilogue::Tile::TileCopyBf16<ArchTag, CType, ScaleType, PerTokenScaleType, DType>;
-    using TileScheduler = Epilogue::Tile::EpilogueHorizontalTileSwizzle;
+    using TileCopy = Act::Epilogue::Tile::TileCopyBf16<ArchTag, CType, ScaleType, PerTokenScaleType, DType>;
+    using TileScheduler = Act::Epilogue::Tile::EpilogueHorizontalTileSwizzle;
 
-    using BlockEpilogue = Epilogue::Block::BlockEpilogue<EpilogueDispatchPolicy, CType, ScaleType, PerTokenScaleType,
+    using BlockEpilogue = Act::Epilogue::Block::BlockEpilogue<EpilogueDispatchPolicy, CType, ScaleType, PerTokenScaleType,
         DType, TileRowBroadcastMul, TileBroadcastOneBlk, TileOneBlkColumnBroadcastMul, TileCopy, TileScheduler>;
 
     if (options.problemShape.m() > options.problemShape.n()) {
-        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
+        using BlockScheduler = typename Act::Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
 
         // kernel level
-        using MatmulKernel = Gemm::Kernel::QuantMatmulMultiStageWorkspace<BlockMmad, BlockEpilogue,
+        using MatmulKernel = Act::Gemm::Kernel::QuantMatmulMultiStageWorkspace<BlockMmad, BlockEpilogue,
             BlockScheduler, workspaceStages>;
 
-        using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
+        using MatmulAdapter = Act::Gemm::Device::DeviceGemm<MatmulKernel>;
     
         MatmulKernel::Arguments arguments{
             options.problemShape, aicCoreNum, deviceA, deviceB, deviceScale,
@@ -209,13 +208,13 @@ void Run(Options const & options)
         matmul_op.Initialize(arguments, deviceWorkspace);
         matmul_op(stream, aicCoreNum, fftsAddr);
     } else {
-        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
+        using BlockScheduler = typename Act::Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
 
         // kernel level
-        using MatmulKernel = Gemm::Kernel::QuantMatmulMultiStageWorkspace<BlockMmad, BlockEpilogue,
+        using MatmulKernel = Act::Gemm::Kernel::QuantMatmulMultiStageWorkspace<BlockMmad, BlockEpilogue,
             BlockScheduler, workspaceStages>;
 
-        using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
+        using MatmulAdapter = Act::Gemm::Device::DeviceGemm<MatmulKernel>;
     
         MatmulKernel::Arguments arguments{
             options.problemShape, aicCoreNum, deviceA, deviceB, deviceScale,

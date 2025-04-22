@@ -33,14 +33,12 @@
 #include "act/status.hpp"
 #include "act/gemm/device/device_gemm.hpp"
 
-using namespace Act;
-
 using ScalarType = float;
 
 typedef struct Options{
     const std::string HELPER = "15_gemm m n k [device_id]";
 
-    GemmCoord problemShape{128, 128, 128};
+    Act::GemmCoord problemShape{128, 128, 128};
     int32_t deviceId{0};
 
     Options() = default;
@@ -67,40 +65,40 @@ typedef struct Options{
     }
 }Options;
 
-layout::RowMajor GetWorkspaceLayout(layout::RowMajor layout, uint32_t align)
+Act::layout::RowMajor GetWorkspaceLayout(Act::layout::RowMajor layout, uint32_t align)
 {
     if (align == 0) {
         return layout;
     }
-    return layout::RowMajor(layout.shape(0), layout.shape(1),
+    return Act::layout::RowMajor(layout.shape(0), layout.shape(1),
         RoundUp(layout.shape(1), align));
 }
 
-layout::ColumnMajor GetWorkspaceLayout(layout::ColumnMajor layout, uint32_t align)
+Act::layout::ColumnMajor GetWorkspaceLayout(Act::layout::ColumnMajor layout, uint32_t align)
 {
     if (align == 0) {
         return layout;
     }
-    return layout::ColumnMajor(layout.shape(0), layout.shape(1),
+    return Act::layout::ColumnMajor(layout.shape(0), layout.shape(1),
         RoundUp(layout.shape(0), align));
 }
 
-size_t GetWorkspaceLen(layout::RowMajor layout)
+size_t GetWorkspaceLen(Act::layout::RowMajor layout)
 {
     return layout.shape(0) * layout.stride(0);
 }
 
-size_t GetWorkspaceLen(layout::ColumnMajor layout)
+size_t GetWorkspaceLen(Act::layout::ColumnMajor layout)
 {
     return layout.shape(1) * layout.stride(1);
 }
 
-bool IsSameStride(layout::RowMajor layout1, layout::RowMajor layout2)
+bool IsSameStride(Act::layout::RowMajor layout1, Act::layout::RowMajor layout2)
 {
     return layout1.stride(0) == layout2.stride(0);
 }
 
-bool IsSameStride(layout::ColumnMajor layout1, layout::ColumnMajor layout2)
+bool IsSameStride(Act::layout::ColumnMajor layout1, Act::layout::ColumnMajor layout2)
 {
     return layout1.stride(1) == layout2.stride(1);
 }
@@ -144,9 +142,9 @@ void Run(Options options){
     size_t sizeX = lenX * sizeof(float);
 
     const uint32_t align = 128;
-    using LayoutA = layout::RowMajor;
-    using LayoutB = layout::RowMajor;
-    using LayoutC = layout::RowMajor;
+    using LayoutA = Act::layout::RowMajor;
+    using LayoutB = Act::layout::RowMajor;
+    using LayoutC = Act::layout::RowMajor;
     LayoutA layoutA{m, k};
     LayoutB layoutB{k, n};
     LayoutC layoutC{m, n};
@@ -198,32 +196,32 @@ void Run(Options options){
 
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
     
-    using ArchTag = Arch::AtlasA2;
+    using ArchTag = Act::Arch::AtlasA2;
     constexpr bool enableUnitFlag = true;
     constexpr bool enableShuffleK = true;
     using GemmBlockDispatchPolicy = Act::Gemm::MmadAtlasA2Preload<enableUnitFlag, enableShuffleK>;
     using EpilogueBlockDispatchPolicy = Act::Epilogue::EpilogueAtlasA2ElemWiseOneSource;
-    using AType = Gemm::GemmType<float, LayoutA>;
-    using BType = Gemm::GemmType<float, LayoutB>;
-    using CType = Gemm::GemmType<float, LayoutC>;
-    using XType = Gemm::GemmType<float, LayoutC>;
+    using AType = Act::Gemm::GemmType<float, LayoutA>;
+    using BType = Act::Gemm::GemmType<float, LayoutB>;
+    using CType = Act::Gemm::GemmType<float, LayoutC>;
+    using XType = Act::Gemm::GemmType<float, LayoutC>;
     using DType = CType;
     using ComputeType = XType;
-    using L1TileShape = GemmShape<128, 128, 128>;
-    using L0TileShape = GemmShape<128, 128, 64>;
-    using TileShapeCast = MatrixShape<L1TileShape::M / 2, L1TileShape::N>;
-    using GemmBlock = Gemm::Block::BlockGemm<GemmBlockDispatchPolicy, L1TileShape, L0TileShape, AType, BType, XType>;
+    using L1TileShape = Act::GemmShape<128, 128, 128>;
+    using L0TileShape = Act::GemmShape<128, 128, 64>;
+    using TileShapeCast = Act::MatrixShape<L1TileShape::M / 2, L1TileShape::N>;
+    using GemmBlock = Act::Gemm::Block::BlockGemm<GemmBlockDispatchPolicy, L1TileShape, L0TileShape, AType, BType, XType>;
     constexpr uint32_t computeLength = L1TileShape::MN / 2;
-    using TileElemWiseAddGemm = Epilogue::Tile::TileElemWiseAdd<ArchTag, ComputeType, computeLength>;
-    using TileElemWiseMulsGemm = Epilogue::Tile::TileElemWiseMuls<ArchTag, ComputeType, computeLength>;
-    using TileElemWiseCastC = Epilogue::Tile::TileCast<ArchTag, ComputeType, CType, TileShapeCast>;
-    using TileElemWiseCastD = Epilogue::Tile::TileCast<ArchTag, DType, ComputeType, TileShapeCast>;
-    using EpilogueTileCopy = Epilogue::Tile::TileCopy<ArchTag, CType, XType, DType>;
-    using EpilogueBlock = Epilogue::Block::BlockEpilogue<EpilogueBlockDispatchPolicy, CType, XType, DType, TileElemWiseAddGemm, TileElemWiseMulsGemm, TileElemWiseCastC, TileElemWiseCastD, EpilogueTileCopy>;
-    using GemmKernel = Gemm::Kernel::KernelGemm<GemmBlock, EpilogueBlock>;
+    using TileElemWiseAddGemm = Act::Epilogue::Tile::TileElemWiseAdd<ArchTag, ComputeType, computeLength>;
+    using TileElemWiseMulsGemm = Act::Epilogue::Tile::TileElemWiseMuls<ArchTag, ComputeType, computeLength>;
+    using TileElemWiseCastC = Act::Epilogue::Tile::TileCast<ArchTag, ComputeType, CType, TileShapeCast>;
+    using TileElemWiseCastD = Act::Epilogue::Tile::TileCast<ArchTag, DType, ComputeType, TileShapeCast>;
+    using EpilogueTileCopy = Act::Epilogue::Tile::TileCopy<ArchTag, CType, XType, DType>;
+    using EpilogueBlock = Act::Epilogue::Block::BlockEpilogue<EpilogueBlockDispatchPolicy, CType, XType, DType, TileElemWiseAddGemm, TileElemWiseMulsGemm, TileElemWiseCastC, TileElemWiseCastD, EpilogueTileCopy>;
+    using GemmKernel = Act::Gemm::Kernel::KernelGemm<GemmBlock, EpilogueBlock>;
     typename EpilogueBlock::Params epilogueParams{hostAlpha[0], hostBeta[0], (uint8_t*)deviceC, layoutC, (uint8_t*)deviceC, layoutC};
     typename GemmKernel::Arguments arguments{options.problemShape, align, (uint8_t*)deviceA, (uint8_t*)deviceB, (uint8_t*)gmWorkspace, (uint8_t*)deviceWA, (uint8_t*)deviceWB, epilogueParams};
-    using GemmAdapter = Gemm::Device::DeviceGemm<GemmKernel>;
+    using GemmAdapter = Act::Gemm::Device::DeviceGemm<GemmKernel>;
     GemmAdapter gemm_op;
     gemm_op.CanImplement(arguments);
     RunAdapter(gemm_op, arguments, stream, aicCoreNum, fftsAddr);

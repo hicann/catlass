@@ -34,17 +34,12 @@
 #include "act/gemv/device/device_gemv.hpp"
 #include "act/status.hpp"
 
-
-using namespace Act;
-
 using ScalarType = float;
-
-
 
 typedef struct Options {
     const std::string HELPER = "20_gemv_aic m n [device_id]";
 
-    GemvCoord problemShape{128, 128};
+    Act::GemvCoord problemShape{128, 128};
     int32_t deviceId{1};
 
     Options() = default;
@@ -107,10 +102,10 @@ void Run(Options options) {
     size_t sizeY = lenY * sizeof(float);
     size_t sizeWorkspace;
 
-    using LayoutX = layout::RowMajor;
-    using LayoutA = layout::RowMajor;
-    using LayoutZ = layout::VectorLayout;
-    using LayoutY = layout::RowMajor;
+    using LayoutX = Act::layout::RowMajor;
+    using LayoutA = Act::layout::RowMajor;
+    using LayoutZ = Act::layout::VectorLayout;
+    using LayoutY = Act::layout::RowMajor;
 
     LayoutX layoutX{1, n};
     LayoutA layoutA{m, n};
@@ -152,50 +147,50 @@ void Run(Options options) {
 
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
-    using ArchTag = Arch::AtlasA2;
+    using ArchTag = Act::Arch::AtlasA2;
 
     // Block level, define BlockGemv
     constexpr bool enableUnitFlag = true;
     constexpr bool enableShuffleK = true;
-    using DispatchPolicy = Gemm::MmadAtlasA2Preload<enableUnitFlag, enableShuffleK>;
+    using DispatchPolicy = Act::Gemm::MmadAtlasA2Preload<enableUnitFlag, enableShuffleK>;
 
-    using LayoutX = layout::RowMajor;
-    using LayoutA = layout::RowMajor;
-    using LayoutTemp = layout::RowMajor;
-    using LayoutZ = layout::VectorLayout;
+    using LayoutX = Act::layout::RowMajor;
+    using LayoutA = Act::layout::RowMajor;
+    using LayoutTemp = Act::layout::RowMajor;
+    using LayoutZ = Act::layout::VectorLayout;
 
-    using L1TileShape = GemvShape<32, 512>;
-    using L0TileShape = GemvShape<32, 256>;
-    using AType = Gemm::GemmType<float, LayoutA>;
-    using XType = Gemm::GemmType<float, LayoutX>;
-    using TempType = Gemm::GemmType<float, LayoutTemp>;
+    using L1TileShape = Act::GemvShape<32, 512>;
+    using L0TileShape = Act::GemvShape<32, 256>;
+    using AType = Act::Gemm::GemmType<float, LayoutA>;
+    using XType = Act::Gemm::GemmType<float, LayoutX>;
+    using TempType = Act::Gemm::GemmType<float, LayoutTemp>;
     using BiasType = void;
-    using TileCopy = Gemv::Tile::TileCopyGemvAic<typename DispatchPolicy::ArchTag, AType, XType, TempType, BiasType>;
-    using TileMmad = Gemm::Tile::TileMmad<typename DispatchPolicy::ArchTag, XType, AType, BiasType>;
+    using TileCopy = Act::Gemv::Tile::TileCopyGemvAic<typename DispatchPolicy::ArchTag, AType, XType, TempType, BiasType>;
+    using TileMmad = Act::Gemm::Tile::TileMmad<typename DispatchPolicy::ArchTag, XType, AType, BiasType>;
 
     using BlockGemv = Gemv::Block::BlockGemv<DispatchPolicy, L1TileShape, L0TileShape, AType, XType, TempType, BiasType, TileCopy, TileMmad>;
 
     // Block level, define BlockEpilogue
-    using EpilogueBlockDispatchPolicy = Epilogue::EpilogueAtlasA2ElemWiseOneSource;
-    using YType = Gemm::GemmType<float, LayoutZ>;
-    using ZType = Gemm::GemmType<float, LayoutZ>;
-    using AXType = Gemm::GemmType<float, LayoutZ>;
+    using EpilogueBlockDispatchPolicy = Act::Epilogue::EpilogueAtlasA2ElemWiseOneSource;
+    using YType = Act::Gemm::GemmType<float, LayoutZ>;
+    using ZType = Act::Gemm::GemmType<float, LayoutZ>;
+    using AXType = Act::Gemm::GemmType<float, LayoutZ>;
 
     using ComputeType = AXType;
     constexpr uint32_t computeLength = 8192;
 
-    using TileElemWiseAddGemv = Epilogue::Tile::TileElemWiseAdd<ArchTag, ComputeType, computeLength>;
-    using TileElemWiseMulsGemv = Epilogue::Tile::TileElemWiseMuls<ArchTag, ComputeType, computeLength>;
+    using TileElemWiseAddGemv = Act::Epilogue::Tile::TileElemWiseAdd<ArchTag, ComputeType, computeLength>;
+    using TileElemWiseMulsGemv = Act::Epilogue::Tile::TileElemWiseMuls<ArchTag, ComputeType, computeLength>;
 
-    using EpilogueTileCopy = Epilogue::Tile::TileCopy<ArchTag, YType, AXType, ZType>;
+    using EpilogueTileCopy = Act::Epilogue::Tile::TileCopy<ArchTag, YType, AXType, ZType>;
 
-    using BlockEpilogue = Epilogue::Block::BlockEpilogue<EpilogueBlockDispatchPolicy, AXType, YType, ZType, TileElemWiseAddGemv, TileElemWiseMulsGemv, EpilogueTileCopy>;
+    using BlockEpilogue = Act::Epilogue::Block::BlockEpilogue<EpilogueBlockDispatchPolicy, AXType, YType, ZType, TileElemWiseAddGemv, TileElemWiseMulsGemv, EpilogueTileCopy>;
 
     // kernle levels
-    using GemvKernel = Gemv::Kernel::GemvEpilogue<BlockGemv, BlockEpilogue>;
+    using GemvKernel = Act::Gemv::Kernel::GemvEpilogue<BlockGemv, BlockEpilogue>;
 
     // TODO:  use adapter to activate the kernel
-    using GemvAdapter = Gemv::Device::DeviceGemv<GemvKernel>;
+    using GemvAdapter = Act::Gemv::Device::DeviceGemv<GemvKernel>;
     GemvKernel::Arguments arguments{options.problemShape, hostAlpha[0], hostBeta[0], sizeof(float), deviceX, deviceA, deviceZ};
     GemvAdapter gemv_op;
     RunAdapter(gemv_op, arguments, stream, aicCoreNum, fftsAddr);

@@ -21,7 +21,7 @@
 #include "act/gemm/kernel/grouped_matmul_slice_m.hpp"
 #include "act/gemm/gemm_type.hpp"
 template <class LayoutA, class LayoutB, class LayoutC>
-ACT_GLOBAL void grouped_matmul_slice_m(GemmCoord problemShape, uint32_t problemCount, GM_ADDR gmGroupList, GM_ADDR gmA,
+ACT_GLOBAL void grouped_matmul_slice_m(Act::GemmCoord problemShape, uint32_t problemCount, GM_ADDR gmGroupList, GM_ADDR gmA,
     LayoutA layoutA, GM_ADDR gmB, LayoutB layoutB, GM_ADDR gmC, LayoutC layoutC)
 {
     if (problemShape.k() > problemShape.n()) {
@@ -33,22 +33,22 @@ ACT_GLOBAL void grouped_matmul_slice_m(GemmCoord problemShape, uint32_t problemC
         constexpr bool enableUnitFlag = true;
         constexpr bool enableShuffleK = true;
 
-        using ArchTag = Arch::AtlasA2;
-        using DispatchPolicy = Gemm::MmadAtlasA2PreloadAsync<preloadStages, l1Stages, l0AStages, l0BStages, l0CStages,
+        using ArchTag = Act::Arch::AtlasA2;
+        using DispatchPolicy = Act::Gemm::MmadAtlasA2PreloadAsync<preloadStages, l1Stages, l0AStages, l0BStages, l0CStages,
                                                                enableUnitFlag, enableShuffleK>;
-        using L1TileShape = GemmShape<256, 128, 256>;
-        using L0TileShape = GemmShape<256, 128, 64>;
+        using L1TileShape = Act::GemmShape<256, 128, 256>;
+        using L0TileShape = Act::GemmShape<256, 128, 64>;
 
-        using AType = Gemm::GemmType<half, LayoutA>;
-        using BType = Gemm::GemmType<half, LayoutB>;
-        using CType = Gemm::GemmType<half, LayoutC>;
+        using AType = Act::Gemm::GemmType<half, LayoutA>;
+        using BType = Act::Gemm::GemmType<half, LayoutB>;
+        using CType = Act::Gemm::GemmType<half, LayoutC>;
 
-        using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+        using BlockMmad = Act::Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
         using BlockEpilogue = void;
-        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
+        using BlockScheduler = typename Act::Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
 
         // kernel level
-        using MatmulKernel = Gemm::Kernel::GroupedMatmulSliceM<BlockMmad, BlockEpilogue, BlockScheduler, int32_t>;
+        using MatmulKernel = Act::Gemm::Kernel::GroupedMatmulSliceM<BlockMmad, BlockEpilogue, BlockScheduler, int32_t>;
 
         typename MatmulKernel::Params params{problemShape, problemCount, gmGroupList, gmA,    layoutA,
                                              gmB,          layoutB,      gmC,         layoutC};
@@ -65,22 +65,22 @@ ACT_GLOBAL void grouped_matmul_slice_m(GemmCoord problemShape, uint32_t problemC
         constexpr bool enableUnitFlag = true;
         constexpr bool enableShuffleK = true;
 
-        using ArchTag = Arch::AtlasA2;
-        using DispatchPolicy = Gemm::MmadAtlasA2PreloadAsync<preloadStages, l1Stages, l0AStages, l0BStages, l0CStages,
+        using ArchTag = Act::Arch::AtlasA2;
+        using DispatchPolicy = Act::Gemm::MmadAtlasA2PreloadAsync<preloadStages, l1Stages, l0AStages, l0BStages, l0CStages,
                                                                enableUnitFlag, enableShuffleK>;
-        using L1TileShape = GemmShape<128, 256, 256>;
-        using L0TileShape = GemmShape<128, 256, 64>;
+        using L1TileShape = Act::GemmShape<128, 256, 256>;
+        using L0TileShape = Act::GemmShape<128, 256, 64>;
 
-        using AType = Gemm::GemmType<half, LayoutA>;
-        using BType = Gemm::GemmType<half, LayoutB>;
-        using CType = Gemm::GemmType<half, LayoutC>;
+        using AType = Act::Gemm::GemmType<half, LayoutA>;
+        using BType = Act::Gemm::GemmType<half, LayoutB>;
+        using CType = Act::Gemm::GemmType<half, LayoutC>;
 
-        using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+        using BlockMmad = Act::Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
         using BlockEpilogue = void;
-        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
+        using BlockScheduler = typename Act::Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
 
         // kernel level
-        using MatmulKernel = Gemm::Kernel::GroupedMatmulSliceM<BlockMmad, BlockEpilogue, BlockScheduler, int64_t>;
+        using MatmulKernel = Act::Gemm::Kernel::GroupedMatmulSliceM<BlockMmad, BlockEpilogue, BlockScheduler, int64_t>;
 
         typename MatmulKernel::Params params{problemShape, problemCount, gmGroupList, gmA,    layoutA,
                                              gmB,          layoutB,      gmC,         layoutC};

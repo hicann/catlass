@@ -34,8 +34,6 @@ output/shared_lib
 #include "act/act.hpp"
 // act头文件...
 
-using namespace Act;
-
 template <
     class LayoutA,
     class LayoutB,
@@ -43,7 +41,7 @@ template <
 >
 ACT_GLOBAL
 void custom_matmul(
-    GemmCoord problemShape,
+    Act::GemmCoord problemShape,
     GM_ADDR gmA, LayoutA layoutA,
     GM_ADDR gmB, LayoutB layoutB,
     GM_ADDR gmC, LayoutC layoutC
