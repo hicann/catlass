@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This file is a part of the CANN Open Software.
  * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -16,13 +16,13 @@
  #include "act/coord.hpp"
  #include "act/gemv_coord.hpp"
  #include "act/gemv/helper.hpp"
+ #include "act/gemm/helper.hpp"
  #include "act/layout/layout.hpp"
  #include "act/detail/alignment.hpp"
  #include "act/gemm/dispatch_policy.hpp"
 
  namespace Act::Gemv::Block {
  template <
-     bool ENABLE_UNIT_FLAG_,
      class UBTileShape_,
      class AType_,
      class XType_,
@@ -33,7 +33,7 @@
      class TileVmuls_
  >
  struct BlockGemv <
-     Gemm::MmadAtlasA2Pingpong<ENABLE_UNIT_FLAG_>,
+     Gemm::GemvAtlasA2,
      UBTileShape_,
      AType_,
      XType_,
@@ -45,7 +45,7 @@
  > {
  public:
      // Type Aliases
-     using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<ENABLE_UNIT_FLAG_>;
+     using DispatchPolicy = Gemm::GemvAtlasA2;
      using ArchTag = typename DispatchPolicy::ArchTag;
      using UBTileShape = UBTileShape_;
      using ElementA = typename AType_::Element;
@@ -60,11 +60,10 @@
      using VecCopyUbToGm = typename TileCopy_::VecCopyUbToGm;
      using MatrixCopyGmToUb = typename TileCopy_::MatrixCopyGmToUb;
      using ElementAccumulator =
-         typename Gemv::helper::ElementAccumulatorSelector<ElementA, ElementX>::ElementAccumulator;
+         typename Gemm::helper::ElementAccumulatorSelector<ElementA, ElementX>::ElementAccumulator;
     
-     using UBAlignHelper = Gemv::helper::UBAlignHelper<ElementA, LayoutA>;
+     using UBAlignHelper = Gemv::helper::UBAlignHelper<ElementA>;
      using TensorCoord = layout::VectorLayout::TensorCoord;
-     static constexpr bool ENABLE_UNIT_FLAG = DispatchPolicy::ENABLE_UNIT_FLAG;
      static constexpr uint32_t STAGES = DispatchPolicy::STAGES;
      static constexpr uint32_t Abuf_SIZE_ = 128 * 1024; 
      static constexpr uint32_t Xbuf_SIZE_ = 16 * 1024;  
@@ -119,14 +118,14 @@
          AscendC::GlobalTensor<ElementA> const &gmA, LayoutA const &layoutA,
          AscendC::GlobalTensor<ElementX> const &gmX, LayoutX const &layoutX,
          AscendC::GlobalTensor<ElementY> const &gmY, LayoutY const &layoutY,
-         AscendC::GlobalTensor<ElementY> const &gmY_read,
+         AscendC::GlobalTensor<ElementY> const &gmYCopy,
          GemvCoord const &actualShape,
          float alpha,
          float beta
         )
      {
         AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>((event_t)(UbOutEventList[UbOutListId]));
-        vecCopyGmToUb(UbYTensorList[UbOutListId], gmY_read,actualShape.m());
+        vecCopyGmToUb(UbYTensorList[UbOutListId], gmYCopy,actualShape.m());
         AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((event_t)(UbOutEventList[UbOutListId]));  
         AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((event_t)(UbOutEventList[UbOutListId]));
         tileVmuls(
