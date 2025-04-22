@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This file is a part of the CANN Open Software.
  * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -22,66 +22,62 @@
 namespace Act::Epilogue::Block {
 
 template <
-    class tempType_,
+    class CType_,    
     class YType_,
     class ZType_,
     class TileElemWiseEpilogueAdd_,
-    class TileElemWiseEpilogueMul_,
+    class TileElemWiseEpilogueMuls_,
     class TileCopy_
 >
 class BlockEpilogue<
-    EpilogueAtlasA2ElemWiseOneSource,
-    tempType_,
+    EpilogueAtlasA2Gemv,
+    CType_,
     YType_,
     ZType_,
     TileElemWiseEpilogueAdd_,
-    TileElemWiseEpilogueMul_,
+    TileElemWiseEpilogueMuls_,
     TileCopy_
 > {
 public:
-    using DispatchPolicy = EpilogueAtlasA2ElemWiseOneSource;
+    using DispatchPolicy = EpilogueAtlasA2Gemv;
     using ArchTag = typename DispatchPolicy::ArchTag;
 
-    using ElementTemp = typename tempType_::Element;
-    using LayoutTemp = typename tempType_::Layout;
+    using ElementC = typename CType_::Element;
+    using LayoutC = typename CType_::Layout;
     using ElementY = typename YType_::Element;
     using LayoutY = typename YType_::Layout;
     using ElementZ = typename ZType_::Element;
     using LayoutZ = typename ZType_::Layout;
 
     using TileElemWiseEpilogueAdd = TileElemWiseEpilogueAdd_;
-    using TileElemWiseEpilogueMul = TileElemWiseEpilogueMul_;
+    using TileElemWiseEpilogueMuls = TileElemWiseEpilogueMuls_;
 
-    using CopyGmToUbY = typename TileCopy_::CopyGmToUbY;
-    using CopyGmToUbTemp = typename TileCopy_::CopyGmToUbTemp;
-    using CopyUbToGmZ = typename TileCopy_::CopyUbToGmZ;
+    using CopyGmToUbY = typename TileCopy_::CopyGmToUbC;
+    using CopyGmToubC = typename TileCopy_::CopyGmToUbX;      
+    using CopyUbToGmZ = typename TileCopy_::CopyUbToGmD;
 
-    static constexpr uint32_t COMPUTE_LENGTH = TileElemWiseEpilogueMul::COMPUTE_LENGTH;
-    static constexpr uint32_t OPERANDS_NUM = DispatchPolicy::OPERANDS_NUM;
+    static constexpr uint32_t COMPUTE_LENGTH = TileElemWiseEpilogueMuls::COMPUTE_LENGTH;
 
-    static constexpr bool noNeedCast = std::is_same<ElementTemp, ElementY>::value;
+    static constexpr bool isNeedCast = !std::is_same<ElementC, ElementY>::value;
 
-    using ElementCompute = typename Act::Gemv::helper::ElementAccumulatorSelector<ElementY, ElementZ>::ElementAccumulator;
+    using ElementCompute = typename Act::Gemm::helper::ElementAccumulatorSelector<ElementY, ElementZ>::ElementAccumulator;
     using ElementScalar = ElementCompute;
     using TensorCoord = layout::VectorLayout::TensorCoord;
 
-    static_assert(std::is_same_v<LayoutY, layout::VectorLayout> && std::is_same_v<LayoutTemp, layout::VectorLayout> &&
-        std::is_same_v<LayoutZ, layout::VectorLayout>,
-    "Layout type of Y, Temp and Z must be VectorLayout");
+    // check the layout of Y, C and Z
+    static_assert(std::is_same_v<LayoutY, layout::VectorLayout> && std::is_same_v<LayoutC, layout::VectorLayout> &&
+        std::is_same_v<LayoutZ, layout::VectorLayout>,"Layout type of Y, C and Z must be VectorLayout");
 
     using LayoutComputeInUb = layout::VectorLayout;
 
     // Check if ArchTag is matched
-    static_assert(std::is_same_v<typename TileElemWiseEpilogueMul::ArchTag, ArchTag>, "Tile epilogue's ArchTag mismatch");
-    // Check if compute length is valid
-    static_assert(COMPUTE_LENGTH * OPERANDS_NUM * sizeof(ElementCompute) <= ArchTag::UB_SIZE, "UB out of bounds");
+    static_assert(std::is_same_v<typename TileElemWiseEpilogueMuls::ArchTag, ArchTag>, "Tile epilogue's ArchTag mismatch");
 
     struct Params {
         ElementScalar alpha;
         ElementScalar beta;
         GM_ADDR ptrY;
         LayoutY layoutY;
-
         GM_ADDR ptrZ;
         LayoutZ layoutZ;
 
@@ -90,22 +86,20 @@ public:
         Params() {}
 
         ACT_HOST_DEVICE
-        Params(ElementScalar alpha_, ElementScalar beta_, GM_ADDR ptrY_, LayoutTemp layoutY_, GM_ADDR ptrZ_, LayoutZ layoutZ_)
+        Params(ElementScalar alpha_, ElementScalar beta_, GM_ADDR ptrY_, LayoutC layoutY_, GM_ADDR ptrZ_, LayoutZ layoutZ_)
             : alpha(alpha_), beta(beta_), ptrY(ptrY_), layoutY(layoutY_), ptrZ(ptrZ_), layoutZ(layoutZ_) {}
     };
 
     ACT_DEVICE
     BlockEpilogue(Arch::Resource<ArchTag>& resource, Params const& params): params(params) 
     {
-        ubTemp = resource.ubBuf.template GetBufferByByte<ElementTemp>(0);
-
-        ubY = resource.ubBuf.template GetBufferByByte<ElementY>(COMPUTE_LENGTH * sizeof(ElementTemp));
-        ubYCast = resource.ubBuf.template GetBufferByByte<ElementCompute>(COMPUTE_LENGTH * sizeof(ElementTemp));
-
+        ubC = resource.ubBuf.template GetBufferByByte<ElementC>(0);
+        ubY = resource.ubBuf.template GetBufferByByte<ElementY>(COMPUTE_LENGTH * sizeof(ElementC));
+        ubYCast = resource.ubBuf.template GetBufferByByte<ElementCompute>(COMPUTE_LENGTH * sizeof(ElementC));
         ubZ = resource.ubBuf.template GetBufferByByte<ElementZ>(
-            COMPUTE_LENGTH * sizeof(ElementY) + COMPUTE_LENGTH * sizeof(ElementTemp));
+            COMPUTE_LENGTH * sizeof(ElementY) + COMPUTE_LENGTH * sizeof(ElementC));
         ubZCast = resource.ubBuf.template GetBufferByByte<ElementCompute>(
-            COMPUTE_LENGTH * sizeof(ElementY) + COMPUTE_LENGTH * sizeof(ElementTemp));
+            COMPUTE_LENGTH * sizeof(ElementY) + COMPUTE_LENGTH * sizeof(ElementC));
 
         AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
     }
@@ -120,8 +114,8 @@ public:
     void operator()(
         TensorCoord const& blockOffsetMN,
         TensorCoord const& actualBlockShapeMN,
-        AscendC::GlobalTensor<ElementCompute> const& gmBlockTemp,
-        LayoutTemp const& layoutBlockTemp) 
+        AscendC::GlobalTensor<ElementCompute> const& gmBlockC,
+        LayoutC const& layoutBlockC) 
     {
         TensorCoord actualBlockShape = actualBlockShapeMN;
         TensorCoord blockOffset = blockOffsetMN;
@@ -134,9 +128,9 @@ public:
         TensorCoord actualSubblockShape = TensorCoord::Min(subblockShape, actualBlockShape - subblockCoord * subblockShape);
         TensorCoord subblockOffset = subblockCoord * subblockShape;
 
-        // Get the data and layout of Temp
-        auto gmSubblockTemp = gmBlockTemp[layoutBlockTemp.GetOffset(subblockOffset)];
-        auto layoutSubblockTemp = layoutBlockTemp.GetTileLayout(actualSubblockShape);
+        // Get the data and layout of C
+        auto gmSubblockC = gmBlockC[layoutBlockC.GetOffset(subblockOffset)];
+        auto layoutSubblockC = layoutBlockC.GetTileLayout(actualSubblockShape);
 
         // Get the data and layout of y
         AscendC::GlobalTensor<ElementY> gmY;
@@ -153,14 +147,14 @@ public:
         // get the layout on UB
         auto layoutComputeInUb = LayoutComputeInUb::template MakeLayoutInUb<ElementCompute>(actualSubblockShape);
 
-        // load Temp(A*x) from gm to ub
+        // load C(A*x) from gm to ub
         AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
-        copyGmToUbTemp(ubTemp, gmSubblockTemp, layoutComputeInUb, layoutSubblockTemp);
+        copyGmToubC(ubC, gmSubblockC, layoutComputeInUb, layoutSubblockC);
         AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
         AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
 
-        // compute Temp * alpha
-        tileEpilogueMul(ubTemp, ubTemp, params.alpha);
+        // compute C * alpha
+        tileEpilogueMul(ubC, ubC, params.alpha);
 
         AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
@@ -172,7 +166,7 @@ public:
         AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
 
         // compute Y * beta
-        if constexpr (!noNeedCast) {
+        if constexpr (isNeedCast) {
             AscendC::Cast<ElementCompute, ElementY>(ubYCast, ubY, AscendC::RoundMode::CAST_NONE, COMPUTE_LENGTH);
             AscendC::PipeBarrier<PIPE_V>();
             tileEpilogueMul(ubYCast, ubYCast, params.beta);
@@ -182,13 +176,13 @@ public:
             AscendC::PipeBarrier<PIPE_V>();
         }
 
-        if constexpr (!noNeedCast) {
-            tileEpilogueAdd(ubZCast, ubTemp, ubYCast);
+        if constexpr (isNeedCast) {
+            tileEpilogueAdd(ubZCast, ubC, ubYCast);
         } else {
-            tileEpilogueAdd(ubZ, ubTemp, ubY);
+            tileEpilogueAdd(ubZ, ubC, ubY);
         }
 
-        if constexpr (!noNeedCast) {
+        if constexpr (isNeedCast) {
             AscendC::PipeBarrier<PIPE_V>();
             AscendC::Cast<ElementZ, ElementCompute>(ubZ, ubZCast, AscendC::RoundMode::CAST_RINT, COMPUTE_LENGTH);
             AscendC::PipeBarrier<PIPE_V>();
@@ -206,15 +200,15 @@ private:
 
     AscendC::LocalTensor<ElementY> ubY;
     AscendC::LocalTensor<ElementCompute> ubYCast;
-    AscendC::LocalTensor<ElementTemp> ubTemp;
+    AscendC::LocalTensor<ElementC> ubC;
     AscendC::LocalTensor<ElementZ> ubZ;
     AscendC::LocalTensor<ElementCompute> ubZCast;
 
     TileElemWiseEpilogueAdd tileEpilogueAdd;
-    TileElemWiseEpilogueMul tileEpilogueMul;
+    TileElemWiseEpilogueMuls tileEpilogueMul;
 
     CopyGmToUbY copyGmToUbY;
-    CopyGmToUbTemp copyGmToUbTemp;
+    CopyGmToubC copyGmToubC;
     CopyUbToGmZ copyUbToGmZ;
 };
 
