@@ -45,7 +45,10 @@ output/python_extension
 
 ### 编译
 
-各部分代码完成后，使用`bash scripts/build.sh python_extension`编译.
+各部分代码完成后：
+
+- 使用`bash scripts/build.sh python_extension`编译pybind扩展.
+- 使用`bash scripts/build.sh torch_library`编译torch扩展.
 
 编译环境如下：
 
@@ -55,6 +58,7 @@ output/python_extension
 | `cmake`           | `>=3.16`           | `apt install cmake`           |
 | `CANN`            | `>=8.0.0.alpha002` | run包安装                     |
 | `pybind11`        | 无要求             | `pip install pybind11`        |
+| `pybind11-stubgen` | 无要求             | `pip install pybind11-stubgen` |
 | `torch`           | 无要求(建议使用2.1+)             | `pip install torch`           |
 | `torch_npu`       | 无要求(最新post版本)             | `pip install torch_npu`       |
 
@@ -63,9 +67,11 @@ output/python_extension
 ### 安装
 
 - 对于torch扩展，你只需要在使用算子前增加如下代码加载：
+
 ```python
 torch.ops.load_library("output/python_extension/libact_torch.so")
 ```
+
 - 对于pybind扩展，编译产物即为一个wheel包，执行`pip install torch_act-xxxxx.whl`即可.
 
 ### 运行
@@ -96,6 +102,7 @@ if __name__ == "__main__":
 ```
 
 ## 版权声明
+
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
 
 This file is a part of the CANN Open Software.
@@ -109,4 +116,5 @@ MERCHANTABILITY, OR FITNESS FOR A PARTICULAR   PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 
 ## 许可证
+
 [CANN Open Software License Agreement Version 1.0](../../LICENSE)

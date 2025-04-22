@@ -45,7 +45,17 @@ done
 
 function build_shared_lib() {
     cd $CMAKE_SOURCE_PATH/examples/shared_lib
+    rm -rf build
     cmake --no-warn-unused-cli -B build -DCMAKE_BUILD_TYPE=$CMAKE_BUILD_TYPE -DCMAKE_INSTALL_PREFIX=$OUTPUT_PATH/shared_lib -DACT_INCLUDE_DIR=$CMAKE_SOURCE_PATH/include
+    cmake --build build -j
+    cmake --install build
+    cd $CMAKE_SOURCE_PATH
+}
+
+function build_torch_library() {
+    cd $CMAKE_SOURCE_PATH/examples/python_extension
+    rm -rf build
+    cmake --no-warn-unused-cli -B build -DCMAKE_BUILD_TYPE=$CMAKE_BUILD_TYPE -DCMAKE_INSTALL_PREFIX=$OUTPUT_PATH/python_extension -DACT_INCLUDE_DIR=$CMAKE_SOURCE_PATH/include -DPython3_EXECUTABLE=$(which python3) -DBUILD_TORCH_LIB=True
     cmake --build build -j
     cmake --install build
     cd $CMAKE_SOURCE_PATH
@@ -53,6 +63,7 @@ function build_shared_lib() {
 
 function build_python_extension() {
     cd $CMAKE_SOURCE_PATH/examples/python_extension
+    rm -rf build
     python3 setup.py bdist_wheel --dist-dir $OUTPUT_PATH/python_extension
     cd $CMAKE_SOURCE_PATH
 }
@@ -64,6 +75,8 @@ elif [[  "$TARGET" == "lib_cmake" ]]; then
     cmake --build $CMAKE_BUILD_PATH
 elif [[ "$TARGET" == "python_extension" ]]; then
     build_python_extension
+elif [[ "$TARGET" == "torch_library" ]]; then
+    build_torch_library
 else
     cmake --no-warn-unused-cli -S$CMAKE_SOURCE_PATH -B$CMAKE_BUILD_PATH
     cmake --build $CMAKE_BUILD_PATH --target $TARGET -j

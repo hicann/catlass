@@ -93,7 +93,8 @@ add_custom_target(act_kernel ALL DEPENDS
 )
 
 add_dependencies(act_kernel ${ALL_KERNEL_TARGETS})
-
-install(FILES ${CMAKE_BINARY_DIR}/libact_kernel.so DESTINATION lib)
-install(FILES ${CMAKE_BINARY_DIR}/libact_kernel.a DESTINATION lib)
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/include/act_kernel.h DESTINATION include)
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    install(FILES ${CMAKE_BINARY_DIR}/libact_kernel.so DESTINATION lib)
+    install(FILES ${CMAKE_BINARY_DIR}/libact_kernel.a DESTINATION lib)
+    install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/include/act_kernel.h DESTINATION include)
+endif()
