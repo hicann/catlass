@@ -11,6 +11,8 @@ import sysconfig
 import torch
 import torch_npu
 
+__all__ = []
+
 def _load_depend_libs():
     PYTHON_PKG_PATH=sysconfig.get_paths()['purelib']
     TORCH_LIB_PATH=os.path.join(PYTHON_PKG_PATH,"torch/lib")

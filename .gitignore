@@ -36,6 +36,8 @@
 .idea/
 # python
 __pycache__/
+*.egg-info
+dist/
 # data bin
 **/data/*.bin
 

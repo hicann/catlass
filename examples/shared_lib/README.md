@@ -96,3 +96,19 @@ bash scripts/build.sh shared_lib
   - `GroupedMatmul`：分组矩阵乘法，提供分组输入输出示例
   - `OptimizedMatmul`：优化矩阵乘法，提供CV融合的示例
 - 本节是算子打包成动态库的一个示例，可根据需要自行扩展功能，并不仅局限于已有的代码.
+
+## 版权声明
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
+
+This file is a part of the CANN Open Software.
+Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+MERCHANTABILITY, OR FITNESS FOR A PARTICULAR   PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+
+## 许可证
+[CANN Open Software License Agreement Version 1.0](../../LICENSE)

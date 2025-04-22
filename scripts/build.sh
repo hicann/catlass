@@ -22,6 +22,7 @@ fi
 
 TARGET=${!#}
 echo "Target is: $TARGET"
+CMAKE_BUILD_TYPE=Release
 
 mkdir -p $CMAKE_BUILD_PATH
 
@@ -31,6 +32,10 @@ while [[ $# -gt 0 ]]; do
             rm -rf build
             rm -rf output
             ;;
+        --debug)
+            echo "Hint: only python extension support debug mode."
+            CMAKE_BUILD_TYPE=Debug
+            ;;
         --*)
             echo "Unknown option: $1"
             ;;
@@ -39,16 +44,15 @@ while [[ $# -gt 0 ]]; do
 done
 
 function build_shared_lib() {
-    SHARED_LIB_SRC_DIR=$CMAKE_SOURCE_PATH/examples/shared_lib
-    bash $SHARED_LIB_SRC_DIR/build.sh --shared_lib_src_dir=$SHARED_LIB_SRC_DIR --output_path=$OUTPUT_PATH/shared_lib --act_src_dir=$CMAKE_SOURCE_PATH
+    cd $CMAKE_SOURCE_PATH/examples/shared_lib
+    cmake --no-warn-unused-cli -B build -DCMAKE_BUILD_TYPE=$CMAKE_BUILD_TYPE -DCMAKE_INSTALL_PREFIX=$OUTPUT_PATH/shared_lib -DACT_INCLUDE_DIR=$CMAKE_SOURCE_PATH/include
+    cmake --build build -j
+    cmake --install build
+    cd $CMAKE_SOURCE_PATH
 }
 
 function build_python_extension() {
     cd $CMAKE_SOURCE_PATH/examples/python_extension
-    cmake --no-warn-unused-cli -B build -DPython3_EXECUTABLE=$(which python3) -DCMAKE_INSTALL_PREFIX=$OUTPUT_PATH/python_extension -DBUILD_TORCH=True
-    cmake --build build -j
-    cmake --install build
-
     python3 setup.py bdist_wheel --dist-dir $OUTPUT_PATH/python_extension
     cd $CMAKE_SOURCE_PATH
 }
@@ -59,7 +63,6 @@ elif [[  "$TARGET" == "lib_cmake" ]]; then
     cmake -DENABLE_LIB=ON -S $CMAKE_SOURCE_PATH -B $CMAKE_BUILD_PATH
     cmake --build $CMAKE_BUILD_PATH
 elif [[ "$TARGET" == "python_extension" ]]; then
-    # build_shared_lib
     build_python_extension
 else
     cmake --no-warn-unused-cli -S$CMAKE_SOURCE_PATH -B$CMAKE_BUILD_PATH
