@@ -26,7 +26,6 @@
 #include "act/status.hpp"
 #include "act/gemm/device/device_gemm.hpp"
 
-using namespace Act;
 using fp16_t = op::fp16_t;
 
 struct Options {
@@ -82,9 +81,9 @@ void Run(Options const &options)
     size_t sizeB = lenB * sizeof(fp16_t);
     size_t sizeC = lenC * sizeof(fp16_t);
 
-    using LayoutA = layout::RowMajor;
-    using LayoutB = layout::RowMajor;
-    using LayoutC = layout::RowMajor;
+    using LayoutA = Act::layout::RowMajor;
+    using LayoutB = Act::layout::RowMajor;
+    using LayoutC = Act::layout::RowMajor;
     LayoutA layoutA{m, k};
     LayoutB layoutB{k, n};
     LayoutC layoutC{m, n};
@@ -108,26 +107,26 @@ void Run(Options const &options)
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
-    using ArchTag = Arch::AtlasA2;
-    using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
-    using L1TileShape = GemmShape<128, 256, 256>;
+    using ArchTag = Act::Arch::AtlasA2;
+    using DispatchPolicy = Act::Gemm::MmadAtlasA2Pingpong<true>;
+    using L1TileShape = Act::GemmShape<128, 256, 256>;
 
-    using L0TileShape = GemmShape<128, 256, 64>;
+    using L0TileShape = Act::GemmShape<128, 256, 64>;
 
-    using AType = Gemm::GemmType<half, LayoutA>;
-    using BType = Gemm::GemmType<half, LayoutB>;
-    using CType = Gemm::GemmType<half, LayoutC>;
+    using AType = Act::Gemm::GemmType<half, LayoutA>;
+    using BType = Act::Gemm::GemmType<half, LayoutB>;
+    using CType = Act::Gemm::GemmType<half, LayoutC>;
 
-    using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+    using BlockMmad = Act::Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
     using BlockEpilogue = void;
 
     // Swizzle offset is 3 and direction is 0.
-    using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
+    using BlockScheduler = typename Act::Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
 
     // kernel level
-    using MatmulKernel = Gemm::Kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
+    using MatmulKernel = Act::Gemm::Kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 
-    using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
+    using MatmulAdapter = Act::Gemm::Device::DeviceGemm<MatmulKernel>;
     MatmulKernel::Arguments arguments{options.problemShape, deviceA, deviceB, deviceC};
     MatmulAdapter matmul_op;
     matmul_op.CanImplement(arguments);

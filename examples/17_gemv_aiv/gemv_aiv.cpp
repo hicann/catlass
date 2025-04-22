@@ -27,8 +27,6 @@
 #include "act/gemv/device/device_gemv.hpp"
 #include "act/status.hpp"
 
-using namespace Act;
-
 using ScalarType = float;
 
 typedef struct Options{
@@ -40,7 +38,7 @@ typedef struct Options{
 
     Options() = default;
     
-    GemvCoord problemShape{M, N};
+    Act::GemvCoord problemShape{M, N};
 
     int Parse(int argc, const char **argv){
         enum ArgsIndex{
@@ -137,10 +135,10 @@ void Run(Options options){
     size_t sizeX = lenX * sizeof(float);
     size_t sizeY = lenY * sizeof(float);
 
-    using LayoutA = layout::RowMajor;
-    using LayoutX = layout::VectorLayout;
-    using LayoutY = layout::VectorLayout;
-    bool is_spiltk = std::is_same_v<LayoutA, layout::ColumnMajor>;
+    using LayoutA = Act::layout::RowMajor;
+    using LayoutX = Act::layout::VectorLayout;
+    using LayoutY = Act::layout::VectorLayout;
+    bool is_spiltk = std::is_same_v<LayoutA, Act::layout::ColumnMajor>;
     LayoutA layoutA{m, n};
     LayoutX layoutX{n};
     LayoutY layoutY{m};
@@ -177,27 +175,27 @@ void Run(Options options){
     }
     
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAiv();
-    using ArchTag = Arch::AtlasA2;
-    using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
-    using AType = Gemm::GemmType<float, LayoutA>;
-    using XType = Gemm::GemmType<float, LayoutX>;
-    using YType = Gemm::GemmType<float, LayoutY>;
+    using ArchTag = Act::Arch::AtlasA2;
+    using DispatchPolicy = Act::Gemm::MmadAtlasA2Pingpong<true>;
+    using AType = Act::Gemm::GemmType<float, LayoutA>;
+    using XType = Act::Gemm::GemmType<float, LayoutX>;
+    using YType = Act::Gemm::GemmType<float, LayoutY>;
     using BiasType = void;
-    using UBTileShape = GemvShape<32,512>;
+    using UBTileShape = Act::GemvShape<32,512>;
     uint32_t maxSplict = 20;
     uint32_t const SPLIT = getSplictNum(is_spiltk, m, n, UBTileShape::M, UBTileShape::N, maxSplict);
 
-    using TileCopy = Gemv::Tile::TileCopyGemvAiv<typename DispatchPolicy::ArchTag, AType, XType, YType, BiasType>;
-    using TileVmad = Gemv::Tile::TileVmad<typename DispatchPolicy::ArchTag, AType, XType, YType, BiasType>;
-    using TileVmuls = Gemv::Tile::TileVmuls<typename DispatchPolicy::ArchTag, XType>;
+    using TileCopy = Act::Gemv::Tile::TileCopyGemvAiv<typename DispatchPolicy::ArchTag, AType, XType, YType, BiasType>;
+    using TileVmad = Act::Gemv::Tile::TileVmad<typename DispatchPolicy::ArchTag, AType, XType, YType, BiasType>;
+    using TileVmuls = Act::Gemv::Tile::TileVmuls<typename DispatchPolicy::ArchTag, XType>;
 
-    using GemvBlock = Gemv::Block::BlockGemv<DispatchPolicy, UBTileShape, AType, XType, YType,BiasType,TileCopy,TileVmad,TileVmuls>;
+    using GemvBlock = Act::Gemv::Block::BlockGemv<DispatchPolicy, UBTileShape, AType, XType, YType,BiasType,TileCopy,TileVmad,TileVmuls>;
     using BlockEpilogue = void;
 
     // kernel level
-    using GemvKernel = Gemv::Kernel::KernelGemv<GemvBlock, BlockEpilogue>;
+    using GemvKernel = Act::Gemv::Kernel::KernelGemv<GemvBlock, BlockEpilogue>;
     typename GemvKernel::Arguments arguments{options.problemShape, hostAlpha[0], hostBeta[0], (uint8_t*)deviceA, (uint8_t*)deviceX, (uint8_t*)deviceY, (uint8_t*)deviceY_read, SPLIT};
-    using GemvAdapter = Gemv::Device::DeviceGemv<GemvKernel>;
+    using GemvAdapter = Act::Gemv::Device::DeviceGemv<GemvKernel>;
     GemvAdapter gemv_op;
     gemv_op.CanImplement(arguments);
     RunAdapter(gemv_op, arguments, stream, aicCoreNum);

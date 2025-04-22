@@ -30,7 +30,6 @@
 #include "act/status.hpp"
 #include "act/gemm/device/device_gemm.hpp"
 
-using namespace Act;
 using fp16_t = op::fp16_t;
 
 
@@ -38,7 +37,7 @@ using fp16_t = op::fp16_t;
 struct Options {
     const std::string HELPER = "03_matmul_add m n k [device_id]";
 
-    GemmCoord problemShape{128, 128, 128};
+    Act::GemmCoord problemShape{128, 128, 128};
     int32_t deviceId{0};
 
     Options() = default;
@@ -91,9 +90,9 @@ void Run(Options const &options)
     size_t sizeD = lenD * sizeof(fp16_t);
 
     // Define the layout of each matrix
-    using LayoutA = layout::RowMajor;
-    using LayoutB = layout::RowMajor;
-    using LayoutC = layout::RowMajor;
+    using LayoutA = Act::layout::RowMajor;
+    using LayoutB = Act::layout::RowMajor;
+    using LayoutC = Act::layout::RowMajor;
     LayoutA layoutA{m, k};
     LayoutB layoutB{k, n};
     LayoutC layoutD{m, n};
@@ -129,40 +128,40 @@ void Run(Options const &options)
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
     // Define ArchTag
-    using ArchTag = Arch::AtlasA2;
+    using ArchTag = Act::Arch::AtlasA2;
 
     // Block level, define BlockMmad
     constexpr bool enableUnitFlag = true;
-    using MmadDispatchPolicy = Gemm::MmadAtlasA2Pingpong<enableUnitFlag>;
-    using L1TileShape = GemmShape<128, 256, 256>;
-    using L0TileShape = GemmShape<128, 256, 64>;
-    using AType = Gemm::GemmType<half, LayoutA>;
-    using BType = Gemm::GemmType<half, LayoutB>;
-    using CType = Gemm::GemmType<half, LayoutC>;
-    using BlockMmad = Gemm::Block::BlockMmad<MmadDispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+    using MmadDispatchPolicy = Act::Gemm::MmadAtlasA2Pingpong<enableUnitFlag>;
+    using L1TileShape = Act::GemmShape<128, 256, 256>;
+    using L0TileShape = Act::GemmShape<128, 256, 64>;
+    using AType = Act::Gemm::GemmType<half, LayoutA>;
+    using BType = Act::Gemm::GemmType<half, LayoutB>;
+    using CType = Act::Gemm::GemmType<half, LayoutC>;
+    using BlockMmad = Act::Gemm::Block::BlockMmad<MmadDispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
 
     // Block level, define BlockEpilogue
-    using EpilogueDispatchPolicy = Epilogue::EpilogueAtlasA2ElemWiseOneSource;
+    using EpilogueDispatchPolicy = Act::Epilogue::EpilogueAtlasA2ElemWiseOneSource;
     using XType = CType;
     using DType = CType;
     using ComputeType = CType;
     constexpr uint32_t computeLength = 16384;
-    using TileElemWiseEpilogue = Epilogue::Tile::TileElemWiseAdd<ArchTag, ComputeType, computeLength>;
-    using EpilogueTileCopy = Epilogue::Tile::TileCopy<ArchTag, CType, XType, DType>;
-    using BlockEpilogue = Epilogue::Block::BlockEpilogue<EpilogueDispatchPolicy, CType, XType, DType,
+    using TileElemWiseEpilogue = Act::Epilogue::Tile::TileElemWiseAdd<ArchTag, ComputeType, computeLength>;
+    using EpilogueTileCopy = Act::Epilogue::Tile::TileCopy<ArchTag, CType, XType, DType>;
+    using BlockEpilogue = Act::Epilogue::Block::BlockEpilogue<EpilogueDispatchPolicy, CType, XType, DType,
         TileElemWiseEpilogue, EpilogueTileCopy>;
 
     // Define BlockScheduler
     // Swizzle offset is 3 and direction is 0.
-    using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
+    using BlockScheduler = typename Act::Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
 
     // Kernel level
-    using MatmulKernel = Gemm::Kernel::MatmulEpilogue<BlockMmad, BlockEpilogue, BlockScheduler>;
+    using MatmulKernel = Act::Gemm::Kernel::MatmulEpilogue<BlockMmad, BlockEpilogue, BlockScheduler>;
 
     // Prepare params
     typename MatmulKernel::Arguments arguments{
         options.problemShape, sizeof(half), deviceA, deviceB, deviceD};
-    using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
+    using MatmulAdapter = Act::Gemm::Device::DeviceGemm<MatmulKernel>;
     MatmulAdapter matmul_op;
     size_t sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
     uint8_t *deviceWorkspace{nullptr};

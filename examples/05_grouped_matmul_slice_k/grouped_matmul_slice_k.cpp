@@ -27,14 +27,13 @@
 #include "act/status.hpp"
 #include "act/gemm/device/device_gemm.hpp"
 
-using namespace Act;
 using fp16_t = op::fp16_t;
 
 struct Options {
     const std::string HELPER = "05_grouped_matmul_slice_k group_count m n k [device_id]";
 
     uint32_t groupCount{1};
-    GemmCoord problemShape{128, 128, 128};
+    Act::GemmCoord problemShape{128, 128, 128};
     int32_t deviceId{0};
 
     Options() = default;
@@ -86,9 +85,9 @@ void Run(Options const &options)
     size_t sizeB = lenB * sizeof(fp16_t);
     size_t sizeC = lenC * sizeof(fp16_t);
 
-    using LayoutA = layout::ColumnMajor;
-    using LayoutB = layout::RowMajor;
-    using LayoutC = layout::RowMajor;
+    using LayoutA = Act::layout::ColumnMajor;
+    using LayoutB = Act::layout::RowMajor;
+    using LayoutC = Act::layout::RowMajor;
 
     const fp16_t fp16_tLower = -5.0;
     const fp16_t fp16_tUpper = 5.0;
@@ -129,27 +128,27 @@ void Run(Options const &options)
     constexpr bool enableUnitFlag = true;
     constexpr bool enableShuffleK = true;
 
-    using ArchTag = Arch::AtlasA2;
-    using DispatchPolicy = Gemm::MmadAtlasA2PreloadAsync<
+    using ArchTag = Act::Arch::AtlasA2;
+    using DispatchPolicy = Act::Gemm::MmadAtlasA2PreloadAsync<
         preloadStages,
         l1Stages, l0AStages, l0BStages, l0CStages,
         enableUnitFlag, enableShuffleK
     >;
-    using L1TileShape = GemmShape<128, 256, 256>;
-    using L0TileShape = GemmShape<128, 256, 64>;
+    using L1TileShape = Act::GemmShape<128, 256, 256>;
+    using L0TileShape = Act::GemmShape<128, 256, 64>;
 
-    using AType = Gemm::GemmType<half, LayoutA>;
-    using BType = Gemm::GemmType<half, LayoutB>;
-    using CType = Gemm::GemmType<half, LayoutC>;
+    using AType = Act::Gemm::GemmType<half, LayoutA>;
+    using BType = Act::Gemm::GemmType<half, LayoutB>;
+    using CType = Act::Gemm::GemmType<half, LayoutC>;
 
-    using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+    using BlockMmad = Act::Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
     using BlockEpilogue = void;
-    using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
+    using BlockScheduler = typename Act::Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
 
     // kernel level
-    using MatmulKernel = Gemm::Kernel::GroupedMatmulSliceK<BlockMmad, BlockEpilogue, BlockScheduler, int64_t>;
+    using MatmulKernel = Act::Gemm::Kernel::GroupedMatmulSliceK<BlockMmad, BlockEpilogue, BlockScheduler, int64_t>;
 
-    using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
+    using MatmulAdapter = Act::Gemm::Device::DeviceGemm<MatmulKernel>;
 
     MatmulKernel::Arguments arguments{
         options.problemShape, problemCount, deviceGroupList, deviceA, deviceB, deviceC
@@ -176,13 +175,13 @@ void Run(Options const &options)
     std::vector<fp16_t> hostC(lenC);
     ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
 
-    std::vector<GemmCoord> problemShapeList(problemCount);
+    std::vector<Act::GemmCoord> problemShapeList(problemCount);
     std::vector<LayoutA> layoutAList(problemCount);
     std::vector<LayoutB> layoutBList(problemCount);
     std::vector<LayoutC> layoutCList(problemCount);
     for (uint32_t i = 0; i < problemCount; ++i) {
         uint32_t currentK = (i == 0) ? groupList[0] : (groupList[i] - groupList[i - 1]);
-        problemShapeList[i] = GemmCoord{m, n, currentK};
+        problemShapeList[i] = Act::GemmCoord{m, n, currentK};
         layoutAList[i] = LayoutA{m, currentK};
         layoutBList[i] = LayoutB{currentK, n};
         layoutCList[i] = LayoutC{m, n};

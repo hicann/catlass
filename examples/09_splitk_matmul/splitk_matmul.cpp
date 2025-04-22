@@ -26,14 +26,13 @@
 #include "act/status.hpp"
 #include "act/gemm/device/device_gemm.hpp"
 
-using namespace Act;
 using fp16_t = op::fp16_t;
 
 
 struct Options {
     const std::string HELPER = "09_splitk_matmul m n k [device_id]";
 
-    GemmCoord problemShape{128, 128, 128};
+    Act::GemmCoord problemShape{128, 128, 128};
     int32_t deviceId{0};
 
     Options() = default;
@@ -85,7 +84,7 @@ void Run(Options const &options)
     uint32_t n = options.problemShape.n();
     uint32_t k = options.problemShape.k();
 
-    using L1TileShape = GemmShape<128, 256, 256>;
+    using L1TileShape = Act::GemmShape<128, 256, 256>;
 
     size_t lenA = static_cast<size_t>(m) * k;
     size_t lenB = static_cast<size_t>(k) * n;
@@ -95,9 +94,9 @@ void Run(Options const &options)
     size_t sizeB = lenB * sizeof(fp16_t);
     size_t sizeC = lenC * sizeof(fp16_t);
 
-    using LayoutA = layout::RowMajor;
-    using LayoutB = layout::ColumnMajor;
-    using LayoutC = layout::RowMajor;
+    using LayoutA = Act::layout::RowMajor;
+    using LayoutB = Act::layout::ColumnMajor;
+    using LayoutC = Act::layout::RowMajor;
     LayoutA layoutA{m, k};
     LayoutB layoutB{k, n};
     LayoutC layoutC{m, n};
@@ -118,16 +117,16 @@ void Run(Options const &options)
     uint8_t *deviceC{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
-    using ArchTag = Arch::AtlasA2;
-    using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
+    using ArchTag = Act::Arch::AtlasA2;
+    using DispatchPolicy = Act::Gemm::MmadAtlasA2Pingpong<true>;
     using L1TileShape = GemmShape<128, 256, 256>;
     using L0TileShape = GemmShape<128, 256, 64>;
 
-    using AType = Gemm::GemmType<half, LayoutA>;
-    using BType = Gemm::GemmType<half, LayoutB>;
-    using CType = Gemm::GemmType<float, LayoutC>;
+    using AType = Act::Gemm::GemmType<half, LayoutA>;
+    using BType = Act::Gemm::GemmType<half, LayoutB>;
+    using CType = Act::Gemm::GemmType<float, LayoutC>;
 
-    using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+    using BlockMmad = Act::Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
     using BlockEpilogue = void;
 
     // After the Matmul computation is completed, launch the ReduceAdd kernel to accumulate the partial sums.
@@ -135,12 +134,12 @@ void Run(Options const &options)
     using ReduceAdd = Act::Gemm::Kernel::ReduceAdd<ArchTag, float, half, computeLength>;
 
     // Swizzle offset is 3 and direction is 0.
-    using BlockScheduler = typename Gemm::Block::SplitkGemmIdentityBlockSwizzle<3, 0>;
+    using BlockScheduler = typename Act::Gemm::Block::SplitkGemmIdentityBlockSwizzle<3, 0>;
 
     // kernel level
-    using MatmulKernel = Gemm::Kernel::SplitkMatmul<BlockMmad, BlockEpilogue, BlockScheduler, ReduceAdd>;
+    using MatmulKernel = Act::Gemm::Kernel::SplitkMatmul<BlockMmad, BlockEpilogue, BlockScheduler, ReduceAdd>;
 
-    using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
+    using MatmulAdapter = Act::Gemm::Device::DeviceGemm<MatmulKernel>;
     MatmulKernel::Arguments arguments{options.problemShape,
         aicCoreNum,
         sizeof(float),
