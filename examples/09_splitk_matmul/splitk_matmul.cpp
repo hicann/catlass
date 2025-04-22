@@ -23,7 +23,7 @@
 #include "act/gemm/gemm_type.hpp"
 #include "act/layout/layout.hpp"
 
-using namespace Act;
+
 using fp16_t = op::fp16_t;
 
 template <
@@ -42,16 +42,16 @@ void SplitkMatmul(
 )
 {
     AscendC::SetSyncBaseAddr(fftsAddr);
-    using ArchTag = Arch::AtlasA2;
-    using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
+    using ArchTag = Act::Arch::AtlasA2;
+    using DispatchPolicy = Act::Gemm::MmadAtlasA2Pingpong<true>;
     using L1TileShape = GemmShape<128, 256, 256>;
     using L0TileShape = GemmShape<128, 256, 64>;
 
-    using AType = Gemm::GemmType<half, LayoutA>;
-    using BType = Gemm::GemmType<half, LayoutB>;
-    using CType = Gemm::GemmType<float, LayoutC>;
+    using AType = Act::Gemm::GemmType<half, LayoutA>;
+    using BType = Act::Gemm::GemmType<half, LayoutB>;
+    using CType = Act::Gemm::GemmType<float, LayoutC>;
 
-    using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+    using BlockMmad = Act::Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
     using BlockEpilogue = void;
 
     // After the Matmul computation is completed, launch the ReduceAdd kernel to accumulate the partial sums.
@@ -60,10 +60,10 @@ void SplitkMatmul(
 
     if (problemShape.m() > problemShape.n()) {
         // Swizzle offset is 3 and direction is 0.
-        using BlockScheduler = typename Gemm::Block::SplitkGemmIdentityBlockSwizzle<3, 0>;
+        using BlockScheduler = typename Act::Gemm::Block::SplitkGemmIdentityBlockSwizzle<3, 0>;
 
         // kernel level
-        using MatmulKernel = Gemm::Kernel::SplitkMatmul<BlockMmad, BlockEpilogue, BlockScheduler, ReduceAdd>;
+        using MatmulKernel = Act::Gemm::Kernel::SplitkMatmul<BlockMmad, BlockEpilogue, BlockScheduler, ReduceAdd>;
 
         typename MatmulKernel::Params params{
             problemShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, gmWorkspace, splitkFactor
@@ -74,10 +74,10 @@ void SplitkMatmul(
         matmul(params);
     } else {
         // Swizzle offset is 3 and direction is 1.
-        using BlockScheduler = typename Gemm::Block::SplitkGemmIdentityBlockSwizzle<3, 1>;
+        using BlockScheduler = typename Act::Gemm::Block::SplitkGemmIdentityBlockSwizzle<3, 1>;
 
         // kernel level
-        using MatmulKernel = Gemm::Kernel::SplitkMatmul<BlockMmad, BlockEpilogue, BlockScheduler, ReduceAdd>;
+        using MatmulKernel = Act::Gemm::Kernel::SplitkMatmul<BlockMmad, BlockEpilogue, BlockScheduler, ReduceAdd>;
 
         typename MatmulKernel::Params params{
             problemShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, gmWorkspace, splitkFactor
@@ -200,9 +200,9 @@ void Run(Options const &options)
     size_t sizeC = lenC * sizeof(fp16_t);
     size_t sizeWorkspace = lenWorkspace * sizeof(float);
 
-    layout::RowMajor layoutA{m, k};
-    layout::ColumnMajor layoutB{k, n};
-    layout::RowMajor layoutC{m, n};
+    Act::layout::RowMajor layoutA{m, k};
+    Act::layout::ColumnMajor layoutB{k, n};
+    Act::layout::RowMajor layoutC{m, n};
 
     std::vector<fp16_t> hostA(lenA);
     std::vector<fp16_t> hostB(lenB);

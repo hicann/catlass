@@ -29,7 +29,7 @@
 #include "act/gemm/gemm_type.hpp"
 #include "act/layout/layout.hpp"
 
-using namespace Act;
+
 using bfloat16 = op::bfloat16;
 
 using L1TileShape = GemmShape<128, 256, 512>;
@@ -50,7 +50,7 @@ void GroupedMatmulSliceMPerTokenDequant(
 )
 {
     AscendC::SetSyncBaseAddr(fftsAddr);
-    using ArchTag = Arch::AtlasA2;
+    using ArchTag = Act::Arch::AtlasA2;
     constexpr uint32_t preloadStages = 1;
     constexpr uint32_t l1Stages = 2;
     constexpr uint32_t l0AStages = 2;

@@ -34,7 +34,7 @@ output/shared_lib
 #include "act/act.hpp"
 // act头文件...
 
-using namespace Act;
+
 
 template <
     class LayoutA,

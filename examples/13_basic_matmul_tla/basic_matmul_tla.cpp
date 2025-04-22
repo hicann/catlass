@@ -26,7 +26,7 @@
 #include "tla/layout.hpp"
 #include "tla/tensor.hpp"
 
-using namespace Act;
+
 using namespace tla;
 using fp16_t = op::fp16_t;
 
@@ -43,7 +43,7 @@ void BasicMatmul(
     GM_ADDR gmC, LayoutTagC tagC
 )
 {
-    using ArchTag = Arch::AtlasA2;
+    using ArchTag = Act::Arch::AtlasA2;
     using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
     using L1TileShape = Shape<_128, _256, _256>;
     using L0TileShape = Shape<_128, _256, _64>;

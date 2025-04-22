@@ -24,7 +24,7 @@
 #include "act/gemm/gemm_type.hpp"
 #include "act/layout/layout.hpp"
 
-using namespace Act;
+
 using fp16_t = op::fp16_t;
 
 template <
@@ -48,8 +48,8 @@ void GroupedMatmul(
     constexpr bool enableUnitFlag = true;
     constexpr bool enableShuffleK = true;
 
-    using ArchTag = Arch::AtlasA2;
-    using DispatchPolicy = Gemm::MmadAtlasA2PreloadAsync<
+    using ArchTag = Act::Arch::AtlasA2;
+    using DispatchPolicy = Act::Gemm::MmadAtlasA2PreloadAsync<
         preloadStages,
         l1Stages, l0AStages, l0BStages, l0CStages,
         enableUnitFlag, enableShuffleK

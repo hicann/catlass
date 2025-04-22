@@ -22,7 +22,6 @@
 #include "act/gemm/gemm_type.hpp"
 #include "act/layout/layout.hpp"
 
-using namespace Act;
 using fp16_t = op::fp16_t;
 
 constexpr float DATA_UPPER_BOUND = 5;
@@ -35,13 +34,13 @@ void BatchedMatmul(uint32_t batchCount, GemmCoord problemShape,
                    GM_ADDR gmB, LayoutB layoutB,
                    GM_ADDR gmC, LayoutC layoutC)
 {
-    using ArchTag = Arch::AtlasA2;
-    using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
+    using ArchTag = Act::Arch::AtlasA2;
+    using DispatchPolicy = Act::Gemm::MmadAtlasA2Pingpong<true>;
     using L1TileShape = GemmShape<128, 256, 256>;
     using L0TileShape = GemmShape<128, 256, 64>;
 
-    using AType = Gemm::GemmType<half, LayoutA>;
-    using BType = Gemm::GemmType<half, LayoutB>;
+    using AType = Act::Gemm::GemmType<half, LayoutA>;
+    using BType = Act::Gemm::GemmType<half, LayoutB>;
     using CType = Gemm::GemmType<half, LayoutC>;
 
     using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
@@ -189,9 +188,9 @@ void Run(Options const &options)
     uint8_t *deviceC{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
-    using LayoutA = layout::RowMajor; // can be RowMajor or ColumnMajor
-    using LayoutB = layout::RowMajor; // can be RowMajor or ColumnMajor
-    using LayoutC = layout::RowMajor; // must be RowMajor
+    using LayoutA = Act::layout::RowMajor; // can be RowMajor or ColumnMajor
+    using LayoutB = Act::layout::RowMajor; // can be RowMajor or ColumnMajor
+    using LayoutC = Act::layout::RowMajor; // must be RowMajor
     LayoutA layoutA{m, k};
     LayoutB layoutB{k, n};
     LayoutC layoutC{m, n};
