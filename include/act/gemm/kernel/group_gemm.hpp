@@ -1,12 +1,12 @@
 /*
-* Copyright (c) 2024 Huawei Technologies Co., Ltd.
-* This file is a part of the CANN Open Software.
-* Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
-* Please refer to the License for details. You may not use this file except in compliance with the License.
-* THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-* INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-* See LICENSE in the root of the software repository for the full text of the License.
-*/
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * This file is a part of the CANN Open Software.
+ * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
+ */
 
 #ifndef ACT_GROUPGEMM_KERNEL_GROUPGEMM_HPP
 #define ACT_GROUPGEMM_KERNEL_GROUPGEMM_HPP
@@ -174,7 +174,7 @@ private:
 template<
     class BlockGemm_,
     class BlockEpilogue_ ,
-    class TileScheduler_ = void
+    class BlockScheduler_ = void
 >
 class KernelGroupGemm{
 public:
@@ -187,8 +187,8 @@ public:
     using ElementB = typename BlockGemm::ElementB;
     using LayoutB = typename BlockGemm::LayoutB;
     using LayoutWB = typename BlockGemm::LayoutB;
-    using ElementX = typename BlockGemm::ElementX;
-    using LayoutX = typename BlockGemm::LayoutX;
+    using ElementC = typename BlockGemm::ElementC;
+    using LayoutC = typename BlockGemm::LayoutC;
     using ElementAccumulator = typename BlockGemm::ElementAccumulator;
     
     using BlockEpilogue = BlockEpilogue_;
@@ -204,14 +204,14 @@ public:
     const uint32_t l0CBlockNum = ArchTag::L0C_SIZE / cSize;
 
     static constexpr uint32_t STAGES = BlockGemm::STAGES; 
-    using TileScheduler = TileScheduler_;
+    using BlockScheduler = BlockScheduler_;
     
     static const uint32_t COMPUTE_LENGTH_A = 96 * 1024 / sizeof(ElementA); 
     using PaddingA = PaddingMatrix<ArchTag, ElementA, LayoutA, COMPUTE_LENGTH_A>;
     static const uint32_t COMPUTE_LENGTH_B = 96 * 1024 / sizeof(ElementB);
     using PaddingB = PaddingMatrix<ArchTag, ElementB, LayoutB, COMPUTE_LENGTH_B>;
 
-    typedef struct Params{
+    struct Params{
         // Data members
         uint32_t problemCount;
         GM_ADDR ptrProblemShape;
@@ -224,10 +224,10 @@ public:
         GM_ADDR ptrWorkspace;
         GM_ADDR ptrLayoutWorkspace;
         GM_ADDR ptrWA;
-        GM_ADDR ptrlayoutWA;
+        GM_ADDR ptrLayoutWA;
         GM_ADDR ptrWB;
-        GM_ADDR ptrlayoutWB;
-        GM_ADDR ptrC;
+        GM_ADDR ptrLayoutWB;
+        GM_ADDR ptrX;
         GM_ADDR ptrD;
         
 
@@ -242,16 +242,16 @@ public:
             GM_ADDR ptrA_, GM_ADDR ptrLayoutA_,
             GM_ADDR ptrB_, GM_ADDR ptrLayoutB_,
             GM_ADDR ptrWorkspace_, GM_ADDR ptrLayoutWorkspace_,
-            GM_ADDR ptrWA_,GM_ADDR ptrlayoutWA_, 
-            GM_ADDR ptrWB_,GM_ADDR ptrlayoutWB_, GM_ADDR ptrC_, GM_ADDR ptrD_)
+            GM_ADDR ptrWA_,GM_ADDR ptrLayoutWA_, 
+            GM_ADDR ptrWB_,GM_ADDR ptrLayoutWB_, GM_ADDR ptrX_, GM_ADDR ptrD_)
                 :problemCount(problemCount_), ptrProblemShape(ptrProblemShape_),
                 alpha(alpha_), beta(beta_),
                 ptrA(ptrA_), ptrLayoutA(ptrLayoutA_),
                 ptrB(ptrB_), ptrLayoutB(ptrLayoutB_),
                 ptrWorkspace(ptrWorkspace_), ptrLayoutWorkspace(ptrLayoutWorkspace_), 
-                ptrWA(ptrWA_), ptrlayoutWA(ptrlayoutWA_), 
-                ptrWB(ptrWB_), ptrlayoutWB(ptrlayoutWB_),ptrC(ptrC_), ptrD(ptrD_){}
-    }Params;
+                ptrWA(ptrWA_), ptrLayoutWA(ptrLayoutWA_), 
+                ptrWB(ptrWB_), ptrLayoutWB(ptrLayoutWB_),ptrX(ptrX_), ptrD(ptrD_){}
+    };
 
     ACT_DEVICE
     KernelGroupGemm(){}
@@ -277,60 +277,56 @@ public:
 
     template<>
     ACT_DEVICE
-    void operator()<AscendC::AIC>(Params &params){
+    void operator()<AscendC::AIC>(Params &params)
+    {
         GemmCoord problemShapeList[MAX_TENSOR_COUNT];
         LayoutA layoutAList[MAX_TENSOR_COUNT];
         LayoutB layoutBList[MAX_TENSOR_COUNT];
-        LayoutX layoutWorkspaceList[MAX_TENSOR_COUNT];
+        LayoutC layoutWorkspaceList[MAX_TENSOR_COUNT];
         LayoutA layoutWAList[MAX_TENSOR_COUNT];
         LayoutB layoutWBList[MAX_TENSOR_COUNT];
-
         // Get matmul information from parameters
         detail::UnpackListParam(problemShapeList, params.ptrProblemShape, params.problemCount);
         detail::UnpackListParam(layoutAList, params.ptrLayoutA, params.problemCount);
         detail::UnpackListParam(layoutBList, params.ptrLayoutB, params.problemCount);
         detail::UnpackListParam(layoutWorkspaceList, params.ptrLayoutWorkspace, params.problemCount);
-        detail::UnpackListParam(layoutWAList, params.ptrlayoutWA, params.problemCount);
-        detail::UnpackListParam(layoutWBList, params.ptrlayoutWB, params.problemCount);
-
+        detail::UnpackListParam(layoutWAList, params.ptrLayoutWA, params.problemCount);
+        detail::UnpackListParam(layoutWBList, params.ptrLayoutWB, params.problemCount);
         uint32_t coreIdx = AscendC::GetBlockIdx();
         uint32_t coreNum = AscendC::GetBlockNum();
         uint64_t inGroupOffsetA = 0;
         uint64_t inGroupOffsetB = 0;
         uint64_t inGroupOffsetWorkspace = 0;
-
         uint32_t startCoreIdx = 0;
         uint32_t startLoopIdx;
-        
         Arch::Resource<ArchTag> resource;
         BlockGemm blockGemm(resource);
-        
-        for(uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx){
+        for (uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx)
+        {
             GemmCoord problemShape = problemShapeList[groupIdx];
             LayoutA layoutA = layoutAList[groupIdx];
             LayoutB layoutB = layoutBList[groupIdx];
-            LayoutX layoutWorkspace = layoutWorkspaceList[groupIdx];
+            LayoutC layoutWorkspace = layoutWorkspaceList[groupIdx];
             LayoutA layoutWA = layoutWAList[groupIdx];
             LayoutB layoutWB = layoutWBList[groupIdx];
             Arch::CrossCoreWaitFlag(flagAivFinishPadding);
-            AscendC::GlobalTensor<ElementX> gmX;
-            gmX.SetGlobalBuffer((__gm__ ElementX*)params.ptrWorkspace);
             AscendC::GlobalTensor<ElementA> gmA;
             gmA.SetGlobalBuffer((__gm__ ElementA*)params.ptrWA);
             AscendC::GlobalTensor<ElementB> gmB;
             gmB.SetGlobalBuffer((__gm__ ElementB*)params.ptrWB);
+            AscendC::GlobalTensor<ElementC> gmC;
+            gmC.SetGlobalBuffer((__gm__ ElementC*)params.ptrWorkspace);
             uint32_t M = problemShape.m();
             uint32_t N = problemShape.n();
             uint32_t K = problemShape.k();
             #pragma unroll
-            for(uint32_t i = 0; i < l0CBlockNum; i++){
+            for (uint32_t i = 0; i < l0CBlockNum; i++)
+            {
                 AscendC::SetFlag<AscendC::HardEvent::FIX_M>((int32_t)i);
             }
-
-            uint32_t MLoops = CeilDiv(M, maxMPerBlock);
-            uint32_t NLoops = CeilDiv(N, maxNPerBlock);
-            uint32_t coreLoops = MLoops * NLoops;
-
+            uint32_t mLoops = CeilDiv(M, maxMPerBlock);
+            uint32_t nLoops = CeilDiv(N, maxNPerBlock);
+            uint32_t coreLoops = mLoops * nLoops;
             // Determine the starting loopIdx of the current core under the current groupIdx
             if (coreIdx < startCoreIdx) {
                 startLoopIdx = coreIdx + coreNum - startCoreIdx;
@@ -338,40 +334,42 @@ public:
                 startLoopIdx = coreIdx - startCoreIdx;
             }
             uint32_t singleIdx = 0;
-            for(uint32_t loopIdx = startLoopIdx; loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()){
-                uint32_t MGmBlockIdx = loopIdx / NLoops;
-                uint32_t NGmBlockIdx = loopIdx % NLoops;
-                uint32_t MGmActual = (MGmBlockIdx == MLoops - 1) ? (M - MGmBlockIdx * maxMPerBlock) : maxMPerBlock;
-                uint32_t NGmActual = (NGmBlockIdx == NLoops - 1) ? (N - NGmBlockIdx * maxNPerBlock) : maxNPerBlock;
+            for (uint32_t loopIdx = startLoopIdx; loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()) 
+            {
+                uint32_t mGmBlockIdx = loopIdx / nLoops;
+                uint32_t nGmBlockIdx = loopIdx % nLoops;
+                uint32_t mGmActual = (mGmBlockIdx == mLoops - 1) ? (M - mGmBlockIdx * maxMPerBlock) : maxMPerBlock;
+                uint32_t nGmActual = (nGmBlockIdx == nLoops - 1) ? (N - nGmBlockIdx * maxNPerBlock) : maxNPerBlock;
                 bool isFirstBlock = (loopIdx == startLoopIdx);
                 bool hasNextBlock = false;
                 GemmCoord nextActualShape;
-                uint32_t MNextGmBlockIdx = 0; uint32_t NNextGmBlockIdx = 0;
-                if(loopIdx + AscendC::GetBlockNum() < coreLoops){
+                uint32_t mNextGmBlockIdx = 0; uint32_t nNextGmBlockIdx = 0;
+                if (loopIdx + AscendC::GetBlockNum() < coreLoops)
+                {
                     hasNextBlock = true;
                     uint32_t nextLoopIdx = loopIdx + AscendC::GetBlockNum();
-                    MNextGmBlockIdx = nextLoopIdx / NLoops;
-                    NNextGmBlockIdx = nextLoopIdx % NLoops;
-                    uint32_t MNextGmActual = (MNextGmBlockIdx == MLoops - 1) ? (M - MNextGmBlockIdx * maxMPerBlock) : maxMPerBlock;
-                    uint32_t NNextGmActual = (NNextGmBlockIdx == NLoops - 1) ? (N - NNextGmBlockIdx * maxNPerBlock) : maxNPerBlock;
-                    nextActualShape = MakeCoord(MNextGmActual, NNextGmActual, K); 
+                    mNextGmBlockIdx = nextLoopIdx / nLoops;
+                    nNextGmBlockIdx = nextLoopIdx % nLoops;
+                    uint32_t mNextGmActual = (mNextGmBlockIdx == mLoops - 1) ? (M - mNextGmBlockIdx * maxMPerBlock) : maxMPerBlock;
+                    uint32_t nNextGmActual = (nNextGmBlockIdx == nLoops - 1) ? (N - nNextGmBlockIdx * maxNPerBlock) : maxNPerBlock;
+                    nextActualShape = MakeCoord(mNextGmActual, nNextGmActual, K); 
                 }
-                GemmCoord actualShape{MGmActual, NGmActual, K};
+                GemmCoord actualShape{mGmActual, nGmActual, K};
                 AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((int32_t)singleIdx);
-                MatrixCoord gmTileAOffset{MGmBlockIdx * maxMPerBlock, 0}; 
+                MatrixCoord gmTileAOffset{mGmBlockIdx * maxMPerBlock, 0}; 
                 auto gmTileA = gmA[inGroupOffsetA + layoutWA.GetOffset(gmTileAOffset)];
-                MatrixCoord gmTileBOffset{0, NGmBlockIdx * maxNPerBlock}; 
+                MatrixCoord gmTileBOffset{0, nGmBlockIdx * maxNPerBlock}; 
                 auto gmTileB = gmB[inGroupOffsetB + layoutWB.GetOffset(gmTileBOffset)];
-                MatrixCoord gmTileXOffset{MGmBlockIdx * maxMPerBlock, NGmBlockIdx * maxNPerBlock}; 
-                auto gmTileX = gmX[inGroupOffsetWorkspace + layoutWorkspace.GetOffset(gmTileXOffset)];
-                MatrixCoord gmTileNextAOffset{MNextGmBlockIdx * maxMPerBlock, 0}; 
+                MatrixCoord gmTileCOffset{mGmBlockIdx * maxMPerBlock, nGmBlockIdx * maxNPerBlock}; 
+                auto gmTileC = gmC[inGroupOffsetWorkspace + layoutWorkspace.GetOffset(gmTileCOffset)];
+                MatrixCoord gmTileNextAOffset{mNextGmBlockIdx * maxMPerBlock, 0}; 
                 auto gmTileNextA = gmA[inGroupOffsetA + layoutWA.GetOffset(gmTileNextAOffset)];
-                MatrixCoord gmTileNextBOffset{0, NNextGmBlockIdx * maxNPerBlock};
+                MatrixCoord gmTileNextBOffset{0, nNextGmBlockIdx * maxNPerBlock};
                 auto gmTileNextB = gmB[inGroupOffsetB + layoutWB.GetOffset(gmTileNextBOffset)];
                 blockGemm(
                     gmTileA, layoutWA, 
                     gmTileB, layoutWB,
-                    gmTileX, layoutWorkspace,
+                    gmTileC, layoutWorkspace,
                     gmTileNextA, gmTileNextB,
                     actualShape, nextActualShape, isFirstBlock, hasNextBlock, singleIdx
                 );
@@ -384,7 +382,8 @@ public:
             inGroupOffsetWorkspace += problemShape.m() * problemShape.n();
             startCoreIdx = (startCoreIdx + coreLoops) % coreNum;
             #pragma unroll
-            for(uint32_t i = 0; i < l0CBlockNum; i++){
+            for (uint32_t i = 0; i < l0CBlockNum; i++)
+            {
                 AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((int32_t)i);
             }
         }
@@ -396,7 +395,7 @@ public:
         GemmCoord problemShapeList[MAX_TENSOR_COUNT];
         LayoutA layoutAList[MAX_TENSOR_COUNT];
         LayoutB layoutBList[MAX_TENSOR_COUNT];
-        LayoutX layoutWorkspaceList[MAX_TENSOR_COUNT];
+        LayoutC layoutWorkspaceList[MAX_TENSOR_COUNT];
         ElementScalar alphaList[MAX_TENSOR_COUNT];
         ElementScalar betaList[MAX_TENSOR_COUNT];
         LayoutA layoutWAList[MAX_TENSOR_COUNT];
@@ -407,9 +406,9 @@ public:
         detail::UnpackListParam(layoutWorkspaceList, params.ptrLayoutWorkspace, params.problemCount);
         detail::UnpackListParam(alphaList, params.alpha, params.problemCount);
         detail::UnpackListParam(betaList, params.beta, params.problemCount);
-        detail::UnpackListParam(layoutWAList, params.ptrlayoutWA, params.problemCount);
-        detail::UnpackListParam(layoutWBList, params.ptrlayoutWB, params.problemCount);
-        uint32_t coreIdx = AscendC::GetBlockIdx() / 2;
+        detail::UnpackListParam(layoutWAList, params.ptrLayoutWA, params.problemCount);
+        detail::UnpackListParam(layoutWBList, params.ptrLayoutWB, params.problemCount);
+        uint32_t coreIdx = AscendC::GetBlockIdx() / AscendC::GetSubBlockNum();
         uint32_t coreNum = AscendC::GetBlockNum();
         uint64_t inGroupOffsetA = 0;
         uint64_t inGroupOffsetWA = 0;
@@ -430,11 +429,14 @@ public:
         gmWB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB*>(params.ptrWB));
         PaddingA paddingA(resource);
         PaddingB paddingB(resource);
-        for(uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx){
+        AscendC::GlobalTensor<ElementC> gmC;
+        gmC.SetGlobalBuffer((__gm__ ElementC*)params.ptrWorkspace);
+        for (uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx)
+        {
             GemmCoord problemShape = problemShapeList[groupIdx];
             LayoutA layoutA = layoutAList[groupIdx];
             LayoutB layoutB = layoutBList[groupIdx];
-            LayoutX layoutWorkspace = layoutWorkspaceList[groupIdx];
+            LayoutC layoutWorkspace = layoutWorkspaceList[groupIdx];
             ElementScalar alpha_ = alphaList[groupIdx];
             ElementScalar beta_ = betaList[groupIdx];
             LayoutA layoutWA = layoutWAList[groupIdx];
@@ -443,31 +445,29 @@ public:
             paddingB(gmWB[inGroupOffsetWB], gmB[inGroupOffsetB], layoutWB, layoutB);
             Act::Arch::CrossCoreBarrier<0x0, PIPE_MTE3>();
             Act::Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(flagAivFinishPadding);
-            AscendC::GlobalTensor<ElementX> gmX;
-            gmX.SetGlobalBuffer((__gm__ ElementX*)params.ptrWorkspace);
-            EpilogueParams epilogueParams{alpha_, beta_, params.ptrC, layoutWorkspace, params.ptrD, layoutWorkspace};
+            EpilogueParams epilogueParams{alpha_, beta_, params.ptrX, layoutWorkspace, params.ptrD, layoutWorkspace};
             BlockEpilogue blockEpilogue(resource, blockShape, epilogueParams);
             uint32_t M = problemShape.m();
             uint32_t N = problemShape.n();
             uint32_t K = problemShape.k();
-            uint32_t MLoops = CeilDiv(M, maxMPerBlock);
-            uint32_t NLoops = CeilDiv(N, maxNPerBlock);
-            uint32_t coreLoops = MLoops * NLoops;
+            uint32_t mLoops = CeilDiv(M, maxMPerBlock);
+            uint32_t nLoops = CeilDiv(N, maxNPerBlock);
+            uint32_t coreLoops = mLoops * nLoops;
             if (coreIdx < startCoreIdx) {
                 startLoopIdx = coreIdx + coreNum - startCoreIdx;
             } else {
                 startLoopIdx = coreIdx - startCoreIdx;
             }
-            for(uint32_t loopIdx = startLoopIdx; loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()){
-                uint32_t MGmBlockIdx = loopIdx / NLoops;
-                uint32_t NGmBlockIdx = loopIdx % NLoops;
-                uint32_t MGmActual = (MGmBlockIdx == MLoops - 1) ? (M - MGmBlockIdx * maxMPerBlock) : maxMPerBlock;
-                uint32_t NGmActual = (NGmBlockIdx == NLoops - 1) ? (N - NGmBlockIdx * maxNPerBlock) : maxNPerBlock;
-                GemmCoord actualShape{MGmActual, NGmActual, K};
+            for (uint32_t loopIdx = startLoopIdx; loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum())
+            {
+                uint32_t mGmBlockIdx = loopIdx / nLoops;
+                uint32_t nGmBlockIdx = loopIdx % nLoops;
+                uint32_t mGmActual = (mGmBlockIdx == mLoops - 1) ? (M - mGmBlockIdx * maxMPerBlock) : maxMPerBlock;
+                uint32_t nGmActual = (nGmBlockIdx == nLoops - 1) ? (N - nGmBlockIdx * maxNPerBlock) : maxNPerBlock;
+                GemmCoord actualShape{mGmActual, nGmActual, K};
+                GemmCoord blockCoord{mGmBlockIdx, nGmBlockIdx, 0};
                 Arch::CrossCoreWaitFlagWithReverse<0x2, PIPE_MTE3>(flagAicFinishStore); 
-                MatrixCoord gmTileOffset{MGmBlockIdx * maxMPerBlock, NGmBlockIdx * maxNPerBlock}; 
-                auto offsetX = layoutWorkspace.GetOffset(gmTileOffset);
-                blockEpilogue(inGroupOffsetWorkspace + offsetX, gmX[inGroupOffsetWorkspace + offsetX], layoutWorkspace, actualShape);
+                blockEpilogue(actualShape, blockCoord, gmC, layoutWorkspace, inGroupOffsetWorkspace);
             }
             inGroupOffsetA += problemShape.m() * problemShape.k();
             inGroupOffsetWA += GetWorkspaceLen(layoutWA);
@@ -488,4 +488,4 @@ private:
 };
 }
 
-#endif // ACT_GROUPGEMM_KERNEL_GROUPGEMM_PL_PA_EPILOGUE_HPP}
+#endif // ACT_GROUPGEMM_KERNEL_GROUPGEMM_PL_PA_EPILOGUE_HPP
