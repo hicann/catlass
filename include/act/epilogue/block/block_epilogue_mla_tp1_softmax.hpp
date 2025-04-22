@@ -64,7 +64,7 @@ public:
     static constexpr uint32_t QK_READY_ID = 1;
 
     ACT_DEVICE
-    BlockEpilogue(Arch::Resource<ArchTag> &resource, half tor_, uint32_t kvSplitCoreNum_)
+    BlockEpilogue(Arch::Resource<ArchTag> &resource, half tor_, uint32_t kvSplitCoreNum_ = 1)
     {
         // Allocate UB space
         constexpr uint32_t LS_UB_TENSOR_OFFSET = 0;
@@ -110,6 +110,12 @@ public:
         } else {
             AscendC::SetVectorMask<int8_t>(0x0, mask);
         }
+    }
+
+    ACT_DEVICE
+    void SetkvSplitCoreNum(uint32_t kvSplitCoreNum_)
+    {
+        kvSplitCoreNum = kvSplitCoreNum_;
     }
 
     ACT_DEVICE

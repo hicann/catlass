@@ -148,6 +148,8 @@ public:
         uint32_t tilingParaSize = gTiling.GetValue(TILING_PARASIZE);
         uint32_t kvSplitPerCore = gTiling.GetValue(TILING_KVSPLIT);
         uint32_t kvSplitCoreNum = gTiling.GetValue(TILING_KVCORENUM);
+        uint32_t formerTaskNum = gTiling.GetValue(TILING_FORMERTASKNUM);
+        uint32_t tailTaskNum = gTiling.GetValue(TILING_TAILTASKNUM);
 
         uint32_t embed = NUM512;
         uint32_t embedRope = NUM64;
@@ -155,14 +157,14 @@ public:
         uint32_t strideQO = qHeads * embed;
         uint32_t strideQORope = qHeads * embedRope;
         uint32_t embedRound = RoundUp<BLOCK_SIZE>(embed);
-        uint32_t processNum = totalTaskNumSpec * kvSplitCoreNum;
         BlockMmadQK blockMmadQK(resource);
         BlockMmadPV blockMmadPV(resource);
 
-        // Go through each task
-        for (uint32_t process = coreIdx; process < processNum; process += uint32_t(coreNum)) {
+        // Go through tail task
+        uint32_t tailProcessNum = tailTaskNum * kvSplitCoreNum;
+        for (uint32_t process = coreIdx; process < tailProcessNum; process += uint32_t(coreNum)) {
             // Get the offset of each core on the GM
-            uint32_t taskIdx = process / kvSplitCoreNum;
+            uint32_t taskIdx = process / kvSplitCoreNum + formerTaskNum;
             uint32_t offsetTiling = tilingHeadSize + tilingParaSize * taskIdx;
             uint32_t curBatch = gTiling.GetValue(offsetTiling);
             uint32_t curTokenWiseOffset = gTiling.GetValue(offsetTiling + 1);
@@ -242,6 +244,76 @@ public:
             }
         }
 
+        icache_preload(1);
+        // Go through former task
+        for (uint32_t process = coreIdx; process < formerTaskNum; process += uint32_t(coreNum)) {
+            // Get the offset of each core on the GM
+            uint32_t offsetTiling = tilingHeadSize + tilingParaSize * process;
+            uint32_t curBatch = gTiling.GetValue(offsetTiling);
+            uint32_t curTokenWiseOffset = gTiling.GetValue(offsetTiling + 1);
+            uint32_t kvSeqlen = gTiling.GetValue(offsetTiling + 2);
+            uint64_t gmOffsetQ = (uint64_t)(curTokenWiseOffset * strideQO);
+            uint64_t gmOffsetQRope = (uint64_t)(curTokenWiseOffset * strideQORope);
+
+            if (kvSeqlen == 0) {
+                continue;
+            }
+            uint32_t nLoop = (kvSeqlen + blockSize - 1) / blockSize;
+
+            uint32_t stackSeqTile = blockSize * UNIT_BLOCK_STACK_NUM;
+
+            uint32_t rowNum = qHeads;
+            uint32_t rowNumRound = RoundUp<BLOCK_SIZE>(rowNum);
+            uint64_t gmOffsetBlockTable = curBatch * maxNumBlocksPerQuery;
+
+            // Split k seqlen
+            for (uint32_t nIdx = 0; nIdx < nLoop + UNIT_BLOCK_STACK_NUM; nIdx += UNIT_BLOCK_STACK_NUM) {
+                if (nIdx < nLoop) {
+                    if (nIdx + UNIT_BLOCK_STACK_NUM > nLoop - 1) {
+                        stackSeqTile = kvSeqlen - nIdx * blockSize;
+                    } else {
+                        stackSeqTile = blockSize * UNIT_BLOCK_STACK_NUM;
+                    }
+                    // Calculate 4 blocks of Q * K^T
+                    uint32_t stackSeqTileRound = RoundUp<BLOCK_SIZE>(stackSeqTile);
+                    LayoutQ layoutQ(rowNum, embed);
+                    LayoutQ layoutQRope(rowNum, embedRope);
+                    LayoutK layoutK(embed, stackSeqTile);
+                    LayoutK layoutKRope(embedRope, stackSeqTile);
+                    LayoutS layoutS(rowNumRound, stackSeqTileRound);
+                    GemmCoord actualBlockShapeQK{rowNum, stackSeqTile, embed + embedRope};
+                    uint32_t gSPingPongFlag = (nIdx / UNIT_BLOCK_STACK_NUM) % 2;
+                    uint64_t gmOffseS =
+                        (uint64_t)coreIdx * TMP_SIZE_DECODER * 4 + (uint64_t)gSPingPongFlag * TMP_SIZE_DECODER * 2;
+                    // Calculate Q * K^T
+                    blockMmadQK(gQ[gmOffsetQ], gQRope[gmOffsetQRope], gK, gKRope, gblockTable[gmOffsetBlockTable],
+                                gS[gmOffseS], layoutQ, layoutQRope, layoutK, layoutKRope, layoutS, actualBlockShapeQK,
+                                nIdx, nLoop, blockSize, kvSeqlen);
+                    Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(qkReady);
+                }
+                // Wait for the four Q * K^T calculations to complete before calculating P * V
+                if (nIdx >= UNIT_BLOCK_STACK_NUM) {
+                    if (nIdx + UNIT_BLOCK_STACK_NUM > nLoop + UNIT_BLOCK_STACK_NUM - 1) {
+                        stackSeqTile = kvSeqlen - (nIdx - UNIT_BLOCK_STACK_NUM) * blockSize;
+                    } else {
+                        stackSeqTile = blockSize * UNIT_BLOCK_STACK_NUM;
+                    }
+                    uint32_t stackSeqTileRound = RoundUp<BLOCK_SIZE>(stackSeqTile);
+                    LayoutP layoutP(rowNum, stackSeqTile, stackSeqTileRound);
+                    LayoutV layoutV(stackSeqTile, embed);
+                    LayoutOTmp layoutOTmp(rowNumRound, embedRound);
+                    GemmCoord actualBlockShapePV{rowNum, embed, stackSeqTile};
+                    uint32_t gPPingPongFlag = (nIdx / UNIT_BLOCK_STACK_NUM - 1) % 2;
+                    uint64_t gmOffseP = (uint64_t)coreIdx * TMP_SIZE * 2 + (uint64_t)gPPingPongFlag * TMP_SIZE;
+                    uint64_t gmOffseOtmp = gmOffseP;
+                    // Calculate P * V
+                    blockMmadPV(gP[gmOffseP], gK, gblockTable[gmOffsetBlockTable], gOTmp[gmOffseOtmp], layoutP, layoutV,
+                                layoutOTmp, actualBlockShapePV, nIdx, nLoop, blockSize, kvSeqlen, softmaxReady);
+                    Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(pvReady);
+                }
+            }
+        }
+
         AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(EVENT_ID0);
         AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(EVENT_ID1);
         AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(EVENT_ID2);
@@ -310,6 +382,8 @@ public:
         uint32_t tilingParaSize = gTiling.GetValue(TILING_PARASIZE);
         uint32_t kvSplitPerCore = gTiling.GetValue(TILING_KVSPLIT);
         uint32_t kvSplitCoreNum = gTiling.GetValue(TILING_KVCORENUM);
+        uint32_t formerTaskNum = gTiling.GetValue(TILING_FORMERTASKNUM);
+        uint32_t tailTaskNum = gTiling.GetValue(TILING_TAILTASKNUM);
 
         uint32_t embed = NUM512;
         uint32_t embedRope = NUM64;
@@ -317,14 +391,14 @@ public:
         uint32_t embedRound = RoundUp<BLOCK_SIZE>(embed);
         uint32_t glFlag = 1;
 
-        uint32_t processNum = totalTaskNumSpec * kvSplitCoreNum;
         EpilogueMLASoftmax epilogueMLATP1Softmax(resource, tor, kvSplitCoreNum);
         EpilogueMLARescaleO epilogueMLATP1RescaleO(resource, kvSplitCoreNum);
 
-        // Go through each task
-        for (uint32_t process = coreIdx; process < processNum; process += uint32_t(coreNum)) {
+        // Go through tail task
+        uint32_t tailProcessNum = tailTaskNum * kvSplitCoreNum;
+        for (uint32_t process = coreIdx; process < tailProcessNum; process += uint32_t(coreNum)) {
             // Get the offset of each core on the GM
-            uint32_t taskIdx = process / kvSplitCoreNum;
+            uint32_t taskIdx = process / kvSplitCoreNum + formerTaskNum;
             uint32_t offsetTiling = tilingHeadSize + tilingParaSize * taskIdx;
             uint32_t curBatch = gTiling.GetValue(offsetTiling);
             uint32_t curTokenWiseOffset = gTiling.GetValue(offsetTiling + 1);
@@ -413,6 +487,75 @@ public:
             }
         }
 
+        icache_preload(1);
+        epilogueMLATP1Softmax.SetkvSplitCoreNum(1);
+        epilogueMLATP1RescaleO.SetkvSplitCoreNum(1);
+        // Go through former task
+        for (uint32_t process = coreIdx; process < formerTaskNum; process += uint32_t(coreNum)) {
+            // Get the offset of each core on the GM
+            uint32_t offsetTiling = tilingHeadSize + tilingParaSize * process;
+            uint32_t curBatch = gTiling.GetValue(offsetTiling);
+            uint32_t curTokenWiseOffset = gTiling.GetValue(offsetTiling + 1);
+            uint32_t kvSeqlen = gTiling.GetValue(offsetTiling + 2);
+            uint64_t gmOffsetO = curTokenWiseOffset * qHeads * embed;
+            if (kvSeqlen == 0) {
+                continue;
+            }
+            uint32_t nLoop = (kvSeqlen + blockSize - 1) / blockSize;
+            uint32_t stackSeqTile = blockSize * UNIT_BLOCK_STACK_NUM;
+            uint32_t rowNum = qHeads;
+
+            // Split k seqlen
+            for (uint32_t nIdx = 0; nIdx < nLoop + UNIT_BLOCK_STACK_NUM; nIdx += UNIT_BLOCK_STACK_NUM) {
+                if (nIdx < nLoop) {
+                    if (nIdx + UNIT_BLOCK_STACK_NUM > nLoop - 1) {
+                        // Calculate the size of the tail block
+                        stackSeqTile = kvSeqlen - nIdx * blockSize;
+                    } else {
+                        stackSeqTile = blockSize * UNIT_BLOCK_STACK_NUM;
+                    }
+                    uint32_t stackSeqTileRound = RoundUp<BLOCK_SIZE>(stackSeqTile);
+                    LayoutP layoutP(rowNum, stackSeqTile, stackSeqTileRound);
+                    LayoutS layoutS(rowNum, stackSeqTile, stackSeqTileRound);
+                    GemmCoord actualBlockShapeQK{rowNum, stackSeqTile, embed};
+                    uint32_t gmOffsetP = (uint64_t)coreIdx * TMP_SIZE * 2 +
+                                         (uint64_t)subBlockIdx * rowNum / 2 * stackSeqTileRound +
+                                         (uint64_t)((nIdx / UNIT_BLOCK_STACK_NUM) % 2) * TMP_SIZE;
+                    uint32_t gmOffsetS = (int64_t)coreIdx * TMP_SIZE_DECODER * 4 +
+                                         (int64_t)subBlockIdx * rowNum / 2 * stackSeqTileRound +
+                                         (uint64_t)((nIdx / UNIT_BLOCK_STACK_NUM) % 2) * TMP_SIZE_DECODER * 2;
+                    // Softmax one-stage calculation
+                    epilogueMLATP1Softmax(gP[gmOffsetP], gS[gmOffsetS], layoutP,
+                                          layoutS, actualBlockShapeQK, nIdx, glFlag);
+                    Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(softmaxReady);
+                }
+
+                if (nIdx >= UNIT_BLOCK_STACK_NUM) {
+                    if (nIdx + UNIT_BLOCK_STACK_NUM > nLoop + UNIT_BLOCK_STACK_NUM - 1) {
+                        // Calculate the size of the tail block
+                        stackSeqTile = kvSeqlen - (nIdx - UNIT_BLOCK_STACK_NUM) * blockSize;
+                    } else {
+                        stackSeqTile = blockSize * UNIT_BLOCK_STACK_NUM;
+                    }
+                    // Wait for P * V calculation to complete
+                    Arch::CrossCoreWaitFlag(pvReady);
+                    LayoutO layoutO(rowNum, embed);
+                    LayoutOTmp layoutOTmp(rowNum, embed, embedRound);
+                    LayoutUpdate layoutUpdate(rowNum, embed, embedRound);
+                    GemmCoord actualBlockShapePV{rowNum, embed, stackSeqTile};
+                    uint32_t isLastNTile = (nIdx >= nLoop) ? 1 : 0;
+                    uint32_t rescaleOPingPongFlag = (nIdx / UNIT_BLOCK_STACK_NUM - 1) % 2;
+                    uint64_t gmOffsetOTmp = (uint64_t)(coreIdx * TMP_SIZE * 2 + rescaleOPingPongFlag * TMP_SIZE);
+                    uint64_t gmOffsetUpdate = (uint64_t)(coreIdx * TMP_SIZE);
+                    // Softmax two-stage update
+                    epilogueMLATP1RescaleO(gOTmp[gmOffsetOTmp], gOUpdate[gmOffsetUpdate], gO[gmOffsetO],
+                                           gOCoreTmp[0], gl[0], layoutOTmp,
+                                           layoutUpdate, layoutO, actualBlockShapePV, nIdx, isLastNTile,
+                                           rescaleOPingPongFlag, glFlag);
+                }
+            }
+        }
+
         AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
         AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
         AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID1);
@@ -445,13 +588,13 @@ public:
                     ? HEADS_PROCESS_MAX
                     : (COMPUTE_ELE_NUM / embed);
             uint32_t loopsPerBatch = (qHeads + headsProcess - 1) / headsProcess;
-            uint32_t loopsTotal = batch * loopsPerBatch;
+            uint32_t loopsTotal = tailTaskNum * loopsPerBatch;
 
             for (uint32_t loopIdx = aivId; loopIdx < loopsTotal; loopIdx += aivNum) {
-                uint32_t batchIdx = loopIdx / loopsPerBatch;
+                uint32_t taskIdx = loopIdx / loopsPerBatch + formerTaskNum;
                 uint32_t loopIdxInBatch = loopIdx % loopsPerBatch;
 
-                uint32_t offsetTiling = tilingHeadSize + tilingParaSize * batchIdx;
+                uint32_t offsetTiling = tilingHeadSize + tilingParaSize * taskIdx;
                 uint32_t kvSeqlen = gTiling.GetValue(offsetTiling + 2);
 
                 if (kvSeqlen == 0) {

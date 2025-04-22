@@ -52,7 +52,7 @@ public:
     static constexpr uint32_t NUM4 = 4;
 
     ACT_DEVICE
-    BlockEpilogue(Arch::Resource<ArchTag> &resource, uint32_t kvSplitCoreNum_)
+    BlockEpilogue(Arch::Resource<ArchTag> &resource, uint32_t kvSplitCoreNum_ = 1)
     {
         // Allocate UB space
         constexpr uint32_t LO_UB_TENSOR_OFFSET = 4 * UB_UINT8_BLOCK_SIZE_MLA;
@@ -94,6 +94,12 @@ public:
         } else {
             AscendC::SetVectorMask<int8_t>(0x0, mask);
         }
+    }
+
+    ACT_DEVICE
+    void SetkvSplitCoreNum(uint32_t kvSplitCoreNum_)
+    {
+        kvSplitCoreNum = kvSplitCoreNum_;
     }
 
     ACT_DEVICE
