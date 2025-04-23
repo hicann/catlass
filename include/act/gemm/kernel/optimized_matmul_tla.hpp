@@ -17,9 +17,10 @@
 #include "act/matrix_coord.hpp"
 #include "act/arch/resource.hpp"
 #include "act/arch/cross_core_sync.hpp"
-
+#include "tla/layout.hpp"
+#include "tla/tensor.hpp"
 namespace Act::Gemm::Kernel {
-
+using namespace tla;
 template<
     class ArchTag_,
     class TensorIn_,

@@ -17,9 +17,10 @@
 #include "act/gemm_coord.hpp"
 #include "act/matrix_coord.hpp"
 #include "tla/tensor.hpp"
-
+#include "tla/layout.hpp"
+#include "tla/tensor.hpp"
 namespace Act::Gemm::Kernel {
-
+using namespace tla;
 // Template for Matmul kernel. Compute C = A * B
 template <
     class BlockMmad_,

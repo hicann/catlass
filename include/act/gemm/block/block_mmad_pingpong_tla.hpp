@@ -17,9 +17,10 @@
 #include "act/gemm_coord.hpp"
 #include "act/gemm/dispatch_policy.hpp"
 #include "act/gemm/helper.hpp"
-
+#include "tla/layout.hpp"
+#include "tla/tensor.hpp"
 namespace Act::Gemm::Block {
-
+using namespace tla;
 template <
     bool ENABLE_UNIT_FLAG_,
     class L1TileShape_,
