@@ -12,9 +12,9 @@
 #define ACT_GEMM_TILE_COPY_L0C_TO_GM_HPP
 
 #include "act/gemm/gemm_type.hpp"
-
+#include "tla/tensor.hpp"
 namespace Act::Gemm::Tile {
-
+using namespace tla;
 enum class ScaleGranularity {
     UNDEFINED = -1,
     NO_QUANT = 0,

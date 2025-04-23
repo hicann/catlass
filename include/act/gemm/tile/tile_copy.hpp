@@ -13,9 +13,9 @@
 
 #include "act/act.hpp"
 #include "act/detail/tag_to_layout.hpp"
-
+#include "tla/tensor.hpp"
 namespace Act::Gemm::Tile {
-
+using namespace tla;
 template <
     class ArchTag,
     class TensorSrc,

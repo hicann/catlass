@@ -17,7 +17,7 @@
 #include "tla/tensor.hpp"
 
 namespace Act::Gemm::Tile {
-
+using namespace tla;
 template <
     class ArchTag,
     class L1Type,

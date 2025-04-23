@@ -15,7 +15,7 @@
 #include "tla/tensor.hpp"
 
 namespace Act::Gemm::Tile {
-
+using namespace tla;
 /// Partial specialization for AtlasA2, RowMajor in and RowMajor out.
 template <class ElementSrc, class ElementDst, class LayoutSrc_, class LayoutDst_>
 struct TileCopyTla<Arch::AtlasA2, Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::GM>,

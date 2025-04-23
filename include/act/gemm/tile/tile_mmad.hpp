@@ -13,9 +13,9 @@
 
 #include "act/act.hpp"
 #include "act/gemm/helper.hpp"
-
+#include "tla/tensor.hpp"
 namespace Act::Gemm::Tile {
-
+using namespace tla;
 ///////////////////////////////////////////////////////////
 
 template <
