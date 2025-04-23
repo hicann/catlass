@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This file is a part of the CANN Open Software.
  * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@
      class BlockGemv_,
      class BlockEpilogue_
  >
- class KernelGemv {
+ class KernelGemvAiv {
  public:
      using BlockGemv = BlockGemv_;
      using ArchTag = typename BlockGemv::ArchTag;
@@ -49,7 +49,7 @@
          GM_ADDR ptrY_read;
          float alpha;
          float beta;
-         uint32_t SPLIT;
+         uint32_t split;
  
          // Methods
          ACT_HOST_DEVICE
@@ -57,15 +57,15 @@
  
          ACT_HOST_DEVICE
          Params(GemvCoord const &problemShape_,  GM_ADDR ptrA_, LayoutA layoutA_,  GM_ADDR ptrX_,LayoutX layoutX_,
-            GM_ADDR ptrY_,LayoutY layoutY_,GM_ADDR ptrY_read_,float alpha_,float beta_,uint32_t SPLIT_)
+            GM_ADDR ptrY_,LayoutY layoutY_,GM_ADDR ptrY_read_,float alpha_,float beta_,uint32_t split_)
              : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrX(ptrX_),layoutX(layoutX_),
-               ptrY(ptrY_),layoutY(layoutY_),ptrY_read(ptrY_read_),alpha(alpha_),beta(beta_),SPLIT(SPLIT_) {}
+               ptrY(ptrY_),layoutY(layoutY_),ptrY_read(ptrY_read_),alpha(alpha_),beta(beta_),split(split_) {}
      };
 
     
      // Methods
      ACT_DEVICE
-     KernelGemv(){}
+     KernelGemvAiv(){}
 
      template <int32_t CORE_TYPE = g_coreType>
      ACT_DEVICE
@@ -89,12 +89,12 @@
          uint32_t maxnPerBlock_round = RoundUp(UBTileShape::N,align);
 
         //add split k
-         uint32_t N_Split = RoundDown(params.problemShape.n(),params.SPLIT)/params.SPLIT;
+         uint32_t N_Split = RoundDown(params.problemShape.n(),params.split)/params.split;
          uint32_t Mloopnum = CeilDiv(params.problemShape.m(),maxmPerBlock_round);
          int32_t loopnum;
         float Realbeta= params.beta;
          if constexpr (std::is_same_v<LayoutA, Act::layout::ColumnMajor>){
-            loopnum = Mloopnum * params.SPLIT;
+            loopnum = Mloopnum * params.split;
             Realbeta = params.beta - 1.0f;
          }else{
             loopnum = Mloopnum;
@@ -111,22 +111,22 @@
          gmX.SetGlobalBuffer((__gm__ ElementX *)params.ptrX);
          AscendC::GlobalTensor<ElementY> gmY;
          gmY.SetGlobalBuffer((__gm__ ElementY *)params.ptrY);
-         AscendC::GlobalTensor<ElementY> gmY_read;
-         gmY_read.SetGlobalBuffer((__gm__ ElementY *)params.ptrY_read);
+         AscendC::GlobalTensor<ElementY> gmYCopy;
+         gmYCopy.SetGlobalBuffer((__gm__ ElementY *)params.ptrY_read);
          uint32_t aiv_num = AscendC::GetBlockNum()*AscendC::GetTaskRation();
          for(uint32_t loop_id = 0;loop_id < loopnum;loop_id++){
             uint32_t aiv_id = AscendC::GetBlockIdx();   
             if(loop_id % aiv_num != aiv_id)continue;
-            uint32_t m_actual = ((int32_t)loop_id > (int32_t)(loopnum - params.SPLIT - 1) ) ? params.problemShape.m() - ((loop_id/params.SPLIT) * maxmPerBlock_round) : maxmPerBlock_round;
+            uint32_t m_actual = ((int32_t)loop_id > (int32_t)(loopnum - params.split - 1) ) ? params.problemShape.m() - ((loop_id/params.split) * maxmPerBlock_round) : maxmPerBlock_round;
             uint32_t n_actual = params.problemShape.n();
 
             if constexpr (std::is_same_v<LayoutA, Act::layout::ColumnMajor>) {
-                offset_matrix = (loop_id % params.SPLIT) * N_Split*params.problemShape.m()+(loop_id/params.SPLIT) * maxmPerBlock_round;
-                offset_vector_out = (loop_id/params.SPLIT) * maxmPerBlock_round;
-                offset_vector_in = (loop_id % params.SPLIT) * N_Split; 
+                offset_matrix = (loop_id % params.split) * N_Split*params.problemShape.m()+(loop_id/params.split) * maxmPerBlock_round;
+                offset_vector_out = (loop_id/params.split) * maxmPerBlock_round;
+                offset_vector_in = (loop_id % params.split) * N_Split; 
                 
-                if((loop_id%params.SPLIT) == params.SPLIT - 1){
-                    n_actual = params.problemShape.n() - N_Split * (params.SPLIT - 1);
+                if((loop_id%params.split) == params.split - 1){
+                    n_actual = params.problemShape.n() - N_Split * (params.split - 1);
                 }
                 else{
                     n_actual = N_Split;
@@ -137,12 +137,12 @@
             }
             GemvCoord actualBlockShape = GemvCoord{m_actual,n_actual};
             
-            float realbeta = (loop_id % params.SPLIT == 0) ? Realbeta:0.0f;
+            float realbeta = (loop_id % params.split == 0) ? Realbeta:0.0f;
 
             blockGemv(gmA[offset_matrix], params.layoutA,
                 gmX[offset_vector_in], params.layoutX,
                 gmY[offset_vector_out], params.layoutY,
-                gmY_read[offset_vector_out],
+                gmYCopy[offset_vector_out],
                 actualBlockShape,
                 params.alpha,
                 realbeta

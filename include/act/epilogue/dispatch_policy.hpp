@@ -42,6 +42,16 @@ struct EpilogueAtlasA2MLARescaleO {
     using ArchTag = Arch::AtlasA2;
 };
 
+// For AtlasA2, GEMM
+struct EpilogueAtlasA2Gemm {
+    using ArchTag = Arch::AtlasA2;
+};
+
+// For AtlasA2, GEMV
+struct EpilogueAtlasA2Gemv {
+    using ArchTag = Arch::AtlasA2;
+};
+
 // For AtlasA2, MLA FD RescaleO
 template <uint32_t COMPUTE_ELE_NUM_>
 struct EpilogueAtlasA2MLAFDRescaleO {
