@@ -16,8 +16,6 @@
 #include "tla/tuple.hpp"
 #include "tla/int_tuple.hpp"
 
-using namespace Act;
-
 namespace tla {
 
 // Aliases
