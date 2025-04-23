@@ -19,8 +19,6 @@
 #include "act/epilogue/tile/copy_ub_to_gm.hpp"
 #include "act/gemm/helper.hpp"
 
-using namespace Act;
-
 namespace Act::Gemm::Kernel{
 
 namespace detail {
