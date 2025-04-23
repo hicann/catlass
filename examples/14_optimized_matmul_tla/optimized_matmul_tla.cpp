@@ -25,7 +25,7 @@
 #include "tla/layout.hpp"
 #include "tla/tensor.hpp"
 
-using namespace Act;
+
 using fp16_t = op::fp16_t;
 
 template <
@@ -123,7 +123,7 @@ void OptimizedMatmul(
     using ElementA = half;
     using ElementB = half;
     using ElementC = half;
-    using ArchTag = Arch::AtlasA2;
+    using ArchTag = Act::Arch::AtlasA2;
     AscendC::SetSyncBaseAddr(fftsAddr);
 
     constexpr bool enableUnitFlag = true;

@@ -37,12 +37,17 @@ public:
     using LayoutWA = typename BlockMmad::LayoutA;
     using LayoutWB = typename BlockMmad::LayoutB;
 
-    using LayoutA = std::conditional_t<std::is_same_v<LayoutWA, layout::RowMajor> ||
-        std::is_same_v<LayoutWA, layout::PaddingRowMajor>, layout::RowMajor, layout::ColumnMajor>;
-    using LayoutB = std::conditional_t<std::is_same_v<LayoutWB, layout::RowMajor> ||
-        std::is_same_v<LayoutWB, layout::PaddingRowMajor>, layout::RowMajor, layout::ColumnMajor>;
+    using LayoutA = std::conditional_t<
+        std::is_same_v<LayoutWA, layout::RowMajor> || std::is_same_v<LayoutWA, layout::PaddingRowMajor>,
+        layout::RowMajor,
+        layout::ColumnMajor>;
+    using LayoutB = std::conditional_t<
+        std::is_same_v<LayoutWB, layout::RowMajor> || std::is_same_v<LayoutWB, layout::PaddingRowMajor>,
+        layout::RowMajor, layout::ColumnMajor>;
 
+    // 这里为什么是96*1024？96KB是不是UB的大小
     static const uint32_t COMPUTE_LENGTH_A = 96 * 1024 / sizeof(ElementA);
+    // 定义用来做padding的kernel
     using PaddingA = PaddingMatrixBlockND<ArchTag, ElementA, LayoutA, LayoutWA, COMPUTE_LENGTH_A>;
     static const uint32_t COMPUTE_LENGTH_B = 96 * 1024 / sizeof(ElementB);
     using PaddingB = PaddingMatrixBlockND<ArchTag, ElementB, LayoutB, LayoutWB, COMPUTE_LENGTH_B>;
@@ -111,6 +116,7 @@ public:
             // 0x0 synchronization control between AI Core
         }
         if ((params.ptrA != params.ptrWA) || (params.ptrB != params.ptrWB)) {
+            //如果是做了padding，就要进行核间同步
             Act::Arch::CrossCoreBarrier<0x0, PIPE_MTE3>();
             Act::Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(flagAivFinishPadding);
         }

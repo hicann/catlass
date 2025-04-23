@@ -23,7 +23,7 @@
 
 #include "kernel_common.hpp"
 
-using namespace Act;
+
 /*
 This example demonstrates how to compute mla.
 */
@@ -218,7 +218,7 @@ public:
                                 gblockTable[gmOffsetBlockTable + startKV / blockSize],
                                 gS[gmOffseS], layoutQ, layoutQRope, layoutK, layoutKRope, layoutS, actualBlockShapeQK,
                                 nIdx, nLoop, blockSize, curKVSeqlen);
-                    Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(qkReady);
+                    Act::Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(qkReady);
                 }
                 // Wait for the four Q * K^T calculations to complete before calculating P * V
                 if (nIdx >= UNIT_BLOCK_STACK_NUM) {
@@ -239,7 +239,7 @@ public:
                     blockMmadPV(gP[gmOffseP], gK, gblockTable[gmOffsetBlockTable + startKV / blockSize],
                                 gOTmp[gmOffseOtmp], layoutP, layoutV,
                                 layoutOTmp, actualBlockShapePV, nIdx, nLoop, blockSize, curKVSeqlen, softmaxReady);
-                    Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(pvReady);
+                    Act::Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(pvReady);
                 }
             }
         }
@@ -458,7 +458,7 @@ public:
                     // Softmax one-stage calculation
                     epilogueMLATP1Softmax(gP[gmOffsetP], gS[gmOffsetS], layoutP,
                                           layoutS, actualBlockShapeQK, nIdx, glFlag);
-                    Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(softmaxReady);
+                    Act::Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(softmaxReady);
                 }
 
                 if (nIdx >= UNIT_BLOCK_STACK_NUM) {
@@ -469,7 +469,7 @@ public:
                         stackSeqTile = blockSize * UNIT_BLOCK_STACK_NUM;
                     }
                     // Wait for P * V calculation to complete
-                    Arch::CrossCoreWaitFlag(pvReady);
+                    Act::Arch::CrossCoreWaitFlag(pvReady);
                     LayoutO layoutO(rowNum, embed);
                     LayoutOTmp layoutOTmp(rowNum, embed, embedRound);
                     LayoutUpdate layoutUpdate(rowNum, embed, embedRound);
@@ -626,10 +626,10 @@ public:
     }
 
 private:
-    Arch::Resource<ArchTag> resource;
-    Arch::CrossCoreFlag qkReady{QK_READY_ID};
-    Arch::CrossCoreFlag softmaxReady{SOFTMAX_READY_ID};
-    Arch::CrossCoreFlag pvReady{PV_READY_ID};
+    Act::Arch::Resource<ArchTag> resource;
+    Act::Arch::CrossCoreFlag qkReady{QK_READY_ID};
+    Act::Arch::CrossCoreFlag softmaxReady{SOFTMAX_READY_ID};
+    Act::Arch::CrossCoreFlag pvReady{PV_READY_ID};
 };
 
 
@@ -651,32 +651,32 @@ ACT_GLOBAL void MLATp1SpecFp16(uint64_t fftsAddr,
     // Set FFTS address
     AscendC::SetSyncBaseAddr(fftsAddr);
 
-    using ArchTag = Arch::AtlasA2;
+    using ArchTag = Act::Arch::AtlasA2;
     using ElementQ = half;
-    using LayoutQ = layout::RowMajor;
+    using LayoutQ = Act::layout::RowMajor;
     using ElementK = half;
-    using LayoutK = layout::ColumnMajor;
+    using LayoutK = Act::layout::ColumnMajor;
     using ElementV = half;
-    using LayoutV = layout::RowMajor;
+    using LayoutV = Act::layout::RowMajor;
     using ElementS = float;
-    using LayoutS = layout::RowMajor;
+    using LayoutS = Act::layout::RowMajor;
     using ElementP = half;
-    using LayoutP = layout::RowMajor;
+    using LayoutP = Act::layout::RowMajor;
     using ElementO = half;
-    using LayoutO = layout::RowMajor;
+    using LayoutO = Act::layout::RowMajor;
     using ElementMask = half;
-    using LayoutMask = layout::RowMajor;
+    using LayoutMask = Act::layout::RowMajor;
     using ElementOTmp = float;
-    using LayoutOTmp = layout::RowMajor;
+    using LayoutOTmp = Act::layout::RowMajor;
     using ElementUpdate = float;
-    using LayoutUpdate = layout::RowMajor;
+    using LayoutUpdate = Act::layout::RowMajor;
 
     // L1TileShape::K must be embdding
     using L1TileShape = GemmShape<128, 128, 576>;
     using L0TileShape = L1TileShape;
 
     // GEMM Block模块，实现Flash MLA的Q * K^T
-    using DispatchPolicyQK = Gemm::MmadAtlasA2MLAQKTp1Spec;
+    using DispatchPolicyQK = Act::Gemm::MmadAtlasA2MLAQKTp1Spec;
     using QType = Gemm::GemmType<ElementQ, LayoutQ>;
     using KType = Gemm::GemmType<ElementK, LayoutK>;
     using SType = Gemm::GemmType<ElementS, LayoutS>;
@@ -735,25 +735,25 @@ ACT_GLOBAL void MLATp1SpecBf16(uint64_t fftsAddr,
     // Set FFTS address
     AscendC::SetSyncBaseAddr(fftsAddr);
 
-    using ArchTag = Arch::AtlasA2;
+    using ArchTag = Act::Arch::AtlasA2;
     using ElementQ = bfloat16_t;
-    using LayoutQ = layout::RowMajor;
+    using LayoutQ = Act::layout::RowMajor;
     using ElementK = bfloat16_t;
-    using LayoutK = layout::ColumnMajor;
+    using LayoutK = Act::layout::ColumnMajor;
     using ElementV = bfloat16_t;
-    using LayoutV = layout::RowMajor;
+    using LayoutV = Act::layout::RowMajor;
     using ElementS = float;
-    using LayoutS = layout::RowMajor;
+    using LayoutS = Act::layout::RowMajor;
     using ElementP = bfloat16_t;
-    using LayoutP = layout::RowMajor;
+    using LayoutP = Act::layout::RowMajor;
     using ElementO = bfloat16_t;
-    using LayoutO = layout::RowMajor;
+    using LayoutO = Act::layout::RowMajor;
     using ElementMask = bfloat16_t;
-    using LayoutMask = layout::RowMajor;
+    using LayoutMask = Act::layout::RowMajor;
     using ElementOTmp = float;
-    using LayoutOTmp = layout::RowMajor;
+    using LayoutOTmp = Act::layout::RowMajor;
     using ElementUpdate = float;
-    using LayoutUpdate = layout::RowMajor;
+    using LayoutUpdate = Act::layout::RowMajor;
 
     // L1TileShape::K must be embdding
     using L1TileShape = GemmShape<128, 128, 576>;

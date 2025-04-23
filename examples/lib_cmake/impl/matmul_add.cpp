@@ -27,7 +27,7 @@
 #include "act/gemm/gemm_type.hpp"
 #include "act/layout/layout.hpp"
 
-using namespace Act;
+
 using fp16_t = op::fp16_t;
 
 template <
@@ -48,17 +48,17 @@ void MatmulAdd(
     // Set FFTS address
     AscendC::SetSyncBaseAddr(fftsAddr);
     // Define ArchTag
-    using ArchTag = Arch::AtlasA2;
+    using ArchTag = Act::Arch::AtlasA2;
 
     // Block level, define BlockMmad
     constexpr bool enableUnitFlag = true;
-    using MmadDispatchPolicy = Gemm::MmadAtlasA2Pingpong<enableUnitFlag>;
+    using MmadDispatchPolicy = Act::Gemm::MmadAtlasA2Pingpong<enableUnitFlag>;
     using L1TileShape = GemmShape<128, 256, 256>;
     using L0TileShape = GemmShape<128, 256, 64>;
-    using AType = Gemm::GemmType<half, LayoutA>;
-    using BType = Gemm::GemmType<half, LayoutB>;
-    using CType = Gemm::GemmType<half, LayoutC>;
-    using BlockMmad = Gemm::Block::BlockMmad<MmadDispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+    using AType = Act::Gemm::GemmType<half, LayoutA>;
+    using BType = Act::Gemm::GemmType<half, LayoutB>;
+    using CType = Act::Gemm::GemmType<half, LayoutC>;
+    using BlockMmad = Act::Gemm::Block::BlockMmad<MmadDispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
 
     // Block level, define BlockEpilogue
     using EpilogueDispatchPolicy = Epilogue::EpilogueAtlasA2ElemWiseOneSource;
@@ -74,10 +74,10 @@ void MatmulAdd(
     if (problemShape.m() > problemShape.n()) {
         // Define BlockScheduler
         // Swizzle offset is 3 and direction is 0.
-        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
+        using BlockScheduler = typename Act::Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
 
         // Kernel level
-        using MatmulKernel = Gemm::Kernel::MatmulEpilogue<BlockMmad, BlockEpilogue, BlockScheduler>;
+        using MatmulKernel = Act::Gemm::Kernel::MatmulEpilogue<BlockMmad, BlockEpilogue, BlockScheduler>;
 
         // Prepare params
         typename BlockEpilogue::Params epilogueParams{gmD, layoutD, gmD, layoutD};
@@ -89,10 +89,10 @@ void MatmulAdd(
     } else {
         // Define BlockScheduler
         // Swizzle offset is 3 and direction is 1.
-        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
+        using BlockScheduler = typename Act::Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
 
         // Kernel level
-        using MatmulKernel = Gemm::Kernel::MatmulEpilogue<BlockMmad, BlockEpilogue, BlockScheduler>;
+        using MatmulKernel = Act::Gemm::Kernel::MatmulEpilogue<BlockMmad, BlockEpilogue, BlockScheduler>;
 
         // Prepare params
         typename BlockEpilogue::Params epilogueParams{gmD, layoutD, gmD, layoutD};

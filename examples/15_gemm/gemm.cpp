@@ -30,7 +30,7 @@
 #include "act/epilogue/tile/tile_cast.hpp"
 #include "act/epilogue/block/block_epilogue.hpp"
 
-using namespace Act;
+
 
 using ScalarType = float;
 
@@ -53,19 +53,19 @@ void GemmTest(
 ){
     // Set FFTS address
     AscendC::SetSyncBaseAddr(fftsAddr);
-    using ArchTag = Arch::AtlasA2;
+    using ArchTag = Act::Arch::AtlasA2;
     constexpr bool enableUnitFlag = true;
     constexpr bool enableShuffleK = true;
     using GemmBlockDispatchPolicy = Act::Gemm::MmadAtlasA2Preload<enableUnitFlag, enableShuffleK>;
     using EpilogueBlockDispatchPolicy = Act::Epilogue::EpilogueAtlasA2ElemWiseOneSource;
-    using AType = Gemm::GemmType<float, LayoutA>;
-    using BType = Gemm::GemmType<float, LayoutB>;
-    using CType = Gemm::GemmType<float, LayoutC>;
-    using XType = Gemm::GemmType<float, LayoutC>;
+    using AType = Act::Gemm::GemmType<float, LayoutA>;
+    using BType = Act::Gemm::GemmType<float, LayoutB>;
+    using CType = Act::Gemm::GemmType<float, LayoutC>;
+    using XType = Act::Gemm::GemmType<float, LayoutC>;
     using L1TileShape = GemmShape<128, 128, 128>;
     using L0TileShape = GemmShape<128, 128, 64>;
     using TileShapeCast = MatrixShape<64, 128>;
-    using GemmBlock = Gemm::Block::BlockGemm<GemmBlockDispatchPolicy, L1TileShape, L0TileShape, AType, BType, XType>;
+    using GemmBlock = Act::Gemm::Block::BlockGemm<GemmBlockDispatchPolicy, L1TileShape, L0TileShape, AType, BType, XType>;
     using DType = CType;
     using ComputeType = XType;
     constexpr uint32_t computeLength = L1TileShape::MN / 2;
@@ -76,7 +76,7 @@ void GemmTest(
     using EpilogueTileCopy = Epilogue::Tile::TileCopy<ArchTag, CType, XType, DType>;
     using EpilogueBlock = Epilogue::Block::BlockEpilogue<EpilogueBlockDispatchPolicy, CType, XType, DType, TileElemWiseAddGemm, TileElemWiseMulsGemm, TileElemWiseCastC, TileElemWiseCastD, EpilogueTileCopy>;
     typename EpilogueBlock::Params epilogueParams{alpha, beta, gmC, layoutC, gmC, layoutC};
-    using GemmKernel = Gemm::Kernel::KernelGemm<GemmBlock, EpilogueBlock>;
+    using GemmKernel = Act::Gemm::Kernel::KernelGemm<GemmBlock, EpilogueBlock>;
     typename GemmKernel::Params params{problemShape, gmA, layoutA, gmB, layoutB, gmWorkspace, gmWA, layoutWA, gmWB, layoutWB, epilogueParams}; // 这里得修改 gmX保存A * B
     GemmKernel gemm;
     gemm(params);

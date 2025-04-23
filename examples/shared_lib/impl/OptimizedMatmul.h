@@ -23,7 +23,7 @@
 #include "act/gemm/kernel/optimized_matmul.hpp"
 #include "act/gemm/gemm_type.hpp"
 
-using namespace Act;
+
 
 template <class Layout> size_t GetWorkspaceLen(Layout layout, size_t blockRows, size_t blockCols)
 {
@@ -85,7 +85,7 @@ ACT_GLOBAL void optimized_matmul(uint64_t fftsAddr, GemmCoord problemShape, GM_A
                                      GM_ADDR gmB, LayoutB layoutB, GM_ADDR gmC, LayoutC layoutC, GM_ADDR gmWA,
                                      GM_ADDR gmWB)
 {
-    using ArchTag = Arch::AtlasA2;
+    using ArchTag = Act::Arch::AtlasA2;
     AscendC::SetSyncBaseAddr(fftsAddr);
 
     constexpr bool enableUnitFlag = true;

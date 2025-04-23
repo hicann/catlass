@@ -23,13 +23,13 @@
 #include "act/gemm/kernel/basic_matmul.hpp"
 #include "act/gemm/gemm_type.hpp"
 
-using namespace Act;
+
 
 template <class LayoutA, class LayoutB, class LayoutC, typename IN_TYPE, typename OUT_TYPE>
 ACT_DEVICE void basic_matmul_kernel(GemmCoord problemShape, GM_ADDR gmA, LayoutA layoutA, GM_ADDR gmB,
                                         LayoutB layoutB, GM_ADDR gmC, LayoutC layoutC)
 {
-    using ArchTag = Arch::AtlasA2;
+    using ArchTag = Act::Arch::AtlasA2;
     using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
     using L1TileShape = GemmShape<128, 256, 256>;
     using L0TileShape = GemmShape<128, 256, 64>;

@@ -23,7 +23,6 @@
 #include "act/gemm/gemm_type.hpp"
 #include "act/layout/layout.hpp"
 
-using namespace Act;
 using fp16_t = op::fp16_t;
 
 template <
@@ -42,10 +41,10 @@ void PaddingMatmul(
     GM_ADDR gmWB, LayoutB layoutWB
 )
 {
-    using ArchTag = Arch::AtlasA2;
+    using ArchTag = Act::Arch::AtlasA2;
     AscendC::SetSyncBaseAddr(fftsAddr);
     constexpr bool enableUnitFlag = true;
-    using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<enableUnitFlag>;
+    using DispatchPolicy = Act::Gemm::MmadAtlasA2Pingpong<enableUnitFlag>;
     using L1TileShape = GemmShape<128, 256, 256>;
     using L0TileShape = GemmShape<128, 256, 64>;
 
@@ -116,21 +115,21 @@ struct Options {
     }
 };
 
-layout::RowMajor GetWorkspaceLayout(layout::RowMajor layout, uint32_t align)
+Act::layout::RowMajor GetWorkspaceLayout(Act::layout::RowMajor layout, uint32_t align)
 {
-    return layout::RowMajor(layout.shape(0), layout.shape(1),
+    return Act::layout::RowMajor(layout.shape(0), layout.shape(1),
         (layout.shape(1) + align - 1) / align * align);
 }
-layout::ColumnMajor GetWorkspaceLayout(layout::ColumnMajor layout, uint32_t align)
+Act::layout::ColumnMajor GetWorkspaceLayout(Act::layout::ColumnMajor layout, uint32_t align)
 {
-    return layout::ColumnMajor(layout.shape(0), layout.shape(1),
+    return Act::layout::ColumnMajor(layout.shape(0), layout.shape(1),
         (layout.shape(0) + align - 1) / align * align);
 }
-size_t GetWorkspaceLen(layout::RowMajor layout)
+size_t GetWorkspaceLen(Act::layout::RowMajor layout)
 {
     return layout.shape(0) * layout.stride(0);
 }
-size_t GetWorkspaceLen(layout::ColumnMajor layout)
+size_t GetWorkspaceLen(Act::layout::ColumnMajor layout)
 {
     return layout.shape(1) * layout.stride(1);
 }
@@ -156,9 +155,9 @@ void Run(Options const &options)
     size_t sizeC = lenC * sizeof(fp16_t);
 
     const uint32_t align = 256;
-    using LayoutA = layout::RowMajor;
-    using LayoutB = layout::ColumnMajor;
-    using LayoutC = layout::RowMajor;
+    using LayoutA = Act::layout::RowMajor;
+    using LayoutB = Act::layout::ColumnMajor;
+    using LayoutC = Act::layout::RowMajor;
     LayoutA layoutA{m, k};
     LayoutB layoutB{k, n};
     LayoutC layoutC{m, n};

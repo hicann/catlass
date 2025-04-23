@@ -25,7 +25,7 @@
  #include "act/gemv/tile/tile_vmad.hpp"
  #include "act/gemv/tile/tile_vmuls.hpp"
 
-using namespace Act;
+
 using UBTileShape = GemvShape<32,512>;
 using ScalarType = float;
 
@@ -44,7 +44,7 @@ void GemvAiv(
     ScalarType alpha,ScalarType beta,
     uint32_t SPLIT
 ){
-    using ArchTag = Arch::AtlasA2;
+    using ArchTag = Act::Arch::AtlasA2;
     using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
     
 

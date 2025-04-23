@@ -32,7 +32,7 @@
 
 #include "act/layout/layout.hpp"
 
-using namespace Act;
+
 
 using ScalarType = float;
 
@@ -54,8 +54,8 @@ ACT_GLOBAL void GemvAic(
     GM_ADDR gmWorkspace) {
     // Set FFTS address
     AscendC::SetSyncBaseAddr(fftsAddr);
-    using ArchTag = Arch::AtlasA2;
-    using LayoutTemp = layout::RowMajor;
+    using ArchTag = Act::Arch::AtlasA2;
+    using LayoutTemp = Act::layout::RowMajor;
     using TempType = Gemm::GemmType<float, LayoutTemp>;
 
     // Block level, define BlockGemv
@@ -130,35 +130,35 @@ typedef struct Options {
     }
 } Options;
 
-layout::RowMajor GetWorkspaceLayout(layout::RowMajor layout, uint32_t align) {
+Act::layout::RowMajor GetWorkspaceLayout(Act::layout::RowMajor layout, uint32_t align) {
     if (align == 0) {
         return layout;
     }
-    return layout::RowMajor(layout.shape(0), layout.shape(1),
+    return Act::layout::RowMajor(layout.shape(0), layout.shape(1),
                             RoundUp(layout.shape(1), align));
 }
 
-layout::ColumnMajor GetWorkspaceLayout(layout::ColumnMajor layout, uint32_t align) {
+Act::layout::ColumnMajor GetWorkspaceLayout(Act::layout::ColumnMajor layout, uint32_t align) {
     if (align == 0) {
         return layout;
     }
-    return layout::ColumnMajor(layout.shape(0), layout.shape(1),
+    return Act::layout::ColumnMajor(layout.shape(0), layout.shape(1),
                                RoundUp(layout.shape(0), align));
 }
 
-size_t GetWorkspaceLen(layout::RowMajor layout) {
+size_t GetWorkspaceLen(Act::layout::RowMajor layout) {
     return layout.shape(0) * layout.stride(0);
 }
 
-size_t GetWorkspaceLen(layout::ColumnMajor layout) {
+size_t GetWorkspaceLen(Act::layout::ColumnMajor layout) {
     return layout.shape(1) * layout.stride(1);
 }
 
-bool IsSameStride(layout::RowMajor layout1, layout::RowMajor layout2) {
+bool IsSameStride(Act::layout::RowMajor layout1, Act::layout::RowMajor layout2) {
     return layout1.stride(0) == layout2.stride(0);
 }
 
-bool IsSameStride(layout::ColumnMajor layout1, layout::ColumnMajor layout2) {
+bool IsSameStride(Act::layout::ColumnMajor layout1, Act::layout::ColumnMajor layout2) {
     return layout1.stride(1) == layout2.stride(1);
 }
 
@@ -183,10 +183,10 @@ void Run(Options options) {
     size_t sizeY = lenY * sizeof(float);
     size_t sizeWorkspace = lenZ * sizeof(float);
 
-    using LayoutX = layout::RowMajor;
-    using LayoutA = layout::ColumnMajor;
-    using LayoutZ = layout::VectorLayout;
-    using LayoutY = layout::RowMajor;
+    using LayoutX = Act::layout::RowMajor;
+    using LayoutA = Act::layout::ColumnMajor;
+    using LayoutZ = Act::layout::VectorLayout;
+    using LayoutY = Act::layout::RowMajor;
 
     LayoutX layoutX{1, n};
     LayoutA layoutA{m, n};

@@ -27,7 +27,6 @@
 #include "act/gemm/gemm_type.hpp"
 #include "act/layout/layout.hpp"
 
-using namespace Act;
 using fp16_t = op::fp16_t;
 
 template <
@@ -48,7 +47,7 @@ void MatmulAdd(
     // Set FFTS address
     AscendC::SetSyncBaseAddr(fftsAddr);
     // Define ArchTag
-    using ArchTag = Arch::AtlasA2;
+    using ArchTag = Act::Arch::AtlasA2;
 
     // Block level, define BlockMmad
     constexpr bool enableUnitFlag = true;
@@ -161,9 +160,9 @@ void Run(Options const &options)
     size_t sizeWorkspace = sizeD;
 
     // Define the layout of each matrix
-    layout::RowMajor layoutA{m, k};
-    layout::RowMajor layoutB{k, n};
-    layout::RowMajor layoutD{m, n};
+    Act::layout::RowMajor layoutA{m, k};
+    Act::layout::RowMajor layoutB{k, n};
+    Act::layout::RowMajor layoutD{m, n};
 
     // Prepare input data A, B, and X
     std::vector<fp16_t> hostA(lenA);

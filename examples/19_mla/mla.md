@@ -40,33 +40,33 @@ MLATiling::GetMLATilingParam(mlaInfo, blockDim, (uint32_t *)tilingHost);
 这一过程也体现在Kernel入口的代码中（以[mla_kernel.cpp](./mla_kernel.cpp)为例）：
 ```c++
 // GEMM Block模块，实现Flash MLA的Q * K^T
-using DispatchPolicyQK = Gemm::MmadAtlasA2MLAQK;
-using QType = Gemm::GemmType<ElementQ, LayoutQ>;
-using KType = Gemm::GemmType<ElementK, LayoutK>;
-using SType = Gemm::GemmType<ElementS, LayoutS>;
-using BlockMmadQK = Gemm::Block::BlockMmad<DispatchPolicyQK, L1TileShape, L0TileShape, QType, KType, SType>;
+using DispatchPolicyQK = Act::Gemm::MmadAtlasA2MLAQK;
+using QType = Act::Gemm::GemmType<ElementQ, LayoutQ>;
+using KType = Act::Gemm::GemmType<ElementK, LayoutK>;
+using SType = Act::Gemm::GemmType<ElementS, LayoutS>;
+using BlockMmadQK = Act::Gemm::Block::BlockMmad<DispatchPolicyQK, L1TileShape, L0TileShape, QType, KType, SType>;
 
 // Epilogue Block模块, 实现Flash MLA中当前S基块的softmax
-using PType = Gemm::GemmType<ElementP, LayoutP>;
-using MaskType = Gemm::GemmType<ElementMask, LayoutMask>;
+using PType = Act::Gemm::GemmType<ElementP, LayoutP>;
+using MaskType = Act::Gemm::GemmType<ElementMask, LayoutMask>;
 using EpilogueMLASoftmax =
     Epilogue::Block::BlockEpilogue<Epilogue::EpilogueAtlasA2MLASoftmax, PType, SType, MaskType>;
 
 // GEMM Block模块，实现Flash MLA的P * V
-using DispatchPolicyPV = Gemm::MmadAtlasA2MLAPV;
-using VType = Gemm::GemmType<ElementV, LayoutV>;
-using OTmpType = Gemm::GemmType<ElementOTmp, LayoutOTmp>;
-using BlockMmadPV = Gemm::Block::BlockMmad<DispatchPolicyPV, L1TileShape, L0TileShape, PType, VType, OTmpType>;
+using DispatchPolicyPV = Act::Gemm::MmadAtlasA2MLAPV;
+using VType = Act::Gemm::GemmType<ElementV, LayoutV>;
+using OTmpType = Act::Gemm::GemmType<ElementOTmp, LayoutOTmp>;
+using BlockMmadPV = Act::Gemm::Block::BlockMmad<DispatchPolicyPV, L1TileShape, L0TileShape, PType, VType, OTmpType>;
 
 // Epilogue Block模块, 实现Flash MLA中当前O基块的更新
-using OType = Gemm::GemmType<ElementO, LayoutO>;
-using OUpdateType = Gemm::GemmType<ElementUpdate, LayoutUpdate>;
+using OType = Act::Gemm::GemmType<ElementO, LayoutO>;
+using OUpdateType = Act::Gemm::GemmType<ElementUpdate, LayoutUpdate>;
 using EpilogueMLARescaleO =
         Epilogue::Block::BlockEpilogue<Epilogue::EpilogueAtlasA2MLARescaleO, OType, OUpdateType, OTmpType>;
 
 // Epilogue Block模块, 实现Flash MLA中flash decoding
-using OType = Gemm::GemmType<ElementO, LayoutO>;
-using lType = Gemm::GemmType<ElementUpdate, LayoutUpdate>;
+using OType = Act::Gemm::GemmType<ElementO, LayoutO>;
+using lType = Act::Gemm::GemmType<ElementUpdate, LayoutUpdate>;
 constexpr uint32_t ComputeEleNum = 6144;
 using EpilogueMLAFDRescaleO =
     Epilogue::Block::BlockEpilogue<Epilogue::EpilogueAtlasA2MLAFDRescaleO<ComputeEleNum>, OType, lType>;
@@ -98,5 +98,5 @@ using CopyL1ToL0A = typename TileCopy_::CopyL1ToL0A;
 using CopyL1ToL0B = typename TileCopy_::CopyL1ToL0B;
 using CopyL0CToGm = typename TileCopy_::CopyL0CToGm;
 using ElementAccumulator =
-    typename Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
+    typename Act::Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
 ```
