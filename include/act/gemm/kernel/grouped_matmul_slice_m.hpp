@@ -17,7 +17,7 @@
 #include "act/gemm_coord.hpp"
 #include "act/matrix_coord.hpp"
 
-__gm__ struct OpSystemRunCfg g_opSystemRunCfg{L2_OFFSET};
+__gm__ struct OpSystemRunCfg g_opSystemRunCfg{Act::L2_OFFSET};
 
 namespace Act::Gemm::Kernel {
 
