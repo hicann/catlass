@@ -26,6 +26,7 @@
 #include "tla/tensor.hpp"
 
 using namespace Act;
+using namespace tla;
 using fp16_t = op::fp16_t;
 
 template <
