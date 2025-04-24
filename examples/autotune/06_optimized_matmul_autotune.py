@@ -54,7 +54,7 @@ the code lines in "optimized_matmul.cpp". The marked line will be entirely repla
     {'L1TileShape': 'GemmShape<64, 64, 256>', 'L0TileShape': 'GemmShape<64, 64, 256>'},
     {'L1TileShape': 'GemmShape<64, 64, 512>', 'L0TileShape': 'GemmShape<64, 64, 256>'},
     {'L1TileShape': 'GemmShape<64, 64, 1024>', 'L0TileShape': 'GemmShape<64, 64, 256>'},
-], warmup=10000, repeat=5, device_ids=[device_id]) # set kernel warmup 1000us, avg of repeat 10 times
+], warmup=10000, repeat=5, device_ids=[device_id]) # set kernel warmup 1000us, avg of repeat 5 times
 def optimized_matmul(ffts_addr, problem_shape, a, layout_a, b, layout_b, c, layout_c,
         workspace_a, workspace_b):
     # This function's input arguments must exactly match the kernel function.
