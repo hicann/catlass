@@ -15,17 +15,17 @@
 #include "tla/tensor.hpp"
 
 namespace Act::Gemm::Tile {
-using namespace tla;
+
 /// Partial specialization for AtlasA2, RowMajor in and RowMajor out.
 template <class ElementSrc, class ElementDst, class LayoutSrc_, class LayoutDst_>
-struct TileCopyTla<Arch::AtlasA2, Tensor<AscendC::LocalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::VECCALC>,
-    Tensor<AscendC::GlobalTensor<ElementDst>, LayoutDst_, AscendC::TPosition::GM>,
+struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::LocalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::VECCALC>,
+    tla::Tensor<AscendC::GlobalTensor<ElementDst>, LayoutDst_, AscendC::TPosition::GM>,
     std::enable_if_t<tla::detail::isRowMajor<LayoutSrc_>::value &&
                      tla::detail::isRowMajor<LayoutDst_>::value>> {
     using LayoutDst = LayoutDst_;
     using LayoutSrc = LayoutSrc_;
-    using TensorDst = Tensor<AscendC::GlobalTensor<ElementDst>, LayoutDst, AscendC::TPosition::GM>;
-    using TensorSrc = Tensor<AscendC::LocalTensor<ElementSrc>, LayoutSrc, AscendC::TPosition::VECCALC>;
+    using TensorDst = tla::Tensor<AscendC::GlobalTensor<ElementDst>, LayoutDst, AscendC::TPosition::GM>;
+    using TensorSrc = tla::Tensor<AscendC::LocalTensor<ElementSrc>, LayoutSrc, AscendC::TPosition::VECCALC>;
 
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
 
@@ -38,10 +38,10 @@ struct TileCopyTla<Arch::AtlasA2, Tensor<AscendC::LocalTensor<ElementSrc>, Layou
     void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
     {
         AscendC::DataCopyExtParams dataCopyParams(
-            get<0>(dstTensor.shape()),
-            get<1>(dstTensor.shape()) * sizeof(ElementSrc),
-            (get<0>(srcTensor.stride()) - get<1>(srcTensor.shape())) / ELE_NUM_PER_C0,
-            (get<0>(dstTensor.stride()) - get<1>(dstTensor.shape())) * sizeof(ElementSrc),
+            tla::get<0>(dstTensor.shape()),
+            tla::get<1>(dstTensor.shape()) * sizeof(ElementSrc),
+            (tla::get<0>(srcTensor.stride()) - tla::get<1>(srcTensor.shape())) / ELE_NUM_PER_C0,
+            (tla::get<0>(dstTensor.stride()) - tla::get<1>(dstTensor.shape())) * sizeof(ElementSrc),
             0
         );
         AscendC::DataCopyPad(dstTensor.data(), srcTensor.data(), dataCopyParams);
@@ -50,13 +50,13 @@ struct TileCopyTla<Arch::AtlasA2, Tensor<AscendC::LocalTensor<ElementSrc>, Layou
 
 /// Partial specialization for AtlasA2, RowMajor in and PaddingRowMajor out.
 template <class ElementSrc, class ElementDst, class LayoutSrc_, class LayoutDst_>
-struct TileCopyTlaExt<Arch::AtlasA2, Tensor<AscendC::LocalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::VECCALC>,
-    Tensor<AscendC::GlobalTensor<ElementDst>, LayoutDst_, AscendC::TPosition::GM>,
+struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::LocalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::VECCALC>,
+    tla::Tensor<AscendC::GlobalTensor<ElementDst>, LayoutDst_, AscendC::TPosition::GM>,
     layout::RowMajor, layout::PaddingRowMajor> {
     using LayoutDst = LayoutDst_;
     using LayoutSrc = LayoutSrc_;
-    using TensorDst = Tensor<AscendC::GlobalTensor<ElementDst>, LayoutDst, AscendC::TPosition::GM>;
-    using TensorSrc = Tensor<AscendC::LocalTensor<ElementSrc>, LayoutSrc, AscendC::TPosition::VECCALC>;
+    using TensorDst = tla::Tensor<AscendC::GlobalTensor<ElementDst>, LayoutDst, AscendC::TPosition::GM>;
+    using TensorSrc = tla::Tensor<AscendC::LocalTensor<ElementSrc>, LayoutSrc, AscendC::TPosition::VECCALC>;
 
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
 
@@ -69,10 +69,10 @@ struct TileCopyTlaExt<Arch::AtlasA2, Tensor<AscendC::LocalTensor<ElementSrc>, La
     void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
     {
         AscendC::DataCopyExtParams dataCopyParams(
-            get<1, 1>(dstTensor.shape()),
-            get<1, 0>(dstTensor.shape()) * sizeof(ElementSrc),
-            (get<0>(srcTensor.stride()) - get<1>(srcTensor.shape())) / ELE_NUM_PER_C0,
-            (get<1, 1>(dstTensor.stride()) - get<1, 0>(dstTensor.shape())) * sizeof(ElementSrc),
+            tla::get<1, 1>(dstTensor.shape()),
+            tla::get<1, 0>(dstTensor.shape()) * sizeof(ElementSrc),
+            (tla::get<0>(srcTensor.stride()) - tla::get<1>(srcTensor.shape())) / ELE_NUM_PER_C0,
+            (tla::get<1, 1>(dstTensor.stride()) - tla::get<1, 0>(dstTensor.shape())) * sizeof(ElementSrc),
             0
         );
         AscendC::DataCopyPad(dstTensor.data(), srcTensor.data(), dataCopyParams);

@@ -20,7 +20,7 @@
 #include "tla/layout.hpp"
 #include "tla/tensor.hpp"
 namespace Act::Gemm::Block {
-using namespace tla;
+
 template <
     bool ENABLE_UNIT_FLAG_,
     class L1TileShape_,
@@ -82,12 +82,12 @@ public:
 
     static constexpr bool ENABLE_UNIT_FLAG = DispatchPolicy::ENABLE_UNIT_FLAG;
     static constexpr uint32_t STAGES = DispatchPolicy::STAGES;
-    static constexpr uint32_t L1_TILE_M = get<0>(L1TileShape{});
-    static constexpr uint32_t L1_TILE_N = get<1>(L1TileShape{});
-    static constexpr uint32_t L1_TILE_K = get<2>(L1TileShape{});
-    static constexpr uint32_t L0_TILE_M = get<0>(L0TileShape{});
-    static constexpr uint32_t L0_TILE_N = get<1>(L0TileShape{});
-    static constexpr uint32_t L0_TILE_K = get<2>(L0TileShape{});
+    static constexpr uint32_t L1_TILE_M = tla::get<0>(L1TileShape{});
+    static constexpr uint32_t L1_TILE_N = tla::get<1>(L1TileShape{});
+    static constexpr uint32_t L1_TILE_K = tla::get<2>(L1TileShape{});
+    static constexpr uint32_t L0_TILE_M = tla::get<0>(L0TileShape{});
+    static constexpr uint32_t L0_TILE_N = tla::get<1>(L0TileShape{});
+    static constexpr uint32_t L0_TILE_K = tla::get<2>(L0TileShape{});
 
     // L1 tile size
     static constexpr uint32_t L1A_TILE_SIZE = L1_TILE_M * L1_TILE_K * sizeof(ElementA);
@@ -162,28 +162,28 @@ public:
     ACT_DEVICE
     void operator()(TensorA &tensorA, TensorB &tensorB, TensorC &tensorC)
     {
-        uint32_t mBlockActual = get<0>(tensorA.orgShape());
-        uint32_t kBlockActual = get<1>(tensorA.orgShape());
-        uint32_t nBlockActual = get<1>(tensorB.orgShape());
+        uint32_t mBlockActual = tla::get<0>(tensorA.orgShape());
+        uint32_t kBlockActual = tla::get<1>(tensorA.orgShape());
+        uint32_t nBlockActual = tla::get<1>(tensorB.orgShape());
 
         uint32_t mRound = RoundUp<L1AAlignHelper::M_ALIGNED>(mBlockActual);
         uint32_t nRound = RoundUp<L1BAlignHelper::N_ALIGNED>(nBlockActual);
 
-        auto layoutInL0C = MakeLayoutL0C(mRound, nRound);
-        auto tensorL0C = MakeTensor(l0CTensor, layoutInL0C, Arch::PositionL0C{});
+        auto layoutInL0C = tla::MakeLayoutL0C(mRound, nRound);
+        auto tensorL0C = tla::MakeTensor(l0CTensor, layoutInL0C, Arch::PositionL0C{});
 
         uint32_t kActual = min(kBlockActual, L1_TILE_K);
         // load first matrix A tile from GM to L1
         AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);
-        auto tensorL1A = MakeTensor(l1ATensorList[l1ListId], L1A_LAYOUT, Arch::PositionL1{});
-        auto tensorTileA = GetTile(tensorA, tla::MakeCoord(0, 0), MakeShape(mBlockActual, kActual));
+        auto tensorL1A = tla::MakeTensor(l1ATensorList[l1ListId], L1A_LAYOUT, Arch::PositionL1{});
+        auto tensorTileA = GetTile(tensorA, tla::MakeCoord(0, 0), tla::MakeShape(mBlockActual, kActual));
         copyGmToL1A(tensorL1A, tensorTileA);
         AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListId]);
 
         // load first matrix B tile from GM to L1
         AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
-        auto tensorL1B = MakeTensor(l1BTensorList[l1ListId], L1B_LAYOUT, Arch::PositionL1{});
-        auto tensorTileB = GetTile(tensorB, tla::MakeCoord(0, 0), MakeShape(kActual, nBlockActual));
+        auto tensorL1B = tla::MakeTensor(l1BTensorList[l1ListId], L1B_LAYOUT, Arch::PositionL1{});
+        auto tensorTileB = GetTile(tensorB, tla::MakeCoord(0, 0), tla::MakeShape(kActual, nBlockActual));
         copyGmToL1B(tensorL1B, tensorTileB);
         AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
 
@@ -208,13 +208,13 @@ public:
                 // Get L1 tensor for next stage
                 auto l1ATensor = l1ATensorList[l1ListIdNext];
                 auto l1BTensor = l1BTensorList[l1ListIdNext];
-                auto tensorL1A = MakeTensor(l1ATensor, L1A_LAYOUT, Arch::PositionL1{});
-                auto tensorL1B = MakeTensor(l1BTensor, L1B_LAYOUT, Arch::PositionL1{});
+                auto tensorL1A = tla::MakeTensor(l1ATensor, L1A_LAYOUT, Arch::PositionL1{});
+                auto tensorL1B = tla::MakeTensor(l1BTensor, L1B_LAYOUT, Arch::PositionL1{});
                 // Get GM tile for next stage
                 auto tensorTileA = GetTile(tensorA, tla::MakeCoord(0, kLoopIdxNext * L1_TILE_K),
-                    MakeShape(mBlockActual, kActualNext));
+                    tla::MakeShape(mBlockActual, kActualNext));
                 auto tensorTileB = GetTile(tensorB, tla::MakeCoord(kLoopIdxNext * L1_TILE_K, 0),
-                    MakeShape(kActualNext, nBlockActual));
+                    tla::MakeShape(kActualNext, nBlockActual));
 
                 // load next matrix A tile from GM to L1
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListIdNext]);
@@ -230,8 +230,8 @@ public:
             // Get L1 tensor for current stage
             auto l1ATensor = l1ATensorList[l1ListId];
             auto l1BTensor = l1BTensorList[l1ListId];
-            tensorL1A = MakeTensor(l1ATensor, L1A_LAYOUT, Arch::PositionL1{});
-            tensorL1B = MakeTensor(l1BTensor, L1B_LAYOUT, Arch::PositionL1{});
+            tensorL1A = tla::MakeTensor(l1ATensor, L1A_LAYOUT, Arch::PositionL1{});
+            tensorL1B = tla::MakeTensor(l1BTensor, L1B_LAYOUT, Arch::PositionL1{});
             // Get the loop nums on L0
             uint32_t kPartLoop = CeilDiv<L0_TILE_K>(kActual);
 
@@ -246,10 +246,10 @@ public:
                     // Locate the current tile on L0A
                     auto l0ATile = l0ATensorList[l0AListId];
                     LayoutAInL0 layoutAInL0 = tla::MakeLayout<ElementA, LayoutAInL0>(mPartActual, kPartActual);
-                    auto tensorL0A = MakeTensor(l0ATile, layoutAInL0, Arch::PositionL0A{});
+                    auto tensorL0A = tla::MakeTensor(l0ATile, layoutAInL0, Arch::PositionL0A{});
                     // Locate the current tile of matrix A on L1
                     auto tensorTileL1A = GetTile(tensorL1A, tla::MakeCoord(mPartIdx * L0_TILE_M, kPartIdx * L0_TILE_K),
-                        MakeShape(mPartActual, kPartActual));
+                        tla::MakeShape(mPartActual, kPartActual));
 
                     AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0AListId]);
                     if ((mPartIdx == 0) && (kPartIdx == 0)) {
@@ -270,11 +270,11 @@ public:
                         // Locate the current tile on L0B
                         auto l0BTile = l0BTensorList[l0BListId];
                         LayoutBInL0 layoutBInL0 = tla::MakeLayout<ElementB, LayoutBInL0>(kPartActual, nPartActual);
-                        auto tensorL0B = MakeTensor(l0BTile, layoutBInL0, Arch::PositionL0B{});
+                        auto tensorL0B = tla::MakeTensor(l0BTile, layoutBInL0, Arch::PositionL0B{});
                         // Locate the current tile of matrix B on L1
                         auto tensorTileL1B = GetTile(tensorL1B,
                                                      tla::MakeCoord(kPartIdx * L0_TILE_K, nPartIdx * L0_TILE_N),
-                                                     MakeShape(kPartActual, nPartActual));
+                                                     tla::MakeShape(kPartActual, nPartActual));
 
                         // Wait for mmad finished
                         AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0BListId]);
@@ -296,7 +296,7 @@ public:
                         // Locate the current tile on L0C
                         auto tensorTileL0C = GetTile(tensorL0C,
                                                      tla::MakeCoord(mPartIdx * L0_TILE_M, nPartIdx * L0_TILE_N),
-                                                     MakeShape(mPartActual, nPartActual));
+                                                     tla::MakeShape(mPartActual, nPartActual));
 
                         // Compute the matrix multiplication on L0A and L0B and write the result to the accumulator
                         // Wait for loading L0B

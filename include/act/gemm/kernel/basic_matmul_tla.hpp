@@ -20,7 +20,7 @@
 #include "tla/layout.hpp"
 #include "tla/tensor.hpp"
 namespace Act::Gemm::Kernel {
-using namespace tla;
+
 // Template for Matmul kernel. Compute C = A * B
 template <
     class BlockMmad_,
@@ -42,9 +42,9 @@ public:
 
     using BlockScheduler = BlockScheduler_;
 
-    static constexpr uint32_t L1_TILE_M = get<0>(L1TileShape{});
-    static constexpr uint32_t L1_TILE_N = get<1>(L1TileShape{});
-    static constexpr uint32_t L1_TILE_K = get<2>(L1TileShape{});
+    static constexpr uint32_t L1_TILE_M = tla:get<0>(L1TileShape{});
+    static constexpr uint32_t L1_TILE_N = tla:get<1>(L1TileShape{});
+    static constexpr uint32_t L1_TILE_K = tla:get<2>(L1TileShape{});
 
     /// Parameters structure
     struct Params {
@@ -95,9 +95,9 @@ public:
         gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrC);
 
         // Represent the full tensors
-        auto tensorA = MakeTensor(gmA, params.layoutA, Arch::PositionGM{});
-        auto tensorB = MakeTensor(gmB, params.layoutB, Arch::PositionGM{});
-        auto tensorC = MakeTensor(gmC, params.layoutC, Arch::PositionGM{});
+        auto tensorA = tla:MakeTensor(gmA, params.layoutA, Arch::PositionGM{});
+        auto tensorB = tla:MakeTensor(gmB, params.layoutB, Arch::PositionGM{});
+        auto tensorC = tla:MakeTensor(gmC, params.layoutC, Arch::PositionGM{});
 
         for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()) {
             // Compute block location
@@ -107,13 +107,13 @@ public:
             // Make tiled views
             auto tensorBlockA = GetTile(tensorA,
                                         tla::MakeCoord(blockCoord.m() * L1_TILE_M, blockCoord.k() * L1_TILE_K),
-                                        MakeShape(actualBlockShape.m(), actualBlockShape.k()));
+                                        tla:MakeShape(actualBlockShape.m(), actualBlockShape.k()));
             auto tensorBlockB = GetTile(tensorB,
                                         tla::MakeCoord(blockCoord.k() * L1_TILE_K, blockCoord.n() * L1_TILE_N),
-                                        MakeShape(actualBlockShape.k(), actualBlockShape.n()));
+                                        tla:MakeShape(actualBlockShape.k(), actualBlockShape.n()));
             auto tensorBlockC = GetTile(tensorC,
                                         tla::MakeCoord(blockCoord.m() * L1_TILE_M, blockCoord.n() * L1_TILE_N),
-                                        MakeShape(actualBlockShape.m(), actualBlockShape.n()));
+                                        tla:MakeShape(actualBlockShape.m(), actualBlockShape.n()));
 
             // Compute block-scoped matrix multiply-add
             blockMmad(tensorBlockA, tensorBlockB, tensorBlockC);

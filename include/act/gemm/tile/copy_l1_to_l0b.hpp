@@ -17,7 +17,7 @@
 #include "tla/tensor.hpp"
 
 namespace Act::Gemm::Tile {
-using namespace tla;
+
 template <
     class ArchTag,
     class L1Type,
@@ -450,11 +450,11 @@ struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::LocalTensor<ElementSrc>, 
     ACT_DEVICE
     void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
     {
-        const uint32_t srcOuterStrideRow = get<0, 1>(srcTensor.stride());
-        const uint32_t srcOuterStrideCol = get<1, 1>(srcTensor.stride());
-        const uint32_t dstOuterShapeRow = get<0, 1>(dstTensor.shape());
-        const uint32_t dstOuterShapeCol = get<1, 1>(dstTensor.shape());
-        const uint32_t dstOuterStrideRow = get<0, 1>(dstTensor.stride());
+        const uint32_t srcOuterStrideRow = tla::get<0, 1>(srcTensor.stride());
+        const uint32_t srcOuterStrideCol = tla::get<1, 1>(srcTensor.stride());
+        const uint32_t dstOuterShapeRow = tla::get<0, 1>(dstTensor.shape());
+        const uint32_t dstOuterShapeCol = tla::get<1, 1>(dstTensor.shape());
+        const uint32_t dstOuterStrideRow = tla::get<0, 1>(dstTensor.stride());
 
         AscendC::LoadData2DParams loadDataParams;
 
@@ -496,11 +496,11 @@ struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::LocalTensor<ElementSrc>, 
     ACT_DEVICE
     void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
     {
-        const uint32_t srcOuterStrideRow = get<0, 1>(srcTensor.stride());
-        const uint32_t srcOuterStrideCol = get<1, 1>(srcTensor.stride());
-        const uint32_t dstOuterShapeRow = get<0, 1>(dstTensor.shape());
-        const uint32_t dstOuterShapeCol = get<1, 1>(dstTensor.shape());
-        const uint32_t dstOuterStrideRow = get<0, 1>(dstTensor.stride());
+        const uint32_t srcOuterStrideRow = tla::get<0, 1>(srcTensor.stride());
+        const uint32_t srcOuterStrideCol = tla::get<1, 1>(srcTensor.stride());
+        const uint32_t dstOuterShapeRow = tla::get<0, 1>(dstTensor.shape());
+        const uint32_t dstOuterShapeCol = tla::get<1, 1>(dstTensor.shape());
+        const uint32_t dstOuterStrideRow = tla::get<0, 1>(dstTensor.stride());
 
         AscendC::LoadData2DParams loadDataParams;
 
@@ -543,11 +543,11 @@ struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::LocalTensor<int8_t>, Layo
     ACT_DEVICE
     void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
     {
-        const uint32_t srcOuterShapeCol = get<1, 1>(srcTensor.shape());
-        const uint32_t srcOuterStrideRow = get<0, 1>(srcTensor.stride());
-        const uint32_t srcOuterStrideCol = get<1, 1>(srcTensor.stride());
-        const uint32_t dstOuterShapeRow = get<0, 1>(dstTensor.shape());
-        const uint32_t dstOuterStrideRow = get<0, 1>(dstTensor.stride());
+        const uint32_t srcOuterShapeCol = tla::get<1, 1>(srcTensor.shape());
+        const uint32_t srcOuterStrideRow = tla::get<0, 1>(srcTensor.stride());
+        const uint32_t srcOuterStrideCol = tla::get<1, 1>(srcTensor.stride());
+        const uint32_t dstOuterShapeRow = tla::get<0, 1>(dstTensor.shape());
+        const uint32_t dstOuterStrideRow = tla::get<0, 1>(dstTensor.stride());
 
         AscendC::LoadData2dTransposeParams loadDataParams;
 

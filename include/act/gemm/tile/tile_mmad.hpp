@@ -15,7 +15,7 @@
 #include "act/gemm/helper.hpp"
 #include "tla/tensor.hpp"
 namespace Act::Gemm::Tile {
-using namespace tla;
+
 ///////////////////////////////////////////////////////////
 
 template <
@@ -70,13 +70,13 @@ struct TileMmad {
 template <
     /// Tag indicating architecture
     class ArchTag_,
-    /// Tensor type for A matrix operand
+    /// tla::Tensor type for A matrix operand
     class TensorA,
-    /// Tensor type for B matrix operand
+    /// tla::Tensor type for B matrix operand
     class TensorB,
-    /// Tensor type for C matrix operand
+    /// tla::Tensor type for C matrix operand
     class TensorC,
-    /// Tensor type for Bias operand
+    /// tla::Tensor type for Bias operand
     class TensorBias = void
 >
 struct TileMmadTla {
@@ -91,9 +91,9 @@ struct TileMmadTla {
          TensorB const &l0BTensor,
          bool initC = true, uint8_t unitFlag = 0)
     {
-        const uint32_t m = get<0>(l0ATensor.orgShape());
-        const uint32_t n = get<1>(l0BTensor.orgShape());
-        const uint32_t k = get<1>(l0ATensor.orgShape());
+        const uint32_t m = tla::get<0>(l0ATensor.orgShape());
+        const uint32_t n = tla::get<1>(l0BTensor.orgShape());
+        const uint32_t k = tla::get<1>(l0ATensor.orgShape());
 
         AscendC::MmadParams mmadParams;
         mmadParams.m = m;

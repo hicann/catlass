@@ -17,7 +17,7 @@
 #include "tla/tensor.hpp"
 
 namespace Act::Gemm::Tile {
-using namespace tla;
+
 template <
     class ArchTag,
     /// GemmType for matrix operand
@@ -683,11 +683,11 @@ struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSrc>,
     ACT_DEVICE
     void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
     {
-        const uint32_t nValue = get<0>(srcTensor.shape());
-        const uint32_t dValue = get<1>(srcTensor.shape());
-        const uint32_t srcDValue = get<0>(srcTensor.stride());
-        const uint32_t dstInnerStrideRow = get<0, 0>(dstTensor.stride());
-        const uint32_t dstOuterStrideCol = get<1, 1>(dstTensor.stride());
+        const uint32_t nValue = tla::get<0>(srcTensor.shape());
+        const uint32_t dValue = tla::get<1>(srcTensor.shape());
+        const uint32_t srcDValue = tla::get<0>(srcTensor.stride());
+        const uint32_t dstInnerStrideRow = tla::get<0, 0>(dstTensor.stride());
+        const uint32_t dstOuterStrideCol = tla::get<1, 1>(dstTensor.stride());
 
         AscendC::Nd2NzParams intriParams;
 
@@ -734,11 +734,11 @@ struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSrc>,
     ACT_DEVICE
     void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
     {
-        const uint32_t nValue = get<1>(srcTensor.shape());
-        const uint32_t dValue = get<0>(srcTensor.shape());
-        const uint32_t srcDValue = get<1>(srcTensor.stride());
-        const uint32_t dstInnerStrideRow = get<1, 0>(dstTensor.stride());
-        const uint32_t dstOuterStrideCol = get<0, 1>(dstTensor.stride());
+        const uint32_t nValue = tla::get<1>(srcTensor.shape());
+        const uint32_t dValue = tla::get<0>(srcTensor.shape());
+        const uint32_t srcDValue = tla::get<1>(srcTensor.stride());
+        const uint32_t dstInnerStrideRow = tla::get<1, 0>(dstTensor.stride());
+        const uint32_t dstOuterStrideCol = tla::get<0, 1>(dstTensor.stride());
 
         AscendC::Nd2NzParams intriParams;
 
@@ -788,14 +788,14 @@ struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSr
         AscendC::Nd2NzParams intriParams;
 
         intriParams.ndNum = 1;
-        intriParams.dValue = get<1>(srcTensor.orgShape());
+        intriParams.dValue = tla::get<1>(srcTensor.orgShape());
         intriParams.srcNdMatrixStride = 0;
-        intriParams.dstNzC0Stride = get<1, 1>(dstTensor.stride()) / ELE_NUM_PER_C0;
+        intriParams.dstNzC0Stride = tla::get<1, 1>(dstTensor.stride()) / ELE_NUM_PER_C0;
         intriParams.dstNzMatrixStride = 0;
 
-        intriParams.nValue = get<0>(srcTensor.orgShape());
-        intriParams.srcDValue = get<0, 0>(srcTensor.stride());
-        intriParams.dstNzNStride = get<0, 0>(dstTensor.stride()) / ELE_NUM_PER_C0;
+        intriParams.nValue = tla::get<0>(srcTensor.orgShape());
+        intriParams.srcDValue = tla::get<0, 0>(srcTensor.stride());
+        intriParams.dstNzNStride = tla::get<0, 0>(dstTensor.stride()) / ELE_NUM_PER_C0;
         AscendC::DataCopy(dstTensor.data(), srcTensor.data(), intriParams);
     }
 };
@@ -824,14 +824,14 @@ struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSr
         AscendC::Nd2NzParams intriParams;
 
         intriParams.ndNum = 1;
-        intriParams.dValue = get<0>(srcTensor.orgShape());
+        intriParams.dValue = tla::get<0>(srcTensor.orgShape());
         intriParams.srcNdMatrixStride = 0;
-        intriParams.dstNzC0Stride = get<0, 1>(dstTensor.stride()) / ELE_NUM_PER_C0;
+        intriParams.dstNzC0Stride = tla::get<0, 1>(dstTensor.stride()) / ELE_NUM_PER_C0;
         intriParams.dstNzMatrixStride = 0;
 
-        intriParams.nValue = get<1>(srcTensor.orgShape());
-        intriParams.srcDValue = get<1, 0>(srcTensor.stride());
-        intriParams.dstNzNStride = get<1, 0>(dstTensor.stride()) / ELE_NUM_PER_C0;
+        intriParams.nValue = tla::get<1>(srcTensor.orgShape());
+        intriParams.srcDValue = tla::get<1, 0>(srcTensor.stride());
+        intriParams.dstNzNStride = tla::get<1, 0>(dstTensor.stride()) / ELE_NUM_PER_C0;
         AscendC::DataCopy(dstTensor.data(), srcTensor.data(), intriParams);
     }
 };
