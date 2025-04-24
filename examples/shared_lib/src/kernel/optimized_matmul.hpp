@@ -25,12 +25,12 @@
 #include "act/gemm/kernel/optimized_matmul.hpp"
 #include "act/layout/layout.hpp"
 
-using namespace Act;
+namespace Act{
 
 template <class Layout>
 size_t GetWorkspaceLen(Layout layout, size_t blockRows, size_t blockCols) {
   return RoundUp(static_cast<size_t>(layout.shape(0)), blockRows) *
-         RoundUp(static_cast<size_t>(layout.shape(1)), blockCols);
+        RoundUp(static_cast<size_t>(layout.shape(1)), blockCols);
 }
 
 bool IsNeedPadding(layout::RowMajor layout, uint32_t align) {
@@ -56,11 +56,11 @@ bool IsNeedPadding(layout::ColumnMajor layout, uint32_t align) {
 template <class LayoutA, class LayoutB, class LayoutC, class LayoutWA,
           class LayoutWB, class BlockMmad>
 ACT_DEVICE void LaunchMatmulDynamicSwizzle(GemmCoord problemShape, GM_ADDR gmA,
-                                           LayoutA layoutA, GM_ADDR gmB,
-                                           LayoutB layoutB, GM_ADDR gmC,
-                                           LayoutC layoutC, GM_ADDR gmWA,
-                                           LayoutWA layoutWA, GM_ADDR gmWB,
-                                           LayoutWB layoutWB) {
+                                          LayoutA layoutA, GM_ADDR gmB,
+                                          LayoutB layoutB, GM_ADDR gmC,
+                                          LayoutC layoutC, GM_ADDR gmWA,
+                                          LayoutWA layoutWA, GM_ADDR gmWB,
+                                          LayoutWB layoutWB) {
   if (problemShape.m() > problemShape.n()) {
     using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
     using BlockEpilogue = void;
@@ -68,8 +68,8 @@ ACT_DEVICE void LaunchMatmulDynamicSwizzle(GemmCoord problemShape, GM_ADDR gmA,
     using MatmulKernel =
         Gemm::Kernel::OptimizedMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
     typename MatmulKernel::Params params{problemShape, gmA,  layoutA, gmB,
-                                         layoutB,      gmC,  layoutC, gmWA,
-                                         layoutWA,     gmWB, layoutWB};
+                                        layoutB,      gmC,  layoutC, gmWA,
+                                        layoutWA,     gmWB, layoutWB};
     // call a kernel
     MatmulKernel matmul;
     matmul(params);
@@ -80,8 +80,8 @@ ACT_DEVICE void LaunchMatmulDynamicSwizzle(GemmCoord problemShape, GM_ADDR gmA,
     using MatmulKernel =
         Gemm::Kernel::OptimizedMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
     typename MatmulKernel::Params params{problemShape, gmA,  layoutA, gmB,
-                                         layoutB,      gmC,  layoutC, gmWA,
-                                         layoutWA,     gmWB, layoutWB};
+                                        layoutB,      gmC,  layoutC, gmWA,
+                                        layoutWA,     gmWB, layoutWB};
 
     // call a kernel
     MatmulKernel matmul;
@@ -91,9 +91,9 @@ ACT_DEVICE void LaunchMatmulDynamicSwizzle(GemmCoord problemShape, GM_ADDR gmA,
 
 template <class LayoutA, class LayoutB, class LayoutC>
 ACT_GLOBAL void optimized_matmul(uint64_t fftsAddr, GemmCoord problemShape,
-                                 GM_ADDR gmA, LayoutA layoutA, GM_ADDR gmB,
-                                 LayoutB layoutB, GM_ADDR gmC, LayoutC layoutC,
-                                 GM_ADDR gmWA, GM_ADDR gmWB) {
+                                GM_ADDR gmA, LayoutA layoutA, GM_ADDR gmB,
+                                LayoutB layoutB, GM_ADDR gmC, LayoutC layoutC,
+                                GM_ADDR gmWA, GM_ADDR gmWB) {
   using ArchTag = Arch::AtlasA2;
   AscendC::SetSyncBaseAddr(fftsAddr);
 
@@ -106,12 +106,12 @@ ACT_GLOBAL void optimized_matmul(uint64_t fftsAddr, GemmCoord problemShape,
   // L1TileShape using GemmShape<256, 128, 256> can achieve better performance.
   using L1TileShape =
       std::conditional_t<std::is_same_v<LayoutA, layout::ColumnMajor> &&
-                             std::is_same_v<LayoutB, layout::ColumnMajor>,
-                         GemmShape<256, 128, 256>, GemmShape<128, 256, 256>>;
+                            std::is_same_v<LayoutB, layout::ColumnMajor>,
+                        GemmShape<256, 128, 256>, GemmShape<128, 256, 256>>;
   using L0TileShape =
       std::conditional_t<std::is_same_v<LayoutA, layout::ColumnMajor> &&
-                             std::is_same_v<LayoutB, layout::ColumnMajor>,
-                         GemmShape<256, 128, 64>, GemmShape<128, 256, 64>>;
+                            std::is_same_v<LayoutB, layout::ColumnMajor>,
+                        GemmShape<256, 128, 64>, GemmShape<128, 256, 64>>;
   ;
   if (gmA == gmWA && gmB == gmWB) {
     // no need to padding A and B.
@@ -121,11 +121,11 @@ ACT_GLOBAL void optimized_matmul(uint64_t fftsAddr, GemmCoord problemShape,
     using BType = Gemm::GemmType<half, LayoutWB>;
     using CType = Gemm::GemmType<half, LayoutC>;
     using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape,
-                                             L0TileShape, AType, BType, CType>;
+                                            L0TileShape, AType, BType, CType>;
     LayoutWA layoutWA = LayoutWA(layoutA.shape(0), layoutA.shape(1));
     LayoutWB layoutWB = LayoutWB(layoutB.shape(0), layoutB.shape(1));
     LaunchMatmulDynamicSwizzle<LayoutA, LayoutB, LayoutC, LayoutWA, LayoutWB,
-                               BlockMmad>(problemShape, gmA, layoutA, gmB,
+                              BlockMmad>(problemShape, gmA, layoutA, gmB,
                                           layoutB, gmC, layoutC, gmWA, layoutWA,
                                           gmWB, layoutWB);
   } else if (gmA == gmWA && gmB != gmWB) {
@@ -133,59 +133,60 @@ ACT_GLOBAL void optimized_matmul(uint64_t fftsAddr, GemmCoord problemShape,
     using LayoutWA = LayoutA;
     using LayoutWB =
         std::conditional_t<std::is_same_v<LayoutB, layout::RowMajor>,
-                           layout::PaddingRowMajor, layout::PaddingColumnMajor>;
+                          layout::PaddingRowMajor, layout::PaddingColumnMajor>;
     using AType = Gemm::GemmType<half, LayoutWA>;
     using BType = Gemm::GemmType<half, LayoutWB>;
     using CType = Gemm::GemmType<half, LayoutC>;
     using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape,
-                                             L0TileShape, AType, BType, CType>;
+                                            L0TileShape, AType, BType, CType>;
     LayoutWA layoutWA = LayoutWA(layoutA.shape(0), layoutA.shape(1));
     LayoutWB layoutWB = LayoutWB(layoutB.shape(0), layoutB.shape(1),
-                                 L1TileShape::K, L1TileShape::N);
+                                L1TileShape::K, L1TileShape::N);
     LaunchMatmulDynamicSwizzle<LayoutA, LayoutB, LayoutC, LayoutWA, LayoutWB,
-                               BlockMmad>(problemShape, gmA, layoutA, gmB,
+                              BlockMmad>(problemShape, gmA, layoutA, gmB,
                                           layoutB, gmC, layoutC, gmWA, layoutWA,
                                           gmWB, layoutWB);
   } else if (gmA != gmWA && gmB == gmWB) {
     // no need to padding B, but A needs padding.
     using LayoutWA =
         std::conditional_t<std::is_same_v<LayoutA, layout::RowMajor>,
-                           layout::PaddingRowMajor, layout::PaddingColumnMajor>;
+                          layout::PaddingRowMajor, layout::PaddingColumnMajor>;
     using LayoutWB = LayoutB;
     using AType = Gemm::GemmType<half, LayoutWA>;
     using BType = Gemm::GemmType<half, LayoutWB>;
     using CType = Gemm::GemmType<half, LayoutC>;
     using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape,
-                                             L0TileShape, AType, BType, CType>;
+                                            L0TileShape, AType, BType, CType>;
     LayoutWA layoutWA = LayoutWA(layoutA.shape(0), layoutA.shape(1),
-                                 L1TileShape::M, L1TileShape::K);
+                                L1TileShape::M, L1TileShape::K);
     LayoutWB layoutWB = LayoutWB(layoutB.shape(0), layoutB.shape(1));
     LaunchMatmulDynamicSwizzle<LayoutA, LayoutB, LayoutC, LayoutWA, LayoutWB,
-                               BlockMmad>(problemShape, gmA, layoutA, gmB,
+                              BlockMmad>(problemShape, gmA, layoutA, gmB,
                                           layoutB, gmC, layoutC, gmWA, layoutWA,
                                           gmWB, layoutWB);
   } else {
     // Both A and B need padding.
     using LayoutWA =
         std::conditional_t<std::is_same_v<LayoutA, layout::RowMajor>,
-                           layout::PaddingRowMajor, layout::PaddingColumnMajor>;
+                          layout::PaddingRowMajor, layout::PaddingColumnMajor>;
     using LayoutWB =
         std::conditional_t<std::is_same_v<LayoutB, layout::RowMajor>,
-                           layout::PaddingRowMajor, layout::PaddingColumnMajor>;
+                          layout::PaddingRowMajor, layout::PaddingColumnMajor>;
     using AType = Gemm::GemmType<half, LayoutWA>;
     using BType = Gemm::GemmType<half, LayoutWB>;
     using CType = Gemm::GemmType<half, LayoutC>;
     using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape,
-                                             L0TileShape, AType, BType, CType>;
+                                            L0TileShape, AType, BType, CType>;
     LayoutWA layoutWA = LayoutWA(layoutA.shape(0), layoutA.shape(1),
-                                 L1TileShape::M, L1TileShape::K);
+                                L1TileShape::M, L1TileShape::K);
     LayoutWB layoutWB = LayoutWB(layoutB.shape(0), layoutB.shape(1),
-                                 L1TileShape::K, L1TileShape::N);
+                                L1TileShape::K, L1TileShape::N);
     LaunchMatmulDynamicSwizzle<LayoutA, LayoutB, LayoutC, LayoutWA, LayoutWB,
-                               BlockMmad>(problemShape, gmA, layoutA, gmB,
+                              BlockMmad>(problemShape, gmA, layoutA, gmB,
                                           layoutB, gmC, layoutC, gmWA, layoutWA,
                                           gmWB, layoutWB);
   }
+}
 }
 
 #endif  // SHARED_LIB_IMPL_OPTIMIZED_MATMUL_H

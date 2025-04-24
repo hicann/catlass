@@ -12,7 +12,7 @@
 #define ACT_GEMM_TILE_COPY_L0C_TO_GM_HPP
 
 #include "act/gemm/gemm_type.hpp"
-
+#include "tla/tensor.hpp"
 namespace Act::Gemm::Tile {
 
 enum class ScaleGranularity {
@@ -252,13 +252,13 @@ template <
 >
 struct CopyL0CToGmTla<Act::Arch::AtlasA2,
                    TensorSrc_,
-                   Tensor<AscendC::GlobalTensor<ElementDst_>, LayoutDst_, AscendC::TPosition::GM>,
+                   tla::Tensor<AscendC::GlobalTensor<ElementDst_>, LayoutDst_, AscendC::TPosition::GM>,
                    ScaleGranularity::NO_QUANT,
                    ReluEnable_,
                    std::enable_if_t<tla::detail::isRowMajor<LayoutDst_>::value>>
 {
     using ArchTag = Act::Arch::AtlasA2;
-    using TensorDst = Tensor<AscendC::GlobalTensor<ElementDst_>, LayoutDst_, AscendC::TPosition::GM>;
+    using TensorDst = tla::Tensor<AscendC::GlobalTensor<ElementDst_>, LayoutDst_, AscendC::TPosition::GM>;
     using ElementDst = ElementDst_;
     using TensorSrc = TensorSrc_;
     using ElementSrc = typename TensorSrc::Element;
@@ -272,10 +272,10 @@ struct CopyL0CToGmTla<Act::Arch::AtlasA2,
         AscendC::FixpipeParamsV220 intriParams;
 
         // Fixpipe layout information
-        intriParams.nSize = get<1>(dstTensor.shape());
-        intriParams.mSize = get<0>(dstTensor.shape());
-        intriParams.srcStride = get<1, 1>(srcTensor.stride()) / get<0, 0>(srcTensor.stride());
-        intriParams.dstStride = get<0>(dstTensor.stride());
+        intriParams.nSize = tla::get<1>(dstTensor.shape());
+        intriParams.mSize = tla::get<0>(dstTensor.shape());
+        intriParams.srcStride = tla::get<1, 1>(srcTensor.stride()) / tla::get<0, 0>(srcTensor.stride());
+        intriParams.dstStride = tla::get<0>(dstTensor.stride());
 
         // Fixpipe auxiliary arguments
         intriParams.quantPre = quantPre;
