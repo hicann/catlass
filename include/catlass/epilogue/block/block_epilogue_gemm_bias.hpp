@@ -24,7 +24,7 @@ template <
     class CType_,
     class BiasType_,
     class DType_,
-    class TileElemWiseEpilogue_,
+    class TileRowBroadcastAdd_,
     class TileCopy_
 >
 class BlockEpilogue <
@@ -32,7 +32,7 @@ class BlockEpilogue <
     CType_,
     BiasType_,
     DType_,
-    TileElemWiseEpilogue_,
+    TileRowBroadcastAdd_,
     TileCopy_
 > {
 public:
@@ -45,13 +45,11 @@ public:
     using LayoutBias = typename BiasType_::Layout;
     using ElementD = typename DType_::Element;
     using LayoutD = typename DType_::Layout;
-    using TileElemWiseEpilogue = TileElemWiseEpilogue_;
+    using TileRowBroadcastAdd = TileRowBroadcastAdd_;
     using CopyGmToUbC = typename TileCopy_::CopyGmToUbC;
     using CopyGmToubBias = typename TileCopy_::CopyGmToUbX;
     using CopyUbToGmD = typename TileCopy_::CopyUbToGmD;
-
-    static constexpr uint32_t COMPUTE_LENGTH = TileElemWiseEpilogue::COMPUTE_LENGTH;
-    static constexpr uint32_t OPERANDS_NUM = DispatchPolicy::OPERANDS_NUM;
+    using TileShape = typename TileRowBroadcastAdd::TileShape;
 
     // Check the element type of C, X and D
     static_assert(std::is_same_v<ElementC, ElementD> && std::is_same_v<ElementBias, ElementD>,
@@ -64,9 +62,12 @@ public:
     using LayoutComputeInUb = layout::RowMajor;
 
     // Check if ArchTag is matched
-    static_assert(std::is_same_v<typename TileElemWiseEpilogue::ArchTag, ArchTag>, "Tile epilogue's ArchTag mismatch");
+    static_assert(std::is_same_v<typename TileRowBroadcastAdd::ArchTag, ArchTag>, "Tile epilogue's ArchTag mismatch");
     // Check if compute length is valid
-    static_assert(COMPUTE_LENGTH * OPERANDS_NUM * sizeof(ElementCompute) <= ArchTag::UB_SIZE, "UB out of bounds");
+    static_assert(TileShape::COUNT * sizeof(ElementC) +
+                    TileShape::COUNT * sizeof(ElementD) +
+                    TileShape::COLUMN * sizeof(ElementBias) <= ArchTag::UB_SIZE,
+                    "UB out of bounds");
 
     // Epilogue params definition
     struct Params {
@@ -87,9 +88,9 @@ public:
     BlockEpilogue(Arch::Resource<ArchTag> &resource, Params const &params) : params(params)
     {
         ubC = resource.ubBuf.template GetBufferByByte<ElementC>(0);
-        ubD = resource.ubBuf.template GetBufferByByte<ElementD>(COMPUTE_LENGTH * sizeof(ElementC));
+        ubD = resource.ubBuf.template GetBufferByByte<ElementD>(TileShape::COUNT * sizeof(ElementC));
         ubBias = resource.ubBuf.template GetBufferByByte<ElementBias>(
-            COMPUTE_LENGTH * sizeof(ElementC) + COMPUTE_LENGTH * sizeof(ElementBias));
+            TileShape::COUNT * sizeof(ElementC) + TileShape::COUNT * sizeof(ElementD));
 
         AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
         AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
@@ -144,10 +145,11 @@ public:
         auto layoutSubblockD = params.layoutD.GetTileLayout(actualSubblockShape);
 
         // Get the data and layout of bias
-        auto biasSubblockShape = actualSubblockShape.template GetCoordByAxis<0>();
+        auto biasSubblockOffset = blockOffset.template GetCoordByAxis<1>();
+        auto biasSubblockShape = actualSubblockShape.template GetCoordByAxis<1>();
         AscendC::GlobalTensor<ElementBias> gmBias;
         gmBias.SetGlobalBuffer(reinterpret_cast<__gm__ ElementBias *>(params.ptrBias));
-        auto gmSubblockBias = gmBias[blockOffset.shape(0)];
+        auto gmSubblockBias = gmBias[params.layoutBias.GetOffset(biasSubblockOffset)];
         auto layoutSubblockBias = params.layoutBias.GetTileLayout(biasSubblockShape);
 
         // Get the layout on UB
@@ -180,7 +182,7 @@ private:
     AscendC::LocalTensor<ElementBias> ubBias;
     AscendC::LocalTensor<ElementD> ubD;
 
-    TileElemWiseEpilogue tileEpilogue;
+    TileRowBroadcastAdd tileEpilogue;
     CopyGmToUbC copyGmToUbC;
     CopyGmToubBias copyGmToubBias;
     CopyUbToGmD copyUbToGmD;
