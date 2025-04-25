@@ -24,6 +24,9 @@
 #include "act/gemm/gemm_type.hpp"
 #include "act/gemm/kernel/grouped_matmul_slice_k.hpp"
 #include "act/layout/layout.hpp"
+
+namespace Act{
+
 template <class LayoutA, class LayoutB, class LayoutC>
 ACT_GLOBAL void grouped_matmul_slice_k(GemmCoord problemShape,
                                        uint32_t problemCount,
@@ -69,5 +72,6 @@ ACT_GLOBAL void grouped_matmul_slice_k(GemmCoord problemShape,
   MatmulKernel matmul;
   matmul(params);
 }
+} // end of namespace Act;
 
 #endif  // SHARED_LIB_IMPL_GROUPED_MATMUL_K_H

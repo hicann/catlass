@@ -27,8 +27,7 @@
 #include "act/gemm/kernel/basic_matmul.hpp"
 #include "act/layout/layout.hpp"
 
-using namespace Act;
-
+namespace Act{
 template <class LayoutA, class LayoutB, class LayoutC, typename IN_TYPE,
           typename OUT_TYPE>
 ACT_DEVICE void basic_matmul_kernel(GemmCoord problemShape, GM_ADDR gmA,
@@ -94,4 +93,5 @@ ACT_GLOBAL void basic_matmul(GemmCoord problemShape, GM_ADDR gmA,
         problemShape, gmA, layoutA, gmB, layoutB, gmC, layoutC);
   }
 }
+} // end of namespace act
 #endif  // SHARED_LIB_IMPL_BASIC_MATMUL_H
