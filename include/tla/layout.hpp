@@ -16,8 +16,6 @@
 #include "tla/tuple.hpp"
 #include "tla/int_tuple.hpp"
 
-using namespace Act;
-
 namespace tla {
 
 // Aliases
@@ -151,10 +149,10 @@ template <class LayoutTag>
 ACT_HOST_DEVICE constexpr
 auto MakeLayoutFromTag(LayoutTag const& tag)
 {
-    static_assert(std::is_same_v<LayoutTag, layout::RowMajor> || std::is_same_v<LayoutTag, layout::ColumnMajor>,
-        "Unsupported LayoutTag for MakeLayoutFromTag, only support layout::RowMajor or layout::ColumnMajor");
+    static_assert(std::is_same_v<LayoutTag, Act::layout::RowMajor> || std::is_same_v<LayoutTag, Act::layout::ColumnMajor>,
+        "Unsupported LayoutTag for MakeLayoutFromTag, only support Act::layout::RowMajor or Act::layout::ColumnMajor");
 
-    if constexpr (std::is_same_v<LayoutTag, layout::RowMajor>) {
+    if constexpr (std::is_same_v<LayoutTag, Act::layout::RowMajor>) {
         return MakeLayout(MakeShape(tag.shape(0), tag.shape(1)), MakeStride(tag.stride(0), Int<1>{}));
     } else {
         return MakeLayout(MakeShape(tag.shape(0), tag.shape(1)), MakeStride(Int<1>{}, tag.stride(1)));
@@ -280,9 +278,9 @@ struct iszN {
 
 template <class Element, class Layout>
 struct iszN<Element, Layout, std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>> {
-    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-    static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
-    static bool const value = (shape<0, 0>(Layout{}) == C0_NUM_PER_FRACTAL &&
+    static constexpr uint32_t ELE_NUM_PER_C0 = Act::BYTE_PER_C0 / sizeof(Element);
+    static constexpr uint32_t ELE_NUM_PER_FRACTAL = Act::BYTE_PER_FRACTAL / sizeof(Element);
+    static bool const value = (shape<0, 0>(Layout{}) == Act::C0_NUM_PER_FRACTAL &&
                                shape<1, 0>(Layout{}) == ELE_NUM_PER_C0 &&
                                stride<1, 0>(Layout{}) == 1 &&
                                stride<0, 1>(Layout{}) == ELE_NUM_PER_FRACTAL);
@@ -295,9 +293,9 @@ struct iszZ {
 
 template <class Element, class Layout>
 struct iszZ<Element, Layout, std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>> {
-    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-    static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
-    static bool const value = (shape<0, 0>(Layout{}) == C0_NUM_PER_FRACTAL &&
+    static constexpr uint32_t ELE_NUM_PER_C0 = Act::BYTE_PER_C0 / sizeof(Element);
+    static constexpr uint32_t ELE_NUM_PER_FRACTAL = Act::BYTE_PER_FRACTAL / sizeof(Element);
+    static bool const value = (shape<0, 0>(Layout{}) == Act::C0_NUM_PER_FRACTAL &&
                                shape<1, 0>(Layout{}) == ELE_NUM_PER_C0 &&
                                stride<1, 0>(Layout{}) == 1 &&
                                stride<1, 1>(Layout{}) == ELE_NUM_PER_FRACTAL);
@@ -310,10 +308,10 @@ struct isnZ {
 
 template <class Element, class Layout>
 struct isnZ<Element, Layout, std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>> {
-    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-    static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
+    static constexpr uint32_t ELE_NUM_PER_C0 = Act::BYTE_PER_C0 / sizeof(Element);
+    static constexpr uint32_t ELE_NUM_PER_FRACTAL = Act::BYTE_PER_FRACTAL / sizeof(Element);
     static bool const value = (shape<0, 0>(Layout{}) == ELE_NUM_PER_C0 &&
-                               shape<1, 0>(Layout{}) == C0_NUM_PER_FRACTAL &&
+                               shape<1, 0>(Layout{}) == Act::C0_NUM_PER_FRACTAL &&
                                stride<0, 0>(Layout{}) == 1 &&
                                stride<1, 1>(Layout{}) == ELE_NUM_PER_FRACTAL);
 };
@@ -330,28 +328,28 @@ auto MakeLayout(uint32_t const& rows, uint32_t const& cols)
                     detail::isnZ<Element, Layout>::value,
         "Unsupported Layout for MakeLayout, only support zN or zZ or nZ");
 
-    constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-    constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
+    constexpr uint32_t ELE_NUM_PER_C0 = Act::BYTE_PER_C0 / sizeof(Element);
+    constexpr uint32_t ELE_NUM_PER_FRACTAL = Act::BYTE_PER_FRACTAL / sizeof(Element);
 
     if constexpr (detail::iszN<Element, Layout>::value) {
         return MakeLayout(
-            MakeShape(MakeShape(Int<C0_NUM_PER_FRACTAL>{}, CeilDiv<C0_NUM_PER_FRACTAL>(rows)),
+            MakeShape(MakeShape(Int<Act::C0_NUM_PER_FRACTAL>{}, CeilDiv<Act::C0_NUM_PER_FRACTAL>(rows)),
                       MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv<ELE_NUM_PER_C0>(cols))),
             MakeStride(MakeStride(Int<ELE_NUM_PER_C0>{}, Int<ELE_NUM_PER_FRACTAL>{}),
-                       MakeStride(Int<1>{}, (int64_t)RoundUp<C0_NUM_PER_FRACTAL>(rows) * ELE_NUM_PER_C0)),
+                       MakeStride(Int<1>{}, (int64_t)RoundUp<Act::C0_NUM_PER_FRACTAL>(rows) * ELE_NUM_PER_C0)),
             MakeShape(rows, cols));
     } else if constexpr (detail::iszZ<Element, Layout>::value) {
         return MakeLayout(
-            MakeShape(MakeShape(Int<C0_NUM_PER_FRACTAL>{}, CeilDiv<C0_NUM_PER_FRACTAL>(rows)),
+            MakeShape(MakeShape(Int<Act::C0_NUM_PER_FRACTAL>{}, CeilDiv<Act::C0_NUM_PER_FRACTAL>(rows)),
                       MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv<ELE_NUM_PER_C0>(cols))),
-            MakeStride(MakeStride(Int<ELE_NUM_PER_C0>{}, (int64_t)RoundUp<ELE_NUM_PER_C0>(cols) * C0_NUM_PER_FRACTAL),
+            MakeStride(MakeStride(Int<ELE_NUM_PER_C0>{}, (int64_t)RoundUp<ELE_NUM_PER_C0>(cols) * Act::C0_NUM_PER_FRACTAL),
                        MakeStride(Int<1>{}, Int<ELE_NUM_PER_FRACTAL>{})),
             MakeShape(rows, cols));
     } else {
         return MakeLayout(
             MakeShape(MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv<ELE_NUM_PER_C0>(rows)),
-                      MakeShape(Int<C0_NUM_PER_FRACTAL>{}, CeilDiv<C0_NUM_PER_FRACTAL>(cols))),
-            MakeStride(MakeStride(Int<1>{}, (int64_t)RoundUp<C0_NUM_PER_FRACTAL>(cols) * ELE_NUM_PER_C0),
+                      MakeShape(Int<Act::C0_NUM_PER_FRACTAL>{}, CeilDiv<Act::C0_NUM_PER_FRACTAL>(cols))),
+            MakeStride(MakeStride(Int<1>{}, (int64_t)RoundUp<Act::C0_NUM_PER_FRACTAL>(cols) * ELE_NUM_PER_C0),
                        MakeStride(Int<ELE_NUM_PER_C0>{}, Int<ELE_NUM_PER_FRACTAL>{})),
             MakeShape(rows, cols));
     }
@@ -393,10 +391,10 @@ ACT_HOST_DEVICE constexpr auto MakeLayoutL0C(uint32_t const& rows, uint32_t cons
 {
     constexpr uint32_t ELE_NUM_PER_FRACTAL = 256;
     return MakeLayout(
-        MakeShape(MakeShape(Int<C0_NUM_PER_FRACTAL>{}, CeilDiv<C0_NUM_PER_FRACTAL>(rows)),
-                  MakeShape(Int<C0_NUM_PER_FRACTAL>{}, CeilDiv<C0_NUM_PER_FRACTAL>(cols))),
-        MakeStride(MakeStride(Int<C0_NUM_PER_FRACTAL>{}, Int<ELE_NUM_PER_FRACTAL>{}),
-                   MakeStride(Int<1>{}, (int64_t)RoundUp<C0_NUM_PER_FRACTAL>(rows) * C0_NUM_PER_FRACTAL)),
+        MakeShape(MakeShape(Int<Act::C0_NUM_PER_FRACTAL>{}, CeilDiv<Act::C0_NUM_PER_FRACTAL>(rows)),
+                  MakeShape(Int<Act::C0_NUM_PER_FRACTAL>{}, CeilDiv<Act::C0_NUM_PER_FRACTAL>(cols))),
+        MakeStride(MakeStride(Int<Act::C0_NUM_PER_FRACTAL>{}, Int<ELE_NUM_PER_FRACTAL>{}),
+                   MakeStride(Int<1>{}, (int64_t)RoundUp<Act::C0_NUM_PER_FRACTAL>(rows) * Act::C0_NUM_PER_FRACTAL)),
         MakeShape(rows, cols));
 }
 

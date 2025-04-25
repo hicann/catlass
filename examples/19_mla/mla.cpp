@@ -189,6 +189,9 @@ void Run(const Options &options)
     uint64_t blockTableSize =
         static_cast<uint64_t>(batch * ((maxKvSeqlen + blockSize - 1) / blockSize) * sizeof(int32_t));
     uint32_t tilingSize = (MLATiling::TILING_HEAD_SIZE + batch * MLATiling::TILING_PARA_SIZE) * sizeof(int32_t);
+    if (specStraKey) {
+        tilingSize = (MLATiling::TILING_HEAD_SIZE + numTokens * MLATiling::TILING_PARA_SIZE) * sizeof(int32_t);
+    }
 
     // Allocate matrices in host and device memory and load Matrix q.
     uint8_t *qHost;
