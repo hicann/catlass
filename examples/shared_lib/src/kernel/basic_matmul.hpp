@@ -70,7 +70,7 @@ ACT_DEVICE void basic_matmul_kernel(GemmCoord problemShape, GM_ADDR gmA,
         Gemm::Kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 
     typename MatmulKernel::Params params{problemShape, gmA, layoutA, gmB,
-                                        layoutB,      gmC, layoutC};
+                                         layoutB,      gmC, layoutC};
 
     // call a kernel
     MatmulKernel matmul;
