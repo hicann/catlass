@@ -8,19 +8,13 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#include <pybind11/pybind11.h>
 #include <torch/extension.h>
-#include <torch_npu/csrc/core/npu/NPUStream.h>
 
-#include "act_kernel.h"
-#include "act_kernel_wrapper.h"
+#include "wrapper/act_kernel_wrapper.h"
 
-namespace py = pybind11;
+#define NPU PrivateUse1
+
 using namespace ActKernelWrapper;
+TORCH_LIBRARY(ActTorch, m) { m.def("basic_matmul(Tensor mat1, Tensor mat2, str c) -> Tensor"); }
 
-PYBIND11_MODULE(torch_act, m) {
-    m.doc() = "Python bindings for ActKernel";
-    m.def("basic_matmul", &RunBasicMatmul, "")
-    .def("grouped_matmul", &RunGroupedMatmul, "")
-    .def("optimized_matmul", &RunOptimizedMatmul, "");
-}
+TORCH_LIBRARY_IMPL(ActTorch, NPU, m) { m.impl("basic_matmul", &RunBasicMatmul); }
