@@ -32,11 +32,11 @@ namespace Act{
 
 template <class LayoutA, class LayoutB, class LayoutC>
 ACT_GLOBAL void grouped_matmul_slice_m(GemmCoord problemShape,
-                                      uint32_t problemCount,
-                                      GM_ADDR gmGroupList, GM_ADDR gmA,
-                                      LayoutA layoutA, GM_ADDR gmB,
-                                      LayoutB layoutB, GM_ADDR gmC,
-                                      LayoutC layoutC) {
+                                       uint32_t problemCount,
+                                       GM_ADDR gmGroupList, GM_ADDR gmA,
+                                       LayoutA layoutA, GM_ADDR gmB,
+                                       LayoutB layoutB, GM_ADDR gmC,
+                                       LayoutC layoutC) {
   if (problemShape.k() > problemShape.n()) {
     constexpr uint32_t preloadStages = 1;
     constexpr uint32_t l1Stages = 2;
@@ -59,7 +59,7 @@ ACT_GLOBAL void grouped_matmul_slice_m(GemmCoord problemShape,
     using CType = Gemm::GemmType<half, LayoutC>;
 
     using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape,
-                                            L0TileShape, AType, BType, CType>;
+                                             L0TileShape, AType, BType, CType>;
     using BlockEpilogue = void;
     using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
 
@@ -97,7 +97,7 @@ ACT_GLOBAL void grouped_matmul_slice_m(GemmCoord problemShape,
     using CType = Gemm::GemmType<half, LayoutC>;
 
     using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape,
-                                            L0TileShape, AType, BType, CType>;
+                                             L0TileShape, AType, BType, CType>;
     using BlockEpilogue = void;
     using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
 

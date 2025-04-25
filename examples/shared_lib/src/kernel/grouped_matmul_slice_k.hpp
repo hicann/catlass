@@ -29,11 +29,11 @@ namespace Act{
 
 template <class LayoutA, class LayoutB, class LayoutC>
 ACT_GLOBAL void grouped_matmul_slice_k(GemmCoord problemShape,
-                                      uint32_t problemCount,
-                                      GM_ADDR gmGroupList, GM_ADDR gmA,
-                                      LayoutA layoutA, GM_ADDR gmB,
-                                      LayoutB layoutB, GM_ADDR gmC,
-                                      LayoutC layoutC) {
+                                       uint32_t problemCount,
+                                       GM_ADDR gmGroupList, GM_ADDR gmA,
+                                       LayoutA layoutA, GM_ADDR gmB,
+                                       LayoutB layoutB, GM_ADDR gmC,
+                                       LayoutC layoutC) {
   constexpr uint32_t preloadStages = 1;
   constexpr uint32_t l1Stages = 2;
   constexpr uint32_t l0AStages = 4;
@@ -55,7 +55,7 @@ ACT_GLOBAL void grouped_matmul_slice_k(GemmCoord problemShape,
   using CType = Gemm::GemmType<half, LayoutC>;
 
   using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape,
-                                          L0TileShape, AType, BType, CType>;
+                                           L0TileShape, AType, BType, CType>;
   using BlockEpilogue = void;
   using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
 
@@ -65,8 +65,8 @@ ACT_GLOBAL void grouped_matmul_slice_k(GemmCoord problemShape,
                                         BlockScheduler, int32_t>;
 
   typename MatmulKernel::Params params{problemShape, problemCount, gmGroupList,
-                                      gmA,          layoutA,      gmB,
-                                      layoutB,      gmC,          layoutC};
+                                       gmA,          layoutA,      gmB,
+                                       layoutB,      gmC,          layoutC};
 
   // call a kernel
   MatmulKernel matmul;

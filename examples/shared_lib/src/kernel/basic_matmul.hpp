@@ -44,7 +44,7 @@ ACT_DEVICE void basic_matmul_kernel(GemmCoord problemShape, GM_ADDR gmA,
   using CType = Gemm::GemmType<OUT_TYPE, LayoutC>;
 
   using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape,
-                                          L0TileShape, AType, BType, CType>;
+                                           L0TileShape, AType, BType, CType>;
   using BlockEpilogue = void;
 
   if (problemShape.m() > problemShape.n()) {
@@ -56,7 +56,7 @@ ACT_DEVICE void basic_matmul_kernel(GemmCoord problemShape, GM_ADDR gmA,
         Gemm::Kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 
     typename MatmulKernel::Params params{problemShape, gmA, layoutA, gmB,
-                                        layoutB,      gmC, layoutC};
+                                         layoutB,      gmC, layoutC};
 
     // call a kernel
     MatmulKernel matmul;
@@ -81,8 +81,8 @@ ACT_DEVICE void basic_matmul_kernel(GemmCoord problemShape, GM_ADDR gmA,
 template <class LayoutA, class LayoutB, class LayoutC, aclDataType IN_TYPE,
           aclDataType OUT_TYPE>
 ACT_GLOBAL void basic_matmul(GemmCoord problemShape, GM_ADDR gmA,
-                            LayoutA layoutA, GM_ADDR gmB, LayoutB layoutB,
-                            GM_ADDR gmC, LayoutC layoutC) {
+                             LayoutA layoutA, GM_ADDR gmB, LayoutB layoutB,
+                             GM_ADDR gmC, LayoutC layoutC) {
   if constexpr (IN_TYPE == ACL_FLOAT16 && OUT_TYPE == ACL_FLOAT16) {
     basic_matmul_kernel<LayoutA, LayoutB, LayoutC, half, half>(
         problemShape, gmA, layoutA, gmB, layoutB, gmC, layoutC);
