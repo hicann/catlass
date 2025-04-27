@@ -386,7 +386,9 @@ public:
                     1, curRowNum * embedRound / FLOAT_BLOCK_SIZE, 0, 0));
         }
         AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(oPingPangFlag + 4);
-        oPingPangFlag = 1 - oPingPangFlag;
+        if (needRowLoop) {
+            oPingPangFlag = 1 - oPingPangFlag;
+        }
     }
 
     ACT_DEVICE
