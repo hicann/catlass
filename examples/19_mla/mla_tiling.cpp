@@ -232,6 +232,7 @@ uint32_t GetKVSplitParam(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *t
     uint32_t kvSeqBlockNum = kvSeqlenMaxAlign / mlaInfo.blockSize;
     uint32_t kvBlockPerCore = CeilDiv(kvSeqBlockNum, kvSplitCoreNum);
     uint32_t kvSplitPerCore = kvBlockPerCore * mlaInfo.blockSize;
+    kvSplitCoreNum = CeilDiv(tilingHost[TILING_MAX_KVSEQLEN], kvSplitPerCore);
 
     tilingHost[TILING_KVSPLIT] = kvSplitPerCore;
     tilingHost[TILING_KVCORENUM] = kvSplitCoreNum;
@@ -293,6 +294,7 @@ uint32_t GetKVSplitParamSpec(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_
     uint32_t kvSeqBlockNum = kvSeqlenMaxAlign / mlaInfo.blockSize;
     uint32_t kvBlockPerCore = CeilDiv(kvSeqBlockNum, kvSplitCoreNum);
     uint32_t kvSplitPerCore = kvBlockPerCore * mlaInfo.blockSize;
+    kvSplitCoreNum = CeilDiv(tilingHost[TILING_MAX_KVSEQLEN], kvSplitPerCore);
 
     tilingHost[TILING_KVSPLIT] = kvSplitPerCore;
     tilingHost[TILING_KVCORENUM] = kvSplitCoreNum;
