@@ -5,6 +5,7 @@
 #include "kernel/grouped_matmul_slice_m.hpp"
 
 namespace ActKernel {
+using namespace Act;
 void GroupedMatmul(uint32_t blockNum, aclrtStream stream,
                    KernelInfo kernelInfo) {
   const uint32_t problemCount = kernelInfo.groupList.size();

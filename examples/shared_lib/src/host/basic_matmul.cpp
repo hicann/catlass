@@ -5,8 +5,9 @@
 #include "act_kernel.h"
 
 namespace ActKernel {
+using namespace Act;
 void BasicMatmul(uint32_t blockNum, aclrtStream stream, KernelInfo kernelInfo) {
-  Act::GemmCoord problemShape{kernelInfo.m, kernelInfo.n, kernelInfo.k};
+  GemmCoord problemShape{kernelInfo.m, kernelInfo.n, kernelInfo.k};
   using LayoutA = layout::RowMajor;
   using LayoutB = layout::RowMajor;
   using LayoutC = layout::RowMajor;

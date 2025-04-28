@@ -6,6 +6,7 @@
 #include "act_kernel.h"
 
 namespace ActKernel {
+using namespace Act;
 void OptimizedMatmul(uint32_t blockNum, aclrtStream stream,
                      KernelInfo kernelInfo) {
   uint32_t m = kernelInfo.m;
