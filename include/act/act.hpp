@@ -11,10 +11,6 @@
 #ifndef ACT_ACT_HPP
 #define ACT_ACT_HPP
 
-#ifndef K_MAX_SHAPE_DIM
-#define K_MAX_SHAPE_DIM 0
-#endif
-
 #include <kernel_operator.h>
 
 #include "act/detail/alignment.hpp"

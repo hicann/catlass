@@ -7,6 +7,13 @@
  * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
  * See LICENSE in the root of the software repository for the full text of the License.
  */
+
+// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0, 
+// optimizing stack space. If you need to use the ShapeInfo of the AscendC Tensor, please undefine this macro.
+#ifndef K_MAX_SHAPE_DIM
+#define K_MAX_SHAPE_DIM 0
+#endif
+
 #include <vector>
 #include <acl/acl.h>
 #include "helper.hpp"
