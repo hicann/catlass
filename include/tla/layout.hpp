@@ -110,23 +110,6 @@ auto MakeLayout(Shape const& shape, Stride const& stride)
     return Layout<Shape, Stride>(shape, stride);
 }
 
-struct UnpackedMakeShape {
-    template <class... T>
-    ACT_HOST_DEVICE constexpr
-    Shape<T...> operator()(T const&... v) const {
-        return {v...};
-    }
-};
-
-template <class Shape, class Stride>
-ACT_HOST_DEVICE constexpr
-auto MakeLayout(Shape const& shape, Stride const& stride)
-{
-    static_assert(is_tuple<Shape>::value || is_integral<Shape>::value);
-    static_assert(is_tuple<Stride>::value || is_integral<Stride>::value);
-    return MakeLayout(shape, stride);
-}
-
 // Convenience tags for common layouts
 
 template <class LayoutTag>

@@ -819,7 +819,6 @@ struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSr
     TileCopyTlaExt() {};
 
     ACT_DEVICE
-    template <class Shape>
     void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor, ActualShape actualShape)
     {
         AscendC::Nd2NzParams intriParams;
