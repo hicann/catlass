@@ -74,12 +74,6 @@ struct Tensor {
         return layout().stride();
     }
 
-    ACT_HOST_DEVICE constexpr
-    decltype(auto) orgShape() const
-    {
-        return layout().orgShape();
-    }
-
     tla::tuple<BuiltinTensor, Layout> rep_;
 };
 

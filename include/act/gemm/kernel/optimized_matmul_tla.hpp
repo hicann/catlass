@@ -36,14 +36,13 @@ public:
     using LayoutIn = typename TensorIn::Layout;
     using LayoutOut = typename TensorOut::Layout;
 
-    using LayoutInner = tla::Layout<tla::Shape<uint32_t, uint32_t>, tla::Stride<int64_t, tla::Int<1>>, tla::Shape<uint32_t, uint32_t>>;
+    using LayoutInner = tla::Layout<tla::Shape<uint32_t, uint32_t>, tla::Stride<int64_t, tla::Int<1>>>;
     using TensorInnerUb = tla::Tensor<AscendC::LocalTensor<Element>, LayoutInner, AscendC::TPosition::VECCALC>;
     using TensorInnerSrcGm = tla::Tensor<AscendC::GlobalTensor<Element>, LayoutInner, AscendC::TPosition::GM>;
 
     using LayoutInnerDstGm = tla::Layout<
         tla::Shape<tla::Shape<uint32_t, uint32_t>, tla::Shape<uint32_t, uint32_t>>,
-        tla::Stride<tla::Stride<int64_t, int64_t>, tla::Stride<tla::Int<1>, int64_t>>,
-        tla::Shape<uint32_t, uint32_t>>;
+        tla::Stride<tla::Stride<int64_t, int64_t>, tla::Stride<tla::Int<1>, int64_t>>>;
     using TensorInnerDstGm = tla::Tensor<AscendC::GlobalTensor<Element>, LayoutInnerDstGm, AscendC::TPosition::GM>;
 
     using CopyGm2Ub = Act::Gemm::Tile::TileCopyTla<ArchTag, TensorInnerSrcGm, TensorInnerUb>;
@@ -419,7 +418,7 @@ public:
             // Compute block-scoped matrix multiply-add
             blockMmad(
                 tensorBlockA, tensorBlockB, tensorBlockC, nextTensorBlockA, nextTensorBlockB,
-                isFirstBlock, hasNextBlock
+                actualBlockShape, nextActualBlockShape, isFirstBlock, hasNextBlock
             );
         }
     }

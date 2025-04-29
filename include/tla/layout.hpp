@@ -49,12 +49,12 @@ Coord<Ts...> MakeCoord(Ts const&... t) {
 // Layout
 //
 
-template <class Shape, class Stride, class OrgShape>
-struct Layout : private tla::tuple<Shape, Stride, OrgShape> {
+template <class Shape, class Stride>
+struct Layout : private tla::tuple<Shape, Stride> {
     // NOTE: This defaults static Shapes/Strides correctly, but not dynamic
     ACT_HOST_DEVICE constexpr
-    Layout(Shape  const& shape  = {}, Stride const& stride = {}, OrgShape const& orgShape = {})
-        : tla::tuple<Shape, Stride, OrgShape>(shape, stride, orgShape) {}
+    Layout(Shape  const& shape  = {}, Stride const& stride = {})
+        : tla::tuple<Shape, Stride>(shape, stride) {}
 
     //
     // Accessors
@@ -67,42 +67,28 @@ struct Layout : private tla::tuple<Shape, Stride, OrgShape> {
     ACT_HOST_DEVICE constexpr
     decltype(auto) shape()
     {
-        return get<0, I...>(static_cast<tla::tuple<Shape, Stride, OrgShape>&>(*this));
+        return get<0, I...>(static_cast<tla::tuple<Shape, Stride>&>(*this));
     }
 
     template <int... I>
     ACT_HOST_DEVICE constexpr
     decltype(auto) shape() const
     {
-        return get<0, I...>(static_cast<tla::tuple<Shape, Stride, OrgShape> const&>(*this));
+        return get<0, I...>(static_cast<tla::tuple<Shape, Stride> const&>(*this));
     }
 
     template <int... I>
     ACT_HOST_DEVICE constexpr
     decltype(auto) stride()
     {
-        return get<1, I...>(static_cast<tla::tuple<Shape, Stride, OrgShape>&>(*this));
+        return get<1, I...>(static_cast<tla::tuple<Shape, Stride>&>(*this));
     }
 
     template <int... I>
     ACT_HOST_DEVICE constexpr
     decltype(auto) stride() const
     {
-        return get<1, I...>(static_cast<tla::tuple<Shape, Stride, OrgShape> const&>(*this));
-    }
-
-    template <int... I>
-    ACT_HOST_DEVICE constexpr
-    decltype(auto) orgShape()
-    {
-        return get<2, I...>(static_cast<tla::tuple<Shape, Stride, OrgShape>&>(*this));
-    }
-
-    template <int... I>
-    ACT_HOST_DEVICE constexpr
-    decltype(auto) orgShape() const
-    {
-        return get<2, I...>(static_cast<tla::tuple<Shape, Stride, OrgShape> const&>(*this));
+        return get<1, I...>(static_cast<tla::tuple<Shape, Stride> const&>(*this));
     }
 
     template <class Coord>
@@ -115,14 +101,13 @@ struct Layout : private tla::tuple<Shape, Stride, OrgShape> {
 
 // Layout construction
 
-template <class Shape, class Stride, class OrgShape>
+template <class Shape, class Stride>
 ACT_HOST_DEVICE constexpr
-auto MakeLayout(Shape const& shape, Stride const& stride, OrgShape const& orgShape)
+auto MakeLayout(Shape const& shape, Stride const& stride)
 {
     static_assert(is_tuple<Shape>::value || is_integral<Shape>::value);
     static_assert(is_tuple<Stride>::value || is_integral<Stride>::value);
-    static_assert(depth_v<OrgShape> == 1 && rank_v<Shape> == rank_v<OrgShape>);
-    return Layout<Shape, Stride, OrgShape>(shape, stride, orgShape);
+    return Layout<Shape, Stride>(shape, stride);
 }
 
 struct UnpackedMakeShape {
@@ -139,8 +124,7 @@ auto MakeLayout(Shape const& shape, Stride const& stride)
 {
     static_assert(is_tuple<Shape>::value || is_integral<Shape>::value);
     static_assert(is_tuple<Stride>::value || is_integral<Stride>::value);
-    auto orgShape = tla::transform_apply(shape, Product{}, UnpackedMakeShape{});
-    return MakeLayout(shape, stride, orgShape);
+    return MakeLayout(shape, stride);
 }
 
 // Convenience tags for common layouts
@@ -160,62 +144,47 @@ auto MakeLayoutFromTag(LayoutTag const& tag)
 }
 
 // Return the shape of a mode
-template <int... Is, class Shape, class Stride, class OrgShape>
+template <int... Is, class Shape, class Stride>
 ACT_HOST_DEVICE constexpr
-decltype(auto) shape(Layout<Shape, Stride, OrgShape>& layout)
+decltype(auto) shape(Layout<Shape, Stride>& layout)
 {
     return layout.template shape<Is...>();
 }
 
-template <int... Is, class Shape, class Stride, class OrgShape>
+template <int... Is, class Shape, class Stride>
 ACT_HOST_DEVICE constexpr
-decltype(auto) shape(Layout<Shape, Stride, OrgShape> const& layout)
+decltype(auto) shape(Layout<Shape, Stride> const& layout)
 {
     return layout.template shape<Is...>();
 }
 
 // Return the stride of a mode
-template <int... Is, class Shape, class Stride, class OrgShape>
+template <int... Is, class Shape, class Stride>
 ACT_HOST_DEVICE constexpr
-decltype(auto) stride(Layout<Shape, Stride, OrgShape>& layout)
+decltype(auto) stride(Layout<Shape, Stride>& layout)
 {
     return layout.template stride<Is...>();
 }
 
-template <int... Is, class Shape, class Stride, class OrgShape>
+template <int... Is, class Shape, class Stride>
 ACT_HOST_DEVICE constexpr
-decltype(auto) stride(Layout<Shape, Stride, OrgShape> const& layout)
+decltype(auto) stride(Layout<Shape, Stride> const& layout)
 {
     return layout.template stride<Is...>();
-}
-
-// Return the orgShape of a mode
-template <int... Is, class Shape, class Stride, class OrgShape>
-ACT_HOST_DEVICE constexpr
-decltype(auto) orgShape(Layout<Shape, Stride, OrgShape>& layout)
-{
-    return layout.template orgShape<Is...>();
-}
-
-template <int... Is, class Shape, class Stride, class OrgShape>
-ACT_HOST_DEVICE constexpr
-decltype(auto) orgShape(Layout<Shape, Stride, OrgShape> const& layout)
-{
-    return layout.template orgShape<Is...>();
 }
 
 // Return the rank of layout
-template <int... Is, class Shape, class Stride, class OrgShape>
+template <int... Is, class Shape, class Stride>
 ACT_HOST_DEVICE constexpr
-auto rank(Layout<Shape, Stride, OrgShape> const& layout)
+auto rank(Layout<Shape, Stride> const& layout)
 {
     return rank(shape<Is...>(layout));
 }
 
 // Return the depth of the layout
-template <int... Is, class Shape, class Stride, class OrgShape>
+template <int... Is, class Shape, class Stride>
 ACT_HOST_DEVICE constexpr
-auto depth(Layout<Shape, Stride, OrgShape> const& layout)
+auto depth(Layout<Shape, Stride> const& layout)
 {
     return depth(shape<Is...>(layout));
 }
@@ -246,8 +215,8 @@ auto crd2idx(Coord const& coord, Shape const& shape, Stride const& stride)
 
 template <class Layout>
 struct is_layout : false_type {};
-template <class Shape, class Stride, class OrgShape>
-struct is_layout<Layout<Shape, Stride, OrgShape>> : true_type {};
+template <class Shape, class Stride>
+struct is_layout<Layout<Shape, Stride>> : true_type {};
 
 namespace detail {
 
@@ -336,22 +305,19 @@ auto MakeLayout(uint32_t const& rows, uint32_t const& cols)
             MakeShape(MakeShape(Int<Act::C0_NUM_PER_FRACTAL>{}, CeilDiv<Act::C0_NUM_PER_FRACTAL>(rows)),
                       MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv<ELE_NUM_PER_C0>(cols))),
             MakeStride(MakeStride(Int<ELE_NUM_PER_C0>{}, Int<ELE_NUM_PER_FRACTAL>{}),
-                       MakeStride(Int<1>{}, (int64_t)RoundUp<Act::C0_NUM_PER_FRACTAL>(rows) * ELE_NUM_PER_C0)),
-            MakeShape(rows, cols));
+                       MakeStride(Int<1>{}, (int64_t)RoundUp<Act::C0_NUM_PER_FRACTAL>(rows) * ELE_NUM_PER_C0)));
     } else if constexpr (detail::iszZ<Element, Layout>::value) {
         return MakeLayout(
             MakeShape(MakeShape(Int<Act::C0_NUM_PER_FRACTAL>{}, CeilDiv<Act::C0_NUM_PER_FRACTAL>(rows)),
                       MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv<ELE_NUM_PER_C0>(cols))),
             MakeStride(MakeStride(Int<ELE_NUM_PER_C0>{}, (int64_t)RoundUp<ELE_NUM_PER_C0>(cols) * Act::C0_NUM_PER_FRACTAL),
-                       MakeStride(Int<1>{}, Int<ELE_NUM_PER_FRACTAL>{})),
-            MakeShape(rows, cols));
+                       MakeStride(Int<1>{}, Int<ELE_NUM_PER_FRACTAL>{})));
     } else {
         return MakeLayout(
             MakeShape(MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv<ELE_NUM_PER_C0>(rows)),
                       MakeShape(Int<Act::C0_NUM_PER_FRACTAL>{}, CeilDiv<Act::C0_NUM_PER_FRACTAL>(cols))),
             MakeStride(MakeStride(Int<1>{}, (int64_t)RoundUp<Act::C0_NUM_PER_FRACTAL>(cols) * ELE_NUM_PER_C0),
-                       MakeStride(Int<ELE_NUM_PER_C0>{}, Int<ELE_NUM_PER_FRACTAL>{})),
-            MakeShape(rows, cols));
+                       MakeStride(Int<ELE_NUM_PER_C0>{}, Int<ELE_NUM_PER_FRACTAL>{})));
     }
 }
 
@@ -372,8 +338,7 @@ auto MakeLayoutTile(Layout const& layout, ShapeNew const& shapeNew)
         return MakeLayout(
             MakeShape(MakeShape(Int<dstInnerShapeRow>{}, CeilDiv<dstInnerShapeRow>(rows)),
                       MakeShape(Int<dstInnerShapeCol>{}, CeilDiv<dstInnerShapeCol>(cols))),
-            layout.stride(),
-            shapeNew);
+            layout.stride());
     } else {
         const uint32_t rows = get<0>(shapeNew);
         const uint32_t cols = get<1>(shapeNew);
@@ -382,8 +347,7 @@ auto MakeLayoutTile(Layout const& layout, ShapeNew const& shapeNew)
         return MakeLayout(
             MakeShape(MakeShape(dstInnerShapeRow, CeilDiv(rows, dstInnerShapeRow)),
                       MakeShape(dstInnerShapeCol, CeilDiv(cols, dstInnerShapeCol))),
-            layout.stride(),
-            shapeNew);
+            layout.stride());
     }
 }
 
@@ -394,8 +358,7 @@ ACT_HOST_DEVICE constexpr auto MakeLayoutL0C(uint32_t const& rows, uint32_t cons
         MakeShape(MakeShape(Int<Act::C0_NUM_PER_FRACTAL>{}, CeilDiv<Act::C0_NUM_PER_FRACTAL>(rows)),
                   MakeShape(Int<Act::C0_NUM_PER_FRACTAL>{}, CeilDiv<Act::C0_NUM_PER_FRACTAL>(cols))),
         MakeStride(MakeStride(Int<Act::C0_NUM_PER_FRACTAL>{}, Int<ELE_NUM_PER_FRACTAL>{}),
-                   MakeStride(Int<1>{}, (int64_t)RoundUp<Act::C0_NUM_PER_FRACTAL>(rows) * Act::C0_NUM_PER_FRACTAL)),
-        MakeShape(rows, cols));
+                   MakeStride(Int<1>{}, (int64_t)RoundUp<Act::C0_NUM_PER_FRACTAL>(rows) * Act::C0_NUM_PER_FRACTAL)));
 }
 
 } // end namespace tla

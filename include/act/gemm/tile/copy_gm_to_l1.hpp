@@ -764,7 +764,43 @@ struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSrc>,
     }
 };
 
-/// Partial specialization for CopyGmToL1, AtlasA2, PaddingRowMajor in and zN out.
+/// Partial specialization for TileCopyTlaExt, CopyGmToL1, AtlasA2, PaddingRowMajor in and zN out.
+template <class ElementSrc, class ElementDst, class LayoutSrc_, class LayoutDst_>
+struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::GM>,
+    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst_, AscendC::TPosition::A1>,
+    layout::RowMajor, layout::zN> {
+    using LayoutDst = LayoutDst_;
+    using LayoutSrc = LayoutSrc_;
+    using TensorDst = tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, AscendC::TPosition::A1>;
+    using TensorSrc = tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, AscendC::TPosition::GM>;
+    using ActualShape = tla::Shape<uint32_t, uint32_t>;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
+
+    // Mehtods
+
+    ACT_DEVICE
+    TileCopyTlaExt() {};
+
+    ACT_DEVICE
+    void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor, ActualShape actualShape)
+    {
+        AscendC::Nd2NzParams intriParams;
+
+        intriParams.ndNum = 1;
+        intriParams.dValue = tla::get<1>(actualShape);
+        intriParams.srcNdMatrixStride = 0;
+        intriParams.dstNzC0Stride = tla::get<1, 1>(dstTensor.stride()) / ELE_NUM_PER_C0;
+        intriParams.dstNzMatrixStride = 0;
+
+        intriParams.nValue = tla::get<0>(actualShape);
+        intriParams.srcDValue = tla::get<0>(srcTensor.stride());
+        intriParams.dstNzNStride = tla::get<0, 0>(dstTensor.stride()) / ELE_NUM_PER_C0;
+        AscendC::DataCopy(dstTensor.data(), srcTensor.data(), intriParams);
+    }
+};
+
+/// Partial specialization for TileCopyTlaExt, CopyGmToL1, AtlasA2, PaddingRowMajor in and zN out.
 template <class ElementSrc, class ElementDst, class LayoutSrc_, class LayoutDst_>
 struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::GM>,
     tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst_, AscendC::TPosition::A1>,
@@ -773,6 +809,7 @@ struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSr
     using LayoutSrc = LayoutSrc_;
     using TensorDst = tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, AscendC::TPosition::A1>;
     using TensorSrc = tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, AscendC::TPosition::GM>;
+    using ActualShape = tla::Shape<uint32_t, uint32_t>;
 
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
 
@@ -782,25 +819,61 @@ struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSr
     TileCopyTlaExt() {};
 
     ACT_DEVICE
-    void operator()(
-        TensorDst const &dstTensor, TensorSrc const &srcTensor)
+    template <class Shape>
+    void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor, ActualShape actualShape)
     {
         AscendC::Nd2NzParams intriParams;
 
         intriParams.ndNum = 1;
-        intriParams.dValue = tla::get<1>(srcTensor.orgShape());
+        intriParams.dValue = tla::get<1>(actualShape);
         intriParams.srcNdMatrixStride = 0;
         intriParams.dstNzC0Stride = tla::get<1, 1>(dstTensor.stride()) / ELE_NUM_PER_C0;
         intriParams.dstNzMatrixStride = 0;
 
-        intriParams.nValue = tla::get<0>(srcTensor.orgShape());
+        intriParams.nValue = tla::get<0>(actualShape);
         intriParams.srcDValue = tla::get<0, 0>(srcTensor.stride());
         intriParams.dstNzNStride = tla::get<0, 0>(dstTensor.stride()) / ELE_NUM_PER_C0;
         AscendC::DataCopy(dstTensor.data(), srcTensor.data(), intriParams);
     }
 };
 
-/// Partial specialization for CopyGmToL1, AtlasA2, PaddingColumnMajor in and nZ out.
+/// Partial specialization for TileCopyTlaExt, CopyGmToL1, AtlasA2, PaddingColumnMajor in and nZ out.
+template <class ElementSrc, class ElementDst, class LayoutSrc_, class LayoutDst_>
+struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::GM>,
+    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst_, AscendC::TPosition::A1>,
+    layout::ColumnMajor, layout::nZ> {
+    using LayoutDst = LayoutDst_;
+    using LayoutSrc = LayoutSrc_;
+    using TensorDst = tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, AscendC::TPosition::A1>;
+    using TensorSrc = tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, AscendC::TPosition::GM>;
+    using ActualShape = tla::Shape<uint32_t, uint32_t>;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
+
+    // Mehtods
+
+    ACT_DEVICE
+    TileCopyTlaExt() {};
+
+    ACT_DEVICE
+    void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor, ActualShape actualShape)
+    {
+        AscendC::Nd2NzParams intriParams;
+
+        intriParams.ndNum = 1;
+        intriParams.dValue = tla::get<0>(actualShape);
+        intriParams.srcNdMatrixStride = 0;
+        intriParams.dstNzC0Stride = tla::get<0, 1>(dstTensor.stride()) / ELE_NUM_PER_C0;
+        intriParams.dstNzMatrixStride = 0;
+
+        intriParams.nValue = tla::get<1>(actualShape);
+        intriParams.srcDValue = tla::get<1>(srcTensor.stride());
+        intriParams.dstNzNStride = tla::get<1, 0>(dstTensor.stride()) / ELE_NUM_PER_C0;
+        AscendC::DataCopy(dstTensor.data(), srcTensor.data(), intriParams);
+    }
+};
+
+/// Partial specialization for TileCopyTlaExt, CopyGmToL1, AtlasA2, PaddingColumnMajor in and nZ out.
 template <class ElementSrc, class ElementDst, class LayoutSrc_, class LayoutDst_>
 struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::GM>,
     tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst_, AscendC::TPosition::A1>,
@@ -809,6 +882,7 @@ struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSr
     using LayoutSrc = LayoutSrc_;
     using TensorDst = tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, AscendC::TPosition::A1>;
     using TensorSrc = tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, AscendC::TPosition::GM>;
+    using ActualShape = tla::Shape<uint32_t, uint32_t>;
 
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
 
@@ -818,18 +892,17 @@ struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSr
     TileCopyTlaExt() {};
 
     ACT_DEVICE
-    void operator()(
-        TensorDst const &dstTensor, TensorSrc const &srcTensor)
+    void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor, ActualShape actualShape)
     {
         AscendC::Nd2NzParams intriParams;
 
         intriParams.ndNum = 1;
-        intriParams.dValue = tla::get<0>(srcTensor.orgShape());
+        intriParams.dValue = tla::get<0>(actualShape);
         intriParams.srcNdMatrixStride = 0;
         intriParams.dstNzC0Stride = tla::get<0, 1>(dstTensor.stride()) / ELE_NUM_PER_C0;
         intriParams.dstNzMatrixStride = 0;
 
-        intriParams.nValue = tla::get<1>(srcTensor.orgShape());
+        intriParams.nValue = tla::get<1>(actualShape);
         intriParams.srcDValue = tla::get<1, 0>(srcTensor.stride());
         intriParams.dstNzNStride = tla::get<1, 0>(dstTensor.stride()) / ELE_NUM_PER_C0;
         AscendC::DataCopy(dstTensor.data(), srcTensor.data(), intriParams);
