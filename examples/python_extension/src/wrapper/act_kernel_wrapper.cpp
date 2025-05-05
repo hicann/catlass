@@ -249,7 +249,7 @@ at::Tensor RunOptimizedMatmul(const at::Tensor &mat1, const at::Tensor &mat2, co
     kernelInfo.inputAddr[0] = static_cast<uint8_t *>(const_cast<void *>(mat1.storage().data()));
     kernelInfo.inputAddr[1] = static_cast<uint8_t *>(const_cast<void *>(mat2.storage().data()));
     torch::Dtype outputDataType = TypeStrToTorchDtype(outDType, mat1.scalar_type());
-    at::Tensor result = at::empty(InferShape(mat1.sizes(), mat2.sizes()), outputDataType).to(GetAtDevice());
+    at::Tensor result = at::empty(InferShape(mat1.sizes(), mat2.sizes()), mat1.options());
     kernelInfo.outputAddr.resize(1);
     kernelInfo.outputAddr.at(0) = static_cast<uint8_t *>(const_cast<void *>(result.storage().data()));
     aclrtStream stream = c10_npu::getCurrentNPUStream().stream(false);
