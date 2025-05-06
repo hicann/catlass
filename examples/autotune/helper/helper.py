@@ -30,3 +30,16 @@ def get_ascendc_sync_base_addr(device_id : int):
     if ret != 0:
         raise Exception("rtGetC2cCtrlAddr failed ret = {}".format(ret))
     return ffts_addr.value, ffts_len.value
+
+
+def check_autotune_avalible():
+
+    ERROR_STR = (
+        "mskpp.autotune is not found in current CANN toolkit. The autotune feature "
+        "is only supported in CANN toolkit 8.1.RC1.beta1 or higher version. "
+        "The lower version needs to be upgraded."
+    )
+
+    import mskpp
+    if not hasattr(mskpp, "autotune"):
+        raise Exception(ERROR_STR)
