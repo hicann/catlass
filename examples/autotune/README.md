@@ -1,7 +1,7 @@
 # Autotune Readme
 ## Autotune自动寻优功能简介
 算子的运行性能与算子定义相关，比如matmul在Kernel层算子定义中使用不同的L1TileShape和L0TileShape参数时，算子的性能会有显著差异。
-为协助开发者高效寻出目标场景下的最优Tiling参数，可使用mskpp库提供的autotune接口来实现自动寻优。
+为协助开发者高效寻出目标场景下的最优Tiling参数，可使用[mskpp库](https://www.hiascend.com/document/detail/zh/canncommercial/81RC1/devaids/opdev/optool/atlasopdev_16_0154.html)提供的autotune接口来实现自动寻优。
 autotune接口启动后会遍历预设的搜索空间，用备选参数替换Kernel代码中被标记为"// tunable"的参数，实例化不同Tiling参数配置的Kernel，
 并行完成Kernel编译与下发，最终展示不同Tiling参数下的Kernel运行耗时，供开发者选出最优Tiling参数。
 自动寻优提供样例代码参考[00_basic_matmul_autotune.py](./00_basic_matmul_autotune.py)等。
