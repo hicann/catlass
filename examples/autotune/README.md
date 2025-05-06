@@ -21,8 +21,7 @@ autotune接口启动后会遍历预设的搜索空间，用备选参数替换Ker
 ```
 
 ## CANN版本配套说明
-- autotune自动寻优功能首次随 CANN 8.1.RC1.beta1 版本发布，需配套 CANN 8.1.RC1.beta1 及之后版本使用。
-（参考《[CANN软件安装指南](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/800alpha002/softwareinst/instg/instg_0001.html?Mode=PmIns&OS=Ubuntu&Software=cannToolKit)》安装CANN开发套件包以及配套固件和驱动）
+- autotune自动寻优功能首次随 CANN 8.1.RC1.beta1 版本发布，需配套 CANN 8.1.RC1.beta1 及之后版本使用。CANN开发套件包: [下载地址](https://www.hiascend.com/zh/developer/download/community/result?module=cann)
 
 ## 使用示例
 - 运行00_basic_matmul_autotune自动寻优，
