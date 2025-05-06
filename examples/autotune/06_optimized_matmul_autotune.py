@@ -12,6 +12,8 @@ import mskpp
 from helper.act_type import GemmCoord, RowMajor, ColumnMajor
 from helper.helper import get_ascendc_sync_base_addr, AIC_CORE_NUM_ATLAS_A2_910B4, check_autotune_avalible
 
+
+check_autotune_avalible()
 device_id = 0
 
 def get_kernel():
@@ -65,8 +67,6 @@ def optimized_matmul(ffts_addr, problem_shape, a, layout_a, b, layout_b, c, layo
 
 
 if __name__ == "__main__":
-
-    check_autotune_avalible()
 
     def round_up(val, align):
         return (val + align - 1) // align * align

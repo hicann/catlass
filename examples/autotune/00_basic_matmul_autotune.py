@@ -13,6 +13,9 @@ from helper.act_type import GemmCoord, RowMajor
 from helper.helper import AIC_CORE_NUM_ATLAS_A2_910B4, check_autotune_avalible
 
 
+check_autotune_avalible()
+
+
 def get_kernel():
     kernel_file = "../00_basic_matmul/basic_matmul.cpp"
     kernel_name = "BasicMatmul"
@@ -53,8 +56,6 @@ def basic_matmul(problem_shape, a, layout_a, b, layout_b, c, layout_c):
 
 
 if __name__ == "__main__":
-
-    check_autotune_avalible()
 
     m = 256
     n = 512

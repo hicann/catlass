@@ -13,6 +13,9 @@ from helper.act_type import GemmCoord, RowMajor, ColumnMajor
 from helper.helper import AIC_CORE_NUM_ATLAS_A2_910B4, check_autotune_avalible
 
 
+check_autotune_avalible()
+
+
 def get_kernel():
     kernel_file = "../08_grouped_matmul/grouped_matmul.cpp"
     kernel_name = "GroupedMatmul"
@@ -64,8 +67,6 @@ def grouped_matmul(problem_count, problem_shape_list,
 
 
 if __name__ == "__main__":
-
-    check_autotune_avalible()
 
     m = 1024
     n = 768
