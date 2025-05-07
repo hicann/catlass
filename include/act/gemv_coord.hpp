@@ -30,7 +30,7 @@ struct GemvShape {
     static constexpr int64_t COUNT = MN;
 
     /// Returns a Coord object
-   ACT_HOST_DEVICE
+    ACT_HOST_DEVICE
     static Coord<2> ToCoord() {
         return MakeCoord(M, N);
     }
@@ -52,44 +52,44 @@ struct GemvCoord : public Coord<2, uint32_t> {
     static constexpr int N_INDEX = 1;
 
     /// Default ctor
-   ACT_HOST_DEVICE
+    ACT_HOST_DEVICE
     GemvCoord() {}
 
     /// Constructs from Coord<2> and a batch
-   ACT_HOST_DEVICE
+    ACT_HOST_DEVICE
     GemvCoord(Coord<2, Index> const& coord)
         : Base(coord) {}
 
     /// Helper to construct from M, N coordinates
-   ACT_HOST_DEVICE
+    ACT_HOST_DEVICE
     GemvCoord(Index m, Index n)
         : Base(MakeCoord(m, n)) {}
 
     /// Returns the GEMV M coordinate (row of the result y)
-   ACT_HOST_DEVICE
+    ACT_HOST_DEVICE
     Index const& m() const {
         return this->At(M_INDEX);
     }
 
     /// Returns reference to the GEMV M coordinate
-   ACT_HOST_DEVICE
+    ACT_HOST_DEVICE
     Index& m() {
         return this->At(M_INDEX);
     }
 
     /// Returns the GEMV N coordinate (column of the matrix A or the input vector x)
-   ACT_HOST_DEVICE
+    ACT_HOST_DEVICE
     Index const& n() const {
         return this->At(N_INDEX);
     }
 
     /// Returns reference to the GEMV N coordinate
-   ACT_HOST_DEVICE
+    ACT_HOST_DEVICE
     Index& n() {
         return this->At(N_INDEX);
     }
 
-   ACT_HOST_DEVICE
+    ACT_HOST_DEVICE
     auto GetCoordMN() const {
         return this->GetCoordByAxis<M_INDEX, N_INDEX>();
     }
