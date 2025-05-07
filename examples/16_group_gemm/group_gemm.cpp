@@ -1,12 +1,12 @@
 /*
-* Copyright (c) 2024 Huawei Technologies Co., Ltd.
-* This file is a part of the CANN Open Software.
-* Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
-* Please refer to the License for details. You may not use this file except in compliance with the License.
-* THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-* INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-* See LICENSE in the root of the software repository for the full text of the License.
-*/
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * This file is a part of the CANN Open Software.
+ * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
+ */
 
 // By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0, 
 // optimizing stack space. If you need to use the ShapeInfo of the AscendC Tensor, please undefine this macro.
@@ -46,7 +46,7 @@ using ScalarType = float;
 template <
     typename LayoutA,
     typename LayoutB,
-    typename LayoutC
+    typename LayoutX
 >
 ACT_GLOBAL
 void GroupGemm(
@@ -56,50 +56,50 @@ void GroupGemm(
     GM_ADDR ptrProblemShape,
     GM_ADDR gmA, GM_ADDR ptrLayoutA,
     GM_ADDR gmB, GM_ADDR ptrLayoutB,
-    GM_ADDR gmC, GM_ADDR ptrLayoutC,
-    GM_ADDR gmWA, GM_ADDR ptrlayoutWA,
-    GM_ADDR gmWB, GM_ADDR ptrlayoutWB,
-    GM_ADDR gmWorkspace
-){
+    GM_ADDR gmX, GM_ADDR ptrLayoutX,
+    GM_ADDR gmWA, GM_ADDR ptrLayoutWA,
+    GM_ADDR gmWB, GM_ADDR ptrLayoutWB,
+    GM_ADDR gmWorkspace)
+{
     // Set FFTS address
     AscendC::SetSyncBaseAddr(fftsAddr);
     using ArchTag = Arch::AtlasA2;
     constexpr bool enableUnitFlag = true;
     constexpr bool enableShuffleK = true;
-    using GemmBlockDispatchPolicy = Gemm::MmadAtlasA2Preload<enableUnitFlag, enableShuffleK>;
-    using EpilogueBlockDispatchPolicy = Epilogue::EpilogueAtlasA2ElemWiseOneSource;
+    constexpr bool enableABBA = true;
+    using GemmBlockDispatchPolicy = Act::Gemm::GemmAtlasA2<enableUnitFlag, enableShuffleK, enableABBA>;
+    using EpilogueBlockDispatchPolicy = Act::Epilogue::EpilogueAtlasA2Gemm;
     using AType = Gemm::GemmType<float, LayoutA>;
     using BType = Gemm::GemmType<float, LayoutB>;
-    using CType = Gemm::GemmType<float, LayoutC>;
-    using XType = Gemm::GemmType<float, LayoutC>;
+    using CType = Gemm::GemmType<float, LayoutX>;
+    using XType = Gemm::GemmType<float, LayoutX>;
     
     using L1TileShape = GemmShape<128, 128, 128>;
     using L0TileShape = GemmShape<128, 128, 64>;
     using TileShapeCast = MatrixShape<L1TileShape::M / 2, L1TileShape::N>;
 
-    using GemmBlock = Gemm::Block::BlockGemm<GemmBlockDispatchPolicy, L1TileShape, L0TileShape, AType, BType, XType>; 
+    using GemmBlock = Gemm::Block::BlockGemm<GemmBlockDispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>; 
     
-    using DType = CType;
-    using ComputeType = XType;
+    using DType = XType;
+    using ComputeType = CType;
     constexpr uint32_t computeLength = L1TileShape::MN / 2;
 
     using TileElemWiseAddGemm = Epilogue::Tile::TileElemWiseAdd<ArchTag, ComputeType, computeLength>;
     using TileElemWiseMulsGemm = Epilogue::Tile::TileElemWiseMuls<ArchTag, ComputeType, computeLength>;
-    using TileElemWiseCastC = Epilogue::Tile::TileCast<ArchTag, ComputeType, CType, TileShapeCast>;
     using TileElemWiseCastD = Epilogue::Tile::TileCast<ArchTag, DType, ComputeType, TileShapeCast>;
 
     using EpilogueTileCopy = Epilogue::Tile::TileCopy<ArchTag, CType, XType, DType>;
 
-    using EpilogueBlock = Epilogue::Block::BlockEpilogue<EpilogueBlockDispatchPolicy, CType, XType, DType, TileElemWiseAddGemm, TileElemWiseMulsGemm, TileElemWiseCastC, TileElemWiseCastD, EpilogueTileCopy>;
+    using EpilogueBlock = Epilogue::Block::BlockEpilogue<EpilogueBlockDispatchPolicy, CType, XType, DType, TileElemWiseAddGemm, TileElemWiseMulsGemm, TileElemWiseCastD, EpilogueTileCopy>;
 
     using GroupGemmKernel = Gemm::Kernel::KernelGroupGemm<GemmBlock, EpilogueBlock>;
-    typename GroupGemmKernel::Params params{problemCount,ptrProblemShape, alpha, beta, gmA, ptrLayoutA, gmB, ptrLayoutB, gmWorkspace, ptrLayoutC,gmWA, ptrlayoutWA, gmWB, ptrlayoutWB, gmC, gmC}; // 这里得修改 gmX保存A * B
+    typename GroupGemmKernel::Params params{problemCount, ptrProblemShape, alpha, beta, gmA, ptrLayoutA, gmB, ptrLayoutB, gmWorkspace, ptrLayoutX, gmWA, ptrLayoutWA, gmWB, ptrLayoutWB, gmX, gmX};
 
     GroupGemmKernel groupgemm;
     groupgemm(params);
 }
 
-typedef struct Options {
+struct Options {
     const std::string HELPER = "16_group_gemm groupCnt mlist nlist klist [deviceId]";
     uint32_t groupCnt = 8;
     std::vector<uint32_t> mList;
@@ -119,7 +119,8 @@ typedef struct Options {
             ARGS_MAX
         };
 
-        if (argc > ARGS_MAX || argc <= KLIST_INDEX) {
+        if (argc > ARGS_MAX || argc <= KLIST_INDEX) 
+        {
             std::cerr << HELPER << std::endl;
             return -1;
         }
@@ -129,12 +130,14 @@ typedef struct Options {
         parseList(argv[NLIST_INDEX], nList);
         parseList(argv[KLIST_INDEX], kList);
 
-        if (mList.size() != groupCnt || nList.size() != groupCnt || kList.size() != groupCnt) {
+        if (mList.size() != groupCnt || nList.size() != groupCnt || kList.size() != groupCnt) 
+        {
             std::cerr << "List lengths do not match groupCnt." << std::endl;
             return -1;
         }
 
-        if (argc == ARGS_MAX) {
+        if (argc == ARGS_MAX) 
+        {
             deviceId = std::atoi(argv[DEVICE_ID_INDEX]);
         }
 
@@ -142,7 +145,8 @@ typedef struct Options {
     }
 
 private:
-    void parseList(const char* str, std::vector<uint32_t>& list) {
+    void parseList(const char* str, std::vector<uint32_t>& list) 
+    {
         char* copy = strdup(str);
         char* token = std::strtok(copy, ",");
         while (token != nullptr) {
@@ -151,11 +155,12 @@ private:
         }
         free(copy);
     }
-}Options;
+};
 
 layout::RowMajor GetWorkspaceLayout(layout::RowMajor layout, uint32_t align)
 {
-    if (align == 0) {
+    if (align == 0) 
+    {
         return layout;
     }
     return layout::RowMajor(layout.shape(0), layout.shape(1),
@@ -164,7 +169,8 @@ layout::RowMajor GetWorkspaceLayout(layout::RowMajor layout, uint32_t align)
 
 layout::ColumnMajor GetWorkspaceLayout(layout::ColumnMajor layout, uint32_t align)
 {
-    if (align == 0) {
+    if (align == 0) 
+    {
         return layout;
     }
     return layout::ColumnMajor(layout.shape(0), layout.shape(1),
@@ -198,46 +204,38 @@ void Run(Options& options){
     ACL_CHECK(aclrtCreateStream(&stream));
 
     uint32_t groupCnt = options.groupCnt;
-
-    uint32_t* M_array= new uint32_t[groupCnt];
-    uint32_t* N_array= new uint32_t[groupCnt];
-    uint32_t* K_array= new uint32_t[groupCnt];
-    for (uint32_t i = 0; i < groupCnt; ++i) {
-        M_array[i] = options.mList[i];
-        N_array[i] = options.nList[i];
-        K_array[i] = options.kList[i];
-    }
     
     const uint32_t align = 128; 
     using LayoutA = layout::RowMajor;
     using LayoutB = layout::RowMajor;
-    using LayoutC = layout::RowMajor;
+    using LayoutX = layout::RowMajor;
 
     // crate grouped matmul problem shapes and layouts
     std::vector<GemmCoord> problemShapeList(groupCnt);
     std::vector<LayoutA> layoutAList(groupCnt);
     std::vector<LayoutB> layoutBList(groupCnt);
-    std::vector<LayoutC> layoutCList(groupCnt);
+    std::vector<LayoutX> layoutXList(groupCnt);
     std::vector<LayoutA> layoutWAList(groupCnt);
     std::vector<LayoutB> layoutWBList(groupCnt);
 
     uint64_t allMKCnt = 0;
     uint64_t allKNCnt = 0;
     uint64_t allMNCnt = 0;
-    uint64_t allMKCnt_padding = 0;
-    uint64_t allKNCnt_padding = 0;
-    for (uint32_t i = 0; i < groupCnt; ++i) {
-        problemShapeList[i] = GemmCoord{M_array[i], N_array[i], K_array[i]};
-        layoutAList[i] = LayoutA{M_array[i], K_array[i]};
-        layoutBList[i] = LayoutB{K_array[i], N_array[i]};
-        layoutCList[i] = LayoutC{M_array[i], N_array[i]};
+    uint64_t allMKCntPadding = 0;
+    uint64_t allKNCntPadding = 0;
+    for (uint32_t i = 0; i < groupCnt; ++i) 
+    {
+        problemShapeList[i] = GemmCoord{options.mList[i], options.nList[i], options.kList[i]};
+        layoutAList[i] = LayoutA{options.mList[i], options.kList[i]};
+        layoutBList[i] = LayoutB{options.kList[i], options.nList[i]};
+        layoutXList[i] = LayoutX{options.mList[i], options.nList[i]};
         layoutWAList[i] = GetWorkspaceLayout(layoutAList[i], align);
         layoutWBList[i] = GetWorkspaceLayout(layoutBList[i], align);
-        allMKCnt += M_array[i] * K_array[i];
-        allKNCnt += K_array[i] * N_array[i];
-        allMNCnt += M_array[i] * N_array[i];
-        allMKCnt_padding += GetWorkspaceLen(layoutWAList[i]);
-        allKNCnt_padding += GetWorkspaceLen(layoutWBList[i]);
+        allMKCnt += options.mList[i] * options.kList[i];
+        allKNCnt += options.kList[i] * options.nList[i];
+        allMNCnt += options.mList[i] * options.nList[i];
+        allMKCntPadding += GetWorkspaceLen(layoutWAList[i]);
+        allKNCntPadding += GetWorkspaceLen(layoutWBList[i]);
     }
     size_t scalarSize = groupCnt * sizeof(ScalarType);
     std::vector<ScalarType> hostAlpha(groupCnt);
@@ -247,44 +245,43 @@ void Run(Options& options){
 
     size_t sizeA = allMKCnt * sizeof(float);
     size_t sizeB = allKNCnt * sizeof(float);
+    size_t sizeX = allMNCnt * sizeof(float);
     size_t sizeC = allMNCnt * sizeof(float);
     std::vector<float> hostA(allMKCnt);
     std::vector<float> hostB(allKNCnt);
-    std::vector<float> hostC(allMNCnt);
+    std::vector<float> hostX(allMNCnt);
     golden::FillRandomData(hostA,  -1.0f, 1.0f);
     golden::FillRandomData(hostB,  -1.0f, 1.0f);
-    golden::FillRandomData(hostC,  -1.0f, 1.0f);
+    golden::FillRandomData(hostX,  -1.0f, 1.0f);
 
-    ScalarType* deviceAlpha{nullptr};
+    uint8_t* deviceAlpha{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceAlpha), scalarSize, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceAlpha, scalarSize, hostAlpha.data(), scalarSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    ScalarType* deviceBeta{nullptr};
+    uint8_t* deviceBeta{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceBeta), scalarSize, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceBeta, scalarSize, hostBeta.data(), scalarSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    float *deviceA{nullptr};
+    uint8_t *deviceA{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
-    size_t sizeWA = allMKCnt_padding * sizeof(float);
-    float *deviceWA{nullptr};
+    size_t sizeWA = allMKCntPadding * sizeof(float);
+    uint8_t *deviceWA{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWA), sizeWA, ACL_MEM_MALLOC_HUGE_FIRST));
 
-    float *deviceB{nullptr};
+    uint8_t *deviceB{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
-    size_t sizeWB = allKNCnt_padding * sizeof(float);
-    float *deviceWB{nullptr};
+    size_t sizeWB = allKNCntPadding * sizeof(float);
+    uint8_t *deviceWB{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWB), sizeWB, ACL_MEM_MALLOC_HUGE_FIRST));
 
-
-    float* deviceC{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMemcpy(deviceC, sizeC, hostC.data(), sizeC, ACL_MEMCPY_HOST_TO_DEVICE));
+    uint8_t* deviceX{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceX), sizeX, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMemcpy(deviceX, sizeX, hostX.data(), sizeX, ACL_MEMCPY_HOST_TO_DEVICE));
     
-    size_t sizeX = allMNCnt * sizeof(float);
-    float *gmWorkspace{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&gmWorkspace), sizeX, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t *gmWorkspace{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&gmWorkspace), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
     uint8_t *problemShapeListDevice{nullptr};
     size_t sizeProblemShapeList = problemShapeList.size() * sizeof(GemmCoord);
@@ -305,11 +302,11 @@ void Run(Options& options){
     ACL_CHECK(aclrtMemcpy(layoutBListDevice, sizeLayoutBList,
         layoutBList.data(), sizeLayoutBList, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *layoutCListDevice{nullptr};
-    size_t sizeLayoutCList = layoutCList.size() * sizeof(LayoutC);
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&layoutCListDevice), sizeLayoutCList, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMemcpy(layoutCListDevice, sizeLayoutCList,
-        layoutCList.data(), sizeLayoutCList, ACL_MEMCPY_HOST_TO_DEVICE));
+    uint8_t *layoutXListDevice{nullptr};
+    size_t sizeLayoutXList = layoutXList.size() * sizeof(LayoutX);
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&layoutXListDevice), sizeLayoutXList, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMemcpy(layoutXListDevice, sizeLayoutXList,
+        layoutXList.data(), sizeLayoutXList, ACL_MEMCPY_HOST_TO_DEVICE));
     
     uint8_t *layoutWAListDevice{nullptr};
     size_t sizeLayoutWAList = layoutWAList.size() * sizeof(LayoutA);
@@ -329,27 +326,28 @@ void Run(Options& options){
     RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
 
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
-    GroupGemm<LayoutA, LayoutB, LayoutC><<<aicCoreNum, nullptr, stream>>>(
+    GroupGemm<LayoutA, LayoutB, LayoutX><<<aicCoreNum, nullptr, stream>>>(
         groupCnt,
         fftsAddr,
-        (uint8_t*)deviceAlpha, (uint8_t*)deviceBeta,
+        deviceAlpha, deviceBeta,
         problemShapeListDevice,
-        (uint8_t*)deviceA, layoutAListDevice,
-        (uint8_t*)deviceB, layoutBListDevice,
-        (uint8_t*)deviceC, layoutCListDevice,
-        (uint8_t*)deviceWA, layoutWAListDevice,
-        (uint8_t*)deviceWB, layoutWBListDevice,
-        (uint8_t*)gmWorkspace);
+        deviceA, layoutAListDevice,
+        deviceB, layoutBListDevice,
+        deviceX, layoutXListDevice,
+        deviceWA, layoutWAListDevice,
+        deviceWB, layoutWBListDevice,
+        gmWorkspace);
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
     std::vector<float> hostRes(allMNCnt);
-    ACL_CHECK(aclrtMemcpy(hostRes.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
+    ACL_CHECK(aclrtMemcpy(hostRes.data(), sizeX, deviceX, sizeX, ACL_MEMCPY_DEVICE_TO_HOST));
     std::vector<float> hostGolden(allMNCnt);
-    golden::ComputeGroupGemm(groupCnt, problemShapeList,hostAlpha,hostBeta, hostA, layoutAList,
-        hostB, layoutBList,hostC,layoutCList, hostGolden, layoutCList);
+    golden::ComputeGroupGemm(groupCnt, problemShapeList, hostAlpha, hostBeta, hostA, layoutAList,
+        hostB, layoutBList, hostX, layoutXList, hostGolden, layoutXList);
         
     std::vector<uint64_t> errorIndices = golden::CompareData(hostRes, hostGolden, allMNCnt);
-    if (errorIndices.empty()) {
+    if (errorIndices.empty()) 
+    {
         std::cout << "Compare success." << std::endl;
     } else {
         std::cerr << "Compare failed. Error count: " << errorIndices.size() << std::endl;
@@ -357,7 +355,7 @@ void Run(Options& options){
 
     ACL_CHECK(aclrtFree(deviceA));
     ACL_CHECK(aclrtFree(deviceB));
-    ACL_CHECK(aclrtFree(deviceC));
+    ACL_CHECK(aclrtFree(deviceX));
     ACL_CHECK(aclrtFree(deviceWA));
     ACL_CHECK(aclrtFree(deviceWB));
     ACL_CHECK(aclrtFree(deviceAlpha));
@@ -365,13 +363,10 @@ void Run(Options& options){
     ACL_CHECK(aclrtFree(problemShapeListDevice));
     ACL_CHECK(aclrtFree(layoutAListDevice));
     ACL_CHECK(aclrtFree(layoutBListDevice));
-    ACL_CHECK(aclrtFree(layoutCListDevice));
+    ACL_CHECK(aclrtFree(layoutXListDevice));
     ACL_CHECK(aclrtFree(layoutWAListDevice));
     ACL_CHECK(aclrtFree(layoutWBListDevice));
     ACL_CHECK(aclrtFree(gmWorkspace));
-    delete[] M_array;
-    delete[] N_array;
-    delete[] K_array;
 
     ACL_CHECK(aclrtDestroyStream(stream));
     ACL_CHECK(aclrtResetDevice(options.deviceId));
