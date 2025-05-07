@@ -100,29 +100,6 @@ struct TileCopyPerTokenDequant {
     using CopyGmToUbPerTokenScale = CopyPerTokenScale2Ub<ArchTag, PerTokenScaleType>;
     using CopyUbToGmD = CopyUb2Gm<ArchTag, DType>;
 };
-
-template <
-    class ArchTag,
-    class XType,
-    class ScaleType,
-    class PerTokenScaleType,
-    class BiasType,
-    class CType
->
-struct TileCopyPerTokenDequantGemm {
-    using ElementX = typename XType::Element;
-    using ElementScale = typename ScaleType::Element;
-    using ElementPerTokenScale = typename PerTokenScaleType::Element;
-    using ElementBias = typename BiasType::Element;
-    using ElementC = typename CType::Element;
-
-    using CopyGmToUbX = CopyGm2Ub<ArchTag, XType>;
-    using CopyGmToUbScale = CopyGm2Ub<ArchTag, ScaleType>;
-    using CopyGmToUbPerTokenScale = CopyGm2Ub<ArchTag, PerTokenScaleType>;
-    using CopyGmToUbBias = CopyGm2Ub<ArchTag, BiasType>;
-    using CopyUbToGmC = CopyUb2Gm<ArchTag, CType>;
-};
-
 } // namespace Act::Epilogue::Tile
 
 #endif  // ACT_EPILOGUE_TILE_TILE_COPY_HPP
