@@ -28,82 +28,83 @@ autotune接口启动后会遍历预设的搜索空间，用备选参数替换Ker
 ```
 # python3 basic_matmul_autotune.py
 ```
-以下是在AtlasA2 910B4硬件上运行的结果，
+以下是在AtlasA2 910B3硬件上运行的结果，
 ```
-No.0: 21.220μs, {'L1TileShape': 'GemmShape<128, 256, 256>', 'L0TileShape': 'GemmShape<128, 256, 64>'}
-No.1: 21.986μs, {'L1TileShape': 'GemmShape<128, 256, 128>', 'L0TileShape': 'GemmShape<128, 256, 64>'}
-No.2: 17.728μs, {'L1TileShape': 'GemmShape<128, 128, 256>', 'L0TileShape': 'GemmShape<128, 128, 64>'}
-No.3: 16.270μs, {'L1TileShape': 'GemmShape<64, 128, 128>', 'L0TileShape': 'GemmShape<64, 128, 128>'}
-No.4: 15.768μs, {'L1TileShape': 'GemmShape<64, 128, 256>', 'L0TileShape': 'GemmShape<64, 128, 128>'}
-No.5: 16.990μs, {'L1TileShape': 'GemmShape<64, 128, 512>', 'L0TileShape': 'GemmShape<64, 128, 128>'}
-No.6: 21.980μs, {'L1TileShape': 'GemmShape<64, 64, 128>', 'L0TileShape': 'GemmShape<64, 64, 128>'}
-No.7: 20.160μs, {'L1TileShape': 'GemmShape<64, 64, 256>', 'L0TileShape': 'GemmShape<64, 64, 128>'}
-No.8: 22.312μs, {'L1TileShape': 'GemmShape<64, 64, 512>', 'L0TileShape': 'GemmShape<64, 64, 128>'}
-No.9: 21.947μs, {'L1TileShape': 'GemmShape<128, 128, 128>', 'L0TileShape': 'GemmShape<128, 128, 128>'}
-No.10: 18.052μs, {'L1TileShape': 'GemmShape<128, 128, 256>', 'L0TileShape': 'GemmShape<128, 128, 128>'}
-No.11: 18.642μs, {'L1TileShape': 'GemmShape<128, 128, 512>', 'L0TileShape': 'GemmShape<128, 128, 128>'}
-Best config: No.4
+No.0: 75.188μs, {'L1TileShape': 'GemmShape<128, 256, 256>', 'L0TileShape': 'GemmShape<128, 256, 64>'}
+No.6: 97.470μs, {'L1TileShape': 'GemmShape<64, 64, 128>', 'L0TileShape': 'GemmShape<64, 64, 128>'}
+No.1: 80.262μs, {'L1TileShape': 'GemmShape<128, 256, 128>', 'L0TileShape': 'GemmShape<128, 256, 64>'}
+No.7: 85.544μs, {'L1TileShape': 'GemmShape<64, 64, 256>', 'L0TileShape': 'GemmShape<64, 64, 128>'}
+No.11: 45.426μs, {'L1TileShape': 'GemmShape<128, 128, 512>', 'L0TileShape': 'GemmShape<128, 128, 128>'}
+No.9: 55.618μs, {'L1TileShape': 'GemmShape<128, 128, 128>', 'L0TileShape': 'GemmShape<128, 128, 128>'}
+No.3: 71.228μs, {'L1TileShape': 'GemmShape<64, 128, 128>', 'L0TileShape': 'GemmShape<64, 128, 128>'}
+No.2: 52.428μs, {'L1TileShape': 'GemmShape<128, 128, 256>', 'L0TileShape': 'GemmShape<128, 128, 64>'}
+No.4: 67.940μs, {'L1TileShape': 'GemmShape<64, 128, 256>', 'L0TileShape': 'GemmShape<64, 128, 128>'}
+No.8: 84.306μs, {'L1TileShape': 'GemmShape<64, 64, 512>', 'L0TileShape': 'GemmShape<64, 64, 128>'}
+No.10: 48.516μs, {'L1TileShape': 'GemmShape<128, 128, 256>', 'L0TileShape': 'GemmShape<128, 128, 128>'}
+No.5: 61.108μs, {'L1TileShape': 'GemmShape<64, 128, 512>', 'L0TileShape': 'GemmShape<64, 128, 128>'}
+Best config: No.11
 compare success.
 ```
-该结果表示输入的problem shape为m=256、n=512、k=1024时，`basic_matmul_autotune.py`中预设搜索空间中的最优参数组合为：
-L1TileShape: GemmShape<64, 128, 256>，
-L0TileShape: GemmShape<64, 128, 128>，
-性能提升如下图所示，算子运行提速25.7%。
-![basic_matmul_autotune_speedup](./images/basic_matmul_autotune_speedup.png)
+该结果表示输入的problem shape为m=1024、n=256、k=6144时，`basic_matmul_autotune.py`中预设搜索空间中的最优参数组合为：
+L1TileShape: GemmShape<128, 128, 512>，
+L0TileShape: GemmShape<128, 128, 128>，
+性能提升如下图所示，算子运行提速40.1%。
+![basic_matmul_autotune_speedup](./images/basic_matmul_autotune_speedup_1.png)
 
 - 运行06_optimized_matmul_autotune自动寻优，
 ```
 # python3 06_optimized_matmul_autotune.py
 ```
-以下是在AtlasA2 910B4硬件上一次运行的结果，
+以下是在AtlasA2 910B3硬件上一次运行的结果，
 ```
-No.0: 39.893μs, {'L1TileShape': 'GemmShape<128, 256, 256>', 'L0TileShape': 'GemmShape<128, 256, 64>'}
-No.1: 40.129μs, {'L1TileShape': 'GemmShape<256, 128, 256>', 'L0TileShape': 'GemmShape<256, 128, 64>'}
-No.2: 39.659μs, {'L1TileShape': 'GemmShape<128, 128, 256>', 'L0TileShape': 'GemmShape<128, 128, 64>'}
-No.3: 37.697μs, {'L1TileShape': 'GemmShape<128, 128, 512>', 'L0TileShape': 'GemmShape<128, 128, 64>'}
-No.4: 40.629μs, {'L1TileShape': 'GemmShape<64, 256, 128>', 'L0TileShape': 'GemmShape<64, 256, 64>'}
-No.5: 37.365μs, {'L1TileShape': 'GemmShape<64, 256, 256>', 'L0TileShape': 'GemmShape<64, 256, 64>'}
-No.6: 40.105μs, {'L1TileShape': 'GemmShape<64, 128, 256>', 'L0TileShape': 'GemmShape<64, 128, 64>'}
-No.7: 32.593μs, {'L1TileShape': 'GemmShape<128, 128, 256>', 'L0TileShape': 'GemmShape<128, 128, 128>'}
-No.8: 36.339μs, {'L1TileShape': 'GemmShape<128, 128, 512>', 'L0TileShape': 'GemmShape<128, 128, 128>'}
-No.9: 34.691μs, {'L1TileShape': 'GemmShape<64, 128, 256>', 'L0TileShape': 'GemmShape<64, 128, 128>'}
-No.10: 36.607μs, {'L1TileShape': 'GemmShape<64, 128, 512>', 'L0TileShape': 'GemmShape<64, 128, 128>'}
-No.11: 36.485μs, {'L1TileShape': 'GemmShape<128, 64, 512>', 'L0TileShape': 'GemmShape<128, 64, 128>'}
-No.12: 42.007μs, {'L1TileShape': 'GemmShape<64, 64, 256>', 'L0TileShape': 'GemmShape<64, 64, 256>'}
-No.13: 37.065μs, {'L1TileShape': 'GemmShape<64, 64, 512>', 'L0TileShape': 'GemmShape<64, 64, 256>'}
-No.14: 37.605μs, {'L1TileShape': 'GemmShape<64, 64, 1024>', 'L0TileShape': 'GemmShape<64, 64, 256>'}
-Best config: No.7
+No.9: 138.084μs, {'L1TileShape': 'GemmShape<64, 128, 256>', 'L0TileShape': 'GemmShape<64, 128, 128>'}
+No.2: 107.888μs, {'L1TileShape': 'GemmShape<128, 128, 256>', 'L0TileShape': 'GemmShape<128, 128, 64>'}
+No.11: 126.272μs, {'L1TileShape': 'GemmShape<128, 64, 512>', 'L0TileShape': 'GemmShape<128, 64, 128>'}
+No.4: 172.840μs, {'L1TileShape': 'GemmShape<64, 256, 128>', 'L0TileShape': 'GemmShape<64, 256, 64>'}
+No.13: 175.396μs, {'L1TileShape': 'GemmShape<64, 64, 512>', 'L0TileShape': 'GemmShape<64, 64, 256>'}
+No.8: 105.456μs, {'L1TileShape': 'GemmShape<128, 128, 512>', 'L0TileShape': 'GemmShape<128, 128, 128>'}
+No.7: 102.716μs, {'L1TileShape': 'GemmShape<128, 128, 256>', 'L0TileShape': 'GemmShape<128, 128, 128>'}
+No.1: 90.292μs, {'L1TileShape': 'GemmShape<256, 128, 256>', 'L0TileShape': 'GemmShape<256, 128, 64>'}
+No.12: 212.984μs, {'L1TileShape': 'GemmShape<64, 64, 256>', 'L0TileShape': 'GemmShape<64, 64, 256>'}
+No.5: 166.016μs, {'L1TileShape': 'GemmShape<64, 256, 256>', 'L0TileShape': 'GemmShape<64, 256, 64>'}
+No.3: 109.108μs, {'L1TileShape': 'GemmShape<128, 128, 512>', 'L0TileShape': 'GemmShape<128, 128, 64>'}
+No.10: 128.888μs, {'L1TileShape': 'GemmShape<64, 128, 512>', 'L0TileShape': 'GemmShape<64, 128, 128>'}
+No.0: 155.212μs, {'L1TileShape': 'GemmShape<128, 256, 256>', 'L0TileShape': 'GemmShape<128, 256, 64>'}
+No.14: 166.260μs, {'L1TileShape': 'GemmShape<64, 64, 1024>', 'L0TileShape': 'GemmShape<64, 64, 256>'}
+No.6: 157.184μs, {'L1TileShape': 'GemmShape<64, 128, 256>', 'L0TileShape': 'GemmShape<64, 128, 64>'}
+Best config: No.1
 compare success.
 ```
-该结果表示输入的problem shape为m=256、n=512、k=1024时，`optimized_matmul_autotune.py`中预设搜索空间中的最优参数组合为：
+该结果表示输入的problem shape为m=1024、n=576、k=6144时，`optimized_matmul_autotune.py`中预设搜索空间中的最优参数组合为：
 L1TileShape: GemmShape<128, 128, 256>，
 L0TileShape: GemmShape<128, 128, 128>,
-性能提升如下图所示，算子运行提速18.3%。
-![optimized_matmul_autotune_speedup](./images/optimized_matmul_autotune_speedup.png)
+性能提升如下图所示，算子运行提速34.36%。
+![optimized_matmul_autotune_speedup](./images/optimized_matmul_autotune_speedup_2.png)
 
 - 运行08_grouped_matmul_autotune自动寻优，
 ```
 # python3 08_grouped_matmul_autotune.py
 ```
-以下是在AtlasA2 910B4硬件上一次运行的结果，
+以下是在AtlasA2 910B3硬件上一次运行的结果，
 ```
-No.0: 63.427μs, {'L1TileShape': 'GemmShape<128, 256, 256>', 'L0TileShape': 'GemmShape<128, 256, 64>'}
-No.1: 63.787μs, {'L1TileShape': 'GemmShape<128, 256, 128>', 'L0TileShape': 'GemmShape<128, 256, 64>'}
-No.2: 66.959μs, {'L1TileShape': 'GemmShape<128, 128, 128>', 'L0TileShape': 'GemmShape<128, 128, 64>'}
-No.3: 64.377μs, {'L1TileShape': 'GemmShape<128, 128, 256>', 'L0TileShape': 'GemmShape<128, 128, 64>'}
-No.4: 66.168μs, {'L1TileShape': 'GemmShape<128, 128, 512>', 'L0TileShape': 'GemmShape<128, 128, 64>'}
-No.5: 65.285μs, {'L1TileShape': 'GemmShape<128, 256, 128>', 'L0TileShape': 'GemmShape<128, 256, 32>'}
-No.6: 71.644μs, {'L1TileShape': 'GemmShape<256, 128, 128>', 'L0TileShape': 'GemmShape<256, 128, 32>'}
-No.7: 65.689μs, {'L1TileShape': 'GemmShape<64, 128, 256>', 'L0TileShape': 'GemmShape<64, 128, 128>'}
-No.8: 63.546μs, {'L1TileShape': 'GemmShape<64, 128, 512>', 'L0TileShape': 'GemmShape<64, 128, 128>'}
-No.9: 74.791μs, {'L1TileShape': 'GemmShape<32, 128, 256>', 'L0TileShape': 'GemmShape<32, 128, 128>'}
-No.10: 71.186μs, {'L1TileShape': 'GemmShape<32, 128, 512>', 'L0TileShape': 'GemmShape<32, 128, 128>'}
-No.11: 77.818μs, {'L1TileShape': 'GemmShape<64, 64, 256>', 'L0TileShape': 'GemmShape<64, 64, 128>'}
-No.12: 72.549μs, {'L1TileShape': 'GemmShape<64, 64, 512>', 'L0TileShape': 'GemmShape<64, 64, 128>'}
-Best config: No.0
+No.3: 6933.814μs, {'L1TileShape': 'GemmShape<128, 128, 256>', 'L0TileShape': 'GemmShape<128, 128, 64>'}
+No.9: 6672.344μs, {'L1TileShape': 'GemmShape<32, 128, 256>', 'L0TileShape': 'GemmShape<32, 128, 128>'}
+No.10: 3820.252μs, {'L1TileShape': 'GemmShape<32, 128, 512>', 'L0TileShape': 'GemmShape<32, 128, 128>'}
+No.0: 6311.324μs, {'L1TileShape': 'GemmShape<128, 256, 256>', 'L0TileShape': 'GemmShape<128, 256, 64>'}
+No.6: 12419.114μs, {'L1TileShape': 'GemmShape<256, 128, 128>', 'L0TileShape': 'GemmShape<256, 128, 32>'}
+No.1: 10879.374μs, {'L1TileShape': 'GemmShape<128, 256, 128>', 'L0TileShape': 'GemmShape<128, 256, 64>'}
+No.7: 7187.830μs, {'L1TileShape': 'GemmShape<64, 128, 256>', 'L0TileShape': 'GemmShape<64, 128, 128>'}
+No.4: 3851.556μs, {'L1TileShape': 'GemmShape<128, 128, 512>', 'L0TileShape': 'GemmShape<128, 128, 64>'}
+No.8: 3830.396μs, {'L1TileShape': 'GemmShape<64, 128, 512>', 'L0TileShape': 'GemmShape<64, 128, 128>'}
+No.5: 11467.018μs, {'L1TileShape': 'GemmShape<128, 256, 128>', 'L0TileShape': 'GemmShape<128, 256, 32>'}
+No.2: 12487.734μs, {'L1TileShape': 'GemmShape<128, 128, 128>', 'L0TileShape': 'GemmShape<128, 128, 64>'}
+No.12: 3985.550μs, {'L1TileShape': 'GemmShape<64, 64, 512>', 'L0TileShape': 'GemmShape<64, 64, 128>'}
+No.11: 7437.658μs, {'L1TileShape': 'GemmShape<64, 64, 256>', 'L0TileShape': 'GemmShape<64, 64, 128>'}
+Best config: No.10
 compare success.
 ```
-该结果表示输入的problem shape为m=1024、n=768、k=512、problem_count=8时，在`grouped_matmul_autotune.py`中预设搜索空间中的最优参数组合为：
-L1TileShape: GemmShape<128, 256, 256>，
-L0TileShape: GemmShape<128, 256, 64>
-搜索空间中未找到明显比原始Tiling参数配置更优的参数。
+该结果表示输入的problem shape为m=16、n=2048、k=6144、problem_count=16时，在`grouped_matmul_autotune.py`中预设搜索空间中的最优参数组合为：
+L1TileShape: GemmShape<64, 128, 512>，
+L0TileShape: GemmShape<64, 128, 128>
+性能提升如下图所示，算子运行提速43.87%。
+![grouped_matmul_autotune_speedup](./images/grouped_matmul_autotune_speedup_1.png)
