@@ -46,7 +46,7 @@ template <
     class LayoutX
 >
 ACT_GLOBAL
-void gemm(
+void GemmExample(
     uint64_t fftsAddr,
     ScalarType alpha, ScalarType beta,
     GemmCoord problemShape,
@@ -242,7 +242,7 @@ void Run(Options options)
     RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
 
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
-    gemm<<<aicCoreNum, nullptr, stream>>>(
+    GemmExample<<<aicCoreNum, nullptr, stream>>>(
         fftsAddr,
         alpha, beta,
         options.problemShape,

@@ -55,7 +55,7 @@ public:
     using CopyGmToUbX = typename TileCopy_::CopyGmToUbX;
     using CopyUbToGmD = typename TileCopy_::CopyUbToGmD;
     
-    const uint32_t STAGES = AscendC::GetSubBlockNum();
+    const uint32_t SubNum = AscendC::GetSubBlockNum();
     const uint32_t UBSize = ArchTag::UB_SIZE;
     static constexpr bool isNeedCast = !std::is_same<ElementC, ElementX>::value;
     static constexpr uint32_t COMPUTE_LENGTH = TileElemWiseEpilogueAdd::COMPUTE_LENGTH;
@@ -89,7 +89,7 @@ public:
     {
         uint32_t maxMPerBlock = blockShapeMNK.m();
         uint32_t maxNPerBlock = blockShapeMNK.n();
-        uint32_t tileSize = maxMPerBlock * maxNPerBlock / STAGES;
+        uint32_t tileSize = maxMPerBlock * maxNPerBlock / SubNum;
         uint32_t ubCSize = tileSize * sizeof(ElementC);
         uint32_t ubXSize = tileSize * sizeof(ElementX);
         uint32_t ubDSize = tileSize * sizeof(ElementD);
@@ -135,14 +135,14 @@ public:
         MatrixCoord actualShapeMN = actualShapeMNK.GetCoordMN();
         MatrixCoord blockOffset = blockCoordMN * blockShapeMN;
         MatrixCoord subblockShape{
-            CeilDiv(actualShapeMN.row(), STAGES),
+            CeilDiv(actualShapeMN.row(), SubNum),
             actualShapeMN.column()
         };
         MatrixCoord subblockCoord{AscendC::GetSubBlockIdx(), 0};
         MatrixCoord actualSubblockShape = MatrixCoord::Min(
             subblockShape, actualShapeMN - subblockCoord * subblockShape);
         MatrixCoord subblockOffset = subblockCoord * subblockShape;
-        LayoutC layoutInUb{blockShapeMN.row() / STAGES, blockShapeMN.column()};
+        LayoutC layoutInUb{blockShapeMN.row() / SubNum, blockShapeMN.column()};
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID1);
         auto layoutTileX = params.layoutX.GetTileLayout(actualSubblockShape);
         auto layoutXInUb = layoutInUb.GetTileLayout(actualSubblockShape);

@@ -73,6 +73,7 @@ public:
     static constexpr uint32_t STAGES = DispatchPolicy::STAGES;
     static constexpr bool ENABLE_UNIT_FLAG = DispatchPolicy::ENABLE_UNIT_FLAG;
     static constexpr bool ENABLE_SHUFFLE_K = DispatchPolicy::ENABLE_SHUFFLE_K;
+    static constexpr bool ENABLE_ABBA = DispatchPolicy::ENABLE_ABBA;
     const uint32_t L1Size = ArchTag::L1_SIZE;
     const uint32_t L1ASize = L1TileShape::M * L1TileShape::K * sizeof(ElementA);
     const uint32_t L1BSize = L1TileShape::K * L1TileShape::N * sizeof(ElementB);
@@ -135,7 +136,11 @@ public:
         uint32_t K = actualShape.k();
         uint32_t maxKPerBlock = L1TileShape::K;
         uint32_t kLoops = CeilDiv(K, maxKPerBlock);
-        uint32_t startTileIdx = AscendC::GetBlockIdx();
+        uint32_t startTileIdx{0};
+        if (ENABLE_SHUFFLE_K) 
+        {
+            startTileIdx = AscendC::GetBlockIdx();
+        }
         uint32_t firstTileIdx = startTileIdx % kLoops; 
         uint32_t lastTileIdx = (startTileIdx + kLoops - 1) % kLoops; 
         uint32_t kGmActual = (firstTileIdx == kLoops - 1) ? (K - firstTileIdx * maxKPerBlock) : maxKPerBlock;
@@ -171,14 +176,24 @@ public:
                 auto gmTileA = gmA[layoutA.GetOffset(gmTileAOffset)];
                 MatrixCoord gmTileBOffset{shuffleKIdxNext * maxKPerBlock, 0}; 
                 auto gmTileB = gmB[layoutB.GetOffset(gmTileBOffset)];
-                if (shuffleKIdxNext % 2 == 1)
-                { 
-                    AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListIdNext]);
-                    copyGmToL1B(l1BTensor[l1ListIdNext], gmTileB, layoutBInL1, layoutTileB);
-                    AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListIdNext]);
-                    AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListIdNext]);
-                    copyGmToL1A(l1ATensor[l1ListIdNext], gmTileA, layoutAInL1, layoutTileA);
-                    AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListIdNext]);
+                if (ENABLE_ABBA)
+                {
+                    if (shuffleKIdxNext % 2 == 1)
+                    { 
+                        AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListIdNext]);
+                        copyGmToL1B(l1BTensor[l1ListIdNext], gmTileB, layoutBInL1, layoutTileB);
+                        AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListIdNext]);
+                        AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListIdNext]);
+                        copyGmToL1A(l1ATensor[l1ListIdNext], gmTileA, layoutAInL1, layoutTileA);
+                        AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListIdNext]);
+                    } else {
+                        AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListIdNext]);
+                        copyGmToL1A(l1ATensor[l1ListIdNext], gmTileA, layoutAInL1, layoutTileA);
+                        AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListIdNext]);
+                        AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListIdNext]);
+                        copyGmToL1B(l1BTensor[l1ListIdNext], gmTileB, layoutBInL1, layoutTileB);
+                        AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListIdNext]);
+                    }
                 } else {
                     AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListIdNext]);
                     copyGmToL1A(l1ATensor[l1ListIdNext], gmTileA, layoutAInL1, layoutTileA);
@@ -197,14 +212,24 @@ public:
                 auto gmNextTileA = gmNextBlockA[layoutA.GetOffset(gmTileAOffset)];
                 MatrixCoord gmTileBOffset{firstTileIdx * maxKPerBlock, 0}; 
                 auto gmNextTileB = gmNextBlockB[layoutB.GetOffset(gmTileBOffset)];
-                if (shuffleKIdx % 2 == 0)
-                { 
-                    AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListIdNext]);
-                    copyGmToL1B(l1BTensor[l1ListIdNext], gmNextTileB, layoutBInL1, layoutTileB);
-                    AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListIdNext]);
-                    AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListIdNext]);
-                    copyGmToL1A(l1ATensor[l1ListIdNext], gmNextTileA, layoutAInL1, layoutTileA);
-                    AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListIdNext]);
+                if (ENABLE_ABBA)
+                {
+                    if (shuffleKIdx % 2 == 0)
+                    { 
+                        AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListIdNext]);
+                        copyGmToL1B(l1BTensor[l1ListIdNext], gmNextTileB, layoutBInL1, layoutTileB);
+                        AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListIdNext]);
+                        AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListIdNext]);
+                        copyGmToL1A(l1ATensor[l1ListIdNext], gmNextTileA, layoutAInL1, layoutTileA);
+                        AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListIdNext]);
+                    } else {
+                        AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListIdNext]);
+                        copyGmToL1A(l1ATensor[l1ListIdNext], gmNextTileA, layoutAInL1, layoutTileA);
+                        AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListIdNext]);
+                        AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListIdNext]);
+                        copyGmToL1B(l1BTensor[l1ListIdNext], gmNextTileB, layoutBInL1, layoutTileB);
+                        AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListIdNext]);
+                    }
                 } else {
                     AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListIdNext]);
                     copyGmToL1A(l1ATensor[l1ListIdNext], gmNextTileA, layoutAInL1, layoutTileA);
@@ -236,39 +261,49 @@ public:
                 auto l0TileB = l0BTensor[l0ListId];
                 mActual = L1TileShape::M;
                 nActual = L1TileShape::N;
-                if (shuffleKIdx % 2 == 0)
+                if (ENABLE_ABBA)
                 {
-                    if (kL0Idx % 2 == 0) { 
-                        AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0ListId]);
-                        copyL1ToL0B(l0TileB, l1TileB, layoutBInL0, layoutBInL1);
-                        AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0ListId]);
-                        AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0ListId]);
-                        copyL1ToL0A(l0TileA, l1TileA, layoutAInL0, layoutAInL1);
-                        AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0ListId]);
+                    if (shuffleKIdx % 2 == 0)
+                    {
+                        if (kL0Idx % 2 == 0) { 
+                            AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0ListId]);
+                            copyL1ToL0B(l0TileB, l1TileB, layoutBInL0, layoutBInL1);
+                            AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0ListId]);
+                            AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0ListId]);
+                            copyL1ToL0A(l0TileA, l1TileA, layoutAInL0, layoutAInL1);
+                            AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0ListId]);
+                        } else {
+                            AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0ListId]);
+                            copyL1ToL0A(l0TileA, l1TileA, layoutAInL0, layoutAInL1);
+                            AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0ListId]);
+                            AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0ListId]);
+                            copyL1ToL0B(l0TileB, l1TileB, layoutBInL0, layoutBInL1);
+                            AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0ListId]);
+                        }
                     } else {
-                        AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0ListId]);
-                        copyL1ToL0A(l0TileA, l1TileA, layoutAInL0, layoutAInL1);
-                        AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0ListId]);
-                        AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0ListId]);
-                        copyL1ToL0B(l0TileB, l1TileB, layoutBInL0, layoutBInL1);
-                        AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0ListId]);
+                        if (kL0Idx % 2 == 0) {
+                            AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0ListId]);
+                            copyL1ToL0A(l0TileA, l1TileA, layoutAInL0, layoutAInL1);
+                            AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0ListId]);
+                            AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0ListId]);
+                            copyL1ToL0B(l0TileB, l1TileB, layoutBInL0, layoutBInL1);
+                            AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0ListId]);
+                        } else {
+                            AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0ListId]);
+                            copyL1ToL0B(l0TileB, l1TileB, layoutBInL0, layoutBInL1);
+                            AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0ListId]);
+                            AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0ListId]);
+                            copyL1ToL0A(l0TileA, l1TileA, layoutAInL0, layoutAInL1);
+                            AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0ListId]);
+                        }
                     }
                 } else {
-                    if (kL0Idx % 2 == 0) {
-                        AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0ListId]);
-                        copyL1ToL0A(l0TileA, l1TileA, layoutAInL0, layoutAInL1);
-                        AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0ListId]);
-                        AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0ListId]);
-                        copyL1ToL0B(l0TileB, l1TileB, layoutBInL0, layoutBInL1);
-                        AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0ListId]);
-                    } else {
-                        AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0ListId]);
-                        copyL1ToL0B(l0TileB, l1TileB, layoutBInL0, layoutBInL1);
-                        AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0ListId]);
-                        AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0ListId]);
-                        copyL1ToL0A(l0TileA, l1TileA, layoutAInL0, layoutAInL1);
-                        AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0ListId]);
-                    }
+                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0ListId]);
+                    copyL1ToL0A(l0TileA, l1TileA, layoutAInL0, layoutAInL1);
+                    AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0ListId]);
+                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0ListId]);
+                    copyL1ToL0B(l0TileB, l1TileB, layoutBInL0, layoutBInL1);
+                    AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0ListId]);
                 }
                 if (kL0Idx == kL0Loops - 1)
                 { 
