@@ -31,7 +31,7 @@ endfunction()
 
 function(bisheng_add_library LIB_NAME LIB_TYPE LIB_SRC)
     set(ASCEND_BISHENG_FLAGS_DEFAULT --std=c++17)
-    set(BISHENG_COMPILER ${CMAKE_CCEC_COMPILER})
+    set(BISHENG_COMPILER ${CMAKE_BISHENG_COMPILER})
 
     if(${LIB_TYPE} STREQUAL "STATIC")
         set(BUILD_LIB_OPTION "--cce-build-static-lib")
