@@ -7,7 +7,7 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 
 set(ACT_EXAMPLES_COMMON_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/common)
-set(CCEC_COMPILER_OPTIONS
+set(BISHENG_COMPILER_OPTIONS
     -O2 -std=c++17 -xcce
     -mllvm -cce-aicore-stack-size=0x8000
     -mllvm -cce-aicore-function-stack-size=0x8000
@@ -29,6 +29,10 @@ set(CCEC_COMPILER_OPTIONS
     -lruntime -lstdc++ -lascendcl -lm -ltiling_api -lplatform -lc_sec -ldl -lnnopbase
 )
 
+if(DEFINED PROF)
+    list(APPEND ${BISHENG_COMPILER_OPTIONS} -lprofapi)
+endif()
+
 file(GLOB_RECURSE ACT_INCLUDE_FILES ${CMAKE_SOURCE_DIR}/include/*.hpp)
 file(GLOB_RECURSE ACT_EXAMPLES_COMMON_INCLUDE_FILES ${ACT_EXAMPLES_COMMON_SOURCE_DIR}/*.hpp)
 add_custom_target(act_examples)
@@ -42,7 +46,7 @@ function(act_example_add_executable NAME)
 
     add_custom_command(
         OUTPUT ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${NAME}
-        COMMAND ${CMAKE_BISHENG_COMPILER} --cce-aicore-arch=${ARCH} ${CCEC_COMPILER_OPTIONS} ${ARGN} -o ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${NAME}
+        COMMAND ${CMAKE_BISHENG_COMPILER} --cce-aicore-arch=${ARCH} ${BISHENG_COMPILER_OPTIONS} ${ARGN} -o ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${NAME}
         DEPENDS ${ARGN} ${ACT_INCLUDE_FILES} ${ACT_EXAMPLES_COMMON_INCLUDE_FILES}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         COMMENT "Compiling executable kernel: ${NAME}"

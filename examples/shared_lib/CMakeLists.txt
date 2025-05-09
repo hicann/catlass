@@ -11,7 +11,7 @@ else()
 endif()
 
 set(CMAKE_BISHENG_COMPILER bisheng)
-set(CCEC_COMPILER_OPTIONS
+set(BISHENG_COMPILER_OPTIONS
     -O2 -std=c++17 -xcce -fPIC
     -mllvm -cce-aicore-stack-size=0x8000
     -mllvm -cce-aicore-function-stack-size=0x8000
@@ -34,11 +34,15 @@ set(CCEC_COMPILER_OPTIONS
     -Wno-macro-redefined -Wno-ignored-attributes
 )
 
-set(CCEC_LINK_OPTIONS
+set(BISHENG_LINK_OPTIONS
     --cce-fatobj-link
     -L${ASCEND_HOME_PATH}/lib64
     -lruntime -lstdc++ -lascendcl -lm -ltiling_api -lplatform -lc_sec -ldl -lnnopbase
 )
+
+if(DEFINED PROF)
+    list(APPEND ${BISHENG_LINK_OPTIONS} -lprofapi)
+endif()
 
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/obj)
 
@@ -49,7 +53,7 @@ function(act_add_kernel NAME ARCH)
 
     add_custom_command(
         OUTPUT ${OUTPUT_FULL_NAME}
-        COMMAND ${CMAKE_BISHENG_COMPILER} --cce-aicore-arch=${ARCH} ${CCEC_COMPILER_OPTIONS} -c ${ARGN} -o ${OUTPUT_FULL_NAME}
+        COMMAND ${CMAKE_BISHENG_COMPILER} --cce-aicore-arch=${ARCH} ${BISHENG_COMPILER_OPTIONS} -c ${ARGN} -o ${OUTPUT_FULL_NAME}
         DEPENDS ${ARGN} ${HOST_SRC} ${ACT_INCLUDE_FILES}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         COMMENT "Compiling single kernel obj ${NAME}"
@@ -73,7 +77,7 @@ message("Kernel Object Files: ${KERNEL_OBJ_FILES}")
 
 add_custom_command(
     OUTPUT ${CMAKE_BINARY_DIR}/libact_kernel.so
-    COMMAND ${CMAKE_BISHENG_COMPILER} ${CCEC_LINK_OPTIONS} ${KERNEL_OBJ_FILES} --shared -o ${CMAKE_BINARY_DIR}/libact_kernel.so
+    COMMAND ${CMAKE_BISHENG_COMPILER} ${BISHENG_LINK_OPTIONS} ${KERNEL_OBJ_FILES} --shared -o ${CMAKE_BINARY_DIR}/libact_kernel.so
     DEPENDS ${KERNEL_OBJ_FILES}
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     COMMENT "Building shared library libact_kernel.so"
@@ -81,7 +85,7 @@ add_custom_command(
 
 add_custom_command(
     OUTPUT ${CMAKE_BINARY_DIR}/libact_kernel.a
-    COMMAND ${CMAKE_BISHENG_COMPILER} ${CCEC_LINK_OPTIONS} ${KERNEL_OBJ_FILES} --cce-build-static-lib -o ${CMAKE_BINARY_DIR}/libact_kernel.a
+    COMMAND ${CMAKE_BISHENG_COMPILER} ${BISHENG_LINK_OPTIONS} ${KERNEL_OBJ_FILES} --cce-build-static-lib -o ${CMAKE_BINARY_DIR}/libact_kernel.a
     DEPENDS ${KERNEL_OBJ_FILES}
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     COMMENT "Building static library libact_kernel.a"
