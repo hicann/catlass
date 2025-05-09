@@ -116,7 +116,7 @@ public:
                                         tla::MakeShape(actualBlockShape.m(), actualBlockShape.n()));
 
             // Compute block-scoped matrix multiply-add
-            blockMmad(tensorBlockA, tensorBlockB, tensorBlockC);
+            blockMmad(tensorBlockA, tensorBlockB, tensorBlockC, actualBlockShape);
         }
     }
 
