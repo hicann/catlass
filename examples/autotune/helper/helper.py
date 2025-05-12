@@ -43,3 +43,15 @@ def check_autotune_avalible():
     import mskpp
     if not hasattr(mskpp, "autotune"):
         raise Exception(ERROR_STR)
+
+
+def assert_kernel_run_one_time():
+    '''
+    This is used to prevent the kernel from being run multiple times due to known issue 1.
+
+    Known issue 1: When a mskpp-defined kernel is run multiple times, the kernel input parameters always retain
+                   the values of the first run.
+    '''
+    assert_kernel_run_one_time.call_count = getattr(assert_kernel_run_one_time, 'call_count', 0) + 1
+    if assert_kernel_run_one_time.call_count > 1:
+        raise RuntimeError("Kernel function can only be called once in current CANN toolkit")
