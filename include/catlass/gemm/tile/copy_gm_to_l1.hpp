@@ -1149,7 +1149,7 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::VectorLayout>> {
         AscendC::GlobalTensor<Element> const &srcTensor,
         LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
     {
-        AscendC::Nd2NzParams intriParams;
+        AscendC::DataCopyParams intriParams;
         intriParams.blockCount = layoutDst.shape(0) / ELE_NUM_PER_C0;
         intriParams.blockLen = 1;
         intriParams.srcStride = 0;
