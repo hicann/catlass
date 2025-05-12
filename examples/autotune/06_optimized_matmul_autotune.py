@@ -62,7 +62,7 @@ def optimized_matmul(ffts_addr, problem_shape, a, layout_a, b, layout_b, c, layo
     # This function's input arguments must exactly match the kernel function.
     kernel = get_kernel()
     blockdim = AIC_CORE_NUM_ATLAS_A2_910B4 # choose the aic number that matches your hardware in helper/helper.py
-    assert_kernel_run_one_time()
+    assert_kernel_run_one_time() # block autotune launched in a for-loop due to the known issue described in README
     return kernel[blockdim](ffts_addr, problem_shape, a, layout_a, b, layout_b, c, layout_c,
         workspace_a, workspace_b, device_id=device_id) # invoke the kernel
 
