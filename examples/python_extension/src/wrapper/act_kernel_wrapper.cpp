@@ -81,9 +81,8 @@ TransposeStatus GetTransposeStatus(const at::Tensor &mat)
     int64_t strideB = strides.at(strides.size() - 1);
     if (strideB == dimB && strideA == 1) {
         return TransposeStatus::TRANSPOSE;
-    } else {
-        return TransposeStatus::NON_CONTINUOUS;
     }
+    return TransposeStatus::NON_CONTINUOUS;
 }
 
 std::vector<int64_t> InferShape(at::IntArrayRef matAShape, at::IntArrayRef matBShape)
@@ -122,7 +121,6 @@ KernelInfo GetKernelInfo(const at::Tensor &mat1, const at::Tensor &mat2, const s
     }
     kernelInfo.transA = static_cast<bool>(transposeStatus1);
     kernelInfo.transB = static_cast<bool>(transposeStatus2);
-    return kernelInfo;
     return kernelInfo;
 };
 
