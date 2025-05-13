@@ -54,4 +54,4 @@ def assert_kernel_run_one_time():
     '''
     assert_kernel_run_one_time.call_count = getattr(assert_kernel_run_one_time, 'call_count', 0) + 1
     if assert_kernel_run_one_time.call_count > 1:
-        raise RuntimeError("Kernel function can only be called once in current CANN toolkit")
+        raise RuntimeError("A mskpp-defined kernel can only be called once in current version of CANN toolkit")
