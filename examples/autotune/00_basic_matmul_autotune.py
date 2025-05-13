@@ -58,9 +58,9 @@ def basic_matmul(problem_shape, a, layout_a, b, layout_b, c, layout_c):
 
 if __name__ == "__main__":
 
-    m = 256
-    n = 512
-    k = 1024
+    m = 1024
+    n = 256
+    k = 6144
 
     problem_shape = GemmCoord(m, n, k)
     layout_a = RowMajor(m, k)

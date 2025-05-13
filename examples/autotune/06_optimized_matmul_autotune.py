@@ -72,9 +72,9 @@ if __name__ == "__main__":
     def round_up(val, align):
         return (val + align - 1) // align * align
 
-    m = 256
-    n = 512
-    k = 1024
+    m = 1024
+    n = 576
+    k = 6144
 
     # 创建kernel入参
     problem_shape = GemmCoord(m, n, k)

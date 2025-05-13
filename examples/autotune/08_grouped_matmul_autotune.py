@@ -69,11 +69,18 @@ def grouped_matmul(problem_count, problem_shape_list,
 
 if __name__ == "__main__":
 
-    m = 1024
-    n = 768
-    k = 512
-    problem_count = 8
+    m = 16
+    n = 2048
+    k = 6144
+    problem_count = 16
     group_list = [128, 256, 512, 515, 568, 579, 678, 1024]
+    m_part = m // problem_count
+    group_list = []
+    for i in range(1, problem_count + 1):
+        if i == problem_count:
+            group_list.append(m)
+        else:
+            group_list.append(m_part * i)
 
     # 创建结构体数组
     problem_shape_list = (GemmCoord * problem_count)()
