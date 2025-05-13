@@ -39,11 +39,9 @@ TLA `Tensor` 提供获取相应特性的接口：
 
 * `.stride()`. 返回 `Tensor` 的 `stride`。
 
-* `.orgShape()`. 返回 `Tensor` 的 `orgShape`。
-
 ## 获取 TileTensor
 
-提供一个 `GetTile` 接口获取 `Tensor` 的一片子tensor，会根据输入坐标对内存进行偏移，根据新的Tile的shape变换Layout（只是逻辑层面的数据组织形式），底层的数据实体一般不变更。
+提供一个 `GetTile` 接口获取 `Tensor` 的一片子tensor，会根据输入坐标对内存进行偏移，根据新的Tile的shape变换Layout（只是逻辑层面的数据组织形式），底层的数据实体不变更。
 
 ```cpp
 Tensor tensor_8x16 = make_tensor(A, make_shape(8, Int<16>{}), make_stride(Int<16>{},Int<1>{}), PositionGM{});

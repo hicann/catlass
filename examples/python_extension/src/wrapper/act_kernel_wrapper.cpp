@@ -16,6 +16,7 @@
 
 #include <tiling/platform/platform_ascendc.h>
 #include <torch/torch.h>
+#include <torch_npu/csrc/core/npu/DeviceUtils.h>
 #include <torch_npu/csrc/core/npu/NPUFormat.h>
 #include <torch_npu/csrc/core/npu/NPUFunctions.h>
 #include <torch_npu/csrc/core/npu/NPUStream.h>
@@ -27,13 +28,10 @@ namespace py = pybind11;
 using namespace ActKernel;
 
 namespace ActKernelWrapper {
-at::Device GetAtDevice()
-{
-    int32_t deviceId;
-    (void)c10_npu::GetDevice(&deviceId);
-    std::stringstream ss;
-    ss << "npu:" << deviceId;
-    return at::Device(ss.str());
+torch::Tensor GetOutputTensor(const std::vector<int64_t> &shape, const torch::Dtype dtype) {
+    at::TensorOptions options = at::TensorOptions();
+    options = options.dtype(dtype).layout(at::kStrided).requires_grad(false).device(torch_npu::utils::get_npu_device_type());
+    return at_npu::native::empty_with_format(shape, options, ACL_FORMAT_ND);
 }
 
 torch::Dtype TypeStrToTorchDtype(std::string typeStr, torch::Dtype defaultType = torch::kFloat16)
@@ -151,7 +149,7 @@ at::Tensor RunBasicMatmul(const at::Tensor &mat1, const at::Tensor &mat2, const 
     kernelInfo.inputAddr[0] = static_cast<uint8_t *>(const_cast<void *>(mat1.storage().data()));
     kernelInfo.inputAddr[1] = static_cast<uint8_t *>(const_cast<void *>(mat2.storage().data()));
     torch::Dtype outputDataType = TypeStrToTorchDtype(outDType, mat1.scalar_type());
-    at::Tensor result = at::empty(InferShape(mat1.sizes(), mat2.sizes()), outputDataType).to(GetAtDevice());
+    torch::Tensor result = GetOutputTensor(InferShape(mat1.sizes(), mat2.sizes()), outputDataType);
     kernelInfo.outputAddr.resize(1);
     kernelInfo.outputAddr.at(0) = static_cast<uint8_t *>(const_cast<void *>(result.storage().data()));
     aclrtStream stream = c10_npu::getCurrentNPUStream().stream(false);
@@ -228,8 +226,8 @@ std::vector<at::Tensor> RunGroupedMatmul(const std::vector<at::Tensor> &mat1, co
     for (size_t i = 0; i < problemCount; i++) {
         at::Tensor currentMat1 = mat1[i];
         at::Tensor currentMat2 = mat2[i];
-        at::Tensor result =
-            at::empty(InferShape(currentMat1.sizes(), currentMat2.sizes()), outputDataType).to(GetAtDevice());
+        torch::Tensor result = GetOutputTensor(InferShape(currentMat1.sizes(), currentMat2.sizes()), outputDataType);
+
         resultList.push_back(result);
         int64_t resultSize = result.nbytes();
         aclrtMemcpy(const_cast<void *>(result.storage().data()), resultSize, deviceC, resultSize,
@@ -249,7 +247,7 @@ at::Tensor RunOptimizedMatmul(const at::Tensor &mat1, const at::Tensor &mat2, co
     kernelInfo.inputAddr[0] = static_cast<uint8_t *>(const_cast<void *>(mat1.storage().data()));
     kernelInfo.inputAddr[1] = static_cast<uint8_t *>(const_cast<void *>(mat2.storage().data()));
     torch::Dtype outputDataType = TypeStrToTorchDtype(outDType, mat1.scalar_type());
-    at::Tensor result = at::empty(InferShape(mat1.sizes(), mat2.sizes()), outputDataType).to(GetAtDevice());
+    torch::Tensor result = GetOutputTensor(InferShape(mat1.sizes(), mat2.sizes()), outputDataType);
     kernelInfo.outputAddr.resize(1);
     kernelInfo.outputAddr.at(0) = static_cast<uint8_t *>(const_cast<void *>(result.storage().data()));
     aclrtStream stream = c10_npu::getCurrentNPUStream().stream(false);

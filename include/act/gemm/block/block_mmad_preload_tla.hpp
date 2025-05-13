@@ -164,14 +164,14 @@ public:
     ACT_DEVICE
     void operator()(
         TensorA &tensorA, TensorB &tensorB, TensorC &tensorC, TensorA &tensorNextA, TensorB &tensorNextB,
-        bool isFirstBlock, bool hasNextBlock)
+        GemmCoord const &actualShape, GemmCoord const &actualShapeNext, bool isFirstBlock, bool hasNextBlock)
     {
-        uint32_t mBlockActual = tla::get<0>(tensorA.orgShape());
-        uint32_t kBlockActual = tla::get<1>(tensorA.orgShape());
-        uint32_t nBlockActual = tla::get<1>(tensorB.orgShape());
-        uint32_t mNextBlockActual = tla::get<0>(tensorNextA.orgShape());
-        uint32_t kNextBlockActual = tla::get<1>(tensorNextA.orgShape());
-        uint32_t nNextBlockActual = tla::get<1>(tensorNextB.orgShape());
+        uint32_t mBlockActual = actualShape.m();
+        uint32_t kBlockActual = actualShape.k();
+        uint32_t nBlockActual = actualShape.n();
+        uint32_t mNextBlockActual = actualShapeNext.m();
+        uint32_t kNextBlockActual = actualShapeNext.k();
+        uint32_t nNextBlockActual = actualShapeNext.n();
 
         uint32_t mRound = RoundUp<L1AAlignHelper::M_ALIGNED>(mBlockActual);
         uint32_t nRound = RoundUp<L1BAlignHelper::N_ALIGNED>(nBlockActual);
@@ -202,7 +202,7 @@ public:
                 tla::MakeCoord(0, firstTileIdx * L1_TILE_K),
                 tla::MakeShape(mBlockActual, kActual)
             );
-            copyGmToL1A(tensorL1A, tensorTileA);
+            copyGmToL1A(tensorL1A, tensorTileA, tla::MakeShape(mBlockActual, kActual));
             AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListId]);
 
             // load first matrix B tile from GM to L1
@@ -213,7 +213,7 @@ public:
                 tla::MakeCoord(firstTileIdx * L1_TILE_K, 0),
                 tla::MakeShape(kActual, nBlockActual)
             );
-            copyGmToL1B(tensorL1B, tensorTileB);
+            copyGmToL1B(tensorL1B, tensorTileB, tla::MakeShape(kActual, nBlockActual));
             AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
         }
 
@@ -246,12 +246,12 @@ public:
 
                 // load next matrix A tile from GM to L1
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListIdNext]);
-                copyGmToL1A(tensorL1A, tensorTileA);
+                copyGmToL1A(tensorL1A, tensorTileA, tla::MakeShape(mBlockActual, kActualNext));
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListIdNext]);
 
                 // load next matrix B tile from GM to L1
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListIdNext]);
-                copyGmToL1B(tensorL1B, tensorTileB);
+                copyGmToL1B(tensorL1B, tensorTileB, tla::MakeShape(kActualNext, nBlockActual));
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListIdNext]);
             }
 
@@ -277,12 +277,12 @@ public:
 
                 // load next matrix A tile from GM to L1
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListIdNext]);
-                copyGmToL1A(tensorL1A, tensorTileA);
+                copyGmToL1A(tensorL1A, tensorTileA, tla::MakeShape(mNextBlockActual, kActualNext));
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListIdNext]);
 
                 // load next matrix B tile from GM to L1
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListIdNext]);
-                copyGmToL1B(tensorL1B, tensorTileB);
+                copyGmToL1B(tensorL1B, tensorTileB, tla::MakeShape(kActualNext, nNextBlockActual));
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListIdNext]);
             }
 
@@ -374,7 +374,8 @@ public:
                             }
                         }
                         // Perform calculation operations
-                        tileMmad(tensorTileL0C, tensorL0A, tensorL0B, initC, unitFlag);
+                        tileMmad(tensorTileL0C, tensorL0A, tensorL0B,
+                                 mPartActual, nPartActual, kPartActual, initC, unitFlag);
 
                         // Notify to move the next L0B tile
                         AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0BListId]);

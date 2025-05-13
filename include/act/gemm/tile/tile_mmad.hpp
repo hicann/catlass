@@ -89,12 +89,9 @@ struct TileMmadTla {
     void operator()(TensorC const &l0CTensor,
          TensorA const &l0ATensor,
          TensorB const &l0BTensor,
+         uint32_t m, uint32_t n, uint32_t k,
          bool initC = true, uint8_t unitFlag = 0)
     {
-        const uint32_t m = tla::get<0>(l0ATensor.orgShape());
-        const uint32_t n = tla::get<1>(l0BTensor.orgShape());
-        const uint32_t k = tla::get<1>(l0ATensor.orgShape());
-
         AscendC::MmadParams mmadParams;
         mmadParams.m = m;
         mmadParams.n = n;
