@@ -18,6 +18,7 @@ class ActTest(TestCase):
         a = torch.ones((2, 3)).to(torch.float16).npu()
         b = torch.ones((3, 4)).to(torch.float16).npu()
         result = torch_act.basic_matmul(a, b, "float16")
+        torch.npu.synchronize()
         golden = torch.mm(a, b)
         self.assertRtolEqual(result, golden)
         
@@ -25,6 +26,7 @@ class ActTest(TestCase):
         a = torch.ones((2, 3)).to(torch.bfloat16).npu()
         b = torch.ones((3, 4)).to(torch.bfloat16).npu()
         result = torch_act.basic_matmul(a, b, "bf16")
+        torch.npu.synchronize()
         golden = torch.mm(a, b)
         self.assertRtolEqual(result.to(torch.float32), golden.to(torch.float32))
 
@@ -32,6 +34,7 @@ class ActTest(TestCase):
         a = torch.ones((2, 3)).to(torch.float16).npu()
         b = torch.ones((3, 4)).to(torch.float16).npu()
         result = torch.ops.ActTorch.basic_matmul(a, b, "float16")
+        torch.npu.synchronize()
         golden = torch.mm(a, b)
         self.assertRtolEqual(result, golden)
 
@@ -41,6 +44,7 @@ class ActTest(TestCase):
         a_list = [torch.ones((m, k)).to(torch.float16).npu() for m in m_list]
         b_list = [torch.ones((k, n)).to(torch.float16).npu() for m in m_list]
         result = torch_act.grouped_matmul(a_list, b_list, "float16", False)
+        torch.npu.synchronize()
         golden = torch_npu.npu_grouped_matmul(a_list, b_list)
         for i in range(len(m_list)):
             self.assertRtolEqual(result[i], golden[i])
@@ -51,6 +55,7 @@ class ActTest(TestCase):
         a_list = [torch.ones((m, k)).to(torch.float16).npu() for k in k_list]
         b_list = [torch.ones((k, n)).to(torch.float16).npu() for k in k_list]
         result = torch_act.grouped_matmul(a_list, b_list, "float16", True)
+        torch.npu.synchronize()
         golden = torch_npu.npu_grouped_matmul(a_list, b_list)
         for i in range(len(k_list)):
             self.assertRtolEqual(result[i], golden[i])
@@ -59,6 +64,7 @@ class ActTest(TestCase):
         a = torch.ones((2, 3)).to(torch.float16).npu()
         b = torch.ones((3, 4)).to(torch.float16).npu()
         result = torch_act.optimized_matmul(a, b, "float16")
+        torch.npu.synchronize()
         golden = torch.mm(a, b)
         self.assertRtolEqual(result, golden)
         

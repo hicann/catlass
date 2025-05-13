@@ -62,6 +62,30 @@ aclDataType TorchDtypeToAclDtype(torch::Dtype torchDtype, aclDataType defaultTyp
     return iter->second;
 }
 
+enum class TransposeStatus : uint32_t {
+    NO_TRANSPOSE = 0,
+    TRANSPOSE = 1,
+    NON_CONTINUOUS = 2
+};
+
+TransposeStatus GetTransposeStatus(const at::Tensor &mat)
+{
+    if (mat.is_contiguous()){
+        return TransposeStatus::NO_TRANSPOSE;
+    }
+    std::vector<int64_t> strides = mat.strides().vec();
+    std::vector<int64_t> shape = mat.sizes().vec();
+    // int64_t dimA = shape.at(shape.size() - 2);
+    int64_t dimB = shape.at(shape.size() - 1);
+    int64_t strideA = strides.at(strides.size() - 2);
+    int64_t strideB = strides.at(strides.size() - 1);
+    if (strideB == dimB && strideA == 1) {
+        return TransposeStatus::TRANSPOSE;
+    } else {
+        return TransposeStatus::NON_CONTINUOUS;
+    }
+}
+
 std::vector<int64_t> InferShape(at::IntArrayRef matAShape, at::IntArrayRef matBShape)
 {
     int64_t m = matAShape.at(0);
@@ -88,6 +112,17 @@ KernelInfo GetKernelInfo(const at::Tensor &mat1, const at::Tensor &mat2, const s
     kernelInfo.n = n;
     kernelInfo.inputDataType = TorchDtypeToAclDtype(mat1.scalar_type());
     kernelInfo.outputDataType = TorchDtypeToAclDtype(TypeStrToTorchDtype(outDType), kernelInfo.inputDataType);
+    TransposeStatus transposeStatus1 = GetTransposeStatus(mat1); 
+    TransposeStatus transposeStatus2 = GetTransposeStatus(mat2);
+    if(transposeStatus1 == TransposeStatus::NON_CONTINUOUS){
+        throw std::runtime_error("mat1 is not contiguous");
+    }
+    if (transposeStatus2 == TransposeStatus::NON_CONTINUOUS){
+        throw std::runtime_error("mat2 is not contiguous");
+    }
+    kernelInfo.transA = static_cast<bool>(transposeStatus1);
+    kernelInfo.transB = static_cast<bool>(transposeStatus2);
+    return kernelInfo;
     return kernelInfo;
 };
 
@@ -155,7 +190,7 @@ at::Tensor RunBasicMatmul(const at::Tensor &mat1, const at::Tensor &mat2, const 
     aclrtStream stream = c10_npu::getCurrentNPUStream().stream(false);
     uint32_t aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
     BasicMatmul(aicCoreNum, stream, kernelInfo);
-    (void)aclrtSynchronizeStream(stream);
+    
     return result;
 }
 
@@ -253,7 +288,7 @@ at::Tensor RunOptimizedMatmul(const at::Tensor &mat1, const at::Tensor &mat2, co
     aclrtStream stream = c10_npu::getCurrentNPUStream().stream(false);
     uint32_t aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
     OptimizedMatmul(aicCoreNum, stream, kernelInfo);
-    (void)aclrtSynchronizeStream(stream);
+    
     return result;
 }
 } // namespace Act
