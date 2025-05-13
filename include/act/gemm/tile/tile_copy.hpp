@@ -162,7 +162,7 @@ struct PaddingPackedTileCopyTla {
     using L1AAlignHelper = Gemm::helper::L1AlignHelper<ElementA, LayoutTagA>;
     using L1BAlignHelper = Gemm::helper::L1AlignHelper<ElementB, LayoutTagB>;
 
-    using LayoutPaddingTagA = std::conditional_t<std::is_same_v<LayoutTagA, layout::RowMajor>, 
+    using LayoutPaddingTagA = std::conditional_t<std::is_same_v<LayoutTagA, layout::RowMajor>,
         layout::PaddingRowMajor, layout::PaddingColumnMajor>;
     using LayoutPaddingTagB = std::conditional_t<std::is_same_v<LayoutTagB, layout::RowMajor>,
         layout::PaddingRowMajor, layout::PaddingColumnMajor>;
@@ -170,12 +170,12 @@ struct PaddingPackedTileCopyTla {
     using CopyGmToL1A = std::conditional_t<
         IS_PADDING_A,
         Gemm::Tile::TileCopyTlaExt<ArchTag, TensorA, TensorL1A, LayoutPaddingTagA, LayoutTagL1A>,
-        Gemm::Tile::TileCopyTla<ArchTag, TensorA, TensorL1A>
+        Gemm::Tile::TileCopyTlaExt<ArchTag, TensorA, TensorL1A, LayoutTagA, LayoutTagL1A>
     >;
     using CopyGmToL1B = std::conditional_t<
         IS_PADDING_B,
         Gemm::Tile::TileCopyTlaExt<ArchTag, TensorB, TensorL1B, LayoutPaddingTagB, LayoutTagL1B>,
-        Gemm::Tile::TileCopyTla<ArchTag, TensorB, TensorL1B>
+        Gemm::Tile::TileCopyTlaExt<ArchTag, TensorB, TensorL1B, LayoutTagB, LayoutTagL1B>
     >;
 
     using CopyL1ToL0A = Gemm::Tile::TileCopyTla<ArchTag, TensorL1A, TensorL0A>;
