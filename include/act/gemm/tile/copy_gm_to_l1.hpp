@@ -368,7 +368,43 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::ColumnMajor>, Gemm::G
 ////////////////////////////////////////
 
 ///////////////////////////////////////
-/// new add gemv
+/// new add gemv, VectorLayout -> zN
+template <class ArchTag, class Element>
+struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::VectorLayout>, Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>> {
+    using LayoutDst = layout::zN;
+    using LayoutSrc = layout::VectorLayout;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+
+    // Methods
+
+    ACT_DEVICE
+    CopyGmToL1() {};
+
+    ACT_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::GlobalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+    {
+        AscendC::Nd2NzParams intriParams;
+
+        intriParams.ndNum = 1;
+        intriParams.dValue = layoutSrc.shape(0);
+        intriParams.srcNdMatrixStride = 0;
+        intriParams.dstNzC0Stride = layoutDst.stride(3) / ELE_NUM_PER_C0;
+        intriParams.dstNzMatrixStride = 0;
+        intriParams.nValue = 1;    
+        intriParams.srcDValue = layoutSrc.shape(0);
+        intriParams.dstNzNStride = layoutDst.stride(0) / ELE_NUM_PER_C0;
+        AscendC::DataCopy(dstTensor, srcTensor, intriParams);
+    }
+};
+
+
+
+///////////////////////////////////////
+/// new add gemv, ColumnMajor -> nN
 template <class ArchTag, class Element>
 struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::ColumnMajor>, Gemm::GemmType<Element, layout::nN, AscendC::TPosition::B1>> {
     using LayoutDst = layout::nN;
@@ -376,7 +412,7 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::ColumnMajor>, Gemm::G
 
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
 
-    // Mehtods
+    // Methods
 
     ACT_DEVICE
     CopyGmToL1() {};

@@ -67,7 +67,7 @@ struct EpilogueAtlasA2PerTokenDequant {
     using ArchTag = Arch::AtlasA2;
     static constexpr uint32_t UB_STAGES = UB_STAGES_;
 };
-//////////////////////////////////////
+////////////////////////////
 /// new add
 // For AtlasA2, GEMM
 struct EpilogueAtlasA2Gemm {
@@ -78,7 +78,7 @@ struct EpilogueAtlasA2Gemm {
 struct EpilogueAtlasA2Gemv {
     using ArchTag = Arch::AtlasA2;
 };
-//////////////////////////////////////
+///////////////////////////
 }  // namespace Act::Epilogue
 
 #endif  // ACT_EPILOGUE_DISPATCH_POLICY_HPP

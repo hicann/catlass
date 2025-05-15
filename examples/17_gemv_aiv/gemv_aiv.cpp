@@ -227,7 +227,7 @@ void Run(Options options){
     ACL_CHECK(aclrtMemcpy(hostRes.data(), sizeY, deviceY, sizeY, ACL_MEMCPY_DEVICE_TO_HOST));
 
     std::vector<float> hostGolden(lenY);
-    golden::ComputeGemvAiv(options.problemShape, alpha, beta, hostA, layoutA, hostX, layoutX, hostY, layoutY, hostGolden, layoutY);
+    golden::ComputeGemv(options.problemShape, alpha, beta, hostA, layoutA, hostX, layoutX, hostY, layoutY, hostGolden, layoutY);
     std::vector<uint64_t> errorIndices = golden::CompareData(hostRes, hostGolden, m);
     if (errorIndices.empty()) {
         std::cout << "Compare success." << std::endl;

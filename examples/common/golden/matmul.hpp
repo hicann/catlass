@@ -67,10 +67,8 @@ void ComputeGemm(
     }
 }
 
-
-// simple gemv_aiv
 template<typename Element, class ElementA, class LayoutA, class ElementX, class LayoutX, class ElementY, class LayoutY, class ElementGolden, class LayoutGolden>
-void ComputeGemvAiv(
+void ComputeGemv(
     const Act::GemvCoord &problemShape,
     Element alpha, Element beta,
     const std::vector<ElementA> &dataA, const LayoutA &layoutA,
@@ -95,30 +93,6 @@ void ComputeGemvAiv(
                                   static_cast<ElementGolden>(accumulator);
     }
 }
-
-// simple gemv_aic
-template<typename Element, class ElementA, class LayoutA, class ElementX, class LayoutX, class ElementY, class LayoutY, class ElementGolden, class LayoutGolden>
-void ComputeGemvAic(
-    const Act::GemvCoord &problemShape,
-    Element alpha, Element beta,
-    const std::vector<ElementA> &dataA, const LayoutA &layoutA,
-    const std::vector<ElementX> &dataX, const LayoutX &layoutX,
-    const std::vector<ElementY> &dataY, const LayoutY &layoutY,
-    std::vector<ElementGolden> &dataGolden, const LayoutGolden &layoutGolden
-)
-{
-    for (uint32_t i = 0; i < problemShape.m(); ++i) {
-        size_t offsetGolden = layoutGolden.GetOffset(MakeCoord(i));
-        ElementGolden accumulator = 0;
-        for (uint32_t k = 0; k < problemShape.n(); ++k) {
-            size_t offsetA = layoutA.GetOffset(MakeCoord(i, k));
-            size_t offsetX = layoutX.GetOffset(MakeCoord(uint32_t(0), k));
-            accumulator += static_cast<ElementGolden>(alpha) * static_cast<ElementGolden>(dataA[offsetA]) * static_cast<ElementGolden>(dataX[offsetX]);
-        }
-        dataGolden[offsetGolden] = static_cast<ElementGolden>(beta) * static_cast<ElementGolden>(dataY[offsetGolden]) + static_cast<ElementGolden>(accumulator);
-    }
-}
-
 
 // simple grouped gemm
 template<typename Element, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC, class ElementGolden, class LayoutGolden>

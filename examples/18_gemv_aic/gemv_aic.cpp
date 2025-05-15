@@ -201,12 +201,11 @@ void Run(Options options)
     size_t sizeY = lenY * sizeof(float);
     size_t sizeWorkspace = lenZ * sizeof(float);
 
-    using LayoutX = layout::RowMajor;
+    using LayoutX = layout::VectorLayout;
     using LayoutA = layout::ColumnMajor;
-    using LayoutY = layout::RowMajor;
     using LayoutZ = layout::VectorLayout;
 
-    LayoutX layoutX{1, n};
+    LayoutX layoutX{n};
     LayoutA layoutA{m, n};
     LayoutZ layoutZ{m};
 
@@ -257,7 +256,7 @@ void Run(Options options)
 
     std::vector<float> hostGolden(lenZ);
 
-    golden::ComputeGemvAic(options.problemShape, alpha, beta, hostA, layoutA, hostX, layoutX, hostY, layoutZ, hostGolden, layoutZ);
+    golden::ComputeGemv(options.problemShape, alpha, beta, hostA, layoutA, hostX, layoutX, hostY, layoutZ, hostGolden, layoutZ);
 
     std::vector<uint64_t> errorIndices = golden::CompareData(hostRes, hostGolden, m);
 
