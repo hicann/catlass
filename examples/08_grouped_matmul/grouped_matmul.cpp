@@ -61,8 +61,8 @@ void GroupedMatmul(
         l1Stages, l0AStages, l0BStages, l0CStages,
         enableUnitFlag, enableShuffleK
     >;
-    using L1TileShape = GemmShape<128, 256, 256>;
-    using L0TileShape = GemmShape<128, 256, 64>;
+    using L1TileShape = GemmShape<128, 256, 256>; // tunable
+    using L0TileShape = GemmShape<128, 256, 64>; // tunable
 
     using AType = Gemm::GemmType<half, LayoutA>;
     using BType = Gemm::GemmType<half, LayoutB>;
