@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This file is a part of the CANN Open Software.
  * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -14,22 +14,22 @@
 #define K_MAX_SHAPE_DIM 0
 #endif
 
- #include <iostream>
- #include <vector>
- 
- #include "helper.hpp"
- #include "golden.hpp"
- 
- #include "act/act.hpp"
- #include "act/arch/arch.hpp"
- #include "act/gemm/dispatch_policy.hpp"
- #include "act/gemv/kernel/kernel_gemv_aiv.hpp"
- #include "act/gemv/block/block_gemv.hpp"
- #include "act/gemm/gemm_type.hpp"
- #include "act/layout/layout.hpp"
- #include "act/gemv/tile/tile_copy.hpp"
- #include "act/gemv/tile/tile_vmad.hpp"
- #include "act/gemv/tile/tile_vmuls.hpp"
+#include <iostream>
+#include <vector>
+
+#include "helper.hpp"
+#include "golden.hpp"
+
+#include "act/act.hpp"
+#include "act/arch/arch.hpp"
+#include "act/gemm/dispatch_policy.hpp"
+#include "act/gemv/kernel/kernel_gemv_aiv.hpp"
+#include "act/gemv/block/block_gemv.hpp"
+#include "act/gemm/gemm_type.hpp"
+#include "act/layout/layout.hpp"
+#include "act/gemv/tile/tile_copy.hpp"
+#include "act/gemv/tile/tile_vmad.hpp"
+#include "act/gemv/tile/tile_vmuls.hpp"
 
 using namespace Act;
 using UBTileShape = GemvShape<32,512>;
@@ -46,12 +46,12 @@ void GemvAiv(
     GM_ADDR gmA, LayoutA layoutA,
     GM_ADDR gmX, LayoutX layoutX,
     GM_ADDR gmY, LayoutY layoutY,
-    GM_ADDR gmY_read,
+    GM_ADDR gmYCopy,
     ScalarType alpha,ScalarType beta,
-    uint32_t SPLIT
+    uint32_t split
 ){
     using ArchTag = Arch::AtlasA2;
-    using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
+    using DispatchPolicy = Gemm::GemvAtlasA2;
     
 
     using AType = Gemm::GemmType<float, LayoutA>;
@@ -62,19 +62,19 @@ void GemvAiv(
     using TileVmad = Gemv::Tile::TileVmad<typename DispatchPolicy::ArchTag, AType, XType, YType, BiasType>;
     using TileVmuls = Gemv::Tile::TileVmuls<typename DispatchPolicy::ArchTag, XType>;
 
-    using GemvBlock = Gemv::Block::BlockGemv<DispatchPolicy, UBTileShape, AType, XType, YType,BiasType,TileCopy,TileVmad,TileVmuls>;
+    using GemvBlock = Gemv::Block::BlockGemv<DispatchPolicy, UBTileShape, AType, XType, YType, BiasType, TileCopy, TileVmad, TileVmuls>;
     using BlockEpilogue = void;
 
     // kernel level
-    using GemvKernel = Gemv::Kernel::KernelGemv<GemvBlock, BlockEpilogue>;
-    typename GemvKernel::Params params{problemShape, gmA, layoutA, gmX, layoutX, gmY, layoutY, gmY_read,alpha,beta,SPLIT};
+    using GemvKernel = Gemv::Kernel::KernelGemvAiv<GemvBlock, BlockEpilogue>;
+    typename GemvKernel::Params params{problemShape, gmA, layoutA, gmX, layoutX, gmY, layoutY, gmYCopy,alpha,beta,split};
     // call a kernel
     GemvKernel gemv;
     
     gemv(params);
 }
 
-typedef struct Options{
+struct Options{
     const std::string HELPER = "05_gemv_aiv m n [device_id]";
 
     uint32_t M = 32;
@@ -85,25 +85,28 @@ typedef struct Options{
     
     GemvCoord problemShape{M, N};
 
-    int Parse(int argc, const char **argv){
-        enum ArgsIndex{
+    int Parse(int argc, const char **argv)
+    {
+        enum ArgsIndex {
             M_INDEX = 1,
             N_INDEX,
             DEVICE_ID_INDEX,
             ARGS_MAX
         };
-        if(argc > ARGS_MAX || argc <= N_INDEX){
+        if (argc > ARGS_MAX || argc <= N_INDEX) 
+        {
             std::cerr << HELPER << std::endl;
             return -1;
         }
         problemShape.m() = std::atoi(argv[M_INDEX]);
         problemShape.n() = std::atoi(argv[N_INDEX]);
-        if(argc == ARGS_MAX){
+        if (argc == ARGS_MAX)
+        {
             deviceId = std::atoi(argv[DEVICE_ID_INDEX]);
         }
         return 0;
     }
-}Options;
+};
 
 uint32_t getSplictNum(bool trans, uint32_t M, uint32_t N, uint32_t M1, uint32_t N1, uint32_t maxSplict)
 {
@@ -145,6 +148,12 @@ uint32_t getSplictNum(bool trans, uint32_t M, uint32_t N, uint32_t M1, uint32_t 
     return splitNum;
 }
 
+template<class ElementRandom>
+void FillRandomScalarData(ElementRandom &scalarData, ElementRandom low, ElementRandom high)
+{
+    scalarData = static_cast<ElementRandom>(low + (static_cast<ElementRandom>(rand()) / static_cast<ElementRandom>(RAND_MAX)) * (high - low));
+}
+
 void Run(Options options){
     aclrtStream stream{nullptr};
     ACL_CHECK(aclInit(nullptr));
@@ -155,7 +164,7 @@ void Run(Options options){
     uint32_t n = options.problemShape.n();
     
     uint32_t maxSplict = 20;
-    uint32_t const SPLIT = getSplictNum(false, m, n, UBTileShape::M, UBTileShape::N, maxSplict);
+    uint32_t const split = getSplictNum(false, m, n, UBTileShape::M, UBTileShape::N, maxSplict);
 
     size_t lenA = static_cast<size_t>(m) * n;
     size_t lenX = static_cast<size_t>(n) * 1;
@@ -174,18 +183,17 @@ void Run(Options options){
     LayoutX layoutX{n};
     LayoutY layoutY{m};
 
-    size_t scalarSize = scalarLen * sizeof(ScalarType);
-    std::vector<ScalarType> hostAlpha(scalarLen);
-    std::vector<ScalarType> hostBeta(scalarLen);
-    golden::FillRandomData(hostAlpha, -1.0f, 1.0f);
-    golden::FillRandomData(hostBeta, -1.0f, 1.0f);
+    ScalarType alpha{0};
+    ScalarType beta{0};
+    FillRandomScalarData(alpha, -1.0f, 1.0f);
+    FillRandomScalarData(beta, -1.0f, 1.0f);
 
     std::vector<float> hostA(lenA);
     std::vector<float> hostX(lenX);
-    std::vector<float> hostY_read(lenY);
+    std::vector<float> hostY(lenY);
     golden::FillRandomData(hostA,  -1.0f, 1.0f);
     golden::FillRandomData(hostX,  -1.0f, 1.0f);
-    golden::FillRandomData(hostY_read,  -1.0f, 1.0f);
+    golden::FillRandomData(hostY,  -1.0f, 1.0f);
 
     uint8_t *deviceA{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
@@ -195,13 +203,13 @@ void Run(Options options){
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceX), sizeX, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceX, sizeX, hostX.data(), sizeX, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceY_read{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceY_read), sizeY, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMemcpy(deviceY_read, sizeY, hostY_read.data(), sizeY, ACL_MEMCPY_HOST_TO_DEVICE));
+    uint8_t *deviceYCopy{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceYCopy), sizeY, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMemcpy(deviceYCopy, sizeY, hostY.data(), sizeY, ACL_MEMCPY_HOST_TO_DEVICE));
 
     uint8_t *deviceY{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceY), sizeY, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMemcpy(deviceY, sizeY, hostY_read.data(), sizeY, ACL_MEMCPY_HOST_TO_DEVICE));
+    ACL_CHECK(aclrtMemcpy(deviceY, sizeY, hostY.data(), sizeY, ACL_MEMCPY_HOST_TO_DEVICE));
     
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAiv();
     GemvAiv<<<aicCoreNum, nullptr, stream>>>(
@@ -209,9 +217,9 @@ void Run(Options options){
         deviceA, layoutA,
         deviceX, layoutX,
         deviceY, layoutY,
-        deviceY_read,
-        hostAlpha[0], hostBeta[0],
-        SPLIT
+        deviceYCopy,
+        alpha, beta,
+        split
     );
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
@@ -219,7 +227,7 @@ void Run(Options options){
     ACL_CHECK(aclrtMemcpy(hostRes.data(), sizeY, deviceY, sizeY, ACL_MEMCPY_DEVICE_TO_HOST));
 
     std::vector<float> hostGolden(lenY);
-    golden::ComputeGemvAiv(options.problemShape, hostAlpha[0], hostBeta[0], hostA, layoutA, hostX, layoutX, hostY_read, layoutY, hostGolden, layoutY);
+    golden::ComputeGemv(options.problemShape, alpha, beta, hostA, layoutA, hostX, layoutX, hostY, layoutY, hostGolden, layoutY);
     std::vector<uint64_t> errorIndices = golden::CompareData(hostRes, hostGolden, m);
     if (errorIndices.empty()) {
         std::cout << "Compare success." << std::endl;
@@ -230,7 +238,7 @@ void Run(Options options){
     ACL_CHECK(aclrtFree(deviceA));
     ACL_CHECK(aclrtFree(deviceX));
     ACL_CHECK(aclrtFree(deviceY));
-    ACL_CHECK(aclrtFree(deviceY_read));
+    ACL_CHECK(aclrtFree(deviceYCopy));
 
     ACL_CHECK(aclrtDestroyStream(stream));
     ACL_CHECK(aclrtResetDevice(options.deviceId));

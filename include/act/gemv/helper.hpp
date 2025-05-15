@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This file is a part of the CANN Open Software.
  * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -8,150 +8,122 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
- #ifndef ACT_GEMV_HELPER_HPP
- #define ACT_GEMV_HELPER_HPP
+#ifndef ACT_GEMV_HELPER_HPP
+#define ACT_GEMV_HELPER_HPP
  
- #include "act/act.hpp"
- #include "act/layout/layout.hpp"
- #include "act/gemm/gemm_type.hpp"
- namespace Act::Gemv::helper {
+#include "act/act.hpp"
+#include "act/layout/layout.hpp"
+#include "act/gemm/gemm_type.hpp"
+namespace Act::Gemv::helper {
  
- template<class Element, class Layout>
- struct UBAlignHelper {
-     static_assert(DEPENDENT_FALSE<Element>, "Unsupported align helper, can not find the specialization.");
- };
+template<class Element>
+struct UBAlignHelper 
+{
+    static constexpr uint32_t ALIGN = BYTE_PER_BLK / sizeof(Element);
+};
  
- template<class Element>
- struct UBAlignHelper<Element, layout::RowMajor> {
-     static constexpr uint32_t ALIGN = BYTE_PER_C0 / sizeof(Element);
- };
+template<class GmAType>
+struct AtomicAddSelector 
+{
+    static_assert(DEPENDENT_FALSE<GmAType>,
+        "Unsupported layout selector, can not find the specialization.");
+};
  
- template<class Element>
- struct UBAlignHelper<Element, layout::ColumnMajor> {
-     static constexpr uint32_t ALIGN = BYTE_PER_C0 / sizeof(Element);
- };
- 
- template<class GmAType>
- struct IsAtoaddSelector {
-     static_assert(DEPENDENT_FALSE<GmAType>,
-         "Unsupported layout selector, can not find the specialization.");
- };
- 
- template<class Element>
- struct IsAtoaddSelector<Gemm::GemmType<Element, layout::RowMajor>> {
+template<class Element>
+struct AtomicAddSelector<Gemm::GemmType<Element, layout::RowMajor>> 
+{
     static constexpr bool value = false;
- };
+};
 
- template<class Element>
- struct IsAtoaddSelector<Gemm::GemmType<Element, layout::ColumnMajor>> {
+template<class Element>
+struct AtomicAddSelector<Gemm::GemmType<Element, layout::ColumnMajor>> 
+{
     static constexpr bool value = true;
- };
+};
 
- template <class Element, class Layout>
- struct L1AlignHelper
- {
-     static_assert(DEPENDENT_FALSE<Element>, "Unsupported align helper, can not find the specialization.");
- };
+template <class Element, class Layout>
+struct L1AlignHelper
+{
+    static_assert(DEPENDENT_FALSE<Element>, "Unsupported align helper, can not find the specialization.");
+};
 
- template <class Element>
- struct L1AlignHelper<Element, layout::RowMajor>
- {
-     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-     static constexpr uint32_t M_ALIGNED = C0_NUM_PER_FRACTAL;
-     static constexpr uint32_t K_ALIGNED = ELE_NUM_PER_C0;
-     static constexpr uint32_t N_ALIGNED = ELE_NUM_PER_C0;
- };
+template <class Element>
+struct L1AlignHelper<Element, layout::RowMajor>
+{
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+    static constexpr uint32_t M_ALIGNED = C0_NUM_PER_FRACTAL;
+    static constexpr uint32_t N_ALIGNED = ELE_NUM_PER_C0;
+};
 
- template <class Element>
- struct L1AlignHelper<Element, layout::ColumnMajor>
- {
-     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+template <class Element>
+struct L1AlignHelper<Element, layout::ColumnMajor>
+{
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
 
-     static constexpr uint32_t getNAligned()
-     {
-         if constexpr (std::is_same<Element, int8_t>::value)
-         {
-             return ELE_NUM_PER_C0 / sizeof(Element); 
-         }
-         else
-         {
-             return C0_NUM_PER_FRACTAL; 
-         }
-     }
+    static constexpr uint32_t getNAligned()
+    {
+        if constexpr (std::is_same<Element, int8_t>::value) {
+            return ELE_NUM_PER_C0 / sizeof(Element); 
+        } else {
+            return C0_NUM_PER_FRACTAL; 
+        }
+    }
 
-     static constexpr uint32_t getMAligned()
-     {
-         if constexpr (std::is_same<Element, int8_t>::value)
-         {
-             return ELE_NUM_PER_C0 / sizeof(Element); 
-         }
-         else
-         {
-             return C0_NUM_PER_FRACTAL; 
-         }
-     }
+    static constexpr uint32_t getMAligned()
+    {
+        if constexpr (std::is_same<Element, int8_t>::value) {
+            return ELE_NUM_PER_C0 / sizeof(Element); 
+        } else {
+            return C0_NUM_PER_FRACTAL; 
+        }
+    }
 
-     static constexpr uint32_t N_ALIGNED = getNAligned();
-     static constexpr uint32_t M_ALIGNED = getMAligned();
- };
+    static constexpr uint32_t N_ALIGNED = getNAligned();
+    static constexpr uint32_t M_ALIGNED = getMAligned();
+};
 
- template <class Element>
- struct L1AlignHelper<Element, layout::zN>
- {
-     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-     static constexpr uint32_t M_ALIGNED = C0_NUM_PER_FRACTAL;
-     static constexpr uint32_t K_ALIGNED = ELE_NUM_PER_C0;
-     static constexpr uint32_t N_ALIGNED = ELE_NUM_PER_C0;
- };
+template <class Element>
+struct L1AlignHelper<Element, layout::VectorLayout>
+{
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+    static constexpr uint32_t M_ALIGNED = C0_NUM_PER_FRACTAL;
+    static constexpr uint32_t N_ALIGNED = ELE_NUM_PER_C0;
+};
 
- template <class Element>
- struct L1AlignHelper<Element, layout::nZ>
- {
-     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-     static constexpr uint32_t M_ALIGNED = ELE_NUM_PER_C0;
-     static constexpr uint32_t K_ALIGNED = ELE_NUM_PER_C0;
-     static constexpr uint32_t N_ALIGNED = C0_NUM_PER_FRACTAL;
- };
+////////////////////////////////
+// new add  gemvaic selector
+template<class GmAType, class GmBType>
+struct L1AndL0TypeSelectorGemv{
+    static_assert(DEPENDENT_FALSE<GmAType>,
+        "Unsupported layout selector, can not find the specialization.");
+    static_assert(DEPENDENT_FALSE<GmBType>,
+        "Unsupported layout selector, can not find the specialization.");
+};
 
- template<class ElementA, class ElementB>
- struct ElementAccumulatorSelector {
-     static_assert(DEPENDENT_FALSE<ElementA>,
-         "Unsupported element accumulator selector, can not find the specialization.");
- };
+template<class Element>
+struct L1AndL0TypeSelectorGemv<Gemm::GemmType<Element, layout::VectorLayout>, Gemm::GemmType<Element, layout::RowMajor>>{
+    using L1AType = Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>;
+    using L1BType = Gemm::GemmType<Element, layout::zN, AscendC::TPosition::B1>;
+    using L0AType = Gemm::GemmType<Element, layout::zZ, AscendC::TPosition::A2>;
+    using L0BType = Gemm::GemmType<Element, layout::zN, AscendC::TPosition::B2>;
+};
 
- template<>
- struct ElementAccumulatorSelector<half, half> {
-     using ElementAccumulator = float;
- };
+template<class Element>
+struct L1AndL0TypeSelectorGemv<Gemm::GemmType<Element, layout::VectorLayout>, Gemm::GemmType<Element, layout::ColumnMajor>>{
+    using L1AType = Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>;
+    using L1BType = Gemm::GemmType<Element, layout::nN, AscendC::TPosition::B1>;
+    using L0AType = Gemm::GemmType<Element, layout::zZ, AscendC::TPosition::A2>;
+    using L0BType = Gemm::GemmType<Element, layout::zN, AscendC::TPosition::B2>;
+};
+
+template<>
+struct L1AndL0TypeSelectorGemv<Gemm::GemmType<int8_t, layout::VectorLayout>, Gemm::GemmType<int8_t, layout::ColumnMajor>>{
+    using L1AType = Gemm::GemmType<int8_t, layout::zN, AscendC::TPosition::A1>;
+    using L1BType = Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::B1>;
+    using L0AType = Gemm::GemmType<int8_t, layout::zZ, AscendC::TPosition::A2>;
+    using L0BType = Gemm::GemmType<int8_t, layout::zN, AscendC::TPosition::B2>;
+};
  
- template<>
- struct ElementAccumulatorSelector<float, float> {
-     using ElementAccumulator = float;
- };
+} // namespace Act::Gemv::helper
  
- template<>
- struct ElementAccumulatorSelector<uint8_t, uint8_t> {
-     using ElementAccumulator = int32_t;
- };
-
- template <>
- struct ElementAccumulatorSelector<int8_t, int8_t>
- {
-     using ElementAccumulator = int32_t;
- };
-
- template <>
- struct ElementAccumulatorSelector<int32_t, int32_t>
- {
-     using ElementAccumulator = int32_t;
- };
-
- template<>
- struct ElementAccumulatorSelector<bfloat16_t, bfloat16_t> {
-     using ElementAccumulator = float;
- };
- 
- } // namespace Act::Gemv::helper
- 
- #endif // ACT_GEMV_HELPER_HPP
- 
+#endif // ACT_GEMV_HELPER_HPP

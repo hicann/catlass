@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This file is a part of the CANN Open Software.
  * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -64,7 +64,7 @@ public:
     using CopyL1ToL0A = typename TileCopy_::CopyL1ToL0A;
     using CopyL1ToL0B = typename TileCopy_::CopyL1ToL0B;
     using CopyL0CToGm = typename TileCopy_::CopyL0CToGm;
-    using ElementAccumulator = typename Gemv::helper::ElementAccumulatorSelector<ElementA, ElementX>::ElementAccumulator;
+    using ElementAccumulator = typename Gemm::helper::ElementAccumulatorSelector<ElementA, ElementX>::ElementAccumulator;
     using LayoutXInL1 = typename CopyL1ToL0A::LayoutSrc;
     using LayoutAInL1 = typename CopyL1ToL0B::LayoutSrc;
     using LayoutXInL0 = typename CopyL1ToL0A::LayoutDst;
@@ -109,10 +109,10 @@ public:
             l0ATensorList[i] = resource.l0ABuf.template GetBufferByByte<ElementX>(L0A_PINGPONG_BUF_SIZE * i);
             l0BTensorList[i] = resource.l0BBuf.template GetBufferByByte<ElementA>(L0B_PINGPONG_BUF_SIZE * i);
 
-            l1AEventList[i] = i;           // 0, 1
-            l1BEventList[i] = i + STAGES;  // 2, 3
-            l0AEventList[i] = i;           // 0, 1
-            l0BEventList[i] = i + STAGES;  // 2, 3
+            l1AEventList[i] = i;          
+            l1BEventList[i] = i + STAGES;  
+            l0AEventList[i] = i;           
+            l0BEventList[i] = i + STAGES; 
 
             // The event id that needs to be set before the loop
             AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[i]);
@@ -167,14 +167,14 @@ public:
             uint32_t shuffleKIdx = (startTileIdx + nLoopIdx) % nTileCount;
             if (shuffleKIdx == firstTileIdx && isFirstBlock) {
                 MatrixCoord gmTileAOffset{0, shuffleKIdx * L1TileShape::N};
-                MatrixCoord gmTilexOffset{0, shuffleKIdx * L1TileShape::N};
+                uint32_t gmTilexOffset{shuffleKIdx * L1TileShape::N};
 
                 auto gmTileA = gmBlockA[layoutA.GetOffset(gmTileAOffset)];
-                auto gmTilex = gmBlockX[layoutX.GetOffset(gmTilexOffset)];
+                auto gmTilex = gmBlockX[gmTilexOffset];
 
                 // load first vector x tile from GM to L1
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);
-                auto layoutTilex = layoutX.GetTileLayout(MakeCoord(uint32_t(1), nRound));
+                auto layoutTilex = layoutX.GetTileLayout(MakeCoord(nRound));
                 copyGmToL1A(l1ATensorList[l1ListId], gmTilex, layoutXInL1, layoutTilex);
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListId]);
 
@@ -201,14 +201,14 @@ public:
 
                 // Get GM tile
                 MatrixCoord gmTileAOffset{0, shuffleKIdxNext * L1TileShape::N};
-                MatrixCoord gmTilexOffset{0, shuffleKIdxNext * L1TileShape::N};
+                uint32_t gmTilexOffset{shuffleKIdxNext * L1TileShape::N};
 
                 auto gmTileA = gmBlockA[layoutA.GetOffset(gmTileAOffset)];
-                auto gmTilex = gmBlockX[layoutX.GetOffset(gmTilexOffset)];
+                auto gmTilex = gmBlockX[gmTilexOffset];
 
                 // load vector x tile from GM to L1
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListIdNext]);
-                auto layoutTilex = layoutX.GetTileLayout(MakeCoord(uint32_t(1), nRoundNext));
+                auto layoutTilex = layoutX.GetTileLayout(MakeCoord(nRoundNext));
 
                 copyGmToL1A(l1ATensor, gmTilex, layoutXInL1, layoutTilex);
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListIdNext]);
@@ -226,20 +226,20 @@ public:
                 auto l1BTensor = l1BTensorList[l1ListIdNext];
 
                 // Get GM tensor for next stage
-                nActualNext = (firstTileIdx < nTileCount - 1) ? L1TileShape::N : (actualShapeNext.n() - firstTileIdx * L1TileShape::N);  // 同样需要判断读取的是不是最后一个被切分的部分
+                nActualNext = (firstTileIdx < nTileCount - 1) ? L1TileShape::N : (actualShapeNext.n() - firstTileIdx * L1TileShape::N);  
                 nRoundNext = RoundUp<L1AAlignHelper::N_ALIGNED>(nActualNext);
 
                 // Get GM tile
                 MatrixCoord gmTileAOffset{0, firstTileIdx * L1TileShape::N};
-                MatrixCoord gmTilexOffset{0, firstTileIdx * L1TileShape::N};
+                uint32_t gmTilexOffset{firstTileIdx * L1TileShape::N};
 
                 auto gmTileA = gmNextBlockA[layoutA.GetOffset(gmTileAOffset)];
-                auto gmTilex = gmNextBlockX[layoutX.GetOffset(gmTilexOffset)];
+                auto gmTilex = gmNextBlockX[gmTilexOffset];
 
                 // load vector x tile from GM to L1
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListIdNext]);
 
-                auto layoutTilex = layoutX.GetTileLayout(MakeCoord(uint32_t(1), nRoundNext));
+                auto layoutTilex = layoutX.GetTileLayout(MakeCoord(nRoundNext));
 
                 copyGmToL1A(l1ATensor, gmTilex, layoutXInL1, layoutTilex);
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListIdNext]);
