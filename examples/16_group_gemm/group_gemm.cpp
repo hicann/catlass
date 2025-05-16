@@ -23,6 +23,7 @@
 
 #include "helper.hpp"
 #include "golden.hpp"
+#include "fp16_t.h"
 
 #include "act/act.hpp"
 #include "act/arch/arch.hpp"
@@ -42,6 +43,7 @@
 
 using namespace Act;
 using ScalarType = float;
+using fp16_t = op::fp16_t;
 
 template <
     typename LayoutA,
@@ -69,13 +71,13 @@ void GroupGemm(
     constexpr bool enableABBA = true;
     using GemmBlockDispatchPolicy = Act::Gemm::GemmAtlasA2<enableUnitFlag, enableShuffleK, enableABBA>;
     using EpilogueBlockDispatchPolicy = Act::Epilogue::EpilogueAtlasA2Gemm;
-    using AType = Gemm::GemmType<float, LayoutA>;
-    using BType = Gemm::GemmType<float, LayoutB>;
-    using CType = Gemm::GemmType<float, LayoutX>;
-    using XType = Gemm::GemmType<float, LayoutX>;
+    using AType = Gemm::GemmType<half, LayoutA>;
+    using BType = Gemm::GemmType<half, LayoutB>;
+    using CType = Gemm::GemmType<half, LayoutX>;
+    using XType = Gemm::GemmType<half, LayoutX>;
     
-    using L1TileShape = GemmShape<128, 128, 128>;
-    using L0TileShape = GemmShape<128, 128, 64>;
+    using L1TileShape = GemmShape<128, 256, 256>;
+    using L0TileShape = GemmShape<128, 256, 64>;
     using TileShapeCast = MatrixShape<L1TileShape::M / 2, L1TileShape::N>;
 
     using GemmBlock = Gemm::Block::BlockGemm<GemmBlockDispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>; 
@@ -205,7 +207,7 @@ void Run(Options& options){
 
     uint32_t groupCnt = options.groupCnt;
     
-    const uint32_t align = 128; 
+    const uint32_t align = 256; 
     using LayoutA = layout::RowMajor;
     using LayoutB = layout::RowMajor;
     using LayoutX = layout::RowMajor;
@@ -243,13 +245,13 @@ void Run(Options& options){
     golden::FillRandomData(hostAlpha,  -1.0f, 1.0f);
     golden::FillRandomData(hostBeta,  -1.0f, 1.0f);
 
-    size_t sizeA = allMKCnt * sizeof(float);
-    size_t sizeB = allKNCnt * sizeof(float);
-    size_t sizeX = allMNCnt * sizeof(float);
-    size_t sizeC = allMNCnt * sizeof(float);
-    std::vector<float> hostA(allMKCnt);
-    std::vector<float> hostB(allKNCnt);
-    std::vector<float> hostX(allMNCnt);
+    size_t sizeA = allMKCnt * sizeof(fp16_t);
+    size_t sizeB = allKNCnt * sizeof(fp16_t);
+    size_t sizeX = allMNCnt * sizeof(fp16_t);
+    size_t sizeC = allMNCnt * sizeof(fp16_t);
+    std::vector<fp16_t> hostA(allMKCnt);
+    std::vector<fp16_t> hostB(allKNCnt);
+    std::vector<fp16_t> hostX(allMNCnt);
     golden::FillRandomData(hostA,  -1.0f, 1.0f);
     golden::FillRandomData(hostB,  -1.0f, 1.0f);
     golden::FillRandomData(hostX,  -1.0f, 1.0f);
@@ -265,14 +267,14 @@ void Run(Options& options){
     uint8_t *deviceA{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
-    size_t sizeWA = allMKCntPadding * sizeof(float);
+    size_t sizeWA = allMKCntPadding * sizeof(fp16_t);
     uint8_t *deviceWA{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWA), sizeWA, ACL_MEM_MALLOC_HUGE_FIRST));
 
     uint8_t *deviceB{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
-    size_t sizeWB = allKNCntPadding * sizeof(float);
+    size_t sizeWB = allKNCntPadding * sizeof(fp16_t);
     uint8_t *deviceWB{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWB), sizeWB, ACL_MEM_MALLOC_HUGE_FIRST));
 
@@ -339,7 +341,7 @@ void Run(Options& options){
         gmWorkspace);
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
-    std::vector<float> hostRes(allMNCnt);
+    std::vector<fp16_t> hostRes(allMNCnt);
     ACL_CHECK(aclrtMemcpy(hostRes.data(), sizeX, deviceX, sizeX, ACL_MEMCPY_DEVICE_TO_HOST));
     std::vector<float> hostGolden(allMNCnt);
     golden::ComputeGroupGemm(groupCnt, problemShapeList, hostAlpha, hostBeta, hostA, layoutAList,
