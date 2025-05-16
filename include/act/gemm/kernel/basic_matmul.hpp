@@ -52,15 +52,43 @@ public:
         LayoutC layoutC;
 
         // Methods
-        ACT_DEVICE
-        Params() {}
+        ACT_HOST_DEVICE
+        Params()
+        {}
 
-        ACT_DEVICE
+        ACT_HOST_DEVICE
         Params(GemmCoord const &problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_,
                LayoutB layoutB_, GM_ADDR ptrC_, LayoutC layoutC_)
             : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_), layoutB(layoutB_),
               ptrC(ptrC_), layoutC(layoutC_) {}
     };
+
+    struct Arguments {
+        GemmCoord problemShape;
+        GM_ADDR ptrA;
+        GM_ADDR ptrB;
+        GM_ADDR ptrC;
+    };
+
+    static bool CanImplement(const Arguments &args)
+    {
+        return true;
+    }
+
+    static size_t GetWorkspaceSize(const Arguments &args)
+    {
+        return 0;
+    }
+
+    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    {
+        LayoutA layoutA{args.problemShape.m(), args.problemShape.k()};
+        LayoutB layoutB{args.problemShape.k(), args.problemShape.n()};
+        LayoutC layoutC{args.problemShape.m(), args.problemShape.n()};
+        Params params{args.problemShape, args.ptrA, layoutA, args.ptrB, layoutB, args.ptrC, layoutC};
+        return params;
+    }
+
 
     // Methods
     ACT_DEVICE
