@@ -1,6 +1,6 @@
 #include <acl/acl.h>
 
-#include "act_kernel.h"
+#include "catlass_kernel.h"
 #include "kernel/grouped_matmul_slice_k.hpp"
 #include "kernel/grouped_matmul_slice_m.hpp"
 

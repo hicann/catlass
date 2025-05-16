@@ -18,19 +18,19 @@
 
 #include <acl/acl.h>
 
-#include "act/act.hpp"
-#include "act/arch/arch.hpp"
-#include "act/gemm/block/block_mmad.hpp"
-#include "act/gemm/block/block_swizzle.hpp"
-#include "act/gemm/dispatch_policy.hpp"
-#include "act/gemm/gemm_type.hpp"
-#include "act/gemm/kernel/basic_matmul.hpp"
-#include "act/layout/layout.hpp"
+#include "catlass/catlass.hpp"
+#include "catlass/arch/arch.hpp"
+#include "catlass/gemm/block/block_mmad.hpp"
+#include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/dispatch_policy.hpp"
+#include "catlass/gemm/gemm_type.hpp"
+#include "catlass/gemm/kernel/basic_matmul.hpp"
+#include "catlass/layout/layout.hpp"
 
 namespace Act{
 template <class LayoutA, class LayoutB, class LayoutC, typename IN_TYPE,
           typename OUT_TYPE>
-ACT_DEVICE void basic_matmul_kernel(GemmCoord problemShape, GM_ADDR gmA,
+CATLASS_DEVICE void basic_matmul_kernel(GemmCoord problemShape, GM_ADDR gmA,
                                     LayoutA layoutA, GM_ADDR gmB,
                                     LayoutB layoutB, GM_ADDR gmC,
                                     LayoutC layoutC) {
@@ -80,7 +80,7 @@ ACT_DEVICE void basic_matmul_kernel(GemmCoord problemShape, GM_ADDR gmA,
 
 template <class LayoutA, class LayoutB, class LayoutC, aclDataType IN_TYPE,
           aclDataType OUT_TYPE>
-ACT_GLOBAL void basic_matmul(GemmCoord problemShape, GM_ADDR gmA,
+CATLASS_GLOBAL void basic_matmul(GemmCoord problemShape, GM_ADDR gmA,
                              LayoutA layoutA, GM_ADDR gmB, LayoutB layoutB,
                              GM_ADDR gmC, LayoutC layoutC) {
   if constexpr (IN_TYPE == ACL_FLOAT16 && OUT_TYPE == ACL_FLOAT16) {
@@ -93,5 +93,5 @@ ACT_GLOBAL void basic_matmul(GemmCoord problemShape, GM_ADDR gmA,
         problemShape, gmA, layoutA, gmB, layoutB, gmC, layoutC);
   }
 }
-} // end of namespace act
+} // end of namespace catlass
 #endif  // SHARED_LIB_IMPL_BASIC_MATMUL_H

@@ -22,7 +22,7 @@ set_bisheng_include_dirs(ascend_device
     ${ASCEND_HOME_PATH}/include
     ${ASCEND_HOME_PATH}/include/experiment/runtime
     ${ASCEND_HOME_PATH}/include/experiment/msprof
-    ${ACT_EXAMPLES_COMMON_SOURCE_DIR}
+    ${CATLASS_EXAMPLES_COMMON_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/include
 )
 # message(STATUS "set_bisheng_include_dirs: " ${BISHENG_INCLUDE_DIRS})

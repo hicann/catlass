@@ -21,14 +21,14 @@
 #include "golden.hpp"
 #include "fp16_t.h"
 
-#include "act/act.hpp"
-#include "act/arch/arch.hpp"
-#include "act/gemm/gemm_type.hpp"
-#include "act/gemm/block/block_mmad.hpp"
-#include "act/gemm/block/block_swizzle.hpp"
-#include "act/gemm/dispatch_policy.hpp"
-#include "act/gemm/kernel/basic_matmul_tla.hpp"
-#include "act/layout/layout.hpp"
+#include "catlass/catlass.hpp"
+#include "catlass/arch/arch.hpp"
+#include "catlass/gemm/gemm_type.hpp"
+#include "catlass/gemm/block/block_mmad.hpp"
+#include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/dispatch_policy.hpp"
+#include "catlass/gemm/kernel/basic_matmul_tla.hpp"
+#include "catlass/layout/layout.hpp"
 
 #include "tla/layout.hpp"
 #include "tla/tensor.hpp"
@@ -42,7 +42,7 @@ template <
     class LayoutTagB,
     class LayoutTagC
 >
-ACT_GLOBAL
+CATLASS_GLOBAL
 void BasicMatmul(
     GemmCoord problemShape,
     GM_ADDR gmA, LayoutTagA tagA,

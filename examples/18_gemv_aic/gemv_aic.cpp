@@ -20,23 +20,23 @@
 #include "helper.hpp"
 #include "golden.hpp"
 
-#include "act/act.hpp"
-#include "act/arch/arch.hpp"
-#include "act/gemv/block/block_gemv.hpp"
+#include "catlass/catlass.hpp"
+#include "catlass/arch/arch.hpp"
+#include "catlass/gemv/block/block_gemv.hpp"
 
-#include "act/gemv/kernel/kernel_gemv_aic.hpp"
-#include "act/gemv/tile/tile_copy.hpp"
+#include "catlass/gemv/kernel/kernel_gemv_aic.hpp"
+#include "catlass/gemv/tile/tile_copy.hpp"
 
-#include "act/gemm/dispatch_policy.hpp"
-#include "act/gemm/gemm_type.hpp"
+#include "catlass/gemm/dispatch_policy.hpp"
+#include "catlass/gemm/gemm_type.hpp"
 
-#include "act/epilogue/block/block_epilogue.hpp"
-#include "act/epilogue/dispatch_policy.hpp"
-#include "act/epilogue/tile/tile_copy.hpp"
-#include "act/epilogue/tile/tile_elemwise_add.hpp"
-#include "act/epilogue/tile/tile_elemwise_muls.hpp"
+#include "catlass/epilogue/block/block_epilogue.hpp"
+#include "catlass/epilogue/dispatch_policy.hpp"
+#include "catlass/epilogue/tile/tile_copy.hpp"
+#include "catlass/epilogue/tile/tile_elemwise_add.hpp"
+#include "catlass/epilogue/tile/tile_elemwise_muls.hpp"
 
-#include "act/layout/layout.hpp"
+#include "catlass/layout/layout.hpp"
 
 using namespace Act;
 
@@ -47,7 +47,7 @@ template <
     class LayoutX,
     class LayoutZ
 >
-ACT_GLOBAL 
+CATLASS_GLOBAL 
 void GemvAic(
     uint64_t fftsAddr,
     ScalarType alpha, ScalarType beta,

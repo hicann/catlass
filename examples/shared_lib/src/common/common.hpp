@@ -1,6 +1,6 @@
 #include <acl/acl.h>
 
-#include "act/layout/layout.hpp"
+#include "catlass/layout/layout.hpp"
 template <aclDataType T>
 struct AclType2Type;
 

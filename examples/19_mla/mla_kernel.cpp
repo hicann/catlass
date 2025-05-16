@@ -8,18 +8,18 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#include "act/act.hpp"
-#include "act/arch/arch.hpp"
-#include "act/layout/layout.hpp"
+#include "catlass/catlass.hpp"
+#include "catlass/arch/arch.hpp"
+#include "catlass/layout/layout.hpp"
 
-#include "act/gemm/block/block_mmad.hpp"
-#include "act/gemm/dispatch_policy.hpp"
-#include "act/gemm/gemm_type.hpp"
+#include "catlass/gemm/block/block_mmad.hpp"
+#include "catlass/gemm/dispatch_policy.hpp"
+#include "catlass/gemm/gemm_type.hpp"
 
-#include "act/arch/cross_core_sync.hpp"
-#include "act/arch/resource.hpp"
-#include "act/epilogue/block/block_epilogue.hpp"
-#include "act/epilogue/dispatch_policy.hpp"
+#include "catlass/arch/cross_core_sync.hpp"
+#include "catlass/arch/resource.hpp"
+#include "catlass/epilogue/block/block_epilogue.hpp"
+#include "catlass/epilogue/dispatch_policy.hpp"
 
 #include "kernel_common.hpp"
 
@@ -83,10 +83,10 @@ public:
         GM_ADDR tiling;
 
         // Methods
-        ACT_DEVICE
+        CATLASS_DEVICE
         Params() {}
 
-        ACT_DEVICE
+        CATLASS_DEVICE
         Params(GM_ADDR q_, GM_ADDR qRope_, GM_ADDR k_, GM_ADDR kRope_, GM_ADDR blockTables_,
                GM_ADDR o_, GM_ADDR s_, GM_ADDR p_, GM_ADDR oTmp_, GM_ADDR oUpdate_,
                GM_ADDR oCoreTmp_, GM_ADDR l_, GM_ADDR tiling_)
@@ -95,14 +95,14 @@ public:
     };
 
     // Methods
-    ACT_DEVICE
+    CATLASS_DEVICE
     MLAKernel() {}
 
     template <int32_t CORE_TYPE = g_coreType>
-    ACT_DEVICE void operator()(Params const &params);
+    CATLASS_DEVICE void operator()(Params const &params);
 
     template <>
-    ACT_DEVICE void operator()<AscendC::AIC>(Params const &params)
+    CATLASS_DEVICE void operator()<AscendC::AIC>(Params const &params)
     {
         AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(EVENT_ID0);
         AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(EVENT_ID1);
@@ -321,7 +321,7 @@ public:
     }
 
     template <>
-    ACT_DEVICE void operator()<AscendC::AIV>(Params const &params)
+    CATLASS_DEVICE void operator()<AscendC::AIV>(Params const &params)
     {
         AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
         AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
@@ -572,7 +572,7 @@ private:
     Arch::CrossCoreFlag pvReady{PV_READY_ID};
 };
 
-ACT_GLOBAL void MLAFp16(uint64_t fftsAddr,
+CATLASS_GLOBAL void MLAFp16(uint64_t fftsAddr,
                         GM_ADDR q,
                         GM_ADDR qRope,
                         GM_ADDR k,
@@ -657,7 +657,7 @@ ACT_GLOBAL void MLAFp16(uint64_t fftsAddr,
 }
 
 
-ACT_GLOBAL void MLABf16(uint64_t fftsAddr,
+CATLASS_GLOBAL void MLABf16(uint64_t fftsAddr,
                         GM_ADDR q,
                         GM_ADDR qRope,
                         GM_ADDR k,

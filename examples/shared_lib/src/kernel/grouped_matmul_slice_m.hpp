@@ -17,21 +17,21 @@
 // for supporting older gcc, to find the reason
 #include <iostream>
 
-#include "act/act.hpp"
-#include "act/arch/arch.hpp"
-#include "act/gemm/block/block_mmad.hpp"
-#include "act/gemm/block/block_swizzle.hpp"
-#include "act/gemm/dispatch_policy.hpp"
-#include "act/gemm/gemm_type.hpp"
-#include "act/gemm/kernel/grouped_matmul_slice_m.hpp"
-#include "act/layout/layout.hpp"
+#include "catlass/catlass.hpp"
+#include "catlass/arch/arch.hpp"
+#include "catlass/gemm/block/block_mmad.hpp"
+#include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/dispatch_policy.hpp"
+#include "catlass/gemm/gemm_type.hpp"
+#include "catlass/gemm/kernel/grouped_matmul_slice_m.hpp"
+#include "catlass/layout/layout.hpp"
 
 
 namespace Act{
 
 
 template <class LayoutA, class LayoutB, class LayoutC>
-ACT_GLOBAL void grouped_matmul_slice_m(GemmCoord problemShape,
+CATLASS_GLOBAL void grouped_matmul_slice_m(GemmCoord problemShape,
                                        uint32_t problemCount,
                                        GM_ADDR gmGroupList, GM_ADDR gmA,
                                        LayoutA layoutA, GM_ADDR gmB,

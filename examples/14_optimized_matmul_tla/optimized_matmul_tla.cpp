@@ -21,13 +21,13 @@
 #include "golden.hpp"
 #include "fp16_t.h"
 
-#include "act/act.hpp"
-#include "act/arch/arch.hpp"
-#include "act/gemm/gemm_type.hpp"
-#include "act/gemm/block/block_mmad.hpp"
-#include "act/gemm/block/block_swizzle.hpp"
-#include "act/gemm/dispatch_policy.hpp"
-#include "act/gemm/kernel/optimized_matmul_tla.hpp"
+#include "catlass/catlass.hpp"
+#include "catlass/arch/arch.hpp"
+#include "catlass/gemm/gemm_type.hpp"
+#include "catlass/gemm/block/block_mmad.hpp"
+#include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/dispatch_policy.hpp"
+#include "catlass/gemm/kernel/optimized_matmul_tla.hpp"
 
 #include "tla/layout.hpp"
 #include "tla/tensor.hpp"
@@ -46,7 +46,7 @@ template <
     class PaddingA,
     class PaddingB
 >
-ACT_DEVICE
+CATLASS_DEVICE
 void LaunchMatmulDynamicSwizzle(
     GemmCoord problemShape,
     GM_ADDR gmA, LayoutA layoutA,
@@ -83,7 +83,7 @@ void LaunchMatmulDynamicSwizzle(
 }
 
 template<class Layout>
-ACT_DEVICE
+CATLASS_DEVICE
 auto GetPaddingLayout(Layout layout, uint32_t blockRows, uint32_t blockCols)
 {
     if constexpr (std::is_same_v<Layout, layout::RowMajor>) {
@@ -118,7 +118,7 @@ template <
     bool IS_PADDING_A,
     bool IS_PADDING_B
 >
-ACT_GLOBAL
+CATLASS_GLOBAL
 void OptimizedMatmul(
     uint64_t fftsAddr,
     GemmCoord problemShape,

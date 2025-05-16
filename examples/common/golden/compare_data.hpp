@@ -13,7 +13,7 @@
 #include <cmath>
 #include <vector>
 
-#include "act/gemm_coord.hpp"
+#include "catlass/gemm_coord.hpp"
 
 namespace Act::golden {
 

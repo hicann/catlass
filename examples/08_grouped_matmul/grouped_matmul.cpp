@@ -22,14 +22,14 @@
 #include "golden.hpp"
 #include "fp16_t.h"
 
-#include "act/act.hpp"
-#include "act/arch/arch.hpp"
-#include "act/gemm/block/block_mmad.hpp"
-#include "act/gemm/block/block_swizzle.hpp"
-#include "act/gemm/dispatch_policy.hpp"
-#include "act/gemm/kernel/grouped_matmul.hpp"
-#include "act/gemm/gemm_type.hpp"
-#include "act/layout/layout.hpp"
+#include "catlass/catlass.hpp"
+#include "catlass/arch/arch.hpp"
+#include "catlass/gemm/block/block_mmad.hpp"
+#include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/dispatch_policy.hpp"
+#include "catlass/gemm/kernel/grouped_matmul.hpp"
+#include "catlass/gemm/gemm_type.hpp"
+#include "catlass/layout/layout.hpp"
 
 using namespace Act;
 using fp16_t = op::fp16_t;
@@ -39,7 +39,7 @@ template <
     class LayoutB,
     class LayoutC
 >
-ACT_GLOBAL
+CATLASS_GLOBAL
 void GroupedMatmul(
     uint32_t problemCount, GM_ADDR ptrProblemShape,
     GM_ADDR ptrA, GM_ADDR ptrLayoutA,

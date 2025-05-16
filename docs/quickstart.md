@@ -14,8 +14,8 @@ chmod +x Ascend-cann-toolkit_<version>_linux-<arch>.run
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
 ```
 
-## 使用Ascend C Templates开发Matmul算子
-本示例主要展示如何基于Ascend C Templates快速搭建一个NPU上的BasicMatmul实现。示例中使用已提供的下层基础组件完成Device层和Kernel层组装，并调用算子输出结果。AscendC Templates分层示意图见[api文档](api.md)。
+## 使用CATLASS Templates开发Matmul算子
+本示例主要展示如何基于CATLASS Templates快速搭建一个NPU上的BasicMatmul实现。示例中使用已提供的下层基础组件完成Device层和Kernel层组装，并调用算子输出结果。AscendC Templates分层示意图见[api文档](api.md)。
 ### Kernel层算子定义
 Kernel层模板由Block层组件构成。这里首先定义三个Block层组件。
 `<class BlockMmad_, class BlockEpilogue_, class BlockScheduler_>`。
@@ -49,14 +49,14 @@ using MatmulKernel = Act::Gemm::Kernel::BasicMatmul<BlockMmad, void, TileSchedul
 ```
 ### Device层算子定义
 基于Kernel层组装的算子，完成核函数的编写。
-1. 使用ACT_GLOBAL修饰符定义Matmul函数，并传入算子的类型参数。
+1. 使用CATLASS_GLOBAL修饰符定义Matmul函数，并传入算子的类型参数。
 ```
 template <
     class LayoutA,
     class LayoutB,
     class LayoutC
 >
-ACT_GLOBAL
+CATLASS_GLOBAL
 void BasicMatmul(
     GemmCoord problemShape,
     GM_ADDR gmA, LayoutA layoutA,
@@ -79,10 +79,10 @@ BasicMatmul<<<BLOCK_NUM, nullptr, stream>>>(
         options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC);
 ```
 ### 算子编译
-使用cmake，调用`act_example_add_executable`函数指定target名称和编译文件。如下所示，00_basic_matmul为target名称，basic_matmul.cpp为需要编译的文件。
+使用cmake，调用`catlass_example_add_executable`函数指定target名称和编译文件。如下所示，00_basic_matmul为target名称，basic_matmul.cpp为需要编译的文件。
 ```
 # CMakeLists.txt
-act_example_add_executable(
+catlass_example_add_executable(
     00_basic_matmul
     basic_matmul.cpp
 )
@@ -90,7 +90,7 @@ act_example_add_executable(
 在项目目录下，调用`build.sh`，即可编译examples中的kernel代码。
 ```
 # 编译examples内所有用例
-bash scripts/build.sh act_examples
+bash scripts/build.sh catlass_examples
 # 编译指定用例
 bash scripts/build.sh 00_basic_matmul
 ```

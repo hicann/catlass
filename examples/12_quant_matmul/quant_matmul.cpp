@@ -22,19 +22,19 @@
 #include "golden.hpp"
 #include "bfloat16.h"
 
-#include "act/act.hpp"
-#include "act/arch/arch.hpp"
-#include "act/epilogue/block/block_epilogue.hpp"
-#include "act/epilogue/dispatch_policy.hpp"
-#include "act/epilogue/tile/tile_broadcast_mul.hpp"
-#include "act/epilogue/tile/tile_broadcast_one_blk.hpp"
-#include "act/epilogue/tile/tile_swizzle.hpp"
-#include "act/gemm/block/block_mmad.hpp"
-#include "act/gemm/block/block_swizzle.hpp"
-#include "act/gemm/dispatch_policy.hpp"
-#include "act/gemm/kernel/quant_matmul_multistage_workspace.hpp"
-#include "act/gemm/gemm_type.hpp"
-#include "act/layout/layout.hpp"
+#include "catlass/catlass.hpp"
+#include "catlass/arch/arch.hpp"
+#include "catlass/epilogue/block/block_epilogue.hpp"
+#include "catlass/epilogue/dispatch_policy.hpp"
+#include "catlass/epilogue/tile/tile_broadcast_mul.hpp"
+#include "catlass/epilogue/tile/tile_broadcast_one_blk.hpp"
+#include "catlass/epilogue/tile/tile_swizzle.hpp"
+#include "catlass/gemm/block/block_mmad.hpp"
+#include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/dispatch_policy.hpp"
+#include "catlass/gemm/kernel/quant_matmul_multistage_workspace.hpp"
+#include "catlass/gemm/gemm_type.hpp"
+#include "catlass/layout/layout.hpp"
 
 using namespace Act;
 using bfloat16 = op::bfloat16;
@@ -46,7 +46,7 @@ template <
     class LayoutA,
     class LayoutB
 >
-ACT_GLOBAL
+CATLASS_GLOBAL
 void QuantMatmul(
     uint64_t fftsAddr,
     GemmCoord problemShape,

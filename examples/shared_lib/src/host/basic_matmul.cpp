@@ -2,7 +2,7 @@
 
 #include <acl/acl.h>
 
-#include "act_kernel.h"
+#include "catlass_kernel.h"
 #include "common.hpp"
 
 namespace ActKernel {

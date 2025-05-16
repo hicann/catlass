@@ -16,14 +16,14 @@
 // for supporting older gcc, to find the reason
 #include <iostream>
 
-#include "act/act.hpp"
-#include "act/arch/arch.hpp"
-#include "act/gemm/block/block_mmad.hpp"
-#include "act/gemm/block/block_swizzle.hpp"
-#include "act/gemm/dispatch_policy.hpp"
-#include "act/gemm/gemm_type.hpp"
-#include "act/gemm/kernel/optimized_matmul.hpp"
-#include "act/layout/layout.hpp"
+#include "catlass/catlass.hpp"
+#include "catlass/arch/arch.hpp"
+#include "catlass/gemm/block/block_mmad.hpp"
+#include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/dispatch_policy.hpp"
+#include "catlass/gemm/gemm_type.hpp"
+#include "catlass/gemm/kernel/optimized_matmul.hpp"
+#include "catlass/layout/layout.hpp"
 
 namespace Act{
 
@@ -55,7 +55,7 @@ bool IsNeedPadding(layout::ColumnMajor layout, uint32_t align) {
 
 template <class LayoutA, class LayoutB, class LayoutC, class LayoutWA,
           class LayoutWB, class BlockMmad>
-ACT_DEVICE void LaunchMatmulDynamicSwizzle(GemmCoord problemShape, GM_ADDR gmA,
+CATLASS_DEVICE void LaunchMatmulDynamicSwizzle(GemmCoord problemShape, GM_ADDR gmA,
                                           LayoutA layoutA, GM_ADDR gmB,
                                           LayoutB layoutB, GM_ADDR gmC,
                                           LayoutC layoutC, GM_ADDR gmWA,
@@ -90,7 +90,7 @@ ACT_DEVICE void LaunchMatmulDynamicSwizzle(GemmCoord problemShape, GM_ADDR gmA,
 }
 
 template <class LayoutA, class LayoutB, class LayoutC>
-ACT_GLOBAL void optimized_matmul(uint64_t fftsAddr, GemmCoord problemShape,
+CATLASS_GLOBAL void optimized_matmul(uint64_t fftsAddr, GemmCoord problemShape,
                                 GM_ADDR gmA, LayoutA layoutA, GM_ADDR gmB,
                                 LayoutB layoutB, GM_ADDR gmC, LayoutC layoutC,
                                 GM_ADDR gmWA, GM_ADDR gmWB) {

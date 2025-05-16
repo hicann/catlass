@@ -12,8 +12,8 @@
 
 #include <vector>
 
-#include "act/layout/layout.hpp"
-#include "act/gemv_coord.hpp"
+#include "catlass/layout/layout.hpp"
+#include "catlass/gemv_coord.hpp"
 
 namespace Act::golden {
 

@@ -6,7 +6,7 @@
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 # See LICENSE in the root of the software repository for the full text of the License.
 
-set(ACT_EXAMPLES_COMMON_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/common)
+set(CATLASS_EXAMPLES_COMMON_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/common)
 set(BISHENG_COMPILER_OPTIONS
     -O2 -std=c++17 -xcce
     -mllvm -cce-aicore-stack-size=0x8000
@@ -22,7 +22,7 @@ set(BISHENG_COMPILER_OPTIONS
     -I${ASCEND_HOME_PATH}/include
     -I${ASCEND_HOME_PATH}/include/experiment/runtime
     -I${ASCEND_HOME_PATH}/include/experiment/msprof
-    -I${ACT_EXAMPLES_COMMON_SOURCE_DIR}
+    -I${CATLASS_EXAMPLES_COMMON_SOURCE_DIR}
     -I${CMAKE_SOURCE_DIR}/include
     -L${ASCEND_HOME_PATH}/lib64
     -Wno-macro-redefined -Wno-ignored-attributes
@@ -33,11 +33,11 @@ if(DEFINED PROF)
     list(APPEND ${BISHENG_COMPILER_OPTIONS} -lprofapi)
 endif()
 
-file(GLOB_RECURSE ACT_INCLUDE_FILES ${CMAKE_SOURCE_DIR}/include/*.hpp)
-file(GLOB_RECURSE ACT_EXAMPLES_COMMON_INCLUDE_FILES ${ACT_EXAMPLES_COMMON_SOURCE_DIR}/*.hpp)
-add_custom_target(act_examples)
+file(GLOB_RECURSE CATLASS_INCLUDE_FILES ${CMAKE_SOURCE_DIR}/include/*.hpp)
+file(GLOB_RECURSE CATLASS_EXAMPLES_COMMON_INCLUDE_FILES ${CATLASS_EXAMPLES_COMMON_SOURCE_DIR}/*.hpp)
+add_custom_target(catlass_examples)
 
-function(act_example_add_executable NAME)
+function(catlass_example_add_executable NAME)
     if (${NAME} STREQUAL "17_gemv_aiv")
         set(ARCH "dav-c220-vec")
     else()
@@ -47,13 +47,13 @@ function(act_example_add_executable NAME)
     add_custom_command(
         OUTPUT ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${NAME}
         COMMAND ${CMAKE_BISHENG_COMPILER} --cce-aicore-arch=${ARCH} ${BISHENG_COMPILER_OPTIONS} ${ARGN} -o ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${NAME}
-        DEPENDS ${ARGN} ${ACT_INCLUDE_FILES} ${ACT_EXAMPLES_COMMON_INCLUDE_FILES}
+        DEPENDS ${ARGN} ${CATLASS_INCLUDE_FILES} ${CATLASS_EXAMPLES_COMMON_INCLUDE_FILES}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         COMMENT "Compiling executable kernel: ${NAME}"
     )
 
     add_custom_target(${NAME} ALL DEPENDS ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${NAME})
-    add_dependencies(act_examples ${NAME})
+    add_dependencies(catlass_examples ${NAME})
 endfunction()
 
 if(ENABLE_LIB)

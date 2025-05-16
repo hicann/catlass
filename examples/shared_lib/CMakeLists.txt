@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(act_kernel)
+project(catlass_kernel)
 
 set(KERNEL_OBJ_FILES "")
 set(ALL_KERNEL_TARGETS "")
@@ -30,7 +30,7 @@ set(BISHENG_COMPILER_OPTIONS
     -I${CMAKE_CURRENT_SOURCE_DIR}/src
     -I${CMAKE_CURRENT_SOURCE_DIR}/src/common
     -I${CMAKE_CURRENT_SOURCE_DIR}/include
-    -I${ACT_INCLUDE_DIR}
+    -I${CATLASS_INCLUDE_DIR}
     -Wno-macro-redefined -Wno-ignored-attributes
 )
 
@@ -46,7 +46,7 @@ endif()
 
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/obj)
 
-function(act_add_kernel NAME ARCH)
+function(catlass_add_kernel NAME ARCH)
     set(OUTPUT_DIR ${CMAKE_BINARY_DIR}/obj)
     set(OUTPUT_NAME ${NAME}.o)
     set(OUTPUT_FULL_NAME ${OUTPUT_DIR}/${OUTPUT_NAME})
@@ -54,7 +54,7 @@ function(act_add_kernel NAME ARCH)
     add_custom_command(
         OUTPUT ${OUTPUT_FULL_NAME}
         COMMAND ${CMAKE_BISHENG_COMPILER} --cce-aicore-arch=${ARCH} ${BISHENG_COMPILER_OPTIONS} -c ${ARGN} -o ${OUTPUT_FULL_NAME}
-        DEPENDS ${ARGN} ${HOST_SRC} ${ACT_INCLUDE_FILES}
+        DEPENDS ${ARGN} ${HOST_SRC} ${CATLASS_INCLUDE_FILES}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         COMMENT "Compiling single kernel obj ${NAME}"
     )
@@ -69,36 +69,36 @@ function(act_add_kernel NAME ARCH)
 endfunction()
 
 # if aicore-arch is different, maybe crash, to find the solution
-act_add_kernel(basic_matmul dav-c220 ${CMAKE_CURRENT_SOURCE_DIR}/src/host/basic_matmul.cpp)
-act_add_kernel(grouped_matmul dav-c220 ${CMAKE_CURRENT_SOURCE_DIR}/src/host/grouped_matmul.cpp)
-act_add_kernel(optimized_matmul dav-c220 ${CMAKE_CURRENT_SOURCE_DIR}/src/host/optimized_matmul.cpp)
+catlass_add_kernel(basic_matmul dav-c220 ${CMAKE_CURRENT_SOURCE_DIR}/src/host/basic_matmul.cpp)
+catlass_add_kernel(grouped_matmul dav-c220 ${CMAKE_CURRENT_SOURCE_DIR}/src/host/grouped_matmul.cpp)
+catlass_add_kernel(optimized_matmul dav-c220 ${CMAKE_CURRENT_SOURCE_DIR}/src/host/optimized_matmul.cpp)
 
 message("Kernel Object Files: ${KERNEL_OBJ_FILES}")
 
 add_custom_command(
-    OUTPUT ${CMAKE_BINARY_DIR}/libact_kernel.so
-    COMMAND ${CMAKE_BISHENG_COMPILER} ${BISHENG_LINK_OPTIONS} ${KERNEL_OBJ_FILES} --shared -o ${CMAKE_BINARY_DIR}/libact_kernel.so
+    OUTPUT ${CMAKE_BINARY_DIR}/libcatlass_kernel.so
+    COMMAND ${CMAKE_BISHENG_COMPILER} ${BISHENG_LINK_OPTIONS} ${KERNEL_OBJ_FILES} --shared -o ${CMAKE_BINARY_DIR}/libcatlass_kernel.so
     DEPENDS ${KERNEL_OBJ_FILES}
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-    COMMENT "Building shared library libact_kernel.so"
+    COMMENT "Building shared library libcatlass_kernel.so"
 )
 
 add_custom_command(
-    OUTPUT ${CMAKE_BINARY_DIR}/libact_kernel.a
-    COMMAND ${CMAKE_BISHENG_COMPILER} ${BISHENG_LINK_OPTIONS} ${KERNEL_OBJ_FILES} --cce-build-static-lib -o ${CMAKE_BINARY_DIR}/libact_kernel.a
+    OUTPUT ${CMAKE_BINARY_DIR}/libcatlass_kernel.a
+    COMMAND ${CMAKE_BISHENG_COMPILER} ${BISHENG_LINK_OPTIONS} ${KERNEL_OBJ_FILES} --cce-build-static-lib -o ${CMAKE_BINARY_DIR}/libcatlass_kernel.a
     DEPENDS ${KERNEL_OBJ_FILES}
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-    COMMENT "Building static library libact_kernel.a"
+    COMMENT "Building static library libcatlass_kernel.a"
 )
 
-add_custom_target(act_kernel ALL DEPENDS
-    ${CMAKE_BINARY_DIR}/libact_kernel.so
-    ${CMAKE_BINARY_DIR}/libact_kernel.a
+add_custom_target(catlass_kernel ALL DEPENDS
+    ${CMAKE_BINARY_DIR}/libcatlass_kernel.so
+    ${CMAKE_BINARY_DIR}/libcatlass_kernel.a
 )
 
-add_dependencies(act_kernel ${ALL_KERNEL_TARGETS})
+add_dependencies(catlass_kernel ${ALL_KERNEL_TARGETS})
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
-    install(FILES ${CMAKE_BINARY_DIR}/libact_kernel.so DESTINATION lib)
-    install(FILES ${CMAKE_BINARY_DIR}/libact_kernel.a DESTINATION lib)
-    install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/include/act_kernel.h DESTINATION include)
+    install(FILES ${CMAKE_BINARY_DIR}/libcatlass_kernel.so DESTINATION lib)
+    install(FILES ${CMAKE_BINARY_DIR}/libcatlass_kernel.a DESTINATION lib)
+    install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/include/catlass_kernel.h DESTINATION include)
 endif()
