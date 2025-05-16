@@ -21,14 +21,14 @@ Kernel层模板由Block层组件构成。这里首先定义三个Block层组件�
 `<class BlockMmad_, class BlockEpilogue_, class BlockScheduler_>`。
 1. `BlockMmad_`为block层mmad计算接口，定义方式如下：
 ```
-using DispatchPolicy = Act::Gemm::MmadAtlasA2Pingpong<true>; //流水排布使用
-using L1TileShape = Act::GemmShape<128, 256, 256>; // L1基本块
-using L0TileShape = Act::GemmShape<128, 256, 64>; // L0基本块
-using AType = Act::Gemm::GemmType<ElementA, LayoutA>;     //封装了A矩阵的数据类型和排布信息
-using BType = Act::Gemm::GemmType<ElementB, LayoutB>;     //封装了B矩阵的数据类型和排布信息
-using CType = Act::Gemm::GemmType<ElementC, LayoutC>;     //封装了C矩阵的数据类型和排布信息
+using DispatchPolicy = Catlass::Gemm::MmadAtlasA2Pingpong<true>; //流水排布使用
+using L1TileShape = Catlass::GemmShape<128, 256, 256>; // L1基本块
+using L0TileShape = Catlass::GemmShape<128, 256, 64>; // L0基本块
+using AType = Catlass::Gemm::GemmType<ElementA, LayoutA>;     //封装了A矩阵的数据类型和排布信息
+using BType = Catlass::Gemm::GemmType<ElementB, LayoutB>;     //封装了B矩阵的数据类型和排布信息
+using CType = Catlass::Gemm::GemmType<ElementC, LayoutC>;     //封装了C矩阵的数据类型和排布信息
 
-using BlockMmad = Act::Gemm::Block::BlockMmad<DispatchPolicy,
+using BlockMmad = Catlass::Gemm::Block::BlockMmad<DispatchPolicy,
     L1TileShape,
     L0TileShape,
     AType,
@@ -41,11 +41,11 @@ using BlockEpilogue = void;
 ```
 3. `BlockScheduler_`该模板类定义数据走位方式，提供计算offset的方法。此处使用定义好的GemmIdentityBlockSwizzle。参考[Swizzle策略说明](swizzle_explanation.md)文档了解更多swizzle信息。
 ```
-using BlockScheduler = typename Act::Gemm::Block::GemmIdentityBlockSwizzle<>;
+using BlockScheduler = typename Catlass::Gemm::Block::GemmIdentityBlockSwizzle<>;
 ```
 4. 基于上述组件即可完成BasicMatmul示例的Kernel层组装。
 ```
-using MatmulKernel = Act::Gemm::Kernel::BasicMatmul<BlockMmad, void, TileSchedule>;
+using MatmulKernel = Catlass::Gemm::Kernel::BasicMatmul<BlockMmad, void, TileSchedule>;
 ```
 ### Device层算子定义
 基于Kernel层组装的算子，完成核函数的编写。

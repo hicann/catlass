@@ -15,7 +15,7 @@
 #include "catlass/layout/layout.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 
-namespace Act::Epilogue::Tile {
+namespace Catlass::Epilogue::Tile {
 
 template <
     class ArchTag,
@@ -137,6 +137,6 @@ struct CopyUb2GmAligned<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>
     };
 };
 
-}  // Act::Epilogue::Tile
+}  // Catlass::Epilogue::Tile
 
 #endif

@@ -14,7 +14,7 @@
 #include "catlass/catlass.hpp"
 #include "catlass/arch/local_tensor_buffer.hpp"
 
-namespace Act::Arch {
+namespace Catlass::Arch {
 
 template<class ArchTag>
 struct Resource {
@@ -36,6 +36,6 @@ public:
     }
 };
 
-} // namespace Act::Arch
+} // namespace Catlass::Arch
 
 #endif // INCLUDE_CATLASS_ARCH_RESOURCE_HPP

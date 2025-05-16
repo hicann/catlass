@@ -15,7 +15,7 @@
 #include "catlass/layout/layout.hpp"
 #include "tla/layout.hpp"
 
-namespace Act::Gemm::helper {
+namespace Catlass::Gemm::helper {
 
 template<class Element, class Layout>
 struct L1AlignHelper {
@@ -250,6 +250,6 @@ struct L1AndL0TypeSelectorGemm<Gemm::GemmType<int8_t, layout::ColumnMajor>, Gemm
     using L0BType = Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::B2>;
 };
 ///////////////////////////////////////
-} // namespace Act::Gemm::helper
+} // namespace Catlass::Gemm::helper
 
 #endif // CATLASS_GEMM_HELPER_HPP

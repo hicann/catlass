@@ -29,7 +29,7 @@
 #include "catlass/gemm/gemm_type.hpp"
 #include "catlass/layout/layout.hpp"
 
-using namespace Act;
+using namespace Catlass;
 using fp16_t = op::fp16_t;
 
 constexpr float DATA_UPPER_BOUND = 5;

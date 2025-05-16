@@ -19,7 +19,7 @@
 #include "catlass/layout/layout.hpp"
 #include "catlass/detail/callback.hpp"
 
-namespace Act::Epilogue::Block {
+namespace Catlass::Epilogue::Block {
 
 template <
     uint32_t UB_STAGES_,
@@ -638,6 +638,6 @@ private:
     CopyUbToGmD copyUbToGmD;
 };
 
-}  // namespace Act::Epilogue::Block
+}  // namespace Catlass::Epilogue::Block
 
 #endif  // CATLASS_EPILOGUE_BLOCK_EPILOGUE_PER_TOKEN_DEQUANT_HPP

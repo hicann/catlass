@@ -19,7 +19,7 @@
 #include "catlass/gemm/dispatch_policy.hpp"
 #include "catlass/arch/resource.hpp"
 
-namespace Act::Gemm::Block{
+namespace Catlass::Gemm::Block{
 template<
     bool ENABLE_UNIT_FLAG_,
     bool ENABLE_SHUFFLE_K_,

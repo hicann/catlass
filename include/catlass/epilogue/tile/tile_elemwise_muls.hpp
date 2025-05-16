@@ -13,7 +13,7 @@
  
  #include "catlass/gemm/helper.hpp"
  
- namespace Act::Epilogue::Tile{
+ namespace Catlass::Epilogue::Tile{
  template<
      class ArchTag_,
      class ComputeType_,

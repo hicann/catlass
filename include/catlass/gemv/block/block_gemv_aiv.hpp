@@ -21,7 +21,7 @@
  #include "catlass/detail/alignment.hpp"
  #include "catlass/gemm/dispatch_policy.hpp"
 
- namespace Act::Gemv::Block {
+ namespace Catlass::Gemv::Block {
  template <
      class UBTileShape_,
      class AType_,
@@ -241,7 +241,7 @@
      
  };
  
- } // namespace Act::Gemv::Block
+ } // namespace Catlass::Gemv::Block
  
  #endif // CATLASS_GEMV_BLOCK_BLOCK_GEMV_AIV_HPP
  

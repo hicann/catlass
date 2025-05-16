@@ -20,7 +20,7 @@
 #include "catlass/epilogue/tile/copy_gm_to_ub.hpp"
 #include "catlass/epilogue/tile/copy_ub_to_gm.hpp"
 
-namespace Act::Gemm::Kernel {
+namespace Catlass::Gemm::Kernel {
 
 template<
     class ArchTag_,
@@ -35,11 +35,11 @@ public:
     using Element = Element_;
     using LayoutIn = LayoutIn_;
     using LayoutOut = LayoutOut_;
-    using ComputeLayout = Act::layout::RowMajor;
-    using ComputeLayoutDst = Act::layout::PaddingRowMajor;
-    using CopyGm2Ub = Act::Epilogue::Tile::CopyGm2Ub<
+    using ComputeLayout = Catlass::layout::RowMajor;
+    using ComputeLayoutDst = Catlass::layout::PaddingRowMajor;
+    using CopyGm2Ub = Catlass::Epilogue::Tile::CopyGm2Ub<
         ArchTag, Gemm::GemmType<Element, ComputeLayout>>;
-    using CopyUb2Gm = Act::Epilogue::Tile::CopyUb2Gm<
+    using CopyUb2Gm = Catlass::Epilogue::Tile::CopyUb2Gm<
         ArchTag, Gemm::GemmType<Element, ComputeLayout>>;
 
     CopyGm2Ub copyGm2Ub;
@@ -207,11 +207,11 @@ public:
     using ArchTag = ArchTag_;
     using Element = Element_;
     using Layout = Layout_;
-    using CopyGm2Ub = Act::Epilogue::Tile::CopyGm2Ub<
-        ArchTag, Gemm::GemmType<Element, Act::layout::RowMajor>>;
-    using CopyUb2Gm = Act::Epilogue::Tile::CopyUb2Gm<
-        ArchTag, Gemm::GemmType<Element, Act::layout::RowMajor>>;
-    using ComputeLayout = Act::layout::RowMajor;
+    using CopyGm2Ub = Catlass::Epilogue::Tile::CopyGm2Ub<
+        ArchTag, Gemm::GemmType<Element, Catlass::layout::RowMajor>>;
+    using CopyUb2Gm = Catlass::Epilogue::Tile::CopyUb2Gm<
+        ArchTag, Gemm::GemmType<Element, Catlass::layout::RowMajor>>;
+    using ComputeLayout = Catlass::layout::RowMajor;
 
     CopyGm2Ub copyGm2Ub;
     CopyUb2Gm copyUb2Gm;
@@ -418,9 +418,9 @@ public:
         PaddingB paddingB(resource);
         paddingB(gmWB, gmB, params.layoutWB, params.layoutB);
         // 0x0 synchronization control between AI Core
-        Act::Arch::CrossCoreBarrier<0x0, PIPE_MTE3>();
+        Catlass::Arch::CrossCoreBarrier<0x0, PIPE_MTE3>();
 
-        Act::Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(flagAivFinishPadding);
+        Catlass::Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(flagAivFinishPadding);
     }
 
     /// Executes matmul
@@ -428,7 +428,7 @@ public:
     CATLASS_DEVICE
     void operator()<AscendC::AIC>(Params const &params)
     {
-        Act::Arch::CrossCoreWaitFlag(flagAivFinishPadding);
+        Catlass::Arch::CrossCoreWaitFlag(flagAivFinishPadding);
 
         BlockScheduler matmulBlockScheduler(params.problemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
         uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
@@ -471,6 +471,6 @@ private:
     Arch::Resource<ArchTag> resource;
 };
 
-} // namespace Act::Gemm::Kernel
+} // namespace Catlass::Gemm::Kernel
 
 #endif // CATLASS_GEMM_KERNEL_PADDING_MATMUL_HPP

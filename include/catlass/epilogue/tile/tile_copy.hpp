@@ -14,7 +14,7 @@
 #include "catlass/epilogue/tile/copy_gm_to_ub.hpp"
 #include "catlass/epilogue/tile/copy_ub_to_gm.hpp"
 
-namespace Act::Epilogue::Tile {
+namespace Catlass::Epilogue::Tile {
 
 template <
     /// Tag indicating architecture
@@ -100,6 +100,6 @@ struct TileCopyPerTokenDequant {
     using CopyGmToUbPerTokenScale = CopyPerTokenScale2Ub<ArchTag, PerTokenScaleType>;
     using CopyUbToGmD = CopyUb2Gm<ArchTag, DType>;
 };
-} // namespace Act::Epilogue::Tile
+} // namespace Catlass::Epilogue::Tile
 
 #endif  // CATLASS_EPILOGUE_TILE_TILE_COPY_HPP

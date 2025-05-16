@@ -13,7 +13,7 @@
 
 #include "catlass/catlass.hpp"
 
-namespace Act::Arch {
+namespace Catlass::Arch {
 
 constexpr uint32_t MAX_REVERSE_DEPTH = 16;
 
@@ -110,6 +110,6 @@ void CrossCoreWaitFlagWithReverse(CrossCoreFlagWithReverse<REVERSE_DEPTH> &flag)
     }
 }
 
-}  // namespace Act::Arch
+}  // namespace Catlass::Arch
 
 #endif // CATLASS_ARCH_CROSS_CORE_SYNC_HPP

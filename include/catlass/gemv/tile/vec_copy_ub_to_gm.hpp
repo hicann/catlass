@@ -15,7 +15,7 @@
 #include "catlass/layout/layout.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 
-namespace Act::Gemv::Tile {
+namespace Catlass::Gemv::Tile {
 
 template <
     class ArchTag,
@@ -97,6 +97,6 @@ struct VecCopyUBToGm<Arch::AtlasA2, Gemm::GemmType<Element, layout::VectorLayout
     }
 };
 
-} // namespace Act::Gemv::Tile
+} // namespace Catlass::Gemv::Tile
 
 #endif // CATLASS_GEMV_TILE_VEC_COPY_UB_TO_GM_HPP

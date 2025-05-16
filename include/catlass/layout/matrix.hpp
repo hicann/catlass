@@ -16,7 +16,7 @@
 #include "catlass/detail/alignment.hpp"
 #include "catlass/matrix_coord.hpp"
 
-namespace Act::layout {
+namespace Catlass::layout {
 
 /// Mapping function for row-major matrices
 struct RowMajor {
@@ -1199,6 +1199,6 @@ private:
     /// Stride data member
     Stride stride_;
 };
-}  // namespace Act::layout
+}  // namespace Catlass::layout
 
 #endif  // CATLASS_LAYOUT_MATRIX_HPP

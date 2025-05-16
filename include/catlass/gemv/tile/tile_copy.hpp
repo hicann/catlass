@@ -27,7 +27,7 @@
 #include "catlass/gemv/helper.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 
-namespace Act::Gemv::Tile {
+namespace Catlass::Gemv::Tile {
 
 template <
     /// Tag indicating architecture
@@ -90,6 +90,6 @@ struct TileCopyGemvAic {
 
 };
 
-} // namespace Act::Gemv::Tile
+} // namespace Catlass::Gemv::Tile
 
 #endif // CATLASS_GEMV_TILE_TILE_COPY_HPP

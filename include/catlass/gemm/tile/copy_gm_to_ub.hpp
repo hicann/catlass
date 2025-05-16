@@ -14,7 +14,7 @@
 #include "catlass/catlass.hpp"
 #include "tla/tensor.hpp"
 
-namespace Act::Gemm::Tile {
+namespace Catlass::Gemm::Tile {
 
 /// Partial specialization for AtlasA2, RowMajor in and RowMajor out.
 template <class ElementSrc, class ElementDst, class LayoutSrc_, class LayoutDst_>
@@ -49,6 +49,6 @@ struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSrc>,
     };
 };
 
-}  // Act::Gemm::Tile
+}  // Catlass::Gemm::Tile
 
 #endif // CATLASS_GEMM_TILE_COPY_GM_TO_UB_HPP

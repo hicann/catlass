@@ -21,7 +21,7 @@
 
 #include "catlass/gemv/helper.hpp"
 
-namespace Act::Gemv::Block {
+namespace Catlass::Gemv::Block {
 
 template <
     bool ENABLE_UNIT_FLAG_,
@@ -351,6 +351,6 @@ protected:
     CopyL0CToGm copyL0CToGm;
 };
 
-}  // namespace Act::Gemv::Block
+}  // namespace Catlass::Gemv::Block
 
 #endif  // CATLASS_GEMV_BLOCK_BLOCK_AIC_HPP

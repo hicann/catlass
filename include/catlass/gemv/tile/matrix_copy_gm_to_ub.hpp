@@ -15,7 +15,7 @@
 #include "catlass/layout/layout.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 
-namespace Act::Gemv::Tile {
+namespace Catlass::Gemv::Tile {
 
 template <
     class ArchTag,
@@ -205,6 +205,6 @@ struct MatrixCopyGmToUB<Arch::AtlasA2, Gemm::GemmType<Element, layout::ColumnMaj
     }
 };
 
-} // namespace Act::Gemv::Tile
+} // namespace Catlass::Gemv::Tile
 
 #endif // CATLASS_GEMV_TILE_MATRIX_COPY_GM_TO_UB_HPP

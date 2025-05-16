@@ -44,7 +44,7 @@ output/shared_lib
 #include "catlass/catlass.hpp"
 // act头文件...
 
-using namespace Act;
+using namespace Catlass;
 
 template <
     class LayoutA,
@@ -69,7 +69,7 @@ void custom_matmul(
 ```cpp
 // ...
 void CustomMatmul(uint32_t blockNum, aclrtStream stream, ernelInfo kernelInfo) {
-    Act::GemmCoord problemShape{kernelInfo.m, kernelInfo.n, kernelInfo.k};
+    Catlass::GemmCoord problemShape{kernelInfo.m, kernelInfo.n, kernelInfo.k};
     using LayoutA = layout::RowMajor;
     using LayoutB = layout::RowMajor;
     using LayoutC = layout::RowMajor;

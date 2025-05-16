@@ -19,7 +19,7 @@
 #include "catlass/epilogue/tile/copy_ub_to_gm.hpp"
 #include "catlass/gemm/helper.hpp"
 
-namespace Act::Gemm::Kernel{
+namespace Catlass::Gemm::Kernel{
 
     namespace detail {
 
@@ -46,11 +46,11 @@ public:
     using ArchTag = ArchTag_;
     using Element = Element_;
     using Layout = Layout_;
-    using CopyGm2Ub = Act::Epilogue::Tile::CopyGm2Ub<
-        ArchTag, Gemm::GemmType<Element, Act::layout::RowMajor>>;
-    using CopyUb2Gm = Act::Epilogue::Tile::CopyUb2Gm<
-        ArchTag, Gemm::GemmType<Element, Act::layout::RowMajor>>;
-    using ComputeLayout = Act::layout::RowMajor; 
+    using CopyGm2Ub = Catlass::Epilogue::Tile::CopyGm2Ub<
+        ArchTag, Gemm::GemmType<Element, Catlass::layout::RowMajor>>;
+    using CopyUb2Gm = Catlass::Epilogue::Tile::CopyUb2Gm<
+        ArchTag, Gemm::GemmType<Element, Catlass::layout::RowMajor>>;
+    using ComputeLayout = Catlass::layout::RowMajor; 
 
     CopyGm2Ub copyGm2Ub;
     CopyUb2Gm copyUb2Gm;
@@ -192,7 +192,7 @@ public:
     using BlockEpilogue = BlockEpilogue_;
     using EpilogueParams = typename BlockEpilogue::Params;
     using ElementCompute =
-        typename Act::Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
+        typename Catlass::Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
     using ElementScalar = ElementCompute; 
     static constexpr uint32_t MAX_TENSOR_COUNT = 32;
 
@@ -441,8 +441,8 @@ public:
             LayoutB layoutWB = layoutWBList[groupIdx];
             paddingA(gmWA[inGroupOffsetWA], gmA[inGroupOffsetA], layoutWA, layoutA); 
             paddingB(gmWB[inGroupOffsetWB], gmB[inGroupOffsetB], layoutWB, layoutB);
-            Act::Arch::CrossCoreBarrier<0x0, PIPE_MTE3>();
-            Act::Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(flagAivFinishPadding);
+            Catlass::Arch::CrossCoreBarrier<0x0, PIPE_MTE3>();
+            Catlass::Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(flagAivFinishPadding);
             EpilogueParams epilogueParams{alpha_, beta_, params.ptrX, layoutWorkspace, params.ptrD, layoutWorkspace};
             BlockEpilogue blockEpilogue(resource, blockShape, epilogueParams);
             uint32_t M = problemShape.m();

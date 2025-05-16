@@ -38,7 +38,7 @@
 
 #include "catlass/layout/layout.hpp"
 
-using namespace Act;
+using namespace Catlass;
 
 using ScalarType = float;
 

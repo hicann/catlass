@@ -15,7 +15,7 @@
  #include "catlass/coord.hpp"
  #include "catlass/gemv_coord.hpp"
 
- namespace Act::Gemv::Kernel {
+ namespace Catlass::Gemv::Kernel {
  
  // Template for Gemv kernel. Compute Y = αA * x + βY
  template <
@@ -93,7 +93,7 @@
          uint32_t Mloopnum = CeilDiv(params.problemShape.m(),maxmPerBlock_round);
          int32_t loopnum;
         float Realbeta= params.beta;
-         if constexpr (std::is_same_v<LayoutA, Act::layout::ColumnMajor>){
+         if constexpr (std::is_same_v<LayoutA, Catlass::layout::ColumnMajor>){
             loopnum = Mloopnum * params.split;
             Realbeta = params.beta - 1.0f;
          }else{
@@ -120,7 +120,7 @@
             uint32_t m_catlassual = ((int32_t)loop_id > (int32_t)(loopnum - params.split - 1) ) ? params.problemShape.m() - ((loop_id/params.split) * maxmPerBlock_round) : maxmPerBlock_round;
             uint32_t n_catlassual = params.problemShape.n();
 
-            if constexpr (std::is_same_v<LayoutA, Act::layout::ColumnMajor>) {
+            if constexpr (std::is_same_v<LayoutA, Catlass::layout::ColumnMajor>) {
                 offset_matrix = (loop_id % params.split) * N_Split*params.problemShape.m()+(loop_id/params.split) * maxmPerBlock_round;
                 offset_vector_out = (loop_id/params.split) * maxmPerBlock_round;
                 offset_vector_in = (loop_id % params.split) * N_Split; 

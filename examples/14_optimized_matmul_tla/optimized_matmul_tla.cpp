@@ -32,7 +32,7 @@
 #include "tla/layout.hpp"
 #include "tla/tensor.hpp"
 
-using namespace Act;
+using namespace Catlass;
 using namespace tla;
 using fp16_t = op::fp16_t;
 
@@ -179,7 +179,7 @@ void OptimizedMatmul(
             TensorC, void, TileCopy>;
         using PaddingA = void;
         constexpr const uint32_t computeLengthB = 96 * 1024 / sizeof(ElementB);
-        using PaddingB = Act::Gemm::Kernel::PaddingMatrixBlockND<ArchTag, TensorB, TensorWB, computeLengthB>;
+        using PaddingB = Catlass::Gemm::Kernel::PaddingMatrixBlockND<ArchTag, TensorB, TensorWB, computeLengthB>;
         LaunchMatmulDynamicSwizzle<
             decltype(layoutA), decltype(layoutB), decltype(layoutC), decltype(layoutWA), decltype(layoutWB),
             BlockMmad, PaddingA, PaddingB
@@ -195,7 +195,7 @@ void OptimizedMatmul(
         using BlockMmad = Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB,
             TensorC, void, TileCopy>;
         constexpr const uint32_t computeLengthA = 96 * 1024 / sizeof(ElementA);
-        using PaddingA = Act::Gemm::Kernel::PaddingMatrixBlockND<ArchTag, TensorA, TensorWA, computeLengthA>;
+        using PaddingA = Catlass::Gemm::Kernel::PaddingMatrixBlockND<ArchTag, TensorA, TensorWA, computeLengthA>;
         using PaddingB = void;
         LaunchMatmulDynamicSwizzle<
             decltype(layoutA), decltype(layoutB), decltype(layoutC), decltype(layoutWA), decltype(layoutWB),
@@ -212,9 +212,9 @@ void OptimizedMatmul(
         using BlockMmad = Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB,
             TensorC, void, TileCopy>;
         constexpr const uint32_t computeLengthA = 96 * 1024 / sizeof(ElementA);
-        using PaddingA = Act::Gemm::Kernel::PaddingMatrixBlockND<ArchTag, TensorA, TensorWA, computeLengthA>;
+        using PaddingA = Catlass::Gemm::Kernel::PaddingMatrixBlockND<ArchTag, TensorA, TensorWA, computeLengthA>;
         constexpr const uint32_t computeLengthB = 96 * 1024 / sizeof(ElementB);
-        using PaddingB = Act::Gemm::Kernel::PaddingMatrixBlockND<ArchTag, TensorB, TensorWB, computeLengthB>;
+        using PaddingB = Catlass::Gemm::Kernel::PaddingMatrixBlockND<ArchTag, TensorB, TensorWB, computeLengthB>;
         LaunchMatmulDynamicSwizzle<
             decltype(layoutA), decltype(layoutB), decltype(layoutC), decltype(layoutWA), decltype(layoutWB),
             BlockMmad, PaddingA, PaddingB

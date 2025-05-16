@@ -13,7 +13,7 @@
 
 #include "catlass/catlass.hpp"
 
-namespace Act {
+namespace Catlass {
 
 /// Statically-sized array specifying Coords within a tensor
 template <
@@ -314,6 +314,6 @@ Coord<4, T> MakeCoord(T dim0, T dim1, T dim2, T dim3)
     return Coord<4, T>(values);
 }
 
-}  // namespace Act
+}  // namespace Catlass
 
 #endif  // CATLASS_COORD_HPP

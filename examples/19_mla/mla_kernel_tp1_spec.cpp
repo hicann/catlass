@@ -23,7 +23,7 @@
 
 #include "kernel_common.hpp"
 
-using namespace Act;
+using namespace Catlass;
 /*
 This example demonstrates how to compute mla.
 */
@@ -572,7 +572,7 @@ public:
 
         // flash decoding
         if (kvSplitCoreNum != 1) {
-            Act::Arch::CrossCoreBarrier<0x0, PIPE_MTE3>();
+            Catlass::Arch::CrossCoreBarrier<0x0, PIPE_MTE3>();
 
             AscendC::SetAtomicNone();
             AscendC::SetMaskNorm();

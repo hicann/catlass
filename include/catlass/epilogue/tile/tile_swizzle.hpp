@@ -15,7 +15,7 @@
 #include "catlass/detail/alignment.hpp"
 #include "catlass/matrix_coord.hpp"
 
-namespace Act::Epilogue::Tile {
+namespace Catlass::Epilogue::Tile {
 
 struct EpilogueIdentityTileSwizzle {
     MatrixCoord blockShape;

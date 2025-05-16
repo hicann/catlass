@@ -31,7 +31,7 @@
 #include "catlass/gemv/tile/tile_vmad.hpp"
 #include "catlass/gemv/tile/tile_vmuls.hpp"
 
-using namespace Act;
+using namespace Catlass;
 using UBTileShape = GemvShape<32,512>;
 using ScalarType = float;
 

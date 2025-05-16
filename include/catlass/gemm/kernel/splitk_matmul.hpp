@@ -17,7 +17,7 @@
 #include "catlass/gemm_coord.hpp"
 #include "catlass/matrix_coord.hpp"
 
-namespace Act::Gemm::Kernel {
+namespace Catlass::Gemm::Kernel {
 
 template<
     class ArchTag_,
@@ -256,7 +256,7 @@ public:
                       actualBlockShape);
         }
 
-        Act::Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(flagAicFinish);
+        Catlass::Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(flagAicFinish);
     }
 
     template <>
@@ -266,8 +266,8 @@ public:
         using ElementOut = typename ReduceAdd::ElementOut;
         using ElementAccumulator = typename ReduceAdd::ElementAccumulator;
 
-        Act::Arch::CrossCoreWaitFlag(flagAicFinish);
-        Act::Arch::CrossCoreBarrier<0x0, PIPE_MTE3>();
+        Catlass::Arch::CrossCoreWaitFlag(flagAicFinish);
+        Catlass::Arch::CrossCoreBarrier<0x0, PIPE_MTE3>();
 
         AscendC::GlobalTensor<ElementOut> gmC;
         AscendC::GlobalTensor<ElementAccumulator> gmWorkspace;
@@ -285,6 +285,6 @@ private:
     Arch::Resource<ArchTag> resource;
 };
 
-} // namespace Act::Gemm::Kernel
+} // namespace Catlass::Gemm::Kernel
 
 #endif // CATLASS_GEMM_KERNEL_SPLITK_MATMUL_HPP

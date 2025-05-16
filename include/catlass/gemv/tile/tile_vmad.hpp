@@ -15,7 +15,7 @@
 #include "catlass/layout/layout.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 
-namespace Act::Gemv::Tile {
+namespace Catlass::Gemv::Tile {
 
 template <
     /// Tag indicating architecture

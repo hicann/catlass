@@ -19,7 +19,7 @@
 #include "catlass/epilogue/tile/copy_ub_to_gm.hpp"
 #include "catlass/gemm/helper.hpp"
 
-namespace Act::Gemm::Kernel{
+namespace Catlass::Gemm::Kernel{
 template<
     class ArchTag_,
     class Element_,
@@ -31,11 +31,11 @@ public:
     using ArchTag = ArchTag_;
     using Element = Element_;
     using Layout = Layout_;
-    using CopyGm2Ub = Act::Epilogue::Tile::CopyGm2Ub<
-        ArchTag, Gemm::GemmType<Element, Act::layout::RowMajor>>;
-    using CopyUb2Gm = Act::Epilogue::Tile::CopyUb2Gm<
-        ArchTag, Gemm::GemmType<Element, Act::layout::RowMajor>>;
-    using ComputeLayout = Act::layout::RowMajor;
+    using CopyGm2Ub = Catlass::Epilogue::Tile::CopyGm2Ub<
+        ArchTag, Gemm::GemmType<Element, Catlass::layout::RowMajor>>;
+    using CopyUb2Gm = Catlass::Epilogue::Tile::CopyUb2Gm<
+        ArchTag, Gemm::GemmType<Element, Catlass::layout::RowMajor>>;
+    using ComputeLayout = Catlass::layout::RowMajor;
 
     CopyGm2Ub copyGm2Ub;
     CopyUb2Gm copyUb2Gm;
@@ -181,7 +181,7 @@ public:
     const uint32_t cSize = maxMPerBlock * maxNPerBlock * sizeof(ElementAccumulator);
     const uint32_t l0CBlockNum = ArchTag::L0C_SIZE / cSize;
     using ElementCompute =
-        typename Act::Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
+        typename Catlass::Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
     using ElementScalar = ElementCompute; 
     static constexpr uint32_t STAGES = BlockGemm::STAGES; 
     using BlockScheduler = BlockScheduler_;
@@ -343,8 +343,8 @@ public:
             // 0x0 synchronization control between AI Core
         }
         if (!IsSameStride(params.layoutWA, params.layoutA) || !IsSameStride(params.layoutWB, params.layoutB)) {
-            Act::Arch::CrossCoreBarrier<0x0, PIPE_MTE3>();
-            Act::Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(flagAivFinishPadding);
+            Catlass::Arch::CrossCoreBarrier<0x0, PIPE_MTE3>();
+            Catlass::Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(flagAivFinishPadding);
         }
         GemmCoord blockShape = L1TileShape::ToCoord();
         BlockEpilogue blockEpilogue(resource, blockShape, params.epilogueParams);

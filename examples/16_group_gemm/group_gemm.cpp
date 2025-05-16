@@ -40,7 +40,7 @@
 #include "catlass/epilogue/tile/tile_cast.hpp"
 #include "catlass/epilogue/block/block_epilogue.hpp"
 
-using namespace Act;
+using namespace Catlass;
 using ScalarType = float;
 
 template <
@@ -67,8 +67,8 @@ void GroupGemm(
     constexpr bool enableUnitFlag = true;
     constexpr bool enableShuffleK = true;
     constexpr bool enableABBA = true;
-    using GemmBlockDispatchPolicy = Act::Gemm::GemmAtlasA2<enableUnitFlag, enableShuffleK, enableABBA>;
-    using EpilogueBlockDispatchPolicy = Act::Epilogue::EpilogueAtlasA2Gemm;
+    using GemmBlockDispatchPolicy = Catlass::Gemm::GemmAtlasA2<enableUnitFlag, enableShuffleK, enableABBA>;
+    using EpilogueBlockDispatchPolicy = Catlass::Epilogue::EpilogueAtlasA2Gemm;
     using AType = Gemm::GemmType<float, LayoutA>;
     using BType = Gemm::GemmType<float, LayoutB>;
     using CType = Gemm::GemmType<float, LayoutX>;

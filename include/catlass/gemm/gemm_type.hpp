@@ -11,7 +11,7 @@
 #ifndef CATLASS_GEMM_GEMM_TYPE_HPP
 #define CATLASS_GEMM_GEMM_TYPE_HPP
 
-namespace Act::Gemm {
+namespace Catlass::Gemm {
 
 ////////////////////////////////////////////////////////////////////
 
@@ -22,6 +22,6 @@ struct GemmType {
     static constexpr AscendC::TPosition POSITION = POSITION_;
 };
 
-} // namespace Act::Gemm
+} // namespace Catlass::Gemm
 
 #endif // CATLASS_GEMM_GEMM_TYPE_HPP

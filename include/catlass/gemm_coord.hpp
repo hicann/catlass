@@ -13,7 +13,7 @@
 
 #include "catlass/coord.hpp"
 
-namespace Act {
+namespace Catlass {
 
 /// Shape of a matrix multiply-add operation
 template <
@@ -153,6 +153,6 @@ struct GemmCoord : public Coord<3, uint32_t> {
     }
 };
 
-} // namespace Act
+} // namespace Catlass
 
 #endif  // CATLASS_GEMM_COORD_HPP

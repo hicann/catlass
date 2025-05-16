@@ -25,7 +25,7 @@
 #include "catlass/gemm/kernel/grouped_matmul_slice_k.hpp"
 #include "catlass/layout/layout.hpp"
 
-namespace Act{
+namespace Catlass{
 
 template <class LayoutA, class LayoutB, class LayoutC>
 CATLASS_GLOBAL void grouped_matmul_slice_k(GemmCoord problemShape,
@@ -72,6 +72,6 @@ CATLASS_GLOBAL void grouped_matmul_slice_k(GemmCoord problemShape,
   MatmulKernel matmul;
   matmul(params);
 }
-} // end of namespace Act;
+} // end of namespace Catlass;
 
 #endif  // SHARED_LIB_IMPL_GROUPED_MATMUL_K_H

@@ -13,7 +13,7 @@
 
 #include "catlass/catlass.hpp"
 
-namespace Act::Epilogue::Block {
+namespace Catlass::Epilogue::Block {
 
 template <
     class DispatchPolicy,
@@ -23,7 +23,7 @@ class BlockEpilogue {
     static_assert(DEPENDENT_FALSE<DispatchPolicy>, "Could not find an epilogue specialization");
 };
 
-}  // namespace Act::Epilogue::Block
+}  // namespace Catlass::Epilogue::Block
 
 #include "catlass/epilogue/block/block_epilogue_elemwise_one_source.hpp"
 #include "catlass/epilogue/block/block_epilogue_fa_softmax.hpp"

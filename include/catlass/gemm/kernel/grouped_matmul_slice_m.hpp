@@ -17,9 +17,9 @@
 #include "catlass/gemm_coord.hpp"
 #include "catlass/matrix_coord.hpp"
 
-__gm__ struct OpSystemRunCfg g_opSystemRunCfg{Act::L2_OFFSET};
+__gm__ struct OpSystemRunCfg g_opSystemRunCfg{Catlass::L2_OFFSET};
 
-namespace Act::Gemm::Kernel {
+namespace Catlass::Gemm::Kernel {
 
 // Template for grouped matmul kernel. Compute grouped C = A * B
 template <
@@ -175,6 +175,6 @@ public:
     }
 };
 
-} // namespace Act::Gemm::Kernel
+} // namespace Catlass::Gemm::Kernel
 
 #endif // CATLASS_GEMM_KERNEL_GROUPED_MATMUL_HPP

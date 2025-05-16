@@ -18,7 +18,7 @@
 #include "catlass/gemm_coord.hpp"
 #include "catlass/matrix_coord.hpp"
 
-namespace Act::Epilogue::Block {
+namespace Catlass::Epilogue::Block {
 
 template <
     class OutputType_,
@@ -304,5 +304,5 @@ private:
     int32_t oTempEventList[STAGES] = {0, 1};
     int32_t oInEventList[STAGES] = {0, 1};
 };
-} // namespace Act::Epilogue::Block
+} // namespace Catlass::Epilogue::Block
 #endif // CATLASS_EPILOGUE_BLOCK_BLOCK_EPILOGUE_MLA_FD_RESACLE_O_HPP

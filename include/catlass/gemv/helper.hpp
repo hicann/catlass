@@ -14,7 +14,7 @@
 #include "catlass/catlass.hpp"
 #include "catlass/layout/layout.hpp"
 #include "catlass/gemm/gemm_type.hpp"
-namespace Act::Gemv::helper {
+namespace Catlass::Gemv::helper {
  
 template<class Element>
 struct UBAlignHelper 
@@ -124,6 +124,6 @@ struct L1AndL0TypeSelectorGemv<Gemm::GemmType<int8_t, layout::VectorLayout>, Gem
     using L0BType = Gemm::GemmType<int8_t, layout::zN, AscendC::TPosition::B2>;
 };
  
-} // namespace Act::Gemv::helper
+} // namespace Catlass::Gemv::helper
  
 #endif // CATLASS_GEMV_HELPER_HPP

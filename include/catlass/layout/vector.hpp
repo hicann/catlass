@@ -14,7 +14,7 @@
 #include "catlass/catlass.hpp"
 #include "catlass/coord.hpp"
 
-namespace Act::layout {
+namespace Catlass::layout {
 
 struct VectorLayout {
 public:
@@ -127,6 +127,6 @@ private:
     Stride stride_;
 };
 
-} // namespace Act::layout
+} // namespace Catlass::layout
 
 #endif  // CATLASS_LAYOUT_VECTOR_HPP

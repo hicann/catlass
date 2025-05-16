@@ -19,7 +19,7 @@
 #include "catlass/gemm_coord.hpp"
 #include "catlass/matrix_coord.hpp"
 
-namespace Act::Epilogue::Block {
+namespace Catlass::Epilogue::Block {
 
 template <
     class OutputType_,
@@ -438,6 +438,6 @@ private:
     CopyUbToGmOutput copyUbToGmOutput;
 };
 
-} // namespace Act::Epilogue::Block
+} // namespace Catlass::Epilogue::Block
 
 #endif // CATLASS_EPILOGUE_BLOCK_BLOCK_EPILOGUE_MLA_SOFTMAX_HPP

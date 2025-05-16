@@ -12,7 +12,7 @@
 #define CATLASS_GEMV_BLOCK_BLOCK_GEMV_HPP
 
 #include "catlass/catlass.hpp"
-namespace Act::Gemv::Block {
+namespace Catlass::Gemv::Block {
 
 template <
     class DispatchPolicy,
@@ -21,7 +21,7 @@ template <
 struct BlockGemv {
     static_assert(DEPENDENT_FALSE<DispatchPolicy>, "BlockGemv is not implemented for this DispatchPolicy");
 };
-}  // namespace Act::Gemv::Block
+}  // namespace Catlass::Gemv::Block
 
 #include "catlass/gemv/block/block_gemv_aiv.hpp"
 #include "catlass/gemv/block/block_gemv_aic.hpp"

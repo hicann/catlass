@@ -18,7 +18,7 @@
 #include "catlass/gemm/dispatch_policy.hpp"
 #include "catlass/gemm/helper.hpp"
 
-namespace Act::Gemm::Block {
+namespace Catlass::Gemm::Block {
 
 template <
     bool ENABLE_UNIT_FLAG_,
@@ -383,6 +383,6 @@ protected:
     CopyL0CToGm copyL0CToGm;
 };
 
-} // namespace Act::Gemm::Block
+} // namespace Catlass::Gemm::Block
 
 #endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_PRELOAD_HPP

@@ -25,7 +25,7 @@
 #include "catlass/gemm/kernel/optimized_matmul.hpp"
 #include "catlass/layout/layout.hpp"
 
-namespace Act{
+namespace Catlass{
 
 template <class Layout>
 size_t GetWorkspaceLen(Layout layout, size_t blockRows, size_t blockCols) {

@@ -18,7 +18,7 @@
 #include "catlass/gemv_coord.hpp"
 #include "catlass/matrix_coord.hpp"
 
-namespace Act::Gemv::Kernel {
+namespace Catlass::Gemv::Kernel {
 
 // tmeplate for gemv kernle, Compute z = αAx + βy
 template <
@@ -129,7 +129,7 @@ public:
             int64_t gmOffsetNextA;
             int64_t gmOffsetNextY;
 
-            if constexpr (std::is_same<LayoutA, Act::layout::RowMajor>::value) {
+            if constexpr (std::is_same<LayoutA, Catlass::layout::RowMajor>::value) {
                 gmOffsetX = 0;
                 gmOffsetA = MGmBlockIdx * maxMPerBlock * params.layoutA.stride(0);
 
@@ -153,7 +153,7 @@ public:
                 nextActualBlockShape = GemvCoord(MNextGmActual, NNextGmActual);
             }
 
-            if constexpr (std::is_same<LayoutA, Act::layout::RowMajor>::value) {
+            if constexpr (std::is_same<LayoutA, Catlass::layout::RowMajor>::value) {
                 gmOffsetNextX = 0;
                 gmOffsetNextA = MNextGmBlockIdx * maxMPerBlock * params.layoutA.stride(0);
 
@@ -247,6 +247,6 @@ private:
     Arch::CrossCoreFlag flagAivFinishPadding{FLAG_AIV_FINISH_STORE};
 };
 
-}  // namespace Act::Gemv::kernel
+}  // namespace Catlass::Gemv::kernel
 
 #endif  // CATLASS_GEMV_KERNLE_GEMV_EPILOGUE_HPP

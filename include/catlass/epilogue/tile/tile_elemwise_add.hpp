@@ -13,7 +13,7 @@
 
 #include "catlass/catlass.hpp"
 
-namespace Act::Epilogue::Tile {
+namespace Catlass::Epilogue::Tile {
 
 template <
     /// Tag indicating architecture
@@ -44,6 +44,6 @@ struct TileElemWiseAdd {
     }
 };
 
-} // namespace Act::Epilogue::Tile
+} // namespace Catlass::Epilogue::Tile
 
 #endif

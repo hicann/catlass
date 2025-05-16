@@ -36,7 +36,7 @@
 #include "catlass/gemm/gemm_type.hpp"
 #include "catlass/layout/layout.hpp"
 
-using namespace Act;
+using namespace Catlass;
 using bfloat16 = op::bfloat16;
 
 CATLASS_GLOBAL

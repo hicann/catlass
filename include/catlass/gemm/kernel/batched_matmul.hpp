@@ -17,7 +17,7 @@
 #include "catlass/gemm_coord.hpp"
 #include "catlass/matrix_coord.hpp"
 
-namespace Act::Gemm::Kernel {
+namespace Catlass::Gemm::Kernel {
 
 // Template for Batched Matmul kernel. Compute batched C = A * B
 template <
@@ -129,6 +129,6 @@ public:
     void operator()<AscendC::AIV>(Params const &params) {}
 };
 
-} // namespace Act::Gemm::Kernel
+} // namespace Catlass::Gemm::Kernel
 
 #endif // CATLASS_GEMM_KERNEL_BATCHED_MATMUL_HPP

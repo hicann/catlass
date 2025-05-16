@@ -15,7 +15,7 @@
 
 #include "catlass/gemm_coord.hpp"
 
-namespace Act::golden {
+namespace Catlass::golden {
 
 template<class ElementResult, class ElementCompare>
 std::vector<uint64_t> CompareData(const std::vector<ElementResult>& result, const std::vector<ElementCompare>& expect,
@@ -94,6 +94,6 @@ std::vector<uint64_t> CompareData(const std::vector<ElementResult>& result, cons
     return errorIndices;
 }
 
-}  // namespace Act::golden
+}  // namespace Catlass::golden
 
 #endif  // EXAMPLES_COMMON_GOLDEN_COMPARE_DATA_HPP

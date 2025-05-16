@@ -18,7 +18,7 @@
 #include "catlass/matrix_coord.hpp"
 #include "catlass/layout/layout.hpp"
 
-namespace Act::Epilogue::Block {
+namespace Catlass::Epilogue::Block {
 
 template <
     class CType_,
@@ -178,6 +178,6 @@ private:
     CopyUbToGmD copyUbToGmD;
 };
 
-}  // namespace Act::Epilogue::Block
+}  // namespace Catlass::Epilogue::Block
 
 #endif  // CATLASS_EPILOGUE_BLOCK_EPILOGUE_ELEMWISE_ONE_SOURCE_HPP

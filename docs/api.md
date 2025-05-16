@@ -11,12 +11,12 @@ CATLASS Template基于上述的分层结构，实现了经典“三层嵌套循�
 
 
 ```c++
-// Act::Gemm::Kernel::BasicMatmul: BlockTileM 和 BlockTileN 循环
+// Catlass::Gemm::Kernel::BasicMatmul: BlockTileM 和 BlockTileN 循环
 // 在AICores上并行
 for (int block_m = 0; block_m < MatmulM; block_m += BlockTileM) {
   for (int block_n = 0; block_n < MatmulN; block_n += BlockTileN) {
 
-    // Act::Gemm::Block::BlockMmad: 在k-tile上迭代的主循环
+    // Catlass::Gemm::Block::BlockMmad: 在k-tile上迭代的主循环
     // 在这个阶段没有循环展开
     for (int k_tile = 0; k_tile < MatmulK; k_tile++) {
 
@@ -47,9 +47,9 @@ CATLASS Template使用以下组件表达上述循环嵌套，这些组件针对�
 
 | API 层级             | API 类 和/或 函数 名称                   |
 | ---                  | ---                                               |
-| Device               | `Act::Gemm::Device::DeviceGemm`     |
-| Kernel               | `Act::Gemm::Kernel::BasicMatmul`            |
-| Block           | `Act::Gemm::Block::BlockMmad` <br /> `Act::Epilogue::Block::BlockEpilogue` <br />|
+| Device               | `Catlass::Gemm::Device::DeviceGemm`     |
+| Kernel               | `Catlass::Gemm::Kernel::BasicMatmul`            |
+| Block           | `Catlass::Gemm::Block::BlockMmad` <br /> `Catlass::Epilogue::Block::BlockEpilogue` <br />|
 | Tile (MMAD and Copy) | `TileMmad` and `TileCopy` <br /> |
 | Basic                 | `AscendC::Mmad` and `AscendC::DataCopy` |
 
@@ -92,7 +92,7 @@ using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<>;
 using MatmulKernel = Gemm::Kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 
 // 第四步：将kernel放入device适配器中，host侧处理kernel使用
-using Matmul = Act::Gemm::Device::DeviceGemm<MatmulKernel>;
+using Matmul = Catlass::Gemm::Device::DeviceGemm<MatmulKernel>;
 ```
 
 
@@ -111,13 +111,13 @@ Block中的不同硬件流水线（例如，MTE1、MTE2或FixPipe）提供不同
 
 ### Block Mmad
 
-`Act::Gemm::Block::BlockMmad`Block矩阵乘累加（MMAD）主循环的主要接口。
+`Catlass::Gemm::Block::BlockMmad`Block矩阵乘累加（MMAD）主循环的主要接口。
 
 The `BlockMmad` 类定义在头文件中
 [include/catlass/gemm/block/block_mmad.hpp](../include/catlass/gemm/block/block_mmad.hpp).
 
 ```c++
-namespace Act::Gemm::Block {
+namespace Catlass::Gemm::Block {
 ////////////////////////////////////////////////////////////////////
 
 template <
@@ -135,7 +135,7 @@ struct BlockMmad {};
 
 ////////////////////////////////////////////////////////////////////
 
-} // namespace Act::Gemm::Block
+} // namespace Catlass::Gemm::Block
 
 ```
 
@@ -178,7 +178,7 @@ struct MmadAtlasA2Pingpong {
 ### Epilogue
 
 
-尾处理实现了涉及输出矩阵的逐元素操作。用户可以提供自定义的尾处理，或者使用标准尾处理之一。这些尾处理位于目录include/catlass/epilogue/block/中，包括像`Act::Epilogue::Block::BlockEpilogue`这样的类。CATLASS Template提供的尾处理不在include/catlass/gemm目录下，也不在`Act::Gemm`命名空间中，因为它们可以用于除Gemm之外的其他计算。
+尾处理实现了涉及输出矩阵的逐元素操作。用户可以提供自定义的尾处理，或者使用标准尾处理之一。这些尾处理位于目录include/catlass/epilogue/block/中，包括像`Catlass::Epilogue::Block::BlockEpilogue`这样的类。CATLASS Template提供的尾处理不在include/catlass/gemm目录下，也不在`Catlass::Gemm`命名空间中，因为它们可以用于除Gemm之外的其他计算。
 
 
 ## Kernel API
@@ -191,21 +191,21 @@ Kernel对应了所有Block在NPU上执行逻辑的集合。Kernel层BasicMatmul�
 Kernel层API是设备侧调用的入口，也是融合连续矩阵乘、尾处理或其他操作的组合点。
 
 Kernel API 入口在
-`Act::Gemm::Kernel::BasicMatmul`, 位于头文件
+`Catlass::Gemm::Kernel::BasicMatmul`, 位于头文件
 [include/catlass/gemm/kernel/basic_matmul.hpp](/include/catlass/gemm/kernel/basic_matmul.hpp).
 `BasicMatmul` 是一个无状态的设备侧内核，实现的矩阵乘运算由两部分组成：
 * Block Mmad
 * Block Epilogue
 
 ```cpp
-namespace Act::Gemm::Kernel {
+namespace Catlass::Gemm::Kernel {
 template <
   class BlockMmad_,
   class BlockEpilogue_,
   class BlockScheduler_
 >
 class BasicMatmul;
-} // namespace Act::Gemm::Kernel
+} // namespace Catlass::Gemm::Kernel
 ```
 
 注：无状态指调用者管理着内核的状态。例如，上述描述的设备API。内核仅接收输入和输出参数 (`Params`).

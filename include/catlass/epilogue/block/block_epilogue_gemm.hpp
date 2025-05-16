@@ -18,7 +18,7 @@
 #include "catlass/epilogue/tile/tile_copy.hpp"
 #include "catlass/gemm/helper.hpp"
 
-namespace Act::Epilogue::Block {
+namespace Catlass::Epilogue::Block {
 template<
     class CType_,
     class XType_, 
@@ -60,7 +60,7 @@ public:
     static constexpr bool isNeedCast = !std::is_same<ElementC, ElementX>::value;
     static constexpr uint32_t COMPUTE_LENGTH = TileElemWiseEpilogueAdd::COMPUTE_LENGTH;
 
-    using ElementCompute = typename Act::Gemm::helper::ElementAccumulatorSelector<ElementX, ElementD>::ElementAccumulator;
+    using ElementCompute = typename Catlass::Gemm::helper::ElementAccumulatorSelector<ElementX, ElementD>::ElementAccumulator;
     using ElementScalar = ElementCompute;
 
     // Check if ArchTag is matched

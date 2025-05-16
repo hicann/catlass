@@ -6,7 +6,7 @@
 #include "catlass_kernel.h"
 
 namespace ActKernel {
-using namespace Act;
+using namespace Catlass;
 void OptimizedMatmul(uint32_t blockNum, aclrtStream stream,
                      KernelInfo kernelInfo) {
   uint32_t m = kernelInfo.m;

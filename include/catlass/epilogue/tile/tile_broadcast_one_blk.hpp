@@ -13,7 +13,7 @@
 
 #include "catlass/catlass.hpp"
 
-namespace Act::Epilogue::Tile {
+namespace Catlass::Epilogue::Tile {
 
 template <
     class ArchTag_,
@@ -54,6 +54,6 @@ struct TileBroadcastOneBlk {
     }
 };
 
-} // namespace Act::Epilogue::Tile
+} // namespace Catlass::Epilogue::Tile
 
 #endif

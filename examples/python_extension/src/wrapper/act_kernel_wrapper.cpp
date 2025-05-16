@@ -289,4 +289,4 @@ at::Tensor RunOptimizedMatmul(const at::Tensor &mat1, const at::Tensor &mat2, co
     
     return result;
 }
-} // namespace Act
+} // namespace Catlass

@@ -14,7 +14,7 @@
 #include "catlass/catlass.hpp"
 #include "catlass/detail/tag_to_layout.hpp"
 #include "tla/tensor.hpp"
-namespace Act::Gemm::Tile {
+namespace Catlass::Gemm::Tile {
 
 template <
     class ArchTag,
@@ -39,7 +39,7 @@ struct TileCopyTlaExt {
     static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported TileCopyTlaExt, can not find the specialization.");
 };
 
-} // namespace Act::Gemm::Tile
+} // namespace Catlass::Gemm::Tile
 
 #include "catlass/gemm/tile/copy_gm_to_l1.hpp"
 #include "catlass/gemm/tile/copy_l0c_to_gm.hpp"
@@ -50,7 +50,7 @@ struct TileCopyTlaExt {
 #include "catlass/gemm/helper.hpp"
 
 
-namespace Act::Gemm::Tile {
+namespace Catlass::Gemm::Tile {
 
 template <
     /// Tag indicating architecture
@@ -214,6 +214,6 @@ struct TileCopyGemm {
     using CopyL0CToGm = Gemm::Tile::CopyL0CToGm<ArchTag, ElementAccumulator, CType>;
 };
 //////////////////////////////
-} // namespace Act::Gemm::Tile
+} // namespace Catlass::Gemm::Tile
 
 #endif // CATLASS_GEMM_TILE_TILE_COPY_HPP

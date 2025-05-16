@@ -19,7 +19,7 @@
 #include "catlass/layout/layout.hpp"
 #include "catlass/matrix_coord.hpp"
 
-namespace Act::Epilogue::Block {
+namespace Catlass::Epilogue::Block {
 
 template <
     class CType_,    
@@ -60,7 +60,7 @@ public:
 
     static constexpr bool isNeedCast = !std::is_same<ElementC, ElementY>::value;
 
-    using ElementCompute = typename Act::Gemm::helper::ElementAccumulatorSelector<ElementY, ElementZ>::ElementAccumulator;
+    using ElementCompute = typename Catlass::Gemm::helper::ElementAccumulatorSelector<ElementY, ElementZ>::ElementAccumulator;
     using ElementScalar = ElementCompute;
     using TensorCoord = layout::VectorLayout::TensorCoord;
 
@@ -211,6 +211,6 @@ private:
     CopyUbToGmZ copyUbToGmZ;
 };
 
-}  // namespace Act::Epilogue::Block
+}  // namespace Catlass::Epilogue::Block
 
 #endif  // CATLASS_EPILOGUE_BLOCK_EPILOGUE_GEMV_HPP

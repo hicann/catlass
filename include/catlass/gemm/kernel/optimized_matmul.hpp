@@ -21,7 +21,7 @@
 #include "catlass/epilogue/tile/copy_ub_to_gm.hpp"
 #include "catlass/gemm/kernel/padding_matmul.hpp"
 
-namespace Act::Gemm::Kernel {
+namespace Catlass::Gemm::Kernel {
 
 template <
     class BlockMmad_,
@@ -111,8 +111,8 @@ public:
             // 0x0 synchronization control between AI Core
         }
         if ((params.ptrA != params.ptrWA) || (params.ptrB != params.ptrWB)) {
-            Act::Arch::CrossCoreBarrier<0x0, PIPE_MTE3>();
-            Act::Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(flagAivFinishPadding);
+            Catlass::Arch::CrossCoreBarrier<0x0, PIPE_MTE3>();
+            Catlass::Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(flagAivFinishPadding);
         }
     }
 
@@ -122,7 +122,7 @@ public:
     void operator()<AscendC::AIC>(Params const &params)
     {
         if ((params.ptrA != params.ptrWA) || (params.ptrB != params.ptrWB)) {
-            Act::Arch::CrossCoreWaitFlag(flagAivFinishPadding);
+            Catlass::Arch::CrossCoreWaitFlag(flagAivFinishPadding);
         }
 
         BlockScheduler matmulBlockScheduler(params.problemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
@@ -181,6 +181,6 @@ private:
     Arch::Resource<ArchTag> resource;
 };
 
-} // namespace Act::Gemm::Kernel
+} // namespace Catlass::Gemm::Kernel
 
 #endif // CATLASS_GEMM_KERNEL_OPTIMIZED_MATMUL_HPP

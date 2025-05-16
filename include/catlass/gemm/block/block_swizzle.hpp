@@ -16,7 +16,7 @@
 #include "catlass/gemm_coord.hpp"
 #include "catlass/matrix_coord.hpp"
 
-namespace Act::Gemm::Block {
+namespace Catlass::Gemm::Block {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -235,6 +235,6 @@ struct SplitkGemmIdentityBlockSwizzle {
     }
 };
 
-}  // namespace Act::Gemm::Block
+}  // namespace Catlass::Gemm::Block
 
 #endif  // CATLASS_GEMM_BLOCK_BLOCK_SWIZZLE_HPP

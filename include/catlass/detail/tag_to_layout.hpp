@@ -16,9 +16,9 @@
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-namespace Act::detail {
+namespace Catlass::detail {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// For each Act::layout, provides its corresponding tla layout types
+// For each Catlass::layout, provides its corresponding tla layout types
 template <class Element, class LayoutTag>
 struct TagToLayout {
     using type = LayoutTag;
@@ -76,6 +76,6 @@ using LayoutL0C = tla::Layout<
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-} // namespace Act::detail
+} // namespace Catlass::detail
 
 #endif // CATLASS_DETAIL_TAG_TO_LAYOUT_HPP

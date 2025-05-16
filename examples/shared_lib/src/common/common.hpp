@@ -34,9 +34,9 @@ struct Transpose2Layout;
 
 template <>
 struct Transpose2Layout<false> {
-  using layout = Act::layout::RowMajor;
+  using layout = Catlass::layout::RowMajor;
 };
 template <>
 struct Transpose2Layout<true> {
-  using layout = Act::layout::ColumnMajor;
+  using layout = Catlass::layout::ColumnMajor;
 };

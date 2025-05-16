@@ -33,7 +33,7 @@
 #include "tla/layout.hpp"
 #include "tla/tensor.hpp"
 
-using namespace Act;
+using namespace Catlass;
 using namespace tla;
 using fp16_t = op::fp16_t;
 

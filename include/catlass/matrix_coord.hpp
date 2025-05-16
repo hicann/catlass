@@ -13,7 +13,7 @@
 
 #include "catlass/coord.hpp"
 
-namespace Act {
+namespace Catlass {
 
 template <
     uint32_t ROW_ = 1,
@@ -98,6 +98,6 @@ struct MatrixCoord : public Coord<2, uint32_t> {
     }
 };
 
-} // namespace Act
+} // namespace Catlass
 
 #endif

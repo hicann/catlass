@@ -14,7 +14,7 @@
 #include "catlass/catlass.hpp"
 #include "catlass/gemm/helper.hpp"
 #include "tla/tensor.hpp"
-namespace Act::Gemm::Tile {
+namespace Catlass::Gemm::Tile {
 
 ///////////////////////////////////////////////////////////
 
@@ -113,6 +113,6 @@ struct TileMmadTla {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-} // namespace Act::Gemm::Tile
+} // namespace Catlass::Gemm::Tile
 
 #endif // CATLASS_GEMM_TILE_TILE_MMAD_HPP

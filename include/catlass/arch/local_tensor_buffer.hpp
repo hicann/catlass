@@ -14,7 +14,7 @@
 #include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
 
-namespace Act::Arch {
+namespace Catlass::Arch {
 
 struct LocalTensorBufferBase {
 public:
@@ -228,6 +228,6 @@ public:
     }
 };
 
-}  // namespace Act::Arch
+}  // namespace Catlass::Arch
 
 #endif  // INCLUDE_CATLASS_ARCH_MEMORY_H

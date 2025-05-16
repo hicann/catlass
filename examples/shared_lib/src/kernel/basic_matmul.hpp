@@ -27,7 +27,7 @@
 #include "catlass/gemm/kernel/basic_matmul.hpp"
 #include "catlass/layout/layout.hpp"
 
-namespace Act{
+namespace Catlass{
 template <class LayoutA, class LayoutB, class LayoutC, typename IN_TYPE,
           typename OUT_TYPE>
 CATLASS_DEVICE void basic_matmul_kernel(GemmCoord problemShape, GM_ADDR gmA,

@@ -11,7 +11,7 @@
 #ifndef CATLASS_ARCH_ARCH_HPP
 #define CATLASS_ARCH_ARCH_HPP
 
-namespace Act::Arch {
+namespace Catlass::Arch {
 
 struct AtlasA2 {
     static constexpr uint32_t BIAS_SIZE = 1024;
@@ -47,6 +47,6 @@ struct PositionUB {
     static constexpr AscendC::TPosition POSITION = AscendC::TPosition::VECCALC;
 };
 
-} // namespace Act::Arch
+} // namespace Catlass::Arch
 
 #endif // CATLASS_ARCH_ARCH_HPP

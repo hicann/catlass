@@ -19,7 +19,7 @@
 #include "tla/tensor.hpp"
 #include "tla/layout.hpp"
 #include "tla/tensor.hpp"
-namespace Act::Gemm::Kernel {
+namespace Catlass::Gemm::Kernel {
 
 // Template for Matmul kernel. Compute C = A * B
 template <
@@ -125,6 +125,6 @@ public:
     void operator()<AscendC::AIV>(Params const &params) {}
 };
 
-} // namespace Act::Gemm::Kernel
+} // namespace Catlass::Gemm::Kernel
 
 #endif // CATLASS_GEMM_KERNEL_MATMUL_TLA_HPP

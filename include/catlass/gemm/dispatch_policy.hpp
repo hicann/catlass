@@ -13,7 +13,7 @@
 
 #include "catlass/catlass.hpp"
 
-namespace Act::Gemm {
+namespace Catlass::Gemm {
 
 // Block Mmad Policies
 
@@ -103,6 +103,6 @@ struct GemvAtlasA2 : public MmadAtlasA2 {
     static constexpr uint32_t STAGES = 2;
 };
 ////////////////////
-}  // namespace Act::Gemm
+}  // namespace Catlass::Gemm
 
 #endif  // CATLASS_GEMM_DISPATCH_POLICY_HPP

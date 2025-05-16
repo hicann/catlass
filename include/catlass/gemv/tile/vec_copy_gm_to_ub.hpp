@@ -16,7 +16,7 @@
 #include "catlass/gemm/gemm_type.hpp"
 constexpr uint32_t STRIDE_LIMIT = 65536;
 
-namespace Act::Gemv::Tile {
+namespace Catlass::Gemv::Tile {
 
 template <
     class ArchTag_,
@@ -48,6 +48,6 @@ struct VecCopyGmToUB {
         params);
 }
 };
-} // namespace Act::Gemv::Tile
+} // namespace Catlass::Gemv::Tile
 
 #endif // CATLASS_GEMV_TILE_VEC_COPY_GM_TO_UB_HPP

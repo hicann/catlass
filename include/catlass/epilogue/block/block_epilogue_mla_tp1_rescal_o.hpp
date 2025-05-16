@@ -18,7 +18,7 @@
 #include "catlass/gemm_coord.hpp"
 #include "catlass/matrix_coord.hpp"
 
-namespace Act::Epilogue::Block {
+namespace Catlass::Epilogue::Block {
 
 template <class OutputType_, class UpdateType_, class InputType_>
 class BlockEpilogue<EpilogueAtlasA2MLATP1RescaleO, OutputType_, UpdateType_, InputType_> {
@@ -336,6 +336,6 @@ private:
     AscendC::LocalTensor<float> gmUbTensor;
 };
 
-} // namespace Act::Epilogue::Block
+} // namespace Catlass::Epilogue::Block
 
 #endif // CATLASS_EPILOGUE_BLOCK_BLOCK_EPILOGUE_MLA_TP1_RESACLE_O_HPP

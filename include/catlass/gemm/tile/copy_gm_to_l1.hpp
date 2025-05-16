@@ -16,7 +16,7 @@
 #include "catlass/gemm/gemm_type.hpp"
 #include "tla/tensor.hpp"
 
-namespace Act::Gemm::Tile {
+namespace Catlass::Gemm::Tile {
 
 template <
     class ArchTag,
@@ -1133,6 +1133,6 @@ struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSr
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-} // namespace Act::Gemm::Tile
+} // namespace Catlass::Gemm::Tile
 
 #endif // CATLASS_GEMM_TILE_COPY_GM_TO_L1_HPP

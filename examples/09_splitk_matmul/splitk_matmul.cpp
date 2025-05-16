@@ -30,7 +30,7 @@
 #include "catlass/gemm/gemm_type.hpp"
 #include "catlass/layout/layout.hpp"
 
-using namespace Act;
+using namespace Catlass;
 using fp16_t = op::fp16_t;
 
 template <
@@ -63,7 +63,7 @@ void SplitkMatmul(
 
     // After the Matmul computation is completed, launch the ReduceAdd kernel to accumulate the partial sums.
     constexpr uint32_t computeLength = 32 * 1024 / sizeof(float);
-    using ReduceAdd = Act::Gemm::Kernel::ReduceAdd<ArchTag, float, half, computeLength>;
+    using ReduceAdd = Catlass::Gemm::Kernel::ReduceAdd<ArchTag, float, half, computeLength>;
 
     if (problemShape.m() > problemShape.n()) {
         // Swizzle offset is 3 and direction is 0.

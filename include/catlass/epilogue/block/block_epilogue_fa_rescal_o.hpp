@@ -18,7 +18,7 @@
 #include "catlass/matrix_coord.hpp"
 #include "catlass/epilogue/tile/tile_copy.hpp"
 
-namespace Act::Epilogue::Block {
+namespace Catlass::Epilogue::Block {
 
 template <
     class OutputType_,
@@ -334,6 +334,6 @@ private:
     CopyUbToGmOutput copyUbToGmOutput;
 };
 
-}  // namespace Act::Epilogue::Block
+}  // namespace Catlass::Epilogue::Block
 
 #endif  // CATLASS_EPILOGUE_BLOCK_BLOCK_EPILOGUE_FA_RESACLE_O_HPP

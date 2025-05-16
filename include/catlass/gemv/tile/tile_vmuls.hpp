@@ -14,7 +14,7 @@
 #include "catlass/catlass.hpp"
 #include "catlass/layout/layout.hpp"
 
-namespace Act::Gemv::Tile {
+namespace Catlass::Gemv::Tile {
 
 template <
     class ArchTag,
@@ -51,6 +51,6 @@ struct TileVmuls
     AscendC::ResetMask(); 
     }
 };
-} // namespace Act::Gemv::Tile
+} // namespace Catlass::Gemv::Tile
 
 #endif // CATLASS_GEMV_TILE_VMULS_HPP

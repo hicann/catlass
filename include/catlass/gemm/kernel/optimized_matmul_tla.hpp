@@ -19,7 +19,7 @@
 #include "catlass/arch/cross_core_sync.hpp"
 #include "tla/layout.hpp"
 #include "tla/tensor.hpp"
-namespace Act::Gemm::Kernel {
+namespace Catlass::Gemm::Kernel {
 
 template<
     class ArchTag_,
@@ -45,8 +45,8 @@ public:
         tla::Stride<tla::Stride<int64_t, int64_t>, tla::Stride<tla::Int<1>, int64_t>>>;
     using TensorInnerDstGm = tla::Tensor<AscendC::GlobalTensor<Element>, LayoutInnerDstGm, AscendC::TPosition::GM>;
 
-    using CopyGm2Ub = Act::Gemm::Tile::TileCopyTla<ArchTag, TensorInnerSrcGm, TensorInnerUb>;
-    using CopyUb2Gm = Act::Gemm::Tile::TileCopyTlaExt<ArchTag, TensorInnerUb,
+    using CopyGm2Ub = Catlass::Gemm::Tile::TileCopyTla<ArchTag, TensorInnerSrcGm, TensorInnerUb>;
+    using CopyUb2Gm = Catlass::Gemm::Tile::TileCopyTlaExt<ArchTag, TensorInnerUb,
         TensorInnerDstGm, layout::RowMajor, layout::PaddingRowMajor>;
 
     CopyGm2Ub copyGm2Ub;
@@ -338,8 +338,8 @@ public:
             // 0x0 synchronization control between AI Core
         }
         if constexpr (!std::is_void_v<PaddingA> || !std::is_void_v<PaddingB>) {
-            Act::Arch::CrossCoreBarrier<0x0, PIPE_MTE3>();
-            Act::Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(flagAivFinishPadding);
+            Catlass::Arch::CrossCoreBarrier<0x0, PIPE_MTE3>();
+            Catlass::Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(flagAivFinishPadding);
         }
     }
 
@@ -349,7 +349,7 @@ public:
     void operator()<AscendC::AIC>(Params const &params)
     {
         if (!std::is_void_v<PaddingA> || !std::is_void_v<PaddingB>) {
-            Act::Arch::CrossCoreWaitFlag(flagAivFinishPadding);
+            Catlass::Arch::CrossCoreWaitFlag(flagAivFinishPadding);
         }
 
         BlockScheduler matmulBlockScheduler(params.problemShape, MakeCoord(L1_TILE_M, L1_TILE_N));
@@ -429,6 +429,6 @@ private:
     Arch::Resource<ArchTag> resource;
 };
 
-} // namespace Act::Gemm::Kernel
+} // namespace Catlass::Gemm::Kernel
 
 #endif // CATLASS_GEMM_KERNEL_OPTIMIZED_MATMUL_TLA_HPP

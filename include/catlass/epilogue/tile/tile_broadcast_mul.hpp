@@ -13,7 +13,7 @@
 
 #include "catlass/catlass.hpp"
 
-namespace Act::Epilogue::Tile {
+namespace Catlass::Epilogue::Tile {
 
 /// BroadcastMul computes the elementwise multiplication of a tensor of shape (m, n) and a tensor
 /// of shape (m, n) after broadcasting. There are two broadcast modes: row-broadcast and
@@ -132,6 +132,6 @@ struct TileOneBlkColumnBroadcastMul {
     }
 };
 
-} // namespace Act::Epilogue::Tile
+} // namespace Catlass::Epilogue::Tile
 
 #endif

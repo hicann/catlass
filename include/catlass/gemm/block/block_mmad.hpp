@@ -15,7 +15,7 @@
 #include "catlass/gemm/tile/tile_copy.hpp"
 #include "catlass/gemm/tile/tile_mmad.hpp"
 
-namespace Act::Gemm::Block {
+namespace Catlass::Gemm::Block {
 
 template <
     class DispatchPolicy,
@@ -66,7 +66,7 @@ struct BlockGemm {
     static_assert(DEPENDENT_FALSE<DispatchPolicy>, "BlockMmad is not implemented for this DispatchPolicy");
 };
 
-} // namespace Act::Gemm::Block
+} // namespace Catlass::Gemm::Block
 
 #include "catlass/gemm/block/block_mmad_pingpong.hpp"
 #include "catlass/gemm/block/block_mmad_fa_qk.hpp"

@@ -17,7 +17,7 @@
 #include "tla/tensor.hpp"
 
 
-namespace Act::Gemm::Tile {
+namespace Catlass::Gemm::Tile {
 
 template <
     class ArchTag,
@@ -31,7 +31,7 @@ struct CopyL1ToL0A {
 ////////////////////////////////
 /// new add gemm
 template<class ArchTag, class Element>
-struct CopyL1ToL0A<ArchTag, Act::Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>, Act::Gemm::GemmType<Element, layout::zZ, AscendC::TPosition::A2>>{
+struct CopyL1ToL0A<ArchTag, Catlass::Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>, Catlass::Gemm::GemmType<Element, layout::zZ, AscendC::TPosition::A2>>{
     using LayoutDst = layout::zZ;
     using LayoutSrc = layout::zN;
 
@@ -63,7 +63,7 @@ struct CopyL1ToL0A<ArchTag, Act::Gemm::GemmType<Element, layout::zN, AscendC::TP
 };
 
 template<class ArchTag, class Element>
-struct CopyL1ToL0A<ArchTag, Act::Gemm::GemmType<Element, layout::nN, AscendC::TPosition::A1>, Act::Gemm::GemmType<Element, layout::zZ, AscendC::TPosition::A2>>{
+struct CopyL1ToL0A<ArchTag, Catlass::Gemm::GemmType<Element, layout::nN, AscendC::TPosition::A1>, Catlass::Gemm::GemmType<Element, layout::zZ, AscendC::TPosition::A2>>{
     using LayoutDst = layout::zZ;
     using LayoutSrc = layout::nN;
 
@@ -93,7 +93,7 @@ struct CopyL1ToL0A<ArchTag, Act::Gemm::GemmType<Element, layout::nN, AscendC::TP
 };
 
 template<class ArchTag>
-struct CopyL1ToL0A<ArchTag, Act::Gemm::GemmType<float, layout::nN, AscendC::TPosition::A1>, Act::Gemm::GemmType<float, layout::zZ, AscendC::TPosition::A2>>{
+struct CopyL1ToL0A<ArchTag, Catlass::Gemm::GemmType<float, layout::nN, AscendC::TPosition::A1>, Catlass::Gemm::GemmType<float, layout::zZ, AscendC::TPosition::A2>>{
     using Element = float;
     using LayoutDst = layout::zZ;
     using LayoutSrc = layout::nN;
@@ -122,7 +122,7 @@ struct CopyL1ToL0A<ArchTag, Act::Gemm::GemmType<float, layout::nN, AscendC::TPos
 };
 
 template<class ArchTag>
-struct CopyL1ToL0A<ArchTag, Act::Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::A1>, Act::Gemm::GemmType<int8_t, layout::zZ, AscendC::TPosition::A2>>{
+struct CopyL1ToL0A<ArchTag, Catlass::Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::A1>, Catlass::Gemm::GemmType<int8_t, layout::zZ, AscendC::TPosition::A2>>{
     using Element = int8_t;
     using LayoutDst = layout::zZ;
     using LayoutSrc = layout::nZ;
@@ -400,6 +400,6 @@ struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::LocalTensor<int8_t>, Layo
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-} // namespace Act::Gemm::Tile
+} // namespace Catlass::Gemm::Tile
 
 #endif // CATLASS_GEMM_TILE_COPY_L1_TO_L0A_HPP

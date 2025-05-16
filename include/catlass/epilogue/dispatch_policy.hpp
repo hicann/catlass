@@ -13,7 +13,7 @@
 
 #include "catlass/arch/arch.hpp"
 
-namespace Act::Epilogue {
+namespace Catlass::Epilogue {
 
 // For AtlasA2, an element wise epilogue of the form D = C + X, where X is an additional source
 struct EpilogueAtlasA2ElemWiseOneSource {
@@ -79,6 +79,6 @@ struct EpilogueAtlasA2Gemv {
     using ArchTag = Arch::AtlasA2;
 };
 ///////////////////////////
-}  // namespace Act::Epilogue
+}  // namespace Catlass::Epilogue
 
 #endif  // CATLASS_EPILOGUE_DISPATCH_POLICY_HPP

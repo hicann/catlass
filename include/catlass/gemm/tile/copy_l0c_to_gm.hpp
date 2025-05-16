@@ -13,7 +13,7 @@
 
 #include "catlass/gemm/gemm_type.hpp"
 #include "tla/tensor.hpp"
-namespace Act::Gemm::Tile {
+namespace Catlass::Gemm::Tile {
 
 enum class ScaleGranularity {
     UNDEFINED = -1,
@@ -36,7 +36,7 @@ struct CopyL0CToGmQuantMode {
 // CopyL0CToGm cast fp32 to fp16
 template <>
 struct CopyL0CToGmQuantMode<
-    Act::Arch::AtlasA2,
+    Catlass::Arch::AtlasA2,
     float, half,
     ScaleGranularity::NO_QUANT
 > {
@@ -46,7 +46,7 @@ struct CopyL0CToGmQuantMode<
 // CopyL0CToGm cast fp32 to bf16
 template <>
 struct CopyL0CToGmQuantMode<
-    Act::Arch::AtlasA2,
+    Catlass::Arch::AtlasA2,
     float, bfloat16_t,
     ScaleGranularity::NO_QUANT
 > {
@@ -56,7 +56,7 @@ struct CopyL0CToGmQuantMode<
 // CopyL0CToGm output fp32
 template <>
 struct CopyL0CToGmQuantMode<
-    Act::Arch::AtlasA2,
+    Catlass::Arch::AtlasA2,
     float, float,
     ScaleGranularity::NO_QUANT
 > {
@@ -66,7 +66,7 @@ struct CopyL0CToGmQuantMode<
 // CopyL0CToGm output int32
 template <>
 struct CopyL0CToGmQuantMode<
-    Act::Arch::AtlasA2,
+    Catlass::Arch::AtlasA2,
     int32_t, int32_t,
     ScaleGranularity::NO_QUANT
 > {
@@ -76,7 +76,7 @@ struct CopyL0CToGmQuantMode<
 // CopyL0CToGm cast int32_t to fp16
 template <>
 struct CopyL0CToGmQuantMode<
-    Act::Arch::AtlasA2,
+    Catlass::Arch::AtlasA2,
     int32_t, half,
     ScaleGranularity::PER_TENSOR
 > {
@@ -85,7 +85,7 @@ struct CopyL0CToGmQuantMode<
 
 template <>
 struct CopyL0CToGmQuantMode<
-    Act::Arch::AtlasA2,
+    Catlass::Arch::AtlasA2,
     int32_t, half,
     ScaleGranularity::PER_CHANNEL
 > {
@@ -108,17 +108,17 @@ template <
     class ElementDst_,
     bool ReluEnable_
 >
-struct CopyL0CToGm<Act::Arch::AtlasA2,
+struct CopyL0CToGm<Catlass::Arch::AtlasA2,
                    ElementAccumulator_,
                    Gemm::GemmType<ElementDst_, layout::RowMajor>,
                    ScaleGranularity::NO_QUANT,
                    ReluEnable_>
 {
-    using ArchTag = Act::Arch::AtlasA2;
+    using ArchTag = Catlass::Arch::AtlasA2;
     using ElementDst = ElementDst_;
     using ElementSrc = ElementAccumulator_;
-    using LayoutSrc = Act::layout::zN;
-    using LayoutDst = Act::layout::RowMajor;
+    using LayoutSrc = Catlass::layout::zN;
+    using LayoutDst = Catlass::layout::RowMajor;
     static constexpr auto quantPre = CopyL0CToGmQuantMode<ArchTag, ElementSrc, ElementDst,
         ScaleGranularity::NO_QUANT>::VALUE;
     static constexpr auto reluEn = ReluEnable_;
@@ -150,17 +150,17 @@ template <
     class ElementDst_,
     bool ReluEnable_
 >
-struct CopyL0CToGm<Act::Arch::AtlasA2,
+struct CopyL0CToGm<Catlass::Arch::AtlasA2,
                    ElementAccumulator_,
                    Gemm::GemmType<ElementDst_, layout::zN>,
                    ScaleGranularity::NO_QUANT,
                    ReluEnable_>
 {
-    using ArchTag = Act::Arch::AtlasA2;
+    using ArchTag = Catlass::Arch::AtlasA2;
     using ElementDst = ElementDst_;
     using ElementSrc = ElementAccumulator_;
-    using LayoutSrc = Act::layout::zN;
-    using LayoutDst = Act::layout::zN;
+    using LayoutSrc = Catlass::layout::zN;
+    using LayoutDst = Catlass::layout::zN;
     static constexpr auto quantPre = CopyL0CToGmQuantMode<ArchTag, ElementSrc, ElementDst,
         ScaleGranularity::NO_QUANT>::VALUE;
     static constexpr auto reluEn = ReluEnable_;
@@ -206,14 +206,14 @@ template <
     class LayoutDst_,
     bool ReluEnable_
 >
-struct CopyL0CToGmTla<Act::Arch::AtlasA2,
+struct CopyL0CToGmTla<Catlass::Arch::AtlasA2,
                    TensorSrc_,
                    tla::Tensor<AscendC::GlobalTensor<ElementDst_>, LayoutDst_, AscendC::TPosition::GM>,
                    ScaleGranularity::NO_QUANT,
                    ReluEnable_,
                    std::enable_if_t<tla::detail::isRowMajor<LayoutDst_>::value>>
 {
-    using ArchTag = Act::Arch::AtlasA2;
+    using ArchTag = Catlass::Arch::AtlasA2;
     using TensorDst = tla::Tensor<AscendC::GlobalTensor<ElementDst_>, LayoutDst_, AscendC::TPosition::GM>;
     using ElementDst = ElementDst_;
     using TensorSrc = TensorSrc_;
@@ -247,6 +247,6 @@ struct CopyL0CToGmTla<Act::Arch::AtlasA2,
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-}  // namespace Act::Gemm::Tile
+}  // namespace Catlass::Gemm::Tile
 
 #endif // CATLASS_GEMM_TILE_COPY_L0C_TO_GM_HPP
