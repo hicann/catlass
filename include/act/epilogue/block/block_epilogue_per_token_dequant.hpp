@@ -274,6 +274,7 @@ public:
             AscendC::Cast(ubPerTokenScaleFp32, ubPerTokenScale, AscendC::RoundMode::CAST_NONE, TileShape::ROW);
             AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(eventUbPerTokenScaleVMTE2List[ubListId]);
 
+            AscendC::PipeBarrier<PIPE_V>();
             tileRowBroadcastMul(ubMul, ubCFp32, ubScaleFp32);
             tileBroadcastOneBlk(ubPerTokenScaleFp32Brcb, ubPerTokenScaleFp32);
             AscendC::PipeBarrier<PIPE_V>();
