@@ -25,9 +25,9 @@
 #include "wrapper/catlass_kernel_wrapper.h"
 
 namespace py = pybind11;
-using namespace ActKernel;
+using namespace CatlassKernel;
 
-namespace ActKernelWrapper {
+namespace CatlassKernelWrapper {
 torch::Tensor GetOutputTensor(const std::vector<int64_t> &shape, const torch::Dtype dtype) {
     at::TensorOptions options = at::TensorOptions();
     options = options.dtype(dtype).layout(at::kStrided).requires_grad(false).device(torch_npu::utils::get_npu_device_type());

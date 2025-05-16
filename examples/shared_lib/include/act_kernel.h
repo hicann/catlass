@@ -16,7 +16,7 @@
 
 #include <vector>
 
-namespace ActKernel {
+namespace CatlassKernel {
 
 struct KernelInfo {
     enum class GMMSplit : uint32_t { SPLIT_M = 0, SPLIT_K = 1, SPLIT_N = 2 };

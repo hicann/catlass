@@ -1,6 +1,6 @@
 # python扩展
 
-为方便开发者使用CATLASS Template算子，代码仓基于pybind11和torch提供了使用python调用CATLASS Template算子的示例.
+为方便开发者使用CATLASS算子，代码仓基于pybind11和torch提供了使用python调用CATLASS算子的示例.
 
 ## 代码结构
 
@@ -18,7 +18,7 @@ python_extension
 │   │   └── wrapper
 │   │       └── catlass_kernel_wrapper.h    # wrapper头文件
 │   └── wrapper
-│       └── catlass_kernel_wrapper.cpp      # act算子wrapper文件
+│       └── catlass_kernel_wrapper.cpp      # catlass算子wrapper文件
 ├── tests
 │   └── test_python_extension.py        # 测试脚本
 └── torch_catlass                       
@@ -82,7 +82,7 @@ import torch
 import torch_npu
 from torch_npu.testing.testcase import TestCase, run_tests
 
-class ActTest(TestCase):
+class CatlassTest(TestCase):
     def test_basic_matmul(self):
         a = torch.ones((2, 3)).to(torch.float16).npu()
         b = torch.ones((3, 4)).to(torch.float16).npu()
@@ -93,7 +93,7 @@ class ActTest(TestCase):
         a = torch.ones((2, 3)).to(torch.float16).npu()
         b = torch.ones((3, 4)).to(torch.float16).npu()
         torch.ops.load_library("../../output/python_extension/libcatlass_torch.so") # 确保加载正确路径
-        result = torch.ops.ActTorch.basic_matmul(a, b, "float16")
+        result = torch.ops.CatlassTorch.basic_matmul(a, b, "float16")
         golden = torch.mm(a, b)
         self.assertRtolEqual(result, golden)
         

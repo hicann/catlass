@@ -13,7 +13,7 @@ import torch_catlass
 torch.ops.load_library("../../../output/python_extension/libcatlass_torch.so") # 手动指定so路径
 
 
-class ActTest(TestCase):
+class CatlassTest(TestCase):
     def test_basic_matmul_pybind(self):
         a = torch.ones((2, 3)).to(torch.float16).npu()
         b = torch.ones((3, 4)).to(torch.float16).npu()
@@ -33,7 +33,7 @@ class ActTest(TestCase):
     def test_basic_matmul_torch_lib(self):
         a = torch.ones((2, 3)).to(torch.float16).npu()
         b = torch.ones((3, 4)).to(torch.float16).npu()
-        result = torch.ops.ActTorch.basic_matmul(a, b, "float16")
+        result = torch.ops.CatlassTorch.basic_matmul(a, b, "float16")
         torch.npu.synchronize()
         golden = torch.mm(a, b)
         self.assertRtolEqual(result, golden)

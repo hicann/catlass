@@ -5,7 +5,7 @@
 #include "catlass_kernel.h"
 #include "common.hpp"
 
-namespace ActKernel {
+namespace CatlassKernel {
 using namespace Catlass;
 #define DEFINE_TEMPLATE_INSTANTIATION(BLOCK_NUM, STREAM, KERNEL_INFO, TRANS_A, \
                                       TRANS_B, TRANS_C, IN_DTYPE, OUT_DTYPE)   \
@@ -33,4 +33,4 @@ void BasicMatmul(uint32_t blockNum, aclrtStream stream, KernelInfo kernelInfo) {
   DEFINE_TEMPLATE_INSTANTIATION(blockNum, stream, kernelInfo, false, false,
                                 false, ACL_BF16, ACL_BF16);
 }
-}  // namespace ActKernel
+}  // namespace CatlassKernel

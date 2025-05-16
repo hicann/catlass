@@ -42,7 +42,7 @@ output/shared_lib
 
 ```cpp
 #include "catlass/catlass.hpp"
-// act头文件...
+// catlass头文件...
 
 using namespace Catlass;
 
@@ -60,7 +60,7 @@ void custom_matmul(
     // 按需定义输入参数...
 )
 {
-    // 使用Act api定义算子...
+    // 使用Catlass api定义算子...
 }
 ```
 

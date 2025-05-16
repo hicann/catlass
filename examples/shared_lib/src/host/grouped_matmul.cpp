@@ -4,7 +4,7 @@
 #include "kernel/grouped_matmul_slice_k.hpp"
 #include "kernel/grouped_matmul_slice_m.hpp"
 
-namespace ActKernel {
+namespace CatlassKernel {
 using namespace Catlass;
 void GroupedMatmul(uint32_t blockNum, aclrtStream stream,
                    KernelInfo kernelInfo) {
@@ -50,4 +50,4 @@ void GroupedMatmul(uint32_t blockNum, aclrtStream stream,
   }
   aclrtFree(groupListDevice);
 }
-}  // namespace ActKernel
+}  // namespace CatlassKernel

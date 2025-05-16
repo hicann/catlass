@@ -5,7 +5,7 @@
 
 #include "catlass_kernel.h"
 
-namespace ActKernel {
+namespace CatlassKernel {
 using namespace Catlass;
 void OptimizedMatmul(uint32_t blockNum, aclrtStream stream,
                      KernelInfo kernelInfo) {
@@ -77,4 +77,4 @@ void OptimizedMatmul(uint32_t blockNum, aclrtStream stream,
     aclrtFree(deviceWB);
   }
 }
-}  // namespace ActKernel
+}  // namespace CatlassKernel
