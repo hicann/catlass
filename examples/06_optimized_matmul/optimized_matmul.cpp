@@ -21,16 +21,16 @@
 #include "golden.hpp"
 #include "fp16_t.h"
 
-#include "act/act.hpp"
-#include "act/arch/arch.hpp"
-#include "act/layout/layout.hpp"
-#include "act/gemm/block/block_mmad.hpp"
-#include "act/gemm/block/block_swizzle.hpp"
-#include "act/gemm/dispatch_policy.hpp"
-#include "act/gemm/kernel/optimized_matmul.hpp"
-#include "act/gemm/gemm_type.hpp"
+#include "catlass/catlass.hpp"
+#include "catlass/arch/arch.hpp"
+#include "catlass/layout/layout.hpp"
+#include "catlass/gemm/block/block_mmad.hpp"
+#include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/dispatch_policy.hpp"
+#include "catlass/gemm/kernel/optimized_matmul.hpp"
+#include "catlass/gemm/gemm_type.hpp"
 
-using namespace Act;
+using namespace Catlass;
 using fp16_t = op::fp16_t;
 
 template <
@@ -41,7 +41,7 @@ template <
     class LayoutWB,
     class BlockMmad
 >
-ACT_DEVICE
+CATLASS_DEVICE
 void LaunchMatmulDynamicSwizzle(
     GemmCoord problemShape,
     GM_ADDR gmA, LayoutA layoutA,
@@ -80,7 +80,7 @@ template <
     class LayoutB,
     class LayoutC
 >
-ACT_GLOBAL
+CATLASS_GLOBAL
 void OptimizedMatmul(
     uint64_t fftsAddr,
     GemmCoord problemShape,

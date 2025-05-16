@@ -1,5 +1,5 @@
 # Block Dispatch Policies说明
-DispatchPolicy是BlockMmad的一个重要模板参数，各个DispatchPolicy定义在include/act/gemm/dispatch_policy中。本文档对下列四个DispatchPolicy的功能、参数以及使用的example进行简单介绍。
+DispatchPolicy是BlockMmad的一个重要模板参数，各个DispatchPolicy定义在include/catlass/gemm/dispatch_policy中。本文档对下列四个DispatchPolicy的功能、参数以及使用的example进行简单介绍。
 - MmadAtlasA2Pingpong
 - MmadAtlasA2Preload
 - MmadAtlasA2PreloadAsync

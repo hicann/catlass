@@ -2,11 +2,11 @@
 
 #include <acl/acl.h>
 
-#include "act_kernel.h"
+#include "catlass_kernel.h"
 #include "common.hpp"
 
 namespace ActKernel {
-using namespace Act;
+using namespace Catlass;
 #define DEFINE_TEMPLATE_INSTANTIATION(BLOCK_NUM, STREAM, KERNEL_INFO, TRANS_A, \
                                       TRANS_B, TRANS_C, IN_DTYPE, OUT_DTYPE)   \
   if (kernelInfo.inputDataType == IN_DTYPE &&                                  \

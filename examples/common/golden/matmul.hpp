@@ -12,10 +12,10 @@
 
 #include <vector>
 
-#include "act/layout/layout.hpp"
-#include "act/gemv_coord.hpp"
+#include "catlass/layout/layout.hpp"
+#include "catlass/gemv_coord.hpp"
 
-namespace Act::golden {
+namespace Catlass::golden {
 
 // simple matmul
 template<class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementGolden, class LayoutGolden>
@@ -69,7 +69,7 @@ void ComputeGemm(
 
 template<typename Element, class ElementA, class LayoutA, class ElementX, class LayoutX, class ElementY, class LayoutY, class ElementGolden, class LayoutGolden>
 void ComputeGemv(
-    const Act::GemvCoord &problemShape,
+    const Catlass::GemvCoord &problemShape,
     Element alpha, Element beta,
     const std::vector<ElementA> &dataA, const LayoutA &layoutA,
     const std::vector<ElementX> &dataX, const LayoutX &layoutX,
@@ -339,6 +339,6 @@ void ComputeGroupedMatmulSliceKPerTokenDequant(
     }
 }
 
-} // namespace Act::golden
+} // namespace Catlass::golden
 
 #endif // EXAMPLES_COMMON_GOLDEN_MATMUL_HPP

@@ -21,4 +21,4 @@ def _load_depend_libs():
     
 _load_depend_libs()
 
-from torch_act._C import *
+from torch_catlass._C import *

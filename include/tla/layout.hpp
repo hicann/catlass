@@ -11,7 +11,7 @@
 #ifndef TLA_LAYOUT_HPP
 #define TLA_LAYOUT_HPP
 
-#include "act/act.hpp"
+#include "catlass/catlass.hpp"
 #include "tla/numeric/integral_constant.hpp"
 #include "tla/tuple.hpp"
 #include "tla/int_tuple.hpp"
@@ -30,17 +30,17 @@ template <class... Coords>
 using Coord = tla::tuple<Coords...>;
 
 template <class... Ts>
-ACT_HOST_DEVICE constexpr
+CATLASS_HOST_DEVICE constexpr
 Shape<Ts...> MakeShape(Ts const&... t) {
     return {t...};
 }
 template <class... Ts>
-ACT_HOST_DEVICE constexpr
+CATLASS_HOST_DEVICE constexpr
 Stride<Ts...> MakeStride(Ts const&... t) {
     return {t...};
 }
 template <class... Ts>
-ACT_HOST_DEVICE constexpr
+CATLASS_HOST_DEVICE constexpr
 Coord<Ts...> MakeCoord(Ts const&... t) {
     return {t...};
 }
@@ -52,7 +52,7 @@ Coord<Ts...> MakeCoord(Ts const&... t) {
 template <class Shape, class Stride>
 struct Layout : private tla::tuple<Shape, Stride> {
     // NOTE: This defaults static Shapes/Strides correctly, but not dynamic
-    ACT_HOST_DEVICE constexpr
+    CATLASS_HOST_DEVICE constexpr
     Layout(Shape  const& shape  = {}, Stride const& stride = {})
         : tla::tuple<Shape, Stride>(shape, stride) {}
 
@@ -64,35 +64,35 @@ struct Layout : private tla::tuple<Shape, Stride> {
     static constexpr int depth  = depth_v<Stride>;
 
     template <int... I>
-    ACT_HOST_DEVICE constexpr
+    CATLASS_HOST_DEVICE constexpr
     decltype(auto) shape()
     {
         return get<0, I...>(static_cast<tla::tuple<Shape, Stride>&>(*this));
     }
 
     template <int... I>
-    ACT_HOST_DEVICE constexpr
+    CATLASS_HOST_DEVICE constexpr
     decltype(auto) shape() const
     {
         return get<0, I...>(static_cast<tla::tuple<Shape, Stride> const&>(*this));
     }
 
     template <int... I>
-    ACT_HOST_DEVICE constexpr
+    CATLASS_HOST_DEVICE constexpr
     decltype(auto) stride()
     {
         return get<1, I...>(static_cast<tla::tuple<Shape, Stride>&>(*this));
     }
 
     template <int... I>
-    ACT_HOST_DEVICE constexpr
+    CATLASS_HOST_DEVICE constexpr
     decltype(auto) stride() const
     {
         return get<1, I...>(static_cast<tla::tuple<Shape, Stride> const&>(*this));
     }
 
     template <class Coord>
-    ACT_HOST_DEVICE constexpr
+    CATLASS_HOST_DEVICE constexpr
     auto operator()(Coord const& coord) const
     {
         return crd2idx(coord, shape(), stride());
@@ -102,7 +102,7 @@ struct Layout : private tla::tuple<Shape, Stride> {
 // Layout construction
 
 template <class Shape, class Stride>
-ACT_HOST_DEVICE constexpr
+CATLASS_HOST_DEVICE constexpr
 auto MakeLayout(Shape const& shape, Stride const& stride)
 {
     static_assert(is_tuple<Shape>::value || is_integral<Shape>::value);
@@ -113,13 +113,13 @@ auto MakeLayout(Shape const& shape, Stride const& stride)
 // Convenience tags for common layouts
 
 template <class LayoutTag>
-ACT_HOST_DEVICE constexpr
+CATLASS_HOST_DEVICE constexpr
 auto MakeLayoutFromTag(LayoutTag const& tag)
 {
-    static_assert(std::is_same_v<LayoutTag, Act::layout::RowMajor> || std::is_same_v<LayoutTag, Act::layout::ColumnMajor>,
-        "Unsupported LayoutTag for MakeLayoutFromTag, only support Act::layout::RowMajor or Act::layout::ColumnMajor");
+    static_assert(std::is_same_v<LayoutTag, Catlass::layout::RowMajor> || std::is_same_v<LayoutTag, Catlass::layout::ColumnMajor>,
+        "Unsupported LayoutTag for MakeLayoutFromTag, only support Catlass::layout::RowMajor or Catlass::layout::ColumnMajor");
 
-    if constexpr (std::is_same_v<LayoutTag, Act::layout::RowMajor>) {
+    if constexpr (std::is_same_v<LayoutTag, Catlass::layout::RowMajor>) {
         return MakeLayout(MakeShape(tag.shape(0), tag.shape(1)), MakeStride(tag.stride(0), Int<1>{}));
     } else {
         return MakeLayout(MakeShape(tag.shape(0), tag.shape(1)), MakeStride(Int<1>{}, tag.stride(1)));
@@ -128,14 +128,14 @@ auto MakeLayoutFromTag(LayoutTag const& tag)
 
 // Return the shape of a mode
 template <int... Is, class Shape, class Stride>
-ACT_HOST_DEVICE constexpr
+CATLASS_HOST_DEVICE constexpr
 decltype(auto) shape(Layout<Shape, Stride>& layout)
 {
     return layout.template shape<Is...>();
 }
 
 template <int... Is, class Shape, class Stride>
-ACT_HOST_DEVICE constexpr
+CATLASS_HOST_DEVICE constexpr
 decltype(auto) shape(Layout<Shape, Stride> const& layout)
 {
     return layout.template shape<Is...>();
@@ -143,14 +143,14 @@ decltype(auto) shape(Layout<Shape, Stride> const& layout)
 
 // Return the stride of a mode
 template <int... Is, class Shape, class Stride>
-ACT_HOST_DEVICE constexpr
+CATLASS_HOST_DEVICE constexpr
 decltype(auto) stride(Layout<Shape, Stride>& layout)
 {
     return layout.template stride<Is...>();
 }
 
 template <int... Is, class Shape, class Stride>
-ACT_HOST_DEVICE constexpr
+CATLASS_HOST_DEVICE constexpr
 decltype(auto) stride(Layout<Shape, Stride> const& layout)
 {
     return layout.template stride<Is...>();
@@ -158,7 +158,7 @@ decltype(auto) stride(Layout<Shape, Stride> const& layout)
 
 // Return the rank of layout
 template <int... Is, class Shape, class Stride>
-ACT_HOST_DEVICE constexpr
+CATLASS_HOST_DEVICE constexpr
 auto rank(Layout<Shape, Stride> const& layout)
 {
     return rank(shape<Is...>(layout));
@@ -166,7 +166,7 @@ auto rank(Layout<Shape, Stride> const& layout)
 
 // Return the depth of the layout
 template <int... Is, class Shape, class Stride>
-ACT_HOST_DEVICE constexpr
+CATLASS_HOST_DEVICE constexpr
 auto depth(Layout<Shape, Stride> const& layout)
 {
     return depth(shape<Is...>(layout));
@@ -174,7 +174,7 @@ auto depth(Layout<Shape, Stride> const& layout)
 
 // Return the offset of coord
 template <class Coord, class Shape, class Stride>
-ACT_HOST_DEVICE constexpr
+CATLASS_HOST_DEVICE constexpr
 auto crd2idx(Coord const& coord, Shape const& shape, Stride const& stride)
 {
     static_assert(is_tuple<Coord>::value && depth_v<Coord> == 1 && rank_v<Coord> == 2);
@@ -230,12 +230,12 @@ struct iszN {
 
 template <class Element, class Layout>
 struct iszN<Element, Layout, std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>> {
-    static constexpr uint32_t ELE_NUM_PER_C0 = Act::BYTE_PER_C0 / sizeof(Element);
-    static constexpr uint32_t ELE_NUM_PER_FRACTAL = Act::BYTE_PER_FRACTAL / sizeof(Element);
-    static bool const value = (shape<0, 0>(Layout{}) == Act::C0_NUM_PER_FRACTAL &&
+    static constexpr uint32_t ELE_NUM_PER_C0 = Catlass::BYTE_PER_C0 / sizeof(Element);
+    static constexpr uint32_t ELE_NUM_PER_FRCATLASSAL = Catlass::BYTE_PER_FRCATLASSAL / sizeof(Element);
+    static bool const value = (shape<0, 0>(Layout{}) == Catlass::C0_NUM_PER_FRCATLASSAL &&
                                shape<1, 0>(Layout{}) == ELE_NUM_PER_C0 &&
                                stride<1, 0>(Layout{}) == 1 &&
-                               stride<0, 1>(Layout{}) == ELE_NUM_PER_FRACTAL);
+                               stride<0, 1>(Layout{}) == ELE_NUM_PER_FRCATLASSAL);
 };
 
 template <class Element, class Layout, class Enable = void>
@@ -245,12 +245,12 @@ struct iszZ {
 
 template <class Element, class Layout>
 struct iszZ<Element, Layout, std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>> {
-    static constexpr uint32_t ELE_NUM_PER_C0 = Act::BYTE_PER_C0 / sizeof(Element);
-    static constexpr uint32_t ELE_NUM_PER_FRACTAL = Act::BYTE_PER_FRACTAL / sizeof(Element);
-    static bool const value = (shape<0, 0>(Layout{}) == Act::C0_NUM_PER_FRACTAL &&
+    static constexpr uint32_t ELE_NUM_PER_C0 = Catlass::BYTE_PER_C0 / sizeof(Element);
+    static constexpr uint32_t ELE_NUM_PER_FRCATLASSAL = Catlass::BYTE_PER_FRCATLASSAL / sizeof(Element);
+    static bool const value = (shape<0, 0>(Layout{}) == Catlass::C0_NUM_PER_FRCATLASSAL &&
                                shape<1, 0>(Layout{}) == ELE_NUM_PER_C0 &&
                                stride<1, 0>(Layout{}) == 1 &&
-                               stride<1, 1>(Layout{}) == ELE_NUM_PER_FRACTAL);
+                               stride<1, 1>(Layout{}) == ELE_NUM_PER_FRCATLASSAL);
 };
 
 template <class Element, class Layout, class Enable = void>
@@ -260,12 +260,12 @@ struct isnZ {
 
 template <class Element, class Layout>
 struct isnZ<Element, Layout, std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>> {
-    static constexpr uint32_t ELE_NUM_PER_C0 = Act::BYTE_PER_C0 / sizeof(Element);
-    static constexpr uint32_t ELE_NUM_PER_FRACTAL = Act::BYTE_PER_FRACTAL / sizeof(Element);
+    static constexpr uint32_t ELE_NUM_PER_C0 = Catlass::BYTE_PER_C0 / sizeof(Element);
+    static constexpr uint32_t ELE_NUM_PER_FRCATLASSAL = Catlass::BYTE_PER_FRCATLASSAL / sizeof(Element);
     static bool const value = (shape<0, 0>(Layout{}) == ELE_NUM_PER_C0 &&
-                               shape<1, 0>(Layout{}) == Act::C0_NUM_PER_FRACTAL &&
+                               shape<1, 0>(Layout{}) == Catlass::C0_NUM_PER_FRCATLASSAL &&
                                stride<0, 0>(Layout{}) == 1 &&
-                               stride<1, 1>(Layout{}) == ELE_NUM_PER_FRACTAL);
+                               stride<1, 1>(Layout{}) == ELE_NUM_PER_FRCATLASSAL);
 };
 
 } // end namespace detail
@@ -273,39 +273,39 @@ struct isnZ<Element, Layout, std::enable_if_t<Layout::depth == 2 && Layout::rank
 // Advanced Layout constructions
 // Make a inner layout with Rows and Cols.
 template <class Element, class Layout>
-ACT_HOST_DEVICE constexpr
+CATLASS_HOST_DEVICE constexpr
 auto MakeLayout(uint32_t const& rows, uint32_t const& cols)
 {
     static_assert(detail::iszN<Element, Layout>::value || detail::iszZ<Element, Layout>::value ||
                     detail::isnZ<Element, Layout>::value,
         "Unsupported Layout for MakeLayout, only support zN or zZ or nZ");
 
-    constexpr uint32_t ELE_NUM_PER_C0 = Act::BYTE_PER_C0 / sizeof(Element);
-    constexpr uint32_t ELE_NUM_PER_FRACTAL = Act::BYTE_PER_FRACTAL / sizeof(Element);
+    constexpr uint32_t ELE_NUM_PER_C0 = Catlass::BYTE_PER_C0 / sizeof(Element);
+    constexpr uint32_t ELE_NUM_PER_FRCATLASSAL = Catlass::BYTE_PER_FRCATLASSAL / sizeof(Element);
 
     if constexpr (detail::iszN<Element, Layout>::value) {
         return MakeLayout(
-            MakeShape(MakeShape(Int<Act::C0_NUM_PER_FRACTAL>{}, CeilDiv<Act::C0_NUM_PER_FRACTAL>(rows)),
+            MakeShape(MakeShape(Int<Catlass::C0_NUM_PER_FRCATLASSAL>{}, CeilDiv<Catlass::C0_NUM_PER_FRCATLASSAL>(rows)),
                       MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv<ELE_NUM_PER_C0>(cols))),
-            MakeStride(MakeStride(Int<ELE_NUM_PER_C0>{}, Int<ELE_NUM_PER_FRACTAL>{}),
-                       MakeStride(Int<1>{}, (int64_t)RoundUp<Act::C0_NUM_PER_FRACTAL>(rows) * ELE_NUM_PER_C0)));
+            MakeStride(MakeStride(Int<ELE_NUM_PER_C0>{}, Int<ELE_NUM_PER_FRCATLASSAL>{}),
+                       MakeStride(Int<1>{}, (int64_t)RoundUp<Catlass::C0_NUM_PER_FRCATLASSAL>(rows) * ELE_NUM_PER_C0)));
     } else if constexpr (detail::iszZ<Element, Layout>::value) {
         return MakeLayout(
-            MakeShape(MakeShape(Int<Act::C0_NUM_PER_FRACTAL>{}, CeilDiv<Act::C0_NUM_PER_FRACTAL>(rows)),
+            MakeShape(MakeShape(Int<Catlass::C0_NUM_PER_FRCATLASSAL>{}, CeilDiv<Catlass::C0_NUM_PER_FRCATLASSAL>(rows)),
                       MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv<ELE_NUM_PER_C0>(cols))),
-            MakeStride(MakeStride(Int<ELE_NUM_PER_C0>{}, (int64_t)RoundUp<ELE_NUM_PER_C0>(cols) * Act::C0_NUM_PER_FRACTAL),
-                       MakeStride(Int<1>{}, Int<ELE_NUM_PER_FRACTAL>{})));
+            MakeStride(MakeStride(Int<ELE_NUM_PER_C0>{}, (int64_t)RoundUp<ELE_NUM_PER_C0>(cols) * Catlass::C0_NUM_PER_FRCATLASSAL),
+                       MakeStride(Int<1>{}, Int<ELE_NUM_PER_FRCATLASSAL>{})));
     } else {
         return MakeLayout(
             MakeShape(MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv<ELE_NUM_PER_C0>(rows)),
-                      MakeShape(Int<Act::C0_NUM_PER_FRACTAL>{}, CeilDiv<Act::C0_NUM_PER_FRACTAL>(cols))),
-            MakeStride(MakeStride(Int<1>{}, (int64_t)RoundUp<Act::C0_NUM_PER_FRACTAL>(cols) * ELE_NUM_PER_C0),
-                       MakeStride(Int<ELE_NUM_PER_C0>{}, Int<ELE_NUM_PER_FRACTAL>{})));
+                      MakeShape(Int<Catlass::C0_NUM_PER_FRCATLASSAL>{}, CeilDiv<Catlass::C0_NUM_PER_FRCATLASSAL>(cols))),
+            MakeStride(MakeStride(Int<1>{}, (int64_t)RoundUp<Catlass::C0_NUM_PER_FRCATLASSAL>(cols) * ELE_NUM_PER_C0),
+                       MakeStride(Int<ELE_NUM_PER_C0>{}, Int<ELE_NUM_PER_FRCATLASSAL>{})));
     }
 }
 
 template <class Layout, class ShapeNew>
-ACT_HOST_DEVICE constexpr
+CATLASS_HOST_DEVICE constexpr
 auto MakeLayoutTile(Layout const& layout, ShapeNew const& shapeNew)
 {
     static_assert(is_tuple<ShapeNew>::value && depth_v<ShapeNew> == 1 && rank_v<ShapeNew> == 2);
@@ -334,14 +334,14 @@ auto MakeLayoutTile(Layout const& layout, ShapeNew const& shapeNew)
     }
 }
 
-ACT_HOST_DEVICE constexpr auto MakeLayoutL0C(uint32_t const& rows, uint32_t const& cols)
+CATLASS_HOST_DEVICE constexpr auto MakeLayoutL0C(uint32_t const& rows, uint32_t const& cols)
 {
-    constexpr uint32_t ELE_NUM_PER_FRACTAL = 256;
+    constexpr uint32_t ELE_NUM_PER_FRCATLASSAL = 256;
     return MakeLayout(
-        MakeShape(MakeShape(Int<Act::C0_NUM_PER_FRACTAL>{}, CeilDiv<Act::C0_NUM_PER_FRACTAL>(rows)),
-                  MakeShape(Int<Act::C0_NUM_PER_FRACTAL>{}, CeilDiv<Act::C0_NUM_PER_FRACTAL>(cols))),
-        MakeStride(MakeStride(Int<Act::C0_NUM_PER_FRACTAL>{}, Int<ELE_NUM_PER_FRACTAL>{}),
-                   MakeStride(Int<1>{}, (int64_t)RoundUp<Act::C0_NUM_PER_FRACTAL>(rows) * Act::C0_NUM_PER_FRACTAL)));
+        MakeShape(MakeShape(Int<Catlass::C0_NUM_PER_FRCATLASSAL>{}, CeilDiv<Catlass::C0_NUM_PER_FRCATLASSAL>(rows)),
+                  MakeShape(Int<Catlass::C0_NUM_PER_FRCATLASSAL>{}, CeilDiv<Catlass::C0_NUM_PER_FRCATLASSAL>(cols))),
+        MakeStride(MakeStride(Int<Catlass::C0_NUM_PER_FRCATLASSAL>{}, Int<ELE_NUM_PER_FRCATLASSAL>{}),
+                   MakeStride(Int<1>{}, (int64_t)RoundUp<Catlass::C0_NUM_PER_FRCATLASSAL>(rows) * Catlass::C0_NUM_PER_FRCATLASSAL)));
 }
 
 } // end namespace tla

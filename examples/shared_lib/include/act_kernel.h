@@ -9,8 +9,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef SHARED_LIB_ACT_KERNEL_H
-#define SHARED_LIB_ACT_KERNEL_H
+#ifndef SHARED_LIB_CATLASS_KERNEL_H
+#define SHARED_LIB_CATLASS_KERNEL_H
 
 #include <acl/acl.h>
 
@@ -41,4 +41,4 @@ void OptimizedMatmul(uint32_t blockNum, aclrtStream stream, KernelInfo kernelInf
 
 }
 
-#endif // SHARED_LIB_ACT_KERNEL_H
+#endif // SHARED_LIB_CATLASS_KERNEL_H

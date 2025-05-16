@@ -1,11 +1,11 @@
 #include <acl/acl.h>
 
-#include "act_kernel.h"
+#include "catlass_kernel.h"
 #include "kernel/grouped_matmul_slice_k.hpp"
 #include "kernel/grouped_matmul_slice_m.hpp"
 
 namespace ActKernel {
-using namespace Act;
+using namespace Catlass;
 void GroupedMatmul(uint32_t blockNum, aclrtStream stream,
                    KernelInfo kernelInfo) {
   const uint32_t problemCount = kernelInfo.groupList.size();

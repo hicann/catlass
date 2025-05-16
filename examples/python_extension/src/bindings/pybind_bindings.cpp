@@ -12,8 +12,8 @@
 #include <torch/extension.h>
 #include <torch_npu/csrc/core/npu/NPUStream.h>
 
-#include "act_kernel.h"
-#include "wrapper/act_kernel_wrapper.h"
+#include "catlass_kernel.h"
+#include "wrapper/catlass_kernel_wrapper.h"
 
 namespace py = pybind11;
 using namespace ActKernelWrapper;

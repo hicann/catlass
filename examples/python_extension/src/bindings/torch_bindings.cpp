@@ -10,7 +10,7 @@
 
 #include <torch/extension.h>
 
-#include "wrapper/act_kernel_wrapper.h"
+#include "wrapper/catlass_kernel_wrapper.h"
 
 #define NPU PrivateUse1
 

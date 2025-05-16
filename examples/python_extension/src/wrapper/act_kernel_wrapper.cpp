@@ -21,8 +21,8 @@
 #include <torch_npu/csrc/core/npu/NPUFunctions.h>
 #include <torch_npu/csrc/core/npu/NPUStream.h>
 
-#include "act_kernel.h"
-#include "wrapper/act_kernel_wrapper.h"
+#include "catlass_kernel.h"
+#include "wrapper/catlass_kernel_wrapper.h"
 
 namespace py = pybind11;
 using namespace ActKernel;
@@ -289,4 +289,4 @@ at::Tensor RunOptimizedMatmul(const at::Tensor &mat1, const at::Tensor &mat2, co
     
     return result;
 }
-} // namespace Act
+} // namespace Catlass
