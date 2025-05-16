@@ -23,6 +23,7 @@
 
 #include "helper.hpp"
 #include "golden.hpp"
+#include "fp16_t.h"
 
 #include "act/act.hpp"
 #include "act/arch/arch.hpp"
@@ -42,6 +43,7 @@
 
 using namespace Act;
 using ScalarType = float;
+using fp16_t = op::fp16_t;
 
 template <
     typename LayoutA,
@@ -243,13 +245,13 @@ void Run(Options& options){
     golden::FillRandomData(hostAlpha,  -1.0f, 1.0f);
     golden::FillRandomData(hostBeta,  -1.0f, 1.0f);
 
-    size_t sizeA = allMKCnt * sizeof(half);
-    size_t sizeB = allKNCnt * sizeof(half);
-    size_t sizeX = allMNCnt * sizeof(half);
-    size_t sizeC = allMNCnt * sizeof(half);
-    std::vector<half> hostA(allMKCnt);
-    std::vector<half> hostB(allKNCnt);
-    std::vector<half> hostX(allMNCnt);
+    size_t sizeA = allMKCnt * sizeof(fp16_t);
+    size_t sizeB = allKNCnt * sizeof(fp16_t);
+    size_t sizeX = allMNCnt * sizeof(fp16_t);
+    size_t sizeC = allMNCnt * sizeof(fp16_t);
+    std::vector<fp16_t> hostA(allMKCnt);
+    std::vector<fp16_t> hostB(allKNCnt);
+    std::vector<fp16_t> hostX(allMNCnt);
     golden::FillRandomData(hostA,  -1.0f, 1.0f);
     golden::FillRandomData(hostB,  -1.0f, 1.0f);
     golden::FillRandomData(hostX,  -1.0f, 1.0f);
@@ -265,14 +267,14 @@ void Run(Options& options){
     uint8_t *deviceA{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
-    size_t sizeWA = allMKCntPadding * sizeof(half);
+    size_t sizeWA = allMKCntPadding * sizeof(fp16_t);
     uint8_t *deviceWA{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWA), sizeWA, ACL_MEM_MALLOC_HUGE_FIRST));
 
     uint8_t *deviceB{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
-    size_t sizeWB = allKNCntPadding * sizeof(half);
+    size_t sizeWB = allKNCntPadding * sizeof(fp16_t);
     uint8_t *deviceWB{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWB), sizeWB, ACL_MEM_MALLOC_HUGE_FIRST));
 
@@ -339,7 +341,7 @@ void Run(Options& options){
         gmWorkspace);
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
-    std::vector<half> hostRes(allMNCnt);
+    std::vector<fp16_t> hostRes(allMNCnt);
     ACL_CHECK(aclrtMemcpy(hostRes.data(), sizeX, deviceX, sizeX, ACL_MEMCPY_DEVICE_TO_HOST));
     std::vector<float> hostGolden(allMNCnt);
     golden::ComputeGroupGemm(groupCnt, problemShapeList, hostAlpha, hostBeta, hostA, layoutAList,
