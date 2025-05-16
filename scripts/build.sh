@@ -46,7 +46,7 @@ done
 function build_shared_lib() {
     cd $CMAKE_SOURCE_PATH/examples/shared_lib
     rm -rf build
-    cmake --no-warn-unused-cli -B build -DCMAKE_BUILD_TYPE=$CMAKE_BUILD_TYPE -DCMAKE_INSTALL_PREFIX=$OUTPUT_PATH/shared_lib -DACT_INCLUDE_DIR=$CMAKE_SOURCE_PATH/include
+    cmake --no-warn-unused-cli -B build -DCMAKE_BUILD_TYPE=$CMAKE_BUILD_TYPE -DCMAKE_INSTALL_PREFIX=$OUTPUT_PATH/shared_lib -DCATLASS_INCLUDE_DIR=$CMAKE_SOURCE_PATH/include
     cmake --build build -j
     cmake --install build
     cd $CMAKE_SOURCE_PATH
@@ -55,7 +55,7 @@ function build_shared_lib() {
 function build_torch_library() {
     cd $CMAKE_SOURCE_PATH/examples/python_extension
     rm -rf build
-    cmake --no-warn-unused-cli -B build -DCMAKE_BUILD_TYPE=$CMAKE_BUILD_TYPE -DCMAKE_INSTALL_PREFIX=$OUTPUT_PATH/python_extension -DACT_INCLUDE_DIR=$CMAKE_SOURCE_PATH/include -DPython3_EXECUTABLE=$(which python3) -DBUILD_TORCH_LIB=True
+    cmake --no-warn-unused-cli -B build -DCMAKE_BUILD_TYPE=$CMAKE_BUILD_TYPE -DCMAKE_INSTALL_PREFIX=$OUTPUT_PATH/python_extension -DCATLASS_INCLUDE_DIR=$CMAKE_SOURCE_PATH/include -DPython3_EXECUTABLE=$(which python3) -DBUILD_TORCH_LIB=True
     cmake --build build -j
     cmake --install build
     cd $CMAKE_SOURCE_PATH

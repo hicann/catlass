@@ -31,7 +31,7 @@ class CMakeBuild(build_ext):
         extdir = os.path.abspath(os.path.dirname(
             self.get_ext_fullpath(ext.name)))
         cmake_args = [
-            "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=" + extdir + "/torch_act",
+            "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=" + extdir + "/torch_catlass",
             "-DPython3_EXECUTABLE=" + sys.executable,
             "-DBUILD_PYBIND=True"
         ]
@@ -56,14 +56,14 @@ class CMakeBuild(build_ext):
 version = f"0.1.0.{time.strftime('%Y%m%d%H%M%S')}"
 
 setup(
-    name="torch_act",
+    name="torch_catlass",
     version=version,
     author="Huawei Technologies Co., Ltd.",
     description="A PyTorch extension for AscendC Tenplates with pybind11 bindings",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
-    packages=["torch_act"],
-    ext_modules=[CMakeExtension("torch_act")],
+    packages=["torch_catlass"],
+    ext_modules=[CMakeExtension("torch_catlass")],
     cmdclass={"build_ext": CMakeBuild},
     zip_safe=False,
     python_requires=">=3.8",

@@ -20,18 +20,18 @@
 #include "helper.hpp"
 #include "golden.hpp"
 
-#include "act/act.hpp"
-#include "act/arch/arch.hpp"
-#include "act/gemm/dispatch_policy.hpp"
-#include "act/gemv/kernel/kernel_gemv_aiv.hpp"
-#include "act/gemv/block/block_gemv.hpp"
-#include "act/gemm/gemm_type.hpp"
-#include "act/layout/layout.hpp"
-#include "act/gemv/tile/tile_copy.hpp"
-#include "act/gemv/tile/tile_vmad.hpp"
-#include "act/gemv/tile/tile_vmuls.hpp"
+#include "catlass/catlass.hpp"
+#include "catlass/arch/arch.hpp"
+#include "catlass/gemm/dispatch_policy.hpp"
+#include "catlass/gemv/kernel/kernel_gemv_aiv.hpp"
+#include "catlass/gemv/block/block_gemv.hpp"
+#include "catlass/gemm/gemm_type.hpp"
+#include "catlass/layout/layout.hpp"
+#include "catlass/gemv/tile/tile_copy.hpp"
+#include "catlass/gemv/tile/tile_vmad.hpp"
+#include "catlass/gemv/tile/tile_vmuls.hpp"
 
-using namespace Act;
+using namespace Catlass;
 using UBTileShape = GemvShape<32,512>;
 using ScalarType = float;
 
@@ -40,7 +40,7 @@ template <
     class LayoutX,
     class LayoutY
 >
-ACT_GLOBAL
+CATLASS_GLOBAL
 void GemvAiv(
     GemvCoord problemShape,
     GM_ADDR gmA, LayoutA layoutA,

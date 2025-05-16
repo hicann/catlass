@@ -7,7 +7,7 @@
 ```bash
 examples/shared_lib
 ├── include
-│   └── act_kernel.h            # 头文件
+│   └── catlass_kernel.h            # 头文件
 └── src
     ├── common
     │   └── common.hpp          # 公共头文件，预留为多个kernel中的模板函数共用
@@ -24,10 +24,10 @@ examples/shared_lib
 ```bash
 output/shared_lib
 ├── include
-│   └── act_kernel.h # 头文件
+│   └── catlass_kernel.h # 头文件
 └── lib
-    ├── libact_kernel.a # 静态链接库
-    └── libact_kernel.so # 动态链接库
+    ├── libcatlass_kernel.a # 静态链接库
+    └── libcatlass_kernel.so # 动态链接库
 ```
 
 ## 使用说明
@@ -41,17 +41,17 @@ output/shared_lib
 - 在`src/kernel`文件夹中创建`custom_matmul.hpp`，实现算子本身.
 
 ```cpp
-#include "act/act.hpp"
-// act头文件...
+#include "catlass/catlass.hpp"
+// catlass头文件...
 
-using namespace Act;
+using namespace Catlass;
 
 template <
     class LayoutA,
     class LayoutB,
     class LayoutC
 >
-ACT_GLOBAL
+CATLASS_GLOBAL
 void custom_matmul(
     GemmCoord problemShape,
     GM_ADDR gmA, LayoutA layoutA,
@@ -60,7 +60,7 @@ void custom_matmul(
     // 按需定义输入参数...
 )
 {
-    // 使用Act api定义算子...
+    // 使用Catlass api定义算子...
 }
 ```
 
@@ -69,7 +69,7 @@ void custom_matmul(
 ```cpp
 // ...
 void CustomMatmul(uint32_t blockNum, aclrtStream stream, ernelInfo kernelInfo) {
-    Act::GemmCoord problemShape{kernelInfo.m, kernelInfo.n, kernelInfo.k};
+    Catlass::GemmCoord problemShape{kernelInfo.m, kernelInfo.n, kernelInfo.k};
     using LayoutA = layout::RowMajor;
     using LayoutB = layout::RowMajor;
     using LayoutC = layout::RowMajor;
@@ -93,14 +93,14 @@ void CustomMatmul(uint32_t blockNum, aclrtStream stream, ernelInfo kernelInfo) {
 | `kernelInfo` | `KernelInfo`  | 算子执行的数据地址和输入详细情况，如mnk等维度的大小 |
 可根据实际需要自行修改参数.
 
-- 在`include/act_kernel.h`中增加`custom_matmul.cpp`中的host入口，以供外部调用.
+- 在`include/catlass_kernel.h`中增加`custom_matmul.cpp`中的host入口，以供外部调用.
 
 ```cpp
 // ...
 void CustomMatmul(uint32_t blockNum, aclrtStream stream, ernelInfo kernelInfo);
 // ...
 ```
-- 在`CMakeLists.txt`增加`act_add_kernel(custom_matmul dav-c220 ${CMAKE_CURRENT_SOURCE_DIR}/src/host/custom_matmul.cpp)`编译命令.
+- 在`CMakeLists.txt`增加`catlass_add_kernel(custom_matmul dav-c220 ${CMAKE_CURRENT_SOURCE_DIR}/src/host/custom_matmul.cpp)`编译命令.
 
 - 如果你增加了多个算子，但又存在相同定义的`模板函数`，这种情况在链接阶段会提示重复符号. 为解决这个问题，你可以将这类函数以`inline`形式存入公共的`common`路径中.
 
@@ -125,11 +125,11 @@ bash scripts/build.sh shared_lib
 
 ```cpp
 template<typename T>
-ACT_DEVICE void real_kernel(...){
+CATLASS_DEVICE void real_kernel(...){
     //...
 }
 template<aclDataType T>
-ACT_GLOBAL void kernel(...){
+CATLASS_GLOBAL void kernel(...){
     if constexpr (T == ACL_BF16){
         real_kernel<bfloat16_t>(...);
     }
@@ -143,7 +143,7 @@ void kernel_host(...){
 > [!NOTE]
 > 部分算子，如`gemv`，需在编译时指定`--cce-aicore-arch=dav-c220-vec`以标识其为`vector`算子. 对于纯`cube`算子或`CV融合`算子，使用`--cce-aicore-arch=dav-c220`可以直接兼容二者，但无法兼容纯`vector`算子的情况. 然而，目前编译器不支持将多个架构不同的.o链接成一个.so.=
 
-> 开发者需要使用`gemv`的情况下，可参考此项目构建一个单独的`libact_kernel_vec.so`文件.
+> 开发者需要使用`gemv`的情况下，可参考此项目构建一个单独的`libcatlass_kernel_vec.so`文件.
 
 ## 版权声明
 

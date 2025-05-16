@@ -1,6 +1,6 @@
-# Ascend C Template MLA
+# CATLASS MLA
 
-Ascend C Template MLA是基于Ascend C Template Gemm Api实现的亲和昇腾AtlasA2硬件的Flash-MLA算子，算子的结构可以分为以下几部分
+CATLASS MLA是基于CATLASS Gemm Api实现的亲和昇腾AtlasA2硬件的Flash-MLA算子，算子的结构可以分为以下几部分
 * Tiling计算；
 * Kernel实现，具体有两种实现，通用的[mla_kernel.cpp](./mla_kernel.cpp)以及特化的[mla_kernel_tp1_spec.cpp](./mla_kernel_tp1_spec.cpp)；
 * Kernel中依赖适合Flash-MLA运算的Block组件；
@@ -78,17 +78,17 @@ using MLAKernel = MLAKernel<BlockMmadQK, BlockMmadPV, EpilogueMLASoftmax,
 
 ## Block Mmad
 算子总共使用了两类Block Mmad组件，分别为：
-* `BlockMmadQK`为BlockMmad模板类的偏特化，用于处理Flash-MLA中的Q与K的矩阵乘操作，头文件[block_mmad_mla_qk.hpp](../../include/act/gemm/block/block_mmad_mla_qk.hpp)中的实现对应通用的[mla_kernel.cpp](./mla_kernel.cpp)，头文件[block_mmad_mla_qk_tp1_spec.hpp](../../include/act/gemm/block/block_mmad_mla_qk_tp1_spec.hpp)中的实现则对应特化的[mla_kernel_tp1_spec.cpp](./mla_kernel_tp1_spec.cpp).  
-* `BlockMmadPV`为BlockMmad模板类的偏特化，用于处理Flash-MLA中的P与V的矩阵乘操作，头文件[block_mmad_mla_pv.hpp](../../include/act/gemm/block/block_mmad_mla_pv.hpp)中的实现对应通用的[mla_kernel.cpp](./mla_kernel.cpp)，头文件[block_mmad_mla_pv_tp1_spec.hpp](../../include/act/gemm/block/block_mmad_mla_pv_tp1_spec.hpp)中的实现则对应特化的[mla_kernel_tp1_spec.cpp](./mla_kernel_tp1_spec.cpp).  
+* `BlockMmadQK`为BlockMmad模板类的偏特化，用于处理Flash-MLA中的Q与K的矩阵乘操作，头文件[block_mmad_mla_qk.hpp](../../include/catlass/gemm/block/block_mmad_mla_qk.hpp)中的实现对应通用的[mla_kernel.cpp](./mla_kernel.cpp)，头文件[block_mmad_mla_qk_tp1_spec.hpp](../../include/catlass/gemm/block/block_mmad_mla_qk_tp1_spec.hpp)中的实现则对应特化的[mla_kernel_tp1_spec.cpp](./mla_kernel_tp1_spec.cpp).  
+* `BlockMmadPV`为BlockMmad模板类的偏特化，用于处理Flash-MLA中的P与V的矩阵乘操作，头文件[block_mmad_mla_pv.hpp](../../include/catlass/gemm/block/block_mmad_mla_pv.hpp)中的实现对应通用的[mla_kernel.cpp](./mla_kernel.cpp)，头文件[block_mmad_mla_pv_tp1_spec.hpp](../../include/catlass/gemm/block/block_mmad_mla_pv_tp1_spec.hpp)中的实现则对应特化的[mla_kernel_tp1_spec.cpp](./mla_kernel_tp1_spec.cpp).  
 
 ## Block Epilogue
 算子总共使用了三类Block Epilogue组件，分别为：
-* `EpilogueMLASoftmax`为BlockEpilogue模板类的偏特化，用于处理Flash-MLA中的online softmax操作，头文件[block_epilogue_mla_softmax.hpp](../../include/act/epilogue/block/block_epilogue_mla_softmax.hpp)中的实现对应通用的[mla_kernel.cpp](./mla_kernel.cpp)，头文件[block_epilogue_mla_tp1_softmax.hpp](../../include/act/epilogue/block/block_epilogue_mla_tp1_softmax.hpp)中的实现则对应特化的[mla_kernel_tp1_spec.cpp](./mla_kernel_tp1_spec.cpp).  
-* `EpilogueMLARescaleO`为BlockEpilogue模板类的偏特化，用于处理Flash-MLA中的rescaleO操作，头文件[block_epilogue_mla_rescale_o.hpp](../../include/act/epilogue/block/block_epilogue_mla_rescale_o.hpp)中的实现对应通用的[mla_kernel.cpp](./mla_kernel.cpp)，头文件[block_epilogue_mla_tp1_rescale_o.hpp](../../include/act/epilogue/block/block_epilogue_mla_tp1_rescale_o.hpp)中的实现则对应特化的[mla_kernel_tp1_spec.cpp](./mla_kernel_tp1_spec.cpp).  
-* `EpilogueMLAFDRescaleO`为BlockEpilogue模板类的偏特化，用于处理Flash-MLA中的flashDecoding操作（如有必要），头文件[block_epilogue_mla_fd_rescale_o.hpp](../../include/act/epilogue/block/block_epilogue_mla_fd_rescale_o.hpp)中的实现为[mla_kernel.cpp](./mla_kernel.cpp)与[mla_kernel_tp1_spec.cpp](./mla_kernel_tp1_spec.cpp)两者共用。
+* `EpilogueMLASoftmax`为BlockEpilogue模板类的偏特化，用于处理Flash-MLA中的online softmax操作，头文件[block_epilogue_mla_softmax.hpp](../../include/catlass/epilogue/block/block_epilogue_mla_softmax.hpp)中的实现对应通用的[mla_kernel.cpp](./mla_kernel.cpp)，头文件[block_epilogue_mla_tp1_softmax.hpp](../../include/catlass/epilogue/block/block_epilogue_mla_tp1_softmax.hpp)中的实现则对应特化的[mla_kernel_tp1_spec.cpp](./mla_kernel_tp1_spec.cpp).  
+* `EpilogueMLARescaleO`为BlockEpilogue模板类的偏特化，用于处理Flash-MLA中的rescaleO操作，头文件[block_epilogue_mla_rescale_o.hpp](../../include/catlass/epilogue/block/block_epilogue_mla_rescale_o.hpp)中的实现对应通用的[mla_kernel.cpp](./mla_kernel.cpp)，头文件[block_epilogue_mla_tp1_rescale_o.hpp](../../include/catlass/epilogue/block/block_epilogue_mla_tp1_rescale_o.hpp)中的实现则对应特化的[mla_kernel_tp1_spec.cpp](./mla_kernel_tp1_spec.cpp).  
+* `EpilogueMLAFDRescaleO`为BlockEpilogue模板类的偏特化，用于处理Flash-MLA中的flashDecoding操作（如有必要），头文件[block_epilogue_mla_fd_rescale_o.hpp](../../include/catlass/epilogue/block/block_epilogue_mla_fd_rescale_o.hpp)中的实现为[mla_kernel.cpp](./mla_kernel.cpp)与[mla_kernel_tp1_spec.cpp](./mla_kernel_tp1_spec.cpp)两者共用。
 
 ## Tile Mmad & Tile Copy
-在通用Kernel使用的Block组件中，使用了位于[tile_mmad.hpp](../../include/act/gemm/tile/tile_mmad.hpp)中的tileMmad组件和位于[tile_copy.hpp](../../include/act/gemm/tile/tile_copy.hpp)中的tileCopy组件，例如：
+在通用Kernel使用的Block组件中，使用了位于[tile_mmad.hpp](../../include/catlass/gemm/tile/tile_mmad.hpp)中的tileMmad组件和位于[tile_copy.hpp](../../include/catlass/gemm/tile/tile_copy.hpp)中的tileCopy组件，例如：
 
 ```c++
 using TileMmad = TileMmad_;

@@ -131,7 +131,7 @@ void FreeMem(uint8_t *host, uint8_t *device)
 }
 
 // Allocate several matrices in NPU device memory and call a
-// ACTLASS MLA kernel.
+// CATLASSLASS MLA kernel.
 void Run(const Options &options)
 {
     aclrtStream stream{nullptr};

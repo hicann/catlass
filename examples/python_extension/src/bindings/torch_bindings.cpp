@@ -10,11 +10,11 @@
 
 #include <torch/extension.h>
 
-#include "wrapper/act_kernel_wrapper.h"
+#include "wrapper/catlass_kernel_wrapper.h"
 
 #define NPU PrivateUse1
 
-using namespace ActKernelWrapper;
-TORCH_LIBRARY(ActTorch, m) { m.def("basic_matmul(Tensor mat1, Tensor mat2, str c) -> Tensor"); }
+using namespace CatlassKernelWrapper;
+TORCH_LIBRARY(CatlassTorch, m) { m.def("basic_matmul(Tensor mat1, Tensor mat2, str c) -> Tensor"); }
 
-TORCH_LIBRARY_IMPL(ActTorch, NPU, m) { m.impl("basic_matmul", &RunBasicMatmul); }
+TORCH_LIBRARY_IMPL(CatlassTorch, NPU, m) { m.impl("basic_matmul", &RunBasicMatmul); }

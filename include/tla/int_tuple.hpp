@@ -24,14 +24,14 @@ namespace tla {
 
 namespace detail {
 template <class T, class F, int... I>
-ACT_HOST_DEVICE constexpr
+CATLASS_HOST_DEVICE constexpr
 auto apply(T&& t, F&& f, seq<I...>)
 {
     return f(get<I>(static_cast<T&&>(t))...);
 }
 
 template <class T, class F, class G, int... I>
-ACT_HOST_DEVICE constexpr
+CATLASS_HOST_DEVICE constexpr
 auto
 tapply(T&& t, F&& f, G&& g, seq<I...>)
 {
@@ -41,14 +41,14 @@ tapply(T&& t, F&& f, G&& g, seq<I...>)
 } // end namespace detail
 
 template <class T, class F>
-ACT_HOST_DEVICE constexpr
+CATLASS_HOST_DEVICE constexpr
 auto apply(T&& t, F&& f)
 {
     return detail::apply(static_cast<T&&>(t), f, tuple_seq<T>{});
 }
 
 template <class T, class F, class G>
-ACT_HOST_DEVICE constexpr
+CATLASS_HOST_DEVICE constexpr
 auto
 transform_apply(T&& t, F&& f, G&& g)
 {
@@ -61,7 +61,7 @@ transform_apply(T&& t, F&& f, G&& g)
 
 template <size_t I, class T,
           __TLA_REQUIRES(tla::is_integral<tla::remove_cvref_t<T>>::value)>
-ACT_HOST_DEVICE constexpr
+CATLASS_HOST_DEVICE constexpr
 decltype(auto) get(T&& t) noexcept
 {
     static_assert(I == 0, "Index out of range");
@@ -69,7 +69,7 @@ decltype(auto) get(T&& t) noexcept
 }
 
 template <size_t I0, size_t I1, size_t... Is, class T>
-ACT_HOST_DEVICE constexpr
+CATLASS_HOST_DEVICE constexpr
 decltype(auto) get(T&& t) noexcept
 {
     return get<I1, Is...>(get<I0>(static_cast<T&&>(t)));
@@ -77,19 +77,19 @@ decltype(auto) get(T&& t) noexcept
 
 // max
 template <class T0, class... Ts>
-ACT_HOST_DEVICE constexpr
+CATLASS_HOST_DEVICE constexpr
 auto max(T0 const& t0, Ts const&... ts);
 
 struct UnpackedMax {
     template <class... T>
-    ACT_HOST_DEVICE constexpr
+    CATLASS_HOST_DEVICE constexpr
     auto operator()(T const&... v) const {
         return tla::max(v...);
     }
 };
 
 template <class T0, class... Ts>
-ACT_HOST_DEVICE constexpr
+CATLASS_HOST_DEVICE constexpr
 auto max(T0 const& t0, Ts const&... ts)
 {
     if constexpr (is_tuple<T0>::value) {
@@ -103,7 +103,7 @@ auto max(T0 const& t0, Ts const&... ts)
 
 // rank
 template <int... Is, class Tuple>
-ACT_HOST_DEVICE constexpr
+CATLASS_HOST_DEVICE constexpr
 auto rank(Tuple const& t)
 {
     if constexpr (sizeof...(Is) == 0) {
@@ -125,19 +125,19 @@ static constexpr auto rank_v = rank_t<Tuple>::value;
 
 // depth
 template <int... Is, class Tuple>
-ACT_HOST_DEVICE constexpr
+CATLASS_HOST_DEVICE constexpr
 auto depth(Tuple const& t);
 
 struct UnpackedDepth {
     template <class... T>
-    ACT_HOST_DEVICE constexpr
+    CATLASS_HOST_DEVICE constexpr
     auto operator()(T const&... v) const {
         return tla::max(depth(v)...);
     }
 };
 
 template <int... Is, class Tuple>
-ACT_HOST_DEVICE constexpr
+CATLASS_HOST_DEVICE constexpr
 auto depth(Tuple const& t)
 {
     if constexpr (sizeof...(Is) == 0) {
@@ -159,7 +159,7 @@ static constexpr auto depth_v = depth_t<Tuple>::value;
 
 struct MultipliesUnaryLfold {
     template <class... T>
-    ACT_HOST_DEVICE constexpr
+    CATLASS_HOST_DEVICE constexpr
     auto operator()(T const&... v) const {
         return (... * v);
     }
@@ -168,7 +168,7 @@ struct MultipliesUnaryLfold {
 // Implementation of product as a function object
 struct Product {
     template <class IntTuple>
-    ACT_HOST_DEVICE constexpr
+    CATLASS_HOST_DEVICE constexpr
     auto
     operator()(IntTuple const& a) const
     {

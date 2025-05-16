@@ -3,10 +3,10 @@
 #include <acl/acl.h>
 #include <runtime/rt_ffts.h>
 
-#include "act_kernel.h"
+#include "catlass_kernel.h"
 
-namespace ActKernel {
-using namespace Act;
+namespace CatlassKernel {
+using namespace Catlass;
 void OptimizedMatmul(uint32_t blockNum, aclrtStream stream,
                      KernelInfo kernelInfo) {
   uint32_t m = kernelInfo.m;
@@ -77,4 +77,4 @@ void OptimizedMatmul(uint32_t blockNum, aclrtStream stream,
     aclrtFree(deviceWB);
   }
 }
-}  // namespace ActKernel
+}  // namespace CatlassKernel
