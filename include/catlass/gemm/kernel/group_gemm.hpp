@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_GROUPGEMM_KERNEL_GROUPGEMM_HPP
-#define CATLASS_GROUPGEMM_KERNEL_GROUPGEMM_HPP
+#ifndef CATLASS_GEMM_KERNEL_GROUPGEMM_HPP
+#define CATLASS_GEMM_KERNEL_GROUPGEMM_HPP
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/cross_core_sync.hpp"
@@ -251,6 +251,41 @@ public:
                 ptrWB(ptrWB_), ptrLayoutWB(ptrLayoutWB_),ptrX(ptrX_), ptrD(ptrD_){}
     };
 
+    struct Arguments{
+        uint32_t problemCount;
+        GM_ADDR ptrProblemShape;
+        GM_ADDR alpha;
+        GM_ADDR beta;
+        GM_ADDR ptrA;
+        GM_ADDR ptrLayoutA;
+        GM_ADDR ptrB;
+        GM_ADDR ptrLayoutB;
+        GM_ADDR ptrWorkspace;
+        GM_ADDR ptrLayoutWorkspace;
+        GM_ADDR ptrWA;
+        GM_ADDR ptrLayoutWA; 
+        GM_ADDR ptrWB;
+        GM_ADDR ptrLayoutWB;
+        GM_ADDR ptrX;
+        GM_ADDR ptrD;
+    };
+
+    static bool CanImplement(const Arguments &args){
+        return true;
+    }
+
+    static size_t GetWorkspaceSize(const Arguments &args)
+    {
+        return 0;
+    }
+
+    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace){
+        Params params{args.problemCount, args.ptrProblemShape, args.alpha, args.beta, args.ptrA, args.ptrLayoutA, args.ptrB, args.ptrLayoutB,
+                    args.ptrWorkspace, args.ptrLayoutWorkspace, args.ptrWA, args.ptrLayoutWA, args.ptrWB, args.ptrLayoutWB, 
+                    args.ptrX, args.ptrD};
+        return params;
+    }
+
     CATLASS_DEVICE
     KernelGroupGemm(){}
 
@@ -486,4 +521,4 @@ private:
 };
 }
 
-#endif // CATLASS_GROUPGEMM_KERNEL_GROUPGEMM_PL_PA_EPILOGUE_HPP
+#endif // CATLASS_GEMM_KERNEL_GROUPGEMM_HPP
