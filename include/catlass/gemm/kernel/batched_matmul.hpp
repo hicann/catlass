@@ -117,8 +117,7 @@ public:
 
     // Methods
     CATLASS_DEVICE
-    BatchedMatmul()
-    {}
+    BatchedMatmul() {}
 
     template <int32_t CORE_TYPE = g_coreType>
     CATLASS_DEVICE
