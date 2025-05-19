@@ -218,12 +218,53 @@ public:
                 epilogueParams(epilogueParams_){} 
     };
 
+    struct Arguments{
+        GemmCoord problemShape;
+        uint32_t align;
+        GM_ADDR ptrA;
+        GM_ADDR ptrB;
+        GM_ADDR gmWorkspace;
+        GM_ADDR ptrWA;
+        GM_ADDR ptrWB;
+        EpilogueParams epilogueParams;
+    };
 
-    CATLASS_DEVICE
-    KernelGemm(){}
+    static layout::RowMajor GetWorkspaceLayout(layout::RowMajor layout, uint32_t align)
+    {
+        if (align == 0) {
+            return layout;
+        }
+        return layout::RowMajor(layout.shape(0), layout.shape(1),
+            RoundUp(layout.shape(1), align));
+    }
+    
+    static layout::ColumnMajor GetWorkspaceLayout(layout::ColumnMajor layout, uint32_t align)
+    {
+        if (align == 0) {
+            return layout;
+        }
+        return layout::ColumnMajor(layout.shape(0), layout.shape(1),
+            RoundUp(layout.shape(0), align));
+    }
 
-    CATLASS_DEVICE
-    ~KernelGemm(){}
+    static bool CanImplement(const Arguments &args){
+        return true;
+    }
+
+    static size_t GetWorkspaceSize(const Arguments &args)
+    {
+        return 0;
+    }
+
+    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace){
+        LayoutA layoutA{args.problemShape.m(), args.problemShape.k()};
+        LayoutB layoutB{args.problemShape.k(), args.problemShape.n()};
+        LayoutWA layoutWA = GetWorkspaceLayout(layoutA, args.align);
+        LayoutWB layoutWB = GetWorkspaceLayout(layoutB, args.align);
+        Params params{args.problemShape, args.ptrA, layoutA, args.ptrB, layoutB, args.gmWorkspace,
+                    args.ptrWA, layoutWA, args.ptrWB, layoutWB, args.epilogueParams};
+        return params;
+    }
 
     CATLASS_DEVICE
     bool IsSameStride(layout::RowMajor layout1, layout::RowMajor layout2)
@@ -235,6 +276,12 @@ public:
     {
         return layout1.stride(1) == layout2.stride(1);
     }
+
+    CATLASS_DEVICE
+    KernelGemm(){}
+
+    CATLASS_DEVICE
+    ~KernelGemm(){}
 
     template<int32_t CORE_TYPE = g_coreType>
     CATLASS_DEVICE

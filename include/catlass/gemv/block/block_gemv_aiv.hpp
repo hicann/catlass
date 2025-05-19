@@ -118,14 +118,14 @@
          AscendC::GlobalTensor<ElementA> const &gmA, LayoutA const &layoutA,
          AscendC::GlobalTensor<ElementX> const &gmX, LayoutX const &layoutX,
          AscendC::GlobalTensor<ElementY> const &gmY, LayoutY const &layoutY,
-         AscendC::GlobalTensor<ElementY> const &gmYCopy,
+         AscendC::GlobalTensor<ElementY> const &gmZ,
          GemvCoord const &actualShape,
          float alpha,
          float beta
         )
      {
         AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>((event_t)(UbOutEventList[UbOutListId]));
-        vecCopyGmToUb(UbYTensorList[UbOutListId], gmYCopy,actualShape.m());
+        vecCopyGmToUb(UbYTensorList[UbOutListId], gmY,actualShape.m());
         AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((event_t)(UbOutEventList[UbOutListId]));  
         AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((event_t)(UbOutEventList[UbOutListId]));
         tileVmuls(
@@ -208,7 +208,7 @@
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>((event_t)(UbOutEventList[UbOutListId]));
         auto layoutDstY = layoutY.GetTileLayout(TensorCoord(y_catlassual));
         auto layoutComputeInUb = layoutY.GetTileLayout(TensorCoord(y_catlassual));
-        vecCopyUbToGm(gmY, UbYTensorList[UbOutListId],layoutDstY, layoutComputeInUb); 
+        vecCopyUbToGm(gmZ, UbYTensorList[UbOutListId],layoutDstY, layoutComputeInUb); 
         AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>((event_t)(UbOutEventList[UbOutListId]));
         UbOutListId = (UbOutListId + 1 < STAGES) ? (UbOutListId + 1) : 0;
      }

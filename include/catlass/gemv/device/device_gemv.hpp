@@ -8,28 +8,29 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_GEMM_DEVICE_DEVICE_GEMM_HPP
-#define CATLASS_GEMM_DEVICE_DEVICE_GEMM_HPP
+#ifndef CATLASS_GEMV_DEVICE_GEMV_UNIVERSAL_ADAPTER_HPP
+#define CATLASS_GEMV_DEVICE_GEMV_UNIVERSAL_ADAPTER_HPP
 
 #include "catlass/catlass.hpp"
 #include "catlass/status.hpp"
-#include "catlass/gemm/device/kernel_adapter.hpp"
+#include "catlass/gemv/device/kernel_adapter.hpp"
 
-namespace Catlass::Gemm::Device {
 
-template <class GemmKernel>
-class DeviceGemm {
+namespace Catlass::Gemv::Device {
+
+template <class GemvKernel>
+class DeviceGemv {
 public:
     /// Argument structure: User API
-    using Arguments = typename GemmKernel::Arguments;
+    using Arguments = typename GemvKernel::Arguments;
     /// Argument structure: Kernel API
-    using Params = typename GemmKernel::Params;
+    using Params = typename GemvKernel::Params;
 private:
     /// kernel API parameters object
     Params params_;
 public:
-    DeviceGemm() {}
-    ~DeviceGemm() {}
+    DeviceGemv() {}
+    ~DeviceGemv() {}
 
     ///Access the Params structure
     Params const &params() const
@@ -40,7 +41,7 @@ public:
     /// Determines whether the GEMM can execute the given problem.
     static Status CanImplement(Arguments const &args)
     {
-        if (GemmKernel::CanImplement(args)) {
+        if (GemvKernel::CanImplement(args)) {
             return Status::kSuccess;
         } else {
             return Status::kInvalid;
@@ -51,15 +52,15 @@ public:
     static size_t GetWorkspaceSize(Arguments const &args)
     {
         size_t workspace_bytes = 0;
-        workspace_bytes += GemmKernel::GetWorkspaceSize(args);
+        workspace_bytes += GemvKernel::GetWorkspaceSize(args);
         return workspace_bytes;
     }
 
-    /// Initializes GEMM state from arguments
+    /// Initializes GEMV state from arguments
     Status Initialize(Arguments const &args, uint8_t *workspace = nullptr, aclrtStream stream = nullptr)
     {
         // Initialize the Params structure
-        params_ = GemmKernel::ToUnderlyingArguments(args, workspace);
+        params_ = GemvKernel::ToUnderlyingArguments(args, workspace);
         return Status::kSuccess;
     }
 
@@ -68,10 +69,10 @@ public:
     inline Status Run(aclrtStream stream, uint32_t blockDim, uint64_t fftsAddr)
     {
         if (fftsAddr == 0) {
-            Catlass::KernelAdapter<GemmKernel><<<blockDim, nullptr, stream>>>(params_);
+            Catlass::KernelAdapter<GemvKernel><<<blockDim, nullptr, stream>>>(params_);
         }
         else {
-            Catlass::KernelAdapter<GemmKernel><<<blockDim, nullptr, stream>>>(params_, fftsAddr);
+            Catlass::KernelAdapter<GemvKernel><<<blockDim, nullptr, stream>>>(params_, fftsAddr);
         }
         return Status::kSuccess;
     }
@@ -89,5 +90,5 @@ public:
 };
 ///////////////////////////////////////////////////////////////////////////////////
 
-} // namespace Catlass::Gemm::Device
+} // namespace Catlass::Gemv::Device
 #endif

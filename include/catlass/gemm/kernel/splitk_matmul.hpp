@@ -195,15 +195,107 @@ public:
         uint32_t splitkFactor = 1;
 
         // Methods
-        CATLASS_DEVICE
+        CATLASS_HOST_DEVICE
         Params() {}
 
-        CATLASS_DEVICE
+        CATLASS_HOST_DEVICE
         Params(GemmCoord const &problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_,
                LayoutB layoutB_, GM_ADDR ptrC_, LayoutC layoutC_, GM_ADDR ptrWorkspace_, uint32_t splitkFactor_)
             : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_), layoutB(layoutB_),
               ptrC(ptrC_), layoutC(layoutC_), ptrWorkspace(ptrWorkspace_), splitkFactor(splitkFactor_) {}
     };
+
+    struct Arguments {
+        GemmCoord problemShape;
+        uint32_t aicCoreNum;
+        size_t workspaceElementSize;
+        GM_ADDR ptrA;
+        GM_ADDR ptrB;
+        GM_ADDR ptrC;
+    };
+
+    static uint32_t GetSplitkFactor(uint32_t m, uint32_t n, uint32_t k, uint32_t aicCoreNum)
+    {
+        uint32_t maxSplitkFactor;
+        if (k <= 1024) {
+            // When k is less than or equal to 1024, it can be divided into at most 2 parts.
+            maxSplitkFactor = 2;
+        } else if (k <= 2048) {
+            // When k is less than or equal to 2048, it can be divided into at most 4 parts.
+            maxSplitkFactor = 4;
+        } else if (k <= 4096) {
+            // When k is less than or equal to 4096, it can be divided into at most 8 parts.
+            maxSplitkFactor = 8;
+        } else {
+            // else it can be divided into at most 16 parts.
+            maxSplitkFactor = 16;
+        }
+        uint32_t splitkFactor = 1;
+        uint32_t m0 = L1TileShape::M;
+        uint32_t n0 = L1TileShape::N;
+        uint32_t k0 = L1TileShape::K;
+
+        uint32_t baseTilesCount = CeilDiv(m, m0) * CeilDiv(n, n0);
+        splitkFactor = std::min(aicCoreNum / baseTilesCount, maxSplitkFactor);
+        // Prevent the split factor form being less than 1
+        splitkFactor = std::max(splitkFactor, static_cast<uint32_t>(1));
+        if (baseTilesCount < aicCoreNum) {
+            while (splitkFactor + 1 <= maxSplitkFactor &&
+                CeilDiv(baseTilesCount * splitkFactor, aicCoreNum) >=
+                CeilDiv(baseTilesCount, aicCoreNum) * splitkFactor) {
+                splitkFactor += 1;
+            }
+        }
+        // Ensure that splitkFactor is less than the number of base tiels in the k direction.
+        splitkFactor = std::min(CeilDiv(k, k0), splitkFactor);
+        // If k is very large, splitting k can lead to better cache utilization.
+        // If k is greater than 8192.
+        if (k > 8192) {
+            // split the k direction into at least 2 parts.
+            splitkFactor = std::max(splitkFactor, static_cast<uint32_t>(2));
+        }
+        // If k is greater than 32768.
+        if (k > 32768) {
+            // split the k direction into at least 4 parts.
+            splitkFactor = std::max(splitkFactor, static_cast<uint32_t>(4));
+        }
+        return splitkFactor;
+    }
+
+    static bool CanImplement(const Arguments &args)
+    {
+        return true;
+    }
+
+    static size_t GetWorkspaceSize(const Arguments &args)
+    {
+        return args.workspaceElementSize * args.problemShape.m() * args.problemShape.n() *
+            GetSplitkFactor(args.problemShape.m(),
+                args.problemShape.n(),
+                args.problemShape.k(),
+                args.aicCoreNum);
+    }
+
+    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    {
+        LayoutA layoutA{args.problemShape.m(), args.problemShape.k()};
+        LayoutB layoutB{args.problemShape.k(), args.problemShape.n()};
+        LayoutC layoutC{args.problemShape.m(), args.problemShape.n()};
+        Params params{
+            args.problemShape,
+            args.ptrA,
+            layoutA,
+            args.ptrB,
+            layoutB,
+            args.ptrC,
+            layoutC,
+            workspace,
+            GetSplitkFactor(args.problemShape.m(),
+                args.problemShape.n(),
+                args.problemShape.k(),
+                args.aicCoreNum)};
+        return params;
+    }
 
     // Methods
     CATLASS_DEVICE

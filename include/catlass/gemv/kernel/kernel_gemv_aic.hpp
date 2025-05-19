@@ -74,6 +74,40 @@ public:
             : problemShape(problemShape_), ptrX(ptrX_), layoutX(layoutX_), ptrA(ptrA_), layoutA(layoutA_), ptrWorkspace(ptrWorkspace_), epilogueParams(epilogueParams_) {}
     };
 
+    struct Arguments {
+        GemvCoord problemShape;
+        ElementY alpha;
+        ElementY beta;
+        size_t elementSize;
+        GM_ADDR ptrX;
+        GM_ADDR ptrA;
+        GM_ADDR ptrZ;
+    };
+
+    static bool CanImplement(const Arguments &args)
+    {
+        return true;
+    }
+
+    static size_t GetWorkspaceSize(const Arguments &args)
+    {
+        return args.elementSize * args.problemShape.m();
+    }
+
+    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    {
+        GemvCoord problemShape = args.problemShape;
+        uint32_t m = problemShape.m();
+        uint32_t n = problemShape.n();
+        LayoutX layoutX{n};
+        LayoutA layoutA{m, n};
+        LayoutZ layoutZ{m};
+        typename BlockEpilogue::Params epilogueParams{args.alpha, args.beta, args.ptrZ, layoutZ, args.ptrZ, layoutZ};
+   
+        Params params{problemShape, args.ptrX, layoutX, args.ptrA, layoutA, workspace, epilogueParams};
+        return params;
+    }
+
     // Methods
     CATLASS_DEVICE
     KernelGemvAic() {}
