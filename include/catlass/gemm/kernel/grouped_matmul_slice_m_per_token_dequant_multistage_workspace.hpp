@@ -73,10 +73,10 @@ public:
         GM_ADDR ptrWorkspace;
 
         // Methods
-        CATLASS_DEVICE
+        CATLASS_HOST_DEVICE
         Params() {}
 
-        CATLASS_DEVICE
+        CATLASS_HOST_DEVICE
         Params(
             GemmCoord problemShape_, uint32_t problemCount_, GM_ADDR ptrGroupList_,
             GM_ADDR ptrA_, LayoutA layoutA_,
@@ -97,6 +97,50 @@ public:
         {
         }
     };
+
+    struct Arguments {
+        GemmCoord problemShape;
+        uint32_t problemCount;
+        uint32_t aicCoreNum;
+        uint8_t *ptrGroupList;
+        uint8_t *ptrA;
+        uint8_t *ptrB;
+        uint8_t *ptrScale;
+        uint8_t *ptrPerTokenScale;
+        uint8_t *ptrD;
+    };
+
+    static bool CanImplement(const Arguments &args)
+    {
+        return true;
+    }
+
+    static size_t GetWorkspaceSize(const Arguments &args)
+    {
+        size_t lenWorkspace = static_cast<size_t>(L1TileShape::M) * L1TileShape::N *
+            args.aicCoreNum * WORKSPACE_STAGES;
+        size_t sizeWorkspace = lenWorkspace * sizeof(uint32_t);
+        return sizeWorkspace;
+    }
+
+    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    {
+        uint32_t m = args.problemShape.m();
+        uint32_t n = args.problemShape.n();
+        uint32_t k = args.problemShape.k();
+        LayoutA layoutA{m, k};
+        LayoutB layoutB{k, n};
+        LayoutScale layoutScale{n};
+        LayoutPerTokenScale layoutPerTokenScale{m};
+        LayoutD layoutD{m, n};
+        Params params{args.problemShape, args.problemCount, args.ptrGroupList,
+            args.ptrA, layoutA,
+            args.ptrB, layoutB,
+            args.ptrScale, layoutScale,
+            args.ptrPerTokenScale, layoutPerTokenScale,
+            args.ptrD, layoutD, workspace};
+        return params;
+    }
 
     // Methods
     CATLASS_DEVICE
