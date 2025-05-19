@@ -56,10 +56,11 @@ public:
         int64_t strideC;
 
         // Methods
-        CATLASS_DEVICE
-        Params() {}
+        CATLASS_HOST_DEVICE
+        Params()
+        {}
 
-        CATLASS_DEVICE
+        CATLASS_HOST_DEVICE
         Params(uint32_t batchCount_, GemmCoord const &problemShape_,
                GM_ADDR ptrA_, LayoutA layoutA_, int64_t strideA_,
                GM_ADDR ptrB_, LayoutB layoutB_, int64_t strideB_,
@@ -69,6 +70,50 @@ public:
               ptrB(ptrB_), layoutB(layoutB_), strideB(strideB_),
               ptrC(ptrC_), layoutC(layoutC_), strideC(strideC_) {}
     };
+
+    struct Arguments {
+        uint32_t batchCount;
+        GemmCoord problemShape;
+        GM_ADDR ptrA;
+        GM_ADDR ptrB;
+        GM_ADDR ptrC;
+    };
+
+    static bool CanImplement(const Arguments &args)
+    {
+        return true;
+    }
+
+    static size_t GetWorkspaceSize(const Arguments &args)
+    {
+        return 0;
+    }
+
+    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    {
+        GemmCoord problemShape = args.problemShape;
+        uint32_t m = problemShape.m();
+        uint32_t n = problemShape.n();
+        uint32_t k = problemShape.k();
+        int64_t strideA = problemShape.m() * problemShape.k();
+        int64_t strideB = problemShape.k() * problemShape.n();
+        int64_t strideC = problemShape.m() * problemShape.n();
+        LayoutA layoutA{args.problemShape.m(), args.problemShape.k()};
+        LayoutB layoutB{args.problemShape.k(), args.problemShape.n()};
+        LayoutC layoutC{args.problemShape.m(), args.problemShape.n()};
+        Params params{args.batchCount,
+            problemShape,
+            args.ptrA,
+            layoutA,
+            strideA,
+            args.ptrB,
+            layoutB,
+            strideB,
+            args.ptrC,
+            layoutC,
+            strideC};
+        return params;
+    }
 
     // Methods
     CATLASS_DEVICE
