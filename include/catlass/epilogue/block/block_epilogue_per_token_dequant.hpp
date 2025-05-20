@@ -53,11 +53,11 @@ public:
     // Data infos
     using ElementC = typename CType_::Element;
     using LayoutC = typename CType_::Layout;
-    using ElementScale = typename ScaleType_::Element;
+    using ElementScale = bfloat16_t;
     using LayoutScale = typename ScaleType_::Layout;
-    using ElementPerTokenScale = typename PerTokenScaleType_::Element;
+    using ElementPerTokenScale = bfloat16_t;
     using LayoutPerTokenScale = typename PerTokenScaleType_::Layout;
-    using ElementD = typename DType_::Element;
+    using ElementD = bfloat16_t;
     using LayoutD = typename DType_::Layout;
 
     // Check data infos

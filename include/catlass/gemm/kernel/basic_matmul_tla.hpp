@@ -58,10 +58,10 @@ public:
         LayoutC layoutC;
 
         // Methods
-        ACT_HOST_DEVICE
+        CATLASS_HOST_DEVICE
         Params() {}
 
-        ACT_HOST_DEVICE
+        CATLASS_HOST_DEVICE
         Params(GemmCoord const &problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_,
                LayoutB layoutB_, GM_ADDR ptrC_, LayoutC layoutC_)
             : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_), layoutB(layoutB_),

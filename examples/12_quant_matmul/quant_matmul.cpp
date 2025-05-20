@@ -35,6 +35,8 @@
 #include "catlass/gemm/kernel/quant_matmul_multistage_workspace.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 #include "catlass/layout/layout.hpp"
+#include "catlass/status.hpp"
+#include "catlass/gemm/device/device_gemm.hpp"
 
 using namespace Catlass;
 using bfloat16 = op::bfloat16;
@@ -94,14 +96,13 @@ void Run(Options const & options)
     size_t lenScale = static_cast<size_t>(n);
     size_t lenPerTokenScale = static_cast<size_t>(m);
     size_t lenD = static_cast<size_t>(m) * n;
-    size_t lenWorkspace = static_cast<size_t>(L1TileShape::M) * L1TileShape::N * aicCoreNum * workspaceStages;
 
     size_t sizeA = lenA * sizeof(int8_t);
     size_t sizeB = lenB * sizeof(int8_t);
     size_t sizeScale = lenScale * sizeof(bfloat16);
     size_t sizePerTokenScale = lenPerTokenScale * sizeof(bfloat16);
     size_t sizeD = lenD * sizeof(bfloat16);
-    size_t sizeWorkspace = lenWorkspace * sizeof(uint32_t);
+    size_t sizeWorkspace;
 
     std::vector<int8_t> hostA(lenA);
     std::vector<int8_t> hostB(lenB);
@@ -134,17 +135,14 @@ void Run(Options const & options)
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceD), sizeD, ACL_MEM_MALLOC_HUGE_FIRST));
 
     uint8_t *deviceWorkspace{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
 
     using LayoutA = layout::RowMajor;
     using LayoutB = layout::ColumnMajor;
-    using LayoutScale = layout::VectorLayout;
-    using LayoutD = layout::RowMajor;
     LayoutA layoutA{m, k};
     LayoutB layoutB{k, n};
-    LayoutScale layoutScale{n};
-    LayoutScale layoutPerTokenScale{m};
-    LayoutD layoutD{m, n};
+    layout::VectorLayout layoutScale{n};
+    layout::VectorLayout layoutPerTokenScale{m};
+    layout::RowMajor layoutD{m, n};
 
     // Prepare FFTS address
     uint64_t fftsAddr{0};
@@ -267,7 +265,9 @@ void Run(Options const & options)
     ACL_CHECK(aclrtFree(deviceScale));
     ACL_CHECK(aclrtFree(devicePerTokenScale));
     ACL_CHECK(aclrtFree(deviceD));
-    ACL_CHECK(aclrtFree(deviceWorkspace));
+    if (sizeWorkspace > 0) {
+        ACL_CHECK(aclrtFree(deviceWorkspace));
+    }
 
     ACL_CHECK(aclrtDestroyStream(stream));
     ACL_CHECK(aclrtResetDevice(options.deviceId));
