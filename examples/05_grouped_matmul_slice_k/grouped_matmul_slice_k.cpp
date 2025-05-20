@@ -31,62 +31,14 @@
 #include "catlass/gemm/gemm_type.hpp"
 #include "catlass/layout/layout.hpp"
 
+#include "catlass/status.hpp"
+#include "catlass/gemm/device/device_gemm.hpp"
+
 using namespace Catlass;
 using fp16_t = op::fp16_t;
 
-template <
-    class LayoutA,
-    class LayoutB,
-    class LayoutC
->
-CATLASS_GLOBAL
-void GroupedMatmul(
-    GemmCoord problemShape,
-    uint32_t problemCount, GM_ADDR gmGroupList,
-    GM_ADDR gmA, LayoutA layoutA,
-    GM_ADDR gmB, LayoutB layoutB,
-    GM_ADDR gmC, LayoutC layoutC
-)
-{
-    constexpr uint32_t preloadStages = 1;
-    constexpr uint32_t l1Stages = 2;
-    constexpr uint32_t l0AStages = 4;
-    constexpr uint32_t l0BStages = 2;
-    constexpr uint32_t l0CStages = 1;
-    constexpr bool enableUnitFlag = true;
-    constexpr bool enableShuffleK = true;
-
-    using ArchTag = Arch::AtlasA2;
-    using DispatchPolicy = Gemm::MmadAtlasA2PreloadAsync<
-        preloadStages,
-        l1Stages, l0AStages, l0BStages, l0CStages,
-        enableUnitFlag, enableShuffleK
-    >;
-    using L1TileShape = GemmShape<128, 256, 256>;
-    using L0TileShape = GemmShape<128, 256, 64>;
-
-    using AType = Gemm::GemmType<half, LayoutA>;
-    using BType = Gemm::GemmType<half, LayoutB>;
-    using CType = Gemm::GemmType<half, LayoutC>;
-
-    using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
-    using BlockEpilogue = void;
-    using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
-
-    // kernel level
-    using MatmulKernel = Gemm::Kernel::GroupedMatmulSliceK<BlockMmad, BlockEpilogue, BlockScheduler, int64_t>;
-
-    typename MatmulKernel::Params params{
-        problemShape, problemCount, gmGroupList, gmA, layoutA, gmB, layoutB, gmC, layoutC
-    };
-
-    // call a kernel
-    MatmulKernel matmul;
-    matmul(params);
-}
-
 struct Options {
-    const std::string HELPER = "15_grouped_matmul_slice_k group_count m n k [device_id]";
+    const std::string HELPER = "05_grouped_matmul_slice_k group_count m n k [device_id]";
 
     uint32_t groupCount{1};
     GemmCoord problemShape{128, 128, 128};
@@ -176,12 +128,56 @@ void Run(Options const &options)
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
-    GroupedMatmul<LayoutA, LayoutB, LayoutC><<<aicCoreNum, nullptr, stream>>>(
-        options.problemShape,
-        problemCount, deviceGroupList,
-        deviceA, layoutA,
-        deviceB, layoutB,
-        deviceC, layoutC);
+    constexpr uint32_t preloadStages = 1;
+    constexpr uint32_t l1Stages = 2;
+    constexpr uint32_t l0AStages = 4;
+    constexpr uint32_t l0BStages = 2;
+    constexpr uint32_t l0CStages = 1;
+    constexpr bool enableUnitFlag = true;
+    constexpr bool enableShuffleK = true;
+
+    using ArchTag = Arch::AtlasA2;
+    using DispatchPolicy = Gemm::MmadAtlasA2PreloadAsync<
+        preloadStages,
+        l1Stages, l0AStages, l0BStages, l0CStages,
+        enableUnitFlag, enableShuffleK
+    >;
+    using L1TileShape = GemmShape<128, 256, 256>;
+    using L0TileShape = GemmShape<128, 256, 64>;
+
+    using AType = Gemm::GemmType<half, LayoutA>;
+    using BType = Gemm::GemmType<half, LayoutB>;
+    using CType = Gemm::GemmType<half, LayoutC>;
+
+    using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+    using BlockEpilogue = void;
+    using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
+
+    // kernel level
+    using MatmulKernel = Gemm::Kernel::GroupedMatmulSliceK<BlockMmad, BlockEpilogue, BlockScheduler, int64_t>;
+
+    using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
+
+    MatmulKernel::Arguments arguments{
+        options.problemShape, problemCount, deviceGroupList, deviceA, deviceB, deviceC
+    };
+
+    // call a kernel
+    MatmulAdapter matmul_op;
+    //judge arguments can run
+    matmul_op.CanImplement(arguments);
+    // get workspace
+    size_t sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
+    uint8_t *deviceWorkspace{nullptr};
+    if(sizeWorkspace > 0){
+        ACL_CHECK(
+        aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST);
+        );
+    }
+    // initalize kernel argument
+    matmul_op.Initialize(arguments, deviceWorkspace);
+    matmul_op(stream, aicCoreNum);
+
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
     std::vector<fp16_t> hostC(lenC);
@@ -214,7 +210,9 @@ void Run(Options const &options)
     ACL_CHECK(aclrtFree(deviceB));
     ACL_CHECK(aclrtFree(deviceC));
     ACL_CHECK(aclrtFree(deviceGroupList));
-
+    if (sizeWorkspace > 0) {
+        ACL_CHECK(aclrtFree(deviceWorkspace));
+    }
     ACL_CHECK(aclrtDestroyStream(stream));
     ACL_CHECK(aclrtResetDevice(options.deviceId));
     ACL_CHECK(aclFinalize());
