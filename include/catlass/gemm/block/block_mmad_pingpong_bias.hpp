@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_GEMM_BLOCK_BLOCK_MMAD_PINGPONG_HPP
-#define CATLASS_GEMM_BLOCK_BLOCK_MMAD_PINGPONG_HPP
+#ifndef CATLASS_GEMM_BLOCK_BLOCK_MMAD_PINGPONG_BIAS_HPP
+#define CATLASS_GEMM_BLOCK_BLOCK_MMAD_PINGPONG_BIAS_HPP
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/resource.hpp"
@@ -32,7 +32,7 @@ template <
     class TileMmad_
 >
 struct BlockMmad <
-    MmadAtlasA2Pingpong<ENABLE_UNIT_FLAG_>,
+    MmadAtlasA2PingpongBias<ENABLE_UNIT_FLAG_>,
     L1TileShape_,
     L0TileShape_,
     AType_,
@@ -44,7 +44,7 @@ struct BlockMmad <
 > {
 public:
     // Type Aliases
-    using DispatchPolicy = MmadAtlasA2Pingpong<ENABLE_UNIT_FLAG_>;
+    using DispatchPolicy = MmadAtlasA2PingpongBias<ENABLE_UNIT_FLAG_>;
     using ArchTag = typename DispatchPolicy::ArchTag;
     using L1TileShape = L1TileShape_;
     using L0TileShape = L0TileShape_;
@@ -57,7 +57,6 @@ public:
     using ElementBias = typename BiasType_::Element;
     using LayoutBias = typename BiasType_::Layout;
     using TileMmad = TileMmad_;
-    using TileMmadBias = Gemm::Tile::TileMmad<ArchTag, AType_, BType_, BiasType_>
     using CopyGmToL1A = typename TileCopy_::CopyGmToL1A;
     using CopyGmToL1B = typename TileCopy_::CopyGmToL1B;
     using CopyGmToL1Bias = typename TileCopy_::CopyGmToL1Bias;
@@ -177,7 +176,7 @@ public:
         auto layoutTileB = layoutB.GetTileLayout(MakeCoord(kActual, actualShape.n()));
         copyGmToL1B(l1BTensorList[l1ListId], gmB, layoutBInL1, layoutTileB);
         auto layoutTileBias = layout::VectorLayout(actualShape.n());
-        copyGMToL1Bias(l1BiasTensor, gmBias, layoutBiasInL1, layoutTileBias);
+        copyGmToL1Bias(l1BiasTensor, gmBias, layoutBiasInL1, layoutTileBias);
         AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
 
         if constexpr (!ENABLE_UNIT_FLAG) {
@@ -307,7 +306,7 @@ public:
                         }
                         // Perform calculation operations
                         if (initC) {
-                            tileMMad(l0CTile, l0ATile, l0BTile, l0BiasTile, mPartActual, nPartActual, kPartActual, initC, unitFlag);
+                            tileMmad(l0CTile, l0ATile, l0BTile, l0BiasTensor, mPartActual, nPartActual, kPartActual, initC, unitFlag);
                         } else {
                             tileMmad(l0CTile, l0ATile, l0BTile, mPartActual, nPartActual, kPartActual, initC, unitFlag);
                         }
@@ -360,17 +359,15 @@ protected:
     uint32_t l0BListId{0};
 
     TileMmad tileMmad;
-    TileMmadBias tileMmadBias;
     CopyGmToL1A copyGmToL1A;
     CopyGmToL1B copyGmToL1B;
     CopyGmToL1Bias copyGmToL1Bias;
     CopyL1ToL0A copyL1ToL0A;
     CopyL1ToL0B copyL1ToL0B;
     CopyL1ToL0C2 copyL1ToL0C2;
-    CopyL1ToL0Bias copyL1ToL0Bias;
     CopyL0CToGm copyL0CToGm;
 };
 
 } // namespace Catlass::Gemm::Block
 
-#endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_PINGPONG_HPP
+#endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_PINGPONG_BIAS_HPP

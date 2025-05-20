@@ -1140,10 +1140,10 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::VectorLayout>> {
 
     // Mehtods
 
-    ACT_DEVICE
+    CATLASS_DEVICE
     CopyGmToL1() {};
 
-    ACT_DEVICE
+    CATLASS_DEVICE
     void operator()(
         AscendC::LocalTensor<Element> const &dstTensor,
         AscendC::GlobalTensor<Element> const &srcTensor,

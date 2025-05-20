@@ -351,13 +351,13 @@ void ComputeMatmulBias(
     for (uint32_t i = 0; i < problemShape.m(); ++i) {
         for (uint32_t j = 0; j < problemShape.n(); ++j) {
             size_t offsetGolden = layoutGolden.GetOffset(MakeCoord(i, j));
-            ElementGolden accumulator = databias[j];
+            ElementGolden accumulator = static_cast<ElementGolden>(databias[j]);
             for (uint32_t k = 0; k < problemShape.k(); ++k) {
                 size_t offsetA = layoutA.GetOffset(MakeCoord(i, k));
                 size_t offsetB = layoutB.GetOffset(MakeCoord(k, j));
-                accumulator += static_cast<ElementGolden>(alpha) * static_cast<ElementGolden>(dataA[offsetA]) * static_cast<ElementGolden>(dataB[offsetB]);
+                accumulator += static_cast<ElementGolden>(dataA[offsetA]) * static_cast<ElementGolden>(dataB[offsetB]);
             }
-            dataGolden[offsetGolden] = static_cast<ElementGolden>(beta) * static_cast<ElementGolden>(dataC[offsetGolden]) + static_cast<ElementGolden>(accumulator);
+            dataGolden[offsetGolden] = accumulator;
         }
     }
 }

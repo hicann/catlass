@@ -128,7 +128,7 @@ public:
         AscendC::GlobalTensor<ElementC> gmC;
         gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrC);
         AscendC::GlobalTensor<ElementBias> gmBias;
-        gmC.SetGlobalBuffer((__gm__ ElementBias *)params.ptrBias);
+        gmBias.SetGlobalBuffer((__gm__ ElementBias *)params.ptrBias);
 
         for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()) {
             // Compute block location
@@ -151,8 +151,6 @@ public:
                 gmC[gmOffsetC], params.layoutC,
                 gmBias[gmOffsetBias],
                 actualBlockShape);
-
-            Arch::CrossCoreSetFlagWithReverse<0x2, PIPE_FIX>(flagAicFinishStore);
         }
     }
 

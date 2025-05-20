@@ -31,7 +31,6 @@ template <
 struct TileMmad {
     using ElementA = typename AType_::Element;
     using ElementB = typename BType_::Element;
-    using ElementBias = typename BiasType_::Element;
     using ElementAccumulator =
         typename Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
 
@@ -65,11 +64,11 @@ struct TileMmad {
         }
     }
 
-    ACT_DEVICE
+    CATLASS_DEVICE
     void operator()(AscendC::LocalTensor<ElementAccumulator> const &l0CTensor,
          AscendC::LocalTensor<ElementA> const &l0ATensor,
          AscendC::LocalTensor<ElementB> const &l0BTensor,
-         AscendC::LocalTensor<ElementBias> const &l0BiasTensor,
+         AscendC::LocalTensor<ElementAccumulator> const &l0BiasTensor,
          uint32_t m, uint32_t n, uint32_t k,
          bool initC = true, uint8_t unitFlag = 0)
     {
@@ -87,7 +86,7 @@ struct TileMmad {
                       mmadParams);
 
         const uint32_t PIPE_M_BARRIER_THRESHOLD = 10;
-        if ((m / C0_NUM_PER_FRACTAL) * (n / C0_NUM_PER_FRACTAL) < PIPE_M_BARRIER_THRESHOLD) {
+        if ((m / C0_NUM_PER_FRCATLASSAL) * (n / C0_NUM_PER_FRCATLASSAL) < PIPE_M_BARRIER_THRESHOLD) {
             AscendC::PipeBarrier<PIPE_M>();
         }
     }

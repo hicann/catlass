@@ -135,7 +135,8 @@ void Run(Options const &options)
     using CType = Gemm::GemmType<half, LayoutC>;
     using BiasType = Gemm::GemmType<half, LayoutBias>;
 
-    using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+    using BlockMmad = Gemm::Block::BlockMmad<
+        DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType, BiasType>;
     using BlockEpilogue = void;
 
     // Swizzle offset is 3 and direction is 0.
@@ -165,7 +166,7 @@ void Run(Options const &options)
     ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
 
     std::vector<float> hostGolden(lenC);
-    golden::ComputeMatmul(options.problemShape, hostA, layoutA, hostB, layoutB, hostBias, hostGolden, layoutC);
+    golden::ComputeMatmulBias(options.problemShape, hostA, layoutA, hostB, layoutB, hostBias, hostGolden, layoutC);
 
     std::vector<uint64_t> errorIndices = golden::CompareData(hostC, hostGolden, k);
     if (errorIndices.empty()) {
