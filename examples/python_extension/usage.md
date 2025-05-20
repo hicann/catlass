@@ -1,6 +1,6 @@
 # python扩展
 
-为方便开发者使用Ascend C Template算子，代码仓基于pybind11和torch提供了使用python调用Ascend C Template算子的示例.
+为方便开发者使用CATLASS算子，代码仓基于pybind11和torch提供了使用python调用CATLASS算子的示例.
 
 - 注意：建议使用pybind扩展. 目前纯torch扩展不支持NPU，在使用torch扩展时，实际上会把NPU Tensor转换到CPU Tensor，再把CPU Tensor转换回NPU Tensor，因此性能会有较大影响.
 
@@ -9,8 +9,8 @@
 ```bash
 python_extension
 ├── CMakeLists.txt              # CMake构建脚本
-├── act_kernel_wrapper.cpp  # 将at::Tensor类型的输入转换为kernel输入
-├── act_kernel_wrapper.h    # 头文件
+├── catlass_kernel_wrapper.cpp  # 将at::Tensor类型的输入转换为kernel输入
+├── catlass_kernel_wrapper.h    # 头文件
 ├── pybind_bindings.cpp         # pybind绑定
 ├── set_env.sh                  # 环境变量设定
 └── torch_bindings.cpp          # torch绑定
@@ -20,8 +20,8 @@ python_extension
 
 ```bash
 output/python_extension
-├── libact_torch.so                             # torch动态链接库
-└── torch_act.cpython-3xx-aarch64-linux-gnu.so  # pybind11动态链接库
+├── libcatlass_torch.so                             # torch动态链接库
+└── torch_catlass.cpython-3xx-aarch64-linux-gnu.so  # pybind11动态链接库
 ```
 
 ## 使用说明
@@ -60,23 +60,23 @@ output/python_extension
 ```python
 import sys
 sys.path.append("../../output/python_extension") # 确保编译出的pybind so文件在path内
-import torch_act
+import torch_catlass
 import torch
 import torch_npu
 from torch_npu.testing.testcase import TestCase, run_tests
 
-class ActTest(TestCase):
+class CatlassTest(TestCase):
     def test_basic_matmul(self):
         a = torch.ones((2, 3)).to(torch.float16).npu()
         b = torch.ones((3, 4)).to(torch.float16).npu()
-        result = torch_act.basic_matmul(a, b, "float16")
+        result = torch_catlass.basic_matmul(a, b, "float16")
         golden = torch.mm(a, b)
         self.assertRtolEqual(result, golden)
     def test_basic_matmul_torch_lib(self):
         a = torch.ones((2, 3)).to(torch.float16).npu()
         b = torch.ones((3, 4)).to(torch.float16).npu()
-        torch.ops.load_library("../../output/python_extension/libact_torch.so")
-        result = torch.ops.ActTorch.basic_matmul(a, b, "float16")
+        torch.ops.load_library("../../output/python_extension/libcatlass_torch.so")
+        result = torch.ops.CatlassTorch.basic_matmul(a, b, "float16")
         golden = torch.mm(a, b)
         self.assertRtolEqual(result, golden)
         

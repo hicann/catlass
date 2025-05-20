@@ -14,20 +14,20 @@
 #include "helper.hpp"
 #include "golden.hpp"
 
-#include "act/act.hpp"
-#include "act/arch/arch.hpp"
-#include "act/gemm/dispatch_policy.hpp"
-#include "act/gemv/kernel/kernel_gemv_aiv.hpp"
-#include "act/gemv/block/block_gemv.hpp"
-#include "act/gemm/gemm_type.hpp"
-#include "act/layout/layout.hpp"
-#include "act/gemv/tile/tile_copy.hpp"
-#include "act/gemv/tile/tile_vmad.hpp"
-#include "act/gemv/tile/tile_vmuls.hpp"
-#include "act/gemv/device/device_gemv.hpp"
-#include "act/status.hpp"
+#include "catlass/catlass.hpp"
+#include "catlass/arch/arch.hpp"
+#include "catlass/gemm/dispatch_policy.hpp"
+#include "catlass/gemv/kernel/kernel_gemv_aiv.hpp"
+#include "catlass/gemv/block/block_gemv.hpp"
+#include "catlass/gemm/gemm_type.hpp"
+#include "catlass/layout/layout.hpp"
+#include "catlass/gemv/tile/tile_copy.hpp"
+#include "catlass/gemv/tile/tile_vmad.hpp"
+#include "catlass/gemv/tile/tile_vmuls.hpp"
+#include "catlass/gemv/device/device_gemv.hpp"
+#include "catlass/status.hpp"
 
-using namespace Act;
+using namespace Catlass;
 
 using ScalarType = float;
 

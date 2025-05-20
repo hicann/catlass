@@ -14,23 +14,23 @@
 #include "golden.hpp"
 #include "fp16_t.h"
 
-#include "act/act.hpp"
-#include "act/arch/arch.hpp"
-#include "act/epilogue/dispatch_policy.hpp"
-#include "act/epilogue/block/block_epilogue.hpp"
-#include "act/epilogue/tile/tile_copy.hpp"
-#include "act/epilogue/tile/tile_elemwise_add.hpp"
-#include "act/gemm/block/block_mmad.hpp"
-#include "act/gemm/block/block_swizzle.hpp"
-#include "act/gemm/dispatch_policy.hpp"
-#include "act/gemm/kernel/matmul_epilogue.hpp"
-#include "act/gemm/gemm_type.hpp"
-#include "act/layout/layout.hpp"
+#include "catlass/catlass.hpp"
+#include "catlass/arch/arch.hpp"
+#include "catlass/epilogue/dispatch_policy.hpp"
+#include "catlass/epilogue/block/block_epilogue.hpp"
+#include "catlass/epilogue/tile/tile_copy.hpp"
+#include "catlass/epilogue/tile/tile_elemwise_add.hpp"
+#include "catlass/gemm/block/block_mmad.hpp"
+#include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/dispatch_policy.hpp"
+#include "catlass/gemm/kernel/matmul_epilogue.hpp"
+#include "catlass/gemm/gemm_type.hpp"
+#include "catlass/layout/layout.hpp"
 
-#include "act/status.hpp"
-#include "act/gemm/device/device_gemm.hpp"
+#include "catlass/status.hpp"
+#include "catlass/gemm/device/device_gemm.hpp"
 
-using namespace Act;
+using namespace Catlass;
 using fp16_t = op::fp16_t;
 
 
