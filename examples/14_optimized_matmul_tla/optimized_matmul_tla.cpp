@@ -312,7 +312,7 @@ void Run(Options const &options)
             TensorC, void, TileCopy>;
         using PaddingA = void;
         constexpr const uint32_t computeLengthB = 96 * 1024 / sizeof(ElementB);
-        using PaddingB = Act::Gemm::Kernel::PaddingMatrixBlockND<ArchTag, TensorB, TensorWB, computeLengthB>;
+        using PaddingB = Catlass::Gemm::Kernel::PaddingMatrixBlockND<ArchTag, TensorB, TensorWB, computeLengthB>;
         if (options.problemShape.m() > options.problemShape.n()) {
             using TileScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
             using BlockEpilogue = void;
@@ -369,7 +369,7 @@ void Run(Options const &options)
         using BlockMmad = Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB,
             TensorC, void, TileCopy>;
         constexpr const uint32_t computeLengthA = 96 * 1024 / sizeof(ElementA);
-        using PaddingA = Act::Gemm::Kernel::PaddingMatrixBlockND<ArchTag, TensorA, TensorWA, computeLengthA>;
+        using PaddingA = Catlass::Gemm::Kernel::PaddingMatrixBlockND<ArchTag, TensorA, TensorWA, computeLengthA>;
         using PaddingB = void;
         if (options.problemShape.m() > options.problemShape.n()) {
             using TileScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
@@ -427,9 +427,9 @@ void Run(Options const &options)
         using BlockMmad = Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB,
             TensorC, void, TileCopy>;
         constexpr const uint32_t computeLengthA = 96 * 1024 / sizeof(ElementA);
-        using PaddingA = Act::Gemm::Kernel::PaddingMatrixBlockND<ArchTag, TensorA, TensorWA, computeLengthA>;
+        using PaddingA = Catlass::Gemm::Kernel::PaddingMatrixBlockND<ArchTag, TensorA, TensorWA, computeLengthA>;
         constexpr const uint32_t computeLengthB = 96 * 1024 / sizeof(ElementB);
-        using PaddingB = Act::Gemm::Kernel::PaddingMatrixBlockND<ArchTag, TensorB, TensorWB, computeLengthB>;
+        using PaddingB = Catlass::Gemm::Kernel::PaddingMatrixBlockND<ArchTag, TensorB, TensorWB, computeLengthB>;
         if (options.problemShape.m() > options.problemShape.n()) {
             using TileScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
             using BlockEpilogue = void;
