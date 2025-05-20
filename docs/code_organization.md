@@ -1,16 +1,16 @@
 # 代码组织结构
-## Ascend C模板库代码组织结构
-这篇文档描述了Ascend C模板库的代码仓结构，主要包含的内容如下：
+## CATLASS代码组织结构
+这篇文档描述了CATLASS的代码仓结构，主要包含的内容如下：
 - include包含模块分层的相关实现
 - examples包含基于模板库的算子编程代码示例
 - docs包含模板库的相关介绍文档
 - scripts包含模板库样例的构建脚本
 ## include
-Ascend C模板库是一套基于Ascend C开发的算子模板库，提供昇腾硬件Gemm类算子定制化开发的极致性能。模板库的分层对应硬件的不同层级展开。block层对应于NPU的单核单基块的层级，tile层对应于分片粒度的数据搬运和计算的层级，basic对应于基础API的层级。这些组件可以在相应的算子内的不同运算层级被使用。
+CATLASS是一套基于Ascend C开发的算子模板库，提供昇腾硬件Gemm类算子定制化开发的极致性能。模板库的分层对应硬件的不同层级展开。block层对应于NPU的单核单基块的层级，tile层对应于分片粒度的数据搬运和计算的层级，basic对应于基础API的层级。这些组件可以在相应的算子内的不同运算层级被使用。
 include目录下的头文件是按照如下的文件层级进行组织的。
 ```
 |── include
-|    |── act
+|    |── catlass
 |        |── arch
 |            |── arch.hpp // 定义了架构相关的基本数据信息，如L1/L0大小，UB大小等
 |            |── cross_core_sync.hpp // 核间同步操作
@@ -119,7 +119,7 @@ include目录下的头文件是按照如下的文件层级进行组织的。
 |            |── layout.hpp                   // layout头文件，主要包含matrix和vector相关layout的定义
 |            |── matrix.hpp                   //包含矩阵运算的layout的定义
 |            |── vector.hpp                   //vector相关的layout定义
-|        |── act.hpp                 // 定义了基本的数据信息，如基本块长度等
+|        |── catlass.hpp                 // 定义了基本的数据信息，如基本块长度等
 |        |── coord.hpp
 |        |── gemm_coord.hpp                  // gemm的基础坐标运算封装
 |        |── gemv_coord.hpp                  // gemv的基础坐标运算封装

@@ -18,26 +18,26 @@
 #include "helper.hpp"
 #include "golden.hpp"
 
-#include "act/act.hpp"
-#include "act/arch/arch.hpp"
-#include "act/gemm/block/block_mmad.hpp"
-#include "act/gemm/kernel/group_gemm.hpp"
-#include "act/gemm/gemm_type.hpp"
-#include "act/layout/layout.hpp"
-#include "act/gemm_coord.hpp"
-#include "act/matrix_coord.hpp"
-#include "act/gemm/dispatch_policy.hpp"
-#include "act/epilogue/dispatch_policy.hpp"
-#include "act/epilogue/tile/tile_copy.hpp"
-#include "act/epilogue/tile/tile_elemwise_add.hpp"
-#include "act/epilogue/tile/tile_elemwise_muls.hpp"
-#include "act/epilogue/tile/tile_cast.hpp"
-#include "act/epilogue/block/block_epilogue.hpp"
+#include "catlass/catlass.hpp"
+#include "catlass/arch/arch.hpp"
+#include "catlass/gemm/block/block_mmad.hpp"
+#include "catlass/gemm/kernel/group_gemm.hpp"
+#include "catlass/gemm/gemm_type.hpp"
+#include "catlass/layout/layout.hpp"
+#include "catlass/gemm_coord.hpp"
+#include "catlass/matrix_coord.hpp"
+#include "catlass/gemm/dispatch_policy.hpp"
+#include "catlass/epilogue/dispatch_policy.hpp"
+#include "catlass/epilogue/tile/tile_copy.hpp"
+#include "catlass/epilogue/tile/tile_elemwise_add.hpp"
+#include "catlass/epilogue/tile/tile_elemwise_muls.hpp"
+#include "catlass/epilogue/tile/tile_cast.hpp"
+#include "catlass/epilogue/block/block_epilogue.hpp"
 
-#include "act/status.hpp"
-#include "act/gemm/device/device_gemm.hpp"
+#include "catlass/status.hpp"
+#include "catlass/gemm/device/device_gemm.hpp"
 
-using namespace Act;
+using namespace Catlass;
 using ScalarType = float;
 
 typedef struct Options {
