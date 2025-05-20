@@ -25,15 +25,15 @@ struct EBO;
 // Specialization for types T that are empty;
 template <size_t N, class T>
 struct EBO<N, T, true> {
-    ACT_HOST_DEVICE constexpr
+    CATLASS_HOST_DEVICE constexpr
     EBO() {}
 
-    ACT_HOST_DEVICE constexpr
+    CATLASS_HOST_DEVICE constexpr
     EBO(T const&) {}
 };
 
 template <size_t N, class T>
-ACT_HOST_DEVICE constexpr
+CATLASS_HOST_DEVICE constexpr
 T getv(EBO<N, T, true> const&)
 {
     return {};
@@ -42,24 +42,24 @@ T getv(EBO<N, T, true> const&)
 // Specialization for types T that are not empty;
 template <size_t N, class T>
 struct EBO<N, T, false> {
-    ACT_HOST_DEVICE constexpr
+    CATLASS_HOST_DEVICE constexpr
     EBO() : t_{} {}
 
-    ACT_HOST_DEVICE constexpr
+    CATLASS_HOST_DEVICE constexpr
     EBO(T const& t) : t_{t} {}
 
     T t_;
 };
 
 template <size_t N, class T>
-ACT_HOST_DEVICE constexpr
+CATLASS_HOST_DEVICE constexpr
 T const& getv(EBO<N, T, false> const& x)
 {
     return x.t_;
 }
 
 template <size_t N, class T>
-ACT_HOST_DEVICE constexpr
+CATLASS_HOST_DEVICE constexpr
 T& getv(EBO<N, T, false>& x)
 {
     return x.t_;
@@ -71,10 +71,10 @@ struct TupleBase;
 
 template <size_t... I, class... T>
 struct TupleBase<index_sequence<I...>, T...> : EBO<I, T>... {
-    ACT_HOST_DEVICE constexpr
+    CATLASS_HOST_DEVICE constexpr
     TupleBase() {}
 
-    ACT_HOST_DEVICE constexpr
+    CATLASS_HOST_DEVICE constexpr
     TupleBase(T const&... t) : EBO<I, T>(t)... {}
 };
 
@@ -83,16 +83,16 @@ struct TupleBase<index_sequence<I...>, T...> : EBO<I, T>... {
 // tla::tuple class.
 template <class... T>
 struct tuple : detail::TupleBase<make_index_sequence<sizeof...(T)>, T...> {
-    ACT_HOST_DEVICE constexpr
+    CATLASS_HOST_DEVICE constexpr
     tuple() {}
 
-    ACT_HOST_DEVICE constexpr
+    CATLASS_HOST_DEVICE constexpr
     tuple(T const&... t) : detail::TupleBase<make_index_sequence<sizeof...(T)>, T...>(t...) {}
 };
 
 // get for tla::tuple
 template <size_t I, class... T>
-ACT_HOST_DEVICE constexpr
+CATLASS_HOST_DEVICE constexpr
 decltype(auto) get(tuple<T...> const& t) noexcept
 {
     static_assert(I < sizeof...(T), "Index out of range");
@@ -100,7 +100,7 @@ decltype(auto) get(tuple<T...> const& t) noexcept
 }
 
 template <size_t I, class... T>
-ACT_HOST_DEVICE constexpr
+CATLASS_HOST_DEVICE constexpr
 decltype(auto) get(tuple<T...>& t) noexcept
 {
     static_assert(I < sizeof...(T), "Index out of range");
@@ -108,7 +108,7 @@ decltype(auto) get(tuple<T...>& t) noexcept
 }
 
 template <size_t I, class... T>
-ACT_HOST_DEVICE constexpr
+CATLASS_HOST_DEVICE constexpr
 decltype(auto) get(tuple<T...>&& t) noexcept
 {
     static_assert(I < sizeof...(T), "Index out of range");

@@ -14,19 +14,19 @@
 #include "golden.hpp"
 #include "fp16_t.h"
 
-#include "act/act.hpp"
-#include "act/arch/arch.hpp"
-#include "act/gemm/block/block_mmad.hpp"
-#include "act/gemm/block/block_swizzle.hpp"
-#include "act/gemm/dispatch_policy.hpp"
-#include "act/gemm/kernel/splitk_matmul.hpp"
-#include "act/gemm/gemm_type.hpp"
-#include "act/layout/layout.hpp"
+#include "catlass/catlass.hpp"
+#include "catlass/arch/arch.hpp"
+#include "catlass/gemm/block/block_mmad.hpp"
+#include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/dispatch_policy.hpp"
+#include "catlass/gemm/kernel/splitk_matmul.hpp"
+#include "catlass/gemm/gemm_type.hpp"
+#include "catlass/layout/layout.hpp"
 
-#include "act/status.hpp"
-#include "act/gemm/device/device_gemm.hpp"
+#include "catlass/status.hpp"
+#include "catlass/gemm/device/device_gemm.hpp"
 
-using namespace Act;
+using namespace Catlass;
 using fp16_t = op::fp16_t;
 
 
@@ -132,7 +132,7 @@ void Run(Options const &options)
 
     // After the Matmul computation is completed, launch the ReduceAdd kernel to accumulate the partial sums.
     constexpr uint32_t computeLength = 32 * 1024 / sizeof(float);
-    using ReduceAdd = Act::Gemm::Kernel::ReduceAdd<ArchTag, float, half, computeLength>;
+    using ReduceAdd = Catlass::Gemm::Kernel::ReduceAdd<ArchTag, float, half, computeLength>;
 
     // Swizzle offset is 3 and direction is 0.
     using BlockScheduler = typename Gemm::Block::SplitkGemmIdentityBlockSwizzle<3, 0>;

@@ -10,15 +10,15 @@
 
 #include <torch/extension.h>
 
-#include "act_kernel_wrapper.h"
+#include "catlass_kernel_wrapper.h"
 
-using namespace ActKernelWrapper;
+using namespace CatlassKernelWrapper;
 
 at::Tensor RunBasicMatmulTorch(const at::Tensor &mat1, const at::Tensor &mat2, const std::string &outDType)
 {
     return RunBasicMatmul(mat1.to(GetAtDevice()), mat2.to(GetAtDevice()), outDType);
 }
 
-TORCH_LIBRARY(ActTorch, m) { m.def("basic_matmul(Tensor mat1, Tensor mat2, str c) -> Tensor"); }
+TORCH_LIBRARY(CatlassTorch, m) { m.def("basic_matmul(Tensor mat1, Tensor mat2, str c) -> Tensor"); }
 
-TORCH_LIBRARY_IMPL(ActTorch, CPU, m) { m.impl("basic_matmul", &RunBasicMatmulTorch); }
+TORCH_LIBRARY_IMPL(CatlassTorch, CPU, m) { m.impl("basic_matmul", &RunBasicMatmulTorch); }
