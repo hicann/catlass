@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_GEMM_TILE_COPY_L1_TO_L0BT_HPP
-#define CATLASS_GEMM_TILE_COPY_L1_TO_L0BT_HPP
+#ifndef CATLASS_GEMM_TILE_COPY_L1_TO_L0C2_HPP
+#define CATLASS_GEMM_TILE_COPY_L1_TO_L0C2_HPP
 
 #include "catlass/catlass.hpp"
 #include "catlass/layout/layout.hpp"
@@ -25,31 +25,29 @@ template <
     class L1Type,
     class L0Type = void
 >
-struct CopyL1ToL0BT {
-    static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy l1 to l0, can not find the specialization.");
+struct CopyL1ToL0C2 {
+    static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy l1 to l0c2, can not find the specialization.");
 };
 
-// RowMajor
-template<class ArchTag, class Element>
-struct CopyL1ToL0BT<ArchTag, Catlass::Gemm::GemmType<Element, layout::VectorLayout>, Catlass::Gemm::GemmType<Element, layout::VectorLayout>>{
+template<class ArchTag, class ElementSrc, class ElementDst>
+struct CopyL1ToL0C2<ArchTag, Catlass::Gemm::GemmType<ElementSrc, layout::VectorLayout>, Catlass::Gemm::GemmType<ElementDst, layout::VectorLayout>>{
     using LayoutDst = layout::VectorLayout;
     using LayoutSrc = layout::VectorLayout;
 
-    static constexpr uint32_t ELE_NUM_PER_C0 =  BYTE_PER_C0 / sizeof(Element);
-    static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
+    static constexpr uint32_t ELE_NUM_PER_C0 =  BYTE_PER_C2 / sizeof(ElementSrc);
 
     CATLASS_DEVICE
-    CopyL1ToL0BT(){}
+    CopyL1ToL0C2(){}
 
     CATLASS_DEVICE
     void operator()(
-        AscendC::LocalTensor<Element> dstTensor,
-        AscendC::LocalTensor<Element> srcTensor,
+        AscendC::LocalTensor<ElementDst> dstTensor,
+        AscendC::LocalTensor<ElementSrc> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc
     ){
         AscendC::DataCopyParams intriParams;
-        intriParams.blockCount = layoutDst.shape(0) / ELE_NUM_PER_C0;
-        intriParams.blockLen = 1;
+        intriParams.blockCount = 1;
+        intriParams.blockLen = layoutDst.shape(0) / ELE_NUM_PER_C0;
         intriParams.srcStride = 0;
         intriParams.dstStride = 0;
         AscendC::DataCopy(dstTensor, srcTensor, intriParams);
@@ -61,4 +59,4 @@ struct CopyL1ToL0BT<ArchTag, Catlass::Gemm::GemmType<Element, layout::VectorLayo
 
 } // namespace Catlass::Gemm::Tile
 
-#endif // CATLASS_GEMM_TILE_COPY_L1_TO_L0A_HPP
+#endif // CATLASS_GEMM_TILE_COPY_L1_TO_L0C2_HPP

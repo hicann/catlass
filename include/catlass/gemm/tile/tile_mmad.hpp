@@ -69,7 +69,7 @@ struct TileMmad {
     void operator()(AscendC::LocalTensor<ElementAccumulator> const &l0CTensor,
          AscendC::LocalTensor<ElementA> const &l0ATensor,
          AscendC::LocalTensor<ElementB> const &l0BTensor,
-         AscendC::LocalTensor<ElementBias> const &l0BTensor,
+         AscendC::LocalTensor<ElementBias> const &l0BiasTensor,
          uint32_t m, uint32_t n, uint32_t k,
          bool initC = true, uint8_t unitFlag = 0)
     {
@@ -78,11 +78,12 @@ struct TileMmad {
         mmadParams.n = n;
         mmadParams.k = k;
         mmadParams.unitFlag = unitFlag;
-        mmadParams.cmatrixInitVal = initC;
+        mmadParams.cmatrixInitVal = false;
 
         AscendC::Mmad(l0CTensor,
                       l0ATensor,
                       l0BTensor,
+                      l0BiasTensor,
                       mmadParams);
 
         const uint32_t PIPE_M_BARRIER_THRESHOLD = 10;

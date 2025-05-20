@@ -55,16 +55,18 @@ public:
     using ElementC = typename CType_::Element;
     using LayoutC = typename CType_::Layout;
     using ElementBias = typename BiasType_::Element;
+    using LayoutBias = typename BiasType_::Layout;
     using TileMmad = TileMmad_;
     using TileMmadBias = Gemm::Tile::TileMmad<ArchTag, AType_, BType_, BiasType_>
     using CopyGmToL1A = typename TileCopy_::CopyGmToL1A;
     using CopyGmToL1B = typename TileCopy_::CopyGmToL1B;
-    using CopyGmToL1Bias = Gemm::Tile::CopyGmToL1<ArchTag, ElementBias>;
+    using CopyGmToL1Bias = typename TileCopy_::CopyGmToL1Bias;
     using CopyL1ToL0A = typename TileCopy_::CopyL1ToL0A;
     using CopyL1ToL0B = typename TileCopy_::CopyL1ToL0B;
     using CopyL0CToGm = typename TileCopy_::CopyL0CToGm;
     using ElementAccumulator =
         typename Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
+    using CopyL1ToL0C2 = typename TileCopy_::CopyL1ToL0C2;
     using LayoutAInL1 = typename CopyL1ToL0A::LayoutSrc;
     using LayoutBInL1 = typename CopyL1ToL0B::LayoutSrc;
     using LayoutAInL0 = typename CopyL1ToL0A::LayoutDst;
@@ -127,7 +129,7 @@ public:
         }
         l0CTensor = resource.l0CBuf.template GetBufferByByte<ElementAccumulator>(0);
         l1BiasTensor = resource.l1Buf.template GetBufferByByte<ElementBias>(l1BiasOffset);
-        l0BiasTensor = resource.l0BiasBuf.template GetBufferByByte<ElementBias>(0);
+        l0BiasTensor = resource.l0BiasBuf.template GetBufferByByte<ElementAccumulator>(0);
         AscendC::SetFlag<AscendC::HardEvent::FIX_M>(EVENT_ID0);
     }
 
@@ -150,6 +152,7 @@ public:
         AscendC::GlobalTensor<ElementA> const &gmA, LayoutA const &layoutA,
         AscendC::GlobalTensor<ElementB> const &gmB, LayoutB const &layoutB,
         AscendC::GlobalTensor<ElementC> const &gmC, LayoutC const &layoutC,
+        AscendC::GlobalTensor<ElementBias> const &gmBias,
         GemmCoord const &actualShape)
     {
         uint32_t mRound = RoundUp<L1AAlignHelper::M_ALIGNED>(actualShape.m());
@@ -157,6 +160,8 @@ public:
 
         auto layoutAInL1 = LayoutAInL1::template MakeLayout<ElementA>(L1TileShape::M, L1TileShape::K);
         auto layoutBInL1 = LayoutBInL1::template MakeLayout<ElementB>(L1TileShape::K, L1TileShape::N);
+        auto layoutBiasInL1 = layout::VectorLayout(L1TileShape::N);
+        auto layoutBiasInL0 = layout::VectorLayout(L0TileShape::N);
         auto layoutInL0C = LayoutCInL0::MakeLayoutInL0C(MakeCoord(mRound, nRound));
 
         uint32_t kActual = min(actualShape.k(), L1TileShape::K);
@@ -171,7 +176,8 @@ public:
         AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
         auto layoutTileB = layoutB.GetTileLayout(MakeCoord(kActual, actualShape.n()));
         copyGmToL1B(l1BTensorList[l1ListId], gmB, layoutBInL1, layoutTileB);
-        copyGMToL1Bias(l1BiasTensor, gmBias)
+        auto layoutTileBias = layout::VectorLayout(actualShape.n());
+        copyGMToL1Bias(l1BiasTensor, gmBias, layoutBiasInL1, layoutTileBias);
         AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
 
         if constexpr (!ENABLE_UNIT_FLAG) {
@@ -269,6 +275,9 @@ public:
                         // Load current tile from L1 to L0B
                         copyL1ToL0B(l0BTile, l1BTile, layoutBInL0, layoutBInL1);
 
+                        // Load bias to l0 biastable
+                        copyL1ToL0C2(l0BiasTensor, l1BiasTensor, layoutBiasInL0, layoutBiasInL1);
+
                         // If the current tile is the last one on the k&n axis, notify to load matrix B from GM to L1
                         if ((kPartIdx == kPartLoop - 1) && (nPartIdx == nPartLoop - 1)) {
                             AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
@@ -297,8 +306,8 @@ public:
                             }
                         }
                         // Perform calculation operations
-                        if (kLoopIdx == 0) {
-                            tileMmadBias(l0CTile, l0ATile, l0BTile, l0BiasTile, mPartActual, nPartActual, kPartActual, initC, unitFlag);
+                        if (initC) {
+                            tileMMad(l0CTile, l0ATile, l0BTile, l0BiasTile, mPartActual, nPartActual, kPartActual, initC, unitFlag);
                         } else {
                             tileMmad(l0CTile, l0ATile, l0BTile, mPartActual, nPartActual, kPartActual, initC, unitFlag);
                         }
@@ -337,7 +346,7 @@ protected:
     AscendC::LocalTensor<ElementA> l0ATensorList[STAGES];
     AscendC::LocalTensor<ElementB> l0BTensorList[STAGES];
     AscendC::LocalTensor<ElementAccumulator> l0CTensor;
-    AscendC::LocalTensor<ElementBias> l0BiasTensor;
+    AscendC::LocalTensor<ElementAccumulator> l0BiasTensor;
 
     // Multi-stage event id list
     int32_t l1AEventList[STAGES];
@@ -357,6 +366,7 @@ protected:
     CopyGmToL1Bias copyGmToL1Bias;
     CopyL1ToL0A copyL1ToL0A;
     CopyL1ToL0B copyL1ToL0B;
+    CopyL1ToL0C2 copyL1ToL0C2;
     CopyL1ToL0Bias copyL1ToL0Bias;
     CopyL0CToGm copyL0CToGm;
 };

@@ -13,7 +13,6 @@
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/resource.hpp"
-#include "catlass/arch/cross_core_sync.hpp"
 #include "catlass/gemm_coord.hpp"
 #include "catlass/matrix_coord.hpp"
 
@@ -36,19 +35,10 @@ public:
     using LayoutB = typename BlockMmad::LayoutB;
     using ElementC = typename BlockMmad::ElementC;
     using LayoutC = typename BlockMmad::LayoutC;
-
-    using BlockEpilogue = BlockEpilogue_;
-    using ElementD = typename BlockEpilogue::ElementD;
-    using LayoutD = typename BlockEpilogue::LayoutD;
-    using ElementBias = typename BlockEpilogue::ElementBias;
-    using LayoutBias = typename BlockEpilogue::LayoutBias;
-    using EpilogueParams = typename BlockEpilogue::Params;
+    using ElementBias = typename BlockMmad::ElementBias;
+    using ElementAccumulator = typename BlockMmad::ElementAccumulator;
 
     using BlockScheduler = BlockScheduler_;
-
-    static_assert(std::is_same_v<typename BlockEpilogue::ElementC, ElementC> &&
-        std::is_same_v<typename BlockEpilogue::LayoutC, LayoutC>,
-        "The CType of Mmad and Epilogue should be consistent.");
 
     /// Parameters structure
     struct Params {
@@ -58,26 +48,63 @@ public:
         LayoutA layoutA;
         GM_ADDR ptrB;
         LayoutB layoutB;
-        GM_ADDR ptrWorkspace;
-        EpilogueParams epilogueParams;
+        GM_ADDR ptrC;
+        LayoutC layoutC;
+        GM_ADDR ptrBias;
 
         // Methods
-        CATLASS_DEVICE
+        CATLASS_HOST_DEVICE
         Params() {}
 
-        CATLASS_DEVICE
+        CATLASS_HOST_DEVICE
         Params(
             GemmCoord const &problemShape_,
             GM_ADDR ptrA_, LayoutA const &layoutA_,
             GM_ADDR ptrB_, LayoutB const &layoutB_,
-            GM_ADDR ptrWorkspace_, EpilogueParams const &epilogueParams_
+            GM_ADDR ptrC_, LayoutC const &layoutC_,
+            GM_ADDR ptrBias_
         ) : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_), layoutB(layoutB_),
-            ptrWorkspace(ptrWorkspace_), epilogueParams(epilogueParams_) {}
+            ptrC(ptrC_), layoutC(layoutC_), ptrBias(ptrBias_) {}
     };
+
+    struct Arguments {
+        GemmCoord problemShape;
+        GM_ADDR ptrA;
+        GM_ADDR ptrB;
+        GM_ADDR ptrC;
+        GM_ADDR ptrBias;
+    };
+
+    static bool CanImplement(const Arguments &args)
+    {
+        return true;
+    }
+
+    static size_t GetWorkspaceSize(const Arguments &args)
+    {
+        return 0;
+    }
+
+    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    {
+        LayoutA layoutA{args.problemShape.m(), args.problemShape.k()};
+        LayoutB layoutB{args.problemShape.k(), args.problemShape.n()};
+        LayoutC layoutC{args.problemShape.m(), args.problemShape.n()};
+        Params params{
+            args.problemShape,
+            args.ptrA,
+            layoutA,
+            args.ptrB,
+            layoutB,
+            args.ptrC,
+            layoutC,
+            args.ptrBias};
+        return params;
+    }
 
     // Methods
     CATLASS_DEVICE
-    MatmulEpilogue() {}
+    MatmulBias() {}
 
     template <int32_t CORE_TYPE = g_coreType>
     CATLASS_DEVICE
@@ -90,6 +117,7 @@ public:
         BlockScheduler matmulBlockScheduler(params.problemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
         uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
 
+        Arch::Resource<ArchTag> resource;
         BlockMmad blockMmad(resource);
 
         // Represent the full gm
@@ -98,8 +126,9 @@ public:
         AscendC::GlobalTensor<ElementB> gmB;
         gmB.SetGlobalBuffer((__gm__ ElementB *)params.ptrB);
         AscendC::GlobalTensor<ElementC> gmC;
-        gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrWorkspace);
-        layout::RowMajor layoutC(params.problemShape.m(), params.problemShape.n());
+        gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrC);
+        AscendC::GlobalTensor<ElementBias> gmBias;
+        gmC.SetGlobalBuffer((__gm__ ElementBias *)params.ptrBias);
 
         for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()) {
             // Compute block location
@@ -112,13 +141,15 @@ public:
             MatrixCoord offsetC{blockCoord.m() * L1TileShape::M, blockCoord.n() * L1TileShape::N};
             int64_t gmOffsetA = params.layoutA.GetOffset(offsetA);
             int64_t gmOffsetB = params.layoutB.GetOffset(offsetB);
-            int64_t gmOffsetC = layoutC.GetOffset(offsetC);
+            int64_t gmOffsetC = params.layoutC.GetOffset(offsetC);
+            int64_t gmOffsetBias = blockCoord.n() * L1TileShape::N;
 
             // Compute block-scoped matrix multiply-add
             blockMmad(
                 gmA[gmOffsetA], params.layoutA,
                 gmB[gmOffsetB], params.layoutB,
-                gmC[gmOffsetC], layoutC,
+                gmC[gmOffsetC], params.layoutC,
+                gmBias[gmOffsetBias],
                 actualBlockShape);
 
             Arch::CrossCoreSetFlagWithReverse<0x2, PIPE_FIX>(flagAicFinishStore);
@@ -127,47 +158,9 @@ public:
 
     template <>
     CATLASS_DEVICE
-    void operator()<AscendC::AIV>(Params const &params)
-    {
-        BlockScheduler matmulBlockScheduler(params.problemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
-        uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
-
-        BlockEpilogue blockEpilogue(resource, params.epilogueParams);
-
-        // Represent the full gm
-        AscendC::GlobalTensor<ElementC> gmC;
-        gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrWorkspace);
-        layout::RowMajor layoutC(params.problemShape.m(), params.problemShape.n());
-
-        // Get aicore information
-        uint32_t aicoreIndex = AscendC::GetBlockIdx() / AscendC::GetSubBlockNum();
-        uint32_t aicoreNum = AscendC::GetBlockNum();
-        uint32_t subcoreIndex = AscendC::GetSubBlockIdx();
-
-        // Loop through the epilogue calculations of each basic block
-        GemmCoord blockShape = L1TileShape::ToCoord();
-        for (uint32_t loopIdx = aicoreIndex; loopIdx < coreLoops; loopIdx += aicoreNum) {
-            // Compute block location
-            GemmCoord blockCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
-            GemmCoord actualBlockShape = matmulBlockScheduler.GetActualBlockShape(blockCoord);
-            // Get the data and layout of C under the current basic block
-            auto gmBlockC = gmC[layoutC.GetOffset(blockCoord.GetCoordMN() * blockShape.GetCoordMN())];
-            auto layoutBlockC = layoutC.GetTileLayout(actualBlockShape.GetCoordMN());
-            // Synchronize cross core
-            Arch::CrossCoreWaitFlagWithReverse<0x2, PIPE_MTE3>(flagAicFinishStore);
-            // Actual calculatioin logic for performing block-scoped epilogue
-            blockEpilogue(blockShape, blockCoord, actualBlockShape, gmBlockC, layoutBlockC);
-        }
-    }
-
-private:
-    // ID used for inter-core synchronization
-    static constexpr Arch::FlagID FLAG_AIC_FINISH_STORE = 0;
-    static constexpr Arch::FlagID RV_FLAG_AIC_FINISH_STORE = 1;
-    Arch::CrossCoreFlagWithReverse<> flagAicFinishStore{FLAG_AIC_FINISH_STORE, RV_FLAG_AIC_FINISH_STORE};
-    Arch::Resource<ArchTag> resource;
+    void operator()<AscendC::AIV>(Params const &params) {}
 };
 
 } // namespace Catlass::Gemm::Kernel
 
-#endif // CATLASS_GEMM_KERNEL_MATMUL_EPILOGUE_HPP
+#endif // CATLASS_GEMM_KERNEL_MATMUL_BIAS_HPP
