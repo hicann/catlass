@@ -135,7 +135,8 @@ void Run(Options const &options)
 
     using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
     using BlockEpilogue = void;
-
+    std::vector<fp16_t> hostC(lenC);
+    
     if (m > n) {
         // Swizzle offset is 3 and direction is 0.
         using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
@@ -160,7 +161,6 @@ void Run(Options const &options)
             ACL_CHECK(aclrtFree(deviceWorkspace));
         }
 
-        std::vector<fp16_t> hostC(lenC);
         ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
     } else {
         // Swizzle offset is 3 and direction is 1.
@@ -187,7 +187,6 @@ void Run(Options const &options)
             ACL_CHECK(aclrtFree(deviceWorkspace));
         }
 
-        std::vector<fp16_t> hostC(lenC);
         ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
     }
 
