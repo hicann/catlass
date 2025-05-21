@@ -1,5 +1,5 @@
 # 代码组织结构
-## CATLASS模板库代码组织结构
+## CATLASS代码组织结构
 这篇文档描述了CATLASS的代码仓结构，主要包含的内容如下：
 - include包含模块分层的相关实现
 - examples包含基于模板库的算子编程代码示例
@@ -7,6 +7,7 @@
 - scripts包含模板库样例的构建脚本
 ## include
 CATLASS模板库是一套基于AscendC开发的算子模板库，提供昇腾硬件Gemm类算子定制化开发的极致性能。模板库的分层对应硬件的不同层级展开。block层对应于NPU的单核单基块的层级，tile层对应于分片粒度的数据搬运和计算的层级，basic对应于基础API的层级。这些组件可以在相应的算子内的不同运算层级被使用。
+
 include目录下的头文件是按照如下的文件层级进行组织的。
 ```
 |── include
@@ -67,6 +68,9 @@ include目录下的头文件是按照如下的文件层级进行组织的。
 |                |── block_mmad_preload_async_with_callback.hpp  // block层async_callback实现
 |                |── block_mmad_preload_tla.hpp   // block层基于tla的preload实现
 |                |── block_swizzle.hpp            // block层swizzle实现
+|            |── device
+|                |── device_gemm.hpp              // gemm的device层实现
+|                |── kernel_adapter.hpp           // gemm的通用内核模板定义
 |            |── kernel
 |                |── basic_matmul.hpp             // kernel层basic_matmul实现
 |                |── basic_matmul_tla.hpp         // kernel层基于tla的basic_matmul实现
@@ -123,9 +127,11 @@ include目录下的头文件是按照如下的文件层级进行组织的。
 |            |── vector.hpp                  // vector相关的layout定义
 |        |── catlass.hpp                     // 定义了基本的数据信息，如基本块长度等
 |        |── coord.hpp                       // 通用基础坐标运算封装
+
 |        |── gemm_coord.hpp                  // gemm的基础坐标运算封装
 |        |── gemv_coord.hpp                  // gemv的基础坐标运算封装
 |        |── matrix_coord.hpp                // 矩阵运算坐标封装
+|        |── status.hpp                      // gemm和gemv可执行状态封装
 |    |── tla
 |        |── numeric
 |            |── integer_sequence.hpp        // integer_sequence定义
@@ -180,6 +186,7 @@ docs文件夹下包含项目的所有文档。
         |—— 02_tensor.md          // tla-tensor介绍
     |—— api.md                    // api接口介绍
     |—— code_organization.md      // 文件组织介绍
+    |—— dispatch_policies.md      // DispatchPolicy模板参数介绍
     |—— quickstart.md             // 搭建指南
     |—— swizzle_explanation.md    // swizzle解释
 ```
