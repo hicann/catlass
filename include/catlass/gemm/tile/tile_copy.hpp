@@ -46,7 +46,7 @@ struct TileCopyTlaExt {
 #include "catlass/gemm/tile/copy_l0c_to_gm.hpp"
 #include "catlass/gemm/tile/copy_l1_to_l0a.hpp"
 #include "catlass/gemm/tile/copy_l1_to_l0b.hpp"
-#include "catlass/gemm/tile/copy_l1_to_l0c2.hpp"
+#include "catlass/gemm/tile/copy_l1_to_btbuf.hpp"
 #include "catlass/gemm/tile/copy_gm_to_ub.hpp"
 #include "catlass/gemm/tile/copy_ub_to_gm.hpp"
 #include "catlass/gemm/helper.hpp"
@@ -80,9 +80,9 @@ struct TileCopy {
         ArchTag, typename helper::L1BTypeSelector<BType>::L1BType>;
     using CopyL0CToGm = Gemm::Tile::CopyL0CToGm<ArchTag, ElementAccumulator, CType>;
     using CopyGmToL1Bias = std::conditional_t<std::is_same_v<BiasType, void>,
-        void, Gemm::Tile::CopyGmToL1<ArchTag, BiasType>>;
-    using CopyL1ToL0C2 = std::conditional_t<std::is_same_v<BiasType, void>,
-        void, Gemm::Tile::CopyL1ToL0C2<ArchTag, BiasType, Gemm::GemmType<ElementAccumulator, layout::VectorLayout>>>;
+        void, Gemm::Tile::CopyGmToL1<ArchTag, BiasType, BiasType>>;
+    using CopyL1ToBTBuf = std::conditional_t<std::is_same_v<BiasType, void>,
+        void, Gemm::Tile::CopyL1ToBTBuf<ArchTag, BiasType, Gemm::GemmType<ElementAccumulator, layout::VectorLayout>>>;
 };
 
 template <

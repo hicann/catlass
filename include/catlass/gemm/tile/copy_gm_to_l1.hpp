@@ -1132,7 +1132,8 @@ struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSr
 };
 
 template <class ArchTag, class Element>
-struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::VectorLayout>> {
+struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::VectorLayout>,
+    Gemm::GemmType<Element, layout::VectorLayout>> {
     using LayoutDst = layout::VectorLayout;
     using LayoutSrc = layout::VectorLayout;
 

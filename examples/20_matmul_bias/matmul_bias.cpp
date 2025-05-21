@@ -37,7 +37,7 @@ using namespace Catlass;
 using fp16_t = op::fp16_t;
 
 struct Options {
-    const std::string HELPER = "00_basic_matmul m n k [device_id]";
+    const std::string HELPER = "20_matmul_bias m n k [device_id]";
 
     GemmCoord problemShape{128, 128, 128};
     int32_t deviceId{0};

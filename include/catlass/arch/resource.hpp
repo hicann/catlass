@@ -24,7 +24,7 @@ public:
     LocalTensorBuffer<ArchTag, AscendC::TPosition::A1> l1Buf;
     LocalTensorBuffer<ArchTag, AscendC::TPosition::A2> l0ABuf;
     LocalTensorBuffer<ArchTag, AscendC::TPosition::B2> l0BBuf;
-    LocalTensorBuffer<ArchTag, AscendC::TPosition::C2> l0BiasBuf;
+    LocalTensorBuffer<ArchTag, AscendC::TPosition::C2> btBuf;
     LocalTensorBuffer<ArchTag, AscendC::TPosition::CO1> l0CBuf;
     LocalTensorBuffer<ArchTag, AscendC::TPosition::VECCALC> ubBuf;
 

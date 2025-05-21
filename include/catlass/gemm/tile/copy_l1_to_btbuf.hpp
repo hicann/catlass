@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_GEMM_TILE_COPY_L1_TO_L0C2_HPP
-#define CATLASS_GEMM_TILE_COPY_L1_TO_L0C2_HPP
+#ifndef CATLASS_GEMM_TILE_COPY_L1_TO_BTBUF_HPP
+#define CATLASS_GEMM_TILE_COPY_L1_TO_BTBUF_HPP
 
 #include "catlass/catlass.hpp"
 #include "catlass/layout/layout.hpp"
@@ -25,19 +25,20 @@ template <
     class L1Type,
     class L0Type = void
 >
-struct CopyL1ToL0C2 {
+struct CopyL1ToBTBuf {
     static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy l1 to l0c2, can not find the specialization.");
 };
 
 template<class ArchTag, class ElementSrc, class ElementDst>
-struct CopyL1ToL0C2<ArchTag, Catlass::Gemm::GemmType<ElementSrc, layout::VectorLayout>, Catlass::Gemm::GemmType<ElementDst, layout::VectorLayout>>{
+struct CopyL1ToBTBuf<ArchTag, Catlass::Gemm::GemmType<ElementSrc, layout::VectorLayout, AscendC::TPosition::C1>,
+    Catlass::Gemm::GemmType<ElementDst, layout::VectorLayout, AscendC::TPosition::C2>>{
     using LayoutDst = layout::VectorLayout;
     using LayoutSrc = layout::VectorLayout;
 
     static constexpr uint32_t ELE_NUM_PER_C0 =  BYTE_PER_C2 / sizeof(ElementSrc);
 
     CATLASS_DEVICE
-    CopyL1ToL0C2(){}
+    CopyL1ToBTBuf(){}
 
     CATLASS_DEVICE
     void operator()(
@@ -59,4 +60,4 @@ struct CopyL1ToL0C2<ArchTag, Catlass::Gemm::GemmType<ElementSrc, layout::VectorL
 
 } // namespace Catlass::Gemm::Tile
 
-#endif // CATLASS_GEMM_TILE_COPY_L1_TO_L0C2_HPP
+#endif // CATLASS_GEMM_TILE_COPY_L1_TO_BTBUF_HPP
