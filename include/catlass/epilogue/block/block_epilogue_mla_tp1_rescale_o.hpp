@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_EPILOGUE_BLOCK_BLOCK_EPILOGUE_MLA_TP1_RESACLE_O_HPP
-#define CATLASS_EPILOGUE_BLOCK_BLOCK_EPILOGUE_MLA_TP1_RESACLE_O_HPP
+#ifndef CATLASS_EPILOGUE_BLOCK_BLOCK_EPILOGUE_MLA_TP1_RESCALE_O_HPP
+#define CATLASS_EPILOGUE_BLOCK_BLOCK_EPILOGUE_MLA_TP1_RESCALE_O_HPP
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/resource.hpp"
@@ -338,4 +338,4 @@ private:
 
 } // namespace Catlass::Epilogue::Block
 
-#endif // CATLASS_EPILOGUE_BLOCK_BLOCK_EPILOGUE_MLA_TP1_RESACLE_O_HPP
+#endif // CATLASS_EPILOGUE_BLOCK_BLOCK_EPILOGUE_MLA_TP1_RESCALE_O_HPP
