@@ -158,6 +158,11 @@ struct L1BTypeSelector<Gemm::GemmType<Element, layout::PaddingColumnMajor>> {
     using L1BType = Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::A1>;
 };
 
+template<class Element>
+struct L1BiasTypeSelector<Gemm::GemmType<Element, layout::VectorLayout>> {
+    using L1BiasType = Gemm::GemmType<Element, layout::VectorLayout, AscendC::TPosition::A1>;
+};
+
 template<class Element, class Layout, class Enable = void>
 struct L1AlignHelperTla {
     static_assert(DEPENDENT_FALSE<Element>, "Unsupported align helper tla, can not find the specialization.");

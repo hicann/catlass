@@ -82,7 +82,10 @@ struct TileCopy {
     using CopyGmToL1Bias = std::conditional_t<std::is_same_v<BiasType, void>,
         void, Gemm::Tile::CopyGmToL1<ArchTag, BiasType, BiasType>>;
     using CopyL1ToBTBuf = std::conditional_t<std::is_same_v<BiasType, void>,
-        void, Gemm::Tile::CopyL1ToBTBuf<ArchTag, BiasType, Gemm::GemmType<ElementAccumulator, layout::VectorLayout>>>;
+        void,
+        Gemm::Tile::CopyL1ToBTBuf<ArchTag,
+            typename helper::L1BiasTypeSelector<BiasType>::L1BiasType,
+            Gemm::GemmType<ElementAccumulator, layout::VectorLayout, AscendC::TPosition::C2>>>;
 };
 
 template <

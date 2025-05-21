@@ -26,11 +26,11 @@ template <
     class L0Type = void
 >
 struct CopyL1ToBTBuf {
-    static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy l1 to l0c2, can not find the specialization.");
+    static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy l1 to biasTable buffer, can not find the specialization.");
 };
 
 template<class ArchTag, class ElementSrc, class ElementDst>
-struct CopyL1ToBTBuf<ArchTag, Catlass::Gemm::GemmType<ElementSrc, layout::VectorLayout, AscendC::TPosition::C1>,
+struct CopyL1ToBTBuf<ArchTag, Catlass::Gemm::GemmType<ElementSrc, layout::VectorLayout, AscendC::TPosition::A1>,
     Catlass::Gemm::GemmType<ElementDst, layout::VectorLayout, AscendC::TPosition::C2>>{
     using LayoutDst = layout::VectorLayout;
     using LayoutSrc = layout::VectorLayout;
