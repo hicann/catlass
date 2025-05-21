@@ -20,7 +20,7 @@
 
 #include "helper.hpp"
 #include "golden.hpp"
-#include "bfloat16.h"
+#include "fp16_t.h"
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
@@ -39,7 +39,7 @@
 #include "catlass/gemm/device/device_gemm.hpp"
 
 using namespace Catlass;
-using bfloat16 = op::bfloat16;
+using fp16_t = op::fp16_t;
 
 using L1TileShape = GemmShape<128, 256, 512>;
 constexpr uint32_t workspaceStages = 2;
@@ -99,15 +99,15 @@ void Run(Options const & options)
 
     size_t sizeA = lenA * sizeof(int8_t);
     size_t sizeB = lenB * sizeof(int8_t);
-    size_t sizeScale = lenScale * sizeof(bfloat16);
-    size_t sizePerTokenScale = lenPerTokenScale * sizeof(bfloat16);
-    size_t sizeD = lenD * sizeof(bfloat16);
+    size_t sizeScale = lenScale * sizeof(fp16_t);
+    size_t sizePerTokenScale = lenPerTokenScale * sizeof(fp16_t);
+    size_t sizeD = lenD * sizeof(fp16_t);
     size_t sizeWorkspace;
 
     std::vector<int8_t> hostA(lenA);
     std::vector<int8_t> hostB(lenB);
-    std::vector<bfloat16> hostScale(lenScale);
-    std::vector<bfloat16> hostPerTokenScale(lenPerTokenScale);
+    std::vector<fp16_t> hostScale(lenScale);
+    std::vector<fp16_t> hostPerTokenScale(lenPerTokenScale);
     golden::FillRandomData(hostA, -16, 16); // Fill with random data, ranging from -16 to 16.
     golden::FillRandomData(hostB, -16, 16); // Fill with random data, ranging from -16 to 16.
     golden::FillRandomData(hostScale, 0.0, 1.0); // Fill with random data, ranging from 0.0 to 1.0
@@ -172,9 +172,9 @@ void Run(Options const & options)
 
     constexpr uint32_t ubStages = 2;
     using EpilogueDispatchPolicy = Epilogue::EpilogueAtlasA2PerTokenDequant<ubStages>;
-    using ScaleType = Gemm::GemmType<uint16_t, layout::VectorLayout>;
-    using PerTokenScaleType = Gemm::GemmType<uint16_t, layout::VectorLayout>;
-    using DType = Gemm::GemmType<uint16_t, layout::RowMajor>;
+    using ScaleType = Gemm::GemmType<half, layout::VectorLayout>;
+    using PerTokenScaleType = Gemm::GemmType<half, layout::VectorLayout>;
+    using DType = Gemm::GemmType<half, layout::RowMajor>;
 
     using RowBroadcastMulType = Gemm::GemmType<float, layout::RowMajor>;
     using BroadcastOneBlkType = Gemm::GemmType<float, layout::RowMajor>;
@@ -186,7 +186,7 @@ void Run(Options const & options)
         EpilogueTileShape::ROW>;
     using TileOneBlkColumnBroadcastMul = Epilogue::Tile::TileOneBlkColumnBroadcastMul<ArchTag,
         OneBlkColumnBroadcastMulType, EpilogueTileShape>;
-    using TileCopy = Epilogue::Tile::TileCopyBf16<ArchTag, CType, ScaleType, PerTokenScaleType, DType>;
+    using TileCopy = Epilogue::Tile::TileCopy<ArchTag, CType, ScaleType, PerTokenScaleType, DType>;
     using TileScheduler = Epilogue::Tile::EpilogueHorizontalTileSwizzle;
 
     using BlockEpilogue = Epilogue::Block::BlockEpilogue<EpilogueDispatchPolicy, CType, ScaleType, PerTokenScaleType,
@@ -241,7 +241,7 @@ void Run(Options const & options)
     }
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
-    std::vector<bfloat16> hostD(lenD);
+    std::vector<fp16_t> hostD(lenD);
     ACL_CHECK(aclrtMemcpy(hostD.data(), sizeD, deviceD, sizeD, ACL_MEMCPY_DEVICE_TO_HOST));
 
     std::vector<float> hostGolden(lenD);
