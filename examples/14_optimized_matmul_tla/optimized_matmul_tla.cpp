@@ -125,22 +125,6 @@ bool IsNeedPadding(layout::ColumnMajor layout, uint32_t align)
     }
 }
 
-template <class Adapter>
-void RunAdapter(Adapter matmul_op, typename Adapter::Arguments args, aclrtStream stream,
-    uint32_t aicCoreNum, uint64_t fftsAddr)
-{
-    size_t sizeWorkspace = matmul_op.GetWorkspaceSize(args);
-    uint8_t *deviceWorkspace = nullptr;
-    if (sizeWorkspace > 0) {
-        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
-    }
-    matmul_op.Initialize(args, deviceWorkspace);
-    matmul_op(stream, aicCoreNum, fftsAddr);
-    ACL_CHECK(aclrtSynchronizeStream(stream));
-    if (sizeWorkspace > 0) {
-        ACL_CHECK(aclrtFree(deviceWorkspace));
-    }
-}
 
 void Run(Options const &options)
 {
