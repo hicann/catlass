@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_GEMM_TILE_COPY_L1_TO_BTBUF_HPP
-#define CATLASS_GEMM_TILE_COPY_L1_TO_BTBUF_HPP
+#ifndef CATLASS_GEMM_TILE_COPY_L1_TO_BT_HPP
+#define CATLASS_GEMM_TILE_COPY_L1_TO_BT_HPP
 
 #include "catlass/catlass.hpp"
 #include "catlass/layout/layout.hpp"
@@ -25,20 +25,20 @@ template <
     class L1Type,
     class L0Type = void
 >
-struct CopyL1ToBTBuf {
+struct CopyL1ToBT {
     static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy l1 to biasTable buffer, can not find the specialization.");
 };
 
 template<class ArchTag, class ElementSrc, class ElementDst>
-struct CopyL1ToBTBuf<ArchTag, Catlass::Gemm::GemmType<ElementSrc, layout::VectorLayout, AscendC::TPosition::A1>,
+struct CopyL1ToBT<ArchTag, Catlass::Gemm::GemmType<ElementSrc, layout::VectorLayout, AscendC::TPosition::A1>,
     Catlass::Gemm::GemmType<ElementDst, layout::VectorLayout, AscendC::TPosition::C2>>{
     using LayoutDst = layout::VectorLayout;
     using LayoutSrc = layout::VectorLayout;
 
-    static constexpr uint32_t ELE_NUM_PER_C0 =  BYTE_PER_C2 / sizeof(ElementSrc);
+    static constexpr uint32_t ELE_NUM_PER_C2 =  BYTE_PER_C2 / sizeof(ElementSrc);
 
     CATLASS_DEVICE
-    CopyL1ToBTBuf(){}
+    CopyL1ToBT(){}
 
     CATLASS_DEVICE
     void operator()(
@@ -48,7 +48,7 @@ struct CopyL1ToBTBuf<ArchTag, Catlass::Gemm::GemmType<ElementSrc, layout::Vector
     ){
         AscendC::DataCopyParams intriParams;
         intriParams.blockCount = 1;
-        intriParams.blockLen = layoutDst.shape(0) / ELE_NUM_PER_C0;
+        intriParams.blockLen = layoutDst.shape(0) / ELE_NUM_PER_C2;
         intriParams.srcStride = 0;
         intriParams.dstStride = 0;
         AscendC::DataCopy(dstTensor, srcTensor, intriParams);
@@ -60,4 +60,4 @@ struct CopyL1ToBTBuf<ArchTag, Catlass::Gemm::GemmType<ElementSrc, layout::Vector
 
 } // namespace Catlass::Gemm::Tile
 
-#endif // CATLASS_GEMM_TILE_COPY_L1_TO_BTBUF_HPP
+#endif // CATLASS_GEMM_TILE_COPY_L1_TO_BT_HPP

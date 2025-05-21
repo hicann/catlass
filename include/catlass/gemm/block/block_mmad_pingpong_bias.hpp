@@ -65,7 +65,7 @@ public:
     using CopyL0CToGm = typename TileCopy_::CopyL0CToGm;
     using ElementAccumulator =
         typename Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
-    using CopyL1ToBTBuf = typename TileCopy_::CopyL1ToBTBuf;
+    using CopyL1ToBT = typename TileCopy_::CopyL1ToBT;
     using LayoutAInL1 = typename CopyL1ToL0A::LayoutSrc;
     using LayoutBInL1 = typename CopyL1ToL0B::LayoutSrc;
     using LayoutAInL0 = typename CopyL1ToL0A::LayoutDst;
@@ -128,7 +128,7 @@ public:
         }
         l0CTensor = resource.l0CBuf.template GetBufferByByte<ElementAccumulator>(0);
         l1BiasTensor = resource.l1Buf.template GetBufferByByte<ElementBias>(l1BiasOffset);
-        l0BiasTensor = resource.l0BiasBuf.template GetBufferByByte<ElementAccumulator>(0);
+        l0BiasTensor = resource.btBuf.template GetBufferByByte<ElementAccumulator>(0);
         AscendC::SetFlag<AscendC::HardEvent::FIX_M>(EVENT_ID0);
     }
 
@@ -275,7 +275,7 @@ public:
                         copyL1ToL0B(l0BTile, l1BTile, layoutBInL0, layoutBInL1);
 
                         // Load bias to l0 biastable
-                        copyL1ToBTBuf(l0BiasTensor, l1BiasTensor, layoutBiasInL0, layoutBiasInL1);
+                        copyL1ToBT(l0BiasTensor, l1BiasTensor, layoutBiasInL0, layoutBiasInL1);
 
                         // If the current tile is the last one on the k&n axis, notify to load matrix B from GM to L1
                         if ((kPartIdx == kPartLoop - 1) && (nPartIdx == nPartLoop - 1)) {
@@ -364,7 +364,7 @@ protected:
     CopyGmToL1Bias copyGmToL1Bias;
     CopyL1ToL0A copyL1ToL0A;
     CopyL1ToL0B copyL1ToL0B;
-    CopyL1ToBTBuf copyL1ToBTBuf;
+    CopyL1ToBT copyL1ToBT;
     CopyL0CToGm copyL0CToGm;
 };
 

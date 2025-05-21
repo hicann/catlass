@@ -158,9 +158,24 @@ struct L1BTypeSelector<Gemm::GemmType<Element, layout::PaddingColumnMajor>> {
     using L1BType = Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::A1>;
 };
 
-template<class Element>
-struct L1BiasTypeSelector<Gemm::GemmType<Element, layout::VectorLayout>> {
+template<class GmBiasType, class ElementAccumulator>
+struct L1BiasTypeSelector {
+    static_assert(DEPENDENT_FALSE<GmBiasType>,
+        "Unsupported layout selector, can not find the specialization.");
+};
+
+template<class ElementAccumulator>
+struct L1BiasTypeSelector<void, ElementAccumulator> {
+    using GMBiasType = void;
+    using L1BiasType = void;
+    using L0BiasType = void;
+};
+
+template<class Element, class ElementAccumulator>
+struct L1BiasTypeSelector<Gemm::GemmType<Element, layout::VectorLayout>, ElementAccumulator> {
+    using GMBiasType = Gemm::GemmType<Element, layout::VectorLayout, AscendC::TPosition::GM>;
     using L1BiasType = Gemm::GemmType<Element, layout::VectorLayout, AscendC::TPosition::A1>;
+    using L0BiasType = Gemm::GemmType<ElementAccumulator, layout::VectorLayout, AscendC::TPosition::C2>;
 };
 
 template<class Element, class Layout, class Enable = void>
