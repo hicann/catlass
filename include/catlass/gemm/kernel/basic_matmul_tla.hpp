@@ -58,15 +58,44 @@ public:
         LayoutC layoutC;
 
         // Methods
-        CATLASS_DEVICE
+        CATLASS_HOST_DEVICE
         Params() {}
 
-        CATLASS_DEVICE
+        CATLASS_HOST_DEVICE
         Params(GemmCoord const &problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_,
                LayoutB layoutB_, GM_ADDR ptrC_, LayoutC layoutC_)
             : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_), layoutB(layoutB_),
               ptrC(ptrC_), layoutC(layoutC_) {}
     };
+
+    struct Arguments {
+        GemmCoord problemShape;
+        uint8_t *ptrA; LayoutA layoutA;
+        uint8_t *ptrB; LayoutB layoutB;
+        uint8_t *ptrC; LayoutC layoutC;
+    };
+
+    static bool CanImplement(const Arguments &args)
+    {
+        return true;
+    }
+
+    static size_t GetWorkspaceSize(const Arguments &args)
+    {
+        return 0;
+    }
+
+    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    {
+        uint32_t m = args.problemShape.m();
+        uint32_t n = args.problemShape.n();
+        uint32_t k = args.problemShape.k();
+        Params params{args.problemShape,
+            args.ptrA, args.layoutA,
+            args.ptrB, args.layoutB,
+            args.ptrC, args.layoutC};
+        return params;
+    }
 
     // Methods
     CATLASS_DEVICE
