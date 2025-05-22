@@ -20,6 +20,7 @@
 namespace Catlass {
 
 constexpr uint32_t BYTE_PER_C0 = 32;
+constexpr uint32_t BYTE_PER_C2 = 64;
 constexpr uint32_t C0_NUM_PER_FRCATLASSAL = 16;
 constexpr uint32_t BYTE_PER_FRCATLASSAL = BYTE_PER_C0 * C0_NUM_PER_FRCATLASSAL;
 
