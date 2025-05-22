@@ -237,7 +237,7 @@ matmulOp(args, workspace, stream);
 
 Tile粒度的MMAD和Copy是对基础API的MMAD和数据拷贝接口的组合，这一层的目的是构建可组合的NPU微内核，这些微内核由硬件加速的数学运算和数据拷贝操作组成，每个操作都有其数据类型和排布。Tile粒度的MMAD和Copy提供了不同硬件上完成相同计算或数据拷贝语义的统一API。
 
-用户可以在本文档顶部的三重嵌套循环伪代码的“内层”循环中使用`Tile::TileMmad()` 或`Tile::CopyGmToL1()` 、`Tile::CopyGmToL1()` 等来调用这些操作。
+用户可以在本文档顶部的三重嵌套循环伪代码的“内层”循环中使用`Tile::TileMmad()` 或`Tile::CopyGmToL1()` 、`Tile::CopyL0CToGm()` 等来调用这些操作。
 
 我们将这个API层级称为“Tile”，因为它使用基础API提供的原子能力去构建更大粒度的操作，作为一个可重用组件，它就像将单独的瓷砖拼接在一起构建成马赛克的图案。
 

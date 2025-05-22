@@ -1,4 +1,4 @@
-# OptimizedMatmul Example Readme
+# QuantMatmul Example Readme
 ## 代码组织
 ```
 ├── 12_quant_matmul
