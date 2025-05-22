@@ -1,4 +1,4 @@
-# Matmul Bias Example Readme
+# MatmulBias Example Readme
 ## 代码组织
 ```
 ├── 20_matmul_bias

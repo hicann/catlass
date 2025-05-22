@@ -130,6 +130,7 @@ include目录下的头文件是按照如下的文件层级进行组织的。
 |            |── vector.hpp                  // vector相关的layout定义
 |        |── catlass.hpp                     // 定义了基本的数据信息，如基本块长度等
 |        |── coord.hpp                       // 通用基础坐标运算封装
+|        |── coord.hpp                       // 通用基础坐标运算封装
 
 |        |── gemm_coord.hpp                  // gemm的基础坐标运算封装
 |        |── gemv_coord.hpp                  // gemv的基础坐标运算封装
@@ -169,6 +170,7 @@ examples文件夹下提供了当前基于分层组件所构建的示例，展示
     |── 17_gemv_aiv                    // gemv_aiv模板样例实现
     |── 18_gemv_aic                    // gemv_aic模板样例实现
     |── 19_mla                         // mla模板样例实现
+    |── 20_matmul_bias                 // matmul bias模板样例实现
     |── common                         // 辅助函数
     │── lib_cmake                      // 使用cmake构建动/静态库示例
     |── python_extension               // python接入示例
