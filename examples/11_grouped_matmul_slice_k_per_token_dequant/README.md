@@ -1,4 +1,4 @@
-# OptimizedMatmul Example Readme
+# GroupedMatmulSliceKPerTokenDequant Example Readme
 ## 代码组织
 ```
 ├── 11_grouped_matmul_slice_k_per_token_dequant
