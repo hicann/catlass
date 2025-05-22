@@ -62,6 +62,7 @@ include目录下的头文件是按照如下的文件层级进行组织的。
 |                |── block_mmad_mla_qk.hpp         // block层mla qk实现
 |                |── block_mmad_mla_qk_tp1_spec.hpp  // block层mla qk实现(针对headNum128特殊优化)
 |                |── block_mmad_pingpong.hpp       // block层的模板实现，包括doublebuffer的相应实现
+|                |── block_mmad_pingpong_bias.hpp  // block层matmul_bias包含doublebuffer实现
 |                |── block_mmad_pingpong_tla.hpp   // block层基于tla的doublebuffer实现
 |                |── block_mmad_preload.hpp        // block层preload实现
 |                |── block_mmad_preload_async.hpp  // block层preload异步加载实现
@@ -83,6 +84,7 @@ include目录下的头文件是按照如下的文件层级进行组织的。
 |                |── grouped_matmul_slice_m.hpp  // kernel层m轴切分groupedMamtul实现
 |                |── grouped_matmul_slice_m_per_token_dequant.hpp // kernel层m轴切分groupedMamtul量化实现
 |                |── grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp // kernel层m轴切分groupmatmul多阶段量化实现
+|                |── matmul_bias.hpp            // kernel层matmul_bias实现 
 |                |── matmul_epilogue.hpp        // kernel层MatmulEpilogue实现 
 |                |── optimized_matmul.hpp       // kernel层optimizedmatmul实现
 |                |── optimized_matmul_tla.hpp   // kernel层基于tla的optimized matmul实现
@@ -96,6 +98,7 @@ include目录下的头文件是按照如下的文件层级进行组织的。
 |                |── copy_l0c_to_gm.hpp       // tile层l0c到gm搬运
 |                |── copy_l1_to_l0a.hpp       // tile层l1到l0a搬运
 |                |── copy_l1_to_l0b.hpp       // tile层l1到l0b搬运
+|                |── copy_l1_to_bt.hpp        // tile层l1到biasTable buffer搬运
 |                |── copy_ub_to_gm.hpp        // tile层ub到gm搬运
 |                |── tile_copy.hpp            // tile层copy封装
 |                |── tile_mmad.hpp            // tile层mmad封装
