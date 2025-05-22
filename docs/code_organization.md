@@ -128,7 +128,7 @@ include目录下的头文件是按照如下的文件层级进行组织的。
 |            |── matrix.hpp                  // 包含矩阵运算的layout的定义
 |            |── vector.hpp                  // vector相关的layout定义
 |        |── catlass.hpp                     // 定义了基本的数据信息，如基本块长度等
-|        |── coord.hpp
+|        |── coord.hpp                       // 通用基础坐标运算封装
 |        |── gemm_coord.hpp                  // gemm的基础坐标运算封装
 |        |── gemv_coord.hpp                  // gemv的基础坐标运算封装
 |        |── matrix_coord.hpp                // 矩阵运算坐标封装
@@ -139,9 +139,9 @@ include目录下的头文件是按照如下的文件层级进行组织的。
 |            |── integral_constant.hpp       // integer_constant定义
 |            |── math.hpp                    // math相关计算
 |        |── int_tuple.hpp                   // int_tupe定义
-|        |── layout.hpp                      // layout定义
+|        |── layout.hpp                      // layout封装定义
 |        |── tensor.hpp                      // tensor封装定义
-|        |── tuple.hpp                       // tuple定义
+|        |── tuple.hpp                       // tuple封装定义
 |        |── type_traits.hpp                 // type_traits定义
 ```
 ## examples
@@ -167,6 +167,7 @@ examples文件夹下提供了当前基于分层组件所构建的示例，展示
     |── 17_gemv_aiv                    // gemv_aiv模板样例实现
     |── 18_gemv_aic                    // gemv_aic模板样例实现
     |── 19_mla                         // mla模板样例实现
+    |── 20_matmul_bias                 // matmul bias模板样例实现
     |── common                         // 辅助函数
     │── lib_cmake                      // 使用cmake构建动/静态库示例
     |── python_extension               // python接入示例
