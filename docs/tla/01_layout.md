@@ -22,7 +22,7 @@ TLA 还定义了[`IntTuple`](../../include/tla/int_tuple.hpp)概念。IntTuple �
 
 * 带有任何模板参数的 IntTuple，比如 `make_tuple(int{2}, Int<3>{})`。
 
-TLA 不仅将 `IntTuple` 用在了 Layout 上，还会在很多其他的地方比如 `Shape` 和 `Stride` 等用到它
+TLA 不仅将 `IntTuple` 用在了 Layout 上，还会在很多其他的地方比如 `Shape` 和 `Stride` 等用到它，详见
 [`include/tla/layout.hpp`](../../include/tla/layout.hpp)。
 
 `IntTuple` 的相关 API 操作：
