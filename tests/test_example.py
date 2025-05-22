@@ -1,0 +1,92 @@
+import enum
+import unittest
+from typing import List, Type
+import subprocess
+import os
+import re
+CMAKE_BINARY_PATH = os.path.join(os.path.dirname(
+    os.path.abspath(__file__)), "..", "build", "bin")
+CMAKE_EXAMPLES_PATH = os.path.join(os.path.dirname(
+    os.path.abspath(__file__)), "..", "examples")
+
+
+class CatlassExampleTest(unittest.TestCase):
+    def run_case(self, executable_name: str, args: List):
+        args = [str(arg) for arg in args]
+
+        ret = subprocess.run(
+            [os.path.join(CMAKE_BINARY_PATH, executable_name)] + args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        for error_log_line in ret.stderr.decode().splitlines():
+            acl_match = re.match(
+                r"^.*aclError:.*([1-9][0-9]{5})", error_log_line)
+            rt_match = re.match(
+                r"^.*rtError:.*([1-9][0-9]{5})", error_log_line)
+            compare_match = re.match(
+                r"^.*Compare failed. Error count: :.*([1-9][0-9]{5})", error_log_line)
+            acl_code = 0 if acl_match is None else int(acl_match.group(1))
+            rt_code = 0 if rt_match is None else int(rt_match.group(1))
+            compare_code = 0 if compare_match is None else int(
+                compare_match.group(1))
+            self.assertEqual(
+                acl_code, 0, f"There is an ACL error: {acl_code}")
+            self.assertEqual(rt_code, 0, f"There is an RT error: {rt_code}")
+            self.assertEqual(compare_code, 0,
+                             f"There is a compare error: {compare_code}")
+        self.assertEqual(
+            ret.returncode, 0, f"Return code is not zero: {ret.returncode}")
+
+    def test_19_mla(self):
+        case_int = [1, 1, 128, 16, 16, 128]
+        case = [str(i) for i in case_int]
+        ret = subprocess.run(["python", os.path.join(
+            CMAKE_EXAMPLES_PATH, "19_mla", "gen_data.py")]+case)
+        self.run_case("19_mla", case_int)
+
+    def test_99_testtest(self):
+        self.run_case("99_testtest", [507035, 11111, 114514, -1])
+
+
+normal_cases = ["00_basic_matmul 256 512 1024 0",
+                "01_batched_matmul 5 256 512 1024 0",
+                "02_grouped_matmul_slice_m 128 512 1024 2048 0",
+                "03_matmul_add 256 512 1024 0",
+                "04_padding_matmul 256 512 1024 0",
+                "05_grouped_matmul_slice_k 128 512 1024 2048 0",
+                "06_optimized_matmul 256 512 1024 0",
+                "07_grouped_matmul_slice_m_per_token_dequant_moe 128 512 1024 2048 0",
+                "08_grouped_matmul 128 512 1024 2048 0",
+                "09_splitk_matmul 256 512 1024 0",
+                "10_grouped_matmul_slice_m_per_token_dequant 128 512 1024 2048 0",
+                "11_grouped_matmul_slice_k_per_token_dequant 128 512 1024 2048 0",
+                "12_quant_matmul 256 512 1024 0",
+                "13_basic_matmul_tla 256 512 1024 0",
+                "14_optimized_matmul_tla 256 512 1024 0",
+                "15_gemm 256 512 1024 0",
+                "16_group_gemm 3 '128,256,512' '256,512,128' '512,256,128' 0",
+                "17_gemv_aiv 256 512 0",
+                "18_gemv_aic 256 512 0",
+                "19_mla 1 1 128 16 16 128"]
+
+_normal_cases = [
+    "99_testtest 114514 1919810 788 2"
+]
+
+
+def set_case(case: str):
+    case_splited = case.split()
+    case_executable_name = case_splited[0]
+    case_args = case_splited[1:]
+
+    def __(self: Type[CatlassExampleTest]):
+        self.run_case(case_executable_name, case_args)
+
+    setattr(CatlassExampleTest, f"test_{case_executable_name}", __)
+
+
+for case in normal_cases:
+    set_case(case)
+if __name__ == '__main__':
+    unittest.main()
