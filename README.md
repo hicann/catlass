@@ -11,7 +11,6 @@ CATLASS，中文名为昇腾算子模板库，是一个聚焦于提供高性能�
 ![image](docs/images/api_level.png) 
 
 分层详细介绍和各层级api，见[api](docs/api.md)文档。
-补充说明：当前CANN社区版/商用版版本暂不支持device层实现，device层特性需获取最新CANN POC版本
 
 ## 目录结构说明
 详细介绍见[code_organization](docs/code_organization.md)
@@ -26,7 +25,7 @@ CATLASS，中文名为昇腾算子模板库，是一个聚焦于提供高性能�
   - Atlas 800T A2 服务器
   - Atlas 200T A2 Box16服务器
 - 平台：aarch64/x86
-- 配套软件：CANN 8.0.0.beta1及之后版本（参考《[CANN软件安装指南](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/800alpha002/softwareinst/instg/instg_0001.html?Mode=PmIns&OS=Ubuntu&Software=cannToolKit)》安装CANN开发套件包以及配套固件和驱动）  
+- 配套软件：CANN 8.1.RC1及之后版本（参考《[CANN软件安装指南](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/800alpha002/softwareinst/instg/instg_0001.html?Mode=PmIns&OS=Ubuntu&Software=cannToolKit)》安装CANN开发套件包以及配套固件和驱动）  
 cmake >= 3.15
 ## 快速上手
 详细请参考[quickstart](docs/quickstart.md)  
