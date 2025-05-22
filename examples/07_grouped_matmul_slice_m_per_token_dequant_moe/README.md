@@ -1,4 +1,4 @@
-# GroupedMatmul Per Token Dequant Example Readme
+# GroupedMatmulSliceMPerTokenDequantMoe Example Readme
 ## 代码组织
 ```
 ├── 07_grouped_matmul_slice_m_per_token_dequant_moe

@@ -1,4 +1,4 @@
-# OptimizedMatmul Example Readme
+# SplitkMatmul Example Readme
 ## 代码组织
 ```
 ├── 09_splitk_matmul
