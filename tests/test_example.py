@@ -1,4 +1,3 @@
-import enum
 import unittest
 from typing import List, Type
 import subprocess
@@ -39,14 +38,12 @@ class CatlassExampleTest(unittest.TestCase):
             ret.returncode, 0, f"Return code is not zero: {ret.returncode}")
 
     def test_19_mla(self):
-        case_int = [1, 1, 128, 16, 16, 128]
-        case = [str(i) for i in case_int]
+        case_base = [str(i) for i in [1, 1, 128, 16, 16, 128]]
+        case_py = case_base + ["half"]
         ret = subprocess.run(["python", os.path.join(
-            CMAKE_EXAMPLES_PATH, "19_mla", "gen_data.py")]+case)
-        self.run_case("19_mla", case_int)
-
-    def test_99_testtest(self):
-        self.run_case("99_testtest", [507035, 11111, 114514, -1])
+            CMAKE_EXAMPLES_PATH, "19_mla", "gen_data.py")]+case_py)
+        case_cpp = case_base + ["--dtype", "half", "--datapath" os.path.join(CMAKE_EXAMPLES_PATH, "19_mla", "data")]
+        self.run_case("19_mla", case_cpp)
 
 
 normal_cases = ["00_basic_matmul 256 512 1024 0",
@@ -67,12 +64,7 @@ normal_cases = ["00_basic_matmul 256 512 1024 0",
                 "15_gemm 256 512 1024 0",
                 "16_group_gemm 3 '128,256,512' '256,512,128' '512,256,128' 0",
                 "17_gemv_aiv 256 512 0",
-                "18_gemv_aic 256 512 0",
-                "19_mla 1 1 128 16 16 128"]
-
-_normal_cases = [
-    "99_testtest 114514 1919810 788 2"
-]
+                "18_gemv_aic 256 512 0"]
 
 
 def set_case(case: str):
