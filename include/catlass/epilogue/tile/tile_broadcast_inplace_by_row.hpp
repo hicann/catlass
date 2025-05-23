@@ -36,7 +36,7 @@ struct TileBroadcastInplaceByRow {
         AscendC::LocalTensor<ElementCompute> const &ubInOut
     )
     {
-        constexpr uint32_t eleNumPerVectorFractal = BYTE_PER_VECTOR_FRCATLASSAL / sizeof(ElementCompute);
+        constexpr uint32_t eleNumPerVectorFractal = BYTE_PER_VECTOR_FRACTAL / sizeof(ElementCompute);
 
         constexpr uint64_t mask = eleNumPerVectorFractal;
         constexpr uint8_t repeatTimes = TileShape::COLUMN / eleNumPerVectorFractal;
@@ -44,8 +44,8 @@ struct TileBroadcastInplaceByRow {
         AscendC::CopyRepeatParams repeatParams;
         repeatParams.dstStride = 1;
         repeatParams.srcStride = 1;
-        repeatParams.dstRepeatSize = BLK_NUM_PER_VECTOR_FRCATLASSAL;
-        repeatParams.srcRepeatSize = BLK_NUM_PER_VECTOR_FRCATLASSAL;
+        repeatParams.dstRepeatSize = BLK_NUM_PER_VECTOR_FRACTAL;
+        repeatParams.srcRepeatSize = BLK_NUM_PER_VECTOR_FRACTAL;
 
         for (uint32_t rowOffset = 1; rowOffset < TileShape::ROW; ++rowOffset) {
             AscendC::Copy(ubInOut[rowOffset * TileShape::COLUMN], ubInOut, mask, repeatTimes, repeatParams);

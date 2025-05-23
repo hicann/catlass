@@ -10,33 +10,33 @@
 
 #ifndef CATLASS_GEMV_HELPER_HPP
 #define CATLASS_GEMV_HELPER_HPP
- 
+
 #include "catlass/catlass.hpp"
 #include "catlass/layout/layout.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 namespace Catlass::Gemv::helper {
- 
+
 template<class Element>
-struct UBAlignHelper 
+struct UBAlignHelper
 {
     static constexpr uint32_t ALIGN = BYTE_PER_BLK / sizeof(Element);
 };
- 
+
 template<class GmAType>
-struct AtomicAddSelector 
+struct AtomicAddSelector
 {
     static_assert(DEPENDENT_FALSE<GmAType>,
         "Unsupported layout selector, can not find the specialization.");
 };
- 
+
 template<class Element>
-struct AtomicAddSelector<Gemm::GemmType<Element, layout::RowMajor>> 
+struct AtomicAddSelector<Gemm::GemmType<Element, layout::RowMajor>>
 {
     static constexpr bool value = false;
 };
 
 template<class Element>
-struct AtomicAddSelector<Gemm::GemmType<Element, layout::ColumnMajor>> 
+struct AtomicAddSelector<Gemm::GemmType<Element, layout::ColumnMajor>>
 {
     static constexpr bool value = true;
 };
@@ -51,7 +51,7 @@ template <class Element>
 struct L1AlignHelper<Element, layout::RowMajor>
 {
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-    static constexpr uint32_t M_ALIGNED = C0_NUM_PER_FRCATLASSAL;
+    static constexpr uint32_t M_ALIGNED = C0_NUM_PER_FRACTAL;
     static constexpr uint32_t N_ALIGNED = ELE_NUM_PER_C0;
 };
 
@@ -63,18 +63,18 @@ struct L1AlignHelper<Element, layout::ColumnMajor>
     static constexpr uint32_t getNAligned()
     {
         if constexpr (std::is_same<Element, int8_t>::value) {
-            return ELE_NUM_PER_C0 / sizeof(Element); 
+            return ELE_NUM_PER_C0 / sizeof(Element);
         } else {
-            return C0_NUM_PER_FRCATLASSAL; 
+            return C0_NUM_PER_FRACTAL;
         }
     }
 
     static constexpr uint32_t getMAligned()
     {
         if constexpr (std::is_same<Element, int8_t>::value) {
-            return ELE_NUM_PER_C0 / sizeof(Element); 
+            return ELE_NUM_PER_C0 / sizeof(Element);
         } else {
-            return C0_NUM_PER_FRCATLASSAL; 
+            return C0_NUM_PER_FRACTAL;
         }
     }
 
@@ -86,7 +86,7 @@ template <class Element>
 struct L1AlignHelper<Element, layout::VectorLayout>
 {
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-    static constexpr uint32_t M_ALIGNED = C0_NUM_PER_FRCATLASSAL;
+    static constexpr uint32_t M_ALIGNED = C0_NUM_PER_FRACTAL;
     static constexpr uint32_t N_ALIGNED = ELE_NUM_PER_C0;
 };
 
@@ -123,7 +123,7 @@ struct L1AndL0TypeSelectorGemv<Gemm::GemmType<int8_t, layout::VectorLayout>, Gem
     using L0AType = Gemm::GemmType<int8_t, layout::zZ, AscendC::TPosition::A2>;
     using L0BType = Gemm::GemmType<int8_t, layout::zN, AscendC::TPosition::B2>;
 };
- 
+
 } // namespace Catlass::Gemv::helper
- 
+
 #endif // CATLASS_GEMV_HELPER_HPP

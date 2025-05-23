@@ -59,7 +59,7 @@ struct TileMmad {
                       mmadParams);
 
         const uint32_t PIPE_M_BARRIER_THRESHOLD = 10;
-        if ((m / C0_NUM_PER_FRCATLASSAL) * (n / C0_NUM_PER_FRCATLASSAL) < PIPE_M_BARRIER_THRESHOLD) {
+        if ((m / C0_NUM_PER_FRACTAL) * (n / C0_NUM_PER_FRACTAL) < PIPE_M_BARRIER_THRESHOLD) {
             AscendC::PipeBarrier<PIPE_M>();
         }
     }
@@ -86,7 +86,7 @@ struct TileMmad {
                       mmadParams);
 
         const uint32_t PIPE_M_BARRIER_THRESHOLD = 10;
-        if ((m / C0_NUM_PER_FRCATLASSAL) * (n / C0_NUM_PER_FRCATLASSAL) < PIPE_M_BARRIER_THRESHOLD) {
+        if ((m / C0_NUM_PER_FRACTAL) * (n / C0_NUM_PER_FRACTAL) < PIPE_M_BARRIER_THRESHOLD) {
             AscendC::PipeBarrier<PIPE_M>();
         }
     }
@@ -132,7 +132,7 @@ struct TileMmadTla {
                       mmadParams);
 
         const uint32_t PIPE_M_BARRIER_THRESHOLD = 10;
-        if ((m / C0_NUM_PER_FRCATLASSAL) * (n / C0_NUM_PER_FRCATLASSAL) < PIPE_M_BARRIER_THRESHOLD) {
+        if ((m / C0_NUM_PER_FRACTAL) * (n / C0_NUM_PER_FRACTAL) < PIPE_M_BARRIER_THRESHOLD) {
             AscendC::PipeBarrier<PIPE_M>();
         }
     }
