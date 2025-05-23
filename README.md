@@ -25,8 +25,13 @@ CATLASS，中文名为CATLASS模板库，是一个聚焦于提供高性能矩阵
   - Atlas 800T A2 服务器
   - Atlas 200T A2 Box16服务器
 - 平台：aarch64/x86
-- 配套软件：CANN 8.1.RC1及之后版本（参考《[CANN软件安装指南](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/800alpha002/softwareinst/instg/instg_0001.html?Mode=PmIns&OS=Ubuntu&Software=cannToolKit)》安装CANN开发套件包以及配套固件和驱动）  
-cmake >= 3.15
+- 配套软件：cmake >= 3.15
+- CANN版本要求：
+
+| CANN包类别 | 版本要求  |    链接        |
+| ------- | ------- | ------- |
+|  社区版       |   8.2.RC1.alpha002 及之后版本      | https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.2.RC1.alpha002 |
+|  商用版       |   8.1.RC1及之后版本      | 请咨询对应Support/SupportE获取 |
 ## 快速上手
 详细请参考[quickstart](docs/quickstart.md)  
 设置环境变量  
