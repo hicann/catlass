@@ -231,11 +231,11 @@ struct iszN {
 template <class Element, class Layout>
 struct iszN<Element, Layout, std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>> {
     static constexpr uint32_t ELE_NUM_PER_C0 = Catlass::BYTE_PER_C0 / sizeof(Element);
-    static constexpr uint32_t ELE_NUM_PER_FRCATLASSAL = Catlass::BYTE_PER_FRCATLASSAL / sizeof(Element);
-    static bool const value = (shape<0, 0>(Layout{}) == Catlass::C0_NUM_PER_FRCATLASSAL &&
+    static constexpr uint32_t ELE_NUM_PER_FRACTAL = Catlass::BYTE_PER_FRACTAL / sizeof(Element);
+    static bool const value = (shape<0, 0>(Layout{}) == Catlass::C0_NUM_PER_FRACTAL &&
                                shape<1, 0>(Layout{}) == ELE_NUM_PER_C0 &&
                                stride<1, 0>(Layout{}) == 1 &&
-                               stride<0, 1>(Layout{}) == ELE_NUM_PER_FRCATLASSAL);
+                               stride<0, 1>(Layout{}) == ELE_NUM_PER_FRACTAL);
 };
 
 template <class Element, class Layout, class Enable = void>
@@ -246,11 +246,11 @@ struct iszZ {
 template <class Element, class Layout>
 struct iszZ<Element, Layout, std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>> {
     static constexpr uint32_t ELE_NUM_PER_C0 = Catlass::BYTE_PER_C0 / sizeof(Element);
-    static constexpr uint32_t ELE_NUM_PER_FRCATLASSAL = Catlass::BYTE_PER_FRCATLASSAL / sizeof(Element);
-    static bool const value = (shape<0, 0>(Layout{}) == Catlass::C0_NUM_PER_FRCATLASSAL &&
+    static constexpr uint32_t ELE_NUM_PER_FRACTAL = Catlass::BYTE_PER_FRACTAL / sizeof(Element);
+    static bool const value = (shape<0, 0>(Layout{}) == Catlass::C0_NUM_PER_FRACTAL &&
                                shape<1, 0>(Layout{}) == ELE_NUM_PER_C0 &&
                                stride<1, 0>(Layout{}) == 1 &&
-                               stride<1, 1>(Layout{}) == ELE_NUM_PER_FRCATLASSAL);
+                               stride<1, 1>(Layout{}) == ELE_NUM_PER_FRACTAL);
 };
 
 template <class Element, class Layout, class Enable = void>
@@ -261,11 +261,11 @@ struct isnZ {
 template <class Element, class Layout>
 struct isnZ<Element, Layout, std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>> {
     static constexpr uint32_t ELE_NUM_PER_C0 = Catlass::BYTE_PER_C0 / sizeof(Element);
-    static constexpr uint32_t ELE_NUM_PER_FRCATLASSAL = Catlass::BYTE_PER_FRCATLASSAL / sizeof(Element);
+    static constexpr uint32_t ELE_NUM_PER_FRACTAL = Catlass::BYTE_PER_FRACTAL / sizeof(Element);
     static bool const value = (shape<0, 0>(Layout{}) == ELE_NUM_PER_C0 &&
-                               shape<1, 0>(Layout{}) == Catlass::C0_NUM_PER_FRCATLASSAL &&
+                               shape<1, 0>(Layout{}) == Catlass::C0_NUM_PER_FRACTAL &&
                                stride<0, 0>(Layout{}) == 1 &&
-                               stride<1, 1>(Layout{}) == ELE_NUM_PER_FRCATLASSAL);
+                               stride<1, 1>(Layout{}) == ELE_NUM_PER_FRACTAL);
 };
 
 } // end namespace detail
@@ -281,26 +281,26 @@ auto MakeLayout(uint32_t const& rows, uint32_t const& cols)
         "Unsupported Layout for MakeLayout, only support zN or zZ or nZ");
 
     constexpr uint32_t ELE_NUM_PER_C0 = Catlass::BYTE_PER_C0 / sizeof(Element);
-    constexpr uint32_t ELE_NUM_PER_FRCATLASSAL = Catlass::BYTE_PER_FRCATLASSAL / sizeof(Element);
+    constexpr uint32_t ELE_NUM_PER_FRACTAL = Catlass::BYTE_PER_FRACTAL / sizeof(Element);
 
     if constexpr (detail::iszN<Element, Layout>::value) {
         return MakeLayout(
-            MakeShape(MakeShape(Int<Catlass::C0_NUM_PER_FRCATLASSAL>{}, CeilDiv<Catlass::C0_NUM_PER_FRCATLASSAL>(rows)),
+            MakeShape(MakeShape(Int<Catlass::C0_NUM_PER_FRACTAL>{}, CeilDiv<Catlass::C0_NUM_PER_FRACTAL>(rows)),
                       MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv<ELE_NUM_PER_C0>(cols))),
-            MakeStride(MakeStride(Int<ELE_NUM_PER_C0>{}, Int<ELE_NUM_PER_FRCATLASSAL>{}),
-                       MakeStride(Int<1>{}, (int64_t)RoundUp<Catlass::C0_NUM_PER_FRCATLASSAL>(rows) * ELE_NUM_PER_C0)));
+            MakeStride(MakeStride(Int<ELE_NUM_PER_C0>{}, Int<ELE_NUM_PER_FRACTAL>{}),
+                       MakeStride(Int<1>{}, (int64_t)RoundUp<Catlass::C0_NUM_PER_FRACTAL>(rows) * ELE_NUM_PER_C0)));
     } else if constexpr (detail::iszZ<Element, Layout>::value) {
         return MakeLayout(
-            MakeShape(MakeShape(Int<Catlass::C0_NUM_PER_FRCATLASSAL>{}, CeilDiv<Catlass::C0_NUM_PER_FRCATLASSAL>(rows)),
+            MakeShape(MakeShape(Int<Catlass::C0_NUM_PER_FRACTAL>{}, CeilDiv<Catlass::C0_NUM_PER_FRACTAL>(rows)),
                       MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv<ELE_NUM_PER_C0>(cols))),
-            MakeStride(MakeStride(Int<ELE_NUM_PER_C0>{}, (int64_t)RoundUp<ELE_NUM_PER_C0>(cols) * Catlass::C0_NUM_PER_FRCATLASSAL),
-                       MakeStride(Int<1>{}, Int<ELE_NUM_PER_FRCATLASSAL>{})));
+            MakeStride(MakeStride(Int<ELE_NUM_PER_C0>{}, (int64_t)RoundUp<ELE_NUM_PER_C0>(cols) * Catlass::C0_NUM_PER_FRACTAL),
+                       MakeStride(Int<1>{}, Int<ELE_NUM_PER_FRACTAL>{})));
     } else {
         return MakeLayout(
             MakeShape(MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv<ELE_NUM_PER_C0>(rows)),
-                      MakeShape(Int<Catlass::C0_NUM_PER_FRCATLASSAL>{}, CeilDiv<Catlass::C0_NUM_PER_FRCATLASSAL>(cols))),
-            MakeStride(MakeStride(Int<1>{}, (int64_t)RoundUp<Catlass::C0_NUM_PER_FRCATLASSAL>(cols) * ELE_NUM_PER_C0),
-                       MakeStride(Int<ELE_NUM_PER_C0>{}, Int<ELE_NUM_PER_FRCATLASSAL>{})));
+                      MakeShape(Int<Catlass::C0_NUM_PER_FRACTAL>{}, CeilDiv<Catlass::C0_NUM_PER_FRACTAL>(cols))),
+            MakeStride(MakeStride(Int<1>{}, (int64_t)RoundUp<Catlass::C0_NUM_PER_FRACTAL>(cols) * ELE_NUM_PER_C0),
+                       MakeStride(Int<ELE_NUM_PER_C0>{}, Int<ELE_NUM_PER_FRACTAL>{})));
     }
 }
 
@@ -336,12 +336,12 @@ auto MakeLayoutTile(Layout const& layout, ShapeNew const& shapeNew)
 
 CATLASS_HOST_DEVICE constexpr auto MakeLayoutL0C(uint32_t const& rows, uint32_t const& cols)
 {
-    constexpr uint32_t ELE_NUM_PER_FRCATLASSAL = 256;
+    constexpr uint32_t ELE_NUM_PER_FRACTAL = 256;
     return MakeLayout(
-        MakeShape(MakeShape(Int<Catlass::C0_NUM_PER_FRCATLASSAL>{}, CeilDiv<Catlass::C0_NUM_PER_FRCATLASSAL>(rows)),
-                  MakeShape(Int<Catlass::C0_NUM_PER_FRCATLASSAL>{}, CeilDiv<Catlass::C0_NUM_PER_FRCATLASSAL>(cols))),
-        MakeStride(MakeStride(Int<Catlass::C0_NUM_PER_FRCATLASSAL>{}, Int<ELE_NUM_PER_FRCATLASSAL>{}),
-                   MakeStride(Int<1>{}, (int64_t)RoundUp<Catlass::C0_NUM_PER_FRCATLASSAL>(rows) * Catlass::C0_NUM_PER_FRCATLASSAL)));
+        MakeShape(MakeShape(Int<Catlass::C0_NUM_PER_FRACTAL>{}, CeilDiv<Catlass::C0_NUM_PER_FRACTAL>(rows)),
+                  MakeShape(Int<Catlass::C0_NUM_PER_FRACTAL>{}, CeilDiv<Catlass::C0_NUM_PER_FRACTAL>(cols))),
+        MakeStride(MakeStride(Int<Catlass::C0_NUM_PER_FRACTAL>{}, Int<ELE_NUM_PER_FRACTAL>{}),
+                   MakeStride(Int<1>{}, (int64_t)RoundUp<Catlass::C0_NUM_PER_FRACTAL>(rows) * Catlass::C0_NUM_PER_FRACTAL)));
 }
 
 } // end namespace tla
