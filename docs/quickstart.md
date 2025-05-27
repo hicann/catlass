@@ -45,7 +45,7 @@ using BlockScheduler = typename Catlass::Gemm::Block::GemmIdentityBlockSwizzle<>
 ```
 4. 基于上述组件即可完成BasicMatmul示例的Kernel层组装。
 ```
-using MatmulKernel = Catlass::Gemm::Kernel::BasicMatmul<BlockMmad, void, TileSchedule>;
+using MatmulKernel = Catlass::Gemm::Kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 ```
 ### Device层算子定义
 基于Kernel层组装的算子，完成核函数的编写。

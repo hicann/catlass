@@ -14,7 +14,6 @@ CATLASS，中文名为CATLASS模板库，是一个聚焦于提供高性能矩阵
 补充说明：当前CANN社区版/商用版版本暂不支持device层实现，device层特性需获取最新CANN POC版本
 
 ## 目录结构说明
-详细介绍见[code_organization](docs/code_organization.md)
 ``` 
 ├── docs     // 文档
 ├── examples // kernel使用样例
