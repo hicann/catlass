@@ -50,7 +50,6 @@ template <
 >
 struct TileCopyOpt : public Catlass::Gemm::Tile::TileCopy<ArchTag, AType, BType, CType, BiasType> {
     using Base = Catlass::Gemm::Tile::TileCopy<ArchTag, AType, BType, CType, BiasType>;
-
     using ElementA = typename Base::ElementA;
     using ElementB = typename Base::ElementB;
     using ElementAccumulator = typename Base::ElementAccumulator;
