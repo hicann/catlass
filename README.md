@@ -13,7 +13,6 @@ CATLASS，中文名为昇腾算子模板库，是一个聚焦于提供高性能�
 分层详细介绍和各层级api，见[api](docs/api.md)文档。
 
 ## 目录结构说明
-详细介绍见[code_organization](docs/code_organization.md)
 ``` 
 ├── docs     // 文档
 ├── examples // kernel使用样例
