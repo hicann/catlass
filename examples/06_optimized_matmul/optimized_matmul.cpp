@@ -292,6 +292,7 @@ void Run(Options const &options)
             static const uint32_t COMPUTE_LENGTH_A = 96 * 1024 / sizeof(ElementA);
             using PaddingA = PaddingMatrixBlockND<ArchTag, ElementA, LayoutA, LayoutWA, COMPUTE_LENGTH_A>;
             static const uint32_t COMPUTE_LENGTH_B = 96 * 1024 / sizeof(ElementB);
+            using PaddingB = PaddingMatrixBlockND<ArchTag, ElementB, LayoutB, LayoutWB, COMPUTE_LENGTH_B>;
             using BlockMmadOpt = Gemm::Block::BlockMmad<
                 DispatchPolicy, L1TileShape, L0TileShape, ATypePadding, BTypePadding, CType>;
             using MatmulKernel = Gemm::Kernel::OptimizedMatmul<BlockMmadOpt, BlockEpilogue, BlockScheduler31, PaddingA, PaddingB>;

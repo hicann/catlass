@@ -204,7 +204,7 @@ public:
     CATLASS_DEVICE
     void operator()<AscendC::AIV>(Params const &params)
     {
-        if (!std::is_void_v<PaddingA>) {
+        if constexpr (!std::is_void_v<PaddingA>) {
             AscendC::GlobalTensor<ElementA> gmA;
             AscendC::GlobalTensor<ElementA> gmWA;
             gmA.SetGlobalBuffer(reinterpret_cast<__gm__ ElementA *>(params.ptrA));
@@ -213,7 +213,7 @@ public:
             paddingA(gmWA, gmA, params.layoutWA, params.layoutA);
         }
 
-        if (!std::is_void_v<PaddingB>) {
+        if constexpr (!std::is_void_v<PaddingB>) {
             AscendC::GlobalTensor<ElementB> gmB;
             AscendC::GlobalTensor<ElementB> gmWB;
             gmB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB *>(params.ptrB));
@@ -222,7 +222,7 @@ public:
             paddingB(gmWB, gmB, params.layoutWB, params.layoutB);
             // 0x0 synchronization control between AI Core
         }
-        if (!std::is_void_v<PaddingA> || !std::is_void_v<PaddingB>) {
+        if constexpr (!std::is_void_v<PaddingA> || !std::is_void_v<PaddingB>) {
             Catlass::Arch::CrossCoreBarrier<0x0, PIPE_MTE3>();
             Catlass::Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(flagAivFinishPadding);
         }
@@ -233,7 +233,7 @@ public:
     CATLASS_DEVICE
     void operator()<AscendC::AIC>(Params const &params)
     {
-        if (!std::is_void_v<PaddingA> || !std::is_void_v<PaddingB>) {
+        if constexpr (!std::is_void_v<PaddingA> || !std::is_void_v<PaddingB>) {
             Catlass::Arch::CrossCoreWaitFlag(flagAivFinishPadding);
         }
 
