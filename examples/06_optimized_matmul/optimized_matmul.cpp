@@ -56,8 +56,9 @@ struct TileCopyOpt : public Catlass::Gemm::Tile::TileCopy<ArchTag, AType, BType,
     using ElementAccumulator = typename Base::ElementAccumulator;
 
     // When matrix A is row-major, if the number of rows in matrix A is less than 16, 
-    // using the CopyGmToL1IntervalDataCopy method can improve the transfer efficiency. The situation is similar for matrix B. 
-    // If the above conditions are met, please uncomment the following and comment out the original matrix A transfer method
+    // using the CopyGmToL1IntervalDataCopy method can improve the transfer efficiency.
+    // The situation is similar for matrix B. If the above conditions are met, 
+    // please uncomment the following and comment out the original matrix A transfer method
 
     // using CopyGmToL1A = Gemm::Tile::CopyGmToL1IntervalDataCopy<ArchTag, AType>;
 
@@ -237,13 +238,16 @@ void Run(Options const &options)
             LayoutPaddingB layoutWB = LayoutPaddingB(
                 layoutB.shape(0), layoutB.shape(1), L1TileShape::K, L1TileShape::N);
             static const uint32_t COMPUTE_LENGTH_A = 96 * 1024 / sizeof(ElementA);
-            using PaddingA = Gemm::Kernel::PaddingMatrixBlockND<ArchTag, ElementA, LayoutA, LayoutPaddingA, COMPUTE_LENGTH_A>;
+            using PaddingA = Gemm::Kernel::PaddingMatrixBlockND<
+                ArchTag, ElementA, LayoutA, LayoutPaddingA, COMPUTE_LENGTH_A>;
             static const uint32_t COMPUTE_LENGTH_B = 96 * 1024 / sizeof(ElementB);
-            using PaddingB = Gemm::Kernel::PaddingMatrixBlockND<ArchTag, ElementB, LayoutB, LayoutPaddingB, COMPUTE_LENGTH_B>;
+            using PaddingB = Gemm::Kernel::PaddingMatrixBlockND<
+                ArchTag, ElementB, LayoutB, LayoutPaddingB, COMPUTE_LENGTH_B>;
             using TileCopy = TileCopyOpt<ArchTag, ATypePadding, BTypePadding, CType>;
             using BlockMmadOpt = Gemm::Block::BlockMmad<
                 DispatchPolicy, L1TileShape, L0TileShape, ATypePadding, BTypePadding, CType, void, TileCopy>;
-            using MatmulKernel = Gemm::Kernel::OptimizedMatmul<BlockMmadOpt, BlockEpilogue, BlockScheduler30, PaddingA, PaddingB>;
+            using MatmulKernel = Gemm::Kernel::OptimizedMatmul<
+                BlockMmadOpt, BlockEpilogue, BlockScheduler30, PaddingA, PaddingB>;
             MatmulKernel::Arguments arguments{
                 options.problemShape, align, sizeof(ElementWorkspace),
                 layoutWA, layoutWB, deviceA, deviceB, deviceC};
@@ -254,12 +258,14 @@ void Run(Options const &options)
             LayoutPaddingA layoutWA = LayoutPaddingA(
                 layoutA.shape(0), layoutA.shape(1), L1TileShape::M, L1TileShape::K);
             static const uint32_t COMPUTE_LENGTH_A = 96 * 1024 / sizeof(ElementA);
-            using PaddingA = Gemm::Kernel::PaddingMatrixBlockND<ArchTag, ElementA, LayoutA, LayoutPaddingA, COMPUTE_LENGTH_A>;
+            using PaddingA = Gemm::Kernel::PaddingMatrixBlockND<
+                ArchTag, ElementA, LayoutA, LayoutPaddingA, COMPUTE_LENGTH_A>;
             using PaddingB = void;  // No padding for B
             using TileCopy = TileCopyOpt<ArchTag, ATypePadding, BType, CType>;
             using BlockMmadOpt = Gemm::Block::BlockMmad<
                 DispatchPolicy, L1TileShape, L0TileShape, ATypePadding, BType, CType, void, TileCopy>;
-            using MatmulKernel = Gemm::Kernel::OptimizedMatmul<BlockMmadOpt, BlockEpilogue, BlockScheduler30, PaddingA, PaddingB>;
+            using MatmulKernel = Gemm::Kernel::OptimizedMatmul<
+                BlockMmadOpt, BlockEpilogue, BlockScheduler30, PaddingA, PaddingB>;
             MatmulKernel::Arguments arguments{
                 options.problemShape, align, sizeof(ElementWorkspace),
                 layoutWA, layoutB, deviceA, deviceB, deviceC};
@@ -271,11 +277,13 @@ void Run(Options const &options)
                 layoutB.shape(0), layoutB.shape(1), L1TileShape::K, L1TileShape::N);
             using PaddingA = void;  // No padding for A
             static const uint32_t COMPUTE_LENGTH_B = 96 * 1024 / sizeof(ElementB);
-            using PaddingB = Gemm::Kernel::PaddingMatrixBlockND<ArchTag, ElementB, LayoutB, LayoutPaddingB, COMPUTE_LENGTH_B>;
+            using PaddingB = Gemm::Kernel::PaddingMatrixBlockND<
+                ArchTag, ElementB, LayoutB, LayoutPaddingB, COMPUTE_LENGTH_B>;
             using TileCopy = TileCopyOpt<ArchTag, AType, BTypePadding, CType>;
             using BlockMmadOpt = Gemm::Block::BlockMmad<
                 DispatchPolicy, L1TileShape, L0TileShape, AType, BTypePadding, CType, void, TileCopy>;
-            using MatmulKernel = Gemm::Kernel::OptimizedMatmul<BlockMmadOpt, BlockEpilogue, BlockScheduler30, PaddingA, PaddingB>;
+            using MatmulKernel = Gemm::Kernel::OptimizedMatmul<
+                BlockMmadOpt, BlockEpilogue, BlockScheduler30, PaddingA, PaddingB>;
             MatmulKernel::Arguments arguments{
                 options.problemShape, align, sizeof(ElementWorkspace),
                 layoutA, layoutWB, deviceA, deviceB, deviceC};
@@ -288,7 +296,8 @@ void Run(Options const &options)
             using TileCopy = TileCopyOpt<ArchTag, AType, BType, CType>;
             using BlockMmadOpt = Gemm::Block::BlockMmad<
                 DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType, void, TileCopy>;
-            using MatmulKernel = Gemm::Kernel::OptimizedMatmul<BlockMmadOpt, BlockEpilogue, BlockScheduler30, PaddingA, PaddingB>;
+            using MatmulKernel = Gemm::Kernel::OptimizedMatmul<
+                BlockMmadOpt, BlockEpilogue, BlockScheduler30, PaddingA, PaddingB>;
             MatmulKernel::Arguments arguments{
                 options.problemShape, align, sizeof(ElementWorkspace),
                 layoutA, layoutB, deviceA, deviceB, deviceC};
@@ -303,13 +312,16 @@ void Run(Options const &options)
             LayoutPaddingB layoutWB = LayoutPaddingB(
                 layoutB.shape(0), layoutB.shape(1), L1TileShape::K, L1TileShape::N);
             static const uint32_t COMPUTE_LENGTH_A = 96 * 1024 / sizeof(ElementA);
-            using PaddingA = Gemm::Kernel::PaddingMatrixBlockND<ArchTag, ElementA, LayoutA, LayoutPaddingA, COMPUTE_LENGTH_A>;
+            using PaddingA = Gemm::Kernel::PaddingMatrixBlockND<
+                ArchTag, ElementA, LayoutA, LayoutPaddingA, COMPUTE_LENGTH_A>;
             static const uint32_t COMPUTE_LENGTH_B = 96 * 1024 / sizeof(ElementB);
-            using PaddingB = Gemm::Kernel::PaddingMatrixBlockND<ArchTag, ElementB, LayoutB, LayoutPaddingB, COMPUTE_LENGTH_B>;
+            using PaddingB = Gemm::Kernel::PaddingMatrixBlockND<
+                ArchTag, ElementB, LayoutB, LayoutPaddingB, COMPUTE_LENGTH_B>;
             using TileCopy = TileCopyOpt<ArchTag, ATypePadding, BTypePadding, CType>;
             using BlockMmadOpt = Gemm::Block::BlockMmad<
                 DispatchPolicy, L1TileShape, L0TileShape, ATypePadding, BTypePadding, CType, void, TileCopy>;
-            using MatmulKernel = Gemm::Kernel::OptimizedMatmul<BlockMmadOpt, BlockEpilogue, BlockScheduler31, PaddingA, PaddingB>;
+            using MatmulKernel = Gemm::Kernel::OptimizedMatmul<
+                BlockMmadOpt, BlockEpilogue, BlockScheduler31, PaddingA, PaddingB>;
             MatmulKernel::Arguments arguments{
                 options.problemShape, align, sizeof(ElementWorkspace),
                 layoutWA, layoutWB, deviceA, deviceB, deviceC};
@@ -320,12 +332,14 @@ void Run(Options const &options)
             LayoutPaddingA layoutWA = LayoutPaddingA(
                 layoutA.shape(0), layoutA.shape(1), L1TileShape::M, L1TileShape::K);
             static const uint32_t COMPUTE_LENGTH_A = 96 * 1024 / sizeof(ElementA);
-            using PaddingA = Gemm::Kernel::PaddingMatrixBlockND<ArchTag, ElementA, LayoutA, LayoutPaddingA, COMPUTE_LENGTH_A>;
+            using PaddingA = Gemm::Kernel::PaddingMatrixBlockND<
+                ArchTag, ElementA, LayoutA, LayoutPaddingA, COMPUTE_LENGTH_A>;
             using PaddingB = void;  // No padding for B
             using TileCopy = TileCopyOpt<ArchTag, ATypePadding, BType, CType>;
             using BlockMmadOpt = Gemm::Block::BlockMmad<
                 DispatchPolicy, L1TileShape, L0TileShape, ATypePadding, BType, CType, void, TileCopy>;
-            using MatmulKernel = Gemm::Kernel::OptimizedMatmul<BlockMmadOpt, BlockEpilogue, BlockScheduler31, PaddingA, PaddingB>;
+            using MatmulKernel = Gemm::Kernel::OptimizedMatmul<
+                BlockMmadOpt, BlockEpilogue, BlockScheduler31, PaddingA, PaddingB>;
             MatmulKernel::Arguments arguments{
                 options.problemShape, align, sizeof(ElementWorkspace),
                 layoutWA, layoutB, deviceA, deviceB, deviceC};
@@ -337,11 +351,13 @@ void Run(Options const &options)
                 layoutB.shape(0), layoutB.shape(1), L1TileShape::K, L1TileShape::N);
             using PaddingA = void;  // No padding for A
             static const uint32_t COMPUTE_LENGTH_B = 96 * 1024 / sizeof(ElementB);
-            using PaddingB = Gemm::Kernel::PaddingMatrixBlockND<ArchTag, ElementB, LayoutB, LayoutPaddingB, COMPUTE_LENGTH_B>;
+            using PaddingB = Gemm::Kernel::PaddingMatrixBlockND<
+                ArchTag, ElementB, LayoutB, LayoutPaddingB, COMPUTE_LENGTH_B>;
             using TileCopy = TileCopyOpt<ArchTag, AType, BTypePadding, CType>;
             using BlockMmadOpt = Gemm::Block::BlockMmad<
                 DispatchPolicy, L1TileShape, L0TileShape, AType, BTypePadding, CType, void, TileCopy>;
-            using MatmulKernel = Gemm::Kernel::OptimizedMatmul<BlockMmadOpt, BlockEpilogue, BlockScheduler31, PaddingA, PaddingB>;
+            using MatmulKernel = Gemm::Kernel::OptimizedMatmul<
+                BlockMmadOpt, BlockEpilogue, BlockScheduler31, PaddingA, PaddingB>;
             MatmulKernel::Arguments arguments{
                 options.problemShape, align, sizeof(ElementWorkspace),
                 layoutA, layoutWB, deviceA, deviceB, deviceC};
@@ -354,7 +370,8 @@ void Run(Options const &options)
             using TileCopy = TileCopyOpt<ArchTag, AType, BType, CType>;
             using BlockMmadOpt = Gemm::Block::BlockMmad<
                 DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType, void, TileCopy>;
-            using MatmulKernel = Gemm::Kernel::OptimizedMatmul<BlockMmadOpt, BlockEpilogue, BlockScheduler31, PaddingA, PaddingB>;
+            using MatmulKernel = Gemm::Kernel::OptimizedMatmul<
+                BlockMmadOpt, BlockEpilogue, BlockScheduler31, PaddingA, PaddingB>;
             MatmulKernel::Arguments arguments{
                 options.problemShape, align, sizeof(ElementWorkspace),
                 layoutA, layoutB, deviceA, deviceB, deviceC};
