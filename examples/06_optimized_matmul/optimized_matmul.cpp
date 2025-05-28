@@ -73,7 +73,8 @@ struct TileCopyOpt : public Catlass::Gemm::Tile::TileCopy<ArchTag, AType, BType,
     using CopyL1ToBT = typename Base::CopyL1ToBT;
 };
 
-const uint32_t align = 512 / sizeof(fp16_t);
+constexpr uint32_t alignByByte = 512;
+const uint32_t alignByElement = alignByByte / sizeof(fp16_t);
 using ArchTag = Arch::AtlasA2;
 constexpr bool ENABLE_UNIT_FLAG = true;
 constexpr bool ENABLE_SHUFFLE_K = true;
@@ -198,8 +199,8 @@ void Run(Options const &options)
     LayoutA layoutA{m, k};
     LayoutB layoutB{k, n};
     LayoutC layoutC{m, n};
-    bool isNeedPaddingA = IsNeedPadding(layoutA, align);
-    bool isNeedPaddingB = IsNeedPadding(layoutB, align);
+    bool isNeedPaddingA = IsNeedPadding(layoutA, alignByElement);
+    bool isNeedPaddingB = IsNeedPadding(layoutB, alignByElement);
     static const uint32_t COMPUTE_LENGTH_A = 96 * 1024 / sizeof(ElementA);
     using GlobalPaddingA = Gemm::Kernel::PaddingMatrixBlockND<
         ArchTag, ElementA, LayoutA, LayoutPaddingA, COMPUTE_LENGTH_A>;
@@ -248,7 +249,7 @@ void Run(Options const &options)
             using MatmulKernel = Gemm::Kernel::OptimizedMatmul<
                 GlobalPaddingA, GlobalPaddingB, BlockMmadOpt, BlockEpilogue, BlockScheduler30>;
             MatmulKernel::Arguments arguments{
-                options.problemShape, align, sizeof(ElementWorkspace),
+                options.problemShape, alignByElement, sizeof(ElementWorkspace),
                 layoutWA, layoutWB, deviceA, deviceB, deviceC};
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
             MatmulAdapter matmul_op;
@@ -262,7 +263,7 @@ void Run(Options const &options)
             using MatmulKernel = Gemm::Kernel::OptimizedMatmul<
                 GlobalPaddingA, void, BlockMmadOpt, BlockEpilogue, BlockScheduler30>;
             MatmulKernel::Arguments arguments{
-                options.problemShape, align, sizeof(ElementWorkspace),
+                options.problemShape, alignByElement, sizeof(ElementWorkspace),
                 layoutWA, layoutB, deviceA, deviceB, deviceC};
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
             MatmulAdapter matmul_op;
@@ -276,7 +277,7 @@ void Run(Options const &options)
             using MatmulKernel = Gemm::Kernel::OptimizedMatmul<
                 void, GlobalPaddingB, BlockMmadOpt, BlockEpilogue, BlockScheduler30>;
             MatmulKernel::Arguments arguments{
-                options.problemShape, align, sizeof(ElementWorkspace),
+                options.problemShape, alignByElement, sizeof(ElementWorkspace),
                 layoutA, layoutWB, deviceA, deviceB, deviceC};
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
             MatmulAdapter matmul_op;
@@ -288,7 +289,7 @@ void Run(Options const &options)
             using MatmulKernel = Gemm::Kernel::OptimizedMatmul<
                 void, void, BlockMmadOpt, BlockEpilogue, BlockScheduler30>;
             MatmulKernel::Arguments arguments{
-                options.problemShape, align, sizeof(ElementWorkspace),
+                options.problemShape, alignByElement, sizeof(ElementWorkspace),
                 layoutA, layoutB, deviceA, deviceB, deviceC};
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
             MatmulAdapter matmul_op;
@@ -306,7 +307,7 @@ void Run(Options const &options)
             using MatmulKernel = Gemm::Kernel::OptimizedMatmul<
                 GlobalPaddingA, GlobalPaddingB, BlockMmadOpt, BlockEpilogue, BlockScheduler31>;
             MatmulKernel::Arguments arguments{
-                options.problemShape, align, sizeof(ElementWorkspace),
+                options.problemShape, alignByElement, sizeof(ElementWorkspace),
                 layoutWA, layoutWB, deviceA, deviceB, deviceC};
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
             MatmulAdapter matmul_op;
@@ -320,7 +321,7 @@ void Run(Options const &options)
             using MatmulKernel = Gemm::Kernel::OptimizedMatmul<
                 GlobalPaddingA, void, BlockMmadOpt, BlockEpilogue, BlockScheduler31>;
             MatmulKernel::Arguments arguments{
-                options.problemShape, align, sizeof(ElementWorkspace),
+                options.problemShape, alignByElement, sizeof(ElementWorkspace),
                 layoutWA, layoutB, deviceA, deviceB, deviceC};
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
             MatmulAdapter matmul_op;
@@ -334,7 +335,7 @@ void Run(Options const &options)
             using MatmulKernel = Gemm::Kernel::OptimizedMatmul<
                 void, GlobalPaddingB, BlockMmadOpt, BlockEpilogue, BlockScheduler31>;
             MatmulKernel::Arguments arguments{
-                options.problemShape, align, sizeof(ElementWorkspace),
+                options.problemShape, alignByElement, sizeof(ElementWorkspace),
                 layoutA, layoutWB, deviceA, deviceB, deviceC};
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
             MatmulAdapter matmul_op;
@@ -346,7 +347,7 @@ void Run(Options const &options)
             using MatmulKernel = Gemm::Kernel::OptimizedMatmul<
                 void, void, BlockMmadOpt, BlockEpilogue, BlockScheduler31>;
             MatmulKernel::Arguments arguments{
-                options.problemShape, align, sizeof(ElementWorkspace),
+                options.problemShape, alignByElement, sizeof(ElementWorkspace),
                 layoutA, layoutB, deviceA, deviceB, deviceC};
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
             MatmulAdapter matmul_op;
