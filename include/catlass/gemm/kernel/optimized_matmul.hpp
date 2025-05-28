@@ -24,11 +24,11 @@
 namespace Catlass::Gemm::Kernel {
 
 template <
+    class PrologueA,
+    class PrologueB,
     class BlockMmad_,
     class BlockEpilogue_,
-    class BlockScheduler_,
-    class PaddingA,
-    class PaddingB
+    class BlockScheduler_
 >
 class OptimizedMatmul {
 public:
@@ -48,8 +48,8 @@ public:
         using type = void;
     };
 
-    using LayoutA = std::conditional_t<std::is_void_v<PaddingA>, LayoutWA, typename LayoutHelper<PaddingA>::type>;
-    using LayoutB = std::conditional_t<std::is_void_v<PaddingB>, LayoutWB, typename LayoutHelper<PaddingB>::type>;
+    using LayoutA = std::conditional_t<std::is_void_v<PrologueA>, LayoutWA, typename LayoutHelper<PrologueA>::type>;
+    using LayoutB = std::conditional_t<std::is_void_v<PrologueB>, LayoutWB, typename LayoutHelper<PrologueB>::type>;
 
     using L1TileShape = typename BlockMmad::L1TileShape;
     using ElementC = typename BlockMmad::ElementC;
@@ -204,25 +204,25 @@ public:
     CATLASS_DEVICE
     void operator()<AscendC::AIV>(Params const &params)
     {
-        if constexpr (!std::is_void_v<PaddingA>) {
+        if constexpr (!std::is_void_v<PrologueA>) {
             AscendC::GlobalTensor<ElementA> gmA;
             AscendC::GlobalTensor<ElementA> gmWA;
             gmA.SetGlobalBuffer(reinterpret_cast<__gm__ ElementA *>(params.ptrA));
             gmWA.SetGlobalBuffer(reinterpret_cast<__gm__ ElementA *>(params.ptrWA));
-            PaddingA paddingA(resource);
-            paddingA(gmWA, gmA, params.layoutWA, params.layoutA);
+            PrologueA prologueA(resource);
+            prologueA(gmWA, gmA, params.layoutWA, params.layoutA);
         }
 
-        if constexpr (!std::is_void_v<PaddingB>) {
+        if constexpr (!std::is_void_v<PrologueB>) {
             AscendC::GlobalTensor<ElementB> gmB;
             AscendC::GlobalTensor<ElementB> gmWB;
             gmB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB *>(params.ptrB));
             gmWB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB *>(params.ptrWB));
-            PaddingB paddingB(resource);
-            paddingB(gmWB, gmB, params.layoutWB, params.layoutB);
+            PrologueB prologueB(resource);
+            prologueB(gmWB, gmB, params.layoutWB, params.layoutB);
             // 0x0 synchronization control between AI Core
         }
-        if constexpr (!std::is_void_v<PaddingA> || !std::is_void_v<PaddingB>) {
+        if constexpr (!std::is_void_v<PrologueA> || !std::is_void_v<PrologueB>) {
             Catlass::Arch::CrossCoreBarrier<0x0, PIPE_MTE3>();
             Catlass::Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(flagAivFinishPadding);
         }
@@ -233,7 +233,7 @@ public:
     CATLASS_DEVICE
     void operator()<AscendC::AIC>(Params const &params)
     {
-        if constexpr (!std::is_void_v<PaddingA> || !std::is_void_v<PaddingB>) {
+        if constexpr (!std::is_void_v<PrologueA> || !std::is_void_v<PrologueB>) {
             Catlass::Arch::CrossCoreWaitFlag(flagAivFinishPadding);
         }
 

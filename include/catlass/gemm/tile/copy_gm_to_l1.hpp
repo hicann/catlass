@@ -42,10 +42,11 @@ struct CopyGmToL1IntervalDataCopy {
 /// Using the standard strided DataCopy interface to implement nd2nz 
 /// transfer may achieve higher data transfer efficiency when the data block shape is short and wide
 /// Partial specialization for AtlasA2, half, RowMajor in and zN out.
-template<class Element>
-struct CopyGmToL1IntervalDataCopy<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>> {
+template<>
+struct CopyGmToL1IntervalDataCopy<Arch::AtlasA2, Gemm::GemmType<half, layout::RowMajor>> {
     using LayoutDst = layout::zN;
     using LayoutSrc = layout::RowMajor;
+    using Element = half;
 
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
 
@@ -75,10 +76,11 @@ struct CopyGmToL1IntervalDataCopy<Arch::AtlasA2, Gemm::GemmType<Element, layout:
 /// Partial specialization for AtlasA2, half, PaddingRowMajor in and zN out.
 /// Using the standard strided DataCopy interface to implement nd2nz 
 /// transfer may achieve higher data transfer efficiency when the data block shape is short and wide
-template<class Element>
-struct CopyGmToL1IntervalDataCopy<Arch::AtlasA2, Gemm::GemmType<Element, layout::PaddingRowMajor>> {
+template<>
+struct CopyGmToL1IntervalDataCopy<Arch::AtlasA2, Gemm::GemmType<half, layout::PaddingRowMajor>> {
     using LayoutDst = layout::zN;
     using LayoutSrc = layout::PaddingRowMajor;
+    using Element = half;
 
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
 
@@ -108,10 +110,11 @@ struct CopyGmToL1IntervalDataCopy<Arch::AtlasA2, Gemm::GemmType<Element, layout:
 /// Partial specialization for AtlasA2, half, ColumnMajor in and zN out.
 /// Using the standard strided DataCopy interface to implement nd2nz 
 /// transfer may achieve higher data transfer efficiency when the data block shape is tall and narrow
-template<class Element>
-struct CopyGmToL1IntervalDataCopy<Arch::AtlasA2, Gemm::GemmType<Element, layout::ColumnMajor>> {
+template<>
+struct CopyGmToL1IntervalDataCopy<Arch::AtlasA2, Gemm::GemmType<half, layout::ColumnMajor>> {
     using LayoutDst = layout::nZ;
     using LayoutSrc = layout::ColumnMajor;
+    using Element = half;
 
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
 
@@ -141,10 +144,11 @@ struct CopyGmToL1IntervalDataCopy<Arch::AtlasA2, Gemm::GemmType<Element, layout:
 /// Partial specialization for AtlasA2, half, PaddingColumnMajor in and zN out.
 /// Using the standard strided DataCopy interface to implement nd2nz 
 /// transfer may achieve higher data transfer efficiency when the data block shape is tall and narrow
-template<class Element>
-struct CopyGmToL1IntervalDataCopy<Arch::AtlasA2, Gemm::GemmType<Element, layout::PaddingColumnMajor>> {
+template<>
+struct CopyGmToL1IntervalDataCopy<Arch::AtlasA2, Gemm::GemmType<half, layout::PaddingColumnMajor>> {
     using LayoutDst = layout::nZ;
     using LayoutSrc = layout::PaddingColumnMajor;
+    using Element = half;
 
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
 
