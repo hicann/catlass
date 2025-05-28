@@ -91,13 +91,13 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::RowMajor>, Gemm::Gemm
         LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
     {
         AscendC::Nd2NzParams intriParams;
-        uint32_t srcNdStride = C0_NUM_PER_FRCATLASSAL * layoutSrc.stride(0);
-        uint32_t ndNum = layoutSrc.shape(0) / C0_NUM_PER_FRCATLASSAL;
-        uint32_t remains = layoutSrc.shape(0) % C0_NUM_PER_FRCATLASSAL;
+        uint32_t srcNdStride = C0_NUM_PER_FRACTAL * layoutSrc.stride(0);
+        uint32_t ndNum = layoutSrc.shape(0) / C0_NUM_PER_FRACTAL;
+        uint32_t remains = layoutSrc.shape(0) % C0_NUM_PER_FRACTAL;
         if (srcNdStride < STRIDE_LIMIT) {
             if (ndNum) {
                 intriParams.ndNum = ndNum;
-                intriParams.nValue = C0_NUM_PER_FRCATLASSAL;
+                intriParams.nValue = C0_NUM_PER_FRACTAL;
                 intriParams.dValue = layoutSrc.shape(1);
                 intriParams.srcNdMatrixStride = srcNdStride;
                 intriParams.srcDValue = layoutSrc.stride(0);
@@ -128,7 +128,7 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::RowMajor>, Gemm::Gemm
             for (uint32_t i = 0; i < ndNum; i++) {
                 AscendC::Nd2NzParams intriParams;
                 intriParams.ndNum = 1;
-                intriParams.nValue = C0_NUM_PER_FRCATLASSAL;
+                intriParams.nValue = C0_NUM_PER_FRACTAL;
                 intriParams.dValue = layoutSrc.shape(1);
                 intriParams.srcNdMatrixStride = 0;
                 intriParams.srcDValue = layoutSrc.stride(0);
@@ -155,8 +155,8 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::RowMajor>, Gemm::Gemm
             }
         } else {
             for (uint32_t i = 0; i < layoutSrc.shape(0); i++) {
-                uint32_t idxR0 = i / C0_NUM_PER_FRCATLASSAL;
-                uint32_t idxInR0 = i % C0_NUM_PER_FRCATLASSAL;
+                uint32_t idxR0 = i / C0_NUM_PER_FRACTAL;
+                uint32_t idxInR0 = i % C0_NUM_PER_FRACTAL;
 
                 AscendC::Nd2NzParams intriParams;
                 intriParams.ndNum = 1;
@@ -196,13 +196,13 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::ColumnMajor>, Gemm::G
         LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
     {
         AscendC::Nd2NzParams intriParams;
-        uint32_t srcNdStride = C0_NUM_PER_FRCATLASSAL * layoutSrc.stride(1);
-        uint32_t ndNum = layoutSrc.shape(1) / C0_NUM_PER_FRCATLASSAL;
-        uint32_t remains = layoutSrc.shape(1) % C0_NUM_PER_FRCATLASSAL;
+        uint32_t srcNdStride = C0_NUM_PER_FRACTAL * layoutSrc.stride(1);
+        uint32_t ndNum = layoutSrc.shape(1) / C0_NUM_PER_FRACTAL;
+        uint32_t remains = layoutSrc.shape(1) % C0_NUM_PER_FRACTAL;
         if (srcNdStride < STRIDE_LIMIT) {
             if (ndNum) {
                 intriParams.ndNum = ndNum;
-                intriParams.nValue = C0_NUM_PER_FRCATLASSAL;
+                intriParams.nValue = C0_NUM_PER_FRACTAL;
                 intriParams.dValue = layoutSrc.shape(0);
                 intriParams.srcNdMatrixStride = srcNdStride;
                 intriParams.srcDValue = layoutSrc.stride(1);
@@ -225,7 +225,7 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::ColumnMajor>, Gemm::G
 
                 tailParams.dstNzC0Stride = layoutDst.stride(1) / ELE_NUM_PER_C0;
                 tailParams.dstNzNStride = layoutDst.stride(2) / ELE_NUM_PER_C0;
-                tailParams.dstNzMatrixStride = 0; 
+                tailParams.dstNzMatrixStride = 0;
 
                 AscendC::DataCopy(dstTensor[ndNum * layoutDst.stride(3)], srcTensor[ndNum * srcNdStride], tailParams);
             }
@@ -233,7 +233,7 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::ColumnMajor>, Gemm::G
             for (uint32_t i = 0; i < ndNum; i++) {
                 AscendC::Nd2NzParams intriParams;
                 intriParams.ndNum = 1;
-                intriParams.nValue = C0_NUM_PER_FRCATLASSAL;
+                intriParams.nValue = C0_NUM_PER_FRACTAL;
                 intriParams.dValue = layoutSrc.shape(0);
                 intriParams.srcNdMatrixStride = 0;
                 intriParams.srcDValue = layoutSrc.stride(1);
@@ -260,8 +260,8 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::ColumnMajor>, Gemm::G
             }
         } else {
             for (uint32_t i = 0; i < layoutSrc.shape(1); i++) {
-                uint32_t idxR0 = i / C0_NUM_PER_FRCATLASSAL;
-                uint32_t idxInR0 = i % C0_NUM_PER_FRCATLASSAL;
+                uint32_t idxR0 = i / C0_NUM_PER_FRACTAL;
+                uint32_t idxInR0 = i % C0_NUM_PER_FRACTAL;
 
                 AscendC::Nd2NzParams intriParams;
                 intriParams.ndNum = 1;
@@ -394,7 +394,7 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::VectorLayout>, Gemm::
         intriParams.srcNdMatrixStride = 0;
         intriParams.dstNzC0Stride = layoutDst.stride(3) / ELE_NUM_PER_C0;
         intriParams.dstNzMatrixStride = 0;
-        intriParams.nValue = 1;    
+        intriParams.nValue = 1;
         intriParams.srcDValue = layoutSrc.shape(0);
         intriParams.dstNzNStride = layoutDst.stride(0) / ELE_NUM_PER_C0;
         AscendC::DataCopy(dstTensor, srcTensor, intriParams);
@@ -424,13 +424,13 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::ColumnMajor>, Gemm::G
         LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
     {
         AscendC::Nd2NzParams intriParams;
-        uint32_t srcNdStride = C0_NUM_PER_FRCATLASSAL * layoutSrc.stride(1);
-        uint32_t ndNum = layoutSrc.shape(1) / C0_NUM_PER_FRCATLASSAL;
-        uint32_t remains = layoutSrc.shape(1) % C0_NUM_PER_FRCATLASSAL;
+        uint32_t srcNdStride = C0_NUM_PER_FRACTAL * layoutSrc.stride(1);
+        uint32_t ndNum = layoutSrc.shape(1) / C0_NUM_PER_FRACTAL;
+        uint32_t remains = layoutSrc.shape(1) % C0_NUM_PER_FRACTAL;
         if (srcNdStride < STRIDE_LIMIT) {
             if (ndNum) {
                 intriParams.ndNum = ndNum;
-                intriParams.nValue = C0_NUM_PER_FRCATLASSAL;
+                intriParams.nValue = C0_NUM_PER_FRACTAL;
                 intriParams.dValue = layoutSrc.shape(0);
                 intriParams.srcNdMatrixStride = srcNdStride;
                 intriParams.srcDValue = layoutSrc.stride(1);
@@ -453,7 +453,7 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::ColumnMajor>, Gemm::G
 
                 tailParams.dstNzC0Stride = layoutDst.stride(1) / ELE_NUM_PER_C0;
                 tailParams.dstNzNStride = layoutDst.stride(2) / ELE_NUM_PER_C0;
-                tailParams.dstNzMatrixStride = 0; 
+                tailParams.dstNzMatrixStride = 0;
 
                 AscendC::DataCopy(dstTensor[ndNum * layoutDst.stride(3)], srcTensor[ndNum * srcNdStride], tailParams);
             }
@@ -461,7 +461,7 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::ColumnMajor>, Gemm::G
             for (uint32_t i = 0; i < ndNum; i++) {
                 AscendC::Nd2NzParams intriParams;
                 intriParams.ndNum = 1;
-                intriParams.nValue = C0_NUM_PER_FRCATLASSAL;
+                intriParams.nValue = C0_NUM_PER_FRACTAL;
                 intriParams.dValue = layoutSrc.shape(0);
                 intriParams.srcNdMatrixStride = 0;
                 intriParams.srcDValue = layoutSrc.stride(1);
@@ -488,8 +488,8 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::ColumnMajor>, Gemm::G
             }
         } else {
             for (uint32_t i = 0; i < layoutSrc.shape(1); i++) {
-                uint32_t idxR0 = i / C0_NUM_PER_FRCATLASSAL;
-                uint32_t idxInR0 = i % C0_NUM_PER_FRCATLASSAL;
+                uint32_t idxR0 = i / C0_NUM_PER_FRACTAL;
+                uint32_t idxInR0 = i % C0_NUM_PER_FRACTAL;
 
                 AscendC::Nd2NzParams intriParams;
                 intriParams.ndNum = 1;
@@ -696,7 +696,7 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::zN>> {
         LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
     {
         uint32_t blockCount = CeilDiv<ELE_NUM_PER_C0>(layoutSrc.orgShape(1));
-        uint32_t blockLen = RoundUp<C0_NUM_PER_FRCATLASSAL>(layoutSrc.orgShape(0));
+        uint32_t blockLen = RoundUp<C0_NUM_PER_FRACTAL>(layoutSrc.orgShape(0));
 
         AscendC::DataCopyParams repeatParams;
 
@@ -743,7 +743,7 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::nZ>> {
         LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
     {
         uint32_t blockCount = CeilDiv<ELE_NUM_PER_C0>(layoutSrc.orgShape(0));
-        uint32_t blockLen = RoundUp<C0_NUM_PER_FRCATLASSAL>(layoutSrc.orgShape(1));
+        uint32_t blockLen = RoundUp<C0_NUM_PER_FRACTAL>(layoutSrc.orgShape(1));
 
         AscendC::DataCopyParams repeatParams;
 
@@ -1130,6 +1130,35 @@ struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSr
         AscendC::DataCopy(dstTensor.data(), srcTensor.data(), intriParams);
     }
 };
+
+template <class ArchTag, class Element>
+struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::VectorLayout, AscendC::TPosition::GM>,
+    Gemm::GemmType<Element, layout::VectorLayout, AscendC::TPosition::A1>> {
+    using LayoutDst = layout::VectorLayout;
+    using LayoutSrc = layout::VectorLayout;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+
+    // Mehtods
+
+    CATLASS_DEVICE
+    CopyGmToL1() {};
+
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::GlobalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+    {
+        AscendC::DataCopyParams intriParams;
+        intriParams.blockCount = 1;
+        intriParams.blockLen = layoutDst.shape(0) / ELE_NUM_PER_C0;
+        intriParams.srcStride = 0;
+        intriParams.dstStride = 0;
+        AscendC::DataCopy(dstTensor, srcTensor, intriParams);
+    }
+};
+
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 

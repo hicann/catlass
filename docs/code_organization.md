@@ -1,5 +1,5 @@
 # 代码组织结构
-## CATLASS模板库代码组织结构
+## CATLASS代码组织结构
 这篇文档描述了CATLASS的代码仓结构，主要包含的内容如下：
 - include包含模块分层的相关实现
 - examples包含基于模板库的算子编程代码示例
@@ -7,6 +7,7 @@
 - scripts包含模板库样例的构建脚本
 ## include
 CATLASS模板库是一套基于AscendC开发的算子模板库，提供昇腾硬件Gemm类算子定制化开发的极致性能。模板库的分层对应硬件的不同层级展开。block层对应于NPU的单核单基块的层级，tile层对应于分片粒度的数据搬运和计算的层级，basic对应于基础API的层级。这些组件可以在相应的算子内的不同运算层级被使用。
+
 include目录下的头文件是按照如下的文件层级进行组织的。
 ```
 |── include
@@ -61,12 +62,16 @@ include目录下的头文件是按照如下的文件层级进行组织的。
 |                |── block_mmad_mla_qk.hpp         // block层mla qk实现
 |                |── block_mmad_mla_qk_tp1_spec.hpp  // block层mla qk实现(针对headNum128特殊优化)
 |                |── block_mmad_pingpong.hpp       // block层的模板实现，包括doublebuffer的相应实现
+|                |── block_mmad_pingpong_bias.hpp  // block层matmul_bias包含doublebuffer实现
 |                |── block_mmad_pingpong_tla.hpp   // block层基于tla的doublebuffer实现
 |                |── block_mmad_preload.hpp        // block层preload实现
 |                |── block_mmad_preload_async.hpp  // block层preload异步加载实现
 |                |── block_mmad_preload_async_with_callback.hpp  // block层async_callback实现
 |                |── block_mmad_preload_tla.hpp   // block层基于tla的preload实现
 |                |── block_swizzle.hpp            // block层swizzle实现
+|            |── device
+|                |── device_gemm.hpp              // gemm的device层实现
+|                |── kernel_adapter.hpp           // gemm的通用内核模板定义
 |            |── kernel
 |                |── basic_matmul.hpp             // kernel层basic_matmul实现
 |                |── basic_matmul_tla.hpp         // kernel层基于tla的basic_matmul实现
@@ -79,6 +84,7 @@ include目录下的头文件是按照如下的文件层级进行组织的。
 |                |── grouped_matmul_slice_m.hpp  // kernel层m轴切分groupedMamtul实现
 |                |── grouped_matmul_slice_m_per_token_dequant.hpp // kernel层m轴切分groupedMamtul量化实现
 |                |── grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp // kernel层m轴切分groupmatmul多阶段量化实现
+|                |── matmul_bias.hpp            // kernel层matmul_bias实现 
 |                |── matmul_epilogue.hpp        // kernel层MatmulEpilogue实现 
 |                |── optimized_matmul.hpp       // kernel层optimizedmatmul实现
 |                |── optimized_matmul_tla.hpp   // kernel层基于tla的optimized matmul实现
@@ -92,6 +98,7 @@ include目录下的头文件是按照如下的文件层级进行组织的。
 |                |── copy_l0c_to_gm.hpp       // tile层l0c到gm搬运
 |                |── copy_l1_to_l0a.hpp       // tile层l1到l0a搬运
 |                |── copy_l1_to_l0b.hpp       // tile层l1到l0b搬运
+|                |── copy_l1_to_bt.hpp        // tile层l1到biasTable buffer搬运
 |                |── copy_ub_to_gm.hpp        // tile层ub到gm搬运
 |                |── tile_copy.hpp            // tile层copy封装
 |                |── tile_mmad.hpp            // tile层mmad封装
@@ -123,9 +130,12 @@ include目录下的头文件是按照如下的文件层级进行组织的。
 |            |── vector.hpp                  // vector相关的layout定义
 |        |── catlass.hpp                     // 定义了基本的数据信息，如基本块长度等
 |        |── coord.hpp                       // 通用基础坐标运算封装
+|        |── coord.hpp                       // 通用基础坐标运算封装
+
 |        |── gemm_coord.hpp                  // gemm的基础坐标运算封装
 |        |── gemv_coord.hpp                  // gemv的基础坐标运算封装
 |        |── matrix_coord.hpp                // 矩阵运算坐标封装
+|        |── status.hpp                      // gemm和gemv可执行状态封装
 |    |── tla
 |        |── numeric
 |            |── integer_sequence.hpp        // integer_sequence定义
@@ -160,6 +170,7 @@ examples文件夹下提供了当前基于分层组件所构建的示例，展示
     |── 17_gemv_aiv                    // gemv_aiv模板样例实现
     |── 18_gemv_aic                    // gemv_aic模板样例实现
     |── 19_mla                         // mla模板样例实现
+    |── 20_matmul_bias                 // matmul bias模板样例实现
     |── common                         // 辅助函数
     │── lib_cmake                      // 使用cmake构建动/静态库示例
     |── python_extension               // python接入示例
@@ -180,6 +191,7 @@ docs文件夹下包含项目的所有文档。
         |—— 02_tensor.md          // tla-tensor介绍
     |—— api.md                    // api接口介绍
     |—— code_organization.md      // 文件组织介绍
+    |—— dispatch_policies.md      // DispatchPolicy模板参数介绍
     |—— quickstart.md             // 搭建指南
     |—— swizzle_explanation.md    // swizzle解释
 ```
