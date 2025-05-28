@@ -312,19 +312,19 @@ public:
     static nZ MakeLayout(Index orgRows, Index orgCols)
     {
         constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-        constexpr uint32_t ELE_NUM_PER_FRCATLASSAL = BYTE_PER_FRCATLASSAL / sizeof(Element);
+        constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
         Index rowsRound = RoundUp<ELE_NUM_PER_C0>(orgRows);
-        Index colsRound = RoundUp<C0_NUM_PER_FRCATLASSAL>(orgCols);
+        Index colsRound = RoundUp<C0_NUM_PER_FRACTAL>(orgCols);
         return nZ(orgRows,
                   orgCols,
                   ELE_NUM_PER_C0,
                   rowsRound / ELE_NUM_PER_C0,
-                  C0_NUM_PER_FRCATLASSAL,
-                  colsRound / C0_NUM_PER_FRCATLASSAL,
+                  C0_NUM_PER_FRACTAL,
+                  colsRound / C0_NUM_PER_FRACTAL,
                   1,
                   colsRound * ELE_NUM_PER_C0,
                   ELE_NUM_PER_C0,
-                  ELE_NUM_PER_FRCATLASSAL);
+                  ELE_NUM_PER_FRACTAL);
     }
 
     /// Returns the offset of a coordinate in linear memory.
@@ -481,17 +481,17 @@ public:
     static zN MakeLayout(Index orgRows, Index orgCols)
     {
         constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-        constexpr uint32_t ELE_NUM_PER_FRCATLASSAL = BYTE_PER_FRCATLASSAL / sizeof(Element);
-        Index rowsRound = RoundUp<C0_NUM_PER_FRCATLASSAL>(orgRows);
+        constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
+        Index rowsRound = RoundUp<C0_NUM_PER_FRACTAL>(orgRows);
         Index colsRound = RoundUp<ELE_NUM_PER_C0>(orgCols);
         return zN(orgRows,
                   orgCols,
-                  C0_NUM_PER_FRCATLASSAL,
-                  rowsRound / C0_NUM_PER_FRCATLASSAL,
+                  C0_NUM_PER_FRACTAL,
+                  rowsRound / C0_NUM_PER_FRACTAL,
                   ELE_NUM_PER_C0,
                   colsRound / ELE_NUM_PER_C0,
                   ELE_NUM_PER_C0,
-                  ELE_NUM_PER_FRCATLASSAL,
+                  ELE_NUM_PER_FRACTAL,
                   1,
                   rowsRound * ELE_NUM_PER_C0);
     }
@@ -501,14 +501,14 @@ public:
     {
         return zN(shape.row(),
                   shape.column(),
-                  C0_NUM_PER_FRCATLASSAL,
-                  CeilDiv<C0_NUM_PER_FRCATLASSAL>(shape.row()),
-                  C0_NUM_PER_FRCATLASSAL,
-                  CeilDiv<C0_NUM_PER_FRCATLASSAL>(shape.column()),
-                  C0_NUM_PER_FRCATLASSAL,
-                  C0_NUM_PER_FRCATLASSAL * C0_NUM_PER_FRCATLASSAL,
+                  C0_NUM_PER_FRACTAL,
+                  CeilDiv<C0_NUM_PER_FRACTAL>(shape.row()),
+                  C0_NUM_PER_FRACTAL,
+                  CeilDiv<C0_NUM_PER_FRACTAL>(shape.column()),
+                  C0_NUM_PER_FRACTAL,
+                  C0_NUM_PER_FRACTAL * C0_NUM_PER_FRACTAL,
                   1,
-                  RoundUp<C0_NUM_PER_FRCATLASSAL>(shape.row()) * C0_NUM_PER_FRCATLASSAL);
+                  RoundUp<C0_NUM_PER_FRACTAL>(shape.row()) * C0_NUM_PER_FRACTAL);
     }
 
     /// Returns the offset of a coordinate in linear memory.
@@ -665,19 +665,19 @@ public:
     static zZ MakeLayout(Index orgRows, Index orgCols)
     {
         constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-        constexpr uint32_t ELE_NUM_PER_FRCATLASSAL = BYTE_PER_FRCATLASSAL / sizeof(Element);
-        Index rowsRound = RoundUp<C0_NUM_PER_FRCATLASSAL>(orgRows);
+        constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
+        Index rowsRound = RoundUp<C0_NUM_PER_FRACTAL>(orgRows);
         Index colsRound = RoundUp<ELE_NUM_PER_C0>(orgCols);
         return zZ(orgRows,
                   orgCols,
-                  C0_NUM_PER_FRCATLASSAL,
-                  rowsRound / C0_NUM_PER_FRCATLASSAL,
+                  C0_NUM_PER_FRACTAL,
+                  rowsRound / C0_NUM_PER_FRACTAL,
                   ELE_NUM_PER_C0,
                   colsRound / ELE_NUM_PER_C0,
                   ELE_NUM_PER_C0,
-                  colsRound * C0_NUM_PER_FRCATLASSAL,
+                  colsRound * C0_NUM_PER_FRACTAL,
                   1,
-                  ELE_NUM_PER_FRCATLASSAL);
+                  ELE_NUM_PER_FRACTAL);
     }
 
     /// Returns the offset of a coordinate in linear memory.
@@ -1105,21 +1105,21 @@ public:
     template <class Element>
     CATLASS_HOST_DEVICE static nN MakeLayout(Index orgRows, Index orgCols) {
         static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-        static constexpr uint32_t ELE_NUM_PER_FRCATLASSAL = BYTE_PER_FRCATLASSAL / sizeof(Element);
+        static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
         Index rowsRound = RoundUp<ELE_NUM_PER_C0>(orgRows);
-        Index colsRound = RoundUp<C0_NUM_PER_FRCATLASSAL>(orgCols);
+        Index colsRound = RoundUp<C0_NUM_PER_FRACTAL>(orgCols);
         return nN(orgRows,
                 orgCols,
 
                 ELE_NUM_PER_C0,
                 rowsRound / ELE_NUM_PER_C0,
-                C0_NUM_PER_FRCATLASSAL,
-                colsRound / C0_NUM_PER_FRCATLASSAL,
+                C0_NUM_PER_FRACTAL,
+                colsRound / C0_NUM_PER_FRACTAL,
 
                 1,
-                ELE_NUM_PER_FRCATLASSAL,
+                ELE_NUM_PER_FRACTAL,
                 ELE_NUM_PER_C0,
-                rowsRound * C0_NUM_PER_FRCATLASSAL);
+                rowsRound * C0_NUM_PER_FRACTAL);
     }
 
     /// Returns the offset of a coordinate in linear memory.

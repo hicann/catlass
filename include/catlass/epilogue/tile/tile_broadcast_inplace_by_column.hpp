@@ -39,8 +39,8 @@ struct TileBroadcastInplaceByColumn {
         constexpr uint32_t eleNumPerBlk = BYTE_PER_BLK / sizeof(ElementCompute);
         constexpr uint32_t blkNumPerRow = TileShape::COLUMN / eleNumPerBlk;
 
-        constexpr uint64_t defaultMask = BYTE_PER_VECTOR_FRCATLASSAL / sizeof(ElementCompute);
-        constexpr uint64_t tailMask = (TileShape::ROW % BLK_NUM_PER_VECTOR_FRCATLASSAL) * eleNumPerBlk;
+        constexpr uint64_t defaultMask = BYTE_PER_VECTOR_FRACTAL / sizeof(ElementCompute);
+        constexpr uint64_t tailMask = (TileShape::ROW % BLK_NUM_PER_VECTOR_FRACTAL) * eleNumPerBlk;
 
         constexpr uint8_t repeatTimes = 1;
 
@@ -50,8 +50,8 @@ struct TileBroadcastInplaceByColumn {
         repeatParams.dstRepeatSize = 1;
         repeatParams.srcRepeatSize = 1;
 
-        for (uint32_t rowOffset = 0; rowOffset < TileShape::ROW; rowOffset += BLK_NUM_PER_VECTOR_FRCATLASSAL) {
-            uint64_t mask = ((TileShape::ROW - rowOffset) >= BLK_NUM_PER_VECTOR_FRCATLASSAL) ? defaultMask : tailMask;
+        for (uint32_t rowOffset = 0; rowOffset < TileShape::ROW; rowOffset += BLK_NUM_PER_VECTOR_FRACTAL) {
+            uint64_t mask = ((TileShape::ROW - rowOffset) >= BLK_NUM_PER_VECTOR_FRACTAL) ? defaultMask : tailMask;
             for (uint32_t colOffset = eleNumPerBlk; colOffset < TileShape::COLUMN; colOffset += eleNumPerBlk) {
                 AscendC::Copy(
                     ubInOut[rowOffset * TileShape::COLUMN + colOffset],

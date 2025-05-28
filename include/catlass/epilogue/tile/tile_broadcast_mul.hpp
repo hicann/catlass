@@ -57,7 +57,7 @@ struct TileRowBroadcastMul {
         repeatParams.src1RepStride = 0;
 
         constexpr uint32_t rowNumPerCompute = maxRepeatTimes;
-        constexpr uint32_t colNumPerCompute = BYTE_PER_VECTOR_FRCATLASSAL / sizeof(ElementCompute);
+        constexpr uint32_t colNumPerCompute = BYTE_PER_VECTOR_FRACTAL / sizeof(ElementCompute);
         for (uint32_t rowOffset = 0; rowOffset < TileShape::ROW; rowOffset += rowNumPerCompute) {
             uint32_t residueM = TileShape::ROW - rowOffset;
             uint8_t repeatTimes = static_cast<uint8_t>((residueM > rowNumPerCompute) ? rowNumPerCompute : residueM);
@@ -112,7 +112,7 @@ struct TileOneBlkColumnBroadcastMul {
         repeatParams.src0RepStride = 1;
         repeatParams.src1RepStride = 0;
 
-        constexpr uint32_t rowNumPerCompute = BLK_NUM_PER_VECTOR_FRCATLASSAL;
+        constexpr uint32_t rowNumPerCompute = BLK_NUM_PER_VECTOR_FRACTAL;
         constexpr uint32_t colNumPerCompute = eleNumPerBlk * maxRepeatNum;
         for (uint32_t rowOffset = 0; rowOffset < TileShape::ROW; rowOffset += rowNumPerCompute) {
             uint32_t residueM = TileShape::ROW - rowOffset;
