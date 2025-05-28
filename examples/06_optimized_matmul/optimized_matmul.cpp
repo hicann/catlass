@@ -74,7 +74,7 @@ struct TileCopyOpt : public Catlass::Gemm::Tile::TileCopy<ArchTag, AType, BType,
 };
 
 constexpr uint32_t alignByByte = 512;
-const uint32_t alignByElement = alignByByte / sizeof(fp16_t);
+constexpr uint32_t alignByElement = alignByByte / sizeof(fp16_t);
 using ArchTag = Arch::AtlasA2;
 constexpr bool ENABLE_UNIT_FLAG = true;
 constexpr bool ENABLE_SHUFFLE_K = true;
