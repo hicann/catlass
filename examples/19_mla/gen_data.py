@@ -11,7 +11,7 @@ import os
 import sys
 import logging
 import numpy as np
-from bfloat16 import bfloat16
+from ml_dtypes import bfloat16
 from dataclasses import dataclass
 np.random.seed(1)
 
