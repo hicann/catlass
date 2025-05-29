@@ -89,15 +89,6 @@ void OptimizedMatmul(
     using ArchTag = Arch::AtlasA2;
     AscendC::SetSyncBaseAddr(fftsAddr);
 
-    constexpr bool enableUnitFlag = true;
-    constexpr bool enableShuffleK = true;
-    using DispatchPolicy = Gemm::MmadAtlasA2Preload<enableUnitFlag, enableShuffleK>;
-
-    using AType = Gemm::GemmType<ElementA, LayoutWA>;
-    using BType = Gemm::GemmType<ElementB, LayoutWB>;
-    using CType = Gemm::GemmType<ElementC, LayoutC>;
-    using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
-
     if (problemShape.m() > problemShape.n()) {
         using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
         using BlockEpilogue = void;
@@ -205,6 +196,7 @@ void Run(Options const &options)
 
     constexpr uint32_t alignByByte = 512;
     constexpr uint32_t alignByElement = alignByByte / sizeof(fp16_t);
+    using ArchTag = Arch::AtlasA2;
     using ElementA = half;
     using ElementB = half;
     using ElementC = half;
@@ -226,6 +218,9 @@ void Run(Options const &options)
     static const uint32_t COMPUTE_LENGTH_B = 96 * 1024 / sizeof(ElementB);
     using GlobalPaddingB = Gemm::Kernel::PaddingMatrixBlockND<
         ArchTag, ElementB, LayoutB, LayoutPaddingB, COMPUTE_LENGTH_B>;
+    constexpr bool enableUnitFlag = true;
+    constexpr bool enableShuffleK = true;
+    using DispatchPolicy = Gemm::MmadAtlasA2Preload<enableUnitFlag, enableShuffleK>;
 
     LayoutA layoutA{m, k};
     LayoutB layoutB{k, n};
@@ -283,25 +278,27 @@ void Run(Options const &options)
             DispatchPolicy, L1TileShape, L0TileShape, ATypePadding, BTypePadding, CType, void, TileCopy>;
         OptimizedMatmul<
             LayoutA, LayoutB, LayoutC, LayoutPaddingA, LayoutPaddingB, GlobalPaddingA, GlobalPaddingB, BlockMmadOpt
-        ><<<aicCoreNum, nullptr, stream>>>(
-            fftsAddr, options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC,deviceWA, deviceWB);
+        ><<<aicCoreNum, nullptr, stream>>>(fftsAddr, options.problemShape, deviceA, layoutA, deviceB, layoutB,
+            deviceC, layoutC, deviceWA, layoutWA, deviceWB, layoutWB);
     } else if (isNeedPaddingA){
         ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWA), sizeWA, ACL_MEM_MALLOC_HUGE_FIRST));
         deviceWB = deviceB;
 
         LayoutPaddingA layoutWA = LayoutPaddingA(
                 layoutA.shape(0), layoutA.shape(1), L1TileShape::M, L1TileShape::K);
+        LayoutB layoutWB = layoutB;
         using TileCopy = TileCopyOpt<ArchTag, ATypePadding, BType, CType>;
         using BlockMmadOpt = Gemm::Block::BlockMmad<
             DispatchPolicy, L1TileShape, L0TileShape, ATypePadding, BType, CType, void, TileCopy>;
         OptimizedMatmul<
             LayoutA, LayoutB, LayoutC, LayoutPaddingA, LayoutB, GlobalPaddingA, void, BlockMmadOpt
-        ><<<aicCoreNum, nullptr, stream>>>(
-            fftsAddr, options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC,deviceWA, deviceWB);
+        ><<<aicCoreNum, nullptr, stream>>>(fftsAddr, options.problemShape, deviceA, layoutA, deviceB, layoutB,
+            deviceC, layoutC, deviceWA, layoutWA, deviceWB, layoutWB);
     } else if (isNeedPaddingB) {
         deviceWA = deviceA;
         ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWB), sizeWB, ACL_MEM_MALLOC_HUGE_FIRST));
 
+        LayoutA layoutWA = layoutA;
         LayoutPaddingB layoutWB = LayoutPaddingB(
                 layoutB.shape(0), layoutB.shape(1), L1TileShape::K, L1TileShape::N);
         using TileCopy = TileCopyOpt<ArchTag, AType, BTypePadding, CType>;
@@ -309,19 +306,21 @@ void Run(Options const &options)
             DispatchPolicy, L1TileShape, L0TileShape, AType, BTypePadding, CType, void, TileCopy>;
         OptimizedMatmul<
             LayoutA, LayoutB, LayoutC, LayoutA, LayoutPaddingB, void, GlobalPaddingB, BlockMmadOpt
-        ><<<aicCoreNum, nullptr, stream>>>(
-            fftsAddr, options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC,deviceWA, deviceWB); 
+        ><<<aicCoreNum, nullptr, stream>>>(fftsAddr, options.problemShape, deviceA, layoutA, deviceB, layoutB,
+            deviceC, layoutC, deviceWA, layoutWA, deviceWB, layoutWB); 
     } else {
         deviceWA = deviceA;
         deviceWB = deviceB;
 
+        LayoutA layoutWA = layoutA;
+        LayoutB layoutWB = layoutB;
         using TileCopy = TileCopyOpt<ArchTag, AType, BType, CType>;
         using BlockMmadOpt = Gemm::Block::BlockMmad<
             DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType, void, TileCopy>;
         OptimizedMatmul<
             LayoutA, LayoutB, LayoutC, LayoutA, LayoutB, void, void, BlockMmadOpt
-        ><<<aicCoreNum, nullptr, stream>>>(
-            fftsAddr, options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC,deviceWA, deviceWB); 
+        ><<<aicCoreNum, nullptr, stream>>>(fftsAddr, options.problemShape, deviceA, layoutA, deviceB, layoutB,
+            deviceC, layoutC, deviceWA, layoutWA, deviceWB, layoutWB);
     }
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
