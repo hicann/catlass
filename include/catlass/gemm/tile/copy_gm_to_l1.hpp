@@ -28,7 +28,153 @@ struct CopyGmToL1 {
     static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy gm to l1, can not find the specialization.");
 };
 
+template <
+    class ArchTag,
+    /// GemmType for matrix operand
+    class GmType,
+    class L1Type = void
+>
+struct CopyGmToL1IntervalDataCopy {
+    static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy gm to l1, can not find the specialization.");
+};
+
 ////////////////////////////////////////
+/// Using the standard strided DataCopy interface to implement nd2nz 
+/// transfer may achieve higher data transfer efficiency when the data block shape is short and wide
+/// Partial specialization for AtlasA2, half, RowMajor in and zN out.
+template<>
+struct CopyGmToL1IntervalDataCopy<Arch::AtlasA2, Gemm::GemmType<half, layout::RowMajor>> {
+    using LayoutDst = layout::zN;
+    using LayoutSrc = layout::RowMajor;
+    using Element = half;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+
+    // Mehtods
+
+    CATLASS_DEVICE
+    CopyGmToL1IntervalDataCopy() {};
+
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::GlobalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+    {
+        for (int i = 0; i < layoutSrc.shape(0); ++i) {
+            AscendC::DataCopyParams dataCopyParams(
+                CeilDiv(layoutSrc.shape(1), layoutDst.shape(2)),
+                layoutDst.shape(2) / ELE_NUM_PER_C0,
+                0,
+                (layoutDst.stride(3) - layoutDst.shape(2)) / ELE_NUM_PER_C0
+            );
+            AscendC::DataCopy(dstTensor[i * layoutDst.shape(2)], srcTensor[i * layoutSrc.stride(0)], dataCopyParams);
+        }
+    }
+};
+
+/// Partial specialization for AtlasA2, half, PaddingRowMajor in and zN out.
+/// Using the standard strided DataCopy interface to implement nd2nz 
+/// transfer may achieve higher data transfer efficiency when the data block shape is short and wide
+template<>
+struct CopyGmToL1IntervalDataCopy<Arch::AtlasA2, Gemm::GemmType<half, layout::PaddingRowMajor>> {
+    using LayoutDst = layout::zN;
+    using LayoutSrc = layout::PaddingRowMajor;
+    using Element = half;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+
+    // Mehtods
+
+    CATLASS_DEVICE
+    CopyGmToL1IntervalDataCopy() {};
+
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::GlobalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+    {
+        for (int i = 0; i < layoutSrc.orgShape(0); ++i) {
+            AscendC::DataCopyParams dataCopyParams(
+                CeilDiv(layoutSrc.orgShape(1), layoutDst.shape(2)),
+                layoutDst.shape(2) / ELE_NUM_PER_C0,
+                0,
+                (layoutDst.stride(3) - layoutDst.shape(2)) / ELE_NUM_PER_C0
+            );
+            AscendC::DataCopy(dstTensor[i * layoutDst.shape(2)], srcTensor[i * layoutSrc.stride(0)], dataCopyParams);
+        }
+    }
+};
+
+/// Partial specialization for AtlasA2, half, ColumnMajor in and zN out.
+/// Using the standard strided DataCopy interface to implement nd2nz 
+/// transfer may achieve higher data transfer efficiency when the data block shape is tall and narrow
+template<>
+struct CopyGmToL1IntervalDataCopy<Arch::AtlasA2, Gemm::GemmType<half, layout::ColumnMajor>> {
+    using LayoutDst = layout::nZ;
+    using LayoutSrc = layout::ColumnMajor;
+    using Element = half;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+
+    // Mehtods
+
+    CATLASS_DEVICE
+    CopyGmToL1IntervalDataCopy() {};
+
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::GlobalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+    {
+        for (int i = 0; i < layoutSrc.shape(1); ++i) {
+            AscendC::DataCopyParams dataCopyParams(
+                CeilDiv(layoutSrc.shape(0), layoutDst.shape(0)),
+                layoutDst.shape(0) / ELE_NUM_PER_C0,
+                0,
+                (layoutDst.stride(1) - layoutDst.shape(0)) / ELE_NUM_PER_C0
+            );
+            AscendC::DataCopy(dstTensor[i * layoutDst.shape(0)], srcTensor[i * layoutSrc.stride(1)], dataCopyParams);
+        }
+    }
+};
+
+/// Partial specialization for AtlasA2, half, PaddingColumnMajor in and zN out.
+/// Using the standard strided DataCopy interface to implement nd2nz 
+/// transfer may achieve higher data transfer efficiency when the data block shape is tall and narrow
+template<>
+struct CopyGmToL1IntervalDataCopy<Arch::AtlasA2, Gemm::GemmType<half, layout::PaddingColumnMajor>> {
+    using LayoutDst = layout::nZ;
+    using LayoutSrc = layout::PaddingColumnMajor;
+    using Element = half;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+
+    // Mehtods
+
+    CATLASS_DEVICE
+    CopyGmToL1IntervalDataCopy() {};
+
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::GlobalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+    {
+        for (int i = 0; i < layoutSrc.orgShape(1); ++i) {
+            AscendC::DataCopyParams dataCopyParams(
+                CeilDiv(layoutSrc.orgShape(0), layoutDst.shape(0)),
+                layoutDst.shape(0) / ELE_NUM_PER_C0,
+                0,
+                (layoutDst.stride(1) - layoutDst.shape(0)) / ELE_NUM_PER_C0
+            );
+            AscendC::DataCopy(dstTensor[i * layoutDst.shape(0)], srcTensor[i * layoutSrc.stride(2)], dataCopyParams);
+        }
+    }
+};
+
 /// new add gemm
 template <class ArchTag, class Element>
 struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::RowMajor>, Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>> {
