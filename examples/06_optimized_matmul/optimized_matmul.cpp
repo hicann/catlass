@@ -86,7 +86,6 @@ void OptimizedMatmul(
     GM_ADDR gmWA, LayoutWA layoutWA,
     GM_ADDR gmWB, LayoutWB layoutWB)
 {
-    using ArchTag = Arch::AtlasA2;
     AscendC::SetSyncBaseAddr(fftsAddr);
 
     if (problemShape.m() > problemShape.n()) {
