@@ -9,11 +9,13 @@
 set(CATLASS_EXAMPLES_COMMON_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/common)
 set(BISHENG_COMPILER_OPTIONS
     -O2 -std=c++17 -xcce
+    --cce-aicore-arch=dav-c220
     -mllvm -cce-aicore-stack-size=0x8000
     -mllvm -cce-aicore-function-stack-size=0x8000
     -mllvm -cce-aicore-record-overflow=true
     -mllvm -cce-aicore-addr-transform
     -mllvm -cce-aicore-dcci-insert-for-scalar=false
+    -cce-launch-new-impl
     -DL2_CACHE_HINT
     -I${ASCEND_HOME_PATH}/compiler/tikcpp
     -I${ASCEND_HOME_PATH}/compiler/tikcpp/tikcfw

@@ -46,6 +46,7 @@ template <
     class LayoutA,
     class LayoutB
 >
+[[bisheng::core_ratio(1, 1)]]
 CATLASS_GLOBAL
 void QuantMatmul(
     uint64_t fftsAddr,
