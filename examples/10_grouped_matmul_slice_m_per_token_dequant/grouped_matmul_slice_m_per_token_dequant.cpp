@@ -39,10 +39,41 @@
 using namespace Catlass;
 using bfloat16 = op::bfloat16;
 
+template <
+    /// Tag indicating architecture
+    class ArchTag,
+    /// GemmType for A matrix operand
+    class AType,
+    /// GemmType type for B matrix operand
+    class BType,
+    /// GemmType type for C matrix operand
+    class CType,
+    /// GemmType type for Bias operand
+    class BiasType = void
+>
+struct TileCopyGMMPTD : public Catlass::Gemm::Tile::TileCopy<ArchTag, AType, BType, CType, BiasType> {
+    using Base = Catlass::Gemm::Tile::TileCopy<ArchTag, AType, BType, CType, BiasType>;
+    using ElementA = typename Base::ElementA;
+    using ElementB = typename Base::ElementB;
+    using ElementAccumulator = typename Base::ElementAccumulator;
+
+    using CopyGmToL1A = Gemm::Tile::CopyGmToL1GMMPTD<ArchTag, AType>;
+    using CopyGmToL1B = typename Base::CopyGmToL1B;
+
+    using CopyL1ToL0A = typename Base::CopyL1ToL0A;
+    using CopyL1ToL0B = typename Base::CopyL1ToL0B;
+
+    using CopyL0CToGm = typename Base::CopyL0CToGm; 
+    using BiasTypeSelector = typename Base::BiasTypeSelector; 
+    using CopyGmToL1Bias = typename Base::CopyGmToL1Bias;
+    using CopyL1ToBT = typename Base::CopyL1ToBT;
+};
+
 using L1TileShape = GemmShape<128, 256, 512>;
 constexpr uint32_t workspaceStages = 2;
 
 template <class LayoutB>
+[[bisheng::core_ratio(1, 1)]]
 CATLASS_GLOBAL
 void GroupedMatmulSliceMPerTokenDequant(
     uint64_t fftsAddr,
@@ -56,6 +87,7 @@ void GroupedMatmulSliceMPerTokenDequant(
     GM_ADDR gmWorkspace
 )
 {
+    icache_preload(1);
     AscendC::SetSyncBaseAddr(fftsAddr);
     using ArchTag = Arch::AtlasA2;
     constexpr uint32_t preloadStages = 1;
@@ -76,7 +108,8 @@ void GroupedMatmulSliceMPerTokenDequant(
     using BType = Gemm::GemmType<int8_t, LayoutB>;
     using CType = Gemm::GemmType<int32_t, layout::RowMajor>;
 
-    using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+    using TileCopyMmad = TileCopyGMMPTD<ArchTag, AType, BType, CType>;
+    using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType, void, TileCopyMmad>;
 
     constexpr uint32_t ubStages = 2;
     using EpilogueDispatchPolicy = Epilogue::EpilogueAtlasA2PerTokenDequant<ubStages>;
