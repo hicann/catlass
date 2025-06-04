@@ -19,6 +19,8 @@
 #include "catlass/gemm_coord.hpp"
 #include "catlass/matrix_coord.hpp"
 
+__gm__ struct OpSystemRunCfg g_opSystemRunCfg{Catlass::L2_OFFSET};
+
 namespace Catlass::Gemm::Kernel {
 
 template <
@@ -125,8 +127,6 @@ public:
         // Represent the full gm
         AscendC::GlobalTensor<ElementA> gmA;
         gmA.SetGlobalBuffer(params.ptrA);
-        AscendC::GlobalTensor<ElementB> gmB;
-        gmB.SetGlobalBuffer(params.ptrB);
         AscendC::GlobalTensor<ElementGroupList> groupList;
         groupList.SetGlobalBuffer(params.ptrGroupList);
 
@@ -152,6 +152,12 @@ public:
 
             blockScheduler.Update(inGroupProblemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
             uint32_t coreLoops = blockScheduler.GetCoreLoops();
+
+            AscendC::GlobalTensor<ElementB> gmB;
+            gmB.SetGlobalBuffer(params.ptrB + gmGroupOffsetB);
+            if (CeilDiv(currentM, L1TileShape::M) == 1) {
+                gmB.SetL2CacheHint(AscendC::CacheMode::CACHE_MODE_DISABLE);
+            }
 
             // Determine the starting loopIdx of the current core under the current groupIdx
             uint32_t startLoopIdx = ((coreIdx < startCoreIdx) ? (coreIdx + coreNum) : coreIdx) - startCoreIdx;
@@ -181,7 +187,7 @@ public:
                 if constexpr (BlockMmad::DispatchPolicy::ASYNC) {
                     blockMmad(
                         gmA[gmGroupOffsetA + gmOffsetA], layoutA,
-                        gmB[gmGroupOffsetB + gmOffsetB], layoutB,
+                        gmB[gmOffsetB], layoutB,
                         gmC[gmOffsetC], layoutC,
                         actualBlockShape,
                         callbackBeforeFixpipe, callbackAfterFixpipe
@@ -190,7 +196,7 @@ public:
                     callbackBeforeFixpipe();
                     blockMmad(
                         gmA[gmGroupOffsetA + gmOffsetA], layoutA,
-                        gmB[gmGroupOffsetB + gmOffsetB], layoutB,
+                        gmB[gmOffsetB], layoutB,
                         gmC[gmOffsetC], layoutC,
                         actualBlockShape
                     );
