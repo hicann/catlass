@@ -52,6 +52,9 @@ struct TileMmad {
         mmadParams.k = k;
         mmadParams.unitFlag = unitFlag;
         mmadParams.cmatrixInitVal = initC;
+        if constexpr (std::is_same_v<ElementA, float> && std::is_same_v<typename AType_::Layout, layout::ColumnMajor>) {
+            mmadParams.kDirectionAlign = true;
+        }
 
         AscendC::Mmad(l0CTensor,
                       l0ATensor,
@@ -78,6 +81,9 @@ struct TileMmad {
         mmadParams.k = k;
         mmadParams.unitFlag = unitFlag;
         mmadParams.cmatrixInitVal = false;
+        if constexpr (std::is_same_v<ElementA, float> && std::is_same_v<typename AType_::Layout, layout::ColumnMajor>) {
+            mmadParams.kDirectionAlign = true;
+        }
 
         AscendC::Mmad(l0CTensor,
                       l0ATensor,

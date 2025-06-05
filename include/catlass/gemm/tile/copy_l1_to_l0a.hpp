@@ -191,6 +191,43 @@ struct CopyL1ToL0A<ArchTag, Gemm::GemmType<Element, layout::zN, AscendC::TPositi
     }
 };
 
+/// Partial specialization for float, zN in and zZ out.
+template <class ArchTag>
+struct CopyL1ToL0A<ArchTag, Gemm::GemmType<float, layout::zN, AscendC::TPosition::A1>> {
+    using Element = float;
+    using LayoutDst = layout::zZ;
+    using LayoutSrc = layout::zN;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+    static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
+
+    // Methods
+
+    CATLASS_DEVICE
+    CopyL1ToL0A() {};
+
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::LocalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+    {
+        constexpr uint8_t PAD_LIST[4] = {0, 0, 0, 0};
+        uint16_t l1M = layoutSrc.shape(0) * layoutSrc.shape(1);
+        uint16_t l1K = layoutSrc.shape(2) * layoutSrc.shape(3);
+        uint16_t l0M = layoutDst.shape(0) * layoutDst.shape(1);
+        uint16_t l0K = layoutDst.shape(2) * layoutDst.shape(3);
+        AscendC::SetFmatrix(1, l1M, PAD_LIST, AscendC::FmatrixMode::FMATRIX_LEFT);
+        static constexpr AscendC::IsResetLoad3dConfig config = {false, false};
+        AscendC::LoadData3DParamsV2<Element> loadDataParams;
+        loadDataParams.kExtension = l0K;
+        loadDataParams.mExtension = l0M;
+        loadDataParams.channelSize = l1K;
+
+        AscendC::LoadData<Element, config>(dstTensor, srcTensor, loadDataParams);
+    }
+};
+
 template <class ArchTag, class Element>
 struct CopyL1ToL0A<ArchTag, Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::A1>> {
     using LayoutDst = layout::zZ;
@@ -258,6 +295,49 @@ struct CopyL1ToL0A<ArchTag, Gemm::GemmType<int8_t, layout::nZ, AscendC::TPositio
                                            srcTensor[i * layoutSrc.stride(1)],
                                            loadDataParams);
         }
+    }
+};
+
+/// Partial specialization for float, nZ in and zZ out. (Transpose A)
+template <class ArchTag>
+struct CopyL1ToL0A<ArchTag, Gemm::GemmType<float, layout::nZ, AscendC::TPosition::A1>> {
+    using Element = float;
+    using LayoutDst = layout::zZ;
+    using LayoutSrc = layout::nZ;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+    static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
+
+    // Methods
+
+    CATLASS_DEVICE
+    CopyL1ToL0A() {};
+
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::LocalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+    {
+        constexpr uint8_t PAD_LIST[4] = {0, 0, 0, 0};
+        uint16_t l1M = layoutSrc.shape(0) * layoutSrc.shape(1);
+        uint16_t l1K = layoutSrc.shape(2) * layoutSrc.shape(3);
+        uint16_t l0M = layoutDst.shape(0) * layoutDst.shape(1);
+        uint16_t l0K = layoutDst.shape(2) * layoutDst.shape(3);
+        // K, M need to be 16 aligned for f32
+        uint16_t l1MAlign = RoundUp<C0_NUM_PER_FRACTAL>(l1M);
+        uint16_t l1KAlign = RoundUp<C0_NUM_PER_FRACTAL>(l1K);
+        uint16_t l0MAlign = RoundUp<C0_NUM_PER_FRACTAL>(l0M);
+        uint16_t l0KAlign = RoundUp<C0_NUM_PER_FRACTAL>(l0K);
+        AscendC::SetFmatrix(1, l1KAlign, PAD_LIST, AscendC::FmatrixMode::FMATRIX_LEFT);
+        static constexpr AscendC::IsResetLoad3dConfig config = {false, false};
+        AscendC::LoadData3DParamsV2<Element> loadDataParams;
+        loadDataParams.kExtension = l0MAlign;
+        loadDataParams.mExtension = l0KAlign;
+        loadDataParams.enTranspose = true;
+        loadDataParams.channelSize = l1MAlign;
+
+        AscendC::LoadData<Element, config>(dstTensor, srcTensor, loadDataParams);
     }
 };
 
