@@ -119,7 +119,6 @@ template <class Type, bool PADDING> struct PaddingHelper {
         if constexpr (PADDING) {
             LayoutPadding layoutW = LayoutPadding(a, b, padA, padB);
             return layoutW;
-
         } else {
             Layout layoutW = Layout(a, b);
             return layoutW;
