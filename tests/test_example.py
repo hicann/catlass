@@ -1,3 +1,11 @@
+# Copyright (c) 2025 Huawei Technologies Co., Ltd.
+# This file is a part of the CANN Open Software.
+# Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
+# Please refer to the License for details. You may not use this file except in compliance with the License.
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
+
 import unittest
 from typing import List, Type
 import subprocess
@@ -42,7 +50,8 @@ class CatlassExampleTest(unittest.TestCase):
         case_py = case_base + ["half"]
         ret = subprocess.run(["python", os.path.join(
             CMAKE_EXAMPLES_PATH, "19_mla", "gen_data.py")]+case_py)
-        case_cpp = case_base + ["--dtype", "half", "--datapath", os.path.join(CMAKE_EXAMPLES_PATH, "19_mla", "data")]
+        case_cpp = case_base + ["--dtype", "half", "--datapath",
+                                os.path.join(CMAKE_EXAMPLES_PATH, "19_mla", "data")]
         self.run_case("19_mla", case_cpp)
 
 
@@ -64,7 +73,8 @@ normal_cases = ["00_basic_matmul 256 512 1024 0",
                 "15_gemm 256 512 1024 0",
                 "16_group_gemm 3 '128,256,512' '256,512,128' '512,256,128' 0",
                 "17_gemv_aiv 256 512 0",
-                "18_gemv_aic 256 512 0"]
+                "18_gemv_aic 256 512 0",
+                "20_matmul_bias 256 512 1024 0"]
 
 
 def set_case(case: str):
