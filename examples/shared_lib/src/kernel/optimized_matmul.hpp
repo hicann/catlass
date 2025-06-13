@@ -164,7 +164,7 @@ CATLASS_GLOBAL void optimized_matmul(uint64_t fftsAddr, GemmCoord problemShape, 
 
     using PaddingHelperB = PaddingHelper<BType, PADDING_B>;
     using LayoutWB = typename PaddingHelperB::LayoutW;
-    LayoutWB layoutWB = PaddingHelperB::GetLayoutW(layoutA.shape(0), layoutA.shape(1), L1TileShape::K, L1TileShape::N);
+    LayoutWB layoutWB = PaddingHelperB::GetLayoutW(layoutB.shape(0), layoutB.shape(1), L1TileShape::K, L1TileShape::N);
     using ActualTypeB = typename PaddingHelperB::ActualType;
     using GlobalPaddingB = typename PaddingHelperB::GlobalPadding;
 

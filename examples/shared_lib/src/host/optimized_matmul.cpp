@@ -18,9 +18,9 @@ void OptimizedMatmul(uint32_t blockNum, aclrtStream stream, KernelInfo kernelInf
     using LayoutA = layout::RowMajor;
     using LayoutB = layout::RowMajor;
     using LayoutC = layout::RowMajor;
-    using ElementA = half;
-    using ElementB = half;
-    using ElementC = half;
+    using ElementA = bfloat16_t;
+    using ElementB = bfloat16_t;
+    using ElementC = bfloat16_t;
     using AType = Gemm::GemmType<ElementA, LayoutA>;
     using BType = Gemm::GemmType<ElementB, LayoutB>;
     using CType = Gemm::GemmType<ElementC, LayoutC>;
