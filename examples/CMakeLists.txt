@@ -31,8 +31,12 @@ set(BISHENG_COMPILER_OPTIONS
     -lruntime -lstdc++ -lascendcl -lm -ltiling_api -lplatform -lc_sec -ldl -lnnopbase
 )
 
-if(DEFINED PROF)
-    list(APPEND ${BISHENG_COMPILER_OPTIONS} -lprofapi)
+if(ENABLE_DUMP)
+    list(APPEND BISHENG_COMPILER_OPTIONS -lascend_dump -DASCENDC_DUMP=1 -DASCENDC_DEBUG)
+endif()
+
+if(PROF)
+    list(APPEND BISHENG_COMPILER_OPTIONS -lprofapi)
 endif()
 
 file(GLOB_RECURSE CATLASS_INCLUDE_FILES ${CMAKE_SOURCE_DIR}/include/*.hpp)
@@ -40,7 +44,7 @@ file(GLOB_RECURSE CATLASS_EXAMPLES_COMMON_INCLUDE_FILES ${CATLASS_EXAMPLES_COMMO
 add_custom_target(catlass_examples)
 
 function(catlass_example_add_executable NAME)
-    if (${NAME} STREQUAL "17_gemv_aiv")
+    if(${NAME} STREQUAL "17_gemv_aiv")
         set(ARCH "dav-c220-vec")
     else()
         set(ARCH "dav-c220")
@@ -61,30 +65,31 @@ endfunction()
 if(ENABLE_LIB)
     add_subdirectory(lib_cmake)
 else()
-
-foreach(EXAMPLE
-    00_basic_matmul
-    01_batched_matmul
-    02_grouped_matmul_slice_m
-    03_matmul_add
-    04_padding_matmul
-    05_grouped_matmul_slice_k
-    06_optimized_matmul
-    07_grouped_matmul_slice_m_per_token_dequant_moe
-    08_grouped_matmul
-    09_splitk_matmul
-    10_grouped_matmul_slice_m_per_token_dequant
-    11_grouped_matmul_slice_k_per_token_dequant
-    12_quant_matmul
-    13_basic_matmul_tla
-    14_optimized_matmul_tla
-    15_gemm
-    16_group_gemm
-    17_gemv_aiv
-    18_gemv_aic
-    19_mla
-)
-    add_subdirectory(${EXAMPLE})
-endforeach()
+    foreach(EXAMPLE
+        00_basic_matmul
+        01_batched_matmul
+        02_grouped_matmul_slice_m
+        03_matmul_add
+        04_padding_matmul
+        05_grouped_matmul_slice_k
+        06_optimized_matmul
+        07_grouped_matmul_slice_m_per_token_dequant_moe
+        08_grouped_matmul
+        09_splitk_matmul
+        10_grouped_matmul_slice_m_per_token_dequant
+        11_grouped_matmul_slice_k_per_token_dequant
+        12_quant_matmul
+        13_basic_matmul_tla
+        14_optimized_matmul_tla
+        15_gemm
+        16_group_gemm
+        17_gemv_aiv
+        18_gemv_aic
+        19_mla
+        20_matmul_bias
+        print_and_dump
+    )
+        add_subdirectory(${EXAMPLE})
+    endforeach()
 
 endif()
