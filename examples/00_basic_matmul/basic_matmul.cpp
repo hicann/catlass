@@ -115,6 +115,7 @@ void Run(Options const &options)
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
+    std::cerr << "aicCoreNum count: " << aicCoreNum << std::endl;
     using ArchTag = Arch::AtlasA2;
     using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
     using L1TileShape = GemmShape<128, 256, 256>;
