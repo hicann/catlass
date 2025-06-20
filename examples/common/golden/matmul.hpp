@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "catlass/layout/layout.hpp"
+#include "catlass/gemm_coord.hpp"
 #include "catlass/gemv_coord.hpp"
 
 namespace Catlass::golden {
@@ -83,13 +84,13 @@ void ComputeGemv(
         for (uint32_t k = 0; k < problemShape.n(); ++k) {
             size_t offsetA = layoutA.GetOffset(MakeCoord(i, k));
             size_t offsetX = layoutX.GetOffset(MakeCoord(k));
-            accumulator += static_cast<ElementGolden>(alpha) * 
-                          static_cast<ElementGolden>(dataA[offsetA]) * 
+            accumulator += static_cast<ElementGolden>(alpha) *
+                          static_cast<ElementGolden>(dataA[offsetA]) *
                           static_cast<ElementGolden>(dataX[offsetX]);
         }
         size_t offsetY = layoutY.GetOffset(MakeCoord(i));
-        dataGolden[offsetGolden] = static_cast<ElementGolden>(beta) * 
-                                  static_cast<ElementGolden>(dataY[offsetY]) + 
+        dataGolden[offsetGolden] = static_cast<ElementGolden>(beta) *
+                                  static_cast<ElementGolden>(dataY[offsetY]) +
                                   static_cast<ElementGolden>(accumulator);
     }
 }
@@ -331,7 +332,7 @@ void ComputeGroupedMatmulSliceKPerTokenDequant(
                     static_cast<float>(dataPerTokenScale[groupOffsetPerTokenScale + i]);
             }
         }
-        
+
         groupOffsetD += static_cast<size_t>(problemShape.m()) * problemShape.n();
         groupOffsetScale += static_cast<size_t>(problemShape.n());
         groupOffsetPerTokenScale += static_cast<size_t>(problemShape.m());

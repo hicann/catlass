@@ -20,6 +20,7 @@
 #include "catlass/arch/resource.hpp"
 
 namespace Catlass::Gemm::Block{
+
 template<
     bool ENABLE_UNIT_FLAG_,
     bool ENABLE_SHUFFLE_K_,
@@ -87,7 +88,7 @@ public:
     const uint32_t l0CBlockNum = ArchTag::L0C_SIZE / cSize;
 
     static_assert(std::is_same_v<LayoutC, layout::RowMajor>, "LayoutC only support RowMajor yet!");
-    
+
     CATLASS_DEVICE
     BlockGemm(Arch::Resource<ArchTag> &resource, uint32_t l1BufAddrStart = 0)
     {
@@ -113,8 +114,9 @@ public:
     }
     // destroy function
     CATLASS_DEVICE
-    ~BlockGemm(){
-        for (uint32_t i = 0; i < STAGES; i++) 
+    ~BlockGemm()
+    {
+        for (uint32_t i = 0; i < STAGES; i++)
         {
             AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[i]);
             AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[i]);
@@ -132,17 +134,17 @@ public:
         AscendC::GlobalTensor<ElementB> const &gmNextBlockB,
         GemmCoord const &actualShape, GemmCoord const &actualShapeNext,
         bool isFirstBlock, bool hasNextBlock, uint32_t singleIdx)
-    { 
+    {
         uint32_t K = actualShape.k();
         uint32_t maxKPerBlock = L1TileShape::K;
         uint32_t kLoops = CeilDiv(K, maxKPerBlock);
         uint32_t startTileIdx{0};
-        if (ENABLE_SHUFFLE_K) 
+        if (ENABLE_SHUFFLE_K)
         {
             startTileIdx = AscendC::GetBlockIdx();
         }
-        uint32_t firstTileIdx = startTileIdx % kLoops; 
-        uint32_t lastTileIdx = (startTileIdx + kLoops - 1) % kLoops; 
+        uint32_t firstTileIdx = startTileIdx % kLoops;
+        uint32_t lastTileIdx = (startTileIdx + kLoops - 1) % kLoops;
         uint32_t kGmActual = (firstTileIdx == kLoops - 1) ? (K - firstTileIdx * maxKPerBlock) : maxKPerBlock;
         auto layoutAInL1 = LayoutAInL1::template MakeLayout<ElementA>(L1TileShape::M, L1TileShape::K);
         auto layoutBInL1 = LayoutBInL1::template MakeLayout<ElementB>(L1TileShape::K, L1TileShape::N);
@@ -150,14 +152,14 @@ public:
         {
             uint32_t shuffleKIdx = (startTileIdx + kIdx) % kLoops;
             if (shuffleKIdx == firstTileIdx && isFirstBlock)
-            { 
-                auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShape.m(), kGmActual)); 
+            {
+                auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShape.m(), kGmActual));
                 auto layoutTileB = layoutB.GetTileLayout(MakeCoord(kGmActual, actualShape.n()));
-                MatrixCoord gmTileAOffset{0, shuffleKIdx * maxKPerBlock}; 
+                MatrixCoord gmTileAOffset{0, shuffleKIdx * maxKPerBlock};
                 auto gmTileA = gmA[layoutA.GetOffset(gmTileAOffset)];
-                MatrixCoord gmTileBOffset{shuffleKIdx * maxKPerBlock, 0}; 
+                MatrixCoord gmTileBOffset{shuffleKIdx * maxKPerBlock, 0};
                 auto gmTileB = gmB[layoutB.GetOffset(gmTileBOffset)];
-                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]); 
+                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);
                 copyGmToL1A(l1ATensor[l1ListId], gmTileA, layoutAInL1, layoutTileA);
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListId]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
@@ -165,21 +167,21 @@ public:
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
             }
             l1ListIdNext = 1 - l1ListId;
-            uint32_t kGmActualNext = 0; 
+            uint32_t kGmActualNext = 0;
             if (shuffleKIdx != lastTileIdx)
-            { 
+            {
                 uint32_t shuffleKIdxNext = (startTileIdx + kIdx + 1) % kLoops;
-                kGmActualNext = (shuffleKIdxNext == kLoops - 1) ? (K - shuffleKIdxNext * maxKPerBlock) : maxKPerBlock; 
-                auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShape.m(), kGmActualNext)); 
+                kGmActualNext = (shuffleKIdxNext == kLoops - 1) ? (K - shuffleKIdxNext * maxKPerBlock) : maxKPerBlock;
+                auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShape.m(), kGmActualNext));
                 auto layoutTileB = layoutB.GetTileLayout(MakeCoord(kGmActualNext, actualShape.n()));
-                MatrixCoord gmTileAOffset{0, shuffleKIdxNext * maxKPerBlock}; 
+                MatrixCoord gmTileAOffset{0, shuffleKIdxNext * maxKPerBlock};
                 auto gmTileA = gmA[layoutA.GetOffset(gmTileAOffset)];
-                MatrixCoord gmTileBOffset{shuffleKIdxNext * maxKPerBlock, 0}; 
+                MatrixCoord gmTileBOffset{shuffleKIdxNext * maxKPerBlock, 0};
                 auto gmTileB = gmB[layoutB.GetOffset(gmTileBOffset)];
                 if (ENABLE_ABBA)
                 {
                     if (shuffleKIdxNext % 2 == 1)
-                    { 
+                    {
                         AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListIdNext]);
                         copyGmToL1B(l1BTensor[l1ListIdNext], gmTileB, layoutBInL1, layoutTileB);
                         AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListIdNext]);
@@ -204,18 +206,18 @@ public:
                 }
             }
             if (shuffleKIdx == lastTileIdx && hasNextBlock)
-            { 
+            {
                 kGmActualNext = (firstTileIdx == kLoops - 1) ? (K - firstTileIdx * maxKPerBlock) : maxKPerBlock;
-                auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShapeNext.m(), kGmActualNext)); 
+                auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShapeNext.m(), kGmActualNext));
                 auto layoutTileB = layoutB.GetTileLayout(MakeCoord(kGmActualNext, actualShapeNext.n()));
-                MatrixCoord gmTileAOffset{0, firstTileIdx * maxKPerBlock}; 
+                MatrixCoord gmTileAOffset{0, firstTileIdx * maxKPerBlock};
                 auto gmNextTileA = gmNextBlockA[layoutA.GetOffset(gmTileAOffset)];
-                MatrixCoord gmTileBOffset{firstTileIdx * maxKPerBlock, 0}; 
+                MatrixCoord gmTileBOffset{firstTileIdx * maxKPerBlock, 0};
                 auto gmNextTileB = gmNextBlockB[layoutB.GetOffset(gmTileBOffset)];
                 if (ENABLE_ABBA)
                 {
                     if (shuffleKIdx % 2 == 0)
-                    { 
+                    {
                         AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListIdNext]);
                         copyGmToL1B(l1BTensor[l1ListIdNext], gmNextTileB, layoutBInL1, layoutTileB);
                         AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListIdNext]);
@@ -265,7 +267,7 @@ public:
                 {
                     if (shuffleKIdx % 2 == 0)
                     {
-                        if (kL0Idx % 2 == 0) { 
+                        if (kL0Idx % 2 == 0) {
                             AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0ListId]);
                             copyL1ToL0B(l0TileB, l1TileB, layoutBInL0, layoutBInL1);
                             AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0ListId]);
@@ -306,7 +308,7 @@ public:
                     AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0ListId]);
                 }
                 if (kL0Idx == kL0Loops - 1)
-                { 
+                {
                     AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);
                     AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
                     l1ListId = l1ListIdNext;
@@ -322,7 +324,7 @@ public:
         }
         AscendC::SetFlag<AscendC::HardEvent::M_FIX>((int32_t)(singleIdx % l0CBlockNum));
         AscendC::WaitFlag<AscendC::HardEvent::M_FIX>((int32_t)(singleIdx % l0CBlockNum));
-        auto layoutInL0X = LayoutCInL0::MakeLayoutInL0C(MakeCoord(L1TileShape::M, L1TileShape::N)); 
+        auto layoutInL0X = LayoutCInL0::MakeLayoutInL0C(MakeCoord(L1TileShape::M, L1TileShape::N));
         LayoutC layoutBlock = layoutC.GetTileLayout(MakeCoord(actualShape.m(), actualShape.n()));
         copyL0CToGm(gmC, l0CTensor[(singleIdx % l0CBlockNum) * BlockCnt], layoutBlock, layoutInL0X);
     }

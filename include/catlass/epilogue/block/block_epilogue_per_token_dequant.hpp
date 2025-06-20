@@ -15,6 +15,7 @@
 #include "catlass/arch/resource.hpp"
 #include "catlass/epilogue/dispatch_policy.hpp"
 #include "catlass/gemm_coord.hpp"
+#include "catlass/gemm/gemm_type.hpp"
 #include "catlass/matrix_coord.hpp"
 #include "catlass/layout/layout.hpp"
 #include "catlass/detail/callback.hpp"

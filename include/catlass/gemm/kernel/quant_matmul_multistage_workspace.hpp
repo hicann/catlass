@@ -15,6 +15,7 @@
 #include "catlass/arch/cross_core_sync.hpp"
 #include "catlass/arch/resource.hpp"
 #include "catlass/coord.hpp"
+#include "catlass/layout/layout.hpp"
 #include "catlass/detail/callback.hpp"
 #include "catlass/gemm_coord.hpp"
 #include "catlass/matrix_coord.hpp"
@@ -134,7 +135,7 @@ public:
             args.ptrD, layoutD, workspace};
         return params;
     }
-    
+
     // Methods
     CATLASS_DEVICE
     QuantMatmulMultiStageWorkspace()

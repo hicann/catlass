@@ -12,6 +12,8 @@
 #define CATLASS_GEMM_TILE_COPY_UB_TO_GM_HPP
 
 #include "catlass/catlass.hpp"
+#include "catlass/arch/arch.hpp"
+#include "catlass/gemm/tile/tile_copy_tla.hpp"
 #include "tla/tensor.hpp"
 
 namespace Catlass::Gemm::Tile {

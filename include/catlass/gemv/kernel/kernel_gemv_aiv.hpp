@@ -10,9 +10,11 @@
 
 #ifndef CATLASS_GEMV_KERNLE_GEMV_AIV_HPP
 #define CATLASS_GEMV_KERNLE_GEMV_AIV_HPP
+
 #include "catlass/catlass.hpp"
 #include "catlass/arch/resource.hpp"
 #include "catlass/coord.hpp"
+#include "catlass/layout/layout.hpp"
 #include "catlass/gemv_coord.hpp"
 
 namespace Catlass::Gemv::Kernel {
@@ -92,47 +94,56 @@ public:
         LayoutA layoutA{m, n};
         LayoutX layoutX{n};
         LayoutY layoutY{m};
-        Params params{problemShape, args.ptrA, layoutA, args.ptrX, layoutX, args.ptrY, layoutY, args.ptrZ, args.alpha, args.beta, args.split};
+        Params params{problemShape,
+            args.ptrA,
+            layoutA,
+            args.ptrX,
+            layoutX,
+            args.ptrY,
+            layoutY,
+            args.ptrZ,
+            args.alpha,
+            args.beta,
+            args.split};
         return params;
     }
 
     // Methods
     CATLASS_DEVICE
-    KernelGemvAiv(){}
+    KernelGemvAiv() {}
 
     template <int32_t CORE_TYPE = g_coreType>
     CATLASS_DEVICE
-    void operator()(Params const &params){
-    };
+    void operator()(Params const &params) {};
 
     /// Executes one Matmul
     template <>
     CATLASS_DEVICE
-    void operator()<AscendC::AIC>(Params const &params) {
-    }
+    void operator()<AscendC::AIC>(Params const &params) {}
 
     template <>
     CATLASS_DEVICE
-    void operator()<AscendC::AIV>(Params const &params) {
+    void operator()<AscendC::AIV>(Params const &params)
+    {
         AscendC::SetAtomicNone();
         Arch::Resource<ArchTag> resource;
         BlockGemv blockGemv(resource);
         uint32_t align = BYTE_PER_C0 / sizeof(ElementA);
-        uint32_t maxmPerBlock_round = RoundUp(UBTileShape::M,align);
-        uint32_t maxnPerBlock_round = RoundUp(UBTileShape::N,align);
+        uint32_t maxmPerBlock_round = RoundUp(UBTileShape::M, align);
+        uint32_t maxnPerBlock_round = RoundUp(UBTileShape::N, align);
 
-        //add split k
-        uint32_t N_Split = RoundDown(params.problemShape.n(),params.split)/params.split;
-        uint32_t Mloopnum = CeilDiv(params.problemShape.m(),maxmPerBlock_round);
+        // add split k
+        uint32_t N_Split = RoundDown(params.problemShape.n(), params.split) / params.split;
+        uint32_t Mloopnum = CeilDiv(params.problemShape.m(), maxmPerBlock_round);
         int32_t loopnum;
-        float Realbeta= params.beta;
-        if constexpr (std::is_same_v<LayoutA, Catlass::layout::ColumnMajor>){
+        float Realbeta = params.beta;
+        if constexpr (std::is_same_v<LayoutA, Catlass::layout::ColumnMajor>) {
             loopnum = Mloopnum * params.split;
             Realbeta = params.beta - 1.0f;
-        }else{
+        } else {
             loopnum = Mloopnum;
         }
-            
+
         uint32_t offset_matrix;
         uint32_t offset_vector_out;
         uint32_t offset_vector_in = 0;
@@ -146,31 +157,34 @@ public:
         gmY.SetGlobalBuffer((__gm__ ElementY *)params.ptrY);
         AscendC::GlobalTensor<ElementY> gmZ;
         gmZ.SetGlobalBuffer((__gm__ ElementY *)params.ptrZ);
-        uint32_t aiv_num = AscendC::GetBlockNum()*AscendC::GetTaskRation();
-        for(uint32_t loop_id = 0;loop_id < loopnum;loop_id++){
-            uint32_t aiv_id = AscendC::GetBlockIdx();   
-            if(loop_id % aiv_num != aiv_id)continue;
-            uint32_t m_catlassual = ((int32_t)loop_id > (int32_t)(loopnum - params.split - 1) ) ? params.problemShape.m() - ((loop_id/params.split) * maxmPerBlock_round) : maxmPerBlock_round;
+        uint32_t aiv_num = AscendC::GetBlockNum() * AscendC::GetTaskRation();
+        for (uint32_t loop_id = 0; loop_id < loopnum; loop_id++) {
+            uint32_t aiv_id = AscendC::GetBlockIdx();
+            if (loop_id % aiv_num != aiv_id)
+                continue;
+            uint32_t m_catlassual = ((int32_t)loop_id > (int32_t)(loopnum - params.split - 1))
+                                        ? params.problemShape.m() - ((loop_id / params.split) * maxmPerBlock_round)
+                                        : maxmPerBlock_round;
             uint32_t n_catlassual = params.problemShape.n();
 
             if constexpr (std::is_same_v<LayoutA, Catlass::layout::ColumnMajor>) {
-                offset_matrix = (loop_id % params.split) * N_Split*params.problemShape.m()+(loop_id/params.split) * maxmPerBlock_round;
-                offset_vector_out = (loop_id/params.split) * maxmPerBlock_round;
-                offset_vector_in = (loop_id % params.split) * N_Split; 
-                
-                if((loop_id%params.split) == params.split - 1){
+                offset_matrix = (loop_id % params.split) * N_Split * params.problemShape.m() +
+                                (loop_id / params.split) * maxmPerBlock_round;
+                offset_vector_out = (loop_id / params.split) * maxmPerBlock_round;
+                offset_vector_in = (loop_id % params.split) * N_Split;
+
+                if ((loop_id % params.split) == params.split - 1) {
                     n_catlassual = params.problemShape.n() - N_Split * (params.split - 1);
-                }
-                else{
+                } else {
                     n_catlassual = N_Split;
                 }
             } else {
                 offset_matrix = loop_id * maxmPerBlock_round * params.problemShape.n();
                 offset_vector_out = loop_id * maxmPerBlock_round;
             }
-            GemvCoord actualBlockShape = GemvCoord{m_catlassual,n_catlassual};
-            
-            float realbeta = (loop_id % params.split == 0) ? Realbeta:0.0f;
+            GemvCoord actualBlockShape = GemvCoord{m_catlassual, n_catlassual};
+
+            float realbeta = (loop_id % params.split == 0) ? Realbeta : 0.0f;
 
             blockGemv(gmA[offset_matrix], params.layoutA,
                 gmX[offset_vector_in], params.layoutX,
@@ -178,13 +192,11 @@ public:
                 gmZ[offset_vector_out],
                 actualBlockShape,
                 params.alpha,
-                realbeta
-            );
-
+                realbeta);
         }
     }
 };
 
-} 
+}
 
 #endif // CATLASS_GEMV_KERNLE_GEMV_AIV_HPP

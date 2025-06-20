@@ -11,6 +11,7 @@
 #ifndef CATLASS_GEMM_DEVICE_DEVICE_GEMM_HPP
 #define CATLASS_GEMM_DEVICE_DEVICE_GEMM_HPP
 
+#include <acl/acl.h>
 #include "catlass/catlass.hpp"
 #include "catlass/status.hpp"
 #include "catlass/gemm/device/kernel_adapter.hpp"
@@ -81,7 +82,7 @@ public:
     {
         return Run(stream, blockDim, 0);
     }
-    
+
     inline Status operator()(aclrtStream stream, uint32_t blockDim, uint64_t fftsAddr)
     {
         return Run(stream, blockDim, fftsAddr);

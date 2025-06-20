@@ -442,7 +442,7 @@ public:
         return sizeWA + sizeWB;
     }
 
-    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace) 
+    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
     {
         GemmCoord problemShape = args.problemShape;
         uint32_t m = problemShape.m();
