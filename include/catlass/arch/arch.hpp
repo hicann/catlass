@@ -11,6 +11,8 @@
 #ifndef CATLASS_ARCH_ARCH_HPP
 #define CATLASS_ARCH_ARCH_HPP
 
+#include "catlass/catlass.hpp"
+
 namespace Catlass::Arch {
 
 struct AtlasA2 {

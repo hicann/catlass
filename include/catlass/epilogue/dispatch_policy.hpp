@@ -11,6 +11,7 @@
 #ifndef CATLASS_EPILOGUE_DISPATCH_POLICY_HPP
 #define CATLASS_EPILOGUE_DISPATCH_POLICY_HPP
 
+#include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
 
 namespace Catlass::Epilogue {
@@ -78,6 +79,27 @@ struct EpilogueAtlasA2Gemm {
 struct EpilogueAtlasA2Gemv {
     using ArchTag = Arch::AtlasA2;
 };
+
+// For AtlasA2, MLAG Pre
+struct EpilogueAtlasA2FAGPre {
+    using ArchTag = Arch::AtlasA2;
+};
+
+// For AtlasA2, MLAG Op
+struct EpilogueAtlasA2FAGOp {
+    using ArchTag = Arch::AtlasA2;
+};
+
+// For AtlasA2, MLAG Sfmg
+struct EpilogueAtlasA2FAGSfmg {
+    using ArchTag = Arch::AtlasA2;
+};
+
+// For AtlasA2, MLAG Post
+struct EpilogueAtlasA2FAGPost {
+    using ArchTag = Arch::AtlasA2;
+};
+
 ///////////////////////////
 }  // namespace Catlass::Epilogue
 

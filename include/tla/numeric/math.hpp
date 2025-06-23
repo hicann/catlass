@@ -11,6 +11,7 @@
 #ifndef TLA_NUMERIC_MATH_HPP
 #define TLA_NUMERIC_MATH_HPP
 
+#include "catlass/catlass.hpp"
 #include "tla/type_traits.hpp"
 
 namespace tla {

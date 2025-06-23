@@ -17,6 +17,8 @@
 #include "catlass/gemm/dispatch_policy.hpp"
 #include "catlass/gemm/helper.hpp"
 #include "catlass/gemm_coord.hpp"
+#include "catlass/gemm/tile/tile_copy.hpp"
+#include "catlass/gemm/tile/tile_mmad.hpp"
 
 ////////////////////////////////////////////////////////////////////
 
@@ -169,7 +171,7 @@ public:
                 copyL1ToL0A(l0ATensor[L0ABPingPongFlag], l1ATensor[embedSplitIdx * rowNumRound * EMBED_SPLIT_SIZE],
                             layoutACatSplitKInL0, layoutACatSplitKInL1);
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(L0ABPingPongFlag);
-                
+
                 if (embedSplitIdx == 0 || embedSplitIdx == 2) {
                     // copy K to l1b
                     AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(L1BPingPongFlag);

@@ -14,6 +14,7 @@
 #include "catlass/catlass.hpp"
 #include "catlass/layout/layout.hpp"
 #include "catlass/gemm/gemm_type.hpp"
+
 constexpr uint32_t STRIDE_LIMIT = 65536;
 
 namespace Catlass::Gemv::Tile {
@@ -39,12 +40,12 @@ struct VecCopyGmToUB {
 ) {
     AscendC::DataCopyParams params;
     params.blockCount = 1;
-    params.blockLen = CeilDiv(len, ELE_NUM_PER_C0); 
-    params.srcStride = 0; 
-    params.dstStride = 0;  
+    params.blockLen = CeilDiv(len, ELE_NUM_PER_C0);
+    params.srcStride = 0;
+    params.dstStride = 0;
     AscendC::DataCopy(
-        dstTensor, 
-        srcTensor, 
+        dstTensor,
+        srcTensor,
         params);
 }
 };

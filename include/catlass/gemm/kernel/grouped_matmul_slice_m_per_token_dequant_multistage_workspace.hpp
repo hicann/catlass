@@ -15,11 +15,12 @@
 #include "catlass/arch/cross_core_sync.hpp"
 #include "catlass/arch/resource.hpp"
 #include "catlass/coord.hpp"
+#include "catlass/layout/layout.hpp"
 #include "catlass/detail/callback.hpp"
 #include "catlass/gemm_coord.hpp"
 #include "catlass/matrix_coord.hpp"
 
-inline __gm__ struct OpSystemRunCfg g_opSystemRunCfg{Catlass::L2_OFFSET};
+__gm__ struct OpSystemRunCfg g_opSystemRunCfg{Catlass::L2_OFFSET};
 
 namespace Catlass::Gemm::Kernel {
 
