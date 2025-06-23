@@ -18,6 +18,8 @@
 #include "catlass/gemm_coord.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
 #include "catlass/gemm/helper.hpp"
+#include "catlass/gemm/tile/tile_copy.hpp"
+#include "catlass/gemm/tile/tile_mmad.hpp"
 
 namespace Catlass::Gemm::Block {
 

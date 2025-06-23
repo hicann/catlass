@@ -17,8 +17,10 @@
 #include "catlass/matrix_coord.hpp"
 #include "catlass/arch/resource.hpp"
 #include "catlass/arch/cross_core_sync.hpp"
+#include "catlass/gemm/tile/tile_copy_tla.hpp"
 #include "tla/layout.hpp"
 #include "tla/tensor.hpp"
+
 namespace Catlass::Gemm::Kernel {
 
 template<
