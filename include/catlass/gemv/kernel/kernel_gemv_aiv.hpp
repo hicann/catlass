@@ -10,9 +10,11 @@
 
 #ifndef CATLASS_GEMV_KERNLE_GEMV_AIV_HPP
 #define CATLASS_GEMV_KERNLE_GEMV_AIV_HPP
+
 #include "catlass/catlass.hpp"
 #include "catlass/arch/resource.hpp"
 #include "catlass/coord.hpp"
+#include "catlass/layout/layout.hpp"
 #include "catlass/gemv_coord.hpp"
 
 namespace Catlass::Gemv::Kernel {
