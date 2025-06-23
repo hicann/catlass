@@ -23,7 +23,7 @@ template <
 struct TileVmuls
 {
     using Element = typename VType_::Element;
-    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element); 
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
 
     // Mehtods
 
@@ -38,7 +38,7 @@ struct TileVmuls
         uint32_t len)
     {
     AscendC::SetMaskCount();
-    AscendC::SetVectorMask<Element, AscendC::MaskMode::COUNTER>(len); 
+    AscendC::SetVectorMask<Element, AscendC::MaskMode::COUNTER>(len);
         AscendC::Muls<Element,false>(
             dstTensor,
             srcTensor,
@@ -48,7 +48,7 @@ struct TileVmuls
             AscendC::UnaryRepeatParams{}
         );
     AscendC::SetMaskNorm();
-    AscendC::ResetMask(); 
+    AscendC::ResetMask();
     }
 };
 } // namespace Catlass::Gemv::Tile

@@ -12,10 +12,11 @@
 #define CATLASS_GEMM_TILE_COPY_L1_TO_L0A_HPP
 
 #include "catlass/catlass.hpp"
+#include "catlass/arch/arch.hpp"
 #include "catlass/layout/layout.hpp"
 #include "catlass/gemm/gemm_type.hpp"
+#include "catlass/gemm/tile/tile_copy_tla.hpp"
 #include "tla/tensor.hpp"
-
 
 namespace Catlass::Gemm::Tile {
 

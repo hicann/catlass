@@ -14,6 +14,7 @@
 #include "catlass/catlass.hpp"
 #include "catlass/arch/resource.hpp"
 #include "catlass/epilogue/dispatch_policy.hpp"
+#include "catlass/gemm/helper.hpp"
 #include "catlass/gemv/helper.hpp"
 #include "catlass/gemv_coord.hpp"
 #include "catlass/layout/layout.hpp"
@@ -22,7 +23,7 @@
 namespace Catlass::Epilogue::Block {
 
 template <
-    class CType_,    
+    class CType_,
     class YType_,
     class ZType_,
     class TileElemWiseEpilogueAdd_,
@@ -53,7 +54,7 @@ public:
     using TileElemWiseEpilogueMuls = TileElemWiseEpilogueMuls_;
 
     using CopyGmToUbY = typename TileCopy_::CopyGmToUbC;
-    using CopyGmToubC = typename TileCopy_::CopyGmToUbX;      
+    using CopyGmToubC = typename TileCopy_::CopyGmToUbX;
     using CopyUbToGmZ = typename TileCopy_::CopyUbToGmD;
 
     static constexpr uint32_t COMPUTE_LENGTH = TileElemWiseEpilogueMuls::COMPUTE_LENGTH;
@@ -91,7 +92,7 @@ public:
     };
 
     CATLASS_DEVICE
-    BlockEpilogue(Arch::Resource<ArchTag>& resource, Params const& params): params(params) 
+    BlockEpilogue(Arch::Resource<ArchTag>& resource, Params const& params): params(params)
     {
         ubC = resource.ubBuf.template GetBufferByByte<ElementC>(0);
         ubY = resource.ubBuf.template GetBufferByByte<ElementY>(COMPUTE_LENGTH * sizeof(ElementC));
@@ -104,7 +105,7 @@ public:
     }
 
     CATLASS_DEVICE
-    ~BlockEpilogue() 
+    ~BlockEpilogue()
     {
         AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
     }
@@ -114,7 +115,7 @@ public:
         TensorCoord const& blockOffsetMN,
         TensorCoord const& actualBlockShapeMN,
         AscendC::GlobalTensor<ElementCompute> const& gmBlockC,
-        LayoutC const& layoutBlockC) 
+        LayoutC const& layoutBlockC)
     {
         TensorCoord actualBlockShape = actualBlockShapeMN;
         TensorCoord blockOffset = blockOffsetMN;

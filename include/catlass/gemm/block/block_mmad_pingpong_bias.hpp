@@ -17,6 +17,8 @@
 #include "catlass/gemm_coord.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
 #include "catlass/gemm/helper.hpp"
+#include "catlass/gemm/tile/tile_copy.hpp"
+#include "catlass/gemm/tile/tile_mmad.hpp"
 
 namespace Catlass::Gemm::Block {
 
@@ -306,11 +308,11 @@ public:
                         }
                         // Perform calculation operations
                         if (initC) {
-                            tileMmad(l0CTile, l0ATile, l0BTile, l0BiasTensor, mPartActual, nPartActual, kPartActual, initC, unitFlag);
+                            tileMmad(l0CTile, l0ATile, l0BTile, l0BiasTensor, mPartActual, nPartActual, kPartActual,
+                                     initC, unitFlag);
                         } else {
                             tileMmad(l0CTile, l0ATile, l0BTile, mPartActual, nPartActual, kPartActual, initC, unitFlag);
                         }
-                        
 
                         // Notify to move the next L0B tile
                         AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0BListId]);
