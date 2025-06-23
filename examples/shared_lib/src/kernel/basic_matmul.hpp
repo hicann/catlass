@@ -18,8 +18,8 @@
 
 #include <acl/acl.h>
 
-#include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
+#include "catlass/catlass.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
@@ -27,71 +27,52 @@
 #include "catlass/gemm/kernel/basic_matmul.hpp"
 #include "catlass/layout/layout.hpp"
 
-namespace Catlass{
-template <class LayoutA, class LayoutB, class LayoutC, typename IN_TYPE,
-          typename OUT_TYPE>
-CATLASS_DEVICE void basic_matmul_kernel(GemmCoord problemShape, GM_ADDR gmA,
-                                    LayoutA layoutA, GM_ADDR gmB,
-                                    LayoutB layoutB, GM_ADDR gmC,
-                                    LayoutC layoutC) {
-  using ArchTag = Arch::AtlasA2;
-  using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
-  using L1TileShape = GemmShape<128, 256, 256>;
-  using L0TileShape = GemmShape<128, 256, 64>;
+namespace Catlass {
 
-  using AType = Gemm::GemmType<IN_TYPE, LayoutA>;
-  using BType = Gemm::GemmType<IN_TYPE, LayoutB>;
-  using CType = Gemm::GemmType<OUT_TYPE, LayoutC>;
+template<class LayoutA, class LayoutB, class LayoutC, class InDType, class OutDType>
+CATLASS_GLOBAL void basic_matmul(GemmCoord problemShape, GM_ADDR gmA, GM_ADDR gmB, GM_ADDR gmC)
+{
+    using ArchTag = Arch::AtlasA2;
+    using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
+    using L1TileShape = GemmShape<128, 256, 256>;
+    using L0TileShape = GemmShape<128, 256, 64>;
 
-  using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape,
-                                           L0TileShape, AType, BType, CType>;
-  using BlockEpilogue = void;
+    using AType = Gemm::GemmType<InDType, LayoutA>;
+    using BType = Gemm::GemmType<InDType, LayoutB>;
+    using CType = Gemm::GemmType<OutDType, LayoutC>;
 
-  if (problemShape.m() > problemShape.n()) {
-    // Swizzle offset is 3 and direction is 0.
-    using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
+    using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+    using BlockEpilogue = void;
 
-    // kernel level
-    using MatmulKernel =
-        Gemm::Kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
+    LayoutA layoutA(problemShape.m(), problemShape.k());
+    LayoutB layoutB(problemShape.k(), problemShape.n());
+    LayoutC layoutC(problemShape.m(), problemShape.n());
 
-    typename MatmulKernel::Params params{problemShape, gmA, layoutA, gmB,
-                                         layoutB,      gmC, layoutC};
+    if (problemShape.m() > problemShape.n()) {
+        // Swizzle offset is 3 and direction is 0.
+        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
 
-    // call a kernel
-    MatmulKernel matmul;
-    matmul(params);
-  } else {
-    // Swizzle offset is 3 and direction is 1.
-    using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
+        // kernel level
+        using MatmulKernel = Gemm::Kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 
-    // kernel level
-    using MatmulKernel =
-        Gemm::Kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
+        typename MatmulKernel::Params params{problemShape, gmA, layoutA, gmB, layoutB, gmC, layoutC};
 
-    typename MatmulKernel::Params params{problemShape, gmA, layoutA, gmB,
-                                         layoutB,      gmC, layoutC};
+        // call a kernel
+        MatmulKernel matmul;
+        matmul(params);
+    } else {
+        // Swizzle offset is 3 and direction is 1.
+        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
 
-    // call a kernel
-    MatmulKernel matmul;
-    matmul(params);
-  }
+        // kernel level
+        using MatmulKernel = Gemm::Kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
+
+        typename MatmulKernel::Params params{problemShape, gmA, layoutA, gmB, layoutB, gmC, layoutC};
+
+        // call a kernel
+        MatmulKernel matmul;
+        matmul(params);
+    }
 }
-
-template <class LayoutA, class LayoutB, class LayoutC, aclDataType IN_TYPE,
-          aclDataType OUT_TYPE>
-CATLASS_GLOBAL void basic_matmul(GemmCoord problemShape, GM_ADDR gmA,
-                             LayoutA layoutA, GM_ADDR gmB, LayoutB layoutB,
-                             GM_ADDR gmC, LayoutC layoutC) {
-  if constexpr (IN_TYPE == ACL_FLOAT16 && OUT_TYPE == ACL_FLOAT16) {
-    basic_matmul_kernel<LayoutA, LayoutB, LayoutC, half, half>(
-        problemShape, gmA, layoutA, gmB, layoutB, gmC, layoutC);
-  }
-
-  if constexpr (IN_TYPE == ACL_BF16 && OUT_TYPE == ACL_BF16) {
-    basic_matmul_kernel<LayoutA, LayoutB, LayoutC, bfloat16_t, bfloat16_t>(
-        problemShape, gmA, layoutA, gmB, layoutB, gmC, layoutC);
-  }
-}
-} // end of namespace catlass
-#endif  // SHARED_LIB_IMPL_BASIC_MATMUL_H
+} // namespace Catlass
+#endif // SHARED_LIB_IMPL_BASIC_MATMUL_H
