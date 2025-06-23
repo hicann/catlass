@@ -12,6 +12,7 @@
 #define CATLASS_GEMV_TILE_VEC_COPY_UB_TO_GM_HPP
 
 #include "catlass/catlass.hpp"
+#include "catlass/arch/arch.hpp"
 #include "catlass/layout/layout.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 
@@ -32,7 +33,7 @@ struct VecCopyUBToGm<Arch::AtlasA2, Gemm::GemmType<Element, layout::VectorLayout
 {
     using LayoutSrc = layout::VectorLayout;
     using LayoutDst = layout::VectorLayout;
-    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element); 
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
 
     // Mehtods
 
@@ -66,7 +67,7 @@ struct VecCopyUBToGm<Arch::AtlasA2, Gemm::GemmType<Element, layout::VectorLayout
 {
     using LayoutSrc = layout::VectorLayout;
     using LayoutDst = layout::VectorLayout;
-    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element); 
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
 
     // Mehtods
 

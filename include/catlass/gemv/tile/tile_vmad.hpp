@@ -12,6 +12,8 @@
 #define CATLASS_GEMV_TILE_TILE_VMAD_HPP
 
 #include "catlass/catlass.hpp"
+#include "catlass/arch/arch.hpp"
+#include "catlass/gemm/helper.hpp"
 #include "catlass/layout/layout.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 
@@ -25,7 +27,6 @@ template <
     class YType,
     class BiasType = void
 >
-
 struct TileVmad
 {
     static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported TileVmad, can not find the specialization.");
@@ -71,13 +72,13 @@ struct TileVmad<Arch::AtlasA2,
         uint32_t elem_repeat_size = ELE_NUM_PER_C0 * 8;
         uint32_t mask = temp_repeat_size;
         uint32_t repeattimes = CeilDiv(m_catlassual, temp_repeat_size);
-        AscendC::Duplicate<ElementAccumulator>( 
+        AscendC::Duplicate<ElementAccumulator>(
             temp,
             (ElementAccumulator)0.0,
-            temp_repeat_size,                                    
-            CeilDiv(m_round * temp_repeat_size, temp_repeat_size), 
-            1,                                                     
-            8                                                     
+            temp_repeat_size,
+            CeilDiv(m_round * temp_repeat_size, temp_repeat_size),
+            1,
+            8
         );
 
         uint32_t repeat_num = n_catlassual / temp_repeat_size;
@@ -95,7 +96,7 @@ struct TileVmad<Arch::AtlasA2,
         AscendC::SetVectorMask<ElementAccumulator, AscendC::MaskMode::COUNTER>(m_catlassual * temp_repeat_size);
         for (uint32_t i = 0; i < repeat_num; i++)
         {
-            uint32_t offset = i * temp_repeat_size; 
+            uint32_t offset = i * temp_repeat_size;
             AscendC::MulAddDst<ElementAccumulator, ElementA, false>(
                 temp,
                 srcTensor_m[offset],
@@ -107,7 +108,7 @@ struct TileVmad<Arch::AtlasA2,
             AscendC::PipeBarrier<PIPE_V>();
         }
         AscendC::SetMaskNorm();
-        AscendC::ResetMask(); 
+        AscendC::ResetMask();
 
         if (remain > 0)
         {
@@ -116,7 +117,7 @@ struct TileVmad<Arch::AtlasA2,
             {
                 remain = n_round - offset;
             }
-            uint64_t remain_mask = remain; 
+            uint64_t remain_mask = remain;
             AscendC::MulAddDst<ElementAccumulator, ElementA, true>(
                 temp,
                 srcTensor_m[offset],
@@ -140,7 +141,7 @@ struct TileVmad<Arch::AtlasA2,
         AscendC::UnaryRepeatParams castparams;
         castparams.dstBlkStride = 1;
         castparams.srcBlkStride = 1;
-        castparams.dstRepStride = 4; 
+        castparams.dstRepStride = 4;
         castparams.srcRepStride = 8;
         AscendC::Cast<ElementA, ElementAccumulator, true>(
             srcTensor_m,
@@ -180,7 +181,7 @@ struct TileVmad<Arch::AtlasA2,
 
     using LayoutDst = layout::RowMajor;
     using LayoutSrc = layout::RowMajor;
-    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementA); 
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementA);
 
     // Mehtods
 
@@ -201,7 +202,7 @@ struct TileVmad<Arch::AtlasA2,
         uint32_t m_round = layoutDst.shape(0);
         uint32_t n_round = layoutDst.shape(1);
 
-        uint32_t repeat_size = ELE_NUM_PER_C0 * 8; 
+        uint32_t repeat_size = ELE_NUM_PER_C0 * 8;
         uint32_t mask = repeat_size;
         uint32_t repeat_num = n_catlassual / repeat_size;
         uint32_t remain = n_catlassual % repeat_size;
@@ -241,7 +242,7 @@ struct TileVmad<Arch::AtlasA2,
             AscendC::PipeBarrier<PIPE_V>();
         }
         AscendC::SetMaskNorm();
-        AscendC::ResetMask(); 
+        AscendC::ResetMask();
 
         if (remain > 0)
         {
@@ -295,7 +296,7 @@ struct TileVmad<Arch::AtlasA2,
             srcTensor_m,
             dstTensor,
             add_mask,
-            CeilDiv(m_round, repeat_size), 
+            CeilDiv(m_round, repeat_size),
             params);
     }
 };
@@ -315,7 +316,7 @@ struct TileVmad<Arch::AtlasA2,
         typename Gemm::helper::ElementAccumulatorSelector<ElementA, ElementX>::ElementAccumulator;
     using LayoutDst = layout::ColumnMajor;
     using LayoutSrc = layout::ColumnMajor;
-    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementA); 
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementA);
 
     // Mehtods
 
@@ -336,15 +337,14 @@ struct TileVmad<Arch::AtlasA2,
         uint32_t m_round = layoutDst.shape(0);
         uint32_t n_round = layoutDst.shape(1);
         AscendC::SetMaskCount();
-        AscendC::SetVectorMask<ElementAccumulator, AscendC::MaskMode::COUNTER>(m_catlassual); 
-        AscendC::Duplicate<ElementAccumulator, false>(                                 
+        AscendC::SetVectorMask<ElementAccumulator, AscendC::MaskMode::COUNTER>(m_catlassual);
+        AscendC::Duplicate<ElementAccumulator, false>(
             temp,
             (ElementAccumulator)0.0,
             AscendC::MASK_PLACEHOLDER,
-            1,                      
-            1,                   
-            8                          
-        );
+            1,
+            1,
+            8);
         AscendC::PipeBarrier<PIPE_V>();
 
         ElementX pix[32];
@@ -361,7 +361,7 @@ struct TileVmad<Arch::AtlasA2,
         params.dstBlkStride = 1;
         params.srcBlkStride = 1;
         params.dstRepStride = 8;
-        params.srcRepStride = 4; 
+        params.srcRepStride = 4;
         for (uint32_t i = 0; i < n_catlassual; i++)
         {
             AscendC::Axpy<ElementAccumulator, ElementA, false>(
@@ -373,7 +373,7 @@ struct TileVmad<Arch::AtlasA2,
                 params);
             AscendC::PipeBarrier<PIPE_V>();
         }
-        params.dstRepStride = 4; 
+        params.dstRepStride = 4;
         params.srcRepStride = 8;
         AscendC::Cast<ElementA, ElementAccumulator, false>(
             srcTensor_m,
@@ -398,7 +398,7 @@ struct TileVmad<Arch::AtlasA2,
             1,
             addparams);
         AscendC::SetMaskNorm();
-        AscendC::ResetMask(); 
+        AscendC::ResetMask();
     }
 };
 
@@ -416,7 +416,7 @@ struct TileVmad<Arch::AtlasA2,
         typename Gemm::helper::ElementAccumulatorSelector<ElementA, ElementX>::ElementAccumulator;
     using LayoutDst = layout::ColumnMajor;
     using LayoutSrc = layout::ColumnMajor;
-    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementA); 
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementA);
 
     // Mehtods
 
@@ -451,10 +451,10 @@ struct TileVmad<Arch::AtlasA2,
         params.dstRepStride = 8;
         params.srcRepStride = 8;
         AscendC::SetMaskCount();
-        AscendC::SetVectorMask<ElementA, AscendC::MaskMode::COUNTER>(m_catlassual); 
+        AscendC::SetVectorMask<ElementA, AscendC::MaskMode::COUNTER>(m_catlassual);
         for (uint32_t i = 0; i < n_catlassual; i++)
         {
-            AscendC::Axpy<ElementY, ElementA, false>( 
+            AscendC::Axpy<ElementY, ElementA, false>(
                 dstTensor,
                 srcTensor_m[i * m_round],
                 pix[i],

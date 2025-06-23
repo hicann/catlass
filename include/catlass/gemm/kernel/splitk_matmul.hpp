@@ -11,8 +11,10 @@
 #ifndef CATLASS_GEMM_KERNEL_SPLITK_MATMUL_HPP
 #define CATLASS_GEMM_KERNEL_SPLITK_MATMUL_HPP
 
+#include <cmath>
 #include "catlass/catlass.hpp"
 #include "catlass/arch/resource.hpp"
+#include "catlass/arch/cross_core_sync.hpp"
 #include "catlass/coord.hpp"
 #include "catlass/gemm_coord.hpp"
 #include "catlass/matrix_coord.hpp"

@@ -11,8 +11,11 @@
 #ifndef CATLASS_GEMM_TILE_COPY_L0C_TO_GM_HPP
 #define CATLASS_GEMM_TILE_COPY_L0C_TO_GM_HPP
 
+#include "catlass/catlass.hpp"
+#include "catlass/arch/arch.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 #include "tla/tensor.hpp"
+
 namespace Catlass::Gemm::Tile {
 
 enum class ScaleGranularity {
