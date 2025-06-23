@@ -20,6 +20,7 @@
 #include "catlass/gemm/helper.hpp"
 
 namespace Catlass::Epilogue::Block {
+
 template<
     class CType_,
     class XType_,
