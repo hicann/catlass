@@ -12,6 +12,7 @@
 #define CATLASS_GEMV_TILE_MATRIX_COPY_GM_TO_UB_HPP
 
 #include "catlass/catlass.hpp"
+#include "catlass/arch/arch.hpp"
 #include "catlass/layout/layout.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 
@@ -35,7 +36,7 @@ struct MatrixCopyGmToUB<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>
     using LayoutDst = layout::RowMajor;
     using LayoutSrc = layout::RowMajor;
 
-    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element); 
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
 
     // Mehtods
 
@@ -141,7 +142,7 @@ struct MatrixCopyGmToUB<Arch::AtlasA2, Gemm::GemmType<Element, layout::ColumnMaj
         uint32_t n_catlassual = layoutSrc.shape(1);
         uint32_t m_round = layoutDst.shape(0);
         uint32_t n_round = layoutDst.shape(1);
-        uint32_t stride = layoutSrc.stride(1); 
+        uint32_t stride = layoutSrc.stride(1);
 
         AscendC::DataCopyParams params;
         if ((m_catlassual % ELE_NUM_PER_C0 == 0) && (stride % ELE_NUM_PER_C0 == 0) && (stride < STRIDE_LIMIT))

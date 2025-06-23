@@ -12,6 +12,7 @@
 #define CATLASS_EPILOGUE_BLOCK_EPILOGUE_GEMM_HPP
 
 #include "catlass/catlass.hpp"
+#include "catlass/arch/resource.hpp"
 #include "catlass/epilogue/dispatch_policy.hpp"
 #include "catlass/gemm_coord.hpp"
 #include "catlass/matrix_coord.hpp"
@@ -21,18 +22,18 @@
 namespace Catlass::Epilogue::Block {
 template<
     class CType_,
-    class XType_, 
-    class DType_, 
-    class TileElemWiseEpilogueAdd_, 
-    class TileElemWiseEpilogueMuls_, 
+    class XType_,
+    class DType_,
+    class TileElemWiseEpilogueAdd_,
+    class TileElemWiseEpilogueMuls_,
     class TileElemWiseCastD_,
     class TileCopy_
 >
 class BlockEpilogue<
     EpilogueAtlasA2Gemm,
     CType_,
-    XType_, 
-    DType_, 
+    XType_,
+    DType_,
     TileElemWiseEpilogueAdd_,
     TileElemWiseEpilogueMuls_,
     TileElemWiseCastD_,
@@ -54,7 +55,7 @@ public:
     using CopyGmToUbC = typename TileCopy_::CopyGmToUbC;
     using CopyGmToUbX = typename TileCopy_::CopyGmToUbX;
     using CopyUbToGmD = typename TileCopy_::CopyUbToGmD;
-    
+
     const uint32_t SubNum = AscendC::GetSubBlockNum();
     const uint32_t UBSize = ArchTag::UB_SIZE;
     static constexpr bool isNeedCast = !std::is_same<ElementC, ElementX>::value;
@@ -78,7 +79,7 @@ public:
 
         CATLASS_HOST_DEVICE
         Params(){}
-        
+
         CATLASS_HOST_DEVICE
         Params(ElementScalar alpha_, ElementScalar beta_, GM_ADDR ptrX_, LayoutX layoutX_, GM_ADDR ptrD_, LayoutD layoutD_)
             : alpha(alpha_), beta(beta_), ptrX(ptrX_), layoutX(layoutX_), ptrD(ptrD_), layoutD(layoutD_){}
@@ -97,7 +98,7 @@ public:
         uint32_t ubDCastSize = tileSize * sizeof(ElementCompute);
         ubCTensor = resource.ubBuf.template GetBufferByByte<ElementC>(ubByteStart);
         ubByteStart += ubCSize;
-        ubXTensor = resource.ubBuf.template GetBufferByByte<ElementX>(ubByteStart); 
+        ubXTensor = resource.ubBuf.template GetBufferByByte<ElementX>(ubByteStart);
         ubByteStart += ubXSize;
         ubDTensor = resource.ubBuf.template GetBufferByByte<ElementD>(ubByteStart);
         ubByteStart += ubDSize;
@@ -182,7 +183,7 @@ public:
             tileElemWiseCastD(ubDTensor, ubDTensorCast);
         }
         AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
-        AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0); 
+        AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
         auto layoutDInGm = params.layoutD.GetTileLayout(actualSubblockShape);
         auto layoutTileD = layoutInUb.GetTileLayout(actualSubblockShape);
         auto gmTileD = gmBlockD[offset + params.layoutD.GetOffset(blockOffset + subblockOffset)];
