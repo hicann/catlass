@@ -10,9 +10,9 @@
 
  #ifndef CATLASS_EPILOGUE_TILE_TILE_ELEMWISE_MULS_HPP
  #define CATLASS_EPILOGUE_TILE_TILE_ELEMWISE_MULS_HPP
- 
+
  #include "catlass/gemm/helper.hpp"
- 
+
  namespace Catlass::Epilogue::Tile{
  template<
      class ArchTag_,
@@ -22,12 +22,12 @@
  struct TileElemWiseMuls{
      using ArchTag = ArchTag_;
      using ElementCompute = typename ComputeType_::Element;
- 
+
      static constexpr uint32_t COMPUTE_LENGTH = COMPUTE_LENGTH_;
- 
+
      CATLASS_DEVICE
      TileElemWiseMuls(){}
- 
+
      CATLASS_DEVICE
      void operator()(
          AscendC::LocalTensor<ElementCompute> dstLocal,
@@ -38,5 +38,5 @@
      }
  };
  }
- 
+
  #endif // CATLASS_EPILOGUE_TILE_TILE_ELEMWISE_MULS_HPP

@@ -19,7 +19,7 @@
 #define OP_API_BFLOAT16_H
 
 #include <cmath>
-
+#include <iostream>
 #include "fp16_t.h"
 
 namespace op {

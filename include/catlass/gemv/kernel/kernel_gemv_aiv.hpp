@@ -8,12 +8,14 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
- #ifndef CATLASS_GEMV_KERNLE_GEMV_AIV_HPP
- #define CATLASS_GEMV_KERNLE_GEMV_AIV_HPP
- #include "catlass/catlass.hpp"
- #include "catlass/arch/resource.hpp"
- #include "catlass/coord.hpp"
- #include "catlass/gemv_coord.hpp"
+#ifndef CATLASS_GEMV_KERNLE_GEMV_AIV_HPP
+#define CATLASS_GEMV_KERNLE_GEMV_AIV_HPP
+
+#include "catlass/catlass.hpp"
+#include "catlass/arch/resource.hpp"
+#include "catlass/coord.hpp"
+#include "catlass/layout/layout.hpp"
+#include "catlass/gemv_coord.hpp"
 
  namespace Catlass::Gemv::Kernel {
  
@@ -121,23 +123,23 @@
             uint32_t n_catlassual = params.problemShape.n();
 
             if constexpr (std::is_same_v<LayoutA, Catlass::layout::ColumnMajor>) {
-                offset_matrix = (loop_id % params.split) * N_Split*params.problemShape.m()+(loop_id/params.split) * maxmPerBlock_round;
-                offset_vector_out = (loop_id/params.split) * maxmPerBlock_round;
-                offset_vector_in = (loop_id % params.split) * N_Split; 
-                
-                if((loop_id%params.split) == params.split - 1){
+                offset_matrix = (loop_id % params.split) * N_Split * params.problemShape.m() +
+                                (loop_id / params.split) * maxmPerBlock_round;
+                offset_vector_out = (loop_id / params.split) * maxmPerBlock_round;
+                offset_vector_in = (loop_id % params.split) * N_Split;
+
+                if ((loop_id % params.split) == params.split - 1) {
                     n_catlassual = params.problemShape.n() - N_Split * (params.split - 1);
-                }
-                else{
+                } else {
                     n_catlassual = N_Split;
                 }
             } else {
                 offset_matrix = loop_id * maxmPerBlock_round * params.problemShape.n();
                 offset_vector_out = loop_id * maxmPerBlock_round;
             }
-            GemvCoord actualBlockShape = GemvCoord{m_catlassual,n_catlassual};
-            
-            float realbeta = (loop_id % params.split == 0) ? Realbeta:0.0f;
+            GemvCoord actualBlockShape = GemvCoord{m_catlassual, n_catlassual};
+
+            float realbeta = (loop_id % params.split == 0) ? Realbeta : 0.0f;
 
             blockGemv(gmA[offset_matrix], params.layoutA,
                 gmX[offset_vector_in], params.layoutX,
@@ -145,13 +147,11 @@
                 gmYCopy[offset_vector_out],
                 actualBlockShape,
                 params.alpha,
-                realbeta
-            );
-
+                realbeta);
         }
-     }
- };
- 
- } 
- 
- #endif // CATLASS_GEMV_KERNLE_GEMV_AIV_HPP
+    }
+};
+
+}
+
+#endif // CATLASS_GEMV_KERNLE_GEMV_AIV_HPP

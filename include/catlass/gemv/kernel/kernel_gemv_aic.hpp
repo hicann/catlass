@@ -15,6 +15,7 @@
 #include "catlass/arch/resource.hpp"
 #include "catlass/epilogue/tile/copy_gm_to_ub.hpp"
 #include "catlass/epilogue/tile/copy_ub_to_gm.hpp"
+#include "catlass/gemm/helper.hpp"
 #include "catlass/gemv_coord.hpp"
 #include "catlass/matrix_coord.hpp"
 
@@ -45,8 +46,8 @@ public:
     using LayoutZ = typename BlockEpilogue::LayoutZ;
     using EpilogueParams = typename BlockEpilogue::Params;
 
-    using ElementAccumulator = typename Gemm::helper::ElementAccumulatorSelector<ElementA, ElementX>::ElementAccumulator;
-
+    using ElementAccumulator =
+        typename Gemm::helper::ElementAccumulatorSelector<ElementA, ElementX>::ElementAccumulator;
 
     struct Params {
         // Data members
@@ -63,15 +64,10 @@ public:
         Params() {}
 
         CATLASS_HOST_DEVICE
-        Params(
-            GemvCoord const& problemShape_,
-            GM_ADDR ptrX_,
-            LayoutX layoutX_,
-            GM_ADDR ptrA_,
-            LayoutA layoutA_,
-            GM_ADDR ptrWorkspace_,
-            EpilogueParams const& epilogueParams_)
-            : problemShape(problemShape_), ptrX(ptrX_), layoutX(layoutX_), ptrA(ptrA_), layoutA(layoutA_), ptrWorkspace(ptrWorkspace_), epilogueParams(epilogueParams_) {}
+        Params(GemvCoord const &problemShape_, GM_ADDR ptrX_, LayoutX layoutX_, GM_ADDR ptrA_, LayoutA layoutA_,
+            GM_ADDR ptrWorkspace_, EpilogueParams const &epilogueParams_)
+            : problemShape(problemShape_), ptrX(ptrX_), layoutX(layoutX_), ptrA(ptrA_), layoutA(layoutA_),
+              ptrWorkspace(ptrWorkspace_), epilogueParams(epilogueParams_) {}
     };
 
     // Methods
@@ -79,23 +75,23 @@ public:
     KernelGemvAic() {}
 
     template <int32_t CORE_TYPE = g_coreType>
-    CATLASS_DEVICE 
+    CATLASS_DEVICE
     void operator()(Params const& params);
 
     template <>
-    CATLASS_DEVICE 
-    void operator()<AscendC::AIC>(Params const& params) 
+    CATLASS_DEVICE
+    void operator()<AscendC::AIC>(Params const& params)
     {
         BlockGemv blockGemv(resource);
         // Represent the full gm
         AscendC::GlobalTensor<ElementX> gmX;
-        gmX.SetGlobalBuffer((__gm__ ElementX*)params.ptrX);
+        gmX.SetGlobalBuffer((__gm__ ElementX *)params.ptrX);
 
         AscendC::GlobalTensor<ElementA> gmA;
-        gmA.SetGlobalBuffer((__gm__ ElementA*)params.ptrA);
+        gmA.SetGlobalBuffer((__gm__ ElementA *)params.ptrA);
 
         AscendC::GlobalTensor<ElementY> gmY;
-        gmY.SetGlobalBuffer((__gm__ ElementY*)params.ptrWorkspace);
+        gmY.SetGlobalBuffer((__gm__ ElementY *)params.ptrWorkspace);
 
         layout::RowMajor layoutY(1, params.problemShape.m());
 
@@ -148,7 +144,8 @@ public:
                 hasNextBlock = true;
                 uint32_t nextLoopIdx = loopIdx + AscendC::GetBlockNum();
                 MNextGmBlockIdx = nextLoopIdx;
-                uint32_t MNextGmActual = (MNextGmBlockIdx == MLoops - 1) ? (M - MNextGmBlockIdx * maxMPerBlock) : maxMPerBlock;
+                uint32_t MNextGmActual =
+                    (MNextGmBlockIdx == MLoops - 1) ? (M - MNextGmBlockIdx * maxMPerBlock) : maxMPerBlock;
                 uint32_t NNextGmActual = N;
                 nextActualBlockShape = GemvCoord(MNextGmActual, NNextGmActual);
             }
@@ -174,7 +171,10 @@ public:
                       gmY[gmOffsetY], layoutY,
                       gmX[gmOffsetNextX],
                       gmA[gmOffsetNextA],
-                      actualBlockShape, nextActualBlockShape, isFirstBlock, hasNextBlock,
+                      actualBlockShape,
+                      nextActualBlockShape,
+                      isFirstBlock,
+                      hasNextBlock,
                       singleIdx);
 
             Arch::CrossCoreSetFlagWithReverse<0x2, PIPE_FIX>(flagAicFinishStore);
@@ -190,14 +190,14 @@ public:
     }
 
     template <>
-    CATLASS_DEVICE 
-    void operator()<AscendC::AIV>(Params const& params) 
+    CATLASS_DEVICE
+    void operator()<AscendC::AIV>(Params const& params)
     {
         BlockEpilogue blockEpilogue(resource, params.epilogueParams);
 
         // Represent the full gm
         AscendC::GlobalTensor<ElementY> gmY;
-        gmY.SetGlobalBuffer((__gm__ ElementY*)params.ptrWorkspace);
+        gmY.SetGlobalBuffer((__gm__ ElementY *)params.ptrWorkspace);
 
         layout::VectorLayout layoutY(params.problemShape.m());
 
