@@ -12,6 +12,7 @@
 #define CATLASS_GEMM_DISPATCH_POLICY_HPP
 
 #include "catlass/catlass.hpp"
+#include "catlass/arch/arch.hpp"
 
 namespace Catlass::Gemm {
 
@@ -61,6 +62,18 @@ struct MmadAtlasA2MLAQKTp1Spec : public MmadAtlasA2 {
 };
 
 struct MmadAtlasA2MLAPVTp1Spec : public MmadAtlasA2 {
+    static constexpr uint32_t STAGES = 2;
+};
+
+struct MmadAtlasA2FAGCube1 : public MmadAtlasA2 {
+    static constexpr uint32_t STAGES = 2;
+};
+
+struct MmadAtlasA2FAGCube2 : public MmadAtlasA2 {
+    static constexpr uint32_t STAGES = 2;
+};
+
+struct MmadAtlasA2FAGCube3 : public MmadAtlasA2 {
     static constexpr uint32_t STAGES = 2;
 };
 

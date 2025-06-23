@@ -12,8 +12,10 @@
 #define CATLASS_GEMM_TILE_COPY_GM_TO_L1_HPP
 
 #include "catlass/catlass.hpp"
+#include "catlass/arch/arch.hpp"
 #include "catlass/layout/layout.hpp"
 #include "catlass/gemm/gemm_type.hpp"
+#include "catlass/gemm/tile/tile_copy_tla.hpp"
 #include "tla/tensor.hpp"
 
 namespace Catlass::Gemm::Tile {
@@ -106,7 +108,6 @@ struct CopyGmToL1GMMPTD<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>
                 }
             }
         }
-        
     }
 
     // layoutSrc must be the layout of one of the src matrices
@@ -143,7 +144,7 @@ struct CopyGmToL1GMMPTD<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>
 };
 
 ////////////////////////////////////////
-/// Using the standard strided DataCopy interface to implement nd2nz 
+/// Using the standard strided DataCopy interface to implement nd2nz
 /// transfer may achieve higher data transfer efficiency when the data block shape is short and wide
 /// Partial specialization for AtlasA2, half, RowMajor in and zN out.
 template<>
@@ -178,7 +179,7 @@ struct CopyGmToL1IntervalDataCopy<Arch::AtlasA2, Gemm::GemmType<half, layout::Ro
 };
 
 /// Partial specialization for AtlasA2, half, PaddingRowMajor in and zN out.
-/// Using the standard strided DataCopy interface to implement nd2nz 
+/// Using the standard strided DataCopy interface to implement nd2nz
 /// transfer may achieve higher data transfer efficiency when the data block shape is short and wide
 template<>
 struct CopyGmToL1IntervalDataCopy<Arch::AtlasA2, Gemm::GemmType<half, layout::PaddingRowMajor>> {
@@ -212,7 +213,7 @@ struct CopyGmToL1IntervalDataCopy<Arch::AtlasA2, Gemm::GemmType<half, layout::Pa
 };
 
 /// Partial specialization for AtlasA2, half, ColumnMajor in and zN out.
-/// Using the standard strided DataCopy interface to implement nd2nz 
+/// Using the standard strided DataCopy interface to implement nd2nz
 /// transfer may achieve higher data transfer efficiency when the data block shape is tall and narrow
 template<>
 struct CopyGmToL1IntervalDataCopy<Arch::AtlasA2, Gemm::GemmType<half, layout::ColumnMajor>> {
@@ -246,7 +247,7 @@ struct CopyGmToL1IntervalDataCopy<Arch::AtlasA2, Gemm::GemmType<half, layout::Co
 };
 
 /// Partial specialization for AtlasA2, half, PaddingColumnMajor in and zN out.
-/// Using the standard strided DataCopy interface to implement nd2nz 
+/// Using the standard strided DataCopy interface to implement nd2nz
 /// transfer may achieve higher data transfer efficiency when the data block shape is tall and narrow
 template<>
 struct CopyGmToL1IntervalDataCopy<Arch::AtlasA2, Gemm::GemmType<half, layout::PaddingColumnMajor>> {
@@ -918,6 +919,38 @@ struct CopyGmToL1<Arch::AtlasA2, Gemm::GemmType<Element, layout::ColumnMajor>> {
             intriParams.dstNzNStride = 0;
             for (uint32_t i = 0; i < layoutSrc.shape(1); i++) {
                 AscendC::DataCopy(dstTensor[i * ELE_NUM_PER_C0], srcTensor[i * layoutSrc.stride(1)], intriParams);
+            }
+        }
+    }
+
+    // layoutSrc must be the layout of one of the src matrices
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::GlobalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc,
+        uint32_t ndNum, uint32_t srcNdMatrixStride,
+        uint32_t dstNzNStride, uint32_t dstNzMatrixStride,
+        uint32_t dstNzC0Stride)
+    {
+        AscendC::Nd2NzParams intriParams;
+
+        intriParams.nValue = layoutSrc.shape(1);
+        intriParams.dValue = layoutSrc.shape(0);
+        intriParams.srcDValue = layoutSrc.stride(1);
+        intriParams.dstNzNStride = dstNzNStride;
+        intriParams.dstNzC0Stride = dstNzC0Stride;
+        if (srcNdMatrixStride < STRIDE_LIMIT) {
+            intriParams.ndNum = ndNum;
+            intriParams.srcNdMatrixStride = srcNdMatrixStride;
+            intriParams.dstNzMatrixStride = dstNzMatrixStride;
+            AscendC::DataCopy(dstTensor, srcTensor, intriParams);
+        } else {
+            intriParams.ndNum = 1;
+            intriParams.srcNdMatrixStride = 0;
+            intriParams.dstNzMatrixStride = 0;
+            for (uint32_t i = 0; i < ndNum; i++) {
+                AscendC::DataCopy(dstTensor[i * ELE_NUM_PER_C0], srcTensor[i * srcNdMatrixStride], intriParams);
             }
         }
     }

@@ -11,6 +11,8 @@
 #ifndef CATLASS_EPILOGUE_TILE_TILE_COPY_HPP
 #define CATLASS_EPILOGUE_TILE_TILE_COPY_HPP
 
+#include "catlass/catlass.hpp"
+#include "catlass/arch/arch.hpp"
 #include "catlass/epilogue/tile/copy_gm_to_ub.hpp"
 #include "catlass/epilogue/tile/copy_ub_to_gm.hpp"
 

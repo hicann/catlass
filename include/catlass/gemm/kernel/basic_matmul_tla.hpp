@@ -19,6 +19,7 @@
 #include "tla/tensor.hpp"
 #include "tla/layout.hpp"
 #include "tla/tensor.hpp"
+
 namespace Catlass::Gemm::Kernel {
 
 // Template for Matmul kernel. Compute C = A * B
