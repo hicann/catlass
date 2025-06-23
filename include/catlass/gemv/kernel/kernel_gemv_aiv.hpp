@@ -55,10 +55,10 @@ public:
         Params() {}
 
         CATLASS_HOST_DEVICE
-        Params(GemvCoord const &problemShape_,  GM_ADDR ptrA_, LayoutA layoutA_,  GM_ADDR ptrX_,LayoutX layoutX_,
-           GM_ADDR ptrY_,LayoutY layoutY_,GM_ADDR ptrY_read_,float alpha_,float beta_,uint32_t split_)
-            : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrX(ptrX_),layoutX(layoutX_),
-              ptrY(ptrY_),layoutY(layoutY_),ptrY_read(ptrY_read_),alpha(alpha_),beta(beta_),split(split_) {}
+        Params(GemvCoord const &problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrX_, LayoutX layoutX_,
+            GM_ADDR ptrY_, LayoutY layoutY_, GM_ADDR ptrY_read_, float alpha_, float beta_, uint32_t split_)
+            : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrX(ptrX_), layoutX(layoutX_), ptrY(ptrY_),
+              layoutY(layoutY_), ptrY_read(ptrY_read_), alpha(alpha_), beta(beta_), split(split_) {}
     };
 
     // Methods

@@ -345,8 +345,7 @@ struct TileVmad<Arch::AtlasA2,
             AscendC::MASK_PLACEHOLDER,
             1,
             1,
-            8
-        );
+            8);
         AscendC::PipeBarrier<PIPE_V>();
 
         ElementX pix[32];

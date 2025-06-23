@@ -80,14 +80,12 @@ struct TileCopyGemvAic {
     using L0AType = typename Gemv::helper::L1AndL0TypeSelectorGemv<XType, AType>::L0AType;
     using L0BType = typename Gemv::helper::L1AndL0TypeSelectorGemv<XType, AType>::L0BType;
 
-
     using CopyGmToL1A = Gemm::Tile::CopyGmToL1<ArchTag, XType, L1XType>;
     using CopyGmToL1B = Gemm::Tile::CopyGmToL1<ArchTag, AType, L1AType>;
 
     using CopyL1ToL0A = Gemm::Tile::CopyL1ToL0A<ArchTag, L1XType, L0AType>;
     using CopyL1ToL0B = Gemm::Tile::CopyL1ToL0B<ArchTag, L1AType, L0BType>;
     using CopyL0CToGm = Gemm::Tile::CopyL0CToGm<ArchTag, ElementAccumulator, YType>;
-
 };
 
 } // namespace Catlass::Gemv::Tile

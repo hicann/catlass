@@ -108,7 +108,6 @@ struct CopyGmToL1GMMPTD<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>
                 }
             }
         }
-
     }
 
     // layoutSrc must be the layout of one of the src matrices

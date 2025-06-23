@@ -223,7 +223,6 @@ public:
               epilogueParams(epilogueParams_) {}
     };
 
-
     CATLASS_DEVICE
     KernelGemm() {}
 

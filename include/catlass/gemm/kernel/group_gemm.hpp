@@ -231,10 +231,6 @@ public:
         GM_ADDR ptrX;
         GM_ADDR ptrD;
 
-
-
-
-
         // Methods
         CATLASS_HOST_DEVICE
         Params() {}
