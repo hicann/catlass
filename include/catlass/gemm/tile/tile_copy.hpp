@@ -15,33 +15,6 @@
 #include "catlass/catlass.hpp"
 #include "catlass/detail/tag_to_layout.hpp"
 #include "tla/tensor.hpp"
-namespace Catlass::Gemm::Tile {
-
-template <
-    class ArchTag,
-    class TensorSrc,
-    class TensorDst,
-    class Enable = void
->
-struct TileCopyTla {
-    static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported TileCopyTla, can not find the specialization.");
-};
-
-// Extended template for TileCopyTla that supports manually specifying LayoutTagSrc and LayoutTagDst.
-// Users can specialize the copy class by LayoutTagSrc and LayoutTagDst.
-template <
-    class ArchTag,
-    class TensorSrc,
-    class TensorDst,
-    class LayoutTagSrc,
-    class LayoutTagDst
->
-struct TileCopyTlaExt {
-    static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported TileCopyTlaExt, can not find the specialization.");
-};
-
-} // namespace Catlass::Gemm::Tile
-
 #include "catlass/gemm/tile/copy_gm_to_l1.hpp"
 #include "catlass/gemm/tile/copy_l0c_to_gm.hpp"
 #include "catlass/gemm/tile/copy_l1_to_l0a.hpp"
@@ -196,7 +169,7 @@ struct PaddingPackedTileCopyTla {
     using CopyL0CToGm = Gemm::Tile::CopyL0CToGmTla<ArchTag, TensorL0C, TensorC>;
 };
 ///////////////////////////////////
-/// new add 
+/// new add
 template <
     /// Tag indicating architecture
     class ArchTag,
@@ -220,7 +193,7 @@ struct TileCopyGemm {
     using L0AType = typename Gemm::helper::L1AndL0TypeSelectorGemm<AType, BType>::L0AType;
     using L0BType = typename Gemm::helper::L1AndL0TypeSelectorGemm<AType, BType>::L0BType;
 
-    using CopyGmToL1A = Gemm::Tile::CopyGmToL1<ArchTag, AType, L1AType>;    
+    using CopyGmToL1A = Gemm::Tile::CopyGmToL1<ArchTag, AType, L1AType>;
     using CopyGmToL1B = Gemm::Tile::CopyGmToL1<ArchTag, BType, L1BType>;
     using CopyL1ToL0A = Gemm::Tile::CopyL1ToL0A<ArchTag, L1AType, L0AType>;
     using CopyL1ToL0B = Gemm::Tile::CopyL1ToL0B<ArchTag, L1BType, L0BType>;

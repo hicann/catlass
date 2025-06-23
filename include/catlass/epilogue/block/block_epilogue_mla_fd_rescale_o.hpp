@@ -88,7 +88,7 @@ public:
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID1);
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID2);
     }
-    
+
     CATLASS_DEVICE
     void SetMask(int32_t len)
     {
