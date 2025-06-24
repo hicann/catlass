@@ -201,12 +201,12 @@ const uint16_t BitShift_10240 = 10240;
  * @ingroup fp16 special value judgment
  * @brief   whether a fp16 is NaN
  */
-#define FP16_IS_NAN(x) (((x & FP16_EXP_MASK) == FP16_EXP_MASK) && (x & FP16_MAN_MASK))
+#define FP16_IS_NAN(x) ((((x) & FP16_EXP_MASK) == FP16_EXP_MASK) && ((x) & FP16_MAN_MASK))
 /**
  * @ingroup fp16 special value judgment
  * @brief   whether a fp16 is invalid
  */
-#define FP16_IS_INVALID(x) ((x & FP16_EXP_MASK) == FP16_EXP_MASK)
+#define FP16_IS_INVALID(x) (((x) & FP16_EXP_MASK) == FP16_EXP_MASK)
 /**
  * @ingroup fp32 basic parameter
  * @brief   fp32 exponent bias
@@ -266,12 +266,12 @@ const uint16_t BitShift_10240 = 10240;
  * @ingroup fp32 special value judgment
  * @brief   whether a fp32 is NaN
  */
-#define FP32_IS_NAN(x) (((x & FP32_EXP_MASK) == FP32_EXP_MASK) && (x & FP32_MAN_MASK))
+#define FP32_IS_NAN(x) ((((x) & FP32_EXP_MASK) == FP32_EXP_MASK) && ((x) & FP32_MAN_MASK))
 /**
  * @ingroup fp32 special value judgment
  * @brief   whether a fp32 is infinite
  */
-#define FP32_IS_INF(x) (((x & FP32_EXP_MASK) == FP32_EXP_MASK) && (!(x & FP32_MAN_MASK)))
+#define FP32_IS_INF(x) ((((x) & FP32_EXP_MASK) == FP32_EXP_MASK) && (!((x) & FP32_MAN_MASK)))
 /**
  * @ingroup fp32 special value judgment
  * @brief   whether a fp32 is a denormalized value
@@ -358,12 +358,12 @@ const uint16_t BitShift_10240 = 10240;
  * @ingroup fp64 special value judgment
  * @brief   whether a fp64 is NaN
  */
-#define FP64_IS_NAN(x) (((x & FP64_EXP_MASK) == FP64_EXP_MASK) && (x & FP64_MAN_MASK))
+#define FP64_IS_NAN(x) ((((x) & FP64_EXP_MASK) == FP64_EXP_MASK) && ((x) & FP64_MAN_MASK))
 /**
  * @ingroup fp64 special value judgment
  * @brief   whether a fp64 is infinite
  */
-#define FP64_IS_INF(x) (((x & FP64_EXP_MASK) == FP64_EXP_MASK) && (!(x & FP64_MAN_MASK)))
+#define FP64_IS_INF(x) ((((x) & FP64_EXP_MASK) == FP64_EXP_MASK) && (!((x) & FP64_MAN_MASK)))
 
 /**
  * @ingroup integer special value judgment
