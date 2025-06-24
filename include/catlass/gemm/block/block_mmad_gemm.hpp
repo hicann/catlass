@@ -137,11 +137,13 @@ public:
         uint32_t K = actualShape.k();
         uint32_t maxKPerBlock = L1TileShape::K;
         uint32_t kLoops = CeilDiv(K, maxKPerBlock);
+        uint32_t kLoopsNext = CeilDiv(actualShapeNext.k(), maxKPerBlock);
         uint32_t startTileIdx{0};
         if (ENABLE_SHUFFLE_K) {
             startTileIdx = AscendC::GetBlockIdx();
         }
         uint32_t firstTileIdx = startTileIdx % kLoops;
+        uint32_t firstTileIdxNext = startTileIdx % kLoopsNext;
         uint32_t lastTileIdx = (startTileIdx + kLoops - 1) % kLoops;
         uint32_t kGmActual = (firstTileIdx == kLoops - 1) ? (K - firstTileIdx * maxKPerBlock) : maxKPerBlock;
         auto layoutAInL1 = LayoutAInL1::template MakeLayout<ElementA>(L1TileShape::M, L1TileShape::K);
@@ -199,12 +201,13 @@ public:
                 }
             }
             if (shuffleKIdx == lastTileIdx && hasNextBlock) {
-                kGmActualNext = (firstTileIdx == kLoops - 1) ? (K - firstTileIdx * maxKPerBlock) : maxKPerBlock;
+                kGmActualNext = (firstTileIdxNext == kLoopsNext - 1)
+                    ? (actualShapeNext.k() - firstTileIdxNext * maxKPerBlock) : maxKPerBlock;
                 auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShapeNext.m(), kGmActualNext));
                 auto layoutTileB = layoutB.GetTileLayout(MakeCoord(kGmActualNext, actualShapeNext.n()));
-                MatrixCoord gmTileAOffset{0, firstTileIdx * maxKPerBlock};
+                MatrixCoord gmTileAOffset{0, firstTileIdxNext * maxKPerBlock};
                 auto gmNextTileA = gmNextBlockA[layoutA.GetOffset(gmTileAOffset)];
-                MatrixCoord gmTileBOffset{firstTileIdx * maxKPerBlock, 0};
+                MatrixCoord gmTileBOffset{firstTileIdxNext * maxKPerBlock, 0};
                 auto gmNextTileB = gmNextBlockB[layoutB.GetOffset(gmTileBOffset)];
                 if (ENABLE_ABBA) {
                     if (shuffleKIdx % 2 == 0) {

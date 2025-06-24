@@ -151,6 +151,7 @@ public:
         auto layoutInL0C = LayoutYInL0::MakeLayoutInL0C(MatrixCoord(L1XAlignHelper::M_ALIGNED, actualShape.m()));
 
         uint32_t nTileCount = CeilDiv<L1TileShape::N>(actualShape.n());
+        uint32_t nTileCountNext = CeilDiv<L1TileShape::N>(actualShapeNext.n());
 
         // Optimize points：ShuffleK
         uint32_t startTileIdx = 0;
@@ -159,6 +160,7 @@ public:
         }
         uint32_t firstTileIdx = startTileIdx % nTileCount;
         uint32_t lastTileIdx = (startTileIdx + nTileCount - 1) % nTileCount;
+        uint32_t firstTileIdxNext = startTileIdx % nTileCountNext;
 
         uint32_t nActual =
             (firstTileIdx < nTileCount - 1) ? L1TileShape::N : (actualShape.n() - firstTileIdx * L1TileShape::N);
@@ -229,13 +231,13 @@ public:
                 auto l1BTensor = l1BTensorList[l1ListIdNext];
 
                 // Get GM tensor for next stage
-                nActualNext = (firstTileIdx < nTileCount - 1) ? L1TileShape::N
-                                                              : (actualShapeNext.n() - firstTileIdx * L1TileShape::N);
+                nActualNext = (firstTileIdxNext < nTileCountNext - 1)
+                    ? L1TileShape::N : (actualShapeNext.n() - firstTileIdxNext * L1TileShape::N);
                 nRoundNext = RoundUp<L1AAlignHelper::N_ALIGNED>(nActualNext);
 
                 // Get GM tile
-                MatrixCoord gmTileAOffset{0, firstTileIdx * L1TileShape::N};
-                uint32_t gmTilexOffset{firstTileIdx * L1TileShape::N};
+                MatrixCoord gmTileAOffset{0, firstTileIdxNext * L1TileShape::N};
+                uint32_t gmTilexOffset{firstTileIdxNext * L1TileShape::N};
 
                 auto gmTileA = gmNextBlockA[layoutA.GetOffset(gmTileAOffset)];
                 auto gmTilex = gmNextBlockX[gmTilexOffset];
