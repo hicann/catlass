@@ -195,6 +195,8 @@ public:
         uint32_t lastTileIdx = (startTileIdx + kTileCount - 1) % kTileCount;
         uint32_t kActual =
             (firstTileIdx < kTileCount - 1) ? L1_TILE_K : (kBlockActual - firstTileIdx * L1_TILE_K);
+        uint32_t kTileCountNext = CeilDiv<L1_TILE_K>(kNextBlockActual);
+        uint32_t firstTileIdxNext = startTileIdx % kTileCountNext;
 
         if (isFirstBlock) {
             // load first matrix A tile from GM to L1
@@ -260,8 +262,8 @@ public:
 
             // preload next tile from GM to L1
             if (shuffleKIdx == lastTileIdx && hasNextBlock) {
-                kActualNext = (firstTileIdx < kTileCount - 1) ?
-                    L1_TILE_K : (kNextBlockActual - firstTileIdx * L1_TILE_K);
+                kActualNext = (firstTileIdxNext < kTileCountNext - 1) ?
+                    L1_TILE_K : (kNextBlockActual - firstTileIdxNext * L1_TILE_K);
 
                 // Get L1 tensor for next stage
                 auto tensorL1A = tla::MakeTensor(l1ATensorList[l1ListIdNext], L1A_LAYOUT, Arch::PositionL1{});
@@ -269,12 +271,12 @@ public:
                 // Get GM tile for next stage
                 auto tensorTileA = GetTile(
                     tensorNextA,
-                    tla::MakeCoord(0, firstTileIdx * L1_TILE_K),
+                    tla::MakeCoord(0, firstTileIdxNext * L1_TILE_K),
                     tla::MakeShape(mNextBlockActual, kActualNext)
                 );
                 auto tensorTileB = GetTile(
                     tensorNextB,
-                    tla::MakeCoord(firstTileIdx * L1_TILE_K, 0),
+                    tla::MakeCoord(firstTileIdxNext * L1_TILE_K, 0),
                     tla::MakeShape(kActualNext, nNextBlockActual)
                 );
 
