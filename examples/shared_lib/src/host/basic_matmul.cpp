@@ -10,8 +10,8 @@ using namespace Catlass;
 
 void BasicMatmul(uint32_t blockNum, aclrtStream stream, KernelInfo kernelInfo)
 {
-    if (kernelInfo.inputDataType == ACL_FLOAT16 && kernelInfo.outputDataType == ACL_FLOAT16 && kernelInfo.transA &&
-        kernelInfo.transB) {
+    if (kernelInfo.inputDataType == ACL_FLOAT16 && kernelInfo.outputDataType == ACL_FLOAT16 && !kernelInfo.transA &&
+        !kernelInfo.transB) {
         using LayoutA = layout::RowMajor;
         using LayoutB = layout::RowMajor;
         using LayoutC = layout::RowMajor;
