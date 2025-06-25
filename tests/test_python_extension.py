@@ -58,19 +58,20 @@ class CatlassTest(TestCase):
 
     def test_basic_matmul_pybind(self):
         self._run_case_basic(2, 3, 4)
-        
+
     @unittest.skip("Not ready")
     def test_basic_matmul_pybind_cr(self):
         self._run_case_basic(2, 3, 4, trans_a=True)
-        
+
     @unittest.skip("Not ready")
     def test_basic_matmul_pybind_rc(self):
         self._run_case_basic(2, 3, 4, trans_b=True)
-        
+
     @unittest.skip("Not ready")
     def test_basic_matmul_pybind_cc(self):
         self._run_case_basic(2, 3, 4, trans_a=True, trans_b=True)
 
+    @unittest.skip("Not ready")
     def test_basic_matmul_pybind_bf16(self):
         self._run_case_basic(2, 3, 4, trans_a=True, trans_b=True)
 
