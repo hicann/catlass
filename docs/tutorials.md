@@ -260,7 +260,7 @@ foreach(EXAMPLE
 ```
 foreach中已有20个项目，在列表后面追加即可。
 #### 编译
-在actlass目录下(请仔细核对执行目录)，执行`bash scripts/build.sh 21_basic_matmul`命令即可进行编译。
+在catlass目录下(请仔细核对执行目录)，执行`bash scripts/build.sh 21_basic_matmul`命令即可进行编译。
 #### 执行
 `cd build/bin`目录，执行`./21_basic_matmul 128 256 4096 0`命令执行算子。
 执行结果如出现`Compare success`。说明精度比对成功。(由于使用CPU进行精度对比，所以执行需要一点时间)
