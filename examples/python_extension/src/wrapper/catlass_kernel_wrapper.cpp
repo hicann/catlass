@@ -75,7 +75,6 @@ TransposeStatus GetTransposeStatus(const at::Tensor &mat)
     }
     std::vector<int64_t> strides = mat.strides().vec();
     std::vector<int64_t> shape = mat.sizes().vec();
-    // int64_t dimA = shape.at(shape.size() - 2);
     int64_t dimB = shape.at(shape.size() - 1);
     int64_t strideA = strides.at(strides.size() - 2);
     int64_t strideB = strides.at(strides.size() - 1);
