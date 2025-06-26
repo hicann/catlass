@@ -42,7 +42,7 @@ struct Callback {
 
 template <typename Func>
 CATLASS_DEVICE
-static void FuncWrapper(void const *func)
+void FuncWrapper(void const *func)
 {
     (*static_cast<Func const *>(func))();
 }

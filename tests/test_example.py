@@ -88,7 +88,7 @@ def set_case(case: str):
     setattr(CatlassExampleTest, f"test_{case_executable_name}", __)
 
 
-for case in normal_cases:
-    set_case(case)
+for normal_case in normal_cases:
+    set_case(normal_case)
 if __name__ == '__main__':
     unittest.main()
