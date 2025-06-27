@@ -11,7 +11,12 @@
 #ifndef CATLASS_CATLASS_HPP
 #define CATLASS_CATLASS_HPP
 
+#ifndef __CCE_IS_AICORE__
+#pragma message("Included CATLASS headers in pure host code")
+#include <cstdint>
+#else
 #include <kernel_operator.h>
+#endif
 
 #include "catlass/detail/alignment.hpp"
 #include "catlass/detail/dependent_false.hpp"
