@@ -11,10 +11,11 @@
 #ifndef CATLASS_DETAIL_MACROS_HPP
 #define CATLASS_DETAIL_MACROS_HPP
 
-#ifndef __CCE_IS_AICORE__
-#pragma message("Included CATLASS headers in pure host code")
-#else
+#if defined(__CCE_IS_AICORE__)
 #define CATLASS_HOST_DEVICE __forceinline__ [host, aicore]
+#else
+#pragma message("Included CATLASS headers in pure host code")
+#define CATLASS_HOST_DEVICE
 #endif
 
 #define CATLASS_DEVICE __forceinline__ __aicore__
