@@ -11,7 +11,7 @@
 #ifndef CATLASS_DETAIL_MACROS_HPP
 #define CATLASS_DETAIL_MACROS_HPP
 
-#if defined(CCE_TRUE)
+#if defined(__CCE__)
 #define CATLASS_HOST_DEVICE __forceinline__ [host, aicore]
 #else
 #pragma message("Included CATLASS headers in pure host code")
