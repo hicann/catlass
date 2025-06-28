@@ -11,7 +11,7 @@
 #ifndef CATLASS_CATLASS_HPP
 #define CATLASS_CATLASS_HPP
 
-#if defined(__CCE_IS_AICORE__)
+#if defined(CCE_TRUE)
 #include <kernel_operator.h>
 #else
 #pragma message("Included CATLASS headers in pure host code")

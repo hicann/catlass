@@ -11,7 +11,7 @@
 #ifndef CATLASS_ALIGNMENT_HPP
 #define CATLASS_ALIGNMENT_HPP
 
-#if !defined(__CCE_IS_AICORE__)
+#if !defined(CCE_TRUE)
 #pragma message("Included CATLASS headers in pure host code")
 #include <cstdint>
 #endif
