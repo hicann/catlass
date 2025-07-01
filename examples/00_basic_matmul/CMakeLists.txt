@@ -10,3 +10,8 @@ catlass_example_add_executable(
     00_basic_matmul
     basic_matmul.cpp
 )
+
+catlass_example_add_executable(
+    00_basic_matmul_dynamic
+    basic_matmul_dynamic.cpp
+)
