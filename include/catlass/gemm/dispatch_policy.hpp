@@ -28,10 +28,11 @@ using MmadAtlasA2 = MmadAtlasA2Base<false>;
 using MmadAtlasA2Async = MmadAtlasA2Base<true>;
 
 // Now ENABLE_UNIT_FLAG_ must be false when intput element is int8
-template <bool ENABLE_UNIT_FLAG_ = false>
+template <bool ENABLE_UNIT_FLAG_ = false, bool IS_DYNAMIC_ = false>
 struct MmadAtlasA2Pingpong : public MmadAtlasA2  {
     static constexpr uint32_t STAGES = 2;
     static constexpr bool ENABLE_UNIT_FLAG = ENABLE_UNIT_FLAG_;
+    static constexpr bool IS_DYNAMIC = IS_DYNAMIC_;
 };
 
 template <bool ENABLE_UNIT_FLAG_ = false, bool ENABLE_SHUFFLE_K_ = false>

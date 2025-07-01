@@ -29,7 +29,6 @@ class BasicMatmul {
 public:
     using BlockMmad = BlockMmad_;
     using ArchTag = typename BlockMmad::ArchTag;
-    using L1TileShape = typename BlockMmad::L1TileShape;
     using ElementA = typename BlockMmad::ElementA;
     using LayoutA = typename BlockMmad::LayoutA;
     using ElementB = typename BlockMmad::ElementB;
@@ -38,11 +37,14 @@ public:
     using LayoutC = typename BlockMmad::LayoutC;
     using ElementAccumulator = typename BlockMmad::ElementAccumulator;
 
+    using MmadArguments = typename BlockMmad::Arguments;
+    using MmadParams = typename BlockMmad::Params;
+
     using BlockScheduler = BlockScheduler_;
 
-    /// Parameters structure
+    static constexpr bool IS_DYNAMIC = BlockMmad::IS_DYNAMIC;
+
     struct Params {
-        // Data members
         GemmCoord problemShape;
         GM_ADDR ptrA;
         LayoutA layoutA;
@@ -50,17 +52,29 @@ public:
         LayoutB layoutB;
         GM_ADDR ptrC;
         LayoutC layoutC;
+        MmadParams mmad;
 
         // Methods
         CATLASS_HOST_DEVICE
-        Params()
-        {}
+        Params() = default;
 
         CATLASS_HOST_DEVICE
-        Params(GemmCoord const &problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_,
-               LayoutB layoutB_, GM_ADDR ptrC_, LayoutC layoutC_)
-            : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_), layoutB(layoutB_),
-              ptrC(ptrC_), layoutC(layoutC_) {}
+        Params(GemmCoord const &problemShape_, GM_ADDR ptrA_, LayoutA const &layoutA_, GM_ADDR ptrB_,
+            LayoutB const &layoutB_, GM_ADDR ptrC_, LayoutC const &layoutC_) :
+            problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_), layoutB(layoutB_),
+            ptrC(ptrC_), layoutC(layoutC_) {}
+
+        CATLASS_HOST_DEVICE
+        Params(GemmCoord const &problemShape_, GM_ADDR ptrA_, LayoutA const &layoutA_, GM_ADDR ptrB_,
+            LayoutB const &layoutB_, GM_ADDR ptrC_, LayoutC const &layoutC_, MmadParams const &mmad_) :
+            problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_), layoutB(layoutB_),
+            ptrC(ptrC_), layoutC(layoutC_), mmad(mmad_) {}
+
+        CATLASS_HOST_DEVICE
+        MmadParams GetMmad() const
+        {
+            return mmad;
+        }
     };
 
     struct Arguments {
@@ -68,11 +82,12 @@ public:
         GM_ADDR ptrA;
         GM_ADDR ptrB;
         GM_ADDR ptrC;
+        MmadArguments mmad;
     };
 
     static bool CanImplement(const Arguments &args)
     {
-        return true;
+        return BlockMmad::CanImplement(args.mmad);
     }
 
     static size_t GetWorkspaceSize(const Arguments &args)
@@ -85,10 +100,15 @@ public:
         LayoutA layoutA{args.problemShape.m(), args.problemShape.k()};
         LayoutB layoutB{args.problemShape.k(), args.problemShape.n()};
         LayoutC layoutC{args.problemShape.m(), args.problemShape.n()};
-        Params params{args.problemShape, args.ptrA, layoutA, args.ptrB, layoutB, args.ptrC, layoutC};
+        Params params{
+            args.problemShape,
+            args.ptrA, layoutA,
+            args.ptrB, layoutB,
+            args.ptrC, layoutC,
+            BlockMmad::ToUnderlyingArguments(args.mmad, workspace)
+        };
         return params;
     }
-
 
     // Methods
     CATLASS_DEVICE
@@ -102,11 +122,14 @@ public:
     template <>
     CATLASS_DEVICE
     void operator()<AscendC::AIC>(Params const &params) {
-        BlockScheduler matmulBlockScheduler(params.problemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
+        auto mmadParams = params.GetMmad();
+        auto l1TileShape = mmadParams.GetL1TileShape();
+
+        BlockScheduler matmulBlockScheduler(params.problemShape, l1TileShape.GetCoordMN());
         uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
 
         Arch::Resource<ArchTag> resource;
-        BlockMmad blockMmad(resource);
+        BlockMmad blockMmad(resource, 0, mmadParams);
 
         // Represent the full gm
         AscendC::GlobalTensor<ElementA> gmA;
@@ -122,9 +145,10 @@ public:
             GemmCoord actualBlockShape = matmulBlockScheduler.GetActualBlockShape(blockCoord);
 
             // Compute initial location in logical coordinates
-            MatrixCoord offsetA{blockCoord.m() * L1TileShape::M, blockCoord.k() * L1TileShape::K};
-            MatrixCoord offsetB{blockCoord.k() * L1TileShape::K, blockCoord.n() * L1TileShape::N};
-            MatrixCoord offsetC{blockCoord.m() * L1TileShape::M, blockCoord.n() * L1TileShape::N};
+            GemmCoord blockOffset = blockCoord * l1TileShape;
+            MatrixCoord offsetA = blockOffset.GetCoordMK();
+            MatrixCoord offsetB = blockOffset.GetCoordKN();
+            MatrixCoord offsetC = blockOffset.GetCoordMN();
             int64_t gmOffsetA = params.layoutA.GetOffset(offsetA);
             int64_t gmOffsetB = params.layoutB.GetOffset(offsetB);
             int64_t gmOffsetC = params.layoutC.GetOffset(offsetC);
