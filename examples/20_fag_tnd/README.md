@@ -1,7 +1,7 @@
 # FAG_TND Example Readme
 ## 代码组织
 ```
-├── 21_fag_tnd
+├── 20_fag_tnd
 │ ├── CMakeLists.txt # CMake编译文件
 │ ├── README.md
 │ ├── fag_tnd.cpp # MLAG模板所需的模块
@@ -37,10 +37,10 @@ python gen_data.py 8 1 128 32768
 
 第二步，执行算子，这里要注意的是执行算子的输入shape和上面第一步生成数据的shape一致。
 cd [代码仓路径]/build/bin
-./21_fag_tnd 8 1 128 32768 0
+./20_fag_tnd 8 1 128 32768 0
 
 此处的参数和生成数据的参数保持一致
-完整参数为 n1 n2 d list_seq [--device DEVICE_ID]，datapath默认为../../examples/21_fag_tnd/data, device默认为0。
+完整参数为 n1 n2 d list_seq [--device DEVICE_ID]，datapath默认为../../examples/20_fag_tnd/data, device默认为0。
 执行结果如下，说明精度比对成功。
 Compare dq success.
 Compare dk success

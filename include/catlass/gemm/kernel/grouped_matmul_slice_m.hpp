@@ -17,7 +17,7 @@
 #include "catlass/gemm_coord.hpp"
 #include "catlass/matrix_coord.hpp"
 
-inline __gm__ struct OpSystemRunCfg g_opSystemRunCfg{Catlass::L2_OFFSET};
+__gm__ struct OpSystemRunCfg g_opSystemRunCfg{Catlass::L2_OFFSET};
 
 namespace Catlass::Gemm::Kernel {
 
@@ -59,10 +59,10 @@ public:
         LayoutC layoutC;
 
         // Methods
-        CATLASS_HOST_DEVICE
+        CATLASS_DEVICE
         Params() {}
 
-        CATLASS_HOST_DEVICE
+        CATLASS_DEVICE
         Params(
             GemmCoord const &problemShape_, uint32_t problemCount_, GM_ADDR ptrGroupList_,
             GM_ADDR ptrA_, LayoutA const &layoutA_,
@@ -76,42 +76,10 @@ public:
         {
         }
     };
-    struct Arguments{
-        GemmCoord problemShape;
-        uint32_t problemCount;
-        uint8_t *ptrGroupList;
-        uint8_t *ptrA;
-        uint8_t *ptrB;
-        uint8_t *ptrC;
-    };
-    static bool CanImplement(const Arguments &args)
-    {
-        return true;
-    }
-    static size_t GetWorkspaceSize(const Arguments &args)
-    {
-        return 0;
-    }
-    static Params ToUnderlyingArguments(const Arguments &args, void* workspace)
-    {
-        uint32_t m = args.problemShape.m();
-        uint32_t n = args.problemShape.n();
-        uint32_t k = args.problemShape.k();
-        LayoutA layoutA{m, k};
-        LayoutB layoutB{k, n};
-        LayoutC layoutC{m, n};
-        Params params{args.problemShape, args.problemCount, args.ptrGroupList,
-            args.ptrA, layoutA,
-            args.ptrB, layoutB,
-            args.ptrC, layoutC};
-        return params;
-    }
+
     // Methods
-    CATLASS_HOST_DEVICE
+    CATLASS_DEVICE
     GroupedMatmulSliceM() {}
-    // Methods
-    CATLASS_HOST_DEVICE
-    ~GroupedMatmulSliceM(){}
 
     template <int32_t CORE_TYPE = g_coreType>
     CATLASS_DEVICE
