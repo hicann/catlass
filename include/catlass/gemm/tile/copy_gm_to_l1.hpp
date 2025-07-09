@@ -922,6 +922,38 @@ struct CopyGmToL1<Arch::AtlasA2, Gemm::GemmType<Element, layout::ColumnMajor>> {
             }
         }
     }
+
+    // layoutSrc must be the layout of one of the src matrices
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::GlobalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc,
+        uint32_t ndNum, uint32_t srcNdMatrixStride,
+        uint32_t dstNzNStride, uint32_t dstNzMatrixStride,
+        uint32_t dstNzC0Stride)
+    {
+        AscendC::Nd2NzParams intriParams;
+
+        intriParams.nValue = layoutSrc.shape(1);
+        intriParams.dValue = layoutSrc.shape(0);
+        intriParams.srcDValue = layoutSrc.stride(1);
+        intriParams.dstNzNStride = dstNzNStride;
+        intriParams.dstNzC0Stride = dstNzC0Stride;
+        if (srcNdMatrixStride < STRIDE_LIMIT) {
+            intriParams.ndNum = ndNum;
+            intriParams.srcNdMatrixStride = srcNdMatrixStride;
+            intriParams.dstNzMatrixStride = dstNzMatrixStride;
+            AscendC::DataCopy(dstTensor, srcTensor, intriParams);
+        } else {
+            intriParams.ndNum = 1;
+            intriParams.srcNdMatrixStride = 0;
+            intriParams.dstNzMatrixStride = 0;
+            for (uint32_t i = 0; i < ndNum; i++) {
+                AscendC::DataCopy(dstTensor[i * ELE_NUM_PER_C0], srcTensor[i * srcNdMatrixStride], intriParams);
+            }
+        }
+    }
 };
 
 /// Partial specialization for zN in and zN out.
