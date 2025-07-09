@@ -70,7 +70,7 @@ struct Options {
     string dtype{"fp16_t"};
     std::vector<int64_t> list_seq;
     uint32_t deviceId{0};
-    string dataPath = "../../examples/21_fag_tnd/data";
+    string dataPath = "../../examples/20_fag_tnd/data";
 
     Options() = default;
 
@@ -142,7 +142,7 @@ void Run(const Options &options)
     ifstream fd(dataPath + "/q.bin", ios::binary);
     if (!fd) {
         printf("No data file in the path, please check the path,"
-                "or run [python <SOURCE_DIR>/examples/21_fag_tnd/gen_data.py] first!\n");
+                "or run [python <SOURCE_DIR>/examples/20_fag_tnd/gen_data.py] first!\n");
         ACL_CHECK(aclrtDestroyStream(stream));
         ACL_CHECK(aclrtResetDevice(options.deviceId));
         ACL_CHECK(aclFinalize());
