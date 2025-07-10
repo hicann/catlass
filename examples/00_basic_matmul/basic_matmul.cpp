@@ -90,10 +90,10 @@ void Run(Options const &options)
     size_t sizeC = lenC * sizeof(fp16_t);
 
     using LayoutA = layout::RowMajor;
-    using LayoutB = layout::RowMajor;
+    using LayoutB = layout::zN;
     using LayoutC = layout::RowMajor;
     LayoutA layoutA{m, k};
-    LayoutB layoutB{k, n};
+    LayoutB layoutB = layout::zN::MakeLayout<fp16_t>(k, n);
     LayoutC layoutC{m, n};
 
     std::vector<fp16_t> hostA(lenA);
@@ -116,10 +116,10 @@ void Run(Options const &options)
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
     using ArchTag = Arch::AtlasA2;
-    using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
-    using L1TileShape = GemmShape<128, 256, 256>;
-
-    using L0TileShape = GemmShape<128, 256, 64>;
+    // using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
+    using DispatchPolicy = Gemm::MmadAtlasA2PreLoad<true, true>;    // change DispatchPolicy here, my friend.
+    using L1TileShape = GemmShape<128, 256, 256>;   // change L1TileShape here, my friend.
+    using L0TileShape = GemmShape<128, 256, 64>;    // change L0TileShape here, my friend.
 
     using AType = Gemm::GemmType<half, LayoutA>;
     using BType = Gemm::GemmType<half, LayoutB>;

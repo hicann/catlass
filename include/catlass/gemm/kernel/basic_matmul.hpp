@@ -129,11 +129,27 @@ public:
             int64_t gmOffsetB = params.layoutB.GetOffset(offsetB);
             int64_t gmOffsetC = params.layoutC.GetOffset(offsetC);
 
+            // The follow change is to fit MmadAtlasA2PreLoad DispatchPolicy.
+            bool isFirstBlock = (loopIdx == AscendC::GetBlockIdx());
+            bool hasNextBlock = false;
+            GemmCoord nextBlockIdCoord;
+            GemmCoord nextActualBlockShape;
+            if (loopIdx + AscendC::GetBlockNum() < coreLoops) {
+                hasNextBlock = true;
+                nextBlockIdCoord = matmulBlockScheduler.GetBlockCoord(loopIdx + AscendC::GetBlockNum());
+                nextActualBlockShape = matmulBlockScheduler.GetActualBlockShape(nextBlockIdCoord);
+            }
+            MatrixCoord offsetNextA{nextBlockIdCoord.m() * L1TileShape::M, nextBlockIdCoord.k() * L1TileShape::K};
+            MatrixCoord offsetNextB{nextBlockIdCoord.k() * L1TileShape::K, nextBlockIdCoord.n() * L1TileShape::N};
+            int64_t gmOffsetNextA = params.layoutA.GetOffset(offsetNextA);
+            int64_t gmOffsetNextB = params.layoutB.GetOffset(offsetNextB);
+
             // Compute block-scoped matrix multiply-add
             blockMmad(gmA[gmOffsetA], params.layoutA,
                       gmB[gmOffsetB], params.layoutB,
                       gmC[gmOffsetC], params.layoutC,
-                      actualBlockShape);
+                      gmA[gmOffsetNextA], gmB[gmOffsetNextB],
+                      actualBlockShape, nextActualBlockShape, isFirstBlock, hasNextBlock);
         }
     }
 
