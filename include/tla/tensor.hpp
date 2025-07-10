@@ -36,8 +36,6 @@ struct Tensor {
     // Accessors
     //
 
-    static constexpr int rank  = Layout::rank;
-
     CATLASS_HOST_DEVICE constexpr
     decltype(auto) tensor() const
     {

@@ -85,6 +85,10 @@ struct is_constant<n, integral_constant<T, v>> : bool_constant<v == n> {};
 //
 
 template <int v>
+constexpr int SIZE_64 = 64;
+constexpr int SIZE_128 = 128;
+constexpr int SIZE_256 = 256;
+constexpr int SIZE_512 = 512;
 using Int = C<v>;
 using _64     = Int<64>;
 using _128    = Int<128>;
