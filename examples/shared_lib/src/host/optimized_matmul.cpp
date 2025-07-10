@@ -28,14 +28,14 @@ void OptimizedMatmul(uint32_t blockNum, aclrtStream stream, KernelInfo kernelInf
     using LayoutA = layout::RowMajor;
     using LayoutB = layout::RowMajor;
     using LayoutC = layout::RowMajor;
-    using ElementA = half;
-    using ElementB = half;
-    using ElementC = half;
+    using ElementA = bfloat16_t;
+    using ElementB = bfloat16_t;
+    using ElementC = bfloat16_t;
     using AType = Gemm::GemmType<ElementA, LayoutA>;
     using BType = Gemm::GemmType<ElementB, LayoutB>;
     using CType = Gemm::GemmType<ElementC, LayoutC>;
     LayoutA layoutA{m, k};
-    LayoutB layoutB{k, n};
+    LayoutB layoutB = layout::zN::MakeLayout<fp16_t>(k, n);
     LayoutC layoutC{m, n};
     constexpr uint32_t alignByByte = 512;
     constexpr uint32_t alignByElement = alignByByte / sizeof(ElementA);
@@ -65,26 +65,13 @@ void OptimizedMatmul(uint32_t blockNum, aclrtStream stream, KernelInfo kernelInf
     }
 
     uint8_t *deviceWB{nullptr};
-    // If layoutWB has the same stride with layoutB, no need to padding B
-    if (isNeedPaddingB) {
-        aclrtMalloc(reinterpret_cast<void **>(&deviceWB), sizeWB, ACL_MEM_MALLOC_HUGE_FIRST);
-    } else {
-        // no need to padding B
-        deviceWB = deviceB;
-    }
+    // no need to padding B
+    deviceWB = deviceB;
 
     // Prepare FFTS address
     uint64_t fftsAddr{0};
     uint32_t fftsLen{0};
     rtGetC2cCtrlAddr(&fftsAddr, &fftsLen);
-    if (isNeedPaddingA && isNeedPaddingB) {
-        optimized_matmul<AType, BType, CType, true, true>
-            <<<blockNum, nullptr, stream>>>(fftsAddr, problemShape, deviceA, deviceB, deviceC, deviceWA, deviceWB);
-    }
-    if (!isNeedPaddingA && isNeedPaddingB) {
-        optimized_matmul<AType, BType, CType, false, true>
-            <<<blockNum, nullptr, stream>>>(fftsAddr, problemShape, deviceA, deviceB, deviceC, deviceWA, deviceWB);
-    }
     if (isNeedPaddingA && !isNeedPaddingB) {
         optimized_matmul<AType, BType, CType, true, false>
             <<<blockNum, nullptr, stream>>>(fftsAddr, problemShape, deviceA, deviceB, deviceC, deviceWA, deviceWB);
@@ -97,9 +84,6 @@ void OptimizedMatmul(uint32_t blockNum, aclrtStream stream, KernelInfo kernelInf
     aclrtSynchronizeStream(stream);
     if (isNeedPaddingA) {
         aclrtFree(deviceWA);
-    }
-    if (isNeedPaddingB) {
-        aclrtFree(deviceWB);
     }
 }
 } // namespace CatlassKernel

@@ -99,6 +99,12 @@ bool IsNeedPadding(layout::ColumnMajor layout, uint32_t align)
     }
 }
 
+bool IsNeedPadding(layout::zN layout, uint32_t align)
+{
+    // zN format is already padded.
+    return false
+}
+
 // common val
 
 template <class Type, bool PADDING> struct PaddingHelper {
@@ -152,7 +158,7 @@ CATLASS_GLOBAL void optimized_matmul(uint64_t fftsAddr, GemmCoord problemShape, 
     using BlockScheduler31 = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
     using BlockEpilogue = void;
     LayoutA layoutA = LayoutA(problemShape.m(), problemShape.k());
-    LayoutB layoutB = LayoutB(problemShape.k(), problemShape.n());
+    LayoutB layoutB = layout::zN::MakeLayout<bfloat16_t>(problemShape.k(), problemShape.n());
     LayoutC layoutC = LayoutC(problemShape.m(), problemShape.n());
 
     using PaddingHelperA = PaddingHelper<AType, PADDING_A>;
@@ -173,7 +179,7 @@ CATLASS_GLOBAL void optimized_matmul(uint64_t fftsAddr, GemmCoord problemShape, 
     using MatmulKernel =
         Gemm::Kernel::OptimizedMatmul<GlobalPaddingA, GlobalPaddingB, BlockMmadOpt, BlockEpilogue, BlockScheduler30>;
     using MatmulParams = typename MatmulKernel::Params;
-    MatmulParams params{problemShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, gmWA, layoutWA, gmWB, layoutWB};
+    MatmulParams params{problemShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, gmWA, layoutWA, gmWB, layoutB};
     MatmulKernel matmul;
     matmul(params);
 }

@@ -33,9 +33,10 @@ template<class LayoutA, class LayoutB, class LayoutC, class InDType, class OutDT
 CATLASS_GLOBAL void basic_matmul(GemmCoord problemShape, GM_ADDR gmA, GM_ADDR gmB, GM_ADDR gmC)
 {
     using ArchTag = Arch::AtlasA2;
-    using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
-    using L1TileShape = GemmShape<128, 256, 256>;
-    using L0TileShape = GemmShape<128, 256, 64>;
+    // using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
+    using DispatchPolicy = Gemm::MmadAtlasA2PreLoad<true, true>;        // change DispatchPolicy here, my friend.
+    using L1TileShape = GemmShape<128, 256, 256>;   // change L1TileShape here, my friend.
+    using L0TileShape = GemmShape<128, 256, 64>;    // change L1TileShape here, my friend.
 
     using AType = Gemm::GemmType<InDType, LayoutA>;
     using BType = Gemm::GemmType<InDType, LayoutB>;
@@ -45,7 +46,7 @@ CATLASS_GLOBAL void basic_matmul(GemmCoord problemShape, GM_ADDR gmA, GM_ADDR gm
     using BlockEpilogue = void;
 
     LayoutA layoutA(problemShape.m(), problemShape.k());
-    LayoutB layoutB(problemShape.k(), problemShape.n());
+    LayoutB layoutB = layout::zN::MakeLayout<bfloat16_t>(problemShape.k(), problemShape.n());
     LayoutC layoutC(problemShape.m(), problemShape.n());
 
     if (problemShape.m() > problemShape.n()) {
