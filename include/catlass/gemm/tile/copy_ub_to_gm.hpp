@@ -20,10 +20,13 @@ namespace Catlass::Gemm::Tile {
 
 /// Partial specialization for AtlasA2, RowMajor in and RowMajor out.
 template <class ElementSrc, class ElementDst, class LayoutSrc_, class LayoutDst_>
-struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::LocalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::VECCALC>,
+struct TileCopyTla<
+    Arch::AtlasA2,
+    tla::Tensor<AscendC::LocalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::VECCALC>,
     tla::Tensor<AscendC::GlobalTensor<ElementDst>, LayoutDst_, AscendC::TPosition::GM>,
     std::enable_if_t<tla::detail::isRowMajor<LayoutSrc_>::value &&
-                     tla::detail::isRowMajor<LayoutDst_>::value>> {
+                     tla::detail::isRowMajor<LayoutDst_>::value>
+>{
     using LayoutDst = LayoutDst_;
     using LayoutSrc = LayoutSrc_;
     using TensorDst = tla::Tensor<AscendC::GlobalTensor<ElementDst>, LayoutDst, AscendC::TPosition::GM>;
@@ -52,9 +55,12 @@ struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::LocalTensor<ElementSrc>, 
 
 /// Partial specialization for AtlasA2, RowMajor in and PaddingRowMajor out.
 template <class ElementSrc, class ElementDst, class LayoutSrc_, class LayoutDst_>
-struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::LocalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::VECCALC>,
+struct TileCopyTlaExt<
+    Arch::AtlasA2,
+    tla::Tensor<AscendC::LocalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::VECCALC>,
     tla::Tensor<AscendC::GlobalTensor<ElementDst>, LayoutDst_, AscendC::TPosition::GM>,
-    layout::RowMajor, layout::PaddingRowMajor> {
+    layout::RowMajor, layout::PaddingRowMajor
+>{
     using LayoutDst = LayoutDst_;
     using LayoutSrc = LayoutSrc_;
     using TensorDst = tla::Tensor<AscendC::GlobalTensor<ElementDst>, LayoutDst, AscendC::TPosition::GM>;

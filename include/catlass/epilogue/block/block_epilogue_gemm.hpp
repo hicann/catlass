@@ -62,12 +62,19 @@ public:
     static constexpr bool isNeedCast = !std::is_same<ElementC, ElementX>::value;
     static constexpr uint32_t COMPUTE_LENGTH = TileElemWiseEpilogueAdd::COMPUTE_LENGTH;
 
-    using ElementCompute = typename Catlass::Gemm::helper::ElementAccumulatorSelector<ElementX, ElementD>::ElementAccumulator;
+    using ElementCompute = typename Catlass::Gemm::helper::
+        ElementAccumulatorSelector<ElementX, ElementD>::ElementAccumulator;
     using ElementScalar = ElementCompute;
 
     // Check if ArchTag is matched
-    static_assert(std::is_same_v<typename TileElemWiseEpilogueAdd::ArchTag, ArchTag>, "Tile epilogue's ArchTag mismatch");
-    static_assert(std::is_same_v<typename TileElemWiseEpilogueMuls::ArchTag, ArchTag>, "Tile epilogue's ArchTag mismatch");
+    static_assert(
+        std::is_same_v<typename TileElemWiseEpilogueAdd::ArchTag, ArchTag>,
+        "Tile epilogue's ArchTag mismatch"
+    );
+    static_assert(
+        std::is_same_v<typename TileElemWiseEpilogueMuls::ArchTag, ArchTag>,
+        "Tile epilogue's ArchTag mismatch"
+    );
     static_assert(std::is_same_v<LayoutC, layout::RowMajor>, "LayoutC only support RowMajor yet!");
 
     struct Params{
@@ -82,12 +89,17 @@ public:
         Params(){}
 
         CATLASS_HOST_DEVICE
-        Params(ElementScalar alpha_, ElementScalar beta_, GM_ADDR ptrX_, LayoutX layoutX_, GM_ADDR ptrD_, LayoutD layoutD_)
+        Params(ElementScalar alpha_, ElementScalar beta_,
+            GM_ADDR ptrX_, LayoutX layoutX_, GM_ADDR ptrD_, LayoutD layoutD_)
             : alpha(alpha_), beta(beta_), ptrX(ptrX_), layoutX(layoutX_), ptrD(ptrD_), layoutD(layoutD_){}
     };
 
     CATLASS_DEVICE
-    BlockEpilogue(Arch::Resource<ArchTag> &resource, GemmCoord blockShape_, Params const& params_ ,uint32_t ubByteStart = 0) : blockShapeMNK(blockShape_), params(params_)
+    BlockEpilogue(
+        Arch::Resource<ArchTag> &resource,
+        GemmCoord blockShape_,
+        Params const& params_ ,
+        uint32_t ubByteStart = 0) : blockShapeMNK(blockShape_), params(params_)
     {
         uint32_t maxMPerBlock = blockShapeMNK.m();
         uint32_t maxNPerBlock = blockShapeMNK.n();
@@ -154,7 +166,12 @@ public:
         AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
         if constexpr (isNeedCast)
         {
-            AscendC::Cast<ElementCompute, ElementX>(ubXTensorCast, ubXTensor, AscendC::RoundMode::CAST_NONE, COMPUTE_LENGTH);
+            AscendC::Cast<ElementCompute, ElementX>(
+                ubXTensorCast,
+                ubXTensor,
+                AscendC::RoundMode::CAST_NONE,
+                COMPUTE_LENGTH
+            );
             AscendC::PipeBarrier<PIPE_V>();
             tileElemWiseEpilogueMuls(ubXTensorCast, ubXTensorCast, (ElementCompute)params.beta);
         } else {

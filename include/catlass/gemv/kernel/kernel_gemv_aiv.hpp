@@ -119,7 +119,9 @@
          for(uint32_t loop_id = 0;loop_id < loopnum;loop_id++){
             uint32_t aiv_id = AscendC::GetBlockIdx();   
             if(loop_id % aiv_num != aiv_id)continue;
-            uint32_t m_catlassual = ((int32_t)loop_id > (int32_t)(loopnum - params.split - 1) ) ? params.problemShape.m() - ((loop_id/params.split) * maxmPerBlock_round) : maxmPerBlock_round;
+            uint32_t m_catlassual = ((int32_t)loop_id > (int32_t)(loopnum - params.split - 1) )
+                                    ? params.problemShape.m() - ((loop_id/params.split) * maxmPerBlock_round)
+                                    : maxmPerBlock_round;
             uint32_t n_catlassual = params.problemShape.n();
 
             if constexpr (std::is_same_v<LayoutA, Catlass::layout::ColumnMajor>) {

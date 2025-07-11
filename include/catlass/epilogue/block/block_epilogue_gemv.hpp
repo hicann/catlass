@@ -61,7 +61,8 @@ public:
 
     static constexpr bool isNeedCast = !std::is_same<ElementC, ElementY>::value;
 
-    using ElementCompute = typename Catlass::Gemm::helper::ElementAccumulatorSelector<ElementY, ElementZ>::ElementAccumulator;
+    using ElementCompute = typename Catlass::Gemm::helper::
+        ElementAccumulatorSelector<ElementY, ElementZ>::ElementAccumulator;
     using ElementScalar = ElementCompute;
     using TensorCoord = layout::VectorLayout::TensorCoord;
 
@@ -72,7 +73,10 @@ public:
     using LayoutComputeInUb = layout::VectorLayout;
 
     // Check if ArchTag is matched
-    static_assert(std::is_same_v<typename TileElemWiseEpilogueMuls::ArchTag, ArchTag>, "Tile epilogue's ArchTag mismatch");
+    static_assert(
+        std::is_same_v<typename TileElemWiseEpilogueMuls::ArchTag, ArchTag>,
+        "Tile epilogue's ArchTag mismatch"
+    );
 
     struct Params {
         ElementScalar alpha;
@@ -87,7 +91,8 @@ public:
         Params() {}
 
         CATLASS_HOST_DEVICE
-        Params(ElementScalar alpha_, ElementScalar beta_, GM_ADDR ptrY_, LayoutC layoutY_, GM_ADDR ptrZ_, LayoutZ layoutZ_)
+        Params(ElementScalar alpha_, ElementScalar beta_,
+            GM_ADDR ptrY_, LayoutC layoutY_, GM_ADDR ptrZ_, LayoutZ layoutZ_)
             : alpha(alpha_), beta(beta_), ptrY(ptrY_), layoutY(layoutY_), ptrZ(ptrZ_), layoutZ(layoutZ_) {}
     };
 
@@ -125,7 +130,10 @@ public:
         };
         TensorCoord subblockCoord{static_cast<uint32_t>(AscendC::GetSubBlockIdx())};
 
-        TensorCoord actualSubblockShape = TensorCoord::Min(subblockShape, actualBlockShape - subblockCoord * subblockShape);
+        TensorCoord actualSubblockShape = TensorCoord::Min(
+            subblockShape,
+            actualBlockShape - subblockCoord * subblockShape
+        );
         TensorCoord subblockOffset = subblockCoord * subblockShape;
 
         // Get the data and layout of C

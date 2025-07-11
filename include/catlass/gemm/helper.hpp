@@ -232,7 +232,10 @@ struct L1AndL0TypeSelectorGemm<Gemm::GemmType<int8_t, layout::RowMajor>, Gemm::G
 };
 
 template<class Element>
-struct L1AndL0TypeSelectorGemm<Gemm::GemmType<Element, layout::ColumnMajor>, Gemm::GemmType<Element, layout::ColumnMajor>>{
+struct L1AndL0TypeSelectorGemm<
+    Gemm::GemmType<Element, layout::ColumnMajor>,
+    Gemm::GemmType<Element, layout::ColumnMajor>
+>{
     using L1AType = Gemm::GemmType<Element, layout::nN, AscendC::TPosition::A1>;
     using L1BType = Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::B1>;
     using L0AType = Gemm::GemmType<Element, layout::zZ, AscendC::TPosition::A2>;
@@ -240,7 +243,10 @@ struct L1AndL0TypeSelectorGemm<Gemm::GemmType<Element, layout::ColumnMajor>, Gem
 };
 
 template<>
-struct L1AndL0TypeSelectorGemm<Gemm::GemmType<int8_t, layout::ColumnMajor>, Gemm::GemmType<int8_t, layout::ColumnMajor>>{
+struct L1AndL0TypeSelectorGemm<
+    Gemm::GemmType<int8_t, layout::ColumnMajor>,
+    Gemm::GemmType<int8_t, layout::ColumnMajor>
+>{
     using L1AType = Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::A1>;
     using L1BType = Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::B1>;
     using L0AType = Gemm::GemmType<int8_t, layout::zZ, AscendC::TPosition::A2>;
@@ -248,7 +254,10 @@ struct L1AndL0TypeSelectorGemm<Gemm::GemmType<int8_t, layout::ColumnMajor>, Gemm
 };
 
 template<class Element>
-struct L1AndL0TypeSelectorGemm<Gemm::GemmType<Element, layout::RowMajor>, Gemm::GemmType<Element, layout::ColumnMajor>>{
+struct L1AndL0TypeSelectorGemm<
+    Gemm::GemmType<Element, layout::RowMajor>,
+    Gemm::GemmType<Element, layout::ColumnMajor>
+>{
     using L1AType = Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>;
     using L1BType = Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::B1>;
     using L0AType = Gemm::GemmType<Element, layout::zZ, AscendC::TPosition::A2>;
@@ -256,7 +265,10 @@ struct L1AndL0TypeSelectorGemm<Gemm::GemmType<Element, layout::RowMajor>, Gemm::
 };
 
 template<class Element>
-struct L1AndL0TypeSelectorGemm<Gemm::GemmType<Element, layout::ColumnMajor>, Gemm::GemmType<Element, layout::RowMajor>>{
+struct L1AndL0TypeSelectorGemm<
+    Gemm::GemmType<Element, layout::ColumnMajor>,
+    Gemm::GemmType<Element, layout::RowMajor>
+>{
     using L1AType = Gemm::GemmType<Element, layout::nN, AscendC::TPosition::A1>;
     using L1BType = Gemm::GemmType<Element, layout::zZ, AscendC::TPosition::B1>;
     using L0AType = Gemm::GemmType<Element, layout::zZ, AscendC::TPosition::A2>;

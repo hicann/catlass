@@ -117,8 +117,12 @@ template <class LayoutTag>
 CATLASS_HOST_DEVICE constexpr
 auto MakeLayoutFromTag(LayoutTag const& tag)
 {
-    static_assert(std::is_same_v<LayoutTag, Catlass::layout::RowMajor> || std::is_same_v<LayoutTag, Catlass::layout::ColumnMajor>,
-        "Unsupported LayoutTag for MakeLayoutFromTag, only support Catlass::layout::RowMajor or Catlass::layout::ColumnMajor");
+    static_assert(
+        (std::is_same_v<LayoutTag, Catlass::layout::RowMajor> ||
+        std::is_same_v<LayoutTag, Catlass::layout::ColumnMajor>),
+        "Unsupported LayoutTag for MakeLayoutFromTag, "\
+        "only support Catlass::layout::RowMajor or Catlass::layout::ColumnMajor"
+    );
 
     if constexpr (std::is_same_v<LayoutTag, Catlass::layout::RowMajor>) {
         return MakeLayout(MakeShape(tag.shape(0), tag.shape(1)), MakeStride(tag.stride(0), Int<1>{}));
@@ -294,8 +298,12 @@ auto MakeLayout(uint32_t const& rows, uint32_t const& cols)
         return MakeLayout(
             MakeShape(MakeShape(Int<Catlass::C0_NUM_PER_FRACTAL>{}, CeilDiv<Catlass::C0_NUM_PER_FRACTAL>(rows)),
                       MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv<ELE_NUM_PER_C0>(cols))),
-            MakeStride(MakeStride(Int<ELE_NUM_PER_C0>{}, (int64_t)RoundUp<ELE_NUM_PER_C0>(cols) * Catlass::C0_NUM_PER_FRACTAL),
-                       MakeStride(Int<1>{}, Int<ELE_NUM_PER_FRACTAL>{})));
+            MakeStride(
+                MakeStride(Int<ELE_NUM_PER_C0>{},
+                (int64_t)RoundUp<ELE_NUM_PER_C0>(cols) * Catlass::C0_NUM_PER_FRACTAL),
+                       MakeStride(Int<1>{}, Int<ELE_NUM_PER_FRACTAL>{})
+                )
+            );
     } else {
         return MakeLayout(
             MakeShape(MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv<ELE_NUM_PER_C0>(rows)),
@@ -341,8 +349,12 @@ CATLASS_HOST_DEVICE constexpr auto MakeLayoutL0C(uint32_t const& rows, uint32_t 
     return MakeLayout(
         MakeShape(MakeShape(Int<Catlass::C0_NUM_PER_FRACTAL>{}, CeilDiv<Catlass::C0_NUM_PER_FRACTAL>(rows)),
                   MakeShape(Int<Catlass::C0_NUM_PER_FRACTAL>{}, CeilDiv<Catlass::C0_NUM_PER_FRACTAL>(cols))),
-        MakeStride(MakeStride(Int<Catlass::C0_NUM_PER_FRACTAL>{}, Int<ELE_NUM_PER_FRACTAL>{}),
-                   MakeStride(Int<1>{}, (int64_t)RoundUp<Catlass::C0_NUM_PER_FRACTAL>(rows) * Catlass::C0_NUM_PER_FRACTAL)));
+        MakeStride(
+            MakeStride(Int<Catlass::C0_NUM_PER_FRACTAL>{},
+            Int<ELE_NUM_PER_FRACTAL>{}),
+            MakeStride(Int<1>{}, (int64_t)RoundUp<Catlass::C0_NUM_PER_FRACTAL>(rows) * Catlass::C0_NUM_PER_FRACTAL)
+        )
+    );
 }
 
 } // end namespace tla

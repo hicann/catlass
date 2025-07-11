@@ -319,7 +319,15 @@ public:
                 }
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0ListId]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0ListId]);
-                tileMmad(l0CTensor[(singleIdx % l0CBlockNum) * BlockCnt], l0TileA, l0TileB, mActual, nActual, kL0Actual, (kIdx == 0) && (kL0Idx == 0));
+                tileMmad(
+                    l0CTensor[(singleIdx % l0CBlockNum) * BlockCnt], 
+                    l0TileA,
+                    l0TileB,
+                    mActual,
+                    nActual,
+                    kL0Actual,
+                    (kIdx == 0) && (kL0Idx == 0)
+                );
                 AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0ListId]);
                 AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0ListId]);
                 l0ListId = 1 - l0ListId;

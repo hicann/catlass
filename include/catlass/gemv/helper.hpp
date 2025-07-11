@@ -102,7 +102,10 @@ struct L1AndL0TypeSelectorGemv{
 };
 
 template<class Element>
-struct L1AndL0TypeSelectorGemv<Gemm::GemmType<Element, layout::VectorLayout>, Gemm::GemmType<Element, layout::RowMajor>>{
+struct L1AndL0TypeSelectorGemv<
+    Gemm::GemmType<Element, layout::VectorLayout>,
+    Gemm::GemmType<Element, layout::RowMajor>
+>{
     using L1AType = Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>;
     using L1BType = Gemm::GemmType<Element, layout::zN, AscendC::TPosition::B1>;
     using L0AType = Gemm::GemmType<Element, layout::zZ, AscendC::TPosition::A2>;
@@ -110,7 +113,10 @@ struct L1AndL0TypeSelectorGemv<Gemm::GemmType<Element, layout::VectorLayout>, Ge
 };
 
 template<class Element>
-struct L1AndL0TypeSelectorGemv<Gemm::GemmType<Element, layout::VectorLayout>, Gemm::GemmType<Element, layout::ColumnMajor>>{
+struct L1AndL0TypeSelectorGemv<
+    Gemm::GemmType<Element, layout::VectorLayout>,
+    Gemm::GemmType<Element, layout::ColumnMajor>
+>{
     using L1AType = Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>;
     using L1BType = Gemm::GemmType<Element, layout::nN, AscendC::TPosition::B1>;
     using L0AType = Gemm::GemmType<Element, layout::zZ, AscendC::TPosition::A2>;
@@ -118,7 +124,10 @@ struct L1AndL0TypeSelectorGemv<Gemm::GemmType<Element, layout::VectorLayout>, Ge
 };
 
 template<>
-struct L1AndL0TypeSelectorGemv<Gemm::GemmType<int8_t, layout::VectorLayout>, Gemm::GemmType<int8_t, layout::ColumnMajor>>{
+struct L1AndL0TypeSelectorGemv<
+    Gemm::GemmType<int8_t, layout::VectorLayout>, 
+    Gemm::GemmType<int8_t, layout::ColumnMajor>
+>{
     using L1AType = Gemm::GemmType<int8_t, layout::zN, AscendC::TPosition::A1>;
     using L1BType = Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::B1>;
     using L0AType = Gemm::GemmType<int8_t, layout::zZ, AscendC::TPosition::A2>;

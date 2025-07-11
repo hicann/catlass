@@ -27,7 +27,10 @@ template <
     class L0Type = void
 >
 struct CopyL1ToBT {
-    static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy l1 to biasTable buffer, can not find the specialization.");
+    static_assert(
+        DEPENDENT_FALSE<ArchTag>,
+        "Unsupported copy l1 to biasTable buffer, can not find the specialization."
+    );
 };
 
 template<class ArchTag, class ElementSrc, class ElementDst>

@@ -33,7 +33,11 @@ struct CopyL1ToL0A {
 ////////////////////////////////
 /// new add gemm
 template<class ArchTag, class Element>
-struct CopyL1ToL0A<ArchTag, Catlass::Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>, Catlass::Gemm::GemmType<Element, layout::zZ, AscendC::TPosition::A2>>{
+struct CopyL1ToL0A<
+    ArchTag,
+    Catlass::Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>,
+    Catlass::Gemm::GemmType<Element, layout::zZ, AscendC::TPosition::A2>
+>{
     using LayoutDst = layout::zZ;
     using LayoutSrc = layout::zN;
 
@@ -65,7 +69,11 @@ struct CopyL1ToL0A<ArchTag, Catlass::Gemm::GemmType<Element, layout::zN, AscendC
 };
 
 template<class ArchTag, class Element>
-struct CopyL1ToL0A<ArchTag, Catlass::Gemm::GemmType<Element, layout::nN, AscendC::TPosition::A1>, Catlass::Gemm::GemmType<Element, layout::zZ, AscendC::TPosition::A2>>{
+struct CopyL1ToL0A<
+    ArchTag,
+    Catlass::Gemm::GemmType<Element, layout::nN, AscendC::TPosition::A1>,
+    Catlass::Gemm::GemmType<Element, layout::zZ, AscendC::TPosition::A2>
+>{
     using LayoutDst = layout::zZ;
     using LayoutSrc = layout::nN;
 
@@ -95,7 +103,11 @@ struct CopyL1ToL0A<ArchTag, Catlass::Gemm::GemmType<Element, layout::nN, AscendC
 };
 
 template<class ArchTag>
-struct CopyL1ToL0A<ArchTag, Catlass::Gemm::GemmType<float, layout::nN, AscendC::TPosition::A1>, Catlass::Gemm::GemmType<float, layout::zZ, AscendC::TPosition::A2>>{
+struct CopyL1ToL0A<
+    ArchTag,
+    Catlass::Gemm::GemmType<float, layout::nN, AscendC::TPosition::A1>,
+    Catlass::Gemm::GemmType<float, layout::zZ, AscendC::TPosition::A2>
+>{
     using Element = float;
     using LayoutDst = layout::zZ;
     using LayoutSrc = layout::nN;
@@ -118,13 +130,21 @@ struct CopyL1ToL0A<ArchTag, Catlass::Gemm::GemmType<float, layout::nN, AscendC::
         loadDataParams.dstGap = 1;
         loadDataParams.dstFracGap = 0;
         for(uint32_t i = 0; i < CeilDiv<C0_NUM_PER_FRACTAL>(layoutSrc.orgShape(0)); i++){
-            AscendC::LoadDataWithTranspose(dstTensor[i * layoutDst.stride(1)], srcTensor[i * layoutSrc.stride(1) * 2], loadDataParams);
+            AscendC::LoadDataWithTranspose(
+                dstTensor[i * layoutDst.stride(1)],
+                srcTensor[i * layoutSrc.stride(1) * 2],
+                loadDataParams
+            );
         }
     }
 };
 
 template<class ArchTag>
-struct CopyL1ToL0A<ArchTag, Catlass::Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::A1>, Catlass::Gemm::GemmType<int8_t, layout::zZ, AscendC::TPosition::A2>>{
+struct CopyL1ToL0A<
+    ArchTag,
+    Catlass::Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::A1>,
+    Catlass::Gemm::GemmType<int8_t, layout::zZ, AscendC::TPosition::A2>
+>{
     using Element = int8_t;
     using LayoutDst = layout::zZ;
     using LayoutSrc = layout::nZ;
