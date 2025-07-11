@@ -60,7 +60,7 @@ transform_apply(T&& t, F&& f, G&& g)
 }
 
 template <size_t I, class T,
-          __TLA_REQUIRES(tla::is_integral<tla::remove_cvref_t<T>>::value)>
+          TLA_REQUIRES(tla::is_integral<tla::remove_cvref_t<T>>::value)>
 CATLASS_HOST_DEVICE constexpr
 decltype(auto) get(T&& t) noexcept
 {

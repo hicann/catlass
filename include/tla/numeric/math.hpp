@@ -21,7 +21,7 @@ namespace tla {
 //
 
 template <class T, class U,
-          __TLA_REQUIRES(std::is_arithmetic<T>::value &&
+          TLA_REQUIRES(std::is_arithmetic<T>::value &&
                          std::is_arithmetic<U>::value)>
 CATLASS_HOST_DEVICE constexpr
 auto
@@ -30,7 +30,7 @@ max(T const& t, U const& u) {
 }
 
 template <class T, class U,
-          __TLA_REQUIRES(std::is_arithmetic<T>::value &&
+          TLA_REQUIRES(std::is_arithmetic<T>::value &&
                          std::is_arithmetic<U>::value)>
 CATLASS_HOST_DEVICE constexpr
 auto

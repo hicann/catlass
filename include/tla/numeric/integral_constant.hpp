@@ -83,7 +83,10 @@ struct is_constant<n, integral_constant<T, v>> : bool_constant<v == n> {};
 //
 // Specializations
 //
-
+constexpr int SIZE_64 = 64;
+constexpr int SIZE_128 = 128;
+constexpr int SIZE_256 = 256;
+constexpr int SIZE_512 = 512;
 template <int v>
 using Int = C<v>;
 using _64     = Int<64>;
@@ -146,13 +149,13 @@ TLA_BINARY_OP(>>);
         return C<OP(t, u)>{};                                           \
     }                                                                   \
     template <auto t, class U,                                          \
-              __TLA_REQUIRES(is_std_integral<U>::value)>                \
+              TLA_REQUIRES(is_std_integral<U>::value)>                \
     CATLASS_HOST_DEVICE constexpr                                       \
     auto OP (C<t>, U u) {                                               \
         return OP(t, u);                                                \
     }                                                                   \
     template <class T, auto u,                                          \
-              __TLA_REQUIRES(is_std_integral<T>::value)>                \
+              TLA_REQUIRES(is_std_integral<T>::value)>                \
     CATLASS_HOST_DEVICE constexpr                                       \
     auto OP (T t, C<u>) {                                               \
         return OP(t, u);                                                \

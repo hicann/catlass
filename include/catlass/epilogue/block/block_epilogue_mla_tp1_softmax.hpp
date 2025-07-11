@@ -341,9 +341,9 @@ public:
             }
         }
 
-        if (nReal == 512) {
+        if (nReal == tla::SIZE_512) {
             RowmaxSPECTILE512(lsUbTensor[sUbOffset], lmUbTensor[rowOffset], tvUbTensor, round_m, nReal, nStride);
-        } else if (nReal == 256) {
+        } else if (nReal == tla::SIZE_256) {
             RowmaxSPECTILE256(lsUbTensor[sUbOffset], lmUbTensor[rowOffset], tvUbTensor, round_m, nReal, nStride);
         } else {
             RowmaxTAILTILE(lsUbTensor[sUbOffset], lmUbTensor[rowOffset], tvUbTensor, round_m, nReal, nStride);
@@ -405,9 +405,9 @@ public:
                                    AscendC::UnaryRepeatParams(1, 1, 8, 8));
         AscendC::PipeBarrier<PIPE_V>();
         // *** ll = rowsum(ls32)
-        if (nReal == 512) {
+        if (nReal == tla::SIZE_512) {
             RowsumSPECTILE512(lsUbTensor[sUbOffset], llUbTensor[rowOffset], tvUbTensor, round_m, nReal, nStride);
-        } else if (nReal == 256) {
+        } else if (nReal == tla::SIZE_256) {
             RowsumSPECTILE256(lsUbTensor[sUbOffset], llUbTensor[rowOffset], tvUbTensor, round_m, nReal, nStride);
         } else {
             RowsumTAILTILE(lsUbTensor[sUbOffset], llUbTensor[rowOffset], tvUbTensor, round_m, nReal, nStride);
