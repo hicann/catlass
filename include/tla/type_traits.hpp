@@ -13,7 +13,7 @@
 
 #include <tuple>
 
-#define TLA_REQUIRES(...)   typename std::enable_if<(__VA_ARGS__)>::type* = nullptr
+#define TLA_REQUIRES(...)   (typename std::enable_if<(__VA_ARGS__)>::type* = nullptr)
 
 namespace tla {
 

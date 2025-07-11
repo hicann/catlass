@@ -32,10 +32,7 @@ struct Tensor {
     Tensor(BuiltinTensor const& builtinTensor, Layout const& layout)
         : rep_(builtinTensor, layout) {}
 
-    //
     // Accessors
-    //
-
     CATLASS_HOST_DEVICE constexpr
     decltype(auto) tensor() const
     {
