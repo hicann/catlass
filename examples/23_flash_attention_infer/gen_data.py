@@ -25,7 +25,7 @@ def gen_seqlen(max_q_seqlen: int, max_kv_seqlen: int, is_varied_len: int, batch:
         q_seqlen_list = [max_q_seqlen] * batch
         kv_seqlen_list = [max_kv_seqlen] * batch
     else:
-        for i in range batch:
+        for i in range(batch):
             q_seq = random.randint(1, max_q_seqlen + 1)
             kv_seq = random.randint(q_seq, max_kv_seqlen + 1)
             q_seqlen_list.append(q_seq)

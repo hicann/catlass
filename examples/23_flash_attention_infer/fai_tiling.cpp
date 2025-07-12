@@ -58,8 +58,8 @@ struct FAInfo {
     int32_t blockSize = 0;
     int32_t kvHeads = 0;
     int32_t batch = 0;
-    int32_t *kvSeqlenList{nullptr};
-    int32_t *qSeqlen{nullptr};
+    int64_t *kvSeqlenList{nullptr};
+    int64_t *qSeqlen{nullptr};
     MaskType maskType = MaskType::NO_MASK;
 };
 
@@ -101,7 +101,7 @@ uint32_t GetQNBlockTile(int64_t qSeqlen, uint32_t groupSize)
     uint32_t qRowNumCeil = 128;
     uint32_t qNBlockTile = qRowNumCeil / qSeqlen;
     qNBlockTile = std::min(qNBlockTile, groupSize);
-    qNBlockTile = std::max(qNBlockTile, 1);
+    qNBlockTile = std::max(qNBlockTile, static_cast<uint32_t>(1));
     return qNBlockTile;
 }
 

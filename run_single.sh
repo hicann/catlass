@@ -22,7 +22,11 @@ function gen_data() {
 function run_kernel {
     echo 'Case: B=' $batch ' qS=' $qSeqlen ' kvS=' $kvSeqlen ' qN=' $numHeads ' kvN=' $kvHeads ' D=' $headSize ' mask=' $maskType
     cd build/bin
-    ./23_flash_attention_infer $batch $qSeqlen $kvSeqlen $numHeads $kvHeads $headSize $isVariedLen $maskType --dType $dtype --device $device
+    ./23_flash_attention_infer $batch $qSeqlen $kvSeqlen $numHeads $kvHeads $headSize $isVariedLen $maskType --dtype $dtype --device $device
     # msprof op --application="./23_flash_attention_infer $batch $qSeqlen $kvSeqlen $numHeads $kvHeads $headSize $isVariedLen $maskType --dType $dtype --device $device" --output=../../prof
     # msprof op simulator --application="./23_flash_attention_infer $batch $qSeqlen $kvSeqlen $numHeads $kvHeads $headSize $isVariedLen $maskType --dType $dtype --device $device" --output=../../simu
 }
+
+build
+gen_data
+run_kernel

@@ -168,11 +168,6 @@ void Run(const Options &options)
     ReadFile(dataPath + "/q_ntokens.bin", qNtokens, 1 * sizeof(int32_t));
     int32_t numTokens = static_cast<int32_t *>(qNtokens)[0];
 
-    // read kvSeq
-    void *kvSeq = nullptr;
-    ACL_CHECK(aclrtMallocHost(&kvSeq, batch * sizeof(int32_t)));
-    ReadFile(dataPath + "/kv_seqlen.bin", kvSeq, batch * sizeof(int32_t));
-
     uint64_t seqArraySize = batch * sizeof(int64_t);
     uint64_t qoSize = (uint64_t)numTokens * (uint64_t)numHeads * (uint64_t)embeddingSize * sizeof(fp16_t);
     uint64_t kvSize =
@@ -266,8 +261,8 @@ void Run(const Options &options)
     faInfo.kvHeads = kvHeads;
     faInfo.batch = batch;
     faInfo.maskType = static_cast<FAInferTiling::MaskType>(maskType);
-    faInfo.qSeqlenList = static_cast<int64_t *>(qSeqHost);
-    faInfo.kvSeqlenList = static_cast<int64_t *>(kvSeqHost);
+    faInfo.qSeqlenList = reinterpret_cast<int64_t *>(qSeqHost);
+    faInfo.kvSeqlenList = reinterpret_cast<int64_t *>(kvSeqHost);
 
     FAInferTiling::FATilingData faTilingData;
 
@@ -288,7 +283,7 @@ void Run(const Options &options)
     std::cout << "faTilingData.mm2OutSize : " << faTilingData.mm2OutSize << endl;
     std::cout << "faTilingData.UpdateSize : " << faTilingData.UpdateSize << endl;
     std::cout << "faTilingData.workSpaceSize : " << faTilingData.workSpaceSize << endl;
-    
+
     tilingHost = reinterpret_cast<void *>(&faTilingData);
 
     uint32_t tilingKey = 0;
