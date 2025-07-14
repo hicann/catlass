@@ -23,27 +23,15 @@
 
 namespace Catlass::Gemv::Block {
 
-template <
-    class UBTileShape_,
-    class AType_,
-    class XType_,
-    class YType_,
-    class BiasType_,
-    class TileCopy_,
-    class TileVmad_,
-    class TileVmuls_
->
-struct BlockGemv <
-    Gemm::GemvAtlasA2,
-    UBTileShape_,
-    AType_,
-    XType_,
-    YType_,
-    BiasType_,
-    TileCopy_,
-    TileVmad_,
-    TileVmuls_
-> {
+template <class UBTileShape_,
+          class AType_,
+          class XType_,
+          class YType_,
+          class BiasType_,
+          class TileCopy_,
+          class TileVmad_,
+          class TileVmuls_>
+struct BlockGemv<Gemm::GemvAtlasA2, UBTileShape_, AType_, XType_, YType_, BiasType_, TileCopy_, TileVmad_, TileVmuls_> {
 public:
     // Type Aliases
     using DispatchPolicy = Gemm::GemvAtlasA2;
@@ -72,7 +60,9 @@ public:
     static constexpr uint32_t workspace_SIZE_ = 32 * 1024;
 
     CATLASS_DEVICE
-    BlockGemv() {}
+    BlockGemv()
+    {
+    }
 
     /// Construct
     CATLASS_DEVICE
@@ -111,24 +101,24 @@ public:
             AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(UbInAEventList[i]);
             AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(UbInXEventList[i]);
             AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(UbOutEventList[i]);
-         }
-         
-     }
- 
-     CATLASS_DEVICE
-     void operator()(
-         AscendC::GlobalTensor<ElementA> const &gmA, LayoutA const &layoutA,
-         AscendC::GlobalTensor<ElementX> const &gmX, LayoutX const &layoutX,
-         AscendC::GlobalTensor<ElementY> const &gmY, LayoutY const &layoutY,
-         AscendC::GlobalTensor<ElementY> const &gmYCopy,
-         GemvCoord const &actualShape,
-         float alpha,
-         float beta
-        )
-     {
+        }
+    }
+
+    CATLASS_DEVICE
+    void operator()(AscendC::GlobalTensor<ElementA> const &gmA,
+                    LayoutA const &layoutA,
+                    AscendC::GlobalTensor<ElementX> const &gmX,
+                    LayoutX const &layoutX,
+                    AscendC::GlobalTensor<ElementY> const &gmY,
+                    LayoutY const &layoutY,
+                    AscendC::GlobalTensor<ElementY> const &gmYCopy,
+                    GemvCoord const &actualShape,
+                    float alpha,
+                    float beta)
+    {
         AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>((event_t)(UbOutEventList[UbOutListId]));
-        vecCopyGmToUb(UbYTensorList[UbOutListId], gmYCopy,actualShape.m());
-        AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((event_t)(UbOutEventList[UbOutListId]));  
+        vecCopyGmToUb(UbYTensorList[UbOutListId], gmYCopy, actualShape.m());
+        AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((event_t)(UbOutEventList[UbOutListId]));
         AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((event_t)(UbOutEventList[UbOutListId]));
         tileVmuls(UbYTensorList[UbOutListId], UbYTensorList[UbOutListId], (ElementY)beta, actualShape.m());
         AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((event_t)(UbOutEventList[UbOutListId]));
@@ -184,12 +174,8 @@ public:
             AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((event_t)(UbInAEventList[UbInListId]));
             auto layoutComputeInUb = layoutA.GetTileLayout(MakeCoord(TileMRound, TileNRound));
             auto layoutTileCompute = layoutA.GetTileLayout(MakeCoord(m_catlassual, n_catlassual));
-            tileVmad(UbYTensorList[UbOutListId],
-                UbXTensorList[UbInListId],
-                UbATensorList[UbInListId],
-                UbWTensorList[UbInListId],
-                layoutComputeInUb,
-                layoutTileCompute);
+            tileVmad(UbYTensorList[UbOutListId], UbXTensorList[UbInListId], UbATensorList[UbInListId],
+                     UbWTensorList[UbInListId], layoutComputeInUb, layoutTileCompute);
             AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((event_t)(UbInAEventList[UbInListId]));
             AscendC::SetFlag<AscendC::HardEvent::V_MTE2>((event_t)(UbInXEventList[UbInListId]));
             UbInListId = UbInListIdNext;
@@ -198,7 +184,7 @@ public:
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>((event_t)(UbOutEventList[UbOutListId]));
         auto layoutDstY = layoutY.GetTileLayout(TensorCoord(y_catlassual));
         auto layoutComputeInUb = layoutY.GetTileLayout(TensorCoord(y_catlassual));
-        vecCopyUbToGm(gmY, UbYTensorList[UbOutListId],layoutDstY, layoutComputeInUb); 
+        vecCopyUbToGm(gmY, UbYTensorList[UbOutListId], layoutDstY, layoutComputeInUb);
         AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>((event_t)(UbOutEventList[UbOutListId]));
         UbOutListId = (UbOutListId + 1 < STAGES) ? (UbOutListId + 1) : 0;
     }
