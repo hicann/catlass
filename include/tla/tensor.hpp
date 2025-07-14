@@ -32,12 +32,7 @@ struct Tensor {
     Tensor(BuiltinTensor const& builtinTensor, Layout const& layout)
         : rep_(builtinTensor, layout) {}
 
-    //
     // Accessors
-    //
-
-    static constexpr int rank  = Layout::rank;
-
     CATLASS_HOST_DEVICE constexpr
     decltype(auto) tensor() const
     {

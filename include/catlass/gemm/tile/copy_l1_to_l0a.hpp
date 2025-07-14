@@ -18,41 +18,35 @@
 #include "catlass/gemm/tile/tile_copy_tla.hpp"
 #include "tla/tensor.hpp"
 
-
 namespace Catlass::Gemm::Tile {
 
-template <
-    class ArchTag,
-    class L1Type,
-    class L0Type = void
->
-struct CopyL1ToL0A {
+template <class ArchTag, class L1Type, class L0Type = void> struct CopyL1ToL0A {
     static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy l1 to l0, can not find the specialization.");
 };
 
 ////////////////////////////////
 /// new add gemm
-template<class ArchTag, class Element>
-struct CopyL1ToL0A<
-    ArchTag,
-    Catlass::Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>,
-    Catlass::Gemm::GemmType<Element, layout::zZ, AscendC::TPosition::A2>
->{
+template <class ArchTag, class Element>
+struct CopyL1ToL0A<ArchTag,
+                   Catlass::Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>,
+                   Catlass::Gemm::GemmType<Element, layout::zZ, AscendC::TPosition::A2>> {
     using LayoutDst = layout::zZ;
     using LayoutSrc = layout::zN;
 
-    static constexpr uint32_t ELE_NUM_PER_C0 =  BYTE_PER_C0 / sizeof(Element);
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
     static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
 
     CATLASS_DEVICE
-    CopyL1ToL0A(){}
+    CopyL1ToL0A()
+    {
+    }
 
     CATLASS_DEVICE
-    void operator()(
-        AscendC::LocalTensor<Element> dstTensor,
-        AscendC::LocalTensor<Element> srcTensor,
-        LayoutDst layoutDst, LayoutSrc layoutSrc
-    ){
+    void operator()(AscendC::LocalTensor<Element> dstTensor,
+                    AscendC::LocalTensor<Element> srcTensor,
+                    LayoutDst layoutDst,
+                    LayoutSrc layoutSrc)
+    {
         AscendC::LoadData2DParams loadDataParams;
         loadDataParams.startIndex = 0;
         loadDataParams.repeatTimes = static_cast<uint16_t>(layoutDst.shape(3));
@@ -68,98 +62,95 @@ struct CopyL1ToL0A<
     }
 };
 
-template<class ArchTag, class Element>
-struct CopyL1ToL0A<
-    ArchTag,
-    Catlass::Gemm::GemmType<Element, layout::nN, AscendC::TPosition::A1>,
-    Catlass::Gemm::GemmType<Element, layout::zZ, AscendC::TPosition::A2>
->{
+template <class ArchTag, class Element>
+struct CopyL1ToL0A<ArchTag,
+                   Catlass::Gemm::GemmType<Element, layout::nN, AscendC::TPosition::A1>,
+                   Catlass::Gemm::GemmType<Element, layout::zZ, AscendC::TPosition::A2>> {
     using LayoutDst = layout::zZ;
     using LayoutSrc = layout::nN;
 
-    static constexpr uint32_t ELE_NUM_PER_C0 =  BYTE_PER_C0 / sizeof(Element);
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
 
     CATLASS_DEVICE
-    CopyL1ToL0A(){}
+    CopyL1ToL0A()
+    {
+    }
 
     CATLASS_DEVICE
-    void operator()(
-        AscendC::LocalTensor<Element> dstTensor,
-        AscendC::LocalTensor<Element> srcTensor,
-        LayoutDst layoutDst, LayoutSrc layoutSrc
-    ){
+    void operator()(AscendC::LocalTensor<Element> dstTensor,
+                    AscendC::LocalTensor<Element> srcTensor,
+                    LayoutDst layoutDst,
+                    LayoutSrc layoutSrc)
+    {
         AscendC::LoadData2DParams loadDataParams;
         loadDataParams.startIndex = 0;
         loadDataParams.repeatTimes = static_cast<uint16_t>(CeilDiv<C0_NUM_PER_FRACTAL>(layoutDst.orgShape(1)));
-        loadDataParams.srcStride = static_cast<uint16_t>(CeilDiv<ELE_NUM_PER_C0>(layoutSrc.orgShape(0)));;
+        loadDataParams.srcStride = static_cast<uint16_t>(CeilDiv<ELE_NUM_PER_C0>(layoutSrc.orgShape(0)));
         loadDataParams.sid = 0;
         loadDataParams.dstGap = 0;
         loadDataParams.ifTranspose = true;
         loadDataParams.addrMode = 0;
-        for(uint32_t i = 0; i < CeilDiv<ELE_NUM_PER_C0>(layoutSrc.orgShape(0)); i++){
+        for (uint32_t i = 0; i < CeilDiv<ELE_NUM_PER_C0>(layoutSrc.orgShape(0)); i++) {
             AscendC::LoadData(dstTensor[i * layoutDst.stride(1)], srcTensor[i * layoutSrc.stride(1)], loadDataParams);
         }
     }
 };
 
-template<class ArchTag>
-struct CopyL1ToL0A<
-    ArchTag,
-    Catlass::Gemm::GemmType<float, layout::nN, AscendC::TPosition::A1>,
-    Catlass::Gemm::GemmType<float, layout::zZ, AscendC::TPosition::A2>
->{
+template <class ArchTag>
+struct CopyL1ToL0A<ArchTag,
+                   Catlass::Gemm::GemmType<float, layout::nN, AscendC::TPosition::A1>,
+                   Catlass::Gemm::GemmType<float, layout::zZ, AscendC::TPosition::A2>> {
     using Element = float;
     using LayoutDst = layout::zZ;
     using LayoutSrc = layout::nN;
 
-    static constexpr uint32_t ELE_NUM_PER_C0 =  BYTE_PER_C0 / sizeof(Element);
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
 
     CATLASS_DEVICE
-    CopyL1ToL0A(){}
+    CopyL1ToL0A()
+    {
+    }
 
     CATLASS_DEVICE
-    void operator()(
-        AscendC::LocalTensor<Element> dstTensor,
-        AscendC::LocalTensor<Element> srcTensor,
-        LayoutDst layoutDst, LayoutSrc layoutSrc
-    ){
+    void operator()(AscendC::LocalTensor<Element> dstTensor,
+                    AscendC::LocalTensor<Element> srcTensor,
+                    LayoutDst layoutDst,
+                    LayoutSrc layoutSrc)
+    {
         AscendC::LoadData2dTransposeParams loadDataParams;
         loadDataParams.startIndex = 0;
         loadDataParams.repeatTimes = static_cast<uint16_t>(CeilDiv<C0_NUM_PER_FRACTAL>(layoutDst.orgShape(1)));
         loadDataParams.srcStride = static_cast<uint16_t>(CeilDiv<C0_NUM_PER_FRACTAL>(layoutSrc.orgShape(0)));
         loadDataParams.dstGap = 1;
         loadDataParams.dstFracGap = 0;
-        for(uint32_t i = 0; i < CeilDiv<C0_NUM_PER_FRACTAL>(layoutSrc.orgShape(0)); i++){
-            AscendC::LoadDataWithTranspose(
-                dstTensor[i * layoutDst.stride(1)],
-                srcTensor[i * layoutSrc.stride(1) * 2],
-                loadDataParams
-            );
+        for (uint32_t i = 0; i < CeilDiv<C0_NUM_PER_FRACTAL>(layoutSrc.orgShape(0)); i++) {
+            AscendC::LoadDataWithTranspose(dstTensor[i * layoutDst.stride(1)], srcTensor[i * layoutSrc.stride(1) * 2],
+                                           loadDataParams);
         }
     }
 };
 
-template<class ArchTag>
-struct CopyL1ToL0A<
-    ArchTag,
-    Catlass::Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::A1>,
-    Catlass::Gemm::GemmType<int8_t, layout::zZ, AscendC::TPosition::A2>
->{
+template <class ArchTag>
+struct CopyL1ToL0A<ArchTag,
+                   Catlass::Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::A1>,
+                   Catlass::Gemm::GemmType<int8_t, layout::zZ, AscendC::TPosition::A2>> {
     using Element = int8_t;
     using LayoutDst = layout::zZ;
     using LayoutSrc = layout::nZ;
 
-    static constexpr uint32_t ELE_NUM_PER_C0 =  BYTE_PER_C0 / sizeof(Element);
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
 
     CATLASS_DEVICE
-    CopyL1ToL0A(){}
+    CopyL1ToL0A()
+    {
+    }
 
     CATLASS_DEVICE
-    void operator()(
-        AscendC::LocalTensor<Element> dstTensor,
-        AscendC::LocalTensor<Element> srcTensor,
-        LayoutDst layoutDst, LayoutSrc layoutSrc
-    ){
+    void operator()(AscendC::LocalTensor<Element> dstTensor,
+                    AscendC::LocalTensor<Element> srcTensor,
+                    LayoutDst layoutDst,
+                    LayoutSrc layoutSrc)
+    {
         AscendC::LoadData2dTransposeParams loadDataParams;
 
         loadDataParams.startIndex = 0;
@@ -169,8 +160,7 @@ struct CopyL1ToL0A<
         loadDataParams.dstFracGap = CeilDiv<ELE_NUM_PER_C0>(layoutDst.orgShape(1)) - 1;
 
         for (uint32_t i = 0; i < CeilDiv<ELE_NUM_PER_C0>(layoutDst.orgShape(0)); i++) {
-            AscendC::LoadDataWithTranspose(dstTensor[i * layoutDst.stride(1) * 2],
-                                           srcTensor[i * layoutSrc.stride(1)],
+            AscendC::LoadDataWithTranspose(dstTensor[i * layoutDst.stride(1) * 2], srcTensor[i * layoutSrc.stride(1)],
                                            loadDataParams);
         }
     }
@@ -189,13 +179,13 @@ struct CopyL1ToL0A<ArchTag, Gemm::GemmType<Element, layout::zN, AscendC::TPositi
     // Methods
 
     CATLASS_DEVICE
-    CopyL1ToL0A() {};
+    CopyL1ToL0A(){};
 
     CATLASS_DEVICE
-    void operator()(
-        AscendC::LocalTensor<Element> const &dstTensor,
-        AscendC::LocalTensor<Element> const &srcTensor,
-        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+    void operator()(AscendC::LocalTensor<Element> const &dstTensor,
+                    AscendC::LocalTensor<Element> const &srcTensor,
+                    LayoutDst const &layoutDst,
+                    LayoutSrc const &layoutSrc)
     {
         AscendC::LoadData2DParams loadDataParams;
 
@@ -222,13 +212,13 @@ struct CopyL1ToL0A<ArchTag, Gemm::GemmType<Element, layout::nZ, AscendC::TPositi
     static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
 
     CATLASS_DEVICE
-    CopyL1ToL0A() {};
+    CopyL1ToL0A(){};
 
     CATLASS_DEVICE
-    void operator()(
-        AscendC::LocalTensor<Element> const &dstTensor,
-        AscendC::LocalTensor<Element> const &srcTensor,
-        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+    void operator()(AscendC::LocalTensor<Element> const &dstTensor,
+                    AscendC::LocalTensor<Element> const &srcTensor,
+                    LayoutDst const &layoutDst,
+                    LayoutSrc const &layoutSrc)
     {
         AscendC::LoadData2DParams loadDataParams;
 
@@ -247,8 +237,7 @@ struct CopyL1ToL0A<ArchTag, Gemm::GemmType<Element, layout::nZ, AscendC::TPositi
 };
 
 /// Partial specialization for int8_t, nZ in and zZ out. (Transpose A)
-template <class ArchTag>
-struct CopyL1ToL0A<ArchTag, Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::A1>> {
+template <class ArchTag> struct CopyL1ToL0A<ArchTag, Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::A1>> {
     using Element = int8_t;
     using LayoutDst = layout::zZ;
     using LayoutSrc = layout::nZ;
@@ -259,13 +248,13 @@ struct CopyL1ToL0A<ArchTag, Gemm::GemmType<int8_t, layout::nZ, AscendC::TPositio
     // Methods
 
     CATLASS_DEVICE
-    CopyL1ToL0A() {};
+    CopyL1ToL0A(){};
 
     CATLASS_DEVICE
-    void operator()(
-        AscendC::LocalTensor<Element> const &dstTensor,
-        AscendC::LocalTensor<Element> const &srcTensor,
-        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+    void operator()(AscendC::LocalTensor<Element> const &dstTensor,
+                    AscendC::LocalTensor<Element> const &srcTensor,
+                    LayoutDst const &layoutDst,
+                    LayoutSrc const &layoutSrc)
     {
         AscendC::LoadData2dTransposeParams loadDataParams;
 
@@ -276,8 +265,7 @@ struct CopyL1ToL0A<ArchTag, Gemm::GemmType<int8_t, layout::nZ, AscendC::TPositio
         loadDataParams.dstFracGap = CeilDiv<ELE_NUM_PER_C0>(layoutDst.orgShape(1)) - 1;
 
         for (uint32_t i = 0; i < CeilDiv<ELE_NUM_PER_C0>(layoutDst.orgShape(0)); i++) {
-            AscendC::LoadDataWithTranspose(dstTensor[i * layoutDst.stride(1) * 2],
-                                           srcTensor[i * layoutSrc.stride(1)],
+            AscendC::LoadDataWithTranspose(dstTensor[i * layoutDst.stride(1) * 2], srcTensor[i * layoutSrc.stride(1)],
                                            loadDataParams);
         }
     }
@@ -287,10 +275,11 @@ struct CopyL1ToL0A<ArchTag, Gemm::GemmType<int8_t, layout::nZ, AscendC::TPositio
 
 /// Partial specialization for CopyL1ToL0A, AtlasA2, zN in and zZ out.
 template <class ElementSrc, class ElementDst, class LayoutSrc_, class LayoutDst_>
-struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::LocalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::A1>,
-    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst_, AscendC::TPosition::A2>,
-    std::enable_if_t<tla::detail::iszZ<ElementDst, LayoutDst_>::value &&
-                     tla::detail::iszN<ElementSrc, LayoutSrc_>::value>> {
+struct TileCopyTla<Arch::AtlasA2,
+                   tla::Tensor<AscendC::LocalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::A1>,
+                   tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst_, AscendC::TPosition::A2>,
+                   std::enable_if_t<tla::detail::iszZ<ElementDst, LayoutDst_>::value &&
+                                    tla::detail::iszN<ElementSrc, LayoutSrc_>::value>> {
     using LayoutDst = LayoutDst_;
     using LayoutSrc = LayoutSrc_;
     using TensorDst = tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, AscendC::TPosition::A2>;
@@ -299,10 +288,10 @@ struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::LocalTensor<ElementSrc>, 
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
     static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(ElementSrc);
 
-    // Mehtods
+    // Methods
 
     CATLASS_DEVICE
-    TileCopyTla() {};
+    TileCopyTla(){};
 
     CATLASS_DEVICE
     void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
@@ -324,8 +313,7 @@ struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::LocalTensor<ElementSrc>, 
         loadDataParams.addrMode = 0;
 
         for (uint32_t i = 0; i < dstOuterShapeRow; i++) {
-            AscendC::LoadData(dstTensor.data()[i * dstOuterStrideRow],
-                              srcTensor.data()[i * srcOuterStrideRow],
+            AscendC::LoadData(dstTensor.data()[i * dstOuterStrideRow], srcTensor.data()[i * srcOuterStrideRow],
                               loadDataParams);
         }
     }
@@ -333,10 +321,11 @@ struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::LocalTensor<ElementSrc>, 
 
 /// Partial specialization for CopyL1ToL0A, AtlasA2, nZ in and zZ out. (Transpose A)
 template <class ElementSrc, class ElementDst, class LayoutSrc_, class LayoutDst_>
-struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::LocalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::A1>,
-    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst_, AscendC::TPosition::A2>,
-    std::enable_if_t<tla::detail::iszZ<ElementDst, LayoutDst_>::value &&
-                     tla::detail::isnZ<ElementSrc, LayoutSrc_>::value>> {
+struct TileCopyTla<Arch::AtlasA2,
+                   tla::Tensor<AscendC::LocalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::A1>,
+                   tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst_, AscendC::TPosition::A2>,
+                   std::enable_if_t<tla::detail::iszZ<ElementDst, LayoutDst_>::value &&
+                                    tla::detail::isnZ<ElementSrc, LayoutSrc_>::value>> {
     using LayoutDst = LayoutDst_;
     using LayoutSrc = LayoutSrc_;
     using TensorDst = tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, AscendC::TPosition::A2>;
@@ -345,10 +334,10 @@ struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::LocalTensor<ElementSrc>, 
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
     static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(ElementSrc);
 
-    // Mehtods
+    // Methods
 
     CATLASS_DEVICE
-    TileCopyTla() {};
+    TileCopyTla(){};
 
     CATLASS_DEVICE
     void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
@@ -369,8 +358,7 @@ struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::LocalTensor<ElementSrc>, 
         loadDataParams.addrMode = 0;
 
         for (uint32_t i = 0; i < dstOuterShapeRow; i++) {
-            AscendC::LoadData(dstTensor.data()[i * dstOuterStrideRow],
-                              srcTensor.data()[i * srcOuterStrideRow],
+            AscendC::LoadData(dstTensor.data()[i * dstOuterStrideRow], srcTensor.data()[i * srcOuterStrideRow],
                               loadDataParams);
         }
     }
@@ -378,10 +366,11 @@ struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::LocalTensor<ElementSrc>, 
 
 /// Partial specialization for CopyL1ToL0A, AtlasA2, int8_t, nZ in and zZ out. (Transpose A)
 template <class LayoutSrc_, class LayoutDst_>
-struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::LocalTensor<int8_t>, LayoutSrc_, AscendC::TPosition::A1>,
+struct TileCopyTla<
+    Arch::AtlasA2,
+    tla::Tensor<AscendC::LocalTensor<int8_t>, LayoutSrc_, AscendC::TPosition::A1>,
     tla::Tensor<AscendC::LocalTensor<int8_t>, LayoutDst_, AscendC::TPosition::A2>,
-    std::enable_if_t<tla::detail::iszZ<int8_t, LayoutDst_>::value &&
-                     tla::detail::isnZ<int8_t, LayoutSrc_>::value>> {
+    std::enable_if_t<tla::detail::iszZ<int8_t, LayoutDst_>::value && tla::detail::isnZ<int8_t, LayoutSrc_>::value>> {
     using Element = int8_t;
     using LayoutDst = LayoutDst_;
     using LayoutSrc = LayoutSrc_;
@@ -391,10 +380,10 @@ struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::LocalTensor<int8_t>, Layo
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
     static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
 
-    // Mehtods
+    // Methods
 
     CATLASS_DEVICE
-    TileCopyTla() {};
+    TileCopyTla(){};
 
     CATLASS_DEVICE
     void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
@@ -414,8 +403,7 @@ struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::LocalTensor<int8_t>, Layo
 
         for (uint32_t i = 0; i < srcOuterShapeRow; i++) {
             AscendC::LoadDataWithTranspose(dstTensor.data()[i * dstOuterStrideRow * 2],
-                                           srcTensor.data()[i * srcOuterStrideRow],
-                                           loadDataParams);
+                                           srcTensor.data()[i * srcOuterStrideRow], loadDataParams);
         }
     }
 };

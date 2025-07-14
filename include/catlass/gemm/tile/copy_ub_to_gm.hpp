@@ -34,7 +34,7 @@ struct TileCopyTla<
 
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
 
-    // Mehtods
+    // Methods
 
     CATLASS_DEVICE
     TileCopyTla() {};
@@ -68,7 +68,7 @@ struct TileCopyTlaExt<
 
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
 
-    // Mehtods
+    // Methods
 
     CATLASS_DEVICE
     TileCopyTlaExt() {};

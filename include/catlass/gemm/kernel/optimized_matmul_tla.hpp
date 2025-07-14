@@ -23,13 +23,7 @@
 
 namespace Catlass::Gemm::Kernel {
 
-template<
-    class ArchTag_,
-    class TensorIn_,
-    class TensorOut_,
-    uint32_t COMPUTE_LENGTH
->
-struct PaddingMatrixBlockND {
+template <class ArchTag_, class TensorIn_, class TensorOut_, uint32_t COMPUTE_LENGTH> struct PaddingMatrixBlockND {
 public:
     using ArchTag = ArchTag_;
     using TensorIn = TensorIn_;
@@ -42,14 +36,13 @@ public:
     using TensorInnerUb = tla::Tensor<AscendC::LocalTensor<Element>, LayoutInner, AscendC::TPosition::VECCALC>;
     using TensorInnerSrcGm = tla::Tensor<AscendC::GlobalTensor<Element>, LayoutInner, AscendC::TPosition::GM>;
 
-    using LayoutInnerDstGm = tla::Layout<
-        tla::Shape<tla::Shape<uint32_t, uint32_t>, tla::Shape<uint32_t, uint32_t>>,
-        tla::Stride<tla::Stride<int64_t, int64_t>, tla::Stride<tla::Int<1>, int64_t>>>;
+    using LayoutInnerDstGm = tla::Layout<tla::Shape<tla::Shape<uint32_t, uint32_t>, tla::Shape<uint32_t, uint32_t>>,
+                                         tla::Stride<tla::Stride<int64_t, int64_t>, tla::Stride<tla::Int<1>, int64_t>>>;
     using TensorInnerDstGm = tla::Tensor<AscendC::GlobalTensor<Element>, LayoutInnerDstGm, AscendC::TPosition::GM>;
 
     using CopyGm2Ub = Catlass::Gemm::Tile::TileCopyTla<ArchTag, TensorInnerSrcGm, TensorInnerUb>;
-    using CopyUb2Gm = Catlass::Gemm::Tile::TileCopyTlaExt<ArchTag, TensorInnerUb,
-        TensorInnerDstGm, layout::RowMajor, layout::PaddingRowMajor>;
+    using CopyUb2Gm = Catlass::Gemm::Tile::
+        TileCopyTlaExt<ArchTag, TensorInnerUb, TensorInnerDstGm, layout::RowMajor, layout::PaddingRowMajor>;
 
     CopyGm2Ub copyGm2Ub;
     CopyUb2Gm copyUb2Gm;
@@ -59,16 +52,14 @@ public:
     {
         int64_t bufferOffset = 0;
         for (uint32_t i = 0; i < BUFFER_NUM; i++) {
-            //在ub上分配空间
+            // 在ub上分配空间
             inputBuffer[i] = resource.ubBuf.template GetBufferByByte<Element>(bufferOffset * sizeof(Element));
-            //每一片UB上的开均分到BUFFER_NUM的空间
+            // 每一片UB上的开均分到BUFFER_NUM的空间
             bufferOffset += COMPUTE_LENGTH;
         }
     }
 
-    template<class Tensor>
-    CATLASS_DEVICE
-    auto GetPaddingTensorSrc(Tensor const &tensor)
+    template <class Tensor> CATLASS_DEVICE auto GetPaddingTensorSrc(Tensor const &tensor)
     {
         if constexpr (std::is_same_v<typename Tensor::Layout, LayoutInner>) {
             return tensor;
@@ -79,9 +70,7 @@ public:
         }
     }
 
-    template<class Tensor>
-    CATLASS_DEVICE
-    auto GetPaddingTensorDst(Tensor const &tensor)
+    template <class Tensor> CATLASS_DEVICE auto GetPaddingTensorDst(Tensor const &tensor)
     {
         if constexpr (std::is_same_v<typename Tensor::Layout, LayoutInnerDstGm>) {
             return tensor;
@@ -93,7 +82,7 @@ public:
     }
 
     CATLASS_DEVICE
-    void operator()(TensorOut &tensorDst, TensorIn const& tensorSrc)
+    void operator()(TensorOut &tensorDst, TensorIn const &tensorSrc)
     {
         auto paddingTensorSrc = GetPaddingTensorSrc(tensorSrc);
         auto paddingTensorDst = GetPaddingTensorDst(tensorDst);
@@ -111,7 +100,7 @@ public:
         if (aivId < tileRemain) {
             tilesPerAiv++;
         }
-        //因为前面进行了工作重分配，所以相应后面的aiv处理的偏移量要后移
+        // 因为前面进行了工作重分配，所以相应后面的aiv处理的偏移量要后移
         uint32_t mIdx = aivId * tilesPerAiv;
         if (aivId >= tileRemain) {
             mIdx += tileRemain;
@@ -120,7 +109,7 @@ public:
         // 配置UB到GM的信号量
         AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[0]);
         AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[1]);
-        uint32_t coreLoops{ 0 };
+        uint32_t coreLoops{0};
         if (roundTileLen > COMPUTE_LENGTH) {
             // Handle the same tile on multiple loops.
             uint32_t loopsPerTile = (tileLen + COMPUTE_LENGTH - 1) / COMPUTE_LENGTH;
@@ -135,21 +124,13 @@ public:
                 }
 
                 AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[bufferIndex]);
-                auto tensorTileSrc = GetTile(
-                    paddingTensorSrc,
-                    offset,
-                    tla::MakeShape(static_cast<uint32_t>(1), actualDataNum)
-                );
-                auto tensorTileDst = GetTile(
-                    paddingTensorDst,
-                    offset,
-                    tla::MakeShape(static_cast<uint32_t>(1), actualDataNum)
-                );
+                auto tensorTileSrc =
+                    GetTile(paddingTensorSrc, offset, tla::MakeShape(static_cast<uint32_t>(1), actualDataNum));
+                auto tensorTileDst =
+                    GetTile(paddingTensorDst, offset, tla::MakeShape(static_cast<uint32_t>(1), actualDataNum));
 
-                auto layoutDstUb = MakeLayout(
-                    tla::MakeShape(static_cast<uint32_t>(1), actualDataNum),
-                    tla::MakeStride(static_cast<int64_t>(COMPUTE_LENGTH), tla::Int<1>{})
-                );
+                auto layoutDstUb = MakeLayout(tla::MakeShape(static_cast<uint32_t>(1), actualDataNum),
+                                              tla::MakeStride(static_cast<int64_t>(COMPUTE_LENGTH), tla::Int<1>{}));
                 auto tensorDstUb = tla::MakeTensor(inputBuffer[bufferIndex], layoutDstUb, Arch::PositionUB{});
 
                 copyGm2Ub(tensorDstUb, tensorTileSrc);
@@ -157,12 +138,9 @@ public:
                 AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE3>(eventIds[bufferIndex]);
 
                 auto layoutSrcUb = MakeLayout(
-                    tla::MakeShape(
-                        CeilDiv(actualDataNum, tla::get<1, 0>(paddingTensorDst.shape())),
-                        tla::get<1, 0>(paddingTensorDst.shape())
-                    ),
-                    tla::MakeStride(static_cast<int64_t>(tla::get<1, 0>(paddingTensorDst.shape())), tla::Int<1>{})
-                );
+                    tla::MakeShape(CeilDiv(actualDataNum, tla::get<1, 0>(paddingTensorDst.shape())),
+                                   tla::get<1, 0>(paddingTensorDst.shape())),
+                    tla::MakeStride(static_cast<int64_t>(tla::get<1, 0>(paddingTensorDst.shape())), tla::Int<1>{}));
                 auto tensorSrcUb = tla::MakeTensor(inputBuffer[bufferIndex], layoutSrcUb, Arch::PositionUB{});
                 copyUb2Gm(tensorTileDst, tensorSrcUb);
                 AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[bufferIndex]);
@@ -182,16 +160,10 @@ public:
                 auto offset = tla::MakeCoord(mIdx + tileIdx, static_cast<uint32_t>(0));
 
                 AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[bufferIndex]);
-                auto tensorTileSrc = GetTile(
-                    paddingTensorSrc,
-                    offset,
-                    tla::MakeShape(actualTilesNum, tileLen)
-                );
+                auto tensorTileSrc = GetTile(paddingTensorSrc, offset, tla::MakeShape(actualTilesNum, tileLen));
 
-                auto layoutDstUb = MakeLayout(
-                    tla::MakeShape(actualTilesNum, tileLen),
-                    tla::MakeStride(static_cast<int64_t>(roundTileLen), tla::Int<1>{})
-                );
+                auto layoutDstUb = MakeLayout(tla::MakeShape(actualTilesNum, tileLen),
+                                              tla::MakeStride(static_cast<int64_t>(roundTileLen), tla::Int<1>{}));
                 auto tensorDstUb = tla::MakeTensor(inputBuffer[bufferIndex], layoutDstUb, Arch::PositionUB{});
 
                 copyGm2Ub(tensorDstUb, tensorTileSrc);
@@ -199,23 +171,15 @@ public:
                 AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE3>(eventIds[bufferIndex]);
 
                 auto layoutSrcUb = MakeLayout(
-                    tla::MakeShape(
-                        CeilDiv(tileLen, tla::get<1, 0>(paddingTensorDst.shape())),
-                        tla::get<1, 0>(paddingTensorDst.shape())
-                    ),
-                    tla::MakeStride(static_cast<int64_t>(tla::get<1, 0>(paddingTensorDst.shape())), tla::Int<1>{})
-                );
+                    tla::MakeShape(CeilDiv(tileLen, tla::get<1, 0>(paddingTensorDst.shape())),
+                                   tla::get<1, 0>(paddingTensorDst.shape())),
+                    tla::MakeStride(static_cast<int64_t>(tla::get<1, 0>(paddingTensorDst.shape())), tla::Int<1>{}));
                 for (uint32_t i = 0; i < actualTilesNum; ++i) {
-                    auto tensorTileDst = GetTile(
-                        paddingTensorDst,
-                        tla::MakeCoord(mIdx + tileIdx + i, static_cast<uint32_t>(0)),
-                        tla::MakeShape(static_cast<uint32_t>(1), tileLen)
-                    );
-                    auto tensorSrcUb = tla::MakeTensor(
-                        inputBuffer[bufferIndex][i * roundTileLen],
-                        layoutSrcUb,
-                        Arch::PositionUB{}
-                    );
+                    auto tensorTileDst =
+                        GetTile(paddingTensorDst, tla::MakeCoord(mIdx + tileIdx + i, static_cast<uint32_t>(0)),
+                                tla::MakeShape(static_cast<uint32_t>(1), tileLen));
+                    auto tensorSrcUb =
+                        tla::MakeTensor(inputBuffer[bufferIndex][i * roundTileLen], layoutSrcUb, Arch::PositionUB{});
                     copyUb2Gm(tensorTileDst, tensorSrcUb);
                 }
                 AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[bufferIndex]);
@@ -228,22 +192,19 @@ public:
     }
 
     CATLASS_DEVICE
-    ~PaddingMatrixBlockND() {}
+    ~PaddingMatrixBlockND()
+    {
+    }
+
 private:
     static const uint32_t BUFFER_NUM = 2;
     AscendC::LocalTensor<Element> inputBuffer[BUFFER_NUM];
     AscendC::TEventID eventIds[BUFFER_NUM] = {EVENT_ID0, EVENT_ID1};
-    uint32_t bufferIndex{ 0 };
+    uint32_t bufferIndex{0};
     static_assert(BUFFER_NUM * COMPUTE_LENGTH * sizeof(Element) <= ArchTag::UB_SIZE, "Excedding the UB space!");
 };
 
-template <
-    class BlockMmad_,
-    class BlockEpilogue_,
-    class BlockScheduler_,
-    class PaddingA,
-    class PaddingB
->
+template <class BlockMmad_, class BlockEpilogue_, class BlockScheduler_, class PaddingA, class PaddingB>
 class OptimizedMatmulTla {
 public:
     using BlockMmad = BlockMmad_;
@@ -253,12 +214,10 @@ public:
     using LayoutWA = typename BlockMmad::LayoutA;
     using LayoutWB = typename BlockMmad::LayoutB;
 
-    template<class T>
-    struct LayoutHelper {
+    template <class T> struct LayoutHelper {
         using type = typename T::LayoutIn;
     };
-    template<>
-    struct LayoutHelper<void> {
+    template <> struct LayoutHelper<void> {
         using type = void;
     };
     using LayoutA = std::conditional_t<std::is_void_v<PaddingA>, LayoutWA, typename LayoutHelper<PaddingA>::type>;
@@ -291,35 +250,54 @@ public:
 
         // Methods
         CATLASS_DEVICE
-        Params() {}
+        Params()
+        {
+        }
 
         CATLASS_DEVICE
         Params(GemmCoord const &problemShape_,
-               GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_, LayoutB layoutB_, GM_ADDR ptrC_, LayoutC layoutC_,
-               GM_ADDR ptrWA_, LayoutWA layoutWA_, GM_ADDR ptrWB_, LayoutWB layoutWB_)
-            : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_), layoutB(layoutB_),
-              ptrC(ptrC_), layoutC(layoutC_), ptrWA(ptrWA_), layoutWA(layoutWA_), ptrWB(ptrWB_), layoutWB(layoutWB_) {}
+               GM_ADDR ptrA_,
+               LayoutA layoutA_,
+               GM_ADDR ptrB_,
+               LayoutB layoutB_,
+               GM_ADDR ptrC_,
+               LayoutC layoutC_,
+               GM_ADDR ptrWA_,
+               LayoutWA layoutWA_,
+               GM_ADDR ptrWB_,
+               LayoutWB layoutWB_)
+            : problemShape(problemShape_),
+              ptrA(ptrA_),
+              layoutA(layoutA_),
+              ptrB(ptrB_),
+              layoutB(layoutB_),
+              ptrC(ptrC_),
+              layoutC(layoutC_),
+              ptrWA(ptrWA_),
+              layoutWA(layoutWA_),
+              ptrWB(ptrWB_),
+              layoutWB(layoutWB_)
+        {
+        }
     };
 
     // Methods
     CATLASS_DEVICE
-    OptimizedMatmulTla() {}
+    OptimizedMatmulTla()
+    {
+    }
 
-    template <int32_t CORE_TYPE = g_coreType>
-    CATLASS_DEVICE
-    void operator()(Params const &params);
+    template <int32_t CORE_TYPE = g_coreType> CATLASS_DEVICE void operator()(Params const &params);
 
-    template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIV>(Params const &params)
+    template <> CATLASS_DEVICE void operator()<AscendC::AIV>(Params const &params)
     {
         if constexpr (!std::is_void_v<PaddingA>) {
             AscendC::GlobalTensor<ElementA> gmA;
             AscendC::GlobalTensor<ElementA> gmWA;
             gmA.SetGlobalBuffer(reinterpret_cast<__gm__ ElementA *>(params.ptrA));
             gmWA.SetGlobalBuffer(reinterpret_cast<__gm__ ElementA *>(params.ptrWA));
-            auto tensorA = tla::MakeTensor<AscendC::GlobalTensor<ElementA>, LayoutA, AscendC::TPosition::GM>(
-                gmA, params.layoutA);
+            auto tensorA =
+                tla::MakeTensor<AscendC::GlobalTensor<ElementA>, LayoutA, AscendC::TPosition::GM>(gmA, params.layoutA);
             auto tensorWA = tla::MakeTensor<AscendC::GlobalTensor<ElementA>, LayoutWA, AscendC::TPosition::GM>(
                 gmWA, params.layoutWA);
             PaddingA paddingA(resource);
@@ -331,8 +309,8 @@ public:
             AscendC::GlobalTensor<ElementB> gmWB;
             gmB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB *>(params.ptrB));
             gmWB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB *>(params.ptrWB));
-            auto tensorB = tla::MakeTensor<AscendC::GlobalTensor<ElementB>, LayoutB, AscendC::TPosition::GM>(
-                gmB, params.layoutB);
+            auto tensorB =
+                tla::MakeTensor<AscendC::GlobalTensor<ElementB>, LayoutB, AscendC::TPosition::GM>(gmB, params.layoutB);
             auto tensorWB = tla::MakeTensor<AscendC::GlobalTensor<ElementB>, LayoutWB, AscendC::TPosition::GM>(
                 gmWB, params.layoutWB);
             PaddingB paddingB(resource);
@@ -346,9 +324,7 @@ public:
     }
 
     /// Executes matmul
-    template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIC>(Params const &params)
+    template <> CATLASS_DEVICE void operator()<AscendC::AIC>(Params const &params)
     {
         if (!std::is_void_v<PaddingA> || !std::is_void_v<PaddingB>) {
             Catlass::Arch::CrossCoreWaitFlag(flagAivFinishPadding);
@@ -365,12 +341,12 @@ public:
         AscendC::GlobalTensor<ElementC> gmC;
         gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrC);
 
-        auto tensorA = tla::MakeTensor<AscendC::GlobalTensor<ElementA>, LayoutWA, AscendC::TPosition::GM>(
-            gmA, params.layoutWA);
-        auto tensorB = tla::MakeTensor<AscendC::GlobalTensor<ElementB>, LayoutWB, AscendC::TPosition::GM>(
-            gmB, params.layoutWB);
-        auto tensorC = tla::MakeTensor<AscendC::GlobalTensor<ElementC>, LayoutC, AscendC::TPosition::GM>(
-            gmC, params.layoutC);
+        auto tensorA =
+            tla::MakeTensor<AscendC::GlobalTensor<ElementA>, LayoutWA, AscendC::TPosition::GM>(gmA, params.layoutWA);
+        auto tensorB =
+            tla::MakeTensor<AscendC::GlobalTensor<ElementB>, LayoutWB, AscendC::TPosition::GM>(gmB, params.layoutWB);
+        auto tensorC =
+            tla::MakeTensor<AscendC::GlobalTensor<ElementC>, LayoutC, AscendC::TPosition::GM>(gmC, params.layoutC);
 
         BlockMmad blockMmad(resource);
 
@@ -380,21 +356,12 @@ public:
             GemmCoord actualBlockShape = matmulBlockScheduler.GetActualBlockShape(blockCoord);
 
             // Compute initial location in logical coordinates
-            auto tensorBlockA = GetTile(
-                tensorA,
-                tla::MakeCoord(blockCoord.m() * L1_TILE_M, blockCoord.k() * L1_TILE_K),
-                tla::MakeShape(actualBlockShape.m(), actualBlockShape.k())
-            );
-            auto tensorBlockB = GetTile(
-                tensorB,
-                tla::MakeCoord(blockCoord.k() * L1_TILE_K, blockCoord.n() * L1_TILE_N),
-                tla::MakeShape(actualBlockShape.k(), actualBlockShape.n())
-            );
-            auto tensorBlockC = GetTile(
-                tensorC,
-                tla::MakeCoord(blockCoord.m() * L1_TILE_M, blockCoord.n() * L1_TILE_N),
-                tla::MakeShape(actualBlockShape.m(), actualBlockShape.n())
-            );
+            auto tensorBlockA = GetTile(tensorA, tla::MakeCoord(blockCoord.m() * L1_TILE_M, blockCoord.k() * L1_TILE_K),
+                                        tla::MakeShape(actualBlockShape.m(), actualBlockShape.k()));
+            auto tensorBlockB = GetTile(tensorB, tla::MakeCoord(blockCoord.k() * L1_TILE_K, blockCoord.n() * L1_TILE_N),
+                                        tla::MakeShape(actualBlockShape.k(), actualBlockShape.n()));
+            auto tensorBlockC = GetTile(tensorC, tla::MakeCoord(blockCoord.m() * L1_TILE_M, blockCoord.n() * L1_TILE_N),
+                                        tla::MakeShape(actualBlockShape.m(), actualBlockShape.n()));
 
             bool isFirstBlock = (loopIdx == AscendC::GetBlockIdx());
             bool hasNextBlock = false;
@@ -406,22 +373,16 @@ public:
                 nextActualBlockShape = matmulBlockScheduler.GetActualBlockShape(nextBlockCoord);
             }
 
-            auto nextTensorBlockA = GetTile(
-                tensorA,
-                tla::MakeCoord(nextBlockCoord.m() * L1_TILE_M, nextBlockCoord.k() * L1_TILE_K),
-                tla::MakeShape(nextActualBlockShape.m(), nextActualBlockShape.k())
-            );
-            auto nextTensorBlockB = GetTile(
-                tensorB,
-                tla::MakeCoord(nextBlockCoord.k() * L1_TILE_K, nextBlockCoord.n() * L1_TILE_N),
-                tla::MakeShape(nextActualBlockShape.k(), nextActualBlockShape.n())
-            );
+            auto nextTensorBlockA =
+                GetTile(tensorA, tla::MakeCoord(nextBlockCoord.m() * L1_TILE_M, nextBlockCoord.k() * L1_TILE_K),
+                        tla::MakeShape(nextActualBlockShape.m(), nextActualBlockShape.k()));
+            auto nextTensorBlockB =
+                GetTile(tensorB, tla::MakeCoord(nextBlockCoord.k() * L1_TILE_K, nextBlockCoord.n() * L1_TILE_N),
+                        tla::MakeShape(nextActualBlockShape.k(), nextActualBlockShape.n()));
 
             // Compute block-scoped matrix multiply-add
-            blockMmad(
-                tensorBlockA, tensorBlockB, tensorBlockC, nextTensorBlockA, nextTensorBlockB,
-                actualBlockShape, nextActualBlockShape, isFirstBlock, hasNextBlock
-            );
+            blockMmad(tensorBlockA, tensorBlockB, tensorBlockC, nextTensorBlockA, nextTensorBlockB, actualBlockShape,
+                      nextActualBlockShape, isFirstBlock, hasNextBlock);
         }
     }
 

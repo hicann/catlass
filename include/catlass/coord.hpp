@@ -24,7 +24,7 @@ template <
 struct Coord {
 public:
     // Number of elements in Coord
-    static const int RANK = RANK_;
+    static const int rank = RANK_;
 
     // Index typen used to store elements
     using Index = Index_;
@@ -36,16 +36,16 @@ public:
     CATLASS_HOST_DEVICE constexpr
     explicit Coord(Index value = Index(0))
     {
-        for (int i = 0; i < RANK; ++i) {
+        for (int i = 0; i < rank; ++i) {
             idx[i] = value;
         }
     }
 
     // Constructs from an array of integers
     CATLASS_HOST_DEVICE constexpr
-    Coord(Index const (&idx_)[RANK])
+    Coord(Index const (&idx_)[rank])
     {
-        for (int i = 0; i < RANK; ++i) {
+        for (int i = 0; i < rank; ++i) {
             idx[i] = idx_[i];
         }
     }
@@ -55,7 +55,7 @@ public:
     int Argmin() const
     {
         int i = 0;
-        for (int j = 1; j < RANK; ++j) {
+        for (int j = 1; j < rank; ++j) {
             if (idx[j] < idx[i]) {
                 i = j;
             }
@@ -68,7 +68,7 @@ public:
     int Argmax() const
     {
         int i = 0;
-        for (int j = 1; j < RANK; ++j) {
+        for (int j = 1; j < rank; ++j) {
             if (idx[j] > idx[i]) {
                 i = j;
             }
@@ -80,7 +80,7 @@ public:
     CATLASS_HOST_DEVICE
     explicit operator bool() const
     {
-        for (int i = 0; i < RANK; ++i) {
+        for (int i = 0; i < rank; ++i) {
             if (idx[i]) {
                 return true;
             }
@@ -92,7 +92,7 @@ public:
     CATLASS_HOST_DEVICE
     bool operator!() const
     {
-        for (int i = 0; i < RANK; ++i) {
+        for (int i = 0; i < rank; ++i) {
             if (idx[i]) {
                 return false;
             }
@@ -105,7 +105,7 @@ public:
     Coord operator+(Coord const &b) const
     {
         Coord c;
-        for (int i = 0; i < RANK; ++i) {
+        for (int i = 0; i < rank; ++i) {
             c.idx[i] = idx[i] + b.idx[i];
         }
         return c;
@@ -116,7 +116,7 @@ public:
     Coord operator+(const Index val) const
     {
         Coord c;
-        for (int i = 0; i < RANK; ++i) {
+        for (int i = 0; i < rank; ++i) {
             c.idx[i] = idx[i] + val;
         }
         return c;
@@ -127,7 +127,7 @@ public:
     Coord operator-(Coord const &b) const
     {
         Coord c;
-        for (int i = 0; i < RANK; i++) {
+        for (int i = 0; i < rank; i++) {
             c.idx[i] = idx[i] - b.idx[i];
         }
         return c;
@@ -138,7 +138,7 @@ public:
     Coord operator-(Index const val) const
     {
         Coord c;
-        for (int i = 0; i < RANK; ++i) {
+        for (int i = 0; i < rank; ++i) {
             c.idx[i] = idx[i] - val;
         }
         return c;
@@ -149,7 +149,7 @@ public:
     Coord operator*(Coord const &b) const
     {
         Coord c;
-        for (int i = 0; i < RANK; i++) {
+        for (int i = 0; i < rank; i++) {
             c.idx[i] = idx[i] * b.idx[i];
         }
         return c;
@@ -160,7 +160,7 @@ public:
     Coord operator/(Coord const &b) const
     {
         Coord c;
-        for (int i = 0; i < RANK; i++) {
+        for (int i = 0; i < rank; i++) {
             c.idx[i] = idx[i] / b.idx[i];
         }
         return c;
@@ -171,7 +171,7 @@ public:
     Coord operator%(Coord const &b) const
     {
         Coord c;
-        for (int i = 0; i < RANK; i++) {
+        for (int i = 0; i < rank; i++) {
             c.idx[i] = idx[i] % b.idx[i];
         }
         return c;
@@ -181,7 +181,7 @@ public:
     CATLASS_HOST_DEVICE
     Coord &operator+=(Coord const &b)
     {
-        for (int i = 0; i < RANK; ++i) {
+        for (int i = 0; i < rank; ++i) {
             idx[i] += b.idx[i];
         }
         return *this;
@@ -191,7 +191,7 @@ public:
     CATLASS_HOST_DEVICE
     bool operator==(Coord const &b) const
     {
-        for (int i = 0; i < RANK; ++i) {
+        for (int i = 0; i < rank; ++i) {
             if (idx[i] != b.idx[i]) {
                 return false;
             }
@@ -203,7 +203,7 @@ public:
     CATLASS_HOST_DEVICE
     bool operator==(Index const val) const
     {
-        for (int i = 0; i < RANK; ++i) {
+        for (int i = 0; i < rank; ++i) {
             if (idx[i] != val) {
                 return false;
             }
@@ -267,7 +267,7 @@ public:
     static Coord Min(Coord const &a, Coord const &b)
     {
         Coord res;
-        for (int i = 0; i < RANK; ++i) {
+        for (int i = 0; i < rank; ++i) {
             res[i] = a[i] < b[i] ? a[i] : b[i];
         }
         return res;
@@ -275,7 +275,7 @@ public:
 
 private:
     // Indices
-    Index idx[RANK];
+    Index idx[rank];
 };
 
 // Helper to make a 1-element coordinate
