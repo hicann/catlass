@@ -31,7 +31,7 @@ struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::LocalTensor<ElementSrc>, 
 
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
 
-    // Mehtods
+    // Methods
 
     CATLASS_DEVICE
     TileCopyTla() {};
@@ -62,7 +62,7 @@ struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::LocalTensor<ElementSrc
 
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
 
-    // Mehtods
+    // Methods
 
     CATLASS_DEVICE
     TileCopyTlaExt() {};

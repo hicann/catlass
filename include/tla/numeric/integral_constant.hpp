@@ -89,10 +89,10 @@ constexpr int SIZE_256 = 256;
 constexpr int SIZE_512 = 512;
 template <int v>
 using Int = C<v>;
-using _64     = Int<64>;
-using _128    = Int<128>;
-using _256    = Int<256>;
-using _512    = Int<512>;
+using _64     = Int<SIZE_64>;
+using _128    = Int<SIZE_128>;
+using _256    = Int<SIZE_256>;
+using _512    = Int<SIZE_512>;
 
 /***************/
 /** Operators **/

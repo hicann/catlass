@@ -39,8 +39,7 @@ template <
     /// MatmulType type for Y vector operand
     class YType,
     /// MatmulTpe type for Bias operand
-    class BiasType = void
->
+    class BiasType = void>
 struct TileCopyGemvAiv {
     using ElementA = typename AType::Element;
     using ElementX = typename XType::Element;
@@ -51,10 +50,9 @@ struct TileCopyGemvAiv {
     // the function of aiv
     using VecCopyGmToUb = Gemv::Tile::VecCopyGmToUB<ArchTag, XType>;
     static constexpr bool is_atoadd = Gemv::helper::AtomicAddSelector<AType>::value;
-    using VecCopyUbToGm = Gemv::Tile::VecCopyUBToGm<ArchTag, YType,is_atoadd>;
+    using VecCopyUbToGm = Gemv::Tile::VecCopyUBToGm<ArchTag, YType, is_atoadd>;
     using MatrixCopyGmToUb = Gemv::Tile::MatrixCopyGmToUB<ArchTag, AType>;
 };
-
 
 template <
     /// Tag indicating architecture
@@ -66,8 +64,7 @@ template <
     /// MatmulType type for Y vector operand
     class YType,
     /// MatmulTpe type for Bias operand
-    class BiasType = void
->
+    class BiasType = void>
 struct TileCopyGemvAic {
     using ElementA = typename AType::Element;
     using ElementX = typename XType::Element;
