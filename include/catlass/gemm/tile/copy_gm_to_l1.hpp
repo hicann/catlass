@@ -179,7 +179,11 @@ struct CopyGmToL1IntervalDataCopy<Arch::AtlasA2, Gemm::GemmType<half, layout::Pa
 
 /// new add gemm
 template <class ArchTag, class Element>
-struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::RowMajor>, Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>> {
+struct CopyGmToL1<
+    ArchTag,
+    Gemm::GemmType<Element, layout::RowMajor>,
+    Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>
+>{
     using LayoutDst = layout::zN;
     using LayoutSrc = layout::RowMajor;
 
@@ -221,7 +225,11 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::RowMajor>, Gemm::Gemm
 };
 
 template <class ArchTag, class Element>
-struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::RowMajor>, Gemm::GemmType<Element, layout::zZ, AscendC::TPosition::B1>> {
+struct CopyGmToL1<
+    ArchTag,
+    Gemm::GemmType<Element, layout::RowMajor>,
+    Gemm::GemmType<Element, layout::zZ, AscendC::TPosition::B1>
+>{
     using LayoutDst = layout::zZ;
     using LayoutSrc = layout::RowMajor;
 
@@ -326,7 +334,11 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::RowMajor>, Gemm::Gemm
 };
 
 template <class ArchTag, class Element>
-struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::ColumnMajor>, Gemm::GemmType<Element, layout::nN, AscendC::TPosition::A1>> {
+struct CopyGmToL1<
+    ArchTag,
+    Gemm::GemmType<Element, layout::ColumnMajor>,
+    Gemm::GemmType<Element, layout::nN, AscendC::TPosition::A1>
+>{
     using LayoutDst = layout::nN;
     using LayoutSrc = layout::ColumnMajor;
 
@@ -431,7 +443,11 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::ColumnMajor>, Gemm::G
 };
 
 template <class ArchTag, class Element>
-struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::ColumnMajor>, Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::B1>> {
+struct CopyGmToL1<
+    ArchTag,
+    Gemm::GemmType<Element, layout::ColumnMajor>,
+    Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::B1>
+>{
     using LayoutDst = layout::nZ;
     using LayoutSrc = layout::ColumnMajor;
 
@@ -473,7 +489,11 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::ColumnMajor>, Gemm::G
 };
 
 template <class ArchTag, class Element>
-struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::ColumnMajor>, Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::A1>> {
+struct CopyGmToL1<
+    ArchTag,
+    Gemm::GemmType<Element, layout::ColumnMajor>,
+    Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::A1>
+>{
     using LayoutDst = layout::nZ;
     using LayoutSrc = layout::ColumnMajor;
 
@@ -518,7 +538,11 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::ColumnMajor>, Gemm::G
 ///////////////////////////////////////
 /// new add gemv, VectorLayout -> zN
 template <class ArchTag, class Element>
-struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::VectorLayout>, Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>> {
+struct CopyGmToL1<
+    ArchTag,
+    Gemm::GemmType<Element, layout::VectorLayout>,
+    Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>
+>{
     using LayoutDst = layout::zN;
     using LayoutSrc = layout::VectorLayout;
 
@@ -550,11 +574,14 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::VectorLayout>, Gemm::
 };
 
 
-
 ///////////////////////////////////////
 /// new add gemv, ColumnMajor -> nN
 template <class ArchTag, class Element>
-struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::ColumnMajor>, Gemm::GemmType<Element, layout::nN, AscendC::TPosition::B1>> {
+struct CopyGmToL1<
+    ArchTag,
+    Gemm::GemmType<Element, layout::ColumnMajor>,
+    Gemm::GemmType<Element, layout::nN, AscendC::TPosition::B1>
+>{
     using LayoutDst = layout::nN;
     using LayoutSrc = layout::ColumnMajor;
 
@@ -659,7 +686,11 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::ColumnMajor>, Gemm::G
 };
 
 template <class ArchTag, class Element>
-struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::RowMajor>, Gemm::GemmType<Element, layout::zN, AscendC::TPosition::B1>> {
+struct CopyGmToL1<
+    ArchTag,
+    Gemm::GemmType<Element, layout::RowMajor>,
+    Gemm::GemmType<Element, layout::zN, AscendC::TPosition::B1>
+>{
     using LayoutDst = layout::zN;
     using LayoutSrc = layout::RowMajor;
 
@@ -1014,7 +1045,10 @@ struct CopyGmToL1<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>,
 
         if ((layoutSrc.shape(1) == layoutSrc.stride(0)) && (layoutDst.shape(1) == layoutDst.stride(0))) {
             DataCopy(dstTensor, srcTensor, rows * cols);
-        } else if (srcStride < STRIDE_LIMIT && dstStride < STRIDE_LIMIT && (cols / ELE_NUM_PER_BLK) < BLOCK_LEN_LIMIT) {
+        } else if (
+            srcStride < STRIDE_LIMIT && dstStride < STRIDE_LIMIT
+            && (cols / ELE_NUM_PER_BLK) < BLOCK_LEN_LIMIT)
+            {
             uint32_t rLoops = CeilDiv(rows, MAX_REPEAT);
             for (uint32_t i = 0; i < rLoops; ++i) {
                 uint32_t rActual = (i < rLoops - 1) ? MAX_REPEAT : rows - i * MAX_REPEAT;
@@ -1137,9 +1171,12 @@ struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSrc>,
 
 /// Partial specialization for TileCopyTlaExt, CopyGmToL1, AtlasA2, PaddingRowMajor in and zN out.
 template <class ElementSrc, class ElementDst, class LayoutSrc_, class LayoutDst_>
-struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::GM>,
+struct TileCopyTlaExt<
+    Arch::AtlasA2,
+    tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::GM>,
     tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst_, AscendC::TPosition::A1>,
-    layout::RowMajor, layout::zN> {
+    layout::RowMajor, layout::zN
+>{
     using LayoutDst = LayoutDst_;
     using LayoutSrc = LayoutSrc_;
     using TensorDst = tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, AscendC::TPosition::A1>;
@@ -1173,9 +1210,12 @@ struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSr
 
 /// Partial specialization for TileCopyTlaExt, CopyGmToL1, AtlasA2, PaddingRowMajor in and zN out.
 template <class ElementSrc, class ElementDst, class LayoutSrc_, class LayoutDst_>
-struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::GM>,
+struct TileCopyTlaExt<
+    Arch::AtlasA2,
+    tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::GM>,
     tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst_, AscendC::TPosition::A1>,
-    layout::PaddingRowMajor, layout::zN> {
+    layout::PaddingRowMajor, layout::zN
+>{
     using LayoutDst = LayoutDst_;
     using LayoutSrc = LayoutSrc_;
     using TensorDst = tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, AscendC::TPosition::A1>;
@@ -1209,9 +1249,12 @@ struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSr
 
 /// Partial specialization for TileCopyTlaExt, CopyGmToL1, AtlasA2, PaddingColumnMajor in and nZ out.
 template <class ElementSrc, class ElementDst, class LayoutSrc_, class LayoutDst_>
-struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::GM>,
+struct TileCopyTlaExt<
+    Arch::AtlasA2,
+    tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::GM>,
     tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst_, AscendC::TPosition::A1>,
-    layout::ColumnMajor, layout::nZ> {
+    layout::ColumnMajor, layout::nZ
+>{
     using LayoutDst = LayoutDst_;
     using LayoutSrc = LayoutSrc_;
     using TensorDst = tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, AscendC::TPosition::A1>;
@@ -1245,9 +1288,12 @@ struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSr
 
 /// Partial specialization for TileCopyTlaExt, CopyGmToL1, AtlasA2, PaddingColumnMajor in and nZ out.
 template <class ElementSrc, class ElementDst, class LayoutSrc_, class LayoutDst_>
-struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::GM>,
+struct TileCopyTlaExt<
+    Arch::AtlasA2,
+    tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::GM>,
     tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst_, AscendC::TPosition::A1>,
-    layout::PaddingColumnMajor, layout::nZ> {
+    layout::PaddingColumnMajor, layout::nZ
+>{
     using LayoutDst = LayoutDst_;
     using LayoutSrc = LayoutSrc_;
     using TensorDst = tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, AscendC::TPosition::A1>;

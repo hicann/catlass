@@ -57,7 +57,8 @@ public:
     friend class AivWaitSync;
 
     struct AicFinishSync {
-        using MatmulKernel = GroupedMatmulSliceKPerTokenDequant<BlockMmad, BlockEpilogue, BlockScheduler, ElementGroupList>;
+        using MatmulKernel = GroupedMatmulSliceKPerTokenDequant<
+            BlockMmad, BlockEpilogue, BlockScheduler, ElementGroupList>;
 
         CATLASS_DEVICE
         void operator()() const
@@ -69,7 +70,9 @@ public:
     };
 
     struct AivWaitSync {
-        using MatmulKernel = GroupedMatmulSliceKPerTokenDequant<BlockMmad, BlockEpilogue, BlockScheduler, ElementGroupList>;
+        using MatmulKernel = GroupedMatmulSliceKPerTokenDequant<
+            BlockMmad, BlockEpilogue, BlockScheduler, ElementGroupList
+        >;
 
         CATLASS_DEVICE
         void operator()() const
