@@ -162,10 +162,10 @@ public:
             uint32_t aiv_id = AscendC::GetBlockIdx();
             if (loop_id % aiv_num != aiv_id)
                 continue;
-            uint32_t m_catlassual = ((int32_t)loop_id > (int32_t)(loopnum - params.split - 1))
+            uint32_t m_actual = ((int32_t)loop_id > (int32_t)(loopnum - params.split - 1))
                                         ? params.problemShape.m() - ((loop_id / params.split) * maxmPerBlock_round)
                                         : maxmPerBlock_round;
-            uint32_t n_catlassual = params.problemShape.n();
+            uint32_t n_actual = params.problemShape.n();
 
             if constexpr (std::is_same_v<LayoutA, Catlass::layout::ColumnMajor>) {
                 offset_matrix = (loop_id % params.split) * N_Split * params.problemShape.m() +
@@ -174,15 +174,15 @@ public:
                 offset_vector_in = (loop_id % params.split) * N_Split;
 
                 if ((loop_id % params.split) == params.split - 1) {
-                    n_catlassual = params.problemShape.n() - N_Split * (params.split - 1);
+                    n_actual = params.problemShape.n() - N_Split * (params.split - 1);
                 } else {
-                    n_catlassual = N_Split;
+                    n_actual = N_Split;
                 }
             } else {
                 offset_matrix = loop_id * maxmPerBlock_round * params.problemShape.n();
                 offset_vector_out = loop_id * maxmPerBlock_round;
             }
-            GemvCoord actualBlockShape = GemvCoord{m_catlassual, n_catlassual};
+            GemvCoord actualBlockShape = GemvCoord{m_actual, n_actual};
 
             float realbeta = (loop_id % params.split == 0) ? Realbeta : 0.0f;
 

@@ -48,34 +48,34 @@ struct MatrixCopyGmToUB<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>
         AscendC::GlobalTensor<Element> srcTensor,
         LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
     {
-        uint32_t m_catlassual = layoutSrc.shape(0);
-        uint32_t n_catlassual = layoutSrc.shape(1);
+        uint32_t m_actual = layoutSrc.shape(0);
+        uint32_t n_actual = layoutSrc.shape(1);
         uint32_t m_round = layoutDst.shape(0);
         uint32_t n_round = layoutDst.shape(1);
         uint32_t stride = layoutSrc.stride(0);
 
         AscendC::DataCopyParams params;
-        if ((n_catlassual % ELE_NUM_PER_C0 == 0) && (stride % ELE_NUM_PER_C0 == 0) && (stride < STRIDE_LIMIT))
+        if ((n_actual % ELE_NUM_PER_C0 == 0) && (stride % ELE_NUM_PER_C0 == 0) && (stride < STRIDE_LIMIT))
         {
-            params.blockCount = m_catlassual;
-            params.blockLen = CeilDiv(n_catlassual, ELE_NUM_PER_C0);
-            params.srcStride = (stride - n_catlassual) / ELE_NUM_PER_C0;
-            params.dstStride = (n_round - n_catlassual) / ELE_NUM_PER_C0;
+            params.blockCount = m_actual;
+            params.blockLen = CeilDiv(n_actual, ELE_NUM_PER_C0);
+            params.srcStride = (stride - n_actual) / ELE_NUM_PER_C0;
+            params.dstStride = (n_round - n_actual) / ELE_NUM_PER_C0;
             AscendC::DataCopy(
                 dstTensor,
                 srcTensor,
                 params);
         }
-        else if ((n_catlassual % ELE_NUM_PER_C0 == 0) && (stride * ELE_NUM_PER_C0 < STRIDE_LIMIT))
+        else if ((n_actual % ELE_NUM_PER_C0 == 0) && (stride * ELE_NUM_PER_C0 < STRIDE_LIMIT))
         {
-            uint32_t counts = m_catlassual / ELE_NUM_PER_C0;
-            uint32_t remain = m_catlassual % ELE_NUM_PER_C0;
+            uint32_t counts = m_actual / ELE_NUM_PER_C0;
+            uint32_t remain = m_actual % ELE_NUM_PER_C0;
             if (counts > 0)
             {
                 params.blockCount = counts;
-                params.blockLen = CeilDiv(n_catlassual, ELE_NUM_PER_C0);
-                params.srcStride = (ELE_NUM_PER_C0 * stride - n_catlassual) / ELE_NUM_PER_C0;
-                params.dstStride = (ELE_NUM_PER_C0 * n_round - n_catlassual) / ELE_NUM_PER_C0;
+                params.blockLen = CeilDiv(n_actual, ELE_NUM_PER_C0);
+                params.srcStride = (ELE_NUM_PER_C0 * stride - n_actual) / ELE_NUM_PER_C0;
+                params.dstStride = (ELE_NUM_PER_C0 * n_round - n_actual) / ELE_NUM_PER_C0;
                 for (uint32_t i = 0; i < ELE_NUM_PER_C0; i++)
                 {
                     AscendC::DataCopy(
@@ -87,7 +87,7 @@ struct MatrixCopyGmToUB<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>
             if (remain > 0)
             {
                 params.blockCount = 1;
-                params.blockLen = CeilDiv(n_catlassual, ELE_NUM_PER_C0);
+                params.blockLen = CeilDiv(n_actual, ELE_NUM_PER_C0);
                 params.srcStride = 0;
                 params.dstStride = 0;
                 for (uint32_t i = 0; i < remain; i++)
@@ -102,10 +102,10 @@ struct MatrixCopyGmToUB<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>
         else
         {
             params.blockCount = 1;
-            params.blockLen = CeilDiv(n_catlassual, ELE_NUM_PER_C0);
+            params.blockLen = CeilDiv(n_actual, ELE_NUM_PER_C0);
             params.srcStride = 0;
             params.dstStride = 0;
-            for (uint32_t i = 0; i < m_catlassual; i++)
+            for (uint32_t i = 0; i < m_actual; i++)
             {
                 AscendC::DataCopy(
                     dstTensor[i * n_round],
@@ -137,34 +137,34 @@ struct MatrixCopyGmToUB<Arch::AtlasA2, Gemm::GemmType<Element, layout::ColumnMaj
         AscendC::GlobalTensor<Element> const &srcTensor,
         LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
     {
-        uint32_t m_catlassual = layoutSrc.shape(0);
-        uint32_t n_catlassual = layoutSrc.shape(1);
+        uint32_t m_actual = layoutSrc.shape(0);
+        uint32_t n_actual = layoutSrc.shape(1);
         uint32_t m_round = layoutDst.shape(0);
         uint32_t n_round = layoutDst.shape(1);
         uint32_t stride = layoutSrc.stride(1);
 
         AscendC::DataCopyParams params;
-        if ((m_catlassual % ELE_NUM_PER_C0 == 0) && (stride % ELE_NUM_PER_C0 == 0) && (stride < STRIDE_LIMIT))
+        if ((m_actual % ELE_NUM_PER_C0 == 0) && (stride % ELE_NUM_PER_C0 == 0) && (stride < STRIDE_LIMIT))
         {
-            params.blockCount = n_catlassual;
-            params.blockLen = CeilDiv(m_catlassual, ELE_NUM_PER_C0);
-            params.srcStride = (stride - m_catlassual) / ELE_NUM_PER_C0;
-            params.dstStride = (m_round - m_catlassual) / ELE_NUM_PER_C0;
+            params.blockCount = n_actual;
+            params.blockLen = CeilDiv(m_actual, ELE_NUM_PER_C0);
+            params.srcStride = (stride - m_actual) / ELE_NUM_PER_C0;
+            params.dstStride = (m_round - m_actual) / ELE_NUM_PER_C0;
             AscendC::DataCopy(
                 dstTensor,
                 srcTensor,
                 params);
         }
-        else if ((m_catlassual % ELE_NUM_PER_C0 == 0) && (stride * ELE_NUM_PER_C0 < STRIDE_LIMIT))
+        else if ((m_actual % ELE_NUM_PER_C0 == 0) && (stride * ELE_NUM_PER_C0 < STRIDE_LIMIT))
         {
-            uint32_t counts = n_catlassual / ELE_NUM_PER_C0;
-            uint32_t remain = n_catlassual % ELE_NUM_PER_C0;
+            uint32_t counts = n_actual / ELE_NUM_PER_C0;
+            uint32_t remain = n_actual % ELE_NUM_PER_C0;
             if (counts > 0)
             {
                 params.blockCount = counts;
-                params.blockLen = CeilDiv(m_catlassual, ELE_NUM_PER_C0);
-                params.srcStride = (ELE_NUM_PER_C0 * stride - m_catlassual) / ELE_NUM_PER_C0;
-                params.dstStride = (ELE_NUM_PER_C0 * m_round - m_catlassual) / ELE_NUM_PER_C0;
+                params.blockLen = CeilDiv(m_actual, ELE_NUM_PER_C0);
+                params.srcStride = (ELE_NUM_PER_C0 * stride - m_actual) / ELE_NUM_PER_C0;
+                params.dstStride = (ELE_NUM_PER_C0 * m_round - m_actual) / ELE_NUM_PER_C0;
                 for (uint32_t i = 0; i < ELE_NUM_PER_C0; i++)
                 {
                     AscendC::DataCopy(
@@ -176,7 +176,7 @@ struct MatrixCopyGmToUB<Arch::AtlasA2, Gemm::GemmType<Element, layout::ColumnMaj
             if (remain > 0)
             {
                 params.blockCount = 1;
-                params.blockLen = CeilDiv(m_catlassual, ELE_NUM_PER_C0);
+                params.blockLen = CeilDiv(m_actual, ELE_NUM_PER_C0);
                 params.srcStride = 0;
                 params.dstStride = 0;
                 for (uint32_t i = 0; i < remain; i++)
@@ -191,10 +191,10 @@ struct MatrixCopyGmToUB<Arch::AtlasA2, Gemm::GemmType<Element, layout::ColumnMaj
         else
         {
             params.blockCount = 1;
-            params.blockLen = CeilDiv(m_catlassual, ELE_NUM_PER_C0);
+            params.blockLen = CeilDiv(m_actual, ELE_NUM_PER_C0);
             params.srcStride = 0;
             params.dstStride = 0;
-            for (uint32_t i = 0; i < n_catlassual; i++)
+            for (uint32_t i = 0; i < n_actual; i++)
             {
                 AscendC::DataCopy(
                     dstTensor[i * m_round],

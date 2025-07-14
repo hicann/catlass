@@ -135,53 +135,53 @@ public:
         TileMRound = RoundUp(UBTileShape::M, UBAlignHelper::ALIGN);
         TileNRound = RoundUp(UBTileShape::N, UBAlignHelper::ALIGN);
         strideA = layoutA.stride(1) * TileNRound;
-        m_catlassual = (actualShape.m() < TileMRound) ? actualShape.m() : TileMRound;
-        n_catlassual = (actualShape.n() < TileNRound) ? actualShape.n() : TileNRound;
+        m_actual = (actualShape.m() < TileMRound) ? actualShape.m() : TileMRound;
+        n_actual = (actualShape.n() < TileNRound) ? actualShape.n() : TileNRound;
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((event_t)(UbInXEventList[UbInListId]));
-        vecCopyGmToUb(UbXTensorList[UbInListId], gmX, n_catlassual);
+        vecCopyGmToUb(UbXTensorList[UbInListId], gmX, n_actual);
         AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((event_t)(UbInXEventList[UbInListId]));
 
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((event_t)(UbInAEventList[UbInListId]));
         auto layoutAInUb = layoutA.GetTileLayout(MakeCoord(TileMRound, TileNRound));
-        auto layoutTileA = layoutA.GetTileLayout(MakeCoord(m_catlassual, n_catlassual));
+        auto layoutTileA = layoutA.GetTileLayout(MakeCoord(m_actual, n_actual));
         matrixCopyGmToUb(UbATensorList[UbInListId], gmA, layoutAInUb, layoutTileA);
         AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((event_t)(UbInAEventList[UbInListId]));
         // main loop
         uint32_t Nloop = CeilDiv(actualShape.n(), TileNRound);
         for (uint32_t LoopIdx = 0; LoopIdx < Nloop; LoopIdx++) {
-            m_catlassual = (actualShape.m() < TileMRound) ? actualShape.m() : TileMRound;
-            n_catlassual = (LoopIdx == Nloop - 1) ? (actualShape.n() - LoopIdx * TileNRound) : TileNRound;
-            y_catlassual = m_catlassual;
-            x_catlassual = n_catlassual;
+            m_actual = (actualShape.m() < TileMRound) ? actualShape.m() : TileMRound;
+            n_actual = (LoopIdx == Nloop - 1) ? (actualShape.n() - LoopIdx * TileNRound) : TileNRound;
+            y_actual = m_actual;
+            x_actual = n_actual;
 
             uint32_t UbInListIdNext = (UbInListId + 1 < STAGES) ? (UbInListId + 1) : 0;
             if (LoopIdx < Nloop - 1) {
                 uint32_t LoopIdxNext = LoopIdx + 1;
-                uint32_t m_catlassual_next = m_catlassual;
-                uint32_t n_catlassual_next =
+                uint32_t m_actual_next = m_actual;
+                uint32_t n_actual_next =
                     (LoopIdxNext == Nloop - 1) ? (actualShape.n() - LoopIdxNext * TileNRound) : TileNRound;
-                uint32_t y_catlassual_next = m_catlassual_next;
-                uint32_t x_catlassual_next = n_catlassual_next;
+                uint32_t y_actual_next = m_actual_next;
+                uint32_t x_actual_next = n_actual_next;
                 // Get L1 tensor for next stage
                 auto matrixTensor = UbATensorList[UbInListIdNext];
                 auto vecTensor = UbXTensorList[UbInListIdNext];
 
                 AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((event_t)(UbInXEventList[UbInListIdNext]));
-                vecCopyGmToUb(vecTensor, gmX[LoopIdxNext * TileNRound], x_catlassual_next);
+                vecCopyGmToUb(vecTensor, gmX[LoopIdxNext * TileNRound], x_actual_next);
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((event_t)(UbInXEventList[UbInListIdNext]));
                 AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>((event_t)(UbInAEventList[UbInListIdNext]));
                 auto layoutAInUb = layoutA.GetTileLayout(MakeCoord(TileMRound, TileNRound));
-                auto layoutTileA = layoutA.GetTileLayout(MakeCoord(m_catlassual_next, n_catlassual_next));
+                auto layoutTileA = layoutA.GetTileLayout(MakeCoord(m_actual_next, n_actual_next));
                 matrixCopyGmToUb(matrixTensor, gmA[LoopIdxNext * strideA], layoutAInUb, layoutTileA);
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_V>((event_t)(UbInAEventList[UbInListIdNext]));
             }
             AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((event_t)(UbInXEventList[UbInListId]));
-            tileVmuls(UbXTensorList[UbInListId], UbXTensorList[UbInListId], (ElementA)alpha, x_catlassual);
+            tileVmuls(UbXTensorList[UbInListId], UbXTensorList[UbInListId], (ElementA)alpha, x_actual);
             AscendC::PipeBarrier<PIPE_V>();
 
             AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>((event_t)(UbInAEventList[UbInListId]));
             auto layoutComputeInUb = layoutA.GetTileLayout(MakeCoord(TileMRound, TileNRound));
-            auto layoutTileCompute = layoutA.GetTileLayout(MakeCoord(m_catlassual, n_catlassual));
+            auto layoutTileCompute = layoutA.GetTileLayout(MakeCoord(m_actual, n_actual));
             tileVmad(UbYTensorList[UbOutListId],
                 UbXTensorList[UbInListId],
                 UbATensorList[UbInListId],
@@ -194,8 +194,8 @@ public:
         }
         AscendC::SetFlag<AscendC::HardEvent::V_MTE3>((event_t)(UbOutEventList[UbOutListId]));
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>((event_t)(UbOutEventList[UbOutListId]));
-        auto layoutDstY = layoutY.GetTileLayout(TensorCoord(y_catlassual));
-        auto layoutComputeInUb = layoutY.GetTileLayout(TensorCoord(y_catlassual));
+        auto layoutDstY = layoutY.GetTileLayout(TensorCoord(y_actual));
+        auto layoutComputeInUb = layoutY.GetTileLayout(TensorCoord(y_actual));
         vecCopyUbToGm(gmZ, UbYTensorList[UbOutListId], layoutDstY, layoutComputeInUb);
         AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>((event_t)(UbOutEventList[UbOutListId]));
         UbOutListId = (UbOutListId + 1 < STAGES) ? (UbOutListId + 1) : 0;
@@ -217,7 +217,7 @@ protected:
     uint32_t UbOutListId{0};
     uint32_t UbInListId{0};
 
-    uint32_t m_catlassual, n_catlassual, x_catlassual, y_catlassual;
+    uint32_t m_actual, n_actual, x_actual, y_actual;
     uint32_t TileMRound, TileNRound;
     uint32_t strideA;
 

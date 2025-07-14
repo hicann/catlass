@@ -64,14 +64,14 @@ struct TileVmad<Arch::AtlasA2,
         LayoutDst const &layoutDst, LayoutSrc const &layoutSrc
     )
     {
-        uint32_t m_catlassual = layoutSrc.shape(0);
-        uint32_t n_catlassual = layoutSrc.shape(1);
+        uint32_t m_actual = layoutSrc.shape(0);
+        uint32_t n_actual = layoutSrc.shape(1);
         uint32_t m_round = layoutDst.shape(0);
         uint32_t n_round = layoutDst.shape(1);
         uint32_t temp_repeat_size = BYTE_PER_C0 * 8 / sizeof(ElementAccumulator);
         uint32_t elem_repeat_size = ELE_NUM_PER_C0 * 8;
         uint32_t mask = temp_repeat_size;
-        uint32_t repeattimes = CeilDiv(m_catlassual, temp_repeat_size);
+        uint32_t repeattimes = CeilDiv(m_actual, temp_repeat_size);
         AscendC::Duplicate<ElementAccumulator>(
             temp,
             (ElementAccumulator)0.0,
@@ -81,8 +81,8 @@ struct TileVmad<Arch::AtlasA2,
             8
         );
 
-        uint32_t repeat_num = n_catlassual / temp_repeat_size;
-        uint32_t remain = n_catlassual % temp_repeat_size;
+        uint32_t repeat_num = n_actual / temp_repeat_size;
+        uint32_t remain = n_actual % temp_repeat_size;
 
         AscendC::PipeBarrier<PIPE_V>();
         AscendC::BinaryRepeatParams params;
@@ -93,7 +93,7 @@ struct TileVmad<Arch::AtlasA2,
         params.src0RepStride = RoundUp(n_round, elem_repeat_size) / ELE_NUM_PER_C0;
         params.src1RepStride = 0;
         AscendC::SetMaskCount();
-        AscendC::SetVectorMask<ElementAccumulator, AscendC::MaskMode::COUNTER>(m_catlassual * temp_repeat_size);
+        AscendC::SetVectorMask<ElementAccumulator, AscendC::MaskMode::COUNTER>(m_actual * temp_repeat_size);
         for (uint32_t i = 0; i < repeat_num; i++)
         {
             uint32_t offset = i * temp_repeat_size;
@@ -123,7 +123,7 @@ struct TileVmad<Arch::AtlasA2,
                 srcTensor_m[offset],
                 srcTensor_v[offset],
                 remain_mask,
-                m_catlassual,
+                m_actual,
                 params);
         }
 
@@ -133,7 +133,7 @@ struct TileVmad<Arch::AtlasA2,
             temp,
             temp,
             reduce_mask,
-            m_catlassual,
+            m_actual,
             1,
             1,
             8);
@@ -152,7 +152,7 @@ struct TileVmad<Arch::AtlasA2,
             castparams);
         AscendC::PipeBarrier<PIPE_V>();
 
-        uint64_t add_mask = (m_catlassual < elem_repeat_size) ? m_catlassual : elem_repeat_size;
+        uint64_t add_mask = (m_actual < elem_repeat_size) ? m_actual : elem_repeat_size;
         params.dstRepStride = 8;
         params.src0RepStride = 8;
         params.src1RepStride = 8;
@@ -197,15 +197,15 @@ struct TileVmad<Arch::AtlasA2,
         LayoutDst const &layoutDst, LayoutSrc const &layoutSrc
     )
     {
-        uint32_t m_catlassual = layoutSrc.shape(0);
-        uint32_t n_catlassual = layoutSrc.shape(1);
+        uint32_t m_actual = layoutSrc.shape(0);
+        uint32_t n_actual = layoutSrc.shape(1);
         uint32_t m_round = layoutDst.shape(0);
         uint32_t n_round = layoutDst.shape(1);
 
         uint32_t repeat_size = ELE_NUM_PER_C0 * 8;
         uint32_t mask = repeat_size;
-        uint32_t repeat_num = n_catlassual / repeat_size;
-        uint32_t remain = n_catlassual % repeat_size;
+        uint32_t repeat_num = n_actual / repeat_size;
+        uint32_t remain = n_actual % repeat_size;
 
         AscendC::BinaryRepeatParams params;
         params.dstBlkStride = 1;
@@ -215,7 +215,7 @@ struct TileVmad<Arch::AtlasA2,
         params.src0RepStride = RoundUp(n_round, repeat_size) / ELE_NUM_PER_C0;
         params.src1RepStride = 0;
         AscendC::SetMaskCount();
-        AscendC::SetVectorMask<ElementA, AscendC::MaskMode::COUNTER>(m_catlassual * repeat_size);
+        AscendC::SetVectorMask<ElementA, AscendC::MaskMode::COUNTER>(m_actual * repeat_size);
         for (uint32_t i = 0; i < repeat_num; i++)
         {
             uint32_t offset = i * repeat_size;
@@ -259,7 +259,7 @@ struct TileVmad<Arch::AtlasA2,
                     srcTensor_m,
                     srcTensor_v,
                     remain_mask,
-                    m_catlassual,
+                    m_actual,
                     params);
             }
             else
@@ -269,7 +269,7 @@ struct TileVmad<Arch::AtlasA2,
                     srcTensor_m[offset],
                     srcTensor_v[offset],
                     remain_mask,
-                    m_catlassual,
+                    m_actual,
                     params);
             }
         }
@@ -280,12 +280,12 @@ struct TileVmad<Arch::AtlasA2,
             srcTensor_m,
             srcTensor_m,
             reduce_mask,
-            m_catlassual,
+            m_actual,
             1,
             1,
             RoundUp(n_round, repeat_size) / ELE_NUM_PER_C0);
 
-        uint64_t add_mask = (m_catlassual < repeat_size) ? m_catlassual : repeat_size;
+        uint64_t add_mask = (m_actual < repeat_size) ? m_actual : repeat_size;
         params.dstRepStride = 8;
         params.src0RepStride = 8;
         params.src1RepStride = 8;
@@ -332,12 +332,12 @@ struct TileVmad<Arch::AtlasA2,
         LayoutDst const &layoutDst, LayoutSrc const &layoutSrc
     )
     {
-        uint32_t m_catlassual = layoutSrc.shape(0);
-        uint32_t n_catlassual = layoutSrc.shape(1);
+        uint32_t m_actual = layoutSrc.shape(0);
+        uint32_t n_actual = layoutSrc.shape(1);
         uint32_t m_round = layoutDst.shape(0);
         uint32_t n_round = layoutDst.shape(1);
         AscendC::SetMaskCount();
-        AscendC::SetVectorMask<ElementAccumulator, AscendC::MaskMode::COUNTER>(m_catlassual);
+        AscendC::SetVectorMask<ElementAccumulator, AscendC::MaskMode::COUNTER>(m_actual);
         AscendC::Duplicate<ElementAccumulator, false>(
             temp,
             (ElementAccumulator)0.0,
@@ -350,7 +350,7 @@ struct TileVmad<Arch::AtlasA2,
         ElementX pix[32];
         AscendC::SetFlag<AscendC::HardEvent::V_S>((event_t)(0));
         AscendC::WaitFlag<AscendC::HardEvent::V_S>((event_t)(0));
-        for (uint32_t i = 0; i < n_catlassual; i++)
+        for (uint32_t i = 0; i < n_actual; i++)
         {
             pix[i] = srcTensor_v.GetValue(i);
         }
@@ -362,7 +362,7 @@ struct TileVmad<Arch::AtlasA2,
         params.srcBlkStride = 1;
         params.dstRepStride = 8;
         params.srcRepStride = 4;
-        for (uint32_t i = 0; i < n_catlassual; i++)
+        for (uint32_t i = 0; i < n_actual; i++)
         {
             AscendC::Axpy<ElementAccumulator, ElementA, false>(
                 temp,
@@ -432,14 +432,14 @@ struct TileVmad<Arch::AtlasA2,
         LayoutDst const &layoutDst, LayoutSrc const &layoutSrc
     )
     {
-        uint32_t m_catlassual = layoutSrc.shape(0);
-        uint32_t n_catlassual = layoutSrc.shape(1);
+        uint32_t m_actual = layoutSrc.shape(0);
+        uint32_t n_actual = layoutSrc.shape(1);
         uint32_t m_round = layoutDst.shape(0);
         uint32_t n_round = layoutDst.shape(1);
         ElementX pix[32];
         AscendC::SetFlag<AscendC::HardEvent::V_S>((event_t)(0));
         AscendC::WaitFlag<AscendC::HardEvent::V_S>((event_t)(0));
-        for (uint32_t i = 0; i < n_catlassual; i++)
+        for (uint32_t i = 0; i < n_actual; i++)
         {
             pix[i] = srcTensor_v.GetValue(i);
         }
@@ -451,8 +451,8 @@ struct TileVmad<Arch::AtlasA2,
         params.dstRepStride = 8;
         params.srcRepStride = 8;
         AscendC::SetMaskCount();
-        AscendC::SetVectorMask<ElementA, AscendC::MaskMode::COUNTER>(m_catlassual);
-        for (uint32_t i = 0; i < n_catlassual; i++)
+        AscendC::SetVectorMask<ElementA, AscendC::MaskMode::COUNTER>(m_actual);
+        for (uint32_t i = 0; i < n_actual; i++)
         {
             AscendC::Axpy<ElementY, ElementA, false>(
                 dstTensor,
