@@ -574,7 +574,6 @@ struct CopyGmToL1<
 };
 
 
-
 ///////////////////////////////////////
 /// new add gemv, ColumnMajor -> nN
 template <class ArchTag, class Element>
@@ -1048,8 +1047,8 @@ struct CopyGmToL1<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>,
             DataCopy(dstTensor, srcTensor, rows * cols);
         } else if (
             srcStride < STRIDE_LIMIT && dstStride < STRIDE_LIMIT 
-            && (cols / ELE_NUM_PER_BLK) < BLOCK_LEN_LIMIT
-        ){
+            && (cols / ELE_NUM_PER_BLK) < BLOCK_LEN_LIMIT)
+            {
             uint32_t rLoops = CeilDiv(rows, MAX_REPEAT);
             for (uint32_t i = 0; i < rLoops; ++i) {
                 uint32_t rActual = (i < rLoops - 1) ? MAX_REPEAT : rows - i * MAX_REPEAT;
