@@ -14,14 +14,14 @@
 #include "catlass/gemm/helper.hpp"
 
 namespace Catlass::Epilogue::Tile {
-template <template <
+template <
     /// Tag indicating architecture
     class ArchTag_,
     /// Compute data type
     class ComputeType_,
     /// Length of the compute buffer
     uint32_t COMPUTE_LENGTH_>
-          struct TileElemWiseMuls {
+struct TileElemWiseMuls {
     using ArchTag = ArchTag_;
     using ElementCompute = typename ComputeType_::Element;
 
