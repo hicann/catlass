@@ -7,6 +7,6 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 
 catlass_example_add_executable(
-    20_matmul_bias
-    matmul_bias.cpp
+    21_basic_matmul_preload_zN
+    basic_matmul_preload_zN.cpp
 )

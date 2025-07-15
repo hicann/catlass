@@ -26,7 +26,7 @@
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
-#include "catlass/gemm/kernel/matmul_bias.hpp"
+#include "catlass/gemm/kernel/basic_matmul_preload.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 #include "catlass/layout/layout.hpp"
 
@@ -37,7 +37,7 @@ using namespace Catlass;
 using fp16_t = op::fp16_t;
 
 struct Options {
-    const std::string HELPER = "20_matmul_bias m n k [device_id]";
+    const std::string HELPER = "00_basic_matmul m n k [device_id]";
 
     GemmCoord problemShape{128, 128, 128};
     int32_t deviceId{0};
@@ -88,23 +88,18 @@ void Run(Options const &options)
     size_t sizeA = lenA * sizeof(fp16_t);
     size_t sizeB = lenB * sizeof(fp16_t);
     size_t sizeC = lenC * sizeof(fp16_t);
-    size_t sizeBias = static_cast<size_t>(n) * sizeof(fp16_t);
 
     using LayoutA = layout::RowMajor;
-    using LayoutB = layout::RowMajor;
+    using LayoutB = layout::zN;
     using LayoutC = layout::RowMajor;
-    using LayoutBias = layout::VectorLayout;
     LayoutA layoutA{m, k};
-    LayoutB layoutB{k, n};
+    LayoutB layoutB = layout::zN::MakeLayout<fp16_t>(k, n);
     LayoutC layoutC{m, n};
-    LayoutBias layoutBias{n};
 
     std::vector<fp16_t> hostA(lenA);
     std::vector<fp16_t> hostB(lenB);
-    std::vector<fp16_t> hostBias(n);
     golden::FillRandomData<fp16_t>(hostA, -5.0f, 5.0f);
     golden::FillRandomData<fp16_t>(hostB, -5.0f, 5.0f);
-    golden::FillRandomData<fp16_t>(hostBias, -5.0f, 5.0f);
 
     uint8_t *deviceA{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
@@ -114,10 +109,6 @@ void Run(Options const &options)
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceBias{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceBias), sizeBias, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMemcpy(deviceBias, sizeBias, hostBias.data(), sizeBias, ACL_MEMCPY_HOST_TO_DEVICE));
-
     uint8_t *deviceC{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
@@ -125,28 +116,28 @@ void Run(Options const &options)
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
     using ArchTag = Arch::AtlasA2;
-    using DispatchPolicy = Gemm::MmadAtlasA2PingpongBias<true>;
-    using L1TileShape = GemmShape<128, 256, 256>;
+    constexpr bool ENABLE_UNIT_FLAG = true;
+    constexpr bool ENABLE_SHUFFLE_K = true;
+    using DispatchPolicy = Gemm::MmadAtlasA2Preload<ENABLE_UNIT_FLAG, ENABLE_SHUFFLE_K>;
 
+    using L1TileShape = GemmShape<128, 256, 256>;
     using L0TileShape = GemmShape<128, 256, 64>;
 
     using AType = Gemm::GemmType<half, LayoutA>;
     using BType = Gemm::GemmType<half, LayoutB>;
     using CType = Gemm::GemmType<half, LayoutC>;
-    using BiasType = Gemm::GemmType<half, LayoutBias>;
 
-    using BlockMmad = Gemm::Block::BlockMmad<
-        DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType, BiasType>;
+    using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
     using BlockEpilogue = void;
 
     // Swizzle offset is 3 and direction is 0.
     using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
 
     // kernel level
-    using MatmulKernel = Gemm::Kernel::MatmulBias<BlockMmad, BlockEpilogue, BlockScheduler>;
+    using MatmulKernel = Gemm::Kernel::BasicMatmulPreload<BlockMmad, BlockEpilogue, BlockScheduler>;
 
     using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-    MatmulKernel::Arguments arguments{options.problemShape, deviceA, deviceB, deviceC, deviceBias};
+    MatmulKernel::Arguments arguments{options.problemShape, deviceA, deviceB, deviceC};
     MatmulAdapter matmul_op;
     matmul_op.CanImplement(arguments);
     size_t sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
@@ -166,7 +157,7 @@ void Run(Options const &options)
     ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
 
     std::vector<float> hostGolden(lenC);
-    golden::ComputeMatmulBias(options.problemShape, hostA, layoutA, hostB, layoutB, hostBias, hostGolden, layoutC);
+    golden::ComputeMatmul(options.problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);
 
     std::vector<uint64_t> errorIndices = golden::CompareData(hostC, hostGolden, k);
     if (errorIndices.empty()) {
