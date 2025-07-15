@@ -11,7 +11,11 @@
 #ifndef CATLASS_CATLASS_HPP
 #define CATLASS_CATLASS_HPP
 
+#include <cstdint>
+
+#if defined(__CCE__)
 #include <kernel_operator.h>
+#endif
 
 #include "catlass/detail/alignment.hpp"
 #include "catlass/detail/dependent_false.hpp"
@@ -31,6 +35,6 @@ constexpr uint32_t BYTE_PER_VECTOR_FRACTAL = BYTE_PER_BLK * BLK_NUM_PER_VECTOR_F
 constexpr uint64_t L2_OFFSET = 0;
 constexpr uint32_t STRIDE_LIMIT = 65536;
 
-}  // namespace Catlass
+} // namespace Catlass
 
-#endif  // CATLASS_CATLASS_HPP
+#endif // CATLASS_CATLASS_HPP

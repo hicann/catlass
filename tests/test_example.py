@@ -12,7 +12,7 @@ import subprocess
 import os
 import re
 CMAKE_BINARY_PATH = os.path.join(os.path.dirname(
-    os.path.abspath(__file__)), "..", "build", "bin")
+    os.path.abspath(__file__)), "..", "output", "bin")
 CMAKE_EXAMPLES_PATH = os.path.join(os.path.dirname(
     os.path.abspath(__file__)), "..", "examples")
 

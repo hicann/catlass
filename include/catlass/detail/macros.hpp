@@ -12,7 +12,11 @@
 #define CATLASS_DETAIL_MACROS_HPP
 
 #define CATLASS_DEVICE __forceinline__ [aicore]
+#ifdef __CCE__
 #define CATLASS_HOST_DEVICE __forceinline__ [host, aicore]
+#else
+#define CATLASS_HOST_DEVICE
+#endif
 #define CATLASS_GLOBAL __global__ [aicore]
 
 #endif  // CATLASS_DETAIL_MACROS_HPP

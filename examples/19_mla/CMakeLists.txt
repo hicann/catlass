@@ -6,7 +6,10 @@
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 # See LICENSE in the root of the software repository for the full text of the License.
 
-catlass_example_add_executable(
-    19_mla
+set(MLA_SOURCES
     mla.cpp
-)
+    mla_tiling.cpp)
+set_source_files_properties(mla.cpp PROPERTIES LANGUAGE ASCEND)
+catlass_example_add_executable(19_mla dav-c220 ${MLA_SOURCES})
+target_include_directories(19_mla PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(19_mla PRIVATE m)

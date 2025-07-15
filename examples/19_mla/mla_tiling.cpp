@@ -8,97 +8,24 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+ #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <numeric>
 #include <string>
 #include <vector>
 
+#include "catlass/detail/alignment.hpp"
+#include "mla_tiling.h"
+
 using namespace std;
 namespace MLATiling {
-const int32_t TILING_BATCH = 0;
-const int32_t TILING_NUMHEADS = 1;
-const int32_t TILING_HEADDIM = 2;
-const int32_t TILING_NUMBLOKS = 3;
-const int32_t TILING_BLOCKSIZE = 4;
-const int32_t TILING_MAXBLOCKS = 5;
-const int32_t TILING_TOR = 6;
-const int32_t TILING_KVHEADS = 7;
-const int32_t TILING_HEADSIZE = 8;
-const int32_t TILING_PARASIZE = 9;
-const int32_t TILING_HEAD_SPLIT_SIZE = 10;
-const int32_t TILING_HEAD_SPLIT_NUM = 11;
-const int32_t TILING_MASKTYPE = 12;
-const int32_t TILING_HEADDIM_ROPE = 13;
-const int32_t TILING_MAX_KVSEQLEN = 14;
-const int32_t TILING_KVSPLIT = 15;
-const int32_t TILING_KVCORENUM = 16;
-const int32_t TILING_MAX_QSEQLEN = 17;
-const int32_t TILING_TOTAL_QTOKENS = 18;
-const int32_t TILING_FORMERTASKNUM = 19;
-const int32_t TILING_TAILTASKNUM = 20;
 
-const int32_t TILING_HEAD_SIZE = 24;
-const int32_t TILING_PARA_SIZE = 17;
 
-const int32_t PARA_TILING_ELENUM_SPEC = 17;
-
-const int32_t NUM0 = 0;
-const int32_t NUM1 = 1;
-const int32_t NUM2 = 2;
-const int32_t NUM3 = 3;
-const int32_t NUM4 = 4;
-const int32_t NUM5 = 5;
-const int32_t NUM6 = 6;
-const int32_t NUM7 = 7;
-const int32_t NUM8 = 8;
-const int32_t NUM9 = 9;
-const int32_t NUM10 = 10;
-const int32_t NUM11 = 11;
-const int32_t NUM12 = 12;
-const int32_t NUM13 = 13;
-const int32_t NUM14 = 14;
-const int32_t NUM15 = 15;
-const int32_t NUM16 = 16;
-const int32_t NUM17 = 17;
-const int32_t NUM18 = 18;
-const int32_t NUM19 = 19;
-const int32_t NUM20 = 20;
-const int32_t NUM21 = 21;
-const int32_t NUM32 = 32;
-const int32_t NUM64 = 64;
-const int32_t NUM128 = 128;
-const int32_t NUM256 = 256;
-const int32_t NUM512 = 512;
-const int32_t NUM576 = 576;
-const int32_t EMBEDDING_LIMIT = 512;
-const int32_t WORKSPACE_BLOCK_SIZE_DB = 65536;
-
-const float SPLITKV_RATION = 0.8;
-const int32_t KV_SEQLEN_SLICE = 128;
-
-constexpr std::array<int32_t, NUM6> QN_TILE_LIST = {128, 64, 32, 16, 8, 1};
-
-enum class MaskType { NO_MASK = 0, MASK_SPEC = 1 };
-
-struct MLAInfo {
-    int32_t numTokens = 0;
-    int32_t numHeads = 0;
-    int32_t embeddingSize = 0;
-    int32_t embeddingSizeRope = 0;
-    int32_t numBlocks = 0;
-    int32_t blockSize = 0;
-    int32_t maxKvSeqlen = 0;
-    int32_t kvHeads = 0;
-    int32_t batch = 0;
-    int32_t *kvSeqLen{nullptr};
-    int32_t *qSeqLen{nullptr};
-    MaskType maskType = MaskType::NO_MASK;
-};
-
-using AddrOffsets = struct AddressOffsetInfo {
+    using AddrOffsets = struct AddressOffsetInfo {
     uint64_t addrQSeqOffset = 0;
     uint64_t addrQSeqRopeOffset = 0;
     uint64_t addrMaskBatchOffset = 0;
@@ -225,7 +152,7 @@ uint32_t GetKVSplitParam(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *t
     }
 
     uint32_t decoderBatch = tilingHost[TILING_BATCH];
-    uint32_t process = Lcm(decoderBatch, blockDim);
+    uint32_t process = std::lcm(decoderBatch, blockDim);
     uint32_t kvSplitCoreNum = process / decoderBatch;
 
     uint32_t kvSeqlenMaxAlign = RoundUp(tilingHost[TILING_MAX_KVSEQLEN], static_cast<uint32_t>(mlaInfo.blockSize));
@@ -287,7 +214,7 @@ uint32_t GetKVSplitParamSpec(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_
         return blockDim;
     }
 
-    uint32_t process = Lcm(tailTaskNum, blockDim);
+    uint32_t process = std::lcm(tailTaskNum, blockDim);
     uint32_t kvSplitCoreNum = process / tailTaskNum;
 
     uint32_t kvSeqlenMaxAlign = RoundUp(tilingHost[TILING_MAX_KVSEQLEN], static_cast<uint32_t>(mlaInfo.blockSize));

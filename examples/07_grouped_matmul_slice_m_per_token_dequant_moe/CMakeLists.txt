@@ -6,7 +6,5 @@
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 # See LICENSE in the root of the software repository for the full text of the License.
 
-catlass_example_add_executable(
-    07_grouped_matmul_slice_m_per_token_dequant_moe
-    grouped_matmul_slice_m_per_token_dequant_moe.cpp
-)
+set_source_files_properties(grouped_matmul_slice_m_per_token_dequant_moe.cpp PROPERTIES LANGUAGE ASCEND)
+catlass_example_add_executable(07_grouped_matmul_slice_m_per_token_dequant_moe dav-c220 grouped_matmul_slice_m_per_token_dequant_moe.cpp)

@@ -43,12 +43,12 @@ constexpr T RoundDown(const T val, const T align)
     return val / align * align;
 }
 
-template <uint32_t DIVISOP, typename T>
+template <uint32_t DIVISOR, typename T>
 CATLASS_HOST_DEVICE
 constexpr T CeilDiv(const T dividend)
 {
-    static_assert(DIVISOP != 0, "DIVISOP must not be 0");
-    return (dividend + DIVISOP - 1) / DIVISOP;
+    static_assert(DIVISOR != 0, "DIVISOR must not be 0");
+    return (dividend + DIVISOR - 1) / DIVISOR;
 }
 
 template <class T>

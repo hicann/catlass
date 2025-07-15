@@ -40,10 +40,10 @@ class CMakeBuild(build_ext):
         if not os.path.exists(self.build_temp):
             os.makedirs(self.build_temp)
 
-        subprocess.check_call(["cmake", ext.sourcedir] +
+        subprocess.check_call(["cmake", os.path.join(ext.sourcedir, "../../")] +
                               cmake_args, cwd=self.build_temp)
         subprocess.check_call(
-            ["cmake", "--build", ".", "-j"] + build_args, cwd=self.build_temp)
+            ["cmake", "--build", ".", "--target", "_C", "-j"] + build_args, cwd=self.build_temp)
 
     def generate_pyi(self, ext):
         extdir = os.path.abspath(os.path.dirname(
