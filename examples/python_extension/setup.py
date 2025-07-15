@@ -8,12 +8,16 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 
 import os
-import sys
+import logging
 import subprocess
-from setuptools import setup, Extension
-from setuptools.command.build_ext import build_ext
+import sys
 import time
 
+from setuptools import setup, Extension
+from setuptools.command.build_ext import build_ext
+
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 class CMakeExtension(Extension):
     def __init__(self, name, sourcedir=""):
@@ -50,7 +54,14 @@ class CMakeBuild(build_ext):
             self.get_ext_fullpath(ext.name)))
         module_name = ext.name.split(".")[-1]
         stubgen_args = [module_name, "--output-dir", extdir]
-        subprocess.check_call(["pybind11-stubgen"] + stubgen_args, cwd=extdir)
+        stubgen_bin = os.path.join(os.path.dirname(
+            sys.executable), "pybind11-stubgen")
+        try:
+            subprocess.check_call([stubgen_bin] + stubgen_args, cwd=extdir)
+        except FileNotFoundError as e:
+            logging.warning("No pybind11-stubgen found")
+        except subprocess.CalledProcessError as e:
+            logging.warning("pybind11-stubgen exited abnormally")
 
 
 version = f"0.1.0.{time.strftime('%Y%m%d%H%M%S')}"
