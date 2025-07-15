@@ -19,6 +19,7 @@ from setuptools.command.build_ext import build_ext
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
+
 class CMakeExtension(Extension):
     def __init__(self, name, sourcedir=""):
         super().__init__(name, sources=[])

@@ -8,7 +8,7 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
- #include <cmath>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -23,8 +23,6 @@
 
 using namespace std;
 namespace MLATiling {
-
-
     using AddrOffsets = struct AddressOffsetInfo {
     uint64_t addrQSeqOffset = 0;
     uint64_t addrQSeqRopeOffset = 0;
