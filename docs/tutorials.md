@@ -245,8 +245,10 @@ int main(int argc, const char **argv)
 在算子目录下（即basic_matmul.cpp同级目录）的CMakeLists.txt文件中加入以下代码
 
 ```
+set_source_files_properties(basic_matmul.cpp PROPERTIES LANGUAGE ASCEND)
 catlass_example_add_executable(
     21_basic_matmul
+    dav-c220
     basic_matmul.cpp
 )
 ```
@@ -262,7 +264,7 @@ foreach中已有20个项目，在列表后面追加即可。
 #### 编译
 在catlass目录下(请仔细核对执行目录)，执行`bash scripts/build.sh 21_basic_matmul`命令即可进行编译。
 #### 执行
-`cd build/bin`目录，执行`./21_basic_matmul 128 256 4096 0`命令执行算子。
+`cd output/bin`目录，执行`./21_basic_matmul 128 256 4096 0`命令执行算子。
 执行结果如出现`Compare success`。说明精度比对成功。(由于使用CPU进行精度对比，所以执行需要一点时间)
 
 #### 性能测试
@@ -536,8 +538,10 @@ int main(int argc, const char **argv)
 ### 编译运行
 在`splitk_matmul.cpp`同级文件夹下创建`CMakeLists.txt`文件，填如以下内容：
 ```cmake
+set_source_files_properties(splitk_matmul.cpp PROPERTIES LANGUAGE ASCEND)
 catlass_example_add_executable(
     22_splitk_matmul # 可执行程序名称
+    dav-c220
     splitk_matmul.cpp
 )
 ```
@@ -553,14 +557,14 @@ bash scripts/build.sh 22_splitk_matmul
 ```
 执行程序：
 ```bash
-# ./build/bin/22_splitk_matmul m n k [device_id]
-./build/bin/22_splitk_matmul 16 16 32768 0
+# ./output/bin/22_splitk_matmul m n k [device_id]
+./output/bin/22_splitk_matmul 16 16 32768 0
 ```
 
 ### 性能测试
 使用msprof op采集性能数据：
 ```bash
-msprof op ./build/bin/22_splitk_matmul 16 16 32768 0
+msprof op ./output/bin/22_splitk_matmul 16 16 32768 0
 ```
 在当前目录下会生成profiling数据，查看`OpBasicInfo.csv`文件获取性能数据。可将该性能数据与Basic Matmul的性能数据进行比较，观察收益。
 
@@ -840,8 +844,10 @@ int main(int argc, const char **argv)
 ### 编译运行
 在`grouped_matmul.cpp`同级文件夹下创建`CMakeLists.txt`文件，填如以下内容：
 ```cmake
+set_source_files_properties(grouped_matmul.cpp PROPERTIES LANGUAGE ASCEND)
 catlass_example_add_executable(
     23_grouped_matmul # 可执行程序名称
+    dav-c220
     grouped_matmul.cpp
 )
 ```
@@ -857,10 +863,10 @@ bash scripts/build.sh 23_grouped_matmul
 ```
 执行程序：
 ```bash
-# ./build/bin/23_grouped_matmul group_count m n k [device_id]
-./build/bin/23_grouped_matmul 128 32768 1280 4096 0
+# ./output/bin/23_grouped_matmul group_count m n k [device_id]
+./output/bin/23_grouped_matmul 128 32768 1280 4096 0
 # msprof op测试程序性能
-msprof op ./build/bin/23_grouped_matmul 128 32768 1280 4096 0
+msprof op ./output/bin/23_grouped_matmul 128 32768 1280 4096 0
 ```
 ### 切换配置，观察性能变化
 以上代码中有两种配置策略，分别是配置一和配置二，配置一为通常的简单配置，配置二为优化配置，增加了`Preload，ShuffleK`两个优化措施，两者使用不同的block层实现，展示了模板库可按需组装搭配各组件的特性。

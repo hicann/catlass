@@ -7,58 +7,35 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 
 set(CATLASS_EXAMPLES_COMMON_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/common)
-set(BISHENG_COMPILER_OPTIONS
-    -O2 -std=c++17 -xcce
-    -mllvm -cce-aicore-stack-size=0x8000
-    -mllvm -cce-aicore-function-stack-size=0x8000
-    -mllvm -cce-aicore-record-overflow=true
-    -mllvm -cce-aicore-addr-transform
-    -mllvm -cce-aicore-dcci-insert-for-scalar=false
-    -DL2_CACHE_HINT
-    -I${ASCEND_HOME_PATH}/compiler/tikcpp
-    -I${ASCEND_HOME_PATH}/compiler/tikcpp/tikcfw
-    -I${ASCEND_HOME_PATH}/compiler/tikcpp/tikcfw/impl
-    -I${ASCEND_HOME_PATH}/compiler/tikcpp/tikcfw/interface
-    -I${ASCEND_HOME_PATH}/include
-    -I${ASCEND_HOME_PATH}/include/experiment/runtime
-    -I${ASCEND_HOME_PATH}/include/experiment/msprof
-    -I${CATLASS_EXAMPLES_COMMON_SOURCE_DIR}
-    -I${CMAKE_SOURCE_DIR}/include
-    -L${ASCEND_HOME_PATH}/lib64
-    -Wno-macro-redefined -Wno-ignored-attributes
-    -lruntime -lstdc++ -lascendcl -lm -ltiling_api -lplatform -lc_sec -ldl -lnnopbase
-)
 
-if(DEFINED PROF)
-    list(APPEND ${BISHENG_COMPILER_OPTIONS} -lprofapi)
-endif()
-
-file(GLOB_RECURSE CATLASS_INCLUDE_FILES ${CMAKE_SOURCE_DIR}/include/*.hpp)
-file(GLOB_RECURSE CATLASS_EXAMPLES_COMMON_INCLUDE_FILES ${CATLASS_EXAMPLES_COMMON_SOURCE_DIR}/*.hpp)
 add_custom_target(catlass_examples)
 
-function(catlass_example_add_executable NAME)
-    if (${NAME} STREQUAL "17_gemv_aiv")
-        set(ARCH "dav-c220-vec")
-    else()
-        set(ARCH "dav-c220")
-    endif()
-
-    add_custom_command(
-        OUTPUT ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${NAME}
-        COMMAND ${CMAKE_BISHENG_COMPILER} --cce-aicore-arch=${ARCH} ${BISHENG_COMPILER_OPTIONS} ${ARGN} -o ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${NAME}
-        DEPENDS ${ARGN} ${CATLASS_INCLUDE_FILES} ${CATLASS_EXAMPLES_COMMON_INCLUDE_FILES}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        COMMENT "Compiling executable kernel: ${NAME}"
-    )
-
-    add_custom_target(${NAME} ALL DEPENDS ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${NAME})
+macro(catlass_example_add_executable NAME AICORE_ARCH)
+    add_executable(${NAME} ${ARGN})
+    target_compile_options(${NAME} PRIVATE $<$<COMPILE_LANGUAGE:ASCEND>:--cce-aicore-arch=${AICORE_ARCH}>)
     add_dependencies(catlass_examples ${NAME})
-endfunction()
+    install(TARGETS ${NAME} DESTINATION bin COMPONENT ${NAME})
+    install(TARGETS ${NAME} DESTINATION bin COMPONENT catlass_examples)
+endmacro()
 
-if(ENABLE_LIB)
-    add_subdirectory(lib_cmake)
-else()
+add_compile_options(
+    $<$<COMPILE_LANGUAGE:ASCEND>:-Wno-macro-redefined>
+    $<$<COMPILE_LANGUAGE:ASCEND>:-Wno-ignored-attributes>
+
+    "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-stack-size=0x8000>"
+    "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-function-stack-size=0x8000>"
+    "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-record-overflow=true>"
+    "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-addr-transform>"
+    "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-dcci-insert-for-scalar=false>"
+)
+
+add_compile_definitions(L2_CACHE_HINT)
+include_directories(
+    ${CATLASS_EXAMPLES_COMMON_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/include
+)
+link_directories(${ASCEND_HOME_PATH}/lib64)
+link_libraries(dl tiling_api platform c_sec nnopbase ascendcl)
 
 foreach(EXAMPLE
     00_basic_matmul
@@ -86,4 +63,5 @@ foreach(EXAMPLE
     add_subdirectory(${EXAMPLE})
 endforeach()
 
-endif()
+add_subdirectory(shared_lib)
+add_subdirectory(python_extension)

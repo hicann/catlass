@@ -8,11 +8,16 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 
 import os
-import sys
+import logging
 import subprocess
+import sys
+import time
+
 from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext
-import time
+
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 
 class CMakeExtension(Extension):
@@ -40,17 +45,24 @@ class CMakeBuild(build_ext):
         if not os.path.exists(self.build_temp):
             os.makedirs(self.build_temp)
 
-        subprocess.check_call(["cmake", ext.sourcedir] +
+        subprocess.check_call(["cmake", os.path.join(ext.sourcedir, "../../")] +
                               cmake_args, cwd=self.build_temp)
         subprocess.check_call(
-            ["cmake", "--build", ".", "-j"] + build_args, cwd=self.build_temp)
+            ["cmake", "--build", ".", "--target", "_C", "-j"] + build_args, cwd=self.build_temp)
 
     def generate_pyi(self, ext):
         extdir = os.path.abspath(os.path.dirname(
             self.get_ext_fullpath(ext.name)))
         module_name = ext.name.split(".")[-1]
         stubgen_args = [module_name, "--output-dir", extdir]
-        subprocess.check_call(["pybind11-stubgen"] + stubgen_args, cwd=extdir)
+        stubgen_bin = os.path.join(os.path.dirname(
+            sys.executable), "pybind11-stubgen")
+        try:
+            subprocess.check_call([stubgen_bin] + stubgen_args, cwd=extdir)
+        except FileNotFoundError as e:
+            logging.warning("No pybind11-stubgen found")
+        except subprocess.CalledProcessError as e:
+            logging.warning("pybind11-stubgen exited abnormally")
 
 
 version = f"0.1.0.{time.strftime('%Y%m%d%H%M%S')}"

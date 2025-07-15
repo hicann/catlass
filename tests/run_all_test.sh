@@ -7,7 +7,13 @@ python3 "$SCRIPT_PATH/test_example.py"
 
 # python extension
 bash "$BUILD_SCRIPT_PATH" --clean python_extension || exit 1
-pip install "$SCRIPT_PATH/../output/python_extension/*.whl"
+WHEEL_DIR="$SCRIPT_PATH/../output/python_extension/"
+WHEEL_FILE=$(find "$WHEEL_DIR" -type f -name "torch_catlass-*.whl" 2>/dev/null | head -n 1)
+if [ -z "$WHEEL_FILE" ]; then
+    echo "Error: No .whl file found in $WHEEL_DIR"
+    exit 1
+fi
+pip install "$WHEEL_FILE"
 python3 "$SCRIPT_PATH/test_python_extension.py"
 pip uninstall torch_catlass
 

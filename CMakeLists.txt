@@ -9,16 +9,28 @@
 cmake_minimum_required(VERSION 3.15)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-project(Catlass)
+set(ASCEND_CMAKE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules)
+list(APPEND CMAKE_MODULE_PATH ${ASCEND_CMAKE_PATH})
+project(Catlass LANGUAGES ASCEND CXX)
 
 if(NOT DEFINED ENV{ASCEND_HOME_PATH})
     message(FATAL_ERROR "Cannot find ASCEND_HOME_PATH, please run set_env.sh.")
 else()
     set(ASCEND_HOME_PATH $ENV{ASCEND_HOME_PATH})
 endif()
-set(CMAKE_BISHENG_COMPILER bisheng)
 
-file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+if(NOT DEFINED CMAKE_BUILD_TYPE OR NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "Release")
+endif()
+
+# Compile options for secure compile
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    set(CMAKE_SKIP_RPATH TRUE)
+    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fstack-protector-strong>)
+    add_compile_options("SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-Xhost-start -fstack-protector-strong -Xhost-end>")
+    add_link_options(-Wl,-z,relro,-z,now)
+    add_link_options(-Wl,-z,noexecstack)
+    add_link_options(-s)
+endif()
 
 add_subdirectory(examples)

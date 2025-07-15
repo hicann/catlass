@@ -6,7 +6,5 @@
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 # See LICENSE in the root of the software repository for the full text of the License.
 
-catlass_example_add_executable(
-    00_basic_matmul
-    basic_matmul.cpp
-)
+set_source_files_properties(basic_matmul.cpp PROPERTIES LANGUAGE ASCEND)
+catlass_example_add_executable(00_basic_matmul dav-c220 basic_matmul.cpp)

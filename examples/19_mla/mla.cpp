@@ -13,7 +13,8 @@
 #ifndef K_MAX_SHAPE_DIM
 #define K_MAX_SHAPE_DIM 0
 #endif
-
+#include <iostream>
+#include <fstream>
 // Helper methods to check for errors
 #include "helper.hpp"
 #include "golden.hpp"
@@ -21,7 +22,7 @@
 #include "mla_kernel_tp1_spec.cpp"
 #include "fp16_t.h"
 #include "bfloat16.h"
-#include "mla_tiling.cpp"
+#include "mla_tiling.h"
 
 using namespace std;
 using fp16_t = op::fp16_t;

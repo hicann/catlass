@@ -79,11 +79,15 @@ BasicMatmul<<<BLOCK_NUM, nullptr, stream>>>(
         options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC);
 ```
 ### 算子编译
-使用cmake，调用`catlass_example_add_executable`函数指定target名称和编译文件。如下所示，00_basic_matmul为target名称，basic_matmul.cpp为需要编译的文件。
+- 设置源代码对应的编译语言，可以混合使用纯C++代码和算子代码。对于算子文件，需要设定语言为ASCEND。
+- 调用`catlass_example_add_executable`函数指定target名称和编译文件。
+- 如下所示，`00_basic_matmul`为target名称，`basic_matmul.cpp`为需要编译的文件，`dav-c220`为NPU核心代号，一般填写`dav-c220`即可。
 ```
 # CMakeLists.txt
+set_source_files_properties(basic_matmul.cpp PROPERTIES LANGUAGE ASCEND)
 catlass_example_add_executable(
     00_basic_matmul
+    dav-c220
     basic_matmul.cpp
 )
 ```
@@ -95,9 +99,9 @@ bash scripts/build.sh catlass_examples
 bash scripts/build.sh 00_basic_matmul
 ```
 ### 算子执行
-切换到可执行文件的编译目录`build/bin`下，执行算子样例程序。
+切换到可执行文件的编译目录`output/bin`下，执行算子样例程序。
 ```
-cd build/bin
+cd output/bin
 # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID（可选）
 ./00_basic_matmul 256 512 1024 0
 ```

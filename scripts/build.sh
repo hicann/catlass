@@ -8,76 +8,133 @@
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 # See LICENSE in the root of the software repository for the full text of the License.
 
-SCRIPT_PATH=$(dirname "$(realpath "$0")")
-CMAKE_SOURCE_PATH=$(realpath "$SCRIPT_PATH"/..)
+set -o errexit
+set -o nounset
+set -o pipefail
 
-CMAKE_BUILD_PATH=$CMAKE_SOURCE_PATH/build
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
 
-OUTPUT_PATH=$CMAKE_SOURCE_PATH/output
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+CMAKE_SOURCE_DIR=$(realpath "$SCRIPT_DIR/..")
+BUILD_DIR="$CMAKE_SOURCE_DIR/build"
+OUTPUT_DIR="$CMAKE_SOURCE_DIR/output"
 
-if [[ $# -eq 0 ]]; then
-    echo "Usage: bash build.sh [--clean] [target]"
-    exit 0
-fi
+echo -e "  ____    _  _____ _        _    ____ ____  "
+echo -e " / ___|  / \|_   _| |      / \  / ___/ ___| "
+echo -e "| |     / _ \ | | | |     / _ \ \___ \___ \ "
+echo -e "| |___ / ___ \| | | |___ / ___ \ ___) |__) |"
+echo -e " \____/_/   \_\_| |_____/_/   \_\____/____/ "
 
-TARGET=${!#}
-echo "Target is: $TARGET"
-CMAKE_BUILD_TYPE=Release
+function show_help() {
+    echo -e "${GREEN}Usage:${NC} $0 [options] <target>"
+    echo -e "\n${BLUE}Options:${NC}"
+    echo "  --clean         Clean build directories"
+    echo "  --debug         Build in debug mode"
+    echo "  --msdebug       Enable msdebug support"
+    echo "  --enable_msprof Enable msprofiling"
+    echo "  -D<option>      Additional CMake options"
+    echo -e "\n${BLUE}Targets:${NC}"
+    echo "  catlass_examples  Build Catlass examples"
+    echo "  python_extension  Build Python extension"
+    echo "  torch_library     Build Torch library"
+    echo "  <other>           Other CMake targets"
+}
 
-mkdir -p "$CMAKE_BUILD_PATH"
+TARGET=""
+CMAKE_BUILD_TYPE="Release"
+declare -a CMAKE_OPTIONS=()
+CLEAN=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
         --clean)
-            rm -rf build
-            rm -rf output
+            CLEAN=true
             ;;
         --debug)
-            echo "Hint: only python extension support debug mode."
-            CMAKE_BUILD_TYPE=Debug
+            CMAKE_BUILD_TYPE="Debug"
+            echo -e "${YELLOW}Debug mode enabled${NC}"
             ;;
-        --*)
-            echo "Unknown option: $1"
+        --msdebug)
+            CMAKE_OPTIONS+=("-DENABLE_MSDEBUG=True")
+            ;;
+        --enable_msprof)
+            CMAKE_OPTIONS+=("-DENABLE_MSPROF=True")
+            ;;
+        -D*)
+            CMAKE_OPTIONS+=("$1")
+            ;;
+        *)
+            if [[ -z "$TARGET" ]]; then
+                TARGET="$1"
+            else
+                echo -e "${RED}Error: Multiple targets specified${NC}" >&2
+                show_help
+                exit 1
+            fi
             ;;
     esac
     shift
 done
 
-function build_shared_lib() {
-    cd "$CMAKE_SOURCE_PATH"/examples/shared_lib || exit
-    rm -rf build
-    cmake --no-warn-unused-cli -B build -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" -DCMAKE_INSTALL_PREFIX="$OUTPUT_PATH"/shared_lib -DCATLASS_INCLUDE_DIR="$CMAKE_SOURCE_PATH"/include
-    cmake --build build -j
-    cmake --install build
-    cd "$CMAKE_SOURCE_PATH" || exit
+if [[ "$CLEAN" == true ]]; then
+    echo -e "${BLUE}Cleaning build directories...${NC}"
+    rm -rf "$BUILD_DIR" "$OUTPUT_DIR"
+    echo -e "${GREEN}Clean complete${NC}"
+fi
+
+if [[ -z "$TARGET" ]]; then
+    echo -e "${RED}Error: No target specified${NC}" >&2
+    show_help
+    exit 1
+fi
+
+mkdir -p "$BUILD_DIR" "$OUTPUT_DIR"
+
+function build_python_extension() {
+    echo -e "${BLUE}Building Python extension...${NC}"
+    cd "$CMAKE_SOURCE_DIR/examples/python_extension" || exit 1
+    rm -rf build dist ./*.egg-info
+    python3 setup.py bdist_wheel --dist-dir "$OUTPUT_DIR/python_extension"
+    echo -e "${GREEN}Python extension built successfully${NC}"
 }
 
 function build_torch_library() {
-    cd "$CMAKE_SOURCE_PATH"/examples/python_extension || exit
-    rm -rf build
-    cmake --no-warn-unused-cli -B build -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" -DCMAKE_INSTALL_PREFIX="$OUTPUT_PATH"/python_extension -DCATLASS_INCLUDE_DIR="$CMAKE_SOURCE_PATH"/include -DPython3_EXECUTABLE="$(which python3)" -DBUILD_TORCH_LIB=True
-    cmake --build build -j
-    cmake --install build
-    cd "$CMAKE_SOURCE_PATH" || exit
+    echo -e "${BLUE}Building Torch library...${NC}"
+    cmake -B build \
+        -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
+        -DCMAKE_INSTALL_PREFIX="$OUTPUT_DIR/python_extension" \
+        -DCATLASS_INCLUDE_DIR="$CMAKE_SOURCE_DIR/include" \
+        -DPython3_EXECUTABLE="$(which python3)" \
+        -DBUILD_TORCH_LIB=True
+    cmake --build build --target catlass_torch -j
+    cmake --install build --component catlass_torch
+    echo -e "${GREEN}Torch library built successfully${NC}"
 }
 
-function build_python_extension() {
-    cd "$CMAKE_SOURCE_PATH"/examples/python_extension || exit
-    rm -rf build
-    python3 setup.py bdist_wheel --dist-dir "$OUTPUT_PATH"/python_extension
-    cd "$CMAKE_SOURCE_PATH" || exit
-}
-
-if [[ "$TARGET" == "shared_lib" ]]; then
-    build_shared_lib
-elif [[  "$TARGET" == "lib_cmake" ]]; then
-    cmake -DENABLE_LIB=ON -S "$CMAKE_SOURCE_PATH" -B "$CMAKE_BUILD_PATH"
-    cmake --build "$CMAKE_BUILD_PATH"
-elif [[ "$TARGET" == "python_extension" ]]; then
-    build_python_extension
-elif [[ "$TARGET" == "torch_library" ]]; then
-    build_torch_library
-else
-    cmake --no-warn-unused-cli -S"$CMAKE_SOURCE_PATH" -B"$CMAKE_BUILD_PATH"
-    cmake --build "$CMAKE_BUILD_PATH" --target "$TARGET" -j
-fi
+# 执行构建
+case "$TARGET" in
+    python_extension)
+        build_python_extension
+        ;;
+    torch_library)
+        build_torch_library
+        ;;
+    *)
+        echo -e "${BLUE}Building target: $TARGET...${NC}"
+        cmake -S "$CMAKE_SOURCE_DIR" -B "$BUILD_DIR" \
+            -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
+            -DCMAKE_INSTALL_PREFIX="$OUTPUT_DIR" \
+            "${CMAKE_OPTIONS[@]}"
+        cmake --build "$BUILD_DIR" --target "$TARGET" -j
+        cmake --install "$BUILD_DIR" --component "$TARGET"
+        echo -e "${GREEN}Target '$TARGET' built successfully${NC}"
+        ;;
+esac

@@ -6,7 +6,5 @@
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 # See LICENSE in the root of the software repository for the full text of the License.
 
-catlass_example_add_executable(
-    04_padding_matmul
-    padding_matmul.cpp
-)
+set_source_files_properties(padding_matmul.cpp PROPERTIES LANGUAGE ASCEND)
+catlass_example_add_executable(04_padding_matmul dav-c220 padding_matmul.cpp)
