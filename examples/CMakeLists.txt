@@ -35,7 +35,7 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/include
 )
 link_directories(${ASCEND_HOME_PATH}/lib64)
-link_libraries(tiling_api platform c_sec nnopbase ascendcl)
+link_libraries(dl tiling_api platform c_sec nnopbase ascendcl)
 
 foreach(EXAMPLE
     00_basic_matmul
