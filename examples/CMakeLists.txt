@@ -86,7 +86,6 @@ else()
         17_gemv_aiv
         18_gemv_aic
         19_mla
-        20_matmul_bias
         print_and_dump
     )
         add_subdirectory(${EXAMPLE})
