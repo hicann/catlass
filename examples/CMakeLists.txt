@@ -9,6 +9,11 @@
 set(CATLASS_EXAMPLES_COMMON_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/common)
 set(BISHENG_COMPILER_OPTIONS
     -O2 -std=c++17 -xcce
+    -Xhost-start
+    -Wl,-z,relro,-z,now
+    -fstack-protector-strong
+    -s 
+    -Xhost-end
     -mllvm -cce-aicore-stack-size=0x8000
     -mllvm -cce-aicore-function-stack-size=0x8000
     -mllvm -cce-aicore-record-overflow=true
