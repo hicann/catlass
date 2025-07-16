@@ -45,6 +45,7 @@ function show_help() {
     echo "  --clean         Clean build directories"
     echo "  --debug         Build in debug mode"
     echo "  --msdebug       Enable msdebug support"
+    echo "  --simulator     Compile example in simulator mode"
     echo "  --enable_msprof Enable msprofiling"
     echo "  -D<option>      Additional CMake options"
     echo -e "\n${BLUE}Targets:${NC}"
