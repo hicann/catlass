@@ -120,9 +120,8 @@ auto MakeLayoutFromTag(LayoutTag const& tag)
     static_assert(std::is_same_v<LayoutTag, Catlass::layout::RowMajor> ||
                   std::is_same_v<LayoutTag, Catlass::layout::ColumnMajor> ||
                   std::is_same_v<LayoutTag, Catlass::layout::zN> || std::is_same_v<LayoutTag, Catlass::layout::nZ>,
-        "Unsupported LayoutTag for MakeLayoutFromTag, 
-        only support Catlass::layout::RowMajor 
-        or Catlass::layout::ColumnMajor or Catlass::layout::zN or Catlass::layout::nZ");
+        "Unsupported LayoutTag for MakeLayoutFromTag, only support Catlass::layout::RowMajor or"
+        "Catlass::layout::ColumnMajor or Catlass::layout::zN or Catlass::layout::nZ");
 
     if constexpr (std::is_same_v<LayoutTag, Catlass::layout::RowMajor>) {
         return MakeLayout(MakeShape(tag.shape(0), tag.shape(1)), MakeStride(tag.stride(0), Int<1>{}));
