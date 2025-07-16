@@ -37,7 +37,7 @@ using namespace Catlass;
 using fp16_t = op::fp16_t;
 
 struct Options {
-    const std::string HELPER = "00_basic_matmul m n k [device_id]";
+    const std::string HELPER = "21_basic_matmul_preload_zN m n k [device_id]";
 
     GemmCoord problemShape{128, 128, 128};
     int32_t deviceId{0};
@@ -89,11 +89,13 @@ void Run(Options const &options)
     size_t sizeB = lenB * sizeof(fp16_t);
     size_t sizeC = lenC * sizeof(fp16_t);
 
+    //LayoutB 非转置使用zN，转置使用nZ
+    //需要在适配层 include\catlass\gemm\kernel\basic_matmul_preload.hpp：ToUnderlyingArguments()中同步修改
     using LayoutA = layout::RowMajor;
     using LayoutB = layout::zN;
     using LayoutC = layout::RowMajor;
     LayoutA layoutA{m, k};
-    LayoutB layoutB = layout::zN::MakeLayout<fp16_t>(k, n);
+    LayoutB layoutB = LayoutB::MakeLayout<fp16_t>(k, n);
     LayoutC layoutC{m, n};
 
     std::vector<fp16_t> hostA(lenA);

@@ -6,6 +6,8 @@
 │   ├── README.md
 │   └── basic_matmul_preload_zN.cpp # 主文件
 ```
+## 功能介绍
+该算子在00_basic_matmul基础上支持B矩阵NZ输入（非转置使用zN，转置使用nZ），并使用MmadAtlasA2Preload的DispatchPolicy。
 ## 使用示例
 - 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/quickstart.md#算子编译)
 - 执行算子
