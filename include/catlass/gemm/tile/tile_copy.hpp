@@ -122,8 +122,9 @@ template <
     bool IS_PADDING_B = false
 >
 struct PaddingPackedTileCopyTla {
-    static_assert(std::is_same_v<LayoutTagA, layout::RowMajor> || std::is_same_v<LayoutTagA, layout::ColumnMajor>,
-        "Unsupported layout, only can be RowMajor and ColumnMajor");
+    static_assert(std::is_same_v<LayoutTagA, layout::RowMajor> || std::is_same_v<LayoutTagA, layout::ColumnMajor> 
+        || std::is_same_v<LayoutTagA, layout::zN> || std::is_same_v<LayoutTagA, layout::nZ>,
+        "Unsupported layout, only can be RowMajor, ColumnMajor, zN and nZ");
     static_assert(std::is_same_v<LayoutTagB, layout::RowMajor> || std::is_same_v<LayoutTagB, layout::ColumnMajor> 
         || std::is_same_v<LayoutTagB, layout::zN> || std::is_same_v<LayoutTagB, layout::nZ>,
         "Unsupported layout, only can be RowMajor, ColumnMajor, zN and nZ");

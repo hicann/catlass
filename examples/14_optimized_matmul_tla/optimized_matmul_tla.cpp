@@ -35,6 +35,9 @@
 using namespace Catlass;
 using namespace tla;
 using fp16_t = op::fp16_t;
+using ElementA = half;
+using ElementB = half;
+using ElementC = half;
 
 template <
     class LayoutA,
@@ -128,9 +131,7 @@ void OptimizedMatmul(
     GM_ADDR gmWA, GM_ADDR gmWB
 )
 {
-    using ElementA = half;
-    using ElementB = half;
-    using ElementC = half;
+
     using ArchTag = Arch::AtlasA2;
     AscendC::SetSyncBaseAddr(fftsAddr);
 
@@ -308,7 +309,7 @@ void Run(Options const &options)
 
     const uint32_t align = 256;
     using LayoutA = layout::RowMajor;
-    using LayoutB = layout::zN;
+    using LayoutB = layout::nZ; // 非转置使用zN，转置使用nZ
     using LayoutC = layout::RowMajor;
     LayoutA layoutA = LayoutA::MakeLayout<ElementA>(m, k);
     LayoutB layoutB = LayoutB::MakeLayout<ElementB>(k, n);
@@ -316,9 +317,9 @@ void Run(Options const &options)
     bool isNeedPaddingA = IsNeedPadding(layoutA, align);
     bool isNeedPaddingB = IsNeedPadding(layoutB, align);
 
-    size_t lenA = layoutA::Capacity();
-    size_t lenB = layoutB::Capacity();
-    size_t lenC = layoutC::Capacity();
+    size_t lenA = layoutA.Capacity();
+    size_t lenB = layoutB.Capacity();
+    size_t lenC = layoutC.Capacity();
 
     size_t sizeA = lenA * sizeof(fp16_t);
     size_t sizeB = lenB * sizeof(fp16_t);
@@ -380,26 +381,33 @@ void Run(Options const &options)
             deviceA, layoutA, deviceB, layoutB, deviceC, layoutC, deviceWA, deviceWB
         );
     } else if (isNeedPaddingA && !isNeedPaddingB) {
-        constexpr const bool isPaddingA = true;
-        constexpr const bool isPaddingB = false;
-        OptimizedMatmul<LayoutA, LayoutB, LayoutC, isPaddingA, isPaddingB><<<aicCoreNum, nullptr, stream>>>(
-            fftsAddr, options.problemShape,
-            deviceA, layoutA, deviceB, layoutB, deviceC, layoutC, deviceWA, deviceWB
-        );
+        if constexpr (std::is_same_v<LayoutA, layout::RowMajor> || std::is_same_v<LayoutA, layout::ColumnMajor>) {
+            constexpr const bool isPaddingA = true;
+            constexpr const bool isPaddingB = false;
+            OptimizedMatmul<LayoutA, LayoutB, LayoutC, isPaddingA, isPaddingB><<<aicCoreNum, nullptr, stream>>>(
+                fftsAddr, options.problemShape,
+                deviceA, layoutA, deviceB, layoutB, deviceC, layoutC, deviceWA, deviceWB
+            );
+        }
     } else if (!isNeedPaddingA && isNeedPaddingB) {
-        constexpr const bool isPaddingA = false;
-        constexpr const bool isPaddingB = true;
-        OptimizedMatmul<LayoutA, LayoutB, LayoutC, isPaddingA, isPaddingB><<<aicCoreNum, nullptr, stream>>>(
-            fftsAddr, options.problemShape,
-            deviceA, layoutA, deviceB, layoutB, deviceC, layoutC, deviceWA, deviceWB
-        );
+        if constexpr (std::is_same_v<LayoutB, layout::RowMajor> || std::is_same_v<LayoutB, layout::ColumnMajor>) {
+            constexpr const bool isPaddingA = false;
+            constexpr const bool isPaddingB = true;
+            OptimizedMatmul<LayoutA, LayoutB, LayoutC, isPaddingA, isPaddingB><<<aicCoreNum, nullptr, stream>>>(
+                fftsAddr, options.problemShape,
+                deviceA, layoutA, deviceB, layoutB, deviceC, layoutC, deviceWA, deviceWB
+            );
+        }
     } else {
-        constexpr const bool isPaddingA = true;
-        constexpr const bool isPaddingB = true;
-        OptimizedMatmul<LayoutA, LayoutB, LayoutC, isPaddingA, isPaddingB><<<aicCoreNum, nullptr, stream>>>(
-            fftsAddr, options.problemShape,
-            deviceA, layoutA, deviceB, layoutB, deviceC, layoutC, deviceWA, deviceWB
-        );
+        if constexpr ((std::is_same_v<LayoutA, layout::RowMajor> || std::is_same_v<LayoutA, layout::ColumnMajor>) && 
+                      (std::is_same_v<LayoutB, layout::RowMajor> || std::is_same_v<LayoutB, layout::ColumnMajor>)) {
+            constexpr const bool isPaddingA = true;
+            constexpr const bool isPaddingB = true;
+            OptimizedMatmul<LayoutA, LayoutB, LayoutC, isPaddingA, isPaddingB><<<aicCoreNum, nullptr, stream>>>(
+                fftsAddr, options.problemShape,
+                deviceA, layoutA, deviceB, layoutB, deviceC, layoutC, deviceWA, deviceWB
+            );
+        }
     }
     ACL_CHECK(aclrtSynchronizeStream(stream));
 

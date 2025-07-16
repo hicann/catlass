@@ -114,12 +114,22 @@ struct L1ATypeSelector<Gemm::GemmType<Element, layout::PaddingRowMajor>> {
 };
 
 template<class Element>
+struct L1ATypeSelector<Gemm::GemmType<Element, layout::zN>> {
+    using L1AType = Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>;
+};
+
+template<class Element>
 struct L1ATypeSelector<Gemm::GemmType<Element, layout::ColumnMajor>> {
     using L1AType = Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::A1>;
 };
 
 template<class Element>
 struct L1ATypeSelector<Gemm::GemmType<Element, layout::PaddingColumnMajor>> {
+    using L1AType = Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::A1>;
+};
+
+template<class Element>
+struct L1ATypeSelector<Gemm::GemmType<Element, layout::nZ>> {
     using L1AType = Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::A1>;
 };
 
