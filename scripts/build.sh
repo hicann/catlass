@@ -14,7 +14,7 @@ set -o pipefail
 
 function get_npu_model(){
     if command -v npu-smi &> /dev/null; then
-        echo "Ascend$(npu-smi info -t board -i 0 -c 0 | grep \"Chip Name\" | awk '{print $NF}')"
+        echo "Ascend$(npu-smi info -t board -i 0 -c 0 | awk '/Chip Name/ {print $NF}')"
         return 1
     else
         echo "Ascend910B1"
