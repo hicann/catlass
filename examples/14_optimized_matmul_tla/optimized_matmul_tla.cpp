@@ -308,7 +308,7 @@ void Run(Options const &options)
 
     const uint32_t align = 256;
     using LayoutA = layout::RowMajor;
-    using LayoutB = layout::ColumnMajor;
+    using LayoutB = layout::zN;
     using LayoutC = layout::RowMajor;
     LayoutA layoutA = LayoutA::MakeLayout<ElementA>(m, k);
     LayoutB layoutB = LayoutB::MakeLayout<ElementB>(k, n);

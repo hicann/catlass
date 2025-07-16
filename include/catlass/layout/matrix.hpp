@@ -449,7 +449,7 @@ public:
     CATLASS_HOST_DEVICE
     size_t Capacity()
     {
-        return static_cast<size_t>(shape_[0]) * shape_[1] * shape_[2] * shape_[3];
+        return static_cast<size_t>(stride_[1]) * shape_[1];
     }
 
 private:
@@ -640,7 +640,7 @@ public:
     CATLASS_HOST_DEVICE
     size_t Capacity()
     {
-        return static_cast<size_t>(shape_[0]) * shape_[1] * shape_[2] * shape_[3];
+        return static_cast<size_t>(stride_[3]) * shape_[3];
     }
 
 private:
