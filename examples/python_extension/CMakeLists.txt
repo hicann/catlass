@@ -10,6 +10,11 @@ set(CATLASS_SHARED_LIB_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../shared_lib)
 set(CATLASS_SHARED_LIB_INCLUDE_DIR ${CATLASS_SHARED_LIB_SRC_DIR}/include)
 set(CATLASS_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/../../include)
 
+if(NOT BUILD_PYBIND AND NOT BUILD_TORCH_LIB)
+    message("NOT build python extension, skip python related dependencies check.")
+    return()
+endif()
+
 if(NOT DEFINED Python3_EXECUTABLE)
     message(WARNING "Python3_EXECUTABLE is not defined, using default python3")
 else()
