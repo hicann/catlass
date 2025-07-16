@@ -375,37 +375,35 @@ void Run(Options const &options)
     if (!isNeedPaddingA && !isNeedPaddingB) {
         constexpr const bool isPaddingA = false;
         constexpr const bool isPaddingB = false;
-        OptimizedMatmul<LayoutTagA, LayoutTagB, LayoutTagC, isPaddingA, isPaddingB><<<aicCoreNum, nullptr, stream>>>(
-            fftsAddr, options.problemShape,
-            deviceA, tagA, deviceB, tagB, deviceC, tagC, deviceWA, deviceWB
-        );
+        OptimizedMatmul<LayoutTagA, LayoutTagB, LayoutTagC, isPaddingA, isPaddingB>
+            <<<aicCoreNum, nullptr, stream>>>(
+                fftsAddr, options.problemShape, deviceA, tagA, deviceB, tagB, deviceC, tagC, deviceWA, deviceWB);
     } else if (isNeedPaddingA && !isNeedPaddingB) {
         if constexpr (std::is_same_v<LayoutTagA, layout::RowMajor> || std::is_same_v<LayoutTagA, layout::ColumnMajor>) {
             constexpr const bool isPaddingA = true;
             constexpr const bool isPaddingB = false;
-            OptimizedMatmul<LayoutTagA, LayoutTagB, LayoutTagC, isPaddingA, isPaddingB><<<aicCoreNum, nullptr, stream>>>(
-                fftsAddr, options.problemShape,
-                deviceA, tagA, deviceB, tagB, deviceC, tagC, deviceWA, deviceWB
-            );
+            OptimizedMatmul<LayoutTagA, LayoutTagB, LayoutTagC, isPaddingA, isPaddingB>
+                <<<aicCoreNum, nullptr, stream>>>(
+                fftsAddr, options.problemShape, deviceA, tagA, deviceB, tagB, deviceC, tagC, deviceWA, deviceWB);
         }
     } else if (!isNeedPaddingA && isNeedPaddingB) {
         if constexpr (std::is_same_v<LayoutTagB, layout::RowMajor> || std::is_same_v<LayoutTagB, layout::ColumnMajor>) {
             constexpr const bool isPaddingA = false;
             constexpr const bool isPaddingB = true;
-            OptimizedMatmul<LayoutTagA, LayoutTagB, LayoutTagC, isPaddingA, isPaddingB><<<aicCoreNum, nullptr, stream>>>(
-                fftsAddr, options.problemShape,
-                deviceA, tagA, deviceB, tagB, deviceC, tagC, deviceWA, deviceWB
-            );
+            OptimizedMatmul<LayoutTagA, LayoutTagB, LayoutTagC, isPaddingA, isPaddingB>
+                <<<aicCoreNum, nullptr, stream>>>(
+                    fftsAddr, options.problemShape, deviceA, tagA, deviceB, tagB, deviceC, tagC, deviceWA, deviceWB);
         }
     } else {
-        if constexpr ((std::is_same_v<LayoutTagA, layout::RowMajor> || std::is_same_v<LayoutTagA, layout::ColumnMajor>) &&
-                      (std::is_same_v<LayoutTagB, layout::RowMajor> || std::is_same_v<LayoutTagB, layout::ColumnMajor>)) {
+        if constexpr ((std::is_same_v<LayoutTagA, layout::RowMajor> ||
+                       std::is_same_v<LayoutTagA, layout::ColumnMajor>) &&
+                      (std::is_same_v<LayoutTagB, layout::RowMajor> ||
+                       std::is_same_v<LayoutTagB, layout::ColumnMajor>)) {
             constexpr const bool isPaddingA = true;
             constexpr const bool isPaddingB = true;
-            OptimizedMatmul<LayoutTagA, LayoutTagB, LayoutTagC, isPaddingA, isPaddingB><<<aicCoreNum, nullptr, stream>>>(
-                fftsAddr, options.problemShape,
-                deviceA, tagA, deviceB, tagB, deviceC, tagC, deviceWA, deviceWB
-            );
+            OptimizedMatmul<LayoutTagA, LayoutTagB, LayoutTagC, isPaddingA, isPaddingB>
+            <<<aicCoreNum, nullptr, stream>>>(
+                fftsAddr, options.problemShape, deviceA, tagA, deviceB, tagB, deviceC, tagC, deviceWA, deviceWB);
         }
     }
     ACL_CHECK(aclrtSynchronizeStream(stream));
