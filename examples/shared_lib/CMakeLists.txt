@@ -13,6 +13,9 @@ endif()
 set(CMAKE_BISHENG_COMPILER bisheng)
 set(BISHENG_COMPILER_OPTIONS
     -O2 -std=c++17 -xcce -fPIC
+    -Xhost-start
+    -fstack-protector-strong
+    -Xhost-end
     -mllvm -cce-aicore-stack-size=0x8000
     -mllvm -cce-aicore-function-stack-size=0x8000
     -mllvm -cce-aicore-record-overflow=true
@@ -36,6 +39,8 @@ set(BISHENG_COMPILER_OPTIONS
 
 set(BISHENG_LINK_OPTIONS
     --cce-fatobj-link
+    -Wl,-z,relro,-z,now
+    -s
     -L${ASCEND_HOME_PATH}/lib64
     -lruntime -lstdc++ -lascendcl -lm -ltiling_api -lplatform -lc_sec -ldl -lnnopbase
 )
