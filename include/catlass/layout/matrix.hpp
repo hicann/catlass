@@ -136,7 +136,7 @@ public:
         return stride_[idx];
     }
 
-    /// Returns the length of the layout 
+    /// Returns the length of the layout
     CATLASS_HOST_DEVICE
     size_t Capacity()
     {
@@ -268,7 +268,7 @@ public:
         return stride_[idx];
     }
 
-    /// Returns the length of the layout 
+    /// Returns the length of the layout
     CATLASS_HOST_DEVICE
     size_t Capacity()
     {
@@ -445,7 +445,7 @@ public:
         return stride_[idx];
     }
 
-    /// Returns the length of the layout 
+    /// Returns the length of the layout
     CATLASS_HOST_DEVICE
     size_t Capacity()
     {
@@ -636,7 +636,7 @@ public:
         return stride_[idx];
     }
 
-    /// Returns the length of the layout 
+    /// Returns the length of the layout
     CATLASS_HOST_DEVICE
     size_t Capacity()
     {

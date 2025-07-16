@@ -117,16 +117,19 @@ template <class LayoutTag>
 CATLASS_HOST_DEVICE constexpr
 auto MakeLayoutFromTag(LayoutTag const& tag)
 {
-    static_assert(std::is_same_v<LayoutTag, Catlass::layout::RowMajor> || std::is_same_v<LayoutTag, Catlass::layout::ColumnMajor> 
-        || std::is_same_v<LayoutTag, Catlass::layout::zN> || std::is_same_v<LayoutTag, Catlass::layout::nZ>,
-        "Unsupported LayoutTag for MakeLayoutFromTag, only support Catlass::layout::RowMajor or Catlass::layout::ColumnMajor or Catlass::layout::zN or Catlass::layout::nZ");
+    static_assert(std::is_same_v<LayoutTag, Catlass::layout::RowMajor> ||
+                  std::is_same_v<LayoutTag, Catlass::layout::ColumnMajor> ||
+                  std::is_same_v<LayoutTag, Catlass::layout::zN> || std::is_same_v<LayoutTag, Catlass::layout::nZ>,
+        "Unsupported LayoutTag for MakeLayoutFromTag, 
+        only support Catlass::layout::RowMajor 
+        or Catlass::layout::ColumnMajor or Catlass::layout::zN or Catlass::layout::nZ");
 
     if constexpr (std::is_same_v<LayoutTag, Catlass::layout::RowMajor>) {
         return MakeLayout(MakeShape(tag.shape(0), tag.shape(1)), MakeStride(tag.stride(0), Int<1>{}));
     } else if constexpr (std::is_same_v<LayoutTag, Catlass::layout::ColumnMajor>) {
         return MakeLayout(MakeShape(tag.shape(0), tag.shape(1)), MakeStride(Int<1>{}, tag.stride(1)));
     } else { // zN or nZ
-        return MakeLayout(MakeShape(MakeShape(tag.shape(0), tag.shape(1)), MakeShape(tag.shape(2), tag.shape(3))), 
+        return MakeLayout(MakeShape(MakeShape(tag.shape(0), tag.shape(1)), MakeShape(tag.shape(2), tag.shape(3))),
                 MakeStride(MakeStride(tag.stride(0), tag.stride(1)), MakeStride(tag.stride(2), tag.stride(3))));
     }
 }
