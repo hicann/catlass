@@ -89,8 +89,8 @@ void Run(Options const &options)
     size_t sizeB = lenB * sizeof(fp16_t);
     size_t sizeC = lenC * sizeof(fp16_t);
 
-    //LayoutB 非转置使用zN，转置使用nZ
-    //需要在适配层 include\catlass\gemm\kernel\basic_matmul_preload.hpp：ToUnderlyingArguments()中同步修改
+    // LayoutB 非转置使用zN，转置使用nZ
+    // 需要在适配层 include\catlass\gemm\kernel\basic_matmul_preload.hpp：ToUnderlyingArguments()中同步修改
     using LayoutA = layout::RowMajor;
     using LayoutB = layout::zN;
     using LayoutC = layout::RowMajor;
@@ -118,9 +118,7 @@ void Run(Options const &options)
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
     using ArchTag = Arch::AtlasA2;
-    constexpr bool ENABLE_UNIT_FLAG = true;
-    constexpr bool ENABLE_SHUFFLE_K = true;
-    using DispatchPolicy = Gemm::MmadAtlasA2Preload<ENABLE_UNIT_FLAG, ENABLE_SHUFFLE_K>;
+    using DispatchPolicy = Gemm::MmadAtlasA2Preload<true, true>;
 
     using L1TileShape = GemmShape<128, 256, 256>;
     using L0TileShape = GemmShape<128, 256, 64>;
