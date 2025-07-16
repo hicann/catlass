@@ -71,8 +71,8 @@ if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
 fi
 
 if [[ ! -v ASCEND_HOME_PATH ]]; then
-    echo "${ERROR}ASCEND_HOME_PATH environment variable is not set!${NC}"
-    echo "${ERROR}Please set ASCEND_HOME_PATH before running this script.${NC}"
+    echo -e "${ERROR}ASCEND_HOME_PATH environment variable is not set!${NC}"
+    echo -e "${ERROR}Please set ASCEND_HOME_PATH before running this script.${NC}"
     exit 1
 fi
 
