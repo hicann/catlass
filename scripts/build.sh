@@ -12,6 +12,16 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
+function get_npu_model(){
+    if command -v npu-smi &> /dev/null; then
+        echo "Ascend$(npu-smi info -t board -i 0 -c 0 | grep \"Chip Name\" | awk '{print $NF}')"
+        return 1
+    else
+        echo "Ascend910B1"
+        return 0
+    fi
+}
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
@@ -48,6 +58,7 @@ TARGET=""
 CMAKE_BUILD_TYPE="Release"
 declare -a CMAKE_OPTIONS=()
 CLEAN=false
+POST_BUILD_HINT=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -65,6 +76,13 @@ while [[ $# -gt 0 ]]; do
         --msdebug)
             CMAKE_OPTIONS+=("-DENABLE_MSDEBUG=True")
             ;;
+        --simulator)
+            CMAKE_OPTIONS+=("-DENABLE_SIMULATOR=True")
+            if NPU_MODEL=$(get_npu_model); then
+                echo -e "${YELLOW}No npu-smi detected, using default model for simulator: ${NPU_MODEL}${NC}"
+            fi
+            CMAKE_OPTIONS+=("-DSIMULATOR_NPU_MODEL=${NPU_MODEL}")
+            POST_BUILD_HINT="Please run \nexport LD_LIBRARY_PATH=${ASCEND_HOME_PATH}/tools/simulator/${NPU_MODEL}/lib:\$LD_LIBRARY_PATH\nin your terminal before execute examples."            ;;
         --enable_msprof)
             CMAKE_OPTIONS+=("-DENABLE_MSPROF=True")
             ;;
@@ -138,3 +156,5 @@ case "$TARGET" in
         echo -e "${GREEN}Target '$TARGET' built successfully${NC}"
         ;;
 esac
+
+echo -e "$POST_BUILD_HINT"

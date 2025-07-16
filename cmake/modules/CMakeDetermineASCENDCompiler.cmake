@@ -33,8 +33,30 @@ set(_CMAKE_ASCEND_HOST_IMPLICIT_LINK_DIRECTORIES
 
 set(_CMAKE_ASCEND_HOST_IMPLICIT_LINK_LIBRARIES
     stdc++
-    runtime
 )
+
+if(DEFINED ENABLE_SIMULATOR AND ENABLE_SIMULATOR)
+    if(NOT DEFINED SIMULATOR_NPU_MODEL)
+        message(WARNING "Simulator mode is enabled but SIMULATOR_NPU_MODEL is not defined. Try get model from LD_LIBRARY_PATH.")
+        set(LD_LIBRARY_PATH $ENV{LD_LIBRARY_PATH})
+        string(REGEX MATCH "simulator/([^:/]*)" SUBDIR "${LD_LIBRARY_PATH}")
+        if(SUBDIR)
+            set(SIMULATOR_NPU_MODEL "${CMAKE_MATCH_1}")
+            message(STATUS "Matched SIMULATOR_NPU_MODEL: ${SIMULATOR_NPU_MODEL}")
+        else()
+            message(FATAL_ERROR "No SIMULATOR_NPU_MODEL matched!")
+        endif()
+    endif()
+
+    list(APPEND _CMAKE_ASCEND_HOST_IMPLICIT_LINK_DIRECTORIES
+        ${_CMAKE_ASCEND_HOME_PATH}/tools/simulator/${SIMULATOR_NPU_MODEL}/lib
+        ${_CMAKE_ASCEND_HOME_PATH}/acllib/lib64/stub)
+    list(APPEND _CMAKE_ASCEND_HOST_IMPLICIT_LINK_LIBRARIES
+        runtime_camodel)
+else()
+    list(APPEND _CMAKE_ASCEND_HOST_IMPLICIT_LINK_LIBRARIES
+        runtime)
+endif()
 
 if(DEFINED ENABLE_MSPROF AND ENABLE_MSPROF)
     list(APPEND _CMAKE_ASCEND_HOST_IMPLICIT_LINK_LIBRARIES profapi)
