@@ -1310,6 +1310,39 @@ struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSr
     }
 };
 
+/// Partial specialization for TileCopyTlaExt, CopyGmToL1, AtlasA2, zN in and zN out.
+template <class ElementSrc, class ElementDst, class LayoutSrc_, class LayoutDst_>
+struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::GM>,
+    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst_, AscendC::TPosition::A1>,
+    layout::zN, layout::zN> {
+    using LayoutDst = LayoutDst_;
+    using LayoutSrc = LayoutSrc_;
+    using TensorDst = tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, AscendC::TPosition::A1>;
+    using TensorSrc = tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, AscendC::TPosition::GM>;
+    using ActualShape = tla::Shape<uint32_t, uint32_t>;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
+
+    // Mehtods
+
+    CATLASS_DEVICE
+    TileCopyTlaExt() {};
+
+    CATLASS_DEVICE
+    void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor, ActualShape actualShape)
+    {
+        uint32_t blockCount = tla::get<1, 1>(srcTensor.shape());
+        uint32_t blockLen = tla::get<0, 0>(srcTensor.shape()) * tla::get<0, 1>(srcTensor.shape());
+
+        AscendC::DataCopyParams repeatParams;
+        repeatParams.blockCount = blockCount;
+        repeatParams.blockLen = blockLen;
+        repeatParams.srcStride = tla::get<1, 1>(srcTensor.stride()) / ELE_NUM_PER_C0 - blockLen;
+        repeatParams.dstStride = tla::get<1, 1>(dstTensor.stride()) / ELE_NUM_PER_C0 - blockLen;
+        AscendC::DataCopy(dstTensor.data(), srcTensor.data(), repeatParams);
+    }
+};
+
 /// Partial specialization for TileCopyTlaExt, CopyGmToL1, AtlasA2, PaddingColumnMajor in and nZ out.
 template <class ElementSrc, class ElementDst, class LayoutSrc_, class LayoutDst_>
 struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::GM>,
@@ -1379,6 +1412,39 @@ struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSr
         intriParams.srcDValue = tla::get<1, 0>(srcTensor.stride());
         intriParams.dstNzNStride = tla::get<1, 0>(dstTensor.stride()) / ELE_NUM_PER_C0;
         AscendC::DataCopy(dstTensor.data(), srcTensor.data(), intriParams);
+    }
+};
+
+/// Partial specialization for TileCopyTlaExt, CopyGmToL1, AtlasA2, nZ in and nZ out.
+template <class ElementSrc, class ElementDst, class LayoutSrc_, class LayoutDst_>
+struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::GM>,
+    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst_, AscendC::TPosition::A1>,
+    layout::nZ, layout::nZ> {
+    using LayoutDst = LayoutDst_;
+    using LayoutSrc = LayoutSrc_;
+    using TensorDst = tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, AscendC::TPosition::A1>;
+    using TensorSrc = tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, AscendC::TPosition::GM>;
+    using ActualShape = tla::Shape<uint32_t, uint32_t>;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
+
+    // Mehtods
+
+    CATLASS_DEVICE
+    TileCopyTlaExt() {};
+
+    CATLASS_DEVICE
+    void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor, ActualShape actualShape)
+    {
+        uint32_t blockCount = tla::get<0, 1>(srcTensor.shape());
+        uint32_t blockLen = tla::get<1, 0>(srcTensor.shape()) * tla::get<1, 1>(srcTensor.shape());
+
+        AscendC::DataCopyParams repeatParams;
+        repeatParams.blockCount = blockCount;
+        repeatParams.blockLen = blockLen;
+        repeatParams.srcStride = tla::get<0, 1>(srcTensor.stride()) / ELE_NUM_PER_C0 - blockLen;
+        repeatParams.dstStride = tla::get<0, 1>(dstTensor.stride()) / ELE_NUM_PER_C0 - blockLen;
+        AscendC::DataCopy(dstTensor.data(), srcTensor.data(), repeatParams);
     }
 };
 

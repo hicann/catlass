@@ -53,6 +53,13 @@ public:
 
     template <class Element>
     CATLASS_HOST_DEVICE
+    static RowMajor MakeLayout(Index rows, Index cols)
+    {
+        return RowMajor(rows, cols);
+    }
+
+    template <class Element>
+    CATLASS_HOST_DEVICE
     static RowMajor MakeLayoutInUb(MatrixCoord const &shape)
     {
         return RowMajor(shape.row(), shape.column(), RoundUp<BYTE_PER_C0 / sizeof(Element)>(shape.column()));
@@ -129,6 +136,13 @@ public:
         return stride_[idx];
     }
 
+    /// Returns the length of the layout 
+    CATLASS_HOST_DEVICE
+    size_t Capacity()
+    {
+        return static_cast<size_t>(shape_[0]) * stride_[0];
+    }
+
 private:
     //
     // Data members
@@ -175,6 +189,13 @@ public:
     /// Ctor
     CATLASS_HOST_DEVICE
     ColumnMajor(Shape shape, Stride stride) : shape_(shape), stride_(stride) {}
+
+    template <class Element>
+    CATLASS_HOST_DEVICE
+    static ColumnMajor MakeLayout(Index rows, Index cols)
+    {
+        return ColumnMajor(rows, cols);
+    }
 
     /// Returns the offset of a coordinate in linear memory.
     /// Assumes coordinate has convention (row, column)
@@ -245,6 +266,13 @@ public:
     typename Stride::Index &stride(int idx)
     {
         return stride_[idx];
+    }
+
+    /// Returns the length of the layout 
+    CATLASS_HOST_DEVICE
+    size_t Capacity()
+    {
+        return static_cast<size_t>(shape_[1]) * stride_[1];
     }
 
 private:
@@ -415,6 +443,13 @@ public:
     typename Stride::Index &stride(int idx)
     {
         return stride_[idx];
+    }
+
+    /// Returns the length of the layout 
+    CATLASS_HOST_DEVICE
+    size_t Capacity()
+    {
+        return static_cast<size_t>(shape_[0]) * shape_[1] * shape_[2] * shape_[3];
     }
 
 private:
@@ -599,6 +634,13 @@ public:
     typename Stride::Index &stride(int idx)
     {
         return stride_[idx];
+    }
+
+    /// Returns the length of the layout 
+    CATLASS_HOST_DEVICE
+    size_t Capacity()
+    {
+        return static_cast<size_t>(shape_[0]) * shape_[1] * shape_[2] * shape_[3];
     }
 
 private:

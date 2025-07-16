@@ -282,6 +282,18 @@ bool IsNeedPadding(layout::ColumnMajor layout, uint32_t align)
     }
 }
 
+bool IsNeedPadding(layout::zN layout, uint32_t align)
+{
+    // No need to pad for zN
+    return false;
+}
+
+bool IsNeedPadding(layout::nZ layout, uint32_t align)
+{
+    // No need to pad for nZ
+    return false;
+}
+
 void Run(Options const &options)
 {
     aclrtStream stream{nullptr};
@@ -294,23 +306,23 @@ void Run(Options const &options)
     uint32_t n = options.problemShape.n();
     uint32_t k = options.problemShape.k();
 
-    size_t lenA = static_cast<size_t>(m) * k;
-    size_t lenB = static_cast<size_t>(k) * n;
-    size_t lenC = static_cast<size_t>(m) * n;
-
-    size_t sizeA = lenA * sizeof(fp16_t);
-    size_t sizeB = lenB * sizeof(fp16_t);
-    size_t sizeC = lenC * sizeof(fp16_t);
-
     const uint32_t align = 256;
     using LayoutA = layout::RowMajor;
     using LayoutB = layout::ColumnMajor;
     using LayoutC = layout::RowMajor;
-    LayoutA layoutA{m, k};
-    LayoutB layoutB{k, n};
-    LayoutC layoutC{m, n};
+    LayoutA layoutA = LayoutA::MakeLayout<ElementA>(m, k);
+    LayoutB layoutB = LayoutB::MakeLayout<ElementB>(k, n);
+    LayoutC layoutC = LayoutC::MakeLayout<ElementC>(m, n);
     bool isNeedPaddingA = IsNeedPadding(layoutA, align);
     bool isNeedPaddingB = IsNeedPadding(layoutB, align);
+
+    size_t lenA = layoutA::Capacity();
+    size_t lenB = layoutB::Capacity();
+    size_t lenC = layoutC::Capacity();
+
+    size_t sizeA = lenA * sizeof(fp16_t);
+    size_t sizeB = lenB * sizeof(fp16_t);
+    size_t sizeC = lenC * sizeof(fp16_t);
 
     // if LayoutA and LayoutB is both ColumnMajor,
     // L1TileShape using GemmShape<256, 128, 256> can achieve better performance.
