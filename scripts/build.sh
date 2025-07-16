@@ -81,6 +81,8 @@ while [[ $# -gt 0 ]]; do
             CMAKE_OPTIONS+=("-DENABLE_SIMULATOR=True")
             if NPU_MODEL=$(get_npu_model); then
                 echo -e "${YELLOW}No npu-smi detected, using default model for simulator: ${NPU_MODEL}${NC}"
+            else
+                echo -e "${GREEN} Detect NPU_MODEL: ${NPU_MODEL}"
             fi
             CMAKE_OPTIONS+=("-DSIMULATOR_NPU_MODEL=${NPU_MODEL}")
             POST_BUILD_HINT="Please run \nexport LD_LIBRARY_PATH=${ASCEND_HOME_PATH}/tools/simulator/${NPU_MODEL}/lib:\$LD_LIBRARY_PATH\nin your terminal before execute examples."            ;;
