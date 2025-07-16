@@ -12,6 +12,16 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
+NC="\033[0m"
+RED="\033[0;31m"
+GREEN="\033[0;32m"
+YELLOW="\033[0;33m"
+BLUE="\033[0;34m"
+
+ERROR="${RED}[ERROR]"
+INFO="${GREEN}[INFO]"
+WARN="${YELLOW}[WARN]"
+
 function get_npu_model(){
     if command -v npu-smi &> /dev/null; then
         echo "Ascend$(npu-smi info -t board -i 0 -c 0 | awk '/Chip Name/ {print $NF}')"
@@ -21,12 +31,6 @@ function get_npu_model(){
         return 0
     fi
 }
-
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 CMAKE_SOURCE_DIR=$(realpath "$SCRIPT_DIR/..")
@@ -52,27 +56,34 @@ function show_help() {
     echo "  catlass_examples  Build Catlass examples"
     echo "  python_extension  Build Python extension"
     echo "  torch_library     Build Torch library"
-    echo "  <other>           Other CMake targets"
+    echo "  <other>           Other specific targets, e.g. 00_basic_matmul"
 }
 
 TARGET=""
 CMAKE_BUILD_TYPE="Release"
 declare -a CMAKE_OPTIONS=()
 CLEAN=false
-POST_BUILD_HINT=""
+POST_BUILD_INFO=""
+
+if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    show_help
+    exit 0
+fi
+
+if [[ ! -v ASCEND_HOME_PATH ]]; then
+    echo "${ERROR}ASCEND_HOME_PATH environment variable is not set!${NC}"
+    echo "${ERROR}Please set ASCEND_HOME_PATH before running this script.${NC}"
+    exit 1
+fi
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        -h|--help)
-            show_help
-            exit 0
-            ;;
         --clean)
             CLEAN=true
             ;;
         --debug)
             CMAKE_BUILD_TYPE="Debug"
-            echo -e "${YELLOW}Debug mode enabled${NC}"
+            echo -e "${WARN}Debug mode enabled"
             ;;
         --msdebug)
             CMAKE_OPTIONS+=("-DENABLE_MSDEBUG=True")
@@ -80,12 +91,13 @@ while [[ $# -gt 0 ]]; do
         --simulator)
             CMAKE_OPTIONS+=("-DENABLE_SIMULATOR=True")
             if NPU_MODEL=$(get_npu_model); then
-                echo -e "${YELLOW}No npu-smi detected, using default model for simulator: ${NPU_MODEL}${NC}"
+                echo -e "${WARN}No npu-smi detected, using default model for simulator: ${NPU_MODEL}${NC}"
             else
-                echo -e "${GREEN} Detect NPU_MODEL: ${NPU_MODEL}"
+                echo -e "${INFO}Detect NPU_MODEL: ${NPU_MODEL}${NC}"
             fi
             CMAKE_OPTIONS+=("-DSIMULATOR_NPU_MODEL=${NPU_MODEL}")
-            POST_BUILD_HINT="Please run \nexport LD_LIBRARY_PATH=${ASCEND_HOME_PATH}/tools/simulator/${NPU_MODEL}/lib:\$LD_LIBRARY_PATH\nin your terminal before execute examples."            ;;
+            POST_BUILD_INFO="${INFO}Please run ${NC}\nexport LD_LIBRARY_PATH=${ASCEND_HOME_PATH}/tools/simulator/${NPU_MODEL}/lib:\$LD_LIBRARY_PATH\n${GREEN}in your terminal before execute examples.${NC}"            
+            ;;
         --enable_msprof)
             CMAKE_OPTIONS+=("-DENABLE_MSPROF=True")
             ;;
@@ -96,7 +108,7 @@ while [[ $# -gt 0 ]]; do
             if [[ -z "$TARGET" ]]; then
                 TARGET="$1"
             else
-                echo -e "${RED}Error: Multiple targets specified${NC}" >&2
+                echo -e "${ERROR}Multiple targets specified${NC}" >&2
                 show_help
                 exit 1
             fi
@@ -106,13 +118,13 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ "$CLEAN" == true ]]; then
-    echo -e "${BLUE}Cleaning build directories...${NC}"
+    echo -e "${INFO}Cleaning build directories...${NC}"
     rm -rf "$BUILD_DIR" "$OUTPUT_DIR"
-    echo -e "${GREEN}Clean complete${NC}"
+    echo -e "${INFO}Clean complete${NC}"
 fi
 
 if [[ -z "$TARGET" ]]; then
-    echo -e "${RED}Error: No target specified${NC}" >&2
+    echo -e "${ERROR}No target specified${NC}" >&2
     show_help
     exit 1
 fi
@@ -120,15 +132,15 @@ fi
 mkdir -p "$BUILD_DIR" "$OUTPUT_DIR"
 
 function build_python_extension() {
-    echo -e "${BLUE}Building Python extension...${NC}"
+    echo -e "${INFO}Building Python extension...${NC}"
     cd "$CMAKE_SOURCE_DIR/examples/python_extension" || exit 1
     rm -rf build dist ./*.egg-info
     python3 setup.py bdist_wheel --dist-dir "$OUTPUT_DIR/python_extension"
-    echo -e "${GREEN}Python extension built successfully${NC}"
+    echo -e "${INFO}Python extension built successfully${NC}"
 }
 
 function build_torch_library() {
-    echo -e "${BLUE}Building Torch library...${NC}"
+    echo -e "${INFO}Building Torch library...${NC}"
     cmake -B build \
         -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
         -DCMAKE_INSTALL_PREFIX="$OUTPUT_DIR/python_extension" \
@@ -137,7 +149,7 @@ function build_torch_library() {
         -DBUILD_TORCH_LIB=True
     cmake --build build --target catlass_torch -j
     cmake --install build --component catlass_torch
-    echo -e "${GREEN}Torch library built successfully${NC}"
+    echo -e "${INFO}Torch library built successfully${NC}"
 }
 
 # 执行构建
@@ -149,15 +161,15 @@ case "$TARGET" in
         build_torch_library
         ;;
     *)
-        echo -e "${BLUE}Building target: $TARGET...${NC}"
+        echo -e "${INFO}Building target: $TARGET...${NC}"
         cmake -S "$CMAKE_SOURCE_DIR" -B "$BUILD_DIR" \
             -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
             -DCMAKE_INSTALL_PREFIX="$OUTPUT_DIR" \
             "${CMAKE_OPTIONS[@]}"
         cmake --build "$BUILD_DIR" --target "$TARGET" -j
         cmake --install "$BUILD_DIR" --component "$TARGET"
-        echo -e "${GREEN}Target '$TARGET' built successfully${NC}"
+        echo -e "${INFO}Target '$TARGET' built successfully${NC}"
         ;;
 esac
 
-echo -e "$POST_BUILD_HINT"
+echo -e "$POST_BUILD_INFO"
