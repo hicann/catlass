@@ -12,6 +12,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 project(python_extension)
 
+set(CMAKE_SKIP_RPATH TRUE)
+
 set(CATLASS_SHARED_LIB_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../shared_lib)
 set(CATLASS_SHARED_LIB_INCLUDE_DIR ${CATLASS_SHARED_LIB_SRC_DIR}/include)
 set(CATLASS_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/../../include)
@@ -22,6 +24,7 @@ if(NOT DEFINED Python3_EXECUTABLE)
 else()
     message("Using python: ${Python3_EXECUTABLE}")
 endif()
+
 find_package(Python3 COMPONENTS Interpreter Development)
 
 if(NOT DEFINED ENV{ASCEND_HOME_PATH})
@@ -47,6 +50,10 @@ link_directories(${ASCEND_HOME_PATH}/lib64
     ${Python3_SITELIB}/torch_npu/lib)
 
 link_libraries(libcatlass_kernel.a "${TORCH_LIBRARIES}" torch_npu tiling_api)
+
+add_compile_options(
+    -fstack-protector-strong)
+add_link_options(-Wl,-z,relro,-z,now -s)
 
 add_library(catlass_kernel_wrapper OBJECT ${CMAKE_CURRENT_SOURCE_DIR}/src/wrapper/catlass_kernel_wrapper.cpp)
 target_compile_options(catlass_kernel_wrapper PRIVATE -fPIC)
