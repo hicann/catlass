@@ -86,10 +86,10 @@ while [[ $# -gt 0 ]]; do
             echo -e "${WARN}Debug mode enabled"
             ;;
         --msdebug)
-            CMAKE_OPTIONS+=("-DENABLE_MSDEBUG=True")
+            CMAKE_OPTIONS+=("-DASCEND_ENABLE_MSDEBUG=True")
             ;;
         --simulator)
-            CMAKE_OPTIONS+=("-DENABLE_SIMULATOR=True")
+            CMAKE_OPTIONS+=("-DASCEND_ENABLE_SIMULATOR=True")
             if NPU_MODEL=$(get_npu_model); then
                 echo -e "${WARN}No npu-smi detected, using default model for simulator: ${NPU_MODEL}${NC}"
             else
@@ -99,7 +99,7 @@ while [[ $# -gt 0 ]]; do
             POST_BUILD_INFO="${INFO}Please run ${NC}\nexport LD_LIBRARY_PATH=${ASCEND_HOME_PATH}/tools/simulator/${NPU_MODEL}/lib:\$LD_LIBRARY_PATH\n${GREEN}in your terminal before execute examples.${NC}"            
             ;;
         --enable_msprof)
-            CMAKE_OPTIONS+=("-DENABLE_MSPROF=True")
+            CMAKE_OPTIONS+=("-DASCEND_ENABLE_MSPROF=True")
             ;;
         -D*)
             CMAKE_OPTIONS+=("$1")
