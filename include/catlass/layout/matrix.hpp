@@ -38,7 +38,7 @@ public:
 
 public:
     /// Constructor
-    CATLASS_HOST_DEVICE
+    CATLASS_HOST_DEVICE constexpr
     RowMajor(Index rows = 0, Index cols = 0)
         : shape_(MakeCoord(rows, cols)), stride_(MakeCoord(LongIndex(cols), LongIndex(1))) {}
 
@@ -50,6 +50,14 @@ public:
     /// Ctor
     CATLASS_HOST_DEVICE
     RowMajor(Shape shape, Stride stride) : shape_(shape), stride_(stride) {}
+
+    /// Make the layout of a coordinate (row, column)
+    template <class Element>
+    CATLASS_HOST_DEVICE constexpr
+    static RowMajor MakeLayout(Index rows, Index cols)
+    {
+        return RowMajor(rows, cols);
+    }
 
     template <class Element>
     CATLASS_HOST_DEVICE
@@ -163,7 +171,7 @@ public:
     // Methods
 
     /// Constructor
-    CATLASS_HOST_DEVICE
+    CATLASS_HOST_DEVICE constexpr
     ColumnMajor(Index rows = 0, Index cols = 0)
         : shape_(MakeCoord(rows, cols)), stride_(MakeCoord(LongIndex(1), LongIndex(rows))) {}
 
@@ -175,6 +183,14 @@ public:
     /// Ctor
     CATLASS_HOST_DEVICE
     ColumnMajor(Shape shape, Stride stride) : shape_(shape), stride_(stride) {}
+
+    /// Make the layout of a coordinate (row, column)
+    template <class Element>
+    CATLASS_HOST_DEVICE constexpr
+    static ColumnMajor MakeLayout(Index rows, Index cols)
+    {
+        return ColumnMajor(rows, cols);
+    }
 
     /// Returns the offset of a coordinate in linear memory.
     /// Assumes coordinate has convention (row, column)
