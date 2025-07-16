@@ -8,7 +8,7 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0, 
+// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0,
 // optimizing stack space. If you need to use the ShapeInfo of the AscendC Tensor, please undefine this macro.
 #ifndef K_MAX_SHAPE_DIM
 #define K_MAX_SHAPE_DIM 0
@@ -35,6 +35,9 @@
 using namespace Catlass;
 using namespace tla;
 using fp16_t = op::fp16_t;
+using ElementA = half;
+using ElementB = half;
+using ElementC = half;
 
 template <
     class LayoutA,
@@ -128,9 +131,6 @@ void OptimizedMatmul(
     GM_ADDR gmWA, GM_ADDR gmWB
 )
 {
-    using ElementA = half;
-    using ElementB = half;
-    using ElementC = half;
     using ArchTag = Arch::AtlasA2;
     AscendC::SetSyncBaseAddr(fftsAddr);
 
@@ -282,6 +282,18 @@ bool IsNeedPadding(layout::ColumnMajor layout, uint32_t align)
     }
 }
 
+bool IsNeedPadding(layout::zN layout, uint32_t align)
+{
+    // No need to pad for zN
+    return false;
+}
+
+bool IsNeedPadding(layout::nZ layout, uint32_t align)
+{
+    // No need to pad for nZ
+    return false;
+}
+
 void Run(Options const &options)
 {
     aclrtStream stream{nullptr};
@@ -294,30 +306,30 @@ void Run(Options const &options)
     uint32_t n = options.problemShape.n();
     uint32_t k = options.problemShape.k();
 
-    size_t lenA = static_cast<size_t>(m) * k;
-    size_t lenB = static_cast<size_t>(k) * n;
-    size_t lenC = static_cast<size_t>(m) * n;
+    const uint32_t align = 256;
+    using LayoutTagA = layout::RowMajor;
+    using LayoutTagB = layout::nZ; // 非转置使用zN，转置使用nZ
+    using LayoutTagC = layout::RowMajor;
+    LayoutTagA tagA = LayoutTagA::MakeLayout<ElementA>(m, k);
+    LayoutTagB tagB = LayoutTagB::MakeLayout<ElementB>(k, n);
+    LayoutTagC tagC = LayoutTagC::MakeLayout<ElementC>(m, n);
+    bool isNeedPaddingA = IsNeedPadding(tagA, align);
+    bool isNeedPaddingB = IsNeedPadding(tagB, align);
+
+    size_t lenA = tagA.Capacity();
+    size_t lenB = tagB.Capacity();
+    size_t lenC = tagC.Capacity();
 
     size_t sizeA = lenA * sizeof(fp16_t);
     size_t sizeB = lenB * sizeof(fp16_t);
     size_t sizeC = lenC * sizeof(fp16_t);
 
-    const uint32_t align = 256;
-    using LayoutA = layout::RowMajor;
-    using LayoutB = layout::ColumnMajor;
-    using LayoutC = layout::RowMajor;
-    LayoutA layoutA{m, k};
-    LayoutB layoutB{k, n};
-    LayoutC layoutC{m, n};
-    bool isNeedPaddingA = IsNeedPadding(layoutA, align);
-    bool isNeedPaddingB = IsNeedPadding(layoutB, align);
-
-    // if LayoutA and LayoutB is both ColumnMajor,
+    // if LayoutTagA and LayoutTagB is both ColumnMajor,
     // L1TileShape using GemmShape<256, 128, 256> can achieve better performance.
-    using L1TileShape = std::conditional_t<std::is_same_v<LayoutA, layout::ColumnMajor> &&
-        std::is_same_v<LayoutB, layout::ColumnMajor>, Shape<_256, _128, _256>, Shape<_128, _256, _256>>;
-    size_t sizeWA = GetWorkspaceLen(layoutA, get<0>(L1TileShape{}), get<2>(L1TileShape{})) * sizeof(fp16_t);
-    size_t sizeWB = GetWorkspaceLen(layoutB, get<2>(L1TileShape{}), get<1>(L1TileShape{})) * sizeof(fp16_t);
+    using L1TileShape = std::conditional_t<std::is_same_v<LayoutTagA, layout::ColumnMajor> &&
+        std::is_same_v<LayoutTagB, layout::ColumnMajor>, Shape<_256, _128, _256>, Shape<_128, _256, _256>>;
+    size_t sizeWA = GetWorkspaceLen(tagA, get<0>(L1TileShape{}), get<2>(L1TileShape{})) * sizeof(fp16_t);
+    size_t sizeWB = GetWorkspaceLen(tagB, get<2>(L1TileShape{}), get<1>(L1TileShape{})) * sizeof(fp16_t);
 
     std::vector<fp16_t> hostA(lenA);
     std::vector<fp16_t> hostB(lenB);
@@ -363,31 +375,36 @@ void Run(Options const &options)
     if (!isNeedPaddingA && !isNeedPaddingB) {
         constexpr const bool isPaddingA = false;
         constexpr const bool isPaddingB = false;
-        OptimizedMatmul<LayoutA, LayoutB, LayoutC, isPaddingA, isPaddingB><<<aicCoreNum, nullptr, stream>>>(
-            fftsAddr, options.problemShape,
-            deviceA, layoutA, deviceB, layoutB, deviceC, layoutC, deviceWA, deviceWB
-        );
+        OptimizedMatmul<LayoutTagA, LayoutTagB, LayoutTagC, isPaddingA, isPaddingB>
+            <<<aicCoreNum, nullptr, stream>>>(
+                fftsAddr, options.problemShape, deviceA, tagA, deviceB, tagB, deviceC, tagC, deviceWA, deviceWB);
     } else if (isNeedPaddingA && !isNeedPaddingB) {
-        constexpr const bool isPaddingA = true;
-        constexpr const bool isPaddingB = false;
-        OptimizedMatmul<LayoutA, LayoutB, LayoutC, isPaddingA, isPaddingB><<<aicCoreNum, nullptr, stream>>>(
-            fftsAddr, options.problemShape,
-            deviceA, layoutA, deviceB, layoutB, deviceC, layoutC, deviceWA, deviceWB
-        );
+        if constexpr (std::is_same_v<LayoutTagA, layout::RowMajor> || std::is_same_v<LayoutTagA, layout::ColumnMajor>) {
+            constexpr const bool isPaddingA = true;
+            constexpr const bool isPaddingB = false;
+            OptimizedMatmul<LayoutTagA, LayoutTagB, LayoutTagC, isPaddingA, isPaddingB>
+                <<<aicCoreNum, nullptr, stream>>>(
+                    fftsAddr, options.problemShape, deviceA, tagA, deviceB, tagB, deviceC, tagC, deviceWA, deviceWB);
+        }
     } else if (!isNeedPaddingA && isNeedPaddingB) {
-        constexpr const bool isPaddingA = false;
-        constexpr const bool isPaddingB = true;
-        OptimizedMatmul<LayoutA, LayoutB, LayoutC, isPaddingA, isPaddingB><<<aicCoreNum, nullptr, stream>>>(
-            fftsAddr, options.problemShape,
-            deviceA, layoutA, deviceB, layoutB, deviceC, layoutC, deviceWA, deviceWB
-        );
+        if constexpr (std::is_same_v<LayoutTagB, layout::RowMajor> || std::is_same_v<LayoutTagB, layout::ColumnMajor>) {
+            constexpr const bool isPaddingA = false;
+            constexpr const bool isPaddingB = true;
+            OptimizedMatmul<LayoutTagA, LayoutTagB, LayoutTagC, isPaddingA, isPaddingB>
+                <<<aicCoreNum, nullptr, stream>>>(
+                    fftsAddr, options.problemShape, deviceA, tagA, deviceB, tagB, deviceC, tagC, deviceWA, deviceWB);
+        }
     } else {
-        constexpr const bool isPaddingA = true;
-        constexpr const bool isPaddingB = true;
-        OptimizedMatmul<LayoutA, LayoutB, LayoutC, isPaddingA, isPaddingB><<<aicCoreNum, nullptr, stream>>>(
-            fftsAddr, options.problemShape,
-            deviceA, layoutA, deviceB, layoutB, deviceC, layoutC, deviceWA, deviceWB
-        );
+        if constexpr ((std::is_same_v<LayoutTagA, layout::RowMajor> ||
+                       std::is_same_v<LayoutTagA, layout::ColumnMajor>) &&
+                      (std::is_same_v<LayoutTagB, layout::RowMajor> ||
+                       std::is_same_v<LayoutTagB, layout::ColumnMajor>)) {
+            constexpr const bool isPaddingA = true;
+            constexpr const bool isPaddingB = true;
+            OptimizedMatmul<LayoutTagA, LayoutTagB, LayoutTagC, isPaddingA, isPaddingB>
+                <<<aicCoreNum, nullptr, stream>>>(
+                    fftsAddr, options.problemShape, deviceA, tagA, deviceB, tagB, deviceC, tagC, deviceWA, deviceWB);
+        }
     }
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
@@ -395,7 +412,7 @@ void Run(Options const &options)
     ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
 
     std::vector<float> hostGolden(lenC);
-    golden::ComputeMatmul(options.problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);
+    golden::ComputeMatmul(options.problemShape, hostA, tagA, hostB, tagB, hostGolden, tagC);
 
     std::vector<uint64_t> errorIndices = golden::CompareData(hostC, hostGolden, k);
     if (errorIndices.empty()) {
