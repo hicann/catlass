@@ -60,6 +60,7 @@ foreach(EXAMPLE
     19_mla
     20_matmul_bias
     21_basic_matmul_preload_zN
+    22_padding_splitk_matmul
 )
     add_subdirectory(${EXAMPLE})
 endforeach()
