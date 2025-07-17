@@ -439,7 +439,7 @@ public:
     {
         // prevent division of 0
         if (align == 0) {
-            return 0;
+            return layout;
         }
         return layout::RowMajor(layout.shape(0), layout.shape(1),
             (layout.shape(1) + align - 1) / align * align);
@@ -449,7 +449,7 @@ public:
     {
         // prevent division of 0
         if (align == 0) {
-            return 0;
+            return layout;
         }
         return layout::ColumnMajor(layout.shape(0), layout.shape(1),
             (layout.shape(0) + align - 1) / align * align);
