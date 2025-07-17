@@ -90,7 +90,6 @@ void Run(Options const &options)
     size_t sizeC = lenC * sizeof(fp16_t);
 
     // LayoutB 非转置使用zN，转置使用nZ
-    // 需要在适配层 include\catlass\gemm\kernel\basic_matmul_preload.hpp：ToUnderlyingArguments()中同步修改
     using LayoutA = layout::RowMajor;
     using LayoutB = layout::zN;
     using LayoutC = layout::RowMajor;

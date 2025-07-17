@@ -33,11 +33,8 @@
 #include "catlass/status.hpp"
 #include "catlass/gemm/device/device_gemm.hpp"
 
-#include "catlass/debug/debug.hpp"
-
 using namespace Catlass;
 using fp16_t = op::fp16_t;
-
 
 struct Options {
     const std::string HELPER = "22_padding_splitk_matmul m n k [device_id]";
@@ -235,7 +232,6 @@ void Run(Options const &options)
     ACL_CHECK(aclrtDestroyStream(stream));
     ACL_CHECK(aclrtResetDevice(options.deviceId));
     ACL_CHECK(aclFinalize());
-    
 }
 
 int main(int argc, const char **argv)

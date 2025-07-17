@@ -14,7 +14,7 @@
 ```
 # 编译指定用例
 bash scripts/build.sh 21_basic_matmul_preload_zN
-# cd [代码仓路径]/build/bin
+# cd [代码仓路径]/output/bin
 # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID
 # Device ID可选，默认为0
 ./21_basic_matmul_preload_zN 256 512 1024 0
