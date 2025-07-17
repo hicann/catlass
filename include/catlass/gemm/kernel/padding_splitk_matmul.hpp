@@ -447,6 +447,10 @@ public:
 
     static layout::ColumnMajor GetWorkspaceLayout(layout::ColumnMajor layout, uint32_t align)
     {
+        // prevent division of 0
+        if (align == 0) {
+            return 0;
+        }
         return layout::ColumnMajor(layout.shape(0), layout.shape(1),
             (layout.shape(0) + align - 1) / align * align);
     }
