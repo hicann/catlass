@@ -15,6 +15,7 @@
 #include "catlass/arch/resource.hpp"
 #include "catlass/coord.hpp"
 #include "catlass/gemm_coord.hpp"
+#include "catlass/layout/layout.hpp"
 #include "catlass/matrix_coord.hpp"
 
 namespace Catlass::Gemm::Kernel {
