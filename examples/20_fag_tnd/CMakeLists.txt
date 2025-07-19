@@ -8,5 +8,5 @@
 
 catlass_example_add_executable(
     20_fag_tnd
-    main.cpp
+    fag_tnd.cpp
 )

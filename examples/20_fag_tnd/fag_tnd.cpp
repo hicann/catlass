@@ -8,411 +8,367 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#include "catlass/catlass.hpp"
-#include "catlass/arch/arch.hpp"
-#include "catlass/layout/layout.hpp"
-#include "catlass/gemm/dispatch_policy.hpp"
-#include "catlass/gemm/gemm_type.hpp"
-#include "catlass/gemm/block/block_mmad.hpp"
-#include "catlass/arch/resource.hpp"
-#include "catlass/arch/cross_core_sync.hpp"
-#include "catlass/epilogue/block/block_epilogue.hpp"
-#include "catlass/epilogue/dispatch_policy.hpp"
+// Helper methods to check for errors
+#include <cstdio>
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <iomanip>
+#include <string>
+#include <cstring>
+#include <cmath>
+#include "helper.hpp"
+#include "golden.hpp"
+#include "fp16_t.h"
+#include "fag_tnd_tiling.cpp"
+#include "fag_tnd_kernel.cpp"
 
-#include "kernel_operator.h"
-#include "kernel_tiling/kernel_tiling.h"
-#include "lib/matmul_intf.h"
-#include "lib/matrix/matmul/tiling.h"
+using namespace std;
+using fp16_t = op::fp16_t;
 
-#include "fag_common/common_header.h"
-#include "fag_common/cube_addr.h"
-#include "fag_common/vector_addr.h"
+/**
+ * Function for read file.
+ */
+bool ReadFile(const string &filePath, void *buffer, size_t bufferSize)
+{
+    if (buffer == nullptr) {
+        printf("Read file %s failed. Buffer is nullptr.\n", filePath.c_str());
+        return false;
+    }
 
-using namespace AscendC;
-using namespace Catlass;
+    // Open file
+    ifstream fd(filePath, ios::binary);
+    if (!fd) {
+        printf("Open file failed. path = %s.\n", filePath.c_str());
+        return false;
+    }
 
-template <
-    class BlockMmadMLACube1_,
-    class BlockMmadMLACube2_,
-    class BlockMmadMLACube3_,
-    class EpilogueFAGPre_,
-    class EpilogueFAGSfmg_,
-    class EpilogueFAGOp_,
-    class EpilogueFAGPost_
->
-class FAGKernel {
-public:
-    using BlockMmadMLACube3 = BlockMmadMLACube3_;
-    using ArchTag = typename BlockMmadMLACube3::ArchTag;
-    using L1TileShape = typename BlockMmadMLACube3::L1TileShape;
-    using ElementdS = typename BlockMmadMLACube3::ElementA;
-    using LayoutdS = typename BlockMmadMLACube3::LayoutA;
-    using ElementdK = typename BlockMmadMLACube3::ElementC;
-    using LayoutdK = typename BlockMmadMLACube3::LayoutC;
-    
-    using BlockMmadMLACube1 = BlockMmadMLACube1_;
-    using ElementQ = typename BlockMmadMLACube1::ElementA;
-    using LayoutQ = typename BlockMmadMLACube1::LayoutA;
-    using ElementK = typename BlockMmadMLACube1::ElementB;
-    using LayoutK = typename BlockMmadMLACube1::LayoutB;
-    using ElementS = typename BlockMmadMLACube1::ElementC;
-    using LayoutS = typename BlockMmadMLACube1::LayoutC;
-    using ElementO = typename BlockMmadMLACube1::ElementA;
-    using LayoutO = typename BlockMmadMLACube1::LayoutA;
-    using ElementV = typename BlockMmadMLACube1::ElementB;
-    using LayoutV = typename BlockMmadMLACube1::LayoutB;
-    using ElementP = typename BlockMmadMLACube1::ElementC;
-    using LayoutP = typename BlockMmadMLACube1::LayoutC;
+    // Load file data in buffer
+    filebuf *buf = fd.rdbuf();
+    size_t size = buf->pubseekoff(0, ios::end, ios::in);
+    if (size == 0) {
+        printf("File %s size is 0\n", filePath.c_str());
+        return false;
+    }
+    if (size > bufferSize) {
+        printf("File %s size is larger than buffer size.\n", filePath.c_str());
+        return false;
+    }
+    buf->pubseekpos(0, ios::in);
+    buf->sgetn(static_cast<char *>(buffer), size);
+    return true;
+}
 
-    using BlockMmadMLACube2 = BlockMmadMLACube2_;
-    using EpilogueFAGPre = EpilogueFAGPre_;
-    using EpilogueFAGSfmg = EpilogueFAGSfmg_;
-    using EpilogueFAGOp = EpilogueFAGOp_;
-    using EpilogueFAGPost = EpilogueFAGPost_;
+// This code section describes the parameters to execute the run function.
+struct Options {
+    static constexpr auto HELPER =
+        "Usage: mla N1 N2 D dtype element_of_list_seq [--device DEVICE_ID]\n";
+    static constexpr auto MIN_ARGS = 5;
 
+    // Define default value.
+    uint32_t N1{0}, N2{0}, D{0};
+    string dtype{"fp16_t"};
+    std::vector<int64_t> list_seq;
+    uint32_t deviceId{0};
+    string dataPath = "../../examples/20_fag_tnd/data";
 
-    /// Parameters structure
-    struct Params {
-        // Data members
-        GM_ADDR query;
-        GM_ADDR key;
-        GM_ADDR value;
-        GM_ADDR dy;
-        GM_ADDR query_right;
-        GM_ADDR key_right; 
-        GM_ADDR pse_shift;
-        GM_ADDR drop_mask;
-        GM_ADDR padding_mask; 
-        GM_ADDR atten_mask;
-        GM_ADDR softmax_max;
-        GM_ADDR softmax_sum;
-        GM_ADDR softmax_in; 
-        GM_ADDR attention_in;
-        GM_ADDR prefix;
-        GM_ADDR actual_seq_qlen; 
-        GM_ADDR actual_seq_kvlen;
-        GM_ADDR q_start_idx;
-        GM_ADDR kv_start_idx; 
-        GM_ADDR dq;
-        GM_ADDR dk;
-        GM_ADDR dv;
-        GM_ADDR dq_right;
-        GM_ADDR dk_right;
-        GM_ADDR workspace;
-        GM_ADDR tiling_data;
+    Options() = default;
 
-        // Methods
-        CATLASS_DEVICE
-        Params() {}
-
-        CATLASS_DEVICE
-        Params(
-            GM_ADDR query_, GM_ADDR key_, GM_ADDR value_, GM_ADDR dy_,
-            GM_ADDR query_right_, GM_ADDR key_right_, GM_ADDR pse_shift_,
-            GM_ADDR drop_mask_, GM_ADDR padding_mask_, GM_ADDR atten_mask_,
-            GM_ADDR softmax_max_, GM_ADDR softmax_sum_, GM_ADDR softmax_in_, 
-            GM_ADDR attention_in_, GM_ADDR prefix_, GM_ADDR actual_seq_qlen_, 
-            GM_ADDR actual_seq_kvlen_, GM_ADDR q_start_idx_, GM_ADDR kv_start_idx_, 
-            GM_ADDR dq_, GM_ADDR dk_, GM_ADDR dv_, GM_ADDR dq_right_, GM_ADDR dk_right_, 
-            GM_ADDR workspace_, GM_ADDR tiling_data_
-        ) : query(query_), key(key_), value(value_), dy(dy_),
-            query_right(query_right_), key_right(key_right_), pse_shift(pse_shift_),
-            drop_mask(drop_mask_), padding_mask(padding_mask_), atten_mask(atten_mask_),
-            softmax_max(softmax_max_), softmax_sum(softmax_sum_), softmax_in(softmax_in_), 
-            attention_in(attention_in_), prefix(prefix_), actual_seq_qlen(actual_seq_qlen_), 
-            actual_seq_kvlen(actual_seq_kvlen_), q_start_idx(q_start_idx_), kv_start_idx(kv_start_idx_), 
-            dq(dq_), dk(dk_), dv(dv_), dq_right(dq_right_), dk_right(dk_right_), 
-            workspace(workspace_), tiling_data(tiling_data_)
-        {
-        }    
-    };
-
-    // Methods
-    CATLASS_DEVICE
-    FAGKernel() {}
-
-    template <int32_t CORE_TYPE = g_coreType>
-    CATLASS_DEVICE
-    void operator()(Params const &params);
-
-    template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIC>(Params const &params)
+    // Define function to parse the command-line arguments.
+    int Parse(int argc, const char **argv)
     {
-        AscendC::GlobalTensor<uint64_t> tilingData;
-        tilingData.SetGlobalBuffer((__gm__ uint64_t *)params.tiling_data);
-
-        int64_t batch = tilingData.GetValue(TILING_B);
-        int64_t g = tilingData.GetValue(TILING_G);
-        int64_t n2 = tilingData.GetValue(TILING_N2);
-        int64_t headNum = n2 * g;
-        int64_t headDim = tilingData.GetValue(TILING_D);
-        int64_t dqWorkSpaceOffset = tilingData.GetValue(TILING_DQ_WORKSPACE_OFFSET);
-        int64_t dkWorkSpaceOffset = tilingData.GetValue(TILING_DK_WORKSPACE_OFFSET);
-        int64_t dvWorkSpaceOffset = tilingData.GetValue(TILING_DV_WORKSPACE_OFFSET);
-        int64_t mm1WorkspaceOffset = tilingData.GetValue(TILING_MM1_WORKSPACE_OFFSET);
-        int64_t mm2WorkspaceOffset = tilingData.GetValue(TILING_MM2_WORKSPACE_OFFSET);
-        int64_t pWorkSpaceOffset = tilingData.GetValue(TILING_P_WORKSPACE_OFFSET);
-        int64_t dsWorkSpaceOffset = tilingData.GetValue(TILING_DS_WORKSPACE_OFFSET);
-
-        AscendC::GlobalTensor<uint32_t> tilingDataU32;
-        tilingDataU32.SetGlobalBuffer((__gm__ uint32_t *)params.tiling_data);;
-        uint32_t coreNum = tilingDataU32.GetValue(TILING_CORE_NUM * CONST_2);
-        int64_t mixCoreNum = (coreNum + 1) / 2;
-
-        struct CubeAddrInfo cubeAddrInfo[2];
-
-        CubeAddr cubeaddr;
-        cubeaddr.init(batch, headNum, g, headDim, GetBlockIdx(), params.query, params.key, params.value, params.dy, params.dk_right, params.actual_seq_qlen, params.actual_seq_kvlen, mixCoreNum);
-
-        int32_t taskId = 0;
-        uint32_t pingpongFlagL1A = 0;
-        uint32_t pingpongFlagL1B = 0;
-        uint32_t pingpongFlagL0A = 0;
-        uint32_t pingpongFlagL0B = 0;
-        uint32_t pingpongFlagC = 0;
-        bool running = true;
-
-        BlockMmadMLACube1 blockMmadMLACube1(resource, headNum, n2, headDim);
-        BlockMmadMLACube2 blockMmadMLACube2(resource, headNum, n2, headDim);
-        BlockMmadMLACube3 blockMmadMLACube3(resource, headNum, n2, headDim);
-
-        while (running) {
-            cubeAddrInfo[taskId % 2].taskId = taskId;
-            cubeaddr.addr_mapping(&cubeAddrInfo[taskId % 2]);
-            if (cubeAddrInfo[taskId % 2].blockLength > 0) {
-                // get start kernel
-                preset_flag();
-                CubeAddrInfo addrs = cubeAddrInfo[taskId % 2];
-                blockMmadMLACube1(cubeAddrInfo[taskId % 2], (__gm__ half*)(params.query), (__gm__ half*)(params.key), (__gm__ float*)(params.workspace + mm2WorkspaceOffset), 
-                    pingpongFlagL1A, pingpongFlagL0A, pingpongFlagL1B, pingpongFlagL0B, pingpongFlagC);
-                clear_flag();
-                preset_flag();
-                blockMmadMLACube1(cubeAddrInfo[taskId % 2], (__gm__ half*)(params.dy), (__gm__ half*)(params.value), (__gm__ float*)(params.workspace + mm1WorkspaceOffset), 
-                    pingpongFlagL1A, pingpongFlagL0A, pingpongFlagL1B, pingpongFlagL0B, pingpongFlagC);
-                clear_flag();
-                AscendC::CrossCoreSetFlag<2, PIPE_FIX>(CUBE2VEC);
-            }
-            if (taskId > 0 && cubeAddrInfo[(taskId - 1) % 2].blockLength > 0) {
-                AscendC::WaitEvent(VEC2CUBE);
-                preset_flag();
-                blockMmadMLACube2(cubeAddrInfo[(taskId - 1) % 2], (__gm__ half*)(params.workspace + dsWorkSpaceOffset), (__gm__ half*)(params.key), (__gm__ float*)(params.workspace + dqWorkSpaceOffset), 
-                    pingpongFlagL1A, pingpongFlagL0A, pingpongFlagL1B, pingpongFlagL0B);
-                clear_flag();
-                preset_flag();
-                blockMmadMLACube3(cubeAddrInfo[(taskId - 1) % 2], (__gm__ half*)(params.workspace + pWorkSpaceOffset), (__gm__ half*)(params.dy), (__gm__ float*)(params.workspace + dvWorkSpaceOffset), 
-                    pingpongFlagL1A, pingpongFlagL0A, pingpongFlagL1B, pingpongFlagL0B, pingpongFlagC);
-                clear_flag();
-                preset_flag();
-                blockMmadMLACube3(cubeAddrInfo[(taskId - 1) % 2], (__gm__ half*)(params.workspace + dsWorkSpaceOffset), (__gm__ half*)(params.query), (__gm__ float*)(params.workspace + dkWorkSpaceOffset), 
-                    pingpongFlagL1A, pingpongFlagL0A, pingpongFlagL1B, pingpongFlagL0B, pingpongFlagC);
-                clear_flag();
-            }
-            if (cubeAddrInfo[taskId % 2].blockLength == 0) {
-                running = false;
-            }
-            taskId++;
+        // The number of arguments must >= 7.
+        if (argc < MIN_ARGS) {
+            printf(HELPER);
+            return -1;
         }
-        AscendC::CrossCoreSetFlag<2, PIPE_FIX>(CUBE2POST);
-    }
 
-    template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIV>(Params const &params)
-    {
-        AscendC::GlobalTensor<uint64_t> tilingData;
-        tilingData.SetGlobalBuffer((__gm__ uint64_t *)params.tiling_data);
-
-        int64_t batch = tilingData.GetValue(TILING_B);
-        int64_t g = tilingData.GetValue(TILING_G);
-        int64_t n2 = tilingData.GetValue(TILING_N2);
-        int64_t headNum = n2 * g;
-        int64_t headDim = tilingData.GetValue(TILING_D); 
-        AscendC::GlobalTensor<uint32_t> tilingDataU32;
-        tilingDataU32.SetGlobalBuffer((__gm__ uint32_t *)params.tiling_data);
-        uint32_t coreNum = tilingDataU32.GetValue(TILING_CORE_NUM * CONST_2);
-        int64_t mixCoreNum = (coreNum + 1) / 2;
-        
-        struct VecAddrInfo vecAddrInfo;
-        AscendC::TPipe pipePre;
-        EpilogueFAGPre epilogueFagPre(resource, &pipePre, params.dq, params.dk, params.dv, params.workspace, params.tiling_data);
-        epilogueFagPre();
-        pipePre.Destroy();
-
-        // vec SoftmaxGrad
-        AscendC::TPipe pipeSoftmaxGrad;
-        EpilogueFAGSfmg epilogueFagSfmg(resource, &pipeSoftmaxGrad, params.dy, params.attention_in, params.actual_seq_qlen, params.workspace, batch, params.tiling_data);
-        epilogueFagSfmg();
-        pipeSoftmaxGrad.Destroy();
-
-        AscendC::SyncAll();
-
-        // vector process
-        AscendC::TPipe pipeVec;
-        EpilogueFAGOp epilogueFagOp(resource, &pipeVec, params.softmax_max, params.softmax_sum,
-            params.atten_mask, params.actual_seq_qlen, params.actual_seq_kvlen, params.workspace, batch, params.tiling_data);
-
-        VectorAddr vector_addr;
-        vector_addr.init(batch, headNum, g, headDim, GetBlockIdx() / 2, params.query, params.key, params.value, params.dy, params.dk_right, params.actual_seq_qlen, params.actual_seq_kvlen, mixCoreNum);
-        int32_t taskId = 0;
-        bool running = true;
-        while (running) {
-            vector_addr.addr_mapping(&vecAddrInfo);
-            if (vecAddrInfo.blockLength > 0) {
-                AscendC::WaitEvent(CUBE2VEC);
-                vecAddrInfo.taskId = taskId;
-                epilogueFagOp(vecAddrInfo);
-                AscendC::CrossCoreSetFlag<2, PIPE_MTE3>(VEC2CUBE);
-            }
-            if (vecAddrInfo.blockLength == 0) {
-                running = false;
-            }
-            taskId++;
+        // Allocate arguments to parameters.
+        uint32_t argIndex = 1;
+        N1 = atoi(argv[argIndex++]);
+        N2 = atoi(argv[argIndex++]);
+        D = atoi(argv[argIndex++]);
+        while (argIndex < argc) {
+            if (argIndex == argc - 1) {
+                deviceId = atoi(argv[argIndex++]);
+            } else {
+                list_seq.push_back(atoi(argv[argIndex++]));
+            };
         }
-        pipeVec.Destroy();
-        AscendC::WaitEvent(CUBE2POST);
-        AscendC::SyncAll();
-        
-        // vector post process
-        AscendC::TPipe pipePost;
-        EpilogueFAGPost epilogueFagPost(resource, &pipePost, params.dq, params.dk, params.dv, params.workspace, params.tiling_data);
-        epilogueFagPost();
-        pipePost.Destroy(); 
+
+        return 0;
     }
 
-    CATLASS_DEVICE
-    void preset_flag()
+    // Define function to print arguments.
+    string ToString() const
     {
-        AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(EVENT_ID0);
-        AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(EVENT_ID1);
-        AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(EVENT_ID2);
-        AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(EVENT_ID3);
-        AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(EVENT_ID4);
-        AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(EVENT_ID5);
-
-        AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(EVENT_ID3);
-        AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(EVENT_ID4);
-        AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(EVENT_ID5);
-        AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(EVENT_ID6);
+        stringstream ss;
+        ss << "{ N1: " << N1 << ", N2: " << N2 << ", D: " << D << ", dtype: " << dtype <<
+            ", "  << ", deviceId: " << deviceId << " }";
+        return ss.str();
     }
-
-    CATLASS_DEVICE
-    void clear_flag()
-    {
-        AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(EVENT_ID0);
-        AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(EVENT_ID1);
-        AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(EVENT_ID2);
-        AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(EVENT_ID3);
-        AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(EVENT_ID4);
-        AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(EVENT_ID5);
-
-        AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(EVENT_ID3);
-        AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(EVENT_ID4);
-        AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(EVENT_ID5);
-        AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(EVENT_ID6);
-    }
-
-private:
-    Arch::Resource<ArchTag> resource;
 };
 
-CATLASS_GLOBAL
-void FAG(uint64_t fftsAddr,
-        GM_ADDR query, GM_ADDR key, GM_ADDR value, GM_ADDR dy,
-        GM_ADDR query_right, GM_ADDR key_right, 
-        GM_ADDR pse_shift, GM_ADDR drop_mask, GM_ADDR padding_mask, 
-        GM_ADDR atten_mask, GM_ADDR softmax_max, GM_ADDR softmax_sum, GM_ADDR softmax_in, 
-        GM_ADDR attention_in, GM_ADDR prefix, GM_ADDR actual_seq_qlen, 
-        GM_ADDR actual_seq_kvlen, GM_ADDR q_start_idx, GM_ADDR kv_start_idx, 
-        GM_ADDR dq, GM_ADDR dk, GM_ADDR dv, GM_ADDR dq_right, GM_ADDR dk_right, 
-        GM_ADDR workspace, GM_ADDR tiling_data)
+void AllocMem(uint8_t **host, uint8_t **device, size_t size)
 {
-    // Set FFTS address
-    AscendC::SetSyncBaseAddr(fftsAddr);
+    ACL_CHECK(aclrtMallocHost(reinterpret_cast<void **>(host), size));
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(device), size, ACL_MEM_MALLOC_HUGE_FIRST));
+}
 
-    using ArchTag = Arch::AtlasA2;
-    // Cube1
-    using ElementQ = half;
-    using LayoutQ = layout::RowMajor;
-    using ElementK = half;
-    using LayoutK = layout::ColumnMajor;
-    using ElementS = float;
-    using LayoutS = layout::RowMajor;
-    using QType = Catlass::Gemm::GemmType<ElementQ, LayoutQ>;
-    using KType = Catlass::Gemm::GemmType<ElementK, LayoutK>;
-    using SType = Catlass::Gemm::GemmType<ElementS, LayoutS>;
-    using DispatchPolicyCube1 = Catlass::Gemm::MmadAtlasA2FAGCube1;
-    using L1TileShapeCube1 = GemmShape<256, 128, 256>;
-    using L0TileShapeCube1 = L1TileShapeCube1;
-    using BlockMmadMLACube1 = Catlass::Gemm::Block::BlockMmad<DispatchPolicyCube1, L1TileShapeCube1, L0TileShapeCube1, QType, KType, SType>;
+void FreeMem(uint8_t *host, uint8_t *device)
+{
+    ACL_CHECK(aclrtFreeHost(host));
+    ACL_CHECK(aclrtFree(device));
+}
 
-    // Cube2
-    using ElementdS = half;
-    using LayoutdS = layout::RowMajor;
-    using ElementKCube2 = half;
-    using LayoutKCube2 = layout::RowMajor;
-    using ElementdQ = float;
-    using LayoutdQ = layout::RowMajor;
+// Allocate several matrices in NPU device memory and call a
+// ACTLASS MLA kernel.
+void Run(const Options &options)
+{
+    aclrtStream stream{nullptr};
+    ACL_CHECK(aclInit(nullptr));
+    ACL_CHECK(aclrtSetDevice(options.deviceId));
+    ACL_CHECK(aclrtCreateStream(&stream));
 
-    using dsCube2Type = Catlass::Gemm::GemmType<ElementdS, LayoutdS>;
-    using kCube2ype = Catlass::Gemm::GemmType<ElementKCube2, LayoutKCube2>;
-    using dqCube2Type = Catlass::Gemm::GemmType<ElementdQ, LayoutdQ>;
-    using DispatchPolicyCube2 = Catlass::Gemm::MmadAtlasA2FAGCube2;
-    using L1TileShapeCube2 = GemmShape<128, 128, 128>;
-    using L0TileShapeCube2 = L1TileShapeCube2;
+    auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
-    using BlockMmadMLACube2 = Catlass::Gemm::Block::BlockMmad<DispatchPolicyCube2, L1TileShapeCube2, L0TileShapeCube2, dsCube2Type, kCube2ype, dqCube2Type>;
+    uint32_t N1 = options.N1;
+    uint32_t N2 = options.N2;
+    uint32_t D = options.D;
+    string dtype = options.dtype;
+    std::vector<int64_t> list_seq = options.list_seq;
+    string dataPath = options.dataPath;
 
-    // Cube3
-    using ElementdSCube3 = half;
-    using LayoutdSCube3 = layout::ColumnMajor;
-    using ElementQCube3 = half;
-    using LayoutQCube3 = layout::RowMajor;
-    using ElementdK = float;
-    using LayoutdK = layout::RowMajor;
+    ifstream fd(dataPath + "/q.bin", ios::binary);
+    if (!fd) {
+        printf("No data file in the path, please check the path,"
+                "or run [python <SOURCE_DIR>/examples/20_fag_tnd/gen_data.py] first!\n");
+        ACL_CHECK(aclrtDestroyStream(stream));
+        ACL_CHECK(aclrtResetDevice(options.deviceId));
+        ACL_CHECK(aclFinalize());
+        return;
+    }
 
-    using dSTypeCube3 = Catlass::Gemm::GemmType<ElementdSCube3, LayoutdSCube3>;
-    using QTypeCube3 = Catlass::Gemm::GemmType<ElementQCube3, LayoutQCube3>;
-    using dKTypeCube3 = Catlass::Gemm::GemmType<ElementdK, LayoutdK>;
-    using DispatchPolicyCube3 = Catlass::Gemm::MmadAtlasA2FAGCube3;
-    using L1TileShapeCube3 = GemmShape<256, 128, 256>;
-    using L0TileShapeCube3 = L1TileShapeCube3;
+    printf("Running mla: N1=%d, N2=%d, D=%d, ...\n", \
+            N1, N2, D);
+    printf("list_seq = ");
+    for (const auto& num : list_seq) {
+        std::cout << num << " ";
+    }
+    std::cout << std::endl;
 
-    using BlockMmadMLACube3 = Catlass::Gemm::Block::BlockMmad<DispatchPolicyCube3, L1TileShapeCube3, L0TileShapeCube3, dSTypeCube3, QTypeCube3, dKTypeCube3>;
+    MLATiling::MLAInfo mlaInfo;
+    
+    int64_t sum_of_list = 0;
+    for (size_t i = 0; i < list_seq.size(); ++i) {
+        sum_of_list += list_seq[i];
+    }
 
-    // epilogue 1
-    using ElementdQVector = float;
-    using LayoutdQVector = layout::RowMajor;
-    using dqVectorType = Catlass::Gemm::GemmType<ElementdQVector, LayoutdQVector>;
-    using ElementdKVector = float;
-    using LayoutdKVector = layout::RowMajor;
-    using dKVectorType = Catlass::Gemm::GemmType<ElementdKVector, LayoutdKVector>;
+    mlaInfo.seqQShapeSize = list_seq.size();
+    mlaInfo.queryShape_0 = sum_of_list;
+    mlaInfo.keyShape_0 = sum_of_list;
+    mlaInfo.queryShape_1 = N1;
+    mlaInfo.keyShape_1 = N2;
+    mlaInfo.queryShape_2 = D;
+    mlaInfo.scaleValue = 1.0 / sqrt(D);
 
-    using EpilogueAtlasA2FAGPre = Catlass::Epilogue::EpilogueAtlasA2FAGPre;
-    using EpilogueFAGPre = Catlass::Epilogue::Block::BlockEpilogue<EpilogueAtlasA2FAGPre, dqVectorType, dKVectorType, dKVectorType>;
+    uint64_t g = N1 / N2;
+    uint64_t qSize = sum_of_list * N2 * g * D * sizeof(fp16_t);
+    uint64_t kSize = sum_of_list * N2 * 1 * D * sizeof(fp16_t);
+    uint64_t vSize = sum_of_list * N2 * 1 * D * sizeof(fp16_t);
+    uint64_t dySize = sum_of_list * N1 * D * sizeof(fp16_t);
+    uint64_t attenMaskSize = 2048 * 2048 * sizeof(fp16_t);
+    uint64_t softMaxMaxSize = sum_of_list * N1 * 8 * sizeof(float);
+    uint64_t softMaxSumSize = sum_of_list * N1 * 8 * sizeof(float);
+    uint64_t attentionInSize = sum_of_list * N1 * D * sizeof(fp16_t);
+    uint64_t actualSeqQlenSize = list_seq.size() * sizeof(int64_t);
+    uint64_t actualSeqKvlenSize = list_seq.size() * sizeof(int64_t);
 
-    using EpilogueAtlasA2FAGSfmg = Catlass::Epilogue::EpilogueAtlasA2FAGSfmg;
-    using EpilogueFAGSfmg = Catlass::Epilogue::Block::BlockEpilogue<EpilogueAtlasA2FAGSfmg, dqVectorType, dKVectorType, dKVectorType>;
+    uint64_t dqSize = qSize;
+    uint64_t dkSize = kSize;
+    uint64_t dvSize = vSize;
+    uint64_t dqRightSize = 16 * 128 * 256 * sizeof(fp16_t);
+    uint64_t dkRightSize = 16 * 128 * 128 * sizeof(float);
 
-    using EpilogueAtlasA2FAGOp = Catlass::Epilogue::EpilogueAtlasA2FAGOp;
-    using EpilogueFAGOp = Catlass::Epilogue::Block::BlockEpilogue<EpilogueAtlasA2FAGOp, dqVectorType, dKVectorType, dKVectorType>;
+    uint64_t workspaceSize = (2 * aicCoreNum * 16 * 128 * 128 * 8 * N1) * sizeof(float);
 
-    using EpilogueAtlasA2FAGPost = Catlass::Epilogue::EpilogueAtlasA2FAGPost;
-    using EpilogueFAGPost = Catlass::Epilogue::Block::BlockEpilogue<EpilogueAtlasA2FAGPost, dqVectorType, dKVectorType, dKVectorType>;
+    // Allocate matrices in host and device memory and load Matrix.
+    uint8_t *qHost;
+    uint8_t *qDevice;
+    AllocMem(&qHost, &qDevice, qSize);
+    ReadFile(dataPath + "/q.bin", qHost, qSize);
+    ACL_CHECK(aclrtMemcpy(qDevice, qSize, qHost, qSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    // Kernel level
-    using FAGKernel = FAGKernel<BlockMmadMLACube1, BlockMmadMLACube2, BlockMmadMLACube3, EpilogueFAGPre, EpilogueFAGSfmg, EpilogueFAGOp, EpilogueFAGPost>;
-    typename FAGKernel::Params params{
-        query, key, value, dy,
-        query_right, key_right, pse_shift,
-        drop_mask, padding_mask, atten_mask,
-        softmax_max, softmax_sum, softmax_in, 
-        attention_in, prefix, actual_seq_qlen, 
-        actual_seq_kvlen, q_start_idx, kv_start_idx, 
-        dq, dk, dv, dq_right, dk_right, 
-        workspace, tiling_data};
+    uint8_t *kHost;
+    uint8_t *kDevice;
+    AllocMem(&kHost, &kDevice, kSize);
+    ReadFile(dataPath + "/k.bin", kHost, kSize);
+    ACL_CHECK(aclrtMemcpy(kDevice, kSize, kHost, kSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    // call kernel
-    FAGKernel fag;
-    fag(params);
+    uint8_t *vHost;
+    uint8_t *vDevice;
+    AllocMem(&vHost, &vDevice, vSize);
+    ReadFile(dataPath + "/v.bin", vHost, vSize);
+    ACL_CHECK(aclrtMemcpy(vDevice, vSize, vHost, vSize, ACL_MEMCPY_HOST_TO_DEVICE));
+
+    uint8_t *dyHost;
+    uint8_t *dyDevice;
+    AllocMem(&dyHost, &dyDevice, dySize);
+    ReadFile(dataPath + "/dx.bin", dyHost, dySize);
+    ACL_CHECK(aclrtMemcpy(dyDevice, dySize, dyHost, dySize, ACL_MEMCPY_HOST_TO_DEVICE));
+
+    uint8_t *attenMaskHost;
+    uint8_t *attenMaskDevice;
+    AllocMem(&attenMaskHost, &attenMaskDevice, attenMaskSize);
+    ReadFile(dataPath + "/atten_mask.bin", attenMaskHost, attenMaskSize);
+    ACL_CHECK(aclrtMemcpy(attenMaskDevice, attenMaskSize, attenMaskHost, attenMaskSize, ACL_MEMCPY_HOST_TO_DEVICE));
+
+    uint8_t *softMaxMaxHost;
+    uint8_t *softMaxMaxDevice;
+    AllocMem(&softMaxMaxHost, &softMaxMaxDevice, softMaxMaxSize);
+    ReadFile(dataPath + "/softmax_max.bin", softMaxMaxHost, softMaxMaxSize);
+    ACL_CHECK(aclrtMemcpy(softMaxMaxDevice, softMaxMaxSize, softMaxMaxHost, softMaxMaxSize, ACL_MEMCPY_HOST_TO_DEVICE));
+
+    uint8_t *softMaxSumHost;
+    uint8_t *softMaxSumDevice;
+    AllocMem(&softMaxSumHost, &softMaxSumDevice, softMaxSumSize);
+    ReadFile(dataPath + "/softmax_sum.bin", softMaxSumHost, softMaxSumSize);
+    ACL_CHECK(aclrtMemcpy(softMaxSumDevice, softMaxSumSize, softMaxSumHost, softMaxSumSize, ACL_MEMCPY_HOST_TO_DEVICE));
+
+    uint8_t *attentionInHost;
+    uint8_t *attentionInDevice;
+    AllocMem(&attentionInHost, &attentionInDevice, attentionInSize);
+    ReadFile(dataPath + "/attention_in.bin", attentionInHost, attentionInSize);
+    ACL_CHECK(aclrtMemcpy(attentionInDevice, attentionInSize, attentionInHost, attentionInSize, ACL_MEMCPY_HOST_TO_DEVICE));
+
+    uint8_t *actualSeqQlenHost;
+    uint8_t *actualSeqQlenDevice;
+    AllocMem(&actualSeqQlenHost, &actualSeqQlenDevice, actualSeqQlenSize);
+    ReadFile(dataPath + "/actual_seq_qlen.bin", actualSeqQlenHost, actualSeqQlenSize);
+    ACL_CHECK(aclrtMemcpy(actualSeqQlenDevice, actualSeqQlenSize, actualSeqQlenHost, actualSeqQlenSize, ACL_MEMCPY_HOST_TO_DEVICE));
+
+    uint8_t *actualSeqKvlenHost;
+    uint8_t *actualSeqKvlenDevice;
+    AllocMem(&actualSeqKvlenHost, &actualSeqKvlenDevice, actualSeqKvlenSize);
+    ReadFile(dataPath + "/actual_seq_kvlen.bin", actualSeqKvlenHost, actualSeqKvlenSize);
+    ACL_CHECK(aclrtMemcpy(actualSeqKvlenDevice, actualSeqKvlenSize, actualSeqKvlenHost, actualSeqKvlenSize, ACL_MEMCPY_HOST_TO_DEVICE));
+
+    uint8_t *dqDevice;
+    ACL_CHECK(
+        aclrtMalloc((void **)(&dqDevice), dqSize, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t *dkDevice;
+    ACL_CHECK(
+        aclrtMalloc((void **)(&dkDevice), dkSize, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t *dvDevice;
+    ACL_CHECK(
+        aclrtMalloc((void **)(&dvDevice), dvSize, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t *dq_rightDevice;
+    ACL_CHECK(aclrtMalloc((void **)(&dq_rightDevice), dqRightSize, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t *dk_rightDevice;
+    ACL_CHECK(aclrtMalloc((void **)(&dk_rightDevice), dkRightSize, ACL_MEM_MALLOC_HUGE_FIRST));
+
+    uint8_t *workspaceDevice;
+    ACL_CHECK(aclrtMalloc((void **)(&workspaceDevice), workspaceSize, ACL_MEM_MALLOC_HUGE_FIRST));
+
+    // // get tiling
+    uint32_t blockDim = aicCoreNum;
+    void *tilingHost = nullptr;
+    uint32_t tilingSize = TILING_PARA_NUM * sizeof(int64_t);
+    ACL_CHECK(aclrtMallocHost(&tilingHost, tilingSize));
+    MLATiling::GetFATilingParam(mlaInfo, blockDim, (int64_t *)tilingHost);
+    uint8_t *tilingDevice;
+    ACL_CHECK(aclrtMalloc((void **)(&tilingDevice), tilingSize, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize, ACL_MEMCPY_HOST_TO_DEVICE));
+
+    // Prepare FFTS address
+    uint64_t fftsAddr{0};
+    uint32_t fftsLen{0};
+    RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
+
+    FAG<<<blockDim, nullptr, stream>>>(
+        fftsAddr, qDevice, kDevice, vDevice, dyDevice, nullptr, nullptr, nullptr, nullptr, nullptr,
+        attenMaskDevice, softMaxMaxDevice, softMaxSumDevice, nullptr, attentionInDevice, nullptr, actualSeqQlenDevice, actualSeqKvlenDevice,
+        nullptr, nullptr, dqDevice, dkDevice, dvDevice, dq_rightDevice, dk_rightDevice, workspaceDevice, tilingDevice);
+    ACL_CHECK(aclrtSynchronizeStream(stream));
+
+    vector<fp16_t> dqHost(dqSize / sizeof(fp16_t));
+    ACL_CHECK(aclrtMemcpy(dqHost.data(), dqSize, dqDevice, dqSize, ACL_MEMCPY_DEVICE_TO_HOST));
+
+    vector<float> goldenDqHost(dqSize / sizeof(fp16_t));
+    const size_t goldenDqSize = dqSize * 2;
+    ReadFile(dataPath + "/dq_golden.bin", goldenDqHost.data(), goldenDqSize);
+
+    vector<fp16_t> dkHost(dkSize / sizeof(fp16_t));
+    ACL_CHECK(aclrtMemcpy(dkHost.data(), dkSize, dkDevice, dkSize, ACL_MEMCPY_DEVICE_TO_HOST));
+
+    vector<float> goldenDkHost(dkSize / sizeof(fp16_t));
+    const size_t goldenDkSize = dkSize * 2;
+    ReadFile(dataPath + "/dk_golden.bin", goldenDkHost.data(), goldenDkSize);
+
+    vector<fp16_t> dvHost(dvSize / sizeof(fp16_t));
+    ACL_CHECK(aclrtMemcpy(dvHost.data(), dvSize, dvDevice, dvSize, ACL_MEMCPY_DEVICE_TO_HOST));
+
+    vector<float> goldenDvHost(dvSize / sizeof(fp16_t));
+    const size_t goldenDvSize = dvSize * 2;
+    ReadFile(dataPath + "/dv_golden.bin", goldenDvHost.data(), goldenDvSize);
+
+    // Compare the result
+    vector<uint64_t> dqerrorIndices = Catlass::golden::CompareData(dqHost, goldenDqHost, dqSize);
+    if (dqerrorIndices.empty()) {
+        cout << "Compare dq success." << endl;
+    } else {
+        cerr << "Compare dq failed. Error count: " << dqerrorIndices.size() << endl;
+    }
+
+    vector<uint64_t> dkerrorIndices = Catlass::golden::CompareData(dkHost, goldenDkHost, dkSize);
+    if (dkerrorIndices.empty()) {
+        cout << "Compare dk success." << endl;
+    } else {
+        cerr << "Compare dk failed. Error count: " << dkerrorIndices.size() << endl;
+    }
+
+    vector<uint64_t> errorIndices = Catlass::golden::CompareData(dvHost, goldenDvHost, dvSize);
+    if (errorIndices.empty()) {
+        cout << "Compare dv success." << endl;
+    } else {
+        cerr << "Compare dv failed. Error count: " << errorIndices.size() << endl;
+    }
+
+    // Free host memory allocations.
+    FreeMem(qHost, qDevice);
+    FreeMem(kHost, kDevice);
+    FreeMem(vHost, vDevice);
+    FreeMem(dyHost, dyDevice);
+    FreeMem(attenMaskHost, attenMaskDevice);
+    FreeMem(softMaxMaxHost, softMaxMaxDevice);
+    FreeMem(softMaxSumHost, softMaxSumDevice);
+    FreeMem(attentionInHost, attentionInDevice);
+    FreeMem(actualSeqQlenHost, actualSeqQlenDevice);
+    FreeMem(actualSeqKvlenHost, actualSeqKvlenDevice);
+
+    aclrtFree(dqDevice);
+    aclrtFree(dkDevice);
+    aclrtFree(dvDevice);
+    aclrtFree(dq_rightDevice);
+    aclrtFree(dk_rightDevice);
+    aclrtFree(workspaceDevice);
+    aclrtFreeHost(tilingHost);
+    aclrtFree(tilingDevice);
+
+    // Destroy specified Stream and reset device.
+    ACL_CHECK(aclrtDestroyStream(stream));
+    ACL_CHECK(aclrtResetDevice(options.deviceId));
+    ACL_CHECK(aclFinalize());
+}
+
+/// Entry point to fa example.
+// usage: fa batch seqlen qHead groupNum embed maxSeqlen [--datapath DATA_PATH --device DEVICE_ID]
+int main(int argc, const char **argv)
+{
+    Options options;
+    if (options.Parse(argc, argv) != 0) {
+        return -1;
+    }
+    Run(options);
+    return 0;
 }

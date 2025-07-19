@@ -208,6 +208,10 @@ public:
     void operator()()
     {
         AscendC::PipeBarrier<PIPE_ALL>();
+        event_t VWaitMte2 = static_cast<event_t>(GetTPipePtr()->FetchEventID(HardEvent::MTE2_V));
+        event_t VWaitMte3 = static_cast<event_t>(GetTPipePtr()->FetchEventID(HardEvent::MTE3_V));
+        event_t Mte2WaitV = static_cast<event_t>(GetTPipePtr()->FetchEventID(HardEvent::V_MTE2));
+        event_t Mte3WaitV = static_cast<event_t>(GetTPipePtr()->FetchEventID(HardEvent::V_MTE3));
 
         uint32_t usedCoreNums = usedCoreNum;
         if (cBlockIdx < usedCoreNums) {
@@ -238,36 +242,34 @@ public:
                     InitIndex((startIdx + i * singleLoopNBurstNum) * d,
                             curS, actual_seq_qlen_addr);
                     CopyInSfmg(nBurst, curS, actual_seq_qlen_addr);
-                    event_t VWaitMte2 = static_cast<event_t>(GetTPipePtr()->FetchEventID(HardEvent::MTE2_V));
                     AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(VWaitMte2);
-                    AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(VWaitMte2);
                 }
+                AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(VWaitMte2);
 
                 // cast 1
                 int64_t calcSize = nBurst * dAlign;
                 Cast(sfmgClc1, input1Buf, RoundMode::CAST_NONE, calcSize);
                 AscendC::PipeBarrier<PIPE_V>();
+
                 // cast 2
                 Cast(sfmgClc2, input2Buf, RoundMode::CAST_NONE, calcSize);
                 AscendC::PipeBarrier<PIPE_V>();
 
                 // pre copyIn next nBurst
                 if (i < singleCoreLoopTimes - 1) {
-
-                    event_t Mte2WaitV = static_cast<event_t>(GetTPipePtr()->FetchEventID(HardEvent::V_MTE2));
                     AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(Mte2WaitV);
                     AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(Mte2WaitV);
-                    
                     int64_t nextNBurst = i == singleCoreLoopTimes - 2 ? singleCoreLastLoopNBurstNum : nBurst;
                     input1Buf = inBuffer1.Get<half>();
                     input2Buf = inBuffer2.Get<half>();
                     InitIndex((startIdx + (i + 1) * singleLoopNBurstNum) * d,
                             curS, actual_seq_qlen_addr);
                     CopyInSfmg(nextNBurst, curS, actual_seq_qlen_addr);
-
-                    event_t VWaitMte2 = static_cast<event_t>(GetTPipePtr()->FetchEventID(HardEvent::MTE2_V));
                     AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(VWaitMte2);
-                    AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(VWaitMte2);
+                }
+
+                if (i > 0) {
+                    AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(VWaitMte3);
                 }
 
                 // sfmg
@@ -290,16 +292,13 @@ public:
                 AscendC::PipeBarrier<PIPE_V>();
 
                 // copyOut
-                event_t Mte3WaitV = static_cast<event_t>(GetTPipePtr()->FetchEventID(HardEvent::V_MTE3));
                 AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(Mte3WaitV);
                 AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(Mte3WaitV);
 
                 int64_t sfmgOutputOffset = (startIdx + i * singleLoopNBurstNum) * BLOCK_SIZE;
                 DataCopy(sfmgWorkspaceGm[sfmgOutputOffset], outputBuf, nBurst * BLOCK_SIZE);
                 if (i < singleCoreLoopTimes - 1) {
-                    event_t VWaitMte3 = static_cast<event_t>(GetTPipePtr()->FetchEventID(HardEvent::MTE3_V));
                     AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(VWaitMte3);
-                    AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(VWaitMte3);
                 }
                 
             }

@@ -165,9 +165,6 @@ public:
     }
 
     __aicore__ void init(int32_t batchIn, int32_t headNumIn, int32_t gIn, int32_t headDimIn, uint32_t coreIdx, 
-        __gm__ uint8_t *query, __gm__ uint8_t *key, 
-        __gm__ uint8_t *value, __gm__ uint8_t *dy,
-        __gm__ uint8_t * user, 
         __gm__ uint8_t *actual_seq_qlen, __gm__ uint8_t *actual_seq_kvlen, uint32_t totalCoreNum) {
         
         batch = batchIn;
@@ -176,11 +173,6 @@ public:
         headDim = headDimIn;
         n2 = headNum / g;
 
-        q_gm_addr = query;
-        k_gm_addr = key;
-        v_gm_addr = value;
-        dy_gm_addr = dy;
-        user_gm_addr = user;
         actual_seq_qlen_addr = actual_seq_qlen;
         actual_seq_kvlen_addr = actual_seq_kvlen;
 
