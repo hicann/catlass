@@ -35,7 +35,7 @@ include(CMakeCommonLanguageInclude)
 
 set(CMAKE_ASCEND_FLAGS "-std=c++${CMAKE_CXX_STANDARD}")
 
-if(DEFINED ENABLE_MSDEBUG AND ENABLE_MSDEBUG)
+if(DEFINED ASCEND_ENABLE_MSDEBUG AND ASCEND_ENABLE_MSDEBUG)
     set(CMAKE_ASCEND_FLAGS_DEBUG "-O0 -g")
 else()
     set(CMAKE_ASCEND_FLAGS_DEBUG "-Xhost-start -O0 -g -Xhost-end -Xaicore-start -O2 -Xaicore-end")

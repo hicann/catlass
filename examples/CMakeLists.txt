@@ -11,11 +11,15 @@ set(CATLASS_EXAMPLES_COMMON_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/common)
 add_custom_target(catlass_examples)
 
 macro(catlass_example_add_executable NAME AICORE_ARCH)
+    set(EXAMPLE_DESTINATION bin)
+    if(DEFINED ENABLE_SIMULATOR AND ENABLE_SIMULATOR)
+        set(EXAMPLE_DESTINATION bin_sim)
+    endif()
     add_executable(${NAME} ${ARGN})
     target_compile_options(${NAME} PRIVATE $<$<COMPILE_LANGUAGE:ASCEND>:--cce-aicore-arch=${AICORE_ARCH}>)
     add_dependencies(catlass_examples ${NAME})
-    install(TARGETS ${NAME} DESTINATION bin COMPONENT ${NAME})
-    install(TARGETS ${NAME} DESTINATION bin COMPONENT catlass_examples)
+    install(TARGETS ${NAME} DESTINATION ${EXAMPLE_DESTINATION} COMPONENT ${NAME})
+    install(TARGETS ${NAME} DESTINATION ${EXAMPLE_DESTINATION} COMPONENT catlass_examples)
 endmacro()
 
 add_compile_options(
