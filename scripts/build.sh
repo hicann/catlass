@@ -26,22 +26,28 @@ CMAKE_BUILD_TYPE=Release
 
 mkdir -p "$CMAKE_BUILD_PATH"
 
+CMAKE_BUILD_DEFINITIONS="-DCMAKE_BUILD_TYPE=$CMAKE_BUILD_TYPE"
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --clean)
             rm -rf build
             rm -rf output
-            ;;
+        ;;
         --debug)
             echo "Hint: only python extension support debug mode."
             CMAKE_BUILD_TYPE=Debug
-            ;;
+        ;;
+        --enable_dump)
+            ENABLE_DUMP=ON
+        ;;
         --*)
             echo "Unknown option: $1"
-            ;;
+        ;;
     esac
     shift
 done
+echo $CMAKE_BUILD_DEFINITIONS
 
 function build_shared_lib() {
     cd "$CMAKE_SOURCE_PATH"/examples/shared_lib || exit
@@ -70,7 +76,7 @@ function build_python_extension() {
 
 if [[ "$TARGET" == "shared_lib" ]]; then
     build_shared_lib
-elif [[  "$TARGET" == "lib_cmake" ]]; then
+elif [[ "$TARGET" == "lib_cmake" ]]; then
     cmake -DENABLE_LIB=ON -S "$CMAKE_SOURCE_PATH" -B "$CMAKE_BUILD_PATH"
     cmake --build "$CMAKE_BUILD_PATH"
 elif [[ "$TARGET" == "python_extension" ]]; then
@@ -78,6 +84,6 @@ elif [[ "$TARGET" == "python_extension" ]]; then
 elif [[ "$TARGET" == "torch_library" ]]; then
     build_torch_library
 else
-    cmake --no-warn-unused-cli -S"$CMAKE_SOURCE_PATH" -B"$CMAKE_BUILD_PATH"
+    cmake --no-warn-unused-cli -DENABLE_DUMP=$ENABLE_DUMP -S"$CMAKE_SOURCE_PATH" -B"$CMAKE_BUILD_PATH"
     cmake --build "$CMAKE_BUILD_PATH" --target "$TARGET" -j
 fi
