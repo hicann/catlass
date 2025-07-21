@@ -44,7 +44,7 @@ catlass
 | 社区版     | 8.2.RC1.alpha002 及之后版本 | [社区CANN包下载地址](https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.2.RC1.alpha002) |
 | 商用版     | 8.1.RC1及之后版本           | 请咨询对应Support/SupportE获取                                                                                       |
 
-- 对于某些调测工具，可能需要更新的CANN版本，可参考[调测工具文档](#toolbox)。
+- 对于某些调测工具，可能需要较以上版本更加新的CANN版本，可参考[调测工具文档](#toolbox)。
 
 ## 🚀 快速上手
 
@@ -90,9 +90,9 @@ cd output/bin
 #### 🚗 功能调试
 
 - [msDebug](./docs/tools/msdebug.md) - 类gdb/lldb的调试工具msDebug
+  - ⚠️ **注意** 这个功能依赖于[8.2.RC1.alpha003](https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.2.RC1.alpha003)版本的社区版或`20250630`之后的商用版。
 - [printf](./docs/tools/print.md) - 在算子device代码进行打印调试
-
-*提示：以上两种工具需要使用[8.2.RC1.alpha003](https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.2.RC1.alpha003)版本的社区版或`20250630`之后的商用版才能支持。*
+  - ⚠️ **注意** 这个功能将在未来的`CANN 8.3`开始支持。
 
 #### ✈️ 性能调优
 
