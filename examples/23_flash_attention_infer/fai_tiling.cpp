@@ -45,7 +45,7 @@ const int32_t NUM64 = 64;
 const int32_t NUM128 = 128;
 const int32_t NUM256 = 256;
 const int32_t NUM512 = 512;
-const int32_t WORKSPACE_BLOCK_SIZE_DB = 65536;
+const int32_t WORKSPACE_BLOCK_SIZE_DB = 131072;
 const int32_t TILING_SIZE_IN_BYTE = 84;
 
 enum class MaskType { NO_MASK = 0, MASK_SPEC = 1 };
@@ -72,6 +72,7 @@ struct FATilingData {
     uint32_t kvHeads = 0;
     uint32_t batch = 0;
     uint32_t maxNumBlocksPerBatch = 0;
+    uint32_t firstBatchTaskNum = 0;
     uint32_t totalTaskNum = 0;
     uint64_t mm1OutSize = 0;
     uint64_t smOnlineOutSize = 0;
@@ -99,7 +100,11 @@ void FillBasicTilingData(const FAInfo &faInfo, FATilingData &faTilingData, int64
 uint32_t GetQNBlockTile(int64_t qSeqlen, uint32_t groupSize)
 {
     uint32_t qRowNumCeil = 128;
-    uint32_t qNBlockTile = qRowNumCeil / qSeqlen;
+    // A trick is used to ensure the qN tile is a even number,
+    // thus most tasks have balanced workload between two vec cores,
+    // and each vec core possess no more than 64 rows when all-rounded row num is no larger than 128,
+    // aiding the coding of rescale block
+    uint32_t qNBlockTile = (qRowNumCeil / qSeqlen) / 2 * 2;
     qNBlockTile = std::min(qNBlockTile, groupSize);
     qNBlockTile = std::max(qNBlockTile, static_cast<uint32_t>(1));
     return qNBlockTile;
@@ -128,6 +133,9 @@ void FillSplitCoreTilingData(const FAInfo &faInfo, FATilingData &faTilingData)
         std::cout << "batch " << batchIdx << " curQSBlockTile : " << curQSBlockTile << '\n';
         std::cout << "batch " << batchIdx << " curQSBlockNum : " << curQSBlockNum << '\n';
         uint32_t curTaskNum = curQNBlockNum * curQSBlockNum;
+        if (batchIdx == 0) {
+            faTilingData.firstBatchTaskNum = curTaskNum;
+        }
         totalTaskNum += curTaskNum;
     }
     faTilingData.totalTaskNum = totalTaskNum;

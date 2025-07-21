@@ -33,6 +33,16 @@ struct EpilogueAtlasA2FARescaleO {
     using ArchTag = Arch::AtlasA2;
 };
 
+// For AtlasA2, FA Infer online Softmax no mask
+struct EpilogueAtlasA2OnlineSoftmaxNoMask {
+    using ArchTag = Arch::AtlasA2;
+};
+
+// For AtlasA2, FA Infer RescaleO no split row
+struct EpilogueAtlasA2RescaleONoSplitRow {
+    using ArchTag = Arch::AtlasA2;
+};
+
 // For AtlasA2, MLA Softmax
 struct EpilogueAtlasA2MLASoftmax {
     using ArchTag = Arch::AtlasA2;
