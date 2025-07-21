@@ -19,15 +19,13 @@ Catlass算子模板库采用分层抽象的设计理念，通过分析硬件架�
 ### 代码部署
 配置环境变量：
 
-```
+```bash
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
-
 ```
 git clone下载Catlass算子模板库源码
 
-```
+```bash
 git clone https://gitee.com/ascend/catlass.git
-
 ```
 需要依赖组件：
 CANN 8.2.RC1.alpha002及之后版本
