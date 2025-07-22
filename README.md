@@ -96,8 +96,7 @@ cd output/bin
 
 #### ✈️ 性能调优
 
-- [msProf](./docs/tools/msprof.md) - 单算子性能分析工具msProf
-- [Profiling](./docs/tools/profiling.md) - 整网性能分析工具Profiling
+- [msProf](./docs/tools/msprof.md) - 算子性能分析工具msProf
 
 ## 👥 合作贡献者
 
