@@ -24,7 +24,7 @@ terminate called after throwing an instance of 'MSDEBUG_ERROR_CODE'
 
 ## 编译运行
 
-1. 基于[快速上手](../../README.md#快速上手)，增加编译选项`--debug --msdebug`，使能`debug`与`msdebug`编译算子样例。
+1. 基于[快速上手](../../README.md#快速上手)，打开工具的编译开关`--debug --msdebug`，使能`debug`与`msdebug`编译算子样例。
 
 ```bash
 bash scripts/build.sh --debug --msdebug 00_basic_matmul

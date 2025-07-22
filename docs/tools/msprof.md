@@ -1,24 +1,54 @@
-# 在CATLASS样例工程使用msProf
+# 在CATLASS样例工程使用msprof
+
+**Profiling**工具提供了AI任务运行性能数据、**昇腾AI处理器**系统数据等性能数据的采集和解析能力。
+
+其中，msprof采集通用命令是性能数据采集的基础，用于提供性能数据采集时的基本信息，包括参数说明、AI任务文件、数据存放路径、自定义环境变量等。
 
 **msProf**工具用于采集和分析运行在**昇腾AI处理器**上算子的关键性能指标，用户可根据输出的性能数据，快速定位算子的软、硬件性能瓶颈，提升算子性能的分析效率。
 
 当前支持基于不同运行模式（上板或仿真）和不同文件形式（可执行文件或算子二进制`.o`文件）进行性能数据的采集和自动解析。
 
-- 提示：CANN提供如下两套性能采集工具
-  - [msProf](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/82RC1alpha003/devaids/optool/atlasopdev_16_0082.html)是单算子性能分析工具，对应的指令为`msprof op`或`msopprof`
+- 提示：CANN提供如下两套性能采集工具，注意区分
   - [Profiling](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/82RC1alpha003/devaids/Profiling/atlasprofiling_16_0010.html)是整网性能分析工具，对应的指令为`msprof`
+  - [msProf](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/82RC1alpha003/devaids/optool/atlasopdev_16_0082.html)是单算子性能分析工具，对应的指令为`msprof op`或`msopprof`
+# 整网性能分析
+## msprof 使用示例
 
-- 本文档介绍的是**前者**，包括**上板性能采集**和**性能流水仿真**两部分。
+下面以对`00_basic_matmul`为例，进行Profiling的使用说明。
 
-# 使用示例
+1. 基于[快速上手](../README.md#快速上手)，打开工具的编译开关`--enable_profiling`， 使能`profiling api`编译算子样例。
 
-下面以对`00_basic_matmul`为例，进行msProf性能调优的使用说明。
+```bash
+bash scripts/build.sh --enable_profiling 00_basic_matmul
+```
 
-## 上板性能采集
+2. 切换到可执行文件的编译目录`output/bin`下，用`msprof`执行算子样例程序。
 
+```bash
+cd output/bin
+# 可执行文件名 |矩阵m轴|n轴|k轴|Device ID（可选）
+msprof ./00_basic_matmul 256 512 1024 0
+```
+
+## op_summary结构
+
+```bash
+├──aicore_time  # 算子在AIcore中的计算时间
+├──memory_bound # 内存带宽
+├──mte2_ratio   # MTE2搬运单元的时间比例
+├──mte2_time    # MTE2搬运单元的时间
+├──mte3_ratio   # MTE3搬运单元的时间比例
+├──mte3_time    # MTE3搬运单元的时间
+├──scalar_ratio # Scalar计算单元的时间比例
+├──scalar_time  # Scalar计算单元的时间
+├──vec_ratio    # Vector计算单元的时间比例
+└──vec_time     # Vector计算单元的时间
+```
+
+
+# 上板性能采集
 通过上板性能采集，可以直接测定算子在NPU卡上的运行时间，可判断性能是否初步达到预期标准。
-
-### 使用示例
+## msprof op 使用示例
 
 1. 参考[快速上手](../../README.md#快速上手)，编译算子样例。
 2. 使用`msprof op *可选参数* app [arguments]`格式调用msProf工具。
@@ -67,11 +97,11 @@ msprof op ./00_basic_matmul 256 512 1024 0
 ├──ResourceConflictRatio.csv  # UB上的 bank group、bank conflict和资源冲突率在所有指令中的占比， 建议减少/避免对于同一个bank读写冲突或bank group的读读冲突
 ```
 
-## 性能流水仿真
+# 性能流水仿真
 
 通过仿真，可以获得**流水图**、**指令与代码行映射**、**代码热点图**等可视化数据，以便进一步分析优化算子计算瓶颈。
 
-### 使用示例
+## msprof op simulator使用示例
 
 1. 编译脚本增加选项`--simulator`， 以`simulator`模式编译算子。
 
@@ -94,7 +124,7 @@ cd output/bin
 msprof op simulator ./00_basic_matmul 256 512 1024 0
 ```
 
-### 输出文件
+## 输出文件
 
 ```bash
 ├──dump                    # 原始的性能数据，用户无需关注
@@ -107,19 +137,19 @@ msprof op simulator ./00_basic_matmul 256 512 1024 0
 
 ```
 
-### 性能数据可视化查看
+## 性能数据可视化查看
 
 - 数据可视化依赖[MindStudio Insight](https://www.hiascend.com/document/detail/zh/mindstudio/80RC1/GUI_baseddevelopmenttool/msascendinsightug/Insight_userguide_0002.html)工具，需要提前下载安装。
 
-#### 代码热点图
+### 代码热点图
 
 获取仿真输出文件夹`simulator`下的`visualize_data.bin`，通过MindStudio Insight工具加载bin文件查看代码热点图。
 
 ![MindStudio Insight Source](https://www.hiascend.com/doc_center/source/zh/mindstudio/80RC1/GUI_baseddevelopmenttool/msascendinsightug/figure/zh-cn_image_0000002274910673.png)
 
-#### 指令流水图
+### 指令流水图
 
-##### 使用Edge/Chrome Trace Viewer/Perfetto呈现
+#### 使用Edge/Chrome Trace Viewer/Perfetto呈现
 
 根据浏览器，选择以下工具：
 
@@ -129,7 +159,7 @@ msprof op simulator ./00_basic_matmul 256 512 1024 0
 
 导入`trace.json`即可查看仿真指令流水图。
 
-##### 使用MindStudio Insight呈现
+#### 使用MindStudio Insight呈现
 
 获取仿真输出文件夹`simulator`下的`visualize_data.bin`。通过MindStudio Insight工具加载bin文件查看仿真流水图。
 
@@ -144,7 +174,7 @@ msprof op simulator ./00_basic_matmul 256 512 1024 0
 2. simulator如果要看代码行映射，在camke中加入`-g`；性能结果中有大量明显vector操作（如Add、Div）映射为scalar操作导致性能结果明显异常（vector_ratio<10%,scalar>90%），这是编译优化等级造成的，将优化等级选择-O3编译即可
 3. 仿真不能指定某个卡（MKI\_NPU\_DEVICE），只能在0卡上跑simulator。
 
-### MindStudio Insight可视化内存热点图
+## MindStudio Insight可视化内存热点图
 
 msProf工具采集到的数据，可导入可视化工具[MindStudio Insight](https://www.hiascend.com/document/detail/zh/mindstudio/80RC1/GUI_baseddevelopmenttool/msascendinsightug/Insight_userguide_0002.html)中，以便进一步分析算子计算瓶颈。
 
