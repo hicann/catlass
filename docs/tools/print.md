@@ -10,7 +10,7 @@
 
 # 使用示例
 
-下面以对`09_splitk_matmul`为例，进行msDebug调试的使用说明。
+下面以对`09_splitk_matmul`为例，进行`设备侧打印`的使用说明。
 
 ## 插入打印代码
 
@@ -46,7 +46,8 @@ cd output/bin
 # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID（可选）
 msdebug ./09_basic_matmul 256 512 1024 0
 ```
-
+- ⚠ 注意事项
+  - 目前`设备侧打印`仅支持打印`GM`和`SB(Scalar Buffer)`上的数值。
 ## 示例
 
 输出结果
