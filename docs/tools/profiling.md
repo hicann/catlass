@@ -8,7 +8,7 @@ Profiling工具提供了AI任务运行性能数据、昇腾AI处理器系统数�
   - [msProf](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/82RC1alpha003/devaids/optool/atlasopdev_16_0082.html)是单算子性能分析工具，对应的指令为`msprof op`或`msopprof`
   - [Profiling](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/82RC1alpha003/devaids/Profiling/atlasprofiling_16_0010.html)是整网性能分析工具，对应的指令为`msprof`
 
-- 本文档介绍的是**前者**。
+- 本文档介绍的是**后者**。
 
 # 使用示例
 
