@@ -401,7 +401,7 @@ public:
         uint32_t embedRound = RoundUp<BLOCK_SIZE>(embed);
 
         EpilogueOnlineSoftmax epilogueOnlineSoftmax(resource, scaleValue);
-        // EpilogueRescaleO epilogueRescaleO(resource);
+        EpilogueRescaleO epilogueRescaleO(resource);
 
         
         uint32_t curTotalTaskNum = firstBatchTaskNum;
@@ -462,6 +462,7 @@ public:
                 noMaskTailS = noMaskKvS % pagedBlockSize;
                 // maskedHeadS = (pagedBlockSize - noMaskTailS) % pagedBlockSize;
             }
+            uint32_t maskedKvS = qSBlockSize;
             uint32_t kvSLoopNumTotal = CeilDiv(noSkipKvS, pagedBlockSize);
             uint32_t kvSLoopNumNoMask = CeilDiv(noMaskKvS, pagedBlockSize);
             uint32_t blockStackNum = (kvSeqlen <= 4096) ? 1 : 2;
@@ -501,6 +502,7 @@ public:
                 Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(softmaxReady);
 
                 if (kvSIdx >= preLaunch * blockStackNum) {
+                    uint32_t delayedKvSIdx = kvSIdx - preLaunch * blockStackNum;
                     stackSeqTile = pagedBlockSize * blockStackNum;
                     LayoutO layoutO(qSBlockSize, embed * qHeads);
                     LayoutOTmp layoutOTmp(rowNum, embed, embedRound);
@@ -510,26 +512,117 @@ public:
                         curStackTileMod * WORKSPACE_BLOCK_SIZE_DB;
                     Arch::CrossCoreWaitFlag(pvReady);
                     // rescale O
+                    epilogueRescaleO(
+                        gO[gmOffsetO],
+                        gOTmp[gmOffsetOTmp],
+                        layoutO,
+                        layoutOTmp,
+                        actualBlockShapePV,
+                        delayedKvSIdx,
+                        qSBlockSize,
+                        qNBlockSize,
+                        (delayedKvSIdx == 0),
+                        0,
+                        curStackTileMod);
                 }
                 stackSeqCount++;
             }
             uint32_t maskedStartIdx = (noMaskTailS == 0) ? kvSLoopNumNoMask : kvSLoopNumNoMask - 1;
+            uint32_t maskedEndIdx = noMaskKvS / pagedBlockSize;
             // masked kvSeqlen loop
             for (uint32_t kvSIdx = maskedStartIdx;
-                kvSIdx < kvSLoopNumTotal + preLaunch * blockStackNum;
+                kvSIdx <= maskedEndIdx + preLaunch * blockStackNum;
                 kvSIdx += blockStackNum) {
-                if (kvSIdx < kvSLoopNumTotal) {
-                    if (kvSIdx + blockStackNum > kvSLoopNumTotal - 1) {
-                        stackSeqTile = kvSeqlen - kvSIdx * pagedBlockSize;
+                if (kvSIdx <= maskedEndIdx) {
+                    // if (kvSIdx + blockStackNum >= maskedEndIdx) {
+                    //     stackSeqTile = maskedKvS;
+                    // } else {
+                    //     stackSeqTile = pagedBlockSize * blockStackNum;
+                    // }
+                    stackSeqTile = maskedKvS;
+                    uint32_t stackSeqTileRound = AlignUp(stackSeqTile, BLOCK_SIZE);
+                    LayoutS layOutS(rowNum, stackSeqTile, stackSeqTileRound);
+                    LayoutP layOutP(rowNum, stackSeqTile, stackSeqTileRound);
+                    GemmCoord actualBlockShapeQK{rowNum, stackSeqTile, embed};
+                    uint32_t curStackTileMod = stackSeqCount % (preLaunch + 1);
+                    uint32_t gmOffsetS = coreIdx * WORKSPACE_BLOCK_SIZE_DB * 2 + // cube core offset
+                        curStackTileMod * WORKSPACE_BLOCK_SIZE_DB; // single cube core db offset
+                    // vec core offset will be processed within epilogue block
+                    uint32_t gmOffsetP = gmOffsetS;
+                    Arch::CrossCoreWaitFlag(qkReady);
+                    // online softmax
+                    epilogueOnlineSoftmax(
+                        gP[gmOffsetP],
+                        gS[gmOffsetS],
+                        layOutP,
+                        layOutS,
+                        actualBlockShapeQK,
+                        kvSIdx,
+                        qSBlockSize,
+                        qNBlockSize,
+                        curStackTileMod);
+                    Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(softmaxReady);
+                }
+
+                if (kvSIdx >= preLaunch * blockStackNum) {
+                    uint32_t delayedKvSIdx = kvSIdx - preLaunch * blockStackNum;
+                    if (delayedKvSIdx + blockStackNum >= maskedEndIdx) {
+                        stackSeqTile = maskedKvS;
+                    } else if (delayedKvSIdx + blockStackNum > kvSLoopNumNoMask - 1) {
+                        stackSeqTile = noMaskKvS - delayedKvSIdx * pagedBlockSize;
                     } else {
                         stackSeqTile = pagedBlockSize * blockStackNum;
                     }
-                    uint32_t curStackTileMod = stackSeqCount % (preLaunch + 1);
-                    // online softmax
 
+                    LayoutO layoutO(qSBlockSize, embed * qHeads);
+                    LayoutOTmp layoutOTmp(rowNum, embed, embedRound);
+                    GemmCoord actualBlockShapePV{rowNum, embed, stackSeqTile};
+                    uint32_t curStackTileMod = (stackSeqCount - preLaunch) % (preLaunch + 1);
+                    uint32_t gmOffsetOTmp = coreIdx * WORKSPACE_BLOCK_SIZE_DB * 2 +
+                        curStackTileMod * WORKSPACE_BLOCK_SIZE_DB;
+                    Arch::CrossCoreWaitFlag(pvReady);
+                    // rescale O
+                    epilogueRescaleO(
+                        gO[gmOffsetO],
+                        gOTmp[gmOffsetOTmp],
+                        layoutO,
+                        layoutOTmp,
+                        actualBlockShapePV,
+                        kvSIdx,
+                        qSBlockSize,
+                        qNBlockSize,
+                        (delayedKvSIdx == 0),
+                        (delayedKvSIdx + blockStackNum >= maskedEndIdx),
+                        curStackTileMod);
                 }
-                uint32_t curStackTileMod = (stackSeqCount - preLaunch) % (preLaunch + 1);
-                // rescale O
+                
+                // if (kvSIdx + blockStackNum > kvSLoopNumTotal + preLaunch * blockStackNum - 1) {
+                //     stackSeqTile = kvSeqlen - (kvSIdx - preLaunch * blockStackNum) * pagedBlockSize;
+                // } else if (kvSIdx + blockStackNum > kvSLoopNumNoMask + preLaunch * blockStackNum - 1) {
+                //     stackSeqTile = noMaskKvS - (kvSIdx - preLaunch * blockStackNum) * pagedBlockSize;
+                // } else {
+                //     stackSeqTile = pagedBlockSize * blockStackNum;
+                // }
+                // LayoutO layoutO(qSBlockSize, embed * qHeads);
+                // LayoutOTmp layoutOTmp(rowNum, embed, embedRound);
+                // GemmCoord actualBlockShapePV{rowNum, embed, stackSeqTile};
+                // uint32_t curStackTileMod = (stackSeqCount - preLaunch) % (preLaunch + 1);
+                // uint32_t gmOffsetOTmp = coreIdx * WORKSPACE_BLOCK_SIZE_DB * 2 +
+                //         curStackTileMod * WORKSPACE_BLOCK_SIZE_DB;
+                // Arch::CrossCoreWaitFlag(pvReady);
+                // // rescale O
+                // epilogueRescaleO(
+                //     gO[gmOffsetO],
+                //     gOTmp[gmOffsetOTmp],
+                //     layoutO,
+                //     layoutOTmp,
+                //     actualBlockShapePV,
+                //     kvSIdx,
+                //     qSBlockSize,
+                //     qNBlockSize,
+                //     0,
+                //     (kvSIdx + blockStackNum > kvSLoopNumTotal + preLaunch * blockStackNum - 1),
+                //     curStackTileMod);
                 stackSeqCount++;
             }
             
