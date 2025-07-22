@@ -46,8 +46,10 @@ cd output/bin
 # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID（可选）
 msdebug ./09_basic_matmul 256 512 1024 0
 ```
+
 - ⚠ 注意事项
   - 目前`设备侧打印`仅支持打印`GM`和`SB(Scalar Buffer)`上的数值。
+
 ## 示例
 
 输出结果
