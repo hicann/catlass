@@ -19,9 +19,9 @@ def get_cu_seqlens(seqlens_list):
     return cu
 
 
-def gen_data(N1, N2, D, list_seq):
-    g = N1 / N2
-    scale = 1 / (D ** 0.5)
+def gen_data(nheads, nheads_k, headdim, list_seq):
+    g = nheads / nheads_k
+    scale = 1 / (headdim ** 0.5)
     pre_tocken = 65536
     next_tocken = 0
 
@@ -32,18 +32,18 @@ def gen_data(N1, N2, D, list_seq):
     keep_prob = 1.0
     cu_seqlens_q = get_cu_seqlens(seqlens_list_q)
     cu_seqlens_k = get_cu_seqlens(seqlens_list_k)
-    S1 = seqlens_list_q.sum()
-    S2 = seqlens_list_k.sum()
+    total_q = seqlens_list_q.sum()
+    total_k = seqlens_list_k.sum()
 
-    print("S1: ", S1)
-    print("S2: ", S2)
+    print("total_q: ", total_q)
+    print("total_k: ", total_k)
 
     pttype = torch.float16
     limit = 2
-    q = limit * (torch.rand([S1, N1, D]) - 0.5).to(pttype)
-    k = limit * (torch.rand([S2, N2, D]) - 0.5).to(pttype)
-    v = limit * (torch.rand([S2, N2, D]) - 0.5).to(pttype)
-    dout = limit * (torch.rand([S1, N1, D]) - 0.5).to(pttype)
+    q = limit * (torch.rand([total_q, nheads, headdim]) - 0.5).to(pttype)
+    k = limit * (torch.rand([total_k, nheads_k, headdim]) - 0.5).to(pttype)
+    v = limit * (torch.rand([total_k, nheads_k, headdim]) - 0.5).to(pttype)
+    dout = limit * (torch.rand([total_q, nheads, headdim]) - 0.5).to(pttype)
 
     cu_seq_len_list = cu_seqlens_q[1:].cpu().numpy().tolist()
     cu_seq_kvlen_list = cu_seqlens_k[1:].cpu().numpy().tolist()
@@ -77,7 +77,7 @@ def gen_data(N1, N2, D, list_seq):
     v.requires_grad = True
     torch.npu.synchronize()
     npu_rst = torch_npu.npu_fusion_attention(
-            q, k, v, N1,
+            q, k, v, nheads,
             pse=None,
             padding_mask=None,
             atten_mask=atten_mask_npu,
@@ -130,9 +130,9 @@ def gen_data(N1, N2, D, list_seq):
 if __name__ == '__main__':
     os.makedirs(os.path.join(WORKSPACE, "data"), exist_ok=True)
 
-    N1 = int(sys.argv[1])
-    N2 = int(sys.argv[2])
-    D = int(sys.argv[3])
+    nheads = int(sys.argv[1])
+    nheads_k = int(sys.argv[2])
+    headdim = int(sys.argv[3])
     list_seq = list(map(int, sys.argv[4:]))
 
-    gen_data(N1, N2, D, list_seq)
+    gen_data(nheads, nheads_k, headdim, list_seq)

@@ -98,8 +98,8 @@ public:
     int64_t b;
     int64_t nheads_k;
     int64_t g;
-    int64_t cuS1Len;
-    int64_t cuS2Len;
+    int64_t cuQSeqLen;
+    int64_t cuKSeqLen;
     int64_t headdim;
 
     float scaleValue;
@@ -462,7 +462,7 @@ public:
             // do scalar calculate
             ///////////////////////////////////////////////////////////////
 
-            GetSeqQlenKvlenByBidx(blockInfo.batchIdx, cuS1Len, cuS2Len);
+            GetSeqQlenKvlenByBidx(blockInfo.batchIdx, cuQSeqLen, cuKSeqLen);
 
             s1CubeExtend = blockInfo.lengthy;
             s2CubeExtend = 128;
@@ -480,7 +480,7 @@ public:
             if (blockInfo.batchIdx > 0) {
                 sfmgOffset = ((__gm__ int64_t *)cu_seq_qlen_addr)[blockInfo.batchIdx - 1] * nheads_k * g * 8;
             }
-            sfmgOffset += ((blockInfo.nheadsKIdx * g + blockInfo.gIdx) * cuS1Len + blockInfo.SeqQIdx * S1_CUBESIZE + curSeqQIdx * s1VecSize) * 8;
+            sfmgOffset += ((blockInfo.nheadsKIdx * g + blockInfo.gIdx) * cuQSeqLen + blockInfo.SeqQIdx * S1_CUBESIZE + curSeqQIdx * s1VecSize) * 8;
             
             // copyIn cube_workspace params
             copyInOffset = 
