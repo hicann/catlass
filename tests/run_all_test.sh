@@ -30,3 +30,6 @@ pip uninstall torch_catlass -y
 # torch lib
 bash "$BUILD_SCRIPT_PATH" --clean torch_library || exit 1
 python3 "$SCRIPT_PATH/test_torch_lib.py"
+
+# self contained include
+bash "$BUILD_SCRIPT_PATH" --clean --tests test_self_contained_includes || exit 1

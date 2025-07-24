@@ -36,7 +36,7 @@ add_compile_options(
 add_compile_definitions(L2_CACHE_HINT)
 include_directories(
     ${CATLASS_EXAMPLES_COMMON_SOURCE_DIR}
-    ${CMAKE_SOURCE_DIR}/include
+    ${CATLASS_INCLUDE_DIR}
 )
 link_directories(${ASCEND_HOME_PATH}/lib64)
 link_libraries(dl tiling_api platform c_sec nnopbase ascendcl)

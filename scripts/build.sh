@@ -25,10 +25,9 @@ WARN="${YELLOW}[WARN]"
 function get_npu_model(){
     if command -v npu-smi &> /dev/null; then
         echo "Ascend$(npu-smi info -t board -i 0 -c 0 | awk '/Chip Name/ {print $NF}')"
-        return 1
-    else
-        echo "Ascend910B1"
         return 0
+    else
+        return 1
     fi
 }
 
@@ -51,12 +50,15 @@ function show_help() {
     echo "  --msdebug       Enable msdebug support"
     echo "  --simulator     Compile example in simulator mode"
     echo "  --enable_profiling Enable profiling"
+    echo "  --tests         Enable building targets in tests"
     echo "  -D<option>      Additional CMake options"
     echo -e "\n${BLUE}Targets:${NC}"
     echo "  catlass_examples  Build Catlass examples"
     echo "  python_extension  Build Python extension"
     echo "  torch_library     Build Torch library"
     echo "  <other>           Other specific targets, e.g. 00_basic_matmul"
+    echo -e "\n{BLUE}Test targets:${NC}"
+    echo "  test_self_contained_includes  Test for self contained includes"
 }
 
 TARGET=""
@@ -94,13 +96,17 @@ while [[ $# -gt 0 ]]; do
             ;;
         --simulator)
             CMAKE_OPTIONS+=("-DASCEND_ENABLE_SIMULATOR=True")
-            if NPU_MODEL=$(get_npu_model); then
-                echo -e "${WARN}No npu-smi detected, using default model for simulator: ${NPU_MODEL}${NC}"
+            if ! NPU_MODEL=$(get_npu_model); then
+                echo -e "${ERROR}No npu-smi detected, please check your environment!"
+                exit 1
             else
                 echo -e "${INFO}Detect NPU_MODEL: ${NPU_MODEL}${NC}"
             fi
             CMAKE_OPTIONS+=("-DSIMULATOR_NPU_MODEL=${NPU_MODEL}")
             POST_BUILD_INFO="${INFO}Please run ${NC}\nexport LD_LIBRARY_PATH=${ASCEND_HOME_PATH}/tools/simulator/${NPU_MODEL}/lib:\$LD_LIBRARY_PATH\n${GREEN}in your terminal before execute examples.${NC}"            
+            ;;
+        --tests)
+            CMAKE_OPTIONS+=("-DBUILD_TESTS=True")
             ;;
         --enable_profiling)
             CMAKE_OPTIONS+=("-DASCEND_ENABLE_MSPROF=True")
