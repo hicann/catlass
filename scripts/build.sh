@@ -50,7 +50,7 @@ function show_help() {
     echo "  --debug         Build in debug mode"
     echo "  --msdebug       Enable msdebug support"
     echo "  --simulator     Compile example in simulator mode"
-    echo "  --enable_profiling Enable msprofiling"
+    echo "  --enable_profiling Enable profiling"
     echo "  -D<option>      Additional CMake options"
     echo -e "\n${BLUE}Targets:${NC}"
     echo "  catlass_examples  Build Catlass examples"
