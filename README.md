@@ -90,7 +90,7 @@ cd output/bin
 #### 🚗 功能调试
 
 - [msDebug](./docs/tools/msdebug.md) - 类gdb/lldb的调试工具msDebug
-  - ⚠️ **注意** 这个功能依赖于[8.2.RC1.alpha003](https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.2.RC1.alpha003)版本的社区版或`20250630`之后的商用版。
+  - ⚠️ **注意** 这个功能依赖于[8.2.RC1.alpha003](https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.2.RC1.alpha003)版本的社区版或`8.2.RC1`之后的商用版。
 - [printf](./docs/tools/print.md) - 在算子device代码进行打印调试
   - ⚠️ **注意** 这个功能将在未来的`CANN 8.3`开始支持。
 
