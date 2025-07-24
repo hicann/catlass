@@ -25,10 +25,9 @@ WARN="${YELLOW}[WARN]"
 function get_npu_model(){
     if command -v npu-smi &> /dev/null; then
         echo "Ascend$(npu-smi info -t board -i 0 -c 0 | awk '/Chip Name/ {print $NF}')"
-        return 1
-    else
-        echo "Ascend910B1"
         return 0
+    else
+        return 1
     fi
 }
 
@@ -97,8 +96,9 @@ while [[ $# -gt 0 ]]; do
             ;;
         --simulator)
             CMAKE_OPTIONS+=("-DASCEND_ENABLE_SIMULATOR=True")
-            if NPU_MODEL=$(get_npu_model); then
-                echo -e "${WARN}No npu-smi detected, using default model for simulator: ${NPU_MODEL}${NC}"
+            if ! NPU_MODEL=$(get_npu_model); then
+                echo -e "${ERROR}No npu-smi detected, please check your environment!"
+                exit 1
             else
                 echo -e "${INFO}Detect NPU_MODEL: ${NPU_MODEL}${NC}"
             fi
