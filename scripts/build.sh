@@ -51,12 +51,15 @@ function show_help() {
     echo "  --msdebug       Enable msdebug support"
     echo "  --simulator     Compile example in simulator mode"
     echo "  --enable_profiling Enable profiling"
+    echo "  --tests         Enable building targets in tests"
     echo "  -D<option>      Additional CMake options"
     echo -e "\n${BLUE}Targets:${NC}"
     echo "  catlass_examples  Build Catlass examples"
     echo "  python_extension  Build Python extension"
     echo "  torch_library     Build Torch library"
     echo "  <other>           Other specific targets, e.g. 00_basic_matmul"
+    echo -e "\n{BLUE}Test targets:${NC}"
+    echo "  test_self_contained_includes  Test for self contained includes"
 }
 
 TARGET=""
@@ -101,6 +104,9 @@ while [[ $# -gt 0 ]]; do
             fi
             CMAKE_OPTIONS+=("-DSIMULATOR_NPU_MODEL=${NPU_MODEL}")
             POST_BUILD_INFO="${INFO}Please run ${NC}\nexport LD_LIBRARY_PATH=${ASCEND_HOME_PATH}/tools/simulator/${NPU_MODEL}/lib:\$LD_LIBRARY_PATH\n${GREEN}in your terminal before execute examples.${NC}"            
+            ;;
+        --tests)
+            CMAKE_OPTIONS+=("-DBUILD_TESTS=True")
             ;;
         --enable_profiling)
             CMAKE_OPTIONS+=("-DASCEND_ENABLE_MSPROF=True")

@@ -19,6 +19,8 @@ else()
     set(ASCEND_HOME_PATH $ENV{ASCEND_HOME_PATH})
 endif()
 
+set(CATLASS_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/include)
+
 if(NOT DEFINED CMAKE_BUILD_TYPE OR NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Release")
 endif()
@@ -34,3 +36,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
 endif()
 
 add_subdirectory(examples)
+
+if(DEFINED BUILD_TESTS AND BUILD_TESTS)
+    add_subdirectory(tests)
+endif()
