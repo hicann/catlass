@@ -31,8 +31,12 @@ set(BISHENG_COMPILER_OPTIONS
     -lruntime -lstdc++ -lascendcl -lm -ltiling_api -lplatform -lc_sec -ldl -lnnopbase
 )
 
-if(DEFINED PROF)
-    list(APPEND ${BISHENG_COMPILER_OPTIONS} -lprofapi)
+if(ENABLE_DUMP)
+    list(APPEND BISHENG_COMPILER_OPTIONS -lascend_dump -DASCENDC_DUMP=1 -DASCENDC_DEBUG)
+endif()
+
+if(PROF)
+    list(APPEND BISHENG_COMPILER_OPTIONS -lprofapi)
 endif()
 
 file(GLOB_RECURSE CATLASS_INCLUDE_FILES ${CMAKE_SOURCE_DIR}/include/*.hpp)
@@ -40,7 +44,7 @@ file(GLOB_RECURSE CATLASS_EXAMPLES_COMMON_INCLUDE_FILES ${CATLASS_EXAMPLES_COMMO
 add_custom_target(catlass_examples)
 
 function(catlass_example_add_executable NAME)
-    if (${NAME} STREQUAL "17_gemv_aiv")
+    if(${NAME} STREQUAL "17_gemv_aiv")
         set(ARCH "dav-c220-vec")
     else()
         set(ARCH "dav-c220")

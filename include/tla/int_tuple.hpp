@@ -121,7 +121,7 @@ template <class Tuple>
 using rank_t = decltype(rank(std::declval<Tuple>()));
 
 template <class Tuple>
-static constexpr auto rank_v = rank_t<Tuple>::value;
+constexpr auto rank_v = rank_t<Tuple>::value;
 
 // depth
 template <int... Is, class Tuple>
@@ -155,7 +155,7 @@ template <class Tuple>
 using depth_t = decltype(depth(std::declval<Tuple>()));
 
 template <class Tuple>
-static constexpr auto depth_v = depth_t<Tuple>::value;
+constexpr auto depth_v = depth_t<Tuple>::value;
 
 struct MultipliesUnaryLfold {
     template <class... T>
