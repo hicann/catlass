@@ -65,30 +65,32 @@ endfunction()
 if(ENABLE_LIB)
     add_subdirectory(lib_cmake)
 else()
-    foreach(EXAMPLE
-        00_basic_matmul
-        01_batched_matmul
-        02_grouped_matmul_slice_m
-        03_matmul_add
-        04_padding_matmul
-        05_grouped_matmul_slice_k
-        06_optimized_matmul
-        07_grouped_matmul_slice_m_per_token_dequant_moe
-        08_grouped_matmul
-        09_splitk_matmul
-        10_grouped_matmul_slice_m_per_token_dequant
-        11_grouped_matmul_slice_k_per_token_dequant
-        12_quant_matmul
-        13_basic_matmul_tla
-        14_optimized_matmul_tla
-        15_gemm
-        16_group_gemm
-        17_gemv_aiv
-        18_gemv_aic
-        19_mla
-        print_and_dump
-    )
-        add_subdirectory(${EXAMPLE})
-    endforeach()
+
+foreach(EXAMPLE
+    00_basic_matmul
+    01_batched_matmul
+    02_grouped_matmul_slice_m
+    03_matmul_add
+    04_padding_matmul
+    05_grouped_matmul_slice_k
+    06_optimized_matmul
+    07_grouped_matmul_slice_m_per_token_dequant_moe
+    08_grouped_matmul
+    09_splitk_matmul
+    10_grouped_matmul_slice_m_per_token_dequant
+    11_grouped_matmul_slice_k_per_token_dequant
+    12_quant_matmul
+    13_basic_matmul_tla
+    14_optimized_matmul_tla
+    15_gemm
+    16_group_gemm
+    17_gemv_aiv
+    18_gemv_aic
+    19_mla
+    20_fag_tnd
+    print_and_dump
+)
+    add_subdirectory(${EXAMPLE})
+endforeach()
 
 endif()

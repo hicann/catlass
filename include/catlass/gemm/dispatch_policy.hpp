@@ -65,6 +65,18 @@ struct MmadAtlasA2MLAPVTp1Spec : public MmadAtlasA2 {
     static constexpr uint32_t STAGES = 2;
 };
 
+struct MmadAtlasA2FAGCube1 : public MmadAtlasA2 {
+    static constexpr uint32_t STAGES = 2;
+};
+
+struct MmadAtlasA2FAGCube2 : public MmadAtlasA2 {
+    static constexpr uint32_t STAGES = 2;
+};
+
+struct MmadAtlasA2FAGCube3 : public MmadAtlasA2 {
+    static constexpr uint32_t STAGES = 2;
+};
+
 template <uint32_t PRELOAD_STAGES_, uint32_t L1_STAGES_, uint32_t L0A_STAGES_, uint32_t L0B_STAGES_,
     uint32_t L0C_STAGES_, bool ENABLE_UNIT_FLAG_, bool ENABLE_SHUFFLE_K_>
 struct MmadAtlasA2PreloadAsync : public MmadAtlasA2Async {
