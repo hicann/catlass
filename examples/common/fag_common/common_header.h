@@ -66,11 +66,11 @@ struct CubeAddrInfo {
 };
 
 struct VecBlockInfo {
-    int32_t S1Idx;
-    int32_t S2Idx;
+    int32_t SeqQIdx;
+    int32_t SeqKIdx;
     int32_t batchIdx;
-    int32_t headNumIdx;
-    int32_t n2Idx;
+    int32_t nheadsIdx;
+    int32_t nheadsKIdx;
     int32_t gIdx = 0;
     int32_t offset;
     int32_t lengthx = 0;

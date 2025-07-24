@@ -52,29 +52,29 @@ public:
     
 
     CATLASS_DEVICE
-    BlockEpilogue(Arch::Resource<ArchTag> &resource, TPipe *pipe_in, __gm__ uint8_t *dy, __gm__ uint8_t *attenIn,
-    __gm__ uint8_t *actual_seq_qlen, __gm__ uint8_t *workspace, int32_t batchIn, __gm__ uint8_t * tiling_in)
+    BlockEpilogue(Arch::Resource<ArchTag> &resource, TPipe *pipe_in, __gm__ uint8_t *dout, __gm__ uint8_t *out,
+    __gm__ uint8_t *cu_seq_qlen, __gm__ uint8_t *workspace, int32_t batchIn, __gm__ uint8_t * tiling_in)
     {
-        b = batchIn;
+        batch = batchIn;
         cBlockIdx = GetBlockIdx();
         pipe = pipe_in;
 
         AscendC::GlobalTensor<uint64_t> tilingData;
         tilingData.SetGlobalBuffer((__gm__ uint64_t *)tiling_in);
-        b = tilingData.GetValue(TILING_B);
-        t1 = tilingData.GetValue(TILING_T1);
-        n2 = tilingData.GetValue(TILING_N2);
+        batch = tilingData.GetValue(TILING_B);
+        total_q = tilingData.GetValue(TILING_T1);
+        nheads_k = tilingData.GetValue(TILING_N2);
         g = tilingData.GetValue(TILING_G);
-        d = tilingData.GetValue(TILING_D);
+        headdim = tilingData.GetValue(TILING_D);
 
         int64_t sfmgWorkspaceOffset = tilingData.GetValue(TILING_SFMG_WORKSPACE_OFFSET);
         int64_t mm1WorkspaceOffset = tilingData.GetValue(TILING_MM1_WORKSPACE_OFFSET);
         int64_t mm2WorkspaceOffset = tilingData.GetValue(TILING_MM2_WORKSPACE_OFFSET);
-        n1 = n2 * g;
-        dAlign = (d + 15) / 16 * 16;
-        actual_seq_qlen_addr = actual_seq_qlen;
+        nheads = nheads_k * g;
+        dAlign = (headdim + 15) / 16 * 16;
+        cu_seq_qlen_addr = cu_seq_qlen;
 
-        n_stride = (n1 - 1) * d * sizeof(half);
+        n_stride = (nheads - 1) * headdim * sizeof(half);
 
         AscendC::GlobalTensor<uint32_t> tilingDataU32;
         tilingDataU32.SetGlobalBuffer((__gm__ uint32_t *)tiling_in);;
@@ -104,7 +104,7 @@ public:
         uint32_t tempBufferLen = 40 * 1024 - outputBufferLen;
 
         // 计算单核的计算量
-        int64_t normalAxisSize = t1 * n1;
+        int64_t normalAxisSize = total_q * nheads;
         normalCoreSize = (normalAxisSize + coreNum -1) / coreNum;
         usedCoreNum = (normalAxisSize + normalCoreSize -1) / normalCoreSize;
 
@@ -126,8 +126,8 @@ public:
         pipe->InitBuffer(tmpBuf, tempBufferLen); // 40K - outputBufferLen
 
         // 初始化 GM
-        dyGm.SetGlobalBuffer((__gm__ half *)dy);
-        attenInGm.SetGlobalBuffer((__gm__ half *)attenIn);
+        doutGm.SetGlobalBuffer((__gm__ half *)dout);
+        outGm.SetGlobalBuffer((__gm__ half *)out);
         sfmgWorkspaceGm.SetGlobalBuffer((__gm__ float *)workspace + sfmgWorkspaceOffset / sizeof(float));
     }
 
@@ -140,16 +140,16 @@ public:
     void InitIndex(int64_t startIdx, int64_t& curS, GM_ADDR seqS)
     {
         int64_t totalLen = 0;
-        for (int64_t bDimIdx = bIdx; bDimIdx < b; bDimIdx++) {
-            totalLen = n1 * ((__gm__ int64_t *)seqS)[bDimIdx] * d;
+        for (int64_t bDimIdx = bIdx; bDimIdx < batch; bDimIdx++) {
+            totalLen = nheads * ((__gm__ int64_t *)seqS)[bDimIdx] * headdim;
             if (totalLen > startIdx) {
                 bIdx = bDimIdx;
                 curS = (bIdx == 0) ? ((__gm__ int64_t *)seqS)[bIdx] :
                                         (((__gm__ int64_t *)seqS)[bIdx] - ((__gm__ int64_t *)seqS)[bIdx - 1]);
-                int64_t bTail = startIdx - (totalLen - n1 * curS * d);
-                nIdx = bTail / (curS * d);
-                int64_t nTail = bTail % (curS * d);
-                sIdx = nTail / d;
+                int64_t bTail = startIdx - (totalLen - nheads * curS * headdim);
+                nIdx = bTail / (curS * headdim);
+                int64_t nTail = bTail % (curS * headdim);
+                sIdx = nTail / headdim;
                 break;
             }
         }
@@ -159,17 +159,17 @@ public:
     void DoCopyIn(int64_t curS, int64_t curNBurst, int64_t dstOffset, GM_ADDR seqS)
     {
         int64_t srcOffset = 0;
-        int64_t bOffset = bIdx == 0 ? 0 : n1 * ((__gm__ int64_t *)seqS)[bIdx - 1] * d;
-        srcOffset = bOffset + (sIdx * n1 + nIdx) * d;
+        int64_t bOffset = bIdx == 0 ? 0 : nheads * ((__gm__ int64_t *)seqS)[bIdx - 1] * headdim;
+        srcOffset = bOffset + (sIdx * nheads + nIdx) * headdim;
 
-        DataCopyPad(input1Buf[dstOffset], dyGm[srcOffset],
-                    {static_cast<uint16_t>(curNBurst), static_cast<uint32_t>(d * sizeof(half)),
+        DataCopyPad(input1Buf[dstOffset], doutGm[srcOffset],
+                    {static_cast<uint16_t>(curNBurst), static_cast<uint32_t>(headdim * sizeof(half)),
                     static_cast<uint32_t>(n_stride), 0, 0},
-                    {true, 0, static_cast<uint8_t>((dAlign - d)), 0});
-        DataCopyPad(input2Buf[dstOffset], attenInGm[srcOffset],
-                    {static_cast<uint16_t>(curNBurst), static_cast<uint32_t>(d * sizeof(half)),
+                    {true, 0, static_cast<uint8_t>((dAlign - headdim)), 0});
+        DataCopyPad(input2Buf[dstOffset], outGm[srcOffset],
+                    {static_cast<uint16_t>(curNBurst), static_cast<uint32_t>(headdim * sizeof(half)),
                     static_cast<uint32_t>(n_stride), 0, 0},
-                    {true, 0, static_cast<uint8_t>((dAlign - d)), 0});
+                    {true, 0, static_cast<uint8_t>((dAlign - headdim)), 0});
     }
 
     CATLASS_DEVICE
@@ -183,11 +183,11 @@ public:
                 DoCopyIn(curS, curNburst, dstOffset, seqS);
                 leftNburst = leftNburst - curNburst;
                 sIdx = 0;
-                if (nIdx < n1 - 1) { // 需要借N
+                if (nIdx < nheads - 1) { // 需要借N
                     nIdx += 1;
                 } else {
                     nIdx = 0;
-                    if (bIdx < b - 1) { // 需要借B
+                    if (bIdx < batch - 1) { // 需要借B
                         bIdx += 1;
                         curS = ((__gm__ int64_t *)seqS)[bIdx] - ((__gm__ int64_t *)seqS)[bIdx - 1];
                     } else { // 没有轴可以借了，end
@@ -239,9 +239,9 @@ public:
                 if (i == 0) {
                     input1Buf = inBuffer1.Get<half>();
                     input2Buf = inBuffer2.Get<half>();
-                    InitIndex((startIdx + i * singleLoopNBurstNum) * d,
-                            curS, actual_seq_qlen_addr);
-                    CopyInSfmg(nBurst, curS, actual_seq_qlen_addr);
+                    InitIndex((startIdx + i * singleLoopNBurstNum) * headdim,
+                            curS, cu_seq_qlen_addr);
+                    CopyInSfmg(nBurst, curS, cu_seq_qlen_addr);
                     AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(VWaitMte2);
                 }
                 AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(VWaitMte2);
@@ -262,9 +262,9 @@ public:
                     int64_t nextNBurst = i == singleCoreLoopTimes - 2 ? singleCoreLastLoopNBurstNum : nBurst;
                     input1Buf = inBuffer1.Get<half>();
                     input2Buf = inBuffer2.Get<half>();
-                    InitIndex((startIdx + (i + 1) * singleLoopNBurstNum) * d,
-                            curS, actual_seq_qlen_addr);
-                    CopyInSfmg(nextNBurst, curS, actual_seq_qlen_addr);
+                    InitIndex((startIdx + (i + 1) * singleLoopNBurstNum) * headdim,
+                            curS, cu_seq_qlen_addr);
+                    CopyInSfmg(nextNBurst, curS, cu_seq_qlen_addr);
                     AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(VWaitMte2);
                 }
 
@@ -315,20 +315,20 @@ protected:
     uint32_t cBlockIdx;
 
     GlobalTensor<float> sfmgWorkspaceGm;
-    GlobalTensor<half> dyGm;
-    GlobalTensor<half> attenInGm;
+    GlobalTensor<half> doutGm;
+    GlobalTensor<half> outGm;
     TBuf<QuePosition::VECIN> inBuffer1, inBuffer2;
     TBuf<> cast1Buf, cast2Buf, tmpBuf;
     TBuf<QuePosition::VECOUT> outBuffer1;
 
-    int64_t b;
-    int64_t n1;
-    int64_t n2;
+    int64_t batch;
+    int64_t nheads;
+    int64_t nheads_k;
     int64_t g;
-    int64_t t1;
-    int64_t d;
+    int64_t total_q;
+    int64_t headdim;
     int64_t dAlign;
-    GM_ADDR actual_seq_qlen_addr;
+    GM_ADDR cu_seq_qlen_addr;
 
     int64_t bIdx = 0;
     int64_t nIdx = 0;

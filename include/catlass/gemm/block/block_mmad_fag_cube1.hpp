@@ -84,12 +84,12 @@ namespace Catlass::Gemm::Block
 
         /// Construct
         CATLASS_DEVICE
-        BlockMmad(Arch::Resource<ArchTag> &resource, uint64_t qHeadNumIn, uint64_t kvHeadNumIn, uint64_t headDimIn)
+        BlockMmad(Arch::Resource<ArchTag> &resource, uint64_t nheadsIn, uint64_t nheadsKIn, uint64_t headDimIn)
         {
             cube1Cnt = 0;
-            qHeadNum = qHeadNumIn;
-            kvHeadNum = kvHeadNumIn;
-            headDim = headDimIn;
+            nheads = nheadsIn;
+            nheads_k = nheadsKIn;
+            headdim = headDimIn;
             globalBlockOffset = GetBlockIdx() * 16 * 128 * 128;
 
             AscendC::SetLoadDataPaddingValue<uint64_t>(0);
@@ -194,20 +194,6 @@ namespace Catlass::Gemm::Block
                         auto layoutInL0C = LayoutCInL0::MakeLayoutInL0C(blockShape);
                         LayoutC layoutC(m_mad_, n_mad_, 128);
                         copyL0CToGm((*gOut)[out_offset], *l0_c_tensor, layoutC, layoutInL0C, 3);
-                        // copy_matrix_cc_to_gm(
-                        //     (__gm__ float*)(*gOut)[out_offset].GetPhyAddr(),
-                        //     ( __cc__ float *)l0_c_tensor->GetPhyAddr(),
-                        //     (uint8_t)0, // uint8_t sid, 
-                        //     (uint16_t)n_mad_, //  uint16_t NSize, 
-                        //     (uint16_t)m_mad_, // uint16_t MSize, 
-                        //     (uint32_t)dst_n_size_, // uint32_t dstStride_dst_D, 
-                        //     (uint16_t)m0_, // uint16_t srcStride, 
-                        //     3, // uint8_t UnitFlagMode, 
-                        //     0, //  uint64_t QuantPRE, 
-                        //     0, //  uint8_t ReLUPRE, 
-                        //     0, // bool channelSplit, 
-                        //     1 // bool NZ2ND_EN
-                        // );
                         cube1Cnt++;
                     }
 
@@ -234,7 +220,7 @@ namespace Catlass::Gemm::Block
                 uint32_t kn = shapeInfo.kx;
                 int32_t lineStride = shapeInfo.lineStride;
 
-                uint32_t src_k_size_ = headDim;
+                uint32_t src_k_size_ = headdim;
 
                 uint32_t l1_m_size_ = km;
                 uint32_t l1_n_size_ = kn;
@@ -261,8 +247,8 @@ namespace Catlass::Gemm::Block
                 bool upperRight = !shapeInfo.upperRight;
                 bool lowerLeft = !shapeInfo.lowerLeft;
 
-                LayoutA layoutA(km, headDim, qHeadNum * headDim);
-                LayoutB layoutB(headDim, kn, kvHeadNum * headDim);
+                LayoutA layoutA(km, headdim, nheads * headdim);
+                LayoutB layoutB(headdim, kn, nheads_k * headdim);
                 LayoutC layoutC(km, kn, 128);
                 LayoutAInL1 layoutAInL1 = LayoutAInL1::template MakeLayout<ElementA>(L1TileShape::M, L1TileShape::K);
                 LayoutBInL1 layoutBInL1 = LayoutBInL1::template MakeLayout<ElementB>(L1TileShape::K, L1TileShape::N);
@@ -270,7 +256,7 @@ namespace Catlass::Gemm::Block
                     LocalTensor<ElementA>* l1_a_tensor = pingpongFlagL1A ? &l1_a_pong_tensor : &l1_a_ping_tensor;
 
                     AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(pingpongFlagL1A + 2);
-                    auto layoutTileA = layoutA.GetTileLayout(MakeCoord(km, static_cast<uint32_t>(headDim)));
+                    auto layoutTileA = layoutA.GetTileLayout(MakeCoord(km, static_cast<uint32_t>(headdim)));
                     copyGmToL1A(*l1_a_tensor, gLeft, layoutAInL1, layoutTileA, 1, 0,
                         1, 0,
                         l1_m_size_align_);
@@ -287,7 +273,7 @@ namespace Catlass::Gemm::Block
 
                         AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(pingpongFlagL1B);
                         auto layoutTileB = layoutB.GetTileLayout(MakeCoord(l1_k_size_, l1_n_size_));
-                        copyGmToL1B(*l1_b_tensor, gRight[n_index * 128 * src_k_size_ * kvHeadNum], layoutBInL1, layoutTileB, 1, 0,
+                        copyGmToL1B(*l1_b_tensor, gRight[n_index * 128 * src_k_size_ * nheads_k], layoutBInL1, layoutTileB, 1, 0,
                             1, 0, l1_n_size_align_);
 
                         AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(pingpongFlagL1B);
@@ -331,9 +317,9 @@ namespace Catlass::Gemm::Block
         LocalTensor<float> l0_c_ping_tensor;
         LocalTensor<float> l0_c_pong_tensor;
 
-        uint64_t qHeadNum;
-        uint64_t kvHeadNum;
-        uint64_t headDim;
+        uint64_t nheads;
+        uint64_t nheads_k;
+        uint64_t headdim;
 
         uint32_t pingPongIdx = 0;
         uint64_t globalBlockOffset = 0;

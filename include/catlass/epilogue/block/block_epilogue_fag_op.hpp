@@ -56,7 +56,7 @@ public:
     GlobalTensor<float> mm1WorkspaceGm;
     GlobalTensor<float> mm2WorkspaceGm;
     GlobalTensor<half> dropWorkSpaceGm, mulWorkSpaceGm;
-    GlobalTensor<float> softmaxMaxGm, softmaxSumGm;
+    GlobalTensor<float> rowMaxGm, rowSumGm;
     GlobalTensor<float> sfmgWorkspaceGm;
 
     constexpr static uint32_t DTYPE_FACTOR = sizeof(float) / sizeof(half);
@@ -96,11 +96,11 @@ public:
 
     // org shape info
     int64_t b;
-    int64_t n2;
+    int64_t nheads_k;
     int64_t g;
-    int64_t actualS1Len;
-    int64_t actualS2Len;
-    int64_t d;
+    int64_t cuS1Len;
+    int64_t cuS2Len;
+    int64_t headdim;
 
     float scaleValue;
 
@@ -117,8 +117,8 @@ public:
     int32_t s1CubeExtend;
     int32_t s2CubeExtend;
     
-    int32_t curS1Idx;
-    int32_t curS2Idx;
+    int32_t curSeqQIdx;
+    int32_t curSeqKIdx;
 
     // offset 
     int32_t sfmgOffset = 0;
@@ -128,15 +128,15 @@ public:
     DataCopyParams copyInParam;
     DataCopyParams copyOutParam;
 
-    __gm__ uint8_t *actual_seq_qlen_addr;
-    __gm__ uint8_t *actual_seq_kvlen_addr;
+    __gm__ uint8_t *cu_seq_qlen_addr;
+    __gm__ uint8_t *cu_seq_kvlen_addr;
 
     SoftMaxTiling softmaxTilingData;
 
     CATLASS_DEVICE
-    BlockEpilogue(Arch::Resource<ArchTag> &resource, TPipe *pipe_in, __gm__ uint8_t *softmax_max,
-    __gm__ uint8_t *softmax_sum, __gm__ uint8_t *atten_mask, __gm__ uint8_t *actual_seq_qlen,
-    __gm__ uint8_t *actual_seq_kvlen, __gm__ uint8_t * workspace, int32_t batchIn, __gm__ uint8_t * tiling_in)
+    BlockEpilogue(Arch::Resource<ArchTag> &resource, TPipe *pipe_in, __gm__ uint8_t *row_max,
+    __gm__ uint8_t *row_sum, __gm__ uint8_t *atten_mask, __gm__ uint8_t *cu_seq_qlen,
+    __gm__ uint8_t *cu_seq_kvlen, __gm__ uint8_t * workspace, int32_t batchIn, __gm__ uint8_t * tiling_in)
     {
         b = batchIn;
         // ub分配
@@ -145,13 +145,13 @@ public:
         blockIdx = GetBlockIdx();
         cubeBlockIdx = blockIdx / 2;
         subIdx = blockIdx % 2;
-        curS1Idx = subIdx;
-        curS2Idx = 0;
+        curSeqQIdx = subIdx;
+        curSeqKIdx = 0;
 
         cubeBaseMN = 16 * 128 * 128;
 
-        actual_seq_qlen_addr = actual_seq_qlen;
-        actual_seq_kvlen_addr = actual_seq_kvlen;
+        cu_seq_qlen_addr = cu_seq_qlen;
+        cu_seq_kvlen_addr = cu_seq_kvlen;
 
 
         // get tiling info 
@@ -159,9 +159,9 @@ public:
         AscendC::GlobalTensor<uint64_t> tilingData;
         tilingData.SetGlobalBuffer((__gm__ uint64_t *)tiling_in);
         b = tilingData.GetValue(TILING_B);
-        n2 = tilingData.GetValue(TILING_N2);
+        nheads_k = tilingData.GetValue(TILING_N2);
         g = tilingData.GetValue(TILING_G);
-        d = tilingData.GetValue(TILING_D);
+        headdim = tilingData.GetValue(TILING_D);
 
         int64_t sfmgWorkSpaceOffset = tilingData.GetValue(TILING_SFMG_WORKSPACE_OFFSET);
         int64_t mm1WorkSpaceOffset = tilingData.GetValue(TILING_MM1_WORKSPACE_OFFSET);
@@ -195,8 +195,8 @@ public:
 
         pipe->InitBuffer(unifiedBuffer, TOTAL_SIZE);
         // global tensor
-        softmaxMaxGm.SetGlobalBuffer((__gm__ float *)softmax_max);
-        softmaxSumGm.SetGlobalBuffer((__gm__ float *)softmax_sum);
+        rowMaxGm.SetGlobalBuffer((__gm__ float *)row_max);
+        rowSumGm.SetGlobalBuffer((__gm__ float *)row_sum);
         attenMaskU8Gm.SetGlobalBuffer((__gm__ uint8_t *)atten_mask);
 
         mm1WorkspaceGm.SetGlobalBuffer((__gm__ float *)(workspace + mm1WorkSpaceOffset));
@@ -214,16 +214,16 @@ public:
     }
 
     CATLASS_DEVICE
-    void GetSeqQlenKvlenByBidx(int64_t bIdx, int64_t &actualSeqQlen, int64_t &actualSeqKvlen)
+    void GetSeqQlenKvlenByBidx(int64_t bIdx, int64_t &cuSeqQlen, int64_t &cuSeqKvlen)
     {
         if (unlikely(bIdx == 0)) {
-            actualSeqQlen = ((__gm__ int64_t *)actual_seq_qlen_addr)[0];
-            actualSeqKvlen = ((__gm__ int64_t *)actual_seq_kvlen_addr)[0];
+            cuSeqQlen = ((__gm__ int64_t *)cu_seq_qlen_addr)[0];
+            cuSeqKvlen = ((__gm__ int64_t *)cu_seq_kvlen_addr)[0];
         } else {
-            actualSeqQlen =
-                ((__gm__ int64_t *)actual_seq_qlen_addr)[bIdx] - ((__gm__ int64_t *)actual_seq_qlen_addr)[bIdx - 1];
-            actualSeqKvlen =
-                ((__gm__ int64_t *)actual_seq_kvlen_addr)[bIdx] - ((__gm__ int64_t *)actual_seq_kvlen_addr)[bIdx - 1];
+            cuSeqQlen =
+                ((__gm__ int64_t *)cu_seq_qlen_addr)[bIdx] - ((__gm__ int64_t *)cu_seq_qlen_addr)[bIdx - 1];
+            cuSeqKvlen =
+                ((__gm__ int64_t *)cu_seq_kvlen_addr)[bIdx] - ((__gm__ int64_t *)cu_seq_kvlen_addr)[bIdx - 1];
         }
         return;
     }
@@ -273,9 +273,9 @@ public:
     CATLASS_DEVICE
     void CopyInSoftMax(LocalTensor<float> &dstTensor, uint32_t s1Extend, uint32_t softMaxOffset)
     {
-        DataCopyPad(dstTensor, softmaxSumGm[softMaxOffset], {1, static_cast<uint16_t>(s1Extend * BLOCK_SIZE), 0, 0},
+        DataCopyPad(dstTensor, rowSumGm[softMaxOffset], {1, static_cast<uint16_t>(s1Extend * BLOCK_SIZE), 0, 0},
                     {false, 0, 0, 0});
-        DataCopyPad(dstTensor[64 * 8], softmaxMaxGm[softMaxOffset],
+        DataCopyPad(dstTensor[64 * 8], rowMaxGm[softMaxOffset],
                     {1, static_cast<uint16_t>(s1Extend * BLOCK_SIZE), 0, 0}, {false, 0, 0, 0});
     }
 
@@ -348,8 +348,8 @@ public:
         AscendC::PipeBarrier<PIPE_V>();
         LocalTensor<uint8_t> attenMaskUbuint8 =
             unifiedBuffer.GetWithOffset<uint8_t>(16 * 1024 / sizeof(uint8_t), ubBufferOffset + BoolBegin);
-        if (blockInfo.S1Idx == blockInfo.S2Idx) {
-            CalcAttenMaskBool(vecClc2Buffer, attenMaskUbuint8[curS1Idx * s1VecSize * 128], s1Extend, s2ExtendAlign, S2_CUBESIZE, 0);
+        if (blockInfo.SeqQIdx == blockInfo.SeqKIdx) {
+            CalcAttenMaskBool(vecClc2Buffer, attenMaskUbuint8[curSeqQIdx * s1VecSize * 128], s1Extend, s2ExtendAlign, S2_CUBESIZE, 0);
         }
 
         ///////////////////////////////////////////////////////////////
@@ -429,7 +429,7 @@ public:
         AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(mte3WaitV);
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(mte3WaitV);
 
-        // dyv = dp -> ds
+        // doutv = dp -> ds
         DataCopyPad(mulWorkSpaceGm[copyOutOffset], vecCopyOutBuffer, copyOutParam);
 
         if (curIdx < blockLen - 1) {
@@ -462,7 +462,7 @@ public:
             // do scalar calculate
             ///////////////////////////////////////////////////////////////
 
-            GetSeqQlenKvlenByBidx(blockInfo.batchIdx, actualS1Len, actualS2Len);
+            GetSeqQlenKvlenByBidx(blockInfo.batchIdx, cuS1Len, cuS2Len);
 
             s1CubeExtend = blockInfo.lengthy;
             s2CubeExtend = 128;
@@ -478,13 +478,13 @@ public:
             //offset
             sfmgOffset = 0;
             if (blockInfo.batchIdx > 0) {
-                sfmgOffset = ((__gm__ int64_t *)actual_seq_qlen_addr)[blockInfo.batchIdx - 1] * n2 * g * 8;
+                sfmgOffset = ((__gm__ int64_t *)cu_seq_qlen_addr)[blockInfo.batchIdx - 1] * nheads_k * g * 8;
             }
-            sfmgOffset += ((blockInfo.n2Idx * g + blockInfo.gIdx) * actualS1Len + blockInfo.S1Idx * S1_CUBESIZE + curS1Idx * s1VecSize) * 8;
+            sfmgOffset += ((blockInfo.nheadsKIdx * g + blockInfo.gIdx) * cuS1Len + blockInfo.SeqQIdx * S1_CUBESIZE + curSeqQIdx * s1VecSize) * 8;
             
             // copyIn cube_workspace params
             copyInOffset = 
-                cubeBlockIdx * cubeBaseMN * 2 + pingpongIdx * cubeBaseMN + blockInfo.offset + curS1Idx * s1VecSize * s2CubeExtend;
+                cubeBlockIdx * cubeBaseMN * 2 + pingpongIdx * cubeBaseMN + blockInfo.offset + curSeqQIdx * s1VecSize * s2CubeExtend;
             copyInParam = {
                 static_cast<uint16_t>(s1Extend),
                 static_cast<uint16_t>(s2ExtendAlign * sizeof(float)),
@@ -495,7 +495,7 @@ public:
             // copyOut cube_workspace params
             copyOutOffset = 
                 (cubeBlockIdx * cubeBaseMN * 2 + pingpongIdx * cubeBaseMN + blockInfo.offset) +
-                (curS1Idx * s1VecSize * s2CubeExtend);
+                (curSeqQIdx * s1VecSize * s2CubeExtend);
             copyOutParam = {
                 static_cast<uint16_t>(s1Extend),
                 static_cast<uint16_t>(s2ExtendAlign * sizeof(half)),

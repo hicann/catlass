@@ -43,15 +43,15 @@ def gen_data(N1, N2, D, list_seq):
     q = limit * (torch.rand([S1, N1, D]) - 0.5).to(pttype)
     k = limit * (torch.rand([S2, N2, D]) - 0.5).to(pttype)
     v = limit * (torch.rand([S2, N2, D]) - 0.5).to(pttype)
-    dx = limit * (torch.rand([S1, N1, D]) - 0.5).to(pttype)
+    dout = limit * (torch.rand([S1, N1, D]) - 0.5).to(pttype)
 
-    actucal_seq_len_list = cu_seqlens_q[1:].cpu().numpy().tolist()
-    actual_seq_kvlen_list = cu_seqlens_k[1:].cpu().numpy().tolist()
+    cu_seq_len_list = cu_seqlens_q[1:].cpu().numpy().tolist()
+    cu_seq_kvlen_list = cu_seqlens_k[1:].cpu().numpy().tolist()
     
     q = q.npu()
     k = k.npu()
     v = v.npu()
-    dx = dx.npu()
+    dout = dout.npu()
     queryRight = q.clone().npu()
     # Mark: modify keyRight as workspace float output
     keyRight = k.clone().float().npu()
@@ -61,14 +61,14 @@ def gen_data(N1, N2, D, list_seq):
     print("q.shape ", q.shape)
     print("k.shape ", k.shape)
     print("v.shape ", v.shape)
-    print("dx.shape ", dx.shape)
+    print("dout.shape ", dout.shape)
     print("queryRight.shape ", queryRight.shape)
     print("queryRight.dtype", queryRight.dtype)
     print("keyRight.shape", keyRight.shape)
     print("keyRight.dtype", keyRight.dtype)
 
-    print("actucal_seq_len_list is ", actucal_seq_len_list)
-    print("actual_seq_kvlen_list is ", actual_seq_kvlen_list)
+    print("cu_seq_len_list is ", cu_seq_len_list)
+    print("cu_seq_kvlen_list is ", cu_seq_kvlen_list)
 
     atten_mask_npu = (torch.triu(torch.ones([2048, 2048]), diagonal=1)).to(torch.bool).npu()
 
@@ -84,8 +84,8 @@ def gen_data(N1, N2, D, list_seq):
             scale=scale,
             keep_prob=keep_prob,
             input_layout="TND",
-            actual_seq_qlen=tuple(actucal_seq_len_list),
-            actual_seq_kvlen=tuple(actual_seq_kvlen_list),
+            cu_seq_qlen=tuple(cu_seq_len_list),
+            cu_seq_kvlen=tuple(cu_seq_kvlen_list),
             pre_tockens=pre_tocken,
             next_tockens=next_tocken,
             inner_precise=0,
@@ -95,7 +95,7 @@ def gen_data(N1, N2, D, list_seq):
     x_max_npu = npu_rst[1]
     x_sum_npu = npu_rst[2]
     torch.npu.synchronize()
-    out_npu.backward(dx)
+    out_npu.backward(dout)
     dq_golden_npu = q.grad
     dk_golden_npu = k.grad
     dv_golden_npu = v.grad
@@ -112,15 +112,15 @@ def gen_data(N1, N2, D, list_seq):
     q.cpu().detach().numpy().tofile(os.path.join(WORKSPACE, "data", "q.bin"))
     k.cpu().detach().numpy().tofile(os.path.join(WORKSPACE, "data", "k.bin"))
     v.cpu().detach().numpy().tofile(os.path.join(WORKSPACE, "data", "v.bin"))
-    dx.cpu().detach().numpy().tofile(os.path.join(WORKSPACE, "data", "dx.bin"))
+    dout.cpu().detach().numpy().tofile(os.path.join(WORKSPACE, "data", "dout.bin"))
     queryRight.cpu().detach().numpy().tofile(os.path.join(WORKSPACE, "data", "queryRight.bin"))
     keyRight.cpu().detach().numpy().tofile(os.path.join(WORKSPACE, "data", "keyRight.bin"))
     atten_mask_npu.cpu().detach().numpy().tofile(os.path.join(WORKSPACE, "data", "atten_mask.bin"))
-    x_max_npu.cpu().detach().numpy().tofile(os.path.join(WORKSPACE, "data", "softmax_max.bin"))
-    x_sum_npu.cpu().detach().numpy().tofile(os.path.join(WORKSPACE, "data", "softmax_sum.bin"))
-    out_npu.cpu().detach().numpy().tofile(os.path.join(WORKSPACE, "data", "attention_in.bin"))
-    np.array(actucal_seq_len_list).tofile(os.path.join(WORKSPACE, "data", "actual_seq_qlen.bin"))
-    np.array(actual_seq_kvlen_list).tofile(os.path.join(WORKSPACE, "data", "actual_seq_kvlen.bin"))
+    x_max_npu.cpu().detach().numpy().tofile(os.path.join(WORKSPACE, "data", "row_max.bin"))
+    x_sum_npu.cpu().detach().numpy().tofile(os.path.join(WORKSPACE, "data", "row_sum.bin"))
+    out_npu.cpu().detach().numpy().tofile(os.path.join(WORKSPACE, "data", "out.bin"))
+    np.array(cu_seq_len_list).tofile(os.path.join(WORKSPACE, "data", "cu_seq_qlen.bin"))
+    np.array(cu_seq_kvlen_list).tofile(os.path.join(WORKSPACE, "data", "cu_seq_kvlen.bin"))
 
     dq_golden_npu.cpu().to(torch.float).numpy().tofile(os.path.join(WORKSPACE, "data", "dq_golden.bin"))
     dk_golden_npu.cpu().to(torch.float).numpy().tofile(os.path.join(WORKSPACE, "data", "dk_golden.bin"))

@@ -14,8 +14,8 @@
 using namespace std;
 using fp16_t = op::fp16_t;
 
-namespace MLATiling {
-struct MLAInfo {
+namespace FAGTiling {
+struct FAGInfo {
     float scaleValue;
 
     int64_t seqQShapeSize;
@@ -28,84 +28,84 @@ struct MLAInfo {
     int64_t valueShape_1;
 };
 
-void printMLATilingData(int64_t *tilingHost) {
-    cout << "MLATilingDATA b: " << tilingHost[TILING_B] << endl;
-    cout << "MLATilingDATA: t1: " << tilingHost[TILING_T1] << endl;
-    cout << "MLATilingDATA: t2: " << tilingHost[TILING_T2] << endl;
-    cout << "MLATilingDATA: N1: " << tilingHost[TILING_N1] << endl;
-    cout << "MLATilingDATA: N2: " << tilingHost[TILING_N2] << endl;
-    cout << "MLATilingDATA: G: " << tilingHost[TILING_G] << endl;
-    cout << "MLATilingDATA: D: " << tilingHost[TILING_D] << endl;
-    cout << "MLATilingDATA: Q size: " << tilingHost[TILING_Q_SIZE] << endl;
-    cout << "MLATilingDATA: kv size: " << tilingHost[TILING_KV_SIZE] << endl;
-    cout << "MLATilingDATA: DQ_WORKSPACE_OFFSET: " << tilingHost[TILING_DQ_WORKSPACE_OFFSET] << endl;
-    cout << "MLATilingDATA: DK_WORKSPACE_OFFSET: " << tilingHost[TILING_DK_WORKSPACE_OFFSET] << endl;
-    cout << "MLATilingDATA: DV_WORKSPACE_OFFSET: " << tilingHost[TILING_DV_WORKSPACE_OFFSET] << endl;
-    cout << "MLATilingDATA: SFMG_WORKSPACE_OFFSET: " << tilingHost[TILING_SFMG_WORKSPACE_OFFSET] << endl;
-    cout << "MLATilingDATA: MM1_WORKSPACE_OFFSET: " << tilingHost[TILING_MM1_WORKSPACE_OFFSET] << endl;
-    cout << "MLATilingDATA: MM2_WORKSPACE_OFFSET: " << tilingHost[TILING_MM2_WORKSPACE_OFFSET] << endl;
-    cout << "MLATilingDATA: P_WORKSPACE_OFFSET: " << tilingHost[TILING_P_WORKSPACE_OFFSET] << endl;
-    cout << "MLATilingDATA: DS_WORKSPACE_OFFSET: " << tilingHost[TILING_DS_WORKSPACE_OFFSET] << endl;
+void printFAGTilingData(int64_t *tilingHost) {
+    cout << "FAGTilingDATA batch: " << tilingHost[TILING_B] << endl;
+    cout << "FAGTilingDATA: total_q: " << tilingHost[TILING_T1] << endl;
+    cout << "FAGTilingDATA: total_k: " << tilingHost[TILING_T2] << endl;
+    cout << "FAGTilingDATA: nheads: " << tilingHost[TILING_N1] << endl;
+    cout << "FAGTilingDATA: nheads_k: " << tilingHost[TILING_N2] << endl;
+    cout << "FAGTilingDATA: G: " << tilingHost[TILING_G] << endl;
+    cout << "FAGTilingDATA: headdim: " << tilingHost[TILING_D] << endl;
+    cout << "FAGTilingDATA: q size: " << tilingHost[TILING_Q_SIZE] << endl;
+    cout << "FAGTilingDATA: kv size: " << tilingHost[TILING_KV_SIZE] << endl;
+    cout << "FAGTilingDATA: dq_workspace_offset: " << tilingHost[TILING_DQ_WORKSPACE_OFFSET] << endl;
+    cout << "FAGTilingDATA: dk_workspace_offset: " << tilingHost[TILING_DK_WORKSPACE_OFFSET] << endl;
+    cout << "FAGTilingDATA: dv_workspace_offset: " << tilingHost[TILING_DV_WORKSPACE_OFFSET] << endl;
+    cout << "FAGTilingDATA: sfmg_workspace_offset: " << tilingHost[TILING_SFMG_WORKSPACE_OFFSET] << endl;
+    cout << "FAGTilingDATA: mm1_workspace_offset: " << tilingHost[TILING_MM1_WORKSPACE_OFFSET] << endl;
+    cout << "FAGTilingDATA: mm2_workspace_offset: " << tilingHost[TILING_MM2_WORKSPACE_OFFSET] << endl;
+    cout << "FAGTilingDATA: p_workspace_offset: " << tilingHost[TILING_P_WORKSPACE_OFFSET] << endl;
+    cout << "FAGTilingDATA: ds_workspace_offset: " << tilingHost[TILING_DS_WORKSPACE_OFFSET] << endl;
 
     float *tilingHostFp = reinterpret_cast<float *>(tilingHost);
-    cout << "MLATilingDATA scale value: " << tilingHostFp[TILING_SCALE_VALUE * CONST_2] << endl;
+    cout << "FAGTilingDATA scale value: " << tilingHostFp[TILING_SCALE_VALUE * CONST_2] << endl;
     
     uint32_t *tilingHostU32 = reinterpret_cast<uint32_t *>(tilingHost);
-    cout << "MLATilingDATA coreNum: " << tilingHostU32[TILING_CORE_NUM * CONST_2] << endl;
-    cout << "MLATilingDATA srcM: " << tilingHostU32[TILING_SOFTMAX_TILING_DATA * CONST_2] << endl;
-    cout << "MLATilingDATA srcK: " << tilingHostU32[TILING_SOFTMAX_TILING_DATA * CONST_2 + 1] << endl;
-    cout << "MLATilingDATA srcSize: " << tilingHostU32[TILING_SOFTMAX_TILING_DATA * CONST_2 + 2] << endl;
-    cout << "MLATilingDATA outMaxM: " << tilingHostU32[TILING_SOFTMAX_TILING_DATA * CONST_2 + 3] << endl;
-    cout << "MLATilingDATA outMaxK: " << tilingHostU32[TILING_SOFTMAX_TILING_DATA * CONST_2 + 4] << endl;
-    cout << "MLATilingDATA outMaxSize: " << tilingHostU32[TILING_SOFTMAX_TILING_DATA * CONST_2 + 5] << endl;
-    cout << "MLATilingDATA splitM: " << tilingHostU32[TILING_SOFTMAX_TILING_DATA * CONST_2 + 6] << endl;
-    cout << "MLATilingDATA splitK: " << tilingHostU32[TILING_SOFTMAX_TILING_DATA * CONST_2 + 7] << endl;
-    cout << "MLATilingDATA SplitSize: " << tilingHostU32[TILING_SOFTMAX_TILING_DATA * CONST_2 + 8] << endl;
-    cout << "MLATilingDATA reduceM: " << tilingHostU32[TILING_SOFTMAX_TILING_DATA * CONST_2 + 9] << endl;
-    cout << "MLATilingDATA reduceK: " << tilingHostU32[TILING_SOFTMAX_TILING_DATA * CONST_2 + 10] << endl;
-    cout << "MLATilingDATA reduceSize: " << tilingHostU32[TILING_SOFTMAX_TILING_DATA * CONST_2 + 11] << endl;
-    cout << "MLATilingDATA rangeM: " << tilingHostU32[TILING_SOFTMAX_TILING_DATA * CONST_2 + 12] << endl;
-    cout << "MLATilingDATA tailM: " << tilingHostU32[TILING_SOFTMAX_TILING_DATA * CONST_2 + 13] << endl;
-    cout << "MLATilingDATA tailSplitSize: " << tilingHostU32[TILING_SOFTMAX_TILING_DATA * CONST_2 + 14] << endl;
-    cout << "MLATilingDATA tailReduceSize: " << tilingHostU32[TILING_SOFTMAX_TILING_DATA * CONST_2 + 15] << endl;
+    cout << "FAGTilingDATA coreNum: " << tilingHostU32[TILING_CORE_NUM * CONST_2] << endl;
+    cout << "FAGTilingDATA srcM: " << tilingHostU32[TILING_SOFTMAX_TILING_DATA * CONST_2] << endl;
+    cout << "FAGTilingDATA srcK: " << tilingHostU32[TILING_SOFTMAX_TILING_DATA * CONST_2 + 1] << endl;
+    cout << "FAGTilingDATA srcSize: " << tilingHostU32[TILING_SOFTMAX_TILING_DATA * CONST_2 + 2] << endl;
+    cout << "FAGTilingDATA outMaxM: " << tilingHostU32[TILING_SOFTMAX_TILING_DATA * CONST_2 + 3] << endl;
+    cout << "FAGTilingDATA outMaxK: " << tilingHostU32[TILING_SOFTMAX_TILING_DATA * CONST_2 + 4] << endl;
+    cout << "FAGTilingDATA outMaxSize: " << tilingHostU32[TILING_SOFTMAX_TILING_DATA * CONST_2 + 5] << endl;
+    cout << "FAGTilingDATA splitM: " << tilingHostU32[TILING_SOFTMAX_TILING_DATA * CONST_2 + 6] << endl;
+    cout << "FAGTilingDATA splitK: " << tilingHostU32[TILING_SOFTMAX_TILING_DATA * CONST_2 + 7] << endl;
+    cout << "FAGTilingDATA SplitSize: " << tilingHostU32[TILING_SOFTMAX_TILING_DATA * CONST_2 + 8] << endl;
+    cout << "FAGTilingDATA reduceM: " << tilingHostU32[TILING_SOFTMAX_TILING_DATA * CONST_2 + 9] << endl;
+    cout << "FAGTilingDATA reduceK: " << tilingHostU32[TILING_SOFTMAX_TILING_DATA * CONST_2 + 10] << endl;
+    cout << "FAGTilingDATA reduceSize: " << tilingHostU32[TILING_SOFTMAX_TILING_DATA * CONST_2 + 11] << endl;
+    cout << "FAGTilingDATA rangeM: " << tilingHostU32[TILING_SOFTMAX_TILING_DATA * CONST_2 + 12] << endl;
+    cout << "FAGTilingDATA tailM: " << tilingHostU32[TILING_SOFTMAX_TILING_DATA * CONST_2 + 13] << endl;
+    cout << "FAGTilingDATA tailSplitSize: " << tilingHostU32[TILING_SOFTMAX_TILING_DATA * CONST_2 + 14] << endl;
+    cout << "FAGTilingDATA tailReduceSize: " << tilingHostU32[TILING_SOFTMAX_TILING_DATA * CONST_2 + 15] << endl;
 
     // softmax grad data
-    cout << "MLATilingDATA srcM: " << tilingHostU32[TILING_SOFTMAX_GRAD_TILING_DATA * CONST_2] << endl;
-    cout << "MLATilingDATA srcK: " << tilingHostU32[TILING_SOFTMAX_GRAD_TILING_DATA * CONST_2 + 1] << endl;
-    cout << "MLATilingDATA srcSize: " << tilingHostU32[TILING_SOFTMAX_GRAD_TILING_DATA * CONST_2 + 2] << endl;
-    cout << "MLATilingDATA outMaxM: " << tilingHostU32[TILING_SOFTMAX_GRAD_TILING_DATA * CONST_2 + 3] << endl;
-    cout << "MLATilingDATA outMaxK: " << tilingHostU32[TILING_SOFTMAX_GRAD_TILING_DATA * CONST_2 + 4] << endl;
-    cout << "MLATilingDATA outMaxSize: " << tilingHostU32[TILING_SOFTMAX_GRAD_TILING_DATA * CONST_2 + 5] << endl;
-    cout << "MLATilingDATA splitM: " << tilingHostU32[TILING_SOFTMAX_GRAD_TILING_DATA * CONST_2 + 6] << endl;
-    cout << "MLATilingDATA splitK: " << tilingHostU32[TILING_SOFTMAX_GRAD_TILING_DATA * CONST_2 + 7] << endl;
-    cout << "MLATilingDATA SplitSize: " << tilingHostU32[TILING_SOFTMAX_GRAD_TILING_DATA * CONST_2 + 8] << endl;
-    cout << "MLATilingDATA reduceM: " << tilingHostU32[TILING_SOFTMAX_GRAD_TILING_DATA * CONST_2 + 9] << endl;
-    cout << "MLATilingDATA reduceK: " << tilingHostU32[TILING_SOFTMAX_GRAD_TILING_DATA * CONST_2 + 10] << endl;
-    cout << "MLATilingDATA reduceSize: " << tilingHostU32[TILING_SOFTMAX_GRAD_TILING_DATA * CONST_2 + 11] << endl;
-    cout << "MLATilingDATA rangeM: " << tilingHostU32[TILING_SOFTMAX_GRAD_TILING_DATA * CONST_2 + 12] << endl;
-    cout << "MLATilingDATA tailM: " << tilingHostU32[TILING_SOFTMAX_GRAD_TILING_DATA * CONST_2 + 13] << endl;
-    cout << "MLATilingDATA tailSplitSize: " << tilingHostU32[TILING_SOFTMAX_GRAD_TILING_DATA * CONST_2 + 14] << endl;
-    cout << "MLATilingDATA tailReduceSize: " << tilingHostU32[TILING_SOFTMAX_GRAD_TILING_DATA * CONST_2 + 15] << endl;
+    cout << "FAGTilingDATA srcM: " << tilingHostU32[TILING_SOFTMAX_GRAD_TILING_DATA * CONST_2] << endl;
+    cout << "FAGTilingDATA srcK: " << tilingHostU32[TILING_SOFTMAX_GRAD_TILING_DATA * CONST_2 + 1] << endl;
+    cout << "FAGTilingDATA srcSize: " << tilingHostU32[TILING_SOFTMAX_GRAD_TILING_DATA * CONST_2 + 2] << endl;
+    cout << "FAGTilingDATA outMaxM: " << tilingHostU32[TILING_SOFTMAX_GRAD_TILING_DATA * CONST_2 + 3] << endl;
+    cout << "FAGTilingDATA outMaxK: " << tilingHostU32[TILING_SOFTMAX_GRAD_TILING_DATA * CONST_2 + 4] << endl;
+    cout << "FAGTilingDATA outMaxSize: " << tilingHostU32[TILING_SOFTMAX_GRAD_TILING_DATA * CONST_2 + 5] << endl;
+    cout << "FAGTilingDATA splitM: " << tilingHostU32[TILING_SOFTMAX_GRAD_TILING_DATA * CONST_2 + 6] << endl;
+    cout << "FAGTilingDATA splitK: " << tilingHostU32[TILING_SOFTMAX_GRAD_TILING_DATA * CONST_2 + 7] << endl;
+    cout << "FAGTilingDATA SplitSize: " << tilingHostU32[TILING_SOFTMAX_GRAD_TILING_DATA * CONST_2 + 8] << endl;
+    cout << "FAGTilingDATA reduceM: " << tilingHostU32[TILING_SOFTMAX_GRAD_TILING_DATA * CONST_2 + 9] << endl;
+    cout << "FAGTilingDATA reduceK: " << tilingHostU32[TILING_SOFTMAX_GRAD_TILING_DATA * CONST_2 + 10] << endl;
+    cout << "FAGTilingDATA reduceSize: " << tilingHostU32[TILING_SOFTMAX_GRAD_TILING_DATA * CONST_2 + 11] << endl;
+    cout << "FAGTilingDATA rangeM: " << tilingHostU32[TILING_SOFTMAX_GRAD_TILING_DATA * CONST_2 + 12] << endl;
+    cout << "FAGTilingDATA tailM: " << tilingHostU32[TILING_SOFTMAX_GRAD_TILING_DATA * CONST_2 + 13] << endl;
+    cout << "FAGTilingDATA tailSplitSize: " << tilingHostU32[TILING_SOFTMAX_GRAD_TILING_DATA * CONST_2 + 14] << endl;
+    cout << "FAGTilingDATA tailReduceSize: " << tilingHostU32[TILING_SOFTMAX_GRAD_TILING_DATA * CONST_2 + 15] << endl;
 }
 
-int32_t GetFATilingParam(const MLAInfo mlaInfo, uint32_t &blockDim, int64_t *tilingHost)
+int32_t GetFATilingParam(const FAGInfo fagInfo, uint32_t &blockDim, int64_t *tilingHost)
 {
     float *tilingHostFp = reinterpret_cast<float *>(tilingHost);
-    tilingHostFp[TILING_SCALE_VALUE * CONST_2] = mlaInfo.scaleValue;
+    tilingHostFp[TILING_SCALE_VALUE * CONST_2] = fagInfo.scaleValue;
 
-    tilingHost[TILING_B] = mlaInfo.seqQShapeSize;
-    tilingHost[TILING_T1] = mlaInfo.queryShape_0;
-    tilingHost[TILING_T2] = mlaInfo.keyShape_0;
-    tilingHost[TILING_N1] = mlaInfo.queryShape_1;
-    tilingHost[TILING_N2] = mlaInfo.keyShape_1;
-    tilingHost[TILING_D] = mlaInfo.queryShape_2;
+    tilingHost[TILING_B] = fagInfo.seqQShapeSize;
+    tilingHost[TILING_T1] = fagInfo.queryShape_0;
+    tilingHost[TILING_T2] = fagInfo.keyShape_0;
+    tilingHost[TILING_N1] = fagInfo.queryShape_1;
+    tilingHost[TILING_N2] = fagInfo.keyShape_1;
+    tilingHost[TILING_D] = fagInfo.queryShape_2;
 
-    uint64_t g = mlaInfo.queryShape_1 / mlaInfo.keyShape_1;
-    tilingHost[TILING_G] = mlaInfo.queryShape_1 / mlaInfo.keyShape_1;
+    uint64_t g = fagInfo.queryShape_1 / fagInfo.keyShape_1;
+    tilingHost[TILING_G] = fagInfo.queryShape_1 / fagInfo.keyShape_1;
 
-    int64_t qSize = mlaInfo.queryShape_0 * mlaInfo.keyShape_1 * g * mlaInfo.queryShape_2;
-    int64_t kvSize = mlaInfo.keyShape_0 * mlaInfo.keyShape_1 * 1 * mlaInfo.queryShape_2;
-    int64_t sfmgSize = mlaInfo.queryShape_0 * mlaInfo.queryShape_1 * 8;
+    int64_t qSize = fagInfo.queryShape_0 * fagInfo.keyShape_1 * g * fagInfo.queryShape_2;
+    int64_t kvSize = fagInfo.keyShape_0 * fagInfo.keyShape_1 * 1 * fagInfo.queryShape_2;
+    int64_t sfmgSize = fagInfo.queryShape_0 * fagInfo.queryShape_1 * 8;
 
     tilingHost[TILING_Q_SIZE] = qSize;
     tilingHost[TILING_KV_SIZE] = kvSize;
@@ -123,11 +123,11 @@ int32_t GetFATilingParam(const MLAInfo mlaInfo, uint32_t &blockDim, int64_t *til
     // softmaxGrad tiling
     constexpr uint32_t inputBufferLen = 24 * 1024;
     constexpr uint32_t castBufferLen = 48 * 1024; // castBuffer 48K*2=96K
-    uint32_t outputBufferLen = (castBufferLen + mlaInfo.queryShape_2 - 1) /  mlaInfo.queryShape_2 * 8;
+    uint32_t outputBufferLen = (castBufferLen + fagInfo.queryShape_2 - 1) /  fagInfo.queryShape_2 * 8;
     uint32_t tempBufferLen = 40 * 1024 - outputBufferLen;
 
-    int64_t singleLoopNBurstNum = inputBufferLen / sizeof(float) / mlaInfo.queryShape_2;
-    std::vector<int64_t> softmaxGradShape = {singleLoopNBurstNum, mlaInfo.queryShape_2};
+    int64_t singleLoopNBurstNum = inputBufferLen / sizeof(float) / fagInfo.queryShape_2;
+    std::vector<int64_t> softmaxGradShape = {singleLoopNBurstNum, fagInfo.queryShape_2};
 
     SoftMaxTiling softmaxGradTilingData;
     SoftMaxGradTilingFunc(softmaxGradShape, sizeof(float), tempBufferLen, 

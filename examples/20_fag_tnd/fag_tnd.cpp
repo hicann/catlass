@@ -62,11 +62,11 @@ bool ReadFile(const string &filePath, void *buffer, size_t bufferSize)
 // This code section describes the parameters to execute the run function.
 struct Options {
     static constexpr auto HELPER =
-        "Usage: mla N1 N2 D dtype element_of_list_seq [--device DEVICE_ID]\n";
+        "Usage: FAG nheads nheads_k headdim dtype element_of_list_seq [--device DEVICE_ID]\n";
     static constexpr auto MIN_ARGS = 5;
 
     // Define default value.
-    uint32_t N1{0}, N2{0}, D{0};
+    uint32_t nheads{0}, nheads_k{0}, headdim{0};
     string dtype{"fp16_t"};
     std::vector<int64_t> list_seq;
     uint32_t deviceId{0};
@@ -85,9 +85,9 @@ struct Options {
 
         // Allocate arguments to parameters.
         uint32_t argIndex = 1;
-        N1 = atoi(argv[argIndex++]);
-        N2 = atoi(argv[argIndex++]);
-        D = atoi(argv[argIndex++]);
+        nheads = atoi(argv[argIndex++]);
+        nheads_k = atoi(argv[argIndex++]);
+        headdim = atoi(argv[argIndex++]);
         while (argIndex < argc) {
             if (argIndex == argc - 1) {
                 deviceId = atoi(argv[argIndex++]);
@@ -103,7 +103,7 @@ struct Options {
     string ToString() const
     {
         stringstream ss;
-        ss << "{ N1: " << N1 << ", N2: " << N2 << ", D: " << D << ", dtype: " << dtype <<
+        ss << "{ nheads: " << nheads << ", nheads_k: " << nheads_k << ", headdim: " << headdim << ", dtype: " << dtype <<
             ", "  << ", deviceId: " << deviceId << " }";
         return ss.str();
     }
@@ -122,7 +122,7 @@ void FreeMem(uint8_t *host, uint8_t *device)
 }
 
 // Allocate several matrices in NPU device memory and call a
-// ACTLASS MLA kernel.
+// ACTLASS FAG kernel.
 void Run(const Options &options)
 {
     aclrtStream stream{nullptr};
@@ -132,9 +132,9 @@ void Run(const Options &options)
 
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
-    uint32_t N1 = options.N1;
-    uint32_t N2 = options.N2;
-    uint32_t D = options.D;
+    uint32_t nheads = options.nheads;
+    uint32_t nheads_k = options.nheads_k;
+    uint32_t headdim = options.headdim;
     string dtype = options.dtype;
     std::vector<int64_t> list_seq = options.list_seq;
     string dataPath = options.dataPath;
@@ -149,40 +149,40 @@ void Run(const Options &options)
         return;
     }
 
-    printf("Running mla: N1=%d, N2=%d, D=%d, ...\n", \
-            N1, N2, D);
+    printf("Running fag: nheads=%d, nheads_k=%d, headdim=%d, ...\n", \
+            nheads, nheads_k, headdim);
     printf("list_seq = ");
     for (const auto& num : list_seq) {
         std::cout << num << " ";
     }
     std::cout << std::endl;
 
-    MLATiling::MLAInfo mlaInfo;
+    FAGTiling::FAGInfo fagInfo;
     
     int64_t sum_of_list = 0;
     for (size_t i = 0; i < list_seq.size(); ++i) {
         sum_of_list += list_seq[i];
     }
 
-    mlaInfo.seqQShapeSize = list_seq.size();
-    mlaInfo.queryShape_0 = sum_of_list;
-    mlaInfo.keyShape_0 = sum_of_list;
-    mlaInfo.queryShape_1 = N1;
-    mlaInfo.keyShape_1 = N2;
-    mlaInfo.queryShape_2 = D;
-    mlaInfo.scaleValue = 1.0 / sqrt(D);
+    fagInfo.seqQShapeSize = list_seq.size();
+    fagInfo.queryShape_0 = sum_of_list;
+    fagInfo.keyShape_0 = sum_of_list;
+    fagInfo.queryShape_1 = nheads;
+    fagInfo.keyShape_1 = nheads_k;
+    fagInfo.queryShape_2 = headdim;
+    fagInfo.scaleValue = 1.0 / sqrt(headdim);
 
-    uint64_t g = N1 / N2;
-    uint64_t qSize = sum_of_list * N2 * g * D * sizeof(fp16_t);
-    uint64_t kSize = sum_of_list * N2 * 1 * D * sizeof(fp16_t);
-    uint64_t vSize = sum_of_list * N2 * 1 * D * sizeof(fp16_t);
-    uint64_t dySize = sum_of_list * N1 * D * sizeof(fp16_t);
+    uint64_t g = nheads / nheads_k;
+    uint64_t qSize = sum_of_list * nheads_k * g * headdim * sizeof(fp16_t);
+    uint64_t kSize = sum_of_list * nheads_k * 1 * headdim * sizeof(fp16_t);
+    uint64_t vSize = sum_of_list * nheads_k * 1 * headdim * sizeof(fp16_t);
+    uint64_t dOutSize = sum_of_list * nheads * headdim * sizeof(fp16_t);
     uint64_t attenMaskSize = 2048 * 2048 * sizeof(fp16_t);
-    uint64_t softMaxMaxSize = sum_of_list * N1 * 8 * sizeof(float);
-    uint64_t softMaxSumSize = sum_of_list * N1 * 8 * sizeof(float);
-    uint64_t attentionInSize = sum_of_list * N1 * D * sizeof(fp16_t);
-    uint64_t actualSeqQlenSize = list_seq.size() * sizeof(int64_t);
-    uint64_t actualSeqKvlenSize = list_seq.size() * sizeof(int64_t);
+    uint64_t softMaxMaxSize = sum_of_list * nheads * 8 * sizeof(float);
+    uint64_t softMaxSumSize = sum_of_list * nheads * 8 * sizeof(float);
+    uint64_t outSize = sum_of_list * nheads * headdim * sizeof(fp16_t);
+    uint64_t cuSeqQlenSize = list_seq.size() * sizeof(int64_t);
+    uint64_t cuSeqKvlenSize = list_seq.size() * sizeof(int64_t);
 
     uint64_t dqSize = qSize;
     uint64_t dkSize = kSize;
@@ -190,7 +190,7 @@ void Run(const Options &options)
     uint64_t dqRightSize = 16 * 128 * 256 * sizeof(fp16_t);
     uint64_t dkRightSize = 16 * 128 * 128 * sizeof(float);
 
-    uint64_t workspaceSize = (2 * aicCoreNum * 16 * 128 * 128 * 8 * N1) * sizeof(float);
+    uint64_t workspaceSize = (2 * aicCoreNum * 16 * 128 * 128 * 8 * nheads) * sizeof(float);
 
     // Allocate matrices in host and device memory and load Matrix.
     uint8_t *qHost;
@@ -211,11 +211,11 @@ void Run(const Options &options)
     ReadFile(dataPath + "/v.bin", vHost, vSize);
     ACL_CHECK(aclrtMemcpy(vDevice, vSize, vHost, vSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *dyHost;
-    uint8_t *dyDevice;
-    AllocMem(&dyHost, &dyDevice, dySize);
-    ReadFile(dataPath + "/dx.bin", dyHost, dySize);
-    ACL_CHECK(aclrtMemcpy(dyDevice, dySize, dyHost, dySize, ACL_MEMCPY_HOST_TO_DEVICE));
+    uint8_t *dOutHost;
+    uint8_t *dOutDevice;
+    AllocMem(&dOutHost, &dOutDevice, dOutSize);
+    ReadFile(dataPath + "/dout.bin", dOutHost, dOutSize);
+    ACL_CHECK(aclrtMemcpy(dOutDevice, dOutSize, dOutHost, dOutSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
     uint8_t *attenMaskHost;
     uint8_t *attenMaskDevice;
@@ -226,32 +226,32 @@ void Run(const Options &options)
     uint8_t *softMaxMaxHost;
     uint8_t *softMaxMaxDevice;
     AllocMem(&softMaxMaxHost, &softMaxMaxDevice, softMaxMaxSize);
-    ReadFile(dataPath + "/softmax_max.bin", softMaxMaxHost, softMaxMaxSize);
+    ReadFile(dataPath + "/row_max.bin", softMaxMaxHost, softMaxMaxSize);
     ACL_CHECK(aclrtMemcpy(softMaxMaxDevice, softMaxMaxSize, softMaxMaxHost, softMaxMaxSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
     uint8_t *softMaxSumHost;
     uint8_t *softMaxSumDevice;
     AllocMem(&softMaxSumHost, &softMaxSumDevice, softMaxSumSize);
-    ReadFile(dataPath + "/softmax_sum.bin", softMaxSumHost, softMaxSumSize);
+    ReadFile(dataPath + "/row_sum.bin", softMaxSumHost, softMaxSumSize);
     ACL_CHECK(aclrtMemcpy(softMaxSumDevice, softMaxSumSize, softMaxSumHost, softMaxSumSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *attentionInHost;
-    uint8_t *attentionInDevice;
-    AllocMem(&attentionInHost, &attentionInDevice, attentionInSize);
-    ReadFile(dataPath + "/attention_in.bin", attentionInHost, attentionInSize);
-    ACL_CHECK(aclrtMemcpy(attentionInDevice, attentionInSize, attentionInHost, attentionInSize, ACL_MEMCPY_HOST_TO_DEVICE));
+    uint8_t *outHost;
+    uint8_t *outDevice;
+    AllocMem(&outHost, &outDevice, outSize);
+    ReadFile(dataPath + "/out.bin", outHost, outSize);
+    ACL_CHECK(aclrtMemcpy(outDevice, outSize, outHost, outSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *actualSeqQlenHost;
-    uint8_t *actualSeqQlenDevice;
-    AllocMem(&actualSeqQlenHost, &actualSeqQlenDevice, actualSeqQlenSize);
-    ReadFile(dataPath + "/actual_seq_qlen.bin", actualSeqQlenHost, actualSeqQlenSize);
-    ACL_CHECK(aclrtMemcpy(actualSeqQlenDevice, actualSeqQlenSize, actualSeqQlenHost, actualSeqQlenSize, ACL_MEMCPY_HOST_TO_DEVICE));
+    uint8_t *cuSeqQlenHost;
+    uint8_t *cuSeqQlenDevice;
+    AllocMem(&cuSeqQlenHost, &cuSeqQlenDevice, cuSeqQlenSize);
+    ReadFile(dataPath + "/cu_seq_qlen.bin", cuSeqQlenHost, cuSeqQlenSize);
+    ACL_CHECK(aclrtMemcpy(cuSeqQlenDevice, cuSeqQlenSize, cuSeqQlenHost, cuSeqQlenSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *actualSeqKvlenHost;
-    uint8_t *actualSeqKvlenDevice;
-    AllocMem(&actualSeqKvlenHost, &actualSeqKvlenDevice, actualSeqKvlenSize);
-    ReadFile(dataPath + "/actual_seq_kvlen.bin", actualSeqKvlenHost, actualSeqKvlenSize);
-    ACL_CHECK(aclrtMemcpy(actualSeqKvlenDevice, actualSeqKvlenSize, actualSeqKvlenHost, actualSeqKvlenSize, ACL_MEMCPY_HOST_TO_DEVICE));
+    uint8_t *cuSeqKvlenHost;
+    uint8_t *cuSeqKvlenDevice;
+    AllocMem(&cuSeqKvlenHost, &cuSeqKvlenDevice, cuSeqKvlenSize);
+    ReadFile(dataPath + "/cu_seq_kvlen.bin", cuSeqKvlenHost, cuSeqKvlenSize);
+    ACL_CHECK(aclrtMemcpy(cuSeqKvlenDevice, cuSeqKvlenSize, cuSeqKvlenHost, cuSeqKvlenSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
     uint8_t *dqDevice;
     ACL_CHECK(
@@ -275,7 +275,7 @@ void Run(const Options &options)
     void *tilingHost = nullptr;
     uint32_t tilingSize = TILING_PARA_NUM * sizeof(int64_t);
     ACL_CHECK(aclrtMallocHost(&tilingHost, tilingSize));
-    MLATiling::GetFATilingParam(mlaInfo, blockDim, (int64_t *)tilingHost);
+    FAGTiling::GetFATilingParam(fagInfo, blockDim, (int64_t *)tilingHost);
     uint8_t *tilingDevice;
     ACL_CHECK(aclrtMalloc((void **)(&tilingDevice), tilingSize, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize, ACL_MEMCPY_HOST_TO_DEVICE));
@@ -286,8 +286,8 @@ void Run(const Options &options)
     RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
 
     FAG<<<blockDim, nullptr, stream>>>(
-        fftsAddr, qDevice, kDevice, vDevice, dyDevice, nullptr, nullptr, nullptr, nullptr, nullptr,
-        attenMaskDevice, softMaxMaxDevice, softMaxSumDevice, nullptr, attentionInDevice, nullptr, actualSeqQlenDevice, actualSeqKvlenDevice,
+        fftsAddr, qDevice, kDevice, vDevice, dOutDevice, nullptr, nullptr, nullptr, nullptr, nullptr,
+        attenMaskDevice, softMaxMaxDevice, softMaxSumDevice, nullptr, outDevice, nullptr, cuSeqQlenDevice, cuSeqKvlenDevice,
         nullptr, nullptr, dqDevice, dkDevice, dvDevice, dq_rightDevice, dk_rightDevice, workspaceDevice, tilingDevice);
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
@@ -338,13 +338,13 @@ void Run(const Options &options)
     FreeMem(qHost, qDevice);
     FreeMem(kHost, kDevice);
     FreeMem(vHost, vDevice);
-    FreeMem(dyHost, dyDevice);
+    FreeMem(dOutHost, dOutDevice);
     FreeMem(attenMaskHost, attenMaskDevice);
     FreeMem(softMaxMaxHost, softMaxMaxDevice);
     FreeMem(softMaxSumHost, softMaxSumDevice);
-    FreeMem(attentionInHost, attentionInDevice);
-    FreeMem(actualSeqQlenHost, actualSeqQlenDevice);
-    FreeMem(actualSeqKvlenHost, actualSeqKvlenDevice);
+    FreeMem(outHost, outDevice);
+    FreeMem(cuSeqQlenHost, cuSeqQlenDevice);
+    FreeMem(cuSeqKvlenHost, cuSeqKvlenDevice);
 
     aclrtFree(dqDevice);
     aclrtFree(dkDevice);
