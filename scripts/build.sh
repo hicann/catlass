@@ -50,7 +50,7 @@ function show_help() {
     echo "  --debug         Build in debug mode"
     echo "  --msdebug       Enable msdebug support"
     echo "  --simulator     Compile example in simulator mode"
-    echo "  --enable_msprof Enable msprofiling"
+    echo "  --enable_profiling Enable profiling"
     echo "  -D<option>      Additional CMake options"
     echo -e "\n${BLUE}Targets:${NC}"
     echo "  catlass_examples  Build Catlass examples"
@@ -78,6 +78,10 @@ fi
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
         --clean)
             CLEAN=true
             ;;
@@ -98,7 +102,7 @@ while [[ $# -gt 0 ]]; do
             CMAKE_OPTIONS+=("-DSIMULATOR_NPU_MODEL=${NPU_MODEL}")
             POST_BUILD_INFO="${INFO}Please run ${NC}\nexport LD_LIBRARY_PATH=${ASCEND_HOME_PATH}/tools/simulator/${NPU_MODEL}/lib:\$LD_LIBRARY_PATH\n${GREEN}in your terminal before execute examples.${NC}"            
             ;;
-        --enable_msprof)
+        --enable_profiling)
             CMAKE_OPTIONS+=("-DASCEND_ENABLE_MSPROF=True")
             ;;
         -D*)

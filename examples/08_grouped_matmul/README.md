@@ -14,7 +14,7 @@
 ```
 # 编译指定用例
 bash scripts/build.sh 08_grouped_matmul
-# cd [代码仓路径]/build/bin
+# cd [代码仓路径]/output/bin
 # 可执行文件名 group数量|m轴|n轴|k轴|Device ID
 ./08_grouped_matmul 128 512 1024 2048 0
 ```

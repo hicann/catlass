@@ -5,12 +5,12 @@
 下载CANN开发套件包，点击[下载链接](https://www.hiascend.com/zh/developer/download/community/result?module=cann)选择对应的开发套件包`Ascend-cann-toolkit_<version>_linux-<arch>.run`。 CANN开发套件包依赖固件驱动，如需安装请查阅[安装NPU驱动固件](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/800alpha002/softwareinst/instg/instg_0005.html?Mode=PmIns&OS=Ubuntu&Software=cannToolKit)页面。
 
 安装CANN开发套件包。以下为root用户默认路径安装演示。
-```
+```bash
 chmod +x Ascend-cann-toolkit_<version>_linux-<arch>.run
 ./Ascend-cann-toolkit_<version>_linux-<arch>.run --install
 ```
 设置环境变量
-```
+```bash
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
 ```
 
@@ -20,7 +20,7 @@ source /usr/local/Ascend/ascend-toolkit/set_env.sh
 Kernel层模板由Block层组件构成。这里首先定义三个Block层组件。
 `<class BlockMmad_, class BlockEpilogue_, class BlockScheduler_>`。
 1. `BlockMmad_`为block层mmad计算接口，定义方式如下：
-```
+```c++
 using DispatchPolicy = Catlass::Gemm::MmadAtlasA2Pingpong<true>; //流水排布使用
 using L1TileShape = Catlass::GemmShape<128, 256, 256>; // L1基本块
 using L0TileShape = Catlass::GemmShape<128, 256, 64>; // L0基本块
@@ -36,21 +36,21 @@ using BlockMmad = Catlass::Gemm::Block::BlockMmad<DispatchPolicy,
     CType>;
 ```
 2. `BlockEpilogue_`为block层后处理，本文构建基础matmul，不涉及后处理，这里传入void。
-```
+```c++
 using BlockEpilogue = void;
 ```
 3. `BlockScheduler_`该模板类定义数据走位方式，提供计算offset的方法。此处使用定义好的GemmIdentityBlockSwizzle。参考[Swizzle策略说明](swizzle_explanation.md)文档了解更多swizzle信息。
-```
+```c++
 using BlockScheduler = typename Catlass::Gemm::Block::GemmIdentityBlockSwizzle<>;
 ```
 4. 基于上述组件即可完成BasicMatmul示例的Kernel层组装。
-```
+```c++
 using MatmulKernel = Catlass::Gemm::Kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 ```
 ### Device层算子定义
 基于Kernel层组装的算子，完成核函数的编写。
 1. 使用CATLASS_GLOBAL修饰符定义Matmul函数，并传入算子的类型参数。
-```
+```c++
 template <
     class LayoutA,
     class LayoutB,
@@ -64,17 +64,17 @@ void BasicMatmul(
     GM_ADDR gmC, LayoutC layoutC);
 ```
 2. BasicMatmul的调用接口为`()`运算符，需要传入Params作为参数。
-```
+```c++
 typename MatmulKernel::Params params{problemShape, gmA, layoutA, gmB, layoutB, gmC, layoutC};
 ```
 3. 最后，实例化一个kernel，并执行该算子。
-```
+```c++
 MatmulKernel matmul;
 matmul(params);
 ```
 ### 算子调用
 调用算子我们需要指定矩阵的输入输出的数据类型和数据排布信息，并使用`<<<>>>`的方式调用核函数。
-```
+```c++
 BasicMatmul<<<BLOCK_NUM, nullptr, stream>>>(
         options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC);
 ```
@@ -92,7 +92,7 @@ catlass_example_add_executable(
 )
 ```
 在项目目录下，调用`build.sh`，即可编译examples中的kernel代码。
-```
+```bash
 # 编译examples内所有用例
 bash scripts/build.sh catlass_examples
 # 编译指定用例
@@ -106,7 +106,7 @@ cd output/bin
 ./00_basic_matmul 256 512 1024 0
 ```
 执行结果如下，表明基于CATLASS编写的Kernel已经成功执行。
-```
+```bash
 Compare success.
 ```
 ### 代码样例

@@ -12,7 +12,7 @@
 ```
 # 编译指定用例
 bash scripts/build.sh 20_matmul_bias
-# cd [代码仓路径]/build/bin
+# cd [代码仓路径]/output/bin
 # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID
 # Device ID可选，默认为0
 ./20_matmul_bias 256 512 1024 0
