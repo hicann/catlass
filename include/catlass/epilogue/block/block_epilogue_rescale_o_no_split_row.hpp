@@ -24,13 +24,13 @@ template <
     class OutputType_
     class InputType_>
 class BlockEpilogue<
-    EpilogueAtlasA2RescaleONoSplitRow,
+    EpilogueAtlasA2FARescaleO,
     OutputType_,
     InputType_>
 {
 public:
     // Type aliases
-    using DispatchPolicy = EpilogueAtlasA2RescaleONoSplitRow;
+    using DispatchPolicy = EpilogueAtlasA2FARescaleO;
     using ArchTag = typename DispatchPolicy::ArchTag;
 
     using ElementOutput = typename OutputType_::Element;
@@ -122,20 +122,19 @@ public:
     CATLASS_DEVICE
     void CopyOToGm(
         AscendC::GlobalTensor<ElementOutput> gOutput,
-        AscendC::LocalTensor<ElementOutput> oUb,
         uin32_t curRowNum, uint32_t qSBlockSize, uint32_t embed,
         uint32_t embedRound, uint32_t qNThisSubBlock, uint32_t oHiddenSize)
     {
         if (qNThisSubBlock == 0) {
             AscendC::DataCopyPad(
                 gOutput, 
-                oUb,
+                goUbTensor16,
                 AscendC::DataCopyExtParams(curRowNum, embed * 2, 0, (oHiddenSize - embed) * 2, 0));
         } else {
             for (uint32_t qNIdx = 0; qNIdx < qNThisSubBlock; qNIdx++) {
                 AscendC::DataCopyPad(
                     gOutput[qNIdx * embed],
-                    oUb[qNIdx * embedRound * qSBlockSize],
+                    goUbTensor16[qNIdx * embedRound * qSBlockSize],
                     AscendC::DataCopyExtParams(qSBlockSize, embed * 2, 0, (oHiddenSize - embed) * 2, 0));
             }
         }
@@ -159,7 +158,7 @@ public:
         uint32_t dmUbOffsetCurStackTile =
             curStackTileMod * MAX_ROW_NUM_SUB_CORE;
         
-        AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
+        AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID3);
         if (!isFirstStackTile) {
             AscendC::DataCopy(loUbTensor, gInput,
                               AscendC::DataCopyParams(1, curRowNum * embedRound / FLOAT_BLOCK_SIZE, 0, 0));
@@ -206,7 +205,7 @@ public:
             AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
             AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
         }
-        AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
+        AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID3);
 
         if (isLastStackTile) {
             // *** gl_block = expand_to_block(gl), 存放于 tv
@@ -256,8 +255,7 @@ public:
 
             // ***move O to GM
             CopyOToGm(
-                gOutput, goUbTensor16,
-                curRowNum, qSBlockSize, embed,
+                gOutput, curRowNum, qSBlockSize, embed,
                 embedRound, qNThisSubBlock, oHiddenSize);
         }
     }

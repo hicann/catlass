@@ -97,6 +97,7 @@ public:
         uint32_t batch = 0;
         uint32_t maxNumBlocksPerBatch = 0;
         uint32_t totalTaskNum = 0;
+        uint32_t firstBatchTaskNum = 0;
         uint64_t mm1OutSize = 0;
         uint64_t smOnlineOutSize = 0;
         uint64_t mm2OutSize = 0;
@@ -360,7 +361,7 @@ public:
 
         AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
         AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID1);
-        AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID4);
+        AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID3);
         AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID2);
         AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID2);
 
@@ -533,7 +534,7 @@ public:
             for (uint32_t kvSIdx = maskedStartIdx;
                 kvSIdx <= maskedEndIdx + preLaunch * blockStackNum;
                 kvSIdx += blockStackNum) {
-                if (kvSIdx <= maskedEndIdx) {
+                if ((kvSIdx <= maskedEndIdx) && (kvSIdx < kvSLoopNumTotal)) {
                     // if (kvSIdx + blockStackNum >= maskedEndIdx) {
                     //     stackSeqTile = maskedKvS;
                     // } else {
@@ -564,8 +565,8 @@ public:
                     Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(softmaxReady);
                 }
 
-                if (kvSIdx >= preLaunch * blockStackNum) {
-                    uint32_t delayedKvSIdx = kvSIdx - preLaunch * blockStackNum;
+                uint32_t delayedKvSIdx = kvSIdx - preLaunch * blockStackNum;
+                if ((delayedKvSIdx >= 0) && (delayedKvSIdx < kvSLoopNumTotal)) {
                     if (delayedKvSIdx + blockStackNum >= maskedEndIdx) {
                         stackSeqTile = maskedKvS;
                     } else if (delayedKvSIdx + blockStackNum > kvSLoopNumNoMask - 1) {
@@ -684,18 +685,20 @@ public:
             // }
         }
 
-        AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
+        
         // AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
         AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID2);
         AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID3);
         AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID4);
         AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID5);
 
-        AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID4);
+        
+        AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
+        AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID2);
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID1);
-        AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID2);
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID2);
+        AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID3);
 
 
     }
@@ -753,11 +756,12 @@ CATLASS_GLOBAL void FAInferFp16(uint64_t fftsAddr,
     using SType = Gemm::GemmType<ElementS, LayoutS>;
     using BlockMmadQK = Gemm::Block::BlockMmad<DispatchPolicyQK, L1TileShape, L0TileShape, QType, KType, SType>;
 
-    // Epilogue Block模块，实现Flash Attention Infer中当前不加mask的S基块的softmax
-    using DispatchPolicyOnlineSoftmaxNoMask = Epilogue::EpilogueAtlasA2OnlineSoftmaxNoMask;
+    // Epilogue Block模块，实现Flash Attention Infer中当前S基块的softmax
+    using DispatchPolicyOnlineSoftmax = Epilogue::EpilogueAtlasA2OnlineSoftmax;
     using PType = Gemm::GemmType<ElementP, LayoutP>;
+    using maskType = Gemm::GemmType<ElementMask, LayoutMask>;
     using EpilogueOnlineSoftmax =
-        Epilogue::Block::BlockEpilogue<DispatchPolicyOnlineSoftmaxNoMask, PType, SType>;
+        Epilogue::Block::BlockEpilogue<DispatchPolicyOnlineSoftmax, PType, SType, maskType>;
 
     // GEMM Block模块，实现Flash Attention Infer的P * V
     using DispatchPolicyPV = Gemm::MmadAtlasA2MLAPV;
@@ -765,11 +769,11 @@ CATLASS_GLOBAL void FAInferFp16(uint64_t fftsAddr,
     using OTmpType = Gemm::GemmType<ElementOTmp, LayoutOTmp>;
     using BlockMmadPV = Gemm::Block::BlockMmad<DispatchPolicyPV, L1TileShape, L0TileShape, PType, VType, OTmpType>;
 
-    // Epilogue Block模块，实现Flash Attention Infer中当前O基块的不分块更新
-    using DispatchPolicyRescaleONoSplitRow = Epilogue::EpilogueAtlasA2RescaleONoSplitRow;
+    // Epilogue Block模块，实现Flash Attention Infer中当前O基块的更新
+    using DispatchPolicyRescaleO = Epilogue::EpilogueAtlasA2FARescaleO;
     using OType = Gemm::GemmType<ElementO, LayoutO>;
     using EpilogueRescaleO =
-        Epilogue::Block::BlockEpilogue<DispatchPolicyRescaleONoSplitRow, OType, OTmpType>;
+        Epilogue::Block::BlockEpilogue<DispatchPolicyRescaleO, OType, OTmpType>;
 
 
     // Kernel level
