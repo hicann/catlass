@@ -14,7 +14,12 @@
 #include <cstdint>
 
 #if defined(__CCE__)
+// AscendC redefines 'inline' for performance like this:
+// #define inline __inline__ __attribute__((always_inline))
+// This conflicts with standard headers. Use pragma to isolate the redefinition
+#pragma push_macro("inline")
 #include <kernel_operator.h>
+#pragma pop_macro("inline")
 #endif
 
 #include "catlass/detail/alignment.hpp"

@@ -13,7 +13,7 @@
 #include "catlass/catlass.hpp"
 
 #if defined(ASCENDC_DUMP) && ASCENDC_DUMP == 1
-#include "catlass/debug/debug.hpp"
+#include "catlass/debug.hpp"
 #endif
 
 namespace Catlass {

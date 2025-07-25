@@ -8,22 +8,34 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+#ifndef CATLASS_DEBUG_HPP
+#define CATLASS_DEBUG_HPP
+
 #include <iostream>
+#include <sstream>
+#include <functional>
+
 #include <acl/acl.h>
 
 #define SINGLE_CORE_DUMPSIZE (1024 * 1024)
 // 75 is from AscendC host stub
 #define ALL_DUMPSIZE (75 * SINGLE_CORE_DUMPSIZE)
 
-#define CHECK_STATUS(status)                                                                                           \
-    do {                                                                                                               \
-        if (status != ACL_SUCCESS) {                                                                                   \
-            std::cout << "Error: " << status << std::endl;                                                             \
-            exit(-1);                                                                                                  \
-        }                                                                                                              \
-    } while (0)
+using LogFuncType = std::function<void(const char *)>;
+inline void aclCheck(aclError status, LogFuncType logFunc = [](const char *logStrPtr) { std::cerr << logStrPtr; })
+{
+    if (status != ACL_SUCCESS) {
+        std::stringstream ss;
+        ss << "AclError: " << status;
+        logFunc(ss.str().c_str());
+    }
+}
 
 namespace Adx {
-void AdumpPrintWorkSpace(const void *dumpBufferAddr, const size_t dumpBufferSize, aclrtStream stream,
+void AdumpPrintWorkSpace(const void *dumpBufferAddr,
+                         const size_t dumpBufferSize,
+                         aclrtStream stream,
                          const char *opType);
 } // namespace Adx
+
+#endif // CATLASS_DEBUG_HPP

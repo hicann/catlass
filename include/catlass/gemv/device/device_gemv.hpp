@@ -16,6 +16,9 @@
 #include "catlass/status.hpp"
 #include "catlass/gemv/device/kernel_adapter.hpp"
 
+#if defined(ASCENDC_DUMP) && ASCENDC_DUMP == 1
+#include "catlass/debug.hpp"
+#endif
 
 namespace Catlass::Gemv::Device {
 
@@ -71,15 +74,15 @@ public:
     {
 #if defined(ASCENDC_DUMP) && ASCENDC_DUMP == 1
         uint8_t *ptrDump{nullptr};
-        CHECK_STATUS(aclrtMalloc(reinterpret_cast<void **>(&ptrDump), ALL_DUMPSIZE, ACL_MEM_MALLOC_HUGE_FIRST));
+        aclCheck(aclrtMalloc(reinterpret_cast<void **>(&ptrDump), ALL_DUMPSIZE, ACL_MEM_MALLOC_HUGE_FIRST));
         if (fftsAddr == 0) {
             Catlass::KernelAdapter<GemvKernel><<<blockDim, nullptr, stream>>>(params_, ptrDump);
         } else {
             Catlass::KernelAdapter<GemvKernel><<<blockDim, nullptr, stream>>>(params_, fftsAddr, ptrDump);
         }
-        CHECK_STATUS(aclrtSynchronizeStream(stream));
+        aclCheck(aclrtSynchronizeStream(stream));
         Adx::AdumpPrintWorkSpace(ptrDump, ALL_DUMPSIZE, stream, "device_gemm");
-        CHECK_STATUS(aclrtFree(ptrDump));
+        aclCheck(aclrtFree(ptrDump));
 #else
         if (fftsAddr == 0) {
             Catlass::KernelAdapter<GemvKernel><<<blockDim, nullptr, stream>>>(params_);
