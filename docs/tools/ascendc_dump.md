@@ -19,7 +19,7 @@ CATLASS_DEVICE
 void operator()<AscendC::AIC>(Params const &params) {
     BlockScheduler matmulBlockScheduler(params.problemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
     uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
-+   AscendC::printf("Current coreLoops is %d\n", coreLoops);
++   AscendC::printf("CoreLoops is %d\n", coreLoops);
     Arch::Resource<ArchTag> resource;
     BlockMmad blockMmad(resource);
 
@@ -66,13 +66,23 @@ bash scripts/build.sh --enable_ascendc_dump 00_basic_matmul
 ```bash
 cd output/bin
 # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID（可选）
-./09_basic_m00_basic_matmulatmul 256 512 1024 0
+./00_basic_matmul 256 512 1024 0
 ```
 
 - ⚠ 注意事项
   - 目前`AscendC算子调测API`**不**支持打印`FixPipe`上的数值。
 
 ### 输出示例
+
+```bash
+./00_basic_matmul 256 512 1024 0
+opType=device_gemm, DumpHead: AIC-0, CoreType=AIC, block dim=24, total_block_num=24, block_remain_len=1048408, block_initial_space=1048576, rsv=0, magic=5aa5bccd
+CoreLoops is 4
+DumpTensor: desc=4, addr=c0013000, data_type=float16, position=GM
+[3.402344, -1.056641, 2.830078, 2.984375, 4.117188, -3.025391, -1.647461, 2.681641, -2.222656, 0.539551, -0.226074, 1.289062, -1.352539, 0.134033, 4.523438, 4.160156]
+... #每个Cube核都会输出一次信息
+Compare success.
+```
 
 ## 版权声明
 
