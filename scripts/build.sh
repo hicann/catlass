@@ -50,6 +50,7 @@ function show_help() {
     echo "  --msdebug       Enable msdebug support"
     echo "  --simulator     Compile example in simulator mode"
     echo "  --enable_profiling Enable profiling"
+    echo "  --enable_ascendc_dump   Enable AscendC dump API"
     echo "  --tests         Enable building targets in tests"
     echo "  -D<option>      Additional CMake options"
     echo -e "\n${BLUE}Targets:${NC}"
@@ -77,6 +78,8 @@ if [[ ! -v ASCEND_HOME_PATH ]]; then
     echo -e "${ERROR}Please set ASCEND_HOME_PATH before running this script.${NC}"
     exit 1
 fi
+
+CMAKE_BUILD_DEFINITIONS="-DCMAKE_BUILD_TYPE=$CMAKE_BUILD_TYPE"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -111,6 +114,9 @@ while [[ $# -gt 0 ]]; do
         --enable_profiling)
             CMAKE_OPTIONS+=("-DASCEND_ENABLE_MSPROF=True")
             ;;
+        --enable_ascendc_dump)
+            CMAKE_OPTIONS+=("-DENABLE_ASCENDC_DUMP=True")
+            ;;
         -D*)
             CMAKE_OPTIONS+=("$1")
             ;;
@@ -126,6 +132,7 @@ while [[ $# -gt 0 ]]; do
     esac
     shift
 done
+echo $CMAKE_BUILD_DEFINITIONS
 
 if [[ "$CLEAN" == true ]]; then
     echo -e "${INFO}Cleaning build directories...${NC}"
