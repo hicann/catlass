@@ -4,11 +4,11 @@
 
 - ⚠️ **注意** 这个功能依赖于[8.2.RC1.alpha003](https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.2.RC1.alpha003)版本的社区版或`8.2.RC1`之后的商用版。
 
-# 使用示例
+## 使用示例
 
 下面以对`00_basic_matmul`为例，进行msDebug调试的使用说明。
 
-## 使能驱动的调试功能
+### 使能驱动的调试功能
 
 参考[msDebug工具概述](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/82RC1alpha003/devaids/optool/atlasopdev_16_0062.html)，以`debug`模式安装驱动，或在`full`模式安装的驱动下执行`echo 1 > /proc/debug_switch`打开调试通道。
 
@@ -22,7 +22,7 @@ msdebug failed to initialize. please install HDK.
 terminate called after throwing an instance of 'MSDEBUG_ERROR_CODE'
 ```
 
-## 编译运行
+### 编译运行
 
 1. 基于[快速上手](../../README.md#快速上手)，打开工具的编译开关`--debug --msdebug`，使能`debug`与`msdebug`编译算子样例。
 
@@ -52,9 +52,9 @@ Current executable set to '/home/catlass/output/bin/00_basic_matmul' (aarch64).
 (msdebug) 
 ```
 
-## 命令行调试
+### 命令行调试
 
-### 设置断点和程序执行
+#### 设置断点和程序执行
 
 通过命令`b basic_matmul.cpp:81`和`b basic_matmul.cpp:128`设置两个断点，再用`breakpoint list`查看已有断点。
 
@@ -109,7 +109,7 @@ Process 813993 exited with status = 0 (0x00000000)
 (msdebug) 
 ```
 
-### 查看变量和内存
+#### 查看变量和内存
 
 如果想查看标量，通过`p`指令，可以直接查看当前n变量的值。
 
@@ -276,7 +276,7 @@ Process 814339 stopped
 (msdebug) 
 ```
 
-### 退出调试
+#### 退出调试
 
 调试完成后，通过命令`q`退出msdebug，若通过`Ctrl+C`等手段强行退出，则msdebug进程不会结束，仍在后台运行，此时可通过`ps -ef | grep msdebug`查找对应的进程pid，再用`kill -9 进程pid`杀掉对应进程即可。不能同时起多个msdebug进程进行调试。
 
@@ -285,7 +285,7 @@ Process 814339 stopped
 Quitting LLDB will kill one or more processes. Do you really want to proceed: [Y/n] y
 ```
 
-### 常用命令表
+#### 常用命令表
 
 |  命令  |  命令缩写  |  作用  |  示例  |
 | ------ | ---------- | ------ | ------- |
@@ -307,7 +307,7 @@ Quitting LLDB will kill one or more processes. Do you really want to proceed: [Y
 |  target modules addkernel.o  |  image addkernel.o  |  PyTorch框架拉起算子时，导入算子调试信息 <br>（注：当程序执行run命令后再执行本命令导入调试信息，<br>则还需额外执行image load命令以使调试信息生效） |  image addAddCustom\_xxx.o  |
 |  target modules load –f kernel.o –s address  |  image load -f kernel.o -s address  |  在程序运行后，使导入的调试信息生效                                                                                                                                       |  image load -f AddCustom\_xxx.o -s 0  |
 
-# 附录
+## 附录
 
 ### msdebug支持的数据格式
 
