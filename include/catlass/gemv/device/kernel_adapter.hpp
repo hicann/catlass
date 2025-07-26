@@ -12,20 +12,30 @@
 
 #include "catlass/catlass.hpp"
 
+#if defined(ASCENDC_DUMP) && ASCENDC_DUMP == 1
+#include "catlass/debug.hpp"
+#endif
+
 namespace Catlass {
-/// Generic ASCENDCT kernel template
+/// Generic Catlass kernel template
 template <class Operator>
-CATLASS_GLOBAL void KernelAdapter(typename Operator::Params params)
+CATLASS_GLOBAL void KernelAdapter(typename Operator::Params params, GM_ADDR ptrDump = nullptr)
 {
     Operator op;
+#if defined(ASCENDC_DUMP) && ASCENDC_DUMP == 1
+    AscendC::InitDump(false, ptrDump, ALL_DUMPSIZE);
+#endif
     op(params);
 }
 
 template <class Operator>
-CATLASS_GLOBAL void KernelAdapter(typename Operator::Params params, uint64_t fftsAddr)
+CATLASS_GLOBAL void KernelAdapter(typename Operator::Params params, uint64_t fftsAddr, GM_ADDR ptrDump = nullptr)
 {
     AscendC::SetSyncBaseAddr(fftsAddr);
     Operator op;
+#if defined(ASCENDC_DUMP) && ASCENDC_DUMP == 1
+    AscendC::InitDump(false, ptrDump, ALL_DUMPSIZE);
+#endif
     op(params);
 }
 } // namespace Catlass

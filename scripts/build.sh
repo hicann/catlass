@@ -22,6 +22,17 @@ ERROR="${RED}[ERROR]"
 INFO="${GREEN}[INFO]"
 WARN="${YELLOW}[WARN]"
 
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+CMAKE_SOURCE_DIR=$(realpath "$SCRIPT_DIR/..")
+BUILD_DIR="$CMAKE_SOURCE_DIR/build"
+OUTPUT_DIR="$CMAKE_SOURCE_DIR/output"
+
+TARGET=""
+CMAKE_BUILD_TYPE="Release"
+declare -a CMAKE_OPTIONS=()
+CLEAN=false
+POST_BUILD_INFO=""
+
 function get_npu_model(){
     if command -v npu-smi &> /dev/null; then
         echo "Ascend$(npu-smi info -t board -i 0 -c 0 | awk '/Chip Name/ {print $NF}')"
@@ -30,11 +41,6 @@ function get_npu_model(){
         return 1
     fi
 }
-
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-CMAKE_SOURCE_DIR=$(realpath "$SCRIPT_DIR/..")
-BUILD_DIR="$CMAKE_SOURCE_DIR/build"
-OUTPUT_DIR="$CMAKE_SOURCE_DIR/output"
 
 echo -e "  ____    _  _____ _        _    ____ ____  "
 echo -e " / ___|  / \|_   _| |      / \  / ___/ ___| "
@@ -50,6 +56,7 @@ function show_help() {
     echo "  --msdebug       Enable msdebug support"
     echo "  --simulator     Compile example in simulator mode"
     echo "  --enable_profiling Enable profiling"
+    echo "  --enable_ascendc_dump   Enable AscendC dump API"
     echo "  --tests         Enable building targets in tests"
     echo "  -D<option>      Additional CMake options"
     echo -e "\n${BLUE}Targets:${NC}"
@@ -60,12 +67,6 @@ function show_help() {
     echo -e "\n{BLUE}Test targets:${NC}"
     echo "  test_self_contained_includes  Test for self contained includes"
 }
-
-TARGET=""
-CMAKE_BUILD_TYPE="Release"
-declare -a CMAKE_OPTIONS=()
-CLEAN=false
-POST_BUILD_INFO=""
 
 if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
     show_help
@@ -80,10 +81,6 @@ fi
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        -h|--help)
-            show_help
-            exit 0
-            ;;
         --clean)
             CLEAN=true
             ;;
@@ -110,6 +107,9 @@ while [[ $# -gt 0 ]]; do
             ;;
         --enable_profiling)
             CMAKE_OPTIONS+=("-DASCEND_ENABLE_MSPROF=True")
+            ;;
+        --enable_ascendc_dump)
+            CMAKE_OPTIONS+=("-DENABLE_ASCENDC_DUMP=True")
             ;;
         -D*)
             CMAKE_OPTIONS+=("$1")
@@ -162,7 +162,6 @@ function build_torch_library() {
     echo -e "${INFO}Torch library built successfully${NC}"
 }
 
-# 执行构建
 case "$TARGET" in
     python_extension)
         build_python_extension

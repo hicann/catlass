@@ -16,6 +16,10 @@
 #include "catlass/status.hpp"
 #include "catlass/gemm/device/kernel_adapter.hpp"
 
+#if defined(ASCENDC_DUMP) && ASCENDC_DUMP == 1
+#include "catlass/debug.hpp"
+#endif
+
 namespace Catlass::Gemm::Device {
 
 template <class GemmKernel>
@@ -32,7 +36,7 @@ public:
     DeviceGemm() {}
     ~DeviceGemm() {}
 
-    ///Access the Params structure
+    /// Access the Params structure
     Params const &params() const
     {
         return params_;
@@ -68,12 +72,24 @@ public:
     /// Supplied params struct must be construct by calling matmul Kernel::to_underling arguments
     inline Status Run(aclrtStream stream, uint32_t blockDim, uint64_t fftsAddr)
     {
+#if defined(ASCENDC_DUMP) && ASCENDC_DUMP == 1
+        uint8_t *ptrDump{nullptr};
+        aclCheck(aclrtMalloc(reinterpret_cast<void **>(&ptrDump), ALL_DUMPSIZE, ACL_MEM_MALLOC_HUGE_FIRST));
+        if (fftsAddr == 0) {
+            Catlass::KernelAdapter<GemmKernel><<<blockDim, nullptr, stream>>>(params_, ptrDump);
+        } else {
+            Catlass::KernelAdapter<GemmKernel><<<blockDim, nullptr, stream>>>(params_, fftsAddr, ptrDump);
+        }
+        aclCheck(aclrtSynchronizeStream(stream));
+        Adx::AdumpPrintWorkSpace(ptrDump, ALL_DUMPSIZE, stream, "device_gemm");
+        aclCheck(aclrtFree(ptrDump));
+#else
         if (fftsAddr == 0) {
             Catlass::KernelAdapter<GemmKernel><<<blockDim, nullptr, stream>>>(params_);
-        }
-        else {
+        } else {
             Catlass::KernelAdapter<GemmKernel><<<blockDim, nullptr, stream>>>(params_, fftsAddr);
         }
+#endif
         return Status::kSuccess;
     }
 

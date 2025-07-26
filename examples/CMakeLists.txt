@@ -12,9 +12,11 @@ add_custom_target(catlass_examples)
 
 macro(catlass_example_add_executable NAME AICORE_ARCH)
     set(EXAMPLE_DESTINATION bin)
+
     if(DEFINED ENABLE_SIMULATOR AND ENABLE_SIMULATOR)
         set(EXAMPLE_DESTINATION bin_sim)
     endif()
+
     add_executable(${NAME} ${ARGN})
     target_compile_options(${NAME} PRIVATE $<$<COMPILE_LANGUAGE:ASCEND>:--cce-aicore-arch=${AICORE_ARCH}>)
     add_dependencies(catlass_examples ${NAME})
@@ -40,6 +42,12 @@ include_directories(
 )
 link_directories(${ASCEND_HOME_PATH}/lib64)
 link_libraries(dl tiling_api platform c_sec nnopbase ascendcl)
+
+if(DEFINED ENABLE_ASCENDC_DUMP AND ENABLE_ASCENDC_DUMP)
+    add_compile_definitions(ASCENDC_DUMP=1)
+    add_compile_definitions(ASCENDC_DEBUG)
+    link_libraries(ascend_dump)
+endif()
 
 foreach(EXAMPLE
     00_basic_matmul
