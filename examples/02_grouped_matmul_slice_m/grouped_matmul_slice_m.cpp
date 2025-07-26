@@ -39,6 +39,7 @@ template <
     class LayoutB,
     class LayoutC
 >
+[[bisheng::core_ratio(1, 0)]]
 CATLASS_GLOBAL
 void GroupedMatmulSliceM(
     GemmCoord problemShape,
