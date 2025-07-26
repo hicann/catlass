@@ -151,169 +151,226 @@ public:
         AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(EVENT_ID5);
         AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(EVENT_ID6);
         AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(EVENT_ID7);
-        AscendC::SetFlag<AscendC::HardEvent::FIX_MTE1>(EVENT_ID0);
-        AscendC::SetFlag<AscendC::HardEvent::FIX_MTE1>(EVENT_ID1);
-        AscendC::SetFlag<AscendC::HardEvent::FIX_MTE1>(EVENT_ID2);
-        AscendC::SetFlag<AscendC::HardEvent::FIX_MTE1>(EVENT_ID3);
-        AscendC::SetFlag<AscendC::HardEvent::FIX_MTE1>(EVENT_ID4);
-        AscendC::SetFlag<AscendC::HardEvent::FIX_MTE1>(EVENT_ID5);
-        AscendC::SetFlag<AscendC::HardEvent::MTE2_FIX>(EVENT_ID0);
+        BlockMmadQK blockMmadQK(resource);
+        static constexpr uint32_t L1_QK_SIZE = BlockMmadQK::L1TileShape::M * BlockMmadQK::L1TileShape::K * sizeof(ElementQ) + 
+                                             BlockMmadQK::L1TileShape::N * BlockMmadQK::L1TileShape::K * sizeof(ElementK) * 2;
+        BlockMmadPV blockMmadPV(resource, L1_QK_SIZE);
 
-        // Get the memory offset address of the input on Global Memory
+        __gm__ FATilingData *fATilingData = reinterpret_cast<__gm__ FATilingData *>(params.tiling);
+        uint64_t mm1OutSize = fATilingData->mm1OutSize;
+        uint64_t smOnlineOutSize = fATilingData->smOnlineOutSize;
+        uint32_t batch = fATilingData->batch;
+        uint32_t qHeads = fATilingData->numHeads;
+        uint32_t kvHeads = fATilingData->kvHeads;
+        uint32_t embed = fATilingData->embeddingSize;
+        uint32_t pagedBlockSize = fATilingData->blockSize;
+        uint32_t maxNumBlocksPerBatch = fATilingData->maxNumBlocksPerBatch;
+        uint32_t curTotalTaskNum = fATilingData->firstBatchTaskNum;
+        uint32_t totalTaskNum = fATilingData->totalTaskNum;
+        uint32_t blockSize = fATilingData->blockSize;
+        float scaleValue = fATilingData->scaleValue;
+
         AscendC::GlobalTensor<ElementQ> gQ;
         gQ.SetGlobalBuffer((__gm__ ElementQ *)params.q);
-
-        AscendC::GlobalTensor<ElementQ> gQRope;
-        gQRope.SetGlobalBuffer((__gm__ ElementQ *)params.qRope);
-
         AscendC::GlobalTensor<ElementK> gK;
         gK.SetGlobalBuffer((__gm__ ElementK *)params.k);
-
-        AscendC::GlobalTensor<ElementK> gKRope;
-        gKRope.SetGlobalBuffer((__gm__ ElementK *)params.kRope);
-
-        AscendC::GlobalTensor<int32_t> gblockTable;
-        gblockTable.SetGlobalBuffer((__gm__ int32_t *)(params.blockTables));
-
+        AscendC::GlobalTensor<ElementK> gV;
+        gV.SetGlobalBuffer((__gm__ ElementK *)params.v);
+        AscendC::GlobalTensor<int32_t> gBlockTable;
+        gBlockTable.SetGlobalBuffer((__gm__ int32_t *)(params.blockTables));
         AscendC::GlobalTensor<ElementS> gS;
-        gS.SetGlobalBuffer((__gm__ ElementS *)params.s);
+        gS.SetGlobalBuffer((__gm__ ElementS *)params.workSpace);
         AscendC::GlobalTensor<ElementP> gP;
-        gP.SetGlobalBuffer((__gm__ ElementP *)params.p);
+        gP.SetGlobalBuffer((__gm__ ElementP *)params.workSpace + mm1OutSize);
         AscendC::GlobalTensor<ElementOTmp> gOTmp;
-        gOTmp.SetGlobalBuffer((__gm__ ElementOTmp *)params.oTmp);
-        AscendC::GlobalTensor<uint32_t> gTiling;
-        gTiling.SetGlobalBuffer((__gm__ uint32_t *)params.tiling);
+        gOTmp.SetGlobalBuffer((__gm__ ElementOTmp *)params.workSpace + mm1OutSize + smOnlineOutSize);
 
-        BlockMmadQK blockMmadQK(resource);
-        BlockMmadPV blockMmadPV(resource);
-
-        // Get tiling parameters
-        uint32_t batch = gTiling.GetValue(TILING_BATCH);
-        uint32_t qHeads = gTiling.GetValue(TILING_NUMHEADS);
-        uint32_t embed = gTiling.GetValue(TILING_HEADDIM);
-        uint32_t embedRope = gTiling.GetValue(TILING_HEADDIM_ROPE);
-        uint32_t blockSize = gTiling.GetValue(TILING_BLOCKSIZE);
-        uint32_t maxNumBlocksPerQuery = gTiling.GetValue(TILING_MAXBLOCKS);
-        uint32_t kvHeads = gTiling.GetValue(TILING_KVHEADS);
-        uint32_t tilingHeadSize = gTiling.GetValue(TILING_HEADSIZE);
-        uint32_t tilingParaSize = gTiling.GetValue(TILING_PARASIZE);
-        uint32_t curQheadSplitSize = gTiling.GetValue(TILING_HEAD_SPLIT_SIZE);
-        uint32_t curQheadSplitNum = gTiling.GetValue(TILING_HEAD_SPLIT_NUM);
-        uint32_t kvSplitPerCore = gTiling.GetValue(TILING_KVSPLIT);
-        uint32_t kvSplitCoreNum = gTiling.GetValue(TILING_KVCORENUM);
-
-        uint32_t strideQO = qHeads * embed;
-        uint32_t strideQORope = qHeads * embedRope;
-        uint32_t strideKV = static_cast<uint64_t>(kvHeads) * embed;
-        uint32_t strideKVRope = static_cast<uint64_t>(kvHeads) * embedRope;
+        uint64_t strideQO = qHeads * embed;
+        uint64_t strideKV = kvHeads * embed;
         uint32_t embedRound = RoundUp<BLOCK_SIZE>(embed);
 
         uint32_t coreIdx = AscendC::GetBlockIdx();
         uint32_t coreNum = AscendC::GetBlockNum();
-        uint32_t processNum = batch * curQheadSplitNum * kvSplitCoreNum;
-        // Go through each task
-        for (uint32_t process = coreIdx; process < processNum; process += uint32_t(coreNum)) {
-            // Get the offset of each core on the GM
-            uint32_t curBatch = process / (curQheadSplitNum * kvSplitCoreNum);
-            uint32_t offsetTiling = tilingHeadSize + tilingParaSize * curBatch;
-            uint32_t qSeqlen = gTiling.GetValue(offsetTiling);
-            uint32_t kvSeqlen = gTiling.GetValue(offsetTiling + 1);
-            uint32_t qAddrHigh = gTiling.GetValue(offsetTiling + 4);
-            uint32_t qAddrLow = gTiling.GetValue(offsetTiling + 5);
-            uint64_t qAddr = (uint64_t)(((uint64_t)qAddrHigh) << 32 | qAddrLow);
-            uint32_t qRopeAddrHigh = gTiling.GetValue(offsetTiling + 6);
-            uint32_t qRopeAddrLow = gTiling.GetValue(offsetTiling + 7);
-            uint64_t qRopeAddr = (uint64_t)(((uint64_t)qRopeAddrHigh) << 32 | qRopeAddrLow);
 
-            if (kvSeqlen == 0) {
-                continue;
-            }
-            uint32_t qHeadSplitIdx = (process % (curQheadSplitNum * kvSplitCoreNum)) / kvSplitCoreNum;
-            uint32_t qHeadSplitSizeActual = (qHeadSplitIdx ==
-                                             (curQheadSplitNum - 1))
-                                                ? (qHeads - qHeadSplitIdx * curQheadSplitSize)
-                                                : curQheadSplitSize;
-            uint32_t curStartHeadIdx = qHeadSplitIdx * curQheadSplitSize;
-            uint64_t gQOffset = qAddr + curStartHeadIdx * embed;
-            uint64_t gQRopeOffset = qRopeAddr + curStartHeadIdx * embedRope;
-
-            uint32_t kvSeqlenAlign = RoundUp(kvSeqlen, blockSize);
-            uint32_t curNIdx = process % kvSplitCoreNum;
-            uint32_t curKVSeqlen = kvSplitPerCore;
-            uint32_t kvLoop = CeilDiv(kvSeqlen, kvSplitPerCore);
-            if (curNIdx >= kvLoop) {
-                continue;
-            }
-            if (curNIdx == (kvLoop - 1)) {
-                curKVSeqlen = kvSeqlen - curNIdx * kvSplitPerCore;
-            }
-            uint32_t startKV = curNIdx * kvSplitPerCore;
-
-            uint32_t tokenNumPerHead = qSeqlen;
-            uint32_t seqTile = blockSize;
-            uint32_t nLoop = (curKVSeqlen + seqTile - 1) / seqTile;
-            uint32_t kSeqTile = seqTile;
-            uint32_t kSeqTileRound = RoundUp<BLOCK_SIZE>(kSeqTile);
-            uint32_t vSeqTile = seqTile;
-            uint32_t vSeqTileRound = RoundUp<BLOCK_SIZE>(vSeqTile);
-
-            uint32_t rowNum = qHeadSplitSizeActual * tokenNumPerHead;
-            uint32_t rowNumRound = RoundUp<BLOCK_SIZE>(rowNum);
-
-            // Split k seqlen
-            for (uint32_t nIdx = 0; nIdx < nLoop + 1; nIdx++) {
-                if (nIdx != nLoop) {
-                    if (nIdx == (nLoop - 1)) {
-                        kSeqTile = (curKVSeqlen - nIdx * seqTile);
-                        kSeqTileRound = RoundUp<BLOCK_SIZE>(kSeqTile);
-                    }
-                    LayoutQ layoutQ(rowNum, embed);
-                    LayoutQ layoutQRope(rowNum, embedRope);
-                    LayoutK layoutK(embed, kSeqTile);
-                    LayoutK layoutKRope(embedRope, kSeqTile);
-                    LayoutS layoutS(rowNumRound, kSeqTileRound);
-                    GemmCoord actualBlockShapeQK{rowNum, kSeqTile, embed + embedRope};
-                    MatrixCoord qShapeSingleNd{qHeadSplitSizeActual, embed};
-                    uint32_t qkPingPongFlag = nIdx % 2;
-                    // Get blockTableId
-                    int32_t blockTableId =
-                        gblockTable.GetValue(curBatch * maxNumBlocksPerQuery + startKV / blockSize + nIdx);
-                    uint64_t kvOffset = (uint64_t)blockTableId * blockSize * strideKV;
-                    uint64_t kvOffsetRope = (uint64_t)blockTableId * blockSize * strideKVRope;
-                    uint64_t gSOffset =
-                        (uint64_t)coreIdx * TMP_SIZE_DECODER + (uint64_t)qkPingPongFlag * TMP_SIZE_DECODER / 2;
-                    // Calculate a Q * K^T in advance
-                    blockMmadQK(
-                        gQ[gQOffset],
-                        gQRope[gQRopeOffset],
-                        gK[kvOffset],
-                        gKRope[kvOffsetRope],
-                        gS[gSOffset],
-                        layoutQ, layoutQRope, layoutK, layoutKRope, layoutS,
-                        actualBlockShapeQK, qShapeSingleNd,
-                        qHeads, nIdx);
-                    Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(qkReady);
+        uint32_t preTotalTaskNum = 0;
+        uint32_t curBatch = 0;
+        uint32_t qBOffset = 0;
+        uint32_t kBOffset = 0;
+        uint32_t vBOffset = 0;
+        uint32_t qSeqlen;
+        uint32_t kvSeqlen;
+        uint32_t curQNBlockTile;
+        uint32_t qNBlockPerGroup;
+        uint32_t curQNBlockNum;
+        uint32_t curQSBlockTile;
+        uint32_t curQSBlockNum;
+        for (uint32_t taskIdx = coreIdx; taskIdx < totalTaskNum; taskIdx += uint32_t(coreNum)) {
+            while (taskIdx >= curTotalTaskNum) {
+                curBatch++;
+                preTotalTaskNum = curTotalTaskNum;
+                qSeqlen = reinterpret_cast<uint32_t>(gActualQseqlen.GetValue(curBatch));
+                kvSeqlen = reinterpret_cast<uint32_t>(gActualKvseqlen.GetValue(curBatch));
+                curQSBlockTile = GetQSBlockTile(kvSeqlen);
+                curQNBlockTile = GetQNBlockTile(qSeqlen, groupSize, curQSBlockTile);
+                qNBlockNumPerGroup = CeilDiv(groupSize, curQNBlockTile);
+                curQNBlockNum = qNBlockNumPerGroup * kvHeads;
+                curQSBlockNum = CeilDiv(qSeqlen, curQSBlockTile);
+                curTotalTaskNum += curQNBlockNum * curQSBlockNum;
+                qBOffset += qSeqlen * strideQO;
+                if constexpr (!PAGED_CACHE_FLAG) {
+                    kBOffset += kvSeqlen * strideKV;
+                    vBOffset += kvSeqlen * strideKV;
                 }
-                // Because a Q * K^T is calculated in advance, the first round is skipped.
-                if (nIdx != 0) {
-                    if (nIdx == nLoop) {
-                        vSeqTile = (curKVSeqlen - (nIdx - 1) * seqTile);
-                        vSeqTileRound = RoundUp<BLOCK_SIZE>(vSeqTile);
+            }
+            uint32_t taskIdxCurBatch = taskIdx - preTotalTaskNum;
+            uint32_t qSBlockIdx = taskIdxCurBatch / curQNBlockNum;
+            uint32_t qNBlockIdx = taskIdxCurBatch - qSBlockIdx * curQNBlockNum;
+            uint32_t qNBlockIdxCurGroup = qNBlockIdx % qNBlockNumPerGroup;
+            uint32_t kvHeadIdx = qNBlockIdx / qNBlockNumPerGroup;
+            uint32_t qHeadIdx = kvHeadIdx * groupSize + qNBlockIdxCurGroup * curQNBlockTile;
+            uint32_t gmQOffset = qBOffset + qSBlockIdx * curQSBlockTile * strideQO + qHeadIdx * embed;
+            uint32_t gmKOffset = kBOffset;
+            uint32_t gmVOffset = vBOffset;
+            if constexpr (!PAGED_CACHE_FLAG) {
+                gmKOffset = kBOffset + kvHeadIdx * embed;
+                gmVOffset = vBOffset + kvHeadIdx * embed;
+            }
+            uint32_t qSBlockSize = (qSBlockIdx == (curQSBlockNum - 1)) ? (qSeqlen - qSBlockIdx * curQSBlockTile) : curQSBlockTile;
+            uint32_t qNBlockSize = (qNBlockIdxCurGroup == (qNBlockNumPerGroup - 1)) ?
+                (groupSize - qNBlockIdxCurGroup * curQNBlockTile) : curQNBlockTile;
+            uint32_t rowNum = qSBlockSize * qNBlockSize;
+            uint32_t rowNumRound = AlignUp(rowNum, BLOCK_SIZE);
+            uint32_t noSkipKvS = kvSeqlen;
+            uint32_t noMaskKvS = kvSeqlen;
+            uint32_t noMaskTailS;
+            if (params.mask != nullptr) {
+                uint32_t diffS = kvSeqlen - qSeqlen;
+                noMaskKvS = (qSBlockIdx + 1) * curQSBlockTile + diffS;
+                noSkipKvS = noMaskKvS + qSBlockSize;
+            }
+            uint32_t kvSLoopNumNoMask = CeilDiv(noMaskKvS, pagedBlockSize);
+            uint32_t kvSLoopNumTotal = kvSLoopNumNoMask + CeilDiv(qSBlockSize, pagedBlockSize);
+            uint32_t blockStackNum = (kvSeqlen <= 4096) ? 2 : 4;
+            uint32_t stackSeqCount = 0;
+            uint32_t stackSeqTile;
+            uint32_t preLaunch = 1;
+            uint32_t stackSeqTileRound = blockStackNum * 128;
+            uint32_t preKVNum = preLaunch * blockStackNum;
+            LayoutQ layoutQ(qSeqlen, strideQO);
+            LayoutK layoutK(strideKV, blockStackNum * pagedBlockSize);
+            LayoutV layoutV(blockStackNum * pagedBlockSize, strideKV);
+            for (uint32_t kvSIdx = 0; kvSIdx < kvSLoopNumNoMask; kvSIdx += blockStackNum) {
+                if (kvSIdx + blockStackNum > kvSLoopNumNoMask - 1) {
+                    stackSeqTile = noMaskKvS - kvSIdx * pagedBlockSize;
+                } else {
+                    stackSeqTile = pagedBlockSize * blockStackNum;
+                }
+                uint32_t SWorkSpacePingPongFlag = kvSIdx % (preLaunch + 1);
+                uint32_t gmSOffset = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) + SWorkSpacePingPongFlag * WORKSPACE_BLOCK_SIZE_DB;
+                LayoutS layOutS(rowNum, stackSeqTile, stackSeqTileRound);
+                if constexpr (PAGED_CACHE_FLAG) {
+                    blockMmadQK(gQ[gmQOffset], gB, gS[gmSOffset],
+                        gBlockTable, LayoutQ, LayoutK, layOutS,
+                        kvSIdx, kvSLoopNumNoMask, pagedBlockSize, noMaskKvS, strideKV);
+                } else {
+                    blockMmadQK(gQ[gmQOffset], gB[gmKOffset], gS[gmSOffset],
+                        gBlockTable, LayoutQ, LayoutK, layOutS,
+                        kvSIdx, kvSLoopNumNoMask, pagedBlockSize, noMaskKvS, strideKV);
+                    gmKOffset += stackSeqTile * strideKV;
+                }
+                Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(qkReady);
+                if (kvSIdx >= preKVNum) {
+                    uint32_t nowkvSIdx = kvSIdx - preKVNum;
+                    if (nowkvSIdx + blockStackNum > kvSLoopNumNoMask - 1) {
+                        stackSeqTile = noMaskKvS - kvSIdx * pagedBlockSize;
+                    } else {
+                        stackSeqTile = pagedBlockSize * blockStackNum;
                     }
-                    LayoutP layoutP(rowNum, vSeqTile, vSeqTileRound);
-                    LayoutV layoutV(embed, vSeqTile);
-                    LayoutOTmp layoutOTmp(rowNumRound, embedRound);
-                    GemmCoord actualBlockShapePV{rowNum, embed, vSeqTile};
-                    uint32_t pvPingPongFlag = (nIdx - 1) % 2;
-                    uint64_t gPOffset = (uint64_t)coreIdx * TMP_SIZE + (uint64_t)pvPingPongFlag * TMP_SIZE / 2;
-                    uint64_t gOTmpOffset = (uint64_t)coreIdx * TMP_SIZE * 2 + (uint64_t)pvPingPongFlag * TMP_SIZE;
-                    // Calculate P * V
-                    blockMmadPV(
-                        gP[gPOffset],
-                        gOTmp[gOTmpOffset],
-                        layoutP, layoutV, layoutOTmp,
-                        actualBlockShapePV, nIdx, softmaxReady);
-                    Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(pvReady);
+                    uint32_t PVWorkSpacePingPongFlag = nowkvSIdx % (preLaunch + 1);
+                    uint32_t gmPOffset = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) + PVWorkSpacePingPongFlag * WORKSPACE_BLOCK_SIZE_DB;
+                    uint32_t gmOTmpOffset = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) + PVWorkSpacePingPongFlag * WORKSPACE_BLOCK_SIZE_DB;
+                    LayoutP layoutP(rowNum, stackSeqTile, stackSeqTileRound);
+                    LayoutOTmp layoutOTmp(rowNum, embed, embedRound);
+                    if constexpr (PAGED_CACHE_FLAG) {
+                        blockMmadPV(gP[gmPOffset], gV, gOTmp[gmOTmpOffset],
+                            gBlockTable, layoutP, LayoutV, LayoutOTmp,
+                            nowkvSIdx, kvSLoopNumNoMask, pagedBlockSize, noMaskKvS, strideKV, softmaxReady);
+                    } else {
+                        blockMmadPV(gP[gmPOffset], gV[gmVOffset], gOTmp[gmOTmpOffset],
+                            gBlockTable, layoutP, LayoutV, LayoutOTmp,
+                            nowkvSIdx, kvSLoopNumNoMask, pagedBlockSize, noMaskKvS, strideKV, softmaxReady);
+                        gmVOffset += stackSeqTile * strideKV;
+                    }
+                    Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(pvReady);
+                }
+            }
+            uint32_t maskTailS = 0;
+            for (uint32_t kvSIdx = kvSLoopNumNoMask; kvSIdx < kvSLoopNumTotal + preKVNum; kvSIdx += blockStackNum) {
+                if (kvSIdx < kvSLoopNumTotal) {
+                    if (kvSIdx + blockStackNum > kvSLoopNumTotal - 1) {
+                        stackSeqTile = noSkipKvS - kvSIdx * pagedBlockSize;
+                    } else {
+                        stackSeqTile = pagedBlockSize * blockStackNum;
+                    }
+                    if constexpr (PAGED_CACHE_FLAG) {
+                        if (kvSIdx == kvSLoopNumNoMask) {
+                            stackSeqTile -= pagedBlockSize - (noMaskKvS - kvSLoopNumNoMask * pagedBlockSize);
+                        }
+                    }
+                    uint32_t SWorkSpacePingPongFlag = kvSIdx % (preLaunch + 1);
+                    uint32_t gmSOffset = coreIdx * WORKSPACE_BLOCK_SIZE_DB * 2 + SWorkSpacePingPongFlag * WORKSPACE_BLOCK_SIZE_DB;
+                    LayoutQ layoutQ(rowNum, embed);
+                    LayoutS layOutS(rowNum, stackSeqTile, stackSeqTileRound);
+                    if constexpr (PAGED_CACHE_FLAG) {
+                        if (kvSIdx == kvSLoopNumNoMask) {
+                            maskTailS = kvSLoopNumNoMask * pagedBlockSize - noMaskKvS;
+                        } else {
+                            maskTailS = 0;
+                        }
+                        blockMmadQK(gQ[gmQOffset], gB, gS[gmSOffset],
+                            gBlockTable, LayoutQ, LayoutK, LayoutS,
+                            kvSIdx, kvSLoopNumNoMask, pagedBlockSize, noSkipKvS, strideKV, maskTailS);
+                    } else {
+                        blockMmadQK(gQ[gmQOffset], gB[gmKOffset], gS[gmSOffset],
+                            gBlockTable, LayoutQ, LayoutK, LayoutS,
+                            kvSIdx, kvSLoopNumNoMask, pagedBlockSize, noSkipKvS, strideKV);
+                        gmKOffset += stackSeqTile * strideKV;
+                    }
+                    Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(qkReady);
+                }
+                if (kvSIdx >= preKVNum) {
+                    uint32_t nowkvSIdx = kvSIdx - preKVNum;
+                    if (kvSIdx + blockStackNum > kvSLoopNumTotal - 1) {
+                        stackSeqTile = noSkipKvS - kvSIdx * pagedBlockSize;
+                    } else {
+                        stackSeqTile = pagedBlockSize * blockStackNum;
+                    }
+                    if constexpr (PAGED_CACHE_FLAG) {
+                        if (nowkvSIdx == kvSLoopNumNoMask) {
+                            stackSeqTile -= pagedBlockSize - (noMaskKvS - kvSLoopNumNoMask * pagedBlockSize);
+                        }
+                    }
+                    uint32_t PWorkSpacePingPongFlag = nowkvSIdx % (preLaunch + 1);
+                    uint32_t gmPOffset = coreIdx * WORKSPACE_BLOCK_SIZE_DB * 2 + // cube core offset
+                                         PWorkSpacePingPongFlag * WORKSPACE_BLOCK_SIZE_DB; // single cube core db offset
+                    LayoutP layoutP(rowNum, stackSeqTile, stackSeqTileRound);
+                    LayoutOTmp layoutOTmp(rowNum, embed, embedRound);
+                    if constexpr (PAGED_CACHE_FLAG) {
+                        if (nowkvSIdx == kvSLoopNumNoMask) {
+                            maskTailS = kvSLoopNumNoMask * pagedBlockSize - noMaskKvS;
+                        } else {
+                            maskTailS = 0;
+                        }
+                        blockMmadPV(gQ[gmQOffset], gB, gP[gmPOffset],
+                            gBlockTable, layoutP, LayoutV, LayoutOTmp,
+                            nowkvSIdx, kvSLoopNumNoMask, pagedBlockSize, noSkipKvS, strideKV, softmaxReady, maskTailS);
+                    } else {
+                        blockMmadPV(gQ[gmQOffset], gB[gmVOffset], gP[gmPOffset],
+                            gBlockTable, layoutP, LayoutV, LayoutOTmp,
+                            nowkvSIdx, kvSLoopNumNoMask, pagedBlockSize, noSkipKvS, strideKV, softmaxReady);
+                        gmVOffset += stackSeqTile * strideKV;
+                    }
+                    Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(pvReady);
                 }
             }
         }
@@ -338,15 +395,6 @@ public:
         AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(EVENT_ID5);
         AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(EVENT_ID6);
         AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(EVENT_ID7);
-
-        AscendC::WaitFlag<AscendC::HardEvent::FIX_MTE1>(EVENT_ID0);
-        AscendC::WaitFlag<AscendC::HardEvent::FIX_MTE1>(EVENT_ID1);
-        AscendC::WaitFlag<AscendC::HardEvent::FIX_MTE1>(EVENT_ID2);
-        AscendC::WaitFlag<AscendC::HardEvent::FIX_MTE1>(EVENT_ID3);
-        AscendC::WaitFlag<AscendC::HardEvent::FIX_MTE1>(EVENT_ID4);
-        AscendC::WaitFlag<AscendC::HardEvent::FIX_MTE1>(EVENT_ID5);
-
-        AscendC::WaitFlag<AscendC::HardEvent::MTE2_FIX>(EVENT_ID0);
     }
 
     template <>
