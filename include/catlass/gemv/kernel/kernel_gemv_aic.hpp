@@ -221,6 +221,8 @@ public:
         for (uint32_t i = 0; i < L0C_TILE_NUM; i++) {
             AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((event_t)i);
         }
+
+        AscendC::PipeBarrier<PIPE_ALL>();
     }
 
     template <>
@@ -268,6 +270,8 @@ public:
             // Actual calculatioin logic for performing block-scoped epilogue
             blockEpilogue(blockOffset, actualBlockShape, gmBlockY, layoutBlockY);
         }
+
+        AscendC::PipeBarrier<PIPE_ALL>();
     }
 
 private:

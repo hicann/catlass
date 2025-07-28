@@ -148,6 +148,8 @@ public:
             // Compute block-scoped matrix multiply-add
             blockMmad(tensorBlockA, tensorBlockB, tensorBlockC, actualBlockShape);
         }
+
+        AscendC::PipeBarrier<PIPE_ALL>();
     }
 
     template <>

@@ -206,6 +206,8 @@ public:
         if constexpr (BlockMmad::DispatchPolicy::ASYNC) {
             blockMmad.SynchronizeBlock();
         }
+
+        AscendC::PipeBarrier<PIPE_ALL>();
     }
 
     template <>

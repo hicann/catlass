@@ -234,6 +234,8 @@ public:
             Arch::CrossCoreWaitFlag(flagAivFinishComputeList[aivComputeStageId]);
             --stageUsed;
         }
+
+        AscendC::PipeBarrier<PIPE_ALL>();
     }
 
     template <>
@@ -283,6 +285,8 @@ public:
 
             stageId = (stageId + 1 < WORKSPACE_STAGES) ? (stageId + 1) : 0;
         }
+
+        AscendC::PipeBarrier<PIPE_ALL>();
     }
 
 private:

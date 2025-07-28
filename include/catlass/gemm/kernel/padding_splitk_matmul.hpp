@@ -204,12 +204,12 @@ public:
         LayoutA layoutA{args.problemShape.m(), args.problemShape.k()};
         LayoutB layoutB{args.problemShape.k(), args.problemShape.n()};
         LayoutC layoutC{args.problemShape.m(), args.problemShape.n()};
-        
+
         uint8_t *workspaceWA = nullptr;
         uint8_t *workspaceWB = nullptr;
         size_t sizeWA = 0;
         size_t sizeWB = 0;
-        
+
         if (args.aNeedPadding) {
             workspaceWA = workspace;
             sizeWA = GetWorkspaceLen(GetWorkspaceLayout(layoutA, args.align)) * args.elementSize;
@@ -304,6 +304,8 @@ public:
         }
 
         Catlass::Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(flagAicFinish);
+
+        AscendC::PipeBarrier<PIPE_ALL>();
     }
 
     template <>
@@ -349,6 +351,8 @@ public:
         reduceAdd(gmC, gmWC,
             static_cast<uint64_t>(params.problemShape.m()) * static_cast<uint64_t>(params.problemShape.n()),
             params.splitkFactor);
+
+        AscendC::PipeBarrier<PIPE_ALL>();
     }
 
 private:

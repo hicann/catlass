@@ -226,6 +226,8 @@ public:
             Catlass::Arch::CrossCoreBarrier<0x0, PIPE_MTE3>();
             Catlass::Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(flagAivFinishPadding);
         }
+
+        AscendC::PipeBarrier<PIPE_ALL>();
     }
 
     /// Executes matmul
@@ -285,6 +287,8 @@ public:
                 gmA[gmOffsetNextA], gmB[gmOffsetNextB],
                 actualBlockShape, nextActualBlockShape, isFirstBlock, hasNextBlock);
         }
+
+        AscendC::PipeBarrier<PIPE_ALL>();
     }
 
 private:

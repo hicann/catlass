@@ -260,6 +260,8 @@ public:
         if constexpr (BlockMmad::DispatchPolicy::ASYNC) {
             blockMmad.SynchronizeBlock();
         }
+
+        AscendC::PipeBarrier<PIPE_ALL>();
     }
 
     template <>
@@ -329,6 +331,8 @@ public:
 
             startCoreIdx = (startCoreIdx + coreLoops) % coreNum;
         }
+
+        AscendC::PipeBarrier<PIPE_ALL>();
     }
 
 private:

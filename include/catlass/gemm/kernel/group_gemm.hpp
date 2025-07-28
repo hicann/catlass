@@ -427,6 +427,7 @@ public:
                 AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((int32_t)i);
             }
         }
+        AscendC::PipeBarrier<PIPE_ALL>();
     }
 
     template <>
@@ -516,6 +517,8 @@ public:
 
             startCoreIdx = (startCoreIdx + coreLoops) % coreNum;
         }
+
+        AscendC::PipeBarrier<PIPE_ALL>();
     }
 
 private:
