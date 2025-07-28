@@ -33,6 +33,12 @@ declare -a CMAKE_OPTIONS=()
 CLEAN=false
 POST_BUILD_INFO=""
 
+echo -e "  ____    _  _____ _        _    ____ ____  "
+echo -e " / ___|  / \|_   _| |      / \  / ___/ ___| "
+echo -e "| |     / _ \ | | | |     / _ \ \___ \___ \ "
+echo -e "| |___ / ___ \| | | |___ / ___ \ ___) |__) |"
+echo -e " \____/_/   \_\_| |_____/_/   \_\____/____/ "
+
 function get_npu_model(){
     if command -v npu-smi &> /dev/null; then
         echo "Ascend$(npu-smi info -t board -i 0 -c 0 | awk '/Chip Name/ {print $NF}')"
@@ -41,12 +47,6 @@ function get_npu_model(){
         return 1
     fi
 }
-
-echo -e "  ____    _  _____ _        _    ____ ____  "
-echo -e " / ___|  / \|_   _| |      / \  / ___/ ___| "
-echo -e "| |     / _ \ | | | |     / _ \ \___ \___ \ "
-echo -e "| |___ / ___ \| | | |___ / ___ \ ___) |__) |"
-echo -e " \____/_/   \_\_| |_____/_/   \_\____/____/ "
 
 function show_help() {
     echo -e "${GREEN}Usage:${NC} $0 [options] <target>"
