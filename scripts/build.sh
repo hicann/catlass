@@ -56,6 +56,7 @@ function show_help() {
     echo "  --msdebug       Enable msdebug support"
     echo "  --simulator     Compile example in simulator mode"
     echo "  --enable_profiling Enable profiling"
+    echo "  --enable_print  Enable built-in compiler print feature"
     echo "  --enable_ascendc_dump   Enable AscendC dump API"
     echo "  --tests         Enable building targets in tests"
     echo "  -D<option>      Additional CMake options"
@@ -110,6 +111,9 @@ while [[ $# -gt 0 ]]; do
             ;;
         --enable_ascendc_dump)
             CMAKE_OPTIONS+=("-DENABLE_ASCENDC_DUMP=True")
+            ;;
+        --enable_print)
+            CMAKE_OPTIONS+=("-DENABLE_PRINT=True")
             ;;
         -D*)
             CMAKE_OPTIONS+=("$1")

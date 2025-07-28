@@ -35,6 +35,10 @@ include(CMakeCommonLanguageInclude)
 
 set(CMAKE_ASCEND_FLAGS "-std=c++${CMAKE_CXX_STANDARD}")
 
+if(DEFINED ENABLE_PRINT AND ENABLE_PRINT)
+    string(APPEND CMAKE_ASCEND_FLAGS " --cce-enable-print")
+endif()
+
 if(DEFINED ASCEND_ENABLE_MSDEBUG AND ASCEND_ENABLE_MSDEBUG)
     set(CMAKE_ASCEND_FLAGS_DEBUG "-O0 -g")
 else()
