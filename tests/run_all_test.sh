@@ -8,6 +8,10 @@
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 # See LICENSE in the root of the software repository for the full text of the License.
 
+set -o errexit
+set -o nounset
+set -o pipefail
+
 SCRIPT_PATH=$(dirname "$(realpath "$0")")
 BUILD_SCRIPT_PATH=$(realpath "$SCRIPT_PATH"/../scripts/build.sh)
 
