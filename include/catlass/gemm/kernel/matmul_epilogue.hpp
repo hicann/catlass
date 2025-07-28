@@ -154,6 +154,8 @@ public:
 
             Arch::CrossCoreSetFlagWithReverse<0x2, PIPE_FIX>(flagAicFinishStore);
         }
+
+        AscendC::PipeBarrier<PIPE_ALL>();
     }
 
     template <>
@@ -189,6 +191,8 @@ public:
             // Actual calculatioin logic for performing block-scoped epilogue
             blockEpilogue(blockShape, blockCoord, actualBlockShape, gmBlockC, layoutBlockC);
         }
+
+        AscendC::PipeBarrier<PIPE_ALL>();
     }
 
 private:

@@ -377,6 +377,8 @@ public:
         for (uint32_t i = 0; i < l0CBlockNum; i++) {
             AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((int32_t)i);
         }
+
+        AscendC::PipeBarrier<PIPE_ALL>();
     }
 
     template <>
@@ -432,6 +434,8 @@ public:
             blockEpilogue(actualShape, blockCoord, gmC, layoutC, inGroupOffsetWorkspace);
         }
         inGroupOffsetWorkspace += params.problemShape.m() * params.problemShape.n();
+
+        AscendC::PipeBarrier<PIPE_ALL>();
     }
 
 private:

@@ -152,6 +152,8 @@ public:
                 gmBias[gmOffsetBias],
                 actualBlockShape);
         }
+
+        AscendC::PipeBarrier<PIPE_ALL>();
     }
 
     template <>

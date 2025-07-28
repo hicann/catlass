@@ -152,6 +152,8 @@ public:
                 gmA[gmOffsetNextA], gmB[gmOffsetNextB],
                 actualBlockShape, nextActualBlockShape, isFirstBlock, hasNextBlock);
         }
+
+        AscendC::PipeBarrier<PIPE_ALL>();
     }
 
     template <>

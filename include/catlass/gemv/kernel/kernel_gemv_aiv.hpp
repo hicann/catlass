@@ -194,6 +194,8 @@ public:
                 params.alpha,
                 realbeta);
         }
+
+        AscendC::PipeBarrier<PIPE_ALL>();
     }
 };
 

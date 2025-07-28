@@ -351,6 +351,8 @@ public:
         }
 
         Catlass::Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(flagAicFinish);
+
+        AscendC::PipeBarrier<PIPE_ALL>();
     }
 
     template <>
@@ -371,6 +373,8 @@ public:
         reduceAdd(gmC, gmWorkspace,
             static_cast<uint64_t>(params.problemShape.m()) * static_cast<uint64_t>(params.problemShape.n()),
             params.splitkFactor);
+
+        AscendC::PipeBarrier<PIPE_ALL>();
     }
 
 private:

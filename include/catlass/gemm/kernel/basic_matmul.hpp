@@ -135,6 +135,8 @@ public:
                       gmC[gmOffsetC], params.layoutC,
                       actualBlockShape);
         }
+
+        AscendC::PipeBarrier<PIPE_ALL>();
     }
 
     template <>
