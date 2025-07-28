@@ -12,7 +12,7 @@
 
 #include "catlass/catlass.hpp"
 
-#if defined(ASCENDC_DUMP) && ASCENDC_DUMP == 1
+#if defined(ENABLE_ASCENDC_DUMP)
 #include "catlass/debug.hpp"
 #endif
 
@@ -24,7 +24,7 @@ template <class Operator>
 CATLASS_GLOBAL void KernelAdapter(typename Operator::Params params, GM_ADDR ptrDump = nullptr)
 {
     Operator op;
-#if defined(ASCENDC_DUMP) && ASCENDC_DUMP == 1
+#if defined(ENABLE_ASCENDC_DUMP)
     AscendC::InitDump(false, ptrDump, ALL_DUMPSIZE);
 #endif
     op(params);
@@ -36,7 +36,7 @@ CATLASS_GLOBAL void KernelAdapter(typename Operator::Params params, uint64_t fft
 {
     AscendC::SetSyncBaseAddr(fftsAddr);
     Operator op;
-#if defined(ASCENDC_DUMP) && ASCENDC_DUMP == 1
+#if defined(ENABLE_ASCENDC_DUMP)
     AscendC::InitDump(false, ptrDump, ALL_DUMPSIZE);
 #endif
     op(params);
