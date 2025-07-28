@@ -33,6 +33,12 @@ declare -a CMAKE_OPTIONS=()
 CLEAN=false
 POST_BUILD_INFO=""
 
+echo -e "  ____    _  _____ _        _    ____ ____  "
+echo -e " / ___|  / \|_   _| |      / \  / ___/ ___| "
+echo -e "| |     / _ \ | | | |     / _ \ \___ \___ \ "
+echo -e "| |___ / ___ \| | | |___ / ___ \ ___) |__) |"
+echo -e " \____/_/   \_\_| |_____/_/   \_\____/____/ "
+
 function get_npu_model(){
     if command -v npu-smi &> /dev/null; then
         echo "Ascend$(npu-smi info -t board -i 0 -c 0 | awk '/Chip Name/ {print $NF}')"
@@ -42,12 +48,6 @@ function get_npu_model(){
     fi
 }
 
-echo -e "  ____    _  _____ _        _    ____ ____  "
-echo -e " / ___|  / \|_   _| |      / \  / ___/ ___| "
-echo -e "| |     / _ \ | | | |     / _ \ \___ \___ \ "
-echo -e "| |___ / ___ \| | | |___ / ___ \ ___) |__) |"
-echo -e " \____/_/   \_\_| |_____/_/   \_\____/____/ "
-
 function show_help() {
     echo -e "${GREEN}Usage:${NC} $0 [options] <target>"
     echo -e "\n${BLUE}Options:${NC}"
@@ -56,6 +56,7 @@ function show_help() {
     echo "  --msdebug       Enable msdebug support"
     echo "  --simulator     Compile example in simulator mode"
     echo "  --enable_profiling Enable profiling"
+    echo "  --enable_print  Enable built-in compiler print feature"
     echo "  --enable_ascendc_dump   Enable AscendC dump API"
     echo "  --tests         Enable building targets in tests"
     echo "  -D<option>      Additional CMake options"
@@ -110,6 +111,9 @@ while [[ $# -gt 0 ]]; do
             ;;
         --enable_ascendc_dump)
             CMAKE_OPTIONS+=("-DENABLE_ASCENDC_DUMP=True")
+            ;;
+        --enable_print)
+            CMAKE_OPTIONS+=("-DENABLE_PRINT=True")
             ;;
         -D*)
             CMAKE_OPTIONS+=("$1")
