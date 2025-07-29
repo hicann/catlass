@@ -66,14 +66,11 @@ struct TileCopyGMMPTD : public Catlass::Gemm::Tile::TileCopy<ArchTag, AType, BTy
     using CopyL1ToL0A = typename Base::CopyL1ToL0A;
     using CopyL1ToL0B = typename Base::CopyL1ToL0B;
 
-    using CopyL0CToGm = typename Base::CopyL0CToGm; 
-    using BiasTypeSelector = typename Base::BiasTypeSelector; 
+    using CopyL0CToGm = typename Base::CopyL0CToGm;
+    using BiasTypeSelector = typename Base::BiasTypeSelector;
     using CopyGmToL1Bias = typename Base::CopyGmToL1Bias;
     using CopyL1ToBT = typename Base::CopyL1ToBT;
 };
-
-
-
 
 struct Options {
     const std::string HELPER = "10_grouped_matmul_slice_m_per_token_dequant_bf16 group_count m n k [device_id]";
@@ -207,7 +204,8 @@ void Run(Options const & options)
     using CType = Gemm::GemmType<int32_t, layout::RowMajor>;
 
     using TileCopyMmad = TileCopyGMMPTD<ArchTag, AType, BType, CType>;
-    using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType, void, TileCopyMmad>;
+    using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape,
+        AType, BType, CType, void, TileCopyMmad>;
 
     constexpr uint32_t ubStages = 2;
     using EpilogueDispatchPolicy = Epilogue::EpilogueAtlasA2PerTokenDequant<ubStages>;

@@ -20,7 +20,7 @@ namespace Catlass {
 /// Generic Catlass kernel template
 template <class Operator>
 // 支持cube核和vector核的比例控制, 注释下行可使能, 仅支持1:0, 1:1, 1:2
-// [[bisheng::core_ratio(1, 2)]] 
+// [[bisheng::core_ratio(1, 2)]]
 CATLASS_GLOBAL void KernelAdapter(typename Operator::Params params, GM_ADDR ptrDump = nullptr)
 {
     Operator op;
@@ -31,7 +31,7 @@ CATLASS_GLOBAL void KernelAdapter(typename Operator::Params params, GM_ADDR ptrD
 }
 
 template <class Operator>
-// [[bisheng::core_ratio(1, 0)]] 
+// [[bisheng::core_ratio(1, 0)]]
 CATLASS_GLOBAL void KernelAdapter(typename Operator::Params params, uint64_t fftsAddr, GM_ADDR ptrDump = nullptr)
 {
     AscendC::SetSyncBaseAddr(fftsAddr);
