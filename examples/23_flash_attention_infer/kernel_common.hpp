@@ -53,22 +53,10 @@ constexpr uint32_t FLOAT_VECTOR_SIZE = 64;
 
 constexpr uint32_t UNIT_BLOCK_STACK_NUM = 4;
 
-#endif
-
 template <typename T>
 CATLASS_DEVICE T AlignUp(T a, T b)
 {
     return (b == 0) ? 0 : (a + b - 1) / b * b;
 }
 
-template <typename T>
-CATLASS_DEVICE T AlignDown(T a, T b)
-{
-    return (b == 0) ? 0 : a / b * b;
-}
-
-template <typename T>
-CATLASS_DEVICE T CeilDiv(T a, T b)
-{
-    return (b == 0) ? 0 : (a + b - 1) / b;
-}
+#endif

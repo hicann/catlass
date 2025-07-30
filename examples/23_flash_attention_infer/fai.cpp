@@ -17,7 +17,7 @@
 // Helper methods to check for errors
 #include "helper.hpp"
 #include "golden.hpp"
-// #include "mla_kernel.cpp"
+#include "fai_kernel.cpp"
 // #include "mla_kernel_tp1_spec.cpp"
 #include "fp16_t.h"
 #include "bfloat16.h"
@@ -141,6 +141,7 @@ void Run(const Options &options)
 
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
+    aicCoreNum = 1;
 
     // Parameters initialization.
     int32_t batch = options.batch;
@@ -242,7 +243,9 @@ void Run(const Options &options)
     ACL_CHECK(aclrtMalloc((void **)(&workSpaceDevice), workSpaceSize, ACL_MEM_MALLOC_HUGE_FIRST));
 
     uint8_t *oDevice{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&oDevice), static_cast<size_t>(qoSize), ACL_MEM_MALLOC_HUGE_FIRST));
+    // ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&oDevice), static_cast<size_t>(qoSize) * 2, ACL_MEM_MALLOC_HUGE_FIRST));
+    // qoSize = 128 * 500 * 4;
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&oDevice), static_cast<size_t>(qoSize) * 2, ACL_MEM_MALLOC_HUGE_FIRST));
 
     uint8_t *tilingDevice;
     ACL_CHECK(aclrtMalloc((void **)(&tilingDevice), tilingSize, ACL_MEM_MALLOC_HUGE_FIRST));
@@ -296,6 +299,8 @@ void Run(const Options &options)
     uint32_t fftsLen{0};
     RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
 
+    FAInferFp16<<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, workSpaceDevice, tilingDevice);
+
     // use Tp1Spec kernel to get better performance when numHeads = 128
     // switch (tilingKey) {
     //     case 0:
@@ -325,11 +330,13 @@ void Run(const Options &options)
     // Copy the result from device to host
     vector<fp16_t> oHostHalf(qoSize / sizeof(fp16_t));
     vector<bfloat16> oHostBf16(qoSize / sizeof(bfloat16));
+    // vector<float> oHostfp32(qoSize / sizeof(float));
     if (dataType == "half") {
         ACL_CHECK(aclrtMemcpy(oHostHalf.data(), qoSize, oDevice, qoSize, ACL_MEMCPY_DEVICE_TO_HOST));
     } else if (dataType == "bf16") {
         ACL_CHECK(aclrtMemcpy(oHostBf16.data(), qoSize, oDevice, qoSize, ACL_MEMCPY_DEVICE_TO_HOST));
     }
+    // ACL_CHECK(aclrtMemcpy(oHostfp32.data(), qoSize, oDevice, qoSize, ACL_MEMCPY_DEVICE_TO_HOST));
 
     // Compute the golden result
     vector<float> goldenHost(qoSize / sizeof(fp16_t));
@@ -337,13 +344,14 @@ void Run(const Options &options)
     ReadFile(dataPath + "/golden.bin", goldenHost.data(), goldenSize);
 
     // Compare the result
-    // vector<uint64_t> errorIndices = (dataType == "half") ? golden::CompareData(oHostHalf, goldenHost, kvSeqlen)
-    //                                                      : golden::CompareData(oHostBf16, goldenHost, kvSeqlen);
-    // if (errorIndices.empty()) {
-    //     cout << "Compare success." << endl;
-    // } else {
-    //     cerr << "Compare failed. Error count: " << errorIndices.size() << endl;
-    // }
+    vector<uint64_t> errorIndices = (dataType == "half") ? golden::CompareData(oHostHalf, goldenHost, kvSeqlen)
+                                                         : golden::CompareData(oHostBf16, goldenHost, kvSeqlen);
+    // vector<uint64_t> errorIndices = golden::CompareData(oHostfp32, goldenHost, kvSeqlen);
+    if (errorIndices.empty()) {
+        cout << "Compare success." << endl;
+    } else {
+        cerr << "Compare failed. Error count: " << errorIndices.size() << endl;
+    }
 
     // Free host memory allocations.
     FreeMem(qSeqHost, qSeqDevice);

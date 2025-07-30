@@ -15,6 +15,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <cmath>
 
 using namespace std;
 namespace FAInferTiling {
@@ -58,6 +59,7 @@ struct FAInfo {
     int32_t blockSize = 0;
     int32_t kvHeads = 0;
     int32_t batch = 0;
+    int64_t *qSeqlenList{nullptr};
     int64_t *kvSeqlenList{nullptr};
     int64_t *qSeqlen{nullptr};
     MaskType maskType = MaskType::NO_MASK;
@@ -85,7 +87,7 @@ struct FATilingData {
 void FillBasicTilingData(const FAInfo &faInfo, FATilingData &faTilingData, int64_t maxKvSeqlen)
 {
     uint32_t maxNumBlocksPerBatch = (maxKvSeqlen + faInfo.blockSize - 1) / faInfo.blockSize;
-    float scaleValue = static_cast<float>(1.0 / sqrt(1.0 * faInfo.embeddingSize));
+    float scaleValue = static_cast<float>(1.0 / std::sqrt(1.0 * faInfo.embeddingSize));
     faTilingData.batch = static_cast<uint32_t>(faInfo.batch);
     faTilingData.numHeads = static_cast<uint32_t>(faInfo.numHeads);
     faTilingData.kvHeads = static_cast<uint32_t>(faInfo.kvHeads);
@@ -158,7 +160,7 @@ void FillWorkSpaceTilingData(uint32_t blockDim, FATilingData &faTilingData)
 
 int32_t GetFATilingParam(const FAInfo &faInfo, uint32_t blockDim, FATilingData &faTilingData)
 {
-    if (&faTilingData == nullptr || faInfo.qSeqlenList == nullptr || faInfo.kvSeqlenList == nullptr) {
+    if (faInfo.qSeqlenList == nullptr || faInfo.kvSeqlenList == nullptr) {
         cerr << "[ERROR] pointer tilingData or seq is nullptr." << endl;
         return -1;
     }
