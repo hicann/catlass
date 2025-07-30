@@ -151,7 +151,7 @@ public:
     {
         if constexpr (PAGED_CACHE_FLAG_) {
             uint32_t blockTableId = gBlockTable.GetValue(nowNIdx);
-            cce::printf("blockTableId:%d\n", blockTableId);
+            // cce::printf("blockTableId:%d\n", blockTableId);
             kOffset = blockTableId * blockSize * strideKV + maskTailS * strideKV + kIdx * EMBED_SPLIT_SIZE;
         } else {
             kOffset = kOffset + nowNIdx * KV_SPLIT_SIZE * strideKV + kIdx * EMBED_SPLIT_SIZE;
@@ -195,18 +195,18 @@ public:
                     stackTile = kvSeqlen % 256;
                 }
                 LayoutC layOutSTemp(rowNum, stackTile, 500);
-                cce::printf("firstItr:%d\n", firstItr);
-                cce::printf("endItr:%d\n", endItr);
-                cce::printf("initMmad:%d\n", initMmad);
-                cce::printf("actualShape[0]:%d\n", actualShape[0]);
-                cce::printf("actualShape[1]:%d\n", actualShape[1]);
-                cce::printf("actualShape[2]:%d\n", actualShape[2]);
-                cce::printf("actualShape.m():%d\n", actualShape.m());
-                cce::printf("actualShape.n():%d\n", actualShape.n());
-                cce::printf("actualShape.k():%d\n", actualShape.k());
-                cce::printf("actualNextShape[0]:%d\n", actualNextShape[0]);
-                cce::printf("actualNextShape[1]:%d\n", actualNextShape[1]);
-                cce::printf("actualNextShape[2]:%d\n", actualNextShape[2]);
+                // cce::printf("firstItr:%d\n", firstItr);
+                // cce::printf("endItr:%d\n", endItr);
+                // cce::printf("initMmad:%d\n", initMmad);
+                // cce::printf("actualShape[0]:%d\n", actualShape[0]);
+                // cce::printf("actualShape[1]:%d\n", actualShape[1]);
+                // cce::printf("actualShape[2]:%d\n", actualShape[2]);
+                // cce::printf("actualShape.m():%d\n", actualShape.m());
+                // cce::printf("actualShape.n():%d\n", actualShape.n());
+                // cce::printf("actualShape.k():%d\n", actualShape.k());
+                // cce::printf("actualNextShape[0]:%d\n", actualNextShape[0]);
+                // cce::printf("actualNextShape[1]:%d\n", actualNextShape[1]);
+                // cce::printf("actualNextShape[2]:%d\n", actualNextShape[2]);
                 computeQK(gA, gB[gBOffset], gC[gCOffset], gB[gBNextOffset], layoutA, layoutB, layOutSTemp,
                           actualShape, actualNextShape, nowNIdx, nkBlockNextIdx, nkBlockLoop, firstItr, endItr, initMmad);
                 ++nkBlockNextIdx;

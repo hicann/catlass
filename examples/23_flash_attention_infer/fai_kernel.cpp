@@ -198,9 +198,9 @@ public:
 
         uint32_t coreIdx = AscendC::GetBlockIdx();
         uint32_t coreNum = AscendC::GetBlockNum();
-        cce::printf("curTotalTaskNum:%d\n", curTotalTaskNum);
+        // cce::printf("curTotalTaskNum:%d\n", curTotalTaskNum);
         curTotalTaskNum = 0;
-        cce::printf("totalTaskNum:%d\n", totalTaskNum);
+        // cce::printf("totalTaskNum:%d\n", totalTaskNum);
         uint32_t preTotalTaskNum = 0;
         uint32_t curBatch = 0;
         uint32_t qBOffset = 0;
@@ -219,8 +219,8 @@ public:
         kvSeqlen = reinterpret_cast<int64_t>(gActualKvseqlen.GetValue(curBatch));
         curQSBlockTile = GetQSBlockTile(kvSeqlen);
         curQNBlockTile = GetQNBlockTile(qSeqlen, groupSize, curQSBlockTile);
-        cce::printf("curQSBlockTile:%d\n", curQSBlockTile);
-        cce::printf("curQNBlockTile:%d\n", curQNBlockTile);
+        // cce::printf("curQSBlockTile:%d\n", curQSBlockTile);
+        // cce::printf("curQNBlockTile:%d\n", curQNBlockTile);
         qNBlockNumPerGroup = CeilDiv(groupSize, curQNBlockTile);
         curQNBlockNum = qNBlockNumPerGroup * kvHeads;
         curQSBlockNum = CeilDiv(qSeqlen, curQSBlockTile);
@@ -230,8 +230,8 @@ public:
             kBOffset += kvSeqlen * strideKV;
             vBOffset += kvSeqlen * strideKV;
         }
-        cce::printf("qSeqlen:%d\n", qSeqlen);
-        cce::printf("kvSeqlen:%d\n", kvSeqlen);
+        // cce::printf("qSeqlen:%d\n", qSeqlen);
+        // cce::printf("kvSeqlen:%d\n", kvSeqlen);
 
         for (uint32_t taskIdx = coreIdx; taskIdx < totalTaskNum; taskIdx += uint32_t(coreNum)) {
             while (taskIdx >= curTotalTaskNum) {
@@ -254,9 +254,9 @@ public:
             uint32_t taskIdxCurBatch = taskIdx - preTotalTaskNum;
             uint32_t qSBlockIdx = taskIdxCurBatch / curQNBlockNum;
             uint32_t qNBlockIdx = taskIdxCurBatch - qSBlockIdx * curQNBlockNum;
-            cce::printf("taskIdx:%d\n", taskIdx);
-            cce::printf("qSBlockIdx:%d\n", qSBlockIdx);
-            cce::printf("qNBlockIdx:%d\n", qNBlockIdx);
+            // cce::printf("taskIdx:%d\n", taskIdx);
+            // cce::printf("qSBlockIdx:%d\n", qSBlockIdx);
+            // cce::printf("qNBlockIdx:%d\n", qNBlockIdx);
             uint32_t qNBlockIdxCurGroup = qNBlockIdx % qNBlockNumPerGroup;
             uint32_t kvHeadIdx = qNBlockIdx / qNBlockNumPerGroup;
             uint32_t qHeadIdx = kvHeadIdx * groupSize + qNBlockIdxCurGroup * curQNBlockTile;
@@ -270,8 +270,8 @@ public:
             uint32_t qSBlockSize = (qSBlockIdx == (curQSBlockNum - 1)) ? (qSeqlen - qSBlockIdx * curQSBlockTile) : curQSBlockTile;
             uint32_t qNBlockSize = (qNBlockIdxCurGroup == (qNBlockNumPerGroup - 1)) ?
                 (groupSize - qNBlockIdxCurGroup * curQNBlockTile) : curQNBlockTile;
-            cce::printf("qSBlockSize:%d\n", qSBlockSize);
-            cce::printf("qNBlockSize:%d\n", qNBlockSize);
+            // cce::printf("qSBlockSize:%d\n", qSBlockSize);
+            // cce::printf("qNBlockSize:%d\n", qNBlockSize);
             uint32_t rowNum = qSBlockSize * qNBlockSize;
             uint32_t rowNumRound = AlignUp(rowNum, BLOCK_SIZE);
             uint32_t noSkipKvS = kvSeqlen;
@@ -284,7 +284,7 @@ public:
             //     cce::printf("noMaskKvS:%d\n", noMaskKvS);
             // }
             uint32_t kvSLoopNumNoMask = CeilDiv(noMaskKvS, pagedBlockSize);
-            cce::printf("noMaskKvS:%d\n", noMaskKvS);
+            // cce::printf("noMaskKvS:%d\n", noMaskKvS);
             uint32_t kvSLoopNumTotal = kvSLoopNumNoMask + CeilDiv(qSBlockSize, pagedBlockSize);
             uint32_t blockStackNum = 4;
             uint32_t stackSeqCount = 0;
@@ -295,7 +295,7 @@ public:
             LayoutQ layoutQTemp(qSeqlen, strideQO);
             LayoutK layoutKTemp(strideKV, blockStackNum * pagedBlockSize);
             LayoutV layoutVTemp(blockStackNum * pagedBlockSize, strideKV);
-            cce::printf("gmQOffset:%d\n", gmQOffset);
+            // cce::printf("gmQOffset:%d\n", gmQOffset);
             blockMmadQK.loadQGM(gQ[gmQOffset], layoutQTemp, rowNum, qNBlockSize, qHeads);
             for (uint32_t kvSIdx = 0; kvSIdx < kvSLoopNumNoMask + preKVNum; kvSIdx += blockStackNum) {
                 if (kvSIdx < kvSLoopNumNoMask) {

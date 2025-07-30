@@ -116,9 +116,9 @@ public:
                        uint32_t &nLoop, uint32_t &kLoop, uint32_t &kvSeqlen, uint32_t &embed, bool firstBlock, uint32_t &maskTailS)
     {
         uint32_t nSplitSize = KV_SPLIT_SIZE * 2;
-        cce::printf("PV nSplitSize:%d\n", nSplitSize);
-        cce::printf("PV nowNIdx:%d\n", nowNIdx);
-        cce::printf("PV nLoop:%d\n", nLoop);
+        // cce::printf("PV nSplitSize:%d\n", nSplitSize);
+        // cce::printf("PV nowNIdx:%d\n", nowNIdx);
+        // cce::printf("PV nLoop:%d\n", nLoop);
         uint32_t embedSplitSize = EMBED_SPLIT_SIZE;
         if (nowNIdx + 2 > nLoop - 1) {
             nSplitSize = kvSeqlen - nowNIdx * KV_SPLIT_SIZE;
@@ -133,7 +133,7 @@ public:
         }
         actualShape[1] = embedSplitSize;
         actualShape[2] = nSplitSize;
-        cce::printf("PV nSplitSize:%d\n", nSplitSize);
+        // cce::printf("PV nSplitSize:%d\n", nSplitSize);
     }
 
     CATLASS_DEVICE
@@ -158,8 +158,8 @@ public:
                     uint32_t &nIdx, uint32_t &nLoop, uint32_t &blockSize, uint32_t kvSeqlen, uint32_t strideKV, Arch::CrossCoreFlag softmaxFlag, uint32_t maskTailS = 0)
     {
         uint32_t embed = layoutB.shape(1);
-        cce::printf("embed:%d\n", embed);
-        cce::printf("nLoop:%d\n", nLoop);
+        // cce::printf("embed:%d\n", embed);
+        // cce::printf("nLoop:%d\n", nLoop);
         uint32_t kLoop = CeilDiv<L1TileShape::K>(embed);
         uint32_t rowNum = layoutA.shape(0);
         uint32_t blockN = layoutA.shape(1);
@@ -183,14 +183,14 @@ public:
                 bool endItr = (blockStackIdx + 2 > UNIT_BLOCK_STACK_NUM - 1) || (nowNIdx + 2 > nLoop - 1);
                 bool initMmad = blockStackIdx == 0;
                 bool pvCVItr = firstItr && kIdx == 0;
-                cce::printf("PV actualShape.m():%d\n", actualShape.m());
-                cce::printf("PV actualShape.n():%d\n", actualShape.n());
-                cce::printf("PV actualShape.k():%d\n", actualShape.k());
-                cce::printf("PV nkBlockNextIdx:%d\n", nkBlockNextIdx);
-                cce::printf("nkBlockLoop:%d\n", nkBlockLoop);
-                cce::printf("gBOffset:%d\n", nkBlockLoop);
-                cce::printf("nkBlockLoop:%d\n", nkBlockLoop);
-                cce::printf("nkBlockLoop:%d\n", nkBlockLoop);
+                // cce::printf("PV actualShape.m():%d\n", actualShape.m());
+                // cce::printf("PV actualShape.n():%d\n", actualShape.n());
+                // cce::printf("PV actualShape.k():%d\n", actualShape.k());
+                // cce::printf("PV nkBlockNextIdx:%d\n", nkBlockNextIdx);
+                // cce::printf("nkBlockLoop:%d\n", nkBlockLoop);
+                // cce::printf("gBOffset:%d\n", nkBlockLoop);
+                // cce::printf("nkBlockLoop:%d\n", nkBlockLoop);
+                // cce::printf("nkBlockLoop:%d\n", nkBlockLoop);
                 LayoutC layoutOTmpTemp(rowNum, embed, 128);
                 // computePV(gA[blockStackIdx / 2 * 256], gB[gBOffset], gC, gB[gBNextOffset], layoutA, layoutB, layoutOTmpTemp,
                 //           actualShape, actualNextShape, nowNIdx, nkBlockNextIdx, nkBlockLoop, firstItr, endItr, initMmad, pvCVItr, softmaxFlag);
