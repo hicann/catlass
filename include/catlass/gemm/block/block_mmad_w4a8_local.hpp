@@ -1,18 +1,18 @@
 /*
 * Copyright (c) 2024 Huawei Technologies Co., Ltd.
-* Thie file is part of the CANN Open Software.
+* This file is a part of the CANN Open Software.
 * Licensed under CANN Open Software License Agreement Version 1.0 (the "License");
 * Please refer to the License for details. You may not use this file except in compliance with the License.
 * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-* INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE.
-* See LICENSE in the root of the software repository for the full text if the License.
+* INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+* See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef CATLASS_GEMM_BLOCK_MMAD_W4A8_LOCAL_HPP
-#define CATLASS_GEMM_BLOCK_MMAD_W4A8_LOCAL_HPP
+#ifndef CATLASS_GEMM_BLOCK_BLOCK_MMAD_W4A8_LOCAL_HPP
+#define CATLASS_GEMM_BLOCK_BLOCK_MMAD_W4A8_LOCAL_HPP
 
 #include "catlass/catlass.hpp"
-#include "catlass/arch/resource/hpp"
+#include "catlass/arch/resource.hpp"
 #include "catlass/coord.hpp"
 #include "catlass/gemm_coord.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
@@ -28,7 +28,7 @@ template <
     class TileShape_,
     uint32_t STAGES = 2
 >
-struct PrologueW4A8 {
+struct PrologueCastW4A8 {
     using ElementIn = ElementIn_;
     using ElementOut = ElementOut_;
     using Layout = Layout_;
@@ -38,22 +38,22 @@ struct PrologueW4A8 {
 
     static constexpr uint32_t COMPUTE_LEN = 16 *1024;
 
-    /// Constructor
+    /// Construct
     CATLASS_DEVICE
-    PrologueW4A8(Arch::Resource<ArchTag> &resource, uint32_t ubBufAddrStart = 0) {
+    PrologueCastW4A8(Arch::Resource<ArchTag> &resource, uint32_t ubBufAddrStart = 0) {
         if (g_coreType == AscendC::AIV) {
             uint32_t ubOffset = ubBufAddrStart;
             uint32_t ubInSize = COMPUTE_LEN * sizeof(ElementIn) / 2;
             uint32_t ubOutSize = COMPUTE_LEN * sizeof(ElementOut);
-            uint32_t ubWorkSpaceSize = COMPUTE_LEN * sizeof(half);
-
-            for (uint32_t i = 0; i < STAGES; ++i) {
-                unInTensorList[i] = resource.ubBuf.template GetBufferByByte<ElementIn>(ubOffset);
+            uint32_t ubWorkspaceSize = COMPUTE_LEN * sizeof(half);
+            // Init buffers
+            for (uint32_t i = 0; i < STAGES; i++) {
+                ubInTensorList[i] = resource.ubBuf.template GetBufferByByte<ElementIn>(ubOffset);
                 ubOffset += ubInSize;
-                unOutTensorList[i] = resource.ubBuf.template GetBufferByByte<ElementOut>(ubOffset);
+                ubOutTensorList[i] = resource.ubBuf.template GetBufferByByte<ElementOut>(ubOffset);
                 ubOffset += ubOutSize;
-                unWorkSpaceList[i] = resource.ubBuf.template GetBufferByByte<half>(ubOffset);
-                ubOffset += ubWorkSpaceSize;
+                ubWorkSpaceList[i] = resource.ubBuf.template GetBufferByByte<half>(ubOffset);
+                ubOffset += ubWorkspaceSize;
 
                 ubEventList[i] = i;
                 AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(ubEventList[i]);
@@ -63,24 +63,24 @@ struct PrologueW4A8 {
     }
 
     CATLASS_DEVICE
-    void Operator()(AscendC::GlobalTensor<ElementOut> const &gmDst,
+    void operator()(AscendC::GlobalTensor<ElementOut> const &gmDst,
         AscendC::GlobalTensor<ElementIn> const &gmSrc, Layout const &layoutDst, Layout const &layoutSrc)
         {
-            uint32_t tilesNum = layoutSrc.shape(0)
+            uint32_t tilesNum = layoutSrc.shape(0);
             uint32_t tileLen = layoutSrc.shape(1);
             uint32_t tileLenRoundInt8 = RoundUp(layoutSrc.shape(1), ELE_NUM_PER_BLK_INT8);
-            uint32_t tileLenRoundInt4 = RoundUp(layoutSrc.shape(1) + 1) / 2,ELE_NUM_PER_BLK_INT8;
+            uint32_t tileLenRoundInt4 = RoundUp((layoutSrc.shape(1)) + 1) / 2,ELE_NUM_PER_BLK_INT8;
             uint64_t tileStrideSrc = layoutSrc.stride(0);
             uint64_t tileStrideDst = layoutDst.stride(0);
-            if constexpr (std::is_same_v<Layout,layout::ColumnMajor>) {
+            if constexpr (std::is_same_v<Layout, layout::ColumnMajor>) {
                 tilesNum = layoutSrc.shape(1);
                 tileLen = layoutSrc.shape(0);
                 tileLenRoundInt8 = RoundUp(layoutSrc.shape(0), ELE_NUM_PER_BLK_INT8);
-                tileLenRoundInt4 = RoundUp(layoutSrc.shape(0) + 1) / 2,ELE_NUM_PER_BLK_INT8;
+                tileLenRoundInt4 = RoundUp((layoutSrc.shape(0) + 1) / 2,ELE_NUM_PER_BLK_INT8);
                 tileStrideSrc = layoutSrc.stride(1);
                 tileStrideDst = layoutDst.stride(1);
             }
-            uint32_t tilesPerAiv = tileNum / AscendC::GetSubBlockNum();
+            uint32_t tilesPerAiv = tilesNum / AscendC::GetSubBlockNum();
             if (AscendC::GetSubBlockIdx() < (tilesNum % AscendC::GetSubBlockNum())) {
                 tilesPerAiv++;
             }
@@ -92,23 +92,23 @@ struct PrologueW4A8 {
             }
             uint32_t tilesPerLoop = 32;
             uint32_t loops = CeilDiv(tilesPerAiv, tilesPerLoop);
-            uint32_t pingpong = 0
+            uint32_t pingpong = 0;
             for (uint32_t loopIdx = 0; loopIdx < loops; loopIdx++) {
                 uint32_t actualTiles = tilesPerLoop;
                 if (loopIdx == loops - 1) {
                     actualTiles = tilesPerAiv - loopIdx * tilesPerLoop;
                 }
                 uint64_t tileOffsetSrc = loopIdx * tilesPerLoop * ((tileStrideSrc + 1) / 2);
-                AscendC::DataCopyExtParams DataCopyExtParamsIn(
-                    actualTiles, (tileLen+1)/2 *sizeof(ElementIn), 
-                    ((tileStrideSrc+1) / 2 - (tileLen+1) / 2) * sizeof(ElementIn),
-                    (tileLenRoundInt4 - (tileLen+1) / 2) * ELE_NUM_PER_BLK_INT8, 0
+                AscendC::DataCopyExtParams dataCopyParamsIn(
+                    actualTiles, (tileLen + 1) / 2 * sizeof(ElementIn), 
+                    ((tileStrideSrc + 1) / 2 - (tileLen + 1) / 2) * sizeof(ElementIn),
+                    (tileLenRoundInt4 - (tileLen + 1) / 2) / ELE_NUM_PER_BLK_INT8, 0
                 );
                 AscendC::DataCopyPadExtParams<ElementIn> padParams(false, 0, 0, 0);
 
                 AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(ubEventList[pingpong]);
-                AscendC::DataCopyPad(unInTensorList[pingpong],
-                    gmSrc[taskOffsetSrc + tileOffsetSrc], DataCopyParamsIn,padParams);
+                AscendC::DataCopyPad(ubInTensorList[pingpong],
+                    gmSrc[taskOffsetSrc + tileOffsetSrc], dataCopyParamsIn, padParams);
                 
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_S>(ubEventList[pingpong]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE2_S>(ubEventList[pingpong]);
@@ -120,34 +120,34 @@ struct PrologueW4A8 {
                 AscendC::SetFlag<AscendC::HardEvent::S_V>(ubEventList[pingpong]);
                 AscendC::WaitFlag<AscendC::HardEvent::S_V>(ubEventList[pingpong]);
 
-                AscendC::Cast(ubWorkSpaceList[pingpong], int4_workspace[pingpong],
-                    AscendC::RoundMode::CAST_NONE, actualTiles * tileLenRoundInt4 *2);
+                AscendC::Cast(ubWorkspaceList[pingpong], int4_workspace[pingpong],
+                    AscendC::RoundMode::CAST_NONE, actualTiles * tileLenRoundInt4 * 2);
 
                 AscendC::PipeBarrier<PIPI_V>();
 
                 AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(ubEventList[pingpong]);
 
-                AscendC::Cast(ubOutTensorList[pingpong], ubWorkSpaceList[pingpong],
-                    AscendC::RoundMode::CAST_NONE, actualTiles * tileLenRoundInt4 *2);
+                AscendC::Cast(ubOutTensorList[pingpong], ubWorkspaceList[pingpong],
+                    AscendC::RoundMode::CAST_NONE, actualTiles * tileLenRoundInt4 * 2);
                 
-                AscendC::SetFlag<AscendC::HardEvent::V_MET3>(ubEventList[pingpong]);
-                AscendC::WaitFlag<AscendC::HardEvent::V_MET3>(ubEventList[pingpong]);
+                AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(ubEventList[pingpong]);
+                AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(ubEventList[pingpong]);
 
                 uint64_t tileOffsetDst = loopIdx * tilesPerLoop * tileStrideDst;
-                AscendC::DataCopyExtParams DataCopyParasOut(
-                    actualTiles,tileLen * sizeof(ElementOut),
-                    (tileLenRoundInt4 * 2 - tileLen) * ELE_NUM_PER_BLK_INT8,
-                    (tileStrideDst - tileLen) * sizeof(ElementOut),0
-                )
+                AscendC::DataCopyExtParams dataCopyParamsOut(
+                    actualTiles, tileLen * sizeof(ElementOut),
+                    (tileLenRoundInt4 * 2 - tileLen) / ELE_NUM_PER_BLK_INT8,
+                    (tileStrideDst - tileLen) * sizeof(ElementOut), 0
+                );
                 AscendC::DataCopyPad(gmDst[taskOffsetDst + tileOffsetDst],
-                    ubOutTensorList[pingpong], DataCopyParasOut);
+                    ubOutTensorList[pingpong], dataCopyParamsOut);
                 AscendC::SetFlag<AscendC::HardEvent::MTE3_S>(ubEventList[pingpong]);
 
                 pingpong = (pingpong + 1) % STAGES;
             }
         }
         
-    ///Destructor
+    /// Destructor
     CATLASS_DEVICE
     ~PrologueCastW4A8() {
         if (g_coreType == AscendC::AIV) {
@@ -160,9 +160,9 @@ struct PrologueW4A8 {
 
 protected:
     //Data members
-    AscendC::LocalTensor<ElementIn> unInTensorList[STAGES];
-    AscendC::LocalTensor<ElementOut> unOutTensorList[STAGES];
-    AscendC::LocalTensor<half> unWorkSpaceList[STAGES];
+    AscendC::LocalTensor<ElementIn> ubInTensorList[STAGES];
+    AscendC::LocalTensor<ElementOut> ubOutTensorList[STAGES];
+    AscendC::LocalTensor<half> ubWorkspaceList[STAGES];
     AscendC::LocalTensor<AscendC::int4b_t> int4_workspace[STAGES];
 
     int32_t ubEventList[STAGES];  
@@ -195,7 +195,7 @@ struct BlockMmad <
 public:
     // Type Aliases
     using DispatchPolicy = MmadAtlasA2W4A8Local<ENABLE_UNIT_FLAG_, ENABLE_SHUFFLE_K_>;
-    using ArchTag = typename TileMmad_::ArchTag;
+    using ArchTag = typename DispatchPolicy::ArchTag;
     using L1TileShape = L1TileShape_;
     using L0TileShape = L0TileShape_;
     using ElementA = typename AType_::Element;
@@ -210,59 +210,59 @@ public:
     using CopyL1ToL0A = typename TileCopy_::CopyL1ToL0A;
     using CopyL1ToL0B = typename TileCopy_::CopyL1ToL0B;
     using ElementAccumulator = 
-        typename Gemm::helper::ElementAccumulator<ElementA, ElementB>::ElementAccumulator;
+        typename Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
     using CopyL0CToGm = Gemm::Tile::CopyL0CToGm<
         ArchTag, ElementAccumulator, CType_, Tile::ScaleGranularity::PER_TENSOR>;
-    using LayoutAInL1 = typename CopyGmToL1A::LayoutSrc;
-    using LayoutBInL1 = typename CopyGmToL1B::LayoutSrc;
+    using LayoutAInL1 = typename CopyL1ToL0A::LayoutSrc;
+    using LayoutBInL1 = typename CopyL1ToL0B::LayoutSrc;
     using LayoutAInL0 = typename CopyL1ToL0A::LayoutDst;
     using LayoutBInL0 = typename CopyL1ToL0B::LayoutDst;
     using LayoutCInL0 = layout::zN;
 
-    using L1AAlignHelper = Gemm::helper::L1AlignHelper<ElementA,LayoutA>;
-    using L1BAlignHelper = Gemm::helper::L1AlignHelper<ElementB,LayoutB>;
+    using L1AAlignHelper = Gemm::helper::L1AlignHelper<ElementA, LayoutA>;
+    using L1BAlignHelper = Gemm::helper::L1AlignHelper<ElementB, LayoutB>;
 
     using TileShapeB = MatrixShape<L1TileShape::K, L1TileShape::N>;
-    using PrologueCastB = PrologueW4A8<ArchTag, int8_t, ElementB, LayoutB, TileShapeB>;
+    using PrologueCastB = PrologueCastW4A8<ArchTag, int8_t, ElementB, LayoutB, TileShapeB>;
 
     static constexpr bool ENABLE_UNIT_FLAG = DispatchPolicy::ENABLE_UNIT_FLAG;
     static constexpr bool ENABLE_SHUFFLE_K = DispatchPolicy::ENABLE_SHUFFLE_K;
     static constexpr uint32_t STAGES = DispatchPolicy::STAGES;
     static constexpr uint32_t L1A_SIZE = L1TileShape::M * L1TileShape::K * sizeof(ElementA);
-    static constexpr uint32_t L1B_SIZE = L1TileShape::K * L1TileShape::N * sizeof(ElementB);
-    static constexpr uint32_t L0A_SIZE = Arch::L0A_SIZE;
-    static constexpr uint32_t L0B_SIZE = Arch::L0B_SIZE;
+    static constexpr uint32_t L1B_SIZE = L1TileShape::N * L1TileShape::K * sizeof(ElementB);
+    static constexpr uint32_t L0A_SIZE = ArchTag::L0A_SIZE;
+    static constexpr uint32_t L0B_SIZE = ArchTag::L0B_SIZE;
     static constexpr uint32_t L0A_PINGPONG_BUF_SIZE = L0A_SIZE / STAGES;
     static constexpr uint32_t L0B_PINGPONG_BUF_SIZE = L0B_SIZE / STAGES;
 
-    //Check L1TileShape
-    static_assert((L1A_SIZE * STAGES + L1B_SIZE * STAGES) <= Arch::L1_SIZE,
+    // Check L1TileShape
+    static_assert((L1A_SIZE * STAGES + L1B_SIZE * STAGES) <= ArchTag::L1_SIZE,
         "L1TileShape exceeding the L1 space!");
     
-    //Check L0TileShape
+    // Check L0TileShape
     static constexpr uint32_t L0A_TILE_SIZE = L0TileShape::M * L0TileShape::K * sizeof(ElementA);
     static constexpr uint32_t L0B_TILE_SIZE = L0TileShape::K * L0TileShape::N * sizeof(ElementB);
-    static_assert((L0A_TILE_SIZE * STAGES) <= Arch::L0_SIZE,
+    static_assert((L0A_TILE_SIZE * STAGES) <= L0A_SIZE,
         "L0TileShape exceeding the L0A space!");
-    static_assert((L0B_TILE_SIZE * STAGES) <= Arch::L0_SIZE,
+    static_assert((L0B_TILE_SIZE * STAGES) <= L0B_SIZE,
         "L0TileShape exceeding the L0B space!");
 
     static_assert(L1TileShape::M == L0TileShape::M && L1TileShape::N == L0TileShape::N,
         "The situation where the basic blocks of L1 and L0 differ on the m and n axes is not supported yet");
     
-    //Check L1TileShape
+    // Construct
     CATLASS_DEVICE
     BlockMmad(Arch::Resource<ArchTag> &resource, uint32_t l1BufAddrStart = 0) : prologueCastB(resource)
     {
-        if (g_coreType == AscendC::AIV) {
+        if (g_coreType == AscendC::AIC) {
             uint32_t l1AOffset = l1BufAddrStart;
-            uint32_t l1BOffset = l1AOffset + L1A_SIZE * STAGES;
+            uint32_t l1BOffset = l1BufAddrStart + L1A_SIZE * STAGES;
             // Init buffers
             for (uint32_t i = 0; i < STAGES; i++) {
-                L1ATensorList[i] = resource.l1Buf.template GetBufferByByte<ElementA>(l1AOffset + i * L1A_SIZE);
-                L1BTensorList[i] = resource.l1Buf.template GetBufferByByte<ElementB>(l1BOffset + i * L1B_SIZE);
-                L0ATensorList[i] = resource.l0ABuf.template GetBufferByByte<ElementA>(i * L0A_PINGPONG_BUF_SIZE);
-                L0BTensorList[i] = resource.l0BBuf.template GetBufferByByte<ElementB>(i * L0B_PINGPONG_BUF_SIZE);
+                l1ATensorList[i] = resource.l1Buf.template GetBufferByByte<ElementA>(l1AOffset + i * L1A_SIZE);
+                l1BTensorList[i] = resource.l1Buf.template GetBufferByByte<ElementB>(l1BOffset + i * L1B_SIZE);
+                l0ATensorList[i] = resource.l0ABuf.template GetBufferByByte<ElementA>(i * L0A_PINGPONG_BUF_SIZE);
+                l0BTensorList[i] = resource.l0BBuf.template GetBufferByByte<ElementB>(i * L0B_PINGPONG_BUF_SIZE);
 
                 l1AEventList[i] = i;
                 l1BEventList[i] = i + STAGES;
@@ -319,10 +319,10 @@ public:
         if constexpr (ENABLE_SHUFFLE_K) {
             startTileIdx = AscendC::GetBlockIdx() / 2;
         }
-        uint32_t firstTileIdx = startTileIdx * kTileCount;
-        uint32_t lastTileIdx = (startTileIdx + kTileCount - 1) * kTileCount;
+        uint32_t firstTileIdx = startTileIdx % kTileCount;
+        uint32_t lastTileIdx = (startTileIdx + kTileCount - 1) % kTileCount;
         uint32_t kActual = 
-            (isFirstBlock < kTileCount) ? LiTileShape::K :(actualShape.k() - firstTileIdx * L1TileShape::K);
+            (firstTileIdx < kTileCount - 1) ? L1TileShape::K : (actualShape.k() - firstTileIdx * L1TileShape::K);
 
         // k loop
         for (uint32_t kLoopIdx = 0; kLoopIdx < kTileCount; kLoopIdx++) {
@@ -330,17 +330,17 @@ public:
             if (shuffleKIdx == firstTileIdx && isFirstBlock) {
                 auto gmTileB = gmB[shuffleKIdx * L1TileShape::K * ((problemShape.n() + 1) / 2)];
                 if constexpr (std::is_same_v<LayoutB, layout::ColumnMajor>) {
-                    gmTileB = gmB[(shuffleKIdx * L1TileShape::K + 1)* / 2];
+                    gmTileB = gmB[(shuffleKIdx * L1TileShape::K + 1) * / 2];
                 }
 
                 //Load first matrix B tile from GM to L1
-                auto layoutTileB = layoutB.GetTileLayout(MakeCoord(kActual, problemShape.n()));
-                auto layoutWB = LayoutB{kActual, problemShape.n(),wkspStrideB};
+                auto layoutTileB = layoutB.GetTileLayout(MakeCoord(kActual, actualShape.n()));
+                auto layoutWB = LayoutB{kActual, actualShape.n(), wkspStrideB};
 
-                Catlass::Arch::CrossCoreSetFlag(notifyAiv[l1ListId]);
+                Catlass::Arch::CrossCoreWaitFlag(notifyAiv[l1ListId]);
                 prologueCastB(gmBW[l1ListId * L1TileShape::K * L1TileShape::N],
                     gmTileB, layoutWB, layoutTileB);
-                Catlass::Arch::CrossCoreSetFlag<0x02, PIPE_MTE3>(notifyAiv[l1ListId]);
+                Catlass::Arch::CrossCoreSetFlag<0x02, PIPE_MTE3>(notifyAic[l1ListId]);
             }
 
             uint32_t l1ListIdNext = (l1ListId + 1 < STAGES) ? (l1ListId + 1) : 0;
@@ -348,45 +348,45 @@ public:
 
             if (shuffleKIdx != lastTileIdx) {
                 uint32_t shuffleKIdxNext = (startTileIdx + kLoopIdx + 1) % kTileCount;
-                //Get GM tensor for next stage
+                // Get GM tensor for next stage
                 kActualNext = (shuffleKIdxNext < kTileCount - 1) ? 
-                    L1TileShape::K :(actualShapeNext.k() - shuffleKIdxNext * L1TileShape::K);
-                auto gmTileB = gmB[shuffleKIdxNext * L1TileShape::K  * ((problemShape.n() + 1) / 2)];
+                    L1TileShape::K : (actualShape.k() - shuffleKIdxNext * L1TileShape::K);
+                auto gmTileB = gmB[shuffleKIdxNext * L1TileShape::K * ((problemShape.n() + 1) / 2)];
                 if constexpr (std::is_same_v<LayoutB, layout::ColumnMajor>) {
                     gmTileB = gmB[(shuffleKIdxNext * L1TileShape::K + 1) / 2];
                 }
-                //Load first matrix B tile from GM to L1
-                auto layoutTileB = layoutB.GetTileLayout(MakeCoord(kActualNext, problemShape.n()));
-                auto layoutWB = LayoutB{kActualNext, problemShape.n(), wkspStrideB};
+                // Load first matrix B tile from GM to L1
+                auto layoutTileB = layoutB.GetTileLayout(MakeCoord(kActualNext, actualShape.n()));
+                auto layoutWB = LayoutB{kActualNext, actualShape.n(), wkspStrideB};
 
-                Catlass::Arch::CrossCoreSetFlag(notifyAiv[l1ListIdNext]);
+                Catlass::Arch::CrossCoreWaitFlag(notifyAiv[l1ListIdNext]);
                 prologueCastB(gmBW[l1ListIdNext * L1TileShape::K * L1TileShape::N],
                     gmTileB, layoutWB, layoutTileB);
-                Catlass::Arch::CrossCoreSetFlag<0x02, PIPE_MTE3>(notifyAiv[l1ListIdNext]);
+                Catlass::Arch::CrossCoreSetFlag<0x02, PIPE_MTE3>(notifyAic[l1ListIdNext]);
             }
 
             if (shuffleKIdx == lastTileIdx && hasNextBlock) {
                 kActualNext = (firstTileIdx < kTileCount - 1) ? 
-                    L1TileShape::K :(actualShapeNext.k() - firstTileIdx * L1TileShape::K);
+                    L1TileShape::K : (actualShapeNext.k() - firstTileIdx * L1TileShape::K);
                 auto gmTileB = gmNextB[firstTileIdx * L1TileShape::K * ((problemShape.n() + 1) / 2)];
                 if constexpr (std::is_same_v<LayoutB, layout::ColumnMajor>) {
                     gmTileB = gmNextB[(firstTileIdx * L1TileShape::K + 1) / 2];
                 }
-                //Load first matrix A tile from GM to L1
-                auto layoutTileB = layoutB.GetTileLayout(MakeCoord(kActualNext, problemShape.n()));
-                auto layoutWB = LayoutB{kActualNext, problemShape.n(), wkspStrideB};
+                // Load first matrix A tile from GM to L1
+                auto layoutTileB = layoutB.GetTileLayout(MakeCoord(kActualNext, actualShapeNext.n()));
+                auto layoutWB = LayoutB{kActualNext, actualShapeNext.n(), wkspStrideB};
 
-                Catlass::Arch::CrossCoreSetFlag(notifyAiv[l1ListIdNext]);
+                Catlass::Arch::CrossCoreWaitFlag(notifyAiv[l1ListIdNext]);
                 prologueCastB(gmBW[l1ListIdNext * L1TileShape::K * L1TileShape::N],
                     gmTileB, layoutWB, layoutTileB);
-                Catlass::Arch::CrossCoreSetFlag<0x02, PIPE_MTE3>(notifyAiv[l1ListIdNext]);
+                Catlass::Arch::CrossCoreSetFlag<0x02, PIPE_MTE3>(notifyAic[l1ListIdNext]);
             }
             l1ListId = l1ListIdNext;
             kActual = kActualNext;
         }
     }
 
-    //Perform a block-scoped matrix multiply-accumulate
+    // Perform a block-scoped matrix multiply-accumulate
     CATLASS_DEVICE
     void operator()(
         AscendC::GlobalTensor<ElementA> const &gmA, LayoutA const &layoutA,
@@ -410,20 +410,20 @@ public:
             wkspStrideB = L1TileShape::K;
         }
 
-        if constexpr (ENABLE_UNIT_FLAG) {
-            Catlass::WaitFlag<AscendC::HardEvent::FIX_M>(EVENT_ID0);
+        if constexpr (!ENABLE_UNIT_FLAG) {
+            AscendC::WaitFlag<AscendC::HardEvent::FIX_M>(EVENT_ID0);
         }
         uint32_t startTileIdx = 0;
         if constexpr (ENABLE_SHUFFLE_K) {
             startTileIdx = AscendC::GetBlockIdx();
         }
-        uint32_t firstTileIdx = startTileIdx * kTileCount;
-        uint32_t lastTileIdx = (startTileIdx + kTileCount - 1) * kTileCount;
+        uint32_t firstTileIdx = startTileIdx % kTileCount;
+        uint32_t lastTileIdx = (startTileIdx + kTileCount - 1) % kTileCount;
         uint32_t kActual = 
-            (isFirstBlock < kTileCount - 1 ) ? L1TileShape::K :(actualShape.k() - firstTileIdx * L1TileShape::K);
+            (firstTileIdx < kTileCount - 1) ? L1TileShape::K : (actualShape.k() - firstTileIdx * L1TileShape::K);
         
-        uint32_t mPartLoop = CeilDiv<L1TileShape::M>(mRound);
-        uint32_t nPartLoop = CeilDiv<L1TileShape::N>(nRound);
+        uint32_t mPartLoop = CeilDiv<L0TileShape::M>(mRound);
+        uint32_t nPartLoop = CeilDiv<L0TileShape::N>(nRound);
 
         // k loop
         for (uint32_t kLoopIdx = 0; kLoopIdx < kTileCount; kLoopIdx++) {
@@ -433,19 +433,19 @@ public:
                 MatrixCoord gmTileAOffset{0, shuffleKIdx * L1TileShape::K};
                 auto gmTileA = gmA[layoutA.GetOffset(gmTileAOffset)];
                 
-                //Load first matrix A tile from GM to L1
+                // Load first matrix A tile from GM to L1
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);
                 auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShape.m(), kActual));
                 CopyGmToL1A(L1ATensorList[l1ListId], gmTileA, layoutAInL1, layoutTileA);
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);
 
-                //Load first matrix B tile from L1 to L0
-                Catlass::Arch::CrossCoreSetFlag(notifyAiv[l1ListId]);
-                AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l1ListId]);
-                auto layoutTileB = LatoutB{kActual, actualShape.n(), wkspStrideB};
-                CopyL1ToL0B(L0BTensorList[l0ListId], gmB[l1ListId * L1TileShape::K * L1TileShape::N], layoutBInL1, layoutTileB);
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l0BEventList[l1ListId]);
-                Catlass::Arch::CrossCoreSetFlag<0x02, PIPE_MTE3>(notifyAiv[l1ListId]);
+                // Load first matrix B tile from GM to L0
+                Catlass::Arch::CrossCoreWaitFlag(notifyAiv[l1ListId]);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l0BEventList[l1ListId]);
+                auto layoutTileB = LayoutB{kActual, actualShape.n(), wkspStrideB};
+                CopyGmToL1B(l1BTensorList[l1ListId], gmB[l1ListId * L1TileShape::K * L1TileShape::N], layoutBInL1, layoutTileB);
+                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
+                Catlass::Arch::CrossCoreSetFlag<0x02, PIPE_MTE2>(notifyAiv[l1ListId]);
                 
             }
 
@@ -456,75 +456,75 @@ public:
             if (shuffleKIdx != lastTileIdx) {
                 uint32_t shuffleKIdxNext = (startTileIdx + kLoopIdx + 1) % kTileCount;
                 // Get L1 tensor for next stage
-                auto l1ATensor = L1ATensorList[l1ListIdNext];
-                auto l1BTensor = L1BTensorList[l1ListIdNext];
+                auto l1ATensor = l1ATensorList[l1ListIdNext];
+                auto l1BTensor = l1BTensorList[l1ListIdNext];
                 // Get GM tensor for next stage
                 kActualNext = (shuffleKIdxNext < kTileCount - 1) ? 
-                    L1TileShape::K :(actualShape.k() - shuffleKIdxNext * L1TileShape::K);
+                    L1TileShape::K : (actualShape.k() - shuffleKIdxNext * L1TileShape::K);
                 MatrixCoord gmTileAOffset{0, shuffleKIdxNext * L1TileShape::K};
                 auto gmTileA = gmA[layoutA.GetOffset(gmTileAOffset)];
 
-                //load next matrix A tile from GM to L1
+                // load next matrix A tile from GM to L1
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListIdNext]);
                 auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShape.m(), kActualNext));
-                CopyGmToL1A(l1ATensor, gmTileA, layoutAInL1, layoutTileA);
+                copyGmToL1A(l1ATensor, gmTileA, layoutAInL1, layoutTileA);
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListIdNext]);
 
-                //Load next matrix B tile from GM to L1
-                Catlass::Arch::CrossCoreSetFlag(notifyAic[l1ListIdNext]);
+                // Load next matrix B tile from GM to L1
+                Catlass::Arch::CrossCoreWaitFlag(notifyAic[l1ListIdNext]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListIdNext]);
-                auto layoutTileB = LatoutB{kActualNext, actualShape.n(), wkspStrideB};
-                CopyGmToL1B(l1BTensor, gmB[l1ListIdNext * L1TileShape::K * L1TileShape::N], layoutBInL1, layoutTileB);
+                auto layoutTileB = LayoutB{kActualNext, actualShape.n(), wkspStrideB};
+                copyGmToL1B(l1BTensor, gmB[l1ListIdNext * L1TileShape::K * L1TileShape::N], layoutBInL1, layoutTileB);
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListIdNext]);
-                Catlass::Arch::CrossCoreSetFlag<0x02, PIPE_MTE3>(notifyAiv[l1ListIdNext]);
+                Catlass::Arch::CrossCoreWaitFlag<0x02, PIPE_MTE2>(notifyAiv[l1ListIdNext]);
             }
             if (shuffleKIdx == lastTileIdx && hasNextBlock) {
                 // Get L1 tensor for next stage
-                auto l1ATensor = L1ATensorList[l1ListIdNext];
-                auto l1BTensor = L1BTensorList[l1ListIdNext];
+                auto l1ATensor = l1ATensorList[l1ListIdNext];
+                auto l1BTensor = l1BTensorList[l1ListIdNext];
                 // Get GM tensor for next stage
                 kActualNext = (firstTileIdx < kTileCount - 1) ?
-                    L1TileShape::K :(actualShapeNext.k() - firstTileIdx * L1TileShape::K);
+                    L1TileShape::K : (actualShapeNext.k() - firstTileIdx * L1TileShape::K);
                 MatrixCoord gmTileAOffset{0, firstTileIdx * L1TileShape::K};
                 auto gmTileA = gmNextA[layoutA.GetOffset(gmTileAOffset)];
 
-                //Load next matrix A tile from GM to L1
+                // Load next matrix A tile from GM to L1
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListIdNext]);
                 auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShapeNext.m(), kActualNext));
-                CopyGmToL1A(l1ATensor, gmTileA, layoutAInL1, layoutTileA);
+                copyGmToL1A(l1ATensor, gmTileA, layoutAInL1, layoutTileA);
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListIdNext]);
 
-                //Load next matrix B tile from GM to L1
-                Catlass::Arch::CrossCoreSetFlag(notifyAic[l1ListIdNext]);
+                // Load next matrix B tile from GM to L1
+                Catlass::Arch::CrossCoreWaitFlag(notifyAic[l1ListIdNext]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListIdNext]);
-                auto layoutTileB = LatoutB{kActualNext, actualShapeNext.n(), wkspStrideB};
-                CopyGmToL1B(l1BTensor, gmB[l1ListIdNext * L1TileShape::K * L1TileShape::N], layoutBInL1, layoutTileB);
+                auto layoutTileB = LayoutB{kActualNext, actualShapeNext.n(), wkspStrideB};
+                copyGmToL1B(l1BTensor, gmB[l1ListIdNext * L1TileShape::K * L1TileShape::N], layoutBInL1, layoutTileB);
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListIdNext]);
                 Catlass::Arch::CrossCoreSetFlag<0x02, PIPE_MTE2>(notifyAiv[l1ListIdNext]);
             }
 
-            //Get L1 tensor for current stage
-            auto l1ATensor = L1ATensorList[l1ListId];
-            auto l1BTensor = L1BTensorList[l1ListId];
+            // Get L1 tensor for current stage
+            auto l1ATensor = l1ATensorList[l1ListId];
+            auto l1BTensor = l1BTensorList[l1ListId];
 
-            //Get the loop nums on L0
+            // Get the loop nums on L0
             uint32_t kPartLoop = CeilDiv<L0TileShape::K>(kActual);
 
-            uint32_t l0ABufId = 0
+            uint32_t l0ABufId = 0;
             uint32_t l0BBufId = 0;
 
-            for (int mPartIdx= 0; mPartIdx < mPartLoop; mPartIdx++) {
+            for (int mPartIdx = 0; mPartIdx < mPartLoop; mPartIdx++) {
                 uint32_t mPartActual = (mPartIdx < mPartLoop - 1) ? L0TileShape::M : 
-                    (mRound - mPartIdx * L0TileShape::M);
+                (mRound - mPartIdx * L0TileShape::M);
                 
                 for (int kPartIdx = 0; kPartIdx < kPartLoop; kPartIdx++) {
                     uint32_t kPartActual = (kPartIdx < kPartLoop - 1) ? L0TileShape::K : 
                         (kActual - kPartIdx * L0TileShape::K);
                     
                     // Locate the current tile on L0A
-                    auto l0ATile = L0ATensorList[l0ListId];
+                    auto l0ATile = l0ATensorList[l0ABuf];
                     LayoutAInL0 layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(mPartActual, kPartActual);
-                    //Locate the current tile of matrix A on L1
+                    // Locate the current tile of matrix A on L1
                     MatrixCoord l1AOffset{mPartIdx * L0TileShape::M, kPartIdx * L0TileShape::K};
                     auto l1ATile = l1ATensor[layoutAInL1.GetOffset(l1AOffset)];
 
@@ -533,9 +533,9 @@ public:
                         AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListId]);
                     }
 
-                    copyL1toL0A(l0ATile, l1ATile, layoutAInL0, layoutAInL1);
+                    copyL1ToL0A(l0ATile, l1ATile, layoutAInL0, layoutAInL1);
 
-                    if ((mPartIdx ==mPartLoop - 1) && (kPartIdx == kPartLoop - 1)) {
+                    if ((mPartIdx == mPartLoop - 1) && (kPartIdx == kPartLoop - 1)) {
                         AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);
                     }
 
@@ -544,7 +544,7 @@ public:
                             (nRound - nPartIdx * L0TileShape::N);
                         
                         // Locate the current tile on L0B
-                        auto l0BTile = L0BTensorList[l0BBufId];
+                        auto l0BTile = l0BTensorList[l0BBufId];
                         LayoutBInL0 layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(kPartActual, nPartActual);
                         // Locate the current tile of matrix B on L1
                         MatrixCoord l1BOffset{kPartIdx * L0TileShape::K, nPartIdx * L0TileShape::N};
@@ -552,22 +552,22 @@ public:
 
                         // Wait for mmad finished
                         AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0BBufId]);
-                        // If the current tile is the first one on the k&n axes, wait for loading matrix B from GM to L1
+                        // If the current tile is the first one on the k&n aixs, wait for loading matrix B from GM to L1
                         if ((kPartIdx == 0) && (nPartIdx == 0)) {
                             AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
                         }
 
-                        // Load current tile from L1 to L0
+                        // Load current tile from L1 to L0B
                         copyL1toL0B(l0BTile, l1BTile, layoutBInL0, layoutBInL1);
 
-                        // If the current tile is the last one on the k&n axes, notify to load matrix B from GM to L0
+                        // If the current tile is the last one on the k&n axis, notify to load matrix B from GM to L0
                         if ((kPartIdx == kPartLoop - 1) && (nPartIdx == nPartLoop - 1)) {
                             AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
                         }
                         // Notify to do mmad
                         AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(EVENT_ID0);
 
-                        //Locate the current tile on L0C
+                        // Locate the current tile on L0C
                         MatrixCoord l0COffset{mPartIdx * L0TileShape::M, nPartIdx * L0TileShape::N};
                         auto l0CTile = l0CTensor[layoutInL0C.GetOffset(l0COffset)];
 
@@ -575,16 +575,16 @@ public:
                         // Wait for loading L0B
                         AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>(EVENT_ID0);
 
-                        // If the current tile is the first one on the k axes, the accumulator needs to be reset to 0
+                        // If the current tile is the first tile on the k axis, the accumulator needs to be reset to 0
                         bool initC = ((kLoopIdx == 0) && (kPartIdx == 0));
-                        // If the unit flag is enabled, the unit flag is set to according to the calculation progress
+                        // If the unit flag is enabled, the unit flag is set according to the calculation progress
                         uint8_t unitFlag = 0b00;
                         if constexpr (ENABLE_UNIT_FLAG) {
-                            if ((kLoopIdx = kTileCount - 1) && (kPartIdx == kPartLoop - 1) &&
-                                (nPartIdx == nPartLoop - 1) && (mPartIdx == mPartLoop - 1)) {
+                            if ((kLoopIdx == kTileCount - 1) && (mPartIdx == mPartLoop - 1) &&
+                                (nPartIdx == nPartLoop - 1) && (nPartIdx == nPartLoop - 1)) {
                                 unitFlag = 0b11; 
                             } else {
-                                unitFlag = 0b10; // last tile on k and n axes
+                                unitFlag = 0b10;
                             } 
                         }
                         // Perform calculation operations
@@ -593,10 +593,10 @@ public:
                         // Notify to move the next L0B tile
                         AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0BBufId]);
 
-                        l0BBufId = ((l0BBufId + 1) < STAGES) ? (l0BBufId + 1) : 0;
+                        l0BBufId = (l0BBufId + 1 < STAGES) ? (l0BBufId + 1) : 0;
                     }
                     AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0ABufId]);
-                    l0ABufId = ((l0ABufId + 1) < STAGES) ? (l0ABufId + 1) : 0;
+                    l0ABufId = (l0ABufId + 1 < STAGES) ? (l0ABufId + 1) : 0;
                 }
             }
 
@@ -607,7 +607,7 @@ public:
         // copy block out
         LayoutC layoutBlock = layoutC.GetTileLayout(actualShape.GetCoordMN());
 
-        if constexpr (ENABLE_UNIT_FLAG) {
+        if constexpr (!ENABLE_UNIT_FLAG) {
             AscendC::SetFlag<AscendC::HardEvent::M_FIX>(EVENT_ID0);
             AscendC::WaitFlag<AscendC::HardEvent::M_FIX>(EVENT_ID0);
             CopyL0CToGm(gmC, l0CTensor, layoutBlock, layoutInL0C, deqScalar);
@@ -619,10 +619,10 @@ public:
 
 protected:
     ///Data members
-    AscendC::LocalTensor<ElementA> L1ATensorList[STAGES];
-    AscendC::LocalTensor<ElementB> L1BTensorList[STAGES];
-    AscendC::LocalTensor<ElementA> L0ATensorList[STAGES];
-    AscendC::LocalTensor<ElementB> L0BTensorList[STAGES];
+    AscendC::LocalTensor<ElementA> l1ATensorList[STAGES];
+    AscendC::LocalTensor<ElementB> l1BTensorList[STAGES];
+    AscendC::LocalTensor<ElementA> l0ATensorList[STAGES];
+    AscendC::LocalTensor<ElementB> l0BTensorList[STAGES];
     AscendC::LocalTensor<ElementAccumulator> l0CTensor;
 
     int32_t l1AEventList[STAGES];
@@ -644,6 +644,6 @@ protected:
     PrologueCastB prologueCastB;
 };
 
-} // namespacec Catlass::Gemm::Block
+} // namespace Catlass::Gemm::Block
 
-#endif // CATLASS_GEMM_BLOCK_MMAD_ATLAS_A2W4A8_LOCAL_HPP
+#endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_ATLAS_A2W4A8_LOCAL_HPP
