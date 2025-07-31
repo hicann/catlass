@@ -36,7 +36,7 @@ struct PrologueCastW4A8 {
 
     static constexpr uint32_t ELE_NUM_PER_BLK_INT8 = BYTE_PER_BLK / sizeof(ElementIn);
 
-    static constexpr uint32_t COMPUTE_LEN = 16 *1024;
+    static constexpr uint32_t COMPUTE_LEN = 16 * 1024;
 
     /// Construct
     CATLASS_DEVICE
@@ -69,7 +69,7 @@ struct PrologueCastW4A8 {
             uint32_t tilesNum = layoutSrc.shape(0);
             uint32_t tileLen = layoutSrc.shape(1);
             uint32_t tileLenRoundInt8 = RoundUp(layoutSrc.shape(1), ELE_NUM_PER_BLK_INT8);
-            uint32_t tileLenRoundInt4 = RoundUp((layoutSrc.shape(1) + 1) / 2,ELE_NUM_PER_BLK_INT8);
+            uint32_t tileLenRoundInt4 = RoundUp((layoutSrc.shape(1) + 1) / 2, ELE_NUM_PER_BLK_INT8);
             uint64_t tileStrideSrc = layoutSrc.stride(0);
             uint64_t tileStrideDst = layoutDst.stride(0);
             if constexpr (std::is_same_v<Layout, layout::ColumnMajor>) {
@@ -159,7 +159,7 @@ struct PrologueCastW4A8 {
     }
 
 protected:
-    // Data members
+    /// Data members
     AscendC::LocalTensor<ElementIn> ubInTensorList[STAGES];
     AscendC::LocalTensor<ElementOut> ubOutTensorList[STAGES];
     AscendC::LocalTensor<half> ubWorkspaceList[STAGES];
@@ -441,7 +441,7 @@ public:
 
                 // Load first matrix B tile from GM to L1
                 Catlass::Arch::CrossCoreWaitFlag(notifyAic[l1ListId]);
-                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l0BEventList[l1ListId]);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
                 auto layoutTileB = LayoutB{kActual, actualShape.n(), wkspStrideB};
                 copyGmToL1B(l1BTensorList[l1ListId], gmB[l1ListId * L1TileShape::K * L1TileShape::N], layoutBInL1, layoutTileB);
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
@@ -470,7 +470,7 @@ public:
                 copyGmToL1A(l1ATensor, gmTileA, layoutAInL1, layoutTileA);
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListIdNext]);
 
-                // Load next matrix B tile from GM to L1
+                // load next matrix B tile from GM to L1
                 Catlass::Arch::CrossCoreWaitFlag(notifyAic[l1ListIdNext]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListIdNext]);
                 auto layoutTileB = LayoutB{kActualNext, actualShape.n(), wkspStrideB};
