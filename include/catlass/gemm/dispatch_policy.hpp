@@ -41,6 +41,14 @@ struct MmadAtlasA2PingpongSliceK : public MmadAtlasA2  {
 };
 
 template <bool ENABLE_UNIT_FLAG_ = false, bool ENABLE_SHUFFLE_K_ = false>
+struct MmadAtlasA2W4A8Local : public MmadAtlasA2 {
+    using ArchTag = Arch::AtlasA2;
+    static constexpr uint32_t STAGES = 2;
+    static constexpr bool ENABLE_UNIT_FLAG = ENABLE_UNIT_FLAG_;
+    static constexpr bool ENABLE_SHUFFLE_K = ENABLE_SHUFFLE_K_;
+};
+
+template <bool ENABLE_UNIT_FLAG_ = false, bool ENABLE_SHUFFLE_K_ = false>
 struct MmadAtlasA2Preload : public MmadAtlasA2 {
     static constexpr uint32_t STAGES = 2;
     static constexpr bool ENABLE_UNIT_FLAG = ENABLE_UNIT_FLAG_;

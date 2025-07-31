@@ -22,6 +22,7 @@
 #include "catlass/gemm/tile/copy_l1_to_bt.hpp"
 #include "catlass/gemm/tile/copy_gm_to_ub.hpp"
 #include "catlass/gemm/tile/copy_ub_to_gm.hpp"
+#include "catlass/gemm/tile/cast_int4_to_int8.hpp"
 #include "catlass/gemm/helper.hpp"
 
 
@@ -47,6 +48,56 @@ struct TileCopy {
 
     using CopyGmToL1A = Gemm::Tile::CopyGmToL1<ArchTag, AType>;
     using CopyGmToL1B = Gemm::Tile::CopyGmToL1<ArchTag, BType>;
+    using CopyL1ToL0A = Gemm::Tile::CopyL1ToL0A<
+        ArchTag, typename helper::L1ATypeSelector<AType>::L1AType>;
+    using CopyL1ToL0B = Gemm::Tile::CopyL1ToL0B<
+        ArchTag, typename helper::L1BTypeSelector<BType>::L1BType>;
+    using CopyL0CToGm = Gemm::Tile::CopyL0CToGm<ArchTag, ElementAccumulator, CType>;
+    using BiasTypeSelector = helper::L1BiasTypeSelector<BiasType, ElementAccumulator>;
+    using CopyGmToL1Bias = std::conditional_t<std::is_same_v<BiasType, void>,
+        void,
+        Gemm::Tile::CopyGmToL1<ArchTag,
+            typename BiasTypeSelector::GMBiasType,
+            typename BiasTypeSelector::L1BiasType>>;
+    using CopyL1ToBT = std::conditional_t<std::is_same_v<BiasType, void>,
+        void,
+        Gemm::Tile::CopyL1ToBT<ArchTag,
+            typename BiasTypeSelector::L1BiasType,
+            typename BiasTypeSelector::L0BiasType>>;
+};
+
+template <
+    class ArchTag,
+    class AType,
+    class BType,
+    class CType,
+    class PrologueA_,
+    class PrologueB_,
+    class BiasType = void
+>
+struct TileCopyWithProligue {
+    using ElementA = typename AType::Element;
+    using ElementB = typename BType::Element;
+
+    using ElementAccumulator =
+        typename Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
+
+    using CopyGmToL1A = Gemm::Tile::CopyGmToL1<ArchTag, AType>;
+    using CopyGmToL1B = Gemm::Tile::CopyGmToL1<ArchTag, BType>;
+
+    using PrologueA = PrologueA_;
+    using PrologueB = PrologueB_;
+
+    using ElementSrcA = int;
+    using ElementSrcB = typename PrologueB::SrcType::Element;
+    using LayoutSrcA = int;
+    using LayoutSrcB = typename PrologueB::SrcType::Layout;
+
+    using ElementDstA = int;
+    using ElementDstB = typename PrologueB::DstType::Element;
+    using LayoutDstA = int;
+    using LayoutDstB = typename PrologueB::DstType::Layout;
+
     using CopyL1ToL0A = Gemm::Tile::CopyL1ToL0A<
         ArchTag, typename helper::L1ATypeSelector<AType>::L1AType>;
     using CopyL1ToL0B = Gemm::Tile::CopyL1ToL0B<
