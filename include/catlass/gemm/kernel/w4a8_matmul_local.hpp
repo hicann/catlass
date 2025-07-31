@@ -146,17 +146,17 @@ public:
                 nextActualBlockShape = matmulBlockScheduler.GetActualBlockShape(nextBlockIdCoord);
             }
 
-            int64_t gmOffsetB = blockIdCoord.k() * L1TileShape::K * ((params.problemShape.n() + 1) / 2)
-                              + (blockIdCoord.n() * L1TileShape::N + 1) / 2;
+            int64_t gmOffsetB = blockIdxCoord.k() * L1TileShape::K * ((params.problemShape.n() + 1) / 2)
+                              + (blockIdxCoord.n() * L1TileShape::N + 1) / 2;
             if constexpr (std::is_same_v<LayoutB, layout::ColumnMajor>) {
-                gmOffsetB = blockIdCoord.n() * L1TileShape::N * ((params.problemShape.k() + 1) / 2)
-                              + (blockIdCoord.k() * L1TileShape::K + 1) / 2;
+                gmOffsetB = blockIdxCoord.n() * L1TileShape::N * ((params.problemShape.k() + 1) / 2)
+                              + (blockIdxCoord.k() * L1TileShape::K + 1) / 2;
             }
 
             int64_t gmOffsetNextB = nextBlockIdCoord.k() * L1TileShape::K * ((params.problemShape.n() + 1) / 2)
                           + (nextBlockIdCoord.n() * L1TileShape::N + 1) / 2;
             if constexpr (std::is_same_v<LayoutB, layout::ColumnMajor>) {
-                gmOffsetB = nextBlockIdCoord.n() * L1TileShape::N * ((params.problemShape.k() + 1) / 2)
+                gmOffsetNextB = nextBlockIdCoord.n() * L1TileShape::N * ((params.problemShape.k() + 1) / 2)
                           + (nextBlockIdCoord.k() * L1TileShape::K + 1) / 2;
             }
 
