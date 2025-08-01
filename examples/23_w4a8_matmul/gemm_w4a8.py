@@ -270,7 +270,7 @@ if __name__ == "__main__":
         build(WORKSPACE)
         exit()
     
-    devcieId = int(sys.argv[2])
+    deviceId = int(sys.argv[2])
     if op == "accur" :
         accuracy_check(deviceId)
     elif op == "prof":
