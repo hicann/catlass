@@ -11,20 +11,15 @@
 // By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0, 
 // optimizing stack space. If you need to use the ShapeInfo of the AscendC Tensor, please undefine this macro.
 
-
-
-
 #pragma once
 
 #include <cstdint>
 
 enum class CubeFormat : uint32_t { ND = 0, NZ, ZN, ZZ, NN, VECTOR };
 
-
 const uint32_t CONST_16 = 16;
 const uint32_t CONST_256 = 256;
 const uint32_t CONST_512 = 512;
-
 
 inline uint32_t RoundUp(const uint32_t val, const uint32_t align = 16)
 {

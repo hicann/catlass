@@ -11,8 +11,6 @@
 // By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0, 
 // optimizing stack space. If you need to use the ShapeInfo of the AscendC Tensor, please undefine this macro.
 
-
-
 #include <cstring>
 #include <iostream>
 #include <vector>
