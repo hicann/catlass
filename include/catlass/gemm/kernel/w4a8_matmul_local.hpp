@@ -85,7 +85,7 @@ public:
     {
         return true;
     }
-
+=
     static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
     {
         GemmCoord problemShape = args.problemShape;
