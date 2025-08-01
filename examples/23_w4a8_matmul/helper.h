@@ -17,7 +17,7 @@
 #define ERROR_LOG(fmt, args...) fprintf(stdout, "[ERROR]  " fmt "\n", ##args)
 
 #define ACL_CHECK(status)                                                                    \
-    {                                                                                     \
+    {                                                                                        \
         aclError error = status;                                                             \
         if (error != ACL_ERROR_NONE) {                                                       \
             std::cerr << __FILE__ << ":" << __LINE__ << " aclError:" << error << std::endl;  \
