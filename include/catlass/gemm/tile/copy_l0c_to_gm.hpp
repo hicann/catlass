@@ -155,17 +155,17 @@ template <
 >
 struct CopyL0CToGm<Catlass::Arch::AtlasA2,
                    ElementAccumulator_,
-                   Gemm::GemmType<ElementDst_, layout::zN>,
-                   ScaleGranularity::NO_QUANT,
+                   Gemm::GemmType<ElementDst_, layout::RowMajor>,
+                   ScaleGranularity::PER_TENSOR,
                    ReluEnable_>
 {
     using ArchTag = Catlass::Arch::AtlasA2;
     using ElementDst = ElementDst_;
     using ElementSrc = ElementAccumulator_;
     using LayoutSrc = Catlass::layout::zN;
-    using LayoutDst = Catlass::layout::zN;
+    using LayoutDst = Catlass::layout::RowMajor;
     static constexpr auto quantPre = CopyL0CToGmQuantMode<ArchTag, ElementSrc, ElementDst,
-        ScaleGranularity::NO_QUANT>::VALUE;
+        ScaleGranularity::PER_TENSOR>::VALUE;
     static constexpr auto reluEn = ReluEnable_;
 
     CATLASS_DEVICE
@@ -175,13 +175,14 @@ struct CopyL0CToGm<Catlass::Arch::AtlasA2,
         AscendC::FixpipeParamsV220 intriParams;
 
         // Fixpipe layout information
-        intriParams.nSize = dstLayout.shape(2) * dstLayout.shape(3);
-        intriParams.mSize = dstLayout.shape(0) * dstLayout.shape(1);
-        intriParams.srcStride = srcLayout.stride(3) / srcLayout.shape(2);
-        intriParams.dstStride = dstLayout.stride(3) / (BYTE_PER_C0 / sizeof(ElementDst));
+        intriParams.nSize = dstLayout.shape(1);
+        intriParams.mSize = dstLayout.shape(0);
+        intriParams.srcStride = srcLayout.stride(3) / srcLayout.shape(0);
+        intriParams.dstStride = dstLayout.stride(0);
 
         // Fixpipe auxiliary arguments
         intriParams.quantPre = quantPre;
+        intriParams.deqScalar = deqScalar;
         intriParams.reluEn = reluEn;
         intriParams.unitFlag = unitFlag;
 
