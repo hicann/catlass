@@ -58,8 +58,8 @@ struct Options {
             DEVICE_ID_INDEX = 1,
             B_INDEX,
             M_INDEX,
-            N_INDEX,
             K_INDEX,
+            N_INDEX,
             TRANS_A,
             TRANS_B,
             ARGS_MAX
@@ -74,14 +74,14 @@ struct Options {
         problemShape.m() = std::atoi(argv[M_INDEX]);
         problemShape.n() = std::atoi(argv[N_INDEX]);
         problemShape.k() = std::atoi(argv[K_INDEX]);
-        transA = std::atoi(argv[transA])
-        transB = std::atoi(argv[transB])
+        transA = std::atoi(argv[trans_A])
+        transB = std::atoi(argv[trans_B])
         return 0
     }
 };
 
 template<typename T>
-uint64_t getSize(uint64_t m, uint64_tn) {
+uint64_t getSize(uint64_t m, uint64_t n) {
     return m * n * (uint64_t)sizeof(T);
 }
 
@@ -107,8 +107,8 @@ void Run(Options const &options)
     size_t lenB = static_cast<size_t>(k) * n;
     size_t lenC = static_cast<size_t>(m) * n;
 
-    size_t sizeA = getSize<__fp16>(m, k);
-    size_t sizeB = etSize<int8_t>(k, (n + 1) / 2);
+    uint64_t sizeA = getSize<__fp16>(m, k);
+    uint64_t sizeB = getSize<int8_t>(k, (n + 1) / 2);
     if (transB) {
         sizeB = getSize<int8_t>((k + 1) / 2, n);
     }
@@ -140,10 +140,10 @@ void Run(Options const &options)
 
     uint64_t fftsAddr{0};
     uint32_t fftsLen{0};
-    RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
+    rtGetC2cCtrlAddr(&fftsAddr, &fftsLen);
 
     uint8_t *deviceA, *deviceB, *deviceC, *workspace;
-    for (uint32_t i = 0; i < (verifyLevel == 0 ? loopTimes : 1); ++1) {
+    for (uint32_t i = 0; i < (verifyLevel == 0 ? loopTimes : 1); ++i) {
 
         ACL_CHECK(aclrtMalloc((void **)&deviceA, sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
         ACL_CHECK(aclrtMalloc((void **)&deviceB, sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
@@ -151,19 +151,19 @@ void Run(Options const &options)
         ACL_CHECK(aclrtMalloc((void **)&workspace, sizeWksp, ACL_MEM_MALLOC_HUGE_FIRST));
 
         if (verifyLevel) {
-            ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
-            ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
+            ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA, sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
+            ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB, sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
         }
         auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
         using ArchTag = Arch::AtlasA2;
 
-        constexpr bool enableUnitFlag = true;
+        constexpr bool enableUnitFlag = false;
         constexpr bool enableShuffleK = true;
         using DispatchPolicy = Gemm::MmadAtlasA2W4A8Local<enableUnitFlag, enableShuffleK>;
 
         // if LayoutA and LayoutB is both ColumnMajor
-        // L1TileShape using Matmul<256, 128, 256> can achieve better performance.
+        // L1TileShape using MatmulShape<256, 128, 256> can achieve better performance.
         using L1TileShape = std::conditional_t<std::is_same_v<LayoutA, layout::ColumnMajor> &&
             std::is_same_v<LayoutB, layout::ColumnMajor>, GemmShape<256, 128, 512>, GemmShape<128, 256, 512>>;
         using L0TileShape = std::conditional_t<std::is_same_v<LayoutA, layout::ColumnMajor> &&
@@ -173,14 +173,14 @@ void Run(Options const &options)
         using CType = Gemm::GemmType<half, LayoutC>;
         using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
 
-        if (options.problemShape.m() > options.problemShape.n) {
+        if (options.problemShape.m() > options.problemShape.n()) {
             using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
             using BlockEpilogue = void;
-            //kernel level
+            // kernel level
             using MatmulKernel = Gemm::Kernel::W4A8MatmulLocal<BlockMmad, BlockEpilogue, BlockScheduler>;
             typename MatmulKernel::Arguments arguments{
                 options.problemShape, deviceA, deviceB, deviceC, workspace, scalar};
-            //call a kernel
+            // call a kernel
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
             MatmulAdapter matmul_op;
             matmul_op.CanImplement(arguments);
@@ -189,15 +189,15 @@ void Run(Options const &options)
         } else {
             using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
             using BlockEpilogue = void;
-            //kernel level
+            // kernel level
             using MatmulKernel = Gemm::Kernel::W4A8MatmulLocal<BlockMmad, BlockEpilogue, BlockScheduler>;
             typename MatmulKernel::Arguments arguments{
                 options.problemShape, deviceA, deviceB, deviceC, workspace, scalar};
-            //call a kernel
+            // call a kernel
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
             MatmulAdapter matmul_op;
             matmul_op.CanImplement(arguments);
-            matmul_op.Initialize(arguments, deviceWorkspace);
+            matmul_op.Initialize(arguments, workspace);
             matmul_op(stream, aicCoreNum, fftsAddr);
         }
 
@@ -215,9 +215,9 @@ void Run(Options const &options)
     if (verifyLevel) {
         WirteFile("/home/c50053055/catlass-master/examples/23_w4a8_matmul/build/data/outputC.dat", hostC, sizeC);
         CompareResults<__fp16, float>((__fp16*)hostC, (float*)hExpected, m, k, n);
-        ACL_CHECK(aclrtFreeHost(deviceA));
-        ACL_CHECK(aclrtFreeHost(deviceB));
-        ACL_CHECK(aclrtFreeHost(deviceC));
+        ACL_CHECK(aclrtFreeHost(hostA));
+        ACL_CHECK(aclrtFreeHost(hostB));
+        ACL_CHECK(aclrtFreeHost(hostC));
         ACL_CHECK(aclrtFreeHost(hExpected));
     }
 
