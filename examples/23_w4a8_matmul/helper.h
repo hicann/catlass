@@ -8,7 +8,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <cstring>
+#include <string>
 #include <cstdlib>
 #include <cmath>
 
@@ -17,12 +17,12 @@
 #define ERROR_LOG(fmt, args...) fprintf(stdout, "[ERROR]  " fmt "\n", ##args)
 
 #define ACL_CHECK(status)                                                                    \
-    do {                                                                                     \
+    {                                                                                     \
         aclError error = status;                                                             \
         if (error != ACL_ERROR_NONE) {                                                       \
             std::cerr << __FILE__ << ":" << __LINE__ << " aclError:" << error << std::endl;  \
         }                                                                                    \
-    } while (0)
+    }
 
 inline bool ReadFile(const std::string &filePath, void *buffer, size_t bufferSize)
 {
