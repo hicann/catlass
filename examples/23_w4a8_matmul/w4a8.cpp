@@ -74,9 +74,9 @@ struct Options {
         problemShape.m() = std::atoi(argv[M_INDEX]);
         problemShape.n() = std::atoi(argv[N_INDEX]);
         problemShape.k() = std::atoi(argv[K_INDEX]);
-        transA = std::atoi(argv[TRANS_A])
-        transB = std::atoi(argv[TRANS_B])
-        return 0
+        transA = std::atoi(argv[TRANS_A]);
+        transB = std::atoi(argv[TRANS_B]);
+        return 0;
     }
 };
 
@@ -184,7 +184,7 @@ void Run(Options const &options)
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
             MatmulAdapter matmul_op;
             matmul_op.CanImplement(arguments);
-            matmul_op.Initialize(arguments, Workspace);
+            matmul_op.Initialize(arguments, workspace);
             matmul_op(stream, aicCoreNum, fftsAddr);
         } else {
             using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
