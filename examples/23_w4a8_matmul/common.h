@@ -21,15 +21,15 @@
 enum class CubeFormat : uint32_t { ND = 0, NZ, ZN, ZZ, NN, VECTOR };
 
 
-const int32_t CONST_16 = 16;
-const int32_t CONST_256 = 256;
-const int32_t CONST_512 = 512;
+const uint32_t CONST_16 = 16;
+const uint32_t CONST_256 = 256;
+const uint32_t CONST_512 = 512;
 
 
 inline uint32_t RoundUp(const uint32_t val, const uint32_t align = 16)
 {
     if (align == 0) {
-        return 0
+        return 0;
     }
     return (val + align - 1) / align * align;
 }
@@ -37,17 +37,17 @@ inline uint32_t RoundUp(const uint32_t val, const uint32_t align = 16)
 inline uint32_t RoundDown(const uint32_t val, const uint32_t align = 16)
 {
     if (align == 0) {
-        return 0
+        return 0;
     }
     return val / align * align;
 }
 
-inline uint32_t CeilDiv(const uint32_t devident, const uint32_t divisor)
+inline uint32_t CeilDiv(const uint32_t dividend, const uint32_t divisor)
 {
     if (divisor == 0) {
-        return UINT32_MAX
+        return UINT32_MAX;
     }
-    return (devident + divisor - 1) / divisor;
+    return (dividend + divisor - 1) / divisor;
 }
 
 inline uint32_t Min(const uint32_t x, const uint32_t y) { return x < y ? x : y; }
