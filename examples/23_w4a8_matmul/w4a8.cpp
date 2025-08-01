@@ -213,7 +213,7 @@ void Run(Options const &options)
     }   
 
     if (verifyLevel) {
-        WirteFile("/home/c50053055/catlass-master/examples/23_w4a8_matmul/build/data/outputC.dat", hostC, sizeC);
+        WriteFile("/home/c50053055/catlass-master/examples/23_w4a8_matmul/build/data/outputC.dat", hostC, sizeC);
         CompareResults<__fp16, float>((__fp16*)hostC, (float*)hExpected, m, k, n);
         ACL_CHECK(aclrtFreeHost(hostA));
         ACL_CHECK(aclrtFreeHost(hostB));
