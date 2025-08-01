@@ -199,7 +199,7 @@ def accuracy_check(deviceId: int = 0) -> None:
             param.layoutB = CubeFormat(testcase["Data Format B"])
 
             gen_testcase(os.path.join(WORKSPACE, 'build/data'), param)
-            cmd = f"cd /home/c50053055/catlass-master/build/bin && ./22_w4a8_matmul_Final {deviceId} {param.b} {param.m} {param.k} {param.n} {int(param.transA)} {int(param.transB)} | tee -a {WORKSPACE}/log/accur.log"
+            cmd = f"cd /home/c50053055/catlass-master/build/bin && ./23 w4a8_matmul_Final {deviceId} {param.b} {param.m} {param.k} {param.n} {int(param.transA)} {int(param.transB)} | tee -a {WORKSPACE}/log/accur.log"
             print(cmd)
             os.system(cmd)
             compare(param)
