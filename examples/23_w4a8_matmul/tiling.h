@@ -78,7 +78,7 @@ void balanceWorkload(uint32_t m, uint32_t k, uint32_t n, uint32_t& m0, uint32_t 
                     bestn0 = n0t;
                 }
             }
-            not -= 16;
+            n0t -= 16;
         }
         m0t -= 16;
     }
@@ -106,9 +106,9 @@ void GetTiling(MatmulInfo& mmInfo, TilingParams& tilingParams) {
 }
 
 void operator<< (std::ostream& os, const TilingParams& t) {
-    std::cout << "b: " << t.b << ",m: " << t.m << ",k: " << t.k << ",n: " << t.n << td::endl;
+    std::cout << "b: " << t.b << ",m: " << t.m << ",k: " << t.k << ",n: " << t.n << std::endl;
     std::cout << "m0: " << t.mTile << ",k0: " << t.kTile << ",n0: " << t.nTile << std::endl;
     std::cout << "padding mode A: " << t.paddingModeA << ",padding mode B: " << t.paddingModeB << std::endl;
-    std::cout << "swizzle cnt: " << t.swizzleCnt << "swizzle dir: " << t.swizzleDir << std::endl;
-    std::cout << "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"<< std::endl;
+    std::cout << "swizzle cnt: " << t.swizzleCnt << ",swizzle dir: " << t.swizzleDir << std::endl;
+    std::cout << "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << std::endl;
 }
