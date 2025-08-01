@@ -170,7 +170,7 @@ struct CopyL0CToGm<Catlass::Arch::AtlasA2,
 
     CATLASS_DEVICE
     void operator()(AscendC::GlobalTensor<ElementDst> const &dst, AscendC::LocalTensor<ElementSrc> const &src,
-        LayoutDst const &dstLayout, LayoutSrc const &srcLayout, uint8_t unitFlag = 0)
+        LayoutDst const &dstLayout, LayoutSrc const &srcLayout, uint64_t deqScalar, uint8_t unitFlag = 0)
     {
         AscendC::FixpipeParamsV220 intriParams;
 
