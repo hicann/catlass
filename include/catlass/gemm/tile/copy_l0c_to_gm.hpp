@@ -177,7 +177,7 @@ struct CopyL0CToGm<Catlass::Arch::AtlasA2,
         // Fixpipe layout information
         intriParams.nSize = dstLayout.shape(1);
         intriParams.mSize = dstLayout.shape(0);
-        intriParams.srcStride = srcLayout.stride(3) / srcLayout.shape(0);
+        intriParams.srcStride = srcLayout.stride(3) / srcLayout.stride(0);
         intriParams.dstStride = dstLayout.stride(0);
 
         // Fixpipe auxiliary arguments
@@ -187,7 +187,7 @@ struct CopyL0CToGm<Catlass::Arch::AtlasA2,
         intriParams.unitFlag = unitFlag;
 
         // Call AscendC Fixpipe
-        AscendC::Fixpipe<ElementDst, ElementSrc, AscendC::CFG_NZ>(dst, src, intriParams);
+        AscendC::Fixpipe<ElementDst, ElementSrc, AscendC::CFG_ROW_MAJOR>(dst, src, intriParams);
     }
 };
 
