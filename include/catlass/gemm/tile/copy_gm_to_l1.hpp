@@ -549,6 +549,140 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::VectorLayout>, Gemm::
     }
 };
 
+template <class ArchTag, class Element>
+struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::NDC1HWC0, AscendC::TPosition::GM>> {
+    using LayoutDst = layout::NDC1HWC0;
+    using LayoutSrc = layout::NDC1HWC0;
+
+    // static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+
+    // Mehtods
+
+    CATLASS_DEVICE
+    CopyGmToL1() {};
+
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::GlobalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+    {
+        // layoutDst = layoutAInL1 (N=1, D=1, cin1LoadL1, hiLoadL1, Wi, C0)
+        // layoutSrc = Fmap.GetTileLayout(1, dilationD, Actualblockshape_C1, Hi, Wi, C0)
+        // 切Kd_l1*C1或C1_l1
+        const static uint64_t MAX_UINT16 = 65535;
+
+        uint32_t cin1LoadL1 = layoutDst.shape(2);
+        uint32_t hiLoadL1 = layoutDst.shape(3);
+        uint32_t wiLoadL1 = layoutDst.shape(4);
+
+        uint32_t dilationD = layoutSrc.shape(1);
+        uint32_t OriC1 = layoutSrc.shape(2);
+        uint32_t OriH = layoutSrc.shape(3);
+        uint32_t OriW = layoutSrc.shape(4);
+        uint32_t OriK0 = layoutSrc.shape(5); // K0 Means C0
+
+        uint64_t dataCopyLoop = CeilDiv(cin1LoadL1, OriC1); // 0或Kd_l1
+        uint64_t dataCopySubLoop = 0;
+        uint64_t blockCount = OriC1;
+        bool srcStrideBeyondMaxU16 = false;
+        if(OriH * OriW - hiLoadL1 * OriW > MAX_UINT16) {
+            dataCopySubLoop = dataCopyLoop > 0 ? layoutSrc.shape(2) / dataCopyLoop : 0;  // 切的C1*Kd_l1, dataCopySubLoop = C1
+            blockCount = 1;
+            srcStrideBeyondMaxU16 = true;
+        }
+
+        uint64_t aL1Offset = 0;
+        if (cin1LoadL1 > OriC1 || srcStrideBeyondMaxU16) {
+            // AscendC::DataCopyParams repeatParams;
+            repeatParams.blockCount = blockCount;
+            repeatParams.blockLen = hiLoadL1 * OriW;
+            repeatParams.srcStride = OriW * OriH - repeatParams.blockLen;
+            repeatParams.dstStride = 0;
+            // DataCopyWithLoop(aL1Offset, dataCopyLoop, dataCopySubLoop, srcStrideBeyondMaxU16);
+            for (uint64_t i = 0; i < dataCopyLoop; i++) {
+                if (srcStrideBeyondMaxU16) {
+                    uint64_t aL1GmSubOffset = aL1GmOffset;
+                    uint64_t aL1SubOffset = aL1Offset;
+                    for (uint64_t j = 0; j < dataCopySubLoop; j++) {
+                        AscendC::DataCopy<Element>(dstTensor[aL1SubOffset], srcTensor[aL1GmSubOffset], repeatParams);
+                        aL1GmSubOffset += OriH * OriW * OriK0;
+                        aL1SubOffset += hiLoadL1 * OriW * OriK0;
+                    }
+                } else {
+                    AscendC::DataCopy<Element>(dstTensor[aL1Offset], srcTensor[aL1GmOffset], repeatParams);
+                }
+                aL1GmOffset += dilationD * OriC1 * OriH * OriW * OriK0;
+                aL1Offset += OriC1 * hiLoadL1 * OriW * OriK0;
+            }
+        } else {
+            repeatParams.blockCount = cin1LoadL1;
+            repeatParams.blockLen = hiLoadL1 * OriW;
+            repeatParams.srcStride = OriW * OriH - repeatParams.blockLen;
+            repeatParams.dstStride = 0;
+            AscendC::DataCopy<Element>(dstTensor[aL1Offset], srcTensor[aL1GmOffset], repeatParams);
+            aL1Offset += cin1LoadL1 * hiLoadL1 * OriW * OriK0;
+        }
+    }
+private:
+    uint64_t aL1GmOffset = 0;
+    AscendC::DataCopyParams repeatParams;
+};
+
+template <class ArchTag, class Element>
+struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::KDC1KHKWN1N0C0, AscendC::TPosition::GM>> {
+    using LayoutDst = layout::nZ;
+    using LayoutSrc = layout::KDC1KHKWN1N0C0;
+
+    // static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+
+    // Mehtods
+
+    CATLASS_DEVICE
+    CopyGmToL1() {};
+
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::GlobalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+    {
+        // nZ LayoutDst (currentKBL1, currentNBL1)
+        // LayoutSrc Filter.shape(C0, KdC1KhKw, N0, N1)
+        // LayoutSrc Filter.orgShape(Cout, Cin, Kd, Kh, Kw)
+        uint32_t currentNBL1 = layoutDst.orgShape(0);
+        uint32_t currentKBL1 = layoutDst.orgShape(1);
+
+        uint32_t N1 = layoutSrc.shape(3);
+        uint32_t N0 = layoutSrc.shape(2);
+        uint32_t C0 = layoutSrc.shape(0);
+        uint32_t OriCo = layoutSrc.orgShape(0); // Cout
+
+        const static uint32_t LOAD2D_MAX_REPEAT_TIMES = 255;
+
+        if (currentNBL1 >= OriCo) {
+            uint32_t repeatTimes = (currentKBL1 * currentNBL1) / (N0 * C0);
+            if(repeatTimes > LOAD2D_MAX_REPEAT_TIMES) {
+                repeatParams.blockCount = 1;
+                repeatParams.srcStride = 0;
+                repeatParams.blockLen = CeilDiv(currentKBL1 * currentNBL1, C0);
+                AscendC::DataCopy<Element>(dstTensor, srcTensor, repeatParams);
+            } else {
+                AscendC::LoadData2DParams loadData2dParams;
+                loadData2dParams.srcStride = 1;
+                loadData2dParams.repeatTimes = repeatTimes;
+                AscendC::LoadData<Element>(dstTensor, srcTensor, loadData2dParams);
+            }
+        } else {
+            repeatParams.blockCount = currentKBL1 / C0;
+            repeatParams.blockLen = currentNBL1;
+            repeatParams.srcStride = N1 * N0 - currentNBL1;
+            AscendC::DataCopy<Element>(dstTensor, srcTensor, repeatParams);
+        }
+    }
+private:
+    AscendC::DataCopyParams repeatParams;
+};
 
 
 ///////////////////////////////////////

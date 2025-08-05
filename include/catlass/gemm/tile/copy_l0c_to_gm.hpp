@@ -175,6 +175,7 @@ struct CopyL0CToGm<Catlass::Arch::AtlasA2,
         AscendC::FixpipeParamsV220 intriParams;
 
         // Fixpipe layout information
+        // 这里为什么用dstLayout算nSize和mSize
         intriParams.nSize = dstLayout.shape(2) * dstLayout.shape(3);
         intriParams.mSize = dstLayout.shape(0) * dstLayout.shape(1);
         intriParams.srcStride = srcLayout.stride(3) / srcLayout.shape(2);
@@ -183,6 +184,55 @@ struct CopyL0CToGm<Catlass::Arch::AtlasA2,
         // Fixpipe auxiliary arguments
         intriParams.quantPre = quantPre;
         intriParams.reluEn = reluEn;
+        intriParams.unitFlag = unitFlag;
+
+        // Call AscendC Fixpipe
+        AscendC::Fixpipe<ElementDst, ElementSrc, AscendC::CFG_NZ>(dst, src, intriParams);
+    }
+};
+
+template <
+    class ElementAccumulator_,
+    class ElementDst_,
+    bool ReluEnable_
+>
+struct CopyL0CToGm<Catlass::Arch::AtlasA2,
+                   ElementAccumulator_,
+                   Gemm::GemmType<ElementDst_, layout::NDC1HWC0>,
+                   ScaleGranularity::NO_QUANT,
+                   ReluEnable_>
+{
+    using ArchTag = Catlass::Arch::AtlasA2;
+    using ElementDst = ElementDst_;
+    using ElementSrc = ElementAccumulator_;
+    using LayoutSrc = Catlass::layout::zN;
+    using LayoutDst = Catlass::layout::NDC1HWC0;
+    static constexpr auto quantPre = CopyL0CToGmQuantMode<ArchTag, ElementSrc, ElementDst,
+        ScaleGranularity::NO_QUANT>::VALUE;
+    static constexpr auto reluEn = ReluEnable_;
+
+    CATLASS_DEVICE
+    void operator()(AscendC::GlobalTensor<ElementDst> const &dst, AscendC::LocalTensor<ElementSrc> const &src,
+        LayoutDst const &dstLayout, LayoutSrc const &srcLayout, uint8_t unitFlag = 0)
+    {
+        /// srcLayout zN (Ho_l0*Wo_l0, Cout0*Cout1_l0)
+        /// dstLayout Fmap.shape (N, D, C1, H, W, C0)
+        AscendC::FixpipeParamsV220 intriParams;
+
+        // Fixpipe layout information
+        intriParams.nSize = srcLayout.orgShape(1);
+        intriParams.mSize = srcLayout.orgShape(0);
+        intriParams.srcStride = srcLayout.stride(3) / srcLayout.shape(2);
+        intriParams.dstStride = dstLayout.shape(3) * dstLayout.shape(4);
+
+        if constexpr (AscendC::IsSameType<ElementSrc, float>::value &&
+                      AscendC::IsSameType<ElementDst, float>::value) {
+            intriParams.isChannelSplit = true;
+        }
+
+        // Fixpipe auxiliary arguments
+        intriParams.quantPre = quantPre;
+        intriParams.reluEn = false; //false
         intriParams.unitFlag = unitFlag;
 
         // Call AscendC Fixpipe

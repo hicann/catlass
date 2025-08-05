@@ -82,6 +82,7 @@ foreach(EXAMPLE
     18_gemv_aic
     19_mla
     20_matmul_bias
+    23_conv_bias
 )
     add_subdirectory(${EXAMPLE})
 endforeach()

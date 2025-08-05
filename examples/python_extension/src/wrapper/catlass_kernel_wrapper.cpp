@@ -288,4 +288,83 @@ at::Tensor RunOptimizedMatmul(const at::Tensor &mat1, const at::Tensor &mat2, co
     
     return result;
 }
+
+std::vector<int64_t> InferConvShape(at::IntArrayRef fmapShape, at::IntArrayRef filterShape,
+                                    const std::vector<int64_t> &strideList, const std::vector<int64_t> &padList,
+                                    const std::vector<int64_t> &dilationList)
+{
+    int64_t n = fmapShape.at(0);
+    int64_t di = fmapShape.at(1);
+    int64_t hi = fmapShape.at(3);
+    int64_t wi = fmapShape.at(4);
+    int64_t cout0 = fmapShape.at(5);
+    int64_t cout = filterShape.at(0);
+    int64_t kd = filterShape.at(2);
+    int64_t kh = filterShape.at(3);
+    int64_t kw = filterShape.at(4);
+
+    int64_t Cout1 = (Cout + cout0 - 1) / cout0;
+    Do = (di + padList[0] * 2 - dilationList[0] * (kd - 1) - 1) / strideList[0] + 1;
+    Ho = (hi + padList[1] * 2 - dilationList[1] * (kh - 1) - 1) / strideList[1] + 1;
+    Wo = (wi + padList[2] * 2 - dilationList[2] * (kw - 1) - 1) / strideList[2] + 1;
+
+    return {n, Do, Cout1, Ho, Wo, cout0};
+}
+
+ConvKernelInfo GetConvKernelInfo(const at::Tensor &fmap, const at::Tensor &filter, const at::Tensor &bias,
+                                 const std::vector<int64_t> &strideList, const std::vector<int64_t> &padList,
+                                 const std::vector<int64_t> &dilationList, const std::string &outDType)
+{
+    ConvKernelInfo kernelInfo;
+    kernelInfo.fmapOriShape.resize(5);
+    kernelInfo.fmapOriShape[0] = fmap.sizes().at(0);
+    kernelInfo.fmapOriShape[1] = fmap.sizes().at(1);
+    kernelInfo.fmapOriShape[2] = fmap.sizes().at(2);
+    kernelInfo.fmapOriShape[3] = fmap.sizes().at(3);
+    kernelInfo.fmapOriShape[4] = fmap.sizes().at(4);
+    kernelInfo.filterOriShape.resize(5);
+    kernelInfo.filterOriShape[0] = filter.sizes().at(0);
+    kernelInfo.filterOriShape[1] = filter.sizes().at(1)
+    kernelInfo.filterOriShape[2] = filter.sizes().at(2);
+    kernelInfo.filterOriShape[3] = filter.sizes().at(3);
+    kernelInfo.filterOriShape[4] = filter.sizes().at(4);
+    kernelInfo.strideList.resize(3);
+    kernelInfo.strideList[0] = strideList[0];
+    kernelInfo.strideList[1] = strideList[1];
+    kernelInfo.strideList[2] = strideList[2];
+    kernelInfo.padList.resize(3);
+    kernelInfo.padList[0] = padList[0];
+    kernelInfo.padList[1] = padList[1];
+    kernelInfo.padList[2] = padList[2];
+    kernelInfo.dilationList.resize(3);
+    kernelInfo.dilationList[0] = dilationList[0];
+    kernelInfo.dilationList[1] = dilationList[1];
+    kernelInfo.dilationList[2] = dilationList[2];
+
+    kernelInfo.inputDataType = TorchDtypeToAclDtype(fmap.scalar_type());
+    kernelInfo.biasDataType = TorchDtypeToAclDtype(bias.scalar_type());
+    kernelInfo.outputDataType = TorchDtypeToAclDtype(TypeStrToTorchDtype(outDType), kernelInfo.inOutDataType);
+    return kernelInfo;
+};
+
+at::Tensor RunConvBias(const at::Tensor &fmap, const at::Tensor &filter, const at::Tensor &bias,
+                       const std::vector<int64_t> &strideList, const std::vector<int64_t> &padList,
+                       const std::vector<int64_t> &dilationList, const std::string &outDType)
+{
+    fmapTransdata = at_npu::native::npu_format_cast(fmap, ACL_FORMAT_NDC1HWC0);
+    filterTransdata = at_npu::native::npu_format_cast(fmap, ACL_FORMAT_FRACTAL_NZ_C0_16);
+    ConvKernelInfo kernelInfo = GetConvKernelInfo(fmap, filter, bias, strideList, padList, dilationList, outDType);
+    kernelInfo.inputAddr.resize(3);
+    kernelInfo.inputAddr[0] = static_cast<uint8_t *>(const_cast<void *>(fmapTransdata.storage().data()));
+    kernelInfo.inputAddr[1] = static_cast<uint8_t *>(const_cast<void *>(filterTransdata.storage().data()));
+    kernelInfo.inputAddr[2] = static_cast<uint8_t *>(const_cast<void *>(bias.storage().data()));
+    torch::Dtype outputDataType = TypeStrToTorchDtype(outDType, fmap.scalar_type());
+    torch::Tensor result = GetOutputTensor(InferConvShape(fmapTransdata.sizes(), filter.sizes(), strideList, padList, dilationList), outputDataType);
+    kernelInfo.outputAddr.resize(1);
+    kernelInfo.outputAddr.at(0) = static_cast<uint8_t *>(const_cast<void *>(result.storage().data()));
+    aclrtStream stream = c10_npu::getCurrentNPUStream().stream(false);
+    uint32_t aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
+    ConvBias(aicCoreNum, stream, kernelInfo);
+    return at_npu::native::npu_format_cast(result, ACL_FORMAT_NCDHW);
+}
 } // namespace Catlass
