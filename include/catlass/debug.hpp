@@ -11,9 +11,11 @@
 #ifndef CATLASS_DEBUG_HPP
 #define CATLASS_DEBUG_HPP
 
+#undef inline
 #include <iostream>
 #include <sstream>
 #include <functional>
+#define inline __inline__ __attribute__((always_inline))
 
 #include <acl/acl.h>
 
