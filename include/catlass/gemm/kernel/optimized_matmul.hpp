@@ -128,6 +128,18 @@ public:
         }
     }
 
+    static bool IfNeedPadding(layout::zN layout, uint32_t align)
+    {
+        // No need to pad for zN
+        return false;
+    }
+
+    static bool IfNeedPadding(layout::nZ layout, uint32_t align)
+    {
+        // No need to pad for nZ
+        return false;
+    }
+
     template<class Layout>
     static size_t GetWorkspaceLen(Layout layout, size_t blockRows, size_t blockCols)
     {
@@ -139,7 +151,8 @@ public:
     {
         size_t workspaceSize = 0;
         LayoutA layoutA{args.problemShape.m(), args.problemShape.k()};
-        LayoutB layoutB{args.problemShape.k(), args.problemShape.n()};
+        // LayoutB layoutB{args.problemShape.k(), args.problemShape.n()};
+        LayoutB layoutB = LayoutB::template MakeLayout<ElementB>(args.problemShape.k(), args.problemShape.n());
         if (IfNeedPadding(layoutA, args.align)) {
             workspaceSize +=
                 GetWorkspaceLen(layoutA, args.layoutWA.shape(0), args.layoutWA.shape(2)) * args.elementSize;
@@ -158,7 +171,8 @@ public:
         using LayoutPaddingB = std::conditional_t<std::is_same_v<LayoutB, layout::RowMajor>,
             layout::PaddingRowMajor, layout::PaddingColumnMajor>;
         LayoutA layoutA{args.problemShape.m(), args.problemShape.k()};
-        LayoutB layoutB{args.problemShape.k(), args.problemShape.n()};
+        // LayoutB layoutB{args.problemShape.k(), args.problemShape.n()};
+        LayoutB layoutB = LayoutB::template MakeLayout<ElementB>(args.problemShape.k(), args.problemShape.n());
         LayoutC layoutC{args.problemShape.m(), args.problemShape.n()};
         bool isPaddingA = IfNeedPadding(layoutA, args.align);
         bool isPaddingB = IfNeedPadding(layoutB, args.align);
