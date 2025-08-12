@@ -7,4 +7,4 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 
 set_source_files_properties(batched_matmul.cpp PROPERTIES LANGUAGE ASCEND)
-catlass_example_add_executable(01_batched_matmul dav-c220 batched_matmul.cpp)
+catlass_example_add_executable(01_batched_matmul dav-c220-cube batched_matmul.cpp)

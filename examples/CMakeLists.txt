@@ -35,7 +35,6 @@ add_compile_options(
     "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-dcci-insert-for-scalar=false>"
 )
 
-add_compile_definitions(L2_CACHE_HINT)
 include_directories(
     ${CATLASS_EXAMPLES_COMMON_SOURCE_DIR}
     ${CATLASS_INCLUDE_DIR}
