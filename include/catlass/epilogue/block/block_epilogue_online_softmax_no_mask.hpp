@@ -810,10 +810,6 @@ public:
                     tokenNumPerHeadThisSubBlock;
                 integralHeadNum = (rowNumCurLoop - proTokenNum) / tokenNumPerHeadThisSubBlock;
                 epiTokenNum = rowNumCurLoop - proTokenNum - integralHeadNum * tokenNumPerHeadThisSubBlock;
-                AscendC::printf("proTokenIdx:%d\n", proTokenIdx);
-                AscendC::printf("proTokenNum:%d\n", proTokenNum);
-                AscendC::printf("integralHeadNum:%d\n", integralHeadNum);
-                AscendC::printf("epiTokenNum:%d\n", epiTokenNum);
                 SubCoreCompute(
                     gOutputCurLoop,
                     gInputCurLoop,
