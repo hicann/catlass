@@ -38,23 +38,13 @@ public:
     using ElementB = typename BlockMmad::ElementB;
     using LayoutWA = typename BlockMmad::LayoutA;
     using LayoutWB = typename BlockMmad::LayoutB;
-
-    template<class T>
-    struct LayoutHelper {
-        using type = typename T::LayoutIn;
-    };
-    template<>
-    struct LayoutHelper<void> {
-        using type = void;
-    };
+    using PaddingLayoutHelperA = PaddingWorkspaceLayoutHelper<PrologueA>;
+    using PaddingLayoutHelperB = PaddingWorkspaceLayoutHelper<PrologueB>;
 
     using LayoutA = std::conditional_t<
-        std::is_void_v<PrologueA>, BlockMmad::LayoutA, typename PaddingLayoutHelper<PrologueA>::LayoutIn>;
+        std::is_void_v<PrologueA>, BlockMmad::LayoutA, typename PaddingLayoutHelperA::LayoutIn>;
     using LayoutB = std::conditional_t<
-        std::is_void_v<PrologueB>, BlockMmad::LayoutB, typename PaddingLayoutHelper<PrologueB>::LayoutIn>;
-
-    using PaddingWorkspaceLayoutHelperA = PaddingWorkspaceLayoutHelper<PrologueA, ElementA, LayoutA>;
-    using PaddingWorkspaceLayoutHelperB = PaddingWorkspaceLayoutHelper<PrologueB, ElementB, LayoutB>;
+        std::is_void_v<PrologueB>, BlockMmad::LayoutB, typename PaddingLayoutHelperB::LayoutIn>;
 
     using L1TileShape = typename BlockMmad::L1TileShape;
     using ElementC = typename BlockMmad::ElementC;
@@ -177,11 +167,11 @@ public:
     {
         size_t workspaceSize = 0;
         if (!std::is_void_v<PrologueA>) {
-            workspaceSize += PaddingWorkspaceLayoutHelperA::GetWorkspaceSize(
+            workspaceSize += PaddingLayoutHelperA::GetWorkspaceSize(
                     args.problemShape.m(), args.problemShape.k(), L1TileShape::M, L1TileShape::K);
         }
         if (!std::is_void_v<PrologueB>) {
-            workspaceSize += PaddingWorkspaceLayoutHelperB::GetWorkspaceSize(
+            workspaceSize += PaddingLayoutHelperB::GetWorkspaceSize(
                     args.problemShape.k(), args.problemShape.n(), L1TileShape::K, L1TileShape::N);
         }
         return workspaceSize;
@@ -201,7 +191,7 @@ public:
 
         if (isPaddingA) {
             gmWA = workspace;
-            sizeWA = PaddingWorkspaceLayoutHelperA::GetWorkspaceSize(
+            sizeWA = PaddingLayoutHelperA::GetWorkspaceSize(
                     args.problemShape.m(), args.problemShape.k(), L1TileShape::M, L1TileShape::K);
         } else {
             gmWA = args.ptrA;
@@ -211,22 +201,38 @@ public:
         } else {
             gmWB = args.ptrB;
         }
+        PaddingLayoutHelperA::LayoutW layoutWA;
+        PaddingLayoutHelperB::LayoutW layoutWB;
         if constexpr (isPaddingA && isPaddingB) {
-            PaddingWorkspaceLayoutHelperA::LayoutW layoutWA = PaddingWorkspaceLayoutHelperA::GetWorkspaceLayout(
+            if constexpr (PaddingLayoutHelperA::paddingTag == PaddingTag::PADDING_BLOCK_ND) {
+                layoutWA = PaddingLayoutHelperA::GetWorkspaceLayout(
+                    args.problemShape.m(), args.problemShape.k(), L1TileShape::M, L1TileShape::K);
+            } else if constexpr (PaddingLayoutHelperA::paddingTag == PaddingTag::PADDING_ND) {
+                layoutWA = PaddingLayoutHelperA::GetWorkspaceLayout(
+                    args.problemShape.m(), args.problemShape.k(), 512 / sizeof(ElementA));
+            }
+            if constexpr (PaddingLayoutHelperB::paddingTag == PaddingTag::PADDING_BLOCK_ND) {
+                layoutWB = PaddingLayoutHelperB::GetWorkspaceLayout(
+                    args.problemShape.k(), args.problemShape.n(), L1TileShape::K, L1TileShape::N);
+            } else if constexpr (PaddingLayoutHelperB::paddingTag == PaddingTag::PADDING_ND) {
+                layoutWB = PaddingLayoutHelperB::GetWorkspaceLayout(
+                    args.problemShape.k(), args.problemShape.n(), 512 / sizeof(ElementB));
+            }
+            PaddingLayoutHelperA::LayoutW layoutWA = PaddingLayoutHelperA::GetWorkspaceLayout(
                 args.problemShape.m(), args.problemShape.k(), L1TileShape::M, L1TileShape::K);
-            PaddingWorkspaceLayoutHelperB::LayoutW layoutWB = PaddingWorkspaceLayoutHelperB::GetWorkspaceLayout(
+            PaddingLayoutHelperB::LayoutW layoutWB = PaddingLayoutHelperB::GetWorkspaceLayout(
                 args.problemShape.k(), args.problemShape.n(), L1TileShape::K, L1TileShape::N);
             Params params{args.problemShape, args.ptrA, layoutA, args.ptrB, layoutB, args.ptrC, layoutC, 
                 gmWA, layoutWA, gmWB, layoutWB};
             return params;
         } else if constexpr (isPaddingA) {
-            PaddingWorkspaceLayoutHelperA::LayoutW layoutWA = PaddingWorkspaceLayoutHelperA::GetWorkspaceLayout(
+            PaddingLayoutHelperA::LayoutW layoutWA = PaddingLayoutHelperA::GetWorkspaceLayout(
                 args.problemShape.m(), args.problemShape.k(), L1TileShape::M, L1TileShape::K);
             Params params{args.problemShape, args.ptrA, layoutA, args.ptrB, layoutB, args.ptrC, layoutC,
                 gmWA, args.layoutWA};
             return params;
         } else if constexpr (isPaddingB) {
-            PaddingWorkspaceLayoutHelperB::LayoutW layoutWB = PaddingWorkspaceLayoutHelperB::GetWorkspaceLayout(
+            PaddingLayoutHelperB::LayoutW layoutWB = PaddingLayoutHelperB::GetWorkspaceLayout(
                 args.problemShape.k(), args.problemShape.n(), L1TileShape::K, L1TileShape::N);
             Params params{args.problemShape, args.ptrA, layoutA, args.ptrB, layoutB, args.ptrC, layoutC,
                 gmWB, args.layoutWB};

@@ -344,47 +344,23 @@ enum class PaddingTag {
     NO_PADDING,
     PADDING_ND,
     PADDING_BLOCK_ND
-}
+};
 
-template <class T>
+template <class Padding>
 struct PaddingLayoutHelper {
-    static_assert(DEPENDENT_FALSE<T>, "Padding is not implemented for this layout");
+    static_assert(DEPENDENT_FALSE<Padding>, "Padding is not implemented for this layout");
+};
+
+template <>
+struct PaddingLayoutHelper<void> {
+    PaddingTag paddingTag = PaddingTag::NO_PADDING;
+    using LayoutIn = void;
 };
 
 template <class ArchTag_, class Element_, class LayoutIn_, class LayoutOut_, uint32_t COMPUTE_LENGTH>
 struct PaddingLayoutHelper<PaddingMatrixBlockND<ArchTag_, Element_, LayoutIn_, LayoutOut_, COMPUTE_LENGTH>> {
+    PaddingTag paddingTag = PaddingTag::PADDING_BLOCK_ND;
     using LayoutIn = LayoutIn_;
-};
-
-template <class ArchTag_, class Element_, class Layout_, uint32_t COMPUTE_LENGTH>
-struct PaddingLayoutHelper<PaddingMatrix<ArchTag_, Element_, Layout_, COMPUTE_LENGTH>> {
-    using LayoutIn = Layout_;
-};
-
-template<>
-struct PaddingLayoutHelper<void> {
-    using LayoutIn = void;
-};
-
-template <PaddingTag, class Element, class Layout>
-struct PaddingWorkspaceLayoutHelper {
-    static_assert(DEPENDENT_FALSE<Padding>, "Unsupported padding, can not find the specialization.");
-};
-
-template <class Element, class Layout>
-struct PaddingWorkspaceLayoutHelper<PaddingTag::NO_PADDING, Element, Layout> {
-    using LayoutW = Layout;
-    CATLASS_HOST_DEVICE static
-    LayoutW GetLayoutW(Layout& layout, uint32_t rowAlign, uint32_t colAlign) {
-        return layout;
-    }
-    static size_t GetWorkspaceSize(uint32_t rows, uint32_t cols, uint32_t rowAlign, uint32_t colAlign) {
-        return 0;
-    }
-};
-
-template <class Element, class Layout>
-struct PaddingWorkspaceLayoutHelper<PaddingTag::PADDING_BLOCK_ND, Element, Layout> {
     using LayoutW = std::conditional_t<std::is_same_v<Layout, layout::RowMajor>,
         layout::PaddingRowMajor, layout::PaddingColumnMajor>;
     CATLASS_HOST_DEVICE static
@@ -396,9 +372,11 @@ struct PaddingWorkspaceLayoutHelper<PaddingTag::PADDING_BLOCK_ND, Element, Layou
     }
 };
 
-template <class Element, class Layout>
-struct PaddingWorkspaceLayoutHelper<PaddingTag::PADDING_ND, Element, Layout> {
-    using LayoutW = Layout;
+template <class ArchTag_, class Element_, class Layout_, uint32_t COMPUTE_LENGTH>
+struct PaddingLayoutHelper<PaddingMatrix<ArchTag_, Element_, Layout_, COMPUTE_LENGTH>> {
+    PaddingTag paddingTag = PaddingTag::PADDING_ND;
+    using LayoutIn = Layout_;
+    using LayoutW = Layout_;
     CATLASS_HOST_DEVICE static
     Layout GetLayoutW(Layout& layout, uint32_t align) {
         if constexpr (std::is_same_v<Layout, layout::RowMajor>) {
