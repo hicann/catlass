@@ -137,7 +137,7 @@ void Run(Options const &options)
         // AicCoreNum needs to be manually adjusted to match the current aicCoreNum.
         if (m > L1TileShape::M) {
             // Swizzle offset is 1 and direction is 0.
-            uint32_t aicCoreNumStatic = 24;
+            constexpr uint32_t aicCoreNumStatic = 24;
             if (aicCoreNumStatic != aicCoreNum) {
                 std::cout << "ERROR: Manually adjust aicCoreNumStatic[" << aicCoreNumStatic
                     << "] to match the current aicCoreNum[" << aicCoreNum << "]."
