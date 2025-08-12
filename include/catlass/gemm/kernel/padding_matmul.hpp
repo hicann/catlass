@@ -340,6 +340,76 @@ private:
     static_assert(BUFFER_NUM * COMPUTE_LENGTH * sizeof(Element) <= ArchTag::UB_SIZE, "Excedding the UB space!");
 };
 
+template <class T>
+struct PaddingLayoutHelper {
+    static_assert(DEPENDENT_FALSE<T>, "Padding is not implemented for this layout");
+};
+
+template <class ArchTag_, class Element_, class LayoutIn_, class LayoutOut_, uint32_t COMPUTE_LENGTH>
+struct PaddingLayoutHelper<PaddingMatrixBlockND<ArchTag_, Element_, LayoutIn_, LayoutOut_, COMPUTE_LENGTH>> {
+    using LayoutIn = LayoutIn_;
+};
+
+template <class ArchTag_, class Element_, class Layout_, uint32_t COMPUTE_LENGTH>
+struct PaddingLayoutHelper<PaddingMatrix<ArchTag_, Element_, Layout_, COMPUTE_LENGTH>> {
+    using LayoutIn = Layout_;
+};
+
+template<>
+struct PaddingLayoutHelper<void> {
+    using LayoutIn = void;
+};
+
+template <class Padding, class Element, class Layout>
+struct PaddingWorkspaceLayoutHelper {
+    static_assert(DEPENDENT_FALSE<T>, "Unsupported padding, can not find the specialization.");
+}
+
+template <class Element, class Layout>
+struct PaddingWorkspaceLayoutHelper<void, Element, Layout> {
+    using LayoutW = Layout;
+    CATLASS_HOST_DEVICE static
+    LayoutW GetLayoutW(Layout& layout, uint32_t rowAlign, uint32_t colAlign) {
+        return layout;
+    }
+    static size_t GetWorkspaceSize(uint32_t rows, uint32_t cols, uint32_t rowAlign, uint32_t colAlign) {
+        return 0;
+    }
+}
+
+template <class Element, class Layout>
+struct PaddingWorkspaceLayoutHelper<PaddingMatrixBlockNd, Element, Layout> {
+    using LayoutW = std::conditional_t<std::is_same_v<Layout, layout::RowMajor>,
+        layout::PaddingRowMajor, layout::PaddingColumnMajor>;
+    CATLASS_HOST_DEVICE static
+    Layout GetLayoutW(Layout& layout, uint32_t rowAlign, uint32_t colAlign) {
+        return layoutW(layout.shape(0), layout.shape(1), rowAlign, colAlign);
+    }
+    static size_t GetWorkspaceSize(uint32_t rows, uint32_t cols, uint32_t rowAlign, uint32_t colAlign) {
+        return static_cast<size_t>(RoundUp(rows, rowAlign)) * RoundUp(cols, colAlign) * sizeof(Element);
+    }
+}
+
+template <class Element, class Layout>
+struct PaddingWorkspaceLayoutHelper<PaddingMatrix, Element, Layout> {
+    using LayoutW = Layout;
+    CATLASS_HOST_DEVICE static
+    Layout GetLayoutW(Layout& layout, uint32_t align) {
+        if constexpr (std::is_same_v<Layout, layout::RowMajor>) {
+            return LayoutW{layout.shape(0), layout.shape(1), RoundUp(layout.shape(1), align)};
+        } else {
+            return LayoutW{layout.shape(0), layout.shape(1), RoundUp(layout.shape(0), align)};
+        }
+    }
+    static size_t GetWorkspaceSize(uint32_t rows, uint32_t cols, uint32_t align) {
+        if constexpr (std::is_same_v<Layout, layout::RowMajor>) {
+            return static_cast<size_t>(rows) * RoundUp(cols, align) * sizeof(Element);
+        } else {
+            return static_cast<size_t>(cols) * RoundUp(rows, align) * sizeof(Element);
+        }
+    }
+}
+
 template <
     class BlockMmad_,
     class BlockEpilogue_,
