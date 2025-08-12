@@ -86,9 +86,6 @@ class TestFlashAttentionInfer():
         row_max = np.max(sim, axis=-1, keepdims=True)
         # print(row_max_2)
         sim_sub = sim - row_max
-        # print(row_max_2)
-        sim_sub_1 = sim[:, :, 0:512] - row_max_1
-        sim_sub_2 = sim[:, :, -128:] - row_max_2
 
         sim_sub = np.exp(sim_sub)
         # print(d_row_max)

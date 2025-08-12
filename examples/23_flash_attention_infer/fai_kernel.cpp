@@ -594,8 +594,6 @@ public:
             noMaskEndStackNum = noMaskEndStackNum != 0 ? noMaskEndStackNum : blockStackNum;
             
             uint32_t maskedEndIdx = noMaskKvS / pagedBlockSize;
-            AscendC::printf("noMaskKvS:%d\n", noMaskKvS);
-            AscendC::printf("maskedEndIdx:%d\n", maskedEndIdx);
             // masked kvSeqlen loop
             for (uint32_t kvSIdx = maskedStartIdx;
                 // kvSIdx <= maskedEndIdx + preLaunch * blockStackNum;
