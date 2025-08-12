@@ -336,7 +336,7 @@ public:
                     }
                     Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(qkReady);
                 }
-                uint32_t nowkvSIdx = maskSIdx;
+                int32_t nowkvSIdx = maskSIdx;
                 stackSeqTile = qSBlockSize;
                 if (kvSIdx == maskSIdx) {
                     stackSeqTile = noMaskKvS % (pagedBlockSize * blockStackNum);
@@ -349,24 +349,27 @@ public:
                 LayoutP layoutPTemp(rowNum, stackSeqTileRound);
                 GemmCoord actualBlockShapePV{rowNum, embed, stackSeqTile};
                 Arch::CrossCoreWaitFlag(softmaxReady);
-                if (kvSIdx != maskSIdx) {
-                    blockMmadPV(gP[gmPOffset], gV[gmVOffset], gOTmp[gmOTmpOffset],
-                        gBlockTable[blockBOffset], layoutPTemp, layoutVTemp, actualBlockShapePV,
-                        nowkvSIdx, kvSLoopNumTotal, pagedBlockSize, noSkipKvS, strideKV, softmaxReady, noMaskTailS, 1);
-                    if constexpr (!PAGED_CACHE_FLAG) {
-                        gmVOffset += stackSeqTile * strideKV;
+                if (nowkvSIdx >= 0) {
+                    uint32_t delayedKvSIdx = nowkvSIdx;
+                    if (kvSIdx != maskSIdx) {
+                        blockMmadPV(gP[gmPOffset], gV[gmVOffset], gOTmp[gmOTmpOffset],
+                            gBlockTable[blockBOffset], layoutPTemp, layoutVTemp, actualBlockShapePV,
+                            delayedKvSIdx, kvSLoopNumTotal, pagedBlockSize, noSkipKvS, strideKV, softmaxReady, noMaskTailS, 1);
+                        if constexpr (!PAGED_CACHE_FLAG) {
+                            gmVOffset += stackSeqTile * strideKV;
+                        }
+                    } else {
+                        maskTailS = 0;
+                        blockMmadPV(gP[gmPOffset], gV[gmVOffset], gOTmp[gmOTmpOffset],
+                            gBlockTable[blockBOffset], layoutPTemp, layoutVTemp, actualBlockShapePV,
+                            delayedKvSIdx, kvSLoopNumNoMask, pagedBlockSize, noMaskKvS, strideKV, softmaxReady);
+                        if constexpr (!PAGED_CACHE_FLAG) {
+                            gmVOffset += stackSeqTile * strideKV;
+                        }
                     }
-                } 
-                else {
-                    maskTailS = 0;
-                    blockMmadPV(gP[gmPOffset], gV[gmVOffset], gOTmp[gmOTmpOffset],
-                        gBlockTable[blockBOffset], layoutPTemp, layoutVTemp, actualBlockShapePV,
-                        nowkvSIdx, kvSLoopNumNoMask, pagedBlockSize, noMaskKvS, strideKV, softmaxReady);
-                    if constexpr (!PAGED_CACHE_FLAG) {
-                        gmVOffset += stackSeqTile * strideKV;
-                    }
+                    Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(pvReady);
                 }
-                Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(pvReady);
+                
                 stackSeqCount++;
             }
         }
@@ -628,7 +631,7 @@ public:
                     Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(softmaxReady);
                 }
 
-                uint32_t delayedKvSIdx = maskedStartIdx;
+                int32_t delayedKvSIdx = maskedStartIdx;
                 stackSeqTile = maskedKvS;
                 if (kvSIdx == maskedStartIdx) {
                     stackSeqTile = noMaskKvS % (pagedBlockSize * blockStackNum);
@@ -642,20 +645,22 @@ public:
                 uint32_t curStackTileMod = (stackSeqCount - preLaunch) % (preLaunch + 1);
                 uint32_t gmOffsetOTmp = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) +
                     curStackTileMod * WORKSPACE_BLOCK_SIZE_DB;
-                Arch::CrossCoreWaitFlag(pvReady);
-                // rescale O
-                epilogueRescaleO(
-                    gO[gmOffsetO],
-                    gOTmp[gmOffsetOTmp],
-                    layoutO,
-                    layoutOTmp,
-                    actualBlockShapePV,
-                    kvSIdx,
-                    qSBlockSize,
-                    qNBlockSize,
-                    (delayedKvSIdx == 0),
-                    (stackSeqCount - preLaunch == totalStackSeqNum - 1),
-                    curStackTileMod);
+                if (delayedKvSIdx >= 0) {
+                    Arch::CrossCoreWaitFlag(pvReady);
+                    // rescale O
+                    epilogueRescaleO(
+                        gO[gmOffsetO],
+                        gOTmp[gmOffsetOTmp],
+                        layoutO,
+                        layoutOTmp,
+                        actualBlockShapePV,
+                        kvSIdx,
+                        qSBlockSize,
+                        qNBlockSize,
+                        (delayedKvSIdx == 0),
+                        (stackSeqCount - preLaunch == totalStackSeqNum - 1),
+                        curStackTileMod);
+                }  
                 stackSeqCount++;
             }
         }

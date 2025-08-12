@@ -140,7 +140,6 @@ void Run(const Options &options)
 
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
-    aicCoreNum = 24;
 
     // Parameters initialization.
     int32_t batch = options.batch;
