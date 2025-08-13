@@ -203,9 +203,9 @@ template <class Layout>
 Layout GetLayout(uint32_t rows, uint32_t cols)
 {
     if constexpr (std::is_same_v<LayoutA, layout::RowMajor> || std::is_same_v<LayoutA, layout::ColumnMajor>) {
-        layout = Layout{rows, cols};
+        return Layout{rows, cols};
     } else if constexpr (std::is_same_v<LayoutA, layout::zN> || std::is_same_v<LayoutA, layout::nZ>) {
-        layout = Layout::template MakeLayout<ElementA>(rows, cols);
+        return Layout::template MakeLayout<ElementA>(rows, cols);
     }
 }
 
