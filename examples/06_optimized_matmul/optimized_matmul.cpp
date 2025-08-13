@@ -192,20 +192,20 @@ bool IsNeedPadding(layout::nZ layout, uint32_t align)
 template <class Layout>
 size_t GetLen(Layout layout)
 {
-    if constexpr (std::is_same_v<LayoutA, layout::RowMajor> || std::is_same_v<LayoutA, layout::ColumnMajor>) {
+    if constexpr (std::is_same_v<Layout, layout::RowMajor> || std::is_same_v<Layout, layout::ColumnMajor>) {
         return static_cast<size_t>(layout.shape(0)) * layout.shape(1);
-    } else if constexpr (std::is_same_v<LayoutA, layout::zN> || std::is_same_v<LayoutA, layout::nZ>) {
+    } else if constexpr (std::is_same_v<Layout, layout::zN> || std::is_same_v<Layout, layout::nZ>) {
         return static_cast<size_t>(layout.shape(0)) * layout.shape(1) * layout.shape(2) * layout.shape(3);
     }
 }
 
-template <class Layout>
+template <class Element, class Layout>
 Layout GetLayout(uint32_t rows, uint32_t cols)
 {
-    if constexpr (std::is_same_v<LayoutA, layout::RowMajor> || std::is_same_v<LayoutA, layout::ColumnMajor>) {
+    if constexpr (std::is_same_v<Layout, layout::RowMajor> || std::is_same_v<Layout, layout::ColumnMajor>) {
         return Layout{rows, cols};
-    } else if constexpr (std::is_same_v<LayoutA, layout::zN> || std::is_same_v<LayoutA, layout::nZ>) {
-        return Layout::template MakeLayout<ElementA>(rows, cols);
+    } else if constexpr (std::is_same_v<Layout, layout::zN> || std::is_same_v<Layout, layout::nZ>) {
+        return Layout::template MakeLayout<Element>(rows, cols);
     }
 }
 
@@ -238,9 +238,9 @@ void Run(Options const &options)
     uint32_t n = options.problemShape.n();
     uint32_t k = options.problemShape.k();
 
-    LayoutA layoutA = GetLayout<LayoutA>(m, k);
-    LayoutB layoutB = GetLayout<LayoutB>(k, n);
-    LayoutC layoutC = GetLayout<LayoutC>(m, n);
+    LayoutA layoutA = GetLayout<ElementA, LayoutA>(m, k);
+    LayoutB layoutB = GetLayout<ElementB, LayoutB>(k, n);
+    LayoutC layoutC = GetLayout<ElementC, LayoutC>(m, n);
     size_t lenA = GetLen(layoutA);
     size_t lenB = GetLen(layoutB);
     size_t lenC = GetLen(layoutC);
