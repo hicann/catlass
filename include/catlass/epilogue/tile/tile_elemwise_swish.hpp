@@ -14,15 +14,13 @@
 #include "catlass/catlass.hpp"
 
 namespace Catlass::Epilogue::Tile {
-
 template <
-    /// Tag indicating architecture
+    // / Tag indicating architecture
     class ArchTag_,
-    /// Compute data type
+    // / Compute data type
     class ComputeType_,
-    /// COMPUTE_LENGTH of the compute buffer
-    uint32_t COMPUTE_COMPUTE_LENGTH_
->
+    // / COMPUTE_LENGTH of the compute buffer
+    uint32_t COMPUTE_COMPUTE_LENGTH_>
 struct TileElemWiseSwish {
     using ArchTag = ArchTag_;
     using ElementCompute = typename ComputeType_::Element;
@@ -33,14 +31,11 @@ struct TileElemWiseSwish {
     TileElemWiseSwish() {}
 
     CATLASS_DEVICE
-    void operator()(
-        AscendC::LocalTensor<ElementCompute> const &dstLocal,
-        AscendC::LocalTensor<ElementCompute> const &srcLocal
-    )
+    void operator () (AscendC::LocalTensor<ElementCompute> const & dstLocal,
+        AscendC::LocalTensor<ElementCompute> const & srcLocal)
     {
         using namespace AscendC;
-        if constexpr (!std::is_same_v<ElementCompute, float32_t>)
-        {
+        if constexpr (!std::is_same_v<ElementCompute, float32_t>) {
             TPipe pipe;
             TBuf<QuePosition::VECCALC> tmp1;
             TBuf<QuePosition::VECCALC> tmp2;
@@ -53,7 +48,7 @@ struct TileElemWiseSwish {
             Muls(p2, p1, (float)-1, COMPUTE_LENGTH);
             Exp(p2, p2, COMPUTE_LENGTH);
             Adds(p2, p2, (float)1, COMPUTE_LENGTH);
-            Div(p2, p1, p2, COMPUTE_LENGTH);            
+            Div(p2, p1, p2, COMPUTE_LENGTH);
             Cast(dstLocal, p2, RoundMode::CAST_RINT, COMPUTE_LENGTH);
             tmp1.FreeTensor(p1);
             tmp2.FreeTensor(p2);
@@ -63,10 +58,8 @@ struct TileElemWiseSwish {
             Adds(dstLocal, dstLocal, (ComputeType_)1, COMPUTE_LENGTH);
             Div(dstLocal, srcLocal, dstLocal, COMPUTE_LENGTH);
         }
-
     }
 };
-
 } // namespace Catlass::Epilogue::Tile
 
 #endif

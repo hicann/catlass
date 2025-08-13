@@ -14,15 +14,13 @@
 #include "catlass/catlass.hpp"
 
 namespace Catlass::Epilogue::Tile {
-
 template <
-    /// Tag indicating architecture
+    // / Tag indicating architecture
     class ArchTag_,
-    /// Compute data type
+    // / Compute data type
     class ComputeType_,
-    /// Length of the compute buffer
-    uint32_t COMPUTE_LENGTH_
->
+    // / Length of the compute buffer
+    uint32_t COMPUTE_LENGTH_>
 struct TileElemWiseRelu {
     using ArchTag = ArchTag_;
     using ElementCompute = typename ComputeType_::Element;
@@ -33,16 +31,13 @@ struct TileElemWiseRelu {
     TileElemWiseRelu() {}
 
     CATLASS_DEVICE
-    void operator()(
-        AscendC::LocalTensor<ElementCompute> const &ubOut,
-        AscendC::LocalTensor<ElementCompute> const &ubIn0
-    )
+    void operator () (AscendC::LocalTensor<ElementCompute> const & ubOut,
+        AscendC::LocalTensor<ElementCompute> const & ubIn0)
     {
         // Do the calculation
         AscendC::Relu(ubOut, ubIn0, COMPUTE_LENGTH);
     }
 };
-
 } // namespace Catlass::Epilogue::Tile
 
 #endif

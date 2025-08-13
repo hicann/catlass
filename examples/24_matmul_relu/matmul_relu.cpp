@@ -8,7 +8,7 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0, 
+// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0,
 // optimizing stack space. If you need to use the ShapeInfo of the AscendC Tensor, please undefine this macro.
 #ifndef K_MAX_SHAPE_DIM
 #define K_MAX_SHAPE_DIM 0
@@ -39,8 +39,6 @@
 
 using namespace Catlass;
 using fp16_t = op::fp16_t;
-
-
 
 struct Options {
     const std::string HELPER = "24_matmul_add m n k [device_id]";
@@ -169,7 +167,7 @@ void Run(Options const &options)
         uint8_t *deviceWorkspace{nullptr};
         if (sizeWorkspace > 0) {
             ACL_CHECK(
-                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace,ACL_MEM_MALLOC_HUGE_FIRST));
+                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
         }
         matmul_op.Initialize(arguments, deviceWorkspace);
         matmul_op(stream, aicCoreNum, fftsAddr);
@@ -195,7 +193,7 @@ void Run(Options const &options)
         uint8_t *deviceWorkspace{nullptr};
         if (sizeWorkspace > 0) {
             ACL_CHECK(
-                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace,ACL_MEM_MALLOC_HUGE_FIRST));
+                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
         }
         matmul_op.Initialize(arguments, deviceWorkspace);
         matmul_op(stream, aicCoreNum, fftsAddr);
@@ -207,7 +205,6 @@ void Run(Options const &options)
         // Copy the result from device to host
         ACL_CHECK(aclrtMemcpy(hostD.data(), sizeD, deviceD, sizeD, ACL_MEMCPY_DEVICE_TO_HOST));
     }
-
 
     // Compute the golden result
     std::vector<float> hostGolden(lenD);
