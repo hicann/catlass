@@ -440,9 +440,9 @@ public:
         uint32_t columnNumRound,
         uint32_t dmUbOffsetCurCycle,
         uint32_t rowOffset,
-        uint32_t kvSIdx)
+        uint32_t isFirstStackTile)
     {
-        if (kvSIdx == 0) {
+        if (isFirstStackTile) {
             AscendC::DataCopy(
                 hmUbTensor[rowOffset], lmUbTensor[rowOffset],
                 AscendC::DataCopyParams(1, rowNumCurLoopRound / FLOAT_BLOCK_SIZE, 0, 0));
@@ -545,9 +545,9 @@ public:
         uint32_t rowNumCurLoopRound,
         uint32_t dmUbOffsetCurCycle,
         uint32_t rowOffset,
-        uint32_t kvSIdx)
+        uint32_t isFirstStackTile)
     {
-        if (kvSIdx == 0) {
+        if (isFirstStackTile) {
             // *** gl = ll
             AscendC::DataCopy(
                 glUbTensor[rowOffset], llUbTensor[rowOffset],
@@ -604,7 +604,7 @@ public:
     CATLASS_DEVICE
     void SubCoreCompute(AscendC::GlobalTensor<ElementOutput> gOutput, AscendC::GlobalTensor<ElementInput> gInput,
                         const LayoutOutput &layoutOutput, const LayoutInput &layoutInput,
-                        uint32_t rowOffset, uint32_t kvSIdx, uint32_t pingpongFlag, uint32_t curStackTileMod)
+                        uint32_t rowOffset, uint32_t isFirstStackTile, uint32_t pingpongFlag, uint32_t curStackTileMod)
     {
         uint32_t rowNumCurLoop = layoutInput.shape(0);
         uint32_t rowNumCurLoopRound = RoundUp(rowNumCurLoop, FLOAT_BLOCK_SIZE);
@@ -624,7 +624,7 @@ public:
 
         CalcLocalRowMax(sUbOffset, rowNumCurLoopRound, columnNum, columnNumRound, rowOffset);
 
-        UpdateGlobalRowMax(rowNumCurLoop, rowNumCurLoopRound, columnNum, columnNumRound, dmUbOffsetCurCycle, rowOffset, kvSIdx);
+        UpdateGlobalRowMax(rowNumCurLoop, rowNumCurLoopRound, columnNum, columnNumRound, dmUbOffsetCurCycle, rowOffset, isFirstStackTile);
 
         CalcExp(sUbOffset, rowNumCurLoop, rowNumCurLoopRound, columnNum, columnNumRound, rowOffset);
 
@@ -639,7 +639,7 @@ public:
         CopyPUbToGm(gOutput, sUbOffset, rowNumCurLoop, columnNumRound, columnNumPad);
         AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(pingpongFlag);
 
-        UpdateGlobalRowSum(sUbOffset, rowNumCurLoop, rowNumCurLoopRound, dmUbOffsetCurCycle, rowOffset, kvSIdx);
+        UpdateGlobalRowSum(sUbOffset, rowNumCurLoop, rowNumCurLoopRound, dmUbOffsetCurCycle, rowOffset, isFirstStackTile);
     }
 
     CATLASS_DEVICE
@@ -647,7 +647,7 @@ public:
                         AscendC::GlobalTensor<ElementMask> gMask,
                         const LayoutOutput &layoutOutput, const LayoutInput &layoutInput,
                         const LayoutInput &layoutMask,
-                        uint32_t rowOffset, uint32_t kvSIdx, uint32_t qSBlockSize,
+                        uint32_t rowOffset, uint32_t isFirstStackTile, uint32_t qSBlockSize,
                         uint32_t pingpongFlag, uint32_t curStackTileMod,
                         uint32_t proTokenIdx, uint32_t proTokenNum, uint32_t epiTokenNum, uint32_t integralHeadNum)
     {
@@ -681,7 +681,7 @@ public:
 
         CalcLocalRowMax(sUbOffset, rowNumCurLoopRound, columnNum, columnNumRound, rowOffset);
 
-        UpdateGlobalRowMax(rowNumCurLoop, rowNumCurLoopRound, columnNum, columnNumRound, dmUbOffsetCurCycle, rowOffset, kvSIdx);
+        UpdateGlobalRowMax(rowNumCurLoop, rowNumCurLoopRound, columnNum, columnNumRound, dmUbOffsetCurCycle, rowOffset, isFirstStackTile);
 
         CalcExp(sUbOffset, rowNumCurLoop, rowNumCurLoopRound, columnNum, columnNumRound, rowOffset);
 
@@ -698,13 +698,13 @@ public:
         AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(pingpongFlag);
         AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID2);
 
-        UpdateGlobalRowSum(sUbOffset, rowNumCurLoop, rowNumCurLoopRound, dmUbOffsetCurCycle, rowOffset, kvSIdx);
+        UpdateGlobalRowSum(sUbOffset, rowNumCurLoop, rowNumCurLoopRound, dmUbOffsetCurCycle, rowOffset, isFirstStackTile);
     }
 
     CATLASS_DEVICE
     void operator()(AscendC::GlobalTensor<ElementOutput> gOutput, AscendC::GlobalTensor<ElementInput> gInput,
                     const LayoutOutput &layoutOutput, const LayoutInput &layoutInput, GemmCoord actualBlockShape,
-                    uint32_t kvSIdx, uint32_t qSBlockSize, uint32_t qNBlockSize, uint32_t curStackTileMod)
+                    uint32_t isFirstStackTile, uint32_t qSBlockSize, uint32_t qNBlockSize, uint32_t curStackTileMod)
     {
         uint32_t rowNum = actualBlockShape.m();
         uint32_t columnNum = actualBlockShape.n();
@@ -746,7 +746,7 @@ public:
                     gInputCurLoop,
                     layoutOutputCurLoop,
                     layoutInputCurLoop,
-                    rowOffsetCurLoop, kvSIdx, pingpongFlag, curStackTileMod);
+                    rowOffsetCurLoop, isFirstStackTile, pingpongFlag, curStackTileMod);
             }
         }
     }
@@ -756,7 +756,7 @@ public:
                     AscendC::GlobalTensor<ElementMask> gMask,
                     const LayoutOutput &layoutOutput, const LayoutInput &layoutInput, const LayoutInput &layoutMask,
                     GemmCoord actualBlockShape,
-                    uint32_t kvSIdx, uint32_t qSBlockSize, uint32_t qNBlockSize, uint32_t curStackTileMod)
+                    uint32_t isFirstStackTile, uint32_t qSBlockSize, uint32_t qNBlockSize, uint32_t curStackTileMod)
     {
         uint32_t rowNum = actualBlockShape.m();
         uint32_t columnNum = actualBlockShape.n();
@@ -818,7 +818,7 @@ public:
                     layoutInputCurLoop,
                     layoutMaskThisSubBlock,
                     rowOffsetCurLoop,
-                    kvSIdx,
+                    isFirstStackTile,
                     qSBlockSize,
                     pingpongFlag,
                     curStackTileMod,

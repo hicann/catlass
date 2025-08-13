@@ -550,7 +550,7 @@ public:
                     layOutP,
                     layOutS,
                     actualBlockShapeQK,
-                    kvSIdx,
+                    (stackSeqCount == 0),
                     qSBlockSize,
                     qNBlockSize,
                     curStackTileMod);
@@ -582,7 +582,7 @@ public:
                         delayedKvSIdx,
                         qSBlockSize,
                         qNBlockSize,
-                        (delayedKvSIdx == 0),
+                        (stackSeqCount == 0),
                         0,
                         curStackTileMod);
                 }
@@ -624,7 +624,7 @@ public:
                         layOutS,
                         layOutMask,
                         actualBlockShapeQK,
-                        kvSIdx,
+                        (stackSeqCount == 0),
                         qSBlockSize,
                         qNBlockSize,
                         curStackTileMod);
@@ -657,7 +657,7 @@ public:
                         kvSIdx,
                         qSBlockSize,
                         qNBlockSize,
-                        (delayedKvSIdx == 0),
+                        (stackSeqCount == 0),
                         (stackSeqCount - preLaunch == totalStackSeqNum - 1),
                         curStackTileMod);
                 }  
