@@ -23,6 +23,12 @@ struct EpilogueAtlasA2ElemWiseOneSource {
     static constexpr uint32_t OPERANDS_NUM = 3;
 };
 
+struct EpilogueAtlasA2ElemWiseNoSource {
+    using ArchTag = Arch::AtlasA2;
+    // Number of operands. Including C, D 2 operands
+    static constexpr uint32_t OPERANDS_NUM = 2;
+};
+
 // For AtlasA2, FA Softmax
 struct EpilogueAtlasA2FASoftmax {
     using ArchTag = Arch::AtlasA2;
