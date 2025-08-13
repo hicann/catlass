@@ -189,6 +189,26 @@ bool IsNeedPadding(layout::nZ layout, uint32_t align)
     return false;
 }
 
+template <class Layout>
+size_t GetLen(Layout layout)
+{
+    if constexpr (std::is_same_v<LayoutA, layout::RowMajor> || std::is_same_v<LayoutA, layout::ColumnMajor>) {
+        return static_cast<size_t>(layout.shape(0)) * layout.shape(1);
+    } else if constexpr (std::is_same_v<LayoutA, layout::zN> || std::is_same_v<LayoutA, layout::nZ>) {
+        return static_cast<size_t>(layout.shape(0)) * layout.shape(1) * layout.shape(2) * layout.shape(3);
+    }
+}
+
+template <class Layout>
+Layout GetLayout(uint32_t rows, uint32_t cols)
+{
+    if constexpr (std::is_same_v<LayoutA, layout::RowMajor> || std::is_same_v<LayoutA, layout::ColumnMajor>) {
+        layout = Layout{rows, cols};
+    } else if constexpr (std::is_same_v<LayoutA, layout::zN> || std::is_same_v<LayoutA, layout::nZ>) {
+        layout = Layout::template MakeLayout<ElementA>(rows, cols);
+    }
+}
+
 template <class Adapter>
 void RunAdapter(Adapter matmul_op, typename Adapter::Arguments args, aclrtStream stream,
     uint32_t aicCoreNum, uint64_t fftsAddr)
@@ -218,26 +238,12 @@ void Run(Options const &options)
     uint32_t n = options.problemShape.n();
     uint32_t k = options.problemShape.k();
 
-    LayoutA layoutA;
-    LayoutB layoutB;
-    LayoutC layoutC{m, n};
-    size_t lenA{0};
-    size_t lenB{0};
-    size_t lenC{0};
-    if constexpr (std::is_same_v<LayoutA, layout::RowMajor> || std::is_same_v<LayoutA, layout::ColumnMajor>) {
-        layoutA = LayoutA{m, k};
-        lenA = static_cast<size_t>(m) * k;
-    } else if constexpr (std::is_same_v<LayoutA, layout::zN> || std::is_same_v<LayoutA, layout::nZ>) {
-        layoutA = LayoutA::template MakeLayout<ElementA>(m, k);
-        lenA = static_cast<size_t>(layoutA.shape(0)) * layoutA.shape(1) * layoutA.shape(2) * layoutA.shape(3);
-    }
-    if constexpr (std::is_same_v<LayoutB, layout::RowMajor> || std::is_same_v<LayoutB, layout::ColumnMajor>) {
-        layoutB = LayoutB{k, n};
-        lenB = static_cast<size_t>(k) * n;
-    } else if constexpr (std::is_same_v<LayoutB, layout::zN> || std::is_same_v<LayoutB, layout::nZ>) {
-        layoutB = LayoutB::template MakeLayout<ElementB>(k, n);
-        lenB = static_cast<size_t>(layoutB.shape(0)) * layoutB.shape(1) * layoutB.shape(2) * layoutB.shape(3);
-    }
+    LayoutA layoutA = GetLayout<LayoutA>(m, k);
+    LayoutB layoutB = GetLayout<LayoutB>(k, n);
+    LayoutC layoutC = GetLayout<LayoutC>(m, n);
+    size_t lenA = GetLen(layoutA);
+    size_t lenB = GetLen(layoutB);
+    size_t lenC = GetLen(layoutC);
 
     size_t sizeA = lenA * sizeof(fp16_t);
     size_t sizeB = lenB * sizeof(fp16_t);
