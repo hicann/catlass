@@ -218,17 +218,31 @@ void Run(Options const &options)
     uint32_t n = options.problemShape.n();
     uint32_t k = options.problemShape.k();
 
-    size_t lenA = static_cast<size_t>(m) * k;
-    size_t lenB = static_cast<size_t>(k) * n;
-    size_t lenC = static_cast<size_t>(m) * n;
+    LayoutA layoutA;
+    LayoutB layoutB;
+    LayoutC layoutC{m, n};
+    size_t lenA{0};
+    size_t lenB{0};
+    size_t lenC{0};
+    if constexpr (std::is_same_v<LayoutA, layout::RowMajor> || std::is_same_v<LayoutA, layout::ColumnMajor>) {
+        layoutA = LayoutA{m, k};
+        lenA = static_cast<size_t>(m) * k;
+    } else if constexpr (std::is_same_v<LayoutA, layout::zN> || std::is_same_v<LayoutA, layout::nZ>) {
+        layoutA = LayoutA::template MakeLayout<ElementA>(m, k);
+        lenA = static_cast<size_t>(layoutA.shape(0)) * layoutA.shape(1) * layoutA.shape(2) * layoutA.shape(3);
+    }
+    if constexpr (std::is_same_v<LayoutB, layout::RowMajor> || std::is_same_v<LayoutB, layout::ColumnMajor>) {
+        layoutB = LayoutB{k, n};
+        lenB = static_cast<size_t>(k) * n;
+    } else if constexpr (std::is_same_v<LayoutB, layout::zN> || std::is_same_v<LayoutB, layout::nZ>) {
+        layoutB = LayoutB::template MakeLayout<ElementB>(k, n);
+        lenB = static_cast<size_t>(layoutB.shape(0)) * layoutB.shape(1) * layoutB.shape(2) * layoutB.shape(3);
+    }
 
     size_t sizeA = lenA * sizeof(fp16_t);
     size_t sizeB = lenB * sizeof(fp16_t);
     size_t sizeC = lenC * sizeof(fp16_t);
 
-    LayoutA layoutA{m, k};
-    LayoutB layoutB{k, n};
-    LayoutC layoutC{m, n};
     bool isNeedPaddingA = IsNeedPadding(layoutA, alignByElement);
     bool isNeedPaddingB = IsNeedPadding(layoutB, alignByElement);
 
