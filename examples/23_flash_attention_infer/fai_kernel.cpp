@@ -472,6 +472,7 @@ public:
             // Get the offset of each core on the GM.
             while (taskIdx >= curTotalTaskNum) {
                 curBatch++;
+                oBatchOffset += qSeqlen * qHeads * embed;
                 preTotalTaskNum = curTotalTaskNum;
                 qSeqlen = static_cast<uint32_t>(gActualQseqlen.GetValue(curBatch));
                 kvSeqlen = static_cast<uint32_t>(gActualKvseqlen.GetValue(curBatch));
@@ -481,7 +482,6 @@ public:
                 curQSBlockTile = GetQSBlockTile(kvSeqlen);
                 curQSBlockNum = CeilDiv(qSeqlen, curQSBlockTile);
                 curTotalTaskNum += curQNBlockNum * curQSBlockNum;
-                oBatchOffset += qSeqlen * qHeads * embed;
             }
             uint32_t taskIdxCurBatch = taskIdx - preTotalTaskNum;
             uint32_t qSBlockIdx = taskIdxCurBatch / curQNBlockNum;
