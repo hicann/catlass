@@ -54,7 +54,7 @@ public:
     using ElementCompute = ElementD;
 
     // Check the layout type of C and D
-    static_assert(std::is_same_v<LayoutC, layout::RowMajor> && std::is_same_v<LayoutD, layout::RowMajor>, 
+    static_assert(std::is_same_v<LayoutC, layout::RowMajor> && std::is_same_v<LayoutD, layout::RowMajor>,
         "Layout type of C, D must be RowMajor");
     using LayoutComputeInUb = layout::RowMajor;
 

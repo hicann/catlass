@@ -275,7 +275,7 @@ template <class ElementT> struct Gelu {
 
 
 template <class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementGolden, class LayoutGolden>
-void ComputeMatmulElemWiseRelu( // 函数名改为Relu
+void ComputeMatmulElemWiseRelu(
     const GemmCoord &problemShape, const std::vector<ElementA> &dataA, const LayoutA &layoutA,
     const std::vector<ElementB> &dataB, const LayoutB &layoutB, std::vector<ElementGolden> &dataGolden,
     const LayoutGolden &layoutGolden)
