@@ -73,6 +73,7 @@ struct TileCopyOpt : public Catlass::Gemm::Tile::TileCopy<ArchTag, AType, BType,
     using CopyL1ToBT = typename Base::CopyL1ToBT;
 };
 
+using PaddingTag = Catlass::Gemm::Kernel::PaddingTag;
 template <class ArchTag, class Element, class Layout, uint32_t COMPUTE_LENGTH, PaddingTag>
 struct PaddingHelper {
     static_assert(DEPENDENT_FALSE<ArchTag>, "Padding is not implemented for this layout");
@@ -106,7 +107,6 @@ constexpr bool ENABLE_SHUFFLE_K = true;
 using ElementA = half;
 using ElementB = half;
 using ElementC = half;
-using ElementWorkspace = float;
 using LayoutA = layout::RowMajor;
 using LayoutB = layout::ColumnMajor;
 using LayoutC = layout::RowMajor;
@@ -179,6 +179,16 @@ bool IsNeedPadding(layout::ColumnMajor layout, uint32_t align)
     }
 }
 
+bool IsNeedPadding(layout::zN layout, uint32_t align)
+{
+    return false;
+}
+
+bool IsNeedPadding(layout::nZ layout, uint32_t align)
+{
+    return false;
+}
+
 template <class Adapter>
 void RunAdapter(Adapter matmul_op, typename Adapter::Arguments args, aclrtStream stream,
     uint32_t aicCoreNum, uint64_t fftsAddr)
@@ -221,6 +231,8 @@ void Run(Options const &options)
     LayoutC layoutC{m, n};
     bool isNeedPaddingA = IsNeedPadding(layoutA, alignByElement);
     bool isNeedPaddingB = IsNeedPadding(layoutB, alignByElement);
+
+    // Layout zN or layout nZ does not require padding operation.
     constexpr PaddingTag paddingTagA = (std::is_same_v<LayoutA, layout::zN> || std::is_same_v<LayoutA, layout::nZ>) ? 
         PaddingTag::NO_PADDING : PaddingTag::PADDING_BLOCK_ND;
     constexpr PaddingTag paddingTagB = (std::is_same_v<LayoutB, layout::zN> || std::is_same_v<LayoutB, layout::nZ>) ? 
