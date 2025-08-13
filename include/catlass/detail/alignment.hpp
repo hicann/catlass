@@ -12,13 +12,19 @@
 #define CATLASS_ALIGNMENT_HPP
 
 #include "catlass/detail/macros.hpp"
+#include "tla/numeric/integral_constant.hpp"
 
 template <uint32_t ALIGN, typename T>
 CATLASS_HOST_DEVICE
-constexpr T RoundUp(const T &val)
+constexpr auto RoundUp(const T &val)
 {
     static_assert(ALIGN != 0, "ALIGN must not be 0");
-    return (val + ALIGN - 1) / ALIGN * ALIGN;
+    if constexpr (tla::is_static<T>::value) {
+        constexpr uint32_t res = (T::value + ALIGN - 1) / ALIGN * ALIGN;
+        return tla::Int<res>{};
+    } else {
+        return (val + ALIGN - 1) / ALIGN * ALIGN;
+    }
 }
 
 template <class T>
@@ -30,10 +36,15 @@ constexpr T RoundUp(const T &val, const T align)
 
 template <uint32_t ALIGN, typename T>
 CATLASS_HOST_DEVICE
-constexpr T RoundDown(const T val)
+constexpr auto RoundDown(const T val)
 {
     static_assert(ALIGN != 0, "ALIGN must not be 0");
-    return val / ALIGN * ALIGN;
+    if constexpr (tla::is_static<T>::value) {
+        constexpr uint32_t res = T::value / ALIGN * ALIGN;
+        return tla::Int<res>{};
+    } else {
+        return val / ALIGN * ALIGN;
+    }
 }
 
 template <class T>
@@ -45,10 +56,15 @@ constexpr T RoundDown(const T val, const T align)
 
 template <uint32_t DIVISOR, typename T>
 CATLASS_HOST_DEVICE
-constexpr T CeilDiv(const T dividend)
+constexpr auto CeilDiv(const T dividend)
 {
     static_assert(DIVISOR != 0, "DIVISOR must not be 0");
-    return (dividend + DIVISOR - 1) / DIVISOR;
+    if constexpr (tla::is_static<T>::value) {
+        constexpr uint32_t res = (T::value + DIVISOR - 1) / DIVISOR;
+        return tla::Int<res>{};
+    } else {
+        return (dividend + DIVISOR - 1) / DIVISOR;
+    }
 }
 
 template <class T>

@@ -13,24 +13,26 @@
 
 #include "tla/layout.hpp"                     // tla::Shape
 #include "tla/numeric/integral_constant.hpp"  // tla::is_integral
+#include "tla/numeric/integer_sequence.hpp"
 
 namespace tla {
 //
 // Tensor
 //
 
-template <class BuiltinTensor, class Layout_, AscendC::TPosition Position>
+template <class BuiltinTensor, class Layout_, class Coord_, AscendC::TPosition Position>
 struct Tensor {
     using Element = typename BuiltinTensor::PrimType;
     using Layout = Layout_;
+    using Coord = Coord_;
     static constexpr AscendC::TPosition position = Position;
 
     CATLASS_HOST_DEVICE constexpr
     Tensor() {}
 
     CATLASS_HOST_DEVICE constexpr
-    Tensor(BuiltinTensor const& builtinTensor, Layout const& layout)
-        : rep_(builtinTensor, layout) {}
+    Tensor(BuiltinTensor const& builtinTensor, Layout const& layout, Coord const& coord = {})
+        : rep_(builtinTensor, layout, coord) {}
 
     //
     // Accessors
@@ -63,6 +65,12 @@ struct Tensor {
     }
 
     CATLASS_HOST_DEVICE constexpr
+    decltype(auto) coord() const
+    {
+        return get<2>(rep_);
+    }
+
+    CATLASS_HOST_DEVICE constexpr
     decltype(auto) shape() const
     {
         return layout().shape();
@@ -74,21 +82,51 @@ struct Tensor {
         return layout().stride();
     }
 
-    tla::tuple<BuiltinTensor, Layout> rep_;
+    tla::tuple<BuiltinTensor, Layout, Coord> rep_;
 };
+
+namespace detail {
+
+template <size_t N, typename Sequence>
+struct MakeIntTupleImpl;
+
+template <size_t N, size_t... Is>
+struct MakeIntTupleImpl<N, tla::index_sequence<Is...>> {
+    using type = tla::tuple<tla::Int<Is*0>...>;
+};
+
+template <size_t N>
+using MakeIntTuple = typename MakeIntTupleImpl<N, tla::make_index_sequence<N>>::type;
+
+} // end namespace detail
 
 template <class BuiltinTensor, class Layout, AscendC::TPosition Position>
 CATLASS_HOST_DEVICE constexpr
 auto MakeTensor(BuiltinTensor const& builtinTensor, Layout const& layout)
 {
-    return Tensor<BuiltinTensor, Layout, Position>(builtinTensor, layout);
+    using Coord = detail::MakeIntTuple<Layout::rank>;
+    return Tensor<BuiltinTensor, Layout, Coord, Position>(builtinTensor, layout);
 }
 
 template <class BuiltinTensor, class Layout, class PositionType>
 CATLASS_HOST_DEVICE constexpr
 auto MakeTensor(BuiltinTensor const& builtinTensor, Layout const& layout, PositionType)
 {
-    return Tensor<BuiltinTensor, Layout, PositionType::POSITION>(builtinTensor, layout);
+    return MakeTensor<BuiltinTensor, Layout, PositionType::POSITION>(builtinTensor, layout);
+}
+
+template <class BuiltinTensor, class Layout, class Coord, AscendC::TPosition Position>
+CATLASS_HOST_DEVICE constexpr
+auto MakeTensor(BuiltinTensor const& builtinTensor, Layout const& layout, Coord const& coord)
+{
+    return Tensor<BuiltinTensor, Layout, Coord, Position>(builtinTensor, layout, coord);
+}
+
+template <class BuiltinTensor, class Layout, class Coord, class PositionType>
+CATLASS_HOST_DEVICE constexpr
+auto MakeTensor(BuiltinTensor const& builtinTensor, Layout const& layout, Coord const& coord, PositionType)
+{
+    return Tensor<BuiltinTensor, Layout, Coord, PositionType::POSITION>(builtinTensor, layout, coord);
 }
 
 template <class Tensor, class Coord, class Shape>
@@ -96,11 +134,11 @@ CATLASS_DEVICE constexpr
 auto GetTile(Tensor const& tensor, Coord const& coord, Shape const& shape)
 {
     auto layout = tensor.layout();
-    auto offset = layout(coord);
     auto builtinTensor = tensor.data();
     auto layoutNew = MakeLayoutTile(layout, shape);
-    return MakeTensor<decltype(builtinTensor), decltype(layoutNew),
-                      Tensor::position>(builtinTensor[offset], layoutNew);
+    auto coordNew = Add(tensor.coord(), coord);
+    return MakeTensor<decltype(builtinTensor), decltype(layoutNew), decltype(coordNew), Tensor::position>(
+        builtinTensor, layoutNew, coordNew);
 }
 
 } // end namespace tla

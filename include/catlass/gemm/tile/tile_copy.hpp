@@ -68,42 +68,61 @@ struct TileCopy {
 template <
     /// Tag indicating architecture
     class ArchTag,
-    class TensorA,
+    class ElementA_,
     class LayoutTagA,
-    class TensorB,
+    class ElementB_,
     class LayoutTagB,
-    class TensorC,
+    class ElementC_,
     class LayoutTagC,
-    class TensorBias = void,
-    class LayoutTagBias = void
+    class ElementBias = void,
+    class LayoutTagBias = void,
+    class L0CCopyMode = CopyToGM
 >
 struct PackedTileCopyTla {
-    using ElementA = typename TensorA::Element;
-    using ElementB = typename TensorB::Element;
+    using ElementA = ElementA_;
+    using ElementB = ElementB_;
     using ElementAccumulator =
         typename Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
 
-    using LayoutL1A = detail::TagToLayout_t<ElementA,
-        typename helper::L1ATypeSelector<Gemm::GemmType<ElementA, LayoutTagA>>::L1AType::Layout>;
-    using LayoutL1B = detail::TagToLayout_t<ElementB,
-        typename helper::L1BTypeSelector<Gemm::GemmType<ElementB, LayoutTagB>>::L1BType::Layout>;
-    using LayoutL0A = detail::TagToLayout_t<ElementA, layout::zZ>;
-    using LayoutL0B = detail::TagToLayout_t<ElementB, layout::nZ>;
+    using LayoutTagL1A = typename helper::L1ATypeSelector<Gemm::GemmType<ElementA, LayoutTagA>>::L1AType::Layout;
+    using LayoutTagL1B = typename helper::L1BTypeSelector<Gemm::GemmType<ElementB, LayoutTagB>>::L1BType::Layout;
+    using LayoutTagL0A = layout::zZ;
+    using LayoutTagL0B = layout::nZ;
+
+    using LayoutA = detail::TagToLayout_t<ElementA, LayoutTagA>;
+    using LayoutB = detail::TagToLayout_t<ElementB, LayoutTagB>;
+    using LayoutC = detail::TagToLayout_t<ElementC_, LayoutTagC>;
+
+    using LayoutL1A = detail::TagToLayout_t<ElementA, LayoutTagL1A>;
+    using LayoutL1B = detail::TagToLayout_t<ElementB, LayoutTagL1B>;
+    using LayoutL0A = detail::TagToLayout_t<ElementA, LayoutTagL0A>;
+    using LayoutL0B = detail::TagToLayout_t<ElementB, LayoutTagL0B>;
     using LayoutL0C = typename detail::LayoutL0C;
 
-    using TensorL1A = tla::Tensor<AscendC::LocalTensor<ElementA>, LayoutL1A, AscendC::TPosition::A1>;
-    using TensorL1B = tla::Tensor<AscendC::LocalTensor<ElementB>, LayoutL1B, AscendC::TPosition::A1>;
-    using TensorL0A = tla::Tensor<AscendC::LocalTensor<ElementA>, LayoutL0A, AscendC::TPosition::A2>;
-    using TensorL0B = tla::Tensor<AscendC::LocalTensor<ElementB>, LayoutL0B, AscendC::TPosition::B2>;
-    using TensorL0C = tla::Tensor<AscendC::LocalTensor<ElementAccumulator>, LayoutL0C, AscendC::TPosition::CO1>;
+    using TensorL1A =
+        tla::Tensor<AscendC::LocalTensor<ElementA>, LayoutL1A, tla::Coord<_0, _0>, AscendC::TPosition::A1>;
+    using TensorL1B =
+        tla::Tensor<AscendC::LocalTensor<ElementB>, LayoutL1B, tla::Coord<_0, _0>, AscendC::TPosition::A1>;
+    using TensorL0A =
+        tla::Tensor<AscendC::LocalTensor<ElementA>, LayoutL0A, tla::Coord<_0, _0>, AscendC::TPosition::A2>;
+    using TensorL0B =
+        tla::Tensor<AscendC::LocalTensor<ElementB>, LayoutL0B, tla::Coord<_0, _0>, AscendC::TPosition::B2>;
+    using TensorL0C =
+        tla::Tensor<AscendC::LocalTensor<ElementAccumulator>, LayoutL0C, tla::Coord<_0, _0>, AscendC::TPosition::CO1>;
 
     using L1AAlignHelper = Gemm::helper::L1AlignHelper<ElementA, LayoutTagA>;
     using L1BAlignHelper = Gemm::helper::L1AlignHelper<ElementB, LayoutTagB>;
 
+    template <class TensorA>
     using CopyGmToL1A = Gemm::Tile::TileCopyTla<ArchTag, TensorA, TensorL1A>;
+
+    template <class TensorB>
     using CopyGmToL1B = Gemm::Tile::TileCopyTla<ArchTag, TensorB, TensorL1B>;
+
     using CopyL1ToL0A = Gemm::Tile::TileCopyTla<ArchTag, TensorL1A, TensorL0A>;
     using CopyL1ToL0B = Gemm::Tile::TileCopyTla<ArchTag, TensorL1B, TensorL0B>;
+
+    template <class TensorC>
     using CopyL0CToGm = Gemm::Tile::CopyL0CToGmTla<ArchTag, TensorL0C, TensorC>;
 };
 

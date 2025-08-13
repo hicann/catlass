@@ -86,6 +86,7 @@ struct is_constant<n, integral_constant<T, v>> : bool_constant<v == n> {};
 
 template <int v>
 using Int = C<v>;
+using _0     = Int<0>;
 using _64     = Int<64>;
 using _128    = Int<128>;
 using _256    = Int<256>;

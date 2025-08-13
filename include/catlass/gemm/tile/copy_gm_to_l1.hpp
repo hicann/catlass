@@ -1034,16 +1034,13 @@ struct CopyGmToL1<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>,
 
 ///////////////////////////////////////////TileCopyTla//////////////////////////////////////////////////////
 /// Partial specialization for CopyGmToL1, AtlasA2, RowMajor in and zN out.
-template <class ElementSrc, class ElementDst, class LayoutSrc_, class LayoutDst_>
-struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::GM>,
-    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst_, AscendC::TPosition::A1>,
-    std::enable_if_t<tla::detail::isRowMajor<LayoutSrc_>::value &&
-                     tla::detail::iszN<ElementDst, LayoutDst_>::value>> {
-    using LayoutDst = LayoutDst_;
-    using LayoutSrc = LayoutSrc_;
-    using TensorDst = tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, AscendC::TPosition::A1>;
-    using TensorSrc = tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, AscendC::TPosition::GM>;
-
+template <class TensorSrc_, class TensorDst_>
+struct TileCopyTla<Arch::AtlasA2, TensorSrc_, TensorDst_,
+    std::enable_if_t<TensorSrc_::position == AscendC::TPosition::GM &&
+                     TensorDst_::position == AscendC::TPosition::A1 &&
+                     tla::detail::isRowMajor<TensorSrc_::Layout>::value &&
+                     tla::detail::iszN<typename TensorDst_::Element, TensorDst_::Layout>::value>> {
+    using ElementSrc = typename TensorSrc_::Element;
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
 
     // Mehtods
@@ -1051,6 +1048,7 @@ struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSrc>,
     CATLASS_DEVICE
     TileCopyTla() {};
 
+    template <class TensorDst, class TensorSrc>
     CATLASS_DEVICE
     void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
     {
@@ -1068,40 +1066,42 @@ struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSrc>,
         intriParams.dstNzC0Stride = dstOuterStrideCol / ELE_NUM_PER_C0;
         intriParams.dstNzMatrixStride = 0;
 
+        auto dstOffset = dstTensor.layout()(dstTensor.coord());
+        auto srcOffset = srcTensor.layout()(srcTensor.coord());
+
         if (srcDValue < STRIDE_LIMIT) {
             intriParams.nValue = nValue;
             intriParams.srcDValue = srcDValue;
             intriParams.dstNzNStride = dstInnerStrideRow / ELE_NUM_PER_C0;
-            AscendC::DataCopy(dstTensor.data(), srcTensor.data(), intriParams);
+            AscendC::DataCopy(dstTensor.data()[dstOffset], srcTensor.data()[srcOffset], intriParams);
         } else {
             intriParams.nValue = 1;
             intriParams.srcDValue = 0;
             intriParams.dstNzNStride = 0;
             for (uint32_t i = 0; i < nValue; i++) {
-                AscendC::DataCopy(dstTensor.data()[i * ELE_NUM_PER_C0], srcTensor.data()[i * srcDValue], intriParams);
+                AscendC::DataCopy(dstTensor.data()[dstOffset + i * ELE_NUM_PER_C0],
+                    srcTensor.data()[srcOffset + i * srcDValue],
+                    intriParams);
             }
         }
     }
 };
 
 /// Partial specialization for CopyGmToL1, AtlasA2, ColumnMajor in and nZ out.
-template <class ElementSrc, class ElementDst, class LayoutSrc_, class LayoutDst_>
-struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::GM>,
-    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst_, AscendC::TPosition::A1>,
-    std::enable_if_t<tla::detail::isColumnMajor<LayoutSrc_>::value &&
-                     tla::detail::isnZ<ElementDst, LayoutDst_>::value>> {
-    using LayoutDst = LayoutDst_;
-    using LayoutSrc = LayoutSrc_;
-    using TensorDst = tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, AscendC::TPosition::A1>;
-    using TensorSrc = tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, AscendC::TPosition::GM>;
-
-    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
+template <class TensorSrc_, class TensorDst_>
+struct TileCopyTla<Arch::AtlasA2, TensorSrc_, TensorDst_,
+    std::enable_if_t<TensorSrc_::position == AscendC::TPosition::GM &&
+                     TensorDst_::position == AscendC::TPosition::A1 &&
+                     tla::detail::isColumnMajor<TensorSrc_::Layout>::value &&
+                     tla::detail::isnZ<typename TensorDst_::Element, TensorDst_::Layout>::value>> {
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(typename TensorSrc_::Element);
 
     // Mehtods
 
     CATLASS_DEVICE
     TileCopyTla() {};
 
+    template <class TensorDst, class TensorSrc>
     CATLASS_DEVICE
     void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
     {
@@ -1119,17 +1119,22 @@ struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSrc>,
         intriParams.dstNzC0Stride = dstOuterStrideCol / ELE_NUM_PER_C0;
         intriParams.dstNzMatrixStride = 0;
 
+        auto dstOffset = dstTensor.layout()(dstTensor.coord());
+        auto srcOffset = srcTensor.layout()(srcTensor.coord());
+
         if (srcDValue < STRIDE_LIMIT) {
             intriParams.nValue = nValue;
             intriParams.srcDValue = srcDValue;
             intriParams.dstNzNStride = dstInnerStrideRow / ELE_NUM_PER_C0;
-            AscendC::DataCopy(dstTensor.data(), srcTensor.data(), intriParams);
+            AscendC::DataCopy(dstTensor.data()[dstOffset], srcTensor.data()[srcOffset], intriParams);
         } else {
             intriParams.nValue = 1;
             intriParams.srcDValue = 0;
             intriParams.dstNzNStride = 0;
             for (uint32_t i = 0; i < nValue; i++) {
-                AscendC::DataCopy(dstTensor.data()[i * ELE_NUM_PER_C0], srcTensor.data()[i * srcDValue], intriParams);
+                AscendC::DataCopy(dstTensor.data()[dstOffset + i * ELE_NUM_PER_C0],
+                    srcTensor.data()[srcOffset + i * srcDValue],
+                    intriParams);
             }
         }
     }

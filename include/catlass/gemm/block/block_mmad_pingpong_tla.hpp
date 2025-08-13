@@ -28,10 +28,10 @@ template <
     bool ENABLE_UNIT_FLAG_,
     class L1TileShape_,
     class L0TileShape_,
-    class TensorA_,
-    class TensorB_,
-    class TensorC_,
-    class TensorBias_,
+    class ElementA_,
+    class ElementB_,
+    class ElementC_,
+    class ElementBias_,
     class TileCopy_,
     class TileMmad_
 >
@@ -39,10 +39,10 @@ struct BlockMmadTla <
     MmadAtlasA2Pingpong<ENABLE_UNIT_FLAG_>,
     L1TileShape_,
     L0TileShape_,
-    TensorA_,
-    TensorB_,
-    TensorC_,
-    TensorBias_,
+    ElementA_,
+    ElementB_,
+    ElementC_,
+    ElementBias_,
     TileCopy_,
     TileMmad_
 > {
@@ -52,28 +52,24 @@ public:
     using ArchTag = typename DispatchPolicy::ArchTag;
     using L1TileShape = L1TileShape_;
     using L0TileShape = L0TileShape_;
-    using TensorA = TensorA_;
-    using TensorB = TensorB_;
-    using TensorC = TensorC_;
-    using ElementA = typename TensorA::Element;
-    using LayoutA = typename TensorA::Layout;
-    using ElementB = typename TensorB::Element;
-    using LayoutB = typename TensorB::Layout;
-    using ElementC = typename TensorC::Element;
-    using LayoutC = typename TensorC::Layout;
+    using ElementA = ElementA_;
+    using LayoutA = typename TileCopy_::LayoutA;
+    using ElementB = ElementB_;
+    using LayoutB = typename TileCopy_::LayoutB;
+    using ElementC = ElementC_;
+    using LayoutC = typename TileCopy_::LayoutC;
 
     using TileMmad = TileMmad_;
-    using CopyGmToL1A = typename TileCopy_::CopyGmToL1A;
-    using CopyGmToL1B = typename TileCopy_::CopyGmToL1B;
+
     using CopyL1ToL0A = typename TileCopy_::CopyL1ToL0A;
     using CopyL1ToL0B = typename TileCopy_::CopyL1ToL0B;
-    using CopyL0CToGm = typename TileCopy_::CopyL0CToGm;
-    using ElementAccumulator = typename CopyL0CToGm::ElementSrc;
 
-    using LayoutAInL1 = typename CopyL1ToL0A::LayoutSrc;
-    using LayoutBInL1 = typename CopyL1ToL0B::LayoutSrc;
-    using LayoutAInL0 = typename CopyL1ToL0A::LayoutDst;
-    using LayoutBInL0 = typename CopyL1ToL0B::LayoutDst;
+    using ElementAccumulator = typename TileCopy_::ElementAccumulator;
+
+    using LayoutTagL1A = typename TileCopy_::LayoutTagL1A;
+    using LayoutTagL1B = typename TileCopy_::LayoutTagL1B;
+    using LayoutTagL0A = typename TileCopy_::LayoutTagL0A;
+    using LayoutTagL0B = typename TileCopy_::LayoutTagL0B;
 
     using L1AAlignHelper = typename TileCopy_::L1AAlignHelper;
     using L1BAlignHelper = typename TileCopy_::L1BAlignHelper;
@@ -115,8 +111,8 @@ public:
     static_assert(L1_TILE_M == L0_TILE_M && L1_TILE_N == L0_TILE_N,
         "The situation where the basic blocks of L1 and L0 differ on the m and n axes is not supported yet");
 
-    static constexpr auto L1A_LAYOUT = tla::MakeLayout<ElementA, LayoutAInL1>(L1_TILE_M, L1_TILE_K);
-    static constexpr auto L1B_LAYOUT = tla::MakeLayout<ElementB, LayoutBInL1>(L1_TILE_K, L1_TILE_N);
+    static constexpr auto L1A_LAYOUT = tla::MakeLayout<ElementA, LayoutTagL1A>(L1_TILE_M, L1_TILE_K);
+    static constexpr auto L1B_LAYOUT = tla::MakeLayout<ElementB, LayoutTagL1B>(L1_TILE_K, L1_TILE_N);
 
     /// Construct
     CATLASS_DEVICE
@@ -162,9 +158,17 @@ public:
     }
 
     /// Perform a block-scoped matrix multiply-accumulate
+    template <class TensorA, class TensorB, class TensorC>
     CATLASS_DEVICE
     void operator()(TensorA &tensorA, TensorB &tensorB, TensorC &tensorC, GemmCoord const &actualShape)
     {
+        using CopyGmToL1A = typename TileCopy_::template CopyGmToL1A<TensorA>;
+        using CopyGmToL1B = typename TileCopy_::template CopyGmToL1B<TensorB>;
+        using CopyL0CToGm = typename TileCopy_::template CopyL0CToGm<TensorC>;
+        CopyGmToL1A copyGmToL1A;
+        CopyGmToL1B copyGmToL1B;
+        CopyL0CToGm copyL0CToGm;
+
         uint32_t mBlockActual = actualShape.m();
         uint32_t kBlockActual = actualShape.k();
         uint32_t nBlockActual = actualShape.n();
@@ -248,7 +252,7 @@ public:
 
                     // Locate the current tile on L0A
                     auto l0ATile = l0ATensorList[l0AListId];
-                    LayoutAInL0 layoutAInL0 = tla::MakeLayout<ElementA, LayoutAInL0>(mPartActual, kPartActual);
+                    auto layoutAInL0 = tla::MakeLayout<ElementA, LayoutTagL0A>(mPartActual, kPartActual);
                     auto tensorL0A = tla::MakeTensor(l0ATile, layoutAInL0, Arch::PositionL0A{});
                     // Locate the current tile of matrix A on L1
                     auto tensorTileL1A = GetTile(tensorL1A, tla::MakeCoord(mPartIdx * L0_TILE_M, kPartIdx * L0_TILE_K),
@@ -272,7 +276,7 @@ public:
 
                         // Locate the current tile on L0B
                         auto l0BTile = l0BTensorList[l0BListId];
-                        LayoutBInL0 layoutBInL0 = tla::MakeLayout<ElementB, LayoutBInL0>(kPartActual, nPartActual);
+                        auto layoutBInL0 = tla::MakeLayout<ElementB, LayoutTagL0B>(kPartActual, nPartActual);
                         auto tensorL0B = tla::MakeTensor(l0BTile, layoutBInL0, Arch::PositionL0B{});
                         // Locate the current tile of matrix B on L1
                         auto tensorTileL1B = GetTile(tensorL1B,
@@ -364,11 +368,8 @@ protected:
     uint32_t l0BListId{0};
 
     TileMmad tileMmad;
-    CopyGmToL1A copyGmToL1A;
-    CopyGmToL1B copyGmToL1B;
     CopyL1ToL0A copyL1ToL0A;
     CopyL1ToL0B copyL1ToL0B;
-    CopyL0CToGm copyL0CToGm;
 };
 
 } // namespace Catlass::Gemm::Block
