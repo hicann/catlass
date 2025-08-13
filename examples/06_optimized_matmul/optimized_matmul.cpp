@@ -73,29 +73,32 @@ struct TileCopyOpt : public Catlass::Gemm::Tile::TileCopy<ArchTag, AType, BType,
     using CopyL1ToBT = typename Base::CopyL1ToBT;
 };
 
-template <class ArchTag, class Element, class Layout, uin32_t COMPUTE_LENGTH, PaddingTag>
-PaddingHelper {
+template <class ArchTag, class Element, class Layout, uint32_t COMPUTE_LENGTH, PaddingTag>
+struct PaddingHelper {
     static_assert(DEPENDENT_FALSE<ArchTag>, "Padding is not implemented for this layout");
 };
 
-template <class ArchTag, class Element, class Layout, uin32_t COMPUTE_LENGTH, PaddingTag::NO_PADDING>
-PaddingHelper {
+template <class ArchTag, class Element, class Layout, uint32_t COMPUTE_LENGTH>
+struct PaddingHelper<ArchTag, Element, Layout, COMPUTE_LENGTH, PaddingTag::NO_PADDING> {
     using Padding = void;
     using LayoutMmad = Layout;
 };
 
-template <class ArchTag, class Element, class Layout, uin32_t COMPUTE_LENGTH, PaddingTag::PADDING_ND>
-PaddingHelper {
+template <class ArchTag, class Element, class Layout, uint32_t COMPUTE_LENGTH>
+struct PaddingHelper<ArchTag, Element, Layout, COMPUTE_LENGTH, PaddingTag::PADDING_ND> {
     using Padding = Catlass::Gemm::Kernel::PaddingMatrix<ArchTag, Element, Layout, COMPUTE_LENGTH>;
     using LayoutMmad = Layout;
 };
 
-template <class ArchTag, class Element, class Layout, uin32_t COMPUTE_LENGTH, PaddingTag::PADDING_BLOCK_ND>
-PaddingHelper {
+template <class ArchTag, class Element, class Layout, uint32_t COMPUTE_LENGTH>
+struct PaddingHelper<ArchTag, Element, Layout, COMPUTE_LENGTH, PaddingTag::PADDING_BLOCK_ND> {
     using LayoutMmad = std::conditional_t<std::is_same_v<Layout, layout::RowMajor>,
         layout::PaddingRowMajor, layout::PaddingColumnMajor>;
     using Padding = Catlass::Gemm::Kernel::PaddingMatrixBlockND<ArchTag, Element, Layout, LayoutMmad, COMPUTE_LENGTH>;
 };
+
+constexpr uint32_t alignByByte = 512;
+constexpr uint32_t alignByElement = alignByByte / sizeof(fp16_t);
 
 using ArchTag = Arch::AtlasA2;
 constexpr bool ENABLE_UNIT_FLAG = true;
@@ -218,8 +221,10 @@ void Run(Options const &options)
     LayoutC layoutC{m, n};
     bool isNeedPaddingA = IsNeedPadding(layoutA, alignByElement);
     bool isNeedPaddingB = IsNeedPadding(layoutB, alignByElement);
-    constexpr PaddingTag paddingTagA = (std::is_same_v<LayoutA, layout::zN> || std::is_same_v<LayoutA, layout::nZ>) ? PaddingTag::NO_PADDING : PaddingTag::PADDING_BLOCK_ND>;
-    constexpr PaddingTag paddingTagB = (std::is_same_v<LayoutB, layout::zN> || std::is_same_v<LayoutB, layout::nZ>) ? PaddingTag::NO_PADDING : PaddingTag::PADDING_BLOCK_ND>;
+    constexpr PaddingTag paddingTagA = (std::is_same_v<LayoutA, layout::zN> || std::is_same_v<LayoutA, layout::nZ>) ? 
+        PaddingTag::NO_PADDING : PaddingTag::PADDING_BLOCK_ND;
+    constexpr PaddingTag paddingTagB = (std::is_same_v<LayoutB, layout::zN> || std::is_same_v<LayoutB, layout::nZ>) ? 
+        PaddingTag::NO_PADDING : PaddingTag::PADDING_BLOCK_ND;
     static const uint32_t COMPUTE_LENGTH_A = 96 * 1024 / sizeof(ElementA);
     using PaddingHelperA = PaddingHelper<ArchTag, ElementA, LayoutA, COMPUTE_LENGTH_A, paddingTagA>;
     using GlobalPaddingA = PaddingHelperA::Padding;
@@ -317,9 +322,7 @@ void Run(Options const &options)
                 DispatchPolicy, L1TileShape, L0TileShape, ATypeMmad, BTypeMmad, CType, void, TileCopy>;
             using MatmulKernel = Gemm::Kernel::OptimizedMatmul<
                 GlobalPaddingA, GlobalPaddingB, BlockMmadOpt, BlockEpilogue, BlockScheduler31>;
-            MatmulKernel::Arguments arguments{
-                options.problemShape, alignByElement, sizeof(ElementWorkspace),
-                layoutWA, layoutWB, deviceA, deviceB, deviceC};
+            MatmulKernel::Arguments arguments{options.problemShape, deviceA, deviceB, deviceC};
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
             MatmulAdapter matmul_op;
             RunAdapter(matmul_op, arguments, stream, aicCoreNum, fftsAddr);
@@ -331,9 +334,7 @@ void Run(Options const &options)
                 DispatchPolicy, L1TileShape, L0TileShape, ATypeMmad, BType, CType, void, TileCopy>;
             using MatmulKernel = Gemm::Kernel::OptimizedMatmul<
                 GlobalPaddingA, void, BlockMmadOpt, BlockEpilogue, BlockScheduler31>;
-            MatmulKernel::Arguments arguments{
-                options.problemShape, alignByElement, sizeof(ElementWorkspace),
-                layoutWA, layoutB, deviceA, deviceB, deviceC};
+            MatmulKernel::Arguments arguments{options.problemShape, deviceA, deviceB, deviceC};
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
             MatmulAdapter matmul_op;
             RunAdapter(matmul_op, arguments, stream, aicCoreNum, fftsAddr);

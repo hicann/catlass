@@ -353,43 +353,43 @@ struct PaddingLayoutHelper {
 
 template <>
 struct PaddingLayoutHelper<void> {
-    PaddingTag paddingTag = PaddingTag::NO_PADDING;
+    static const PaddingTag paddingTag = PaddingTag::NO_PADDING;
     using LayoutIn = void;
 };
 
 template <class ArchTag_, class Element_, class LayoutIn_, class LayoutOut_, uint32_t COMPUTE_LENGTH>
 struct PaddingLayoutHelper<PaddingMatrixBlockND<ArchTag_, Element_, LayoutIn_, LayoutOut_, COMPUTE_LENGTH>> {
-    PaddingTag paddingTag = PaddingTag::PADDING_BLOCK_ND;
+    static const PaddingTag paddingTag = PaddingTag::PADDING_BLOCK_ND;
     using LayoutIn = LayoutIn_;
-    using LayoutW = std::conditional_t<std::is_same_v<Layout, layout::RowMajor>,
+    using LayoutW = std::conditional_t<std::is_same_v<LayoutIn, layout::RowMajor>,
         layout::PaddingRowMajor, layout::PaddingColumnMajor>;
     CATLASS_HOST_DEVICE static
-    Layout GetLayoutW(Layout& layout, uint32_t rowAlign, uint32_t colAlign) {
-        return layoutW(layout.shape(0), layout.shape(1), rowAlign, colAlign);
+    LayoutW GetWorkspaceLayout(LayoutIn& layout, uint32_t rowAlign, uint32_t colAlign) {
+        return LayoutW(layout.shape(0), layout.shape(1), rowAlign, colAlign);
     }
     static size_t GetWorkspaceSize(uint32_t rows, uint32_t cols, uint32_t rowAlign, uint32_t colAlign) {
-        return static_cast<size_t>(RoundUp(rows, rowAlign)) * RoundUp(cols, colAlign) * sizeof(Element);
+        return static_cast<size_t>(RoundUp(rows, rowAlign)) * RoundUp(cols, colAlign) * sizeof(Element_);
     }
 };
 
 template <class ArchTag_, class Element_, class Layout_, uint32_t COMPUTE_LENGTH>
 struct PaddingLayoutHelper<PaddingMatrix<ArchTag_, Element_, Layout_, COMPUTE_LENGTH>> {
-    PaddingTag paddingTag = PaddingTag::PADDING_ND;
+    static const PaddingTag paddingTag = PaddingTag::PADDING_ND;
     using LayoutIn = Layout_;
     using LayoutW = Layout_;
     CATLASS_HOST_DEVICE static
-    Layout GetLayoutW(Layout& layout, uint32_t align) {
-        if constexpr (std::is_same_v<Layout, layout::RowMajor>) {
+    LayoutW GetWorkspaceLayout(LayoutIn& layout, uint32_t align) {
+        if constexpr (std::is_same_v<LayoutIn, layout::RowMajor>) {
             return LayoutW{layout.shape(0), layout.shape(1), RoundUp(layout.shape(1), align)};
         } else {
             return LayoutW{layout.shape(0), layout.shape(1), RoundUp(layout.shape(0), align)};
         }
     }
     static size_t GetWorkspaceSize(uint32_t rows, uint32_t cols, uint32_t align) {
-        if constexpr (std::is_same_v<Layout, layout::RowMajor>) {
-            return static_cast<size_t>(rows) * RoundUp(cols, align) * sizeof(Element);
+        if constexpr (std::is_same_v<LayoutIn, layout::RowMajor>) {
+            return static_cast<size_t>(rows) * RoundUp(cols, align) * sizeof(Element_);
         } else {
-            return static_cast<size_t>(cols) * RoundUp(rows, align) * sizeof(Element);
+            return static_cast<size_t>(cols) * RoundUp(rows, align) * sizeof(Element_);
         }
     }
 };
