@@ -73,31 +73,6 @@ struct TileCopyOpt : public Catlass::Gemm::Tile::TileCopy<ArchTag, AType, BType,
     using CopyL1ToBT = typename Base::CopyL1ToBT;
 };
 
-using PaddingTag = Catlass::Gemm::Kernel::PaddingTag;
-template <class ArchTag, class Element, class Layout, uint32_t COMPUTE_LENGTH, PaddingTag>
-struct PaddingHelper {
-    static_assert(DEPENDENT_FALSE<ArchTag>, "Padding is not implemented for this layout");
-};
-
-template <class ArchTag, class Element, class Layout, uint32_t COMPUTE_LENGTH>
-struct PaddingHelper<ArchTag, Element, Layout, COMPUTE_LENGTH, PaddingTag::NO_PADDING> {
-    using Padding = void;
-    using LayoutMmad = Layout;
-};
-
-template <class ArchTag, class Element, class Layout, uint32_t COMPUTE_LENGTH>
-struct PaddingHelper<ArchTag, Element, Layout, COMPUTE_LENGTH, PaddingTag::PADDING_ND> {
-    using Padding = Catlass::Gemm::Kernel::PaddingMatrix<ArchTag, Element, Layout, COMPUTE_LENGTH>;
-    using LayoutMmad = Layout;
-};
-
-template <class ArchTag, class Element, class Layout, uint32_t COMPUTE_LENGTH>
-struct PaddingHelper<ArchTag, Element, Layout, COMPUTE_LENGTH, PaddingTag::PADDING_BLOCK_ND> {
-    using LayoutMmad = std::conditional_t<std::is_same_v<Layout, layout::RowMajor>,
-        layout::PaddingRowMajor, layout::PaddingColumnMajor>;
-    using Padding = Catlass::Gemm::Kernel::PaddingMatrixBlockND<ArchTag, Element, Layout, LayoutMmad, COMPUTE_LENGTH>;
-};
-
 constexpr uint32_t alignByByte = 512;
 constexpr uint32_t alignByElement = alignByByte / sizeof(fp16_t);
 
@@ -189,6 +164,26 @@ bool IsNeedPadding(layout::nZ layout, uint32_t align)
     return false;
 }
 
+template <class Layout>
+size_t GetLen(Layout layout)
+{
+    if constexpr (std::is_same_v<Layout, layout::RowMajor> || std::is_same_v<Layout, layout::ColumnMajor>) {
+        return static_cast<size_t>(layout.shape(0)) * layout.shape(1);
+    } else if constexpr (std::is_same_v<Layout, layout::zN> || std::is_same_v<Layout, layout::nZ>) {
+        return static_cast<size_t>(layout.shape(0)) * layout.shape(1) * layout.shape(2) * layout.shape(3);
+    }
+}
+
+template <class Element, class Layout>
+Layout GetLayout(uint32_t rows, uint32_t cols)
+{
+    if constexpr (std::is_same_v<Layout, layout::RowMajor> || std::is_same_v<Layout, layout::ColumnMajor>) {
+        return Layout{rows, cols};
+    } else if constexpr (std::is_same_v<Layout, layout::zN> || std::is_same_v<Layout, layout::nZ>) {
+        return Layout::template MakeLayout<Element>(rows, cols);
+    }
+}
+
 template <class Adapter>
 void RunAdapter(Adapter matmul_op, typename Adapter::Arguments args, aclrtStream stream,
     uint32_t aicCoreNum, uint64_t fftsAddr)
@@ -233,16 +228,17 @@ void Run(Options const &options)
     bool isNeedPaddingB = IsNeedPadding(layoutB, alignByElement);
 
     // Layout zN or layout nZ does not require padding operation.
+    using PaddingTag = Catlass::Gemm::Kernel::PaddingTag;
     constexpr PaddingTag paddingTagA = (std::is_same_v<LayoutA, layout::zN> || std::is_same_v<LayoutA, layout::nZ>) ? 
         PaddingTag::NO_PADDING : PaddingTag::PADDING_BLOCK_ND;
     constexpr PaddingTag paddingTagB = (std::is_same_v<LayoutB, layout::zN> || std::is_same_v<LayoutB, layout::nZ>) ? 
         PaddingTag::NO_PADDING : PaddingTag::PADDING_BLOCK_ND;
     static const uint32_t COMPUTE_LENGTH_A = 96 * 1024 / sizeof(ElementA);
-    using PaddingHelperA = PaddingHelper<ArchTag, ElementA, LayoutA, COMPUTE_LENGTH_A, paddingTagA>;
-    using GlobalPaddingA = PaddingHelperA::Padding;
+    using PaddingAssistantA = PaddingAssistant<ArchTag, ElementA, LayoutA, COMPUTE_LENGTH_A, paddingTagA>;
+    using GlobalPaddingA = PaddingAssistantA::Padding;
     static const uint32_t COMPUTE_LENGTH_B = 96 * 1024 / sizeof(ElementB);
-    using PaddingHelperB = PaddingHelper<ArchTag, ElementB, LayoutB, COMPUTE_LENGTH_B, paddingTagB>;
-    using GlobalPaddingB = PaddingHelperB::Padding;
+    using PaddingAssistantB = PaddingAssistant<ArchTag, ElementB, LayoutB, COMPUTE_LENGTH_B, paddingTagB>;
+    using GlobalPaddingB = PaddingAssistantB::Padding;
 
     // if LayoutA and LayoutB is both ColumnMajor,
     // L1TileShape using GemmShape<256, 128, 256> can achieve better performance.
@@ -275,8 +271,8 @@ void Run(Options const &options)
 
     if (m > n) {
         if (isNeedPaddingA && isNeedPaddingB) { 
-            using LayoutMmadA = typename PaddingHelperA::LayoutMmad; 
-            using LayoutMmadB = typename PaddingHelperB::LayoutMmad;
+            using LayoutMmadA = typename PaddingAssistantA::LayoutAfterPadding; 
+            using LayoutMmadB = typename PaddingAssistantB::LayoutAfterPadding;
             using ATypeMmad = Gemm::GemmType<ElementA, LayoutMmadA>;
             using BTypeMmad = Gemm::GemmType<ElementB, LayoutMmadB>;
             using TileCopy = TileCopyOpt<ArchTag, ATypeMmad, BTypeMmad, CType>;
@@ -289,7 +285,7 @@ void Run(Options const &options)
             MatmulAdapter matmul_op;
             RunAdapter(matmul_op, arguments, stream, aicCoreNum, fftsAddr);
         } else if (isNeedPaddingA) {
-            using LayoutMmadA = typename PaddingHelperA::LayoutMmad; 
+            using LayoutMmadA = typename PaddingAssistantA::LayoutAfterPadding; 
             using ATypeMmad = Gemm::GemmType<ElementA, LayoutMmadA>;
             using TileCopy = TileCopyOpt<ArchTag, ATypeMmad, BType, CType>;
             using BlockMmadOpt = Gemm::Block::BlockMmad<
@@ -301,7 +297,7 @@ void Run(Options const &options)
             MatmulAdapter matmul_op;
             RunAdapter(matmul_op, arguments, stream, aicCoreNum, fftsAddr);
         } else if (isNeedPaddingB) {
-            using LayoutMmadB = typename PaddingHelperB::LayoutMmad;
+            using LayoutMmadB = typename PaddingAssistantB::LayoutAfterPadding;
             using BTypeMmad = Gemm::GemmType<ElementB, LayoutMmadB>;
             using TileCopy = TileCopyOpt<ArchTag, AType, BTypeMmad, CType>;
             using BlockMmadOpt = Gemm::Block::BlockMmad<
@@ -325,8 +321,8 @@ void Run(Options const &options)
         }
     } else {
         if (isNeedPaddingA && isNeedPaddingB) {
-            using LayoutMmadA = typename PaddingHelperA::LayoutMmad; 
-            using LayoutMmadB = typename PaddingHelperB::LayoutMmad;
+            using LayoutMmadA = typename PaddingAssistantA::LayoutAfterPadding; 
+            using LayoutMmadB = typename PaddingAssistantB::LayoutAfterPadding;
             using ATypeMmad = Gemm::GemmType<ElementA, LayoutMmadA>;
             using BTypeMmad = Gemm::GemmType<ElementB, LayoutMmadB>;
             using TileCopy = TileCopyOpt<ArchTag, ATypeMmad, BTypeMmad, CType>;
@@ -339,7 +335,7 @@ void Run(Options const &options)
             MatmulAdapter matmul_op;
             RunAdapter(matmul_op, arguments, stream, aicCoreNum, fftsAddr);
         } else if (isNeedPaddingA) {
-            using LayoutMmadA = typename PaddingHelperA::LayoutMmad; 
+            using LayoutMmadA = typename PaddingAssistantA::LayoutAfterPadding; 
             using ATypeMmad = Gemm::GemmType<ElementA, LayoutMmadA>;
             using TileCopy = TileCopyOpt<ArchTag, ATypeMmad, BType, CType>;
             using BlockMmadOpt = Gemm::Block::BlockMmad<
@@ -351,7 +347,7 @@ void Run(Options const &options)
             MatmulAdapter matmul_op;
             RunAdapter(matmul_op, arguments, stream, aicCoreNum, fftsAddr);
         } else if (isNeedPaddingB) {
-            using LayoutMmadB = typename PaddingHelperB::LayoutMmad;
+            using LayoutMmadB = typename PaddingAssistantB::LayoutAfterPadding;
             using BTypeMmad = Gemm::GemmType<ElementB, LayoutMmadB>;
             using TileCopy = TileCopyOpt<ArchTag, AType, BTypeMmad, CType>;
             using BlockMmadOpt = Gemm::Block::BlockMmad<

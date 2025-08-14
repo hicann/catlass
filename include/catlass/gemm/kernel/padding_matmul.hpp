@@ -346,6 +346,7 @@ enum class PaddingTag {
     PADDING_BLOCK_ND
 };
 
+// This struct helps obtain the padded workspace layout and the required workspace size.
 template <class Padding>
 struct PaddingLayoutHelper {
     static_assert(DEPENDENT_FALSE<Padding>, "Padding is not implemented for this layout");
@@ -392,6 +393,34 @@ struct PaddingLayoutHelper<PaddingMatrix<ArchTag_, Element_, Layout_, COMPUTE_LE
             return static_cast<size_t>(cols) * RoundUp(rows, align) * sizeof(Element_);
         }
     }
+};
+
+// The PaddingAssistant structure can construct the required padding class by specifying the PaddingTag 
+// and the basic information of the matrix, thereby unifying the use of various paddings.
+// Moreover, it allows for quick retrieval of the layout information after padding.
+template <class ArchTag, class Element, class Layout, uint32_t COMPUTE_LENGTH, PaddingTag>
+struct PaddingAssistant {
+    static_assert(DEPENDENT_FALSE<ArchTag>, "Padding is not implemented for this layout");
+};
+
+template <class ArchTag, class Element, class Layout, uint32_t COMPUTE_LENGTH>
+struct PaddingAssistant<ArchTag, Element, Layout, COMPUTE_LENGTH, PaddingTag::NO_PADDING> {
+    using Padding = void;
+    using LayoutAfterPadding = Layout;
+};
+
+template <class ArchTag, class Element, class Layout, uint32_t COMPUTE_LENGTH>
+struct PaddingAssistant<ArchTag, Element, Layout, COMPUTE_LENGTH, PaddingTag::PADDING_ND> {
+    using Padding = Catlass::Gemm::Kernel::PaddingMatrix<ArchTag, Element, Layout, COMPUTE_LENGTH>;
+    using LayoutAfterPadding = Layout;
+};
+
+template <class ArchTag, class Element, class Layout, uint32_t COMPUTE_LENGTH>
+struct PaddingAssistant<ArchTag, Element, Layout, COMPUTE_LENGTH, PaddingTag::PADDING_BLOCK_ND> {
+    using LayoutAfterPadding = std::conditional_t<std::is_same_v<Layout, layout::RowMajor>,
+        layout::PaddingRowMajor, layout::PaddingColumnMajor>;
+    using Padding = Catlass::Gemm::Kernel::PaddingMatrixBlockND<
+        ArchTag, Element, Layout, LayoutAfterPadding, COMPUTE_LENGTH>;
 };
 
 template <
