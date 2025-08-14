@@ -166,13 +166,19 @@ public:
     static size_t GetWorkspaceSize(const Arguments &args)
     {
         size_t workspaceSize = 0;
-        if constexpr (!std::is_void_v<PrologueA>) {
+        if constexpr (PaddingLayoutHelperA::paddingTag == PaddingTag::PADDING_BLOCK_ND) {
             workspaceSize += PaddingLayoutHelperA::GetWorkspaceSize(
                     args.problemShape.m(), args.problemShape.k(), L1TileShape::M, L1TileShape::K);
+        } else if constexpr (PaddingLayoutHelperA::paddingTag == PaddingTag::PADDING_ND) {
+            workspaceSize += PaddingLayoutHelperA::GetWorkspaceSize(
+                    args.problemShape.m(), args.problemShape.k(), 512 / sizeof(ElementA));
         }
-        if constexpr (!std::is_void_v<PrologueB>) {
+        if constexpr (PaddingLayoutHelperB::paddingTag == PaddingTag::PADDING_BLOCK_ND) {
             workspaceSize += PaddingLayoutHelperB::GetWorkspaceSize(
                     args.problemShape.k(), args.problemShape.n(), L1TileShape::K, L1TileShape::N);
+        } else if constexpr (PaddingLayoutHelperB::paddingTag == PaddingTag::PADDING_ND) {
+            workspaceSize += PaddingLayoutHelperB::GetWorkspaceSize(
+                    args.problemShape.k(), args.problemShape.n(), 512 / sizeof(ElementB));
         }
         return workspaceSize;
     }
@@ -198,11 +204,15 @@ public:
         uint8_t *gmWA = nullptr;
         uint8_t *gmWB = nullptr;
         size_t sizeWA = 0;
-
         if constexpr (isPaddingA) {
             gmWA = workspace;
-            sizeWA = PaddingLayoutHelperA::GetWorkspaceSize(
-                    args.problemShape.m(), args.problemShape.k(), L1TileShape::M, L1TileShape::K);
+            if constexpr (PaddingLayoutHelperA::paddingTag == PaddingTag::PADDING_BLOCK_ND) {
+                sizeWA += PaddingLayoutHelperA::GetWorkspaceSize(
+                        args.problemShape.m(), args.problemShape.k(), L1TileShape::M, L1TileShape::K);
+            } else if constexpr (PaddingLayoutHelperA::paddingTag == PaddingTag::PADDING_ND) {
+                sizeWA += PaddingLayoutHelperA::GetWorkspaceSize(
+                        args.problemShape.m(), args.problemShape.k(), 512 / sizeof(ElementA));
+            }
         }
         if constexpr (isPaddingB) {
             gmWB = workspace + sizeWA;
