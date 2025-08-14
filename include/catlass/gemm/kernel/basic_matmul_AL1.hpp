@@ -89,7 +89,6 @@ public:
         return params;
     }
 
-
     // Methods
     CATLASS_DEVICE
     BasicMatmulAL1() {}
@@ -132,7 +131,7 @@ public:
             int64_t gmOffsetB = params.layoutB.GetOffset(offsetB);
             int64_t gmOffsetC = params.layoutC.GetOffset(offsetC);
 
-            //judge whether the current blockA is already on L1Cache
+            // Judge whether the current blockA is already on L1Cache
             bool isFirstBlock = (loopIdx == firstBlockIdx);
             bool needLoadL1 = true;
             if (isFirstBlock) {

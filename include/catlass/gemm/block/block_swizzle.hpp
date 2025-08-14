@@ -303,11 +303,6 @@ struct GemmIdentityBlockSwizzleL1FullLoad {
     }
 
     ////// WARNING: current strategy not support GetBatchIdx()
-    // CATLASS_DEVICE
-    // uint32_t GetBatchIdx(uint32_t taskIdx)
-    // {
-    //     return taskIdx / (GetCoreLoops());
-    // }
 
     CATLASS_DEVICE
     GemmCoord GetBlockCoord(uint32_t taskIdx)
