@@ -380,8 +380,8 @@ auto MakeLayoutTile(Layout const& layout, ShapeNew const& shapeNew)
     }
 }
 
-CATLASS_HOST_DEVICE constexpr
 template <class T, class U>
+CATLASS_HOST_DEVICE constexpr
 auto MakeLayoutL0C(T const& rows, U const& cols)
 {
     constexpr uint32_t ELE_NUM_PER_FRACTAL = 256;

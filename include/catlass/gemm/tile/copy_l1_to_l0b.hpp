@@ -475,13 +475,12 @@ struct CopyL1ToL0B<ArchTag, Gemm::GemmType<Element, layout::nZ, AscendC::TPositi
 
 ///////////////////////////////////////////TileCopyTla//////////////////////////////////////////////////////
 /// Partial specialization for CopyL1ToL0B, AtlasA2, zN in and nZ out.
-template <class TensorSrc_, class TensorDst_>
-struct TileCopyTla<Arch::AtlasA2, TensorSrc_, TensorDst_,
-    std::enable_if_t<TensorSrc_::position == AscendC::TPosition::A1 &&
-                     TensorDst_::position == AscendC::TPosition::B2 &&
-                     tla::detail::iszN<typename TensorSrc_::Element, TensorSrc_::Layout>::value &&
-                     tla::detail::isnZ<typename TensorDst_::Element, TensorDst_::Layout>::value>> {
-    using ElementSrc = typename TensorSrc_::Element;
+template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+struct TileCopyTla<Arch::AtlasA2,
+    tla::Tensor<AscendC::LocalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::A1>,
+    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::B2>,
+    std::enable_if_t<tla::detail::iszN<ElementSrc, LayoutSrc>::value &&
+                     tla::detail::isnZ<ElementDst, LayoutDst>::value>> {
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
     static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(ElementSrc);
 
@@ -522,13 +521,12 @@ struct TileCopyTla<Arch::AtlasA2, TensorSrc_, TensorDst_,
 };
 
 /// Partial specialization for CopyL1ToL0B, AtlasA2, nZ in and nZ out. (Transpose B)
-template <class TensorSrc_, class TensorDst_>
-struct TileCopyTla<Arch::AtlasA2, TensorSrc_, TensorDst_,
-    std::enable_if_t<TensorSrc_::position == AscendC::TPosition::A1 &&
-                     TensorDst_::position == AscendC::TPosition::B2 &&
-                     tla::detail::isnZ<typename TensorSrc_::Element, TensorSrc_::Layout>::value &&
-                     tla::detail::isnZ<typename TensorDst_::Element, TensorDst_::Layout>::value>> {
-    using ElementSrc = typename TensorSrc_::Element;
+template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+struct TileCopyTla<Arch::AtlasA2,
+    tla::Tensor<AscendC::LocalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::A1>,
+    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::B2>,
+    std::enable_if_t<tla::detail::isnZ<ElementSrc, LayoutSrc>::value &&
+                     tla::detail::isnZ<ElementDst, LayoutDst>::value>> {
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
     static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(ElementSrc);
 
@@ -569,14 +567,11 @@ struct TileCopyTla<Arch::AtlasA2, TensorSrc_, TensorDst_,
 };
 
 /// Partial specialization for CopyL1ToL0B, AtlasA2, int8_t, zN in and nZ out.
-template <class TensorSrc_, class TensorDst_>
-struct TileCopyTla<Arch::AtlasA2, TensorSrc_, TensorDst_,
-    std::enable_if_t<std::is_same_v<typename TensorSrc_::Element, int8_t> &&
-                     std::is_same_v<typename TensorDst_::Element, int8_t> &&
-                     TensorSrc_::position == AscendC::TPosition::B2 &&
-                     TensorDst_::position == AscendC::TPosition::A2 &&
-                     tla::detail::iszN<typename TensorSrc_::Element, TensorSrc_::Layout>::value &&
-                     tla::detail::isnZ<typename TensorDst_::Element, TensorDst_::Layout>::value>> {
+template <class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+struct TileCopyTla<Arch::AtlasA2,
+    tla::Tensor<AscendC::LocalTensor<int8_t>, LayoutSrc, CoordSrc, AscendC::TPosition::A1>,
+    tla::Tensor<AscendC::LocalTensor<int8_t>, LayoutDst, CoordDst, AscendC::TPosition::B2>,
+    std::enable_if_t<tla::detail::iszN<int8_t, LayoutSrc>::value && tla::detail::isnZ<int8_t, LayoutDst>::value>> {
     using Element = int8_t;
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
     static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);

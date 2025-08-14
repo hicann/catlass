@@ -209,20 +209,20 @@ struct CopyL0CToGmTla {
 
 template <
     class TensorSrc_,
-    class TensorDst_,
+    class ElementDst_,
+    class LayoutDst_,
+    class CoordDst_,
     bool ReluEnable_
 >
 struct CopyL0CToGmTla<Catlass::Arch::AtlasA2,
                    TensorSrc_,
-                   TensorDst_,
+                   tla::Tensor<AscendC::GlobalTensor<ElementDst_>, LayoutDst_, CoordDst_, AscendC::TPosition::GM>,
                    ScaleGranularity::NO_QUANT,
                    ReluEnable_,
-                   std::enable_if_t<TensorSrc_::position == AscendC::TPosition::CO1 &&
-                                    TensorDst_::position == AscendC::TPosition::GM &&
-                                    tla::detail::isRowMajor<TensorDst_::Layout>::value>>
+                   std::enable_if_t<tla::detail::isRowMajor<LayoutDst_>::value>>
 {
     using ArchTag = Catlass::Arch::AtlasA2;
-    using ElementDst = typename TensorDst_::Element;
+    using ElementDst = ElementDst_;
     using ElementSrc = typename TensorSrc_::Element;
     static constexpr auto quantPre = CopyL0CToGmQuantMode<ArchTag, ElementSrc, ElementDst,
         ScaleGranularity::NO_QUANT>::VALUE;

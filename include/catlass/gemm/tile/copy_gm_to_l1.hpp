@@ -1034,13 +1034,12 @@ struct CopyGmToL1<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>,
 
 ///////////////////////////////////////////TileCopyTla//////////////////////////////////////////////////////
 /// Partial specialization for CopyGmToL1, AtlasA2, RowMajor in and zN out.
-template <class TensorSrc_, class TensorDst_>
-struct TileCopyTla<Arch::AtlasA2, TensorSrc_, TensorDst_,
-    std::enable_if_t<TensorSrc_::position == AscendC::TPosition::GM &&
-                     TensorDst_::position == AscendC::TPosition::A1 &&
-                     tla::detail::isRowMajor<TensorSrc_::Layout>::value &&
-                     tla::detail::iszN<typename TensorDst_::Element, TensorDst_::Layout>::value>> {
-    using ElementSrc = typename TensorSrc_::Element;
+template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+struct TileCopyTla<Arch::AtlasA2,
+    tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::GM>,
+    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::A1>,
+    std::enable_if_t<tla::detail::isRowMajor<LayoutSrc>::value &&
+                     tla::detail::iszN<ElementDst, LayoutDst>::value>> {
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
 
     // Mehtods
@@ -1088,13 +1087,13 @@ struct TileCopyTla<Arch::AtlasA2, TensorSrc_, TensorDst_,
 };
 
 /// Partial specialization for CopyGmToL1, AtlasA2, ColumnMajor in and nZ out.
-template <class TensorSrc_, class TensorDst_>
-struct TileCopyTla<Arch::AtlasA2, TensorSrc_, TensorDst_,
-    std::enable_if_t<TensorSrc_::position == AscendC::TPosition::GM &&
-                     TensorDst_::position == AscendC::TPosition::A1 &&
-                     tla::detail::isColumnMajor<TensorSrc_::Layout>::value &&
-                     tla::detail::isnZ<typename TensorDst_::Element, TensorDst_::Layout>::value>> {
-    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(typename TensorSrc_::Element);
+template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+struct TileCopyTla<Arch::AtlasA2,
+    tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::GM>,
+    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::A1>,
+    std::enable_if_t<tla::detail::isColumnMajor<LayoutSrc>::value &&
+                     tla::detail::isnZ<ElementDst, LayoutDst>::value>> {
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
 
     // Mehtods
 

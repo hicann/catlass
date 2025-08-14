@@ -215,7 +215,7 @@ Add(IntTupleA const& a, IntTupleB const& b)
 {
     if constexpr (is_tuple<IntTupleA>::value && is_tuple<IntTupleB>::value) {
         static_assert(tuple_size<IntTupleA>::value == tuple_size<IntTupleB>::value, "Mismatched ranks");
-        return transform(a, b, [](auto const &x, auto const &y) { return Add(x, y); });
+        return transform(a, b, [](auto const& x, auto const& y) { return Add(x, y); });
     } else {
         return tla::add(a, b);
     }
