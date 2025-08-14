@@ -187,19 +187,9 @@ public:
     {
         constexpr bool isPaddingA = !std::is_void_v<PrologueA>;
         constexpr bool isPaddingB = !std::is_void_v<PrologueB>;
-        LayoutA layoutA;
-        LayoutB layoutB;
-        if constexpr (std::is_same_v<LayoutA, layout::RowMajor> || std::is_same_v<LayoutA, layout::ColumnMajor>) {
-            layoutA = LayoutA{args.problemShape.m(), args.problemShape.k()};
-        } else if constexpr (std::is_same_v<LayoutA, layout::zN> || std::is_same_v<LayoutA, layout::nZ>) {
-            layoutA = LayoutA::template MakeLayout<ElementA>(args.problemShape.m(), args.problemShape.k());
-        }
-        if constexpr (std::is_same_v<LayoutB, layout::RowMajor> || std::is_same_v<LayoutB, layout::ColumnMajor>) {
-            layoutB = LayoutB{args.problemShape.k(), args.problemShape.n()};
-        } else if constexpr (std::is_same_v<LayoutB, layout::zN> || std::is_same_v<LayoutB, layout::nZ>) {
-            layoutB = LayoutB::template MakeLayout<ElementB>(args.problemShape.k(), args.problemShape.n());
-        }
-        LayoutC layoutC{args.problemShape.m(), args.problemShape.n()};
+        LayoutA layoutA = LayoutA::template MakeLayout<ElementA>(args.problemShape.m(), args.problemShape.k());
+        LayoutB layoutB = LayoutB::template MakeLayout<ElementB>(args.problemShape.k(), args.problemShape.n());
+        LayoutC layoutC = LayoutC::template MakeLayout<ElementC>(args.problemShape.m(), args.problemShape.n());
 
         uint8_t *gmWA = nullptr;
         uint8_t *gmWB = nullptr;

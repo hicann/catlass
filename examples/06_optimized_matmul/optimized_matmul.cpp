@@ -189,26 +189,6 @@ bool IsNeedPadding(layout::nZ layout, uint32_t align)
     return false;
 }
 
-template <class Layout>
-size_t GetLen(Layout layout)
-{
-    if constexpr (std::is_same_v<Layout, layout::RowMajor> || std::is_same_v<Layout, layout::ColumnMajor>) {
-        return static_cast<size_t>(layout.shape(0)) * layout.shape(1);
-    } else if constexpr (std::is_same_v<Layout, layout::zN> || std::is_same_v<Layout, layout::nZ>) {
-        return static_cast<size_t>(layout.shape(0)) * layout.shape(1) * layout.shape(2) * layout.shape(3);
-    }
-}
-
-template <class Element, class Layout>
-Layout GetLayout(uint32_t rows, uint32_t cols)
-{
-    if constexpr (std::is_same_v<Layout, layout::RowMajor> || std::is_same_v<Layout, layout::ColumnMajor>) {
-        return Layout{rows, cols};
-    } else if constexpr (std::is_same_v<Layout, layout::zN> || std::is_same_v<Layout, layout::nZ>) {
-        return Layout::template MakeLayout<Element>(rows, cols);
-    }
-}
-
 template <class Adapter>
 void RunAdapter(Adapter matmul_op, typename Adapter::Arguments args, aclrtStream stream,
     uint32_t aicCoreNum, uint64_t fftsAddr)
@@ -238,12 +218,12 @@ void Run(Options const &options)
     uint32_t n = options.problemShape.n();
     uint32_t k = options.problemShape.k();
 
-    LayoutA layoutA = GetLayout<ElementA, LayoutA>(m, k);
-    LayoutB layoutB = GetLayout<ElementB, LayoutB>(k, n);
-    LayoutC layoutC = GetLayout<ElementC, LayoutC>(m, n);
-    size_t lenA = GetLen(layoutA);
-    size_t lenB = GetLen(layoutB);
-    size_t lenC = GetLen(layoutC);
+    LayoutA layoutA = LayoutA::template MakeLayout<ElementA>(m, k);
+    LayoutB layoutB = LayoutB::template MakeLayout<ElementB>(k, n);
+    LayoutC layoutC = LayoutC::template MakeLayout<ElementC>(m, n);
+    size_t lenA = layoutA.Capacity();
+    size_t lenB = layoutB.Capacity();
+    size_t lenC = layoutC.Capacity();
 
     size_t sizeA = lenA * sizeof(fp16_t);
     size_t sizeB = lenB * sizeof(fp16_t);
