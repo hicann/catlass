@@ -234,10 +234,12 @@ void Run(Options const &options)
     constexpr PaddingTag paddingTagB = (std::is_same_v<LayoutB, layout::zN> || std::is_same_v<LayoutB, layout::nZ>) ? 
         PaddingTag::NO_PADDING : PaddingTag::PADDING_BLOCK_ND;
     static const uint32_t COMPUTE_LENGTH_A = 96 * 1024 / sizeof(ElementA);
-    using PaddingAssistantA = PaddingAssistant<ArchTag, ElementA, LayoutA, COMPUTE_LENGTH_A, paddingTagA>;
+    using PaddingAssistantA = Catlass::Gemm::Kernel::PaddingAssistant<
+        ArchTag, ElementA, LayoutA, COMPUTE_LENGTH_A, paddingTagA>;
     using GlobalPaddingA = PaddingAssistantA::Padding;
     static const uint32_t COMPUTE_LENGTH_B = 96 * 1024 / sizeof(ElementB);
-    using PaddingAssistantB = PaddingAssistant<ArchTag, ElementB, LayoutB, COMPUTE_LENGTH_B, paddingTagB>;
+    using PaddingAssistantB = Catlass::Gemm::Kernel::PaddingAssistant<
+        ArchTag, ElementB, LayoutB, COMPUTE_LENGTH_B, paddingTagB>;
     using GlobalPaddingB = PaddingAssistantB::Padding;
 
     // if LayoutA and LayoutB is both ColumnMajor,
