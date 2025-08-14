@@ -164,26 +164,6 @@ bool IsNeedPadding(layout::nZ layout, uint32_t align)
     return false;
 }
 
-template <class Layout>
-size_t GetLen(Layout layout)
-{
-    if constexpr (std::is_same_v<Layout, layout::RowMajor> || std::is_same_v<Layout, layout::ColumnMajor>) {
-        return static_cast<size_t>(layout.shape(0)) * layout.shape(1);
-    } else if constexpr (std::is_same_v<Layout, layout::zN> || std::is_same_v<Layout, layout::nZ>) {
-        return static_cast<size_t>(layout.shape(0)) * layout.shape(1) * layout.shape(2) * layout.shape(3);
-    }
-}
-
-template <class Element, class Layout>
-Layout GetLayout(uint32_t rows, uint32_t cols)
-{
-    if constexpr (std::is_same_v<Layout, layout::RowMajor> || std::is_same_v<Layout, layout::ColumnMajor>) {
-        return Layout{rows, cols};
-    } else if constexpr (std::is_same_v<Layout, layout::zN> || std::is_same_v<Layout, layout::nZ>) {
-        return Layout::template MakeLayout<Element>(rows, cols);
-    }
-}
-
 template <class Adapter>
 void RunAdapter(Adapter matmul_op, typename Adapter::Arguments args, aclrtStream stream,
     uint32_t aicCoreNum, uint64_t fftsAddr)
