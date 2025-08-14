@@ -673,7 +673,10 @@ public:
         AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(pingpongFlag);
         ScaleS(sUbOffset, rowNumCurLoop, columnNumRound);
 
-        AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID2);
+        // fp32 mask shares the same space with fp16 P-pingpong,
+        // thus the upcast operation needs to wait for 2 flags, triggered by P-pingpong copyOut
+        AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
+        AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID1);
         AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID2);
         UpCastMask(sUbOffset, rowNumCurLoop, columnNumRound); 
         ApplyMask(sUbOffset, rowNumCurLoop, columnNumRound);
@@ -685,7 +688,6 @@ public:
 
         CalcExp(sUbOffset, rowNumCurLoop, rowNumCurLoopRound, columnNum, columnNumRound, rowOffset);
 
-        AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(pingpongFlag);
         DownCastP(sUbOffset, rowNumCurLoop, columnNumRound);
         AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(pingpongFlag);
 
@@ -695,8 +697,8 @@ public:
 
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(pingpongFlag);
         CopyPUbToGm(gOutput, sUbOffset, rowNumCurLoop, columnNumRound, columnNumPad);
-        AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(pingpongFlag);
-        AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID2);
+        AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
+        AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID1);
 
         UpdateGlobalRowSum(sUbOffset, rowNumCurLoop, rowNumCurLoopRound, dmUbOffsetCurCycle, rowOffset, isFirstStackTile);
     }

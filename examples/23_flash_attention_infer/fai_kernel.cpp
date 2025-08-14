@@ -348,9 +348,10 @@ public:
                 uint64_t gmOTmpOffset = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) + PVWorkSpacePingPongFlag * WORKSPACE_BLOCK_SIZE_DB;
                 LayoutP layoutPTemp(rowNum, stackSeqTileRound);
                 GemmCoord actualBlockShapePV{rowNum, embed, stackSeqTile};
-                Arch::CrossCoreWaitFlag(softmaxReady);
+
                 if (nowkvSIdx >= 0) {
                     uint32_t delayedKvSIdx = nowkvSIdx;
+                    Arch::CrossCoreWaitFlag(softmaxReady);
                     if (kvSIdx != maskSIdx) {
                         blockMmadPV(gP[gmPOffset], gV[gmVOffset], gOTmp[gmOTmpOffset],
                             gBlockTable[blockBOffset], layoutPTemp, layoutVTemp, actualBlockShapePV,
@@ -582,7 +583,7 @@ public:
                         delayedKvSIdx,
                         qSBlockSize,
                         qNBlockSize,
-                        (stackSeqCount == 0),
+                        (stackSeqCount - preLaunch == 0),
                         0,
                         curStackTileMod);
                 }
@@ -645,6 +646,7 @@ public:
                 uint32_t curStackTileMod = (stackSeqCount - preLaunch) % (preLaunch + 1);
                 uint32_t gmOffsetOTmp = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) +
                     curStackTileMod * WORKSPACE_BLOCK_SIZE_DB;
+                
                 if (delayedKvSIdx >= 0) {
                     Arch::CrossCoreWaitFlag(pvReady);
                     // rescale O
@@ -657,7 +659,7 @@ public:
                         kvSIdx,
                         qSBlockSize,
                         qNBlockSize,
-                        (stackSeqCount == 0),
+                        (stackSeqCount - preLaunch == 0),
                         (stackSeqCount - preLaunch == totalStackSeqNum - 1),
                         curStackTileMod);
                 }  
