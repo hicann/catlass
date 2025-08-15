@@ -73,6 +73,7 @@ foreach(EXAMPLE
     20_matmul_bias
     21_basic_matmul_preload_zN
     22_padding_splitk_matmul
+    23_conv_bias
 )
     add_subdirectory(${EXAMPLE})
 endforeach()

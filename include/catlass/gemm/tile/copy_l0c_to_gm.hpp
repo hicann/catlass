@@ -190,6 +190,62 @@ struct CopyL0CToGm<Catlass::Arch::AtlasA2,
     }
 };
 
+template <
+    class ElementAccumulator_,
+    class ElementDst_,
+    bool ReluEnable_
+>
+struct CopyL0CToGm<Catlass::Arch::AtlasA2,
+                   ElementAccumulator_,
+                   Gemm::GemmType<ElementDst_, layout::NDC1HWC0>,
+                   ScaleGranularity::NO_QUANT,
+                   ReluEnable_>
+{
+    using ArchTag = Catlass::Arch::AtlasA2;
+    using ElementDst = ElementDst_;
+    using ElementSrc = ElementAccumulator_;
+    using LayoutSrc = Catlass::layout::zN;
+    using LayoutDst = Catlass::layout::NDC1HWC0;
+    static constexpr auto quantPre = CopyL0CToGmQuantMode<ArchTag, ElementSrc, ElementDst,
+        ScaleGranularity::NO_QUANT>::VALUE;
+    static constexpr auto reluEn = ReluEnable_;
+
+    CATLASS_DEVICE
+    void operator()(AscendC::GlobalTensor<ElementDst> const &dst, AscendC::LocalTensor<ElementSrc> const &src,
+        LayoutDst const &dstLayout, LayoutSrc const &srcLayout, uint8_t unitFlag = 0)
+    {
+        /// srcLayout zN (Ho_l0*Wo_l0, Cout0*Cout1_l0)
+        /// dstLayout Fmap.shape (N, D, C1, H, W, C0)
+        AscendC::FixpipeParamsV220 intriParams;
+
+        // Fixpipe layout information
+        intriParams.nSize = srcLayout.orgShape(1);
+        intriParams.mSize = srcLayout.orgShape(0);
+        intriParams.srcStride = srcLayout.stride(3) / srcLayout.shape(2);
+        intriParams.dstStride = dstLayout.shape(1) * dstLayout.shape(2);
+
+        if constexpr (AscendC::IsSameType<ElementSrc, float>::value &&
+                      AscendC::IsSameType<ElementDst, float>::value) {
+            intriParams.isChannelSplit = true;
+        }
+
+        // Fixpipe auxiliary arguments
+        intriParams.quantPre = quantPre;
+        intriParams.reluEn = false; //false
+        intriParams.unitFlag = unitFlag;
+        AscendC::printf("[CopyOut] intriParams.nSize %d, intriParams.mSize %d, intriParams.srcStride %d, "
+                    "intriParams.dstStride %d, intriParams.quantPre %d, intriParams.reluEn %d.\n",
+            intriParams.nSize,
+            intriParams.mSize,
+            intriParams.srcStride,
+            intriParams.dstStride,
+            intriParams.quantPre,
+            intriParams.reluEn);
+        // Call AscendC Fixpipe
+        AscendC::Fixpipe<ElementDst, ElementSrc, AscendC::CFG_NZ>(dst, src, intriParams);
+    }
+};
+
 ///////////////////////////////////////////CopyL0CToGmTla/////////////////////////////////////////////////
 template <
     class ArchTag,
