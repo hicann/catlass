@@ -166,7 +166,7 @@ struct L1BTypeSelector<Gemm::GemmType<Element, layout::PaddingColumnMajor>> {
 
 template<class Element>
 struct L1BTypeSelector<Gemm::GemmType<Element, layout::KDC1KHKWN1N0C0>> {
-    using L1BType = Gemm::GemmType<Element, layout::KDC1KHKWN1N0C0, AscendC::TPosition::A1>;
+    using L1BType = Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::A1>;
 };
 
 template<class GmBiasType, class ElementAccumulator>

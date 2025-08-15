@@ -229,7 +229,7 @@ void Run(Options const &options)
     using OutType = Gemm::GemmType<half, LayoutOut>;
 
     using CoreTileShape = ConvCoreShape<1, 1, 1, 1>;  // nDim, dDim, c1Dim, hwDim
-    using FmapL1TileShape = ConvFmapL1Shape<16, 2, 1>;  //mAL1, kd, c1
+    using FmapL1TileShape = ConvFmapL1Shape<16, 1, 1>;  //mAL1, kd, c1
     using FilterL1TileShape = ConvFilterL1Shape<3, 1, 48>;  // kd, c1, nBL1
     using L0TileShape = ConvL0Shape<16, 48, 32>;  //mL0 kL0 nL0
 
