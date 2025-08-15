@@ -619,11 +619,6 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::NDC1HWC0, AscendC::TP
             AscendC::DataCopy<Element>(dstTensor[aL1Offset], srcTensor[aL1GmOffset], repeatParams);
             aL1Offset += cin1LoadL1 * hiLoadL1 * OriW * OriK0;
         }
-        AscendC::printf("[LoadAL1] dataCopyParams.blockCount %d, dataCopyParams.blockLen %d, "
-                    "dataCopyParams.srcStride %d.\n",
-            repeatParams.blockCount,
-            repeatParams.blockLen,
-            repeatParams.srcStride);
     }
 private:
     uint64_t aL1GmOffset = 0;
@@ -678,7 +673,6 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::KDC1KHKWN1N0C0, Ascen
             repeatParams.srcStride = N1 * N0 - currentNBL1;
             AscendC::DataCopy<Element>(dstTensor, srcTensor, repeatParams);
         }
-        AscendC::printf("[LoadBL1] blockCount %d srcStride %d blockLen %d.\n", repeatParams.blockCount, repeatParams.srcStride, repeatParams.blockLen);
     }
 private:
     AscendC::DataCopyParams repeatParams;

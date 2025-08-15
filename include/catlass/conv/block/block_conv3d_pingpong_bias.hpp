@@ -140,8 +140,6 @@ public:
         uint64_t hiAL1Max = (hoAL1Max - 1) * conv3dParams.sH() + conv3dParams.dilatedKernelH();
         hiAL1Max = hiAL1Max > conv3dParams.hi() ? conv3dParams.hi() : hiAL1Max;
         uint64_t al1Spacesize = FmapL1TileShape::Kd * FmapL1TileShape::Ci1 * hiAL1Max * conv3dParams.wicin0()  * sizeof(ElementFmap);
-        AscendC::printf("[Conv3dv2Block] FmapL1TileShape::Ci1 %d FmapL1TileShape::Kd %d \n", FmapL1TileShape::Ci1, FmapL1TileShape::Kd);
-        AscendC::printf("[Conv3dv2Block] bl1Spacesize %d hoAL1Max %d hiAL1Max %d al1Spacesize %d \n", bl1Spacesize, hoAL1Max, hiAL1Max, al1Spacesize);
 
         for (uint32_t i = 0; i < L0A_STAGES; i++) {
             l0ATensorList[i] = resource.l0ABuf.template GetBufferByByte<ElementFmap>(L0A_PINGPONG_BUF_SIZE * i);
@@ -215,7 +213,6 @@ public:
         iterParams.maxKL0Iter = iterParams.ddr2l0LoopK - 1;
         iterParams.kL0Tail = conv3dParams.alignCinKhKwKd() % L0TileShape::kL0;
         iterParams.kL0Tail = iterParams.kL0Tail == 0 ? L0TileShape::kL0 : iterParams.kL0Tail;
-        AscendC::printf("[Conv3dv2Block] ddr2l0LoopK %d maxKL0Iter %d kL0Tail %d \n", iterParams.ddr2l0LoopK, iterParams.maxKL0Iter, iterParams.kL0Tail);
 
         ////B矩阵k轴循环迭代参数
         iterParams.maxKBL1Iter = CeilDiv(conv3dParams.kdcin1(), FilterL1TileShape::Kd * FilterL1TileShape::Ci1) - 1;
@@ -223,8 +220,6 @@ public:
         iterParams.kBL1fullload = conv3dParams.kdcin1() == FilterL1TileShape::Kd * FilterL1TileShape::Ci1;
         uint32_t kBL1TailCheck = conv3dParams.alignCinKhKwKd() % (FilterL1TileShape::Kd * FilterL1TileShape::Ci1 * conv3dParams.khkwcin0());
         iterParams.kBL1Tail = kBL1TailCheck == 0 ? FilterL1TileShape::Kd * FilterL1TileShape::Ci1 * conv3dParams.khkwcin0() : kBL1TailCheck;
-        AscendC::printf("[Conv3dv2Block] maxKBL1Iter %d multiKBL1 %d kBL1fullload %d kBL1TailCheck %d kBL1Tail %d\n",
-                         iterParams.maxKBL1Iter, iterParams.multiKBL1, iterParams.kBL1fullload, kBL1TailCheck, iterParams.kBL1Tail);
 
         ////A矩阵k轴循环迭代参数
         iterParams.maxKAL1Iter = CeilDiv(conv3dParams.kdcin1(), FmapL1TileShape::Kd * FmapL1TileShape::Ci1) - 1;
@@ -232,8 +227,6 @@ public:
         iterParams.kAL1fullload = conv3dParams.kdcin1() == FmapL1TileShape::Kd * FmapL1TileShape::Ci1;
         uint32_t kAL1TailCheck = conv3dParams.alignCinKhKwKd() % (FmapL1TileShape::Kd * FmapL1TileShape::Ci1 * conv3dParams.khkwcin0());
         iterParams.kAL1Tail = kAL1TailCheck == 0 ? FmapL1TileShape::Kd * FmapL1TileShape::Ci1 * conv3dParams.khkwcin0() : kAL1TailCheck;
-        AscendC::printf("[Conv3dv2Block] maxKAL1Iter %d multiKAL1 %d kAL1fullload %d kAL1TailCheck %d kAL1Tail %d\n",
-                        iterParams.maxKAL1Iter, iterParams.multiKAL1, iterParams.kAL1fullload, kAL1TailCheck, iterParams.kAL1Tail);
 
         /////M方向的循环参数
         iterParams.mAL1Tail = actualBlockShape.hw() % FmapL1TileShape::mAL1;
@@ -245,8 +238,6 @@ public:
         iterParams.mAL0Tail = iterParams.mAL0Tail == 0 ? L0TileShape::mL0 : iterParams.mAL0Tail;
         iterParams.l12l0LoopM = CeilDiv(FmapL1TileShape::mAL1, L0TileShape::mL0);
         iterParams.maxML0Iter = iterParams.l12l0LoopM - 1;
-        AscendC::printf("[Conv3dv2Block] mAL1Tail %d mAL1DivmL0 %d ddr2l1LoopM %d maxMAL1Iter %d mAL0Tail %d l12l0LoopM %d maxML0Iter %d\n",
-                        iterParams.mAL1Tail, mAL1DivmL0, ddr2l1LoopM, iterParams.maxMAL1Iter, iterParams.mAL0Tail, iterParams.l12l0LoopM, iterParams.maxML0Iter);
 
         //////Cout方向的循环参数
         iterParams.maxNBL1Iter = CeilDiv(actualBlockShape.c1() * conv3dParams.cout0(), FilterL1TileShape::nBL1) - 1;
@@ -259,30 +250,22 @@ public:
         iterParams.ddr2l1LoopN = iterParams.maxNBL1Iter + 1;
         iterParams.l12l0LoopN = nBL1DivnL0;
         iterParams.maxNL0Iter = iterParams.l12l0LoopN - 1;
-        AscendC::printf("[Conv3dv2Block] maxNBL1Iter %d nBL1Tail %d nBL1DivnL0 %d nBL1TailAlign %d nL0Tail %d ddr2l1LoopN %d l12l0LoopN %d maxNL0Iter %d\n",
-                        iterParams.maxNBL1Iter, iterParams.nBL1Tail, nBL1DivnL0, iterParams.nBL1TailAlign, iterParams.nL0Tail,
-                        iterParams.ddr2l1LoopN, iterParams.l12l0LoopN, iterParams.maxNL0Iter);
 
         //////D方向循环参数
         iterParams.ddr2l1LoopD = actualBlockShape.d();
-        AscendC::printf("[Conv3dv2Block] ddr2l1LoopD %d\n", iterParams.ddr2l1LoopD);
         
         /////相关输入的起始位置
         iterParams.diStartPos = actualIdxStartFmap.d();
         iterParams.hwStartPos = actualIdxStartFmap.hw();
-        AscendC::printf("[Conv3dv2Block] diStartPos %d hwStartPos %d\n", iterParams.diStartPos, iterParams.hwStartPos);
         
         /////开始batch循环
         for (uint32_t batchIter = 0; batchIter < actualBlockShape.n(); ++batchIter) {
-            AscendC::printf("[Conv3dv2Block] batchIter %d\n", batchIter);
             auto gmBatchFmap = fmapGm[batchIter * conv3dParams.fmapOneBatchSize()];
             auto gmBatchOut = outGm[batchIter * conv3dParams.outputOneBatchSize()];
-            AscendC::printf("[Conv3dv2Block] conv3dParams.fmapOneBatchSize() %d\n", conv3dParams.fmapOneBatchSize());
-            AscendC::printf("[Conv3dv2Block] conv3dParams.outputOneBatchSize() %d\n", conv3dParams.outputOneBatchSize());
             /////实现IteraAll
             while (true) {
                 ///////第一次迭代需要重新初始化用到的参数
-                if(iterParams.isFirstIterate) {
+                if (iterParams.isFirstIterate) {
                     iterParams.nBL0Iter = 0;
                     iterParams.mAL0Iter = 0;
                     iterParams.mAL1Iter = 0;
@@ -330,15 +313,12 @@ public:
                 // in each iterate k, cal current m,n value
                 uint32_t n = (iterParams.nBL1Iter == iterParams.maxNBL1Iter && iterParams.nBL0Iter == iterParams.maxNL0Iter) ? iterParams.nL0Tail : L0TileShape::nL0;
                 uint32_t m = (iterParams.mAL1Iter == iterParams.maxMAL1Iter && iterParams.mAL0Iter == iterParams.maxML0Iter) ? iterParams.mAL0Tail : L0TileShape::mL0;
-                AscendC::printf("[Conv3dv2Block] n %d m %d\n", n, m);
                 
                 tileParams.l0CurrentM = CeilDiv(m, BLOCK_L0_M) * BLOCK_L0_M;
                 tileParams.l0CurrentN = CeilDiv(n, BLOCK_L0_N) * BLOCK_L0_N;
 
                 uint32_t biasGmOffset = iterParams.nBL1Iter * FilterL1TileShape::nBL1 + iterParams.nBL0Iter * L0TileShape::nL0;
-                AscendC::printf("[Conv3dv2Block] biasGmOffset %d\n", biasGmOffset);
 
-                //////TODO同步
                 auto layoutTileBias = layout::VectorLayout(actualBlockShape.c1() * conv3dParams.n0());
                 auto layoutBiasInL1 = layout::VectorLayout(tileParams.l0CurrentN);
                 auto l0BiasTile = l0BiasTensor;
@@ -346,20 +326,15 @@ public:
                 copyGmToL1Bias(l1BiasTensor, biasGm[biasGmOffset], layoutBiasInL1, layoutTileBias);
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(L1A_STAGES + L1B_STAGES);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(L1A_STAGES + L1B_STAGES);
-                // AscendC::DumpTensor(l1BiasTensor, 2, 16);
                 auto layoutBiasInL0 = layout::VectorLayout(tileParams.l0CurrentN);
                 AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(L0A_STAGES + L0B_STAGES);
                 copyL1ToBT(l0BiasTile, l1BiasTensor, layoutBiasInL0, layoutBiasInL1);
-                // AscendC::DumpTensor(l0BiasTensor, 2, 16);
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(L0A_STAGES + L0B_STAGES);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>(L0A_STAGES + L0B_STAGES);
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(L1A_STAGES + L1B_STAGES);
                 iterParams.kIter = 0;
                 uint16_t isOdd = 0;
-                AscendC::printf("no preload in ReduceK: loadAl1Flag: %d, kAL1fullload: %d loadBL1Flag: %d, kBL1fullload: %d\n",
-                    iterParams.loadAL1Flag, iterParams.kAL1fullload, iterParams.loadBL1Flag, iterParams.kBL1fullload);
                 while (iterParams.kIter < iterParams.ddr2l0LoopK) {
-                    AscendC::printf("no preload in ReduceK: kIter: %d loadAL1Flag %d\n", iterParams.kIter, iterParams.loadAL1Flag);
                     if (iterParams.loadAL1Flag || (!iterParams.kAL1fullload && iterParams.kIter % iterParams.multiKAL1 == 0)) {
                         AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[0]);
                         AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[0]);
@@ -386,7 +361,6 @@ public:
                 uint32_t howoIdx = FmapL1TileShape::mAL1 * iterParams.mAL1Iter + L0TileShape::mL0 * iterParams.mAL0Iter;
                 Conv3d6HdCoord gmTileOutOffset{0, iterParams.dOutIter, cout1L1Idx, howoIdx};  //TODO
                 auto gmTileOut = gmBatchOut[layoutOut.GetOffset(gmTileOutOffset)];
-                AscendC::printf("[CopyOut] offset %d.\n", layoutOut.GetOffset(gmTileOutOffset));
                 if constexpr (!ENABLE_UNIT_FLAG) {
                     AscendC::SetFlag<AscendC::HardEvent::M_FIX>(EVENT_ID0);
                     AscendC::WaitFlag<AscendC::HardEvent::M_FIX>(EVENT_ID0);
@@ -533,10 +507,6 @@ protected:
         bool set2dFlagDTail = false;
         uint32_t hiLoadL1 = orgHiLoadL1;
         uint32_t cin1LoadL1 = orgCin1LoadL1;
-        AscendC::printf("[LoadAL1Process] currentML1 %d currentM %d hoStartIdx %d hoEndIdx %d orgHiLoadL1 %d tmpCurCoreHiStartIdx %d"
-                         "curCoreHiStartIdx %d currentCin1LoadL1 %d kAL1Tmp %d orgCin1LoadL1 %d kdL1Idx %d cin1L1Idx %d\n", 
-                        currentML1, currentM, hoStartIdx, hoEndIdx, orgHiLoadL1, tmpCurCoreHiStartIdx, curCoreHiStartIdx,
-                        currentCin1LoadL1, kAL1Tmp, orgCin1LoadL1, kdL1Idx, cin1L1Idx);
 
         /////ProcessMMiddleData
         uint32_t hiStartIdxWithPad = hoStartIdx * conv3dParams.sH();
@@ -564,10 +534,6 @@ protected:
             hiLoadL1 = hiWithPad - hiStartIdxWithPad;
             padBottomL1 = hiEndIdxWithPad - hiWithPad;
         }
-        AscendC::printf("[ProcessMMiddleData] hiStartIdxWithPad %d hiEndIdxWithPad %d hiIdx %d hiWithPad %d aL1IsFullPad %d hiLoadL1 %d"
-                         "padTopL1 %d padBottomL1 %d\n", 
-                        hiStartIdxWithPad, hiEndIdxWithPad, hiIdx, hiWithPad, iterParams.aL1IsFullPad, hiLoadL1, padTopL1,
-                        padBottomL1);
 
         //////ProcessDoutMiddleData
         uint32_t diStartWithPad = iterParams.diStartPos + iterParams.dOutIter * conv3dParams.sD() + kdL1Idx * conv3dParams.dD();
@@ -579,8 +545,6 @@ protected:
         uint32_t diWithPad = conv3dParams.di() + conv3dParams.padhead();
         uint32_t cin1LoadL1PadHead = 0;
         uint32_t cin1LoadL1PadTail = 0;
-        AscendC::printf("[ProcessDoutMiddleData] diStartWithPad %d diEndWithPad %d diIdx %d diWithPad %d conv3dParams.di() %d conv3dParams.padhead() %d\n", 
-                        diStartWithPad, diEndWithPad, diIdx, diWithPad, conv3dParams.di(), conv3dParams.padhead());
         if (diEndWithPad <= conv3dParams.padhead()) {
             // di开头全pad
             iterParams.aL1IsFullPad = true;
@@ -611,10 +575,6 @@ protected:
             cin1LoadL1PadTail = cin1LoadL1 - kdTmp * conv3dParams.cin1();
             cin1LoadL1 = kdTmp * conv3dParams.cin1();
         }
-        AscendC::printf("[ProcessDoutMiddleData] diStartWithPad %d diEndWithPad %d diIdx %d diWithPad %d cin1LoadL1PadHead %d cin1LoadL1PadTail %d"
-                         "aL1IsFullPad %d set2dFlagDHead %d cin1LoadL1 %d set2dFlagDTail %d\n", 
-                        diStartWithPad, diEndWithPad, diIdx, diWithPad, cin1LoadL1PadHead, cin1LoadL1PadTail, iterParams.aL1IsFullPad,
-                        set2dFlagDHead, cin1LoadL1, set2dFlagDTail);
         if (!iterParams.aL1IsFullPad) {
             uint8_t padList[PAD_SIZE] = {0};
             padList[PAD_IDX_L] = conv3dParams.padleft();
@@ -622,7 +582,6 @@ protected:
             padList[PAD_IDX_T] = padTopL1;
             padList[PAD_IDX_B] = padBottomL1;
             SetFmatrix(hiLoadL1, conv3dParams.wi(), padList, AscendC::FmatrixMode::FMATRIX_LEFT);
-            AscendC::printf("[SetFmatrix] padList[PAD_IDX_L] %d padList[PAD_IDX_R] %d padList[PAD_IDX_T] %d padList[PAD_IDX_B] %d\n", padList[PAD_IDX_L], padList[PAD_IDX_R], padList[PAD_IDX_T], padList[PAD_IDX_B]);
 
             uint64_t aL1Offset = 0;
             if (set2dFlagDHead) {
@@ -635,14 +594,11 @@ protected:
                 InitConstValue(l1ATensorList[l1ListId], initConstValueParams);
                 aL1Offset += cin1LoadL1PadHead * hiLoadL1 * conv3dParams.wicin0();
                 set2dFlagDHead = false;
-                AscendC::printf("[LoadAL1] initConstValueParams.repeatTimes %d, initConstValueParams.blockNum %d \n", 
-                                initConstValueParams.repeatTimes, initConstValueParams.blockNum);
             }
 
             Conv3d6HdCoord gmTileFmapOffset{0, diIdx, cin1L1Idx, hiIdx * conv3dParams.wi()};  //TODO
             auto layoutTileFmap = layoutFmap.GetTileLayout(MakeCoord((uint32_t)1, conv3dParams.dD(), conv3dParams.cin1(), conv3dParams.hi(), conv3dParams.wi(), conv3dParams.cin0()));
             auto gmTileFmap = gmBatchFmap[layoutTileFmap.GetOffset(gmTileFmapOffset)];
-            AscendC::printf("[LoadAL1] aL1GmOffset %d aL1Offset %d\n", layoutTileFmap.GetOffset(gmTileFmapOffset), aL1Offset);
             layoutFmapInL1 = LayoutFmapInL1::MakeLayout(1, 1, cin1LoadL1, hiLoadL1, conv3dParams.wi() ,conv3dParams.cin0());
 
             copyGmToL1A(l1ATensorList[l1ListId][aL1Offset], gmTileFmap, layoutFmapInL1, layoutTileFmap);
@@ -661,7 +617,6 @@ protected:
         }
         iterParams.loadAL1Flag = false;
         layoutFmapInL1 = LayoutFmapInL1::MakeLayout(1, 1, orgCin1LoadL1, orgHiLoadL1, conv3dParams.wi() ,conv3dParams.cin0());
-        AscendC::DumpTensor(l1ATensorList[l1ListId], 2, 864);
     }
 
     CATLASS_DEVICE
@@ -670,16 +625,12 @@ protected:
         iterParams.kBL1Iter = kBL1Iter;
         uint32_t currentNBL1 = ((iterParams.nBL1Iter != iterParams.maxNBL1Iter) || (FilterL1TileShape::nBL1 >= conv3dParams.alignCout())) ? FilterL1TileShape::nBL1 : iterParams.nBL1TailAlign;
         uint32_t currentKBL1 = iterParams.kBL1Iter == iterParams.maxKBL1Iter ? iterParams.kBL1Tail : FilterL1TileShape::Kd * FilterL1TileShape::Ci1 * conv3dParams.khkwcin0();
-        Conv3dFracZ3dCoord gmTileFilterOffset{iterParams.kBL1Iter * FilterL1TileShape::Kd * FilterL1TileShape::Ci1 * conv3dParams.khkw(), iterParams.nBL1Iter * FilterL1TileShape::nBL1};   //TODO
-        AscendC::printf("[LoadBL1] bL1GmOffset %d iterParams.kBL1Iter %d FilterL1TileShape::Kd %d.\n", layoutFilter.GetOffset(gmTileFilterOffset), iterParams.kBL1Iter, FilterL1TileShape::Kd);
-        AscendC::printf("[LoadBL1] FilterL1TileShape::Ci1 %d conv3dParams.khkw() %d iterParams.nBL1Iter %d FilterL1TileShape::nBL1 %d.\n", FilterL1TileShape::Ci1, conv3dParams.khkw(), iterParams.nBL1Iter, FilterL1TileShape::nBL1);
+        Conv3dFracZ3dCoord gmTileFilterOffset{iterParams.kBL1Iter * FilterL1TileShape::Kd * FilterL1TileShape::Ci1 * conv3dParams.khkw(), iterParams.nBL1Iter * FilterL1TileShape::nBL1};
         auto layoutTileFilter = layoutFilter;
         auto gmTileFiler = filterGm[layoutTileFilter.GetOffset(gmTileFilterOffset)];
-        AscendC::printf("[LoadBL1] N1 %d, N0 %d.\n", layoutFilter.shape(3), layoutFilter.shape(2));
         layoutFilterInL1 = LayoutFilterInL1::template MakeLayout<ElementFilter>(currentKBL1, currentNBL1);
         copyGmToL1B(l1BTensorList[l1ListId], gmTileFiler, layoutFilterInL1, layoutTileFilter);
         iterParams.loadBL1Flag = false;  // LoopK中只有K方向可能重新载入。
-        // AscendC::DumpTensor(l1BTensorList[l1ListId], 2, 2304);
     }
 
     CATLASS_DEVICE
@@ -706,7 +657,6 @@ protected:
         uint32_t tilingNBSrc_ = (iterParams.nBL1Iter != iterParams.maxNBL1Iter) ? FilterL1TileShape::nBL1 : iterParams.nBL1TailAlign;
         MatrixCoord l1TileFilterOffset{iterParams.kBL0Iter * L0TileShape::kL0, iterParams.nBL0Iter * L0TileShape::nL0};   //TODO
         auto l1BTile = l1BTensorList[0][layoutFilterInL1.GetOffset(l1TileFilterOffset)];
-        AscendC::printf("[LoadBL0] load2dSrcOffset %d.\n", layoutFilterInL1.GetOffset(l1TileFilterOffset));
         LayoutBInL0 layoutBInL0 = LayoutBInL0::template MakeLayout<ElementFilter>(currentKL0, tileParams.l0CurrentN);
         copyL1ToL0B(l0BTile, l1BTile, layoutBInL0, layoutFilterInL1);
         AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0abFlag]);
@@ -724,7 +674,7 @@ protected:
         }
         if (iterParams.kIter == 0) {
             tileMmad(l0CTile, l0ATile, l0BTile, l0BiasTensor, tileParams.l0CurrentM, tileParams.l0CurrentN, currentKL0,
-                        true, unitFlag);
+                     true, unitFlag);
         } else {
             tileMmad(l0CTile, l0ATile, l0BTile, tileParams.l0CurrentM, tileParams.l0CurrentN, currentKL0, false, unitFlag);
         }

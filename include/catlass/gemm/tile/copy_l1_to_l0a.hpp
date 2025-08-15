@@ -201,15 +201,6 @@ struct CopyL1ToL0A<ArchTag, Catlass::Gemm::GemmType<Element, layout::NDC1HWC0, A
         LayoutDst layoutDst, LayoutSrc layoutSrc, 
         uint32_t kStartPt, uint32_t mStartPt
     ){
-        AscendC::printf(
-            "[LoadAL0] loadData3Dv2Params.strideW %d, loadData3Dv2Params.strideH %d, loadData3Dv2Params.filterW %d,"
-            "loadData3Dv2Params.filterH %d, loadData3Dv2Params.dilationFilterW %d, loadData3Dv2Params.dilationFilterH %d.\n",
-            loadData3Dv2Params.strideW,
-            loadData3Dv2Params.strideH,
-            loadData3Dv2Params.filterW,
-            loadData3Dv2Params.filterH,
-            loadData3Dv2Params.dilationFilterW,
-            loadData3Dv2Params.dilationFilterH);
         // LayoutDst = (Ho_l0a*Wo_l0a, C1_l0×Kh×Kw×C0)或者(Ho_l0a×Wo_l0a, Kd_l0×C1×Kh×Kw×C0)
         // LayoutSrc = 6hd = (N=1, D=1, cin1LoadL1, hiLoadL1, Wi, C0)
         loadData3Dv2Params.kStartPt = kStartPt;
@@ -218,14 +209,6 @@ struct CopyL1ToL0A<ArchTag, Catlass::Gemm::GemmType<Element, layout::NDC1HWC0, A
         loadData3Dv2Params.mExtension = layoutDst.orgShape(0);
         loadData3Dv2Params.channelSize = layoutSrc.orgShape(1) * layoutSrc.orgShape(2) * layoutSrc.orgShape(5);
         static constexpr AscendC::IsResetLoad3dConfig CONV3D_LOAD3DV2_DEFAULT_CONFIG = {false, false};
-        AscendC::printf(
-            "[LoadAL0] loadData3Dv2Params.channelSize %d, loadData3Dv2Params.kExtension %d, "
-            "loadData3Dv2Params.kStartPt %d, loadData3Dv2Params.mExtension %d, loadData3Dv2Params.mStartPt %d.\n",
-            loadData3Dv2Params.channelSize,
-            loadData3Dv2Params.kExtension,
-            loadData3Dv2Params.kStartPt,
-            loadData3Dv2Params.mExtension,
-            loadData3Dv2Params.mStartPt);
         AscendC::LoadData<Element, CONV3D_LOAD3DV2_DEFAULT_CONFIG>(dstTensor, srcTensor, loadData3Dv2Params);
     }
 private:

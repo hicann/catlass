@@ -122,9 +122,11 @@ public:
     CATLASS_DEVICE
     void operator()<AscendC::AIC>(Params const &params)
     {
-        BlockScheduler convBlockScheduler(Conv3d6HdCoord{params.problemShape.batch(), params.problemShape.dout(), params.problemShape.cout1(), params.problemShape.howo()}, Conv3d6HdCoord{CoreTileShape::noCnt, CoreTileShape::doCnt, CoreTileShape::co1Cnt, CoreTileShape::howoCnt});
+        BlockScheduler convBlockScheduler(Conv3d6HdCoord{params.problemShape.batch(), params.problemShape.dout(),
+                                          params.problemShape.cout1(), params.problemShape.howo()},
+                                          Conv3d6HdCoord{CoreTileShape::noCnt, CoreTileShape::doCnt,
+                                                         CoreTileShape::co1Cnt, CoreTileShape::howoCnt});
         uint32_t coreLoops = convBlockScheduler.GetCoreLoops();
-        AscendC::printf("[Conv3dV2Kernel] coreLoops %d\n", coreLoops);
 
         Arch::Resource<ArchTag> resource;
         BlockConv blockConv(resource, params.problemShape);
@@ -143,11 +145,9 @@ public:
             Conv3d6HdCoord blockCoord = convBlockScheduler.GetBlockCoord(loopIdx);
             Conv3d6HdCoord dimStartCoord = convBlockScheduler.GetDimStartIdx(blockCoord);
             Conv3d6HdCoord actualBlockShape = convBlockScheduler.GetActualBlockShape(blockCoord, dimStartCoord);
-            AscendC::printf("[Conv3dv2Kernel] noIdxStart %d doIdxStart %d c1IdxStart %d howoIdxStart %d \n", dimStartCoord.n(), dimStartCoord.d(), dimStartCoord.c1(), dimStartCoord.hw());
 
             uint32_t diIdxStart = Max(dimStartCoord.d() * params.problemShape.sD(), params.problemShape.padhead(), 0);
             uint32_t hiwiIdxStart = Max((dimStartCoord.hw() / params.problemShape.wo()) * params.problemShape.sH(), params.problemShape.padtop(), 0) * params.problemShape.wi();
-            AscendC::printf("[Conv3dv2Kernel] diIdxStart %d hiwiIdxStart %d\n", diIdxStart, hiwiIdxStart);
             
             //Compute initial location in logical coordinates
             Conv3d6HdCoord offsetFmap{dimStartCoord.n(), diIdxStart, 0, hiwiIdxStart};
@@ -160,17 +160,6 @@ public:
             int64_t gmOffsetOut = params.layoutOut.GetOffset(offsetOut);
             int64_t gmOffsetBias = dimStartCoord.c1() * params.problemShape.cout0();
 
-            AscendC::printf("[KernelInitBuffer] fmStartAddr %d weightStartAddr %d outputStartAddr %d biasStartAddr %d.\n",
-                gmOffsetFmap,
-                gmOffsetFilter,
-                gmOffsetOut,
-                gmOffsetBias);
-
-            AscendC::printf("[KernelBuffer] singleCoreNo %d singleCoreCo %d singleCoreDo %d singleCoreM %d.\n",
-                actualBlockShape.n(),
-                actualBlockShape.c1(),
-                actualBlockShape.d(),
-                actualBlockShape.hw());
             blockConv(
                 fmapGm[gmOffsetFmap], params.layoutFmap,
                 filterGm[gmOffsetFilter], params.layoutFilter,

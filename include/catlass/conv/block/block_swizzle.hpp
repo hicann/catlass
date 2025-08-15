@@ -35,11 +35,10 @@ struct Conv3dIdentityBlockSwizzle {
 
     CATLASS_DEVICE
     Conv3dIdentityBlockSwizzle(Conv3d6HdCoord const &outShape_, Conv3d6HdCoord const &loops_)
-        : outShape(outShape_), loops(loops_) 
+        : outShape(outShape_), loops(loops_)
     {
-        coreTileShape = Conv3d6HdCoord{CeilDiv(outShape.n(), loops.n()), CeilDiv(outShape.d(), loops.d()), CeilDiv(outShape.c1(), loops.c1()), CeilDiv(outShape.hw(), loops.hw())};
-        AscendC::printf("[Conv3dV2Kernel] coreTileShape.n() %d coreTileShape.d() %d coreTileShape.c1() %d coreTileShape.hw() %d\n", coreTileShape.n(), coreTileShape.d(), coreTileShape.c1(), coreTileShape.hw());
-        AscendC::printf("[Conv3dV2Kernel] loops.n() %d loops.d() %d loops.c1() %d loops.hw() %d\n", loops.n(), loops.d(), loops.c1(), loops.hw());
+        coreTileShape = Conv3d6HdCoord{CeilDiv(outShape.n(), loops.n()), CeilDiv(outShape.d(), loops.d()),
+                                       CeilDiv(outShape.c1(), loops.c1()), CeilDiv(outShape.hw(), loops.hw())};
         loopsMN = MatrixCoord{loops.hw(), loops.n() * loops.d() * loops.c1()};
     }
 

@@ -231,16 +231,8 @@ struct CopyL0CToGm<Catlass::Arch::AtlasA2,
 
         // Fixpipe auxiliary arguments
         intriParams.quantPre = quantPre;
-        intriParams.reluEn = false; //false
+        intriParams.reluEn = false;
         intriParams.unitFlag = unitFlag;
-        AscendC::printf("[CopyOut] intriParams.nSize %d, intriParams.mSize %d, intriParams.srcStride %d, "
-                    "intriParams.dstStride %d, intriParams.quantPre %d, intriParams.reluEn %d.\n",
-            intriParams.nSize,
-            intriParams.mSize,
-            intriParams.srcStride,
-            intriParams.dstStride,
-            intriParams.quantPre,
-            intriParams.reluEn);
         // Call AscendC Fixpipe
         AscendC::Fixpipe<ElementDst, ElementSrc, AscendC::CFG_NZ>(dst, src, intriParams);
     }
