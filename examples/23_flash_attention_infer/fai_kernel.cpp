@@ -58,10 +58,6 @@ public:
     using ElementOTmp = typename EpilogueRescaleO::ElementInput;
     using LayoutOTmp = typename EpilogueRescaleO::LayoutInput;
 
-    // using ElementUpdate = typename EpilogueRescaleO::ElementUpdate;
-    // using LayoutUpdate = typename EpilogueRescaleO::LayoutUpdate;
-
-
     /// Parameters structure
     struct Params {
         // Data members
@@ -329,9 +325,9 @@ public:
                             gBlockTable[blockBOffset], layoutQTemp, layoutKTemp, actualBlockShapeQK,
                             kvSIdx, kvSLoopNumTotal, pagedBlockSize, noSkipKvS, strideKV, noMaskTailS, 1);
                     } else {
-                        // blockMmadQK(gQ[gmQOffset], gK[gmKOffset], gS[gmSOffset],
-                        //     gBlockTable[blockBOffset], layoutQTemp, layoutKTemp, actualBlockShapeQK,
-                        //     kvSIdx, kvSLoopNumTotal, pagedBlockSize, noSkipKvS, strideKV);
+                        blockMmadQK(gQ[gmQOffset], gK[gmKOffset], gS[gmSOffset],
+                            gBlockTable[blockBOffset], layoutQTemp, layoutKTemp, actualBlockShapeQK,
+                            kvSIdx, kvSLoopNumTotal, pagedBlockSize, noSkipKvS, strideKV);
                         gmKOffset += stackSeqTile * strideKV;
                     }
                     Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(qkReady);
@@ -559,7 +555,6 @@ public:
 
                 if (kvSIdx >= preLaunch * blockStackNum) {
                     uint32_t delayedKvSIdx = kvSIdx - preLaunch * blockStackNum;
-                    // stackSeqTile = pagedBlockSize * blockStackNum;
                     if (delayedKvSIdx + blockStackNum > kvSLoopNumNoMask - 1) {
                         stackSeqTile = noMaskKvS - kvSIdx * pagedBlockSize;
                     } else {
@@ -573,7 +568,6 @@ public:
                         curStackTileMod * WORKSPACE_BLOCK_SIZE_DB;
                     Arch::CrossCoreWaitFlag(pvReady);
                     // rescale O
-                    // AscendC::DumpTensor(gOTmp[gmOffsetOTmp], 0, 128);
                     epilogueRescaleO(
                         gO[gmOffsetO],
                         gOTmp[gmOffsetOTmp],
@@ -589,18 +583,13 @@ public:
                 }
                 stackSeqCount++;
             }
-            uint32_t maskedStartIdx = (noMaskTailS == 0) ? kvSLoopNumNoMask : kvSLoopNumNoMask - 1;
-            // uint32_t noMaskTailStackNum = (noMaskKvS / pagedBlockSize) % blockStackNum;
-            // noMaskTailStackNum = noMaskTailStackNum != 0 ? noMaskTailStackNum : blockStackNum;
-            // uint32_t maskedPreStackNum = (preLaunch - 1) * blockStackNum + noMaskTailStackNum;
-            
+            uint32_t maskedStartIdx = (noMaskTailS == 0) ? kvSLoopNumNoMask : kvSLoopNumNoMask - 1; 
             uint32_t noMaskEndStackNum = kvSLoopNumNoMask % blockStackNum;
             noMaskEndStackNum = noMaskEndStackNum != 0 ? noMaskEndStackNum : blockStackNum;
             
             uint32_t maskedEndIdx = noMaskKvS / pagedBlockSize;
             // masked kvSeqlen loop
             for (uint32_t kvSIdx = maskedStartIdx;
-                // kvSIdx <= maskedEndIdx + preLaunch * blockStackNum;
                 kvSIdx < kvSLoopNumTotal + preLaunch * blockStackNum;
                 kvSIdx += blockStackNum) {
                 if (kvSIdx < kvSLoopNumTotal) {

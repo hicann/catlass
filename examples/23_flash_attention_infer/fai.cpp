@@ -273,29 +273,9 @@ void Run(const Options &options)
 
     FAInferTiling::GetFATilingParam(faInfo, blockDim, faTilingData);
 
-    std::cout << "qoSize : " << qoSize << endl;
-    std::cout << "faTilingData.batch : " << faTilingData.batch << endl;
-    std::cout << "faTilingData.numHeads : " << faTilingData.numHeads << endl;
-    std::cout << "faTilingData.kvHeads : " << faTilingData.kvHeads << endl;
-    std::cout << "faTilingData.embeddingSize : " << faTilingData.embeddingSize << endl;
-    std::cout << "faTilingData.numBlocks : " << faTilingData.numBlocks << endl;
-    std::cout << "faTilingData.blockSize : " << faTilingData.blockSize << endl;
-    std::cout << "faTilingData.maxKvSeqlen : " << faTilingData.maxKvSeqlen << endl;
-    std::cout << "faTilingData.maxNumBlocksPerBatch : " << faTilingData.maxNumBlocksPerBatch << endl;
-    std::cout << "faTilingData.scaleValue : " << faTilingData.scaleValue << endl;
-    std::cout << "faTilingData.totalTaskNum : " << faTilingData.totalTaskNum << endl;
-    std::cout << "faTilingData.mm1OutSize : " << faTilingData.mm1OutSize << endl;
-    std::cout << "faTilingData.smOnlineOutSize : " << faTilingData.smOnlineOutSize << endl;
-    std::cout << "faTilingData.mm2OutSize : " << faTilingData.mm2OutSize << endl;
-    std::cout << "faTilingData.UpdateSize : " << faTilingData.UpdateSize << endl;
-    std::cout << "faTilingData.workSpaceSize : " << faTilingData.workSpaceSize << endl;
-    std::cout << "faTilingData.maskType : " << faTilingData.maskType << endl;
-    // std::cout << "tilingSize : " << tilingSize <<"  :" <<sizeof(FAInferTiling::FATilingData)<< endl;
-
     tilingHost = reinterpret_cast<void *>(&faTilingData);
 
     uint32_t tilingKey = 0;
-    std::cout << "tilingKey : " << tilingKey << std::endl;
 
     ACL_CHECK(aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize, ACL_MEMCPY_HOST_TO_DEVICE));
 

@@ -129,12 +129,8 @@ void FillSplitCoreTilingData(const FAInfo &faInfo, FATilingData &faTilingData)
         uint32_t curQNBlockTile = GetQNBlockTile(qSeqlen, groupSize);
         uint32_t qNBlockNumPerGroup = (groupSize + curQNBlockTile - 1) / curQNBlockTile;
         uint32_t curQNBlockNum = qNBlockNumPerGroup * faInfo.kvHeads;
-        std::cout << "batch " << batchIdx << " curQNBlockTile : " << curQNBlockTile << '\n';
-        std::cout << "batch " << batchIdx << " curQNBlockNum : " << curQNBlockNum << '\n';
         uint32_t curQSBlockTile = GetQSBlockTile(kvSeqlen);
         uint32_t curQSBlockNum = (qSeqlen + curQSBlockTile - 1) / curQSBlockTile;
-        std::cout << "batch " << batchIdx << " curQSBlockTile : " << curQSBlockTile << '\n';
-        std::cout << "batch " << batchIdx << " curQSBlockNum : " << curQSBlockNum << '\n';
         uint32_t curTaskNum = curQNBlockNum * curQSBlockNum;
         if (batchIdx == 0) {
             faTilingData.firstBatchTaskNum = curTaskNum;
@@ -142,7 +138,6 @@ void FillSplitCoreTilingData(const FAInfo &faInfo, FATilingData &faTilingData)
         totalTaskNum += curTaskNum;
     }
     faTilingData.totalTaskNum = totalTaskNum;
-    std::cout << "total task nums : " << faTilingData.totalTaskNum << '\n';
 }
 
 void FillWorkSpaceTilingData(uint32_t blockDim, FATilingData &faTilingData)

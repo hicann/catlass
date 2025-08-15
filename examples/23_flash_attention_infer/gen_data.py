@@ -84,11 +84,8 @@ class TestFlashAttentionInfer():
     @classmethod
     def softmax_numpy(cls, sim):
         row_max = np.max(sim, axis=-1, keepdims=True)
-        # print(row_max_2)
         sim_sub = sim - row_max
-
         sim_sub = np.exp(sim_sub)
-        # print(d_row_max)
         row_sum = np.sum(sim_sub, axis=-1, keepdims=True)
         soft_res = sim_sub / row_sum
         return soft_res
@@ -112,9 +109,7 @@ class TestFlashAttentionInfer():
                 ).astype(np.float32)
         
         # softmax
-        # print(sim_high[:, 8:10, -128:])
         p_high = self.softmax_numpy(sim_high)
-        # print(p_high_2)
         p = p_high.astype(query.dtype)
         p_high = p_high.astype(np.float32)
         value = np.transpose(value, (1, 0, 2))
@@ -171,9 +166,6 @@ class TestFlashAttentionInfer():
             out, out_high = self.ref_masked_attention(q, keys, values, scale, mask)
             out = out.reshape(-1, num_heads, head_size_vo)
             out_high = out_high.reshape(-1, num_heads, head_size_vo)
-            # out = out.reshape(-1, num_heads, 500)
-            # out_high = out_high.reshape(-1, num_heads, 500)
-            # import pdb;pdb.set_trace()
             output[cu_seqlen: cu_seqlen + q_seqlen, :, :] = out
             true_out[cu_seqlen: cu_seqlen + q_seqlen, :, :] = out_high
             cu_seqlen += q_seqlen
@@ -239,7 +231,6 @@ class TestFlashAttentionInfer():
             mask = None
 
         shape_out = (num_tokens, gen_data_params.num_heads, head_size_vo)
-        # shape_out = (num_tokens, gen_data_params.num_heads, 500)
         ref_output = np.zeros(shape_out, dtype=gen_data_params.dtype)
         true_out = np.zeros(shape_out, dtype=np.float32)
 
@@ -257,7 +248,6 @@ class TestFlashAttentionInfer():
         query.tofile(os.path.join(WORKSPACE, "data", "q.bin"))
         key_cache.tofile(os.path.join(WORKSPACE, "data", "k.bin"))
         value_cache.tofile(os.path.join(WORKSPACE, "data", "v.bin"))
-        # self.sim_high.tofile(os.path.join(WORKSPACE, "data", "s.bin"))
         np.array(block_tables).astype(np.int32).tofile(os.path.join(WORKSPACE, "data", "block_table.bin"))
         np.array(gen_data_params.q_seqlen_list).astype(np.int64).tofile(
             os.path.join(WORKSPACE, "data", "q_seqlen.bin"))
@@ -266,7 +256,6 @@ class TestFlashAttentionInfer():
         if mask is not None:
             actual_input_mask_triu = np.triu(np.ones((1024, 1024)), 1).astype(gen_data_params.dtype)
             actual_input_mask_triu *= -10000
-            # print(actual_input_mask_triu)
             actual_input_mask_triu.tofile(os.path.join(WORKSPACE, "data", "mask.bin"))
         ref_output.astype(np.float32).tofile(os.path.join(WORKSPACE, "data", "golden.bin"))
 
@@ -301,7 +290,6 @@ if __name__ == "__main__":
     num_blocks = batch * ((max_kv_seqlen + block_size - 1) // block_size)
     
     testObj = TestFlashAttentionInfer()
-    # testObj.check_attr(batch, q_seqlen, kv_seqlen, num_blocks, block_size)
     gen_data_params = testObj.GenDataParams(q_seqlen_list, kv_seqlen_list, num_head,
                                             kv_heads, embedding_size,
                                             num_blocks, block_size, mask_type, dtype, kv_dtype)
