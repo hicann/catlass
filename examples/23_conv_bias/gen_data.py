@@ -49,15 +49,10 @@ def main():
     w_out = (w + 2 * pW - dW * (kw - 1) - 1) // sW + 1
 
     # 生成正常shape数据
-    # fmap = np.random.uniform(-5, 5, (N, Cin, d, h, w)).astype(np_dtype)
-    # weight = np.random.uniform(-0.1, 0.1, (Cout, Cin, kd, kh, kw)).astype(np_dtype)
-    # bias = np.random.uniform(-0.1, 0.1, (Cout,)).astype(bias_dtype)
-    
     fmap_tensor = torch.randn((N, Cin, d, h, w)).to(torch_dtype).to(tensorDtype)
     weight_tensor = torch.randn((Cout, Cin, kd, kh, kw)).to(torch_dtype).to(tensorDtype)
     bias = np.random.uniform(-0.1, 0.1, (Cout,)).astype(bias_dtype)
 
-    # # 转换为PyTorch张量
     fmap = fmap_tensor.numpy().astype(np_dtype)
     weight = weight_tensor.numpy().astype(np_dtype)
     bias_tensor = torch.from_numpy(bias).to(tensorDtype)
@@ -81,7 +76,6 @@ def main():
     fmap_data = np.concatenate((fmap, zero_padding_array), axis=1)
     fmap_data = fmap_data.reshape((N, c1, c0, d, h, w)).transpose(0, 3, 1, 4, 5, 2)
     print(f"fmap_reshaped dtype:{fmap_data.dtype}")
-    print(f"fmap_reshaped dtype:{fmap_data.size}")
 
     # weight:(Cout, Cin, kd, kh, kw) --> (kd * c1 * kh * kw) * n1 * n0 * c0
     num_padding_in_n = n1 * n0 - Cout
@@ -100,7 +94,6 @@ def main():
     golden_np_data = np.concatenate((golden_np, zero_padding_array), axis=1)
     golden_np_data = golden_np_data.reshape((N, cout1, c0, d_out, h_out, w_out)).transpose(0, 3, 1, 4, 5, 2).astype(np.float32)
     print(f"golden_reshaped dtype:{golden_np_data.dtype}")
-    print(f"golden_reshaped dtype:{golden_np_data.size}")
 
     print(f"fmap_reshaped shape:{fmap_data.shape}")
     print(f"weight_reshaped shape:{weight_data.shape}")
@@ -109,17 +102,10 @@ def main():
     os.makedirs("data", exist_ok=True)
 
     # 保存数据为二进制文件
-    print(f"fmap_reshaped dtype:{fmap_data.dtype}")
-    print(f"weight_reshaped dtype:{weight_data.dtype}")
-    print(f"golden_reshaped dtype:{golden_np_data.dtype}")
     fmap_data.tofile("data/fmap.bin")
     weight_data.tofile("data/weight.bin")
     bias.tofile("data/bias.bin")
     golden_np_data.tofile("data/golden.bin")
-    # print("fmap_data:", fmap_data)
-    # print("weight_data:", weight_data)
-    # print("bias:", bias)
-    # print("golden_data:", golden_np_data)
    
     print(f"Data generated successfully! Output saved in 'data' directory.")
     print(f"Input shape: {N}x{d}x{h}x{w}x{Cin}")
