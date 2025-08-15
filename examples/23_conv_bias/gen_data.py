@@ -108,7 +108,6 @@ def main():
     golden_np_data.tofile("data/golden.bin")
    
     print(f"Data generated successfully! Output saved in 'data' directory.")
-    print(f"Input shape: {N}x{d}x{h}x{w}x{Cin}")
 
 if __name__ == "__main__":
     if len(sys.argv) != 20:

@@ -123,6 +123,11 @@ struct L1ATypeSelector<Gemm::GemmType<Element, layout::PaddingColumnMajor>> {
     using L1AType = Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::A1>;
 };
 
+template<class Element>
+struct L1ATypeSelector<Gemm::GemmType<Element, layout::NDC1HWC0>> {
+    using L1AType = Gemm::GemmType<Element, layout::NDC1HWC0, AscendC::TPosition::A1>;
+};
+
 template<class GmBType>
 struct L1BTypeSelector {
     static_assert(DEPENDENT_FALSE<GmBType>,
@@ -157,6 +162,11 @@ struct L1BTypeSelector<Gemm::GemmType<Element, layout::nZ>> {
 template<class Element>
 struct L1BTypeSelector<Gemm::GemmType<Element, layout::PaddingColumnMajor>> {
     using L1BType = Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::A1>;
+};
+
+template<class Element>
+struct L1BTypeSelector<Gemm::GemmType<Element, layout::KDC1KHKWN1N0C0>> {
+    using L1BType = Gemm::GemmType<Element, layout::KDC1KHKWN1N0C0, AscendC::TPosition::A1>;
 };
 
 template<class GmBiasType, class ElementAccumulator>

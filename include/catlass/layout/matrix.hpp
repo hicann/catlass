@@ -15,6 +15,7 @@
 #include "catlass/coord.hpp"
 #include "catlass/detail/alignment.hpp"
 #include "catlass/matrix_coord.hpp"
+#include "catlass/conv_coord.hpp"
 
 namespace Catlass::layout {
 
