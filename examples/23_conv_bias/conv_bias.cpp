@@ -66,7 +66,7 @@ bool ReadFile(const std::string &filePath, void *buffer, size_t bufferSize)
         return false;
     }
     buf->pubseekpos(0, std::ios::in);
-    buf->sgetn(static_cast<char *>(buffer), size);
+    buf->sgetn(static_cast<char*>(buffer), size);
     return true;
 }
 
@@ -91,10 +91,10 @@ struct Options {
             HI_INDEX,
             WI_INDEX,
             CIN0_INDEX,
+            COUT_INDEX,
             KD_INDEX,
             KH_INDEX,
             KW_INDEX,
-            COUT_INDEX,
             SD_INDEX,
             SH_INDEX,
             SW_INDEX,
