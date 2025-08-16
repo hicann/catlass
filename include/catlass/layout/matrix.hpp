@@ -356,6 +356,27 @@ public:
                   ELE_NUM_PER_FRACTAL);
     }
 
+    /// Partial specialization for AscendC::int4b_t. Make the layout of a coordinate (row, column)
+    template <>
+    CATLASS_HOST_DEVICE constexpr 
+    nZ MakeLayout<AscendC::int4b_t>(Index orgRows, Index orgCols)
+    {
+        constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 * 2;
+        constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL * 2;
+        Index rowsRound = RoundUp<ELE_NUM_PER_C0>(orgRows);
+        Index colsRound = RoundUp<C0_NUM_PER_FRACTAL>(orgCols);
+        return nZ(orgRows,
+                  orgCols,
+                  ELE_NUM_PER_C0,
+                  rowsRound / ELE_NUM_PER_C0,
+                  C0_NUM_PER_FRACTAL,
+                  colsRound / C0_NUM_PER_FRACTAL,
+                  1,
+                  colsRound * ELE_NUM_PER_C0,
+                  ELE_NUM_PER_C0,
+                  ELE_NUM_PER_FRACTAL);
+    }
+
     /// Returns the offset of a coordinate in linear memory.
     /// Assumes coordinate has convention (row, column)
     CATLASS_HOST_DEVICE
@@ -520,6 +541,28 @@ public:
         constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
         Index rowsRound = RoundUp<C0_NUM_PER_FRACTAL>(orgRows);
         Index colsRound = RoundUp<ELE_NUM_PER_C0>(orgCols);
+        return zN(orgRows,
+                  orgCols,
+                  C0_NUM_PER_FRACTAL,
+                  rowsRound / C0_NUM_PER_FRACTAL,
+                  ELE_NUM_PER_C0,
+                  colsRound / ELE_NUM_PER_C0,
+                  ELE_NUM_PER_C0,
+                  ELE_NUM_PER_FRACTAL,
+                  1,
+                  rowsRound * ELE_NUM_PER_C0);
+    }
+
+    /// Partial specialization for AscendC::int4b_t. Make the layout of a coordinate (row, column)
+    template <>
+    CATLASS_HOST_DEVICE constexpr 
+    zN MakeLayout<AscendC::int4b_t>(Index orgRows, Index orgCols)
+    {
+        constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 * 2;
+        constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL * 2;
+        Index rowsRound = RoundUp<C0_NUM_PER_FRACTAL>(orgRows);
+        Index colsRound = RoundUp<ELE_NUM_PER_C0>(orgCols);
+
         return zN(orgRows,
                   orgCols,
                   C0_NUM_PER_FRACTAL,
@@ -709,6 +752,27 @@ public:
     {
         constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
         constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
+        Index rowsRound = RoundUp<C0_NUM_PER_FRACTAL>(orgRows);
+        Index colsRound = RoundUp<ELE_NUM_PER_C0>(orgCols);
+        return zZ(orgRows,
+                  orgCols,
+                  C0_NUM_PER_FRACTAL,
+                  rowsRound / C0_NUM_PER_FRACTAL,
+                  ELE_NUM_PER_C0,
+                  colsRound / ELE_NUM_PER_C0,
+                  ELE_NUM_PER_C0,
+                  colsRound * C0_NUM_PER_FRACTAL,
+                  1,
+                  ELE_NUM_PER_FRACTAL);
+    }
+
+    /// Partial specialization for AscendC::int4b_t. Make the layout of a coordinate (row, column)
+    template <>
+    CATLASS_HOST_DEVICE constexpr 
+    zZ MakeLayout<AscendC::int4b_t>(Index orgRows, Index orgCols)
+    {
+        constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 * 2;
+        constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL * 2;
         Index rowsRound = RoundUp<C0_NUM_PER_FRACTAL>(orgRows);
         Index colsRound = RoundUp<ELE_NUM_PER_C0>(orgCols);
         return zZ(orgRows,

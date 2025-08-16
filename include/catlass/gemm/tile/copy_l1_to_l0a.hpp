@@ -253,6 +253,44 @@ struct CopyL1ToL0A<ArchTag, Gemm::GemmType<Element, layout::zN, AscendC::TPositi
     }
 };
 
+/// Partial specialization for AscendC::int4b_t, zN in and zZ out.
+template <class ArchTag>
+struct CopyL1ToL0A<ArchTag, Gemm::GemmType<AscendC::int4b_t, layout::zN, AscendC::TPosition::A1>>
+{
+    using Element = AscendC::int4b_t;
+    using LayoutDst = layout::zZ;
+    using LayoutSrc = layout::zN;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 * 2;
+    static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL * 2;
+
+    // Methods
+
+    CATLASS_DEVICE
+    CopyL1ToL0A() {};
+
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::LocalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+    {
+        AscendC::LoadData2DParams loadDataParams;
+
+        loadDataParams.startIndex = 0;
+        loadDataParams.repeatTimes = static_cast<uint16_t>(layoutDst.shape(3));
+        loadDataParams.srcStride = layoutSrc.stride(3) / ELE_NUM_PER_FRACTAL;
+        loadDataParams.sid = 0;
+        loadDataParams.dstGap = layoutDst.stride(3) / ELE_NUM_PER_FRACTAL - 1;
+        loadDataParams.ifTranspose = false;
+        loadDataParams.addrMode = 0;
+
+        for (uint32_t i = 0; i < layoutDst.shape(1); i++) {
+            AscendC::LoadData(dstTensor[i * layoutDst.stride(1)], srcTensor[i * layoutSrc.stride(1)], loadDataParams);
+        }
+    }
+};
+
 /// Partial specialization for float, zN in and zZ out.
 template <class ArchTag>
 struct CopyL1ToL0A<ArchTag, Gemm::GemmType<float, layout::zN, AscendC::TPosition::A1>> {

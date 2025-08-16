@@ -95,6 +95,15 @@ struct CopyL0CToGmQuantMode<
     static constexpr auto VALUE = QuantMode_t::VDEQF16;
 };
 
+template <>
+struct CopyL0CToGmQuantMode<
+    Catlass::Arch::AtlasA2,
+    int32_t, half,
+    ScaleGranularity::PER_GROUP
+> {
+    static constexpr auto VALUE = QuantMode_t::VDEQF16;
+};
+
 template <
     class ArchTag,
     class ElementAccumulator,
@@ -145,6 +154,47 @@ struct CopyL0CToGm<Catlass::Arch::AtlasA2,
 
         // Call AscendC Fixpipe
         AscendC::Fixpipe<ElementDst, ElementSrc, AscendC::CFG_ROW_MAJOR>(dst, src, intriParams);
+    }
+};
+
+template <
+    class ElementAccumulator_,
+    class ElementDst_,
+    bool ReluEnable_>
+struct CopyL0CToGm<Catlass::Arch::AtlasA2,
+                   ElementAccumulator_,
+                   Gemm::GemmType<ElementDst_, layout::RowMajor>,
+                   ScaleGranularity::PER_GROUP,
+                   ReluEnable_>
+{
+    using ArchTag = Catlass::Arch::AtlasA2;
+    using ElementDst = ElementDst_;
+    using ElementSrc = ElementAccumulator_;
+    using LayoutSrc = Catlass::layout::zN;
+    using LayoutDst = Catlass::layout::RowMajor;
+    static constexpr auto quantPre = CopyL0CToGmQuantMode<ArchTag, ElementSrc, ElementDst,
+                                                          ScaleGranularity::PER_GROUP>::VALUE;
+    static constexpr auto reluEn = ReluEnable_;
+
+    CATLASS_DEVICE
+    void operator()(AscendC::GlobalTensor<ElementDst> const &dst, AscendC::LocalTensor<ElementSrc> const &src, AscendC::LocalTensor<uint64_t> const &quantTensor,
+                    LayoutDst const &dstLayout, LayoutSrc const &srcLayout, uint8_t unitFlag = 0)
+    {
+        AscendC::FixpipeParamsV220 intriParams;
+
+        // Fixpipe layout information
+        intriParams.nSize = dstLayout.shape(1);
+        intriParams.mSize = dstLayout.shape(0);
+        intriParams.srcStride = srcLayout.stride(3) / srcLayout.stride(0);
+        intriParams.dstStride = dstLayout.stride(0);
+
+        // Fixpipe auxiliary arguments
+        intriParams.quantPre = quantPre;
+        intriParams.reluEn = reluEn;
+        intriParams.unitFlag = unitFlag;
+        // Call AscendC Fixpipe
+        AscendC::Fixpipe<ElementDst, ElementSrc, AscendC::CFG_ROW_MAJOR>(dst, src, quantTensor, intriParams);
+        AscendC::PipeBarrier<PIPE_ALL>();
     }
 };
 
