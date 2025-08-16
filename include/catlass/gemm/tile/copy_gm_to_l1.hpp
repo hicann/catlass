@@ -1000,6 +1000,55 @@ struct CopyGmToL1<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>> {
     }
 };
 
+/// Partial specialization for AtlasA2, RowMajor in and zN out.
+template <>
+struct CopyGmToL1<Arch::AtlasA2, Gemm::GemmType<int4b_t, layout::RowMajor>>
+{
+    // using Element = int8_t;
+    using Element = int4b_t;
+    using LayoutDst = layout::zN;
+    using LayoutSrc = layout::RowMajor;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = Catlass::divElement<uint32_t, Element>(BYTE_PER_C0);
+    // Mehtods
+
+    CATLASS_DEVICE
+    CopyGmToL1(){};
+
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::GlobalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+    {
+        AscendC::Nd2NzParams intriParams;
+
+        intriParams.ndNum = 1;
+        intriParams.dValue = layoutSrc.shape(1) / 2;
+        intriParams.srcNdMatrixStride = 0;
+        intriParams.dstNzC0Stride = layoutDst.stride(3) / ELE_NUM_PER_C0;
+        intriParams.dstNzMatrixStride = 0;
+
+        if (layoutSrc.stride(0) < STRIDE_LIMIT)
+        {
+            intriParams.nValue = layoutSrc.shape(0);
+            intriParams.srcDValue = layoutSrc.stride(0) / 2;
+            intriParams.dstNzNStride = layoutDst.stride(0) / ELE_NUM_PER_C0;
+            AscendC::DataCopy(dstTensor, srcTensor, intriParams);
+        }
+        else
+        {
+            intriParams.nValue = 1;
+            intriParams.srcDValue = 0;
+            intriParams.dstNzNStride = 0;
+            for (uint32_t i = 0; i < layoutSrc.shape(0); i++)
+            {
+                AscendC::DataCopy(dstTensor[i * ELE_NUM_PER_C0], srcTensor[i * layoutSrc.stride(0)], intriParams);
+            }
+        }
+    }
+};
+
 /// Partial specialization for AtlasA2, ColumnMajor in and nZ out.
 template <
     class Element
@@ -1054,8 +1103,8 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::zN>> {
     using LayoutDst = layout::zN;
     using LayoutSrc = layout::zN;
 
-    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-
+    static constexpr uint32_t ELE_NUM_PER_C0 =  Catlass::divElement<uint32_t, Element>(BYTE_PER_C0);
+   
     // Mehtods
 
     CATLASS_DEVICE

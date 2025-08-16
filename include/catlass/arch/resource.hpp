@@ -27,6 +27,7 @@ public:
     LocalTensorBuffer<ArchTag, AscendC::TPosition::C2> btBuf;
     LocalTensorBuffer<ArchTag, AscendC::TPosition::CO1> l0CBuf;
     LocalTensorBuffer<ArchTag, AscendC::TPosition::VECCALC> ubBuf;
+    LocalTensorBuffer<ArchTag, AscendC::TPosition::C1> c1Buf;
 
     CATLASS_DEVICE
     Resource()

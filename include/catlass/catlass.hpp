@@ -18,6 +18,7 @@
 #endif
 
 #include "catlass/detail/alignment.hpp"
+#include "catlass/detail/datatype.hpp"
 #include "catlass/detail/dependent_false.hpp"
 #include "catlass/detail/macros.hpp"
 

@@ -15,7 +15,11 @@
 #include "catlass/layout/layout.hpp"
 #include "catlass/gemm_coord.hpp"
 #include "catlass/gemv_coord.hpp"
+#include "int4.h"
+#include "bfloat16.h"
 
+using int4_t = op::int4;
+using bfloat16 = op::bfloat16;
 namespace Catlass::golden {
 
 // simple matmul
@@ -38,6 +42,46 @@ void ComputeMatmul(
             }
             dataGolden[offsetGolden] = static_cast<ElementGolden>(accumulator);
         }
+    }
+}
+
+template <class LayoutA, class LayoutB, class LayoutQ, class ElementGolden, class LayoutGolden>
+void ComputeGroupMatmulPerGroupQuant(
+    uint32_t problemCount, const std::vector<GemmCoord> &problemShapeList,
+    const std::vector<int4_t> &dataA, const std::vector<LayoutA> &layoutAList,
+    const std::vector<int4_t> &dataB, const std::vector<LayoutB> &layoutBList,
+    const std::vector<bfloat16> &dataQ, const std::vector<LayoutQ> &layoutQList,
+    std::vector<ElementGolden> &dataGolden, const std::vector<LayoutGolden> &layoutGoldenList)
+{
+    size_t inGroupOffsetA = 0;
+    size_t inGroupOffsetB = 0;
+    size_t inGroupOffsetQ = 0;
+    size_t inGroupOffsetGolden = 0;
+
+    for (uint32_t inGroupId = 0; inGroupId < problemCount; ++inGroupId)
+    {
+        uint32_t g = layoutQList[inGroupId].shape(0);
+        GemmCoord problemShape = problemShapeList[inGroupId];
+        for (uint32_t i = 0; i < problemShape.m(); ++i)
+        {
+            for (uint32_t j = 0; j < problemShape.n(); ++j)
+            {
+                size_t offsetGolden = inGroupOffsetGolden + layoutGoldenList[inGroupId].GetOffset(MakeCoord(i, j));
+                ElementGolden accumulator = 0;
+                for (uint32_t k = 0; k < problemShape.k(); ++k)
+                {
+                    size_t offsetA = inGroupOffsetA + layoutAList[inGroupId].GetOffset(MakeCoord(i, k));
+                    size_t offsetB = inGroupOffsetB + layoutBList[inGroupId].GetOffset(MakeCoord(k, j));
+                    size_t offsetQ = inGroupOffsetQ + layoutQList[inGroupId].GetOffset(MakeCoord(k / (problemShape.k() / g), j));
+                    accumulator += static_cast<float>(static_cast<int32_t>(dataA[offsetA]) * static_cast<int32_t>(dataB[offsetB])) * static_cast<float>(dataQ[offsetQ]);
+                }
+                dataGolden[offsetGolden] = static_cast<ElementGolden>(accumulator);
+            }
+        }
+        inGroupOffsetA += static_cast<size_t>(problemShape.m()) * problemShape.k();
+        inGroupOffsetB += static_cast<size_t>(problemShape.k()) * problemShape.n();
+        inGroupOffsetQ += static_cast<size_t>(g) * problemShape.n();
+        inGroupOffsetGolden += static_cast<size_t>(problemShape.m()) * problemShape.n();
     }
 }
 
