@@ -11,6 +11,7 @@
 #define EXAMPLES_COMMON_GOLDEN_MATMUL_HPP
 
 #include <vector>
+#include <cstring>
 
 #include "catlass/layout/layout.hpp"
 #include "catlass/gemm_coord.hpp"
@@ -297,6 +298,36 @@ void QuantMatmul(
             dataGolden[offsetGolden] = static_cast<float>(accumulator) *
                 static_cast<float>(dataScale[j]) *
                 static_cast<float>(dataPerTokenScale[i]);
+        }
+    }
+}
+
+template <
+    class LayoutA,
+    class LayoutB
+>
+void QuantMatmulFP(
+    const GemmCoord &problemShape,
+    const std::vector<int8_t> &dataA, const LayoutA &layoutA,
+    const std::vector<int8_t> &dataB, const LayoutB &layoutB,
+    const std::vector<int32_t> &dataBias, const layout::VectorLayout &layoutBias,
+    const std::vector<uint64_t> &dataScale, const layout::VectorLayout &layoutScale,
+    std::vector<float> &dataGolden, const layout::RowMajor &layoutGolden
+)
+{
+    for (uint32_t i = 0; i < problemShape.m(); ++i) {
+        for (uint32_t j = 0; j < problemShape.n(); ++j) {
+            int32_t accumulator = static_cast<int32_t>(dataBias[j]);
+            for (uint32_t k = 0; k < problemShape.k(); ++k) {
+                size_t offsetA = layoutA.GetOffset(MakeCoord(i, k));
+                size_t offsetB = layoutB.GetOffset(MakeCoord(k, j));
+                accumulator += static_cast<int32_t>(dataA[offsetA]) * static_cast<int32_t>(dataB[offsetB]);
+            }
+            size_t offsetGolden = layoutGolden.GetOffset(MakeCoord(i, j));
+            float f32;
+            uint32_t i32 = static_cast<uint32_t>(dataScale[j]);
+            std::memcpy(&f32, &i32, sizeof(uint32_t));  // view transfer
+            dataGolden[offsetGolden] = static_cast<float>(accumulator) * f32;
         }
     }
 }

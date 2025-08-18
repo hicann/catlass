@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_GEMM_BLOCK_BLOCK_MMAD_PINGPONG_BIAS_QUANT_PERCHN_HPP
-#define CATLASS_GEMM_BLOCK_BLOCK_MMAD_PINGPONG_BIAS_QUANT_PERCHN_HPP
+#ifndef CATLASS_GEMM_BLOCK_BLOCK_MMAD_PINGPONG_BIAS_QUANT_FP_HPP
+#define CATLASS_GEMM_BLOCK_BLOCK_MMAD_PINGPONG_BIAS_QUANT_FP_HPP
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/resource.hpp"
@@ -34,7 +34,7 @@ template <
     class TileCopy_,
     class TileMmad_
 >
-struct BlockMmadQuantPerchn <
+struct BlockMmadQuantFP <
     MmadAtlasA2PingpongBias<ENABLE_UNIT_FLAG_>,
     L1TileShape_,
     L0TileShape_,
@@ -115,7 +115,7 @@ public:
 
     /// Construct
     CATLASS_DEVICE
-    BlockMmadQuantPerchn(Arch::Resource<ArchTag> &resource, uint32_t l1BufAddrStart = 0)
+    BlockMmadQuantFP(Arch::Resource<ArchTag> &resource, uint32_t l1BufAddrStart = 0)
     {
         uint32_t l1AOffset = l1BufAddrStart;
         uint32_t l1BOffset = l1BufAddrStart + L1A_SIZE * STAGES;
@@ -151,7 +151,7 @@ public:
 
     /// Destructor
     CATLASS_DEVICE
-    ~BlockMmadQuantPerchn()
+    ~BlockMmadQuantFP()
     {
         for (uint32_t i = 0; i < STAGES; i++) {
             AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[i]);
@@ -200,6 +200,10 @@ public:
         auto layoutTileScale = layoutTileBias;
         copyGmToL1Scale(l1ScaleTensor, gmScale, layoutScaleInL1, layoutTileScale);
         AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
+
+        // Load scale to l0 fixpipe
+        copyL1ToFP(l0ScaleTensor, l1ScaleTensor, layoutScaleInL0, layoutScaleInL1);
+        // AscendC::SetFixPipeConfig(l0ScaleTensor);
 
         if constexpr (!ENABLE_UNIT_FLAG) {
             AscendC::WaitFlag<AscendC::HardEvent::FIX_M>(EVENT_ID0);
@@ -299,10 +303,6 @@ public:
                         // Load bias to l0 biastable
                         copyL1ToBT(l0BiasTensor, l1BiasTensor, layoutBiasInL0, layoutBiasInL1);
 
-                        // Load scale to l0 fixpipe
-                        copyL1ToFP(l0ScaleTensor, l1ScaleTensor, layoutScaleInL0, layoutScaleInL1);
-                        AscendC::SetFixPipeConfig(l0ScaleTensor);
-
                         // If the current tile is the last one on the k&n axis, notify to load matrix B from GM to L1
                         if ((kPartIdx == kPartLoop - 1) && (nPartIdx == nPartLoop - 1)) {
                             AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
@@ -352,7 +352,9 @@ public:
 
         // copy block out
         LayoutC layoutBlock = layoutC.GetTileLayout(actualShape.GetCoordMN());
+
         // sync fp descale tensor copy
+        AscendC::SetFixPipeConfig(l0ScaleTensor);
         AscendC::PipeBarrier<PIPE_FIX>();
 
         if constexpr (!ENABLE_UNIT_FLAG) {
@@ -402,4 +404,4 @@ protected:
 
 } // namespace Catlass::Gemm::Block
 
-#endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_PINGPONG_BIAS_QUANT_PERCHN_HPP
+#endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_PINGPONG_BIAS_QUANT_FP_HPP
