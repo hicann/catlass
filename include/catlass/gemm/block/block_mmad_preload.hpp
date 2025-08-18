@@ -101,6 +101,7 @@ public:
 
     static_assert(L1TileShape::M == L0TileShape::M && L1TileShape::N == L0TileShape::N,
         "The situation where the basic blocks of L1 and L0 differ on the m and n axes is not supported yet");
+    static_assert(L0TileShape::K <= L1TileShape::K, "L0TileShape::K cannot exceed L1TileShape::K");
 
     /// Construct
     CATLASS_DEVICE
