@@ -36,6 +36,22 @@ template <
     class DispatchPolicy,
     class L1TileShape,
     class L0TileShape,
+    class AType,
+    class BType,
+    class CType,
+    class BiasType,
+    class ScaleType,
+    class TileCopy = Gemm::Tile::TileCopyFP<typename DispatchPolicy::ArchTag, AType, BType, CType, BiasType, ScaleType>,
+    class TileMmad = Gemm::Tile::TileMmad<typename DispatchPolicy::ArchTag, AType, BType, BiasType>
+>
+struct BlockMmadQuantPerchn {
+    static_assert(DEPENDENT_FALSE<DispatchPolicy>, "BlockMmadQuantPerchn is not implemented for this DispatchPolicy");
+};
+
+template <
+    class DispatchPolicy,
+    class L1TileShape,
+    class L0TileShape,
     class TensorA,
     class TensorB,
     class TensorC,
@@ -82,7 +98,6 @@ struct BlockGemm {
 #include "catlass/gemm/block/block_mmad_preload_async_with_callback.hpp"
 #include "catlass/gemm/block/block_mmad_gemm.hpp"
 #include "catlass/gemm/block/block_mmad_pingpong_bias.hpp"
-#include "catlass/gemm/block/block_mmad_fai_qk.hpp"
-#include "catlass/gemm/block/block_mmad_fai_pv.hpp"
+#include "catlass/gemm/block/block_mmad_pingpong_bias_quant_perchn.hpp"
 
 #endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_HPP
