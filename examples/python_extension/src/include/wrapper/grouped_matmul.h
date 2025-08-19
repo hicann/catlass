@@ -24,7 +24,7 @@ using namespace CatlassKernel;
 using OutputType = at::Tensor;
 OutputType AllocOutput(KernelInfo &kernelInfo);
 KernelInfo GetKernelInfo(const at::Tensor &mat1, const at::Tensor &mat2, const at::Tensor &groupList,
-                         const std::string outDType, const bool transA, const bool transB, const bool splitK);
+                         const std::string &outDType, const bool transA, const bool transB, const bool splitK);
 } // namespace CatlassKernelWrapper::GroupedMatmulLike
 
 #endif
