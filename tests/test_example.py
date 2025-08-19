@@ -6,11 +6,12 @@
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 # See LICENSE in the root of the software repository for the full text of the License.
 
-import unittest
-from typing import List, Type
-import subprocess
 import os
 import re
+import subprocess
+import unittest
+from typing import List, Type
+
 CMAKE_BINARY_PATH = os.path.join(os.path.dirname(
     os.path.abspath(__file__)), "..", "output", "bin")
 CMAKE_EXAMPLES_PATH = os.path.join(os.path.dirname(

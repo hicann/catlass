@@ -12,14 +12,19 @@
 #ifndef SHARED_LIB_CATLASS_KERNEL_H
 #define SHARED_LIB_CATLASS_KERNEL_H
 
-#include <acl/acl.h>
-
+#include <cstdint>
 #include <vector>
 
-namespace CatlassKernel {
+#include <acl/acl.h>
 
+namespace CatlassKernel {
+using ElementGroupList = int64_t;
 struct KernelInfo {
-    enum class GMMSplit : uint32_t { SPLIT_M = 0, SPLIT_K = 1, SPLIT_N = 2 };
+    enum class GMMSplit : uint32_t {
+        SPLIT_M = 0,
+        SPLIT_K = 1,
+        SPLIT_N = 2
+    };
     aclDataType inputDataType = aclDataType::ACL_FLOAT16;
     aclDataType outputDataType = aclDataType::ACL_FLOAT16;
     uint32_t g = 1;
@@ -27,18 +32,20 @@ struct KernelInfo {
     uint32_t m = 1;
     uint32_t n = 1;
     uint32_t k = 1;
+    uint32_t M = 1;
+    uint32_t K = 1;
     bool transA = false;
     bool transB = false;
-    std::vector<int32_t> groupList;
+    std::vector<ElementGroupList> groupList;
     GMMSplit split = GMMSplit::SPLIT_M;
     std::vector<uint8_t *> inputAddr;
     std::vector<uint8_t *> outputAddr;
 };
 
-void BasicMatmul(uint32_t blockNum, aclrtStream stream, KernelInfo kernelInfo);
-void GroupedMatmul(uint32_t blockNum, aclrtStream stream, KernelInfo kernelInfo);
-void OptimizedMatmul(uint32_t blockNum, aclrtStream stream, KernelInfo kernelInfo);
+void BasicMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo);
+void GroupedMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo);
+void OptimizedMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo);
 
-}
+} // namespace CatlassKernel
 
 #endif // SHARED_LIB_CATLASS_KERNEL_H

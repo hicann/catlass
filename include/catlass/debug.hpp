@@ -18,17 +18,38 @@
 #define inline __inline__ __attribute__((always_inline))
 
 #include <acl/acl.h>
+#include <runtime/rt_ffts.h>
 
 #define SINGLE_CORE_DUMPSIZE (1024 * 1024)
 // 75 is from AscendC host stub
 #define ALL_DUMPSIZE (75 * SINGLE_CORE_DUMPSIZE)
 
 using LogFuncType = std::function<void(const char *)>;
+/**
+ * @brief Check acl api status code.
+ * @param status The return code of acl api.
+ * @param logFunc Log function, which receives a C-Style string.
+ * @return
+ */
 inline void aclCheck(aclError status, LogFuncType logFunc = [](const char *logStrPtr) { std::cerr << logStrPtr; })
 {
     if (status != ACL_SUCCESS) {
         std::stringstream ss;
         ss << "AclError: " << status;
+        logFunc(ss.str().c_str());
+    }
+}
+/**
+ * @brief Check rt api status code.
+ * @param status The return code of rt api.
+ * @param logFunc Log function, which receives a C-Style string.
+ * @return
+ */
+inline void rtCheck(rtError_t status, LogFuncType logFunc = [](const char *logStrPtr) { std::cerr << logStrPtr; })
+{
+    if (status != RT_ERROR_NONE) {
+        std::stringstream ss;
+        ss << "RtError: " << status;
         logFunc(ss.str().c_str());
     }
 }

@@ -18,8 +18,8 @@
 
 namespace CatlassKernelWrapper {
 at::Tensor RunBasicMatmul(const at::Tensor &mat1, const at::Tensor &mat2, const std::string &outDType);
-std::vector<at::Tensor> RunGroupedMatmul(const std::vector<at::Tensor> &mat1, const std::vector<at::Tensor> &mat2,
-                                         const std::string &outDType, const bool &splitK);
+at::Tensor RunGroupedMatmul(const at::Tensor &mat1, const at::Tensor &mat2, const at::Tensor &groupList,
+                            const std::string &outDType, const bool transA, const bool transB, const bool splitK);
 at::Tensor RunOptimizedMatmul(const at::Tensor &mat1, const at::Tensor &mat2, const std::string &outDType);
 
 } // namespace CatlassKernelWrapper
