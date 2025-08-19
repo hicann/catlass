@@ -341,18 +341,18 @@ public:
 
                 while (iterParams.kIter < iterParams.ddr2l0LoopK) {
                     if (iterParams.loadAL1Flag || (!iterParams.kAL1fullload && iterParams.kIter % iterParams.multiKAL1 == 0)) {
-                        AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[0]);
-                        AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[0]);
+                        AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);
+                        AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);
                         LoadAL1Process(gmBatchFmap, iterParams.kIter / iterParams.multiKAL1, layoutFmap);
-                        AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[0]);
-                        AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[0]);
+                        AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListId]);
+                        AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListId]);
                     }
                     if (iterParams.loadBL1Flag || (!iterParams.kBL1fullload && iterParams.kIter % iterParams.multiKBL1 == 0)) {
-                        AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[0]);
-                        AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[0]);
+                        AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
+                        AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
                         LoadBL1Process(filterGm, iterParams.kIter / iterParams.multiKBL1, layoutFilter);
-                        AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[0]);
-                        AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[0]);
+                        AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
+                        AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
                     }
                     AscendC::PipeBarrier<PIPE_MTE2>();
                     ReduceKL0AL0BPingPong(isOdd);
@@ -370,10 +370,10 @@ public:
                 if constexpr (!ENABLE_UNIT_FLAG) {
                     AscendC::SetFlag<AscendC::HardEvent::M_FIX>(EVENT_ID0);
                     AscendC::WaitFlag<AscendC::HardEvent::M_FIX>(EVENT_ID0);
-                    copyL0CToGm(gmTileOut, l0CTensorList[0], layoutOutGm, layoutCInL0);
+                    copyL0CToGm(gmTileOut, l0CTensorList[l0cListId], layoutOutGm, layoutCInL0);
                     AscendC::SetFlag<AscendC::HardEvent::FIX_M>(EVENT_ID0);
                 } else {
-                    copyL0CToGm(gmTileOut, l0CTensorList[0], layoutOutGm, layoutCInL0, 0b11);
+                    copyL0CToGm(gmTileOut, l0CTensorList[l0cListId], layoutOutGm, layoutCInL0, 0b11);
                 }
             }
             iterParams.isFirstIterate = true;
@@ -480,6 +480,7 @@ protected:
 
     // The id of current stage
     uint32_t l1ListId{0};
+    uint32_t l0cListId{0};
 
     TileMmad tileMmad;
     CopyGmToL1A copyGmToL1A;
@@ -657,19 +658,19 @@ protected:
                 iterParams.mAL0Iter * L0TileShape::mL0 + iterParams.hwStartPos % conv3dParams.wo() :
                 iterParams.mAL0Iter * L0TileShape::mL0 + (iterParams.hwStartPos + iterParams.mAL1Iter * FmapL1TileShape::mAL1) % conv3dParams.wo();
             LayoutAInL0 layoutAInL0 = LayoutAInL0::template MakeLayout<ElementFilter>(tileParams.l0CurrentM, currentKL0);
-            copyL1ToL0A(l0ATile, l1ATensorList[0], layoutAInL0, layoutFmapInL1, kStartPt, mStartPt);
+            copyL1ToL0A(l0ATile, l1ATensorList[l1ListId], layoutAInL0, layoutFmapInL1, kStartPt, mStartPt);
         }
         iterParams.kBL0Iter = iterParams.kIter % iterParams.multiKBL1;
         uint32_t tilingNBSrc_ = (iterParams.nBL1Iter != iterParams.maxNBL1Iter) ? FilterL1TileShape::nBL1 : iterParams.nBL1TailAlign;
         MatrixCoord l1TileFilterOffset{iterParams.kBL0Iter * L0TileShape::kL0, iterParams.nBL0Iter * L0TileShape::nL0};   //TODO
-        auto l1BTile = l1BTensorList[0][layoutFilterInL1.GetOffset(l1TileFilterOffset)];
+        auto l1BTile = l1BTensorList[l1ListId][layoutFilterInL1.GetOffset(l1TileFilterOffset)];
         LayoutBInL0 layoutBInL0 = LayoutBInL0::template MakeLayout<ElementFilter>(currentKL0, tileParams.l0CurrentN);
         copyL1ToL0B(l0BTile, l1BTile, layoutBInL0, layoutFilterInL1);
         AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0abFlag]);
         AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0abFlag]);
         AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>(l0AEventList[l0abFlag]);
         AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>(l0BEventList[l0abFlag]);
-        auto l0CTile = l0CTensorList[0];
+        auto l0CTile = l0CTensorList[l0cListId];
         uint8_t unitFlag = 0b00;
         if constexpr (ENABLE_UNIT_FLAG) {
             if (iterParams.kIter == iterParams.ddr2l0LoopK - 1) {
