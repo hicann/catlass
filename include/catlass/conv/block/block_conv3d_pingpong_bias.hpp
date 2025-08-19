@@ -349,6 +349,7 @@ public:
                         AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[0]);
                         AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[0]);
                     }
+                    AscendC::PipeBarrier<PIPE_MTE2>();
                     ReduceKL0AL0BPingPong(isOdd);
                     iterParams.kIter++;
                     isOdd = iterParams.kIter & 0x1;
