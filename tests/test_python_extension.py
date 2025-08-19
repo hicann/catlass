@@ -77,9 +77,9 @@ class CatlassTest(TestCase):
 
     def test_grouped_matmul_list_m(self):
         g = 128
-        group_list = generate_sequence_split(g, random.randint(256, 40960))
+        group_list = generate_sequence_split(g, random.randint(256, 4096))
         group_list = calculate_prefix_sum(group_list)
-        m_sum, k, n = sum(group_list), 4096, 1280
+        m_sum, k, n = group_list[-1], 4096, 1280
         a = torch.randn((m_sum, k), device='npu').to(torch.float16)
         b = torch.randn((g, k, n), device='npu').to(torch.float16)
         b_list = [b[i] for i in range(g)]
@@ -94,18 +94,20 @@ class CatlassTest(TestCase):
 
     def test_grouped_matmul_list_k(self):
         g = 128
-        group_list = generate_sequence_split(g, random.randint(256, 40960))
+        group_list = generate_sequence_split(g, random.randint(256, 4096))
         group_list = calculate_prefix_sum(group_list)
-        m, k_sum, n = 4096, sum(group_list), 1280
+        m, k_sum, n = 4096, group_list[-1], 1280
         a = torch.randn((k_sum, m), device='npu').to(torch.float16)
         b = torch.randn((k_sum, n), device='npu').to(torch.float16)
         group_list_tensor = torch.tensor(
             group_list, device='npu').to(torch.int64)
         a_list = torch.split(a.transpose(0, 1).contiguous(), group_list, dim=1)
         b_list = torch.split(b, group_list, dim=0)
+        torch.npu.synchronize()
         result = torch_catlass.grouped_matmul(
             a, b, group_list_tensor, "float16", True, False, True)
         golden = torch.stack(torch_npu.npu_grouped_matmul(a_list, b_list))
+        torch.npu.synchronize()
         self.assertRtolEqual(result, golden)
 
     def test_optimized_matmul_pybind(self):

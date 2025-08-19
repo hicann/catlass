@@ -18,7 +18,7 @@
 #include <acl/acl.h>
 
 namespace CatlassKernel {
-using ElementGroupList = int32_t;
+using ElementGroupList = int64_t;
 struct KernelInfo {
     enum class GMMSplit : uint32_t {
         SPLIT_M = 0,

@@ -22,7 +22,7 @@ KernelInfo GetKernelInfo(const at::Tensor &mat1, const at::Tensor &mat2, const a
 {
     KernelInfo kernelInfo;
     // set input addr
-    kernelInfo.inputAddr.resize(2);
+    kernelInfo.inputAddr.resize(3);
     kernelInfo.inputAddr[0] = static_cast<uint8_t *>(const_cast<void *>(mat1.storage().data()));
     kernelInfo.inputAddr[1] = static_cast<uint8_t *>(const_cast<void *>(mat2.storage().data()));
     kernelInfo.inputAddr[2] = static_cast<uint8_t *>(const_cast<void *>(groupList.storage().data()));
@@ -31,7 +31,7 @@ KernelInfo GetKernelInfo(const at::Tensor &mat1, const at::Tensor &mat2, const a
     std::vector<int64_t> groupListVec(groupListHost.data_ptr<int64_t>(),
                                       groupListHost.data_ptr<int64_t>() + groupListHost.numel());
     kernelInfo.g = groupListVec.size();
-    int64_t groupListSum = std::accumulate(groupListVec.begin(), groupListVec.end(), 0);
+    int64_t groupListSum = groupListVec[-1];
 
     std::vector<int64_t> matAShape(mat1.sizes().vec());
     std::vector<int64_t> matBShape(mat2.sizes().vec());
@@ -86,6 +86,7 @@ KernelInfo GetKernelInfo(const at::Tensor &mat1, const at::Tensor &mat2, const a
             }
             kernelInfo.k = k1;
             kernelInfo.n = n;
+            break;
         case KernelInfo::GMMSplit::SPLIT_K:
             // [m, K]@[K, n]->[g, m, n]
             if (matAShape.size() != 2) {
@@ -116,6 +117,7 @@ KernelInfo GetKernelInfo(const at::Tensor &mat1, const at::Tensor &mat2, const a
             }
             kernelInfo.m = m;
             kernelInfo.n = n;
+            break;
     }
     return kernelInfo;
 };
