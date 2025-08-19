@@ -334,6 +334,11 @@ public:
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(L1A_STAGES + L1B_STAGES);
                 iterParams.kIter = 0;
                 uint16_t isOdd = 0;
+
+                if constexpr (!ENABLE_UNIT_FLAG) {
+                    AscendC::WaitFlag<AscendC::HardEvent::FIX_M>(EVENT_ID0);
+                }
+
                 while (iterParams.kIter < iterParams.ddr2l0LoopK) {
                     if (iterParams.loadAL1Flag || (!iterParams.kAL1fullload && iterParams.kIter % iterParams.multiKAL1 == 0)) {
                         AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[0]);
