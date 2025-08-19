@@ -25,7 +25,7 @@ OutputType AllocOutput(KernelInfo &kernelInfo)
     return output;
 }
 
-KernelInfo GetKernelInfo(const at::Tensor &mat1, const at::Tensor &mat2, const std::string outDType)
+KernelInfo GetKernelInfo(const at::Tensor &mat1, const at::Tensor &mat2, const std::string &outDType)
 {
     KernelInfo kernelInfo;
     kernelInfo.inputAddr.resize(2);

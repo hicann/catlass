@@ -48,9 +48,9 @@ at::Tensor RunGroupedMatmul(const at::Tensor &mat1,
                             const at::Tensor &mat2,
                             const at::Tensor &groupList,
                             const std::string &outDType,
-                            const bool &transA,
-                            const bool &transB,
-                            const bool &splitK)
+                            const bool transA,
+                            const bool transB,
+                            const bool splitK)
 {
     KernelInfo kernelInfo = GroupedMatmulLike::GetKernelInfo(mat1, mat2, groupList, outDType, transA, transB, splitK);
     at::Tensor output = GroupedMatmulLike::AllocOutput(kernelInfo);

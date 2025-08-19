@@ -27,7 +27,7 @@ torch::Tensor GetOutputTensor(const std::vector<int64_t> &shape, const torch::Dt
     return at_npu::native::empty_with_format(shape, options, ACL_FORMAT_ND);
 }
 
-torch::Dtype TypeStrToTorchDtype(std::string typeStr)
+torch::Dtype TypeStrToTorchDtype(const std::string &typeStr)
 {
     static const std::unordered_map<std::string, torch::Dtype> mapper = {{"float32", torch::kFloat32},
                                                                          {"float16", torch::kFloat16},
@@ -38,7 +38,7 @@ torch::Dtype TypeStrToTorchDtype(std::string typeStr)
     return iter != mapper.end() ? iter->second : torch::kFloat16;
 }
 
-aclDataType TorchDtypeToAclDtype(torch::Dtype torchDtype)
+aclDataType TorchDtypeToAclDtype(const torch::Dtype torchDtype)
 {
     static const std::unordered_map<torch::Dtype, aclDataType> mapper = {{torch::kFloat32, ACL_FLOAT},
                                                                          {torch::kFloat16, ACL_FLOAT16},
@@ -49,12 +49,12 @@ aclDataType TorchDtypeToAclDtype(torch::Dtype torchDtype)
     return iter != mapper.end() ? iter->second : ACL_FLOAT16;
 };
 
-aclDataType TypeStrToAclDtype(std::string typeStr)
+aclDataType TypeStrToAclDtype(const std::string &typeStr)
 {
     return TorchDtypeToAclDtype(TypeStrToTorchDtype(typeStr));
 };
 
-torch::Dtype AclDtypeToTorchDtype(aclDataType aclDtype)
+torch::Dtype AclDtypeToTorchDtype(const aclDataType aclDtype)
 {
     static const std::map<aclDataType, torch::Dtype> mapper = {{ACL_FLOAT16, torch::kFloat16},
                                                                {ACL_FLOAT, torch::kFloat32},

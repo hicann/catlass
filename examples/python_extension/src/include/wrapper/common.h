@@ -22,10 +22,10 @@
 
 namespace CatlassKernelWrapper {
 torch::Tensor GetOutputTensor(const std::vector<int64_t> &shape, const torch::Dtype dtype);
-torch::Dtype TypeStrToTorchDtype(std::string typeStr);
-aclDataType TypeStrToAclDtype(std::string typeStr);
-torch::Dtype AclDtypeToTorchDtype(aclDataType aclDtype);
-aclDataType TorchDtypeToAclDtype(torch::Dtype torchDtype);
+torch::Dtype TypeStrToTorchDtype(const std::string &typeStr);
+aclDataType TypeStrToAclDtype(const std::string &typeStr);
+torch::Dtype AclDtypeToTorchDtype(const aclDataType aclDtype);
+aclDataType TorchDtypeToAclDtype(const torch::Dtype torchDtype);
 
 enum class TransposeStatus : uint32_t {
     NO_TRANSPOSE = 0,
