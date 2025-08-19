@@ -42,9 +42,9 @@ struct KernelInfo {
     std::vector<uint8_t *> outputAddr;
 };
 
-void BasicMatmul(uint32_t blockNum, aclrtStream stream, KernelInfo kernelInfo);
-void GroupedMatmul(uint32_t blockNum, aclrtStream stream, KernelInfo kernelInfo);
-void OptimizedMatmul(uint32_t blockNum, aclrtStream stream, KernelInfo kernelInfo);
+void BasicMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo);
+void GroupedMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo);
+void OptimizedMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo);
 
 } // namespace CatlassKernel
 
