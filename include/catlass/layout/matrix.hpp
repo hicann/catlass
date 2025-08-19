@@ -1307,8 +1307,8 @@ public:
         Stride tileStride = MakeCoord(stride(0),                   /// StrideC0
             stride(1),                                      /// StrideW = C0
             (LongIndex)(tileOriShape[3] * tileOriShape[4] * shape(3)),  /// StrideC1 = Hi*Wi*C0
-            (LongIndex)(CeilDiv(tileOriShape[1], shape(3)) * tileOriShape[3] * tileOriShape[4] * shape(3)),  /// StrideD = C1_l1*Hi*Wi*C0
-            (LongIndex)(tileOriShape[2] * CeilDiv(tileOriShape[1], shape(3)) * tileOriShape[3] * tileOriShape[4] * shape(3))  /// StrideN
+            (LongIndex)(tileOriShape[2] * tileOriShape[3] * tileOriShape[4] * shape(3)),  /// StrideD = C1_l1*Hi*Wi*C0
+            (LongIndex)(tileOriShape[1] * tileOriShape[2] * tileOriShape[3] * tileOriShape[4] * shape(3))  /// StrideN
         );
         return NDC1HWC0(tileOriShape, tileShape, tileStride);
     }
@@ -1483,14 +1483,14 @@ public:
     {
         /// Assumes coordinate has convention (Cou1, Cin1, Kd, Kh, Kw)
         Shape tileShape = MakeCoord(shape(0),  /// C0
-            tileOriShape[0],  /// Kd*C1*Kh*Kw
-            shape(2),                            /// N0
-            tileOriShape[1]  /// N1
+            tileOriShape[0],                   /// Kd*C1*Kh*Kw
+            shape(2),                          /// N0
+            tileOriShape[1]                    /// N1
         );
-        Stride tileStride = MakeCoord(stride(0),                     /// TileStrideC0
+        Stride tileStride = MakeCoord(stride(0),            /// TileStrideC0
             stride(2) * tileOriShape[1] * tileOriShape[2],  /// TileStrideDC1HW
-            (LongIndex)shape(0),                                        /// TileStrideN0
-            stride(2)                                       /// TileStrideN1
+            (LongIndex)shape(0),                            /// TileStrideN0
+            stride(2) * tileOriShape[2]                    /// TileStrideN1
         );
         return KDC1KHKWN1N0C0(tileOriShape, tileShape, tileStride);
     }
