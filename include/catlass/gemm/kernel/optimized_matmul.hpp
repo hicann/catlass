@@ -222,8 +222,8 @@ public:
         }
 
         if constexpr (isPaddingA && isPaddingB) {
-            typename PrologueA::LayoutW layoutWA;
-            typename PrologueB::LayoutW layoutWB;
+            typename PrologueA::LayoutOut layoutWA;
+            typename PrologueB::LayoutOut layoutWB;
             if constexpr (PrologueA::paddingTag == PaddingTag::PADDING_BLOCK_ND) {
                 layoutWA = PrologueA::GetWorkspaceLayout(layoutA, L1TileShape::M, L1TileShape::K);
             } else if constexpr (PrologueA::paddingTag == PaddingTag::PADDING_ND) {
@@ -238,7 +238,7 @@ public:
                 gmWA, layoutWA, gmWB, layoutWB};
             return params;
         } else if constexpr (isPaddingA) {
-            typename PrologueA::LayoutW layoutWA;
+            typename PrologueA::LayoutOut layoutWA;
             if constexpr (PrologueA::paddingTag == PaddingTag::PADDING_BLOCK_ND) {
                 layoutWA = PrologueA::GetWorkspaceLayout(layoutA, L1TileShape::M, L1TileShape::K);
             } else if constexpr (PrologueA::paddingTag == PaddingTag::PADDING_ND) {
@@ -248,7 +248,7 @@ public:
                 gmWA, layoutWA};
             return params;
         } else if constexpr (isPaddingB) {
-            typename PrologueB::LayoutW layoutWB;
+            typename PrologueB::LayoutOut layoutWB;
             if constexpr (PrologueB::paddingTag == PaddingTag::PADDING_BLOCK_ND) {
                 layoutWB = PrologueB::GetWorkspaceLayout(layoutB, L1TileShape::K, L1TileShape::N);
             } else if constexpr (PrologueB::paddingTag == PaddingTag::PADDING_ND) {
