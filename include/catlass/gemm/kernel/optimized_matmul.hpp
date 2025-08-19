@@ -38,13 +38,20 @@ public:
     using ElementB = typename BlockMmad::ElementB;
     using LayoutWA = typename BlockMmad::LayoutA;
     using LayoutWB = typename BlockMmad::LayoutB;
-    using PaddingLayoutHelperA = PaddingLayoutHelper<PrologueA>;
-    using PaddingLayoutHelperB = PaddingLayoutHelper<PrologueB>;
+
+    template<class T>
+    struct LayoutHelper {
+        using type = typename T::LayoutIn;
+    };
+    template<>
+    struct LayoutHelper<void> {
+        using type = void;
+    };
 
     using LayoutA = std::conditional_t<
-        std::is_void_v<PrologueA>, typename BlockMmad::LayoutA, typename PaddingLayoutHelperA::LayoutIn>;
+        std::is_void_v<PrologueA>, typename BlockMmad::LayoutA, typename LayoutHelper<PrologueA>::type>;
     using LayoutB = std::conditional_t<
-        std::is_void_v<PrologueB>, typename BlockMmad::LayoutB, typename PaddingLayoutHelperB::LayoutIn>;
+        std::is_void_v<PrologueB>, typename BlockMmad::LayoutB, typename LayoutHelper<PrologueB>::type>;
 
     using L1TileShape = typename BlockMmad::L1TileShape;
     using ElementC = typename BlockMmad::ElementC;
@@ -165,20 +172,26 @@ public:
 
     static size_t GetWorkspaceSize(const Arguments &args)
     {
+        constexpr bool isPaddingA = !std::is_void_v<PrologueA>;
+        constexpr bool isPaddingB = !std::is_void_v<PrologueB>;
         size_t workspaceSize = 0;
-        if constexpr (PaddingLayoutHelperA::paddingTag == PaddingTag::PADDING_BLOCK_ND) {
-            workspaceSize += PaddingLayoutHelperA::GetWorkspaceSize(
-                    args.problemShape.m(), args.problemShape.k(), L1TileShape::M, L1TileShape::K);
-        } else if constexpr (PaddingLayoutHelperA::paddingTag == PaddingTag::PADDING_ND) {
-            workspaceSize += PaddingLayoutHelperA::GetWorkspaceSize(
-                    args.problemShape.m(), args.problemShape.k(), 512 / sizeof(ElementA));
+        if (isPaddingA) {
+            if constexpr (PrologueA::paddingTag == PaddingTag::PADDING_BLOCK_ND) {
+                workspaceSize += PrologueA::GetWorkspaceSize(
+                        args.problemShape.m(), args.problemShape.k(), L1TileShape::M, L1TileShape::K);
+            } else if constexpr (PrologueA::paddingTag == PaddingTag::PADDING_ND) {
+                workspaceSize += PrologueA::GetWorkspaceSize(
+                        args.problemShape.m(), args.problemShape.k(), 512 / sizeof(ElementA));
+            }
         }
-        if constexpr (PaddingLayoutHelperB::paddingTag == PaddingTag::PADDING_BLOCK_ND) {
-            workspaceSize += PaddingLayoutHelperB::GetWorkspaceSize(
-                    args.problemShape.k(), args.problemShape.n(), L1TileShape::K, L1TileShape::N);
-        } else if constexpr (PaddingLayoutHelperB::paddingTag == PaddingTag::PADDING_ND) {
-            workspaceSize += PaddingLayoutHelperB::GetWorkspaceSize(
-                    args.problemShape.k(), args.problemShape.n(), 512 / sizeof(ElementB));
+        if (isPaddingB) {
+            if constexpr (PrologueB::paddingTag == PaddingTag::PADDING_BLOCK_ND) {
+                workspaceSize += PrologueB::GetWorkspaceSize(
+                        args.problemShape.k(), args.problemShape.n(), L1TileShape::K, L1TileShape::N);
+            } else if constexpr (PrologueB::paddingTag == PaddingTag::PADDING_ND) {
+                workspaceSize += PrologueB::GetWorkspaceSize(
+                        args.problemShape.k(), args.problemShape.n(), 512 / sizeof(ElementB));
+            }
         }
         return workspaceSize;
     }
@@ -196,11 +209,11 @@ public:
         size_t sizeWA = 0;
         if constexpr (isPaddingA) {
             gmWA = workspace;
-            if constexpr (PaddingLayoutHelperA::paddingTag == PaddingTag::PADDING_BLOCK_ND) {
-                sizeWA += PaddingLayoutHelperA::GetWorkspaceSize(
+            if constexpr (PrologueA::paddingTag == PaddingTag::PADDING_BLOCK_ND) {
+                sizeWA += PrologueA::GetWorkspaceSize(
                         args.problemShape.m(), args.problemShape.k(), L1TileShape::M, L1TileShape::K);
-            } else if constexpr (PaddingLayoutHelperA::paddingTag == PaddingTag::PADDING_ND) {
-                sizeWA += PaddingLayoutHelperA::GetWorkspaceSize(
+            } else if constexpr (PrologueA::paddingTag == PaddingTag::PADDING_ND) {
+                sizeWA += PrologueA::GetWorkspaceSize(
                         args.problemShape.m(), args.problemShape.k(), 512 / sizeof(ElementA));
             }
         }
@@ -209,37 +222,37 @@ public:
         }
 
         if constexpr (isPaddingA && isPaddingB) {
-            typename PaddingLayoutHelperA::LayoutW layoutWA;
-            typename PaddingLayoutHelperB::LayoutW layoutWB;
-            if constexpr (PaddingLayoutHelperA::paddingTag == PaddingTag::PADDING_BLOCK_ND) {
-                layoutWA = PaddingLayoutHelperA::GetWorkspaceLayout(layoutA, L1TileShape::M, L1TileShape::K);
-            } else if constexpr (PaddingLayoutHelperA::paddingTag == PaddingTag::PADDING_ND) {
-                layoutWA = PaddingLayoutHelperA::GetWorkspaceLayout(layoutA, 512 / sizeof(ElementA));
+            typename PrologueA::LayoutW layoutWA;
+            typename PrologueB::LayoutW layoutWB;
+            if constexpr (PrologueA::paddingTag == PaddingTag::PADDING_BLOCK_ND) {
+                layoutWA = PrologueA::GetWorkspaceLayout(layoutA, L1TileShape::M, L1TileShape::K);
+            } else if constexpr (PrologueA::paddingTag == PaddingTag::PADDING_ND) {
+                layoutWA = PrologueA::GetWorkspaceLayout(layoutA, 512 / sizeof(ElementA));
             }
-            if constexpr (PaddingLayoutHelperB::paddingTag == PaddingTag::PADDING_BLOCK_ND) {
-                layoutWB = PaddingLayoutHelperB::GetWorkspaceLayout(layoutB, L1TileShape::K, L1TileShape::N);
-            } else if constexpr (PaddingLayoutHelperB::paddingTag == PaddingTag::PADDING_ND) {
-                layoutWB = PaddingLayoutHelperB::GetWorkspaceLayout(layoutB, 512 / sizeof(ElementB));
+            if constexpr (PrologueB::paddingTag == PaddingTag::PADDING_BLOCK_ND) {
+                layoutWB = PrologueB::GetWorkspaceLayout(layoutB, L1TileShape::K, L1TileShape::N);
+            } else if constexpr (PrologueB::paddingTag == PaddingTag::PADDING_ND) {
+                layoutWB = PrologueB::GetWorkspaceLayout(layoutB, 512 / sizeof(ElementB));
             }
             Params params{args.problemShape, args.ptrA, layoutA, args.ptrB, layoutB, args.ptrC, layoutC, 
                 gmWA, layoutWA, gmWB, layoutWB};
             return params;
         } else if constexpr (isPaddingA) {
-            typename PaddingLayoutHelperA::LayoutW layoutWA;
-            if constexpr (PaddingLayoutHelperA::paddingTag == PaddingTag::PADDING_BLOCK_ND) {
-                layoutWA = PaddingLayoutHelperA::GetWorkspaceLayout(layoutA, L1TileShape::M, L1TileShape::K);
-            } else if constexpr (PaddingLayoutHelperA::paddingTag == PaddingTag::PADDING_ND) {
-                layoutWA = PaddingLayoutHelperA::GetWorkspaceLayout(layoutA, 512 / sizeof(ElementA));
+            typename PrologueA::LayoutW layoutWA;
+            if constexpr (PrologueA::paddingTag == PaddingTag::PADDING_BLOCK_ND) {
+                layoutWA = PrologueA::GetWorkspaceLayout(layoutA, L1TileShape::M, L1TileShape::K);
+            } else if constexpr (PrologueA::paddingTag == PaddingTag::PADDING_ND) {
+                layoutWA = PrologueA::GetWorkspaceLayout(layoutA, 512 / sizeof(ElementA));
             }
             Params params{args.problemShape, args.ptrA, layoutA, args.ptrB, layoutB, args.ptrC, layoutC,
                 gmWA, layoutWA};
             return params;
         } else if constexpr (isPaddingB) {
-            typename PaddingLayoutHelperB::LayoutW layoutWB;
-            if constexpr (PaddingLayoutHelperB::paddingTag == PaddingTag::PADDING_BLOCK_ND) {
-                layoutWB = PaddingLayoutHelperB::GetWorkspaceLayout(layoutB, L1TileShape::K, L1TileShape::N);
-            } else if constexpr (PaddingLayoutHelperB::paddingTag == PaddingTag::PADDING_ND) {
-                layoutWB = PaddingLayoutHelperB::GetWorkspaceLayout(layoutB, 512 / sizeof(ElementB));
+            typename PrologueB::LayoutW layoutWB;
+            if constexpr (PrologueB::paddingTag == PaddingTag::PADDING_BLOCK_ND) {
+                layoutWB = PrologueB::GetWorkspaceLayout(layoutB, L1TileShape::K, L1TileShape::N);
+            } else if constexpr (PrologueB::paddingTag == PaddingTag::PADDING_ND) {
+                layoutWB = PrologueB::GetWorkspaceLayout(layoutB, 512 / sizeof(ElementB));
             }
             Params params{args.problemShape, args.ptrA, layoutA, args.ptrB, layoutB, args.ptrC, layoutC,
                 gmWB, layoutWB};

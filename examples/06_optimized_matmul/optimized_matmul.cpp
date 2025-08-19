@@ -214,13 +214,13 @@ void Run(Options const &options)
     constexpr PaddingTag paddingTagB = (std::is_same_v<LayoutB, layout::zN> || std::is_same_v<LayoutB, layout::nZ>) ? 
         PaddingTag::NO_PADDING : PaddingTag::PADDING_BLOCK_ND;
     static const uint32_t COMPUTE_LENGTH_A = 96 * 1024 / sizeof(ElementA);
-    using PaddingAssistantA = Catlass::Gemm::Kernel::PaddingAssistant<
+    using PaddingBuilderA = Catlass::Gemm::Kernel::PaddingBuilder<
         ArchTag, ElementA, LayoutA, COMPUTE_LENGTH_A, paddingTagA>;
-    using GlobalPaddingA = PaddingAssistantA::Padding;
+    using GlobalPaddingA = PaddingBuilderA::Padding;
     static const uint32_t COMPUTE_LENGTH_B = 96 * 1024 / sizeof(ElementB);
-    using PaddingAssistantB = Catlass::Gemm::Kernel::PaddingAssistant<
+    using PaddingBuilderB = Catlass::Gemm::Kernel::PaddingBuilder<
         ArchTag, ElementB, LayoutB, COMPUTE_LENGTH_B, paddingTagB>;
-    using GlobalPaddingB = PaddingAssistantB::Padding;
+    using GlobalPaddingB = PaddingBuilderB::Padding;
 
     // if LayoutA and LayoutB is both ColumnMajor,
     // L1TileShape using GemmShape<256, 128, 256> can achieve better performance.
@@ -253,8 +253,8 @@ void Run(Options const &options)
 
     if (m > n) {
         if (isNeedPaddingA && isNeedPaddingB) { 
-            using LayoutMmadA = typename PaddingAssistantA::LayoutAfterPadding; 
-            using LayoutMmadB = typename PaddingAssistantB::LayoutAfterPadding;
+            using LayoutMmadA = typename PaddingBuilderA::LayoutAfterPadding; 
+            using LayoutMmadB = typename PaddingBuilderB::LayoutAfterPadding;
             using ATypeMmad = Gemm::GemmType<ElementA, LayoutMmadA>;
             using BTypeMmad = Gemm::GemmType<ElementB, LayoutMmadB>;
             using TileCopy = TileCopyOpt<ArchTag, ATypeMmad, BTypeMmad, CType>;
@@ -267,7 +267,7 @@ void Run(Options const &options)
             MatmulAdapter matmul_op;
             RunAdapter(matmul_op, arguments, stream, aicCoreNum, fftsAddr);
         } else if (isNeedPaddingA) {
-            using LayoutMmadA = typename PaddingAssistantA::LayoutAfterPadding; 
+            using LayoutMmadA = typename PaddingBuilderA::LayoutAfterPadding; 
             using ATypeMmad = Gemm::GemmType<ElementA, LayoutMmadA>;
             using TileCopy = TileCopyOpt<ArchTag, ATypeMmad, BType, CType>;
             using BlockMmadOpt = Gemm::Block::BlockMmad<
@@ -279,7 +279,7 @@ void Run(Options const &options)
             MatmulAdapter matmul_op;
             RunAdapter(matmul_op, arguments, stream, aicCoreNum, fftsAddr);
         } else if (isNeedPaddingB) {
-            using LayoutMmadB = typename PaddingAssistantB::LayoutAfterPadding;
+            using LayoutMmadB = typename PaddingBuilderB::LayoutAfterPadding;
             using BTypeMmad = Gemm::GemmType<ElementB, LayoutMmadB>;
             using TileCopy = TileCopyOpt<ArchTag, AType, BTypeMmad, CType>;
             using BlockMmadOpt = Gemm::Block::BlockMmad<
@@ -303,8 +303,8 @@ void Run(Options const &options)
         }
     } else {
         if (isNeedPaddingA && isNeedPaddingB) {
-            using LayoutMmadA = typename PaddingAssistantA::LayoutAfterPadding; 
-            using LayoutMmadB = typename PaddingAssistantB::LayoutAfterPadding;
+            using LayoutMmadA = typename PaddingBuilderA::LayoutAfterPadding; 
+            using LayoutMmadB = typename PaddingBuilderB::LayoutAfterPadding;
             using ATypeMmad = Gemm::GemmType<ElementA, LayoutMmadA>;
             using BTypeMmad = Gemm::GemmType<ElementB, LayoutMmadB>;
             using TileCopy = TileCopyOpt<ArchTag, ATypeMmad, BTypeMmad, CType>;
@@ -317,7 +317,7 @@ void Run(Options const &options)
             MatmulAdapter matmul_op;
             RunAdapter(matmul_op, arguments, stream, aicCoreNum, fftsAddr);
         } else if (isNeedPaddingA) {
-            using LayoutMmadA = typename PaddingAssistantA::LayoutAfterPadding; 
+            using LayoutMmadA = typename PaddingBuilderA::LayoutAfterPadding; 
             using ATypeMmad = Gemm::GemmType<ElementA, LayoutMmadA>;
             using TileCopy = TileCopyOpt<ArchTag, ATypeMmad, BType, CType>;
             using BlockMmadOpt = Gemm::Block::BlockMmad<
@@ -329,7 +329,7 @@ void Run(Options const &options)
             MatmulAdapter matmul_op;
             RunAdapter(matmul_op, arguments, stream, aicCoreNum, fftsAddr);
         } else if (isNeedPaddingB) {
-            using LayoutMmadB = typename PaddingAssistantB::LayoutAfterPadding;
+            using LayoutMmadB = typename PaddingBuilderB::LayoutAfterPadding;
             using BTypeMmad = Gemm::GemmType<ElementB, LayoutMmadB>;
             using TileCopy = TileCopyOpt<ArchTag, AType, BTypeMmad, CType>;
             using BlockMmadOpt = Gemm::Block::BlockMmad<
