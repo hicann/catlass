@@ -1,7 +1,7 @@
 # BasicMatmul Example Readme
 ## 代码组织
 ```
-├── 23_basic_matmul_AL1
+├── 24_basic_matmul_AL1
 │   ├── CMakeLists.txt   # CMake编译文件
 │   ├── README.md
 │   └── basic_matmul_AL1.cpp # 主文件
@@ -17,11 +17,11 @@
 - 执行算子
 ```
 # 编译指定用例
-bash scripts/build.sh 23_basic_matmul_AL1
+bash scripts/build.sh 24_basic_matmul_AL1
 # cd [代码仓路径]/output/bin
 # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID
 # Device ID可选，默认为0
-./23_basic_matmul_AL1 256 512 1024 0
+./24_basic_matmul_AL1 256 512 1024 0
 ```
 执行结果如下，说明精度比对成功。
 ```
