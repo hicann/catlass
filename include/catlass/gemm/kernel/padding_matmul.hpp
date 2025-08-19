@@ -384,14 +384,14 @@ struct PaddingBuilder {
 
 template <class ArchTag, class Element, class Layout, uint32_t COMPUTE_LENGTH>
 struct PaddingBuilder<ArchTag, Element, Layout, COMPUTE_LENGTH, PaddingTag::NO_PADDING> {
-    using Padding = void;
     using LayoutAfterPadding = Layout;
+    using Padding = void;
 };
 
 template <class ArchTag, class Element, class Layout, uint32_t COMPUTE_LENGTH>
 struct PaddingBuilder<ArchTag, Element, Layout, COMPUTE_LENGTH, PaddingTag::PADDING_ND> {
-    using Padding = Catlass::Gemm::Kernel::PaddingMatrix<ArchTag, Element, Layout, COMPUTE_LENGTH>;
     using LayoutAfterPadding = Layout;
+    using Padding = Catlass::Gemm::Kernel::PaddingMatrix<ArchTag, Element, Layout, COMPUTE_LENGTH>;
 };
 
 template <class ArchTag, class Element, class Layout, uint32_t COMPUTE_LENGTH>
