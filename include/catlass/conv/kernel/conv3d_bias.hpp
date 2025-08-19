@@ -92,8 +92,6 @@ public:
         LayoutFmap layoutFmap = LayoutFmap::MakeLayout(args.problemShape.batch(), args.problemShape.di(), args.problemShape.cin1(), args.problemShape.hi(), args.problemShape.wi(), args.problemShape.cin0());
         LayoutFilter layoutFilter = LayoutFilter::MakeLayout(args.problemShape.kdc1khkw(), args.problemShape.n1(), args.problemShape.n0(), args.problemShape.cin0());
         LayoutOut layoutOut = LayoutOut::MakeLayout(args.problemShape.batch(), args.problemShape.dout(), args.problemShape.cout1(), args.problemShape.ho(), args.problemShape.wo(), args.problemShape.cout0());
-        // LayoutFilter layoutFilter{args.problemShape.kdc1khkw(), args.problemShape.n1(), args.problemShape.n0(), args.problemShape.cin0()};
-        // LayoutOut layoutOut{args.problemShape.n(), args.problemShape.dout(), args.problemShape.cout1(), args.problemShape.ho(), args.problemShape.wo(), args.problemShape.cout0()};
         Params params{
             args.problemShape,
             args.ptrFmap,
@@ -179,7 +177,7 @@ public:
         if (a > b) {
             return a - b;
         } else {
-            return 0;
+            return c;
         }
     }
 };

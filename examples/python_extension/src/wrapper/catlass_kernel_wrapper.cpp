@@ -358,7 +358,6 @@ at::Tensor RunConvBias(const at::Tensor &fmap, const at::Tensor &filter, const a
     kernelInfo.inputAddr[1] = static_cast<uint8_t *>(const_cast<void *>(filter.storage().data()));
     kernelInfo.inputAddr[2] = static_cast<uint8_t *>(const_cast<void *>(bias.storage().data()));
     torch::Dtype outputDataType = TypeStrToTorchDtype(outDType, fmap.scalar_type());
-    // torch::Tensor result = GetOutputTensor(InferConvShape(fmap.sizes(), filterOrgShape, strideList, padList, dilationList), outputDataType);
     torch::Tensor result = GetOutputTensor(InferConvShape(at_npu::native::get_npu_storage_sizes(fmap), filter.sizes(), strideList, padList, dilationList), outputDataType);
     kernelInfo.outputAddr.resize(1);
     kernelInfo.outputAddr.at(0) = static_cast<uint8_t *>(const_cast<void *>(result.storage().data()));

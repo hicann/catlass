@@ -1253,7 +1253,6 @@ public:
     CATLASS_HOST_DEVICE constexpr
     NDC1HWC0(OrgShape orgshape, Shape shape, Stride stride) : orgShape_(orgshape), shape_(shape), stride_(stride) {}
 
-    /// Make the layout of a coordinate (N, D, C1, H, W)
     CATLASS_HOST_DEVICE constexpr
     static NDC1HWC0 MakeLayout(Index Batch, Index D, Index C1, Index H, Index W, Index C0)
     {
@@ -1278,21 +1277,15 @@ public:
     }
 
     // CATLASS_HOST_DEVICE
-    // static NDC1HWC0 MakeLayoutInL0C(Conv3dBlockCoord const &shape) {}
-
     /// Returns the offset of a coordinate in linear memory.
-    /// Assumes coordinate has convention (Batch, D, C1, H*W)
     CATLASS_HOST_DEVICE
     LongIndex GetOffset(Conv3d6HdCoord const &coord) const
     {
-        // coord.hw() = hi*W+wi
-        // Assumes Offset C0 = 0
         return LongIndex(coord.n()) * stride_[4] + LongIndex(coord.d()) * stride_[3] +
                LongIndex(coord.c1()) * stride_[2] + LongIndex(coord.hw()) * stride_[1];
     }
 
     /// Returns the layout of a tile.
-
     CATLASS_HOST_DEVICE
     NDC1HWC0 GetTileLayout(OrgShape const &tileOriShape) const
     {
@@ -1396,9 +1389,6 @@ private:
 
 struct KDC1KHKWN1N0C0 {
     public:
-    /// Logical rank of tensor
-    /// (Kd*C1*Kh*Kw, Cout1, Cout0, C0)
-    /// (C0, Kd*C1*Kh*Kw, N0, N1)
     static constexpr int RANK = 4;
 
     /// Index type used for coordinates
@@ -1408,7 +1398,6 @@ struct KDC1KHKWN1N0C0 {
     using LongIndex = int64_t;
 
     /// Logical rank of orgshape
-    /// (Kd*C1*Kh*Kw, N1*N0*C0)
     static constexpr int ORG_SHAPE_RANK = 4;
 
     /// Logical coordinate
@@ -1481,7 +1470,6 @@ public:
     CATLASS_HOST_DEVICE
     KDC1KHKWN1N0C0 GetTileLayout(OrgShape const &tileOriShape) const
     {
-        /// Assumes coordinate has convention (Cou1, Cin1, Kd, Kh, Kw)
         Shape tileShape = MakeCoord(shape(0),  /// C0
             tileOriShape[0],                   /// Kd*C1*Kh*Kw
             shape(2),                          /// N0

@@ -553,9 +553,7 @@ template <class ArchTag, class Element>
 struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::NDC1HWC0, AscendC::TPosition::GM>> {
     using LayoutDst = layout::NDC1HWC0;
     using LayoutSrc = layout::NDC1HWC0;
-    // static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
     // Mehtods
-
     CATLASS_DEVICE
     CopyGmToL1() {};
 
@@ -565,9 +563,6 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::NDC1HWC0, AscendC::TP
         AscendC::GlobalTensor<Element> const &srcTensor,
         LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
     {
-        // layoutDst = layoutAInL1 (N=1, D=1, cin1LoadL1, hiLoadL1, Wi, C0)
-        // layoutSrc = Fmap.GetTileLayout(1, dilationD, Actualblockshape_C1, Hi, Wi, C0)
-        // 切Kd_l1*C1或C1_l1
         const static uint64_t MAX_UINT16 = 65535;
 
         uint32_t cin1LoadL1 = layoutDst.orgShape(2);
