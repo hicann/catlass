@@ -66,7 +66,7 @@ struct TileCopyOpt : public Catlass::Gemm::Tile::TileCopy<ArchTag, AType, BType,
 namespace CatlassKernel {
 using namespace Catlass;
 template <class LayoutA, class LayoutB, class LayoutC, class InDType, class OutDType>
-void OptimizedMatmulImpl(uint32_t blockNum, aclrtStream stream, KernelInfo kernelInfo)
+void OptimizedMatmulImpl(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo)
 {
     // Prepare FFTS address
     uint32_t fftsLen{0};
@@ -174,7 +174,7 @@ void OptimizedMatmulImpl(uint32_t blockNum, aclrtStream stream, KernelInfo kerne
         RunAdapter(matmulOp, arguments, stream, blockNum, fftsAddr);
     }
 }
-void OptimizedMatmul(uint32_t blockNum, aclrtStream stream, KernelInfo kernelInfo)
+void OptimizedMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo)
 {
     uint32_t m = kernelInfo.m;
     uint32_t n = kernelInfo.n;

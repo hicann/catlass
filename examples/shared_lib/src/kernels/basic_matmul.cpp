@@ -28,7 +28,7 @@ namespace CatlassKernel {
 using namespace Catlass;
 
 template <class LayoutA, class LayoutB, class LayoutC, class InDType, class OutDType>
-void BasicMatmulImpl(uint32_t blockNum, aclrtStream stream, KernelInfo kernelInfo)
+void BasicMatmulImpl(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo)
 {
     GemmCoord problemShape{kernelInfo.m, kernelInfo.n, kernelInfo.k};
     uint8_t *deviceA = kernelInfo.inputAddr.at(0);
@@ -60,7 +60,7 @@ void BasicMatmulImpl(uint32_t blockNum, aclrtStream stream, KernelInfo kernelInf
     RunAdapter<MatmulAdapter>(matmulOp, arguments, stream, blockNum);
 }
 
-void BasicMatmul(uint32_t blockNum, aclrtStream stream, KernelInfo kernelInfo)
+void BasicMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo)
 {
     if (kernelInfo.inputDataType == ACL_FLOAT16 && kernelInfo.outputDataType == ACL_FLOAT16 && !kernelInfo.transA &&
         !kernelInfo.transB) {

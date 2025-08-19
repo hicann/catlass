@@ -33,7 +33,7 @@ template <class LayoutA,
           class OutDType,
           KernelInfo::GMMSplit GMM_SPLIT,
           bool K_GT_N>
-void GroupedMatmulImpl(uint32_t blockNum, aclrtStream stream, KernelInfo kernelInfo)
+void GroupedMatmulImpl(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo)
 {
     GemmCoord problemShape{kernelInfo.m, kernelInfo.n, kernelInfo.k};
     uint32_t problemCount = kernelInfo.g;
@@ -79,7 +79,7 @@ void GroupedMatmulImpl(uint32_t blockNum, aclrtStream stream, KernelInfo kernelI
     RunAdapter<MatmulAdapter>(matmulOp, arguments, stream, blockNum);
 }
 
-void GroupedMatmul(uint32_t blockNum, aclrtStream stream, KernelInfo kernelInfo)
+void GroupedMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo)
 {
     if (kernelInfo.split == KernelInfo::GMMSplit::SPLIT_K && kernelInfo.transA && !kernelInfo.transB) {
         if (kernelInfo.inputDataType == ACL_FLOAT16 && kernelInfo.outputDataType == ACL_FLOAT16) {
