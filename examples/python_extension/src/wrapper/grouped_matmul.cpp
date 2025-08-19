@@ -31,7 +31,7 @@ KernelInfo GetKernelInfo(const at::Tensor &mat1, const at::Tensor &mat2, const a
     std::vector<int64_t> groupListVec(groupListHost.data_ptr<int64_t>(),
                                       groupListHost.data_ptr<int64_t>() + groupListHost.numel());
     kernelInfo.g = groupListVec.size();
-    int64_t groupListSum = groupListVec[-1];
+    int64_t groupListSum = groupListVec[kernelInfo.g - 1];
 
     std::vector<int64_t> matAShape(mat1.sizes().vec());
     std::vector<int64_t> matBShape(mat2.sizes().vec());
@@ -84,6 +84,7 @@ KernelInfo GetKernelInfo(const at::Tensor &mat1, const at::Tensor &mat2, const a
             if (k1 != k2) {
                 throw std::runtime_error("k unequal");
             }
+            kernelInfo.M = M;
             kernelInfo.k = k1;
             kernelInfo.n = n;
             break;
@@ -115,6 +116,7 @@ KernelInfo GetKernelInfo(const at::Tensor &mat1, const at::Tensor &mat2, const a
             if (K != groupListSum) {
                 throw std::runtime_error("mat1[1](K) should be equal to groupListSum");
             }
+            kernelInfo.K = K;
             kernelInfo.m = m;
             kernelInfo.n = n;
             break;
