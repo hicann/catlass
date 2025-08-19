@@ -19,10 +19,10 @@ python_extension
 │   │       └── catlass_kernel_wrapper.h    # wrapper头文件
 │   └── wrapper
 │       └── catlass_kernel_wrapper.cpp      # catlass算子wrapper文件
-├── tests
-│   └── test_python_extension.py        # 测试脚本
 └── torch_catlass                       
     └── __init__.py                     # 初始化入口，用于打包
+tests
+└── test_python_extension.py        # 测试脚本
 ```
 
 ## 编译产物结构

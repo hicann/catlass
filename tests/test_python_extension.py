@@ -9,10 +9,10 @@
 import random
 import unittest
 
-from torch_npu.testing.testcase import TestCase, run_tests
-import torch_npu
 import torch
 import torch_catlass
+import torch_npu
+from torch_npu.testing.testcase import TestCase, run_tests
 
 
 def generate_sequence_split(n, sum_num):
@@ -75,7 +75,6 @@ class CatlassTest(TestCase):
     def test_basic_matmul_pybind_bf16(self):
         self._run_case_basic(2, 3, 4, trans_a=True, trans_b=True)
 
-    @unittest.skip("Not ready")
     def test_grouped_matmul_list_m(self):
         g = 128
         group_list = generate_sequence_split(g, random.randint(256, 40960))
@@ -93,7 +92,6 @@ class CatlassTest(TestCase):
             [a], b_list, group_list=group_list, split_item=3)[0]
         self.assertRtolEqual(result, golden)
 
-    @unittest.skip("Not ready")
     def test_grouped_matmul_list_k(self):
         g = 128
         group_list = generate_sequence_split(g, random.randint(256, 40960))
