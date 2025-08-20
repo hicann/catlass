@@ -328,7 +328,7 @@ ConvKernelInfo GetConvKernelInfo(const at::Tensor &fmap, const at::Tensor &filte
     kernelInfo.filterRelated[0] = filter.sizes().at(2);
     kernelInfo.filterRelated[1] = filter.sizes().at(3);
     kernelInfo.filterRelated[2] = filter.sizes().at(4);
-    kernelInfo.filterRelated[3] = filter.sizes().at(1);
+    kernelInfo.filterRelated[3] = filter.sizes().at(0);
     kernelInfo.strideList.resize(3);
     kernelInfo.strideList[0] = strideList[0];
     kernelInfo.strideList[1] = strideList[1];
