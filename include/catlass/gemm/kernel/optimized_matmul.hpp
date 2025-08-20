@@ -180,6 +180,7 @@ public:
                 workspaceSize += PrologueA::GetWorkspaceSize(
                         args.problemShape.m(), args.problemShape.k(), L1TileShape::M, L1TileShape::K);
             } else if constexpr (PrologueA::paddingTag == PaddingTag::PADDING_ND) {
+                // Optimal bandwidth for 512 Byte aligned reads
                 workspaceSize += PrologueA::GetWorkspaceSize(
                         args.problemShape.m(), args.problemShape.k(), 512 / sizeof(ElementA));
             }
@@ -189,6 +190,7 @@ public:
                 workspaceSize += PrologueB::GetWorkspaceSize(
                         args.problemShape.k(), args.problemShape.n(), L1TileShape::K, L1TileShape::N);
             } else if constexpr (PrologueB::paddingTag == PaddingTag::PADDING_ND) {
+                // Optimal bandwidth for 512 Byte aligned reads
                 workspaceSize += PrologueB::GetWorkspaceSize(
                         args.problemShape.k(), args.problemShape.n(), 512 / sizeof(ElementB));
             }
@@ -213,6 +215,7 @@ public:
                 sizeWA += PrologueA::GetWorkspaceSize(
                         args.problemShape.m(), args.problemShape.k(), L1TileShape::M, L1TileShape::K);
             } else if constexpr (PrologueA::paddingTag == PaddingTag::PADDING_ND) {
+                // Optimal bandwidth for 512 Byte aligned reads
                 sizeWA += PrologueA::GetWorkspaceSize(
                         args.problemShape.m(), args.problemShape.k(), 512 / sizeof(ElementA));
             }
@@ -232,6 +235,7 @@ public:
             if constexpr (PrologueB::paddingTag == PaddingTag::PADDING_BLOCK_ND) {
                 layoutWB = PrologueB::GetWorkspaceLayout(layoutB, L1TileShape::K, L1TileShape::N);
             } else if constexpr (PrologueB::paddingTag == PaddingTag::PADDING_ND) {
+                // Optimal bandwidth for 512 Byte aligned reads
                 layoutWB = PrologueB::GetWorkspaceLayout(layoutB, 512 / sizeof(ElementB));
             }
             Params params{args.problemShape, args.ptrA, layoutA, args.ptrB, layoutB, args.ptrC, layoutC, 
@@ -242,6 +246,7 @@ public:
             if constexpr (PrologueA::paddingTag == PaddingTag::PADDING_BLOCK_ND) {
                 layoutWA = PrologueA::GetWorkspaceLayout(layoutA, L1TileShape::M, L1TileShape::K);
             } else if constexpr (PrologueA::paddingTag == PaddingTag::PADDING_ND) {
+                // Optimal bandwidth for 512 Byte aligned reads
                 layoutWA = PrologueA::GetWorkspaceLayout(layoutA, 512 / sizeof(ElementA));
             }
             Params params{args.problemShape, args.ptrA, layoutA, args.ptrB, layoutB, args.ptrC, layoutC,
@@ -252,6 +257,7 @@ public:
             if constexpr (PrologueB::paddingTag == PaddingTag::PADDING_BLOCK_ND) {
                 layoutWB = PrologueB::GetWorkspaceLayout(layoutB, L1TileShape::K, L1TileShape::N);
             } else if constexpr (PrologueB::paddingTag == PaddingTag::PADDING_ND) {
+                // Optimal bandwidth for 512 Byte aligned reads
                 layoutWB = PrologueB::GetWorkspaceLayout(layoutB, 512 / sizeof(ElementB));
             }
             Params params{args.problemShape, args.ptrA, layoutA, args.ptrB, layoutB, args.ptrC, layoutC,

@@ -54,7 +54,7 @@ public:
         return LayoutOut(layout.shape(0), layout.shape(1), rowAlign, colAlign);
     }
     static size_t GetWorkspaceSize(uint32_t rows, uint32_t cols, uint32_t rowAlign, uint32_t colAlign) {
-        return static_cast<size_t>(RoundUp(rows, rowAlign)) * RoundUp(cols, colAlign) * sizeof(Element_);
+        return static_cast<size_t>(RoundUp(rows, rowAlign)) * RoundUp(cols, colAlign) * sizeof(Element);
     }
 
     CopyGm2Ub copyGm2Ub;
@@ -243,9 +243,9 @@ public:
     }
     static size_t GetWorkspaceSize(uint32_t rows, uint32_t cols, uint32_t align) {
         if constexpr (std::is_same_v<LayoutIn, layout::RowMajor>) {
-            return static_cast<size_t>(rows) * RoundUp(cols, align) * sizeof(Element_);
+            return static_cast<size_t>(rows) * RoundUp(cols, align) * sizeof(Element);
         } else {
-            return static_cast<size_t>(cols) * RoundUp(rows, align) * sizeof(Element_);
+            return static_cast<size_t>(cols) * RoundUp(rows, align) * sizeof(Element);
         }
     }
 

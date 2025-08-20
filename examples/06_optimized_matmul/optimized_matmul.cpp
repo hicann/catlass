@@ -207,8 +207,9 @@ void Run(Options const &options)
     bool isNeedPaddingA = IsNeedPadding(layoutA, alignByElement);
     bool isNeedPaddingB = IsNeedPadding(layoutB, alignByElement);
 
-    // Layout zN or layout nZ does not require padding operation.
+    // PaddingTag can be NO_PADDING, PADDING_BLOCK_ND, or PADDING_ND.
     using PaddingTag = Catlass::Gemm::Kernel::PaddingTag;
+    // Layout zN or layout nZ does not require padding operation.
     constexpr PaddingTag paddingTagA = (std::is_same_v<LayoutA, layout::zN> || std::is_same_v<LayoutA, layout::nZ>) ? 
         PaddingTag::NO_PADDING : PaddingTag::PADDING_BLOCK_ND;
     constexpr PaddingTag paddingTagB = (std::is_same_v<LayoutB, layout::zN> || std::is_same_v<LayoutB, layout::nZ>) ? 
