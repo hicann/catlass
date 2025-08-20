@@ -175,7 +175,7 @@ public:
         constexpr bool isPaddingA = !std::is_void_v<PrologueA>;
         constexpr bool isPaddingB = !std::is_void_v<PrologueB>;
         size_t workspaceSize = 0;
-        if (isPaddingA) {
+        if constexpr (isPaddingA) {
             if constexpr (PrologueA::paddingTag == PaddingTag::PADDING_BLOCK_ND) {
                 workspaceSize += PrologueA::GetWorkspaceSize(
                         args.problemShape.m(), args.problemShape.k(), L1TileShape::M, L1TileShape::K);
@@ -184,7 +184,7 @@ public:
                         args.problemShape.m(), args.problemShape.k(), 512 / sizeof(ElementA));
             }
         }
-        if (isPaddingB) {
+        if constexpr (isPaddingB) {
             if constexpr (PrologueB::paddingTag == PaddingTag::PADDING_BLOCK_ND) {
                 workspaceSize += PrologueB::GetWorkspaceSize(
                         args.problemShape.k(), args.problemShape.n(), L1TileShape::K, L1TileShape::N);
