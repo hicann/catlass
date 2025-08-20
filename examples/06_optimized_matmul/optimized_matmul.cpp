@@ -223,11 +223,6 @@ void Run(Options const &options)
         ArchTag, ElementB, LayoutB, COMPUTE_LENGTH_B, paddingTagB>;
     using GlobalPaddingB = PaddingBuilderB::Padding;
 
-    // if LayoutA and LayoutB is both ColumnMajor,
-    // L1TileShape using GemmShape<256, 128, 256> can achieve better performance.
-    using L1TileShape = std::conditional_t<std::is_same_v<LayoutA, layout::ColumnMajor> &&
-        std::is_same_v<LayoutB, layout::ColumnMajor>, GemmShape<256, 128, 256>, GemmShape<128, 256, 256>>;
-
     std::vector<fp16_t> hostA(lenA);
     std::vector<fp16_t> hostB(lenB);
     golden::FillRandomData<fp16_t>(hostA, -5.0f, 5.0f);
