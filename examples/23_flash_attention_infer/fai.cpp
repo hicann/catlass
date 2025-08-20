@@ -231,10 +231,10 @@ void Run(const Options &options)
 
     // Allocate matrices in device memory for workspace.
     // One base workspace block contains 65536 elements.
-    uint64_t mm1OutSize = aicCoreNum * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(float) * FAInferTiling::NUM2;
-    uint64_t smOnlineOutSize = aicCoreNum * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(fp16_t) * FAInferTiling::NUM2;
-    uint64_t mm2OutSize = aicCoreNum * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(float) * FAInferTiling::NUM2;
-    uint64_t UpdateSize = aicCoreNum * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(float) * FAInferTiling::NUM2;
+    uint64_t mm1OutSize = aicCoreNum * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(float) * FAInferTiling::NUM3;
+    uint64_t smOnlineOutSize = aicCoreNum * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(fp16_t) * FAInferTiling::NUM3;
+    uint64_t mm2OutSize = aicCoreNum * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(float) * FAInferTiling::NUM3;
+    uint64_t UpdateSize = aicCoreNum * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(float) * FAInferTiling::NUM3;
     uint64_t workSpaceSize = mm1OutSize + smOnlineOutSize + mm2OutSize + UpdateSize;
     
     uint8_t *sDevice;
@@ -283,7 +283,15 @@ void Run(const Options &options)
     uint64_t fftsAddr{0};
     uint32_t fftsLen{0};
     RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
-
+    
+    for(int i = 0; i < 1; i ++){
+        if(dataType == "half"){
+            FAInferFp16<<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice, pDevice, oTempDevice, oUpdateDevice, tilingDevice);
+        }
+        else{
+            FAInferBf16<<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice, pDevice, oTempDevice, oUpdateDevice, tilingDevice);
+        }
+    }
     FAInferFp16<<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice, pDevice, oTempDevice, oUpdateDevice, tilingDevice);
     ACL_CHECK(aclrtSynchronizeStream(stream));
     // Copy the result from device to host
