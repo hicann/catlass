@@ -132,7 +132,7 @@ public:
     static size_t GetWorkspaceLen(Layout layout, size_t blockRows, size_t blockCols)
     {
         return RoundUp(static_cast<size_t>(layout.shape(0)), blockRows) *
-                RoundUp(static_cast<size_t>(layout.shape(1)), blockRows);
+                RoundUp(static_cast<size_t>(layout.shape(1)), blockCols);
     }
 
     static size_t GetWorkspaceSize(const Arguments &args)
