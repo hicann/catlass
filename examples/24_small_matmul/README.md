@@ -6,6 +6,10 @@
 │   ├── README.md
 │   └── small_matmul.cpp # 主文件
 ```
+## 功能介绍
+- 该算子针对小shape场景，在basic_matmul的基础上减少不必要的scalar计算开销
+- 要求切分基本块数不超过cube核数，即ceilDiv(m, L1TileShape::M) * ceilDiv(n, L1TileShape::N) <= aicCoreNum
+- 要求k轴不超过L1TileShape::K
 ## 使用示例
 - 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/quickstart.md#算子编译)
 - 执行算子
