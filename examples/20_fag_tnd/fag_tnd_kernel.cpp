@@ -399,19 +399,19 @@ void FAG(uint64_t fftsAddr,
 
     // VEC_Pre ：dQ/dOut/dV的workspace清零
     using EpilogueAtlasA2FAGPre = Catlass::Epilogue::EpilogueAtlasA2FAGPre;
-    using EpilogueFAGPre = Catlass::Epilogue::Block::BlockEpilogue<INPUT_DTYPE, EpilogueAtlasA2FAGPre, OutputType, UpdateType, InputType>;
+    using EpilogueFAGPre = Catlass::Epilogue::Block::BlockEpilogue<EpilogueAtlasA2FAGPre, INPUT_DTYPE>;
 
     // VEC_Sfmg ：计算 SoftmaxGrad(dOut, atten_in)
     using EpilogueAtlasA2FAGSfmg = Catlass::Epilogue::EpilogueAtlasA2FAGSfmg;
-    using EpilogueFAGSfmg = Catlass::Epilogue::Block::BlockEpilogue<INPUT_DTYPE, EpilogueAtlasA2FAGSfmg, OutputType, UpdateType, InputType>;
+    using EpilogueFAGSfmg = Catlass::Epilogue::Block::BlockEpilogue<EpilogueAtlasA2FAGSfmg, INPUT_DTYPE>;
 
     // VEC_Op：计算S = Mask(Q*K^T)，并完成重计算 P = Softmax(S)，再计算dS = P * Sub(dP, Sfmg)
     using EpilogueAtlasA2FAGOp = Catlass::Epilogue::EpilogueAtlasA2FAGOp;
-    using EpilogueFAGOp = Catlass::Epilogue::Block::BlockEpilogue<INPUT_DTYPE, EpilogueAtlasA2FAGOp, OutputType, UpdateType, InputType>;
+    using EpilogueFAGOp = Catlass::Epilogue::Block::BlockEpilogue<EpilogueAtlasA2FAGOp, INPUT_DTYPE>;
 
     // VEC_Post：dQ*scale和dK*scale，并搬运输出dQ/dK/dV
     using EpilogueAtlasA2FAGPost = Catlass::Epilogue::EpilogueAtlasA2FAGPost;
-    using EpilogueFAGPost = Catlass::Epilogue::Block::BlockEpilogue<INPUT_DTYPE, EpilogueAtlasA2FAGPost, OutputType, UpdateType, InputType>;
+    using EpilogueFAGPost = Catlass::Epilogue::Block::BlockEpilogue<EpilogueAtlasA2FAGPost, INPUT_DTYPE>;
 
     // Kernel level
     using FAGKernel = FAGKernel<half, BlockMmadFAGCube1, BlockMmadFAGCube2, BlockMmadFAGCube3, EpilogueFAGPre, 
