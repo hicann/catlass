@@ -6,5 +6,10 @@
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 # See LICENSE in the root of the software repository for the full text of the License.
 
-set_source_files_properties(grouped_matmul.cpp PROPERTIES LANGUAGE ASCEND)
-catlass_example_add_executable(08_grouped_matmul dav-c220-cube grouped_matmul.cpp)
+set(FAI_SOURCES
+    fai.cpp)
+
+set_source_files_properties(fai.cpp PROPERTIES LANGUAGE ASCEND)
+catlass_example_add_executable(23_flash_attention_infer dav-c220 ${FAI_SOURCES})
+target_include_directories(23_flash_attention_infer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(23_flash_attention_infer PRIVATE m)

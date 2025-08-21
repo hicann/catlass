@@ -35,7 +35,6 @@ add_compile_options(
     "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-dcci-insert-for-scalar=false>"
 )
 
-add_compile_definitions(L2_CACHE_HINT)
 include_directories(
     ${CATLASS_EXAMPLES_COMMON_SOURCE_DIR}
     ${CATLASS_INCLUDE_DIR}
@@ -74,6 +73,7 @@ foreach(EXAMPLE
     20_matmul_bias
     21_basic_matmul_preload_zN
     22_padding_splitk_matmul
+    23_flash_attention_infer
 )
     add_subdirectory(${EXAMPLE})
 endforeach()
