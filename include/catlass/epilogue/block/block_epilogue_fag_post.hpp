@@ -34,15 +34,8 @@ using AscendC::TQue;
 using namespace AscendC;
 namespace Catlass::Epilogue::Block {
 
-template <
-    class OutputType_,
-    class UpdateType_,
-    class InputType_>
-class BlockEpilogue<
-    EpilogueAtlasA2FAGPost,
-    OutputType_,
-    UpdateType_,
-    InputType_>
+template <typename INPUT_DTYPE>
+class BlockEpilogue<EpilogueAtlasA2FAGPost, INPUT_DTYPE>
 {
 public:
     using DispatchPolicy = EpilogueAtlasA2FAGPost;
@@ -57,7 +50,7 @@ public:
     // input
     AscendC::GlobalTensor<float> dqWorkSpaceGm, dkWorkSpaceGm, dvWorkSpaceGm;
     // output
-    AscendC::GlobalTensor<half> dqGm, dkGm, dvGm;
+    AscendC::GlobalTensor<INPUT_DTYPE> dqGm, dkGm, dvGm;
 
     int64_t cBlockIdx;
     // query
@@ -97,9 +90,9 @@ public:
         tilingDataFp.SetGlobalBuffer((__gm__ float *)tiling_in);
         scaleValue = tilingDataFp.GetValue(TILING_SCALE_VALUE * CONST_2);
 
-        dqGm.SetGlobalBuffer((__gm__ half *)dq);
-        dkGm.SetGlobalBuffer((__gm__ half *)dk);
-        dvGm.SetGlobalBuffer((__gm__ half *)dv);
+        dqGm.SetGlobalBuffer((__gm__ INPUT_DTYPE *)dq);
+        dkGm.SetGlobalBuffer((__gm__ INPUT_DTYPE *)dk);
+        dvGm.SetGlobalBuffer((__gm__ INPUT_DTYPE *)dv);
 
         dqWorkSpaceGm.SetGlobalBuffer((__gm__ float *)workspace + dqWorkSpaceOffset / sizeof(float));
         dkWorkSpaceGm.SetGlobalBuffer((__gm__ float *)workspace + dkWorkSpaceOffset / sizeof(float));
@@ -156,7 +149,7 @@ public:
         for (uint64_t i = qBegin; i < qEnd; i = i + qPostBaseNum) {
 
             AscendC::LocalTensor<float> vecIn = inBuffer.Get<float>();
-            AscendC::LocalTensor<half> vecOut = outBuffer.Get<half>();
+            AscendC::LocalTensor<INPUT_DTYPE> vecOut = outBuffer.Get<INPUT_DTYPE>();
             uint64_t dataSize = i + qPostBaseNum < qPostBlockTotal ? qPostBaseNum : qPostTailNum;
             DataCopy(vecIn, dqWorkSpaceGm[i], (dataSize + 7) / 8 * 8); // dataSize(fp32) align 32B
 
@@ -185,7 +178,7 @@ public:
 
         for (uint64_t i = kvBegin; i < kvEnd; i = i + kvPostBaseNum) {
             AscendC::LocalTensor<float> vecIn = inBuffer.Get<float>();
-            AscendC::LocalTensor<half> vecOut = outBuffer.Get<half>();
+            AscendC::LocalTensor<INPUT_DTYPE> vecOut = outBuffer.Get<INPUT_DTYPE>();
             uint64_t dataSize = i + kvPostBaseNum < kvPostBlockTotal ? kvPostBaseNum : kvPostTailNum;
             DataCopy(vecIn, dkWorkSpaceGm[i], (dataSize + 7) / 8 * 8); // dataSize(fp32) align 32B
             event_t vWaitMte2 = static_cast<event_t>(GetTPipePtr()->FetchEventID(HardEvent::MTE2_V));
@@ -210,7 +203,7 @@ public:
         // init v
         for (uint64_t i = kvBegin; i < kvEnd; i = i + kvPostBaseNum) {
             AscendC::LocalTensor<float> vecIn = inBuffer.Get<float>();
-            AscendC::LocalTensor<half> vecOut = outBuffer.Get<half>();
+            AscendC::LocalTensor<INPUT_DTYPE> vecOut = outBuffer.Get<INPUT_DTYPE>();
             uint64_t dataSize = i + kvPostBaseNum < kvPostBlockTotal ? kvPostBaseNum : kvPostTailNum;
             DataCopy(vecIn, dvWorkSpaceGm[i], (dataSize + 7) / 8 * 8); // dataSize(fp32) align 32B
             event_t vWaitMte2 = static_cast<event_t>(GetTPipePtr()->FetchEventID(HardEvent::MTE2_V));

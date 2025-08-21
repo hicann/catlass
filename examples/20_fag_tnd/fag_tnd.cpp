@@ -285,7 +285,7 @@ void Run(const Options &options)
     uint32_t fftsLen{0};
     RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
 
-    FAG<<<blockDim, nullptr, stream>>>(
+    FAG<half><<<blockDim, nullptr, stream>>>(
         fftsAddr, qDevice, kDevice, vDevice, dOutDevice, nullptr, nullptr, nullptr, nullptr, nullptr,
         attenMaskDevice, softMaxMaxDevice, softMaxSumDevice, nullptr, outDevice, nullptr, cuSeqQlenDevice, cuSeqKvlenDevice,
         nullptr, nullptr, dqDevice, dkDevice, dvDevice, dq_rightDevice, dk_rightDevice, workspaceDevice, tilingDevice);

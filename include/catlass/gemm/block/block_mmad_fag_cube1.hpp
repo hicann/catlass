@@ -207,7 +207,7 @@ namespace Catlass::Gemm::Block
         }
 
         CATLASS_DEVICE
-        void operator()(const CubeAddrInfo &addrs, __gm__ half *left, __gm__ half *right, __gm__ float *out,
+        void operator()(const CubeAddrInfo &addrs, __gm__ ElementA *left, __gm__ ElementB *right, __gm__ float *out,
                         uint32_t &pingpongFlagL1A, uint32_t &pingpongFlagL0A, uint32_t &pingpongFlagL1B,
                         uint32_t &pingpongFlagL0B, uint32_t &pingpongFlagC)
         {
