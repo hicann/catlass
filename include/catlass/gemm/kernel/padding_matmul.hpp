@@ -399,7 +399,7 @@ struct PaddingBuilder<ArchTag, Element, LayoutIn, COMPUTE_LENGTH, PaddingTag::NO
 template <class ArchTag, class Element, class LayoutIn, uint32_t COMPUTE_LENGTH>
 struct PaddingBuilder<ArchTag, Element, LayoutIn, COMPUTE_LENGTH, PaddingTag::PADDING_ND> {
     using LayoutAfterPadding = LayoutIn;
-    using Padding = Catlass::Gemm::Kernel::PaddingMatrixND<ArchTag, Element, Layout, COMPUTE_LENGTH>;
+    using Padding = Catlass::Gemm::Kernel::PaddingMatrixND<ArchTag, Element, LayoutIn, COMPUTE_LENGTH>;
 };
 
 template <class ArchTag, class Element, class LayoutIn, uint32_t COMPUTE_LENGTH>
