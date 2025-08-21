@@ -20,12 +20,13 @@
 #include "helper.hpp"
 #include "golden.hpp"
 #include "fp16_t.h"
+#include "bfloat16.h"
 #include "fag_tnd_tiling.cpp"
 #include "fag_tnd_kernel.cpp"
 
 using namespace std;
 using fp16_t = op::fp16_t;
-using bfloat16_t = op::bfloat16;
+using bfloat16 = op::bfloat16;
 
 /**
  * Function for read file.
@@ -124,7 +125,6 @@ void FreeMem(uint8_t *host, uint8_t *device)
 
 // Allocate several matrices in NPU device memory and call a
 // ACTLASS FAG kernel.
-template <typename INPUT_DTYPE>
 void Run(const Options &options)
 {
     aclrtStream stream{nullptr};
