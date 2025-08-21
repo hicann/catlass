@@ -414,7 +414,7 @@ void FAG(uint64_t fftsAddr,
     using EpilogueFAGPost = Catlass::Epilogue::Block::BlockEpilogue<EpilogueAtlasA2FAGPost, INPUT_DTYPE>;
 
     // Kernel level
-    using FAGKernel = FAGKernel<half, BlockMmadFAGCube1, BlockMmadFAGCube2, BlockMmadFAGCube3, EpilogueFAGPre, 
+    using FAGKernel = FAGKernel<INPUT_DTYPE, BlockMmadFAGCube1, BlockMmadFAGCube2, BlockMmadFAGCube3, EpilogueFAGPre, 
                                 EpilogueFAGSfmg, EpilogueFAGOp, EpilogueFAGPost>;
     typename FAGKernel::Params params{
         q, k, v, dout,
