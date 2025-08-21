@@ -131,7 +131,7 @@ namespace Catlass::Gemm::Block
         }
 
         CATLASS_DEVICE
-        void operator()(const CubeAddrInfo &addrs, __gm__ half *left, __gm__ half *right, __gm__ float *out,
+        void operator()(const CubeAddrInfo &addrs, __gm__ ElementA *left, __gm__ ElementB *right, __gm__ float *out,
                         uint32_t &pingpongFlagL1A, uint32_t &pingpongFlagL0A, uint32_t &pingpongFlagL1B,
                         uint32_t &pingpongFlagL0B, uint32_t &pingpongFlagC)
         {
@@ -162,8 +162,8 @@ namespace Catlass::Gemm::Block
                 uint32_t m_loop = CeilDiv<SIZE_128>(km);
                 uint32_t n_loop = CeilDiv<SIZE_128>(kn);
 
-                __gm__ half* gm_a = left + (shapeInfo.out + globalBlockOffset);
-                __gm__ half* gm_b = right + shapeInfo.left;
+                __gm__ ElementA* gm_a = left + (shapeInfo.out + globalBlockOffset);
+                __gm__ ElementB* gm_b = right + shapeInfo.left;
                 __gm__ float* gm_out = out + shapeInfo.right;
 
                 AscendC::GlobalTensor<ElementA> gLeft;

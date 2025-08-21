@@ -5,19 +5,14 @@
 #include <vector>
 #include <iomanip>
 #include <cstring>
-
 #include "softmax_tiling.cpp"
 #include "helper.hpp"
-#include "fp16_t.h"
 #include "fag_common/common_header.h"
-
 using namespace std;
-using fp16_t = op::fp16_t;
 
 namespace FAGTiling {
 struct FAGInfo {
     float scaleValue;
-
     int64_t seqQShapeSize;
     int64_t queryShape_0;
     int64_t queryShape_1;

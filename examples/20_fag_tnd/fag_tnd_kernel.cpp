@@ -32,6 +32,7 @@ using namespace AscendC;
 using namespace Catlass;
 
 template <
+    typename INPUT_DTYPE,
     class BlockMmadFAGCube1_,
     class BlockMmadFAGCube2_,
     class BlockMmadFAGCube3_,
@@ -188,9 +189,9 @@ public:
                 // get start kernel
                 SetFlag();
                 CubeAddrInfo addrs = cubeAddrInfo[taskId % 2];
-                blockMmadFAGCube1(cubeAddrInfo[taskId % 2], (__gm__ half*)(params.q), (__gm__ half*)(params.k), (__gm__ float*)(params.workspace + mm2WorkspaceOffset), 
+                blockMmadFAGCube1(cubeAddrInfo[taskId % 2], (__gm__ INPUT_DTYPE*)(params.q), (__gm__ INPUT_DTYPE*)(params.k), (__gm__ float*)(params.workspace + mm2WorkspaceOffset), 
                     pingpongFlagL1A, pingpongFlagL0A, pingpongFlagL1B, pingpongFlagL0B, pingpongFlagC);
-                blockMmadFAGCube1(cubeAddrInfo[taskId % 2], (__gm__ half*)(params.dout), (__gm__ half*)(params.v), (__gm__ float*)(params.workspace + mm1WorkspaceOffset), 
+                blockMmadFAGCube1(cubeAddrInfo[taskId % 2], (__gm__ INPUT_DTYPE*)(params.dout), (__gm__ INPUT_DTYPE*)(params.v), (__gm__ float*)(params.workspace + mm1WorkspaceOffset), 
                     pingpongFlagL1A, pingpongFlagL0A, pingpongFlagL1B, pingpongFlagL0B, pingpongFlagC);
                 WaitFlag();
                 AscendC::CrossCoreSetFlag<2, PIPE_FIX>(CUBE2VEC);
@@ -198,15 +199,15 @@ public:
             if (taskId > 0 && cubeAddrInfo[(taskId - 1) % 2].blockLength > 0) {
                 AscendC::WaitEvent(VEC2CUBE);
                 SetFlag();
-                blockMmadFAGCube2(cubeAddrInfo[(taskId - 1) % 2], (__gm__ half*)(params.workspace + dsWorkSpaceOffset), (__gm__ half*)(params.k), (__gm__ float*)(params.workspace + dqWorkSpaceOffset), 
+                blockMmadFAGCube2(cubeAddrInfo[(taskId - 1) % 2], (__gm__ INPUT_DTYPE*)(params.workspace + dsWorkSpaceOffset), (__gm__ INPUT_DTYPE*)(params.k), (__gm__ float*)(params.workspace + dqWorkSpaceOffset), 
                     pingpongFlagL1A, pingpongFlagL0A, pingpongFlagL1B, pingpongFlagL0B);
                 WaitFlag();
                 SetFlag();
-                blockMmadFAGCube3(cubeAddrInfo[(taskId - 1) % 2], (__gm__ half*)(params.workspace + pWorkSpaceOffset), (__gm__ half*)(params.dout), (__gm__ float*)(params.workspace + dvWorkSpaceOffset), 
+                blockMmadFAGCube3(cubeAddrInfo[(taskId - 1) % 2], (__gm__ INPUT_DTYPE*)(params.workspace + pWorkSpaceOffset), (__gm__ INPUT_DTYPE*)(params.dout), (__gm__ float*)(params.workspace + dvWorkSpaceOffset), 
                     pingpongFlagL1A, pingpongFlagL0A, pingpongFlagL1B, pingpongFlagL0B, pingpongFlagC);
                 WaitFlag();
                 SetFlag();
-                blockMmadFAGCube3(cubeAddrInfo[(taskId - 1) % 2], (__gm__ half*)(params.workspace + dsWorkSpaceOffset), (__gm__ half*)(params.q), (__gm__ float*)(params.workspace + dkWorkSpaceOffset), 
+                blockMmadFAGCube3(cubeAddrInfo[(taskId - 1) % 2], (__gm__ INPUT_DTYPE*)(params.workspace + dsWorkSpaceOffset), (__gm__ INPUT_DTYPE*)(params.q), (__gm__ float*)(params.workspace + dkWorkSpaceOffset), 
                     pingpongFlagL1A, pingpongFlagL0A, pingpongFlagL1B, pingpongFlagL0B, pingpongFlagC);
                 WaitFlag();
             }
@@ -318,6 +319,7 @@ private:
     Arch::Resource<ArchTag> resource;
 };
 
+template <typename INPUT_DTYPE>
 CATLASS_GLOBAL
 void FAG(uint64_t fftsAddr,
         GM_ADDR q, GM_ADDR k, GM_ADDR v, GM_ADDR dout,
@@ -334,9 +336,9 @@ void FAG(uint64_t fftsAddr,
 
     using ArchTag = Arch::AtlasA2;
     // Cube1 计算：左矩阵不转置，右矩阵转置。实现 (Q * K^T) 和 dP = dOut * V^T
-    using ElementA1 = half;               // q和dout
+    using ElementA1 = INPUT_DTYPE;               // q和dout
     using LayoutA1 = layout::RowMajor;
-    using ElementB1 = half;               // k和v
+    using ElementB1 = INPUT_DTYPE;               // k和v
     using LayoutB1 = layout::ColumnMajor;
     using ElementC1 = float;
     using LayoutC1 = layout::RowMajor;
@@ -349,9 +351,9 @@ void FAG(uint64_t fftsAddr,
     using BlockMmadFAGCube1 = Catlass::Gemm::Block::BlockMmad<DispatchPolicyCube1, L1TileShapeCube1, L0TileShapeCube1, A1Type, B1Type, C1Type>;
 
     // Cube2 计算：左矩阵不转置，右矩阵不转置。实现 dQ = dS * K
-    using ElementA2 = half;           // ds
+    using ElementA2 = INPUT_DTYPE;           // ds
     using LayoutA2 = layout::RowMajor;
-    using ElementB2 = half;           // k
+    using ElementB2 = INPUT_DTYPE;           // k
     using LayoutB2 = layout::RowMajor;
     using ElementC2 = float;
     using LayoutC2 = layout::RowMajor;
@@ -366,9 +368,9 @@ void FAG(uint64_t fftsAddr,
     using BlockMmadFAGCube2 = Catlass::Gemm::Block::BlockMmad<DispatchPolicyCube2, L1TileShapeCube2, L0TileShapeCube2, A2Type, B2Type, C2Type>;
 
     // Cube3 计算：左矩阵转置，右矩阵不转置。 实现 dK = dS^T * Q 和 dV = P^T * dOut
-    using ElementA3 = half;              // ds和p
+    using ElementA3 = INPUT_DTYPE;              // ds和p
     using LayoutA3 = layout::ColumnMajor;
-    using ElementB3 = half;              // q和dout
+    using ElementB3 = INPUT_DTYPE;              // q和dout
     using LayoutB3 = layout::RowMajor;
     using ElementC3 = float;
     using LayoutC3 = layout::RowMajor;
@@ -397,22 +399,23 @@ void FAG(uint64_t fftsAddr,
 
     // VEC_Pre ：dQ/dOut/dV的workspace清零
     using EpilogueAtlasA2FAGPre = Catlass::Epilogue::EpilogueAtlasA2FAGPre;
-    using EpilogueFAGPre = Catlass::Epilogue::Block::BlockEpilogue<EpilogueAtlasA2FAGPre, OutputType, UpdateType, InputType>;
+    using EpilogueFAGPre = Catlass::Epilogue::Block::BlockEpilogue<EpilogueAtlasA2FAGPre, INPUT_DTYPE>;
 
     // VEC_Sfmg ：计算 SoftmaxGrad(dOut, atten_in)
     using EpilogueAtlasA2FAGSfmg = Catlass::Epilogue::EpilogueAtlasA2FAGSfmg;
-    using EpilogueFAGSfmg = Catlass::Epilogue::Block::BlockEpilogue<EpilogueAtlasA2FAGSfmg, OutputType, UpdateType, InputType>;
+    using EpilogueFAGSfmg = Catlass::Epilogue::Block::BlockEpilogue<EpilogueAtlasA2FAGSfmg, INPUT_DTYPE>;
 
     // VEC_Op：计算S = Mask(Q*K^T)，并完成重计算 P = Softmax(S)，再计算dS = P * Sub(dP, Sfmg)
     using EpilogueAtlasA2FAGOp = Catlass::Epilogue::EpilogueAtlasA2FAGOp;
-    using EpilogueFAGOp = Catlass::Epilogue::Block::BlockEpilogue<EpilogueAtlasA2FAGOp, OutputType, UpdateType, InputType>;
+    using EpilogueFAGOp = Catlass::Epilogue::Block::BlockEpilogue<EpilogueAtlasA2FAGOp, INPUT_DTYPE>;
 
     // VEC_Post：dQ*scale和dK*scale，并搬运输出dQ/dK/dV
     using EpilogueAtlasA2FAGPost = Catlass::Epilogue::EpilogueAtlasA2FAGPost;
-    using EpilogueFAGPost = Catlass::Epilogue::Block::BlockEpilogue<EpilogueAtlasA2FAGPost, OutputType, UpdateType, InputType>;
+    using EpilogueFAGPost = Catlass::Epilogue::Block::BlockEpilogue<EpilogueAtlasA2FAGPost, INPUT_DTYPE>;
 
     // Kernel level
-    using FAGKernel = FAGKernel<BlockMmadFAGCube1, BlockMmadFAGCube2, BlockMmadFAGCube3, EpilogueFAGPre, EpilogueFAGSfmg, EpilogueFAGOp, EpilogueFAGPost>;
+    using FAGKernel = FAGKernel<INPUT_DTYPE, BlockMmadFAGCube1, BlockMmadFAGCube2, BlockMmadFAGCube3, EpilogueFAGPre, 
+                                EpilogueFAGSfmg, EpilogueFAGOp, EpilogueFAGPost>;
     typename FAGKernel::Params params{
         q, k, v, dout,
         q_right, k_right, pse_shift,

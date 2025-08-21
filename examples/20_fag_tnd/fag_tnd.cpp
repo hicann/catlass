@@ -20,11 +20,13 @@
 #include "helper.hpp"
 #include "golden.hpp"
 #include "fp16_t.h"
+#include "bfloat16.h"
 #include "fag_tnd_tiling.cpp"
 #include "fag_tnd_kernel.cpp"
 
 using namespace std;
 using fp16_t = op::fp16_t;
+using bfloat16 = op::bfloat16;
 
 /**
  * Function for read file.
@@ -285,7 +287,7 @@ void Run(const Options &options)
     uint32_t fftsLen{0};
     RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
 
-    FAG<<<blockDim, nullptr, stream>>>(
+    FAG<half><<<blockDim, nullptr, stream>>>(
         fftsAddr, qDevice, kDevice, vDevice, dOutDevice, nullptr, nullptr, nullptr, nullptr, nullptr,
         attenMaskDevice, softMaxMaxDevice, softMaxSumDevice, nullptr, outDevice, nullptr, cuSeqQlenDevice, cuSeqKvlenDevice,
         nullptr, nullptr, dqDevice, dkDevice, dvDevice, dq_rightDevice, dk_rightDevice, workspaceDevice, tilingDevice);

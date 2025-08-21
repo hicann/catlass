@@ -3,6 +3,7 @@ import torch
 import torch_npu
 import numpy as np
 import sys
+import tensorflow as tf
 
 
 torch.npu.set_device(1)
@@ -10,7 +11,7 @@ np.random.seed(3)
 torch.manual_seed(3)
 
 WORKSPACE = os.path.dirname(os.path.abspath(__file__))
-
+pttype = torch.float16
 
 def get_cu_seqlens(seqlens_list):
     cu = torch.zeros(len(seqlens_list) + 1, dtype = torch.int64)
@@ -38,7 +39,6 @@ def gen_data(nheads, nheads_k, headdim, list_seq):
     print("total_q: ", total_q)
     print("total_k: ", total_k)
 
-    pttype = torch.float16
     limit = 2
     q = limit * (torch.rand([total_q, nheads, headdim]) - 0.5).to(pttype)
     k = limit * (torch.rand([total_k, nheads_k, headdim]) - 0.5).to(pttype)
@@ -56,7 +56,7 @@ def gen_data(nheads, nheads_k, headdim, list_seq):
     # Mark: modify keyRight as workspace float output
     keyRight = k.clone().float().npu()
     keyRight = torch.rand([16, 128, 128]).float().npu()
-    queryRight = torch.rand([16, 128, 256]).to(torch.float16).npu()
+    queryRight = torch.rand([16, 128, 256]).to(pttype).npu()
 
     print("q.shape ", q.shape)
     print("k.shape ", k.shape)
@@ -104,21 +104,25 @@ def gen_data(nheads, nheads_k, headdim, list_seq):
     print("soft_max_max shape ", x_max_npu.shape, x_max_npu.dtype)
     print("soft_max_sum shape ", x_sum_npu.shape, x_sum_npu.dtype)
     print("attention in shape ", out_npu.shape, out_npu.dtype)
-
     print("dq_golden shape ", dq_golden_npu.shape, dq_golden_npu.dtype)
     print("dk_golden shape ", dk_golden_npu.shape, dk_golden_npu.dtype)
     print("dv_golden shape ", dv_golden_npu.shape, dv_golden_npu.dtype)
 
-    q.cpu().detach().numpy().tofile(os.path.join(WORKSPACE, "data", "q.bin"))
-    k.cpu().detach().numpy().tofile(os.path.join(WORKSPACE, "data", "k.bin"))
-    v.cpu().detach().numpy().tofile(os.path.join(WORKSPACE, "data", "v.bin"))
-    dout.cpu().detach().numpy().tofile(os.path.join(WORKSPACE, "data", "dout.bin"))
+    if pttype == torch.bfloat16:
+        save_dtype = tf.bfloat16.as_numpy_dtype
+    else:
+        save_dtype = np.float16
+
+    q.cpu().detach().to(torch.float32).numpy().astype(save_dtype).tofile(os.path.join(WORKSPACE, "data", "q.bin"))
+    k.cpu().detach().to(torch.float32).numpy().astype(save_dtype).tofile(os.path.join(WORKSPACE, "data", "k.bin"))
+    v.cpu().detach().to(torch.float32).numpy().astype(save_dtype).tofile(os.path.join(WORKSPACE, "data", "v.bin"))
+    dout.cpu().detach().to(torch.float32).numpy().astype(save_dtype).tofile(os.path.join(WORKSPACE, "data", "dout.bin"))
     queryRight.cpu().detach().numpy().tofile(os.path.join(WORKSPACE, "data", "queryRight.bin"))
     keyRight.cpu().detach().numpy().tofile(os.path.join(WORKSPACE, "data", "keyRight.bin"))
     atten_mask_npu.cpu().detach().numpy().tofile(os.path.join(WORKSPACE, "data", "atten_mask.bin"))
     x_max_npu.cpu().detach().numpy().tofile(os.path.join(WORKSPACE, "data", "row_max.bin"))
     x_sum_npu.cpu().detach().numpy().tofile(os.path.join(WORKSPACE, "data", "row_sum.bin"))
-    out_npu.cpu().detach().numpy().tofile(os.path.join(WORKSPACE, "data", "out.bin"))
+    out_npu.cpu().detach().to(torch.float32).numpy().astype(save_dtype).tofile(os.path.join(WORKSPACE, "data", "out.bin"))
     np.array(cu_seq_len_list).tofile(os.path.join(WORKSPACE, "data", "cu_seq_qlen.bin"))
     np.array(cu_seq_kvlen_list).tofile(os.path.join(WORKSPACE, "data", "cu_seq_kvlen.bin"))
 

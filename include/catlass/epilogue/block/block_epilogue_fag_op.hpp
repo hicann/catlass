@@ -35,15 +35,8 @@ using AscendC::TQue;
 using namespace AscendC;
 namespace Catlass::Epilogue::Block {
 
-template <
-    class OutputType_,
-    class UpdateType_,
-    class InputType_>
-class BlockEpilogue<
-    EpilogueAtlasA2FAGOp,
-    OutputType_,
-    UpdateType_,
-    InputType_>
+template <typename INPUT_DTYPE>
+class BlockEpilogue<EpilogueAtlasA2FAGOp, INPUT_DTYPE>
 {
 public:
     using DispatchPolicy = EpilogueAtlasA2FAGOp;
@@ -55,14 +48,14 @@ public:
     GlobalTensor<uint8_t> attenMaskU8Gm;
     GlobalTensor<float> mm1WorkspaceGm;
     GlobalTensor<float> mm2WorkspaceGm;
-    GlobalTensor<half> dropWorkSpaceGm, mulWorkSpaceGm;
+    GlobalTensor<INPUT_DTYPE> dropWorkSpaceGm, mulWorkSpaceGm;
     GlobalTensor<float> rowMaxGm, rowSumGm;
     GlobalTensor<float> sfmgWorkspaceGm;
 
-    constexpr static uint32_t DTYPE_FACTOR = sizeof(float) / sizeof(half);
+    constexpr static uint32_t DTYPE_FACTOR = sizeof(float) / sizeof(INPUT_DTYPE);
     constexpr static uint32_t cal_block_num = 32 / sizeof(float);
     constexpr static uint32_t cal_repeat_num = 256 / sizeof(float);
-    constexpr static uint32_t input_block_num = 32 / sizeof(half);
+    constexpr static uint32_t input_block_num = 32 / sizeof(INPUT_DTYPE);
     constexpr static uint32_t ADDR_ALIGN_SIZE = 512;
     constexpr static uint32_t INPUT_NUMS = 2;
     constexpr static uint32_t BLOCK_SIZE = 32;
@@ -200,10 +193,10 @@ public:
         attenMaskU8Gm.SetGlobalBuffer((__gm__ uint8_t *)atten_mask);
 
         mm1WorkspaceGm.SetGlobalBuffer((__gm__ float *)(workspace + mm1WorkSpaceOffset));
-        mulWorkSpaceGm.SetGlobalBuffer((__gm__ half *)(workspace + dsWorkSpaceOffset));
+        mulWorkSpaceGm.SetGlobalBuffer((__gm__ INPUT_DTYPE *)(workspace + dsWorkSpaceOffset));
         
         mm2WorkspaceGm.SetGlobalBuffer((__gm__ float *)(workspace + mm2WorkSpaceOffset));
-        dropWorkSpaceGm.SetGlobalBuffer((__gm__ half *)(workspace + pWorkSpaceOffset));
+        dropWorkSpaceGm.SetGlobalBuffer((__gm__ INPUT_DTYPE *)(workspace + pWorkSpaceOffset));
 
         sfmgWorkspaceGm.SetGlobalBuffer((__gm__ float *)(workspace + sfmgWorkSpaceOffset));
     }
@@ -257,7 +250,7 @@ public:
             scalar = *((float *)&tmp);
         } else {
             uint16_t tmp = 0xFBFF;
-            scalar = *((half *)&tmp);
+            scalar = *((INPUT_DTYPE *)&tmp);
         }
 
         SelectWithBytesMaskShapeInfo info;
@@ -363,7 +356,7 @@ public:
         ///////////////////////////////////////////////////////////////
         // cast fp322bf16
         ///////////////////////////////////////////////////////////////
-        LocalTensor<half> vecCopyOutBuffer = unifiedBuffer.GetWithOffset<half>(17 * 1024 / sizeof(half), ubBufferOffset + T1Begin);
+        LocalTensor<INPUT_DTYPE> vecCopyOutBuffer = unifiedBuffer.GetWithOffset<INPUT_DTYPE>(17 * 1024 / sizeof(INPUT_DTYPE), ubBufferOffset + T1Begin);
         AscendC::PipeBarrier<PIPE_V>();
         Cast(vecCopyOutBuffer, vecDropBuffer, RoundMode::CAST_ROUND, s1Extend * s2ExtendAlign);
 
@@ -422,7 +415,7 @@ public:
         Mul(vecClc1Buffer, vecClc1Buffer, simpleSoftmaxResBuf, s1Extend * s2ExtendAlign);
 
         AscendC::PipeBarrier<PIPE_V>();
-        LocalTensor<half> vecCopyOutBuffer = unifiedBuffer.GetWithOffset<half>(17 * 1024 / sizeof(half), ubBufferOffset + T1Begin);
+        LocalTensor<INPUT_DTYPE> vecCopyOutBuffer = unifiedBuffer.GetWithOffset<INPUT_DTYPE>(17 * 1024 / sizeof(INPUT_DTYPE), ubBufferOffset + T1Begin);
         Cast(vecCopyOutBuffer, vecClc1Buffer, RoundMode::CAST_ROUND, s1Extend * s2ExtendAlign);
 
         event_t mte3WaitV = static_cast<event_t>(GetTPipePtr()->FetchEventID(HardEvent::V_MTE3));
@@ -498,9 +491,9 @@ public:
                 (curSeqQIdx * s1VecSize * s2CubeExtend);
             copyOutParam = {
                 static_cast<uint16_t>(s1Extend),
-                static_cast<uint16_t>(s2ExtendAlign * sizeof(half)),
+                static_cast<uint16_t>(s2ExtendAlign * sizeof(INPUT_DTYPE)),
                 0,
-                static_cast<uint16_t>((s2CubeExtend - s2ExtendAlign) * sizeof(half))
+                static_cast<uint16_t>((s2CubeExtend - s2ExtendAlign) * sizeof(INPUT_DTYPE))
             };
 
             ///////////////////////////////////////////////////////////////
