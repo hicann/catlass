@@ -50,10 +50,12 @@ public:
 
     static const PaddingTag paddingTag = PaddingTag::PADDING_BLOCK_ND;
     CATLASS_HOST_DEVICE static
-    LayoutOut GetWorkspaceLayout(LayoutIn& layout, uint32_t rowAlign, uint32_t colAlign) {
+    LayoutOut GetWorkspaceLayout(LayoutIn& layout, uint32_t rowAlign, uint32_t colAlign)
+    {
         return LayoutOut(layout.shape(0), layout.shape(1), rowAlign, colAlign);
     }
-    static size_t GetWorkspaceSize(uint32_t rows, uint32_t cols, uint32_t rowAlign, uint32_t colAlign) {
+    static size_t GetWorkspaceSize(uint32_t rows, uint32_t cols, uint32_t rowAlign, uint32_t colAlign)
+    {
         return static_cast<size_t>(RoundUp(rows, rowAlign)) * RoundUp(cols, colAlign) * sizeof(Element);
     }
 
@@ -234,14 +236,16 @@ public:
     using LayoutIn = Layout_;
     using LayoutOut = Layout_;
     CATLASS_HOST_DEVICE static
-    LayoutOut GetWorkspaceLayout(LayoutIn& layout, uint32_t align) {
+    LayoutOut GetWorkspaceLayout(LayoutIn& layout, uint32_t align)
+    {
         if constexpr (std::is_same_v<LayoutIn, layout::RowMajor>) {
             return LayoutOut{layout.shape(0), layout.shape(1), RoundUp(layout.shape(1), align)};
         } else {
             return LayoutOut{layout.shape(0), layout.shape(1), RoundUp(layout.shape(0), align)};
         }
     }
-    static size_t GetWorkspaceSize(uint32_t rows, uint32_t cols, uint32_t align) {
+    static size_t GetWorkspaceSize(uint32_t rows, uint32_t cols, uint32_t align)
+    {
         if constexpr (std::is_same_v<LayoutIn, layout::RowMajor>) {
             return static_cast<size_t>(rows) * RoundUp(cols, align) * sizeof(Element);
         } else {
