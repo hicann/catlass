@@ -80,6 +80,20 @@ void Run(Options const &options)
     uint32_t m = options.problemShape.m();
     uint32_t n = options.problemShape.n();
     uint32_t k = options.problemShape.k();
+    
+    using L1TileShape = GemmShape<128, 256, 256>;
+    using L0TileShape = GemmShape<128, 256, 64>;
+
+    // Get the number of cube cores of the current hardware
+    auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
+
+    if ((CeilDiv(m, L1TileShape::M) * CeilDiv(n, L1TileShape::N) > aicCoreNum) || (k > L1TileShape::K)) {
+        std::cout << "Not satisfy the constraints of 24_samll_kernel." << std::endl;
+        ACL_CHECK(aclrtDestroyStream(stream));
+        ACL_CHECK(aclrtResetDevice(options.deviceId));
+        ACL_CHECK(aclFinalize());
+        return;
+    }
 
     size_t lenA = static_cast<size_t>(m) * k;
     size_t lenB = static_cast<size_t>(k) * n;
@@ -112,16 +126,11 @@ void Run(Options const &options)
     uint8_t *deviceC{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
-    // Get the number of cube cores of the current hardware
-    auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
-
     using ArchTag = Arch::AtlasA2;
     static constexpr uint32_t stages = 1;
     constexpr bool enableUnitFlag = false;
     constexpr bool enableShuffleK = false;
     using DispatchPolicy = Gemm::MmadAtlasA2Small<stages, enableUnitFlag, enableShuffleK>;
-    using L1TileShape = GemmShape<128, 256, 256>;
-    using L0TileShape = GemmShape<128, 256, 64>;
 
     using AType = Gemm::GemmType<half, LayoutA>;
     using BType = Gemm::GemmType<half, LayoutB>;
@@ -130,27 +139,52 @@ void Run(Options const &options)
     using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
     using BlockEpilogue = void;
 
-    // Swizzle offset is 3 and direction is 0.
-    using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
+    if (m > n) {
+        // Swizzle offset is 3 and direction is 0.
+        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
 
-    // kernel level
-    using MatmulKernel = Gemm::Kernel::SmallMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
+        // kernel level
+        using MatmulKernel = Gemm::Kernel::SmallMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 
-    using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-    MatmulKernel::Arguments arguments{options.problemShape, deviceA, deviceB, deviceC};
-    MatmulAdapter matmul_op;
-    matmul_op.CanImplement(arguments);
-    size_t sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
-    uint8_t *deviceWorkspace = nullptr;
-    if (sizeWorkspace > 0) {
-        ACL_CHECK(
-            aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
-    }
-    matmul_op.Initialize(arguments, deviceWorkspace);
-    matmul_op(stream, aicCoreNum);
-    ACL_CHECK(aclrtSynchronizeStream(stream));
-    if (sizeWorkspace > 0) {
-        ACL_CHECK(aclrtFree(deviceWorkspace));
+        using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
+        MatmulKernel::Arguments arguments{options.problemShape, deviceA, deviceB, deviceC};
+        MatmulAdapter matmul_op;
+        matmul_op.CanImplement(arguments);
+        size_t sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
+        uint8_t *deviceWorkspace = nullptr;
+        if (sizeWorkspace > 0) {
+            ACL_CHECK(
+                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+        }
+        matmul_op.Initialize(arguments, deviceWorkspace);
+        matmul_op(stream, aicCoreNum);
+        ACL_CHECK(aclrtSynchronizeStream(stream));
+        if (sizeWorkspace > 0) {
+            ACL_CHECK(aclrtFree(deviceWorkspace));
+        }
+    } else {
+        // Swizzle offset is 3 and direction is 1.
+        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
+
+        // kernel level
+        using MatmulKernel = Gemm::Kernel::SmallMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
+
+        using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
+        MatmulKernel::Arguments arguments{options.problemShape, deviceA, deviceB, deviceC};
+        MatmulAdapter matmul_op;
+        matmul_op.CanImplement(arguments);
+        size_t sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
+        uint8_t *deviceWorkspace = nullptr;
+        if (sizeWorkspace > 0) {
+            ACL_CHECK(
+                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+        }
+        matmul_op.Initialize(arguments, deviceWorkspace);
+        matmul_op(stream, aicCoreNum);
+        ACL_CHECK(aclrtSynchronizeStream(stream));
+        if (sizeWorkspace > 0) {
+            ACL_CHECK(aclrtFree(deviceWorkspace));
+        }
     }
 
     std::vector<fp16_t> hostC(lenC);
