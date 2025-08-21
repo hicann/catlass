@@ -298,7 +298,7 @@ std::vector<int64_t> InferConvShape(at::IntArrayRef fmapShape, at::IntArrayRef f
     int64_t hi = fmapShape.at(3);
     int64_t wi = fmapShape.at(4);
     int64_t cout0 = fmapShape.at(5);
-    int64_t cout = filterShape.at(1);
+    int64_t cout = filterShape.at(0);
     int64_t kd = filterShape.at(2);
     int64_t kh = filterShape.at(3);
     int64_t kw = filterShape.at(4);
