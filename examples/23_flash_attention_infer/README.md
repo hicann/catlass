@@ -26,7 +26,7 @@ kvHeads=1
 headSize=128
 isVariedLen=0
 maskType=1
-dtype="half"
+dtype="bf16"
 cacheMode=1
 device=0
 
@@ -44,7 +44,7 @@ function gen_data() {
 function run_kernel {
     echo 'Case: B=' $batch ' qS=' $qSeqlen ' kvS=' $kvSeqlen ' qN=' $numHeads ' kvN=' $kvHeads ' D=' $headSize ' mask=' $maskType
     cd output/bin/
-    ./23_flash_attention_infer $batch $qSeqlen $kvSeqlen $numHeads $kvHeads $headSize $isVariedLen $maskType --device $device
+    ./23_flash_attention_infer $batch $qSeqlen $kvSeqlen $numHeads $kvHeads $headSize $isVariedLen $maskType --device $device --dtype $dtype
 }
 
 build
