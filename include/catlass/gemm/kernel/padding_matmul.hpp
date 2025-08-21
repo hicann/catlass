@@ -221,7 +221,7 @@ template<
     class Layout_,
     uint32_t COMPUTE_LENGTH
 >
-struct PaddingMatrix {
+struct PaddingMatrixND {
 public:
     using ArchTag = ArchTag_;
     using Element = Element_;
@@ -257,7 +257,7 @@ public:
     CopyUb2Gm copyUb2Gm;
 
     CATLASS_DEVICE
-    PaddingMatrix(Arch::Resource<ArchTag> &resource)
+    PaddingMatrixND(Arch::Resource<ArchTag> &resource)
     {
         int64_t bufferOffset = 0;
         for (uint32_t i = 0; i < BUFFER_NUM; i++) {
@@ -371,7 +371,7 @@ public:
     }
 
     CATLASS_DEVICE
-    ~PaddingMatrix() {}
+    ~PaddingMatrixND() {}
 private:
     static const uint32_t BUFFER_NUM = 2;
     AscendC::LocalTensor<Element> inputBuffer[BUFFER_NUM];
@@ -379,35 +379,35 @@ private:
     uint32_t bufferIndex{ 0 };
     static_assert(BUFFER_NUM * COMPUTE_LENGTH * sizeof(Element) <= ArchTag::UB_SIZE, "Excedding the UB space!");
     static_assert(std::is_same_v<LayoutIn, layout::RowMajor> || 
-        std::is_same_v<LayoutIn, layout::ColumnMajor>, "Unsported layout for PaddingMatrix!");
+        std::is_same_v<LayoutIn, layout::ColumnMajor>, "Unsported layout for PaddingMatrixND!");
 };
 
 // The PaddingBuilder structure can construct the required padding class by specifying the PaddingTag 
 // and the basic information of the matrix, thereby unifying the use of various paddings.
 // Moreover, it allows for quick retrieval of the layout information after padding.
-template <class ArchTag, class Element, class Layout, uint32_t COMPUTE_LENGTH, PaddingTag>
+template <class ArchTag, class Element, class LayoutIn, uint32_t COMPUTE_LENGTH, PaddingTag>
 struct PaddingBuilder {
     static_assert(DEPENDENT_FALSE<ArchTag>, "Padding is not implemented for this layout");
 };
 
-template <class ArchTag, class Element, class Layout, uint32_t COMPUTE_LENGTH>
-struct PaddingBuilder<ArchTag, Element, Layout, COMPUTE_LENGTH, PaddingTag::NO_PADDING> {
-    using LayoutAfterPadding = Layout;
+template <class ArchTag, class Element, class LayoutIn, uint32_t COMPUTE_LENGTH>
+struct PaddingBuilder<ArchTag, Element, LayoutIn, COMPUTE_LENGTH, PaddingTag::NO_PADDING> {
+    using LayoutAfterPadding = LayoutIn;
     using Padding = void;
 };
 
-template <class ArchTag, class Element, class Layout, uint32_t COMPUTE_LENGTH>
-struct PaddingBuilder<ArchTag, Element, Layout, COMPUTE_LENGTH, PaddingTag::PADDING_ND> {
-    using LayoutAfterPadding = Layout;
-    using Padding = Catlass::Gemm::Kernel::PaddingMatrix<ArchTag, Element, Layout, COMPUTE_LENGTH>;
+template <class ArchTag, class Element, class LayoutIn, uint32_t COMPUTE_LENGTH>
+struct PaddingBuilder<ArchTag, Element, LayoutIn, COMPUTE_LENGTH, PaddingTag::PADDING_ND> {
+    using LayoutAfterPadding = LayoutIn;
+    using Padding = Catlass::Gemm::Kernel::PaddingMatrixND<ArchTag, Element, Layout, COMPUTE_LENGTH>;
 };
 
-template <class ArchTag, class Element, class Layout, uint32_t COMPUTE_LENGTH>
-struct PaddingBuilder<ArchTag, Element, Layout, COMPUTE_LENGTH, PaddingTag::PADDING_BLOCK_ND> {
-    using LayoutAfterPadding = std::conditional_t<std::is_same_v<Layout, layout::RowMajor>,
+template <class ArchTag, class Element, class LayoutIn, uint32_t COMPUTE_LENGTH>
+struct PaddingBuilder<ArchTag, Element, LayoutIn, COMPUTE_LENGTH, PaddingTag::PADDING_BLOCK_ND> {
+    using LayoutAfterPadding = std::conditional_t<std::is_same_v<LayoutIn, layout::RowMajor>,
         layout::PaddingRowMajor, layout::PaddingColumnMajor>;
     using Padding = Catlass::Gemm::Kernel::PaddingMatrixBlockND<
-        ArchTag, Element, Layout, LayoutAfterPadding, COMPUTE_LENGTH>;
+        ArchTag, Element, LayoutIn, LayoutAfterPadding, COMPUTE_LENGTH>;
 };
 
 template <
@@ -425,9 +425,9 @@ public:
     using LayoutB = typename BlockMmad::LayoutB;
 
     static const uint32_t COMPUTE_LENGTH_A = 96 * 1024 / sizeof(ElementA);
-    using PaddingA = PaddingMatrix<ArchTag, ElementA, LayoutA, COMPUTE_LENGTH_A>;
+    using PaddingA = PaddingMatrixND<ArchTag, ElementA, LayoutA, COMPUTE_LENGTH_A>;
     static const uint32_t COMPUTE_LENGTH_B = 96 * 1024 / sizeof(ElementB);
-    using PaddingB = PaddingMatrix<ArchTag, ElementB, LayoutB, COMPUTE_LENGTH_B>;
+    using PaddingB = PaddingMatrixND<ArchTag, ElementB, LayoutB, COMPUTE_LENGTH_B>;
 
     using L1TileShape = typename BlockMmad::L1TileShape;
     using ElementC = typename BlockMmad::ElementC;
