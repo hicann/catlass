@@ -291,31 +291,31 @@ void Run(const Options &options)
         else{
             FAInferBf16<<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice, pDevice, oTempDevice, oUpdateDevice, tilingDevice);
         }
-    }
-    FAInferFp16<<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice, pDevice, oTempDevice, oUpdateDevice, tilingDevice);
-    ACL_CHECK(aclrtSynchronizeStream(stream));
-    // Copy the result from device to host
-    vector<fp16_t> oHostHalf(qoSize / sizeof(fp16_t));
-    vector<bfloat16> oHostBf16(qoSize / sizeof(bfloat16));
-    if (dataType == "half") {
-        ACL_CHECK(aclrtMemcpy(oHostHalf.data(), qoSize, oDevice, qoSize, ACL_MEMCPY_DEVICE_TO_HOST));
-    } else if (dataType == "bf16") {
-        ACL_CHECK(aclrtMemcpy(oHostBf16.data(), qoSize, oDevice, qoSize, ACL_MEMCPY_DEVICE_TO_HOST));
-    }
-    
+        ACL_CHECK(aclrtSynchronizeStream(stream));
+        // Copy the result from device to host
+        vector<fp16_t> oHostHalf(qoSize / sizeof(fp16_t));
+        vector<bfloat16> oHostBf16(qoSize / sizeof(bfloat16));
+        if (dataType == "half") {
+            ACL_CHECK(aclrtMemcpy(oHostHalf.data(), qoSize, oDevice, qoSize, ACL_MEMCPY_DEVICE_TO_HOST));
+        } else if (dataType == "bf16") {
+            ACL_CHECK(aclrtMemcpy(oHostBf16.data(), qoSize, oDevice, qoSize, ACL_MEMCPY_DEVICE_TO_HOST));
+        }
+        
+        
 
-    // Compute the golden result
-    vector<float> goldenHost(qoSize / sizeof(fp16_t));
-    const size_t goldenSize = qoSize * 2;
-    ReadFile(dataPath + "/golden.bin", goldenHost.data(), goldenSize);
+        // Compute the golden result
+        vector<float> goldenHost(qoSize / sizeof(fp16_t));
+        const size_t goldenSize = qoSize * 2;
+        ReadFile(dataPath + "/golden.bin", goldenHost.data(), goldenSize);
 
-    // Compare the result
-    vector<uint64_t> errorIndices = (dataType == "half") ? golden::CompareData(oHostHalf, goldenHost, kvSeqlen)
-                                                         : golden::CompareData(oHostBf16, goldenHost, kvSeqlen);
-    if (errorIndices.empty()) {
-        cout << "Compare success." << endl;
-    } else {
-        cerr << "Compare failed. Error count: " << errorIndices.size() << endl;
+        // Compare the result
+        vector<uint64_t> errorIndices = (dataType == "half") ? golden::CompareData(oHostHalf, goldenHost, kvSeqlen)
+                                                            : golden::CompareData(oHostBf16, goldenHost, kvSeqlen);
+        if (errorIndices.empty()) {
+            cout << "Compare success." << endl;
+        } else {
+            cerr << "Compare failed. Error count: " << errorIndices.size() << endl;
+        }
     }
 
     // Free host memory allocations.

@@ -264,7 +264,7 @@
              uint32_t stackSeqTile;
              uint32_t stackSeqTileRound = blockStackNum * 128;
              int32_t preLaunch = 2;
-             int32_t totalStackSeqNum = (MaskType != 0) ?
+             int32_t totalStackSeqNum = (maskType != 0) ?
                  (CeilDiv(noMaskKvS, blockStackNum * pagedBlockSize) + 1) :
                  CeilDiv(noMaskKvS, blockStackNum * pagedBlockSize);
              int32_t stackSeqCount = 0;
@@ -324,14 +324,14 @@
                  ((noMaskTailS != 0) ? (kvSLoopNumNoMask - 1) : kvSLoopNumNoMask) :
                  AlignUp(kvSLoopNumNoMask, blockStackNum);
              uint32_t noMaskTailInteStackNum = (noMaskKvS / pagedBlockSize) % blockStackNum;
-             noMaskTailInteStackNum = noMaskTailInteStackNum != 0 ? 
+             noMaskTailInteStackNum = (noMaskTailInteStackNum != 0) ? 
                      noMaskTailInteStackNum : ((noMaskTailS != 0) ? 0:blockStackNum);
              uint32_t preLaunchStackNum = (maskType != 0) ?
                  ((preLaunch - 1) * blockStackNum + noMaskTailInteStackNum) : (preLaunch * blockStackNum);
  
              // masked kvSeqlen loop
              for (uint32_t kvSIdx = maskedStartIdx; kvSIdx < kvSLoopNumTotal + preLaunchStackNum; ){
-                 if (kvSIdx < kvSLoopNumTotal && stackSeqCount < totalStackSeqNum - 1){
+                 if ((kvSIdx < kvSLoopNumTotal)) && (stackSeqCount <= totalStackSeqNum - 1)){
                      stackSeqTile = maskedKvS;
                      uint32_t SWorkSpacePingPongFlag = stackSeqCount % (preLaunch + 1);
                      uint64_t gmSOffset = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) + SWorkSpacePingPongFlag * WORKSPACE_BLOCK_SIZE_DB;
@@ -535,10 +535,10 @@
              uint32_t stackSeqTilePad = blockStackNum * pagedBlockSize;
              uint32_t stackSeqTile;
              int32_t preLaunch = 2;
-             uint32_t totalStackSeqNum = (maskType != 0) ?
+             int32_t totalStackSeqNum = (maskType != 0) ?
                  (CeilDiv(noMaskKvS, blockStackNum * pagedBlockSize) + 1) :
                  CeilDiv(noMaskKvS, blockStackNum * pagedBlockSize);
-             uint32_t stackSeqCount = 0;
+             int32_t stackSeqCount = 0;
  
              // no mask kvSeqlen loop
              for (uint32_t kvSIdx = 0;
@@ -613,14 +613,14 @@
              ((noMaskTailS != 0) ? (kvSLoopNumNoMask - 1) : kvSLoopNumNoMask) :
              AlignUp(kvSLoopNumNoMask, blockStackNum);
              uint32_t noMaskTailInteStackNum = (noMaskKvS / pagedBlockSize) % blockStackNum;
-             noMaskTailInteStackNum = noMaskTailInteStackNum != 0 ? 
+             noMaskTailInteStackNum = (noMaskTailInteStackNum != 0) ?
+                noMaskTailInteStackNum : ((noMaskTailS != 0) ? 0 : blockStackNum);
              uint32_t preLaunchStackNum = (maskType != 0) ?
                  ((preLaunch - 1) * blockStackNum + noMaskTailInteStackNum) : (preLaunch * blockStackNum);
              // masked kvSeqlen loop
              for (uint32_t kvSIdx = maskedStartIdx;
                  kvSIdx < kvSLoopNumTotal + preLaunchStackNum; ){
-                 if ((kvSIdx < kvSLoopNumTotal) && (stackSeqCount < totalStackSeqNum - 1)){
-                 if (kvSIdx < kvSLoopNumTotal) {
+                 if ((kvSIdx < kvSLoopNumTotal) && (stackSeqCount <= totalStackSeqNum - 1)){
                      stackSeqTile = maskedKvS;
                      uint32_t stackSeqTileRound = RoundUp(stackSeqTile, BLOCK_SIZE);
                      LayoutS layOutS(rowNum, stackSeqTile, stackSeqTilePad);
@@ -645,7 +645,7 @@
                          qSBlockSize,
                          qNBlockSize,
                          curStackTileMod,
-                         qReady);
+                         qkReady);
                      Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(softmaxReady);
                  }
                  if (kvSIdx >= preLaunchStackNum){
@@ -665,7 +665,6 @@
                      uint32_t curStackTileMod = (stackSeqCount - preLaunch) % (preLaunch + 1);
                      uint32_t gmOffsetOTmp = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) +
                          curStackTileMod * WORKSPACE_BLOCK_SIZE_DB;
-                     }
                      Arch::CrossCoreWaitFlag(pvReady);
                      // rescale O
                      epilogueRescaleO(
@@ -677,7 +676,7 @@
                          qSBlockSize,
                          qNBlockSize,
                          (stackSeqCount - preLaunch == 0),
-                         0,
+                         (stackSeqCount - preLaunch == totalStackSeqNum - 1),
                          curStackTileMod);
                  }
                  if((maskType != 0) && (stackSeqCount - preLaunch == totalStackSeqNum - 2)){
@@ -810,22 +809,23 @@
      AscendC::SetSyncBaseAddr(fftsAddr);
  
      using ArchTag = Arch::AtlasA2;
-     using ElementQ = bf16;
+     using ElementQ = bfloat16_t;
      using LayoutQ = layout::RowMajor;
-     using ElementK = bf16;
+     using ElementK = bfloat16_t;
      using LayoutK = layout::ColumnMajor;
-     using ElementV = bf16;
+     using ElementV = bfloat16_t;
      using LayoutV = layout::RowMajor;
      using ElementS = float;
      using LayoutS = layout::RowMajor;
-     using ElementP = bf16;
+     using ElementP = bfloat16_t;
      using LayoutP = layout::RowMajor;
-     using ElementO = bf16;
+     using ElementO = bfloat16_t;
      using LayoutO = layout::RowMajor;
-     using ElementMask = bf16;
+     using ElementMask = bfloat16_t;
      using LayoutMask = layout::RowMajor;
      using ElementOTmp = float;
-     using ElmentUpdate = float;
+     using LayoutOTmp = layout::RowMajor;
+     using ElementUpdate = float;
      using LayoutUpdate = layout::RowMajor;
      // L1TileShape::K must be embdding
      using L1TileShape = GemmShape<128, 128, 128>;
@@ -850,8 +850,9 @@
      // Epilogue Block模块，实现Flash Attention Infer中当前O基块的更新
      using DispatchPolicyRescaleO = Epilogue::EpilogueAtlasA2RescaleO;
      using OType = Gemm::GemmType<ElementO, LayoutO>;
-     using OUpdateType = Gemm::GemmType<ElmentUpdate, LayoutUpdate>;
+     using OUpdateType = Gemm::GemmType<ElementUpdate, LayoutUpdate>;
      using EpilogueRescaleO =
+         Epilogue::Block::BlockEpilogue<DispatchPolicyRescaleO, OType, OTmpType, OUpdateType>;
  
      // Kernel Level
      using FAInferKernel = FAInferKernel<BlockMmadQK, BlockMmadPV, EpilogueOnlineSoftmax, EpilogueRescaleO, true>;
