@@ -738,13 +738,14 @@
                      AscendC::GlobalTensor<ElementMask> gMask,
                      const LayoutOutput &layoutOutput, const LayoutInput &layoutInput, const LayoutInput &layoutMask,
                      GemmCoord actualBlockShape,
-                     uint32_t isFirstStackTile, uint32_t qSBlockSize, uint32_t qNBlockSize, uint32_t curStackTileMod)
+                     uint32_t isFirstStackTile, uint32_t qSBlockSize, uint32_t qNBlockSize, uint32_t curStackTileMod, 
+                    Arch::CrossCoreFlag qkReady)
      {
          uint32_t rowNum = actualBlockShape.m();
          uint32_t columnNum = actualBlockShape.n();
          uint32_t columnNumRound = RoundUp(columnNum, BLOCK_SIZE);
          uint32_t columnNumPad = layoutInput.stride(0);
- 
+         uint32_t maskStride = layoutMask.stride(0);
          uint32_t subBlockIdx = AscendC::GetSubBlockIdx();
          uint32_t subBlockNum = AscendC::GetSubBlockNum();
  
@@ -766,7 +767,7 @@
          auto layoutMaskThisSubBlock = layoutMask;
 
 
-         uint32_t maxRowNumPerLoop = MAX_UB_S_ELEM_NUM / columnNumPad;
+         uint32_t maxRowNumPerLoop = MAX_UB_S_ELEM_NUM / columnNumRound;
          uint32_t rowNumTile = RoundDown(maxRowNumPerLoop, FLOAT_BLOCK_SIZE);
          uint32_t rowLoopNum = CeilDiv(rowActualThisSubBlock, rowNumTile);
          uint32_t preLoad = 1;
@@ -775,6 +776,7 @@
             if(rowLoopIdx < rowLoopNum){
                 uint32_t pingpongFlag = rowLoopIdx % 2;
                 uint32_t rowOffsetCurLoop = rowLoopIdx * rowNumTile;
+                uint32_t rowOffsetIoGm = rowOffsetCurLoop + rowOffsetThisSubBlock;
                 uint32_t rowNumCurLoop = (rowLoopIdx == rowLoopNum - 1) ?
                     (rowActualThisSubBlock - rowOffsetCurLoop) : rowNumTile;
                 // loop 0 mask load before cross core sync
@@ -789,7 +791,7 @@
                     // the number of integral heads within a cycle
                     uint32_t epiTokenNum = rowNumCurLoop - proTokenNum - integralHeadNum * tokenNumPerHeadThisSubBlock;
                     AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID2);
-                    CopyMaskGmToUb(gMaskThisBlock, columnNum, columnNumRound, maskStride,
+                    CopyMaskGmToUb(gMaskThisSubBlock, columnNum, columnNumRound, maskStride,
                         qSBlockSize, proTokenIdx, proTokenNum, integralHeadNum, epiTokenNum);
                     AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID2);
                     Arch::CrossCoreWaitFlag(qkReady);
