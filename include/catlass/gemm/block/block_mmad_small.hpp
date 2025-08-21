@@ -23,7 +23,7 @@
 namespace Catlass::Gemm::Block {
 
 template <
-    bool STAGES_,
+    uint32_t STAGES_,
     bool ENABLE_UNIT_FLAG_,
     bool ENABLE_SHUFFLE_K_,
     class L1TileShape_,
