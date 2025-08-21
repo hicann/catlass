@@ -23,15 +23,8 @@
 using namespace AscendC;
 namespace Catlass::Epilogue::Block {
 
-template <
-    class OutputType_,
-    class UpdateType_,
-    class InputType_>
-class BlockEpilogue<
-    EpilogueAtlasA2FAGPre,
-    OutputType_,
-    UpdateType_,
-    InputType_>
+template <typename INPUT_DTYPE>
+class BlockEpilogue<EpilogueAtlasA2FAGPre, INPUT_DTYPE>
 {
 public:
     using DispatchPolicy = EpilogueAtlasA2FAGPre;
