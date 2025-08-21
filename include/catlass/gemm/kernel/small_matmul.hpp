@@ -89,7 +89,6 @@ public:
         return params;
     }
 
-
     // Methods
     CATLASS_DEVICE
     SmallMatmul() {}
