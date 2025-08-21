@@ -331,7 +331,7 @@
  
              // masked kvSeqlen loop
              for (uint32_t kvSIdx = maskedStartIdx; kvSIdx < kvSLoopNumTotal + preLaunchStackNum; ){
-                 if ((kvSIdx < kvSLoopNumTotal)) && (stackSeqCount <= totalStackSeqNum - 1)){
+                 if ((kvSIdx < kvSLoopNumTotal) && (stackSeqCount <= totalStackSeqNum - 1)){
                      stackSeqTile = maskedKvS;
                      uint32_t SWorkSpacePingPongFlag = stackSeqCount % (preLaunch + 1);
                      uint64_t gmSOffset = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) + SWorkSpacePingPongFlag * WORKSPACE_BLOCK_SIZE_DB;
