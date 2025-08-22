@@ -103,10 +103,11 @@ class TestFlashAttentionInfer():
         key = np.transpose(key, (1, 2, 0))
         sim_high = self.group_matmul(query.shape[0], key.shape[0], query, key)  # (head_num, q_seqlen, k_seqlen)
         sim_high = sim_high * scale
+        post_mask_factor = -3e38
         if mask is not None:
             sim_high = sim_high + (
                 mask[:sim_high.shape[-2], :sim_high.shape[-1]]
-                ).astype(np.float32)
+                ).astype(np.float32) * post_mask_factor
         
         # softmax
         p_high = self.softmax_numpy(sim_high)
@@ -214,16 +215,15 @@ class TestFlashAttentionInfer():
                     size=(batch_size, max_k_seqlen, gen_data_params.kv_heads, head_size_qk)).astype(gen_data_params.dtype)
                 value_cache = np.random.uniform(kv_min_range, kv_max_range,
                     size=(batch_size, max_k_seqlen, gen_data_params.kv_heads, head_size_vo)).astype(gen_data_params.dtype)
-        pre_mask_factor = -10000.0
+        
         if gen_data_params.mask_type == 1:
-            mask = np.zeros(shape=(num_tokens, max_k_seqlen)).astype(np.float16)
+            mask = np.zeros(shape=(num_tokens, max_k_seqlen)).astype(gen_data_params.dtype)
             pre_qseqlen = 0
             for i in range(batch_size):
                 qseqlen = gen_data_params.q_seqlen_list[i]
                 kseqlen = gen_data_params.k_seqlen_list[i]
                 tri = np.ones((qseqlen, qseqlen))
-                tri = np.triu(tri, 1)
-                tri *= pre_mask_factor
+                tri = np.triu(tri, 1).astype(gen_data_params.dtype)
                 mask[pre_qseqlen : (pre_qseqlen + qseqlen), kseqlen - qseqlen : kseqlen] = tri
                 pre_qseqlen += qseqlen
             mask = mask.astype(gen_data_params.dtype)
@@ -255,7 +255,6 @@ class TestFlashAttentionInfer():
             os.path.join(WORKSPACE, "data", "kv_seqlen.bin"))
         if mask is not None:
             actual_input_mask_triu = np.triu(np.ones((1024, 1024)), 1).astype(gen_data_params.dtype)
-            actual_input_mask_triu *= -10000
             actual_input_mask_triu.tofile(os.path.join(WORKSPACE, "data", "mask.bin"))
         ref_output.astype(np.float32).tofile(os.path.join(WORKSPACE, "data", "golden.bin"))
 
