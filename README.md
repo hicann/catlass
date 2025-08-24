@@ -87,6 +87,7 @@ cd output/bin
 - [dispatch_policies](./docs/dispatch_policies.md) - BlockMmad一个重要模板参数`DispatchPolicy`的描述。
 - [quickstart](./docs/quickstart.md) - 模板库的快速开始。
 - [swizzle_explanation](./docs/swizzle_explanation.md) - AI Core计算基本块的顺序之Swizzle策略的描述。
+- [matmul_fast_tuning](./docs/matmul_fast_tuning.md) - Matmul基础调优介绍，通过tiling调参及kernel组合的方式快速获得性能提升。
 
 ### 🧰 调测工具文档 <span id="toolbox"></span>
 
