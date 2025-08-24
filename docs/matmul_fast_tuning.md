@@ -1,5 +1,9 @@
 # Matmul快速调优
-catlass算子模板库的定位，是针对Gemm类算子提供的模板样例库，与通常的算子库有所区别。 在通常的算子库中，会针对一类问题的不同的输入样例做泛化性的优化考虑，以提供在大多数场景下较优的开箱性能。 模板库当前主要的目标，是针对不同输入提供模板样例，示例在不同输入下快速自定义开发出高性能算子，理论上并不提供相较于算子库最优的泛化性能。 例如，对于matmul场景，CANN中的matmul算子或调用接口着重通过直接调用提供泛化场景性能；而在模板库中，通过提供basic-matmul, optimized-matmul, splitk-matmul matmul, padding-splitk-matmul等等多种matmul以示例在不同输入场景下如何自定义定制开发以获取最优性能。 该仓上的多个matmul样例针对不同输入case有不同的适用范围以及调优手段，可按需定制以获取最优性能。
+
+## CATLASS样例定位
+catlass算子模板库的定位，是针对Gemm类算子提供的模板样例库，与通常的算子库有所区别。 在通常的算子库中，会针对一类问题的不同的输入样例做泛化性的优化考虑，以提供在大多数场景下较优的开箱性能。 模板库当前主要的目标，是针对不同输入提供模板样例，示例在不同输入下快速自定义开发出高性能算子，理论上并不提供相较于算子库最优的泛化性能。 例如，对于matmul场景，CANN中的matmul算子或调用接口着重通过直接调用提供泛化场景性能；而在模板库中，通过提供basic-matmul, optimized-matmul, splitk-matmul, padding-splitk-matmul等等多种matmul以示例在不同输入场景下如何自定义定制开发以获取最优性能。 仓上的多个matmul样例针对不同输入case有不同的适用范围以及调优手段，可按需定制以获取最优性能。
+
+
 对于调优方法来说，总体分为**基础调优**和**进阶定制**两大类，本篇文章重点介绍第一类基础调优的方式，通过tiling调参及kernel组合的方式快速获得性能提升。
 
 ## Matmul基础知识
@@ -69,7 +73,7 @@ L0C实际占用 = L0::M * L0::N * 4(Byte)
 ```
 
 ## 调优策略
-### kernel选择
+### 样例覆盖和选择
 当前库上基础Matmul算子有：
 
 - [00_basic_matmul](../examples/00_basic_matmul/basic_matmul.cpp)，采用`MmadAtlasA2Pingpong`的dispatchPolicy，使能pingpong策略
@@ -132,6 +136,9 @@ struct MmadAtlasA2Preload : public MmadAtlasA2 {
 分析C矩阵切基本块情况，M方向切（128 + 32）两块，N方向切24个长256的块，共48个基本块。swizzle<3, 1>和swizzle<4, 1>的基本块分配AIC情况如下图。swizzle<3, 1>时，1、2、5、6号核在M方向有最大任务量为（128 + 128 + 32）；swizzle<4, 1>时，12、13、14、15号核在M方向有最大任务量为（128 + 128），负载更加均衡。
 <img src="images/matmul_fast_tuning/swizzle_case.png" width="100%">
 
+### 浅述定制调优
+- 当前仓上Matmul样例各有特性和优势场景，用户可以通过深层的代码重新组装进行定制开发。例如，[21_basic_matmul_preload_zN](../examples/21_basic_matmul_preload_zN/basic_matmul_preload_zN.cpp)便是基于00_basic_matmul组装了`MmadAtlasA2Preload`的dispatchPolicy，而[22_padding_splitk_matmul](../examples/22_padding_splitk_matmul/padding_splitk_matmul.cpp)是组装了04_padding_matmul和09_splitk_matmul的特性。用户在熟悉了仓上不同样例代码后，可以根据业务场景深度开发达到更好的性能。模板库也会持续增加使用了新的算法、适合更多场景的Matmul样例。
+- 除了基础的Matmul定制调优，仓上一些衍生样例（如[03_matmul_add](../examples/03_matmul_add/matmul_add.cpp)、[20_matmul_bias](../examples/20_matmul_bias/matmul_bias.cpp)等）往往是基于00_basic_matmul等样例增加新的功能，这些样例同样可以定制化地使用不同的基础Matmul样例、并进行tiling调参达到更好性能。
 
 ## 版权声明
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
