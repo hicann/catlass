@@ -22,6 +22,12 @@
 
 namespace Catlass::Gemm::Kernel {
 
+enum class PaddingTag {
+    NO_PADDING,
+    PADDING_ND,
+    PADDING_BLOCK_ND
+};
+
 template<
     class ArchTag_,
     class Element_,
@@ -41,6 +47,17 @@ public:
         ArchTag, Gemm::GemmType<Element, ComputeLayout>>;
     using CopyUb2Gm = Catlass::Epilogue::Tile::CopyUb2Gm<
         ArchTag, Gemm::GemmType<Element, ComputeLayout>>;
+
+    static const PaddingTag paddingTag = PaddingTag::PADDING_BLOCK_ND;
+    CATLASS_HOST_DEVICE static
+    LayoutOut GetWorkspaceLayout(LayoutIn& layout, uint32_t rowAlign, uint32_t colAlign)
+    {
+        return LayoutOut(layout.shape(0), layout.shape(1), rowAlign, colAlign);
+    }
+    static size_t GetWorkspaceSize(uint32_t rows, uint32_t cols, uint32_t rowAlign, uint32_t colAlign)
+    {
+        return static_cast<size_t>(RoundUp(rows, rowAlign)) * RoundUp(cols, colAlign) * sizeof(Element);
+    }
 
     CopyGm2Ub copyGm2Ub;
     CopyUb2Gm copyUb2Gm;
@@ -194,6 +211,8 @@ private:
     AscendC::TEventID eventIds[BUFFER_NUM] = {EVENT_ID0, EVENT_ID1};
     uint32_t bufferIndex{ 0 };
     static_assert(BUFFER_NUM * COMPUTE_LENGTH * sizeof(Element) <= ArchTag::UB_SIZE, "Excedding the UB space!");
+    static_assert(std::is_same_v<LayoutIn, layout::RowMajor> ||
+        std::is_same_v<LayoutIn, layout::ColumnMajor>, "Unsported layout for PaddingMatrixBlockNd!");
 };
 
 template<
@@ -202,7 +221,7 @@ template<
     class Layout_,
     uint32_t COMPUTE_LENGTH
 >
-struct PaddingMatrix {
+struct PaddingMatrixND {
 public:
     using ArchTag = ArchTag_;
     using Element = Element_;
@@ -213,11 +232,32 @@ public:
         ArchTag, Gemm::GemmType<Element, Catlass::layout::RowMajor>>;
     using ComputeLayout = Catlass::layout::RowMajor;
 
+    static const PaddingTag paddingTag = PaddingTag::PADDING_ND;
+    using LayoutIn = Layout_;
+    using LayoutOut = Layout_;
+    CATLASS_HOST_DEVICE static
+    LayoutOut GetWorkspaceLayout(LayoutIn& layout, uint32_t align)
+    {
+        if constexpr (std::is_same_v<LayoutIn, layout::RowMajor>) {
+            return LayoutOut{layout.shape(0), layout.shape(1), RoundUp(layout.shape(1), align)};
+        } else {
+            return LayoutOut{layout.shape(0), layout.shape(1), RoundUp(layout.shape(0), align)};
+        }
+    }
+    static size_t GetWorkspaceSize(uint32_t rows, uint32_t cols, uint32_t align)
+    {
+        if constexpr (std::is_same_v<LayoutIn, layout::RowMajor>) {
+            return static_cast<size_t>(rows) * RoundUp(cols, align) * sizeof(Element);
+        } else {
+            return static_cast<size_t>(cols) * RoundUp(rows, align) * sizeof(Element);
+        }
+    }
+
     CopyGm2Ub copyGm2Ub;
     CopyUb2Gm copyUb2Gm;
 
     CATLASS_DEVICE
-    PaddingMatrix(Arch::Resource<ArchTag> &resource)
+    PaddingMatrixND(Arch::Resource<ArchTag> &resource)
     {
         int64_t bufferOffset = 0;
         for (uint32_t i = 0; i < BUFFER_NUM; i++) {
@@ -331,13 +371,43 @@ public:
     }
 
     CATLASS_DEVICE
-    ~PaddingMatrix() {}
+    ~PaddingMatrixND() {}
 private:
     static const uint32_t BUFFER_NUM = 2;
     AscendC::LocalTensor<Element> inputBuffer[BUFFER_NUM];
     AscendC::TEventID eventIds[BUFFER_NUM] = {EVENT_ID0, EVENT_ID1};
     uint32_t bufferIndex{ 0 };
     static_assert(BUFFER_NUM * COMPUTE_LENGTH * sizeof(Element) <= ArchTag::UB_SIZE, "Excedding the UB space!");
+    static_assert(std::is_same_v<LayoutIn, layout::RowMajor> || 
+        std::is_same_v<LayoutIn, layout::ColumnMajor>, "Unsported layout for PaddingMatrixND!");
+};
+
+// The PaddingBuilder structure can construct the required padding class by specifying the PaddingTag 
+// and the basic information of the matrix, thereby unifying the use of various paddings.
+// Moreover, it allows for quick retrieval of the layout information after padding.
+template <class ArchTag, class Element, class LayoutIn, uint32_t COMPUTE_LENGTH, PaddingTag>
+struct PaddingBuilder {
+    static_assert(DEPENDENT_FALSE<ArchTag>, "Padding is not implemented for this layout");
+};
+
+template <class ArchTag, class Element, class LayoutIn, uint32_t COMPUTE_LENGTH>
+struct PaddingBuilder<ArchTag, Element, LayoutIn, COMPUTE_LENGTH, PaddingTag::NO_PADDING> {
+    using LayoutAfterPadding = LayoutIn;
+    using Padding = void;
+};
+
+template <class ArchTag, class Element, class LayoutIn, uint32_t COMPUTE_LENGTH>
+struct PaddingBuilder<ArchTag, Element, LayoutIn, COMPUTE_LENGTH, PaddingTag::PADDING_ND> {
+    using LayoutAfterPadding = LayoutIn;
+    using Padding = Catlass::Gemm::Kernel::PaddingMatrixND<ArchTag, Element, LayoutIn, COMPUTE_LENGTH>;
+};
+
+template <class ArchTag, class Element, class LayoutIn, uint32_t COMPUTE_LENGTH>
+struct PaddingBuilder<ArchTag, Element, LayoutIn, COMPUTE_LENGTH, PaddingTag::PADDING_BLOCK_ND> {
+    using LayoutAfterPadding = std::conditional_t<std::is_same_v<LayoutIn, layout::RowMajor>,
+        layout::PaddingRowMajor, layout::PaddingColumnMajor>;
+    using Padding = Catlass::Gemm::Kernel::PaddingMatrixBlockND<
+        ArchTag, Element, LayoutIn, LayoutAfterPadding, COMPUTE_LENGTH>;
 };
 
 template <
@@ -355,9 +425,9 @@ public:
     using LayoutB = typename BlockMmad::LayoutB;
 
     static const uint32_t COMPUTE_LENGTH_A = 96 * 1024 / sizeof(ElementA);
-    using PaddingA = PaddingMatrix<ArchTag, ElementA, LayoutA, COMPUTE_LENGTH_A>;
+    using PaddingA = PaddingMatrixND<ArchTag, ElementA, LayoutA, COMPUTE_LENGTH_A>;
     static const uint32_t COMPUTE_LENGTH_B = 96 * 1024 / sizeof(ElementB);
-    using PaddingB = PaddingMatrix<ArchTag, ElementB, LayoutB, COMPUTE_LENGTH_B>;
+    using PaddingB = PaddingMatrixND<ArchTag, ElementB, LayoutB, COMPUTE_LENGTH_B>;
 
     using L1TileShape = typename BlockMmad::L1TileShape;
     using ElementC = typename BlockMmad::ElementC;
