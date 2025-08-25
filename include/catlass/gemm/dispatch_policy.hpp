@@ -34,6 +34,12 @@ struct MmadAtlasA2Pingpong : public MmadAtlasA2  {
     static constexpr bool ENABLE_UNIT_FLAG = ENABLE_UNIT_FLAG_;
 };
 
+template <bool ENABLE_UNIT_FLAG_ = false>
+struct MmadAtlasA2Parallel : public MmadAtlasA2  {
+    static constexpr uint32_t STAGES = 2;
+    static constexpr bool ENABLE_UNIT_FLAG = ENABLE_UNIT_FLAG_;
+};
+
 template <bool ENABLE_UNIT_FLAG_ = false, bool ENABLE_SHUFFLE_K_ = false>
 struct MmadAtlasA2Preload : public MmadAtlasA2 {
     static constexpr uint32_t STAGES = 2;
