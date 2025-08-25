@@ -53,8 +53,8 @@ CATLASS_GLOBAL
 void SmallMatmul(
     GemmCoord problemShape,
     GM_ADDR gmA, LayoutA layoutA,
-    GM_ADDR gmB, LayoutA layoutB,
-    GM_ADDR gmC, LayoutA layoutC
+    GM_ADDR gmB, LayoutB layoutB,
+    GM_ADDR gmC, LayoutC layoutC
 )
 {
     using AType = Gemm::GemmType<half, LayoutA>;
@@ -70,7 +70,7 @@ void SmallMatmul(
     // kernel level
     using MatmulKernel = Gemm::Kernel::SmallMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 
-    typename MatmulKernel::Params params{problemShape, gmA, layoutA, gmB, layoutB,gmC, layoutC};
+    typename MatmulKernel::Params params{problemShape, gmA, layoutA, gmB, layoutB, gmC, layoutC};
 
     // call a kernel
     MatmulKernel matmul;
@@ -127,6 +127,7 @@ void Run(Options const &options)
 
     if ((CeilDiv(m, L1TileShape::M) * CeilDiv(n, L1TileShape::N) > aicCoreNum) || (k > L1TileShape::K)) {
         std::cout << "Not satisfy the constraints of 24_samll_kernel." << std::endl;
+        std::cout << "Please see ReadMe or code for more details." << std::endl;
         ACL_CHECK(aclrtDestroyStream(stream));
         ACL_CHECK(aclrtResetDevice(options.deviceId));
         ACL_CHECK(aclFinalize());
@@ -164,7 +165,7 @@ void Run(Options const &options)
     uint8_t *deviceC{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
-    SmallMatmul<<<aicCoreNum,nullptr, stream>>>(
+    SmallMatmul<<<aicCoreNum, nullptr, stream>>>(
         options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC);
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
