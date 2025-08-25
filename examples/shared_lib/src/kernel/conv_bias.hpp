@@ -44,9 +44,9 @@ CATLASS_GLOBAL void conv_bias(Conv3dParams problemShape, GM_ADDR gmFmap, GM_ADDR
         l0AStages, l0BStages,
         l0CStages, enableUnitFlag
     >;
-    using CoreTileShape = ConvCoreShape<1, 1, 1, 9>;
-    using FmapL1TileShape = ConvFmapL1Shape<16, 1, 16>;
-    using FilterL1TileShape = ConvFilterL1Shape<16, 1, 16>;
+    using CoreTileShape = ConvCoreShape<2, 2, 2, 3>;
+    using FmapL1TileShape = ConvFmapL1Shape<16, 1, 1>;
+    using FilterL1TileShape = ConvFilterL1Shape<1, 1, 16>;
     using L0TileShape = ConvL0Shape<16, 16, 16>;
 
     using FmapType = Gemm::GemmType<FmapDtype, LayoutFmap>;
