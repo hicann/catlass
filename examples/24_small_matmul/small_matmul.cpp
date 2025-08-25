@@ -25,22 +25,21 @@
 #include "catlass/arch/arch.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/device/device_gemm.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
-#include "catlass/gemm/kernel/small_matmul.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 #include "catlass/layout/layout.hpp"
-
+#include "catlass/gemm/kernel/small_matmul.hpp"
 #include "catlass/status.hpp"
-#include "catlass/gemm/device/device_gemm.hpp"
 
 using namespace Catlass;
 using fp16_t = op::fp16_t;
 
 using ArchTag = Arch::AtlasA2;
-static constexpr uint32_t stages = 2;
-constexpr bool enableUnitFlag = true;
-constexpr bool enableShuffleK = false;
-using DispatchPolicy = Gemm::MmadAtlasA2Small<stages, enableUnitFlag, enableShuffleK>;
+static constexpr uint32_t STAGES = 2;
+constexpr bool ENABLE_UNIT_FLAG = true;
+constexpr bool ENABLE_SHUFFLE_K = false;
+using DispatchPolicy = Gemm::MmadAtlasA2Small<STAGES, ENABLE_UNIT_FLAG, ENABLE_SHUFFLE_K>;
 using L1TileShape = GemmShape<128, 256, 256>;
 using L0TileShape = GemmShape<128, 256, 64>;
 
