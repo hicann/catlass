@@ -40,6 +40,109 @@ struct CopyGmToL1IntervalDataCopy {
     static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy gm to l1, can not find the specialization.");
 };
 
+template <
+    class ArchTag,
+    /// GemmType for matrix operand
+    class GmType,
+    class L1Type = void
+>
+struct CopyGmToL1GMMPTD {
+    static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy gm to l1, can not find the specialization.");
+};
+
+/// Partial specialization for AtlasA2, RowMajor in and zN out.
+template <class Element>
+struct CopyGmToL1GMMPTD<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>> {
+    using LayoutDst = layout::zN;
+    using LayoutSrc = layout::RowMajor;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+
+    // Mehtods
+
+    CATLASS_DEVICE
+    CopyGmToL1GMMPTD() {};
+
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::GlobalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+    {
+        AscendC::Nd2NzParams intriParams;
+
+        intriParams.ndNum = 1;
+        intriParams.dValue = layoutSrc.shape(1);
+        intriParams.srcNdMatrixStride = 0;
+        intriParams.dstNzC0Stride = layoutDst.stride(3) / ELE_NUM_PER_C0;
+        intriParams.dstNzMatrixStride = 0;
+
+        if (layoutSrc.shape(0) == 1) {
+            // If the number of matrix rows is 1, the regular interval-based DataCopy interface can be used instead of
+            // the ND2NZ DataCopy interface, resulting in higher transfer efficiency.
+            AscendC::DataCopyParams dataCopyParams(
+                CeilDiv(layoutSrc.shape(1), layoutDst.shape(2)),
+                layoutDst.shape(2) / ELE_NUM_PER_C0,
+                0,
+                (layoutDst.stride(3) - layoutDst.shape(2)) / ELE_NUM_PER_C0);
+            AscendC::DataCopy(dstTensor, srcTensor, dataCopyParams);
+        } else {
+            if (layoutSrc.stride(0) < STRIDE_LIMIT) {
+                if (layoutSrc.shape(1) != ELE_NUM_PER_C0 || layoutSrc.stride(0) != ELE_NUM_PER_C0) {
+                    intriParams.nValue = layoutSrc.shape(0);
+                    intriParams.srcDValue = layoutSrc.stride(0);
+                    intriParams.dstNzNStride = layoutDst.stride(0) / ELE_NUM_PER_C0;
+                    AscendC::DataCopy(dstTensor, srcTensor, intriParams);
+                } else {
+                    // If the matrix has ELE_NUM_PER_C0 columns and a stride of ELE_NUM_PER_C0, it follows a row-major
+                    // layout in L1, allowing the use of the standard contiguous DataCopy interface for more efficient
+                    // transfers.
+                    AscendC::DataCopy(dstTensor, srcTensor, layoutSrc.shape(0) * layoutSrc.shape(1));
+                }
+            } else {
+                intriParams.nValue = 1;
+                intriParams.srcDValue = 0;
+                intriParams.dstNzNStride = 0;
+                for (uint32_t i = 0; i < layoutSrc.shape(0); i++) {
+                    AscendC::DataCopy(dstTensor[i * ELE_NUM_PER_C0], srcTensor[i * layoutSrc.stride(0)], intriParams);
+                }
+            }
+        }
+    }
+
+    // layoutSrc must be the layout of one of the src matrices
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::GlobalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc,
+        uint32_t ndNum, uint32_t srcNdMatrixStride,
+        uint32_t dstNzNStride, uint32_t dstNzMatrixStride,
+        uint32_t dstNzC0Stride)
+    {
+        AscendC::Nd2NzParams intriParams;
+
+        intriParams.nValue = layoutSrc.shape(0);
+        intriParams.dValue = layoutSrc.shape(1);
+        intriParams.srcDValue = layoutSrc.stride(0);
+        intriParams.dstNzNStride = dstNzNStride;
+        intriParams.dstNzC0Stride = dstNzC0Stride;
+        if (srcNdMatrixStride < STRIDE_LIMIT) {
+            intriParams.ndNum = ndNum;
+            intriParams.srcNdMatrixStride = srcNdMatrixStride;
+            intriParams.dstNzMatrixStride = dstNzMatrixStride;
+            AscendC::DataCopy(dstTensor, srcTensor, intriParams);
+        } else {
+            intriParams.ndNum = 1;
+            intriParams.srcNdMatrixStride = 0;
+            intriParams.dstNzMatrixStride = 0;
+            for (uint32_t i = 0; i < ndNum; i++) {
+                AscendC::DataCopy(dstTensor[i * ELE_NUM_PER_C0], srcTensor[i * srcNdMatrixStride], intriParams);
+            }
+        }
+    }
+};
+
 ////////////////////////////////////////
 /// Using the standard strided DataCopy interface to implement nd2nz
 /// transfer may achieve higher data transfer efficiency when the data block shape is short and wide

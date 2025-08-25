@@ -101,8 +101,11 @@ void Run(Options const &options)
     const fp16_t fp16_tUpper = 5.0;
     std::vector<fp16_t> hostA(lenA);
     std::vector<fp16_t> hostB(lenB);
+    std::vector<fp16_t> hostC(lenC);
     golden::FillRandomData<fp16_t>(hostA, fp16_tLower, fp16_tUpper);
     golden::FillRandomData<fp16_t>(hostB, fp16_tLower, fp16_tUpper);
+    // Pre-fill the hostC to verify the result when Ki=0
+    golden::FillRandomData<fp16_t>(hostC, fp16_tLower, fp16_tUpper);
     auto groupList = golden::GenerateGroupList<int64_t>(k, problemCount);
 
     size_t sizeGroupList = problemCount * sizeof(int64_t);
@@ -180,7 +183,6 @@ void Run(Options const &options)
 
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
-    std::vector<fp16_t> hostC(lenC);
     ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
 
     std::vector<GemmCoord> problemShapeList(problemCount);
