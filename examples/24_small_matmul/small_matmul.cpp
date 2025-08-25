@@ -36,6 +36,47 @@
 using namespace Catlass;
 using fp16_t = op::fp16_t;
 
+using ArchTag = Arch::AtlasA2;
+static constexpr uint32_t stages = 2;
+constexpr bool enableUnitFlag = true;
+constexpr bool enableShuffleK = false;
+using DispatchPolicy = Gemm::MmadAtlasA2Small<stages, enableUnitFlag, enableShuffleK>;
+using L1TileShape = GemmShape<128, 256, 256>;
+using L0TileShape = GemmShape<128, 256, 64>;
+
+template <
+    class LayoutA,
+    class LayoutB,
+    class LayoutC
+>
+CATLASS_GLOBAL
+void SmallMatmul(
+    GemmCoord problemShape,
+    GM_ADDR gmA, LayoutA layoutA,
+    GM_ADDR gmB, LayoutA layoutB,
+    GM_ADDR gmC, LayoutA layoutC
+)
+{
+    using AType = Gemm::GemmType<half, LayoutA>;
+    using BType = Gemm::GemmType<half, LayoutB>;
+    using CType = Gemm::GemmType<half, LayoutC>;
+
+    using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+    using BlockEpilogue = void;
+
+    // Swizzle offset is 3 and direction is 0.
+    using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
+
+    // kernel level
+    using MatmulKernel = Gemm::Kernel::SmallMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
+
+    typename MatmulKernel::Params params{problemShape, gmA, layoutA, gmB, layoutB,gmC, layoutC};
+
+    // call a kernel
+    MatmulKernel matmul;
+    matmul(params);
+}
+
 struct Options {
     const std::string HELPER = "24_small_matmul m n k [device_id]";
 
@@ -80,9 +121,6 @@ void Run(Options const &options)
     uint32_t m = options.problemShape.m();
     uint32_t n = options.problemShape.n();
     uint32_t k = options.problemShape.k();
-    
-    using L1TileShape = GemmShape<128, 256, 256>;
-    using L0TileShape = GemmShape<128, 256, 64>;
 
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
@@ -126,41 +164,9 @@ void Run(Options const &options)
     uint8_t *deviceC{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
-    using ArchTag = Arch::AtlasA2;
-    static constexpr uint32_t stages = 1;
-    constexpr bool enableUnitFlag = false;
-    constexpr bool enableShuffleK = false;
-    using DispatchPolicy = Gemm::MmadAtlasA2Small<stages, enableUnitFlag, enableShuffleK>;
-
-    using AType = Gemm::GemmType<half, LayoutA>;
-    using BType = Gemm::GemmType<half, LayoutB>;
-    using CType = Gemm::GemmType<half, LayoutC>;
-
-    using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
-    using BlockEpilogue = void;
-
-    // Swizzle offset is 3 and direction is 0.
-    using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
-
-    // kernel level
-    using MatmulKernel = Gemm::Kernel::SmallMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
-
-    using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-    MatmulKernel::Arguments arguments{options.problemShape, deviceA, deviceB, deviceC};
-    MatmulAdapter matmul_op;
-    matmul_op.CanImplement(arguments);
-    size_t sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
-    uint8_t *deviceWorkspace = nullptr;
-    if (sizeWorkspace > 0) {
-        ACL_CHECK(
-            aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
-    }
-    matmul_op.Initialize(arguments, deviceWorkspace);
-    matmul_op(stream, aicCoreNum);
+    SmallMatmul<<<aicCoreNum,nullptr, stream>>>(
+        options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC);
     ACL_CHECK(aclrtSynchronizeStream(stream));
-    if (sizeWorkspace > 0) {
-        ACL_CHECK(aclrtFree(deviceWorkspace));
-    }
 
     std::vector<fp16_t> hostC(lenC);
     ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
