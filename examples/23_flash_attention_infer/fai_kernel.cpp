@@ -374,7 +374,7 @@ public:
     }
  
      template <>
-     CATLASS_DEVICE void operator()<AscendC::AIV>(Params const &params)
+     CATLASS_DEVICE void operator()<AscendC::AIV>(FAIKernelParams const &params)
      {
          AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
          AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID1);

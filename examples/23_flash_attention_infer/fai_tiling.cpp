@@ -48,7 +48,11 @@
  const int32_t NUM512 = 512;
  const int32_t WORKSPACE_BLOCK_SIZE_DB = 131072;
  
- enum class MaskType { NO_MASK = 0, MASK_SPEC = 1 };
+ enum class MaskType{
+    NO_MASK = 0;
+    MASK_SPEC = 1;
+    MASK_CAUSUAL = 2;
+};
  
  struct FAInfo {
      int32_t numTokens = 0;
@@ -64,25 +68,7 @@
      MaskType maskType = MaskType::MASK_SPEC;
  };
  
- struct FATilingData {
-     uint32_t numHeads = 0;
-     uint32_t embeddingSize = 0;
-     uint32_t numBlocks = 0;
-     uint32_t blockSize = 0;
-     uint32_t maxKvSeqlen = 0;
-     uint32_t kvHeads = 0;
-     uint32_t batch = 0;
-     uint32_t maxNumBlocksPerBatch = 0;
-     uint32_t firstBatchTaskNum = 0;
-     uint32_t totalTaskNum = 0;
-     uint32_t maskType = 0;
-     uint64_t mm1OutSize = 0;
-     uint64_t smOnlineOutSize = 0;
-     uint64_t mm2OutSize = 0;
-     uint64_t UpdateSize = 0;
-     uint64_t workSpaceSize = 0;
-     float scaleValue = 0.0;
- };
+
  
  void FillBasicTilingData(const FAInfo &faInfo, FATilingData &faTilingData, int64_t maxKvSeqlen)
  {
