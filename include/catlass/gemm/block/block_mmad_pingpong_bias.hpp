@@ -81,8 +81,10 @@ public:
     static constexpr uint32_t STAGES = DispatchPolicy::STAGES;
     static constexpr uint32_t L1A_SIZE = L1TileShape::M * L1TileShape::K * sizeof(ElementA);
     static constexpr uint32_t L1B_SIZE = L1TileShape::N * L1TileShape::K * sizeof(ElementB);
+    static constexpr uint32_t L1BIAS_SIZE = L1TileShape::N * sizeof(ElementBias);
     static constexpr uint32_t L0A_SIZE = ArchTag::L0A_SIZE;
     static constexpr uint32_t L0B_SIZE = ArchTag::L0B_SIZE;
+    static constexpr uint32_t L0C_SIZE = ArchTag::L0C_SIZE;
     static constexpr uint32_t L0A_PINGPONG_BUF_SIZE = L0A_SIZE / STAGES;
     static constexpr uint32_t L0B_PINGPONG_BUF_SIZE = L0B_SIZE / STAGES;
 
@@ -90,16 +92,20 @@ public:
     static_assert(std::is_same_v<LayoutC, layout::RowMajor>, "LayoutC only support RowMajor yet!");
 
     // Check L1TileShape
-    static_assert((L1A_SIZE * STAGES + L1B_SIZE * STAGES) <= ArchTag::L1_SIZE, "L1TileShape exceeding the L1 space!");
+    static_assert((L1A_SIZE * STAGES + L1B_SIZE * STAGES + L1BIAS_SIZE) <= ArchTag::L1_SIZE,
+                    "L1TileShape exceeding the L1 space!");
 
     // Check L0TileShape
     static constexpr uint32_t L0A_TILE_SIZE = L0TileShape::M * L0TileShape::K * sizeof(ElementA);
     static constexpr uint32_t L0B_TILE_SIZE = L0TileShape::K * L0TileShape::N * sizeof(ElementB);
+    static constexpr uint32_t L0C_TILE_SIZE = L0TileShape::M * L0TileShape::N * sizeof(ElementAccumulator);
     static_assert((L0A_TILE_SIZE * STAGES) <= L0A_SIZE, "L0TileShape exceeding the L0A space!");
     static_assert((L0B_TILE_SIZE * STAGES) <= L0B_SIZE, "L0TileShape exceeding the L0B space!");
+    static_assert(L0C_TILE_SIZE <= L0C_SIZE, "L0TileShape exceeding the L0C space!");
 
     static_assert(L1TileShape::M == L0TileShape::M && L1TileShape::N == L0TileShape::N,
         "The situation where the basic blocks of L1 and L0 differ on the m and n axes is not supported yet");
+    static_assert(L0TileShape::K <= L1TileShape::K, "L0TileShape::K cannot exceed L1TileShape::K");
 
     /// Construct
     CATLASS_DEVICE
@@ -178,7 +184,9 @@ public:
         auto layoutTileB = layoutB.GetTileLayout(MakeCoord(kActual, actualShape.n()));
         copyGmToL1B(l1BTensorList[l1ListId], gmB, layoutBInL1, layoutTileB);
         auto layoutTileBias = layout::VectorLayout(actualShape.n());
-        copyGmToL1Bias(l1BiasTensor, gmBias, layoutBiasInL1, layoutTileBias);
+        if (gmBias.GetPhyAddr() != nullptr){
+            copyGmToL1Bias(l1BiasTensor, gmBias, layoutBiasInL1, layoutTileBias);
+        }
         AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
 
         if constexpr (!ENABLE_UNIT_FLAG) {
@@ -277,8 +285,9 @@ public:
                         copyL1ToL0B(l0BTile, l1BTile, layoutBInL0, layoutBInL1);
 
                         // Load bias to l0 biastable
-                        copyL1ToBT(l0BiasTensor, l1BiasTensor, layoutBiasInL0, layoutBiasInL1);
-
+                        if (gmBias.GetPhyAddr() != nullptr){
+                            copyL1ToBT(l0BiasTensor, l1BiasTensor, layoutBiasInL0, layoutBiasInL1);
+                        }
                         // If the current tile is the last one on the k&n axis, notify to load matrix B from GM to L1
                         if ((kPartIdx == kPartLoop - 1) && (nPartIdx == nPartLoop - 1)) {
                             AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
@@ -308,12 +317,16 @@ public:
                         }
                         // Perform calculation operations
                         if (initC) {
-                            tileMmad(l0CTile, l0ATile, l0BTile, l0BiasTensor, mPartActual, nPartActual, kPartActual,
+                            if (gmBias.GetPhyAddr() != nullptr){
+                                 tileMmad(l0CTile, l0ATile, l0BTile, l0BiasTensor, mPartActual, nPartActual, kPartActual,
                                      initC, unitFlag);
-                        } else {
-                            tileMmad(l0CTile, l0ATile, l0BTile, mPartActual, nPartActual, kPartActual, initC, unitFlag);
-                        }
+                            } else {
+                                tileMmad(l0CTile, l0ATile, l0BTile, mPartActual, nPartActual, kPartActual, initC, unitFlag);
+                            }
 
+                        } else {
+                             tileMmad(l0CTile, l0ATile, l0BTile, mPartActual, nPartActual, kPartActual, initC, unitFlag);
+                        }
                         // Notify to move the next L0B tile
                         AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0BListId]);
                         l0BListId = (l0BListId + 1 < STAGES) ? (l0BListId + 1) : 0;
