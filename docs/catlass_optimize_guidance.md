@@ -1,4 +1,4 @@
-# Matmul快速调优
+# 模板库优化指引
 
 ## CATLASS样例定位
 catlass算子模板库的定位，是针对Gemm类算子提供的模板样例库，与通常的算子库有所区别。 在通常的算子库中，会针对一类问题的不同的输入样例做泛化性的优化考虑，以提供在大多数场景下较优的开箱性能。 模板库当前主要的目标，是针对不同输入提供模板样例，示例在不同输入下快速自定义开发出高性能算子，理论上并不提供相较于算子库最优的泛化性能。 例如，对于matmul场景，CANN中的matmul算子或调用接口着重通过直接调用提供泛化场景性能；而在模板库中，通过提供basic-matmul, optimized-matmul, splitk-matmul, padding-splitk-matmul等等多种matmul以示例在不同输入场景下如何自定义定制开发以获取最优性能。 仓上的多个matmul样例针对不同输入case有不同的适用范围以及调优手段，可按需定制以获取最优性能。
@@ -9,17 +9,13 @@ catlass算子模板库的定位，是针对Gemm类算子提供的模板样例库
 ## Matmul基础知识
 
 ### C矩阵切基本块分核
-首先是任务量分核逻辑，库上[00_basic_matmul](../examples/00_basic_matmul/basic_matmul.cpp)、[06_optimized_matmul](../examples/06_optimized_matmul/optimized_matmul.cpp)等样例都是对C矩阵切基本块后分核，C矩阵分别在M轴、N轴上基于`L1TileShape::M`和`L1TileShape::N`切基本块，而后基本块按照[swizzle策略](./swizzle_explanation.md)分配到cube上进行计算。
-
-**示例：20个cube核、GemmIdentityBlockSwizzle<1, 0>**
-
-<img src="images/matmul_fast_tuning/matmul_tile.png" width="75%">
+首先是任务量分核逻辑，库上[00_basic_matmul](../examples/00_basic_matmul/basic_matmul.cpp)、[06_optimized_matmul](../examples/06_optimized_matmul/optimized_matmul.cpp)等样例都是对C矩阵切基本块后分核，C矩阵分别在M轴、N轴上基于`L1TileShape::M`和`L1TileShape::N`切分，得到`CeilDiv(M, L1TileShape::M) * CeilDiv(N, L1TileShape::N)`个基本块，而后基本块按照[swizzle策略](./swizzle_explanation.md)分配到cube上进行计算。
 
 ### Matmul硬件可视化
 参考[昇腾社区文档-基本架构](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/83RC1alpha001/opdevg/Ascendcopdevg/atlas_ascendc_10_0008.html)。
-基础matmul切块、数据搬运、计算涉及的大致硬件架构如下图，由于使能了doubleBuffer，在L1/L0A/L0B上会存放两块Tile数据。
+基础matmul切块、数据搬运、计算涉及的硬件架构如下图，由于使能了doubleBuffer，在L1/L0A/L0B上会存放两块Tile数据。
 
-<img src="images/matmul_fast_tuning/cube_hardware.png" width="100%">
+<img src="https://www.hiascend.com/doc_center/source/zh/CANNCommunityEdition/83RC1alpha001/opdevg/Ascendcopdevg/figure/zh-cn_image_0000002405923777.png" width="80%">
 
 ### TileShape约束
 由上可知TileShape在设置时要保证不能超出L1/L0A/L0B/L0C空间大小，同时TileShape取值必须是16的倍数。
@@ -134,7 +130,7 @@ struct MmadAtlasA2Preload : public MmadAtlasA2 {
 使用21_basic_matmul_preload_zN，按照默认的L1TileShape<128,256,256>、L0TileShape<128,256,64>，swizzle设置为<3, 1>，耗时为**40.6us**。swizzle设置为<4, 1>，耗时为**35.3us**。
 
 分析C矩阵切基本块情况，M方向切（128 + 32）两块，N方向切24个长256的块，共48个基本块。swizzle<3, 1>和swizzle<4, 1>的基本块分配AIC情况如下图。swizzle<3, 1>时，1、2、5、6号核在M方向有最大任务量为（128 + 128 + 32）；swizzle<4, 1>时，12、13、14、15号核在M方向有最大任务量为（128 + 128），负载更加均衡。
-<img src="images/matmul_fast_tuning/swizzle_case.png" width="100%">
+<img src="images/catlass_optimize_guidance/swizzle_case.png" width="100%">
 
 ### 浅述定制调优
 - 当前仓上Matmul样例各有特性和优势场景，用户可以通过深层的代码重新组装进行定制开发。例如，[21_basic_matmul_preload_zN](../examples/21_basic_matmul_preload_zN/basic_matmul_preload_zN.cpp)便是基于00_basic_matmul组装了`MmadAtlasA2Preload`的dispatchPolicy，而[22_padding_splitk_matmul](../examples/22_padding_splitk_matmul/padding_splitk_matmul.cpp)是组装了04_padding_matmul和09_splitk_matmul的特性。用户在熟悉了仓上不同样例代码后，可以根据业务场景深度开发达到更好的性能。模板库也会持续增加使用了新的算法、适合更多场景的Matmul样例。
