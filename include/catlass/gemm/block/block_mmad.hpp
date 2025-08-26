@@ -86,5 +86,9 @@ struct BlockGemm {
 #include "catlass/gemm/block/block_mmad_fai_qk_normal.hpp"
 #include "catlass/gemm/block/block_mmad_fai_pv_head_tail.hpp"
 #include "catlass/gemm/block/block_mmad_fai_pv_normal.hpp"
+<<<<<<< HEAD
 #include "catlass/gemm/block/block_mmad_pingpong_full_loadA.hpp"
+=======
+#include "catlass/gemm/block/block_mmad_w8a16.hpp"
+>>>>>>> 84ef85b (temp work)
 #endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_HPP
