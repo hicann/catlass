@@ -772,6 +772,8 @@
          uint32_t rowLoopNum = CeilDiv(rowActualThisSubBlock, rowNumTile);
          uint32_t preLoad = 1;
          
+         Arch::CrossCoreWaitFlag(qkReady);
+
          for (uint32_t rowLoopIdx = 0; rowLoopIdx < rowLoopNum + preLoad; rowLoopIdx++) {
             if(rowLoopIdx < rowLoopNum){
                 uint32_t pingpongFlag = rowLoopIdx % 2;
@@ -793,8 +795,7 @@
                     AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID2);
                     CopyMaskGmToUb(gMaskThisSubBlock, columnNum, columnNumRound, maskStride,
                         qSBlockSize, proTokenIdx, proTokenNum, integralHeadNum, epiTokenNum);
-                    AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID2);
-                    Arch::CrossCoreWaitFlag(qkReady);
+                    AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID2);                    
                 }
                 int64_t offsetInput = layoutInput.GetOffset(MatrixCoord(rowOffsetIoGm, 0));
                 auto gInputCurLoop = gInput[offsetInput];
