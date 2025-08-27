@@ -130,7 +130,7 @@ public:
 
         // Represent the full gm
         AscendC::GlobalTensor<int8_t> gmB;
-        gmB.SetGlobalBuffer((__gm__ ElementB *)params.ptrB);
+        gmB.SetGlobalBuffer((__gm__ int8_t *)params.ptrB);
         AscendC::GlobalTensor<ElementB> gmBWksp;
         gmBWksp.SetGlobalBuffer((__gm__ ElementB *)params.ptrWksp);
 
@@ -162,7 +162,7 @@ public:
             // Compute initial location in logical coordinates
             MatrixCoord offsetB{blockIdxCoord.k() * L1TileShape::K, blockIdxCoord.n() * L1TileShape::N};
             int64_t gmOffsetB = params.layoutB.GetOffset(offsetB);
-            MatrixCoord offsetNextB{nextBlockIdxCoord.k() * L1TileShape::K, nextBlockIdxCoord.n() * L1TileShape::N};
+            MatrixCoord offsetNextB{nextBlockIdCoord.k() * L1TileShape::K, nextBlockIdCoord.n() * L1TileShape::N};
             int64_t gmOffsetNextB = params.layoutB.GetOffset(offsetNextB);
             int64_t gmOffsetBWksp = (AscendC::GetBlockIdx() / 2) * L1TileShape::K * L1TileShape::N * 2;
 

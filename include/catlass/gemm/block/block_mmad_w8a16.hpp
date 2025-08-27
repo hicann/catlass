@@ -56,7 +56,7 @@ struct PrologueCast {
     }
 
     CATLASS_DEVICE
-    void operator() (AscendC::GlobalTensor<ElementOut> const &gmDst,
+    void operator()(AscendC::GlobalTensor<ElementOut> const &gmDst,
         AscendC::GlobalTensor<ElementIn> const &gmSrc,
         Layout const &layoutDst, Layout const &layoutSrc, half deqScalar, half deqZeroPoint)
     {
@@ -65,7 +65,7 @@ struct PrologueCast {
         uint32_t tileLenRoundInt8 = RoundUp(layoutSrc.shape(1), ELE_NUM_PER_BLK_INT8);
         uint64_t tileStrideSrc = layoutSrc.stride(0);
         uint64_t tileStrideDst = layoutDst.stride(0);
-        if constexpr (std::is_same_v<Layout,layout::ColumnMajor>) {
+        if constexpr (std::is_same_v<Layout, layout::ColumnMajor>) {
             tileNum = layoutSrc.shape(1);
             tileLen = layoutSrc.shape(0);
             tileLenRoundInt8 = RoundUp(layoutSrc.shape(0), ELE_NUM_PER_BLK_INT8);
@@ -86,8 +86,8 @@ struct PrologueCast {
         uint32_t pingpong = 0;
         for (uint32_t loopIdx = 0; loopIdx < loops; ++loopIdx) {
             uint32_t actualTiles = TILES_PER_LOOP;
-            if (loopIdx == loopIdx - 1) {
-                actualTiles = TILES_PER_LOOP - loopIdx * TILES_PER_LOOP;
+            if (loopIdx == loops - 1) {
+                actualTiles = tilesPerAiv - loopIdx * TILES_PER_LOOP;
             }
             uint64_t tileOffsetSrc = loopIdx * TILES_PER_LOOP * tileStrideSrc;
             AscendC::DataCopyExtParams dataCopyParamsIn(
@@ -152,7 +152,7 @@ protected:
     AscendC::LocalTensor<ElementOut> ubOutTensorList[STAGES];
 
     int32_t ubEventList[STAGES];
-}
+};
 
 template <
     bool ENABLE_UNIT_FLAG_,
@@ -308,7 +308,7 @@ public:
         uint32_t kTileCountNext = CeilDiv<L1TileShape::K>(actualShapeNext.k());
 
         uint32_t wkspStrideB = L1TileShape::N;
-        if  (std::is_same_v<LayoutB, layout::ColumnMajor>) {
+        if (std::is_same_v<LayoutB, layout::ColumnMajor>) {
             wkspStrideB = L1TileShape::K;
         }
 
@@ -376,6 +376,7 @@ public:
             }
             l1ListId = l1ListIdNext;
             kActual = kActualNext;
+        }
     }
 
     /// Perform a block-scoped matrix multiply-accumulate
@@ -399,7 +400,7 @@ public:
         uint32_t kTileCountNext = CeilDiv<L1TileShape::K>(actualShapeNext.k());
 
         uint32_t wkspStrideB = L1TileShape::N;
-        if  (std::is_same_v<LayoutB, layout::ColumnMajor>) {
+        if (std::is_same_v<LayoutB, layout::ColumnMajor>) {
             wkspStrideB = L1TileShape::K;
         }
 
@@ -495,6 +496,7 @@ public:
                     layoutBInL1, layoutTileB);
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListIdNext]);
                 Arch::CrossCoreSetFlag<0x2, PIPE_MTE2>(notifyAiv[l1ListIdNext]);
+            }
 
             // Get L1 tensor for current stage
             auto l1ATensor = l1ATensorList[l1ListId];
@@ -623,8 +625,8 @@ protected:
     int32_t l0AEventList[STAGES];
     int32_t l0BEventList[STAGES];
 
-    Arch::CrossCoreFlag  notifyAic[STAGES] = { EVENT_ID0, EVENT_ID1 };
-    Arch::CrossCoreFlag  notifyAiv[STAGES] = { EVENT_ID2, EVENT_ID3 };
+    Arch::CrossCoreFlag notifyAic[STAGES] = { EVENT_ID0, EVENT_ID1 };
+    Arch::CrossCoreFlag notifyAiv[STAGES] = { EVENT_ID2, EVENT_ID3 };
 
     uint32_t l1ListId{0};
 

@@ -139,9 +139,9 @@ void Run(Options const &options)
     size_t lenB = static_cast<size_t>(k) * n;
     size_t lenC = static_cast<size_t>(m) * n;
 
-    size_t sizeA = lenA * sizeof(fp16_t);
+    size_t sizeA = lenA * sizeof(half);
     size_t sizeB = lenB * sizeof(int8_t);
-    size_t sizeC = lenC * sizeof(fp16_t);
+    size_t sizeC = lenC * sizeof(half);
 
     using LayoutA = layout::RowMajor;
     using LayoutB = layout::RowMajor;
@@ -150,8 +150,8 @@ void Run(Options const &options)
     LayoutB layoutB{k, n};
     LayoutC layoutC{m, n};
 
-    fp16_t deqScalar = 1.5;
-    fp16_t deqZeroPoint = 0.1;
+    half deqScalar = 1.5;
+    half deqZeroPoint = 0.1;
 
     // if LayoutA and LayoutB is both ColumnMajor,
     // L1TileShape using GemmShape<256, 128, 256> can achieve better performance.
@@ -163,9 +163,9 @@ void Run(Options const &options)
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
-    std::vector<fp16_t> hostA(lenB);
-    std::vector<int8_t> hostB(lenA);
-    golden::FillRandomData<fp16_t>(hostA, -5.0f, 5.0f);
+    std::vector<half> hostA(lenA);
+    std::vector<int8_t> hostB(lenB);
+    golden::FillRandomData<half>(hostA, -5.0f, 5.0f);
     golden::FillRandomData<int8_t>(hostB, -8, 8);
 
     uint8_t *deviceA{nullptr};
@@ -187,11 +187,10 @@ void Run(Options const &options)
     using ArchTag = Arch::AtlasA2;
     constexpr bool ENABLE_UNIT_FLAG = true;
     constexpr bool ENABLE_SHUFFLE_K = true;
-    using ElementWorkspace = float;
 
-    using AType = Gemm::GemmType<fp16_t, LayoutA>;
-    using BType = Gemm::GemmType<fp16_t, LayoutB>;
-    using CType = Gemm::GemmType<fp16_t, LayoutC>;
+    using AType = Gemm::GemmType<half, LayoutA>;
+    using BType = Gemm::GemmType<half, LayoutB>;
+    using CType = Gemm::GemmType<half, LayoutC>;
     using DispatchPolicy = Gemm::MmadAtlasA2W8A16<ENABLE_UNIT_FLAG, ENABLE_SHUFFLE_K>;
 
     using TileCopy = TileCopyOpt<ArchTag, AType, BType, CType>;
@@ -203,7 +202,7 @@ void Run(Options const &options)
         using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
         using MatmulKernel = Gemm::Kernel::W8A16Matmul<BlockMmadOpt, BlockEpilogue, BlockScheduler>;
         MatmulKernel::Arguments arguments{
-            options.problemShape, aicCoreNum, sizeof(fp16_t), deviceA, deviceB, deviceC, deqScalar, deqZeroPoint};
+            options.problemShape, aicCoreNum, sizeof(half), deviceA, deviceB, deviceC, deqScalar, deqZeroPoint};
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
         MatmulAdapter matmul_op;
         RunAdapter(matmul_op, arguments, stream, aicCoreNum, fftsAddr);
@@ -211,18 +210,18 @@ void Run(Options const &options)
         using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
         using MatmulKernel = Gemm::Kernel::W8A16Matmul<BlockMmadOpt, BlockEpilogue, BlockScheduler>;
         MatmulKernel::Arguments arguments{
-            options.problemShape, aicCoreNum, sizeof(fp16_t), deviceA, deviceB, deviceC, deqScalar, deqZeroPoint};
+            options.problemShape, aicCoreNum, sizeof(half), deviceA, deviceB, deviceC, deqScalar, deqZeroPoint};
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
         MatmulAdapter matmul_op;
         RunAdapter(matmul_op, arguments, stream, aicCoreNum, fftsAddr);
     }
 
-    std::vector<fp16_t> hostBFp16(hostB.begin(), hostB.end());
+    std::vector<half> hostBFp16(hostB.begin(), hostB.end());
     for (size_t i = 0; i < hostBFp16.size(); i++) {
-        hostBFp16[i] = static_cast<fp16_t>((hostBFp16[i] + deqZeroPoint) * deqScalar);
+        hostBFp16[i] = static_cast<half>((hostBFp16[i] + deqZeroPoint) * deqScalar);
     }
 
-    std::vector<fp16_t> hostC(lenC);
+    std::vector<half> hostC(lenC);
     ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
 
     std::vector<float> hostGolden(lenC);
