@@ -126,8 +126,10 @@ void Run(Options const &options)
 
     std::vector<fp16_t> hostC(lenC);
 
+    uint32_t L1UsedSpace = L1TileShape::M * k * sizeof(fp16_t) + L1TileShape::K * L1TileShape::N * 2 * sizeof(fp16_t);
+
     // judge whether to use L1 full load strategy
-    if ((L1TileShape::M * k * 2) <= ArchTag::L1_SIZE) {
+    if (L1UsedSpace <= ArchTag::L1_SIZE) {
         using DispatchPolicy = Gemm::MmadAtlasA2L1FullLoad<true>;
         using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
         using BlockEpilogue = void;
