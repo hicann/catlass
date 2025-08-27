@@ -49,9 +49,9 @@
  const int32_t WORKSPACE_BLOCK_SIZE_DB = 131072;
  
  enum class MaskType{
-    NO_MASK = 0;
-    MASK_SPEC = 1;
-    MASK_CAUSUAL = 2;
+    NO_MASK = 0, 
+    MASK_SPEC = 1, 
+    MASK_CAUSUAL = 2
 };
  
  struct FAInfo {

@@ -175,7 +175,7 @@ void Run(const Options &options)
     uint64_t blockTableSize =
         static_cast<uint64_t>(batch * ((maxKvSeqlen + blockSize - 1) / blockSize) * sizeof(int32_t));
     // ?????
-    uint32_t tilingSize = sizeof(FAInferTiling::FATilingData);
+    uint32_t tilingSize = sizeof(FATilingData);
 
     // Allocate matrices in host and device memory.
     uint8_t *qSeqHost;
@@ -269,7 +269,7 @@ void Run(const Options &options)
     faInfo.qSeqlenList = reinterpret_cast<int64_t *>(qSeqHost);
     faInfo.kvSeqlenList = reinterpret_cast<int64_t *>(kvSeqHost);
 
-    FAInferTiling::FATilingData faTilingData;
+    FATilingData faTilingData;
 
     FAInferTiling::GetFATilingParam(faInfo, blockDim, faTilingData);
 

@@ -72,8 +72,8 @@ CATLASS_DEVICE T Max(T a, T b)
 }
 
 enum class cvPipeLineType{
-    FAI_COMMON_NORMAL = 0;
-    FAI_COMMON_CHUNK_MASK = 1;
+    FAI_COMMON_NORMAL = 0,
+    FAI_COMMON_CHUNK_MASK = 1
 };
 
 CATLASS_DEVICE
@@ -88,7 +88,7 @@ uint32_t GetQNBlockTile(uint32_t qSeqlen, uint32_t groupSize)
 CATLASS_DEVICE
 uint32_t GetQSBlockTile(uint32_t kvSeqlen)
 {
-    uint32 qSBlockTile = 128;
+    uint32_t qSBlockTile = 128;
     return qSBlockTile;
 }
 
