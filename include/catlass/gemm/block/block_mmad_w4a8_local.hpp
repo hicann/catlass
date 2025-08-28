@@ -303,10 +303,8 @@ public:
     CATLASS_DEVICE
     void operator()(
         AscendC::GlobalTensor<int8_t> const &gmB, LayoutB const &layoutB,
-        AscendC::GlobalTensor<int8_t> const &gmNextB,
         AscendC::GlobalTensor<ElementB> const &gmBW,
-        GemmCoord const &actualShape, GemmCoord const &actualShapeNext,
-        bool isFirstBlock, bool hasNextBlock, GemmCoord const &problemShape) 
+        GemmCoord const &actualShape, GemmCoord const &problemShape) 
     {
         uint32_t kTileCount = CeilDiv<L1TileShape::K>(actualShape.k());
 
@@ -327,7 +325,7 @@ public:
         // k loop
         for (uint32_t kLoopIdx = 0; kLoopIdx < kTileCount; kLoopIdx++) {
             uint32_t shuffleKIdx = (startTileIdx + kLoopIdx) % kTileCount;
-            if (shuffleKIdx == firstTileIdx && isFirstBlock) {
+            if (shuffleKIdx == firstTileIdx) {
                 auto gmTileB = gmB[shuffleKIdx * L1TileShape::K * ((problemShape.n() + 1) / 2)];
                 if constexpr (std::is_same_v<LayoutB, layout::ColumnMajor>) {
                     gmTileB = gmB[(shuffleKIdx * L1TileShape::K + 1) / 2];
@@ -365,22 +363,6 @@ public:
                 Catlass::Arch::CrossCoreSetFlag<0x02, PIPE_MTE3>(notifyAic[l1ListIdNext]);
             }
 
-            if (shuffleKIdx == lastTileIdx && hasNextBlock) {
-                kActualNext = (firstTileIdx < kTileCount - 1) ? 
-                    L1TileShape::K : (actualShapeNext.k() - firstTileIdx * L1TileShape::K);
-                auto gmTileB = gmNextB[firstTileIdx * L1TileShape::K * ((problemShape.n() + 1) / 2)];
-                if constexpr (std::is_same_v<LayoutB, layout::ColumnMajor>) {
-                    gmTileB = gmNextB[(firstTileIdx * L1TileShape::K + 1) / 2];
-                }
-                // Load first matrix A tile from GM to L1
-                auto layoutTileB = layoutB.GetTileLayout(MakeCoord(kActualNext, actualShapeNext.n()));
-                auto layoutWB = LayoutB{kActualNext, actualShapeNext.n(), wkspStrideB};
-
-                Catlass::Arch::CrossCoreWaitFlag(notifyAiv[l1ListIdNext]);
-                prologueCastB(gmBW[l1ListIdNext * L1TileShape::K * L1TileShape::N],
-                    gmTileB, layoutWB, layoutTileB);
-                Catlass::Arch::CrossCoreSetFlag<0x02, PIPE_MTE3>(notifyAic[l1ListIdNext]);
-            }
             l1ListId = l1ListIdNext;
             kActual = kActualNext;
         }
@@ -392,9 +374,7 @@ public:
         AscendC::GlobalTensor<ElementA> const &gmA, LayoutA const &layoutA,
         AscendC::GlobalTensor<ElementB> const &gmB,
         AscendC::GlobalTensor<ElementC> const &gmC, LayoutC const &layoutC,
-        AscendC::GlobalTensor<ElementB> const &gmNextA,
-        GemmCoord const &actualShape, GemmCoord const &actualShapeNext,
-        bool isFirstBlock, bool hasNextBlock, uint64_t deqScalar) 
+        GemmCoord const &actualShape, uint64_t deqScalar) 
     {
         uint32_t mRound = RoundUp<L1AAlignHelper::M_ALIGNED>(actualShape.m());
         uint32_t nRound = RoundUp<L1BAlignHelper::N_ALIGNED>(actualShape.n());
@@ -429,7 +409,7 @@ public:
         for (uint32_t kLoopIdx = 0; kLoopIdx < kTileCount; kLoopIdx++) {
             uint32_t shuffleKIdx = (startTileIdx + kLoopIdx) % kTileCount;
             // Load first matrix A tile in total kernel loop from GM to L1
-            if (shuffleKIdx == firstTileIdx && isFirstBlock) {
+            if (shuffleKIdx == firstTileIdx) {
                 MatrixCoord gmTileAOffset{0, shuffleKIdx * L1TileShape::K};
                 auto gmTileA = gmA[layoutA.GetOffset(gmTileAOffset)];
                 
@@ -474,30 +454,6 @@ public:
                 Catlass::Arch::CrossCoreWaitFlag(notifyAic[l1ListIdNext]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListIdNext]);
                 auto layoutTileB = LayoutB{kActualNext, actualShape.n(), wkspStrideB};
-                copyGmToL1B(l1BTensor, gmB[l1ListIdNext * L1TileShape::K * L1TileShape::N], layoutBInL1, layoutTileB);
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListIdNext]);
-                Catlass::Arch::CrossCoreSetFlag<0x02, PIPE_MTE2>(notifyAiv[l1ListIdNext]);
-            }
-            if (shuffleKIdx == lastTileIdx && hasNextBlock) {
-                // Get L1 tensor for next stage
-                auto l1ATensor = l1ATensorList[l1ListIdNext];
-                auto l1BTensor = l1BTensorList[l1ListIdNext];
-                // Get GM tensor for next stage
-                kActualNext = (firstTileIdx < kTileCount - 1) ?
-                    L1TileShape::K : (actualShapeNext.k() - firstTileIdx * L1TileShape::K);
-                MatrixCoord gmTileAOffset{0, firstTileIdx * L1TileShape::K};
-                auto gmTileA = gmNextA[layoutA.GetOffset(gmTileAOffset)];
-
-                // load next matrix A tile from GM to L1
-                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListIdNext]);
-                auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShapeNext.m(), kActualNext));
-                copyGmToL1A(l1ATensor, gmTileA, layoutAInL1, layoutTileA);
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListIdNext]);
-
-                // load next matrix B tile from GM to L1
-                Catlass::Arch::CrossCoreWaitFlag(notifyAic[l1ListIdNext]);
-                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListIdNext]);
-                auto layoutTileB = LayoutB{kActualNext, actualShapeNext.n(), wkspStrideB};
                 copyGmToL1B(l1BTensor, gmB[l1ListIdNext * L1TileShape::K * L1TileShape::N], layoutBInL1, layoutTileB);
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListIdNext]);
                 Catlass::Arch::CrossCoreSetFlag<0x02, PIPE_MTE2>(notifyAiv[l1ListIdNext]);

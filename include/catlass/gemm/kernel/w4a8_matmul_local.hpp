@@ -125,26 +125,11 @@ public:
 
         GemmCoord blockIdxCoord;
         GemmCoord actualBlockShape;
-        GemmCoord nextBlockIdCoord;
-        GemmCoord nextActualBlockShape;
 
         for (uint32_t loopIdx = AscendC::GetBlockIdx() / 2; loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()) {
-            bool isFirstBlock = (loopIdx == AscendC::GetBlockIdx() / 2);
-            bool hasNextBlock = false;
-
             // Compute block location
-            if (isFirstBlock) {
-                blockIdxCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
-                actualBlockShape = matmulBlockScheduler.GetActualBlockShape(blockIdxCoord);
-            } else {
-                blockIdxCoord = nextBlockIdCoord;
-                actualBlockShape = nextActualBlockShape;
-            }
-            if (loopIdx + AscendC::GetBlockNum() < coreLoops) {
-                hasNextBlock = true;
-                nextBlockIdCoord = matmulBlockScheduler.GetBlockCoord(loopIdx + AscendC::GetBlockNum());
-                nextActualBlockShape = matmulBlockScheduler.GetActualBlockShape(nextBlockIdCoord);
-            }
+            blockIdxCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
+            actualBlockShape = matmulBlockScheduler.GetActualBlockShape(blockIdxCoord)
 
             int64_t gmOffsetB = blockIdxCoord.k() * L1TileShape::K * ((params.problemShape.n() + 1) / 2)
                               + (blockIdxCoord.n() * L1TileShape::N + 1) / 2;
@@ -153,20 +138,13 @@ public:
                               + (blockIdxCoord.k() * L1TileShape::K + 1) / 2;
             }
 
-            int64_t gmOffsetNextB = nextBlockIdCoord.k() * L1TileShape::K * ((params.problemShape.n() + 1) / 2)
-                          + (nextBlockIdCoord.n() * L1TileShape::N + 1) / 2;
-            if constexpr (std::is_same_v<LayoutB, layout::ColumnMajor>) {
-                gmOffsetNextB = nextBlockIdCoord.n() * L1TileShape::N * ((params.problemShape.k() + 1) / 2)
-                          + (nextBlockIdCoord.k() * L1TileShape::K + 1) / 2;
-            }
-
             int64_t gmOffsetBWksp = (AscendC::GetBlockIdx() / 2) * L1TileShape::K * L1TileShape::N * 2;
 
             // Compute block-scoped matrix multiply-add
             blockMmad(
                 gmB[gmOffsetB], params.layoutB,
-                gmB[gmOffsetNextB], gmWB[gmOffsetBWksp],
-                actualBlockShape, nextActualBlockShape, isFirstBlock, hasNextBlock, params.problemShape);                      
+                gmWB[gmOffsetBWksp],
+                actualBlockShape, params.problemShape);                      
         }
     }
 
@@ -190,28 +168,12 @@ public:
         uint64_t deqScalar = params.deqScalar;
 
         GemmCoord blockIdxCoord;
-        GemmCoord actualBlockShape;
-        GemmCoord nextBlockIdCoord;
-        GemmCoord nextActualBlockShape;       
+        GemmCoord actualBlockShape;      
 
         for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()) {
-            bool isFirstBlock = (loopIdx == AscendC::GetBlockIdx());
-            bool hasNextBlock = false;
+            blockIdxCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
+            actualBlockShape = matmulBlockScheduler.GetActualBlockShape(blockIdxCoord);
             
-            // Compute block location
-            if (isFirstBlock) {
-                blockIdxCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
-                actualBlockShape = matmulBlockScheduler.GetActualBlockShape(blockIdxCoord);
-            } else {
-                blockIdxCoord = nextBlockIdCoord;
-                actualBlockShape = nextActualBlockShape;
-            }
-            if (loopIdx + AscendC::GetBlockNum() < coreLoops) {
-                hasNextBlock = true;
-                nextBlockIdCoord = matmulBlockScheduler.GetBlockCoord(loopIdx + AscendC::GetBlockNum());
-                nextActualBlockShape = matmulBlockScheduler.GetActualBlockShape(nextBlockIdCoord);
-            }
-
             MatrixCoord offsetA{blockIdxCoord.m() * L1TileShape::M, blockIdxCoord.k() * L1TileShape::K};
             MatrixCoord offsetC{blockIdxCoord.m() * L1TileShape::M, blockIdxCoord.n() * L1TileShape::N};
             int64_t gmOffsetA = params.layoutA.GetOffset(offsetA);
@@ -222,8 +184,8 @@ public:
             int64_t gmOffsetNextA = params.layoutA.GetOffset(offsetNextA);
             // Compute block-scoped matrix multiply-add
             blockMmad(
-                gmA[gmOffsetA], params.layoutA, gmB[gmOffsetB], gmC[gmOffsetC], params.layoutC, gmA[gmOffsetNextA],
-                actualBlockShape, nextActualBlockShape, isFirstBlock, hasNextBlock, deqScalar);
+                gmA[gmOffsetA], params.layoutA, gmB[gmOffsetB], gmC[gmOffsetC], params.layoutC,
+                actualBlockShape, deqScalar);
         }
     }
 
