@@ -87,7 +87,7 @@ public:
 
     static size_t GetWorkspaceSize(const Arguments &args)
     {
-        // // Calculate workspace size, using double buffer
+        // Calculate workspace size, using double buffer
         size_t lenWorkspace = static_cast<size_t>(L1TileShape::N) * L1TileShape::K *
             args.aicCoreNum * BUFFER_NUM;
         size_t sizeWorkspace = lenWorkspace * args.elementSize;
