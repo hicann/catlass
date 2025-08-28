@@ -124,9 +124,9 @@ void Run(Options const &options)
         ACL_CHECK(aclrtMallocHost((void **)(&hostB), sizeB));
         ACL_CHECK(aclrtMallocHost((void **)(&hostC), sizeC));
         ACL_CHECK(aclrtMallocHost((void **)(&hExpected), sizeExpected));
-        ReadFile("/home/c50053055/catlass_test/examples/23_w4a8_matmul/build/data/inputA.dat", hostA, sizeA);
-        ReadFile("/home/c50053055/catlass_test/examples/23_w4a8_matmul/build/data/inputB.dat", hostB, sizeB);
-        ReadFile("/home/c50053055/catlass_test/examples/23_w4a8_matmul/build/data/expected.dat", hExpected, sizeExpected);
+        ReadFile("./build/data/inputA.dat", hostA, sizeA);
+        ReadFile("./build/data/inputB.dat", hostB, sizeB);
+        ReadFile("./build/data/expected.dat", hExpected, sizeExpected);
     }
 
     using LayoutA = layout::RowMajor;
@@ -211,7 +211,7 @@ void Run(Options const &options)
     }   
 
     if (verifyLevel) {
-        WriteFile("/home/c50053055/catlass_test/examples/23_w4a8_matmul/build/data/outputC.dat", hostC, sizeC);
+        WriteFile("./build/data/outputC.dat", hostC, sizeC);
         CompareResults<__fp16, float>((__fp16*)hostC, (float*)hExpected, m, k, n);
         ACL_CHECK(aclrtFreeHost(hostA));
         ACL_CHECK(aclrtFreeHost(hostB));
