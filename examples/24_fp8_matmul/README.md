@@ -1,9 +1,10 @@
-# BasicMatmul Example Readme
+# Fp8Matmul Example Readme
 ## 代码组织
 ```
 ├── 24_fp8_matmul
 │   ├── CMakeLists.txt   # CMake编译文件
 │   ├── README.md
+│   ├── gen_data.py      # 数据生成脚本
 │   └── fp8_matmul.cpp   # 主文件
 ```
 ## 使用示例
@@ -13,9 +14,9 @@
 # 编译指定用例
 bash scripts/build.sh 24_fp8_matmul
 # cd [代码仓路径]/output/bin
-# 可执行文件名 |矩阵m轴|n轴|k轴|transA|transB|Device ID
+# 可执行文件名 |矩阵m轴|n轴|k轴|Device ID
 # Device ID可选，默认为0
-./24_fp8_matmul 256 512 1024 0 0 0
+./24_fp8_matmul 256 512 1024 0
 ```
 执行结果如下，说明精度比对成功。
 ```
