@@ -232,11 +232,10 @@ struct CopyL0CToGmTla<Catlass::Arch::AtlasA2,
     CATLASS_DEVICE
     void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor, uint8_t unitFlag = 0)
     {
-        static_assert(tla::detail::iszN<typename TensorSrc::Element, typename TensorSrc::Layout>::value &&
-                      tla::detail::isRowMajor<typename TensorDst::Layout>::value &&
+        static_assert(tla::detail::isRowMajor<typename TensorDst::Layout>::value &&
                       TensorSrc::position == AscendC::TPosition::CO1 &&
                       TensorDst::position == AscendC::TPosition::GM,
-            "The input parameters do not match. TensorSrc must be L0C and zN, while TensorDst must be GM and RowMajor");
+            "The input parameters do not match. TensorSrc must be L0C, while TensorDst must be GM and RowMajor");
 
         AscendC::FixpipeParamsV220 intriParams;
 

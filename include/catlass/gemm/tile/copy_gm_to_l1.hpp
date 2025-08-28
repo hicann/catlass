@@ -1154,7 +1154,7 @@ struct TileCopyTla<Arch::AtlasA2,
 
 /// Partial specialization for TileCopyTlaExt, CopyGmToL1, AtlasA2, PaddingRowMajor in and zN out.
 template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
-struct TileCopyTla<Arch::AtlasA2,
+struct TileCopyTlaExt<Arch::AtlasA2,
     tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::GM>,
     tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::A1>,
     layout::RowMajor, layout::zN> {
@@ -1196,7 +1196,7 @@ struct TileCopyTla<Arch::AtlasA2,
 
 /// Partial specialization for TileCopyTlaExt, CopyGmToL1, AtlasA2, PaddingRowMajor in and zN out.
 template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
-struct TileCopyTla<Arch::AtlasA2,
+struct TileCopyTlaExt<Arch::AtlasA2,
     tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::GM>,
     tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::A1>,
     layout::PaddingRowMajor, layout::zN> {
@@ -1237,7 +1237,7 @@ struct TileCopyTla<Arch::AtlasA2,
 
 /// Partial specialization for TileCopyTlaExt, CopyGmToL1, AtlasA2, PaddingColumnMajor in and nZ out.
 template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
-struct TileCopyTla<Arch::AtlasA2,
+struct TileCopyTlaExt<Arch::AtlasA2,
     tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::GM>,
     tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::A1>,
     layout::ColumnMajor, layout::nZ> {
@@ -1280,7 +1280,7 @@ struct TileCopyTla<Arch::AtlasA2,
 
 /// Partial specialization for TileCopyTlaExt, CopyGmToL1, AtlasA2, PaddingColumnMajor in and nZ out.
 template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
-struct TileCopyTla<Arch::AtlasA2,
+struct TileCopyTlaExt<Arch::AtlasA2,
     tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::GM>,
     tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::A1>,
     layout::PaddingColumnMajor, layout::nZ> {
