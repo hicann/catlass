@@ -766,13 +766,17 @@
          auto gMaskThisSubBlock = gMask[offsetMask];
          auto layoutMaskThisSubBlock = layoutMask;
 
-
          uint32_t maxRowNumPerLoop = MAX_UB_S_ELEM_NUM / columnNumRound;
          uint32_t rowNumTile = RoundDown(maxRowNumPerLoop, FLOAT_BLOCK_SIZE);
          uint32_t rowLoopNum = CeilDiv(rowActualThisSubBlock, rowNumTile);
          uint32_t preLoad = 1;
          
-         for (uint32_t rowLoopIdx = 0; rowLoopIdx < rowLoopNum + preLoad; rowLoopIdx++) {
+         if (rowActualThisSubBlock == 0) {
+             Arch::CrossCoreWaitFlag(qkReady);
+             return;
+         }
+
+        for (uint32_t rowLoopIdx = 0; rowLoopIdx < rowLoopNum + preLoad; rowLoopIdx++) {
             if(rowLoopIdx < rowLoopNum){
                 uint32_t pingpongFlag = rowLoopIdx % 2;
                 uint32_t rowOffsetCurLoop = rowLoopIdx * rowNumTile;
