@@ -1051,6 +1051,12 @@ struct TileCopyTla<Arch::AtlasA2,
     CATLASS_DEVICE
     void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
     {
+        static_assert(tla::detail::isRowMajor<typename TensorSrc::Layout>::value &&
+                      tla::detail::iszN<typename TensorDst::Element, typename TensorDst::Layout>::value &&
+                      TensorSrc::position == AscendC::TPosition::GM &&
+                      TensorDst::position == AscendC::TPosition::A1,
+            "The input parameters do not match. TensorSrc must be GM and RowMajor, while TensorDst must be L1 and zN");
+
         const uint32_t nValue = tla::get<0>(srcTensor.shape());
         const uint32_t dValue = tla::get<1>(srcTensor.shape());
         const uint32_t srcDValue = tla::get<0>(srcTensor.stride());
@@ -1104,6 +1110,13 @@ struct TileCopyTla<Arch::AtlasA2,
     CATLASS_DEVICE
     void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
     {
+        static_assert(tla::detail::isColumnMajor<typename TensorSrc::Layout>::value &&
+                      tla::detail::isnZ<typename TensorDst::Element, typename TensorDst::Layout>::value &&
+                      TensorSrc::position == AscendC::TPosition::GM &&
+                      TensorDst::position == AscendC::TPosition::A1,
+            "The input parameters do not match. TensorSrc must be GM and ColumnMajor, "
+            "while TensorDst must be L1 and nZ");
+
         const uint32_t nValue = tla::get<1>(srcTensor.shape());
         const uint32_t dValue = tla::get<0>(srcTensor.shape());
         const uint32_t srcDValue = tla::get<1>(srcTensor.stride());
@@ -1140,14 +1153,11 @@ struct TileCopyTla<Arch::AtlasA2,
 };
 
 /// Partial specialization for TileCopyTlaExt, CopyGmToL1, AtlasA2, PaddingRowMajor in and zN out.
-template <class ElementSrc, class ElementDst, class LayoutSrc_, class LayoutDst_>
-struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::GM>,
-    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst_, AscendC::TPosition::A1>,
+template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+struct TileCopyTla<Arch::AtlasA2,
+    tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::GM>,
+    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::A1>,
     layout::RowMajor, layout::zN> {
-    using LayoutDst = LayoutDst_;
-    using LayoutSrc = LayoutSrc_;
-    using TensorDst = tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, AscendC::TPosition::A1>;
-    using TensorSrc = tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, AscendC::TPosition::GM>;
     using ActualShape = tla::Shape<uint32_t, uint32_t>;
 
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
@@ -1157,9 +1167,16 @@ struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSr
     CATLASS_DEVICE
     TileCopyTlaExt() {};
 
+    template <class TensorDst, class TensorSrc>
     CATLASS_DEVICE
     void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor, ActualShape actualShape)
     {
+        static_assert(tla::detail::isRowMajor<typename TensorSrc::Layout>::value &&
+                      tla::detail::iszN<typename TensorDst::Element, typename TensorDst::Layout>::value &&
+                      TensorSrc::position == AscendC::TPosition::GM &&
+                      TensorDst::position == AscendC::TPosition::A1,
+            "The input parameters do not match. TensorSrc must be GM and RowMajor, while TensorDst must be L1 and zN");
+
         AscendC::Nd2NzParams intriParams;
 
         intriParams.ndNum = 1;
@@ -1171,19 +1188,18 @@ struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSr
         intriParams.nValue = tla::get<0>(actualShape);
         intriParams.srcDValue = tla::get<0>(srcTensor.stride());
         intriParams.dstNzNStride = tla::get<0, 0>(dstTensor.stride()) / ELE_NUM_PER_C0;
-        AscendC::DataCopy(dstTensor.data(), srcTensor.data(), intriParams);
+        auto dstOffset = dstTensor.layout()(dstTensor.coord());
+        auto srcOffset = srcTensor.layout()(srcTensor.coord());
+        AscendC::DataCopy(dstTensor.data()[dstOffset], srcTensor.data()[srcOffset], intriParams);
     }
 };
 
 /// Partial specialization for TileCopyTlaExt, CopyGmToL1, AtlasA2, PaddingRowMajor in and zN out.
-template <class ElementSrc, class ElementDst, class LayoutSrc_, class LayoutDst_>
-struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::GM>,
-    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst_, AscendC::TPosition::A1>,
+template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+struct TileCopyTla<Arch::AtlasA2,
+    tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::GM>,
+    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::A1>,
     layout::PaddingRowMajor, layout::zN> {
-    using LayoutDst = LayoutDst_;
-    using LayoutSrc = LayoutSrc_;
-    using TensorDst = tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, AscendC::TPosition::A1>;
-    using TensorSrc = tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, AscendC::TPosition::GM>;
     using ActualShape = tla::Shape<uint32_t, uint32_t>;
 
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
@@ -1193,9 +1209,15 @@ struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSr
     CATLASS_DEVICE
     TileCopyTlaExt() {};
 
+    template <class TensorDst, class TensorSrc>
     CATLASS_DEVICE
     void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor, ActualShape actualShape)
     {
+        static_assert(tla::detail::iszN<typename TensorDst::Element, typename TensorDst::Layout>::value &&
+                      TensorSrc::position == AscendC::TPosition::GM &&
+                      TensorDst::position == AscendC::TPosition::A1,
+            "The input parameters do not match. TensorSrc must be GM and PaddingRowMajor, "
+            "while TensorDst must be L1 and zN");
         AscendC::Nd2NzParams intriParams;
 
         intriParams.ndNum = 1;
@@ -1207,19 +1229,18 @@ struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSr
         intriParams.nValue = tla::get<0>(actualShape);
         intriParams.srcDValue = tla::get<0, 0>(srcTensor.stride());
         intriParams.dstNzNStride = tla::get<0, 0>(dstTensor.stride()) / ELE_NUM_PER_C0;
-        AscendC::DataCopy(dstTensor.data(), srcTensor.data(), intriParams);
+        auto dstOffset = dstTensor.layout()(dstTensor.coord());
+        auto srcOffset = srcTensor.layout()(srcTensor.coord());
+        AscendC::DataCopy(dstTensor.data()[dstOffset], srcTensor.data()[srcOffset], intriParams);
     }
 };
 
 /// Partial specialization for TileCopyTlaExt, CopyGmToL1, AtlasA2, PaddingColumnMajor in and nZ out.
-template <class ElementSrc, class ElementDst, class LayoutSrc_, class LayoutDst_>
-struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::GM>,
-    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst_, AscendC::TPosition::A1>,
+template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+struct TileCopyTla<Arch::AtlasA2,
+    tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::GM>,
+    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::A1>,
     layout::ColumnMajor, layout::nZ> {
-    using LayoutDst = LayoutDst_;
-    using LayoutSrc = LayoutSrc_;
-    using TensorDst = tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, AscendC::TPosition::A1>;
-    using TensorSrc = tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, AscendC::TPosition::GM>;
     using ActualShape = tla::Shape<uint32_t, uint32_t>;
 
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
@@ -1229,9 +1250,17 @@ struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSr
     CATLASS_DEVICE
     TileCopyTlaExt() {};
 
+    template <class TensorDst, class TensorSrc>
     CATLASS_DEVICE
     void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor, ActualShape actualShape)
     {
+        static_assert(tla::detail::isColumnMajor<typename TensorSrc::Layout>::value &&
+                      tla::detail::isnZ<typename TensorDst::Element, typename TensorDst::Layout>::value &&
+                      TensorSrc::position == AscendC::TPosition::GM &&
+                      TensorDst::position == AscendC::TPosition::A1,
+            "The input parameters do not match. TensorSrc must be GM and ColumnMajor, "
+            "while TensorDst must be L1 and nZ");
+
         AscendC::Nd2NzParams intriParams;
 
         intriParams.ndNum = 1;
@@ -1243,19 +1272,18 @@ struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSr
         intriParams.nValue = tla::get<1>(actualShape);
         intriParams.srcDValue = tla::get<1>(srcTensor.stride());
         intriParams.dstNzNStride = tla::get<1, 0>(dstTensor.stride()) / ELE_NUM_PER_C0;
-        AscendC::DataCopy(dstTensor.data(), srcTensor.data(), intriParams);
+        auto dstOffset = dstTensor.layout()(dstTensor.coord());
+        auto srcOffset = srcTensor.layout()(srcTensor.coord());
+        AscendC::DataCopy(dstTensor.data()[dstOffset], srcTensor.data()[srcOffset], intriParams);
     }
 };
 
 /// Partial specialization for TileCopyTlaExt, CopyGmToL1, AtlasA2, PaddingColumnMajor in and nZ out.
-template <class ElementSrc, class ElementDst, class LayoutSrc_, class LayoutDst_>
-struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::GM>,
-    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst_, AscendC::TPosition::A1>,
+template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+struct TileCopyTla<Arch::AtlasA2,
+    tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::GM>,
+    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::A1>,
     layout::PaddingColumnMajor, layout::nZ> {
-    using LayoutDst = LayoutDst_;
-    using LayoutSrc = LayoutSrc_;
-    using TensorDst = tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, AscendC::TPosition::A1>;
-    using TensorSrc = tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, AscendC::TPosition::GM>;
     using ActualShape = tla::Shape<uint32_t, uint32_t>;
 
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
@@ -1265,9 +1293,16 @@ struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSr
     CATLASS_DEVICE
     TileCopyTlaExt() {};
 
+    template <class TensorDst, class TensorSrc>
     CATLASS_DEVICE
     void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor, ActualShape actualShape)
     {
+        static_assert(tla::detail::isnZ<typename TensorDst::Element, typename TensorDst::Layout>::value &&
+                      TensorSrc::position == AscendC::TPosition::GM &&
+                      TensorDst::position == AscendC::TPosition::A1,
+            "The input parameters do not match. TensorSrc must be GM and PaddingColumnMajor, "
+            "while TensorDst must be L1 and nZ");
+
         AscendC::Nd2NzParams intriParams;
 
         intriParams.ndNum = 1;
@@ -1279,7 +1314,9 @@ struct TileCopyTlaExt<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSr
         intriParams.nValue = tla::get<1>(actualShape);
         intriParams.srcDValue = tla::get<1, 0>(srcTensor.stride());
         intriParams.dstNzNStride = tla::get<1, 0>(dstTensor.stride()) / ELE_NUM_PER_C0;
-        AscendC::DataCopy(dstTensor.data(), srcTensor.data(), intriParams);
+        auto dstOffset = dstTensor.layout()(dstTensor.coord());
+        auto srcOffset = srcTensor.layout()(srcTensor.coord());
+        AscendC::DataCopy(dstTensor.data()[dstOffset], srcTensor.data()[srcOffset], intriParams);
     }
 };
 

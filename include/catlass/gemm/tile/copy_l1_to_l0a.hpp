@@ -364,6 +364,12 @@ struct TileCopyTla<Arch::AtlasA2,
     CATLASS_DEVICE
     void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
     {
+        static_assert(tla::detail::iszN<typename TensorSrc::Element, typename TensorSrc::Layout>::value &&
+                      tla::detail::iszZ<typename TensorDst::Element, typename TensorDst::Layout>::value &&
+                      TensorSrc::position == AscendC::TPosition::A1 &&
+                      TensorDst::position == AscendC::TPosition::A2,
+            "The input parameters do not match. TensorSrc must be L1 and zN, while TensorDst must be L0A and zZ");
+
         const uint32_t srcOuterStrideRow = tla::get<0, 1>(srcTensor.stride());
         const uint32_t srcOuterStrideCol = tla::get<1, 1>(srcTensor.stride());
         const uint32_t dstOuterShapeRow = tla::get<0, 1>(dstTensor.shape());
@@ -410,6 +416,12 @@ struct TileCopyTla<Arch::AtlasA2,
     CATLASS_DEVICE
     void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
     {
+        static_assert(tla::detail::isnZ<typename TensorSrc::Element, typename TensorSrc::Layout>::value &&
+                      tla::detail::iszZ<typename TensorDst::Element, typename TensorDst::Layout>::value &&
+                      TensorSrc::position == AscendC::TPosition::A1 &&
+                      TensorDst::position == AscendC::TPosition::A2,
+            "The input parameters do not match. TensorSrc must be L1 and nZ, while TensorDst must be L0A and zZ");
+
         const uint32_t srcOuterStrideRow = tla::get<0, 1>(srcTensor.stride());
         const uint32_t dstOuterShapeRow = tla::get<0, 1>(dstTensor.shape());
         const uint32_t dstOuterShapeCol = tla::get<1, 1>(dstTensor.shape());
@@ -455,6 +467,15 @@ struct TileCopyTla<Arch::AtlasA2,
     CATLASS_DEVICE
     void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
     {
+        static_assert(std::is_same_v<int8_t, typename TensorSrc::Element> &&
+                      std::is_same_v<int8_t, typename TensorDst::Element> &&
+                      tla::detail::isnZ<int8_t, typename TensorSrc::Layout>::value &&
+                      tla::detail::iszZ<int8_t, typename TensorDst::Layout>::value &&
+                      TensorSrc::position == AscendC::TPosition::A1 &&
+                      TensorDst::position == AscendC::TPosition::A2,
+            "The input parameters do not match. TensorSrc must be int8_t, L1 and nZ, "
+            "while TensorDst must be int8_t, L0A and zZ");
+
         const uint32_t srcOuterShapeRow = tla::get<0, 1>(srcTensor.shape());
         const uint32_t srcOuterStrideRow = tla::get<0, 1>(srcTensor.stride());
         const uint32_t dstOuterShapeCol = tla::get<1, 1>(dstTensor.shape());
