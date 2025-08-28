@@ -129,7 +129,7 @@ public:
         for (uint32_t loopIdx = AscendC::GetBlockIdx() / 2; loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()) {
             // Compute block location
             blockIdxCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
-            actualBlockShape = matmulBlockScheduler.GetActualBlockShape(blockIdxCoord)
+            actualBlockShape = matmulBlockScheduler.GetActualBlockShape(blockIdxCoord);
 
             int64_t gmOffsetB = blockIdxCoord.k() * L1TileShape::K * ((params.problemShape.n() + 1) / 2)
                               + (blockIdxCoord.n() * L1TileShape::N + 1) / 2;
@@ -180,9 +180,6 @@ public:
             int64_t gmOffsetB = AscendC::GetBlockIdx() * L1TileShape::K * L1TileShape::N * 2;
             int64_t gmOffsetC = params.layoutC.GetOffset(offsetC);
 
-            MatrixCoord offsetNextA{nextBlockIdCoord.m() * L1TileShape::M, nextBlockIdCoord.k() * L1TileShape::K};
-            int64_t gmOffsetNextA = params.layoutA.GetOffset(offsetNextA);
-            // Compute block-scoped matrix multiply-add
             blockMmad(
                 gmA[gmOffsetA], params.layoutA, gmB[gmOffsetB], gmC[gmOffsetC], params.layoutC,
                 actualBlockShape, deqScalar);
