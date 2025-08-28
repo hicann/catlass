@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_GEMM_BLOCK_BLOCK_MMAD_PINGPONG_BIAS_HPP
-#define CATLASS_GEMM_BLOCK_BLOCK_MMAD_PINGPONG_BIAS_HPP
+#ifndef CATLASS_GEMM_BLOCK_BLOCK_MMAD_PINGPONG_BIAS_QUANT_PERCHN_HPP
+#define CATLASS_GEMM_BLOCK_BLOCK_MMAD_PINGPONG_BIAS_QUANT_PERCHN_HPP
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/resource.hpp"
@@ -30,10 +30,11 @@ template <
     class BType_,
     class CType_,
     class BiasType_,
+    class ScaleType_,
     class TileCopy_,
     class TileMmad_
 >
-struct BlockMmad <
+struct BlockMmadQuantPerchn <
     MmadAtlasA2PingpongBias<ENABLE_UNIT_FLAG_>,
     L1TileShape_,
     L0TileShape_,
@@ -41,6 +42,7 @@ struct BlockMmad <
     BType_,
     CType_,
     BiasType_,
+    ScaleType_,
     TileCopy_,
     TileMmad_
 > {
@@ -58,16 +60,20 @@ public:
     using LayoutC = typename CType_::Layout;
     using ElementBias = typename BiasType_::Element;
     using LayoutBias = typename BiasType_::Layout;
+    using ElementScale = typename ScaleType_::Element;
+    using LayoutScale = typename ScaleType_::Layout;
     using TileMmad = TileMmad_;
     using CopyGmToL1A = typename TileCopy_::CopyGmToL1A;
     using CopyGmToL1B = typename TileCopy_::CopyGmToL1B;
     using CopyGmToL1Bias = typename TileCopy_::CopyGmToL1Bias;
+    using CopyGmToL1Scale = typename TileCopy_::CopyGmToL1Scale;
     using CopyL1ToL0A = typename TileCopy_::CopyL1ToL0A;
     using CopyL1ToL0B = typename TileCopy_::CopyL1ToL0B;
     using CopyL0CToGm = typename TileCopy_::CopyL0CToGm;
     using ElementAccumulator =
         typename Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
     using CopyL1ToBT = typename TileCopy_::CopyL1ToBT;
+    using CopyL1ToFP = typename TileCopy_::CopyL1ToFP;
     using LayoutAInL1 = typename CopyL1ToL0A::LayoutSrc;
     using LayoutBInL1 = typename CopyL1ToL0B::LayoutSrc;
     using LayoutAInL0 = typename CopyL1ToL0A::LayoutDst;
@@ -81,39 +87,40 @@ public:
     static constexpr uint32_t STAGES = DispatchPolicy::STAGES;
     static constexpr uint32_t L1A_SIZE = L1TileShape::M * L1TileShape::K * sizeof(ElementA);
     static constexpr uint32_t L1B_SIZE = L1TileShape::N * L1TileShape::K * sizeof(ElementB);
-    static constexpr uint32_t L1BIAS_SIZE = L1TileShape::N * sizeof(ElementBias);
+    static constexpr uint32_t L1Bias_SIZE = L1TileShape::N * sizeof(ElementBias);
+    static constexpr uint32_t L1Scale_SIZE = L1TileShape::N * sizeof(ElementScale);
     static constexpr uint32_t L0A_SIZE = ArchTag::L0A_SIZE;
     static constexpr uint32_t L0B_SIZE = ArchTag::L0B_SIZE;
-    static constexpr uint32_t L0C_SIZE = ArchTag::L0C_SIZE;
     static constexpr uint32_t L0A_PINGPONG_BUF_SIZE = L0A_SIZE / STAGES;
     static constexpr uint32_t L0B_PINGPONG_BUF_SIZE = L0B_SIZE / STAGES;
 
     // Check LayoutC
     static_assert(std::is_same_v<LayoutC, layout::RowMajor>, "LayoutC only support RowMajor yet!");
+    // Check bias is quant_bias (int32_t)
+    static_assert(std::is_same_v<ElementBias, int32_t>, "ElementBias only support int32_t yet!");
+    // Check deqScale is uint64_t (float32 view as uint64_t)
+    static_assert(std::is_same_v<ElementScale, uint64_t>, "ElementScale only support uint64_t yet!");
 
     // Check L1TileShape
-    static_assert((L1A_SIZE * STAGES + L1B_SIZE * STAGES + L1BIAS_SIZE) <= ArchTag::L1_SIZE,
-                    "L1TileShape exceeding the L1 space!");
+    static_assert((L1A_SIZE * STAGES + L1B_SIZE * STAGES) <= ArchTag::L1_SIZE, "L1TileShape exceeding the L1 space!");
 
     // Check L0TileShape
     static constexpr uint32_t L0A_TILE_SIZE = L0TileShape::M * L0TileShape::K * sizeof(ElementA);
     static constexpr uint32_t L0B_TILE_SIZE = L0TileShape::K * L0TileShape::N * sizeof(ElementB);
-    static constexpr uint32_t L0C_TILE_SIZE = L0TileShape::M * L0TileShape::N * sizeof(ElementAccumulator);
     static_assert((L0A_TILE_SIZE * STAGES) <= L0A_SIZE, "L0TileShape exceeding the L0A space!");
     static_assert((L0B_TILE_SIZE * STAGES) <= L0B_SIZE, "L0TileShape exceeding the L0B space!");
-    static_assert(L0C_TILE_SIZE <= L0C_SIZE, "L0TileShape exceeding the L0C space!");
 
     static_assert(L1TileShape::M == L0TileShape::M && L1TileShape::N == L0TileShape::N,
         "The situation where the basic blocks of L1 and L0 differ on the m and n axes is not supported yet");
-    static_assert(L0TileShape::K <= L1TileShape::K, "L0TileShape::K cannot exceed L1TileShape::K");
 
     /// Construct
     CATLASS_DEVICE
-    BlockMmad(Arch::Resource<ArchTag> &resource, uint32_t l1BufAddrStart = 0)
+    BlockMmadQuantPerchn(Arch::Resource<ArchTag> &resource, uint32_t l1BufAddrStart = 0)
     {
         uint32_t l1AOffset = l1BufAddrStart;
         uint32_t l1BOffset = l1BufAddrStart + L1A_SIZE * STAGES;
         uint32_t l1BiasOffset = l1BufAddrStart + L1A_SIZE * STAGES + L1B_SIZE * STAGES;
+        uint32_t l1ScaleOffset = l1BufAddrStart + L1A_SIZE * STAGES + L1B_SIZE * STAGES + L1Bias_SIZE;
         // Init buffers
         for (uint32_t i = 0; i < STAGES; i++) {
             // Assign L1/L0A/L0B space for each stages
@@ -137,12 +144,14 @@ public:
         l0CTensor = resource.l0CBuf.template GetBufferByByte<ElementAccumulator>(0);
         l1BiasTensor = resource.l1Buf.template GetBufferByByte<ElementBias>(l1BiasOffset);
         l0BiasTensor = resource.btBuf.template GetBufferByByte<ElementAccumulator>(0);
+        l1ScaleTensor = resource.l1Buf.template GetBufferByByte<ElementScale>(l1ScaleOffset);
+        l0ScaleTensor = resource.fpBuf.template GetBufferByByte<ElementScale>(0);
         AscendC::SetFlag<AscendC::HardEvent::FIX_M>(EVENT_ID0);
     }
 
     /// Destructor
     CATLASS_DEVICE
-    ~BlockMmad()
+    ~BlockMmadQuantPerchn()
     {
         for (uint32_t i = 0; i < STAGES; i++) {
             AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[i]);
@@ -160,6 +169,7 @@ public:
         AscendC::GlobalTensor<ElementB> const &gmB, LayoutB const &layoutB,
         AscendC::GlobalTensor<ElementC> const &gmC, LayoutC const &layoutC,
         AscendC::GlobalTensor<ElementBias> const &gmBias,
+        AscendC::GlobalTensor<ElementScale> const &gmScale,
         GemmCoord const &actualShape)
     {
         uint32_t mRound = RoundUp<L1AAlignHelper::M_ALIGNED>(actualShape.m());
@@ -169,6 +179,8 @@ public:
         auto layoutBInL1 = LayoutBInL1::template MakeLayout<ElementB>(L1TileShape::K, L1TileShape::N);
         auto layoutBiasInL1 = layout::VectorLayout(L1TileShape::N);
         auto layoutBiasInL0 = layout::VectorLayout(L0TileShape::N);
+        auto layoutScaleInL1 = layout::VectorLayout(L1TileShape::N);
+        auto layoutScaleInL0 = layout::VectorLayout(L0TileShape::N);
         auto layoutInL0C = LayoutCInL0::MakeLayoutInL0C(MakeCoord(mRound, nRound));
 
         uint32_t kActual = min(actualShape.k(), L1TileShape::K);
@@ -184,9 +196,9 @@ public:
         auto layoutTileB = layoutB.GetTileLayout(MakeCoord(kActual, actualShape.n()));
         copyGmToL1B(l1BTensorList[l1ListId], gmB, layoutBInL1, layoutTileB);
         auto layoutTileBias = layout::VectorLayout(actualShape.n());
-        if (gmBias.GetPhyAddr() != nullptr){
-            copyGmToL1Bias(l1BiasTensor, gmBias, layoutBiasInL1, layoutTileBias);
-        }
+        copyGmToL1Bias(l1BiasTensor, gmBias, layoutBiasInL1, layoutTileBias);
+        auto layoutTileScale = layoutTileBias;
+        copyGmToL1Scale(l1ScaleTensor, gmScale, layoutScaleInL1, layoutTileScale);
         AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
 
         if constexpr (!ENABLE_UNIT_FLAG) {
@@ -285,9 +297,12 @@ public:
                         copyL1ToL0B(l0BTile, l1BTile, layoutBInL0, layoutBInL1);
 
                         // Load bias to l0 biastable
-                        if (gmBias.GetPhyAddr() != nullptr){
-                            copyL1ToBT(l0BiasTensor, l1BiasTensor, layoutBiasInL0, layoutBiasInL1);
-                        }
+                        copyL1ToBT(l0BiasTensor, l1BiasTensor, layoutBiasInL0, layoutBiasInL1);
+
+                        // Load scale to l0 fixpipe
+                        copyL1ToFP(l0ScaleTensor, l1ScaleTensor, layoutScaleInL0, layoutScaleInL1);
+                        AscendC::SetFixPipeConfig(l0ScaleTensor);
+
                         // If the current tile is the last one on the k&n axis, notify to load matrix B from GM to L1
                         if ((kPartIdx == kPartLoop - 1) && (nPartIdx == nPartLoop - 1)) {
                             AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
@@ -317,16 +332,12 @@ public:
                         }
                         // Perform calculation operations
                         if (initC) {
-                            if (gmBias.GetPhyAddr() != nullptr){
-                                 tileMmad(l0CTile, l0ATile, l0BTile, l0BiasTensor, mPartActual, nPartActual, kPartActual,
+                            tileMmad(l0CTile, l0ATile, l0BTile, l0BiasTensor, mPartActual, nPartActual, kPartActual,
                                      initC, unitFlag);
-                            } else {
-                                tileMmad(l0CTile, l0ATile, l0BTile, mPartActual, nPartActual, kPartActual, initC, unitFlag);
-                            }
-
                         } else {
-                             tileMmad(l0CTile, l0ATile, l0BTile, mPartActual, nPartActual, kPartActual, initC, unitFlag);
+                            tileMmad(l0CTile, l0ATile, l0BTile, mPartActual, nPartActual, kPartActual, initC, unitFlag);
                         }
+
                         // Notify to move the next L0B tile
                         AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0BListId]);
                         l0BListId = (l0BListId + 1 < STAGES) ? (l0BListId + 1) : 0;
@@ -341,6 +352,8 @@ public:
 
         // copy block out
         LayoutC layoutBlock = layoutC.GetTileLayout(actualShape.GetCoordMN());
+        // sync fp descale tensor copy
+        AscendC::PipeBarrier<PIPE_FIX>();
 
         if constexpr (!ENABLE_UNIT_FLAG) {
             AscendC::SetFlag<AscendC::HardEvent::M_FIX>(EVENT_ID0);
@@ -357,10 +370,12 @@ protected:
     AscendC::LocalTensor<ElementA> l1ATensorList[STAGES];
     AscendC::LocalTensor<ElementB> l1BTensorList[STAGES];
     AscendC::LocalTensor<ElementBias> l1BiasTensor;
+    AscendC::LocalTensor<ElementScale> l1ScaleTensor;
     AscendC::LocalTensor<ElementA> l0ATensorList[STAGES];
     AscendC::LocalTensor<ElementB> l0BTensorList[STAGES];
     AscendC::LocalTensor<ElementAccumulator> l0CTensor;
     AscendC::LocalTensor<ElementAccumulator> l0BiasTensor;
+    AscendC::LocalTensor<ElementScale> l0ScaleTensor;
 
     // Multi-stage event id list
     int32_t l1AEventList[STAGES];
@@ -377,12 +392,14 @@ protected:
     CopyGmToL1A copyGmToL1A;
     CopyGmToL1B copyGmToL1B;
     CopyGmToL1Bias copyGmToL1Bias;
+    CopyGmToL1Scale copyGmToL1Scale;
     CopyL1ToL0A copyL1ToL0A;
     CopyL1ToL0B copyL1ToL0B;
     CopyL1ToBT copyL1ToBT;
+    CopyL1ToFP copyL1ToFP;
     CopyL0CToGm copyL0CToGm;
 };
 
 } // namespace Catlass::Gemm::Block
 
-#endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_PINGPONG_BIAS_HPP
+#endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_PINGPONG_BIAS_QUANT_PERCHN_HPP
