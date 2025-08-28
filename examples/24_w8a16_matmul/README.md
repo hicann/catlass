@@ -1,4 +1,4 @@
-# OptimizedMatmul Example Readme
+# W8A16Matmul Example Readme
 ## 代码组织
 ```
 ├── 24_w8a16_matmul
@@ -7,7 +7,8 @@
 │   └── w8a16_matmul.cpp # 主文件
 ```
 ## 功能介绍
-该算子基于optimized_matmul增加反量化功能，将输入B矩阵从int8转到float16，再与deqZeroPoint求和后和deqScalar做乘法。
+- 该算子基于optimized_matmul增加反量化功能，将输入B矩阵从int8转到float16，再与deqZeroPoint求和后和deqScalar做乘法。
+- 当前实现仅支持RowMajor、ColumnMajor数据排布。
 ## 使用示例
 - 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/quickstart.md#算子编译)
 - 执行算子
