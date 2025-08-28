@@ -766,13 +766,15 @@
          auto gMaskThisSubBlock = gMask[offsetMask];
          auto layoutMaskThisSubBlock = layoutMask;
 
-
          uint32_t maxRowNumPerLoop = MAX_UB_S_ELEM_NUM / columnNumRound;
          uint32_t rowNumTile = RoundDown(maxRowNumPerLoop, FLOAT_BLOCK_SIZE);
          uint32_t rowLoopNum = CeilDiv(rowActualThisSubBlock, rowNumTile);
-         uint32_t preLoad = 1;
+         uint32_t preLoad = 1;         
          
-         Arch::CrossCoreWaitFlag(qkReady);
+         if (rowActualThisSubBlock == 0 ){
+             Arch::CrossCoreWaitFlag(qkReady);
+             return;
+         }
 
          for (uint32_t rowLoopIdx = 0; rowLoopIdx < rowLoopNum + preLoad; rowLoopIdx++) {
             if(rowLoopIdx < rowLoopNum){
@@ -795,7 +797,8 @@
                     AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID2);
                     CopyMaskGmToUb(gMaskThisSubBlock, columnNum, columnNumRound, maskStride,
                         qSBlockSize, proTokenIdx, proTokenNum, integralHeadNum, epiTokenNum);
-                    AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID2);                    
+                    AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID2); 
+                    Arch::CrossCoreWaitFlag(qkReady);                                       
                 }
                 int64_t offsetInput = layoutInput.GetOffset(MatrixCoord(rowOffsetIoGm, 0));
                 auto gInputCurLoop = gInput[offsetInput];
