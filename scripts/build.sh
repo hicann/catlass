@@ -166,12 +166,25 @@ function build_torch_library() {
     echo -e "${INFO}Torch library built successfully${NC}"
 }
 
+function build_mstuner_catlass() {
+    echo -e "${INFO}Building mstuner_catlass...${NC}"
+    cmake -S "$CMAKE_SOURCE_DIR" -B "$BUILD_DIR" "${CMAKE_OPTIONS[@]}"
+    cmake --build build --target mstuner_catlass -j
+    cmake --install build --component catlass_kernels
+    cmake --install build --component mstuner_catlass
+    echo -e "${INFO}mstuner_catlass built successfully${NC}"
+}
+
+# 执行构建
 case "$TARGET" in
     python_extension)
         build_python_extension
         ;;
     torch_library)
         build_torch_library
+        ;;
+    mstuner_catlass)
+        build_mstuner_catlass
         ;;
     *)
         echo -e "${INFO}Building target: $TARGET...${NC}"
