@@ -41,7 +41,8 @@ link_directories(${ASCEND_HOME_PATH}/lib64
 
 link_libraries(catlass_kernel_static "${TORCH_LIBRARIES}" torch_npu tiling_api)
 
-add_library(catlass_kernel_wrapper OBJECT ${CMAKE_CURRENT_SOURCE_DIR}/src/wrapper/catlass_kernel_wrapper.cpp)
+file(GLOB WRAPPER_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/wrapper/*.cpp)
+add_library(catlass_kernel_wrapper OBJECT ${WRAPPER_SOURCES})
 target_compile_options(catlass_kernel_wrapper PRIVATE -fPIC)
 
 if(BUILD_PYBIND)

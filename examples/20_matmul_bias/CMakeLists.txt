@@ -7,4 +7,4 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 
 set_source_files_properties(matmul_bias.cpp PROPERTIES LANGUAGE ASCEND)
-catlass_example_add_executable(20_matmul_bias dav-c220 matmul_bias.cpp)
+catlass_example_add_executable(20_matmul_bias dav-c220-cube matmul_bias.cpp)
