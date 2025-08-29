@@ -96,37 +96,23 @@ struct MakeIntTupleImpl<N, tla::index_sequence<Is...>> {
 };
 
 template <size_t N>
-using MakeIntTuple = typename MakeIntTupleImpl<N, tla::make_index_sequence<N>>::type;
+using MakeZeroTuple = typename MakeIntTupleImpl<N, tla::make_index_sequence<N>>::type;
 
 } // end namespace detail
-
-template <class BuiltinTensor, class Layout, AscendC::TPosition Position>
-CATLASS_HOST_DEVICE constexpr
-auto MakeTensor(BuiltinTensor const& builtinTensor, Layout const& layout)
-{
-    using Coord = detail::MakeIntTuple<Layout::rank>;
-    return Tensor<BuiltinTensor, Layout, Coord, Position>(builtinTensor, layout);
-}
 
 template <class BuiltinTensor, class Layout, class PositionType>
 CATLASS_HOST_DEVICE constexpr
 auto MakeTensor(BuiltinTensor const& builtinTensor, Layout const& layout, PositionType)
 {
-    return MakeTensor<BuiltinTensor, Layout, PositionType::POSITION>(builtinTensor, layout);
-}
-
-template <class BuiltinTensor, class Layout, class Coord, AscendC::TPosition Position>
-CATLASS_HOST_DEVICE constexpr
-auto MakeTensor(BuiltinTensor const& builtinTensor, Layout const& layout, Coord const& coord)
-{
-    return Tensor<BuiltinTensor, Layout, Coord, Position>(builtinTensor, layout, coord);
+    using Coord = detail::MakeZeroTuple<Layout::rank>;
+    return Tensor<BuiltinTensor, Layout, Coord, PositionType::value>(builtinTensor, layout);
 }
 
 template <class BuiltinTensor, class Layout, class Coord, class PositionType>
 CATLASS_HOST_DEVICE constexpr
 auto MakeTensor(BuiltinTensor const& builtinTensor, Layout const& layout, Coord const& coord, PositionType)
 {
-    return Tensor<BuiltinTensor, Layout, Coord, PositionType::POSITION>(builtinTensor, layout, coord);
+    return Tensor<BuiltinTensor, Layout, Coord, PositionType::value>(builtinTensor, layout, coord);
 }
 
 template <class Tensor, class Coord, class Shape>
@@ -137,8 +123,7 @@ auto GetTile(Tensor const& tensor, Coord const& coord, Shape const& shape)
     auto builtinTensor = tensor.data();
     auto layoutNew = MakeLayoutTile(layout, shape);
     auto coordNew = Add(tensor.coord(), coord);
-    return MakeTensor<decltype(builtinTensor), decltype(layoutNew), decltype(coordNew), Tensor::position>(
-        builtinTensor, layoutNew, coordNew);
+    return MakeTensor(builtinTensor, layoutNew, coordNew, Catlass::Arch::PositionType<Tensor::position>{});
 }
 
 } // end namespace tla

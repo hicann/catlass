@@ -95,9 +95,9 @@ public:
         }
     }
 
-    template <class TensorOut, class TensorIn>
+    template <class TensorDst, class TensorSrc>
     CATLASS_DEVICE
-    void operator()(TensorOut &tensorDst, TensorIn const& tensorSrc)
+    void operator()(TensorDst &tensorDst, TensorSrc const& tensorSrc)
     {
         auto paddingTensorSrc = GetPaddingTensorSrc(tensorSrc);
         auto paddingTensorDst = GetPaddingTensorDst(tensorDst);

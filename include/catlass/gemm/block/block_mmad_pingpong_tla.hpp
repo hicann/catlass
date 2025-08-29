@@ -111,8 +111,8 @@ public:
     static_assert(L1_TILE_M == L0_TILE_M && L1_TILE_N == L0_TILE_N,
         "The situation where the basic blocks of L1 and L0 differ on the m and n axes is not supported yet");
 
-    static constexpr auto L1A_LAYOUT = tla::MakeLayout<ElementA, LayoutTagL1A>(L1_TILE_M, L1_TILE_K);
-    static constexpr auto L1B_LAYOUT = tla::MakeLayout<ElementB, LayoutTagL1B>(L1_TILE_K, L1_TILE_N);
+    static constexpr auto L1A_LAYOUT = tla::MakeLayout<ElementA, LayoutTagL1A>(Int<L1_TILE_M>{}, Int<L1_TILE_K>{});
+    static constexpr auto L1B_LAYOUT = tla::MakeLayout<ElementB, LayoutTagL1B>(Int<L1_TILE_K>{}, Int<L1_TILE_N>{});
 
     /// Construct
     CATLASS_DEVICE

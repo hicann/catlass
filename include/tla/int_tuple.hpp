@@ -23,6 +23,7 @@ namespace tla {
 //
 
 namespace detail {
+
 template <class T, class F, int... I>
 CATLASS_HOST_DEVICE constexpr
 auto apply(T&& t, F&& f, seq<I...>)
@@ -32,16 +33,14 @@ auto apply(T&& t, F&& f, seq<I...>)
 
 template <class T, class F, class G, int... I>
 CATLASS_HOST_DEVICE constexpr
-auto
-tapply(T&& t, F&& f, G&& g, seq<I...>)
+auto tapply(T&& t, F&& f, G&& g, seq<I...>)
 {
     return g(f(get<I>(static_cast<T&&>(t)))...);
 }
 
 template <class T0, class T1, class F, class G, int... I>
 CATLASS_HOST_DEVICE constexpr
-auto
-tapply(T0&& t0, T1&& t1, F&& f, G&& g, seq<I...>)
+auto tapply(T0&& t0, T1&& t1, F&& f, G&& g, seq<I...>)
 {
     return g(f(get<I>(static_cast<T0&&>(t0)),
                get<I>(static_cast<T1&&>(t1)))...);
@@ -58,8 +57,7 @@ auto apply(T&& t, F&& f)
 
 template <class T, class F, class G>
 CATLASS_HOST_DEVICE constexpr
-auto
-transform_apply(T&& t, F&& f, G&& g)
+auto transform_apply(T&& t, F&& f, G&& g)
 {
     if constexpr (is_tuple<remove_cvref_t<T>>::value) {
         return detail::tapply(static_cast<T&&>(t), f, g, tuple_seq<T>{});
@@ -68,14 +66,21 @@ transform_apply(T&& t, F&& f, G&& g)
     }
 }
 
+struct UnpackedMakeTuple {
+    template <class... T>
+    CATLASS_HOST_DEVICE constexpr
+    auto operator()(T const&... a) const {
+        return tla::MakeTuple(a...);
+    }
+};
+
 template <class T0, class T1, class F>
 CATLASS_HOST_DEVICE constexpr
-auto
-transform(T0 const& t0, T1 const& t1, F&& f)
+auto transform(T0 const& t0, T1 const& t1, F&& f)
 {
     if constexpr (is_tuple<T0>::value) {
         static_assert(tuple_size<T0>::value == tuple_size<T1>::value, "Mismatched tuple_size");
-        return detail::tapply(t0, t1, f, [](auto const&... a){ return tla::MakeTuple(a...); }, tuple_seq<T0>{});
+        return detail::tapply(t0, t1, f, UnpackedMakeTuple{}, tuple_seq<T0>{});
     } else {
         return f(t0, t1);
     }
@@ -191,8 +196,7 @@ struct MultipliesUnaryLfold {
 struct Product {
     template <class IntTuple>
     CATLASS_HOST_DEVICE constexpr
-    auto
-    operator()(IntTuple const& a) const
+    auto operator()(IntTuple const& a) const
     {
         if constexpr (is_tuple<IntTuple>::value) {
             if constexpr (tuple_size<IntTuple>::value == 0) {
@@ -207,15 +211,26 @@ struct Product {
 };
 static const CATLASS_HOST_DEVICE Product product;
 
-// add a and b
+// Add
 template <class IntTupleA, class IntTupleB>
 CATLASS_HOST_DEVICE constexpr
-auto
-Add(IntTupleA const& a, IntTupleB const& b)
+auto Add(IntTupleA const& a, IntTupleB const& b);
+
+struct UnpackedAdd {
+    template <class IntTupleA, class IntTupleB>
+    CATLASS_HOST_DEVICE constexpr
+    auto operator()(IntTupleA const& x, IntTupleB const& y) const {
+        return Add(x, y);
+    }
+};
+
+template <class IntTupleA, class IntTupleB>
+CATLASS_HOST_DEVICE constexpr
+auto Add(IntTupleA const& a, IntTupleB const& b)
 {
     if constexpr (is_tuple<IntTupleA>::value && is_tuple<IntTupleB>::value) {
         static_assert(tuple_size<IntTupleA>::value == tuple_size<IntTupleB>::value, "Mismatched ranks");
-        return transform(a, b, [](auto const& x, auto const& y) { return Add(x, y); });
+        return transform(a, b, UnpackedAdd{});
     } else {
         return tla::add(a, b);
     }
