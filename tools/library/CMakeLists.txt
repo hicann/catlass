@@ -8,14 +8,14 @@
 
 message(STATUS "CATLASS_LIBRARY_KERNELS=${CATLASS_LIBRARY_KERNELS}")
 
-set(AICORE_ARCH dav-c220)
+set(ARCH "AtlasA2")
 
 find_package(Python COMPONENTS Interpreter REQUIRED)
 execute_process(
     COMMAND ${Python_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/code_generator.py
         --kernels ${CATLASS_LIBRARY_KERNELS}
         --workspace-dir ${CMAKE_CURRENT_BINARY_DIR}
-        --arch ${AICORE_ARCH}
+        --arch ${ARCH}
     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
     RESULT_VARIABLE CATLASS_LIBRARY_CODE_GENERATION_RESULT
     OUTPUT_FILE ${CMAKE_CURRENT_BINARY_DIR}/catlass_library_code_generation.log
@@ -28,9 +28,6 @@ if(NOT CATLASS_LIBRARY_CODE_GENERATION_RESULT EQUAL 0)
 endif()
 
 file(GLOB_RECURSE CATLASS_LIBRARY_GENERATED_SRCS CONFIGURE_DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/generated/*.cpp)
-foreach(src ${CATLASS_LIBRARY_GENERATED_SRCS})
-    message(STATUS "Generating ${src}")
-endforeach()
 
 message(STATUS "Catlass library operator code was generated successfully.")
 
@@ -56,6 +53,7 @@ add_library(catlass_kernels SHARED
     src/manifest.cpp
 )
 
+set(AICORE_ARCH dav-c220)
 target_compile_options(catlass_kernels PRIVATE $<$<COMPILE_LANGUAGE:ASCEND>:--cce-aicore-arch=${AICORE_ARCH}>)
 
 
