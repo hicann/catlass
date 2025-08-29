@@ -104,7 +104,7 @@ cd output/bin
 - [msProf&Profiling](./docs/tools/performance_tools.md) - 性能调优工具`msProf`和`Profiling`
   - [单算子性能分析：msProf](./docs/tools/performance_tools.md#用msProf进行单算子性能分析)
   - [整网性能分析：Profiling](./docs/tools/performance_tools.md#用Profiling进行整网性能分析)
-- [msTuner](./tools/tuner/README.md) - Tiling自动寻优工具
+- [msTuner_CATLASS](./tools/tuner/README.md) - Tiling自动寻优工具
 
 ## 👥 合作贡献者
 
