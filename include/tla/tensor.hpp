@@ -11,6 +11,7 @@
 #ifndef TLA_TENSOR_HPP
 #define TLA_TENSOR_HPP
 
+#include "catlass/arch/arch.hpp"
 #include "tla/layout.hpp"                     // tla::Shape
 #include "tla/numeric/integral_constant.hpp"  // tla::is_integral
 #include "tla/numeric/integer_sequence.hpp"

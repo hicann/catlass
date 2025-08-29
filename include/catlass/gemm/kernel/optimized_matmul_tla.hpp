@@ -39,16 +39,16 @@ public:
     using LayoutOut = typename TensorOut::Layout;
 
     using LayoutInner = tla::Layout<tla::Shape<uint32_t, uint32_t>, tla::Stride<int64_t, tla::Int<1>>>;
-    using TensorInnerUb =
-        tla::Tensor<AscendC::LocalTensor<Element>, LayoutInner, tla::Coord<_0, _0>, AscendC::TPosition::VECCALC>;
+    using TensorInnerUb = tla::Tensor<AscendC::LocalTensor<Element>, LayoutInner, tla::Coord<tla::_0, tla::_0>,
+        AscendC::TPosition::VECCALC>;
     using TensorInnerSrcGm =
-        tla::Tensor<AscendC::GlobalTensor<Element>, LayoutInner, tla::Coord<_0, _0>, AscendC::TPosition::GM>;
+        tla::Tensor<AscendC::GlobalTensor<Element>, LayoutInner, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
 
     using LayoutInnerDstGm = tla::Layout<
         tla::Shape<tla::Shape<uint32_t, uint32_t>, tla::Shape<uint32_t, uint32_t>>,
         tla::Stride<tla::Stride<int64_t, int64_t>, tla::Stride<tla::Int<1>, int64_t>>>;
-    using TensorInnerDstGm =
-        tla::Tensor<AscendC::GlobalTensor<Element>, LayoutInnerDstGm, tla::Coord<_0, _0>, AscendC::TPosition::GM>;
+    using TensorInnerDstGm = tla::Tensor<AscendC::GlobalTensor<Element>, LayoutInnerDstGm, tla::Coord<tla::_0, tla::_0>,
+        AscendC::TPosition::GM>;
 
     using CopyGm2Ub = Catlass::Gemm::Tile::TileCopyTla<ArchTag, TensorInnerSrcGm, TensorInnerUb>;
     using CopyUb2Gm = Catlass::Gemm::Tile::TileCopyTlaExt<ArchTag, TensorInnerUb,

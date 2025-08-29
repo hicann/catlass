@@ -217,12 +217,12 @@ void Run(Options const &options)
     auto layoutA = MakeLayoutFromTag(tagA);
     auto layoutB = MakeLayoutFromTag(tagB);
     auto layoutC = MakeLayoutFromTag(tagC);
-    using TensorA =
-        Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutA), tla::Coord<_0, _0>, AscendC::TPosition::GM>;
-    using TensorB =
-        Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutB), tla::Coord<_0, _0>, AscendC::TPosition::GM>;
-    using TensorC =
-        Tensor<AscendC::GlobalTensor<ElementC>, decltype(layoutC), tla::Coord<_0, _0>, AscendC::TPosition::GM>;
+    using TensorA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutA), tla::Coord<tla::_0, tla::_0>,
+        AscendC::TPosition::GM>;
+    using TensorB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutB), tla::Coord<tla::_0, tla::_0>,
+        AscendC::TPosition::GM>;
+    using TensorC = Tensor<AscendC::GlobalTensor<ElementC>, decltype(layoutC), tla::Coord<tla::_0, tla::_0>,
+        AscendC::TPosition::GM>;
 
     // if LayoutA and LayoutB is both ColumnMajor,
     // L1TileShape using GemmShape<256, 128, 256> can achieve better performance.
@@ -234,10 +234,10 @@ void Run(Options const &options)
         // no need to padding A and B.
         auto layoutWA = MakeLayout(layoutA.shape(), layoutA.stride());
         auto layoutWB = MakeLayout(layoutB.shape(), layoutB.stride());
-        using TensorWA =
-            Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutWA), tla::Coord<_0, _0>, AscendC::TPosition::GM>;
-        using TensorWB =
-            Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutWB), tla::Coord<_0, _0>, AscendC::TPosition::GM>;
+        using TensorWA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutWA), tla::Coord<tla::_0, tla::_0>,
+            AscendC::TPosition::GM>;
+        using TensorWB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutWB), tla::Coord<tla::_0, tla::_0>,
+            AscendC::TPosition::GM>;
         using TileCopy = Gemm::Tile::PaddingPackedTileCopyTla<ArchTag, TensorWA, LayoutTagA, TensorWB, LayoutTagB,
             TensorC, LayoutTagC, void, void, false, false>;
         using BlockMmad = Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB,
@@ -293,10 +293,10 @@ void Run(Options const &options)
         // no need to padding A, but B needs padding.
         auto layoutWA = MakeLayout(layoutA.shape(), layoutA.stride());
         auto layoutWB = GetPaddingLayout(tagB, get<2>(L1TileShape{}), get<1>(L1TileShape{}));
-        using TensorWA =
-            Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutWA), tla::Coord<_0, _0>, AscendC::TPosition::GM>;
-        using TensorWB =
-            Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutWB), tla::Coord<_0, _0>, AscendC::TPosition::GM>;
+        using TensorWA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutWA), tla::Coord<tla::_0, tla::_0>,
+            AscendC::TPosition::GM>;
+        using TensorWB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutWB), tla::Coord<tla::_0, tla::_0>,
+            AscendC::TPosition::GM>;
         using TileCopy = Gemm::Tile::PaddingPackedTileCopyTla<ArchTag, TensorWA, LayoutTagA, TensorWB, LayoutTagB,
             TensorC, LayoutTagC, void, void, false, true>;
         using BlockMmad = Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB,
@@ -353,10 +353,10 @@ void Run(Options const &options)
         // no need to padding B, but A needs padding.
         auto layoutWA = GetPaddingLayout(tagA, get<0>(L1TileShape{}), get<2>(L1TileShape{}));
         auto layoutWB = MakeLayout(layoutB.shape(), layoutB.stride());
-        using TensorWA =
-            Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutWA), tla::Coord<_0, _0>, AscendC::TPosition::GM>;
-        using TensorWB =
-            Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutWB), tla::Coord<_0, _0>, AscendC::TPosition::GM>;
+        using TensorWA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutWA), tla::Coord<tla::_0, tla::_0>,
+            AscendC::TPosition::GM>;
+        using TensorWB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutWB), tla::Coord<tla::_0, tla::_0>,
+            AscendC::TPosition::GM>;
         using TileCopy = Gemm::Tile::PaddingPackedTileCopyTla<ArchTag, TensorWA, LayoutTagA, TensorWB, LayoutTagB,
             TensorC, LayoutTagC, void, void, true, false>;
         using BlockMmad = Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB,
@@ -413,10 +413,10 @@ void Run(Options const &options)
         // Both A and B need padding.
         auto layoutWA = GetPaddingLayout(tagA, get<0>(L1TileShape{}), get<2>(L1TileShape{}));
         auto layoutWB = GetPaddingLayout(tagB, get<2>(L1TileShape{}), get<1>(L1TileShape{}));
-        using TensorWA =
-            Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutWA), tla::Coord<_0, _0>, AscendC::TPosition::GM>;
-        using TensorWB =
-            Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutWB), tla::Coord<_0, _0>, AscendC::TPosition::GM>;
+        using TensorWA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutWA), tla::Coord<tla::_0, tla::_0>,
+            AscendC::TPosition::GM>;
+        using TensorWB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutWB), tla::Coord<tla::_0, tla::_0>,
+            AscendC::TPosition::GM>;
         using TileCopy = Gemm::Tile::PaddingPackedTileCopyTla<ArchTag, TensorWA, LayoutTagA, TensorWB, LayoutTagB,
             TensorC, LayoutTagC, void, void, true, true>;
         using BlockMmad = Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB,

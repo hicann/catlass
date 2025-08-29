@@ -100,15 +100,15 @@ struct PackedTileCopyTla {
     using LayoutL0C = typename detail::LayoutL0C;
 
     using TensorL1A =
-        tla::Tensor<AscendC::LocalTensor<ElementA>, LayoutL1A, tla::Coord<_0, _0>, AscendC::TPosition::A1>;
+        tla::Tensor<AscendC::LocalTensor<ElementA>, LayoutL1A, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::A1>;
     using TensorL1B =
-        tla::Tensor<AscendC::LocalTensor<ElementB>, LayoutL1B, tla::Coord<_0, _0>, AscendC::TPosition::A1>;
+        tla::Tensor<AscendC::LocalTensor<ElementB>, LayoutL1B, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::A1>;
     using TensorL0A =
-        tla::Tensor<AscendC::LocalTensor<ElementA>, LayoutL0A, tla::Coord<_0, _0>, AscendC::TPosition::A2>;
+        tla::Tensor<AscendC::LocalTensor<ElementA>, LayoutL0A, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::A2>;
     using TensorL0B =
-        tla::Tensor<AscendC::LocalTensor<ElementB>, LayoutL0B, tla::Coord<_0, _0>, AscendC::TPosition::B2>;
-    using TensorL0C =
-        tla::Tensor<AscendC::LocalTensor<ElementAccumulator>, LayoutL0C, tla::Coord<_0, _0>, AscendC::TPosition::CO1>;
+        tla::Tensor<AscendC::LocalTensor<ElementB>, LayoutL0B, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::B2>;
+    using TensorL0C = tla::Tensor<AscendC::LocalTensor<ElementAccumulator>, LayoutL0C, tla::Coord<tla::_0, tla::_0>,
+        AscendC::TPosition::CO1>;
 
     using L1AAlignHelper = Gemm::helper::L1AlignHelper<ElementA, LayoutTagA>;
     using L1BAlignHelper = Gemm::helper::L1AlignHelper<ElementB, LayoutTagB>;
@@ -162,15 +162,15 @@ struct PaddingPackedTileCopyTla {
     using LayoutL0C = typename detail::LayoutL0C;
 
     using TensorL1A =
-        tla::Tensor<AscendC::LocalTensor<ElementA>, LayoutL1A, tla::Coord<_0, _0>, AscendC::TPosition::A1>;
+        tla::Tensor<AscendC::LocalTensor<ElementA>, LayoutL1A, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::A1>;
     using TensorL1B =
-        tla::Tensor<AscendC::LocalTensor<ElementB>, LayoutL1B, tla::Coord<_0, _0>, AscendC::TPosition::A1>;
+        tla::Tensor<AscendC::LocalTensor<ElementB>, LayoutL1B, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::A1>;
     using TensorL0A =
-        tla::Tensor<AscendC::LocalTensor<ElementA>, LayoutL0A, tla::Coord<_0, _0>, AscendC::TPosition::A2>;
+        tla::Tensor<AscendC::LocalTensor<ElementA>, LayoutL0A, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::A2>;
     using TensorL0B =
-        tla::Tensor<AscendC::LocalTensor<ElementB>, LayoutL0B, tla::Coord<_0, _0>, AscendC::TPosition::B2>;
-    using TensorL0C =
-        tla::Tensor<AscendC::LocalTensor<ElementAccumulator>, LayoutL0C, tla::Coord<_0, _0>, AscendC::TPosition::CO1>;
+        tla::Tensor<AscendC::LocalTensor<ElementB>, LayoutL0B, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::B2>;
+    using TensorL0C = tla::Tensor<AscendC::LocalTensor<ElementAccumulator>, LayoutL0C, tla::Coord<tla::_0, tla::_0>,
+        AscendC::TPosition::CO1>;
 
     using L1AAlignHelper = Gemm::helper::L1AlignHelper<ElementA, LayoutTagA>;
     using L1BAlignHelper = Gemm::helper::L1AlignHelper<ElementB, LayoutTagB>;
