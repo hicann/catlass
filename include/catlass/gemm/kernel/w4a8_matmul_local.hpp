@@ -141,7 +141,7 @@ public:
             int64_t gmOffsetBWksp = (AscendC::GetBlockIdx() / 2) * L1TileShape::K * L1TileShape::N * 2;
 
             // Compute block-scoped matrix multiply-add
-            blockMmad(
+            blockMmad.prologue(
                 gmB[gmOffsetB], params.layoutB,
                 gmWB[gmOffsetBWksp],
                 actualBlockShape, params.problemShape);                      

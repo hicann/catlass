@@ -28,7 +28,7 @@ template <
     class TileShape_,
     uint32_t STAGES = 2
 >
-struct PrologueCastW4A8 {
+struct ConvertW4ToW8 {
     using ElementIn = ElementIn_;
     using ElementOut = ElementOut_;
     using TileShape = TileShape_;
@@ -40,7 +40,7 @@ struct PrologueCastW4A8 {
 
     /// Construct
     CATLASS_DEVICE
-    PrologueCastW4A8(Arch::Resource<ArchTag> &resource, uint32_t ubBufAddrStart = 0) {
+    ConvertW4ToW8(Arch::Resource<ArchTag> &resource, uint32_t ubBufAddrStart = 0) {
         if (g_coreType == AscendC::AIV) {
             uint32_t ubOffset = ubBufAddrStart;
             uint32_t ubInSize = COMPUTE_LEN * sizeof(ElementIn) / 2;
@@ -149,7 +149,7 @@ struct PrologueCastW4A8 {
         
     /// Destructor
     CATLASS_DEVICE
-    ~PrologueCastW4A8() {
+    ~ConvertW4ToW8() {
         if (g_coreType == AscendC::AIV) {
             for (uint32_t i = 0; i < STAGES; i++) {
                 AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(ubEventList[i]);
@@ -223,7 +223,7 @@ public:
     using L1BAlignHelper = Gemm::helper::L1AlignHelper<ElementB, LayoutB>;
 
     using TileShapeB = MatrixShape<L1TileShape::K, L1TileShape::N>;
-    using PrologueCastB = PrologueCastW4A8<ArchTag, int8_t, ElementB, LayoutB, TileShapeB>;
+    using ConvertW4ToW8B = ConvertW4ToW8<ArchTag, int8_t, ElementB, LayoutB, TileShapeB>;
 
     static constexpr bool ENABLE_UNIT_FLAG = DispatchPolicy::ENABLE_UNIT_FLAG;
     static constexpr bool ENABLE_SHUFFLE_K = DispatchPolicy::ENABLE_SHUFFLE_K;
@@ -252,7 +252,7 @@ public:
     
     /// Construct
     CATLASS_DEVICE
-    BlockMmad(Arch::Resource<ArchTag> &resource, uint32_t l1BufAddrStart = 0) : prologueCastB(resource)
+    BlockMmad(Arch::Resource<ArchTag> &resource, uint32_t l1BufAddrStart = 0) : convertW4ToW8B(resource)
     {
         if (g_coreType == AscendC::AIC) {
             uint32_t l1AOffset = l1BufAddrStart;
@@ -301,7 +301,7 @@ public:
 
     /// Prologue: cast int4_t to int8_t (w4a8)
     CATLASS_DEVICE
-    void operator()(
+    void prologue()(
         AscendC::GlobalTensor<int8_t> const &gmB, LayoutB const &layoutB,
         AscendC::GlobalTensor<ElementB> const &gmBW,
         GemmCoord const &actualShape, GemmCoord const &problemShape) 
@@ -336,7 +336,7 @@ public:
                 auto layoutWB = LayoutB{kActual, actualShape.n(), wkspStrideB};
 
                 Catlass::Arch::CrossCoreWaitFlag(notifyAiv[l1ListId]);
-                prologueCastB(gmBW[l1ListId * L1TileShape::K * L1TileShape::N],
+                convertW4ToW8B(gmBW[l1ListId * L1TileShape::K * L1TileShape::N],
                     gmTileB, layoutWB, layoutTileB);
                 Catlass::Arch::CrossCoreSetFlag<0x02, PIPE_MTE3>(notifyAic[l1ListId]);
             }
@@ -358,7 +358,7 @@ public:
                 auto layoutWB = LayoutB{kActualNext, actualShape.n(), wkspStrideB};
 
                 Catlass::Arch::CrossCoreWaitFlag(notifyAiv[l1ListIdNext]);
-                prologueCastB(gmBW[l1ListIdNext * L1TileShape::K * L1TileShape::N],
+                convertW4ToW8B(gmBW[l1ListIdNext * L1TileShape::K * L1TileShape::N],
                     gmTileB, layoutWB, layoutTileB);
                 Catlass::Arch::CrossCoreSetFlag<0x02, PIPE_MTE3>(notifyAic[l1ListIdNext]);
             }
@@ -597,7 +597,7 @@ protected:
     CopyL1ToL0A copyL1ToL0A;
     CopyL1ToL0B copyL1ToL0B;
     CopyL0CToGm copyL0CToGm;
-    PrologueCastB prologueCastB;
+    ConvertW4ToW8B convertW4ToW8B;
 };
 
 } // namespace Catlass::Gemm::Block
