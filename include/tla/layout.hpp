@@ -204,8 +204,8 @@ auto crd2offset_itt(CInt const& coord, STuple const& shape, DTuple const& stride
         return crd2offset(_0{}, get<I0>(shape), get<I0>(stride)) +
                (_0{} + ... + crd2offset(_0{}, get<Is>(shape), get<Is>(stride)));
     } else {                             // General case
-        return crd2offset(coord % product(get<I0>(shape)), get<I0>(shape), get<I0>(stride)) +
-               crd2offset_itt(coord / product(get<I0>(shape)), shape, stride, seq<Is...>{});
+        return crd2offset(coord % Product{}(get<I0>(shape)), get<I0>(shape), get<I0>(stride)) +
+               crd2offset_itt(coord / Product{}(get<I0>(shape)), shape, stride, seq<Is...>{});
     }
 }
 
@@ -338,9 +338,10 @@ auto MakeLayout(T const& rows, U const& cols)
     } else if constexpr (std::is_same_v<LayoutTag, Catlass::layout::zZ>) {
         return MakeLayout(
             MakeShape(MakeShape(Int<Catlass::C0_NUM_PER_FRACTAL>{}, CeilDiv(rows, Int<Catlass::C0_NUM_PER_FRACTAL>{})),
-                      MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv(cols, Int<ELE_NUM_PER_C0>{}))),
-            MakeStride(MakeStride(Int<ELE_NUM_PER_C0>{}, RoundUp(cols, Int<ELE_NUM_PER_C0>{}) * Catlass::C0_NUM_PER_FRACTAL),
-                       MakeStride(Int<1>{}, Int<ELE_NUM_PER_FRACTAL>{})));
+                MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv(cols, Int<ELE_NUM_PER_C0>{}))),
+            MakeStride(
+                MakeStride(Int<ELE_NUM_PER_C0>{}, RoundUp(cols, Int<ELE_NUM_PER_C0>{}) * Catlass::C0_NUM_PER_FRACTAL),
+                MakeStride(Int<1>{}, Int<ELE_NUM_PER_FRACTAL>{})));
     } else {
         return MakeLayout(
             MakeShape(MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv(rows, Int<ELE_NUM_PER_C0>{})),

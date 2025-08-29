@@ -209,7 +209,6 @@ struct Product {
         }
     }
 };
-static const CATLASS_HOST_DEVICE Product product;
 
 // Add
 template <class IntTupleA, class IntTupleB>
