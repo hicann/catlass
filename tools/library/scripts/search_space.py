@@ -47,7 +47,7 @@ def register_gemm_basic_matmul_operation(manifest):
     LOGGER.info(f'basic_matmul tile_shapes size={len(tile_shapes)}')
 
     block_swizzle_descriptions = [
-        'Gemm::Block::GemmIdentityBlockSwizzle<3, 1>',
+        'Gemm::Block::GemmIdentityBlockSwizzle<3, 0>',
         # 可自定义其他Swizzle参数
     ]
 
