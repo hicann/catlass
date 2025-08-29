@@ -132,9 +132,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ "$CLEAN" == true ]]; then
-    echo -e "${INFO}Cleaning build directories...${NC}"
+    echo -e "${INFO}Cleaning build directories...\c"
     rm -rf "$BUILD_DIR" "$OUTPUT_DIR"
-    echo -e "${INFO}Clean complete${NC}"
+    echo -e "Complete!${NC}"
 fi
 
 if [[ -z "$TARGET" ]]; then
@@ -175,10 +175,12 @@ case "$TARGET" in
         ;;
     *)
         echo -e "${INFO}Building target: $TARGET...${NC}"
-        cmake -S "$CMAKE_SOURCE_DIR" -B "$BUILD_DIR" \
-            -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
-            -DCMAKE_INSTALL_PREFIX="$OUTPUT_DIR" \
-            "${CMAKE_OPTIONS[@]}"
+        if [[ -d ${BUILD_DIR} ]]; then
+            cmake -S "$CMAKE_SOURCE_DIR" -B "$BUILD_DIR" \
+                -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
+                -DCMAKE_INSTALL_PREFIX="$OUTPUT_DIR" \
+                "${CMAKE_OPTIONS[@]}"
+        fi
         cmake --build "$BUILD_DIR" --target "$TARGET" -j
         cmake --install "$BUILD_DIR" --component "$TARGET"
         echo -e "${INFO}Target '$TARGET' built successfully${NC}"

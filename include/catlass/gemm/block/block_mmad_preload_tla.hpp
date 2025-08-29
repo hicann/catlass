@@ -116,6 +116,7 @@ public:
 
     static_assert(L1_TILE_M == L0_TILE_M && L1_TILE_N == L0_TILE_N,
         "The situation where the basic blocks of L1 and L0 differ on the m and n axes is not supported yet");
+    static_assert(L0_TILE_K <= L1_TILE_K, "L0TileShape::K cannot exceed L1TileShape::K");
 
     static constexpr auto L1A_LAYOUT = tla::MakeLayout<ElementA, LayoutAInL1>(L1_TILE_M, L1_TILE_K);
     static constexpr auto L1B_LAYOUT = tla::MakeLayout<ElementB, LayoutBInL1>(L1_TILE_K, L1_TILE_N);

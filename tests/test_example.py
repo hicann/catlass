@@ -6,11 +6,12 @@
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 # See LICENSE in the root of the software repository for the full text of the License.
 
-import unittest
-from typing import List, Type
-import subprocess
 import os
 import re
+import subprocess
+import unittest
+from typing import List, Type
+
 CMAKE_BINARY_PATH = os.path.join(os.path.dirname(
     os.path.abspath(__file__)), "..", "output", "bin")
 CMAKE_EXAMPLES_PATH = os.path.join(os.path.dirname(
@@ -60,7 +61,7 @@ normal_cases = ["00_basic_matmul 256 512 1024 0",
                 "02_grouped_matmul_slice_m 128 512 1024 2048 0",
                 "03_matmul_add 256 512 1024 0",
                 "04_padding_matmul 256 512 1024 0",
-                "05_grouped_matmul_slice_k 128 512 1024 2048 0",
+                "05_grouped_matmul_slice_k 128 512 1024 32 0",
                 "06_optimized_matmul 256 512 1024 0",
                 "07_grouped_matmul_slice_m_per_token_dequant_moe 128 512 1024 2048 0",
                 "08_grouped_matmul 128 512 1024 2048 0",

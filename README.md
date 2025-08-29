@@ -38,7 +38,7 @@ catlass
     - `A200I A2 Box 异构组件`
 
 - 软件版本：
-  - `gcc >= 9.3`
+  - `gcc >= 7.5`（已测试`7.5`，`8.3`，`9.3`，`11.4`，建议使用9.3以上版本。）
   - `cmake >= 3.15`
   - `python >= 3.10`
 
@@ -84,6 +84,7 @@ cd output/bin
 ### 📖 API文档
 
 - [api](./docs/api.md) - CATLASS通用矩阵乘法Gemm API的描述。
+- [catlass_optimize_guidance](./docs/catlass_optimize_guidance.md) - 模板库优化指引，通过tiling调参及kernel组合的方式快速获得性能提升。
 - [dispatch_policies](./docs/dispatch_policies.md) - BlockMmad一个重要模板参数`DispatchPolicy`的描述。
 - [quickstart](./docs/quickstart.md) - 模板库的快速开始。
 - [swizzle_explanation](./docs/swizzle_explanation.md) - AI Core计算基本块的顺序之Swizzle策略的描述。

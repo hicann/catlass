@@ -1,7 +1,7 @@
 # if aicore-arch is different, maybe crash, to find the solution
 add_compile_definitions(TILING_KEY_VAR)
 add_compile_options(--cce-aicore-arch=dav-c220)
-file(GLOB CATLASS_SHARED_LIB_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/host/*.cpp)
+file(GLOB CATLASS_SHARED_LIB_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/kernels/*.cpp)
 set_source_files_properties(${CATLASS_SHARED_LIB_SRC} PROPERTIES LANGUAGE ASCEND)
 
 add_library(catlass_kernel SHARED ${CATLASS_SHARED_LIB_SRC})
