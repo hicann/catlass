@@ -1,10 +1,10 @@
-## msTuner - Tiling自动寻优工具
+## msTuner_CATLASS (Mindstudio Tuner for CATLASS) - Tiling自动寻优工具
 
-mstuner_catlass是用于CATLASS模板库算子Tiling参数寻优的工具，支持自定义搜索空间范围与剪枝函数，批量实例化范围内全量算子，完成性能测试，为算子Tiling参数寻优提供参考。
+mstuner_catlass是用于CATLASS模板库算子Tiling参数寻优的工具，支持自定义搜索空间，实例化搜索空间内全量算子，批量完成在板性能测试，为算子Tiling参数寻优提供参考。
 
 ### 使用示例
 
-以m=20，n=16384，k=1536 的**basic_matmul**的tiling参数寻优为例，使用预设的搜索空间配置，执行以下命令完成工具的编译。
+以m=256，n=512，k=1024 的**basic_matmul**的tiling参数寻优为例，使用预设的搜索空间配置，执行以下命令完成工具的编译。
 
 ```bash
 bash scripts/build.sh -DCATLASS_LIBRARY_KERNELS=basic_matmul mstuner_catlass
@@ -33,10 +33,10 @@ $ ./output/bin/mstuner_catlass --m=256 --n=512 --k=1024 --device=0 --output=resu
    task_duration(us) : 19.380
            device_id : 0
            operation : Gemm
-         description : catlass_gemm_basic_matmul_fp16xRowMajor_fp16xRowMajor_fp16xRowMajor_32x128x128_32x128x32_swizzle3x1
+         description : catlass_gemm_basic_matmul_fp16xRowMajor_fp16xRowMajor_fp16xRowMajor_32x128x128_32x128x32_swizzle3x0
        l0_tile_shape : 32x128x32
        l1_tile_shape : 32x128x128
-             swizzle : swizzle3x1
+             swizzle : swizzle3x0
                    m : 256
                    n : 512
                    k : 1024
@@ -58,16 +58,16 @@ case_id,task_duration(us),device_id,operation,description,m,n,k,A,B,C
 
 ## 编译
 
-支持通过`CATLASS_LIBRARY_KERNELS`命令过滤算子，比如通过如下命令指定仅编译`basic_matmul`类算子，
+支持通过`-DCATLASS_LIBRARY_KERNELS=<kernel_name>`命令过滤算子，当算子的description信息包含`kernel_name`时，该算子用例代码会被生成并编译，比如通过如下命令指定编译`basic_matmul`类算子，
 
 ```bash
 bash scripts/build.sh -DCATLASS_LIBRARY_KERNELS=basic_matmul mstuner_catlass
 ```
 
-也支持通过字符串字串匹配算子description信息的方式过滤需要的算子，比如通过如下命令仅编译指定的basic_matmul算子，其L1/L0TileShape分别是：32x208x256、32x208x64。
+可直接指定具体的单个算子实例的description信息，比如通过如下命令指定仅编译上一节的使用示例中所展示的case_id为1的算子，
 
 ```bash
-bash scripts/build.sh -DCATLASS_LIBRARY_KERNELS=catlass_gemm_basic_matmul_fp16xRowMajor_fp16xRowMajor_fp16xRowMajor_32x208x256_32x208x64_swizzle3x1 mstuner_catlass
+bash scripts/build.sh -DCATLASS_LIBRARY_KERNELS=catlass_gemm_basic_matmul_fp16xRowMajor_fp16xRowMajor_fp16xRowMajor_32x128x128_32x128x32_swizzle3x1 mstuner_catlass
 ```
 
 当前已支持如下算子类型：
@@ -92,7 +92,7 @@ mstuner_catlass 支持以下命令：
 
 | 命令          | 示例                          | 描述                                                         |
 | ------------- | ----------------------------- | ------------------------------------------------------------ |
-| --help        | --help                        | 展示工具支持的命令                                           |
+| --help, -h    | --help                        | 展示工具支持的命令                                           |
 | --kernels     | --kernels=basic_matmul        | 过滤寻优的算子类型，其与算子的description列字符串进行子串匹配，未匹配时该算子会被跳过 |
 | --output      | --output=./profile_result.csv | 指定算子性能数据落盘文件路径                                 |
 | --device      | --device=0                    | 指定运行的单卡ID                                             |
@@ -107,6 +107,7 @@ mstuner_catlass 支持以下命令：
 当搜索空间配置并生成了多种A、B、C的数据类型与内存排布时，支持通过`--A/--B/--C=数据类型:内存排布`命令对算子进行过滤。
  - 数据类型支持`u8, int8, int32, fp16, bf16, fp32`
  - 内存排布支持`row, column, nZ, zN, zZ, padding_row_major, padding_column_major, nN`
+注意：不指定`--output`时，不会落盘算子性能数据。
 
 ## 搜索空间配置
 
@@ -121,7 +122,7 @@ INFO:manifest:operations that will be generated in total: 1701
 ...
 ```
 
-以`basic_matmul`算子的搜索空间为例，其配置位于函数`register_gemm_basic_matmul_operation `中，
+以`basic_matmul`算子的搜索空间为例，其配置位于函数`register_gemm_basic_matmul_operation`中，
 
 - layouts配置
 
@@ -163,6 +164,6 @@ INFO:manifest:operations that will be generated in total: 1701
 
   ```python
       block_swizzle_descriptions = [
-          'Gemm::Block::GemmIdentityBlockSwizzle<3, 1>',
+          'Gemm::Block::GemmIdentityBlockSwizzle<3, 0>',
       ]
   ```

@@ -185,7 +185,7 @@ void CommandLineParser::PrintHelp()
          "rapidly perform batch testing on the performance of catlass library operators.\n"
          "It supports developers in selecting optimal tiling parameters for custom problem scenarios.\n");
     LOGM("Options:");
-    LOGM("   --help                               <Optional> Help message.");
+    LOGM("   --help, -h                           <Optional> Help message.");
     LOGM("   --output=<string>                    <Optional> Path to output file containing profiling data.");
     LOGM("   --device=<int>                       <Optional> Device id, a positive integer, default is 0.");
     LOGM("   --m=<int>                            <Required> Specify dimension m for matmul problem shape.");
@@ -197,4 +197,4 @@ void CommandLineParser::PrintHelp()
     LOGM("   --C=<dtype:layout>                   <Optional> Filter operations by dtype and layout of the tensor C.");
     LOGM("   --group_count=<int>                  <Optional> Specify group count for grouped-matmul-like operations.");
 }
-} // namespace Catlass
+} // namespace Catlass
