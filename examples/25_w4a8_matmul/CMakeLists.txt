@@ -7,4 +7,4 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 
 set_source_files_properties(w4a8.cpp PROPERTIES LANGUAGE ASCEND)
-catlass_example_add_executable(23_w4a8_matmul dav-c220 w4a8.cpp)
+catlass_example_add_executable(25_w4a8_matmul dav-c220 w4a8.cpp)
