@@ -74,6 +74,7 @@ foreach(EXAMPLE
     21_basic_matmul_preload_zN
     22_padding_splitk_matmul
     23_flash_attention_infer
+    25_w4a8_matmul
 )
     add_subdirectory(${EXAMPLE})
 endforeach()
