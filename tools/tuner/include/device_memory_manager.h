@@ -101,7 +101,7 @@ private:
         Finalize();
     }
 
-    inline uint64_t Align(uint64_t size) const { return (size + 31) / 32 * 32; }
+    inline uint64_t Align(uint64_t size) const { return ((size + 63) / 64 + 1) * 64; }
 
     bool Expand(void** addr, uint64_t &size, uint64_t target);
     bool Free(void* addr);
@@ -117,4 +117,4 @@ private:
 };
 
 } // namespace Catlass
-#endif // CATLASS_TUNER_DEVICE_MEMORY_MANAGER_H
+#endif // CATLASS_TUNER_DEVICE_MEMORY_MANAGER_H
