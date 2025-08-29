@@ -301,7 +301,7 @@ public:
 
     /// Prologue: cast int4_t to int8_t (w4a8)
     CATLASS_DEVICE
-    void prologue()(
+    void prologue(
         AscendC::GlobalTensor<int8_t> const &gmB, LayoutB const &layoutB,
         AscendC::GlobalTensor<ElementB> const &gmBW,
         GemmCoord const &actualShape, GemmCoord const &problemShape) 
