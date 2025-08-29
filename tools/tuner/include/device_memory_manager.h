@@ -101,7 +101,7 @@ private:
         Finalize();
     }
 
-    inline uint64_t Align(uint64_t size) const { return ((size + 63) / 64 + 1) * 64; }
+    inline uint64_t Align(uint64_t size) const { return ((size + 63) / 64) * 64; }
 
     bool Expand(void** addr, uint64_t &size, uint64_t target);
     bool Free(void* addr);

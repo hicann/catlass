@@ -6,7 +6,11 @@
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 # See LICENSE in the root of the software repository for the full text of the License.
 
-message(STATUS "CATLASS_LIBRARY_KERNELS=${CATLASS_LIBRARY_KERNELS}")
+if ("${CATLASS_LIBRARY_KERNELS}" STREQUAL "")
+    message(FATAL_ERROR "CATLASS_LIBRARY_KERNELS is not allowed to be empty")
+else()
+    message(STATUS "CATLASS_LIBRARY_KERNELS=${CATLASS_LIBRARY_KERNELS}")
+endif()
 
 set(ARCH "AtlasA2")
 
