@@ -88,7 +88,7 @@ def register_gemm_basic_matmul_operation(manifest):
 def register_gemm_grouped_matmul_operation(manifest):
 
     layouts = [
-        [library.LayoutType.RowMajor, library.LayoutType.RowMajor, library.LayoutType.RowMajor],
+        [library.LayoutType.ColumnMajor, library.LayoutType.RowMajor, library.LayoutType.RowMajor],
     ]
     data_types = [
         [library.DataType.fp16, library.DataType.fp16, library.DataType.fp16],
@@ -109,7 +109,7 @@ def register_gemm_grouped_matmul_operation(manifest):
             l1_tile_k_range=(128, 256),
             l0_tile_m_range=(128, 256),
             l0_tile_n_range=(128, 256),
-            l0_tile_k_range=(32, 32)
+            l0_tile_k_range=(32, 64)
         )
     ))
     LOGGER.info(f'grouped_matmul tile_shapes size={len(tile_shapes)}')
@@ -290,4 +290,4 @@ def generate_tile_shapes(
                 yield ((l1_m, l1_n, l1_k), (l0_m, l0_n, l0_k))
     return generator(element_sizes, stages)
 
-############### search space generation methods end ###############
+############### search space generation methods end ###############
