@@ -341,12 +341,12 @@ public:
 
                 while (iterParams.kIter < iterParams.ddr2l0LoopK) {
                     if (iterParams.loadAL1Flag || (!iterParams.kAL1fullload && iterParams.kIter % iterParams.multiKAL1 == 0)) {
+                        AscendC::PipeBarrier<PIPE_ALL>();
                         AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);
                         AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);
                         LoadAL1Process(gmBatchFmap, iterParams.kIter / iterParams.multiKAL1, layoutFmap);
                         AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListId]);
                         AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListId]);
-                        AscendC::PipeBarrier<PIPE_MTE2>();
                     }
                     if (iterParams.loadBL1Flag || (!iterParams.kBL1fullload && iterParams.kIter % iterParams.multiKBL1 == 0)) {
                         AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
@@ -354,7 +354,6 @@ public:
                         LoadBL1Process(filterGm, iterParams.kIter / iterParams.multiKBL1, layoutFilter);
                         AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
                         AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
-                        AscendC::PipeBarrier<PIPE_MTE2>();
                     }
                     ReduceKL0AL0BPingPong(isOdd);
                     iterParams.kIter++;
