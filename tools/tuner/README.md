@@ -14,13 +14,13 @@ bash scripts/build.sh -DCATLASS_LIBRARY_KERNELS=basic_matmul mstuner_catlass
 
 ```bash
 export LD_LIBRARY_PATH=$PWD/output/lib64/:$LD_LIBRARY_PATH
-./output/bin/mstuner_catlass --m=20 --n=16384 --k=1536 --device=0 --output=results.csv
+./output/bin/mstuner_catlass --m=256 --n=512 --k=1024 --device=0 --output=results.csv
 ```
 
 运行成功如下所示(实际运行结果因硬件差异与硬件性能波动不一定完全相同)，
 
 ```bash
-$ ./output/bin/mstuner_catlass --m=20 --n=16384 --k=1536 --device=0 --output=results.csv
+$ ./output/bin/mstuner_catlass --m=256 --n=512 --k=1024 --device=0 --output=results.csv
 [INFO ] Set profile output file /path_to_my_repo/catlass/output/results.csv
 [INFO ] Start to initialize device 0
 [INFO ] Initializing device 0 success
@@ -30,16 +30,16 @@ $ ./output/bin/mstuner_catlass --m=20 --n=16384 --k=1536 --device=0 --output=res
 ================================
 
              case_id : 1
-   task_duration(us) : 82.580
+   task_duration(us) : 19.380
            device_id : 0
            operation : Gemm
          description : catlass_gemm_basic_matmul_fp16xRowMajor_fp16xRowMajor_fp16xRowMajor_32x128x128_32x128x32_swizzle3x1
        l0_tile_shape : 32x128x32
        l1_tile_shape : 32x128x128
              swizzle : swizzle3x1
-                   m : 20
-                   n : 16384
-                   k : 1536
+                   m : 256
+                   n : 512
+                   k : 1024
                    A : fp16:row
                    B : fp16:row
                    C : fp16:row
@@ -51,7 +51,7 @@ $ ./output/bin/mstuner_catlass --m=20 --n=16384 --k=1536 --device=0 --output=res
 ================================
 Top 10:
 case_id,task_duration(us),device_id,operation,description,m,n,k,A,B,C
-1701,49.920,0,Gemm,catlass_gemm_basic_matmul_fp16xRowMajor_fp16xRowMajor_fp16xRowMajor_128x256x256_128x256x64_swizzle3x1,20,16384,1536,fp16:row,fp16:row,fp16:row
+489,12.740,7,Gemm,catlass_gemm_basic_matmul_fp16xRowMajor_fp16xRowMajor_fp16xRowMajor_64x128x128_64x128x64_swizzle3x1,256,512,1024,fp16:row,fp16:row,fp16:row
 ...
 [INFO ] Save profile data to /path_to_my_repo/catlass/output/results.csv success
 ```
@@ -74,11 +74,6 @@ bash scripts/build.sh -DCATLASS_LIBRARY_KERNELS=catlass_gemm_basic_matmul_fp16xR
 
 - basic_matmul
 - grouped_matmul
-- grouped_matmul_slice_m
-- optimized_matmul_without_padding
-- optimized_matmul_padding_a_only
-- optimized_matmul_padding_b_only
-- optimized_matmul_padding_ab
 
 编译也可通过如下的cmake命令完成，
 
@@ -121,10 +116,8 @@ mstuner_catlass支持在 `tools/library/scripts/search_space.py`文件中对算�
 
 ```txt
 INFO:search_space:basic_matmul tile_shapes size=1701
-INFO:search_space:grouped_matmul tile_shapes size=306
-INFO:search_space:grouped_matmul_slice_m tile_shapes size=81
-...
-INFO:search_space:operations that will be generated in total: 1701
+INFO:search_space:grouped_matmul tile_shapes size=576
+INFO:manifest:operations that will be generated in total: 1701
 ...
 ```
 
