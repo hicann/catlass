@@ -280,7 +280,7 @@ struct ConvL0Shape {
     }
 };
 
-struct Conv3d6HdCoord : public Coord<4, uint32_t> {  // (N, D, C1, HW)
+struct Conv3d6HdCoord : public Coord<4, uint32_t> {
     using Index = uint32_t;
 
     using Base = Coord<4, Index>;
@@ -320,7 +320,7 @@ struct Conv3d6HdCoord : public Coord<4, uint32_t> {  // (N, D, C1, HW)
     }
 
     CATLASS_HOST_DEVICE
-    Index const& c1() const {   //需要包含c0
+    Index const& c1() const {
         return this->At(C1_INDEX);
     }
     CATLASS_HOST_DEVICE
@@ -338,7 +338,7 @@ struct Conv3d6HdCoord : public Coord<4, uint32_t> {  // (N, D, C1, HW)
     }
 };
 
-struct Conv3dFracZ3dCoord : public Coord<2, uint32_t> {  // (kdC1khkw, n1)
+struct Conv3dFracZ3dCoord : public Coord<2, uint32_t> {
     using Index = uint32_t;
 
     using Base = Coord<2, Index>;

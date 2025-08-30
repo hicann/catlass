@@ -1297,11 +1297,11 @@ public:
             tileOriShape[1] * tileOriShape[2]
         );
 
-        Stride tileStride = MakeCoord(stride(0),                   /// StrideC0
-            stride(1),                                      /// StrideW = C0
-            (LongIndex)(tileOriShape[3] * tileOriShape[4] * shape(3)),  /// StrideC1 = Hi*Wi*C0
-            (LongIndex)(tileOriShape[2] * tileOriShape[3] * tileOriShape[4] * shape(3)),  /// StrideD = C1_l1*Hi*Wi*C0
-            (LongIndex)(tileOriShape[1] * tileOriShape[2] * tileOriShape[3] * tileOriShape[4] * shape(3))  /// StrideN
+        Stride tileStride = MakeCoord(stride(0),
+            stride(1),
+            (LongIndex)(tileOriShape[3] * tileOriShape[4] * shape(3)),
+            (LongIndex)(tileOriShape[2] * tileOriShape[3] * tileOriShape[4] * shape(3)),
+            (LongIndex)(tileOriShape[1] * tileOriShape[2] * tileOriShape[3] * tileOriShape[4] * shape(3))
         );
         return NDC1HWC0(tileOriShape, tileShape, tileStride);
     }

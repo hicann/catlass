@@ -100,8 +100,6 @@ public:
     using LayoutBInL0 = typename CopyL1ToL0B::LayoutDst;
     using LayoutCInL0 = layout::zN;
 
-    // using Conv3dParams = typename Catlass::Conv3dParams;
-
     static constexpr bool ENABLE_UNIT_FLAG = DispatchPolicy::ENABLE_UNIT_FLAG;
     static constexpr uint32_t L1A_STAGES = DispatchPolicy::L1A_STAGES;
     static constexpr uint32_t L1B_STAGES = DispatchPolicy::L1B_STAGES;
@@ -208,27 +206,27 @@ public:
         AscendC::GlobalTensor<ElementBias> const &biasGm,
         Conv3d6HdCoord const &actualBlockShape, Conv3d6HdCoord const &actualIdxStartFmap)
     {
-        /////K方向的循环参数初始化
+        //Initialization of the loop parameter in the K direction
         iterParams.ddr2l0LoopK = CeilDiv(conv3dParams.alignCinKhKwKd(), L0TileShape::kL0);
         iterParams.maxKL0Iter = iterParams.ddr2l0LoopK - 1;
         iterParams.kL0Tail = conv3dParams.alignCinKhKwKd() % L0TileShape::kL0;
         iterParams.kL0Tail = iterParams.kL0Tail == 0 ? L0TileShape::kL0 : iterParams.kL0Tail;
 
-        ////B矩阵k轴循环迭代参数
+        //The k-axis loop iteration parameters of the B-matrix
         iterParams.maxKBL1Iter = CeilDiv(conv3dParams.kdcin1(), FilterL1TileShape::Kd * FilterL1TileShape::Ci1) - 1;
         iterParams.multiKBL1 = CeilDiv(FilterL1TileShape::Kd * FilterL1TileShape::Ci1 * conv3dParams.khkwcin0(), L0TileShape::kL0);
         iterParams.kBL1fullload = conv3dParams.kdcin1() == FilterL1TileShape::Kd * FilterL1TileShape::Ci1;
         uint32_t kBL1TailCheck = conv3dParams.alignCinKhKwKd() % (FilterL1TileShape::Kd * FilterL1TileShape::Ci1 * conv3dParams.khkwcin0());
         iterParams.kBL1Tail = kBL1TailCheck == 0 ? FilterL1TileShape::Kd * FilterL1TileShape::Ci1 * conv3dParams.khkwcin0() : kBL1TailCheck;
 
-        ////A矩阵k轴循环迭代参数
+        //The k-axis loop iteration parameters of matrix A
         iterParams.maxKAL1Iter = CeilDiv(conv3dParams.kdcin1(), FmapL1TileShape::Kd * FmapL1TileShape::Ci1) - 1;
         iterParams.multiKAL1 = CeilDiv(FmapL1TileShape::Kd * FmapL1TileShape::Ci1 * conv3dParams.khkwcin0(), L0TileShape::kL0);
         iterParams.kAL1fullload = conv3dParams.kdcin1() == FmapL1TileShape::Kd * FmapL1TileShape::Ci1;
         uint32_t kAL1TailCheck = conv3dParams.alignCinKhKwKd() % (FmapL1TileShape::Kd * FmapL1TileShape::Ci1 * conv3dParams.khkwcin0());
         iterParams.kAL1Tail = kAL1TailCheck == 0 ? FmapL1TileShape::Kd * FmapL1TileShape::Ci1 * conv3dParams.khkwcin0() : kAL1TailCheck;
 
-        /////M方向的循环参数
+        //Loop parameters in the M direction
         iterParams.mAL1Tail = actualBlockShape.hw() % FmapL1TileShape::mAL1;
         iterParams.mAL1Tail = iterParams.mAL1Tail == 0 ? FmapL1TileShape::mAL1 : iterParams.mAL1Tail;
         uint32_t mAL1DivmL0 = CeilDiv(FmapL1TileShape::mAL1, L0TileShape::mL0);
@@ -239,7 +237,7 @@ public:
         iterParams.l12l0LoopM = CeilDiv(FmapL1TileShape::mAL1, L0TileShape::mL0);
         iterParams.maxML0Iter = iterParams.l12l0LoopM - 1;
 
-        //////Cout方向的循环参数
+        //Loop parameters in the Cout direction
         iterParams.maxNBL1Iter = CeilDiv(actualBlockShape.c1() * conv3dParams.cout0(), FilterL1TileShape::nBL1) - 1;
         iterParams.nBL1Tail = (actualBlockShape.c1() * conv3dParams.cout0()) % FilterL1TileShape::nBL1;
         iterParams.nBL1Tail = iterParams.nBL1Tail == 0 ? FilterL1TileShape::nBL1 : iterParams.nBL1Tail;
@@ -251,20 +249,19 @@ public:
         iterParams.l12l0LoopN = nBL1DivnL0;
         iterParams.maxNL0Iter = iterParams.l12l0LoopN - 1;
 
-        //////D方向循环参数
+        //Loop parameter in the D direction
         iterParams.ddr2l1LoopD = actualBlockShape.d();
         
-        /////相关输入的起始位置
+        //The starting position of the input
         iterParams.diStartPos = actualIdxStartFmap.d();
         iterParams.hwStartPos = actualIdxStartFmap.hw();
         
-        /////开始batch循环
+        //Start the batch iterate
         for (uint32_t batchIter = 0; batchIter < actualBlockShape.n(); ++batchIter) {
             auto gmBatchFmap = fmapGm[batchIter * conv3dParams.fmapOneBatchSize()];
             auto gmBatchOut = outGm[batchIter * conv3dParams.outputOneBatchSize()];
-            /////实现IteraAll
             while (true) {
-                ///////第一次迭代需要重新初始化用到的参数
+                //The parameters used need to be reinitialized in the first iteration
                 if (iterParams.isFirstIterate) {
                     iterParams.nBL0Iter = 0;
                     iterParams.mAL0Iter = 0;
@@ -280,7 +277,7 @@ public:
                         iterParams.mL0IsDivisibleByWo = true;
                     }
                 } else {
-                    //////先往N轴方向偏移再往M轴方向偏移。Weight复用Fmap。
+                    //From N to M
                     iterParams.nBL0Iter++;
                     if (iterParams.nBL0Iter == iterParams.l12l0LoopN) {
                         iterParams.nBL0Iter = 0;
@@ -304,13 +301,12 @@ public:
                         break;
                     }
                 }
-                /////L1的最后一次循环需要刷新循环轮次
+                ////Refresh the cycle round
                 iterParams.l12l0LoopM = iterParams.mAL1Iter == iterParams.maxMAL1Iter ? CeilDiv(iterParams.mAL1Tail, L0TileShape::mL0) : mAL1DivmL0;
                 iterParams.maxML0Iter = iterParams.l12l0LoopM - 1;
                 iterParams.l12l0LoopN = iterParams.nBL1Iter == iterParams.maxNBL1Iter ? CeilDiv(iterParams.nBL1Tail, L0TileShape::nL0) : nBL1DivnL0;
                 iterParams.maxNL0Iter = iterParams.l12l0LoopN - 1;
-                /////开启k轴循环
-                // in each iterate k, cal current m,n value
+                ////Start the K-axis iterate
                 uint32_t n = (iterParams.nBL1Iter == iterParams.maxNBL1Iter && iterParams.nBL0Iter == iterParams.maxNL0Iter) ? iterParams.nL0Tail : L0TileShape::nL0;
                 uint32_t m = (iterParams.mAL1Iter == iterParams.maxMAL1Iter && iterParams.mAL0Iter == iterParams.maxML0Iter) ? iterParams.mAL0Tail : L0TileShape::mL0;
                 
@@ -365,7 +361,7 @@ public:
                 LayoutFmap layoutOutGm = layoutOut.GetTileLayout(MakeCoord((uint32_t)1, conv3dParams.dout(), conv3dParams.cout1(), conv3dParams.ho(), conv3dParams.wo(), conv3dParams.cout0()));
                 uint32_t cout1L1Idx = (FilterL1TileShape::nBL1 * iterParams.nBL1Iter + L0TileShape::nL0 * iterParams.nBL0Iter) / conv3dParams.cout0();
                 uint32_t howoIdx = FmapL1TileShape::mAL1 * iterParams.mAL1Iter + L0TileShape::mL0 * iterParams.mAL0Iter;
-                Conv3d6HdCoord gmTileOutOffset{0, iterParams.dOutIter, cout1L1Idx, howoIdx};  //TODO
+                Conv3d6HdCoord gmTileOutOffset{0, iterParams.dOutIter, cout1L1Idx, howoIdx};
                 auto gmTileOut = gmBatchOut[layoutOut.GetOffset(gmTileOutOffset)];
                 if constexpr (!ENABLE_UNIT_FLAG) {
                     AscendC::SetFlag<AscendC::HardEvent::M_FIX>(EVENT_ID0);
@@ -383,30 +379,29 @@ public:
     }
 protected:
     struct IterParams {
-        uint8_t enableBias = false;     // 是否有bias
-        uint8_t isFirstIterate = true;  // 是否第一次Iterate
-        uint8_t loadAL1Flag = true;     // 是否载入AL1的标志
-        uint8_t loadBL1Flag = true;     // 是否载入BL1的标志
-        uint8_t loadAL0Flag = true;     // 是否载入AL0的标志
-        uint8_t loadBL0Flag = true;     // 是否载入BL0的标志
+        uint8_t isFirstIterate = true;
+        uint8_t loadAL1Flag = true;
+        uint8_t loadBL1Flag = true;
+        uint8_t loadAL0Flag = true;
+        uint8_t loadBL0Flag = true;
         uint8_t kAL1fullload = false;
         uint8_t kBL1fullload = false;
         uint8_t biasFullLoadFlag = false;
-        uint8_t mL0IsDivisibleByWo = false; // mL0是否能整除wo的标志
+        uint8_t mL0IsDivisibleByWo = false;
 
         uint8_t isGroupOptDimTail = false;
         
-        uint32_t kAL1Iter = 0;  // AL1上k方向迭代器
-        uint32_t kBL1Iter = 0;  // BL1上k方向迭代器
+        uint32_t kAL1Iter = 0;
+        uint32_t kBL1Iter = 0;
         uint32_t mAL1Iter = 0;
-        uint32_t nBL1Iter = 0;  // BL1上n方向迭代器
+        uint32_t nBL1Iter = 0;
         uint32_t dOutIter = 0;
-        uint32_t kIter = 0;     // k方向迭代器，从DDR到L0
-        uint32_t kAL0Iter = 0;  // L1A 到L0方向的迭代器
-        uint32_t kBL0Iter = 0;  // L1B 到L0方向的迭代器
-        uint32_t mAL0Iter = 0;  // AL0上m方向迭代器
-        uint32_t nBL0Iter = 0;  // BL0上n方向迭代器
-        uint32_t groupOptIter = 0;  // groupopt方向迭代器
+        uint32_t kIter = 0;
+        uint32_t kAL0Iter = 0;
+        uint32_t kBL0Iter = 0;
+        uint32_t mAL0Iter = 0;
+        uint32_t nBL0Iter = 0;
+        uint32_t groupOptIter = 0;
 
         uint32_t maxKAL1Iter = 0;
         uint32_t maxMAL1Iter = 0;
@@ -515,34 +510,27 @@ protected:
         uint32_t hiLoadL1 = orgHiLoadL1;
         uint32_t cin1LoadL1 = orgCin1LoadL1;
 
-        /////ProcessMMiddleData
         uint32_t hiStartIdxWithPad = hoStartIdx * conv3dParams.sH();
         uint32_t hiEndIdxWithPad = hiStartIdxWithPad + hiLoadL1;
         uint32_t hiIdx = hiStartIdxWithPad - conv3dParams.padtop() - curCoreHiStartIdx;
         uint32_t hiWithPad = conv3dParams.hi() + conv3dParams.padtop();
         if (hiEndIdxWithPad <= conv3dParams.padtop()) {
-            // hi开头全pad
             iterParams.aL1IsFullPad = true;
         } else if (hiStartIdxWithPad < conv3dParams.padtop()) {
-            // hi开头一部分是pad
             hiIdx = 0;
             hiLoadL1 = hiLoadL1 + hiStartIdxWithPad - conv3dParams.padtop();
             padTopL1 = conv3dParams.padtop() - hiStartIdxWithPad;
             if (hiEndIdxWithPad >= hiWithPad) {
-                // m尾部部分是pad
                 hiLoadL1 = conv3dParams.hi() - hiIdx;
                 padBottomL1 = hiEndIdxWithPad - hiWithPad;
             }
         } else if (hiStartIdxWithPad >= hiWithPad) {
-            // m尾部全是pad
             iterParams.aL1IsFullPad = true;
         } else if (hiEndIdxWithPad > hiWithPad) {
-            // m尾部部分是pad
             hiLoadL1 = hiWithPad - hiStartIdxWithPad;
             padBottomL1 = hiEndIdxWithPad - hiWithPad;
         }
 
-        //////ProcessDoutMiddleData
         uint32_t diStartWithPad = iterParams.diStartPos + iterParams.dOutIter * conv3dParams.sD() + kdL1Idx * conv3dParams.dD();
         uint32_t diEndWithPad = cin1LoadL1 <= conv3dParams.cin1()
                                     ? diStartWithPad + 1
@@ -553,10 +541,8 @@ protected:
         uint32_t cin1LoadL1PadHead = 0;
         uint32_t cin1LoadL1PadTail = 0;
         if (diEndWithPad <= conv3dParams.padhead()) {
-            // di开头全pad
             iterParams.aL1IsFullPad = true;
         } else if (diStartWithPad < conv3dParams.padhead()) {
-            // di开头一部分是pad，只有cin1LoadL1 > self_->ctx.cin1情况会进
             set2dFlagDHead = true;
             uint32_t kdTmp = CeilDiv((conv3dParams.padhead() - diStartWithPad), conv3dParams.dD());
             cin1LoadL1PadHead = kdTmp * conv3dParams.cin1();
@@ -564,20 +550,15 @@ protected:
             cin1LoadL1 -= cin1LoadL1PadHead;
 
             if (diEndWithPad > diWithPad) {
-                // dout尾部部分是pad
                 set2dFlagDTail = true;
-                // 计算真实应该载入多少kdTmp
                 kdTmp = CeilDiv((conv3dParams.di() - diIdx), conv3dParams.dD());
                 cin1LoadL1PadTail = cin1LoadL1 - kdTmp * conv3dParams.cin1();
                 cin1LoadL1 = kdTmp * conv3dParams.cin1();
             }
         } else if (diStartWithPad >= diWithPad) {
-            // dout尾部全是pad
             iterParams.aL1IsFullPad = true;
         } else if (diEndWithPad > diWithPad) {
-            // dout尾部部分是pad，只有cin1LoadL1 > self_->ctx.cin1情况会进
             set2dFlagDTail = true;
-            // 计算真实应该载入多少kdTmp
             uint32_t kdTmp = CeilDiv((diWithPad - diStartWithPad), conv3dParams.dD());
             cin1LoadL1PadTail = cin1LoadL1 - kdTmp * conv3dParams.cin1();
             cin1LoadL1 = kdTmp * conv3dParams.cin1();
@@ -592,7 +573,6 @@ protected:
 
             uint64_t aL1Offset = 0;
             if (set2dFlagDHead) {
-                // 前di pad
                 AscendC::InitConstValueParams<ElementFmap> initConstValueParams;
                 initConstValueParams.repeatTimes = cin1LoadL1PadHead / conv3dParams.cin1();
                 initConstValueParams.blockNum = conv3dParams.cin1() * hiLoadL1 * conv3dParams.wi();
@@ -611,7 +591,6 @@ protected:
             copyGmToL1A(l1ATensorList[l1ListId][aL1Offset], gmTileFmap, layoutFmapInL1, layoutTileFmap);
 
             if (set2dFlagDTail) {
-                // 后di pad
                 aL1Offset += cin1LoadL1 * hiLoadL1 * conv3dParams.wi()* conv3dParams.cin0();
                 AscendC::InitConstValueParams<ElementFmap> initConstValueParams;
                 initConstValueParams.repeatTimes = cin1LoadL1PadTail / conv3dParams.cin1();
@@ -637,7 +616,7 @@ protected:
         auto gmTileFiler = filterGm[layoutTileFilter.GetOffset(gmTileFilterOffset)];
         layoutFilterInL1 = LayoutFilterInL1::template MakeLayout<ElementFilter>(currentKBL1, currentNBL1);
         copyGmToL1B(l1BTensorList[l1ListId], gmTileFiler, layoutFilterInL1, layoutTileFilter);
-        iterParams.loadBL1Flag = false;  // LoopK中只有K方向可能重新载入。
+        iterParams.loadBL1Flag = false;
     }
 
     CATLASS_DEVICE

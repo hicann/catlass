@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from bfloat16 import bfloat16
 
 def main():
-    # 示例参数
+    # Example parameters
     N = int(sys.argv[1])
     Cin = int(sys.argv[2])
     d = int(sys.argv[3])
@@ -25,9 +25,9 @@ def main():
     pD = int(sys.argv[16])
     pH = int(sys.argv[17])
     pW = int(sys.argv[18])
-    dtype_str = sys.argv[19]   # 数据类型: bfloat16或float16
+    dtype_str = sys.argv[19]   # Dtype: bfloat16 or float16
 
-    # 解析
+    # Parameter analysis
     c0 , n0 = 16, 16
     if dtype_str == "float16":
         np_dtype = np.float16
@@ -43,12 +43,12 @@ def main():
     n1 = (Cout +  n0 - 1) // n0
     tensorDtype = torch.float32
 
-    # 计算输出尺寸
+    # Calculate the output size
     d_out = (d + 2 * pD - dD * (kd - 1) - 1) // sD + 1
     h_out = (h + 2 * pH - dH * (kh - 1) - 1) // sH + 1
     w_out = (w + 2 * pW - dW * (kw - 1) - 1) // sW + 1
 
-    # 生成正常shape数据
+    # Generate normal shape data
     fmap_tensor = torch.randn((N, Cin, d, h, w)).to(torch_dtype).to(tensorDtype)
     weight_tensor = torch.randn((Cout, Cin, kd, kh, kw)).to(torch_dtype).to(tensorDtype)
     bias = np.random.uniform(-0.1, 0.1, (Cout,)).astype(bias_dtype)
@@ -69,7 +69,7 @@ def main():
 
     golden_np = golden.numpy().astype(np_dtype)
 
-    # 按照指定内存布局重塑数据
+    # Reshape the data according to the specified memory layout
     # fmap: N, Cin, d, h, w --> (N, c1, c0, d, h, w) --> N * d * c1 * h * w * c0
     num_2_padding_in_cin = c1 * c0 - Cin
     zero_padding_array = np.zeros((N, num_2_padding_in_cin, d, h, w), dtype=np_dtype)
@@ -98,10 +98,10 @@ def main():
     print(f"fmap_reshaped shape:{fmap_data.shape}")
     print(f"weight_reshaped shape:{weight_data.shape}")
     print(f"golden_reshaped shape:{golden_np_data.shape}")
-    # 创建输出目录
+    # Create an output directory
     os.makedirs("data", exist_ok=True)
 
-    # 保存数据为二进制文件
+    # Save the data as a binary file
     fmap_data.tofile("data/fmap.bin")
     weight_data.tofile("data/weight.bin")
     bias.tofile("data/bias.bin")

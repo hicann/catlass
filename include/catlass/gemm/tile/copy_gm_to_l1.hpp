@@ -553,7 +553,9 @@ template <class ArchTag, class Element>
 struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::NDC1HWC0, AscendC::TPosition::GM>> {
     using LayoutDst = layout::NDC1HWC0;
     using LayoutSrc = layout::NDC1HWC0;
+
     // Mehtods
+
     CATLASS_DEVICE
     CopyGmToL1() {};
 
@@ -572,14 +574,14 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::NDC1HWC0, AscendC::TP
         uint32_t OriC1 = layoutSrc.orgShape(2);
         uint32_t OriH = layoutSrc.orgShape(3);
         uint32_t OriW = layoutSrc.orgShape(4);
-        uint32_t OriK0 = layoutSrc.orgShape(5); // K0 Means C0
+        uint32_t OriK0 = layoutSrc.orgShape(5);
 
-        uint64_t dataCopyLoop = CeilDiv(cin1LoadL1, OriC1); // 0或Kd_l1
+        uint64_t dataCopyLoop = CeilDiv(cin1LoadL1, OriC1);
         uint64_t dataCopySubLoop = 0;
         uint64_t blockCount = OriC1;
         bool srcStrideBeyondMaxU16 = false;
         if (OriH * OriW - hiLoadL1 * OriW > MAX_UINT16) {
-            dataCopySubLoop = dataCopyLoop > 0 ? cin1LoadL1 / dataCopyLoop : 0;  // 切的C1*Kd_l1, dataCopySubLoop = C1
+            dataCopySubLoop = dataCopyLoop > 0 ? cin1LoadL1 / dataCopyLoop : 0;
             blockCount = 1;
             srcStrideBeyondMaxU16 = true;
         }
@@ -624,7 +626,7 @@ template <class ArchTag, class Element>
 struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::KDC1KHKWN1N0C0, AscendC::TPosition::GM>> {
     using LayoutDst = layout::nZ;
     using LayoutSrc = layout::KDC1KHKWN1N0C0;
-    // static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+
     // Mehtods
 
     CATLASS_DEVICE
@@ -636,16 +638,13 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::KDC1KHKWN1N0C0, Ascen
         AscendC::GlobalTensor<Element> const &srcTensor,
         LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
     {
-        // nZ LayoutDst (currentKBL1, currentNBL1)
-        // LayoutSrc Filter.shape(C0, KdC1KhKw, N0, N1)
-        // LayoutSrc Filter.orgShape(KdC1KhKw, N1, N0, C0)
         uint32_t currentNBL1 = layoutDst.orgShape(1);
         uint32_t currentKBL1 = layoutDst.orgShape(0);
 
         uint32_t N1 = layoutSrc.shape(3);
         uint32_t N0 = layoutSrc.shape(2);
         uint32_t C0 = layoutSrc.shape(0);
-        uint32_t OriCoAlign = N1 * N0; // Cout
+        uint32_t OriCoAlign = N1 * N0;
 
         const static uint32_t LOAD2D_MAX_REPEAT_TIMES = 255;
 

@@ -214,11 +214,8 @@ struct CopyL0CToGm<Catlass::Arch::AtlasA2,
     void operator()(AscendC::GlobalTensor<ElementDst> const &dst, AscendC::LocalTensor<ElementSrc> const &src,
         LayoutDst const &dstLayout, LayoutSrc const &srcLayout, uint8_t unitFlag = 0)
     {
-        /// srcLayout zN (Ho_l0*Wo_l0, Cout0*Cout1_l0)
-        /// dstLayout Fmap.shape (N, D, C1, H, W, C0)
         AscendC::FixpipeParamsV220 intriParams;
 
-        // Fixpipe layout information
         intriParams.nSize = srcLayout.orgShape(1);
         intriParams.mSize = srcLayout.orgShape(0);
         intriParams.srcStride = srcLayout.stride(3) / srcLayout.shape(2);
@@ -229,11 +226,9 @@ struct CopyL0CToGm<Catlass::Arch::AtlasA2,
             intriParams.isChannelSplit = true;
         }
 
-        // Fixpipe auxiliary arguments
         intriParams.quantPre = quantPre;
         intriParams.reluEn = false;
         intriParams.unitFlag = unitFlag;
-        // Call AscendC Fixpipe
         AscendC::Fixpipe<ElementDst, ElementSrc, AscendC::CFG_NZ>(dst, src, intriParams);
     }
 };

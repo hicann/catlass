@@ -29,7 +29,6 @@ struct Conv3dIdentityBlockSwizzle {
     uint64_t nStart, doStart, co1Start, howoStart;
 
     // Methods
-
     CATLASS_DEVICE
     Conv3dIdentityBlockSwizzle() {}
 

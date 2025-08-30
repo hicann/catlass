@@ -228,13 +228,13 @@ void Run(Options const &options)
     using BiasType = Gemm::GemmType<half, LayoutBias>;
     using OutType = Gemm::GemmType<half, LayoutOut>;
 
-    using CoreTileShape = ConvCoreShape<1, 1, 1, 1>;  // nDim, dDim, c1Dim, hwDim
+    using CoreTileShape = ConvCoreShape<2, 2, 2, 3>;  // nDim, dDim, c1Dim, hwDim
     using FmapL1TileShape = ConvFmapL1Shape<16, 1, 1>;  //mAL1, kd, c1
-    using FilterL1TileShape = ConvFilterL1Shape<3, 1, 48>;  // kd, c1, nBL1
-    using L0TileShape = ConvL0Shape<16, 48, 32>;  //mL0 kL0 nL0
+    using FilterL1TileShape = ConvFilterL1Shape<1, 1, 16>;  // kd, c1, nBL1
+    using L0TileShape = ConvL0Shape<16, 16, 6>;  //mL0 kL0 nL0
 
     using BlockConv = Conv::Block::BlockConv<DispatchPolicy, CoreTileShape, FmapL1TileShape, FilterL1TileShape, L0TileShape, FmapType, FilterType, OutType, BiasType>;
-    using BlockEpilogue = void;    //////是否需要尾块处理
+    using BlockEpilogue = void;
 
     // Swizzle offset is 3 and direction is 0.
     using BlockScheduler = typename Conv::Block::Conv3dIdentityBlockSwizzle<3, 0>;
@@ -244,7 +244,7 @@ void Run(Options const &options)
 
     using ConvAdapter = Conv::Device::DeviceConv<ConvKernel>;
     ConvKernel::Arguments arguments{problemShape, deviceFmap, deviceFilter, deviceOut, deviceBias};
-    ConvAdapter conv_op;   //////TODO
+    ConvAdapter conv_op;
     conv_op.CanImplement(arguments);
     size_t sizeWorkspace = conv_op.GetWorkspaceSize(arguments);
     uint8_t *deviceWorkspace = nullptr;
@@ -271,14 +271,6 @@ void Run(Options const &options)
         std::cout << "Compare success." << std::endl;
     } else {
         std::cerr << "Compare failed. Error count: " << errorIndices.size() << std::endl;
-    }
-
-    for (int64_t i = 0; i < lenOut; i++) {
-        if (hostGolden[i] != static_cast<float>(hostOut[i])) {
-            std::cout<< "No." << i << std::endl;
-            std::cout << "hostGolden: " << hostGolden[i] << std::endl;
-            std::cout << "hostOut: " << static_cast<float>(hostOut[i]) << std::endl;
-        }
     }
 
     ACL_CHECK(aclrtFree(deviceFmap));

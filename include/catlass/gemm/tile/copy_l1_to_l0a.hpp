@@ -164,6 +164,8 @@ struct CopyL1ToL0A<ArchTag, Catlass::Gemm::GemmType<Element, layout::NDC1HWC0, A
     static constexpr uint32_t ELE_NUM_PER_C0 =  BYTE_PER_C0 / sizeof(Element);
     static constexpr uint8_t RIGHT_MOVE_8 = 8;
 
+    // Methods
+
     CATLASS_DEVICE
     CopyL1ToL0A(uint32_t strideW = 0,
                 uint32_t strideH = 0,
@@ -201,8 +203,6 @@ struct CopyL1ToL0A<ArchTag, Catlass::Gemm::GemmType<Element, layout::NDC1HWC0, A
         LayoutDst layoutDst, LayoutSrc layoutSrc, 
         uint32_t kStartPt, uint32_t mStartPt
     ){
-        // LayoutDst = (Ho_l0a*Wo_l0a, C1_l0×Kh×Kw×C0)或者(Ho_l0a×Wo_l0a, Kd_l0×C1×Kh×Kw×C0)
-        // LayoutSrc = 6hd = (N=1, D=1, cin1LoadL1, hiLoadL1, Wi, C0)
         loadData3Dv2Params.kStartPt = kStartPt;
         loadData3Dv2Params.mStartPt = mStartPt;
         loadData3Dv2Params.kExtension = layoutDst.orgShape(1);
