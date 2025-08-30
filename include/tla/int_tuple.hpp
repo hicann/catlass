@@ -210,6 +210,21 @@ struct Product {
     }
 };
 
+namespace detail {
+
+template <size_t N, typename Sequence>
+struct MakeZeroTupleImpl;
+
+template <size_t N, size_t... Is>
+struct MakeZeroTupleImpl<N, tla::index_sequence<Is...>> {
+    using type = tla::tuple<tla::Int<Is*0>...>;
+};
+
+template <size_t N>
+using MakeZeroTuple = typename MakeZeroTupleImpl<N, tla::make_index_sequence<N>>::type;
+
+} // end namespace detail
+
 // Add
 template <class IntTupleA, class IntTupleB>
 CATLASS_HOST_DEVICE constexpr

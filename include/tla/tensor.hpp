@@ -14,7 +14,7 @@
 #include "catlass/arch/arch.hpp"
 #include "tla/layout.hpp"                     // tla::Shape
 #include "tla/numeric/integral_constant.hpp"  // tla::is_integral
-#include "tla/numeric/integer_sequence.hpp"
+#include "tla/int_tuple.hpp"
 
 namespace tla {
 //
@@ -85,21 +85,6 @@ struct Tensor {
 
     tla::tuple<BuiltinTensor, Layout, Coord> rep_;
 };
-
-namespace detail {
-
-template <size_t N, typename Sequence>
-struct MakeIntTupleImpl;
-
-template <size_t N, size_t... Is>
-struct MakeIntTupleImpl<N, tla::index_sequence<Is...>> {
-    using type = tla::tuple<tla::Int<Is*0>...>;
-};
-
-template <size_t N>
-using MakeZeroTuple = typename MakeIntTupleImpl<N, tla::make_index_sequence<N>>::type;
-
-} // end namespace detail
 
 template <class BuiltinTensor, class Layout, class PositionType>
 CATLASS_HOST_DEVICE constexpr
