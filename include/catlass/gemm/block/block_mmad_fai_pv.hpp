@@ -100,18 +100,17 @@ public:
         // Allocate L1 memory space
         l0ATensor = resource.l0ABuf.template GetBufferByByte<ElementA>(0);
         l0BTensor = resource.l0BBuf.template GetBufferByByte<ElementB>(0);
+        l0CTensor = resource.l0CBuf.template GetBufferByByte<ElementC>(0);
+        l1BTensor = resource.l1Buf.template GetBufferByByte<ElementB>(l1BufAddrStart + L1A_SIZE * LOAB_BLOCK * STAGES);
         for (uint32_t i = 0; i < STAGES; i++) {
             l1ATensor[i] = resource.l1Buf.template GetBufferByByte<ElementA>(l1BufAddrStart + L1A_SIZE * LOAB_BLOCK * i);
-            l0CTensor[i] = resource.l0CBuf.template GetBufferByByte<ElementAccumulator>(L0C_PINGPONG_BUF_SIZE * i);
-            l1BTensor[i] =
-            resource.l1Buf.template GetBufferByByte<ElementB>(l1BufAddrStart + L1A_SIZE * LOAB_BLOCK * 2 + L1B_SIZE * i);
         }
     }
 
     /// Destructor
     CATLASS_DEVICE
     ~BlockMmad() {}
-    
+
     CATLASS_DEVICE
     void getBlockShape(GemmCoord &actualShape, uint32_t &nowNIdx, uint32_t &kIdx,
                        uint32_t &nLoop, uint32_t &kLoop, uint32_t &kvSeqlen, uint32_t &embed, bool firstBlock, uint32_t maskTailS = 0)
@@ -155,34 +154,71 @@ public:
                     LayoutA layoutA, LayoutB layoutB, GemmCoord actualOriShape,
                     uint32_t &nIdx, uint32_t &nLoop, uint32_t &blockSize, uint32_t kvSeqlen, uint32_t strideKV, Arch::CrossCoreFlag softmaxFlag)
     {
-        uint32_t embed = actualOriShape[1];
+        uint32_t embed = actualOriShape[1]; // 实际上是nloop
         uint32_t kLoop = CeilDiv<L1TileShape::K>(embed);
         uint32_t rowNum = layoutA.shape(0);
         uint32_t blockN = layoutA.shape(1);
         GemmCoord actualShape{rowNum, 0, 0};
         GemmCoord actualNextShape{rowNum, 0, 0};
         uint32_t nkBlockLoop = (nLoop + LOAB_BLOCK - 1) / LOAB_BLOCK * kLoop; // gap
-        uint32_t nkBlockNextIdx = (nIdx + LOAB_BLOCK - 1) / LOAB_BLOCK * kLoop + 1; // gap
+        
         uint32_t gBOffset = 0;
+        uint32_t gCOffset = 0;
         uint32_t gBNextOffset = 0;
+        uint32_t mPartLoop = CeilDiv<L1TileShape::M>(rowNum);
+
+        
         for (uint32_t kIdx = 0; kIdx < kLoop; kIdx++) {
-            for (uint32_t blockStackIdx = 0; (blockStackIdx < UNIT_BLOCK_STACK_NUM) && ((nIdx + blockStackIdx) < nLoop);
-                 blockStackIdx += LOAB_BLOCK) {
+            // load V
+            AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(EVENT_ID0);
+            for (uint32_t blockStackIdx = 0; (blockStackIdx < UNIT_BLOCK_STACK_NUM) && ((nIdx + blockStackIdx) < nLoop); blockStackIdx += LOAB_BLOCK) {
                 uint32_t nowNIdx = nIdx + blockStackIdx;
-                uint32_t kLoopNextIdx = (nkBlockNextIdx % (kLoop * UNIT_BLOCK_STACK_NUM)) / (UNIT_BLOCK_STACK_NUM / LOAB_BLOCK);
-                uint32_t nLoopNextIdx = (nkBlockNextIdx % (kLoop * UNIT_BLOCK_STACK_NUM)) % (UNIT_BLOCK_STACK_NUM / LOAB_BLOCK) + nkBlockNextIdx / (kLoop * UNIT_BLOCK_STACK_NUM) * UNIT_BLOCK_STACK_NUM;
                 getBlockShape(actualShape, nowNIdx, kIdx, nLoop, kLoop, kvSeqlen, embed, nowNIdx == nIdx);
-                getBlockShape(actualNextShape, nLoopNextIdx, kLoopNextIdx, nLoop, kLoop, kvSeqlen, embed, nowNIdx == nIdx);
                 getKVOffset(gBlockTable, gBOffset, nowNIdx, kIdx, nLoop, kLoop, strideKV, blockSize);
-                getKVOffset(gBlockTable, gBNextOffset, nLoopNextIdx, kLoopNextIdx, nLoop, kLoop, strideKV, blockSize);
-                bool firstItr = blockStackIdx == 0;
-                bool endItr = (blockStackIdx + LOAB_BLOCK > UNIT_BLOCK_STACK_NUM - 1) || (nowNIdx + LOAB_BLOCK > nLoop - 1);
-                bool initMmad = blockStackIdx == 0;
-                bool pvCVItr = firstItr && kIdx == 0;
-                LayoutC layoutOTmpTemp(rowNum, embed, embed);
-                computePV(gA[blockStackIdx * 128], gB[gBOffset], gC, gB[gBNextOffset], layoutA, layoutB, layoutOTmpTemp,
-                          actualShape, actualNextShape, nowNIdx, nkBlockNextIdx, nkBlockLoop, firstItr, endItr, initMmad, pvCVItr, softmaxFlag);
-                ++nkBlockNextIdx;
+                LayoutBInL1 layoutBInL1 = LayoutBInL1::template MakeLayout<ElementB>(actualShape.k(), actualShape.n());
+                auto layoutBTile = layoutB.GetTileLayout(MakeCoord(actualShape.k(), actualShape.n()));
+                copyGmToL1B(l1BTensor[blockStackIdx * 128 * 128], gB[gBOffset], layoutBInL1, layoutBTile);
+            }
+
+            AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(EVENT_ID0);
+            AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(EVENT_ID0);
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(EVENT_ID0);
+
+            for (uint32_t mPartIdx = 0; mPartIdx < mPartLoop; mPartIdx++) {
+                uint32_t mPartActual = (mPartIdx < mPartLoop - 1) ? L1TileShape::M : (rowNum - mPartIdx * L1TileShape::M);
+
+                actualShape[0] = mPartActual;
+                actualNextShape[0] = mPartActual;
+
+                uint32_t nkBlockNextIdx = (nIdx + LOAB_BLOCK - 1) / LOAB_BLOCK * kLoop + 1; // gap
+
+                for (uint32_t blockStackIdx = 0; (blockStackIdx < UNIT_BLOCK_STACK_NUM) && ((nIdx + blockStackIdx) < nLoop);
+                 blockStackIdx += LOAB_BLOCK) {
+                    uint32_t nowNIdx = nIdx + blockStackIdx;
+                    uint32_t kLoopNextIdx = (nkBlockNextIdx % (kLoop * UNIT_BLOCK_STACK_NUM)) / (UNIT_BLOCK_STACK_NUM / LOAB_BLOCK);
+                    uint32_t nLoopNextIdx = (nkBlockNextIdx % (kLoop * UNIT_BLOCK_STACK_NUM)) % (UNIT_BLOCK_STACK_NUM / LOAB_BLOCK) + nkBlockNextIdx / (kLoop * UNIT_BLOCK_STACK_NUM) * UNIT_BLOCK_STACK_NUM;
+
+                    getBlockShape(actualShape, nowNIdx, kIdx, nLoop, kLoop, kvSeqlen, embed, nowNIdx == nIdx);
+                    getBlockShape(actualNextShape, nLoopNextIdx, kLoopNextIdx, nLoop, kLoop, kvSeqlen, embed, nowNIdx == nIdx);
+                    getKVOffset(gBlockTable, gBOffset, nowNIdx, kIdx, nLoop, kLoop, strideKV, blockSize);
+                    getKVOffset(gBlockTable, gBNextOffset, nLoopNextIdx, kLoopNextIdx, nLoop, kLoop, strideKV, blockSize);
+                    bool firstItr = blockStackIdx == 0;
+                    bool endItr = (blockStackIdx + LOAB_BLOCK > UNIT_BLOCK_STACK_NUM - 1) || (nowNIdx + LOAB_BLOCK > nLoop - 1);
+                    bool initMmad = blockStackIdx == 0;
+                    bool pvCVItr = firstItr && kIdx == 0;
+
+                    LayoutC layoutOTmpTemp(mPartActual, embed, embed); // 256, 128, 128
+                    computePV(
+                        gA[blockStackIdx * 128 + mPartIdx * L1TileShape::M * KV_BASE_BLOCK],
+                        gB[gBOffset],
+                        gC[mPartIdx * L1TileShape::M * embed],
+                        gB[gBNextOffset],
+                        layoutA, layoutB, layoutOTmpTemp,
+                        actualShape, actualNextShape,
+                        blockStackIdx, nowNIdx, nkBlockNextIdx, nkBlockLoop, firstItr, endItr, initMmad, pvCVItr, softmaxFlag
+                    );
+                    ++nkBlockNextIdx;
+                }
             }
         }
     }
@@ -199,39 +235,69 @@ public:
         uint32_t kLoop = CeilDiv<L1TileShape::K>(embed);
         uint32_t rowNum = layoutA.shape(0);
         uint32_t blockN = layoutA.shape(1);
+        uint32_t tempK = layoutA.shape(2);
         GemmCoord actualShape{rowNum, 0, 0};
         GemmCoord actualNextShape{rowNum, 0, 0};
         uint32_t nkBlockLoop = (nLoop + LOAB_BLOCK - 1) / LOAB_BLOCK * kLoop; // gap
         uint32_t nkBlockNextIdx = (nIdx + LOAB_BLOCK - 1) / LOAB_BLOCK * kLoop + 1; // gap
         uint32_t gBOffset = 0;
+        uint32_t gCOffset = 0;
         uint32_t gBNextOffset = 0;
         uint32_t nowMaskTailS = 0;
         uint32_t gPOffset = 0;
+
+        uint32_t mPartLoop = CeilDiv<L1TileShape::M>(rowNum);
+
         for (uint32_t kIdx = 0; kIdx < kLoop; kIdx++) {
-            nowMaskTailS = maskTailS;
-            gPOffset = 0;
-            for (uint32_t blockStackIdx = 0; (blockStackIdx < UNIT_BLOCK_STACK_NUM) && ((nIdx + blockStackIdx) < nLoop);
-                 blockStackIdx += LOAB_BLOCK) {
+            // load V
+            AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(EVENT_ID0);
+            for (uint32_t blockStackIdx = 0; (blockStackIdx < UNIT_BLOCK_STACK_NUM) && ((nIdx + blockStackIdx) < nLoop); blockStackIdx += LOAB_BLOCK) {
                 uint32_t nowNIdx = nIdx + blockStackIdx;
-                uint32_t kLoopNextIdx = (nkBlockNextIdx % (kLoop * UNIT_BLOCK_STACK_NUM)) / (UNIT_BLOCK_STACK_NUM / LOAB_BLOCK);
-                uint32_t nLoopNextIdx = (nkBlockNextIdx % (kLoop * UNIT_BLOCK_STACK_NUM)) % (UNIT_BLOCK_STACK_NUM / LOAB_BLOCK) + nkBlockNextIdx / (kLoop * UNIT_BLOCK_STACK_NUM) * UNIT_BLOCK_STACK_NUM;
-                uint32_t startSeqOffset = nowNIdx == nIdx ? maskTailS : 0;
-                uint32_t startSeqNxtOffset = nLoopNextIdx == nIdx ? maskTailS : 0;
-                getBlockShape(actualShape, nowNIdx, kIdx, nLoop, kLoop, kvSeqlen, embed, nowNIdx == nIdx, nowMaskTailS);
-                getBlockShape(actualNextShape, nLoopNextIdx, kLoopNextIdx, nLoop, kLoop, kvSeqlen, embed, nLoopNextIdx == nIdx, nowMaskTailS);
-                getKVOffset(gBlockTable, gBOffset, nowNIdx, kIdx, nLoop, kLoop, strideKV, blockSize, startSeqOffset);
-                getKVOffset(gBlockTable, gBNextOffset, nLoopNextIdx, kLoopNextIdx, nLoop, kLoop, strideKV, blockSize, startSeqNxtOffset);
-                bool firstItr = blockStackIdx == 0;
-                bool endItr = (blockStackIdx + LOAB_BLOCK > UNIT_BLOCK_STACK_NUM - 1) || (nowNIdx + LOAB_BLOCK > nLoop - 1);
-                bool initMmad = blockStackIdx == 0;
-                bool pvCVItr = firstItr && kIdx == 0;
-                LayoutC layoutOTmpTemp(rowNum, embed, embed);
-                computePV(gA[gPOffset], gB[gBOffset], gC, gB[gBNextOffset], layoutA, layoutB, layoutOTmpTemp,
-                          actualShape, actualNextShape, nowNIdx, nkBlockNextIdx, nkBlockLoop, firstItr, endItr, initMmad, pvCVItr, softmaxFlag, preloadFlag);
-                gPOffset += actualShape.k();
-                ++nkBlockNextIdx;
-                nowMaskTailS = 0;
-                preloadFlag = false;
+                getBlockShape(actualShape, nowNIdx, kIdx, nLoop, kLoop, kvSeqlen, embed, nowNIdx == nIdx);
+                getKVOffset(gBlockTable, gBOffset, nowNIdx, kIdx, nLoop, kLoop, strideKV, blockSize);
+                LayoutBInL1 layoutBInL1 = LayoutBInL1::template MakeLayout<ElementB>(actualShape.k(), actualShape.n());
+                auto layoutBTile = layoutB.GetTileLayout(MakeCoord(actualShape.k(), actualShape.n()));
+                copyGmToL1B(l1BTensor[blockStackIdx * 128 * 128], gB[gBOffset], layoutBInL1, layoutBTile);
+            }
+            AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(EVENT_ID0);
+            AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(EVENT_ID0);
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(EVENT_ID0);
+
+            for (uint32_t mPartIdx = 0; mPartIdx < mPartLoop; mPartIdx++) {
+                uint32_t mPartActual = (mPartIdx < mPartLoop - 1) ? L1TileShape::M : (rowNum - mPartIdx * L1TileShape::M);
+
+                actualShape[0] = mPartActual;
+                actualNextShape[0] = mPartActual;
+
+                uint32_t nkBlockNextIdx = (nIdx + LOAB_BLOCK - 1) / LOAB_BLOCK * kLoop + 1;
+                nowMaskTailS = maskTailS;
+                gPOffset = mPartIdx * L1TileShape::M * KV_BASE_BLOCK;
+                bool innerPreloadFlag = preloadFlag;
+
+                for (uint32_t blockStackIdx = 0; (blockStackIdx < UNIT_BLOCK_STACK_NUM) && ((nIdx + blockStackIdx) < nLoop);
+                    blockStackIdx += LOAB_BLOCK) {
+                    uint32_t nowNIdx = nIdx + blockStackIdx;
+                    uint32_t kLoopNextIdx = (nkBlockNextIdx % (kLoop * UNIT_BLOCK_STACK_NUM)) / (UNIT_BLOCK_STACK_NUM / LOAB_BLOCK);
+                    uint32_t nLoopNextIdx = (nkBlockNextIdx % (kLoop * UNIT_BLOCK_STACK_NUM)) % (UNIT_BLOCK_STACK_NUM / LOAB_BLOCK) + nkBlockNextIdx / (kLoop * UNIT_BLOCK_STACK_NUM) * UNIT_BLOCK_STACK_NUM;
+                    uint32_t startSeqOffset = nowNIdx == nIdx ? maskTailS : 0;
+                    uint32_t startSeqNxtOffset = nLoopNextIdx == nIdx ? maskTailS : 0;
+                    getBlockShape(actualShape, nowNIdx, kIdx, nLoop, kLoop, kvSeqlen, embed, nowNIdx == nIdx, nowMaskTailS);
+                    getBlockShape(actualNextShape, nLoopNextIdx, kLoopNextIdx, nLoop, kLoop, kvSeqlen, embed, nLoopNextIdx == nIdx, nowMaskTailS);
+                    getKVOffset(gBlockTable, gBOffset, nowNIdx, kIdx, nLoop, kLoop, strideKV, blockSize, startSeqOffset);
+                    getKVOffset(gBlockTable, gBNextOffset, nLoopNextIdx, kLoopNextIdx, nLoop, kLoop, strideKV, blockSize, startSeqNxtOffset);
+                    bool firstItr = blockStackIdx == 0;
+                    bool endItr = (blockStackIdx + LOAB_BLOCK > UNIT_BLOCK_STACK_NUM - 1) || (nowNIdx + LOAB_BLOCK > nLoop - 1);
+                    bool initMmad = blockStackIdx == 0;
+                    bool pvCVItr = firstItr && kIdx == 0;
+                    LayoutC layoutOTmpTemp(mPartActual, embed, embed);
+
+                    computePV(gA[gPOffset], gB[gBOffset], gC[mPartIdx * L1TileShape::M * embed], gB[gBNextOffset], layoutA, layoutB, layoutOTmpTemp,
+                            actualShape, actualNextShape, blockStackIdx, nowNIdx, nkBlockNextIdx, nkBlockLoop, firstItr, endItr, initMmad, pvCVItr, softmaxFlag, innerPreloadFlag);
+                    gPOffset += actualShape.k();
+                    ++nkBlockNextIdx;
+                    nowMaskTailS = 0;
+                    innerPreloadFlag = false;
+                }
             }
         }
     }
@@ -243,7 +309,8 @@ public:
         AscendC::GlobalTensor<ElementC> const &gC,
         AscendC::GlobalTensor<ElementB> const &gmNextBlockB,
         LayoutA layoutA, LayoutB layoutB, LayoutC layoutC,
-        GemmCoord actualShape, GemmCoord actualNextShape, uint32_t nowIdx, uint32_t &nkblockIdx,
+        GemmCoord actualShape, GemmCoord actualNextShape, 
+        uint32_t blockStackIdx, uint32_t nowIdx, uint32_t &nkblockIdx,
         uint32_t &nkblockLoop, bool firstItr, bool endItr, bool initMmad, bool pvCVItr, Arch::CrossCoreFlag softmaxFlag, bool preloadFlag = false)
     {
         uint32_t MActual = actualShape.m();
@@ -258,18 +325,10 @@ public:
         LayoutBInL0 layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(kActual, nActual);
         uint32_t l1KvPingPongFlag = nkblockIdx % 2;
         uint32_t l0ABPingPongFlag = nkblockIdx % 2;
-        if (nkblockIdx == 1 || preloadFlag) {
-            auto layoutBTile = layoutB.GetTileLayout(MakeCoord(kActual, nActual));
-            AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1KvPingPongFlag + 2);
-            copyGmToL1B(l1BTensor[l1KvPingPongFlag], gB, layoutBInL1, layoutBTile);
-            AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1KvPingPongFlag + 2);
-        }
 
-        AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1KvPingPongFlag + 2);
         AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(2);
         AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(3);
-        copyL1ToL0B(l0BTensor, l1BTensor[l1KvPingPongFlag], layoutBInL0, layoutBInL1);
-        AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1KvPingPongFlag + 2);
+        copyL1ToL0B(l0BTensor, l1BTensor[blockStackIdx * 128 * 128], layoutBInL0, layoutBInL1);
 
         if (pvCVItr) {
             // Arch::CrossCoreWaitFlag(softmaxFlag);
@@ -278,16 +337,6 @@ public:
         auto layoutATile = layoutA.GetTileLayout(MakeCoord(MActual, kActual));
         copyGmToL1A(l1ATensor[l1KvPingPongFlag], gA, layoutAInL1, layoutATile);
         AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(EVENT_ID5);
-
-        if (nkblockIdx != nkblockLoop) {
-            uint32_t nNextActual = actualNextShape.n();
-            uint32_t kNextActual = actualNextShape.k();
-            LayoutBInL1 layoutBNextInL1 = LayoutBInL1::template MakeLayout<ElementB>(kNextActual, nNextActual);
-            auto layoutNextBTile = layoutB.GetTileLayout(MakeCoord(kNextActual, nNextActual));
-            AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(1 - l1KvPingPongFlag + 2);
-            copyGmToL1B(l1BTensor[1 - l1KvPingPongFlag], gmNextBlockB, layoutBNextInL1, layoutNextBTile);
-            AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(1 - l1KvPingPongFlag + 2);
-        }
 
         AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(EVENT_ID5);
         AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(0);
@@ -323,10 +372,10 @@ public:
 protected:
     /// Data members
     AscendC::LocalTensor<ElementA> l1ATensor[STAGES];
-    AscendC::LocalTensor<ElementB> l1BTensor[STAGES];
+    AscendC::LocalTensor<ElementB> l1BTensor;
     AscendC::LocalTensor<ElementA> l0ATensor;
     AscendC::LocalTensor<ElementB> l0BTensor;
-    AscendC::LocalTensor<ElementAccumulator> l0CTensor[STAGES];
+    AscendC::LocalTensor<ElementC> l0CTensor;
 
     TileMmad tileMmad;
     CopyGmToL1A copyGmToL1A;
