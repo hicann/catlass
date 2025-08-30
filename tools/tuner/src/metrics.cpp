@@ -147,7 +147,6 @@ bool MkdirRecursively(std::string_view path)
     std::filesystem::path absPath = path;
     if (IsExist(path)) {
         if (std::filesystem::is_directory(absPath, ec) && !ec) {
-            chmod(path.data(), SAVE_DIR_AUTHORITY);
             return ec.value() == 0;
         }
         if (ec) {
@@ -163,11 +162,11 @@ bool MkdirRecursively(std::string_view path)
         cur.append(path.substr(slow, fast - slow));
         cur.append(PATH_SEP);
         if (!IsExist(cur)) {
-            if (!std::filesystem::create_directory(cur, ec) && ec) {
+            if ((!std::filesystem::create_directory(cur, ec) && ec) ||
+                chmod(cur.c_str(), SAVE_DIR_AUTHORITY) != 0) {
                 LOGE("Create dir %.*s failed: %s", static_cast<int>(cur.size()), cur.data(), ec.message().c_str());
                 return false;
             }
-            chmod(cur.c_str(), SAVE_DIR_AUTHORITY);
         }
         if (fast == std::string_view::npos) {
             break;
@@ -201,13 +200,17 @@ void Metrics::SetOutputPath(std::string_view output)
     if (absPath.size() < TAIL_LEN || absPath.find(".csv", absPath.size() - TAIL_LEN) == std::string::npos) {
         absPath.append(".csv");
     }
-    if (IsExist(absPath) && IsSoftLink(absPath)) {
-        LOGE("--output cannot be a soft link");
-        return;
-    }
-    if (std::error_code ec; std::filesystem::is_directory(absPath, ec) && !ec) {
-        LOGE("--output cannot be an existing directory: %s", absPath.c_str());
-        return;
+    // check file security
+    if (IsExist(absPath)) {
+        if (IsSoftLink(absPath)) {
+            LOGE("--output cannot be a soft link");
+            return;
+        } else if (!IsSafePath(absPath)) {
+            return;
+        } else if (std::error_code ec; std::filesystem::is_directory(absPath, ec) && !ec) {
+            LOGE("--output cannot be an existing directory: %s", absPath.c_str());
+            return;
+        }
     }
     std::string_view absView = absPath;
     auto sep = absView.rfind(PATH_SEP);
@@ -250,11 +253,10 @@ void Metrics::Dump()
         return;
     }
     std::ofstream file(outputPath_);
-    if (!file.is_open()) {
+    if (!file.is_open() || chmod(outputPath_.c_str(), SAVE_DATA_FILE_AUTHORITY) != 0) {
         LOGE("Create file %s failed", outputPath_.c_str());
         return;
     }
-    chmod(outputPath_.c_str(), SAVE_DATA_FILE_AUTHORITY);
     std::ostream_iterator<std::string> output_iterator(file, "\n");
     output_iterator++ = head;
     std::transform(metrics_.begin(), metrics_.end(), output_iterator, [&](Metric& metric) {
@@ -285,4 +287,4 @@ std::string Metrics::GetHead()
     return head;
 }
 
-} // namespace Catlass
+} // namespace Catlass
