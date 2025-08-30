@@ -54,7 +54,7 @@
      static constexpr uint32_t REDUCE_UB_SIZE = 1024;
      static constexpr uint32_t ROW_OPS_SPEC_MASK_32 = 32;
      static constexpr uint32_t ROW_OPS_SPEC_MASK_4 = 4;
-     static constexpr uint32_t MAX_ROW_NUM_SUB_CORE = 128;
+     static constexpr uint32_t MAX_ROW_NUM_SUB_CORE = 256;
      static constexpr int64_t UB_FLOAT_LINE_SIZE = 64;
      enum class MaskCategory{
          NO_MASK = 0,

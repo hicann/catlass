@@ -57,6 +57,9 @@
  
      using ElementOTmp = typename EpilogueRescaleO::ElementInput;
      using LayoutOTmp = typename EpilogueRescaleO::LayoutInput;
+
+    using ElementUpdate = typename EpilogueRescaleO::ElementUpdate;
+    using LayoutUpdate = typename EpilogueRescaleO::LayoutUpdate;
  
      /// Parameters structure
      struct Params {
@@ -113,7 +116,7 @@
      CATLASS_DEVICE
      uint32_t GetQNBlockTile(uint32_t qSeqlen, uint32_t groupSize)
      {
-         uint32_t qNBlockTile = (128 / qSeqlen) / 2 * 2;
+         uint32_t qNBlockTile = (512 / qSeqlen) / 2 * 2;
          qNBlockTile = qNBlockTile < groupSize ? qNBlockTile : groupSize;
          qNBlockTile = qNBlockTile < 1 ? 1 : qNBlockTile;
          return qNBlockTile;
@@ -122,7 +125,7 @@
      CATLASS_DEVICE
      uint32_t GetQSBlockTile(uint32_t kvSeqlen)
      {
-         uint32_t qSBlockTile = 128;
+         uint32_t qSBlockTile = 512;
          return qSBlockTile;
      }
  
@@ -422,6 +425,7 @@
          AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID3);
          AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID4);
          AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID5);
+         AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID6);
  
          AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
          AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID1);
@@ -583,17 +587,21 @@
                      }
                      LayoutO layoutO(qSeqlen, embed * qHeads);
                      LayoutOTmp layoutOTmp(rowNum, embed, embedRound);
+                     LayoutUpdate layoutUpdate(rowNum, embed, embedRound);
                      GemmCoord actualBlockShapePV{rowNum, embed, stackSeqTile};
                      uint32_t curStackTileMod = (stackSeqCount - preLaunch) % (preLaunch + 1);
                      uint32_t gmOffsetOTmp = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) +
                          curStackTileMod * WORKSPACE_BLOCK_SIZE_DB;
+                    uint64_t gmOffsetUpdate = (uint64_t)(coreIdx * WORKSPACE_BLOCK_SIZE_DB);
                      Arch::CrossCoreWaitFlag(pvReady);
                      // rescale O
                      epilogueRescaleO(
                          gO[gmOffsetO],
                          gOTmp[gmOffsetOTmp],
+                         gOUpdate[gmOffsetUpdate],
                          layoutO,
                          layoutOTmp,
+                         layoutUpdate,
                          actualBlockShapePV,
                          qSBlockSize,
                          qNBlockSize,
@@ -661,17 +669,21 @@
                      }
                      LayoutO layoutO(qSBlockSize, embed * qHeads);
                      LayoutOTmp layoutOTmp(rowNum, embed, embedRound);
+                     LayoutUpdate layoutUpdate(rowNum, embed, embedRound);
                      GemmCoord actualBlockShapePV{rowNum, embed, stackSeqTile};
                      uint32_t curStackTileMod = (stackSeqCount - preLaunch) % (preLaunch + 1);
                      uint32_t gmOffsetOTmp = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) +
                          curStackTileMod * WORKSPACE_BLOCK_SIZE_DB;
+                    uint64_t gmOffsetUpdate = (uint64_t)(coreIdx * WORKSPACE_BLOCK_SIZE_DB);
                      Arch::CrossCoreWaitFlag(pvReady);
                      // rescale O
                      epilogueRescaleO(
                          gO[gmOffsetO],
                          gOTmp[gmOffsetOTmp],
+                         gOUpdate[gmOffsetUpdate],
                          layoutO,
                          layoutOTmp,
+                         layoutUpdate,
                          actualBlockShapePV,
                          qSBlockSize,
                          qNBlockSize,
@@ -693,6 +705,7 @@
          AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID3);
          AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID4);
          AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID5);
+         AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID6);
  
          
          AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
@@ -751,8 +764,8 @@
      using ElementUpdate = float;
      using LayoutUpdate = layout::RowMajor;
      // L1TileShape::K must be embdding
-     using L1TileShape = GemmShape<128, 128, 128>;
-     using L0TileShape = L1TileShape;
+     using L1TileShape = GemmShape<512, 128, 128>;
+     using L0TileShape = GemmShape<128, 128, 128>;
      // GEMM Block模块，实现Flash Attention Infer的Q * K^T
      using DispatchPolicyQK = Gemm::MmadAtlasA2FAIQK<true>;
      using QType = Gemm::GemmType<ElementQ, LayoutQ>;
@@ -770,7 +783,8 @@
      using DispatchPolicyPV = Gemm::MmadAtlasA2FAIPV<true>;
      using VType = Gemm::GemmType<ElementV, LayoutV>;
      using OTmpType = Gemm::GemmType<ElementOTmp, LayoutOTmp>;
-     using BlockMmadPV = Gemm::Block::BlockMmad<DispatchPolicyPV, L1TileShape, L0TileShape, PType, VType, OTmpType>;
+     using L1TileShapePV = GemmShape<256, 128, 128>;
+     using BlockMmadPV = Gemm::Block::BlockMmad<DispatchPolicyPV, L1TileShapePV, L0TileShape, PType, VType, OTmpType>;
  
      // Epilogue Block模块，实现Flash Attention Infer中当前O基块的更新
      using DispatchPolicyRescaleO = Epilogue::EpilogueAtlasA2RescaleO;

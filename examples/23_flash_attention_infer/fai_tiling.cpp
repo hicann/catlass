@@ -46,7 +46,7 @@
  const int32_t NUM128 = 128;
  const int32_t NUM256 = 256;
  const int32_t NUM512 = 512;
- const int32_t WORKSPACE_BLOCK_SIZE_DB = 131072;
+ const int32_t WORKSPACE_BLOCK_SIZE_DB = 131072 * 4;
  
  enum class MaskType { NO_MASK = 0, MASK_SPEC = 1 };
  
@@ -102,7 +102,7 @@
  
  uint32_t GetQNBlockTile(int64_t qSeqlen, uint32_t groupSize)
  {
-     uint32_t qRowNumCeil = 128;
+     uint32_t qRowNumCeil = 512;
      // A trick is used to ensure the qN tile is a even number,
      // thus most tasks have balanced workload between two vec cores,
      // and each vec core possess no more than 64 rows when all-rounded row num is no larger than 128,
@@ -115,7 +115,7 @@
  
  uint32_t GetQSBlockTile(int64_t kvSeqlen)
  {
-     uint32_t qSBlockTile = 128;
+     uint32_t qSBlockTile = 512;
      return qSBlockTile;
  }
  

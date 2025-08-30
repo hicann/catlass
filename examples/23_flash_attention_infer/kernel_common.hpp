@@ -15,7 +15,7 @@ constexpr uint32_t QK_READY_ID = 1;
 constexpr uint32_t SOFTMAX_READY_ID = 2;
 constexpr uint32_t PV_READY_ID = 3;
 constexpr uint32_t BLOCK_SIZE = 16;
-constexpr uint32_t WORKSPACE_BLOCK_SIZE_DB = 131072;
+constexpr uint32_t WORKSPACE_BLOCK_SIZE_DB = 131072 * 4;
 constexpr uint32_t TMP_SIZE_DECODER = 32768;
 
 constexpr int32_t TILING_BATCH = 0;
