@@ -70,4 +70,76 @@ CATLASS_DEVICE T Max(T a, T b)
 {
     return (a > b) ? a : b;
 }
+
+enum class cvPipeLineType{
+    FAI_COMMON_NORMAL = 0,
+    FAI_COMMON_CHUNK_MASK = 1
+};
+
+CATLASS_DEVICE
+uint32_t GetQNBlockTile(uint32_t qSeqlen, uint32_t groupSize)
+{
+    uint32_t qNBlockTile = (128 / qSeqlen) / 2 * 2;
+    qNBlockTile = qNBlockTile < groupSize ? qNBlockTile : groupSize;
+    qNBlockTile = qNBlockTile < 1 ? 1 : qNBlockTile;
+    return qNBlockTile;
+}
+
+CATLASS_DEVICE
+uint32_t GetQSBlockTile(uint32_t kvSeqlen)
+{
+    uint32_t qSBlockTile = 128;
+    return qSBlockTile;
+}
+
+
+
+
+struct FATilingData {
+    uint32_t numHeads = 0;
+    uint32_t embeddingSize = 0;
+    uint32_t numBlocks = 0;
+    uint32_t blockSize = 0;
+    uint32_t maxKvSeqlen = 0;
+    uint32_t kvHeads = 0;
+    uint32_t batch = 0;
+    uint32_t maxNumBlocksPerBatch = 0;
+    uint32_t firstBatchTaskNum = 0;
+    uint32_t totalTaskNum = 0;
+    uint32_t maskType = 0;
+    uint64_t mm1OutSize = 0;
+    uint64_t smOnlineOutSize = 0;
+    uint64_t mm2OutSize = 0;
+    uint64_t UpdateSize = 0;
+    uint64_t workSpaceSize = 0;
+    float scaleValue = 0.0;
+};
+
+
+struct FAIKernelParams{
+    GM_ADDR q;
+    GM_ADDR k;
+    GM_ADDR v;
+    GM_ADDR mask;
+    GM_ADDR blockTables;
+    GM_ADDR actualQseqlen;
+    GM_ADDR actualKvseqlen;
+    GM_ADDR o;
+    GM_ADDR s;
+    GM_ADDR p;
+    GM_ADDR oTemp;
+    GM_ADDR oUpdate;
+    GM_ADDR tiling;
+    // Methods
+    CATLASS_DEVICE
+    FAIKernelParams() {}
+    CATLASS_DEVICE
+    FAIKernelParams(GM_ADDR q_, GM_ADDR k_, GM_ADDR v_, GM_ADDR mask_, GM_ADDR blockTables_, 
+        GM_ADDR actualQseqlen_, GM_ADDR actualKvseqlen_, GM_ADDR o_, GM_ADDR s_, GM_ADDR p_, 
+        GM_ADDR oTemp_, GM_ADDR oUpdate_, GM_ADDR tiling_)
+        : q(q_), k(k_), v(v_), mask(mask_), blockTables(blockTables_), actualQseqlen(actualQseqlen_), 
+            actualKvseqlen(actualKvseqlen_), o(o_), s(s_), p(p_), oTemp(oTemp_), oUpdate(oUpdate_), tiling(tiling_) {}
+};
+
+
 #endif

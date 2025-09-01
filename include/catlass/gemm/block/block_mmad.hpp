@@ -82,7 +82,8 @@ struct BlockGemm {
 #include "catlass/gemm/block/block_mmad_preload_async_with_callback.hpp"
 #include "catlass/gemm/block/block_mmad_gemm.hpp"
 #include "catlass/gemm/block/block_mmad_pingpong_bias.hpp"
-#include "catlass/gemm/block/block_mmad_fai_qk.hpp"
-#include "catlass/gemm/block/block_mmad_fai_pv.hpp"
-
+#include "catlass/gemm/block/block_mmad_fai_qk_head_tail.hpp"
+#include "catlass/gemm/block/block_mmad_fai_qk_normal.hpp"
+#include "catlass/gemm/block/block_mmad_fai_pv_head_tail.hpp"
+#include "catlass/gemm/block/block_mmad_fai_pv_normal.hpp"
 #endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_HPP
