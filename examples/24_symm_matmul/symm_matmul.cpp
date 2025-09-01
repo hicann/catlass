@@ -1,0 +1,307 @@
+/*
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * This file is a part of the CANN Open Software.
+ * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
+ */
+
+// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0, 
+// optimizing stack space. If you need to use the ShapeInfo of the AscendC Tensor, please undefine this macro.
+#ifndef K_MAX_SHAPE_DIM
+#define K_MAX_SHAPE_DIM 0
+#endif
+
+#include <iostream>
+#include <vector>
+#include <type_traits>
+
+#include "helper.hpp"
+#include "golden.hpp"
+#include "fp16_t.h"
+#include "catlass/catlass.hpp"
+#include "catlass/arch/arch.hpp"
+#include "catlass/gemm/block/block_mmad.hpp"
+#include "catlass/gemm/kernel/symm_matmul.hpp"
+#include "catlass/gemm/gemm_type.hpp"
+#include "catlass/layout/layout.hpp"
+#include "catlass/gemm_coord.hpp"
+#include "catlass/matrix_coord.hpp"
+#include "catlass/gemm/dispatch_policy.hpp"
+#include "catlass/epilogue/dispatch_policy.hpp"
+#include "catlass/epilogue/tile/tile_copy.hpp"
+#include "catlass/epilogue/tile/tile_elemwise_add.hpp"
+#include "catlass/epilogue/tile/tile_elemwise_muls.hpp"
+#include "catlass/epilogue/tile/tile_cast.hpp"
+#include "catlass/epilogue/block/block_epilogue.hpp"
+
+#include "catlass/status.hpp"
+#include "catlass/gemm/device/device_gemm.hpp"
+
+using namespace Catlass;
+
+using ScalarType = float;
+using fp16_t = op::fp16_t;
+struct Options{
+    const std::string HELPER = "15_gemm m n k [device_id]";
+
+    GemmCoord problemShape{128, 128, 128};
+    int32_t deviceId{0};
+
+    Options() = default;
+
+    int Parse(int argc, const char **argv){
+        enum ArgsIndex {
+            M_INDEX = 1,
+            N_INDEX,
+            K_INDEX,
+            DEVICE_ID_INDEX,
+            ARGS_MAX
+        };
+        if (argc > ARGS_MAX || argc <= K_INDEX)
+        {
+            std::cerr << HELPER << std::endl;
+            return -1;
+        }
+        problemShape.m() = std::atoi(argv[M_INDEX]);
+        problemShape.n() = std::atoi(argv[N_INDEX]);
+        problemShape.k() = std::atoi(argv[K_INDEX]);
+        if (argc == ARGS_MAX)
+        {
+            deviceId = std::atoi(argv[DEVICE_ID_INDEX]);
+        }
+        return 0;
+    }
+};
+
+layout::RowMajor GetWorkspaceLayout(layout::RowMajor layout, uint32_t align)
+{
+    if (align == 0) 
+    {
+        return layout;
+    }
+    return layout::RowMajor(layout.shape(0), layout.shape(1),
+        RoundUp(layout.shape(1), align));
+}
+
+layout::ColumnMajor GetWorkspaceLayout(layout::ColumnMajor layout, uint32_t align)
+{
+    if (align == 0) 
+    {
+        return layout;
+    }
+    return layout::ColumnMajor(layout.shape(0), layout.shape(1),
+        RoundUp(layout.shape(0), align));
+}
+
+size_t GetWorkspaceLen(layout::RowMajor layout)
+{
+    return layout.shape(0) * layout.stride(0);
+}
+
+size_t GetWorkspaceLen(layout::ColumnMajor layout)
+{
+    return layout.shape(1) * layout.stride(1);
+}
+
+bool IsSameStride(layout::RowMajor layout1, layout::RowMajor layout2)
+{
+    return layout1.stride(0) == layout2.stride(0);
+}
+
+bool IsSameStride(layout::ColumnMajor layout1, layout::ColumnMajor layout2)
+{
+    return layout1.stride(1) == layout2.stride(1);
+}
+
+template<class ElementRandom>
+void FillRandomScalarData(ElementRandom &scalarData, ElementRandom low, ElementRandom high)
+{
+    scalarData = static_cast<ElementRandom>(low + (static_cast<ElementRandom>(rand()) / static_cast<ElementRandom>(RAND_MAX)) * (high - low));
+}
+
+template <class Adapter>
+void RunAdapter(Adapter matmul_op, typename Adapter::Arguments args, aclrtStream stream,
+    uint32_t aicCoreNum, uint64_t fftsAddr)
+{
+    size_t sizeWorkspace = matmul_op.GetWorkspaceSize(args);
+    uint8_t *deviceWorkspace = nullptr;
+    if (sizeWorkspace > 0) 
+    {
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+    }
+    matmul_op.Initialize(args, deviceWorkspace);
+    matmul_op(stream, aicCoreNum, fftsAddr);
+    ACL_CHECK(aclrtSynchronizeStream(stream));
+    if (sizeWorkspace > 0) 
+    {
+        ACL_CHECK(aclrtFree(deviceWorkspace));
+    }
+}
+
+void Run(Options options)
+{
+    aclrtStream stream{nullptr};
+    ACL_CHECK(aclInit(nullptr));
+    ACL_CHECK(aclrtSetDevice(options.deviceId));
+    ACL_CHECK(aclrtCreateStream(&stream));
+
+    uint32_t m = options.problemShape.m();
+    uint32_t n = options.problemShape.n();
+    uint32_t k = options.problemShape.k();
+
+    size_t lenA = static_cast<size_t>(m) * k;
+    size_t lenB = static_cast<size_t>(k) * n;
+    size_t lenC = static_cast<size_t>(m) * n;
+    size_t lenX = lenC; 
+
+    size_t sizeA = lenA * sizeof(fp16_t);
+    size_t sizeB = lenB * sizeof(fp16_t);
+    size_t sizeC = lenC * sizeof(fp16_t);
+    size_t sizeX = lenX * sizeof(fp16_t);
+
+    const uint32_t align = 128;
+    using LayoutA = layout::RowMajor;
+    using LayoutB = layout::RowMajor;
+    using LayoutX = layout::RowMajor;
+    LayoutA layoutA{m, k};
+    LayoutB layoutB{k, n};
+    LayoutX layoutX{m, n};
+    LayoutA layoutWA = GetWorkspaceLayout(layoutA, align);
+    LayoutB layoutWB = GetWorkspaceLayout(layoutB, align);
+    size_t sizeWA = GetWorkspaceLen(layoutWA) * sizeof(fp16_t);
+    size_t sizeWB = GetWorkspaceLen(layoutWB) * sizeof(fp16_t);
+
+    ScalarType alpha{0};
+    ScalarType beta{0};
+    FillRandomScalarData(alpha, -10.0f, 10.0f);
+    FillRandomScalarData(beta, -10.0f, 10.0f);
+    std::vector<fp16_t> hostA(lenA);
+    std::vector<fp16_t> hostB(lenB);
+    std::vector<fp16_t> hostX(lenX);
+    golden::FillRandomData(hostA,  -1.0f, 1.0f);
+    //golden::FillRandomData(hostB,  -1.0f, 1.0f);
+    for(int m_idx = 0; m_idx < m; m_idx++){
+        for(int k_idx = 0; k_idx < k; k_idx++){
+            hostB[k_idx * m + m_idx] = hostA[m_idx * k + k_idx];
+        }
+    }
+    // golden::FillRandomData(hostX,  -1.0f, 1.0f);
+
+    for(int m_idx = 0; m_idx < m; m_idx++){
+        for(int n_idx = 0; n_idx < n; n_idx++){
+            hostX[m_idx * n + n_idx] = 1.f;
+        }
+    }
+    uint8_t *deviceA{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
+    uint8_t *deviceWA{nullptr};
+    if (IsSameStride(layoutWA, layoutA)) 
+    {
+        deviceWA = deviceA;
+    } else {
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWA), sizeWA, ACL_MEM_MALLOC_HUGE_FIRST));
+    }
+    uint8_t *deviceB{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
+    uint8_t *deviceWB{nullptr};
+    if (IsSameStride(layoutWB, layoutB)) 
+    {
+        deviceWB = deviceB;
+    } else {
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWB), sizeWB, ACL_MEM_MALLOC_HUGE_FIRST));
+    }
+    uint8_t *deviceX{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceX), sizeX, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMemcpy(deviceX, sizeX, hostX.data(), sizeX, ACL_MEMCPY_HOST_TO_DEVICE));
+
+    uint8_t *gmWorkspace{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&gmWorkspace), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
+
+    // Prepare FFTS address
+    uint64_t fftsAddr{0};
+    uint32_t fftsLen{0};
+    RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
+
+    auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
+
+    using ArchTag = Arch::AtlasA2;
+    constexpr bool enableUnitFlag = true;
+    constexpr bool enableShuffleK = true;
+    constexpr bool enableABBA = true;
+    using GemmBlockDispatchPolicy = Gemm::GemmAtlasA2<enableUnitFlag, enableShuffleK, enableABBA>;
+    using EpilogueBlockDispatchPolicy = Epilogue::EpilogueAtlasA2Gemm;
+    using AType = Gemm::GemmType<half, LayoutA>;
+    using BType = Gemm::GemmType<half, LayoutB>;
+    using CType = Gemm::GemmType<half, LayoutX>;
+    using XType = Gemm::GemmType<half, LayoutX>;
+    using DType = XType;
+    using ComputeType = CType;
+    using L1TileShape = GemmShape<128, 128, 128>;
+    using L0TileShape = GemmShape<128, 128, 64>;
+    using TileShapeCast = MatrixShape<L1TileShape::M / 2, L1TileShape::N>;
+    using GemmBlock = Gemm::Block::BlockGemm<GemmBlockDispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
+    constexpr uint32_t computeLength = L1TileShape::MN / 2;
+    using TileElemWiseAddGemm = Epilogue::Tile::TileElemWiseAdd<ArchTag, ComputeType, computeLength>;
+    using TileElemWiseMulsGemm = Epilogue::Tile::TileElemWiseMuls<ArchTag, ComputeType, computeLength>;
+    using EpilogueTileCopy = Epilogue::Tile::TileCopy<ArchTag, CType, XType, DType>;
+    using EpilogueBlock = Epilogue::Block::BlockEpilogue<EpilogueBlockDispatchPolicy, CType, XType, DType, TileElemWiseAddGemm, TileElemWiseMulsGemm, EpilogueTileCopy, std::true_type>;
+    using GemmKernel = Gemm::Kernel::KernelGemm<GemmBlock, EpilogueBlock>;
+    typename EpilogueBlock::Params epilogueParams{alpha, beta, deviceX, layoutX, deviceX, layoutX};
+    typename GemmKernel::Arguments arguments{options.problemShape, align, deviceA, deviceB, gmWorkspace, deviceWA, deviceWB, epilogueParams};
+    using GemmAdapter = Gemm::Device::DeviceGemm<GemmKernel>;
+    GemmAdapter gemm_op;
+    gemm_op.CanImplement(arguments);
+    RunAdapter(gemm_op, arguments, stream, aicCoreNum, fftsAddr);
+
+    std::vector<fp16_t> hostRes(lenX);
+    ACL_CHECK(aclrtMemcpy(hostRes.data(), sizeX, deviceX, sizeX, ACL_MEMCPY_DEVICE_TO_HOST));
+    std::vector<fp16_t> hostGolden(lenX);
+    golden::ComputeGemm(options.problemShape, alpha, beta, hostA, layoutA, hostB, layoutB, hostX, layoutX, hostGolden, layoutX);
+
+    // std::vector<uint64_t> errorIndices = golden::CompareData(hostRes, hostGolden, m * n);
+    // if (errorIndices.empty()) 
+    // {
+    //     std::cout << "Compare success." << std::endl;
+    // } else {
+    //     std::cerr << "Compare failed. Error count: " << errorIndices.size() << std::endl;
+    // }
+    for(int m_idx = 0; m_idx < m; m_idx++){
+        for(int n_idx = 0; n_idx < n; n_idx++){
+            std::cout << static_cast<float>(hostRes[m_idx * n + n_idx]) << " ";
+        }
+        std::cout << std::endl;
+    }
+
+    ACL_CHECK(aclrtFree(deviceA));
+    ACL_CHECK(aclrtFree(deviceB));
+    ACL_CHECK(aclrtFree(deviceX));
+    if (!IsSameStride(layoutWA, layoutA)) 
+    {
+        ACL_CHECK(aclrtFree(deviceWA));
+    }
+    if (!IsSameStride(layoutWB, layoutB)) 
+    {
+        ACL_CHECK(aclrtFree(deviceWB));
+    }
+    ACL_CHECK(aclrtFree(gmWorkspace));
+
+    ACL_CHECK(aclrtDestroyStream(stream));
+    ACL_CHECK(aclrtResetDevice(options.deviceId));
+    ACL_CHECK(aclFinalize());
+}
+
+int main(int argc, const char **argv)
+{
+    Options options;
+    if(options.Parse(argc, argv) != 0)
+    {
+        return -1;
+    }
+    Run(options);
+    return 0;
+}
