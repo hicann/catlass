@@ -235,6 +235,100 @@ struct SplitkGemmIdentityBlockSwizzle {
     }
 };
 
+/// Block swizzling function for Symm Gemms
+template <uint32_t SwizzleOffset = 1, uint32_t SwizzleDirection = 0>
+struct GemmTriangularBlockSwizzle {
+    /// Data members
+
+    GemmCoord problemShape;
+    MatrixCoord tileMN;
+    MatrixCoord loopsMN;
+
+    /// Methods
+
+    CATLASS_DEVICE
+    GemmTriangularBlockSwizzle() {}
+
+    CATLASS_DEVICE
+    GemmTriangularBlockSwizzle(GemmCoord const &problemShape_, MatrixCoord const &tileMN_)
+        : problemShape(problemShape_), tileMN(tileMN_)
+    {
+        loopsMN = CeilDiv(MatrixCoord(problemShape.GetCoordMN()), tileMN);
+    }
+
+    CATLASS_DEVICE
+    GemmTriangularBlockSwizzle(GemmCoord const &problemShape_, MatrixCoord const &tileMN_,
+        MatrixCoord const &loopsMN_)
+        : problemShape(problemShape_), tileMN(tileMN_), loopsMN(loopsMN_) {}
+
+    CATLASS_DEVICE
+    void Update(GemmCoord const &problemShape_, MatrixCoord const &tileMN_)
+    {
+        problemShape = problemShape_;
+        tileMN = tileMN_;
+
+        loopsMN = CeilDiv(MatrixCoord(problemShape.GetCoordMN()), tileMN);
+    }
+
+    CATLASS_DEVICE
+    void Update(GemmCoord const &problemShape_, MatrixCoord const &tileMN_, MatrixCoord const &loopsMN_)
+    {
+        problemShape = problemShape_;
+        tileMN = tileMN_;
+        loopsMN = loopsMN_;
+    }
+
+    CATLASS_DEVICE
+    uint32_t GetCoreLoops() const
+    {
+        // return loopsMN.row() * loopsMN.column();
+        uint32_t N_blocks = loopsMN.row();
+        // Use 64-bit intermediate to prevent overflow for large N_blocks
+        return static_cast<uint32_t>(N_blocks * (N_blocks + 1) / 2);
+    }
+
+    CATLASS_DEVICE
+    uint32_t GetBatchIdx(uint32_t taskIdx)
+    {
+        return taskIdx / (GetCoreLoops());
+    }
+
+    CATLASS_DEVICE
+    GemmCoord GetBlockCoord(uint32_t taskIdx)
+    {
+        int32_t linear_block_idx = taskIdx % GetCoreLoops();
+
+        // --- Translate 1D linear_block_idx to 2D (m_idx, n_idx) for an UPPER triangle ---
+        // We use a column-major traversal order. This means n_idx is the primary index.
+
+        // 1. Calculate the column index (n_idx).
+        //    The math is identical to calculating m_idx in the lower-triangular case.
+        //    We are finding 'n' such that n*(n+1)/2 <= idx < (n+1)*(n+2)/2.
+        float n_approx = (sqrt(8.0f * static_cast<float>(linear_block_idx) + 1.0f) - 1.0f) / 2.0f;
+        int32_t n_idx = static_cast<int32_t>(n_approx);
+
+        // 2. Calculate the row index (m_idx).
+        //    This is the offset from the start of the current column (n_idx),
+        //    which is equivalent to linear_block_idx minus all blocks in previous columns.
+        uint32_t prev_cols_blocks = (uint32_t)n_idx * (n_idx + 1) / 2;
+        uint32_t m_idx = static_cast<uint32_t>(linear_block_idx - prev_cols_blocks);
+
+        // We now have (m_idx, n_idx) such that n_idx >= m_idx.
+        return GemmCoord{m_idx, (uint32_t)n_idx, 0};
+
+    }
+
+    CATLASS_DEVICE
+    GemmCoord GetActualBlockShape(GemmCoord blockCoord)
+    {
+        uint32_t mActual = (blockCoord.m() == (loopsMN.row() - 1)) ?
+            (problemShape.m() - blockCoord.m() * tileMN.row()) : tileMN.row();
+        uint32_t nActual = (blockCoord.n() == (loopsMN.column() - 1)) ?
+            (problemShape.n() - blockCoord.n() * tileMN.column()) : tileMN.column();
+        uint32_t kActual = problemShape.k();
+        return GemmCoord{mActual, nActual, kActual};
+    }
+};
 }  // namespace Catlass::Gemm::Block
 
 #endif  // CATLASS_GEMM_BLOCK_BLOCK_SWIZZLE_HPP
