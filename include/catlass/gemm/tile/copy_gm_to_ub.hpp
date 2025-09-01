@@ -19,16 +19,12 @@
 namespace Catlass::Gemm::Tile {
 
 /// Partial specialization for AtlasA2, RowMajor in and RowMajor out.
-template <class ElementSrc, class ElementDst, class LayoutSrc_, class LayoutDst_>
-struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::GM>,
-    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst_, AscendC::TPosition::VECCALC>,
-    std::enable_if_t<tla::detail::isRowMajor<LayoutSrc_>::value &&
-                     tla::detail::isRowMajor<LayoutDst_>::value>> {
-    using LayoutDst = LayoutDst_;
-    using LayoutSrc = LayoutSrc_;
-    using TensorDst = tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, AscendC::TPosition::VECCALC>;
-    using TensorSrc = tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, AscendC::TPosition::GM>;
-
+template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+struct TileCopyTla<Arch::AtlasA2,
+    tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::GM>,
+    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::VECCALC>,
+    std::enable_if_t<tla::detail::isRowMajor<LayoutSrc>::value &&
+                     tla::detail::isRowMajor<LayoutDst>::value>> {
     static constexpr uint32_t ELE_NUM_PER_BLK = BYTE_PER_BLK / sizeof(ElementSrc);
 
     // Mehtods
@@ -36,9 +32,17 @@ struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSrc>,
     CATLASS_DEVICE
     TileCopyTla() {};
 
+    template <class TensorDst, class TensorSrc>
     CATLASS_DEVICE
     void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
     {
+        static_assert(tla::detail::isRowMajor<typename TensorSrc::Layout>::value &&
+                      tla::detail::isRowMajor<typename TensorDst::Layout>::value &&
+                      TensorSrc::position == AscendC::TPosition::GM &&
+                      TensorDst::position == AscendC::TPosition::VECCALC,
+            "The input parameters do not match. TensorSrc must be GM and RowMajor, "
+            "while TensorDst must be UB and RowMajor");
+
         AscendC::DataCopyExtParams dataCopyParams(
             tla::get<0>(srcTensor.shape()),
             tla::get<1>(srcTensor.shape()) * sizeof(ElementSrc),
@@ -47,7 +51,9 @@ struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::GlobalTensor<ElementSrc>,
             0
         );
         AscendC::DataCopyPadExtParams<ElementSrc> padParams(false, 0, 0, 0);
-        AscendC::DataCopyPad(dstTensor.data(), srcTensor.data(), dataCopyParams, padParams);
+        auto dstOffset = dstTensor.layout()(dstTensor.coord());
+        auto srcOffset = srcTensor.layout()(srcTensor.coord());
+        AscendC::DataCopyPad(dstTensor.data()[dstOffset], srcTensor.data()[srcOffset], dataCopyParams, padParams);
     };
 };
 

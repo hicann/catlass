@@ -12,6 +12,7 @@
 #define CATLASS_ALIGNMENT_HPP
 
 #include "catlass/detail/macros.hpp"
+#include "tla/numeric/integral_constant.hpp"
 
 template <uint32_t ALIGN, typename T>
 CATLASS_HOST_DEVICE
@@ -21,11 +22,20 @@ constexpr T RoundUp(const T &val)
     return (val + ALIGN - 1) / ALIGN * ALIGN;
 }
 
-template <class T>
+template <class T, class U>
 CATLASS_HOST_DEVICE
-constexpr T RoundUp(const T &val, const T align)
+constexpr auto RoundUp(T const &val, U const &align)
 {
-    return (val + align - 1) / align * align;
+    if constexpr (tla::is_static<T>::value && tla::is_static<U>::value) { // Int, Int
+        constexpr uint32_t res = (T::value + U::value - 1) / U::value * U::value;
+        return tla::Int<res>{};
+    } else if constexpr (tla::is_static<T>::value) { // Int, int
+        return (T::value + align - 1) / align * align;
+    } else if constexpr (tla::is_static<U>::value) { // int, Int
+        return (val + U::value - 1) / U::value * U::value;
+    } else { // int, int
+        return (val + align - 1) / align * align;
+    }
 }
 
 template <uint32_t ALIGN, typename T>
@@ -36,11 +46,20 @@ constexpr T RoundDown(const T val)
     return val / ALIGN * ALIGN;
 }
 
-template <class T>
+template <class T, class U>
 CATLASS_HOST_DEVICE
-constexpr T RoundDown(const T val, const T align)
+constexpr auto RoundDown(T const &val, U const &align)
 {
-    return val / align * align;
+    if constexpr (tla::is_static<T>::value && tla::is_static<U>::value) { // Int, Int
+        constexpr uint32_t res = T::value / U::value * U::value;
+        return tla::Int<res>{};
+    } else if constexpr (tla::is_static<T>::value) { // Int, int
+        return T::value / align * align;
+    } else if constexpr (tla::is_static<U>::value) { // int, Int
+        return val / U::value * U::value;
+    } else { // int, int
+        return val / align * align;
+    }
 }
 
 template <uint32_t DIVISOR, typename T>
@@ -51,11 +70,20 @@ constexpr T CeilDiv(const T dividend)
     return (dividend + DIVISOR - 1) / DIVISOR;
 }
 
-template <class T>
+template <class T, class U>
 CATLASS_HOST_DEVICE
-constexpr T CeilDiv(const T dividend, const T divisor)
+constexpr auto CeilDiv(T const &dividend, U const &divisor)
 {
-    return (dividend + divisor - 1) / divisor;
+    if constexpr (tla::is_static<T>::value && tla::is_static<U>::value) { // Int, Int
+        constexpr uint32_t res = (T::value + U::value - 1) / U::value;
+        return tla::Int<res>{};
+    } else if constexpr (tla::is_static<T>::value) { // Int, int
+        return (T::value + divisor - 1) / divisor;
+    } else if constexpr (tla::is_static<U>::value) { // int, Int
+        return (dividend + U::value - 1) / U::value;
+    } else { // int, int
+        return (dividend + divisor - 1) / divisor;
+    }
 }
 
 #endif  // CATLASS_ALIGNMENT_HPP

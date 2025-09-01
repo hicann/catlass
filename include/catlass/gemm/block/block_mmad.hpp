@@ -36,12 +36,12 @@ template <
     class DispatchPolicy,
     class L1TileShape,
     class L0TileShape,
-    class TensorA,
-    class TensorB,
-    class TensorC,
-    class TensorBias = void,
-    class TileCopy = Gemm::Tile::PackedTileCopyTla<typename DispatchPolicy::ArchTag, TensorA, layout::RowMajor,
-        TensorB, layout::RowMajor, TensorC, layout::RowMajor, TensorBias, layout::RowMajor>,
+    class ElementA,
+    class ElementB,
+    class ElementC,
+    class ElementBias = void,
+    class TileCopy = Gemm::Tile::PackedTileCopyTla<typename DispatchPolicy::ArchTag, ElementA, layout::RowMajor,
+        ElementB, layout::RowMajor, ElementC, layout::RowMajor, ElementBias, layout::RowMajor>,
     class TileMmad = Gemm::Tile::TileMmadTla<typename DispatchPolicy::ArchTag, typename TileCopy::TensorL0A,
         typename TileCopy::TensorL0B, typename TileCopy::TensorL0C>
 >

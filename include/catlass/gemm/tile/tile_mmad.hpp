@@ -104,13 +104,13 @@ template <
     /// Tag indicating architecture
     class ArchTag_,
     /// tla::Tensor type for A matrix operand
-    class TensorA,
+    class TensorA_,
     /// tla::Tensor type for B matrix operand
-    class TensorB,
+    class TensorB_,
     /// tla::Tensor type for C matrix operand
-    class TensorC,
+    class TensorC_,
     /// tla::Tensor type for Bias operand
-    class TensorBias = void
+    class TensorBias_ = void
 >
 struct TileMmadTla {
     // Methods
@@ -118,6 +118,7 @@ struct TileMmadTla {
     CATLASS_DEVICE
     TileMmadTla() {}
 
+    template <class TensorC, class TensorA, class TensorB>
     CATLASS_DEVICE
     void operator()(TensorC const &l0CTensor,
          TensorA const &l0ATensor,

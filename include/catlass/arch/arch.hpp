@@ -25,29 +25,15 @@ struct AtlasA2 {
     static constexpr uint32_t L0C_SIZE = 128 * 1024;
 };
 
-struct PositionGM {
-    static constexpr AscendC::TPosition POSITION = AscendC::TPosition::GM;
-};
+template <AscendC::TPosition POS>
+using PositionType = std::integral_constant<AscendC::TPosition, POS>;
 
-struct PositionL1 {
-    static constexpr AscendC::TPosition POSITION = AscendC::TPosition::A1;
-};
-
-struct PositionL0A {
-    static constexpr AscendC::TPosition POSITION = AscendC::TPosition::A2;
-};
-
-struct PositionL0B {
-    static constexpr AscendC::TPosition POSITION = AscendC::TPosition::B2;
-};
-
-struct PositionL0C {
-    static constexpr AscendC::TPosition POSITION = AscendC::TPosition::CO1;
-};
-
-struct PositionUB {
-    static constexpr AscendC::TPosition POSITION = AscendC::TPosition::VECCALC;
-};
+using PositionGM = PositionType<AscendC::TPosition::GM>;
+using PositionL1 = PositionType<AscendC::TPosition::A1>;
+using PositionL0A = PositionType<AscendC::TPosition::A2>;
+using PositionL0B = PositionType<AscendC::TPosition::B2>;
+using PositionL0C = PositionType<AscendC::TPosition::CO1>;
+using PositionUB = PositionType<AscendC::TPosition::VECCALC>;
 
 } // namespace Catlass::Arch
 

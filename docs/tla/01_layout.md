@@ -147,12 +147,12 @@ w32xh48   :  ((16,2),(16,3)):((16,256),(1,512))
 
 ### Layout 坐标与索引
 
-在 TLA 中，可使用 `tla::crd2idx(c, shape, stride)`  将索引转换到坐标，目前坐标需为二维。
+在 TLA 中，可使用 `tla::crd2offset(c, shape, stride)`  将坐标转换到索引，目前坐标需为二维。
 
 ```cpp
 auto shape  = Shape<Shape<_4,_2>,Shape<_4,_3>>{};
 auto stride = Stride<Stride<_4,_16>,Stride<_1,_32>>{};
-print(crd2idx(make_coord(1, 5), shape, stride));  // 37
+print(crd2offset(tla::MakeCoord(1, 5), shape, stride));  // 37
 ```
 
 ### 获取 Tilelayout
