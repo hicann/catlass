@@ -33,7 +33,7 @@ extern "C" __global__ __aicore__ void(...)
 
 ## 编译运行
 
-1. 基于[快速上手](../../README.md#快速上手)，打开工具的编译开关`--enable_print`， 使能设备侧打印特性编译算子样例。
+1. 在catlass目录下，基于[快速上手](../../README.md#快速上手)，打开工具的编译开关`--enable_print`， 使能设备侧打印特性编译算子样例。
 
 ```bash
 bash scripts/build.sh --enable_print 09_splitk_matmul
@@ -44,7 +44,7 @@ bash scripts/build.sh --enable_print 09_splitk_matmul
 ```bash
 cd output/bin
 # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID（可选）
-msdebug ./09_basic_matmul 256 512 1024 0
+msdebug ./09_splitk_matmul 256 512 1024 0
 ```
 
 - ⚠ 注意事项
