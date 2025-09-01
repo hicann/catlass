@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_EPILOGUE_BLOCK_EPILOGUE_GEMM_HPP
-#define CATLASS_EPILOGUE_BLOCK_EPILOGUE_GEMM_HPP
+#ifndef CATLASS_EPILOGUE_BLOCK_EPILOGUE_SYMM_GEMM_HPP
+#define CATLASS_EPILOGUE_BLOCK_EPILOGUE_SYMM_GEMM_HPP
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/resource.hpp"
@@ -31,7 +31,7 @@ template<
     class NeedAddType_
 >
 class BlockEpilogue<
-    EpilogueAtlasA2Gemm,
+    EpilogueAtlasA2SymmGemm,
     CType_,
     XType_,
     DType_,
@@ -42,7 +42,7 @@ class BlockEpilogue<
 >{
 public:
     // Type aliases
-    using DispatchPolicy = EpilogueAtlasA2Gemm;
+    using DispatchPolicy = EpilogueAtlasA2SymmGemm;
     using ArchTag = typename DispatchPolicy::ArchTag;
     using ElementC = typename CType_::Element;
     using LayoutC = typename CType_::Layout;

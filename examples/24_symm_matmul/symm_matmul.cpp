@@ -235,7 +235,7 @@ void Run(Options options)
     constexpr bool enableShuffleK = true;
     constexpr bool enableABBA = true;
     using GemmBlockDispatchPolicy = Gemm::GemmAtlasA2<enableUnitFlag, enableShuffleK, enableABBA>;
-    using EpilogueBlockDispatchPolicy = Epilogue::EpilogueAtlasA2Gemm;
+    using EpilogueBlockDispatchPolicy = Epilogue::EpilogueAtlasA2SymmGemm;
     using AType = Gemm::GemmType<half, LayoutA>;
     using BType = Gemm::GemmType<half, LayoutB>;
     using CType = Gemm::GemmType<half, LayoutX>;
