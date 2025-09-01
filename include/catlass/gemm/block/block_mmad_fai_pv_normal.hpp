@@ -226,6 +226,7 @@ public:
         if (pvCVItr) {
             Arch::CrossCoreWaitFlag(softmaxFlag);
             AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(4);
+            AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(5);
             auto layoutATile = layoutA.GetTileLayout(MakeCoord(MActual, (uint32_t)512));
             copyGmToL1A(l1ATensor, gA, layoutAInL1, layoutATile);
             AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(4);
@@ -269,6 +270,7 @@ public:
         auto layoutInL0C = LayoutCInL0::MakeLayoutInL0C(MakeCoord(MActual, nActual));
         if (endItr) {
             AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(4);
+            AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(5);
             if constexpr (!ENABLE_UNIT_FLAG_) {
                 AscendC::SetFlag<AscendC::HardEvent::M_FIX>(0);
                 AscendC::WaitFlag<AscendC::HardEvent::M_FIX>(0);
