@@ -162,7 +162,7 @@ private:
 template<
     class BlockGemm_,
     class BlockEpilogue_ ,
-    class BlockScheduler_ = void
+    class BlockScheduler_
 >
 class KernelGemm{
 public:
@@ -182,9 +182,7 @@ public:
     using BlockEpilogue = BlockEpilogue_;
     using EpilogueParams = typename BlockEpilogue::Params;
 
-    const uint32_t maxMPerBlock = L1TileShape::M;
-    const uint32_t maxNPerBlock = L1TileShape::N;
-    const uint32_t cSize = maxMPerBlock * maxNPerBlock * sizeof(ElementAccumulator);
+    const uint32_t cSize = L1TileShape::M * L1TileShape::N * sizeof(ElementAccumulator);
     const uint32_t l0CBlockNum = ArchTag::L0C_SIZE / cSize;
     using ElementCompute =
         typename Catlass::Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
@@ -324,47 +322,59 @@ public:
         for (uint32_t i = 0; i < l0CBlockNum; i++) {
             AscendC::SetFlag<AscendC::HardEvent::FIX_M>((int32_t)i);
         }
-        uint32_t mLoops = CeilDiv(M, maxMPerBlock);
-        uint32_t nLoops = CeilDiv(N, maxNPerBlock);
-        uint32_t coreLoops = mLoops * nLoops;
+        // uint32_t mLoops = CeilDiv(M, L1TileShape::M);
+        // uint32_t nLoops = CeilDiv(N, L1TileShape::N);
+        // uint32_t coreLoops = mLoops * nLoops;
         uint32_t singleIdx = 0;
         LayoutC layoutC(params.problemShape.m(), params.problemShape.n());
+        
+        //TODO:
+        BlockScheduler matmulBlockScheduler(params.problemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
+        uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
+        
         for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()) {
-            uint32_t mGmBlockIdx = loopIdx / nLoops;
-            uint32_t nGmBlockIdx = loopIdx % nLoops;
-            if (mGmBlockIdx > nGmBlockIdx) {
-                continue;
-            }
-            uint32_t mGmActual = (mGmBlockIdx == mLoops - 1) ? (M - mGmBlockIdx * maxMPerBlock) : maxMPerBlock;
-            uint32_t nGmActual = (nGmBlockIdx == nLoops - 1) ? (N - nGmBlockIdx * maxNPerBlock) : maxNPerBlock;
+            // uint32_t mGmBlockIdx = loopIdx / nLoops;
+            // uint32_t nGmBlockIdx = loopIdx % nLoops;
+            // Compute block location
+            GemmCoord blockCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
+            GemmCoord actualShape = matmulBlockScheduler.GetActualBlockShape(blockCoord);
+
+            if(blockCoord.m()>blockCoord.n()) continue;
+
+            // uint32_t mGmActual = (mGmBlockIdx == mLoops - 1) ? (M - mGmBlockIdx * L1TileShape::M) : L1TileShape::M;
+            // uint32_t nGmActual = (nGmBlockIdx == nLoops - 1) ? (N - nGmBlockIdx * L1TileShape::N) : L1TileShape::N;
             bool isFirstBlock = (loopIdx == AscendC::GetBlockIdx());
             bool hasNextBlock = false;
+
+            GemmCoord nextBlockIdCoord;
             GemmCoord nextActualShape;
-            uint32_t mNextGmBlockIdx = 0;
-            uint32_t nNextGmBlockIdx = 0;
+            // uint32_t mNextGmBlockIdx = 0;
+            // uint32_t nNextGmBlockIdx = 0;
             if (loopIdx + AscendC::GetBlockNum() < coreLoops) {
                 hasNextBlock = true;
                 uint32_t nextLoopIdx = loopIdx + AscendC::GetBlockNum();
-                mNextGmBlockIdx = nextLoopIdx / nLoops;
-                nNextGmBlockIdx = nextLoopIdx % nLoops;
-                uint32_t mNextGmActual =
-                    (mNextGmBlockIdx == mLoops - 1) ? (M - mNextGmBlockIdx * maxMPerBlock) : maxMPerBlock;
-                uint32_t nNextGmActual =
-                    (nNextGmBlockIdx == nLoops - 1) ? (N - nNextGmBlockIdx * maxNPerBlock) : maxNPerBlock;
-                nextActualShape = MakeCoord(mNextGmActual, nNextGmActual, K);
+                // mNextGmBlockIdx = nextLoopIdx / nLoops;
+                // nNextGmBlockIdx = nextLoopIdx % nLoops;
+                // uint32_t mNextGmActual =
+                //     (mNextGmBlockIdx == mLoops - 1) ? (M - mNextGmBlockIdx * L1TileShape::M) : L1TileShape::M;
+                // uint32_t nNextGmActual =
+                //     (nNextGmBlockIdx == nLoops - 1) ? (N - nNextGmBlockIdx * L1TileShape::N) : L1TileShape::N;
+                // nextActualShape = MakeCoord(mNextGmActual, nNextGmActual, K);
+                nextBlockIdCoord = matmulBlockScheduler.GetBlockCoord(nextLoopIdx);
+                nextActualShape = matmulBlockScheduler.GetActualBlockShape(nextBlockIdCoord);
             }
-            GemmCoord actualShape{mGmActual, nGmActual, K};
             AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((int32_t)singleIdx);
-            MatrixCoord gmTileAOffset{mGmBlockIdx * maxMPerBlock, 0};
+            MatrixCoord gmTileAOffset{blockCoord.m() * L1TileShape::M, 0};
             auto gmTileA = gmA[params.layoutWA.GetOffset(gmTileAOffset)];
-            MatrixCoord gmTileBOffset{0, nGmBlockIdx * maxNPerBlock};
+            MatrixCoord gmTileBOffset{0, blockCoord.n() * L1TileShape::N};
             auto gmTileB = gmB[params.layoutWB.GetOffset(gmTileBOffset)];
-            MatrixCoord gmTileCOffset{mGmBlockIdx * maxMPerBlock, nGmBlockIdx * maxNPerBlock};
+            MatrixCoord gmTileCOffset{blockCoord.m() * L1TileShape::M, blockCoord.n() * L1TileShape::N};
             auto gmTileC = gmC[layoutC.GetOffset(gmTileCOffset)];
-            MatrixCoord gmTileNextAOffset{mNextGmBlockIdx * maxMPerBlock, 0};
+            MatrixCoord gmTileNextAOffset{nextBlockIdCoord.m() * L1TileShape::M, 0};
             auto gmTileNextA = gmA[params.layoutWA.GetOffset(gmTileNextAOffset)];
-            MatrixCoord gmTileNextBOffset{0, nNextGmBlockIdx * maxNPerBlock};
+            MatrixCoord gmTileNextBOffset{0, nextBlockIdCoord.n() * L1TileShape::N};
             auto gmTileNextB = gmB[params.layoutWB.GetOffset(gmTileNextBOffset)];
+            
             blockGemm(
                 gmTileA, params.layoutWA,
                 gmTileB, params.layoutWB,
@@ -417,26 +427,32 @@ public:
         uint32_t M = params.problemShape.m();
         uint32_t N = params.problemShape.n();
         uint32_t K = params.problemShape.k();
-        uint32_t mLoops = CeilDiv(M, maxMPerBlock);
-        uint32_t nLoops = CeilDiv(N, maxNPerBlock);
-        uint32_t coreLoops = mLoops * nLoops;
+        // uint32_t mLoops = CeilDiv(M, L1TileShape::M);
+        // uint32_t nLoops = CeilDiv(N, L1TileShape::N);
+        // uint32_t coreLoops = mLoops * nLoops;
+        BlockScheduler matmulBlockScheduler(params.problemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
+        uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
+
         uint32_t aivNum = AscendC::GetSubBlockNum();
         uint32_t aivIndex = AscendC::GetBlockIdx();
         uint32_t aicoreIndex = aivIndex / aivNum;
         AscendC::GlobalTensor<ElementC> gmC;
         gmC.SetGlobalBuffer((__gm__ ElementC *)params.gmWorkspace);
         for (uint32_t loopIdx = aicoreIndex; loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()) {
-            uint32_t mGmBlockIdx = loopIdx / nLoops;
-            uint32_t nGmBlockIdx = loopIdx % nLoops;
-            if (mGmBlockIdx > nGmBlockIdx) {
-                continue;
-            }
-            uint32_t mGmActual = (mGmBlockIdx == mLoops - 1) ? (M - mGmBlockIdx * maxMPerBlock) : maxMPerBlock;
-            uint32_t nGmActual = (nGmBlockIdx == nLoops - 1) ? (N - nGmBlockIdx * maxNPerBlock) : maxNPerBlock;
-            GemmCoord actualShape{mGmActual, nGmActual, K};
-            GemmCoord blockCoord{mGmBlockIdx, nGmBlockIdx, 0};
+            // uint32_t mGmBlockIdx = loopIdx / nLoops;
+            // uint32_t nGmBlockIdx = loopIdx % nLoops;
+            // if(mGmBlockIdx>nGmBlockIdx) continue;
+            // uint32_t mGmActual = (mGmBlockIdx == mLoops - 1) ? (M - mGmBlockIdx * L1TileShape::M) : L1TileShape::M;
+            // uint32_t nGmActual = (nGmBlockIdx == nLoops - 1) ? (N - nGmBlockIdx * L1TileShape::N) : L1TileShape::N;
+            // GemmCoord actualShape{mGmActual, nGmActual, K};
+            // GemmCoord blockCoord{mGmBlockIdx, nGmBlockIdx, 0};
+            GemmCoord blockCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
+            GemmCoord actualShape = matmulBlockScheduler.GetActualBlockShape(blockCoord);
+
+            if(blockCoord.m()>blockCoord.n()) continue;
             LayoutC layoutC(params.problemShape.m(), params.problemShape.n());
             Arch::CrossCoreWaitFlagWithReverse<0x2, PIPE_MTE3>(flagAicFinishStore);
+            
             blockEpilogue(actualShape, blockCoord, gmC, layoutC, inGroupOffsetWorkspace);
         }
         inGroupOffsetWorkspace += params.problemShape.m() * params.problemShape.n();

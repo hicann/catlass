@@ -23,6 +23,7 @@
 #include "fp16_t.h"
 #include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
+#include "catlass/gemm/block/block_swizzle.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/kernel/symm_matmul.hpp"
 #include "catlass/gemm/gemm_type.hpp"
@@ -250,7 +251,11 @@ void Run(Options options)
     using TileElemWiseMulsGemm = Epilogue::Tile::TileElemWiseMuls<ArchTag, ComputeType, computeLength>;
     using EpilogueTileCopy = Epilogue::Tile::TileCopy<ArchTag, CType, XType, DType>;
     using EpilogueBlock = Epilogue::Block::BlockEpilogue<EpilogueBlockDispatchPolicy, CType, XType, DType, TileElemWiseAddGemm, TileElemWiseMulsGemm, EpilogueTileCopy, std::true_type>;
-    using GemmKernel = Gemm::Kernel::KernelGemm<GemmBlock, EpilogueBlock>;
+
+    // Swizzle offset is 3 and direction is 0.
+    using BlockScheduler = typename Gemm::Block::GemmTriangularBlockSwizzle<3, 0>;
+
+    using GemmKernel = Gemm::Kernel::KernelGemm<GemmBlock, EpilogueBlock, BlockScheduler>;
     typename EpilogueBlock::Params epilogueParams{alpha, beta, deviceX, layoutX, deviceX, layoutX};
     typename GemmKernel::Arguments arguments{options.problemShape, align, deviceA, deviceB, gmWorkspace, deviceWA, deviceWB, epilogueParams};
     using GemmAdapter = Gemm::Device::DeviceGemm<GemmKernel>;
