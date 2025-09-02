@@ -11,6 +11,7 @@ import logging
 import argparse
 from manifest import Manifest
 import search_space # critical for operation registry
+import search_space_config
 
 LOGGER = logging.getLogger(__name__)
 
@@ -49,4 +50,4 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main())

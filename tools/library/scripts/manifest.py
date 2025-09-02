@@ -16,11 +16,19 @@ LOGGER = logging.getLogger(__name__)
 
 class OperationRegistry:
     register_functions = {}
+    register_functions_high_priority = {}
 
     @classmethod
     def register(cls, name):
         def decorator(func):
             cls.register_functions[name] = func
+            return func
+        return decorator
+
+    @classmethod
+    def register_high_priority(cls, name):
+        def decorator(func):
+            cls.register_functions_high_priority[name] = func
             return func
         return decorator
 
@@ -37,8 +45,16 @@ class Manifest:
         self.target_generator = {
             'gemm': gemm_operation.GemmOperationGenerator
         }
-        for _, func in OperationRegistry.register_functions.items():
+        for _, func in OperationRegistry.register_functions_high_priority.items():
             func(self)
+        for name, func in OperationRegistry.register_functions.items():
+            if name in OperationRegistry.register_functions_high_priority:
+                LOGGER.info(
+                    f'skip seach space registration of {name} in search_space.py'
+                    f' due to a duplicate registration in seach_sapce_config.py'
+                )
+            else:
+                func(self)
         LOGGER.info(f'operations that will be generated in total: {len(self.operations)}')
 
         if len(self.operations) > 10000:
