@@ -1,4 +1,4 @@
-## msTuner_CATLASS (Mindstudio Tuner for CATLASS) - Tiling自动寻优工具
+## msTuner_CATLASS (MindStudio Tuner for CATLASS) - Tiling自动寻优工具
 
 mstuner_catlass是用于CATLASS模板库算子Tiling参数寻优的工具，支持自定义搜索空间，实例化搜索空间内全量算子，批量完成在板性能测试，为算子Tiling参数寻优提供参考。
 
@@ -111,9 +111,11 @@ mstuner_catlass 支持以下命令：
 
 ## 搜索空间配置
 
-mstuner_catlass支持在 `tools/library/scripts/search_space.py`文件中对算子tiling参数的搜索空间进行自定义配置，支持自定义配置layouts、data types、L1/L0 Tile Shapes、Swizzle策略等参数自动正交生成全量搜索空间，同时支持自定义剪枝函数加速搜索空间遍历，每种正交配置组合会实例化为一个独立算子，当搜索空间配置为较大时，会导致数万个算子被实例化，导致编译耗时较长，且可能无法保证编译成功，同时算子数量较多时，算子下发前注册耗时也较长，因此建议合理配置搜索空间，尽量控制在5000以内以获得最佳的工具体验。
+mstuner_catlass支持对算子tiling参数的搜索空间进行自定义配置，支持自定义配置layouts、data types、L1/L0 Tile Shapes、Swizzle策略等参数自动正交生成全量搜索空间，自定义剪枝函数过滤筛选搜索空间，最终每种正交配置组合会实例化为一个独立算子，生成的算子实例化代码位于`build/tools/library/generated`目录中。
 
-算子数量可通过查看日志文件`build/tools/library/catlass_library_code_generation.log`，如下所示，basic_matmul的搜索空间会实例化1701个算子，
+当搜索空间范围配置较广时，会导致上万个算子被实例化，导致编译耗时较长，且过多的算子可能超过硬件限制无法保证编译成功，同时算子数量较多时，算子下发前注册耗时也较长，因此建议合理配置搜索空间，尽量控制在5000以内以获得最佳的工具体验。
+
+算子数量可通过查看日志文件`build/tools/library/catlass_library_code_generation.log`，如下所示，basic_matmul的搜索空间实例了1701个算子：
 
 ```txt
 INFO:search_space:basic_matmul tile_shapes size=1701
@@ -122,7 +124,57 @@ INFO:manifest:operations that will be generated in total: 1701
 ...
 ```
 
-以`basic_matmul`算子的搜索空间为例，其配置位于函数`register_gemm_basic_matmul_operation`中，
+搜索空间配置支持入门级配置与高级配置。
+
+### 入门级配置
+
+mstuner_catlass支持在 `tools/library/scripts/search_space_config.py`文件中对算子tiling参数搜索空间进行入门级的简化配置，开发者可自由调整以下参数来设置搜索范围：
+
+- kernel_type，算子类型
+- data_type_a/data_type_b/data_type_c：A/B/C输入矩阵的元素类型
+- layout_a/layout_b/layout_c：A/B/C输入矩阵的内存排布
+- l1_tile_m_range：L1 Tile Shape的m轴取值搜索范围
+- l1_tile_n_range：L1 Tile Shape的n轴取值搜索范围
+- l1_tile_k_range：L1 Tile Shape的k轴取值搜索范围
+- block_swizzle：Swizzle策略
+
+basic_matmul算子的一种搜索空间配置如下：
+
+```python
+@OperationRegistry.register_high_priority('basic_matmul')
+def register(manifest):
+    config = search_space.SearchSpaceConfiguration(
+        kernel_type='basic_matmul',
+
+        data_type_a=library.DataType.fp16,
+        data_type_b=library.DataType.fp16,
+        data_type_c=library.DataType.fp16,
+
+        layout_a=library.LayoutType.RowMajor,
+        layout_b=library.LayoutType.RowMajor,
+        layout_c=library.LayoutType.RowMajor,
+
+        l1_tile_m_range=(32, 128),  # min and max of a range are set here
+        l1_tile_n_range=(128, 256),
+        l1_tile_k_range=(128, 256),
+
+        block_swizzle='Gemm::Block::GemmIdentityBlockSwizzle<3, 0>',
+    )
+
+    search_space.register_custom_kernel(config, manifest)
+```
+
+入门级配置的算子搜索空间会**覆盖**高级配置中同类型算子的配置，若暂不需要使能入门级配置而使用高级配置，可把该行代码注释掉：
+
+```python
+# @OperationRegistry.register_high_priority('basic_matmul')
+```
+
+### 高级配置
+
+mstuner_catlass支持在 `tools/library/scripts/search_space.py`文件中对算子tiling参数的搜索空间进行更为灵活的自定义配置，支持自定义配置layouts、data types、L1/L0 Tile Shapes、Swizzle策略等参数的正交组合方式，自定义剪枝函数过滤筛选搜索空间遍历。
+
+ 以`basic_matmul`算子的搜索空间为例，其配置位于函数`register_gemm_basic_matmul_operation`中，
 
 - layouts配置
 

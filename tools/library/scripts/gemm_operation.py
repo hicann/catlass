@@ -15,50 +15,30 @@ from utils import KernelGroupFile
 class GemmOperation:
     def __init__(
         self,
-        operation_type: str,
         kernel_type: str,
-        device_api: str,
-        kernel_api: str,
-        block_api: str,
-        dispatch: str,
         l1_tile_shape: list,
         l0_tile_shape: list,
         a_type: library.GemmTypeDescription,
         b_type: library.GemmTypeDescription,
         c_type: library.GemmTypeDescription,
-        epilogue: str,
         block_swizzle: str,
-        cpp_instance: str,
-        custom_headers: str = '',
-        custom_common_decls: str = '',
         arch: library.ArchTag = library.ArchTag.A2,
-        custom_args=None
     ):
-        self.operation_type = operation_type
+        self.operation_type = 'gemm'
         self.kernel_type = kernel_type
-        self.device_api = device_api
-        self.kernel_api = kernel_api
-        self.block_api = block_api
-        self.dispatch = dispatch
         self.l1_tile_shape = l1_tile_shape
         self.l0_tile_shape = l0_tile_shape
         self.a_type = a_type
         self.b_type = b_type
         self.c_type = c_type
-        self.epilogue = epilogue
         self.block_swizzle = block_swizzle
-        self.cpp_instance = cpp_instance
-        self.custom_headers = custom_headers
-        self.custom_common_decls = custom_common_decls
         self.arch = arch
-        self.custom_args = {} if custom_args is None else custom_args
 
         self.kernel_name = self.get_name()
 
-        # UniversalMatmulKernelInstance is used for other kernel types by default
         self.kernel_instance_generators = {
-            'basic_matmul': UniversalMatmulKernelInstance,
-            'grouped_matmul': UniversalMatmulKernelInstance,
+            'basic_matmul': BasicMatmulKernelInstance,
+            'grouped_matmul': GroupedMatmulKernelInstance,
         }
 
         self.body_template = """
@@ -98,7 +78,8 @@ void Register_{kernel_name}(Manifest &manifest)
             layout_c=self.c_type.layout.get_name(),
             l1_tile_shape='x'.join(str(val) for val in self.l1_tile_shape),
             l0_tile_shape='x'.join(str(val) for val in self.l0_tile_shape),
-            block_swizzle=self.get_block_swizzle_name())
+            block_swizzle=self.get_block_swizzle_name()
+        )
 
     def get_block_swizzle_name(self):
         match = re.search(r'<(\d+)\s*,\s*(\d+)\s*>', self.block_swizzle)
@@ -112,16 +93,16 @@ void Register_{kernel_name}(Manifest &manifest)
         if self.kernel_type in self.kernel_instance_generators:
             instance_geneorator = self.kernel_instance_generators[self.kernel_type]()
         else:
-            instance_geneorator = UniversalMatmulKernelInstance()
+            raise Exception(f'no kernel instance registered for {self.kernel_type}')
         kernel_instance_src = instance_geneorator.gen_src(self)
 
         body_src = self.body_template.format(
             kernel_name=self.kernel_name,
             kernel_instance=kernel_instance_src,
-            cpp_instance=self.cpp_instance,
+            cpp_instance=instance_geneorator.cpp_instance,
         )
 
-        return self.custom_headers, self.custom_common_decls, body_src
+        return instance_geneorator.custom_headers, instance_geneorator.custom_common_decls, body_src
 
 
 class GemmOperationGenerator:
@@ -201,31 +182,30 @@ void RegisterCatlass{operation_type}Operations(Manifest &manifest)
         self.curr_file_id = (self.curr_file_id + 1) % GROUP_FILE_NUM
         return file
 
-
-class UniversalMatmulKernelInstance:
+class BasicMatmulKernelInstance:
     def __init__(self):
+        self.cpp_instance = 'BasicMatmulGemmOperation'
+        self.custom_headers = '#include "catlass/gemm/kernel/basic_matmul.hpp"'
+        self.custom_common_decls = ''
         self.template = """
-        {device_api}<
-            {kernel_api}<
-                {block_api}<
-                    {dispatch},
+        Gemm::Device::DeviceGemm<
+            Gemm::Kernel::BasicMatmul<
+                Gemm::Block::BlockMmad<
+                    Gemm::MmadAtlasA2Pingpong<true>,
                     GemmShape<{l1_m}, {l1_n}, {l1_k}>,
                     GemmShape<{l0_m}, {l0_n}, {l0_k}>,
                     Gemm::GemmType<{element_a}, {layout_a}>,
                     Gemm::GemmType<{element_b}, {layout_b}>,
                     Gemm::GemmType<{element_c}, {layout_c}>
                 >,
-                {epilogue},
-                {scheduler}
+                void,
+                {block_swizzle}
             >
         >"""
 
+
     def gen_src(self, gemm_operation):
         src = self.template.format(
-            device_api=gemm_operation.device_api,
-            kernel_api=gemm_operation.kernel_api,
-            block_api=gemm_operation.block_api,
-            dispatch=gemm_operation.dispatch,
             l1_m=str(gemm_operation.l1_tile_shape[0]),
             l1_n=str(gemm_operation.l1_tile_shape[1]),
             l1_k=str(gemm_operation.l1_tile_shape[2]),
@@ -238,8 +218,48 @@ class UniversalMatmulKernelInstance:
             layout_a=gemm_operation.a_type.layout.to_code(),
             layout_b=gemm_operation.b_type.layout.to_code(),
             layout_c=gemm_operation.c_type.layout.to_code(),
-            epilogue=gemm_operation.epilogue,
-            scheduler=gemm_operation.block_swizzle
+            block_swizzle=gemm_operation.block_swizzle
+        )
+        return src
+
+
+class GroupedMatmulKernelInstance:
+    def __init__(self):
+        self.cpp_instance = 'GroupedMatmulGemmOperation'
+        self.custom_headers = '#include "catlass/gemm/kernel/grouped_matmul.hpp"'
+        self.custom_common_decls = ''
+        self.template = """
+        Gemm::Device::DeviceGemm<
+            Gemm::Kernel::GroupedMatmul<
+                Gemm::Block::BlockMmad<
+                    Gemm::MmadAtlasA2PreloadAsync<1,2,4,2,1,true,true>,
+                    GemmShape<{l1_m}, {l1_n}, {l1_k}>,
+                    GemmShape<{l0_m}, {l0_n}, {l0_k}>,
+                    Gemm::GemmType<{element_a}, {layout_a}>,
+                    Gemm::GemmType<{element_b}, {layout_b}>,
+                    Gemm::GemmType<{element_c}, {layout_c}>
+                >,
+                void,
+                {block_swizzle}
+            >
+        >"""
+
+
+    def gen_src(self, gemm_operation):
+        src = self.template.format(
+            l1_m=str(gemm_operation.l1_tile_shape[0]),
+            l1_n=str(gemm_operation.l1_tile_shape[1]),
+            l1_k=str(gemm_operation.l1_tile_shape[2]),
+            l0_m=str(gemm_operation.l0_tile_shape[0]),
+            l0_n=str(gemm_operation.l0_tile_shape[1]),
+            l0_k=str(gemm_operation.l0_tile_shape[2]),
+            element_a=gemm_operation.a_type.element_type.to_code(),
+            element_b=gemm_operation.b_type.element_type.to_code(),
+            element_c=gemm_operation.c_type.element_type.to_code(),
+            layout_a=gemm_operation.a_type.layout.to_code(),
+            layout_b=gemm_operation.b_type.layout.to_code(),
+            layout_c=gemm_operation.c_type.layout.to_code(),
+            block_swizzle=gemm_operation.block_swizzle
         )
         return src
 
