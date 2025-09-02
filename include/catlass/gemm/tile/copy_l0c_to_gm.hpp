@@ -190,6 +190,49 @@ struct CopyL0CToGm<Catlass::Arch::AtlasA2,
     }
 };
 
+template <
+    class ElementAccumulator_,
+    class ElementDst_,
+    bool ReluEnable_
+>
+struct CopyL0CToGm<Catlass::Arch::AtlasA2,
+                   ElementAccumulator_,
+                   Gemm::GemmType<ElementDst_, layout::NDC1HWC0>,
+                   ScaleGranularity::NO_QUANT,
+                   ReluEnable_>
+{
+    using ArchTag = Catlass::Arch::AtlasA2;
+    using ElementDst = ElementDst_;
+    using ElementSrc = ElementAccumulator_;
+    using LayoutSrc = Catlass::layout::zN;
+    using LayoutDst = Catlass::layout::NDC1HWC0;
+    static constexpr auto quantPre = CopyL0CToGmQuantMode<ArchTag, ElementSrc, ElementDst,
+        ScaleGranularity::NO_QUANT>::VALUE;
+    static constexpr auto reluEn = ReluEnable_;
+
+    CATLASS_DEVICE
+    void operator()(AscendC::GlobalTensor<ElementDst> const &dst, AscendC::LocalTensor<ElementSrc> const &src,
+        LayoutDst const &dstLayout, LayoutSrc const &srcLayout, uint8_t unitFlag = 0)
+    {
+        AscendC::FixpipeParamsV220 intriParams;
+
+        intriParams.nSize = srcLayout.orgShape(1);
+        intriParams.mSize = srcLayout.orgShape(0);
+        intriParams.srcStride = srcLayout.stride(3) / srcLayout.shape(2);
+        intriParams.dstStride = dstLayout.shape(1) * dstLayout.shape(2);
+
+        if constexpr (AscendC::IsSameType<ElementSrc, float>::value &&
+                      AscendC::IsSameType<ElementDst, float>::value) {
+            intriParams.isChannelSplit = true;
+        }
+
+        intriParams.quantPre = quantPre;
+        intriParams.reluEn = false;
+        intriParams.unitFlag = unitFlag;
+        AscendC::Fixpipe<ElementDst, ElementSrc, AscendC::CFG_NZ>(dst, src, intriParams);
+    }
+};
+
 ///////////////////////////////////////////CopyL0CToGmTla/////////////////////////////////////////////////
 // L0C copy mode
 struct CopyToGM {};

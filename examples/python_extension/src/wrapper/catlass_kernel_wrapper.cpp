@@ -28,6 +28,7 @@
 #include "catlass_kernel.h"
 #include "wrapper/grouped_matmul.h"
 #include "wrapper/matmul.h"
+#include "wrapper/conv.h"
 
 namespace py = pybind11;
 using namespace CatlassKernel;
@@ -67,6 +68,18 @@ at::Tensor RunOptimizedMatmul(const at::Tensor &mat1, const at::Tensor &mat2, co
     aclrtStream stream = c10_npu::getCurrentNPUStream().stream(false);
     uint32_t aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
     OptimizedMatmul(aicCoreNum, stream, kernelInfo);
+    return output;
+}
+
+at::Tensor RunConvBias(const at::Tensor &fmap, const at::Tensor &filter, const at::Tensor &bias,
+                       const std::vector<int64_t> &strideList, const std::vector<int64_t> &padList,
+                       const std::vector<int64_t> &dilationList, const std::string &outDType)
+{
+    ConvKernelInfo kernelInfo = ConvLike::GetKernelInfo(fmap, filter, bias, strideList, padList, dilationList, outDType);
+    at::Tensor output = ConvLike::AllocOutput(kernelInfo);
+    aclrtStream stream = c10_npu::getCurrentNPUStream().stream(false);
+    uint32_t aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
+    ConvBias(aicCoreNum, stream, kernelInfo);
     return output;
 }
 } // namespace CatlassKernelWrapper
