@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This file is a part of the CANN Open Software.
  * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -132,9 +132,12 @@ public:
         if (alignedN > COMPUTE_LENGTH / 2) {
             blockLoopInfo.nLoop = (blockLoopInfo.n + COMPUTE_LENGTH - 1) / COMPUTE_LENGTH;
             blockLoopInfo.totalLoop = blockLoopInfo.taskPerAiv * blockLoopInfo.nLoop;
-        } else {
+        } else if (alignedN != 0) {
             blockLoopInfo.nLoop = COMPUTE_LENGTH / alignedN;
             blockLoopInfo.totalLoop = (blockLoopInfo.taskPerAiv + blockLoopInfo.nLoop - 1) / blockLoopInfo.nLoop;
+        } else {
+            blockLoopInfo.nLoop = 0;
+            blockLoopInfo.totalLoop = 0;
         }
     }
 
@@ -296,7 +299,6 @@ public:
     void operator()(AscendC::GlobalTensor<int8_t> src, AscendC::GlobalTensor<half> dst, LayoutIn layout,
         uint32_t srcStride, uint32_t dstStride, half scalar, half zeroPoint, uint32_t &bufferIndex)
     {
-
         BlockLoopInfo blockLoopInfo;
         blockLoopInfo.m = layout.shape(0);
         blockLoopInfo.n = layout.shape(1);

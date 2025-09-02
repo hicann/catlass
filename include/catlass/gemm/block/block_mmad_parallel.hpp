@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
- #ifndef CATLASS_GEMM_BLOCK_BLOCK_MMAD_PARALLEL_HPP
- #define CATLASS_GEMM_BLOCK_BLOCK_MMAD_PARALLEL_HPP
+#ifndef CATLASS_GEMM_BLOCK_BLOCK_MMAD_PARALLEL_HPP
+#define CATLASS_GEMM_BLOCK_BLOCK_MMAD_PARALLEL_HPP
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/resource.hpp"
@@ -138,9 +138,10 @@ public:
         AscendC::GlobalTensor<ElementA> const &gmWA, LayoutA const &layoutA,
         AscendC::GlobalTensor<ElementB> const &gmWB, LayoutB const &layoutB,
         AscendC::GlobalTensor<ElementC> const &gmC, LayoutC const &layoutC,
-        AscendC::GlobalTensor<ElementA> const &gmNextWA, LayoutA const &layoutNextA, 
-        AscendC::GlobalTensor<ElementB> const &gmNextWB, LayoutB const &layoutNextB, 
-        GemmCoord const &actualShape, GemmCoord const &nextActualShape, bool isFirstKSlice, bool isFirstBlock, bool hasNextBlock)
+        AscendC::GlobalTensor<ElementA> const &gmNextWA, LayoutA const &layoutNextA,
+        AscendC::GlobalTensor<ElementB> const &gmNextWB, LayoutB const &layoutNextB,
+        GemmCoord const &actualShape, GemmCoord const &nextActualShape,
+        bool isFirstKSlice, bool isFirstBlock, bool hasNextBlock)
     {
         uint32_t mRound = RoundUp<L1AAlignHelper::M_ALIGNED>(actualShape.m());
         uint32_t nRound = RoundUp<L1BAlignHelper::N_ALIGNED>(actualShape.n());
@@ -152,7 +153,7 @@ public:
         uint32_t kActual = min(actualShape.k(), L1TileShape::K);
 
         // load first matrix A tile from GM to L1
-        if(isFirstBlock){
+        if (isFirstBlock) {
             AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);
             auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShape.m(), kActual));
             copyGmToL1A(l1ATensorList[l1ListId], gmWA, layoutAInL1, layoutTileA);

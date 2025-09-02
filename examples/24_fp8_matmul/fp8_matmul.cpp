@@ -28,9 +28,9 @@
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
-#include "catlass/gemm/kernel/fp8_matmul.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 #include "catlass/layout/layout.hpp"
+#include "catlass/gemm/kernel/fp8_matmul.hpp"
 
 #include "catlass/status.hpp"
 #include "catlass/gemm/device/device_gemm.hpp"
@@ -122,21 +122,21 @@ void Run(Options const &options)
 
     std::vector<int8_t> hostA(lenA);
     std::vector<int8_t> hostB(lenB);
-    std::string in_file_A_name = "./input/a_8.bin";
-    std::ifstream in_file_A(in_file_A_name, std::ios::binary);
-    if (!in_file_A.is_open()) {
-        std::cerr << "Failed to open in_file_A: " << in_file_A_name << std::endl;
+    std::string inFileAName = "./input/a_8.bin";
+    std::ifstream inFileA(inFileAName, std::ios::binary);
+    if (!inFileA.is_open()) {
+        std::cerr << "Failed to open inFileA: " << inFileAName << std::endl;
     } else {
-        in_file_A.read(reinterpret_cast<char *>(hostA.data()), sizeA);
-        in_file_A.close();
+        inFileA.read(reinterpret_cast<char *>(hostA.data()), sizeA);
+        inFileA.close();
     }
-    std::string in_file_B_name = "./input/b_8.bin";
-    std::ifstream in_file_B(in_file_B_name, std::ios::binary);
-    if (!in_file_B.is_open()) {
-        std::cerr << "Failed to open in_file_B: " << in_file_B_name << std::endl;
+    std::string inFileBName = "./input/b_8.bin";
+    std::ifstream inFileB(inFileBName, std::ios::binary);
+    if (!inFileB.is_open()) {
+        std::cerr << "Failed to open inFileB: " << inFileBName << std::endl;
     } else {
-        in_file_B.read(reinterpret_cast<char *>(hostB.data()), sizeB);
-        in_file_B.close();
+        inFileB.read(reinterpret_cast<char *>(hostB.data()), sizeB);
+        inFileB.close();
     }
 
     uint8_t *deviceA{nullptr};
@@ -229,8 +229,8 @@ void Run(Options const &options)
     ACL_CHECK(aclrtMemcpy(hostWB.data(), sizeWB, deviceWB, sizeWB, ACL_MEMCPY_DEVICE_TO_HOST));
 
     std::vector<float> hostGolden(m * n);
-    std::string output_file_name = "./output/expected_data.bin";
-    ReadFileToVector(output_file_name, hostGolden);
+    std::string outputFileName = "./output/expected_data.bin";
+    ReadFileToVector(outputFileName, hostGolden);
 
     std::vector<float> hostCFP32(hostC.begin(), hostC.end());
     std::vector<uint64_t> errorIndices = golden::CompareData(hostC, hostGolden, k);
