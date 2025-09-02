@@ -39,13 +39,16 @@ public:
     using LayoutOut = typename TensorOut::Layout;
 
     using LayoutInner = tla::Layout<tla::Shape<uint32_t, uint32_t>, tla::Stride<int64_t, tla::Int<1>>>;
-    using TensorInnerUb = tla::Tensor<AscendC::LocalTensor<Element>, LayoutInner, AscendC::TPosition::VECCALC>;
-    using TensorInnerSrcGm = tla::Tensor<AscendC::GlobalTensor<Element>, LayoutInner, AscendC::TPosition::GM>;
+    using TensorInnerUb = tla::Tensor<AscendC::LocalTensor<Element>, LayoutInner, tla::Coord<tla::_0, tla::_0>,
+        AscendC::TPosition::VECCALC>;
+    using TensorInnerSrcGm =
+        tla::Tensor<AscendC::GlobalTensor<Element>, LayoutInner, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
 
     using LayoutInnerDstGm = tla::Layout<
         tla::Shape<tla::Shape<uint32_t, uint32_t>, tla::Shape<uint32_t, uint32_t>>,
         tla::Stride<tla::Stride<int64_t, int64_t>, tla::Stride<tla::Int<1>, int64_t>>>;
-    using TensorInnerDstGm = tla::Tensor<AscendC::GlobalTensor<Element>, LayoutInnerDstGm, AscendC::TPosition::GM>;
+    using TensorInnerDstGm = tla::Tensor<AscendC::GlobalTensor<Element>, LayoutInnerDstGm, tla::Coord<tla::_0, tla::_0>,
+        AscendC::TPosition::GM>;
 
     using CopyGm2Ub = Catlass::Gemm::Tile::TileCopyTla<ArchTag, TensorInnerSrcGm, TensorInnerUb>;
     using CopyUb2Gm = Catlass::Gemm::Tile::TileCopyTlaExt<ArchTag, TensorInnerUb,
@@ -92,8 +95,9 @@ public:
         }
     }
 
+    template <class TensorDst, class TensorSrc>
     CATLASS_DEVICE
-    void operator()(TensorOut &tensorDst, TensorIn const& tensorSrc)
+    void operator()(TensorDst &tensorDst, TensorSrc const& tensorSrc)
     {
         auto paddingTensorSrc = GetPaddingTensorSrc(tensorSrc);
         auto paddingTensorDst = GetPaddingTensorDst(tensorDst);
@@ -349,10 +353,8 @@ public:
             AscendC::GlobalTensor<ElementA> gmWA;
             gmA.SetGlobalBuffer(reinterpret_cast<__gm__ ElementA *>(params.ptrA));
             gmWA.SetGlobalBuffer(reinterpret_cast<__gm__ ElementA *>(params.ptrWA));
-            auto tensorA = tla::MakeTensor<AscendC::GlobalTensor<ElementA>, LayoutA, AscendC::TPosition::GM>(
-                gmA, params.layoutA);
-            auto tensorWA = tla::MakeTensor<AscendC::GlobalTensor<ElementA>, LayoutWA, AscendC::TPosition::GM>(
-                gmWA, params.layoutWA);
+            auto tensorA = tla::MakeTensor(gmA, params.layoutA, Arch::PositionGM{});
+            auto tensorWA = tla::MakeTensor(gmWA, params.layoutWA, Arch::PositionGM{});
             PaddingA paddingA(resource);
             paddingA(tensorWA, tensorA);
         }
@@ -362,10 +364,8 @@ public:
             AscendC::GlobalTensor<ElementB> gmWB;
             gmB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB *>(params.ptrB));
             gmWB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB *>(params.ptrWB));
-            auto tensorB = tla::MakeTensor<AscendC::GlobalTensor<ElementB>, LayoutB, AscendC::TPosition::GM>(
-                gmB, params.layoutB);
-            auto tensorWB = tla::MakeTensor<AscendC::GlobalTensor<ElementB>, LayoutWB, AscendC::TPosition::GM>(
-                gmWB, params.layoutWB);
+            auto tensorB = tla::MakeTensor(gmB, params.layoutB, Arch::PositionGM{});
+            auto tensorWB = tla::MakeTensor(gmWB, params.layoutWB, Arch::PositionGM{});
             PaddingB paddingB(resource);
             paddingB(tensorWB, tensorB);
             // 0x0 synchronization control between AI Core
@@ -398,12 +398,9 @@ public:
         AscendC::GlobalTensor<ElementC> gmC;
         gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrC);
 
-        auto tensorA = tla::MakeTensor<AscendC::GlobalTensor<ElementA>, LayoutWA, AscendC::TPosition::GM>(
-            gmA, params.layoutWA);
-        auto tensorB = tla::MakeTensor<AscendC::GlobalTensor<ElementB>, LayoutWB, AscendC::TPosition::GM>(
-            gmB, params.layoutWB);
-        auto tensorC = tla::MakeTensor<AscendC::GlobalTensor<ElementC>, LayoutC, AscendC::TPosition::GM>(
-            gmC, params.layoutC);
+        auto tensorA = tla::MakeTensor(gmA, params.layoutWA, Arch::PositionGM{});
+        auto tensorB = tla::MakeTensor(gmB, params.layoutWB, Arch::PositionGM{});
+        auto tensorC = tla::MakeTensor(gmC, params.layoutC, Arch::PositionGM{});
 
         BlockMmad blockMmad(resource);
 

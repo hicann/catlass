@@ -96,7 +96,7 @@ struct Layout : private tla::tuple<Shape, Stride> {
     CATLASS_HOST_DEVICE constexpr
     auto operator()(Coord const& coord) const
     {
-        return crd2idx(coord, shape(), stride());
+        return crd2offset(coord, shape(), stride());
     }
 };
 
@@ -117,13 +117,20 @@ template <class LayoutTag>
 CATLASS_HOST_DEVICE constexpr
 auto MakeLayoutFromTag(LayoutTag const& tag)
 {
-    static_assert(std::is_same_v<LayoutTag, Catlass::layout::RowMajor> || std::is_same_v<LayoutTag, Catlass::layout::ColumnMajor>,
-        "Unsupported LayoutTag for MakeLayoutFromTag, only support Catlass::layout::RowMajor or Catlass::layout::ColumnMajor");
+    static_assert(std::is_same_v<LayoutTag, Catlass::layout::RowMajor> ||
+                  std::is_same_v<LayoutTag, Catlass::layout::ColumnMajor> ||
+                  std::is_same_v<LayoutTag, Catlass::layout::zN> ||
+                  std::is_same_v<LayoutTag, Catlass::layout::nZ>,
+        "Unsupported LayoutTag for MakeLayoutFromTag, only support Catlass::layout::RowMajor or"
+        "Catlass::layout::ColumnMajor or Catlass::layout::zN or Catlass::layout::nZ");
 
     if constexpr (std::is_same_v<LayoutTag, Catlass::layout::RowMajor>) {
         return MakeLayout(MakeShape(tag.shape(0), tag.shape(1)), MakeStride(tag.stride(0), Int<1>{}));
-    } else {
+    } else if constexpr (std::is_same_v<LayoutTag, Catlass::layout::ColumnMajor>) {
         return MakeLayout(MakeShape(tag.shape(0), tag.shape(1)), MakeStride(Int<1>{}, tag.stride(1)));
+    } else {  // zN or nZ
+        return MakeLayout(MakeShape(MakeShape(tag.shape(0), tag.shape(1)), MakeShape(tag.shape(2), tag.shape(3))),
+            MakeStride(MakeStride(tag.stride(0), tag.stride(1)), MakeStride(tag.stride(2), tag.stride(3))));
     }
 }
 
@@ -176,24 +183,53 @@ auto depth(Layout<Shape, Stride> const& layout)
 // Return the offset of coord
 template <class Coord, class Shape, class Stride>
 CATLASS_HOST_DEVICE constexpr
-auto crd2idx(Coord const& coord, Shape const& shape, Stride const& stride)
-{
-    static_assert(is_tuple<Coord>::value && depth_v<Coord> == 1 && rank_v<Coord> == 2);
+auto crd2offset(Coord  const& coord, Shape  const& shape, Stride const& stride);
 
-    constexpr int strideDepth = depth_v<Stride>;
-    const uint32_t row = get<0>(coord);
-    const uint32_t col = get<1>(coord);
-    if constexpr (strideDepth == 1) {
-        const int64_t rowStride = get<0>(stride);
-        const int64_t colStride = get<1>(stride);
-        return row * rowStride + col * colStride;
-    } else if constexpr (strideDepth == 2) {
-        const uint32_t rowsInFractal = get<0, 0>(shape);
-        const uint32_t colsInFractal = get<1, 0>(shape);
-        const int64_t strideRowsByFractal = get<0, 1>(stride);
-        const int64_t strideColsByFractal = get<1, 1>(stride);
-        return row / rowsInFractal * strideRowsByFractal + col / colsInFractal * strideColsByFractal
-            + (row % rowsInFractal) * get<0, 0>(stride) + (col % colsInFractal) * get<1, 0>(stride);
+namespace detail {
+
+template <class Coord, class Shape, class Stride, int... Is>
+CATLASS_HOST_DEVICE constexpr
+auto crd2offset_ttt(Coord  const& coord, Shape  const& shape, Stride const& stride, seq<Is...>)
+{
+    return (... + crd2offset(get<Is>(coord), get<Is>(shape), get<Is>(stride)));
+}
+
+template <class CInt, class STuple, class DTuple, int I0, int... Is>
+CATLASS_HOST_DEVICE constexpr
+auto crd2offset_itt(CInt const& coord, STuple const& shape, DTuple const& stride, seq<I0, Is...>)
+{
+    if constexpr (sizeof...(Is) == 0) {  // Avoid recursion and mod on single/last iter
+        return crd2offset(coord, get<I0>(shape), get<I0>(stride));
+    } else if constexpr (is_constant<0, CInt>::value) {
+        return crd2offset(_0{}, get<I0>(shape), get<I0>(stride)) +
+               (_0{} + ... + crd2offset(_0{}, get<Is>(shape), get<Is>(stride)));
+    } else {                             // General case
+        return crd2offset(coord % Product{}(get<I0>(shape)), get<I0>(shape), get<I0>(stride)) +
+               crd2offset_itt(coord / Product{}(get<I0>(shape)), shape, stride, seq<Is...>{});
+    }
+}
+
+} // end namespace detail
+
+template <class Coord, class Shape, class Stride>
+CATLASS_HOST_DEVICE constexpr
+auto crd2offset(Coord const& coord, Shape const& shape, Stride const& stride)
+{
+    if constexpr (is_tuple<Coord>::value) {
+        if constexpr (is_tuple<Shape>::value) {  // tuple tuple tuple
+            static_assert(tuple_size<Coord>::value == tuple_size<Shape>::value, "Mismatched Ranks");
+            static_assert(tuple_size<Coord>::value == tuple_size<Stride>::value, "Mismatched Ranks");
+            return detail::crd2offset_ttt(coord, shape, stride, tuple_seq<Coord>{});
+        } else {  // tuple "int" "int"
+            static_assert(sizeof(Coord) == 0, "Invalid parameters");
+        }
+    } else {
+        if constexpr (is_tuple<Shape>::value) {  // "int" tuple tuple
+            static_assert(tuple_size<Shape>::value == tuple_size<Stride>::value, "Mismatched Ranks");
+            return detail::crd2offset_itt(coord, shape, stride, tuple_seq<Shape>{});
+        } else {  // "int" "int" "int"
+            return coord * stride;
+        }
     }
 }
 
@@ -202,6 +238,7 @@ struct is_layout : false_type {};
 template <class Shape, class Stride>
 struct is_layout<Layout<Shape, Stride>> : true_type {};
 
+// Layout Check
 namespace detail {
 
 template <class Layout, class Enable = void>
@@ -273,34 +310,43 @@ struct isnZ<Element, Layout, std::enable_if_t<Layout::depth == 2 && Layout::rank
 
 // Advanced Layout constructions
 // Make a inner layout with Rows and Cols.
-template <class Element, class Layout>
+template <class Element, class LayoutTag, class T, class U>
 CATLASS_HOST_DEVICE constexpr
-auto MakeLayout(uint32_t const& rows, uint32_t const& cols)
+auto MakeLayout(T const& rows, U const& cols)
 {
-    static_assert(detail::iszN<Element, Layout>::value || detail::iszZ<Element, Layout>::value ||
-                    detail::isnZ<Element, Layout>::value,
-        "Unsupported Layout for MakeLayout, only support zN or zZ or nZ");
+    static_assert(std::is_same_v<LayoutTag, Catlass::layout::RowMajor> ||
+                  std::is_same_v<LayoutTag, Catlass::layout::ColumnMajor> ||
+                  std::is_same_v<LayoutTag, Catlass::layout::zN> ||
+                  std::is_same_v<LayoutTag, Catlass::layout::nZ> ||
+                  std::is_same_v<LayoutTag, Catlass::layout::zZ>,
+        "Unsupported LayoutTag for MakeLayoutFromTag, only support Catlass::layout::RowMajor or"
+        "Catlass::layout::ColumnMajor or Catlass::layout::zN or Catlass::layout::nZ or Catlass::layout::zZ");
 
     constexpr uint32_t ELE_NUM_PER_C0 = Catlass::BYTE_PER_C0 / sizeof(Element);
     constexpr uint32_t ELE_NUM_PER_FRACTAL = Catlass::BYTE_PER_FRACTAL / sizeof(Element);
 
-    if constexpr (detail::iszN<Element, Layout>::value) {
+    if constexpr (std::is_same_v<LayoutTag, Catlass::layout::RowMajor>) {
+        return MakeLayout(MakeShape(rows, cols), MakeStride(cols, Int<1>{}));
+    } else if constexpr (std::is_same_v<LayoutTag, Catlass::layout::ColumnMajor>) {
+        return MakeLayout(MakeShape(rows, cols), MakeStride(Int<1>{}, rows));
+    } else if constexpr (std::is_same_v<LayoutTag, Catlass::layout::zN>) {
         return MakeLayout(
-            MakeShape(MakeShape(Int<Catlass::C0_NUM_PER_FRACTAL>{}, CeilDiv<Catlass::C0_NUM_PER_FRACTAL>(rows)),
-                      MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv<ELE_NUM_PER_C0>(cols))),
+            MakeShape(MakeShape(Int<Catlass::C0_NUM_PER_FRACTAL>{}, CeilDiv(rows, Int<Catlass::C0_NUM_PER_FRACTAL>{})),
+                      MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv(cols, Int<ELE_NUM_PER_C0>{}))),
             MakeStride(MakeStride(Int<ELE_NUM_PER_C0>{}, Int<ELE_NUM_PER_FRACTAL>{}),
-                       MakeStride(Int<1>{}, (int64_t)RoundUp<Catlass::C0_NUM_PER_FRACTAL>(rows) * ELE_NUM_PER_C0)));
-    } else if constexpr (detail::iszZ<Element, Layout>::value) {
+                       MakeStride(Int<1>{}, RoundUp(rows, Int<Catlass::C0_NUM_PER_FRACTAL>{}) * ELE_NUM_PER_C0)));
+    } else if constexpr (std::is_same_v<LayoutTag, Catlass::layout::zZ>) {
         return MakeLayout(
-            MakeShape(MakeShape(Int<Catlass::C0_NUM_PER_FRACTAL>{}, CeilDiv<Catlass::C0_NUM_PER_FRACTAL>(rows)),
-                      MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv<ELE_NUM_PER_C0>(cols))),
-            MakeStride(MakeStride(Int<ELE_NUM_PER_C0>{}, (int64_t)RoundUp<ELE_NUM_PER_C0>(cols) * Catlass::C0_NUM_PER_FRACTAL),
-                       MakeStride(Int<1>{}, Int<ELE_NUM_PER_FRACTAL>{})));
+            MakeShape(MakeShape(Int<Catlass::C0_NUM_PER_FRACTAL>{}, CeilDiv(rows, Int<Catlass::C0_NUM_PER_FRACTAL>{})),
+                MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv(cols, Int<ELE_NUM_PER_C0>{}))),
+            MakeStride(
+                MakeStride(Int<ELE_NUM_PER_C0>{}, RoundUp(cols, Int<ELE_NUM_PER_C0>{}) * Catlass::C0_NUM_PER_FRACTAL),
+                MakeStride(Int<1>{}, Int<ELE_NUM_PER_FRACTAL>{})));
     } else {
         return MakeLayout(
-            MakeShape(MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv<ELE_NUM_PER_C0>(rows)),
-                      MakeShape(Int<Catlass::C0_NUM_PER_FRACTAL>{}, CeilDiv<Catlass::C0_NUM_PER_FRACTAL>(cols))),
-            MakeStride(MakeStride(Int<1>{}, (int64_t)RoundUp<Catlass::C0_NUM_PER_FRACTAL>(cols) * ELE_NUM_PER_C0),
+            MakeShape(MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv(rows, Int<ELE_NUM_PER_C0>{})),
+                      MakeShape(Int<Catlass::C0_NUM_PER_FRACTAL>{}, CeilDiv(cols, Int<Catlass::C0_NUM_PER_FRACTAL>{}))),
+            MakeStride(MakeStride(Int<1>{}, RoundUp(cols, Int<Catlass::C0_NUM_PER_FRACTAL>{}) * ELE_NUM_PER_C0),
                        MakeStride(Int<ELE_NUM_PER_C0>{}, Int<ELE_NUM_PER_FRACTAL>{})));
     }
 }
@@ -313,8 +359,8 @@ auto MakeLayoutTile(Layout const& layout, ShapeNew const& shapeNew)
 
     if constexpr (Layout::depth == 1 && Layout::rank == 2) {
         return MakeLayout(shapeNew, layout.stride());
-    } else if constexpr (is_integral<decltype(shape<0, 0>(layout))>::value &&
-                         is_integral<decltype(shape<1, 0>(layout))>::value) {
+    } else if constexpr (is_static<decltype(shape<0, 0>(layout))>::value &&
+                         is_static<decltype(shape<1, 0>(layout))>::value) {
         const uint32_t rows = get<0>(shapeNew);
         const uint32_t cols = get<1>(shapeNew);
         constexpr uint32_t dstInnerShapeRow = decltype(shape<0, 0>(layout))::value;
@@ -335,14 +381,16 @@ auto MakeLayoutTile(Layout const& layout, ShapeNew const& shapeNew)
     }
 }
 
-CATLASS_HOST_DEVICE constexpr auto MakeLayoutL0C(uint32_t const& rows, uint32_t const& cols)
+template <class T, class U>
+CATLASS_HOST_DEVICE constexpr
+auto MakeLayoutL0C(T const& rows, U const& cols)
 {
     constexpr uint32_t ELE_NUM_PER_FRACTAL = 256;
     return MakeLayout(
-        MakeShape(MakeShape(Int<Catlass::C0_NUM_PER_FRACTAL>{}, CeilDiv<Catlass::C0_NUM_PER_FRACTAL>(rows)),
-                  MakeShape(Int<Catlass::C0_NUM_PER_FRACTAL>{}, CeilDiv<Catlass::C0_NUM_PER_FRACTAL>(cols))),
+        MakeShape(MakeShape(Int<Catlass::C0_NUM_PER_FRACTAL>{}, CeilDiv(rows, Int<Catlass::C0_NUM_PER_FRACTAL>{})),
+            MakeShape(Int<Catlass::C0_NUM_PER_FRACTAL>{}, CeilDiv(cols, Int<Catlass::C0_NUM_PER_FRACTAL>{}))),
         MakeStride(MakeStride(Int<Catlass::C0_NUM_PER_FRACTAL>{}, Int<ELE_NUM_PER_FRACTAL>{}),
-                   MakeStride(Int<1>{}, (int64_t)RoundUp<Catlass::C0_NUM_PER_FRACTAL>(rows) * Catlass::C0_NUM_PER_FRACTAL)));
+            MakeStride(Int<1>{}, RoundUp(rows, Int<Catlass::C0_NUM_PER_FRACTAL>{}) * Catlass::C0_NUM_PER_FRACTAL)));
 }
 
 } // end namespace tla

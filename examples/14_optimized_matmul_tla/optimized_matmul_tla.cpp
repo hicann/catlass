@@ -8,7 +8,7 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0, 
+// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0,
 // optimizing stack space. If you need to use the ShapeInfo of the AscendC Tensor, please undefine this macro.
 #ifndef K_MAX_SHAPE_DIM
 #define K_MAX_SHAPE_DIM 0
@@ -159,7 +159,7 @@ void Run(Options const &options)
 
     // if LayoutA and LayoutB is both ColumnMajor,
     // L1TileShape using GemmShape<256, 128, 256> can achieve better performance.
-    using L1TileShape = std::conditional_t<std::is_same_v<LayoutTagA, layout::ColumnMajor> && 
+    using L1TileShape = std::conditional_t<std::is_same_v<LayoutTagA, layout::ColumnMajor> &&
         std::is_same_v<LayoutTagB, layout::ColumnMajor>, Shape<_256, _128, _256>, Shape<_128, _256, _256>>;
     size_t sizeWA = GetWorkspaceLen(tagA, get<0>(L1TileShape{}), get<2>(L1TileShape{})) * sizeof(fp16_t);
     size_t sizeWB = GetWorkspaceLen(tagB, get<2>(L1TileShape{}), get<1>(L1TileShape{})) * sizeof(fp16_t);
@@ -217,9 +217,12 @@ void Run(Options const &options)
     auto layoutA = MakeLayoutFromTag(tagA);
     auto layoutB = MakeLayoutFromTag(tagB);
     auto layoutC = MakeLayoutFromTag(tagC);
-    using TensorA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutA), AscendC::TPosition::GM>;
-    using TensorB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutB), AscendC::TPosition::GM>;
-    using TensorC = Tensor<AscendC::GlobalTensor<ElementC>, decltype(layoutC), AscendC::TPosition::GM>;
+    using TensorA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutA), tla::Coord<tla::_0, tla::_0>,
+        AscendC::TPosition::GM>;
+    using TensorB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutB), tla::Coord<tla::_0, tla::_0>,
+        AscendC::TPosition::GM>;
+    using TensorC = Tensor<AscendC::GlobalTensor<ElementC>, decltype(layoutC), tla::Coord<tla::_0, tla::_0>,
+        AscendC::TPosition::GM>;
 
     // if LayoutA and LayoutB is both ColumnMajor,
     // L1TileShape using GemmShape<256, 128, 256> can achieve better performance.
@@ -231,8 +234,10 @@ void Run(Options const &options)
         // no need to padding A and B.
         auto layoutWA = MakeLayout(layoutA.shape(), layoutA.stride());
         auto layoutWB = MakeLayout(layoutB.shape(), layoutB.stride());
-        using TensorWA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutWA), AscendC::TPosition::GM>;
-        using TensorWB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutWB), AscendC::TPosition::GM>;
+        using TensorWA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutWA), tla::Coord<tla::_0, tla::_0>,
+            AscendC::TPosition::GM>;
+        using TensorWB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutWB), tla::Coord<tla::_0, tla::_0>,
+            AscendC::TPosition::GM>;
         using TileCopy = Gemm::Tile::PaddingPackedTileCopyTla<ArchTag, TensorWA, LayoutTagA, TensorWB, LayoutTagB,
             TensorC, LayoutTagC, void, void, false, false>;
         using BlockMmad = Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB,
@@ -246,7 +251,7 @@ void Run(Options const &options)
             using MatmulKernel = Gemm::Kernel::OptimizedMatmulTla<
                 BlockMmad, BlockEpilogue, TileScheduler, PaddingA, PaddingB>;
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-    
+
             MatmulKernel::Arguments arguments{
                 options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC,
                 deviceWA, layoutWA, deviceWB, layoutWB};
@@ -268,7 +273,7 @@ void Run(Options const &options)
             using MatmulKernel = Gemm::Kernel::OptimizedMatmulTla<
                 BlockMmad, BlockEpilogue, TileScheduler, PaddingA, PaddingB>;
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-    
+
             MatmulKernel::Arguments arguments{
                 options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC,
                 deviceWA, layoutWA, deviceWB, layoutWB};
@@ -288,8 +293,10 @@ void Run(Options const &options)
         // no need to padding A, but B needs padding.
         auto layoutWA = MakeLayout(layoutA.shape(), layoutA.stride());
         auto layoutWB = GetPaddingLayout(tagB, get<2>(L1TileShape{}), get<1>(L1TileShape{}));
-        using TensorWA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutWA), AscendC::TPosition::GM>;
-        using TensorWB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutWB), AscendC::TPosition::GM>;
+        using TensorWA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutWA), tla::Coord<tla::_0, tla::_0>,
+            AscendC::TPosition::GM>;
+        using TensorWB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutWB), tla::Coord<tla::_0, tla::_0>,
+            AscendC::TPosition::GM>;
         using TileCopy = Gemm::Tile::PaddingPackedTileCopyTla<ArchTag, TensorWA, LayoutTagA, TensorWB, LayoutTagB,
             TensorC, LayoutTagC, void, void, false, true>;
         using BlockMmad = Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB,
@@ -304,7 +311,7 @@ void Run(Options const &options)
             using MatmulKernel = Gemm::Kernel::OptimizedMatmulTla<
                 BlockMmad, BlockEpilogue, TileScheduler, PaddingA, PaddingB>;
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-    
+
             MatmulKernel::Arguments arguments{
                 options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC,
                 deviceWA, layoutWA, deviceWB, layoutWB};
@@ -326,7 +333,7 @@ void Run(Options const &options)
             using MatmulKernel = Gemm::Kernel::OptimizedMatmulTla<
                 BlockMmad, BlockEpilogue, TileScheduler, PaddingA, PaddingB>;
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-    
+
             MatmulKernel::Arguments arguments{
                 options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC,
                 deviceWA, layoutWA, deviceWB, layoutWB};
@@ -346,8 +353,10 @@ void Run(Options const &options)
         // no need to padding B, but A needs padding.
         auto layoutWA = GetPaddingLayout(tagA, get<0>(L1TileShape{}), get<2>(L1TileShape{}));
         auto layoutWB = MakeLayout(layoutB.shape(), layoutB.stride());
-        using TensorWA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutWA), AscendC::TPosition::GM>;
-        using TensorWB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutWB), AscendC::TPosition::GM>;
+        using TensorWA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutWA), tla::Coord<tla::_0, tla::_0>,
+            AscendC::TPosition::GM>;
+        using TensorWB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutWB), tla::Coord<tla::_0, tla::_0>,
+            AscendC::TPosition::GM>;
         using TileCopy = Gemm::Tile::PaddingPackedTileCopyTla<ArchTag, TensorWA, LayoutTagA, TensorWB, LayoutTagB,
             TensorC, LayoutTagC, void, void, true, false>;
         using BlockMmad = Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB,
@@ -362,7 +371,7 @@ void Run(Options const &options)
             using MatmulKernel = Gemm::Kernel::OptimizedMatmulTla<
                 BlockMmad, BlockEpilogue, TileScheduler, PaddingA, PaddingB>;
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-    
+
             MatmulKernel::Arguments arguments{
                 options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC,
                 deviceWA, layoutWA, deviceWB, layoutWB};
@@ -384,7 +393,7 @@ void Run(Options const &options)
             using MatmulKernel = Gemm::Kernel::OptimizedMatmulTla<
                 BlockMmad, BlockEpilogue, TileScheduler, PaddingA, PaddingB>;
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-    
+
             MatmulKernel::Arguments arguments{
                 options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC,
                 deviceWA, layoutWA, deviceWB, layoutWB};
@@ -401,11 +410,13 @@ void Run(Options const &options)
             matmul_op(stream, aicCoreNum, fftsAddr);
         }
     } else {
-        // Both A and B need padding. 
+        // Both A and B need padding.
         auto layoutWA = GetPaddingLayout(tagA, get<0>(L1TileShape{}), get<2>(L1TileShape{}));
         auto layoutWB = GetPaddingLayout(tagB, get<2>(L1TileShape{}), get<1>(L1TileShape{}));
-        using TensorWA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutWA), AscendC::TPosition::GM>;
-        using TensorWB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutWB), AscendC::TPosition::GM>;
+        using TensorWA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutWA), tla::Coord<tla::_0, tla::_0>,
+            AscendC::TPosition::GM>;
+        using TensorWB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutWB), tla::Coord<tla::_0, tla::_0>,
+            AscendC::TPosition::GM>;
         using TileCopy = Gemm::Tile::PaddingPackedTileCopyTla<ArchTag, TensorWA, LayoutTagA, TensorWB, LayoutTagB,
             TensorC, LayoutTagC, void, void, true, true>;
         using BlockMmad = Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB,
@@ -421,7 +432,7 @@ void Run(Options const &options)
             using MatmulKernel = Gemm::Kernel::OptimizedMatmulTla<
                 BlockMmad, BlockEpilogue, TileScheduler, PaddingA, PaddingB>;
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-    
+
             MatmulKernel::Arguments arguments{
                 options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC,
                 deviceWA, layoutWA, deviceWB, layoutWB};
@@ -443,7 +454,7 @@ void Run(Options const &options)
             using MatmulKernel = Gemm::Kernel::OptimizedMatmulTla<
                 BlockMmad, BlockEpilogue, TileScheduler, PaddingA, PaddingB>;
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-    
+
             MatmulKernel::Arguments arguments{
                 options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC,
                 deviceWA, layoutWA, deviceWB, layoutWB};

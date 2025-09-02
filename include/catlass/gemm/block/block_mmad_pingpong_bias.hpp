@@ -85,8 +85,10 @@ public:
     static constexpr uint32_t L0A_SIZE = ArchTag::L0A_SIZE;
     static constexpr uint32_t L0B_SIZE = ArchTag::L0B_SIZE;
     static constexpr uint32_t L0C_SIZE = ArchTag::L0C_SIZE;
+    static constexpr uint32_t BT_SIZE = ArchTag::BIAS_SIZE;
     static constexpr uint32_t L0A_PINGPONG_BUF_SIZE = L0A_SIZE / STAGES;
     static constexpr uint32_t L0B_PINGPONG_BUF_SIZE = L0B_SIZE / STAGES;
+    static constexpr uint32_t BIAS_BUF_SIZE = L0TileShape::N * sizeof(ElementAccumulator);
 
     // Check LayoutC
     static_assert(std::is_same_v<LayoutC, layout::RowMajor>, "LayoutC only support RowMajor yet!");
@@ -102,6 +104,7 @@ public:
     static_assert((L0A_TILE_SIZE * STAGES) <= L0A_SIZE, "L0TileShape exceeding the L0A space!");
     static_assert((L0B_TILE_SIZE * STAGES) <= L0B_SIZE, "L0TileShape exceeding the L0B space!");
     static_assert(L0C_TILE_SIZE <= L0C_SIZE, "L0TileShape exceeding the L0C space!");
+    static_assert(BIAS_BUF_SIZE <= BT_SIZE, "BIAS_BUF_SIZE exceeding the BT space! Reduce L0TileShape::N");
 
     static_assert(L1TileShape::M == L0TileShape::M && L1TileShape::N == L0TileShape::N,
         "The situation where the basic blocks of L1 and L0 differ on the m and n axes is not supported yet");

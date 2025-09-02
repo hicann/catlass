@@ -11,7 +11,7 @@
 #ifndef TLA_NUMERIC_INTEGER_CONSTANT_HPP
 #define TLA_NUMERIC_INTEGER_CONSTANT_HPP
 
-#include "catlass/catlass.hpp"
+#include "catlass/detail/macros.hpp"
 #include "tla/type_traits.hpp"
 #include "tla/numeric/math.hpp"
 
@@ -86,6 +86,7 @@ struct is_constant<n, integral_constant<T, v>> : bool_constant<v == n> {};
 
 template <int v>
 using Int = C<v>;
+using _0     = Int<0>;
 using _64     = Int<64>;
 using _128    = Int<128>;
 using _256    = Int<256>;
@@ -160,6 +161,7 @@ TLA_BINARY_OP(>>);
 
 TLA_NAMED_BINARY_FN(max);
 TLA_NAMED_BINARY_FN(min);
+TLA_NAMED_BINARY_FN(add);
 
 #undef TLA_NAMED_UNARY_FN
 #undef TLA_NAMED_BINARY_FN
