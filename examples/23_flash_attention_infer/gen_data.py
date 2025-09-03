@@ -60,7 +60,8 @@ class TestFlashAttentionInfer():
         block_size: int
         mask_type: int
         dtype: any
-        kv_dtype: int
+        kv_mode: int
+        kv_layout: int  # 0:nd  1:nz
 
     @classmethod
     def check_attr(cls, batch: int, q_seqlen: int, kv_seqlen: int, num_blocks: int, block_size: int):
@@ -138,7 +139,7 @@ class TestFlashAttentionInfer():
             q = attention_inputs.query[cu_seqlen:(cu_seqlen + q_seqlen), :, :]
             keys = None
             values = None
-            if attention_inputs.shape_param.kv_dtype == 1:
+            if attention_inputs.shape_param.kv_mode == 1:
                 keys = []
                 values = []
                 block_table = attention_inputs.block_tables[i]
@@ -155,7 +156,7 @@ class TestFlashAttentionInfer():
                     values.append(v)
                 keys = np.stack(keys, axis=0)
                 values = np.stack(values, axis=0)
-            elif attention_inputs.shape_param.kv_dtype == 0:
+            elif attention_inputs.shape_param.kv_mode == 0:
                 keys = attention_inputs.key_cache[kv_seqlen_now: kv_seqlen_now + k_seqlen, :, :]
                 values = attention_inputs.value_cache[kv_seqlen_now: kv_seqlen_now + k_seqlen, :, :]
                 # import pdb;pdb.set_trace()
@@ -189,7 +190,7 @@ class TestFlashAttentionInfer():
         layout = 'TND'
         key_cache = None
         value_cache = None
-        if gen_data_params.kv_dtype == 1:
+        if gen_data_params.kv_mode == 1:
             key_cache = np.random.uniform(kv_min_range, kv_max_range,
                 size=(gen_data_params.num_blocks, gen_data_params.block_size,
                 gen_data_params.kv_heads, head_size_qk)).astype(gen_data_params.dtype)
@@ -204,7 +205,7 @@ class TestFlashAttentionInfer():
                     for j in range(max_num_blocks_per_seq)
                 ]
                 block_tables.append(block_table)
-        elif gen_data_params.kv_dtype == 0:
+        elif gen_data_params.kv_mode == 0:
             if layout == 'TND':
                 key_cache = np.random.uniform(kv_min_range, kv_max_range,
                     size=(num_kv_tokens, gen_data_params.kv_heads, head_size_qk)).astype(gen_data_params.dtype)
@@ -242,6 +243,14 @@ class TestFlashAttentionInfer():
             ref_output,
             true_out,
         )
+
+        if gen_data_params.kv_mode == 1 and gen_data_params.kv_layout == 1:
+            key_cache_nz = key_cache.reshape(gen_data_params.num_blocks, gen_data_params.block_size,
+                gen_data_params.kv_heads * head_size_qk // 16, 16)
+            value_cache_nz = value_cache.reshape(gen_data_params.num_blocks, gen_data_params.block_size,
+                gen_data_params.kv_heads * head_size_vo // 16, 16)
+            key_cache = np.transpose(key_cache_nz, (0, 2, 1, 3))
+            value_cache = np.transpose(value_cache_nz, (0, 2, 1, 3))
 
         num_tokens.astype(np.int32).tofile(os.path.join(WORKSPACE, "data", "q_ntokens.bin"))
         num_kv_tokens.astype(np.int32).tofile(os.path.join(WORKSPACE, "data", "kv_ntokens.bin"))
@@ -281,7 +290,16 @@ if __name__ == "__main__":
         logging("[ERROR] dtype must be half or bf16")
         sys.exit()
 
-    kv_dtype = int(sys.argv[10])
+    kv_mode = int(sys.argv[10])
+    str_kv_layout = str(sys.argv[11])
+
+    if str_kv_layout == "nz":
+        kv_layout = 1
+    elif str_kv_layout == "nd":
+        kv_layout = 0
+    else:
+        logging("[ERROR] kv_layout must be nz or nd")
+        sys.exit()
 
     q_seqlen_list, kv_seqlen_list = gen_seqlen(q_seqlen, kv_seqlen, is_varied_len, batch)
     
@@ -291,6 +309,6 @@ if __name__ == "__main__":
     testObj = TestFlashAttentionInfer()
     gen_data_params = testObj.GenDataParams(q_seqlen_list, kv_seqlen_list, num_head,
                                             kv_heads, embedding_size,
-                                            num_blocks, block_size, mask_type, dtype, kv_dtype)
+                                            num_blocks, block_size, mask_type, dtype, kv_mode, kv_layout)
     testObj.calc_data(gen_data_params)
 
