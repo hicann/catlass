@@ -363,6 +363,94 @@ void ComputeMatmulBias(
     }
 }
 
+// matmul_activation
+template <class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementGolden, class LayoutGolden,
+    class Activation>
+void ComputeMatmulElemWiseActivation(const GemmCoord &problemShape, const std::vector<ElementA> &dataA,
+    const LayoutA &layoutA, const std::vector<ElementB> &dataB, const LayoutB &layoutB,
+    std::vector<ElementGolden> &dataGolden, const LayoutGolden &layoutGolden, Activation activation)
+{
+    for (uint32_t i = 0; i < problemShape.m(); ++i) {
+        for (uint32_t j = 0; j < problemShape.n(); ++j) {
+            size_t offsetGolden = layoutGolden.GetOffset(MakeCoord(i, j));
+            ElementGolden accumulator = 0;
+            for (uint32_t k = 0; k < problemShape.k(); ++k) {
+                size_t offsetA = layoutA.GetOffset(MakeCoord(i, k));
+                size_t offsetB = layoutB.GetOffset(MakeCoord(k, j));
+                accumulator += static_cast<ElementGolden>(dataA[offsetA]) * static_cast<ElementGolden>(dataB[offsetB]);
+            }
+            dataGolden[offsetGolden] = activation(accumulator);
+        }
+    }
+}
+
+template <class ElementT> struct Relu {
+    ElementT operator () (ElementT val) const
+    {
+        return val < ElementT(0) ? ElementT(0) : val;
+    }
+};
+
+template <class ElementT> struct Sigmoid {
+    ElementT operator () (ElementT val) const
+    {
+        // 使用类型安全的数学函数调用
+        using std::exp; // 启用ADL查找
+        const ElementT one = static_cast<ElementT>(1);
+        return one / (one + exp(-val)); // 全部使用ElementT类型
+    }
+};
+
+template <class ElementT> struct Swish {
+    ElementT operator () (ElementT val) const
+    {
+        return val * Sigmoid<ElementT>{}(val);
+    }
+};
+
+template <class ElementT> struct Gelu {
+    ElementT operator () (ElementT val) const
+    {
+        static constexpr ElementT kScale = 1.59576912; // 2 * sqrt(2/π)
+        static constexpr ElementT kCubicCoef = 0.044715;
+
+        // 更稳定的计算方式
+        const ElementT x_cubed = val * val * val;
+        const ElementT inner = val + kCubicCoef * x_cubed;
+
+        return val * Sigmoid<ElementT>{}(kScale * inner);
+    }
+};
+
+
+template <class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementGolden, class LayoutGolden>
+void ComputeMatmulElemWiseRelu(
+    const GemmCoord &problemShape, const std::vector<ElementA> &dataA, const LayoutA &layoutA,
+    const std::vector<ElementB> &dataB, const LayoutB &layoutB, std::vector<ElementGolden> &dataGolden,
+    const LayoutGolden &layoutGolden)
+{
+    ComputeMatmulElemWiseActivation(problemShape, dataA, layoutA, dataB, layoutB, dataGolden, layoutGolden,
+        Relu<ElementGolden>{});
+}
+
+
+template <class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementGolden, class LayoutGolden>
+void ComputeMatmulElemWiseGelu(const GemmCoord &problemShape, const std::vector<ElementA> &dataA,
+    const LayoutA &layoutA, const std::vector<ElementB> &dataB, const LayoutB &layoutB,
+    std::vector<ElementGolden> &dataGolden, const LayoutGolden &layoutGolden)
+{
+    ComputeMatmulElemWiseActivation(problemShape, dataA, layoutA, dataB, layoutB, dataGolden, layoutGolden,
+        Gelu<ElementGolden>{});
+}
+
+template <class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementGolden, class LayoutGolden>
+void ComputeMatmulElemWiseSwish(const GemmCoord &problemShape, const std::vector<ElementA> &dataA,
+    const LayoutA &layoutA, const std::vector<ElementB> &dataB, const LayoutB &layoutB,
+    std::vector<ElementGolden> &dataGolden, const LayoutGolden &layoutGolden)
+{
+    ComputeMatmulElemWiseActivation(problemShape, dataA, layoutA, dataB, layoutB, dataGolden, layoutGolden,
+        Swish<ElementGolden>{});
+}
 } // namespace Catlass::golden
 
 #endif // EXAMPLES_COMMON_GOLDEN_MATMUL_HPP

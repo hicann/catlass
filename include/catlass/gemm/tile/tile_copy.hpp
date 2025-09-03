@@ -227,6 +227,26 @@ struct TileCopyGemm {
     using CopyL0CToGm = Gemm::Tile::CopyL0CToGm<ArchTag, ElementAccumulator, CType>;
 };
 //////////////////////////////
+// fixpipe开启relu开关
+template <
+    /// Tag indicating architecture
+    class ArchTag,
+    /// GemmType for A matrix operand
+    class AType,
+    /// GemmType type for B matrix operand
+    class BType,
+    /// GemmType type for C matrix operand
+    class CType,
+    /// GemmType type for Bias operand
+    class BiasType = void
+>
+struct ReluTileCopy : public TileCopy<ArchTag, AType, BType, CType, BiasType> {
+    // 重写 CopyL0CToGm
+    using ElementAccumulator = typename TileCopy<ArchTag, AType, BType, CType, BiasType>::ElementAccumulator;
+    using CopyL0CToGm = Gemm::Tile::CopyL0CToGm<ArchTag, ElementAccumulator, CType,
+        Catlass::Gemm::Tile::ScaleGranularity::NO_QUANT, true>;
+};
+
 } // namespace Catlass::Gemm::Tile
 
 #endif // CATLASS_GEMM_TILE_TILE_COPY_HPP
