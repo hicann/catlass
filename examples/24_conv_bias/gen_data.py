@@ -11,7 +11,7 @@ import sys
 import numpy as np
 import torch
 import torch.nn.functional as F
-from bfloat16 import bfloat16
+from ml_dtypes import bfloat16
 
 def main():
     # Example parameters
