@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_GEMM_BLOCK_BLOCK_MMAD_PINGPONG_AL1_HPP
-#define CATLASS_GEMM_BLOCK_BLOCK_MMAD_PINGPONG_AL1_HPP
+#ifndef CATLASS_GEMM_BLOCK_BLOCK_MMAD_PINGPONG_FULL_LOADA_HPP
+#define CATLASS_GEMM_BLOCK_BLOCK_MMAD_PINGPONG_FULL_LOADA_HPP
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/resource.hpp"
@@ -34,7 +34,7 @@ template <
     class TileMmad_
 >
 struct BlockMmad <
-    MmadAtlasA2L1FullLoad<ENABLE_UNIT_FLAG_>,
+    MmadAtlasA2FullLoadA<ENABLE_UNIT_FLAG_>,
     L1TileShape_,
     L0TileShape_,
     AType_,
@@ -46,7 +46,7 @@ struct BlockMmad <
 > {
 public:
     // Type Aliases
-    using DispatchPolicy = MmadAtlasA2L1FullLoad<ENABLE_UNIT_FLAG_>;
+    using DispatchPolicy = MmadAtlasA2FullLoadA<ENABLE_UNIT_FLAG_>;
     using ArchTag = typename DispatchPolicy::ArchTag;
     using L1TileShape = L1TileShape_;
     using L0TileShape = L0TileShape_;
@@ -339,4 +339,4 @@ protected:
 
 } // namespace Catlass::Gemm::Block
 
-#endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_PINGPONG_AL1_HPP
+#endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_PINGPONG_FULL_LOADA_HPP

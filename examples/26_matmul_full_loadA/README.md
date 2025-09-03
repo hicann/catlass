@@ -1,13 +1,13 @@
-# BasicMatmulAL1 Example Readme
+# MatmulFullLoadA Example Readme
 ## 代码组织
 ```
-├── 24_basic_matmul_AL1
+├── 26_matmul_full_loadA
 │   ├── CMakeLists.txt   # CMake编译文件
 │   ├── README.md
-│   └── basic_matmul_AL1.cpp # 主文件
+│   └── matmul_full_loadA.cpp # 主文件
 ```
 ## 功能介绍
-- 该算子在00_basic_matmul基础上支持A矩阵全载（需要一半的L1空间可以放入L1TileShape::M * problemShape.K），计算每个基本块时完整搬入A矩阵分块，而后pingpong搬入B矩阵；若L1空间不够A矩阵全载，则退化到00_basic_matmul；
+- 该算子在00_basic_matmul基础上支持A矩阵全载（需要一半的L1空间可以放入L1TileShape::M * problemShape.K），计算每个基本块时完整搬入A矩阵分块，而后pingpong搬入B矩阵；若L1空间不够A矩阵全载，则返回报错；
 - A矩阵全载时，N轴越大，单核越能多次复用L1中的A矩阵、无需再从GM或L2Cache搬运A矩阵，性能收益就越大；
 - A矩阵全载时，N轴较小，无法复用A矩阵，性能收益较00_basic_matmul可能会出现劣化；
 - 若problemShape.M <= L1TileShape::M，即M方向不切块分核，此时常用GemmIdentityBlockSwizzle策略即可适用；
@@ -18,11 +18,11 @@
 - 执行算子
 ```
 # 编译指定用例
-bash scripts/build.sh 24_basic_matmul_AL1
+bash scripts/build.sh 26_matmul_full_loadA
 # cd [代码仓路径]/output/bin
 # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID
 # Device ID可选，默认为0
-./24_basic_matmul_AL1 256 512 1024 0
+./26_matmul_full_loadA 256 512 1024 0
 ```
 执行结果如下，说明精度比对成功。
 ```

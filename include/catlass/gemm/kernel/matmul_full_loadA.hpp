@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_GEMM_KERNEL_MATMUL_AL1_HPP
-#define CATLASS_GEMM_KERNEL_MATMUL_AL1_HPP
+#ifndef CATLASS_GEMM_KERNEL_MATMUL_FULL_LOADA_HPP
+#define CATLASS_GEMM_KERNEL_MATMUL_FULL_LOADA_HPP
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/resource.hpp"
@@ -25,7 +25,7 @@ template <
     class BlockEpilogue_,
     class BlockScheduler_
 >
-class BasicMatmulAL1 {
+class MatmulFullLoadA {
 public:
     using BlockMmad = BlockMmad_;
     using ArchTag = typename BlockMmad::ArchTag;
@@ -91,7 +91,7 @@ public:
 
     // Methods
     CATLASS_DEVICE
-    BasicMatmulAL1() {}
+    MatmulFullLoadA() {}
 
     template <int32_t CORE_TYPE = g_coreType>
     CATLASS_DEVICE
@@ -161,4 +161,4 @@ public:
 
 } // namespace Catlass::Gemm::Kernel
 
-#endif // CATLASS_GEMM_KERNEL_MATMUL_HPP
+#endif // CATLASS_GEMM_KERNEL_MATMUL_FULL_LOADA_HPP

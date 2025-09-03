@@ -236,7 +236,7 @@ struct SplitkGemmIdentityBlockSwizzle {
 };
 
 /// Block swizzling function for Gemms
-template <uint32_t SwizzleOffset = 1, uint32_t SwizzleDirection = 0, uint32_t AicCoreNum = 24>
+template <uint32_t SwizzleOffset = 1, uint32_t SwizzleDirection = 0>
 struct GemmIdentityBlockSwizzleL1FullLoad {
     /// Data members
 
@@ -246,6 +246,7 @@ struct GemmIdentityBlockSwizzleL1FullLoad {
 
     uint32_t loopsPerCore;
     uint32_t loopsTail;
+    uint32_t aicCoreNum;
 
     /// Methods
 
@@ -258,8 +259,9 @@ struct GemmIdentityBlockSwizzleL1FullLoad {
     {
         loopsMN = CeilDiv(MatrixCoord(problemShape.GetCoordMN()), tileMN);
         uint32_t loopsTotalNum = GetCoreLoops();
-        loopsPerCore = loopsTotalNum / AicCoreNum;
-        loopsTail = loopsTotalNum % AicCoreNum;
+        aicCoreNum = AscendC::GetBlockNum();
+        loopsPerCore = loopsTotalNum / aicCoreNum;
+        loopsTail = loopsTotalNum % aicCoreNum;
     }
 
     CATLASS_DEVICE
@@ -268,8 +270,9 @@ struct GemmIdentityBlockSwizzleL1FullLoad {
         : problemShape(problemShape_), tileMN(tileMN_), loopsMN(loopsMN_)
     {
         uint32_t loopsTotalNum = GetCoreLoops();
-        loopsPerCore = loopsTotalNum / AicCoreNum;
-        loopsTail = loopsTotalNum % AicCoreNum;
+        aicCoreNum = AscendC::GetBlockNum();
+        loopsPerCore = loopsTotalNum / aicCoreNum;
+        loopsTail = loopsTotalNum % aicCoreNum;
     }
 
     CATLASS_DEVICE
@@ -280,8 +283,9 @@ struct GemmIdentityBlockSwizzleL1FullLoad {
         loopsMN = CeilDiv(MatrixCoord(problemShape.GetCoordMN()), tileMN);
 
         uint32_t loopsTotalNum = GetCoreLoops();
-        loopsPerCore = loopsTotalNum / AicCoreNum;
-        loopsTail = loopsTotalNum % AicCoreNum;
+        aicCoreNum = AscendC::GetBlockNum();
+        loopsPerCore = loopsTotalNum / aicCoreNum;
+        loopsTail = loopsTotalNum % aicCoreNum;
     }
 
     CATLASS_DEVICE
@@ -292,8 +296,9 @@ struct GemmIdentityBlockSwizzleL1FullLoad {
         loopsMN = loopsMN_;
 
         uint32_t loopsTotalNum = GetCoreLoops();
-        loopsPerCore = loopsTotalNum / AicCoreNum;
-        loopsTail = loopsTotalNum % AicCoreNum;
+        aicCoreNum = AscendC::GetBlockNum();
+        loopsPerCore = loopsTotalNum / aicCoreNum;
+        loopsTail = loopsTotalNum % aicCoreNum;
     }
 
     CATLASS_DEVICE
@@ -308,8 +313,8 @@ struct GemmIdentityBlockSwizzleL1FullLoad {
     GemmCoord GetBlockCoord(uint32_t taskIdx)
     {
         // calculate innerIdx from taskIdx
-        uint32_t CoreIdx = taskIdx % AicCoreNum;
-        uint32_t innerCoreIdx = taskIdx / AicCoreNum;
+        uint32_t CoreIdx = taskIdx % aicCoreNum;
+        uint32_t innerCoreIdx = taskIdx / aicCoreNum;
         uint32_t innerIdx = CoreIdx * loopsPerCore + innerCoreIdx;
         if (CoreIdx < loopsTail) {
             innerIdx += CoreIdx;
