@@ -151,7 +151,7 @@ void Run(Options const &options)
 
     Conv3dParams problemShape = Conv3dParams::MakeConvCoord(options.fmapRelated, options.filterRelated, options.pads, options.strides, options.dilations);
 
-    uint32_t N = problemShape.batch();
+    uint32_t n = problemShape.batch();
     uint32_t di = problemShape.di();
     uint32_t cin1 = problemShape.cin1();
     uint32_t hi = problemShape.hi();
@@ -167,10 +167,10 @@ void Run(Options const &options)
     uint32_t cout0 = problemShape.cout0();
     uint32_t cout = problemShape.cout();
 
-    size_t lenFmap = static_cast<size_t>(N) * di * cin1 * hi * wi * cin0;
+    size_t lenFmap = static_cast<size_t>(n) * di * cin1 * hi * wi * cin0;
     size_t lenFilter = static_cast<size_t>(kdc1khkw) * n1 * n0 * cin0;
     size_t lenBias = static_cast<size_t>(cout);
-    size_t lenOut = static_cast<size_t>(N) * dout * cout1 * ho * wo * cout0;
+    size_t lenOut = static_cast<size_t>(n) * dout * cout1 * ho * wo * cout0;
 
     size_t sizeFmap = lenFmap * sizeof(fp16_t);
     size_t sizeFilter = lenFilter * sizeof(fp16_t);
@@ -181,9 +181,9 @@ void Run(Options const &options)
     using LayoutFilter = layout::KDC1KHKWN1N0C0;
     using LayoutOut = layout::NDC1HWC0;
     using LayoutBias = layout::VectorLayout;
-    LayoutFmap layoutFmap{N, di, cin1, hi * wi, cin0};
+    LayoutFmap layoutFmap{n, di, cin1, hi * wi, cin0};
     LayoutFilter layoutFilter{kdc1khkw, n1, n0, cin0};
-    LayoutOut layoutOut{N, dout, cout1, ho * wo, cout0};
+    LayoutOut layoutOut{n, dout, cout1, ho * wo, cout0};
 
     std::vector<fp16_t> hostFmap(lenFmap);
     std::vector<fp16_t> hostFilter(lenFilter);

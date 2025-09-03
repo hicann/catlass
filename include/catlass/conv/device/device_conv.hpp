@@ -42,7 +42,7 @@ public:
         return params_;
     }
 
-    /// Determines whether the GEMM can execute the given problem.
+    /// Determines whether the Conv can execute the given problem.
     static Status CanImplement(Arguments const &args)
     {
         if (ConvKernel::CanImplement(args)) {
@@ -60,7 +60,7 @@ public:
         return workspace_bytes;
     }
 
-    /// Initializes GEMM state from arguments
+    /// Initializes Conv state from arguments
     Status Initialize(Arguments const &args, uint8_t *workspace = nullptr, aclrtStream stream = nullptr)
     {
         // Initialize the Params structure
