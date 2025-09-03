@@ -77,7 +77,11 @@ normal_cases = ["00_basic_matmul 256 512 1024 0",
                 "18_gemv_aic 256 512 0",
                 "20_matmul_bias 256 512 1024 0",
                 "21_basic_matmul_preload_zN 256 512 1024 0",
-                "22_padding_splitk_matmul 256 512 1024 0"]
+                "22_padding_splitk_matmul 256 512 1024 0",
+                "26_matmul_relu 256 512 1024 0",
+                "27_matmul_gelu 256 512 1024 0",
+                "28_matmul_swish 256 512 1024 0",
+                ]
 
 
 def set_case(case: str):
