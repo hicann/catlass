@@ -167,7 +167,7 @@ void Run(Options const &options)
         ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
     } else {
         // Swizzle offset is 3 and direction is 0.
-        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
+        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
 
         // kernel level
         using MatmulKernel = Gemm::Kernel::MatmulFullLoadA<BlockMmad, BlockEpilogue, BlockScheduler>;
