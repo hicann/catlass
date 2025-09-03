@@ -122,7 +122,7 @@ void Run(Options const &options)
 
     std::vector<int8_t> hostA(lenA);
     std::vector<int8_t> hostB(lenB);
-    std::string inFileAName = "./input/a_8.bin";
+    std::string inFileAName = "../../examples/24_fp8_matmul/input/a_8.bin";
     std::ifstream inFileA(inFileAName, std::ios::binary);
     if (!inFileA.is_open()) {
         std::cerr << "Failed to open inFileA: " << inFileAName << std::endl;
@@ -130,7 +130,7 @@ void Run(Options const &options)
         inFileA.read(reinterpret_cast<char *>(hostA.data()), sizeA);
         inFileA.close();
     }
-    std::string inFileBName = "./input/b_8.bin";
+    std::string inFileBName = "../../examples/24_fp8_matmul/input/b_8.bin";
     std::ifstream inFileB(inFileBName, std::ios::binary);
     if (!inFileB.is_open()) {
         std::cerr << "Failed to open inFileB: " << inFileBName << std::endl;
@@ -229,7 +229,7 @@ void Run(Options const &options)
     ACL_CHECK(aclrtMemcpy(hostWB.data(), sizeWB, deviceWB, sizeWB, ACL_MEMCPY_DEVICE_TO_HOST));
 
     std::vector<float> hostGolden(m * n);
-    std::string outputFileName = "./output/expected_data.bin";
+    std::string outputFileName = "../../examples/24_fp8_matmul/output/expected_data.bin";
     ReadFileToVector(outputFileName, hostGolden);
 
     std::vector<float> hostCFP32(hostC.begin(), hostC.end());
