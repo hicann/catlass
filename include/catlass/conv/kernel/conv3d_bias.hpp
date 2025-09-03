@@ -37,7 +37,7 @@ public:
     using ElementOut = typename BlockConv::ElementOut;
     using LayoutOut = typename BlockConv::LayoutOut;
     using ElementBias = typename BlockConv::ElementBias;
-    using ElementAccumulator = typename Gemm::helper::ElementAccumulatorSelector<ElementFmap, ElementFilter>::ElementAccumulator;
+    using ElementAccumulator = typename BlockConv::ElementAccumulator;
 
     // using Conv3dParams = typename Catlass::Conv3dParams;
 
