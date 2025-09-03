@@ -61,7 +61,7 @@ struct BlockConv <
     TileMmad_
 > {
 public:
-    //Type Aliases
+    // Type Aliases
     using DispatchPolicy = ConvAtlasA2Pingpong<
         L1A_STAGES_,
         L1B_STAGES_,
@@ -130,14 +130,18 @@ public:
     ///// Construct 进行initBuffer
     CATLASS_DEVICE
     BlockConv(Arch::Resource<ArchTag> &resource, Conv3dParams const &conv3dParams_, uint32_t l1BufAddrStart = 0)
-    : conv3dParams(conv3dParams_)
+        : conv3dParams(conv3dParams_)
     {
-        copyL1ToL0A = CopyL1ToL0A::MakeCopyL1ToL0A(conv3dParams.sW(), conv3dParams.sH(), conv3dParams.kw(), conv3dParams.kh(), conv3dParams.dW(), conv3dParams.dH());
-        uint64_t bl1Spacesize = FilterL1TileShape::Kd * FilterL1TileShape::Ci1 * conv3dParams.khkwcin0() * FilterL1TileShape::nBL1 * sizeof(ElementFilter);
+        copyL1ToL0A = CopyL1ToL0A::MakeCopyL1ToL0A(conv3dParams.sW(), conv3dParams.sH(),
+                                                   conv3dParams.kw(), conv3dParams.kh(),
+                                                   conv3dParams.dW(), conv3dParams.dH());
+        uint64_t bl1Spacesize = FilterL1TileShape::Kd * FilterL1TileShape::Ci1 *
+                                conv3dParams.khkwcin0() * FilterL1TileShape::nBL1 * sizeof(ElementFilter);
         uint64_t hoAL1Max = FmapL1TileShape::mAL1  / conv3dParams.wo() + 2;
         uint64_t hiAL1Max = (hoAL1Max - 1) * conv3dParams.sH() + conv3dParams.dilatedKernelH();
         hiAL1Max = hiAL1Max > conv3dParams.hi() ? conv3dParams.hi() : hiAL1Max;
-        uint64_t al1Spacesize = FmapL1TileShape::Kd * FmapL1TileShape::Ci1 * hiAL1Max * conv3dParams.wicin0()  * sizeof(ElementFmap);
+        uint64_t al1Spacesize = FmapL1TileShape::Kd * FmapL1TileShape::Ci1 * hiAL1Max *
+                                conv3dParams.wicin0()  * sizeof(ElementFmap);
 
         for (uint32_t i = 0; i < L0A_STAGES; i++) {
             l0ATensorList[i] = resource.l0ABuf.template GetBufferByByte<ElementFmap>(L0A_PINGPONG_BUF_SIZE * i);
@@ -197,7 +201,7 @@ public:
         AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(L0A_STAGES + L0B_STAGES);
     }
 
-    /// Perform a block-scoped conv3d
+    // Perform a block-scoped conv3d
     CATLASS_DEVICE
     void operator()(
         AscendC::GlobalTensor<ElementFmap> const &fmapGm, LayoutFmap const &layoutFmap,
@@ -206,27 +210,27 @@ public:
         AscendC::GlobalTensor<ElementBias> const &biasGm,
         Conv3d6HdCoord const &actualBlockShape, Conv3d6HdCoord const &actualIdxStartFmap)
     {
-        //Initialization of the loop parameter in the K direction
+        // Initialization of the loop parameter in the K direction
         iterParams.ddr2l0LoopK = CeilDiv(conv3dParams.alignCinKhKwKd(), L0TileShape::kL0);
         iterParams.maxKL0Iter = iterParams.ddr2l0LoopK - 1;
         iterParams.kL0Tail = conv3dParams.alignCinKhKwKd() % L0TileShape::kL0;
         iterParams.kL0Tail = iterParams.kL0Tail == 0 ? L0TileShape::kL0 : iterParams.kL0Tail;
 
-        //The k-axis loop iteration parameters of the B-matrix
+        // The k-axis loop iteration parameters of the B-matrix
         iterParams.maxKBL1Iter = CeilDiv(conv3dParams.kdcin1(), FilterL1TileShape::Kd * FilterL1TileShape::Ci1) - 1;
         iterParams.multiKBL1 = CeilDiv(FilterL1TileShape::Kd * FilterL1TileShape::Ci1 * conv3dParams.khkwcin0(), L0TileShape::kL0);
         iterParams.kBL1fullload = conv3dParams.kdcin1() == FilterL1TileShape::Kd * FilterL1TileShape::Ci1;
         uint32_t kBL1TailCheck = conv3dParams.alignCinKhKwKd() % (FilterL1TileShape::Kd * FilterL1TileShape::Ci1 * conv3dParams.khkwcin0());
         iterParams.kBL1Tail = kBL1TailCheck == 0 ? FilterL1TileShape::Kd * FilterL1TileShape::Ci1 * conv3dParams.khkwcin0() : kBL1TailCheck;
 
-        //The k-axis loop iteration parameters of matrix A
+        // The k-axis loop iteration parameters of matrix A
         iterParams.maxKAL1Iter = CeilDiv(conv3dParams.kdcin1(), FmapL1TileShape::Kd * FmapL1TileShape::Ci1) - 1;
         iterParams.multiKAL1 = CeilDiv(FmapL1TileShape::Kd * FmapL1TileShape::Ci1 * conv3dParams.khkwcin0(), L0TileShape::kL0);
         iterParams.kAL1fullload = conv3dParams.kdcin1() == FmapL1TileShape::Kd * FmapL1TileShape::Ci1;
         uint32_t kAL1TailCheck = conv3dParams.alignCinKhKwKd() % (FmapL1TileShape::Kd * FmapL1TileShape::Ci1 * conv3dParams.khkwcin0());
         iterParams.kAL1Tail = kAL1TailCheck == 0 ? FmapL1TileShape::Kd * FmapL1TileShape::Ci1 * conv3dParams.khkwcin0() : kAL1TailCheck;
 
-        //Loop parameters in the M direction
+        // Loop parameters in the M direction
         iterParams.mAL1Tail = actualBlockShape.hw() % FmapL1TileShape::mAL1;
         iterParams.mAL1Tail = iterParams.mAL1Tail == 0 ? FmapL1TileShape::mAL1 : iterParams.mAL1Tail;
         uint32_t mAL1DivmL0 = CeilDiv(FmapL1TileShape::mAL1, L0TileShape::mL0);
@@ -237,7 +241,7 @@ public:
         iterParams.l12l0LoopM = CeilDiv(FmapL1TileShape::mAL1, L0TileShape::mL0);
         iterParams.maxML0Iter = iterParams.l12l0LoopM - 1;
 
-        //Loop parameters in the Cout direction
+        // Loop parameters in the Cout direction
         iterParams.maxNBL1Iter = CeilDiv(actualBlockShape.c1() * conv3dParams.cout0(), FilterL1TileShape::nBL1) - 1;
         iterParams.nBL1Tail = (actualBlockShape.c1() * conv3dParams.cout0()) % FilterL1TileShape::nBL1;
         iterParams.nBL1Tail = iterParams.nBL1Tail == 0 ? FilterL1TileShape::nBL1 : iterParams.nBL1Tail;
@@ -249,19 +253,19 @@ public:
         iterParams.l12l0LoopN = nBL1DivnL0;
         iterParams.maxNL0Iter = iterParams.l12l0LoopN - 1;
 
-        //Loop parameter in the D direction
+        // Loop parameter in the D direction
         iterParams.ddr2l1LoopD = actualBlockShape.d();
         
-        //The starting position of the input
+        // The starting position of the input
         iterParams.diStartPos = actualIdxStartFmap.d();
         iterParams.hwStartPos = actualIdxStartFmap.hw();
         
-        //Start the batch iterate
+        // Start the batch iterate
         for (uint32_t batchIter = 0; batchIter < actualBlockShape.n(); ++batchIter) {
             auto gmBatchFmap = fmapGm[batchIter * conv3dParams.fmapOneBatchSize()];
             auto gmBatchOut = outGm[batchIter * conv3dParams.outputOneBatchSize()];
             while (true) {
-                //The parameters used need to be reinitialized in the first iteration
+                // The parameters used need to be reinitialized in the first iteration
                 if (iterParams.isFirstIterate) {
                     iterParams.nBL0Iter = 0;
                     iterParams.mAL0Iter = 0;
@@ -277,7 +281,7 @@ public:
                         iterParams.mL0IsDivisibleByWo = true;
                     }
                 } else {
-                    //From N to M
+                    // From N to M
                     iterParams.nBL0Iter++;
                     if (iterParams.nBL0Iter == iterParams.l12l0LoopN) {
                         iterParams.nBL0Iter = 0;
@@ -301,12 +305,12 @@ public:
                         break;
                     }
                 }
-                ////Refresh the cycle round
+                // Refresh the cycle round
                 iterParams.l12l0LoopM = iterParams.mAL1Iter == iterParams.maxMAL1Iter ? CeilDiv(iterParams.mAL1Tail, L0TileShape::mL0) : mAL1DivmL0;
                 iterParams.maxML0Iter = iterParams.l12l0LoopM - 1;
                 iterParams.l12l0LoopN = iterParams.nBL1Iter == iterParams.maxNBL1Iter ? CeilDiv(iterParams.nBL1Tail, L0TileShape::nL0) : nBL1DivnL0;
                 iterParams.maxNL0Iter = iterParams.l12l0LoopN - 1;
-                ////Start the K-axis iterate
+                // Start the K-axis iterate
                 uint32_t n = (iterParams.nBL1Iter == iterParams.maxNBL1Iter && iterParams.nBL0Iter == iterParams.maxNL0Iter) ? iterParams.nL0Tail : L0TileShape::nL0;
                 uint32_t m = (iterParams.mAL1Iter == iterParams.maxMAL1Iter && iterParams.mAL0Iter == iterParams.maxML0Iter) ? iterParams.mAL0Tail : L0TileShape::mL0;
                 
@@ -584,7 +588,7 @@ protected:
                 set2dFlagDHead = false;
             }
 
-            Conv3d6HdCoord gmTileFmapOffset{0, diIdx, cin1L1Idx, hiIdx * conv3dParams.wi()};  //TODO
+            Conv3d6HdCoord gmTileFmapOffset{0, diIdx, cin1L1Idx, hiIdx * conv3dParams.wi()};
             auto layoutTileFmap = layoutFmap.GetTileLayout(MakeCoord((uint32_t)1, conv3dParams.dD(), conv3dParams.cin1(), conv3dParams.hi(), conv3dParams.wi(), conv3dParams.cin0()));
             auto gmTileFmap = gmBatchFmap[layoutTileFmap.GetOffset(gmTileFmapOffset)];
             layoutFmapInL1 = LayoutFmapInL1::MakeLayout(1, 1, cin1LoadL1, hiLoadL1, conv3dParams.wi() ,conv3dParams.cin0());
@@ -642,7 +646,7 @@ protected:
         }
         iterParams.kBL0Iter = iterParams.kIter % iterParams.multiKBL1;
         uint32_t tilingNBSrc_ = (iterParams.nBL1Iter != iterParams.maxNBL1Iter) ? FilterL1TileShape::nBL1 : iterParams.nBL1TailAlign;
-        MatrixCoord l1TileFilterOffset{iterParams.kBL0Iter * L0TileShape::kL0, iterParams.nBL0Iter * L0TileShape::nL0};   //TODO
+        MatrixCoord l1TileFilterOffset{iterParams.kBL0Iter * L0TileShape::kL0, iterParams.nBL0Iter * L0TileShape::nL0};
         auto l1BTile = l1BTensorList[l1ListId][layoutFilterInL1.GetOffset(l1TileFilterOffset)];
         LayoutBInL0 layoutBInL0 = LayoutBInL0::template MakeLayout<ElementFilter>(currentKL0, tileParams.l0CurrentN);
         copyL1ToL0B(l0BTile, l1BTile, layoutBInL0, layoutFilterInL1);

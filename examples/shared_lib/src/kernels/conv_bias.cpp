@@ -30,7 +30,11 @@ using namespace Catlass;
 template<class LayoutFmap, class LayoutFilter, class LayoutOut, class FmapDtype, class BiasDType, class OutDType>
 void ConvBiasImpl(const uint32_t blockNum, aclrtStream stream, const ConvKernelInfo &kernelInfo)
 {
-    Conv3dParams problemShape = Conv3dParams::MakeConvCoord(kernelInfo.fmapRelated.data(), kernelInfo.filterRelated.data(), kernelInfo.padList.data(), kernelInfo.strideList.data(), kernelInfo.dilationList.data());
+    Conv3dParams problemShape = Conv3dParams::MakeConvCoord(kernelInfo.fmapRelated.data(),
+                                                            kernelInfo.filterRelated.data(),
+                                                            kernelInfo.padList.data(),
+                                                            kernelInfo.strideList.data(),
+                                                            kernelInfo.dilationList.data());
     uint8_t *deviceFmap = kernelInfo.inputAddr.at(0);
     uint8_t *deviceFilter = kernelInfo.inputAddr.at(1);
     uint8_t *deviceBias = kernelInfo.inputAddr.at(2);
@@ -58,7 +62,9 @@ void ConvBiasImpl(const uint32_t blockNum, aclrtStream stream, const ConvKernelI
     using BiasType = Gemm::GemmType<BiasDType, layout::VectorLayout>;
     using OutType = Gemm::GemmType<OutDType, LayoutOut>;
 
-    using BlockConv = Conv::Block::BlockConv<DispatchPolicy, CoreTileShape, FmapL1TileShape, FilterL1TileShape, L0TileShape, FmapType, FilterType, OutType, BiasType>;
+    using BlockConv = Conv::Block::BlockConv<DispatchPolicy,
+                                             CoreTileShape, FmapL1TileShape, FilterL1TileShape, L0TileShape,
+                                             FmapType, FilterType, OutType, BiasType>;
     using BlockEpilogue = void;
 
     // Swizzle offset is 3 and direction is 0.

@@ -36,7 +36,8 @@ struct Conv3dIdentityBlockSwizzle {
     Conv3dIdentityBlockSwizzle(Conv3d6HdCoord const &outShape_, Conv3d6HdCoord const &loops_)
         : outShape(outShape_), loops(loops_)
     {
-        loops = Conv3d6HdCoord{min(outShape.n(), loops.n()), min(outShape.d(), loops.d()), min(outShape.c1(), loops.c1()), min(outShape.hw(), loops.hw())};
+        loops = Conv3d6HdCoord{min(outShape.n(), loops.n()), min(outShape.d(), loops.d()),
+                               min(outShape.c1(), loops.c1()), min(outShape.hw(), loops.hw())};
         coreTileShape = Conv3d6HdCoord{CeilDiv(outShape.n(), loops.n()), CeilDiv(outShape.d(), loops.d()),
                                        CeilDiv(outShape.c1(), loops.c1()), CeilDiv(outShape.hw(), loops.hw())};
         loopsMN = MatrixCoord{loops.hw(), loops.n() * loops.d() * loops.c1()};

@@ -132,9 +132,14 @@ public:
     CATLASS_HOST_DEVICE
     Index const &kw() const { return filterFracZ3DShape_[3]; }
     CATLASS_HOST_DEVICE
-    Index const khkw() const { return filterFracZ3DShape_[2] * filterFracZ3DShape_[3]; }
+    Index const khkw() const
+    { 
+        return filterFracZ3DShape_[2] * filterFracZ3DShape_[3];
+    }
     CATLASS_HOST_DEVICE
-    Index const kdc1khkw() const { return filterFracZ3DShape_[0] * filterFracZ3DShape_[1] * filterFracZ3DShape_[2] * filterFracZ3DShape_[3]; }
+    Index const kdc1khkw() const{
+        return filterFracZ3DShape_[0] * filterFracZ3DShape_[1] * filterFracZ3DShape_[2] * filterFracZ3DShape_[3];
+    }
     CATLASS_HOST_DEVICE
     Index const &n1() const { return filterFracZ3DShape_[4]; }
     CATLASS_HOST_DEVICE
@@ -200,14 +205,22 @@ public:
     CATLASS_HOST_DEVICE
     Index const khkwcin0() const { return filterFracZ3DShape_[2] * filterFracZ3DShape_[3] * filterFracZ3DShape_[6]; }
     CATLASS_HOST_DEVICE
-    Index const alignCinKhKwKd() const { return filterFracZ3DShape_[0] * filterFracZ3DShape_[1] * filterFracZ3DShape_[2] * filterFracZ3DShape_[3] * filterFracZ3DShape_[6]; }
+    Index const alignCinKhKwKd() const
+    { 
+        return filterFracZ3DShape_[0] * filterFracZ3DShape_[1] * filterFracZ3DShape_[2] * filterFracZ3DShape_[3] * filterFracZ3DShape_[6];
+    }
     CATLASS_HOST_DEVICE
     Index const kdcin1() const { return filterFracZ3DShape_[0] * filterFracZ3DShape_[1]; }
     CATLASS_HOST_DEVICE
-    Index const fmapOneBatchSize() const {return fmap6HDShape_[1] * fmap6HDShape_[2] * fmap6HDShape_[3] * fmap6HDShape_[4] * fmap6HDShape_[5]; }
+    Index const fmapOneBatchSize() const
+    {
+        return fmap6HDShape_[1] * fmap6HDShape_[2] * fmap6HDShape_[3] * fmap6HDShape_[4] * fmap6HDShape_[5];
+    }
     CATLASS_HOST_DEVICE
-    Index const outputOneBatchSize() const {return out6HDShape_[1] * out6HDShape_[2] * out6HDShape_[3] * out6HDShape_[4] * out6HDShape_[5]; }
-
+    Index const outputOneBatchSize() const
+    {
+        return out6HDShape_[1] * out6HDShape_[2] * out6HDShape_[3] * out6HDShape_[4] * out6HDShape_[5];
+    }
 };
 
 template <
@@ -224,7 +237,8 @@ struct ConvCoreShape {
 
     /// Returns a Coord object
     CATLASS_HOST_DEVICE
-    static Coord<4> ToCoord() {
+    static Coord<4> ToCoord()
+    {
         return MakeCoord(noCnt, doCnt, co1Cnt, howoCnt);
     }
 };
@@ -241,7 +255,8 @@ struct ConvFmapL1Shape {
 
     /// Returns a Coord object
     CATLASS_HOST_DEVICE
-    static Coord<3> ToCoord() {
+    static Coord<3> ToCoord()
+    {
         return MakeCoord(mAL1, Kd, Ci1);
     }
 };
@@ -258,7 +273,8 @@ struct ConvFilterL1Shape {
 
     /// Returns a Coord object
     CATLASS_HOST_DEVICE
-    static Coord<3> ToCoord() {
+    static Coord<3> ToCoord()
+    {
         return MakeCoord(Kd, Ci1, nBL1);
     }
 };
@@ -275,7 +291,8 @@ struct ConvL0Shape {
 
     /// Returns a Coord object
     CATLASS_HOST_DEVICE
-    static Coord<3> ToCoord() {
+    static Coord<3> ToCoord()
+    {
         return MakeCoord(mL0, kL0, nL0);
     }
 };
@@ -299,41 +316,49 @@ struct Conv3d6HdCoord : public Coord<4, uint32_t> {
 
     CATLASS_HOST_DEVICE
     Conv3d6HdCoord(Index n, Index d, Index c1, Index hw)
-    : Base(MakeCoord(n, d, c1, hw)) {}
+        : Base(MakeCoord(n, d, c1, hw)) {}
 
     CATLASS_HOST_DEVICE
-    Index const& n() const {
+    Index const& n() const
+    {
         return this->At(N_INDEX);
     }
     CATLASS_HOST_DEVICE
-    Index& n() {
+    Index& n()
+    {
         return this->At(N_INDEX);
     }
 
     CATLASS_HOST_DEVICE
-    Index const& d() const {
+    Index const& d() const
+    {
         return this->At(D_INDEX);
     }
     CATLASS_HOST_DEVICE
-    Index& d() {
+    Index& d()
+    {
         return this->At(D_INDEX);
     }
 
     CATLASS_HOST_DEVICE
-    Index const& c1() const {
+    Index const& c1() const
+    {
         return this->At(C1_INDEX);
     }
     CATLASS_HOST_DEVICE
-    Index& c1() {
+    Index& c1()
+    {
         return this->At(C1_INDEX);
     }
 
     CATLASS_HOST_DEVICE
-    Index const& hw() const {
+    Index const& hw() const
+    {
         return this->At(HW_INDEX);
     }
     CATLASS_HOST_DEVICE
-    Index& hw() {
+    Index& hw()
+    {
         return this->At(HW_INDEX);
     }
 };
@@ -352,23 +377,27 @@ struct Conv3dFracZ3dCoord : public Coord<2, uint32_t> {
 
     CATLASS_HOST_DEVICE
     Conv3dFracZ3dCoord(Index kdc1khkw, Index n1)
-    : Base(MakeCoord(kdc1khkw, n1)) {}
+        : Base(MakeCoord(kdc1khkw, n1)) {}
 
     CATLASS_HOST_DEVICE
-    Index const& kdc1khkw() const {
+    Index const& kdc1khkw() const
+    {
         return this->At(KDC1KHKW_INDEX);
     }
     CATLASS_HOST_DEVICE
-    Index& kdc1khkw() {
+    Index& kdc1khkw()
+    {
         return this->At(KDC1KHKW_INDEX);
     }
 
     CATLASS_HOST_DEVICE
-    Index const& n1() const {
+    Index const& n1() const
+    {
         return this->At(N1_INDEX);
     }
     CATLASS_HOST_DEVICE
-    Index& n1() {
+    Index& n1()
+    {
         return this->At(N1_INDEX);
     }
 };

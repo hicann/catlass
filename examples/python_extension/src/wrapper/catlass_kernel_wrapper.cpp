@@ -75,7 +75,9 @@ at::Tensor RunConvBias(const at::Tensor &fmap, const at::Tensor &filter, const a
                        const std::vector<int64_t> &strideList, const std::vector<int64_t> &padList,
                        const std::vector<int64_t> &dilationList, const std::string &outDType)
 {
-    ConvKernelInfo kernelInfo = ConvLike::GetKernelInfo(fmap, filter, bias, strideList, padList, dilationList, outDType);
+    ConvKernelInfo kernelInfo = ConvLike::GetKernelInfo(fmap, filter, bias,
+                                                        strideList, padList, dilationList,
+                                                        outDType);
     at::Tensor output = ConvLike::AllocOutput(kernelInfo);
     aclrtStream stream = c10_npu::getCurrentNPUStream().stream(false);
     uint32_t aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();

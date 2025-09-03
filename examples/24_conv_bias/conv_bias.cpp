@@ -71,7 +71,7 @@ bool ReadFile(const std::string &filePath, void *buffer, size_t bufferSize)
 }
 
 struct Options {
-    const std::string HELPER = "23_conv_bias batch di cin1 hi wi cin0 cout kd kh kw sD sH sW dD dH dW pD pH pW [device_id]";
+    const std::string HELPER = "24_conv_bias batch di cin1 hi wi cin0 cout kd kh kw sD sH sW dD dH dW pD pH pW [device_id]";
 
     uint32_t fmapRelated[6] = {1, 1, 1, 2, 9, 16};  // {batch, di, cin1, hi, wi, cin0}
     uint32_t filterRelated[4] = {1, 1, 1, 1};  // {kd, kh, kw, cout}

@@ -1430,7 +1430,7 @@ private:
 };
 
 struct KDC1KHKWN1N0C0 {
-    public:
+public:
     static constexpr int RANK = 4;
 
     /// Index type used for coordinates
