@@ -1,7 +1,7 @@
 # MatmulFullLoadA Example Readme
 ## 代码组织
 ```
-├── 26_matmul_full_loadA
+├── 25_matmul_full_loadA
 │   ├── CMakeLists.txt   # CMake编译文件
 │   ├── README.md
 │   └── matmul_full_loadA.cpp # 主文件
@@ -18,11 +18,11 @@
 - 执行算子
 ```
 # 编译指定用例
-bash scripts/build.sh 26_matmul_full_loadA
+bash scripts/build.sh 25_matmul_full_loadA
 # cd [代码仓路径]/output/bin
 # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID
 # Device ID可选，默认为0
-./26_matmul_full_loadA 256 512 1024 0
+./25_matmul_full_loadA 256 512 1024 0
 ```
 执行结果如下，说明精度比对成功。
 ```

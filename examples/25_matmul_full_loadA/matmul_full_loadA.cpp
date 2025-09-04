@@ -37,7 +37,7 @@ using namespace Catlass;
 using fp16_t = op::fp16_t;
 
 struct Options {
-    const std::string HELPER = "26_matmul_full_loadA m n k [device_id]";
+    const std::string HELPER = "25_matmul_full_loadA m n k [device_id]";
 
     GemmCoord problemShape{128, 128, 128};
     int32_t deviceId{0};
@@ -129,7 +129,7 @@ void Run(Options const &options)
 
     // judge whether to use L1 full load strategy
     if (L1UsedSpace > ArchTag::L1_SIZE) {
-        std::cout << "Not satisfy the constraints of 26_matmul_full_loadA." << std::endl;
+        std::cout << "Not satisfy the constraints of 25_matmul_full_loadA." << std::endl;
         std::cout << "MatA tile cannot be full loaded to L1." << std::endl;
         ACL_CHECK(aclrtDestroyStream(stream));
         ACL_CHECK(aclrtResetDevice(options.deviceId));
