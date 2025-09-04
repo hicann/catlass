@@ -524,13 +524,13 @@ public:
                     auto l1ATile = l1ATensor[layoutAInL1.GetOffset(l1AOffset)];
 
                     AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0ABufId]);
-                    if ((mPartIdx == 0) && (kPartIdx == 0)) {
+                    if (mPartIdx == 0 && kPartIdx == 0) {
                         AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListId]);
                     }
 
                     copyL1ToL0A(l0ATile, l1ATile, layoutAInL0, layoutAInL1);
 
-                    if ((mPartIdx == mPartLoop - 1) && (kPartIdx == kPartLoop - 1)) {
+                    if (mPartIdx == mPartLoop - 1 && kPartIdx == kPartLoop - 1) {
                         AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);
                     }
 
@@ -556,7 +556,7 @@ public:
                         copyL1ToL0B(l0BTile, l1BTile, layoutBInL0, layoutBInL1);
 
                         // If the current tile is the last one on the k&n axis, notify to load matrix B from GM to L1
-                        if ((kPartIdx == kPartLoop - 1) && (nPartIdx == nPartLoop - 1)) {
+                        if (kPartIdx == kPartLoop - 1 && nPartIdx == nPartLoop - 1) {
                             AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
                         }
                         // Notify to do mmad
