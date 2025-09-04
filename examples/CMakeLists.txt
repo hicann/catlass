@@ -74,7 +74,7 @@ foreach(EXAMPLE
     21_basic_matmul_preload_zN
     22_padding_splitk_matmul
     23_flash_attention_infer
-    24_fp8_matmul
+    24_a2_fp8_e4m3_matmul
     26_matmul_relu
     27_matmul_gelu
     28_matmul_swish

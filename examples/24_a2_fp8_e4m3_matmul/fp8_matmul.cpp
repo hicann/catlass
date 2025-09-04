@@ -50,7 +50,7 @@ bool ReadFileToVector(const std::string &filePath, std::vector<float> &data)
 }
 
 struct Options {
-    const std::string HELPER = "24_fp8_matmul m n k [device_id]";
+    const std::string HELPER = "24_a2_fp8_e4m3_matmul m n k [device_id]";
 
     GemmCoord problemShape{128, 128, 128};
     int32_t deviceId{0};
@@ -122,7 +122,7 @@ void Run(Options const &options)
 
     std::vector<int8_t> hostA(lenA);
     std::vector<int8_t> hostB(lenB);
-    std::string inFileAName = "../../examples/24_fp8_matmul/input/a_8.bin";
+    std::string inFileAName = "../../examples/24_a2_fp8_e4m3_matmul/input/a_8.bin";
     std::ifstream inFileA(inFileAName, std::ios::binary);
     if (!inFileA.is_open()) {
         std::cerr << "Failed to open inFileA: " << inFileAName << std::endl;
@@ -130,7 +130,7 @@ void Run(Options const &options)
         inFileA.read(reinterpret_cast<char *>(hostA.data()), sizeA);
         inFileA.close();
     }
-    std::string inFileBName = "../../examples/24_fp8_matmul/input/b_8.bin";
+    std::string inFileBName = "../../examples/24_a2_fp8_e4m3_matmul/input/b_8.bin";
     std::ifstream inFileB(inFileBName, std::ios::binary);
     if (!inFileB.is_open()) {
         std::cerr << "Failed to open inFileB: " << inFileBName << std::endl;
@@ -165,7 +165,7 @@ void Run(Options const &options)
     uint32_t fftsLen{0};
     RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
     using ArchTag = Arch::AtlasA2;
-    using DispatchPolicy = Gemm::MmadAtlasA2Parallel<true>;
+    using DispatchPolicy = Gemm::MmadAtlasA2PingpongSliceK<true>;
     using L1TileShape = GemmShape<128, 256, 256>;
     using L0TileShape = GemmShape<128, 256, 64>;
 
@@ -229,7 +229,7 @@ void Run(Options const &options)
     ACL_CHECK(aclrtMemcpy(hostWB.data(), sizeWB, deviceWB, sizeWB, ACL_MEMCPY_DEVICE_TO_HOST));
 
     std::vector<float> hostGolden(m * n);
-    std::string outputFileName = "../../examples/24_fp8_matmul/output/expected_data.bin";
+    std::string outputFileName = "../../examples/24_a2_fp8_e4m3_matmul/output/expected_data.bin";
     ReadFileToVector(outputFileName, hostGolden);
 
     std::vector<float> hostCFP32(hostC.begin(), hostC.end());
