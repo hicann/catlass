@@ -13,15 +13,15 @@
 ```
 # python3 ./examples/24_conv_bias/gen_data.py |batch|cin|di|hi|wi|cout|kd|kh|kw|sD|sH|sW|dD|dH|dW|pD|pH|pW|dtype
 # 最后一个参数指明数据类型为**float6**或 **bfloat16**
-python3 gen_data.py 32 64 1 32 48 128 1 1 1 1 1 1 1 1 1 0 0 0 float16
+python3 ./examples/24_conv_bias/gen_data.py 32 64 1 32 48 128 1 1 1 1 1 1 1 1 1 0 0 0 float16
 ```
 执行该命令后会在当前路径下生成data目录，包含算子的输入数据和用于精度验证的golden数据
 ```
 ├── data
-│   ├── fmap.bin   # 卷积的featureMap
-│   ├── weight.bin  # 卷积的weight
-|   ├── bias.bin   # 卷积的bias
-│   └── golden.bin # cpu计算卷积的标杆结果
+│   ├── fmap.bin   # 卷积的featureMap（NDC1HWC0的私有格式，数据排布为[batch, di, cin1, hi, wi, cin0]，其中cin0 = 16，cin1 = ceilDiv(cin, cin0)）
+│   ├── weight.bin  # 卷积的weight（FRACTAL_Z_3D的私有格式，数据排布为[kdc1khkw, n1, n0, cin0]，其中n0 = 16，n1 = ceilDiv(cout, n0)）
+|   ├── bias.bin   # 卷积的bias（ND格式，数据排布为[cout]）
+│   └── golden.bin # cpu计算卷积的标杆结果 （NDC1HWC0的私有格式，数据排布为[batch, do, cout1, ho, wo, cout0]，其中cout0=16，cout1 = ceilDiv(cout, cout0)）
 ```
 - 第二步，执行算子，这里需要注意的是执行算子的输入shape和上面第一步生成数据的shape一致。
 ```
@@ -30,7 +30,7 @@ bash scripts/build.sh 24_conv_bias
 # cd [代码仓路径]/output/bin
 # 可执行文件名 |batch|di|cin1|hi|wi|cin0|cout|kd|kh|kw|sD|sH|sW|dD|dH|dW|pD|pH|pW|Device ID
 # Device ID可选，默认为0
-./24_conv_bias 32 1 4 32 48 16 128 1 1 1 1 1 1 1 1 1 0 0 0 0
+./output/bin/24_conv_bias 32 1 4 32 48 16 128 1 1 1 1 1 1 1 1 1 0 0 0 0
 ```
 执行结果如下，说明精度比对成功。
 ```

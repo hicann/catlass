@@ -59,8 +59,6 @@ bool ReadFile(const std::string &filePath, void *buffer, size_t bufferSize)
         printf("File %s size is 0\n", filePath.c_str());
         return false;
     }
-    printf("File size is %zu\n", size);
-    printf("BufferSize is %zu\n", bufferSize);
     if (size > bufferSize) {
         printf("File %s size is larger than buffer size.\n", filePath.c_str());
         return false;
