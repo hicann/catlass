@@ -55,6 +55,14 @@ class CatlassExampleTest(unittest.TestCase):
                                 os.path.join(CMAKE_EXAMPLES_PATH, "19_mla", "data")]
         self.run_case("19_mla", case_cpp)
 
+    def test_24_conv_bias(self):
+        case_base = [str(i) for i in [32, 64, 1, 32, 48, 128, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0]]
+        case_py = case_base + ["float16"]
+        ret = subprocess.run(["python", os.path.join(
+            CMAKE_EXAMPLES_PATH, "24_conv_bias", "gen_data.py")]+case_py)        
+        case_cpp = [str(i) for i in [32, 1, 4, 32, 48, 16, 128, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0]]
+        self.run_case("24_conv_bias", case_cpp)
+
 
 normal_cases = ["00_basic_matmul 256 512 1024 0",
                 "01_batched_matmul 5 256 512 1024 0",
