@@ -31,7 +31,7 @@ git clone https://gitee.com/ascend/catlass.git
 CANN 8.2.RC1.alpha002及之后版本
 cmake >= 3.15
 ### 代码实现
-此处以basicmatmul为例进行展示，`cd catlass/example`，创建算子目录`mkdir 21_basic_matmul`，在该目录下创建对应的算子文件`basic_matmul.cpp`和编译文件`CMakeLists.txt`。
+此处以basicmatmul为例进行展示，`cd catlass/examples`，创建算子目录`mkdir basic_matmul`，在该目录下创建对应的算子文件`basic_matmul.cpp`和编译文件`CMakeLists.txt`。
 
 下面将展示3段代码，需要写入basic_matmul.cpp文件中。
 #### 配置头文件，定义输入参数解析结构体
@@ -240,37 +240,38 @@ int main(int argc, const char **argv)
 ```
 ### 编译运行
 #### 编辑编译文件
-在算子目录下（即basic_matmul.cpp同级目录）的CMakeLists.txt文件中加入以下代码
+在`catlass/examples/basic_matmul/CMakeLists.txt`文件中写入以下代码
 
-```
+```cmake
 set_source_files_properties(basic_matmul.cpp PROPERTIES LANGUAGE ASCEND)
 catlass_example_add_executable(
-    21_basic_matmul
+    basic_matmul
     dav-c220
     basic_matmul.cpp
 )
 ```
-在example目录下的CMakeLists.txt文件的foreach循环中加入该算子的信息。
+在`catlass/examples/CMakeLists.txt`文件的foreach循环中加入该算子的信息。
 
-```
+```diff
 foreach(EXAMPLE
-    21_basic_matmul
+    # ...
++   basic_matmul
+    # ...
 )
 
 ```
-foreach中已有20个项目，在列表后面追加即可。
 #### 编译
-在catlass目录下(请仔细核对执行目录)，执行`bash scripts/build.sh 21_basic_matmul`命令即可进行编译。
+在catlass目录下(请仔细核对执行目录)，执行`bash scripts/build.sh basic_matmul`命令即可进行编译。出现`[INFO]Target 'basic_matmul' built successfully`表示编译成功
 #### 执行
-`cd output/bin`目录，执行`./21_basic_matmul 128 256 4096 0`命令执行算子。
+在catlass目录下执行`cd output/bin`，执行`./basic_matmul 128 256 4096 0`命令执行算子。
 执行结果如出现`Compare success`。说明精度比对成功。(由于使用CPU进行精度对比，所以执行需要一点时间)
 
 #### 性能测试
-执行`msprof op ./21_basic_matmul 128 256 4096 0`命令即可调用msprof工具对算子进行性能测试。
+在`catlass/output/bin`目录下执行`msprof op ./basic_matmul 128 256 4096 0`命令即可调用msprof工具对算子进行性能测试。
 执行完毕后会在同目录下生成“OPPROF_xxxx”文件夹，进入该文件夹，查看`OpBasicInfo.csv`文件，其中`“Task Duration(us)”`表示该算子执行的耗时。
 #### tiling调优
 此处展示如何通过调整tile shape对算子的性能进行优化。
-通过改动上面代码中的下面两行代码改动tile shape：
+通过改动`catlass/examples/basic_matmul/basic_matmul.cpp`中的下面两行代码改动tile shape：
 ```cpp
 // 定义tiling切分策略
 using L1TileShape = GemmShape<128, 256, 256>;
@@ -278,15 +279,15 @@ using L0TileShape = GemmShape<128, 256, 64>;
 ```
 **case1** `m, n, k = 128, 256, 4096`
 1. 使用初始的TileShape， `L1TileShape: <128,256,256>`, `L0TileShape: <128,256,64>`，
-执行命令`msprof op ./21_basic_matmul 128 256 4096 0`,测试算子在当前tileShape下的性能。
+执行命令`msprof op ./basic_matmul 128 256 4096 0`,测试算子在当前tileShape下的性能。
 2. 修改TileShape为 `L1TileShape: <32,128,256>`, `L0TileShape: <32,128,64>`，
-3. 重新编译后，执行命令`msprof op ./21_basic_matmul 128 256 4096 0`，测试算子修改tileShape后的性能。通过比对tileShape修改前后的性能，观察调整tiling对算子性能的影响。
+3. 重新编译后，执行命令`msprof op ./basic_matmul 128 256 4096 0`，测试算子修改tileShape后的性能。通过比对tileShape修改前后的性能，观察调整tiling对算子性能的影响。
 
 **case2** `m, n, k = 16, 16, 32768`
 1. 使用初始的TileShape `L1TileShape: <128,256,256>`, `L0TileShape: <128,256,64>`，
-执行命令`msprof op ./21_basic_matmul 128 256 4096 0`,测试算子在当前tileShape下的性能。
+执行命令`msprof op ./basic_matmul 128 256 4096 0`,测试算子在当前tileShape下的性能。
 2. 修改TileShape为 `L1TileShape: <16,16,2048>`, `L0TileShape: <16,16, 64>`，
-3. 重新编译后，执行命令`msprof op ./21_basic_matmul 128 256 4096 0`，测试算子修改tileShape后的性能。通过比对tileShape修改前后的性能，观察调整tiling对算子性能的影响。
+3. 重新编译后，执行命令`msprof op ./basic_matmul 128 256 4096 0`，测试算子修改tileShape后的性能。通过比对tileShape修改前后的性能，观察调整tiling对算子性能的影响。
 
 ## SplitK Matmul体验
 ### 原理说明
@@ -294,12 +295,13 @@ using L0TileShape = GemmShape<128, 256, 64>;
 
 由于硬件约束，基本块的大小最小为`16x16`，如果Matmul的M和N轴很小，例如`M=16,N=16`,那么只能划分出一个基本块，只能利用一个计算核心，浪费了很多计算资源，如图所示，如果K方向足够大，可以对K方向进行切分，从而话分出更多的任务块，利用更多的计算核心，提高计算效率。
 ### 代码实现
-首先在`example`目录下面创建新文件夹，命名为`22_splitk_matmul`，然后在该文件夹下创建新文件`splitk_matmul.cpp`。
+首先在`catlass/examples`目录下面创建新文件夹，命名为`splitk_matmul`，然后在该文件夹下创建新文件`splitk_matmul.cpp`。
 #### 更改包含的头文件（此处仅供说明，请使用下面完整代码进行实验）
-```cpp
-#include "catlass/gemm/kernel/splitk_matmul.hpp"
+```diff
+- #include "catlass/gemm/kernel/basic_matmul.hpp"
++ #include "catlass/gemm/kernel/splitk_matmul.hpp"
 ```
-SplitK Matmul在Basic Matmul的基础上扩展，对Matmul的K方向进行切分，从而增加基本任务块数量，充分利用计算资源。需要将原来的kernel层头文件更换为`atlass/gemm/kernel/splitk_matmul.hpp`，其他组件和BasicMamtul相同。
+SplitK Matmul在Basic Matmul的基础上扩展，对Matmul的K方向进行切分，从而增加基本任务块数量，充分利用计算资源。需要将原来的kernel层头文件中的`#include "catlass/gemm/kernel/basic_matmul.hpp"`更换为`#include "catlass/gemm/kernel/splitk_matmul.hpp"`，其他组件和BasicMamtul相同。
 
 #### 更改Kernel配置（此处仅供说明，请使用下面完整代码进行实验）
 SplitK Matmul先利用Cube Core算出各个基本块的部分和，然后由Vector Core进行累加，为了不损失精度，累加过程采用`float`类型。由于对K轴进行了切分，SplitkMatmul的BlockScheduler是定制化的，BlockScheduler组件决定基本块的遍历方式，SplitkMatmul需要拆分K轴进行遍历，所以需要定制化BlockScheduler，实际开发可基于BasicMamtul的BlockScheduler进行修改，缩短开发时间。
@@ -534,41 +536,43 @@ int main(int argc, const char **argv)
 }
 ```
 ### 编译运行
-在`splitk_matmul.cpp`同级文件夹下创建`CMakeLists.txt`文件，填如以下内容：
+在`catlass/examples/splitk_matmul/splitk_matmul.cpp`同级文件夹下创建`CMakeLists.txt`文件，填入以下内容：
 ```cmake
 set_source_files_properties(splitk_matmul.cpp PROPERTIES LANGUAGE ASCEND)
 catlass_example_add_executable(
-    22_splitk_matmul # 可执行程序名称
+    splitk_matmul # 可执行程序名称
     dav-c220
     splitk_matmul.cpp
 )
 ```
-然后在example下的，填入文件夹名称：
-```cmake
+然后在`catlass/examples/CMakeLists.txt`文件的foreach循环中加入该算子的信息：
+```diff
 foreach(EXAMPLE
-    22_splitk_matmul
+    # ...
++   splitk_matmul
+    # ...
 )
 ```
-运行脚本进行编译：
+在catlass目录下，运行脚本进行编译：
 ```bash
-bash scripts/build.sh 22_splitk_matmul
+bash scripts/build.sh splitk_matmul
 ```
-执行程序：
+在catlass目录下，`cd output/bin`目录执行程序：
 ```bash
-# ./output/bin/22_splitk_matmul m n k [device_id]
-./output/bin/22_splitk_matmul 16 16 32768 0
+# ./splitk_matmul m n k [device_id]
+./splitk_matmul 16 16 32768 0
 ```
 
 ### 性能测试
-使用msprof op采集性能数据：
+在`catlass/output/bin`目录下，使用msprof op采集性能数据：
 ```bash
-msprof op ./output/bin/22_splitk_matmul 16 16 32768 0
+msprof op ./splitk_matmul 16 16 32768 0
 ```
 在当前目录下会生成profiling数据，查看`OpBasicInfo.csv`文件获取性能数据。可将该性能数据与Basic Matmul的性能数据进行比较，观察收益。
 
 ## GroupMatmul体验
 ### 代码组装
-首先在`example`目录下面创建新文件夹，命名为`23_grouped_matmul`，然后在该文件夹下创建新文件`grouped_matmul.cpp`。写入以下代码：
+首先在`catlass/examples`目录下面创建新文件夹，命名为`grouped_matmul`，然后在该文件夹下创建新文件`grouped_matmul.cpp`。写入以下代码：
 ```cpp
 // 如果不需使用AscendC Tensor中的ShapeInfo信息，可以设置K_MAX_SHAPE_DIM为0减少使用的栈空间
 #ifndef K_MAX_SHAPE_DIM
@@ -840,31 +844,33 @@ int main(int argc, const char **argv)
 }
 ```
 ### 编译运行
-在`grouped_matmul.cpp`同级文件夹下创建`CMakeLists.txt`文件，填如以下内容：
+在`catlass/examples/grouped_matmul/splitk_matmul.cpp`同级文件夹下创建`CMakeLists.txt`文件，填入以下内容：
 ```cmake
 set_source_files_properties(grouped_matmul.cpp PROPERTIES LANGUAGE ASCEND)
 catlass_example_add_executable(
-    23_grouped_matmul # 可执行程序名称
+    grouped_matmul # 可执行程序名称
     dav-c220
     grouped_matmul.cpp
 )
 ```
-然后在example下的，填入文件夹名称：
-```cmake
+然后在`catlass/examples/CMakeLists.txt`文件的foreach循环中加入该算子的信息：
+```diff
 foreach(EXAMPLE
-    23_grouped_matmul
+    # ...
++   grouped_matmul
+    # ...
 )
 ```
-运行脚本进行编译：
+在catlass目录下，运行脚本进行编译：
 ```bash
-bash scripts/build.sh 23_grouped_matmul
+bash scripts/build.sh grouped_matmul
 ```
-执行程序：
+在catlass目录下，`cd output/bin`目录执行程序：
 ```bash
-# ./output/bin/23_grouped_matmul group_count m n k [device_id]
-./output/bin/23_grouped_matmul 128 32768 1280 4096 0
+# ./grouped_matmul group_count m n k [device_id]
+./grouped_matmul 128 32768 1280 4096 0
 # msprof op测试程序性能
-msprof op ./output/bin/23_grouped_matmul 128 32768 1280 4096 0
+msprof op ./grouped_matmul 128 32768 1280 4096 0
 ```
 ### 切换配置，观察性能变化
 以上代码中有两种配置策略，分别是配置一和配置二，配置一为通常的简单配置，配置二为优化配置，增加了`Preload，ShuffleK`两个优化措施，两者使用不同的block层实现，展示了模板库可按需组装搭配各组件的特性。
