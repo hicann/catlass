@@ -62,7 +62,7 @@ bool ReadFile(const string &filePath, void *buffer, size_t bufferSize)
 // This code section describes the parameters to execute the run function.
 struct Options {
     static constexpr auto HELPER = "Usage: fai batch qSeqlen kvSeqlen numHeads kvHeads embeddingSize isVariedLen maskType [--dtype DTYPE "
-                                   "--datapath DATA_PATH --device DEVICE_ID]\n";
+                                   "--datapath DATA_PATH --kvlayout KV_LAYOUT --device DEVICE_ID]\n";
     static constexpr auto MIN_ARGS = 7;
 
     // Define default value.
@@ -77,6 +77,7 @@ struct Options {
     uint32_t deviceId{0};
     uint32_t blockSize{128};
     string dataType = "half";
+    string kvLayout = "nd";
     string dataPath = "../../examples/23_flash_attention_infer/data";
 
     Options() = default;
@@ -108,6 +109,8 @@ struct Options {
                 deviceId = atoi(argv[argIndex++]);
             } else if (flag == "--dtype") {
                 dataType = string(argv[argIndex++]);
+            } else if (flag == "--kvlayout") {
+                kvLayout = string(argv[argIndex++]);
             } else {
                 printf(HELPER);
                 return -1;
@@ -151,6 +154,7 @@ void Run(const Options &options)
     int32_t blockSize = options.blockSize;
     int32_t maskType = options.maskType;
     string dataType = options.dataType;
+    string kvLayout = options.kvLayout;
     string dataPath = options.dataPath;
     int32_t maxKvSeqlen = kvSeqlen;
     int32_t numBlocks = batch * ((maxKvSeqlen + blockSize - 1) / blockSize);
@@ -159,7 +163,11 @@ void Run(const Options &options)
         cerr << "[ERROR] dtype must be 'half' or 'bf16'." << endl;
         return;
     }
-    
+
+    if ((kvLayout != "nz") && (kvLayout != "nd")) {
+        cerr << "[ERROR] kvlayout must be 'nz' or 'nd'." << endl;
+        return;
+    }
 
     // read qNtokens num
     void *qNtokens = nullptr;
@@ -286,10 +294,23 @@ void Run(const Options &options)
     
     for(int i = 0; i < 1; i ++){
         if(dataType == "half"){
-            FAInferFp16<<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice, pDevice, oTempDevice, oUpdateDevice, tilingDevice);
+            if (kvLayout == "nz") {
+                FAInferFp16<layout::nZ, layout::zN><<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, kDevice, vDevice, maskDevice,
+                    blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice, pDevice, oTempDevice, oUpdateDevice, tilingDevice);
+            } else {
+                FAInferFp16<layout::ColumnMajor, layout::RowMajor><<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, kDevice, vDevice, maskDevice,
+                    blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice, pDevice, oTempDevice, oUpdateDevice, tilingDevice);
+            }
+            
         }
         else{
-            FAInferBf16<<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice, pDevice, oTempDevice, oUpdateDevice, tilingDevice);
+            if (kvLayout == "nz") {
+                FAInferBf16<layout::nZ, layout::zN><<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, kDevice, vDevice, maskDevice,
+                    blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice, pDevice, oTempDevice, oUpdateDevice, tilingDevice);
+            } else {
+                FAInferBf16<layout::ColumnMajor, layout::RowMajor><<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, kDevice, vDevice, maskDevice,
+                    blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice, pDevice, oTempDevice, oUpdateDevice, tilingDevice);
+            }
         }
         ACL_CHECK(aclrtSynchronizeStream(stream));
         // Copy the result from device to host

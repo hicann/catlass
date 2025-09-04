@@ -27,7 +27,8 @@ headSize=128
 isVariedLen=0
 maskType=1
 dtype="bf16"
-cacheMode=1
+kvMode=1
+kvLayout="nz"
 device=0
 
 function build() {
@@ -37,14 +38,14 @@ function build() {
 }
 
 function gen_data() {
-    python3 examples/23_flash_attention_infer/gen_data.py $batch $qSeqlen $kvSeqlen $numHeads $kvHeads $headSize $isVariedLen $maskType "$dtype" $cacheMode
+    python3 examples/23_flash_attention_infer/gen_data.py $batch $qSeqlen $kvSeqlen $numHeads $kvHeads $headSize $isVariedLen $maskType "$dtype" $kvMode "$kvLayout"
     echo "Data gen finished"
 }
 
 function run_kernel {
     echo 'Case: B=' $batch ' qS=' $qSeqlen ' kvS=' $kvSeqlen ' qN=' $numHeads ' kvN=' $kvHeads ' D=' $headSize ' mask=' $maskType
     cd output/bin/
-    ./23_flash_attention_infer $batch $qSeqlen $kvSeqlen $numHeads $kvHeads $headSize $isVariedLen $maskType --device $device --dtype $dtype
+    ./23_flash_attention_infer $batch $qSeqlen $kvSeqlen $numHeads $kvHeads $headSize $isVariedLen $maskType  --dtype $dtype --kvlayout $kvLayout --device $device
 }
 
 build
