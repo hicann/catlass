@@ -54,6 +54,12 @@ class CatlassExampleTest(unittest.TestCase):
         case_cpp = case_base + ["--dtype", "half", "--datapath",
                                 os.path.join(CMAKE_EXAMPLES_PATH, "19_mla", "data")]
         self.run_case("19_mla", case_cpp)
+    
+    def test_24_fp8_matmul(self):
+        case_py = [str(i) for i in [256, 512, 1024, 0, 0]]
+        ret = subprocess.run(["python", os.path.join(CMAKE_EXAMPLES_PATH, "24_fp8_matmul", "gen_data.py")] + case_py)
+        case_cpp = [str(i) for i in [256, 512, 1024, 0]]
+        self.run_case("24_fp8_matmul", case_cpp)
 
 
 normal_cases = ["00_basic_matmul 256 512 1024 0",
@@ -77,8 +83,7 @@ normal_cases = ["00_basic_matmul 256 512 1024 0",
                 "18_gemv_aic 256 512 0",
                 "20_matmul_bias 256 512 1024 0",
                 "21_basic_matmul_preload_zN 256 512 1024 0",
-                "22_padding_splitk_matmul 256 512 1024 0",
-                "24_fp8_matmul 256 512 1024 0"]
+                "22_padding_splitk_matmul 256 512 1024 0"]
 
 
 def set_case(case: str):
