@@ -1,7 +1,7 @@
 # W8A16Matmul Example Readme
 ## 代码组织
 ```
-├── 24_w8a16_matmul
+├── 30_w8a16_matmul
 │   ├── CMakeLists.txt     # CMake编译文件
 │   ├── README.md
 │   └── w8a16_matmul.cpp # 主文件
@@ -14,11 +14,11 @@
 - 执行算子
 ```
 # 编译指定用例
-bash scripts/build.sh 24_w8a16_matmul
+bash scripts/build.sh 30_w8a16_matmul
 # cd [代码仓路径]/output/bin
 # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID
 # Device ID可选，默认为0
-./24_w8a16_matmul 256 512 1024 0
+./30_w8a16_matmul 256 512 1024 0
 ```
 执行结果如下，说明精度比对成功。
 ```
