@@ -59,7 +59,8 @@ torch::Dtype AclDtypeToTorchDtype(const aclDataType aclDtype)
     static const std::map<aclDataType, torch::Dtype> mapper = {{ACL_FLOAT16, torch::kFloat16},
                                                                {ACL_FLOAT, torch::kFloat32},
                                                                {ACL_INT32, torch::kInt32},
-                                                               {ACL_INT8, torch::kInt8}};
+                                                               {ACL_INT8, torch::kInt8},
+                                                               {ACL_BF16, torch::kBFloat16}};
     auto iter = mapper.find(aclDtype);
     return iter != mapper.end() ? iter->second : torch::kFloat16;
 };

@@ -42,10 +42,26 @@ struct KernelInfo {
     std::vector<uint8_t *> outputAddr;
 };
 
+struct ConvKernelInfo {
+    aclDataType inputDataType = aclDataType::ACL_FLOAT16;
+    aclDataType biasDataType = aclDataType::ACL_FLOAT;
+    aclDataType outputDataType = aclDataType::ACL_FLOAT16;
+
+    std::vector<uint32_t> fmapRelated;
+    std::vector<uint32_t> filterRelated;
+    
+    std::vector<uint32_t> strideList;
+    std::vector<uint32_t> padList;
+    std::vector<uint32_t> dilationList;
+
+    std::vector<uint8_t *> inputAddr;
+    std::vector<uint8_t *> outputAddr;
+};
+
 void BasicMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo);
 void GroupedMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo);
 void OptimizedMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo);
-
+void ConvBias(uint32_t blockNum, aclrtStream stream, ConvKernelInfo kernelInfo);
 } // namespace CatlassKernel
 
 #endif // SHARED_LIB_CATLASS_KERNEL_H

@@ -1,7 +1,7 @@
-# Fp8Matmul Example Readme
+# A2Fp8E4M3Matmul Example Readme
 ## 代码组织
 ```
-├── 24_a2_fp8_e4m3_matmul
+├── 29_a2_fp8_e4m3_matmul
 │   ├── CMakeLists.txt   # CMake编译文件
 │   ├── README.md
 │   ├── gen_data.py      # 数据生成脚本
@@ -15,7 +15,7 @@ example使用
 - 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/quickstart.md#算子编译)
 ```
 # 编译指定用例
-bash scripts/build.sh 24_a2_fp8_e4m3_matmul
+bash scripts/build.sh 29_a2_fp8_e4m3_matmul
 ```
 - 第二步，首先执行`gen_data.py`，生成测试样例，测试用例需要从命令行输入
 ```
@@ -38,7 +38,7 @@ python gen_data.py 256 512 1024 0 0
 # cd [代码仓路径]/output/bin
 # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID
 # Device ID可选，默认为0
-./24_a2_fp8_e4m3_matmul 256 512 1024 0
+./29_a2_fp8_e4m3_matmul 256 512 1024 0
 ```
 执行结果如下，说明精度比对成功。
 ```
@@ -47,7 +47,7 @@ Compare success.
 
 ## 说明
 
-`gen_data.py`的输入支持trans_a和trans_b，但24_a2_fp8_e4m3_matmul可执行文件不支持，仅仅是trans_a和trans_b均为0的example示例。
+1、 `gen_data.py`的输入支持trans_a和trans_b，但29_a2_fp8_e4m3_matmul可执行文件不支持，仅仅是trans_a和trans_b均为0的example示例。
 
 若要对应转置情况请修改example示例中的layout，因为layout隐式表征转置状态，即layout::RowMajor表示不转置，layout::ColumnMajor表示转置。
 
@@ -59,3 +59,5 @@ Compare success.
 | 0       | 1       | layout::RowMajor    | layout::ColumnMajor |
 | 1       | 0       | layout::ColumnMajor | layout::RowMajor    |
 | 1       | 1       | layout::ColumnMajor | layout::ColumnMajor |
+
+2、对比FP16 Matmul，该样例针对大shape的case有较为明显的显存收益

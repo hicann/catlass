@@ -146,10 +146,18 @@ struct MmadAtlasA2FAITailPV : public MmadAtlasA2{
     static constexpr bool ENABLE_UNIT_FLAG = ENABLE_UNIT_FLAG_;
 };
 
+template <bool ENABLE_UNIT_FLAG_ = false>
+struct MmadAtlasA2FullLoadA : public MmadAtlasA2  {
+    static constexpr uint32_t STAGES = 2;
+    static constexpr bool ENABLE_UNIT_FLAG = ENABLE_UNIT_FLAG_;
+};
 
-
-
-
+template <bool ENABLE_UNIT_FLAG_ = false, bool ENABLE_SHUFFLE_K_ = false>
+struct MmadAtlasA2W8A16 : public MmadAtlasA2 {
+    static constexpr uint32_t STAGES = 2;
+    static constexpr bool ENABLE_UNIT_FLAG = ENABLE_UNIT_FLAG_;
+    static constexpr bool ENABLE_SHUFFLE_K = ENABLE_SHUFFLE_K_;
+};
 }  // namespace Catlass::Gemm
 
 #endif  // CATLASS_GEMM_DISPATCH_POLICY_HPP
