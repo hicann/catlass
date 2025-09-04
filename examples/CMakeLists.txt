@@ -75,6 +75,9 @@ foreach(EXAMPLE
     22_padding_splitk_matmul
     23_flash_attention_infer
     24_conv_bias
+	26_matmul_relu
+    27_matmul_gelu
+	28_matmul_swish
 )
     add_subdirectory(${EXAMPLE})
 endforeach()
