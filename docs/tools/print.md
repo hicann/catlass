@@ -56,7 +56,7 @@ bash scripts/build.sh --enable_print 09_splitk_matmul
 ```bash
 cd output/bin
 # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID（可选）
-msdebug ./09_splitk_matmul 256 512 1024 0
+./09_splitk_matmul 256 512 1024 0
 ```
 
 - ⚠ 注意事项
