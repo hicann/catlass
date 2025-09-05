@@ -212,7 +212,7 @@ void Run(const Options &options)
     AllocMem(&kHost, &kDevice, kvSize);
     if (cacheLayout == "nd") {
         ReadFile(dataPath + "/k.bin", kHost, kvSize);
-    } else if (cacheLayout == "nz"){
+    } else if (cacheLayout == "nz") {
         ReadFile(dataPath + "/k_nz.bin", kHost, kvSize);
     }
     ACL_CHECK(aclrtMemcpy(kDevice, kvSize, kHost, kvSize, ACL_MEMCPY_HOST_TO_DEVICE));
@@ -223,7 +223,7 @@ void Run(const Options &options)
     AllocMem(&vHost, &vDevice, kvSize);
     if (cacheLayout == "nd") {
         ReadFile(dataPath + "/v.bin", vHost, kvSize);
-    } else if (cacheLayout == "nz"){
+    } else if (cacheLayout == "nz") {
         ReadFile(dataPath + "/v_nz.bin", vHost, kvSize);
     }
     ACL_CHECK(aclrtMemcpy(vDevice, kvSize, vHost, kvSize, ACL_MEMCPY_HOST_TO_DEVICE));

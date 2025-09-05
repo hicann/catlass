@@ -251,12 +251,14 @@ class TestFlashAttentionInfer():
             key_cache.tofile(os.path.join(WORKSPACE, "data", "k.bin"))
             value_cache.tofile(os.path.join(WORKSPACE, "data", "v.bin"))
         elif (gen_data_params.cache_layout == "nz"):
-            key_cache_nz = key_cache.reshape(gen_data_params.num_blocks, gen_data_params.block_size, gen_data_params.kv_heads * head_size_qk // 16, 16)
-            key_cache_nz = np.transpose(key_cache_nz, (0,2,1,3)) # num_block,  N2 * D // 16, block_size, 16
+            key_cache_nz = key_cache.reshape(gen_data_params.num_blocks, gen_data_params.block_size,
+                                             gen_data_params.kv_heads * head_size_qk // 16, 16)
+            key_cache_nz = np.transpose(key_cache_nz, (0, 2, 1, 3)) # num_block,  N2 * D // 16, block_size, 16
             key_cache_nz.tofile(os.path.join(WORKSPACE, "data", "k_nz.bin"))
 
-            value_cache_nz = value_cache.reshape(gen_data_params.num_blocks, gen_data_params.block_size, gen_data_params.kv_heads * head_size_qk // 16, 16)
-            value_cache_nz = np.transpose(value_cache_nz, (0,2,1,3)) # num_block,  N2 * D // 16, block_size, 16
+            value_cache_nz = value_cache.reshape(gen_data_params.num_blocks, gen_data_params.block_size,
+                                                 gen_data_params.kv_heads * head_size_qk // 16, 16)
+            value_cache_nz = np.transpose(value_cache_nz, (0, 2 ,1, 3)) # num_block,  N2 * D // 16, block_size, 16
             value_cache_nz.tofile(os.path.join(WORKSPACE, "data", "v_nz.bin"))
 
         np.array(block_tables).astype(np.int32).tofile(os.path.join(WORKSPACE, "data", "block_table.bin"))
@@ -295,7 +297,7 @@ if __name__ == "__main__":
     kv_dtype = int(sys.argv[10])
 
     cache_layout = str(sys.argv[11])
-    if not cache_layout in ["nz", "nd"]:
+    if cache_layout not in ["nz", "nd"]:
         logging("[ERROR] cache_layout must be nz or nd.")
         sys.exit()
 
