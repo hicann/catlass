@@ -299,24 +299,28 @@ void Run(const Options &options)
     uint64_t fftsAddr{0};
     uint32_t fftsLen{0};
     RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
-    
+
     for(int i = 0; i < 1; i ++){
         if(dataType == "half"){
             if (cacheLayout == "nz") {
-                FAInferFp16<layout::nZ, layout::zN><<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, kDevice, vDevice, maskDevice,
-                    blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice, pDevice, oTempDevice, oUpdateDevice, tilingDevice);
+                FAInferFp16<layout::nZ, layout::zN><<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, kDevice, vDevice,
+                    maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice, pDevice, oTempDevice,
+                    oUpdateDevice, tilingDevice);
             } else if (cacheLayout == "nd") {
-                FAInferFp16<layout::ColumnMajor, layout::RowMajor><<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, kDevice, vDevice, maskDevice,
-                    blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice, pDevice, oTempDevice, oUpdateDevice, tilingDevice);
+                FAInferFp16<layout::ColumnMajor, layout::RowMajor><<<blockDim, nullptr, stream>>>(fftsAddr, qDevice,
+                    kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice,
+                    pDevice, oTempDevice, oUpdateDevice, tilingDevice);
             }
         }
         else{
             if (cacheLayout == "nz") {
-                FAInferBf16<layout::nZ, layout::zN><<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, kDevice, vDevice, maskDevice,
-                    blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice, pDevice, oTempDevice, oUpdateDevice, tilingDevice);
+                FAInferBf16<layout::nZ, layout::zN><<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, kDevice,
+                    vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice, pDevice,
+                    oTempDevice, oUpdateDevice, tilingDevice);
             } else if (cacheLayout == "nd") {
-                FAInferBf16<layout::ColumnMajor, layout::RowMajor><<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, kDevice, vDevice, maskDevice,
-                    blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice, pDevice, oTempDevice, oUpdateDevice, tilingDevice);
+                FAInferBf16<layout::ColumnMajor, layout::RowMajor><<<blockDim, nullptr, stream>>>(fftsAddr, qDevice,
+                    kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice,
+                    kvSeqDevice, sDevice, pDevice, oTempDevice, oUpdateDevice, tilingDevice);
             }
         }
         ACL_CHECK(aclrtSynchronizeStream(stream));
