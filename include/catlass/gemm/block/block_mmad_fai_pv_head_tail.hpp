@@ -90,6 +90,7 @@ public:
     static constexpr uint32_t KV_BASE_BLOCK = 512;
     static constexpr uint32_t KV_SPLIT_SIZE = 128;
     static constexpr uint32_t LOAB_BLOCK = 1;
+    static constexpr uint32_t NZ_LAST_DIM = 16;
 
     // Check LayoutC
     static_assert(std::is_same_v<LayoutC, layout::RowMajor>, "LayoutC only support RowMajor yet!");
@@ -142,6 +143,9 @@ public:
         if constexpr (PAGED_CACHE_FLAG_) {
             uint32_t blockTableId = gBlockTable.GetValue(nowNIdx);
             kOffset = blockTableId * blockSize * strideKV + maskTailS * strideKV + kIdx * EMBED_SPLIT_SIZE;
+            if constexpr (std::is_same_v<LayoutB, layout::zN>) {
+                kOffset = blockTableId * blockSize * strideKV + maskTailS * NZ_LAST_DIM + kIdx * EMBED_SPLIT_SIZE;
+            }
         } else {
             kOffset = nowNIdx * KV_SPLIT_SIZE * strideKV + kIdx * EMBED_SPLIT_SIZE;
         }
