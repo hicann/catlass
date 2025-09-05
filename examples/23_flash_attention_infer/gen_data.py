@@ -258,7 +258,7 @@ class TestFlashAttentionInfer():
 
             value_cache_nz = value_cache.reshape(gen_data_params.num_blocks, gen_data_params.block_size,
                                                  gen_data_params.kv_heads * head_size_qk // 16, 16)
-            value_cache_nz = np.transpose(value_cache_nz, (0, 2 ,1, 3))
+            value_cache_nz = np.transpose(value_cache_nz, (0, 2, 1, 3))
             value_cache_nz.tofile(os.path.join(WORKSPACE, "data", "v_nz.bin"))
 
         np.array(block_tables).astype(np.int32).tofile(os.path.join(WORKSPACE, "data", "block_table.bin"))
