@@ -17,7 +17,7 @@
 #include "catlass/gemm_coord.hpp"
 #include "catlass/matrix_coord.hpp"
 #include "catlass/layout/layout.hpp"
-
+#include "catlass/detail/callback.hpp"
 namespace Catlass::Epilogue::Block {
 
 template <
@@ -103,6 +103,69 @@ public:
     }
 
     CATLASS_DEVICE
+    void operator() (
+        GemmCoord const &blockShapeMNK,
+        GemmCoord const &blockCoordMNK,
+        GemmCoord const &actualBlockShapeMNK,
+        AscendC::GlobalTensor<ElementCompute> const &gmBlockC,
+        LayoutX const &layoutBlockC, Callback &&callback = Callback{}
+    )
+    {
+        callback();
+        // Calculate the offset of the current block
+        MatrixCoord blockShape = blockShapeMNK.GetCoordMN();
+        MatrixCoord blockCoord = blockCoordMNK.GetCoordMN();
+        MatrixCoord actualBlockShape = actualBlockShapeMNK.GetCoordMN();
+        MatrixCoord blockOffset = blockCoord * blockShape;
+
+        // Calculate the offset and the shape of the current subblock
+        MatrixCoord subblockShape{
+            CeilDiv(actualBlockShape.row(), static_cast<uint32_t>(AscendC::GetSubBlockNum())),
+            actualBlockShape.column()
+        };
+        MatrixCoord subblockCoord{ AscendC::GetSubBlockIdx(), 0 };
+        MatrixCoord actualSubblockShape = MatrixCoord::Min(
+            subblockShape, actualBlockShape - subblockCoord * subblockShape);
+        MatrixCoord subblockOffset = subblockCoord * subblockShape;
+
+        // Get the data and layout of C
+        auto gmSubblockC = gmBlockC[layoutBlockC.GetOffset(subblockOffset)];
+        auto layoutSubblockC = layoutBlockC.GetTileLayout(actualSubblockShape);
+
+        // Get the data and layout of X
+        AscendC::GlobalTensor<ElementX> gmX;
+        gmX.SetGlobalBuffer(reinterpret_cast<__gm__ ElementX *>(params.ptrX));
+        auto gmSubblockX = gmX[params.layoutX.GetOffset(blockOffset + subblockOffset)];
+        auto layoutSubblockX = params.layoutX.GetTileLayout(actualSubblockShape);
+
+        // Get the data and layout of D
+        AscendC::GlobalTensor<ElementD> gmD;
+        gmD.SetGlobalBuffer(reinterpret_cast<__gm__ ElementD *>(params.ptrD));
+        auto gmSubblockD = gmD[params.layoutD.GetOffset(blockOffset + subblockOffset)];
+        auto layoutSubblockD = params.layoutD.GetTileLayout(actualSubblockShape);
+
+        // Get the layout on UB
+        auto layoutComputeInUb = LayoutComputeInUb::template MakeLayoutInUb<ElementCompute>(actualSubblockShape);
+
+        // Copy the data of C and X
+        AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
+        copyGmToUbC(ubC, gmSubblockC, layoutComputeInUb, layoutSubblockC);
+        copyGmToUbX(ubX, gmSubblockX, layoutComputeInUb, layoutSubblockX);
+        AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
+
+        // Perform epilogue calculation
+        AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
+        AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
+        tileEpilogue(ubD, ubC, ubX);
+        AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
+        AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
+
+        // Copy the data of D
+        AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
+        copyUbToGmD(gmSubblockD, ubD, layoutSubblockD, layoutComputeInUb);
+        AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
+    }
+CATLASS_DEVICE
     void operator() (
         GemmCoord const &blockShapeMNK,
         GemmCoord const &blockCoordMNK,

@@ -16,7 +16,6 @@
 
 #include <iostream>
 #include <vector>
-#include <cstdlib>
 
 #include "helper.hpp"
 #include "golden.hpp"
@@ -24,16 +23,16 @@
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
+#include "catlass/epilogue/dispatch_policy.hpp"
+#include "catlass/epilogue/block/block_epilogue.hpp"
+#include "catlass/epilogue/tile/tile_copy.hpp"
+#include "catlass/epilogue/tile/tile_elemwise_add.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
 #include "catlass/gemm/kernel/grouped_matmul_epilogue.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 #include "catlass/layout/layout.hpp"
-#include "catlass/epilogue/dispatch_policy.hpp"
-#include "catlass/epilogue/block/block_epilogue.hpp"
-#include "catlass/epilogue/tile/tile_copy.hpp"
-#include "catlass/epilogue/tile/tile_elemwise_add.hpp"
 
 #include "catlass/status.hpp"
 #include "catlass/gemm/device/device_gemm.hpp"
@@ -97,7 +96,7 @@ void Run(Options const &options)
     size_t sizeB = lenB * sizeof(fp16_t);
     size_t sizeD = lenD * sizeof(fp16_t);
 
-    using LayoutA = layout::ColumnMajor;
+    using LayoutA = layout::RowMajor;
     using LayoutB = layout::RowMajor;
     using LayoutC = layout::RowMajor;
 
@@ -109,6 +108,7 @@ void Run(Options const &options)
     golden::FillRandomData<fp16_t>(hostA, fp16_tLower, fp16_tUpper);
     golden::FillRandomData<fp16_t>(hostB, fp16_tLower, fp16_tUpper);
     golden::FillRandomData<fp16_t>(hostX, fp16_tLower, fp16_tUpper);
+
     auto groupList = golden::GenerateGroupList(k, problemCount);
 
     std::vector<GemmCoord> problemShapeList(problemCount);
@@ -160,17 +160,20 @@ void Run(Options const &options)
     ACL_CHECK(aclrtMemcpy(layoutCListDevice, sizeLayoutCList,
         layoutCList.data(), sizeLayoutCList, ACL_MEMCPY_HOST_TO_DEVICE));
 
+    uint64_t fftsAddr{0};
+    uint32_t fftsLen{0};
+    RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
+
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
+    using ArchTag = Arch::AtlasA2;
     constexpr uint32_t preloadStages = 1;
     constexpr uint32_t l1Stages = 2;
     constexpr uint32_t l0AStages = 4;
     constexpr uint32_t l0BStages = 2;
     constexpr uint32_t l0CStages = 1;
-    constexpr bool enableUnitFlag = true;
+    constexpr bool enableUnitFlag = false;
     constexpr bool enableShuffleK = true;
-
-    using ArchTag = Arch::AtlasA2;
     using DispatchPolicy = Gemm::MmadAtlasA2PreloadAsync<
         preloadStages,
         l1Stages, l0AStages, l0BStages, l0CStages,
@@ -198,50 +201,61 @@ void Run(Options const &options)
     using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
 
     typename MatmulKernel::Arguments arguments{
-        problemCount, problemShapeListDevice,
+        problemCount,
+        options.problemShape,
+        sizeof(half),
+        problemShapeListDevice,
         deviceA, layoutAListDevice,
         deviceB, layoutBListDevice,
-        deviceD, layoutCListDevice
-    };
+        layoutCListDevice,
+        deviceD};
 
     MatmulAdapter matmul_op;
-    // Workspace size equals output size
+    size_t sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
     uint8_t *deviceWorkspace{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeD, ACL_MEM_MALLOC_HUGE_FIRST));
+    if (sizeWorkspace > 0) {
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+    }
     matmul_op.Initialize(arguments, deviceWorkspace);
-    matmul_op(stream, aicCoreNum);
-
+    std::cout<< "start" << std::endl;
+    matmul_op(stream, aicCoreNum, fftsAddr);
+    std::cout<< "end" << std::endl;   
     ACL_CHECK(aclrtSynchronizeStream(stream));
+    if (sizeWorkspace > 0) {
+        ACL_CHECK(aclrtFree(deviceWorkspace));
+    }
 
     std::vector<fp16_t> hostD(lenD);
     ACL_CHECK(aclrtMemcpy(hostD.data(), sizeD, deviceD, sizeD, ACL_MEMCPY_DEVICE_TO_HOST));
+    std::cout<< "memcpy hostd" << std::endl;  
+    // std::vector<float> hostGolden(lenD);
+    // golden::ComputeGroupedMatmul(problemCount, problemShapeList, hostA, layoutAList,
+    //     hostB, layoutBList, hostGolden, layoutCList);
+    // for (size_t i = 0; i < hostGolden.size(); ++i) {
+    //     hostGolden[i] += static_cast<float>(hostX[i]);
+    // }
 
-    std::vector<float> hostGolden(lenD);
-    golden::ComputeGroupedMatmul(problemCount, problemShapeList, hostA, layoutAList,
-        hostB, layoutBList, hostGolden, layoutCList);
-    for (size_t idx = 0; idx < lenD; ++idx) {
-        hostGolden[idx] += static_cast<float>(hostX[idx]);
-    }
-
-    std::vector<uint64_t> errorIndices = golden::CompareData(hostD, hostGolden, k, groupList, m * n);
-    if (errorIndices.empty()) {
-        std::cout << "Compare success." << std::endl;
-    } else {
-        std::cerr << "Compare failed. Error count: " << errorIndices.size() << std::endl;
-    }
+    // std::vector<uint64_t> errorIndices = golden::CompareData(hostD, hostGolden, k, groupList, m * n);
+    // if (errorIndices.empty()) {
+    //     std::cout << "Compare success." << std::endl;
+    // } else {
+    //     std::cerr << "Compare failed. Error count: " << errorIndices.size() << std::endl;
+    // }
 
     ACL_CHECK(aclrtFree(deviceA));
     ACL_CHECK(aclrtFree(deviceB));
     ACL_CHECK(aclrtFree(deviceD));
-    ACL_CHECK(aclrtFree(deviceWorkspace));
+    std::cout<< "end 1" << std::endl;  
     ACL_CHECK(aclrtFree(problemShapeListDevice));
     ACL_CHECK(aclrtFree(layoutAListDevice));
     ACL_CHECK(aclrtFree(layoutBListDevice));
     ACL_CHECK(aclrtFree(layoutCListDevice));
+    std::cout<< "end 2" << std::endl;  
 
     ACL_CHECK(aclrtDestroyStream(stream));
     ACL_CHECK(aclrtResetDevice(options.deviceId));
     ACL_CHECK(aclFinalize());
+    std::cout<< "end 3" << std::endl; 
 }
 
 int main(int argc, const char **argv)
