@@ -123,7 +123,7 @@ struct MmadAtlasA2Preload : public MmadAtlasA2 {
 
 分析切基本块数目为`CeilDiv(1/128) * CeilDiv(768/128) = 6`，则24个AIC仅6个进行工作，负载不均衡。
 
-考虑到B矩阵为ColumnMajor，可以对N轴进行更细粒度切分，调整L1TileShape<16,32,1024>、L0TileShape<16,32,256>，切分基本块数目为`CeilDiv(1/16) * CeilDiv(768/32) = 24`，则24个AIC都只处理1个基本块，负载均衡，任务耗时为**15.5us**。
+考虑到B矩阵为ColumnMajor，可以对N轴进行更细粒度切分，调整L1TileShape<16,32,1024>、L0TileShape<16,32,256>，切分基本块数目为`CeilDiv(1/16) * CeilDiv(768/32) = 24`，则24个AIC都进行工作并只处理1个基本块，负载均衡，任务耗时为**15.5us**。
 
 - ⚠️ 注意点
 
