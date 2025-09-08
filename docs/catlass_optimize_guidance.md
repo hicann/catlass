@@ -111,9 +111,19 @@ struct MmadAtlasA2Preload : public MmadAtlasA2 {
 
 此时B矩阵为zN格式（同NZ格式），使用21_basic_matmul_preload_zN，按照默认的L1TileShape<128,256,256>、L0TileShape<128,256,64>，耗时为**181.4us**。
 
-分析切基本块数目为`CeilDiv(32/128) * CeilDiv(6144/256) = 24`，则20个AIC中有4个需要计算两个基本块、其余16个处理1个基本块，负载不均衡。
+分析切基本块数目为`CeilDiv(20/128) * CeilDiv(6144/256) = 24`，则20个AIC中有4个需要计算两个基本块、其余16个处理1个基本块，负载不均衡。
 
-调整L1TileShape<32,320,128>、L0TileShape<32,320,32>，切分基本块数目为`CeilDiv(1024/256) * CeilDiv(576/128) = 20`，则20个AIC都只处理1个基本块，负载均衡，任务耗时为**139.6us**。
+调整L1TileShape<32,320,128>、L0TileShape<32,320,32>，切分基本块数目为`CeilDiv(20/32) * CeilDiv(6144/320) = 20`，则20个AIC都只处理1个基本块，负载均衡，任务耗时为**139.6us**。
+
+- 案例三
+
+场景描述：A矩阵RowMajor，B矩阵ColumnMajor，M 1，N 768，K 5120，fp32输入输出，24个AIC。
+
+此时AB矩阵数据都沿K轴排布。而K轴512B对齐，直接使用00_basic_matmul，按照fp32数据类型常用的L1TileShape<128,128,256>、L0TileShape<128,128,64>，耗时为**36.3us**。
+
+分析切基本块数目为`CeilDiv(1/128) * CeilDiv(768/128) = 6`，则24个AIC仅6个进行工作，负载不均衡。
+
+考虑到B矩阵为ColumnMajor，可以对N轴进行更细粒度切分，调整L1TileShape<16,32,1024>、L0TileShape<16,32,256>，切分基本块数目为`CeilDiv(1/16) * CeilDiv(768/32) = 24`，则24个AIC都只处理1个基本块，负载均衡，任务耗时为**15.5us**。
 
 - ⚠️ 注意点
 
