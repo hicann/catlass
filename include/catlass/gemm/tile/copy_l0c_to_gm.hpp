@@ -232,7 +232,54 @@ struct CopyL0CToGm<Catlass::Arch::AtlasA2,
     }
 };
 
+template <
+    class ElementAccumulator_,
+    class ElementDst_,
+    bool ReluEnable_
+>
+struct CopyL0CToGm<Catlass::Arch::AtlasA2,
+                   ElementAccumulator_,
+                   Gemm::GemmType<ElementDst_, layout::NDC1HWC0>,
+                   ScaleGranularity::NO_QUANT,
+                   ReluEnable_>
+{
+    using ArchTag = Catlass::Arch::AtlasA2;
+    using ElementDst = ElementDst_;
+    using ElementSrc = ElementAccumulator_;
+    using LayoutSrc = Catlass::layout::zN;
+    using LayoutDst = Catlass::layout::NDC1HWC0;
+    static constexpr auto quantPre = CopyL0CToGmQuantMode<ArchTag, ElementSrc, ElementDst,
+        ScaleGranularity::NO_QUANT>::VALUE;
+    static constexpr auto reluEn = ReluEnable_;
+
+    CATLASS_DEVICE
+    void operator()(AscendC::GlobalTensor<ElementDst> const &dst, AscendC::LocalTensor<ElementSrc> const &src,
+        LayoutDst const &dstLayout, LayoutSrc const &srcLayout, uint8_t unitFlag = 0)
+    {
+        AscendC::FixpipeParamsV220 intriParams;
+
+        intriParams.nSize = srcLayout.orgShape(1);
+        intriParams.mSize = srcLayout.orgShape(0);
+        intriParams.srcStride = srcLayout.stride(3) / srcLayout.shape(2);
+        intriParams.dstStride = dstLayout.shape(1) * dstLayout.shape(2);
+
+        if constexpr (AscendC::IsSameType<ElementSrc, float>::value &&
+                      AscendC::IsSameType<ElementDst, float>::value) {
+            intriParams.isChannelSplit = true;
+        }
+
+        intriParams.quantPre = quantPre;
+        intriParams.reluEn = false;
+        intriParams.unitFlag = unitFlag;
+        AscendC::Fixpipe<ElementDst, ElementSrc, AscendC::CFG_NZ>(dst, src, intriParams);
+    }
+};
+
 ///////////////////////////////////////////CopyL0CToGmTla/////////////////////////////////////////////////
+// L0C copy mode
+struct CopyToGM {};
+struct CopyToL1 {};
+
 template <
     class ArchTag,
     class TensorSrc,
@@ -249,27 +296,32 @@ template <
     class TensorSrc_,
     class ElementDst_,
     class LayoutDst_,
+    class CoordDst_,
     bool ReluEnable_
 >
 struct CopyL0CToGmTla<Catlass::Arch::AtlasA2,
                    TensorSrc_,
-                   tla::Tensor<AscendC::GlobalTensor<ElementDst_>, LayoutDst_, AscendC::TPosition::GM>,
+                   tla::Tensor<AscendC::GlobalTensor<ElementDst_>, LayoutDst_, CoordDst_, AscendC::TPosition::GM>,
                    ScaleGranularity::NO_QUANT,
                    ReluEnable_,
                    std::enable_if_t<tla::detail::isRowMajor<LayoutDst_>::value>>
 {
     using ArchTag = Catlass::Arch::AtlasA2;
-    using TensorDst = tla::Tensor<AscendC::GlobalTensor<ElementDst_>, LayoutDst_, AscendC::TPosition::GM>;
     using ElementDst = ElementDst_;
-    using TensorSrc = TensorSrc_;
-    using ElementSrc = typename TensorSrc::Element;
+    using ElementSrc = typename TensorSrc_::Element;
     static constexpr auto quantPre = CopyL0CToGmQuantMode<ArchTag, ElementSrc, ElementDst,
         ScaleGranularity::NO_QUANT>::VALUE;
     static constexpr auto reluEn = ReluEnable_;
 
+    template <class TensorDst, class TensorSrc>
     CATLASS_DEVICE
     void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor, uint8_t unitFlag = 0)
     {
+        static_assert(tla::detail::isRowMajor<typename TensorDst::Layout>::value &&
+                      TensorSrc::position == AscendC::TPosition::CO1 &&
+                      TensorDst::position == AscendC::TPosition::GM,
+            "The input parameters do not match. TensorSrc must be L0C, while TensorDst must be GM and RowMajor");
+
         AscendC::FixpipeParamsV220 intriParams;
 
         // Fixpipe layout information
@@ -283,9 +335,12 @@ struct CopyL0CToGmTla<Catlass::Arch::AtlasA2,
         intriParams.reluEn = reluEn;
         intriParams.unitFlag = unitFlag;
 
+        auto dstOffset = dstTensor.layout()(dstTensor.coord());
+        auto srcOffset = srcTensor.layout()(srcTensor.coord());
+
         // Call AscendC Fixpipe
         AscendC::Fixpipe<ElementDst, ElementSrc, AscendC::CFG_ROW_MAJOR>(
-            dstTensor.data(), srcTensor.data(), intriParams);
+            dstTensor.data()[dstOffset], srcTensor.data()[srcOffset], intriParams);
     }
 };
 

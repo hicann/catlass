@@ -6,11 +6,12 @@
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 # See LICENSE in the root of the software repository for the full text of the License.
 
-import unittest
-from typing import List, Type
-import subprocess
 import os
 import re
+import subprocess
+import unittest
+from typing import List, Type
+
 CMAKE_BINARY_PATH = os.path.join(os.path.dirname(
     os.path.abspath(__file__)), "..", "output", "bin")
 CMAKE_EXAMPLES_PATH = os.path.join(os.path.dirname(
@@ -54,13 +55,21 @@ class CatlassExampleTest(unittest.TestCase):
                                 os.path.join(CMAKE_EXAMPLES_PATH, "19_mla", "data")]
         self.run_case("19_mla", case_cpp)
 
+    def test_24_conv_bias(self):
+        case_base = [str(i) for i in [32, 64, 1, 32, 48, 128, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0]]
+        case_py = case_base + ["float16"]
+        ret = subprocess.run(["python", os.path.join(
+            CMAKE_EXAMPLES_PATH, "24_conv_bias", "gen_data.py")]+case_py)        
+        case_cpp = [str(i) for i in [32, 1, 4, 32, 48, 16, 128, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0]]
+        self.run_case("24_conv_bias", case_cpp)
+
 
 normal_cases = ["00_basic_matmul 256 512 1024 0",
                 "01_batched_matmul 5 256 512 1024 0",
                 "02_grouped_matmul_slice_m 128 512 1024 2048 0",
                 "03_matmul_add 256 512 1024 0",
                 "04_padding_matmul 256 512 1024 0",
-                "05_grouped_matmul_slice_k 128 512 1024 2048 0",
+                "05_grouped_matmul_slice_k 128 512 1024 32 0",
                 "06_optimized_matmul 256 512 1024 0",
                 "07_grouped_matmul_slice_m_per_token_dequant_moe 128 512 1024 2048 0",
                 "08_grouped_matmul 128 512 1024 2048 0",
@@ -76,7 +85,13 @@ normal_cases = ["00_basic_matmul 256 512 1024 0",
                 "18_gemv_aic 256 512 0",
                 "20_matmul_bias 256 512 1024 0",
                 "21_basic_matmul_preload_zN 256 512 1024 0",
-                "22_padding_splitk_matmul 256 512 1024 0"]
+                "22_padding_splitk_matmul 256 512 1024 0",
+                "25_matmul_full_loadA 256 512 1024 0",
+                "26_matmul_relu 256 512 1024 0",
+                "27_matmul_gelu 256 512 1024 0",
+                "28_matmul_swish 256 512 1024 0",
+                "30_w8a16_matmul 256 512 1024 0",
+                ]
 
 
 def set_case(case: str):

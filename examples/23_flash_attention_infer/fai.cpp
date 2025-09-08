@@ -175,7 +175,7 @@ void Run(const Options &options)
     uint64_t blockTableSize =
         static_cast<uint64_t>(batch * ((maxKvSeqlen + blockSize - 1) / blockSize) * sizeof(int32_t));
     // ?????
-    uint32_t tilingSize = sizeof(FAInferTiling::FATilingData);
+    uint32_t tilingSize = sizeof(FATilingData);
 
     // Allocate matrices in host and device memory.
     uint8_t *qSeqHost;
@@ -231,10 +231,10 @@ void Run(const Options &options)
 
     // Allocate matrices in device memory for workspace.
     // One base workspace block contains 65536 elements.
-    uint64_t mm1OutSize = aicCoreNum * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(float) * FAInferTiling::NUM2;
-    uint64_t smOnlineOutSize = aicCoreNum * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(fp16_t) * FAInferTiling::NUM2;
-    uint64_t mm2OutSize = aicCoreNum * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(float) * FAInferTiling::NUM2;
-    uint64_t UpdateSize = aicCoreNum * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(float) * FAInferTiling::NUM2;
+    uint64_t mm1OutSize = aicCoreNum * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(float) * FAInferTiling::NUM3;
+    uint64_t smOnlineOutSize = aicCoreNum * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(fp16_t) * FAInferTiling::NUM3;
+    uint64_t mm2OutSize = aicCoreNum * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(float) * FAInferTiling::NUM3;
+    uint64_t UpdateSize = aicCoreNum * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(float) * FAInferTiling::NUM3;
     uint64_t workSpaceSize = mm1OutSize + smOnlineOutSize + mm2OutSize + UpdateSize;
     
     uint8_t *sDevice;
@@ -269,7 +269,7 @@ void Run(const Options &options)
     faInfo.qSeqlenList = reinterpret_cast<int64_t *>(qSeqHost);
     faInfo.kvSeqlenList = reinterpret_cast<int64_t *>(kvSeqHost);
 
-    FAInferTiling::FATilingData faTilingData;
+    FATilingData faTilingData;
 
     FAInferTiling::GetFATilingParam(faInfo, blockDim, faTilingData);
 
@@ -283,31 +283,39 @@ void Run(const Options &options)
     uint64_t fftsAddr{0};
     uint32_t fftsLen{0};
     RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
-
-    FAInferFp16<<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice, pDevice, oTempDevice, oUpdateDevice, tilingDevice);
-    ACL_CHECK(aclrtSynchronizeStream(stream));
-    // Copy the result from device to host
-    vector<fp16_t> oHostHalf(qoSize / sizeof(fp16_t));
-    vector<bfloat16> oHostBf16(qoSize / sizeof(bfloat16));
-    if (dataType == "half") {
-        ACL_CHECK(aclrtMemcpy(oHostHalf.data(), qoSize, oDevice, qoSize, ACL_MEMCPY_DEVICE_TO_HOST));
-    } else if (dataType == "bf16") {
-        ACL_CHECK(aclrtMemcpy(oHostBf16.data(), qoSize, oDevice, qoSize, ACL_MEMCPY_DEVICE_TO_HOST));
-    }
     
+    for(int i = 0; i < 1; i ++){
+        if(dataType == "half"){
+            FAInferFp16<<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice, pDevice, oTempDevice, oUpdateDevice, tilingDevice);
+        }
+        else{
+            FAInferBf16<<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice, pDevice, oTempDevice, oUpdateDevice, tilingDevice);
+        }
+        ACL_CHECK(aclrtSynchronizeStream(stream));
+        // Copy the result from device to host
+        vector<fp16_t> oHostHalf(qoSize / sizeof(fp16_t));
+        vector<bfloat16> oHostBf16(qoSize / sizeof(bfloat16));
+        if (dataType == "half") {
+            ACL_CHECK(aclrtMemcpy(oHostHalf.data(), qoSize, oDevice, qoSize, ACL_MEMCPY_DEVICE_TO_HOST));
+        } else if (dataType == "bf16") {
+            ACL_CHECK(aclrtMemcpy(oHostBf16.data(), qoSize, oDevice, qoSize, ACL_MEMCPY_DEVICE_TO_HOST));
+        }
+        
+        
 
-    // Compute the golden result
-    vector<float> goldenHost(qoSize / sizeof(fp16_t));
-    const size_t goldenSize = qoSize * 2;
-    ReadFile(dataPath + "/golden.bin", goldenHost.data(), goldenSize);
+        // Compute the golden result
+        vector<float> goldenHost(qoSize / sizeof(fp16_t));
+        const size_t goldenSize = qoSize * 2;
+        ReadFile(dataPath + "/golden.bin", goldenHost.data(), goldenSize);
 
-    // Compare the result
-    vector<uint64_t> errorIndices = (dataType == "half") ? golden::CompareData(oHostHalf, goldenHost, kvSeqlen)
-                                                         : golden::CompareData(oHostBf16, goldenHost, kvSeqlen);
-    if (errorIndices.empty()) {
-        cout << "Compare success." << endl;
-    } else {
-        cerr << "Compare failed. Error count: " << errorIndices.size() << endl;
+        // Compare the result
+        vector<uint64_t> errorIndices = (dataType == "half") ? golden::CompareData(oHostHalf, goldenHost, kvSeqlen)
+                                                            : golden::CompareData(oHostBf16, goldenHost, kvSeqlen);
+        if (errorIndices.empty()) {
+            cout << "Compare success." << endl;
+        } else {
+            cerr << "Compare failed. Error count: " << errorIndices.size() << endl;
+        }
     }
 
     // Free host memory allocations.

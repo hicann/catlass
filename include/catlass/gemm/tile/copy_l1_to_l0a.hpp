@@ -155,6 +155,66 @@ struct CopyL1ToL0A<ArchTag, Catlass::Gemm::GemmType<int8_t, layout::nZ, AscendC:
         }
     }
 };
+
+template<class ArchTag, class Element>
+struct CopyL1ToL0A<ArchTag, Catlass::Gemm::GemmType<Element, layout::NDC1HWC0, AscendC::TPosition::A1>>{
+    using LayoutDst = layout::zZ;
+    using LayoutSrc = layout::NDC1HWC0;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 =  BYTE_PER_C0 / sizeof(Element);
+    static constexpr uint8_t RIGHT_MOVE_8 = 8;
+
+    // Methods
+
+    CATLASS_DEVICE
+    CopyL1ToL0A(uint32_t strideW = 0,
+                uint32_t strideH = 0,
+                uint32_t filterW = 0,
+                uint32_t filterH = 0,
+                uint32_t dilationFilterW = 0,
+                uint32_t dilationFilterH = 0)
+    {
+        loadData3Dv2Params.strideW = strideW;
+        loadData3Dv2Params.strideH = strideH;
+        loadData3Dv2Params.filterW = filterW;
+        loadData3Dv2Params.filterSizeW = filterW >> RIGHT_MOVE_8;
+        loadData3Dv2Params.filterH = filterH;
+        loadData3Dv2Params.filterSizeH = filterH >> RIGHT_MOVE_8;
+        loadData3Dv2Params.dilationFilterW = dilationFilterW;
+        loadData3Dv2Params.dilationFilterH = dilationFilterH;
+    }
+
+    CATLASS_DEVICE
+    static CopyL1ToL0A MakeCopyL1ToL0A(
+        uint32_t strideW = 0,
+        uint32_t strideH = 0,
+        uint32_t filterW = 0,
+        uint32_t filterH = 0,
+        uint32_t dilationFilterW = 0,
+        uint32_t dilationFilterH = 0)
+    {
+        return CopyL1ToL0A(strideW, strideH, filterW, filterH, dilationFilterW, dilationFilterH);
+    }
+
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> dstTensor,
+        AscendC::LocalTensor<Element> srcTensor,
+        LayoutDst layoutDst, LayoutSrc layoutSrc, 
+        uint32_t kStartPt, uint32_t mStartPt
+    ){
+        loadData3Dv2Params.kStartPt = kStartPt;
+        loadData3Dv2Params.mStartPt = mStartPt;
+        loadData3Dv2Params.kExtension = layoutDst.orgShape(1);
+        loadData3Dv2Params.mExtension = layoutDst.orgShape(0);
+        loadData3Dv2Params.channelSize = layoutSrc.orgShape(1) * layoutSrc.orgShape(2) * layoutSrc.orgShape(5);
+        static constexpr AscendC::IsResetLoad3dConfig CONV3D_LOAD3DV2_DEFAULT_CONFIG = {false, false};
+        AscendC::LoadData<Element, CONV3D_LOAD3DV2_DEFAULT_CONFIG>(dstTensor, srcTensor, loadData3Dv2Params);
+    }
+private:
+    AscendC::LoadData3DParamsV2<Element> loadData3Dv2Params;
+};
+
 //////////////////////////////////////////
 
 /// Partial specialization for zN in and zZ out.
@@ -346,16 +406,12 @@ struct CopyL1ToL0A<ArchTag, Gemm::GemmType<float, layout::nZ, AscendC::TPosition
 ///////////////////////////////////////////TileCopyTla//////////////////////////////////////////////////////
 
 /// Partial specialization for CopyL1ToL0A, AtlasA2, zN in and zZ out.
-template <class ElementSrc, class ElementDst, class LayoutSrc_, class LayoutDst_>
-struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::LocalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::A1>,
-    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst_, AscendC::TPosition::A2>,
-    std::enable_if_t<tla::detail::iszZ<ElementDst, LayoutDst_>::value &&
-                     tla::detail::iszN<ElementSrc, LayoutSrc_>::value>> {
-    using LayoutDst = LayoutDst_;
-    using LayoutSrc = LayoutSrc_;
-    using TensorDst = tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, AscendC::TPosition::A2>;
-    using TensorSrc = tla::Tensor<AscendC::LocalTensor<ElementSrc>, LayoutSrc, AscendC::TPosition::A1>;
-
+template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+struct TileCopyTla<Arch::AtlasA2,
+    tla::Tensor<AscendC::LocalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::A1>,
+    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::A2>,
+    std::enable_if_t<tla::detail::iszN<ElementSrc, LayoutSrc>::value &&
+                     tla::detail::iszZ<ElementDst, LayoutDst>::value>> {
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
     static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(ElementSrc);
 
@@ -364,9 +420,16 @@ struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::LocalTensor<ElementSrc>, 
     CATLASS_DEVICE
     TileCopyTla() {};
 
+    template <class TensorDst, class TensorSrc>
     CATLASS_DEVICE
     void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
     {
+        static_assert(tla::detail::iszN<typename TensorSrc::Element, typename TensorSrc::Layout>::value &&
+                      tla::detail::iszZ<typename TensorDst::Element, typename TensorDst::Layout>::value &&
+                      TensorSrc::position == AscendC::TPosition::A1 &&
+                      TensorDst::position == AscendC::TPosition::A2,
+            "The input parameters do not match. TensorSrc must be L1 and zN, while TensorDst must be L0A and zZ");
+
         const uint32_t srcOuterStrideRow = tla::get<0, 1>(srcTensor.stride());
         const uint32_t srcOuterStrideCol = tla::get<1, 1>(srcTensor.stride());
         const uint32_t dstOuterShapeRow = tla::get<0, 1>(dstTensor.shape());
@@ -383,25 +446,24 @@ struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::LocalTensor<ElementSrc>, 
         loadDataParams.ifTranspose = false;
         loadDataParams.addrMode = 0;
 
+        auto dstOffset = dstTensor.layout()(dstTensor.coord());
+        auto srcOffset = srcTensor.layout()(srcTensor.coord());
+
         for (uint32_t i = 0; i < dstOuterShapeRow; i++) {
-            AscendC::LoadData(dstTensor.data()[i * dstOuterStrideRow],
-                              srcTensor.data()[i * srcOuterStrideRow],
+            AscendC::LoadData(dstTensor.data()[dstOffset + i * dstOuterStrideRow],
+                              srcTensor.data()[srcOffset + i * srcOuterStrideRow],
                               loadDataParams);
         }
     }
 };
 
 /// Partial specialization for CopyL1ToL0A, AtlasA2, nZ in and zZ out. (Transpose A)
-template <class ElementSrc, class ElementDst, class LayoutSrc_, class LayoutDst_>
-struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::LocalTensor<ElementSrc>, LayoutSrc_, AscendC::TPosition::A1>,
-    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst_, AscendC::TPosition::A2>,
-    std::enable_if_t<tla::detail::iszZ<ElementDst, LayoutDst_>::value &&
-                     tla::detail::isnZ<ElementSrc, LayoutSrc_>::value>> {
-    using LayoutDst = LayoutDst_;
-    using LayoutSrc = LayoutSrc_;
-    using TensorDst = tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, AscendC::TPosition::A2>;
-    using TensorSrc = tla::Tensor<AscendC::LocalTensor<ElementSrc>, LayoutSrc, AscendC::TPosition::A1>;
-
+template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+struct TileCopyTla<Arch::AtlasA2,
+    tla::Tensor<AscendC::LocalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::A1>,
+    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::A2>,
+    std::enable_if_t<tla::detail::isnZ<ElementSrc, LayoutSrc>::value &&
+                     tla::detail::iszZ<ElementDst, LayoutDst>::value>> {
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
     static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(ElementSrc);
 
@@ -410,9 +472,16 @@ struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::LocalTensor<ElementSrc>, 
     CATLASS_DEVICE
     TileCopyTla() {};
 
+    template <class TensorDst, class TensorSrc>
     CATLASS_DEVICE
     void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
     {
+        static_assert(tla::detail::isnZ<typename TensorSrc::Element, typename TensorSrc::Layout>::value &&
+                      tla::detail::iszZ<typename TensorDst::Element, typename TensorDst::Layout>::value &&
+                      TensorSrc::position == AscendC::TPosition::A1 &&
+                      TensorDst::position == AscendC::TPosition::A2,
+            "The input parameters do not match. TensorSrc must be L1 and nZ, while TensorDst must be L0A and zZ");
+
         const uint32_t srcOuterStrideRow = tla::get<0, 1>(srcTensor.stride());
         const uint32_t dstOuterShapeRow = tla::get<0, 1>(dstTensor.shape());
         const uint32_t dstOuterShapeCol = tla::get<1, 1>(dstTensor.shape());
@@ -428,26 +497,24 @@ struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::LocalTensor<ElementSrc>, 
         loadDataParams.ifTranspose = true;
         loadDataParams.addrMode = 0;
 
+        auto dstOffset = dstTensor.layout()(dstTensor.coord());
+        auto srcOffset = srcTensor.layout()(srcTensor.coord());
+
         for (uint32_t i = 0; i < dstOuterShapeRow; i++) {
-            AscendC::LoadData(dstTensor.data()[i * dstOuterStrideRow],
-                              srcTensor.data()[i * srcOuterStrideRow],
+            AscendC::LoadData(dstTensor.data()[dstOffset + i * dstOuterStrideRow],
+                              srcTensor.data()[srcOffset + i * srcOuterStrideRow],
                               loadDataParams);
         }
     }
 };
 
 /// Partial specialization for CopyL1ToL0A, AtlasA2, int8_t, nZ in and zZ out. (Transpose A)
-template <class LayoutSrc_, class LayoutDst_>
-struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::LocalTensor<int8_t>, LayoutSrc_, AscendC::TPosition::A1>,
-    tla::Tensor<AscendC::LocalTensor<int8_t>, LayoutDst_, AscendC::TPosition::A2>,
-    std::enable_if_t<tla::detail::iszZ<int8_t, LayoutDst_>::value &&
-                     tla::detail::isnZ<int8_t, LayoutSrc_>::value>> {
+template <class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+struct TileCopyTla<Arch::AtlasA2,
+    tla::Tensor<AscendC::LocalTensor<int8_t>, LayoutSrc, CoordSrc, AscendC::TPosition::A1>,
+    tla::Tensor<AscendC::LocalTensor<int8_t>, LayoutDst, CoordDst, AscendC::TPosition::A2>,
+    std::enable_if_t<tla::detail::isnZ<int8_t, LayoutSrc>::value && tla::detail::iszZ<int8_t, LayoutDst>::value>> {
     using Element = int8_t;
-    using LayoutDst = LayoutDst_;
-    using LayoutSrc = LayoutSrc_;
-    using TensorDst = tla::Tensor<AscendC::LocalTensor<Element>, LayoutDst, AscendC::TPosition::A2>;
-    using TensorSrc = tla::Tensor<AscendC::LocalTensor<Element>, LayoutSrc, AscendC::TPosition::A1>;
-
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
     static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
 
@@ -456,9 +523,19 @@ struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::LocalTensor<int8_t>, Layo
     CATLASS_DEVICE
     TileCopyTla() {};
 
+    template <class TensorDst, class TensorSrc>
     CATLASS_DEVICE
     void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
     {
+        static_assert(std::is_same_v<int8_t, typename TensorSrc::Element> &&
+                      std::is_same_v<int8_t, typename TensorDst::Element> &&
+                      tla::detail::isnZ<int8_t, typename TensorSrc::Layout>::value &&
+                      tla::detail::iszZ<int8_t, typename TensorDst::Layout>::value &&
+                      TensorSrc::position == AscendC::TPosition::A1 &&
+                      TensorDst::position == AscendC::TPosition::A2,
+            "The input parameters do not match. TensorSrc must be int8_t, L1 and nZ, "
+            "while TensorDst must be int8_t, L0A and zZ");
+
         const uint32_t srcOuterShapeRow = tla::get<0, 1>(srcTensor.shape());
         const uint32_t srcOuterStrideRow = tla::get<0, 1>(srcTensor.stride());
         const uint32_t dstOuterShapeCol = tla::get<1, 1>(dstTensor.shape());
@@ -472,9 +549,12 @@ struct TileCopyTla<Arch::AtlasA2, tla::Tensor<AscendC::LocalTensor<int8_t>, Layo
         loadDataParams.dstGap = 0;
         loadDataParams.dstFracGap = dstOuterShapeCol - 1;
 
+        auto dstOffset = dstTensor.layout()(dstTensor.coord());
+        auto srcOffset = srcTensor.layout()(srcTensor.coord());
+
         for (uint32_t i = 0; i < srcOuterShapeRow; i++) {
-            AscendC::LoadDataWithTranspose(dstTensor.data()[i * dstOuterStrideRow * 2],
-                                           srcTensor.data()[i * srcOuterStrideRow],
+            AscendC::LoadDataWithTranspose(dstTensor.data()[dstOffset + i * dstOuterStrideRow * 2],
+                                           srcTensor.data()[srcOffset + i * srcOuterStrideRow],
                                            loadDataParams);
         }
     }

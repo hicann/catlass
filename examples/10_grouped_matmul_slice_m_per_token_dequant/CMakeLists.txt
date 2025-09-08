@@ -8,3 +8,4 @@
 
 set_source_files_properties(grouped_matmul_slice_m_per_token_dequant.cpp PROPERTIES LANGUAGE ASCEND)
 catlass_example_add_executable(10_grouped_matmul_slice_m_per_token_dequant dav-c220 grouped_matmul_slice_m_per_token_dequant.cpp)
+target_compile_definitions(10_grouped_matmul_slice_m_per_token_dequant PRIVATE L2_CACHE_HINT)

@@ -18,10 +18,12 @@
 
 namespace CatlassKernelWrapper {
 at::Tensor RunBasicMatmul(const at::Tensor &mat1, const at::Tensor &mat2, const std::string &outDType);
-std::vector<at::Tensor> RunGroupedMatmul(const std::vector<at::Tensor> &mat1, const std::vector<at::Tensor> &mat2,
-                                         const std::string &outDType, const bool &splitK);
+at::Tensor RunGroupedMatmul(const at::Tensor &mat1, const at::Tensor &mat2, const at::Tensor &groupList,
+                            const std::string &outDType, const bool transA, const bool transB, const bool splitK);
 at::Tensor RunOptimizedMatmul(const at::Tensor &mat1, const at::Tensor &mat2, const std::string &outDType);
-
+at::Tensor RunConvBias(const at::Tensor &fmap, const at::Tensor &filter, const at::Tensor &bias,
+                       const std::vector<int64_t> &strideList, const std::vector<int64_t> &padList,
+                       const std::vector<int64_t> &dilationList, const std::string &outDType);
 } // namespace CatlassKernelWrapper
 
 #endif // PY_EXT_CATLASS_KERNEL_WRAPPER_H

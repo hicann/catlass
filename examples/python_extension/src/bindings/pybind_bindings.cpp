@@ -18,9 +18,11 @@
 namespace py = pybind11;
 using namespace CatlassKernelWrapper;
 
-PYBIND11_MODULE(_C, m) {
+PYBIND11_MODULE(_C, m)
+{
     m.doc() = "Python bindings for CatlassKernel";
     m.def("basic_matmul", &RunBasicMatmul, "")
-    .def("grouped_matmul", &RunGroupedMatmul, "")
-    .def("optimized_matmul", &RunOptimizedMatmul, "");
+        .def("grouped_matmul", &RunGroupedMatmul, "")
+        .def("optimized_matmul", &RunOptimizedMatmul, "")
+        .def("conv_bias", &RunConvBias, "");
 }

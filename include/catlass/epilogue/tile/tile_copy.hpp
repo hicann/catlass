@@ -31,6 +31,21 @@ template <
     class ArchTag,
     /// GemmType for C matrix operand
     class CType,
+    /// GemmType for D matrix operand
+    class DType
+>
+struct TileCopy<ArchTag, CType, DType> {
+    using ElementC = typename CType::Element;
+    using ElementD = typename DType::Element;
+
+    using CopyGmToUbC = CopyGm2Ub<ArchTag, CType>;
+    using CopyUbToGmD = CopyUb2Gm<ArchTag, DType>;
+};
+
+template <
+    class ArchTag,
+    /// GemmType for C matrix operand
+    class CType,
     /// GemmType for X matrix operand
     class XType,
     /// GemmType for D matrix operand

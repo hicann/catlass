@@ -134,6 +134,15 @@ template <class... T>
 struct tuple_size<const tla::tuple<T...>>
     : std::integral_constant<size_t, sizeof...(T)> {};
 
+// make_tuple
+template <class... T>
+CATLASS_HOST_DEVICE constexpr
+tuple<T...>
+MakeTuple(T const&... t)
+{
+    return {t...};
+}
+
 } // end namespace tla
 
 #endif // TLA_TUPLE_HPP

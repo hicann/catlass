@@ -8,9 +8,9 @@
 
 import os
 
-from torch_npu.testing.testcase import TestCase, run_tests
-import torch_npu
 import torch
+import torch_npu
+from torch_npu.testing.testcase import TestCase, run_tests
 
 script_path = os.path.dirname(os.path.abspath(__file__))
 torch.ops.load_library(

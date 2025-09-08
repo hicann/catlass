@@ -8,30 +8,42 @@
 
   - ⚠️ **注意** 这个功能将在社区版未来的CANN 8.3开始支持，商用最新版现已支持。
 
-# 使用示例
+## 使用示例
 
 下面以对`09_splitk_matmul`为例，进行`设备侧打印`的使用说明。
 
-## 插入打印代码
+### 插入打印代码
 
 在想进行调试的代码段增加打印代码。
 
 ```diff
-extern "C" __global__ __aicore__ void(...)
-{
-    // ...
-    uint32_t tileLen;
-    if (taskPerAiv > COMPUTE_LENGTH) {
-        tileLen = COMPUTE_LENGTH;
-    } else {
-        tileLen = taskPerAiv;
+// include/catlass/gemm/kernel/basic_matmul.hpp
+// ...
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::GlobalTensor<ElementOut> const &dst,
+        AscendC::GlobalTensor<ElementAccumulator> const &src,
+        uint64_t elementCount, uint32_t splitkFactor)
+    {
+        // The vec mte processes 256 bytes of data at a time.
+        constexpr uint32_t ELE_PER_VECOTR_BLOCK = 256 / sizeof(ElementAccumulator);
+        uint32_t aivNum = AscendC::GetBlockNum() * AscendC::GetSubBlockNum();
+        uint32_t aivId = AscendC::GetBlockIdx();
+        uint64_t taskPerAiv =
+            (elementCount / aivNum + ELE_PER_VECOTR_BLOCK - 1) / ELE_PER_VECOTR_BLOCK * ELE_PER_VECOTR_BLOCK;
+        if (taskPerAiv == 0) taskPerAiv = ELE_PER_VECOTR_BLOCK;
+        uint32_t tileLen;
+        if (taskPerAiv > COMPUTE_LENGTH) {
+            tileLen = COMPUTE_LENGTH;
+        } else {
+            tileLen = taskPerAiv;
+        }
++       cce::printf("tileLen:%d\n", tileLen);
+// ...
     }
-+   cce::printf("tileLen:%d\n", tileLen);
-    // ...
-}
 ```
 
-## 编译运行
+### 编译运行
 
 1. 基于[快速上手](../../README.md#快速上手)，打开工具的编译开关`--enable_print`， 使能设备侧打印特性编译算子样例。
 
@@ -44,13 +56,13 @@ bash scripts/build.sh --enable_print 09_splitk_matmul
 ```bash
 cd output/bin
 # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID（可选）
-msdebug ./09_basic_matmul 256 512 1024 0
+./09_splitk_matmul 256 512 1024 0
 ```
 
 - ⚠ 注意事项
-  - 目前`设备侧打印`仅支持打印`GM`和`SB(Scalar Buffer)`上的数值。
+  - 目前`设备侧打印`仅支持打印`GM`、`UB`和`SB(Scalar Buffer)`上的数值。
 
-## 输出示例
+### 输出示例
 
 输出结果
 

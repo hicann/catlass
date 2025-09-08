@@ -74,6 +74,12 @@ foreach(EXAMPLE
     21_basic_matmul_preload_zN
     22_padding_splitk_matmul
     23_flash_attention_infer
+    24_conv_bias
+    25_matmul_full_loadA
+	26_matmul_relu
+    27_matmul_gelu
+	28_matmul_swish
+    30_w8a16_matmul
 )
     add_subdirectory(${EXAMPLE})
 endforeach()

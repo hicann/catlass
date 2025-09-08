@@ -71,10 +71,10 @@ public:
     using CopyL0CToGm = typename TileCopy_::CopyL0CToGm;
     using ElementAccumulator = typename CopyL0CToGm::ElementSrc;
 
-    using LayoutAInL1 = typename CopyL1ToL0A::LayoutSrc;
-    using LayoutBInL1 = typename CopyL1ToL0B::LayoutSrc;
-    using LayoutAInL0 = typename CopyL1ToL0A::LayoutDst;
-    using LayoutBInL0 = typename CopyL1ToL0B::LayoutDst;
+    using LayoutTagL1A = typename TileCopy_::LayoutTagL1A;
+    using LayoutTagL1B = typename TileCopy_::LayoutTagL1B;
+    using LayoutTagL0A = typename TileCopy_::LayoutTagL0A;
+    using LayoutTagL0B = typename TileCopy_::LayoutTagL0B;
 
     using L1AAlignHelper = typename TileCopy_::L1AAlignHelper;
     using L1BAlignHelper = typename TileCopy_::L1BAlignHelper;
@@ -116,9 +116,10 @@ public:
 
     static_assert(L1_TILE_M == L0_TILE_M && L1_TILE_N == L0_TILE_N,
         "The situation where the basic blocks of L1 and L0 differ on the m and n axes is not supported yet");
+    static_assert(L0_TILE_K <= L1_TILE_K, "L0TileShape::K cannot exceed L1TileShape::K");
 
-    static constexpr auto L1A_LAYOUT = tla::MakeLayout<ElementA, LayoutAInL1>(L1_TILE_M, L1_TILE_K);
-    static constexpr auto L1B_LAYOUT = tla::MakeLayout<ElementB, LayoutBInL1>(L1_TILE_K, L1_TILE_N);
+    static constexpr auto L1A_LAYOUT = tla::MakeLayout<ElementA, LayoutTagL1A>(L1_TILE_M, L1_TILE_K);
+    static constexpr auto L1B_LAYOUT = tla::MakeLayout<ElementB, LayoutTagL1B>(L1_TILE_K, L1_TILE_N);
 
     /// Construct
     CATLASS_DEVICE
@@ -164,6 +165,7 @@ public:
     }
 
     /// Perform a block-scoped matrix multiply-accumulate
+    template <class TensorA, class TensorB, class TensorC>
     CATLASS_DEVICE
     void operator()(
         TensorA &tensorA, TensorB &tensorB, TensorC &tensorC, TensorA &tensorNextA, TensorB &tensorNextB,
@@ -309,7 +311,7 @@ public:
 
                     // Locate the current tile on L0A
                     auto l0ATile = l0ATensorList[l0AListId];
-                    LayoutAInL0 layoutAInL0 = tla::MakeLayout<ElementA, LayoutAInL0>(mPartActual, kPartActual);
+                    auto layoutAInL0 = tla::MakeLayout<ElementA, LayoutTagL0A>(mPartActual, kPartActual);
                     auto tensorL0A = tla::MakeTensor(l0ATile, layoutAInL0, Arch::PositionL0A{});
                     // Locate the current tile of matrix A on L1
                     auto tensorTileL1A = GetTile(tensorL1A, tla::MakeCoord(mPartIdx * L0_TILE_M, kPartIdx * L0_TILE_K),
@@ -333,7 +335,7 @@ public:
 
                         // Locate the current tile on L0B
                         auto l0BTile = l0BTensorList[l0BListId];
-                        LayoutBInL0 layoutBInL0 = tla::MakeLayout<ElementB, LayoutBInL0>(kPartActual, nPartActual);
+                        auto layoutBInL0 = tla::MakeLayout<ElementB, LayoutTagL0B>(kPartActual, nPartActual);
                         auto tensorL0B = tla::MakeTensor(l0BTile, layoutBInL0, Arch::PositionL0B{});
                         // Locate the current tile of matrix B on L1
                         auto tensorTileL1B = GetTile(tensorL1B,

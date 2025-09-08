@@ -19,6 +19,60 @@
 
 namespace Catlass::Gemm::Kernel {
 
+template<
+    class ArchTag_,
+    class Element_
+>
+struct MemFill {
+public:
+    using ArchTag = ArchTag_;
+    using Element = Element_;
+
+    CATLASS_DEVICE
+    MemFill(Arch::Resource<ArchTag> &resource)
+    {
+        ubBuffer = resource.ubBuf.template GetBufferByByte<Element>(0);
+    }
+
+    CATLASS_DEVICE
+    void operator()(AscendC::GlobalTensor<Element> const &dst,
+                    uint32_t elementCount, Element fillValue)
+    {
+        const uint32_t maxBurstSize = MAX_BURST_BYTES / sizeof(Element);
+        const uint32_t ubBufferSize = ubBuffer.GetSize() > maxBurstSize ? maxBurstSize : ubBuffer.GetSize();
+        const uint32_t batchCount = elementCount / ubBufferSize;
+        const uint32_t tailElements = elementCount % ubBufferSize;
+
+        // duplicate fillValue to ubBuffer for datacopy later
+        AscendC::Duplicate<Element>(ubBuffer, fillValue, ubBufferSize);
+        AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
+        AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
+        uint32_t currentOffset = 0;
+
+        // fill the main block by datacopy
+        if (batchCount > 0) {
+            for (int index = 0; index < batchCount; ++index) {
+                AscendC::DataCopyPad(dst[currentOffset], ubBuffer,
+                    AscendC::DataCopyExtParams(1, static_cast<uint32_t>(ubBufferSize * sizeof(Element)), 0, 0, 0));
+                currentOffset += ubBufferSize;
+            }
+        }
+        
+        // fill the tail block by datacopy
+        if (tailElements != 0) {
+            AscendC::DataCopyPad(dst[currentOffset], ubBuffer,
+                AscendC::DataCopyExtParams(1, static_cast<uint32_t>(tailElements * sizeof(Element)), 0, 0, 0));
+        }
+    }
+
+    CATLASS_DEVICE
+    ~MemFill() {}
+
+private:
+    static const size_t MAX_BURST_BYTES = 255 * 32;
+    AscendC::LocalTensor<Element> ubBuffer;
+};
+
 // Template for grouped matmul kernel. Compute grouped C = A * B
 template <
     class BlockMmad_,
@@ -39,6 +93,7 @@ public:
     using LayoutC = typename BlockMmad::LayoutC;
     using ElementAccumulator = typename BlockMmad::ElementAccumulator;
     using ElementGroupList = ElementGroupList_;
+    using MemFill0 = MemFill<ArchTag, ElementC>;
 
     using BlockScheduler = BlockScheduler_;
 
@@ -122,7 +177,6 @@ public:
     void operator()<AscendC::AIC>(Params const &params)
     {
         BlockScheduler blockScheduler;
-        Arch::Resource<ArchTag> resource;
         BlockMmad blockMmad(resource);
 
         // Represent the full gm
@@ -146,6 +200,13 @@ public:
             uint32_t currentK = (groupIdx == 0) ? groupList.GetValue(groupIdx) :
                 (groupList.GetValue(groupIdx) - groupList.GetValue(groupIdx - 1));
             GemmCoord problemShape{params.problemShape.m(), params.problemShape.n(), currentK};
+
+            if (currentK == 0) {
+                inGroupOffsetA += problemShape.m() * problemShape.k();
+                inGroupOffsetB += problemShape.k() * problemShape.n();
+                inGroupOffsetC += problemShape.m() * problemShape.n();
+                continue;
+            }
 
             LayoutA layoutA = params.layoutA.GetTileLayout(problemShape.GetCoordMK());
             LayoutB layoutB = params.layoutB.GetTileLayout(problemShape.GetCoordKN());
@@ -199,7 +260,31 @@ public:
 
     template <>
     CATLASS_DEVICE
-    void operator()<AscendC::AIV>(Params const &params) {}
+    void operator()<AscendC::AIV>(Params const &params)
+    {
+        MemFill0 memFill0(resource);
+        AscendC::GlobalTensor<ElementC> gmC;
+        gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrC);
+        AscendC::GlobalTensor<ElementGroupList> groupList;
+        groupList.SetGlobalBuffer(params.ptrGroupList);
+
+        int64_t inGroupOffsetC = 0;
+
+        for (uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx) {
+            uint32_t currentK = (groupIdx == 0) ? groupList.GetValue(groupIdx) :
+                (groupList.GetValue(groupIdx) - groupList.GetValue(groupIdx - 1));
+            GemmCoord problemShape{params.problemShape.m(), params.problemShape.n(), currentK};
+
+            if (currentK == 0) {
+                memFill0(gmC[inGroupOffsetC], problemShape.m() * problemShape.n(), 0);
+            }
+            inGroupOffsetC += problemShape.m() * problemShape.n();
+        }
+        AscendC::PipeBarrier<PIPE_ALL>();
+    }
+
+private:
+    Arch::Resource<ArchTag> resource;
 };
 
 } // namespace Catlass::Gemm::Kernel

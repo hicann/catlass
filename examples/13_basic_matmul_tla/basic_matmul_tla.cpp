@@ -8,7 +8,7 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0, 
+// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0,
 // optimizing stack space. If you need to use the ShapeInfo of the AscendC Tensor, please undefine this macro.
 #ifndef K_MAX_SHAPE_DIM
 #define K_MAX_SHAPE_DIM 0
@@ -133,14 +133,11 @@ void Run(Options const &options)
     auto layoutB = MakeLayoutFromTag(tagB);
     auto layoutC = MakeLayoutFromTag(tagC);
 
-    using TensorA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutA), AscendC::TPosition::GM>;
-    using TensorB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutB), AscendC::TPosition::GM>;
-    using TensorC = Tensor<AscendC::GlobalTensor<ElementC>, decltype(layoutC), AscendC::TPosition::GM>;
     using TileCopy =
-        Gemm::Tile::PackedTileCopyTla<ArchTag, TensorA, LayoutTagA, TensorB, LayoutTagB, TensorC, LayoutTagC>;
+        Gemm::Tile::PackedTileCopyTla<ArchTag, ElementA, LayoutTagA, ElementB, LayoutTagB, ElementC, LayoutTagC>;
     using BlockMmad =
         Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape,
-                                    TensorA, TensorB, TensorC, void, TileCopy>;
+                                    ElementA, ElementB, ElementC, void, TileCopy>;
     using BlockEpilogue = void;
 
     if (options.problemShape.m() > options.problemShape.n()) {
@@ -151,7 +148,7 @@ void Run(Options const &options)
         using MatmulKernel = Gemm::Kernel::BasicMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler>;
 
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-    
+
         MatmulKernel::Arguments arguments{
             options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC};
 
@@ -173,7 +170,7 @@ void Run(Options const &options)
         using MatmulKernel = Gemm::Kernel::BasicMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler>;
 
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-    
+
         MatmulKernel::Arguments arguments{
             options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC};
 

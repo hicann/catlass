@@ -52,12 +52,12 @@ template <
     class DispatchPolicy,
     class L1TileShape,
     class L0TileShape,
-    class TensorA,
-    class TensorB,
-    class TensorC,
-    class TensorBias = void,
-    class TileCopy = Gemm::Tile::PackedTileCopyTla<typename DispatchPolicy::ArchTag, TensorA, layout::RowMajor,
-        TensorB, layout::RowMajor, TensorC, layout::RowMajor, TensorBias, layout::RowMajor>,
+    class ElementA,
+    class ElementB,
+    class ElementC,
+    class ElementBias = void,
+    class TileCopy = Gemm::Tile::PackedTileCopyTla<typename DispatchPolicy::ArchTag, ElementA, layout::RowMajor,
+        ElementB, layout::RowMajor, ElementC, layout::RowMajor, ElementBias, layout::RowMajor>,
     class TileMmad = Gemm::Tile::TileMmadTla<typename DispatchPolicy::ArchTag, typename TileCopy::TensorL0A,
         typename TileCopy::TensorL0B, typename TileCopy::TensorL0C>
 >
@@ -99,5 +99,10 @@ struct BlockGemm {
 #include "catlass/gemm/block/block_mmad_gemm.hpp"
 #include "catlass/gemm/block/block_mmad_pingpong_bias.hpp"
 #include "catlass/gemm/block/block_mmad_pingpong_bias_quant_perchn.hpp"
-
+#include "catlass/gemm/block/block_mmad_fai_qk_head_tail.hpp"
+#include "catlass/gemm/block/block_mmad_fai_qk_normal.hpp"
+#include "catlass/gemm/block/block_mmad_fai_pv_head_tail.hpp"
+#include "catlass/gemm/block/block_mmad_fai_pv_normal.hpp"
+#include "catlass/gemm/block/block_mmad_pingpong_full_loadA.hpp"
+#include "catlass/gemm/block/block_mmad_w8a16.hpp"
 #endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_HPP

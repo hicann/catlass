@@ -28,7 +28,7 @@ template<
     class Layout_,
     uint32_t COMPUTE_LENGTH
 >
-struct PaddingMatrix {
+struct PaddingMatrixND {
 public:
     using ArchTag = ArchTag_;
     using Element = Element_;
@@ -43,7 +43,7 @@ public:
     CopyUb2Gm copyUb2Gm;
 
     CATLASS_DEVICE
-    PaddingMatrix(Arch::Resource<ArchTag> &resource)
+    PaddingMatrixND(Arch::Resource<ArchTag> &resource)
     {
         int64_t bufferOffset = 0;
         for (uint32_t i = 0; i < BUFFER_NUM; i++) { //
@@ -149,7 +149,7 @@ public:
     }
 
     CATLASS_DEVICE
-    ~PaddingMatrix() {}
+    ~PaddingMatrixND() {}
 
 private:
     static const uint32_t BUFFER_NUM = 2;
@@ -193,9 +193,9 @@ public:
     using BlockScheduler = BlockScheduler_;
 
     static const uint32_t COMPUTE_LENGTH_A = 96 * 1024 / sizeof(ElementA);
-    using PaddingA = PaddingMatrix<ArchTag, ElementA, LayoutA, COMPUTE_LENGTH_A>;
+    using PaddingA = PaddingMatrixND<ArchTag, ElementA, LayoutA, COMPUTE_LENGTH_A>;
     static const uint32_t COMPUTE_LENGTH_B = 96 * 1024 / sizeof(ElementB);
-    using PaddingB = PaddingMatrix<ArchTag, ElementB, LayoutB, COMPUTE_LENGTH_B>;
+    using PaddingB = PaddingMatrixND<ArchTag, ElementB, LayoutB, COMPUTE_LENGTH_B>;
 
     struct Params{
         GemmCoord problemShape;
