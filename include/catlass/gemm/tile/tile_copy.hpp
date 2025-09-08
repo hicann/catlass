@@ -88,16 +88,6 @@ struct TileCopyWithProligue {
     using PrologueA = PrologueA_;
     using PrologueB = PrologueB_;
 
-    using ElementSrcA = int;
-    using ElementSrcB = typename PrologueB::SrcType::Element;
-    using LayoutSrcA = int;
-    using LayoutSrcB = typename PrologueB::SrcType::Layout;
-
-    using ElementDstA = int;
-    using ElementDstB = typename PrologueB::DstType::Element;
-    using LayoutDstA = int;
-    using LayoutDstB = typename PrologueB::DstType::Layout;
-
     using CopyL1ToL0A = Gemm::Tile::CopyL1ToL0A<
         ArchTag, typename helper::L1ATypeSelector<AType>::L1AType>;
     using CopyL1ToL0B = Gemm::Tile::CopyL1ToL0B<

@@ -71,14 +71,11 @@ def gen_data_int4(row, col, trans):
             data_int8 = np.hstack((data_int8_origin, zero_row))
 
         quantized = data_int8.reshape(-1, 2)
-        print(quantized.shape)
         high_quantized = (quantized[:, 0] & 0x0F)
         low_quantized = (quantized[:, 1] & 0x0F) << 4
         data_int4 = low_quantized | high_quantized
-        print("kkkkkk")
 
         data_int4_array = np.array(data_int4, dtype=np.int8)
-        print(data_int4_array.shape)
         return data_int8_origin.T, data_int4_array
 
     else:
@@ -88,14 +85,11 @@ def gen_data_int4(row, col, trans):
             data_int8 = np.hstack((data_int8_origin, zero_column))
 
         quantized = data_int8.reshape(-1, 2)
-        print(quantized.shape)
         high_quantized = (quantized[:, 0] & 0x0F)
         low_quantized = (quantized[:, 1] & 0x0F) << 4
         data_int4 = low_quantized | high_quantized
 
         data_int4_array = np.array(data_int4, dtype=np.int8)
-        print("kkkkkk")
-        print(data_int4.shape)
         return data_int8_origin, data_int4_array
 
 def gen_testcase(path: str, param: OpParam) -> None:
@@ -103,20 +97,13 @@ def gen_testcase(path: str, param: OpParam) -> None:
     transA, transB = param.transA, param.transB
 
     a_int8 = gen_data_int8(msize, ksize)
-    print("int8 a done")
 
     b_int8, b_int4 = gen_data_int4(ksize, nsize, transB)
     b_int4.tofile(WORKSPACE +"/build/data/inputB.dat")
-    print("int4 b done")
-
-    print(a_int8.shape)
-    print(b_int8.shape)
 
     # numpy int32矩阵乘法非常慢，此处用float32的矩阵乘法代替
     c_int32 = np.dot(a_int8.astype(np.float32), b_int8.astype(np.float32))
     c_int32 = np.float32(1.5) * c_int32
-
-    print("matmul done")
 
     if transA:
         a_int8 = a_int8.T
@@ -217,9 +204,7 @@ def performance_test(deviceId: int = 0):
                 "model.csv"]
     csv_list = ["6_four_model.csv"]
     csv_list = ["test_cases.csv"]
-    # csv_list = ["rand_0_10000.csv"]
     csv_list = ["rand_1_10000_round.csv"]
-    # csv_list = ["model.csv"]
     for csv in csv_list:
         rowNum = len(open(WORKSPACE + "/csv/" + csv).readlines()) - 1
         launchCount = 100
@@ -228,7 +213,6 @@ def performance_test(deviceId: int = 0):
             csvRowNum = min(launchCount, rowNum - csvIndex)
             cmd = f"./w4a8 {deviceId} {csv} {csvIndex}"
             print(cmd)
-            # os.system(f"cd {WORKSPACE}/build/bin && {cmd}")
             os.system(f"cd {WORKSPACE}/build/bin && msprof op \
                 --kernel-name=_Z10GemmLaunchPhS_S_S_S_mm    \
                 --warm-up=50 \
@@ -239,7 +223,6 @@ def performance_test(deviceId: int = 0):
             with open(f"{WORKSPACE}/log/output.log", 'r') as f:
                 lines = f.readlines()  # 读取所有行
                 resPath = lines[-3].split(" ")[-1].replace('\n', '')
-                # print(resPath)
                 write_profop_data(csv, resPath)
 
 def clean_space() :
