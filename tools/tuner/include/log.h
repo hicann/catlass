@@ -11,6 +11,8 @@
 #ifndef CATLASS_TUNER_LOG_H
 #define CATLASS_TUNER_LOG_H
 
+#include <string>
+#include <unordered_map>
 #include <cstdio>
 
 #define LOG(__level, __msg, ...) printf(__level __msg "\n", ##__VA_ARGS__)
@@ -19,4 +21,24 @@
 #define LOGE(__msg, ...) LOG("[ERROR] ", __msg, ##__VA_ARGS__)
 #define LOGM(__msg, ...) LOG("", __msg, ##__VA_ARGS__)
 
-#endif // CATLASS_TUNER_LOG_H
+inline const std::unordered_map<char, std::string>& GetInvalidChars()
+{
+    static const std::unordered_map<char, std::string> INVALID_CHAR = {
+        {'\n', "\\n"}, {'\f', "\\f"}, {'\r', "\\r"}, {'\b', "\\b"},
+        {'\t', "\\t"}, {'\v', "\\v"}, {'\u007F', "\\u007F"}
+    };
+    return INVALID_CHAR;
+}
+
+inline std::string ReplaceInvalidChars(const std::string &str)
+{
+    auto &invalidChars = GetInvalidChars();
+    std::string replaced;
+    for (auto c : str) {
+        auto it = invalidChars.find(c);
+        replaced += it != invalidChars.cend() ? it->second : std::string{c};
+    }
+    return replaced;
+}
+
+#endif // CATLASS_TUNER_LOG_H

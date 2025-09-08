@@ -164,6 +164,9 @@ void CommandLineParser::Parse(int argc, const char **argv)
             }
         } else if (arg == "--help" || arg == "-h") {
             help_ = true;
+        } else {
+            arg = ReplaceInvalidChars(arg);
+            LOGW("Unrecognized argument %s, format should be --key=value", arg.c_str());
         }
     }
 }
@@ -187,14 +190,18 @@ void CommandLineParser::PrintHelp()
     LOGM("Options:");
     LOGM("   --help, -h                           <Optional> Help message.");
     LOGM("   --output=<string>                    <Optional> Path to output file containing profiling data.");
-    LOGM("   --device=<int>                       <Optional> Device id, a positive integer, default is 0.");
-    LOGM("   --m=<int>                            <Required> Specify dimension m for matmul problem shape.");
-    LOGM("   --n=<int>                            <Required> Specify dimension n for matmul problem shape.");
-    LOGM("   --k=<int>                            <Required> Specify dimension k for matmul problem shape.");
+    LOGM("   --device=<int>                       <Optional> Device id, a positive integer, default: 0.");
+    LOGM("   --m=<int>                            <Optional> Specify dimension m for matmul problem shape, "
+         "default: 256.");
+    LOGM("   --n=<int>                            <Optional> Specify dimension n for matmul problem shape, "
+         "default: 512.");
+    LOGM("   --k=<int>                            <Optional> Specify dimension k for matmul problem shape, "
+         "default: 1024.");
+    LOGM("   --group_count=<int>                  <Optional> Specify group count for grouped-matmul-like operations, "
+         "default: 128.");
     LOGM("   --kernels=<string>                   <Optional> Filter operations by kernel name.");
     LOGM("   --A=<dtype:layout>                   <Optional> Filter operations by dtype and layout of the tensor A.");
     LOGM("   --B=<dtype:layout>                   <Optional> Filter operations by dtype and layout of the tensor B.");
     LOGM("   --C=<dtype:layout>                   <Optional> Filter operations by dtype and layout of the tensor C.");
-    LOGM("   --group_count=<int>                  <Optional> Specify group count for grouped-matmul-like operations.");
 }
 } // namespace Catlass

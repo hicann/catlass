@@ -37,19 +37,20 @@ void GemmOpConfig::SaveMetric(Metric &metric)
     metric.SetField<ClassicMetric::K>(k_);
 }
 
-bool GemmOpConfig::InitConfig(const Catlass::CommandLineParser &parser)
+bool GemmOpConfig::InitConfig(const CommandLineParser &parser)
 {
-    static const std::vector<std::string> keys = {"m", "n", "k"};
-    for (auto &key : keys) {
-        if (!parser.HasKey(key)) {
-            LOGE("Key %s not exist", key.c_str());
-            invalid_ = true;
-            return false;
-        }
+    if (parser.HasKey("m")) {
+        m_ = 0;
+        GET_CHECK(parser.Get<decltype(m_)>("m", m_), "m");
     }
-    GET_CHECK(parser.Get<decltype(m_)>("m", m_), "m");
-    GET_CHECK(parser.Get<decltype(n_)>("n", n_), "n");
-    GET_CHECK(parser.Get<decltype(k_)>("k", k_), "k");
+    if (parser.HasKey("n")) {
+        n_ = 0;
+        GET_CHECK(parser.Get<decltype(n_)>("n", n_), "n");
+    }
+    if (parser.HasKey("k")) {
+        k_ = 0;
+        GET_CHECK(parser.Get<decltype(k_)>("k", k_), "k");
+    }
     if (m_ == 0 || n_ == 0 || k_ == 0) {
         invalid_ = true;
         return false;
@@ -216,4 +217,4 @@ bool GroupedGemmOpConfig::InitArgument(Library::Operation *op)
     return true;
 }
 
-} // namespace Catlass
+} // namespace Catlass

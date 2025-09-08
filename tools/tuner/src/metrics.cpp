@@ -119,12 +119,9 @@ bool CheckPermission(std::string_view path)
 
 bool CheckInvalidChar(std::string_view path)
 {
-    static const std::unordered_map<char, std::string> INVALID_CHAR = {
-        {'\n', "\\n"}, {'\f', "\\f"}, {'\r', "\\r"}, {'\b', "\\b"},
-        {'\t', "\\t"}, {'\v', "\\v"}, {'\u007F', "\\u007F"}
-    };
+    auto &invalidChars = GetInvalidChars();
     for (auto c : path) {
-        if (auto it = INVALID_CHAR.find(c); it != INVALID_CHAR.end()) {
+        if (auto it = invalidChars.find(c); it != invalidChars.cend()) {
             LOGE("Path contains invalid character %s", it->second.c_str());
             return false;
         }

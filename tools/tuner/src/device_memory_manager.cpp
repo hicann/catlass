@@ -12,7 +12,7 @@
 
 namespace Catlass {
 
-void DoClearL2Cache(uint32_t blockDim, void* l2ctrl, void* stream, void* buffer, void* tilingSize);
+void DoClearL2Cache(uint32_t blockDim, uint8_t* l2ctrl, uint8_t* stream, uint8_t* buffer, uint8_t* tilingSize);
 
 namespace {
 struct L2CacheClearTiling {
@@ -243,7 +243,9 @@ bool DeviceMemoryManager::ClearL2Cache(uint32_t blockDim)
 {
     bool res = false;
     if (cacheClear_.buffer && cacheClear_.tilingSize && cacheClear_.flushBuffer) {
-        DoClearL2Cache(blockDim, nullptr, stream_, cacheClear_.buffer, cacheClear_.tilingSize);
+        DoClearL2Cache(blockDim, nullptr, reinterpret_cast<uint8_t*>(stream_),
+                       reinterpret_cast<uint8_t*>(cacheClear_.buffer),
+                       reinterpret_cast<uint8_t*>(cacheClear_.tilingSize));
         ACL_CHECK(aclrtMemcpyAsync(cacheClear_.flushBuffer, cacheClear_.cacheSize,
                                    cacheClear_.buffer, cacheClear_.cacheSize, ACL_MEMCPY_DEVICE_TO_DEVICE, stream_),
                   "aclrtMemcpyAsync");
@@ -283,4 +285,4 @@ bool DeviceMemoryManager::FillDeviceData(void *dst, size_t size, void *host) con
     return true;
 }
 
-} // namespace Catlass
+} // namespace Catlass

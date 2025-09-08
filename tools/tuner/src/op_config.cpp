@@ -24,15 +24,21 @@ TensorConfig OpConfig::GetTensorConfig(const std::string &key, const CommandLine
     }
     auto i = val.find(':');
     if (i == std::string::npos || i >= val.size() - 1) {
-        LOGE("Parse command line inputs failed, value format should be sth like fp16:row, key: %s, value: %.*s",
-            key.c_str(), static_cast<int>(val.size()), val.data());
+        LOGW("--%s format is invalid, it should be sth like fp16:row, please check README.md. "
+             "Will skip this argument.", key.c_str());
         return config;
     }
     config.dataType = LibraryHelper::GetDataTypeEnum(val.substr(0, i));
     config.layoutType = LibraryHelper::GetLayoutEnum(val.substr(i + 1));
     if (config.dataType == DataType::Invalid || config.layoutType == LayoutType::Invalid) {
-        LOGE("Parse command line inputs failed, value is invalid, key: %s, value: %.*s", key.c_str(),
-             static_cast<int>(val.size()), val.data());
+        std::string_view log = "Will skip this argument.";
+        if (config.dataType != DataType::Invalid) {
+            log = "Will use dataType to filter kernels.";
+        } else if (config.layoutType != LayoutType::Invalid) {
+            log = "Will use layoutType to filter kernels.";
+        }
+        LOGW("--%s format is invalid, it should be sth like fp16:row, please check README.md. %.*s",
+             key.c_str(), static_cast<int>(log.size()), log.data());
     }
     return config;
 }
@@ -93,4 +99,4 @@ void OpConfigPool::Register(Operation *op, const CommandLineParser &parser, cons
     }
 }
 
-} // namespace Catlass
+} // namespace Catlass

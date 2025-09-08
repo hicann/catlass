@@ -27,9 +27,9 @@ protected:
     TensorConfig tcA_{};
     TensorConfig tcB_{};
     TensorConfig tcC_{};
-    uint32_t m_{0};
-    uint32_t n_{0};
-    uint32_t k_{0};
+    uint32_t m_{256};  // 256 为example/00_basic_matmul算子默认配置
+    uint32_t n_{512};  // 512 为example/00_basic_matmul算子默认配置
+    uint32_t k_{1024}; // 1024 为example/00_basic_matmul算子默认配置
 
 private:
     template<class T>
