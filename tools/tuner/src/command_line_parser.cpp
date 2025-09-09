@@ -15,9 +15,9 @@ namespace Catlass {
 using ERROR_CODE = CommandLineParser::ERROR_CODE;
 
 template<>
-ERROR_CODE CommandLineParser::Get<std::string>(const std::string& key, std::string &target) const
+ERROR_CODE CommandLineParser::Get<std::string>(const std::string& key, std::string &target)
 {
-    auto it = dataMap_.find(key);
+    auto it = FindKey(key);
     if (it == dataMap_.end()) {
         return ERROR_CODE::KEY_NOT_EXIST;
     }
@@ -26,9 +26,9 @@ ERROR_CODE CommandLineParser::Get<std::string>(const std::string& key, std::stri
 }
 
 template<>
-ERROR_CODE CommandLineParser::Get<std::string_view>(const std::string& key, std::string_view &target) const
+ERROR_CODE CommandLineParser::Get<std::string_view>(const std::string& key, std::string_view &target)
 {
-    auto it = dataMap_.find(key);
+    auto it = FindKey(key);
     if (it == dataMap_.end()) {
         return ERROR_CODE::KEY_NOT_EXIST;
     }
@@ -37,11 +37,13 @@ ERROR_CODE CommandLineParser::Get<std::string_view>(const std::string& key, std:
 }
 
 template<>
-ERROR_CODE CommandLineParser::Get<int64_t>(const std::string& key, int64_t &target) const
+ERROR_CODE CommandLineParser::Get<int64_t>(const std::string& key, int64_t &target)
 {
-    auto it = dataMap_.find(key);
+    auto it = FindKey(key);
     if (it == dataMap_.end()) {
         return ERROR_CODE::KEY_NOT_EXIST;
+    } else if (!IsDigitFormat(it->second)) {
+        return ERROR_CODE::NOT_DIGITAL_FORMAT;
     }
 
     try {
@@ -53,11 +55,13 @@ ERROR_CODE CommandLineParser::Get<int64_t>(const std::string& key, int64_t &targ
 }
 
 template<>
-ERROR_CODE CommandLineParser::Get<uint64_t>(const std::string& key, uint64_t &target) const
+ERROR_CODE CommandLineParser::Get<uint64_t>(const std::string& key, uint64_t &target)
 {
-    auto it = dataMap_.find(key);
+    auto it = FindKey(key);
     if (it == dataMap_.end()) {
         return ERROR_CODE::KEY_NOT_EXIST;
+    } else if (!IsDigitFormat(it->second)) {
+        return ERROR_CODE::NOT_DIGITAL_FORMAT;
     }
 
     if (it->second[0] == '-') {
@@ -72,7 +76,7 @@ ERROR_CODE CommandLineParser::Get<uint64_t>(const std::string& key, uint64_t &ta
 }
 
 template<>
-ERROR_CODE CommandLineParser::Get<int32_t>(const std::string& key, int32_t &target) const
+ERROR_CODE CommandLineParser::Get<int32_t>(const std::string& key, int32_t &target)
 {
     int64_t x = 0;
     ERROR_CODE ret = CommandLineParser::Get<int64_t>(key, x);
@@ -87,7 +91,7 @@ ERROR_CODE CommandLineParser::Get<int32_t>(const std::string& key, int32_t &targ
 }
 
 template<>
-ERROR_CODE CommandLineParser::Get<uint32_t>(const std::string& key, uint32_t &target) const
+ERROR_CODE CommandLineParser::Get<uint32_t>(const std::string& key, uint32_t &target)
 {
     uint64_t x = 0;
     ERROR_CODE ret = CommandLineParser::Get<uint64_t>(key, x);
@@ -102,11 +106,13 @@ ERROR_CODE CommandLineParser::Get<uint32_t>(const std::string& key, uint32_t &ta
 }
 
 template<>
-ERROR_CODE CommandLineParser::Get<double>(const std::string& key, double &target) const
+ERROR_CODE CommandLineParser::Get<double>(const std::string& key, double &target)
 {
-    auto it = dataMap_.find(key);
+    auto it = FindKey(key);
     if (it == dataMap_.end()) {
         return ERROR_CODE::KEY_NOT_EXIST;
+    } else if (!IsDigitFormat(it->second)) {
+        return ERROR_CODE::NOT_DIGITAL_FORMAT;
     }
 
     try {
@@ -118,11 +124,13 @@ ERROR_CODE CommandLineParser::Get<double>(const std::string& key, double &target
 }
 
 template<>
-ERROR_CODE CommandLineParser::Get<float>(const std::string& key, float &target) const
+ERROR_CODE CommandLineParser::Get<float>(const std::string& key, float &target)
 {
-    auto it = dataMap_.find(key);
+    auto it = FindKey(key);
     if (it == dataMap_.end()) {
         return ERROR_CODE::KEY_NOT_EXIST;
+    } else if (!IsDigitFormat(it->second)) {
+        return ERROR_CODE::NOT_DIGITAL_FORMAT;
     }
 
     try {
@@ -134,9 +142,9 @@ ERROR_CODE CommandLineParser::Get<float>(const std::string& key, float &target) 
 }
 
 template<>
-ERROR_CODE CommandLineParser::Get<bool>(const std::string& key, bool &target) const
+ERROR_CODE CommandLineParser::Get<bool>(const std::string& key, bool &target)
 {
-    auto it = dataMap_.find(key);
+    auto it = FindKey(key);
     if (it == dataMap_.end()) {
         return ERROR_CODE::KEY_NOT_EXIST;
     }
@@ -181,7 +189,18 @@ std::vector<std::string> CommandLineParser::Keys() const
     return result;
 }
 
-void CommandLineParser::PrintHelp()
+void CommandLineParser::PrintUnusedKeys() const
+{
+    for (const auto& pair : dataMap_) {
+        if (usedSet_.find(pair.first) == usedSet_.end()) {
+            std::string key = ReplaceInvalidChars(pair.first);
+            std::string value = ReplaceInvalidChars(pair.second);
+            LOGW("Unused command line input, key: %s, value: %s", key.c_str(), value.c_str());
+        }
+    }
+}
+
+void CommandLineParser::PrintHelp() const
 {
     LOGM("mstuner_catlass (MindStudio Tuner for CATLASS) is part of MindStudio Operator-dev Tools.\n");
     LOGM("The mstuner_catlass tool provides developers with the capability to efficiently and\n"
@@ -203,5 +222,27 @@ void CommandLineParser::PrintHelp()
     LOGM("   --A=<dtype:layout>                   <Optional> Filter operations by dtype and layout of the tensor A.");
     LOGM("   --B=<dtype:layout>                   <Optional> Filter operations by dtype and layout of the tensor B.");
     LOGM("   --C=<dtype:layout>                   <Optional> Filter operations by dtype and layout of the tensor C.");
+}
+
+bool CommandLineParser::IsDigitFormat(const std::string &str)
+{
+    bool point = false;
+    for (size_t i = 0; i < str.size(); ++i) {
+        if (std::isdigit(static_cast<uint8_t>(str[i]))) {
+            continue;
+        } else if (str[i] == '+' || str[i] == '-') { // +/- for positive/negative numbers
+            if (i != 0) {
+                return false;
+            }
+        } else if (str[i] == '.') { // . for float numbers
+            if (point) {
+                return false;
+            }
+            point = true;
+        } else if (!std::isdigit(static_cast<uint8_t>(str[i]))) {
+            return false;
+        }
+    }
+    return true;
 }
 } // namespace Catlass

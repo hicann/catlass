@@ -37,7 +37,7 @@ void GemmOpConfig::SaveMetric(Metric &metric)
     metric.SetField<ClassicMetric::K>(k_);
 }
 
-bool GemmOpConfig::InitConfig(const CommandLineParser &parser)
+bool GemmOpConfig::InitConfig(CommandLineParser &parser)
 {
     if (parser.HasKey("m")) {
         m_ = 0;
@@ -51,13 +51,11 @@ bool GemmOpConfig::InitConfig(const CommandLineParser &parser)
         k_ = 0;
         GET_CHECK(parser.Get<decltype(k_)>("k", k_), "k");
     }
-    if (m_ == 0 || n_ == 0 || k_ == 0) {
+    if (m_ == 0 || n_ == 0 || k_ == 0 || !GetTensorConfig("A", parser, tcA_) ||
+        !GetTensorConfig("B", parser, tcB_) || !GetTensorConfig("C", parser, tcC_)) {
         invalid_ = true;
         return false;
     }
-    tcA_ = GetTensorConfig("A", parser);
-    tcB_ = GetTensorConfig("B", parser);
-    tcC_ = GetTensorConfig("C", parser);
     return true;
 }
 
@@ -72,7 +70,7 @@ bool GemmOpConfig::Filter(Library::Operation *op)
     return true;
 }
 
-bool BasicGemmOpConfig::InitConfig(const CommandLineParser &parser)
+bool BasicGemmOpConfig::InitConfig(CommandLineParser &parser)
 {
     bool res = GemmOpConfig::InitConfig(parser);
     if (!res) {
@@ -125,7 +123,7 @@ void GroupedGemmOpConfig::SaveMetric(Metric &metric)
     metric.SetField("group_count", std::to_string(config_.groupCount));
 }
 
-bool GroupedGemmOpConfig::InitConfig(const CommandLineParser &parser)
+bool GroupedGemmOpConfig::InitConfig(CommandLineParser &parser)
 {
     bool res = GemmOpConfig::InitConfig(parser);
     if (!res) {

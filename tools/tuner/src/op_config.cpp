@@ -14,33 +14,33 @@ namespace Catlass {
 
 using namespace Library;
 
-TensorConfig OpConfig::GetTensorConfig(const std::string &key, const CommandLineParser &parser)
+bool OpConfig::GetTensorConfig(const std::string &key, CommandLineParser &parser, TensorConfig &config)
 {
-    TensorConfig config{};
+    if (!parser.HasKey(key)) {
+        return true;
+    }
+
     std::string_view val;
     auto err = parser.Get<std::string_view>(key, val);
     if (err != CommandLineParser::ERROR_CODE::NONE) {
-        return config;
+        LOGE("Get command line input failed, key: %s, err: %s", key.c_str(),
+             CommandLineParser::GetErrorStr(err).data());
+        return false;
     }
     auto i = val.find(':');
-    if (i == std::string::npos || i >= val.size() - 1) {
-        LOGW("--%s format is invalid, it should be sth like fp16:row, please check README.md. "
-             "Will skip this argument.", key.c_str());
-        return config;
+    if (!val.empty() && i >= val.size() - 1) {
+        LOGE("Command line input --%s value format is invalid, it should be string like fp16:row, "
+             "please check README.md. ", key.c_str());
+        return false;
     }
     config.dataType = LibraryHelper::GetDataTypeEnum(val.substr(0, i));
     config.layoutType = LibraryHelper::GetLayoutEnum(val.substr(i + 1));
     if (config.dataType == DataType::Invalid || config.layoutType == LayoutType::Invalid) {
-        std::string_view log = "Will skip this argument.";
-        if (config.dataType != DataType::Invalid) {
-            log = "Will use dataType to filter kernels.";
-        } else if (config.layoutType != LayoutType::Invalid) {
-            log = "Will use layoutType to filter kernels.";
-        }
-        LOGW("--%s format is invalid, it should be sth like fp16:row, please check README.md. %.*s",
-             key.c_str(), static_cast<int>(log.size()), log.data());
+        LOGE("Command line input --%s value format is invalid, it should be string like fp16:row, "
+             "please check README.md. ", key.c_str());
+        return false;
     }
-    return config;
+    return true;
 }
 
 std::shared_ptr<OpConfig> GetGemmOpConfig(const OperationDescription &desp)
@@ -76,27 +76,29 @@ std::shared_ptr<OpConfig> OpConfig::GetOpConfig(const OperationDescription &desp
     return func[i](desp);
 }
 
-void OpConfigPool::Register(Operation *op, const CommandLineParser &parser, const std::string_view kernel)
+// return true means exist normally, false means meet sth wrong
+bool OpConfigPool::Register(Operation *op, CommandLineParser &parser, const std::string_view kernel)
 {
     auto &desp = op->GetDescription();
     std::string_view name = desp.name;
     if (!kernel.empty() && name.find(kernel) == std::string_view::npos) {
-        return;
+        return true;
     }
     std::shared_ptr<OpConfig> config = OpConfig::GetOpConfig(desp);
     if (!config) {
         LOGE("Get op config failed, op name %s", desp.name);
-        return;
+        return false;
     }
     auto p = pool_.insert({config, {}});
     if (p.second && !config->InitConfig(parser)) {
-        LOGE("Initialize config failed, skip all same type op like current: %s", desp.name);
-        return;
+        LOGE("Initialize config for %s failed", desp.name);
+        return false;
     }
     config = p.first->first;
     if (!config->Invalid() && config->Filter(op)) {
         p.first->second.emplace_back(op);
     }
+    return true;
 }
 
 } // namespace Catlass

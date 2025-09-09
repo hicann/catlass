@@ -20,7 +20,7 @@ public:
     explicit GemmOpConfig(const Library::OperationDescription &desp) : OpConfig(desp) {}
     ~GemmOpConfig() override = default;
     void SaveMetric(Metric &metric) override;
-    bool InitConfig(const CommandLineParser &parser) override;
+    bool InitConfig(CommandLineParser &parser) override;
     bool Filter(Library::Operation *op) override;
 
 protected:
@@ -47,7 +47,7 @@ public:
         subKind_ = static_cast<uint32_t>(Library::GemmKind::BasicMatmul);
     }
 
-    bool InitConfig(const CommandLineParser &parser) override;
+    bool InitConfig(CommandLineParser &parser) override;
     bool InitArgument(Library::Operation *op) override;
 
     void* GetConfig() override { return &config_; };
@@ -66,7 +66,7 @@ public:
         subKind_ = static_cast<uint32_t>(Library::GemmKind::GroupedMatmul);
     }
 
-    bool InitConfig(const CommandLineParser &parser) override;
+    bool InitConfig(CommandLineParser &parser) override;
     bool InitArgument(Library::Operation *op) override;
 
     void SaveMetric(Metric &metric) override;

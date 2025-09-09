@@ -186,12 +186,12 @@ void Metrics::Add(const std::shared_ptr<OpConfig>& opConfig, Library::Operation 
     }
 }
 
-void Metrics::SetOutputPath(std::string_view output)
+bool Metrics::SetOutputPath(std::string_view output)
 {
     std::string absPath = StandardizePath(output);
     if (absPath.empty() || absPath.back() == '/') {
         LOGE("--output is not a valid file path");
-        return;
+        return false;
     }
     constexpr size_t TAIL_LEN = 4;
     if (absPath.size() < TAIL_LEN || absPath.find(".csv", absPath.size() - TAIL_LEN) == std::string::npos) {
@@ -201,22 +201,23 @@ void Metrics::SetOutputPath(std::string_view output)
     if (IsExist(absPath)) {
         if (IsSoftLink(absPath)) {
             LOGE("--output cannot be a soft link");
-            return;
+            return false;
         } else if (!IsSafePath(absPath)) {
-            return;
+            return false;
         } else if (std::error_code ec; std::filesystem::is_directory(absPath, ec) && !ec) {
             LOGE("--output cannot be an existing directory: %s", absPath.c_str());
-            return;
+            return false;
         }
     }
     std::string_view absView = absPath;
     auto sep = absView.rfind(PATH_SEP);
     std::string_view dir = absView.substr(0, sep);
     if (!CheckInvalidChar(absView) || !IsSafePath(dir) || !MkdirRecursively(dir)) {
-        return;
+        return false;
     }
     outputPath_ = std::move(absPath);
     LOGI("Set profile output file %s", outputPath_.c_str());
+    return true;
 }
 
 void Metrics::PrintTop10(const std::string &head)
