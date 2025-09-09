@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_LIBRARY_LIBRARY_H
-#define CATLASS_LIBRARY_LIBRARY_H
+#ifndef CATLASS_LIBRARY_OPERATION_H
+#define CATLASS_LIBRARY_OPERATION_H
 
 #include <string>
 #include <acl/acl.h>
@@ -201,4 +201,4 @@ struct GroupedMatmulGemmConfiguration {
 }
 }
 
-#endif // CATLASS_LIBRARY_MANIFEST_H
+#endif // CATLASS_LIBRARY_MANIFEST_H

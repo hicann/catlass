@@ -19,7 +19,7 @@
 #include "device_memory_manager.h"
 #include "metric.h"
 
-#include "catlass/library/library.h"
+#include "catlass/library/operation.h"
 #include "common/bfloat16.h"
 
 namespace Catlass {

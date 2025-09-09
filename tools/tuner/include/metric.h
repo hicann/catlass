@@ -16,7 +16,7 @@
 #include <vector>
 #include <sstream>
 #include <iomanip>
-#include "catlass/library/library.h"
+#include "catlass/library/operation.h"
 
 namespace Catlass {
 
@@ -147,4 +147,4 @@ template <size_t N>
 struct Metric::IsString<const char[N]> : std::true_type {};
 
 } // namespace Catlass
-#endif // CATLASS_TUNER_METRIC_H
+#endif // CATLASS_TUNER_METRIC_H

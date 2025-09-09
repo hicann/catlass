@@ -13,7 +13,7 @@
 
 #include <vector>
 
-#include "catlass/library/library.h"
+#include "catlass/library/operation.h"
 
 #include "catlass/status.hpp"
 
