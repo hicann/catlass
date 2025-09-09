@@ -2,7 +2,7 @@ import os
 import sys
 import itertools
 
-WRAPPER_CODE_PATH = "./warpper"
+WRAPPER_CODE_PATH = "../warpper"
 
 LAYOUT_TAG_SET = [0, 1] # 0 is RowMajor, 1 is ColumnMajor
 LAYOUT_TAG_MAP = {0: "Catlass::layout::RowMajor", 1: "Catlass::layout::ColumnMajor"}
@@ -14,9 +14,9 @@ common_matmul_template = """
 void {launch_kernel_func_name}(aclrtStream& stream, uint64_t fftsAddr,
     uint8_t* dA, uint8_t* dB, uint8_t* dC, uint8_t* dW, uint8_t* dTilingParams, TilingParams& tilingParams)
 {{
-    using ElementA = {elememt_a};
-    using ElementB = {elememt_b};
-    using ElementC = {elememt_c};
+    using ElementA = {element_a};
+    using ElementB = {element_b};
+    using ElementC = {element_c};
     using LayoutA = {layout_a};
     using LayoutB = {layout_b};
     using LayoutC = {layout_c};
@@ -26,9 +26,9 @@ void {launch_kernel_func_name}(aclrtStream& stream, uint64_t fftsAddr,
 
 size_t {get_workspace_func_name}(TilingParams& tilingParams)
 {{
-    using ElementA = {elememt_a};
-    using ElementB = {elememt_b};
-    using ElementC = {elememt_c};
+    using ElementA = {element_a};
+    using ElementB = {element_b};
+    using ElementC = {element_c};
     using LayoutA = {layout_a};
     using LayoutB = {layout_b};
     using LayoutC = {layout_c};
@@ -39,7 +39,8 @@ size_t {get_workspace_func_name}(TilingParams& tilingParams)
 def gen_common_matmul_code(kernel_name, base_file_name, kernel_serial, dtype):
     combinations = list(itertools.product(LAYOUT_TAG_SET, LAYOUT_TAG_SET))
     for l_tag_a, l_tag_b in combinations:
-        kernel_func_name = (kernel_name + dtype.capitialize() + "Layout" + str(l_tag_a) + str(l_tag_b))
+        launch_kernel_func_name = ("Launch" + kernel_name + dtype.capitalize() + "Layout" + str(l_tag_a) + str(l_tag_b))
+        get_workspace_func_name = (kernel_name + dtype.capitalize() + "Layout" + str(l_tag_a) + str(l_tag_b) + "GetWorkspaceSize")
         file_name = (base_file_name + "_" + dtype + "_layout" + str(l_tag_a) + str(l_tag_b) + ".cpp")
 
         element_a = dtype
@@ -49,7 +50,7 @@ def gen_common_matmul_code(kernel_name, base_file_name, kernel_serial, dtype):
         layout_b = LAYOUT_TAG_MAP[l_tag_b]
         layout_c = "Catlass::layout::RowMajor"
 
-        template = common_matmul_template.format(element_a, element_b, element_c, layout_a, layout_b, layout_c)
+        template = common_matmul_template.format(launch_kernel_func_name=launch_kernel_func_name, get_workspace_func_name=get_workspace_func_name, element_a=element_a, element_b=element_b, element_c=element_c, layout_a=layout_a, layout_b=layout_b, layout_c=layout_c)
 
         with open(os.path.join(WRAPPER_CODE_PATH, file_name), "w") as f:
             f.write(template)
