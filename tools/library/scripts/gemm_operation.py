@@ -120,7 +120,7 @@ class GemmOperationGenerator:
         self.function_call_template = """    Register_{kernel_name}(manifest);\n"""
 
         self.register_template = """
-#include "catlass/library/library.h"
+#include "catlass/library/operation.h"
 #include "catlass/library/manifest.h"
 
 namespace Catlass {{
@@ -138,7 +138,7 @@ void RegisterCatlass{operation_type}Operations(Manifest &manifest)
 """
 
         self.gemm_headers = """
-#include "catlass/library/library.h"
+#include "catlass/library/operation.h"
 #include "catlass/library/manifest.h"
 
 #include "catlass/catlass.hpp"
@@ -181,6 +181,7 @@ void RegisterCatlass{operation_type}Operations(Manifest &manifest)
         file = self.kernel_group_files[self.curr_file_id]
         self.curr_file_id = (self.curr_file_id + 1) % GROUP_FILE_NUM
         return file
+
 
 class BasicMatmulKernelInstance:
     def __init__(self):

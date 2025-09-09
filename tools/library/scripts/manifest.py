@@ -63,7 +63,7 @@ class Manifest:
             )
 
         self.register_all_operations_template = """
-#include "catlass/library/library.h"
+#include "catlass/library/operation.h"
 #include "catlass/library/manifest.h"
 
 namespace Catlass {{
@@ -84,7 +84,7 @@ void RegisterAllKernels(Manifest &manifest)
         self.function_call_template = """    Register_{kernel_name}(manifest);\n"""
 
         self.register_template = """
-#include "catlass/library/library.h"
+#include "catlass/library/operation.h"
 #include "catlass/library/manifest.h"
 
 namespace Catlass {{

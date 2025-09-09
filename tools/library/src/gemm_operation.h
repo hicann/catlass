@@ -12,7 +12,7 @@
 #define CATLASS_LIBRARY_GEMM_OPERATION_H
 
 #include <type_traits>
-#include "catlass/library/library.h"
+#include "catlass/library/operation.h"
 #include "library_utils.h"
 
 namespace Catlass {
@@ -161,4 +161,4 @@ private:
 }
 }
 
-#endif // CATLASS_LIBRARY_GEMM_OPERATION_H
+#endif // CATLASS_LIBRARY_GEMM_OPERATION_H

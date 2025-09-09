@@ -12,7 +12,7 @@
 #define CATLASS_TUNER_LIBRARY_HELPER_H
 
 #include <unordered_map>
-#include "catlass/library/library.h"
+#include "catlass/library/operation.h"
 #include "catlass/layout/matrix.hpp"
 
 namespace Catlass {
@@ -32,4 +32,4 @@ public:
 };
 
 }
-#endif // CATLASS_TUNER_LIBRARY_HELPER_H
+#endif // CATLASS_TUNER_LIBRARY_HELPER_H

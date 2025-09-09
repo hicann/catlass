@@ -10,17 +10,20 @@ import library
 import search_space
 from manifest import OperationRegistry
 
+
 """
 If more customization of search space configuration is required, you
 need unregister this configuration by COMMENTING this line below:
 
-@OperationRegistry.register_high_priority('basic_matmul'))
+@OperationRegistry.register_high_priority('basic_matmul')
 
 More customizable configurations are provided in search_space.py
 in form of functions that are marked by @OperationRegistry.register
 e.g. register_gemm_basic_matmul_operation
 Pruning strategies and parameter combination strategies are customizable.
 """
+
+
 @OperationRegistry.register_high_priority('basic_matmul')
 def register(manifest):
     config = search_space.SearchSpaceConfiguration(
