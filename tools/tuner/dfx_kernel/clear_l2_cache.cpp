@@ -15,7 +15,7 @@ constexpr uint16_t TILE_LENGTH = 512;
 class ClearL2Cache {
 public:
     __aicore__ inline ClearL2Cache() {}
-    __aicore__ inline void Init(__gm__ void* x, uint64_t blockLen)
+    __aicore__ inline void Init(__gm__ uint8_t* x, uint64_t blockLen)
     {
         xGm.SetGlobalBuffer((__gm__ int8_t *)x + blockLen * AscendC::GetBlockIdx(), blockLen);
         pipe.InitBuffer(inQueueX, 1, TILE_LENGTH * sizeof(int8_t));
@@ -40,7 +40,7 @@ private:
     uint64_t kernelBlockLen;
 };
 
-extern "C" __global__ __aicore__ void DoClear(__gm__ void* x, __gm__ void* tilingSize)
+extern "C" __global__ __aicore__ void DoClear(__gm__ uint8_t* x, __gm__ uint8_t* tilingSize)
 {
     if ASCEND_IS_AIV {
         return;
@@ -52,8 +52,8 @@ extern "C" __global__ __aicore__ void DoClear(__gm__ void* x, __gm__ void* tilin
 }
 
 namespace Catlass {
-void DoClearL2Cache(uint32_t blockDim, void* l2ctrl, void* stream, void* buffer, void* tilingSize)
+void DoClearL2Cache(uint32_t blockDim, uint8_t* l2ctrl, uint8_t* stream, uint8_t* buffer, uint8_t* tilingSize)
 {
-    DoClear<<<blockDim, l2ctrl, stream>>>(buffer, tilingSize);
+    DoClear<<<blockDim, reinterpret_cast<void*>(l2ctrl), reinterpret_cast<void*>(stream)>>>(buffer, tilingSize);
 }
-} // namespace Catlass
+} // namespace Catlass

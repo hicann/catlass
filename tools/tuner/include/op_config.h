@@ -78,13 +78,13 @@ class OpConfig {
 public:
     explicit OpConfig(const Library::OperationDescription &desp) : kind_(static_cast<uint32_t>(desp.kind)) {}
     static std::shared_ptr<OpConfig> GetOpConfig(const Library::OperationDescription &desp);
-    static TensorConfig GetTensorConfig(const std::string &key, const CommandLineParser &parser);
+    static bool GetTensorConfig(const std::string &key, CommandLineParser &parser, TensorConfig &config);
 
     virtual ~OpConfig() = default;
     virtual void* GetConfig() = 0;
     virtual void* GetArg() = 0;
     virtual bool Filter(Library::Operation *op) = 0;
-    virtual bool InitConfig(const CommandLineParser &parser) = 0; // call once each OpConfig
+    virtual bool InitConfig(CommandLineParser &parser) = 0; // call once each OpConfig
     virtual bool InitArgument(Library::Operation *op) = 0; // call each Operator
     virtual void SaveMetric(Metric &metric) = 0;
 
@@ -120,7 +120,7 @@ protected:
 
 class OpConfigPool {
 public:
-    void Register(Library::Operation *op, const CommandLineParser &parser, const std::string_view kernel);
+    bool Register(Library::Operation *op, CommandLineParser &parser, const std::string_view kernel);
     auto &GetPool() { return pool_; }
 
 private:
@@ -139,4 +139,4 @@ private:
 };
 
 } // namespace Catlass
-#endif // CATLASS_TUNER_OP_CONFIG_H
+#endif // CATLASS_TUNER_OP_CONFIG_H

@@ -37,26 +37,25 @@ void GemmOpConfig::SaveMetric(Metric &metric)
     metric.SetField<ClassicMetric::K>(k_);
 }
 
-bool GemmOpConfig::InitConfig(const Catlass::CommandLineParser &parser)
+bool GemmOpConfig::InitConfig(CommandLineParser &parser)
 {
-    static const std::vector<std::string> keys = {"m", "n", "k"};
-    for (auto &key : keys) {
-        if (!parser.HasKey(key)) {
-            LOGE("Key %s not exist", key.c_str());
-            invalid_ = true;
-            return false;
-        }
+    if (parser.HasKey("m")) {
+        m_ = 0;
+        GET_CHECK(parser.Get<decltype(m_)>("m", m_), "m");
     }
-    GET_CHECK(parser.Get<decltype(m_)>("m", m_), "m");
-    GET_CHECK(parser.Get<decltype(n_)>("n", n_), "n");
-    GET_CHECK(parser.Get<decltype(k_)>("k", k_), "k");
-    if (m_ == 0 || n_ == 0 || k_ == 0) {
+    if (parser.HasKey("n")) {
+        n_ = 0;
+        GET_CHECK(parser.Get<decltype(n_)>("n", n_), "n");
+    }
+    if (parser.HasKey("k")) {
+        k_ = 0;
+        GET_CHECK(parser.Get<decltype(k_)>("k", k_), "k");
+    }
+    if (m_ == 0 || n_ == 0 || k_ == 0 || !GetTensorConfig("A", parser, tcA_) ||
+        !GetTensorConfig("B", parser, tcB_) || !GetTensorConfig("C", parser, tcC_)) {
         invalid_ = true;
         return false;
     }
-    tcA_ = GetTensorConfig("A", parser);
-    tcB_ = GetTensorConfig("B", parser);
-    tcC_ = GetTensorConfig("C", parser);
     return true;
 }
 
@@ -71,7 +70,7 @@ bool GemmOpConfig::Filter(Library::Operation *op)
     return true;
 }
 
-bool BasicGemmOpConfig::InitConfig(const CommandLineParser &parser)
+bool BasicGemmOpConfig::InitConfig(CommandLineParser &parser)
 {
     bool res = GemmOpConfig::InitConfig(parser);
     if (!res) {
@@ -124,7 +123,7 @@ void GroupedGemmOpConfig::SaveMetric(Metric &metric)
     metric.SetField("group_count", std::to_string(config_.groupCount));
 }
 
-bool GroupedGemmOpConfig::InitConfig(const CommandLineParser &parser)
+bool GroupedGemmOpConfig::InitConfig(CommandLineParser &parser)
 {
     bool res = GemmOpConfig::InitConfig(parser);
     if (!res) {
@@ -216,4 +215,4 @@ bool GroupedGemmOpConfig::InitArgument(Library::Operation *op)
     return true;
 }
 
-} // namespace Catlass
+} // namespace Catlass

@@ -20,16 +20,16 @@ public:
     explicit GemmOpConfig(const Library::OperationDescription &desp) : OpConfig(desp) {}
     ~GemmOpConfig() override = default;
     void SaveMetric(Metric &metric) override;
-    bool InitConfig(const CommandLineParser &parser) override;
+    bool InitConfig(CommandLineParser &parser) override;
     bool Filter(Library::Operation *op) override;
 
 protected:
     TensorConfig tcA_{};
     TensorConfig tcB_{};
     TensorConfig tcC_{};
-    uint32_t m_{0};
-    uint32_t n_{0};
-    uint32_t k_{0};
+    uint32_t m_{256};  // 256 为example/00_basic_matmul算子默认配置
+    uint32_t n_{512};  // 512 为example/00_basic_matmul算子默认配置
+    uint32_t k_{1024}; // 1024 为example/00_basic_matmul算子默认配置
 
 private:
     template<class T>
@@ -47,7 +47,7 @@ public:
         subKind_ = static_cast<uint32_t>(Library::GemmKind::BasicMatmul);
     }
 
-    bool InitConfig(const CommandLineParser &parser) override;
+    bool InitConfig(CommandLineParser &parser) override;
     bool InitArgument(Library::Operation *op) override;
 
     void* GetConfig() override { return &config_; };
@@ -66,7 +66,7 @@ public:
         subKind_ = static_cast<uint32_t>(Library::GemmKind::GroupedMatmul);
     }
 
-    bool InitConfig(const CommandLineParser &parser) override;
+    bool InitConfig(CommandLineParser &parser) override;
     bool InitArgument(Library::Operation *op) override;
 
     void SaveMetric(Metric &metric) override;

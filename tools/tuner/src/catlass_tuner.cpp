@@ -19,14 +19,20 @@ static constexpr int RUN_TIMES = 5;
 CatlassTuner::CatlassTuner(CommandLineParser parser) : parser_(std::move(parser))
 {
     if (parser_.HasKey("device")) {
+        deviceId_ = -1;
         GET_CHECK(parser_.Get<decltype(deviceId_)>("device", deviceId_), "device");
+        if (deviceId_ == -1) {
+            return;
+        }
         profileHandler_.SetDeviceId(deviceId_);
         metrics_.SetDeviceId(deviceId_);
     }
     if (parser_.HasKey("output")) {
         std::string_view output;
         GET_CHECK(parser_.Get<std::string_view>("output", output), "output");
-        metrics_.SetOutputPath(output);
+        if (output.empty() || !metrics_.SetOutputPath(output)) {
+            return;
+        }
     }
     if (!profileHandler_.Init()) {
         LOGE("Start profile channel failed, will not run operators");
@@ -43,7 +49,7 @@ CatlassTuner::~CatlassTuner()
     DeviceMemoryManager::Instance().Finalize();
 }
 
-OpConfigPool CatlassTuner::InitOperators()
+bool CatlassTuner::InitOperators(OpConfigPool &pool)
 {
     std::string_view kernel;
     if (parser_.HasKey("kernels")) {
@@ -52,15 +58,15 @@ OpConfigPool CatlassTuner::InitOperators()
             auto uc = static_cast<unsigned char>(c);
             if (!std::isdigit(uc) && !std::isalpha(uc) && c != '_') {
                 LOGE("--kernels can only contain [0-9, a-z, A-Z, _]");
-                kernel = "";
-                break;
+                return false;
             }
         }
     }
 
-    OpConfigPool pool;
     for (auto op : manifest_.GetOperations()) {
-        pool.Register(op, parser_, kernel);
+        if (!pool.Register(op, parser_, kernel)) {
+            return false;
+        }
     }
     size_t sum = 0;
     for (auto &p : pool.GetPool()) {
@@ -69,21 +75,26 @@ OpConfigPool CatlassTuner::InitOperators()
         }
     }
     LOGI("Initializing %lu operations", sum);
-    return pool;
+    return true;
 }
 
 void CatlassTuner::Run()
 {
     if (!stream_) {
         return;
-    } else if (manifest_.Initialize() != Status::kSuccess) {
+    }
+
+    OpConfigPool pool;
+    if (manifest_.Initialize() != Status::kSuccess) {
         LOGE("Initialize operator manifest failed");
+        return;
+    } else if (!InitOperators(pool)) {
         return;
     }
 
+    parser_.PrintUnusedKeys();
     // Get the number of cube cores of the current hardware
     uint32_t aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
-    OpConfigPool pool = InitOperators();
     for (auto &p : pool.GetPool()) {
         auto &opConfig = p.first;
         if (!opConfig || opConfig->Invalid()) {
@@ -202,4 +213,4 @@ void CatlassTuner::Synchronize()
     UpdateMetrics(true);
 }
 
-} // namespace Catlass
+} // namespace Catlass

@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <unordered_set>
 #include <algorithm>
 #include <cstdint>
 
@@ -36,6 +37,7 @@ public:
         KEY_NOT_EXIST,
         INTEGER_OVERFLOW,
         EXPECT_UNSIGNED_INTEGER,
+        NOT_DIGITAL_FORMAT,
         END,
     };
 
@@ -47,6 +49,7 @@ public:
             "key not exist",
             "integer overflow",
             "expect unsigned integer",
+            "input is not digital format",
             "unknown error"
         };
         auto idx = std::min(static_cast<int>(er), static_cast<int>(ERROR_CODE::END));
@@ -61,10 +64,11 @@ public:
     [[nodiscard]] inline bool Help() const { return help_; }
 
     void Parse(int argc, const char* argv[]);
-    void PrintHelp();
+    void PrintHelp() const;
+    void PrintUnusedKeys() const;
     [[nodiscard]] std::vector<std::string> Keys() const;
     template <typename T>
-    ERROR_CODE Get(const std::string& key, T &target) const;
+    ERROR_CODE Get(const std::string& key, T &target);
 
 private:
     // 去除字符串两端空格
@@ -79,29 +83,41 @@ private:
         return (start < end) ? std::string(start, end) : "";
     }
 
+    static bool IsDigitFormat(const std::string& str);
+
+    auto FindKey(const std::string& key)
+    {
+        auto it = dataMap_.find(key);
+        if (it != dataMap_.end()) {
+            usedSet_.insert(key);
+        }
+        return it;
+    }
+
     std::map<std::string, std::string> dataMap_;
+    std::unordered_set<std::string> usedSet_;
     bool help_{false};
 };
 
 template<>
-CommandLineParser::ERROR_CODE CommandLineParser::Get<std::string>(const std::string& key, std::string &target) const;
+CommandLineParser::ERROR_CODE CommandLineParser::Get<std::string>(const std::string& key, std::string &target);
 template<>
 CommandLineParser::ERROR_CODE CommandLineParser::Get<std::string_view>(const std::string& key,
-                                                                       std::string_view &target) const;
+                                                                       std::string_view &target);
 template<>
-CommandLineParser::ERROR_CODE CommandLineParser::Get<int64_t>(const std::string& key, int64_t &target) const;
+CommandLineParser::ERROR_CODE CommandLineParser::Get<int64_t>(const std::string& key, int64_t &target);
 template<>
-CommandLineParser::ERROR_CODE CommandLineParser::Get<uint64_t>(const std::string& key, uint64_t &target) const;
+CommandLineParser::ERROR_CODE CommandLineParser::Get<uint64_t>(const std::string& key, uint64_t &target);
 template<>
-CommandLineParser::ERROR_CODE CommandLineParser::Get<int32_t>(const std::string& key, int32_t &target) const;
+CommandLineParser::ERROR_CODE CommandLineParser::Get<int32_t>(const std::string& key, int32_t &target);
 template<>
-CommandLineParser::ERROR_CODE CommandLineParser::Get<uint32_t>(const std::string& key, uint32_t &target) const;
+CommandLineParser::ERROR_CODE CommandLineParser::Get<uint32_t>(const std::string& key, uint32_t &target);
 template<>
-CommandLineParser::ERROR_CODE CommandLineParser::Get<double>(const std::string& key, double &target) const;
+CommandLineParser::ERROR_CODE CommandLineParser::Get<double>(const std::string& key, double &target);
 template<>
-CommandLineParser::ERROR_CODE CommandLineParser::Get<float>(const std::string& key, float &target) const;
+CommandLineParser::ERROR_CODE CommandLineParser::Get<float>(const std::string& key, float &target);
 template<>
-CommandLineParser::ERROR_CODE CommandLineParser::Get<bool>(const std::string& key, bool &target) const;
+CommandLineParser::ERROR_CODE CommandLineParser::Get<bool>(const std::string& key, bool &target);
 
 } // namespace Catlass
-#endif // CATLASS_TUNER_COMMAND_LINE_PARSER_H
+#endif // CATLASS_TUNER_COMMAND_LINE_PARSER_H

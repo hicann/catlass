@@ -21,7 +21,7 @@ class Metrics {
 public:
     inline void SetDeviceId(int32_t device) { deviceId_ = device; }
 
-    void SetOutputPath(std::string_view output);
+    bool SetOutputPath(std::string_view output);
     void Dump();
     void Add(const std::shared_ptr<OpConfig>& opConfig, Library::Operation *op);
     void SetDurationAndPrint(double duration);
@@ -42,4 +42,4 @@ private:
 };
 
 } // namespace Catlass
-#endif // CATLASS_TUNER_METRICS_H
+#endif // CATLASS_TUNER_METRICS_H
