@@ -42,16 +42,6 @@ set_source_files_properties(${CATLASS_LIBRARY_GENERATED_SRCS} PROPERTIES LANGUAG
 add_compile_definitions(L2_CACHE_HINT)
 add_compile_definitions(TILING_KEY_VAR)
 
-add_compile_options(
-    $<$<COMPILE_LANGUAGE:ASCEND>:-Wno-macro-redefined>
-    $<$<COMPILE_LANGUAGE:ASCEND>:-Wno-ignored-attributes>
-    "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-stack-size=0x8000>"
-    "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-function-stack-size=0x8000>"
-    "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-record-overflow=true>"
-    "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-addr-transform>"
-    "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-dcci-insert-for-scalar=false>"
-)
-
 add_library(catlass_kernels SHARED
     ${CATLASS_LIBRARY_GENERATED_SRCS}
     src/manifest.cpp
@@ -60,6 +50,7 @@ add_library(catlass_kernels SHARED
 set(AICORE_ARCH dav-c220)
 target_compile_options(catlass_kernels PRIVATE $<$<COMPILE_LANGUAGE:ASCEND>:--cce-aicore-arch=${AICORE_ARCH}>)
 
+set_target_properties(catlass_kernels PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 target_include_directories(catlass_kernels PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include

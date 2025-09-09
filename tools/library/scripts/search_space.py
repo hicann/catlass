@@ -135,9 +135,6 @@ def tile_shape_constraint_for_pingpong(
     if l0c_tile_size > L0C_SIZE_MAX:
         return False
 
-    if l1_m * l1_n < 64 * 64:
-        return False
-
     return True
 
 
@@ -177,9 +174,6 @@ def tile_shape_constraint_for_preload_async(
 
     # check L0C
     if l0c_tile_size * l0c_stages > L0C_SIZE_MAX:
-        return False
-
-    if l1_m * l1_n < 64 * 64:
         return False
 
     return True

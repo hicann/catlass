@@ -11,7 +11,7 @@
 #ifndef CATLASS_LIBRARY_LIBRARY_UTILS_H
 #define CATLASS_LIBRARY_LIBRARY_UTILS_H
 
-#include "catlass/library/library.h"
+#include "catlass/library/operation.h"
 
 namespace Catlass {
 namespace Library {
@@ -88,4 +88,4 @@ TensorDescription MakeTensorDescription()
 }
 }
 
-#endif // CATLASS_LIBRARY_LIBRARY_UTILS_H
+#endif // CATLASS_LIBRARY_LIBRARY_UTILS_H
