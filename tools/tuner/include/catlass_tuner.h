@@ -27,7 +27,7 @@ public:
     void Run();
 
 private:
-    OpConfigPool InitOperators();
+    bool InitOperators(OpConfigPool &pool);
     void UpdateMetrics(bool readAll = false);
     void Synchronize();
     OpRunStatus RunOp(const std::shared_ptr<OpConfig>& opConfig, Library::Operation *op, uint32_t aicCoreNum);
@@ -43,4 +43,4 @@ private:
 };
 
 } // namespace Catlass
-#endif // CATLASS_TUNER_CATLASS_TUNER_H
+#endif // CATLASS_TUNER_CATLASS_TUNER_H
