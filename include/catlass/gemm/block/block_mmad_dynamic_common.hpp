@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_GEMM_BLOCK_BLOCK_MMAD_PRELOAD_HPP
-#define CATLASS_GEMM_BLOCK_BLOCK_MMAD_PRELOAD_HPP
+#ifndef CATLASS_GEMM_BLOCK_BLOCK_MMAD_DYNAMIC_COMMON_HPP
+#define CATLASS_GEMM_BLOCK_BLOCK_MMAD_DYNAMIC_COMMON_HPP
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/resource.hpp"
@@ -22,35 +22,14 @@
 
 namespace Catlass::Gemm::Block {
 
-template <
-    bool ENABLE_UNIT_FLAG_,
-    bool ENABLE_SHUFFLE_K_,
-    class L1TileShape_,
-    class L0TileShape_,
-    class AType_,
-    class BType_,
-    class CType_,
-    class BiasType_,
-    class TileCopy_,
-    class TileMmad_
->
-struct BlockMmad <
-    MmadAtlasA2Preload<ENABLE_UNIT_FLAG_, ENABLE_SHUFFLE_K_>,
-    L1TileShape_,
-    L0TileShape_,
-    AType_,
-    BType_,
-    CType_,
-    BiasType_,
-    TileCopy_,
-    TileMmad_
-> {
+template <bool ENABLE_UNIT_FLAG_, bool ENABLE_SHUFFLE_K_, class L1TileShape_, class L0TileShape_, class AType_,
+    class BType_, class CType_, class BiasType_, class TileCopy_, class TileMmad_>
+struct BlockMmad<MmadAtlasA2DynamicCommon<ENABLE_UNIT_FLAG_, ENABLE_SHUFFLE_K_>, L1TileShape_, L0TileShape_, AType_,
+    BType_, CType_, BiasType_, TileCopy_, TileMmad_> {
 public:
     // Type Aliases
-    using DispatchPolicy = MmadAtlasA2Preload<ENABLE_UNIT_FLAG_, ENABLE_SHUFFLE_K_>;
+    using DispatchPolicy = MmadAtlasA2DynamicCommon<ENABLE_UNIT_FLAG_, ENABLE_SHUFFLE_K_>;
     using ArchTag = typename DispatchPolicy::ArchTag;
-    using L1TileShape = L1TileShape_;
-    using L0TileShape = L0TileShape_;
     using ElementA = typename AType_::Element;
     using LayoutA = typename AType_::Layout;
     using ElementB = typename BType_::Element;
@@ -77,42 +56,35 @@ public:
     static constexpr bool ENABLE_UNIT_FLAG = DispatchPolicy::ENABLE_UNIT_FLAG;
     static constexpr bool ENABLE_SHUFFLE_K = DispatchPolicy::ENABLE_SHUFFLE_K;
     static constexpr uint32_t STAGES = DispatchPolicy::STAGES;
-    static constexpr uint32_t L1A_SIZE = L1TileShape::M * L1TileShape::K * sizeof(ElementA);
-    static constexpr uint32_t L1B_SIZE = L1TileShape::N * L1TileShape::K * sizeof(ElementB);
-    static constexpr uint32_t L0A_SIZE = ArchTag::L0A_SIZE;
-    static constexpr uint32_t L0B_SIZE = ArchTag::L0B_SIZE;
-    static constexpr uint32_t L0C_SIZE = ArchTag::L0C_SIZE;
-    static constexpr uint32_t L0A_PINGPONG_BUF_SIZE = L0A_SIZE / STAGES;
-    static constexpr uint32_t L0B_PINGPONG_BUF_SIZE = L0B_SIZE / STAGES;
+
+    static constexpr uint32_t L0A_PINGPONG_BUF_SIZE = ArchTag::L0A_SIZE / STAGES;
+    static constexpr uint32_t L0B_PINGPONG_BUF_SIZE = ArchTag::L0B_SIZE / STAGES;
 
     // Check LayoutC
     static_assert(std::is_same_v<LayoutC, layout::RowMajor>, "LayoutC only support RowMajor yet!");
 
-    // Check L1TileShape
-    static_assert((L1A_SIZE * STAGES + L1B_SIZE * STAGES) <= ArchTag::L1_SIZE, "L1TileShape exceeding the L1 space!");
-
-    // Check L0TileShape
-    static constexpr uint32_t L0A_TILE_SIZE = L0TileShape::M * L0TileShape::K * sizeof(ElementA);
-    static constexpr uint32_t L0B_TILE_SIZE = L0TileShape::K * L0TileShape::N * sizeof(ElementB);
-    static constexpr uint32_t L0C_TILE_SIZE = L0TileShape::M * L0TileShape::N * sizeof(ElementAccumulator);
-    static_assert((L0A_TILE_SIZE * STAGES) <= L0A_SIZE, "L0TileShape exceeding the L0A space!");
-    static_assert((L0B_TILE_SIZE * STAGES) <= L0B_SIZE, "L0TileShape exceeding the L0B space!");
-    static_assert(L0C_TILE_SIZE <= L0C_SIZE, "L0TileShape exceeding the L0C space!");
-
-    static_assert(L1TileShape::M == L0TileShape::M && L1TileShape::N == L0TileShape::N,
-        "The situation where the basic blocks of L1 and L0 differ on the m and n axes is not supported yet");
-    static_assert(L0TileShape::K <= L1TileShape::K, "L0TileShape::K cannot exceed L1TileShape::K");
-
     /// Construct
     CATLASS_DEVICE
-    BlockMmad(Arch::Resource<ArchTag> &resource, uint32_t l1BufAddrStart = 0)
+    BlockMmad(GemmCoord const &l1TileShape_, Arch::Resource<ArchTag> &resource, uint32_t l1BufAddrStart = 0)
     {
+        uint32_t l1ASize = l1TileShape.m() * l1TileShape.n() * sizeof(ElementA);
+        uint32_t l1BSize = l1TileShape.k() * l1TileShape.n() * sizeof(ElementB);
+    
+        kPartLenMax = min(L0A_PINGPONG_BUF_SIZE / sizeof(ElementA) / l1TileShape.m() / L1AAlignHelper::ELE_NUM_PER_C0 *
+                              L1AAlignHelper::ELE_NUM_PER_C0,
+            L0B_PINGPONG_BUF_SIZE / sizeof(ElementB) / l1TileShape.n() / L1AAlignHelper::ELE_NUM_PER_C0 *
+                L1AAlignHelper::ELE_NUM_PER_C0);
+
+        if constexpr (std::is_same_v<ElementA, float> && std::is_same_v<ElementB, float>) {
+            kPartLenMax = RoundDown<C0_NUM_PER_FRACTAL>(kPartLenMax);
+        }
+
         uint32_t l1AOffset = l1BufAddrStart;
-        uint32_t l1BOffset = l1BufAddrStart + L1A_SIZE * STAGES;
+        uint32_t l1BOffset = l1BufAddrStart + l1ASize * STAGES;
         // Init buffers
         for (uint32_t i = 0; i < STAGES; i++) {
-            l1ATensorList[i] = resource.l1Buf.template GetBufferByByte<ElementA>(l1AOffset + L1A_SIZE * i);
-            l1BTensorList[i] = resource.l1Buf.template GetBufferByByte<ElementB>(l1BOffset + L1B_SIZE * i);
+            l1ATensorList[i] = resource.l1Buf.template GetBufferByByte<ElementA>(l1AOffset + l1ASize * i);
+            l1BTensorList[i] = resource.l1Buf.template GetBufferByByte<ElementB>(l1BOffset + l1BSize * i);
             l0ATensorList[i] = resource.l0ABuf.template GetBufferByByte<ElementA>(L0A_PINGPONG_BUF_SIZE * i);
             l0BTensorList[i] = resource.l0BBuf.template GetBufferByByte<ElementB>(L0B_PINGPONG_BUF_SIZE * i);
 
@@ -144,14 +116,11 @@ public:
 
     /// Perform a block-scoped matrix multiply-accumulate
     CATLASS_DEVICE
-    void operator()(
-        AscendC::GlobalTensor<ElementA> const &gmBlockA, LayoutA const &layoutA,
+    void operator()(AscendC::GlobalTensor<ElementA> const &gmBlockA, LayoutA const &layoutA,
         AscendC::GlobalTensor<ElementB> const &gmBlockB, LayoutB const &layoutB,
         AscendC::GlobalTensor<ElementC> const &gmBlockC, LayoutC const &layoutC,
-        AscendC::GlobalTensor<ElementA> const &gmNextBlockA,
-        AscendC::GlobalTensor<ElementB> const &gmNextBlockB,
-        GemmCoord const &actualShape, GemmCoord const &actualShapeNext,
-        bool isFirstBlock, bool hasNextBlock)
+        AscendC::GlobalTensor<ElementA> const &gmNextBlockA, AscendC::GlobalTensor<ElementB> const &gmNextBlockB,
+        GemmCoord const &actualShape, GemmCoord const &actualShapeNext, bool isFirstBlock, bool hasNextBlock)
     {
         uint32_t mRound = RoundUp<L1AAlignHelper::M_ALIGNED>(actualShape.m());
         uint32_t nRound = RoundUp<L1BAlignHelper::N_ALIGNED>(actualShape.n());
@@ -211,8 +180,8 @@ public:
                 auto l1ATensor = l1ATensorList[l1ListIdNext];
                 auto l1BTensor = l1BTensorList[l1ListIdNext];
                 // Get GM tensor for next stage
-                kActualNext = (shuffleKIdxNext < kTileCount - 1) ?
-                    L1TileShape::K : (actualShape.k() - shuffleKIdxNext * L1TileShape::K);
+                kActualNext = (shuffleKIdxNext < kTileCount - 1) ? L1TileShape::K
+                                                                 : (actualShape.k() - shuffleKIdxNext * L1TileShape::K);
                 MatrixCoord gmTileAOffset{0, shuffleKIdxNext * L1TileShape::K};
                 MatrixCoord gmTileBOffset{shuffleKIdxNext * L1TileShape::K, 0};
                 auto gmTileA = gmBlockA[layoutA.GetOffset(gmTileAOffset)];
@@ -235,8 +204,9 @@ public:
                 auto l1ATensor = l1ATensorList[l1ListIdNext];
                 auto l1BTensor = l1BTensorList[l1ListIdNext];
                 // Get GM tensor for next stage
-                kActualNext = (firstTileIdxNext < kTileCountNext - 1) ?
-                    L1TileShape::K : (actualShapeNext.k() - firstTileIdxNext * L1TileShape::K);
+                kActualNext = (firstTileIdxNext < kTileCountNext - 1)
+                                  ? L1TileShape::K
+                                  : (actualShapeNext.k() - firstTileIdxNext * L1TileShape::K);
                 MatrixCoord gmTileAOffset{0, firstTileIdxNext * L1TileShape::K};
                 MatrixCoord gmTileBOffset{firstTileIdxNext * L1TileShape::K, 0};
                 auto gmTileA = gmNextBlockA[layoutA.GetOffset(gmTileAOffset)];
@@ -265,12 +235,12 @@ public:
             uint32_t l0BBufId = 0;
 
             for (int mPartIdx = 0; mPartIdx < mPartLoop; mPartIdx++) {
-                uint32_t mPartActual = (mPartIdx < mPartLoop - 1) ?
-                    L0TileShape::M : (mRound - mPartIdx * L0TileShape::M);
+                uint32_t mPartActual =
+                    (mPartIdx < mPartLoop - 1) ? L0TileShape::M : (mRound - mPartIdx * L0TileShape::M);
 
                 for (int kPartIdx = 0; kPartIdx < kPartLoop; kPartIdx++) {
-                    uint32_t kPartActual = (kPartIdx < kPartLoop - 1) ?
-                        L0TileShape::K : (kActual - kPartIdx * L0TileShape::K);
+                    uint32_t kPartActual =
+                        (kPartIdx < kPartLoop - 1) ? L0TileShape::K : (kActual - kPartIdx * L0TileShape::K);
 
                     // Locate the current tile on L0A
                     auto l0ATile = l0ATensorList[l0ABufId];
@@ -291,8 +261,8 @@ public:
                     }
 
                     for (int nPartIdx = 0; nPartIdx < nPartLoop; nPartIdx++) {
-                        uint32_t nPartActual = (nPartIdx < nPartLoop - 1) ?
-                            L0TileShape::N : (nRound - nPartIdx * L0TileShape::N);
+                        uint32_t nPartActual =
+                            (nPartIdx < nPartLoop - 1) ? L0TileShape::N : (nRound - nPartIdx * L0TileShape::N);
 
                         // Locate the current tile on L0B
                         auto l0BTile = l0BTensorList[l0BBufId];
@@ -382,6 +352,8 @@ protected:
     int32_t l0BEventList[STAGES];
 
     uint32_t l1ListId{0};
+    GemmCoord l1TileShape;
+    uint32_t kPartLenMax;
 
     TileMmad tileMmad;
     CopyGmToL1A copyGmToL1A;
@@ -391,6 +363,6 @@ protected:
     CopyL0CToGm copyL0CToGm;
 };
 
-} // namespace Catlass::Gemm::Block
+}  // namespace Catlass::Gemm::Block
 
-#endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_PRELOAD_HPP
+#endif  // CATLASS_GEMM_BLOCK_BLOCK_MMAD_DYNAMIC_COMMON_HPP
