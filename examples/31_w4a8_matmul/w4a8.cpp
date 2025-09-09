@@ -38,7 +38,7 @@
 using namespace Catlass;
 
 struct Options {
-    const std::string HELPER = "25_w4a8_matmul [device_id] m n k transA transB ";
+    const std::string HELPER = "31_w4a8_matmul [device_id] m n k transA transB ";
 
     GemmCoord problemShape{128, 128, 128};
     int32_t deviceId{0};
@@ -118,9 +118,9 @@ void Run(Options const &options)
         ACL_CHECK(aclrtMallocHost((void **)(&hostB), sizeB));
         ACL_CHECK(aclrtMallocHost((void **)(&hostC), sizeC));
         ACL_CHECK(aclrtMallocHost((void **)(&hExpected), sizeExpected));
-        ReadFile("../../../examples/25_w4a8_matmul/build/data/inputA.dat", hostA, sizeA);
-        ReadFile("../../../examples/25_w4a8_matmul/build/data/inputB.dat", hostB, sizeB);
-        ReadFile("../../../examples/25_w4a8_matmul/build/data/expected.dat", hExpected, sizeExpected);
+        ReadFile("../../../examples/31_w4a8_matmul/build/data/inputA.dat", hostA, sizeA);
+        ReadFile("../../../examples/31_w4a8_matmul/build/data/inputB.dat", hostB, sizeB);
+        ReadFile("../../../examples/31_w4a8_matmul/build/data/expected.dat", hExpected, sizeExpected);
     }
 
     using ElementA = int8_t;
@@ -242,7 +242,7 @@ void Run(Options const &options)
     }
 
     if (verifyLevel) {
-        WriteFile("../../../examples/25_w4a8_matmul/build/data/outputC.dat", hostC, sizeC);
+        WriteFile("../../../examples/31_w4a8_matmul/build/data/outputC.dat", hostC, sizeC);
         CompareResults<__fp16, float>((__fp16*)hostC, (float*)hExpected, m, k, n);
         ACL_CHECK(aclrtFreeHost(hostA));
         ACL_CHECK(aclrtFreeHost(hostB));
