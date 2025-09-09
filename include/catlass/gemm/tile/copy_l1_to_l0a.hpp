@@ -223,8 +223,8 @@ struct CopyL1ToL0A<ArchTag, Gemm::GemmType<Element, layout::zN, AscendC::TPositi
     using LayoutDst = layout::zZ;
     using LayoutSrc = layout::zN;
 
-    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-    static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
+    static constexpr uint32_t ELE_NUM_PER_C0 = Catlass::divElement<uint32_t, Element>(BYTE_PER_C0);
+    static constexpr uint32_t ELE_NUM_PER_FRACTAL = Catlass::divElement<uint32_t, Element>(BYTE_PER_FRACTAL);
 
     // Methods
 

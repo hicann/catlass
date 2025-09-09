@@ -13,6 +13,11 @@
 #include <vector>
 #include <cstdlib>
 #include <ctime>
+#include "int4.h"
+#include "fp16_t.h"
+
+using int4_t = op::int4;
+using fp16_t = op::fp16_t;
 
 namespace Catlass::golden {
 
@@ -32,6 +37,15 @@ void FillRandomData<int8_t, int>(std::vector<int8_t>& data, int low, int high)
     for (uint64_t i = 0; i < data.size(); ++i) {
         int randomValue = low + rand() % (high - low + 1);
         data[i] = static_cast<int8_t>(randomValue);
+    }
+}
+
+template <>
+void FillRandomData<int4_t, int>(std::vector<int4_t>& data, int low, int high)
+{
+    for (uint64_t i = 0; i < data.size(); ++i) {
+        int randomValue = low + rand() % (high - low + 1);
+        data[i] = static_cast<int4_t>(randomValue);
     }
 }
 

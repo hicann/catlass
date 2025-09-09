@@ -340,8 +340,8 @@ public:
     CATLASS_HOST_DEVICE constexpr
     static nZ MakeLayout(Index orgRows, Index orgCols)
     {
-        constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-        constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
+        constexpr uint32_t ELE_NUM_PER_C0 = Catlass::divElement<uint32_t, Element>(BYTE_PER_C0);
+        constexpr uint32_t ELE_NUM_PER_FRACTAL = Catlass::divElement<uint32_t, Element>(BYTE_PER_FRACTAL);
         Index rowsRound = RoundUp<ELE_NUM_PER_C0>(orgRows);
         Index colsRound = RoundUp<C0_NUM_PER_FRACTAL>(orgCols);
         return nZ(orgRows,
@@ -516,10 +516,11 @@ public:
     CATLASS_HOST_DEVICE constexpr
     static zN MakeLayout(Index orgRows, Index orgCols)
     {
-        constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-        constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
+        constexpr uint32_t ELE_NUM_PER_C0 = Catlass::divElement<uint32_t, Element>(BYTE_PER_C0);
+        constexpr uint32_t ELE_NUM_PER_FRACTAL = Catlass::divElement<uint32_t, Element>(BYTE_PER_FRACTAL);
         Index rowsRound = RoundUp<C0_NUM_PER_FRACTAL>(orgRows);
         Index colsRound = RoundUp<ELE_NUM_PER_C0>(orgCols);
+
         return zN(orgRows,
                   orgCols,
                   C0_NUM_PER_FRACTAL,
@@ -707,8 +708,8 @@ public:
     CATLASS_HOST_DEVICE constexpr
     static zZ MakeLayout(Index orgRows, Index orgCols)
     {
-        constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
-        constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
+        constexpr uint32_t ELE_NUM_PER_C0 = Catlass::divElement<uint32_t, Element>(BYTE_PER_C0);
+        constexpr uint32_t ELE_NUM_PER_FRACTAL = Catlass::divElement<uint32_t, Element>(BYTE_PER_FRACTAL);
         Index rowsRound = RoundUp<C0_NUM_PER_FRACTAL>(orgRows);
         Index colsRound = RoundUp<ELE_NUM_PER_C0>(orgCols);
         return zZ(orgRows,
