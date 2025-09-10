@@ -430,15 +430,16 @@ protected:
         iterParams.kBL1Tail = kBL1TailCheck == 0 ? FilterL1TileShape::Kd * FilterL1TileShape::Ci1 * conv3dParams.khkwcin0() : kBL1TailCheck;
 
         // The k-axis loop iteration parameters of matrix A
+        uint32_t kAL1 = FmapL1TileShape::Kd * FmapL1TileShape::Ci1 * conv3dParams.khkwcin0();
         iterParams.maxKAL1Iter = CeilDiv(conv3dParams.kdcin1(), FmapL1TileShape::Kd * FmapL1TileShape::Ci1) - 1;
-        iterParams.multiKAL1 = CeilDiv(FmapL1TileShape::Kd * FmapL1TileShape::Ci1 * conv3dParams.khkwcin0(), L0TileShape::kL0);
+        iterParams.multiKAL1 = CeilDiv(kAL1, L0TileShape::kL0);
         iterParams.kAL1fullload = conv3dParams.kdcin1() == FmapL1TileShape::Kd * FmapL1TileShape::Ci1;
-        uint32_t kAL1TailCheck = conv3dParams.alignCinKhKwKd() % (FmapL1TileShape::Kd * FmapL1TileShape::Ci1 * conv3dParams.khkwcin0());
-        iterParams.kAL1Tail = kAL1TailCheck == 0 ? FmapL1TileShape::Kd * FmapL1TileShape::Ci1 * conv3dParams.khkwcin0() : kAL1TailCheck;
+        uint32_t kAL1TailCheck = conv3dParams.alignCinKhKwKd() % kAL1;
+        iterParams.kAL1Tail = kAL1TailCheck == 0 ? kAL1 : kAL1TailCheck;
         uint8_t L0ASet2dFlag = conv3dParams.padhead() != 0 || conv3dParams.padtail() != 0 ||
                 conv3dParams.padtop() >= conv3dParams.kh() || conv3dParams.padbottom() >= conv3dParams.kh();
         bool kAL1TailCase = iterParams.kAL1Tail != kAL1;
-        conv3dParams.preloadABL1DbFlag = L1A_STAGES == 2 && L1B_STAGES == 2 && !iterParams.kAL1fullload &&
+        iterParams.preloadABL1DbFlag = L1A_STAGES == 2 && L1B_STAGES == 2 && !iterParams.kAL1fullload &&
                                          !iterParams.kBL1fullload && !L0ASet2dFlag && !kAL1TailCase;
     }
 
@@ -448,24 +449,24 @@ protected:
         // Loop parameters in the M direction
         iterParams.mAL1Tail = actualBlockShape.hw() % FmapL1TileShape::mAL1;
         iterParams.mAL1Tail = iterParams.mAL1Tail == 0 ? FmapL1TileShape::mAL1 : iterParams.mAL1Tail;
-        uint32_t mAL1DivmL0 = CeilDiv(FmapL1TileShape::mAL1, L0TileShape::mL0);
-        uint32_t ddr2l1LoopM = CeilDiv(actualBlockShape.hw(), FmapL1TileShape::mAL1);
-        iterParams.maxMAL1Iter = ddr2l1LoopM - 1;
+        iterParams.mAL1DivmL0 = CeilDiv(FmapL1TileShape::mAL1, L0TileShape::mL0);
+        iterParams.ddr2l1LoopM = CeilDiv(actualBlockShape.hw(), FmapL1TileShape::mAL1);
+        iterParams.maxMAL1Iter = iterParams.ddr2l1LoopM - 1;
         iterParams.mAL0Tail = iterParams.mAL1Tail % L0TileShape::mL0;
         iterParams.mAL0Tail = iterParams.mAL0Tail == 0 ? L0TileShape::mL0 : iterParams.mAL0Tail;
-        iterParams.l12l0LoopM = CeilDiv(FmapL1TileShape::mAL1, L0TileShape::mL0);
+        iterParams.l12l0LoopM = iterParams.mAL1DivmL0;
         iterParams.maxML0Iter = iterParams.l12l0LoopM - 1;
 
         // Loop parameters in the Cout direction
         iterParams.maxNBL1Iter = CeilDiv(actualBlockShape.c1() * conv3dParams.cout0(), FilterL1TileShape::nBL1) - 1;
         iterParams.nBL1Tail = (actualBlockShape.c1() * conv3dParams.cout0()) % FilterL1TileShape::nBL1;
         iterParams.nBL1Tail = iterParams.nBL1Tail == 0 ? FilterL1TileShape::nBL1 : iterParams.nBL1Tail;
-        uint32_t nBL1DivnL0 = CeilDiv(FilterL1TileShape::nBL1, L0TileShape::nL0);
+        iterParams.nBL1DivnL0 = CeilDiv(FilterL1TileShape::nBL1, L0TileShape::nL0);
         iterParams.nBL1TailAlign = CeilDiv(iterParams.nBL1Tail, BLOCK_L0_N) * BLOCK_L0_N;
         iterParams.nL0Tail = iterParams.nBL1Tail % L0TileShape::nL0;
         iterParams.nL0Tail = iterParams.nL0Tail == 0 ? L0TileShape::nL0 : iterParams.nL0Tail;
         iterParams.ddr2l1LoopN = iterParams.maxNBL1Iter + 1;
-        iterParams.l12l0LoopN = nBL1DivnL0;
+        iterParams.l12l0LoopN = iterParams.nBL1DivnL0;
         iterParams.maxNL0Iter = iterParams.l12l0LoopN - 1;
 
         // Loop parameter in the D direction
@@ -491,7 +492,7 @@ protected:
             iterParams.mAL1Iter++;
             iterParams.loadAL1Flag = true;
         }
-        if (iterParams.mAL1Iter == ddr2l1LoopM) {
+        if (iterParams.mAL1Iter == iterParams.ddr2l1LoopM) {
             iterParams.mAL1Iter = 0;
             iterParams.dOutIter++;
         }
@@ -510,23 +511,23 @@ protected:
         while (iterParams.kIter < iterParams.ddr2l0LoopK) {
             if (iterParams.loadAL1Flag || (!iterParams.kAL1fullload && iterParams.kIter % iterParams.multiKAL1 == 0)) {
                 AscendC::PipeBarrier<PIPE_ALL>();
-                AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);
-                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);
+                AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListId]);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListId]);
                 LoadAL1Process(gmBatchFmap, iterParams.kIter / iterParams.multiKAL1, layoutFmap);
                 iterParams.loadAL1Flag = false;
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListId]);
-                AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListId]);
+                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1AListId]);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1AListId]);
             }
             if (iterParams.loadBL1Flag || (!iterParams.kBL1fullload && iterParams.kIter % iterParams.multiKBL1 == 0)) {
                 AscendC::PipeBarrier<PIPE_ALL>();
-                AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
-                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
+                AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1BListId]);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1BListId]);
                 LoadBL1Process(filterGm, iterParams.kIter / iterParams.multiKBL1, layoutFilter);
                 iterParams.loadBL1Flag = false;
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
-                AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
+                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1BListId]);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1BListId]);
             }
-            ReduceKL0AL0BPingPong(isOdd);
+            ReduceKL0AL0BPingPong(isOdd, l1AListId, l1BListId);
             iterParams.kIter++;
             isOdd = iterParams.kIter & 0x1;
         }
@@ -534,7 +535,7 @@ protected:
 
     CATLASS_DEVICE
     void ReduceKPreloadDbAll(AscendC::GlobalTensor<ElementFmap> const &gmBatchFmap, LayoutFmap const &layoutFmap,
-                              AscendC::GlobalTensor<ElementFilter> const &filterGm, LayoutFilter const &layoutFilter)
+                             AscendC::GlobalTensor<ElementFilter> const &filterGm, LayoutFilter const &layoutFilter)
     {
         AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListId]);
         LoadAL1Process(gmBatchFmap, 0, layoutFmap, l1AListId);
@@ -551,13 +552,13 @@ protected:
         uint32_t l1AListIdNext = (l1AListId + 1 < L1A_STAGES) ? (l1AListId + 1) : 0;
         uint32_t l1BListIdNext = (l1BListId + 1 < L1B_STAGES) ? (l1BListId + 1) : 0;
         AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListIdNext]);
-        LoadAL1Process(gmBatchFmap, 0, layoutFmap, l1AListIdNext);
+        LoadAL1Process(gmBatchFmap, 1, layoutFmap, l1AListIdNext);
         iterParams.loadAL1Flag = false;
         AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1AListIdNext]);
         AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1AListIdNext]);
 
         AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1BListIdNext]);
-        LoadBL1Process(filterGm, 0, layoutFilter, l1BListIdNext);
+        LoadBL1Process(filterGm, 1, layoutFilter, l1BListIdNext);
         iterParams.loadBL1Flag = false;
         AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1BListIdNext]);
         AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1BListIdNext]);
@@ -577,28 +578,28 @@ protected:
                 (iterParams.loadAL1Flag || (!iterParams.kAL1fullload && iterParams.kIter % iterParams.multiKAL1 == 0))) {
                 l1AListId = l1AListIdNext;
                 l1AListIdNext = (l1AListId + 1 < L1A_STAGES) ? (l1AListId + 1) : 0;
-                AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListIdNext])
+                AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListIdNext]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListIdNext]);
                 LoadAL1Process(gmBatchFmap, (iterParams.kIter / iterParams.multiKAL1) + 1, layoutFmap, l1AListIdNext);
                 iterParams.loadAL1Flag = false;
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1AListIdNext])
+                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1AListIdNext]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1AListIdNext]);
             }
 
-            if (iterParams.kIter == maxKAL1PreloadIter) {
+            if (iterParams.kIter == maxKBL1PreloadIter) {
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[0]);
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[1]);
                 l1BListId = l1BListIdNext;
-            } else if (iterParams.kIter < maxKAL1PreloadIter &&
+            } else if (iterParams.kIter < maxKBL1PreloadIter &&
                 (iterParams.loadBL1Flag || (!iterParams.kBL1fullload && iterParams.kIter % iterParams.multiKBL1 == 0))) {
                 l1BListId = l1BAListIdNext;
                 l1BListIdNext = (l1BListId + 1 < L1B_STAGES) ? (l1BListId + 1) : 0;
-                AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1BListIdNext])
-                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1BListIdNext]);
-                LoadAL1Process(gmBatchFmap, (iterParams.kIter / iterParams.multiKAL1) + 1, layoutFmap, l1BListIdNext);
+                AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1BListIdNext]);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1BListIdNext]);
+                LoadBL1Process(gmBatchFmap, (iterParams.kIter / iterParams.multiKBL1) + 1, layoutFilter, l1BListIdNext);
                 iterParams.loadBL1Flag = false;
-                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1BListIdNext])
-                AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1BListIdNext]);
+                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1BListIdNext]);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1BListIdNext]);
             }
             ReduceKL0AL0BPingPong(isOdd, l1AListId, l1BListId);
             iterParams.kIter++;
