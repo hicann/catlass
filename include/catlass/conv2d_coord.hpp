@@ -941,6 +941,16 @@ public:
     }
 
     CATLASS_HOST_DEVICE
+    Index howo() const {
+        return this->filterShape.ho() * this->filterShape.wo();
+    }
+
+    CATLASS_HOST_DEVICE
+    Index howoRound() const {
+        return (this->filterShape.howo() + C0 - 1) / C0 * C0;
+    }
+
+    CATLASS_HOST_DEVICE
     ShortIndex const &kh() const {
         return this->configs.kh();
     }
