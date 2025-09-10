@@ -12,38 +12,41 @@
 #define CATLASS_GEMM_DEVICE_DEVICE_GEMM_HPP
 
 #include <acl/acl.h>
-#include "catlass/catlass.hpp"
-#include "catlass/status.hpp"
-#include "catlass/gemm/device/kernel_adapter.hpp"
 
-#if defined(ENABLE_ASCENDC_DUMP)
+#include "catlass/catlass.hpp"
+#include "catlass/device//kernel_adapter.hpp"
+#include "catlass/status.hpp"
+
 #include "catlass/debug.hpp"
-#endif
 
 namespace Catlass::Gemm::Device {
-
-template <class GemmKernel>
+using CatlassKernelType = Catlass::CatlassKernelType;
+template<class GemmKernel, CatlassKernelType Type = CatlassKernelType::KERNEL_TYPE_MIX_AIC_1_2>
 class DeviceGemm {
 public:
     /// Argument structure: User API
     using Arguments = typename GemmKernel::Arguments;
     /// Argument structure: Kernel API
     using Params = typename GemmKernel::Params;
+
 private:
     /// kernel API parameters object
     Params params_;
+
 public:
-    DeviceGemm() {}
-    ~DeviceGemm() {}
+    DeviceGemm()
+    {}
+    ~DeviceGemm()
+    {}
 
     /// Access the Params structure
-    Params const &params() const
+    Params const& params() const
     {
         return params_;
     }
 
     /// Determines whether the GEMM can execute the given problem.
-    static Status CanImplement(Arguments const &args)
+    static Status CanImplement(Arguments const& args)
     {
         if (GemmKernel::CanImplement(args)) {
             return Status::kSuccess;
@@ -53,7 +56,7 @@ public:
     }
 
     /// Gets the workspace size
-    static size_t GetWorkspaceSize(Arguments const &args)
+    static size_t GetWorkspaceSize(Arguments const& args)
     {
         size_t workspace_bytes = 0;
         workspace_bytes += GemmKernel::GetWorkspaceSize(args);
@@ -61,7 +64,7 @@ public:
     }
 
     /// Initializes GEMM state from arguments
-    Status Initialize(Arguments const &args, uint8_t *workspace = nullptr, aclrtStream stream = nullptr)
+    Status Initialize(Arguments const& args, uint8_t* workspace = nullptr, aclrtStream stream = nullptr)
     {
         // Initialize the Params structure
         params_ = GemmKernel::ToUnderlyingArguments(args, workspace);
@@ -72,22 +75,35 @@ public:
     /// Supplied params struct must be construct by calling matmul Kernel::to_underling arguments
     inline Status Run(aclrtStream stream, uint32_t blockDim, uint64_t fftsAddr)
     {
+        if constexpr (Type != CatlassKernelType::KERNEL_TYPE_AIV_ONLY ||
+                      Type != CatlassKernelType::KERNEL_TYPE_AIC_ONLY) {
+            if (fftsAddr == 0) {
+                // Prepare FFTS address
+                uint32_t fftsLen{0};
+                uint64_t fftsAddr{0};
+                rtCheck(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
+            }
+        }
+
 #if defined(ENABLE_ASCENDC_DUMP)
-        uint8_t *ptrDump{nullptr};
-        aclCheck(aclrtMalloc(reinterpret_cast<void **>(&ptrDump), ALL_DUMPSIZE, ACL_MEM_MALLOC_HUGE_FIRST));
-        if (fftsAddr == 0) {
-            Catlass::KernelAdapter<GemmKernel><<<blockDim, nullptr, stream>>>(params_, ptrDump);
+        uint8_t* ptrDump{nullptr};
+        aclCheck(aclrtMalloc(reinterpret_cast<void**>(&ptrDump), ALL_DUMPSIZE, ACL_MEM_MALLOC_HUGE_FIRST));
+        if constexpr (Type == CatlassKernelType::KERNEL_TYPE_AIV_ONLY ||
+                      Type == CatlassKernelType::KERNEL_TYPE_AIC_ONLY) {
+            Catlass::KernelAdapter<GemmKernel, Type>::RunKernel<<<blockDim, nullptr, stream>>>(params_, ptrDump);
         } else {
-            Catlass::KernelAdapter<GemmKernel><<<blockDim, nullptr, stream>>>(params_, fftsAddr, ptrDump);
+            Catlass::KernelAdapter<GemmKernel, Type>::RunKernel<<<blockDim, nullptr, stream>>>(
+                params_, fftsAddr, ptrDump);
         }
         aclCheck(aclrtSynchronizeStream(stream));
         Adx::AdumpPrintWorkSpace(ptrDump, ALL_DUMPSIZE, stream, "device_gemm");
         aclCheck(aclrtFree(ptrDump));
 #else
-        if (fftsAddr == 0) {
-            Catlass::KernelAdapter<GemmKernel><<<blockDim, nullptr, stream>>>(params_);
+        if constexpr (Type == CatlassKernelType::KERNEL_TYPE_AIV_ONLY ||
+                      Type == CatlassKernelType::KERNEL_TYPE_AIC_ONLY) {
+            Catlass::KernelAdapter<GemmKernel, Type>::RunKernel<<<blockDim, nullptr, stream>>>(params_);
         } else {
-            Catlass::KernelAdapter<GemmKernel><<<blockDim, nullptr, stream>>>(params_, fftsAddr);
+            Catlass::KernelAdapter<GemmKernel, Type>::RunKernel<<<blockDim, nullptr, stream>>>(params_, fftsAddr);
         }
 #endif
         return Status::kSuccess;
@@ -106,5 +122,5 @@ public:
 };
 ///////////////////////////////////////////////////////////////////////////////////
 
-} // namespace Catlass::Gemm::Device
+}  // namespace Catlass::Gemm::Device
 #endif

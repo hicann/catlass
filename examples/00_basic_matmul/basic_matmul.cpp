@@ -31,7 +31,7 @@
 #include "catlass/layout/layout.hpp"
 
 #include "catlass/status.hpp"
-#include "catlass/gemm/device/device_gemm.hpp"
+#include "catlass/device/device_gemm.hpp"
 
 using namespace Catlass;
 using fp16_t = op::fp16_t;
@@ -134,7 +134,7 @@ void Run(Options const &options)
     // kernel level
     using MatmulKernel = Gemm::Kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 
-    using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
+    using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel, CatlassKernelType::KERNEL_TYPE_AIC_ONLY>;
     MatmulKernel::Arguments arguments{options.problemShape, deviceA, deviceB, deviceC};
     MatmulAdapter matmul_op;
     matmul_op.CanImplement(arguments);

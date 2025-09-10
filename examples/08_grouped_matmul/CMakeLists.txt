@@ -7,4 +7,4 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 
 set_source_files_properties(grouped_matmul.cpp PROPERTIES LANGUAGE ASCEND)
-catlass_example_add_executable(08_grouped_matmul dav-c220-cube grouped_matmul.cpp)
+catlass_example_add_executable(08_grouped_matmul dav-c220 grouped_matmul.cpp)

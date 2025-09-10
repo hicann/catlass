@@ -7,4 +7,4 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 
 set_source_files_properties(gemv_aiv.cpp PROPERTIES LANGUAGE ASCEND)
-catlass_example_add_executable(17_gemv_aiv dav-c220-vec gemv_aiv.cpp)
+catlass_example_add_executable(17_gemv_aiv dav-c220 gemv_aiv.cpp)

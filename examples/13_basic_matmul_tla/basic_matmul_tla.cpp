@@ -30,7 +30,7 @@
 #include "catlass/gemm/kernel/basic_matmul_tla.hpp"
 #include "catlass/layout/layout.hpp"
 #include "catlass/status.hpp"
-#include "catlass/gemm/device/device_gemm.hpp"
+#include "catlass/device/device_gemm.hpp"
 #include "tla/layout.hpp"
 #include "tla/tensor.hpp"
 

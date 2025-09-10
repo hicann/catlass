@@ -29,7 +29,7 @@
 #include "catlass/gemm/dispatch_policy.hpp"
 #include "catlass/gemm/kernel/optimized_matmul_tla.hpp"
 #include "catlass/status.hpp"
-#include "catlass/gemm/device/device_gemm.hpp"
+#include "catlass/device/device_gemm.hpp"
 #include "tla/layout.hpp"
 #include "tla/tensor.hpp"
 

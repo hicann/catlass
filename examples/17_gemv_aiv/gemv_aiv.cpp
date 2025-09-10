@@ -30,7 +30,7 @@
 #include "catlass/gemv/tile/tile_copy.hpp"
 #include "catlass/gemv/tile/tile_vmad.hpp"
 #include "catlass/gemv/tile/tile_vmuls.hpp"
-#include "catlass/gemv/device/device_gemv.hpp"
+#include "catlass/device/device_gemv.hpp"
 #include "catlass/status.hpp"
 
 using namespace Catlass;

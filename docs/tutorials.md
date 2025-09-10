@@ -55,7 +55,7 @@ cmake >= 3.15
 #include "catlass/layout/layout.hpp"
 
 #include "catlass/status.hpp"
-#include "catlass/gemm/device/device_gemm.hpp"
+#include "catlass/device/device_gemm.hpp"
 
 using namespace Catlass;
 using fp16_t = op::fp16_t;
@@ -176,7 +176,7 @@ void Run(Options const &options)  //
     using MatmulKernel = Gemm::Kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
     
     // 定义Device层适配器
-    using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
+    using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel, KernenType::AIC>;
     MatmulKernel::Arguments arguments{options.problemShape, deviceA, deviceB, deviceC};
 
     /* 第四步，执行模板样例 */
@@ -323,7 +323,7 @@ using BlockScheduler = typename Gemm::Block::SplitkGemmIdentityBlockSwizzle<3, 0
 // kernel level
 using MatmulKernel = Gemm::Kernel::SplitkMatmul<BlockMmad, BlockEpilogue, BlockScheduler, ReduceAdd>;
 
-using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
+using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel, KernenType::MIX>;
 MatmulKernel::Arguments arguments{options.problemShape,
     aicCoreNum,
     sizeof(float),
@@ -366,7 +366,7 @@ matmul_op(stream, aicCoreNum, fftsAddr);
 #include "catlass/layout/layout.hpp"
 
 #include "catlass/status.hpp"
-#include "catlass/gemm/device/device_gemm.hpp"
+#include "catlass/device/device_gemm.hpp"
 
 using namespace Catlass;
 using fp16_t = op::fp16_t;
@@ -479,7 +479,7 @@ void Run(Options const &options)
     // kernel level
     using MatmulKernel = Gemm::Kernel::SplitkMatmul<BlockMmad, BlockEpilogue, BlockScheduler, ReduceAdd>;
 
-    using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
+    using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel, KernenType::MIX>;
     MatmulKernel::Arguments arguments{options.problemShape,
         aicCoreNum,
         sizeof(float),
@@ -596,7 +596,7 @@ msprof op ./splitk_matmul 16 16 32768 0
 #include "catlass/gemm/gemm_type.hpp"
 #include "catlass/layout/layout.hpp"
 #include "catlass/status.hpp"
-#include "catlass/gemm/device/device_gemm.hpp"
+#include "catlass/device/device_gemm.hpp"
 
 using namespace Catlass;
 using fp16_t = op::fp16_t;
@@ -783,7 +783,7 @@ aclError Run(Options const &options)  //
     using BlockEpilogue = void;
 
     using MatmulKernel = Gemm::Kernel::GroupedMatmulSliceM<BlockMmad, BlockEpilogue, BlockScheduler, int64_t>;
-    using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
+    using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel, KernenType::AIC>;
     MatmulKernel::Arguments arguments{options.problemShape, problemCount, deviceGroupList, deviceA, deviceB, deviceC};
 
     /* 第四步，执行模板样例 */

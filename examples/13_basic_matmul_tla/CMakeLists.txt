@@ -7,4 +7,4 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 
 set_source_files_properties(basic_matmul_tla.cpp PROPERTIES LANGUAGE ASCEND)
-catlass_example_add_executable(13_basic_matmul_tla dav-c220-cube basic_matmul_tla.cpp)
+catlass_example_add_executable(13_basic_matmul_tla dav-c220 basic_matmul_tla.cpp)
