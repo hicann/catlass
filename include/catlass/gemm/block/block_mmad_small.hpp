@@ -243,8 +243,7 @@ public:
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(EVENT_ID0);
 
                 // Locate the current tile on L0C
-                MatrixCoord l0COffset{reinterpret_cast<uint32_t>(0U), reinterpret_cast<uint32_t>(0U)};
-                auto l0CTile = l0CTensor[layoutInL0C.GetOffset(l0COffset)];
+                auto l0CTile = l0CTensor;
 
                 // Compute the matrix multiplication on L0A and L0B and write the result to the accumulator
                 // Wait for loading L0B
