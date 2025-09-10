@@ -1,6 +1,11 @@
 #ifndef BASE_INFO_H
 #define BASE_INFO_H
 
+#include "catlass/catlass.hpp"
+#include "catlass/arch/arch.hpp"
+
+constexpr uint32_t CORE_NUM = 20;
+
 enum class LayoutTag : uint8_t { TagRowMajor = 0, TagColumnMajor = 1};
 
 struct TilingParams {

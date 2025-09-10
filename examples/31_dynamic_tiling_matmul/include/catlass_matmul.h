@@ -1,17 +1,16 @@
 #ifndef CATLASS_MATMUL_H
 #define CATLASS_MATMUL_H
 
-#include <runtime/rt_ffts.h>
-#include "acl/acl.h"
-#include "launch_map.h"
+#include "helper.hpp"
+#include "tiling.h"
 
 template <class Dtype>
 struct CatlassMatmulDescriptor {
     TilingParams tilingParams;
     uint8_t *dTilingParams;
-    TilingKey tiingKey;
+    TilingKey tilingKey;
 
-    CatlassMatmulDescript(uint32_t m, uint32_t n, uint32_t k, size_t strideA, size_t strideB, size_t strideC,
+    CatlassMatmulDescriptor(uint32_t m, uint32_t n, uint32_t k, size_t strideA, size_t strideB, size_t strideC,
         LayoutTag layoutTagA, LayoutTag layoutTagB, LayoutTag layoutTagC)
     {
         ACL_CHECK(aclrtMalloc((void **)&dTilingParams, sizeof(TilingParams), ACL_MEM_MALLOC_HUGE_FIRST));
@@ -47,7 +46,7 @@ struct CatlassMatmulDescriptor {
     {
         ACL_CHECK(aclrtFree(dTilingParams));
     }
-}
+};
 
 template <DType>
 size_t CatlassMatmulGetWorkspace(CatlassMatmulDescriptor<Dtype> &desc)

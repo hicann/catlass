@@ -41,6 +41,7 @@ launch_map_template = """
 #define LAUNCH_MAP_H
 
 #include <unordered_map>
+#include <string>
 
 #include "base_info.h"
 
@@ -98,17 +99,17 @@ union TilingKey {{
 std::unordered_map<uint64_t, void(*)(aclrtStream&, uint64_t, 
     uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, TilingParams&)> launchKernelFuncMap = {{ 
 {launch_func_list}
-}}
+}};
 
 using GetWorkspaceFunc = size_t(*)(TilingParams& tilingParams);
 std::unordered_map<uint64_t, GetWorkspaceFunc> getWorkspaceFuncMap = {{
 {workspace_func_list}
-}}
+}};
 
 // only for print kernel Info
 std::unordered_map<uint64_t, std::string> funcNameMap = {{
 {func_name_list}
-}}
+}};
 
 
 #endif // LAUNCH_MAP_H

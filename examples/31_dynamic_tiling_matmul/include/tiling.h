@@ -6,6 +6,8 @@
 #include <string>
 
 #include "base_info.h"
+#include "launch_map.h"
+#include "adjust_tiling.h"
 
 template <class Dtype>
 void GetTiling(TilingParams &tilingParams, TilingKey &tilingKey)

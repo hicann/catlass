@@ -1,6 +1,8 @@
 add_subdirectory(impl)
 
-include_directories(${ASCEND_HOME_PATH}/include/experiment/runtime (${ASCEND_HOME_PATH}/include/experiment/msprof
-    ${ASCEND_HOME_PATH}/include ${CMAKE_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/include))
-link_directories(${ASCEND_HOME_PATH}/lib64)
+include_directories(
+    ${CMAKE_SOURCE_DIR}/include 
+    ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+set_source_files_properties(dynamic_tiling_matmul_half.cpp PROPERTIES LANGUAGE ASCEND)
 add_executable(31_dynamic_tiling_matmul dynamic_tiling_matmul_half.cpp)
