@@ -37,7 +37,7 @@
 #include "catlass/layout/layout.hpp"
 
 #include "catlass/status.hpp"
-#include "catlass/gemm/device/device_gemm.hpp"
+#include "catlass/device/device_gemm.hpp"
 
 using namespace Catlass;
 using bfloat16 = op::bfloat16;

@@ -20,7 +20,7 @@
 #include "catlass/gemm/kernel/optimized_matmul.hpp"
 #include "catlass/layout/layout.hpp"
 #include "catlass/status.hpp"
-#include "catlass/gemm/device/device_gemm.hpp"
+#include "catlass/device/device_gemm.hpp"
 
 #include "catlass_kernel.h"
 #include "common.hpp"

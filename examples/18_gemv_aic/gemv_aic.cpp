@@ -37,7 +37,7 @@
 #include "catlass/epilogue/tile/tile_elemwise_muls.hpp"
 
 #include "catlass/layout/layout.hpp"
-#include "catlass/gemv/device/device_gemv.hpp"
+#include "catlass/device/device_gemv.hpp"
 #include "catlass/status.hpp"
 
 using namespace Catlass;

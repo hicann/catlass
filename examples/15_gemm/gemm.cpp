@@ -37,7 +37,7 @@
 #include "catlass/epilogue/block/block_epilogue.hpp"
 
 #include "catlass/status.hpp"
-#include "catlass/gemm/device/device_gemm.hpp"
+#include "catlass/device/device_gemm.hpp"
 
 using namespace Catlass;
 
