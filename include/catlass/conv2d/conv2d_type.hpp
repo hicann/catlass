@@ -8,12 +8,22 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_LAYOUT_LAYOUT_HPP
-#define CATLASS_LAYOUT_LAYOUT_HPP
+#ifndef CATLASS_CONV2D_CONV2D_TYPE_HPP
+#define CATLASS_CONV2D_CONV2D_TYPE_HPP
 
 #include "catlass/catlass.hpp"
-#include "catlass/layout/matrix.hpp"
-#include "catlass/layout/vector.hpp"
-#include "catlass/layout/conv2d.hpp"
 
-#endif  // CATLASS_LAYOUT_LAYOUT_HPP
+namespace Catlass::Conv2d {
+
+////////////////////////////////////////////////////////////////////
+
+template <class Element_, class Layout_, AscendC::TPosition POSITION_ = AscendC::TPosition::GM>
+struct Conv2dType {
+    using Element = Element_;
+    using Layout = Layout_;
+    static constexpr AscendC::TPosition POSITION = POSITION_;
+};
+
+} // namespace Catlass::Conv2d
+
+#endif // CATLASS_CONV2D_CONV2D_TYPE_HPP
