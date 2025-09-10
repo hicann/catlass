@@ -15,6 +15,7 @@
 #include <vector>
 #include <algorithm>
 #include <random>
+#include <functional>
 
 namespace Catlass {
 
@@ -117,4 +118,4 @@ inline void Erase(std::vector<T> &vec, typename std::vector<T>::size_type num)
 }
 
 } // namespace Catlass
-#endif // CATLASS_TUNER_MTVAR_H
+#endif // CATLASS_TUNER_MTVAR_H

@@ -64,7 +64,7 @@ case_id,task_duration(us),device_id,operation,description,m,n,k,A,B,C
 bash scripts/build.sh -DCATLASS_LIBRARY_KERNELS=basic_matmul mstuner_catlass
 ```
 
-可直接指定具体的单个算子实例的description信息，比如通过如下命令指定仅编译上一节的使用示例中所展示的case_id为1的算子。
+可直接指定具体的单个算子实例的description信息，比如使用如下命令，仅编译快速上手中所展示的case_id为1的算子。
 
 ```bash
 bash scripts/build.sh -DCATLASS_LIBRARY_KERNELS=catlass_gemm_basic_matmul_fp16xRowMajor_fp16xRowMajor_fp16xRowMajor_32x128x128_32x128x32_swizzle3x1 mstuner_catlass
@@ -92,21 +92,21 @@ mstuner_catlass 支持以下命令。
 
 | 命令          | 示例                          | 默认值 | 描述                                                         |
 | ------------- | ----------------------------- |-| ------------------------------------------------------------ |
-| --help, -h    | --help                        | / | 展示工具支持的命令                                           |
-| --kernels     | --kernels=basic_matmul        | / | 过滤寻优的算子类型，其与算子的description列字符串进行子串匹配，未匹配时该算子会被跳过 |
-| --output      | --output=./profile_result.csv | / | 指定算子性能数据落盘文件路径                                 |
-| --device      | --device=0                    | 0 | 指定运行的单卡ID                                             |
-| --m           | --m=256                       | 256 | 指定输入矩阵的维度m                                          |
-| --n           | --n=512                       | 512 | 指定输入矩阵的维度m                                          |
-| --k           | --k=1024                      | 1024 | 指定输入矩阵的维度k                                          |
-| --A           | --A=fp16:row                  | / | 通过指定矩阵A的数据类型与内存排布过滤算子                      |
-| --B           | --B=fp16:column               | / | 通过指定矩阵B的数据类型与内存排布过滤算子                    |
-| --C           | --C=fp16:row                  | / | 通过指定矩阵C的数据类型与内存排布过滤算子                    |
-| --group_count | --group_count=128             | 128 | 指定grouped_matmul类算子的group数量，默认值为128                          |
+| --help, -h    | --help                        | / | 展示工具支持的命令。                                           |
+| --kernels     | --kernels=basic_matmul        | / | 过滤寻优的算子类型，其与算子的description列字符串进行子串匹配，未匹配时该算子会被跳过。 |
+| --output      | --output=./profile_result.csv | / | 指定算子性能数据落盘文件路径。                                 |
+| --device      | --device=0                    | 0 | 指定运行的单卡ID。                                             |
+| --m           | --m=256                       | 256 | 指定输入矩阵的维度m。                                          |
+| --n           | --n=512                       | 512 | 指定输入矩阵的维度m。                                          |
+| --k           | --k=1024                      | 1024 | 指定输入矩阵的维度k。                                          |
+| --A           | --A=fp16:row                  | / | 通过指定矩阵A的数据类型与内存排布过滤算子。                      |
+| --B           | --B=fp16:column               | / | 通过指定矩阵B的数据类型与内存排布过滤算子。                    |
+| --C           | --C=fp16:row                  | / | 通过指定矩阵C的数据类型与内存排布过滤算子。                    |
+| --group_count | --group_count=128             | 128 | 指定grouped_matmul类算子的group数量。                          |
 
 当搜索空间配置并生成了多种A、B、C的数据类型与内存排布时，支持通过`--A/--B/--C=数据类型:内存排布`命令对算子进行过滤。
-- 数据类型支持`u8, int8, int32, fp16, bf16, fp32`
-- 内存排布支持`row, column, nZ, zN, zZ, padding_row_major, padding_column_major, nN`
+- 数据类型支持`u8, int8, int32, fp16, bf16, fp32`。
+- 内存排布支持`row, column, nZ, zN, zZ, padding_row_major, padding_column_major, nN`。
 - 要求输入`<data:layout>`的格式，输入样例如：`fp16:row`，`fp32:zZ`。
 注意：不指定`--output`时，不会落盘算子性能数据。
 

@@ -33,6 +33,7 @@ add_dependencies(mstuner_catlass
 )
 
 target_link_libraries(mstuner_catlass PRIVATE
+    stdc++fs
     pthread
     tiling_api
     platform
@@ -47,4 +48,4 @@ target_link_libraries(mstuner_catlass PRIVATE
 
 install(TARGETS mstuner_catlass
         DESTINATION bin
-        COMPONENT mstuner_catlass)
+        COMPONENT mstuner_catlass)
