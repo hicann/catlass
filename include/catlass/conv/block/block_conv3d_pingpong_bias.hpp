@@ -513,7 +513,7 @@ protected:
                 AscendC::PipeBarrier<PIPE_ALL>();
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListId]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListId]);
-                LoadAL1Process(gmBatchFmap, iterParams.kIter / iterParams.multiKAL1, layoutFmap);
+                LoadAL1Process(gmBatchFmap, iterParams.kIter / iterParams.multiKAL1, layoutFmap, l1AListId);
                 iterParams.loadAL1Flag = false;
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1AListId]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1AListId]);
@@ -522,7 +522,7 @@ protected:
                 AscendC::PipeBarrier<PIPE_ALL>();
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1BListId]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1BListId]);
-                LoadBL1Process(filterGm, iterParams.kIter / iterParams.multiKBL1, layoutFilter);
+                LoadBL1Process(filterGm, iterParams.kIter / iterParams.multiKBL1, layoutFilter, l1BListId);
                 iterParams.loadBL1Flag = false;
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1BListId]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1BListId]);
@@ -592,11 +592,11 @@ protected:
                 l1BListId = l1BListIdNext;
             } else if (iterParams.kIter < maxKBL1PreloadIter &&
                 (iterParams.loadBL1Flag || (!iterParams.kBL1fullload && iterParams.kIter % iterParams.multiKBL1 == 0))) {
-                l1BListId = l1BAListIdNext;
+                l1BListId = l1BListIdNext;
                 l1BListIdNext = (l1BListId + 1 < L1B_STAGES) ? (l1BListId + 1) : 0;
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1BListIdNext]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1BListIdNext]);
-                LoadBL1Process(gmBatchFmap, (iterParams.kIter / iterParams.multiKBL1) + 1, layoutFilter, l1BListIdNext);
+                LoadBL1Process(filterGm, (iterParams.kIter / iterParams.multiKBL1) + 1, layoutFilter, l1BListIdNext);
                 iterParams.loadBL1Flag = false;
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1BListIdNext]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1BListIdNext]);
