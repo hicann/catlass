@@ -114,7 +114,6 @@ public:
 
         // For small-shape matmul, each AI Core computes only one block.
         uint32_t loopIdx = AscendC::GetBlockIdx();
-
         if (loopIdx < totalLoops) {
             // Compute block location
             GemmCoord blockCoord{loopIdx / nLoops, loopIdx % nLoops, 0};
