@@ -39,6 +39,17 @@ list(APPEND CATLASS_LIBRARY_GENERATED_SRCS src/manifest.cpp)
 
 set_source_files_properties(${CATLASS_LIBRARY_GENERATED_SRCS} PROPERTIES LANGUAGE ASCEND)
 
+add_compile_options(
+    $<$<COMPILE_LANGUAGE:ASCEND>:-Wno-macro-redefined>
+    $<$<COMPILE_LANGUAGE:ASCEND>:-Wno-ignored-attributes>
+
+    "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-stack-size=0x8000>"
+    "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-function-stack-size=0x8000>"
+    "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-record-overflow=true>"
+    "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-addr-transform>"
+    "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-dcci-insert-for-scalar=false>"
+)
+
 add_compile_definitions(L2_CACHE_HINT)
 add_compile_definitions(TILING_KEY_VAR)
 
