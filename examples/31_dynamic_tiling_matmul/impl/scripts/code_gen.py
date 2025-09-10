@@ -2,7 +2,7 @@ import os
 import sys
 import itertools
 
-WRAPPER_CODE_PATH = "../warpper"
+WRAPPER_CODE_PATH = "../wrapper"
 
 LAYOUT_TAG_SET = [0, 1]  # 0 is RowMajor, 1 is ColumnMajor
 LAYOUT_TAG_MAP = {0: "Catlass::layout::RowMajor", 1: "Catlass::layout::ColumnMajor"}
@@ -41,6 +41,9 @@ launch_map_template = """
 #define LAUNCH_MAP_H
 
 #include <unordered_map>
+
+#include "base_info.h"
+
 union TilingKey {{
     uint64_t value;
     struct {{
@@ -86,8 +89,8 @@ union TilingKey {{
     }}
 }};
 
-#define DECLARE_KERNEL_FUNC(kernelName) \
-    void Launch##kernelName(aclerStream&, uint64_t, uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, TilingParams&); \
+#define DECLARE_KERNEL_FUNC(kernelName) \\
+    void Launch##kernelName(aclrtStream&, uint64_t, uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, TilingParams&); \\
     size_t kernelName##GetWorkspaceSize(TilingParams&);
 
 {declare_list}
@@ -192,4 +195,3 @@ if __name__ == "__main__":
 
     gen_common_matmul_code("CommonMatmulKernel", "common_matmul_kernel", 0, str_dtype, kernel_info)
     gen_launch_map_code(kernel_info)
-    print(kernel_info)
