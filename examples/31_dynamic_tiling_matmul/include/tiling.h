@@ -27,20 +27,47 @@ void PrintTilingParams(const TilingParams &tilingParams)
     if (m1InL0 && n1InL0) {
         // TODO
     }
-    std::cout << std::dec << "m: " << tilingParams.m << " ,n: " << tilingParams.n << " ,k: " << tilingParams.k
-              << " ,layoutTagA: " << static_cast<uint32_t>(tilingParams.layoutTagA)
-              << " ,layoutTagB: " << static_cast<uint32_t>(tilingParams.layoutTagB) << std::endl
-              << "m1: " << static_cast<uint32_t>(tilingParams.m1) * 16
-              << " ,n1: " << static_cast<uint32_t>(tilingParams.m1) * 16
-              << " ,k1: " << static_cast<uint32_t>(tilingParams.m1) * 16 << std::endl
-              << "m1InL0 " << static_cast<uint32_t>(m1InL0)
-              << " ,n1InL0 " << static_cast<uint32_t>(n1InL0)
-              << " ,k1InL0 " << static_cast<uint32_t>(k1LnL0) << std::endl
-              << "paddingTagA: " << static_cast<uint32_t>(tilingParams.paddingTagB)
-              << " ,paddingTagB: " << static_cast<uint32_t>(tilingParams.paddingTagB) << std::endl
-              << "aivm1: " << static_cast<uint32_t>(tilingParams.aivm1)
-              << " ,aivn1: " << static_cast<uint32_t>(tilingParams.aivn1) << std::endl
-              << " ,blockDim: " << static_cast<uint32_t>(tilingParams.blockDim) << std::endl;
+    std::cout << std::dec
+    << "┌────────────────────────────────────────────────────────────┐\n"
+    << "│                    Tiling Parameters                       │\n"
+    << "├──────────────────────────────┬─────────────────────────────┤\n"
+    << "│ Basic Dimensions             │ Values                      │\n"
+    << "├──────────────────────────────┼─────────────────────────────┤\n"
+    << "│ m                            │ " << std::setw(27) << tilingParams.m << " │\n"
+    << "│ n                            │ " << std::setw(27) << tilingParams.n << " │\n"
+    << "│ k                            │ " << std::setw(27) << tilingParams.k << " │\n"
+    << "├──────────────────────────────┼─────────────────────────────┤\n"
+    << "│ Layout Tags                  │ Values                      │\n"
+    << "├──────────────────────────────┼─────────────────────────────┤\n"
+    << "│ layoutTagA                   │ " << std::setw(27) << static_cast<uint32_t>(tilingParams.layoutTagA) << " │\n"
+    << "│ layoutTagB                   │ " << std::setw(27) << static_cast<uint32_t>(tilingParams.layoutTagB) << " │\n"
+    << "├──────────────────────────────┼─────────────────────────────┤\n"
+    << "│ Tile Sizes (x16)             │ Values                      │\n"
+    << "├──────────────────────────────┼─────────────────────────────┤\n"
+    << "│ m1                           │ " << std::setw(27) << static_cast<uint32_t>(tilingParams.m1) * 16 << " │\n"
+    << "│ n1                           │ " << std::setw(27) << static_cast<uint32_t>(tilingParams.n1) * 16 << " │\n"
+    << "│ k1                           │ " << std::setw(27) << static_cast<uint32_t>(tilingParams.k1) * 16 << " │\n"
+    << "├──────────────────────────────┼─────────────────────────────┤\n"
+    << "│ L0 Cache Sizes               │ Values                      │\n"
+    << "├──────────────────────────────┼─────────────────────────────┤\n"
+    << "│ m1InL0                       │ " << std::setw(27) << static_cast<uint32_t>(m1InL0) << " │\n"
+    << "│ n1InL0                       │ " << std::setw(27) << static_cast<uint32_t>(n1InL0) << " │\n"
+    << "│ k1InL0                       │ " << std::setw(27) << static_cast<uint32_t>(k1LnL0) << " │\n"
+    << "├──────────────────────────────┼─────────────────────────────┤\n"
+    << "│ Padding Tags                 │ Values                      │\n"
+    << "├──────────────────────────────┼─────────────────────────────┤\n"
+    << "│ paddingTagA                  │ " << std::setw(27) << static_cast<uint32_t>(tilingParams.paddingTagA) << " │\n"
+    << "│ paddingTagB                  │ " << std::setw(27) << static_cast<uint32_t>(tilingParams.paddingTagB) << " │\n"
+    << "├──────────────────────────────┼─────────────────────────────┤\n"
+    << "│ AIV Parameters               │ Values                      │\n"
+    << "├──────────────────────────────┼─────────────────────────────┤\n"
+    << "│ aivm1                        │ " << std::setw(27) << static_cast<uint32_t>(tilingParams.aivm1) << " │\n"
+    << "│ aivn1                        │ " << std::setw(27) << static_cast<uint32_t>(tilingParams.aivn1) << " │\n"
+    << "├──────────────────────────────┼─────────────────────────────┤\n"
+    << "│ Block Dimension              │ Values                      │\n"
+    << "├──────────────────────────────┼─────────────────────────────┤\n"
+    << "│ blockDim                     │ " << std::setw(27) << static_cast<uint32_t>(tilingParams.blockDim) << " │\n"
+    << "└──────────────────────────────┴─────────────────────────────┘" << std::endl;
 }
 
 #endif  // TILING_H

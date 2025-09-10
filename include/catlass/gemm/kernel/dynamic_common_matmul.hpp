@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_GEMM_KERNEL_OPTIMIZED_MATMUL_HPP
-#define CATLASS_GEMM_KERNEL_OPTIMIZED_MATMUL_HPP
+#ifndef CATLASS_GEMM_KERNEL_DYNAMIC_COMMON_MATMUL_HPP
+#define CATLASS_GEMM_KERNEL_DYNAMIC_COMMON_MATMUL_HPP
 
 #include "catlass/catlass.hpp"
 #include "catlass/coord.hpp"
@@ -39,6 +39,7 @@ public:
     struct Params {
         // Data members
         GemmCoord problemShape;
+        GemmCoord l1TileShape;
         GM_ADDR ptrA;
         LayoutA layoutA;
         GM_ADDR ptrB;
@@ -52,10 +53,10 @@ public:
         {}
 
         CATLASS_HOST_DEVICE
-        Params(GemmCoord const &problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_, LayoutB layoutB_,
-            GM_ADDR ptrC_, LayoutC layoutC_)
-            : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_), layoutB(layoutB_), ptrC(ptrC_),
-              layoutC(layoutC_)
+        Params(GemmCoord const &problemShape_, GemmCoord const &l1TileShape_, GM_ADDR ptrA_, LayoutA& layoutA_,
+            GM_ADDR ptrB_, LayoutB& layoutB_, GM_ADDR ptrC_, LayoutC& layoutC_)
+            : problemShape(problemShape_), l1TileShape(l1TileShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_),
+              layoutB(layoutB_), ptrC(ptrC_), layoutC(layoutC_)
         {}
     };
 
@@ -65,7 +66,6 @@ public:
     {}
 
     /// Executes matmul
-    template <>
     CATLASS_DEVICE void operator()(Params const &params, Catlass::Arch::Resource<ArchTag> &resource)
     {
         BlockScheduler matmulBlockScheduler(
@@ -114,11 +114,11 @@ public:
             int64_t gmOffsetC = params.layoutC.GetOffset(offsetC);
 
             MatrixCoord offsetNextA{
-                nextBlockIdCoord.m() * params.l1TileShape.m(), nextBlockIdCoord.k() * params.l1TileShape.k()};
+                nextBlockCoord.m() * params.l1TileShape.m(), nextBlockCoord.k() * params.l1TileShape.k()};
             MatrixCoord offsetNextB{
-                nextBlockIdCoord.k() * params.l1TileShape.k(), nextBlockIdCoord.n() * params.l1TileShape.n()};
-            int64_t gmOffsetNextA = layoutA.GetOffset(offsetNextA);
-            int64_t gmOffsetNextB = layoutB.GetOffset(offsetNextB);
+                nextBlockCoord.k() * params.l1TileShape.k(), nextBlockCoord.n() * params.l1TileShape.n()};
+            int64_t gmOffsetNextA = params.layoutA.GetOffset(offsetNextA);
+            int64_t gmOffsetNextB = params.layoutB.GetOffset(offsetNextB);
 
             // Compute block-scoped matrix multiply-add
             blockMmad(gmA[gmOffsetA],
@@ -140,4 +140,4 @@ public:
 
 }  // namespace Catlass::Gemm::Kernel
 
-#endif  // CATLASS_GEMM_KERNEL_OPTIMIZED_MATMUL_HPP
+#endif  // CATLASS_GEMM_KERNEL_DYNAMIC_COMMON_MATMUL_HPP

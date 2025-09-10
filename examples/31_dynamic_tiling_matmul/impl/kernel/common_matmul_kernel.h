@@ -1,40 +1,43 @@
 #ifndef COMMON_MATMUL_KERNEL_H
 #define COMMON_MATMUL_KERNEL_H
 
+#include "base_info.h"
+#include "acl/acl.h"
 #include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
 #include "catlass/layout/layout.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
-#include "catlass/gemm/kernel/dynamic_matmul.hpp"
+#include "catlass/gemm/kernel/dynamic_common_matmul.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 
 template <class ArchTag, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC>
-CATLASS_DEVICE void CommomDynamicMatmul(GemmCoord &problemShape, GemmCoord &l1TileShape, GM_ADDR gmA, LayoutA &layoutA,
-    GM_ADDR gmB, LayoutB &layoutB, GM_ADDR gmC, LayoutC &layoutC, Catlass::Arch::Resource<ArchTag> &resource)
+CATLASS_DEVICE void CommonDynamicMatmul(Catlass::GemmCoord &problemShape, Catlass::GemmCoord &l1TileShape, GM_ADDR gmA,
+    LayoutA &layoutA, GM_ADDR gmB, LayoutB &layoutB, GM_ADDR gmC, LayoutC &layoutC,
+    Catlass::Arch::Resource<ArchTag> &resource)
 {
     constexpr bool enableUnitFlag = true;
     constexpr bool enableShuffleK = true;
-    using DispatchPolicy = Catlass::Gemm::MmadAtlasA2Dynamic<enableShuffleK, enableShuffleK>;
+    using DispatchPolicy = Catlass::Gemm::MmadAtlasA2DynamicCommon<enableShuffleK, enableShuffleK>;
 
-    using Atype = Catlass::Gemm::GemmType<ElementA, LayoutA>;
-    using Btype = Catlass::Gemm::GemmType<ElementB, LayoutB>;
-    using Ctype = Catlass::Gemm::GemmType<ElementC, LayoutC>;
+    using AType = Catlass::Gemm::GemmType<ElementA, LayoutA>;
+    using BType = Catlass::Gemm::GemmType<ElementB, LayoutB>;
+    using CType = Catlass::Gemm::GemmType<ElementC, LayoutC>;
 
-    using BlockMmad = Catlass::Gemm::Block::BlockMmad<DispatchPolicy, void, void, AType, BType, Ctype>;
+    using BlockMmad = Catlass::Gemm::Block::BlockMmad<DispatchPolicy, void, void, AType, BType, CType>;
     using BlockEpilogue = void;
     if (problemShape.m() > problemShape.n()) {
-        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
+        using BlockScheduler = typename Catlass::Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
         // kernel level
-        using MatmulKernel = Catlass::Gemm::Kernel::DynamicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
+        using MatmulKernel = Catlass::Gemm::Kernel::DynamicCommonMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
         typename MatmulKernel::Params params{problemShape, l1TileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC};
         // call a kernel
         MatmulKernel matmul;
         matmul(params, resource);
     } else {
-        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
+        using BlockScheduler = typename Catlass::Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
         // kernel level
-        using MatmulKernel = Catlass::Gemm::Kernel::DynamicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
+        using MatmulKernel = Catlass::Gemm::Kernel::DynamicCommonMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
         typename MatmulKernel::Params params{problemShape, l1TileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC};
         // call a kernel
         MatmulKernel matmul;
@@ -43,15 +46,15 @@ CATLASS_DEVICE void CommomDynamicMatmul(GemmCoord &problemShape, GemmCoord &l1Ti
 }
 
 template <class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC>
-CATLASS_GLOBAL void CommomMatmulKernel(__gm__ uint8_t *__restrict__ gmA, __gm__ uint8_t *__restrict__ gmB,
-    __gm__ uint8_t *__restrict__ gmB, __gm__ uint8_t *__restrict__ tilingData)
+CATLASS_GLOBAL void CommonMatmulKernel(__gm__ uint8_t *__restrict__ gmA, __gm__ uint8_t *__restrict__ gmB,
+    __gm__ uint8_t *__restrict__ gmC, __gm__ uint8_t *__restrict__ tilingData)
 {
-    using ArchTag = Arch::AtlasA2;
+    using ArchTag = Catlass::Arch::AtlasA2;
     Catlass::Arch::Resource<ArchTag> resource;
 
     uint8_t tilingParams[48];
     *(uint64_t *)(tilingParams) = *(reinterpret_cast<__gm__ uint64_t *>(tilingData));
-    *(uint32_t *)(tilingParams + 8) = *(reinterpret_cast<__gm__ uint64_t *>(tilingData + 8));
+    *(uint32_t *)(tilingParams + 8) = *(reinterpret_cast<__gm__ uint32_t *>(tilingData + 8));
     *(uint64_t *)(tilingParams + 12) = *(reinterpret_cast<__gm__ uint64_t *>(tilingData + 16));
     *(uint64_t *)(tilingParams + 20) = *(reinterpret_cast<__gm__ uint64_t *>(tilingData + 24));
     *(uint64_t *)(tilingParams + 28) = *(reinterpret_cast<__gm__ uint64_t *>(tilingData + 32));
@@ -74,8 +77,8 @@ CATLASS_GLOBAL void CommomMatmulKernel(__gm__ uint8_t *__restrict__ gmA, __gm__ 
     uint32_t n1 = *(reinterpret_cast<uint8_t *>(tilingParams + 39)) * 16;
     uint32_t k1 = *(reinterpret_cast<uint8_t *>(tilingParams + 40)) * 16;
 
-    GemmCoord problemShape(m, n, k);
-    GemmCoord l1TileShape(m1, n1, k1);
+    Catlass::GemmCoord problemShape(m, n, k);
+    Catlass::GemmCoord l1TileShape(m1, n1, k1);
     LayoutA layoutA{m, k, strideA};
     LayoutB layoutB{k, n, strideB};
     LayoutC layoutC{m, n, strideC};
@@ -92,7 +95,8 @@ void LaunchCommonMatmulKernel(aclrtStream &stream, uint64_t fftsAddr, uint8_t *d
 }
 
 template <class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC>
-size_t CommonMatmulKernelGetWorkspaceSize(TilingParams& tilingParams) {
+size_t CommonMatmulKernelGetWorkspaceSize(TilingParams &tilingParams)
+{
     return 0;
 }
 

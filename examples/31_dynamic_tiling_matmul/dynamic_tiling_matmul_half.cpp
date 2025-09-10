@@ -14,6 +14,7 @@ void Run(aclrtStream &stream, uint32_t m, uint32_t n, uint32_t k, LayoutTag layo
 {
     CatlassMatmulDescriptor<fp16_t> desc;
     desc.SetMatmulInfo(m, n, k, layoutTagA, layoutTagB, LayoutTag::TagRowMajor);
+    PrintCatlassMatmulInfo(desc);
 
     size_t lenA = static_cast<size_t>(m) * k;
     size_t lenB = static_cast<size_t>(k) * n;
@@ -64,7 +65,7 @@ int main(int argc, const char **argv)
     LayoutTag layoutTagB = static_cast<LayoutTag>(std::atoi(argv[5]));
     Run(stream, m, n, k, layoutTagA, layoutTagB);
 
-    ACL_CHECK(aclrtDestroyStream(&stream));
+    ACL_CHECK(aclrtDestroyStream(stream));
     ACL_CHECK(aclrtResetDevice(deviceId));
     ACL_CHECK(aclFinalize());
 }

@@ -1,7 +1,6 @@
 #ifndef BASE_INFO_H
 #define BASE_INFO_H
 
-#include "fp16_t.h"
 #include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
 
@@ -14,9 +13,9 @@ struct TilingParams {
     uint32_t m{0};
     uint32_t n{0};
     uint32_t k{0};
-    uint32_t strideA{0};
-    uint32_t strideB{0};
-    uint32_t strideC{0};
+    uint64_t strideA{0};
+    uint64_t strideB{0};
+    uint64_t strideC{0};
     uint8_t layoutTagA{0};
     uint8_t layoutTagB{0};
     uint8_t m1{0};

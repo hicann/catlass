@@ -21,7 +21,6 @@ struct CatlassMatmulDescriptor {
         ACL_CHECK(aclrtMalloc((void **)&dTilingParams, sizeof(TilingParams), ACL_MEM_MALLOC_HUGE_FIRST));
     }
 
-
     void SetMatmulInfo(
         uint32_t m, uint32_t n, uint32_t k, LayoutTag layoutTagA, LayoutTag layoutTagB, LayoutTag layoutTagC)
     {
@@ -72,6 +71,14 @@ void ExecuteCatlassMatmul(
         desc.dTilingParams, sizeof(TilingParams), &desc.tilingParams, sizeof(TilingParams), ACL_MEMCPY_HOST_TO_DEVICE));
 
     launchKernelFuncMap[desc.tilingKey.value](stream, fftsAddr, dA, dB, dC, dW, desc.dTilingParams, desc.tilingParams);
+}
+
+template <class DType>
+void PrintCatlassMatmulInfo(CatlassMatmulDescriptor<DType> &desc)
+{
+    PrintTilingParams<DType>(desc.tilingParams);
+    std::cout << "Kernel Func Name: " << funcNameMap[desc.tilingKey.value] << std::endl;
+    std::cout << "TilingKey: " << std::hex << desc.tilingKey.value << std::endl;
 }
 
 #endif  // CATLASS_MATMUL_H
