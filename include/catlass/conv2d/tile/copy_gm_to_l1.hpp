@@ -95,10 +95,10 @@ struct CopyGmToL1<ArchTag, Conv2d::Conv2dType<Element, layout::Filter, AscendC::
         uint32_t cin1Actual = layoutSrc.shape(0);
         uint32_t KhKw = layoutSrc.shape(1) * layoutSrc.shape(2);
         uint32_t coutActual = layoutSrc.shape(3);
+        uint32_t coutRound = RoundUp<ELE_NUM_PER_C0>(coutActual);
         uint32_t strideKhKw = layoutSrc.stride(2); // Cout * ELE_NUM_PER_C0
         uint32_t Cout = strideKhKw / ELE_NUM_PER_C0;
-        uint32_t coutBlock = layoutDst.shape(3);
-        
+
         AscendC::DataCopy(
             dstTensor,
             srcTensor,
@@ -106,7 +106,7 @@ struct CopyGmToL1<ArchTag, Conv2d::Conv2dType<Element, layout::Filter, AscendC::
                 cin1Actual * KhKw, // blockCount 连续传输数据块个数
                 coutActual * ELE_NUM_PER_C0 * sizeof(Element) / 32, // blockLen 每个连续传输数据块长度
                 (Cout - coutActual) * ELE_NUM_PER_C0 * sizeof(Element) / 32, // 源操作数，相邻连续数据块的间隔（前面一个数据块的尾与后面数据块的头的间隔），单位为datablock(32Bytes)
-                (coutBlock - coutActual) * ELE_NUM_PER_C0 * sizeof(Element) / 32 // 目的操作数，相邻连续数据块间的间隔（前面一个数据块的尾与后面数据块的头的间隔），单位为datablock(32Bytes)
+                (coutRound - coutActual) * ELE_NUM_PER_C0 * sizeof(Element) / 32 // 目的操作数，相邻连续数据块间的间隔（前面一个数据块的尾与后面数据块的头的间隔），单位为datablock(32Bytes)
             )
         );
     }

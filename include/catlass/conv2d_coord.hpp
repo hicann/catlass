@@ -942,12 +942,12 @@ public:
 
     CATLASS_HOST_DEVICE
     Index howo() const {
-        return this->filterShape.ho() * this->filterShape.wo();
+        return this->outputShape.ho() * this->outputShape.wo();
     }
 
     CATLASS_HOST_DEVICE
     Index howoRound() const {
-        return (this->filterShape.howo() + C0 - 1) / C0 * C0;
+        return (this->howo() + C0 - 1) / C0 * C0;
     }
 
     CATLASS_HOST_DEVICE
