@@ -164,7 +164,8 @@ void Run(Options const &options) {
   auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
   using ArchTag = Arch::AtlasA2;
-  using DispatchPolicy = Conv2d::MmadAtlasA2Pingpong<true>;
+  using ENABLE_UNIT_FLAG = false;
+  using DispatchPolicy = Conv2d::MmadAtlasA2Pingpong<ENABLE_UNIT_FLAG>;
   using L1TileShape = Catlass::PostIm2colShape<8, 12, 96, 8>; // (hoBlock, woBlock, coutBlock, cin1Block)
   using L0TileShape = Catlass::PostIm2colShape<8, 12, 96, 1>; 
 //   using L1TileShape = Catlass::PostIm2colShape<4, 4, 16, 2>; // (hoBlock, woBlock, coutBlock, cin1Block)
