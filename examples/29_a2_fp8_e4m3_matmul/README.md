@@ -8,7 +8,15 @@
 │   └── fp8_matmul.cpp   # 主文件
 ```
 ## 功能介绍
-该算子支持输入A矩阵和B矩阵的数据类型为FP8 E4M3格式（软实现），然后进行矩阵乘输出C矩阵。
+该算子支持输入A矩阵和B矩阵的数据类型为FP8 E4M3格式（软实现），然后进行矩阵乘输出C矩阵（FP16）。
+## 实现细节
+1、输入处理：接收两个FP8 E4M3格式的输入矩阵A和B
+
+2、伪量化：将FP8数据伪量化成FP16格式（per-tensor量化模式）
+
+3、矩阵乘：使用FP16数据进行矩阵乘，中间结果使用FP32精度进行累加
+
+4、输出转换：将最终结果转换成FP16格式输出
 ## 使用示例
 example使用
 - 第一步，编译
@@ -61,3 +69,5 @@ Compare success.
 | 1       | 1       | layout::ColumnMajor | layout::ColumnMajor |
 
 2、对比FP16 Matmul，该样例针对大shape的case有较为明显的显存收益
+
+3、针对小shape场景，可以参考[catlass_optimize_guidance](../../docs/catlass_optimize_guidance.md#tiling优化)对样例进行tiling调优
