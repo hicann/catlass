@@ -11,12 +11,16 @@
 #ifndef CATLASS_DETAIL_MACROS_HPP
 #define CATLASS_DETAIL_MACROS_HPP
 
-#define CATLASS_DEVICE __forceinline__ [aicore]
+#if defined(__CCE__)
+#include <kernel_operator.h>
+#endif
+
+#define CATLASS_DEVICE __forceinline__ __aicore__
 #ifdef __CCE__
 #define CATLASS_HOST_DEVICE __forceinline__ [host, aicore]
 #else
 #define CATLASS_HOST_DEVICE
 #endif
-#define CATLASS_GLOBAL __global__ [aicore]
+#define CATLASS_GLOBAL __global__ __aicore__
 
 #endif  // CATLASS_DETAIL_MACROS_HPP
