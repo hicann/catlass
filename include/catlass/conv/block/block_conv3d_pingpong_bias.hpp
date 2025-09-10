@@ -513,6 +513,7 @@ protected:
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);
                 LoadAL1Process(gmBatchFmap, iterParams.kIter / iterParams.multiKAL1, layoutFmap);
+                iterParams.loadAL1Flag = false;
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListId]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListId]);
             }
@@ -521,6 +522,7 @@ protected:
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);
                 LoadBL1Process(filterGm, iterParams.kIter / iterParams.multiKBL1, layoutFilter);
+                iterParams.loadBL1Flag = false;
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
             }
@@ -536,24 +538,27 @@ protected:
     {
         AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListId]);
         LoadAL1Process(gmBatchFmap, 0, layoutFmap, l1AListId);
+        iterParams.loadAL1Flag = true;
         AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1AListId]);
         AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1AListId]);
 
         AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1BListId]);
-        LoadAL1Process(filterGm, 0, layoutFilter, l1BListId);
+        LoadBL1Process(filterGm, 0, layoutFilter, l1BListId);
+        iterParams.loadBL1Flag = true;
         AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1BListId]);
         AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1BListId]);
 
         uint32_t l1AListIdNext = (l1AListId + 1 < L1A_STAGES) ? (l1AListId + 1) : 0;
         uint32_t l1BListIdNext = (l1BListId + 1 < L1B_STAGES) ? (l1BListId + 1) : 0;
-
         AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListIdNext]);
         LoadAL1Process(gmBatchFmap, 0, layoutFmap, l1AListIdNext);
+        iterParams.loadAL1Flag = false;
         AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1AListIdNext]);
         AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1AListIdNext]);
 
         AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1BListIdNext]);
-        LoadAL1Process(filterGm, 0, layoutFilter, l1BListIdNext);
+        LoadBL1Process(filterGm, 0, layoutFilter, l1BListIdNext);
+        iterParams.loadBL1Flag = false;
         AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1BListIdNext]);
         AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1BListIdNext]);
 
@@ -575,6 +580,7 @@ protected:
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListIdNext])
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListIdNext]);
                 LoadAL1Process(gmBatchFmap, (iterParams.kIter / iterParams.multiKAL1) + 1, layoutFmap, l1AListIdNext);
+                iterParams.loadAL1Flag = false;
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1AListIdNext])
                 AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1AListIdNext]);
             }
@@ -590,6 +596,7 @@ protected:
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1BListIdNext])
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1BListIdNext]);
                 LoadAL1Process(gmBatchFmap, (iterParams.kIter / iterParams.multiKAL1) + 1, layoutFmap, l1BListIdNext);
+                iterParams.loadBL1Flag = false;
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1BListIdNext])
                 AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1BListIdNext]);
             }
@@ -728,7 +735,6 @@ protected:
         auto gmTileFiler = filterGm[layoutTileFilter.GetOffset(gmTileFilterOffset)];
         layoutFilterInL1 = LayoutFilterInL1::template MakeLayout<ElementFilter>(currentKBL1, currentNBL1);
         copyGmToL1B(l1BTensorList[l1ListId], gmTileFiler, layoutFilterInL1, layoutTileFilter);
-        iterParams.loadBL1Flag = false;
     }
 
     CATLASS_DEVICE
