@@ -3,7 +3,7 @@
 
 #include "adjust_tiling_b16.h"
 
-template <class Dtype>
+template <class DType>
 void AdjustTiling(TilingParams &tilingParams)
 {
     uint32_t layoutTagA = tilingParams.layoutTagA;

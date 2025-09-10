@@ -9,13 +9,11 @@
  */
 
 #include "catlass_matmul.h"
-#include "fp16_t.h"
-using fp16_t = op::fp16_t;
 
 void Run(aclrtStream &stream, uint32_t m, uint32_t n, uint32_t k, LayoutTag layoutTagA, LayoutTag layoutTagB)
 {
     CatlassMatmulDescriptor<fp16_t> desc;
-    desc.SetMatmulInfo(m, n, k, layoutTagA, layoutTagB, layoutTagC);
+    desc.SetMatmulInfo(m, n, k, layoutTagA, layoutTagB, LayoutTag::TagRowMajor);
 
     size_t lenA = static_cast<size_t>(m) * k;
     size_t lenB = static_cast<size_t>(k) * n;
@@ -26,7 +24,7 @@ void Run(aclrtStream &stream, uint32_t m, uint32_t n, uint32_t k, LayoutTag layo
     size_t sizeC = lenC * sizeof(fp16_t);
 
     std::vector<fp16_t> hostA(lenA);
-    std::vector<fp16_t> hostA(lenB);
+    std::vector<fp16_t> hostB(lenB);
     std::vector<fp16_t> hostC(lenC);
 
     uint8_t *dA, *dB, *dC, *dW;
@@ -41,7 +39,7 @@ void Run(aclrtStream &stream, uint32_t m, uint32_t n, uint32_t k, LayoutTag layo
     }
 
     ExecuteCatlassMatmul(stream, dA, dB, dC, dW, desc);
-    ACL_CHECK(acltrSynchronizeStream(stream));
+    ACL_CHECK(aclrtSynchronizeStream(stream));
 
     ACL_CHECK(aclrtFree(dA));
     ACL_CHECK(aclrtFree(dB));
@@ -57,7 +55,7 @@ int main(int argc, const char **argv)
     ACL_CHECK(aclrtSetDevice(deviceId));
     ACL_CHECK(aclInit(nullptr));
     aclrtStream stream;
-    ACL_CHECK(aclrtCreateStream(&stream))
+    ACL_CHECK(aclrtCreateStream(&stream));
 
     uint32_t m = std::atoi(argv[1]);
     uint32_t n = std::atoi(argv[2]);
@@ -66,7 +64,7 @@ int main(int argc, const char **argv)
     LayoutTag layoutTagB = static_cast<LayoutTag>(std::atoi(argv[5]));
     Run(stream, m, n, k, layoutTagA, layoutTagB);
 
-    ACL_CHECK(aclrtDestoryStream(&stream))
-    ACL_CHECK(aclrtResetDevice(deviceId))
+    ACL_CHECK(aclrtDestroyStream(&stream));
+    ACL_CHECK(aclrtResetDevice(deviceId));
     ACL_CHECK(aclFinalize());
 }

@@ -66,10 +66,11 @@ public:
     /// Construct
     CATLASS_DEVICE
     BlockMmad(GemmCoord const &l1TileShape_, Arch::Resource<ArchTag> &resource, uint32_t l1BufAddrStart = 0)
+        : l1TileShape(l1TileShape_)
     {
         uint32_t l1ASize = l1TileShape.m() * l1TileShape.n() * sizeof(ElementA);
         uint32_t l1BSize = l1TileShape.k() * l1TileShape.n() * sizeof(ElementB);
-    
+
         kPartLenMax = min(L0A_PINGPONG_BUF_SIZE / sizeof(ElementA) / l1TileShape.m() / L1AAlignHelper::ELE_NUM_PER_C0 *
                               L1AAlignHelper::ELE_NUM_PER_C0,
             L0B_PINGPONG_BUF_SIZE / sizeof(ElementB) / l1TileShape.n() / L1AAlignHelper::ELE_NUM_PER_C0 *
@@ -125,12 +126,12 @@ public:
         uint32_t mRound = RoundUp<L1AAlignHelper::M_ALIGNED>(actualShape.m());
         uint32_t nRound = RoundUp<L1BAlignHelper::N_ALIGNED>(actualShape.n());
 
-        auto layoutAInL1 = LayoutAInL1::template MakeLayout<ElementA>(L1TileShape::M, L1TileShape::K);
-        auto layoutBInL1 = LayoutBInL1::template MakeLayout<ElementB>(L1TileShape::K, L1TileShape::N);
+        auto layoutAInL1 = LayoutAInL1::template MakeLayout<ElementA>(l1TileShape.m(), l1TileShape.k());
+        auto layoutBInL1 = LayoutBInL1::template MakeLayout<ElementB>(l1TileShape.k(), l1TileShape.n());
         auto layoutInL0C = LayoutCInL0::MakeLayoutInL0C(MakeCoord(mRound, nRound));
 
-        uint32_t kTileCount = CeilDiv<L1TileShape::K>(actualShape.k());
-        uint32_t kTileCountNext = CeilDiv<L1TileShape::K>(actualShapeNext.k());
+        uint32_t kTileCount = CeilDiv<l1TileShape.k()>(actualShape.k());
+        uint32_t kTileCountNext = CeilDiv<l1TileShape.k()>(actualShapeNext.k());
 
         if constexpr (!ENABLE_UNIT_FLAG) {
             AscendC::WaitFlag<AscendC::HardEvent::FIX_M>(EVENT_ID0);
@@ -142,7 +143,7 @@ public:
         uint32_t firstTileIdx = startTileIdx % kTileCount;
         uint32_t lastTileIdx = (startTileIdx + kTileCount - 1) % kTileCount;
         uint32_t kActual =
-            (firstTileIdx < kTileCount - 1) ? L1TileShape::K : (actualShape.k() - firstTileIdx * L1TileShape::K);
+            (firstTileIdx < kTileCount - 1) ? l1TileShape.k() : (actualShape.k() - firstTileIdx * l1TileShape.k());
         uint32_t firstTileIdxNext = startTileIdx % kTileCountNext;
 
         uint32_t mPartLoop = CeilDiv<L0TileShape::M>(mRound);
@@ -153,8 +154,8 @@ public:
             uint32_t shuffleKIdx = (startTileIdx + kLoopIdx) % kTileCount;
             // Load first matrix A tile in total kernel loop from GM to L1
             if (shuffleKIdx == firstTileIdx && isFirstBlock) {
-                MatrixCoord gmTileAOffset{0, shuffleKIdx * L1TileShape::K};
-                MatrixCoord gmTileBOffset{shuffleKIdx * L1TileShape::K, 0};
+                MatrixCoord gmTileAOffset{0, shuffleKIdx * l1TileShape.k()};
+                MatrixCoord gmTileBOffset{shuffleKIdx * l1TileShape.k(), 0};
                 auto gmTileA = gmBlockA[layoutA.GetOffset(gmTileAOffset)];
                 auto gmTileB = gmBlockB[layoutB.GetOffset(gmTileBOffset)];
                 // Load first matrix A tile from GM to L1
@@ -180,10 +181,10 @@ public:
                 auto l1ATensor = l1ATensorList[l1ListIdNext];
                 auto l1BTensor = l1BTensorList[l1ListIdNext];
                 // Get GM tensor for next stage
-                kActualNext = (shuffleKIdxNext < kTileCount - 1) ? L1TileShape::K
-                                                                 : (actualShape.k() - shuffleKIdxNext * L1TileShape::K);
-                MatrixCoord gmTileAOffset{0, shuffleKIdxNext * L1TileShape::K};
-                MatrixCoord gmTileBOffset{shuffleKIdxNext * L1TileShape::K, 0};
+                kActualNext = (shuffleKIdxNext < kTileCount - 1) ? l1TileShape.k()
+                                                                 : (actualShape.k() - shuffleKIdxNext * l1TileShape.k());
+                MatrixCoord gmTileAOffset{0, shuffleKIdxNext * l1TileShape.k()};
+                MatrixCoord gmTileBOffset{shuffleKIdxNext * l1TileShape.k(), 0};
                 auto gmTileA = gmBlockA[layoutA.GetOffset(gmTileAOffset)];
                 auto gmTileB = gmBlockB[layoutB.GetOffset(gmTileBOffset)];
 
@@ -205,10 +206,10 @@ public:
                 auto l1BTensor = l1BTensorList[l1ListIdNext];
                 // Get GM tensor for next stage
                 kActualNext = (firstTileIdxNext < kTileCountNext - 1)
-                                  ? L1TileShape::K
-                                  : (actualShapeNext.k() - firstTileIdxNext * L1TileShape::K);
-                MatrixCoord gmTileAOffset{0, firstTileIdxNext * L1TileShape::K};
-                MatrixCoord gmTileBOffset{firstTileIdxNext * L1TileShape::K, 0};
+                                  ? l1TileShape.k()
+                                  : (actualShapeNext.k() - firstTileIdxNext * l1TileShape.k());
+                MatrixCoord gmTileAOffset{0, firstTileIdxNext * l1TileShape.k()};
+                MatrixCoord gmTileBOffset{firstTileIdxNext * l1TileShape.k(), 0};
                 auto gmTileA = gmNextBlockA[layoutA.GetOffset(gmTileAOffset)];
                 auto gmTileB = gmNextBlockB[layoutB.GetOffset(gmTileBOffset)];
                 // load next matrix A tile from GM to L1

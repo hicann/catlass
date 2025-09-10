@@ -1,9 +1,11 @@
 #ifndef BASE_INFO_H
 #define BASE_INFO_H
 
+#include "fp16_t.h"
 #include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
 
+using fp16_t = __fp16;
 constexpr uint32_t CORE_NUM = 20;
 
 enum class LayoutTag : uint8_t { TagRowMajor = 0, TagColumnMajor = 1};
@@ -26,6 +28,8 @@ struct TilingParams {
     uint8_t blockDim{0};
     uint32_t aivm1{0};
     uint32_t aivn1{0};
+
+    TilingParams() {}
 
     TilingParams(uint32_t m_, uint32_t n_, uint32_t k_, size_t strideA_, size_t strideB_, size_t strideC_,
         LayoutTag layoutTagA_, LayoutTag layoutTagB_, LayoutTag layoutTagC_)

@@ -51,21 +51,21 @@ bool IsExStrideLimit(uint32_t rows, uint32_t cols, uint32_t layoutTag)
     }
 }
 
-template <class Dtype>
+template <class DType>
 bool JudgeSpace(uint32_t m1, uint32_t n1, uint32_t k1)
 {
-    bool judgeL1 = (m1 * k1 * 2 * sizeof(Dtype) + k1 * n1 * 2 * sizeof(Dtype) <= Catlass::Arch::AtlasA2::L1_SIZE);
+    bool judgeL1 = (m1 * k1 * 2 * sizeof(DType) + k1 * n1 * 2 * sizeof(DType) <= Catlass::Arch::AtlasA2::L1_SIZE);
     bool judgeL0C = (m1 * n1 * 4 <= Catlass::Arch::AtlasA2::L0C_SIZE) ? true : false;
     return judgeL1 && judgeL0C;
 }
 
-template <class Dtype>
+template <class DType>
 uint32_t GetMaxK1(uint32_t m1, uint32_t n1)
 {
     std::vector<uint32_t> k1List = {1024, 512, 256, 128};
     uint32_t k1 = 512 / sizeof(DType);
     for (const auto &k1t : k1List) {
-        if (JudgeSpace(m1, n1, k1t)) {
+        if (JudgeSpace<DType>(m1, n1, k1t)) {
             k1 = k1t;
             break;
         }

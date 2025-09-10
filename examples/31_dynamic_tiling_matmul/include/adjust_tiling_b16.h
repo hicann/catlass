@@ -15,22 +15,22 @@ void AdjustTilingB16Layout00(TilingParams &tilingParams)
 
     if (n >= 256) {
         // n0 = 256 delivers optimal bandwidth performance.
-        uint32_t maxBlocks = RoundUp(CeilDiv(m, m1) * CeilDiv(n, n1), CORE_NUM);
+        uint32_t maxBlocks = RoundUpHost(CeilDivHost(m, m1) * CeilDivHost(n, n1), CORE_NUM);
         BalanceWorkload(m, n, m1, n1, 32);
-        uint32_t blocks = CeilDiv(m, 64) * CeilDiv(n, 512);
+        uint32_t blocks = CeilDivHost(m, 64) * CeilDivHost(n, 512);
         if (blocks < maxBlocks - CORE_NUM && k <= 128) {
             m1 = 64;
             n1 = 512;
         }
     } else {
         m1 = 128;
-        n1 = RoundUp(n, 16);
+        n1 = RoundUpHost(n, 16);
         BalanceWorkload(m, n, m1, n1, 32);
-        uint32_t maxBlocks = RoundUp(CeilDiv(m, m1) * CeilDiv(n, n1), CORE_NUM);
+        uint32_t maxBlocks = RoundUpHost(CeilDivHost(m, m1) * CeilDivHost(n, n1), CORE_NUM);
         uint32_t m1t = m1;
         while (JudgeSpace<fp16_t>(m1t + 16, n1, k1)) {
             m1t += 16;
-            uint32_t blocks = CeilDiv(m, m1t) * CeilDiv(n, n1);
+            uint32_t blocks = CeilDivHost(m, m1t) * CeilDivHost(n, n1);
             if (blocks <= maxBlocks - CORE_NUM) {
                 m1 = m1t;
             }

@@ -3,19 +3,19 @@
 
 #include "launch_map.h"
 
-bool CommonMatmulHandler(TilingParams& params, TilingKey& tilingKey) {
+bool CommonMatmulHandler(TilingParams &params, TilingKey &tilingKey)
+{
     uint8_t kernelSerial = 0;
-    tilingKey.setTilingKey(kernelSerial, params.layoutTagA, params.layoutTagB, 0, 0, 0);
+    tilingKey.SetTilingKey(kernelSerial, params.layoutTagA, params.layoutTagB, 0, 0, 0);
     return true;
 }
 
 void SelectKernelHalf(TilingParams &tilingParams, TilingKey &tilingKey)
 {
-    using HandlerPtr Handlers[] =
-    { CommonMatmulHalfHandler }
+    using HandlerPtr = bool (*)(TilingParams& tilingParams, TilingKey& tilingKey);
+    HandlerPtr handlers[] = {CommonMatmulHandler};
 
-    for (auto handler : Handlers)
-    {
+    for (auto handler : handlers) {
         if (handler(tilingParams, tilingKey)) {
             break;
         }
@@ -26,8 +26,8 @@ void SelectKernelHalf(TilingParams &tilingParams, TilingKey &tilingKey)
     uint32_t m1 = tilingParams.m1 * 16;
     uint32_t n1 = tilingParams.n1 * 16;
 
-    uint32_t tasksAic = CeilDiv(m, m1) * CeilDiv(n, n1) * tilingParams.splitkFactor;
-    uint32_t blockDimAic = taskAic > 20 ? 20 : tasksAic;
+    uint32_t tasksAic = CeilDivHost(m, m1) * CeilDivHost(n, n1) * tilingParams.splitkFactor;
+    uint32_t blockDimAic = tasksAic > 20 ? 20 : tasksAic;
 
     tilingParams.blockDim = blockDimAic;
 }

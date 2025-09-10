@@ -8,21 +8,22 @@
 #include "base_info.h"
 #include "launch_map.h"
 #include "adjust_tiling.h"
+#include "select_kernel.h"
 
-template <class Dtype>
+template <class DType>
 void GetTiling(TilingParams &tilingParams, TilingKey &tilingKey)
 {
-    AdjustTiling<Dtype>(tilingParams);
-    SelectKernel<Dtype>(tilingParams, tilingKey);
+    AdjustTiling<DType>(tilingParams);
+    SelectKernel<DType>(tilingParams, tilingKey);
 }
 
-template <class Dtype>
+template <class DType>
 void PrintTilingParams(const TilingParams &tilingParams)
 {
     uint32_t bytePerC0 = 32;
     uint32_t c0NumPerFractal = 16;
-    uint32_t elePerC0 = bytePerC0 / sizeof(Dtype);
-    uing32_t m1InL0 = tilingParams.m1 * 16, n1InL0 = tilingParams.n1 * 16, k1LnL0 = 0;
+    uint32_t elePerC0 = bytePerC0 / sizeof(DType);
+    uint32_t m1InL0 = tilingParams.m1 * 16, n1InL0 = tilingParams.n1 * 16, k1LnL0 = 0;
     if (m1InL0 && n1InL0) {
         // TODO
     }
