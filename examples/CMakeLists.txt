@@ -81,6 +81,7 @@ foreach(EXAMPLE
 	28_matmul_swish
     29_a2_fp8_e4m3_matmul
     30_w8a16_matmul
+    31_dynamic_tiling_matmul
 )
     add_subdirectory(${EXAMPLE})
 endforeach()
