@@ -45,7 +45,7 @@ struct Options {
 
   // uint32_t dataSizes[4] = {4, 6, 16, 16}; // {hi, wi, cin, cout}
   uint32_t dataSizes[4] = {33, 43, 160, 176}; // {hi, wi, cin, cout}
-  uint8_t filterSizes[2] = {1, 1}; // {Kh, Kw}
+  uint8_t filterSizes[2] = {3, 3}; // {Kh, Kw}
   uint8_t pads[4] = {0, 0, 0, 0}; // {padLeft, padRight, padTop, padBottom}
   uint8_t strides[2] = {1, 1}; // {strideH, strideW}
   uint8_t dilations[2] = {1, 1}; // {dilationH, dilationW}
@@ -178,10 +178,10 @@ void Run(Options const &options) {
   using ArchTag = Arch::AtlasA2;
   constexpr bool ENABLE_UNIT_FLAG = false;
   using DispatchPolicy = Conv2d::MmadAtlasA2Pingpong<ENABLE_UNIT_FLAG>;
-  // using L1TileShape = Catlass::PostIm2colShape<8, 12, 96, 8>; // (hoBlock, woBlock, coutBlock, cin1Block)
-  // using L0TileShape = Catlass::PostIm2colShape<8, 12, 96, 1>; 
-  using L1TileShape = Catlass::PostIm2colShape<4, 4, 16, 2>; // (hoBlock, woBlock, coutBlock, cin1Block)
-  using L0TileShape = Catlass::PostIm2colShape<4, 4, 16, 1>; 
+  using L1TileShape = Catlass::PostIm2colShape<8, 12, 96, 8>; // (hoBlock, woBlock, coutBlock, cin1Block)
+  using L0TileShape = Catlass::PostIm2colShape<8, 12, 96, 1>; 
+  // using L1TileShape = Catlass::PostIm2colShape<4, 4, 16, 2>; // (hoBlock, woBlock, coutBlock, cin1Block)
+  // using L0TileShape = Catlass::PostIm2colShape<4, 4, 16, 1>; 
 
   uint32_t hoBlock = L1TileShape::Ho;
   uint32_t woBlock = L1TileShape::Wo;

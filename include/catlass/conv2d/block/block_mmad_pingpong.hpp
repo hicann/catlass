@@ -246,8 +246,8 @@ public:
 
                 // Locate the current tile on L0B
                 auto l0BTile = l0BTensorList[l0BListId];
-                FilterCoord l1BOffset{cin1L0Idx * L0TileShape::Cin1, 0, 0, 0, 0};
-                auto l1BTile = l1BTensor[layoutFilterInL1.GetOffset(l1BOffset)];
+                uint32_t l1BOffset = cin1L0Idx * L0TileShape::Cin1 * configs.kh() * configs.kw() * coutRound * ELE_NUM_B_PER_C0;
+                auto l1BTile = l1BTensor[l1BOffset];
 
                 // Wait for mmad finished
                 AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0AListId]);
