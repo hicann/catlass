@@ -1,6 +1,6 @@
 # if aicore-arch is different, maybe crash, to find the solution
 add_compile_definitions(TILING_KEY_VAR)
-add_compile_options(--cce-aicore-arch=dav-c220)
+add_compile_options(--cce-aicore-arch=dav-c220-cube)
 file(GLOB CATLASS_SHARED_LIB_SRC ${CMAKE_CURRENT_SOURCE_DIR}/impl/wrapper/*.cpp)
 set_source_files_properties(${CATLASS_SHARED_LIB_SRC} PROPERTIES LANGUAGE ASCEND)
 
@@ -26,5 +26,5 @@ link_directories(${CMAKE_BINARY_DIR})
 link_libraries(generalization_kernel)
 
 set_source_files_properties(dynamic_tiling_matmul_half.cpp PROPERTIES LANGUAGE ASCEND)
-catlass_example_add_executable(31_dynamic_tiling_matmul dav-c220 dynamic_tiling_matmul_half.cpp)
+catlass_example_add_executable(31_dynamic_tiling_matmul dav-c220-cube dynamic_tiling_matmul_half.cpp)
 add_dependencies(31_dynamic_tiling_matmul generalization_kernel)
