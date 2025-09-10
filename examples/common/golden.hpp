@@ -14,5 +14,6 @@
 #include "golden/compare_data.hpp"
 #include "golden/fill_data.hpp"
 #include "golden/matmul.hpp"
+#include "golden/conv2d.hpp"
 
 #endif // EXAMPLES_COMMON_GOLDEN_HPP
