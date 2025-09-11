@@ -28,11 +28,17 @@ void Run(aclrtStream &stream, uint32_t m, uint32_t n, uint32_t k, LayoutTag layo
     std::vector<fp16_t> hostB(lenB);
     std::vector<fp16_t> hostC(lenC);
 
+    golden::FillRandomData<fp16_t>(hostA, -5.0f, 5.0f);
+    golden::FillRandomData<fp16_t>(hostB, -5.0f, 5.0f);
+
     uint8_t *dA, *dB, *dC, *dW;
 
     ACL_CHECK(aclrtMalloc((void **)&dA, sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMalloc((void **)&dB, sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMalloc((void **)&dC, sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
+
+    ACL_CHECK(aclrtMemcpy(dA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
+    ACL_CHECK(aclrtMemcpy(dB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
 
     size_t workspaceSize = CatlassMatmulGetWorkspace(desc);
     if (workspaceSize > 0) {
@@ -41,6 +47,38 @@ void Run(aclrtStream &stream, uint32_t m, uint32_t n, uint32_t k, LayoutTag layo
 
     ExecuteCatlassMatmul(stream, dA, dB, dC, dW, desc);
     ACL_CHECK(aclrtSynchronizeStream(stream));
+
+    ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
+
+    std::vector<float> hostGolden(lenC);
+    Catlass::GemmCoord problemShape{m, n, k};
+    if (layoutTagA == layoutTag::TagRowMajor && layoutTagB == LayoutTag::TagRowMajor) {
+        Catlass::layout::RowMajor layoutA{m, n};
+        Catlass::layout::RowMajor layoutB{k, n};
+        Catlass::layout::RowMajor layoutC{m, n};
+        golden::ComputeMatmul(problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);
+    } else if (layoutTagA == layoutTag::TagRowMajor && layoutTagB == LayoutTag::TagColumnMajor) {
+        Catlass::layout::RowMajor layoutA{m, n};
+        Catlass::layout::ColumnMajor layoutB{k, n};
+        Catlass::layout::RowMajor layoutC{m, n};
+        golden::ComputeMatmul(problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);
+    } else if (layoutTagA == layoutTag::TagColumnMajor && layoutTagB == LayoutTag::TagRowMajor) {
+        Catlass::layout::ColumnMajor layoutA{m, k};
+        Catlass::layout::RowMajor layoutB{k, n};
+        Catlass::layout::RowMajor layoutC{m, n};
+        golden::ComputeMatmul(problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);
+    } else {
+        Catlass::layout::ColumnMajor layoutA{m, k};
+        Catlass::layout::ColumnMajor layoutB{k, n};
+        Catlass::layout::RowMajor layoutC{m, n};
+        golden::ComputeMatmul(problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);
+    }
+    std::vector<uint64_t> errorIndices = golden::CompareData(hostC, hostGolden, k);
+    if (errorIndices.empty()) {
+        std::cout << "Compare success." << std::endl;
+    } else {
+        std::cerr << "Compare failed. Error count: " << errorIndices.size() << std::endl;
+    }
 
     ACL_CHECK(aclrtFree(dA));
     ACL_CHECK(aclrtFree(dB));
