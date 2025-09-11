@@ -63,7 +63,7 @@ void AdjustTilingB16Layout01(TilingParams &tilingParams, PlatformInfo& platformI
         BalanceWorkload(n, m, n1, m1, 64, platformInfo);
         BalanceWorkload(m, n, m1, n1, 64, platformInfo); 
     }
-    uint32_t maxBlocks = RoundUpHost(CeilDiv(m, m0) * CeilDiv(n, n0), platformInfo.coreNum)
+    uint32_t maxBlocks = RoundUpHost(CeilDivHost(m, m1) * CeilDivHost(n, n1), platformInfo.coreNum);
     if (m < n) {
         uint32_t n1t = n1;
         while (JudgeSpace<fp16_t>(m1, n1t + 16, k1, platformInfo)) {
@@ -115,7 +115,7 @@ void AdjustTilingB16Layout10(TilingParams &tilingParams, PlatformInfo& platformI
         n1 = RoundUpHost(n, 16);
     }
 
-    uint32_t blocks = CeilDivHost(m, m1) * CeilDiv(n, n1);
+    uint32_t blocks = CeilDivHost(m, m1) * CeilDivHost(n, n1);
     if (blocks <= platformInfo.coreNum / 4) {
         if (n1 > 16) {
             n1 /= 2;
@@ -167,7 +167,7 @@ void AdjustTilingB16Layout11(TilingParams &tilingParams, PlatformInfo& platformI
         uint32_t n1t = n1;
         while (JudgeSpace<fp16_t>(n1t + 16, m1, k1, platformInfo)) {
             n1t += 16;
-            uint32_t blocks = CeilDivHost(n, m1t) * CeilDivHost(m, n1);
+            uint32_t blocks = CeilDivHost(n, n1t) * CeilDivHost(m, m1);
             if (blocks <= maxBlocks - platformInfo.coreNum) {
                 n1 = n1t;
             }
@@ -181,7 +181,7 @@ void AdjustTilingB16Layout11(TilingParams &tilingParams, PlatformInfo& platformI
     double ratio = (double)(m * k + k * n) / (m * n);
     if (ratio < 0.1 && n >= 256) {
         m1 = 128;
-        n0 = 256;
+        n1 = 256;
     }
     k1 = GetMaxK1<fp16_t>(m1, n1, platformInfo);
     SetTile(tilingParams, m1, n1, k1);
