@@ -242,12 +242,12 @@ public:
                 // Locate the current tile on L0A
                 auto l0ATile = l0ATensorList[l0AListId];
                 FmapCoord l1AOffset{cin1L0Idx * L0TileShape::Cin1, 0, 0, 0};
-                auto l1ATile = l1ATensor[l1AOffset.GetOffset(l1AOffset)];
+                auto l1ATile = l1ATensor[layoutFmapInL1.GetOffset(l1AOffset)];
 
                 // Locate the current tile on L0B
                 auto l0BTile = l0BTensorList[l0BListId];
                 FilterCoord l1BOffset{cin1L0Idx * L0TileShape::Cin1, 0, 0, 0, 0};
-                auto l1BTile = l1BTensor[l1BOffset.GetOffset(l1BOffset)];
+                auto l1BTile = l1BTensor[layoutFilterInL1.GetOffset(l1BOffset)];
 
                 // Wait for mmad finished
                 AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0AListId]);
