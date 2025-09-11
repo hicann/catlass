@@ -1,7 +1,7 @@
 # if aicore-arch is different, maybe crash, to find the solution
 option(GENERATE_MATMUL_WRAPPER_CODE "Generate wrapper code for generalization matmul" OFF)
 
-if(GENERATE_SPECIAL_CODE)
+if(GENERATE_MATMUL_WRAPPER_CODE)
     execute_process(
         COMMAND python ${CMAKE_CURRENT_SOURCE_DIR}/impl/scripts/code_gen.py
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/impl/scripts
