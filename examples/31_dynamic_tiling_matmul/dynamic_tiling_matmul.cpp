@@ -9,6 +9,8 @@
  */
 
 #include "catlass_matmul.h"
+#include "golden.hpp"
+#include "catlass/layout/layout.hpp"
 
 void Run(aclrtStream &stream, uint32_t m, uint32_t n, uint32_t k, LayoutTag layoutTagA, LayoutTag layoutTagB)
 {
@@ -28,8 +30,8 @@ void Run(aclrtStream &stream, uint32_t m, uint32_t n, uint32_t k, LayoutTag layo
     std::vector<fp16_t> hostB(lenB);
     std::vector<fp16_t> hostC(lenC);
 
-    golden::FillRandomData<fp16_t>(hostA, -5.0f, 5.0f);
-    golden::FillRandomData<fp16_t>(hostB, -5.0f, 5.0f);
+    Catlass::golden::FillRandomData<fp16_t>(hostA, -5.0f, 5.0f);
+    Catlass::golden::FillRandomData<fp16_t>(hostB, -5.0f, 5.0f);
 
     uint8_t *dA, *dB, *dC, *dW;
 
@@ -48,32 +50,32 @@ void Run(aclrtStream &stream, uint32_t m, uint32_t n, uint32_t k, LayoutTag layo
     ExecuteCatlassMatmul(stream, dA, dB, dC, dW, desc);
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
-    ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
+    ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, dC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
 
     std::vector<float> hostGolden(lenC);
     Catlass::GemmCoord problemShape{m, n, k};
-    if (layoutTagA == layoutTag::TagRowMajor && layoutTagB == LayoutTag::TagRowMajor) {
+    if (layoutTagA == LayoutTag::TagRowMajor && layoutTagB == LayoutTag::TagRowMajor) {
         Catlass::layout::RowMajor layoutA{m, n};
         Catlass::layout::RowMajor layoutB{k, n};
         Catlass::layout::RowMajor layoutC{m, n};
-        golden::ComputeMatmul(problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);
-    } else if (layoutTagA == layoutTag::TagRowMajor && layoutTagB == LayoutTag::TagColumnMajor) {
+        Catlass::golden::ComputeMatmul(problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);
+    } else if (layoutTagA == LayoutTag::TagRowMajor && layoutTagB == LayoutTag::TagColumnMajor) {
         Catlass::layout::RowMajor layoutA{m, n};
         Catlass::layout::ColumnMajor layoutB{k, n};
         Catlass::layout::RowMajor layoutC{m, n};
-        golden::ComputeMatmul(problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);
-    } else if (layoutTagA == layoutTag::TagColumnMajor && layoutTagB == LayoutTag::TagRowMajor) {
+        Catlass::golden::ComputeMatmul(problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);
+    } else if (layoutTagA == LayoutTag::TagColumnMajor && layoutTagB == LayoutTag::TagRowMajor) {
         Catlass::layout::ColumnMajor layoutA{m, k};
         Catlass::layout::RowMajor layoutB{k, n};
         Catlass::layout::RowMajor layoutC{m, n};
-        golden::ComputeMatmul(problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);
+        Catlass::golden::ComputeMatmul(problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);
     } else {
         Catlass::layout::ColumnMajor layoutA{m, k};
         Catlass::layout::ColumnMajor layoutB{k, n};
         Catlass::layout::RowMajor layoutC{m, n};
-        golden::ComputeMatmul(problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);
+        Catlass::golden::ComputeMatmul(problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);
     }
-    std::vector<uint64_t> errorIndices = golden::CompareData(hostC, hostGolden, k);
+    std::vector<uint64_t> errorIndices = Catlass::golden::CompareData(hostC, hostGolden, k);
     if (errorIndices.empty()) {
         std::cout << "Compare success." << std::endl;
     } else {
