@@ -193,6 +193,6 @@ if __name__ == "__main__":
     str_dtype = str(sys.argv[1])
 
     kernel_info = {}
-
+    os.makedirs(WRAPPER_CODE_PATH, exist_ok=True)
     gen_common_matmul_code("CommonMatmulKernel", "common_matmul_kernel", 0, str_dtype, kernel_info)
     gen_launch_map_code(kernel_info)

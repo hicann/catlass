@@ -1,4 +1,13 @@
 # if aicore-arch is different, maybe crash, to find the solution
+add_custom_target(auto_gen_code)
+add_custom_command(
+    TARGET auto_gen_code
+    COMMAND python ${CMAKE_CURRENT_SOURCE_DIR}/impl/scripts/code_gen.py half
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/impl
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/impl/scripts/code_gen.py
+    COMMENT "Generate wrapper code, launch_map.h ...done"
+)
+
 add_compile_definitions(TILING_KEY_VAR)
 add_compile_options($<$<COMPILE_LANGUAGE:ASCEND>:--cce-aicore-arch=dav-c220>)
 file(GLOB CATLASS_SHARED_LIB_SRC ${CMAKE_CURRENT_SOURCE_DIR}/impl/wrapper/*.cpp)
@@ -19,6 +28,7 @@ link_libraries(generalization_kernel runtime)
 add_executable(31_dynamic_tiling_matmul dynamic_tiling_matmul_half.cpp)
 add_dependencies(catlass_examples 31_dynamic_tiling_matmul)
 add_dependencies(31_dynamic_tiling_matmul generalization_kernel)
+add_dependencies(generalization_kernel auto_gen_code)
 
 install(TARGETS generalization_kernel DESTINATION shared_lib/lib COMPONENT 31_dynamic_tiling_matmul)
 install(TARGETS 31_dynamic_tiling_matmul DESTINATION bin COMPONENT 31_dynamic_tiling_matmul)
