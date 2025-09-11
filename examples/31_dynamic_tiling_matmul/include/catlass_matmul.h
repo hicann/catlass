@@ -2,7 +2,7 @@
 #define CATLASS_MATMUL_H
 
 #include "helper.hpp"
-#include "tiling.h"
+#include "get_tiling.h"
 
 template <class DType>
 struct CatlassMatmulDescriptor {

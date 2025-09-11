@@ -6,7 +6,7 @@
 #include <string>
 #include <iomanip>
 
-#include "base_info.h"
+#include "tiling_params.h"
 #include "launch_map.h"
 #include "adjust_tiling.h"
 #include "select_kernel.h"

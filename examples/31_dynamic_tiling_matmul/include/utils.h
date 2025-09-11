@@ -2,7 +2,7 @@
 #define UTILS_H
 
 #include <vector>
-#include "base_info.h"
+#include "tiling_params.h"
 #include "platform_info.h"
 
 template <typename T1, typename T2>

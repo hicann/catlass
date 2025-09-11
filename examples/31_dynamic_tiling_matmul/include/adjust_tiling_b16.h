@@ -2,7 +2,7 @@
 #define ADJUST_TILING_B16_H
 
 #include "utils.h"
-#include "base_info.h"
+#include "tiling_params.h"
 #include "platform_info.h"
 
 using fp16_t = __fp16;
