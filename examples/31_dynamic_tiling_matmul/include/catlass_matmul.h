@@ -9,6 +9,7 @@ struct CatlassMatmulDescriptor {
     TilingParams tilingParams;
     uint8_t *dTilingParams;
     TilingKey tilingKey;
+    PlatformInfo platformInfo;
 
     CatlassMatmulDescriptor(uint32_t m, uint32_t n, uint32_t k, size_t strideA, size_t strideB, size_t strideC,
         LayoutTag layoutTagA, LayoutTag layoutTagB, LayoutTag layoutTagC)
