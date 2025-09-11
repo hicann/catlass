@@ -89,13 +89,13 @@ struct CopyGmToL1<ArchTag, Conv2d::Conv2dType<Element, layout::Filter, AscendC::
     void operator()( // {Cin1, Kh, Kw, Cout, C0}
         AscendC::LocalTensor<Element> const &dstTensor,
         AscendC::GlobalTensor<Element> const &srcTensor,
-        LayoutDst const &layoutDst, // LayoutFilterInL1{L1TileShape::Cin1, configs.kh(), configs.kw(), L1TileShape::Cout, ELE_NUM_B_PER_C0}
+        LayoutDst const &layoutDst, // LayoutFilterInL1{L1TileShape::Cin1, configs.kh(), configs.kw(), coutRound, ELE_NUM_B_PER_C0}
         LayoutSrc const &layoutSrc) // layoutTileFilter{cin1Actual, configs.kh(), configs.kw(), actualShape.cout(), ELE_NUM_B_PER_C0}
     {
         uint32_t cin1Actual = layoutSrc.shape(0);
         uint32_t KhKw = layoutSrc.shape(1) * layoutSrc.shape(2);
         uint32_t coutActual = layoutSrc.shape(3);
-        uint32_t coutRound = RoundUp<ELE_NUM_PER_C0>(coutActual);
+        uint32_t coutRound = layoutDst.shape(3);
         uint32_t strideKhKw = layoutSrc.stride(2); // Cout * ELE_NUM_PER_C0
         uint32_t Cout = strideKhKw / ELE_NUM_PER_C0;
 

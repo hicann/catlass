@@ -164,9 +164,9 @@ public:
         uint32_t coutRound = RoundUp<L1FilterAlignHelper::COUT_ALIGNED>(actualShape.cout());
 
         auto layoutFmapInL1 = LayoutFmapInL1::template MakeLayout<ElementFmap>(
-            L1TileShape::Cin1, hiBlock, wiBlock, ELE_NUM_A_PER_C0);
+            L1TileShape::Cin1, actualShape.hi(), actualShape.wi(), ELE_NUM_A_PER_C0);
         auto layoutFilterInL1 = LayoutFilterInL1::template MakeLayout<ElementFilter>(
-            L1TileShape::Cin1, configs.kh(), configs.kw(), L1TileShape::Cout, ELE_NUM_B_PER_C0);
+            L1TileShape::Cin1, configs.kh(), configs.kw(), coutRound, ELE_NUM_B_PER_C0);
         auto layoutInL0C = LayoutOutputInL0::MakeLayoutInL0C(MakeCoord(howoRound, coutRound));
     
         uint32_t cin1Actual = min(actualShape.cin1(), L1TileShape::Cin1);
@@ -241,13 +241,13 @@ public:
                     
                 // Locate the current tile on L0A
                 auto l0ATile = l0ATensorList[l0AListId];
-                uint32_t l1AOffset = cin1L0Idx * L0TileShape::Cin1 * actualShape.hi() * actualShape.wi() * ELE_NUM_A_PER_C0;
-                auto l1ATile = l1ATensor[l1AOffset];
+                FmapCoord l1AOffset{cin1L0Idx * L0TileShape::Cin1, 0, 0, 0};
+                auto l1ATile = l1ATensor[l1AOffset.GetOffset(l1AOffset)];
 
                 // Locate the current tile on L0B
                 auto l0BTile = l0BTensorList[l0BListId];
-                uint32_t l1BOffset = cin1L0Idx * L0TileShape::Cin1 * configs.kh() * configs.kw() * coutRound * ELE_NUM_B_PER_C0;
-                auto l1BTile = l1BTensor[l1BOffset];
+                FilterCoord l1BOffset{cin1L0Idx * L0TileShape::Cin1, 0, 0, 0, 0};
+                auto l1BTile = l1BTensor[l1BOffset.GetOffset(l1BOffset)];
 
                 // Wait for mmad finished
                 AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0AListId]);
