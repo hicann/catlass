@@ -6,11 +6,11 @@
 struct PlatformInfo
 {
     uint32_t coreNum{24};
-    uint32_t ubSize{192 * 1024};
-    uint32_t l1Size{512 * 1024};
-    uint32_t l0ASize{64 * 1024};
-    uint32_t l0BSize{64 * 1024};
-    uint32_t l0CSize{128 * 1024};
+    uint64_t ubSize{192 * 1024};
+    uint64_t l1Size{512 * 1024};
+    uint64_t l0ASize{64 * 1024};
+    uint64_t l0BSize{64 * 1024};
+    uint64_t l0CSize{128 * 1024};
 
     PlatformInfo()
     {

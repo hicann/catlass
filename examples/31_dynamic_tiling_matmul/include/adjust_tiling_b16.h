@@ -41,7 +41,7 @@ void AdjustTilingB16Layout00(TilingParams &tilingParams, PlatformInfo& platformI
         m1 = 128;
         n1 = 256;
     }
-    k1 = GetMaxK1<fp16_t>(m1, n1);
+    k1 = GetMaxK1<fp16_t>(m1, n1, platformInfo);
     SetTile(tilingParams, m1, n1, k1);
 }
 

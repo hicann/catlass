@@ -1,9 +1,6 @@
 #ifndef BASE_INFO_H
 #define BASE_INFO_H
 
-#include "catlass/catlass.hpp"
-#include "catlass/arch/arch.hpp"
-
 using fp16_t = __fp16;
 constexpr uint32_t CORE_NUM = 20;
 
