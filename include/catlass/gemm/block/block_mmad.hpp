@@ -32,6 +32,23 @@ struct BlockMmad {
     static_assert(DEPENDENT_FALSE<DispatchPolicy>, "BlockMmad is not implemented for this DispatchPolicy");
 };
 
+// for per-group quant with fixpipe
+template <
+    class DispatchPolicy,
+    class L1TileShape,
+    class L0TileShape,
+    class AType,
+    class BType,
+    class CType,
+    class QType,
+    class BiasType = void,
+    class TileCopy = Gemm::Tile::TileCopy<typename DispatchPolicy::ArchTag, AType, BType, CType, BiasType>,
+    class TileMmad = Gemm::Tile::TileMmad<typename DispatchPolicy::ArchTag, AType, BType, BiasType>
+>
+struct BlockGmmQuant {
+    static_assert(DEPENDENT_FALSE<DispatchPolicy>, "BlockGmmQuant is not implemented for this DispatchPolicy");
+};
+
 template <
     class DispatchPolicy,
     class L1TileShape,
@@ -89,4 +106,6 @@ struct BlockGemm {
 #include "catlass/gemm/block/block_mmad_pingpong_full_loadA.hpp"
 #include "catlass/gemm/block/block_mmad_w8a16.hpp"
 #include "catlass/gemm/block/block_mmad_pingpong_slice_k.hpp"
+#include "catlass/gemm/block/block_mmad_pingpong_fixpipe_quant.hpp"
+
 #endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_HPP

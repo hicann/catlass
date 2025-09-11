@@ -98,6 +98,7 @@ normal_cases = ["00_basic_matmul 256 512 1024 0",
                 "27_matmul_gelu 256 512 1024 0",
                 "28_matmul_swish 256 512 1024 0",
                 "30_w8a16_matmul 256 512 1024 0",
+                "31_grouped_matmul_a4w4 2 64,64 128,128 64,64 1,1 0",
                 ]
 
 

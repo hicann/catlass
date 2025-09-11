@@ -97,6 +97,11 @@ struct ElementAccumulatorSelector<bfloat16_t, bfloat16_t> {
     using ElementAccumulator = float;
 };
 
+template<>
+struct ElementAccumulatorSelector<AscendC::int4b_t, AscendC::int4b_t> {
+    using ElementAccumulator = int32_t;
+};
+
 template<class GmAType>
 struct L1ATypeSelector {
     static_assert(DEPENDENT_FALSE<GmAType>,

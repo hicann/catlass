@@ -425,6 +425,46 @@ struct CopyL1ToL0B<ArchTag, Gemm::GemmType<Element, layout::zN, AscendC::TPositi
     }
 };
 
+/// Partial specialization for AscendC::int4b_t, zN in and nZ out.
+template <class ArchTag>
+struct CopyL1ToL0B<ArchTag, Gemm::GemmType<AscendC::int4b_t, layout::zN, AscendC::TPosition::A1>>
+{
+    using Element = AscendC::int4b_t;
+    using LayoutDst = layout::nZ;
+    using LayoutSrc = layout::zN;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 * 2;
+    static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL * 2;
+
+    // Methods
+
+    CATLASS_DEVICE
+    CopyL1ToL0B() {};
+
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::LocalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+    {
+        AscendC::LoadData2dTransposeParams loadDataParams;
+
+        loadDataParams.startIndex = 0;
+
+        loadDataParams.repeatTimes = static_cast<uint16_t>(CeilDiv<ELE_NUM_PER_C0>(layoutDst.orgShape(1)));
+        loadDataParams.srcStride = layoutSrc.stride(3) / ELE_NUM_PER_FRACTAL / 4 ;
+        loadDataParams.dstGap = 3; // 表示一个迭代中分形数量-1
+        loadDataParams.dstFracGap = 0; // 表示分形是按Z遍历
+
+        // 循环次数代表要做几次迭代，一次迭代能做4个分形，所以src*4
+        for (uint32_t i = 0; i < CeilDiv<ELE_NUM_PER_C0>(layoutDst.orgShape(0)); i++) {
+            AscendC::LoadDataWithTranspose(dstTensor[i * layoutDst.stride(1) ],
+                                           srcTensor[i * layoutSrc.stride(1) * 4 ],
+                                           loadDataParams);
+        }
+    }
+};
+
 /// Partial specialization for nZ in and nZ out. (Transpose B)
 template <class ArchTag, class Element>
 struct CopyL1ToL0B<ArchTag, Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::A1>> {
