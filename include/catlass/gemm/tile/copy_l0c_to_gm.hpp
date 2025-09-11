@@ -126,6 +126,8 @@ struct CopyL0CToGm<Catlass::Arch::AtlasA2,
         ScaleGranularity::NO_QUANT>::VALUE;
     static constexpr auto reluEn = ReluEnable_;
 
+    struct Params {};
+
     CATLASS_DEVICE
     void operator()(AscendC::GlobalTensor<ElementDst> const &dst, AscendC::LocalTensor<ElementSrc> const &src,
         LayoutDst const &dstLayout, LayoutSrc const &srcLayout, uint8_t unitFlag = 0)
@@ -155,6 +157,74 @@ template <
 >
 struct CopyL0CToGm<Catlass::Arch::AtlasA2,
                    ElementAccumulator_,
+                   Gemm::GemmType<ElementDst_, layout::RowMajor>,
+                   ScaleGranularity::PER_TENSOR,
+                   ReluEnable_>
+{
+    using ArchTag = Catlass::Arch::AtlasA2;
+    using ElementDst = ElementDst_;
+    using ElementSrc = ElementAccumulator_;
+    using LayoutSrc = Catlass::layout::zN;
+    using LayoutDst = Catlass::layout::RowMajor;
+    static constexpr auto quantPre = CopyL0CToGmQuantMode<ArchTag, ElementSrc, ElementDst,
+        ScaleGranularity::PER_TENSOR>::VALUE;
+    static constexpr auto reluEn = ReluEnable_;
+
+    struct Params {
+        union {
+            float f32[2];
+            uint64_t s64;
+        } scalarUnion{};
+
+        CATLASS_HOST_DEVICE
+        Params() = default;
+
+        CATLASS_HOST_DEVICE
+        Params(float scalar)
+        {
+            scalarUnion.f32[0] = scalar;
+            scalarUnion.f32[1] = 0;
+        }
+    };
+
+    CATLASS_DEVICE
+    CopyL0CToGm() = default;
+
+    CATLASS_DEVICE
+    CopyL0CToGm(Params const &params_) : params(params_) {};
+
+    CATLASS_DEVICE
+    void operator()(AscendC::GlobalTensor<ElementDst> const &dst, AscendC::LocalTensor<ElementSrc> const &src,
+        LayoutDst const &dstLayout, LayoutSrc const &srcLayout, uint8_t unitFlag = 0)
+    {
+        AscendC::FixpipeParamsV220 intriParams;
+
+        // Fixpipe layout information
+        intriParams.nSize = dstLayout.shape(1);
+        intriParams.mSize = dstLayout.shape(0);
+        intriParams.srcStride = srcLayout.stride(3) / srcLayout.stride(0);
+        intriParams.dstStride = dstLayout.stride(0);
+
+        // Fixpipe auxiliary arguments
+        intriParams.quantPre = quantPre;
+        intriParams.deqScalar = params.scalarUnion.s64;
+        intriParams.reluEn = reluEn;
+        intriParams.unitFlag = unitFlag;
+
+        // Call AscendC Fixpipe
+        AscendC::Fixpipe<ElementDst, ElementSrc, AscendC::CFG_ROW_MAJOR>(dst, src, intriParams);
+    }
+
+    Params params;
+};
+
+template <
+    class ElementAccumulator_,
+    class ElementDst_,
+    bool ReluEnable_
+>
+struct CopyL0CToGm<Catlass::Arch::AtlasA2,
+                   ElementAccumulator_,
                    Gemm::GemmType<ElementDst_, layout::zN>,
                    ScaleGranularity::NO_QUANT,
                    ReluEnable_>
@@ -167,6 +237,8 @@ struct CopyL0CToGm<Catlass::Arch::AtlasA2,
     static constexpr auto quantPre = CopyL0CToGmQuantMode<ArchTag, ElementSrc, ElementDst,
         ScaleGranularity::NO_QUANT>::VALUE;
     static constexpr auto reluEn = ReluEnable_;
+
+    struct Params {};
 
     CATLASS_DEVICE
     void operator()(AscendC::GlobalTensor<ElementDst> const &dst, AscendC::LocalTensor<ElementSrc> const &src,
@@ -209,6 +281,8 @@ struct CopyL0CToGm<Catlass::Arch::AtlasA2,
     static constexpr auto quantPre = CopyL0CToGmQuantMode<ArchTag, ElementSrc, ElementDst,
         ScaleGranularity::NO_QUANT>::VALUE;
     static constexpr auto reluEn = ReluEnable_;
+
+    struct Params {};
 
     CATLASS_DEVICE
     void operator()(AscendC::GlobalTensor<ElementDst> const &dst, AscendC::LocalTensor<ElementSrc> const &src,

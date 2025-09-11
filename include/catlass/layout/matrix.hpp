@@ -139,12 +139,12 @@ public:
 
     /// Returns the length of the layout
     CATLASS_HOST_DEVICE
-    size_t Capacity()
+    LongIndex Capacity() const
     {
-        return static_cast<size_t>(shape_[0]) * stride_[0];
+        return static_cast<LongIndex>(shape_[0]) * stride_[0];
     }
 
-private:
+protected:
     //
     // Data members
     //
@@ -154,6 +154,59 @@ private:
 
     /// Stride data member
     Stride stride_;
+};
+
+struct RowMajorInt4 : public RowMajor {
+public:
+    /// Constructor
+    CATLASS_HOST_DEVICE
+    RowMajorInt4(Index rows = 0, Index cols = 0) :
+        RowMajor(MakeCoord(rows, cols), MakeCoord(LongIndex(RoundUp<2>(cols)), LongIndex(1))) {}
+
+    /// Constructor
+    CATLASS_HOST_DEVICE
+    RowMajorInt4(Index rows, Index cols, LongIndex ldm) :
+        RowMajor(MakeCoord(rows, cols), MakeCoord(ldm, LongIndex(1))) {}
+
+    /// Ctor
+    CATLASS_HOST_DEVICE
+    RowMajorInt4(Shape shape, Stride stride) : RowMajor(shape, stride) {}
+
+    template <class Element>
+    CATLASS_HOST_DEVICE
+    static RowMajorInt4 MakeLayout(Index rows, Index cols)
+    {
+        return RowMajorInt4(rows, cols);
+    }
+
+    template <class Element>
+    CATLASS_HOST_DEVICE
+    static RowMajorInt4 MakeLayoutInUb(MatrixCoord const &shape)
+    {
+        return RowMajorInt4(shape.row(), shape.column(), RoundUp<BYTE_PER_C0 * 2>(shape.column()));
+    }
+
+    /// Returns the offset of a coordinate in linear memory.
+    /// Assumes coordinate has convention (row, column)
+    CATLASS_HOST_DEVICE
+    LongIndex GetOffset(MatrixCoord const &coord) const
+    {
+        return LongIndex(coord.row()) * CeilDiv<2>(stride_[0]) + LongIndex(coord.column() / 2);
+    }
+
+    /// Returns the layout of a tile.
+    CATLASS_HOST_DEVICE
+    RowMajorInt4 GetTileLayout(MatrixCoord const &tileShape) const
+    {
+        return RowMajorInt4(tileShape, stride());
+    }
+
+    /// Returns the length of the layout
+    CATLASS_HOST_DEVICE
+    LongIndex Capacity() const
+    {
+        return LongIndex(shape_[0]) * CeilDiv<2>(stride_[0]);
+    }
 };
 
 /// Mapping function for col-major matrices
@@ -271,12 +324,12 @@ public:
 
     /// Returns the length of the layout
     CATLASS_HOST_DEVICE
-    size_t Capacity()
+    LongIndex Capacity() const
     {
-        return static_cast<size_t>(shape_[1]) * stride_[1];
+        return static_cast<LongIndex>(shape_[1]) * stride_[1];
     }
 
-private:
+protected:
     //
     // Data members
     //
@@ -286,6 +339,59 @@ private:
 
     /// Stride data member
     Stride stride_;
+};
+
+struct ColumnMajorInt4 : public RowMajor {
+public:
+    /// Constructor
+    CATLASS_HOST_DEVICE
+    ColumnMajorInt4(Index rows = 0, Index cols = 0) :
+        RowMajor(MakeCoord(rows, cols), MakeCoord(LongIndex(1), LongIndex(RoundUp<2>(rows)))) {}
+
+    /// Constructor
+    CATLASS_HOST_DEVICE
+    ColumnMajorInt4(Index rows, Index cols, LongIndex ldm) :
+        RowMajor(MakeCoord(rows, cols), MakeCoord(LongIndex(1), ldm)) {}
+
+    /// Ctor
+    CATLASS_HOST_DEVICE
+    ColumnMajorInt4(Shape shape, Stride stride) : RowMajor(shape, stride) {}
+
+    template <class Element>
+    CATLASS_HOST_DEVICE
+    static ColumnMajorInt4 MakeLayout(Index rows, Index cols)
+    {
+        return ColumnMajorInt4(rows, cols);
+    }
+
+    template <class Element>
+    CATLASS_HOST_DEVICE
+    static ColumnMajorInt4 MakeLayoutInUb(MatrixCoord const &shape)
+    {
+        return ColumnMajorInt4(shape.row(), shape.column(), RoundUp<BYTE_PER_C0 * 2>(shape.row()));
+    }
+
+    /// Returns the offset of a coordinate in linear memory.
+    /// Assumes coordinate has convention (row, column)
+    CATLASS_HOST_DEVICE
+    LongIndex GetOffset(MatrixCoord const &coord) const
+    {
+        return LongIndex(coord.column()) * CeilDiv<2>(stride_[1]) + LongIndex(coord.row() / 2);
+    }
+
+    /// Returns the layout of a tile.
+    CATLASS_HOST_DEVICE
+    ColumnMajorInt4 GetTileLayout(MatrixCoord const &tileShape) const
+    {
+        return ColumnMajorInt4(tileShape, stride());
+    }
+
+    /// Returns the length of the layout
+    CATLASS_HOST_DEVICE
+    LongIndex Capacity() const
+    {
+        return LongIndex(shape_[1]) * CeilDiv<2>(stride_[1]);
+    }
 };
 
 /// Mapping function for nZ matrices which is col-major inside fractal and row-major between fractal
@@ -448,9 +554,9 @@ public:
 
     /// Returns the length of the layout
     CATLASS_HOST_DEVICE
-    size_t Capacity()
+    LongIndex Capacity() const
     {
-        return static_cast<size_t>(stride_[1]) * shape_[1];
+        return static_cast<LongIndex>(stride_[1]) * shape_[1];
     }
 
 private:
@@ -639,9 +745,9 @@ public:
 
     /// Returns the length of the layout
     CATLASS_HOST_DEVICE
-    size_t Capacity()
+    LongIndex Capacity() const
     {
-        return static_cast<size_t>(stride_[3]) * shape_[3];
+        return static_cast<LongIndex>(stride_[3]) * shape_[3];
     }
 
 private:
