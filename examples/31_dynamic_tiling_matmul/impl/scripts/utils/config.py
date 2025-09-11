@@ -3,14 +3,16 @@ import os
 class Config:
     WRAPPER_CODE_PATH = "../wrapper"
     INCLUDE_PATH = "../../include"
-    
+
     LAYOUT_TAG_SET = [0, 1]  # 0 is RowMajor, 1 is ColumnMajor
     LAYOUT_TAG_MAP = {0: "Catlass::layout::RowMajor", 1: "Catlass::layout::ColumnMajor"}
-    
+
     DTYPE_MAP = {"half": 0, "float": 1}
-        
+
     @staticmethod
-    def get_tiling_key(kernel_serial, dtype, l_tag_a, l_tag_b, p_tag_a, p_tag_b, p_tag_c):
+    def get_tiling_key(
+        kernel_serial, dtype, l_tag_a, l_tag_b, p_tag_a, p_tag_b, p_tag_c
+    ):
         part1 = kernel_serial  # 56-63
         part2 = Config.DTYPE_MAP[dtype] << 4  # 48-55
         part3 = 0  # 40-47

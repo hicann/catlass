@@ -31,9 +31,12 @@ size_t {get_workspace_func_name}(TilingParams& tilingParams)
     return CommonMatmulKernelGetWorkspaceSize<ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC>(tilingParams);
 }}
 """
+
     @staticmethod
     def gen_code(kernel_name, base_file_name, kernel_serial, dtype, kernel_info):
-        combinations = list(itertools.product(Config.LAYOUT_TAG_SET, Config.LAYOUT_TAG_SET))
+        combinations = list(
+            itertools.product(Config.LAYOUT_TAG_SET, Config.LAYOUT_TAG_SET)
+        )
         for l_tag_a, l_tag_b in combinations:
             kernel_func_name = (
                 kernel_name
@@ -42,7 +45,9 @@ size_t {get_workspace_func_name}(TilingParams& tilingParams)
                 + str(l_tag_a)
                 + str(l_tag_b)
             )
-            kernel_info[Config.get_tiling_key(kernel_serial, dtype, l_tag_a, l_tag_b, 0, 0, 0)] = kernel_func_name
+            kernel_info[
+                Config.get_tiling_key(kernel_serial, dtype, l_tag_a, l_tag_b, 0, 0, 0)
+            ] = kernel_func_name
             launch_kernel_func_name = "Launch" + kernel_func_name
             get_workspace_func_name = (
                 kernel_name
