@@ -250,7 +250,7 @@ public:
                 // load next matrix B tile from GM to L1
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListIdNext]);
                 auto layoutTileB = layoutB.GetTileLayout(MakeCoord(kActualNext, actualShapeNext.n()));
-                copyGmToL2B(l1BTensor, gmTileB, layoutBInL1, layoutTileB);
+                copyGmToL1B(l1BTensor, gmTileB, layoutBInL1, layoutTileB);
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListIdNext]);
             }
 

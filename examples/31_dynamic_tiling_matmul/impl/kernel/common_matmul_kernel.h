@@ -46,7 +46,7 @@ CATLASS_DEVICE void CommonDynamicMatmul(Catlass::GemmCoord &problemShape, Catlas
 }
 
 template <class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC>
-CATLASS_GLOBAL void CommonMatmulKernel(__gm__ uint8_t *__restrict__ gmA, __gm__ uint8_t *__restrict__ gmB,
+CATLASS_GLOBAL __attribute__((aic)) void CommonMatmulKernel(__gm__ uint8_t *__restrict__ gmA, __gm__ uint8_t *__restrict__ gmB,
     __gm__ uint8_t *__restrict__ gmC, __gm__ uint8_t *__restrict__ tilingData)
 {
     using ArchTag = Catlass::Arch::AtlasA2;
