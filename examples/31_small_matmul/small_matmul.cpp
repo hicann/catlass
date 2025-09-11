@@ -124,7 +124,7 @@ void Run(Options const &options)
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
     if ((CeilDiv(m, L1TileShape::M) * CeilDiv(n, L1TileShape::N) > aicCoreNum) || (k > L1TileShape::K)) {
-        std::cout << "Not satisfy the constraints of 24_samll_kernel." << std::endl;
+        std::cout << "Not satisfy the constraints of small_matmul." << std::endl;
         std::cout << "Please see ReadMe or code for more details." << std::endl;
         ACL_CHECK(aclrtDestroyStream(stream));
         ACL_CHECK(aclrtResetDevice(options.deviceId));
