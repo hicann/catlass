@@ -166,12 +166,29 @@ function build_torch_library() {
     echo -e "${INFO}Torch library built successfully${NC}"
 }
 
+function build_generalization_matmul() {
+    echo -e "${INFO}Building generalization matmul...${NC}"
+    if [[ -d ${BUILD_DIR} ]]; then
+            cmake -S "$CMAKE_SOURCE_DIR" -B "$BUILD_DIR" \
+                -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
+                -DCMAKE_INSTALL_PREFIX="$OUTPUT_DIR" \
+                -DGENERATE_MATMUL_WRAPPER_CODE=ON \
+                "${CMAKE_OPTIONS[@]}"
+    fi
+    cmake --build "$BUILD_DIR" --target "$TARGET" -j
+    cmake --install "$BUILD_DIR" --component "$TARGET"
+    echo -e "${INFO}generalization matmul built successfully${NC}"
+}
+
 case "$TARGET" in
     python_extension)
         build_python_extension
         ;;
     torch_library)
         build_torch_library
+        ;;
+    31_dynamic_tiling_matmul)
+        build_generalization_matmul
         ;;
     *)
         echo -e "${INFO}Building target: $TARGET...${NC}"

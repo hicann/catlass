@@ -1,16 +1,25 @@
 # if aicore-arch is different, maybe crash, to find the solution
+option(GENERATE_MATMUL_WRAPPER_CODE "Generate wrapper code for generalization matmul" OFF)
+
+if(GENERATE_SPECIAL_CODE)
+    execute_process(
+        COMMAND python ${CMAKE_CURRENT_SOURCE_DIR}/impl/scripts/code_gen.py
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/impl/scripts
+    )
+endif()
+
 add_custom_target(auto_gen_code)
 add_custom_command(
     TARGET auto_gen_code
-    COMMAND python ${CMAKE_CURRENT_SOURCE_DIR}/impl/scripts/code_gen.py half
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/impl
+    COMMAND python ${CMAKE_CURRENT_SOURCE_DIR}/impl/scripts/code_gen.py
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/impl/scripts
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/impl/scripts/code_gen.py
     COMMENT "Generate wrapper code, launch_map.h ...done"
 )
 
 add_compile_definitions(TILING_KEY_VAR)
 add_compile_options($<$<COMPILE_LANGUAGE:ASCEND>:--cce-aicore-arch=dav-c220>)
-file(GLOB CATLASS_SHARED_LIB_SRC ${CMAKE_CURRENT_SOURCE_DIR}/impl/wrapper/*.cpp)
+file(GLOB CATLASS_SHARED_LIB_SRC CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/impl/wrapper/*.cpp)
 set_source_files_properties(${CATLASS_SHARED_LIB_SRC} PROPERTIES LANGUAGE ASCEND)
 
 add_library(generalization_kernel STATIC ${CATLASS_SHARED_LIB_SRC})
@@ -25,7 +34,7 @@ include_directories(
 
 link_libraries(generalization_kernel runtime)
 
-add_executable(31_dynamic_tiling_matmul dynamic_tiling_matmul_half.cpp)
+add_executable(31_dynamic_tiling_matmul dynamic_tiling_matmul.cpp)
 add_dependencies(catlass_examples 31_dynamic_tiling_matmul)
 add_dependencies(31_dynamic_tiling_matmul generalization_kernel)
 add_dependencies(generalization_kernel auto_gen_code)
