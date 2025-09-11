@@ -1,9 +1,6 @@
 #ifndef BASE_INFO_H
 #define BASE_INFO_H
 
-using fp16_t = __fp16;
-constexpr uint32_t CORE_NUM = 20;
-
 enum class LayoutTag : uint8_t { TagRowMajor = 0, TagColumnMajor = 1};
 
 struct TilingParams {

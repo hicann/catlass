@@ -32,7 +32,7 @@ size_t {get_workspace_func_name}(TilingParams& tilingParams)
 }}
 """
     @staticmethod
-    def gen_code(self, kernel_name, base_file_name, kernel_serial, dtype, kernel_info):
+    def gen_code(kernel_name, base_file_name, kernel_serial, dtype, kernel_info):
         combinations = list(itertools.product(Config.LAYOUT_TAG_SET, Config.LAYOUT_TAG_SET))
         for l_tag_a, l_tag_b in combinations:
             kernel_func_name = (
@@ -69,7 +69,7 @@ size_t {get_workspace_func_name}(TilingParams& tilingParams)
             layout_b = Config.LAYOUT_TAG_MAP[l_tag_b]
             layout_c = "Catlass::layout::RowMajor"
 
-            content = self.TEMPLATE.format(
+            content = CommonMatmulTemplate.TEMPLATE.format(
                 launch_kernel_func_name=launch_kernel_func_name,
                 get_workspace_func_name=get_workspace_func_name,
                 element_a=element_a,

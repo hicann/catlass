@@ -19,9 +19,9 @@ T1 CeilDivHost(T1 a, T2 b)
     return (a + (tmp - 1)) / tmp;
 }
 
-void BalanceWorkload(uint32_t m, uint32_t n, uint32_t m1, uint32_t n1, uint32_t threshold)
+void BalanceWorkload(uint32_t m, uint32_t n, uint32_t m1, uint32_t n1, uint32_t threshold, PlatformInfo& platformInfo)
 {
-    uint32_t maxBlocks = RoundUpHost(CeilDivHost(m, m1) * CeilDivHost(n, n1), CORE_NUM);
+    uint32_t maxBlocks = RoundUpHost(CeilDivHost(m, m1) * CeilDivHost(n, n1), platformInfo.coreNum);
     while (m1 > threshold && (CeilDivHost(m, m1 - 16) * CeilDivHost(n, n1) <= maxBlocks)) {
         m1 -= 16;
     }

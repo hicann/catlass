@@ -80,11 +80,11 @@ std::unordered_map<uint64_t, std::string> funcNameMap = {{
 """
 
     @staticmethod
-    def gen_code(self, kernel_info):
+    def gen_code(kernel_info):
         declare_list = "\n".join("DECLARE_KERNEL_FUNC({})".format(value) for value in kernel_info.values())
         launch_func_list = ",\n".join("{{ {}, Launch{} }}".format(key, value) for key, value in kernel_info.items())
         workspace_func_list = ",\n".join("{{ {}, {}GetWorkspaceSize }}".format(key, value) for key, value in kernel_info.items())
         func_name_list = ",\n".join("{{ {}, \"{}\" }}".format(key, value) for key, value in kernel_info.items())
-        content = self.TEMPLATE.format(declare_list=declare_list, launch_func_list=launch_func_list, workspace_func_list=workspace_func_list, func_name_list=func_name_list)
+        content = LaunchMapTemplate.TEMPLATE.format(declare_list=declare_list, launch_func_list=launch_func_list, workspace_func_list=workspace_func_list, func_name_list=func_name_list)
         with open(os.path.join("../../include", "launch_map.h"), "w") as f:
                 f.write(content)

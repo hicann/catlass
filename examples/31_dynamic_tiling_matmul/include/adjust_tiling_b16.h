@@ -4,8 +4,8 @@
 #include "utils.h"
 #include "tiling_params.h"
 #include "platform_info.h"
-
-using fp16_t = __fp16;
+#include "fp16_t.h"
+using fp16_t = op::fp16_t;
 
 void AdjustTilingB16Layout00(TilingParams &tilingParams, PlatformInfo& platformInfo)
 {
@@ -26,7 +26,7 @@ void AdjustTilingB16Layout00(TilingParams &tilingParams, PlatformInfo& platformI
     } else {
         m1 = 128;
         n1 = RoundUpHost(n, 16);
-        BalanceWorkload(m, n, m1, n1, 32);
+        BalanceWorkload(m, n, m1, n1, 32, platformInfo);
         uint32_t maxBlocks = RoundUpHost(CeilDivHost(m, m1) * CeilDivHost(n, n1), platformInfo.coreNum);
         uint32_t m1t = m1;
         while (JudgeSpace<fp16_t>(m1t + 16, n1, k1, platformInfo)) {
