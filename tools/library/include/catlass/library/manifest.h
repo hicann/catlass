@@ -8,19 +8,31 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_DETAIL_MACROS_HPP
-#define CATLASS_DETAIL_MACROS_HPP
+#ifndef CATLASS_LIBRARY_MANIFEST_H
+#define CATLASS_LIBRARY_MANIFEST_H
 
-#if defined(__CCE__)
-#include <kernel_operator.h>
-#endif
+#include <vector>
 
-#define CATLASS_DEVICE __forceinline__ __aicore__
-#ifdef __CCE__
-#define CATLASS_HOST_DEVICE __forceinline__ [host, aicore]
-#else
-#define CATLASS_HOST_DEVICE
-#endif
-#define CATLASS_GLOBAL __global__ __aicore__
+#include "catlass/library/operation.h"
 
-#endif  // CATLASS_DETAIL_MACROS_HPP
+#include "catlass/status.hpp"
+
+namespace Catlass {
+namespace Library {
+
+class Manifest {
+public:
+    Manifest() = default;
+
+    Status Initialize();
+    void Append(Operation *operation_ptr);
+    std::vector<Operation *> const &GetOperations() const;
+
+private:
+    std::vector<Operation *> operationList_;
+};
+
+}
+}
+
+#endif // CATLASS_LIBRARY_MANIFEST_H

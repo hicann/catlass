@@ -64,6 +64,7 @@ function show_help() {
     echo "  catlass_examples  Build Catlass examples"
     echo "  python_extension  Build Python extension"
     echo "  torch_library     Build Torch library"
+    echo "  mstuner_catlass   Build msTuner for CATLASS. Use it with -DCATLASS_LIBRARY_KERNELS=<kernel_name>"
     echo "  <other>           Other specific targets, e.g. 00_basic_matmul"
     echo -e "\n{BLUE}Test targets:${NC}"
     echo "  test_self_contained_includes  Test for self contained includes"
@@ -180,6 +181,16 @@ function build_generalization_matmul() {
     echo -e "${INFO}generalization matmul built successfully${NC}"
 }
 
+function build_mstuner_catlass() {
+    echo -e "${INFO}Building mstuner_catlass...${NC}"
+    cmake -S "$CMAKE_SOURCE_DIR" -B "$BUILD_DIR" "${CMAKE_OPTIONS[@]}"
+    cmake --build build --target mstuner_catlass -j
+    cmake --install build --component catlass_kernels
+    cmake --install build --component mstuner_catlass
+    echo -e "${INFO}mstuner_catlass built successfully${NC}"
+}
+
+# 执行构建
 case "$TARGET" in
     python_extension)
         build_python_extension
@@ -189,6 +200,8 @@ case "$TARGET" in
         ;;
     31_dynamic_tiling_matmul)
         build_generalization_matmul
+    mstuner_catlass)
+        build_mstuner_catlass
         ;;
     *)
         echo -e "${INFO}Building target: $TARGET...${NC}"

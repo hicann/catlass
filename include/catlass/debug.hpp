@@ -11,11 +11,11 @@
 #ifndef CATLASS_DEBUG_HPP
 #define CATLASS_DEBUG_HPP
 
-#undef inline
+#pragma push_macro("inline")
 #include <iostream>
 #include <sstream>
 #include <functional>
-#define inline __inline__ __attribute__((always_inline))
+#pragma pop_macro("inline")
 
 #include <acl/acl.h>
 #include <runtime/rt_ffts.h>

@@ -25,6 +25,7 @@ namespace Catlass::Gemm::Device {
 template <class GemmKernel>
 class DeviceGemm {
 public:
+    using Kernel = GemmKernel;
     /// Argument structure: User API
     using Arguments = typename GemmKernel::Arguments;
     /// Argument structure: Kernel API
