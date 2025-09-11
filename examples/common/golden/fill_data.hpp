@@ -13,6 +13,8 @@
 #include <vector>
 #include <cstdlib>
 #include <ctime>
+#include <cstring>
+#include <iostream>
 
 namespace Catlass::golden {
 
@@ -32,6 +34,17 @@ void FillRandomData<int8_t, int>(std::vector<int8_t>& data, int low, int high)
     for (uint64_t i = 0; i < data.size(); ++i) {
         int randomValue = low + rand() % (high - low + 1);
         data[i] = static_cast<int8_t>(randomValue);
+    }
+}
+
+template <>
+void FillRandomData<uint64_t, float>(std::vector<uint64_t>& data, float low, float high)
+{
+    for (uint64_t i = 0; i < data.size(); ++i) {
+        float randomValue = low + (static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX)) * (high - low);
+        uint32_t i32;
+        std::memcpy(&i32, &randomValue, sizeof(randomValue));  // view transfer
+        data[i] = static_cast<uint64_t>(i32);
     }
 }
 
