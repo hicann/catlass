@@ -11,6 +11,7 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/impl
     ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+add_link_options(-Wl,-rpath,${CMAKE_INSTALL_PREFIX}/shared_lib/lib)
 link_libraries(generalization_kernel)
 
 set_source_files_properties(dynamic_tiling_matmul_half.cpp PROPERTIES LANGUAGE ASCEND)
@@ -18,5 +19,5 @@ catlass_example_add_executable(31_dynamic_tiling_matmul dav-c220 dynamic_tiling_
 add_dependencies(31_dynamic_tiling_matmul generalization_kernel)
 
 install(TARGETS generalization_kernel
-    DESTINATION bin
+    DESTINATION shared_lib/lib
     COMPONENT 31_dynamic_tiling_matmul)

@@ -2,14 +2,15 @@
 #define ADJUST_TILING_H
 
 #include "adjust_tiling_b16.h"
+#include "platform_info.h"
 
 template <class DType>
-void AdjustTiling(TilingParams &tilingParams)
+void AdjustTiling(TilingParams &tilingParams, PlatformInfo& platformInfo)
 {
     uint32_t layoutTagA = tilingParams.layoutTagA;
     uint32_t layoutTagB = tilingParams.layoutTagB;
 
-    AdjustTilingB16[layoutTagA][layoutTagB](tilingParams);
+    AdjustTilingB16[layoutTagA][layoutTagB](tilingParams, platformInfo);
 }
 
 #endif  // ADJUST_TILING_H

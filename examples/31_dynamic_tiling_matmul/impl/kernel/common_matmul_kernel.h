@@ -1,7 +1,7 @@
 #ifndef COMMON_MATMUL_KERNEL_H
 #define COMMON_MATMUL_KERNEL_H
 
-#include "base_info.h"
+#include "tiling_params.h"
 #include "acl/acl.h"
 #include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"

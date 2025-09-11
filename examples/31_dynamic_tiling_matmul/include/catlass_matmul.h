@@ -38,14 +38,14 @@ struct CatlassMatmulDescriptor {
             strideC = m;
         }
         tilingParams.SetParams(m, n, k, strideA, strideB, strideC, layoutTagA, layoutTagB, layoutTagC);
-        GetTiling<DType>(tilingParams, tilingKey);
+        GetTiling<DType>(tilingParams, tilingKey, platformInfo);
     }
 
     void SetMatmulInfo(uint32_t m, uint32_t n, uint32_t k, size_t strideA, size_t strideB, size_t strideC,
         LayoutTag layoutTagA, LayoutTag layoutTagB, LayoutTag layoutTagC)
     {
         tilingParams.SetParams(m, n, k, strideA, strideB, strideC, layoutTagA, layoutTagB, layoutTagC);
-        GetTiling<DType>(tilingParams, tilingKey);
+        GetTiling<DType>(tilingParams, tilingKey, platformInfo);
     }
 
     ~CatlassMatmulDescriptor()

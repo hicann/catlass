@@ -43,7 +43,7 @@ launch_map_template = """
 #include <unordered_map>
 #include <string>
 
-#include "base_info.h"
+#include "tiling_params.h"
 
 union TilingKey {{
     uint64_t value;

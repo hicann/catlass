@@ -10,12 +10,13 @@
 #include "launch_map.h"
 #include "adjust_tiling.h"
 #include "select_kernel.h"
+#include "platform_info.h"
 
 template <class DType>
-void GetTiling(TilingParams &tilingParams, TilingKey &tilingKey)
+void GetTiling(TilingParams &tilingParams, TilingKey &tilingKey, PlatformInfo& platformInfo)
 {
-    AdjustTiling<DType>(tilingParams);
-    SelectKernel<DType>(tilingParams, tilingKey);
+    AdjustTiling<DType>(tilingParams, platformInfo);
+    SelectKernel<DType>(tilingParams, tilingKey, platformInfo);
 }
 
 template <class DType>
