@@ -11,7 +11,7 @@
 #ifndef EXAMPLES_COMMON_HELPER_HPP
 #define EXAMPLES_COMMON_HELPER_HPP
 
-#undef inline
+#pragma push_macro("inline")
 #include <cstdio>
 #include <fstream>
 #include <iostream>
@@ -21,7 +21,7 @@
 #include <opdev/fp16_t.h>
 #include <runtime/rt_ffts.h>
 #include <tiling/platform/platform_ascendc.h>
-#define inline __inline__ __attribute__((always_inline))
+#pragma pop_macro("inline")
 
 using op::bfloat16;
 using op::fp16_t;
@@ -45,7 +45,7 @@ using op::fp16_t;
     } while (0)
 
 /**
- * Function for read file.
+ * Function for reading a file.
  */
 bool ReadFile(const std::string& filePath, void* buffer, size_t bufferSize)
 {
@@ -75,6 +75,15 @@ bool ReadFile(const std::string& filePath, void* buffer, size_t bufferSize)
     buf->pubseekpos(0, std::ios::in);
     buf->sgetn(static_cast<char*>(buffer), size);
     return true;
+}
+
+/**
+ * Function for reading file to a vector.
+ */
+template <typename T>
+bool ReadFileToVector(const std::string &filePath, std::vector<T> &vec)
+{
+    return ReadFile(filePath, vec.data(), vec.size() * sizeof(T));
 }
 
 #endif  // EXAMPLES_COMMON_HELPER_HPP

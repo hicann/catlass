@@ -95,10 +95,10 @@ bash scripts/build.sh --simulator 00_basic_matmul
 export LD_LIBRARY_PATH=/usr/local/Ascend/ascend-toolkit/...:$LD_LIBRARY_PATH
 ```
 
-3. 切换到可执行文件的编译目录 `output/bin` 下， 使用`msprof op simulator`执行算子样例程序。
+3. 切换到**仿真器模式**可执行文件的编译目录 `output/bin_sim` 下， 使用`msprof op simulator`执行算子样例程序。
 
 ```bash
-cd output/bin
+cd output/bin_sim
 # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID（可选）
 msprof op simulator ./00_basic_matmul 256 512 1024 0
 ```
