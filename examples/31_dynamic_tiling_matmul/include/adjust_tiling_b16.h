@@ -1,3 +1,13 @@
+/*
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * This file is a part of the CANN Open Software.
+ * Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR dataA PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
+ */
+
 #ifndef ADJUST_TILING_B16_H
 #define ADJUST_TILING_B16_H
 
@@ -16,22 +26,22 @@ void AdjustTilingB16Layout00(TilingParams &tilingParams, PlatformInfo& platformI
 
     if (n >= 256) {
         // n0 = 256 delivers optimal bandwidth performance.
-        uint32_t maxBlocks = RoundUpHost(CeilDivHost(m, m1) * CeilDivHost(n, n1), platformInfo.coreNum);
+        uint32_t maxBlocks = RoundUp(CeilDiv(m, m1) * CeilDiv(n, n1), platformInfo.coreNum);
         BalanceWorkload(m, n, m1, n1, 32, platformInfo);
-        uint32_t blocks = CeilDivHost(m, 64) * CeilDivHost(n, 512);
+        uint32_t blocks = CeilDiv(m, 64) * CeilDiv(n, 512);
         if (blocks < maxBlocks - platformInfo.coreNum && k <= 128) {
             m1 = 64;
             n1 = 512;
         }
     } else {
         m1 = 128;
-        n1 = RoundUpHost(n, 16);
+        n1 = RoundUp(n, 16);
         BalanceWorkload(m, n, m1, n1, 32, platformInfo);
-        uint32_t maxBlocks = RoundUpHost(CeilDivHost(m, m1) * CeilDivHost(n, n1), platformInfo.coreNum);
+        uint32_t maxBlocks = RoundUp(CeilDiv(m, m1) * CeilDiv(n, n1), platformInfo.coreNum);
         uint32_t m1t = m1;
         while (JudgeSpace<fp16_t>(m1t + 16, n1, k1, platformInfo)) {
             m1t += 16;
-            uint32_t blocks = CeilDivHost(m, m1t) * CeilDivHost(n, n1);
+            uint32_t blocks = CeilDiv(m, m1t) * CeilDiv(n, n1);
             if (blocks <= maxBlocks - platformInfo.coreNum) {
                 m1 = m1t;
             }
@@ -63,12 +73,12 @@ void AdjustTilingB16Layout01(TilingParams &tilingParams, PlatformInfo& platformI
         BalanceWorkload(n, m, n1, m1, 64, platformInfo);
         BalanceWorkload(m, n, m1, n1, 64, platformInfo); 
     }
-    uint32_t maxBlocks = RoundUpHost(CeilDivHost(m, m1) * CeilDivHost(n, n1), platformInfo.coreNum);
+    uint32_t maxBlocks = RoundUp(CeilDiv(m, m1) * CeilDiv(n, n1), platformInfo.coreNum);
     if (m < n) {
         uint32_t n1t = n1;
         while (JudgeSpace<fp16_t>(m1, n1t + 16, k1, platformInfo)) {
             n1t += 16;
-            uint32_t blocks = CeilDivHost(m, m1) * CeilDivHost(n, n1t);
+            uint32_t blocks = CeilDiv(m, m1) * CeilDiv(n, n1t);
             if (blocks <= maxBlocks - platformInfo.coreNum) {
                 n1 = n1t;
             }
@@ -77,7 +87,7 @@ void AdjustTilingB16Layout01(TilingParams &tilingParams, PlatformInfo& platformI
         uint32_t m1t = m1;
         while (JudgeSpace<fp16_t>(m1t + 16, n1, k1, platformInfo)) {
             m1t += 16;
-            uint32_t blocks = CeilDivHost(m, m1t) * CeilDivHost(n, n1);
+            uint32_t blocks = CeilDiv(m, m1t) * CeilDiv(n, n1);
             if (blocks <= maxBlocks - platformInfo.coreNum) {
                 m1 = m1t;
             }
@@ -109,13 +119,13 @@ void AdjustTilingB16Layout10(TilingParams &tilingParams, PlatformInfo& platformI
         k1 = 256;
     }
     if (m < m1) {
-        m1 = RoundUpHost(m, 16);
+        m1 = RoundUp(m, 16);
     }
     if (n < n1) {
-        n1 = RoundUpHost(n, 16);
+        n1 = RoundUp(n, 16);
     }
 
-    uint32_t blocks = CeilDivHost(m, m1) * CeilDivHost(n, n1);
+    uint32_t blocks = CeilDiv(m, m1) * CeilDiv(n, n1);
     if (blocks <= platformInfo.coreNum / 4) {
         if (n1 > 16) {
             n1 /= 2;
@@ -152,22 +162,22 @@ void AdjustTilingB16Layout11(TilingParams &tilingParams, PlatformInfo& platformI
 
     if (m >= 256) {
         // n0 = 256 delivers optimal bandwidth performance.
-        uint32_t maxBlocks = RoundUpHost(CeilDivHost(m, m1) * CeilDivHost(n, n1), platformInfo.coreNum);
+        uint32_t maxBlocks = RoundUp(CeilDiv(m, m1) * CeilDiv(n, n1), platformInfo.coreNum);
         BalanceWorkload(n, m, n1, m1, 32, platformInfo);
-        uint32_t blocks = CeilDivHost(n, 64) * CeilDivHost(m, 512);
+        uint32_t blocks = CeilDiv(n, 64) * CeilDiv(m, 512);
         if (blocks < maxBlocks - platformInfo.coreNum && k <= 128) {
             n1 = 64;
             m1 = 512;
         }
     } else {
         n1 = 128;
-        m1 = RoundUpHost(m, 16);
+        m1 = RoundUp(m, 16);
         BalanceWorkload(n, m, n1, m1, 32, platformInfo);
-        uint32_t maxBlocks = RoundUpHost(CeilDivHost(m, m1) * CeilDivHost(n, n1), platformInfo.coreNum);
+        uint32_t maxBlocks = RoundUp(CeilDiv(m, m1) * CeilDiv(n, n1), platformInfo.coreNum);
         uint32_t n1t = n1;
         while (JudgeSpace<fp16_t>(n1t + 16, m1, k1, platformInfo)) {
             n1t += 16;
-            uint32_t blocks = CeilDivHost(n, n1t) * CeilDivHost(m, m1);
+            uint32_t blocks = CeilDiv(n, n1t) * CeilDiv(m, m1);
             if (blocks <= maxBlocks - platformInfo.coreNum) {
                 n1 = n1t;
             }
