@@ -10,17 +10,18 @@ struct TilingParams {
     uint64_t strideA{0};
     uint64_t strideB{0};
     uint64_t strideC{0};
-    uint8_t layoutTagA{0};
-    uint8_t layoutTagB{0};
-    uint8_t m1{0};
-    uint8_t n1{0};
-    uint8_t k1{0};
-    uint8_t paddingTagA{0};
-    uint8_t paddingTagB{0};
-    uint8_t splitkFactor{1};
+    uint16_t m1{0};
+    uint16_t n1{0};
+    uint16_t k1{0};
+    uint16_t splitkFactor{1};
+    // The following parameters are only used in tiling and are not read by the kernel.
+    uint8_t layoutTagA;
+    uint8_t layoutTagB;
+    uint8_t layoutTagC;
+    uint8_t paddingTagA;
+    uint8_t paddingTagB;
+    uint8_t paddingTagC;
     uint8_t blockDim{0};
-    uint32_t aivm1{0};
-    uint32_t aivn1{0};
 
     TilingParams() {}
 

@@ -35,12 +35,10 @@ void BalanceWorkload(uint32_t m, uint32_t n, uint32_t m1, uint32_t n1, uint32_t 
 
 void SetTile(TilingParams &TilingParams, uint32_t m1, uint32_t n1, uint32_t k1)
 {
-    // To save space, tiling parameters (m1, n1, k1) are stored as uint8_t. Though uint8_t has a
-    // maximum value of 255, since these values are always multiples of 16, they can be safely divided
-    // by 16 before storage, ensuring they fit within the uint8_t range.
-    TilingParams.m1 = m1 / 16;
-    TilingParams.n1 = n1 / 16;
-    TilingParams.k1 = k1 / 16;
+    // To save space, tiling parameters (m1, n1, k1) are stored as uint16_t.j
+    TilingParams.m1 = static_cast<uint16_t>(m1);
+    TilingParams.n1 = static_cast<uint16_t>(n1);
+    TilingParams.k1 = static_cast<uint16_t>(k1);
 }
 
 bool IsExStrideLimit(uint32_t rows, uint32_t cols, uint32_t layoutTag)

@@ -24,8 +24,8 @@ void SelectKernelHalf(TilingParams &tilingParams, TilingKey &tilingKey, Platform
 
     uint32_t m = tilingParams.m;
     uint32_t n = tilingParams.n;
-    uint32_t m1 = tilingParams.m1 * 16;
-    uint32_t n1 = tilingParams.n1 * 16;
+    uint32_t m1 = tilingParams.m1;
+    uint32_t n1 = tilingParams.n1;
 
     uint32_t tasksAic = CeilDivHost(m, m1) * CeilDivHost(n, n1) * tilingParams.splitkFactor;
     uint32_t blockDimAic = tasksAic > platformInfo.coreNum ? platformInfo.coreNum : tasksAic;
