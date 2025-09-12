@@ -14,17 +14,28 @@
 #include "platform_info.h"
 #include "launch_map.h"
 
-bool CommonMatmulHandler(TilingParams &params, TilingKey &tilingKey, PlatformInfo& platformInfo)
+bool CommonMatmulHalfHandler(TilingParams &params, TilingKey &tilingKey, PlatformInfo& platformInfo)
 {
     uint8_t kernelSerial = 0;
     tilingKey.SetTilingKey(kernelSerial, params.layoutTagA, params.layoutTagB, 0, 0, 0);
     return true;
 }
 
+bool SmallMatmulHalfHandler(TilingParams &params, TilingKey &tilingKey, PlatformInfo& platformInfo)
+{
+    uint8_t kernelSerial = 1;
+    uint32_t taskBlocks = CeilDiv(params.m, params.m1) * CeilDiv(params.n, params.n1);
+    if (taskBlocks <= platformInfo.coreNum && params.k <= params.k1) {
+        tilingKey.SetTilingKey(kernelSerial, params.layoutTagA, params.layoutTagB, 0, 0, 0);
+        return true;
+    }
+    return false;
+}
+
 void SelectKernelHalf(TilingParams &tilingParams, TilingKey &tilingKey, PlatformInfo& platformInfo)
 {
     using HandlerPtr = bool (*)(TilingParams& tilingParams, TilingKey& tilingKey, PlatformInfo& platformInfo);
-    HandlerPtr handlers[] = {CommonMatmulHandler};
+    HandlerPtr handlers[] = {SmallMatmulHalfHandler, CommonMatmulHalfHandler};
 
     for (auto handler : handlers) {
         if (handler(tilingParams, tilingKey, platformInfo)) {
