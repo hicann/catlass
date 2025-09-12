@@ -213,22 +213,22 @@ void Run(Options const &options)
         ACL_CHECK(aclrtFree(deviceWorkspace));
     }
 
-    // std::vector<fp16_t> hostD(lenD);
-    // ACL_CHECK(aclrtMemcpy(hostD.data(), sizeD, deviceD, sizeD, ACL_MEMCPY_DEVICE_TO_HOST));
+    std::vector<fp16_t> hostD(lenD);
+    ACL_CHECK(aclrtMemcpy(hostD.data(), sizeD, deviceD, sizeD, ACL_MEMCPY_DEVICE_TO_HOST));
 
-    // std::vector<float> hostGolden(lenD);
-    // golden::ComputeGroupedMatmul(problemCount, problemShapeList, hostA, layoutAList,
-    //     hostB, layoutBList, hostGolden, layoutCList);
-    // for (size_t i = 0; i < hostGolden.size(); ++i) {
-    //     hostGolden[i] += static_cast<float>(hostX[i]);
-    // }
+    std::vector<float> hostGolden(lenD);
+    golden::ComputeGroupedMatmul(problemCount, problemShapeList, hostA, layoutAList,
+        hostB, layoutBList, hostGolden, layoutCList);
+    for (size_t i = 0; i < hostGolden.size(); ++i) {
+        hostGolden[i] += static_cast<float>(hostX[i]);
+    }
 
-    // std::vector<uint64_t> errorIndices = golden::CompareData(hostD, hostGolden, k, groupList, m * n);
-    // if (errorIndices.empty()) {
-    //     std::cout << "Compare success." << std::endl;
-    // } else {
-    //     std::cerr << "Compare failed. Error count: " << errorIndices.size() << std::endl;
-    // }
+    std::vector<uint64_t> errorIndices = golden::CompareData(hostD, hostGolden, k, groupList, m * n);
+    if (errorIndices.empty()) {
+        std::cout << "Compare success." << std::endl;
+    } else {
+        std::cerr << "Compare failed. Error count: " << errorIndices.size() << std::endl;
+    }
 
     ACL_CHECK(aclrtFree(deviceA));
     ACL_CHECK(aclrtFree(deviceB));
