@@ -18,15 +18,15 @@
 
 void BalanceWorkload(uint32_t m, uint32_t n, uint32_t m1, uint32_t n1, uint32_t threshold, PlatformInfo& platformInfo)
 {
-    uint32_t maxBlocks = RoundUpHost(CeilDivHost(m, m1) * CeilDivHost(n, n1), platformInfo.coreNum);
-    while (m1 > threshold && (CeilDivHost(m, m1 - 16) * CeilDivHost(n, n1) <= maxBlocks)) {
+    uint32_t maxBlocks = RoundUp(CeilDiv(m, m1) * CeilDiv(n, n1), platformInfo.coreNum);
+    while (m1 > threshold && (CeilDiv(m, m1 - 16) * CeilDiv(n, n1) <= maxBlocks)) {
         m1 -= 16;
     }
     if (m < m1) {
-        m1 = RoundUpHost(m, 16);
+        m1 = RoundUp(m, 16);
     }
     if (n < n1) {
-        n1 = RoundUpHost(n, 16);
+        n1 = RoundUp(n, 16);
     }
 }
 
