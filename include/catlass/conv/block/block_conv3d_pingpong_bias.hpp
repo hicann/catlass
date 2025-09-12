@@ -537,6 +537,8 @@ protected:
     void ReduceKPreloadDbAll(AscendC::GlobalTensor<ElementFmap> const &gmBatchFmap, LayoutFmap const &layoutFmap,
                              AscendC::GlobalTensor<ElementFilter> const &filterGm, LayoutFilter const &layoutFilter)
     {
+        l1AListId = 0;
+        l1BListId = 0;
         AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListId]);
         LoadAL1Process(gmBatchFmap, 0, layoutFmap, l1AListId);
         iterParams.loadAL1Flag = true;
