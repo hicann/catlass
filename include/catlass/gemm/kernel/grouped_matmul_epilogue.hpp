@@ -32,7 +32,59 @@ CATLASS_DEVICE void UnpackListParam(T *const dst, GM_ADDR src, uint32_t len)
 }
 
 } // namespace detail
+template<
+    class ArchTag_,
+    class Element_
+>
+struct MemFill {
+public:
+    using ArchTag = ArchTag_;
+    using Element = Element_;
 
+    CATLASS_DEVICE
+    MemFill(Arch::Resource<ArchTag> &resource)
+    {
+        ubBuffer = resource.ubBuf.template GetBufferByByte<Element>(0);
+    }
+
+    CATLASS_DEVICE
+    void operator()(AscendC::GlobalTensor<Element> const &dst,
+                    uint32_t elementCount, Element fillValue)
+    {
+        const uint32_t maxBurstSize = MAX_BURST_BYTES / sizeof(Element);
+        const uint32_t ubBufferSize = ubBuffer.GetSize() > maxBurstSize ? maxBurstSize : ubBuffer.GetSize();
+        const uint32_t batchCount = elementCount / ubBufferSize;
+        const uint32_t tailElements = elementCount % ubBufferSize;
+
+        // duplicate fillValue to ubBuffer for datacopy later
+        AscendC::Duplicate<Element>(ubBuffer, fillValue, ubBufferSize);
+        AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
+        AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
+        uint32_t currentOffset = 0;
+
+        // fill the main block by datacopy
+        if (batchCount > 0) {
+            for (int index = 0; index < batchCount; ++index) {
+                AscendC::DataCopyPad(dst[currentOffset], ubBuffer,
+                    AscendC::DataCopyExtParams(1, static_cast<uint32_t>(ubBufferSize * sizeof(Element)), 0, 0, 0));
+                currentOffset += ubBufferSize;
+            }
+        }
+        
+        // fill the tail block by datacopy
+        if (tailElements != 0) {
+            AscendC::DataCopyPad(dst[currentOffset], ubBuffer,
+                AscendC::DataCopyExtParams(1, static_cast<uint32_t>(tailElements * sizeof(Element)), 0, 0, 0));
+        }
+    }
+
+    CATLASS_DEVICE
+    ~MemFill() {}
+
+private:
+    static const size_t MAX_BURST_BYTES = 255 * 32;
+    AscendC::LocalTensor<Element> ubBuffer;
+};
 // Template for grouped matmul add kernel. Compute grouped D = A * B + X
 // The matmul results are written to a workspace and the epilogue adds X to produce D.
 template <
@@ -57,6 +109,7 @@ public:
     using LayoutD = typename BlockEpilogue::LayoutD;
 
     using BlockScheduler = BlockScheduler_;
+    using MemFill0 = MemFill<ArchTag, ElementC>;
     static constexpr uint32_t MAX_TENSOR_COUNT = 256;
 
     struct Params {
@@ -211,6 +264,7 @@ public:
     template <>
     CATLASS_DEVICE void operator()<AscendC::AIV>(Params const &params)
     {
+        MemFill0 memFill0(resource);
         GemmCoord problemShapeList[MAX_TENSOR_COUNT];
         LayoutC layoutCList[MAX_TENSOR_COUNT];
 
@@ -236,6 +290,7 @@ public:
             LayoutD layoutD = layoutC; // D shares layout with C
 
             if (problemShape.k() == 0) {
+                memFill0(gmWorkspace[inGroupOffsetC], problemShape.m() * problemShape.n(), 0);
                 inGroupOffsetC += problemShape.m() * problemShape.n();
                 inGroupOffsetD += problemShape.m() * problemShape.n();
                 continue;
