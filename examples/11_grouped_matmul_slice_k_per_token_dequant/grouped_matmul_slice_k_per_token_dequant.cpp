@@ -14,13 +14,10 @@
 #define K_MAX_SHAPE_DIM 0
 #endif
 
-#include <iostream>
 #include <vector>
-#include <cstdlib>
 
-#include "helper.hpp"
 #include "golden.hpp"
-#include "bfloat16.h"
+#include "helper.hpp"
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"

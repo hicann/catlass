@@ -11,37 +11,70 @@
 #ifndef EXAMPLES_COMMON_HELPER_HPP
 #define EXAMPLES_COMMON_HELPER_HPP
 
+#undef inline
+#include <cstdio>
+#include <fstream>
 #include <iostream>
+
 #include <acl/acl.h>
+#include <opdev/bfloat16.h>
+#include <opdev/fp16_t.h>
 #include <runtime/rt_ffts.h>
-#include "tiling/platform/platform_ascendc.h"
+#include <tiling/platform/platform_ascendc.h>
+#define inline __inline__ __attribute__((always_inline))
+
+using op::bfloat16;
+using op::fp16_t;
 
 // Macro function for unwinding acl errors.
-#define ACL_CHECK(status)                                                                    \
-    do {                                                                                     \
-        aclError error = status;                                                             \
-        if (error != ACL_ERROR_NONE) {                                                       \
-            std::cerr << __FILE__ << ":" << __LINE__ << " aclError:" << error << std::endl;  \
-        }                                                                                    \
+#define ACL_CHECK(status)                                                                                              \
+    do {                                                                                                               \
+        aclError error = status;                                                                                       \
+        if (error != ACL_ERROR_NONE) {                                                                                 \
+            std::cerr << __FILE__ << ":" << __LINE__ << " aclError:" << error << std::endl;                            \
+        }                                                                                                              \
     } while (0)
 
 // Macro function for unwinding rt errors.
-#define RT_CHECK(status)                                                                     \
-    do {                                                                                     \
-        rtError_t error = status;                                                            \
-        if (error != RT_ERROR_NONE) {                                                        \
-            std::cerr << __FILE__ << ":" << __LINE__ << " rtError:" << error << std::endl;   \
-        }                                                                                    \
+#define RT_CHECK(status)                                                                                               \
+    do {                                                                                                               \
+        rtError_t error = status;                                                                                      \
+        if (error != RT_ERROR_NONE) {                                                                                  \
+            std::cerr << __FILE__ << ":" << __LINE__ << " rtError:" << error << std::endl;                             \
+        }                                                                                                              \
     } while (0)
 
-int Gcd(int a, int b)
+/**
+ * Function for read file.
+ */
+bool ReadFile(const std::string& filePath, void* buffer, size_t bufferSize)
 {
-    return b == 0 ? a : Gcd(b, a % b);
-}
+    if (buffer == nullptr) {
+        printf("Read file %s failed. Buffer is nullptr.\n", filePath.c_str());
+        return false;
+    }
 
-int Lcm(int a, int b)
-{
-    return abs(a * b) / Gcd(a, b);
+    // Open file
+    std::ifstream fd(filePath, std::ios::binary);
+    if (!fd) {
+        printf("Open file failed. path = %s.\n", filePath.c_str());
+        return false;
+    }
+
+    // Load file data in buffer
+    std::filebuf* buf = fd.rdbuf();
+    size_t size = buf->pubseekoff(0, std::ios::end, std::ios::in);
+    if (size == 0) {
+        printf("File %s size is 0\n", filePath.c_str());
+        return false;
+    }
+    if (size > bufferSize) {
+        printf("File %s size is larger than buffer size.\n", filePath.c_str());
+        return false;
+    }
+    buf->pubseekpos(0, std::ios::in);
+    buf->sgetn(static_cast<char*>(buffer), size);
+    return true;
 }
 
 #endif  // EXAMPLES_COMMON_HELPER_HPP
