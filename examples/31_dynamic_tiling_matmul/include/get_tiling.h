@@ -26,33 +26,33 @@ void PrintTilingParams(const TilingParams &tilingParams)
     uint32_t c0NumPerFractal = 16;
     uint32_t elePerC0 = bytePerC0 / sizeof(DType);
     uint32_t m0 = tilingParams.m1, n0 = tilingParams.n1, k0 = 0;
-    if (m1InL0 && n1InL0) {
+    if (m0 && n0) {
         // TODO
     }
     std::cout << std::dec
-    << "┌────────────────────────────────────────────────────────────┐\n"
-    << "│                    Tiling Parameters                       │\n"
-    << "├──────────────────────────────┬─────────────────────────────┤\n"
-    << "│ m:           " << std::setw(27) << tilingParams.m << " │\n"
-    << "│ n:           " << std::setw(27) << tilingParams.n << " │\n"
-    << "│ k:           " << std::setw(27) << tilingParams.k << " │\n"
-    << "├──────────────────────────────┼─────────────────────────────┤\n"
-    << "│ layoutTagA:  " << std::setw(27) << static_cast<uint32_t>(tilingParams.layoutTagA) << " │\n"
-    << "│ layoutTagB:  " << std::setw(27) << static_cast<uint32_t>(tilingParams.layoutTagB) << " │\n"
-    << "├──────────────────────────────┼─────────────────────────────┤\n"
-    << "│ mTile:       " << std::setw(27) << static_cast<uint32_t>(tilingParams.m1) << " │\n"
-    << "│ nTile:       " << std::setw(27) << static_cast<uint32_t>(tilingParams.n1) << " │\n"
-    << "│ kTile:       " << std::setw(27) << static_cast<uint32_t>(tilingParams.k1) << " │\n"
-    << "├──────────────────────────────┼─────────────────────────────┤\n"
-    << "│ mTileInL0:   " << std::setw(27) << static_cast<uint32_t>(m0) << " │\n"
-    << "│ nTileInL0:   " << std::setw(27) << static_cast<uint32_t>(n0) << " │\n"
-    << "│ kTileInL0:   " << std::setw(27) << static_cast<uint32_t>(k0) << " │\n"
-    << "├──────────────────────────────┼─────────────────────────────┤\n"
-    << "│ paddingTagA: " << std::setw(27) << static_cast<uint32_t>(tilingParams.paddingTagA) << " │\n"
-    << "│ paddingTagB: " << std::setw(27) << static_cast<uint32_t>(tilingParams.paddingTagB) << " │\n"
-    << "├──────────────────────────────┼─────────────────────────────┤\n"
-    << "│ blockDim:    " << std::setw(27) << static_cast<uint32_t>(tilingParams.blockDim) << " │\n"
-    << "└──────────────────────────────┴─────────────────────────────┘" << std::endl;
+    << "┌───────────────────────────────────┐\n"
+    << "│         Tiling Parameters         │\n"
+    << "├──────────────┬────────────────────┤\n"
+    << "│ m:           " << std::setw(20) << tilingParams.m << " │\n"
+    << "│ n:           " << std::setw(20) << tilingParams.n << " │\n"
+    << "│ k:           " << std::setw(20) << tilingParams.k << " │\n"
+    << "├──────────────┼────────────────────┤\n"
+    << "│ layoutTagA:  " << std::setw(20) << static_cast<uint32_t>(tilingParams.layoutTagA) << " │\n"
+    << "│ layoutTagB:  " << std::setw(20) << static_cast<uint32_t>(tilingParams.layoutTagB) << " │\n"
+    << "├──────────────┼────────────────────┤\n"
+    << "│ mTile:       " << std::setw(20) << static_cast<uint32_t>(tilingParams.m1) << " │\n"
+    << "│ nTile:       " << std::setw(20) << static_cast<uint32_t>(tilingParams.n1) << " │\n"
+    << "│ kTile:       " << std::setw(20) << static_cast<uint32_t>(tilingParams.k1) << " │\n"
+    << "├──────────────┼────────────────────┤\n"
+    << "│ mTileInL0:   " << std::setw(20) << static_cast<uint32_t>(m0) << " │\n"
+    << "│ nTileInL0:   " << std::setw(20) << static_cast<uint32_t>(n0) << " │\n"
+    << "│ kTileInL0:   " << std::setw(20) << static_cast<uint32_t>(k0) << " │\n"
+    << "├──────────────┼────────────────────┤\n"
+    << "│ paddingTagA: " << std::setw(20) << static_cast<uint32_t>(tilingParams.paddingTagA) << " │\n"
+    << "│ paddingTagB: " << std::setw(20) << static_cast<uint32_t>(tilingParams.paddingTagB) << " │\n"
+    << "├──────────────┼────────────────────┤\n"
+    << "│ blockDim:    " << std::setw(20) << static_cast<uint32_t>(tilingParams.blockDim) << " │\n"
+    << "└──────────────┴────────────────────┘" << std::endl;
 }
 
 #endif  // TILING_H

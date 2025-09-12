@@ -200,6 +200,7 @@ case "$TARGET" in
         ;;
     31_dynamic_tiling_matmul)
         build_generalization_matmul
+        ;;
     mstuner_catlass)
         build_mstuner_catlass
         ;;

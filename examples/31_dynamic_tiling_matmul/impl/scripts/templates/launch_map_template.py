@@ -11,6 +11,22 @@ class LaunchMapTemplate:
 
 #include "tiling_params.h"
 
+/*
+ * Bit field layout description (little-endian assumed):
+ * -------------------------------------------------------------------------
+ * | Bit Range | Size | Field Name            | Description                |
+ * |-----------|------|-----------------------|----------------------------|
+ * | 0-3       | 4    | layoutTagB            | Layout tag for B matrix    |
+ * | 4-7       | 4    | layoutTagA            | Layout tag for A matrix    |
+ * | 8-11      | 4    | paddingTagA           | Padding tag for A matrix   |
+ * | 12-15     | 4    | paddingTagB           | Padding tag for B matrix   |
+ * | 16-19     | 4    | paddingTagC           | Padding tag for C matrix   |
+ * | 20-51     | 32   | reserveBit            | Reserved for future use    |
+ * | 52-55     | 4    | dtype                 | Data type specification    |
+ * | 56-63     | 8    | templateKernelSerial  | Template kernel serial ID  |
+ * -------------------------------------------------------------------------
+ */
+
 union TilingKey {{
     uint64_t value;
     struct {{
