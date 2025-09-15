@@ -71,7 +71,7 @@ struct CopyGmToL1DynamicOptimized<Arch::AtlasA2, Gemm::GemmType<Element, layout:
     // Mehtods
 
     CATLASS_DEVICE
-    CopyGmToL1() {};
+    CopyGmToL1DynamicOptimized() {};
 
     CATLASS_DEVICE
     void operator()(
@@ -88,10 +88,12 @@ struct CopyGmToL1DynamicOptimized<Arch::AtlasA2, Gemm::GemmType<Element, layout:
         intriParams.dstNzMatrixStride = 0;
 
         if (layoutSrc.shape(0) <= 16) {
+            // If the number of matrix rows is 1, the regular interval-based DataCopy interface can be used instead of
+            // the ND2NZ DataCopy interface, resulting in higher transfer efficiency.
             for (int i = 0; i < layoutSrc.shape(0); ++i) {
                 AscendC::DataCopyParams dataCopyParams(
-                    CeilDiv(layoutSrc.shape(1), layoutDst.shape(2));
-                    layoutDst.shape(2) / ELE_NUM_PER_C0;
+                    CeilDiv(layoutSrc.shape(1), layoutDst.shape(2)),
+                    layoutDst.shape(2) / ELE_NUM_PER_C0,
                     0,
                     (layoutDst.shape(3) - layoutDst.shape(2)) / ELE_NUM_PER_C0
                 );
@@ -106,6 +108,9 @@ struct CopyGmToL1DynamicOptimized<Arch::AtlasA2, Gemm::GemmType<Element, layout:
                     intriParams.dstNzNStride = layoutDst.stride(0) / ELE_NUM_PER_C0;
                     AscendC::DataCopy(dstTensor, srcTensor, intriParams);
                 } else {
+                    // If the matrix has ELE_NUM_PER_C0, columns and a stride of ELE_NUM_PER_C0, it follows a row-major
+                    // layout in L1, allowing the use of standard contiguous DataCopy interface for more efficient
+                    // transfers.
                     AscendC::DataCopy(dstTensor, srcTensor, layoutSrc.shape(0) * layoutSrc.shape(1));
                 }
             } else {
@@ -131,7 +136,7 @@ struct CopyGmToL1DynamicOptimized<Arch::AtlasA2, Gemm::GemmType<Element, layout:
     // Mehtods
 
     CATLASS_DEVICE
-    CopyGmToL1() {};
+    CopyGmToL1DynamicOptimized() {};
 
     CATLASS_DEVICE
     void operator()(
@@ -148,6 +153,8 @@ struct CopyGmToL1DynamicOptimized<Arch::AtlasA2, Gemm::GemmType<Element, layout:
         intriParams.dstNzMatrixStride = 0;
 
         if (layoutSrc.shape(1) <= 16) {
+            // If the number of matrix cols is 1, the regular interval-based DataCopy interface can be used instead of
+            // the ND2NZ DataCopy interface, resulting in higher transfer efficiency.
             for (int i = 0; i < layoutSrc.shape(1); ++i) {
                 AscendC::DataCopyParams dataCopyParams(
                     CeilDiv(layoutSrc.shape(0), layoutDst.shape(0)),
@@ -166,6 +173,9 @@ struct CopyGmToL1DynamicOptimized<Arch::AtlasA2, Gemm::GemmType<Element, layout:
                     intriParams.dstNzNStride = layoutDst.stride(2) / ELE_NUM_PER_C0;
                     AscendC::DataCopy(dstTensor, srcTensor, intriParams);
                 } else {
+                    // If the matrix has ELE_NUM_PER_C0, rows and a stride of ELE_NUM_PER_C0, it follows a col-major
+                    // layout in L1, allowing the use of standard contiguous DataCopy interface for more efficient
+                    // transfers.
                     AscendC::DataCopy(dstTensor, srcTensor, layoutSrc.shape(0) * layoutSrc.shape(1));
                 }
             } else {
