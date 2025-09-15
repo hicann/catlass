@@ -37,12 +37,13 @@ class LaunchMapTemplate:
 union TilingKey {{
     uint64_t value;
     struct {{
-        uint64_t layoutTagB : 4;  // 0-3
-        uint64_t layoutTagA : 4;  // 4-7
-        uint64_t paddingTagA : 4; // 8-11
-        uint64_t paddingTagB : 4; // 12-15
-        uint64_t paddingTagC : 4; // 16-19
-        uint64_t reserveBit : 32; // 20-51 May be used in the future
+        uint64_t layoutTagC : 4;  // 0-3
+        uint64_t layoutTagB : 4;  // 4-7
+        uint64_t layoutTagA : 4;  // 8-11
+        uint64_t paddingTagC : 4; // 12-15
+        uint64_t paddingTagB : 4; // 16-19
+        uint64_t paddingTagA : 4; // 20-23
+        uint64_t reserveBit : 28; // 24-51 May be used in the future
         uint64_t dtype : 4;       // 52-55
         uint64_t templateKernelSerial : 8; // 56-63
     }} bits;

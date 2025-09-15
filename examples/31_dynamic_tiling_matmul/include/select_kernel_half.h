@@ -17,14 +17,17 @@
 bool CommonMatmulHandler(TilingParams &params, TilingKey &tilingKey, PlatformInfo& platformInfo)
 {
     uint8_t kernelSerial = 0;
-    tilingKey.SetTilingKey(kernelSerial, params.layoutTagA, params.layoutTagB, 0, 0, 0);
+    // kernelSerial, layoutTagA, layoutTagB, layoutTagC, paddingTagA, paddingTagB, paddingTagC, dtype(defalut 0).
+    tilingKey.SetTilingKey(kernelSerial, params.layoutTagA, params.layoutTagB, 0, 0, 0, 0);
     return true;
 }
 
 void SelectKernelHalf(TilingParams &tilingParams, TilingKey &tilingKey, PlatformInfo& platformInfo)
 {
     using HandlerPtr = bool (*)(TilingParams& tilingParams, TilingKey& tilingKey, PlatformInfo& platformInfo);
-    HandlerPtr handlers[] = {CommonMatmulHandler};
+    HandlerPtr handlers[] = {
+        CommonMatmulHandler
+    };
 
     for (auto handler : handlers) {
         if (handler(tilingParams, tilingKey, platformInfo)) {
