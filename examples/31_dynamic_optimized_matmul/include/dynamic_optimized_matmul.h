@@ -53,14 +53,19 @@ void ExecuteDynamicOptimizedMatmul(aclrtStream &stream, uint64_t fftsAddr, uint8
 }
 
 template <class DType>
-void PrintTilingParams(TilingParams &tilingParams)
+void PrintTilingParams(TilingParams &tilingParams, PlatformInfo& platformInfo)
 {
     uint32_t bytePerC0 = 32;
     uint32_t c0NumPerFractal = 16;
     uint32_t elePerC0 = bytePerC0 / sizeof(DType);
     uint32_t m0 = tilingParams.m1, n0 = tilingParams.n1, k0 = 0;
     if (m0 && n0) {
-        // TODO
+        uint32_t kTileMaxA = platformInfo.l0ASize / 2 / sizeof(DType) / m0 / elePerC0 * elePerC0;
+        uint32_t kTileMaxB = platformInfo.l0BSize / 2 / sizeof(DType) / n0 / elePerC0 * elePerC0;
+        k0 = kTileMaxA > kTileMaxB ? kTileMaxB : kTileMaxA;
+        if constexpr (std::is_same_v<DType, float>) {
+            k0 = kTileInL0 / c0NumPerFractal * c0NumPerFractal;
+        }
     }
     std::cout << std::dec << "┌─────────────────────────────────────────────┐\n"
               << "│            Tiling Parameters                │\n"
@@ -72,9 +77,9 @@ void PrintTilingParams(TilingParams &tilingParams)
               << "│ layoutTagA:  " << std::setw(30) << static_cast<uint32_t>(tilingParams.layoutTagA) << " │\n"
               << "│ layoutTagB:  " << std::setw(30) << static_cast<uint32_t>(tilingParams.layoutTagB) << " │\n"
               << "├───────────────────┼─────────────────────────┤\n"
-              << "│ mTile:       " << std::setw(30) << static_cast<uint32_t>(tilingParams.m1) << " │\n"
-              << "│ nTile:       " << std::setw(30) << static_cast<uint32_t>(tilingParams.n1) << " │\n"
-              << "│ kTile:       " << std::setw(30) << static_cast<uint32_t>(tilingParams.k1) << " │\n"
+              << "│ mTileInL1:   " << std::setw(30) << static_cast<uint32_t>(tilingParams.m1) << " │\n"
+              << "│ nTileInL1:   " << std::setw(30) << static_cast<uint32_t>(tilingParams.n1) << " │\n"
+              << "│ kTileInL1:   " << std::setw(30) << static_cast<uint32_t>(tilingParams.k1) << " │\n"
               << "├───────────────────┼─────────────────────────┤\n"
               << "│ mTileInL0:   " << std::setw(30) << static_cast<uint32_t>(m0) << " │\n"
               << "│ nTileInL0:   " << std::setw(30) << static_cast<uint32_t>(n0) << " │\n"
