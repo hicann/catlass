@@ -91,7 +91,8 @@ public:
     static constexpr uint32_t KV_SPLIT_SIZE = 128;
     static constexpr uint32_t NZ_LAST_DIM = 16;
 
-    static_assert(std::is_same_v<LayoutC, layout::RowMajor>, "LayoutC only support RowMajor yet!");
+    // [fixpipe change]
+    static_assert(std::is_same_v<LayoutC, layout::RowMajor> || std::is_same_v<LayoutC, layout::zN>, "LayoutC only support RowMajor and zN yet!");
 
     CATLASS_DEVICE
     BlockMmad(Arch::Resource<ArchTag> &resource, uint32_t l1BufAddrStart = 0)
@@ -278,10 +279,10 @@ public:
             if constexpr (!ENABLE_UNIT_FLAG_) {
                 AscendC::SetFlag<AscendC::HardEvent::M_FIX>(locPingPongFlag);
                 AscendC::WaitFlag<AscendC::HardEvent::M_FIX>(locPingPongFlag);
-                copyL0CToGm(gC, l0CTensor[locPingPongFlag * mRound * 128], layoutC, layoutInL0C);
+                copyL0CToGm(gC, l0CTensor[locPingPongFlag * mRound * 128], layoutInL0C, layoutInL0C);
                 AscendC::SetFlag<AscendC::HardEvent::FIX_M>(locPingPongFlag);
             } else {
-                copyL0CToGm(gC, l0CTensor[locPingPongFlag * mRound * 128], layoutC, layoutInL0C, unitFlag);
+                copyL0CToGm(gC, l0CTensor[locPingPongFlag * mRound * 128], layoutInL0C, layoutInL0C, unitFlag);
             }
         }
     }
