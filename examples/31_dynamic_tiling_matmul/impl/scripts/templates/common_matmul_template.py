@@ -46,7 +46,7 @@ size_t {get_workspace_func_name}(TilingParams& tilingParams)
             itertools.product(Config.LAYOUT_TAG_SET, Config.LAYOUT_TAG_SET)
         )
         for l_tag_a, l_tag_b in combinations:
-            # kernel_fun_name can be CommonMatmulKernelLayout00
+            # kernel_fun_name can be CommonMatmulKernelHalfLayout00
             kernel_func_name = (
                 kernel_name
                 + dtype.capitalize()
@@ -58,9 +58,9 @@ size_t {get_workspace_func_name}(TilingParams& tilingParams)
             kernel_info[
                 Config.get_tiling_key(kernel_serial, dtype, l_tag_a, l_tag_b, 0, 0, 0, 0)
             ] = kernel_func_name
-            # launch_kernel_fun_name can be LaunchCommonMatmulKernelLayout00
+            # launch_kernel_fun_name can be LaunchCommonMatmulKernelHalfLayout00
             launch_kernel_func_name = "Launch" + kernel_func_name
-            # get_workspace_fun_name can be CommonMatmulKernelLayout00GetWorkspaceSize
+            # get_workspace_fun_name can be CommonMatmulKernelHalfLayout00GetWorkspaceSize
             get_workspace_func_name = (
                 kernel_name
                 + dtype.capitalize()
@@ -69,7 +69,7 @@ size_t {get_workspace_func_name}(TilingParams& tilingParams)
                 + str(l_tag_b)
                 + "GetWorkspaceSize"
             )
-            # file name can be common_matmul_kernel_layout_00.cpp
+            # file name can be common_matmul_kernel_half_layout_00.cpp
             file_name = (
                 base_file_name
                 + "_"

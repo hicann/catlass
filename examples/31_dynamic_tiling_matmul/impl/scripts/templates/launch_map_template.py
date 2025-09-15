@@ -23,12 +23,13 @@ class LaunchMapTemplate:
  * -------------------------------------------------------------------------
  * | Bit Range | Size | Field Name            | Description                |
  * |-----------|------|-----------------------|----------------------------|
- * | 0-3       | 4    | layoutTagB            | Layout tag for B matrix    |
- * | 4-7       | 4    | layoutTagA            | Layout tag for A matrix    |
- * | 8-11      | 4    | paddingTagA           | Padding tag for A matrix   |
- * | 12-15     | 4    | paddingTagB           | Padding tag for B matrix   |
- * | 16-19     | 4    | paddingTagC           | Padding tag for C matrix   |
- * | 20-51     | 32   | reserveBit            | Reserved for future use    |
+ * | 0-3       | 4    | layoutTagC            | Layout tag for C matrix    |
+ * | 4-7       | 4    | layoutTagB            | Layout tag for B matrix    |
+ * | 8-11      | 4    | layoutTagA            | Layout tag for A matrix    |
+ * | 12-15     | 4    | paddingTagC           | Padding tag for C matrix   |
+ * | 16-19     | 4    | paddingTagB           | Padding tag for B matrix   |
+ * | 20-23     | 4    | paddingTagA           | Padding tag for A matrix   |
+ * | 24-51     | 28   | reserveBit            | Reserved for future use    |
  * | 52-55     | 4    | dtype                 | Data type specification    |
  * | 56-63     | 8    | templateKernelSerial  | Template kernel serial ID  |
  * -------------------------------------------------------------------------
@@ -53,6 +54,7 @@ union TilingKey {{
 
     uint8_t GetLayoutTagA() const {{return bits.layoutTagA;}}
     uint8_t GetLayoutTagB() const {{return bits.layoutTagB;}}
+    uint8_t GetLayoutTagC() const {{return bits.layoutTagC;}}
     uint8_t GetPaddingTagTagA() const {{return bits.paddingTagA;}}
     uint8_t GetPaddingTagTagB() const {{return bits.paddingTagB;}}
     uint8_t GetPaddingTagTagC() const {{return bits.paddingTagC;}}
@@ -62,17 +64,19 @@ union TilingKey {{
     void SetKernelSerial(uint8_t kernelSerial) {{ bits.templateKernelSerial = kernelSerial;}}
     void SetLayoutTagA(uint8_t layoutTagA) {{ bits.layoutTagA = layoutTagA & 0xF; }}
     void SetLayoutTagB(uint8_t layoutTagB) {{ bits.layoutTagB = layoutTagB & 0xF; }}
+    void SetLayoutTagC(uint8_t layoutTagC) {{ bits.layoutTagC = layoutTagC & 0xF; }}
     void SetPaddingTagA(uint8_t paddingTagA) {{ bits.paddingTagA = paddingTagA & 0xF; }}
     void SetPaddingTagB(uint8_t paddingTagB) {{ bits.paddingTagB = paddingTagB & 0xF; }}
     void SetPaddingTagC(uint8_t paddingTagC) {{ bits.paddingTagC = paddingTagC & 0xF; }}
     void SetDtype(uint8_t dtype) {{ bits.dtype = dtype & 0xF; }}
 
-    void SetTilingKey(uint8_t kernelSerial, uint8_t layoutTagA, uint8_t layoutTagB,
+    void SetTilingKey(uint8_t kernelSerial, uint8_t layoutTagA, uint8_t layoutTagB, uint8_t layoutTagC,
         uint8_t paddingTagA, uint8_t paddingTagB, uint8_t paddingTagC, uint8_t dtype = 0)
     {{
         SetKernelSerial(kernelSerial);
         SetLayoutTagA(layoutTagA);
         SetLayoutTagB(layoutTagB);
+        SetLayoutTagC(layoutTagC);
         SetPaddingTagA(paddingTagA);
         SetPaddingTagB(paddingTagB);
         SetPaddingTagC(paddingTagC);
