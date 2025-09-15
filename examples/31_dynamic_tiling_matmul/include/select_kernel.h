@@ -15,9 +15,9 @@
 #include "select_kernel_half.h"
 
 template <class DType>
-void SelectKernel(TilingParams &tilingParams, TilingKey &tilingKey, PlatformInfo& platformInfo)
+void SelectKernel(TilingParams &tilingParams, PlatformInfo& platformInfo)
 {
-    SelectKernelHalf(tilingParams, tilingKey, platformInfo);
+    SelectKernelHalf(tilingParams, platformInfo);
 }
 
 #endif  // SELECT_KERNEL_H

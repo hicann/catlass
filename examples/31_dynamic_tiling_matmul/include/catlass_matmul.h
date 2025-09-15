@@ -17,7 +17,7 @@ template <class DType>
 size_t DoTilingAndSelectKernel(TilingParams &tilingParams, PlatformInfo &platformInfo)
 {
     AdjustTiling<DType>(tilingParams, platformInfo);
-    SelectKernel<DType>(tilingParams, tilingKey, platformInfo);
+    SelectKernel<DType>(tilingParams, platformInfo);
 }
 
 template <class DType>

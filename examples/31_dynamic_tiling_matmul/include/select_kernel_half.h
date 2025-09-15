@@ -14,23 +14,23 @@
 #include "platform_info.h"
 #include "launch_map.h"
 
-bool CommonMatmulHandler(TilingParams &params, TilingKey &tilingKey, PlatformInfo& platformInfo)
+bool CommonMatmulHandler(TilingParams &params, PlatformInfo& platformInfo)
 {
     uint8_t kernelSerial = 0;
     // kernelSerial, layoutTagA, layoutTagB, layoutTagC, paddingTagA, paddingTagB, paddingTagC, dtype(defalut 0).
-    tilingKey.SetTilingKey(kernelSerial, params.layoutTagA, params.layoutTagB, 0, 0, 0, 0);
+    tilingParams.tilingKey.SetTilingKey(kernelSerial, params.layoutTagA, params.layoutTagB, 0, 0, 0, 0);
     return true;
 }
 
-void SelectKernelHalf(TilingParams &tilingParams, TilingKey &tilingKey, PlatformInfo& platformInfo)
+void SelectKernelHalf(TilingParams &tilingParams, PlatformInfo& platformInfo)
 {
-    using HandlerPtr = bool (*)(TilingParams& tilingParams, TilingKey& tilingKey, PlatformInfo& platformInfo);
+    using HandlerPtr = bool (*)(TilingParams& tilingParams, PlatformInfo& platformInfo);
     HandlerPtr handlers[] = {
         CommonMatmulHandler
     };
 
     for (auto handler : handlers) {
-        if (handler(tilingParams, tilingKey, platformInfo)) {
+        if (handler(tilingParams, platformInfo)) {
             break;
         }
     }
