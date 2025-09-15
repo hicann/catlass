@@ -14,17 +14,17 @@
 #include <iostream>
 #include <iomanip>
 
-#include "adjust_tiling_b16.h"
+#include "do_tiling_b16.h"
 #include "select_kernel_half.h"
 #include "launch_map.h"
 
 template <class DType>
-void AdjustTiling(TilingParams &tilingParams, PlatformInfo &platformInfo)
+void DoTiling(TilingParams &tilingParams, PlatformInfo &platformInfo)
 {
     uint32_t layoutTagA = tilingParams.layoutTagA;
     uint32_t layoutTagB = tilingParams.layoutTagB;
 
-    AdjustTilingB16[layoutTagA][layoutTagB](tilingParams, platformInfo);
+    DoTilingB16[layoutTagA][layoutTagB](tilingParams, platformInfo);
 }
 
 template <class DType>
@@ -36,7 +36,7 @@ void SelectKernel(TilingParams &tilingParams, PlatformInfo &platformInfo)
 template <class DType>
 void DoTilingAndSelectKernel(TilingParams &tilingParams, PlatformInfo &platformInfo)
 {
-    AdjustTiling<DType>(tilingParams, platformInfo);
+    DoTiling<DType>(tilingParams, platformInfo);
     SelectKernel<DType>(tilingParams, platformInfo);
 }
 

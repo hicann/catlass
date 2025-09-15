@@ -18,7 +18,7 @@
 
 using fp16_t = op::fp16_t;
 
-void AdjustTilingB16Layout00(TilingParams &tilingParams, PlatformInfo& platformInfo)
+void DoTilingB16Layout00(TilingParams &tilingParams, PlatformInfo& platformInfo)
 {
     uint32_t m = tilingParams.m;
     uint32_t n = tilingParams.m;
@@ -56,7 +56,7 @@ void AdjustTilingB16Layout00(TilingParams &tilingParams, PlatformInfo& platformI
     SetTile(tilingParams, m1, n1, k1);
 }
 
-void AdjustTilingB16Layout01(TilingParams &tilingParams, PlatformInfo& platformInfo)
+void DoTilingB16Layout01(TilingParams &tilingParams, PlatformInfo& platformInfo)
 {
     uint32_t m = tilingParams.m;
     uint32_t n = tilingParams.m;
@@ -107,7 +107,7 @@ void AdjustTilingB16Layout01(TilingParams &tilingParams, PlatformInfo& platformI
     SetTile(tilingParams, m1, n1, k1);
 }
 
-void AdjustTilingB16Layout10(TilingParams &tilingParams, PlatformInfo& platformInfo)
+void DoTilingB16Layout10(TilingParams &tilingParams, PlatformInfo& platformInfo)
 {
     uint32_t m = tilingParams.m;
     uint32_t n = tilingParams.m;
@@ -154,7 +154,7 @@ void AdjustTilingB16Layout10(TilingParams &tilingParams, PlatformInfo& platformI
     SetTile(tilingParams, m1, n1, k1); 
 }
 
-void AdjustTilingB16Layout11(TilingParams &tilingParams, PlatformInfo& platformInfo)
+void DoTilingB16Layout11(TilingParams &tilingParams, PlatformInfo& platformInfo)
 {
     uint32_t m = tilingParams.m;
     uint32_t n = tilingParams.m;
@@ -199,6 +199,6 @@ void AdjustTilingB16Layout11(TilingParams &tilingParams, PlatformInfo& platformI
 }
 
 using FuncType = void (*)(TilingParams &tilingParams, PlatformInfo& platformInfo);
-std::array<std::array<FuncType, 2>, 2> AdjustTilingB16 = {
-    {{{AdjustTilingB16Layout00, AdjustTilingB16Layout01}}, {{AdjustTilingB16Layout10, AdjustTilingB16Layout11}}}};
+std::array<std::array<FuncType, 2>, 2> DoTilingB16 = {
+    {{{DoTilingB16Layout00, DoTilingB16Layout01}}, {{DoTilingB16Layout10, DoTilingB16Layout11}}}};
 #endif  // ADJUST_TILING_B16_H
