@@ -95,7 +95,7 @@ struct CopyGmToL1DynamicOptimized<Arch::AtlasA2, Gemm::GemmType<Element, layout:
                     CeilDiv(layoutSrc.shape(1), layoutDst.shape(2)),
                     layoutDst.shape(2) / ELE_NUM_PER_C0,
                     0,
-                    (layoutDst.shape(3) - layoutDst.shape(2)) / ELE_NUM_PER_C0
+                    (layoutDst.stride(3) - layoutDst.shape(2)) / ELE_NUM_PER_C0
                 );
                 AscendC::DataCopy(
                     dstTensor[i * layoutDst.shape(2)], srcTensor[i * layoutSrc.stride(0)], dataCopyParams);
