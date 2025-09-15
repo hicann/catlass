@@ -106,19 +106,19 @@ public:
             }
 
             // Compute initial location in logical coordinates
-            MatrixCoord offsetA{blockCoord.m() * params.l1TileShape.m(), blockCoord.k() * params.l1TileShape.k()};
-            MatrixCoord offsetB{blockCoord.k() * params.l1TileShape.k(), blockCoord.n() * params.l1TileShape.n()};
-            MatrixCoord offsetC{blockCoord.m() * params.l1TileShape.m(), blockCoord.n() * params.l1TileShape.n()};
-            int64_t gmOffsetA = params.layoutA.GetOffset(offsetA);
-            int64_t gmOffsetB = params.layoutB.GetOffset(offsetB);
-            int64_t gmOffsetC = params.layoutC.GetOffset(offsetC);
+            MatrixCoord coordA{blockCoord.m() * params.l1TileShape.m(), blockCoord.k() * params.l1TileShape.k()};
+            MatrixCoord coordB{blockCoord.k() * params.l1TileShape.k(), blockCoord.n() * params.l1TileShape.n()};
+            MatrixCoord coordC{blockCoord.m() * params.l1TileShape.m(), blockCoord.n() * params.l1TileShape.n()};
+            int64_t gmOffsetA = params.layoutA.GetOffset(coordA);
+            int64_t gmOffsetB = params.layoutB.GetOffset(coordB);
+            int64_t gmOffsetC = params.layoutC.GetOffset(coordC);
 
-            MatrixCoord offsetNextA{
+            MatrixCoord coordNextA{
                 nextBlockCoord.m() * params.l1TileShape.m(), nextBlockCoord.k() * params.l1TileShape.k()};
-            MatrixCoord offsetNextB{
+            MatrixCoord coordNextB{
                 nextBlockCoord.k() * params.l1TileShape.k(), nextBlockCoord.n() * params.l1TileShape.n()};
-            int64_t gmOffsetNextA = params.layoutA.GetOffset(offsetNextA);
-            int64_t gmOffsetNextB = params.layoutB.GetOffset(offsetNextB);
+            int64_t gmOffsetNextA = params.layoutA.GetOffset(coordNextA);
+            int64_t gmOffsetNextB = params.layoutB.GetOffset(coordNextB);
 
             // Compute block-scoped matrix multiply-add
             blockMmad(gmA[gmOffsetA],

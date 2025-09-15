@@ -19,7 +19,7 @@ void Run(aclrtStream &stream, uint32_t m, uint32_t n, uint32_t k, LayoutTag layo
     LayoutTag layoutTagC = LayoutTag::TagRowMajor;
     TilingParams tilingParams{m, n, k, layoutTagA, layoutTagB, layoutTagC};
     DoTilingAndSelectKernel<fp16_t>(tilingParams, platformInfo);
-    PrintTilingParams<fp16_t>(tilingParams);
+    PrintTilingParams<fp16_t>(tilingParams, platformInfo);
 
     size_t lenA = static_cast<size_t>(m) * k;
     size_t lenB = static_cast<size_t>(k) * n;
