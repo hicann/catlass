@@ -8,34 +8,31 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0, 
+// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0,
 // optimizing stack space. If you need to use the ShapeInfo of the AscendC Tensor, please undefine this macro.
 #ifndef K_MAX_SHAPE_DIM
 #define K_MAX_SHAPE_DIM 0
 #endif
 
+#include "catlass/gemm/kernel/grouped_matmul.hpp"
+
 #include <iostream>
 #include <vector>
-#include <cstdlib>
 
-#include "helper.hpp"
-#include "golden.hpp"
-
-
-#include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
+#include "catlass/catlass.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/device/device_gemm.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
-#include "catlass/gemm/kernel/grouped_matmul.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 #include "catlass/layout/layout.hpp"
-
 #include "catlass/status.hpp"
-#include "catlass/gemm/device/device_gemm.hpp"
+
+#include "golden.hpp"
+#include "helper.hpp"
 
 using namespace Catlass;
-
 
 struct Options {
     const std::string HELPER = "08_grouped_matmul group_count m n k [device_id]";
@@ -46,16 +43,8 @@ struct Options {
 
     Options() = default;
 
-    int Parse(int argc, const char **argv)
-    {
-        enum ArgsIndex {
-            GROUP_COUNT_INDEX = 1,
-            M_INDEX,
-            N_INDEX,
-            K_INDEX,
-            DEVICE_ID_INDEX,
-            ARGS_MAX
-        };
+    int Parse(int argc, const char **argv) {
+        enum ArgsIndex { GROUP_COUNT_INDEX = 1, M_INDEX, N_INDEX, K_INDEX, DEVICE_ID_INDEX, ARGS_MAX };
 
         if (argc > ARGS_MAX || argc <= K_INDEX) {
             std::cerr << HELPER << std::endl;
@@ -73,8 +62,7 @@ struct Options {
     }
 };
 
-void Run(Options const &options)
-{
+void Run(Options const &options) {
     aclrtStream stream{nullptr};
     ACL_CHECK(aclInit(nullptr));
     ACL_CHECK(aclrtSetDevice(options.deviceId));
@@ -89,20 +77,20 @@ void Run(Options const &options)
     size_t lenB = static_cast<size_t>(k) * n;
     size_t lenC = static_cast<size_t>(m) * n * problemCount;
 
-    size_t sizeA = lenA * sizeof(fp16_t);
-    size_t sizeB = lenB * sizeof(fp16_t);
-    size_t sizeC = lenC * sizeof(fp16_t);
+    size_t sizeA = lenA * sizeof(float16);
+    size_t sizeB = lenB * sizeof(float16);
+    size_t sizeC = lenC * sizeof(float16);
 
     using LayoutA = layout::ColumnMajor;
     using LayoutB = layout::RowMajor;
     using LayoutC = layout::RowMajor;
 
-    const fp16_t fp16_tLower = -5.0;
-    const fp16_t fp16_tUpper = 5.0;
-    std::vector<fp16_t> hostA(lenA);
-    std::vector<fp16_t> hostB(lenB);
-    golden::FillRandomData<fp16_t>(hostA, fp16_tLower, fp16_tUpper);
-    golden::FillRandomData<fp16_t>(hostB, fp16_tLower, fp16_tUpper);
+    const float16 float16Lower = -5.0;
+    const float16 float16Upper = 5.0;
+    std::vector<float16> hostA(lenA);
+    std::vector<float16> hostB(lenB);
+    golden::FillRandomData<float16>(hostA, float16Lower, float16Upper);
+    golden::FillRandomData<float16>(hostB, float16Lower, float16Upper);
     auto groupList = golden::GenerateGroupList(k, problemCount);
 
     // crate grouped matmul problem shapes and layouts
@@ -132,27 +120,27 @@ void Run(Options const &options)
     uint8_t *problemShapeListDevice{nullptr};
     size_t sizeProblemShapeList = problemShapeList.size() * sizeof(GemmCoord);
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&problemShapeListDevice), sizeProblemShapeList,
-        ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMemcpy(problemShapeListDevice, sizeProblemShapeList,
-        problemShapeList.data(), sizeProblemShapeList, ACL_MEMCPY_HOST_TO_DEVICE));
+                          ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMemcpy(problemShapeListDevice, sizeProblemShapeList, problemShapeList.data(), sizeProblemShapeList,
+                          ACL_MEMCPY_HOST_TO_DEVICE));
 
     uint8_t *layoutAListDevice{nullptr};
     size_t sizeLayoutAList = layoutAList.size() * sizeof(LayoutA);
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&layoutAListDevice), sizeLayoutAList, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMemcpy(layoutAListDevice, sizeLayoutAList,
-        layoutAList.data(), sizeLayoutAList, ACL_MEMCPY_HOST_TO_DEVICE));
+    ACL_CHECK(aclrtMemcpy(layoutAListDevice, sizeLayoutAList, layoutAList.data(), sizeLayoutAList,
+                          ACL_MEMCPY_HOST_TO_DEVICE));
 
     uint8_t *layoutBListDevice{nullptr};
     size_t sizeLayoutBList = layoutBList.size() * sizeof(LayoutB);
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&layoutBListDevice), sizeLayoutBList, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMemcpy(layoutBListDevice, sizeLayoutBList,
-        layoutBList.data(), sizeLayoutBList, ACL_MEMCPY_HOST_TO_DEVICE));
+    ACL_CHECK(aclrtMemcpy(layoutBListDevice, sizeLayoutBList, layoutBList.data(), sizeLayoutBList,
+                          ACL_MEMCPY_HOST_TO_DEVICE));
 
     uint8_t *layoutCListDevice{nullptr};
     size_t sizeLayoutCList = layoutCList.size() * sizeof(LayoutC);
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&layoutCListDevice), sizeLayoutCList, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMemcpy(layoutCListDevice, sizeLayoutCList,
-        layoutCList.data(), sizeLayoutCList, ACL_MEMCPY_HOST_TO_DEVICE));
+    ACL_CHECK(aclrtMemcpy(layoutCListDevice, sizeLayoutCList, layoutCList.data(), sizeLayoutCList,
+                          ACL_MEMCPY_HOST_TO_DEVICE));
 
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
@@ -166,11 +154,8 @@ void Run(Options const &options)
     constexpr bool enableShuffleK = true;
 
     using ArchTag = Arch::AtlasA2;
-    using DispatchPolicy = Gemm::MmadAtlasA2PreloadAsync<
-        preloadStages,
-        l1Stages, l0AStages, l0BStages, l0CStages,
-        enableUnitFlag, enableShuffleK
-    >;
+    using DispatchPolicy = Gemm::MmadAtlasA2PreloadAsync<preloadStages, l1Stages, l0AStages, l0BStages, l0CStages,
+                                                         enableUnitFlag, enableShuffleK>;
     using L1TileShape = GemmShape<128, 256, 256>;
     using L0TileShape = GemmShape<128, 256, 64>;
 
@@ -186,18 +171,14 @@ void Run(Options const &options)
     using MatmulKernel = Gemm::Kernel::GroupedMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 
     using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-    typename MatmulKernel::Arguments arguments{
-        problemCount, problemShapeListDevice, 
-        deviceA, layoutAListDevice, 
-        deviceB, layoutBListDevice, 
-        deviceC, layoutCListDevice
-    };
+    typename MatmulKernel::Arguments arguments{problemCount, problemShapeListDevice, deviceA, layoutAListDevice,
+                                               deviceB,      layoutBListDevice,      deviceC, layoutCListDevice};
     MatmulAdapter matmul_op;
     matmul_op.CanImplement(arguments);
-    //get workspace
+    // get workspace
     size_t sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
     uint8_t *deviceWorkspace{nullptr};
-    if(sizeWorkspace > 0){
+    if (sizeWorkspace > 0) {
         ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
     }
     matmul_op.Initialize(arguments, deviceWorkspace);
@@ -205,12 +186,12 @@ void Run(Options const &options)
 
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
-    std::vector<fp16_t> hostC(lenC);
+    std::vector<float16> hostC(lenC);
     ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
 
     std::vector<float> hostGolden(lenC);
-    golden::ComputeGroupedMatmul(problemCount, problemShapeList, hostA, layoutAList,
-        hostB, layoutBList, hostGolden, layoutCList);
+    golden::ComputeGroupedMatmul(problemCount, problemShapeList, hostA, layoutAList, hostB, layoutBList, hostGolden,
+                                 layoutCList);
 
     std::vector<uint64_t> errorIndices = golden::CompareData(hostC, hostGolden, k, groupList, m * n);
     if (errorIndices.empty()) {
@@ -232,8 +213,7 @@ void Run(Options const &options)
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv)
-{
+int main(int argc, const char **argv) {
     Options options;
     if (options.Parse(argc, argv) == 0) {
         Run(options);

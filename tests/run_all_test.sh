@@ -37,3 +37,6 @@ python3 "$SCRIPT_PATH/test_torch_lib.py"
 
 # self contained include
 bash "$BUILD_SCRIPT_PATH" --clean --tests test_self_contained_includes || exit 1
+
+# test build mstuner
+bash scripts/build.sh --clean -DCATLASS_LIBRARY_KERNELS=basic_matmul mstuner_catlass

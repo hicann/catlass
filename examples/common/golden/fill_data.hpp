@@ -10,35 +10,30 @@
 #ifndef EXAMPLES_COMMON_GOLDEN_FILL_DATA_HPP
 #define EXAMPLES_COMMON_GOLDEN_FILL_DATA_HPP
 
-#include <vector>
 #include <cstdlib>
 #include <ctime>
+#include <vector>
 
 namespace Catlass::golden {
 
 template <class Element, class ElementRandom>
-void FillRandomData(std::vector<Element>& data, ElementRandom low, ElementRandom high)
-{
+void FillRandomData(std::vector<Element> &data, ElementRandom low, ElementRandom high) {
     for (uint64_t i = 0; i < data.size(); ++i) {
-        ElementRandom randomValue = low +
-            (static_cast<ElementRandom>(rand()) / static_cast<ElementRandom>(RAND_MAX)) * (high - low);
+        ElementRandom randomValue = low
+                                    + (static_cast<ElementRandom>(rand()) / static_cast<ElementRandom>(RAND_MAX))
+                                          * (high - low);
         data[i] = static_cast<Element>(randomValue);
     }
 }
 
-template <>
-void FillRandomData<int8_t, int>(std::vector<int8_t>& data, int low, int high)
-{
+template <> void FillRandomData<int8_t, int>(std::vector<int8_t> &data, int low, int high) {
     for (uint64_t i = 0; i < data.size(); ++i) {
         int randomValue = low + rand() % (high - low + 1);
         data[i] = static_cast<int8_t>(randomValue);
     }
 }
 
-
-template <typename T>
-void QuickSort(std::vector<T>& arr, int left, int right)
-{
+template <typename T> void QuickSort(std::vector<T> &arr, int left, int right) {
     if (left >= right) {
         return;
     }
@@ -65,9 +60,7 @@ void QuickSort(std::vector<T>& arr, int left, int right)
 }
 
 // Generate an ascending random sequence as grouplist
-template <typename T = int32_t>
-std::vector<T> GenerateGroupList(uint32_t m, uint32_t problemCount)
-{
+template <typename T = int32_t> std::vector<T> GenerateGroupList(uint32_t m, uint32_t problemCount) {
     std::vector<T> groupList(problemCount);
     std::srand(std::time(nullptr));
     for (int i = 0; i < problemCount; ++i) {

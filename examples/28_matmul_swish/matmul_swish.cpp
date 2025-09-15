@@ -17,28 +17,25 @@
 #include <iostream>
 #include <vector>
 
-#include "helper.hpp"
-#include "golden.hpp"
-
-
-#include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
-#include "catlass/epilogue/dispatch_policy.hpp"
+#include "catlass/catlass.hpp"
 #include "catlass/epilogue/block/block_epilogue.hpp"
+#include "catlass/epilogue/dispatch_policy.hpp"
 #include "catlass/epilogue/tile/tile_copy.hpp"
 #include "catlass/epilogue/tile/tile_elemwise_swish.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
-#include "catlass/gemm/dispatch_policy.hpp"
-#include "catlass/gemm/kernel/matmul_activation.hpp"
-#include "catlass/gemm/gemm_type.hpp"
-#include "catlass/layout/layout.hpp"
-
-#include "catlass/status.hpp"
 #include "catlass/gemm/device/device_gemm.hpp"
+#include "catlass/gemm/dispatch_policy.hpp"
+#include "catlass/gemm/gemm_type.hpp"
+#include "catlass/gemm/kernel/matmul_activation.hpp"
+#include "catlass/layout/layout.hpp"
+#include "catlass/status.hpp"
+
+#include "golden.hpp"
+#include "helper.hpp"
 
 using namespace Catlass;
-
 
 struct Options {
     const std::string HELPER = "28_matmul_swish m n k [device_id]";
@@ -48,15 +45,8 @@ struct Options {
 
     Options() = default;
 
-    int Parse(int argc, const char **argv)
-    {
-        enum ArgsIndex {
-            M_INDEX = 1,
-            N_INDEX,
-            K_INDEX,
-            DEVICE_ID_INDEX,
-            ARGS_MAX
-        };
+    int Parse(int argc, const char **argv) {
+        enum ArgsIndex { M_INDEX = 1, N_INDEX, K_INDEX, DEVICE_ID_INDEX, ARGS_MAX };
 
         if (argc > ARGS_MAX || argc <= K_INDEX) {
             std::cerr << HELPER << std::endl;
@@ -73,8 +63,7 @@ struct Options {
     }
 };
 
-void Run(Options const &options)
-{
+void Run(Options const &options) {
     aclrtStream stream{nullptr};
 
     ACL_CHECK(aclInit(nullptr));
@@ -90,10 +79,10 @@ void Run(Options const &options)
     size_t lenB = static_cast<size_t>(k) * n;
     size_t lenD = static_cast<size_t>(m) * n;
 
-    size_t sizeA = lenA * sizeof(fp16_t);
-    size_t sizeB = lenB * sizeof(fp16_t);
+    size_t sizeA = lenA * sizeof(float16);
+    size_t sizeB = lenB * sizeof(float16);
     size_t sizeC = lenD * sizeof(float);
-    size_t sizeD = lenD * sizeof(fp16_t);
+    size_t sizeD = lenD * sizeof(float16);
 
     // Define the layout of each matrix
     using LayoutA = layout::RowMajor;
@@ -104,10 +93,10 @@ void Run(Options const &options)
     LayoutC layoutD{m, n};
 
     // Prepare input data A, B, and X
-    std::vector<fp16_t> hostA(lenA);
-    std::vector<fp16_t> hostB(lenB);
-    golden::FillRandomData<fp16_t>(hostA, -5.0f, 5.0f);
-    golden::FillRandomData<fp16_t>(hostB, -5.0f, 5.0f);
+    std::vector<float16> hostA(lenA);
+    std::vector<float16> hostB(lenB);
+    golden::FillRandomData<float16>(hostA, -5.0f, 5.0f);
+    golden::FillRandomData<float16>(hostB, -5.0f, 5.0f);
 
     // Allocate device memory and copy data from host to device
     uint8_t *deviceA{nullptr};
@@ -151,13 +140,12 @@ void Run(Options const &options)
     constexpr uint32_t computeLength = 16384; // 64 * 128 * 2B
     using TileElemWiseEpilogue = Epilogue::Tile::TileElemWiseSwish<ArchTag, CType, computeLength>;
     using EpilogueTileCopy = Epilogue::Tile::TileCopy<ArchTag,
-        CType, // CopyGmtoUbC
-        DType // CopyUbtoGmD
-    >;
-    using BlockEpilogue = Epilogue::Block::BlockEpilogue<
-        EpilogueDispatchPolicy, CType, DType,
-        TileElemWiseEpilogue, EpilogueTileCopy>;
-    std::vector<fp16_t> hostD(lenD);
+                                                      CType, // CopyGmtoUbC
+                                                      DType  // CopyUbtoGmD
+                                                      >;
+    using BlockEpilogue =
+        Epilogue::Block::BlockEpilogue<EpilogueDispatchPolicy, CType, DType, TileElemWiseEpilogue, EpilogueTileCopy>;
+    std::vector<float16> hostD(lenD);
     if (m > n) {
         // Define BlockScheduler
         // Swizzle offset is 3 and direction is 0.
@@ -186,7 +174,7 @@ void Run(Options const &options)
             options.problemShape, sizeof(half), deviceA, deviceB, deviceC, deviceD};
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
         MatmulAdapter matmul_op;
-        
+
         matmul_op.Initialize(arguments);
         matmul_op(stream, aicCoreNum, fftsAddr);
         ACL_CHECK(aclrtSynchronizeStream(stream));
@@ -216,8 +204,7 @@ void Run(Options const &options)
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv)
-{
+int main(int argc, const char **argv) {
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;

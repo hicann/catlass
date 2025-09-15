@@ -8,33 +8,31 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0, 
+// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0,
 // optimizing stack space. If you need to use the ShapeInfo of the AscendC Tensor, please undefine this macro.
 #ifndef K_MAX_SHAPE_DIM
 #define K_MAX_SHAPE_DIM 0
 #endif
 
+#include "catlass/gemm/kernel/padding_splitk_matmul.hpp"
+
 #include <iostream>
 #include <vector>
 
-#include "helper.hpp"
-#include "golden.hpp"
-
-
-#include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
+#include "catlass/catlass.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/device/device_gemm.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
-#include "catlass/gemm/kernel/padding_splitk_matmul.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 #include "catlass/layout/layout.hpp"
-
 #include "catlass/status.hpp"
-#include "catlass/gemm/device/device_gemm.hpp"
+
+#include "golden.hpp"
+#include "helper.hpp"
 
 using namespace Catlass;
-
 
 struct Options {
     const std::string HELPER = "22_padding_splitk_matmul m n k [device_id]";
@@ -44,15 +42,8 @@ struct Options {
 
     Options() = default;
 
-    int Parse(int argc, const char **argv)
-    {
-        enum ArgsIndex {
-            M_INDEX = 1,
-            N_INDEX,
-            K_INDEX,
-            DEVICE_ID_INDEX,
-            ARGS_MAX
-        };
+    int Parse(int argc, const char **argv) {
+        enum ArgsIndex { M_INDEX = 1, N_INDEX, K_INDEX, DEVICE_ID_INDEX, ARGS_MAX };
 
         if (argc > ARGS_MAX || argc <= K_INDEX) {
             std::cerr << HELPER << std::endl;
@@ -69,8 +60,7 @@ struct Options {
     }
 };
 
-bool NeedPadding(layout::RowMajor layout, const uint32_t align)
-{
+bool NeedPadding(layout::RowMajor layout, const uint32_t align) {
     // If the stride is greater than 65536, padding is required to reduce the stride.
     if (layout.stride(0) < 65536) {
         return layout.stride(0) % align != 0;
@@ -79,8 +69,7 @@ bool NeedPadding(layout::RowMajor layout, const uint32_t align)
     }
 }
 
-bool NeedPadding(layout::ColumnMajor layout, const uint32_t align)
-{
+bool NeedPadding(layout::ColumnMajor layout, const uint32_t align) {
     // If the stride is greater than 65536, padding is required to reduce the stride.
     if (layout.stride(1) < 65536) {
         return layout.stride(1) % align != 0;
@@ -89,8 +78,7 @@ bool NeedPadding(layout::ColumnMajor layout, const uint32_t align)
     }
 }
 
-void Run(Options const &options)
-{
+void Run(Options const &options) {
     aclrtStream stream{nullptr};
 
     ACL_CHECK(aclInit(nullptr));
@@ -105,9 +93,9 @@ void Run(Options const &options)
     size_t lenB = static_cast<size_t>(k) * n;
     size_t lenC = static_cast<size_t>(m) * n;
 
-    size_t sizeA = lenA * sizeof(fp16_t);
-    size_t sizeB = lenB * sizeof(fp16_t);
-    size_t sizeC = lenC * sizeof(fp16_t);
+    size_t sizeA = lenA * sizeof(float16);
+    size_t sizeB = lenB * sizeof(float16);
+    size_t sizeC = lenC * sizeof(float16);
 
     using LayoutA = layout::RowMajor;
     using LayoutB = layout::ColumnMajor;
@@ -120,10 +108,10 @@ void Run(Options const &options)
     bool aNeedPadding = NeedPadding(layoutA, align);
     bool bNeedPadding = NeedPadding(layoutB, align);
 
-    std::vector<fp16_t> hostA(lenA);
-    std::vector<fp16_t> hostB(lenB);
-    golden::FillRandomData<fp16_t>(hostA, -5.0f, 5.0f);
-    golden::FillRandomData<fp16_t>(hostB, -5.0f, 5.0f);
+    std::vector<float16> hostA(lenA);
+    std::vector<float16> hostB(lenB);
+    golden::FillRandomData<float16>(hostA, -5.0f, 5.0f);
+    golden::FillRandomData<float16>(hostB, -5.0f, 5.0f);
 
     uint8_t *deviceA{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
@@ -156,12 +144,12 @@ void Run(Options const &options)
 
     using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
     using BlockEpilogue = void;
-    std::vector<fp16_t> hostC(lenC);
+    std::vector<float16> hostC(lenC);
 
     // After the Matmul computation is completed, launch the ReduceAdd kernel to accumulate the partial sums.
     constexpr uint32_t computeLength = 32 * 1024 / sizeof(float);
     using ReduceAdd = Catlass::Gemm::Kernel::ReduceAdd<ArchTag, float, half, computeLength>;
-    
+
     if (m > n) {
         // Swizzle offset is 3 and direction is 0.
         using BlockScheduler = typename Gemm::Block::SplitkGemmIdentityBlockSwizzle<3, 0>;
@@ -169,8 +157,8 @@ void Run(Options const &options)
         using MatmulKernel = Gemm::Kernel::PaddingSplitkMatmul<BlockMmad, BlockEpilogue, BlockScheduler, ReduceAdd>;
 
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-        MatmulKernel::Arguments arguments{
-            options.problemShape, aicCoreNum, align, aNeedPadding, bNeedPadding, sizeof(float), deviceA, deviceB, deviceC};
+        MatmulKernel::Arguments arguments{options.problemShape, aicCoreNum, align,   aNeedPadding, bNeedPadding,
+                                          sizeof(float),        deviceA,    deviceB, deviceC};
         MatmulAdapter matmul_op;
         matmul_op.CanImplement(arguments);
         size_t sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
@@ -190,13 +178,13 @@ void Run(Options const &options)
     } else {
         // Swizzle offset is 3 and direction is 1.
         using BlockScheduler = typename Gemm::Block::SplitkGemmIdentityBlockSwizzle<3, 1>;
-            
+
         // kernel level
         using MatmulKernel = Gemm::Kernel::PaddingSplitkMatmul<BlockMmad, BlockEpilogue, BlockScheduler, ReduceAdd>;
 
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-        MatmulKernel::Arguments arguments{
-            options.problemShape, aicCoreNum, align, aNeedPadding, bNeedPadding, sizeof(float), deviceA, deviceB, deviceC};
+        MatmulKernel::Arguments arguments{options.problemShape, aicCoreNum, align,   aNeedPadding, bNeedPadding,
+                                          sizeof(float),        deviceA,    deviceB, deviceC};
         MatmulAdapter matmul_op;
         matmul_op.CanImplement(arguments);
         size_t sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
@@ -234,8 +222,7 @@ void Run(Options const &options)
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv)
-{
+int main(int argc, const char **argv) {
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;

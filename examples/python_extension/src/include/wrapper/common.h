@@ -27,11 +27,7 @@ aclDataType TypeStrToAclDtype(const std::string &typeStr);
 torch::Dtype AclDtypeToTorchDtype(const aclDataType aclDtype);
 aclDataType TorchDtypeToAclDtype(const torch::Dtype torchDtype);
 
-enum class TransposeStatus : uint32_t {
-    NO_TRANSPOSE = 0,
-    TRANSPOSE = 1,
-    NON_CONTINUOUS = 2
-};
+enum class TransposeStatus : uint32_t { NO_TRANSPOSE = 0, TRANSPOSE = 1, NON_CONTINUOUS = 2 };
 
 TransposeStatus GetTransposeStatus(const at::Tensor &mat);
 } // namespace CatlassKernelWrapper

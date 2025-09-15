@@ -31,10 +31,10 @@ void ConstructLayoutT(DataType dataType, uint32_t a, uint32_t b, uint8_t *data)
             *reinterpret_cast<T*>(data) = T::template MakeLayout<int32_t>(a, b);
             break;
         case DataType::Fp16:
-            *reinterpret_cast<T*>(data) = T::template MakeLayout<op::fp16_t>(a, b);
+            *reinterpret_cast<T*>(data) = T::template MakeLayout<float16>(a, b);
             break;
         case DataType::Bf16:
-            *reinterpret_cast<T*>(data) = T::template MakeLayout<op::bfloat16>(a, b);
+            *reinterpret_cast<T*>(data) = T::template MakeLayout<bfloat16>(a, b);
             break;
         case DataType::Fp32:
             *reinterpret_cast<T*>(data) = T::template MakeLayout<float>(a, b);
@@ -201,4 +201,4 @@ void LibraryHelper::ConstructLayout(LayoutType layoutType, DataType dataType, ui
     }
 }
 
-} // namespace Catlass
+} // namespace Catlass

@@ -14,40 +14,25 @@
 #define K_MAX_SHAPE_DIM 0
 #endif
 
-#include <cmath>
-#include <cstdlib>
-#include <fstream>
+#include "catlass/gemm/kernel/fp8_matmul.hpp"
+
 #include <iostream>
 #include <vector>
 
-#include "helper.hpp"
-#include "golden.hpp"
-
-#include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
+#include "catlass/catlass.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/device/device_gemm.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 #include "catlass/layout/layout.hpp"
-#include "catlass/gemm/kernel/fp8_matmul.hpp"
-
 #include "catlass/status.hpp"
-#include "catlass/gemm/device/device_gemm.hpp"
+
+#include "golden.hpp"
+#include "helper.hpp"
 
 using namespace Catlass;
-
-bool ReadFileToVector(const std::string &filePath, std::vector<float> &data)
-{
-    std::ifstream file(filePath, std::ios::binary);
-    if (!file.is_open()) {
-        std::cerr << "Failed to open file: " << filePath << std::endl;
-        return false;
-    }
-    file.read(reinterpret_cast<char *>(data.data()), data.size() * sizeof(float));
-    file.close();
-    return true;
-}
 
 struct Options {
     const std::string HELPER = "29_a2_fp8_e4m3_matmul m n k [device_id]";
@@ -57,8 +42,7 @@ struct Options {
 
     Options() = default;
 
-    int Parse(int argc, const char **argv)
-    {
+    int Parse(int argc, const char **argv) {
         enum ArgsIndex { M_INDEX = 1, N_INDEX, K_INDEX, DEVICE_ID_INDEX, ARGS_MAX };
 
         if (argc > ARGS_MAX || argc <= K_INDEX) {
@@ -76,8 +60,7 @@ struct Options {
     }
 };
 
-void Run(Options const &options)
-{
+void Run(Options const &options) {
     aclrtStream stream{nullptr};
     ACL_CHECK(aclInit(nullptr));
     ACL_CHECK(aclrtSetDevice(options.deviceId));
@@ -100,11 +83,11 @@ void Run(Options const &options)
     size_t lenWB = static_cast<size_t>(splitkLength) * 256 * nScalar;
     size_t lenWC = static_cast<size_t>(128 * mScalar) * 256 * nScalar;
 
-    size_t sizeA = lenA * sizeof(int8_t);
-    size_t sizeB = lenB * sizeof(int8_t);
-    size_t sizeC = lenC * sizeof(half);
-    size_t sizeWA = aicCoreNum * lenWA * sizeof(half) * 2;  // 双缓冲
-    size_t sizeWB = aicCoreNum * lenWB * sizeof(half) * 2;  // 双缓冲
+    size_t sizeA = lenA * sizeof(float8_e4m3);
+    size_t sizeB = lenB * sizeof(float8_e4m3);
+    size_t sizeC = lenC * sizeof(float16);
+    size_t sizeWA = aicCoreNum * lenWA * sizeof(float16) * 2; // 双缓冲
+    size_t sizeWB = aicCoreNum * lenWB * sizeof(float16) * 2; // 双缓冲
     size_t sizeWC = aicCoreNum * lenWC * sizeof(float);
 
     size_t sizeWorkspace;
@@ -117,27 +100,13 @@ void Run(Options const &options)
     LayoutC layoutC{m, n};
 
     // input init
-    half scalar = 1.0;
-    half zeroPoint = 0;
+    float16 scalar(1.0);
+    float16 zeroPoint(0);
 
-    std::vector<int8_t> hostA(lenA);
-    std::vector<int8_t> hostB(lenB);
-    std::string inFileAName = "../../examples/29_a2_fp8_e4m3_matmul/input/a_8.bin";
-    std::ifstream inFileA(inFileAName, std::ios::binary);
-    if (!inFileA.is_open()) {
-        std::cerr << "Failed to open inFileA: " << inFileAName << std::endl;
-    } else {
-        inFileA.read(reinterpret_cast<char *>(hostA.data()), sizeA);
-        inFileA.close();
-    }
-    std::string inFileBName = "../../examples/29_a2_fp8_e4m3_matmul/input/b_8.bin";
-    std::ifstream inFileB(inFileBName, std::ios::binary);
-    if (!inFileB.is_open()) {
-        std::cerr << "Failed to open inFileB: " << inFileBName << std::endl;
-    } else {
-        inFileB.read(reinterpret_cast<char *>(hostB.data()), sizeB);
-        inFileB.close();
-    }
+    std::vector<float8_e4m3> hostA(lenA);
+    std::vector<float8_e4m3> hostB(lenB);
+    golden::FillRandomData(hostA, -5, 5);
+    golden::FillRandomData(hostB, -5, 5);
 
     uint8_t *deviceA{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
@@ -171,7 +140,7 @@ void Run(Options const &options)
 
     using AType = Gemm::GemmType<half, LayoutA>;
     using BType = Gemm::GemmType<half, LayoutB>;
-    using CType = Gemm::GemmType<float, LayoutC>;  // 原子加以float类型进行累加
+    using CType = Gemm::GemmType<float, LayoutC>; // 原子加以float类型进行累加
 
     using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
     using BlockEpilogue = void;
@@ -219,20 +188,17 @@ void Run(Options const &options)
     }
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
-    std::vector<half> hostC(lenC);
+    std::vector<float16> hostC(lenC);
     std::vector<float> hostWC(aicCoreNum * lenWC);
-    std::vector<half> hostWA(aicCoreNum * lenWA * 2);
-    std::vector<half> hostWB(aicCoreNum * lenWB * 2);
+    std::vector<float16> hostWA(aicCoreNum * lenWA * 2);
+    std::vector<float16> hostWB(aicCoreNum * lenWB * 2);
     ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
     ACL_CHECK(aclrtMemcpy(hostWC.data(), sizeWC, deviceWC, sizeWC, ACL_MEMCPY_DEVICE_TO_HOST));
     ACL_CHECK(aclrtMemcpy(hostWA.data(), sizeWA, deviceWA, sizeWA, ACL_MEMCPY_DEVICE_TO_HOST));
     ACL_CHECK(aclrtMemcpy(hostWB.data(), sizeWB, deviceWB, sizeWB, ACL_MEMCPY_DEVICE_TO_HOST));
 
     std::vector<float> hostGolden(m * n);
-    std::string outputFileName = "../../examples/29_a2_fp8_e4m3_matmul/output/expected_data.bin";
-    ReadFileToVector(outputFileName, hostGolden);
 
-    std::vector<float> hostCFP32(hostC.begin(), hostC.end());
     std::vector<uint64_t> errorIndices = golden::CompareData(hostC, hostGolden, k);
     if (errorIndices.empty()) {
         std::cout << "Compare success." << std::endl;
@@ -253,8 +219,7 @@ void Run(Options const &options)
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv)
-{
+int main(int argc, const char **argv) {
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;

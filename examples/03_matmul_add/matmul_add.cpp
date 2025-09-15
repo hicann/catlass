@@ -8,7 +8,7 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0, 
+// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0,
 // optimizing stack space. If you need to use the ShapeInfo of the AscendC Tensor, please undefine this macro.
 #ifndef K_MAX_SHAPE_DIM
 #define K_MAX_SHAPE_DIM 0
@@ -17,30 +17,25 @@
 #include <iostream>
 #include <vector>
 
-#include "helper.hpp"
-#include "golden.hpp"
-
-
-#include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
-#include "catlass/epilogue/dispatch_policy.hpp"
+#include "catlass/catlass.hpp"
 #include "catlass/epilogue/block/block_epilogue.hpp"
+#include "catlass/epilogue/dispatch_policy.hpp"
 #include "catlass/epilogue/tile/tile_copy.hpp"
 #include "catlass/epilogue/tile/tile_elemwise_add.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
-#include "catlass/gemm/dispatch_policy.hpp"
-#include "catlass/gemm/kernel/matmul_epilogue.hpp"
-#include "catlass/gemm/gemm_type.hpp"
-#include "catlass/layout/layout.hpp"
-
-#include "catlass/status.hpp"
 #include "catlass/gemm/device/device_gemm.hpp"
+#include "catlass/gemm/dispatch_policy.hpp"
+#include "catlass/gemm/gemm_type.hpp"
+#include "catlass/gemm/kernel/matmul_epilogue.hpp"
+#include "catlass/layout/layout.hpp"
+#include "catlass/status.hpp"
+
+#include "golden.hpp"
+#include "helper.hpp"
 
 using namespace Catlass;
-
-
-
 
 struct Options {
     const std::string HELPER = "03_matmul_add m n k [device_id]";
@@ -50,15 +45,8 @@ struct Options {
 
     Options() = default;
 
-    int Parse(int argc, const char **argv)
-    {
-        enum ArgsIndex {
-            M_INDEX = 1,
-            N_INDEX,
-            K_INDEX,
-            DEVICE_ID_INDEX,
-            ARGS_MAX
-        };
+    int Parse(int argc, const char **argv) {
+        enum ArgsIndex { M_INDEX = 1, N_INDEX, K_INDEX, DEVICE_ID_INDEX, ARGS_MAX };
 
         if (argc > ARGS_MAX || argc <= K_INDEX) {
             std::cerr << HELPER << std::endl;
@@ -75,8 +63,7 @@ struct Options {
     }
 };
 
-void Run(Options const &options)
-{
+void Run(Options const &options) {
     aclrtStream stream{nullptr};
 
     ACL_CHECK(aclInit(nullptr));
@@ -93,9 +80,9 @@ void Run(Options const &options)
     size_t lenD = static_cast<size_t>(m) * n;
     size_t lenX = lenD;
 
-    size_t sizeA = lenA * sizeof(fp16_t);
-    size_t sizeB = lenB * sizeof(fp16_t);
-    size_t sizeD = lenD * sizeof(fp16_t);
+    size_t sizeA = lenA * sizeof(float16);
+    size_t sizeB = lenB * sizeof(float16);
+    size_t sizeD = lenD * sizeof(float16);
 
     // Define the layout of each matrix
     using LayoutA = layout::RowMajor;
@@ -106,12 +93,12 @@ void Run(Options const &options)
     LayoutC layoutD{m, n};
 
     // Prepare input data A, B, and X
-    std::vector<fp16_t> hostA(lenA);
-    std::vector<fp16_t> hostB(lenB);
-    std::vector<fp16_t> hostX(lenX);
-    golden::FillRandomData<fp16_t>(hostA, -5.0f, 5.0f);
-    golden::FillRandomData<fp16_t>(hostB, -5.0f, 5.0f);
-    golden::FillRandomData<fp16_t>(hostX, -5.0f, 5.0f);
+    std::vector<float16> hostA(lenA);
+    std::vector<float16> hostB(lenB);
+    std::vector<float16> hostX(lenX);
+    golden::FillRandomData<float16>(hostA, -5.0f, 5.0f);
+    golden::FillRandomData<float16>(hostB, -5.0f, 5.0f);
+    golden::FillRandomData<float16>(hostX, -5.0f, 5.0f);
 
     // Allocate device memory and copy data from host to device
     uint8_t *deviceA{nullptr};
@@ -157,8 +144,8 @@ void Run(Options const &options)
     using TileElemWiseEpilogue = Epilogue::Tile::TileElemWiseAdd<ArchTag, ComputeType, computeLength>;
     using EpilogueTileCopy = Epilogue::Tile::TileCopy<ArchTag, CType, XType, DType>;
     using BlockEpilogue = Epilogue::Block::BlockEpilogue<EpilogueDispatchPolicy, CType, XType, DType,
-        TileElemWiseEpilogue, EpilogueTileCopy>;
-    std::vector<fp16_t> hostD(lenD);
+                                                         TileElemWiseEpilogue, EpilogueTileCopy>;
+    std::vector<float16> hostD(lenD);
     if (m > n) {
         // Define BlockScheduler
         // Swizzle offset is 3 and direction is 0.
@@ -166,15 +153,14 @@ void Run(Options const &options)
         // Kernel level
         using MatmulKernel = Gemm::Kernel::MatmulEpilogue<BlockMmad, BlockEpilogue, BlockScheduler>;
         // Prepare params
-        typename MatmulKernel::Arguments arguments{
-            options.problemShape, sizeof(half), deviceA, deviceB, deviceD};
+        typename MatmulKernel::Arguments arguments{options.problemShape, sizeof(half), deviceA, deviceB, deviceD};
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
         MatmulAdapter matmul_op;
         size_t sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
         uint8_t *deviceWorkspace{nullptr};
         if (sizeWorkspace > 0) {
             ACL_CHECK(
-                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace,ACL_MEM_MALLOC_HUGE_FIRST));
+                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
         }
         matmul_op.Initialize(arguments, deviceWorkspace);
         matmul_op(stream, aicCoreNum, fftsAddr);
@@ -192,15 +178,14 @@ void Run(Options const &options)
         // Kernel level
         using MatmulKernel = Gemm::Kernel::MatmulEpilogue<BlockMmad, BlockEpilogue, BlockScheduler>;
         // Prepare params
-        typename MatmulKernel::Arguments arguments{
-            options.problemShape, sizeof(half), deviceA, deviceB, deviceD};
+        typename MatmulKernel::Arguments arguments{options.problemShape, sizeof(half), deviceA, deviceB, deviceD};
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
         MatmulAdapter matmul_op;
         size_t sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
         uint8_t *deviceWorkspace{nullptr};
         if (sizeWorkspace > 0) {
             ACL_CHECK(
-                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace,ACL_MEM_MALLOC_HUGE_FIRST));
+                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
         }
         matmul_op.Initialize(arguments, deviceWorkspace);
         matmul_op(stream, aicCoreNum, fftsAddr);
@@ -212,7 +197,6 @@ void Run(Options const &options)
         // Copy the result from device to host
         ACL_CHECK(aclrtMemcpy(hostD.data(), sizeD, deviceD, sizeD, ACL_MEMCPY_DEVICE_TO_HOST));
     }
-
 
     // Compute the golden result
     std::vector<float> hostGolden(lenD);
@@ -235,8 +219,7 @@ void Run(Options const &options)
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv)
-{
+int main(int argc, const char **argv) {
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;

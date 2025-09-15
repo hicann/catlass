@@ -17,9 +17,13 @@
 namespace CatlassKernelWrapper::GroupedMatmulLike {
 using namespace CatlassKernel;
 using OutputType = at::Tensor;
-KernelInfo GetKernelInfo(const at::Tensor &mat1, const at::Tensor &mat2, const at::Tensor &groupList,
-                         const std::string &outDType, const bool transA, const bool transB, const bool splitK)
-{
+KernelInfo GetKernelInfo(const at::Tensor &mat1,
+                         const at::Tensor &mat2,
+                         const at::Tensor &groupList,
+                         const std::string &outDType,
+                         const bool transA,
+                         const bool transB,
+                         const bool splitK) {
     KernelInfo kernelInfo;
     // set input addr
     kernelInfo.inputAddr.resize(3);
@@ -56,75 +60,74 @@ KernelInfo GetKernelInfo(const at::Tensor &mat1, const at::Tensor &mat2, const a
         kernelInfo.split = KernelInfo::GMMSplit::SPLIT_M;
     }
     switch (kernelInfo.split) {
-        case KernelInfo::GMMSplit::SPLIT_M:
-            // [M, k]@[g, k, n]->[M, n]
-            if (matAShape.size() != 2) {
-                throw std::runtime_error("dim num of mat1 should be 2 (M, k)");
-            }
-            if (matBShape.size() != 3) {
-                throw std::runtime_error("dim num of mat2 should be 3 (G, k, n)");
-            }
-            if (kernelInfo.transA) {
-                throw std::runtime_error("mat1 transpose is not supported");
-            }
-            if (kernelInfo.transB) {
-                matBShape = {matBShape[0], matBShape[2], matBShape[1]};
-            }
-            M = matAShape[0];
-            k1 = matAShape[1];
-            g = matBShape[0];
-            k2 = matBShape[1];
-            n = matBShape[2];
-            if (g != kernelInfo.g) {
-                throw std::runtime_error("mat2[0](g) should be equal to groupNum");
-            }
-            if (M != groupListSum) {
-                throw std::runtime_error("mat1[0](M) should be equal to groupListSum");
-            }
-            if (k1 != k2) {
-                throw std::runtime_error("k unequal");
-            }
-            kernelInfo.M = M;
-            kernelInfo.k = k1;
-            kernelInfo.n = n;
-            break;
-        case KernelInfo::GMMSplit::SPLIT_K:
-            // [m, K]@[K, n]->[g, m, n]
-            if (matAShape.size() != 2) {
-                throw std::runtime_error("dim num of mat1 should be 2(m, K)");
-            }
-            if (matBShape.size() != 2) {
-                throw std::runtime_error("dim num of mat2 should be 2(K, n)");
-            }
-            if (!kernelInfo.transA) {
-                throw std::runtime_error("mat1 must be transposed");
-            } else {
-                matAShape = {matAShape[1], matAShape[0]};
-            }
-            if (kernelInfo.transB) {
-                throw std::runtime_error("mat2 transpose is not supported");
-            }
-            m = matAShape[0];
-            K1 = matAShape[1];
-            K2 = matBShape[0];
-            n = matBShape[1];
-            g = kernelInfo.g;
-            if (K1 != K2) {
-                throw std::runtime_error("K unequal");
-            }
-            K = K1;
-            if (K != groupListSum) {
-                throw std::runtime_error("mat1[1](K) should be equal to groupListSum");
-            }
-            kernelInfo.K = K;
-            kernelInfo.m = m;
-            kernelInfo.n = n;
-            break;
+    case KernelInfo::GMMSplit::SPLIT_M:
+        // [M, k]@[g, k, n]->[M, n]
+        if (matAShape.size() != 2) {
+            throw std::runtime_error("dim num of mat1 should be 2 (M, k)");
+        }
+        if (matBShape.size() != 3) {
+            throw std::runtime_error("dim num of mat2 should be 3 (G, k, n)");
+        }
+        if (kernelInfo.transA) {
+            throw std::runtime_error("mat1 transpose is not supported");
+        }
+        if (kernelInfo.transB) {
+            matBShape = {matBShape[0], matBShape[2], matBShape[1]};
+        }
+        M = matAShape[0];
+        k1 = matAShape[1];
+        g = matBShape[0];
+        k2 = matBShape[1];
+        n = matBShape[2];
+        if (g != kernelInfo.g) {
+            throw std::runtime_error("mat2[0](g) should be equal to groupNum");
+        }
+        if (M != groupListSum) {
+            throw std::runtime_error("mat1[0](M) should be equal to groupListSum");
+        }
+        if (k1 != k2) {
+            throw std::runtime_error("k unequal");
+        }
+        kernelInfo.M = M;
+        kernelInfo.k = k1;
+        kernelInfo.n = n;
+        break;
+    case KernelInfo::GMMSplit::SPLIT_K:
+        // [m, K]@[K, n]->[g, m, n]
+        if (matAShape.size() != 2) {
+            throw std::runtime_error("dim num of mat1 should be 2(m, K)");
+        }
+        if (matBShape.size() != 2) {
+            throw std::runtime_error("dim num of mat2 should be 2(K, n)");
+        }
+        if (!kernelInfo.transA) {
+            throw std::runtime_error("mat1 must be transposed");
+        } else {
+            matAShape = {matAShape[1], matAShape[0]};
+        }
+        if (kernelInfo.transB) {
+            throw std::runtime_error("mat2 transpose is not supported");
+        }
+        m = matAShape[0];
+        K1 = matAShape[1];
+        K2 = matBShape[0];
+        n = matBShape[1];
+        g = kernelInfo.g;
+        if (K1 != K2) {
+            throw std::runtime_error("K unequal");
+        }
+        K = K1;
+        if (K != groupListSum) {
+            throw std::runtime_error("mat1[1](K) should be equal to groupListSum");
+        }
+        kernelInfo.K = K;
+        kernelInfo.m = m;
+        kernelInfo.n = n;
+        break;
     }
     return kernelInfo;
 };
-OutputType AllocOutput(KernelInfo &kernelInfo)
-{
+OutputType AllocOutput(KernelInfo &kernelInfo) {
     OutputType output;
     if (kernelInfo.split == KernelInfo::GMMSplit::SPLIT_M) {
         output = GetOutputTensor({kernelInfo.M, kernelInfo.n}, AclDtypeToTorchDtype(kernelInfo.outputDataType));

@@ -1,0 +1,55 @@
+# 基于 GNU 风格（更接近 KR 风格）
+BasedOnStyle: LLVM
+
+ColumnLimit: 120
+
+# KR 风格的大括号设置
+BreakBeforeBraces: Attach
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+# 引用和指针符号跟随变量名
+PointerAlignment: Right
+SpaceBeforeParens: ControlStatements
+
+# 头文件排序设置
+SortIncludes: true
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex: "^<[^/]+>$"
+    Priority: 1
+  - Regex: '^<[^/]+\.h(>|$)'
+    Priority: 2
+  - Regex: "^<.*/.*>"
+    Priority: 3
+  - Regex: '^"(catlass|tla)/.*"'
+    Priority: 4
+  - Regex: '^".*"'
+    Priority: 5
+  - Regex: ".*"
+    Priority: 6
+
+# 函数声明和定义格式
+AllowAllParametersOfDeclarationOnNextLine: false
+BinPackParameters: false
+BreakBeforeBinaryOperators: NonAssignment
+BreakBeforeTernaryOperators: true
+BreakConstructorInitializers: BeforeComma
+PenaltyBreakAssignment: 100
+PenaltyBreakBeforeFirstCallParameter: 100
+PenaltyBreakComment: 60
+PenaltyBreakFirstLessLess: 120
+PenaltyBreakString: 1000
+
+# 其他格式设置
+DerivePointerAlignment: false
+SpaceInEmptyParentheses: false
+SpacesInAngles: false
+SpacesInConditionalStatement: false
+SpacesInContainerLiterals: false
+SpacesInCStyleCastParentheses: false
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+
+# 确保返回值类型和函数名在同一行（KR 风格）
+AlwaysBreakAfterReturnType: None

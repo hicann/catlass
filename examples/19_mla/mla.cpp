@@ -8,31 +8,26 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0, 
+// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0,
 // optimizing stack space. If you need to use the ShapeInfo of the AscendC Tensor, please undefine this macro.
 #ifndef K_MAX_SHAPE_DIM
 #define K_MAX_SHAPE_DIM 0
 #endif
-#include <iostream>
 #include <fstream>
+#include <iostream>
 // Helper methods to check for errors
-#include "helper.hpp"
 #include "golden.hpp"
+#include "helper.hpp"
 #include "mla_kernel.cpp"
 #include "mla_kernel_tp1_spec.cpp"
-
-
 #include "mla_tiling.h"
 
 using namespace std;
 
-
-
 /**
  * Function for read file.
  */
-bool ReadFile(const string &filePath, void *buffer, size_t bufferSize)
-{
+bool ReadFile(const string &filePath, void *buffer, size_t bufferSize) {
     if (buffer == nullptr) {
         printf("Read file %s failed. Buffer is nullptr.\n", filePath.c_str());
         return false;
@@ -86,8 +81,7 @@ struct Options {
     Options() = default;
 
     // Define function to parse the command-line arguments.
-    int Parse(int argc, const char **argv)
-    {
+    int Parse(int argc, const char **argv) {
         // The number of arguments must >= 7.
         if (argc < MIN_ARGS) {
             printf(HELPER);
@@ -119,22 +113,19 @@ struct Options {
     }
 };
 
-void AllocMem(uint8_t **host, uint8_t **device, size_t size)
-{
+void AllocMem(uint8_t **host, uint8_t **device, size_t size) {
     ACL_CHECK(aclrtMallocHost(reinterpret_cast<void **>(host), size));
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(device), size, ACL_MEM_MALLOC_HUGE_FIRST));
 }
 
-void FreeMem(uint8_t *host, uint8_t *device)
-{
+void FreeMem(uint8_t *host, uint8_t *device) {
     ACL_CHECK(aclrtFreeHost(host));
     ACL_CHECK(aclrtFree(device));
 }
 
 // Allocate several matrices in NPU device memory and call a
 // CATLASSLASS MLA kernel.
-void Run(const Options &options)
-{
+void Run(const Options &options) {
     aclrtStream stream{nullptr};
     ACL_CHECK(aclInit(nullptr));
     ACL_CHECK(aclrtSetDevice(options.deviceId));
@@ -186,15 +177,15 @@ void Run(const Options &options)
     ACL_CHECK(aclrtMallocHost(&kvSeq, batch * sizeof(int32_t)));
     ReadFile(dataPath + "/kv_seqlen.bin", kvSeq, batch * sizeof(int32_t));
 
-    uint64_t qoSize = (uint64_t)numTokens * (uint64_t)numHeads * (uint64_t)embeddingSize * sizeof(fp16_t);
-    uint64_t qRopeSize = (uint64_t)numTokens * (uint64_t)numHeads * (uint64_t)embeddingSizeRope * sizeof(fp16_t);
-    uint64_t kvSize =
-        (uint64_t)numBlocks * (uint64_t)blockSize * (uint64_t)kvHeads * (uint64_t)embeddingSize * sizeof(fp16_t);
-    uint64_t kRopeSize =
-        (uint64_t)numBlocks * (uint64_t)blockSize * (uint64_t)kvHeads * (uint64_t)embeddingSizeRope * sizeof(fp16_t);
-    uint64_t maskSize = (uint64_t)numTokens * (uint64_t)maxKvSeqlen * sizeof(fp16_t);
-    uint64_t blockTableSize =
-        static_cast<uint64_t>(batch * ((maxKvSeqlen + blockSize - 1) / blockSize) * sizeof(int32_t));
+    uint64_t qoSize = (uint64_t)numTokens * (uint64_t)numHeads * (uint64_t)embeddingSize * sizeof(float16);
+    uint64_t qRopeSize = (uint64_t)numTokens * (uint64_t)numHeads * (uint64_t)embeddingSizeRope * sizeof(float16);
+    uint64_t kvSize = (uint64_t)numBlocks * (uint64_t)blockSize * (uint64_t)kvHeads * (uint64_t)embeddingSize
+                      * sizeof(float16);
+    uint64_t kRopeSize = (uint64_t)numBlocks * (uint64_t)blockSize * (uint64_t)kvHeads * (uint64_t)embeddingSizeRope
+                         * sizeof(float16);
+    uint64_t maskSize = (uint64_t)numTokens * (uint64_t)maxKvSeqlen * sizeof(float16);
+    uint64_t blockTableSize = static_cast<uint64_t>(batch * ((maxKvSeqlen + blockSize - 1) / blockSize)
+                                                    * sizeof(int32_t));
     uint32_t tilingSize = (MLATiling::TILING_HEAD_SIZE + batch * MLATiling::TILING_PARA_SIZE) * sizeof(int32_t);
     if (specStraKey) {
         tilingSize = (MLATiling::TILING_HEAD_SIZE + numTokens * MLATiling::TILING_PARA_SIZE) * sizeof(int32_t);
@@ -243,7 +234,7 @@ void Run(const Options &options)
 
     uint8_t *pDevice;
     ACL_CHECK(aclrtMalloc((void **)(&pDevice),
-                          aicCoreNum * MLATiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(fp16_t) * MLATiling::NUM2,
+                          aicCoreNum * MLATiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(float16) * MLATiling::NUM2,
                           ACL_MEM_MALLOC_HUGE_FIRST));
 
     uint8_t *oTmpDevice;
@@ -299,32 +290,32 @@ void Run(const Options &options)
 
     // use Tp1Spec kernel to get better performance when numHeads = 128
     switch (tilingKey) {
-        case 0:
-            MLAFp16<<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, qRopeDevice, kDevice, kRopeDevice,
-                                                   blockTableDevice, oDevice, sDevice, pDevice, oTmpDevice,
-                                                   globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
-            break;
-        case 1:
-            MLABf16<<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, qRopeDevice, kDevice, kRopeDevice,
-                                                   blockTableDevice, oDevice, sDevice, pDevice, oTmpDevice,
-                                                   globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
-            break;
-        case 4:
-            MLATp1SpecFp16<<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, qRopeDevice, kDevice, kRopeDevice,
-                                                          blockTableDevice, oDevice, sDevice, pDevice, oTmpDevice,
-                                                          globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
-            break;
-        case 5:
-            MLATp1SpecBf16<<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, qRopeDevice, kDevice, kRopeDevice,
-                                                          blockTableDevice, oDevice, sDevice, pDevice, oTmpDevice,
-                                                          globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
-            break;
-        default:
-            break;
+    case 0:
+        MLAFp16<<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice,
+                                               oDevice, sDevice, pDevice, oTmpDevice, globaloDevice, oCoreTmpDevice,
+                                               lDevice, tilingDevice);
+        break;
+    case 1:
+        MLABf16<<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice,
+                                               oDevice, sDevice, pDevice, oTmpDevice, globaloDevice, oCoreTmpDevice,
+                                               lDevice, tilingDevice);
+        break;
+    case 4:
+        MLATp1SpecFp16<<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, qRopeDevice, kDevice, kRopeDevice,
+                                                      blockTableDevice, oDevice, sDevice, pDevice, oTmpDevice,
+                                                      globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
+        break;
+    case 5:
+        MLATp1SpecBf16<<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, qRopeDevice, kDevice, kRopeDevice,
+                                                      blockTableDevice, oDevice, sDevice, pDevice, oTmpDevice,
+                                                      globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
+        break;
+    default:
+        break;
     }
     ACL_CHECK(aclrtSynchronizeStream(stream));
     // Copy the result from device to host
-    vector<fp16_t> oHostHalf(qoSize / sizeof(fp16_t));
+    vector<float16> oHostHalf(qoSize / sizeof(float16));
     vector<bfloat16> oHostBf16(qoSize / sizeof(bfloat16), (bfloat16)2.1);
     if (dataType == "half") {
         ACL_CHECK(aclrtMemcpy(oHostHalf.data(), qoSize, oDevice, qoSize, ACL_MEMCPY_DEVICE_TO_HOST));
@@ -333,7 +324,7 @@ void Run(const Options &options)
     }
 
     // Compute the golden result
-    vector<float> goldenHost(qoSize / sizeof(fp16_t));
+    vector<float> goldenHost(qoSize / sizeof(float16));
     const size_t goldenSize = qoSize * 2;
     ReadFile(dataPath + "/golden.bin", goldenHost.data(), goldenSize);
 
@@ -373,8 +364,7 @@ void Run(const Options &options)
 
 /// Entry point to mla example.
 
-int main(int argc, const char **argv)
-{
+int main(int argc, const char **argv) {
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;

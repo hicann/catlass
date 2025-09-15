@@ -19,34 +19,25 @@
 #include <runtime/rt_ffts.h>
 #include <tiling/platform/platform_ascendc.h>
 
-#include <float8.h>
-#include <intn.h>
-#include <mxfloat.h>
-#include <Eigen/Core>
-
-using namespace ml_dtypes;
-using fp16_t = Eigen::half;
-using bfloat16 = Eigen::bfloat16;
+#include "dtypes.h"
 
 // Macro function for unwinding acl errors.
-#define ACL_CHECK(status)                                                      \
-  do {                                                                         \
-    aclError error = status;                                                   \
-    if (error != ACL_ERROR_NONE) {                                             \
-      std::cerr << __FILE__ << ":" << __LINE__ << " aclError:" << error        \
-                << std::endl;                                                  \
-    }                                                                          \
-  } while (0)
+#define ACL_CHECK(status)                                                                                              \
+    do {                                                                                                               \
+        aclError error = status;                                                                                       \
+        if (error != ACL_ERROR_NONE) {                                                                                 \
+            std::cerr << __FILE__ << ":" << __LINE__ << " aclError:" << error << std::endl;                            \
+        }                                                                                                              \
+    } while (0)
 
 // Macro function for unwinding rt errors.
-#define RT_CHECK(status)                                                       \
-  do {                                                                         \
-    rtError_t error = status;                                                  \
-    if (error != RT_ERROR_NONE) {                                              \
-      std::cerr << __FILE__ << ":" << __LINE__ << " rtError:" << error         \
-                << std::endl;                                                  \
-    }                                                                          \
-  } while (0)
+#define RT_CHECK(status)                                                                                               \
+    do {                                                                                                               \
+        rtError_t error = status;                                                                                      \
+        if (error != RT_ERROR_NONE) {                                                                                  \
+            std::cerr << __FILE__ << ":" << __LINE__ << " rtError:" << error << std::endl;                             \
+        }                                                                                                              \
+    } while (0)
 
 int Gcd(int a, int b) { return b == 0 ? a : Gcd(b, a % b); }
 

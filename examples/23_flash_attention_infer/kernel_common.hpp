@@ -53,32 +53,16 @@ constexpr uint32_t FLOAT_VECTOR_SIZE = 64;
 
 constexpr uint32_t UNIT_BLOCK_STACK_NUM = 4;
 
-template <typename T>
-CATLASS_DEVICE T AlignUp(T a, T b)
-{
-    return (b == 0) ? 0 : (a + b - 1) / b * b;
-}
+template <typename T> CATLASS_DEVICE T AlignUp(T a, T b) { return (b == 0) ? 0 : (a + b - 1) / b * b; }
 
-template <typename T>
-CATLASS_DEVICE T Min(T a, T b)
-{
-    return (a > b) ? b : a;
-}
+template <typename T> CATLASS_DEVICE T Min(T a, T b) { return (a > b) ? b : a; }
 
-template <typename T>
-CATLASS_DEVICE T Max(T a, T b)
-{
-    return (a > b) ? a : b;
-}
+template <typename T> CATLASS_DEVICE T Max(T a, T b) { return (a > b) ? a : b; }
 
-enum class cvPipeLineType{
-    FAI_COMMON_NORMAL = 0,
-    FAI_COMMON_CHUNK_MASK = 1
-};
+enum class cvPipeLineType { FAI_COMMON_NORMAL = 0, FAI_COMMON_CHUNK_MASK = 1 };
 
 CATLASS_DEVICE
-uint32_t GetQNBlockTile(uint32_t qSeqlen, uint32_t groupSize)
-{
+uint32_t GetQNBlockTile(uint32_t qSeqlen, uint32_t groupSize) {
     uint32_t qNBlockTile = (128 / qSeqlen) / 2 * 2;
     qNBlockTile = qNBlockTile < groupSize ? qNBlockTile : groupSize;
     qNBlockTile = qNBlockTile < 1 ? 1 : qNBlockTile;
@@ -86,14 +70,10 @@ uint32_t GetQNBlockTile(uint32_t qSeqlen, uint32_t groupSize)
 }
 
 CATLASS_DEVICE
-uint32_t GetQSBlockTile(uint32_t kvSeqlen)
-{
+uint32_t GetQSBlockTile(uint32_t kvSeqlen) {
     uint32_t qSBlockTile = 128;
     return qSBlockTile;
 }
-
-
-
 
 struct FATilingData {
     uint32_t numHeads = 0;
@@ -115,8 +95,7 @@ struct FATilingData {
     float scaleValue = 0.0;
 };
 
-
-struct FAIKernelParams{
+struct FAIKernelParams {
     GM_ADDR q;
     GM_ADDR k;
     GM_ADDR v;
@@ -134,12 +113,32 @@ struct FAIKernelParams{
     CATLASS_DEVICE
     FAIKernelParams() {}
     CATLASS_DEVICE
-    FAIKernelParams(GM_ADDR q_, GM_ADDR k_, GM_ADDR v_, GM_ADDR mask_, GM_ADDR blockTables_, 
-        GM_ADDR actualQseqlen_, GM_ADDR actualKvseqlen_, GM_ADDR o_, GM_ADDR s_, GM_ADDR p_, 
-        GM_ADDR oTemp_, GM_ADDR oUpdate_, GM_ADDR tiling_)
-        : q(q_), k(k_), v(v_), mask(mask_), blockTables(blockTables_), actualQseqlen(actualQseqlen_), 
-            actualKvseqlen(actualKvseqlen_), o(o_), s(s_), p(p_), oTemp(oTemp_), oUpdate(oUpdate_), tiling(tiling_) {}
+    FAIKernelParams(GM_ADDR q_,
+                    GM_ADDR k_,
+                    GM_ADDR v_,
+                    GM_ADDR mask_,
+                    GM_ADDR blockTables_,
+                    GM_ADDR actualQseqlen_,
+                    GM_ADDR actualKvseqlen_,
+                    GM_ADDR o_,
+                    GM_ADDR s_,
+                    GM_ADDR p_,
+                    GM_ADDR oTemp_,
+                    GM_ADDR oUpdate_,
+                    GM_ADDR tiling_)
+        : q(q_)
+        , k(k_)
+        , v(v_)
+        , mask(mask_)
+        , blockTables(blockTables_)
+        , actualQseqlen(actualQseqlen_)
+        , actualKvseqlen(actualKvseqlen_)
+        , o(o_)
+        , s(s_)
+        , p(p_)
+        , oTemp(oTemp_)
+        , oUpdate(oUpdate_)
+        , tiling(tiling_) {}
 };
-
 
 #endif

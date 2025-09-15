@@ -23,8 +23,12 @@ using namespace CatlassKernel;
 using OutputType = at::Tensor;
 
 OutputType AllocOutput(ConvKernelInfo &kernelInfo);
-ConvKernelInfo GetKernelInfo(const at::Tensor &fmap, const at::Tensor &filter, const at::Tensor &bias,
-                             const std::vector<int64_t> &strideList, const std::vector<int64_t> &padList,
-                             const std::vector<int64_t> &dilationList, const std::string &outDType);
+ConvKernelInfo GetKernelInfo(const at::Tensor &fmap,
+                             const at::Tensor &filter,
+                             const at::Tensor &bias,
+                             const std::vector<int64_t> &strideList,
+                             const std::vector<int64_t> &padList,
+                             const std::vector<int64_t> &dilationList,
+                             const std::string &outDType);
 } // namespace CatlassKernelWrapper::ConvLike
 #endif

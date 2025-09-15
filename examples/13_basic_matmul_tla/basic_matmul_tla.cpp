@@ -14,29 +14,28 @@
 #define K_MAX_SHAPE_DIM 0
 #endif
 
+#include "catlass/gemm/kernel/basic_matmul_tla.hpp"
+
 #include <iostream>
 #include <vector>
 
-#include "helper.hpp"
-#include "golden.hpp"
-
-
-#include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
-#include "catlass/gemm/gemm_type.hpp"
+#include "catlass/catlass.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/device/device_gemm.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
-#include "catlass/gemm/kernel/basic_matmul_tla.hpp"
+#include "catlass/gemm/gemm_type.hpp"
 #include "catlass/layout/layout.hpp"
 #include "catlass/status.hpp"
-#include "catlass/gemm/device/device_gemm.hpp"
 #include "tla/layout.hpp"
 #include "tla/tensor.hpp"
 
+#include "golden.hpp"
+#include "helper.hpp"
+
 using namespace Catlass;
 using namespace tla;
-
 
 struct Options {
     const std::string HELPER = "00_basic_matmul m n k [device_id]";
@@ -46,15 +45,8 @@ struct Options {
 
     Options() = default;
 
-    int Parse(int argc, const char **argv)
-    {
-        enum ArgsIndex {
-            M_INDEX = 1,
-            N_INDEX,
-            K_INDEX,
-            DEVICE_ID_INDEX,
-            ARGS_MAX
-        };
+    int Parse(int argc, const char **argv) {
+        enum ArgsIndex { M_INDEX = 1, N_INDEX, K_INDEX, DEVICE_ID_INDEX, ARGS_MAX };
 
         if (argc > ARGS_MAX || argc <= K_INDEX) {
             std::cerr << HELPER << std::endl;
@@ -71,8 +63,7 @@ struct Options {
     }
 };
 
-void Run(Options const &options)
-{
+void Run(Options const &options) {
     aclrtStream stream{nullptr};
 
     ACL_CHECK(aclInit(nullptr));
@@ -87,9 +78,9 @@ void Run(Options const &options)
     size_t lenB = static_cast<size_t>(k) * n;
     size_t lenC = static_cast<size_t>(m) * n;
 
-    size_t sizeA = lenA * sizeof(fp16_t);
-    size_t sizeB = lenB * sizeof(fp16_t);
-    size_t sizeC = lenC * sizeof(fp16_t);
+    size_t sizeA = lenA * sizeof(float16);
+    size_t sizeB = lenB * sizeof(float16);
+    size_t sizeC = lenC * sizeof(float16);
     size_t sizeWorkspace;
 
     using LayoutTagA = layout::RowMajor;
@@ -99,10 +90,10 @@ void Run(Options const &options)
     LayoutTagB tagB{k, n};
     LayoutTagC tagC{m, n};
 
-    std::vector<fp16_t> hostA(lenA);
-    std::vector<fp16_t> hostB(lenB);
-    golden::FillRandomData<fp16_t>(hostA, -5.0f, 5.0f);
-    golden::FillRandomData<fp16_t>(hostB, -5.0f, 5.0f);
+    std::vector<float16> hostA(lenA);
+    std::vector<float16> hostB(lenB);
+    golden::FillRandomData<float16>(hostA, -5.0f, 5.0f);
+    golden::FillRandomData<float16>(hostB, -5.0f, 5.0f);
 
     uint8_t *deviceA{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
@@ -135,9 +126,8 @@ void Run(Options const &options)
 
     using TileCopy =
         Gemm::Tile::PackedTileCopyTla<ArchTag, ElementA, LayoutTagA, ElementB, LayoutTagB, ElementC, LayoutTagC>;
-    using BlockMmad =
-        Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape,
-                                    ElementA, ElementB, ElementC, void, TileCopy>;
+    using BlockMmad = Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, ElementA, ElementB, ElementC,
+                                                void, TileCopy>;
     using BlockEpilogue = void;
 
     if (options.problemShape.m() > options.problemShape.n()) {
@@ -149,16 +139,14 @@ void Run(Options const &options)
 
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
 
-        MatmulKernel::Arguments arguments{
-            options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC};
+        MatmulKernel::Arguments arguments{options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC};
 
         MatmulAdapter matmul_op;
         matmul_op.CanImplement(arguments);
         sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
         if (sizeWorkspace > 0) {
             ACL_CHECK(
-                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
-            );
+                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
         }
         matmul_op.Initialize(arguments, deviceWorkspace);
         matmul_op(stream, aicCoreNum);
@@ -171,23 +159,21 @@ void Run(Options const &options)
 
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
 
-        MatmulKernel::Arguments arguments{
-            options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC};
+        MatmulKernel::Arguments arguments{options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC};
 
         MatmulAdapter matmul_op;
         matmul_op.CanImplement(arguments);
         sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
         if (sizeWorkspace > 0) {
             ACL_CHECK(
-                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
-            );
+                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
         }
         matmul_op.Initialize(arguments, deviceWorkspace);
         matmul_op(stream, aicCoreNum);
     }
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
-    std::vector<fp16_t> hostC(lenC);
+    std::vector<float16> hostC(lenC);
     ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
 
     std::vector<float> hostGolden(lenC);
@@ -209,8 +195,7 @@ void Run(Options const &options)
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv)
-{
+int main(int argc, const char **argv) {
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;

@@ -20,11 +20,7 @@
 namespace CatlassKernel {
 using ElementGroupList = int64_t;
 struct KernelInfo {
-    enum class GMMSplit : uint32_t {
-        SPLIT_M = 0,
-        SPLIT_K = 1,
-        SPLIT_N = 2
-    };
+    enum class GMMSplit : uint32_t { SPLIT_M = 0, SPLIT_K = 1, SPLIT_N = 2 };
     aclDataType inputDataType = aclDataType::ACL_FLOAT16;
     aclDataType outputDataType = aclDataType::ACL_FLOAT16;
     uint32_t g = 1;
@@ -49,7 +45,7 @@ struct ConvKernelInfo {
 
     std::vector<uint32_t> fmapRelated;
     std::vector<uint32_t> filterRelated;
-    
+
     std::vector<uint32_t> strideList;
     std::vector<uint32_t> padList;
     std::vector<uint32_t> dilationList;
