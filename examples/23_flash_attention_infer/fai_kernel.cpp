@@ -530,7 +530,8 @@ public:
                      stackSeqTile = pagedBlockSize * blockStackNum;
                  }
                  uint32_t stackSeqTileRound = RoundUp(stackSeqTile, BLOCK_SIZE);
-                 LayoutS layOutS(rowNum, stackSeqTile, stackSeqTilePad);
+                 // LayoutS layOutS(rowNum, stackSeqTile, stackSeqTilePad);
+                 LayoutS layOutS = LayoutS::MakeLayoutInL0C(MakeCoord(rowNum, stackSeqTile));
                  LayoutP layOutP(rowNum, stackSeqTile, stackSeqTilePad);
                  GemmCoord actualBlockShapeQK{rowNum, stackSeqTile, embed};
                  uint32_t curStackTileMod = stackSeqCount % (preLaunch + 1);
@@ -720,7 +721,8 @@ template <
     using ElementV = half;
     using LayoutV = LAYOUT_V;
     using ElementS = float;
-    using LayoutS = layout::RowMajor;
+    // using LayoutS = layout::RowMajor;
+    using LayoutS = layout::zN;
     using ElementP = half;
     using LayoutP = layout::RowMajor;
     using ElementO = half;
@@ -814,7 +816,8 @@ template <
     using ElementV = bfloat16_t;
     using LayoutV = LAYOUT_V;
     using ElementS = float;
-    using LayoutS = layout::RowMajor;
+    // using LayoutS = layout::RowMajor;
+    using LayoutS = layout::zN;
     using ElementP = bfloat16_t;
     using LayoutP = layout::RowMajor;
     using ElementO = bfloat16_t;
