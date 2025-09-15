@@ -64,7 +64,7 @@ void PrintTilingParams(TilingParams &tilingParams, PlatformInfo& platformInfo)
         uint32_t kTileMaxB = platformInfo.l0BSize / 2 / sizeof(DType) / n0 / elePerC0 * elePerC0;
         k0 = kTileMaxA > kTileMaxB ? kTileMaxB : kTileMaxA;
         if constexpr (std::is_same_v<DType, float>) {
-            k0 = kTileInL0 / c0NumPerFractal * c0NumPerFractal;
+            k0 = k0 / c0NumPerFractal * c0NumPerFractal;
         }
     }
     std::cout << std::dec << "┌─────────────────────────────────────────────┐\n"
