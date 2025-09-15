@@ -15,6 +15,7 @@
 #include "tiling_params.h"
 #include "platform_info.h"
 #include "fp16_t.h"
+
 using fp16_t = op::fp16_t;
 
 void AdjustTilingB16Layout00(TilingParams &tilingParams, PlatformInfo& platformInfo)

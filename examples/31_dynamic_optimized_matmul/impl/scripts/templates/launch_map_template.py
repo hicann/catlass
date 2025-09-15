@@ -16,6 +16,7 @@ class LaunchMapTemplate:
 #include <unordered_map>
 #include <string>
 
+#include "acl/acl.h"
 #include "tiling_params.h"
 
 #define DECLARE_KERNEL_FUNC(kernelName) \\

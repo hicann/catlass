@@ -8,8 +8,10 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef BASE_INFO_H
-#define BASE_INFO_H
+#ifndef TILING_PARAMS_H
+#define TILING_PARAMS_H
+
+#include <cstdint>
 
 enum class LayoutTag : uint8_t { TagRowMajor = 0, TagColumnMajor = 1};
 
@@ -30,9 +32,9 @@ enum class LayoutTag : uint8_t { TagRowMajor = 0, TagColumnMajor = 1};
  * -------------------------------------------------------------------------
  */
 
-union TilingKey {{
+union TilingKey {
     uint64_t value;
-    struct {{
+    struct {
         uint64_t layoutTagC : 4;  // 0-3
         uint64_t layoutTagB : 4;  // 4-7
         uint64_t layoutTagA : 4;  // 8-11
@@ -42,32 +44,32 @@ union TilingKey {{
         uint64_t reserveBit : 28; // 24-51 May be used in the future
         uint64_t dtype : 4;       // 52-55
         uint64_t templateKernelSerial : 8; // 56-63
-    }} bits;
+    } bits;
 
-    TilingKey() : value(0) {{}}
-    TilingKey(uint64_t v) : value(v) {{}}
+    TilingKey() : value(0) {}
+    TilingKey(uint64_t v) : value(v) {}
 
-    uint8_t GetLayoutTagA() const {{return bits.layoutTagA;}}
-    uint8_t GetLayoutTagB() const {{return bits.layoutTagB;}}
-    uint8_t GetLayoutTagC() const {{return bits.layoutTagC;}}
-    uint8_t GetPaddingTagTagA() const {{return bits.paddingTagA;}}
-    uint8_t GetPaddingTagTagB() const {{return bits.paddingTagB;}}
-    uint8_t GetPaddingTagTagC() const {{return bits.paddingTagC;}}
-    uint8_t GetDtype() const {{return bits.dtype;}}
-    uint8_t GetKernelSerial() const {{return bits.templateKernelSerial;}}
+    uint8_t GetLayoutTagA() const {return bits.layoutTagA;}
+    uint8_t GetLayoutTagB() const {return bits.layoutTagB;}
+    uint8_t GetLayoutTagC() const {return bits.layoutTagC;}
+    uint8_t GetPaddingTagTagA() const {return bits.paddingTagA;}
+    uint8_t GetPaddingTagTagB() const {return bits.paddingTagB;}
+    uint8_t GetPaddingTagTagC() const {return bits.paddingTagC;}
+    uint8_t GetDtype() const {return bits.dtype;}
+    uint8_t GetKernelSerial() const {return bits.templateKernelSerial;}
 
-    void SetKernelSerial(uint8_t kernelSerial) {{ bits.templateKernelSerial = kernelSerial;}}
-    void SetLayoutTagA(uint8_t layoutTagA) {{ bits.layoutTagA = layoutTagA & 0xF; }}
-    void SetLayoutTagB(uint8_t layoutTagB) {{ bits.layoutTagB = layoutTagB & 0xF; }}
-    void SetLayoutTagC(uint8_t layoutTagC) {{ bits.layoutTagC = layoutTagC & 0xF; }}
-    void SetPaddingTagA(uint8_t paddingTagA) {{ bits.paddingTagA = paddingTagA & 0xF; }}
-    void SetPaddingTagB(uint8_t paddingTagB) {{ bits.paddingTagB = paddingTagB & 0xF; }}
-    void SetPaddingTagC(uint8_t paddingTagC) {{ bits.paddingTagC = paddingTagC & 0xF; }}
-    void SetDtype(uint8_t dtype) {{ bits.dtype = dtype & 0xF; }}
+    void SetKernelSerial(uint8_t kernelSerial) { bits.templateKernelSerial = kernelSerial;}
+    void SetLayoutTagA(uint8_t layoutTagA) { bits.layoutTagA = layoutTagA & 0xF; }
+    void SetLayoutTagB(uint8_t layoutTagB) { bits.layoutTagB = layoutTagB & 0xF; }
+    void SetLayoutTagC(uint8_t layoutTagC) { bits.layoutTagC = layoutTagC & 0xF; }
+    void SetPaddingTagA(uint8_t paddingTagA) { bits.paddingTagA = paddingTagA & 0xF; }
+    void SetPaddingTagB(uint8_t paddingTagB) { bits.paddingTagB = paddingTagB & 0xF; }
+    void SetPaddingTagC(uint8_t paddingTagC) { bits.paddingTagC = paddingTagC & 0xF; }
+    void SetDtype(uint8_t dtype) { bits.dtype = dtype & 0xF; }
 
     void SetTilingKey(uint8_t kernelSerial, uint8_t layoutTagA, uint8_t layoutTagB, uint8_t layoutTagC,
         uint8_t paddingTagA, uint8_t paddingTagB, uint8_t paddingTagC, uint8_t dtype = 0)
-    {{
+    {
         SetKernelSerial(kernelSerial);
         SetLayoutTagA(layoutTagA);
         SetLayoutTagB(layoutTagB);
@@ -76,8 +78,8 @@ union TilingKey {{
         SetPaddingTagB(paddingTagB);
         SetPaddingTagC(paddingTagC);
         SetDtype(dtype);
-    }}
-}};
+    }
+};
 
 struct TilingParams {
     uint32_t m{0};
@@ -165,4 +167,4 @@ struct TilingParams {
     }
 };
 
-#endif // BASE_INFO_H
+#endif // TILING_PARAMS_H

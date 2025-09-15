@@ -12,13 +12,12 @@
 #define SELECT_KERNEL_HALF_H
 
 #include "platform_info.h"
-#include "launch_map.h"
 
 bool CommonMatmulHandler(TilingParams &params, PlatformInfo& platformInfo)
 {
     uint8_t kernelSerial = 0;
     // kernelSerial, layoutTagA, layoutTagB, layoutTagC, paddingTagA, paddingTagB, paddingTagC, dtype(defalut 0).
-    tilingParams.tilingKey.SetTilingKey(kernelSerial, params.layoutTagA, params.layoutTagB, 0, 0, 0, 0);
+    params.tilingKey.SetTilingKey(kernelSerial, params.layoutTagA, params.layoutTagB, 0, 0, 0, 0);
     return true;
 }
 

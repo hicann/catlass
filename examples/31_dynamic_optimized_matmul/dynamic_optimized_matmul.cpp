@@ -8,17 +8,18 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#include "catlass_matmul.h"
+#include "dynamic_optimized_matmul.h"
+#include "helper.hpp"
 #include "golden.hpp"
 #include "catlass/layout/layout.hpp"
 
-void Run(aclrtStream &stream, uint32_t m, uint32_t n, uint32_t k, LayoutTag layoutTagA, LayoutTag layoutTagB)
+void Run(aclrtStream &stream, uint32_t m, uint32_t n, uint32_t k, LayoutTag layoutTagA, LayoutTag layoutTagB,
+    PlatformInfo &platformInfo)
 {
-    PlatformInfo PlatformInfo;
     LayoutTag layoutTagC = LayoutTag::TagRowMajor;
-    TilingParams tilingParams{m, n, k, layoutTagA, layoutTagB, LayoutTagC};
-    DoTilingAndSelectKernel<fp16_t>(tilingParams, PlatformInfo);
-    PrintCatlassMatmulInfo(tilingParams);
+    TilingParams tilingParams{m, n, k, layoutTagA, layoutTagB, layoutTagC};
+    DoTilingAndSelectKernel<fp16_t>(tilingParams, platformInfo);
+    PrintTilingParams<fp16_t>(tilingParams);
 
     size_t lenA = static_cast<size_t>(m) * k;
     size_t lenB = static_cast<size_t>(k) * n;
@@ -37,7 +38,6 @@ void Run(aclrtStream &stream, uint32_t m, uint32_t n, uint32_t k, LayoutTag layo
 
     uint8_t *dA, *dB, *dC, *dW, *dTilingParams;
 
-
     ACL_CHECK(aclrtMalloc((void **)&dA, sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMalloc((void **)&dB, sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMalloc((void **)&dC, sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
@@ -46,7 +46,7 @@ void Run(aclrtStream &stream, uint32_t m, uint32_t n, uint32_t k, LayoutTag layo
     ACL_CHECK(aclrtMemcpy(dA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
     ACL_CHECK(aclrtMemcpy(dB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    size_t workspaceSize = CatlassMatmulGetWorkspace(tilingParams);
+    size_t workspaceSize = DynamicOptimizedMatmulGetWorkspace(tilingParams);
     if (workspaceSize > 0) {
         ACL_CHECK(aclrtMalloc((void **)&dW, workspaceSize, ACL_MEM_MALLOC_HUGE_FIRST));
     }
@@ -58,7 +58,7 @@ void Run(aclrtStream &stream, uint32_t m, uint32_t n, uint32_t k, LayoutTag layo
     ACL_CHECK(aclrtMemcpy(
         dTilingParams, sizeof(TilingParams), &tilingParams, sizeof(TilingParams), ACL_MEMCPY_HOST_TO_DEVICE));
 
-    ExecuteCatlassMatmul(stream, dA, dB, dC, dW, dTilingParams, tilingParams);
+    ExecuteDynamicOptimizedMatmul(stream, fftsAddr, dA, dB, dC, dW, dTilingParams, tilingParams);
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
     ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, dC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
@@ -110,12 +110,14 @@ int main(int argc, const char **argv)
     aclrtStream stream;
     ACL_CHECK(aclrtCreateStream(&stream));
 
+    PlatformInfo platformInfo;
+
     uint32_t m = std::atoi(argv[1]);
     uint32_t n = std::atoi(argv[2]);
     uint32_t k = std::atoi(argv[3]);
     LayoutTag layoutTagA = static_cast<LayoutTag>(std::atoi(argv[4]));
     LayoutTag layoutTagB = static_cast<LayoutTag>(std::atoi(argv[5]));
-    Run(stream, m, n, k, layoutTagA, layoutTagB);
+    Run(stream, m, n, k, layoutTagA, layoutTagB, platformInfo);
 
     ACL_CHECK(aclrtDestroyStream(stream));
     ACL_CHECK(aclrtResetDevice(deviceId));

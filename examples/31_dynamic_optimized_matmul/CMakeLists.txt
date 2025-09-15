@@ -41,11 +41,11 @@ include_directories(
 
 link_libraries(generalization_kernel runtime)
 
-add_executable(31_dynamic_tiling_matmul dynamic_tiling_matmul.cpp)
-add_dependencies(catlass_examples 31_dynamic_tiling_matmul)
-add_dependencies(31_dynamic_tiling_matmul generalization_kernel)
+add_executable(31_dynamic_optimized_matmul dynamic_optimized_matmul.cpp)
+add_dependencies(catlass_examples 31_dynamic_optimized_matmul)
+add_dependencies(31_dynamic_optimized_matmul generalization_kernel)
 add_dependencies(generalization_kernel auto_gen_code)
 
-install(TARGETS generalization_kernel DESTINATION shared_lib/lib COMPONENT 31_dynamic_tiling_matmul)
-install(TARGETS 31_dynamic_tiling_matmul DESTINATION bin COMPONENT 31_dynamic_tiling_matmul)
-install(TARGETS 31_dynamic_tiling_matmul DESTINATION bin COMPONENT catlass_examples)
+install(TARGETS generalization_kernel DESTINATION shared_lib/lib COMPONENT 31_dynamic_optimized_matmul)
+install(TARGETS 31_dynamic_optimized_matmul DESTINATION bin COMPONENT 31_dynamic_optimized_matmul)
+install(TARGETS 31_dynamic_optimized_matmul DESTINATION bin COMPONENT catlass_examples)
