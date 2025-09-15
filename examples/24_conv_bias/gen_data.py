@@ -120,7 +120,7 @@ def main():
 if __name__ == "__main__":
     if len(sys.argv) != 20:
         print("Usage: python gen_data.py n Cin d h w Cout kd kh kw sD sH sW dD dH dW pD pH pW dtype")
-        print("Example: python gen_data.py 2 16 32 32 4 16 3 3 3 4 16 1 1 1 1 1 1 1 1 1 float32")
+        print("Example: python gen_data.py 2 16 32 32 4 16 3 3 3 4 16 1 1 1 1 1 1 1 1 1 float16")
         sys.exit(1)
 
     main()
