@@ -20,7 +20,6 @@
 
 #include "helper.hpp"
 #include "golden.hpp"
-#include "bfloat16.h"
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
@@ -40,7 +39,8 @@
 #include "catlass/gemm/device/device_gemm.hpp"
 
 using namespace Catlass;
-using bfloat16 = op::bfloat16;
+#include <Eigen/Core>
+
 
 
 struct Options {

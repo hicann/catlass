@@ -18,13 +18,13 @@
 #include "helper.hpp"
 #include "golden.hpp"
 #include "fai_kernel.cpp"
-#include "fp16_t.h"
-#include "bfloat16.h"
+
+
 #include "fai_tiling.cpp"
 
 using namespace std;
-using fp16_t = op::fp16_t;
-using bfloat16 = op::bfloat16;
+
+
 
 /**
  * Function for read file.

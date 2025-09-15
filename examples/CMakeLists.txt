@@ -9,6 +9,13 @@
 set(CATLASS_EXAMPLES_COMMON_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/common)
 
 add_custom_target(catlass_examples)
+set(ML_DTYPES_DIR ${CATLASS_3RDPARTY_DIR}/ml_dtypes)
+set(ML_DTYPES_INCLUDE_DIR ${ML_DTYPES_DIR}/ml_dtypes/include)
+set(EIGEN_INCLUDE_DIR ${CATLASS_3RDPARTY_DIR}/Eigen)
+
+include_directories(${ML_DTYPES_INCLUDE_DIR})
+include_directories(${ML_DTYPES_DIR})
+include_directories(${EIGEN_INCLUDE_DIR})
 
 macro(catlass_example_add_executable NAME AICORE_ARCH)
     set(EXAMPLE_DESTINATION bin)

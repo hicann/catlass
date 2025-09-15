@@ -19,7 +19,7 @@
 
 #include "helper.hpp"
 #include "golden.hpp"
-#include "fp16_t.h"
+
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
@@ -34,7 +34,7 @@
 #include "catlass/gemm/device/device_gemm.hpp"
 
 using namespace Catlass;
-using fp16_t = op::fp16_t;
+
 
 template <
     /// Tag indicating architecture

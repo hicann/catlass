@@ -20,7 +20,7 @@
 
 #include "helper.hpp"
 #include "golden.hpp"
-#include "fp16_t.h"
+
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
@@ -36,7 +36,7 @@
 #include "catlass/conv/device/device_conv.hpp"
 
 using namespace Catlass;
-using fp16_t = op::fp16_t;
+
 
 bool ReadFile(const std::string &filePath, void *buffer, size_t bufferSize)
 {

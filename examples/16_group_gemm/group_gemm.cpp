@@ -23,7 +23,7 @@
 
 #include "helper.hpp"
 #include "golden.hpp"
-#include "fp16_t.h"
+
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
@@ -46,7 +46,7 @@
 
 using namespace Catlass;
 using ScalarType = float;
-using fp16_t = op::fp16_t;
+
 
 struct Options {
     const std::string HELPER = "16_group_gemm groupCnt mlist nlist klist [deviceId]";

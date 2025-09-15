@@ -20,13 +20,13 @@
 #include "golden.hpp"
 #include "mla_kernel.cpp"
 #include "mla_kernel_tp1_spec.cpp"
-#include "fp16_t.h"
-#include "bfloat16.h"
+
+
 #include "mla_tiling.h"
 
 using namespace std;
-using fp16_t = op::fp16_t;
-using bfloat16 = op::bfloat16;
+
+
 
 /**
  * Function for read file.

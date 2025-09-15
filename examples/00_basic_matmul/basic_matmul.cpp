@@ -19,7 +19,6 @@
 
 #include "helper.hpp"
 #include "golden.hpp"
-#include "fp16_t.h"
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
@@ -34,7 +33,7 @@
 #include "catlass/gemm/device/device_gemm.hpp"
 
 using namespace Catlass;
-using fp16_t = op::fp16_t;
+using fp16_t = ml_dtypes::fp16_t;
 
 struct Options {
     const std::string HELPER = "00_basic_matmul m n k [device_id]";
