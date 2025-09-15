@@ -15,7 +15,7 @@
 #include <iomanip>
 
 #include "do_tiling_b16.h"
-#include "select_kernel_half.h"
+#include "select_kernel_b16.h"
 #include "launch_map.h"
 
 template <class DType>
@@ -30,7 +30,7 @@ void DoTiling(TilingParams &tilingParams, PlatformInfo &platformInfo)
 template <class DType>
 void SelectKernel(TilingParams &tilingParams, PlatformInfo &platformInfo)
 {
-    SelectKernelHalf(tilingParams, platformInfo);
+    SelectKernelB16(tilingParams, platformInfo);
 }
 
 template <class DType>

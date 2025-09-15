@@ -21,7 +21,7 @@ bool CommonMatmulHandler(TilingParams &params, PlatformInfo& platformInfo)
     return true;
 }
 
-void SelectKernelHalf(TilingParams &tilingParams, PlatformInfo& platformInfo)
+void SelectKernelB16(TilingParams &tilingParams, PlatformInfo& platformInfo)
 {
     using HandlerPtr = bool (*)(TilingParams& tilingParams, PlatformInfo& platformInfo);
     HandlerPtr handlers[] = {
