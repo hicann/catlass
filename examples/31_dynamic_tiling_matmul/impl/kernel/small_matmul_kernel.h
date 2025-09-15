@@ -22,7 +22,7 @@
 #include "catlass/gemm/gemm_type.hpp"
 
 template <class ArchTag, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC>
-CATLASS_DEVICE void SmallMatmul(Catlass::GemmCoord &problemShape, Catlass::GemmCoord &l1TileShape, GM_ADDR gmA,
+CATLASS_DEVICE void DynamicSmallMatmul(Catlass::GemmCoord &problemShape, Catlass::GemmCoord &l1TileShape, GM_ADDR gmA,
     LayoutA &layoutA, GM_ADDR gmB, LayoutB &layoutB, GM_ADDR gmC, LayoutC &layoutC,
     Catlass::Arch::Resource<ArchTag> &resource)
 {
@@ -39,7 +39,7 @@ CATLASS_DEVICE void SmallMatmul(Catlass::GemmCoord &problemShape, Catlass::GemmC
     using BlockEpilogue = void;
     using BlockScheduler = void;
     // kernel level
-    using MatmulKernel = Catlass::Gemm::Kernel::DynamicCommonMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
+    using MatmulKernel = Catlass::Gemm::Kernel::DynamicSmallMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
     typename MatmulKernel::Params params{problemShape, l1TileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC};
     // call a kernel
     MatmulKernel matmul;
@@ -133,12 +133,12 @@ CATLASS_GLOBAL __attribute__((aic)) void SmallMatmulKernel(__gm__ uint8_t *__res
     LayoutA layoutA{m, k, strideA};
     LayoutB layoutB{k, n, strideB};
     LayoutC layoutC{m, n, strideC};
-    SmallMatmul<ArchTag, ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC>(
+    DynamicSmallMatmul<ArchTag, ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC>(
         problemShape, l1TileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, resource);
 }
 
 template <class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC>
-void LaunchCommonMatmulKernel(aclrtStream &stream, uint64_t fftsAddr, uint8_t *dA, uint8_t *dB, uint8_t *dC,
+void LaunchSmallMatmulKernel(aclrtStream &stream, uint64_t fftsAddr, uint8_t *dA, uint8_t *dB, uint8_t *dC,
     uint8_t *dTilingParams, TilingParams &tilingParams)
 {
     SmallMatmulKernel<ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC>

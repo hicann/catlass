@@ -125,14 +125,13 @@ public:
     void operator()(AscendC::GlobalTensor<ElementA> const &gmBlockA, LayoutA const &layoutA,
         AscendC::GlobalTensor<ElementB> const &gmBlockB, LayoutB const &layoutB,
         AscendC::GlobalTensor<ElementC> const &gmBlockC, LayoutC const &layoutC,
-        AscendC::GlobalTensor<ElementA> const &gmNextBlockA, AscendC::GlobalTensor<ElementB> const &gmNextBlockB,
-        GemmCoord const &actualShape, GemmCoord const &actualShapeNext, bool isFirstBlock, bool hasNextBlock)
+        GemmCoord const &actualShape)
     {
         uint32_t mRound = RoundUp<L1AAlignHelper::M_ALIGNED>(actualShape.m());
         uint32_t nRound = RoundUp<L1BAlignHelper::N_ALIGNED>(actualShape.n());
 
-        auto layoutAInL1 = LayoutAInL1::template MakeLayout<ElementA>(L1TileShape::M, L1TileShape::K);
-        auto layoutBInL1 = LayoutBInL1::template MakeLayout<ElementB>(L1TileShape::K, L1TileShape::N);
+        auto layoutAInL1 = LayoutAInL1::template MakeLayout<ElementA>(l1TileShape.m(), l1TileShape.k());
+        auto layoutBInL1 = LayoutBInL1::template MakeLayout<ElementB>(l1TileShape.k(), l1TileShape.n());
         auto layoutInL0C = LayoutCInL0::MakeLayoutInL0C(MakeCoord(mRound, nRound));
 
         if constexpr (!ENABLE_UNIT_FLAG) {
