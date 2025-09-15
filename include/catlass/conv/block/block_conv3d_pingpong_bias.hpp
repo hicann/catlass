@@ -572,7 +572,7 @@ protected:
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[1]);
                 l1AListId = l1AListIdNext;
                 AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1AListId]);
-            } else if (iterParams.kIter < maxKAL1PreloadIter (!iterParams.kAL1fullload && iterParams.kIter % iterParams.multiKAL1 == 0)) {
+            } else if (iterParams.kIter < maxKAL1PreloadIter && (!iterParams.kAL1fullload && iterParams.kIter % iterParams.multiKAL1 == 0)) {
                 l1AListId = l1AListIdNext;
                 l1AListIdNext = (l1AListId + 1 < L1A_STAGES) ? (l1AListId + 1) : 0;
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListIdNext]);
