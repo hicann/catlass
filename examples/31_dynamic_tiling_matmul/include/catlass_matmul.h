@@ -11,85 +11,67 @@
 #ifndef CATLASS_MATMUL_H
 #define CATLASS_MATMUL_H
 
-#include "helper.hpp"
 #include "get_tiling.h"
 
 template <class DType>
-struct CatlassMatmulDescriptor {
-    TilingParams tilingParams;
-    uint8_t *dTilingParams;
-    TilingKey tilingKey;
-    PlatformInfo platformInfo;
-
-    CatlassMatmulDescriptor(uint32_t m, uint32_t n, uint32_t k, size_t strideA, size_t strideB, size_t strideC,
-        LayoutTag layoutTagA, LayoutTag layoutTagB, LayoutTag layoutTagC)
-    {
-        ACL_CHECK(aclrtMalloc((void **)&dTilingParams, sizeof(TilingParams), ACL_MEM_MALLOC_HUGE_FIRST));
-    }
-
-    CatlassMatmulDescriptor()
-    {
-        ACL_CHECK(aclrtMalloc((void **)&dTilingParams, sizeof(TilingParams), ACL_MEM_MALLOC_HUGE_FIRST));
-    }
-
-    void SetMatmulInfo(
-        uint32_t m, uint32_t n, uint32_t k, LayoutTag layoutTagA, LayoutTag layoutTagB, LayoutTag layoutTagC)
-    {
-        size_t strideA = k;
-        size_t strideB = n;
-        size_t strideC = n;
-        if (static_cast<LayoutTag>(layoutTagA) == LayoutTag::TagColumnMajor) {
-            strideA = m;
-        }
-        if (static_cast<LayoutTag>(layoutTagB) == LayoutTag::TagColumnMajor) {
-            strideB = k;
-        }
-        if (static_cast<LayoutTag>(layoutTagC) == LayoutTag::TagColumnMajor) {
-            strideC = m;
-        }
-        tilingParams.SetParams(m, n, k, strideA, strideB, strideC, layoutTagA, layoutTagB, layoutTagC);
-        GetTiling<DType>(tilingParams, tilingKey, platformInfo);
-    }
-
-    void SetMatmulInfo(uint32_t m, uint32_t n, uint32_t k, size_t strideA, size_t strideB, size_t strideC,
-        LayoutTag layoutTagA, LayoutTag layoutTagB, LayoutTag layoutTagC)
-    {
-        tilingParams.SetParams(m, n, k, strideA, strideB, strideC, layoutTagA, layoutTagB, layoutTagC);
-        GetTiling<DType>(tilingParams, tilingKey, platformInfo);
-    }
-
-    ~CatlassMatmulDescriptor()
-    {
-        ACL_CHECK(aclrtFree(dTilingParams));
-    }
-};
-
-template <class DType>
-size_t CatlassMatmulGetWorkspace(CatlassMatmulDescriptor<DType> &desc)
+size_t DoTilingAndSelectKernel(TilingParams &tilingParams, PlatformInfo &platformInfo)
 {
-    return getWorkspaceFuncMap[desc.tilingKey.value](desc.tilingParams);
+    AdjustTiling<DType>(tilingParams, platformInfo);
+    SelectKernel<DType>(tilingParams, tilingKey, platformInfo);
 }
 
 template <class DType>
-void ExecuteCatlassMatmul(
-    aclrtStream &stream, uint8_t *dA, uint8_t *dB, uint8_t *dC, uint8_t *dW, CatlassMatmulDescriptor<DType> &desc)
+size_t CatlassMatmulGetWorkspace(TilingParams &tilingParams)
 {
-    uint64_t fftsAddr{0};
-    uint32_t fftsLen{0};
-    RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
-
-    ACL_CHECK(aclrtMemcpy(
-        desc.dTilingParams, sizeof(TilingParams), &desc.tilingParams, sizeof(TilingParams), ACL_MEMCPY_HOST_TO_DEVICE));
-
-    launchKernelFuncMap[desc.tilingKey.value](stream, fftsAddr, dA, dB, dC, dW, desc.dTilingParams, desc.tilingParams);
+    return getWorkspaceFuncMap[tilingParams.tilingKey.value](desc.tilingParams);
 }
 
 template <class DType>
-void PrintCatlassMatmulInfo(CatlassMatmulDescriptor<DType> &desc)
+void ExecuteCatlassMatmul(aclrtStream &stream, uint8_t *dA, uint8_t *dB, uint8_t *dC, uint8_t *dW,
+    uint8_t &dTilingParams, TilingParams &tilingParams)
 {
-    PrintTilingParams<DType>(desc.tilingParams);
-    std::cout << "Kernel Func Name: " << funcNameMap[desc.tilingKey.value] << std::endl;
-    std::cout << "TilingKey: " << std::hex << desc.tilingKey.value << std::endl;
+
+    launchKernelFuncMap[tilingParams.tilingKey.value](stream, fftsAddr, dA, dB, dC, dW, dTilingParams, tilingParams);
+}
+
+template <class DType>
+void PrintCatlassMatmulInfo(TilingParams &tilingParams)
+{
+    uint32_t bytePerC0 = 32;
+    uint32_t c0NumPerFractal = 16;
+    uint32_t elePerC0 = bytePerC0 / sizeof(DType);
+    uint32_t m0 = tilingParams.m1, n0 = tilingParams.n1, k0 = 0;
+    if (m0 && n0) {
+        // TODO
+    }
+    std::cout << std::dec << "┌────────────────────────────────────────┐\n"
+              << "│            Tiling Parameters           │\n"
+              << "├───────────────────┬────────────────────┤\n"
+              << "│ m:           " << std::setw(20) << tilingParams.m << " │\n"
+              << "│ n:           " << std::setw(20) << tilingParams.n << " │\n"
+              << "│ k:           " << std::setw(20) << tilingParams.k << " │\n"
+              << "├───────────────────┼────────────────────┤\n"
+              << "│ layoutTagA:  " << std::setw(20) << static_cast<uint32_t>(tilingParams.layoutTagA) << " │\n"
+              << "│ layoutTagB:  " << std::setw(20) << static_cast<uint32_t>(tilingParams.layoutTagB) << " │\n"
+              << "├───────────────────┼────────────────────┤\n"
+              << "│ mTile:       " << std::setw(20) << static_cast<uint32_t>(tilingParams.m1) << " │\n"
+              << "│ nTile:       " << std::setw(20) << static_cast<uint32_t>(tilingParams.n1) << " │\n"
+              << "│ kTile:       " << std::setw(20) << static_cast<uint32_t>(tilingParams.k1) << " │\n"
+              << "├───────────────────┼────────────────────┤\n"
+              << "│ mTileInL0:   " << std::setw(20) << static_cast<uint32_t>(m0) << " │\n"
+              << "│ nTileInL0:   " << std::setw(20) << static_cast<uint32_t>(n0) << " │\n"
+              << "│ kTileInL0:   " << std::setw(20) << static_cast<uint32_t>(k0) << " │\n"
+              << "├───────────────────┼────────────────────┤\n"
+              << "│ paddingTagA: " << std::setw(20) << static_cast<uint32_t>(tilingParams.paddingTagA) << " │\n"
+              << "│ paddingTagB: " << std::setw(20) << static_cast<uint32_t>(tilingParams.paddingTagB) << " │\n"
+              << "├───────────────────┼────────────────────┤\n"
+              << "│ blockDim:    " << std::setw(20) << static_cast<uint32_t>(tilingParams.blockDim) << " │\n"
+              << "├───────────────────┼────────────────────┤\n"
+              << "│ " Kernel Func Name : " << std::setw(20) << funcNameMap[tilingParams.tilingKey.value] << " │\n "
+              << "├───────────────────┼────────────────────┤\n"
+              << "│ " TilingKey : " << << std::hex << tilingParams.tilingKey.value << " │\n "
+              << "└───────────────────┴────────────────────┘"
+              << std::endl;
 }
 
 #endif  // CATLASS_MATMUL_H
