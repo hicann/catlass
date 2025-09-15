@@ -167,8 +167,8 @@ function build_torch_library() {
     echo -e "${INFO}Torch library built successfully${NC}"
 }
 
-function build_generalization_matmul() {
-    echo -e "${INFO}Building generalization matmul...${NC}"
+function build_dynamic_optimized_matmul() {
+    echo -e "${INFO}Building dynamic optimized matmul...${NC}"
     if [[ -d ${BUILD_DIR} ]]; then
             cmake -S "$CMAKE_SOURCE_DIR" -B "$BUILD_DIR" \
                 -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
@@ -178,7 +178,7 @@ function build_generalization_matmul() {
     fi
     cmake --build "$BUILD_DIR" --target "$TARGET" -j
     cmake --install "$BUILD_DIR" --component "$TARGET"
-    echo -e "${INFO}generalization matmul built successfully${NC}"
+    echo -e "${INFO}dynamic optimized matmul built successfully${NC}"
 }
 
 function build_mstuner_catlass() {
@@ -198,8 +198,8 @@ case "$TARGET" in
     torch_library)
         build_torch_library
         ;;
-    31_dynamic_tiling_matmul)
-        build_generalization_matmul
+    31_dynamic_optimized_matmul)
+        build_dynamic_optimized_matmul
         ;;
     mstuner_catlass)
         build_mstuner_catlass

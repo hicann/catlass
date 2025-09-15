@@ -8,15 +8,30 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_MATMUL_H
-#define CATLASS_MATMUL_H
+#ifndef CATLASS_DYNAMIC_OPTIMIZED_MATMUL_H
+#define CATLASS_DYNAMIC_OPTIMIZED_MATMUL_H
 
 #include <iostream>
 #include <iomanip>
 
-#include "adjust_tiling.h"
-#include "select_kernel.h"
+#include "adjust_tiling_b16.h"
+#include "select_kernel_half.h"
 #include "launch_map.h"
+
+template <class DType>
+void AdjustTiling(TilingParams &tilingParams, PlatformInfo &platformInfo)
+{
+    uint32_t layoutTagA = tilingParams.layoutTagA;
+    uint32_t layoutTagB = tilingParams.layoutTagB;
+
+    AdjustTilingB16[layoutTagA][layoutTagB](tilingParams, platformInfo);
+}
+
+template <class DType>
+void SelectKernel(TilingParams &tilingParams, PlatformInfo &platformInfo)
+{
+    SelectKernelHalf(tilingParams, platformInfo);
+}
 
 template <class DType>
 void DoTilingAndSelectKernel(TilingParams &tilingParams, PlatformInfo &platformInfo)
@@ -30,8 +45,8 @@ size_t DynamicOptimizedMatmulGetWorkspace(TilingParams &tilingParams)
     return getWorkspaceFuncMap[tilingParams.tilingKey.value](tilingParams);
 }
 
-void ExecuteDynamicOptimizedMatmul(aclrtStream &stream, uint64_t fftsAddr, uint8_t *dA, uint8_t *dB, uint8_t *dC, uint8_t *dW,
-    uint8_t* dTilingParams, TilingParams &tilingParams)
+void ExecuteDynamicOptimizedMatmul(aclrtStream &stream, uint64_t fftsAddr, uint8_t *dA, uint8_t *dB, uint8_t *dC,
+    uint8_t *dW, uint8_t *dTilingParams, TilingParams &tilingParams)
 {
 
     launchKernelFuncMap[tilingParams.tilingKey.value](stream, fftsAddr, dA, dB, dC, dW, dTilingParams, tilingParams);
@@ -71,9 +86,8 @@ void PrintTilingParams(TilingParams &tilingParams)
               << "│ blockDim:    " << std::setw(30) << static_cast<uint32_t>(tilingParams.blockDim) << " │\n"
               << "├───────────────────┼─────────────────────────┤\n"
               << "│ TilingKey:   " << std::hex << std::setw(30) << tilingParams.tilingKey.value << " │\n"
-              << "└───────────────────┴─────────────────────────┘"
-              << std::endl;
+              << "└───────────────────┴─────────────────────────┘" << std::endl;
     std::cout << "Kernel Func Name : " << funcNameMap[tilingParams.tilingKey.value] << std::endl;
 }
 
-#endif  // CATLASS_MATMUL_H
+#endif  // CATLASS_DYNAMIC_OPTIMIZED_MATMUL_H
