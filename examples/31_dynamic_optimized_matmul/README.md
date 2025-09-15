@@ -1,8 +1,29 @@
 # OptimizedMatmul Example Readme
 ## 代码组织
 ```
-......
-
+examples/31_dynamic_optimized_matmul
+├── CMakeLists.txt
+├── README.md
+├── dynamic_optimized_matmul.cpp
+├── impl
+│   ├── kernel
+│   │   └── common_matmul_kernel.h
+│   ├── scripts
+│   │   ├── templates
+│   │   │   ├── common_matmul_template.py
+│   │   │   └── launch_map_template.py
+│   │   ├── utils
+│   │   │   └── config.py
+│   │   └── wrapper_code_gen.py
+│   └── wrapper # 自动生成
+└── include
+    ├── launch_map.h # 自动生成
+    ├── do_tiling_b16.h
+    ├── dynamic_optimized_matmul.h
+    ├── platform_info.h
+    ├── select_kernel_b16.h
+    ├── tiling_params.h
+    └── utils.h
 ```
 ## 工程说明
 工程默认编译成静态库，如果想编译成动态库，请把CMakeLists.txt中的`STATIC`改为`SHARED`，并手动export动态库路径。
