@@ -1,0 +1,25 @@
+# OptimizedMatmul Example Readme
+## 代码组织
+```
+......
+
+```
+## 工程说明
+工程编译前会调用python脚本生成代码，具体包括调用各模板的外围代码，以及launch_map.h(包含tilingKey和具体Kernel的映射关系)
+如果需要进行批量性能测试，请注释掉精度比较代码，由于精度比较使用cpu算golden，耗时较长。
+DynamicOptimizedMamtul根据shape动态确定Tiling参数，并尽力选择最好的模板进行计算，尽力获取最优性能，但是不保证是最优性能。
+## 使用示例
+- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/quickstart.md#算子编译)
+- 执行算子
+```
+# 编译指定用例
+bash scripts/build.sh 31_dynamic_optimized_matmul
+# cd [代码仓路径]/output/bin
+# 可执行文件名 |矩阵m轴|n轴|k轴|Device ID
+# Device ID可选，默认为0
+./06_optimized_matmul 256 512 1024 0
+```
+执行结果如下，说明精度比对成功。
+```
+Compare success.
+```
