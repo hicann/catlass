@@ -274,6 +274,8 @@ public:
 
                 if (iterParams.preloadABL1DbFlag) {
                     ReduceKPreloadDbAll(gmBatchFmap, layoutFmap, filterGm, layoutFilter);
+                } else if (iterParams.preloadAL1DbFlag) {
+                    ReduceKPreloadDbFmap(gmBatchFmap, layoutFmap, filterGm, layoutFilter);
                 } else {
                     ReduceK(gmBatchFmap, layoutFmap, filterGm, layoutFilter);
                 }
@@ -510,7 +512,6 @@ protected:
         uint16_t isOdd = 0;
         while (iterParams.kIter < iterParams.ddr2l0LoopK) {
             if (iterParams.loadAL1Flag || (!iterParams.kAL1fullload && iterParams.kIter % iterParams.multiKAL1 == 0)) {
-                AscendC::PipeBarrier<PIPE_ALL>();
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListId]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListId]);
                 LoadAL1Process(gmBatchFmap, iterParams.kIter / iterParams.multiKAL1, layoutFmap, l1AListId);
@@ -519,7 +520,6 @@ protected:
                 AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1AListId]);
             }
             if (iterParams.loadBL1Flag || (!iterParams.kBL1fullload && iterParams.kIter % iterParams.multiKBL1 == 0)) {
-                AscendC::PipeBarrier<PIPE_ALL>();
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1BListId]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1BListId]);
                 LoadBL1Process(filterGm, iterParams.kIter / iterParams.multiKBL1, layoutFilter, l1BListId);
@@ -531,14 +531,73 @@ protected:
             iterParams.kIter++;
             isOdd = iterParams.kIter & 0x1;
         }
+        AscendC::PipeBarrier<PIPE_ALL>();
+    }
+
+    CATLASS_DEVICE
+    void ReduceKPreloadDbFmap(AscendC::GlobalTensor<ElementFmap> const &gmBatchFmap, LayoutFmap const &layoutFmap,
+                             AscendC::GlobalTensor<ElementFilter> const &filterGm, LayoutFilter const &layoutFilter)
+    {
+        AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListId]);
+        LoadAL1Process(gmBatchFmap, 0, layoutFmap, l1AListId);
+        AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1AListId]);
+        AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1AListId]);
+
+        if (iterParams.loadBL1Flag || !(iterParams.kBL1fullload)) {
+            AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1BListId]);
+            AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1BListId]);
+            LoadBL1Process(filterGm, 0, layoutFilter, l1BListId);
+            iterParams.loadBL1Flag = false;
+            AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1BListId]);
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1BListId]);
+        }
+
+        ReduceKL0AL0BPingPong(event_t::EVENT_ID0, l1AListId, l1BListId);
+
+        uint32_t l1AListIdNext = (l1AListId + 1 < L1A_STAGES) ? (l1AListId + 1) : 0;
+        AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListIdNext]);
+        LoadAL1Process(gmBatchFmap, 1, layoutFmap, l1AListIdNext);
+        iterParams.loadAL1Flag = false;
+        AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1AListIdNext]);
+
+        iterParams.kIter = 1;
+        uint16_t isOdd = 1;
+        uint64_t maxKAL1PreloadIter = iterParams.ddr2l0LoopK - iterParams.multiKAL1;
+        while (iterParams.kIter < iterParams.ddr2l0LoopK) {
+            if (iterParams.kIter == maxKAL1PreloadIter) {
+                l1AListId = l1AListIdNext;
+                l1AListIdNext = (l1AListId + 1 < L1A_STAGES) ? (l1AListId + 1) : 0;
+                AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListIdNext]);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1AListId]);
+            } else if (iterParams.kIter < maxKAL1PreloadIter && (!iterParams.kAL1fullload && iterParams.kIter % iterParams.multiKAL1 == 0)) {
+                l1AListId = l1AListIdNext;
+                l1AListIdNext = (l1AListId + 1 < L1A_STAGES) ? (l1AListId + 1) : 0;
+                AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListIdNext]);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListIdNext]);
+                LoadAL1Process(gmBatchFmap, (iterParams.kIter / iterParams.multiKAL1) + 1, layoutFmap, l1AListIdNext);
+                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1AListIdNext]);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1AListId]);
+            }
+
+            if (iterParams.loadBL1Flag || (!iterParams.kBL1fullload && iterParams.kIter % iterParams.multiKBL1 == 0)) {
+                AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1BListId]);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1BListId]);
+                LoadBL1Process(filterGm, iterParams.kIter / iterParams.multiKBL1, layoutFilter, l1BListId);
+                iterParams.loadBL1Flag = false;
+                AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1BListId]);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1BListId]);
+            }
+            ReduceKL0AL0BPingPong(isOdd, l1AListId, l1BListId);
+            iterParams.kIter++;
+            isOdd = iterParams.kIter & 0x1;
+        }
+        AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListId]);
     }
 
     CATLASS_DEVICE
     void ReduceKPreloadDbAll(AscendC::GlobalTensor<ElementFmap> const &gmBatchFmap, LayoutFmap const &layoutFmap,
                              AscendC::GlobalTensor<ElementFilter> const &filterGm, LayoutFilter const &layoutFilter)
     {
-        l1AListId = 0;
-        l1BListId = 0;
         AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListId]);
         LoadAL1Process(gmBatchFmap, 0, layoutFmap, l1AListId);
         AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1AListId]);
@@ -551,7 +610,6 @@ protected:
 
         uint32_t l1AListIdNext = (l1AListId + 1 < L1A_STAGES) ? (l1AListId + 1) : 0;
         uint32_t l1BListIdNext = (l1BListId + 1 < L1B_STAGES) ? (l1BListId + 1) : 0;
-        AscendC::PipeBarrier<PIPE_ALL>();
         AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListIdNext]);
         LoadAL1Process(gmBatchFmap, 1, layoutFmap, l1AListIdNext);
         AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1AListIdNext]);
@@ -568,9 +626,9 @@ protected:
         uint64_t maxKBL1PreloadIter = iterParams.ddr2l0LoopK - iterParams.multiKBL1;
         while (iterParams.kIter < iterParams.ddr2l0LoopK) {
             if (iterParams.kIter == maxKAL1PreloadIter) {
-                AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[0]);
-                AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[1]);
                 l1AListId = l1AListIdNext;
+                l1AListIdNext = (l1AListId + 1 < L1A_STAGES) ? (l1AListId + 1) : 0;
+                AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListIdNext]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1AListId]);
             } else if (iterParams.kIter < maxKAL1PreloadIter && (!iterParams.kAL1fullload && iterParams.kIter % iterParams.multiKAL1 == 0)) {
                 l1AListId = l1AListIdNext;
@@ -583,9 +641,9 @@ protected:
             }
 
             if (iterParams.kIter == maxKBL1PreloadIter) {
-                AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[0]);
-                AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[1]);
                 l1BListId = l1BListIdNext;
+                l1BListIdNext = (l1BListId + 1 < L1B_STAGES) ? (l1BListId + 1) : 0;
+                AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1BListIdNext]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1BListId]);
             } else if (iterParams.kIter < maxKBL1PreloadIter && (!iterParams.kBL1fullload && iterParams.kIter % iterParams.multiKBL1 == 0)) {
                 l1BListId = l1BListIdNext;
@@ -600,6 +658,8 @@ protected:
             iterParams.kIter++;
             isOdd = iterParams.kIter & 0x1;
         }
+        AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListId]);
+        AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1BListId]);
     }
 
     CATLASS_DEVICE
