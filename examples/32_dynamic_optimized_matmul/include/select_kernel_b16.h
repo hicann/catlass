@@ -13,7 +13,7 @@
 
 #include "platform_info.h"
 
-bool CommonMatmulHandler(TilingParams &params, PlatformInfo& platformInfo)
+bool CommonMatmulB16Handler(TilingParams &params, PlatformInfo& platformInfo)
 {
     uint8_t kernelSerial = 0;
     // kernelSerial, layoutTagA, layoutTagB, layoutTagC, paddingTagA, paddingTagB, paddingTagC, dtype(defalut 0).
@@ -25,7 +25,7 @@ void SelectKernelB16(TilingParams &tilingParams, PlatformInfo& platformInfo)
 {
     using HandlerPtr = bool (*)(TilingParams& tilingParams, PlatformInfo& platformInfo);
     HandlerPtr handlers[] = {
-        CommonMatmulHandler
+        CommonMatmulB16Handler
     };
 
     for (auto handler : handlers) {
