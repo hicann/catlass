@@ -1,7 +1,7 @@
 # OptimizedMatmul Example Readme
 ## 代码组织
 ```
-examples/31_dynamic_optimized_matmul
+examples/32_dynamic_optimized_matmul
 ├── CMakeLists.txt
 ├── README.md
 ├── dynamic_optimized_matmul.cpp
@@ -35,11 +35,11 @@ DynamicOptimizedMamtul根据shape动态确定Tiling参数，并尽力选择最�
 - 执行算子
 ```
 # 编译指定用例
-bash scripts/build.sh 31_dynamic_optimized_matmul
+bash scripts/build.sh 32_dynamic_optimized_matmul
 # cd [代码仓路径]/output/bin
 # 可执行文件名 |矩阵m轴|n轴|k轴|LayoutA|LayoutB|Device ID
 # 0 is RowMajor, 1 is ColumnMajor
-./31_dynamic_optimized_matmul 256 512 1024 0 1 0
+./32_dynamic_optimized_matmul 256 512 1024 0 1 0
 ```
 执行结果如下，说明精度比对成功。
 ```

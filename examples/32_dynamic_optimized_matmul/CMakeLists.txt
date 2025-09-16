@@ -41,11 +41,11 @@ include_directories(
 
 link_libraries(dynamic_optimized_kernel runtime)
 
-add_executable(31_dynamic_optimized_matmul dynamic_optimized_matmul.cpp)
-add_dependencies(catlass_examples 31_dynamic_optimized_matmul)
-add_dependencies(31_dynamic_optimized_matmul dynamic_optimized_kernel)
+add_executable(32_dynamic_optimized_matmul dynamic_optimized_matmul.cpp)
+add_dependencies(catlass_examples 32_dynamic_optimized_matmul)
+add_dependencies(32_dynamic_optimized_matmul dynamic_optimized_kernel)
 add_dependencies(dynamic_optimized_kernel auto_gen_code)
 
-install(TARGETS dynamic_optimized_kernel DESTINATION shared_lib/lib COMPONENT 31_dynamic_optimized_matmul)
-install(TARGETS 31_dynamic_optimized_matmul DESTINATION bin COMPONENT 31_dynamic_optimized_matmul)
-install(TARGETS 31_dynamic_optimized_matmul DESTINATION bin COMPONENT catlass_examples)
+install(TARGETS dynamic_optimized_kernel DESTINATION shared_lib/lib COMPONENT 32_dynamic_optimized_matmul)
+install(TARGETS 32_dynamic_optimized_matmul DESTINATION bin COMPONENT 32_dynamic_optimized_matmul)
+install(TARGETS 32_dynamic_optimized_matmul DESTINATION bin COMPONENT catlass_examples)
