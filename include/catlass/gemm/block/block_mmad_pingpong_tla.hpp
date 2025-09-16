@@ -97,7 +97,10 @@ public:
     static constexpr uint32_t L0C_TILE_SIZE = L1_TILE_M * L1_TILE_N * sizeof(ElementAccumulator);
 
     // Check LayoutC
-    static_assert(tla::detail::isRowMajor<LayoutC>::value, "LayoutC only support RowMajor yet!");
+    static_assert(tla::detail::isRowMajor<LayoutC>::value ||
+                      ((std::is_same_v<ElementA, half> ||
+                          std::is_same_v<ElementA, bfloat16_t>) && tla::detail::iszN<ElementC, LayoutC>::value),
+        "LayoutC only supports zN in half or bfloat16, RowMajor yet!");
 
     // Check L1TileShape
     static_assert((L1A_TILE_SIZE + L1B_TILE_SIZE) * STAGES <= ArchTag::L1_SIZE,

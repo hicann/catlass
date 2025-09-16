@@ -52,7 +52,9 @@ struct TileMmad {
         mmadParams.k = k;
         mmadParams.unitFlag = unitFlag;
         mmadParams.cmatrixInitVal = initC;
-        if constexpr (std::is_same_v<ElementA, float> && std::is_same_v<typename AType_::Layout, layout::ColumnMajor>) {
+        if constexpr (std::is_same_v<ElementA, float> &&
+                      (std::is_same_v<typename AType_::Layout, layout::ColumnMajor> ||
+                          std::is_same_v<typename AType_::Layout, layout::nZ>)) {
             mmadParams.kDirectionAlign = true;
         }
 
@@ -81,7 +83,9 @@ struct TileMmad {
         mmadParams.k = k;
         mmadParams.unitFlag = unitFlag;
         mmadParams.cmatrixInitVal = false;
-        if constexpr (std::is_same_v<ElementA, float> && std::is_same_v<typename AType_::Layout, layout::ColumnMajor>) {
+        if constexpr (std::is_same_v<ElementA, float> &&
+                      (std::is_same_v<typename AType_::Layout, layout::ColumnMajor> ||
+                          std::is_same_v<typename AType_::Layout, layout::nZ>)) {
             mmadParams.kDirectionAlign = true;
         }
 
@@ -103,14 +107,10 @@ struct TileMmad {
 template <
     /// Tag indicating architecture
     class ArchTag_,
-    /// tla::Tensor type for A matrix operand
-    class TensorA_,
-    /// tla::Tensor type for B matrix operand
-    class TensorB_,
-    /// tla::Tensor type for C matrix operand
-    class TensorC_,
-    /// tla::Tensor type for Bias operand
-    class TensorBias_ = void
+    /// Element for A matrix operand
+    class ElementA,
+    /// LayoutTag for A matrix operand
+    class LayoutTagA
 >
 struct TileMmadTla {
     // Methods
@@ -132,6 +132,10 @@ struct TileMmadTla {
         mmadParams.k = k;
         mmadParams.unitFlag = unitFlag;
         mmadParams.cmatrixInitVal = initC;
+        if constexpr (std::is_same_v<ElementA, float> &&
+                      (std::is_same_v<LayoutTagA, layout::ColumnMajor> || std::is_same_v<LayoutTagA, layout::nZ>)) {
+            mmadParams.kDirectionAlign = true;
+        }
 
         AscendC::Mmad(l0CTensor.data(),
                       l0ATensor.data(),

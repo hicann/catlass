@@ -326,28 +326,29 @@ auto MakeLayout(T const& rows, U const& cols)
     constexpr uint32_t ELE_NUM_PER_FRACTAL = Catlass::BYTE_PER_FRACTAL / sizeof(Element);
 
     if constexpr (std::is_same_v<LayoutTag, Catlass::layout::RowMajor>) {
-        return MakeLayout(MakeShape(rows, cols), MakeStride(cols, Int<1>{}));
+        return MakeLayout(MakeShape(rows, cols), MakeStride((int64_t)cols, Int<1>{}));
     } else if constexpr (std::is_same_v<LayoutTag, Catlass::layout::ColumnMajor>) {
-        return MakeLayout(MakeShape(rows, cols), MakeStride(Int<1>{}, rows));
+        return MakeLayout(MakeShape(rows, cols), MakeStride(Int<1>{}, (int64_t)rows));
     } else if constexpr (std::is_same_v<LayoutTag, Catlass::layout::zN>) {
         return MakeLayout(
             MakeShape(MakeShape(Int<Catlass::C0_NUM_PER_FRACTAL>{}, CeilDiv(rows, Int<Catlass::C0_NUM_PER_FRACTAL>{})),
-                      MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv(cols, Int<ELE_NUM_PER_C0>{}))),
+                MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv(cols, Int<ELE_NUM_PER_C0>{}))),
             MakeStride(MakeStride(Int<ELE_NUM_PER_C0>{}, Int<ELE_NUM_PER_FRACTAL>{}),
-                       MakeStride(Int<1>{}, RoundUp(rows, Int<Catlass::C0_NUM_PER_FRACTAL>{}) * ELE_NUM_PER_C0)));
+                MakeStride(Int<1>{}, RoundUp((int64_t)rows, Int<Catlass::C0_NUM_PER_FRACTAL>{}) * ELE_NUM_PER_C0)));
     } else if constexpr (std::is_same_v<LayoutTag, Catlass::layout::zZ>) {
         return MakeLayout(
             MakeShape(MakeShape(Int<Catlass::C0_NUM_PER_FRACTAL>{}, CeilDiv(rows, Int<Catlass::C0_NUM_PER_FRACTAL>{})),
                 MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv(cols, Int<ELE_NUM_PER_C0>{}))),
-            MakeStride(
-                MakeStride(Int<ELE_NUM_PER_C0>{}, RoundUp(cols, Int<ELE_NUM_PER_C0>{}) * Catlass::C0_NUM_PER_FRACTAL),
+            MakeStride(MakeStride(Int<ELE_NUM_PER_C0>{},
+                           RoundUp((int64_t)cols, Int<ELE_NUM_PER_C0>{}) * Catlass::C0_NUM_PER_FRACTAL),
                 MakeStride(Int<1>{}, Int<ELE_NUM_PER_FRACTAL>{})));
     } else {
         return MakeLayout(
             MakeShape(MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv(rows, Int<ELE_NUM_PER_C0>{})),
-                      MakeShape(Int<Catlass::C0_NUM_PER_FRACTAL>{}, CeilDiv(cols, Int<Catlass::C0_NUM_PER_FRACTAL>{}))),
-            MakeStride(MakeStride(Int<1>{}, RoundUp(cols, Int<Catlass::C0_NUM_PER_FRACTAL>{}) * ELE_NUM_PER_C0),
-                       MakeStride(Int<ELE_NUM_PER_C0>{}, Int<ELE_NUM_PER_FRACTAL>{})));
+                MakeShape(Int<Catlass::C0_NUM_PER_FRACTAL>{}, CeilDiv(cols, Int<Catlass::C0_NUM_PER_FRACTAL>{}))),
+            MakeStride(
+                MakeStride(Int<1>{}, RoundUp((int64_t)cols, Int<Catlass::C0_NUM_PER_FRACTAL>{}) * ELE_NUM_PER_C0),
+                MakeStride(Int<ELE_NUM_PER_C0>{}, Int<ELE_NUM_PER_FRACTAL>{})));
     }
 }
 
@@ -390,7 +391,8 @@ auto MakeLayoutL0C(T const& rows, U const& cols)
         MakeShape(MakeShape(Int<Catlass::C0_NUM_PER_FRACTAL>{}, CeilDiv(rows, Int<Catlass::C0_NUM_PER_FRACTAL>{})),
             MakeShape(Int<Catlass::C0_NUM_PER_FRACTAL>{}, CeilDiv(cols, Int<Catlass::C0_NUM_PER_FRACTAL>{}))),
         MakeStride(MakeStride(Int<Catlass::C0_NUM_PER_FRACTAL>{}, Int<ELE_NUM_PER_FRACTAL>{}),
-            MakeStride(Int<1>{}, RoundUp(rows, Int<Catlass::C0_NUM_PER_FRACTAL>{}) * Catlass::C0_NUM_PER_FRACTAL)));
+            MakeStride(
+                Int<1>{}, RoundUp((int64_t)rows, Int<Catlass::C0_NUM_PER_FRACTAL>{}) * Catlass::C0_NUM_PER_FRACTAL)));
 }
 
 } // end namespace tla

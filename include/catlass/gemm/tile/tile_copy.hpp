@@ -69,13 +69,13 @@ template <
     /// Tag indicating architecture
     class ArchTag,
     class ElementA_,
-    class LayoutTagA,
+    class LayoutTagA_,
     class ElementB_,
-    class LayoutTagB,
+    class LayoutTagB_,
     class ElementC_,
-    class LayoutTagC,
-    class ElementBias = void,
-    class LayoutTagBias = void,
+    class LayoutTagC_,
+    class ElementBias_ = void,
+    class LayoutTagBias_ = void,
     class L0CCopyMode = CopyToGM
 >
 struct PackedTileCopyTla {
@@ -83,6 +83,10 @@ struct PackedTileCopyTla {
     using ElementB = ElementB_;
     using ElementAccumulator =
         typename Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
+
+    using LayoutTagA = LayoutTagA_;
+    using LayoutTagB = LayoutTagB_;
+    using LayoutTagC = LayoutTagC_;
 
     using LayoutTagL1A = typename helper::L1ATypeSelector<Gemm::GemmType<ElementA, LayoutTagA>>::L1AType::Layout;
     using LayoutTagL1B = typename helper::L1BTypeSelector<Gemm::GemmType<ElementB, LayoutTagB>>::L1BType::Layout;

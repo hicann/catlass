@@ -42,8 +42,7 @@ template <
     class ElementBias = void,
     class TileCopy = Gemm::Tile::PackedTileCopyTla<typename DispatchPolicy::ArchTag, ElementA, layout::RowMajor,
         ElementB, layout::RowMajor, ElementC, layout::RowMajor, ElementBias, layout::RowMajor>,
-    class TileMmad = Gemm::Tile::TileMmadTla<typename DispatchPolicy::ArchTag, typename TileCopy::TensorL0A,
-        typename TileCopy::TensorL0B, typename TileCopy::TensorL0C>
+    class TileMmad = Gemm::Tile::TileMmadTla<typename DispatchPolicy::ArchTag, ElementA, typename TileCopy::LayoutTagA>
 >
 struct BlockMmadTla {
     static_assert(DEPENDENT_FALSE<DispatchPolicy>, "BlockMmadTla is not implemented for this DispatchPolicy");
