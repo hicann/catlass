@@ -514,6 +514,7 @@ protected:
         uint16_t isOdd = 0;
         while (iterParams.kIter < iterParams.ddr2l0LoopK) {
             if (iterParams.loadAL1Flag || (!iterParams.kAL1fullload && iterParams.kIter % iterParams.multiKAL1 == 0)) {
+                AscendC::PipeBarrier<PIPE_ALL>();
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListId]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListId]);
                 LoadAL1Process(gmBatchFmap, iterParams.kIter / iterParams.multiKAL1, layoutFmap, l1AListId);
@@ -522,6 +523,7 @@ protected:
                 AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1AListId]);
             }
             if (iterParams.loadBL1Flag || (!iterParams.kBL1fullload && iterParams.kIter % iterParams.multiKBL1 == 0)) {
+                AscendC::PipeBarrier<PIPE_ALL>();
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1BListId]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1BListId]);
                 LoadBL1Process(filterGm, iterParams.kIter / iterParams.multiKBL1, layoutFilter, l1BListId);
@@ -533,7 +535,6 @@ protected:
             iterParams.kIter++;
             isOdd = iterParams.kIter & 0x1;
         }
-        AscendC::PipeBarrier<PIPE_ALL>();
     }
 
     CATLASS_DEVICE
