@@ -167,20 +167,6 @@ function build_torch_library() {
     echo -e "${INFO}Torch library built successfully${NC}"
 }
 
-function build_dynamic_optimized_matmul() {
-    echo -e "${INFO}Building dynamic optimized matmul...${NC}"
-    if [[ -d ${BUILD_DIR} ]]; then
-            cmake -S "$CMAKE_SOURCE_DIR" -B "$BUILD_DIR" \
-                -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
-                -DCMAKE_INSTALL_PREFIX="$OUTPUT_DIR" \
-                -DGENERATE_MATMUL_WRAPPER_CODE=ON \
-                "${CMAKE_OPTIONS[@]}"
-    fi
-    cmake --build "$BUILD_DIR" --target "$TARGET" -j
-    cmake --install "$BUILD_DIR" --component "$TARGET"
-    echo -e "${INFO}dynamic optimized matmul built successfully${NC}"
-}
-
 function build_mstuner_catlass() {
     echo -e "${INFO}Building mstuner_catlass...${NC}"
     cmake -S "$CMAKE_SOURCE_DIR" -B "$BUILD_DIR" "${CMAKE_OPTIONS[@]}"
@@ -198,19 +184,24 @@ case "$TARGET" in
     torch_library)
         build_torch_library
         ;;
-    31_dynamic_optimized_matmul)
-        build_dynamic_optimized_matmul
-        ;;
     mstuner_catlass)
         build_mstuner_catlass
         ;;
     *)
         echo -e "${INFO}Building target: $TARGET...${NC}"
         if [[ -d ${BUILD_DIR} ]]; then
-            cmake -S "$CMAKE_SOURCE_DIR" -B "$BUILD_DIR" \
-                -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
-                -DCMAKE_INSTALL_PREFIX="$OUTPUT_DIR" \
-                "${CMAKE_OPTIONS[@]}"
+            if [["$TARGET" == "31_dynamic_optomized_matmul"]] || [["$TARGET" == "catlass_examples"]]; then
+                cmake -S "$CMAKE_SOURCE_DIR" -B "$BUILD_DIR" \
+                    -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
+                    -DCMAKE_INSTALL_PREFIX="$OUTPUT_DIR" \
+                    -DGENERATE_MATMUL_WRAPPER_CODE=ON \
+                    "${CMAKE_OPTIONS[@]}"
+            else
+                cmake -S "$CMAKE_SOURCE_DIR" -B "$BUILD_DIR" \
+                    -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
+                    -DCMAKE_INSTALL_PREFIX="$OUTPUT_DIR" \
+                    "${CMAKE_OPTIONS[@]}"
+            fi
         fi
         cmake --build "$BUILD_DIR" --target "$TARGET" -j
         cmake --install "$BUILD_DIR" --component "$TARGET"
