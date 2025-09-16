@@ -32,7 +32,7 @@ void BalanceWorkload(uint32_t m, uint32_t n, uint32_t m1, uint32_t n1, uint32_t 
 
 void SetTile(TilingParams &TilingParams, uint32_t m1, uint32_t n1, uint32_t k1)
 {
-    // To save space, tiling parameters (m1, n1, k1) are stored as uint16_t.j
+    // To save space, tiling parameters (m1, n1, k1) are stored as uint16_t.
     TilingParams.m1 = static_cast<uint16_t>(m1);
     TilingParams.n1 = static_cast<uint16_t>(n1);
     TilingParams.k1 = static_cast<uint16_t>(k1);
