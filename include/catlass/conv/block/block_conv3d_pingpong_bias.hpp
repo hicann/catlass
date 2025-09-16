@@ -311,6 +311,7 @@ protected:
         uint8_t kAL1fullload = false;
         uint8_t kBL1fullload = false;
         uint8_t biasFullLoadFlag = false;
+        uint8_t preloadAL1DbFlag = false;
         uint8_t preloadABL1DbFlag = false;
         uint8_t mL0IsDivisibleByWo = false;
 
@@ -441,6 +442,7 @@ protected:
         uint8_t L0ASet2dFlag = conv3dParams.padhead() != 0 || conv3dParams.padtail() != 0 ||
                 conv3dParams.padtop() >= conv3dParams.kh() || conv3dParams.padbottom() >= conv3dParams.kh();
         bool kAL1TailCase = iterParams.kAL1Tail != kAL1;
+        iterParams.preloadAL1DbFlag = L1A_STAGES == 2 && !iterParams.kAL1fullload && !L0ASet2dFlag && !kAL1TailCase;
         iterParams.preloadABL1DbFlag = L1A_STAGES == 2 && L1B_STAGES == 2 && !iterParams.kAL1fullload &&
                                          !iterParams.kBL1fullload && !L0ASet2dFlag && !kAL1TailCase;
     }
