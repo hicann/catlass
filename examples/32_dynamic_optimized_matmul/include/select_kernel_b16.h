@@ -12,33 +12,36 @@
 #define SELECT_KERNEL_HALF_H
 
 #include "platform_info.h"
-#include "launch_map.h"
 
-bool CommonMatmulHalfHandler(TilingParams &params, TilingKey &tilingKey, PlatformInfo& platformInfo)
+bool CommonMatmulB16Handler(TilingParams &params, PlatformInfo& platformInfo)
 {
     uint8_t kernelSerial = 0;
-    tilingKey.SetTilingKey(kernelSerial, params.layoutTagA, params.layoutTagB, 0, 0, 0);
+    // kernelSerial, layoutTagA, layoutTagB, layoutTagC, paddingTagA, paddingTagB, paddingTagC, dtype(defalut 0).
+    params.tilingKey.SetTilingKey(kernelSerial, params.layoutTagA, params.layoutTagB, 0, 0, 0, 0);
     return true;
 }
 
-bool SmallMatmulHalfHandler(TilingParams &params, TilingKey &tilingKey, PlatformInfo& platformInfo)
+bool SmallMatmulB16Handler(TilingParams &params, PlatformInfo& platformInfo)
 {
     uint8_t kernelSerial = 1;
     uint32_t taskBlocks = CeilDiv(params.m, params.m1) * CeilDiv(params.n, params.n1);
     if (taskBlocks <= platformInfo.coreNum && params.k <= params.k1) {
-        tilingKey.SetTilingKey(kernelSerial, params.layoutTagA, params.layoutTagB, 0, 0, 0);
+        params.tilingKey.SetTilingKey(kernelSerial, params.layoutTagA, params.layoutTagB, 0, 0, 0, 0);
         return true;
     }
     return false;
 }
 
-void SelectKernelHalf(TilingParams &tilingParams, TilingKey &tilingKey, PlatformInfo& platformInfo)
+void SelectKernelB16(TilingParams &tilingParams, PlatformInfo& platformInfo)
 {
-    using HandlerPtr = bool (*)(TilingParams& tilingParams, TilingKey& tilingKey, PlatformInfo& platformInfo);
-    HandlerPtr handlers[] = {SmallMatmulHalfHandler, CommonMatmulHalfHandler};
+    using HandlerPtr = bool (*)(TilingParams& tilingParams, PlatformInfo& platformInfo);
+    HandlerPtr handlers[] = {
+        SmallMatmulB16Handler,
+        CommonMatmulB16Handler
+    };
 
     for (auto handler : handlers) {
-        if (handler(tilingParams, tilingKey, platformInfo)) {
+        if (handler(tilingParams, platformInfo)) {
             break;
         }
     }

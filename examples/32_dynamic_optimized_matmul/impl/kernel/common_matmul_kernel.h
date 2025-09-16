@@ -21,6 +21,23 @@
 #include "catlass/gemm/kernel/dynamic_common_matmul.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 
+template <
+    /// Tag indicating architecture
+    class ArchTag,
+    /// GemmType for A matrix operand
+    class AType,
+    /// GemmType type for B matrix operand
+    class BType,
+    /// GemmType type for C matrix operand
+    class CType,
+    /// GemmType type for Bias operand
+    class BiasType = void
+>
+struct TileCopyDynamicOptimized : public Catlass::Gemm::Tile::TileCopy<ArchTag, AType, BType, CType, BiasType> {
+    using CopyGmToL1A = typename Catlass::Gemm::Tile::CopyGmToL1DynamicOptimized<ArchTag, AType>;
+    using CopyGmToL1B = typename Catlass::Gemm::Tile::CopyGmToL1DynamicOptimized<ArchTag, BType>;
+};
+
 template <class ArchTag, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC>
 CATLASS_DEVICE void CommonDynamicMatmul(Catlass::GemmCoord &problemShape, Catlass::GemmCoord &l1TileShape, GM_ADDR gmA,
     LayoutA &layoutA, GM_ADDR gmB, LayoutB &layoutB, GM_ADDR gmC, LayoutC &layoutC,
@@ -34,7 +51,8 @@ CATLASS_DEVICE void CommonDynamicMatmul(Catlass::GemmCoord &problemShape, Catlas
     using BType = Catlass::Gemm::GemmType<ElementB, LayoutB>;
     using CType = Catlass::Gemm::GemmType<ElementC, LayoutC>;
 
-    using BlockMmad = Catlass::Gemm::Block::BlockMmad<DispatchPolicy, void, void, AType, BType, CType>;
+    using TileCopy = TileCopyDynamicOptimized<ArchTag, AType, BType, CType>;
+    using BlockMmad = Catlass::Gemm::Block::BlockMmad<DispatchPolicy, void, void, AType, BType, CType, void, TileCopy>;
     using BlockEpilogue = void;
     if (problemShape.m() > problemShape.n()) {
         using BlockScheduler = typename Catlass::Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;

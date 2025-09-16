@@ -50,6 +50,166 @@ struct CopyGmToL1GMMPTD {
     static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy gm to l1, can not find the specialization.");
 };
 
+template <
+    class ArchTag,
+    /// GemmType for matrix operand
+    class GmType,
+    class L1Type = void
+>
+struct CopyGmToL1DynamicOptimized {
+    static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy gm to l1, can not find the specialization.");
+};
+
+/// Partial specialization for AtlasA2, RowMajor in and zN out.
+template <class Element>
+struct CopyGmToL1DynamicOptimized<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>> {
+    using LayoutDst = layout::zN;
+    using LayoutSrc = layout::RowMajor;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+
+    // Mehtods
+
+    CATLASS_DEVICE
+    CopyGmToL1DynamicOptimized() {};
+
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::GlobalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+    {
+        AscendC::Nd2NzParams intriParams;
+
+        intriParams.ndNum = 1;
+        intriParams.dValue = layoutSrc.shape(1);
+        intriParams.srcNdMatrixStride = 0;
+        intriParams.dstNzC0Stride = layoutDst.stride(3) / ELE_NUM_PER_C0;
+        intriParams.dstNzMatrixStride = 0;
+
+        if (layoutSrc.shape(0) <= 16) {
+            // If the number of matrix rows is 1, the regular interval-based DataCopy interface can be used instead of
+            // the ND2NZ DataCopy interface, resulting in higher transfer efficiency.
+            for (int i = 0; i < layoutSrc.shape(0); ++i) {
+                AscendC::DataCopyParams dataCopyParams(
+                    CeilDiv(layoutSrc.shape(1), layoutDst.shape(2)),
+                    layoutDst.shape(2) / ELE_NUM_PER_C0,
+                    0,
+                    (layoutDst.stride(3) - layoutDst.shape(2)) / ELE_NUM_PER_C0
+                );
+                AscendC::DataCopy(
+                    dstTensor[i * layoutDst.shape(2)], srcTensor[i * layoutSrc.stride(0)], dataCopyParams);
+            }
+        } else {
+            if (layoutSrc.stride(0) < STRIDE_LIMIT) {
+                if (layoutSrc.shape(1) != ELE_NUM_PER_C0 || layoutSrc.stride(0) != ELE_NUM_PER_C0) {
+                    intriParams.nValue = layoutSrc.shape(0);
+                    intriParams.srcDValue = layoutSrc.stride(0);
+                    intriParams.dstNzNStride = layoutDst.stride(0) / ELE_NUM_PER_C0;
+                    AscendC::DataCopy(dstTensor, srcTensor, intriParams);
+                } else {
+                    // If the matrix has ELE_NUM_PER_C0, columns and a stride of ELE_NUM_PER_C0, it follows a row-major
+                    // layout in L1, allowing the use of standard contiguous DataCopy interface for more efficient
+                    // transfers.
+                    AscendC::DataCopy(dstTensor, srcTensor, layoutSrc.shape(0) * layoutSrc.shape(1));
+                }
+            } else {
+                intriParams.nValue = 1;
+                intriParams.srcDValue = 0;
+                intriParams.dstNzNStride = 0;
+                for (uint32_t i = 0; i < layoutSrc.shape(0); i++) {
+                    AscendC::DataCopy(dstTensor[i * ELE_NUM_PER_C0], srcTensor[i * layoutSrc.stride(0)], intriParams);
+                }
+            }
+        }
+    }
+};
+
+/// Partial specialization for AtlasA2, ColumnMajor in and nZ out.
+template <class Element>
+struct CopyGmToL1DynamicOptimized<Arch::AtlasA2, Gemm::GemmType<Element, layout::ColumnMajor>> {
+    using LayoutDst = layout::nZ;
+    using LayoutSrc = layout::ColumnMajor;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+
+    // Mehtods
+
+    CATLASS_DEVICE
+    CopyGmToL1DynamicOptimized() {};
+
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::GlobalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+    {
+        AscendC::Nd2NzParams intriParams;
+
+        intriParams.ndNum = 1;
+        intriParams.dValue = layoutSrc.shape(0);
+        intriParams.srcNdMatrixStride = 0;
+        intriParams.dstNzC0Stride = layoutDst.stride(1) / ELE_NUM_PER_C0;
+        intriParams.dstNzMatrixStride = 0;
+
+        if (layoutSrc.shape(1) <= 16) {
+            // If the number of matrix cols is 1, the regular interval-based DataCopy interface can be used instead of
+            // the ND2NZ DataCopy interface, resulting in higher transfer efficiency.
+            for (int i = 0; i < layoutSrc.shape(1); ++i) {
+                AscendC::DataCopyParams dataCopyParams(
+                    CeilDiv(layoutSrc.shape(0), layoutDst.shape(0)),
+                    layoutDst.shape(0) / ELE_NUM_PER_C0,
+                    0,
+                    (layoutDst.stride(1) - layoutDst.shape(0)) / ELE_NUM_PER_C0
+                );
+                AscendC::DataCopy(
+                    dstTensor[i * layoutDst.shape(0)], srcTensor[i * layoutSrc.stride(1)], dataCopyParams);
+            }
+        } else {
+            if (layoutSrc.stride(1) < STRIDE_LIMIT) {
+                if (layoutSrc.shape(0) != ELE_NUM_PER_C0 || layoutSrc.stride(1) != ELE_NUM_PER_C0) {
+                    intriParams.nValue = layoutSrc.shape(1);
+                    intriParams.srcDValue = layoutSrc.stride(1);
+                    intriParams.dstNzNStride = layoutDst.stride(2) / ELE_NUM_PER_C0;
+                    AscendC::DataCopy(dstTensor, srcTensor, intriParams);
+                } else {
+                    // If the matrix has ELE_NUM_PER_C0, rows and a stride of ELE_NUM_PER_C0, it follows a col-major
+                    // layout in L1, allowing the use of standard contiguous DataCopy interface for more efficient
+                    // transfers.
+                    AscendC::DataCopy(dstTensor, srcTensor, layoutSrc.shape(0) * layoutSrc.shape(1));
+                }
+            } else {
+                intriParams.nValue = 1;
+                intriParams.srcDValue = 0;
+                intriParams.dstNzNStride = 0;
+                for (uint32_t i = 0; i < layoutSrc.shape(1); i++) {
+                    AscendC::DataCopy(dstTensor[i * ELE_NUM_PER_C0], srcTensor[i * layoutSrc.stride(1)], intriParams);
+                }
+            }
+        }
+    }
+};
+
+/// Partial specialization for AtlasA2, zN in and zN out.
+template <class Element>
+struct CopyGmToL1DynamicOptimized<Arch::AtlasA2, Gemm::GemmType<Element, layout::zN>> : 
+    public CopyGmToL1<Arch::AtlasA2, Gemm::GemmType<Element, layout::zN>> {};
+
+/// Partial specialization for AtlasA2, nZ in and nZ out.
+template <class Element>
+struct CopyGmToL1DynamicOptimized<Arch::AtlasA2, Gemm::GemmType<Element, layout::nZ>> : 
+    public CopyGmToL1<Arch::AtlasA2, Gemm::GemmType<Element, layout::nZ>> {};
+
+/// Partial specialization for AtlasA2, PaddingRowMajor in and zN out.
+template <class Element>
+struct CopyGmToL1DynamicOptimized<Arch::AtlasA2, Gemm::GemmType<Element, layout::PaddingRowMajor>> : 
+    public CopyGmToL1<Arch::AtlasA2, Gemm::GemmType<Element, layout::PaddingRowMajor>> {};
+
+/// Partial specialization for AtlasA2, PaddingColumnMajor in and nZ out.
+template <class Element>
+struct CopyGmToL1DynamicOptimized<Arch::AtlasA2, Gemm::GemmType<Element, layout::PaddingColumnMajor>> : 
+    public CopyGmToL1<Arch::AtlasA2, Gemm::GemmType<Element, layout::PaddingColumnMajor>> {};
+
 /// Partial specialization for AtlasA2, RowMajor in and zN out.
 template <class Element>
 struct CopyGmToL1GMMPTD<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>> {
