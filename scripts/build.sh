@@ -190,7 +190,7 @@ case "$TARGET" in
     *)
         echo -e "${INFO}Building target: $TARGET...${NC}"
         if [[ -d ${BUILD_DIR} ]]; then
-            if [["$TARGET" == "31_dynamic_optomized_matmul"]] || [["$TARGET" == "catlass_examples"]]; then
+            if [[ "$TARGET" == "31_dynamic_optomized_matmul" ]] || [[ "$TARGET" == "catlass_examples" ]]; then
                 cmake -S "$CMAKE_SOURCE_DIR" -B "$BUILD_DIR" \
                     -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
                     -DCMAKE_INSTALL_PREFIX="$OUTPUT_DIR" \
