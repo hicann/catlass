@@ -547,7 +547,6 @@ protected:
         AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1AListId]);
 
         if (iterParams.loadBL1Flag || !(iterParams.kBL1fullload)) {
-            AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1BListId]);
             AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1BListId]);
             LoadBL1Process(filterGm, 0, layoutFilter, l1BListId);
             iterParams.loadBL1Flag = false;
@@ -595,6 +594,7 @@ protected:
             isOdd = iterParams.kIter & 0x1;
         }
         AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListId]);
+        AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1BListId]);
     }
 
     CATLASS_DEVICE
