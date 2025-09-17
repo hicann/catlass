@@ -14,6 +14,12 @@ class Config:
 
     LAYOUT_TAG_SET = [0, 1]  # 0 is RowMajor, 1 is ColumnMajor
     LAYOUT_TAG_MAP = {0: "Catlass::layout::RowMajor", 1: "Catlass::layout::ColumnMajor"}
+    PADDING_TAG_MAP = {
+        0: "PaddingTag::NO_PADDING", 
+        1: "PaddingTag::PADDING_ND",
+        2: "PaddingTag::PADDING_BLOCK_ND",
+        3: "PaddingTag::PADDING_NZ"
+    }
 
     DTYPE_MAP = {"half": 0, "float": 1}
 
