@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef PADDING_MATMUL_KERNEL_H
-#define PADDING_MATMUL_KERNEL_H
+#ifndef PADDING_MUTI_CORE_SPLITK_MATMUL_KERNEL_H
+#define PADDING_MUTI_CORE_SPLITK_MATMUL_KERNEL_H
 
 #include "tiling_params.h"
 #include "acl/acl.h"
@@ -214,9 +214,7 @@ void LaunchPaddingMutiCoreSplitkKernel(aclrtStream &stream, uint64_t fftsAddr, u
         sizeWB = PaddingBuilderB::Padding::GetWorkspaceSize(k, n);
     }
 
-    if constexpr (paddingTagC == PaddingTag::PADDING_ND) {
-        dReduceW = dW + sizeWA + sizeWB;
-    }
+    dReduceW = dW + sizeWA + sizeWB;
 
     PaddingMutiCoreSplitkMatmulKernel<ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC, paddingTagA, paddingTagB
         ><<<tilingParams.blockDim, nullptr, stream>>>(fftsAddr, dA, dB, dC, dWA, dWB, dReduceW, dTilingParams);
@@ -235,7 +233,7 @@ size_t PaddingMutiCoreSplitkKernelGetWorkspaceSize(TilingParams &tilingParams)
     uint32_t m1 = static_cast<uint32_t>(tilingParams.m1);
     uint32_t n1 = static_cast<uint32_t>(tilingParams.n1);
     uint32_t k1 = static_cast<uint32_t>(tilingParams.k1);
-    size_t sizeWA = 0, sizeWB = 0, sizeRreduceW;
+    size_t sizeWA = 0, sizeWB = 0, sizeReduceW;
     if constexpr (paddingTagA == PaddingTag::PADDING_BLOCK_ND) {
         sizeWA = PaddingBuilderA::Padding::GetWorkspaceSize(m, k, m1, k1);
     } else if constexpr (paddingTagA == PaddingTag::PADDING_ND) {
@@ -257,4 +255,4 @@ size_t PaddingMutiCoreSplitkKernelGetWorkspaceSize(TilingParams &tilingParams)
     return sizeWA + sizeWB + sizeReduceW;
 }
 
-#endif  // PADDING_MATMUL_KERNEL_H
+#endif  // PADDING_MUTI_CORE_SPLITK_MATMUL_KERNEL_H

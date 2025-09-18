@@ -23,6 +23,7 @@ void {launch_kernel_func_name}(aclrtStream& stream, uint64_t fftsAddr,
     using ElementC = {element_c};
     using LayoutA = {layout_a};
     using LayoutB = {layout_b};
+    using LayoutC = {layout_c};
     constexpr PaddingTag paddingTagA = {padding_tag_a};
     constexpr PaddingTag paddingTagB = {padding_tag_b};
     LaunchPaddingMutiCoreSplitkMatmulKernel<ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC,
@@ -37,6 +38,7 @@ size_t {get_workspace_func_name}(TilingParams& tilingParams)
     using ElementC = {element_c};
     using LayoutA = {layout_a};
     using LayoutB = {layout_b};
+    using LayoutC = {layout_c};
     constexpr PaddingTag paddingTagA = {padding_tag_a};
     constexpr PaddingTag paddingTagB = {padding_tag_b};
     return PaddingMutiCoreSplitkMatmulKernelGetWorkspaceSize<ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC,
