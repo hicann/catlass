@@ -20,6 +20,7 @@ from torch_npu.npu._format import Format
 from catlass_test.common import (
     BishengDType,
     get_current_stream_ptr,
+    is_transposed,
     torch_dtype_to_bisheng_dtype,
 )
 from catlass_test.compiler import TemplateCompiler
@@ -72,7 +73,12 @@ class AdapterBase(ABC):
         if npu_format == Format.ND:
             return (
                 "layout::ColumnMajor"
-                if self.attrs.get(f"Trans{tensor_name}", False)
+                if any(
+                    (
+                        self.attrs.get(f"Trans{tensor_name}", False),
+                        is_transposed(tensor),
+                    )
+                )
                 else "layout::RowMajor"
             )
         elif npu_format == Format.FRACTAL_NZ:

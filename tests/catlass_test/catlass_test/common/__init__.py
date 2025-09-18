@@ -50,3 +50,8 @@ def torch_dtype_to_bisheng_dtype(torch_dtype: torch.dtype) -> BishengDType:
 def swap(*args):
     assert len(args) >= 2
     return (*args[:-2], args[-1], args[-2])
+
+
+def is_transposed(mat: torch.Tensor) -> bool:
+    assert len(mat.shape) >= 2
+    return mat.stride(-2) == 1 and mat.stride(-1) == mat.shape[0]

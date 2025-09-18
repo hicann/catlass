@@ -127,7 +127,7 @@ class TemplateCompiler:
             f"-DTILING_KEY_VAR",
         ]
         command = (
-            ["ccec"]
+            ["bisheng"]
             + COMPILER_COMPILE_OPTIONS
             + COMPILER_DEFINATIONS
             + COMPILER_LLVM_COMPILE_OPTIONS
