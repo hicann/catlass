@@ -254,7 +254,7 @@ public:
             for (int mPartIdx = 0; mPartIdx < mPartLoop; mPartIdx++) {
                 uint32_t hoPartActual = (mPartIdx < mPartLoop - 1) ?
                     hoL0Tile : (hoActual - mPartIdx * hoL0Tile);     
-                uint32_t mPartActual = hoL0Actual * woActual;
+                uint32_t mPartActual = hoPartActual * woActual;
                 
                 // compute hiPartActual from hoPartActual
                 uint8_t tilePadTop = 0, tilePadBottom = 0;
@@ -267,6 +267,7 @@ public:
                     tilePadBottom = blockPadBottom;
                     hiPartActual -= tilePadBottom;
                 }
+                uint8_t *tilePadList = {blockPadLeft, blockPadRight, tilePadTop, tilePadBottom};
 
                 for (int kPartIdx = 0; kPartIdx < kPartLoop; kPartIdx++) {
                     uint32_t cin1PartActual = (kPartIdx < kPartLoop - 1) ?
@@ -313,7 +314,7 @@ public:
                         }
 
                         // Load current tile from L1 to L0B
-                        copyL1ToL0B(l0BTile, l1BTile, LayoutFilterInL0, LayoutFilterInL1);
+                        copyL1ToL0B(l0BTile, l1BTile, layoutFilterInL0, layoutFilterInL1);
 
                         if ((kPartIdx == kPartLoop - 1) && (nPartIdx == nPartLoop - 1)) {
                             AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1ListId]);

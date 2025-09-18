@@ -60,12 +60,12 @@ struct Conv2dIdentityBlockSwizzle {
 
     CATLASS_DEVICE
     uint32_t GetCoreLoops() const {
-        return loops.h() * loops.w() * loops.cout(); 
+        return loops.ho() * loops.wo() * loops.cout(); 
     }
 
     CATLASS_DEVICE
     uint32_t GetLoops() const {
-        return loops.batch() * this->GetCoreLoops(); 
+        return problemShape.batch() * this->GetCoreLoops(); 
     }
 
     CATLASS_DEVICE
