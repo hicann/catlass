@@ -117,9 +117,9 @@ struct Conv2dIdentityBlockSwizzle {
     CATLASS_DEVICE
     Conv2d5HdCoord GetActualBlockShape(Conv2d5HdCoord blockCoord) {
         uint32_t hoActual = (blockCoord.h() == loops.ho() - 1) ? 
-            (problemShape.ho() - blockCoord.h() * tiles.ho()) : tiles.ho();
+            (problemShape.h() - blockCoord.h() * tiles.ho()) : tiles.ho();
         uint32_t woActual = (blockCoord.w() == loops.wo() - 1) ? 
-            (problemShape.wo() - blockCoord.w() * tiles.wo()) : tiles.wo();
+            (problemShape.w() - blockCoord.w() * tiles.wo()) : tiles.wo();
         uint32_t coutActual = (blockCoord.cout() == loops.cout() - 1) ? 
             (problemShape.cout() - blockCoord.cout() * tiles.cout()) : tiles.cout();
         uint32_t cin1Actual = problemShape.cin1();

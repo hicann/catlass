@@ -132,9 +132,9 @@ public:
             uint8_t blockPadTop = 0, blockPadBottom = 0, blockPadLeft = 0, blockPadRight = 0;
             
             // Compute indices of hi
-            uint32_t hoStart = blockCoord.ho() * FmapL1TileShape::Ho;
+            uint32_t hoStart = blockCoord.h() * FmapL1TileShape::Ho;
             int32_t hiStart = hoStart * params.problemShape.strideH() - params.problemShape.padTop();
-            int32_t hiEnd = hiStart + (actualBlockShape.ho() - 1) * params.problemShape.strideH() + 
+            int32_t hiEnd = hiStart + (actualBlockShape.h() - 1) * params.problemShape.strideH() + 
                 (params.problemShape.kh() - 1) * params.problemShape.dilationH();
             if(hiStart < 0){
                 blockPadTop = 0 - hiStart;
@@ -147,9 +147,9 @@ public:
             uint32_t hiActual = hiEnd - hiStart + 1;
 
             // Compute indexes of wi
-            uint32_t woStart = blockCoord.wo() * FmapL1TileShape::Wo;
+            uint32_t woStart = blockCoord.w() * FmapL1TileShape::Wo;
             int32_t wiStart = woStart * params.problemShape.strideW() - params.problemShape.padLeft();
-            int32_t wiEnd = wiStart + (actualBlockShape.wo() - 1) * params.problemShape.strideW() + 
+            int32_t wiEnd = wiStart + (actualBlockShape.w() - 1) * params.problemShape.strideW() + 
                 (params.problemShape.kw() - 1) * params.problemShape.dilationW();
             if(wiStart < 0){
                 blockPadLeft = 0 - wiStart;
