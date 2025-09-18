@@ -22,18 +22,34 @@
 namespace Catlass::Gemm::Kernel {
 
 template <class PrologueA_, class PrologueB_, class BlockMmad_, 
-    class BlockEpilogue_, class BlockScheduler_, class RemovePaddingC>
+    class BlockEpilogue_, class BlockScheduler_, class RemovePaddingC_>
 class DynamicPaddingMatmul {
 public:
+    using PrologueA = PrologueA_;
+    using PrologueB = PrologueB_;
+    using RemovePaddingC = RemovePaddingC_;
+
     using BlockMmad = BlockMmad_;
     using ArchTag = typename BlockMmad::ArchTag;
     using ElementA = typename BlockMmad::ElementA;
     using ElementB = typename BlockMmad::ElementB;
     using ElementC = typename BlockMmad::ElementC;
 
-    using LayoutA = typename BlockMmad::LayoutA;
-    using LayoutB = typename BlockMmad::LayoutB;
     using LayoutC = typename BlockMmad::LayoutC;
+
+    template<class T>
+    struct LayoutHelper {
+        using type = typename T::LayoutIn;
+    };
+    template<>
+    struct LayoutHelper<void> {
+        using type = void;
+    };
+
+    using LayoutA = std::conditional_t<
+        std::is_void_v<PrologueA>, typename BlockMmad::LayoutA, typename LayoutHelper<PrologueA>::type>;
+    using LayoutB = std::conditional_t<
+        std::is_void_v<PrologueB>, typename BlockMmad::LayoutB, typename LayoutHelper<PrologueB>::type>;
 
     using BlockScheduler = BlockScheduler_;
 
@@ -59,9 +75,10 @@ public:
 
         CATLASS_HOST_DEVICE
         Params(GemmCoord const &problemShape_, GemmCoord const &l1TileShape_, GM_ADDR ptrA_, LayoutA& layoutA_,
-            GM_ADDR ptrB_, LayoutB& layoutB_, GM_ADDR ptrC_, LayoutC& layoutC_, GM_ADDR ptrWA_, GM_ADDR ptrWB_)
+            GM_ADDR ptrB_, LayoutB& layoutB_, GM_ADDR ptrC_, LayoutC& layoutC_, GM_ADDR ptrWA_, GM_ADDR ptrWB_,
+            GM_ADDR ptrWC_)
             : problemShape(problemShape_), l1TileShape(l1TileShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_),
-              layoutB(layoutB_), ptrC(ptrC_), layoutC(layoutC_), ptrWA(ptrWA_), ptrWB(ptrWB_)
+              layoutB(layoutB_), ptrC(ptrC_), layoutC(layoutC_), ptrWA(ptrWA_), ptrWB(ptrWB_), ptrWC(ptrWC_)
         {}
     };
 
@@ -72,11 +89,11 @@ public:
 
     template <int32_t CORE_TYPE = g_coreType>
     CATLASS_DEVICE
-    void operator()(Params const &params, Catlass::Arch::Resource &resource);
+    void operator()(Params const &params, Catlass::Arch::Resource<ArchTag> &resource);
 
     template<>
     CATLASS_DEVICE
-    void operator()<AscendC::AIV>(Params const &params, Catlass::Arch::Resource &resource)
+    void operator()<AscendC::AIV>(Params const &params, Catlass::Arch::Resource<ArchTag> &resource)
     {
          if constexpr (!std::is_void_v<PrologueA>) {
             AscendC::GlobalTensor<ElementA> gmA;
@@ -92,7 +109,7 @@ public:
                 layoutWA = PrologueA::GetWorkspaceLayout(params.layoutA);
             }
             PrologueA prologueA(resource);
-            prologueA(gmWA, gmA, params.layoutWA, params.layoutA);
+            prologueA(gmWA, gmA, layoutWA, params.layoutA);
         }
 
         if constexpr (!std::is_void_v<PrologueB>) {
@@ -106,10 +123,10 @@ public:
             } else if constexpr (PrologueB::paddingTag == Catlass::Gemm::Kernel::PaddingTag::PADDING_BLOCK_ND) {
                 layoutWB = PrologueB::GetWorkspaceLayout(params.layoutB, params.l1TileShape.k(), params.l1TileShape.n());
             } else if constexpr (PrologueB::paddingTag == Catlass::Gemm::Kernel::PaddingTag::PADDING_NZ) {
-                layoutWB = PrologueB::GetWorkspaceLayout(params.layoutA);
+                layoutWB = PrologueB::GetWorkspaceLayout(params.layoutB);
             }
             PrologueB prologueB(resource);
-            prologueB(gmWB, gmB, params.layoutWB, params.layoutB);
+            prologueB(gmWB, gmB, layoutWB, params.layoutB);
             // 0x0 synchronization control between AI Core
         }
         if constexpr (!std::is_void_v<PrologueA> || !std::is_void_v<PrologueB>) {
@@ -117,7 +134,7 @@ public:
             Catlass::Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(flagAivFinishPadding);
         }
 
-        if constexpr (!std::is_same_v<RemovePaddingC, void>) {
+        if constexpr (!std::is_void_v<RemovePaddingC>) {
             Catlass::Arch::CrossCoreWaitFlag(flagAicFinish);
             Catlass::Arch::CrossCoreBarrier<0x0, PIPE_MTE3>();
             AscendC::GlobalTensor<ElementC> gmC;
@@ -133,6 +150,7 @@ public:
     }
 
     /// Executes matmul
+    template<>
     CATLASS_DEVICE void operator()<AscendC::AIC>(Params const &params, Catlass::Arch::Resource<ArchTag> &resource)
     {
         if constexpr (!std::is_void_v<PrologueA> || !std::is_void_v<PrologueB>) {
@@ -173,7 +191,7 @@ public:
             } else if constexpr (PrologueB::paddingTag == Catlass::Gemm::Kernel::PaddingTag::PADDING_BLOCK_ND) {
                 layoutB = PrologueB::GetWorkspaceLayout(params.layoutB, params.l1TileShape.k(), params.l1TileShape.n());
             } else if constexpr (PrologueB::paddingTag == Catlass::Gemm::Kernel::PaddingTag::PADDING_NZ) {
-                layoutB = PrologueB::GetWorkspaceLayout(params.layoutA);
+                layoutB = PrologueB::GetWorkspaceLayout(params.layoutB);
             }
         }
         AscendC::GlobalTensor<ElementC> gmC;
@@ -241,7 +259,7 @@ public:
                 isFirstBlock,
                 hasNextBlock);
         }
-        if constexpr (!std::is_void_v<RemovePaddingC, void>) {
+        if constexpr (!std::is_void_v<RemovePaddingC>) {
             Catlass::Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(flagAicFinish);
         }
         AscendC::PipeBarrier<PIPE_ALL>();

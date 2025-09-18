@@ -54,7 +54,7 @@ size_t {get_workspace_func_name}(TilingParams& tilingParams)
                 + str(l_tag_b)
             )
             kernel_info[
-                Config.get_tiling_key(kernel_serial, dtype, l_tag_a, l_tag_b, 0, 0, 0)
+                Config.get_tiling_key(kernel_serial, dtype, l_tag_a, l_tag_b, 0, 0, 0, 0)
             ] = kernel_func_name
             launch_kernel_func_name = "Launch" + kernel_func_name
             get_workspace_func_name = (

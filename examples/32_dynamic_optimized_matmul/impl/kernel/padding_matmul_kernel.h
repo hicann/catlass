@@ -39,45 +39,8 @@ struct TileCopyDynamicOptimized : public Catlass::Gemm::Tile::TileCopy<ArchTag, 
     using CopyGmToL1B = typename Catlass::Gemm::Tile::CopyGmToL1DynamicOptimized<ArchTag, BType>;
 };
 
-template <class ArchTag, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC>
-CATLASS_DEVICE void DynamicPaddingMatmul(Catlass::GemmCoord &problemShape, Catlass::GemmCoord &l1TileShape, GM_ADDR gmA,
-    LayoutA &layoutA, GM_ADDR gmB, LayoutB &layoutB, GM_ADDR gmC, LayoutC &layoutC, GM_ADDR gmWA, GM_ADDR gmWB,
-    GM_ADDR gmWC, Catlass::Arch::Resource<ArchTag> &resource)
-{
-    constexpr bool enableUnitFlag = true;
-    constexpr bool enableShuffleK = true;
-    using DispatchPolicy = Catlass::Gemm::MmadAtlasA2DynamicCommon<enableShuffleK, enableShuffleK>;
-
-    using AType = Catlass::Gemm::GemmType<ElementA, LayoutA>;
-    using BType = Catlass::Gemm::GemmType<ElementB, LayoutB>;
-    using CType = Catlass::Gemm::GemmType<ElementC, LayoutC>;
-
-    using TileCopy = TileCopyDynamicOptimized<ArchTag, AType, BType, CType>;
-    using BlockMmad = Catlass::Gemm::Block::BlockMmad<DispatchPolicy, void, void, AType, BType, CType, void, TileCopy>;
-    using BlockEpilogue = void;
-    if (problemShape.m() > problemShape.n()) {
-        using BlockScheduler = typename Catlass::Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
-        // kernel level
-        using MatmulKernel = Catlass::Gemm::Kernel::DynamicCommonMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
-        typename MatmulKernel::Params params{
-            problemShape, l1TileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, gmWA, gmWB, gmWC};
-        // call a kernel
-        MatmulKernel matmul;
-        matmul(params, resource);
-    } else {
-        using BlockScheduler = typename Catlass::Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
-        // kernel level
-        using MatmulKernel = Catlass::Gemm::Kernel::DynamicCommonMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
-        typename MatmulKernel::Params params{
-            problemShape, l1TileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, gmWA, gmWB, gmWC};
-        // call a kernel
-        MatmulKernel matmul;
-        matmul(params, resource);
-    }
-}
-
 template <class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC,
-    PaddingTag paddingTagA, PaddingTag paddingTagB>
+    PaddingTag paddingTagA, PaddingTag paddingTagB,  PaddingTag paddingTagC>
 CATLASS_GLOBAL __attribute__((aic)) void PaddingMatmulKernel(__gm__ uint8_t *__restrict__ gmA,
     __gm__ uint8_t *__restrict__ gmB, __gm__ uint8_t *__restrict__ gmC, __gm__ uint8_t *__restrict__ gmWA,
     __gm__ uint8_t *__restrict__ gmWB, __gm__ uint8_t *__restrict__ gmWC, __gm__ uint8_t *__restrict__ tilingData)
@@ -165,14 +128,52 @@ CATLASS_GLOBAL __attribute__((aic)) void PaddingMatmulKernel(__gm__ uint8_t *__r
     LayoutA layoutA{m, k, strideA};
     LayoutB layoutB{k, n, strideB};
     LayoutC layoutC{m, n, strideC};
-    DynamicPaddingMatmul<ArchTag, ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC>(
-        problemShape, l1TileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, gmWA, gmWB, gmWC, resource);
+
+    using PaddingBuilderA = Catlass::Gemm::Kernel::PaddingBuilder<paddingTagA, ArchTag, ElementA, LayoutA>;
+    using PaddingBuilderB = Catlass::Gemm::Kernel::PaddingBuilder<paddingTagB, ArchTag, ElementB, LayoutB>;
+    using RemovePaddingBuilderC = Catlass::Gemm::Kernel::PaddingBuilder<paddingTagC, ArchTag, ElementC, LayoutC>;
+    using PaddingA = typename PaddingBuilderA::Padding;
+    using PaddingB = typename PaddingBuilderB::Padding;
+    using RemovePaddingC = typename RemovePaddingBuilderC::Padding;
+
+    constexpr bool enableUnitFlag = true;
+    constexpr bool enableShuffleK = true;
+    using DispatchPolicy = Catlass::Gemm::MmadAtlasA2DynamicCommon<enableShuffleK, enableShuffleK>;
+
+    using AType = Catlass::Gemm::GemmType<ElementA, typename PaddingBuilderA::LayoutAfterPadding>;
+    using BType = Catlass::Gemm::GemmType<ElementB, typename PaddingBuilderB::LayoutAfterPadding>;
+    using CType = Catlass::Gemm::GemmType<ElementC, LayoutC>;
+
+    using TileCopy = TileCopyDynamicOptimized<ArchTag, AType, BType, CType>;
+    using BlockMmad = Catlass::Gemm::Block::BlockMmad<DispatchPolicy, void, void, AType, BType, CType, void, TileCopy>;
+    using BlockEpilogue = void;
+    if (problemShape.m() > problemShape.n()) {
+        using BlockScheduler = typename Catlass::Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
+        // kernel level
+        using MatmulKernel = Catlass::Gemm::Kernel::DynamicPaddingMatmul<
+            PaddingA, PaddingB, BlockMmad, BlockEpilogue, BlockScheduler, RemovePaddingC>;
+        typename MatmulKernel::Params params{
+            problemShape, l1TileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, gmWA, gmWB, gmWC};
+        // call a kernel
+        MatmulKernel matmul;
+        matmul(params, resource);
+    } else {
+        using BlockScheduler = typename Catlass::Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
+        // kernel level
+        using MatmulKernel = Catlass::Gemm::Kernel::DynamicPaddingMatmul<
+            PaddingA, PaddingB, BlockMmad, BlockEpilogue, BlockScheduler, RemovePaddingC>;
+        typename MatmulKernel::Params params{
+            problemShape, l1TileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, gmWA, gmWB, gmWC};
+        // call a kernel
+        MatmulKernel matmul;
+        matmul(params, resource);
+    }
 }
 
 template <class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC,
-    PaddingTag paddingTagA, PaddingTag paddingTagB>
+    PaddingTag paddingTagA, PaddingTag paddingTagB,  PaddingTag paddingTagC>
 void LaunchPaddingMatmulKernel(aclrtStream &stream, uint64_t fftsAddr, uint8_t *dA, uint8_t *dB, uint8_t *dC,
-    uint8_t *dTilingParams, TilingParams &tilingParams)
+    uint8_t *dW, uint8_t *dTilingParams, TilingParams &tilingParams)
 {
     using ArchTag = Catlass::Arch::AtlasA2;
     using PaddingBuilderA = Catlass::Gemm::Kernel::PaddingBuilder<paddingTagA, ArchTag, ElementA, LayoutA>;
@@ -181,44 +182,44 @@ void LaunchPaddingMatmulKernel(aclrtStream &stream, uint64_t fftsAddr, uint8_t *
     uint32_t m = tilingParams.m;
     uint32_t n = tilingParams.n;
     uint32_t k = tilingParams.k;
-    uint32_t mTile = static_cast<uint32_t>(tilingParams.mTile);
-    uint32_t nTile = static_cast<uint32_t>(tilingParams.nTile);
-    uint32_t kTile = static_cast<uint32_t>(tilingParams.kTile);
-    uint8_t* dWA = nullptr;
-    uint8_t* dWB = nullptr;
-    uint8_t* dWC = nullptr;
+    uint32_t m1 = static_cast<uint32_t>(tilingParams.m1);
+    uint32_t n1 = static_cast<uint32_t>(tilingParams.n1);
+    uint32_t k1 = static_cast<uint32_t>(tilingParams.k1);
+    uint8_t *dWA = nullptr;
+    uint8_t *dWB = nullptr;
+    uint8_t *dWC = nullptr;
     size_t sizeWA = 0, sizeWB = 0;
 
     dWA = dW;
     if constexpr (paddingTagA == PaddingTag::PADDING_BLOCK_ND) {
-        sizeWA = PrologueA::GetWorkspaceSize(m, k, mTile, kTile);
+        sizeWA = PaddingBuilderA::Padding::GetWorkspaceSize(m, k, m1, k1);
     } else if constexpr (paddingTagA == PaddingTag::PADDING_ND) {
         // Optimal bandwidth for 512 Byte aligned reads
-        sizeWA = PrologueA::GetWorkspaceSize(m, k, 512 / sizeof(ElementA));
-    } else if constexpr (paddingTagA == PaddingTag::PADDING_NZ){
-        sizeWA = PrologueA::GetWorkspaceSize(m, k);
+        sizeWA = PaddingBuilderA::Padding::GetWorkspaceSize(m, k, 512 / sizeof(ElementA));
+    } else if constexpr (paddingTagA == PaddingTag::PADDING_NZ) {
+        sizeWA = PaddingBuilderA::Padding::GetWorkspaceSize(m, k);
     }
 
     dWB = dW + sizeWA;
     if constexpr (paddingTagB == PaddingTag::PADDING_BLOCK_ND) {
-        sizeWB = PrologueB::GetWorkspaceSize(k, n, mTile, kTile);
+        sizeWB = PaddingBuilderB::Padding::GetWorkspaceSize(k, n, m1, k1);
     } else if constexpr (paddingTagB == PaddingTag::PADDING_ND) {
         // Optimal bandwidth for 512 Byte aligned reads
-        sizeWB = PrologueB::GetWorkspaceSize(k, n, 512 / sizeof(ElementB));
-    } else if constexpr (paddingTagB == PaddingTag::PADDING_NZ){
-        sizeWB = PrologueB::GetWorkspaceSize(k, n);
+        sizeWB = PaddingBuilderB::Padding::GetWorkspaceSize(k, n, 512 / sizeof(ElementB));
+    } else if constexpr (paddingTagB == PaddingTag::PADDING_NZ) {
+        sizeWB = PaddingBuilderB::Padding::GetWorkspaceSize(k, n);
     }
 
-    if constexpr (paddingTagC == PaddingTag::PADDING_ND){
+    if constexpr (paddingTagC == PaddingTag::PADDING_ND) {
         dWC = dW + sizeWA + sizeWB;
     }
 
-    PaddingMatmulKernel<ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC>
+    PaddingMatmulKernel<ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC, paddingTagA, paddingTagB, paddingTagC>
         <<<tilingParams.blockDim, nullptr, stream>>>(dA, dB, dC, dWA, dWB, dWC, dTilingParams);
 }
 
 template <class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC,
-    PaddingTag paddingTagA, PaddingTag paddingTagB>
+    PaddingTag paddingTagA, PaddingTag paddingTagB,  PaddingTag paddingTagC>
 size_t PaddingMatmulKernelGetWorkspaceSize(TilingParams &tilingParams)
 {
     using ArchTag = Catlass::Arch::AtlasA2;
@@ -228,31 +229,31 @@ size_t PaddingMatmulKernelGetWorkspaceSize(TilingParams &tilingParams)
     uint32_t m = tilingParams.m;
     uint32_t n = tilingParams.n;
     uint32_t k = tilingParams.k;
-    uint32_t mTile = static_cast<uint32_t>(tilingParams.mTile);
-    uint32_t nTile = static_cast<uint32_t>(tilingParams.nTile);
-    uint32_t kTile = static_cast<uint32_t>(tilingParams.kTile);
+    uint32_t m1 = static_cast<uint32_t>(tilingParams.m1);
+    uint32_t n1 = static_cast<uint32_t>(tilingParams.n1);
+    uint32_t k1 = static_cast<uint32_t>(tilingParams.k1);
     size_t sizeWA = 0, sizeWB = 0, sizeWC = 0;
     if constexpr (paddingTagA == PaddingTag::PADDING_BLOCK_ND) {
-        sizeWA = PrologueA::GetWorkspaceSize(m, k, mTile, kTile);
+        sizeWA = PaddingBuilderA::Padding::GetWorkspaceSize(m, k, m1, k1);
     } else if constexpr (paddingTagA == PaddingTag::PADDING_ND) {
         // Optimal bandwidth for 512 Byte aligned reads
-        sizeWA = PrologueA::GetWorkspaceSize(m, k, 512 / sizeof(ElementA));
-    } else if constexpr (paddingTagA == PaddingTag::PADDING_NZ){
-        sizeWA = PrologueA::GetWorkspaceSize(m, k);
+        sizeWA = PaddingBuilderA::Padding::GetWorkspaceSize(m, k, 512 / sizeof(ElementA));
+    } else if constexpr (paddingTagA == PaddingTag::PADDING_NZ) {
+        sizeWA = PaddingBuilderA::Padding::GetWorkspaceSize(m, k);
     }
 
     if constexpr (paddingTagB == PaddingTag::PADDING_BLOCK_ND) {
-        sizeWB = PrologueB::GetWorkspaceSize(k, n, mTile, kTile);
+        sizeWB = PaddingBuilderB::Padding::GetWorkspaceSize(k, n, m1, k1);
     } else if constexpr (paddingTagB == PaddingTag::PADDING_ND) {
         // Optimal bandwidth for 512 Byte aligned reads
-        sizeWB = PrologueB::GetWorkspaceSize(k, n, 512 / sizeof(ElementB));
-    } else if constexpr (paddingTagB == PaddingTag::PADDING_NZ){
-        sizeWB = PrologueB::GetWorkspaceSize(k, n);
+        sizeWB = PaddingBuilderB::Padding::GetWorkspaceSize(k, n, 512 / sizeof(ElementB));
+    } else if constexpr (paddingTagB == PaddingTag::PADDING_NZ) {
+        sizeWB = PaddingBuilderB::Padding::GetWorkspaceSize(k, n);
     }
 
-    if constexpr (paddingTagC == PaddingTag::PADDING_ND){
-        sizeWC = PrologueB::GetWorkspaceSize(m, n, 512 / sizeof(ElementC));
-    } 
+    if constexpr (paddingTagC == PaddingTag::PADDING_ND) {
+        sizeWC = RemovePaddingC::Padding::GetWorkspaceSize(m, n, 512 / sizeof(ElementC));
+    }
     return sizeWA + sizeWB + sizeWC;
 }
 

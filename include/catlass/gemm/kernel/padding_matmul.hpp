@@ -25,7 +25,8 @@ namespace Catlass::Gemm::Kernel {
 enum class PaddingTag {
     NO_PADDING,
     PADDING_ND,
-    PADDING_BLOCK_ND
+    PADDING_BLOCK_ND,
+    PADDING_NZ    
 };
 
 template<
@@ -79,7 +80,7 @@ struct PaddingMatrixNZ {
 
     CATLASS_DEVICE
     void CopyUb2Ub(AscendC::LocalTensor<Element> const &dst, AscendC::LocalTensor<Element> const &src,
-        ComputeLayoutDst layoutDst, ComputeLayoutSrc layoutSrc)
+        ComputeLayoutDst const &layoutDst, ComputeLayoutSrc const &layoutSrc)
     {
        uint32_t loops = CeilDiv(layoutSrc.shape(0), BLK_NUM_PER_VECTOR_FRACTAL); 
        for (uint32_t i = 0; i < loops; ++i) {
@@ -97,7 +98,7 @@ struct PaddingMatrixNZ {
 
     CATLASS_DEVICE
     void CopyUb2Gm(AscendC::GlobalTensor<Element> const &dst, AscendC::LocalTensor<Element> const &src,
-        ComputeLayoutDst layoutDst, ComputeLayoutDst layoutSrc)
+        ComputeLayoutDst const &layoutDst, ComputeLayoutDst const &layoutSrc)
     {
         if (layoutDst.stride(3) / ELE_NUM_PER_C0 < STRIDE_LIMIT) {
             AscendC::DataCopyParams dataCopyParams(
@@ -143,14 +144,15 @@ struct PaddingMatrixNZ {
     }
 
     CATLASS_DEVICE
-    void CommonND2NZ(AscendC::GlobalTensor<Element> const &dst, AscendC::GlobalTensor<Element> const & src,
-        ComputeLayoutDst& computeLayoutDst, ComputeLayoutSrc& computeLayoutSrc)
+    void CommonND2NZ(AscendC::GlobalTensor<Element> const &dst, AscendC::GlobalTensor<Element> const &src,
+        ComputeLayoutDst const &computeLayoutDst, ComputeLayoutSrc const &computeLayoutSrc)
     {
         uint32_t aivNum = AscendC::GetBlockNum() * AscendC::GetSubBlockNum();
         uint32_t aivId = AscendC::GetBlockIdx();
 
         uint32_t refTileRows = 16;
-        uint32_t tileRows = COMPUTE_LENGTH / refTileRows;
+        uint32_t refTileCols = COMPUTE_LENGTH / refTileRows;
+        uint32_t tileRows = refTileRows;
         uint32_t tileCols = RoundUp(
             computeLayoutSrc.shape(1) / CeilDiv(computeLayoutSrc.shape(1), refTileCols), ELE_NUM_PER_C0);
         
@@ -210,8 +212,8 @@ struct PaddingMatrixNZ {
     }
 
     CATLASS_DEVICE
-    void VnchwND2NZ(AscendC::GlobalTensor<Element> const &dst, AscendC::GlobalTensor<Element> const & src,
-        ComputeLayoutDst& computeLayoutDst, ComputeLayoutSrc& computeLayoutSrc)
+    void VnchwND2NZ(AscendC::GlobalTensor<Element> const &dst, AscendC::GlobalTensor<Element> const &src,
+        ComputeLayoutDst const &computeLayoutDst, ComputeLayoutSrc const &computeLayoutSrc)
     {
         uint32_t aivNum = AscendC::GetBlockNum() * AscendC::GetSubBlockNum();
         uint32_t aivId = AscendC::GetBlockIdx();
@@ -299,8 +301,8 @@ struct PaddingMatrixNZ {
                 }
                 uint8_t repeatTimes = innerAxisPerCols;
                 if (repeatTimes > 1) {
-                    AscendC::TransDataTo5HDParams params{
-                        false, false, repeatTimes, 1, innerAxisLen * VNCHW_SIZE / ELE_NUM_PER_C0};
+                    AscendC::TransDataTo5HDParams params{false, false, repeatTimes, 1, 
+                        static_cast<uint16_t>(innerAxisLen * VNCHW_SIZE / ELE_NUM_PER_C0)};
                     AscendC::TransDataTo5HD<Element>(dstLocalList, srcLocalList, params);
                 } else {
                     AscendC::TransDataTo5HD<Element>(dstLocalList, srcLocalList, paramsRepeatOne);
@@ -333,11 +335,11 @@ struct PaddingMatrixNZ {
 
     CATLASS_DEVICE
     void operator()(AscendC::GlobalTensor<Element> const &dst, AscendC::GlobalTensor<Element> const &src,
-        LayoutOut& layoutDst, LayoutIn& layoutSrc)
+        LayoutOut const &layoutDst, LayoutIn const &layoutSrc)
     {
         auto computeLayoutSrc = GetPaddingComputeLayout(layoutSrc);
         auto computeLayoutDst = GetPaddingComputeLayout(layoutDst);
-        uint32_t vnchwMaxInnerAxisLen = COMPUTE_LENGTH / VNCHW_SIZE / ELE_NUM_PER_C0；
+        uint32_t vnchwMaxInnerAxisLen = COMPUTE_LENGTH / VNCHW_SIZE / ELE_NUM_PER_C0;
         bool cond0 = computeLayoutSrc.shape(1) % ELE_NUM_PER_C0 != 0;
         bool cond1 = computeLayoutSrc.shape(1) < vnchwMaxInnerAxisLen && computeLayoutSrc.shape(1);
         bool cond2 = computeLayoutSrc.shape(1) < vnchwMaxInnerAxisLen * 2 && computeLayoutSrc.shape(1) % 2 == 0;
@@ -383,7 +385,7 @@ public:
 
     static const PaddingTag paddingTag = PaddingTag::PADDING_BLOCK_ND;
     CATLASS_HOST_DEVICE static
-    LayoutOut GetWorkspaceLayout(LayoutIn& layout, uint32_t rowAlign, uint32_t colAlign)
+    LayoutOut GetWorkspaceLayout(const LayoutIn& layout, uint32_t rowAlign, uint32_t colAlign)
     {
         return LayoutOut(layout.shape(0), layout.shape(1), rowAlign, colAlign);
     }
@@ -442,7 +444,7 @@ public:
     CATLASS_DEVICE
     void operator()(AscendC::GlobalTensor<Element> const &dst,
                     AscendC::GlobalTensor<Element> const &src,
-                    LayoutOut layoutDst, LayoutIn layoutSrc)
+                    LayoutOut const &layoutDst, LayoutIn const &layoutSrc)
     {
         auto computeLayoutSrc = GetPaddingComputeLayout(layoutSrc);
         auto computeLayoutDst = GetPaddingComputeLayout(layoutDst);
@@ -569,7 +571,7 @@ public:
     using LayoutIn = Layout_;
     using LayoutOut = Layout_;
     CATLASS_HOST_DEVICE static
-    LayoutOut GetWorkspaceLayout(LayoutIn& layout, uint32_t align)
+    LayoutOut GetWorkspaceLayout(const LayoutIn& layout, uint32_t align)
     {
         if constexpr (std::is_same_v<LayoutIn, layout::RowMajor>) {
             return LayoutOut{layout.shape(0), layout.shape(1), RoundUp(layout.shape(1), align)};
@@ -614,7 +616,7 @@ public:
     CATLASS_DEVICE
     void operator()(AscendC::GlobalTensor<Element> const &dst,
                     AscendC::GlobalTensor<Element> const &src,
-                    Layout layoutDst, Layout layoutSrc)
+                    Layout const &layoutDst, Layout const &layoutSrc)
     {
         ComputeLayout computeLayoutSrc = GetPaddingComputeLayout(layoutSrc);
         ComputeLayout computeLayoutDst = GetPaddingComputeLayout(layoutDst);
@@ -734,7 +736,7 @@ struct PaddingBuilder<PaddingTag::PADDING_ND, ArchTag, Element, LayoutIn, COMPUT
     using LayoutAfterPadding = LayoutIn;
     using Padding = std::conditional_t<
         (COMPUTE_LENGTH > 0),
-        Catlass::Gemm::Kernel::PaddingMatrixND<ArchTag, Element, LayoutIn, COMPUTE_LENGTH>>;
+        Catlass::Gemm::Kernel::PaddingMatrixND<ArchTag, Element, LayoutIn, COMPUTE_LENGTH>,
         Catlass::Gemm::Kernel::PaddingMatrixND<ArchTag, Element, LayoutIn, 96 * 1024 / sizeof(Element)>
     >;
 };
@@ -745,20 +747,22 @@ struct PaddingBuilder<PaddingTag::PADDING_BLOCK_ND, ArchTag, Element, LayoutIn, 
         layout::PaddingRowMajor, layout::PaddingColumnMajor>;
     using Padding = std::conditional_t<
         (COMPUTE_LENGTH > 0),
-        Catlass::Gemm::Kernel::PaddingMatrixBlockND<ArchTag, Element, LayoutIn, LayoutAfterPadding, COMPUTE_LENGTH>;
+        Catlass::Gemm::Kernel::PaddingMatrixBlockND<ArchTag, Element, LayoutIn, LayoutAfterPadding, COMPUTE_LENGTH>,
         Catlass::Gemm::Kernel::PaddingMatrixBlockND<
-            ArchTag, Element, LayoutIn, LayoutAfterPadding, 96 * 1024 / sizeof(Element)>;
+            ArchTag, Element, LayoutIn, LayoutAfterPadding, 96 * 1024 / sizeof(Element)>
+    >;
 };
 
 template <class ArchTag, class Element, class LayoutIn, uint32_t COMPUTE_LENGTH>
-struct PaddingBuilder<PaddingTag::PADDING_BLOCK_ND, ArchTag, Element, LayoutIn, COMPUTE_LENGTH> {
+struct PaddingBuilder<PaddingTag::PADDING_NZ, ArchTag, Element, LayoutIn, COMPUTE_LENGTH> {
     using LayoutAfterPadding = std::conditional_t<std::is_same_v<LayoutIn, layout::RowMajor>,
         layout::zN, layout::nZ>;
     using Padding = std::conditional_t<
         (COMPUTE_LENGTH > 0),
-        Catlass::Gemm::Kernel::PaddingMatrixNZ<ArchTag, Element, LayoutIn, LayoutAfterPadding, COMPUTE_LENGTH>;
+        Catlass::Gemm::Kernel::PaddingMatrixNZ<ArchTag, Element, LayoutIn, LayoutAfterPadding, COMPUTE_LENGTH>,
         Catlass::Gemm::Kernel::PaddingMatrixNZ<
-            ArchTag, Element, LayoutIn, LayoutAfterPadding, 48 * 1024 / sizeof(Element)>;
+            ArchTag, Element, LayoutIn, LayoutAfterPadding, 48 * 1024 / sizeof(Element)>
+    >;
 };
 
 template <
