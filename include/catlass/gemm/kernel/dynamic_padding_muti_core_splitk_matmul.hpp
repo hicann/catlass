@@ -136,17 +136,19 @@ public:
             Catlass::Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(flagAivFinishPadding);
         }
 
-        if constexpr (!std::is_void_v<RemovePaddingC>) {
-            Catlass::Arch::CrossCoreWaitFlag(flagAicFinish);
-            Catlass::Arch::CrossCoreBarrier<0x0, PIPE_MTE3>();
-            AscendC::GlobalTensor<ElementC> gmC;
-            AscendC::GlobalTensor<ElementC> gmWC;
-            gmC.SetGlobalBuffer(reinterpret_cast<__gm__ ElementC *>(params.ptrC));
-            gmWC.SetGlobalBuffer(reinterpret_cast<__gm__ ElementC *>(params.ptrWC));
-            LayoutC layoutWC = RemovePaddingC::GetWorkspaceLayout(params.layoutC, 512 / sizeof(ElementC));
-            RemovePaddingC removePaddingC(resource);
-            removePaddingC(gmC, gmWC, params.layoutC, layoutWC);
-        }
+        using ElementOut = typename ReduceAdd::ElementOut;
+        using ElementAccumulator = typename ReduceAdd::ElementAccumulator;
+
+        Catlass::Arch::CrossCoreWaitFlag(flagAicFinish);
+        Catlass::Arch::CrossCoreBarrier<0x0, PIPE_MTE3>();
+
+        AscendC::GlobalTensor<ElementOut> gmC;
+        AscendC::GlobalTensor<ElementAccumulator> gmReduceW;
+        gmC.SetGlobalBuffer(reinterpret_cast<__gm__ ElementOut *>(params.ptrC));
+        gmReduceW.SetGlobalBuffer(reinterpret_cast<__gm__ ElementAccumulator *>(params.ptrReduceW));
+        ReduceAdd reduceAdd(resource);
+        reduceAdd( gmC, gmReduceW,
+            static_cast<uint64_t>(params.problemShape.m()) * params.problemShape.n(), params.splitkFactor);
 
         AscendC::PipeBarrier<PIPE_ALL>();
     }
@@ -197,13 +199,7 @@ public:
             }
         }
         AscendC::GlobalTensor<ElementC> gmC;
-        if constexpr (std::is_void_v<RemovePaddingC>) {
-            gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrC);
-            layoutC = params.layoutC;
-        } else {
-            gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrWC);
-            layoutC = RemovePaddingC::GetWorkspaceLayout(params.layoutC, 512 / sizeof(ElementC));
-        }
+        gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrC);
 
         BlockMmad blockMmad(params.l1TileShape, resource);
 
@@ -236,7 +232,9 @@ public:
             MatrixCoord coordC{blockCoord.m() * params.l1TileShape.m(), blockCoord.n() * params.l1TileShape.n()};
             int64_t gmOffsetA = layoutA.GetOffset(coordA);
             int64_t gmOffsetB = layoutB.GetOffset(coordB);
-            int64_t gmOffsetC = layoutC.GetOffset(coordC);
+            int64_t gmOffsetC = params.layoutC.GetOffset(coordC)
+                + static_cast<uint64_t>(params.problemShape.m()) * params.problemShape.n() 
+                * matmulBlockScheduler.GetSplitSliceIdx(loopIdx);
 
             MatrixCoord coordNextA{
                 nextBlockCoord.m() * params.l1TileShape.m(), nextBlockCoord.k() * params.l1TileShape.k()};
@@ -251,7 +249,7 @@ public:
                 gmB[gmOffsetB],
                 layoutB,
                 gmC[gmOffsetC],
-                layoutC,
+                params.layoutC,
                 gmA[gmOffsetNextA],
                 gmB[gmOffsetNextB],
                 actualBlockShape,
@@ -259,9 +257,8 @@ public:
                 isFirstBlock,
                 hasNextBlock);
         }
-        if constexpr (!std::is_void_v<RemovePaddingC>) {
-            Catlass::Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(flagAicFinish);
-        }
+
+        Catlass::Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(flagAicFinish);
         AscendC::PipeBarrier<PIPE_ALL>();
     }
 private:
