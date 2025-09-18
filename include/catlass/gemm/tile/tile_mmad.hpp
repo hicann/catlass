@@ -106,11 +106,11 @@ struct TileMmad {
 
 template <
     /// Tag indicating architecture
-    class ArchTag_,
+    class ArchTag,
     /// Element for A matrix operand
     class ElementA,
-    /// LayoutTag for A matrix operand
-    class LayoutTagA
+    /// LayoutTag for A matrix operand in L1
+    class LayoutTagL1A
 >
 struct TileMmadTla {
     // Methods
@@ -132,8 +132,8 @@ struct TileMmadTla {
         mmadParams.k = k;
         mmadParams.unitFlag = unitFlag;
         mmadParams.cmatrixInitVal = initC;
-        if constexpr (std::is_same_v<ElementA, float> &&
-                      (std::is_same_v<LayoutTagA, layout::ColumnMajor> || std::is_same_v<LayoutTagA, layout::nZ>)) {
+        if constexpr (std::is_same_v<ArchTag, Arch::AtlasA2> && std::is_same_v<ElementA, float> &&
+                      std::is_same_v<LayoutTagL1A, layout::nZ>) {
             mmadParams.kDirectionAlign = true;
         }
 
