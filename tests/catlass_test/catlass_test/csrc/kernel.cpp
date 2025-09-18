@@ -23,4 +23,4 @@ template <typename ElementA> inline int32_t Kernel(uint8_t *deviceA) {
 #define RUNTIME_PARAM uint8_t *deviceA
 #define RUNTIME_PARAM_CALL deviceA
 #endif
-extern "C" int32_t run(RUNTIME_PARAM) { KERNEL_TEMPLATE_NAME<COMPILE_PARAM>(RUNTIME_PARAM_CALL); }
+extern "C" int32_t run(RUNTIME_PARAM) { return KERNEL_TEMPLATE_NAME<COMPILE_PARAM>(RUNTIME_PARAM_CALL); }

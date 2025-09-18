@@ -14,7 +14,7 @@
 // AscendCL headers
 
 #ifdef ASCENDC_MODULE_OPERATOR_H
-#undef inline
+#    undef inline
 #endif
 
 #include <acl/acl.h>
@@ -22,7 +22,7 @@
 #include <tiling/platform/platform_ascendc.h>
 
 #ifdef ASCENDC_MODULE_OPERATOR_H
-#define inline __inline__ __attribute__((always_inline))
+#    define inline __inline__ __attribute__((always_inline))
 #endif
 
 // Macro function for unwinding acl errors.
@@ -54,7 +54,8 @@
     ACL_CHECK(aclrtSynchronizeStream(stream));                                                                         \
     if (sizeWorkspace > 0) {                                                                                           \
         ACL_CHECK(aclrtFree(deviceWorkspace));                                                                         \
-    }
+    }                                                                                                                  \
+    return ACL_SUCCESS;
 
 #define RUN_ADAPTER_MIX(op, args, stream, coreNum)                                                                     \
     uint32_t fftsLen = 0;                                                                                              \
@@ -70,6 +71,7 @@
     ACL_CHECK(aclrtSynchronizeStream(stream));                                                                         \
     if (sizeWorkspace > 0) {                                                                                           \
         ACL_CHECK(aclrtFree(deviceWorkspace));                                                                         \
-    }
+    }                                                                                                                  \
+    return ACL_SUCCESS;
 
 #endif
