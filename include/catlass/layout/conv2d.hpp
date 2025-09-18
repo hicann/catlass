@@ -69,7 +69,7 @@ public:
     /// Assumes coordinate has convention (batch, cin1, hi, wi, c0)
     CATLASS_HOST_DEVICE
     LongIndex GetOffset(FmapCoord const &coord) const {
-        return LongIndex(coord.batch()) * stride_[0]
+        return LongIndex(coord.batch()) * stride_[0] +
             LongIndex(coord.cin1()) * stride_[1] + 
             LongIndex(coord.hi()) * stride_[2] +
             LongIndex(coord.wi()) * stride_[3] +
