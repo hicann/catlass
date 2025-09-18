@@ -200,10 +200,8 @@ public:
             layoutC = params.layoutC;
         } else {
             gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrWC);
-            layoutC = RemovePaddingC::GetWorkspaceLayout(params.layoutC, 512 / sizeof(ElementB));
+            layoutC = RemovePaddingC::GetWorkspaceLayout(params.layoutC, 512 / sizeof(ElementC));
         }
-
-        gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrC);
 
         BlockMmad blockMmad(params.l1TileShape, resource);
 

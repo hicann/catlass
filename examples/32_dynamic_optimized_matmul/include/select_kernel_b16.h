@@ -100,7 +100,7 @@ void GetPaddingTag(TilingParams& tilingParams, PlatformInfo& platformInfo) {
     uint64_t innerAxisB = n;
     uint32_t nValueB = std::min(k, k1);
     uint32_t dValueB = std::min(n, n1);
-    if (static_cast<LayoutTag>(tilingParams.layoutTagA) == LayoutTag::TagColumnMajor) {
+    if (static_cast<LayoutTag>(tilingParams.layoutTagB) == LayoutTag::TagColumnMajor) {
         outterAxisB = n;
         innerAxisB = k;
         nValueB = std::min(n, n1);
@@ -228,7 +228,7 @@ void GetPaddingTag(TilingParams& tilingParams, PlatformInfo& platformInfo) {
         size_t totalDataSize = static_cast<size_t>(m) * k * CeilDiv(n, n1) * 2
             + static_cast<size_t>(k) * n * CeilDiv(m, m1) * 2 + static_cast<size_t>(m) * n * 2;
         if (totalDataSize < 96 * 1024 * 1024) { // half of L2 cache size
-            paddingTagC = PaddingTag::PADDING_NZ;
+            paddingTagC = PaddingTag::PADDING_ND;
         }
     }
 
@@ -250,10 +250,15 @@ bool SmallMatmulB16Handler(TilingParams &params, PlatformInfo& platformInfo)
 {
     uint8_t kernelSerial = 1;
     GetPaddingTag(params, platformInfo);
-    uint32_t taskBlocks = CeilDiv(params.m, params.m1) * CeilDiv(params.n, params.n1);
-    if (taskBlocks <= platformInfo.coreNum && params.k <= params.k1) {
-        params.tilingKey.SetTilingKey(kernelSerial, params.layoutTagA, params.layoutTagB, 0, 0, 0, 0);
-        return true;
+    if (static_cast<PaddingTag>(params.paddingTagA) == PaddingTag::PADDING_NONE
+        && static_cast<PaddingTag>(params.paddingTagB) == PaddingTag::PADDING_NONE
+        && static_cast<PaddingTag>(params.paddingTagC) == PaddingTag::PADDING_NONE) {
+
+        uint32_t taskBlocks = CeilDiv(params.m, params.m1) * CeilDiv(params.n, params.n1);
+        if (taskBlocks <= platformInfo.coreNum && params.k <= params.k1) {
+            params.tilingKey.SetTilingKey(kernelSerial, params.layoutTagA, params.layoutTagB, 0, 0, 0, 0);
+            return true;
+        }
     }
     return false;
 }

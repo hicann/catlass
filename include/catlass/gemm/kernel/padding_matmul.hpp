@@ -567,6 +567,8 @@ public:
         ArchTag, Gemm::GemmType<Element, Catlass::layout::RowMajor>>;
     using ComputeLayout = Catlass::layout::RowMajor;
 
+    constexpr static uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
+
     static const PaddingTag paddingTag = PaddingTag::PADDING_ND;
     using LayoutIn = Layout_;
     using LayoutOut = Layout_;
@@ -627,7 +629,7 @@ public:
         // Each line is a tile.
         uint32_t tilesNum = computeLayoutSrc.shape(0);
         uint32_t tileLen = computeLayoutSrc.shape(1);
-        uint32_t paddingStride = computeLayoutDst.stride(0);
+        uint32_t roundTileLen = RoundUp(computeLayoutSrc.shape(1), ELE_NUM_PER_C0);
 
         uint32_t tilesPerAiv = tilesNum / aivNum;
         uint32_t tileRemain = tilesNum % aivNum;
@@ -643,7 +645,7 @@ public:
         AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[0]);
         AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[1]);
         uint32_t coreLoops{ 0 };
-        if (paddingStride > COMPUTE_LENGTH) {
+        if (roundTileLen > COMPUTE_LENGTH) {
             // Handle the same tile on multiple loops.
             uint32_t loopsPerTile = (tileLen + COMPUTE_LENGTH - 1) / COMPUTE_LENGTH;
             coreLoops = tilesPerAiv * loopsPerTile;
@@ -674,7 +676,7 @@ public:
             }
         } else {
             // Handle multiple tile each loop.
-            uint32_t tilesPerLoop = COMPUTE_LENGTH / paddingStride;
+            uint32_t tilesPerLoop = COMPUTE_LENGTH / roundTileLen;
             coreLoops = (tilesPerAiv + tilesPerLoop - 1) / tilesPerLoop;
             for (uint32_t loopIdx = 0; loopIdx < coreLoops; ++loopIdx) {
                 uint32_t tileIdx = loopIdx * tilesPerLoop;
@@ -688,7 +690,7 @@ public:
                 AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[bufferIndex]);
                 ComputeLayout dstLayout = computeLayoutDst.GetTileLayout(MatrixCoord(actualTilesNum, tileLen));
                 ComputeLayout srcLayout = computeLayoutSrc.GetTileLayout(MatrixCoord(actualTilesNum, tileLen));
-                ComputeLayout &ubLayout = dstLayout;
+                ComputeLayout ubLayout = ComputeLayout{actualTilesNum, tileLen, roundTileLen};
 
                 copyGm2Ub(inputBuffer[bufferIndex], src[gmSrcOffset], ubLayout, srcLayout);
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE3>(eventIds[bufferIndex]);

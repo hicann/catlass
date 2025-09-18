@@ -203,7 +203,7 @@ void LaunchPaddingMatmulKernel(aclrtStream &stream, uint64_t fftsAddr, uint8_t *
 
     dWB = dW + sizeWA;
     if constexpr (paddingTagB == PaddingTag::PADDING_BLOCK_ND) {
-        sizeWB = PaddingBuilderB::Padding::GetWorkspaceSize(k, n, m1, k1);
+        sizeWB = PaddingBuilderB::Padding::GetWorkspaceSize(k, n, k1, n1);
     } else if constexpr (paddingTagB == PaddingTag::PADDING_ND) {
         // Optimal bandwidth for 512 Byte aligned reads
         sizeWB = PaddingBuilderB::Padding::GetWorkspaceSize(k, n, 512 / sizeof(ElementB));
@@ -244,7 +244,7 @@ size_t PaddingMatmulKernelGetWorkspaceSize(TilingParams &tilingParams)
     }
 
     if constexpr (paddingTagB == PaddingTag::PADDING_BLOCK_ND) {
-        sizeWB = PaddingBuilderB::Padding::GetWorkspaceSize(k, n, m1, k1);
+        sizeWB = PaddingBuilderB::Padding::GetWorkspaceSize(k, n, k1, n1);
     } else if constexpr (paddingTagB == PaddingTag::PADDING_ND) {
         // Optimal bandwidth for 512 Byte aligned reads
         sizeWB = PaddingBuilderB::Padding::GetWorkspaceSize(k, n, 512 / sizeof(ElementB));
