@@ -30,3 +30,6 @@ def set_catlass_version(catlass_version: str, reset: bool = False):
         git.Repo.clone_from(CATLASS_REPO_URL, to_path=CATLASS_PATH)
     repo = git.Repo(CATLASS_PATH)
     repo.git.checkout()
+
+
+from catlass_test.function import *
