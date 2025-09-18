@@ -182,7 +182,7 @@ public:
         // load first Fmap tile from GM to L1
         AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListId]);
         auto layoutTileFmap = layoutFmap.GetTileLayout(
-            MakeCoord(1, cin1Actual, hiActual, wiActual, ELE_NUM_A_PER_C0));
+            MakeCoord((uint32_t)1, cin1Actual, hiActual, wiActual, ELE_NUM_A_PER_C0));
         copyGmToL1A(l1ATensorList[l1ListId], gmFmap, layoutFmapInL1, layoutTileFmap);
         AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListId]);
 
@@ -227,7 +227,7 @@ public:
                 // load next Fmap tile from GM to L1
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1ListIdNext]);
                 layoutTileFmap = layoutFmap.GetTileLayout(
-                    MakeCoord(1, cin1ActualNext, hiActual, wiActual, ELE_NUM_A_PER_C0));
+                    MakeCoord((uint32_t)1, cin1ActualNext, hiActual, wiActual, ELE_NUM_A_PER_C0));
                 copyGmToL1A(l1ATensor, gmTileFmap, layoutFmapInL1, layoutTileFmap);
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1ListIdNext]);
 
@@ -366,7 +366,7 @@ public:
         // copy block out
         uint32_t cout1Actual = coutRound / ELE_NUM_A_PER_C0;
         LayoutOutput layoutBlock = layoutOutput.GetTileLayout(
-            MakeCoord(1, cout1Actual, hoActual, woActual, ELE_NUM_A_PER_C0));
+            MakeCoord((uint32_t)1, cout1Actual, hoActual, woActual, ELE_NUM_A_PER_C0));
 
         if constexpr (!ENABLE_UNIT_FLAG) {
             AscendC::SetFlag<AscendC::HardEvent::M_FIX>(EVENT_ID0);
