@@ -39,7 +39,7 @@ struct TileCopyDynamicOptimized : public Catlass::Gemm::Tile::TileCopy<ArchTag, 
 };
 
 template <class ArchTag, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC>
-CATLASS_DEVICE void CommonDynamicMatmul(Catlass::GemmCoord &problemShape, Catlass::GemmCoord &l1TileShape, GM_ADDR gmA,
+CATLASS_DEVICE void DynamicCommonMatmul(Catlass::GemmCoord &problemShape, Catlass::GemmCoord &l1TileShape, GM_ADDR gmA,
     LayoutA &layoutA, GM_ADDR gmB, LayoutB &layoutB, GM_ADDR gmC, LayoutC &layoutC,
     Catlass::Arch::Resource<ArchTag> &resource)
 {
@@ -160,7 +160,7 @@ CATLASS_GLOBAL __attribute__((aic)) void CommonMatmulKernel(__gm__ uint8_t *__re
     LayoutA layoutA{m, k, strideA};
     LayoutB layoutB{k, n, strideB};
     LayoutC layoutC{m, n, strideC};
-    CommonDynamicMatmul<ArchTag, ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC>(
+    DynamicCommonMatmul<ArchTag, ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC>(
         problemShape, l1TileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, resource);
 }
 
