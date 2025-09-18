@@ -171,7 +171,7 @@ public:
         uint32_t coutRound = RoundUp<L1FilterAlignHelper::COUT_ALIGNED>(actualShape.cout());
 
         auto layoutFmapInL1 = LayoutFmapInL1::template MakeLayout<ElementFmap>(
-            FmapL1TileShape::Cin1, hiActual, wiActual, ELE_NUM_A_PER_C0);
+            (uint32_t)1, FmapL1TileShape::Cin1, hiActual, wiActual, ELE_NUM_A_PER_C0);
         auto layoutFilterInL1 = LayoutFilterInL1::template MakeLayout<ElementFilter>(
             FmapL1TileShape::Cin1, configs.kh(), configs.kw(), coutRound, ELE_NUM_B_PER_C0);
         auto layoutInL0C = LayoutOutputInL0::MakeLayoutInL0C(MakeCoord(howoRound, coutRound));
