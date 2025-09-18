@@ -186,11 +186,11 @@ void Run(Options const &options) {
   using FilterL1TileShape = Catlass::Conv2dFilterL1Shape<96, 8>; // (coutBlock, cin1Block_big)
   using L0TileShape = Catlass::Conv2dL0Shape<16, 16, 16>; // (mL0, nL0, kL0)
 
-  uint32_t hoBlock = L1TileShape::Ho;
-  uint32_t woBlock = L1TileShape::Wo;
-  uint32_t coutBlock = L1TileShape::Cout;
-  uint32_t cin1L1Block = L1TileShape::Cin1;
-  uint32_t cin1L0Block = L0TileShape::Cin1;
+  uint32_t hoBlock = FmapL1TileShape::Ho;
+  uint32_t woBlock = FmapL1TileShape::Wo;
+  uint32_t coutBlock = FilterL1TileShape::Cout;
+  uint32_t cin1L1Block = FmapL1TileShape::Cin1;
+  uint32_t cin1L0Block = L0TileShape::K / (kh * kw * c0);
   uint32_t hiBlock = (hoBlock - 1) * strideH + (kh - 1) * dilationH + 1;
   uint32_t wiBlock = (woBlock - 1) * strideW + (kw - 1) * dilationW + 1;
   uint32_t howoBlock = hoBlock * woBlock;
