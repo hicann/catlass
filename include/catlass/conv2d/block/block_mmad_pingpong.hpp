@@ -219,7 +219,7 @@ public:
                 auto l1ATensor = l1ATensorList[l1ListIdNext];
                 auto l1BTensor = l1BTensorList[l1ListIdNext];
                 // Get GM tile for next stage
-                FmapCoord gmTileFmapOffset{cin1LoopIdxNext * FmapL1TileShape::Cin1, 0, 0, 0};
+                FmapCoord gmTileFmapOffset{1, cin1LoopIdxNext * FmapL1TileShape::Cin1, 0, 0, 0};
                 FilterCoord gmTileFilterOffset{cin1LoopIdxNext * FmapL1TileShape::Cin1, 0, 0, 0, 0};
                 auto gmTileFmap = gmFmap[layoutFmap.GetOffset(gmTileFmapOffset)];
                 auto gmTileFilter = gmFilter[layoutFilter.GetOffset(gmTileFilterOffset)];
