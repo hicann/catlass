@@ -14,9 +14,17 @@
 // AscendCL headers
 #include "macros.hpp"
 
+#ifdef ASCENDC_MODULE_OPERATOR_H
+#undef inline
+#endif
+
 #include <acl/acl.h>
 #include <runtime/rt_ffts.h>
 #include <tiling/platform/platform_ascendc.h>
+
+#ifdef ASCENDC_MODULE_OPERATOR_H
+#define inline __inline__ __attribute__((always_inline))
+#endif
 
 // Macro function for unwinding acl errors.
 #define ACL_CHECK(status)              \
