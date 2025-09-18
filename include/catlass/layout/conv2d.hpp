@@ -19,9 +19,9 @@
 namespace Catlass::layout {
 
 /// Mapping function for input map
-struct Fmap { // (Cin1, Hi, Wi, C0)
+struct Fmap { // (Batch, Cin1, Hi, Wi, C0)
     /// Logical rank of tensor
-    static constexpr int RANK = 4;
+    static constexpr int RANK = 5;
 
     /// Index type used for coordinates
     using Index = uint32_t;
@@ -38,40 +38,42 @@ struct Fmap { // (Cin1, Hi, Wi, C0)
 public:
     /// Ctor
     CATLASS_HOST_DEVICE
-    Fmap(Index cin1 = 0, Index hi = 0, Index wi = 0, Index c0 = 0)
-        : shape_(MakeCoord(cin1, hi, wi, c0))
+    Fmap(Index batch = 0, Index cin1 = 0, Index hi = 0, Index wi = 0, Index c0 = 0)
+        : shape_(MakeCoord(batch, cin1, hi, wi, c0))
     {
+        LongIndex strideBatch = cin1 * hi * wi * c0;
         LongIndex strideCin1 = hi * wi * c0;
         LongIndex strideHi = wi * c0;
         LongIndex strideWi = c0;
         LongIndex strideC0 = 1;
-        stride_ = MakeCoord(strideCin1, strideHi, strideWi, strideC0);
+        stride_ = MakeCoord(strideBatch, strideCin1, strideHi, strideWi, strideC0);
     }
 
     CATLASS_HOST_DEVICE
-    Fmap(Index cin1, Index hi, Index wi, Index c0,
-        LongIndex strideCin1, LongIndex strideHi, LongIndex strideWi, LongIndex strideC0)
-        : shape_(MakeCoord(cin1, hi, wi, c0)), 
-        stride_(MakeCoord(strideCin1, strideHi, strideWi, strideC0)) {}
+    Fmap(Index batch, Index cin1, Index hi, Index wi, Index c0,
+        LongIndex strideBatch, LongIndex strideCin1, LongIndex strideHi, LongIndex strideWi, LongIndex strideC0)
+        : shape_(MakeCoord(batch, cin1, hi, wi, c0)), 
+        stride_(MakeCoord(strideBatch, strideCin1, strideHi, strideWi, strideC0)) {}
 
     CATLASS_HOST_DEVICE
     Fmap(Shape shape, Stride stride) : shape_(shape), stride_(stride) {}
 
-    /// Make the layout of a coordinate (cin1, hi, wi, c0)
+    /// Make the layout of a coordinate (batch, cin1, hi, wi, c0)
     template <class Element>
     CATLASS_HOST_DEVICE
-    static Fmap MakeLayout(Index cin1, Index hi, Index wi, Index c0) {
-        return Fmap(cin1, hi, wi, c0);
+    static Fmap MakeLayout(Index batch, Index cin1, Index hi, Index wi, Index c0) {
+        return Fmap(batch, cin1, hi, wi, c0);
     }
 
     /// Returns the offset of a coordinate in linear memory.
-    /// Assumes coordinate has convention (cin1, hi, wi, c0)
+    /// Assumes coordinate has convention (batch, cin1, hi, wi, c0)
     CATLASS_HOST_DEVICE
     LongIndex GetOffset(FmapCoord const &coord) const {
-        return LongIndex(coord.cin1()) * stride_[0] + 
-            LongIndex(coord.hi()) * stride_[1] +
-            LongIndex(coord.wi()) * stride_[2] +
-            LongIndex(coord.c0()) * stride_[3]; 
+        return LongIndex(coord.batch()) * stride_[0]
+            LongIndex(coord.cin1()) * stride_[1] + 
+            LongIndex(coord.hi()) * stride_[2] +
+            LongIndex(coord.wi()) * stride_[3] +
+            LongIndex(coord.c0()) * stride_[4]; 
     }
 
     /// Returns the layout of a tile.
@@ -270,9 +272,9 @@ private:
 };
 
 /// Mapping function for output map
-struct Output { // (Cout1, Ho, Wo, C0)
+struct Output { // (Batch, Cout1, Ho, Wo, C0)
     /// Logical rank of tensor
-    static constexpr int RANK = 4;
+    static constexpr int RANK = 5;
 
     /// Index type used for coordinates
     using Index = uint32_t;
@@ -289,40 +291,42 @@ struct Output { // (Cout1, Ho, Wo, C0)
 public:
     /// Ctor
     CATLASS_HOST_DEVICE
-    Output(Index cout1 = 0, Index ho = 0, Index wo = 0, Index c0 = 0)
-        : shape_(MakeCoord(cout1, ho, wo, c0))
+    Output(Index batch = 0, Index cout1 = 0, Index ho = 0, Index wo = 0, Index c0 = 0)
+        : shape_(MakeCoord(batch, cout1, ho, wo, c0))
     {
+        LongIndex strideBatch = cout1 * ho * wo * c0;
         LongIndex strideCout1 = ho * wo * c0;
         LongIndex strideHo = wo * c0;
         LongIndex strideWo = c0;
         LongIndex strideC0 = 1;
-        stride_ = MakeCoord(strideCout1, strideHo, strideWo, strideC0);
+        stride_ = MakeCoord(strideBatch, strideCout1, strideHo, strideWo, strideC0);
     }
 
     CATLASS_HOST_DEVICE
-    Output(Index cout1, Index ho, Index wo, Index c0,
-        LongIndex strideCout1, LongIndex strideHo, LongIndex strideWo, LongIndex strideC0)
-        : shape_(MakeCoord(cout1, ho, wo, c0)), 
-        stride_(MakeCoord(strideCout1, strideHo, strideWo, strideC0)) {}
+    Output(Index batch, Index cout1, Index ho, Index wo, Index c0,
+        LongIndex strideBatch, LongIndex strideCout1, LongIndex strideHo, LongIndex strideWo, LongIndex strideC0)
+        : shape_(MakeCoord(batch, cout1, ho, wo, c0)), 
+        stride_(MakeCoord(strideBatch, strideCout1, strideHo, strideWo, strideC0)) {}
 
     CATLASS_HOST_DEVICE
     Output(Shape shape, Stride stride) : shape_(shape), stride_(stride) {}
 
-    /// Make the layout of a coordinate (cout1, ho, wo, c0)
+    /// Make the layout of a coordinate (batch, cout1, ho, wo, c0)
     template <class Element>
     CATLASS_HOST_DEVICE
-    static Output MakeLayout(Index cout1 = 0, Index ho = 0, Index wo = 0, Index c0 = 0) {
-        return Output(cout1, ho, wo, c0);
+    static Output MakeLayout(Index batch = 0, Index cout1 = 0, Index ho = 0, Index wo = 0, Index c0 = 0) {
+        return Output(batch, cout1, ho, wo, c0);
     }
 
     /// Returns the offset of a coordinate in linear memory.
-    /// Assumes coordinate has convention (cout1, ho, wo, c0)
+    /// Assumes coordinate has convention (batch, cout1, ho, wo, c0)
     CATLASS_HOST_DEVICE
     LongIndex GetOffset(OutputCoord const &coord) const {
-        return LongIndex(coord.cout1()) * stride_[0] + 
-            LongIndex(coord.ho()) * stride_[1] +
-            LongIndex(coord.wo()) * stride_[2] +
-            LongIndex(coord.c0()) * stride_[3]; 
+        return LongIndex(coord.batch()) * stride_[0] + 
+            LongIndex(coord.cout1()) * stride_[1] + 
+            LongIndex(coord.ho()) * stride_[2] +
+            LongIndex(coord.wo()) * stride_[3] +
+            LongIndex(coord.c0()) * stride_[4]; 
     }
 
     /// Returns the layout of a tile.

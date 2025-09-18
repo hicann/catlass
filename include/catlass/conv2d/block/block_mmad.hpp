@@ -19,7 +19,8 @@ namespace Catlass::Conv2d::Block {
 
 template <
     class DispatchPolicy,
-    class L1TileShape,
+    class FmapL1TileShape,
+    class FilterL1TileShape,
     class L0TileShape,
     class FmapType,
     class FilterType,
@@ -36,7 +37,8 @@ struct BlockMmad {
 // so i add a new one class to avoid the conflict
 template <
     class DispatchPolicy,
-    class L1TileShape,
+    class FmapL1TileShape,
+    class FilterL1TileShape,
     class L0TileShape,
     class FmapType,
     class FilterType,

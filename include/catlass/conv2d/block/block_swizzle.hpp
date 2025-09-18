@@ -24,7 +24,7 @@ template <uint32_t SwizzleOffset = 1, uint32_t SwizzleDirection = 0>
 struct Conv2dIdentityBlockSwizzle {
     /// Data members
 
-    PostIm2colCoord problemShape;
+    Conv2d5HdCoord problemShape; // {Batch, Ho, Wo, Cout, Cin1}
     HoWoCoutCoord tiles;
     HoWoCoutCoord loops;
 
@@ -34,25 +34,25 @@ struct Conv2dIdentityBlockSwizzle {
     Conv2dIdentityBlockSwizzle() {}
 
     CATLASS_DEVICE
-    Conv2dIdentityBlockSwizzle(PostIm2colCoord const &problemShape_, HoWoCoutCoord const &tiles_)
+    Conv2dIdentityBlockSwizzle(Conv2d5HdCoord const &problemShape_, HoWoCoutCoord const &tiles_)
         : problemShape(problemShape_), tiles(tiles_) {
         loops = CeilDiv(HoWoCoutCoord(problemShape.GetCoordHoWoCout()), tiles);      
     }
 
     CATLASS_DEVICE
-    Conv2dIdentityBlockSwizzle(PostIm2colCoord const &problemShape_, HoWoCoutCoord const &tiles_,
+    Conv2dIdentityBlockSwizzle(Conv2d5HdCoord const &problemShape_, HoWoCoutCoord const &tiles_,
         HoWoCoutCoord const &loops_)
         : problemShape(problemShape_), tiles(tiles_), loops(loops_) {}
 
     CATLASS_DEVICE
-    void Update(PostIm2colCoord const &problemShape_, HoWoCoutCoord const &tiles_) {
+    void Update(Conv2d5HdCoord const &problemShape_, HoWoCoutCoord const &tiles_) {
         problemShape = problemShape_;
         tiles = tiles_;
         loops = CeilDiv(HoWoCoutCoord(problemShape.GetCoordHoWoCout()), tiles);
     }
 
     CATLASS_DEVICE
-    void Update(PostIm2colCoord const &problemShape_, HoWoCoutCoord const &tiles_, HoWoCoutCoord const &loops_) {
+    void Update(Conv2d5HdCoord const &problemShape_, HoWoCoutCoord const &tiles_, HoWoCoutCoord const &loops_) {
         problemShape = problemShape_;
         tiles = tiles_;
         loops = loops_;
@@ -60,7 +60,12 @@ struct Conv2dIdentityBlockSwizzle {
 
     CATLASS_DEVICE
     uint32_t GetCoreLoops() const {
-        return loops.ho() * loops.wo() * loops.cout(); 
+        return loops.h() * loops.w() * loops.cout(); 
+    }
+
+    CATLASS_DEVICE
+    uint32_t GetLoops() const {
+        return loops.batch() * this->GetCoreLoops(); 
     }
 
     CATLASS_DEVICE
@@ -69,7 +74,8 @@ struct Conv2dIdentityBlockSwizzle {
     }
 
     CATLASS_DEVICE
-    PostIm2colCoord GetBlockCoord(uint32_t taskIdx) {
+    Conv2d5HdCoord GetBlockCoord(uint32_t taskIdx) {
+        uint32_t outerIdx = this->GetBatchIdx(taskIdx);
         uint32_t innerIdx = taskIdx % GetCoreLoops();
         if constexpr (SwizzleDirection == 0) { // howoCout (Zn)
             uint32_t tileBlockLoop = CeilDiv(loops.howo(), SwizzleOffset);
@@ -87,7 +93,7 @@ struct Conv2dIdentityBlockSwizzle {
             }
             uint32_t hoIdx = howoIdx / loops.wo();
             uint32_t woIdx = howoIdx % loops.wo();
-            return PostIm2colCoord{hoIdx, woIdx, coutIdx, 0};
+            return Conv2d5HdCoord{outerIdx, hoIdx, woIdx, coutIdx, 0};
         } else if constexpr (SwizzleDirection == 1) { // coutHoWo (Nz)
             uint32_t tileBlockLoop = CeilDiv(loops.cout(), SwizzleOffset);
             uint32_t tileBlockIdx = innerIdx / (SwizzleOffset * loops.howo());
@@ -104,20 +110,20 @@ struct Conv2dIdentityBlockSwizzle {
             }
             uint32_t hoIdx = howoIdx / loops.wo();
             uint32_t woIdx = howoIdx % loops.wo();
-            return PostIm2colCoord{hoIdx, woIdx, coutIdx, 0};
+            return Conv2d5HdCoord{outerIdx, hoIdx, woIdx, coutIdx, 0};
         }
     }
 
     CATLASS_DEVICE
-    PostIm2colCoord GetActualBlockShape(PostIm2colCoord blockCoord) {
-        uint32_t hoActual = (blockCoord.ho() == loops.ho() - 1) ? 
-            (problemShape.ho() - blockCoord.ho() * tiles.ho()) : tiles.ho();
-        uint32_t woActual = (blockCoord.wo() == loops.wo() - 1) ? 
-            (problemShape.wo() - blockCoord.wo() * tiles.wo()) : tiles.wo();
+    Conv2d5HdCoord GetActualBlockShape(Conv2d5HdCoord blockCoord) {
+        uint32_t hoActual = (blockCoord.h() == loops.h() - 1) ? 
+            (problemShape.h() - blockCoord.h() * tiles.h()) : tiles.h();
+        uint32_t woActual = (blockCoord.w() == loops.w() - 1) ? 
+            (problemShape.w() - blockCoord.w() * tiles.w()) : tiles.w();
         uint32_t coutActual = (blockCoord.cout() == loops.cout() - 1) ? 
             (problemShape.cout() - blockCoord.cout() * tiles.cout()) : tiles.cout();
         uint32_t cin1Actual = problemShape.cin1();
-        return PostIm2colCoord{hoActual, woActual, coutActual, cin1Actual};
+        return Conv2d5HdCoord{1, hoActual, woActual, coutActual, cin1Actual};
     }
 };
 

@@ -41,10 +41,10 @@ using fp16_t = op::fp16_t;
 
 struct Options {
   const std::string HELPER = 
-    "24_basic_conv2d hi, wi, cin, cout, kh, kw, padLeft, padRight, padTop, padBottom, strideH, strideW, dilationH, dilationW [device_id]";
+    "24_basic_conv2d batch, hi, wi, cin, cout, kh, kw, padLeft, padRight, padTop, padBottom, strideH, strideW, dilationH, dilationW [device_id]";
 
-  // uint32_t dataSizes[4] = {4, 6, 16, 16}; // {hi, wi, cin, cout}
-  uint32_t dataSizes[4] = {33, 43, 160, 176}; // {hi, wi, cin, cout}
+  // uint32_t dataSizes[5] = {1, 4, 6, 16, 16}; // {hi, wi, cin, cout}
+  uint32_t dataSizes[5] = {1, 33, 43, 160, 176}; // {hi, wi, cin, cout}
   uint8_t filterSizes[2] = {3, 3}; // {Kh, Kw}
   uint8_t pads[4] = {0, 0, 0, 0}; // {padLeft, padRight, padTop, padBottom}
   uint8_t strides[2] = {1, 1}; // {strideH, strideW}
@@ -57,7 +57,8 @@ struct Options {
 
   int Parse(int argc, const char **argv) {
     enum ArgsIndex {
-      HI_INDEX = 1,
+      BATCH_INDEX = 1,
+      HI_INDEX,
       WI_INDEX,
       CIN_INDEX,
       COUT_INDEX,
@@ -74,10 +75,11 @@ struct Options {
     //   return 0;
     // }
 
-    // dataSizes[0] = std::atoi(argv[HI_INDEX]);
-    // dataSizes[1] = std::atoi(argv[WI_INDEX]);
-    // dataSizes[2] = std::atoi(argv[CIN_INDEX]);
-    // dataSizes[3] = std::atoi(argv[COUT_INDEX]);
+    // dataSizes[0] = std::atoi(argv[BATCH_INDEX]);
+    // dataSizes[1] = std::atoi(argv[HI_INDEX]);
+    // dataSizes[2] = std::atoi(argv[WI_INDEX]);
+    // dataSizes[3] = std::atoi(argv[CIN_INDEX]);
+    // dataSizes[4] = std::atoi(argv[COUT_INDEX]);
     // filterSizes[0] = std::atoi(argv[KH_INDEX]);
     // filterSizes[1] = std::atoi(argv[KW_INDEX]);
     // pads[0] = std::atoi(argv[PADLEFT_INDEX]);
@@ -106,6 +108,7 @@ void Run(Options const &options) {
   ACL_CHECK(aclrtCreateStream(&stream));
 
   uint32_t c0 = options.problemParams.C0;
+  uint32_t batch = options.problemParams.batch();
   uint32_t hi = options.problemParams.hi();
   uint32_t wi = options.problemParams.wi();
   uint32_t cin1 = options.problemParams.cin1();
@@ -128,6 +131,7 @@ void Run(Options const &options) {
   uint32_t dilationW = options.problemParams.dilationW();
 
   printf("c0 = %d\n", c0);
+  printf("batch = %d\n", batch);
   printf("hi = %d\n", hi);
   printf("wi = %d\n", wi);
   printf("cin1 = %d\n", cin1);
@@ -141,9 +145,9 @@ void Run(Options const &options) {
   printf("kh = %d\n", kh);
   printf("kw = %d\n", kw);
 
-  size_t lenFmap = cin1 * hi * wi * c0;
+  size_t lenFmap = batch * cin1 * hi * wi * c0;
   size_t lenFilter = cin1 * kh * kw * cout * c0;
-  size_t lenOutput = ho * wo * coutRound;
+  size_t lenOutput = batch * ho * wo * coutRound;
 
   size_t sizeFmap = lenFmap * sizeof(fp16_t);
   size_t sizeFilter = lenFilter * sizeof(fp16_t);
@@ -152,9 +156,9 @@ void Run(Options const &options) {
   using LayoutFmap = layout::Fmap;
   using LayoutFilter = layout::Filter;
   using LayoutOutput = layout::Output;
-  LayoutFmap layoutFmap{cin1, hi, wi, c0};
+  LayoutFmap layoutFmap{batch, cin1, hi, wi, c0};
   LayoutFilter layoutFilter{cin1, kh, kw, cout, c0};
-  LayoutOutput layoutOutput{cout1, ho, wo, c0};
+  LayoutOutput layoutOutput{batch, cout1, ho, wo, c0};
 
   std::vector<fp16_t> hostFmap(lenFmap);
   std::vector<fp16_t> hostFilter(lenFilter);
@@ -178,10 +182,9 @@ void Run(Options const &options) {
   using ArchTag = Arch::AtlasA2;
   constexpr bool ENABLE_UNIT_FLAG = false;
   using DispatchPolicy = Conv2d::MmadAtlasA2Pingpong<ENABLE_UNIT_FLAG>;
-  using L1TileShape = Catlass::PostIm2colShape<8, 12, 96, 8>; // (hoBlock, woBlock, coutBlock, cin1Block)
-  using L0TileShape = Catlass::PostIm2colShape<8, 12, 96, 1>; 
-  // using L1TileShape = Catlass::PostIm2colShape<4, 4, 16, 2>; // (hoBlock, woBlock, coutBlock, cin1Block)
-  // using L0TileShape = Catlass::PostIm2colShape<4, 4, 16, 1>; 
+  using FmapL1TileShape = Catlass::Conv2dFmapL1Shape<8, 12, 8>; // (hoBlock, woBlock, cin1Block_small)
+  using FilterL1TileShape = Catlass::Conv2dFilterL1Shape<96, 8>; // (coutBlock, cin1Block_big)
+  using L0TileShape = Catlass::Conv2dL0Shape<16, 16, 16>; // (mL0, nL0, kL0)
 
   uint32_t hoBlock = L1TileShape::Ho;
   uint32_t woBlock = L1TileShape::Wo;
@@ -213,8 +216,9 @@ void Run(Options const &options) {
   using FilterType = Conv2d::Conv2dType<half, LayoutFilter>;
   using OutputType = Conv2d::Conv2dType<half, LayoutOutput>;
 
-  using BlockMmad = Conv2d::Block::BlockMmad<
-      DispatchPolicy, L1TileShape, L0TileShape, FmapType, FilterType, OutputType>;
+  using BlockMmad = Conv2d::Block::BlockMmad<DispatchPolicy,
+      FmapL1TileShape, FilterL1TileShape, L0TileShape,
+      FmapType, FilterType, OutputType>;
   using BlockEpilogue = void;
 
   // Swizzle offset is 3 and direction is 0.

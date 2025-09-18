@@ -14,12 +14,63 @@
 namespace Catlass {
 
 template <
+    uint32_t Ho_ = 1,
+    uint32_t Wo_ = 1,
+    uint32_t Cin1_ = 1
+>
+struct Conv2dFmapL1Shape { // (Ho, Wo, Cin1)
+    static constexpr uint32_t Ho = Ho_;
+    static constexpr uint32_t Wo = Wo_;
+    static constexpr uint32_t Cin1 = Cin1_;
+
+    /// Returns a Coord object
+    CATLASS_HOST_DEVICE
+    static Coord<3> ToCoord() {
+        return MakeCoord(Ho, Wo, Cin1);
+    }
+};
+
+template <
+    uint32_t Cout_ = 16,
+    uint32_t Cin1_ = 1
+>
+struct Conv2dFilterL1Shape { // (Cout, Cin1)
+    static constexpr uint32_t Cout = Cout_;
+    static constexpr uint32_t Cin1 = Cin1_;
+
+    /// Returns a Coord object
+    CATLASS_HOST_DEVICE
+    static Coord<2> ToCoord() {
+        return MakeCoord(Cout, Cin1);
+    }
+};
+
+template <
+    uint32_t mL0_ = 16,
+    uint32_t nL0_ = 16,
+    uint32_t kL0_ = 16
+>
+struct Conv2dL0Shape {
+    static constexpr uint32_t mL0 = mL0_;
+    static constexpr uint32_t nL0 = nL0_;
+    static constexpr uint32_t kL0 = kL0_;
+
+    /// Returns a Coord object
+    CATLASS_HOST_DEVICE
+    static Coord<3> ToCoord() {
+        return MakeCoord(mL0, nL0, kL0);
+    }
+};
+
+template <
+    uint32_t Batch_ = 1,
     uint32_t Cin1_ = 1,
     uint32_t Hi_ = 1,
     uint32_t Wi_ = 1,
     uint32_t C0_ = 16
 >
-struct FmapShape { // (Cin1, Hi, Wi, C0)
+struct FmapShape { // (Batch, Cin1, Hi, Wi, C0)
+    static constexpr uint32_t Batch = Batch_;
     static constexpr uint32_t Cin1 = Cin1_;
     static constexpr uint32_t Hi = Hi_;
     static constexpr uint32_t Wi = Wi_;
@@ -28,64 +79,72 @@ struct FmapShape { // (Cin1, Hi, Wi, C0)
     static constexpr int64_t Cin = Cin1 * C0;
     static constexpr int64_t HWi = Hi * Wi;
 
-    static constexpr int64_t COUNT = Cin * HWi;
+    static constexpr int64_t COUNT = Batch * Cin * HWi;
 
     /// Returns a Coord object
     CATLASS_HOST_DEVICE
-    static Coord<4> ToCoord() {
-        return MakeCoord(Cin1, Hi, Wi, C0);
+    static Coord<5> ToCoord() {
+        return MakeCoord(Batch, Cin1, Hi, Wi, C0);
     }
 };
 
-struct FmapCoord : public Coord<4, uint32_t> { // (Cin1, Hi, Wi, C0)
+struct FmapCoord : public Coord<5, uint32_t> { // (Batch, Cin1, Hi, Wi, C0)
 public:
     /// Integer-valued index
     using Index = uint32_t;
 
-    /// Base type is a Coord of rank=4
-    using Base = Coord<4, Index>;
+    /// Base type is a Coord of rank=5
+    using Base = Coord<5, Index>;
 
     /// LongIndex type
     using LongIndex = typename Base::LongIndex;
 
     /// dimensions
-    static constexpr uint32_t CIN1_INDEX = 0;
-    static constexpr uint32_t HI_INDEX = 1;
-    static constexpr uint32_t WI_INDEX = 2;
-    static constexpr uint32_t C0_INDEX = 3;
+    static constexpr uint32_t BATCH_INDEX = 0;
+    static constexpr uint32_t CIN1_INDEX = 1;
+    static constexpr uint32_t HI_INDEX = 2;
+    static constexpr uint32_t WI_INDEX = 3;
+    static constexpr uint32_t C0_INDEX = 4;
 
     /// Default ctor
     CATLASS_HOST_DEVICE
     FmapCoord() {}
 
-    /// Constructs from Coord<4>
+    /// Constructs from Coord<5>
     CATLASS_HOST_DEVICE
-    FmapCoord(Coord<4, Index> const &coord) : Base(coord) {}
+    FmapCoord(Coord<5, Index> const &coord) : Base(coord) {}
 
     /// Helper to construct from Cin1, Hi, Wi, C0
     CATLASS_HOST_DEVICE
-    FmapCoord(Index cin1, Index hi, Index wi, Index c0)
-    : Base(MakeCoord(cin1, hi, wi, c0)) {}
+    FmapCoord(Index batch, Index cin1, Index hi, Index wi, Index c0)
+    : Base(MakeCoord(batch, cin1, hi, wi, c0)) {}
 
     CATLASS_HOST_DEVICE
-    FmapCoord(LongIndex cin1, LongIndex hi, LongIndex wi, LongIndex c0)
-    : Base(MakeCoord(Index(cin1), Index(hi), Index(wi), Index(c0))) {}
+    FmapCoord(LongIndex batch, LongIndex cin1, LongIndex hi, LongIndex wi, LongIndex c0)
+    : Base(MakeCoord(Index(batch), Index(cin1), Index(hi), Index(wi), Index(c0))) {}
 
     CATLASS_HOST_DEVICE
     Index const &cin1() const {
         return this->At(CIN1_INDEX);
     }
-    
     CATLASS_HOST_DEVICE
     Index &cin1() {
         return this->At(CIN1_INDEX);
     }
 
     CATLASS_HOST_DEVICE
+    Index const &batch() const {
+        return this->At(BATCH_INDEX);
+    }
+    CATLASS_HOST_DEVICE
+    Index &batch() {
+        return this->At(BATCH_INDEX);
+    }
+
+    CATLASS_HOST_DEVICE
     Index const &hi() const {
         return this->At(HI_INDEX);
     }
-    
     CATLASS_HOST_DEVICE
     Index &hi() {
         return this->At(HI_INDEX);
@@ -95,7 +154,6 @@ public:
     Index const &wi() const {
         return this->At(WI_INDEX);
     }
-
     CATLASS_HOST_DEVICE
     Index &wi() {
         return this->At(WI_INDEX);
@@ -105,7 +163,6 @@ public:
     Index const &c0() const {
         return this->At(C0_INDEX);
     }
-
     CATLASS_HOST_DEVICE
     Index &c0() {
         return this->At(C0_INDEX);
@@ -190,7 +247,6 @@ public:
     Index const &cin1() const {
         return this->At(CIN1_INDEX);
     }
-    
     CATLASS_HOST_DEVICE
     Index &cin1() {
         return this->At(CIN1_INDEX);
@@ -200,7 +256,6 @@ public:
     Index const &kh() const {
         return this->At(KH_INDEX);
     }
-    
     CATLASS_HOST_DEVICE
     Index &kh() {
         return this->At(KH_INDEX);
@@ -210,7 +265,6 @@ public:
     Index const &kw() const {
         return this->At(KW_INDEX);
     }
-    
     CATLASS_HOST_DEVICE
     Index &kw() {
         return this->At(KW_INDEX);
@@ -220,7 +274,6 @@ public:
     Index const &cout() const {
         return this->At(COUT_INDEX);
     }
-    
     CATLASS_HOST_DEVICE
     Index &cout() {
         return this->At(COUT_INDEX);
@@ -230,7 +283,6 @@ public:
     Index const &c0() const {
         return this->At(C0_INDEX);
     }
-
     CATLASS_HOST_DEVICE
     Index &c0() {
         return this->At(C0_INDEX);
@@ -251,12 +303,14 @@ public:
 };
 
 template <
+    uint32_t Batch = 1,
     uint32_t Cout1_ = 1,
     uint32_t Ho_ = 1,
     uint32_t Wo_ = 1,
     uint32_t C0_ = 16
 >
-struct OutputShape { // (Cout1, Ho, Wo, C0)
+struct OutputShape { // (Batch, Cout1, Ho, Wo, C0)
+    static constexpr uint32_t Batch = Batch_;
     static constexpr uint32_t Cout1 = Cout1_;
     static constexpr uint32_t Ho = Ho_;
     static constexpr uint32_t Wo = Wo_;
@@ -265,54 +319,62 @@ struct OutputShape { // (Cout1, Ho, Wo, C0)
     static constexpr int64_t Cout = Cout1 * C0;
     static constexpr int64_t HWo = Ho * Wo;
 
-    static constexpr int64_t COUNT = Cout * HWo;
+    static constexpr int64_t COUNT = Batch * Cout * HWo;
 
     /// Returns a Coord object
     CATLASS_HOST_DEVICE
-    static Coord<4> ToCoord() {
-        return MakeCoord(Cout1, Ho, Wo, C0);
+    static Coord<5> ToCoord() {
+        return MakeCoord(Batch, Cout1, Ho, Wo, C0);
     }
 };
 
-struct OutputCoord : public Coord<4, uint32_t> { // (Cout1, Ho, Wo, C0)
+struct OutputCoord : public Coord<5, uint32_t> { // (Batch, Cout1, Ho, Wo, C0)
 public:
     /// Integer-valued index
     using Index = uint32_t;
 
-    /// Base type is a Coord of rank=4
-    using Base = Coord<4, Index>;
-
+    /// Base type is a Coord of rank=5
+    using Base = Coord<5, Index>;
     /// LongIndex type
     using LongIndex = typename Base::LongIndex;
 
     /// dimensions
-    static constexpr uint32_t COUT1_INDEX = 0;
-    static constexpr uint32_t HO_INDEX = 1;
-    static constexpr uint32_t WO_INDEX = 2;
-    static constexpr uint32_t C0_INDEX = 3;
+    static constexpr uint32_t BATCH_INDEX = 0;
+    static constexpr uint32_t COUT1_INDEX = 1;
+    static constexpr uint32_t HO_INDEX = 2;
+    static constexpr uint32_t WO_INDEX = 3;
+    static constexpr uint32_t C0_INDEX = 4;
 
     /// Default ctor
     CATLASS_HOST_DEVICE
     OutputCoord() {}
 
-    /// Constructs from Coord<4>
+    /// Constructs from Coord<5>
     CATLASS_HOST_DEVICE
-    OutputCoord(Coord<4, Index> const &coord) : Base(coord) {}
+    OutputCoord(Coord<5, Index> const &coord) : Base(coord) {}
 
-    /// Helper to construct from Cout1, Ho, Wo, C0
+    /// Helper to construct from Batch, Cout1, Ho, Wo, C0
     CATLASS_HOST_DEVICE
-    OutputCoord(Index cout1, Index ho, Index wo, Index c0)
-    : Base(MakeCoord(cout1, ho, wo, c0)) {}
+    OutputCoord(Index batch, Index cout1, Index ho, Index wo, Index c0)
+    : Base(MakeCoord(batch, cout1, ho, wo, c0)) {}
 
     CATLASS_HOST_DEVICE
-    OutputCoord(LongIndex cout1, LongIndex ho, LongIndex wo, LongIndex c0)
-    : Base(MakeCoord(Index(cout1), Index(ho), Index(wo), Index(c0))) {}
+    OutputCoord(LongIndex batch, LongIndex cout1, LongIndex ho, LongIndex wo, LongIndex c0)
+    : Base(MakeCoord(Index(batch), Index(cout1), Index(ho), Index(wo), Index(c0))) {}
+
+    CATLASS_HOST_DEVICE
+    Index const &batch() const {
+        return this->At(BATCH_INDEX);
+    }
+    CATLASS_HOST_DEVICE
+    Index &batch() {
+        return this->At(BATCH_INDEX);
+    }
 
     CATLASS_HOST_DEVICE
     Index const &cout1() const {
         return this->At(COUT1_INDEX);
     }
-    
     CATLASS_HOST_DEVICE
     Index &cout1() {
         return this->At(COUT1_INDEX);
@@ -322,7 +384,6 @@ public:
     Index const &ho() const {
         return this->At(HO_INDEX);
     }
-    
     CATLASS_HOST_DEVICE
     Index &ho() {
         return this->At(HO_INDEX);
@@ -332,7 +393,6 @@ public:
     Index const &wo() const {
         return this->At(WO_INDEX);
     }
-    
     CATLASS_HOST_DEVICE
     Index &wo() {
         return this->At(WO_INDEX);
@@ -342,7 +402,6 @@ public:
     Index const &c0() const {
         return this->At(C0_INDEX);
     }
-
     CATLASS_HOST_DEVICE
     Index &c0() {
         return this->At(C0_INDEX);
@@ -357,115 +416,6 @@ public:
     /// In-place addition
     CATLASS_HOST_DEVICE
     OutputCoord &operator+=(Base const &b) {
-        Base::operator+=(b);
-        return *this;
-    }
-};
-
-template <
-    uint32_t Hi_ = 1,
-    uint32_t Wi_ = 1,
-    uint32_t Cout_ = 16,
-    uint32_t Cin1_ = 1
->
-struct PreIm2colShape { // (Hi, Wi, Cout, Cin1)
-    static constexpr uint32_t Hi = Hi_;
-    static constexpr uint32_t Wi = Wi_;
-    static constexpr uint32_t Cout = Cout_;
-    static constexpr uint32_t Cin1 = Cin1_;
-
-    static constexpr int64_t HWi = Hi * Wi;
-
-    /// Returns a Coord object
-    CATLASS_HOST_DEVICE
-    static Coord<4> ToCoord() {
-        return MakeCoord(Hi, Wi, Cout, Cin1);
-    }
-};
-
-struct PreIm2colCoord : public Coord<4, uint32_t> { // (Hi, Wi, Cout, Cin1)
-public:
-    /// Integer-valued index
-    using Index = uint32_t;
-
-    /// Base type is a Coord of rank=4
-    using Base = Coord<4, Index>;
-
-    /// LongIndex type
-    using LongIndex = typename Base::LongIndex;
-
-    /// dimensions
-    static constexpr uint32_t HI_INDEX = 0;
-    static constexpr uint32_t WI_INDEX = 1;
-    static constexpr uint32_t COUT_INDEX = 2;
-    static constexpr uint32_t CIN1_INDEX = 3;
-
-    /// Default ctor
-    CATLASS_HOST_DEVICE
-    PreIm2colCoord() {}
-
-    /// Constructs from Coord<4>
-    CATLASS_HOST_DEVICE
-    PreIm2colCoord(Coord<4, Index> const &coord) : Base(coord) {}
-
-    /// Helper to construct from Hi, Wi, Cout, Cin1
-    CATLASS_HOST_DEVICE
-    PreIm2colCoord(Index hi, Index wi, Index cout, Index cin1)
-    : Base(MakeCoord(hi, wi, cout, cin1)) {}
-
-    CATLASS_HOST_DEVICE
-    PreIm2colCoord(LongIndex hi, LongIndex wi, LongIndex cout, LongIndex cin1)
-    : Base(MakeCoord(Index(hi), Index(wi), Index(cout), Index(cin1))) {}
-
-    CATLASS_HOST_DEVICE
-    Index const &hi() const {
-        return this->At(HI_INDEX);
-    }
-    
-    CATLASS_HOST_DEVICE
-    Index &hi() {
-        return this->At(HI_INDEX);
-    }
-
-    CATLASS_HOST_DEVICE
-    Index const &wi() const {
-        return this->At(WI_INDEX);
-    }
-    
-    CATLASS_HOST_DEVICE
-    Index &wi() {
-        return this->At(WI_INDEX);
-    }
-
-    CATLASS_HOST_DEVICE
-    Index const &cout() const {
-        return this->At(COUT_INDEX);
-    }
-
-    CATLASS_HOST_DEVICE
-    Index &cout() {
-        return this->At(COUT_INDEX);
-    }
-
-    CATLASS_HOST_DEVICE
-    Index const &cin1() const {
-        return this->At(CIN1_INDEX);
-    }
-
-    CATLASS_HOST_DEVICE
-    Index &cin1() {
-        return this->At(CIN1_INDEX);
-    }
-
-    /// Element-wise addition
-    CATLASS_HOST_DEVICE
-    PreIm2colCoord operator+(Base const &b) const {
-        return PreIm2colCoord(Base::operator+(b));
-    }
-
-    /// In-place addition
-    CATLASS_HOST_DEVICE
-    PreIm2colCoord &operator+=(Base const &b) {
         Base::operator+=(b);
         return *this;
     }
@@ -574,85 +524,92 @@ public:
 };
 
 template <
-    uint32_t Ho_ = 1,
-    uint32_t Wo_ = 1,
+    uint32_t H_ = 1,
+    uint32_t W_ = 1,
     uint32_t Cout_ = 16,
     uint32_t Cin1_ = 1
 >
-struct PostIm2colShape { // (Ho, Wo, Cout, Cin1)
-    static constexpr uint32_t Ho = Ho_;
-    static constexpr uint32_t Wo = Wo_;
+struct Conv2d5HdShape { // (H, W, Cout, Cin1)
+    static constexpr uint32_t H = H_;
+    static constexpr uint32_t W = W_;
     static constexpr uint32_t Cout = Cout_;
     static constexpr uint32_t Cin1 = Cin1_;
 
-    static constexpr int64_t HWo = Ho * Wo;
+    static constexpr int64_t HW = H * W;
 
     /// Returns a Coord object
     CATLASS_HOST_DEVICE
     static Coord<4> ToCoord() {
-        return MakeCoord(Ho, Wo, Cout, Cin1);
+        return MakeCoord(H, W, Cout, Cin1);
     }
 };
 
-struct PostIm2colCoord : public Coord<4, uint32_t> { // (Ho, Wo, Cout, Cin1)
+struct Conv2d5HdCoord : public Coord<5, uint32_t> { // (Batch, H, W, Cout, Cin1)
 public:
     /// Integer-valued index
     using Index = uint32_t;
 
-    /// Base type is a Coord of rank=4
-    using Base = Coord<4, Index>;
+    /// Base type is a Coord of rank=5
+    using Base = Coord<5, Index>;
 
     /// LongIndex type
     using LongIndex = typename Base::LongIndex;
 
     /// dimensions
-    static constexpr uint32_t HO_INDEX = 0;
-    static constexpr uint32_t WO_INDEX = 1;
-    static constexpr uint32_t COUT_INDEX = 2;
-    static constexpr uint32_t CIN1_INDEX = 3;
+    static constexpr uint32_t BATCH_INDEX = 0;
+    static constexpr uint32_t H_INDEX = 1;
+    static constexpr uint32_t W_INDEX = 2;
+    static constexpr uint32_t COUT_INDEX = 3;
+    static constexpr uint32_t CIN1_INDEX = 4;
 
     /// Default ctor
     CATLASS_HOST_DEVICE
-    PostIm2colCoord() {}
+    Conv2d5HdCoord() {}
 
-    /// Constructs from Coord<4>
+    /// Constructs from Coord<5>
     CATLASS_HOST_DEVICE
-    PostIm2colCoord(Coord<4, Index> const &coord) : Base(coord) {}
+    Conv2d5HdCoord(Coord<5, Index> const &coord) : Base(coord) {}
 
-    /// Helper to construct from Ho, Wo, Cout, Cin1
+    /// Helper to construct from Batch, H, W, Cout, Cin1
     CATLASS_HOST_DEVICE
-    PostIm2colCoord(Index ho, Index wo, Index cout, Index cin1)
-    : Base(MakeCoord(ho, wo, cout, cin1)) {}
-
-    CATLASS_HOST_DEVICE
-    PostIm2colCoord(LongIndex ho, LongIndex wo, LongIndex cout, LongIndex cin1)
-    : Base(MakeCoord(Index(ho), Index(wo), Index(cout), Index(cin1))) {}
+    Conv2d5HdCoord(Index batch, Index h, Index w, Index cout, Index cin1)
+    : Base(MakeCoord(batch, h, w, cout, cin1)) {}
 
     CATLASS_HOST_DEVICE
-    Index const &ho() const {
-        return this->At(HO_INDEX);
+    Conv2d5HdCoord(LongIndex batch, LongIndex h, LongIndex w, LongIndex cout, LongIndex cin1)
+    : Base(MakeCoord(Index(batch), Index(h), Index(w), Index(cout), Index(cin1))) {}
+
+    CATLASS_HOST_DEVICE
+    Index const &batch() const {
+        return this->At(BATCH_INDEX);
     }
-    
     CATLASS_HOST_DEVICE
-    Index &ho() {
-        return this->At(HO_INDEX);
+    Index &batch() {
+        return this->At(BATCH_INDEX);
     }
 
     CATLASS_HOST_DEVICE
-    Index const &wo() const {
-        return this->At(WO_INDEX);
+    Index const &h() const {
+        return this->At(H_INDEX);
     }
-    
     CATLASS_HOST_DEVICE
-    Index &wo() {
-        return this->At(WO_INDEX);
+    Index &h() {
+        return this->At(H_INDEX);
+    }
+
+    CATLASS_HOST_DEVICE
+    Index const &w() const {
+        return this->At(W_INDEX);
+    }
+    CATLASS_HOST_DEVICE
+    Index &w() {
+        return this->At(W_INDEX);
     }
 
     CATLASS_HOST_DEVICE
     Index const &cout() const {
         return this->At(COUT_INDEX);
     }
-
     CATLASS_HOST_DEVICE
     Index &cout() {
         return this->At(COUT_INDEX);
@@ -662,7 +619,6 @@ public:
     Index const &cin1() const {
         return this->At(CIN1_INDEX);
     }
-
     CATLASS_HOST_DEVICE
     Index &cin1() {
         return this->At(CIN1_INDEX);
@@ -670,20 +626,20 @@ public:
 
     /// Element-wise addition
     CATLASS_HOST_DEVICE
-    PostIm2colCoord operator+(Base const &b) const {
-        return PostIm2colCoord(Base::operator+(b));
+    Conv2d5HdCoord operator+(Base const &b) const {
+        return Conv2d5HdCoord(Base::operator+(b));
     }
 
     /// In-place addition
     CATLASS_HOST_DEVICE
-    PostIm2colCoord &operator+=(Base const &b) {
+    Conv2d5HdCoord &operator+=(Base const &b) {
         Base::operator+=(b);
         return *this;
     }
 
     CATLASS_HOST_DEVICE
     auto GetCoordHoWoCout() const {
-        return this->GetCoordByAxis<HO_INDEX, WO_INDEX, COUT_INDEX>();
+        return this->GetCoordByAxis<H_INDEX, W_INDEX, COUT_INDEX>();
     }
 };
 
@@ -808,45 +764,44 @@ public:
     using Strides = Coord<2, ShortIndex>;
     using Dilations = Coord<2, ShortIndex>;
 private:
-    // Hi, Wi, Cin, Cout, Kh, Kw
-    FmapCoord inputShape; // {Cin1, Hi, Wi, C0}
+    // Batch, Hi, Wi, Cin, Cout, Kh, Kw
+    FmapCoord fmapShape; // {Batch, Cin1, Hi, Wi, C0}
     FilterCoord filterShape; // {Cin1, Kh, Kw, Cout, C0}
-    OutputCoord outputShape; // {Cout1, Ho, Wo, C0}
+    OutputCoord outputShape; // {Batch, Cout1, Ho, Wo, C0}
     Conv2dConfigs configs; // {Ks, Pads, Strides, Dilations}
-    PostIm2colCoord postIm2colShape; // {Ho, Wo, Cout, Cin1}
+    Conv2d5HdCoord postIm2colShape; // {Batch, Ho, Wo, Cout, Cin1}
 public:
     /// Default ctor
     CATLASS_HOST_DEVICE
     Conv2dParams() {}
 
     CATLASS_HOST_DEVICE
-    Conv2dParams(Index hi, Index wi, Index cin, Index cout,
+    Conv2dParams(Index batch, Index hi, Index wi, Index cin, Index cout,
         ShortIndex kh, ShortIndex kw,
         ShortIndex padLeft, ShortIndex padRight, ShortIndex padTop, ShortIndex padBottom,
         ShortIndex strideH, ShortIndex strideW,
         ShortIndex dilationH, ShortIndex dilationW)
-    : inputShape(MakeCoord(CeilDiv(cin, C0), hi, wi, C0)),
+    : fmapShape(MakeCoord(batch, CeilDiv(cin, C0), hi, wi, C0)),
       filterShape(MakeCoord(CeilDiv(cin, C0), (Index)kh, (Index)kw, cout, C0)),
       configs(kh, kw, padLeft, padRight, padTop, padBottom, strideH, strideW, dilationH, dilationW)
     {
         Index cout1 = CeilDiv(cout, C0);
         Index ho = (hi + padTop + padBottom - dilationH * (kh - 1) - 1) / strideH + 1;
         Index wo = (wi + padLeft + padRight - dilationW * (kw - 1) - 1) / strideW + 1;
-        // AscendC::printf("outputShape = %d, %d, %d, %d\n", cout1, ho, wo, C0);
-        outputShape = MakeCoord(cout1, ho, wo, C0);
-        postIm2colShape = MakeCoord(ho, wo, cout, filterShape.cin1());
+        outputShape = MakeCoord(batch, cout1, ho, wo, C0);
+        postIm2colShape = MakeCoord(batch, ho, wo, cout, filterShape.cin1());
     }
 
     CATLASS_HOST_DEVICE
     static Conv2dParams MakeConv2dParams(
-        const Index* dataSizes, // [Hi, Wi, Cin, Cout]
+        const Index* dataSizes, // [Batch, Hi, Wi, Cin, Cout]
         const ShortIndex* filterSizes, // [Kh, Kw]
         const ShortIndex* pads, // [padLeft, padRight, padTop, padBottom]
         const ShortIndex* strides, // [strideH, strideW]
         const ShortIndex* dilations) // [dilationH, dilationW]
     {
         return Conv2dParams(
-            dataSizes[0], dataSizes[1], dataSizes[2], dataSizes[3],
+            dataSizes[0], dataSizes[1], dataSizes[2], dataSizes[3], dataSizes[4],
             filterSizes[0], filterSizes[1],
             pads[0], pads[1], pads[2], pads[3],
             strides[0], strides[1], strides[2], strides[3]);
@@ -863,40 +818,49 @@ public:
     }
 
     CATLASS_HOST_DEVICE
-    PostIm2colCoord const &getPostIm2colShape() const {
+    Conv2d5HdCoord const &getPostIm2colShape() const {
         return this->postIm2colShape;
     }
 
     CATLASS_HOST_DEVICE
+    Index const &batch() const {
+        return this->fmapShape.batch();
+    }
+    CATLASS_HOST_DEVICE
+    Index &batch() {
+        return this->fmapShape.batch();
+    }
+
+    CATLASS_HOST_DEVICE
     Index const &hi() const {
-        return this->inputShape.hi();
+        return this->fmapShape.hi();
     }
     CATLASS_HOST_DEVICE
     Index &hi() {
-        return this->inputShape.hi();
+        return this->fmapShape.hi();
     }
 
     CATLASS_HOST_DEVICE
     Index const &wi() const {
-        return this->inputShape.wi();
+        return this->fmapShape.wi();
     }
     CATLASS_HOST_DEVICE
     Index &wi() {
-        return this->inputShape.wi();
+        return this->fmapShape.wi();
     }
 
     CATLASS_HOST_DEVICE
     Index cin() const {
-        return this->inputShape.cin1() * C0;
+        return this->fmapShape.cin1() * C0;
     }
 
     CATLASS_HOST_DEVICE
     Index const &cin1() const {
-        return this->inputShape.cin1();
+        return this->fmapShape.cin1();
     }
     CATLASS_HOST_DEVICE
     Index &cin1() {
-        return this->inputShape.cin1();
+        return this->fmapShape.cin1();
     }
 
     CATLASS_HOST_DEVICE

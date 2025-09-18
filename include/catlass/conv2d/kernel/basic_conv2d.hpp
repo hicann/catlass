@@ -28,7 +28,8 @@ class BasicConv2d {
 public:
     using BlockMmad = BlockMmad_;
     using ArchTag = typename BlockMmad::ArchTag;
-    using L1TileShape = typename BlockMmad::L1TileShape;
+    using FmapL1TileShape = typename BlockMmad::FmapL1TileShape;
+    using FilterL1TileShape = typename BlockMmad::FilterL1TileShape;
     using ElementFmap = typename BlockMmad::ElementFmap;
     using LayoutFmap = typename BlockMmad::LayoutFmap;
     using ElementFilter = typename BlockMmad::ElementFilter;
@@ -74,18 +75,15 @@ public:
         GM_ADDR ptrOutput;
     };
 
-    static bool CanImplement(const Arguments &args)
-    {
+    static bool CanImplement(const Arguments &args) {
         return true;
     }
 
-    static size_t GetWorkspaceSize(const Arguments &args)
-    {
+    static size_t GetWorkspaceSize(const Arguments &args) {
         return 0;
     }
 
-    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
-    {
+    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace) {
         LayoutFmap layoutFmap{args.problemShape.cin1(), args.problemShape.hi(),
             args.problemShape.wi(), args.problemShape.C0};
         LayoutFilter layoutFilter{args.problemShape.cin1(), args.problemShape.kh(),
@@ -111,8 +109,9 @@ public:
     void operator()<AscendC::AIC>(Params const &params) {
         BlockScheduler conv2dBlockScheduler(
             params.problemShape.getPostIm2colShape(),
-            MakeCoord(L1TileShape::Ho, L1TileShape::Wo, L1TileShape::Cout));
-        uint32_t coreLoops = conv2dBlockScheduler.GetCoreLoops();
+            MakeCoord(FmapL1TileShape::Ho, FmapL1TileShape::Wo, FilterL1TileShape::Cout));
+        // uint32_t coreLoops = conv2dBlockScheduler.GetCoreLoops();
+        uint32_t loops = conv2dBlockScheduler.GetLoops();
         
         Arch::Resource<ArchTag> resource;
         BlockMmad blockMmad(resource, params.problemShape.getConv2dConfigs());
@@ -125,15 +124,15 @@ public:
         AscendC::GlobalTensor<ElementOutput> gmOutput;
         gmOutput.SetGlobalBuffer((__gm__ ElementOutput *)params.ptrOutput);
     
-        for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()) {
+        for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < loops; loopIdx += AscendC::GetBlockNum()) {
             // Compute block location
-            PostIm2colCoord blockCoord = conv2dBlockScheduler.GetBlockCoord(loopIdx);
-            PostIm2colCoord actualBlockShape = conv2dBlockScheduler.GetActualBlockShape(blockCoord);
+            Conv2d5HdCoord blockCoord = conv2dBlockScheduler.GetBlockCoord(loopIdx);
+            Conv2d5HdCoord actualBlockShape = conv2dBlockScheduler.GetActualBlockShape(blockCoord);
 
             uint8_t blockPadTop = 0, blockPadBottom = 0, blockPadLeft = 0, blockPadRight = 0;
             
             // Compute indices of hi
-            uint32_t hoStart = blockCoord.ho() * L1TileShape::Ho;
+            uint32_t hoStart = blockCoord.ho() * FmapL1TileShape::Ho;
             int32_t hiStart = hoStart * params.problemShape.strideH() - params.problemShape.padTop();
             int32_t hiEnd = hiStart + (actualBlockShape.ho() - 1) * params.problemShape.strideH() + 
                 (params.problemShape.kh() - 1) * params.problemShape.dilationH();
@@ -148,7 +147,7 @@ public:
             uint32_t hiActual = hiEnd - hiStart + 1;
 
             // Compute indexes of wi
-            uint32_t woStart = blockCoord.wo() * L1TileShape::Wo;
+            uint32_t woStart = blockCoord.wo() * FmapL1TileShape::Wo;
             int32_t wiStart = woStart * params.problemShape.strideW() - params.problemShape.padLeft();
             int32_t wiEnd = wiStart + (actualBlockShape.wo() - 1) * params.problemShape.strideW() + 
                 (params.problemShape.kw() - 1) * params.problemShape.dilationW();
@@ -162,13 +161,13 @@ public:
             }
             uint32_t wiActual = wiEnd - wiStart + 1;
 
-            PreIm2colCoord mmaActualSize(hiActual, wiActual, actualBlockShape.cout(), actualBlockShape.cin1());
+            Conv2d5HdCoord mmaActualSize(1, hiActual, wiActual, actualBlockShape.cout(), actualBlockShape.cin1());
             uint8_t blockPadList[4] = {blockPadLeft, blockPadRight, blockPadTop, blockPadBottom};
 
             // Compute initial location in logical coordinates
-            FmapCoord offsetFmap{0, (uint32_t)hiStart, (uint32_t)wiStart, 0}; // (Cin1, Hi, Wi, C0)
-            FilterCoord offsetFilter{0, 0, 0, blockCoord.cout() * L1TileShape::Cout, 0}; // (Cin1, Kw, Kh, Cout, C0)
-            OutputCoord offsetOutput{blockCoord.cout() * L1TileShape::Cout / C0 , hoStart, woStart, 0}; // (Cout1, Ho, Wo, C0)
+            FmapCoord offsetFmap{blockCoord.batch(), 0, (uint32_t)hiStart, (uint32_t)wiStart, 0}; // (Batch, Cin1, Hi, Wi, C0)
+            FilterCoord offsetFilter{0, 0, 0, blockCoord.cout() * FilterL1TileShape::Cout, 0}; // (Cin1, Kw, Kh, Cout, C0)
+            OutputCoord offsetOutput{blockCoord.batch(), blockCoord.cout() * FilterL1TileShape::Cout / C0, hoStart, woStart, 0}; // (Batch, Cout1, Ho, Wo, C0)
             int64_t gmOffsetFmap = params.layoutFmap.GetOffset(offsetFmap);
             int64_t gmOffsetFilter = params.layoutFilter.GetOffset(offsetFilter);
             int64_t gmOffsetOutput = params.layoutOutput.GetOffset(offsetOutput);
