@@ -10,7 +10,7 @@ import ctypes
 import re
 from abc import ABC, abstractmethod
 from functools import lru_cache
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 import torch_npu
@@ -42,6 +42,8 @@ class AdapterBase(ABC):
         self.attrs = attrs
         self.input_tensors = input_tensors
         self.output_tensors = output_tensors
+        if self.output_tensors == {}:
+            self.output_tensors = self.get_output_tensors()
         self.template_compiler = TemplateCompiler(kernel_src_file)
 
     def get_tensor(self, tensor_name: str) -> torch.Tensor:
@@ -123,7 +125,7 @@ class AdapterBase(ABC):
         kernel.run(*params)
         torch.npu.synchronize()
 
-    def get_output_tensors(self) -> Union[List[torch.Tensor], Dict[str, torch.Tensor]]:
+    def get_output_tensors(self) -> Dict[str, torch.Tensor]:
         output_shapes = self.get_output_shapes()
         output_dtypes = self.get_output_dtypes()
         output_tensors = {}
