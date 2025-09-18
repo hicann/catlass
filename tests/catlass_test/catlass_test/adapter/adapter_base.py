@@ -87,11 +87,11 @@ class AdapterBase(ABC):
         for template_compile_param in template_compile_params.keys():
             if var_name := element_pattern.search(template_compile_param):
                 compile_params[template_compile_param] = self.get_tensor_dtype_bisheng(
-                    var_name
+                    var_name.group(1)
                 )
             elif var_name := layout_pattern.search(template_compile_param):
                 compile_params[template_compile_param] = self.get_tensor_layout(
-                    var_name
+                    var_name.group(1)
                 )
         return compile_params
 

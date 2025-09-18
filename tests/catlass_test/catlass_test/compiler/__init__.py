@@ -11,7 +11,10 @@ from catlass_test import (
     CATLASS_INCLUDE_PATH,
     CATLASS_TEST_INCLUDE_PATH,
     CATLASS_TEST_KERNEL_PATH,
+    CATLASS_TEST_PATH,
 )
+
+CATLASS_KERNEL_ENTRY_FILE = os.path.join(CATLASS_TEST_PATH, "csrc", "kernel.cpp")
 
 COMPILER_INCLUDE_DIRECTORIES = [
     f"-I{CATLASS_TEST_INCLUDE_PATH}",
@@ -134,7 +137,7 @@ class TemplateCompiler:
             + [
                 "-fPIC",
                 "--shared",
-                "/home/yuantao/catlass/tests/catlass_test/catlass_test/csrc/kernel.cpp",
+                CATLASS_KERNEL_ENTRY_FILE,
                 "-o",
                 kernel_full_path,
             ]
