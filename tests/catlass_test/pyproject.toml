@@ -1,0 +1,22 @@
+[project]
+name = "catlass-test"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.8,<3.12"
+dependencies = [
+    "gitpython>=3.1.45",
+    "inflection>=0.5.1",
+    "loguru>=0.7.3",
+    "torch>=2.1.0,<2.7",
+    "torch-npu>=2.5.1.post1",
+]
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+torchvision = [{ index = "pytorch-cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
