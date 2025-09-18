@@ -267,7 +267,7 @@ public:
                     tilePadBottom = blockPadBottom;
                     hiPartActual -= tilePadBottom;
                 }
-                uint8_t *tilePadList = {blockPadLeft, blockPadRight, tilePadTop, tilePadBottom};
+                uint8_t tilePadList[4] = {blockPadLeft, blockPadRight, tilePadTop, tilePadBottom};
 
                 for (int kPartIdx = 0; kPartIdx < kPartLoop; kPartIdx++) {
                     uint32_t cin1PartActual = (kPartIdx < kPartLoop - 1) ?
