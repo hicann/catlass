@@ -12,7 +12,6 @@
 #define CATLASS_TEST_COMMON_HPP
 
 // AscendCL headers
-#include "macros.hpp"
 
 #ifdef ASCENDC_MODULE_OPERATOR_H
 #undef inline

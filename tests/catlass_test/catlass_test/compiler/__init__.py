@@ -99,7 +99,6 @@ class TemplateCompiler:
 
     def compile(self, compile_definitions: Dict[str, str]) -> str:
         """编译算子"""
-        # logger.info(f"compiling kernel {kernel_name}")
 
         dcompile_params = []
         for var_name in self.compile_params.keys():
@@ -115,6 +114,7 @@ class TemplateCompiler:
             )
             + ".so"
         )
+        logger.info(f"compiling kernel {kernel_name}")
         kernel_full_path = os.path.join(CATLASS_TEST_KERNEL_PATH, kernel_name)
         if os.path.exists(kernel_full_path):
             return kernel_full_path
