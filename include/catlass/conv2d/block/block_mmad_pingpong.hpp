@@ -156,8 +156,8 @@ public:
         uint8_t blockPadRight = blockPadList[1];
         uint8_t blockPadTop = blockPadList[2];
         uint8_t blockPadBottom = blockPadList[3];
-        uint32_t wiActual = actualShape.wi();
-        uint32_t hiActual = actualShape.hi();
+        uint32_t wiActual = actualShape.w();
+        uint32_t hiActual = actualShape.h();
         int32_t wiActualOrg = wiActual + blockPadLeft + blockPadRight;
         int32_t hiActualOrg = hiActual + blockPadTop + blockPadBottom;
 
@@ -199,7 +199,7 @@ public:
         }
 
         uint32_t hoL0Tile = L0TileShape::M / woActual;
-        uint32_t mPartLoop = CeilDiv<hoL0Tile>(hoActual);
+        uint32_t mPartLoop = CeilDiv(hoActual, hoL0Tile);
         uint32_t nPartLoop = CeilDiv<L0TileShape::N>(coutRound);
         uint32_t cin1L0Tile = L0TileShape::K / (configs.kh() * configs.kw() * ELE_NUM_A_PER_C0);
         uint32_t kL0Tile = cin1L0Tile * configs.kh() * configs.kw() * ELE_NUM_A_PER_C0;
@@ -248,7 +248,7 @@ public:
             // AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1ListId]);
             
             // Get the loop nums on L0
-            uint32_t kPartLoop = CeilDiv<cin1L0Tile>(cin1Actual);
+            uint32_t kPartLoop = CeilDiv(cin1Actual, cin1L0Tile);
 
             uint32_t hiPartOffset = 0;
             for (int mPartIdx = 0; mPartIdx < mPartLoop; mPartIdx++) {
