@@ -20,3 +20,9 @@ torchvision = [{ index = "pytorch-cpu" }]
 name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
 explicit = true
+
+[tool.setuptools.packages.find]
+include = ["catlass_test*"]
+
+[tool.setuptools.package-data]
+"catlass_test" = ["csrc/**/*", "csrc/*"]
