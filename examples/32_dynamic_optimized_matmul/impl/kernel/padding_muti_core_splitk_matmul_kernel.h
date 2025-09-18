@@ -40,7 +40,7 @@ struct TileCopyDynamicOptimized : public Catlass::Gemm::Tile::TileCopy<ArchTag, 
 };
 
 template <class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC,
-    PaddingTag paddingTagA, PaddingTag paddingTagB,  PaddingTag paddingTagC>
+    PaddingTag paddingTagA, PaddingTag paddingTagB>
 [[bisheng::core_ratio(1, 2)]] CATLASS_GLOBAL void PaddingMutiCoreSplitkMatmulKernel(uint64_t fftsAddr, __gm__ uint8_t *__restrict__ gmA,
     __gm__ uint8_t *__restrict__ gmB, __gm__ uint8_t *__restrict__ gmC, __gm__ uint8_t *__restrict__ gmWA,
     __gm__ uint8_t *__restrict__ gmWB, __gm__ uint8_t *__restrict__ gmReduceW, __gm__ uint8_t *__restrict__ tilingData)
@@ -136,10 +136,8 @@ template <class ElementA, class LayoutA, class ElementB, class LayoutB, class El
 
     using PaddingBuilderA = Catlass::Gemm::Kernel::PaddingBuilder<paddingTagA, ArchTag, ElementA, LayoutA>;
     using PaddingBuilderB = Catlass::Gemm::Kernel::PaddingBuilder<paddingTagB, ArchTag, ElementB, LayoutB>;
-    using RemovePaddingBuilderC = Catlass::Gemm::Kernel::PaddingBuilder<paddingTagC, ArchTag, ElementC, LayoutC>;
     using PaddingA = typename PaddingBuilderA::Padding;
     using PaddingB = typename PaddingBuilderB::Padding;
-    using RemovePaddingC = typename RemovePaddingBuilderC::Padding;
 
     constexpr bool enableUnitFlag = true;
     constexpr bool enableShuffleK = true;
@@ -152,11 +150,14 @@ template <class ElementA, class LayoutA, class ElementB, class LayoutB, class El
     using TileCopy = TileCopyDynamicOptimized<ArchTag, AType, BType, CType>;
     using BlockMmad = Catlass::Gemm::Block::BlockMmad<DispatchPolicy, void, void, AType, BType, CType, void, TileCopy>;
     using BlockEpilogue = void;
+
+    constexpr uint32_t computeLength = 32 * 1024 / sizeof(float);
+    using RecudeAdd = Catlass::Gemm::Kernel::ReduceAdd<ArchTag, float, ElementC, computeLength>;
     if (problemShape.m() > problemShape.n()) {
         using BlockScheduler = typename Catlass::Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
         // kernel level
         using MatmulKernel = Catlass::Gemm::Kernel::DynamicPaddingMatmul<
-            PaddingA, PaddingB, BlockMmad, BlockEpilogue, BlockScheduler, RemovePaddingC>;
+            PaddingA, PaddingB, BlockMmad, BlockEpilogue, BlockScheduler, RecudeAdd>;
         typename MatmulKernel::Params params{
             problemShape, l1TileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, gmWA, gmWB, gmReduceW, splitkFactor};
         // call a kernel
@@ -166,7 +167,7 @@ template <class ElementA, class LayoutA, class ElementB, class LayoutB, class El
         using BlockScheduler = typename Catlass::Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
         // kernel level
         using MatmulKernel = Catlass::Gemm::Kernel::DynamicPaddingMatmul<
-            PaddingA, PaddingB, BlockMmad, BlockEpilogue, BlockScheduler, RemovePaddingC>;
+            PaddingA, PaddingB, BlockMmad, BlockEpilogue, BlockScheduler, RecudeAdd>;
         typename MatmulKernel::Params params{
             problemShape, l1TileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, gmWA, gmWB, gmReduceW, splitkFactor};
         // call a kernel
@@ -177,7 +178,7 @@ template <class ElementA, class LayoutA, class ElementB, class LayoutB, class El
 
 template <class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC,
     PaddingTag paddingTagA, PaddingTag paddingTagB>
-void LaunchPaddingMutiCoreSplitkKernel(aclrtStream &stream, uint64_t fftsAddr, uint8_t *dA, uint8_t *dB, uint8_t *dC,
+void LaunchPaddingMutiCoreSplitkMatmulKernel(aclrtStream &stream, uint64_t fftsAddr, uint8_t *dA, uint8_t *dB, uint8_t *dC,
     uint8_t *dW, uint8_t *dTilingParams, TilingParams &tilingParams)
 {
     using ArchTag = Catlass::Arch::AtlasA2;
@@ -222,7 +223,7 @@ void LaunchPaddingMutiCoreSplitkKernel(aclrtStream &stream, uint64_t fftsAddr, u
 
 template <class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC,
     PaddingTag paddingTagA, PaddingTag paddingTagB>
-size_t PaddingMutiCoreSplitkKernelGetWorkspaceSize(TilingParams &tilingParams)
+size_t PaddingMutiCoreSplitkMatmulKernelGetWorkspaceSize(TilingParams &tilingParams)
 {
     using ArchTag = Catlass::Arch::AtlasA2;
     using PaddingBuilderA = Catlass::Gemm::Kernel::PaddingBuilder<paddingTagA, ArchTag, ElementA, LayoutA>;
