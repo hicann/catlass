@@ -46,19 +46,19 @@ struct Conv2dFilterL1Shape { // (Cout, Cin1)
 };
 
 template <
-    uint32_t mL0_ = 16,
-    uint32_t nL0_ = 16,
-    uint32_t kL0_ = 16
+    uint32_t M_ = 16,
+    uint32_t N_ = 16,
+    uint32_t K_ = 16
 >
 struct Conv2dL0Shape {
-    static constexpr uint32_t mL0 = mL0_;
-    static constexpr uint32_t nL0 = nL0_;
-    static constexpr uint32_t kL0 = kL0_;
+    static constexpr uint32_t M = M_;
+    static constexpr uint32_t N = N_;
+    static constexpr uint32_t K = K_;
 
     /// Returns a Coord object
     CATLASS_HOST_DEVICE
     static Coord<3> ToCoord() {
-        return MakeCoord(mL0, nL0, kL0);
+        return MakeCoord(M, N, K);
     }
 };
 
@@ -303,7 +303,7 @@ public:
 };
 
 template <
-    uint32_t Batch = 1,
+    uint32_t Batch_ = 1,
     uint32_t Cout1_ = 1,
     uint32_t Ho_ = 1,
     uint32_t Wo_ = 1,
