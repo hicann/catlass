@@ -112,10 +112,10 @@ void GetPaddingTag(TilingParams& tilingParams, PlatformInfo& platformInfo) {
     if (matrixASize > 192 * 1024 * 1024) { // L2 cache size
         aBandwidthAiv = 10;
     }
-    double aBandwidthBeforePaddingAic = GetBandWidth(nValueA, dValueA, innerAxisA);
+    double aBandwidthBeforePaddingAic = GetBandwidth(nValueA, dValueA, innerAxisA);
     
     uint32_t tasksAic = CeilDiv(m, m1) * CeilDiv(n, n1) * splitkFactor;
-    uint32_t blockDimAic = tasksAic > platformInfo.coreNum ? platformInfo.coreNum : taskBlocks;
+    uint32_t blockDimAic = tasksAic > platformInfo.coreNum ? platformInfo.coreNum : tasksAic;
     if (CeilDiv(m, m1) < blockDimAic / 2 && k <= k1 && CeilDiv(m, m1) <= 2) {
         aBandwidthBeforePaddingAic = aBandwidthBeforePaddingAic / (blockDimAic / CeilDiv(m, m1) * 1.5);
     }
@@ -126,7 +126,7 @@ void GetPaddingTag(TilingParams& tilingParams, PlatformInfo& platformInfo) {
     if (matrixBSize > 192 * 1024 * 1024) { // L2 cache size
         bBandwidthAiv = 10;
     }
-    double bBandwidthBeforePaddingAic = GetBandWidth(nValueB, dValueB, innerAxisB); 
+    double bBandwidthBeforePaddingAic = GetBandwidth(nValueB, dValueB, innerAxisB); 
     if (CeilDiv(n, n1) < blockDimAic / 2 && k <= k1 && CeilDiv(n, n1) <= 2) {
         bBandwidthBeforePaddingAic = bBandwidthBeforePaddingAic / (blockDimAic / CeilDiv(n, n1) * 1.5);
     }
@@ -168,12 +168,12 @@ void GetPaddingTag(TilingParams& tilingParams, PlatformInfo& platformInfo) {
             taskRows = outterAxisB;
         }
         taskCols = RoundUp(innerAxisB / CeilDiv(innerAxisB, taskCols), 16);
-        uint32_t taskAivB = CeilDiv(outterAxisB, taskRows) * CeilDiv(innerAxisB, taskCols);
+        uint32_t tasksAivB = CeilDiv(outterAxisB, taskRows) * CeilDiv(innerAxisB, taskCols);
         uint32_t maxTasksPerCore = CeilDiv(tasksAivB, platformInfo.coreNum * 2);
         bMaxDataSizeAiv = maxTasksPerCore * taskCols * taskRows * 2;
     }
 
-    uint32_t tasksAiv = std::max(taskAivA, taskAivB);
+    uint32_t tasksAiv = std::max(tasksAivA, tasksAivB);
     uint32_t blockDimAiv = CeilDiv(tasksAiv, 2) > platformInfo.coreNum ? platformInfo.coreNum : CeilDiv(tasksAiv, 2);
     uint32_t blockDim = blockDimAic;
     if (innerAxisA > 192 && innerAxisB > 192) {
@@ -228,13 +228,14 @@ void GetPaddingTag(TilingParams& tilingParams, PlatformInfo& platformInfo) {
         size_t totalDataSize = static_cast<size_t>(m) * k * CeilDiv(n, n1) * 2
             + static_cast<size_t>(k) * n * CeilDiv(m, m1) * 2 + static_cast<size_t>(m) * n * 2;
         if (totalDataSize < 96 * 1024 * 1024) { // half of L2 cache size
-            paddingTagC = paddingTag::PADDING_NZ;
+            paddingTagC = PaddingTag::PADDING_NZ;
         }
     }
 
     tilingParams.paddingTagA = static_cast<uint8_t>(paddingTagA);
     tilingParams.paddingTagB = static_cast<uint8_t>(paddingTagB); 
-    tilingParams.paddingTagC = static_cast<uint8_t>(paddingTagC); 
+    tilingParams.paddingTagC = static_cast<uint8_t>(paddingTagC);
+    tilingParams.blockDim = blockDim;
 }
 
 bool CommonMatmulB16Handler(TilingParams &params, PlatformInfo& platformInfo)
@@ -248,6 +249,7 @@ bool CommonMatmulB16Handler(TilingParams &params, PlatformInfo& platformInfo)
 bool SmallMatmulB16Handler(TilingParams &params, PlatformInfo& platformInfo)
 {
     uint8_t kernelSerial = 1;
+    GetPaddingTag(params, PlatformInfo);
     uint32_t taskBlocks = CeilDiv(params.m, params.m1) * CeilDiv(params.n, params.n1);
     if (taskBlocks <= platformInfo.coreNum && params.k <= params.k1) {
         params.tilingKey.SetTilingKey(kernelSerial, params.layoutTagA, params.layoutTagB, 0, 0, 0, 0);
@@ -259,7 +261,6 @@ bool SmallMatmulB16Handler(TilingParams &params, PlatformInfo& platformInfo)
 bool PaddingMatmulB16Handler(TilingParams &params, PlatformInfo& PlatformInfo)
 {
     uint8_t kernelSerial = 2;
-    GetPaddingTag(params);
     if (params.paddingTagA || params.paddingTagB || params.paddingTagC) {
         params.tilingKey.SetTilingKey(kernelSerial, 
             params.layoutTagA, params.layoutTagB, 0, params.paddingTagA, params.paddingTagB, params.paddingTagC); 
@@ -282,16 +283,6 @@ void SelectKernelB16(TilingParams &tilingParams, PlatformInfo& platformInfo)
             break;
         }
     }
-
-    uint32_t m = tilingParams.m;
-    uint32_t n = tilingParams.n;
-    uint32_t m1 = tilingParams.m1;
-    uint32_t n1 = tilingParams.n1;
-
-    uint32_t tasksAic = CeilDiv(m, m1) * CeilDiv(n, n1) * tilingParams.splitkFactor;
-    uint32_t blockDimAic = tasksAic > platformInfo.coreNum ? platformInfo.coreNum : tasksAic;
-
-    tilingParams.blockDim = blockDimAic;
 }
 
 #endif  // SELECT_KERNEL_HALF_H
