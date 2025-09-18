@@ -21,8 +21,8 @@ using fp16_t = op::fp16_t;
 void DoTilingB16Layout00(TilingParams &tilingParams, PlatformInfo& platformInfo)
 {
     uint32_t m = tilingParams.m;
-    uint32_t n = tilingParams.m;
-    uint32_t k = tilingParams.m;
+    uint32_t n = tilingParams.n;
+    uint32_t k = tilingParams.k;
     uint32_t m1 = 128, n1 = 256, k1 = 256;
 
     if (n >= 256) {
@@ -59,8 +59,8 @@ void DoTilingB16Layout00(TilingParams &tilingParams, PlatformInfo& platformInfo)
 void DoTilingB16Layout01(TilingParams &tilingParams, PlatformInfo& platformInfo)
 {
     uint32_t m = tilingParams.m;
-    uint32_t n = tilingParams.m;
-    uint32_t k = tilingParams.m;
+    uint32_t n = tilingParams.n;
+    uint32_t k = tilingParams.k;
     uint32_t m1 = 128, n1 = 256, k1 = 256;
     // When LayoutA is RowMajor and LayoutB is ColumnMajor, bandwidth issues can be completely disregarded,
     // simply choose the tiling configureation with the most balanced workload
@@ -110,8 +110,8 @@ void DoTilingB16Layout01(TilingParams &tilingParams, PlatformInfo& platformInfo)
 void DoTilingB16Layout10(TilingParams &tilingParams, PlatformInfo& platformInfo)
 {
     uint32_t m = tilingParams.m;
-    uint32_t n = tilingParams.m;
-    uint32_t k = tilingParams.m;
+    uint32_t n = tilingParams.n;
+    uint32_t k = tilingParams.k;
     uint32_t m1 = 128, n1 = 256, k1 = 256;
     double ratio = (double)(m * k + k * n) / (m * n);
     if (m > n && (ratio > 0.1 || n < 256)) {
@@ -157,8 +157,8 @@ void DoTilingB16Layout10(TilingParams &tilingParams, PlatformInfo& platformInfo)
 void DoTilingB16Layout11(TilingParams &tilingParams, PlatformInfo& platformInfo)
 {
     uint32_t m = tilingParams.m;
-    uint32_t n = tilingParams.m;
-    uint32_t k = tilingParams.m;
+    uint32_t n = tilingParams.n;
+    uint32_t k = tilingParams.k;
     uint32_t m1 = 256, n1 = 128, k1 = 256;
 
     if (m >= 256) {

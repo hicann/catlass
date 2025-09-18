@@ -249,7 +249,7 @@ bool CommonMatmulB16Handler(TilingParams &params, PlatformInfo& platformInfo)
 bool SmallMatmulB16Handler(TilingParams &params, PlatformInfo& platformInfo)
 {
     uint8_t kernelSerial = 1;
-    GetPaddingTag(params, PlatformInfo);
+    GetPaddingTag(params, platformInfo);
     uint32_t taskBlocks = CeilDiv(params.m, params.m1) * CeilDiv(params.n, params.n1);
     if (taskBlocks <= platformInfo.coreNum && params.k <= params.k1) {
         params.tilingKey.SetTilingKey(kernelSerial, params.layoutTagA, params.layoutTagB, 0, 0, 0, 0);
@@ -258,7 +258,7 @@ bool SmallMatmulB16Handler(TilingParams &params, PlatformInfo& platformInfo)
     return false;
 }
 
-bool PaddingMatmulB16Handler(TilingParams &params, PlatformInfo& PlatformInfo)
+bool PaddingMatmulB16Handler(TilingParams &params, PlatformInfo& platformInfo)
 {
     uint8_t kernelSerial = 2;
     if (params.paddingTagA || params.paddingTagB || params.paddingTagC) {

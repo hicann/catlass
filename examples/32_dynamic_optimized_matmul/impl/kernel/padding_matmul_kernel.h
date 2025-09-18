@@ -41,10 +41,11 @@ struct TileCopyDynamicOptimized : public Catlass::Gemm::Tile::TileCopy<ArchTag, 
 
 template <class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC,
     PaddingTag paddingTagA, PaddingTag paddingTagB,  PaddingTag paddingTagC>
-CATLASS_GLOBAL __attribute__((aic)) void PaddingMatmulKernel(__gm__ uint8_t *__restrict__ gmA,
+[[bisheng::core_ratio(1, 2)]] CATLASS_GLOBAL void PaddingMatmulKernel(uint64_t fftsAddr, __gm__ uint8_t *__restrict__ gmA,
     __gm__ uint8_t *__restrict__ gmB, __gm__ uint8_t *__restrict__ gmC, __gm__ uint8_t *__restrict__ gmWA,
     __gm__ uint8_t *__restrict__ gmWB, __gm__ uint8_t *__restrict__ gmWC, __gm__ uint8_t *__restrict__ tilingData)
 {
+    AscendC::SetSyncBaseAddr(fftsAddr);
     using ArchTag = Catlass::Arch::AtlasA2;
     Catlass::Arch::Resource<ArchTag> resource;
 
@@ -215,7 +216,7 @@ void LaunchPaddingMatmulKernel(aclrtStream &stream, uint64_t fftsAddr, uint8_t *
     }
 
     PaddingMatmulKernel<ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC, paddingTagA, paddingTagB, paddingTagC>
-        <<<tilingParams.blockDim, nullptr, stream>>>(dA, dB, dC, dWA, dWB, dWC, dTilingParams);
+        <<<tilingParams.blockDim, nullptr, stream>>>(fftsAddr, dA, dB, dC, dWA, dWB, dWC, dTilingParams);
 }
 
 template <class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC,
