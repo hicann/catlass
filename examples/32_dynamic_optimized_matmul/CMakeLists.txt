@@ -45,6 +45,7 @@ add_compile_options(
     $<$<COMPILE_LANGUAGE:CXX>:-O3> 
     $<$<COMPILE_LANGUAGE:CXX>:-std=c++17> 
     $<$<COMPILE_LANGUAGE:CXX>:-static-libstdc++>
+    $<$<COMPILE_LANGUAGE:CXX>:-static-libgcc>
 )
 add_executable(32_dynamic_optimized_matmul dynamic_optimized_matmul.cpp)
 add_dependencies(catlass_examples 32_dynamic_optimized_matmul)
