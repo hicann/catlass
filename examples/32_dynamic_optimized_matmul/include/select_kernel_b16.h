@@ -274,10 +274,46 @@ bool PaddingMatmulB16Handler(TilingParams &params, PlatformInfo& platformInfo)
     return false;
 }
 
-bool SplitkMatmulHalfHandler(TilingParams& params)
+bool SplitkMatmulB16Handler(TilingParams& params, PlatformInfo& platformInfo)
 {
-    
-
+    uint32_t m = params.m;
+    uint32_t n = params.n;
+    uint32_t k = params.k;
+    uint32_t m1t = 128, n1t = 256, k1t = 256;
+    LayoutTag layoutTagA = static_cast<LayoutTag>(params.layoutTagA);
+    LayoutTag layoutTagB = static_cast<LayoutTag>(params.layoutTagB);
+    bool cond1 = (layoutTagA == LayoutTag::TagColumnMajor && layoutTagB == LayoutTag::TagColumnMajor);
+    bool cond2 = (layoutTagA == LayoutTag::TagColumnMajor && layoutTagB == LayoutTag::TagRowMajor) && (m > n); 
+    if (cond1 || cond2) {
+        m1t = 256;
+        n1t = 128;
+    }
+    uint32_t blocks = CeilDiv(m, m1t) * CeilDiv(n, n1t);
+    uint32_t maxSplitkFactor = 2;
+    if (k > 1024) {
+        maxSplitkFactor = 4;
+    }
+    if (k > 2048) {
+        maxSplitkFactor = 8;
+    }
+    if (k > 4096) {
+        maxSplitkFactor = 16;
+    }
+    if (k >= 12288) {
+        maxSplitkFactor = platformInfo.coreNum;
+    }
+    if ((blocks <= platformInfo.coreNum / 2 && k > 5120) || (blocks <= 2 && k > 1024)) {
+        params.m1 = m1t;
+        params.n1 = n1t;
+        params.k1 = k1t;
+        params.splitkFactor = std::min(platformInfo.coreNum / blocks, maxSplitkFactor);
+        GetPaddingTag(params, platformInfo);
+        uint8_t kernelSerial = 3;
+        params.tilingKey.SetTilingKey(kernelSerial, 
+            params.layoutTagA, params.layoutTagB, 0, params.paddingTagA, params.paddingTagB, 0); 
+        return true;
+    }
+    return false;
 }
 
 void SelectKernelB16(TilingParams &tilingParams, PlatformInfo& platformInfo)
@@ -285,6 +321,7 @@ void SelectKernelB16(TilingParams &tilingParams, PlatformInfo& platformInfo)
     using HandlerPtr = bool (*)(TilingParams& tilingParams, PlatformInfo& platformInfo);
     HandlerPtr handlers[] = {
         SmallMatmulB16Handler,
+        SplitkMatmulB16Handler,
         PaddingMatmulB16Handler,
         CommonMatmulB16Handler
     };

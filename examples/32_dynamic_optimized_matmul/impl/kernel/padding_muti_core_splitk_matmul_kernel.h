@@ -145,7 +145,7 @@ template <class ElementA, class LayoutA, class ElementB, class LayoutB, class El
 
     using AType = Catlass::Gemm::GemmType<ElementA, typename PaddingBuilderA::LayoutAfterPadding>;
     using BType = Catlass::Gemm::GemmType<ElementB, typename PaddingBuilderB::LayoutAfterPadding>;
-    using CType = Catlass::Gemm::GemmType<ElementC, LayoutC>;
+    using CType = Catlass::Gemm::GemmType<float, LayoutC>;
 
     using TileCopy = TileCopyDynamicOptimized<ArchTag, AType, BType, CType>;
     using BlockMmad = Catlass::Gemm::Block::BlockMmad<DispatchPolicy, void, void, AType, BType, CType, void, TileCopy>;

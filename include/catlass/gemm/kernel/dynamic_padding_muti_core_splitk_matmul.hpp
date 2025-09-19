@@ -199,7 +199,7 @@ public:
             }
         }
         AscendC::GlobalTensor<ElementC> gmC;
-        gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrC);
+        gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrReduceW);
 
         BlockMmad blockMmad(params.l1TileShape, resource);
 
