@@ -41,7 +41,11 @@ include_directories(
 
 link_libraries(dynamic_optimized_kernel runtime)
 
-add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-O3> $<$<COMPILE_LANGUAGE:CXX>:-std=c++17>)
+add_compile_options(
+    $<$<COMPILE_LANGUAGE:CXX>:-O3> 
+    $<$<COMPILE_LANGUAGE:CXX>:-std=c++17> 
+    $<$<COMPILE_LANGUAGE:CXX>:-static-libstdc++>
+)
 add_executable(32_dynamic_optimized_matmul dynamic_optimized_matmul.cpp)
 add_dependencies(catlass_examples 32_dynamic_optimized_matmul)
 add_dependencies(32_dynamic_optimized_matmul dynamic_optimized_kernel)
