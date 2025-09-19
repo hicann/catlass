@@ -18,7 +18,7 @@
 #include "catlass/layout/layout.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
-#include "catlass/gemm/kernel/dynamic_padding_matmul.hpp"
+#include "catlass/gemm/kernel/dynamic_padding_muti_core_splitk_matmul.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 
 using PaddingTag = Catlass::Gemm::Kernel::PaddingTag;
@@ -154,9 +154,9 @@ template <class ElementA, class LayoutA, class ElementB, class LayoutB, class El
     constexpr uint32_t computeLength = 32 * 1024 / sizeof(float);
     using RecudeAdd = Catlass::Gemm::Kernel::ReduceAdd<ArchTag, float, ElementC, computeLength>;
     if (problemShape.m() > problemShape.n()) {
-        using BlockScheduler = typename Catlass::Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
+        using BlockScheduler = typename Catlass::Gemm::Block::SplitkGemmIdentityBlockSwizzle<3, 0>;
         // kernel level
-        using MatmulKernel = Catlass::Gemm::Kernel::DynamicPaddingMatmul<
+        using MatmulKernel = Catlass::Gemm::Kernel::DynamicPaddingMutiCoreSplitkMatmul<
             PaddingA, PaddingB, BlockMmad, BlockEpilogue, BlockScheduler, RecudeAdd>;
         typename MatmulKernel::Params params{
             problemShape, l1TileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, gmWA, gmWB, gmReduceW, splitkFactor};
@@ -164,9 +164,9 @@ template <class ElementA, class LayoutA, class ElementB, class LayoutB, class El
         MatmulKernel matmul;
         matmul(params, resource);
     } else {
-        using BlockScheduler = typename Catlass::Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
+        using BlockScheduler = typename Catlass::Gemm::Block::SplitkGemmIdentityBlockSwizzle<3, 1>;
         // kernel level
-        using MatmulKernel = Catlass::Gemm::Kernel::DynamicPaddingMatmul<
+        using MatmulKernel = Catlass::Gemm::Kernel::DynamicPaddingMutiCoreSplitkMatmul<
             PaddingA, PaddingB, BlockMmad, BlockEpilogue, BlockScheduler, RecudeAdd>;
         typename MatmulKernel::Params params{
             problemShape, l1TileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, gmWA, gmWB, gmReduceW, splitkFactor};

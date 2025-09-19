@@ -274,6 +274,12 @@ bool PaddingMatmulB16Handler(TilingParams &params, PlatformInfo& platformInfo)
     return false;
 }
 
+bool SplitkMatmulHalfHandler(TilingParams& params)
+{
+    
+
+}
+
 void SelectKernelB16(TilingParams &tilingParams, PlatformInfo& platformInfo)
 {
     using HandlerPtr = bool (*)(TilingParams& tilingParams, PlatformInfo& platformInfo);

@@ -77,10 +77,11 @@ public:
 
         CATLASS_HOST_DEVICE
         Params(GemmCoord const &problemShape_, GemmCoord const &l1TileShape_, GM_ADDR ptrA_, LayoutA& layoutA_,
-            GM_ADDR ptrB_, LayoutB& layoutB_, GM_ADDR ptrC_, LayoutC& layoutC_, GM_ADDR ptrWA_, GM_ADDR ptrWB_
-            GM_ADDR ptrReduceW_)
+            GM_ADDR ptrB_, LayoutB& layoutB_, GM_ADDR ptrC_, LayoutC& layoutC_, GM_ADDR ptrWA_, GM_ADDR ptrWB_,
+            GM_ADDR ptrReduceW_, uint32_t splitkFactor_)
             : problemShape(problemShape_), l1TileShape(l1TileShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_),
-              layoutB(layoutB_), ptrC(ptrC_), layoutC(layoutC_), ptrWA(ptrWA_), ptrWB(ptrWB_), ptrReduceW(ptrReduceW_)
+              layoutB(layoutB_), ptrC(ptrC_), layoutC(layoutC_), ptrWA(ptrWA_), ptrWB(ptrWB_), ptrReduceW(ptrReduceW_),
+              splitkFactor(splitkFactor_)
         {}
     };
 
@@ -161,8 +162,7 @@ public:
             Catlass::Arch::CrossCoreWaitFlag(flagAivFinishPadding);
         }
 
-        BlockScheduler matmulBlockScheduler(
-            params.problemShape, MakeCoord(params.l1TileShape.m(), params.l1TileShape.n()));
+        BlockScheduler matmulBlockScheduler(params.problemShape, params.l1TileShape, params.splitkFactor);
         uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
 
         typename BlockMmad::LayoutA layoutA;
@@ -213,7 +213,8 @@ public:
             bool isFirstBlock = (loopIdx == AscendC::GetBlockIdx());
             if (isFirstBlock) {
                 blockCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
-                actualBlockShape = matmulBlockScheduler.GetActualBlockShape(blockCoord);
+                actualBlockShape = matmulBlockScheduler.GetActualBlockShape(
+                    blockCoord, matmulBlockScheduler.GetSplitkSliceIdx(loopIdx));
             } else {
                 blockCoord = nextBlockCoord;
                 actualBlockShape = nextActualBlockShape;
@@ -223,7 +224,8 @@ public:
             if (loopIdx + AscendC::GetBlockNum() < coreLoops) {
                 hasNextBlock = true;
                 nextBlockCoord = matmulBlockScheduler.GetBlockCoord(loopIdx + AscendC::GetBlockNum());
-                nextActualBlockShape = matmulBlockScheduler.GetActualBlockShape(nextBlockCoord);
+                nextActualBlockShape = matmulBlockScheduler.GetActualBlockShape(nextBlockCoord,
+                    matmulBlockScheduler.GetSplitkSliceIdx(loopIdx + AscendC::GetBlockNum()));
             }
 
             // Compute initial location in logical coordinates
@@ -234,7 +236,7 @@ public:
             int64_t gmOffsetB = layoutB.GetOffset(coordB);
             int64_t gmOffsetC = params.layoutC.GetOffset(coordC)
                 + static_cast<uint64_t>(params.problemShape.m()) * params.problemShape.n() 
-                * matmulBlockScheduler.GetSplitSliceIdx(loopIdx);
+                * matmulBlockScheduler.GetSplitkSliceIdx(loopIdx);
 
             MatrixCoord coordNextA{
                 nextBlockCoord.m() * params.l1TileShape.m(), nextBlockCoord.k() * params.l1TileShape.k()};
