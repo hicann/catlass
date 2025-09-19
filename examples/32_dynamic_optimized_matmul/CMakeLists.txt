@@ -25,7 +25,12 @@ add_custom_command(
 )
 
 add_compile_definitions(TILING_KEY_VAR)
-add_compile_options($<$<COMPILE_LANGUAGE:ASCEND>:--cce-aicore-arch=dav-c220>)
+add_compile_options(
+    $<$<COMPILE_LANGUAGE:ASCEND>:--cce-aicore-arch=dav-c220>
+    $<$<COMPILE_LANGUAGE:ASCEND>:-std=c++17>
+    $<$<COMPILE_LANGUAGE:ASCEND>:-static-libstdc++>
+    $<$<COMPILE_LANGUAGE:ASCEND>:-static-libgcc>
+)
 file(GLOB CATLASS_SHARED_LIB_SRC CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/impl/wrapper/*.cpp)
 set_source_files_properties(${CATLASS_SHARED_LIB_SRC} PROPERTIES LANGUAGE ASCEND)
 
