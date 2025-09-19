@@ -73,11 +73,10 @@ CATLASS_DEVICE void DynamicCommonMatmul(Catlass::GemmCoord &problemShape, Catlas
     }
 }
 
-template <class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC>
+template <class ArchTag, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC>
 CATLASS_GLOBAL __attribute__((aic)) void CommonMatmulKernel(__gm__ uint8_t *__restrict__ gmA,
     __gm__ uint8_t *__restrict__ gmB, __gm__ uint8_t *__restrict__ gmC, __gm__ uint8_t *__restrict__ tilingData)
 {
-    using ArchTag = Catlass::Arch::AtlasA2;
     Catlass::Arch::Resource<ArchTag> resource;
 
     /*
@@ -164,15 +163,15 @@ CATLASS_GLOBAL __attribute__((aic)) void CommonMatmulKernel(__gm__ uint8_t *__re
         problemShape, l1TileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, resource);
 }
 
-template <class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC>
+template <class ArchTag, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC>
 void LaunchCommonMatmulKernel(aclrtStream &stream, uint64_t fftsAddr, uint8_t *dA, uint8_t *dB, uint8_t *dC,
     uint8_t *dTilingParams, TilingParams &tilingParams)
 {
-    CommonMatmulKernel<ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC>
+    CommonMatmulKernel<ArchTag, ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC>
         <<<tilingParams.blockDim, nullptr, stream>>>(dA, dB, dC, dTilingParams);
 }
 
-template <class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC>
+template <class ArchTag, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC>
 size_t CommonMatmulKernelGetWorkspaceSize(TilingParams &tilingParams)
 {
     return 0;
