@@ -81,16 +81,16 @@ struct CopyL0CToGm<Catlass::Arch::AtlasA2,
     void operator()(
         AscendC::GlobalTensor<ElementDst> const &dst,
         AscendC::LocalTensor<ElementSrc> const &src,
-        LayoutDst const &dstLayout, uint8_t unitFlag = 0) // (Cout1, Ho, Wo, C0)
+        LayoutDst const &dstLayout, uint8_t unitFlag = 0) // (Batch, Cout1, Ho, Wo, C0)
     {
-        uint32_t cout1Actual = dstLayout.shape(0);
+        uint32_t cout1Actual = dstLayout.shape(1);
         uint32_t coutRound = cout1Actual * C0;
-        uint32_t hoActual = dstLayout.shape(1);
-        uint32_t woActual = dstLayout.shape(2);
+        uint32_t hoActual = dstLayout.shape(2);
+        uint32_t woActual = dstLayout.shape(3);
         uint32_t howoActual = hoActual * woActual;
         uint32_t howoRound = RoundUp<C0>(howoActual);
-        uint32_t strideHo = dstLayout.stride(1); // Wo * C0
-        uint32_t strideHoWo = dstLayout.stride(0); // Ho * Wo * C0 
+        uint32_t strideHo = dstLayout.stride(2); // Wo * C0
+        uint32_t strideHoWo = dstLayout.stride(1); // Ho * Wo * C0 
         uint32_t HoWo = strideHoWo / C0;
 
         for (int hoIdx = 0; hoIdx < hoActual; hoIdx++) {

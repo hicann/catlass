@@ -42,17 +42,17 @@ struct CopyGmToL1<ArchTag, Conv2d::Conv2dType<Element, layout::Fmap, AscendC::TP
     CopyGmToL1() {};
 
     CATLASS_DEVICE
-    void operator()( // {Cin1, Hi, Wi, C0}
+    void operator()( // {Batch, Cin1, Hi, Wi, C0}
         AscendC::LocalTensor<Element> const &dstTensor,
         AscendC::GlobalTensor<Element> const &srcTensor,
-        LayoutDst const &layoutDst, // layoutFmapInL1{L1TileShape::Cin1, hiBlock, wiBlock, ELE_NUM_A_PER_C0}
-        LayoutSrc const &layoutSrc) // layoutTileFmap{cin1Actual, actualShape.hi(), actualShape.wi(), ELE_NUM_A_PER_C0}
+        LayoutDst const &layoutDst, // layoutFmapInL1{1, L1TileShape::Cin1, hiBlock, wiBlock, ELE_NUM_A_PER_C0}
+        LayoutSrc const &layoutSrc) // layoutTileFmap{Batch, cin1Actual, actualShape.hi(), actualShape.wi(), ELE_NUM_A_PER_C0}
     {   
-        uint32_t cin1Actual = layoutSrc.shape(0);
-        uint32_t hiActual = layoutSrc.shape(1);
-        uint32_t wiActual = layoutSrc.shape(2);
-        uint32_t strideCin1 = layoutSrc.stride(0); // Hi * Wi * ELE_NUM_PER_C0
-        uint32_t strideHi = layoutSrc.stride(1); // Wi * ELE_NUM_PER_C0
+        uint32_t cin1Actual = layoutSrc.shape(1);
+        uint32_t hiActual = layoutSrc.shape(2);
+        uint32_t wiActual = layoutSrc.shape(3);
+        uint32_t strideCin1 = layoutSrc.stride(1); // Hi * Wi * ELE_NUM_PER_C0
+        uint32_t strideHi = layoutSrc.stride(2); // Wi * ELE_NUM_PER_C0
         uint32_t Wi = strideHi / ELE_NUM_PER_C0;
 
         for(int cin1Idx = 0; cin1Idx < cin1Actual; cin1Idx++) {

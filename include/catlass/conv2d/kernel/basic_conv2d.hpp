@@ -84,11 +84,13 @@ public:
     }
 
     static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace) {
-        LayoutFmap layoutFmap{args.problemShape.cin1(), args.problemShape.hi(),
+        LayoutFmap layoutFmap{args.problemShape.batch(),
+            args.problemShape.cin1(), args.problemShape.hi(),
             args.problemShape.wi(), args.problemShape.C0};
         LayoutFilter layoutFilter{args.problemShape.cin1(), args.problemShape.kh(),
             args.problemShape.kw(), args.problemShape.cout(), args.problemShape.C0};
-        LayoutOutput layoutOutput{args.problemShape.cout1(), args.problemShape.ho(),
+        LayoutOutput layoutOutput{args.problemShape.batch(),
+            args.problemShape.cout1(), args.problemShape.ho(),
             args.problemShape.wo(), args.problemShape.C0};
         Params params{args.problemShape, args.ptrFmap, layoutFmap,
             args.ptrFilter, layoutFilter, args.ptrOutput, layoutOutput};

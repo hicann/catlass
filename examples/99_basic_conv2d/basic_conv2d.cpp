@@ -43,8 +43,8 @@ struct Options {
   const std::string HELPER = 
     "24_basic_conv2d batch, hi, wi, cin, cout, kh, kw, padLeft, padRight, padTop, padBottom, strideH, strideW, dilationH, dilationW [device_id]";
 
-  // uint32_t dataSizes[5] = {1, 4, 6, 16, 16}; // {hi, wi, cin, cout}
-  uint32_t dataSizes[5] = {1, 33, 43, 160, 176}; // {hi, wi, cin, cout}
+  // uint32_t dataSizes[5] = {1, 4, 6, 16, 16}; // {batch, hi, wi, cin, cout}
+  uint32_t dataSizes[5] = {1, 33, 43, 160, 176}; // {batch, hi, wi, cin, cout}
   uint8_t filterSizes[2] = {3, 3}; // {Kh, Kw}
   uint8_t pads[4] = {0, 0, 0, 0}; // {padLeft, padRight, padTop, padBottom}
   uint8_t strides[2] = {1, 1}; // {strideH, strideW}
@@ -184,7 +184,7 @@ void Run(Options const &options) {
   using DispatchPolicy = Conv2d::MmadAtlasA2Pingpong<ENABLE_UNIT_FLAG>;
   using FmapL1TileShape = Catlass::Conv2dFmapL1Shape<8, 12, 8>; // (hoBlock, woBlock, cin1Block_small)
   using FilterL1TileShape = Catlass::Conv2dFilterL1Shape<96, 8>; // (coutBlock, cin1Block_big)
-  using L0TileShape = Catlass::Conv2dL0Shape<16, 16, 16>; // (mL0, nL0, kL0)
+  using L0TileShape = Catlass::Conv2dL0Shape<16, 16, 3*3*16>; // (mL0, nL0, kL0)
 
   uint32_t hoBlock = FmapL1TileShape::Ho;
   uint32_t woBlock = FmapL1TileShape::Wo;
