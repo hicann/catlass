@@ -226,7 +226,7 @@ void Run(Options const &options)
     using BiasType = Gemm::GemmType<half, LayoutBias>;
     using OutType = Gemm::GemmType<half, LayoutOut>;
 
-    using CoreTileShape = ConvCoreShape<2, 2, 2, 3>;  // nDim, dDim, c1Dim, hwDim
+    using CoreTileShape = ConvCoreShape<2, 2, 2, 2>;  // nDim, dDim, c1Dim, hwDim
     using FmapL1TileShape = ConvFmapL1Shape<16, 1, 1>;  //mAL1, kd, c1
     using FilterL1TileShape = ConvFilterL1Shape<1, 1, 16>;  // kd, c1, nBL1
     using L0TileShape = ConvL0Shape<16, 16, 16>;  //mL0 kL0 nL0
