@@ -125,7 +125,7 @@ void Run(Options const &options)
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
     using ArchTag = Arch::AtlasA2;
-    using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
+    using DispatchPolicy = Gemm::MmadPingpong<ArchTag, true>;
     using L1TileShape = Shape<_128, _256, _256>;
     using L0TileShape = Shape<_128, _256, _64>;
 

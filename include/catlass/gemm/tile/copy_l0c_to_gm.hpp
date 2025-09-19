@@ -185,6 +185,10 @@ struct CopyL0CToGm<Catlass::Arch::AtlasA2,
         intriParams.reluEn = reluEn;
         intriParams.unitFlag = unitFlag;
 
+        if constexpr (std::is_same_v<ElementSrc, float> && std::is_same_v<ElementDst, float>) {
+            intriParams.isChannelSplit = true;
+        }
+
         // Call AscendC Fixpipe
         AscendC::Fixpipe<ElementDst, ElementSrc, AscendC::CFG_NZ>(dst, src, intriParams);
     }
@@ -344,6 +348,10 @@ struct CopyL0CToGmTla<Catlass::Arch::AtlasA2,
         intriParams.quantPre = quantPre;
         intriParams.reluEn = reluEn;
         intriParams.unitFlag = unitFlag;
+
+        if constexpr (std::is_same_v<ElementSrc, float> && std::is_same_v<ElementDst, float>) {
+            intriParams.isChannelSplit = true;
+        }
 
         auto dstOffset = dstTensor.layout()(dstTensor.coord());
         auto srcOffset = srcTensor.layout()(srcTensor.coord());
