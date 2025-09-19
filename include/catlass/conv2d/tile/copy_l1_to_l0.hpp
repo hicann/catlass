@@ -102,26 +102,68 @@ struct CopyL1ToL0B<ArchTag, Catlass::Conv2d::Conv2dType<Element, layout::Filter,
     void operator()(
         AscendC::LocalTensor<Element> dstTensor,
         AscendC::LocalTensor<Element> srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc,
         uint32_t cin1L0Actual, uint32_t coutRound)
     {
-      uint8_t nIters = 
-        (cin1L0Actual * configs.kh() * configs.kw() * coutRound * ELE_NUM_PER_C0) / ELE_NUM_PER_FRACTAL;
-        
-      AscendC::LoadData(
-          dstTensor,
-          srcTensor,
-          {
-            0, // startIndex
-            nIters, // 迭代次数
-            1, // srcStride (相邻迭代间，源操作数前一个分形与后一个分形起始地址的间隔，单位：512B)
-            0, // 预留参数，配置为0即可
-            0, // dstGap (相邻迭代间，目的操作数前一个分形结束地址与后一个分形起始地址的间隔，单位：512B)
-            false, // 不启用转置
-            0 // 预留参数，配置为0即可
-          }
-      );
+        // layoutSrc = layoutFilterInL1 shape(cin1L1, kh, kw, coutRound, C0)
+        // layoutDst = layoutFilterInL0 shape(cinL0Actual*kh*kw*C0, nPartActual)
+        AscendC::LoadData2DParams loadDataParams;
+
+        loadDataParams.startIndex = 0;
+        loadDataParams.repeatTimes = static_cast<uint16_t>(layoutDst.shape(3));
+        loadDataParams.srcStride = 1;
+        loadDataParams.sid = 0;
+        loadDataParams.dstGap = 0;
+        loadDataParams.ifTranspose = false;
+        loadDataParams.addrMode = 0;
+
+        for (uint32_t i = 0; i < LayoutDst.shape(1); i++) {
+            AscendC::LoadData(
+                dstTensor[i * layoutDst.stride(1)],
+                srcTensor[i * LayoutSrc.shape(3) * ELE_NUM_PER_C0],
+                loadDataParams
+            );
+        }
     }
 };
+
+// template<class ArchTag, class Element>
+// struct CopyL1ToL0B<ArchTag, Catlass::Conv2d::Conv2dType<Element, layout::Filter, AscendC::TPosition::A1>>{
+//     using LayoutDst = layout::nZ;
+//     using LayoutSrc = layout::Filter;
+
+//     static constexpr uint32_t ELE_NUM_PER_C0 =  BYTE_PER_C0 / sizeof(Element);
+//     static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
+
+//     Conv2dConfigs configs;
+
+//     CATLASS_DEVICE
+//     CopyL1ToL0B(const Conv2dConfigs& configs_) : configs(configs_) {};
+
+//     CATLASS_DEVICE
+//     void operator()(
+//         AscendC::LocalTensor<Element> dstTensor,
+//         AscendC::LocalTensor<Element> srcTensor,
+//         uint32_t cin1L0Actual, uint32_t coutRound)
+//     {
+//       uint8_t nIters = 
+//         (cin1L0Actual * configs.kh() * configs.kw() * coutRound * ELE_NUM_PER_C0) / ELE_NUM_PER_FRACTAL;
+        
+//       AscendC::LoadData(
+//           dstTensor,
+//           srcTensor,
+//           {
+//             0, // startIndex
+//             nIters, // 迭代次数
+//             1, // srcStride (相邻迭代间，源操作数前一个分形与后一个分形起始地址的间隔，单位：512B)
+//             0, // 预留参数，配置为0即可
+//             0, // dstGap (相邻迭代间，目的操作数前一个分形结束地址与后一个分形起始地址的间隔，单位：512B)
+//             false, // 不启用转置
+//             0 // 预留参数，配置为0即可
+//           }
+//       );
+//     }
+// };
 
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
