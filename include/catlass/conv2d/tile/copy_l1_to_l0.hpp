@@ -102,8 +102,8 @@ struct CopyL1ToL0B<ArchTag, Catlass::Conv2d::Conv2dType<Element, layout::Filter,
     void operator()(
         AscendC::LocalTensor<Element> dstTensor,
         AscendC::LocalTensor<Element> srcTensor,
-        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc,
-        uint32_t cin1L0Actual, uint32_t coutRound)
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+        // uint32_t cin1L0Actual, uint32_t coutRound)
     {
         // layoutSrc = layoutFilterInL1 shape(cin1L1, kh, kw, coutRound, C0)
         // layoutDst = layoutFilterInL0 shape(cinL0Actual*kh*kw*C0, nPartActual)
@@ -117,10 +117,10 @@ struct CopyL1ToL0B<ArchTag, Catlass::Conv2d::Conv2dType<Element, layout::Filter,
         loadDataParams.ifTranspose = false;
         loadDataParams.addrMode = 0;
 
-        for (uint32_t i = 0; i < LayoutDst.shape(1); i++) {
+        for (uint32_t i = 0; i < layoutDst.shape(1); i++) {
             AscendC::LoadData(
                 dstTensor[i * layoutDst.stride(1)],
-                srcTensor[i * LayoutSrc.shape(3) * ELE_NUM_PER_C0],
+                srcTensor[i * layoutSrc.shape(3) * ELE_NUM_PER_C0],
                 loadDataParams
             );
         }
