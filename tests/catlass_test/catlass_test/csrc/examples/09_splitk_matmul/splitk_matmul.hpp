@@ -9,6 +9,7 @@
 #include "catlass/layout/layout.hpp"
 #include "catlass/status.hpp"
 #include "catlass_test/common.hpp"
+using namespace Catlass;
 template <class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC>
 inline TEMPLATE_RET_TYPE SplitkMatmul(aclrtStream stream, GemmCoord problemShape, uint8_t *deviceA, uint8_t *deviceB, uint8_t *deviceC) {
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();

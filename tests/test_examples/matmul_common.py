@@ -2,7 +2,7 @@ import pytest
 import pandas as pd
 import torch
 
-from catlass_test import *
+import catlass_test
 
 cases = pd.read_csv("csv/matmul.csv")
 
