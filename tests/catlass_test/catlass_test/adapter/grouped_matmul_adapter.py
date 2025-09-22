@@ -10,9 +10,9 @@ from typing import Any, Dict, Literal, Tuple
 
 import torch
 
-from catlass_test.adapter import MatmulAdapter
+from catlass_test.adapter.matmul_adapter import MatmulAdapter
 from catlass_test.catlass.gemm_coord import GemmCoord
-from catlass_test.catlass_test.common import OpType, swap
+from catlass_test.common import OpType, swap
 
 
 class GroupedMatmulAdapter(MatmulAdapter):

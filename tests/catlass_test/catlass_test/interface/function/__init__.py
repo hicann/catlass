@@ -12,7 +12,7 @@ import torch
 
 from catlass_test import CATLASS_TEST_KERNEL_EXAMPLES_PATH
 from catlass_test.adapter import GroupedMatmulAdapter, MatmulAdapter
-from tests.catlass_test.catlass_test.common import OpType
+from catlass_test.common import OpType
 
 
 def basic_matmul(

@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 import torch
-# from catlass_test import basic_matmul
+from catlass_test import basic_matmul
 
 cases = pd.read_csv("csv/matmul.csv")
 

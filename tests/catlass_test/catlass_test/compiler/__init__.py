@@ -13,7 +13,7 @@ from catlass_test import (
     CATLASS_TEST_KERNEL_PATH,
     CATLASS_TEST_PATH,
 )
-from tests.catlass_test.catlass_test.common import OpType
+from catlass_test.common import OpType
 
 CATLASS_KERNEL_ENTRY_FILE = os.path.join(CATLASS_TEST_PATH, "csrc", "kernel.cpp")
 
