@@ -70,15 +70,15 @@ struct FAKernelInfo {
     uint32_t blockSize{128};
     aclDataType dataType = ACL_FLOAT16;
 
-    std::vector<unit8_t *> inputAddr;
-    std::vector<unit8_t *> outputAddr;
-}
+    std::vector<uint8_t *> inputAddr;
+    std::vector<uint8_t *> outputAddr;
+};
 
 void BasicMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo);
 void GroupedMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo);
 void OptimizedMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo);
 void ConvBias(uint32_t blockNum, aclrtStream stream, ConvKernelInfo kernelInfo);
-void FlashAttentionInfer(const uint32_t blockNum, aclrtStream stream, ConvKernelInfo kernelInfo)
+void FlashAttentionInfer(const uint32_t blockNum, aclrtStream stream, ConvKernelInfo kernelInfo);
 } // namespace CatlassKernel
 
 #endif // SHARED_LIB_CATLASS_KERNEL_H
