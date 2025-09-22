@@ -16,11 +16,12 @@ if(GENERATE_MATMUL_WRAPPER_CODE)
 endif()
 
 add_custom_target(auto_gen_code)
+file(GLOB_RECURSE AUTO_GEN_CODE_SRC CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/impl/scripts/*.py)
 add_custom_command(
     TARGET auto_gen_code
     COMMAND python ${CMAKE_CURRENT_SOURCE_DIR}/impl/scripts/wrapper_code_gen.py
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/impl/scripts
-    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/impl/scripts/wrapper_code_gen.py
+    DEPENDS ${AUTO_GEN_CODE_SRC}
     COMMENT "Generate wrapper code, launch_map.h ...done"
 )
 
@@ -29,7 +30,7 @@ add_compile_options($<$<COMPILE_LANGUAGE:ASCEND>:--cce-aicore-arch=dav-c220>)
 file(GLOB CATLASS_SHARED_LIB_SRC CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/impl/wrapper/*.cpp)
 set_source_files_properties(${CATLASS_SHARED_LIB_SRC} PROPERTIES LANGUAGE ASCEND)
 
-add_library(dynamic_optimized_kernel SHARED ${CATLASS_SHARED_LIB_SRC})
+add_library(dynamic_optimized_kernel STATIC ${CATLASS_SHARED_LIB_SRC})
 set_target_properties(dynamic_optimized_kernel PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 include_directories(
@@ -39,12 +40,9 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/impl
     ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-add_link_options(-Wl,-rpath,${CMAKE_INSTALL_PREFIX}/shared_lib/lib) 
 link_libraries(dynamic_optimized_kernel runtime)
-
 add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-O3>)
 
-set_source_files_properties(dynamic_optimized_matmul.cpp PROPERTIES LANGUAGE ASCEND)
 add_executable(32_dynamic_optimized_matmul dynamic_optimized_matmul.cpp)
 add_dependencies(catlass_examples 32_dynamic_optimized_matmul)
 add_dependencies(32_dynamic_optimized_matmul dynamic_optimized_kernel)
