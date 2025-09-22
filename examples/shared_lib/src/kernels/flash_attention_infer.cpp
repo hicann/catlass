@@ -872,10 +872,10 @@ void FAImpl(const uint32_t blockNum, aclrtStream stream, const FAKernelInfo &ker
     faInfo.batch = batch;
     faInfo.maskType = static_cast<FAInferTiling::MaskType>(maskType);
     uint8_t *qSeqHost;
-    AllocMem(&qSeqHost, &qSeqDevice, seqArraySize);
-    faInfo.qSeqlenList = reinterpret_cast<int64_t *>(qSeqHost);
+    ACL_CHECK(aclrtMallocHost(reinterpret_cast<void **>(qSeqHost), seqArraySize));
     uint8_t *kvSeqHost;
-    AllocMem(&kvSeqHost, &kvSeqDevice, seqArraySize);
+    ACL_CHECK(aclrtMallocHost(reinterpret_cast<void **>(kvSeqHost), seqArraySize));
+    faInfo.qSeqlenList = reinterpret_cast<int64_t *>(qSeqHost);
     faInfo.kvSeqlenList = reinterpret_cast<int64_t *>(kvSeqHost);
 
     FATilingData faTilingData;
