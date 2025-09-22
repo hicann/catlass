@@ -14,7 +14,7 @@
 #include <acl/acl.h>
 #include "catlass/catlass.hpp"
 #include "catlass/status.hpp"
-#include "catlass/gemm/device/kernel_adapter.hpp"
+#include "catlass/detail/kernel_adapter.hpp"
 
 #if defined(ENABLE_ASCENDC_DUMP)
 #include "catlass/debug.hpp"
