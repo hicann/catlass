@@ -900,7 +900,7 @@ void FAImpl(const uint32_t blockNum, aclrtStream stream, const FAKernelInfo &ker
     ACL_CHECK(aclrtSynchronizeStream(stream));
 }
 
-void FlashAttentionInfer(uint32_t blockNum, aclrtStream stream, ConvKernelInfo kernelInfo)
+void FlashAttentionInfer(uint32_t blockNum, aclrtStream stream, FAKernelInfo kernelInfo)
 {
     if (kernelInfo.dataType == ACL_FLOAT16) {
         FAImpl<half>(blockNum, stream, kernelInfo);

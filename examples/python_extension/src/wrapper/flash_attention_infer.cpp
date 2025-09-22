@@ -35,10 +35,6 @@ FAKernelInfo GetKernelInfo(const at::Tensor &qNtokens, const at::Tensor &qSeqDev
     kernelInfo.inputAddr[5] = static_cast<uint8_t *>(const_cast<void *>(vDevice.storage().data()));
     kernelInfo.inputAddr[6] = static_cast<uint8_t *>(const_cast<void *>(maskDevice.storage().data()));
     kernelInfo.inputAddr[7] = static_cast<uint8_t *>(const_cast<void *>(blockTableDevice.storage().data()));
-    // if ((str_dtype != "half") && (str_dtype != "bf16")) {
-    //     cerr << "[ERROR] dtype must be 'half' or 'bf16'." << endl;
-    //     return;
-    // }
 
     kernelInfo.batch = batch;
     kernelInfo.qSeqlen = q_seqlen;
@@ -46,15 +42,20 @@ FAKernelInfo GetKernelInfo(const at::Tensor &qNtokens, const at::Tensor &qSeqDev
     kernelInfo.numHeads = num_head;
     kernelInfo.kvHeads = kv_heads;
     kernelInfo.embeddingSize = embedding_size;
-    kernelInfo.blockSize = embedding_size;
-    kernelInfo.embeddingSize = embedding_size;  // 此处存在问题需要整改
+    kernelInfo.blockSize = 128;  // 此处存在问题需要整改
     kernelInfo.isVariedLen = is_varied_len;
     kernelInfo.maskType = mask_type;
+
+    if ((str_dtype != "half") && (str_dtype != "bf16")) {
+        throw std::runtime_error("str_dtype of fai should be half or bf16.");
+        return;
+    }
+    kernelInfo.dataType = str_dtype;
 
     return kernelInfo;
 }
 
-OutputType AllocOutput(FAKernelInfo &kernelInfo)  // 为甚
+OutputType AllocOutput(FAKernelInfo &kernelInfo)
 {
     void *qNtokens = kernelInfo.inputAddr.at(0);
     int32_t numTokens = static_cast<int32_t *>(qNtokens)[0];
