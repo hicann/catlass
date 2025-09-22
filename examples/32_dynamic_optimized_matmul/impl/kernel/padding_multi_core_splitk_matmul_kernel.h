@@ -252,7 +252,7 @@ size_t PaddingMultiCoreSplitkMatmulKernelGetWorkspaceSize(TilingParams &tilingPa
     } else if constexpr (paddingTagB == PaddingTag::PADDING_NZ) {
         sizeWB = PaddingBuilderB::Padding::GetWorkspaceSize(k, n);
     }
-    sizeReduceW = static_cast<size_t>(m) * n * tilingParams.splitkFactor;
+    sizeReduceW = static_cast<size_t>(m) * n * tilingParams.splitkFactor * sizeof(float);
     return sizeWA + sizeWB + sizeReduceW;
 }
 

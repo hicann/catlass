@@ -87,7 +87,7 @@ size_t {get_workspace_func_name}(TilingParams& tilingParams)
                 + str(p_tag_b)
                 + "GetWorkspaceSize"
             )
-            # file name can be padding_matmul_kernel_half_layout_00.cpp
+            # file name can be padding_multi_core_splitk_matmul_kernel_half_layout_00.cpp
             file_name = (
                 base_file_name
                 + "_"
