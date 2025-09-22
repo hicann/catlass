@@ -39,4 +39,8 @@ class BlockEpilogue {
 #include "catlass/epilogue/block/block_epilogue_mla_tp1_rescale_o.hpp"
 #include "catlass/epilogue/block/block_epilogue_online_softmax_no_mask.hpp"
 #include "catlass/epilogue/block/block_epilogue_rescale_o_no_split_row.hpp"
+#include "catlass/epilogue/block/block_epilogue_fag_op.hpp"
+#include "catlass/epilogue/block/block_epilogue_fag_post.hpp"
+#include "catlass/epilogue/block/block_epilogue_fag_pre.hpp"
+#include "catlass/epilogue/block/block_epilogue_fag_sfmg.hpp"
 #endif  // CATLASS_EPILOGUE_BLOCK_BLOCK_EPILOGUE_HPP
