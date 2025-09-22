@@ -27,5 +27,6 @@ TORCH_LIBRARY_IMPL(CatlassTorch, NPU, m)
 {
     m.impl("basic_matmul", &RunBasicMatmul)
         .impl("grouped_matmul", &RunGroupedMatmul)
-        .impl("optimized_matmul", &RunOptimizedMatmul);
+        .impl("optimized_matmul", &RunOptimizedMatmul)
+        .impl("flash_attention_infer", &RunFlashAttentionInfer);
 }
