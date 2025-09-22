@@ -78,7 +78,7 @@ void BasicMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo &
 void GroupedMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo);
 void OptimizedMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo);
 void ConvBias(uint32_t blockNum, aclrtStream stream, ConvKernelInfo kernelInfo);
-void FlashAttentionInfer(const uint32_t blockNum, aclrtStream stream, ConvKernelInfo kernelInfo);
+void FlashAttentionInfer(const uint32_t blockNum, aclrtStream stream, FAKernelInfo kernelInfo);
 } // namespace CatlassKernel
 
 #endif // SHARED_LIB_CATLASS_KERNEL_H

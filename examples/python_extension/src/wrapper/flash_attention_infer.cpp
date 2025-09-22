@@ -46,11 +46,10 @@ FAKernelInfo GetKernelInfo(const at::Tensor &qNtokens, const at::Tensor &qSeqDev
     kernelInfo.isVariedLen = is_varied_len;
     kernelInfo.maskType = mask_type;
 
-    if ((str_dtype != "half") && (str_dtype != "bf16")) {
-        throw std::runtime_error("str_dtype of fai should be half or bf16.");
-        return;
+    if ((str_dtype != "float16") && (str_dtype != "bf16")) {
+        throw std::runtime_error("str_dtype of fai should be float16 or bf16.");
     }
-    kernelInfo.dataType = str_dtype;
+    kernelInfo.dataType = TypeStrToAclDtype(str_dtype);
 
     return kernelInfo;
 }
