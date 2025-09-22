@@ -37,7 +37,7 @@ inline TEMPLATE_RET_TYPE PaddingMatmul(aclrtStream stream, GemmCoord problemShap
 
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
         typename MatmulKernel::Arguments arguments{
-            options.problemShape, align, sizeof(float), deviceA, deviceB, deviceC};
+            problemShape, align, sizeof(float), deviceA, deviceB, deviceC};
         MatmulAdapter matmulOp;
         RUN_ADAPTER(matmulOp, arguments, stream, aicCoreNum);
     } else {
@@ -49,7 +49,7 @@ inline TEMPLATE_RET_TYPE PaddingMatmul(aclrtStream stream, GemmCoord problemShap
 
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
         typename MatmulKernel::Arguments arguments{
-            options.problemShape, align, sizeof(float), deviceA, deviceB, deviceC};
+            problemShape, align, sizeof(float), deviceA, deviceB, deviceC};
         MatmulAdapter matmulOp;
         RUN_ADAPTER(matmulOp, arguments, stream, aicCoreNum);
     }
