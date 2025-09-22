@@ -49,7 +49,7 @@ uint64_t getFftsAddr() {
     uint64_t fftsAddr = 0;
 #if defined(MIX_AIC_1_0) || defined(MIX_AIC_1_1) || defined(MIX_AIC_1_2)
     uint32_t fftsLen = 0;
-    RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen))
+    RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
 #endif
     return fftsAddr;
 }
