@@ -367,6 +367,191 @@ struct GemmIdentityBlockSwizzleL1FullLoad {
     }
 };
 
+/// Block swizzling function for streamk Gemms
+template <uint32_t SwizzleOffset = 1, uint32_t SwizzleDirection = 0>
+struct StreamkGemmIdentityBlockSwizzle {
+    /// Data members
+
+    GemmCoord problemShape;
+    GemmCoord tileMNK;
+    GemmCoord loopsMNK;
+    uint32_t blockDim;
+    // Represents the number of ordinary blocks.
+    uint32_t normalBlocks;
+    // Represents the number of blocks that need to be split according to the Streamk algorithm.
+    uint32_t streamkBlocks;
+    // If computing streamk blocks, how many kTile should each core process
+    uint32_t kTileNumPerCore;
+    // Since the number of kTiles may not be evenly divisible by the number of cores,
+    // some cores need to compute one additoinal kTile compared to others
+    uint32_t kTileRemain;
+
+    struct StreamkBlockDec {
+        // If the current block is a ordinary block, set it to false.
+        // If it is a streamk block, set it to true.
+        bool isStreamkBlock{false};
+        // If the current block is a cross block-meaning it consists partly of the tail k portion of the
+        // current basic block and partly of the head k portion of the next basic block, set it to true.
+        bool isCrossBlock{false};
+
+        GemmCoord blockCoord;
+        GemmCoord actualBlockShape;
+        GemmCoord streamkBlockCoord;
+        GemmCoord streamkActualBlockShape;
+    };
+
+
+    /// Methods
+
+    CATLASS_DEVICE
+    StreamkGemmIdentityBlockSwizzle() {}
+
+    CATLASS_DEVICE
+    StreamkGemmIdentityBlockSwizzle(
+        GemmCoord const &problemShape_, GemmCoord const &tileMNK_, uint32_t blockDim_
+    ) : problemShape(problemShape_), tileMNK(tileMNK_), blockDim(blockDim_)
+    {
+        loopsMNK = CeilDiv(problemShape, tileMNK);
+        streamkBlocks = loopsMNK.m() * loopsMNK.n() % blockDim;
+        normalBlocks = loopsMNK.m() * loopsMNK.n() - streamkBlocks;
+        kTileNumPerCore = streamkBlocks * loopsMNK.k() / blockDim;
+        kTileRemain = streamkBlocks * loopsMNK.k() % blockDim;
+    }
+
+    CATLASS_DEVICE
+    uint32_t GetCoreLoops() const
+    {
+        uint32_t blocksNum = loopsMNK.m() * loopsMNK.n();
+        uint32_t coreLoops = blocksNum / blockDim * blockDim + min(streamkBlocks * loopsMNK.k(), blockDim);
+        return coreLoops;
+    }
+
+    CATLASS_DEVICE
+    GemmCoord GetBlockCoord(uint32_t taskIdx)
+    {
+        uint32_t innerIdx = taskIdx % GetCoreLoops();
+        if constexpr (SwizzleDirection == 0) { // Zn
+            uint32_t tileBlockLoop = CeilDiv(loopsMNK.m(), SwizzleOffset);
+            uint32_t tileBlockIdx = innerIdx / (SwizzleOffset * loopsMNK.n());
+            uint32_t inTileBlockIdx = innerIdx % (SwizzleOffset * loopsMNK.n());
+
+            uint32_t nRow = SwizzleOffset;
+            if (tileBlockIdx == tileBlockLoop - 1) {
+                nRow = loopsMNK.m() - SwizzleOffset * tileBlockIdx;
+            }
+            uint32_t mIdx = tileBlockIdx * SwizzleOffset + inTileBlockIdx % nRow;
+            uint32_t nIdx = inTileBlockIdx / nRow;
+            if (tileBlockIdx % 2 == 1) {
+                nIdx = loopsMNK.n() - nIdx - 1;
+            }
+            return GemmCoord{mIdx, nIdx, 0};
+        } else if constexpr (SwizzleDirection == 1) { // Nz
+            uint32_t tileBlockLoop = CeilDiv(loopsMNK.n(), SwizzleOffset);
+            uint32_t tileBlockIdx = innerIdx / (SwizzleOffset * loopsMNK.m());
+            uint32_t inTileBlockIdx = innerIdx % (SwizzleOffset * loopsMNK.m());
+
+            uint32_t nCol = SwizzleOffset;
+            if (tileBlockIdx == tileBlockLoop - 1) {
+                nCol = loopsMNK.n() - SwizzleOffset * tileBlockIdx;
+            }
+            uint32_t mIdx = inTileBlockIdx / nCol;
+            uint32_t nIdx = tileBlockIdx * SwizzleOffset + inTileBlockIdx % nCol;
+            if (tileBlockIdx % 2 == 1) {
+                mIdx = loopsMNK.m() - mIdx - 1;
+            }
+            return GemmCoord{mIdx, nIdx, 0};
+        }
+    }
+
+    CATLASS_DEVICE
+    GemmCoord GetActualBlockShape(GemmCoord blockCoord)
+    {
+        uint32_t mActual = 
+            (blockCoord.m() == (loopsMNK.m() - 1)) ? (problemShape.m() - blockCoord.m() * tileMNK.m()) : tileMNK.m();
+        uint32_t nActual = 
+            (blockCoord.n() == (loopsMNK.n() - 1)) ? (problemShape.n() - blockCoord.n() * tileMNK.n()) : tileMNK.n();
+        uint32_t kActual = problemShape.k();
+        return GemmCoord{mActual, nActual, kActual};
+    }
+
+    CATLASS_DEVICE
+    uint32_t GetStreamkBlockNum() { return streamkBlocks; }
+
+    CATLASS_DEVICE
+    uint32_t GetNormalBlockNum() { return normalBlocks; }
+
+    CATLASS_DEVICE
+    void GetStreamkBlockDec(uint32_t loopIdx, StreamkBlockDec &streamkBlockDec)
+    {
+        if (loopIdx < normalBlocks) {
+            streamkBlockDec.isStreamkBlock = false;
+            streamkBlockDec.isCrossBlock = false;
+            streamkBlockDec.blockCoord = GetBlockCoord(loopIdx);
+            streamkBlockDec.actualBlockShape = GetActualBlockShape(streamkBlockDec.blockCoord);
+        } else {
+            streamkBlockDec.isStreamkBlock = true;
+            uint32_t curKTileNum = kTileNumPerCore;
+            uint32_t kTileIdx = ((loopIdx - normalBlocks) * kTileNumPerCore + kTileRemain);
+            if (loopIdx - normalBlocks < kTileRemain) {
+                curKTileNum += 1;
+                kTileIdx = ((loopIdx - normalBlocks) * curKTileNum);
+            }
+            uint32_t streamkBlockIdx = kTileIdx / loopsMNK.k();
+            GemmCoord blockCoordTmp = GetBlockCoord(normalBlocks + streamkBlockIdx);
+            streamkBlockDec.blockCoord = GemmCoord{blockCoordTmp.m(), blockCoordTmp.n(), kTileIdx % loopsMNK.k()};
+
+            uint32_t nextStreamkBlockIdx = (kTileIdx + curKTileNum) / loopsMNK.k();
+            streamkBlockDec.isCrossBlock = false;
+            GemmCoord actualBlockShapeTmp = GetActualBlockShape(streamkBlockDec.blockCoord);
+            if ((kTileIdx % loopsMNK.k() + curKTileNum) * tileMNK.k() > problemShape.k()) {
+                streamkBlockDec.actualBlockShape = GemmCoord{actualBlockShapeTmp.m(), actualBlockShapeTmp.n(),
+                    problemShape.k() - (kTileIdx % loopsMNK.k()) * tileMNK.k()};
+            } else {
+                streamkBlockDec.actualBlockShape = 
+                    GemmCoord{actualBlockShapeTmp.m(), actualBlockShapeTmp.n(), curKTileNum * tileMNK.k()};
+            }
+            if (kTileIdx % loopsMNK.k() + curKTileNum > loopsMNK.k()) {
+                streamkBlockDec.isCrossBlock = true;
+                streamkBlockDec.streamkBlockCoord = GetBlockCoord(normalBlocks + nextStreamkBlockIdx);
+                GemmCoord streamkActualBlockShapeTmp = GetActualBlockShape(streamkBlockDec.streamkBlockCoord);
+                streamkBlockDec.streamkActualBlockShape = GemmCoord{streamkActualBlockShapeTmp.m(),
+                    streamkActualBlockShapeTmp.n(), ((kTileIdx + curKTileNum) % loopsMNK.k()) * tileMNK.k()};
+            }
+        }
+    }
+
+    CATLASS_DEVICE
+    uint32_t GetCoreIdx(uint32_t streamkBlockIdx)
+    {
+        if (streamkBlockIdx * loopsMNK.k() > kTileRemain * (kTileNumPerCore + 1)) {
+            return kTileRemain +
+                (streamkBlockIdx * loopsMNK.k() - kTileRemain * (kTileNumPerCore + 1)) / kTileNumPerCore;
+        } else {
+            return streamkBlockIdx * loopsMNK.k() / (kTileNumPerCore + 1);
+        }
+    }
+
+    CATLASS_DEVICE
+    bool IsCross(uint32_t streamkBlockIdx)
+    {
+        // If the head part of the current block and the tail part of the previous block are computed by
+        // the same core, return true.
+        if (streamkBlockIdx * loopsMNK.k() > kTileRemain * (kTileNumPerCore + 1)) {
+            if ((streamkBlockIdx * loopsMNK.k() - kTileRemain * (kTileNumPerCore + 1)) % kTileNumPerCore == 0) {
+                return false;
+            } else {
+                return true;
+            }
+        } else {
+            if ((streamkBlockIdx * loopsMNK.k()) % (kTileNumPerCore + 1) == 0) {
+                return false;
+            } else {
+                return true;
+            }
+        }
+    }
+};
+
 }  // namespace Catlass::Gemm::Block
 
 #endif  // CATLASS_GEMM_BLOCK_BLOCK_SWIZZLE_HPP

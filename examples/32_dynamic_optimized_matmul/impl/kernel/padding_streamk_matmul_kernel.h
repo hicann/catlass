@@ -18,7 +18,7 @@
 #include "catlass/layout/layout.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
-#include "catlass/gemm/kernel/dynamic_padding_multi_core_splitk_matmul.hpp"
+#include "catlass/gemm/kernel/dynamic_padding_streamk_matmul.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 
 using PaddingTag = Catlass::Gemm::Kernel::PaddingTag;
@@ -41,7 +41,8 @@ struct TileCopyDynamicOptimized : public Catlass::Gemm::Tile::TileCopy<ArchTag, 
 
 template <class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC,
     PaddingTag paddingTagA, PaddingTag paddingTagB>
-[[bisheng::core_ratio(1, 2)]] CATLASS_GLOBAL void PaddingMultiCoreSplitkMatmulKernel(uint64_t fftsAddr, __gm__ uint8_t *__restrict__ gmA,
+[[bisheng::core_ratio(1, 2)]] CATLASS_GLOBAL void PaddingStreamkMatmulKernel(
+    uint64_t fftsAddr, __gm__ uint8_t *__restrict__ gmA,
     __gm__ uint8_t *__restrict__ gmB, __gm__ uint8_t *__restrict__ gmC, __gm__ uint8_t *__restrict__ gmWA,
     __gm__ uint8_t *__restrict__ gmWB, __gm__ uint8_t *__restrict__ gmReduceW, __gm__ uint8_t *__restrict__ tilingData)
 {
@@ -65,7 +66,6 @@ template <class ElementA, class LayoutA, class ElementB, class LayoutB, class El
      * | 40-41  | 2    | m1          | uint16_t  | l1 mTile(16-bit to save space)|
      * | 42-43  | 2    | n1          | uint16_t  | l1 nTile(16-bit to save space)|
      * | 44-45  | 2    | k1          | uint16_t  | l1 kTile(16-bit to save space)|
-     * | 46-48  | 2    | splitkFactor| uint16_t  | splitk factor                 |
      * -------------------------------------------------------------------------
      */
     uint8_t tilingParams[48];
@@ -99,8 +99,7 @@ template <class ElementA, class LayoutA, class ElementB, class LayoutB, class El
      * | 36-37  | 2    | m1           | uint16_t  | tilingParams[36:37]| block M size       |
      * | 38-39  | 2    | n1           | uint16_t  | tilingParams[38:39]| block N size       |
      * | 40-41  | 2    | k1           | uint16_t  | tilingParams[40:41]| block K size       |
-     * | 42-43  | 2    | splitkFactor | uint16_t  | tilingParams[42:43]| block K size       |
-     * | 44-47  | 6    | (reserved)   |  -        | tilingParams[44:47]| unused             |
+     * | 42-47  | 6    | (reserved)   |  -        | tilingParams[42:47]| unused             |
      * -------------------------------------------------------------------------------------
      * This requires little-endian architecture to work correctly.
      */
@@ -125,8 +124,6 @@ template <class ElementA, class LayoutA, class ElementB, class LayoutB, class El
     uint32_t n1 = *(reinterpret_cast<uint16_t *>(tilingParams + 38));
     // read k1: tilingParams[40:41]
     uint32_t k1 = *(reinterpret_cast<uint16_t *>(tilingParams + 40));
-    // read splitkFactor: tilingParams[42:43]
-    uint32_t splitkFactor = *(reinterpret_cast<uint16_t *>(tilingParams + 42));
 
     Catlass::GemmCoord problemShape(m, n, k);
     Catlass::GemmCoord l1TileShape(m1, n1, k1);
@@ -152,24 +149,24 @@ template <class ElementA, class LayoutA, class ElementB, class LayoutB, class El
     using BlockEpilogue = void;
 
     constexpr uint32_t computeLength = 32 * 1024 / sizeof(float);
-    using RecudeAdd = Catlass::Gemm::Kernel::ReduceAdd<ArchTag, float, ElementC, computeLength>;
+    using RecudeAdd = Catlass::Gemm::Kernel::StreamkReduceAdd<ArchTag, BlockScheduler float, ElementC, computeLength>;
     if (problemShape.m() > problemShape.n()) {
-        using BlockScheduler = typename Catlass::Gemm::Block::SplitkGemmIdentityBlockSwizzle<3, 0>;
+        using BlockScheduler = typename Catlass::Gemm::Block::StreamkGemmIdentityBlockSwizzle<3, 0>;
         // kernel level
         using MatmulKernel = Catlass::Gemm::Kernel::DynamicPaddingMultiCoreSplitkMatmul<
             PaddingA, PaddingB, BlockMmad, BlockEpilogue, BlockScheduler, RecudeAdd>;
         typename MatmulKernel::Params params{
-            problemShape, l1TileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, gmWA, gmWB, gmReduceW, splitkFactor};
+            problemShape, l1TileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, gmWA, gmWB, gmReduceW};
         // call a kernel
         MatmulKernel matmul;
         matmul(params, resource);
     } else {
-        using BlockScheduler = typename Catlass::Gemm::Block::SplitkGemmIdentityBlockSwizzle<3, 1>;
+        using BlockScheduler = typename Catlass::Gemm::Block::StreamkGemmIdentityBlockSwizzle<3, 1>;
         // kernel level
         using MatmulKernel = Catlass::Gemm::Kernel::DynamicPaddingMultiCoreSplitkMatmul<
             PaddingA, PaddingB, BlockMmad, BlockEpilogue, BlockScheduler, RecudeAdd>;
         typename MatmulKernel::Params params{
-            problemShape, l1TileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, gmWA, gmWB, gmReduceW, splitkFactor};
+            problemShape, l1TileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, gmWA, gmWB, gmReduceW};
         // call a kernel
         MatmulKernel matmul;
         matmul(params, resource);
@@ -178,7 +175,7 @@ template <class ElementA, class LayoutA, class ElementB, class LayoutB, class El
 
 template <class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC,
     PaddingTag paddingTagA, PaddingTag paddingTagB>
-void LaunchPaddingMultiCoreSplitkMatmulKernel(aclrtStream &stream, uint64_t fftsAddr, uint8_t *dA, uint8_t *dB, uint8_t *dC,
+void LaunchPaddingStreamkMatmulKernel(aclrtStream &stream, uint64_t fftsAddr, uint8_t *dA, uint8_t *dB, uint8_t *dC,
     uint8_t *dW, uint8_t *dTilingParams, TilingParams &tilingParams)
 {
     using ArchTag = Catlass::Arch::AtlasA2;
@@ -217,13 +214,13 @@ void LaunchPaddingMultiCoreSplitkMatmulKernel(aclrtStream &stream, uint64_t ffts
 
     dReduceW = dW + sizeWA + sizeWB;
 
-    PaddingMultiCoreSplitkMatmulKernel<ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC, paddingTagA, paddingTagB
+    PaddingStreamkMatmulKernel<ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC, paddingTagA, paddingTagB
         ><<<tilingParams.blockDim, nullptr, stream>>>(fftsAddr, dA, dB, dC, dWA, dWB, dReduceW, dTilingParams);
 }
 
 template <class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC,
     PaddingTag paddingTagA, PaddingTag paddingTagB>
-size_t PaddingMultiCoreSplitkMatmulKernelGetWorkspaceSize(TilingParams &tilingParams)
+size_t PaddingStreamkMatmulKernelGetWorkspaceSize(TilingParams &tilingParams)
 {
     using ArchTag = Catlass::Arch::AtlasA2;
     using PaddingBuilderA = Catlass::Gemm::Kernel::PaddingBuilder<paddingTagA, ArchTag, ElementA, LayoutA>;
@@ -252,7 +249,7 @@ size_t PaddingMultiCoreSplitkMatmulKernelGetWorkspaceSize(TilingParams &tilingPa
     } else if constexpr (paddingTagB == PaddingTag::PADDING_NZ) {
         sizeWB = PaddingBuilderB::Padding::GetWorkspaceSize(k, n);
     }
-    sizeReduceW = static_cast<size_t>(m) * n * tilingParams.splitkFactor * sizeof(float);
+    sizeReduceW = static_cast<size_t>(m1) * n1 * 2 * sizeof(float);
     return sizeWA + sizeWB + sizeReduceW;
 }
 
