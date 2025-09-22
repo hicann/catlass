@@ -241,9 +241,13 @@ public:
                     break;
                 }
                 // Refresh the cycle round
-                iterParams.l12l0LoopM = iterParams.mAL1Iter == iterParams.maxMAL1Iter ? CeilDiv(iterParams.mAL1Tail, L0TileShape::mL0) : iterParams.mAL1DivmL0;
+                iterParams.l12l0LoopM = iterParams.mAL1Iter == iterParams.maxMAL1Iter
+                    ? CeilDiv(iterParams.mAL1Tail, L0TileShape::mL0)
+                    : iterParams.mAL1DivmL0;
                 iterParams.maxML0Iter = iterParams.l12l0LoopM - 1;
-                iterParams.l12l0LoopN = iterParams.nBL1Iter == iterParams.maxNBL1Iter ? CeilDiv(iterParams.nBL1Tail, L0TileShape::nL0) : iterParams.nBL1DivnL0;
+                iterParams.l12l0LoopN = iterParams.nBL1Iter == iterParams.maxNBL1Iter
+                    ? CeilDiv(iterParams.nBL1Tail, L0TileShape::nL0)
+                    : iterParams.nBL1DivnL0;
                 iterParams.maxNL0Iter = iterParams.l12l0LoopN - 1;
                 // Start the K-axis iterate
                 uint32_t n = (iterParams.nBL1Iter == iterParams.maxNBL1Iter && iterParams.nBL0Iter == iterParams.maxNL0Iter) ? iterParams.nL0Tail : L0TileShape::nL0;
