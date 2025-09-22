@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_GEMM_KERNEL_DYNAMIC_PADDING_MUTI_CORE_SPLITK_MATMUL_HPP
-#define CATLASS_GEMM_KERNEL_DYNAMIC_PADDING_MUTI_CORE_SPLITK_MATMUL_HPP
+#ifndef CATLASS_GEMM_KERNEL_DYNAMIC_PADDING_MULTI_CORE_SPLITK_MATMUL_HPP
+#define CATLASS_GEMM_KERNEL_DYNAMIC_PADDING_MULTI_CORE_SPLITK_MATMUL_HPP
 
 #include "catlass/catlass.hpp"
 #include "catlass/coord.hpp"
@@ -24,7 +24,7 @@ namespace Catlass::Gemm::Kernel {
 
 template <class PrologueA_, class PrologueB_, class BlockMmad_, 
     class BlockEpilogue_, class BlockScheduler_, class ReduceAdd_>
-class DynamicPaddingMutiCoreSplitkMatmul {
+class DynamicPaddingMultiCoreSplitkMatmul {
 public:
     using PrologueA = PrologueA_;
     using PrologueB = PrologueB_;
@@ -87,7 +87,7 @@ public:
 
     // Methods
     CATLASS_DEVICE
-    DynamicPaddingMutiCoreSplitkMatmul()
+    DynamicPaddingMultiCoreSplitkMatmul()
     {}
 
     template <int32_t CORE_TYPE = g_coreType>
@@ -272,4 +272,4 @@ private:
 
 }  // namespace Catlass::Gemm::Kernel
 
-#endif  // CATLASS_GEMM_KERNEL_DYNAMIC_PADDING_MUTI_CORE_SPLITK_MATMUL_HPP
+#endif  // CATLASS_GEMM_KERNEL_DYNAMIC_PADDING_MULTI_CORE_SPLITK_MATMUL_HPP

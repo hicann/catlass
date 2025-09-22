@@ -11,10 +11,10 @@ import itertools
 
 from utils.config import Config
 
-class PaddingMutiCoreSplitkMatmulTemplate:
+class PaddingMultiCoreSplitkMatmulTemplate:
 
     TEMPLATE = """
-#include "kernel/padding_muti_core_splitk_matmul_kernel.h"
+#include "kernel/padding_multi_core_splitk_matmul_kernel.h"
 void {launch_kernel_func_name}(aclrtStream& stream, uint64_t fftsAddr,
     uint8_t* dA, uint8_t* dB, uint8_t* dC, uint8_t* dW, uint8_t* dTilingParams, TilingParams& tilingParams)
 {{
@@ -26,7 +26,7 @@ void {launch_kernel_func_name}(aclrtStream& stream, uint64_t fftsAddr,
     using LayoutC = {layout_c};
     constexpr PaddingTag paddingTagA = {padding_tag_a};
     constexpr PaddingTag paddingTagB = {padding_tag_b};
-    LaunchPaddingMutiCoreSplitkMatmulKernel<ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC,
+    LaunchPaddingMultiCoreSplitkMatmulKernel<ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC,
         paddingTagA, paddingTagB>(
         stream, fftsAddr, dA, dB, dC, dW, dTilingParams, tilingParams);
 }}
@@ -41,7 +41,7 @@ size_t {get_workspace_func_name}(TilingParams& tilingParams)
     using LayoutC = {layout_c};
     constexpr PaddingTag paddingTagA = {padding_tag_a};
     constexpr PaddingTag paddingTagB = {padding_tag_b};
-    return PaddingMutiCoreSplitkMatmulKernelGetWorkspaceSize<ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC,
+    return PaddingMultiCoreSplitkMatmulKernelGetWorkspaceSize<ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC,
         paddingTagA, paddingTagB>(tilingParams);
 }}
 """
@@ -58,7 +58,7 @@ size_t {get_workspace_func_name}(TilingParams& tilingParams)
             )
         )
         for l_tag_a, l_tag_b, p_tag_a, p_tag_b in combinations:
-            # kernel_fun_name can be PaddingMutiCoreSplitkMatmulKernelHalfLayout00
+            # kernel_fun_name can be PaddingMultiCoreSplitkMatmulKernelHalfLayout00
             kernel_func_name = (
                 kernel_name
                 + dtype.capitalize()
@@ -73,9 +73,9 @@ size_t {get_workspace_func_name}(TilingParams& tilingParams)
             kernel_info[
                 Config.get_tiling_key(kernel_serial, dtype, l_tag_a, l_tag_b, 0, p_tag_a, p_tag_b, 0)
             ] = kernel_func_name
-            # launch_kernel_fun_name can be LaunchPaddingMutiCoreSplitkMatmulKernelHalfLayout00
+            # launch_kernel_fun_name can be LaunchPaddingMultiCoreSplitkMatmulKernelHalfLayout00
             launch_kernel_func_name = "Launch" + kernel_func_name
-            # get_workspace_fun_name can be PaddingMutiCoreSplitkMatmulKernelHalfLayout00GetWorkspaceSize
+            # get_workspace_fun_name can be PaddingMultiCoreSplitkMatmulKernelHalfLayout00GetWorkspaceSize
             get_workspace_func_name = (
                 kernel_name
                 + dtype.capitalize()
@@ -110,7 +110,7 @@ size_t {get_workspace_func_name}(TilingParams& tilingParams)
             padding_tag_a = Config.PADDING_TAG_MAP[p_tag_a]
             padding_tag_b = Config.PADDING_TAG_MAP[p_tag_b]
 
-            content = PaddingMutiCoreSplitkMatmulTemplate.TEMPLATE.format(
+            content = PaddingMultiCoreSplitkMatmulTemplate.TEMPLATE.format(
                 launch_kernel_func_name=launch_kernel_func_name,
                 get_workspace_func_name=get_workspace_func_name,
                 element_a=element_a,

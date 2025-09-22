@@ -274,7 +274,7 @@ bool PaddingMatmulB16Handler(TilingParams &params, PlatformInfo& platformInfo)
     return false;
 }
 
-bool SplitkMatmulB16Handler(TilingParams& params, PlatformInfo& platformInfo)
+bool PaddingMultiCoreSplitkMatmulB16Handler(TilingParams& params, PlatformInfo& platformInfo)
 {
     uint32_t m = params.m;
     uint32_t n = params.n;
@@ -321,7 +321,7 @@ void SelectKernelB16(TilingParams &tilingParams, PlatformInfo& platformInfo)
     using HandlerPtr = bool (*)(TilingParams& tilingParams, PlatformInfo& platformInfo);
     HandlerPtr handlers[] = {
         SmallMatmulB16Handler,
-        SplitkMatmulB16Handler,
+        PaddingMultiCoreSplitkMatmulB16Handler,
         PaddingMatmulB16Handler,
         CommonMatmulB16Handler
     };
