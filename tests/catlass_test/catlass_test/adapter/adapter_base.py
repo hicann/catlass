@@ -19,6 +19,7 @@ from torch_npu.npu._format import Format
 
 from catlass_test.common import (
     BishengDType,
+    OpType,
     get_current_stream_ptr,
     is_transposed,
     torch_dtype_to_bisheng_dtype,
@@ -38,6 +39,7 @@ class AdapterBase(ABC):
         input_tensors: Dict[str, torch.Tensor],
         output_tensors: Dict[str, torch.Tensor] = {},
         attrs: Dict[str, Any] = {},
+        op_type: OpType = OpType.MIX_AIC_1_2,
     ):
         self.kernel_src_file = kernel_src_file
         self.attrs = attrs
@@ -46,6 +48,7 @@ class AdapterBase(ABC):
         if self.output_tensors == {}:
             self.output_tensors = self.get_output_tensors()
         self.template_compiler = TemplateCompiler(kernel_src_file)
+        self.op_type = op_type
 
     def get_tensor(self, tensor_name: str) -> torch.Tensor:
         return self.input_tensors.get(
@@ -73,12 +76,7 @@ class AdapterBase(ABC):
         if npu_format == Format.ND:
             return (
                 "layout::ColumnMajor"
-                if any(
-                    (
-                        self.attrs.get(f"Trans{tensor_name}", False),
-                        is_transposed(tensor),
-                    )
-                )
+                if self.attrs.get(f"Trans{tensor_name}", False) or is_transposed(tensor)
                 else "layout::RowMajor"
             )
         elif npu_format == Format.FRACTAL_NZ:
@@ -105,11 +103,16 @@ class AdapterBase(ABC):
         runtime_params = []
         template_runtime_params = self.template_compiler.runtime_params
         ptr_pattern = re.compile(r"device([A-Za-z0-9_]+)")
+        layout_pattern = re.compile(r"layout([A-Za-z0-9_]+)")
         for template_runtime_param in template_runtime_params.keys():
             if "stream" in template_runtime_param:
                 runtime_params.append(get_current_stream_ptr())
             elif (var_name := ptr_pattern.search(template_runtime_param)) is not None:
                 runtime_params.append(self.get_tensor_ptr(var_name.group(1)))
+            elif (
+                var_name := layout_pattern.search(template_runtime_param)
+            ) is not None:
+                logger.error("Do not support layout")
             elif template_runtime_param == "problemShape":
                 runtime_params.append(self.get_problem_shape())
             elif template_runtime_param == "problemCount":
@@ -117,7 +120,9 @@ class AdapterBase(ABC):
         return runtime_params
 
     def get_kernel(self) -> ctypes.CDLL:
-        kernel_path = self.template_compiler.compile(self.get_compile_params())
+        kernel_path = self.template_compiler.compile(
+            self.get_compile_params(), self.op_type
+        )
         kernel_dll = load_kernel_lib(kernel_path)
         return kernel_dll
 

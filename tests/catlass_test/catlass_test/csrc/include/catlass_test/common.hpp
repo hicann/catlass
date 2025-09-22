@@ -25,6 +25,8 @@
 #    define inline __inline__ __attribute__((always_inline))
 #endif
 
+#define TEMPLATE_RET_TYPE int32_t
+
 // Macro function for unwinding acl errors.
 #define ACL_CHECK(status)              \
     do {                               \
@@ -43,25 +45,18 @@
         }                             \
     } while (0)
 
-#define RUN_ADAPTER(op, args, stream, coreNum)                                                                         \
-    size_t sizeWorkspace = op.GetWorkspaceSize(args);                                                                  \
-    uint8_t *deviceWorkspace = nullptr;                                                                                \
-    if (sizeWorkspace > 0) {                                                                                           \
-        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)); \
-    }                                                                                                                  \
-    op.Initialize(args, deviceWorkspace);                                                                              \
-    op(stream, coreNum);                                                                                               \
-    ACL_CHECK(aclrtSynchronizeStream(stream));                                                                         \
-    if (sizeWorkspace > 0) {                                                                                           \
-        ACL_CHECK(aclrtFree(deviceWorkspace));                                                                         \
-    }                                                                                                                  \
-    return ACL_SUCCESS;
+uint64_t getFftsAddr() {
+    uint64_t fftsAddr = 0;
+#if defined(MIX_AIC_1_0) || defined(MIX_AIC_1_1) || defined(MIX_AIC_1_2)
+    uint32_t fftsLen = 0;
+    RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen))
+#endif
+    return fftsAddr;
+}
 
-#define RUN_ADAPTER_MIX(op, args, stream, coreNum)                                                                     \
-    uint32_t fftsLen = 0;                                                                                              \
-    uint64_t fftsAddr = 0;                                                                                             \
-    RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));                                                                   \
-    size_t sizeWorkspace = matmul_op.GetWorkspaceSize(args);                                                           \
+#define RUN_ADAPTER(op, args, stream, coreNum)                                                                         \
+    uint64_t fftsAddr = getFftsAddr();                                                                                 \
+    size_t sizeWorkspace = op.GetWorkspaceSize(args);                                                                  \
     uint8_t *deviceWorkspace = nullptr;                                                                                \
     if (sizeWorkspace > 0) {                                                                                           \
         ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)); \
@@ -73,5 +68,4 @@
         ACL_CHECK(aclrtFree(deviceWorkspace));                                                                         \
     }                                                                                                                  \
     return ACL_SUCCESS;
-
 #endif

@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 import torch
-from catlass_test import basic_matmul
+# from catlass_test import basic_matmul
 
 cases = pd.read_csv("csv/matmul.csv")
 
@@ -24,7 +24,7 @@ test_cases = test_cases[0:20]
     "m, k, n, transpose_a, transpose_b, input_dtypes, output_dtype",
     test_cases,
 )
-def test_basic_matmul(
+def test_00_basic_matmul(
     m,
     k,
     n,
@@ -58,3 +58,5 @@ def test_basic_matmul(
         result = result.to(torch.float32)
         golden = golden.to(torch.float32)
     assert torch.allclose(result, golden, rtol=0.001, atol=0.001)
+
+

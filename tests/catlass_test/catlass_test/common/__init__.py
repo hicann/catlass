@@ -6,10 +6,11 @@
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 # See LICENSE in the root of the software repository for the full text of the License.
 
-from typing import Dict, Literal, Tuple
 import ctypes
+from enum import Enum
+from typing import Dict, Literal
+
 import torch
-import torch_npu
 
 
 def get_current_stream_ptr() -> ctypes.c_void_p:
@@ -55,3 +56,11 @@ def swap(*args):
 def is_transposed(mat: torch.Tensor) -> bool:
     assert len(mat.shape) >= 2
     return mat.stride(-2) == 1 and mat.stride(-1) == mat.shape[0]
+
+
+class OpType(Enum):
+    AIV_ONLY = 0
+    AIC_ONLY = 1
+    MIX_AIC_1_0 = 3
+    MIX_AIC_1_1 = 4
+    MIX_AIC_1_2 = 5

@@ -32,4 +32,4 @@ def set_catlass_version(catlass_version: str, reset: bool = False):
     repo.git.checkout()
 
 
-from catlass_test.function import *
+from tests.catlass_test.catlass_test.interface.function import *

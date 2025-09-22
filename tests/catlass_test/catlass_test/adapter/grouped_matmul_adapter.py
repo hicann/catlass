@@ -6,29 +6,29 @@
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 # See LICENSE in the root of the software repository for the full text of the License.
 
-from typing import Any, Dict, List, Literal, Tuple, Union
+from typing import Any, Dict, Literal, Tuple
 
 import torch
 
 from catlass_test.adapter import MatmulAdapter
 from catlass_test.catlass.gemm_coord import GemmCoord
-from catlass_test.catlass_test.common import swap
+from catlass_test.catlass_test.common import OpType, swap
 
 
-class GroupedMatmulCase(MatmulAdapter):
+class GroupedMatmulAdapter(MatmulAdapter):
     def __init__(
         self,
-        kernel_name: str,
         kernel_src_file: str,
         input_tensors: Dict[str, torch.Tensor],
         output_tensors: Dict[str, torch.Tensor] = {},
+        attrs: Dict[str, Any] = {},
+        op_type: OpType = OpType.MIX_AIC_1_2,
         slice_axis: Literal["m", "k", "n"] = "m",
         group_list_prefix_sum: bool = False,
-        attrs: Dict[str, Any] = {},
     ) -> None:
         self.slice_axis = slice_axis
         self.group_list_prefix_sum = group_list_prefix_sum
-        super().__init__(kernel_src_file, input_tensors, output_tensors, attrs)
+        super().__init__(kernel_src_file, input_tensors, output_tensors, attrs, op_type)
 
     @property
     def GroupList(self):

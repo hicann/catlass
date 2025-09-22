@@ -15,7 +15,7 @@
 #include "catlass/gemm/device/device_gemm.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
 #include "catlass/gemm/gemm_type.hpp"
-#include "catlass/gemm/kernel/basic_matmul.hpp"
+#include "catlass/gemm/kernel/batched_matmul.hpp"
 #include "catlass/layout/layout.hpp"
 #include "catlass/layout/matrix.hpp"
 #include "catlass/status.hpp"
@@ -24,10 +24,12 @@
 using namespace Catlass;
 
 template <class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC>
-inline TEMPLATE_RET_TYPE BasicMatmul(aclrtStream stream, GemmCoord problemShape, uint8_t *deviceA, uint8_t *deviceB, uint8_t *deviceC) {
+inline TEMPLATE_RET_TYPE BasicMatmul(aclrtStream stream, GemmCoord problemShape, uint32_t problemCount, uint8_t *deviceA, uint8_t *deviceB, uint8_t *deviceC) {
+    // Get the number of cube cores of the current hardware
+    auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
+
     using ArchTag = Arch::AtlasA2;
     using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
-
     using L1TileShape = GemmShape<128, 256, 256>;
     using L0TileShape = GemmShape<128, 256, 64>;
 
@@ -38,15 +40,27 @@ inline TEMPLATE_RET_TYPE BasicMatmul(aclrtStream stream, GemmCoord problemShape,
     using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
     using BlockEpilogue = void;
 
-    // Swizzle offset is 3 and direction is 0.
-    using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
+    if (problemShape.m() > problemShape.n()) {
+        // Swizzle offset is 3 and direction is 0.
+        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
 
-    // kernel level
-    using MatmulKernel = Gemm::Kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
+        // kernel level
+        using MatmulKernel = Gemm::Kernel::BatchedMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 
-    using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-    typename MatmulKernel::Arguments arguments{problemShape, deviceA, deviceB, deviceC};
-    MatmulAdapter matmulOp;
-    auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
-    RUN_ADAPTER(matmulOp, arguments, stream, aicCoreNum);
+        using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
+        typename MatmulKernel::Arguments arguments{problemCount, problemShape, deviceA, deviceB, deviceC};
+        MatmulAdapter matmulOp;
+        RunAdapter(matmulOp, arguments, stream, aicCoreNum);
+    } else {
+        // Swizzle offset is 3 and direction is 1.
+        using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
+
+        // kernel level
+        using MatmulKernel = Gemm::Kernel::BatchedMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
+
+        using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
+        typename MatmulKernel::Arguments arguments{problemCount, problemShape, deviceA, deviceB, deviceC};
+        MatmulAdapter matmulOp;
+        RUN_ADAPTER(matmulOp, arguments, stream, aicCoreNum);
+    }
 }

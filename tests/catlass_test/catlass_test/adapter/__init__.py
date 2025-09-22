@@ -7,4 +7,5 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 
 from catlass_test.adapter.adapter_base import AdapterBase
+from catlass_test.adapter.grouped_matmul_adapter import GroupedMatmulAdapter
 from catlass_test.adapter.matmul_adapter import MatmulAdapter

@@ -13,6 +13,7 @@ from catlass_test import (
     CATLASS_TEST_KERNEL_PATH,
     CATLASS_TEST_PATH,
 )
+from tests.catlass_test.catlass_test.common import OpType
 
 CATLASS_KERNEL_ENTRY_FILE = os.path.join(CATLASS_TEST_PATH, "csrc", "kernel.cpp")
 
@@ -77,7 +78,7 @@ class TemplateCompiler:
 
     def __init_kernel_name_and_params(self):
         pattern = re.compile(
-            r"template\s*<([^>]+)>\s*(?:inline\s+)?int32_t\s+(\w+)\s*\(([^)]+)\)"
+            r"template\s*<([^>]+)>\s*(?:inline\s+)?TEMPLATE_RET_TYPE\s+(\w+)\s*\(([^)]+)\)"
         )
         with open(self.kernel_template_src, mode="r+") as kernel_template_src_handle:
             match = pattern.search(kernel_template_src_handle.read())
@@ -97,10 +98,13 @@ class TemplateCompiler:
     def runtime_params_call(self):
         return ",".join(self.runtime_params.keys())
 
-    def compile(self, compile_definitions: Dict[str, str]) -> str:
+    def compile(
+        self, compile_definitions: Dict[str, str], op_type: OpType = OpType.MIX_AIC_1_2
+    ) -> str:
         """编译算子"""
 
         dcompile_params = []
+        dcompile_params.append(f"-D{op_type.name}")
         for var_name in self.compile_params.keys():
             dcompile_params.append(compile_definitions.get(var_name))
         compile_params = ",".join(dcompile_params)
