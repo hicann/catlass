@@ -37,7 +37,7 @@ inline TEMPLATE_RET_TYPE SplitkMatmul(aclrtStream stream, GemmCoord problemShape
     using MatmulKernel = Gemm::Kernel::SplitkMatmul<BlockMmad, BlockEpilogue, BlockScheduler, ReduceAdd>;
 
     using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-    MatmulKernel::Arguments arguments{problemShape,
+    typename MatmulKernel::Arguments MatmulKernel::Arguments arguments{problemShape,
                                       aicCoreNum,
                                       sizeof(float),
                                       deviceA,

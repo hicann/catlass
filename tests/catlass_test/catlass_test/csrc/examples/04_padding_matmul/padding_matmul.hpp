@@ -36,7 +36,7 @@ inline TEMPLATE_RET_TYPE PaddingMatmul(aclrtStream stream, GemmCoord problemShap
         using MatmulKernel = Gemm::Kernel::PaddingMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-        MatmulKernel::Arguments arguments{
+        typename MatmulKernel::Arguments MatmulKernel::Arguments arguments{
             options.problemShape, align, sizeof(float), deviceA, deviceB, deviceC};
         MatmulAdapter matmulOp;
         RUN_ADAPTER(matmulOp, arguments, stream, aicCoreNum);
@@ -48,7 +48,7 @@ inline TEMPLATE_RET_TYPE PaddingMatmul(aclrtStream stream, GemmCoord problemShap
         using MatmulKernel = Gemm::Kernel::PaddingMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-        MatmulKernel::Arguments arguments{
+        typename MatmulKernel::Arguments MatmulKernel::Arguments arguments{
             options.problemShape, align, sizeof(float), deviceA, deviceB, deviceC};
         MatmulAdapter matmulOp;
         RUN_ADAPTER(matmulOp, arguments, stream, aicCoreNum);
