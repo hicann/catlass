@@ -194,7 +194,7 @@ case "$TARGET" in
                 cmake -S "$CMAKE_SOURCE_DIR" -B "$BUILD_DIR" \
                     -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
                     -DCMAKE_INSTALL_PREFIX="$OUTPUT_DIR" \
-                    -DGENERATE_MATMUL_WRAPPER_CODE=ON \
+                    -DCOMPILE_DYNAMIC_OPTIMIZED_MATMUL=ON \
                     "${CMAKE_OPTIONS[@]}"
             else
                 cmake -S "$CMAKE_SOURCE_DIR" -B "$BUILD_DIR" \
