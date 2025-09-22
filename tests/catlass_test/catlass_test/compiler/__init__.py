@@ -104,7 +104,6 @@ class TemplateCompiler:
         """编译算子"""
 
         dcompile_params = []
-        dcompile_params.append(f"-D{op_type.name}")
         for var_name in self.compile_params.keys():
             dcompile_params.append(compile_definitions.get(var_name))
         compile_params = ",".join(dcompile_params)
@@ -129,6 +128,7 @@ class TemplateCompiler:
             f"-DRUNTIME_PARAM_CALL={self.runtime_params_call}",
             f"-DKERNEL_TEMPLATE_NAME={self.kernel_name}",
             f"-DTILING_KEY_VAR",
+            f"-D{op_type.name}"
         ]
         command = (
             ["bisheng"]
