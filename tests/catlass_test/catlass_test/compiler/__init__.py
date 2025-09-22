@@ -159,4 +159,5 @@ class TemplateCompiler:
                 "Compile failed! The return code of compiler is not 0. Error info: "
             )
             logger.error(result.stderr)
+            exit(1)
         return kernel_full_path

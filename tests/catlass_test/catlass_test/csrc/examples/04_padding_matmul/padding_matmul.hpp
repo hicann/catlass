@@ -1,5 +1,3 @@
-#include "catlass/gemm/kernel/padding_matmul.hpp"
-
 #include "catlass/arch/arch.hpp"
 #include "catlass/catlass.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
@@ -7,6 +5,7 @@
 #include "catlass/gemm/device/device_gemm.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
 #include "catlass/gemm/gemm_type.hpp"
+#include "catlass/gemm/kernel/padding_matmul.hpp"
 #include "catlass/layout/layout.hpp"
 #include "catlass/status.hpp"
 #include "catlass_test/common.hpp"
@@ -28,7 +27,7 @@ inline TEMPLATE_RET_TYPE PaddingMatmul(aclrtStream stream, GemmCoord problemShap
 
     using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
     using BlockEpilogue = void;
-
+    const uint32_t align = 256;
     if (problemShape.m() > problemShape.n()) {
         // Swizzle offset is 3 and direction is 0.
         using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
