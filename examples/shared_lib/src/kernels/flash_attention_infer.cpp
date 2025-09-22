@@ -839,7 +839,7 @@ void FAImpl(const uint32_t blockNum, aclrtStream stream, const FAKernelInfo &ker
     // Allocate matrices in device memory for workspace.
     // One base workspace block contains 65536 elements.
     uint64_t mm1OutSize = blockNum * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(float) * FAInferTiling::NUM3;
-    uint64_t smOnlineOutSize = blockNum * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(fp16_t) * FAInferTiling::NUM3;
+    uint64_t smOnlineOutSize = blockNum * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(DType) * FAInferTiling::NUM3;
     uint64_t mm2OutSize = blockNum * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(float) * FAInferTiling::NUM3;
     uint64_t UpdateSize = blockNum * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(float) * FAInferTiling::NUM3;
     uint64_t workSpaceSize = mm1OutSize + smOnlineOutSize + mm2OutSize + UpdateSize;
