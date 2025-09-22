@@ -29,7 +29,7 @@ inline TEMPLATE_RET_TYPE PaddingMatmul(aclrtStream stream, GemmCoord problemShap
     using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
     using BlockEpilogue = void;
 
-    if (m > n) {
+    if (problemShape.m() > problemShape.n()) {
         // Swizzle offset is 3 and direction is 0.
         using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
         // kernel level
