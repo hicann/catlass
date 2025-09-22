@@ -789,9 +789,6 @@ CATLASS_GLOBAL void FAInfer(uint64_t fftsAddr,
 template<class DType>
 void FAImpl(const uint32_t blockNum, aclrtStream stream, const FAKernelInfo &kernelInfo)
 {
-    // Get the number of cube cores of the current hardware
-    auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
-
     // Parameters initialization.
     int32_t batch = kernelInfo.batch;
     int32_t qSeqlen = kernelInfo.qSeqlen;
