@@ -112,7 +112,6 @@ public:
         BlockScheduler conv2dBlockScheduler(
             params.problemShape.getPostIm2colShape(),
             MakeCoord(FmapL1TileShape::Ho, FmapL1TileShape::Wo, FilterL1TileShape::Cout));
-        // uint32_t coreLoops = conv2dBlockScheduler.GetCoreLoops();
         uint32_t loops = conv2dBlockScheduler.GetLoops();
         
         Arch::Resource<ArchTag> resource;
@@ -131,7 +130,7 @@ public:
             Conv2d5HdCoord blockCoord = conv2dBlockScheduler.GetBlockCoord(loopIdx);
             Conv2d5HdCoord actualBlockShape = conv2dBlockScheduler.GetActualBlockShape(blockCoord);
 
-            uint8_t blockPadTop = 0, blockPadBottom = 0, blockPadLeft = 0, blockPadRight = 0;
+            uint8_t blockPadLeft = 0, blockPadRight = 0, blockPadTop = 0, blockPadBottom = 0;
             
             // Compute indices of hi
             uint32_t hoStart = blockCoord.h() * FmapL1TileShape::Ho;

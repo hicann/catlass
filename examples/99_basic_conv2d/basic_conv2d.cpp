@@ -42,12 +42,11 @@ using fp16_t = op::fp16_t;
 struct Options {
   const std::string HELPER = 
     "24_basic_conv2d batch, hi, wi, cin, cout, kh, kw, padLeft, padRight, padTop, padBottom, strideH, strideW, dilationH, dilationW [device_id]";
-
-  // uint32_t dataSizes[5] = {1, 4, 6, 16, 16}; // {batch, hi, wi, cin, cout}
-  uint32_t dataSizes[5] = {1, 33, 43, 160, 176}; // {batch, hi, wi, cin, cout}
-  uint8_t filterSizes[2] = {3, 3}; // {Kh, Kw}
-  uint8_t pads[4] = {0, 0, 0, 0}; // {padLeft, padRight, padTop, padBottom}
-  uint8_t strides[2] = {1, 1}; // {strideH, strideW}
+  
+  uint32_t dataSizes[5] = {2, 33, 43, 112, 80}; // {batch, hi, wi, cin, cout}
+  uint8_t filterSizes[2] = {3, 3}; // {kh, kw}
+  uint8_t pads[4] = {2, 2, 2, 2}; // {padLeft, padRight, padTop, padBottom}
+  uint8_t strides[2] = {2, 2}; // {strideH, strideW}
   uint8_t dilations[2] = {1, 1}; // {dilationH, dilationW}
   int32_t deviceId{0};
 
@@ -134,6 +133,8 @@ void Run(Options const &options) {
   printf("batch = %d\n", batch);
   printf("hi = %d\n", hi);
   printf("wi = %d\n", wi);
+  printf("kh = %d\n", kh);
+  printf("kw = %d\n", kw);
   printf("cin1 = %d\n", cin1);
   printf("ho = %d\n", ho);
   printf("wo = %d\n", wo);
@@ -142,9 +143,7 @@ void Run(Options const &options) {
   printf("cout1 = %d\n", cout1);
   printf("cout = %d\n", cout);
   printf("coutRound = %d\n", coutRound);
-  printf("kh = %d\n", kh);
-  printf("kw = %d\n", kw);
-
+  
   size_t lenFmap = batch * cin1 * hi * wi * c0;
   size_t lenFilter = cin1 * kh * kw * cout * c0;
   size_t lenOutput = batch * ho * wo * coutRound;
@@ -182,30 +181,34 @@ void Run(Options const &options) {
   using ArchTag = Arch::AtlasA2;
   constexpr bool ENABLE_UNIT_FLAG = false;
   using DispatchPolicy = Conv2d::MmadAtlasA2Pingpong<ENABLE_UNIT_FLAG>;
-  using FmapL1TileShape = Catlass::Conv2dFmapL1Shape<8, 12, 8>; // (hoBlock, woBlock, cin1Block_small)
-  using FilterL1TileShape = Catlass::Conv2dFilterL1Shape<96, 8>; // (coutBlock, cin1Block_big)
-  using L0TileShape = Catlass::Conv2dL0Shape<16, 16, 3*3*16>; // (mL0, nL0, kL0)
+  using FmapL1TileShape = Catlass::Conv2dFmapL1Shape<8, 12, 2>; // (hoBlock, woBlock, cin1BlockSmall)
+  using FilterL1TileShape = Catlass::Conv2dFilterL1Shape<32, 4>; // (coutBlock, cin1BlockBig)
+  using L0TileShape = Catlass::Conv2dL0Shape<16, 16, 16>; // (mL0, nL0, kL0)
 
   uint32_t hoBlock = FmapL1TileShape::Ho;
   uint32_t woBlock = FmapL1TileShape::Wo;
-  uint32_t coutBlock = FilterL1TileShape::Cout;
-  uint32_t cin1L1Block = FmapL1TileShape::Cin1;
-  uint32_t cin1L0Block = L0TileShape::K / (kh * kw * c0);
+  uint32_t cin1FmapL1Block = FmapL1TileShape::Cin1;
+  uint32_t coutBlock = RoundUp(FilterL1TileShape::Cout, c0);
+  uint32_t cin1FilterL1Block = FilterL1TileShape::Cin1;
   uint32_t hiBlock = (hoBlock - 1) * strideH + (kh - 1) * dilationH + 1;
   uint32_t wiBlock = (woBlock - 1) * strideW + (kw - 1) * dilationW + 1;
-  uint32_t howoBlock = hoBlock * woBlock;
-  uint32_t howoRoundBlock = (howoBlock + c0 - 1) / c0 * c0;
-  uint32_t coutRoundBlock = (coutBlock + c0 -1) /c0 * c0;
+
+  uint32_t hoL0Tile = Max(L0TileShape::M / woBlock, 1);
+  uint32_t mL0A = hoL0Tile * woBlock;
+  uint32_t mL0C = RoundUp<C0_NUM_PER_FRACTAL>(mL0A);
+  uint32_t mPartLoop = CeilDiv(hoBlock, hoL0Tile);
+  uint32_t mL1C = mL0C * mPartLoop;
+  uint32_t cin1L0Block = Max(L0TileShape::K / (kh * kw * c0), 1);
+  uint32_t coutL0Block = RoundUp(L0TileShape::N, c0);
 
   uint32_t l1DataSize = 
-      2 * (cin1L1Block * hiBlock * wiBlock * c0 + 
-           cin1L1Block * kh * kw * coutBlock *c0) * sizeof(fp16_t);
+      2 * (cin1FmapL1Block * hiBlock * wiBlock * c0 + 
+           cin1FilterL1Block * kh * kw * coutBlock *c0) * sizeof(fp16_t);
   uint32_t l0ADataSize = 
-      2 * howoRoundBlock * (cin1L0Block * kh * kw * c0) * sizeof(fp16_t);
+      2 * mL0A * (cin1L0Block * kh * kw * c0) * sizeof(fp16_t);
   uint32_t l0BDataSize = 
-      2 * (cin1L0Block * kh * kw * c0) * coutRoundBlock * sizeof(fp16_t); 
-  uint32_t l0CDataSize = 
-      howoRoundBlock * coutRoundBlock * sizeof(float); 
+      2 * (cin1L0Block * kh * kw * c0) * coutL0Block * sizeof(fp16_t); 
+  uint32_t l0CDataSize = mL1C * coutBlock * sizeof(float); 
   
   printf("l1DataSize=%d, L1Size=%d\n", l1DataSize, ArchTag::L1_SIZE);
   printf("l0ADataSize=%d, L0A_SIZE=%d\n", l0ADataSize, ArchTag::L0A_SIZE);

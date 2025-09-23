@@ -659,9 +659,9 @@ private:
     Dilations dilations;
 public:
     Conv2dConfigs(ShortIndex kh = 0, ShortIndex kw = 0,
-        ShortIndex padTop = 0, ShortIndex padBottom = 0, ShortIndex padLeft = 0, ShortIndex padRight = 0,
+        ShortIndex padLeft = 0, ShortIndex padRight = 0, ShortIndex padTop = 0, ShortIndex padBottom = 0,
         ShortIndex strideH = 0, ShortIndex strideW = 0, ShortIndex dilationH = 0, ShortIndex dilationW = 0)
-    : ks(MakeCoord(kh, kw)), pads(MakeCoord(padTop, padBottom, padLeft, padRight)), 
+    : ks(MakeCoord(kh, kw)), pads(MakeCoord(padLeft, padRight, padTop, padBottom)), 
       strides(MakeCoord(strideH, strideW)), dilations(MakeCoord(dilationH, dilationW)) {}
 
     CATLASS_HOST_DEVICE
@@ -683,38 +683,38 @@ public:
     }
 
     CATLASS_HOST_DEVICE
-    ShortIndex const &padTop() const {
-        return this->pads[0];
-    }
-    CATLASS_HOST_DEVICE
-    ShortIndex const &padTop() {
-        return this->pads[0];
-    }
-
-    CATLASS_HOST_DEVICE
-    ShortIndex const &padBottom() const {
-        return this->pads[1];
-    }
-    CATLASS_HOST_DEVICE
-    ShortIndex const &padBottom() {
-        return this->pads[1];
-    }
-
-    CATLASS_HOST_DEVICE
     ShortIndex const &padLeft() const {
-        return this->pads[2];
+        return this->pads[0];
     }
     CATLASS_HOST_DEVICE
     ShortIndex const &padLeft() {
-        return this->pads[2];
+        return this->pads[0];
     }
 
     CATLASS_HOST_DEVICE
     ShortIndex const &padRight() const {
-        return this->pads[3];
+        return this->pads[1];
     }
     CATLASS_HOST_DEVICE
     ShortIndex const &padRight() {
+        return this->pads[1];
+    }
+
+    CATLASS_HOST_DEVICE
+    ShortIndex const &padTop() const {
+        return this->pads[2];
+    }
+    CATLASS_HOST_DEVICE
+    ShortIndex const &padTop() {
+        return this->pads[2];
+    }
+
+    CATLASS_HOST_DEVICE
+    ShortIndex const &padBottom() const {
+        return this->pads[3];
+    }
+    CATLASS_HOST_DEVICE
+    ShortIndex const &padBottom() {
         return this->pads[3];
     }
 

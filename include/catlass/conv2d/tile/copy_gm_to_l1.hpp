@@ -42,11 +42,11 @@ struct CopyGmToL1<ArchTag, Conv2d::Conv2dType<Element, layout::Fmap, AscendC::TP
     CopyGmToL1() {};
 
     CATLASS_DEVICE
-    void operator()( // {Batch, Cin1, Hi, Wi, C0}
+    void operator()( // {Cin1, Hi, Wi, C0}
         AscendC::LocalTensor<Element> const &dstTensor,
         AscendC::GlobalTensor<Element> const &srcTensor,
-        LayoutDst const &layoutDst, // layoutFmapInL1{1, L1TileShape::Cin1, hiBlock, wiBlock, ELE_NUM_A_PER_C0}
-        LayoutSrc const &layoutSrc) // layoutTileFmap{Batch, cin1Actual, actualShape.hi(), actualShape.wi(), ELE_NUM_A_PER_C0}
+        LayoutDst const &layoutDst,
+        LayoutSrc const &layoutSrc)
     {   
         uint32_t cin1Actual = layoutSrc.shape(1);
         uint32_t hiActual = layoutSrc.shape(2);
@@ -89,8 +89,8 @@ struct CopyGmToL1<ArchTag, Conv2d::Conv2dType<Element, layout::Filter, AscendC::
     void operator()( // {Cin1, Kh, Kw, Cout, C0}
         AscendC::LocalTensor<Element> const &dstTensor,
         AscendC::GlobalTensor<Element> const &srcTensor,
-        LayoutDst const &layoutDst, // LayoutFilterInL1{L1TileShape::Cin1, configs.kh(), configs.kw(), coutRound, ELE_NUM_B_PER_C0}
-        LayoutSrc const &layoutSrc) // layoutTileFilter{cin1Actual, configs.kh(), configs.kw(), actualShape.cout(), ELE_NUM_B_PER_C0}
+        LayoutDst const &layoutDst,
+        LayoutSrc const &layoutSrc)
     {
         uint32_t cin1Actual = layoutSrc.shape(0);
         uint32_t KhKw = layoutSrc.shape(1) * layoutSrc.shape(2);
@@ -111,8 +111,6 @@ struct CopyGmToL1<ArchTag, Conv2d::Conv2dType<Element, layout::Filter, AscendC::
         );
     }
 };
-
-/////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 } // namespace Catlass::Conv2d::Tile
 
