@@ -46,8 +46,8 @@ FAKernelInfo GetKernelInfo(const at::Tensor &query, const at::Tensor &key, const
     int64_t embedding_size = query.sizes().at(2);
 
     int64_t batch = actual_seq_lengths.size();
-    int64_t q_seqlen = std::max_element(actual_seq_lengths.begin(), actual_seq_lengths.end());
-    int64_t kv_seqlen = std::max_element(actual_seq_lengths_kv.begin(), actual_seq_lengths_kv.end());
+    int64_t q_seqlen = *std::max_element(actual_seq_lengths.begin(), actual_seq_lengths.end());
+    int64_t kv_seqlen = *std::max_element(actual_seq_lengths_kv.begin(), actual_seq_lengths_kv.end());
 
     int64_t mask_type;
     switch (sparse_mode)
