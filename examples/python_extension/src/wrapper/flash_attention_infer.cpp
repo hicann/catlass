@@ -46,6 +46,9 @@ FAKernelInfo GetKernelInfo(const at::Tensor &query, const at::Tensor &key, const
     int64_t embedding_size = query.sizes().at(2);
 
     int64_t batch = actual_seq_lengths.size();
+    if (batch != actual_seq_lengths_kv.size()) {
+        throw std::runtime_error("actual_seq_lengths and actual_seq_lengths_kv must have the same size");
+    }
     int64_t q_seqlen = *std::max_element(actual_seq_lengths.begin(), actual_seq_lengths.end());
     int64_t kv_seqlen = *std::max_element(actual_seq_lengths_kv.begin(), actual_seq_lengths_kv.end());
 
