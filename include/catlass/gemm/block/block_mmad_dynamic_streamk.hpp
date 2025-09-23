@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_GEMM_BLOCK_BLOCK_MMAD_DYNAMIC_COMMON_HPP
-#define CATLASS_GEMM_BLOCK_BLOCK_MMAD_DYNAMIC_COMMON_HPP
+#ifndef CATLASS_GEMM_BLOCK_BLOCK_MMAD_DYNAMIC_STREAMK_HPP
+#define CATLASS_GEMM_BLOCK_BLOCK_MMAD_DYNAMIC_STREAMK_HPP
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/resource.hpp"
@@ -42,7 +42,7 @@ public:
     using CopyL1ToL0A = typename TileCopy_::CopyL1ToL0A;
     using CopyL1ToL0B = typename TileCopy_::CopyL1ToL0B;
     using CopyL0CToGmNormalBlock = typename TileCopy_::CopyL0CToGm;
-    using CopyL0CToStreamkBlock = Gemm::Tile::CopyL0CT0Gm<ArchTag, float, Gemm::GemmType<float, LayoutC>>;
+    using CopyL0CToGmStreamkBlock = Gemm::Tile::CopyL0CToGm<ArchTag, float, Gemm::GemmType<float, LayoutC>>;
     using ElementAccumulator =
         typename Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
     using LayoutAInL1 = typename CopyL1ToL0A::LayoutSrc;
@@ -338,9 +338,9 @@ public:
                 copyL0CToGmStreamkBlock(gmW, l0CTensor, layoutW, layoutInL0C, 0b11);
             } else {
                 copyL0CToGmNormalBlock(gmBlockC, l0CTensor, layoutBlock, layoutInL0C, 0b11);
+            }
         }
     }
-
 protected:
     /// Data members
     AscendC::LocalTensor<ElementA> l1ATensorList[STAGES];
@@ -363,9 +363,10 @@ protected:
     CopyGmToL1B copyGmToL1B;
     CopyL1ToL0A copyL1ToL0A;
     CopyL1ToL0B copyL1ToL0B;
-    CopyL0CToGm copyL0CToGm;
+    CopyL0CToGmNormalBlock copyL0CToGmNormalBlock; 
+    CopyL0CToGmStreamkBlock copyL0CToGmStreamkBlock;
 };
 
 }  // namespace Catlass::Gemm::Block
 
-#endif  // CATLASS_GEMM_BLOCK_BLOCK_MMAD_DYNAMIC_COMMON_HPP
+#endif  // CATLASS_GEMM_BLOCK_BLOCK_MMAD_DYNAMIC_STREAMK_HPP

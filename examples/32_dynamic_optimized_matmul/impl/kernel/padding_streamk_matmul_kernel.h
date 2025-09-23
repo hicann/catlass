@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef PADDING_MULTI_CORE_SPLITK_MATMUL_KERNEL_H
-#define PADDING_MULTI_CORE_SPLITK_MATMUL_KERNEL_H
+#ifndef PADDING_STREAMK_MATMUL_KERNEL_H
+#define PADDING_STREAMK_MATMUL_KERNEL_H
 
 #include "tiling_params.h"
 #include "acl/acl.h"
@@ -138,7 +138,7 @@ template <class ElementA, class LayoutA, class ElementB, class LayoutB, class El
 
     constexpr bool enableUnitFlag = true;
     constexpr bool enableShuffleK = true;
-    using DispatchPolicy = Catlass::Gemm::MmadAtlasA2DynamicCommon<enableShuffleK, enableShuffleK>;
+    using DispatchPolicy = Catlass::Gemm::MmadAtlasA2DynamicStreamk<enableShuffleK, enableShuffleK>;
 
     using AType = Catlass::Gemm::GemmType<ElementA, typename PaddingBuilderA::LayoutAfterPadding>;
     using BType = Catlass::Gemm::GemmType<ElementB, typename PaddingBuilderB::LayoutAfterPadding>;
@@ -149,11 +149,12 @@ template <class ElementA, class LayoutA, class ElementB, class LayoutB, class El
     using BlockEpilogue = void;
 
     constexpr uint32_t computeLength = 32 * 1024 / sizeof(float);
-    using RecudeAdd = Catlass::Gemm::Kernel::StreamkReduceAdd<ArchTag, BlockScheduler float, ElementC, computeLength>;
     if (problemShape.m() > problemShape.n()) {
         using BlockScheduler = typename Catlass::Gemm::Block::StreamkGemmIdentityBlockSwizzle<3, 0>;
+        using RecudeAdd = Catlass::Gemm::Kernel::StreamkReduceAdd<
+            ArchTag, BlockScheduler, float, ElementC, computeLength>;
         // kernel level
-        using MatmulKernel = Catlass::Gemm::Kernel::DynamicPaddingMultiCoreSplitkMatmul<
+        using MatmulKernel = Catlass::Gemm::Kernel::DynamicPaddingStreamkMatmul<
             PaddingA, PaddingB, BlockMmad, BlockEpilogue, BlockScheduler, RecudeAdd>;
         typename MatmulKernel::Params params{
             problemShape, l1TileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, gmWA, gmWB, gmReduceW};
@@ -162,8 +163,10 @@ template <class ElementA, class LayoutA, class ElementB, class LayoutB, class El
         matmul(params, resource);
     } else {
         using BlockScheduler = typename Catlass::Gemm::Block::StreamkGemmIdentityBlockSwizzle<3, 1>;
+        using RecudeAdd = Catlass::Gemm::Kernel::StreamkReduceAdd<
+            ArchTag, BlockScheduler, float, ElementC, computeLength>;
         // kernel level
-        using MatmulKernel = Catlass::Gemm::Kernel::DynamicPaddingMultiCoreSplitkMatmul<
+        using MatmulKernel = Catlass::Gemm::Kernel::DynamicPaddingStreamkMatmul<
             PaddingA, PaddingB, BlockMmad, BlockEpilogue, BlockScheduler, RecudeAdd>;
         typename MatmulKernel::Params params{
             problemShape, l1TileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, gmWA, gmWB, gmReduceW};
@@ -253,4 +256,4 @@ size_t PaddingStreamkMatmulKernelGetWorkspaceSize(TilingParams &tilingParams)
     return sizeWA + sizeWB + sizeReduceW;
 }
 
-#endif  // PADDING_MULTI_CORE_SPLITK_MATMUL_KERNEL_H
+#endif  // PADDING_STREAMK_MATMUL_KERNEL_H

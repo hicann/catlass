@@ -174,7 +174,7 @@ private:
                           BUFFER_NUM * COMPUTE_LENGTH * sizeof(ElementOut) <=
                       ArchTag::UB_SIZE,
         "Excedding the UB space!");
-}
+};
 
 template <class PrologueA_, class PrologueB_, class BlockMmad_, class BlockEpilogue_, class BlockScheduler_,
     class ReduceAdd_>
@@ -189,6 +189,7 @@ public:
     using ElementA = typename BlockMmad::ElementA;
     using ElementB = typename BlockMmad::ElementB;
     using ElementC = typename BlockMmad::ElementC;
+    using ElementAccumulator = typename BlockMmad::ElementAccumulator;
 
     using LayoutC = typename BlockMmad::LayoutC;
 
@@ -231,7 +232,7 @@ public:
         CATLASS_HOST_DEVICE
         Params(GemmCoord const &problemShape_, GemmCoord const &l1TileShape_, GM_ADDR ptrA_, LayoutA &layoutA_,
             GM_ADDR ptrB_, LayoutB &layoutB_, GM_ADDR ptrC_, LayoutC &layoutC_, GM_ADDR ptrWA_, GM_ADDR ptrWB_,
-            GM_ADDR ptrReduceW_, uint32_t splitkFactor_)
+            GM_ADDR ptrReduceW_)
             : problemShape(problemShape_), l1TileShape(l1TileShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_),
               layoutB(layoutB_), ptrC(ptrC_), layoutC(layoutC_), ptrWA(ptrWA_), ptrWB(ptrWB_), ptrReduceW(ptrReduceW_)
         {}
@@ -384,10 +385,10 @@ public:
             int64_t gmOffsetA = layoutA.GetOffset(coordA);
             int64_t gmOffsetB = layoutB.GetOffset(coordB);
             int64_t gmOffsetC = params.layoutC.GetOffset(coordC);
-            MatrixCoord coordNextA{nextStreamkBlockDec.nextBlockCoord.m() * params.l1TileShape.m(),
-                nextStreamkBlockDec.nextBlockCoord.k() * params.l1TileShape.k()};
-            MatrixCoord coordNextB{nextStreamkBlockDec.nextBlockCoord.k() * params.l1TileShape.k(),
-                nextStreamkBlockDec.nextBlockCoord.n() * params.l1TileShape.n()};
+            MatrixCoord coordNextA{nextStreamkBlockDec.blockCoord.m() * params.l1TileShape.m(),
+                nextStreamkBlockDec.blockCoord.k() * params.l1TileShape.k()};
+            MatrixCoord coordNextB{nextStreamkBlockDec.blockCoord.k() * params.l1TileShape.k(),
+                nextStreamkBlockDec.blockCoord.n() * params.l1TileShape.n()};
             int64_t gmOffsetNextA = layoutA.GetOffset(coordNextA);
             int64_t gmOffsetNextB = layoutB.GetOffset(coordNextB);
 
@@ -400,8 +401,10 @@ public:
                 layoutA,
                 gmB[gmOffsetB],
                 layoutB,
-                gmW[gmOffsetW],
+                gmC[gmOffsetC],
                 params.layoutC,
+                gmW[gmOffsetW],
+                layoutW,
                 gmA[gmOffsetNextA],
                 gmB[gmOffsetNextB],
                 streamkBlockDec.actualBlockShape,
@@ -409,36 +412,37 @@ public:
                 isFirstBlock,
                 hasNextBlock,
                 streamkBlockDec.isStreamkBlock);
-        }
-        // If the current block is a cross block-meaning it consists partly of the tail k portion of
-        // current block and partly of head k portion of the next block-then a second blockmmad
-        // computation must be invoked to process the head k segment of the next block.
-        if (streamkBlockDec.isCrossBlock) {
-            MatrixCoord coordA{streamkBlockDec.streamkBlockCoord.m() * params.l1TileShape.m(),
-                streamkBlockDec.streamkBlockDec.k() * params.l1TileShape.k()};
-            MatrixCoord coordB{streamkBlockDec.streamkBlockCoord.k() * params.l1TileShape.k(),
-                streamkBlockDec.streamkBlockDec.n() * params.l1TileShape.n()};
-            int64_t gmOffsetA = layoutA.GetOffset(coordA);
-            int64_t gmOffsetB = layoutB.GetOffset(coordB);
-            int64_t gmOffsetW = params.l1TileShape.m() * params.l1TileShape.n() * (2 * blockIdx + 1);
-            LayoutC layoutW = LayoutC{streamkBlockDec.streamkActualBlockShape.m(),
-                streamkBlockDec.streamkActualBlockShape.n(), params.l1TileShape.n()};
-            blockMmad(gmA[gmOffsetA],
-                layoutA,
-                gmB[gmOffsetB],
-                layoutB,
-                gmC[gmOffsetC],
-                params.layoutC,
-                gmA[gmOffsetNextA],
-                gmB[gmOffsetNextB],
-                streamkBlockDec.streamkActualBlockShape,
-                nextStreamkBlockDec.actualBlockShape,
-                true,
-                false,
-                streamkBlockDec.isStreamkBlock);
+            // If the current block is a cross block-meaning it consists partly of the tail k portion of
+            // current block and partly of head k portion of the next block-then a second blockmmad
+            // computation must be invoked to process the head k segment of the next block.
+            if (streamkBlockDec.isCrossBlock) {
+                MatrixCoord coordA{streamkBlockDec.streamkBlockCoord.m() * params.l1TileShape.m(),
+                    streamkBlockDec.streamkBlockCoord.k() * params.l1TileShape.k()};
+                MatrixCoord coordB{streamkBlockDec.streamkBlockCoord.k() * params.l1TileShape.k(),
+                    streamkBlockDec.streamkBlockCoord.n() * params.l1TileShape.n()};
+                int64_t gmOffsetA = layoutA.GetOffset(coordA);
+                int64_t gmOffsetB = layoutB.GetOffset(coordB);
+                int64_t gmOffsetW = params.l1TileShape.m() * params.l1TileShape.n() * (2 * blockIdx + 1);
+                LayoutC layoutW = LayoutC{streamkBlockDec.streamkActualBlockShape.m(),
+                    streamkBlockDec.streamkActualBlockShape.n(), params.l1TileShape.n()};
+                blockMmad(gmA[gmOffsetA],
+                    layoutA,
+                    gmB[gmOffsetB],
+                    layoutB,
+                    gmC[gmOffsetC],
+                    params.layoutC,
+                    gmW[gmOffsetW],
+                    layoutW,
+                    gmA[gmOffsetNextA],
+                    gmB[gmOffsetNextB],
+                    streamkBlockDec.streamkActualBlockShape,
+                    nextStreamkBlockDec.actualBlockShape,
+                    true,
+                    false,
+                    streamkBlockDec.isStreamkBlock);
+            }
 
         }
-
         Catlass::Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(flagAicFinish);
         AscendC::PipeBarrier<PIPE_ALL>();
     }
