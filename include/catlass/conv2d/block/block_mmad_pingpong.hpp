@@ -184,7 +184,15 @@ public:
 
         uint32_t howoRound = RoundUp<L1FmapAlignHelper::HOWO_ALIGNED>(howoActual);
         uint32_t coutRound = RoundUp<L1FilterAlignHelper::COUT_ALIGNED>(actualShape.cout());
-
+        
+        uint32_t hoL0Tile = Max(L0TileShape::M / woActual, 1);
+        uint32_t mL0A = hoL0Tile * woActual;
+        uint32_t mL0C = RoundUp<C0_NUM_PER_FRACTAL>(mL0A);
+        uint32_t mPartLoop = CeilDiv(hoActual, hoL0Tile);
+        uint32_t nPartLoop = CeilDiv<L0TileShape::N>(coutRound);
+        uint32_t cin1L0Tile = Max(L0TileShape::K / (configs.kh() * configs.kw() * ELE_NUM_A_PER_C0), 1);
+        uint32_t mL1C = mL0C * mPartLoop;
+        
         auto layoutFmapInL1 = LayoutFmapInL1::template MakeLayout<ElementFmap>(
             (uint32_t)1, FmapL1TileShape::Cin1, hiActual, wiActual, ELE_NUM_A_PER_C0);
         auto layoutFilterInL1 = LayoutFilterInL1::template MakeLayout<ElementFilter>(
@@ -212,14 +220,6 @@ public:
         if constexpr (!ENABLE_UNIT_FLAG) {
             AscendC::WaitFlag<AscendC::HardEvent::FIX_M>(EVENT_ID0);
         }
-
-        uint32_t hoL0Tile = Max(L0TileShape::M / woActual, 1);
-        uint32_t mL0A = hoL0Tile * woActual;
-        uint32_t mL0C = RoundUp<C0_NUM_PER_FRACTAL>(mL0A);
-        uint32_t mPartLoop = CeilDiv(hoActual, hoL0Tile);
-        uint32_t nPartLoop = CeilDiv<L0TileShape::N>(coutRound);
-        uint32_t cin1L0Tile = Max(L0TileShape::K / (configs.kh() * configs.kw() * ELE_NUM_A_PER_C0), 1);
-        uint32_t mL1C = mL0C * mPartLoop;
 
         // main loop
         uint32_t cin1TileCnt =

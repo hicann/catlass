@@ -69,26 +69,26 @@ struct Options {
       ARGS_MAX
     };
 
-    // if (argc > ARGS_MAX || argc <= DILATIONW_INDEX) {
-    //   std::cerr << HELPER << std::endl;
-    //   return 0;
-    // }
+    if (argc > ARGS_MAX || argc <= DILATIONW_INDEX) {
+      std::cerr << HELPER << std::endl;
+      return 0;
+    }
 
-    // dataSizes[0] = std::atoi(argv[BATCH_INDEX]);
-    // dataSizes[1] = std::atoi(argv[HI_INDEX]);
-    // dataSizes[2] = std::atoi(argv[WI_INDEX]);
-    // dataSizes[3] = std::atoi(argv[CIN_INDEX]);
-    // dataSizes[4] = std::atoi(argv[COUT_INDEX]);
-    // filterSizes[0] = std::atoi(argv[KH_INDEX]);
-    // filterSizes[1] = std::atoi(argv[KW_INDEX]);
-    // pads[0] = std::atoi(argv[PADLEFT_INDEX]);
-    // pads[1] = std::atoi(argv[PADRIGHT_INDEX]);
-    // pads[2] = std::atoi(argv[PADTOP_INDEX]);
-    // pads[3] = std::atoi(argv[PADBOTTOM_INDEX]);
-    // strides[0] = std::atoi(argv[STRIDEH_INDEX]);
-    // strides[1] = std::atoi(argv[STRIDEW_INDEX]);
-    // dilations[0] = std::atoi(argv[DILATIONH_INDEX]);
-    // dilations[1] = std::atoi(argv[DILATIONW_INDEX]);
+    dataSizes[0] = std::atoi(argv[BATCH_INDEX]);
+    dataSizes[1] = std::atoi(argv[HI_INDEX]);
+    dataSizes[2] = std::atoi(argv[WI_INDEX]);
+    dataSizes[3] = std::atoi(argv[CIN_INDEX]);
+    dataSizes[4] = std::atoi(argv[COUT_INDEX]);
+    filterSizes[0] = std::atoi(argv[KH_INDEX]);
+    filterSizes[1] = std::atoi(argv[KW_INDEX]);
+    pads[0] = std::atoi(argv[PADLEFT_INDEX]);
+    pads[1] = std::atoi(argv[PADRIGHT_INDEX]);
+    pads[2] = std::atoi(argv[PADTOP_INDEX]);
+    pads[3] = std::atoi(argv[PADBOTTOM_INDEX]);
+    strides[0] = std::atoi(argv[STRIDEH_INDEX]);
+    strides[1] = std::atoi(argv[STRIDEW_INDEX]);
+    dilations[0] = std::atoi(argv[DILATIONH_INDEX]);
+    dilations[1] = std::atoi(argv[DILATIONW_INDEX]);
 
     problemParams = Catlass::Conv2dParams::MakeConv2dParams(dataSizes, filterSizes, pads, strides, dilations);
 
@@ -98,6 +98,14 @@ struct Options {
     return 0;
   }
 };
+
+int32_t Max(int32_t a, int32_t b) {
+  if (a > b) {
+      return a;
+  } else {
+      return b;
+  }
+}
 
 void Run(Options const &options) {
   aclrtStream stream{nullptr};
