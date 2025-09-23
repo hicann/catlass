@@ -17,7 +17,7 @@
 在想进行调试的代码段增加打印代码。
 
 ```diff
-// include/catlass/gemm/kernel/basic_matmul.hpp
+// include/catlass/gemm/kernel/splitk_matmul.hpp
 // ...
     CATLASS_DEVICE
     void operator()(
