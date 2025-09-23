@@ -22,7 +22,7 @@ TORCH_LIBRARY(CatlassTorch, m)
              "split) -> Tensor")
         .def("optimized_matmul(Tensor mat1, Tensor mat2, str c) -> Tensor")
         .def("flash_attention_infer(Tensor query, Tensor key, Tensor value, "
-              "List[int] actual_seq_lengths, List[int] actual_seq_lengths_kv, "
+              "int[] actual_seq_lengths, int[] actual_seq_lengths_kv, "
               "Tensor atten_mask, Tensor block_table, str input_layout, "
               "int num_heads, int num_key_value_heads, int sparse_mode) -> Tensor");
 }
