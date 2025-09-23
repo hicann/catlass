@@ -81,7 +81,7 @@ FAKernelInfo GetKernelInfo(const at::Tensor &query, const at::Tensor &key, const
 
     uint8_t *kvSeqDevice;
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(kvSeqDevice), seqArraySize, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMemcpy(kvSeqDevice, seqArraySize, actual_seq_lengths.data(), seqArraySize, ACL_MEMCPY_HOST_TO_DEVICE));
+    ACL_CHECK(aclrtMemcpy(kvSeqDevice, seqArraySize, actual_seq_lengths_kv.data(), seqArraySize, ACL_MEMCPY_HOST_TO_DEVICE));
 
     FAKernelInfo kernelInfo;
     kernelInfo.inputAddr.resize(7);
