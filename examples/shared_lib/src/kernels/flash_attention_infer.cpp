@@ -803,8 +803,7 @@ void FAImpl(const uint32_t blockNum, aclrtStream stream, const FAKernelInfo &ker
     int32_t numBlocks = batch * ((maxKvSeqlen + blockSize - 1) / blockSize);
 
     // read qNtokens num
-    void *qNtokens = kernelInfo.inputAddr.at(0);
-    int32_t numTokens = static_cast<int32_t *>(qNtokens)[0];
+    int32_t numTokens = kernelInfo.qNtokens;
 
     uint64_t seqArraySize = batch * sizeof(int64_t);
     uint64_t qoSize = (uint64_t)numTokens * (uint64_t)numHeads * (uint64_t)embeddingSize * sizeof(DType);
@@ -816,22 +815,22 @@ void FAImpl(const uint32_t blockNum, aclrtStream stream, const FAKernelInfo &ker
     // ?????
     uint32_t tilingSize = sizeof(FATilingData);
 
-    uint8_t *qSeqDevice = kernelInfo.inputAddr.at(1);
+    uint8_t *qSeqDevice = kernelInfo.inputAddr.at(0);
 
-    uint8_t *kvSeqDevice = kernelInfo.inputAddr.at(2);
+    uint8_t *kvSeqDevice = kernelInfo.inputAddr.at(1);
     
-    uint8_t *qDevice = kernelInfo.inputAddr.at(3);
+    uint8_t *qDevice = kernelInfo.inputAddr.at(2);
 
-    uint8_t *kDevice = kernelInfo.inputAddr.at(4);
+    uint8_t *kDevice = kernelInfo.inputAddr.at(3);
 
-    uint8_t *vDevice = kernelInfo.inputAddr.at(5);
+    uint8_t *vDevice = kernelInfo.inputAddr.at(4);
 
     uint8_t *maskDevice;
     if (maskType == 1) {
-        maskDevice = kernelInfo.inputAddr.at(6);
+        maskDevice = kernelInfo.inputAddr.at(5);
     }
 
-    uint8_t *blockTableDevice = kernelInfo.inputAddr.at(7);
+    uint8_t *blockTableDevice = kernelInfo.inputAddr.at(6);
 
     // Allocate matrices in device memory for workspace.
     // One base workspace block contains 65536 elements.

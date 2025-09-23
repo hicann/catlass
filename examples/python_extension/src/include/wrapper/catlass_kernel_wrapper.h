@@ -24,11 +24,10 @@ at::Tensor RunOptimizedMatmul(const at::Tensor &mat1, const at::Tensor &mat2, co
 at::Tensor RunConvBias(const at::Tensor &fmap, const at::Tensor &filter, const at::Tensor &bias,
                        const std::vector<int64_t> &strideList, const std::vector<int64_t> &padList,
                        const std::vector<int64_t> &dilationList, const std::string &outDType);
-at::Tensor RunFlashAttentionInfer(const at::Tensor &qNtokens, const at::Tensor &qSeqDevice, const at::Tensor &kvSeqDevice,
-                                  const at::Tensor &qDevice, const at::Tensor &kDevice, const at::Tensor &vDevice, const at::Tensor &maskDevice,
-                                  const at::Tensor &blockTableDevice, const int32_t &batch, const int32_t &q_seqlen, const int32_t &kv_seqlen,
-                                  const int32_t &num_head, const int32_t &kv_heads, const int32_t &embedding_size, const int32_t &is_varied_len,
-                                  const int32_t &mask_type, const std::string &str_dtype, const int32_t &kv_dtype);
+at::Tensor RunFlashAttentionInfer(const at::Tensor &query, const at::Tensor &key, const at::Tensor &value,
+                           const std::vector<int64_t> &actual_seq_lengths, const std::vector<int64_t> &actual_seq_lengths_kv,
+                           const at::Tensor &atten_mask, const at::Tensor &block_table, const std::string &input_layout,
+                           const int32_t &num_heads, const int32_t &num_key_value_heads, const int32_t &sparse_mode);
 } // namespace CatlassKernelWrapper
 
 #endif // PY_EXT_CATLASS_KERNEL_WRAPPER_H

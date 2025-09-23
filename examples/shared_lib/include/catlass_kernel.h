@@ -59,6 +59,7 @@ struct ConvKernelInfo {
 };
 
 struct FAKernelInfo {
+    uint32_t qNtokens{0};
     uint32_t batch{0};
     uint32_t qSeqlen{0};
     uint32_t kvSeqlen{0};

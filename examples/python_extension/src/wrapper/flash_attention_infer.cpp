@@ -18,46 +18,81 @@ namespace CatlassKernelWrapper::FAILike {
 using namespace CatlassKernel;
 using OutputType = at::Tensor;
 
-FAKernelInfo GetKernelInfo(const at::Tensor &qNtokens, const at::Tensor &qSeqDevice, const at::Tensor &kvSeqDevice,
-                           const at::Tensor &qDevice, const at::Tensor &kDevice, const at::Tensor &vDevice, const at::Tensor &maskDevice,
-                           const at::Tensor &blockTableDevice, const int32_t &batch, const int32_t &q_seqlen, const int32_t &kv_seqlen,
-                           const int32_t &num_head, const int32_t &kv_heads, const int32_t &embedding_size, const int32_t &is_varied_len,
-                           const int32_t &mask_type, const std::string &str_dtype, const int32_t &kv_dtype)  // 暴露变量整改
+FAKernelInfo GetKernelInfo(const at::Tensor &query, const at::Tensor &key, const at::Tensor &value,
+                           const std::vector<int64_t> &actual_seq_lengths, const std::vector<int64_t> &actual_seq_lengths_kv,
+                           const at::Tensor &atten_mask, const at::Tensor &block_table, const std::string &input_layout,
+                           const int32_t &num_heads, const int32_t &num_key_value_heads, const int32_t &sparse_mode)
 {
+    if (input_layout != "TND") {
+        throw std::runtime_error("input_layout of fai only support TND");
+    }
+    aclDataType query_dtype = TorchDtypeToAclDtype(query.scalar_type());
+    aclDataType key_dtype = TorchDtypeToAclDtype(key.scalar_type());
+    aclDataType value_dtype = TorchDtypeToAclDtype(value.scalar_type());
+    if (query_dtype != key_dtype || query_dtype != value_dtype) {
+        throw std::runtime_error("query, key and value must have the same dataType");
+    }
+    int32_t *qNtokens = nullptr;
+    ACL_CHECK(aclrtMallocHost(reinterpret_cast<void**>(&qNtokens), 1 * sizeof(int32_t)));
+    qNtokens[0] = query.sizes().at(0);
+    int32_t embedding_size = query.sizes().at(2);
+
+    int32_t batch = actual_seq_lengths.size();
+    int32_t q_seqlen = std::max_element(actual_seq_lengths.begin(), actual_seq_lengths.end());
+    int32_t kv_seqlen = std::max_element(actual_seq_lengths_kv.begin(), actual_seq_lengths_kv.end());
+
+    int32_t mask_type;
+    switch (sparse_mode)
+    {
+    case 0:
+        mask_type = 0;
+        break;
+    case 1:
+        mask_type = 3;
+        break;
+    default:
+        throw std::runtime_error("sparse_mode of fai should be 0 or 1");
+    }
+
+    int32_t kv_dtype;
+    if (block_table.numel() != 0) {
+        kv_dtype = 1;
+    } else {
+        kv_dtype = 0;
+    }
+
+    aclDataType str_dtype = query_dtype;
+    if ((str_dtype != ACL_FLOAT16) || (str_dtype != ACL_BF16)) {
+        throw std::runtime_error("str_dtype of fai should be ACL_FLOAT16 or ACL_BF16");
+    }
+
     FAKernelInfo kernelInfo;
-
-    kernelInfo.inputAddr.resize(8);
-    kernelInfo.inputAddr[0] = static_cast<uint8_t *>(const_cast<void *>(qNtokens.storage().data()));
-    kernelInfo.inputAddr[1] = static_cast<uint8_t *>(const_cast<void *>(qSeqDevice.storage().data()));
-    kernelInfo.inputAddr[2] = static_cast<uint8_t *>(const_cast<void *>(kvSeqDevice.storage().data()));
-    kernelInfo.inputAddr[3] = static_cast<uint8_t *>(const_cast<void *>(qDevice.storage().data()));
-    kernelInfo.inputAddr[4] = static_cast<uint8_t *>(const_cast<void *>(kDevice.storage().data()));
-    kernelInfo.inputAddr[5] = static_cast<uint8_t *>(const_cast<void *>(vDevice.storage().data()));
-    kernelInfo.inputAddr[6] = static_cast<uint8_t *>(const_cast<void *>(maskDevice.storage().data()));
-    kernelInfo.inputAddr[7] = static_cast<uint8_t *>(const_cast<void *>(blockTableDevice.storage().data()));
-
+    kernelInfo.inputAddr.resize(7);
+    kernelInfo.inputAddr[0] = static_cast<uint8_t *>(const_cast<void *>(actual_seq_lengths.storage().data()));
+    kernelInfo.inputAddr[1] = static_cast<uint8_t *>(const_cast<void *>(actual_seq_lengths_kv.storage().data()));
+    kernelInfo.inputAddr[2] = static_cast<uint8_t *>(const_cast<void *>(query.storage().data()));
+    kernelInfo.inputAddr[3] = static_cast<uint8_t *>(const_cast<void *>(key.storage().data()));
+    kernelInfo.inputAddr[4] = static_cast<uint8_t *>(const_cast<void *>(value.storage().data()));
+    kernelInfo.inputAddr[5] = static_cast<uint8_t *>(const_cast<void *>(atten_mask.storage().data()));
+    kernelInfo.inputAddr[6] = static_cast<uint8_t *>(const_cast<void *>(block_table.storage().data()));
+    
+    kernelInfo.qNtokens = qNtokens[0];
     kernelInfo.batch = batch;
     kernelInfo.qSeqlen = q_seqlen;
     kernelInfo.kvSeqlen = kv_seqlen;
-    kernelInfo.numHeads = num_head;
-    kernelInfo.kvHeads = kv_heads;
+    kernelInfo.numHeads = num_heads;
+    kernelInfo.kvHeads = num_key_value_heads;
     kernelInfo.embeddingSize = embedding_size;
-    kernelInfo.blockSize = 128;  // 此处存在问题需要整改
-    kernelInfo.isVariedLen = is_varied_len;
+    kernelInfo.blockSize = 128;
     kernelInfo.maskType = mask_type;
-
-    if ((str_dtype != "float16") && (str_dtype != "bf16")) {
-        throw std::runtime_error("str_dtype of fai should be float16 or bf16.");
-    }
-    kernelInfo.dataType = TypeStrToAclDtype(str_dtype);
+    kernelInfo.dataType = str_dtype;
 
     return kernelInfo;
 }
 
 OutputType AllocOutput(FAKernelInfo &kernelInfo)
 {
-    void *qNtokens = kernelInfo.inputAddr.at(0);
-    int32_t numTokens = static_cast<int32_t *>(qNtokens)[0];
+    int32_t numTokens = kernelInfo.qNtokens;
 
     int32_t numHeads = kernelInfo.numHeads;
 

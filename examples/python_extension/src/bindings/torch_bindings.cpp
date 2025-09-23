@@ -21,10 +21,10 @@ TORCH_LIBRARY(CatlassTorch, m)
         .def("grouped_matmul(Tensor mat1, Tensor mat2, Tensor groupList, str c, bool trans_a, bool trans_b, bool "
              "split) -> Tensor")
         .def("optimized_matmul(Tensor mat1, Tensor mat2, str c) -> Tensor")
-        .def("flash_attention_infer(Tensor qNtokens, Tensor qSeqDevice, Tensor kvSeqDevice, Tensor qDevice, "
-              "Tensor kDevice, Tensor vDevice, Tensor maskDevice, Tensor blockTableDevice, int batch, "
-              "int q_seqlen, int kv_seqlen, num_head, int kv_heads, int embedding_size, int is_varied_len, "
-              "int mask_type, str str_dtype, int kv_dtype) -> Tensor");
+        .def("flash_attention_infer(Tensor query, Tensor key, Tensor value, "
+              "List[int] actual_seq_lengths, List[int] actual_seq_lengths_kv, "
+              "Tensor atten_mask, Tensor block_table, str input_layout, "
+              "int num_heads, int num_key_value_heads, int sparse_mode) -> Tensor");
 }
 
 TORCH_LIBRARY_IMPL(CatlassTorch, NPU, m)
