@@ -27,6 +27,13 @@
 
 #define TEMPLATE_RET_TYPE int32_t
 
+#ifdef __DAV_C220__
+#    define float8_e4m3_t int8_t
+#endif
+
+#define aicCoreNum platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic()
+#define aivCoreNum platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAiv()
+
 // Macro function for unwinding acl errors.
 #define ACL_CHECK(status)              \
     do {                               \

@@ -9,9 +9,12 @@ import os
 from typing import Iterable, List, Optional, Union
 
 import torch
-
 from catlass_test import CATLASS_TEST_KERNEL_EXAMPLES_PATH
-from catlass_test.adapter import GroupedMatmulAdapter, MatmulAdapter
+from catlass_test.adapter import (
+    BatchedMatmulAdapter,
+    GroupedMatmulAdapter,
+    MatmulAdapter,
+)
 from catlass_test.common import OpType
 
 
@@ -49,7 +52,7 @@ def batched_matmul(
     """
     output_tensors = {"C": out} if out is not None else {}
 
-    adapter = MatmulAdapter(
+    adapter = BatchedMatmulAdapter(
         os.path.join(
             CATLASS_TEST_KERNEL_EXAMPLES_PATH, "01_batched_matmul", "batched_matmul.hpp"
         ),
@@ -125,7 +128,7 @@ def grouped_matmul_slice_k(
     out_dtype: Optional[torch.dtype] = None,
     out: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
-    """Test function for `examples/02_grouped_matmul_slice_m`.
+    """Test function for `examples/05_grouped_matmul_slice_k`.
     This function does not have equivalent torch function.
     """
     if isinstance(group_list, Iterable):

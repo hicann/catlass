@@ -83,7 +83,7 @@ class AdapterBase(ABC):
             return ""
         return ""
 
-    def get_compile_params(self) -> Dict[str, str]:
+    def __get_compile_params(self) -> Dict[str, str]:
         compile_params = {}
         template_compile_params = self.template_compiler.compile_params
         element_pattern: re.Pattern[str] = re.compile(r"Element([A-Za-z0-9_]+)")
@@ -97,9 +97,13 @@ class AdapterBase(ABC):
                 compile_params[template_compile_param] = self.get_tensor_layout(
                     var_name.group(1)
                 )
+            else:
+                compile_params[template_compile_param] = self.get_compile_params(
+                    template_compile_param
+                )
         return compile_params
 
-    def get_runtime_params(self) -> List[Any]:
+    def __get_runtime_params(self) -> List[Any]:
         runtime_params = []
         template_runtime_params = self.template_compiler.runtime_params
         ptr_pattern = re.compile(r"device([A-Za-z0-9_]+)")
@@ -113,15 +117,13 @@ class AdapterBase(ABC):
                 var_name := layout_pattern.search(template_runtime_param)
             ) is not None:
                 logger.error("Do not support layout")
-            elif template_runtime_param == "problemShape":
-                runtime_params.append(self.get_problem_shape())
-            elif template_runtime_param == "problemCount":
-                runtime_params.append(self.get_problem_count())
+            else:
+                runtime_params.append(self.get_runtime_params(template_runtime_param))
         return runtime_params
 
     def get_kernel(self) -> ctypes.CDLL:
         kernel_path = self.template_compiler.compile(
-            self.get_compile_params(), self.op_type
+            self.__get_compile_params(), self.op_type
         )
         kernel_dll = load_kernel_lib(kernel_path)
         return kernel_dll
@@ -129,7 +131,7 @@ class AdapterBase(ABC):
     def run(self):
         """执行用例"""
         logger.info(f"kernel template is {self.kernel_src_file}.")
-        params = self.get_runtime_params()
+        params = self.__get_runtime_params()
         logger.info(",".join([str(type(param).__name__) for param in params]))
         kernel = self.get_kernel()
         torch.npu.synchronize()
@@ -148,7 +150,14 @@ class AdapterBase(ABC):
 
         return output_tensors
 
+    def get_compile_params(self, param_name: str):
+        pass
+
+    def get_runtime_params(self, param_name: str):
+        pass
+
     # abstract methods
+
     @abstractmethod
     def get_output_shapes(self) -> Dict[str, Tuple[int, ...]]:
         pass

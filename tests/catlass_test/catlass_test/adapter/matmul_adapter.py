@@ -13,6 +13,12 @@ from catlass_test.catlass.gemm_coord import GemmCoord
 
 
 class MatmulAdapter(AdapterBase):
+    def get_runtime_params(self, param_name: str):
+        if param_name == "problemShape":
+            return self.get_problem_shape()
+        elif param_name == "problemCount":
+            return self.get_problem_count()
+
     def get_output_shapes(self) -> Dict[str, Tuple[int, ...]]:
         ma, ka = self.A.shape[-2:]
         kb, nb = self.B.shape[-2:]
