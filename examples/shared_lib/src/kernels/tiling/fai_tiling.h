@@ -12,7 +12,7 @@
 #define CATLASS_EXAMPLES_FAI_SHAREDLIB_TILING_H
 
 #include <cstdint>
-#include "fai_tiling.h"
+#include "fai_tiling_data.h"
 
 namespace FAInferTiling {
 const int32_t NUM0 = 0;
