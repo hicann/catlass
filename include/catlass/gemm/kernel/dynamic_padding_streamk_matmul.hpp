@@ -78,7 +78,7 @@ struct StreamkReduceAdd {
             // Get the ID of first core for the current skBlock computation.
             uint32_t startCoreIdx = matmulBlockScheduler.GetCoreIdx(skBlockId);
             // Get the ID of first core for the next skBlock computation.
-            uint32_t endCoreIdx = matmulBlockScheduler.GetCoreIdx(skBlockId);
+            uint32_t endCoreIdx = matmulBlockScheduler.GetCoreIdx(skBlockId + 1);
             if (isTailCross) {
                 endCoreIdx = endCoreIdx + 1;
             }
