@@ -19,12 +19,12 @@ using OutputType = at::Tensor;
 
 torch::Tensor GetConvOutputTensor(const std::vector<int64_t> &shape, const torch::Dtype dtype) {
     at::TensorOptions options = at::TensorOptions();
-    options = options.dtype(dtype).layout(at::kStrided).requires_grad(false).device(torch_npu::utils::get_npu_device_type());
+    options =
+        options.dtype(dtype).layout(at::kStrided).requires_grad(false).device(torch_npu::utils::get_npu_device_type());
     return at_npu::native::empty_with_format(shape, options, ACL_FORMAT_NDC1HWC0);
 }
 
-OutputType AllocOutput(ConvKernelInfo &kernelInfo)
-{
+OutputType AllocOutput(ConvKernelInfo &kernelInfo) {
     int64_t n = kernelInfo.fmapRelated[0];
     int64_t di = kernelInfo.fmapRelated[1];
     int64_t hi = kernelInfo.fmapRelated[3];
@@ -34,9 +34,12 @@ OutputType AllocOutput(ConvKernelInfo &kernelInfo)
     int64_t kh = kernelInfo.filterRelated[1];
     int64_t kw = kernelInfo.filterRelated[2];
 
-    int64_t Do = (di + kernelInfo.padList[0] * 2 - kernelInfo.dilationList[0] * (kd - 1) - 1) / kernelInfo.strideList[0] + 1;
-    int64_t Ho = (hi + kernelInfo.padList[1] * 2 - kernelInfo.dilationList[1] * (kh - 1) - 1) / kernelInfo.strideList[1] + 1;
-    int64_t Wo = (wi + kernelInfo.padList[2] * 2 - kernelInfo.dilationList[2] * (kw - 1) - 1) / kernelInfo.strideList[2] + 1;
+    int64_t Do = (di + kernelInfo.padList[0] * 2 - kernelInfo.dilationList[0] * (kd - 1) - 1) / kernelInfo.strideList[0]
+                 + 1;
+    int64_t Ho = (hi + kernelInfo.padList[1] * 2 - kernelInfo.dilationList[1] * (kh - 1) - 1) / kernelInfo.strideList[1]
+                 + 1;
+    int64_t Wo = (wi + kernelInfo.padList[2] * 2 - kernelInfo.dilationList[2] * (kw - 1) - 1) / kernelInfo.strideList[2]
+                 + 1;
 
     OutputType output = GetConvOutputTensor({n, cout, Do, Ho, Wo}, AclDtypeToTorchDtype(kernelInfo.outputDataType));
     kernelInfo.outputAddr.resize(1);
@@ -44,10 +47,13 @@ OutputType AllocOutput(ConvKernelInfo &kernelInfo)
     return output;
 }
 
-ConvKernelInfo GetKernelInfo(const at::Tensor &fmap, const at::Tensor &filter, const at::Tensor &bias,
-                             const std::vector<int64_t> &strideList, const std::vector<int64_t> &padList,
-                             const std::vector<int64_t> &dilationList, const std::string &outDType)
-{
+ConvKernelInfo GetKernelInfo(const at::Tensor &fmap,
+                             const at::Tensor &filter,
+                             const at::Tensor &bias,
+                             const std::vector<int64_t> &strideList,
+                             const std::vector<int64_t> &padList,
+                             const std::vector<int64_t> &dilationList,
+                             const std::string &outDType) {
     ConvKernelInfo kernelInfo;
 
     kernelInfo.inputAddr.resize(3);
@@ -86,4 +92,4 @@ ConvKernelInfo GetKernelInfo(const at::Tensor &fmap, const at::Tensor &filter, c
     kernelInfo.outputDataType = TypeStrToAclDtype(outDType);
     return kernelInfo;
 }
-} // namespace CatlassKernelWrapper::MatmulLike
+} // namespace CatlassKernelWrapper::ConvLike

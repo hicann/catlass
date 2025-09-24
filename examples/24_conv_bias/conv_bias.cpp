@@ -8,38 +8,34 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0, 
+// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0,
 // optimizing stack space. If you need to use the ShapeInfo of the AscendC Tensor, please undefine this macro.
 #ifndef K_MAX_SHAPE_DIM
 #define K_MAX_SHAPE_DIM 0
 #endif
 
-#include <iostream>
 #include <fstream>
+#include <iostream>
 #include <vector>
 
-#include "helper.hpp"
-#include "golden.hpp"
-#include "fp16_t.h"
-
-#include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
+#include "catlass/catlass.hpp"
 #include "catlass/conv/block/block_conv.hpp"
 #include "catlass/conv/block/block_swizzle.hpp"
+#include "catlass/conv/device/device_conv.hpp"
 #include "catlass/conv/dispatch_policy.hpp"
 #include "catlass/conv/kernel/conv3d_bias.hpp"
+#include "catlass/conv_coord.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 #include "catlass/layout/layout.hpp"
-#include "catlass/conv_coord.hpp"
-
 #include "catlass/status.hpp"
-#include "catlass/conv/device/device_conv.hpp"
+
+#include "golden.hpp"
+#include "helper.hpp"
 
 using namespace Catlass;
-using fp16_t = op::fp16_t;
 
-bool ReadFile(const std::string &filePath, void *buffer, size_t bufferSize)
-{
+bool ReadFile(const std::string &filePath, void *buffer, size_t bufferSize) {
     if (buffer == nullptr) {
         printf("Read file %s failed. Buffer is nullptr.\n", filePath.c_str());
         return false;
@@ -64,15 +60,16 @@ bool ReadFile(const std::string &filePath, void *buffer, size_t bufferSize)
         return false;
     }
     buf->pubseekpos(0, std::ios::in);
-    buf->sgetn(static_cast<char*>(buffer), size);
+    buf->sgetn(static_cast<char *>(buffer), size);
     return true;
 }
 
 struct Options {
-    const std::string HELPER = "24_conv_bias batch di cin1 hi wi cin0 cout kd kh kw sD sH sW dD dH dW pD pH pW [device_id]";
+    const std::string HELPER =
+        "24_conv_bias batch di cin1 hi wi cin0 cout kd kh kw sD sH sW dD dH dW pD pH pW [device_id]";
 
-    uint32_t fmapRelated[6] = {1, 1, 1, 2, 9, 16};  // {batch, di, cin1, hi, wi, cin0}
-    uint32_t filterRelated[4] = {1, 1, 1, 1};  // {kd, kh, kw, cout}
+    uint32_t fmapRelated[6] = {1, 1, 1, 2, 9, 16}; // {batch, di, cin1, hi, wi, cin0}
+    uint32_t filterRelated[4] = {1, 1, 1, 1};      // {kd, kh, kw, cout}
     uint32_t strides[3] = {1, 1, 1};
     uint32_t pads[3] = {0, 0, 0};
     uint32_t dilations[3] = {1, 1, 1};
@@ -80,8 +77,7 @@ struct Options {
 
     Options() = default;
 
-    int Parse(int argc, const char **argv)
-    {
+    int Parse(int argc, const char **argv) {
         enum ArgsIndex {
             BATCH_INDEX = 1,
             DI_INDEX,
@@ -139,15 +135,15 @@ struct Options {
     }
 };
 
-void Run(Options const &options)
-{
+void Run(Options const &options) {
     aclrtStream stream{nullptr};
 
     ACL_CHECK(aclInit(nullptr));
     ACL_CHECK(aclrtSetDevice(options.deviceId));
     ACL_CHECK(aclrtCreateStream(&stream));
 
-    Conv3dParams problemShape = Conv3dParams::MakeConvCoord(options.fmapRelated, options.filterRelated, options.pads, options.strides, options.dilations);
+    Conv3dParams problemShape = Conv3dParams::MakeConvCoord(options.fmapRelated, options.filterRelated, options.pads,
+                                                            options.strides, options.dilations);
 
     uint32_t n = problemShape.batch();
     uint32_t di = problemShape.di();
@@ -170,10 +166,10 @@ void Run(Options const &options)
     size_t lenBias = static_cast<size_t>(cout);
     size_t lenOut = static_cast<size_t>(n) * dout * cout1 * ho * wo * cout0;
 
-    size_t sizeFmap = lenFmap * sizeof(fp16_t);
-    size_t sizeFilter = lenFilter * sizeof(fp16_t);
-    size_t sizeOut = lenOut * sizeof(fp16_t);
-    size_t sizeBias = lenBias * sizeof(fp16_t);
+    size_t sizeFmap = lenFmap * sizeof(float16);
+    size_t sizeFilter = lenFilter * sizeof(float16);
+    size_t sizeOut = lenOut * sizeof(float16);
+    size_t sizeBias = lenBias * sizeof(float16);
 
     using LayoutFmap = layout::NDC1HWC0;
     using LayoutFilter = layout::KDC1KHKWN1N0C0;
@@ -183,9 +179,9 @@ void Run(Options const &options)
     LayoutFilter layoutFilter{kdc1khkw, n1, n0, cin0};
     LayoutOut layoutOut{n, dout, cout1, ho * wo, cout0};
 
-    std::vector<fp16_t> hostFmap(lenFmap);
-    std::vector<fp16_t> hostFilter(lenFilter);
-    std::vector<fp16_t> hostBias(lenBias);
+    std::vector<float16> hostFmap(lenFmap);
+    std::vector<float16> hostFilter(lenFilter);
+    std::vector<float16> hostBias(lenBias);
     ReadFile("./data/fmap.bin", hostFmap.data(), sizeFmap);
     ReadFile("./data/weight.bin", hostFilter.data(), sizeFilter);
     ReadFile("./data/bias.bin", hostBias.data(), sizeBias);
@@ -215,23 +211,21 @@ void Run(Options const &options)
     constexpr uint32_t l0CStages = 1;
     constexpr bool enableUnitFlag = true;
     using ArchTag = Arch::AtlasA2;
-    using DispatchPolicy = Conv::ConvAtlasA2Pingpong<
-        l1AStages, l1BStages,
-        l0AStages, l0BStages,
-        l0CStages, enableUnitFlag
-    >;
-    
+    using DispatchPolicy =
+        Conv::ConvAtlasA2Pingpong<l1AStages, l1BStages, l0AStages, l0BStages, l0CStages, enableUnitFlag>;
+
     using FmapType = Gemm::GemmType<half, LayoutFmap>;
     using FilterType = Gemm::GemmType<half, LayoutFilter>;
     using BiasType = Gemm::GemmType<half, LayoutBias>;
     using OutType = Gemm::GemmType<half, LayoutOut>;
 
-    using CoreTileShape = ConvCoreShape<2, 2, 2, 3>;  // nDim, dDim, c1Dim, hwDim
-    using FmapL1TileShape = ConvFmapL1Shape<16, 1, 1>;  //mAL1, kd, c1
-    using FilterL1TileShape = ConvFilterL1Shape<1, 1, 16>;  // kd, c1, nBL1
-    using L0TileShape = ConvL0Shape<16, 16, 16>;  //mL0 kL0 nL0
+    using CoreTileShape = ConvCoreShape<2, 2, 2, 3>;       // nDim, dDim, c1Dim, hwDim
+    using FmapL1TileShape = ConvFmapL1Shape<16, 1, 1>;     // mAL1, kd, c1
+    using FilterL1TileShape = ConvFilterL1Shape<1, 1, 16>; // kd, c1, nBL1
+    using L0TileShape = ConvL0Shape<16, 16, 16>;           // mL0 kL0 nL0
 
-    using BlockConv = Conv::Block::BlockConv<DispatchPolicy, CoreTileShape, FmapL1TileShape, FilterL1TileShape, L0TileShape, FmapType, FilterType, OutType, BiasType>;
+    using BlockConv = Conv::Block::BlockConv<DispatchPolicy, CoreTileShape, FmapL1TileShape, FilterL1TileShape,
+                                             L0TileShape, FmapType, FilterType, OutType, BiasType>;
     using BlockEpilogue = void;
 
     // Swizzle offset is 3 and direction is 0.
@@ -247,8 +241,7 @@ void Run(Options const &options)
     size_t sizeWorkspace = conv_op.GetWorkspaceSize(arguments);
     uint8_t *deviceWorkspace = nullptr;
     if (sizeWorkspace > 0) {
-        ACL_CHECK(
-            aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
     }
     conv_op.Initialize(arguments, deviceWorkspace);
     conv_op(stream, aicCoreNum);
@@ -257,7 +250,7 @@ void Run(Options const &options)
         ACL_CHECK(aclrtFree(deviceWorkspace));
     }
 
-    std::vector<fp16_t> hostOut(lenOut);
+    std::vector<float16> hostOut(lenOut);
     ACL_CHECK(aclrtMemcpy(hostOut.data(), sizeOut, deviceOut, sizeOut, ACL_MEMCPY_DEVICE_TO_HOST));
 
     std::vector<float> hostGolden(lenOut);
@@ -281,8 +274,7 @@ void Run(Options const &options)
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv)
-{
+int main(int argc, const char **argv) {
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;

@@ -8,32 +8,31 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0, 
+// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0,
 // optimizing stack space. If you need to use the ShapeInfo of the AscendC Tensor, please undefine this macro.
 #ifndef K_MAX_SHAPE_DIM
 #define K_MAX_SHAPE_DIM 0
 #endif
 
-#include <vector>
-#include <acl/acl.h>
-#include "helper.hpp"
-#include "golden.hpp"
-#include "fp16_t.h"
+#include "catlass/gemm/kernel/batched_matmul.hpp"
 
-#include "catlass/catlass.hpp"
+#include <iostream>
+#include <vector>
+
 #include "catlass/arch/arch.hpp"
+#include "catlass/catlass.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/device/device_gemm.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
-#include "catlass/gemm/kernel/batched_matmul.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 #include "catlass/layout/layout.hpp"
-
 #include "catlass/status.hpp"
-#include "catlass/gemm/device/device_gemm.hpp"
+
+#include "golden.hpp"
+#include "helper.hpp"
 
 using namespace Catlass;
-using fp16_t = op::fp16_t;
 
 constexpr float DATA_UPPER_BOUND = 5;
 constexpr float DATA_LOWER_BOUND = -5;
@@ -49,16 +48,8 @@ struct Options {
 
     Options() = default;
 
-    int Parse(int argc, const char **argv)
-    {
-        enum ArgsIndex {
-            B_INDEX = 1,
-            M_INDEX,
-            N_INDEX,
-            K_INDEX,
-            DEVICE_ID_INDEX,
-            ARGS_MAX
-        };
+    int Parse(int argc, const char **argv) {
+        enum ArgsIndex { B_INDEX = 1, M_INDEX, N_INDEX, K_INDEX, DEVICE_ID_INDEX, ARGS_MAX };
 
         if (argc > ARGS_MAX || argc <= K_INDEX) {
             std::cerr << HELPER << std::endl;
@@ -76,33 +67,11 @@ struct Options {
     }
 };
 
-
-void resourceInit(uint32_t deviceId, aclrtStream *stream)
-{
+void Run(Options const &options) {
+    aclrtStream stream{nullptr};
     ACL_CHECK(aclInit(nullptr));
     ACL_CHECK(aclrtSetDevice(deviceId));
     ACL_CHECK(aclrtCreateStream(stream));
-}
-
-void resourceDestroy(uint32_t deviceId, aclrtStream stream)
-{
-    ACL_CHECK(aclrtDestroyStream(stream));
-    ACL_CHECK(aclrtResetDevice(deviceId));
-    ACL_CHECK(aclFinalize());
-}
-
-void freeTensor(uint8_t *deviceA, uint8_t *deviceB, uint8_t *deviceC)
-{
-    ACL_CHECK(aclrtFree(deviceA));
-    ACL_CHECK(aclrtFree(deviceB));
-    ACL_CHECK(aclrtFree(deviceC));
-}
-
-void Run(Options const &options)
-{
-    aclrtStream stream{nullptr};
-
-    resourceInit(options.deviceId, &stream);
 
     uint32_t batchCount = options.batchCount;
     uint32_t m = options.m;
@@ -114,26 +83,26 @@ void Run(Options const &options)
     size_t lenB = static_cast<size_t>(k) * n * batchCount;
     size_t lenC = static_cast<size_t>(m) * n * batchCount;
 
-    size_t sizeA = lenA * sizeof(fp16_t);
-    size_t sizeB = lenB * sizeof(fp16_t);
-    size_t sizeC = lenC * sizeof(fp16_t);
+    size_t sizeA = lenA * sizeof(float16);
+    size_t sizeB = lenB * sizeof(float16);
+    size_t sizeC = lenC * sizeof(float16);
 
     // allocate memory of A and copy to device side
-    std::vector<fp16_t> hostA(lenA, 1.0);
-    golden::FillRandomData<fp16_t>(hostA, DATA_LOWER_BOUND, DATA_UPPER_BOUND);
+    std::vector<float16> hostA(lenA, 1.0);
+    golden::FillRandomData<float16>(hostA, -5, 5);
     uint8_t *deviceA{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
 
     // allocate memory of B and copy to device side
-    std::vector<fp16_t> hostB(lenB, 1.0);
-    golden::FillRandomData<fp16_t>(hostB, DATA_LOWER_BOUND, DATA_UPPER_BOUND);
+    std::vector<float16> hostB(lenB, 1.0);
+    golden::FillRandomData<float16>(hostB, -5, 5);
     uint8_t *deviceB{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
 
     // allocate memory of C
-    std::vector<fp16_t> hostC(lenC);
+    std::vector<float16> hostC(lenC);
     uint8_t *deviceC{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
@@ -167,15 +136,14 @@ void Run(Options const &options)
         using MatmulKernel = Gemm::Kernel::BatchedMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-        MatmulKernel::Arguments arguments{batchCount, problemShape,
-            deviceA, deviceB, deviceC};
+        MatmulKernel::Arguments arguments{batchCount, problemShape, deviceA, deviceB, deviceC};
         MatmulAdapter matmul_op;
 
         uint8_t *deviceWorkspace{nullptr};
         matmul_op.Initialize(arguments, deviceWorkspace);
         matmul_op(stream, aicCoreNum);
         ACL_CHECK(aclrtSynchronizeStream(stream));
-        
+
         ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
     } else {
         // Swizzle offset is 3 and direction is 1.
@@ -185,18 +153,16 @@ void Run(Options const &options)
         using MatmulKernel = Gemm::Kernel::BatchedMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-        MatmulKernel::Arguments arguments{batchCount, problemShape,
-            deviceA, deviceB, deviceC};
+        MatmulKernel::Arguments arguments{batchCount, problemShape, deviceA, deviceB, deviceC};
         MatmulAdapter matmul_op;
 
         uint8_t *deviceWorkspace{nullptr};
         matmul_op.Initialize(arguments, deviceWorkspace);
         matmul_op(stream, aicCoreNum);
         ACL_CHECK(aclrtSynchronizeStream(stream));
-        
+
         ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
     }
-
 
     // comparison of precision with matmul computed on cpu
     std::vector<float> hostGolden(lenC);
@@ -209,12 +175,15 @@ void Run(Options const &options)
         std::cerr << "Compare failed. Error count: " << errorIndices.size() << std::endl;
     }
 
-    freeTensor(deviceA, deviceB, deviceC);
-    resourceDestroy(options.deviceId, stream);
+    ACL_CHECK(aclrtFree(deviceA));
+    ACL_CHECK(aclrtFree(deviceB));
+    ACL_CHECK(aclrtFree(deviceC));
+    ACL_CHECK(aclrtDestroyStream(stream));
+    ACL_CHECK(aclrtResetDevice(deviceId));
+    ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv)
-{
+int main(int argc, const char **argv) {
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;

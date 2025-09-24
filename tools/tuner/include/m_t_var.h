@@ -75,7 +75,7 @@ void FillRandomData(std::vector<Element>& data, ElementRandom low, ElementRandom
             return static_cast<Element>(dist(engine));
         });
     } else {
-        // use double for all float data, to avoid adapting op::fp16_t/op::bfloat16 and other customized data type
+        // use double for all float data, to avoid adapting customized data types like float16, bfloat16 and float8_e4m3, etc.
         std::uniform_real_distribution<double> dist(low, high);
         std::generate(data.begin(), data.end(), [&]() {
             return static_cast<Element>(dist(engine));

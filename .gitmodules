@@ -1,0 +1,6 @@
+[submodule "3rdparty/ml_dtypes"]
+	path = 3rdparty/ml_dtypes
+	url = https://github.com/jax-ml/ml_dtypes.git
+[submodule "3rdparty/Eigen"]
+	path = 3rdparty/Eigen
+	url = https://gitlab.com/libeigen/Eigen.git

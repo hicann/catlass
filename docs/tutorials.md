@@ -43,7 +43,7 @@ cmake >= 3.15
 
 #include "helper.hpp"
 #include "golden.hpp"
-#include "fp16_t.h"
+
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
@@ -58,7 +58,7 @@ cmake >= 3.15
 #include "catlass/gemm/device/device_gemm.hpp"
 
 using namespace Catlass;
-using fp16_t = op::fp16_t;
+
 
 // 解析输入参数
 struct Options {
@@ -117,9 +117,9 @@ void Run(Options const &options)  //
     size_t lenC = static_cast<size_t>(m) * n;
 
     // 根据矩阵元素数量和数据类型计算矩阵占用内存大小
-    size_t sizeA = lenA * sizeof(fp16_t);
-    size_t sizeB = lenB * sizeof(fp16_t);
-    size_t sizeC = lenC * sizeof(fp16_t);
+    size_t sizeA = lenA * sizeof(float16);
+    size_t sizeB = lenB * sizeof(float16);
+    size_t sizeC = lenC * sizeof(float16);
 
     // 初始化数据排布格式，RowMajor表示行优先
     using LayoutA = layout::RowMajor;
@@ -130,10 +130,10 @@ void Run(Options const &options)  //
     LayoutC layoutC{m, n};
 
     // 初始化输入数据
-    std::vector<fp16_t> hostA(lenA);
-    std::vector<fp16_t> hostB(lenB);
-    golden::FillRandomData<fp16_t>(hostA, -5.0f, 5.0f);
-    golden::FillRandomData<fp16_t>(hostB, -5.0f, 5.0f);
+    std::vector<float16> hostA(lenA);
+    std::vector<float16> hostB(lenB);
+    golden::FillRandomData<float16>(hostA, -5.0f, 5.0f);
+    golden::FillRandomData<float16>(hostB, -5.0f, 5.0f);
 
     // 申请A矩阵在device上的内存，并将A矩阵拷贝至device
     uint8_t *deviceA{nullptr};
@@ -200,7 +200,7 @@ void Run(Options const &options)  //
     }
     
     // 将输出数据搬出
-    std::vector<fp16_t> hostC(lenC);
+    std::vector<float16> hostC(lenC);
     ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
     
     // 计算精度标杆并与输出数据比对
@@ -354,7 +354,7 @@ matmul_op(stream, aicCoreNum, fftsAddr);
 
 #include "helper.hpp"
 #include "golden.hpp"
-#include "fp16_t.h"
+
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
@@ -369,7 +369,7 @@ matmul_op(stream, aicCoreNum, fftsAddr);
 #include "catlass/gemm/device/device_gemm.hpp"
 
 using namespace Catlass;
-using fp16_t = op::fp16_t;
+
 
 
 struct Options {
@@ -430,9 +430,9 @@ void Run(Options const &options)
     size_t lenB = static_cast<size_t>(k) * n;
     size_t lenC = static_cast<size_t>(m) * n;
 
-    size_t sizeA = lenA * sizeof(fp16_t);
-    size_t sizeB = lenB * sizeof(fp16_t);
-    size_t sizeC = lenC * sizeof(fp16_t);
+    size_t sizeA = lenA * sizeof(float16);
+    size_t sizeB = lenB * sizeof(float16);
+    size_t sizeC = lenC * sizeof(float16);
 
     using LayoutA = layout::RowMajor;
     using LayoutB = layout::RowMajor;
@@ -441,10 +441,10 @@ void Run(Options const &options)
     LayoutB layoutB{k, n};
     LayoutC layoutC{m, n};
 
-    std::vector<fp16_t> hostA(lenA);
-    std::vector<fp16_t> hostB(lenB);
-    golden::FillRandomData<fp16_t>(hostA, -5.0f, 5.0f);
-    golden::FillRandomData<fp16_t>(hostB, -5.0f, 5.0f);
+    std::vector<float16> hostA(lenA);
+    std::vector<float16> hostB(lenB);
+    golden::FillRandomData<float16>(hostA, -5.0f, 5.0f);
+    golden::FillRandomData<float16>(hostB, -5.0f, 5.0f);
 
     uint8_t *deviceA{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
@@ -500,7 +500,7 @@ void Run(Options const &options)
     matmul_op(stream, aicCoreNum, fftsAddr);
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
-    std::vector<fp16_t> hostC(lenC);
+    std::vector<float16> hostC(lenC);
     ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
 
     std::vector<float> hostGolden(lenC);
@@ -585,7 +585,7 @@ msprof op ./splitk_matmul 16 16 32768 0
 
 #include "helper.hpp"
 #include "golden.hpp"
-#include "fp16_t.h"
+
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
@@ -599,7 +599,7 @@ msprof op ./splitk_matmul 16 16 32768 0
 #include "catlass/gemm/device/device_gemm.hpp"
 
 using namespace Catlass;
-using fp16_t = op::fp16_t;
+
 
 // 解析输入参数
 struct Options {
@@ -684,16 +684,16 @@ aclError Run(Options const &options)  //
     size_t lenB = static_cast<size_t>(k) * n * problemCount;
     size_t lenC = static_cast<size_t>(m) * n;
 
-    size_t sizeA = lenA * sizeof(fp16_t);
-    size_t sizeB = lenB * sizeof(fp16_t);
-    size_t sizeC = lenC * sizeof(fp16_t);
+    size_t sizeA = lenA * sizeof(float16);
+    size_t sizeB = lenB * sizeof(float16);
+    size_t sizeC = lenC * sizeof(float16);
 
     using LayoutA = layout::RowMajor;
     using LayoutB = layout::ColumnMajor;
     using LayoutC = layout::RowMajor;
 
-    std::vector<fp16_t> hostA(lenA);
-    std::vector<fp16_t> hostB(lenB);
+    std::vector<float16> hostA(lenA);
+    std::vector<float16> hostB(lenB);
     auto groupList = golden::GenerateGroupList<int64_t>(m, problemCount);
 
     size_t sizeGroupList = problemCount * sizeof(int64_t);
@@ -810,7 +810,7 @@ aclError Run(Options const &options)  //
         return status;
     }
 
-    std::vector<fp16_t> hostC(lenC);
+    std::vector<float16> hostC(lenC);
     status = aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST);
     if (status != ACL_ERROR_NONE) {
         FreeDeviceMemory({deviceGroupList, deviceA, deviceB, deviceC});

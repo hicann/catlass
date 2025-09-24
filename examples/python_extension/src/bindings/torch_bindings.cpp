@@ -15,16 +15,14 @@
 #define NPU PrivateUse1
 
 using namespace CatlassKernelWrapper;
-TORCH_LIBRARY(CatlassTorch, m)
-{
+TORCH_LIBRARY(CatlassTorch, m) {
     m.def("basic_matmul(Tensor mat1, Tensor mat2, str c) -> Tensor")
         .def("grouped_matmul(Tensor mat1, Tensor mat2, Tensor groupList, str c, bool trans_a, bool trans_b, bool "
              "split) -> Tensor")
         .def("optimized_matmul(Tensor mat1, Tensor mat2, str c) -> Tensor");
 }
 
-TORCH_LIBRARY_IMPL(CatlassTorch, NPU, m)
-{
+TORCH_LIBRARY_IMPL(CatlassTorch, NPU, m) {
     m.impl("basic_matmul", &RunBasicMatmul)
         .impl("grouped_matmul", &RunGroupedMatmul)
         .impl("optimized_matmul", &RunOptimizedMatmul);

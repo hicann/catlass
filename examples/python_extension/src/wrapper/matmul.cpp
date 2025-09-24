@@ -17,16 +17,14 @@ namespace CatlassKernelWrapper::MatmulLike {
 using namespace CatlassKernel;
 using OutputType = at::Tensor;
 
-OutputType AllocOutput(KernelInfo &kernelInfo)
-{
+OutputType AllocOutput(KernelInfo &kernelInfo) {
     OutputType output = GetOutputTensor({kernelInfo.m, kernelInfo.n}, AclDtypeToTorchDtype(kernelInfo.outputDataType));
     kernelInfo.outputAddr.resize(1);
     kernelInfo.outputAddr[0] = static_cast<uint8_t *>(const_cast<void *>(output.storage().data()));
     return output;
 }
 
-KernelInfo GetKernelInfo(const at::Tensor &mat1, const at::Tensor &mat2, const std::string &outDType)
-{
+KernelInfo GetKernelInfo(const at::Tensor &mat1, const at::Tensor &mat2, const std::string &outDType) {
     KernelInfo kernelInfo;
     kernelInfo.inputAddr.resize(2);
     kernelInfo.inputAddr[0] = static_cast<uint8_t *>(const_cast<void *>(mat1.storage().data()));

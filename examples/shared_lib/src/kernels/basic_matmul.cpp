@@ -7,19 +7,19 @@
  * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
  * See LICENSE in the root of the software repository for the full text of the License.
  */
+#include "catlass/gemm/kernel/basic_matmul.hpp"
+
 #include <acl/acl.h>
 
-#include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
+#include "catlass/catlass.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/device/device_gemm.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
-#include "catlass/gemm/kernel/basic_matmul.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 #include "catlass/layout/layout.hpp"
-
 #include "catlass/status.hpp"
-#include "catlass/gemm/device/device_gemm.hpp"
 
 #include "catlass_kernel.h"
 #include "common.hpp"
@@ -28,8 +28,7 @@ namespace CatlassKernel {
 using namespace Catlass;
 
 template <class LayoutA, class LayoutB, class LayoutC, class InDType, class OutDType>
-void BasicMatmulImpl(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo)
-{
+void BasicMatmulImpl(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo) {
     GemmCoord problemShape{kernelInfo.m, kernelInfo.n, kernelInfo.k};
     uint8_t *deviceA = kernelInfo.inputAddr.at(0);
     uint8_t *deviceB = kernelInfo.inputAddr.at(1);
@@ -60,10 +59,9 @@ void BasicMatmulImpl(const uint32_t blockNum, aclrtStream stream, const KernelIn
     RunAdapter<MatmulAdapter>(matmulOp, arguments, stream, blockNum);
 }
 
-void BasicMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo)
-{
-    if (kernelInfo.inputDataType == ACL_FLOAT16 && kernelInfo.outputDataType == ACL_FLOAT16 && !kernelInfo.transA &&
-        !kernelInfo.transB) {
+void BasicMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo) {
+    if (kernelInfo.inputDataType == ACL_FLOAT16 && kernelInfo.outputDataType == ACL_FLOAT16 && !kernelInfo.transA
+        && !kernelInfo.transB) {
         BasicMatmulImpl<layout::RowMajor, layout::RowMajor, layout::RowMajor, half, half>(blockNum, stream, kernelInfo);
     }
     // If more conditions are needed, add branches manually.

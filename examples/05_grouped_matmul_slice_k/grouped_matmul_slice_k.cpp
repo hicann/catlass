@@ -8,34 +8,31 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0, 
+// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0,
 // optimizing stack space. If you need to use the ShapeInfo of the AscendC Tensor, please undefine this macro.
 #ifndef K_MAX_SHAPE_DIM
 #define K_MAX_SHAPE_DIM 0
 #endif
 
+#include "catlass/gemm/kernel/grouped_matmul_slice_k.hpp"
+
 #include <iostream>
 #include <vector>
-#include <cstdlib>
 
-#include "helper.hpp"
-#include "golden.hpp"
-#include "fp16_t.h"
-
-#include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
+#include "catlass/catlass.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/device/device_gemm.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
-#include "catlass/gemm/kernel/grouped_matmul_slice_k.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 #include "catlass/layout/layout.hpp"
-
 #include "catlass/status.hpp"
-#include "catlass/gemm/device/device_gemm.hpp"
+
+#include "golden.hpp"
+#include "helper.hpp"
 
 using namespace Catlass;
-using fp16_t = op::fp16_t;
 
 struct Options {
     const std::string HELPER = "05_grouped_matmul_slice_k group_count m n k [device_id]";
@@ -46,16 +43,8 @@ struct Options {
 
     Options() = default;
 
-    int Parse(int argc, const char **argv)
-    {
-        enum ArgsIndex {
-            GROUP_COUNT_INDEX = 1,
-            M_INDEX,
-            N_INDEX,
-            K_INDEX,
-            DEVICE_ID_INDEX,
-            ARGS_MAX
-        };
+    int Parse(int argc, const char **argv) {
+        enum ArgsIndex { GROUP_COUNT_INDEX = 1, M_INDEX, N_INDEX, K_INDEX, DEVICE_ID_INDEX, ARGS_MAX };
 
         if (argc > ARGS_MAX || argc <= K_INDEX) {
             std::cerr << HELPER << std::endl;
@@ -73,8 +62,7 @@ struct Options {
     }
 };
 
-void Run(Options const &options)
-{
+void Run(Options const &options) {
     aclrtStream stream{nullptr};
     ACL_CHECK(aclInit(nullptr));
     ACL_CHECK(aclrtSetDevice(options.deviceId));
@@ -89,23 +77,23 @@ void Run(Options const &options)
     size_t lenB = static_cast<size_t>(k) * n;
     size_t lenC = static_cast<size_t>(m) * n * problemCount;
 
-    size_t sizeA = lenA * sizeof(fp16_t);
-    size_t sizeB = lenB * sizeof(fp16_t);
-    size_t sizeC = lenC * sizeof(fp16_t);
+    size_t sizeA = lenA * sizeof(float16);
+    size_t sizeB = lenB * sizeof(float16);
+    size_t sizeC = lenC * sizeof(float16);
 
     using LayoutA = layout::ColumnMajor;
     using LayoutB = layout::RowMajor;
     using LayoutC = layout::RowMajor;
 
-    const fp16_t fp16_tLower = -5.0;
-    const fp16_t fp16_tUpper = 5.0;
-    std::vector<fp16_t> hostA(lenA);
-    std::vector<fp16_t> hostB(lenB);
-    std::vector<fp16_t> hostC(lenC);
-    golden::FillRandomData<fp16_t>(hostA, fp16_tLower, fp16_tUpper);
-    golden::FillRandomData<fp16_t>(hostB, fp16_tLower, fp16_tUpper);
+    const float16 float16Lower = -5.0;
+    const float16 float16Upper = 5.0;
+    std::vector<float16> hostA(lenA);
+    std::vector<float16> hostB(lenB);
+    std::vector<float16> hostC(lenC);
+    golden::FillRandomData<float16>(hostA, float16Lower, float16Upper);
+    golden::FillRandomData<float16>(hostB, float16Lower, float16Upper);
     // Pre-fill the hostC to verify the result when Ki=0
-    golden::FillRandomData<fp16_t>(hostC, fp16_tLower, fp16_tUpper);
+    golden::FillRandomData<float16>(hostC, float16Lower, float16Upper);
     auto groupList = golden::GenerateGroupList<int64_t>(k, problemCount);
 
     size_t sizeGroupList = problemCount * sizeof(int64_t);
@@ -140,11 +128,8 @@ void Run(Options const &options)
     constexpr bool enableShuffleK = true;
 
     using ArchTag = Arch::AtlasA2;
-    using DispatchPolicy = Gemm::MmadAtlasA2PreloadAsync<
-        preloadStages,
-        l1Stages, l0AStages, l0BStages, l0CStages,
-        enableUnitFlag, enableShuffleK
-    >;
+    using DispatchPolicy = Gemm::MmadAtlasA2PreloadAsync<preloadStages, l1Stages, l0AStages, l0BStages, l0CStages,
+                                                         enableUnitFlag, enableShuffleK>;
     using L1TileShape = GemmShape<128, 256, 256>;
     using L0TileShape = GemmShape<128, 256, 64>;
 
@@ -161,21 +146,17 @@ void Run(Options const &options)
 
     using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
 
-    MatmulKernel::Arguments arguments{
-        options.problemShape, problemCount, deviceGroupList, deviceA, deviceB, deviceC
-    };
+    MatmulKernel::Arguments arguments{options.problemShape, problemCount, deviceGroupList, deviceA, deviceB, deviceC};
 
     // call a kernel
     MatmulAdapter matmul_op;
-    //judge arguments can run
+    // judge arguments can run
     matmul_op.CanImplement(arguments);
     // get workspace
     size_t sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
     uint8_t *deviceWorkspace{nullptr};
-    if(sizeWorkspace > 0){
-        ACL_CHECK(
-        aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST);
-        );
+    if (sizeWorkspace > 0) {
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST););
     }
     // initalize kernel argument
     matmul_op.Initialize(arguments, deviceWorkspace);
@@ -198,8 +179,8 @@ void Run(Options const &options)
     }
 
     std::vector<float> hostGolden(lenC);
-    golden::ComputeGroupedMatmul(problemCount, problemShapeList, hostA, layoutAList,
-        hostB, layoutBList, hostGolden, layoutCList);
+    golden::ComputeGroupedMatmul(problemCount, problemShapeList, hostA, layoutAList, hostB, layoutBList, hostGolden,
+                                 layoutCList);
 
     std::vector<uint64_t> errorIndices = golden::CompareData(hostC, hostGolden, k);
     if (errorIndices.empty()) {
@@ -220,8 +201,7 @@ void Run(Options const &options)
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv)
-{
+int main(int argc, const char **argv) {
     Options options;
     if (options.Parse(argc, argv) == 0) {
         Run(options);

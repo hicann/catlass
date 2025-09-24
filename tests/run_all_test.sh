@@ -15,6 +15,9 @@ set -o pipefail
 SCRIPT_PATH=$(dirname "$(realpath "$0")")
 BUILD_SCRIPT_PATH=$(realpath "$SCRIPT_PATH"/../scripts/build.sh)
 
+# get 3rdparty
+git submodule update
+
 # example test
 bash "$BUILD_SCRIPT_PATH" --clean catlass_examples || exit 1
 python3 "$SCRIPT_PATH/test_example.py"
@@ -37,3 +40,6 @@ python3 "$SCRIPT_PATH/test_torch_lib.py"
 
 # self contained include
 bash "$BUILD_SCRIPT_PATH" --clean --tests test_self_contained_includes || exit 1
+
+# test build mstuner
+bash "$BUILD_SCRIPT_PATH" --clean -DCATLASS_LIBRARY_KERNELS=basic_matmul mstuner_catlass

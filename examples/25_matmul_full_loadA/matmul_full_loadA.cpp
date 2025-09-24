@@ -8,33 +8,31 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0, 
+// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0,
 // optimizing stack space. If you need to use the ShapeInfo of the AscendC Tensor, please undefine this macro.
 #ifndef K_MAX_SHAPE_DIM
 #define K_MAX_SHAPE_DIM 0
 #endif
 
+#include "catlass/gemm/kernel/matmul_full_loadA.hpp"
+
 #include <iostream>
 #include <vector>
 
-#include "helper.hpp"
-#include "golden.hpp"
-#include "fp16_t.h"
-
-#include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
+#include "catlass/catlass.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/device/device_gemm.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
-#include "catlass/gemm/kernel/matmul_full_loadA.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 #include "catlass/layout/layout.hpp"
-
 #include "catlass/status.hpp"
-#include "catlass/gemm/device/device_gemm.hpp"
+
+#include "golden.hpp"
+#include "helper.hpp"
 
 using namespace Catlass;
-using fp16_t = op::fp16_t;
 
 struct Options {
     const std::string HELPER = "25_matmul_full_loadA m n k [device_id]";
@@ -44,15 +42,8 @@ struct Options {
 
     Options() = default;
 
-    int Parse(int argc, const char **argv)
-    {
-        enum ArgsIndex {
-            M_INDEX = 1,
-            N_INDEX,
-            K_INDEX,
-            DEVICE_ID_INDEX,
-            ARGS_MAX
-        };
+    int Parse(int argc, const char **argv) {
+        enum ArgsIndex { M_INDEX = 1, N_INDEX, K_INDEX, DEVICE_ID_INDEX, ARGS_MAX };
 
         if (argc > ARGS_MAX || argc <= K_INDEX) {
             std::cerr << HELPER << std::endl;
@@ -69,8 +60,7 @@ struct Options {
     }
 };
 
-void Run(Options const &options)
-{
+void Run(Options const &options) {
     aclrtStream stream{nullptr};
 
     ACL_CHECK(aclInit(nullptr));
@@ -85,9 +75,9 @@ void Run(Options const &options)
     size_t lenB = static_cast<size_t>(k) * n;
     size_t lenC = static_cast<size_t>(m) * n;
 
-    size_t sizeA = lenA * sizeof(fp16_t);
-    size_t sizeB = lenB * sizeof(fp16_t);
-    size_t sizeC = lenC * sizeof(fp16_t);
+    size_t sizeA = lenA * sizeof(float16);
+    size_t sizeB = lenB * sizeof(float16);
+    size_t sizeC = lenC * sizeof(float16);
 
     using LayoutA = layout::RowMajor;
     using LayoutB = layout::RowMajor;
@@ -96,10 +86,10 @@ void Run(Options const &options)
     LayoutB layoutB{k, n};
     LayoutC layoutC{m, n};
 
-    std::vector<fp16_t> hostA(lenA);
-    std::vector<fp16_t> hostB(lenB);
-    golden::FillRandomData<fp16_t>(hostA, -5.0f, 5.0f);
-    golden::FillRandomData<fp16_t>(hostB, -5.0f, 5.0f);
+    std::vector<float16> hostA(lenA);
+    std::vector<float16> hostB(lenB);
+    golden::FillRandomData<float16>(hostA, -5.0f, 5.0f);
+    golden::FillRandomData<float16>(hostB, -5.0f, 5.0f);
 
     uint8_t *deviceA{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
@@ -123,9 +113,9 @@ void Run(Options const &options)
     using L1TileShape = GemmShape<128, 256, 256>;
     using L0TileShape = GemmShape<128, 256, 64>;
 
-    std::vector<fp16_t> hostC(lenC);
+    std::vector<float16> hostC(lenC);
 
-    uint32_t L1UsedSpace = L1TileShape::M * k * sizeof(fp16_t) + L1TileShape::K * L1TileShape::N * 2 * sizeof(fp16_t);
+    uint32_t L1UsedSpace = L1TileShape::M * k * sizeof(float16) + L1TileShape::K * L1TileShape::N * 2 * sizeof(float16);
 
     // judge whether to use L1 full load strategy
     if (L1UsedSpace > ArchTag::L1_SIZE) {
@@ -139,7 +129,7 @@ void Run(Options const &options)
     using DispatchPolicy = Gemm::MmadAtlasA2FullLoadA<true>;
     using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
     using BlockEpilogue = void;
-    
+
     // if m > L1TileShape::M, split M for coreLoop.
     // Use New GemmIdentityBlockSwizzleL1FullLoad<SwizzleOffset, SwizzleDirection, AicCoreNum>.
     if (m > L1TileShape::M) {
@@ -209,8 +199,7 @@ void Run(Options const &options)
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv)
-{
+int main(int argc, const char **argv) {
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;

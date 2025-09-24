@@ -8,7 +8,7 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0, 
+// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0,
 // optimizing stack space. If you need to use the ShapeInfo of the AscendC Tensor, please undefine this macro.
 #ifndef K_MAX_SHAPE_DIM
 #define K_MAX_SHAPE_DIM 0
@@ -17,24 +17,21 @@
 #include <iostream>
 #include <vector>
 
-#include "helper.hpp"
-#include "golden.hpp"
-#include "fp16_t.h"
-
-#include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
+#include "catlass/catlass.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
-#include "catlass/gemm/dispatch_policy.hpp"
-#include "catlass/gemm/kernel/basic_matmul_preload.hpp"
-#include "catlass/gemm/gemm_type.hpp"
-#include "catlass/layout/layout.hpp"
-
-#include "catlass/status.hpp"
 #include "catlass/gemm/device/device_gemm.hpp"
+#include "catlass/gemm/dispatch_policy.hpp"
+#include "catlass/gemm/gemm_type.hpp"
+#include "catlass/gemm/kernel/basic_matmul_preload.hpp"
+#include "catlass/layout/layout.hpp"
+#include "catlass/status.hpp"
+
+#include "golden.hpp"
+#include "helper.hpp"
 
 using namespace Catlass;
-using fp16_t = op::fp16_t;
 
 struct Options {
     const std::string HELPER = "21_basic_matmul_preload_zN m n k [device_id]";
@@ -44,15 +41,8 @@ struct Options {
 
     Options() = default;
 
-    int Parse(int argc, const char **argv)
-    {
-        enum ArgsIndex {
-            M_INDEX = 1,
-            N_INDEX,
-            K_INDEX,
-            DEVICE_ID_INDEX,
-            ARGS_MAX
-        };
+    int Parse(int argc, const char **argv) {
+        enum ArgsIndex { M_INDEX = 1, N_INDEX, K_INDEX, DEVICE_ID_INDEX, ARGS_MAX };
 
         if (argc > ARGS_MAX || argc <= K_INDEX) {
             std::cerr << HELPER << std::endl;
@@ -69,8 +59,7 @@ struct Options {
     }
 };
 
-void Run(Options const &options)
-{
+void Run(Options const &options) {
     aclrtStream stream{nullptr};
 
     ACL_CHECK(aclInit(nullptr));
@@ -85,9 +74,9 @@ void Run(Options const &options)
     size_t lenB = static_cast<size_t>(k) * n;
     size_t lenC = static_cast<size_t>(m) * n;
 
-    size_t sizeA = lenA * sizeof(fp16_t);
-    size_t sizeB = lenB * sizeof(fp16_t);
-    size_t sizeC = lenC * sizeof(fp16_t);
+    size_t sizeA = lenA * sizeof(float16);
+    size_t sizeB = lenB * sizeof(float16);
+    size_t sizeC = lenC * sizeof(float16);
 
     // LayoutB 非转置使用zN，转置使用nZ
     // 需要在适配层 include\catlass\gemm\kernel\basic_matmul_preload.hpp：ToUnderlyingArguments()中同步修改
@@ -95,13 +84,13 @@ void Run(Options const &options)
     using LayoutB = layout::zN;
     using LayoutC = layout::RowMajor;
     LayoutA layoutA{m, k};
-    LayoutB layoutB = LayoutB::MakeLayout<fp16_t>(k, n);
+    LayoutB layoutB = LayoutB::MakeLayout<float16>(k, n);
     LayoutC layoutC{m, n};
 
-    std::vector<fp16_t> hostA(lenA);
-    std::vector<fp16_t> hostB(lenB);
-    golden::FillRandomData<fp16_t>(hostA, -5.0f, 5.0f);
-    golden::FillRandomData<fp16_t>(hostB, -5.0f, 5.0f);
+    std::vector<float16> hostA(lenA);
+    std::vector<float16> hostB(lenB);
+    golden::FillRandomData<float16>(hostA, -5.0f, 5.0f);
+    golden::FillRandomData<float16>(hostB, -5.0f, 5.0f);
 
     uint8_t *deviceA{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
@@ -143,8 +132,7 @@ void Run(Options const &options)
     size_t sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
     uint8_t *deviceWorkspace = nullptr;
     if (sizeWorkspace > 0) {
-        ACL_CHECK(
-            aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
     }
     matmul_op.Initialize(arguments, deviceWorkspace);
     matmul_op(stream, aicCoreNum);
@@ -153,7 +141,7 @@ void Run(Options const &options)
         ACL_CHECK(aclrtFree(deviceWorkspace));
     }
 
-    std::vector<fp16_t> hostC(lenC);
+    std::vector<float16> hostC(lenC);
     ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
 
     std::vector<float> hostGolden(lenC);
@@ -175,8 +163,7 @@ void Run(Options const &options)
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv)
-{
+int main(int argc, const char **argv) {
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;

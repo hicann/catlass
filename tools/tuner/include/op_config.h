@@ -20,7 +20,7 @@
 #include "metric.h"
 
 #include "catlass/library/operation.h"
-#include "common/bfloat16.h"
+#include "common/dtypes.h"
 
 namespace Catlass {
 
@@ -42,10 +42,10 @@ struct TensorConfig {
                 FillData<int32_t>(len, dst);
                 break;
             case Library::DataType::Fp16:
-                FillData<op::fp16_t>(len, dst);
+                FillData<float16>(len, dst);
                 break;
             case Library::DataType::Bf16:
-                FillData<op::bfloat16>(len, dst);
+                FillData<bfloat16>(len, dst);
                 break;
             case Library::DataType::Fp32:
                 FillData<float>(len, dst);
