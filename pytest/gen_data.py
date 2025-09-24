@@ -247,7 +247,8 @@ class TestFlashAttentionInfer():
             ref_output,
             true_out,
         )
-
+        
+        print(torch.allclose(fai_outputs, true_out, rtol=1e-03))
         num_tokens.astype(np.int32).tofile(os.path.join(WORKSPACE, "data", "q_ntokens.bin"))
         num_kv_tokens.astype(np.int32).tofile(os.path.join(WORKSPACE, "data", "kv_ntokens.bin"))
         query.tofile(os.path.join(WORKSPACE, "data", "q.bin"))

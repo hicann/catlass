@@ -92,26 +92,6 @@ uint32_t GetQSBlockTile(uint32_t kvSeqlen)
     return qSBlockTile;
 }
 
-struct FATilingData {
-    uint32_t numHeads = 0;
-    uint32_t embeddingSize = 0;
-    uint32_t numBlocks = 0;
-    uint32_t blockSize = 0;
-    uint32_t maxKvSeqlen = 0;
-    uint32_t kvHeads = 0;
-    uint32_t batch = 0;
-    uint32_t maxNumBlocksPerBatch = 0;
-    uint32_t firstBatchTaskNum = 0;
-    uint32_t totalTaskNum = 0;
-    uint32_t maskType = 0;
-    uint64_t mm1OutSize = 0;
-    uint64_t smOnlineOutSize = 0;
-    uint64_t mm2OutSize = 0;
-    uint64_t UpdateSize = 0;
-    uint64_t workSpaceSize = 0;
-    float scaleValue = 0.0;
-};
-
 struct FAIKernelParams{
     GM_ADDR q;
     GM_ADDR k;

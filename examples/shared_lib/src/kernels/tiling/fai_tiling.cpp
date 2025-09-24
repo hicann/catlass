@@ -17,8 +17,9 @@
 #include <vector>
 #include <cmath>
 
-# include "catlass/detail/alignment.hpp"
+// # include "catlass/detail/alignment.hpp"
 # include "fai_tiling.h"
+# include "fai_tiling_data.h"
 
 using namespace std;
 namespace FAInferTiling {

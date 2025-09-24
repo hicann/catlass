@@ -31,7 +31,7 @@
 #include "common.hpp"
 namespace CatlassKernel {
 using namespace Catlass;
-using namespace FAInferTiling;  // 去除？
+// using namespace FAInferTiling;
 
 // Macro function for unwinding acl errors.
 #define ACL_CHECK(status)                                                                    \
@@ -252,7 +252,7 @@ public:
                         stackSeqTile = pagedBlockSize * blockStackNum;
                     }
                     uint32_t SWorkSpacePingPongFlag = stackSeqCount % (preLaunch + 1);
-                    uint64_t gmSOffset = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) + SWorkSpacePingPongFlag * WORKSPACE_BLOCK_SIZE_DB;
+                    uint64_t gmSOffset = coreIdx * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) + SWorkSpacePingPongFlag * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB;
                     GemmCoord actualBlockShapeQK{rowNum, stackSeqTile, embed};
                     if constexpr (!PAGED_CACHE_FLAG) {
                         blockMmadQK(gQ[gmQOffset], gK[gmKOffset], gS[gmSOffset],
@@ -273,8 +273,8 @@ public:
                         stackSeqTile = pagedBlockSize * blockStackNum;
                     }
                     uint32_t PVWorkSpacePingPongFlag = (stackSeqCount - preLaunch) % (preLaunch + 1);
-                    uint64_t gmPOffset = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) + PVWorkSpacePingPongFlag * WORKSPACE_BLOCK_SIZE_DB;
-                    uint64_t gmOTmpOffset = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) + PVWorkSpacePingPongFlag * WORKSPACE_BLOCK_SIZE_DB;
+                    uint64_t gmPOffset = coreIdx * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) + PVWorkSpacePingPongFlag * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB;
+                    uint64_t gmOTmpOffset = coreIdx * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) + PVWorkSpacePingPongFlag * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB;
                     LayoutP layoutPTemp(rowNum, stackSeqTileRound);
                     GemmCoord actualBlockShapePV{rowNum, embed, stackSeqTile};
                     if constexpr (!PAGED_CACHE_FLAG) {
@@ -313,7 +313,7 @@ public:
                 if ((kvSIdx < kvSLoopNumTotal) && (stackSeqCount <= totalStackSeqNum - 1)) {
                     stackSeqTile = maskedKvS;
                     uint32_t SWorkSpacePingPongFlag = stackSeqCount % (preLaunch + 1);
-                    uint64_t gmSOffset = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) + SWorkSpacePingPongFlag * WORKSPACE_BLOCK_SIZE_DB;
+                    uint64_t gmSOffset = coreIdx * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) + SWorkSpacePingPongFlag * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB;
                     GemmCoord actualBlockShapeQK{rowNum, stackSeqTile, embed};
                     if constexpr (!PAGED_CACHE_FLAG) {
                         blockMmadQKTail(gQ[gmQOffset], gK[gmKOffset], gS[gmSOffset],
@@ -338,8 +338,8 @@ public:
                         stackSeqTile = pagedBlockSize * blockStackNum;
                     }
                     uint32_t PVWorkSpacePingPongFlag = (stackSeqCount - preLaunch) % (preLaunch + 1);
-                    uint64_t gmPOffset = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) + PVWorkSpacePingPongFlag * WORKSPACE_BLOCK_SIZE_DB;
-                    uint64_t gmOTmpOffset = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) + PVWorkSpacePingPongFlag * WORKSPACE_BLOCK_SIZE_DB;
+                    uint64_t gmPOffset = coreIdx * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) + PVWorkSpacePingPongFlag * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB;
+                    uint64_t gmOTmpOffset = coreIdx * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) + PVWorkSpacePingPongFlag * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB;
                     LayoutP layoutPTemp(rowNum, stackSeqTileRound);
                     GemmCoord actualBlockShapePV{rowNum, embed, stackSeqTile};
 
@@ -539,8 +539,8 @@ public:
                 LayoutP layOutP(rowNum, stackSeqTile, stackSeqTilePad);
                 GemmCoord actualBlockShapeQK{rowNum, stackSeqTile, embed};
                 uint32_t curStackTileMod = stackSeqCount % (preLaunch + 1);
-                uint32_t gmOffsetS = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) + // cube core offset
-                    curStackTileMod * WORKSPACE_BLOCK_SIZE_DB; // single cube core db offset
+                uint32_t gmOffsetS = coreIdx * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) + // cube core offset
+                    curStackTileMod * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB; // single cube core db offset
                 // vec core offset will be processed within epilogue block
                 uint32_t gmOffsetP = gmOffsetS;
                 // AscendC::printf("stackSeqCount:%d\n", stackSeqCount);
@@ -569,8 +569,8 @@ public:
                     LayoutOTmp layoutOTmp(rowNum, embed, embedRound);
                     GemmCoord actualBlockShapePV{rowNum, embed, stackSeqTile};
                     uint32_t curStackTileMod = (stackSeqCount - preLaunch) % (preLaunch + 1);
-                    uint32_t gmOffsetOTmp = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) +
-                        curStackTileMod * WORKSPACE_BLOCK_SIZE_DB;
+                    uint32_t gmOffsetOTmp = coreIdx * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) +
+                        curStackTileMod * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB;
                     Arch::CrossCoreWaitFlag(pvReady);
                     // rescale O
                     epilogueRescaleO(
@@ -612,8 +612,8 @@ public:
                     LayoutMask layOutMask(1024, 1024, 1024);
                     GemmCoord actualBlockShapeQK{rowNum, stackSeqTile, embed};
                     uint32_t curStackTileMod = stackSeqCount % (preLaunch + 1);
-                    uint32_t gmOffsetS = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) + // cube core offset
-                        curStackTileMod * WORKSPACE_BLOCK_SIZE_DB; // single cube core db offset
+                    uint32_t gmOffsetS = coreIdx * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) + // cube core offset
+                        curStackTileMod * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB; // single cube core db offset
                     // vec core offset will be processed within epilogue block
                     uint32_t gmOffsetP = gmOffsetS;
                     // online softmax
@@ -647,8 +647,8 @@ public:
                     LayoutOTmp layoutOTmp(rowNum, embed, embedRound);
                     GemmCoord actualBlockShapePV{rowNum, embed, stackSeqTile};
                     uint32_t curStackTileMod = (stackSeqCount - preLaunch) % (preLaunch + 1);
-                    uint32_t gmOffsetOTmp = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) +
-                        curStackTileMod * WORKSPACE_BLOCK_SIZE_DB;
+                    uint32_t gmOffsetOTmp = coreIdx * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) +
+                        curStackTileMod * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB;
                     Arch::CrossCoreWaitFlag(pvReady);
                     // rescale O
                     epilogueRescaleO(

@@ -8,10 +8,11 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_EXAMPLES_FAI_SHAREDLIB_MLA_TILING_H
-#define CATLASS_EXAMPLES_FAI_SHAREDLIB_MLA_TILING_H
+#ifndef CATLASS_EXAMPLES_FAI_SHAREDLIB_TILING_H
+#define CATLASS_EXAMPLES_FAI_SHAREDLIB_TILING_H
 
 #include <cstdint>
+#include "fai_tiling.h"
 
 namespace FAInferTiling {
 const int32_t NUM0 = 0;
