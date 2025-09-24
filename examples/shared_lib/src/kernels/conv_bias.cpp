@@ -52,7 +52,7 @@ void ConvBiasImpl(const uint32_t blockNum, aclrtStream stream, const ConvKernelI
         l0AStages, l0BStages,
         l0CStages, enableUnitFlag
     >;
-    using CoreTileShape = ConvCoreShape<2, 2, 2, 3>;
+    using CoreTileShape = ConvCoreShape<2, 2, 2, 2>;
     using FmapL1TileShape = ConvFmapL1Shape<16, 1, 1>;
     using FilterL1TileShape = ConvFilterL1Shape<1, 1, 16>;
     using L0TileShape = ConvL0Shape<16, 16, 16>;
