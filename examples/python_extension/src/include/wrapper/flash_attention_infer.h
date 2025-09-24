@@ -26,6 +26,6 @@ OutputType AllocOutput(FAKernelInfo &kernelInfo);
 FAKernelInfo GetKernelInfo(const at::Tensor &query, const at::Tensor &key, const at::Tensor &value,
                            const std::vector<int64_t> &actual_seq_lengths, const std::vector<int64_t> &actual_seq_lengths_kv,
                            const at::Tensor &atten_mask, const at::Tensor &block_table, const std::string &input_layout,
-                           const int32_t &num_heads, const int32_t &num_key_value_heads, const int32_t &sparse_mode);
+                           const int64_t &num_heads, const int64_t &num_key_value_heads, const int64_t &sparse_mode);
 } // namespace CatlassKernelWrapper::FAILike
 #endif
