@@ -318,9 +318,9 @@ bool PaddingMultiCoreSplitkMatmulB16Handler(TilingParams& params, PlatformInfo& 
 
 bool PaddingStreamkMatmulB16Handler(TilingParams& params, PlatformInfo& platformInfo)
 {
-    uint32_t m1 = params.m1;
-    uint32_t n1 = params.n1;
-    uint32_t k1 = params.k1;
+    uint32_t m = params.m;
+    uint32_t n = params.n;
+    uint32_t k = params.k;
     // Streamk ensures workload balancing by partitioning k, the L1 tile block can use the size with the best bandwidth.
     // The size setting of l1 tile does not need to consider workload balancing.
     uint32_t m1t = 128, n1t = 256, k1t = 256;
@@ -339,7 +339,8 @@ bool PaddingStreamkMatmulB16Handler(TilingParams& params, PlatformInfo& platform
             params.m1 = m1t;
             params.n1 = n1t;
             params.k1 = k1t;
-            GetPaddingTag(params);
+            GetPaddingTag(params, platformInfo);
+            params.blockDim = platformInfo.coreNum;
             uint32_t kernelSerial = 4;
             params.tilingKey.SetTilingKey(kernelSerial, 
                 params.layoutTagA, params.layoutTagB, 0, params.paddingTagA, params.paddingTagB, 0); 

@@ -142,7 +142,7 @@ template <class ElementA, class LayoutA, class ElementB, class LayoutB, class El
 
     using AType = Catlass::Gemm::GemmType<ElementA, typename PaddingBuilderA::LayoutAfterPadding>;
     using BType = Catlass::Gemm::GemmType<ElementB, typename PaddingBuilderB::LayoutAfterPadding>;
-    using CType = Catlass::Gemm::GemmType<float, LayoutC>;
+    using CType = Catlass::Gemm::GemmType<ElementC, LayoutC>;
 
     using TileCopy = TileCopyDynamicOptimized<ArchTag, AType, BType, CType>;
     using BlockMmad = Catlass::Gemm::Block::BlockMmad<DispatchPolicy, void, void, AType, BType, CType, void, TileCopy>;
@@ -151,11 +151,11 @@ template <class ElementA, class LayoutA, class ElementB, class LayoutB, class El
     constexpr uint32_t computeLength = 32 * 1024 / sizeof(float);
     if (problemShape.m() > problemShape.n()) {
         using BlockScheduler = typename Catlass::Gemm::Block::StreamkGemmIdentityBlockSwizzle<3, 0>;
-        using RecudeAdd = Catlass::Gemm::Kernel::StreamkReduceAdd<
+        using ReduceAdd = Catlass::Gemm::Kernel::StreamkReduceAdd<
             ArchTag, BlockScheduler, float, ElementC, computeLength>;
         // kernel level
         using MatmulKernel = Catlass::Gemm::Kernel::DynamicPaddingStreamkMatmul<
-            PaddingA, PaddingB, BlockMmad, BlockEpilogue, BlockScheduler, RecudeAdd>;
+            PaddingA, PaddingB, BlockMmad, BlockEpilogue, BlockScheduler, ReduceAdd>;
         typename MatmulKernel::Params params{
             problemShape, l1TileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, gmWA, gmWB, gmReduceW};
         // call a kernel
@@ -163,11 +163,11 @@ template <class ElementA, class LayoutA, class ElementB, class LayoutB, class El
         matmul(params, resource);
     } else {
         using BlockScheduler = typename Catlass::Gemm::Block::StreamkGemmIdentityBlockSwizzle<3, 1>;
-        using RecudeAdd = Catlass::Gemm::Kernel::StreamkReduceAdd<
+        using ReduceAdd = Catlass::Gemm::Kernel::StreamkReduceAdd<
             ArchTag, BlockScheduler, float, ElementC, computeLength>;
         // kernel level
         using MatmulKernel = Catlass::Gemm::Kernel::DynamicPaddingStreamkMatmul<
-            PaddingA, PaddingB, BlockMmad, BlockEpilogue, BlockScheduler, RecudeAdd>;
+            PaddingA, PaddingB, BlockMmad, BlockEpilogue, BlockScheduler, ReduceAdd>;
         typename MatmulKernel::Params params{
             problemShape, l1TileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, gmWA, gmWB, gmReduceW};
         // call a kernel
@@ -234,7 +234,7 @@ size_t PaddingStreamkMatmulKernelGetWorkspaceSize(TilingParams &tilingParams)
     uint32_t m1 = static_cast<uint32_t>(tilingParams.m1);
     uint32_t n1 = static_cast<uint32_t>(tilingParams.n1);
     uint32_t k1 = static_cast<uint32_t>(tilingParams.k1);
-    size_t sizeWA = 0, sizeWB = 0, sizeReduceW;
+    size_t sizeWA = 0, sizeWB = 0, sizeReduceW = 0;
     if constexpr (paddingTagA == PaddingTag::PADDING_BLOCK_ND) {
         sizeWA = PaddingBuilderA::Padding::GetWorkspaceSize(m, k, m1, k1);
     } else if constexpr (paddingTagA == PaddingTag::PADDING_ND) {
@@ -252,7 +252,7 @@ size_t PaddingStreamkMatmulKernelGetWorkspaceSize(TilingParams &tilingParams)
     } else if constexpr (paddingTagB == PaddingTag::PADDING_NZ) {
         sizeWB = PaddingBuilderB::Padding::GetWorkspaceSize(k, n);
     }
-    sizeReduceW = static_cast<size_t>(m1) * n1 * 2 * sizeof(float);
+    sizeReduceW = static_cast<size_t>(m1) * n1 * 2 * sizeof(float) * tilingParams.blockDim;
     return sizeWA + sizeWB + sizeReduceW;
 }
 
