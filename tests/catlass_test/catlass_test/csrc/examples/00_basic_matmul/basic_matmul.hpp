@@ -47,6 +47,5 @@ inline TEMPLATE_RET_TYPE BasicMatmul(aclrtStream stream, GemmCoord problemShape,
     using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
     typename MatmulKernel::Arguments arguments{problemShape, deviceA, deviceB, deviceC};
     MatmulAdapter matmulOp;
-    auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
     RUN_ADAPTER(matmulOp, arguments, stream, aicCoreNum);
 }

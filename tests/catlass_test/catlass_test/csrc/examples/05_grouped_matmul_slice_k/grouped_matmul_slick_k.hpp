@@ -13,9 +13,6 @@
 
 template <class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC, class ElementGroupList>
 inline TEMPLATE_RET_TYPE GroupedMatmulSliceK(aclrtStream stream, GemmCoord problemShape, uint32_t problemCount, uint8_t *deviceA, uint8_t *deviceB, uint8_t *deviceGroupList, uint8_t *deviceC) {
-    // Get the number of cube cores of the current hardware
-    auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
-
     constexpr uint32_t preloadStages = 1;
     constexpr uint32_t l1Stages = 2;
     constexpr uint32_t l0AStages = 4;

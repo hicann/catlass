@@ -25,9 +25,6 @@ using namespace Catlass;
 
 template <class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC>
 inline TEMPLATE_RET_TYPE BasicMatmul(aclrtStream stream, GemmCoord problemShape, uint32_t problemCount, uint8_t *deviceA, uint8_t *deviceB, uint8_t *deviceC) {
-    // Get the number of cube cores of the current hardware
-    auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
-
     using ArchTag = Arch::AtlasA2;
     using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
     using L1TileShape = GemmShape<128, 256, 256>;
