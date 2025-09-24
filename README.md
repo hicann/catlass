@@ -113,6 +113,8 @@ cd output/bin
 
 [华南理工大学 陆璐教授团队](https://www2.scut.edu.cn/cs/2017/0629/c22284a328108/page.htm)
 
+科大讯飞 研究院工程组
+
 - 可参阅[贡献指南](./CONTRIBUTORS.md)了解我们的版本开发策略，以便参与CATLASS的开发。
 
 ## 🔒 安全声明

@@ -54,6 +54,8 @@
 
 ### [华南理工大学 陆璐教授团队](https://www2.scut.edu.cn/cs/2017/0629/c22284a328108/page.htm)
 
+### 科大讯飞 研究院工程组
+
 ## ©️ 版权声明
 
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
