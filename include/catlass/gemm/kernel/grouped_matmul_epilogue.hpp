@@ -21,17 +21,6 @@
 
 namespace Catlass::Gemm::Kernel {
 
-namespace detail {
-
-template <class T>
-CATLASS_DEVICE void UnpackListParam(T *const dst, GM_ADDR src, uint32_t len)
-{
-    for (uint32_t i = 0; i * sizeof(uint64_t) < len * sizeof(T); ++i) {
-        reinterpret_cast<uint64_t *>(dst)[i] = reinterpret_cast<__gm__ uint64_t *>(src)[i];
-    }
-}
-
-} // namespace detail
 template<
     class ArchTag_,
     class Element_
@@ -90,7 +79,8 @@ private:
 template <
     class BlockMmad_,
     class BlockEpilogue_,
-    class BlockScheduler_
+    class BlockScheduler_,
+    class ElementGroupList_
 >
 class GroupedMatmulEpilogue {
 public:
@@ -103,6 +93,7 @@ public:
     using LayoutB = typename BlockMmad::LayoutB;
     using ElementC = typename BlockMmad::ElementC;
     using LayoutC = typename BlockMmad::LayoutC;
+    using ElementGroupList = ElementGroupList_;
 
     using BlockEpilogue = BlockEpilogue_;
     using ElementD = typename BlockEpilogue::ElementD;
@@ -110,44 +101,44 @@ public:
 
     using BlockScheduler = BlockScheduler_;
     using MemFill0 = MemFill<ArchTag, ElementC>;
-    static constexpr uint32_t MAX_TENSOR_COUNT = 256;
 
     struct Params {
+        GemmCoord problemShape;
         uint32_t problemCount;
-        GM_ADDR ptrProblemShape;
-        GM_ADDR ptrA;
-        GM_ADDR ptrLayoutA;
-        GM_ADDR ptrB;
-        GM_ADDR ptrLayoutB;
+        __gm__ ElementGroupList *ptrGroupList;
+        __gm__ ElementA *ptrA;
+        LayoutA layoutA;
+        __gm__ ElementB *ptrB;
+        LayoutB layoutB;
+        __gm__ ElementD *ptrD;
+        LayoutD layoutD;
         GM_ADDR ptrWorkspace;
-        GM_ADDR ptrLayoutC;
-        GM_ADDR ptrD;
 
         CATLASS_HOST_DEVICE Params() {}
 
-        CATLASS_HOST_DEVICE Params(
-            uint32_t problemCount_, GM_ADDR ptrProblemShape_,
-            GM_ADDR ptrA_, GM_ADDR ptrLayoutA_,
-            GM_ADDR ptrB_, GM_ADDR ptrLayoutB_,
-            GM_ADDR ptrWorkspace_, GM_ADDR ptrLayoutC_,
-            GM_ADDR ptrD_)
-            : problemCount(problemCount_), ptrProblemShape(ptrProblemShape_),
-              ptrA(ptrA_), ptrLayoutA(ptrLayoutA_),
-              ptrB(ptrB_), ptrLayoutB(ptrLayoutB_),
-              ptrWorkspace(ptrWorkspace_), ptrLayoutC(ptrLayoutC_),
-              ptrD(ptrD_) {}
+        CATLASS_HOST_DEVICE
+        Params(
+            GemmCoord const &problemShape_, uint32_t problemCount_, GM_ADDR ptrGroupList_,
+            GM_ADDR ptrA_, LayoutA const &layoutA_,
+            GM_ADDR ptrB_, LayoutB const &layoutB_,
+            GM_ADDR ptrD_, LayoutD const &layoutD_,
+            GM_ADDR ptrWorkspace_
+        ) : problemShape(problemShape_),
+            problemCount(problemCount_), ptrGroupList(reinterpret_cast<__gm__ ElementGroupList *>(ptrGroupList_)),
+            ptrA(reinterpret_cast<__gm__ ElementA *>(ptrA_)), layoutA(layoutA_),
+            ptrB(reinterpret_cast<__gm__ ElementB *>(ptrB_)), layoutB(layoutB_),
+            ptrD(reinterpret_cast<__gm__ ElementD *>(ptrD_)), layoutD(layoutD_),
+            ptrWorkspace(ptrWorkspace_)
+        {
+        }
     };
 
     struct Arguments {
         uint32_t problemCount;
         GemmCoord problemShape; // used for workspace size
-        size_t elementSize;
-        uint8_t *ptrProblemShape;
+        uint8_t *ptrGroupList;
         uint8_t *ptrA;
-        uint8_t *ptrLayoutA;
         uint8_t *ptrB;
-        uint8_t *ptrLayoutB;
-        uint8_t *ptrLayoutC;
         uint8_t *ptrD; // also stores X
     };
 
@@ -155,39 +146,41 @@ public:
 
     static size_t GetWorkspaceSize(const Arguments &args)
     {
-        return static_cast<size_t>(args.elementSize) *
+        return static_cast<size_t>(sizeof(ElementC)) *
                args.problemShape.m() * args.problemShape.n() * args.problemCount;
     }
 
     static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
     {
+        uint32_t m = args.problemShape.m();
+        uint32_t n = args.problemShape.n();
+        uint32_t k = args.problemShape.k();
+        LayoutA layoutA{m, k};
+        LayoutB layoutB{k, n};
+        LayoutD layoutD{m, n};
         Params params{
-            args.problemCount, args.ptrProblemShape,
-            args.ptrA, args.ptrLayoutA,
-            args.ptrB, args.ptrLayoutB,
-            workspace, args.ptrLayoutC,
-            args.ptrD};
+            args.problemShape, args.problemCount, args.ptrGroupList,
+            args.ptrA, layoutA,
+            args.ptrB, layoutB,
+            args.ptrD, layoutD,
+            workspace};
         return params;
     }
 
-    CATLASS_DEVICE GroupedMatmulEpilogue() {}
+    CATLASS_DEVICE
+    GroupedMatmulEpilogue() {}
+
+    CATLASS_DEVICE
+    ~GroupedMatmulEpilogue() {}
 
     template <int32_t CORE_TYPE = g_coreType>
-    CATLASS_DEVICE void operator()(Params const &params);
+    CATLASS_DEVICE
+    void operator()(Params const &params);
 
     template <>
-    CATLASS_DEVICE void operator()<AscendC::AIC>(Params const &params)
+    CATLASS_DEVICE
+    void operator()<AscendC::AIC>(Params const &params)
     {
-        GemmCoord problemShapeList[MAX_TENSOR_COUNT];
-        LayoutA layoutAList[MAX_TENSOR_COUNT];
-        LayoutB layoutBList[MAX_TENSOR_COUNT];
-        LayoutC layoutCList[MAX_TENSOR_COUNT];
-
-        detail::UnpackListParam(problemShapeList, params.ptrProblemShape, params.problemCount);
-        detail::UnpackListParam(layoutAList, params.ptrLayoutA, params.problemCount);
-        detail::UnpackListParam(layoutBList, params.ptrLayoutB, params.problemCount);
-        detail::UnpackListParam(layoutCList, params.ptrLayoutC, params.problemCount);
-
         BlockScheduler matmulBlockScheduler;
         BlockMmad blockMmad(resource);
 
@@ -197,19 +190,20 @@ public:
         gmB.SetGlobalBuffer((__gm__ ElementB *)params.ptrB);
         AscendC::GlobalTensor<ElementC> gmWorkspace;
         gmWorkspace.SetGlobalBuffer((__gm__ ElementC *)params.ptrWorkspace);
+        AscendC::GlobalTensor<ElementGroupList> groupList;
+        groupList.SetGlobalBuffer(params.ptrGroupList);
 
         uint32_t coreIdx = AscendC::GetBlockIdx();
         uint32_t coreNum = AscendC::GetBlockNum();
         int64_t inGroupOffsetA = 0;
         int64_t inGroupOffsetB = 0;
         int64_t inGroupOffsetC = 0;
+        
         uint32_t startCoreIdx = 0;
-
         for (uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx) {
-            GemmCoord problemShape = problemShapeList[groupIdx];
-            LayoutA layoutA = layoutAList[groupIdx];
-            LayoutB layoutB = layoutBList[groupIdx];
-            LayoutC layoutC = layoutCList[groupIdx];
+            uint32_t currentK = (groupIdx == 0) ? groupList.GetValue(groupIdx) :
+                (groupList.GetValue(groupIdx) - groupList.GetValue(groupIdx - 1));
+            GemmCoord problemShape{params.problemShape.m(), params.problemShape.n(), currentK};
 
             if (problemShape.k() == 0) {
                 inGroupOffsetA += problemShape.m() * problemShape.k();
@@ -217,6 +211,10 @@ public:
                 inGroupOffsetC += problemShape.m() * problemShape.n();
                 continue;
             }
+
+            LayoutA layoutA = params.layoutA.GetTileLayout(problemShape.GetCoordMK());
+            LayoutB layoutB = params.layoutB.GetTileLayout(problemShape.GetCoordKN());
+            LayoutC layoutC = LayoutC(problemShape.m(), problemShape.n());
 
             matmulBlockScheduler.Update(problemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
             uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
@@ -265,11 +263,6 @@ public:
     CATLASS_DEVICE void operator()<AscendC::AIV>(Params const &params)
     {
         MemFill0 memFill0(resource);
-        GemmCoord problemShapeList[MAX_TENSOR_COUNT];
-        LayoutC layoutCList[MAX_TENSOR_COUNT];
-
-        detail::UnpackListParam(problemShapeList, params.ptrProblemShape, params.problemCount);
-        detail::UnpackListParam(layoutCList, params.ptrLayoutC, params.problemCount);
 
         BlockScheduler matmulBlockScheduler;
 
@@ -285,9 +278,12 @@ public:
 
         GemmCoord blockShape = L1TileShape::ToCoord();
         for (uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx) {
-            GemmCoord problemShape = problemShapeList[groupIdx];
-            LayoutC layoutC = layoutCList[groupIdx];
-            LayoutD layoutD = layoutC; // D shares layout with C
+            uint32_t currentK = (groupIdx == 0) ? groupList.GetValue(groupIdx) :
+                (groupList.GetValue(groupIdx) - groupList.GetValue(groupIdx - 1));
+            GemmCoord problemShape{params.problemShape.m(), params.problemShape.n(), currentK};
+
+            LayoutC layoutC = LayoutC(problemShape.m(), problemShape.n());
+            LayoutD layoutD = params.layoutD.GetTileLayout(problemShape.GetCoordMN());
 
             if (problemShape.k() == 0) {
                 memFill0(gmWorkspace[inGroupOffsetC], problemShape.m() * problemShape.n(), 0);
