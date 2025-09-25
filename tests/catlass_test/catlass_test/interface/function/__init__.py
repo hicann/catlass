@@ -71,6 +71,7 @@ def grouped_matmul_slice_m(
     group_list: Union[torch.Tensor, Iterable[int]],
     out_dtype: Optional[torch.dtype] = None,
     out: Optional[torch.Tensor] = None,
+    **kwargs,
 ) -> torch.Tensor:
     """Test function for `examples/02_grouped_matmul_slice_m`.
     This function does not have equivalent torch function.
@@ -81,6 +82,9 @@ def grouped_matmul_slice_m(
         group_list_tensor = group_list
     output_tensors = {"C": out} if out is not None else {}
 
+    attrs = {"out_dtype": out_dtype}
+    attrs.update(kwargs)
+
     adapter = GroupedMatmulAdapter(
         os.path.join(
             CATLASS_TEST_KERNEL_EXAMPLES_PATH,
@@ -89,7 +93,7 @@ def grouped_matmul_slice_m(
         ),
         {"A": x, "B": weight, "GroupList": group_list_tensor},
         output_tensors,
-        {"out_dtype": out_dtype},
+        attrs,
         OpType.AIC_ONLY,
         "m",
         True,
@@ -127,6 +131,7 @@ def grouped_matmul_slice_k(
     group_list: Union[torch.Tensor, Iterable[int]],
     out_dtype: Optional[torch.dtype] = None,
     out: Optional[torch.Tensor] = None,
+    **kwargs
 ) -> torch.Tensor:
     """Test function for `examples/05_grouped_matmul_slice_k`.
     This function does not have equivalent torch function.
@@ -136,6 +141,8 @@ def grouped_matmul_slice_k(
     else:
         group_list_tensor = group_list
     output_tensors = {"C": out} if out is not None else {}
+    attrs = {"out_dtype": out_dtype}
+    attrs.update(kwargs)
 
     adapter = GroupedMatmulAdapter(
         os.path.join(

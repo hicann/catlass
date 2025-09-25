@@ -1,0 +1,1 @@
+from catlass_test.golden.grouped_matmul import grouped_matmul_golden, grouped_matmul_gen_case
