@@ -524,23 +524,25 @@ public:
 };
 
 template <
+    uint32_t Batch_ = 1,
     uint32_t H_ = 1,
     uint32_t W_ = 1,
     uint32_t Cout_ = 16,
     uint32_t Cin1_ = 1
 >
-struct Conv2d5HdShape { // (H, W, Cout, Cin1)
+struct Conv2d5HdShape { // (Batch, H, W, Cout, Cin1)
+    static constexpr uint32_t Batch = Batch_;
     static constexpr uint32_t H = H_;
     static constexpr uint32_t W = W_;
     static constexpr uint32_t Cout = Cout_;
     static constexpr uint32_t Cin1 = Cin1_;
 
     static constexpr int64_t HW = H * W;
-
+    
     /// Returns a Coord object
     CATLASS_HOST_DEVICE
-    static Coord<4> ToCoord() {
-        return MakeCoord(H, W, Cout, Cin1);
+    static Coord<5> ToCoord() {
+        return MakeCoord(Batch, H, W, Cout, Cin1);
     }
 };
 
