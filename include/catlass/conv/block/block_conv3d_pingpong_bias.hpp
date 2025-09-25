@@ -120,6 +120,16 @@ public:
     static constexpr uint32_t PAD_IDX_R = 1;
     static constexpr uint32_t BLOCK_SIZE = 512;
 
+    // Check L0TileShape
+    static constexpr uint32_t L0A_TILE_SIZE = L0TileShape::mL0 * L0TileShape::kL0 * sizeof(ElementFmap);
+    static constexpr uint32_t L0B_TILE_SIZE = L0TileShape::kL0 * L0TileShape::nL0 * sizeof(ElementFilter);
+    static constexpr uint32_t L0C_TILE_SIZE = L0TileShape::mL0 * L0TileShape::nL0 * sizeof(ElementAccumulator);
+    static constexpr uint32_t BIAS_BUF_SIZE = L0TileShape::nL0 * sizeof(ElementAccumulator);
+    static_assert((L0A_TILE_SIZE * L0A_STAGES) <= ArchTag::L0A_SIZE, "L0TileShape exceeding the L0A space!");
+    static_assert((L0B_TILE_SIZE * L0B_STAGES) <= ArchTag::L0B_SIZE, "L0TileShape exceeding the L0B space!");
+    static_assert(L0C_TILE_SIZE * L0C_STAGES <= ArchTag::L0C_SIZE, "L0TileShape exceeding the L0C space!");
+    static_assert(BIAS_BUF_SIZE <= ArchTag::BIAS_SIZE, "BIAS_BUF_SIZE exceeding the BT space! Reduce L0TileShape::nL0");
+
     // Check PingPong
     static_assert(L1A_STAGES == 1, "L1A PingPong must be 1!");
     static_assert(L1B_STAGES == 1, "L1A PingPong must be 1!");
