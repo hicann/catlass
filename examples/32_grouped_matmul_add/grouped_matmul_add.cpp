@@ -96,7 +96,7 @@ void Run(Options const &options)
     size_t sizeB = lenB * sizeof(fp16_t);
     size_t sizeD = lenD * sizeof(fp16_t);
 
-    using LayoutA = layout::RowMajor;
+    using LayoutA = layout::ColumnMajor;
     using LayoutB = layout::RowMajor;
     using LayoutC = layout::RowMajor;
 
@@ -105,23 +105,18 @@ void Run(Options const &options)
     std::vector<fp16_t> hostA(lenA);
     std::vector<fp16_t> hostB(lenB);
     std::vector<fp16_t> hostX(lenD);
+    std::vector<fp16_t> hostD(lenD);
     golden::FillRandomData<fp16_t>(hostA, fp16_tLower, fp16_tUpper);
     golden::FillRandomData<fp16_t>(hostB, fp16_tLower, fp16_tUpper);
     golden::FillRandomData<fp16_t>(hostX, fp16_tLower, fp16_tUpper);
+    golden::FillRandomData<fp16_t>(hostD, fp16_tLower, fp16_tUpper); // 校验示例里的清零
 
-    auto groupList = golden::GenerateGroupList(k, problemCount);
-    
-    std::vector<GemmCoord> problemShapeList(problemCount);
-    std::vector<LayoutA> layoutAList(problemCount);
-    std::vector<LayoutB> layoutBList(problemCount);
-    std::vector<LayoutC> layoutCList(problemCount);
-    for (uint32_t i = 0; i < problemCount; ++i) {
-        uint32_t currentK = (i == 0) ? groupList[0] : (groupList[i] - groupList[i - 1]);
-        problemShapeList[i] = GemmCoord{m, n, currentK};
-        layoutAList[i] = LayoutA{m, currentK};
-        layoutBList[i] = LayoutB{currentK, n};
-        layoutCList[i] = LayoutC{m, n};
-    }
+    auto groupList = golden::GenerateGroupList<int64_t>(k, problemCount);
+
+    size_t sizeGroupList = problemCount * sizeof(int64_t);
+    uint8_t *deviceGroupList{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceGroupList), sizeGroupList, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMemcpy(deviceGroupList, sizeGroupList, groupList.data(), sizeGroupList, ACL_MEMCPY_HOST_TO_DEVICE));
 
     uint8_t *deviceA{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
@@ -134,31 +129,6 @@ void Run(Options const &options)
     uint8_t *deviceD{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceD), sizeD, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceD, sizeD, hostX.data(), sizeD, ACL_MEMCPY_HOST_TO_DEVICE));
-
-    uint8_t *problemShapeListDevice{nullptr};
-    size_t sizeProblemShapeList = problemShapeList.size() * sizeof(GemmCoord);
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&problemShapeListDevice), sizeProblemShapeList,
-        ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMemcpy(problemShapeListDevice, sizeProblemShapeList,
-        problemShapeList.data(), sizeProblemShapeList, ACL_MEMCPY_HOST_TO_DEVICE));
-
-    uint8_t *layoutAListDevice{nullptr};
-    size_t sizeLayoutAList = layoutAList.size() * sizeof(LayoutA);
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&layoutAListDevice), sizeLayoutAList, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMemcpy(layoutAListDevice, sizeLayoutAList,
-        layoutAList.data(), sizeLayoutAList, ACL_MEMCPY_HOST_TO_DEVICE));
-
-    uint8_t *layoutBListDevice{nullptr};
-    size_t sizeLayoutBList = layoutBList.size() * sizeof(LayoutB);
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&layoutBListDevice), sizeLayoutBList, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMemcpy(layoutBListDevice, sizeLayoutBList,
-        layoutBList.data(), sizeLayoutBList, ACL_MEMCPY_HOST_TO_DEVICE));
-
-    uint8_t *layoutCListDevice{nullptr};
-    size_t sizeLayoutCList = layoutCList.size() * sizeof(LayoutC);
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&layoutCListDevice), sizeLayoutCList, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMemcpy(layoutCListDevice, sizeLayoutCList,
-        layoutCList.data(), sizeLayoutCList, ACL_MEMCPY_HOST_TO_DEVICE));
 
     uint64_t fftsAddr{0};
     uint32_t fftsLen{0};
@@ -187,17 +157,15 @@ void Run(Options const &options)
         TileElemWiseEpilogue, EpilogueTileCopy>;
 
     using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
-    using MatmulKernel = Gemm::Kernel::GroupedMatmulEpilogue<BlockMmad, BlockEpilogue, BlockScheduler>;
+    using MatmulKernel = Gemm::Kernel::GroupedMatmulEpilogue<BlockMmad, BlockEpilogue, BlockScheduler, int64_t>;
     using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
 
     typename MatmulKernel::Arguments arguments{
         problemCount,
         options.problemShape,
-        sizeof(half),
-        problemShapeListDevice,
-        deviceA, layoutAListDevice,
-        deviceB, layoutBListDevice,
-        layoutCListDevice,
+        deviceGroupList,
+        deviceA,
+        deviceB,
         deviceD};
 
     MatmulAdapter matmul_op;
@@ -213,7 +181,6 @@ void Run(Options const &options)
         ACL_CHECK(aclrtFree(deviceWorkspace));
     }
 
-    std::vector<fp16_t> hostD(lenD);
     ACL_CHECK(aclrtMemcpy(hostD.data(), sizeD, deviceD, sizeD, ACL_MEMCPY_DEVICE_TO_HOST));
 
     std::vector<float> hostGolden(lenD);
@@ -233,10 +200,7 @@ void Run(Options const &options)
     ACL_CHECK(aclrtFree(deviceA));
     ACL_CHECK(aclrtFree(deviceB));
     ACL_CHECK(aclrtFree(deviceD));
-    ACL_CHECK(aclrtFree(problemShapeListDevice));
-    ACL_CHECK(aclrtFree(layoutAListDevice));
-    ACL_CHECK(aclrtFree(layoutBListDevice));
-    ACL_CHECK(aclrtFree(layoutCListDevice));
+    ACL_CHECK(aclrtFree(deviceGroupList));
 
     ACL_CHECK(aclrtDestroyStream(stream));
     ACL_CHECK(aclrtResetDevice(options.deviceId));
