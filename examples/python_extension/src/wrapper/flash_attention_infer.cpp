@@ -40,9 +40,9 @@ FAKernelInfo GetKernelInfo(const at::Tensor &query, const at::Tensor &key, const
     if (query_dtype != key_dtype || query_dtype != value_dtype) {
         throw std::runtime_error("query, key and value must have the same dataType");
     }
-    int64_t *qNtokens = nullptr;
-    ACL_CHECK(aclrtMallocHost(reinterpret_cast<void**>(&qNtokens), 1 * sizeof(int64_t)));
-    qNtokens[0] = query.sizes().at(0);
+    // int64_t *qNtokens = nullptr;
+    // ACL_CHECK(aclrtMallocHost(reinterpret_cast<void**>(&qNtokens), 1 * sizeof(int64_t)));
+    int64_t qNtokens = query.sizes().at(0);
     int64_t embedding_size = query.sizes().at(2);
 
     int64_t batch = actual_seq_lengths.size();
@@ -73,7 +73,7 @@ FAKernelInfo GetKernelInfo(const at::Tensor &query, const at::Tensor &key, const
     }
 
     aclDataType str_dtype = query_dtype;
-    if ((str_dtype != ACL_FLOAT16) || (str_dtype != ACL_BF16)) {
+    if ((str_dtype != ACL_FLOAT16) && (str_dtype != ACL_BF16)) {
         throw std::runtime_error("str_dtype of fai should be ACL_FLOAT16 or ACL_BF16");
     }
 
@@ -96,7 +96,7 @@ FAKernelInfo GetKernelInfo(const at::Tensor &query, const at::Tensor &key, const
     kernelInfo.inputAddr[5] = static_cast<uint8_t *>(const_cast<void *>(atten_mask.storage().data()));
     kernelInfo.inputAddr[6] = static_cast<uint8_t *>(const_cast<void *>(block_table.storage().data()));
     
-    kernelInfo.qNtokens = static_cast<uint32_t>(qNtokens[0]);
+    kernelInfo.qNtokens = static_cast<uint32_t>(qNtokens);
     kernelInfo.batch = static_cast<uint32_t>(batch);
     kernelInfo.qSeqlen = static_cast<uint32_t>(q_seqlen);
     kernelInfo.kvSeqlen = static_cast<uint32_t>(kv_seqlen);

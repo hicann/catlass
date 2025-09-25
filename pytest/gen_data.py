@@ -15,6 +15,7 @@ import random
 from ml_dtypes import bfloat16
 from dataclasses import dataclass
 import torch_catlass
+import torch
 np.random.seed(1)
 
 
@@ -32,8 +33,8 @@ def gen_seqlen(max_q_seqlen: int, max_kv_seqlen: int, is_varied_len: int, batch:
             kv_seq = random.randint(1, max_kv_seqlen)
             q_seqlen_list.append(q_seq)
             kv_seqlen_list.append(kv_seq)
-    print(q_seqlen_list)
-    print(kv_seqlen_list)
+    # print(q_seqlen_list)
+    # print(kv_seqlen_list)
     return q_seqlen_list, kv_seqlen_list
 
 class TestFlashAttentionInfer():
@@ -238,17 +239,26 @@ class TestFlashAttentionInfer():
         attention_inputs = self.AttentionInputs(query, key_cache, value_cache, block_tables,
             gen_data_params.q_seqlen_list, gen_data_params.k_seqlen_list, mask, gen_data_params.mask_type, gen_data_params)
         
-        fai_outputs = torch_catlass.flash_attention_infer(query=query, key=key_cache, value=value_cache,
-                                                          actual_seq_lengths=gen_data_params.q_seqlen_list, actual_seq_lengths_kv=gen_data_params.k_seqlen_list,
-                                                          atten_mask=mask, block_table=block_tables, input_layout=layout,
-                                                          num_heads=gen_data_params.num_heads, num_key_value_heads=gen_data_params.kv_heads, sparse_mode=gen_data_params.mask_type)
+        catlass_query = torch.tensor(query.astype(np.float32), dtype=torch.bfloat16).npu()
+        catlass_key_cache = torch.tensor(key_cache.astype(np.float32), dtype=torch.bfloat16).npu()
+        catlass_value_cache = torch.tensor(value_cache.astype(np.float32), dtype=torch.bfloat16).npu()
+        catlass_mask = torch.tensor(mask.astype(np.float32), dtype=torch.bfloat16).npu()
+        catlass_block_tables = torch.tensor(block_tables.astype(np.float32), dtype=torch.bfloat16).npu()
+        
+        actual_seq_lengths = [int(x) for x in gen_data_params.q_seqlen_list]
+        actual_seq_lengths_kv = [int(x) for x in gen_data_params.k_seqlen_list]
+        
+        fai_outputs = torch_catlass.flash_attention_infer(query, key_cache, value_cache,
+                                                          actual_seq_lengths, actual_seq_lengths_kv,
+                                                          catlass_mask, catlass_block_tables, layout,
+                                                          gen_data_params.num_heads, gen_data_params.kv_heads, gen_data_params.mask_type)
         self.ref_single_query_cached_kv_attention(
             attention_inputs,
             ref_output,
             true_out,
         )
         
-        print(torch.allclose(fai_outputs, true_out, rtol=1e-03))
+        # print(torch.allclose(fai_outputs, true_out, rtol=1e-03))
         num_tokens.astype(np.int32).tofile(os.path.join(WORKSPACE, "data", "q_ntokens.bin"))
         num_kv_tokens.astype(np.int32).tofile(os.path.join(WORKSPACE, "data", "kv_ntokens.bin"))
         query.tofile(os.path.join(WORKSPACE, "data", "q.bin"))
