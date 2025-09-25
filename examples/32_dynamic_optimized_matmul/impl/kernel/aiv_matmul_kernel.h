@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef COMMON_MATMUL_KERNEL_H
-#define COMMON_MATMUL_KERNEL_H
+#ifndef AIV_MATMUL_KERNEL_H
+#define AIV_MATMUL_KERNEL_H
 
 #include "tiling_params.h"
 #include "acl/acl.h"
@@ -18,17 +18,24 @@
 #include "catlass/layout/layout.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
-#include "catlass/gemm/kernel/dynamic_common_matmul.hpp"
+#include "catlass/gemm/kernel/dynamic_matmul_aiv.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 
-enum DispatchPolicyTag {
+enum class DispatchPolicyTag {
     DEFAULT = 0,
     MATMUL_AIV_SIMPLE = 1,
-    MATMUL_AIV_TARNS = 2
+    MATMUL_AIV_TRANS = 2
+};
+
+template <class ArchTag, class AType, class BType, class CType>
+struct TileCopyAiv {
+    using CopyGmToUbA = Catlass::Gemm::Tile::CopyGm2Ub<ArchTag, AType>;
+    using CopyGmToUbB = Catlass::Gemm::Tile::CopyGm2Ub<ArchTag, BType>;
+    using CopyUbToGmC = Catlass::Gemm::Tile::CopyUb2Gm<ArchTag, CType>;
 };
 
 template <class ArchTag, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC, class DispatchPolicy>
-CATLASS_DEVICE void AivMatmul(Catlass::GemmCoord &problemShape, Catlass::MatrixCoord &taskShape, GM_ADDR gmA,
+CATLASS_DEVICE void AivMatmul(Catlass::GemmCoord &problemShape, Catlass::MatrixCoord &taskTileShape, GM_ADDR gmA,
     LayoutA &layoutA, GM_ADDR gmB, LayoutB &layoutB, GM_ADDR gmC, LayoutC &layoutC,
     Catlass::Arch::Resource<ArchTag> &resource)
 {
@@ -36,7 +43,7 @@ CATLASS_DEVICE void AivMatmul(Catlass::GemmCoord &problemShape, Catlass::MatrixC
     using BType = Catlass::Gemm::GemmType<ElementB, LayoutB>;
     using CType = Catlass::Gemm::GemmType<ElementC, LayoutC>;
     using BiasType = void;
-    using TileCopy = Catlass::Gemm::Tile::TileCopyAiv<ArchTag, AType, BType, CType>;
+    using TileCopy = TileCopyAiv<ArchTag, AType, BType, CType>;
     static constexpr uint32_t COMPUTE_LENGTH = 16 * 1024;
     using TileVmuls = Catlass::Gemm::Tile::TileMuls<ArchTag, AType, COMPUTE_LENGTH>;
     using BlockMmad = Catlass::Gemm::Block::BlockMmadAiv<DispatchPolicy, AType, BType, CType, BiasType, TileCopy, TileVmuls>;
@@ -51,8 +58,8 @@ CATLASS_DEVICE void AivMatmul(Catlass::GemmCoord &problemShape, Catlass::MatrixC
     matmul(params, resource);
 }
 
-template <class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC, DispatchPolicyTag dispatchPolicy>
-CATLASS_GLOBAL __attribute__((aic)) void CommonMatmulKernel(__gm__ uint8_t *__restrict__ gmA,
+template <class ElementA, class ElementB, class ElementC, DispatchPolicyTag dispatchPolicyTag>
+CATLASS_GLOBAL __attribute__((aiv)) void AivMatmulKernel(__gm__ uint8_t *__restrict__ gmA,
     __gm__ uint8_t *__restrict__ gmB, __gm__ uint8_t *__restrict__ gmC, __gm__ uint8_t *__restrict__ tilingData)
 {
     using ArchTag = Catlass::Arch::AtlasA2;
@@ -123,7 +130,7 @@ CATLASS_GLOBAL __attribute__((aic)) void CommonMatmulKernel(__gm__ uint8_t *__re
 
     using LayoutA = Catlass::layout::VectorLayout;
     using LayoutB = Catlass::layout::VectorLayout;
-    using LayoutC = Catlass::RowMajor;
+    using LayoutC = Catlass::layout::RowMajor;
 
     Catlass::GemmCoord problemShape(m, n, k);
     Catlass::MatrixCoord taskTileShape(m1, n1);
@@ -132,38 +139,38 @@ CATLASS_GLOBAL __attribute__((aic)) void CommonMatmulKernel(__gm__ uint8_t *__re
     LayoutC layoutC{m, n, strideC};
 
     // default impl: m axis as scalar axis
-    if constexpr (dispatchPolicy == DispatchPolicyTag::DEFAULT) {
+    if constexpr (dispatchPolicyTag == DispatchPolicyTag::DEFAULT) {
         constexpr uint32_t SCALAR_BUFFER_ELE_NUM = 256;
         constexpr uint32_t STAGES = 2;
         using DispatchPolicy = Catlass::Gemm::MmadAtlasA2Aiv<SCALAR_BUFFER_ELE_NUM, STAGES>;
-        AivMatmul<ArchTag, ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC, dispatchPolicyTag>(
+        AivMatmul<ArchTag, ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC, DispatchPolicy>(
             problemShape, taskTileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, resource);
-    } else if constexpr (dispatchPolicy == DispatchPolicyTag::MATMUL_AIV_SIMPLE) {
+    } else if constexpr (dispatchPolicyTag == DispatchPolicyTag::MATMUL_AIV_SIMPLE) {
         constexpr uint32_t SCALAR_BUFFER_ELE_NUM = 256;
         constexpr bool IS_TILE_M = true;
         using DispatchPolicy = Catlass::Gemm::MmadAtlasA2AivSimple<SCALAR_BUFFER_ELE_NUM, IS_TILE_M>;
-        AivMatmul<ArchTag, ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC, dispatchPolicyTag>(
+        AivMatmul<ArchTag, ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC, DispatchPolicy>(
             problemShape, taskTileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, resource);
-    } else if constexpr (dispatchPolicy == DispatchPolicyTag::MATMUL_AIV_TARNS) {
+    } else if constexpr (dispatchPolicyTag == DispatchPolicyTag::MATMUL_AIV_TRANS) {
         constexpr uint32_t SCALAR_BUFFER_ELE_NUM = 256;
         using DispatchPolicy = Catlass::Gemm::MmadAtlasA2AivSimple<SCALAR_BUFFER_ELE_NUM>;
-        AivMatmul<ArchTag, ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC, dispatchPolicyTag>(
+        AivMatmul<ArchTag, ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC, DispatchPolicy>(
             problemShape, taskTileShape, gmA, layoutA, gmB, layoutB, gmC, layoutC, resource);
     }
 }
 
-template <class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC>
-void LaunchCommonMatmulKernel(aclrtStream &stream, uint64_t fftsAddr, uint8_t *dA, uint8_t *dB, uint8_t *dC,
+template <class ElementA, class ElementB, class ElementC, DispatchPolicyTag dispatchPolicyTag>
+void LaunchAivMatmulKernel(aclrtStream &stream, uint64_t fftsAddr, uint8_t *dA, uint8_t *dB, uint8_t *dC,
     uint8_t *dTilingParams, TilingParams &tilingParams)
 {
-    CommonMatmulKernel<ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC, dispatchPolicyTag>
+    AivMatmulKernel<ElementA, ElementB, ElementC, dispatchPolicyTag>
         <<<tilingParams.blockDim, nullptr, stream>>>(dA, dB, dC, dTilingParams);
 }
 
-template <class ElementA, class ElementB, class LayoutB, class ElementC, class LayoutC>
-size_t CommonMatmulKernelGetWorkspaceSize(TilingParams &tilingParams)
+template <class ElementA, class ElementB, class ElementC, DispatchPolicyTag dispatchPolicyTag>
+size_t AivMatmulKernelGetWorkspaceSize(TilingParams &tilingParams)
 {
     return 0;
 }
 
-#endif  // COMMON_MATMUL_KERNEL_H
+#endif  // AIV_MATMUL_KERNEL_H

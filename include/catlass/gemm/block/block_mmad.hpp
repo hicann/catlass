@@ -66,6 +66,19 @@ struct BlockGemm {
     static_assert(DEPENDENT_FALSE<DispatchPolicy>, "BlockMmad is not implemented for this DispatchPolicy");
 };
 
+template <
+    class DispatchPolicy,
+    class AType,
+    class BType,
+    class CType,
+    class BiasType,
+    class TileCopy,
+    class TileMmad
+>
+struct BlockMmadAiv {
+    static_assert(DEPENDENT_FALSE<DispatchPolicy>, "BlockMmadAiv is not implemented for this DispatchPolicy");
+};
+
 } // namespace Catlass::Gemm::Block
 
 #include "catlass/gemm/block/block_mmad_pingpong.hpp"
@@ -92,5 +105,6 @@ struct BlockGemm {
 #include "catlass/gemm/block/block_mmad_dynamic_common.hpp"
 #include "catlass/gemm/block/block_mmad_dynamic_small.hpp"
 #include "catlass/gemm/block/block_mmad_dynamic_streamk.hpp"
+#include "catlass/gemm/block/block_mmad_dynamic_aiv.hpp"
 #include "catlass/gemm/block/block_mmad_small.hpp"
 #endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_HPP

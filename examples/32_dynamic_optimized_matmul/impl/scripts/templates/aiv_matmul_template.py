@@ -21,7 +21,7 @@ void {launch_kernel_func_name}(aclrtStream& stream, uint64_t fftsAddr,
     using ElementA = {element_a};
     using ElementB = {element_b};
     using ElementC = {element_c};
-    DispatchPolicyTag dispatchPolicyTag = {dispatch_policy_tag}
+    constexpr DispatchPolicyTag dispatchPolicyTag = {dispatch_policy_tag};
     LaunchAivMatmulKernel<ElementA, ElementB, ElementC, dispatchPolicyTag>(
         stream, fftsAddr, dA, dB, dC, dTilingParams, tilingParams);
 }}
@@ -30,6 +30,8 @@ size_t {get_workspace_func_name}(TilingParams& tilingParams)
 {{
     using ElementA = {element_a};
     using ElementB = {element_b};
+    using ElementC = {element_c};
+    constexpr DispatchPolicyTag dispatchPolicyTag = {dispatch_policy_tag};
     return AivMatmulKernelGetWorkspaceSize<ElementA, ElementB, ElementC, dispatchPolicyTag>(tilingParams);
 }}
 """
@@ -42,10 +44,7 @@ size_t {get_workspace_func_name}(TilingParams& tilingParams)
     @staticmethod
     def gen_code(kernel_name, base_file_name, kernel_serial, dtype, kernel_info):
         DISPATCH_POLICY_SET = [0, 1, 2]
-        combinations = list(
-            itertools.product(DISPATCH_POLICY_SET)
-        )
-        for d_tag in combinations:
+        for d_tag in DISPATCH_POLICY_SET:
             # kernel_fun_name can be CommonMatmulKernelHalfLayout00
             kernel_func_name = (
                 kernel_name
@@ -55,7 +54,7 @@ size_t {get_workspace_func_name}(TilingParams& tilingParams)
             )
             # store tilingKey and kernel name
             kernel_info[
-                Config.get_tiling_key(kernel_serial, dtype, 0, 0, 0, 0, 0, 0)
+                Config.get_tiling_key(kernel_serial, dtype, d_tag, 0, 0, 0, 0, 0)
             ] = kernel_func_name
             # launch_kernel_fun_name can be LaunchCommonMatmulKernelHalfLayout00
             launch_kernel_func_name = "Launch" + kernel_func_name
@@ -74,6 +73,7 @@ size_t {get_workspace_func_name}(TilingParams& tilingParams)
             element_a = dtype
             element_b = dtype
             element_c = dtype
+            dispatch_policy_tag = AivMatmulTemplate.DISPATCH_POLICY_TAG_MAP[d_tag]
 
             content = AivMatmulTemplate.TEMPLATE.format(
                 launch_kernel_func_name=launch_kernel_func_name,
@@ -81,6 +81,7 @@ size_t {get_workspace_func_name}(TilingParams& tilingParams)
                 element_a=element_a,
                 element_b=element_b,
                 element_c=element_c,
+                dispatch_policy_tag=dispatch_policy_tag
             )
 
             with open(os.path.join(Config.WRAPPER_CODE_PATH, file_name), "w") as f:

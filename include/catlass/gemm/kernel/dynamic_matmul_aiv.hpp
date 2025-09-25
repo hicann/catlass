@@ -18,7 +18,7 @@ template <
     class PrologueB_,
     class BlockMmad_, 
     class BlockEpilogue_,
-    class BlockScheduler_,
+    class BlockScheduler_
 >
 class MatmulAiv {
 public:
@@ -124,9 +124,9 @@ public:
             GemmCoord actualBlockShape = matmulBlockScheduler.GetActualBlockShape(blockCoord);
 
             // Compute initial location in logical coordinates
-            TensorCoord coordA{blockCoord.m() * params.taskShape.row()};
-            TensorCoord coordB{blockCoord.n() * params.taskShape.column()};
-            MatrixCoord coordC{blockCoord.m() * params.taskShape.row(), blockCoord.n() * params.taskTileShape.column()};
+            TensorCoord coordA{blockCoord.m() * params.taskTileShape.row()};
+            TensorCoord coordB{blockCoord.n() * params.taskTileShape.column()};
+            MatrixCoord coordC{blockCoord.m() * params.taskTileShape.row(), blockCoord.n() * params.taskTileShape.column()};
             int64_t gmOffsetA = params.layoutA.GetOffset(coordA);
             int64_t gmOffsetB = params.layoutB.GetOffset(coordB);
             int64_t gmOffsetC = params.layoutC.GetOffset(coordC);

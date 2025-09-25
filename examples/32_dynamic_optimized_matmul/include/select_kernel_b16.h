@@ -349,10 +349,102 @@ bool PaddingStreamkMatmulB16Handler(TilingParams& params, PlatformInfo& platform
     return false;
 }
 
+bool AivMatmulB16Handler(TilingParams& params, PlatformInfo& platformInfo)
+{
+    if (params.k != 1) {
+        return false;
+    }
+    uint32_t aivCoreNums = platformInfo.coreNum * 2;
+    constexpr uint32_t SCALAR_BUFFER_ELE_NUM = 256;
+    uint8_t kernelSerial = 5;
+    uint8_t dispatchPolicyTag = 0;
+    if (params.m <= params.n || params.n > 64) {
+        uint32_t nTile = RoundUp(params.n, 16);
+        if (nTile * 2 > 32768) {
+            nTile = 32768 / 2;
+        } else if (nTile * 2 < 128) {
+            nTile = 128 / 2;
+        }
+        uint32_t nCut = CeilDiv(params.n, nTile);
+        uint32_t mCoreNum = CeilDiv(aivCoreNums, nCut);
+        uint32_t mTile = CeilDiv(params.m, mCoreNum);
+        uint32_t ubASize = SCALAR_BUFFER_ELE_NUM * 2;
+        uint32_t ubBSize = nTile * 2;
+        uint32_t ubCSize = platformInfo.ubSize - ubASize - ubBSize;
+        uint32_t mTileLimits = ubCSize / ubBSize > 64 ? 64 : ubCSize / ubBSize;
+        if (mTile <= mTileLimits && nTile >= params.n) {
+            dispatchPolicyTag = 1;
+        }
+        if (mTile > mTileLimits) {
+            mTile = nTile >= 8192 ? mTileLimits * 4 : mTileLimits;
+        }
+
+        uint32_t blocks = CeilDiv(params.m, mTile) * CeilDiv(params.n, nTile);
+        uint32_t loopsTimes = CeilDiv(blocks, aivCoreNums);
+        uint32_t nextMTile = mTile;
+        uint32_t nextBlocks = blocks;
+        uint32_t nextLoopsTimes = loopsTimes;
+        while(nextLoopsTimes == loopsTimes && nextMTile > 1) {
+            mTile = nextMTile;
+            nextMTile = nextMTile - 1;
+            nextBlocks = CeilDiv(params.m, nextMTile) * CeilDiv(params.n, nTile);
+            nextLoopsTimes = CeilDiv(nextBlocks, aivCoreNums);
+        }
+        uint32_t nextNTile = nTile;
+        nextLoopsTimes = loopsTimes;
+        while (nextLoopsTimes == loopsTimes && nextNTile > 64) {
+            nTile = nextNTile;
+            nextNTile = nextNTile - 16;
+            nextBlocks = CeilDiv(params.n, mTile) * CeilDiv(params.n, nextNTile);
+            nextLoopsTimes = CeilDiv(nextBlocks, aivCoreNums);
+        }
+        params.m1 = mTile;
+        params.n1 = nTile;
+        params.k1 = 0;
+        params.tilingKey.SetTilingKey(kernelSerial, dispatchPolicyTag, 0, 0, 0, 0, 0); 
+    } else {
+        uint32_t nTile = RoundUp(params.n, 16);
+        uint32_t mTile = params.m;
+        if (params.m <= 4096) {
+            mTile = 128;
+        } else {
+            mTile = CeilDiv(params.m, aivCoreNums);
+        }
+        mTile = RoundUp(mTile, 16);
+        uint32_t ubScalarSize = SCALAR_BUFFER_ELE_NUM * 2;
+        uint32_t mTileLimits = (platformInfo.ubSize - ubScalarSize) / 2 / (1 + nTile * 2) / 16 * 16;
+        if (mTile > mTileLimits) {
+            mTile = mTileLimits;
+        }
+        uint32_t blocks = CeilDiv(params.m, mTile) * CeilDiv(params.n, nTile);
+        uint32_t loopsTimes = CeilDiv(blocks, aivCoreNums);
+        uint32_t nextMTile = mTile;
+        uint32_t nextBlocks = blocks;
+        uint32_t nextLoopsTimes = loopsTimes;
+        while (nextLoopsTimes == loopsTimes && nextMTile > 112) {
+            mTile = nextMTile;
+            nextMTile = nextMTile - 16;
+            nextBlocks = CeilDiv(params.m, nextMTile) * CeilDiv(params.n, nTile);
+            nextLoopsTimes = CeilDiv(nextBlocks, aivCoreNums);
+        }
+        params.m1 = mTile;
+        params.n1 = nTile;
+        params.k1 = 0;
+        dispatchPolicyTag = 2;
+        params.tilingKey.SetTilingKey(kernelSerial, dispatchPolicyTag, 0, 0, 0, 0, 0); 
+    }
+
+    uint32_t taskBlocks = CeilDiv(params.m, params.m1) * CeilDiv(params.n, params.n1);
+    params.blockDim = taskBlocks > (platformInfo.coreNum * 2) ? platformInfo.coreNum * 2 : taskBlocks;
+    return true;
+
+}
+
 void SelectKernelB16(TilingParams &tilingParams, PlatformInfo& platformInfo)
 {
     using HandlerPtr = bool (*)(TilingParams& tilingParams, PlatformInfo& platformInfo);
     HandlerPtr handlers[] = {
+        AivMatmulB16Handler,
         SmallMatmulB16Handler,
         PaddingMultiCoreSplitkMatmulB16Handler,
         PaddingStreamkMatmulB16Handler,
