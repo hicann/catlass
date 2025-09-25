@@ -14,6 +14,7 @@ from templates.small_matmul_template import SmallMatmulTemplate
 from templates.padding_matmul_template import PaddingMatmulTemplate
 from templates.padding_multi_core_splitk_matmul_template import PaddingMultiCoreSplitkMatmulTemplate
 from templates.padding_streamk_matmul_template import PaddingStreamkMatmulTemplate
+from templates.aiv_matmul_template import AivMatmulTemplate
 from templates.launch_map_template import LaunchMapTemplate
 
 if __name__ == "__main__":
@@ -26,4 +27,5 @@ if __name__ == "__main__":
     PaddingMatmulTemplate.gen_code("PaddingMatmulKernel", "padding_matmul_kernel", 2, "half", kernel_info)
     PaddingMultiCoreSplitkMatmulTemplate.gen_code("PaddingMultiCoreSplitkMatmulKernel", "padding_multi_core_splitk_matmul_kernel", 3, "half", kernel_info)
     PaddingStreamkMatmulTemplate.gen_code("PaddingStreamkMatmulKernel", "padding_streamk_matmul_kernel", 4, "half", kernel_info)
+    AivMatmulTemplate.gen_code("AivMatmulKernel", "aiv_matmul_kernel", 5, "half", kernel_info)
     LaunchMapTemplate.gen_code(kernel_info)
