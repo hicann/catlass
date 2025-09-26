@@ -1,8 +1,9 @@
 # if aicore-arch is different, maybe crash, to find the solution
 add_compile_definitions(TILING_KEY_VAR)
-add_compile_options(--cce-aicore-arch=dav-c220)
+add_compile_options($<$<COMPILE_LANGUAGE:ASCEND>:--cce-aicore-arch=dav-c220>)
 file(GLOB CATLASS_SHARED_LIB_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/kernels/*.cpp)
 set_source_files_properties(${CATLASS_SHARED_LIB_SRC} PROPERTIES LANGUAGE ASCEND)
+list(APPEND CATLASS_SHARED_LIB_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/kernels/tiling/fai_tiling.cpp)
 
 add_library(catlass_kernel SHARED ${CATLASS_SHARED_LIB_SRC})
 add_library(catlass_kernel_static STATIC ${CATLASS_SHARED_LIB_SRC})

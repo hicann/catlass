@@ -24,5 +24,6 @@ PYBIND11_MODULE(_C, m)
     m.def("basic_matmul", &RunBasicMatmul, "")
         .def("grouped_matmul", &RunGroupedMatmul, "")
         .def("optimized_matmul", &RunOptimizedMatmul, "")
-        .def("conv_bias", &RunConvBias, "");
+        .def("conv_bias", &RunConvBias, "")
+        .def("flash_attention_infer", &RunFlashAttentionInfer, "");
 }

@@ -24,6 +24,10 @@ at::Tensor RunOptimizedMatmul(const at::Tensor &mat1, const at::Tensor &mat2, co
 at::Tensor RunConvBias(const at::Tensor &fmap, const at::Tensor &filter, const at::Tensor &bias,
                        const std::vector<int64_t> &strideList, const std::vector<int64_t> &padList,
                        const std::vector<int64_t> &dilationList, const std::string &outDType);
+at::Tensor RunFlashAttentionInfer(const at::Tensor &query, const at::Tensor &key, const at::Tensor &value,
+                           const std::vector<int64_t> &actual_seq_lengths, const std::vector<int64_t> &actual_seq_lengths_kv,
+                           const at::Tensor &atten_mask, const at::Tensor &block_table, const std::string &input_layout,
+                           const int64_t &num_heads, const int64_t &num_key_value_heads, const int64_t &sparse_mode);
 } // namespace CatlassKernelWrapper
 
 #endif // PY_EXT_CATLASS_KERNEL_WRAPPER_H

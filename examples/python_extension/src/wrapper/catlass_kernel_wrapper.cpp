@@ -29,6 +29,7 @@
 #include "wrapper/grouped_matmul.h"
 #include "wrapper/matmul.h"
 #include "wrapper/conv.h"
+#include "wrapper/flash_attention_infer.h"
 
 namespace py = pybind11;
 using namespace CatlassKernel;
@@ -82,6 +83,22 @@ at::Tensor RunConvBias(const at::Tensor &fmap, const at::Tensor &filter, const a
     aclrtStream stream = c10_npu::getCurrentNPUStream().stream(false);
     uint32_t aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
     ConvBias(aicCoreNum, stream, kernelInfo);
+    return output;
+}
+
+at::Tensor RunFlashAttentionInfer(const at::Tensor &query, const at::Tensor &key, const at::Tensor &value,
+                           const std::vector<int64_t> &actual_seq_lengths, const std::vector<int64_t> &actual_seq_lengths_kv,
+                           const at::Tensor &atten_mask, const at::Tensor &block_table, const std::string &input_layout,
+                           const int64_t &num_heads, const int64_t &num_key_value_heads, const int64_t &sparse_mode)
+{
+    FAKernelInfo kernelInfo = FAILike::GetKernelInfo(query, key, value,
+                                                    actual_seq_lengths, actual_seq_lengths_kv,
+                                                    atten_mask, block_table, input_layout,
+                                                    num_heads, num_key_value_heads, sparse_mode);
+    at::Tensor output = FAILike::AllocOutput(kernelInfo);
+    aclrtStream stream = c10_npu::getCurrentNPUStream().stream(false);
+    uint32_t aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
+    FlashAttentionInfer(aicCoreNum, stream, kernelInfo);
     return output;
 }
 } // namespace CatlassKernelWrapper

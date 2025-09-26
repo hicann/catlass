@@ -6,6 +6,7 @@
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 # See LICENSE in the root of the software repository for the full text of the License.
 
+add_compile_options(-O0 -g)
 set(CATLASS_SHARED_LIB_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../shared_lib)
 set(CATLASS_SHARED_LIB_INCLUDE_DIR ${CATLASS_SHARED_LIB_SRC_DIR}/include)
 set(CATLASS_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/../../include)

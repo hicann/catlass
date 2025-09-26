@@ -20,12 +20,19 @@ TORCH_LIBRARY(CatlassTorch, m)
     m.def("basic_matmul(Tensor mat1, Tensor mat2, str c) -> Tensor")
         .def("grouped_matmul(Tensor mat1, Tensor mat2, Tensor groupList, str c, bool trans_a, bool trans_b, bool "
              "split) -> Tensor")
-        .def("optimized_matmul(Tensor mat1, Tensor mat2, str c) -> Tensor");
+        .def("optimized_matmul(Tensor mat1, Tensor mat2, str c) -> Tensor")
+        /*
+        .def("flash_attention_infer(Tensor query, Tensor key, Tensor value, "
+              "int[] actual_seq_lengths, int[] actual_seq_lengths_kv, "
+              "Tensor atten_mask, Tensor block_table, str input_layout, "
+              "int num_heads, int num_key_value_heads, int sparse_mode) -> Tensor");
+        */
 }
 
 TORCH_LIBRARY_IMPL(CatlassTorch, NPU, m)
 {
     m.impl("basic_matmul", &RunBasicMatmul)
         .impl("grouped_matmul", &RunGroupedMatmul)
-        .impl("optimized_matmul", &RunOptimizedMatmul);
+        .impl("optimized_matmul", &RunOptimizedMatmul)
+        // .impl("flash_attention_infer", &RunFlashAttentionInfer);
 }
