@@ -11,11 +11,15 @@
 #ifndef CATLASS_DEBUG_HPP
 #define CATLASS_DEBUG_HPP
 
-#pragma push_macro("inline")
+#ifdef ASCENDC_MODULE_OPERATOR_H
+#undef inline
+#endif
 #include <iostream>
 #include <sstream>
 #include <functional>
-#pragma pop_macro("inline")
+#ifdef ASCENDC_MODULE_OPERATOR_H
+#define inline __inline__ __attribute__((always_inline))
+#endif
 
 #include <acl/acl.h>
 #include <runtime/rt_ffts.h>

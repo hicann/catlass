@@ -11,9 +11,13 @@
 #ifndef TLA_UTIL_TYPE_TRAITS_HPP
 #define TLA_UTIL_TYPE_TRAITS_HPP
 
-#pragma push_macro("inline")
+#ifdef ASCENDC_MODULE_OPERATOR_H
+#undef inline
+#endif
 #include <tuple>
-#pragma pop_macro("inline")
+#ifdef ASCENDC_MODULE_OPERATOR_H
+#define inline __inline__ __attribute__((always_inline))
+#endif
 
 #define __TLA_REQUIRES(...)   typename std::enable_if<(__VA_ARGS__)>::type* = nullptr
 
