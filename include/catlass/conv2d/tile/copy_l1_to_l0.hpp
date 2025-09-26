@@ -46,8 +46,7 @@ struct CopyL1ToL0A<ArchTag, Catlass::Conv2d::Conv2dType<Element, layout::Fmap, A
         AscendC::LocalTensor<Element> srcTensor, // (cin1, hi, wi, C0)
         LayoutDst const &layoutDst, // {mPartRound, kPartActual} rowsInFractal, rowsByFractal, colsInFractal, colsByFractal
         LayoutSrc const &layoutSrc, // {1, FmapL1TileShape::Cin1, hiActual, wiActual, ELE_NUM_A_PER_C0}
-        uint8_t* tilePadList,
-        uint32_t hiPartActual)
+        uint8_t* blockPadList)
     {
         uint32_t hiActual = layoutSrc.shape(2);
         uint32_t wiActual = layoutSrc.shape(3);
@@ -55,28 +54,26 @@ struct CopyL1ToL0A<ArchTag, Catlass::Conv2d::Conv2dType<Element, layout::Fmap, A
         uint32_t kPartActual = layoutDst.orgShape(1);
         uint32_t cin1L0Actual = kPartActual / (configs.kh() * configs.kw() * ELE_NUM_PER_C0);
 
-        for(int cin1Idx = 0; cin1Idx < cin1L0Actual; cin1Idx++) {
-            AscendC::LoadData(
-                dstTensor[configs.kh() * configs.kw() * ELE_NUM_PER_FRACTAL * cin1Idx],
-                srcTensor[hiActual * wiActual * ELE_NUM_PER_C0 * cin1Idx],
-                { // load3dv2
-                    tilePadList, // {padLeft, padRight, padTop, padBottom}
-                    static_cast<uint16_t>(hiPartActual), // 源操作数 height
-                    static_cast<uint16_t>(wiActual), // 源操作数 width
-                    static_cast<uint16_t>(cin1L0Actual * ELE_NUM_PER_C0), // 源操作数的通道数(channelSize为 4, 8, N*16, N*16+4, N*16+8)
-                    static_cast<uint16_t>(kPartActual), // 目的操作数Width维度的传输长度(16的倍数)
-                    static_cast<uint16_t>(mPartRound), // 目的操作数height维度的传输长度(16的倍数)
-                    0, // 目的操作数Width维度的起点
-                    0, // 目的操作数height维度的起点
-                    configs.strideW(), configs.strideH(),
-                    configs.kw(), configs.kh(),
-                    configs.dilationW(), configs.dilationH(),
-                    false, // 是否启用转置
-                    false, // 是否使能small k特性
-                    (half)(0) // Pad填充值的数值
-                }
-            );
-        }
+        AscendC::LoadData(
+            dstTensor,
+            srcTensor,
+            { // load3dv2
+                blockPadList, // {padLeft, padRight, padTop, padBottom}
+                static_cast<uint16_t>(hiActual), // 源操作数 height
+                static_cast<uint16_t>(wiActual), // 源操作数 width
+                static_cast<uint16_t>(cin1L0Actual * ELE_NUM_PER_C0), // 源操作数的通道数(channelSize为 4, 8, N*16, N*16+4, N*16+8)
+                static_cast<uint16_t>(kPartActual), // 目的操作数Width维度的传输长度(16的倍数)
+                static_cast<uint16_t>(mPartRound), // 目的操作数height维度的传输长度(16的倍数)
+                0, // 目的操作数Width维度的起点
+                0, // 目的操作数height维度的起点
+                configs.strideW(), configs.strideH(),
+                configs.kw(), configs.kh(),
+                configs.dilationW(), configs.dilationH(),
+                false, // 是否启用转置
+                false, // 是否使能small k特性
+                (half)(0) // Pad填充值的数值
+            }
+        );
     }
 };
 

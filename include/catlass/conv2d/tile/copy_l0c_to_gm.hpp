@@ -81,18 +81,15 @@ struct CopyL0CToGm<Catlass::Arch::AtlasA2,
     void operator()(
         AscendC::GlobalTensor<ElementDst> const &dst,
         AscendC::LocalTensor<ElementSrc> const &src,
-        LayoutDst const &dstLayout, uint32_t mL0A, uint8_t unitFlag = 0) // (Batch, Cout1, Ho, Wo, C0)
+        LayoutDst const &dstLayout, uint8_t unitFlag = 0) // (Batch, Cout1, Ho, Wo, C0)
     {
         // compute sizes
         uint32_t cout1Actual = dstLayout.shape(1);
         uint32_t coutRound = cout1Actual * C0;
         uint32_t hoActual = dstLayout.shape(2);
         uint32_t woActual = dstLayout.shape(3);
-        // compute srcStride
-        uint32_t hoL0Tile = mL0A / woActual;
-        uint32_t mPartLoop = CeilDiv(hoActual, hoL0Tile);
-        uint32_t mL0C = RoundUp<C0_NUM_PER_FRACTAL>(mL0A);
-        uint32_t mL1C = mL0C * mPartLoop;
+        uint32_t howoActual = hoActual * woActual;
+        uint32_t howoRound = RoundUp<C0>(howoActual);
         // compute dstStride
         uint32_t strideHo = dstLayout.stride(2); // Wo * C0
         uint32_t strideHoWo = dstLayout.stride(1); // Ho * Wo * C0 
@@ -100,13 +97,11 @@ struct CopyL0CToGm<Catlass::Arch::AtlasA2,
 
         for (int hoIdx = 0; hoIdx < hoActual; hoIdx++) {
             size_t gmOffset = hoIdx * strideHo;
-            size_t l0Offset =
-                (hoIdx / hoL0Tile) * mL0C * C0 + 
-                (hoIdx % hoL0Tile) * woActual * C0;
+            size_t l0Offset = hoIdx * woActual * C0;
             AscendC::FixpipeParamsV220 fixPipeParams(
                 coutRound, // nSize
                 woActual, // mSize
-                mL1C, // srcStride
+                howoRound, // srcStride
                 HoWo, // dstStride
                 reluEn
             );
