@@ -11,7 +11,9 @@
 #ifndef EXAMPLES_COMMON_HELPER_HPP
 #define EXAMPLES_COMMON_HELPER_HPP
 
+#ifdef ASCENDC_MODULE_OPERATOR_H
 #undef inline
+#endif
 #include <cstdio>
 #include <fstream>
 #include <iostream>
@@ -22,10 +24,13 @@
 #include <runtime/rt_ffts.h>
 #include <tiling/platform/platform_ascendc.h>
 
+#ifdef ASCENDC_MODULE_OPERATOR_H
+#inline __inline__ __attribute__((always_inline))
+#endif
+
 #include "catlass/layout/layout.hpp"
 
 #include "options.hpp"
-#define inline __inline__ __attribute__((always_inline))
 
 using op::bfloat16;
 using op::fp16_t;
