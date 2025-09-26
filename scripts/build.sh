@@ -190,10 +190,18 @@ case "$TARGET" in
     *)
         echo -e "${INFO}Building target: $TARGET...${NC}"
         if [[ -d ${BUILD_DIR} ]]; then
-            cmake -S "$CMAKE_SOURCE_DIR" -B "$BUILD_DIR" \
-                -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
-                -DCMAKE_INSTALL_PREFIX="$OUTPUT_DIR" \
-                "${CMAKE_OPTIONS[@]}"
+            if [[ "$TARGET" == "32_dynamic_optimized_matmul" ]] || [[ "$TARGET" == "catlass_examples" ]]; then
+                cmake -S "$CMAKE_SOURCE_DIR" -B "$BUILD_DIR" \
+                    -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
+                    -DCMAKE_INSTALL_PREFIX="$OUTPUT_DIR" \
+                    -DGENERATE_MATMUL_WRAPPER_CODE=ON \
+                    "${CMAKE_OPTIONS[@]}"
+            else
+                cmake -S "$CMAKE_SOURCE_DIR" -B "$BUILD_DIR" \
+                    -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
+                    -DCMAKE_INSTALL_PREFIX="$OUTPUT_DIR" \
+                    "${CMAKE_OPTIONS[@]}"
+            fi
         fi
         cmake --build "$BUILD_DIR" --target "$TARGET" -j
         cmake --install "$BUILD_DIR" --component "$TARGET"
