@@ -7,37 +7,49 @@
  * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
  * See LICENSE in the root of the software repository for the full text of the License.
  */
-#ifndef CATLASS_GEMM_DEVICE_KERNEL_ADAPTER_HPP
-#define CATLASS_GEMM_DEVICE_KERNEL_ADAPTER_HPP
+#ifndef CATLASS_DETAIL_KERNEL_ADAPTER_HPP
+#define CATLASS_DETAIL_KERNEL_ADAPTER_HPP
 
 #include "catlass/catlass.hpp"
 
 #if defined(ENABLE_ASCENDC_DUMP)
 #include "catlass/debug.hpp"
-#endif
-
 namespace Catlass {
 /// Generic Catlass kernel template
 template <class Operator>
-CATLASS_GLOBAL void KernelAdapter(typename Operator::Params params, GM_ADDR ptrDump = nullptr)
+CATLASS_GLOBAL void KernelAdapter(typename Operator::Params params, GM_ADDR ptrDump)
 {
     Operator op;
-#if defined(ENABLE_ASCENDC_DUMP)
     AscendC::InitDump(false, ptrDump, ALL_DUMPSIZE);
-#endif
     op(params);
 }
 
 template <class Operator>
-CATLASS_GLOBAL void KernelAdapter(typename Operator::Params params, uint64_t fftsAddr, GM_ADDR ptrDump = nullptr)
+CATLASS_GLOBAL void KernelAdapter(typename Operator::Params params, uint64_t fftsAddr, GM_ADDR ptrDump)
 {
     AscendC::SetSyncBaseAddr(fftsAddr);
     Operator op;
-#if defined(ENABLE_ASCENDC_DUMP)
     AscendC::InitDump(false, ptrDump, ALL_DUMPSIZE);
-#endif
     op(params);
 }
 } // namespace Catlass
+#else
+namespace Catlass {
+/// Generic Catlass kernel template
+template <class Operator>
+CATLASS_GLOBAL void KernelAdapter(typename Operator::Params params)
+{
+    Operator op;
+    op(params);
+}
 
+template <class Operator>
+CATLASS_GLOBAL void KernelAdapter(typename Operator::Params params, uint64_t fftsAddr)
+{
+    AscendC::SetSyncBaseAddr(fftsAddr);
+    Operator op;
+    op(params);
+}
+} // namespace Catlass
+#endif
 #endif
