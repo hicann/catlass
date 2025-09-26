@@ -87,6 +87,7 @@ void PrintTilingParams(TilingParams &tilingParams, PlatformInfo& platformInfo)
               << "├───────────────────┼─────────────────────────┤\n"
               << "│ paddingTagA: " << std::setw(30) << static_cast<uint32_t>(tilingParams.paddingTagA) << " │\n"
               << "│ paddingTagB: " << std::setw(30) << static_cast<uint32_t>(tilingParams.paddingTagB) << " │\n"
+              << "│ paddingTagC: " << std::setw(30) << static_cast<uint32_t>(tilingParams.paddingTagC) << " │\n"
               << "├───────────────────┼─────────────────────────┤\n"
               << "│ blockDim:    " << std::setw(30) << static_cast<uint32_t>(tilingParams.blockDim) << " │\n"
               << "├───────────────────┼─────────────────────────┤\n"
