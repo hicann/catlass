@@ -8,71 +8,35 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0, 
+// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0,
 // optimizing stack space. If you need to use the ShapeInfo of the AscendC Tensor, please undefine this macro.
 #ifndef K_MAX_SHAPE_DIM
 #define K_MAX_SHAPE_DIM 0
 #endif
 
+#include "catlass/gemm/kernel/padding_matmul.hpp"
+
 #include <iostream>
 #include <vector>
 
-#include "helper.hpp"
-#include "golden.hpp"
-#include "fp16_t.h"
-
-#include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
+#include "catlass/catlass.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/device/device_gemm.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
-#include "catlass/gemm/kernel/padding_matmul.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 #include "catlass/layout/layout.hpp"
-
 #include "catlass/status.hpp"
-#include "catlass/gemm/device/device_gemm.hpp"
+
+#include "golden.hpp"
+#include "helper.hpp"
 
 using namespace Catlass;
-using fp16_t = op::fp16_t;
-   
 
-struct Options {
-    const std::string HELPER = "04_padding_matmul m n k [device_id]";
+using Options = GemmOptions;
 
-    GemmCoord problemShape{128, 128, 128};
-    int32_t deviceId{0};
-
-    Options() = default;
-
-    int Parse(int argc, const char **argv)
-    {
-        enum ArgsIndex {
-            M_INDEX = 1,
-            N_INDEX,
-            K_INDEX,
-            DEVICE_ID_INDEX,
-            ARGS_MAX
-        };
-
-        if (argc > ARGS_MAX || argc <= K_INDEX) {
-            std::cerr << HELPER << std::endl;
-            return -1;
-        }
-
-        problemShape.m() = std::atoi(argv[M_INDEX]);
-        problemShape.n() = std::atoi(argv[N_INDEX]);
-        problemShape.k() = std::atoi(argv[K_INDEX]);
-        if (argc == ARGS_MAX) {
-            deviceId = std::atoi(argv[DEVICE_ID_INDEX]);
-        }
-        return 0;
-    }
-};
-
-
-void Run(Options const &options)
-{
+static void Run(Options const &options) {
     aclrtStream stream{nullptr};
 
     ACL_CHECK(aclInit(nullptr));
@@ -136,7 +100,7 @@ void Run(Options const &options)
     using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
     using BlockEpilogue = void;
     std::vector<fp16_t> hostC(lenC);
-    
+
     if (m > n) {
         // Swizzle offset is 3 and direction is 0.
         using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
@@ -144,18 +108,17 @@ void Run(Options const &options)
         using MatmulKernel = Gemm::Kernel::PaddingMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-        MatmulKernel::Arguments arguments{
-            options.problemShape, align, sizeof(float), deviceA, deviceB, deviceC};
-        MatmulAdapter matmul_op;
-        matmul_op.CanImplement(arguments);
-        size_t sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
+        MatmulKernel::Arguments arguments{options.problemShape, align, sizeof(float), deviceA, deviceB, deviceC};
+        MatmulAdapter matmulOp;
+        matmulOp.CanImplement(arguments);
+        size_t sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
         uint8_t *deviceWorkspace = nullptr;
         if (sizeWorkspace > 0) {
             ACL_CHECK(
                 aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
         }
-        matmul_op.Initialize(arguments, deviceWorkspace);
-        matmul_op(stream, aicCoreNum, fftsAddr);
+        matmulOp.Initialize(arguments, deviceWorkspace);
+        matmulOp(stream, aicCoreNum, fftsAddr);
         ACL_CHECK(aclrtSynchronizeStream(stream));
         if (sizeWorkspace > 0) {
             ACL_CHECK(aclrtFree(deviceWorkspace));
@@ -165,23 +128,22 @@ void Run(Options const &options)
     } else {
         // Swizzle offset is 3 and direction is 1.
         using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
-            
+
         // kernel level
         using MatmulKernel = Gemm::Kernel::PaddingMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-        MatmulKernel::Arguments arguments{
-            options.problemShape, align, sizeof(float), deviceA, deviceB, deviceC};
-        MatmulAdapter matmul_op;
-        matmul_op.CanImplement(arguments);
-        size_t sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
+        MatmulKernel::Arguments arguments{options.problemShape, align, sizeof(float), deviceA, deviceB, deviceC};
+        MatmulAdapter matmulOp;
+        matmulOp.CanImplement(arguments);
+        size_t sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
         uint8_t *deviceWorkspace = nullptr;
         if (sizeWorkspace > 0) {
             ACL_CHECK(
                 aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
         }
-        matmul_op.Initialize(arguments, deviceWorkspace);
-        matmul_op(stream, aicCoreNum, fftsAddr);
+        matmulOp.Initialize(arguments, deviceWorkspace);
+        matmulOp(stream, aicCoreNum, fftsAddr);
         ACL_CHECK(aclrtSynchronizeStream(stream));
         if (sizeWorkspace > 0) {
             ACL_CHECK(aclrtFree(deviceWorkspace));
@@ -189,7 +151,6 @@ void Run(Options const &options)
 
         ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
     }
-
 
     std::vector<float> hostGolden(lenC);
     golden::ComputeMatmul(options.problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);
@@ -208,11 +169,9 @@ void Run(Options const &options)
     ACL_CHECK(aclrtDestroyStream(stream));
     ACL_CHECK(aclrtResetDevice(options.deviceId));
     ACL_CHECK(aclFinalize());
-    
 }
 
-int main(int argc, const char **argv)
-{
+int main(int argc, const char **argv) {
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;

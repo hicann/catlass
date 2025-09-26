@@ -18,6 +18,8 @@ macro(catlass_example_add_executable NAME AICORE_ARCH)
     endif()
 
     add_executable(${NAME} ${ARGN})
+    target_compile_definitions(${NAME} PRIVATE CATLASS_EXAMPLE_NAME=${NAME})
+    target_include_directories(${NAME} PRIVATE ${ASCEND_HOME_PATH}/include/aclnn)
     target_compile_options(${NAME} PRIVATE $<$<COMPILE_LANGUAGE:ASCEND>:--cce-aicore-arch=${AICORE_ARCH}>)
     add_dependencies(catlass_examples ${NAME})
     install(TARGETS ${NAME} DESTINATION ${EXAMPLE_DESTINATION} COMPONENT ${NAME})

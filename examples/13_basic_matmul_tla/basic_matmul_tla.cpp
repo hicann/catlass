@@ -14,65 +14,32 @@
 #define K_MAX_SHAPE_DIM 0
 #endif
 
+#include "catlass/gemm/kernel/basic_matmul_tla.hpp"
+
 #include <iostream>
 #include <vector>
 
-#include "helper.hpp"
-#include "golden.hpp"
-#include "fp16_t.h"
-
-#include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
-#include "catlass/gemm/gemm_type.hpp"
+#include "catlass/catlass.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/device/device_gemm.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
-#include "catlass/gemm/kernel/basic_matmul_tla.hpp"
+#include "catlass/gemm/gemm_type.hpp"
 #include "catlass/layout/layout.hpp"
 #include "catlass/status.hpp"
-#include "catlass/gemm/device/device_gemm.hpp"
 #include "tla/layout.hpp"
 #include "tla/tensor.hpp"
 
+#include "golden.hpp"
+#include "helper.hpp"
+
 using namespace Catlass;
 using namespace tla;
-using fp16_t = op::fp16_t;
 
-struct Options {
-    const std::string HELPER = "00_basic_matmul m n k [device_id]";
+using Options = GemmOptions;
 
-    GemmCoord problemShape{128, 128, 128};
-    int32_t deviceId{0};
-
-    Options() = default;
-
-    int Parse(int argc, const char **argv)
-    {
-        enum ArgsIndex {
-            M_INDEX = 1,
-            N_INDEX,
-            K_INDEX,
-            DEVICE_ID_INDEX,
-            ARGS_MAX
-        };
-
-        if (argc > ARGS_MAX || argc <= K_INDEX) {
-            std::cerr << HELPER << std::endl;
-            return -1;
-        }
-
-        problemShape.m() = std::atoi(argv[M_INDEX]);
-        problemShape.n() = std::atoi(argv[N_INDEX]);
-        problemShape.k() = std::atoi(argv[K_INDEX]);
-        if (argc == ARGS_MAX) {
-            deviceId = std::atoi(argv[DEVICE_ID_INDEX]);
-        }
-        return 0;
-    }
-};
-
-void Run(Options const &options)
-{
+static void Run(Options const &options) {
     aclrtStream stream{nullptr};
 
     ACL_CHECK(aclInit(nullptr));
@@ -135,9 +102,8 @@ void Run(Options const &options)
 
     using TileCopy =
         Gemm::Tile::PackedTileCopyTla<ArchTag, ElementA, LayoutTagA, ElementB, LayoutTagB, ElementC, LayoutTagC>;
-    using BlockMmad =
-        Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape,
-                                    ElementA, ElementB, ElementC, void, TileCopy>;
+    using BlockMmad = Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, ElementA, ElementB, ElementC,
+                                                void, TileCopy>;
     using BlockEpilogue = void;
 
     if (options.problemShape.m() > options.problemShape.n()) {
@@ -149,19 +115,17 @@ void Run(Options const &options)
 
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
 
-        MatmulKernel::Arguments arguments{
-            options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC};
+        MatmulKernel::Arguments arguments{options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC};
 
-        MatmulAdapter matmul_op;
-        matmul_op.CanImplement(arguments);
-        sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
+        MatmulAdapter matmulOp;
+        matmulOp.CanImplement(arguments);
+        sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
         if (sizeWorkspace > 0) {
             ACL_CHECK(
-                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
-            );
+                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
         }
-        matmul_op.Initialize(arguments, deviceWorkspace);
-        matmul_op(stream, aicCoreNum);
+        matmulOp.Initialize(arguments, deviceWorkspace);
+        matmulOp(stream, aicCoreNum);
     } else {
         // Swizzle offset is 3 and direction is 1.
         using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
@@ -171,19 +135,17 @@ void Run(Options const &options)
 
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
 
-        MatmulKernel::Arguments arguments{
-            options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC};
+        MatmulKernel::Arguments arguments{options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC};
 
-        MatmulAdapter matmul_op;
-        matmul_op.CanImplement(arguments);
-        sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
+        MatmulAdapter matmulOp;
+        matmulOp.CanImplement(arguments);
+        sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
         if (sizeWorkspace > 0) {
             ACL_CHECK(
-                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
-            );
+                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
         }
-        matmul_op.Initialize(arguments, deviceWorkspace);
-        matmul_op(stream, aicCoreNum);
+        matmulOp.Initialize(arguments, deviceWorkspace);
+        matmulOp(stream, aicCoreNum);
     }
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
@@ -209,8 +171,7 @@ void Run(Options const &options)
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv)
-{
+int main(int argc, const char **argv) {
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;
