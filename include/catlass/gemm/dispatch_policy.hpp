@@ -159,12 +159,57 @@ struct MmadAtlasA2W8A16 : public MmadAtlasA2 {
     static constexpr bool ENABLE_SHUFFLE_K = ENABLE_SHUFFLE_K_;
 };
 
+
+template <bool ENABLE_UNIT_FLAG_ = false, bool ENABLE_SHUFFLE_K_ = false>
+struct MmadAtlasA2DynamicCommon : public MmadAtlasA2 {
+    static constexpr uint32_t STAGES = 2;
+    static constexpr bool ENABLE_UNIT_FLAG = ENABLE_UNIT_FLAG_;
+    static constexpr bool ENABLE_SHUFFLE_K = ENABLE_SHUFFLE_K_;
+};
+
+template <uint32_t STAGES_, bool ENABLE_UNIT_FLAG_ = false, bool ENABLE_SHUFFLE_K_ = false>
+struct MmadAtlasA2DynamicSmall : public MmadAtlasA2 {
+    static constexpr uint32_t STAGES = STAGES_;
+    static constexpr bool ENABLE_UNIT_FLAG = ENABLE_UNIT_FLAG_;
+    static constexpr bool ENABLE_SHUFFLE_K = ENABLE_SHUFFLE_K_;
+};
+
+template <uint32_t STAGES_, bool ENABLE_UNIT_FLAG_ = false, bool ENABLE_SHUFFLE_K_ = false>
+struct MmadAtlasA2DynamicStreamk : public MmadAtlasA2 {
+    static constexpr uint32_t STAGES = STAGES_;
+    static constexpr bool ENABLE_UNIT_FLAG = ENABLE_UNIT_FLAG_;
+    static constexpr bool ENABLE_SHUFFLE_K = ENABLE_SHUFFLE_K_;
+};
+
 template <uint32_t STAGES_, bool ENABLE_UNIT_FLAG_ = false, bool ENABLE_SHUFFLE_K_ = false>
 struct MmadAtlasA2Small : public MmadAtlasA2 {
     static constexpr uint32_t STAGES = STAGES_;
     static constexpr bool ENABLE_UNIT_FLAG = ENABLE_UNIT_FLAG_;
     static constexpr bool ENABLE_SHUFFLE_K = ENABLE_SHUFFLE_K_;
 };
+
+template <uint32_t SCALAR_BUFFER_ELE_NUM_ = 256, uint32_t STAGES_ = 2>
+struct MmadAtlasA2Aiv : public MmadAtlasA2 {
+    static constexpr uint32_t STAGES = STAGES_;
+    static constexpr uint32_t SCALAR_BUFFER_ELE_NUM = SCALAR_BUFFER_ELE_NUM_;
+};
+
+// UB must have a capacity of UBA(mTile) + UBB(nTile) + UBC(mTile, nTile) size.
+// MmadAtlasA2AivSimple is suitable for cases: mTile <= mTileUbLimits && nTile >= params.n
+template <uint32_t SCALAR_BUFFER_ELE_NUM_ = 256, bool IS_TILE_M_ = true>
+struct MmadAtlasA2AivSimple : public MmadAtlasA2 {
+    static constexpr uint32_t SCALAR_BUFFER_ELE_NUM = SCALAR_BUFFER_ELE_NUM_;
+    static constexpr bool IS_TILE_M = IS_TILE_M_;
+};
+
+// mTile and nTile must be aligned to 16.
+// UB must have a capacity of UBA(mTile) + UBB(nTile) + 2 * UBC(mTile, nTile) size.
+// MmadAtlasA2AivTrans is suitable for cases: M > N
+template <uint32_t SCALAR_BUFFER_ELE_NUM_ = 256>
+struct MmadAtlasA2AivTrans : public MmadAtlasA2 {
+    static constexpr uint32_t SCALAR_BUFFER_ELE_NUM = SCALAR_BUFFER_ELE_NUM_;
+};
+
 }  // namespace Catlass::Gemm
 
 #endif  // CATLASS_GEMM_DISPATCH_POLICY_HPP
