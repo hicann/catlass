@@ -38,6 +38,23 @@ std::vector<uint64_t> CompareData(const std::vector<ElementResult>& result, cons
     return errorIndices;
 }
 
+template<>
+std::vector<uint64_t> CompareData(const std::vector<int32_t>& result, const std::vector<int32_t>& expect,
+    uint32_t computeNum)
+{
+    using ElementCompare = int32_t;
+    std::vector<uint64_t> errorIndices;
+    for (uint64_t i = 0; i < result.size(); ++i) {
+        ElementCompare actualValue = static_cast<ElementCompare>(result[i]);
+        ElementCompare expectValue = expect[i];
+        ElementCompare diff = std::abs(actualValue - expectValue);
+        if (diff != 0) {
+            errorIndices.push_back(i);
+        }
+    }
+    return errorIndices;
+}
+
 // Compare for GroupedMatmul slicing M
 template<class ElementResult, class ElementCompare>
 std::vector<uint64_t> CompareData(const std::vector<ElementResult>& result, const std::vector<ElementCompare>& expect,

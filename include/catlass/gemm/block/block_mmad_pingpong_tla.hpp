@@ -25,6 +25,7 @@
 namespace Catlass::Gemm::Block {
 
 template <
+    class ArchTag_,
     bool ENABLE_UNIT_FLAG_,
     class L1TileShape_,
     class L0TileShape_,
@@ -36,7 +37,7 @@ template <
     class TileMmad_
 >
 struct BlockMmadTla <
-    MmadAtlasA2Pingpong<ENABLE_UNIT_FLAG_>,
+    MmadPingpong<ArchTag_, ENABLE_UNIT_FLAG_>,
     L1TileShape_,
     L0TileShape_,
     ElementA_,
@@ -48,7 +49,7 @@ struct BlockMmadTla <
 > {
 public:
     // Type Aliases
-    using DispatchPolicy = MmadAtlasA2Pingpong<ENABLE_UNIT_FLAG_>;
+    using DispatchPolicy = MmadPingpong<ArchTag_, ENABLE_UNIT_FLAG_>;
     using ArchTag = typename DispatchPolicy::ArchTag;
     using L1TileShape = L1TileShape_;
     using L0TileShape = L0TileShape_;
@@ -97,7 +98,10 @@ public:
     static constexpr uint32_t L0C_TILE_SIZE = L1_TILE_M * L1_TILE_N * sizeof(ElementAccumulator);
 
     // Check LayoutC
-    static_assert(tla::detail::isRowMajor<LayoutC>::value, "LayoutC only support RowMajor yet!");
+    static_assert(tla::detail::isRowMajor<LayoutC>::value ||
+                      ((std::is_same_v<ElementC, half> || std::is_same_v<ElementC, bfloat16_t> ||
+                          std::is_same_v<ElementC, float>) && tla::detail::iszN<ElementC, LayoutC>::value),
+        "LayoutC only supports zN in half or bfloat16 or float, RowMajor in all dtype yet!");
 
     // Check L1TileShape
     static_assert((L1A_TILE_SIZE + L1B_TILE_SIZE) * STAGES <= ArchTag::L1_SIZE,
