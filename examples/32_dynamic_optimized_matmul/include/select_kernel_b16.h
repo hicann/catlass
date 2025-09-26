@@ -16,6 +16,10 @@
 bool CommonMatmulB16Handler(TilingParams &params, PlatformInfo& platformInfo)
 {
     uint8_t kernelSerial = 0;
+    uint32_t taskBlocks = CeilDiv(params.m, params.m1) * CeilDiv(params.n, params.n1) * tilingParams.splitkFactor;
+    uint32_t blockDim = taskBlocks > platformInfo.coreNum ? platformInfo.coreNum : taskBlocks;
+
+    tilingParams.blockDim = blockDim;
     // kernelSerial, layoutTagA, layoutTagB, layoutTagC, paddingTagA, paddingTagB, paddingTagC, dtype(defalut 0).
     params.tilingKey.SetTilingKey(kernelSerial, params.layoutTagA, params.layoutTagB, 0, 0, 0, 0);
     return true;
@@ -49,16 +53,6 @@ void SelectKernelB16(TilingParams &tilingParams, PlatformInfo& platformInfo)
     // Restore to the original layout
     tilingParams.layoutTagA = layoutTagATmp;
     tilingParams.layoutTagB = layoutTagBTmp;
-
-    uint32_t m = tilingParams.m;
-    uint32_t n = tilingParams.n;
-    uint32_t m1 = tilingParams.m1;
-    uint32_t n1 = tilingParams.n1;
-
-    uint32_t tasksAic = CeilDiv(m, m1) * CeilDiv(n, n1) * tilingParams.splitkFactor;
-    uint32_t blockDimAic = tasksAic > platformInfo.coreNum ? platformInfo.coreNum : tasksAic;
-
-    tilingParams.blockDim = blockDimAic;
 }
 
 #endif  // SELECT_KERNEL_HALF_H
