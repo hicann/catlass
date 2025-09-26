@@ -14,13 +14,10 @@
 #define K_MAX_SHAPE_DIM 0
 #endif
 
-#include <iostream>
-#include <fstream>
 #include <vector>
 
-#include "helper.hpp"
 #include "golden.hpp"
-#include "fp16_t.h"
+#include "helper.hpp"
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
@@ -36,37 +33,6 @@
 #include "catlass/conv/device/device_conv.hpp"
 
 using namespace Catlass;
-using fp16_t = op::fp16_t;
-
-bool ReadFile(const std::string &filePath, void *buffer, size_t bufferSize)
-{
-    if (buffer == nullptr) {
-        printf("Read file %s failed. Buffer is nullptr.\n", filePath.c_str());
-        return false;
-    }
-
-    // Open file
-    std::ifstream fd(filePath, std::ios::binary);
-    if (!fd) {
-        printf("Open file failed. path = %s.\n", filePath.c_str());
-        return false;
-    }
-
-    // Load file data in buffer
-    std::filebuf *buf = fd.rdbuf();
-    size_t size = buf->pubseekoff(0, std::ios::end, std::ios::in);
-    if (size == 0) {
-        printf("File %s size is 0\n", filePath.c_str());
-        return false;
-    }
-    if (size > bufferSize) {
-        printf("File %s size is larger than buffer size.\n", filePath.c_str());
-        return false;
-    }
-    buf->pubseekpos(0, std::ios::in);
-    buf->sgetn(static_cast<char*>(buffer), size);
-    return true;
-}
 
 struct Options {
     const std::string HELPER = "24_conv_bias batch di cin1 hi wi cin0 cout kd kh kw sD sH sW dD dH dW pD pH pW [device_id]";

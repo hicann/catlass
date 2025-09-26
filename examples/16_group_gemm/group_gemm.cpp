@@ -14,16 +14,13 @@
 #define K_MAX_SHAPE_DIM 0
 #endif
 
-#include <iostream>
 #include <string>
-#include <vector>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 
-#include "helper.hpp"
 #include "golden.hpp"
-#include "fp16_t.h"
+#include "helper.hpp"
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
@@ -46,7 +43,6 @@
 
 using namespace Catlass;
 using ScalarType = float;
-using fp16_t = op::fp16_t;
 
 struct Options {
     const std::string HELPER = "16_group_gemm groupCnt mlist nlist klist [deviceId]";

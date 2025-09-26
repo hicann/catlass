@@ -17,11 +17,10 @@
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
-#include <iostream>
 #include <vector>
 
-#include "helper.hpp"
 #include "golden.hpp"
+#include "helper.hpp"
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
@@ -36,18 +35,6 @@
 #include "catlass/gemm/device/device_gemm.hpp"
 
 using namespace Catlass;
-
-bool ReadFileToVector(const std::string &filePath, std::vector<float> &data)
-{
-    std::ifstream file(filePath, std::ios::binary);
-    if (!file.is_open()) {
-        std::cerr << "Failed to open file: " << filePath << std::endl;
-        return false;
-    }
-    file.read(reinterpret_cast<char *>(data.data()), data.size() * sizeof(float));
-    file.close();
-    return true;
-}
 
 struct Options {
     const std::string HELPER = "29_a2_fp8_e4m3_matmul m n k [device_id]";

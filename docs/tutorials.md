@@ -41,9 +41,8 @@ cmake >= 3.15
 #include <iostream>
 #include <vector>
 
-#include "helper.hpp"
 #include "golden.hpp"
-#include "fp16_t.h"
+#include "helper.hpp"
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
@@ -58,7 +57,6 @@ cmake >= 3.15
 #include "catlass/gemm/device/device_gemm.hpp"
 
 using namespace Catlass;
-using fp16_t = op::fp16_t;
 
 // 解析输入参数
 struct Options {
@@ -354,7 +352,7 @@ matmul_op(stream, aicCoreNum, fftsAddr);
 
 #include "helper.hpp"
 #include "golden.hpp"
-#include "fp16_t.h"
+#include <opdev/fp16_t.h>
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
@@ -369,7 +367,7 @@ matmul_op(stream, aicCoreNum, fftsAddr);
 #include "catlass/gemm/device/device_gemm.hpp"
 
 using namespace Catlass;
-using fp16_t = op::fp16_t;
+using op::fp16_t;
 
 
 struct Options {
@@ -585,7 +583,7 @@ msprof op ./splitk_matmul 16 16 32768 0
 
 #include "helper.hpp"
 #include "golden.hpp"
-#include "fp16_t.h"
+#include <opdev/fp16_t.h>
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
@@ -599,7 +597,7 @@ msprof op ./splitk_matmul 16 16 32768 0
 #include "catlass/gemm/device/device_gemm.hpp"
 
 using namespace Catlass;
-using fp16_t = op::fp16_t;
+using op::fp16_t;
 
 // 解析输入参数
 struct Options {

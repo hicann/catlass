@@ -18,9 +18,8 @@
 #include <vector>
 #include <cstdlib>
 
-#include "helper.hpp"
 #include "golden.hpp"
-#include "bfloat16.h"
+#include "helper.hpp"
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"

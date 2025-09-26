@@ -15,49 +15,12 @@
 #endif
 
 // Helper methods to check for errors
-#include "helper.hpp"
 #include "golden.hpp"
+#include "helper.hpp"
 #include "fai_kernel.cpp"
-#include "fp16_t.h"
-#include "bfloat16.h"
 #include "fai_tiling.cpp"
 
 using namespace std;
-using fp16_t = op::fp16_t;
-using bfloat16 = op::bfloat16;
-
-/**
- * Function for read file.
- */
-bool ReadFile(const string &filePath, void *buffer, size_t bufferSize)
-{
-    if (buffer == nullptr) {
-        printf("Read file %s failed. Buffer is nullptr.\n", filePath.c_str());
-        return false;
-    }
-
-    // Open file
-    ifstream fd(filePath, ios::binary);
-    if (!fd) {
-        printf("Open file failed. path = %s.\n", filePath.c_str());
-        return false;
-    }
-
-    // Load file data in buffer
-    filebuf *buf = fd.rdbuf();
-    size_t size = buf->pubseekoff(0, ios::end, ios::in);
-    if (size == 0) {
-        printf("File %s size is 0\n", filePath.c_str());
-        return false;
-    }
-    if (size > bufferSize) {
-        printf("File %s size is larger than buffer size.\n", filePath.c_str());
-        return false;
-    }
-    buf->pubseekpos(0, ios::in);
-    buf->sgetn(static_cast<char *>(buffer), size);
-    return true;
-}
 
 // This code section describes the parameters to execute the run function.
 struct Options {
