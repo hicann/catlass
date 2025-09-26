@@ -43,7 +43,7 @@ using namespace Catlass;
 
 using ScalarType = float;
 
-using Options = GroupedGemmOptions;
+using Options = GemmOptions;
 
 inline layout::RowMajor GetWorkspaceLayout(layout::RowMajor layout, uint32_t align) {
     if (align == 0) {
