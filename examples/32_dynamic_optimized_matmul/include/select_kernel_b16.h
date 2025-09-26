@@ -23,6 +23,18 @@ bool CommonMatmulB16Handler(TilingParams &params, PlatformInfo& platformInfo)
 
 void SelectKernelB16(TilingParams &tilingParams, PlatformInfo& platformInfo)
 {
+    // Temporarily store the original layoutTagA and layoutTagB
+    uint8_t layoutTagATmp = tilingParams.layoutTagA;
+    uint8_t layoutTagBTmp = tilingParams.layoutTagB;
+    // When m=1 or n=1, the row-major and column-major matrix layouts are indentical, the matrix can be stored
+    // in either format. In such cases, the layout with higher memory transfer bandwidth should be selected.
+    if (tilingParams.m == 1 && static_cast<LayoutTag>(tilingParams.layoutTagA) == LayoutTag::TagColumnMajor) {
+        tilingParams.layoutTagA = static_cast<uint8_t>(LayoutTag::TagRowMajor);
+    }
+    if (tilingParams.n == 1 && static_cast<LayoutTag>(tilingParams.layoutTagB) == LayoutTag::TagRowMajor) {
+        tilingParams.layoutTagB = static_cast<uint8_t>(LayoutTag::TagColumnMajor);
+    }
+
     using HandlerPtr = bool (*)(TilingParams& tilingParams, PlatformInfo& platformInfo);
     HandlerPtr handlers[] = {
         CommonMatmulB16Handler
@@ -33,6 +45,10 @@ void SelectKernelB16(TilingParams &tilingParams, PlatformInfo& platformInfo)
             break;
         }
     }
+
+    // Restore to the original layout
+    tilingParams.layoutTagA = layoutTagATmp;
+    tilingParams.layoutTagB = layoutTagBTmp;
 
     uint32_t m = tilingParams.m;
     uint32_t n = tilingParams.n;
