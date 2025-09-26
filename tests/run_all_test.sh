@@ -37,3 +37,11 @@ python3 "$SCRIPT_PATH/test_torch_lib.py"
 
 # self contained include
 bash "$BUILD_SCRIPT_PATH" --clean --tests test_self_contained_includes || exit 1
+
+# catlass_test(experiment)
+cd "$SCRIPT_PATH/catlass_test"
+pip install .
+cd ../test_examples
+pytest test_basic_matmul.py
+pip uninstall catlass_test -y
+
