@@ -8,12 +8,22 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef EXAMPLES_COMMON_GOLDEN_HPP
-#define EXAMPLES_COMMON_GOLDEN_HPP
+#ifndef CATLASS_CONV2D_CONV2D_TYPE_HPP
+#define CATLASS_CONV2D_CONV2D_TYPE_HPP
 
-#include "golden/compare_data.hpp"
-#include "golden/fill_data.hpp"
-#include "golden/matmul.hpp"
-#include "golden/conv2d.hpp"
+#include "catlass/catlass.hpp"
 
-#endif // EXAMPLES_COMMON_GOLDEN_HPP
+namespace Catlass::Conv2d {
+
+////////////////////////////////////////////////////////////////////
+
+template <class Element_, class Layout_, AscendC::TPosition POSITION_ = AscendC::TPosition::GM>
+struct Conv2dType {
+    using Element = Element_;
+    using Layout = Layout_;
+    static constexpr AscendC::TPosition POSITION = POSITION_;
+};
+
+} // namespace Catlass::Conv2d
+
+#endif // CATLASS_CONV2D_CONV2D_TYPE_HPP

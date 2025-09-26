@@ -14,5 +14,6 @@
 #include "catlass/catlass.hpp"
 #include "catlass/layout/matrix.hpp"
 #include "catlass/layout/vector.hpp"
+#include "catlass/layout/conv2d.hpp"
 
 #endif  // CATLASS_LAYOUT_LAYOUT_HPP
