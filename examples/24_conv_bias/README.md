@@ -7,6 +7,35 @@
 |   ├── gen_data.py   # 输入数据及标杆产生文件
 │   └── conv_bias.cpp # 主文件
 ```
+
+## 功能介绍
+- 实现3D卷积功能。
+- 计算公式：
+  我们假定输入（input）的shape是 $(N, C_{\text{in}}, D_i, H_i, W_i)$ ，（weight）的shape是 $(C_{\text{out}}, C_{\text{in}}, K_d, K_h, K_w)$，输出（output）的shape是 $(N, C_{\text{out}}, D_o, H_o, W_o)$，那输出将被表示为：
+
+  $$
+    \text{out}(N_i, C_{\text{out}_j}) = \text{bias}(C_{\text{out}_j}) + \sum_{k = 0}^{C_{\text{in}} - 1} \text{weight}(C_{\text{out}_j}, k) \star \text{input}(N_i, k)
+  $$
+
+  其中，$\star$表示互相关的计算。$N$代表batch size，$C$代表通道数，$D$、$H$和$W$分别代表深度、高度和宽度，相应输出维度的计算公式如下：
+
+  $$
+    D_o=[(D_i + 2 * padding[0] - dilation[0] * (K_d - 1) - 1 ) / stride[0]] + 1 \\
+    H_o=[(H_i + 2 * padding[1] - dilation[1] * (K_h - 1) - 1 ) / stride[1]] + 1 \\
+    W_o=[(W_i + 2 * padding[2] - dilation[2] * (K_w - 1) - 1 ) / stride[2]] + 1
+  $$
+
+- 当前实现相较于cann仅支持w轴全载的基础conv3d功能，不涉及weight bypass、l1开doublebuffer、pointwise以及w轴切分等优化手段和分支，输入input、weight和bias在l1上的搬运量不能超过硬件限制，即需要满足以下条件：
+  $$
+    weightL1Size = K_h * K_w * 512 \\
+    hoInL1Max = 16 / W_o + 2 \\
+    hiInL1Max = (hoInL1Max - 1) * stride[1] + 1 + (K_h - 1) * dilation[1] \\
+    hiInL1Max = min(H_i, hiInL1Max) \\
+    inputL1Size = hiInL1Max * W_i * 32 \\
+    biasL1Size = 64 \\
+    weightL1Size + inputL1Size + biasL1Size < 524288
+  $$
+
 ## 使用示例
 - 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/quickstart.md#算子编译)
 - 第一步， 首先执行`gen_data.py`，生成测试样例，测试用例需要从命令行输入。
