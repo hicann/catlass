@@ -90,7 +90,8 @@ public:
     static constexpr uint32_t KV_BASE_BLOCK = 512;
     static constexpr uint32_t KV_SPLIT_SIZE = 128;
 
-    static_assert(std::is_same_v<LayoutC, layout::RowMajor>, "LayoutC only support RowMajor yet!");
+    // [fixpipe change]
+    static_assert(std::is_same_v<LayoutC, layout::RowMajor> || std::is_same_v<LayoutC, layout::zN>, "LayoutC only support RowMajor and zN yet!");
 
     CATLASS_DEVICE
     BlockMmad(Arch::Resource<ArchTag> &resource, uint32_t l1BufAddrStart = 0)
@@ -195,6 +196,10 @@ public:
                 uint32_t nLoopNextIdx = nkBlockNextIdx / kLoop;
                 uint32_t kLoopNextIdx = nkBlockNextIdx % kLoop;
                 uint32_t gCOffset = blockStackIdx / 2 * 2 * KV_SPLIT_SIZE;
+                if (blockStackIdx > 1) {
+                    gCOffset = 128*256;
+                }
+                // AscendC::printf("$$$$$$$$  blockStackIdx:%ld, kIdx:%ld, gCOffset:%ld  $$$$$$$$\n", blockStackIdx, kIdx, gCOffset);
                 getBlockShape(actualShape, nowNIdx, kIdx, nLoop, kLoop, kvSeqlen, embed, nowNIdx == nIdx);
                 getBlockShape(actualNextShape, nLoopNextIdx, kLoopNextIdx, nLoop, kLoop, kvSeqlen, embed, nLoopNextIdx == nIdx);
                 getKVOffset(gBlockTable, gBOffset, nowNIdx, kIdx, nLoop, kLoop, strideKV, blockSize);
@@ -206,7 +211,10 @@ public:
                 int cc = 1;
                 bool initMmad = kIdx == 0;
                 stackTile += actualShape[1];
-                LayoutC layOutSTemp(rowNum, stackTile, 512);
+                // LayoutC layOutSTemp(rowNum, stackTile, 512);
+                // LayoutC layOutSTemp = layout::zN::template MakeLayout<ElementC>(rowNum, stackTile);
+                LayoutC layOutSTemp = layout::zN::template MakeLayout<ElementC>(256, actualShape.m());
+
                 // LayoutC layOutSTemp(rowNum, stackTile, 512);
                 // AscendC::printf("firstItr:%d\n", firstItr);
                 // AscendC::printf("endItr:%d\n", endItr);
@@ -307,11 +315,11 @@ public:
             if constexpr (!ENABLE_UNIT_FLAG_) {
                 AscendC::SetFlag<AscendC::HardEvent::M_FIX>(l1KvPingPongFlag);
                 AscendC::WaitFlag<AscendC::HardEvent::M_FIX>(l1KvPingPongFlag);
-                copyL0CToGm(gC, l0CTensor, layoutC, layoutInL0C);
+                copyL0CToGm(gC, l0CTensor, layoutInL0C, layoutInL0C);
                 AscendC::SetFlag<AscendC::HardEvent::FIX_M>(0);
                 AscendC::SetFlag<AscendC::HardEvent::FIX_M>(1);
             } else {
-                copyL0CToGm(gC, l0CTensor, layoutC, layoutInL0C, unitFlag);
+                copyL0CToGm(gC, l0CTensor, layoutInL0C, layoutInL0C, unitFlag);
             }
         }
     }

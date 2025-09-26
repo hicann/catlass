@@ -189,6 +189,12 @@ public:
             uint64_t gmQOffset = qBOffset + qSBlockIdx * curQSBlockTile * strideQO + qHeadIdx * embed;
             uint64_t gmKOffset = kBOffset + kvHeadIdx * embed;
             uint64_t gmVOffset = vBOffset + kvHeadIdx * embed;
+            if constexpr (PAGED_CACHE_FLAG && std::is_same_v<LayoutK, layout::nZ>) {
+                gmKOffset = kBOffset + kvHeadIdx * embed * pagedBlockSize;
+            }
+            if constexpr (PAGED_CACHE_FLAG && std::is_same_v<LayoutV, layout::zN>) {
+                gmVOffset = vBOffset + kvHeadIdx * embed * pagedBlockSize;
+            }
             uint32_t qSBlockSize = (qSBlockIdx == (curQSBlockNum - 1)) ? (qSeqlen - qSBlockIdx * curQSBlockTile) : curQSBlockTile;
             uint32_t qNBlockSize = (qNBlockIdxCurGroup == (qNBlockNumPerGroup - 1)) ?
                 (groupSize - qNBlockIdxCurGroup * curQNBlockTile) : curQNBlockTile;
@@ -217,8 +223,21 @@ public:
             int32_t stackSeqCount = 0;
 
             LayoutQ layoutQTemp(rowNum, embed);
-            LayoutK layoutKTemp(strideKV, blockStackNum * pagedBlockSize);
-            LayoutV layoutVTemp(blockStackNum * pagedBlockSize, strideKV);
+            uint32_t kRow = strideKV;
+            uint32_t kCol = blockStackNum * pagedBlockSize;
+            uint32_t vRow = blockStackNum * pagedBlockSize;
+            uint32_t vCol = strideKV;
+            if constexpr (PAGED_CACHE_FLAG && std::is_same_v<LayoutK, layout::nZ>) {
+                kRow = blockStackNum * strideKV;
+                kCol = pagedBlockSize;
+            }
+            if constexpr (PAGED_CACHE_FLAG && std::is_same_v<LayoutV, layout::zN>) {
+                vRow = pagedBlockSize;
+                vCol = blockStackNum * strideKV;
+            }
+            LayoutK layoutKTemp = LayoutK::template MakeLayout<ElementK>(kRow, kCol);
+            LayoutV layoutVTemp = LayoutV::template MakeLayout<ElementV>(vRow, vCol);
+
             blockMmadQK.loadQGM(gQ[gmQOffset], layoutQTemp, rowNum, qNBlockSize, qHeads);
             for (uint32_t kvSIdx = 0; kvSIdx < kvSLoopNumNoMask; kvSIdx += blockStackNum) {
                 if (kvSIdx < kvSLoopNumNoMask) {
@@ -511,7 +530,8 @@ public:
                      stackSeqTile = pagedBlockSize * blockStackNum;
                  }
                  uint32_t stackSeqTileRound = RoundUp(stackSeqTile, BLOCK_SIZE);
-                 LayoutS layOutS(rowNum, stackSeqTile, stackSeqTilePad);
+                 // LayoutS layOutS(rowNum, stackSeqTile, stackSeqTilePad);
+                 LayoutS layOutS = LayoutS::MakeLayoutInL0C(MakeCoord(rowNum, stackSeqTile));
                  LayoutP layOutP(rowNum, stackSeqTile, stackSeqTilePad);
                  GemmCoord actualBlockShapeQK{rowNum, stackSeqTile, embed};
                  uint32_t curStackTileMod = stackSeqCount % (preLaunch + 1);
@@ -673,6 +693,9 @@ public:
      Arch::CrossCoreFlag pvReady{PV_READY_ID};
  };
  
+template <
+    class LAYOUT_K,
+    class LAYOUT_V>
  CATLASS_GLOBAL void FAInferFp16(uint64_t fftsAddr,
                                  GM_ADDR q,
                                  GM_ADDR k,
@@ -694,11 +717,12 @@ public:
     using ElementQ = half;
     using LayoutQ = layout::RowMajor;
     using ElementK = half;
-    using LayoutK = layout::ColumnMajor;
+    using LayoutK = LAYOUT_K;
     using ElementV = half;
-    using LayoutV = layout::RowMajor;
+    using LayoutV = LAYOUT_V;
     using ElementS = float;
-    using LayoutS = layout::RowMajor;
+    // using LayoutS = layout::RowMajor;
+    using LayoutS = layout::zN;
     using ElementP = half;
     using LayoutP = layout::RowMajor;
     using ElementO = half;
@@ -764,6 +788,9 @@ public:
     flashAttnInfer(params);
  }
  
+template <
+    class LAYOUT_K,
+    class LAYOUT_V>
  CATLASS_GLOBAL void FAInferBf16(uint64_t fftsAddr,
                                  GM_ADDR q,
                                  GM_ADDR k,
@@ -785,11 +812,12 @@ public:
     using ElementQ = bfloat16_t;
     using LayoutQ = layout::RowMajor;
     using ElementK = bfloat16_t;
-    using LayoutK = layout::ColumnMajor;
+    using LayoutK = LAYOUT_K;
     using ElementV = bfloat16_t;
-    using LayoutV = layout::RowMajor;
+    using LayoutV = LAYOUT_V;
     using ElementS = float;
-    using LayoutS = layout::RowMajor;
+    // using LayoutS = layout::RowMajor;
+    using LayoutS = layout::zN;
     using ElementP = bfloat16_t;
     using LayoutP = layout::RowMajor;
     using ElementO = bfloat16_t;

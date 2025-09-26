@@ -78,6 +78,7 @@ struct Options {
     uint32_t blockSize{128};
     string dataType = "half";
     string dataPath = "../../examples/23_flash_attention_infer/data";
+    string cacheLayout = "nd";
 
     Options() = default;
 
@@ -108,6 +109,8 @@ struct Options {
                 deviceId = atoi(argv[argIndex++]);
             } else if (flag == "--dtype") {
                 dataType = string(argv[argIndex++]);
+            } else if (flag == "--cache_layout") {
+                cacheLayout = string(argv[argIndex++]);
             } else {
                 printf(HELPER);
                 return -1;
@@ -154,12 +157,17 @@ void Run(const Options &options)
     string dataPath = options.dataPath;
     int32_t maxKvSeqlen = kvSeqlen;
     int32_t numBlocks = batch * ((maxKvSeqlen + blockSize - 1) / blockSize);
+    string cacheLayout = options.cacheLayout;
 
     if ((dataType != "half") && (dataType != "bf16")) {
         cerr << "[ERROR] dtype must be 'half' or 'bf16'." << endl;
         return;
     }
-    
+
+    if ((cacheLayout != "nz") && (cacheLayout != "nd")) {
+        cerr << "[ERROR] cacheLayout must be 'nz' or 'nd'." << endl;
+        return;
+    }
 
     // read qNtokens num
     void *qNtokens = nullptr;
@@ -202,14 +210,22 @@ void Run(const Options &options)
     uint8_t *kHost;
     uint8_t *kDevice;
     AllocMem(&kHost, &kDevice, kvSize);
-    ReadFile(dataPath + "/k.bin", kHost, kvSize);
+    if (cacheLayout == "nd") {
+        ReadFile(dataPath + "/k.bin", kHost, kvSize);
+    } else if (cacheLayout == "nz") {
+        ReadFile(dataPath + "/k_nz.bin", kHost, kvSize);
+    }
     ACL_CHECK(aclrtMemcpy(kDevice, kvSize, kHost, kvSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
     // Allocate matrices in host and device memory and load Matrix v.
     uint8_t *vHost;
     uint8_t *vDevice;
     AllocMem(&vHost, &vDevice, kvSize);
-    ReadFile(dataPath + "/v.bin", vHost, kvSize);
+    if (cacheLayout == "nd") {
+        ReadFile(dataPath + "/v.bin", vHost, kvSize);
+    } else if (cacheLayout == "nz") {
+        ReadFile(dataPath + "/v_nz.bin", vHost, kvSize);
+    }
     ACL_CHECK(aclrtMemcpy(vDevice, kvSize, vHost, kvSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
     // Allocate matrices in host and device memory and load Matrix v.
@@ -283,13 +299,29 @@ void Run(const Options &options)
     uint64_t fftsAddr{0};
     uint32_t fftsLen{0};
     RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
-    
+
     for(int i = 0; i < 1; i ++){
         if(dataType == "half"){
-            FAInferFp16<<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice, pDevice, oTempDevice, oUpdateDevice, tilingDevice);
+            if (cacheLayout == "nz") {
+                FAInferFp16<layout::nZ, layout::zN><<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, kDevice, vDevice,
+                    maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice, pDevice, oTempDevice,
+                    oUpdateDevice, tilingDevice);
+            } else if (cacheLayout == "nd") {
+                FAInferFp16<layout::ColumnMajor, layout::RowMajor><<<blockDim, nullptr, stream>>>(fftsAddr, qDevice,
+                    kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice,
+                    pDevice, oTempDevice, oUpdateDevice, tilingDevice);
+            }
         }
         else{
-            FAInferBf16<<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice, pDevice, oTempDevice, oUpdateDevice, tilingDevice);
+            if (cacheLayout == "nz") {
+                FAInferBf16<layout::nZ, layout::zN><<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, kDevice,
+                    vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice, pDevice,
+                    oTempDevice, oUpdateDevice, tilingDevice);
+            } else if (cacheLayout == "nd") {
+                FAInferBf16<layout::ColumnMajor, layout::RowMajor><<<blockDim, nullptr, stream>>>(fftsAddr, qDevice,
+                    kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice,
+                    kvSeqDevice, sDevice, pDevice, oTempDevice, oUpdateDevice, tilingDevice);
+            }
         }
         ACL_CHECK(aclrtSynchronizeStream(stream));
         // Copy the result from device to host

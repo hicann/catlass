@@ -331,7 +331,120 @@
                  rowNumCurLoop, columnNumRound / FLOAT_BLOCK_SIZE,
                  (columnNumPad - columnNumRound) / FLOAT_BLOCK_SIZE, 0));
      }
- 
+
+     CATLASS_DEVICE
+     void CopySGmToUbzN2Nd(
+         AscendC::GlobalTensor<ElementInput> gInput,
+         uint32_t sUbOffset,
+         uint32_t rowNumCurLoop,
+         uint32_t columnNumRound,
+         uint32_t columnNumPad)
+     {
+         // input S
+        //  AscendC::DataCopy(
+        //      lsUbTensor[sUbOffset], gInput,
+        //      AscendC::DataCopyParams(
+        //          rowNumCurLoop, // blockCount 连续搬运的数据块个数
+        //          columnNumRound / FLOAT_BLOCK_SIZE, // blockLen 数据块长度, 单位为DataBlock(32B)
+        //          (columnNumPad - columnNumRound) / FLOAT_BLOCK_SIZE,  // srcGap 前面一个数据块的尾与后面数据块的头的间隔,单位为DataBlock(32B)
+        //          0)); // dstGap 前面一个数据块的尾与后面数据块的头的间隔,单位为DataBlock(32B)
+        // uint32_t gmOffset = 0;
+        // for(uint32_t rowIdx = 0; rowIdx < rowNumCurLoop; rowIdx++) {
+        //     AscendC::DataCopy(
+        //         lsUbTensor[sUbOffset + rowIdx*columnNumRound], gInput[gmOffset],
+        //         AscendC::DataCopyParams(
+        //             columnNumRound/16,
+        //             2,
+        //             (rowNumCurLoop - 1) * 2,  // srcGap 前面一个数据块的尾与后面数据块的头的间隔,单位为DataBlock(32B)
+        //             0)); // dstGap 前面一个数据块的尾与后面数据块的头的间隔,单位为DataBlock(32B)
+        //     gmOffset += 16;
+        // }
+
+        for(uint32_t colIdx = 0; colIdx < columnNumRound / 16; colIdx++) {
+            AscendC::DataCopy(
+                lsUbTensor[sUbOffset + 16*colIdx], gInput[colIdx*128*16],
+                AscendC::DataCopyParams(
+                    rowNumCurLoop,
+                    2,
+                    0,  // srcGap 前面一个数据块的尾与后面数据块的头的间隔,单位为DataBlock(32B)
+                    (columnNumRound - 16) / 8)); // dstGap 前面一个数据块的尾与后面数据块的头的间隔,单位为DataBlock(32B)
+            // AscendC::printf("DataCopy loop: colIdx: %ld\n", colIdx);
+            // AscendC::printf("DataCopy loop: uboffset(sUbOffset + 16*colIdx): %ld\n", sUbOffset + 16*colIdx);
+            // AscendC::printf("DataCopy loop: gmoffset(colIdx*128*16): %ld\n", colIdx*128*16);
+            // AscendC::printf("DataCopy loop: blockCount: %ld\n", rowNumCurLoop);
+            // AscendC::printf("DataCopy loop: dstStride((columnNumRound - 16) / 8)): %ld\n", (columnNumRound - 16) / 8);
+            // AscendC::DumpTensor(lsUbTensor[sUbOffset + 16*colIdx], colIdx+10, 8192);
+        }
+        // AscendC::printf("CopySGmToUbzN2Nd: sUbOffset: %ld\n", sUbOffset);
+        // AscendC::printf("CopySGmToUbzN2Nd: rowNumCurLoop: %ld\n", rowNumCurLoop);
+        // AscendC::printf("CopySGmToUbzN2Nd: columnNumPad: %ld\n", columnNumPad);
+        // AscendC::printf("CopySGmToUbzN2Nd: columnNumRound: %ld\n", columnNumRound);
+        
+        // AscendC::printf("===================\n");
+        // AscendC::printf("\n\n\nTensor on ub: \n");
+        // AscendC::DumpTensor(lsUbTensor[sUbOffset], 0, 8192);
+        // AscendC::printf("===================\n");
+        // AscendC::printf("\n\n\nTensor on gm: \n");
+        // AscendC::DumpTensor(gInput, 1, 8192);
+        // AscendC::printf("\n\n\n\n");
+     }
+
+     CATLASS_DEVICE
+     void CopySGmToUbzN2zN(
+         AscendC::GlobalTensor<ElementInput> gInput,
+         uint32_t sUbOffset,
+         uint32_t rowNumCurLoop,
+         uint32_t columnNumRound,
+         uint32_t columnNumPad)
+     {
+         // input S
+         AscendC::DataCopy(
+             lsUbTensor[sUbOffset], gInput,
+             AscendC::DataCopyParams(
+                columnNumRound / 16,
+                rowNumCurLoop * 2,
+                (128-rowNumCurLoop) * 2,
+                0));
+
+        // AscendC::printf("====================================\n\n\n\n");
+        // AscendC::printf("CopySGmToUbzN2zN: sUbOffset: %ld\n", sUbOffset);
+        // AscendC::printf("CopySGmToUbzN2zN: rowNumCurLoop: %ld\n", rowNumCurLoop);
+        // AscendC::printf("CopySGmToUbzN2zN: columnNumRound: %ld\n", columnNumRound);
+        // AscendC::printf("===================\n");
+        // AscendC::printf("\n\n\nTensor on ub: \n");
+        // AscendC::DumpTensor(lsUbTensor[sUbOffset], 0, 4096);
+        // AscendC::printf("===================\n");
+        // AscendC::printf("\n\n\nTensor on gm: \n");
+        // AscendC::DumpTensor(gInput, 1, 4096);
+        // AscendC::printf("\n\n\n\n");
+     }
+
+     CATLASS_DEVICE
+     void CopySNz2Nd(
+         uint32_t sUbOffset,
+         uint32_t rowNumCurLoop,
+         uint32_t columnNumRound)
+     {
+         uint64_t mask = 16;
+         for(uint32_t colIdx = 0; colIdx < columnNumRound / 16; colIdx++) {
+            // input S
+            AscendC::Copy(
+                lsUbTensor[sUbOffset + rowNumCurLoop * columnNumRound + colIdx * 16], //dst
+                lsUbTensor[sUbOffset + colIdx * rowNumCurLoop * 16], // src
+                mask,
+                rowNumCurLoop, // repeatTime
+                {1, 1, static_cast<uint16_t>(columnNumRound / FLOAT_BLOCK_SIZE), 2} // dstStride, srcStride, dstRepeatSize, srcRepeatSize
+            );
+        }
+        // AscendC::printf("\n\n\n\n=================CopySNz2Nd===================\n\n\n\n");
+        // AscendC::printf("CopySNz2Nd: rowNumCurLoop * columnNumRound: %ld\n", rowNumCurLoop * columnNumRound);
+        // AscendC::printf("\n\n\n NZ Tensor on ub: offset: %ld \n", sUbOffset);
+        // AscendC::DumpTensor(lsUbTensor[sUbOffset], 3, 4096);
+        // AscendC::printf("===================\n");
+        // AscendC::printf("\n\n\n ND Tensor on ub, offset:%ld \n", sUbOffset + rowNumCurLoop * columnNumRound);
+        // AscendC::DumpTensor(lsUbTensor[sUbOffset + rowNumCurLoop * columnNumRound], 4, 4096);
+     }
+
      CATLASS_DEVICE
      void CopyMaskGmToUb(
          AscendC::GlobalTensor<ElementMask> gMask,   
@@ -375,14 +488,30 @@
          uint32_t sUbOffset,
          uint32_t rowNumCurLoop,
          uint32_t columnNumRound)
-     {
+     {  
+        // if (sUbOffset == 4096) {
+        //     AscendC::printf("===================\n");
+        //     AscendC::printf("\n\n\n Before scale: sUbOffset: %ld, rowNumCurLoop: %ld, columnNumRound: %ld, \n", sUbOffset, rowNumCurLoop, columnNumRound);
+        //     AscendC::DumpTensor(lsUbTensor[sUbOffset], 6, 4096);
+        //     }
+        AscendC::SetVectorMask<float>(64);
          // *** ls = scaleValue * ls
          AscendC::Muls<float, false>(
              lsUbTensor[sUbOffset], lsUbTensor[sUbOffset], scaleValue, (uint64_t)0,
              (rowNumCurLoop * columnNumRound + FLOAT_VECTOR_SIZE - 1) / FLOAT_VECTOR_SIZE,
              AscendC::UnaryRepeatParams(1, 1, 8, 8));
- 
+        // AscendC::Muls<float>(
+        //     lsUbTensor[sUbOffset], lsUbTensor[sUbOffset], scaleValue,
+        //     1);
+        
+         AscendC::ResetMask();
          AscendC::PipeBarrier<PIPE_V>();
+
+        //  if (sUbOffset == 4096) {
+        //     AscendC::printf("===================\n");
+        //     AscendC::printf("\n\n\n After scale: sUbOffset: %ld, rowNumCurLoop: %ld, columnNumRound: %ld, \n", sUbOffset, rowNumCurLoop, columnNumRound);
+        //     AscendC::DumpTensor(lsUbTensor[sUbOffset], 7, 4096);
+        //  }
      }
  
      CATLASS_DEVICE
@@ -631,7 +760,7 @@
          uint32_t columnNum = layoutOutput.shape(1);
          // Align colNum to 16, for both float&half compute&copy
          uint32_t columnNumPad = layoutOutput.stride(0);
-         uint32_t sUbOffset = pingpongFlag * MAX_UB_S_ELEM_NUM;
+         uint32_t sUbOffset = pingpongFlag * MAX_UB_S_ELEM_NUM + MAX_UB_S_ELEM_NUM / 2;
          uint32_t dmUbOffsetCurCycle = curStackTileMod * MAX_ROW_NUM_SUB_CORE + rowOffset;
  
          CalcLocalRowMax(sUbOffset, rowNumCurLoopRound, columnNum, columnNumRound, rowOffset);
@@ -665,10 +794,11 @@
                      const LayoutOutput &layoutOutput, const LayoutInput &layoutInput, GemmCoord actualBlockShape,
                      uint32_t isFirstStackTile, uint32_t qSBlockSize, uint32_t qNBlockSize, uint32_t curStackTileMod)
      {
-         uint32_t rowNum = actualBlockShape.m();
+         uint32_t rowNum = actualBlockShape.m(); // 128
          uint32_t columnNum = actualBlockShape.n();
          uint32_t columnNumRound = RoundUp(columnNum, BLOCK_SIZE);
-         uint32_t columnNumPad = layoutInput.stride(0);
+        //  uint32_t columnNumPad = layoutInput.stride(0);
+         uint32_t columnNumPad = 4 * 128;
  
          uint32_t subBlockIdx = AscendC::GetSubBlockIdx();
          uint32_t subBlockNum = AscendC::GetSubBlockNum();
@@ -677,22 +807,26 @@
          uint32_t qNThisSubBlock = (qNBlockSize == 1) ?
              0 : (subBlockIdx == 1) ? (qNBlockSize - qNSplitSubBlock) : qNSplitSubBlock;
          uint32_t rowSplitSubBlock = (qNBlockSize == 1) ?
-             (qSBlockSize / 2) : (qSBlockSize * qNSplitSubBlock);
-         uint32_t rowActualThisSubBlock = (subBlockIdx == 1) ?
+             (qSBlockSize / 2) : (qSBlockSize * qNSplitSubBlock); // 64
+         uint32_t rowActualThisSubBlock = (subBlockIdx == 1) ? // 64
              (rowNum - rowSplitSubBlock) : rowSplitSubBlock;
-         uint32_t rowOffsetThisSubBlock = subBlockIdx * rowSplitSubBlock;
-         uint32_t maxRowNumPerLoop = MAX_UB_S_ELEM_NUM / columnNumRound;
-         uint32_t rowNumTile = RoundDown(maxRowNumPerLoop, FLOAT_BLOCK_SIZE);
-         uint32_t rowLoopNum = CeilDiv(rowActualThisSubBlock, rowNumTile);
+         uint32_t rowOffsetThisSubBlock = subBlockIdx * rowSplitSubBlock; // 行方向上偏移, core0: 0, core1: 64
+         uint32_t maxRowNumPerLoop = MAX_UB_S_ELEM_NUM / columnNumRound; // 64 -> 16
+         uint32_t rowNumTile = RoundDown(maxRowNumPerLoop, FLOAT_BLOCK_SIZE); // 64 -> 16
+         rowNumTile = rowNumTile / 2; // [nz add ->一次计算原来的一半] 16 -> 8
+         uint32_t rowLoopNum = CeilDiv(rowActualThisSubBlock, rowNumTile); // 1 -> 4 -> 8
+        //  AscendC::printf("stage2: rowNumTile: %ld\n", rowNumTile);
+        //  AscendC::printf("stage2: rowLoopNum: %ld\n", rowLoopNum);
+
          uint32_t preLoad = 1;
  
          
          for (uint32_t rowLoopIdx = 0; rowLoopIdx < rowLoopNum + preLoad; rowLoopIdx++) {
+            // AscendC::printf("===================\n");
              if(rowLoopIdx < rowLoopNum){
-                 
                  uint32_t pingpongFlag = rowLoopIdx % 2;
                  uint32_t rowOffsetCurLoop = rowLoopIdx * rowNumTile;
-                 uint32_t rowOffsetIoGm = rowOffsetCurLoop + rowOffsetThisSubBlock;
+                 uint32_t rowOffsetIoGm = rowOffsetCurLoop + rowOffsetThisSubBlock; // AI_V上的偏移 + 行方向上偏移
                  uint32_t rowNumCurLoop = (rowLoopIdx == rowLoopNum - 1) ?
                      (rowActualThisSubBlock - rowOffsetCurLoop) : rowNumTile;
              // loop 0 mask load before cross core sync
@@ -700,11 +834,19 @@
              
                 int64_t offsetInput = layoutInput.GetOffset(MatrixCoord(rowOffsetIoGm, 0));
                 auto gInputCurLoop = gInput[offsetInput];
+
+                // AscendC::printf("\n DataCopy Loop: rowLoopIdx: %ld, rowLoopNum: %ld, pingpongFlag: %ld, rowOffsetCurLoop: %ld, rowOffsetIoGm: %ld,"
+                //     "rowNumCurLoop: %ld, offsetInput: %ld\n", rowLoopIdx, rowLoopNum, pingpongFlag, rowOffsetCurLoop, rowOffsetIoGm, rowNumCurLoop, offsetInput);
                 
                 AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(pingpongFlag);
-                CopySGmToUb(gInputCurLoop, (pingpongFlag * MAX_UB_S_ELEM_NUM), rowNumCurLoop, columnNumRound, columnNumPad);
+                // CopySGmToUb(gInputCurLoop, (pingpongFlag * MAX_UB_S_ELEM_NUM), rowNumCurLoop, columnNumRound, columnNumPad);
+                // CopySGmToUbzN2Nd(gInputCurLoop, (pingpongFlag * MAX_UB_S_ELEM_NUM), rowNumCurLoop, columnNumRound, columnNumPad);
+                CopySGmToUbzN2zN(gInputCurLoop, (pingpongFlag * MAX_UB_S_ELEM_NUM), rowNumCurLoop, columnNumRound, columnNumPad);
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(pingpongFlag);
- 
+                AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(pingpongFlag);
+                CopySNz2Nd((pingpongFlag * MAX_UB_S_ELEM_NUM), rowNumCurLoop, columnNumRound);
+                // AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(pingpongFlag);
+                AscendC::PipeBarrier<PIPE_V>();
             }
             if(rowLoopIdx >= preLoad){
                 uint32_t delayedRowLoopIdx = rowLoopIdx - preLoad;
@@ -713,12 +855,18 @@
                 uint32_t rowOffsetIoGm = rowOffsetCurLoop + rowOffsetThisSubBlock;
                 uint32_t rowNumCurLoop = (delayedRowLoopIdx == rowLoopNum - 1) ?
                     (rowActualThisSubBlock - rowOffsetCurLoop) : rowNumTile;
+                // AscendC::printf("\n\nstage2: rowNumCurLoop: %ld\n\n", rowNumCurLoop);
 
                 int64_t offsetOutput = layoutOutput.GetOffset(MatrixCoord(rowOffsetIoGm, 0));
                 auto gOutputCurLoop = gOutput[offsetOutput];
                 auto layoutOutputCurLoop = layoutOutput.GetTileLayout(MatrixCoord(rowNumCurLoop, columnNum));
-                AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(pingpongFlag);
-                ScaleS((pingpongFlag * MAX_UB_S_ELEM_NUM), rowNumCurLoop, columnNumRound);
+
+                // AscendC::printf("\n Compute Loop: rowLoopIdx: %ld, rowLoopNum: %ld, pingpongFlag: %ld, rowOffsetCurLoop: %ld, rowOffsetIoGm: %ld,"
+                //     "rowNumCurLoop: %ld, offsetOutput: %ld, ubSOffset: %ld, \n", rowLoopIdx, rowLoopNum, pingpongFlag, rowOffsetCurLoop, rowOffsetIoGm, 
+                //     rowNumCurLoop, offsetOutput, (pingpongFlag * MAX_UB_S_ELEM_NUM + MAX_UB_S_ELEM_NUM / 2));
+                
+                // AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(pingpongFlag);
+                ScaleS((pingpongFlag * MAX_UB_S_ELEM_NUM + MAX_UB_S_ELEM_NUM / 2), rowNumCurLoop, columnNumRound);
                 SubCoreCompute<MaskCategory::NO_MASK>(
                     gOutputCurLoop,
                     layoutOutputCurLoop,
@@ -736,7 +884,7 @@
     CATLASS_DEVICE
      void operator()(AscendC::GlobalTensor<ElementOutput> gOutput, AscendC::GlobalTensor<ElementInput> gInput,
                      AscendC::GlobalTensor<ElementMask> gMask,
-                     const LayoutOutput &layoutOutput, const LayoutInput &layoutInput, const LayoutInput &layoutMask,
+                     const LayoutOutput &layoutOutput, const LayoutInput &layoutInput, const LayoutMask &layoutMask,
                      GemmCoord actualBlockShape,
                      uint32_t isFirstStackTile, uint32_t qSBlockSize, uint32_t qNBlockSize, uint32_t curStackTileMod, 
                     Arch::CrossCoreFlag qkReady)

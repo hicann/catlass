@@ -61,6 +61,7 @@ class TestFlashAttentionInfer():
         mask_type: int
         dtype: any
         kv_dtype: int
+        cache_layout: any
 
     @classmethod
     def check_attr(cls, batch: int, q_seqlen: int, kv_seqlen: int, num_blocks: int, block_size: int):
@@ -246,8 +247,20 @@ class TestFlashAttentionInfer():
         num_tokens.astype(np.int32).tofile(os.path.join(WORKSPACE, "data", "q_ntokens.bin"))
         num_kv_tokens.astype(np.int32).tofile(os.path.join(WORKSPACE, "data", "kv_ntokens.bin"))
         query.tofile(os.path.join(WORKSPACE, "data", "q.bin"))
-        key_cache.tofile(os.path.join(WORKSPACE, "data", "k.bin"))
-        value_cache.tofile(os.path.join(WORKSPACE, "data", "v.bin"))
+        if (gen_data_params.cache_layout == "nd"):
+            key_cache.tofile(os.path.join(WORKSPACE, "data", "k.bin"))
+            value_cache.tofile(os.path.join(WORKSPACE, "data", "v.bin"))
+        elif (gen_data_params.cache_layout == "nz"):
+            key_cache_nz = key_cache.reshape(gen_data_params.num_blocks, gen_data_params.block_size,
+                                             gen_data_params.kv_heads * head_size_qk // 16, 16)
+            key_cache_nz = np.transpose(key_cache_nz, (0, 2, 1, 3)) # num_block,  N2 * D // 16, block_size, 16
+            key_cache_nz.tofile(os.path.join(WORKSPACE, "data", "k_nz.bin"))
+
+            value_cache_nz = value_cache.reshape(gen_data_params.num_blocks, gen_data_params.block_size,
+                                                 gen_data_params.kv_heads * head_size_qk // 16, 16)
+            value_cache_nz = np.transpose(value_cache_nz, (0, 2, 1, 3))
+            value_cache_nz.tofile(os.path.join(WORKSPACE, "data", "v_nz.bin"))
+
         np.array(block_tables).astype(np.int32).tofile(os.path.join(WORKSPACE, "data", "block_table.bin"))
         np.array(gen_data_params.q_seqlen_list).astype(np.int64).tofile(
             os.path.join(WORKSPACE, "data", "q_seqlen.bin"))
@@ -283,6 +296,11 @@ if __name__ == "__main__":
 
     kv_dtype = int(sys.argv[10])
 
+    cache_layout = str(sys.argv[11])
+    if cache_layout not in ["nz", "nd"]:
+        logging("[ERROR] cache_layout must be nz or nd.")
+        sys.exit()
+
     q_seqlen_list, kv_seqlen_list = gen_seqlen(q_seqlen, kv_seqlen, is_varied_len, batch)
     
     max_kv_seqlen = max(kv_seqlen_list)
@@ -291,6 +309,6 @@ if __name__ == "__main__":
     testObj = TestFlashAttentionInfer()
     gen_data_params = testObj.GenDataParams(q_seqlen_list, kv_seqlen_list, num_head,
                                             kv_heads, embedding_size,
-                                            num_blocks, block_size, mask_type, dtype, kv_dtype)
+                                            num_blocks, block_size, mask_type, dtype, kv_dtype, cache_layout)
     testObj.calc_data(gen_data_params)
 
