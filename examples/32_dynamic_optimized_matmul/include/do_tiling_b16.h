@@ -150,6 +150,8 @@ void DoTilingB16Layout10(TilingParams &tilingParams, PlatformInfo& platformInfo)
             n1 = 128;
         }
     }
+    m1 = RoundUp(m1, 16);
+    n1 = RoundUp(n1, 16);
     k1 = GetMaxK1<fp16_t>(m1, n1, platformInfo);
     SetTile(tilingParams, m1, n1, k1); 
 }
