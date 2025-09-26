@@ -40,8 +40,8 @@ void ConvBiasImpl(const uint32_t blockNum, aclrtStream stream, const ConvKernelI
     uint8_t *deviceBias = kernelInfo.inputAddr.at(2);
     uint8_t *deviceOut = kernelInfo.outputAddr.at(0);
     
-    constexpr uint32_t l1AStages = 1;
-    constexpr uint32_t l1BStages = 1;
+    constexpr uint32_t l1AStages = 2;
+    constexpr uint32_t l1BStages = 2;
     constexpr uint32_t l0AStages = 2;
     constexpr uint32_t l0BStages = 2;
     constexpr uint32_t l0CStages = 1;
