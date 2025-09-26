@@ -76,6 +76,7 @@ void PrintTilingParams(TilingParams &tilingParams, PlatformInfo& platformInfo)
               << "├───────────────────┼─────────────────────────┤\n"
               << "│ layoutTagA:  " << std::setw(30) << static_cast<uint32_t>(tilingParams.layoutTagA) << " │\n"
               << "│ layoutTagB:  " << std::setw(30) << static_cast<uint32_t>(tilingParams.layoutTagB) << " │\n"
+              << "│ layoutTagC:  " << std::setw(30) << static_cast<uint32_t>(tilingParams.layoutTagC) << " │\n"
               << "├───────────────────┼─────────────────────────┤\n"
               << "│ mTileInL1:   " << std::setw(30) << static_cast<uint32_t>(tilingParams.m1) << " │\n"
               << "│ nTileInL1:   " << std::setw(30) << static_cast<uint32_t>(tilingParams.n1) << " │\n"
