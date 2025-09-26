@@ -875,3 +875,15 @@ msprof op ./grouped_matmul 128 32768 1280 4096 0
 ### 切换配置，观察性能变化
 以上代码中有两种配置策略，分别是配置一和配置二，配置一为通常的简单配置，配置二为优化配置，增加了`Preload，ShuffleK`两个优化措施，两者使用不同的block层实现，展示了模板库可按需组装搭配各组件的特性。
 分别采用配置一和配置二测试同一组shape，例如下面的shape：group_count=64,m=49152,n=1280,k=4096。观察配置一和配置二的性能差别。（**请找到上面代码中的配置一和配置二，使用一个配置时注释另一个**）
+
+## 版权声明
+ * This program is free software, you can redistribute it and/or modify.
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * This file is a part of the CANN Open Software.
+ * Licensed under CANN Open Software License Agreement Version 2.0 (the "License").
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
+
+## 许可证
+[CANN Open Software License Agreement Version 2.0](../LICENSE)
