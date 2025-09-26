@@ -110,7 +110,7 @@ public:
         LayoutA layoutA;
         __gm__ ElementB *ptrB;
         LayoutB layoutB;
-        __gm__ ElementD *ptrD;
+        GM_ADDR ptrD;
         LayoutD layoutD;
         GM_ADDR ptrWorkspace;
 
@@ -127,7 +127,7 @@ public:
             problemCount(problemCount_), ptrGroupList(reinterpret_cast<__gm__ ElementGroupList *>(ptrGroupList_)),
             ptrA(reinterpret_cast<__gm__ ElementA *>(ptrA_)), layoutA(layoutA_),
             ptrB(reinterpret_cast<__gm__ ElementB *>(ptrB_)), layoutB(layoutB_),
-            ptrD(reinterpret_cast<__gm__ ElementD *>(ptrD_)), layoutD(layoutD_),
+            ptrD(ptrD_), layoutD(layoutD_),
             ptrWorkspace(ptrWorkspace_)
         {
         }
@@ -268,6 +268,8 @@ public:
 
         AscendC::GlobalTensor<ElementC> gmWorkspace;
         gmWorkspace.SetGlobalBuffer((__gm__ ElementC *)params.ptrWorkspace);
+        AscendC::GlobalTensor<ElementGroupList> groupList;
+        groupList.SetGlobalBuffer(params.ptrGroupList);
 
         uint32_t aicoreIndex = AscendC::GetBlockIdx() / AscendC::GetSubBlockNum();
         uint32_t aicoreNum = AscendC::GetBlockNum();

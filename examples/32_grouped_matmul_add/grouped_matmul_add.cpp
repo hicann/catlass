@@ -183,6 +183,18 @@ void Run(Options const &options)
 
     ACL_CHECK(aclrtMemcpy(hostD.data(), sizeD, deviceD, sizeD, ACL_MEMCPY_DEVICE_TO_HOST));
 
+    std::vector<GemmCoord> problemShapeList(problemCount);
+    std::vector<LayoutA> layoutAList(problemCount);
+    std::vector<LayoutB> layoutBList(problemCount);
+    std::vector<LayoutC> layoutCList(problemCount);
+    for (uint32_t i = 0; i < problemCount; ++i) {
+        uint32_t currentK = (i == 0) ? groupList[0] : (groupList[i] - groupList[i - 1]);
+        problemShapeList[i] = GemmCoord{m, n, currentK};
+        layoutAList[i] = LayoutA{m, currentK};
+        layoutBList[i] = LayoutB{currentK, n};
+        layoutCList[i] = LayoutC{m, n};
+    }
+    
     std::vector<float> hostGolden(lenD);
     golden::ComputeGroupedMatmul(problemCount, problemShapeList, hostA, layoutAList,
         hostB, layoutBList, hostGolden, layoutCList);
