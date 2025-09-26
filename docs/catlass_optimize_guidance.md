@@ -94,7 +94,7 @@ struct MmadAtlasA2Preload : public MmadAtlasA2 {
 - [22_padding_splitk_matmul](../examples/22_padding_splitk_matmul/padding_splitk_matmul.cpp)，集成了`04_padding_matmul`和`09_splitk_matmul`特性，在M/N轴较小、K轴有一定长度、非对齐场景能产生性能收益。
 
 ### TileShape调整
-在满足（1）16的倍数（2）不超过硬件限制 的约束下，调整TileShape尝试达到负载均衡。同时当前库上方案限制 `L1TileShape::M == L0TileShape::M`，`L0TileShape::N == L0TileShape::N`，一般推荐`L0TileShape::K == 1/4 L1TileShape::M`。
+在满足（1）16的倍数（2）不超过硬件限制 的约束下，调整TileShape尝试达到负载均衡。为了在满足最优性能的同时简化tiling策略，当前库上方案限制 `L0TileShape::M == L1TileShape::M`、`L0TileShape::N == L1TileShape::N`来降低调参复杂度，并推荐设置`L0TileShape::K == 1/4 L1TileShape::K`。
 - 案例一
 
 场景描述：A矩阵RowMajor，B矩阵ColumnMajor，M 1024，N 576，K 6144，fp16输入输出，20个AIC。
