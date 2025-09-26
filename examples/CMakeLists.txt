@@ -81,7 +81,7 @@ foreach(EXAMPLE
 	28_matmul_swish
     29_a2_fp8_e4m3_matmul
     30_w8a16_matmul
-    31_small_matmul
+    32_grouped_matmul_add
 )
     add_subdirectory(${EXAMPLE})
 endforeach()
