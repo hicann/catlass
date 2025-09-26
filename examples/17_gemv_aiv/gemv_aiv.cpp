@@ -8,7 +8,7 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0, 
+// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0,
 // optimizing stack space. If you need to use the ShapeInfo of the AscendC Tensor, please undefine this macro.
 #ifndef K_MAX_SHAPE_DIM
 #define K_MAX_SHAPE_DIM 0
@@ -17,91 +17,52 @@
 #include <iostream>
 #include <vector>
 
-#include "helper.hpp"
-#include "golden.hpp"
-
-#include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
+#include "catlass/catlass.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
-#include "catlass/gemv/kernel/kernel_gemv_aiv.hpp"
-#include "catlass/gemv/block/block_gemv.hpp"
 #include "catlass/gemm/gemm_type.hpp"
-#include "catlass/layout/layout.hpp"
+#include "catlass/gemv/block/block_gemv.hpp"
+#include "catlass/gemv/device/device_gemv.hpp"
+#include "catlass/gemv/kernel/kernel_gemv_aiv.hpp"
 #include "catlass/gemv/tile/tile_copy.hpp"
 #include "catlass/gemv/tile/tile_vmad.hpp"
 #include "catlass/gemv/tile/tile_vmuls.hpp"
-#include "catlass/gemv/device/device_gemv.hpp"
+#include "catlass/layout/layout.hpp"
 #include "catlass/status.hpp"
+
+#include "golden.hpp"
+#include "helper.hpp"
 
 using namespace Catlass;
 
 using ScalarType = float;
 
-struct Options{
-    const std::string HELPER = "17_gemv_aiv m n [device_id]";
+using Options = GemvOptions;
 
-    uint32_t M = 32;
-    uint32_t N = 32;
-    uint32_t deviceId{0};
-
-    Options() = default;
-    
-    GemvCoord problemShape{M, N};
-
-    int Parse(int argc, const char **argv)
-    {
-        enum ArgsIndex {
-            M_INDEX = 1,
-            N_INDEX,
-            DEVICE_ID_INDEX,
-            ARGS_MAX
-        };
-        if (argc > ARGS_MAX || argc <= N_INDEX) 
-        {
-            std::cerr << HELPER << std::endl;
-            return -1;
-        }
-        problemShape.m() = std::atoi(argv[M_INDEX]);
-        problemShape.n() = std::atoi(argv[N_INDEX]);
-        if (argc == ARGS_MAX)
-        {
-            deviceId = std::atoi(argv[DEVICE_ID_INDEX]);
-        }
-        return 0;
-    }
-};
-
-uint32_t getSplictNum(bool trans, uint32_t M, uint32_t N, uint32_t M1, uint32_t N1, uint32_t maxSplict)
-{
+uint32_t getSplictNum(bool trans, uint32_t M, uint32_t N, uint32_t M1, uint32_t N1, uint32_t maxSplict) {
     uint32_t CORENUM = 20;
     uint32_t splitNum = 1;
-    uint32_t maxOccupancy = 0; 
+    uint32_t maxOccupancy = 0;
     uint32_t blockNum = (M - 1) / M1 + 1;
-    if (!trans)
-    {
+    if (!trans) {
         splitNum = 1;
-    }
-    else{
+    } else {
         uint32_t splitNum1 = 1, splitNum2 = 1;
-        for (uint32_t i = 1; i <= maxSplict; i += 1)
-        {
+        for (uint32_t i = 1; i <= maxSplict; i += 1) {
             uint32_t occupancy = (i * blockNum) % (CORENUM * 2);
             if (!occupancy)
                 occupancy = (CORENUM * 2);
-            if (occupancy > maxOccupancy)
-            {
+            if (occupancy > maxOccupancy) {
                 maxOccupancy = occupancy;
                 splitNum1 = i;
             }
         }
         maxOccupancy = 0;
-        for (uint32_t i = 1; i <= maxSplict; i <<= 1)
-        {
+        for (uint32_t i = 1; i <= maxSplict; i <<= 1) {
             uint32_t occupancy = (i * blockNum) % (CORENUM * 2);
             if (!occupancy)
                 occupancy = (CORENUM * 2);
-            if (occupancy > maxOccupancy)
-            {
+            if (occupancy > maxOccupancy) {
                 maxOccupancy = occupancy;
                 splitNum2 = i;
             }
@@ -111,30 +72,13 @@ uint32_t getSplictNum(bool trans, uint32_t M, uint32_t N, uint32_t M1, uint32_t 
     return splitNum;
 }
 
-template <class Adapter>
-void RunAdapter(Adapter gemv_op, typename Adapter::Arguments args, aclrtStream stream,
-    uint32_t aicCoreNum)
-{
-    size_t sizeWorkspace = gemv_op.GetWorkspaceSize(args);
-    uint8_t *deviceWorkspace = nullptr;
-    if (sizeWorkspace > 0) {
-        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
-    }
-    gemv_op.Initialize(args, deviceWorkspace);
-    gemv_op(stream, aicCoreNum);
-    ACL_CHECK(aclrtSynchronizeStream(stream));
-    if (sizeWorkspace > 0) {
-        ACL_CHECK(aclrtFree(deviceWorkspace));
-    }
+template <class ElementRandom>
+void FillRandomScalarData(ElementRandom &scalarData, ElementRandom low, ElementRandom high) {
+    scalarData = static_cast<ElementRandom>(
+        low + (static_cast<ElementRandom>(rand()) / static_cast<ElementRandom>(RAND_MAX)) * (high - low));
 }
 
-template<class ElementRandom>
-void FillRandomScalarData(ElementRandom &scalarData, ElementRandom low, ElementRandom high)
-{
-    scalarData = static_cast<ElementRandom>(low + (static_cast<ElementRandom>(rand()) / static_cast<ElementRandom>(RAND_MAX)) * (high - low));
-}
-
-void Run(Options options){
+static void Run(Options options) {
     aclrtStream stream{nullptr};
     ACL_CHECK(aclInit(nullptr));
     ACL_CHECK(aclrtSetDevice(options.deviceId));
@@ -142,7 +86,7 @@ void Run(Options options){
 
     uint32_t m = options.problemShape.m();
     uint32_t n = options.problemShape.n();
-    using UBTileShape = GemvShape<32,512>;
+    using UBTileShape = GemvShape<32, 512>;
 
     uint32_t maxSplict = 20;
     uint32_t const split = getSplictNum(false, m, n, UBTileShape::M, UBTileShape::N, maxSplict);
@@ -159,7 +103,7 @@ void Run(Options options){
     using LayoutA = layout::RowMajor;
     using LayoutX = layout::VectorLayout;
     using LayoutY = layout::VectorLayout;
-    
+
     LayoutA layoutA{m, n};
     LayoutX layoutX{n};
     LayoutY layoutY{m};
@@ -172,9 +116,9 @@ void Run(Options options){
     std::vector<float> hostA(lenA);
     std::vector<float> hostX(lenX);
     std::vector<float> hostY(lenY);
-    golden::FillRandomData(hostA,  -1.0f, 1.0f);
-    golden::FillRandomData(hostX,  -1.0f, 1.0f);
-    golden::FillRandomData(hostY,  -1.0f, 1.0f);
+    golden::FillRandomData(hostA, -1.0f, 1.0f);
+    golden::FillRandomData(hostX, -1.0f, 1.0f);
+    golden::FillRandomData(hostY, -1.0f, 1.0f);
 
     uint8_t *deviceA{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
@@ -191,7 +135,7 @@ void Run(Options options){
     uint8_t *deviceZ{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceZ), sizeY, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceZ, sizeY, hostY.data(), sizeY, ACL_MEMCPY_HOST_TO_DEVICE));
-    
+
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAiv();
     using ArchTag = Arch::AtlasA2;
     using DispatchPolicy = Gemm::GemvAtlasA2;
@@ -204,13 +148,15 @@ void Run(Options options){
     using TileVmad = Gemv::Tile::TileVmad<typename DispatchPolicy::ArchTag, AType, XType, YType, BiasType>;
     using TileVmuls = Gemv::Tile::TileVmuls<typename DispatchPolicy::ArchTag, XType>;
 
-    using GemvBlock = Gemv::Block::BlockGemv<DispatchPolicy, UBTileShape, AType, XType, YType, BiasType, TileCopy, TileVmad, TileVmuls>;
+    using GemvBlock = Gemv::Block::BlockGemv<DispatchPolicy, UBTileShape, AType, XType, YType, BiasType, TileCopy,
+                                             TileVmad, TileVmuls>;
     using BlockEpilogue = void;
 
     // kernel level
     using GemvKernel = Gemv::Kernel::KernelGemvAiv<GemvBlock, BlockEpilogue>;
-    typename GemvKernel::Arguments arguments{options.problemShape, deviceA, deviceX, deviceY, deviceZ, alpha, beta, split};
-    
+    typename GemvKernel::Arguments arguments{
+        options.problemShape, deviceA, deviceX, deviceY, deviceZ, alpha, beta, split};
+
     using GemvAdapter = Gemv::Device::DeviceGemv<GemvKernel>;
     GemvAdapter gemv_op;
     gemv_op.CanImplement(arguments);
@@ -220,7 +166,8 @@ void Run(Options options){
     ACL_CHECK(aclrtMemcpy(hostRes.data(), sizeY, deviceZ, sizeY, ACL_MEMCPY_DEVICE_TO_HOST));
 
     std::vector<float> hostGolden(lenY);
-    golden::ComputeGemv(options.problemShape, alpha, beta, hostA, layoutA, hostX, layoutX, hostY, layoutY, hostGolden, layoutY);
+    golden::ComputeGemv(options.problemShape, alpha, beta, hostA, layoutA, hostX, layoutX, hostY, layoutY, hostGolden,
+                        layoutY);
     std::vector<uint64_t> errorIndices = golden::CompareData(hostRes, hostGolden, m);
     if (errorIndices.empty()) {
         std::cout << "Compare success." << std::endl;
@@ -238,9 +185,9 @@ void Run(Options options){
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv){
+int main(int argc, const char **argv) {
     Options options;
-    if(options.Parse(argc, argv) != 0){
+    if (options.Parse(argc, argv) != 0) {
         return -1;
     }
     Run(options);
