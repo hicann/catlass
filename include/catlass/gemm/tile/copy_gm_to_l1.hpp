@@ -998,6 +998,33 @@ struct CopyGmToL1<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>> {
             }
         }
     }
+
+    // layoutSrc must be the layout of one of the src matrices
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::GlobalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc,
+        bool fagFlag)
+    {
+        int32_t mUp = (layoutSrc.shape(0) + 1) / 2;
+        int32_t mDown = layoutSrc.shape(0) - mUp;
+        int32_t mAlign = RoundUp<C0_NUM_PER_FRACTAL>(layoutSrc.shape(0));
+
+        AscendC::Nd2NzParams intriParams;
+        intriParams.ndNum = 1;
+        intriParams.nValue = mUp;
+        intriParams.dValue = layoutSrc.shape(1);
+        intriParams.srcDValue = layoutSrc.stride(0);
+        intriParams.dstNzNStride = 1;
+        intriParams.dstNzC0Stride = mAlign;
+
+        AscendC::DataCopy(dstTensor, srcTensor, intriParams);
+        if (mDown) {
+            intriParams.nValue = mDown;
+            AscendC::DataCopy(dstTensor[mUp * 16], srcTensor[mUp * 128 *2 ], intriParams);
+        }
+    }
 };
 
 /// Partial specialization for AtlasA2, ColumnMajor in and nZ out.
@@ -1041,6 +1068,63 @@ struct CopyGmToL1<Arch::AtlasA2, Gemm::GemmType<Element, layout::ColumnMajor>> {
             for (uint32_t i = 0; i < layoutSrc.shape(1); i++) {
                 AscendC::DataCopy(dstTensor[i * ELE_NUM_PER_C0], srcTensor[i * layoutSrc.stride(1)], intriParams);
             }
+        }
+    }
+
+    // layoutSrc must be the layout of one of the src matrices
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::GlobalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc,
+        uint32_t ndNum, uint32_t srcNdMatrixStride,
+        uint32_t dstNzNStride, uint32_t dstNzMatrixStride,
+        uint32_t dstNzC0Stride)
+    {
+        AscendC::Nd2NzParams intriParams;
+
+        intriParams.nValue = layoutSrc.shape(1);
+        intriParams.dValue = layoutSrc.shape(0);
+        intriParams.srcDValue = layoutSrc.stride(1);
+        intriParams.dstNzNStride = dstNzNStride;
+        intriParams.dstNzC0Stride = dstNzC0Stride;
+        if (srcNdMatrixStride < STRIDE_LIMIT) {
+            intriParams.ndNum = ndNum;
+            intriParams.srcNdMatrixStride = srcNdMatrixStride;
+            intriParams.dstNzMatrixStride = dstNzMatrixStride;
+            AscendC::DataCopy(dstTensor, srcTensor, intriParams);
+        } else {
+            intriParams.ndNum = 1;
+            intriParams.srcNdMatrixStride = 0;
+            intriParams.dstNzMatrixStride = 0;
+            for (uint32_t i = 0; i < ndNum; i++) {
+                AscendC::DataCopy(dstTensor[i * ELE_NUM_PER_C0], srcTensor[i * srcNdMatrixStride], intriParams);
+            }
+        }
+    }
+    // layoutSrc must be the layout of one of the src matrices
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::GlobalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc, bool fagFlag)
+    {
+        int32_t mUp = (layoutSrc.shape(1) + 1) / 2;
+        int32_t mDown = layoutSrc.shape(1) - mUp;
+        int32_t mAlign = RoundUp<C0_NUM_PER_FRACTAL>(layoutSrc.shape(1));
+
+        AscendC::Nd2NzParams intriParams;
+        intriParams.ndNum = 1;
+        intriParams.nValue = mUp;
+        intriParams.dValue = layoutSrc.shape(0);
+        intriParams.srcDValue = layoutSrc.stride(1);
+        intriParams.dstNzNStride = 1;
+        intriParams.dstNzC0Stride = mAlign;
+
+        AscendC::DataCopy(dstTensor, srcTensor, intriParams);
+        if (mDown) {
+            intriParams.nValue = mDown;
+            AscendC::DataCopy(dstTensor[mUp * 16], srcTensor[mUp * 128 *2 ], intriParams);
         }
     }
 };
@@ -1571,6 +1655,7 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::VectorLayout, AscendC
         AscendC::DataCopy(dstTensor, srcTensor, intriParams);
     }
 };
+
 
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////

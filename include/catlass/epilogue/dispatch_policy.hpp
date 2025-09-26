@@ -96,6 +96,25 @@ struct EpilogueAtlasA2Gemv {
     using ArchTag = Arch::AtlasA2;
 };
 ///////////////////////////
-}  // namespace Catlass::Epilogue
 
+/*=======================================
+============ AtlasA2 FAG start ===========
+=========================================*/
+struct EpilogueAtlasA2FAGPre {
+    using ArchTag = Arch::AtlasA2;
+};
+struct EpilogueAtlasA2FAGOp {
+    using ArchTag = Arch::AtlasA2;
+};
+struct EpilogueAtlasA2FAGSfmg {
+    using ArchTag = Arch::AtlasA2;
+};
+struct EpilogueAtlasA2FAGPost {
+    using ArchTag = Arch::AtlasA2;
+};
+/*=======================================
+============ AtlasA2 FAG end ===========
+=========================================*/
+
+}  // namespace Catlass::Epilogue
 #endif  // CATLASS_EPILOGUE_DISPATCH_POLICY_HPP
