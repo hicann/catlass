@@ -11,8 +11,8 @@
 #ifndef CATLASS_EXAMPLES_MLA_MLA_TILING_H
 #define CATLASS_EXAMPLES_MLA_MLA_TILING_H
 
-#include <cstdint>
 #include <array>
+#include <cstdint>
 
 namespace MLATiling {
 const int32_t TILING_BATCH = 0;
@@ -78,7 +78,10 @@ const int32_t KV_SEQLEN_SLICE = 128;
 
 constexpr std::array<int32_t, NUM6> QN_TILE_LIST = {128, 64, 32, 16, 8, 1};
 
-enum class MaskType { NO_MASK = 0, MASK_SPEC = 1 };
+enum class MaskType {
+    NO_MASK = 0,
+    MASK_SPEC = 1
+};
 
 struct MLAInfo {
     int32_t numTokens = 0;

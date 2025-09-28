@@ -48,7 +48,11 @@ const int32_t NUM256 = 256;
 const int32_t NUM512 = 512;
 const int32_t WORKSPACE_BLOCK_SIZE_DB = 131072;
 
-enum class MaskType { NO_MASK = 0, MASK_SPEC = 1, MASK_CAUSUAL = 2 };
+enum class MaskType {
+    NO_MASK = 0,
+    MASK_SPEC = 1,
+    MASK_CAUSUAL = 2
+};
 
 struct FAInfo {
     int32_t numTokens = 0;

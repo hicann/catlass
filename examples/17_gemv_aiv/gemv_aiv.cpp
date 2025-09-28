@@ -39,7 +39,7 @@ using ScalarType = float;
 
 using Options = GemvOptions;
 
-uint32_t getSplictNum(bool trans, uint32_t M, uint32_t N, uint32_t M1, uint32_t N1, uint32_t maxSplict) {
+static uint32_t getSplictNum(bool trans, uint32_t M, uint32_t N, uint32_t M1, uint32_t N1, uint32_t maxSplict) {
     uint32_t CORENUM = 20;
     uint32_t splitNum = 1;
     uint32_t maxOccupancy = 0;

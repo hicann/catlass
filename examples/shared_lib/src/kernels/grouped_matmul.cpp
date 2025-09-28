@@ -10,17 +10,17 @@
 
 #include <acl/acl.h>
 
-#include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
+#include "catlass/catlass.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/device/device_gemm.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
-#include "catlass/gemm/kernel/grouped_matmul_slice_m.hpp"
-#include "catlass/gemm/kernel/grouped_matmul_slice_k.hpp"
 #include "catlass/gemm/gemm_type.hpp"
+#include "catlass/gemm/kernel/grouped_matmul_slice_k.hpp"
+#include "catlass/gemm/kernel/grouped_matmul_slice_m.hpp"
 #include "catlass/layout/layout.hpp"
 #include "catlass/status.hpp"
-#include "catlass/gemm/device/device_gemm.hpp"
 
 #include "catlass_kernel.h"
 #include "common.hpp"
@@ -33,8 +33,7 @@ template <class LayoutA,
           class OutDType,
           KernelInfo::GMMSplit GMM_SPLIT,
           bool K_GT_N>
-void GroupedMatmulImpl(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo)
-{
+void GroupedMatmulImpl(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo) {
     GemmCoord problemShape{kernelInfo.m, kernelInfo.n, kernelInfo.k};
     uint32_t problemCount = kernelInfo.g;
     uint8_t *deviceA = kernelInfo.inputAddr.at(0);
@@ -79,8 +78,7 @@ void GroupedMatmulImpl(const uint32_t blockNum, aclrtStream stream, const Kernel
     RunAdapter<MatmulAdapter>(matmulOp, arguments, stream, blockNum);
 }
 
-void GroupedMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo)
-{
+void GroupedMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo) {
     if (kernelInfo.split == KernelInfo::GMMSplit::SPLIT_K && kernelInfo.transA && !kernelInfo.transB) {
         if (kernelInfo.inputDataType == ACL_FLOAT16 && kernelInfo.outputDataType == ACL_FLOAT16) {
             GroupedMatmulImpl<layout::ColumnMajor, layout::RowMajor, layout::RowMajor, half, half,

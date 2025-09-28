@@ -61,7 +61,7 @@ template <class Layout> size_t GetWorkspaceLen(Layout layout, size_t blockRows, 
            * RoundUp(static_cast<size_t>(layout.shape(1)), blockCols);
 }
 
-static void Run(Options const &options) {
+static void Run(const Options &options) {
     aclrtStream stream{nullptr};
 
     ACL_CHECK(aclInit(nullptr));

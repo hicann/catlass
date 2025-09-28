@@ -43,7 +43,7 @@ constexpr uint32_t workspaceStages = 2;
 
 using Options = GemmOptions;
 
-static void Run(Options const &options) {
+static void Run(const Options &options) {
     aclrtStream stream{nullptr};
     ACL_CHECK(aclInit(nullptr));
     ACL_CHECK(aclrtSetDevice(options.deviceId));

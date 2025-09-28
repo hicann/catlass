@@ -53,13 +53,25 @@ constexpr uint32_t FLOAT_VECTOR_SIZE = 64;
 
 constexpr uint32_t UNIT_BLOCK_STACK_NUM = 4;
 
-template <typename T> CATLASS_DEVICE T AlignUp(T a, T b) { return (b == 0) ? 0 : (a + b - 1) / b * b; }
+template <typename T>
+CATLASS_DEVICE T AlignUp(T a, T b) {
+    return (b == 0) ? 0 : (a + b - 1) / b * b;
+}
 
-template <typename T> CATLASS_DEVICE T Min(T a, T b) { return (a > b) ? b : a; }
+template <typename T>
+CATLASS_DEVICE T Min(T a, T b) {
+    return (a > b) ? b : a;
+}
 
-template <typename T> CATLASS_DEVICE T Max(T a, T b) { return (a > b) ? a : b; }
+template <typename T>
+CATLASS_DEVICE T Max(T a, T b) {
+    return (a > b) ? a : b;
+}
 
-enum class cvPipeLineType { FAI_COMMON_NORMAL = 0, FAI_COMMON_CHUNK_MASK = 1 };
+enum class cvPipeLineType {
+    FAI_COMMON_NORMAL = 0,
+    FAI_COMMON_CHUNK_MASK = 1
+};
 
 CATLASS_DEVICE
 uint32_t GetQNBlockTile(uint32_t qSeqlen, uint32_t groupSize) {
@@ -111,7 +123,8 @@ struct FAIKernelParams {
     GM_ADDR tiling;
     // Methods
     CATLASS_DEVICE
-    FAIKernelParams() {}
+    FAIKernelParams() {
+    }
     CATLASS_DEVICE
     FAIKernelParams(GM_ADDR q_,
                     GM_ADDR k_,
@@ -138,7 +151,8 @@ struct FAIKernelParams {
         , p(p_)
         , oTemp(oTemp_)
         , oUpdate(oUpdate_)
-        , tiling(tiling_) {}
+        , tiling(tiling_) {
+    }
 };
 
 #endif

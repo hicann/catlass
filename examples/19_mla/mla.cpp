@@ -81,19 +81,19 @@ struct Options {
     }
 };
 
-void AllocMem(uint8_t **host, uint8_t **device, size_t size) {
+static void AllocMem(uint8_t **host, uint8_t **device, size_t size) {
     ACL_CHECK(aclrtMallocHost(reinterpret_cast<void **>(host), size));
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(device), size, ACL_MEM_MALLOC_HUGE_FIRST));
 }
 
-void FreeMem(uint8_t *host, uint8_t *device) {
+static void FreeMem(uint8_t *host, uint8_t *device) {
     ACL_CHECK(aclrtFreeHost(host));
     ACL_CHECK(aclrtFree(device));
 }
 
 // Allocate several matrices in NPU device memory and call a
-// CATLASSLASS MLA kernel.
-void Run(const Options &options) {
+// CATLASS MLA kernel.
+static void Run(const Options &options) {
     aclrtStream stream{nullptr};
     ACL_CHECK(aclInit(nullptr));
     ACL_CHECK(aclrtSetDevice(options.deviceId));

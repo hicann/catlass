@@ -24,6 +24,11 @@
 #define CATLASS_EXAMPLE_NAME catlass_example
 #endif
 
+/**
+ * @struct GemmOptions
+ * @brief Options structuture for gemm examples.
+ * @brief Arguments: `example_name m n k [device_id]`
+ */
 struct GemmOptions {
     const std::string HELPER = "m n k [device_id]";
 
@@ -33,9 +38,16 @@ struct GemmOptions {
     GemmOptions() = default;
 
     int Parse(int argc, const char **argv) {
-        enum class ArgsIndex { M_INDEX = 1, N_INDEX, K_INDEX, DEVICE_ID_INDEX, ARGS_MAX };
+        enum class ArgsIndex {
+            M_INDEX = 1,
+            N_INDEX,
+            K_INDEX,
+            DEVICE_ID_INDEX,
+            ARGS_MAX
+        };
 
-        if (argc > static_cast<uint32_t>(ArgsIndex::ARGS_MAX) || argc < static_cast<uint32_t>(ArgsIndex::DEVICE_ID_INDEX)) {
+        if (argc > static_cast<uint32_t>(ArgsIndex::ARGS_MAX)
+            || argc < static_cast<uint32_t>(ArgsIndex::DEVICE_ID_INDEX)) {
             std::cerr << TOSTRING(CATLASS_EXAMPLE_NAME) << " " << HELPER << std::endl;
             return -1;
         }
@@ -50,6 +62,11 @@ struct GemmOptions {
     }
 };
 
+/**
+ * @struct GemvOptions
+ * @brief Options structuture for gemv examples.
+ * @brief Arguments: `example_name m n [device_id]`
+ */
 struct GemvOptions {
     const std::string HELPER = "m n [device_id]";
 
@@ -59,9 +76,15 @@ struct GemvOptions {
     GemvOptions() = default;
 
     int Parse(int argc, const char **argv) {
-        enum class ArgsIndex { M_INDEX = 1, N_INDEX, DEVICE_ID_INDEX, ARGS_MAX };
+        enum class ArgsIndex {
+            M_INDEX = 1,
+            N_INDEX,
+            DEVICE_ID_INDEX,
+            ARGS_MAX
+        };
 
-        if (argc > static_cast<uint32_t>(ArgsIndex::ARGS_MAX) || argc < static_cast<uint32_t>(ArgsIndex::DEVICE_ID_INDEX)) {
+        if (argc > static_cast<uint32_t>(ArgsIndex::ARGS_MAX)
+            || argc < static_cast<uint32_t>(ArgsIndex::DEVICE_ID_INDEX)) {
             std::cerr << TOSTRING(CATLASS_EXAMPLE_NAME) << " " << HELPER << std::endl;
             return -1;
         }
@@ -75,8 +98,13 @@ struct GemvOptions {
     }
 };
 
+/**
+ * @struct GroupedGemmOptions
+ * @brief Options structuture for grouped/batched gemm examples.
+ * @brief Arguments: `example_name problem_count m n k [device_id]`
+ */
 struct GroupedGemmOptions {
-    const std::string HELPER = "m n k [device_id]";
+    const std::string HELPER = "problem_count m n k [device_id]";
 
     Catlass::GemmCoord problemShape{128, 128, 128};
     uint32_t problemCount{1};
@@ -85,9 +113,17 @@ struct GroupedGemmOptions {
     GroupedGemmOptions() = default;
 
     int Parse(int argc, const char **argv) {
-        enum class ArgsIndex { GROUP_COUNT = 1, M_INDEX, N_INDEX, K_INDEX, DEVICE_ID_INDEX, ARGS_MAX };
+        enum class ArgsIndex {
+            GROUP_COUNT = 1,
+            M_INDEX,
+            N_INDEX,
+            K_INDEX,
+            DEVICE_ID_INDEX,
+            ARGS_MAX
+        };
 
-        if (argc > static_cast<uint32_t>(ArgsIndex::ARGS_MAX) || argc < static_cast<uint32_t>(ArgsIndex::DEVICE_ID_INDEX)) {
+        if (argc > static_cast<uint32_t>(ArgsIndex::ARGS_MAX)
+            || argc < static_cast<uint32_t>(ArgsIndex::DEVICE_ID_INDEX)) {
             std::cerr << TOSTRING(CATLASS_EXAMPLE_NAME) << " " << HELPER << std::endl;
             return -1;
         }
@@ -101,7 +137,5 @@ struct GroupedGemmOptions {
         return 0;
     }
 };
-
-using BatchedGemmOptions = GroupedGemmOptions;
 
 #endif

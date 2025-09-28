@@ -38,11 +38,11 @@ struct Options {
     const std::string HELPER =
         "24_conv_bias batch di cin1 hi wi cin0 cout kd kh kw sD sH sW dD dH dW pD pH pW [device_id]";
 
-    uint32_t fmapRelated[6] = {1, 1, 1, 2, 9, 16}; // {batch, di, cin1, hi, wi, cin0}
-    uint32_t filterRelated[4] = {1, 1, 1, 1};      // {kd, kh, kw, cout}
-    uint32_t strides[3] = {1, 1, 1};
-    uint32_t pads[3] = {0, 0, 0};
-    uint32_t dilations[3] = {1, 1, 1};
+    std::vector<uint32_t> fmapRelated = {1, 1, 1, 2, 9, 16}; // {batch, di, cin1, hi, wi, cin0}
+    std::vector<uint32_t> filterRelated = {1, 1, 1, 1};      // {kd, kh, kw, cout}
+    std::vector<uint32_t> strides = {1, 1, 1};
+    std::vector<uint32_t> pads = {0, 0, 0};
+    std::vector<uint32_t> dilations = {1, 1, 1};
     int32_t deviceId{0};
 
     Options() = default;
@@ -106,15 +106,15 @@ struct Options {
     }
 };
 
-static void Run(Options const &options) {
+static void Run(const Options &options) {
     aclrtStream stream{nullptr};
 
     ACL_CHECK(aclInit(nullptr));
     ACL_CHECK(aclrtSetDevice(options.deviceId));
     ACL_CHECK(aclrtCreateStream(&stream));
 
-    Conv3dParams problemShape = Conv3dParams::MakeConvCoord(options.fmapRelated, options.filterRelated, options.pads,
-                                                            options.strides, options.dilations);
+    Conv3dParams problemShape = Conv3dParams::MakeConvCoord(options.fmapRelated.data(), options.filterRelated.data(), options.pads.data(),
+                                                            options.strides.data(), options.dilations.data());
 
     uint32_t n = problemShape.batch();
     uint32_t di = problemShape.di();

@@ -24,13 +24,14 @@
 #include "kernel_operator.h"
 using namespace Catlass;
 
-template <class BlockMmadQK,
-          class BlockMmadPV,
-          class BlockMmadQKTail,
-          class BlockMmadPVTail,
-          class EpilogueOnlineSoftmax,
-          class EpilogueRescaleO,
-          bool PAGED_CACHE_FLAG>
+template <
+    class BlockMmadQK,
+    class BlockMmadPV,
+    class BlockMmadQKTail,
+    class BlockMmadPVTail,
+    class EpilogueOnlineSoftmax,
+    class EpilogueRescaleO,
+    bool PAGED_CACHE_FLAG>
 class FAInferKernel {
   public:
     using ArchTag = typename BlockMmadQK::ArchTag;
@@ -58,11 +59,14 @@ class FAInferKernel {
 
     // Methods
     CATLASS_DEVICE
-    FAInferKernel() {}
+    FAInferKernel() {
+    }
 
-    template <int32_t CORE_TYPE = g_coreType> CATLASS_DEVICE void operator()(FAIKernelParams const &params);
+    template <int32_t CORE_TYPE = g_coreType>
+    CATLASS_DEVICE void operator()(FAIKernelParams const &params);
 
-    template <> CATLASS_DEVICE void operator()<AscendC::AIC>(FAIKernelParams const &params) {
+    template <>
+    CATLASS_DEVICE void operator()<AscendC::AIC>(FAIKernelParams const &params) {
         AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(EVENT_ID0);
         AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(EVENT_ID1);
         AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(EVENT_ID2);
@@ -228,12 +232,16 @@ class FAInferKernel {
                                          + SWorkSpacePingPongFlag * WORKSPACE_BLOCK_SIZE_DB;
                     GemmCoord actualBlockShapeQK{rowNum, stackSeqTile, embed};
                     if constexpr (!PAGED_CACHE_FLAG) {
-                        blockMmadQK(gQ[gmQOffset], gK[gmKOffset], gS[gmSOffset], gBlockTable, layoutQTemp, layoutKTemp,
-                                    actualBlockShapeQK, kvSIdx, kvSLoopNumNoMask, pagedBlockSize, noMaskKvS, strideKV);
+                        blockMmadQK(
+                            gQ[gmQOffset], gK[gmKOffset], gS[gmSOffset], gBlockTable, layoutQTemp, layoutKTemp,
+                            actualBlockShapeQK, kvSIdx, kvSLoopNumNoMask, pagedBlockSize, noMaskKvS, strideKV
+                        );
                     } else {
-                        blockMmadQK(gQ[gmQOffset], gK[gmKOffset], gS[gmSOffset], gBlockTable[blockBOffset], layoutQTemp,
-                                    layoutKTemp, actualBlockShapeQK, kvSIdx, kvSLoopNumNoMask, pagedBlockSize,
-                                    noMaskKvS, strideKV);
+                        blockMmadQK(
+                            gQ[gmQOffset], gK[gmKOffset], gS[gmSOffset], gBlockTable[blockBOffset], layoutQTemp,
+                            layoutKTemp, actualBlockShapeQK, kvSIdx, kvSLoopNumNoMask, pagedBlockSize, noMaskKvS,
+                            strideKV
+                        );
                     }
                     Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(qkReady);
                 }
@@ -252,13 +260,17 @@ class FAInferKernel {
                     LayoutP layoutPTemp(rowNum, stackSeqTileRound);
                     GemmCoord actualBlockShapePV{rowNum, embed, stackSeqTile};
                     if constexpr (!PAGED_CACHE_FLAG) {
-                        blockMmadPV(gP[gmPOffset], gV[gmVOffset], gOTmp[gmOTmpOffset], gBlockTable, layoutPTemp,
-                                    layoutVTemp, actualBlockShapePV, nowkvSIdx, kvSLoopNumNoMask, pagedBlockSize,
-                                    noMaskKvS, strideKV, softmaxReady);
+                        blockMmadPV(
+                            gP[gmPOffset], gV[gmVOffset], gOTmp[gmOTmpOffset], gBlockTable, layoutPTemp, layoutVTemp,
+                            actualBlockShapePV, nowkvSIdx, kvSLoopNumNoMask, pagedBlockSize, noMaskKvS, strideKV,
+                            softmaxReady
+                        );
                     } else {
-                        blockMmadPV(gP[gmPOffset], gV[gmVOffset], gOTmp[gmOTmpOffset], gBlockTable[blockBOffset],
-                                    layoutPTemp, layoutVTemp, actualBlockShapePV, nowkvSIdx, kvSLoopNumNoMask,
-                                    pagedBlockSize, noMaskKvS, strideKV, softmaxReady);
+                        blockMmadPV(
+                            gP[gmPOffset], gV[gmVOffset], gOTmp[gmOTmpOffset], gBlockTable[blockBOffset], layoutPTemp,
+                            layoutVTemp, actualBlockShapePV, nowkvSIdx, kvSLoopNumNoMask, pagedBlockSize, noMaskKvS,
+                            strideKV, softmaxReady
+                        );
                     }
                     Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(pvReady);
                 }
@@ -290,13 +302,17 @@ class FAInferKernel {
                                          + SWorkSpacePingPongFlag * WORKSPACE_BLOCK_SIZE_DB;
                     GemmCoord actualBlockShapeQK{rowNum, stackSeqTile, embed};
                     if constexpr (!PAGED_CACHE_FLAG) {
-                        blockMmadQKTail(gQ[gmQOffset], gK[gmKOffset], gS[gmSOffset], gBlockTable, layoutQTemp,
-                                        layoutKTemp, actualBlockShapeQK, kvSIdx, kvSLoopNumTotal, pagedBlockSize,
-                                        noSkipKvS, strideKV, noMaskTailS, 1);
+                        blockMmadQKTail(
+                            gQ[gmQOffset], gK[gmKOffset], gS[gmSOffset], gBlockTable, layoutQTemp, layoutKTemp,
+                            actualBlockShapeQK, kvSIdx, kvSLoopNumTotal, pagedBlockSize, noSkipKvS, strideKV,
+                            noMaskTailS, 1
+                        );
                     } else {
-                        blockMmadQKTail(gQ[gmQOffset], gK[gmKOffset], gS[gmSOffset], gBlockTable[blockBOffset],
-                                        layoutQTemp, layoutKTemp, actualBlockShapeQK, kvSIdx, kvSLoopNumTotal,
-                                        pagedBlockSize, noSkipKvS, strideKV, noMaskTailS, 1);
+                        blockMmadQKTail(
+                            gQ[gmQOffset], gK[gmKOffset], gS[gmSOffset], gBlockTable[blockBOffset], layoutQTemp,
+                            layoutKTemp, actualBlockShapeQK, kvSIdx, kvSLoopNumTotal, pagedBlockSize, noSkipKvS,
+                            strideKV, noMaskTailS, 1
+                        );
                     }
                     Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(qkReady);
                 }
@@ -321,24 +337,31 @@ class FAInferKernel {
 
                     if ((stackSeqCount - preLaunch == totalStackSeqNum - 1) && (maskType != 0)) { // 加mask
                         if constexpr (!PAGED_CACHE_FLAG) {
-                            blockMmadPVTail(gP[gmPOffset], gV[gmVOffset], gOTmp[gmOTmpOffset], gBlockTable, layoutPTemp,
-                                            layoutVTemp, actualBlockShapePV, delayedKvSIdx, kvSLoopNumTotal,
-                                            pagedBlockSize, noSkipKvS, strideKV, softmaxReady, noMaskTailS, 1);
+                            blockMmadPVTail(
+                                gP[gmPOffset], gV[gmVOffset], gOTmp[gmOTmpOffset], gBlockTable, layoutPTemp,
+                                layoutVTemp, actualBlockShapePV, delayedKvSIdx, kvSLoopNumTotal, pagedBlockSize,
+                                noSkipKvS, strideKV, softmaxReady, noMaskTailS, 1
+                            );
                         } else {
-                            blockMmadPVTail(gP[gmPOffset], gV[gmVOffset], gOTmp[gmOTmpOffset],
-                                            gBlockTable[blockBOffset], layoutPTemp, layoutVTemp, actualBlockShapePV,
-                                            delayedKvSIdx, kvSLoopNumTotal, pagedBlockSize, noSkipKvS, strideKV,
-                                            softmaxReady, noMaskTailS, 1);
+                            blockMmadPVTail(
+                                gP[gmPOffset], gV[gmVOffset], gOTmp[gmOTmpOffset], gBlockTable[blockBOffset],
+                                layoutPTemp, layoutVTemp, actualBlockShapePV, delayedKvSIdx, kvSLoopNumTotal,
+                                pagedBlockSize, noSkipKvS, strideKV, softmaxReady, noMaskTailS, 1
+                            );
                         }
                     } else { // 不加mask
                         if constexpr (!PAGED_CACHE_FLAG) {
-                            blockMmadPV(gP[gmPOffset], gV[gmVOffset], gOTmp[gmOTmpOffset], gBlockTable, layoutPTemp,
-                                        layoutVTemp, actualBlockShapePV, delayedKvSIdx, kvSLoopNumNoMask,
-                                        pagedBlockSize, noMaskKvS, strideKV, softmaxReady);
+                            blockMmadPV(
+                                gP[gmPOffset], gV[gmVOffset], gOTmp[gmOTmpOffset], gBlockTable, layoutPTemp,
+                                layoutVTemp, actualBlockShapePV, delayedKvSIdx, kvSLoopNumNoMask, pagedBlockSize,
+                                noMaskKvS, strideKV, softmaxReady
+                            );
                         } else {
-                            blockMmadPV(gP[gmPOffset], gV[gmVOffset], gOTmp[gmOTmpOffset], gBlockTable[blockBOffset],
-                                        layoutPTemp, layoutVTemp, actualBlockShapePV, delayedKvSIdx, kvSLoopNumNoMask,
-                                        pagedBlockSize, noMaskKvS, strideKV, softmaxReady);
+                            blockMmadPV(
+                                gP[gmPOffset], gV[gmVOffset], gOTmp[gmOTmpOffset], gBlockTable[blockBOffset],
+                                layoutPTemp, layoutVTemp, actualBlockShapePV, delayedKvSIdx, kvSLoopNumNoMask,
+                                pagedBlockSize, noMaskKvS, strideKV, softmaxReady
+                            );
                         }
                     }
                     Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(pvReady);
@@ -374,7 +397,8 @@ class FAInferKernel {
         AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(EVENT_ID7);
     }
 
-    template <> CATLASS_DEVICE void operator()<AscendC::AIV>(FAIKernelParams const &params) {
+    template <>
+    CATLASS_DEVICE void operator()<AscendC::AIV>(FAIKernelParams const &params) {
         AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
         AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID1);
         AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID2);
@@ -518,8 +542,10 @@ class FAInferKernel {
                 // AscendC::printf("stackSeqCount:%d\n", stackSeqCount);
                 Arch::CrossCoreWaitFlag(qkReady);
                 // online softmax
-                epilogueOnlineSoftmax(gP[gmOffsetP], gS[gmOffsetS], layOutP, layOutS, actualBlockShapeQK,
-                                      (stackSeqCount == 0), qSBlockSize, qNBlockSize, curStackTileMod);
+                epilogueOnlineSoftmax(
+                    gP[gmOffsetP], gS[gmOffsetS], layOutP, layOutS, actualBlockShapeQK, (stackSeqCount == 0),
+                    qSBlockSize, qNBlockSize, curStackTileMod
+                );
                 Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(softmaxReady);
 
                 if (kvSIdx >= preLaunch * blockStackNum) {
@@ -537,8 +563,10 @@ class FAInferKernel {
                                             + curStackTileMod * WORKSPACE_BLOCK_SIZE_DB;
                     Arch::CrossCoreWaitFlag(pvReady);
                     // rescale O
-                    epilogueRescaleO(gO[gmOffsetO], gOTmp[gmOffsetOTmp], layoutO, layoutOTmp, actualBlockShapePV,
-                                     qSBlockSize, qNBlockSize, (stackSeqCount - preLaunch == 0), 0, curStackTileMod);
+                    epilogueRescaleO(
+                        gO[gmOffsetO], gOTmp[gmOffsetOTmp], layoutO, layoutOTmp, actualBlockShapePV, qSBlockSize,
+                        qNBlockSize, (stackSeqCount - preLaunch == 0), 0, curStackTileMod
+                    );
                 }
                 stackSeqCount++;
             }
@@ -571,9 +599,10 @@ class FAInferKernel {
                     // vec core offset will be processed within epilogue block
                     uint32_t gmOffsetP = gmOffsetS;
                     // online softmax
-                    epilogueOnlineSoftmax(gP[gmOffsetP], gS[gmOffsetS], gMask, layOutP, layOutS, layOutMask,
-                                          actualBlockShapeQK, (stackSeqCount == 0), qSBlockSize, qNBlockSize,
-                                          curStackTileMod, qkReady);
+                    epilogueOnlineSoftmax(
+                        gP[gmOffsetP], gS[gmOffsetS], gMask, layOutP, layOutS, layOutMask, actualBlockShapeQK,
+                        (stackSeqCount == 0), qSBlockSize, qNBlockSize, curStackTileMod, qkReady
+                    );
                     Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(softmaxReady);
                 }
                 if (kvSIdx >= preLaunchStackNum) {
@@ -593,9 +622,11 @@ class FAInferKernel {
                                             + curStackTileMod * WORKSPACE_BLOCK_SIZE_DB;
                     Arch::CrossCoreWaitFlag(pvReady);
                     // rescale O
-                    epilogueRescaleO(gO[gmOffsetO], gOTmp[gmOffsetOTmp], layoutO, layoutOTmp, actualBlockShapePV,
-                                     qSBlockSize, qNBlockSize, (stackSeqCount - preLaunch == 0),
-                                     (stackSeqCount - preLaunch == totalStackSeqNum - 1), curStackTileMod);
+                    epilogueRescaleO(
+                        gO[gmOffsetO], gOTmp[gmOffsetOTmp], layoutO, layoutOTmp, actualBlockShapePV, qSBlockSize,
+                        qNBlockSize, (stackSeqCount - preLaunch == 0),
+                        (stackSeqCount - preLaunch == totalStackSeqNum - 1), curStackTileMod
+                    );
                 }
                 if ((maskType != 0) && (stackSeqCount - preLaunch == totalStackSeqNum - 2)) {
                     kvSIdx += noMaskTailInteStackNum;
@@ -627,20 +658,22 @@ class FAInferKernel {
     Arch::CrossCoreFlag pvReady{PV_READY_ID};
 };
 
-CATLASS_GLOBAL void FAInferFp16(uint64_t fftsAddr,
-                                GM_ADDR q,
-                                GM_ADDR k,
-                                GM_ADDR v,
-                                GM_ADDR mask,
-                                GM_ADDR blockTables,
-                                GM_ADDR o,
-                                GM_ADDR actualQseqlen,
-                                GM_ADDR actualKvseqlen,
-                                GM_ADDR s,
-                                GM_ADDR p,
-                                GM_ADDR oTemp,
-                                GM_ADDR oUpdate,
-                                GM_ADDR tiling) {
+CATLASS_GLOBAL void FAInferFp16(
+    uint64_t fftsAddr,
+    GM_ADDR q,
+    GM_ADDR k,
+    GM_ADDR v,
+    GM_ADDR mask,
+    GM_ADDR blockTables,
+    GM_ADDR o,
+    GM_ADDR actualQseqlen,
+    GM_ADDR actualKvseqlen,
+    GM_ADDR s,
+    GM_ADDR p,
+    GM_ADDR oTemp,
+    GM_ADDR oUpdate,
+    GM_ADDR tiling
+) {
     AscendC::SetSyncBaseAddr(fftsAddr);
 
     using ArchTag = Arch::AtlasA2;
@@ -706,8 +739,8 @@ CATLASS_GLOBAL void FAInferFp16(uint64_t fftsAddr,
 
     // Kernel level
     // using FAInferKernel = FAInferKernel<BlockMmadQK, BlockMmadPV, EpilogueOnlineSoftmax, EpilogueRescaleO, true>;
-    using FAInferKernel = FAInferKernel<BlockMmadQK, BlockMmadPV, BlockMmadQKTail, BlockMmadPVTail,
-                                        EpilogueOnlineSoftmax, EpilogueRescaleO, true>;
+    using FAInferKernel = FAInferKernel<
+        BlockMmadQK, BlockMmadPV, BlockMmadQKTail, BlockMmadPVTail, EpilogueOnlineSoftmax, EpilogueRescaleO, true>;
     FAIKernelParams params{q, k, v, mask, blockTables, actualQseqlen, actualKvseqlen, o, s, p, oTemp, oUpdate, tiling};
 
     // call kernel
@@ -715,20 +748,22 @@ CATLASS_GLOBAL void FAInferFp16(uint64_t fftsAddr,
     flashAttnInfer(params);
 }
 
-CATLASS_GLOBAL void FAInferBf16(uint64_t fftsAddr,
-                                GM_ADDR q,
-                                GM_ADDR k,
-                                GM_ADDR v,
-                                GM_ADDR mask,
-                                GM_ADDR blockTables,
-                                GM_ADDR o,
-                                GM_ADDR actualQseqlen,
-                                GM_ADDR actualKvseqlen,
-                                GM_ADDR s,
-                                GM_ADDR p,
-                                GM_ADDR oTemp,
-                                GM_ADDR oUpdate,
-                                GM_ADDR tiling) {
+CATLASS_GLOBAL void FAInferBf16(
+    uint64_t fftsAddr,
+    GM_ADDR q,
+    GM_ADDR k,
+    GM_ADDR v,
+    GM_ADDR mask,
+    GM_ADDR blockTables,
+    GM_ADDR o,
+    GM_ADDR actualQseqlen,
+    GM_ADDR actualKvseqlen,
+    GM_ADDR s,
+    GM_ADDR p,
+    GM_ADDR oTemp,
+    GM_ADDR oUpdate,
+    GM_ADDR tiling
+) {
     AscendC::SetSyncBaseAddr(fftsAddr);
 
     using ArchTag = Arch::AtlasA2;
@@ -794,8 +829,8 @@ CATLASS_GLOBAL void FAInferBf16(uint64_t fftsAddr,
 
     // Kernel level
     // using FAInferKernel = FAInferKernel<BlockMmadQK, BlockMmadPV, EpilogueOnlineSoftmax, EpilogueRescaleO, true>;
-    using FAInferKernel = FAInferKernel<BlockMmadQK, BlockMmadPV, BlockMmadQKTail, BlockMmadPVTail,
-                                        EpilogueOnlineSoftmax, EpilogueRescaleO, true>;
+    using FAInferKernel = FAInferKernel<
+        BlockMmadQK, BlockMmadPV, BlockMmadQKTail, BlockMmadPVTail, EpilogueOnlineSoftmax, EpilogueRescaleO, true>;
     FAIKernelParams params{q, k, v, mask, blockTables, actualQseqlen, actualKvseqlen, o, s, p, oTemp, oUpdate, tiling};
 
     // call kernel

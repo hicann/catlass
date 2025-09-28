@@ -39,7 +39,7 @@ using namespace Catlass;
 
 using Options = GemmOptions;
 
-static void Run(Options const &options) {
+static void Run(const Options &options) {
     aclrtStream stream{nullptr};
 
     ACL_CHECK(aclInit(nullptr));

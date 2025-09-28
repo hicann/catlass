@@ -32,8 +32,12 @@ using AddrOffsets = struct AddressOffsetInfo {
     uint64_t addrLSeqOffset = 0;
 };
 
-inline uint32_t GetHigh32Bit(uint64_t v) { return static_cast<uint32_t>(v >> NUM32); }
-inline uint32_t GetLow32Bit(uint64_t v) { return static_cast<uint32_t>(v); }
+inline uint32_t GetHigh32Bit(uint64_t v) {
+    return static_cast<uint32_t>(v >> NUM32);
+}
+inline uint32_t GetLow32Bit(uint64_t v) {
+    return static_cast<uint32_t>(v);
+}
 
 void GetAddrOffsetMLA(uint32_t *tilingHost, const AddrOffsets addrOffsets, const int32_t tilingOffset) {
     // Calculate address offset
@@ -105,11 +109,13 @@ int32_t GetQNBlockTile(const MLAInfo &mlaInfo, int32_t qSeqLen, uint32_t specStr
     return qNBlockTile;
 }
 
-void GetTilingHead(const MLAInfo &mlaInfo,
-                   uint32_t *tilingHost,
-                   const uint32_t *torPtr,
-                   int32_t maxQseqlen,
-                   uint32_t specStrategyFlag) {
+void GetTilingHead(
+    const MLAInfo &mlaInfo,
+    uint32_t *tilingHost,
+    const uint32_t *torPtr,
+    int32_t maxQseqlen,
+    uint32_t specStrategyFlag
+) {
     // Calculating tiling parameters
     tilingHost[TILING_BATCH] = static_cast<uint32_t>(mlaInfo.batch);
     tilingHost[TILING_HEADSIZE] = static_cast<uint32_t>(TILING_HEAD_SIZE);
