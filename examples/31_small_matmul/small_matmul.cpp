@@ -16,8 +16,16 @@
 
 #include "catlass/gemm/kernel/small_matmul.hpp"
 
+#ifdef ASCENDC_MODULE_OPERATOR_H
+#undef inline
+#endif
+
 #include <iostream>
 #include <vector>
+
+#ifdef ASCENDC_MODULE_OPERATOR_H
+#define inline __inline__ __attribute__((always_inline))
+#endif
 
 #include "catlass/arch/arch.hpp"
 #include "catlass/catlass.hpp"
@@ -43,13 +51,15 @@ using L1TileShape = GemmShape<128, 256, 256>;
 using L0TileShape = GemmShape<128, 256, 64>;
 
 template <class LayoutA, class LayoutB, class LayoutC>
-CATLASS_GLOBAL void SmallMatmul(GemmCoord problemShape,
-                                GM_ADDR gmA,
-                                LayoutA layoutA,
-                                GM_ADDR gmB,
-                                LayoutB layoutB,
-                                GM_ADDR gmC,
-                                LayoutC layoutC) {
+CATLASS_GLOBAL void SmallMatmul(
+    GemmCoord problemShape,
+    GM_ADDR gmA,
+    LayoutA layoutA,
+    GM_ADDR gmB,
+    LayoutB layoutB,
+    GM_ADDR gmC,
+    LayoutC layoutC
+) {
     using AType = Gemm::GemmType<half, LayoutA>;
     using BType = Gemm::GemmType<half, LayoutB>;
     using CType = Gemm::GemmType<half, LayoutC>;
@@ -125,8 +135,9 @@ static void Run(const Options &options) {
     uint8_t *deviceC{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
-    SmallMatmul<<<aicCoreNum, nullptr, stream>>>(options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC,
-                                                 layoutC);
+    SmallMatmul<<<aicCoreNum, nullptr, stream>>>(
+        options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC
+    );
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
     std::vector<fp16_t> hostC(lenC);

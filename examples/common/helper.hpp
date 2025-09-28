@@ -25,7 +25,7 @@
 #include <tiling/platform/platform_ascendc.h>
 
 #ifdef ASCENDC_MODULE_OPERATOR_H
-#inline __inline__ __attribute__((always_inline))
+#define inline __inline__ __attribute__((always_inline))
 #endif
 
 #include "catlass/layout/layout.hpp"
