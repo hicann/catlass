@@ -14,9 +14,6 @@
 #define K_MAX_SHAPE_DIM 0
 #endif
 
-#include <iostream>
-#include <vector>
-
 #include "catlass/arch/arch.hpp"
 #include "catlass/catlass.hpp"
 #include "catlass/conv/block/block_conv.hpp"
@@ -113,8 +110,10 @@ static void Run(const Options &options) {
     ACL_CHECK(aclrtSetDevice(options.deviceId));
     ACL_CHECK(aclrtCreateStream(&stream));
 
-    Conv3dParams problemShape = Conv3dParams::MakeConvCoord(options.fmapRelated.data(), options.filterRelated.data(), options.pads.data(),
-                                                            options.strides.data(), options.dilations.data());
+    Conv3dParams problemShape = Conv3dParams::MakeConvCoord(
+        options.fmapRelated.data(), options.filterRelated.data(), options.pads.data(), options.strides.data(),
+        options.dilations.data()
+    );
 
     uint32_t n = problemShape.batch();
     uint32_t di = problemShape.di();
@@ -195,8 +194,9 @@ static void Run(const Options &options) {
     using FilterL1TileShape = ConvFilterL1Shape<1, 1, 16>; // kd, c1, nBL1
     using L0TileShape = ConvL0Shape<16, 16, 16>;           // mL0 kL0 nL0
 
-    using BlockConv = Conv::Block::BlockConv<DispatchPolicy, CoreTileShape, FmapL1TileShape, FilterL1TileShape,
-                                             L0TileShape, FmapType, FilterType, OutType, BiasType>;
+    using BlockConv = Conv::Block::BlockConv<
+        DispatchPolicy, CoreTileShape, FmapL1TileShape, FilterL1TileShape, L0TileShape, FmapType, FilterType, OutType,
+        BiasType>;
     using BlockEpilogue = void;
 
     // Swizzle offset is 3 and direction is 0.

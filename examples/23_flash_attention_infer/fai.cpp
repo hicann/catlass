@@ -23,8 +23,7 @@
 using namespace std;
 
 // This code section describes the parameters to execute the run function.
-struct Options
-{
+struct Options {
     static constexpr auto HELPER =
         "Usage: fai batch qSeqlen kvSeqlen numHeads kvHeads embeddingSize isVariedLen maskType [--dtype DTYPE "
         "--datapath DATA_PATH --device DEVICE_ID]\n";
@@ -132,8 +131,9 @@ static void Run(const Options &options) {
     uint64_t kvSize = (uint64_t)numBlocks * (uint64_t)blockSize * (uint64_t)kvHeads * (uint64_t)embeddingSize
                       * sizeof(fp16_t);
     uint64_t maskSize = 1024 * 1024 * sizeof(fp16_t);
-    uint64_t blockTableSize = static_cast<uint64_t>(batch * ((maxKvSeqlen + blockSize - 1) / blockSize)
-                                                    * sizeof(int32_t));
+    uint64_t blockTableSize = static_cast<uint64_t>(
+        batch * ((maxKvSeqlen + blockSize - 1) / blockSize) * sizeof(int32_t)
+    );
     // ?????
     uint32_t tilingSize = sizeof(FATilingData);
 
@@ -246,13 +246,15 @@ static void Run(const Options &options) {
 
     for (int i = 0; i < 1; i++) {
         if (dataType == "half") {
-            FAInferFp16<<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, kDevice, vDevice, maskDevice,
-                                                       blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice,
-                                                       pDevice, oTempDevice, oUpdateDevice, tilingDevice);
+            FAInferFp16<<<blockDim, nullptr, stream>>>(
+                fftsAddr, qDevice, kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice,
+                sDevice, pDevice, oTempDevice, oUpdateDevice, tilingDevice
+            );
         } else {
-            FAInferBf16<<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, kDevice, vDevice, maskDevice,
-                                                       blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice,
-                                                       pDevice, oTempDevice, oUpdateDevice, tilingDevice);
+            FAInferBf16<<<blockDim, nullptr, stream>>>(
+                fftsAddr, qDevice, kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice,
+                sDevice, pDevice, oTempDevice, oUpdateDevice, tilingDevice
+            );
         }
         ACL_CHECK(aclrtSynchronizeStream(stream));
         // Copy the result from device to host

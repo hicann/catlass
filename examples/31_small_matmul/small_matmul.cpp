@@ -16,17 +16,6 @@
 
 #include "catlass/gemm/kernel/small_matmul.hpp"
 
-#ifdef ASCENDC_MODULE_OPERATOR_H
-#undef inline
-#endif
-
-#include <iostream>
-#include <vector>
-
-#ifdef ASCENDC_MODULE_OPERATOR_H
-#define inline __inline__ __attribute__((always_inline))
-#endif
-
 #include "catlass/arch/arch.hpp"
 #include "catlass/catlass.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"

@@ -14,9 +14,6 @@
 #define K_MAX_SHAPE_DIM 0
 #endif
 
-#include <iostream>
-#include <vector>
-
 #include "catlass/arch/arch.hpp"
 #include "catlass/catlass.hpp"
 #include "catlass/epilogue/block/block_epilogue.hpp"
@@ -122,10 +119,11 @@ static void Run(const Options &options) {
     ACL_CHECK(aclrtMemcpy(deviceScale, sizeScale, hostScale.data(), sizeScale, ACL_MEMCPY_HOST_TO_DEVICE));
 
     uint8_t *devicePerTokenScale{nullptr};
-    ACL_CHECK(
-        aclrtMalloc(reinterpret_cast<void **>(&devicePerTokenScale), sizePerTokenScale, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMemcpy(devicePerTokenScale, sizePerTokenScale, hostPerTokenScale.data(), sizePerTokenScale,
-                          ACL_MEMCPY_HOST_TO_DEVICE));
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&devicePerTokenScale), sizePerTokenScale, ACL_MEM_MALLOC_HUGE_FIRST)
+    );
+    ACL_CHECK(aclrtMemcpy(
+        devicePerTokenScale, sizePerTokenScale, hostPerTokenScale.data(), sizePerTokenScale, ACL_MEMCPY_HOST_TO_DEVICE
+    ));
 
     uint8_t *deviceD{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceD), sizeD, ACL_MEM_MALLOC_HUGE_FIRST));
@@ -151,8 +149,8 @@ static void Run(const Options &options) {
     constexpr uint32_t workspaceStages = 2;
     constexpr bool enableUnitFlag = false;
     constexpr bool enableShuffleK = true;
-    using DispatchPolicy = Gemm::MmadAtlasA2PreloadAsyncWithCallback<preloadStages, l1Stages, l0AStages, l0BStages,
-                                                                     l0CStages, enableUnitFlag, enableShuffleK>;
+    using DispatchPolicy = Gemm::MmadAtlasA2PreloadAsyncWithCallback<
+        preloadStages, l1Stages, l0AStages, l0BStages, l0CStages, enableUnitFlag, enableShuffleK>;
     using L1TileShape = GemmShape<128, 256, 512>;
     using L0TileShape = GemmShape<128, 256, 128>;
 
@@ -183,9 +181,9 @@ static void Run(const Options &options) {
     using TileCopy = Epilogue::Tile::TileCopy<ArchTag, CType, ScaleType, PerTokenScaleType, DType>;
     using TileScheduler = Epilogue::Tile::EpilogueHorizontalTileSwizzle;
 
-    using BlockEpilogue = Epilogue::Block::BlockEpilogue<EpilogueDispatchPolicy, CType, ScaleType, PerTokenScaleType,
-                                                         DType, TileRowBroadcastMul, TileBroadcastOneBlk,
-                                                         TileOneBlkColumnBroadcastMul, TileCopy, TileScheduler>;
+    using BlockEpilogue = Epilogue::Block::BlockEpilogue<
+        EpilogueDispatchPolicy, CType, ScaleType, PerTokenScaleType, DType, TileRowBroadcastMul, TileBroadcastOneBlk,
+        TileOneBlkColumnBroadcastMul, TileCopy, TileScheduler>;
 
     using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
 
@@ -215,9 +213,10 @@ static void Run(const Options &options) {
     ACL_CHECK(aclrtMemcpy(hostD.data(), sizeD, deviceD, sizeD, ACL_MEMCPY_DEVICE_TO_HOST));
 
     std::vector<float> hostGolden(lenD);
-    golden::ComputeGroupedMatmulPerTokenDequant(options.problemShape, problemCount, groupList, hostA, layoutA, hostB,
-                                                layoutB, hostScale, layoutScale, hostPerTokenScale, layoutPerTokenScale,
-                                                hostGolden, layoutD);
+    golden::ComputeGroupedMatmulPerTokenDequant(
+        options.problemShape, problemCount, groupList, hostA, layoutA, hostB, layoutB, hostScale, layoutScale,
+        hostPerTokenScale, layoutPerTokenScale, hostGolden, layoutD
+    );
 
     std::vector<uint64_t> errorIndices = golden::CompareData(hostD, hostGolden, k, groupList[problemCount - 1] * n);
     if (errorIndices.empty()) {

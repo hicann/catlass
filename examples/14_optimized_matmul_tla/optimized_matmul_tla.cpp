@@ -16,9 +16,6 @@
 
 #include "catlass/gemm/kernel/optimized_matmul_tla.hpp"
 
-#include <iostream>
-#include <vector>
-
 #include "catlass/arch/arch.hpp"
 #include "catlass/catlass.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
@@ -36,27 +33,39 @@
 using namespace Catlass;
 using namespace tla;
 
-template <class Layout> auto GetPaddingLayout(Layout layout, uint32_t blockRows, uint32_t blockCols) {
+template <class Layout>
+auto GetPaddingLayout(Layout layout, uint32_t blockRows, uint32_t blockCols) {
     if constexpr (std::is_same_v<Layout, layout::RowMajor>) {
-        auto shape = MakeShape(MakeShape(blockRows, CeilDiv(layout.shape(0), blockRows)),
-                               MakeShape(blockCols, CeilDiv(layout.shape(1), blockCols)));
-        auto stride = MakeStride(MakeStride(static_cast<int64_t>(blockCols),
-                                            static_cast<int64_t>(blockRows) * RoundUp(layout.shape(1), blockCols)),
-                                 MakeStride(Int<1>{}, static_cast<int64_t>(blockRows) * blockCols));
+        auto shape = MakeShape(
+            MakeShape(blockRows, CeilDiv(layout.shape(0), blockRows)),
+            MakeShape(blockCols, CeilDiv(layout.shape(1), blockCols))
+        );
+        auto stride = MakeStride(
+            MakeStride(
+                static_cast<int64_t>(blockCols), static_cast<int64_t>(blockRows) * RoundUp(layout.shape(1), blockCols)
+            ),
+            MakeStride(Int<1>{}, static_cast<int64_t>(blockRows) * blockCols)
+        );
         return MakeLayout(shape, stride);
     } else {
-        auto shape = MakeShape(MakeShape(blockRows, CeilDiv(layout.shape(0), blockRows)),
-                               MakeShape(blockCols, CeilDiv(layout.shape(1), blockCols)));
-        auto stride = MakeStride(MakeStride(Int<1>{}, static_cast<int64_t>(blockRows) * blockCols),
-                                 MakeStride(static_cast<int64_t>(blockRows),
-                                            RoundUp(layout.shape(0), blockRows) * static_cast<int64_t>(blockCols)));
+        auto shape = MakeShape(
+            MakeShape(blockRows, CeilDiv(layout.shape(0), blockRows)),
+            MakeShape(blockCols, CeilDiv(layout.shape(1), blockCols))
+        );
+        auto stride = MakeStride(
+            MakeStride(Int<1>{}, static_cast<int64_t>(blockRows) * blockCols),
+            MakeStride(
+                static_cast<int64_t>(blockRows), RoundUp(layout.shape(0), blockRows) * static_cast<int64_t>(blockCols)
+            )
+        );
         return MakeLayout(shape, stride);
     }
 }
 
 using Options = GemmOptions;
 
-template <class Layout> size_t GetWorkspaceLen(Layout layout, size_t blockRows, size_t blockCols) {
+template <class Layout>
+size_t GetWorkspaceLen(Layout layout, size_t blockRows, size_t blockCols) {
     return RoundUp(static_cast<size_t>(layout.shape(0)), blockRows)
            * RoundUp(static_cast<size_t>(layout.shape(1)), blockCols);
 }
@@ -93,9 +102,9 @@ static void Run(const Options &options) {
 
     // if LayoutA and LayoutB is both ColumnMajor,
     // L1TileShape using GemmShape<256, 128, 256> can achieve better performance.
-    using L1TileShape = std::conditional_t<std::is_same_v<LayoutTagA, layout::ColumnMajor>
-                                               && std::is_same_v<LayoutTagB, layout::ColumnMajor>,
-                                           Shape<_256, _128, _256>, Shape<_128, _256, _256>>;
+    using L1TileShape = std::conditional_t<
+        std::is_same_v<LayoutTagA, layout::ColumnMajor> && std::is_same_v<LayoutTagB, layout::ColumnMajor>,
+        Shape<_256, _128, _256>, Shape<_128, _256, _256>>;
     size_t sizeWA = GetWorkspaceLen(tagA, get<0>(L1TileShape{}), get<2>(L1TileShape{})) * sizeof(fp16_t);
     size_t sizeWB = GetWorkspaceLen(tagB, get<2>(L1TileShape{}), get<1>(L1TileShape{})) * sizeof(fp16_t);
 
@@ -152,33 +161,33 @@ static void Run(const Options &options) {
     auto layoutA = MakeLayoutFromTag(tagA);
     auto layoutB = MakeLayoutFromTag(tagB);
     auto layoutC = MakeLayoutFromTag(tagC);
-    using TensorA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutA), tla::Coord<tla::_0, tla::_0>,
-                           AscendC::TPosition::GM>;
-    using TensorB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutB), tla::Coord<tla::_0, tla::_0>,
-                           AscendC::TPosition::GM>;
-    using TensorC = Tensor<AscendC::GlobalTensor<ElementC>, decltype(layoutC), tla::Coord<tla::_0, tla::_0>,
-                           AscendC::TPosition::GM>;
+    using TensorA =
+        Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutA), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
+    using TensorB =
+        Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutB), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
+    using TensorC =
+        Tensor<AscendC::GlobalTensor<ElementC>, decltype(layoutC), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
 
     // if LayoutA and LayoutB is both ColumnMajor,
     // L1TileShape using GemmShape<256, 128, 256> can achieve better performance.
-    using L1TileShape = std::conditional_t<std::is_same_v<LayoutTagA, layout::ColumnMajor>
-                                               && std::is_same_v<LayoutTagB, layout::ColumnMajor>,
-                                           Shape<_256, _128, _256>, Shape<_128, _256, _256>>;
-    using L0TileShape = std::conditional_t<std::is_same_v<LayoutTagA, layout::ColumnMajor>
-                                               && std::is_same_v<LayoutTagB, layout::ColumnMajor>,
-                                           Shape<_256, _128, _64>, Shape<_128, _256, _64>>;
+    using L1TileShape = std::conditional_t<
+        std::is_same_v<LayoutTagA, layout::ColumnMajor> && std::is_same_v<LayoutTagB, layout::ColumnMajor>,
+        Shape<_256, _128, _256>, Shape<_128, _256, _256>>;
+    using L0TileShape = std::conditional_t<
+        std::is_same_v<LayoutTagA, layout::ColumnMajor> && std::is_same_v<LayoutTagB, layout::ColumnMajor>,
+        Shape<_256, _128, _64>, Shape<_128, _256, _64>>;
     if (!isNeedPaddingA && !isNeedPaddingB) {
         // no need to padding A and B.
         auto layoutWA = MakeLayout(layoutA.shape(), layoutA.stride());
         auto layoutWB = MakeLayout(layoutB.shape(), layoutB.stride());
-        using TensorWA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutWA), tla::Coord<tla::_0, tla::_0>,
-                                AscendC::TPosition::GM>;
-        using TensorWB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutWB), tla::Coord<tla::_0, tla::_0>,
-                                AscendC::TPosition::GM>;
-        using TileCopy = Gemm::Tile::PaddingPackedTileCopyTla<ArchTag, TensorWA, LayoutTagA, TensorWB, LayoutTagB,
-                                                              TensorC, LayoutTagC, void, void, false, false>;
-        using BlockMmad = Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB,
-                                                    TensorC, void, TileCopy>;
+        using TensorWA = Tensor<
+            AscendC::GlobalTensor<ElementA>, decltype(layoutWA), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
+        using TensorWB = Tensor<
+            AscendC::GlobalTensor<ElementB>, decltype(layoutWB), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
+        using TileCopy = Gemm::Tile::PaddingPackedTileCopyTla<
+            ArchTag, TensorWA, LayoutTagA, TensorWB, LayoutTagB, TensorC, LayoutTagC, void, void, false, false>;
+        using BlockMmad = Gemm::Block::BlockMmadTla<
+            DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB, TensorC, void, TileCopy>;
         using PaddingA = void;
         using PaddingB = void;
         if (options.problemShape.m() > options.problemShape.n()) {
@@ -206,7 +215,8 @@ static void Run(const Options &options) {
             sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
             if (sizeWorkspace > 0) {
                 ACL_CHECK(
-                    aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+                    aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
+                );
             }
             matmulOp.Initialize(arguments, deviceWorkspace);
             matmulOp(stream, aicCoreNum, fftsAddr);
@@ -235,7 +245,8 @@ static void Run(const Options &options) {
             sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
             if (sizeWorkspace > 0) {
                 ACL_CHECK(
-                    aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+                    aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
+                );
             }
             matmulOp.Initialize(arguments, deviceWorkspace);
             matmulOp(stream, aicCoreNum, fftsAddr);
@@ -244,14 +255,14 @@ static void Run(const Options &options) {
         // no need to padding A, but B needs padding.
         auto layoutWA = MakeLayout(layoutA.shape(), layoutA.stride());
         auto layoutWB = GetPaddingLayout(tagB, get<2>(L1TileShape{}), get<1>(L1TileShape{}));
-        using TensorWA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutWA), tla::Coord<tla::_0, tla::_0>,
-                                AscendC::TPosition::GM>;
-        using TensorWB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutWB), tla::Coord<tla::_0, tla::_0>,
-                                AscendC::TPosition::GM>;
-        using TileCopy = Gemm::Tile::PaddingPackedTileCopyTla<ArchTag, TensorWA, LayoutTagA, TensorWB, LayoutTagB,
-                                                              TensorC, LayoutTagC, void, void, false, true>;
-        using BlockMmad = Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB,
-                                                    TensorC, void, TileCopy>;
+        using TensorWA = Tensor<
+            AscendC::GlobalTensor<ElementA>, decltype(layoutWA), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
+        using TensorWB = Tensor<
+            AscendC::GlobalTensor<ElementB>, decltype(layoutWB), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
+        using TileCopy = Gemm::Tile::PaddingPackedTileCopyTla<
+            ArchTag, TensorWA, LayoutTagA, TensorWB, LayoutTagB, TensorC, LayoutTagC, void, void, false, true>;
+        using BlockMmad = Gemm::Block::BlockMmadTla<
+            DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB, TensorC, void, TileCopy>;
         using PaddingA = void;
         constexpr const uint32_t computeLengthB = 96 * 1024 / sizeof(ElementB);
         using PaddingB = Catlass::Gemm::Kernel::PaddingMatrixBlockND<ArchTag, TensorB, TensorWB, computeLengthB>;
@@ -280,7 +291,8 @@ static void Run(const Options &options) {
             sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
             if (sizeWorkspace > 0) {
                 ACL_CHECK(
-                    aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+                    aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
+                );
             }
             matmulOp.Initialize(arguments, deviceWorkspace);
             matmulOp(stream, aicCoreNum, fftsAddr);
@@ -309,7 +321,8 @@ static void Run(const Options &options) {
             sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
             if (sizeWorkspace > 0) {
                 ACL_CHECK(
-                    aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+                    aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
+                );
             }
             matmulOp.Initialize(arguments, deviceWorkspace);
             matmulOp(stream, aicCoreNum, fftsAddr);
@@ -318,14 +331,14 @@ static void Run(const Options &options) {
         // no need to padding B, but A needs padding.
         auto layoutWA = GetPaddingLayout(tagA, get<0>(L1TileShape{}), get<2>(L1TileShape{}));
         auto layoutWB = MakeLayout(layoutB.shape(), layoutB.stride());
-        using TensorWA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutWA), tla::Coord<tla::_0, tla::_0>,
-                                AscendC::TPosition::GM>;
-        using TensorWB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutWB), tla::Coord<tla::_0, tla::_0>,
-                                AscendC::TPosition::GM>;
-        using TileCopy = Gemm::Tile::PaddingPackedTileCopyTla<ArchTag, TensorWA, LayoutTagA, TensorWB, LayoutTagB,
-                                                              TensorC, LayoutTagC, void, void, true, false>;
-        using BlockMmad = Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB,
-                                                    TensorC, void, TileCopy>;
+        using TensorWA = Tensor<
+            AscendC::GlobalTensor<ElementA>, decltype(layoutWA), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
+        using TensorWB = Tensor<
+            AscendC::GlobalTensor<ElementB>, decltype(layoutWB), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
+        using TileCopy = Gemm::Tile::PaddingPackedTileCopyTla<
+            ArchTag, TensorWA, LayoutTagA, TensorWB, LayoutTagB, TensorC, LayoutTagC, void, void, true, false>;
+        using BlockMmad = Gemm::Block::BlockMmadTla<
+            DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB, TensorC, void, TileCopy>;
         constexpr const uint32_t computeLengthA = 96 * 1024 / sizeof(ElementA);
         using PaddingA = Catlass::Gemm::Kernel::PaddingMatrixBlockND<ArchTag, TensorA, TensorWA, computeLengthA>;
         using PaddingB = void;
@@ -354,7 +367,8 @@ static void Run(const Options &options) {
             sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
             if (sizeWorkspace > 0) {
                 ACL_CHECK(
-                    aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+                    aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
+                );
             }
             matmulOp.Initialize(arguments, deviceWorkspace);
             matmulOp(stream, aicCoreNum, fftsAddr);
@@ -383,7 +397,8 @@ static void Run(const Options &options) {
             sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
             if (sizeWorkspace > 0) {
                 ACL_CHECK(
-                    aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+                    aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
+                );
             }
             matmulOp.Initialize(arguments, deviceWorkspace);
             matmulOp(stream, aicCoreNum, fftsAddr);
@@ -392,14 +407,14 @@ static void Run(const Options &options) {
         // Both A and B need padding.
         auto layoutWA = GetPaddingLayout(tagA, get<0>(L1TileShape{}), get<2>(L1TileShape{}));
         auto layoutWB = GetPaddingLayout(tagB, get<2>(L1TileShape{}), get<1>(L1TileShape{}));
-        using TensorWA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutWA), tla::Coord<tla::_0, tla::_0>,
-                                AscendC::TPosition::GM>;
-        using TensorWB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutWB), tla::Coord<tla::_0, tla::_0>,
-                                AscendC::TPosition::GM>;
-        using TileCopy = Gemm::Tile::PaddingPackedTileCopyTla<ArchTag, TensorWA, LayoutTagA, TensorWB, LayoutTagB,
-                                                              TensorC, LayoutTagC, void, void, true, true>;
-        using BlockMmad = Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB,
-                                                    TensorC, void, TileCopy>;
+        using TensorWA = Tensor<
+            AscendC::GlobalTensor<ElementA>, decltype(layoutWA), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
+        using TensorWB = Tensor<
+            AscendC::GlobalTensor<ElementB>, decltype(layoutWB), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
+        using TileCopy = Gemm::Tile::PaddingPackedTileCopyTla<
+            ArchTag, TensorWA, LayoutTagA, TensorWB, LayoutTagB, TensorC, LayoutTagC, void, void, true, true>;
+        using BlockMmad = Gemm::Block::BlockMmadTla<
+            DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB, TensorC, void, TileCopy>;
         constexpr const uint32_t computeLengthA = 96 * 1024 / sizeof(ElementA);
         using PaddingA = Catlass::Gemm::Kernel::PaddingMatrixBlockND<ArchTag, TensorA, TensorWA, computeLengthA>;
         constexpr const uint32_t computeLengthB = 96 * 1024 / sizeof(ElementB);
@@ -429,7 +444,8 @@ static void Run(const Options &options) {
             sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
             if (sizeWorkspace > 0) {
                 ACL_CHECK(
-                    aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+                    aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
+                );
             }
             matmulOp.Initialize(arguments, deviceWorkspace);
             matmulOp(stream, aicCoreNum, fftsAddr);
@@ -458,7 +474,8 @@ static void Run(const Options &options) {
             sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
             if (sizeWorkspace > 0) {
                 ACL_CHECK(
-                    aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+                    aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
+                );
             }
             matmulOp.Initialize(arguments, deviceWorkspace);
             matmulOp(stream, aicCoreNum, fftsAddr);

@@ -17,6 +17,7 @@
 #include <cstdio>
 #include <fstream>
 #include <iostream>
+#include <vector>
 
 #include <acl/acl.h>
 #include <opdev/bfloat16.h>
@@ -86,11 +87,13 @@ inline bool ReadFile(const std::string &filePath, void *buffer, size_t bufferSiz
 }
 
 template <class Adapter>
-inline void RunAdapter(Adapter opAdapter,
-                       typename Adapter::Arguments args,
-                       aclrtStream stream,
-                       uint32_t coreNum,
-                       uint64_t fftsAddr = 0) {
+inline void RunAdapter(
+    Adapter opAdapter,
+    typename Adapter::Arguments args,
+    aclrtStream stream,
+    uint32_t coreNum,
+    uint64_t fftsAddr = 0
+) {
     size_t sizeWorkspace = opAdapter.GetWorkspaceSize(args);
     uint8_t *deviceWorkspace = nullptr;
     if (sizeWorkspace > 0) {
@@ -123,9 +126,13 @@ inline bool IsNeedPadding(layout::ColumnMajor layout, uint32_t align) {
     }
 }
 
-inline bool IsNeedPadding(layout::zN layout, uint32_t align) { return false; }
+inline bool IsNeedPadding(layout::zN layout, uint32_t align) {
+    return false;
+}
 
-inline bool IsNeedPadding(layout::nZ layout, uint32_t align) { return false; }
+inline bool IsNeedPadding(layout::nZ layout, uint32_t align) {
+    return false;
+}
 } // namespace Catlass
 
 #endif // EXAMPLES_COMMON_HELPER_HPP

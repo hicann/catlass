@@ -16,9 +16,6 @@
 
 #include "catlass/gemm/kernel/grouped_matmul_slice_k.hpp"
 
-#include <iostream>
-#include <vector>
-
 #include "catlass/arch/arch.hpp"
 #include "catlass/catlass.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
@@ -102,8 +99,8 @@ static void Run(const Options &options) {
     constexpr bool enableShuffleK = true;
 
     using ArchTag = Arch::AtlasA2;
-    using DispatchPolicy = Gemm::MmadAtlasA2PreloadAsync<preloadStages, l1Stages, l0AStages, l0BStages, l0CStages,
-                                                         enableUnitFlag, enableShuffleK>;
+    using DispatchPolicy = Gemm::MmadAtlasA2PreloadAsync<
+        preloadStages, l1Stages, l0AStages, l0BStages, l0CStages, enableUnitFlag, enableShuffleK>;
     using L1TileShape = GemmShape<128, 256, 256>;
     using L0TileShape = GemmShape<128, 256, 64>;
 
@@ -153,8 +150,9 @@ static void Run(const Options &options) {
     }
 
     std::vector<float> hostGolden(lenC);
-    golden::ComputeGroupedMatmul(problemCount, problemShapeList, hostA, layoutAList, hostB, layoutBList, hostGolden,
-                                 layoutCList);
+    golden::ComputeGroupedMatmul(
+        problemCount, problemShapeList, hostA, layoutAList, hostB, layoutBList, hostGolden, layoutCList
+    );
 
     std::vector<uint64_t> errorIndices = golden::CompareData(hostC, hostGolden, k);
     if (errorIndices.empty()) {

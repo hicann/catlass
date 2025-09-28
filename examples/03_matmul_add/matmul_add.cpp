@@ -14,9 +14,6 @@
 #define K_MAX_SHAPE_DIM 0
 #endif
 
-#include <iostream>
-#include <vector>
-
 #include "catlass/arch/arch.hpp"
 #include "catlass/catlass.hpp"
 #include "catlass/epilogue/block/block_epilogue.hpp"
@@ -119,8 +116,8 @@ static void Run(const Options &options) {
     constexpr uint32_t computeLength = 16384;
     using TileElemWiseEpilogue = Epilogue::Tile::TileElemWiseAdd<ArchTag, ComputeType, computeLength>;
     using EpilogueTileCopy = Epilogue::Tile::TileCopy<ArchTag, CType, XType, DType>;
-    using BlockEpilogue = Epilogue::Block::BlockEpilogue<EpilogueDispatchPolicy, CType, XType, DType,
-                                                         TileElemWiseEpilogue, EpilogueTileCopy>;
+    using BlockEpilogue = Epilogue::Block::BlockEpilogue<
+        EpilogueDispatchPolicy, CType, XType, DType, TileElemWiseEpilogue, EpilogueTileCopy>;
     std::vector<fp16_t> hostD(lenD);
     if (m > n) {
         // Define BlockScheduler
@@ -135,8 +132,8 @@ static void Run(const Options &options) {
         size_t sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
         uint8_t *deviceWorkspace{nullptr};
         if (sizeWorkspace > 0) {
-            ACL_CHECK(
-                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+            ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
+            );
         }
         matmulOp.Initialize(arguments, deviceWorkspace);
         matmulOp(stream, aicCoreNum, fftsAddr);
@@ -160,8 +157,8 @@ static void Run(const Options &options) {
         size_t sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
         uint8_t *deviceWorkspace{nullptr};
         if (sizeWorkspace > 0) {
-            ACL_CHECK(
-                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+            ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
+            );
         }
         matmulOp.Initialize(arguments, deviceWorkspace);
         matmulOp(stream, aicCoreNum, fftsAddr);

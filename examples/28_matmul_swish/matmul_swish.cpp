@@ -14,9 +14,6 @@
 #define K_MAX_SHAPE_DIM 0
 #endif
 
-#include <iostream>
-#include <vector>
-
 #include "catlass/arch/arch.hpp"
 #include "catlass/catlass.hpp"
 #include "catlass/epilogue/block/block_epilogue.hpp"
@@ -115,10 +112,11 @@ static void Run(const Options &options) {
 
     constexpr uint32_t computeLength = 16384; // 64 * 128 * 2B
     using TileElemWiseEpilogue = Epilogue::Tile::TileElemWiseSwish<ArchTag, CType, computeLength>;
-    using EpilogueTileCopy = Epilogue::Tile::TileCopy<ArchTag,
-                                                      CType, // CopyGmtoUbC
-                                                      DType  // CopyUbtoGmD
-                                                      >;
+    using EpilogueTileCopy = Epilogue::Tile::TileCopy<
+        ArchTag,
+        CType, // CopyGmtoUbC
+        DType  // CopyUbtoGmD
+        >;
     using BlockEpilogue =
         Epilogue::Block::BlockEpilogue<EpilogueDispatchPolicy, CType, DType, TileElemWiseEpilogue, EpilogueTileCopy>;
     std::vector<fp16_t> hostD(lenD);

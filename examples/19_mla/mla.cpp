@@ -152,8 +152,9 @@ static void Run(const Options &options) {
     uint64_t kRopeSize = (uint64_t)numBlocks * (uint64_t)blockSize * (uint64_t)kvHeads * (uint64_t)embeddingSizeRope
                          * sizeof(fp16_t);
     uint64_t maskSize = (uint64_t)numTokens * (uint64_t)maxKvSeqlen * sizeof(fp16_t);
-    uint64_t blockTableSize = static_cast<uint64_t>(batch * ((maxKvSeqlen + blockSize - 1) / blockSize)
-                                                    * sizeof(int32_t));
+    uint64_t blockTableSize = static_cast<uint64_t>(
+        batch * ((maxKvSeqlen + blockSize - 1) / blockSize) * sizeof(int32_t)
+    );
     uint32_t tilingSize = (MLATiling::TILING_HEAD_SIZE + batch * MLATiling::TILING_PARA_SIZE) * sizeof(int32_t);
     if (specStraKey) {
         tilingSize = (MLATiling::TILING_HEAD_SIZE + numTokens * MLATiling::TILING_PARA_SIZE) * sizeof(int32_t);
@@ -196,23 +197,28 @@ static void Run(const Options &options) {
 
     // Allocate matrices in device memory for workspace.
     uint8_t *sDevice;
-    ACL_CHECK(aclrtMalloc((void **)(&sDevice),
-                          aicCoreNum * MLATiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(float) * MLATiling::NUM2,
-                          ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc(
+        (void **)(&sDevice), aicCoreNum * MLATiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(float) * MLATiling::NUM2,
+        ACL_MEM_MALLOC_HUGE_FIRST
+    ));
 
     uint8_t *pDevice;
-    ACL_CHECK(aclrtMalloc((void **)(&pDevice),
-                          aicCoreNum * MLATiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(fp16_t) * MLATiling::NUM2,
-                          ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc(
+        (void **)(&pDevice), aicCoreNum * MLATiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(fp16_t) * MLATiling::NUM2,
+        ACL_MEM_MALLOC_HUGE_FIRST
+    ));
 
     uint8_t *oTmpDevice;
-    ACL_CHECK(aclrtMalloc((void **)(&oTmpDevice),
-                          aicCoreNum * MLATiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(float) * MLATiling::NUM2,
-                          ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc(
+        (void **)(&oTmpDevice), aicCoreNum * MLATiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(float) * MLATiling::NUM2,
+        ACL_MEM_MALLOC_HUGE_FIRST
+    ));
 
     uint8_t *globaloDevice;
-    ACL_CHECK(aclrtMalloc((void **)(&globaloDevice), aicCoreNum * MLATiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(float),
-                          ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc(
+        (void **)(&globaloDevice), aicCoreNum * MLATiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(float),
+        ACL_MEM_MALLOC_HUGE_FIRST
+    ));
 
     uint8_t *oDevice{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&oDevice), static_cast<size_t>(qoSize), ACL_MEM_MALLOC_HUGE_FIRST));
@@ -259,24 +265,28 @@ static void Run(const Options &options) {
     // use Tp1Spec kernel to get better performance when numHeads = 128
     switch (tilingKey) {
     case 0:
-        MLAFp16<<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice,
-                                               oDevice, sDevice, pDevice, oTmpDevice, globaloDevice, oCoreTmpDevice,
-                                               lDevice, tilingDevice);
+        MLAFp16<<<blockDim, nullptr, stream>>>(
+            fftsAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oDevice, sDevice, pDevice,
+            oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice
+        );
         break;
     case 1:
-        MLABf16<<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice,
-                                               oDevice, sDevice, pDevice, oTmpDevice, globaloDevice, oCoreTmpDevice,
-                                               lDevice, tilingDevice);
+        MLABf16<<<blockDim, nullptr, stream>>>(
+            fftsAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oDevice, sDevice, pDevice,
+            oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice
+        );
         break;
     case 4:
-        MLATp1SpecFp16<<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, qRopeDevice, kDevice, kRopeDevice,
-                                                      blockTableDevice, oDevice, sDevice, pDevice, oTmpDevice,
-                                                      globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
+        MLATp1SpecFp16<<<blockDim, nullptr, stream>>>(
+            fftsAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oDevice, sDevice, pDevice,
+            oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice
+        );
         break;
     case 5:
-        MLATp1SpecBf16<<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, qRopeDevice, kDevice, kRopeDevice,
-                                                      blockTableDevice, oDevice, sDevice, pDevice, oTmpDevice,
-                                                      globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
+        MLATp1SpecBf16<<<blockDim, nullptr, stream>>>(
+            fftsAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oDevice, sDevice, pDevice,
+            oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice
+        );
         break;
     default:
         break;

@@ -17,8 +17,6 @@
 #include "catlass/gemm/kernel/group_gemm.hpp"
 
 #include <cstring>
-#include <iostream>
-#include <vector>
 
 #include "catlass/arch/arch.hpp"
 #include "catlass/catlass.hpp"
@@ -54,7 +52,14 @@ struct Options {
     Options() = default;
 
     int Parse(int argc, const char **argv) {
-        enum class ArgsIndex { GROUPCNT_INDEX = 1, MLIST_INDEX, NLIST_INDEX, KLIST_INDEX, DEVICE_ID_INDEX, ARGS_MAX };
+        enum class ArgsIndex {
+            GROUPCNT_INDEX = 1,
+            MLIST_INDEX,
+            NLIST_INDEX,
+            KLIST_INDEX,
+            DEVICE_ID_INDEX,
+            ARGS_MAX
+        };
 
         if (argc > static_cast<uint32_t>(ArgsIndex::ARGS_MAX)
             || argc <= static_cast<uint32_t>(ArgsIndex::KLIST_INDEX)) {
@@ -79,7 +84,7 @@ struct Options {
         return 0;
     }
 
-  private:
+private:
     void parseList(const char *str, std::vector<uint32_t> &list) {
         char *copy = strdup(str);
         char *token = std::strtok(copy, ",");
@@ -105,9 +110,13 @@ inline layout::ColumnMajor GetWorkspaceLayout(layout::ColumnMajor layout, uint32
     return layout::ColumnMajor(layout.shape(0), layout.shape(1), RoundUp(layout.shape(0), align));
 }
 
-inline size_t GetWorkspaceLen(layout::RowMajor layout) { return layout.shape(0) * layout.stride(0); }
+inline size_t GetWorkspaceLen(layout::RowMajor layout) {
+    return layout.shape(0) * layout.stride(0);
+}
 
-inline size_t GetWorkspaceLen(layout::ColumnMajor layout) { return layout.shape(1) * layout.stride(1); }
+inline size_t GetWorkspaceLen(layout::ColumnMajor layout) {
+    return layout.shape(1) * layout.stride(1);
+}
 
 inline bool IsSameStride(layout::RowMajor layout1, layout::RowMajor layout2) {
     return layout1.stride(0) == layout2.stride(0);
@@ -204,40 +213,48 @@ static void Run(Options &options) {
 
     uint8_t *problemShapeListDevice{nullptr};
     size_t sizeProblemShapeList = problemShapeList.size() * sizeof(GemmCoord);
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&problemShapeListDevice), sizeProblemShapeList,
-                          ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMemcpy(problemShapeListDevice, sizeProblemShapeList, problemShapeList.data(), sizeProblemShapeList,
-                          ACL_MEMCPY_HOST_TO_DEVICE));
+    ACL_CHECK(
+        aclrtMalloc(reinterpret_cast<void **>(&problemShapeListDevice), sizeProblemShapeList, ACL_MEM_MALLOC_HUGE_FIRST)
+    );
+    ACL_CHECK(aclrtMemcpy(
+        problemShapeListDevice, sizeProblemShapeList, problemShapeList.data(), sizeProblemShapeList,
+        ACL_MEMCPY_HOST_TO_DEVICE
+    ));
 
     uint8_t *layoutAListDevice{nullptr};
     size_t sizeLayoutAList = layoutAList.size() * sizeof(LayoutA);
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&layoutAListDevice), sizeLayoutAList, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMemcpy(layoutAListDevice, sizeLayoutAList, layoutAList.data(), sizeLayoutAList,
-                          ACL_MEMCPY_HOST_TO_DEVICE));
+    ACL_CHECK(
+        aclrtMemcpy(layoutAListDevice, sizeLayoutAList, layoutAList.data(), sizeLayoutAList, ACL_MEMCPY_HOST_TO_DEVICE)
+    );
 
     uint8_t *layoutBListDevice{nullptr};
     size_t sizeLayoutBList = layoutBList.size() * sizeof(LayoutB);
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&layoutBListDevice), sizeLayoutBList, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMemcpy(layoutBListDevice, sizeLayoutBList, layoutBList.data(), sizeLayoutBList,
-                          ACL_MEMCPY_HOST_TO_DEVICE));
+    ACL_CHECK(
+        aclrtMemcpy(layoutBListDevice, sizeLayoutBList, layoutBList.data(), sizeLayoutBList, ACL_MEMCPY_HOST_TO_DEVICE)
+    );
 
     uint8_t *layoutXListDevice{nullptr};
     size_t sizeLayoutXList = layoutXList.size() * sizeof(LayoutX);
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&layoutXListDevice), sizeLayoutXList, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMemcpy(layoutXListDevice, sizeLayoutXList, layoutXList.data(), sizeLayoutXList,
-                          ACL_MEMCPY_HOST_TO_DEVICE));
+    ACL_CHECK(
+        aclrtMemcpy(layoutXListDevice, sizeLayoutXList, layoutXList.data(), sizeLayoutXList, ACL_MEMCPY_HOST_TO_DEVICE)
+    );
 
     uint8_t *layoutWAListDevice{nullptr};
     size_t sizeLayoutWAList = layoutWAList.size() * sizeof(LayoutA);
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&layoutWAListDevice), sizeLayoutWAList, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMemcpy(layoutWAListDevice, sizeLayoutWAList, layoutWAList.data(), sizeLayoutWAList,
-                          ACL_MEMCPY_HOST_TO_DEVICE));
+    ACL_CHECK(aclrtMemcpy(
+        layoutWAListDevice, sizeLayoutWAList, layoutWAList.data(), sizeLayoutWAList, ACL_MEMCPY_HOST_TO_DEVICE
+    ));
 
     uint8_t *layoutWBListDevice{nullptr};
     size_t sizeLayoutWBList = layoutWBList.size() * sizeof(LayoutB);
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&layoutWBListDevice), sizeLayoutWBList, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMemcpy(layoutWBListDevice, sizeLayoutWBList, layoutWBList.data(), sizeLayoutWBList,
-                          ACL_MEMCPY_HOST_TO_DEVICE));
+    ACL_CHECK(aclrtMemcpy(
+        layoutWBListDevice, sizeLayoutWBList, layoutWBList.data(), sizeLayoutWBList, ACL_MEMCPY_HOST_TO_DEVICE
+    ));
 
     // Prepare FFTS address
     uint64_t fftsAddr{0};
@@ -266,9 +283,9 @@ static void Run(Options &options) {
     using TileElemWiseMulsGemm = Epilogue::Tile::TileElemWiseMuls<ArchTag, ComputeType, computeLength>;
     using TileElemWistCastD = Epilogue::Tile::TileCast<ArchTag, DType, ComputeType, TileShapeCast>;
     using EpilogueTileCopy = Epilogue::Tile::TileCopy<ArchTag, CType, XType, DType>;
-    using EpilogueBlock =
-        Epilogue::Block::BlockEpilogue<EpilogueBlockDispatchPolicy, CType, XType, DType, TileElemWiseAddGemm,
-                                       TileElemWiseMulsGemm, TileElemWistCastD, EpilogueTileCopy>;
+    using EpilogueBlock = Epilogue::Block::BlockEpilogue<
+        EpilogueBlockDispatchPolicy, CType, XType, DType, TileElemWiseAddGemm, TileElemWiseMulsGemm, TileElemWistCastD,
+        EpilogueTileCopy>;
     using GroupGemmKernel = Gemm::Kernel::KernelGroupGemm<GemmBlock, EpilogueBlock>;
     typename GroupGemmKernel::Arguments arguments{groupCnt,    problemShapeListDevice, deviceAlpha, deviceBeta,
                                                   deviceA,     layoutAListDevice,      deviceB,     layoutBListDevice,
@@ -282,8 +299,10 @@ static void Run(Options &options) {
     std::vector<fp16_t> hostRes(allMNCnt);
     ACL_CHECK(aclrtMemcpy(hostRes.data(), sizeX, deviceX, sizeX, ACL_MEMCPY_DEVICE_TO_HOST));
     std::vector<float> hostGolden(allMNCnt);
-    golden::ComputeGroupGemm(groupCnt, problemShapeList, hostAlpha, hostBeta, hostA, layoutAList, hostB, layoutBList,
-                             hostX, layoutXList, hostGolden, layoutXList);
+    golden::ComputeGroupGemm(
+        groupCnt, problemShapeList, hostAlpha, hostBeta, hostA, layoutAList, hostB, layoutBList, hostX, layoutXList,
+        hostGolden, layoutXList
+    );
 
     std::vector<uint64_t> errorIndices = golden::CompareData(hostRes, hostGolden, allMNCnt);
     if (errorIndices.empty()) {

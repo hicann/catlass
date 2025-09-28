@@ -16,9 +16,6 @@
 
 #include "catlass/gemm/kernel/matmul_full_loadA.hpp"
 
-#include <iostream>
-#include <vector>
-
 #include "catlass/arch/arch.hpp"
 #include "catlass/catlass.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
@@ -121,8 +118,8 @@ static void Run(const Options &options) {
         size_t sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
         uint8_t *deviceWorkspace = nullptr;
         if (sizeWorkspace > 0) {
-            ACL_CHECK(
-                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+            ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
+            );
         }
         matmulOp.Initialize(arguments, deviceWorkspace);
         matmulOp(stream, aicCoreNum);
@@ -144,8 +141,8 @@ static void Run(const Options &options) {
         size_t sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
         uint8_t *deviceWorkspace = nullptr;
         if (sizeWorkspace > 0) {
-            ACL_CHECK(
-                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+            ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
+            );
         }
         matmulOp.Initialize(arguments, deviceWorkspace);
         matmulOp(stream, aicCoreNum);

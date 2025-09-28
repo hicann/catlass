@@ -16,9 +16,6 @@
 
 #include "catlass/gemm/kernel/gemm.hpp"
 
-#include <iostream>
-#include <vector>
-
 #include "catlass/arch/arch.hpp"
 #include "catlass/catlass.hpp"
 #include "catlass/epilogue/block/block_epilogue.hpp"
@@ -59,9 +56,13 @@ inline layout::ColumnMajor GetWorkspaceLayout(layout::ColumnMajor layout, uint32
     return layout::ColumnMajor(layout.shape(0), layout.shape(1), RoundUp(layout.shape(0), align));
 }
 
-inline size_t GetWorkspaceLen(layout::RowMajor layout) { return layout.shape(0) * layout.stride(0); }
+inline size_t GetWorkspaceLen(layout::RowMajor layout) {
+    return layout.shape(0) * layout.stride(0);
+}
 
-inline size_t GetWorkspaceLen(layout::ColumnMajor layout) { return layout.shape(1) * layout.stride(1); }
+inline size_t GetWorkspaceLen(layout::ColumnMajor layout) {
+    return layout.shape(1) * layout.stride(1);
+}
 
 inline bool IsSameStride(layout::RowMajor layout1, layout::RowMajor layout2) {
     return layout1.stride(0) == layout2.stride(0);
@@ -74,7 +75,8 @@ inline bool IsSameStride(layout::ColumnMajor layout1, layout::ColumnMajor layout
 template <class ElementRandom>
 void FillRandomScalarData(ElementRandom &scalarData, ElementRandom low, ElementRandom high) {
     scalarData = static_cast<ElementRandom>(
-        low + (static_cast<ElementRandom>(rand()) / static_cast<ElementRandom>(RAND_MAX)) * (high - low));
+        low + (static_cast<ElementRandom>(rand()) / static_cast<ElementRandom>(RAND_MAX)) * (high - low)
+    );
 }
 
 static void Run(Options options) {
@@ -172,9 +174,9 @@ static void Run(Options options) {
     using TileElemWiseMulsGemm = Epilogue::Tile::TileElemWiseMuls<ArchTag, ComputeType, computeLength>;
     using TileElemWiseCastD = Epilogue::Tile::TileCast<ArchTag, DType, ComputeType, TileShapeCast>;
     using EpilogueTileCopy = Epilogue::Tile::TileCopy<ArchTag, CType, XType, DType>;
-    using EpilogueBlock =
-        Epilogue::Block::BlockEpilogue<EpilogueBlockDispatchPolicy, CType, XType, DType, TileElemWiseAddGemm,
-                                       TileElemWiseMulsGemm, TileElemWiseCastD, EpilogueTileCopy>;
+    using EpilogueBlock = Epilogue::Block::BlockEpilogue<
+        EpilogueBlockDispatchPolicy, CType, XType, DType, TileElemWiseAddGemm, TileElemWiseMulsGemm, TileElemWiseCastD,
+        EpilogueTileCopy>;
     using GemmKernel = Gemm::Kernel::KernelGemm<GemmBlock, EpilogueBlock>;
     typename EpilogueBlock::Params epilogueParams{alpha, beta, deviceX, layoutX, deviceX, layoutX};
     typename GemmKernel::Arguments arguments{options.problemShape, align,    deviceA,  deviceB,
@@ -187,8 +189,9 @@ static void Run(Options options) {
     std::vector<float> hostRes(lenX);
     ACL_CHECK(aclrtMemcpy(hostRes.data(), sizeX, deviceX, sizeX, ACL_MEMCPY_DEVICE_TO_HOST));
     std::vector<float> hostGolden(lenX);
-    golden::ComputeGemm(options.problemShape, alpha, beta, hostA, layoutA, hostB, layoutB, hostX, layoutX, hostGolden,
-                        layoutX);
+    golden::ComputeGemm(
+        options.problemShape, alpha, beta, hostA, layoutA, hostB, layoutB, hostX, layoutX, hostGolden, layoutX
+    );
 
     std::vector<uint64_t> errorIndices = golden::CompareData(hostRes, hostGolden, m * n);
     if (errorIndices.empty()) {

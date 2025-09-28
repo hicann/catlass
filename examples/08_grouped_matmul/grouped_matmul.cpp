@@ -16,9 +16,6 @@
 
 #include "catlass/gemm/kernel/grouped_matmul.hpp"
 
-#include <iostream>
-#include <vector>
-
 #include "catlass/arch/arch.hpp"
 #include "catlass/catlass.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
@@ -93,28 +90,34 @@ static void Run(const Options &options) {
 
     uint8_t *problemShapeListDevice{nullptr};
     size_t sizeProblemShapeList = problemShapeList.size() * sizeof(GemmCoord);
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&problemShapeListDevice), sizeProblemShapeList,
-                          ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMemcpy(problemShapeListDevice, sizeProblemShapeList, problemShapeList.data(), sizeProblemShapeList,
-                          ACL_MEMCPY_HOST_TO_DEVICE));
+    ACL_CHECK(
+        aclrtMalloc(reinterpret_cast<void **>(&problemShapeListDevice), sizeProblemShapeList, ACL_MEM_MALLOC_HUGE_FIRST)
+    );
+    ACL_CHECK(aclrtMemcpy(
+        problemShapeListDevice, sizeProblemShapeList, problemShapeList.data(), sizeProblemShapeList,
+        ACL_MEMCPY_HOST_TO_DEVICE
+    ));
 
     uint8_t *layoutAListDevice{nullptr};
     size_t sizeLayoutAList = layoutAList.size() * sizeof(LayoutA);
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&layoutAListDevice), sizeLayoutAList, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMemcpy(layoutAListDevice, sizeLayoutAList, layoutAList.data(), sizeLayoutAList,
-                          ACL_MEMCPY_HOST_TO_DEVICE));
+    ACL_CHECK(
+        aclrtMemcpy(layoutAListDevice, sizeLayoutAList, layoutAList.data(), sizeLayoutAList, ACL_MEMCPY_HOST_TO_DEVICE)
+    );
 
     uint8_t *layoutBListDevice{nullptr};
     size_t sizeLayoutBList = layoutBList.size() * sizeof(LayoutB);
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&layoutBListDevice), sizeLayoutBList, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMemcpy(layoutBListDevice, sizeLayoutBList, layoutBList.data(), sizeLayoutBList,
-                          ACL_MEMCPY_HOST_TO_DEVICE));
+    ACL_CHECK(
+        aclrtMemcpy(layoutBListDevice, sizeLayoutBList, layoutBList.data(), sizeLayoutBList, ACL_MEMCPY_HOST_TO_DEVICE)
+    );
 
     uint8_t *layoutCListDevice{nullptr};
     size_t sizeLayoutCList = layoutCList.size() * sizeof(LayoutC);
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&layoutCListDevice), sizeLayoutCList, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMemcpy(layoutCListDevice, sizeLayoutCList, layoutCList.data(), sizeLayoutCList,
-                          ACL_MEMCPY_HOST_TO_DEVICE));
+    ACL_CHECK(
+        aclrtMemcpy(layoutCListDevice, sizeLayoutCList, layoutCList.data(), sizeLayoutCList, ACL_MEMCPY_HOST_TO_DEVICE)
+    );
 
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
@@ -128,8 +131,8 @@ static void Run(const Options &options) {
     constexpr bool enableShuffleK = true;
 
     using ArchTag = Arch::AtlasA2;
-    using DispatchPolicy = Gemm::MmadAtlasA2PreloadAsync<preloadStages, l1Stages, l0AStages, l0BStages, l0CStages,
-                                                         enableUnitFlag, enableShuffleK>;
+    using DispatchPolicy = Gemm::MmadAtlasA2PreloadAsync<
+        preloadStages, l1Stages, l0AStages, l0BStages, l0CStages, enableUnitFlag, enableShuffleK>;
     using L1TileShape = GemmShape<128, 256, 256>;
     using L0TileShape = GemmShape<128, 256, 64>;
 
@@ -164,8 +167,9 @@ static void Run(const Options &options) {
     ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
 
     std::vector<float> hostGolden(lenC);
-    golden::ComputeGroupedMatmul(problemCount, problemShapeList, hostA, layoutAList, hostB, layoutBList, hostGolden,
-                                 layoutCList);
+    golden::ComputeGroupedMatmul(
+        problemCount, problemShapeList, hostA, layoutAList, hostB, layoutBList, hostGolden, layoutCList
+    );
 
     std::vector<uint64_t> errorIndices = golden::CompareData(hostC, hostGolden, k, groupList, m * n);
     if (errorIndices.empty()) {

@@ -14,9 +14,6 @@
 #define K_MAX_SHAPE_DIM 0
 #endif
 
-#include <iostream>
-#include <vector>
-
 #include "catlass/arch/arch.hpp"
 #include "catlass/catlass.hpp"
 #include "catlass/epilogue/block/block_epilogue.hpp"
@@ -44,7 +41,8 @@ using Options = GemvOptions;
 template <class ElementRandom>
 void FillRandomScalarData(ElementRandom &scalarData, ElementRandom low, ElementRandom high) {
     scalarData = static_cast<ElementRandom>(
-        low + (static_cast<ElementRandom>(rand()) / static_cast<ElementRandom>(RAND_MAX)) * (high - low));
+        low + (static_cast<ElementRandom>(rand()) / static_cast<ElementRandom>(RAND_MAX)) * (high - low)
+    );
 }
 
 static void Run(Options options) {
@@ -124,8 +122,8 @@ static void Run(Options options) {
     using TileCopy = Gemv::Tile::TileCopyGemvAic<typename DispatchPolicy::ArchTag, AType, XType, CType, BiasType>;
     using TileMmad = Gemm::Tile::TileMmad<typename DispatchPolicy::ArchTag, XType, AType, BiasType>;
 
-    using BlockGemv = Gemv::Block::BlockGemv<DispatchPolicy, L1TileShape, L0TileShape, AType, XType, CType, BiasType,
-                                             TileCopy, TileMmad>;
+    using BlockGemv = Gemv::Block::BlockGemv<
+        DispatchPolicy, L1TileShape, L0TileShape, AType, XType, CType, BiasType, TileCopy, TileMmad>;
 
     // Block level, define BlockEpilogue
     using EpilogueBlockDispatchPolicy = Epilogue::EpilogueAtlasA2Gemv;
@@ -141,8 +139,8 @@ static void Run(Options options) {
 
     using EpilogueTileCopy = Epilogue::Tile::TileCopy<ArchTag, YType, AXType, ZType>;
 
-    using BlockEpilogue = Epilogue::Block::BlockEpilogue<EpilogueBlockDispatchPolicy, AXType, YType, ZType,
-                                                         TileElemWiseAddGemv, TileElemWiseMulsGemv, EpilogueTileCopy>;
+    using BlockEpilogue = Epilogue::Block::BlockEpilogue<
+        EpilogueBlockDispatchPolicy, AXType, YType, ZType, TileElemWiseAddGemv, TileElemWiseMulsGemv, EpilogueTileCopy>;
 
     // kernle levels
     using GemvKernel = Gemv::Kernel::KernelGemvAic<BlockGemv, BlockEpilogue>;
@@ -158,8 +156,9 @@ static void Run(Options options) {
 
     std::vector<float> hostGolden(lenZ);
 
-    golden::ComputeGemv(options.problemShape, alpha, beta, hostA, layoutA, hostX, layoutX, hostY, layoutZ, hostGolden,
-                        layoutZ);
+    golden::ComputeGemv(
+        options.problemShape, alpha, beta, hostA, layoutA, hostX, layoutX, hostY, layoutZ, hostGolden, layoutZ
+    );
 
     std::vector<uint64_t> errorIndices = golden::CompareData(hostRes, hostGolden, m);
 

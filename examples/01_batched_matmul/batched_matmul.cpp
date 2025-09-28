@@ -16,9 +16,6 @@
 
 #include "catlass/gemm/kernel/batched_matmul.hpp"
 
-#include <iostream>
-#include <vector>
-
 #include "catlass/arch/arch.hpp"
 #include "catlass/catlass.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"

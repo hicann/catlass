@@ -14,9 +14,6 @@
 #define K_MAX_SHAPE_DIM 0
 #endif
 
-#include <iostream>
-#include <vector>
-
 #include "catlass/arch/arch.hpp"
 #include "catlass/catlass.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
@@ -75,7 +72,8 @@ static uint32_t getSplictNum(bool trans, uint32_t M, uint32_t N, uint32_t M1, ui
 template <class ElementRandom>
 void FillRandomScalarData(ElementRandom &scalarData, ElementRandom low, ElementRandom high) {
     scalarData = static_cast<ElementRandom>(
-        low + (static_cast<ElementRandom>(rand()) / static_cast<ElementRandom>(RAND_MAX)) * (high - low));
+        low + (static_cast<ElementRandom>(rand()) / static_cast<ElementRandom>(RAND_MAX)) * (high - low)
+    );
 }
 
 static void Run(Options options) {
@@ -148,8 +146,8 @@ static void Run(Options options) {
     using TileVmad = Gemv::Tile::TileVmad<typename DispatchPolicy::ArchTag, AType, XType, YType, BiasType>;
     using TileVmuls = Gemv::Tile::TileVmuls<typename DispatchPolicy::ArchTag, XType>;
 
-    using GemvBlock = Gemv::Block::BlockGemv<DispatchPolicy, UBTileShape, AType, XType, YType, BiasType, TileCopy,
-                                             TileVmad, TileVmuls>;
+    using GemvBlock = Gemv::Block::BlockGemv<
+        DispatchPolicy, UBTileShape, AType, XType, YType, BiasType, TileCopy, TileVmad, TileVmuls>;
     using BlockEpilogue = void;
 
     // kernel level
@@ -166,8 +164,9 @@ static void Run(Options options) {
     ACL_CHECK(aclrtMemcpy(hostRes.data(), sizeY, deviceZ, sizeY, ACL_MEMCPY_DEVICE_TO_HOST));
 
     std::vector<float> hostGolden(lenY);
-    golden::ComputeGemv(options.problemShape, alpha, beta, hostA, layoutA, hostX, layoutX, hostY, layoutY, hostGolden,
-                        layoutY);
+    golden::ComputeGemv(
+        options.problemShape, alpha, beta, hostA, layoutA, hostX, layoutX, hostY, layoutY, hostGolden, layoutY
+    );
     std::vector<uint64_t> errorIndices = golden::CompareData(hostRes, hostGolden, m);
     if (errorIndices.empty()) {
         std::cout << "Compare success." << std::endl;
