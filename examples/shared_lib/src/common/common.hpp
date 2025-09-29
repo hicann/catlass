@@ -20,47 +20,47 @@
 namespace CatlassKernel {
 using namespace Catlass;
 
-template <aclDataType T> struct AclType2Type
-{
-    static_assert(DEPENDENT_FALSE<T>, "AclType2Type is not implemented for this type");
-};
+template <aclDataType T>
+struct AclType2Type {};
 
-template <> struct AclType2Type<ACL_FLOAT>
-{
+template <>
+struct AclType2Type<ACL_FLOAT> {
     using type = float;
 };
 
-template <> struct AclType2Type<ACL_INT32>
-{
+template <>
+struct AclType2Type<ACL_INT32> {
     using type = int32_t;
 };
 
-template <> struct AclType2Type<ACL_INT8>
-{
+template <>
+struct AclType2Type<ACL_INT8> {
     using type = int8_t;
 };
 
-template <> struct AclType2Type<ACL_FLOAT16>
-{
+template <>
+struct AclType2Type<ACL_FLOAT16> {
     using type = half;
 };
 
-template <> struct AclType2Type<ACL_BF16>
-{
+template <>
+struct AclType2Type<ACL_BF16> {
     using type = bfloat16_t;
 };
 
-template <bool IS_TRANSPOSE> struct Transpose2Layout
-{
+template <bool IS_TRANSPOSE>
+struct Transpose2Layout {
     using layout = std::conditional_t<IS_TRANSPOSE, Catlass::layout::ColumnMajor, Catlass::layout::RowMajor>;
 };
 
 template <class Adapter>
-void RunAdapter(Adapter matmulOp,
-                typename Adapter::Arguments args,
-                aclrtStream stream,
-                uint32_t aicCoreNum,
-                uint64_t fftsAddr = 0) {
+void RunAdapter(
+    Adapter matmulOp,
+    typename Adapter::Arguments args,
+    aclrtStream stream,
+    uint32_t aicCoreNum,
+    uint64_t fftsAddr = 0
+) {
     size_t sizeWorkspace = matmulOp.GetWorkspaceSize(args);
     uint8_t *deviceWorkspace = nullptr;
     if (sizeWorkspace > 0) {
@@ -78,8 +78,7 @@ inline bool IsNeedPadding(layout::RowMajor layout, uint32_t align) {
     // If the stride is greater than 65536, padding is required to reduce the stride.
     if (layout.stride(0) < 65536) {
         return layout.stride(0) % align != 0;
-    }
-    else {
+    } else {
         return true;
     }
 }
@@ -88,8 +87,7 @@ inline bool IsNeedPadding(layout::ColumnMajor layout, uint32_t align) {
     // If the stride is greater than 65536, padding is required to reduce the stride.
     if (layout.stride(1) < 65536) {
         return layout.stride(1) % align != 0;
-    }
-    else {
+    } else {
         return true;
     }
 }
