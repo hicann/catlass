@@ -258,7 +258,6 @@
      {
          uint32_t rowNum = actualBlockShape.m();
          uint32_t embed = actualBlockShape.n();
-         // uint32_t columnNumRound = layoutInput.stride(0);
  
          uint32_t subBlockIdx = AscendC::GetSubBlockIdx();
          uint32_t subBlockNum = AscendC::GetSubBlockNum();
