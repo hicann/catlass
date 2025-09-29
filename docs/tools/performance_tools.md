@@ -104,9 +104,9 @@ msprof op simulator ./00_basic_matmul 256 512 1024 0
 ```
 
 - ⚠ 注意事项
-  - 若需要查看**代码热点图**，需要在CMakeLists.txt中增加`add
+  - 若需要查看**代码热点图**，需要在`examples/CMakeLists.txt`中增加`add
   _compile_options("SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-Xaicore-start -g -Xaicore-end")`。
-  - 性能结果中有大量明显`Vector`操作（如`Add`、`Div`）映射为`Scalar`操作导致性能结果明显异常(`vector_ratio<10%`，`scalar>90%`)，这是编译优化等级造成的，可在CMakeLists.txt中增加`add_compile_options($<$<COMPILE_LANGUAGE:ASCEND>:"-Xaicore-start -O3 -Xaicore-end")`。
+  - 性能结果中有大量明显`Vector`操作（如`Add`、`Div`）映射为`Scalar`操作导致性能结果明显异常(`vector_ratio<10%`，`scalar>90%`)，这是编译优化等级造成的，可在`examples/CMakeLists.txt`中增加`add_compile_options($<$<COMPILE_LANGUAGE:ASCEND>:"-Xaicore-start -O3 -Xaicore-end")`。
   - 仿真只能在0卡运行，不能指定NPU卡号。
 
 #### 仿真数据说明
@@ -180,17 +180,4 @@ cd output/bin
 msprof ./00_basic_matmul 256 512 1024 0
 ```
 
-### 性能数据说明
-
-```bash
-├──aicore_time  # 算子在AIcore中的计算时间
-├──memory_bound # 内存带宽
-├──mte2_ratio   # MTE2搬运单元的时间比例
-├──mte2_time    # MTE2搬运单元的时间
-├──mte3_ratio   # MTE3搬运单元的时间比例
-├──mte3_time    # MTE3搬运单元的时间
-├──scalar_ratio # Scalar计算单元的时间比例
-├──scalar_time  # Scalar计算单元的时间
-├──vec_ratio    # Vector计算单元的时间比例
-└──vec_time     # Vector计算单元的时间
-```
+可参考[msprof性能数据文件参考](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/82RC1alpha003/devaids/Profiling/atlasprofiling_16_0057.html)了解性能数据各文件的功能。

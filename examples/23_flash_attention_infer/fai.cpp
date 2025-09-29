@@ -8,61 +8,25 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0, 
+// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0,
 // optimizing stack space. If you need to use the ShapeInfo of the AscendC Tensor, please undefine this macro.
 #ifndef K_MAX_SHAPE_DIM
 #define K_MAX_SHAPE_DIM 0
 #endif
 
 // Helper methods to check for errors
-#include "helper.hpp"
-#include "golden.hpp"
 #include "fai_kernel.cpp"
-#include "fp16_t.h"
-#include "bfloat16.h"
 #include "fai_tiling.cpp"
+#include "golden.hpp"
+#include "helper.hpp"
 
 using namespace std;
-using fp16_t = op::fp16_t;
-using bfloat16 = op::bfloat16;
-
-/**
- * Function for read file.
- */
-bool ReadFile(const string &filePath, void *buffer, size_t bufferSize)
-{
-    if (buffer == nullptr) {
-        printf("Read file %s failed. Buffer is nullptr.\n", filePath.c_str());
-        return false;
-    }
-
-    // Open file
-    ifstream fd(filePath, ios::binary);
-    if (!fd) {
-        printf("Open file failed. path = %s.\n", filePath.c_str());
-        return false;
-    }
-
-    // Load file data in buffer
-    filebuf *buf = fd.rdbuf();
-    size_t size = buf->pubseekoff(0, ios::end, ios::in);
-    if (size == 0) {
-        printf("File %s size is 0\n", filePath.c_str());
-        return false;
-    }
-    if (size > bufferSize) {
-        printf("File %s size is larger than buffer size.\n", filePath.c_str());
-        return false;
-    }
-    buf->pubseekpos(0, ios::in);
-    buf->sgetn(static_cast<char *>(buffer), size);
-    return true;
-}
 
 // This code section describes the parameters to execute the run function.
 struct Options {
-    static constexpr auto HELPER = "Usage: fai batch qSeqlen kvSeqlen numHeads kvHeads embeddingSize isVariedLen maskType [--dtype DTYPE "
-                                   "--datapath DATA_PATH --device DEVICE_ID]\n";
+    static constexpr auto HELPER =
+        "Usage: fai batch qSeqlen kvSeqlen numHeads kvHeads embeddingSize isVariedLen maskType [--dtype DTYPE "
+        "--datapath DATA_PATH --device DEVICE_ID]\n";
     static constexpr auto MIN_ARGS = 7;
 
     // Define default value.
@@ -82,8 +46,7 @@ struct Options {
     Options() = default;
 
     // Define function to parse the command-line arguments.
-    int Parse(int argc, const char **argv)
-    {
+    int Parse(int argc, const char **argv) {
         // The number of arguments must >= 7.
         if (argc < MIN_ARGS) {
             printf(HELPER);
@@ -117,22 +80,19 @@ struct Options {
     }
 };
 
-void AllocMem(uint8_t **host, uint8_t **device, size_t size)
-{
+static void AllocMem(uint8_t **host, uint8_t **device, size_t size) {
     ACL_CHECK(aclrtMallocHost(reinterpret_cast<void **>(host), size));
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(device), size, ACL_MEM_MALLOC_HUGE_FIRST));
 }
 
-void FreeMem(uint8_t *host, uint8_t *device)
-{
+static void FreeMem(uint8_t *host, uint8_t *device) {
     ACL_CHECK(aclrtFreeHost(host));
     ACL_CHECK(aclrtFree(device));
 }
 
 // Allocate several matrices in NPU device memory and call a
-// CATLASSLASS MLA kernel.
-void Run(const Options &options)
-{
+// CATLASS FAI kernel.
+static void Run(const Options &options) {
     aclrtStream stream{nullptr};
     ACL_CHECK(aclInit(nullptr));
     ACL_CHECK(aclrtSetDevice(options.deviceId));
@@ -159,7 +119,6 @@ void Run(const Options &options)
         cerr << "[ERROR] dtype must be 'half' or 'bf16'." << endl;
         return;
     }
-    
 
     // read qNtokens num
     void *qNtokens = nullptr;
@@ -169,11 +128,12 @@ void Run(const Options &options)
 
     uint64_t seqArraySize = batch * sizeof(int64_t);
     uint64_t qoSize = (uint64_t)numTokens * (uint64_t)numHeads * (uint64_t)embeddingSize * sizeof(fp16_t);
-    uint64_t kvSize =
-        (uint64_t)numBlocks * (uint64_t)blockSize * (uint64_t)kvHeads * (uint64_t)embeddingSize * sizeof(fp16_t);
+    uint64_t kvSize = (uint64_t)numBlocks * (uint64_t)blockSize * (uint64_t)kvHeads * (uint64_t)embeddingSize
+                      * sizeof(fp16_t);
     uint64_t maskSize = 1024 * 1024 * sizeof(fp16_t);
-    uint64_t blockTableSize =
-        static_cast<uint64_t>(batch * ((maxKvSeqlen + blockSize - 1) / blockSize) * sizeof(int32_t));
+    uint64_t blockTableSize = static_cast<uint64_t>(
+        batch * ((maxKvSeqlen + blockSize - 1) / blockSize) * sizeof(int32_t)
+    );
     // ?????
     uint32_t tilingSize = sizeof(FATilingData);
 
@@ -190,7 +150,7 @@ void Run(const Options &options)
     AllocMem(&kvSeqHost, &kvSeqDevice, seqArraySize);
     ReadFile(dataPath + "/kv_seqlen.bin", kvSeqHost, seqArraySize);
     ACL_CHECK(aclrtMemcpy(kvSeqDevice, seqArraySize, kvSeqHost, seqArraySize, ACL_MEMCPY_HOST_TO_DEVICE));
-    
+
     // Allocate matrices in host and device memory and load Matrix q.
     uint8_t *qHost;
     uint8_t *qDevice;
@@ -220,7 +180,6 @@ void Run(const Options &options)
         ReadFile(dataPath + "/mask.bin", maskHost, maskSize);
         ACL_CHECK(aclrtMemcpy(maskDevice, maskSize, maskHost, maskSize, ACL_MEMCPY_HOST_TO_DEVICE));
     }
-    
 
     // Allocate matrices in host and device memory and load Matrix block_table.
     uint8_t *blockTableHost;
@@ -232,11 +191,12 @@ void Run(const Options &options)
     // Allocate matrices in device memory for workspace.
     // One base workspace block contains 65536 elements.
     uint64_t mm1OutSize = aicCoreNum * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(float) * FAInferTiling::NUM3;
-    uint64_t smOnlineOutSize = aicCoreNum * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(fp16_t) * FAInferTiling::NUM3;
+    uint64_t smOnlineOutSize = aicCoreNum * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(fp16_t)
+                               * FAInferTiling::NUM3;
     uint64_t mm2OutSize = aicCoreNum * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(float) * FAInferTiling::NUM3;
     uint64_t UpdateSize = aicCoreNum * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(float) * FAInferTiling::NUM3;
     uint64_t workSpaceSize = mm1OutSize + smOnlineOutSize + mm2OutSize + UpdateSize;
-    
+
     uint8_t *sDevice;
     ACL_CHECK(aclrtMalloc((void **)(&sDevice), mm1OutSize, ACL_MEM_MALLOC_HUGE_FIRST));
     uint8_t *pDevice;
@@ -245,7 +205,7 @@ void Run(const Options &options)
     ACL_CHECK(aclrtMalloc((void **)(&oTempDevice), mm2OutSize, ACL_MEM_MALLOC_HUGE_FIRST));
     uint8_t *oUpdateDevice;
     ACL_CHECK(aclrtMalloc((void **)(&oUpdateDevice), UpdateSize, ACL_MEM_MALLOC_HUGE_FIRST));
-    
+
     uint8_t *oDevice{nullptr};
     ACL_CHECK(aclrtMalloc((void **)(&oDevice), qoSize * 2, ACL_MEM_MALLOC_HUGE_FIRST));
 
@@ -283,13 +243,18 @@ void Run(const Options &options)
     uint64_t fftsAddr{0};
     uint32_t fftsLen{0};
     RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
-    
-    for(int i = 0; i < 1; i ++){
-        if(dataType == "half"){
-            FAInferFp16<<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice, pDevice, oTempDevice, oUpdateDevice, tilingDevice);
-        }
-        else{
-            FAInferBf16<<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice, pDevice, oTempDevice, oUpdateDevice, tilingDevice);
+
+    for (int i = 0; i < 1; i++) {
+        if (dataType == "half") {
+            FAInferFp16<<<blockDim, nullptr, stream>>>(
+                fftsAddr, qDevice, kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice,
+                sDevice, pDevice, oTempDevice, oUpdateDevice, tilingDevice
+            );
+        } else {
+            FAInferBf16<<<blockDim, nullptr, stream>>>(
+                fftsAddr, qDevice, kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice,
+                sDevice, pDevice, oTempDevice, oUpdateDevice, tilingDevice
+            );
         }
         ACL_CHECK(aclrtSynchronizeStream(stream));
         // Copy the result from device to host
@@ -300,8 +265,6 @@ void Run(const Options &options)
         } else if (dataType == "bf16") {
             ACL_CHECK(aclrtMemcpy(oHostBf16.data(), qoSize, oDevice, qoSize, ACL_MEMCPY_DEVICE_TO_HOST));
         }
-        
-        
 
         // Compute the golden result
         vector<float> goldenHost(qoSize / sizeof(fp16_t));
@@ -310,7 +273,7 @@ void Run(const Options &options)
 
         // Compare the result
         vector<uint64_t> errorIndices = (dataType == "half") ? golden::CompareData(oHostHalf, goldenHost, kvSeqlen)
-                                                            : golden::CompareData(oHostBf16, goldenHost, kvSeqlen);
+                                                             : golden::CompareData(oHostBf16, goldenHost, kvSeqlen);
         if (errorIndices.empty()) {
             cout << "Compare success." << endl;
         } else {
@@ -345,8 +308,7 @@ void Run(const Options &options)
 
 /// Entry point to mla example.
 
-int main(int argc, const char **argv)
-{
+int main(int argc, const char **argv) {
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;

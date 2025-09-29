@@ -8,75 +8,35 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0, 
+// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0,
 // optimizing stack space. If you need to use the ShapeInfo of the AscendC Tensor, please undefine this macro.
 #ifndef K_MAX_SHAPE_DIM
 #define K_MAX_SHAPE_DIM 0
 #endif
 
-#include <iostream>
-#include <vector>
-
-#include "helper.hpp"
-#include "golden.hpp"
-#include "fp16_t.h"
-
-#include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
-#include "catlass/epilogue/dispatch_policy.hpp"
+#include "catlass/catlass.hpp"
 #include "catlass/epilogue/block/block_epilogue.hpp"
+#include "catlass/epilogue/dispatch_policy.hpp"
 #include "catlass/epilogue/tile/tile_copy.hpp"
 #include "catlass/epilogue/tile/tile_elemwise_add.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
-#include "catlass/gemm/dispatch_policy.hpp"
-#include "catlass/gemm/kernel/matmul_epilogue.hpp"
-#include "catlass/gemm/gemm_type.hpp"
-#include "catlass/layout/layout.hpp"
-
-#include "catlass/status.hpp"
 #include "catlass/gemm/device/device_gemm.hpp"
+#include "catlass/gemm/dispatch_policy.hpp"
+#include "catlass/gemm/gemm_type.hpp"
+#include "catlass/gemm/kernel/matmul_epilogue.hpp"
+#include "catlass/layout/layout.hpp"
+#include "catlass/status.hpp"
+
+#include "golden.hpp"
+#include "helper.hpp"
 
 using namespace Catlass;
-using fp16_t = op::fp16_t;
 
+using Options = GemmOptions;
 
-
-struct Options {
-    const std::string HELPER = "03_matmul_add m n k [device_id]";
-
-    GemmCoord problemShape{128, 128, 128};
-    int32_t deviceId{0};
-
-    Options() = default;
-
-    int Parse(int argc, const char **argv)
-    {
-        enum ArgsIndex {
-            M_INDEX = 1,
-            N_INDEX,
-            K_INDEX,
-            DEVICE_ID_INDEX,
-            ARGS_MAX
-        };
-
-        if (argc > ARGS_MAX || argc <= K_INDEX) {
-            std::cerr << HELPER << std::endl;
-            return -1;
-        }
-
-        problemShape.m() = std::atoi(argv[M_INDEX]);
-        problemShape.n() = std::atoi(argv[N_INDEX]);
-        problemShape.k() = std::atoi(argv[K_INDEX]);
-        if (argc == ARGS_MAX) {
-            deviceId = std::atoi(argv[DEVICE_ID_INDEX]);
-        }
-        return 0;
-    }
-};
-
-void Run(Options const &options)
-{
+static void Run(const Options &options) {
     aclrtStream stream{nullptr};
 
     ACL_CHECK(aclInit(nullptr));
@@ -156,8 +116,8 @@ void Run(Options const &options)
     constexpr uint32_t computeLength = 16384;
     using TileElemWiseEpilogue = Epilogue::Tile::TileElemWiseAdd<ArchTag, ComputeType, computeLength>;
     using EpilogueTileCopy = Epilogue::Tile::TileCopy<ArchTag, CType, XType, DType>;
-    using BlockEpilogue = Epilogue::Block::BlockEpilogue<EpilogueDispatchPolicy, CType, XType, DType,
-        TileElemWiseEpilogue, EpilogueTileCopy>;
+    using BlockEpilogue = Epilogue::Block::BlockEpilogue<
+        EpilogueDispatchPolicy, CType, XType, DType, TileElemWiseEpilogue, EpilogueTileCopy>;
     std::vector<fp16_t> hostD(lenD);
     if (m > n) {
         // Define BlockScheduler
@@ -166,18 +126,17 @@ void Run(Options const &options)
         // Kernel level
         using MatmulKernel = Gemm::Kernel::MatmulEpilogue<BlockMmad, BlockEpilogue, BlockScheduler>;
         // Prepare params
-        typename MatmulKernel::Arguments arguments{
-            options.problemShape, sizeof(half), deviceA, deviceB, deviceD};
+        typename MatmulKernel::Arguments arguments{options.problemShape, sizeof(half), deviceA, deviceB, deviceD};
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-        MatmulAdapter matmul_op;
-        size_t sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
+        MatmulAdapter matmulOp;
+        size_t sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
         uint8_t *deviceWorkspace{nullptr};
         if (sizeWorkspace > 0) {
-            ACL_CHECK(
-                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace,ACL_MEM_MALLOC_HUGE_FIRST));
+            ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
+            );
         }
-        matmul_op.Initialize(arguments, deviceWorkspace);
-        matmul_op(stream, aicCoreNum, fftsAddr);
+        matmulOp.Initialize(arguments, deviceWorkspace);
+        matmulOp(stream, aicCoreNum, fftsAddr);
         ACL_CHECK(aclrtSynchronizeStream(stream));
         if (sizeWorkspace > 0) {
             ACL_CHECK(aclrtFree(deviceWorkspace));
@@ -192,18 +151,17 @@ void Run(Options const &options)
         // Kernel level
         using MatmulKernel = Gemm::Kernel::MatmulEpilogue<BlockMmad, BlockEpilogue, BlockScheduler>;
         // Prepare params
-        typename MatmulKernel::Arguments arguments{
-            options.problemShape, sizeof(half), deviceA, deviceB, deviceD};
+        typename MatmulKernel::Arguments arguments{options.problemShape, sizeof(half), deviceA, deviceB, deviceD};
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-        MatmulAdapter matmul_op;
-        size_t sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
+        MatmulAdapter matmulOp;
+        size_t sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
         uint8_t *deviceWorkspace{nullptr};
         if (sizeWorkspace > 0) {
-            ACL_CHECK(
-                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace,ACL_MEM_MALLOC_HUGE_FIRST));
+            ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
+            );
         }
-        matmul_op.Initialize(arguments, deviceWorkspace);
-        matmul_op(stream, aicCoreNum, fftsAddr);
+        matmulOp.Initialize(arguments, deviceWorkspace);
+        matmulOp(stream, aicCoreNum, fftsAddr);
         ACL_CHECK(aclrtSynchronizeStream(stream));
         if (sizeWorkspace > 0) {
             ACL_CHECK(aclrtFree(deviceWorkspace));
@@ -212,7 +170,6 @@ void Run(Options const &options)
         // Copy the result from device to host
         ACL_CHECK(aclrtMemcpy(hostD.data(), sizeD, deviceD, sizeD, ACL_MEMCPY_DEVICE_TO_HOST));
     }
-
 
     // Compute the golden result
     std::vector<float> hostGolden(lenD);
@@ -235,8 +192,7 @@ void Run(Options const &options)
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv)
-{
+int main(int argc, const char **argv) {
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;

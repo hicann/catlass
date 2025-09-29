@@ -8,81 +8,44 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0, 
+// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0,
 // optimizing stack space. If you need to use the ShapeInfo of the AscendC Tensor, please undefine this macro.
 #ifndef K_MAX_SHAPE_DIM
 #define K_MAX_SHAPE_DIM 0
 #endif
 
-#include <iostream>
-#include <fstream>
-#include <vector>
-
-#include "helper.hpp"
-#include "golden.hpp"
-#include "fp16_t.h"
-
-#include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
+#include "catlass/catlass.hpp"
 #include "catlass/conv/block/block_conv.hpp"
 #include "catlass/conv/block/block_swizzle.hpp"
+#include "catlass/conv/device/device_conv.hpp"
 #include "catlass/conv/dispatch_policy.hpp"
 #include "catlass/conv/kernel/conv3d_bias.hpp"
+#include "catlass/conv_coord.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 #include "catlass/layout/layout.hpp"
-#include "catlass/conv_coord.hpp"
-
 #include "catlass/status.hpp"
-#include "catlass/conv/device/device_conv.hpp"
+
+#include "golden.hpp"
+#include "helper.hpp"
 
 using namespace Catlass;
-using fp16_t = op::fp16_t;
-
-bool ReadFile(const std::string &filePath, void *buffer, size_t bufferSize)
-{
-    if (buffer == nullptr) {
-        printf("Read file %s failed. Buffer is nullptr.\n", filePath.c_str());
-        return false;
-    }
-
-    // Open file
-    std::ifstream fd(filePath, std::ios::binary);
-    if (!fd) {
-        printf("Open file failed. path = %s.\n", filePath.c_str());
-        return false;
-    }
-
-    // Load file data in buffer
-    std::filebuf *buf = fd.rdbuf();
-    size_t size = buf->pubseekoff(0, std::ios::end, std::ios::in);
-    if (size == 0) {
-        printf("File %s size is 0\n", filePath.c_str());
-        return false;
-    }
-    if (size > bufferSize) {
-        printf("File %s size is larger than buffer size.\n", filePath.c_str());
-        return false;
-    }
-    buf->pubseekpos(0, std::ios::in);
-    buf->sgetn(static_cast<char*>(buffer), size);
-    return true;
-}
 
 struct Options {
-    const std::string HELPER = "24_conv_bias batch di cin1 hi wi cin0 cout kd kh kw sD sH sW dD dH dW pD pH pW [device_id]";
+    const std::string HELPER =
+        "24_conv_bias batch di cin1 hi wi cin0 cout kd kh kw sD sH sW dD dH dW pD pH pW [device_id]";
 
-    uint32_t fmapRelated[6] = {1, 1, 1, 2, 9, 16};  // {batch, di, cin1, hi, wi, cin0}
-    uint32_t filterRelated[4] = {1, 1, 1, 1};  // {kd, kh, kw, cout}
-    uint32_t strides[3] = {1, 1, 1};
-    uint32_t pads[3] = {0, 0, 0};
-    uint32_t dilations[3] = {1, 1, 1};
+    std::vector<uint32_t> fmapRelated = {1, 1, 1, 2, 9, 16}; // {batch, di, cin1, hi, wi, cin0}
+    std::vector<uint32_t> filterRelated = {1, 1, 1, 1};      // {kd, kh, kw, cout}
+    std::vector<uint32_t> strides = {1, 1, 1};
+    std::vector<uint32_t> pads = {0, 0, 0};
+    std::vector<uint32_t> dilations = {1, 1, 1};
     int32_t deviceId{0};
 
     Options() = default;
 
-    int Parse(int argc, const char **argv)
-    {
-        enum ArgsIndex {
+    int Parse(int argc, const char **argv) {
+        enum class ArgsIndex {
             BATCH_INDEX = 1,
             DI_INDEX,
             CIN1_INDEX,
@@ -106,48 +69,51 @@ struct Options {
             ARGS_MAX
         };
 
-        if (argc > ARGS_MAX || argc <= PW_INDEX) {
+        if (argc > static_cast<uint32_t>(ArgsIndex::ARGS_MAX)
+            || argc < static_cast<uint32_t>(ArgsIndex::DEVICE_ID_INDEX)) {
             std::cerr << HELPER << std::endl;
             return 0;
         }
 
-        fmapRelated[0] = std::atoi(argv[BATCH_INDEX]);
-        fmapRelated[1] = std::atoi(argv[DI_INDEX]);
-        fmapRelated[2] = std::atoi(argv[CIN1_INDEX]);
-        fmapRelated[3] = std::atoi(argv[HI_INDEX]);
-        fmapRelated[4] = std::atoi(argv[WI_INDEX]);
-        fmapRelated[5] = std::atoi(argv[CIN0_INDEX]);
-        filterRelated[0] = std::atoi(argv[KD_INDEX]);
-        filterRelated[1] = std::atoi(argv[KH_INDEX]);
-        filterRelated[2] = std::atoi(argv[KW_INDEX]);
-        filterRelated[3] = std::atoi(argv[COUT_INDEX]);
-        strides[0] = std::atoi(argv[SD_INDEX]);
-        strides[1] = std::atoi(argv[SH_INDEX]);
-        strides[2] = std::atoi(argv[SW_INDEX]);
-        dilations[0] = std::atoi(argv[DD_INDEX]);
-        dilations[1] = std::atoi(argv[DH_INDEX]);
-        dilations[2] = std::atoi(argv[DW_INDEX]);
-        pads[0] = std::atoi(argv[PD_INDEX]);
-        pads[1] = std::atoi(argv[PH_INDEX]);
-        pads[2] = std::atoi(argv[PW_INDEX]);
+        fmapRelated[0] = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::BATCH_INDEX)]);
+        fmapRelated[1] = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::DI_INDEX)]);
+        fmapRelated[2] = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::CIN1_INDEX)]);
+        fmapRelated[3] = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::HI_INDEX)]);
+        fmapRelated[4] = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::WI_INDEX)]);
+        fmapRelated[5] = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::CIN0_INDEX)]);
+        filterRelated[0] = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::KD_INDEX)]);
+        filterRelated[1] = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::KH_INDEX)]);
+        filterRelated[2] = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::KW_INDEX)]);
+        filterRelated[3] = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::COUT_INDEX)]);
+        strides[0] = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::SD_INDEX)]);
+        strides[1] = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::SH_INDEX)]);
+        strides[2] = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::SW_INDEX)]);
+        dilations[0] = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::DD_INDEX)]);
+        dilations[1] = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::DH_INDEX)]);
+        dilations[2] = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::DW_INDEX)]);
+        pads[0] = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::PD_INDEX)]);
+        pads[1] = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::PH_INDEX)]);
+        pads[2] = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::PW_INDEX)]);
 
-        if (argc == ARGS_MAX) {
-            deviceId = std::atoi(argv[DEVICE_ID_INDEX]);
+        if (argc == static_cast<uint32_t>(ArgsIndex::ARGS_MAX)) {
+            deviceId = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::DEVICE_ID_INDEX)]);
         }
 
         return 0;
     }
 };
 
-void Run(Options const &options)
-{
+static void Run(const Options &options) {
     aclrtStream stream{nullptr};
 
     ACL_CHECK(aclInit(nullptr));
     ACL_CHECK(aclrtSetDevice(options.deviceId));
     ACL_CHECK(aclrtCreateStream(&stream));
 
-    Conv3dParams problemShape = Conv3dParams::MakeConvCoord(options.fmapRelated, options.filterRelated, options.pads, options.strides, options.dilations);
+    Conv3dParams problemShape = Conv3dParams::MakeConvCoord(
+        options.fmapRelated.data(), options.filterRelated.data(), options.pads.data(), options.strides.data(),
+        options.dilations.data()
+    );
 
     uint32_t n = problemShape.batch();
     uint32_t di = problemShape.di();
@@ -215,23 +181,22 @@ void Run(Options const &options)
     constexpr uint32_t l0CStages = 1;
     constexpr bool enableUnitFlag = true;
     using ArchTag = Arch::AtlasA2;
-    using DispatchPolicy = Conv::ConvAtlasA2Pingpong<
-        l1AStages, l1BStages,
-        l0AStages, l0BStages,
-        l0CStages, enableUnitFlag
-    >;
-    
+    using DispatchPolicy =
+        Conv::ConvAtlasA2Pingpong<l1AStages, l1BStages, l0AStages, l0BStages, l0CStages, enableUnitFlag>;
+
     using FmapType = Gemm::GemmType<half, LayoutFmap>;
     using FilterType = Gemm::GemmType<half, LayoutFilter>;
     using BiasType = Gemm::GemmType<half, LayoutBias>;
     using OutType = Gemm::GemmType<half, LayoutOut>;
 
-    using CoreTileShape = ConvCoreShape<2, 2, 2, 2>;  // nDim, dDim, c1Dim, hwDim
-    using FmapL1TileShape = ConvFmapL1Shape<16, 1, 1>;  //mAL1, kd, c1
-    using FilterL1TileShape = ConvFilterL1Shape<1, 1, 16>;  // kd, c1, nBL1
-    using L0TileShape = ConvL0Shape<16, 16, 16>;  //mL0 kL0 nL0
+    using CoreTileShape = ConvCoreShape<2, 2, 2, 2>;       // nDim, dDim, c1Dim, hwDim
+    using FmapL1TileShape = ConvFmapL1Shape<16, 1, 1>;     // mAL1, kd, c1
+    using FilterL1TileShape = ConvFilterL1Shape<1, 1, 16>; // kd, c1, nBL1
+    using L0TileShape = ConvL0Shape<16, 16, 16>;           // mL0 kL0 nL0
 
-    using BlockConv = Conv::Block::BlockConv<DispatchPolicy, CoreTileShape, FmapL1TileShape, FilterL1TileShape, L0TileShape, FmapType, FilterType, OutType, BiasType>;
+    using BlockConv = Conv::Block::BlockConv<
+        DispatchPolicy, CoreTileShape, FmapL1TileShape, FilterL1TileShape, L0TileShape, FmapType, FilterType, OutType,
+        BiasType>;
     using BlockEpilogue = void;
 
     // Swizzle offset is 3 and direction is 0.
@@ -247,8 +212,7 @@ void Run(Options const &options)
     size_t sizeWorkspace = conv_op.GetWorkspaceSize(arguments);
     uint8_t *deviceWorkspace = nullptr;
     if (sizeWorkspace > 0) {
-        ACL_CHECK(
-            aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
     }
     conv_op.Initialize(arguments, deviceWorkspace);
     conv_op(stream, aicCoreNum);
@@ -281,8 +245,7 @@ void Run(Options const &options)
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv)
-{
+int main(int argc, const char **argv) {
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;

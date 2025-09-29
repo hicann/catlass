@@ -14,70 +14,26 @@
 #define K_MAX_SHAPE_DIM 0
 #endif
 
-#include <cmath>
-#include <cstdlib>
-#include <fstream>
-#include <iostream>
-#include <vector>
+#include "catlass/gemm/kernel/fp8_matmul.hpp"
 
-#include "helper.hpp"
-#include "golden.hpp"
-
-#include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
+#include "catlass/catlass.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/device/device_gemm.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 #include "catlass/layout/layout.hpp"
-#include "catlass/gemm/kernel/fp8_matmul.hpp"
-
 #include "catlass/status.hpp"
-#include "catlass/gemm/device/device_gemm.hpp"
+
+#include "golden.hpp"
+#include "helper.hpp"
 
 using namespace Catlass;
 
-bool ReadFileToVector(const std::string &filePath, std::vector<float> &data)
-{
-    std::ifstream file(filePath, std::ios::binary);
-    if (!file.is_open()) {
-        std::cerr << "Failed to open file: " << filePath << std::endl;
-        return false;
-    }
-    file.read(reinterpret_cast<char *>(data.data()), data.size() * sizeof(float));
-    file.close();
-    return true;
-}
+using Options = GemmOptions;
 
-struct Options {
-    const std::string HELPER = "29_a2_fp8_e4m3_matmul m n k [device_id]";
-
-    GemmCoord problemShape{128, 128, 128};
-    int32_t deviceId{0};
-
-    Options() = default;
-
-    int Parse(int argc, const char **argv)
-    {
-        enum ArgsIndex { M_INDEX = 1, N_INDEX, K_INDEX, DEVICE_ID_INDEX, ARGS_MAX };
-
-        if (argc > ARGS_MAX || argc <= K_INDEX) {
-            std::cerr << HELPER << std::endl;
-            return -1;
-        }
-
-        problemShape.m() = std::atoi(argv[M_INDEX]);
-        problemShape.n() = std::atoi(argv[N_INDEX]);
-        problemShape.k() = std::atoi(argv[K_INDEX]);
-        if (argc == ARGS_MAX) {
-            deviceId = std::atoi(argv[DEVICE_ID_INDEX]);
-        }
-        return 0;
-    }
-};
-
-void Run(Options const &options)
-{
+static void Run(const Options &options) {
     aclrtStream stream{nullptr};
     ACL_CHECK(aclInit(nullptr));
     ACL_CHECK(aclrtSetDevice(options.deviceId));
@@ -103,8 +59,8 @@ void Run(Options const &options)
     size_t sizeA = lenA * sizeof(int8_t);
     size_t sizeB = lenB * sizeof(int8_t);
     size_t sizeC = lenC * sizeof(half);
-    size_t sizeWA = aicCoreNum * lenWA * sizeof(half) * 2;  // 双缓冲
-    size_t sizeWB = aicCoreNum * lenWB * sizeof(half) * 2;  // 双缓冲
+    size_t sizeWA = aicCoreNum * lenWA * sizeof(half) * 2; // 双缓冲
+    size_t sizeWB = aicCoreNum * lenWB * sizeof(half) * 2; // 双缓冲
     size_t sizeWC = aicCoreNum * lenWC * sizeof(float);
 
     size_t sizeWorkspace;
@@ -171,7 +127,7 @@ void Run(Options const &options)
 
     using AType = Gemm::GemmType<half, LayoutA>;
     using BType = Gemm::GemmType<half, LayoutB>;
-    using CType = Gemm::GemmType<float, LayoutC>;  // 原子加以float类型进行累加
+    using CType = Gemm::GemmType<float, LayoutC>; // 原子加以float类型进行累加
 
     using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
     using BlockEpilogue = void;
@@ -187,15 +143,15 @@ void Run(Options const &options)
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
         MatmulKernel::Arguments arguments{
             options.problemShape, deviceA, deviceB, deviceC, deviceWA, deviceWB, deviceWC, scalar, zeroPoint};
-        MatmulAdapter matmul_op;
-        matmul_op.CanImplement(arguments);
-        sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
+        MatmulAdapter matmulOp;
+        matmulOp.CanImplement(arguments);
+        sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
         if (sizeWorkspace > 0) {
-            ACL_CHECK(
-                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+            ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
+            );
         }
-        matmul_op.Initialize(arguments, deviceWorkspace);
-        matmul_op(stream, aicCoreNum, fftsAddr);
+        matmulOp.Initialize(arguments, deviceWorkspace);
+        matmulOp(stream, aicCoreNum, fftsAddr);
     } else {
         // Swizzle offset is 3 and direction is 1.
         using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
@@ -207,15 +163,15 @@ void Run(Options const &options)
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
         MatmulKernel::Arguments arguments{
             options.problemShape, deviceA, deviceB, deviceC, deviceWA, deviceWB, deviceWC, scalar, zeroPoint};
-        MatmulAdapter matmul_op;
-        matmul_op.CanImplement(arguments);
-        sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
+        MatmulAdapter matmulOp;
+        matmulOp.CanImplement(arguments);
+        sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
         if (sizeWorkspace > 0) {
-            ACL_CHECK(
-                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+            ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
+            );
         }
-        matmul_op.Initialize(arguments, deviceWorkspace);
-        matmul_op(stream, aicCoreNum, fftsAddr);
+        matmulOp.Initialize(arguments, deviceWorkspace);
+        matmulOp(stream, aicCoreNum, fftsAddr);
     }
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
@@ -230,7 +186,7 @@ void Run(Options const &options)
 
     std::vector<float> hostGolden(m * n);
     std::string outputFileName = "../../examples/29_a2_fp8_e4m3_matmul/output/expected_data.bin";
-    ReadFileToVector(outputFileName, hostGolden);
+    ReadFile(outputFileName, hostGolden.data(), sizeof(float) * hostGolden.size());
 
     std::vector<float> hostCFP32(hostC.begin(), hostC.end());
     std::vector<uint64_t> errorIndices = golden::CompareData(hostC, hostGolden, k);
@@ -253,8 +209,7 @@ void Run(Options const &options)
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv)
-{
+int main(int argc, const char **argv) {
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;

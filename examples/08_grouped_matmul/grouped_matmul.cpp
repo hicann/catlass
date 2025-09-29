@@ -8,79 +8,38 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0, 
+// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0,
 // optimizing stack space. If you need to use the ShapeInfo of the AscendC Tensor, please undefine this macro.
 #ifndef K_MAX_SHAPE_DIM
 #define K_MAX_SHAPE_DIM 0
 #endif
 
-#include <iostream>
-#include <vector>
-#include <cstdlib>
+#include "catlass/gemm/kernel/grouped_matmul.hpp"
 
-#include "helper.hpp"
-#include "golden.hpp"
-#include "fp16_t.h"
-
-#include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
+#include "catlass/catlass.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/device/device_gemm.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
-#include "catlass/gemm/kernel/grouped_matmul.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 #include "catlass/layout/layout.hpp"
-
 #include "catlass/status.hpp"
-#include "catlass/gemm/device/device_gemm.hpp"
+
+#include "golden.hpp"
+#include "helper.hpp"
 
 using namespace Catlass;
-using fp16_t = op::fp16_t;
 
-struct Options {
-    const std::string HELPER = "08_grouped_matmul group_count m n k [device_id]";
+using Options = GroupedGemmOptions;
 
-    uint32_t groupCount{1};
-    GemmCoord problemShape{128, 128, 128};
-    int32_t deviceId{0};
-
-    Options() = default;
-
-    int Parse(int argc, const char **argv)
-    {
-        enum ArgsIndex {
-            GROUP_COUNT_INDEX = 1,
-            M_INDEX,
-            N_INDEX,
-            K_INDEX,
-            DEVICE_ID_INDEX,
-            ARGS_MAX
-        };
-
-        if (argc > ARGS_MAX || argc <= K_INDEX) {
-            std::cerr << HELPER << std::endl;
-            return -1;
-        }
-
-        groupCount = std::atoi(argv[GROUP_COUNT_INDEX]);
-        problemShape.m() = std::atoi(argv[M_INDEX]);
-        problemShape.n() = std::atoi(argv[N_INDEX]);
-        problemShape.k() = std::atoi(argv[K_INDEX]);
-        if (argc == ARGS_MAX) {
-            deviceId = std::atoi(argv[DEVICE_ID_INDEX]);
-        }
-        return 0;
-    }
-};
-
-void Run(Options const &options)
-{
+static void Run(const Options &options) {
     aclrtStream stream{nullptr};
     ACL_CHECK(aclInit(nullptr));
     ACL_CHECK(aclrtSetDevice(options.deviceId));
     ACL_CHECK(aclrtCreateStream(&stream));
 
-    uint32_t problemCount = options.groupCount;
+    uint32_t problemCount = options.problemCount;
     uint32_t m = options.problemShape.m();
     uint32_t n = options.problemShape.n();
     uint32_t k = options.problemShape.k();
@@ -131,28 +90,34 @@ void Run(Options const &options)
 
     uint8_t *problemShapeListDevice{nullptr};
     size_t sizeProblemShapeList = problemShapeList.size() * sizeof(GemmCoord);
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&problemShapeListDevice), sizeProblemShapeList,
-        ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMemcpy(problemShapeListDevice, sizeProblemShapeList,
-        problemShapeList.data(), sizeProblemShapeList, ACL_MEMCPY_HOST_TO_DEVICE));
+    ACL_CHECK(
+        aclrtMalloc(reinterpret_cast<void **>(&problemShapeListDevice), sizeProblemShapeList, ACL_MEM_MALLOC_HUGE_FIRST)
+    );
+    ACL_CHECK(aclrtMemcpy(
+        problemShapeListDevice, sizeProblemShapeList, problemShapeList.data(), sizeProblemShapeList,
+        ACL_MEMCPY_HOST_TO_DEVICE
+    ));
 
     uint8_t *layoutAListDevice{nullptr};
     size_t sizeLayoutAList = layoutAList.size() * sizeof(LayoutA);
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&layoutAListDevice), sizeLayoutAList, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMemcpy(layoutAListDevice, sizeLayoutAList,
-        layoutAList.data(), sizeLayoutAList, ACL_MEMCPY_HOST_TO_DEVICE));
+    ACL_CHECK(
+        aclrtMemcpy(layoutAListDevice, sizeLayoutAList, layoutAList.data(), sizeLayoutAList, ACL_MEMCPY_HOST_TO_DEVICE)
+    );
 
     uint8_t *layoutBListDevice{nullptr};
     size_t sizeLayoutBList = layoutBList.size() * sizeof(LayoutB);
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&layoutBListDevice), sizeLayoutBList, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMemcpy(layoutBListDevice, sizeLayoutBList,
-        layoutBList.data(), sizeLayoutBList, ACL_MEMCPY_HOST_TO_DEVICE));
+    ACL_CHECK(
+        aclrtMemcpy(layoutBListDevice, sizeLayoutBList, layoutBList.data(), sizeLayoutBList, ACL_MEMCPY_HOST_TO_DEVICE)
+    );
 
     uint8_t *layoutCListDevice{nullptr};
     size_t sizeLayoutCList = layoutCList.size() * sizeof(LayoutC);
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&layoutCListDevice), sizeLayoutCList, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMemcpy(layoutCListDevice, sizeLayoutCList,
-        layoutCList.data(), sizeLayoutCList, ACL_MEMCPY_HOST_TO_DEVICE));
+    ACL_CHECK(
+        aclrtMemcpy(layoutCListDevice, sizeLayoutCList, layoutCList.data(), sizeLayoutCList, ACL_MEMCPY_HOST_TO_DEVICE)
+    );
 
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
@@ -167,10 +132,7 @@ void Run(Options const &options)
 
     using ArchTag = Arch::AtlasA2;
     using DispatchPolicy = Gemm::MmadAtlasA2PreloadAsync<
-        preloadStages,
-        l1Stages, l0AStages, l0BStages, l0CStages,
-        enableUnitFlag, enableShuffleK
-    >;
+        preloadStages, l1Stages, l0AStages, l0BStages, l0CStages, enableUnitFlag, enableShuffleK>;
     using L1TileShape = GemmShape<128, 256, 256>;
     using L0TileShape = GemmShape<128, 256, 64>;
 
@@ -186,22 +148,18 @@ void Run(Options const &options)
     using MatmulKernel = Gemm::Kernel::GroupedMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 
     using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-    typename MatmulKernel::Arguments arguments{
-        problemCount, problemShapeListDevice, 
-        deviceA, layoutAListDevice, 
-        deviceB, layoutBListDevice, 
-        deviceC, layoutCListDevice
-    };
-    MatmulAdapter matmul_op;
-    matmul_op.CanImplement(arguments);
-    //get workspace
-    size_t sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
+    typename MatmulKernel::Arguments arguments{problemCount, problemShapeListDevice, deviceA, layoutAListDevice,
+                                               deviceB,      layoutBListDevice,      deviceC, layoutCListDevice};
+    MatmulAdapter matmulOp;
+    matmulOp.CanImplement(arguments);
+    // get workspace
+    size_t sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
     uint8_t *deviceWorkspace{nullptr};
-    if(sizeWorkspace > 0){
+    if (sizeWorkspace > 0) {
         ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
     }
-    matmul_op.Initialize(arguments, deviceWorkspace);
-    matmul_op(stream, aicCoreNum);
+    matmulOp.Initialize(arguments, deviceWorkspace);
+    matmulOp(stream, aicCoreNum);
 
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
@@ -209,8 +167,9 @@ void Run(Options const &options)
     ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
 
     std::vector<float> hostGolden(lenC);
-    golden::ComputeGroupedMatmul(problemCount, problemShapeList, hostA, layoutAList,
-        hostB, layoutBList, hostGolden, layoutCList);
+    golden::ComputeGroupedMatmul(
+        problemCount, problemShapeList, hostA, layoutAList, hostB, layoutBList, hostGolden, layoutCList
+    );
 
     std::vector<uint64_t> errorIndices = golden::CompareData(hostC, hostGolden, k, groupList, m * n);
     if (errorIndices.empty()) {
@@ -232,8 +191,7 @@ void Run(Options const &options)
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv)
-{
+int main(int argc, const char **argv) {
     Options options;
     if (options.Parse(argc, argv) == 0) {
         Run(options);

@@ -8,18 +8,16 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
-#include "catlass/layout/layout.hpp"
-
+#include "catlass/arch/cross_core_sync.hpp"
+#include "catlass/arch/resource.hpp"
+#include "catlass/catlass.hpp"
+#include "catlass/epilogue/block/block_epilogue.hpp"
+#include "catlass/epilogue/dispatch_policy.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
 #include "catlass/gemm/gemm_type.hpp"
-
-#include "catlass/arch/cross_core_sync.hpp"
-#include "catlass/arch/resource.hpp"
-#include "catlass/epilogue/block/block_epilogue.hpp"
-#include "catlass/epilogue/dispatch_policy.hpp"
+#include "catlass/layout/layout.hpp"
 
 #include "kernel_common.hpp"
 
@@ -27,8 +25,12 @@ using namespace Catlass;
 /*
 This example demonstrates how to compute mla.
 */
-template <class BlockMmadQK, class BlockMmadPV, class EpilogueMLASoftmax, class EpilogueMLARescaleO,
-          class EpilogueMLAFDRescaleO>
+template <
+    class BlockMmadQK,
+    class BlockMmadPV,
+    class EpilogueMLASoftmax,
+    class EpilogueMLARescaleO,
+    class EpilogueMLAFDRescaleO>
 class MLAKernelTp1Spec {
 public:
     using ArchTag = typename BlockMmadQK::ArchTag;
@@ -79,25 +81,51 @@ public:
 
         // Methods
         CATLASS_DEVICE
-        Params() {}
+        Params() {
+        }
 
         CATLASS_DEVICE
-        Params(GM_ADDR q_, GM_ADDR qRope_, GM_ADDR k_, GM_ADDR kRope_, GM_ADDR blockTables_, GM_ADDR o_, GM_ADDR s_,
-               GM_ADDR p_, GM_ADDR oTmp_, GM_ADDR oUpdate_, GM_ADDR oCoreTmp_, GM_ADDR l_, GM_ADDR tiling_)
-            : q(q_), qRope(qRope_), k(k_), kRope(kRope_), blockTables(blockTables_), o(o_), s(s_), p(p_), oTmp(oTmp_),
-              oUpdate(oUpdate_), oCoreTmp(oCoreTmp_), l(l_), tiling(tiling_)
-        {
+        Params(
+            GM_ADDR q_,
+            GM_ADDR qRope_,
+            GM_ADDR k_,
+            GM_ADDR kRope_,
+            GM_ADDR blockTables_,
+            GM_ADDR o_,
+            GM_ADDR s_,
+            GM_ADDR p_,
+            GM_ADDR oTmp_,
+            GM_ADDR oUpdate_,
+            GM_ADDR oCoreTmp_,
+            GM_ADDR l_,
+            GM_ADDR tiling_
+        )
+            : q(q_)
+            , qRope(qRope_)
+            , k(k_)
+            , kRope(kRope_)
+            , blockTables(blockTables_)
+            , o(o_)
+            , s(s_)
+            , p(p_)
+            , oTmp(oTmp_)
+            , oUpdate(oUpdate_)
+            , oCoreTmp(oCoreTmp_)
+            , l(l_)
+            , tiling(tiling_) {
         }
     };
 
     // Methods
     CATLASS_DEVICE
-    MLAKernelTp1Spec() {}
+    MLAKernelTp1Spec() {
+    }
 
-    template <int32_t CORE_TYPE = g_coreType> CATLASS_DEVICE void operator()(Params const &params);
+    template <int32_t CORE_TYPE = g_coreType>
+    CATLASS_DEVICE void operator()(Params const &params);
 
-    template <> CATLASS_DEVICE void operator()<AscendC::AIC>(Params const &params)
-    {
+    template <>
+    CATLASS_DEVICE void operator()<AscendC::AIC>(Params const &params) {
         AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(EVENT_ID0);
         AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(EVENT_ID1);
         AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(EVENT_ID2);
@@ -211,13 +239,14 @@ public:
                     LayoutS layoutS(rowNumRound, stackSeqTileRound);
                     GemmCoord actualBlockShapeQK{rowNum, stackSeqTile, embed + embedRope};
                     uint32_t gSPingPongFlag = (nIdx / UNIT_BLOCK_STACK_NUM) % 2;
-                    uint64_t gmOffseS =
-                        (uint64_t)coreIdx * TMP_SIZE_DECODER * 4 + (uint64_t)gSPingPongFlag * TMP_SIZE_DECODER * 2;
+                    uint64_t gmOffseS = (uint64_t)coreIdx * TMP_SIZE_DECODER * 4
+                                        + (uint64_t)gSPingPongFlag * TMP_SIZE_DECODER * 2;
                     // Calculate Q * K^T
-                    blockMmadQK(gQ[gmOffsetQ], gQRope[gmOffsetQRope], gK, gKRope,
-                                gblockTable[gmOffsetBlockTable + startKV / blockSize],
-                                gS[gmOffseS], layoutQ, layoutQRope, layoutK, layoutKRope, layoutS, actualBlockShapeQK,
-                                nIdx, nLoop, blockSize, curKVSeqlen);
+                    blockMmadQK(
+                        gQ[gmOffsetQ], gQRope[gmOffsetQRope], gK, gKRope,
+                        gblockTable[gmOffsetBlockTable + startKV / blockSize], gS[gmOffseS], layoutQ, layoutQRope,
+                        layoutK, layoutKRope, layoutS, actualBlockShapeQK, nIdx, nLoop, blockSize, curKVSeqlen
+                    );
                     Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(qkReady);
                 }
                 // Wait for the four Q * K^T calculations to complete before calculating P * V
@@ -236,9 +265,11 @@ public:
                     uint64_t gmOffseP = (uint64_t)coreIdx * TMP_SIZE * 2 + (uint64_t)gPPingPongFlag * TMP_SIZE;
                     uint64_t gmOffseOtmp = gmOffseP;
                     // Calculate P * V
-                    blockMmadPV(gP[gmOffseP], gK, gblockTable[gmOffsetBlockTable + startKV / blockSize],
-                                gOTmp[gmOffseOtmp], layoutP, layoutV,
-                                layoutOTmp, actualBlockShapePV, nIdx, nLoop, blockSize, curKVSeqlen, softmaxReady);
+                    blockMmadPV(
+                        gP[gmOffseP], gK, gblockTable[gmOffsetBlockTable + startKV / blockSize], gOTmp[gmOffseOtmp],
+                        layoutP, layoutV, layoutOTmp, actualBlockShapePV, nIdx, nLoop, blockSize, curKVSeqlen,
+                        softmaxReady
+                    );
                     Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(pvReady);
                 }
             }
@@ -283,12 +314,14 @@ public:
                     LayoutS layoutS(rowNumRound, stackSeqTileRound);
                     GemmCoord actualBlockShapeQK{rowNum, stackSeqTile, embed + embedRope};
                     uint32_t gSPingPongFlag = (nIdx / UNIT_BLOCK_STACK_NUM) % 2;
-                    uint64_t gmOffseS =
-                        (uint64_t)coreIdx * TMP_SIZE_DECODER * 4 + (uint64_t)gSPingPongFlag * TMP_SIZE_DECODER * 2;
+                    uint64_t gmOffseS = (uint64_t)coreIdx * TMP_SIZE_DECODER * 4
+                                        + (uint64_t)gSPingPongFlag * TMP_SIZE_DECODER * 2;
                     // Calculate Q * K^T
-                    blockMmadQK(gQ[gmOffsetQ], gQRope[gmOffsetQRope], gK, gKRope, gblockTable[gmOffsetBlockTable],
-                                gS[gmOffseS], layoutQ, layoutQRope, layoutK, layoutKRope, layoutS, actualBlockShapeQK,
-                                nIdx, nLoop, blockSize, kvSeqlen);
+                    blockMmadQK(
+                        gQ[gmOffsetQ], gQRope[gmOffsetQRope], gK, gKRope, gblockTable[gmOffsetBlockTable], gS[gmOffseS],
+                        layoutQ, layoutQRope, layoutK, layoutKRope, layoutS, actualBlockShapeQK, nIdx, nLoop, blockSize,
+                        kvSeqlen
+                    );
                     Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(qkReady);
                 }
                 // Wait for the four Q * K^T calculations to complete before calculating P * V
@@ -307,8 +340,10 @@ public:
                     uint64_t gmOffseP = (uint64_t)coreIdx * TMP_SIZE * 2 + (uint64_t)gPPingPongFlag * TMP_SIZE;
                     uint64_t gmOffseOtmp = gmOffseP;
                     // Calculate P * V
-                    blockMmadPV(gP[gmOffseP], gK, gblockTable[gmOffsetBlockTable], gOTmp[gmOffseOtmp], layoutP, layoutV,
-                                layoutOTmp, actualBlockShapePV, nIdx, nLoop, blockSize, kvSeqlen, softmaxReady);
+                    blockMmadPV(
+                        gP[gmOffseP], gK, gblockTable[gmOffsetBlockTable], gOTmp[gmOffseOtmp], layoutP, layoutV,
+                        layoutOTmp, actualBlockShapePV, nIdx, nLoop, blockSize, kvSeqlen, softmaxReady
+                    );
                     Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(pvReady);
                 }
             }
@@ -332,8 +367,8 @@ public:
         AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(EVENT_ID7);
     }
 
-    template <> CATLASS_DEVICE void operator()<AscendC::AIV>(Params const &params)
-    {
+    template <>
+    CATLASS_DEVICE void operator()<AscendC::AIV>(Params const &params) {
         AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
         AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
         AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID1);
@@ -449,15 +484,16 @@ public:
                     LayoutP layoutP(rowNum, stackSeqTile, stackSeqTileRound);
                     LayoutS layoutS(rowNum, stackSeqTile, stackSeqTileRound);
                     GemmCoord actualBlockShapeQK{rowNum, stackSeqTile, embed};
-                    uint32_t gmOffsetP = (uint64_t)coreIdx * TMP_SIZE * 2 +
-                                         (uint64_t)subBlockIdx * rowNum / 2 * stackSeqTileRound +
-                                         (uint64_t)((nIdx / UNIT_BLOCK_STACK_NUM) % 2) * TMP_SIZE;
-                    uint32_t gmOffsetS = (int64_t)coreIdx * TMP_SIZE_DECODER * 4 +
-                                         (int64_t)subBlockIdx * rowNum / 2 * stackSeqTileRound +
-                                         (uint64_t)((nIdx / UNIT_BLOCK_STACK_NUM) % 2) * TMP_SIZE_DECODER * 2;
+                    uint32_t gmOffsetP = (uint64_t)coreIdx * TMP_SIZE * 2
+                                         + (uint64_t)subBlockIdx * rowNum / 2 * stackSeqTileRound
+                                         + (uint64_t)((nIdx / UNIT_BLOCK_STACK_NUM) % 2) * TMP_SIZE;
+                    uint32_t gmOffsetS = (int64_t)coreIdx * TMP_SIZE_DECODER * 4
+                                         + (int64_t)subBlockIdx * rowNum / 2 * stackSeqTileRound
+                                         + (uint64_t)((nIdx / UNIT_BLOCK_STACK_NUM) % 2) * TMP_SIZE_DECODER * 2;
                     // Softmax one-stage calculation
-                    epilogueMLATP1Softmax(gP[gmOffsetP], gS[gmOffsetS], layoutP,
-                                          layoutS, actualBlockShapeQK, nIdx, glFlag);
+                    epilogueMLATP1Softmax(
+                        gP[gmOffsetP], gS[gmOffsetS], layoutP, layoutS, actualBlockShapeQK, nIdx, glFlag
+                    );
                     Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(softmaxReady);
                 }
 
@@ -479,10 +515,11 @@ public:
                     uint64_t gmOffsetOTmp = (uint64_t)(coreIdx * TMP_SIZE * 2 + rescaleOPingPongFlag * TMP_SIZE);
                     uint64_t gmOffsetUpdate = (uint64_t)(coreIdx * TMP_SIZE);
                     // Softmax two-stage update
-                    epilogueMLATP1RescaleO(gOTmp[gmOffsetOTmp], gOUpdate[gmOffsetUpdate], gO[gmOffsetO],
-                                           gOCoreTmp[oFdOffset], gl[lOffset], layoutOTmp,
-                                           layoutUpdate, layoutO, actualBlockShapePV, nIdx, isLastNTile,
-                                           rescaleOPingPongFlag, glFlag);
+                    epilogueMLATP1RescaleO(
+                        gOTmp[gmOffsetOTmp], gOUpdate[gmOffsetUpdate], gO[gmOffsetO], gOCoreTmp[oFdOffset], gl[lOffset],
+                        layoutOTmp, layoutUpdate, layoutO, actualBlockShapePV, nIdx, isLastNTile, rescaleOPingPongFlag,
+                        glFlag
+                    );
                 }
             }
         }
@@ -518,15 +555,16 @@ public:
                     LayoutP layoutP(rowNum, stackSeqTile, stackSeqTileRound);
                     LayoutS layoutS(rowNum, stackSeqTile, stackSeqTileRound);
                     GemmCoord actualBlockShapeQK{rowNum, stackSeqTile, embed};
-                    uint32_t gmOffsetP = (uint64_t)coreIdx * TMP_SIZE * 2 +
-                                         (uint64_t)subBlockIdx * rowNum / 2 * stackSeqTileRound +
-                                         (uint64_t)((nIdx / UNIT_BLOCK_STACK_NUM) % 2) * TMP_SIZE;
-                    uint32_t gmOffsetS = (int64_t)coreIdx * TMP_SIZE_DECODER * 4 +
-                                         (int64_t)subBlockIdx * rowNum / 2 * stackSeqTileRound +
-                                         (uint64_t)((nIdx / UNIT_BLOCK_STACK_NUM) % 2) * TMP_SIZE_DECODER * 2;
+                    uint32_t gmOffsetP = (uint64_t)coreIdx * TMP_SIZE * 2
+                                         + (uint64_t)subBlockIdx * rowNum / 2 * stackSeqTileRound
+                                         + (uint64_t)((nIdx / UNIT_BLOCK_STACK_NUM) % 2) * TMP_SIZE;
+                    uint32_t gmOffsetS = (int64_t)coreIdx * TMP_SIZE_DECODER * 4
+                                         + (int64_t)subBlockIdx * rowNum / 2 * stackSeqTileRound
+                                         + (uint64_t)((nIdx / UNIT_BLOCK_STACK_NUM) % 2) * TMP_SIZE_DECODER * 2;
                     // Softmax one-stage calculation
-                    epilogueMLATP1Softmax(gP[gmOffsetP], gS[gmOffsetS], layoutP,
-                                          layoutS, actualBlockShapeQK, nIdx, glFlag);
+                    epilogueMLATP1Softmax(
+                        gP[gmOffsetP], gS[gmOffsetS], layoutP, layoutS, actualBlockShapeQK, nIdx, glFlag
+                    );
                     Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(softmaxReady);
                 }
 
@@ -548,10 +586,10 @@ public:
                     uint64_t gmOffsetOTmp = (uint64_t)(coreIdx * TMP_SIZE * 2 + rescaleOPingPongFlag * TMP_SIZE);
                     uint64_t gmOffsetUpdate = (uint64_t)(coreIdx * TMP_SIZE);
                     // Softmax two-stage update
-                    epilogueMLATP1RescaleO(gOTmp[gmOffsetOTmp], gOUpdate[gmOffsetUpdate], gO[gmOffsetO],
-                                           gOCoreTmp[0], gl[0], layoutOTmp,
-                                           layoutUpdate, layoutO, actualBlockShapePV, nIdx, isLastNTile,
-                                           rescaleOPingPongFlag, glFlag);
+                    epilogueMLATP1RescaleO(
+                        gOTmp[gmOffsetOTmp], gOUpdate[gmOffsetUpdate], gO[gmOffsetO], gOCoreTmp[0], gl[0], layoutOTmp,
+                        layoutUpdate, layoutO, actualBlockShapePV, nIdx, isLastNTile, rescaleOPingPongFlag, glFlag
+                    );
                 }
             }
         }
@@ -583,10 +621,8 @@ public:
             uint32_t aivNum = AscendC::GetBlockNum() * AscendC::GetSubBlockNum();
             uint32_t aivId = AscendC::GetBlockIdx();
 
-            uint32_t headsProcess =
-                (COMPUTE_ELE_NUM / embed) > HEADS_PROCESS_MAX
-                    ? HEADS_PROCESS_MAX
-                    : (COMPUTE_ELE_NUM / embed);
+            uint32_t headsProcess = (COMPUTE_ELE_NUM / embed) > HEADS_PROCESS_MAX ? HEADS_PROCESS_MAX
+                                                                                  : (COMPUTE_ELE_NUM / embed);
             uint32_t loopsPerBatch = (qHeads + headsProcess - 1) / headsProcess;
             uint32_t loopsTotal = tailTaskNum * loopsPerBatch;
 
@@ -617,10 +653,9 @@ public:
 
                 epilogueMLAFDRescaleO(
                     gO[oAddr + loopIdxInBatch * headsProcess * embed],
-                    gOCoreTmp[oFdOffset * kvSplitCoreNum +
-                              loopIdxInBatch * headsProcess * kvSplitCoreNum * embed],
-                    gl[lOffset + loopIdxInBatch * headsProcess * kvSplitCoreNum],
-                    actualHeads, headsProcess, embed);
+                    gOCoreTmp[oFdOffset * kvSplitCoreNum + loopIdxInBatch * headsProcess * kvSplitCoreNum * embed],
+                    gl[lOffset + loopIdxInBatch * headsProcess * kvSplitCoreNum], actualHeads, headsProcess, embed
+                );
             }
         }
     }
@@ -632,22 +667,22 @@ private:
     Arch::CrossCoreFlag pvReady{PV_READY_ID};
 };
 
-
-CATLASS_GLOBAL void MLATp1SpecFp16(uint64_t fftsAddr,
-                                GM_ADDR q,
-                                GM_ADDR qRope,
-                                GM_ADDR k,
-                                GM_ADDR kRope,
-                                GM_ADDR blockTables,
-                                GM_ADDR o,
-                                GM_ADDR s,
-                                GM_ADDR p,
-                                GM_ADDR oTmp,
-                                GM_ADDR oUpdate,
-                                GM_ADDR oCoreTmp,
-                                GM_ADDR l,
-                                GM_ADDR tiling)
-{
+CATLASS_GLOBAL void MLATp1SpecFp16(
+    uint64_t fftsAddr,
+    GM_ADDR q,
+    GM_ADDR qRope,
+    GM_ADDR k,
+    GM_ADDR kRope,
+    GM_ADDR blockTables,
+    GM_ADDR o,
+    GM_ADDR s,
+    GM_ADDR p,
+    GM_ADDR oTmp,
+    GM_ADDR oUpdate,
+    GM_ADDR oCoreTmp,
+    GM_ADDR l,
+    GM_ADDR tiling
+) {
     // Set FFTS address
     AscendC::SetSyncBaseAddr(fftsAddr);
 
@@ -708,8 +743,8 @@ CATLASS_GLOBAL void MLATp1SpecFp16(uint64_t fftsAddr,
         Epilogue::Block::BlockEpilogue<Epilogue::EpilogueAtlasA2MLAFDRescaleO<ComputeEleNum>, OType, lType>;
 
     // Kernel level
-    using MLAKernel = MLAKernelTp1Spec<BlockMmadQK, BlockMmadPV, EpilogueMLASoftmax,
-                                       EpilogueMLARescaleO, EpilogueMLAFDRescaleO>;
+    using MLAKernel =
+        MLAKernelTp1Spec<BlockMmadQK, BlockMmadPV, EpilogueMLASoftmax, EpilogueMLARescaleO, EpilogueMLAFDRescaleO>;
     typename MLAKernel::Params params{q, qRope, k, kRope, blockTables, o, s, p, oTmp, oUpdate, oCoreTmp, l, tiling};
 
     // call kernel
@@ -717,21 +752,22 @@ CATLASS_GLOBAL void MLATp1SpecFp16(uint64_t fftsAddr,
     mla(params);
 }
 
-CATLASS_GLOBAL void MLATp1SpecBf16(uint64_t fftsAddr,
-                                GM_ADDR q,
-                                GM_ADDR qRope,
-                                GM_ADDR k,
-                                GM_ADDR kRope,
-                                GM_ADDR blockTables,
-                                GM_ADDR o,
-                                GM_ADDR s,
-                                GM_ADDR p,
-                                GM_ADDR oTmp,
-                                GM_ADDR oUpdate,
-                                GM_ADDR oCoreTmp,
-                                GM_ADDR l,
-                                GM_ADDR tiling)
-{
+CATLASS_GLOBAL void MLATp1SpecBf16(
+    uint64_t fftsAddr,
+    GM_ADDR q,
+    GM_ADDR qRope,
+    GM_ADDR k,
+    GM_ADDR kRope,
+    GM_ADDR blockTables,
+    GM_ADDR o,
+    GM_ADDR s,
+    GM_ADDR p,
+    GM_ADDR oTmp,
+    GM_ADDR oUpdate,
+    GM_ADDR oCoreTmp,
+    GM_ADDR l,
+    GM_ADDR tiling
+) {
     // Set FFTS address
     AscendC::SetSyncBaseAddr(fftsAddr);
 
@@ -792,8 +828,8 @@ CATLASS_GLOBAL void MLATp1SpecBf16(uint64_t fftsAddr,
         Epilogue::Block::BlockEpilogue<Epilogue::EpilogueAtlasA2MLAFDRescaleO<ComputeEleNum>, OType, lType>;
 
     // Kernel level
-    using MLAKernel = MLAKernelTp1Spec<BlockMmadQK, BlockMmadPV, EpilogueMLASoftmax,
-                                       EpilogueMLARescaleO, EpilogueMLAFDRescaleO>;
+    using MLAKernel =
+        MLAKernelTp1Spec<BlockMmadQK, BlockMmadPV, EpilogueMLASoftmax, EpilogueMLARescaleO, EpilogueMLAFDRescaleO>;
     typename MLAKernel::Params params{q, qRope, k, kRope, blockTables, o, s, p, oTmp, oUpdate, oCoreTmp, l, tiling};
 
     // call kernel

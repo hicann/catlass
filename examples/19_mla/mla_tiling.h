@@ -11,6 +11,7 @@
 #ifndef CATLASS_EXAMPLES_MLA_MLA_TILING_H
 #define CATLASS_EXAMPLES_MLA_MLA_TILING_H
 
+#include <array>
 #include <cstdint>
 
 namespace MLATiling {

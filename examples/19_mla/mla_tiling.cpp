@@ -8,6 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+#include "mla_tiling.h"
+
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -19,11 +21,10 @@
 #include <vector>
 
 #include "catlass/detail/alignment.hpp"
-#include "mla_tiling.h"
 
 using namespace std;
 namespace MLATiling {
-    using AddrOffsets = struct AddressOffsetInfo {
+using AddrOffsets = struct AddressOffsetInfo {
     uint64_t addrQSeqOffset = 0;
     uint64_t addrQSeqRopeOffset = 0;
     uint64_t addrMaskBatchOffset = 0;
@@ -31,11 +32,14 @@ namespace MLATiling {
     uint64_t addrLSeqOffset = 0;
 };
 
-inline uint32_t GetHigh32Bit(uint64_t v) { return static_cast<uint32_t>(v >> NUM32); }
-inline uint32_t GetLow32Bit(uint64_t v) { return static_cast<uint32_t>(v); }
+inline uint32_t GetHigh32Bit(uint64_t v) {
+    return static_cast<uint32_t>(v >> NUM32);
+}
+inline uint32_t GetLow32Bit(uint64_t v) {
+    return static_cast<uint32_t>(v);
+}
 
-void GetAddrOffsetMLA(uint32_t *tilingHost, const AddrOffsets addrOffsets, const int32_t tilingOffset)
-{
+void GetAddrOffsetMLA(uint32_t *tilingHost, const AddrOffsets addrOffsets, const int32_t tilingOffset) {
     // Calculate address offset
     tilingHost[tilingOffset + NUM4] = GetHigh32Bit(addrOffsets.addrQSeqOffset);
     tilingHost[tilingOffset + NUM5] = GetLow32Bit(addrOffsets.addrQSeqOffset);
@@ -45,8 +49,7 @@ void GetAddrOffsetMLA(uint32_t *tilingHost, const AddrOffsets addrOffsets, const
     tilingHost[tilingOffset + NUM9] = GetLow32Bit(addrOffsets.addrMaskBatchOffset);
 }
 
-void GetMLATilingCommon(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *tilingHost)
-{
+void GetMLATilingCommon(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *tilingHost) {
     // Calculate the batch-related tiling parameters
     int32_t maxKVSeqlen = 0;
     int32_t maxQSeqlen = 0;
@@ -73,8 +76,7 @@ void GetMLATilingCommon(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *ti
     tilingHost[TILING_MAX_QSEQLEN] = maxQSeqlen;
 }
 
-void GetMLATilingSpec(const MLAInfo &mmInfo, uint32_t &blockDim, uint32_t *tilingHost)
-{
+void GetMLATilingSpec(const MLAInfo &mmInfo, uint32_t &blockDim, uint32_t *tilingHost) {
     // Tp1 senario specialization
     // Treat every Q token with 128 heads as one process, regardless of the mtp depth
     int32_t prevTaskNum = 0;
@@ -94,8 +96,7 @@ void GetMLATilingSpec(const MLAInfo &mmInfo, uint32_t &blockDim, uint32_t *tilin
     tilingHost[TILING_MAX_KVSEQLEN] = maxKVSeqlen;
 }
 
-int32_t GetQNBlockTile(const MLAInfo &mlaInfo, int32_t qSeqLen, uint32_t specStrategyFlag)
-{
+int32_t GetQNBlockTile(const MLAInfo &mlaInfo, int32_t qSeqLen, uint32_t specStrategyFlag) {
     int32_t tokenNum = qSeqLen;
     if (specStrategyFlag) {
         tokenNum = NUM1;
@@ -108,9 +109,13 @@ int32_t GetQNBlockTile(const MLAInfo &mlaInfo, int32_t qSeqLen, uint32_t specStr
     return qNBlockTile;
 }
 
-void GetTilingHead(const MLAInfo &mlaInfo, uint32_t *tilingHost, const uint32_t *torPtr, int32_t maxQseqlen,
-                   uint32_t specStrategyFlag)
-{
+void GetTilingHead(
+    const MLAInfo &mlaInfo,
+    uint32_t *tilingHost,
+    const uint32_t *torPtr,
+    int32_t maxQseqlen,
+    uint32_t specStrategyFlag
+) {
     // Calculating tiling parameters
     tilingHost[TILING_BATCH] = static_cast<uint32_t>(mlaInfo.batch);
     tilingHost[TILING_HEADSIZE] = static_cast<uint32_t>(TILING_HEAD_SIZE);
@@ -136,11 +141,10 @@ void GetTilingHead(const MLAInfo &mlaInfo, uint32_t *tilingHost, const uint32_t 
     tilingHost[TILING_TOTAL_QTOKENS] = static_cast<uint32_t>(mlaInfo.numTokens);
 }
 
-uint32_t GetKVSplitParam(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *tilingHost)
-{
+uint32_t GetKVSplitParam(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *tilingHost) {
     // Calculate the tiling parameters related to flash decoding
-    bool isKVSplit = (tilingHost[TILING_MAX_KVSEQLEN] >= blockDim * KV_SEQLEN_SLICE * NUM2) &&
-                     (tilingHost[TILING_BATCH] <= blockDim * SPLITKV_RATION && tilingHost[TILING_MAX_QSEQLEN] == 1);
+    bool isKVSplit = (tilingHost[TILING_MAX_KVSEQLEN] >= blockDim * KV_SEQLEN_SLICE * NUM2)
+                     && (tilingHost[TILING_BATCH] <= blockDim * SPLITKV_RATION && tilingHost[TILING_MAX_QSEQLEN] == 1);
     if (tilingHost[TILING_NUMHEADS] == NUM128 || !isKVSplit) {
         tilingHost[TILING_KVCORENUM] = 1;
         tilingHost[TILING_KVSPLIT] = tilingHost[TILING_MAX_KVSEQLEN];
@@ -181,8 +185,7 @@ uint32_t GetKVSplitParam(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *t
     return decoderBatch * kvSplitCoreNum;
 }
 
-uint32_t GetKVSplitParamSpec(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *tilingHost)
-{
+uint32_t GetKVSplitParamSpec(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *tilingHost) {
     // Tp1 senario specialization
     // Calculate the tiling parameters related to flash decoding
     uint32_t totalTaskNumSpec = tilingHost[TILING_TOTAL_QTOKENS];
@@ -246,8 +249,7 @@ uint32_t GetKVSplitParamSpec(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_
     return tailTaskNum * kvSplitCoreNum;
 }
 
-int32_t GetMLATilingParam(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *tilingHost)
-{
+int32_t GetMLATilingParam(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *tilingHost) {
     if (tilingHost == nullptr || mlaInfo.qSeqLen == nullptr || mlaInfo.kvSeqLen == nullptr) {
         cerr << "[ERROR] pointer tilingHost or seq is nullptr." << endl;
         return -1;

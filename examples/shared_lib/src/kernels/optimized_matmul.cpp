@@ -8,19 +8,20 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+#include "catlass/gemm/kernel/optimized_matmul.hpp"
+
 #include <acl/acl.h>
 #include <runtime/rt_ffts.h>
 
-#include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
+#include "catlass/catlass.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/device/device_gemm.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
 #include "catlass/gemm/gemm_type.hpp"
-#include "catlass/gemm/kernel/optimized_matmul.hpp"
 #include "catlass/layout/layout.hpp"
 #include "catlass/status.hpp"
-#include "catlass/gemm/device/device_gemm.hpp"
 
 #include "catlass_kernel.h"
 #include "common.hpp"
@@ -61,13 +62,12 @@ struct TileCopyOpt : public Catlass::Gemm::Tile::TileCopy<ArchTag, AType, BType,
     using CopyGmToL1Bias = typename Base::CopyGmToL1Bias;
     using CopyL1ToBT = typename Base::CopyL1ToBT;
 };
-}  // namespace Catlass
+} // namespace Catlass
 
 namespace CatlassKernel {
 using namespace Catlass;
 template <class LayoutA, class LayoutB, class LayoutC, class InDType, class OutDType, bool M_GT_N>
-void OptimizedMatmulImpl(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo)
-{
+void OptimizedMatmulImpl(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo) {
     using ArchTag = Arch::AtlasA2;
     constexpr uint32_t alignByByte = 512;
     constexpr uint32_t alignByElement = alignByByte / sizeof(InDType);
@@ -82,12 +82,12 @@ void OptimizedMatmulImpl(const uint32_t blockNum, aclrtStream stream, const Kern
     using DispatchPolicy = Gemm::MmadAtlasA2Preload<ENABLE_UNIT_FLAG, ENABLE_SHUFFLE_K>;
     using PaddingTag = Catlass::Gemm::Kernel::PaddingTag;
     // Layout zN or layout nZ does not require padding operation.
-    constexpr PaddingTag paddingTagA = (std::is_same_v<LayoutA, layout::zN> || std::is_same_v<LayoutA, layout::nZ>) ?
-                                           PaddingTag::NO_PADDING :
-                                           PaddingTag::PADDING_BLOCK_ND;
-    constexpr PaddingTag paddingTagB = (std::is_same_v<LayoutB, layout::zN> || std::is_same_v<LayoutB, layout::nZ>) ?
-                                           PaddingTag::NO_PADDING :
-                                           PaddingTag::PADDING_BLOCK_ND;
+    constexpr PaddingTag paddingTagA = (std::is_same_v<LayoutA, layout::zN> || std::is_same_v<LayoutA, layout::nZ>)
+                                           ? PaddingTag::NO_PADDING
+                                           : PaddingTag::PADDING_BLOCK_ND;
+    constexpr PaddingTag paddingTagB = (std::is_same_v<LayoutB, layout::zN> || std::is_same_v<LayoutB, layout::nZ>)
+                                           ? PaddingTag::NO_PADDING
+                                           : PaddingTag::PADDING_BLOCK_ND;
     static const uint32_t COMPUTE_LENGTH_A = 96 * 1024 / sizeof(ElementA);
     using PaddingBuilderA =
         Catlass::Gemm::Kernel::PaddingBuilder<ArchTag, ElementA, LayoutA, COMPUTE_LENGTH_A, paddingTagA>;
@@ -97,13 +97,13 @@ void OptimizedMatmulImpl(const uint32_t blockNum, aclrtStream stream, const Kern
         Catlass::Gemm::Kernel::PaddingBuilder<ArchTag, ElementB, LayoutB, COMPUTE_LENGTH_B, paddingTagB>;
     using GlobalPaddingB = typename PaddingBuilderB::Padding;
     // Prepare FFTS address
-    uint32_t fftsLen{ 0 };
-    uint64_t fftsAddr{ 0 };
+    uint32_t fftsLen{0};
+    uint64_t fftsAddr{0};
     rtCheck(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
-    GemmCoord problemShape{ kernelInfo.m, kernelInfo.n, kernelInfo.k };
-    LayoutA layoutA{ kernelInfo.m, kernelInfo.k };
-    LayoutB layoutB{ kernelInfo.k, kernelInfo.n };
-    LayoutC layoutC{ kernelInfo.m, kernelInfo.n };
+    GemmCoord problemShape{kernelInfo.m, kernelInfo.n, kernelInfo.k};
+    LayoutA layoutA{kernelInfo.m, kernelInfo.k};
+    LayoutB layoutB{kernelInfo.k, kernelInfo.n};
+    LayoutC layoutC{kernelInfo.m, kernelInfo.n};
     uint8_t *deviceA = kernelInfo.inputAddr.at(0);
     uint8_t *deviceB = kernelInfo.inputAddr.at(1);
     uint8_t *deviceC = kernelInfo.outputAddr.at(0);
@@ -112,13 +112,13 @@ void OptimizedMatmulImpl(const uint32_t blockNum, aclrtStream stream, const Kern
     // L1TileShape using GemmShape<256, 128, 256> can achieve better performance.
     using L1TileShape =
         std::conditional_t<std::is_same_v<LayoutA, layout::ColumnMajor> && std::is_same_v<LayoutB, layout::ColumnMajor>,
-            GemmShape<256, 128, 256>, GemmShape<128, 256, 256> >;
+                           GemmShape<256, 128, 256>, GemmShape<128, 256, 256>>;
     using L0TileShape =
         std::conditional_t<std::is_same_v<LayoutA, layout::ColumnMajor> && std::is_same_v<LayoutB, layout::ColumnMajor>,
-            GemmShape<256, 128, 64>, GemmShape<128, 256, 64> >;
+                           GemmShape<256, 128, 64>, GemmShape<128, 256, 64>>;
 
     using BlockScheduler = std::conditional_t<M_GT_N, Catlass::Gemm::Block::GemmIdentityBlockSwizzle<3, 0>,
-        Catlass::Gemm::Block::GemmIdentityBlockSwizzle<3, 1> >;
+                                              Catlass::Gemm::Block::GemmIdentityBlockSwizzle<3, 1>>;
     using BlockEpilogue = void;
     bool isNeedPaddingA = IsNeedPadding(layoutA, alignByElement);
     bool isNeedPaddingB = IsNeedPadding(layoutB, alignByElement);
@@ -130,10 +130,10 @@ void OptimizedMatmulImpl(const uint32_t blockNum, aclrtStream stream, const Kern
         using BTypeMmad = Gemm::GemmType<ElementB, LayoutMmadB>;
         using TileCopy = TileCopyOpt<ArchTag, ATypeMmad, BTypeMmad, CType>;
         using BlockMmadOpt = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, ATypeMmad, BTypeMmad,
-            CType, void, TileCopy>;
+                                                    CType, void, TileCopy>;
         using MatmulKernel =
             Gemm::Kernel::OptimizedMatmul<GlobalPaddingA, GlobalPaddingB, BlockMmadOpt, BlockEpilogue, BlockScheduler>;
-        typename MatmulKernel::Arguments arguments{ problemShape, deviceA, deviceB, deviceC };
+        typename MatmulKernel::Arguments arguments{problemShape, deviceA, deviceB, deviceC};
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
         MatmulAdapter matmulOp;
         RunAdapter(matmulOp, arguments, stream, blockNum, fftsAddr);
@@ -145,7 +145,7 @@ void OptimizedMatmulImpl(const uint32_t blockNum, aclrtStream stream, const Kern
             Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, ATypeMmad, BType, CType, void, TileCopy>;
         using MatmulKernel =
             Gemm::Kernel::OptimizedMatmul<GlobalPaddingA, void, BlockMmadOpt, BlockEpilogue, BlockScheduler>;
-        typename MatmulKernel::Arguments arguments{ problemShape, deviceA, deviceB, deviceC };
+        typename MatmulKernel::Arguments arguments{problemShape, deviceA, deviceB, deviceC};
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
         MatmulAdapter matmulOp;
         RunAdapter(matmulOp, arguments, stream, blockNum, fftsAddr);
@@ -157,7 +157,7 @@ void OptimizedMatmulImpl(const uint32_t blockNum, aclrtStream stream, const Kern
             Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BTypeMmad, CType, void, TileCopy>;
         using MatmulKernel =
             Gemm::Kernel::OptimizedMatmul<void, GlobalPaddingB, BlockMmadOpt, BlockEpilogue, BlockScheduler>;
-        typename MatmulKernel::Arguments arguments{ problemShape, deviceA, deviceB, deviceC };
+        typename MatmulKernel::Arguments arguments{problemShape, deviceA, deviceB, deviceC};
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
         MatmulAdapter matmulOp;
         RunAdapter(matmulOp, arguments, stream, blockNum, fftsAddr);
@@ -166,24 +166,25 @@ void OptimizedMatmulImpl(const uint32_t blockNum, aclrtStream stream, const Kern
         using BlockMmadOpt =
             Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType, void, TileCopy>;
         using MatmulKernel = Gemm::Kernel::OptimizedMatmul<void, void, BlockMmadOpt, BlockEpilogue, BlockScheduler>;
-        typename MatmulKernel::Arguments arguments{ problemShape, deviceA, deviceB, deviceC };
+        typename MatmulKernel::Arguments arguments{problemShape, deviceA, deviceB, deviceC};
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
         MatmulAdapter matmulOp;
         RunAdapter(matmulOp, arguments, stream, blockNum, fftsAddr);
     }
 }
-void OptimizedMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo)
-{
-    if (!kernelInfo.transA && !kernelInfo.transB && kernelInfo.inputDataType == ACL_FLOAT16 &&
-        kernelInfo.outputDataType == ACL_FLOAT16) {
+void OptimizedMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo) {
+    if (!kernelInfo.transA && !kernelInfo.transB && kernelInfo.inputDataType == ACL_FLOAT16
+        && kernelInfo.outputDataType == ACL_FLOAT16) {
         if (kernelInfo.m > kernelInfo.n) {
-            OptimizedMatmulImpl<layout::RowMajor, layout::RowMajor, layout::RowMajor, half, half, true>(
-                blockNum, stream, kernelInfo);
+            OptimizedMatmulImpl<layout::RowMajor, layout::RowMajor, layout::RowMajor, half, half, true>(blockNum,
+                                                                                                        stream,
+                                                                                                        kernelInfo);
         } else {
-            OptimizedMatmulImpl<layout::RowMajor, layout::RowMajor, layout::RowMajor, half, half, false>(
-                blockNum, stream, kernelInfo);
+            OptimizedMatmulImpl<layout::RowMajor, layout::RowMajor, layout::RowMajor, half, half, false>(blockNum,
+                                                                                                         stream,
+                                                                                                         kernelInfo);
         }
     }
     // If more conditions are needed, add branches manually.
 }
-}  // namespace CatlassKernel
+} // namespace CatlassKernel

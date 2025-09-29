@@ -14,67 +14,29 @@
 #define K_MAX_SHAPE_DIM 0
 #endif
 
-#include <iostream>
-#include <vector>
-
-#include "helper.hpp"
-#include "golden.hpp"
-#include "fp16_t.h"
-
-#include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
-#include "catlass/epilogue/dispatch_policy.hpp"
+#include "catlass/catlass.hpp"
 #include "catlass/epilogue/block/block_epilogue.hpp"
+#include "catlass/epilogue/dispatch_policy.hpp"
 #include "catlass/epilogue/tile/tile_copy.hpp"
 #include "catlass/epilogue/tile/tile_elemwise_swish.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
-#include "catlass/gemm/dispatch_policy.hpp"
-#include "catlass/gemm/kernel/matmul_activation.hpp"
-#include "catlass/gemm/gemm_type.hpp"
-#include "catlass/layout/layout.hpp"
-
-#include "catlass/status.hpp"
 #include "catlass/gemm/device/device_gemm.hpp"
+#include "catlass/gemm/dispatch_policy.hpp"
+#include "catlass/gemm/gemm_type.hpp"
+#include "catlass/gemm/kernel/matmul_activation.hpp"
+#include "catlass/layout/layout.hpp"
+#include "catlass/status.hpp"
+
+#include "golden.hpp"
+#include "helper.hpp"
 
 using namespace Catlass;
-using fp16_t = op::fp16_t;
 
-struct Options {
-    const std::string HELPER = "28_matmul_swish m n k [device_id]";
+using Options = GemmOptions;
 
-    GemmCoord problemShape{128, 128, 128};
-    int32_t deviceId{0};
-
-    Options() = default;
-
-    int Parse(int argc, const char **argv)
-    {
-        enum ArgsIndex {
-            M_INDEX = 1,
-            N_INDEX,
-            K_INDEX,
-            DEVICE_ID_INDEX,
-            ARGS_MAX
-        };
-
-        if (argc > ARGS_MAX || argc <= K_INDEX) {
-            std::cerr << HELPER << std::endl;
-            return -1;
-        }
-
-        problemShape.m() = std::atoi(argv[M_INDEX]);
-        problemShape.n() = std::atoi(argv[N_INDEX]);
-        problemShape.k() = std::atoi(argv[K_INDEX]);
-        if (argc == ARGS_MAX) {
-            deviceId = std::atoi(argv[DEVICE_ID_INDEX]);
-        }
-        return 0;
-    }
-};
-
-void Run(Options const &options)
-{
+static void Run(const Options &options) {
     aclrtStream stream{nullptr};
 
     ACL_CHECK(aclInit(nullptr));
@@ -150,13 +112,13 @@ void Run(Options const &options)
 
     constexpr uint32_t computeLength = 16384; // 64 * 128 * 2B
     using TileElemWiseEpilogue = Epilogue::Tile::TileElemWiseSwish<ArchTag, CType, computeLength>;
-    using EpilogueTileCopy = Epilogue::Tile::TileCopy<ArchTag,
+    using EpilogueTileCopy = Epilogue::Tile::TileCopy<
+        ArchTag,
         CType, // CopyGmtoUbC
-        DType // CopyUbtoGmD
-    >;
-    using BlockEpilogue = Epilogue::Block::BlockEpilogue<
-        EpilogueDispatchPolicy, CType, DType,
-        TileElemWiseEpilogue, EpilogueTileCopy>;
+        DType  // CopyUbtoGmD
+        >;
+    using BlockEpilogue =
+        Epilogue::Block::BlockEpilogue<EpilogueDispatchPolicy, CType, DType, TileElemWiseEpilogue, EpilogueTileCopy>;
     std::vector<fp16_t> hostD(lenD);
     if (m > n) {
         // Define BlockScheduler
@@ -168,10 +130,10 @@ void Run(Options const &options)
         typename MatmulKernel::Arguments arguments{
             options.problemShape, sizeof(half), deviceA, deviceB, deviceC, deviceD};
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-        MatmulAdapter matmul_op;
+        MatmulAdapter matmulOp;
 
-        matmul_op.Initialize(arguments);
-        matmul_op(stream, aicCoreNum, fftsAddr);
+        matmulOp.Initialize(arguments);
+        matmulOp(stream, aicCoreNum, fftsAddr);
         ACL_CHECK(aclrtSynchronizeStream(stream));
         // Copy the result from device to host
         ACL_CHECK(aclrtMemcpy(hostD.data(), sizeD, deviceD, sizeD, ACL_MEMCPY_DEVICE_TO_HOST));
@@ -185,10 +147,10 @@ void Run(Options const &options)
         typename MatmulKernel::Arguments arguments{
             options.problemShape, sizeof(half), deviceA, deviceB, deviceC, deviceD};
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-        MatmulAdapter matmul_op;
-        
-        matmul_op.Initialize(arguments);
-        matmul_op(stream, aicCoreNum, fftsAddr);
+        MatmulAdapter matmulOp;
+
+        matmulOp.Initialize(arguments);
+        matmulOp(stream, aicCoreNum, fftsAddr);
         ACL_CHECK(aclrtSynchronizeStream(stream));
 
         // Copy the result from device to host
@@ -216,8 +178,7 @@ void Run(Options const &options)
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv)
-{
+int main(int argc, const char **argv) {
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;

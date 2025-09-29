@@ -8,32 +8,28 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0, 
+// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0,
 // optimizing stack space. If you need to use the ShapeInfo of the AscendC Tensor, please undefine this macro.
 #ifndef K_MAX_SHAPE_DIM
 #define K_MAX_SHAPE_DIM 0
 #endif
 
-#include <iostream>
-#include <vector>
+#include "catlass/gemm/kernel/small_matmul.hpp"
 
-#include "helper.hpp"
-#include "golden.hpp"
-#include "fp16_t.h"
-
-#include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
+#include "catlass/catlass.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
 #include "catlass/gemm/device/device_gemm.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
 #include "catlass/gemm/gemm_type.hpp"
-#include "catlass/gemm/kernel/small_matmul.hpp"
 #include "catlass/layout/layout.hpp"
 #include "catlass/status.hpp"
 
+#include "golden.hpp"
+#include "helper.hpp"
+
 using namespace Catlass;
-using fp16_t = op::fp16_t;
 
 using ArchTag = Arch::AtlasA2;
 static constexpr uint32_t STAGES = 2;
@@ -43,19 +39,16 @@ using DispatchPolicy = Gemm::MmadAtlasA2Small<STAGES, ENABLE_UNIT_FLAG, ENABLE_S
 using L1TileShape = GemmShape<128, 256, 256>;
 using L0TileShape = GemmShape<128, 256, 64>;
 
-template <
-    class LayoutA,
-    class LayoutB,
-    class LayoutC
->
-CATLASS_GLOBAL
-void SmallMatmul(
+template <class LayoutA, class LayoutB, class LayoutC>
+CATLASS_GLOBAL void SmallMatmul(
     GemmCoord problemShape,
-    GM_ADDR gmA, LayoutA layoutA,
-    GM_ADDR gmB, LayoutB layoutB,
-    GM_ADDR gmC, LayoutC layoutC
-)
-{
+    GM_ADDR gmA,
+    LayoutA layoutA,
+    GM_ADDR gmB,
+    LayoutB layoutB,
+    GM_ADDR gmC,
+    LayoutC layoutC
+) {
     using AType = Gemm::GemmType<half, LayoutA>;
     using BType = Gemm::GemmType<half, LayoutB>;
     using CType = Gemm::GemmType<half, LayoutC>;
@@ -76,41 +69,9 @@ void SmallMatmul(
     matmul(params);
 }
 
-struct Options {
-    const std::string HELPER = "31_small_matmul m n k [device_id]";
+using Options = GemmOptions;
 
-    GemmCoord problemShape{128, 128, 128};
-    int32_t deviceId{0};
-
-    Options() = default;
-
-    int Parse(int argc, const char **argv)
-    {
-        enum ArgsIndex {
-            M_INDEX = 1,
-            N_INDEX,
-            K_INDEX,
-            DEVICE_ID_INDEX,
-            ARGS_MAX
-        };
-
-        if (argc > ARGS_MAX || argc <= K_INDEX) {
-            std::cerr << HELPER << std::endl;
-            return -1;
-        }
-
-        problemShape.m() = std::atoi(argv[M_INDEX]);
-        problemShape.n() = std::atoi(argv[N_INDEX]);
-        problemShape.k() = std::atoi(argv[K_INDEX]);
-        if (argc == ARGS_MAX) {
-            deviceId = std::atoi(argv[DEVICE_ID_INDEX]);
-        }
-        return 0;
-    }
-};
-
-void Run(Options const &options)
-{
+static void Run(const Options &options) {
     aclrtStream stream{nullptr};
 
     ACL_CHECK(aclInit(nullptr));
@@ -164,7 +125,8 @@ void Run(Options const &options)
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
     SmallMatmul<<<aicCoreNum, nullptr, stream>>>(
-        options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC);
+        options.problemShape, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC
+    );
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
     std::vector<fp16_t> hostC(lenC);
@@ -189,8 +151,7 @@ void Run(Options const &options)
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv)
-{
+int main(int argc, const char **argv) {
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;
