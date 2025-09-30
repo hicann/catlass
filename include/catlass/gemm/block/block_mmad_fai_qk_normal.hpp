@@ -127,7 +127,6 @@ public:
         // intriParams.dstNzNStride = tokenNumPerGroup;
         // intriParams.dstNzC0Stride = rowNumRound;
         // intriParams.ndNum = tokenNumPerGroup;
-        // intriParams.srcNdMatrixStride = qHeads * embed;
         // intriParams.dstNzMatrixStride = 16;
         // AscendC::DataCopy(l1ATensor, gA, intriParams);
         AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(EVENT_ID3);
@@ -207,7 +206,6 @@ public:
                 bool initMmad = kIdx == 0;
                 stackTile += actualShape[1];
                 LayoutC layOutSTemp(rowNum, stackTile, 512);
-                // LayoutC layOutSTemp(rowNum, stackTile, 512);
                 // AscendC::printf("firstItr:%d\n", firstItr);
                 // AscendC::printf("endItr:%d\n", endItr);
                 // AscendC::printf("initMmad:%d\n", initMmad);
