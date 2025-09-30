@@ -145,19 +145,3 @@ struct MmadAtlasA2Preload : public MmadAtlasA2 {
 ### 浅述定制调优
 - 当前仓上Matmul样例各有特性和优势场景，用户可以通过深层的代码重新组装进行定制开发。例如，[21_basic_matmul_preload_zN](../examples/21_basic_matmul_preload_zN/basic_matmul_preload_zN.cpp)便是基于00_basic_matmul组装了`MmadAtlasA2Preload`的dispatchPolicy，而[22_padding_splitk_matmul](../examples/22_padding_splitk_matmul/padding_splitk_matmul.cpp)是组装了04_padding_matmul和09_splitk_matmul的特性。用户在熟悉了仓上不同样例代码后，可以根据业务场景深度开发达到更好的性能。模板库也会持续增加使用了新的算法、适合更多场景的Matmul样例。
 - 除了基础的Matmul定制调优，仓上一些衍生样例（如[03_matmul_add](../examples/03_matmul_add/matmul_add.cpp)、[20_matmul_bias](../examples/20_matmul_bias/matmul_bias.cpp)等）往往是基于00_basic_matmul等样例增加新的功能，这些样例同样可以定制化地使用不同的基础Matmul样例、并进行tiling调参达到更好性能。
-
-## 版权声明
-Copyright (c) 2025 Huawei Technologies Co., Ltd.
-
-This file is a part of the CANN Open Software.
-Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
-EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
-MERCHANTABILITY, OR FITNESS FOR A PARTICULAR   PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
-
-## 许可证
-[CANN Open Software License Agreement Version 1.0](../LICENSE)
