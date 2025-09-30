@@ -147,13 +147,13 @@ TLA_BINARY_OP(>>);
         return C<OP(t, u)>{};                                           \
     }                                                                   \
     template <auto t, class U,                                          \
-              __TLA_REQUIRES(is_std_integral<U>::value)>                \
+              TLA_REQUIRES(is_std_integral<U>::value)>                \
     CATLASS_HOST_DEVICE constexpr                                       \
     auto OP (C<t>, U u) {                                               \
         return OP(t, u);                                                \
     }                                                                   \
     template <class T, auto u,                                          \
-              __TLA_REQUIRES(is_std_integral<T>::value)>                \
+              TLA_REQUIRES(is_std_integral<T>::value)>                \
     CATLASS_HOST_DEVICE constexpr                                       \
     auto OP (T t, C<u>) {                                               \
         return OP(t, u);                                                \
