@@ -52,5 +52,6 @@ BraceWrapping:
   AfterClass: false
   AfterStruct: false
   AfterUnion: false
+  AfterFunction: true
   BeforeCatch: false
   BeforeElse: false

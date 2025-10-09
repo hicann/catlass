@@ -7,7 +7,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
  * See LICENSE in the root of the software repository for the full text of the License.
  */
- 
+
 #ifndef EXAMPLES_COMMON_GOLDEN_COMPARE_DATA_HPP
 #define EXAMPLES_COMMON_GOLDEN_COMPARE_DATA_HPP
 
@@ -33,6 +33,23 @@ std::vector<uint64_t> CompareData(const std::vector<ElementResult>& result, cons
         ElementCompare expectValue = expect[i];
         ElementCompare diff = std::fabs(actualValue - expectValue);
         if (diff > rtol * std::max(1.0f, std::fabs(expectValue))) {
+            errorIndices.push_back(i);
+        }
+    }
+    return errorIndices;
+}
+
+template<>
+std::vector<uint64_t> CompareData(const std::vector<int32_t>& result, const std::vector<int32_t>& expect,
+    uint32_t computeNum)
+{
+    using ElementCompare = int32_t;
+    std::vector<uint64_t> errorIndices;
+    for (uint64_t i = 0; i < result.size(); ++i) {
+        ElementCompare actualValue = static_cast<ElementCompare>(result[i]);
+        ElementCompare expectValue = expect[i];
+        ElementCompare diff = std::abs(actualValue - expectValue);
+        if (diff != 0) {
             errorIndices.push_back(i);
         }
     }

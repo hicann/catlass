@@ -1376,6 +1376,115 @@ struct TileCopyTla<Arch::AtlasA2,
     }
 };
 
+/// Partial specialization for CopyGmToL1, AtlasA2, zN in and zN out.
+template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+struct TileCopyTla<Arch::AtlasA2,
+    tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::GM>,
+    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::A1>,
+    std::enable_if_t<tla::detail::iszN<ElementSrc, LayoutSrc>::value &&
+                     tla::detail::iszN<ElementDst, LayoutDst>::value>> {
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
+
+    // Mehtods
+
+    CATLASS_DEVICE
+    TileCopyTla() {};
+
+    template <class TensorDst, class TensorSrc>
+    CATLASS_DEVICE
+    void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
+    {
+        static_assert(tla::detail::iszN<typename TensorSrc::Element, typename TensorSrc::Layout>::value &&
+                      tla::detail::iszN<typename TensorDst::Element, typename TensorDst::Layout>::value &&
+                      TensorSrc::position == AscendC::TPosition::GM &&
+                      TensorDst::position == AscendC::TPosition::A1,
+            "The input parameters do not match. TensorSrc must be GM and zN, while TensorDst must be L1 and zN");
+
+        const uint32_t srcOuterStrideCol = tla::get<1, 1>(srcTensor.stride());
+        const uint32_t dstOuterStrideCol = tla::get<1, 1>(dstTensor.stride());
+
+        uint32_t blockCount = tla::get<1, 1>(srcTensor.shape());
+        uint32_t blockLen = tla::get<0, 0>(srcTensor.shape()) * tla::get<0, 1>(srcTensor.shape());
+
+        auto dstOffset = dstTensor.layout()(dstTensor.coord());
+        auto srcOffset = srcTensor.layout()(srcTensor.coord());
+
+        AscendC::DataCopyParams repeatParams;
+        if (srcOuterStrideCol / ELE_NUM_PER_C0 <= STRIDE_LIMIT) {
+            repeatParams.blockCount = blockCount;
+            repeatParams.blockLen = blockLen;
+            repeatParams.srcStride = srcOuterStrideCol / ELE_NUM_PER_C0 - blockLen;
+            repeatParams.dstStride = dstOuterStrideCol / ELE_NUM_PER_C0 - blockLen;
+            AscendC::DataCopy(dstTensor.data()[dstOffset], srcTensor.data()[srcOffset], repeatParams);
+        } else {
+            repeatParams.blockCount = 1;
+            repeatParams.blockLen = blockLen;
+            repeatParams.srcStride = 0;
+            repeatParams.dstStride = 0;
+            for (uint32_t i = 0; i < blockCount; i++) {
+                AscendC::DataCopy(dstTensor.data()[dstOffset + i * dstOuterStrideCol],
+                    srcTensor.data()[srcOffset + i * srcOuterStrideCol],
+                    repeatParams);
+            }
+        }
+    }
+};
+
+/// Partial specialization for CopyGmToL1, AtlasA2, nZ in and nZ out.
+template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+struct TileCopyTla<Arch::AtlasA2,
+    tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::GM>,
+    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::A1>,
+    std::enable_if_t<tla::detail::isnZ<ElementSrc, LayoutSrc>::value &&
+                     tla::detail::isnZ<ElementDst, LayoutDst>::value>> {
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
+
+    // Mehtods
+
+    CATLASS_DEVICE
+    TileCopyTla() {};
+
+    template <class TensorDst, class TensorSrc>
+    CATLASS_DEVICE
+    void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
+    {
+        static_assert(tla::detail::isnZ<typename TensorSrc::Element, typename TensorSrc::Layout>::value &&
+                      tla::detail::isnZ<typename TensorDst::Element, typename TensorDst::Layout>::value &&
+                      TensorSrc::position == AscendC::TPosition::GM &&
+                      TensorDst::position == AscendC::TPosition::A1,
+            "The input parameters do not match. TensorSrc must be GM and nZ, while TensorDst must be L1 and nZ");
+
+        const uint32_t srcOuterStrideRow = tla::get<0, 1>(srcTensor.stride());
+        const uint32_t dstOuterStrideRow = tla::get<0, 1>(dstTensor.stride());
+
+        uint32_t blockCount = tla::get<0, 1>(srcTensor.shape());
+        uint32_t blockLen = tla::get<1, 0>(srcTensor.shape()) * tla::get<1, 1>(srcTensor.shape());
+
+        auto dstOffset = dstTensor.layout()(dstTensor.coord());
+        auto srcOffset = srcTensor.layout()(srcTensor.coord());
+
+        AscendC::DataCopyParams repeatParams;
+        if (srcOuterStrideRow / ELE_NUM_PER_C0 <= STRIDE_LIMIT) {
+            repeatParams.blockCount = blockCount;
+            repeatParams.blockLen = blockLen;
+            repeatParams.srcStride = srcOuterStrideRow / ELE_NUM_PER_C0 - blockLen;
+            repeatParams.dstStride = dstOuterStrideRow / ELE_NUM_PER_C0 - blockLen;
+            AscendC::DataCopy(dstTensor.data()[dstOffset], srcTensor.data()[srcOffset], repeatParams);
+        } else {
+            repeatParams.blockCount = 1;
+            repeatParams.blockLen = blockLen;
+            repeatParams.srcStride = 0;
+            repeatParams.dstStride = 0;
+            for (uint32_t i = 0; i < blockCount; i++) {
+                AscendC::DataCopy(dstTensor.data()[dstOffset + i * dstOuterStrideRow],
+                    srcTensor.data()[srcOffset + i * srcOuterStrideRow],
+                    repeatParams);
+            }
+        }
+    }
+};
+
+///////////////////////////////////////////TileCopyTlaExt//////////////////////////////////////////////////////
 /// Partial specialization for TileCopyTlaExt, CopyGmToL1, AtlasA2, PaddingRowMajor in and zN out.
 template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
 struct TileCopyTlaExt<Arch::AtlasA2,
@@ -1459,7 +1568,7 @@ struct TileCopyTlaExt<Arch::AtlasA2,
     }
 };
 
-/// Partial specialization for TileCopyTlaExt, CopyGmToL1, AtlasA2, PaddingColumnMajor in and nZ out.
+/// Partial specialization for TileCopyTlaExt, CopyGmToL1, AtlasA2, ColumnMajor in and nZ out.
 template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
 struct TileCopyTlaExt<Arch::AtlasA2,
     tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::GM>,
@@ -1541,6 +1650,116 @@ struct TileCopyTlaExt<Arch::AtlasA2,
         auto dstOffset = dstTensor.layout()(dstTensor.coord());
         auto srcOffset = srcTensor.layout()(srcTensor.coord());
         AscendC::DataCopy(dstTensor.data()[dstOffset], srcTensor.data()[srcOffset], intriParams);
+    }
+};
+
+/// Partial specialization for TileCopyTlaExt, CopyGmToL1, AtlasA2, zN in and zN out.
+template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+struct TileCopyTlaExt<Arch::AtlasA2,
+    tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::GM>,
+    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::A1>,
+    layout::zN, layout::zN> {
+    using ActualShape = tla::Shape<uint32_t, uint32_t>;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
+
+    // Mehtods
+
+    CATLASS_DEVICE
+    TileCopyTlaExt() {};
+
+    template <class TensorDst, class TensorSrc>
+    CATLASS_DEVICE
+    void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor, ActualShape actualShape)
+    {
+        static_assert(tla::detail::iszN<typename TensorSrc::Element, typename TensorSrc::Layout>::value &&
+                      tla::detail::iszN<typename TensorDst::Element, typename TensorDst::Layout>::value &&
+                      TensorSrc::position == AscendC::TPosition::GM &&
+                      TensorDst::position == AscendC::TPosition::A1,
+            "The input parameters do not match. TensorSrc must be GM and zN, while TensorDst must be L1 and zN");
+
+        const uint32_t srcOuterStrideCol = tla::get<1, 1>(srcTensor.stride());
+        const uint32_t dstOuterStrideCol = tla::get<1, 1>(dstTensor.stride());
+
+        uint32_t blockCount = CeilDiv<ELE_NUM_PER_C0>(tla::get<1>(actualShape));
+        uint32_t blockLen = RoundUp<C0_NUM_PER_FRACTAL>(tla::get<0>(actualShape));
+
+        auto dstOffset = dstTensor.layout()(dstTensor.coord());
+        auto srcOffset = srcTensor.layout()(srcTensor.coord());
+
+        AscendC::DataCopyParams repeatParams;
+        if (srcOuterStrideCol / ELE_NUM_PER_C0 <= STRIDE_LIMIT) {
+            repeatParams.blockCount = blockCount;
+            repeatParams.blockLen = blockLen;
+            repeatParams.srcStride = srcOuterStrideCol / ELE_NUM_PER_C0 - blockLen;
+            repeatParams.dstStride = dstOuterStrideCol / ELE_NUM_PER_C0 - blockLen;
+            AscendC::DataCopy(dstTensor.data()[dstOffset], srcTensor.data()[srcOffset], repeatParams);
+        } else {
+            repeatParams.blockCount = 1;
+            repeatParams.blockLen = blockLen;
+            repeatParams.srcStride = 0;
+            repeatParams.dstStride = 0;
+            for (uint32_t i = 0; i < blockCount; i++) {
+                AscendC::DataCopy(dstTensor.data()[dstOffset + i * dstOuterStrideCol],
+                    srcTensor.data()[srcOffset + i * srcOuterStrideCol],
+                    repeatParams);
+            }
+        }
+    }
+};
+
+/// Partial specialization for TileCopyTlaExt, CopyGmToL1, AtlasA2, nZ in and nZ out.
+template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+struct TileCopyTlaExt<Arch::AtlasA2,
+    tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::GM>,
+    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::A1>,
+    layout::nZ, layout::nZ> {
+    using ActualShape = tla::Shape<uint32_t, uint32_t>;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
+
+    // Mehtods
+
+    CATLASS_DEVICE
+    TileCopyTlaExt() {};
+
+    template <class TensorDst, class TensorSrc>
+    CATLASS_DEVICE
+    void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor, ActualShape actualShape)
+    {
+        static_assert(tla::detail::isnZ<typename TensorSrc::Element, typename TensorSrc::Layout>::value &&
+                      tla::detail::isnZ<typename TensorDst::Element, typename TensorDst::Layout>::value &&
+                      TensorSrc::position == AscendC::TPosition::GM &&
+                      TensorDst::position == AscendC::TPosition::A1,
+            "The input parameters do not match. TensorSrc must be GM and nZ, while TensorDst must be L1 and nZ");
+
+        const uint32_t srcOuterStrideRow = tla::get<0, 1>(srcTensor.stride());
+        const uint32_t dstOuterStrideRow = tla::get<0, 1>(dstTensor.stride());
+
+        uint32_t blockCount = CeilDiv<ELE_NUM_PER_C0>(tla::get<0>(actualShape));
+        uint32_t blockLen = RoundUp<C0_NUM_PER_FRACTAL>(tla::get<1>(actualShape));
+
+        auto dstOffset = dstTensor.layout()(dstTensor.coord());
+        auto srcOffset = srcTensor.layout()(srcTensor.coord());
+
+        AscendC::DataCopyParams repeatParams;
+        if (srcOuterStrideRow / ELE_NUM_PER_C0 <= STRIDE_LIMIT) {
+            repeatParams.blockCount = blockCount;
+            repeatParams.blockLen = blockLen;
+            repeatParams.srcStride = srcOuterStrideRow / ELE_NUM_PER_C0 - blockLen;
+            repeatParams.dstStride = dstOuterStrideRow / ELE_NUM_PER_C0 - blockLen;
+            AscendC::DataCopy(dstTensor.data()[dstOffset], srcTensor.data()[srcOffset], repeatParams);
+        } else {
+            repeatParams.blockCount = 1;
+            repeatParams.blockLen = blockLen;
+            repeatParams.srcStride = 0;
+            repeatParams.dstStride = 0;
+            for (uint32_t i = 0; i < blockCount; i++) {
+                AscendC::DataCopy(dstTensor.data()[dstOffset + i * dstOuterStrideRow],
+                    srcTensor.data()[srcOffset + i * srcOuterStrideRow],
+                    repeatParams);
+            }
+        }
     }
 };
 
