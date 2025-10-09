@@ -42,7 +42,8 @@ if(COMPILE_DYNAMIC_OPTIMIZED_MATMUL)
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
     link_libraries(dynamic_optimized_kernel runtime)
-    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-O3>)
+    # add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-O3>)
+    set_source_files_properties(dynamic_optimized_matmul.cpp PROPERTIES LANGUAGE ASCEND)
 
     add_executable(32_dynamic_optimized_matmul dynamic_optimized_matmul.cpp)
     add_dependencies(catlass_examples 32_dynamic_optimized_matmul)
