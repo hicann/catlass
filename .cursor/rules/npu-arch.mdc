@@ -1,0 +1,31 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# EVT (Epilogue Visitor Tree) 设计 Prompt
+
+## 目标
+为面向SIMD的NPU模板库设计epilogue visitor tree功能，对标CUTLASS语义。
+
+## 目标设备架构
+- **存储层次**: A*B结果在GM，vector单元从GM读取到UB(local memory)进行向量操作后写回GM
+- **UB限制**: UB空间有限
+- **向量指令**: 支持标量、矢量单目、矢量双目、向量标量双目、精度转换、规约、填充等操作
+- **并行模型**: 多AI Core共享指令代码，通过block_idx区分身份
+
+## 核心指令支持
+- 标量运算: `ScalarCast<srcT, dstT, roundMode>`
+- 矢量单目: `Exp<T>(dst, src, calCount)`
+- 矢量双目: `Add<T>(dst, src0, src1, calCount)`
+- 向量标量双目: `Adds<T>(dst, src, scalar, calCount)`
+- 精度转换: `Cast<T1, T2>(dst, src, round_mode, calCount)`
+- 向量规约: `ReduceSum<T>(dst, src, work, length)`
+- 向量填充: `Duplicate<T>(dst, scalar, calCount)`
+- 原子操作: `SetAtomicAdd<T>()`, `SetAtomicMax<T>()`, `SetAtomicMin<T>()`
+
+其中操作数为AscendC::LocalTensor<T>，需要通过类似
+ubC = resource.ubBuf.template GetBufferByByte<ElementC>(0);
+ubX = resource.ubBuf.template GetBufferByByte<ElementX>(COMPUTE_LENGTH * sizeof(ElementC));
+ubD = resource.ubBuf.template GetBufferByByte<ElementD>(
+    COMPUTE_LENGTH * sizeof(ElementC) + COMPUTE_LENGTH * sizeof(ElementX));来进行申请。
