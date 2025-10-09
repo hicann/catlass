@@ -48,7 +48,7 @@ class CatlassExampleTest(unittest.TestCase):
             self.assertEqual(compare_code, 0,
                              f"There is a compare error: {compare_code}")
         self.assertEqual(
-            ret.returncode, 0, f"Return code is not zero: {ret.returncode}")
+            ret.returncode, 0, f"Return code is not zero: {ret.returncode}, \n Return error: {ret.stderr}")
 
     def test_19_mla(self):
         case_base = [str(i) for i in [1, 1, 128, 16, 16, 128]]
