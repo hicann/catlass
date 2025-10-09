@@ -36,7 +36,8 @@ using namespace tla;
 
 using Options = GemmOptions;
 
-static void Run(const Options &options) {
+static void Run(const Options &options)
+{
     aclrtStream stream{nullptr};
 
     ACL_CHECK(aclInit(nullptr));
@@ -47,21 +48,25 @@ static void Run(const Options &options) {
     uint32_t n = options.problemShape.n();
     uint32_t k = options.problemShape.k();
 
-    size_t lenA = static_cast<size_t>(m) * k;
-    size_t lenB = static_cast<size_t>(k) * n;
-    size_t lenC = static_cast<size_t>(m) * n;
-
-    size_t sizeA = lenA * sizeof(fp16_t);
-    size_t sizeB = lenB * sizeof(fp16_t);
-    size_t sizeC = lenC * sizeof(fp16_t);
-    size_t sizeWorkspace;
+    using ElementA = half;
+    using ElementB = half;
+    using ElementC = half;
 
     using LayoutTagA = layout::RowMajor;
     using LayoutTagB = layout::RowMajor;
     using LayoutTagC = layout::RowMajor;
-    LayoutTagA tagA{m, k};
-    LayoutTagB tagB{k, n};
-    LayoutTagC tagC{m, n};
+    LayoutTagA tagA = LayoutTagA::MakeLayout<ElementA>(m, k);
+    LayoutTagB tagB = LayoutTagB::MakeLayout<ElementB>(k, n);
+    LayoutTagC tagC = LayoutTagC::MakeLayout<ElementC>(m, n);
+
+    size_t lenA = tagA.Capacity();
+    size_t lenB = tagB.Capacity();
+    size_t lenC = tagC.Capacity();
+
+    size_t sizeA = lenA * sizeof(ElementA);
+    size_t sizeB = lenB * sizeof(ElementB);
+    size_t sizeC = lenC * sizeof(ElementC);
+    size_t sizeWorkspace;
 
     std::vector<fp16_t> hostA(lenA);
     std::vector<fp16_t> hostB(lenB);
@@ -85,17 +90,13 @@ static void Run(const Options &options) {
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
     using ArchTag = Arch::AtlasA2;
-    using DispatchPolicy = Gemm::MmadAtlasA2Pingpong<true>;
+    using DispatchPolicy = Gemm::MmadPingpong<ArchTag, true>;
     using L1TileShape = Shape<_128, _256, _256>;
     using L0TileShape = Shape<_128, _256, _64>;
 
-    using ElementA = half;
-    using ElementB = half;
-    using ElementC = half;
-
-    auto layoutA = MakeLayoutFromTag(tagA);
-    auto layoutB = MakeLayoutFromTag(tagB);
-    auto layoutC = MakeLayoutFromTag(tagC);
+    auto layoutA = tla::MakeLayout<ElementA, LayoutTagA>(m, k);
+    auto layoutB = tla::MakeLayout<ElementB, LayoutTagB>(k, n);
+    auto layoutC = tla::MakeLayout<ElementC, LayoutTagC>(m, n);
 
     using TileCopy =
         Gemm::Tile::PackedTileCopyTla<ArchTag, ElementA, LayoutTagA, ElementB, LayoutTagB, ElementC, LayoutTagC>;
@@ -168,7 +169,8 @@ static void Run(const Options &options) {
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv) {
+int main(int argc, const char **argv)
+{
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;

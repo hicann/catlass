@@ -7,7 +7,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
  * See LICENSE in the root of the software repository for the full text of the License.
  */
- 
+
 #ifndef CATLASS_GEMM_HELPER_HPP
 #define CATLASS_GEMM_HELPER_HPP
 
@@ -109,12 +109,22 @@ struct L1ATypeSelector<Gemm::GemmType<Element, layout::RowMajor>> {
 };
 
 template<class Element>
+struct L1ATypeSelector<Gemm::GemmType<Element, layout::zN>> {
+    using L1AType = Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>;
+};
+
+template<class Element>
 struct L1ATypeSelector<Gemm::GemmType<Element, layout::PaddingRowMajor>> {
     using L1AType = Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>;
 };
 
 template<class Element>
 struct L1ATypeSelector<Gemm::GemmType<Element, layout::ColumnMajor>> {
+    using L1AType = Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::A1>;
+};
+
+template<class Element>
+struct L1ATypeSelector<Gemm::GemmType<Element, layout::nZ>> {
     using L1AType = Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::A1>;
 };
 
