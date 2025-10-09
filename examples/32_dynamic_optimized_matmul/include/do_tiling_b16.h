@@ -14,7 +14,8 @@
 #include "utils.h"
 #include "tiling_params.h"
 #include "platform_info.h"
-#include "fp16_t.h"
+#include <opdev/bfloat16.h>
+#include <opdev/fp16_t.h>
 
 using fp16_t = op::fp16_t;
 
