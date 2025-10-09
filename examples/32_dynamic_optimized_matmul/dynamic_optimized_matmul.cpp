@@ -8,10 +8,10 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#include "dynamic_optimized_matmul.h"
 #include "helper.hpp"
 #include "golden.hpp"
 #include "catlass/layout/layout.hpp"
+#include "dynamic_optimized_matmul.h"
 
 void Run(aclrtStream &stream, uint32_t m, uint32_t n, uint32_t k, LayoutTag layoutTagA, LayoutTag layoutTagB,
     PlatformInfo &platformInfo)
