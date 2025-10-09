@@ -19,25 +19,27 @@ from ml_dtypes import bfloat16
 
 def main():
     # Example parameters
-    N = int(sys.argv[static_cast<uint32_t>(ArgsIndex::1])
-    Cin = int(sys.argv[static_cast<uint32_t>(ArgsIndex::2])
-    d = int(sys.argv[static_cast<uint32_t>(ArgsIndex::3])
-    h = int(sys.argv[static_cast<uint32_t>(ArgsIndex::4])
-    w = int(sys.argv[static_cast<uint32_t>(ArgsIndex::5])
-    Cout = int(sys.argv[static_cast<uint32_t>(ArgsIndex::6])
-    kd = int(sys.argv[static_cast<uint32_t>(ArgsIndex::7])
-    kh = int(sys.argv[static_cast<uint32_t>(ArgsIndex::8])
-    kw = int(sys.argv[static_cast<uint32_t>(ArgsIndex::9])
-    sD = int(sys.argv[static_cast<uint32_t>(ArgsIndex::10])
-    sH = int(sys.argv[static_cast<uint32_t>(ArgsIndex::11])
-    sW = int(sys.argv[static_cast<uint32_t>(ArgsIndex::12])
-    dD = int(sys.argv[static_cast<uint32_t>(ArgsIndex::13])
-    dH = int(sys.argv[static_cast<uint32_t>(ArgsIndex::14])
-    dW = int(sys.argv[static_cast<uint32_t>(ArgsIndex::15])
-    pD = int(sys.argv[static_cast<uint32_t>(ArgsIndex::16])
-    pH = int(sys.argv[static_cast<uint32_t>(ArgsIndex::17])
-    pW = int(sys.argv[static_cast<uint32_t>(ArgsIndex::18])
-    dtype_str = sys.argv[static_cast<uint32_t>(ArgsIndex::19]   # Dtype: bfloat16 or float16
+    N = int(sys.argv[1])
+    Cin = int(sys.argv[2])
+    d = int(sys.argv[3])
+    h = int(sys.argv[4])
+    w = int(sys.argv[5])
+    Cout = int(sys.argv[6])
+    kd = int(sys.argv[7])
+    kh = int(sys.argv[8])
+    kw = int(sys.argv[9])
+    sD = int(sys.argv[10])
+    sH = int(sys.argv[11])
+    sW = int(sys.argv[12])
+    dD = int(sys.argv[13])
+    dH = int(sys.argv[14])
+    dW = int(sys.argv[15])
+    pD = int(sys.argv[16])
+    pH = int(sys.argv[17])
+    pW = int(sys.argv[18])
+    dtype_str = sys.argv[19]   # Dtype: bfloat16 or float16
+    assert dtype_str == 'float16' or dtype_str == 'bfloat16', \
+            'Dtype must be bfloat16 or float16'
 
     # Parameter analysis
     c0 , n0 = 16, 16
