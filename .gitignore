@@ -47,3 +47,6 @@ output/
 
 # log文件
 *.log
+
+# 参考代码目录
+reference/
