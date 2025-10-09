@@ -37,6 +37,7 @@ if(COMPILE_DYNAMIC_OPTIMIZED_MATMUL)
         ${ASCEND_HOME_PATH}/include
         ${ASCEND_HOME_PATH}/include/experiment/runtime
         ${ASCEND_HOME_PATH}/include/experiment/msprof
+        ${ASCEND_HOME_PATH}/include/aclnn
         ${CMAKE_CURRENT_SOURCE_DIR}/impl
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
