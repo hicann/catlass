@@ -39,10 +39,6 @@ echo -e "| |     / _ \ | | | |     / _ \ \___ \___ \ "
 echo -e "| |___ / ___ \| | | |___ / ___ \ ___) |__) |"
 echo -e " \____/_/   \_\_| |_____/_/   \_\____/____/ "
 
-set -x
-find / -name libascend_hal.so
-set +x
-
 function get_npu_model(){
     if command -v npu-smi &> /dev/null; then
         echo "Ascend$(npu-smi info -t board -i 0 -c 0 | awk '/Chip Name/ {print $NF}')"
