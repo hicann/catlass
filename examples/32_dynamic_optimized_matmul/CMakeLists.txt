@@ -30,7 +30,7 @@ if(COMPILE_DYNAMIC_OPTIMIZED_MATMUL)
     file(GLOB CATLASS_SHARED_LIB_SRC CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/impl/wrapper/*.cpp)
     set_source_files_properties(${CATLASS_SHARED_LIB_SRC} PROPERTIES LANGUAGE ASCEND)
 
-    add_library(dynamic_optimized_kernel STATIC ${CATLASS_SHARED_LIB_SRC})
+    add_library(dynamic_optimized_kernel SHARED ${CATLASS_SHARED_LIB_SRC})
     set_target_properties(dynamic_optimized_kernel PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
     include_directories(
@@ -41,8 +41,7 @@ if(COMPILE_DYNAMIC_OPTIMIZED_MATMUL)
         ${CMAKE_CURRENT_SOURCE_DIR}/impl
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-    link_directories(${ASCEND_HOME_PATH}/lib64 /usr/local/Ascend/driver/lib64/driver)
-    link_libraries(dynamic_optimized_kernel runtime ascend_hal)
+    link_libraries(dynamic_optimized_kernel runtime)
     add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-O3>)
 
     add_executable(32_dynamic_optimized_matmul dynamic_optimized_matmul.cpp)
