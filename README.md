@@ -1,5 +1,9 @@
 # CATLASS
 
+## 🔥 Latest News
+
+- [2025/09] CATLASS模板库正式开源
+
 ## 📌 简介
 
 CATLASS(**CA**NN **T**emplates for **L**inear **A**lgebra **S**ubroutine**s**)，中文名为昇腾算子模板库，是一个聚焦于提供高性能矩阵乘类算子基础模板的代码库。  
@@ -18,12 +22,14 @@ CATLASS(**CA**NN **T**emplates for **L**inear **A**lgebra **S**ubroutine**s**)�
 
 ```bash
 catlass
-├── cmake       # cmake工程文件
-├── docs        # 文档
-├── examples    # kernel使用样例
-├── include     # 模板头文件
-├── scripts     # 编译脚本
-└── tests       # 测试用例
+├── cmake          # cmake工程文件
+├── docs           # 文档
+├── examples       # kernel算子样例
+├── include        # 模板头文件
+├── scripts        # 编译脚本
+|   └── build.sh   # 算子样例编译脚本
+├── tests       # catlass-test测试件
+└── tools       # 相关工具
 ```
 
 ## 💻 软硬件配套说明
@@ -51,11 +57,12 @@ catlass
 
 - 对于某些调测工具，可能需要较以上版本更加新的CANN版本，可参考[调测工具文档](#toolbox)。
 
-## 🚀 快速上手
+## ⚡️ 快速上手
 
-以`00_basic_matmul`算子样例为例，快速上手CATLASS算子开发：
+以[`00_basic_matmul`](https://gitcode.com/cann/catlass/tree/master/examples/00_basic_matmul)算子样例为例，快速上手CATLASS算子开发：
 
 1. 使能CANN环境变量
+关于CANN环境准备请参考官网[安装说明](https://www.hiascend.com/document/detail/zh/canncommercial/82RC1/softwareinst/instg/instg_0008.html?Mode=PmIns&InstallType=local&OS=Debian&Software=cannToolKit)
 
 ```bash
 # root用户安装（默认路径）
@@ -63,13 +70,13 @@ source /usr/local/Ascend/ascend-toolkit/set_env.sh
 ```
 
 2. 编译算子样例
-
+在主目录下，执行下述指令。
 ```bash
 bash scripts/build.sh 00_basic_matmul
 ```
 
 3. 执行算子样例
-切换到可执行文件的编译目录`output/bin`下，执行算子样例程序。
+切换到可执行文件的编译目录`output/bin`下，运行算子样例程序如下。
 
 ```bash
 cd output/bin
@@ -81,13 +88,15 @@ cd output/bin
 
 ## 📚 文档介绍
 
-### 📖 API文档
+### 📖 基础文档
 
-- [api](./docs/api.md) - CATLASS通用矩阵乘法Gemm API的描述。
-- [catlass_optimize_guidance](./docs/catlass_optimize_guidance.md) - 模板库优化指引，通过tiling调参及kernel组合的方式快速获得性能提升。
-- [dispatch_policies](./docs/dispatch_policies.md) - BlockMmad一个重要模板参数`DispatchPolicy`的描述。
-- [quickstart](./docs/quickstart.md) - 模板库的快速开始。
-- [swizzle_explanation](./docs/swizzle_explanation.md) - AI Core计算基本块的顺序之Swizzle策略的描述。
+按照由浅入深的次序，对模板库的相关内容展开介绍。
+
+- [quickstart](./docs/quickstart.md) - 快速上手实践模板库，以基础的Matmul算子开发为实践背景认识使用模板库。
+- [catlass_optimize_guidance](./docs/catlass_optimize_guidance.md) - 模板库的进阶教程，介绍模板库下的基础调优方式，如何通过Tiling调参、应用不同的Dispatch策略的方式，快速获得性能提升。
+- [api](./docs/api.md) - 介绍CATLASS模板库的通用矩阵乘法Gemm API。
+- [swizzle_explanation](./docs/swizzle_explanation.md) - 对模板库中Swizzle策略的基本介绍，这影响了AI Core上计算基本块间的顺序。
+- [dispatch_policies](./docs/dispatch_policies.md) - 对模板库在`Block`层面上`BlockMmad`中的一个重要模板参数`DispatchPolicy`的介绍。
 
 ### 🧰 调测工具文档 <span id="toolbox"></span>
 
