@@ -66,6 +66,35 @@ auto transform_apply(T&& t, F&& f, G&& g)
     }
 }
 
+// Overload: transform apply with two tuples T0 and T1
+template <class T0, class T1, class F, class G>
+CATLASS_HOST_DEVICE constexpr
+auto transform_apply(T0&& t0, T1&& t1, F&& f, G&& g)
+{
+    if constexpr (is_tuple<remove_cvref_t<T0>>::value) {
+        static_assert(tuple_size<remove_cvref_t<T0>>::value == tuple_size<remove_cvref_t<T1>>::value,
+                      "Mismatched tuple_size");
+        return detail::tapply(static_cast<T0&&>(t0), static_cast<T1&&>(t1), f, g, tuple_seq<T0>{});
+    } else {
+        return g(f(static_cast<T0&&>(t0), static_cast<T1&&>(t1)));
+    }
+}
+
+// for_each: 对每个元素执行函数，无返回值
+namespace detail {
+template <class T, class F, int... I>
+CATLASS_HOST_DEVICE constexpr
+void for_each_impl(T&& t, F&& f, seq<I...>) {
+    (f(get<I>(static_cast<T&&>(t))), ...);
+}
+} // namespace detail
+
+template <class T, class F>
+CATLASS_HOST_DEVICE constexpr
+void for_each(T&& t, F&& f) {
+    detail::for_each_impl(static_cast<T&&>(t), f, tuple_seq<T>{});
+}
+
 struct UnpackedMakeTuple {
     template <class... T>
     CATLASS_HOST_DEVICE constexpr

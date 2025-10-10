@@ -12,6 +12,7 @@
 #define CATLASS_EPILOGUE_BLOCK_BLOCK_EPILOGUE_HPP
 
 #include "catlass/catlass.hpp"
+#include "catlass/epilogue/dispatch_policy.hpp"
 
 namespace Catlass::Epilogue::Block {
 
@@ -22,6 +23,21 @@ template <
 class BlockEpilogue {
     static_assert(DEPENDENT_FALSE<DispatchPolicy>, "Could not find an epilogue specialization");
 };
+
+// 前向声明：EpilogueWithVisitorCallbacks 使用类型形式的计算长度（例如 tla::Int<N> 或 std::integral_constant）
+template <
+    class CType_,
+    class ComputeLength_,
+    class ElementCompute_,
+    class FusionCallbacks_
+>
+class BlockEpilogue<
+    EpilogueWithVisitorCallbacks,
+    CType_,
+    ComputeLength_,
+    ElementCompute_,
+    FusionCallbacks_
+>;
 
 }  // namespace Catlass::Epilogue::Block
 
@@ -39,4 +55,5 @@ class BlockEpilogue {
 #include "catlass/epilogue/block/block_epilogue_mla_tp1_rescale_o.hpp"
 #include "catlass/epilogue/block/block_epilogue_online_softmax_no_mask.hpp"
 #include "catlass/epilogue/block/block_epilogue_rescale_o_no_split_row.hpp"
+#include "catlass/epilogue/block/block_epilogue_visitor.hpp"
 #endif  // CATLASS_EPILOGUE_BLOCK_BLOCK_EPILOGUE_HPP

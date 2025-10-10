@@ -74,6 +74,7 @@ struct TupleBase<index_sequence<I...>, T...> : EBO<I, T>... {
     CATLASS_HOST_DEVICE constexpr
     TupleBase() {}
 
+    template <typename Dummy = void, typename std::enable_if<(sizeof...(T) > 0), Dummy>::type* = nullptr>
     CATLASS_HOST_DEVICE constexpr
     TupleBase(T const&... t) : EBO<I, T>(t)... {}
 };
@@ -86,6 +87,7 @@ struct tuple : detail::TupleBase<make_index_sequence<sizeof...(T)>, T...> {
     CATLASS_HOST_DEVICE constexpr
     tuple() {}
 
+    template <typename Dummy = void, typename std::enable_if<(sizeof...(T) > 0), Dummy>::type* = nullptr>
     CATLASS_HOST_DEVICE constexpr
     tuple(T const&... t) : detail::TupleBase<make_index_sequence<sizeof...(T)>, T...>(t...) {}
 };
