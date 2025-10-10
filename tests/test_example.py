@@ -25,7 +25,7 @@ CMAKE_EXAMPLES_PATH = os.path.join(os.path.dirname(
 class CatlassExampleTest(unittest.TestCase):
     def run_case(self, executable_name: str, args: List):
         # Check if any missing library exists
-        self._ldd_lookup(executable_name, '00_basic_matmul') # DEBUG
+        self._ldd_lookup(executable_name) # DEBUG
 
         args = [str(arg) for arg in args]
 
