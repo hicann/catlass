@@ -24,6 +24,9 @@ CMAKE_EXAMPLES_PATH = os.path.join(os.path.dirname(
 
 class CatlassExampleTest(unittest.TestCase):
     def run_case(self, executable_name: str, args: List):
+        # Check if any missing library exists
+        self._ldd_lookup(executable_name, '00_basic_matmul') # DEBUG
+
         args = [str(arg) for arg in args]
 
         ret = subprocess.run(
@@ -74,6 +77,26 @@ class CatlassExampleTest(unittest.TestCase):
         case_cpp = [str(i) for i in [256, 512, 1024, 0]]
         self.run_case("29_a2_fp8_e4m3_matmul", case_cpp)
 
+    def _ldd_lookup(self, executable_name: str, allow_exec_name: str = ''):
+        '''
+        For DEBUG usage.
+        '''
+        if allow_exec_name and allow_exec_name != executable_name:
+            return # Just pass
+
+        ret = subprocess.run(
+            ['ldd', os.path.join(CMAKE_BINARY_PATH, executable_name)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False
+        )
+
+        if ret.returncode != 0:
+            print(f"Error happen when executing `ldd {executable_name}`, \n error: {ret.stderr}")
+        
+        # Just for check
+        print(f"=====\nldd check: \n {lddout} \n=====\n")
 
 normal_cases = ["00_basic_matmul 256 512 1024 0",
                 "01_batched_matmul 5 256 512 1024 0",
