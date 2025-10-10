@@ -144,4 +144,6 @@ def set_case(case: str):
 for normal_case in normal_cases:
     set_case(normal_case)
 if __name__ == '__main__':
+    print("\n==BEGIN_TEST_EXAMPLE_PY==\n")
+    os.system("echo $LD_LIBRARY_PATH")
     unittest.main()
