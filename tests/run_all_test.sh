@@ -12,6 +12,8 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
+echo ${LD_LIBRARY_PATH} # For DEBUG only
+
 SCRIPT_PATH=$(dirname "$(realpath "$0")")
 BUILD_SCRIPT_PATH=$(realpath "$SCRIPT_PATH"/../scripts/build.sh)
 

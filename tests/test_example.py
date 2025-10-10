@@ -24,6 +24,9 @@ CMAKE_EXAMPLES_PATH = os.path.join(os.path.dirname(
 
 class CatlassExampleTest(unittest.TestCase):
     def run_case(self, executable_name: str, args: List):
+        # Check if any missing library exists
+        self._ldd_lookup(executable_name) # DEBUG
+
         args = [str(arg) for arg in args]
 
         ret = subprocess.run(
@@ -48,7 +51,7 @@ class CatlassExampleTest(unittest.TestCase):
             self.assertEqual(compare_code, 0,
                              f"There is a compare error: {compare_code}")
         self.assertEqual(
-            ret.returncode, 0, f"Return code is not zero: {ret.returncode}")
+            ret.returncode, 0, f"Return code is not zero: {ret.returncode}, \n Return error: {ret.stderr}")
 
     def test_19_mla(self):
         case_base = [str(i) for i in [1, 1, 128, 16, 16, 128]]
@@ -74,6 +77,27 @@ class CatlassExampleTest(unittest.TestCase):
         case_cpp = [str(i) for i in [256, 512, 1024, 0]]
         self.run_case("29_a2_fp8_e4m3_matmul", case_cpp)
 
+    def _ldd_lookup(self, executable_name: str, allow_exec_name: str = ''):
+        '''
+        For DEBUG usage.
+        '''
+        if allow_exec_name and allow_exec_name != executable_name:
+            return # Just pass
+
+        ret = subprocess.run(
+            ['ldd', os.path.join(CMAKE_BINARY_PATH, executable_name)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False
+        )
+
+        if ret.returncode != 0:
+            print(f"Error happen when executing `ldd {executable_name}`, \n error: {ret.stderr}")
+        
+        # Just for check
+        lddout = ret.stdout
+        print(f"=====\nldd check: \n {lddout} \n=====\n")
 
 normal_cases = ["00_basic_matmul 256 512 1024 0",
                 "01_batched_matmul 5 256 512 1024 0",
@@ -120,4 +144,6 @@ def set_case(case: str):
 for normal_case in normal_cases:
     set_case(normal_case)
 if __name__ == '__main__':
+    print("\n==BEGIN_TEST_EXAMPLE_PY==\n")
+    print(os.environ.get("LD_LIBRARY_PATH"), end='\n===\n')
     unittest.main()
