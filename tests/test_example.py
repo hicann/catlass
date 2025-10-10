@@ -96,6 +96,7 @@ class CatlassExampleTest(unittest.TestCase):
             print(f"Error happen when executing `ldd {executable_name}`, \n error: {ret.stderr}")
         
         # Just for check
+        lddout = ret.stdout
         print(f"=====\nldd check: \n {lddout} \n=====\n")
 
 normal_cases = ["00_basic_matmul 256 512 1024 0",
