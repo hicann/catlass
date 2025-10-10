@@ -38,8 +38,6 @@ def main():
     pH = int(sys.argv[17])
     pW = int(sys.argv[18])
     dtype_str = sys.argv[19]   # Dtype: bfloat16 or float16
-    assert dtype_str == 'float16' or dtype_str == 'bfloat16', \
-            'Dtype must be bfloat16 or float16'
 
     # Parameter analysis
     c0 , n0 = 16, 16
