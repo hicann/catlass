@@ -1,4 +1,4 @@
-# MLA Example Readme
+# FAI-MLA Example Readme
 ## 代码组织
 ```
 ├── 23_flash_attention_infer
