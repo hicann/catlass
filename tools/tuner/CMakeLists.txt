@@ -18,11 +18,19 @@ link_directories(${CMAKE_BINARY_DIR}/tools/library)
 if(NOT DEFINED ASCEND_HOME_PATH)
     message(FATAL_ERROR "Cannot find ASCEND_HOME_PATH, please run set_env.sh.")
 else()
-    include_directories(${ASCEND_HOME_PATH}/include)
-    include_directories(${ASCEND_HOME_PATH}/include/experiment/runtime)
-    include_directories(${ASCEND_HOME_PATH}/include/experiment/msprof)
-    link_directories(${ASCEND_HOME_PATH}/lib64)
-    link_directories(${ASCEND_HOME_PATH}/lib64/../devlib)
+    include_directories(
+        ${ASCEND_HOME_PATH}/include
+        ${ASCEND_HOME_PATH}/include/aclnn
+        ${ASCEND_HOME_PATH}/include/experiment/runtime
+        ${ASCEND_HOME_PATH}/include/experiment/msprof
+        ${ASCEND_HOME_PATH}/include/experiment/msprof
+        ${ASCEND_HOME_PATH}/lib64
+        ${ASCEND_HOME_PATH}/lib64/../devlib
+    )
+    link_directories(
+        ${ASCEND_HOME_PATH}/lib64
+        ${ASCEND_HOME_PATH}/lib64/../devlib
+    )
 endif()
 add_subdirectory(dfx_kernel)
 file(GLOB_RECURSE SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")

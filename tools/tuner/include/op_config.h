@@ -14,13 +14,14 @@
 #include <memory>
 #include <unordered_map>
 
+#include <opdev/bfloat16.h>
+
 #include "command_line_parser.h"
 #include "m_t_var.h"
 #include "device_memory_manager.h"
 #include "metric.h"
 
 #include "catlass/library/operation.h"
-#include "common/bfloat16.h"
 
 namespace Catlass {
 
