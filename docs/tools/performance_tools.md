@@ -52,11 +52,11 @@ msprof op --application="./00_basic_matmul 256 512 1024 0"
 
 - ⚠ 注意事项
   - 工具默认会读取第一个算子的性能，使用example进行调测时可直接获取到结果；若接入其他工程，工程中可能存在其他算子（虽然只跑某一个算子的用例），所以性能分析时要通过--kernel-name指定算子名称的方式，否则读取不到结果。
-  - 上板调测可在非0卡进行调测，需要使用下面的命令进行环境变量的设定：
+  - 可设置环境变量`ASCEND_RT_VISIBLE_DEVICES`指定上板调测的Device Id, 如：
 
 ```bash
-# 指定使用卡0
-export ASCEND_RT_VISIBLE_DEVICES=0
+# 指定当前进程仅可使用Device Id为0，1，2，3的Device
+export ASCEND_RT_VISIBLE_DEVICES=0,1,2,3
 msprof op ./00_basic_matmul 256 512 1024 0
 ```
 
