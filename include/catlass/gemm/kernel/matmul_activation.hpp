@@ -81,7 +81,6 @@ public:
         size_t elementSize;
         GM_ADDR ptrA;
         GM_ADDR ptrB;
-        GM_ADDR ptrC;
         GM_ADDR ptrD;
     };
 
@@ -105,11 +104,11 @@ public:
         LayoutB layoutB{k, n};
         LayoutC layoutC{m, n};
         // 传出
-        typename BlockEpilogue::Params epilogueParams{args.ptrC, layoutC, args.ptrD, layoutC};
+        typename BlockEpilogue::Params epilogueParams{workspace, layoutC, args.ptrD, layoutC};
         Params params{problemShape,
             args.ptrA, layoutA, // A矩阵
             args.ptrB, layoutB, // B矩阵
-            args.ptrC,
+            workspace,
             epilogueParams};
         return params;
     }

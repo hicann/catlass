@@ -54,7 +54,6 @@ static void Run(const Options &options) {
 
     size_t sizeA = lenA * sizeof(fp16_t);
     size_t sizeB = lenB * sizeof(fp16_t);
-    size_t sizeC = lenD * sizeof(float);
     size_t sizeD = lenD * sizeof(fp16_t);
 
     // Define the layout of each matrix
@@ -79,9 +78,6 @@ static void Run(const Options &options) {
     uint8_t *deviceB{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
-
-    uint8_t *deviceC{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
     // The data of X is stored on deviceD to save storage space
     uint8_t *deviceD{nullptr};
@@ -119,7 +115,6 @@ static void Run(const Options &options) {
         >;
     using BlockEpilogue =
         Epilogue::Block::BlockEpilogue<EpilogueDispatchPolicy, CType, DType, TileElemWiseEpilogue, EpilogueTileCopy>;
-    std::vector<fp16_t> hostD(lenD);
     if (m > n) {
         // Define BlockScheduler
         // Swizzle offset is 3 and direction is 0.
@@ -128,15 +123,10 @@ static void Run(const Options &options) {
         using MatmulKernel = Gemm::Kernel::MatmulActivation<BlockMmad, BlockEpilogue, BlockScheduler>;
         // Prepare params
         typename MatmulKernel::Arguments arguments{
-            options.problemShape, sizeof(half), deviceA, deviceB, deviceC, deviceD};
+            options.problemShape, sizeof(float), deviceA, deviceB, deviceD};
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
         MatmulAdapter matmulOp;
-
-        matmulOp.Initialize(arguments);
-        matmulOp(stream, aicCoreNum, fftsAddr);
-        ACL_CHECK(aclrtSynchronizeStream(stream));
-        // Copy the result from device to host
-        ACL_CHECK(aclrtMemcpy(hostD.data(), sizeD, deviceD, sizeD, ACL_MEMCPY_DEVICE_TO_HOST));
+        RunAdapter(matmulOp, arguments, stream, aicCoreNum, fftsAddr);
     } else {
         // Define BlockScheduler
         // Swizzle offset is 3 and direction is 1.
@@ -145,17 +135,15 @@ static void Run(const Options &options) {
         using MatmulKernel = Gemm::Kernel::MatmulActivation<BlockMmad, BlockEpilogue, BlockScheduler>;
         // Prepare params
         typename MatmulKernel::Arguments arguments{
-            options.problemShape, sizeof(half), deviceA, deviceB, deviceC, deviceD};
+            options.problemShape, sizeof(float), deviceA, deviceB, deviceD};
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
         MatmulAdapter matmulOp;
-
-        matmulOp.Initialize(arguments);
-        matmulOp(stream, aicCoreNum, fftsAddr);
-        ACL_CHECK(aclrtSynchronizeStream(stream));
-
-        // Copy the result from device to host
-        ACL_CHECK(aclrtMemcpy(hostD.data(), sizeD, deviceD, sizeD, ACL_MEMCPY_DEVICE_TO_HOST));
+        RunAdapter(matmulOp, arguments, stream, aicCoreNum, fftsAddr);
     }
+
+    // Copy the result from device to host
+    std::vector<fp16_t> hostD(lenD);
+    ACL_CHECK(aclrtMemcpy(hostD.data(), sizeD, deviceD, sizeD, ACL_MEMCPY_DEVICE_TO_HOST));
 
     // Compute the golden result
     std::vector<float> hostGolden(lenD);
