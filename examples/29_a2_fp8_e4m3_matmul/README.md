@@ -43,7 +43,7 @@ python gen_data.py 256 512 1024 0 0
 
 - 第三步，执行算子，这里要注意执行算子的输入shape和上面第二步生成数据的shape一致
 ```
-# cd [代码仓路径]/output/bin
+cd output/bin
 # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID
 # Device ID可选，默认为0
 ./29_a2_fp8_e4m3_matmul 256 512 1024 0

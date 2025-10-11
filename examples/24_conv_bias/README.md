@@ -56,7 +56,7 @@ python3 ./examples/24_conv_bias/gen_data.py 32 64 1 32 48 128 1 1 1 1 1 1 1 1 1 
 ```
 # 编译指定用例
 bash scripts/build.sh 24_conv_bias
-# cd [代码仓路径]/output/bin
+cd output/bin
 # 可执行文件名 |batch|di|cin1|hi|wi|cin0|cout|kd|kh|kw|sD|sH|sW|dD|dH|dW|pD|pH|pW|Device ID
 # Device ID可选，默认为0
 ./output/bin/24_conv_bias 32 1 4 32 48 16 128 1 1 1 1 1 1 1 1 1 0 0 0 0

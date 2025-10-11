@@ -12,7 +12,7 @@
 ```
 # 编译指定用例
 bash scripts/build.sh 01_batched_matmul
-# cd [代码仓路径]/output/bin
+cd output/bin
 # 可执行文件名 batch轴|m轴|n轴|k轴|Device ID
 # Device ID可选，默认为0
 # 注意！这里相比basicMatmul多一个batch轴的输入参数
