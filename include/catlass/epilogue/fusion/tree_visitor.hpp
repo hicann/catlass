@@ -21,14 +21,15 @@ struct TreeVisitor : VisitorImpl<ChildOps..., NodeOp> {
         template <typename... Args, int... Is>
         CATLASS_DEVICE auto collect_child_outputs(
             MatrixCoord const& tileOffset,
+            MatrixCoord const& localTileOffset,  // 新增
             MatrixCoord const& tileShape,
             uint32_t calCount,
             tla::seq<Is...>,
             Args const&... args
         ) {
             return tla::tuple<decltype(tla::get<Is>(callbacks_tuple).visit(
-                tileOffset, tileShape, calCount, args...))...>(
-                tla::get<Is>(callbacks_tuple).visit(tileOffset, tileShape, calCount, args...)...
+                tileOffset, localTileOffset, tileShape, calCount, args...))...>(
+                tla::get<Is>(callbacks_tuple).visit(tileOffset, localTileOffset, tileShape, calCount, args...)...
             );
         }
 
@@ -36,6 +37,7 @@ struct TreeVisitor : VisitorImpl<ChildOps..., NodeOp> {
         template <typename ChildOutputs, int... Is>
         CATLASS_DEVICE auto call_parent_with_outputs(
             MatrixCoord const& tileOffset,
+            MatrixCoord const& localTileOffset,  // 新增
             MatrixCoord const& tileShape,
             uint32_t calCount,
             ChildOutputs const& child_outputs,
@@ -43,7 +45,7 @@ struct TreeVisitor : VisitorImpl<ChildOps..., NodeOp> {
         ) {
             constexpr int Rm1 = sizeof...(ChildOps);
             return tla::get<Rm1>(callbacks_tuple).visit(
-                tileOffset, tileShape, calCount, 
+                tileOffset, localTileOffset, tileShape, calCount, 
                 tla::get<Is>(child_outputs)...
             );
         }
@@ -52,6 +54,7 @@ struct TreeVisitor : VisitorImpl<ChildOps..., NodeOp> {
         template <typename... Args>
         CATLASS_DEVICE auto visit(
             MatrixCoord const& tileOffset,
+            MatrixCoord const& localTileOffset,  // 新增
             MatrixCoord const& tileShape,
             uint32_t calCount,
             Args const&... args
@@ -60,14 +63,14 @@ struct TreeVisitor : VisitorImpl<ChildOps..., NodeOp> {
             
             // 访问所有子节点，收集输出
             auto child_outputs = collect_child_outputs(
-                tileOffset, tileShape, calCount,
+                tileOffset, localTileOffset, tileShape, calCount,
                 tla::make_seq<Rm1>{},
                 args...
             );
             
             // 将子节点输出传给父节点
             return call_parent_with_outputs(
-                tileOffset, tileShape, calCount,
+                tileOffset, localTileOffset, tileShape, calCount,
                 child_outputs,
                 tla::make_seq<Rm1>{}
             );

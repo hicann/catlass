@@ -71,9 +71,13 @@ static void Run(const Options &options) {
     std::vector<fp16_t> hostA(lenA);
     std::vector<fp16_t> hostB(lenB);
     std::vector<fp16_t> hostX(lenX);
+    std::srand(std::time(nullptr));
     golden::FillRandomData<fp16_t>(hostA, -5.0f, 5.0f);
     golden::FillRandomData<fp16_t>(hostB, -5.0f, 5.0f);
     golden::FillRandomData<fp16_t>(hostX, -5.0f, 5.0f);
+    // golden::FillRandomData<fp16_t>(hostA, 1.0f, 1.0f);
+    // golden::FillRandomData<fp16_t>(hostB, 1.0f, 1.0f);
+    // golden::FillRandomData<fp16_t>(hostX, 1.0f, 1.0f);
 
     // Allocate device memory and copy data from host to device
     uint8_t *deviceA{nullptr};
@@ -84,10 +88,13 @@ static void Run(const Options &options) {
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    // The data of X is stored on deviceD to save storage space
+    // Allocate separate memory for X and D
+    uint8_t *deviceX{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceX), sizeD, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMemcpy(deviceX, sizeD, hostX.data(), sizeD, ACL_MEMCPY_HOST_TO_DEVICE));
+
     uint8_t *deviceD{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceD), sizeD, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMemcpy(deviceD, sizeD, hostX.data(), sizeD, ACL_MEMCPY_HOST_TO_DEVICE));
 
     // Prepare FFTS address
     uint64_t fftsAddr{0};
@@ -113,7 +120,7 @@ static void Run(const Options &options) {
     // 定义 EVT: D = C + X
     using ElementCompute = half;
     constexpr uint32_t computeLength = 4096;
-
+    
     using EVT = Epilogue::Fusion::TreeVisitor<
         Epilogue::Fusion::VisitorAuxStore<half, AscendC::RoundMode::CAST_NONE, LayoutC>,
         Epilogue::Fusion::TreeVisitor<
@@ -138,8 +145,12 @@ static void Run(const Options &options) {
     using ArgsAuxLoad = typename Epilogue::Fusion::VisitorAuxLoad<half, LayoutC>::Arguments;
     using ArgsStore = typename Epilogue::Fusion::VisitorAuxStore<half, AscendC::RoundMode::CAST_NONE, LayoutC>::Arguments;
     typename EVT::Arguments evt_args{
-        tla::MakeTuple(ArgsAccLoad{nullptr, half(0), layoutD}, ArgsAuxLoad{deviceD, half(0), layoutD}, ArgsCompute{}),
-        ArgsStore{deviceD, layoutD}
+        tla::MakeTuple(
+            ArgsAccLoad{nullptr, half(0), layoutD},  // VisitorAccLoad
+            ArgsAuxLoad{deviceX, half(0), layoutD},  // VisitorAuxLoad - 从 deviceX 读取
+            ArgsCompute{}  // VisitorCompute
+        ),
+        ArgsStore{deviceD, layoutD}  // VisitorAuxStore
     };
 
     std::vector<fp16_t> hostD(lenD);
@@ -165,12 +176,49 @@ static void Run(const Options &options) {
         ACL_CHECK(aclrtFree(deviceWorkspace));
     }
 
+    // 打印问题规模和指针
+    std::cout << "=== Debug Info ===" << std::endl;
+    std::cout << "Problem shape: M=" << m << ", N=" << n << ", K=" << k << std::endl;
+    std::cout << "deviceX ptr: " << (void*)deviceX << std::endl;
+    std::cout << "deviceD ptr: " << (void*)deviceD << std::endl;
+    std::cout << "computeLength: " << computeLength << std::endl;
+    std::cout << "Workspace size: " << sizeWorkspace << std::endl;
+
     // Copy the result from device to host
     ACL_CHECK(aclrtMemcpy(hostD.data(), sizeD, deviceD, sizeD, ACL_MEMCPY_DEVICE_TO_HOST));
+
+    // 打印前几个输入和输出
+    std::cout << "\n=== First 5 inputs (X) ===" << std::endl;
+    for (int i = 0; i < 5 && i < lenX; ++i) {
+        std::cout << "  X[" << i << "] = " << static_cast<float>(hostX[i]) << std::endl;
+    }
+
+    std::cout << "\n=== First 5 results (D) ===" << std::endl;
+    for (int i = 0; i < 5 && i < lenD; ++i) {
+        std::cout << "  D[" << i << "] = " << static_cast<float>(hostD[i]) << std::endl;
+    }
 
     // Compute the golden result
     std::vector<float> hostGolden(lenD);
     golden::ComputeMatmulElemWiseAdd(options.problemShape, hostA, layoutA, hostB, layoutB, hostX, hostGolden, layoutD);
+
+    std::cout << "\n=== First 5 golden ===" << std::endl;
+    for (int i = 0; i < 5 && i < lenD; ++i) {
+        std::cout << "  Golden[" << i << "] = " << hostGolden[i] << std::endl;
+    }
+
+    std::cout << "\n=== Middle 5 results (around M*N/2) ===" << std::endl;
+    size_t mid = lenD / 2;
+    for (int i = 0; i < 5 && (mid + i) < lenD; ++i) {
+        std::cout << "  D[" << (mid+i) << "] = " << static_cast<float>(hostD[mid+i]) 
+                  << " vs Golden = " << hostGolden[mid+i] << std::endl;
+    }
+
+    std::cout << "\n=== Last 5 results (D) ===" << std::endl;
+    for (int i = 0; i < 5 && i < lenD; ++i) {
+        std::cout << "  D[" << (lenD-i-1) << "] = " << static_cast<float>(hostD[lenD-i-1]) 
+                  << " vs Golden = " << hostGolden[lenD-i-1] << std::endl;
+    }
 
     // Compare the result
     std::vector<uint64_t> errorIndices = golden::CompareData(hostD, hostGolden, k);
@@ -182,6 +230,7 @@ static void Run(const Options &options) {
 
     ACL_CHECK(aclrtFree(deviceA));
     ACL_CHECK(aclrtFree(deviceB));
+    ACL_CHECK(aclrtFree(deviceX));  // 新增
     ACL_CHECK(aclrtFree(deviceD));
 
     ACL_CHECK(aclrtDestroyStream(stream));

@@ -109,8 +109,9 @@ struct VisitorCompute : VisitorImpl<> {
 
         template <typename... ElementInputs>
         CATLASS_DEVICE AscendC::LocalTensor<ElementOutput> const& visit(
-            MatrixCoord const&,
-            MatrixCoord const&,
+            MatrixCoord const& globalTileOffset,    // 不使用
+            MatrixCoord const& localTileOffset,     // 新增参数（不使用）
+            MatrixCoord const& tileShape,           // 不使用
             uint32_t calCount,
             AscendC::LocalTensor<ElementInputs> const&... inputs
         ) {
@@ -120,10 +121,10 @@ struct VisitorCompute : VisitorImpl<> {
 
             // 类型转换：将输入转换到 ElementCompute
             convert_inputs_from_tuple(inputs_tuple, calCount, tla::make_seq<NumInputs>{});
-
+            // AscendC::PipeBarrier<PIPE_ALL>();
             // 执行计算
             call_compute_fn(tla::make_seq<NumInputs>{});
-
+            // AscendC::PipeBarrier<PIPE_ALL>();
             // 输出类型转换
             if constexpr (!std::is_same_v<ElementOutput, ElementCompute>) {
                 NumericArrayConverter<ElementOutput, ElementCompute, RoundStyle>{}(
@@ -131,7 +132,7 @@ struct VisitorCompute : VisitorImpl<> {
             } else {
                 AscendC::DataCopy(ubOut, ubOutCompute, calCount);
             }
-
+            // AscendC::PipeBarrier<PIPE_ALL>();
             return ubOut;
         }
 

@@ -71,27 +71,43 @@ struct VisitorAuxLoad : VisitorImpl<> {
         template <typename... Args>
         CATLASS_DEVICE AscendC::LocalTensor<Element> const& visit(
             MatrixCoord const& globalTileOffset,
+            MatrixCoord const& localTileOffset,  // 新增参数
             MatrixCoord const& tileShape,
             uint32_t calCount,
             Args const&... /*unused*/
         ) {
+            // AscendC::PipeBarrier<PIPE_ALL>();
+            uint32_t cols = tileShape.column();
+            uint32_t rows = (cols == 0) ? 0 : (calCount / cols);
+
             if (params_ptr->ptr_aux != nullptr) {
-                // 从用户提供的 ptr_aux 加载
+                // 从用户提供的 ptr_aux 加载（使用全局坐标，逐行拷贝，处理跨距）
                 AscendC::GlobalTensor<Element> gmAux;
                 gmAux.SetGlobalBuffer((__gm__ Element*)(params_ptr->ptr_aux));
-                auto gmOffset = params_ptr->layout.GetOffset(globalTileOffset);
-                auto gmTileAux = gmAux[gmOffset];
-                AscendC::DataCopy(ubAux, gmTileAux, calCount);
+                for (uint32_t r = 0; r < rows; ++r) {
+                    auto rowGlobalOffset = params_ptr->layout.GetOffset(globalTileOffset + MatrixCoord{r, 0});
+                    auto gmRow = gmAux[rowGlobalOffset];
+                    auto ubRow = ubAux[r * cols];
+                    AscendC::DataCopy(ubRow, gmRow, cols);
+                }
             } else {
-                // 从 gmSubblockC 加载（AccLoad 场景）
-                auto gmOffset = layoutSubblockC.GetOffset(globalTileOffset);
-                auto gmTileC = gmSubblockC[gmOffset];
-                AscendC::DataCopy(ubAux, gmTileC, calCount);
+                // 从 gmSubblockC 加载（AccLoad 场景，使用局部坐标，逐行拷贝，处理跨距）
+                for (uint32_t r = 0; r < rows; ++r) {
+                    auto rowLocalOffset = layoutSubblockC.GetOffset(localTileOffset + MatrixCoord{r, 0});
+                    auto gmRow = gmSubblockC[rowLocalOffset];
+                    auto ubRow = ubAux[r * cols];
+                    AscendC::DataCopy(ubRow, gmRow, cols);
+                }
             }
             // 同步 MTE2: GM->UB 完成
+            // AscendC::PipeBarrier<PIPE_ALL>();
+
+            // AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE3>(EVENT_ID0);
+            // AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE3>(EVENT_ID0);
             AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
             AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
             return ubAux;
+            // AscendC::PipeBarrier<PIPE_ALL>();
         }
     };
 

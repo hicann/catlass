@@ -69,10 +69,12 @@ struct VisitorAuxStore : VisitorImpl<> {
         template <typename ElementInput>
         CATLASS_DEVICE void visit(
             MatrixCoord const& globalTileOffset,
-            MatrixCoord const&,
+            MatrixCoord const& localTileOffset,  // 新增参数（不使用）
+            MatrixCoord const& tileShape,
             uint32_t calCount,
             AscendC::LocalTensor<ElementInput> const& input
         ) {
+            // AscendC::PipeBarrier<PIPE_ALL>();
             // 类型转换
             if constexpr (!std::is_same_v<ElementInput, Element>) {
                 NumericArrayConverter<Element, ElementInput, RoundStyle>{}(ubAux, input, calCount);
@@ -84,14 +86,23 @@ struct VisitorAuxStore : VisitorImpl<> {
             AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
             AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
 
-            // 写回 GM
+            // 写回 GM（使用全局坐标，逐行写回处理跨距）
             if (params_ptr->ptr_aux != nullptr) {
                 AscendC::GlobalTensor<Element> gmAux;
                 gmAux.SetGlobalBuffer((__gm__ Element*)(params_ptr->ptr_aux));
-                auto gmOffset = params_ptr->layout.GetOffset(globalTileOffset);
-                auto gmTileAux = gmAux[gmOffset];
-                AscendC::DataCopy(gmTileAux, ubAux, calCount);
+                uint32_t cols = tileShape.column();
+                uint32_t rows = (cols == 0) ? 0 : (calCount / cols);
+                for (uint32_t r = 0; r < rows; ++r) {
+                    auto rowGlobalOffset = params_ptr->layout.GetOffset(globalTileOffset + MatrixCoord{r, 0});
+                    auto gmRow = gmAux[rowGlobalOffset];
+                    auto ubRow = ubAux[r * cols];
+                    AscendC::DataCopy(gmRow, ubRow, cols);
+                }
             }
+
+            AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
+            AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
+            // AscendC::PipeBarrier<PIPE_ALL>();
         }
     };
 

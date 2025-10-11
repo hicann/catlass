@@ -49,17 +49,11 @@ public:
     BlockEpilogue(Arch::Resource<ArchTag>& resource, Params const& params)
         : params(params), fusion_callbacks(params.fusion_params)
     {
-        // 初始化事件标志
-        AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
-        AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
     }
 
     CATLASS_DEVICE
     ~BlockEpilogue()
     {
-        // 等待所有事件完成
-        AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
-        AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
     }
 
     CATLASS_DEVICE
@@ -109,34 +103,49 @@ public:
         for (uint32_t r = 0; r < rows; ) {
             callbacks.begin_row(r);
 
-            for (uint32_t c = 0; c < cols; ) {
-                uint32_t remainCols = cols - c;
-                uint32_t tileCols = (remainCols < COMPUTE_LENGTH) ? remainCols : COMPUTE_LENGTH;
-                uint32_t rowsCap = (tileCols == 0) ? 0 : (COMPUTE_LENGTH / tileCols);
-                if (rowsCap == 0) rowsCap = 1;
-
+            // 检查是否需要列分块
+            if (cols <= COMPUTE_LENGTH) {
+                // 列宽 <= COMPUTE_LENGTH，可以处理完整行宽
+                uint32_t maxRowsPerTile = COMPUTE_LENGTH / cols;
+                if (maxRowsPerTile == 0) maxRowsPerTile = 1;  // 防止除零
+                
                 uint32_t remainRows = rows - r;
-                uint32_t tileRows = (remainRows < rowsCap) ? remainRows : rowsCap;
-
-                MatrixCoord tileShape{tileRows, tileCols};
-                MatrixCoord localTileOffset{r, c};
+                uint32_t tileRows = (remainRows < maxRowsPerTile) ? remainRows : maxRowsPerTile;
+                
+                MatrixCoord tileShape{tileRows, cols};
+                MatrixCoord localTileOffset{r, 0};
                 // 计算全局绝对坐标
                 MatrixCoord globalTileOffset = blockOffset + subblockOffset + localTileOffset;
-                uint32_t calCount = tileRows * tileCols;
+                uint32_t calCount = tileRows * cols;
 
                 // 访问当前 tile
-                callbacks.visit(globalTileOffset, tileShape, calCount);
+                callbacks.visit(globalTileOffset, localTileOffset, tileShape, calCount);
+                // AscendC::PipeBarrier<PIPE_ALL>();
 
-                c += tileCols;
+                r += tileRows;
+            } else { //应该暂时都用不到
+                // 列宽 > COMPUTE_LENGTH，需要列分块，每次处理1行
+                for (uint32_t c = 0; c < cols; ) {
+                    uint32_t remainCols = cols - c;
+                    uint32_t tileCols = (remainCols < COMPUTE_LENGTH) ? remainCols : COMPUTE_LENGTH;
+                    
+                    MatrixCoord tileShape{1, tileCols};
+                    MatrixCoord localTileOffset{r, c};
+                    // 计算全局绝对坐标
+                    MatrixCoord globalTileOffset = blockOffset + subblockOffset + localTileOffset;
+                    uint32_t calCount = tileCols;  // 1行 * tileCols列
+
+                    // 访问当前 tile
+                    callbacks.visit(globalTileOffset, localTileOffset, tileShape, calCount);
+                    // AscendC::PipeBarrier<PIPE_ALL>();
+
+                    c += tileCols;
+                }
+                
+                r += 1;  // 处理完一行
             }
 
             callbacks.end_row(r);
-
-            // 推进行索引
-            uint32_t rowsCapAllCols = (cols == 0) ? 0 : (COMPUTE_LENGTH / ((cols < COMPUTE_LENGTH) ? cols : COMPUTE_LENGTH));
-            if (rowsCapAllCols == 0) rowsCapAllCols = 1;
-            uint32_t advR = ((rows - r) < rowsCapAllCols) ? (rows - r) : rowsCapAllCols;
-            r += advR;
         }
 
         callbacks.end_epilogue();
