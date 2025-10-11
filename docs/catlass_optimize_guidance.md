@@ -24,17 +24,17 @@ catlass算子模板库的定位，是针对Gemm类算子提供的模板样例库
 对于输入输出是fp16场景，为了计算精度，cube核进行mmad输出到L0C上的结果是fp32数据类型，fixpipe随路传回gm时cast到fp16数据类型。
 ```
 L1大小512K
-L1实际占用 = L1::M * L1::K * 2(Byte) * 2(douberBuffer) + L1::K * L1::N * 2(Byte) * 2(douberBuffer)
+L1实际占用 = L1::M * L1::K * 2(Byte) * 2(doubleBuffer) + L1::K * L1::N * 2(Byte) * 2(doubleBuffer)
         = 128 * 256 * 2 * 2 + 256 * 256 * 2 * 2
         = 393216 B = 384 KB = 3/4 L1_SIZE
 
 L0A大小64K
-L0A实际占用 = L0::M * L0::K * 2(Byte) * 2(douberBuffer)
+L0A实际占用 = L0::M * L0::K * 2(Byte) * 2(doubleBuffer)
         = 128 * 64 * 2 * 2
         = 32768 B = 32 KB = 1/2 L0A_SIZE
 
 L0B大小64K
-L0B实际占用 = L0::K * L0::N * 2(Byte) * 2(douberBuffer)
+L0B实际占用 = L0::K * L0::N * 2(Byte) * 2(doubleBuffer)
         = 64 * 256 * 2 * 2
         = 65536 B = 64 KB = 1 L0B_SIZE
 
@@ -48,17 +48,17 @@ L0C实际占用 = L0::M * L0::N * 4(Byte)
 
 ```
 L1大小512K
-L1实际占用 = L1::M * L1::K * 4(Byte) * 2(douberBuffer) + L1::K * L1::N * 4(Byte) * 2(douberBuffer)
+L1实际占用 = L1::M * L1::K * 4(Byte) * 2(doubleBuffer) + L1::K * L1::N * 4(Byte) * 2(doubleBuffer)
         = 128 * 256 * 4 * 2 + 128 * 256 * 4 * 2
         = 524288 B = 512 KB = 1 L1_SIZE
 
 L0A大小64K
-L0A实际占用 = L0::M * L0::K * 4(Byte) * 2(douberBuffer)
+L0A实际占用 = L0::M * L0::K * 4(Byte) * 2(doubleBuffer)
         = 128 * 64 * 4 * 2
         = 65536 B = 64 KB = 1 L0A_SIZE
 
 L0B大小64K
-L0B实际占用 = L0::K * L0::N * 4(Byte) * 2(douberBuffer)
+L0B实际占用 = L0::K * L0::N * 4(Byte) * 2(doubleBuffer)
         = 64 * 128 * 4 * 2
         = 65536 B = 64 KB = 1 L0B_SIZE
 
@@ -94,7 +94,7 @@ struct MmadAtlasA2Preload : public MmadAtlasA2 {
 - [22_padding_splitk_matmul](../examples/22_padding_splitk_matmul/padding_splitk_matmul.cpp)，集成了`04_padding_matmul`和`09_splitk_matmul`特性，在M/N轴较小、K轴有一定长度、非对齐场景能产生性能收益。
 
 ### TileShape调整
-在满足（1）16的倍数（2）不超过硬件限制 的约束下，调整TileShape尝试达到负载均衡。同时当前库上方案限制 `L1TileShape::M == L0TileShape::M`，`L0TileShape::N == L0TileShape::N`，一般推荐`L0TileShape::K == 1/4 L1TileShape::M`。
+在满足（1）16的倍数（2）不超过硬件限制 的约束下，调整TileShape尝试达到负载均衡。同时当前库上方案限制 `L1TileShape::M == L0TileShape::M`且`L0TileShape::N == L1TileShape::N`，一般推荐`L0TileShape::K == 1/4 L1TileShape::M`。
 - 案例一
 
 场景描述：A矩阵RowMajor，B矩阵ColumnMajor，M 1024，N 576，K 6144，fp16输入输出，20个AIC。
