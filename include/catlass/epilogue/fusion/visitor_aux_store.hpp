@@ -3,6 +3,7 @@
 
 #include "catlass/epilogue/fusion/visitor_impl.hpp"
 #include "catlass/epilogue/fusion/operations.hpp"
+#include "catlass/epilogue/tile/tile_copy.hpp"
 
 namespace Catlass::Epilogue::Fusion {
 
@@ -86,18 +87,16 @@ struct VisitorAuxStore : VisitorImpl<> {
             AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
             AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
 
-            // 写回 GM（使用全局坐标，逐行写回处理跨距）
+            // 写回 GM（使用全局坐标，tile 封装处理跨距）
             if (params_ptr->ptr_aux != nullptr) {
+                auto layoutUb = layout::RowMajor::MakeLayoutInUb<Element>(tileShape);
+                using CopyUb2GmT = Epilogue::Tile::CopyUb2Gm<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>>;
+                CopyUb2GmT copyUb2Gm{};
                 AscendC::GlobalTensor<Element> gmAux;
                 gmAux.SetGlobalBuffer((__gm__ Element*)(params_ptr->ptr_aux));
-                uint32_t cols = tileShape.column();
-                uint32_t rows = (cols == 0) ? 0 : (calCount / cols);
-                for (uint32_t r = 0; r < rows; ++r) {
-                    auto rowGlobalOffset = params_ptr->layout.GetOffset(globalTileOffset + MatrixCoord{r, 0});
-                    auto gmRow = gmAux[rowGlobalOffset];
-                    auto ubRow = ubAux[r * cols];
-                    AscendC::DataCopy(gmRow, ubRow, cols);
-                }
+                auto gmTile = gmAux[params_ptr->layout.GetOffset(globalTileOffset)];
+                auto layoutDst = params_ptr->layout.GetTileLayout(tileShape);
+                copyUb2Gm(gmTile, ubAux, layoutDst, layoutUb);
             }
 
             AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);

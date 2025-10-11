@@ -2,6 +2,7 @@
 #define CATLASS_EPILOGUE_FUSION_VISITOR_AUX_LOAD_HPP
 
 #include "catlass/epilogue/fusion/visitor_impl.hpp"
+#include "catlass/epilogue/tile/tile_copy.hpp"
 
 namespace Catlass::Epilogue::Fusion {
 
@@ -77,27 +78,22 @@ struct VisitorAuxLoad : VisitorImpl<> {
             Args const&... /*unused*/
         ) {
             // AscendC::PipeBarrier<PIPE_ALL>();
-            uint32_t cols = tileShape.column();
-            uint32_t rows = (cols == 0) ? 0 : (calCount / cols);
+            auto layoutUb = layout::RowMajor::MakeLayoutInUb<Element>(tileShape);
+            using CopyGm2UbT = Epilogue::Tile::CopyGm2Ub<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>>;
+            CopyGm2UbT copyGm2Ub{};
 
             if (params_ptr->ptr_aux != nullptr) {
-                // 从用户提供的 ptr_aux 加载（使用全局坐标，逐行拷贝，处理跨距）
+                // 从用户提供的 ptr_aux 加载（使用全局坐标，tile 封装处理跨距）
                 AscendC::GlobalTensor<Element> gmAux;
                 gmAux.SetGlobalBuffer((__gm__ Element*)(params_ptr->ptr_aux));
-                for (uint32_t r = 0; r < rows; ++r) {
-                    auto rowGlobalOffset = params_ptr->layout.GetOffset(globalTileOffset + MatrixCoord{r, 0});
-                    auto gmRow = gmAux[rowGlobalOffset];
-                    auto ubRow = ubAux[r * cols];
-                    AscendC::DataCopy(ubRow, gmRow, cols);
-                }
+                auto gmTile = gmAux[params_ptr->layout.GetOffset(globalTileOffset)];
+                auto layoutSrc = params_ptr->layout.GetTileLayout(tileShape);
+                copyGm2Ub(ubAux, gmTile, layoutUb, layoutSrc);
             } else {
-                // 从 gmSubblockC 加载（AccLoad 场景，使用局部坐标，逐行拷贝，处理跨距）
-                for (uint32_t r = 0; r < rows; ++r) {
-                    auto rowLocalOffset = layoutSubblockC.GetOffset(localTileOffset + MatrixCoord{r, 0});
-                    auto gmRow = gmSubblockC[rowLocalOffset];
-                    auto ubRow = ubAux[r * cols];
-                    AscendC::DataCopy(ubRow, gmRow, cols);
-                }
+                // 从 gmSubblockC 加载（AccLoad 场景，使用局部坐标，tile 封装处理跨距）
+                auto gmTile = gmSubblockC[layoutSubblockC.GetOffset(localTileOffset)];
+                auto layoutSrc = layoutSubblockC.GetTileLayout(tileShape);
+                copyGm2Ub(ubAux, gmTile, layoutUb, layoutSrc);
             }
             // 同步 MTE2: GM->UB 完成
             // AscendC::PipeBarrier<PIPE_ALL>();
