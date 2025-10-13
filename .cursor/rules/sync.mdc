@@ -1,0 +1,118 @@
+---
+alwaysApply: false
+---
+AI Core中包含计算单元、存储单元、搬运单元等核心组件。
+
+计算单元包括了三种基础计算资源：Cube计算单元、Vector计算单元和Scalar计算单元。
+存储单元包括内部存储和外部存储：
+AI Core的内部存储，统称为Local Memory，对应的数据类型为LocalTensor。
+AI Core能够访问的外部存储称之为Global Memory，对应的数据类型为GlobalTensor。
+DMA（Direct Memory Access）搬运单元：负责数据搬运，包括Global Memory和Local Memory之间的数据搬运，以及不同层级Local Memory之间的数据搬运。
+AI Core内部核心组件及组件功能详细说明如下表。
+表1 AI Core内部核心组件
+展开
+组件分类
+
+组件名称
+
+组件功能
+
+计算单元
+
+Scalar
+
+执行地址计算、循环控制等标量计算工作，并把向量计算、矩阵计算、数据搬运、同步指令发射给对应单元执行。
+
+Vector
+
+负责执行向量运算。
+
+Cube
+
+负责执行矩阵运算。
+
+存储单元
+
+Local Memory
+
+AI Core的内部存储。
+
+搬运单元
+
+DMA（Direct Memory Access）
+
+负责数据搬运，包括Global Memory和Local Memory之间的数据搬运以及不同层级Local Memory之间的数据搬运。
+
+开发者在理解硬件架构的抽象时，需要重点关注如下异步指令流、同步信号流、计算数据流三个过程：
+
+AI Core内部的异步并行计算过程：Scalar计算单元读取指令序列，并把向量计算、矩阵计算、数据搬运指令发射给对应单元的指令队列，向量计算单元、矩阵计算单元、数据搬运单元异步的并行执行接收到的指令。该过程可以参考图1中蓝色箭头所示的指令流。
+不同的指令间有可能存在依赖关系，为了保证不同指令队列间的指令按照正确的逻辑关系执行，Scalar计算单元也会给对应单元下发同步指令。各单元之间的同步过程可以参考图1中的绿色箭头所示的同步信号流。
+AI Core内部数据处理的基本过程：DMA搬入单元将数据从Global Memory搬运到Local Memory，Vector/Cube计算单元完成数据计算，并把计算结果写回Local Memory，DMA搬出单元把处理好的数据从Local Memory搬运回Global Memory。该过程可以参考图1中的红色箭头所示的数据流。
+
+四个执行单元Scalar、Vector、DMA(VECIN)、DMA(VECOUT)并行执行，若访问同一片Local Memory，需要同步机制来控制他们的访问时序：保证先搬入Local Memory后再计算，计算完成后再搬出。
+
+流水类型
+
+含义
+
+PIPE_S
+
+标量流水线，使用Tensor GetValue函数时为此流水
+
+PIPE_V
+
+矢量计算流水及L0C->UB数据搬运流水、UB->UB的搬运指令
+
+PIPE_M
+
+矩阵计算流水
+
+PIPE_MTE1
+
+L1->L0A、L1->L0B数据搬运流水
+
+PIPE_MTE2
+
+GM->L1、GM->L0A、GM->L0B、GM->UB数据搬运流水
+
+PIPE_MTE3
+
+UB->GM、UB->L1数据搬运流水
+
+PIPE_FIX
+
+L0C->GM、L0C->L1数据搬运流水。
+
+同步控制分类
+对上述并行流水的同步控制分为两种：
+
+多流水同步：通过TQueSync的SetFlag/WaitFlag或者SetFlag/WaitFlag(ISASI)接口进行不同流水线间的同步控制。
+SetFlag：当前序指令的所有读写操作都完成之后，当前指令开始执行，并将硬件中的对应标志位设置为1。
+WaitFlag：当执行到该指令时，如果发现对应标志位为0，该队列的后续指令将一直被阻塞；如果发现对应标志位为1，则将对应标志位设置为0，同时后续指令开始执行。
+单流水同步：通过PipeBarrier(ISASI)完成同一流水线内的同步控制，用于在同一流水线内部约束执行顺序。其作用是，保证前序指令中所有数据的读写工作全部完成，后序指令才能执行。
+
+以纯Vector计算为例，矢量计算前后的CopyIn、CopyOut过程使用搬运指令队列（MTE2/MTE3），Compute过程使用Vector指令队列（V），不同指令队列可并行执行，意味着CopyIn、CopyOut过程和Compute过程是可以并行的。如图1所示，考虑一个完整的数据搬运和计算过程，CopyIn过程将数据从Global Memory搬运到Local Memory，Vector计算单元完成Compute计算后，经过CopyOut过程将计算结果搬回Global Memory。
+在此过程中，数据搬运与Vector计算串行执行，Vector计算单元不可避免存在资源闲置问题，假设CopyIn、Compute、CopyOut三阶段分别耗时相同均为t，则Vector的利用率仅为1/3，等待时间过长，Vector利用率严重不足。
+
+为减少Vector等待时间，使能double buffer机制将待处理的数据一分为二，比如Tensor1、Tensor2。如图3所示，当Vector单元对Tensor1中数据进行Compute计算时，Tensor2数据流可以执行CopyIn的过程；而当Vector切换到计算Tensor2时，Tensor1数据流可以执行CopyOut的过程。由此，数据的进出搬运和Vector计算实现并行执行，Vector闲置问题得以有效缓解。
+
+总体来说，double buffer是基于MTE指令队列与Vector指令队列的独立性和可并行性，通过将数据搬运与Vector计算并行执行以隐藏部分的数据搬运时间，并降低Vector指令的等待时间，
+
+对于单缓冲手动进行同步控制，插入的同步事件如下：
+正向同步
+在本次数据搬入和计算之间，插入MTE2_V（矢量计算流水等待MT2搬运流水）同步事件，确保数据搬入之后再进行计算；在本次数据计算和搬出之间，插入V_MTE3（MTE3搬运流水等待矢量计算流水）同步事件，确保数据计算完成后再进行搬出。
+
+反向同步
+在上一次的数据计算和本次数据搬入之间，插入V_MTE2（MT2搬运流水等待矢量计算流水）同步事件，确保上一次的数据计算完成后，本次的数据再进行搬入。防止本次的数据会覆盖掉上一次未计算完成的数据；在上一次的数据搬出和本次数据计算之间，插入MTE3_V（矢量计算流水等待MT3搬运流水）同步事件，确保上一次的数据搬出后，再进行本次数据的计算。防止本次的数据会覆盖掉上一次未搬出的数据。
+
+
+同一核内不同流水线之间的同步指令，具有数据依赖的不同流水指令之间需要插此同步。
+SetFlag：当前序指令的所有读写操作都完成之后，当前指令开始执行，并将硬件中的对应标志位设置为1。
+WaitFlag：当执行到该指令时，如果发现对应标志位为0，该队列的后续指令将一直被阻塞；如果发现对应标志位为1，则将对应标志位设置为0，同时后续指令开始执行。
+例子：// 同步 V->MTE3: 向量计算完成
+            AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0); //此处理解成，Set前方的V指令如果未完成，则flag0为0，完成设为1。(X_Y表示Y等X)
+            AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0); //此处理解成，Wait后方的MTE3指令会被阻塞执行，直到flag0设为1。
+
+阻塞相同流水，具有数据依赖的相同流水之间需要插入此同步。PipeBarrier
+例子：// AscendC::PipeBarrier<PIPE_ALL>();
+     // AscendC::PipeBarrier<PIPE_V>();
