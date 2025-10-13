@@ -20,7 +20,7 @@ for (int block_m = 0; block_m < MatmulM; block_m += BlockTileM) {
     // 在这个阶段没有循环展开
     for (int k_tile = 0; k_tile < MatmulK; k_tile++) {
 
-      // tileMma内的循环 (m,k) x (k,n) => (m,n)
+      // Tile级内循环: (m,k) x (k,n) => (m,n)
       // TileMmad使用硬件指令 AscendC::Mmad
       for (int tile_mma_m = 0; tile_mma_m < m; tile_mma_m++) {
         for (int tile_mma_n = 0; tile_mma_n < n; tile_mma_n++) {
@@ -164,9 +164,9 @@ struct MmadAtlasA2Pingpong {
 ```
 
 
-`STAGES` 参数使用户可以方便的调整多buffer场景的buffer片数，`ENABLE_UNIT_FLAG` 参数用于表示是否启用Mmad运算与L0C结果拷贝到全局内存的细粒度并行。
+`STAGES` 参数使用户可以方便地调整多buffer场景的buffer片数，`ENABLE_UNIT_FLAG` 参数用于表示是否启用Mmad运算与L0C结果拷贝到全局内存的细粒度并行。
 
-采用Dispath Policy的设计还有如下优点：
+采用Dispatch Policy的设计还有如下优点：
 - 它避免了代码重复，主循环可以与多个不同的内核使用。
 - 它使编写通用代码更容易，因为主要类型名称`BlockMma`在任何实现中都不会改变。
 - 它提供了一个清晰、单一的扩展点，供用户插入针对他们自己调度策略特化实现的新的、定制的主循环。

@@ -15,7 +15,7 @@ A/B矩阵为int8类型，scale为bf16，输出结果为bf16
 ```
 # 编译指定用例
 bash scripts/build.sh 11_grouped_matmul_slice_k_per_token_dequant
-# cd [代码仓路径]/output/bin
+cd output/bin
 # 可执行文件名|group数量|矩阵m轴|n轴|k轴|Device ID
 # Device ID可选，默认为0
 ./11_grouped_matmul_slice_k_per_token_dequant 128 512 1024 2048 0

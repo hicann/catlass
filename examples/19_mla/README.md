@@ -36,7 +36,9 @@ python gen_data.py 1 1 128 16 16 128 half
 ```
 第二步，执行算子，这里要注意的是执行算子的输入shape和上面第一步生成数据的shape一致。
 ```
-# cd [代码仓路径]/output/bin
+# 编译指定用例
+bash scripts/build.sh 19_mla
+cd output/bin
 ./19_mla 1 1 128 16 16 128
 # 此处的参数和生成数据的参数保持一致
 # 完整参数为 batchSize, qSeqlen, kvSeqlen, qheadNum, numBlock, blockSize [--dtype DTYPE --datapath DATA_PATH --device DEVICE_ID]，dtype默认为half, datapath默认为../../examples/19_mla/data, device默认为0。

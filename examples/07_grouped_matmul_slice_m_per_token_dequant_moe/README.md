@@ -17,7 +17,7 @@ A/B矩阵为int8类型，scale为fp32，输出结果为fp16
 ```
 # 编译指定用例
 bash scripts/build.sh 07_grouped_matmul_slice_m_per_token_dequant_moe
-# cd [代码仓路径]/output/bin
+cd output/bin
 # 可执行文件名|group数量|矩阵m轴|n轴|k轴|Device ID
 # Device ID可选，默认为0
 ./07_grouped_matmul_slice_m_per_token_dequant_moe 128 512 1024 2048 0

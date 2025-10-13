@@ -37,7 +37,7 @@ source /usr/local/Ascend/ascend-toolkit/set_env.sh
 git clone下载Catlass算子模板库源码
 
 ```bash
-git clone https://gitee.com/ascend/catlass.git
+git clone https://gitcode.com/cann/catlass.git
 ```
 
 需要依赖组件：
@@ -319,9 +319,9 @@ using L0TileShape = GemmShape<128, 256, 64>;
 **case2** `m, n, k = 16, 16, 32768`
 
 1. 使用初始的TileShape `L1TileShape: <128,256,256>`, `L0TileShape: <128,256,64>`，
-执行命令`msprof op ./basic_matmul 128 256 4096 0`,测试算子在当前tileShape下的性能。
+执行命令`msprof op ./basic_matmul 16 16 32768 0`,测试算子在当前tileShape下的性能。
 2. 修改TileShape为 `L1TileShape: <16,16,2048>`, `L0TileShape: <16,16, 64>`，
-3. 重新编译后，执行命令`msprof op ./basic_matmul 128 256 4096 0`，测试算子修改tileShape后的性能。通过比对tileShape修改前后的性能，观察调整tiling对算子性能的影响。
+3. 重新编译后，执行命令`msprof op ./basic_matmul 16 16 32768 0`，测试算子修改tileShape后的性能。通过比对tileShape修改前后的性能，观察调整tiling对算子性能的影响。
 
 ## SplitK Matmul体验
 
@@ -329,7 +329,7 @@ using L0TileShape = GemmShape<128, 256, 64>;
 
 ![](./images/split_k_matmul.png)
 
-由于硬件约束，基本块的大小最小为`16x16`，如果Matmul的M和N轴很小，例如`M=16,N=16`,那么只能划分出一个基本块，只能利用一个计算核心，浪费了很多计算资源，如图所示，如果K方向足够大，可以对K方向进行切分，从而话分出更多的任务块，利用更多的计算核心，提高计算效率。
+由于硬件约束，基本块的大小最小为`16x16`，如果Matmul的M和N轴很小，例如`M=16,N=16`,那么只能划分出一个基本块，只能利用一个计算核心，浪费了很多计算资源，如图所示，如果K方向足够大，可以对K方向进行切分，从而划分出更多的任务块，利用更多的计算核心，提高计算效率。
 
 ### 代码实现
 
@@ -701,7 +701,7 @@ struct Options {
                     deviceId = std::stoi(argv[DEVICE_ID_INDEX]);
                     return SUCCESS;
                 } else {
-                    std::cerr << "deviced id cannot be negative"<< std::endl;
+                    std::cerr << "device id cannot be negative"<< std::endl;
                     return FAILED;
                 }
             } catch (const std::invalid_argument& e) {

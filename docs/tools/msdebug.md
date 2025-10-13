@@ -62,7 +62,7 @@ Current executable set to '/home/catlass/output/bin/00_basic_matmul' (aarch64).
 (msdebug) b basic_matmul.cpp:81
 Breakpoint 1: where = 00_basic_matmul`Run(Options const&) + 416 at basic_matmul.cpp:81:18, address = 0x000000000019e8dc
 (msdebug) b basic_matmul.cpp:128
-Breakpoint 2: where = 00_basic_matmul`Run(Options const&) + 2816 at basic_matmul.cpp:138:39, address = 0x000000000019f23c
+Breakpoint 2: where = 00_basic_matmul`Run(Options const&) + 2816 at basic_matmul.cpp:128:39, address = 0x000000000019f23c
 (msdebug) breakpoint list
 Current breakpoints:
 1: file = 'basic_matmul.cpp', line = 81, exact_match = 0, locations = 1
@@ -131,7 +131,7 @@ Process 814079 stopped
 
 如果想查看内存，先通过`p`指令，查看当前内存的信息。
 
-然后通过`x -m UB -f float32[] 65536 -c 4 -s 4`命令，可以打印accumulatorBuffer内存中的值，一次最多打印1024字节。
+通过`x -m UB -f float16[] 65536 -c 4 -s 4`命令，可以打印accumulatorBuffer内存中的值，一次最多打印1024字节。
 
 ```bash
 (msdebug) c
@@ -179,7 +179,7 @@ Process 814339 stopped
 0x00010004: {244.125 -364.75}
 0x00010008: {-104.875 -156}
 0x0001000c: {232 -100.75}
-(msdebug) x -m UB -f float16[] 65536 -c 4 -s 8 # 在UB内存中从65536的地址分打印4行8字节的fp1数据
+(msdebug) x -m UB -f float16[] 65536 -c 4 -s 8 # 在UB内存中从65536的地址分打印4行8字节的fp16数据
 0x00010000: {355.5 188.75 244.125 -364.75}
 0x00010008: {-104.875 -156 232 -100.75}
 0x00010010: {-47.4062 105.875 -322.5 -265.75}
@@ -266,7 +266,7 @@ Process 814339 stopped
 }
 (uint64_t) elementCount = 131072
 (uint32_t) splitkFactor = 2
-(const uint32_t) ELE_PER_VECOTR_BLOCK = 64
+(const uint32_t) ELE_PER_VECTOR_BLOCK = 64
 (uint32_t) aivNum = 48
 (uint32_t) aivId = 26
 (uint64_t) taskPerAiv = 2752
@@ -294,7 +294,7 @@ Quitting LLDB will kill one or more processes. Do you really want to proceed: [Y
 |  continue | c |  继续运行 | c |
 |  print | p | 打印变量| p zLocal |
 |  frame variable | var | 打印当前帧所有变量 | var |
-|  memory read | x | 读内存<br>-m 指定内存位置，支持GM/UB/L0A/L0B/L0C<br>-f 指定[字节转换格式](#附录1)<br>-s 指定每行打印字节数<br>-c 指定打印的行数 |  x -m GM -f float16[] 1000-c 2 -s 128  |
+|  memory read | x | 读内存<br>-m 指定内存位置，支持GM/UB/L0A/L0B/L0C<br>-f 指定[字节转换格式](#附录1)<br>-s 指定每行打印字节数<br>-c 指定打印的行数 |  x -m GM -f float16[] 1000 -c 2 -s 128  |
 |  register read | re r | 读取寄存器值<br>-a 读取所有寄存器值<br>\$REG\_NAME 读取指定名称的寄存器值 | register read -are r \$PC |
 |  thread step-over |  next<br>n                          |  在同一个调用栈中，移动到下一个可执行的代码行                                                                                                                              |  n |
 |  ascend info devices |  /  |  查询device信息  |  ascend info devices |
@@ -362,5 +362,6 @@ Valid values are:
 配置环境变量ASCEND_RT_VISIBLE_DEVICES为需要使用的NPU卡号，例如
 
 ```bash
+# 指定当前进程仅使用Device ID为2的Device
 export ASCEND_RT_VISIBLE_DEVICES=2
 ```
