@@ -21,7 +21,7 @@
 GlobalTensor<float> A = ...;
 
 // 缺省coord, 默认为（0， 0）
-Layout w8xh16 = MakeLayout(MakeShape(8, Int<16>{}), MakeStride(Int<16>{},Int< 1>{}));
+Layout w8xh16 = MakeLayout(MakeShape(8, Int<16>{}), MakeStride(Int<16>{},Int<1>{}));
 Tensor tensor_8x16 = MakeTensor(A, w8xh16, Arch::PositionGM{});
 
 // 用户指定coord
@@ -50,5 +50,5 @@ TLA `Tensor` 提供获取相应特性的接口：
 Layout w8xh16 = MakeLayout(MakeShape(8, Int<16>{}), MakeStride(Int<16>{},Int< 1>{}));
 Tensor tensor_8x16 = MakeTensor(A, w8xh16, Arch::PositionGM{});
 
-auto tensor_tile = GetTile(tensor_8x16, MakeCoord(2, 4), MakeShape(4, 8)); // (4,8):(_16,_1)
+auto tensor_tile = GetTile(tensor_8x16, tla::MakeCoord(2, 4), MakeShape(4, 8)); // (4,8):(_16,_1)
 ```
