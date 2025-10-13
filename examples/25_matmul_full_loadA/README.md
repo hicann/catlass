@@ -12,7 +12,7 @@
 - A矩阵全载时，N轴较小，无法复用A矩阵，性能收益较00_basic_matmul可能会出现劣化；
 - 若problemShape.M <= L1TileShape::M，即M方向不切块分核，此时常用GemmIdentityBlockSwizzle策略即可适用；
 - 若problemShape.M > L1TileShape::M，新增配套的GemmIdentityBlockSwizzleL1FullLoad<SwizzleOffset, SwizzleDirection, AicCoreNum>，使得每个核需要处理的基本块尽可能地连在一起，提升A矩阵分核全载时的块间复用率；
-- 以24个cube核为例，常用的GemmIdentityBlockSwizzle策略，基本块分核顺序为0-1-2-...-22-23-0-1-2...-22-23-0-1-2...，每个核需要处理的基本块跳跃分布。新增的GemmIdentityBlockSwizzle策略，基本块分核顺序为0-0..-0-1-1...-1-2-2...-23，每个核需要处理的基本块连续分布。
+- 以24个cube核为例，常用的GemmIdentityBlockSwizzle策略，基本块分核顺序为0-1-2-...-22-23-0-1-2...-22-23-0-1-2...，每个核需要处理的基本块跳跃分布。新增的GemmIdentityBlockSwizzleL1FullLoad策略，基本块分核顺序为0-0..-0-1-1...-1-2-2...-23，每个核需要处理的基本块连续分布。
 ## 使用示例
 - 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/quickstart.md#算子编译)
 - 执行算子

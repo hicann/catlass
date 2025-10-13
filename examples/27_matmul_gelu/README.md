@@ -49,7 +49,7 @@ Gelu(x) =x∗Sigmod( 2Z )
 $$
 再次展开，并取近似：$\sqrt {8/π}\approx 1.595769$，有:
 $$
-Gelu(x) \approx x∗Sigmod( 1.595769∗(x+0.044715∗x^3 ))
+Gelu(x) \approx x∗Sigmoid( 1.595769∗(x+0.044715∗x^3 ))
 $$
 在上式中展开$Sigmoid$函数，最终Gelu的计算形式为：
 $$

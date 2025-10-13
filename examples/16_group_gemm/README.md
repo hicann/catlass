@@ -13,7 +13,7 @@
 # 编译指定用例
 bash scripts/build.sh 16_group_gemm
 cd output/bin
-# 可执行文件名 |矩阵个数||矩阵m轴组|n轴组|k轴组|Device ID
+# 可执行文件名 |矩阵个数|矩阵m轴组|n轴组|k轴组|Device ID
 # Device ID可选，默认为0
 ./16_group_gemm 3 "128,256,512" "256,512,128" "512,256,128" 0
 ```
