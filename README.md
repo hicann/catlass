@@ -45,21 +45,18 @@ catlass
 
 - 软件版本：
   - `gcc >= 7.5, < 13`（已测试`7.5`，`8.3`，`9.3`，`11.4`，建议使用9.3以上版本。）
-  - `cmake >= 3.15`
+  - `cmake >= 3.22`
   - `python >= 3.10`
 
 - CANN版本：
+  - 社区版`CANN`包（[8.2.RC1.alpha002](https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.2.RC1.alpha002)及之后版本）
 
-| CANN包类别 | 版本要求                    | 获取方式                                                                                                             |
-| ---------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| 社区版     | 8.2.RC1.alpha002 及之后版本 | [社区CANN包下载地址](https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.2.RC1.alpha002) |
-| 商用版     | 8.1.RC1及之后版本           | 请咨询对应Support/SupportE获取                                                                                       |
 
 - 对于某些调测工具，可能需要较以上版本更加新的CANN版本，可参考[调测工具文档](#toolbox)。
 
 ## ⚡️ 快速上手
 
-以[`00_basic_matmul`](https://gitcode.com/cann/catlass/tree/master/examples/00_basic_matmul)算子样例为例，快速上手CATLASS算子开发：
+以[`00_basic_matmul`](examples/00_basic_matmul)算子样例为例，快速上手CATLASS算子开发：
 
 1. 使能CANN环境变量
 关于CANN环境准备请参考官网[安装说明](https://www.hiascend.com/document/detail/zh/canncommercial/82RC1/softwareinst/instg/instg_0008.html?Mode=PmIns&InstallType=local&OS=Debian&Software=cannToolKit)
@@ -98,16 +95,16 @@ cd output/bin
 - [swizzle_explanation](./docs/swizzle_explanation.md) - 对模板库中Swizzle策略的基本介绍，这影响了AI Core上计算基本块间的顺序。
 - [dispatch_policies](./docs/dispatch_policies.md) - 对模板库在`Block`层面上`BlockMmad`中的一个重要模板参数`DispatchPolicy`的介绍。
 
-### 🧰 调测工具文档 <span id="toolbox"></span>
+### 🧰 调测工具文档
 
 我们已经在CATLASS示例工程中适配了大多数CANN提供的调测工具，开发算子时，可基于CATLASS示例工程进行初步开发调优，无需关注具体的工具适配操作，待算子基础功能、性能达到预期，再迁移到其他工程中。
 
 #### 🚗 功能调试
 
 - [msDebug](./docs/tools/msdebug.md) - 类gdb/lldb的调试工具msDebug
-  - ⚠️ **注意** 这个功能依赖于[8.2.RC1.alpha003](https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.2.RC1.alpha003)版本的社区版或`8.2.RC1`之后的商用版。
+  - ⚠️ **注意** 此功能依赖社区版`CANN`包版本为[8.2.RC1.alpha003](https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.2.RC1.alpha003)。
 - [printf](./docs/tools/print.md) - 在算子device代码进行打印调试
-  - ⚠️ **注意** 这个功能将在未来的`CANN 8.3`开始支持。
+  - ⚠️ **注意** 此功能依赖社区版`CANN`包版本在CANN 8.3后（如[8.3.RC1.alpha001](https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.3.RC1.alpha001)）。
 
 #### ✈️ 性能调优
 
