@@ -37,7 +37,7 @@ source /usr/local/Ascend/ascend-toolkit/set_env.sh
 git clone下载Catlass算子模板库源码
 
 ```bash
-git clone https://gitee.com/ascend/catlass.git
+git clone https://gitcode.com/cann/catlass.git
 ```
 
 需要依赖组件：

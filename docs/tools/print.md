@@ -6,7 +6,7 @@
 - 支持格式化字符串
 - 支持打印常见整型与浮点数、指针、字符
 
-  - ⚠️ **注意** 这个功能将在社区版未来的CANN 8.3开始支持，商用最新版现已支持。
+  - ⚠️ **注意** 这个功能在社区版CANN 8.3后（如[8.3.RC1.alpha001](https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.3.RC1.alpha001)）开始支持。
 
 ## 使用示例
 
