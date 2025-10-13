@@ -99,8 +99,8 @@ struct VisitorAuxStore : VisitorImpl<> {
                 copyUb2Gm(gmTile, ubAux, layoutDst, layoutUb);
             }
 
-            AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
-            AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
+            // AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
+            // AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
             // AscendC::PipeBarrier<PIPE_ALL>();
         }
     };

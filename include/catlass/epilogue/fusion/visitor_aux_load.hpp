@@ -77,6 +77,8 @@ struct VisitorAuxLoad : VisitorImpl<> {
             uint32_t calCount,
             Args const&... /*unused*/
         ) {
+            AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
+            AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
             // AscendC::PipeBarrier<PIPE_ALL>();
             auto layoutUb = layout::RowMajor::MakeLayoutInUb<Element>(tileShape);
             using CopyGm2UbT = Epilogue::Tile::CopyGm2Ub<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>>;

@@ -115,6 +115,8 @@ struct VisitorCompute : VisitorImpl<> {
             uint32_t calCount,
             AscendC::LocalTensor<ElementInputs> const&... inputs
         ) {
+            AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
+            AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
             static_assert(sizeof...(ElementInputs) == NumInputs, "Input count mismatch");
 
             auto inputs_tuple = tla::tuple<AscendC::LocalTensor<ElementInputs> const&...>(inputs...);
