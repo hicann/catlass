@@ -9,7 +9,8 @@
  */
 
 #include "library_helper.h"
-#include "common/bfloat16.h"
+
+#include <opdev/bfloat16.h>
 
 namespace Catlass {
 
