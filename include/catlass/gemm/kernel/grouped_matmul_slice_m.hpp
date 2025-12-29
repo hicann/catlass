@@ -139,8 +139,12 @@ public:
 
         uint32_t startCoreIdx = 0;
         for (uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx) {
+#ifdef CATLASS_EXPERIMENTAL_GROUPLIST_SEGMENTED
+            uint32_t currentM = groupList.GetValue(groupIdx);
+#else
             uint32_t currentM = (groupIdx == 0) ? groupList.GetValue(groupIdx) :
                 (groupList.GetValue(groupIdx) - groupList.GetValue(groupIdx - 1));
+#endif
             GemmCoord inGroupProblemShape{currentM, params.problemShape.n(), params.problemShape.k()};
 
             LayoutA layoutA = params.layoutA.GetTileLayout(inGroupProblemShape.GetCoordMK());

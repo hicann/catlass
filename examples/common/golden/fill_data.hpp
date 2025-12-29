@@ -79,6 +79,8 @@ void QuickSort(std::vector<T>& arr, int left, int right)
 }
 
 // Generate an ascending random sequence as grouplist
+// If CATLASS_EXPERIMENTAL_GROUPLIST_SEGMENTED is defined, convert to segmented form
+// Otherwise, keep prefix-sum form
 template <typename T = int32_t>
 std::vector<T> GenerateGroupList(uint32_t m, uint32_t problemCount)
 {
@@ -88,6 +90,12 @@ std::vector<T> GenerateGroupList(uint32_t m, uint32_t problemCount)
         groupList[i] = rand() % (m + 1);
     }
     QuickSort(groupList, 0, groupList.size() - 1);
+
+#ifdef CATLASS_EXPERIMENTAL_GROUPLIST_SEGMENTED
+    for (int i = problemCount - 1; i > 0; --i) {
+        groupList[i] -= groupList[i - 1];
+    }
+#endif
 
     return groupList;
 }

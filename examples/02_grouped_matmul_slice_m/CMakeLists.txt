@@ -11,3 +11,9 @@
 set_source_files_properties(grouped_matmul_slice_m.cpp PROPERTIES LANGUAGE ASCEND)
 catlass_example_add_executable(02_grouped_matmul_slice_m cube grouped_matmul_slice_m.cpp)
 target_compile_definitions(02_grouped_matmul_slice_m PRIVATE L2_CACHE_HINT)
+
+# Option to use segmented group list format instead of prefix-sum format
+option(CATLASS_EXPERIMENTAL_GROUPLIST_SEGMENTED "Use segmented group list format instead of prefix-sum format" OFF)
+if(CATLASS_EXPERIMENTAL_GROUPLIST_SEGMENTED)
+    target_compile_definitions(02_grouped_matmul_slice_m PRIVATE CATLASS_EXPERIMENTAL_GROUPLIST_SEGMENTED)
+endif()

@@ -183,7 +183,11 @@ static void Run(const Options &options) {
     std::vector<LayoutB> layoutBList(problemCount);
     std::vector<LayoutC> layoutCList(problemCount);
     for (uint32_t i = 0; i < problemCount; ++i) {
+#ifdef CATLASS_EXPERIMENTAL_GROUPLIST_SEGMENTED
+        uint32_t currentM = groupList[i];
+#else
         uint32_t currentM = (i == 0) ? groupList[0] : (groupList[i] - groupList[i - 1]);
+#endif
         problemShapeList[i] = GemmCoord{currentM, n, k};
         layoutAList[i] = LayoutA{currentM, k};
         layoutBList[i] = LayoutB{k, n};
@@ -195,7 +199,15 @@ static void Run(const Options &options) {
         problemCount, problemShapeList, hostA, layoutAList, hostB, layoutBList, hostGolden, layoutCList
     );
 
+#ifdef CATLASS_EXPERIMENTAL_GROUPLIST_SEGMENTED
+    uint64_t totalM = 0;
+    for (uint32_t i = 0; i < problemCount; ++i) {
+        totalM += groupList[i];
+    }
+    std::vector<uint64_t> errorIndices = golden::CompareData(hostC, hostGolden, k, totalM * n);
+#else
     std::vector<uint64_t> errorIndices = golden::CompareData(hostC, hostGolden, k, groupList[problemCount - 1] * n);
+#endif
     if (errorIndices.empty()) {
         std::cout << "Compare success." << std::endl;
     } else {
