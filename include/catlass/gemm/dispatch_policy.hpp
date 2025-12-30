@@ -228,6 +228,28 @@ struct MmadAtlasA2DynamicSingleCoreSplitk : public MmadAtlasA2 {
     static_assert(!(ENABLE_UNIT_FLAG && (L0C_STAGES > 1)), "When L0C_STAGES > 1, can not enable unitflag");
 };
 
+template <uint32_t SCALAR_BUFFER_ELE_NUM_ = 256, uint32_t STAGES_ = 2>
+struct MmadAtlasA2DynamicAiv : public MmadAtlasA2 {
+    static constexpr uint32_t STAGES = STAGES_;
+    static constexpr uint32_t SCALAR_BUFFER_ELE_NUM = SCALAR_BUFFER_ELE_NUM_;
+};
+
+// UB must have a capacity of UBA(mTile) + UBB(nTile) + UBC(mTile, nTile) size.
+// MmadAtlasA2AivSimple is suitable for cases: mTile <= mTileUbLimits && nTile >= params.n
+template <uint32_t SCALAR_BUFFER_ELE_NUM_ = 256, bool IS_TILE_M_ = true>
+struct MmadAtlasA2DynamicAivSimple : public MmadAtlasA2 {
+    static constexpr uint32_t SCALAR_BUFFER_ELE_NUM = SCALAR_BUFFER_ELE_NUM_;
+    static constexpr bool IS_TILE_M = IS_TILE_M_;
+};
+
+// mTile and nTile must be aligned to 16.
+// UB must have a capacity of UBA(mTile) + UBB(nTile) + 2 * UBC(mTile, nTile) size.
+// MmadAtlasA2AivTrans is suitable for cases: M > N
+template <uint32_t SCALAR_BUFFER_ELE_NUM_ = 256>
+struct MmadAtlasA2DynamicAivTrans : public MmadAtlasA2 {
+    static constexpr uint32_t SCALAR_BUFFER_ELE_NUM = SCALAR_BUFFER_ELE_NUM_;
+};
+
 template <uint32_t STAGES_, bool ENABLE_UNIT_FLAG_ = false, bool ENABLE_SHUFFLE_K_ = false>
 struct MmadAtlasA2Small : public MmadAtlasA2 {
     static constexpr uint32_t STAGES = STAGES_;

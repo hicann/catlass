@@ -14,6 +14,7 @@
 #include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
 #include "catlass/gemm/tile/tile_copy_tla.hpp"
+#include "catlass/gemm/gemm_type.hpp"
 #include "tla/tensor.hpp"
 
 namespace Catlass::Gemm::Tile {
@@ -54,6 +55,43 @@ struct TileCopyTla<Arch::AtlasA2,
         auto dstOffset = dstTensor.layout()(dstTensor.coord());
         auto srcOffset = srcTensor.layout()(srcTensor.coord());
         AscendC::DataCopyPad(dstTensor.data()[dstOffset], srcTensor.data()[srcOffset], dataCopyParams, padParams);
+    };
+};
+
+template <
+    class ArchTag,
+    class GmType
+>
+struct CopyGm2Ub {
+    static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy gm to ub, can not find the specialization.");
+};
+
+template <typename Element>
+struct CopyGm2Ub<Arch::AtlasA2, Gemm::GemmType<Element, layout::VectorLayout>> {
+    using LayoutSrc = layout::VectorLayout;
+    using LayoutDst = layout::VectorLayout;
+
+    static constexpr uint32_t ELE_NUM_PER_BLK = BYTE_PER_BLK / sizeof(Element);
+
+    CATLASS_DEVICE
+    CopyGm2Ub() = default;
+
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::GlobalTensor<Element> const &srcTensor,
+        layout::VectorLayout const &layoutDst,
+        layout::VectorLayout const &layoutSrc)
+    {
+        AscendC::DataCopyExtParams dataCopyParams(
+            1,
+            layoutSrc.shape(0) * sizeof(Element),
+            0,
+            0,
+            0
+        );
+        AscendC::DataCopyPadExtParams<Element> padParams(false, 0, 0, 0);
+        AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams, padParams);
     };
 };
 

@@ -14,6 +14,7 @@ import os
 from utils.config import Config
 
 from templates.common_matmul_template import CommonMatmulTemplate
+from templates.aiv_matmul_template import AivMatmulTemplate
 from templates.small_matmul_template import SmallMatmulTemplate
 from templates.padding_common_matmul_template import PaddingCommonMatmulTemplate
 from templates.padding_multi_core_splitk_matmul_template import PaddingMultiCoreSplitkMatmulTemplate
@@ -38,4 +39,5 @@ if __name__ == "__main__":
     PaddingSingleCoreSplitkForSmallKMatmulTemplate.gen_code("half", kernel_info)
     PaddingSingleCoreSplitkKLoopOuterMatmulTemplate.gen_code("half", kernel_info)
     PaddingSingleCoreSplitkKLoopMiddleMatmulTemplate.gen_code("half", kernel_info)
+    AivMatmulTemplate.gen_code("half", kernel_info)
     LaunchMapTemplate.gen_code(kernel_info)

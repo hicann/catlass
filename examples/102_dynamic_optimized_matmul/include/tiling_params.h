@@ -100,14 +100,14 @@ struct TilingParams {
     uint16_t m1Factor{1};
     uint16_t n1Factor{1};
     // The following parameters are only used in tiling and are not read by the kernel.
-    uint8_t layoutTagA;
-    uint8_t layoutTagB;
-    uint8_t layoutTagC;
-    uint8_t paddingTagA;
-    uint8_t paddingTagB;
-    uint8_t paddingTagC;
+    uint8_t layoutTagA{0};
+    uint8_t layoutTagB{0};
+    uint8_t layoutTagC{0};
+    uint8_t paddingTagA{0};
+    uint8_t paddingTagB{0};
+    uint8_t paddingTagC{0};
     uint8_t blockDim{0};
-    TilingKey tilingKey;
+    TilingKey tilingKey{0};
 
     TilingParams() {}
 

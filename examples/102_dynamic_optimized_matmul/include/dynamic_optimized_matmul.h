@@ -67,6 +67,10 @@ void PrintTilingParams(TilingParams &tilingParams, PlatformInfo& platformInfo)
             k0 = k0 / c0NumPerFractal * c0NumPerFractal;
         }
     }
+    // AivMatmul
+    if (tilingParams.k == 1) {
+        m0 = n0 = k0 = 0;
+    }
     std::cout << std::dec << "┌─────────────────────────────────────────────┐\n"
               << "│            Tiling Parameters                │\n"
               << "├───────────────────┬─────────────────────────┤\n"

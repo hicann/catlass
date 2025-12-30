@@ -36,6 +36,7 @@ class Config:
         "PaddingSingleCoreSplitkForSmallKMatmulKernel": 6,
         "PaddingSingleCoreSplitkKLoopOuterMatmulKernel": 7,
         "PaddingSingleCoreSplitkKLoopMiddleMatmulKernel": 8,
+        "AivMatmulKernel": 9
     }
 
     DTYPE_MAP = {"half": 0, "float": 1}
