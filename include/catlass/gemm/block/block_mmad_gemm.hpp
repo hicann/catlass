@@ -88,6 +88,10 @@ public:
     const uint32_t l0CBlockNum = ArchTag::L0C_SIZE / cSize;
 
     static_assert(std::is_same_v<LayoutC, layout::RowMajor>, "LayoutC only support RowMajor yet!");
+    
+    // 32B (256b) aligned
+    static_assert(Gemm::helper::TileShapeAlignChecker<L1TileShape, L0TileShape, ElementA, ElementB>::_ALIGN == 256, 
+        "Tile shape must be 32B aligned.");
 
     CATLASS_DEVICE
     BlockGemm(Arch::Resource<ArchTag> &resource, uint32_t l1BufAddrStart = 0)

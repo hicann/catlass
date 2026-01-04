@@ -97,10 +97,15 @@ public:
     static_assert((L0B_TILE_SIZE * STAGES) <= L0B_SIZE, "L0TileShape exceeding the L0B space!");
     static_assert(L0C_TILE_SIZE <= L0C_SIZE, "L0TileShape exceeding the L0C space!");
 
+    // Check tileshape
     static_assert(L1TileShape::M == L0TileShape::M && L1TileShape::N == L0TileShape::N,
         "The situation where the basic blocks of L1 and L0 differ on the m and n axes is not supported yet");
     static_assert(L0TileShape::K <= L1TileShape::K, "L0TileShape::K cannot exceed L1TileShape::K");
-
+    
+    // 32B (256b) aligned
+    static_assert(Gemm::helper::TileShapeAlignChecker<L1TileShape, L0TileShape, ElementA, ElementB>::_ALIGN == 256, 
+        "Tile shape must be 32B aligned.");
+    
     /// Construct
     CATLASS_DEVICE
     BlockMmad(Arch::Resource<ArchTag> &resource, uint32_t l1BufAddrStart = 0)

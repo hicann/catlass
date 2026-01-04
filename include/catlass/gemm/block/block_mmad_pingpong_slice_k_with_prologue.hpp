@@ -98,7 +98,11 @@ public:
     static constexpr uint32_t L0B_TILE_SIZE = L0TileShape::K * L0TileShape::N * sizeof(ElementB);
     static_assert((L0A_TILE_SIZE * STAGES) <= L0A_SIZE, "L0TileShape exceeding the L0A space!");
     static_assert((L0B_TILE_SIZE * STAGES) <= L0B_SIZE, "L0TileShape exceeding the L0B space!");
-
+    
+    // 32B (256b) aligned
+    static_assert(Gemm::helper::TileShapeAlignChecker<L1TileShape, L0TileShape, ElementA, ElementB>::_ALIGN == 256, 
+        "Tile shape must be 32B aligned.");
+    
     struct Params {
         typename Tile::PrologueTraits<PrologueA>::Params prologueAParams{};
         typename Tile::PrologueTraits<PrologueB>::Params prologueBParams{};

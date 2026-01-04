@@ -112,9 +112,15 @@ public:
     static_assert(L0B_TILE_SIZE * STAGES <= ArchTag::L0B_SIZE, "L0TileShape exceeding the L0B space!");
     static_assert(L0C_TILE_SIZE <= ArchTag::L0C_SIZE, "L0TileShape exceeding the L0C space!");
 
+    static constexpr uint32_t _32B = 32*8; // in bits
     static_assert(L1_TILE_M == L0_TILE_M && L1_TILE_N == L0_TILE_N,
         "The situation where the basic blocks of L1 and L0 differ on the m and n axes is not supported yet");
     static_assert(L0_TILE_K <= L1_TILE_K, "L0TileShape::K cannot exceed L1TileShape::K");
+    static_assert(L1_TILE_M * SizeOfBits<ElementA>::value % _32B == 0, "L1TileShape::M must be 32B aligned.");
+    static_assert(L1_TILE_K * SizeOfBits<ElementA>::value % _32B == 0, "L1TileShape::K must be 32B aligned.");
+    static_assert(L1_TILE_K * SizeOfBits<ElementB>::value % _32B == 0, "L1TileShape::K must be 32B aligned.");
+    static_assert(L1_TILE_N * SizeOfBits<ElementB>::value % _32B == 0, "L1TileShape::N must be 32B aligned.");
+    static_assert(L0_TILE_K * SizeOfBits<ElementB>::value % _32B == 0, "L0TileShape::K must be 32B aligned.");
 
     static constexpr auto L1A_LAYOUT = tla::MakeLayout<ElementA, LayoutTagL1A>(Int<L1_TILE_M>{}, Int<L1_TILE_K>{});
     static constexpr auto L1B_LAYOUT = tla::MakeLayout<ElementB, LayoutTagL1B>(Int<L1_TILE_K>{}, Int<L1_TILE_N>{});

@@ -101,7 +101,10 @@ public:
     static_assert(L0TileShape::K <= L1TileShape::K, "L0TileShape::K cannot exceed L1TileShape::K");
     static_assert(L0TileShape::M <= L1TileShape::M, "L0TileShape::M cannot exceed L1TileShape::M");
     static_assert(L0TileShape::N <= L1TileShape::N, "L0TileShape::N cannot exceed L1TileShape::N");
-
+    // 32B (256b) aligned
+    static_assert(Gemm::helper::TileShapeAlignChecker<L1TileShape, L0TileShape, ElementA, ElementB>::_ALIGN == 256, 
+        "Tile shape must be 32B aligned.");
+    
     static constexpr uint32_t L0A_PINGPONG_BUF_SIZE = ArchTag::L0A_SIZE / L0AB_STAGES;
     static constexpr uint32_t L0B_PINGPONG_BUF_SIZE = ArchTag::L0B_SIZE / L0AB_STAGES;
     static constexpr uint32_t L0C_PINGPONG_BUF_SIZE = ArchTag::L0C_SIZE / L0C_STAGES;

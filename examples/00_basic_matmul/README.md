@@ -44,6 +44,7 @@ BasicMatmul所涉及的关键模板参数如下:
 | `float` | `float` | `float` \| `fp16_t` \| `bfloat16_t` | 
 | `fp16_t` | `fp16_t` | `float` \| `fp16_t` \| `bfloat16_t` | 
 | `bfloat16_t` | `bfloat16_t` | `float` \| `fp16_t` \| `bfloat16_t` | 
+| `int8_t` | `int8_t` | `int32_t` | 
 
 
 ## 代码组织

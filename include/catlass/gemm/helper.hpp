@@ -319,6 +319,23 @@ struct L1AndL0TypeSelectorGemm<Gemm::GemmType<int8_t, layout::ColumnMajor>, Gemm
     using L0AType = Gemm::GemmType<int8_t, layout::zZ, AscendC::TPosition::A2>;
     using L0BType = Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::B2>;
 };
+
+///////////////////////////////////////
+// Check for whether the tile shape is aligned (Default: 32Bytes).
+template<class L1TileShape, class L0TileShape, class ElementA, class ElementB, uint32_t _aligned=32>
+struct TileShapeAlignChecker {
+    static constexpr uint32_t _ALIGN = _aligned*8;
+
+    static_assert(L1TileShape::M * SizeOfBits<ElementA>::value % _ALIGN == 0, "L1TileShape::M is not aligned.");
+    static_assert(L0TileShape::M * SizeOfBits<ElementA>::value % _ALIGN == 0, "L0TileShape::M is not aligned.");
+    static_assert(L1TileShape::K * SizeOfBits<ElementA>::value % _ALIGN == 0, "L1TileShape::K is not aligned.");
+    static_assert(L1TileShape::K * SizeOfBits<ElementB>::value % _ALIGN == 0, "L1TileShape::K is not aligned.");
+    static_assert(L0TileShape::K * SizeOfBits<ElementA>::value % _ALIGN == 0, "L0TileShape::K is not aligned.");
+    static_assert(L0TileShape::K * SizeOfBits<ElementB>::value % _ALIGN == 0, "L0TileShape::K is not aligned.");
+    static_assert(L1TileShape::N * SizeOfBits<ElementB>::value % _ALIGN == 0, "L1TileShape::N is not aligned.");
+    static_assert(L0TileShape::N * SizeOfBits<ElementB>::value % _ALIGN == 0, "L0TileShape::N is not aligned.");
+};
+
 ///////////////////////////////////////
 } // namespace Catlass::Gemm::helper
 
