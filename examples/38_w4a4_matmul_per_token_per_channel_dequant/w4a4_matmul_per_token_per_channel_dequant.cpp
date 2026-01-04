@@ -14,34 +14,21 @@
 #define K_MAX_SHAPE_DIM 0
 #endif
 
-#include <cstring>
-#include <iostream>
-#include <vector>
-#include <fstream>
-#include <cstdlib>
-#include <cmath>
-#include <string>
-
-#include <tiling/platform/platform_ascendc.h>
-#include <acl/acl.h>
-#include <runtime/rt_ffts.h>
+#include "catlass/gemm/kernel/w4a4_matmul_per_token_per_channel_dequant.hpp"
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
-#include "catlass/layout/layout.hpp"
-#include "catlass/status.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
-#include "catlass/gemm/dispatch_policy.hpp"
-#include "catlass/gemm/kernel/w4a4_matmul.hpp"
-#include "catlass/gemm/gemm_type.hpp"
 #include "catlass/gemm/device/device_gemm.hpp"
+#include "catlass/gemm/dispatch_policy.hpp"
 #include "catlass/epilogue/block/block_epilogue.hpp"
 #include "catlass/epilogue/dispatch_policy.hpp"
 #include "catlass/epilogue/tile/tile_broadcast_mul.hpp"
-#include "catlass/epilogue/tile/tile_broadcast_add.hpp"
 #include "catlass/epilogue/tile/tile_broadcast_one_blk.hpp"
 #include "catlass/epilogue/tile/tile_swizzle.hpp"
+#include "catlass/layout/layout.hpp"
+#include "catlass/status.hpp"
 
 #include "golden.hpp"
 #include "helper.hpp"
@@ -96,26 +83,26 @@ void Run(Options const &options)
     // Read data from `.dat`  files
     void *hostA = nullptr;
     ACL_CHECK(aclrtMallocHost(&hostA, sizeA));
-    std::string inFileAName = "../../examples/38_w4a4_matmul/data/inputA.dat";
+    std::string inFileAName = "../../examples/38_w4a4_matmul_per_token_per_channel_dequant/data/inputA.dat";
     ReadFile(inFileAName, hostA, sizeA);
 
     void *hostB = nullptr;
     ACL_CHECK(aclrtMallocHost(&hostB, sizeB));
-    std::string inFileBName = "../../examples/38_w4a4_matmul/data/inputB.dat";
+    std::string inFileBName = "../../examples/38_w4a4_matmul_per_token_per_channel_dequant/data/inputB.dat";
     ReadFile(inFileBName, hostB, sizeB);
 
     void *hostScale = nullptr;
     ACL_CHECK(aclrtMallocHost(&hostScale, sizeScale));
-    std::string inputScalePath = "../../examples/38_w4a4_matmul/data/inputScale.dat";
+    std::string inputScalePath = "../../examples/38_w4a4_matmul_per_token_per_channel_dequant/data/inputScale.dat";
     ReadFile(inputScalePath, hostScale, sizeScale);
 
     void *hostPerTokenScale = nullptr;
     ACL_CHECK(aclrtMallocHost(&hostPerTokenScale, sizePerTokenScale));
-    std::string inputPerTokenScalePath = "../../examples/38_w4a4_matmul/data/inputPerTokenScale.dat";
+    std::string inputPerTokenScalePath = "../../examples/38_w4a4_matmul_per_token_per_channel_dequant/data/inputPerTokenScale.dat";
     ReadFile(inputPerTokenScalePath, hostPerTokenScale, sizePerTokenScale);
 
     std::vector<float> hExpected(goldenSize);
-    std::string expected_path = "../../examples/38_w4a4_matmul/data/expected.dat";
+    std::string expected_path = "../../examples/38_w4a4_matmul_per_token_per_channel_dequant/data/expected.dat";
     ReadFile(expected_path, hExpected.data(), goldenSize);
 
     uint64_t fftsAddr{0};
@@ -146,7 +133,7 @@ void Run(Options const &options)
     constexpr uint32_t workspaceStages = 2;
     constexpr bool enableUnitFlag = false;
     constexpr bool enableShuffleK = true;
-    using DispatchPolicy = Gemm::MmadAtlasA2W4A4Matmul<
+    using DispatchPolicy = Gemm::MmadAtlasA2W4A4MatmulPerTokenPerChannelDequant<
         preloadStages, l1Stages, l0AStages, l0BStages, l0CStages, enableUnitFlag, enableShuffleK>;
 
     using L1TileShape = GemmShape<128, 256, 1024>;
@@ -166,7 +153,7 @@ void Run(Options const &options)
     >;
 
     // --------- Epilogue
-    using EpilogueDispatchPolicy = Epilogue::EpilogueAtlasA2W4A4Gemm;
+    using EpilogueDispatchPolicy = Epilogue::EpilogueAtlasA2W4A4PerTokenPerChannelDequant;
     using PerTokenScaleType = Gemm::GemmType<ElementPerTokenScale, LayoutPerTokenScale>;
     using DType = Gemm::GemmType<ElementD, LayoutD>;
 
@@ -189,7 +176,7 @@ void Run(Options const &options)
 
     // --------- Kernel
     using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
-    using MatmulKernel = Gemm::Kernel::W4A4Matmul<BlockMmad, BlockEpilogue,
+    using MatmulKernel = Gemm::Kernel::W4A4MatmulPerTokenPerChannelDequant<BlockMmad, BlockEpilogue,
         BlockScheduler, workspaceStages, ElementScale, LayoutScale>;
     // call a kernel
     using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;

@@ -116,7 +116,7 @@ struct MmadAtlasA2PreloadAsyncWithCallback :
 
 template <uint32_t PRELOAD_STAGES_, uint32_t L1_STAGES_, uint32_t L0A_STAGES_, uint32_t L0B_STAGES_,
     uint32_t L0C_STAGES_, bool ENABLE_UNIT_FLAG_, bool ENABLE_SHUFFLE_K_>
-struct MmadAtlasA2W4A4Matmul :
+struct MmadAtlasA2W4A4MatmulPerTokenPerChannelDequant :
     public MmadAtlasA2PreloadAsyncWithCallback<
         PRELOAD_STAGES_,
         L1_STAGES_,

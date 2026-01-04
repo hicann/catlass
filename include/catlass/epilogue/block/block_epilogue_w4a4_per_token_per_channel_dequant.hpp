@@ -32,7 +32,7 @@ template <
     class EpilogueTileSwizzle_
 >
 class BlockEpilogue <
-    EpilogueAtlasA2W4A4Gemm,
+    EpilogueAtlasA2W4A4PerTokenPerChannelDequant,
     CType_,
     PerTokenScaleType_,
     DType_,
@@ -42,7 +42,7 @@ class BlockEpilogue <
     EpilogueTileSwizzle_
 > {
 public:
-    using DispatchPolicy = EpilogueAtlasA2W4A4Gemm;
+    using DispatchPolicy = EpilogueAtlasA2W4A4PerTokenPerChannelDequant;
     using ArchTag = typename DispatchPolicy::ArchTag;
 
     // Data infos

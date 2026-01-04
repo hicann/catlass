@@ -41,7 +41,7 @@ template <
     class TileMmad_
 >
 struct BlockMmad <
-    MmadAtlasA2W4A4Matmul<
+    MmadAtlasA2W4A4MatmulPerTokenPerChannelDequant<
         PRELOAD_STAGES_,
         L1_STAGES_,
         L0A_STAGES_,
@@ -61,7 +61,7 @@ struct BlockMmad <
 > {
 public:
     // Type Aliases
-    using DispatchPolicy = MmadAtlasA2W4A4Matmul<
+    using DispatchPolicy = MmadAtlasA2W4A4MatmulPerTokenPerChannelDequant<
         PRELOAD_STAGES_,
         L1_STAGES_,
         L0A_STAGES_,

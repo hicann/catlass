@@ -84,9 +84,9 @@ class CatlassExampleTest(unittest.TestCase):
     def test_38_w4a4_matmul(self):
         case_py = [str(i) for i in [96, 4096, 1280]] # (M, N, K)
         ret = subprocess.run(["python", os.path.join(
-            CMAKE_EXAMPLES_PATH, "38_w4a4_matmul", "gen_data.py")] + case_py)
+            CMAKE_EXAMPLES_PATH, "38_w4a4_matmul_per_token_per_channel_dequant", "gen_data.py")] + case_py)
         case_cpp = case_py
-        self.run_case("38_w4a4_matmul", case_cpp)
+        self.run_case("38_w4a4_matmul_per_token_per_channel_dequant", case_cpp)
 
 normal_cases = ["00_basic_matmul 256 512 1024 0",
                 "01_batched_matmul 5 256 512 1024 0",

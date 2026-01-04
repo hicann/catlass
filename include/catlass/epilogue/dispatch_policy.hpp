@@ -87,7 +87,7 @@ struct EpilogueAtlasA2PerTokenDequant {
 
 
 // For AtlasA2, W4A4 epilogue process
-struct EpilogueAtlasA2W4A4Gemm {
+struct EpilogueAtlasA2W4A4PerTokenPerChannelDequant {
     using ArchTag = Arch::AtlasA2;
 };
 ////////////////////////////

@@ -34,7 +34,7 @@ template <
     class ElementScale_,
     class LayoutScale_
 >
-class W4A4Matmul {
+class W4A4MatmulPerTokenPerChannelDequant {
 public:
     using BlockMmad = BlockMmad_;
     using ArchTag = typename BlockMmad::ArchTag;
@@ -170,7 +170,7 @@ public:
 
     // Methods
     CATLASS_DEVICE
-    W4A4Matmul()
+    W4A4MatmulPerTokenPerChannelDequant()
     {
         Arch::FlagID flagId = 0;
         for (uint32_t stageId = 0; stageId < WORKSPACE_STAGES; ++stageId) {
@@ -340,7 +340,7 @@ private:
     friend struct AicSetFunc;
 
     struct AicWaitFunc {
-        using MatmulKernel = W4A4Matmul<BlockMmad, BlockEpilogue, BlockScheduler,
+        using MatmulKernel = W4A4MatmulPerTokenPerChannelDequant<BlockMmad, BlockEpilogue, BlockScheduler,
             WORKSPACE_STAGES, ElementScale, LayoutScale>;
 
         CATLASS_DEVICE
@@ -357,7 +357,7 @@ private:
     };
 
     struct AicSetFunc {
-        using MatmulKernel = W4A4Matmul<BlockMmad, BlockEpilogue, BlockScheduler,
+        using MatmulKernel = W4A4MatmulPerTokenPerChannelDequant<BlockMmad, BlockEpilogue, BlockScheduler,
             WORKSPACE_STAGES, ElementScale, LayoutScale>;
 
         CATLASS_DEVICE

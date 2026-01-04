@@ -110,5 +110,5 @@ struct BlockMmadAiv {
 #include "catlass/gemm/block/block_mmad_single_core_splitk.hpp"
 #include "catlass/gemm/block/block_mmad_dynamic_aiv.hpp"
 #include "catlass/gemm/block/block_mmad_streamk.hpp"
-#include "catlass/gemm/block/block_mmad_w4a4.hpp"
+#include "catlass/gemm/block/block_mmad_w4a4_per_token_per_channel_dequant.hpp"
 #endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_HPP

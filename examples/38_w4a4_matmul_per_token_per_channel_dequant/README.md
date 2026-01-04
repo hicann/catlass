@@ -1,4 +1,4 @@
-# W4A4Matmul Example Readme
+# W4A4MatmulPerTokenPerChannelDequant Example Readme
 
 ## 功能说明
 
@@ -51,10 +51,10 @@ $$
 
 ## 代码组织
 ```
-├── 38_w4a4_matmul
+├── 38_w4a4_matmul_per_token_per_channel_dequant
 │   ├── CMakeLists.txt # CMake编译文件
 │   ├── gen_data.py
-│   ├── w4a4_matmul.cpp
+│   ├── w4a4_matmul_per_token_per_channel_dequant.cpp
 │   └── README.md
 ```
 ## 功能介绍
@@ -70,17 +70,17 @@ $$
 以下是一个完整的shell脚本示例
 ```
 # 编译算子
-bash scripts/build.sh 38_w4a4_matmul
+bash scripts/build.sh 38_w4a4_matmul_per_token_per_channel_dequant
 
 # 生成测试数据
-cd examples/38_w4a4_matmul/
+cd examples/38_w4a4_matmul_per_token_per_channel_dequant/
 # python gen_data.py <M> <N> <K>
 python gen_data.py 256 512 1024
 cd ../..
 
 # 进行测试
 cd output/bin/
-./38_w4a4_matmul 256 512 1024 0
+./38_w4a4_matmul_per_token_per_channel_dequant 256 512 1024 0
 ```
 
 执行结果如下，说明精度比对成功。
@@ -97,10 +97,10 @@ Compare success.
 并在生成测试例时补充`transB`参数置1（默认为0），完整测试过程如下：
 ```
 # 算子编译
-bash scripts/build.sh 37_w4a4_matmul --clean 
+bash scripts/build.sh 38_w4a4_matmul_per_token_per_channel_dequant --clean 
 
 # 生成测试数据
-cd examples/37_w4a4_matmul/
+cd examples/38_w4a4_matmul_per_token_per_channel_dequant/
 # python gen_data.py <M> <N> <K> <transB>
 python gen_data.py 256 512 1024 1
 
@@ -108,7 +108,7 @@ cd ../..
 
 # 进行测试
 cd output/bin/
-./37_w4a4_matmul 256 512 1024 0
+./38_w4a4_matmul_per_token_per_channel_dequant 256 512 1024 0
 ```
 
 

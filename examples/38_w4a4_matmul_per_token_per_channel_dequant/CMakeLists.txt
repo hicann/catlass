@@ -8,5 +8,5 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
-set_source_files_properties(w4a4_matmul.cpp PROPERTIES LANGUAGE ASCEND)
-catlass_example_add_executable(38_w4a4_matmul mix w4a4_matmul.cpp)
+set_source_files_properties(w4a4_matmul_per_token_per_channel_dequant.cpp PROPERTIES LANGUAGE ASCEND)
+catlass_example_add_executable(38_w4a4_matmul_per_token_per_channel_dequant mix w4a4_matmul_per_token_per_channel_dequant.cpp)
