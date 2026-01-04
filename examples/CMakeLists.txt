@@ -130,6 +130,7 @@ foreach(EXAMPLE
     34_single_core_splitk_matmul
     37_streamk_matmul
     38_w4a4_matmul_per_token_per_channel_dequant
+    39_big_matmul_tla
     102_dynamic_optimized_matmul
 )
     add_subdirectory(${EXAMPLE})
