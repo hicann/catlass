@@ -70,7 +70,7 @@ void Run(Options const &options)
 
     uint64_t sizeA = layoutA.Capacity() * sizeof(int8_t);
     uint64_t sizeB = layoutPrologueB.Capacity() / 2 * sizeof(int8_t);
-    uint64_t sizeC = layoutC.Capacity() * sizeof(__fp16);
+    uint64_t sizeC = layoutC.Capacity() * sizeof(fp16_t);
     uint64_t goldenSize = layoutC.Capacity() * sizeof(float);
 
     void *hostA = nullptr;
@@ -83,7 +83,7 @@ void Run(Options const &options)
     std::string inputB_path = "../../examples/32_w4a8_matmul/data/inputB.dat";
     ReadFile(inputB_path, hostB, sizeB);
 
-    std::vector<float> hExpected(goldenSize);
+    std::vector<float> hExpected(lenC);
     std::string expected_path = "../../examples/32_w4a8_matmul/data/expected.dat";
     ReadFile(expected_path, hExpected.data(), goldenSize);
 
@@ -201,7 +201,7 @@ void Run(Options const &options)
     ACL_CHECK(aclrtFree(deviceA));
     ACL_CHECK(aclrtFree(deviceB));
 
-    std::vector<fp16_t> hostC(sizeC);
+    std::vector<fp16_t> hostC(lenC);
     ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
     ACL_CHECK(aclrtFree(deviceC));
 
