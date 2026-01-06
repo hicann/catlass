@@ -91,6 +91,9 @@ if(DEFINED ENABLE_ASCENDC_DUMP AND ENABLE_ASCENDC_DUMP)
     link_libraries(ascend_dump)
 endif()
 
+link_directories(${ASCEND_HOME_PATH}/${CMAKE_SYSTEM_PROCESSOR}-linux/devlib)
+link_libraries(ascend_hal)
+
 # regular examples
 foreach(EXAMPLE
     00_basic_matmul

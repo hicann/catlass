@@ -10,7 +10,7 @@
 
 # if aicore-arch is different, maybe crash, to find the solution
 add_compile_definitions(TILING_KEY_VAR)
-add_compile_options(--cce-aicore-arch=${CCE_AICORE_ARCH_BASE})
+add_compile_options($<$<COMPILE_LANGUAGE:ASCEND>:--cce-aicore-arch=${CCE_AICORE_ARCH_BASE}>)
 file(GLOB CATLASS_SHARED_LIB_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/kernels/*.cpp)
 set_source_files_properties(${CATLASS_SHARED_LIB_SRC} PROPERTIES LANGUAGE ASCEND)
 
@@ -26,6 +26,18 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include
 add_custom_target(shared_lib)
 add_dependencies(shared_lib catlass_kernel)
 add_dependencies(shared_lib catlass_kernel_static)
+
+if(DEFINED CATLASS_BUILD_USAGE AND CATLASS_BUILD_USAGE)
+    add_executable(basic_matmul_shared_lib basic_matmul_shared_lib.cpp)
+    target_compile_definitions(basic_matmul_shared_lib PRIVATE CATLASS_EXAMPLE_NAME=basic_matmul_shared_lib)
+    target_include_directories(basic_matmul_shared_lib PRIVATE 
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${ASCEND_HOME_PATH}/include
+        ${ASCEND_HOME_PATH}/include/aclnn)
+    target_link_libraries(basic_matmul_shared_lib PRIVATE catlass_kernel_static)
+    add_dependencies(shared_lib basic_matmul_shared_lib)
+    install(TARGETS basic_matmul_shared_lib DESTINATION bin COMPONENT shared_lib)
+endif()
 
 install(TARGETS catlass_kernel catlass_kernel_static
     DESTINATION shared_lib/lib

@@ -7,30 +7,53 @@
 ```bash
 examples/shared_lib
 ├── include
-│   └── catlass_kernel.h            # 头文件
-└── src
-    ├── common
-    │   └── common.hpp          # 公共头文件，预留为多个kernel中的模板函数共用
-    ├── host                    # host侧接口
-    │   ├── basic_matmul.cpp    
-    │   └── ...
-    └── kernel                  # kernel侧算子
-        ├── basic_matmul.hpp
-        └── ...
+│   └── catlass_kernel.h        # 头文件
+├── src
+│   ├── common
+│   │   └── common.hpp          # 公共头文件，预留为多个kernel中的模板函数共用
+│   └── kernels                 # 算子实现
+│       ├── basic_matmul.cpp
+│       └── ...
+└── basic_matmul_shared_lib.cpp # CATLASS examples 风格使用示例
 ```
 
 ## 编译产物结构
 
 ```bash
-output/shared_lib
-├── include
-│   └── catlass_kernel.h # 头文件
-└── lib
-    ├── libcatlass_kernel.a # 静态链接库
-    └── libcatlass_kernel.so # 动态链接库
+output
+├── bin
+│   └── basic_matmul_shared_lib         # 使用示例
+└── shared_lib
+    ├── include
+    │   └── catlass_kernel.h            # 头文件
+    └── lib
+        ├── libcatlass_kernel.so        # 动态链接库
+        └── libcatlass_kernel_static.a  # 静态链接库
 ```
 
 ## 使用说明
+
+调用头文件中的接口即可：
+
+```cpp
+#include "catlass_kernel.h"
+// ...
+    CatlassKernel::KernelInfo kernelInfo;
+    kernelInfo.inputAddr = {reinterpret_cast<uint8_t *>(deviceA), reinterpret_cast<uint8_t *>(deviceB)};
+    kernelInfo.outputAddr = {reinterpret_cast<uint8_t *>(deviceC)};
+    kernelInfo.inputDataType = ACL_FLOAT16;
+    kernelInfo.outputDataType = ACL_FLOAT16;
+    kernelInfo.m = m;
+    kernelInfo.n = n;
+    kernelInfo.k = k;
+
+    CatlassKernel::BasicMatmul(aicCoreNum, stream, kernelInfo);
+// ...
+```
+
+可参考[basic_matmul_shared_lib.cpp](examples/shared_lib/basic_matmul_shared_lib.cpp)获取详细的示例代码。
+
+## 扩展说明
 
 假设待添加算子为`custom_matmul`。
 
@@ -102,20 +125,21 @@ void CustomMatmul(uint32_t blockNum, aclrtStream stream, kernelInfo kernelInfo);
 // ...
 ```
 
-- 在`CMakeLists.txt`增加`catlass_add_kernel(custom_matmul dav-c220 ${CMAKE_CURRENT_SOURCE_DIR}/src/host/custom_matmul.cpp)`编译命令。
-
 - 如果你增加了多个算子，但又存在相同定义的`模板函数`，这种情况在链接阶段会提示重复符号。为解决这个问题，你可以将这类函数以`inline`形式存入公共的`common`路径中。
 
 ### 编译
 
 ```bash
 bash scripts/build.sh shared_lib
+# 编译使用示例代码的可执行文件
+bash scripts/build.sh -DCATLASS_BUILD_USAGE shared_lib
 ```
 
 ## 注意事项
 
-- 我们目前提供了三种典型算子作为示例：
+- 我们目前提供了四种典型算子作为示例：
   - `BasicMatmul`：基本矩阵乘法，并实现了类型模板的实现方法
   - `GroupedMatmul`：分组矩阵乘法，提供分组输入输出示例
   - `OptimizedMatmul`：优化矩阵乘法，提供CV融合的示例
+  - `ConvBias`：卷积算子
 - 本节是算子打包成动态库的一个示例，可根据需要自行扩展功能，并不仅局限于已有的代码。
