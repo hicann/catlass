@@ -401,6 +401,73 @@ struct QuantTileCopy : public TileCopy<ArchTag, AType, BType, CType, BiasType> {
     >;
 };
 
+// sparse Tile
+template <
+    /// Tag indicating architecture
+    class ArchTag,
+    class ElementA_,
+    class LayoutTagA,
+    class ElementB_,
+    class LayoutTagB,
+    class ElementC_,
+    class LayoutTagC
+>
+struct SparseTileCopyTla {
+    using ElementA = ElementA_;
+    using ElementB = ElementB_;
+    using ElementAccumulator =
+        typename Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
+
+    using LayoutTagL1A = typename helper::L1ATypeSelector<Gemm::GemmType<ElementA, LayoutTagA>>::L1AType::Layout;
+    using LayoutTagL1B = layout::zN;
+    using LayoutTagL0A = layout::zZ;
+    using LayoutTagL0B = layout::nZ;
+    using LayoutTagL1BIdx = layout::zN;
+
+    using LayoutA = detail::TagToLayout_t<ElementA, LayoutTagA>;
+    using LayoutB = detail::TagToLayout_t<ElementB, LayoutTagB>;
+    using LayoutC = detail::TagToLayout_t<ElementC_, LayoutTagC>;
+
+    using LayoutL1A = detail::TagToLayout_t<ElementA, LayoutTagL1A>;
+    using LayoutL1B = detail::TagToLayout_t<ElementB, LayoutTagL1B>;
+    using LayoutL1BIdx = detail::TagToLayout_t<int32_t, LayoutTagL1BIdx>;
+    using LayoutL0A = detail::TagToLayout_t<ElementA, LayoutTagL0A>;
+    using LayoutL0B = detail::TagToLayout_t<ElementB, LayoutTagL0B>;
+    using LayoutL0C = typename detail::LayoutL0C;
+
+    using TensorL1A =
+        tla::Tensor<AscendC::LocalTensor<ElementA>, LayoutL1A, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::A1>;
+    using TensorL1B =
+        tla::Tensor<AscendC::LocalTensor<ElementB>, LayoutL1B, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::A1>;
+    using TensorL1BIdx =
+        tla::Tensor<AscendC::LocalTensor<int32_t>, LayoutL1BIdx, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::A1>;
+    using TensorL0A =
+        tla::Tensor<AscendC::LocalTensor<ElementA>, LayoutL0A, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::A2>;
+    using TensorL0B =
+        tla::Tensor<AscendC::LocalTensor<ElementB>, LayoutL0B, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::B2>;
+    using TensorL0C = tla::Tensor<AscendC::LocalTensor<ElementAccumulator>, LayoutL0C, tla::Coord<tla::_0, tla::_0>,
+        AscendC::TPosition::CO1>;
+
+    using L1AAlignHelper = Gemm::helper::L1AlignHelper<ElementA, LayoutTagA>;
+    using L1BAlignHelper = Gemm::helper::L1AlignHelper<ElementB, LayoutTagB>;
+
+    template <class TensorA>
+    using CopyGmToL1A = Gemm::Tile::TileCopySparseTla<ArchTag, TensorA, TensorL1A>;
+
+    template <class TensorB>
+    using CopyGmToL1B = Gemm::Tile::TileCopySparseTla<ArchTag, TensorB, TensorL1B>;
+
+    template <class TensorIdx>
+    using CopyGmToL1BIdx = Gemm::Tile::TileCopySparseTla<ArchTag, TensorIdx, TensorL1BIdx>;
+
+    using CopyL1ToL0A = Gemm::Tile::TileCopySparseTla<ArchTag, TensorL1A, TensorL0A>;
+
+    using CopyL1ToL0B = Gemm::Tile::CopyL1ToL0BSparseTla<ArchTag, ElementA, TensorL1B, TensorL0B, TensorL1BIdx>;
+
+    template <class TensorC>
+    using CopyL0CToGm = Gemm::Tile::CopyL0CToGmSparseTla<ArchTag, TensorL0C, TensorC>;
+};
+
 } // namespace Catlass::Gemm::Tile
 
 #endif // CATLASS_GEMM_TILE_TILE_COPY_HPP

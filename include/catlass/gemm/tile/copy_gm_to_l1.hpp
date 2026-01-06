@@ -1970,6 +1970,96 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::VectorLayout, AscendC
     }
 };
 
+/// Partial specialization for CopyGmToL1, AtlasA2, RowMajor or ColumnMajor in and zN out.
+template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+struct TileCopySparseTla<Arch::AtlasA2,
+    tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::GM>,
+    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::A1>,
+    std::enable_if_t<(tla::detail::isRowMajor<LayoutSrc>::value ||
+                      tla::detail::isColumnMajor<LayoutSrc>::value) &&
+                     tla::detail::iszN<ElementDst, LayoutDst>::value>> {
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
+
+    // Methods
+
+    CATLASS_DEVICE
+    TileCopySparseTla() {};
+
+    template <class TensorDst, class TensorSrc>
+    CATLASS_DEVICE
+    void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
+    {
+        static_assert((tla::detail::isRowMajor<typename TensorSrc::Layout>::value ||
+                       tla::detail::isColumnMajor<typename TensorSrc::Layout>::value) &&
+                      tla::detail::iszN<typename TensorDst::Element, typename TensorDst::Layout>::value &&
+                      TensorSrc::position == AscendC::TPosition::GM &&
+                      TensorDst::position == AscendC::TPosition::A1,
+            "The input parameters do not match. TensorSrc must be GM and RowMajor or ColumnMajor, while TensorDst must be L1 and zN");
+
+        auto srcShape = srcTensor.shape();
+        auto srcStride = srcTensor.stride();
+        auto dstShape = dstTensor.shape();
+        auto coord = srcTensor.coord();
+
+        AscendC::Nd2NzParams nd2nzParams;
+        nd2nzParams.ndNum = 1;
+        nd2nzParams.nValue =
+            tla::min<int, int>(tla::get<0, 0>(dstShape) * tla::get<0, 1>(dstShape), tla::get<0>(srcShape) - tla::get<0>(coord));
+        nd2nzParams.dValue =
+            tla::min<int, int>(tla::get<1, 0>(dstShape) * tla::get<1, 1>(dstShape), tla::get<1>(srcShape) - tla::get<1>(coord));
+        nd2nzParams.srcNdMatrixStride = 0;
+        nd2nzParams.srcDValue = tla::get<0>(srcStride);
+        nd2nzParams.dstNzC0Stride = tla::get<0, 0>(dstShape) * tla::get<0, 1>(dstShape);
+        nd2nzParams.dstNzNStride = 1;
+        nd2nzParams.dstNzMatrixStride = 0;
+
+        auto offset = srcTensor.layout()(coord);
+
+        AscendC::DataCopy(dstTensor.data(), srcTensor.data()[offset], nd2nzParams);
+    }
+};
+
+/// Partial specialization for CopyGmToL1, AtlasA2, sparse zn in and zN out.
+template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+struct TileCopySparseTla<Arch::AtlasA2,
+    tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::GM>,
+    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::A1>,
+    std::enable_if_t<tla::detail::iszN<uint32_t, LayoutSrc>::value &&
+                     tla::detail::iszN<ElementDst, LayoutDst>::value>> {
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
+
+    // Methods
+
+    CATLASS_DEVICE
+    TileCopySparseTla() {};
+
+    template <class TensorDst, class TensorSrc>
+    CATLASS_DEVICE
+    void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
+    {
+        static_assert(tla::detail::iszN<uint32_t, typename TensorSrc::Layout>::value &&
+                      tla::detail::iszN<uint32_t, typename TensorDst::Layout>::value &&
+                      TensorSrc::position == AscendC::TPosition::GM &&
+                      TensorDst::position == AscendC::TPosition::A1,
+            "The input parameters do not match. TensorSrc must be GM and zN, while TensorDst must be L1 and zN");
+
+        using TransT = typename TensorSrc::Element;
+
+        auto srcShape = srcTensor.shape();
+        auto dstShape = dstTensor.shape();
+        auto coord = srcTensor.coord();
+        int32_t alignedGRow = tla::get<0, 0>(srcShape) * tla::get<0, 1>(srcShape);
+        // height direction need to be 16 aligned
+        auto alignHeight = tla::get<0, 0>(dstShape) * tla::get<0, 1>(dstShape);
+        int32_t blockLen = alignHeight * tla::get<1, 0>(dstShape) * sizeof(TransT) / BYTE_PER_C0;
+        int32_t srcStride = (alignedGRow - alignHeight) * tla::get<1, 0>(srcShape) * sizeof(TransT) / BYTE_PER_C0;
+        uint16_t nburst = tla::get<1, 1>(dstShape);
+        auto offset = srcTensor.layout()(coord);
+        AscendC::DataCopy(
+            dstTensor.data(), srcTensor.data()[offset],
+            {nburst, static_cast<uint16_t>(blockLen), static_cast<uint16_t>(srcStride), static_cast<uint16_t>(0)});
+    }
+};
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 } // namespace Catlass::Gemm::Tile

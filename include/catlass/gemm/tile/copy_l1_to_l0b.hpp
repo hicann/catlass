@@ -732,6 +732,93 @@ struct TileCopyTla<Arch::AtlasA2,
     }
 };
 
+/// Partial specialization for CopyL1ToL0B, AtlasA2, zN in and nZ out.
+template <class ElementA,
+          class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst,
+          class ElementIdx, class LayoutIdx, class CoordIdx>
+struct CopyL1ToL0BSparseTla<Arch::AtlasA2, ElementA,
+    tla::Tensor<AscendC::LocalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::A1>,
+    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::B2>,
+    tla::Tensor<AscendC::LocalTensor<ElementIdx>, LayoutIdx, CoordIdx, AscendC::TPosition::A1>,
+    std::enable_if_t<tla::detail::iszN<ElementSrc, LayoutSrc>::value &&
+                     tla::detail::isnZ<ElementDst, LayoutDst>::value &&
+                     tla::detail::iszN<ElementIdx, LayoutIdx>::value>> {
+    static constexpr uint8_t INDEX_SHIFT = 2;              ///< Shift value for index manipulation
+
+    // Mehtods
+
+    CATLASS_DEVICE
+    CopyL1ToL0BSparseTla() {};
+
+    template <class TensorDst, class TensorSrc, class TensorIdx>
+    CATLASS_DEVICE
+    void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor, TensorIdx const &idxTensor)
+    {
+        static_assert(tla::detail::iszN<typename TensorSrc::Element, typename TensorSrc::Layout>::value &&
+                      tla::detail::isnZ<typename TensorDst::Element, typename TensorDst::Layout>::value &&
+                      TensorSrc::position == AscendC::TPosition::A1 &&
+                      TensorDst::position == AscendC::TPosition::B2,
+            "The input parameters do not match. TensorSrc must be L1 and zN, while TensorDst must be L0B and nZ");
+
+        auto dstShape = dstTensor.shape();
+        auto dstStride = dstTensor.stride();
+        auto srcShape = srcTensor.shape();
+        auto srcStride = srcTensor.stride();
+        auto coord = srcTensor.coord();
+
+        // SET LOAD2D parameters , loop axis: K or M, or 1
+        uint16_t madK = tla::get<1, 0>(dstShape) * tla::get<1, 1>(dstShape);
+
+        // k is c0Size_ aligned for f32
+        uint16_t kC0 = CeilDiv(madK, tla::get<1, 0>(dstShape));
+        uint16_t nFraC0 = tla::get<0, 1>(dstShape);
+        uint16_t l0bLoop = 1;
+        uint64_t l0bDstAddrStride = 0;
+        uint64_t l0bSrcAddrStride = 0;
+        uint8_t l0bRepeat = kC0 * nFraC0;
+        uint16_t l0bDststride = 0;
+        uint16_t l0bSrcstride = 1;
+
+        uint16_t bL1N = tla::get<0, 0>(srcShape) * tla::get<0, 1>(srcShape);
+        if (nFraC0 * tla::get<0, 0>(dstShape) == bL1N) { // loop=1
+            l0bLoop = 1;
+        } else if (nFraC0 >= kC0) { // LOOP is K and repeat is n axis
+            l0bLoop = kC0;
+            l0bDstAddrStride = nFraC0 * tla::get<1, 1>(dstStride);
+            l0bSrcAddrStride = bL1N * tla::get<1, 0>(srcShape);
+            l0bRepeat = nFraC0;
+
+            l0bDststride = 0;
+            l0bSrcstride = 1;
+        } else { // LOOP is N  and repeat is K axis
+            l0bLoop = nFraC0;
+            l0bDstAddrStride = tla::get<1, 1>(dstStride);
+            l0bSrcAddrStride = tla::get<0, 1>(srcStride);
+            l0bRepeat = kC0;
+
+            l0bDststride = nFraC0 - 1;
+            l0bSrcstride = bL1N;
+        }
+        // use load2d for L1_2_L0B
+        // startIndex, repeatTimes, srcStride, sid, dstGap, ifTranspose, addrmode
+        AscendC::LoadData2dParams loadDataParams{0, l0bRepeat, l0bSrcstride, 0, l0bDststride, 0, 0};
+        uint16_t bL1KOffset = tla::get<1>(coord);
+        uint64_t l1bOffset = tla::get<0>(coord) * tla::get<1, 0>(srcShape) + bL1KOffset * bL1N;
+        uint64_t l0bOffset = 0;
+        AscendC::LocalTensor<ElementA> dstLocal;
+        AscendC::LocalTensor<ElementA> srcLocal;
+        AscendC::LocalTensor<uint8_t> l1BIndex;
+        for (uint64_t i = 0; i < l0bLoop; i++) {
+            dstLocal.SetAddr(dstTensor.data()[l0bOffset].address_);
+            srcLocal.SetAddr(srcTensor.data()[l1bOffset].address_);
+            l1BIndex.SetAddr(idxTensor.data()[l1bOffset >> INDEX_SHIFT].address_);
+            AscendC::LoadDataWithSparse(dstLocal, srcLocal, l1BIndex, loadDataParams);
+            l1bOffset += l0bSrcAddrStride;
+            l0bOffset += l0bDstAddrStride;
+        }
+    }
+};
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 } // namespace Catlass::Gemm::Tile

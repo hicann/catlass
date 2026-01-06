@@ -662,6 +662,56 @@ struct TileCopyTla<Arch::AtlasA2,
     }
 };
 
+/// Partial specialization for CopyL1ToL0A, AtlasA2, zN in and zZ out.
+template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+struct TileCopySparseTla<Arch::AtlasA2,
+    tla::Tensor<AscendC::LocalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::A1>,
+    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::A2>,
+    std::enable_if_t<tla::detail::iszN<ElementSrc, LayoutSrc>::value &&
+                     tla::detail::iszZ<ElementDst, LayoutDst>::value>> {
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
+    static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(ElementSrc);
+    static constexpr uint16_t HW_N0 = 16;                  ///< Hardware configuration parameter for N0, reserved for future hardware configuration
+    static constexpr uint16_t HW_M0 = 16;                  ///< Hardware configuration parameter for M0
+    static constexpr uint64_t M_POS_BIT = 48;              ///< Bit position for M index
+    static constexpr uint64_t K_POS_BIT = 32;              ///< Bit position for K index
+    static constexpr uint64_t M_STEP_BIT = 16;             ///< Bit step for M index
+    static constexpr uint8_t PAD_LIST[4] = {0, 0, 0, 0};   ///< Padding list for data alignment
+
+    // Methods
+
+    CATLASS_DEVICE
+    TileCopySparseTla() {};
+
+    template <class TensorDst, class TensorSrc>
+    CATLASS_DEVICE
+    void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
+    {
+        static_assert(tla::detail::iszN<typename TensorSrc::Element, typename TensorSrc::Layout>::value &&
+                      tla::detail::iszZ<typename TensorDst::Element, typename TensorDst::Layout>::value &&
+                      TensorSrc::position == AscendC::TPosition::A1 &&
+                      TensorDst::position == AscendC::TPosition::A2,
+            "The input parameters do not match. TensorSrc must be L1 and zN, while TensorDst must be L0A and zZ");
+
+        auto srcShape = srcTensor.shape();
+        auto dstShape = dstTensor.shape();
+        auto coord = srcTensor.coord();
+        uint16_t aL1K = tla::get<1, 0>(srcShape) * tla::get<1, 1>(srcShape);
+        uint16_t aL1M = tla::get<0, 0>(srcShape) * tla::get<0, 1>(srcShape);
+        uint16_t wAlign = RoundUp(aL1M, HW_M0);
+        AscendC::Load3DSetFMatrixCal(1, wAlign, PAD_LIST);
+        // format(M, K), K_axis is k direction, and M_axis is m direction in load3d intrin
+        uint16_t madMAlign = tla::get<0, 0>(dstShape) * tla::get<0, 1>(dstShape);
+        uint16_t kStep = tla::get<1, 0>(dstShape) * tla::get<1, 1>(dstShape);
+        AscendC::LoadData3DParamsV2Pro loadData3DV2;
+        loadData3DV2.channelSize = aL1K;
+        loadData3DV2.extConfig = ((uint64_t)tla::get<0>(coord) << M_POS_BIT) | ((uint64_t)tla::get<1>(coord) << K_POS_BIT) |
+                                 ((uint64_t)madMAlign << M_STEP_BIT) | (uint64_t)kStep;
+
+        AscendC::LoadData(dstTensor.data(), srcTensor.data(), loadData3DV2);
+    }
+};
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 } // namespace Catlass::Gemm::Tile

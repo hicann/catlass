@@ -599,6 +599,66 @@ struct CopyL0CToGmTla<Catlass::Arch::AtlasA2,
     }
 };
 
+template <
+    class ArchTag,
+    class TensorSrc,
+    class TensorDst,
+    ScaleGranularity DEQUANT_GRANULARITY = ScaleGranularity::NO_QUANT,
+    class Enable = void
+>
+struct CopyL0CToGmSparseTla {
+    static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy l0c to gm, can not find the specialization.");
+};
+
+template <
+    class TensorSrc_,
+    class ElementDst_,
+    class LayoutDst_,
+    class CoordDst_
+>
+struct CopyL0CToGmSparseTla<Catlass::Arch::AtlasA2,
+                   TensorSrc_,
+                   tla::Tensor<AscendC::GlobalTensor<ElementDst_>, LayoutDst_, CoordDst_, AscendC::TPosition::GM>,
+                   ScaleGranularity::NO_QUANT,
+                   std::enable_if_t<tla::detail::isRowMajor<LayoutDst_>::value>>
+{
+    using ArchTag = Catlass::Arch::AtlasA2;
+    using ElementDst = ElementDst_;
+    using ElementSrc = typename TensorSrc_::Element;
+    static constexpr auto quantPre = CopyL0CToGmQuantMode<ArchTag, ElementSrc, ElementDst,
+        ScaleGranularity::NO_QUANT>::VALUE;
+
+    struct Params {};
+
+    template <class TensorDst, class TensorSrc>
+    CATLASS_DEVICE
+    void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
+    {
+        static_assert(tla::detail::isRowMajor<typename TensorDst::Layout>::value &&
+                      TensorSrc::position == AscendC::TPosition::CO1 &&
+                      TensorDst::position == AscendC::TPosition::GM,
+            "The input parameters do not match. TensorSrc must be L0C, while TensorDst must be GM and RowMajor");
+
+        auto dstShape = dstTensor.shape();
+        auto srcShape = srcTensor.shape();
+        auto dstStride = dstTensor.stride();
+        auto coord = dstTensor.coord();
+
+        AscendC::FixpipeParamsV220 params;
+        params.nSize =
+            tla::min<int, int>(tla::get<1, 0>(srcShape) * tla::get<1, 1>(srcShape), tla::get<1>(dstShape) - tla::get<1>(coord));
+        params.mSize =
+            tla::min<int, int>(tla::get<0, 0>(srcShape) * tla::get<0, 1>(srcShape), tla::get<0>(dstShape) - tla::get<0>(coord));
+        params.srcStride = tla::get<0, 0>(srcShape) * tla::get<0, 1>(srcShape);
+        params.dstStride = tla::get<0>(dstStride);
+        params.quantPre = quantPre;
+
+        auto srcOffset = srcTensor.layout()(srcTensor.coord);
+        auto dstOffset = dstTensor.layout()(coord);
+        AscendC::Fixpipe<ElementDst, ElementSrc, AscendC::CFG_ROW_MAJOR>(dstTensor.data()[dstOffset], srcTensor.data()[srcOffset], params);
+    }
+};
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 }  // namespace Catlass::Gemm::Tile

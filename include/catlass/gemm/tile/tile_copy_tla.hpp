@@ -38,6 +38,28 @@ struct TileCopyTlaExt {
     static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported TileCopyTlaExt, can not find the specialization.");
 };
 
+template <
+    class ArchTag,
+    class TensorSrc,
+    class TensorDst,
+    class Enable = void
+>
+struct TileCopySparseTla {
+    static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported TileCopySparseTla, can not find the specialization.");
+};
+
+template <
+    class ArchTag,
+    class Element,
+    class TensorSrc,
+    class TensorDst,
+    class TensorIdx,
+    class Enable = void
+>
+struct CopyL1ToL0BSparseTla {
+    static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported CopyL1ToL0BSparseTla, can not find the specialization.");
+};
+
 } // namespace Catlass::Gemm::Tile
 
 #endif // CATLASS_GEMM_TILE_TILE_COPY_TLA_HPP
