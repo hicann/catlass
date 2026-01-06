@@ -30,12 +30,12 @@ void BalanceWorkload(uint32_t m, uint32_t n, uint32_t& m1, uint32_t& n1, uint32_
     }
 }
 
-void SetTile(TilingParams &TilingParams, uint32_t m1, uint32_t n1, uint32_t k1)
+void SetTile(TilingParams &tilingParams, uint32_t m1, uint32_t n1, uint32_t k1)
 {
     // To save space, tiling parameters (m1, n1, k1) are stored as uint16_t.
-    TilingParams.m1 = static_cast<uint16_t>(m1);
-    TilingParams.n1 = static_cast<uint16_t>(n1);
-    TilingParams.k1 = static_cast<uint16_t>(k1);
+    tilingParams.m1 = static_cast<uint16_t>(m1);
+    tilingParams.n1 = static_cast<uint16_t>(n1);
+    tilingParams.k1 = static_cast<uint16_t>(k1);
 }
 
 bool IsExStrideLimit(uint32_t rows, uint32_t cols, uint32_t layoutTag)
@@ -68,5 +68,30 @@ uint32_t GetMaxK1(uint32_t m1, uint32_t n1, PlatformInfo& platformInfo)
     }
     return k1;
 }
+
+bool IsAStrideEqualShape(TilingParams &tilingParams) {
+    if (static_cast<LayoutTag>(tilingParams.layoutTagA) == LayoutTag::TagColumnMajor) {
+        return (tilingParams.m == tilingParams.strideA);
+    } else {
+        return (tilingParams.k == tilingParams.strideA);
+    }
+}
+
+bool IsBStrideEqualShape(TilingParams &tilingParams) {
+    if (static_cast<LayoutTag>(tilingParams.layoutTagB) == LayoutTag::TagColumnMajor) {
+        return (tilingParams.k == tilingParams.strideB);
+    } else {
+        return (tilingParams.n == tilingParams.strideB);
+    }
+}
+
+bool IsCStrideEqualShape(TilingParams &tilingParams) {
+    if (static_cast<LayoutTag>(tilingParams.layoutTagC) == LayoutTag::TagColumnMajor) {
+        return (tilingParams.m == tilingParams.strideC);
+    } else {
+        return (tilingParams.n == tilingParams.strideC);
+    }
+}
+
 
 #endif  // UTILS_H

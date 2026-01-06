@@ -305,6 +305,10 @@ bool PaddingCommonMatmulB16Handler(TilingParams &params, PlatformInfo& platformI
 
 bool PaddingMultiCoreSplitkMatmulB16Handler(TilingParams& params, PlatformInfo& platformInfo)
 {
+    // The template does not support cases where the stride of matrix C is greater than its shape.
+    if (!IsCStrideEqualShape(params)) {
+        return false;
+    }
     uint32_t m = params.m;
     uint32_t n = params.n;
     uint32_t k = params.k;
@@ -381,7 +385,7 @@ bool PaddingStreamkMatmulB16Handler(TilingParams& params, PlatformInfo& platform
 bool AivMatmulB16Handler(TilingParams& params, PlatformInfo& platformInfo)
 {
     // AivMatmul is only used when K=1
-    if (params.k != 1) {
+    if (params.k != 1 || !IsAStrideEqualShape(params) || !IsBStrideEqualShape(params)) {
         return false;
     }
     uint32_t aivCoreNums = platformInfo.coreNum * 2;
@@ -494,10 +498,12 @@ void SelectKernelB16(TilingParams &tilingParams, PlatformInfo& platformInfo)
     uint8_t layoutTagBTmp = tilingParams.layoutTagB;
     // When m=1 or n=1, the row-major and column-major matrix layouts are indentical, the matrix can be stored
     // in either format. In such cases, the layout with higher memory transfer bandwidth should be selected.
-    if (tilingParams.m == 1 && static_cast<LayoutTag>(tilingParams.layoutTagA) == LayoutTag::TagColumnMajor) {
+    if (static_cast<LayoutTag>(tilingParams.layoutTagA) == LayoutTag::TagColumnMajor &&
+        tilingParams.m == 1 && tilingParams.strideA == 1) {
         tilingParams.layoutTagA = static_cast<uint8_t>(LayoutTag::TagRowMajor);
     }
-    if (tilingParams.n == 1 && static_cast<LayoutTag>(tilingParams.layoutTagB) == LayoutTag::TagRowMajor) {
+    if (static_cast<LayoutTag>(tilingParams.layoutTagB) == LayoutTag::TagRowMajor &&
+        tilingParams.n == 1 && tilingParams.strideB == 1) {
         tilingParams.layoutTagB = static_cast<uint8_t>(LayoutTag::TagColumnMajor);
     }
 

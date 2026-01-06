@@ -178,7 +178,9 @@ struct PaddingMatrixNZ {
             uint64_t tileOffsetSrc = computeLayoutSrc.GetOffset(tileCoord);
             ComputeLayoutSrc tileLayoutSrc = computeLayoutSrc.GetTileLayout(MatrixCoord(rowTileActual, colTileActual));
             ComputeLayoutSrc ubLayoutIn = ComputeLayoutSrc{rowTileActual, RoundUp(colTileActual, ELE_NUM_PER_C0)};
-            if (tileCols < computeLayoutSrc.shape(1) || (computeLayoutSrc.shape(1) % ELE_NUM_PER_C0)) {
+            if ((tileCols < computeLayoutSrc.shape(1))
+                || (computeLayoutSrc.shape(1) % ELE_NUM_PER_C0) 
+                || (computeLayoutSrc.shape(1) != computeLayoutSrc.stride(0))) {
                 copyGm2Ub(inputBuffer[bufferIndex], src[tileOffsetSrc], ubLayoutIn, tileLayoutSrc);
             } else {
                 // Continuous copy to ub
@@ -345,7 +347,9 @@ struct PaddingMatrixNZ {
         bool cond2 = computeLayoutSrc.shape(1) < vnchwMaxInnerAxisLen * 2 && computeLayoutSrc.shape(1) % 2 == 0;
         bool cond3 = computeLayoutSrc.shape(1) < vnchwMaxInnerAxisLen * 4 && computeLayoutSrc.shape(1) % 4 == 0;
         bool cond4 = computeLayoutSrc.shape(0) > 1024; // Empirical parameters
-        if (cond0 && cond4 && (cond1 || cond2 || cond3)) {
+        // VnchwND2NZ requires that the shape must be equal the stride
+        bool cond5 = computeLayoutSrc.shape(1) == computeLayoutSrc.stride(0);
+        if (cond0 && cond4 && (cond1 || cond2 || cond3) && cond5) {
             VnchwND2NZ(dst, src, computeLayoutDst, computeLayoutSrc);
         } else {
             CommonND2NZ(dst, src, computeLayoutDst, computeLayoutSrc);
