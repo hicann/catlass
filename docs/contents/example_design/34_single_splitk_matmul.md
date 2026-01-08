@@ -1,7 +1,7 @@
-# CATLASS GMM_single_splitK_Matmul
+# CATLASS Single_core_splitK_Matmul 样例介绍
 
-## ## 样例实现
-CATLASS [GMM_single_splitK_Matmul样例](../../../examples/34_single_core_splitk_matmul/README.md)算子是基于CATLASS Gemm Api实现的亲和昇腾AtlasA2硬件的GMM算子,针对大尺寸矩阵计算场景优化设计，关键算子件包括以下几部分:
+## 样例实现
+CATLASS [`34_single_core_splitk_matmul`样例](../../../examples/34_single_core_splitk_matmul/README.md)算子是基于CATLASS Gemm Api实现的亲和昇腾AtlasA2硬件的Matmul算子,针对大尺寸矩阵计算场景优化设计，关键算子件包括以下几部分:
  - **Example组装**：[single_core_splitk.cpp](../../../examples/34_single_core_splitk_matmul/single_core_splitk.cpp)
  - **Kernel实现**：
    - 主Kernel文件：[single_core_slicek_matmul.hpp](../../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp)
@@ -153,14 +153,14 @@ graph LR
 </div>
 
 
-如上图所示，相较于经典的矩阵乘过程，单核切K的`Matmul`模板采取了复用左矩阵的办法，即对于某个AI Core，其L1A上加载的分形矩阵是**固定**的。
+如上图所示，相较于经典的矩阵乘过程，单核切K的`Matmul`模板采取了复用左矩阵的办法，即对于某个AI Core，其L1A上加载的分形矩阵是**驻留**的，进而降低对GM的访问量。
 
 举例而言，对于经典计算过程，单核所进行的数据搬运过程包括：1. 从GM搬运A0到L1A，B0到L1B；2. 从GM搬运A1到L1A，B1到L1B；..., N. 从GM搬运A(n-1)到L1A， B(n-1)到L1B。
 
 在本单核切K策略下，单个AI Core上的流程图如下所示：
 
 <div style="display: flex; justify-content: center;">
-<img src="https://raw.gitcode.com/user-images/assets/7831925/113740e9-bef5-477f-8a5f-a0e1b0d3595b/splitk_newfig.png" width="85%" height="auto">
+<img src="https://raw.gitcode.com/user-images/assets/7694484/5f0dcf49-6c76-47ea-ac2f-70a88d2ca8bc/singleCoreSplitK_Arrange.png" width="85%" height="auto">
 </div>
 
 显然，该办法能有效减轻MTE2的搬运负担，但是会加重L0C计算结果搬回到GM的负担，需要在GM上开启原子加。
@@ -196,8 +196,8 @@ if (atomicAdd) {
 | FP16/BF16 | 256 | 128 | 512 | 
 | FP32 | 256 | 128 | 256 | 
 
- - 使用对齐写出
- 对于本优化策略，关键瓶颈是数据写出`FIX_PIPE`的带宽，因此需要启用对齐，以提高非对齐场景下`gmWC`搬运至`gmC`的带宽性能。
+ - 数据对齐
+ 如需对数据进行类型转换，需采取数据对齐，以提高处理流程中的数据搬运带宽。
 
  ```cpp
 // RemovePaddingNDAndCast的核心处理逻辑
@@ -226,10 +226,10 @@ for (uint32_t loopIdx = 0; loopIdx < coreLoops; ++loopIdx) {
 ### Swizzle排布方案
 
 
-在矩阵C上的swizzle策略采用S型特征，相较于Z型的swizzle排布，在换行处可节约一次搬运。如上图所示，按S型Swizzle策略加载，前一组需要加载到L1A, L1B上的分形矩阵为`<A01, <B10, B11>>`，后一次需要加载的是`<A11, <B10, B11>>`。“换行”过程下，可以固定L1B上的数据，仅从GM上重读入A11 到L1A上，以减轻载入负担。
+在矩阵C上的swizzle策略采用S型特征，相较于Z型的swizzle排布，在换行处可节约一次搬运。如下图所示，按该S型Swizzle策略，前一组需要加载到L1A, L1B上的分形矩阵为`<A02, <B20, B21, B22, B23>>`，后一次需要加载的是`<A12, <B20, B21, B22, B23>>`(以`SwizzleOffset`为`4`为例)。“换行”过程下，可以固定L1B上的数据，仅从GM上重读入左矩阵，可减轻载入负担。
 
 <div style="display: flex; justify-content: center;">
-    <img src="https://raw.gitcode.com/user-images/assets/7831925/82464c03-ecfc-4a3f-afbb-82740c77103f/tmp4.png" width="35%" height="auto">
+    <img src="https://raw.gitcode.com/user-images/assets/7694484/45fcbe2f-bcfc-4bde-b11a-43361f09c1d5/singleCoreSplitK_Swizzle.png" width="35%" height="auto">
 </div>
 
 
