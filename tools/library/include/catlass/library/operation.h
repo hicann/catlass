@@ -42,6 +42,7 @@ enum class LayoutType {
     PaddingRowMajor,
     PaddingColumnMajor,
     nN,
+    VectorLayout,
     Invalid
 };
 
@@ -136,6 +137,23 @@ struct GemmOperationDescription : public OperationDescription {
 };
 
 
+struct QuantMatmulGemmOperationDescription : public GemmOperationDescription {
+    TensorDescription Scale;
+    TensorDescription PerTokenScale;
+    TensorDescription D;  // output
+    QuantMatmulGemmOperationDescription(
+        GemmKind gemmKind = GemmKind::Invalid,
+        TensorDescription A = TensorDescription(),
+        TensorDescription B = TensorDescription(),
+        TensorDescription C = TensorDescription(),
+        TensorDescription D = TensorDescription(),
+        TensorDescription Scale = TensorDescription(),
+        TensorDescription PerTokenScale = TensorDescription(),
+        DataType epilogueElementType = DataType::Invalid
+    ) : GemmOperationDescription(gemmKind, A, B, C, epilogueElementType),
+        D(D), Scale(Scale), PerTokenScale(PerTokenScale){}
+};
+
 class Operation {
 public:
     virtual ~Operation() = default;
@@ -198,6 +216,22 @@ struct GroupedMatmulGemmConfiguration {
     uint32_t groupCount;
 };
 
+struct QuantMatmulGemmArguments {
+    Catlass::GemmCoord problemShape;
+    uint32_t aicCoreNum;
+    uint8_t *ptrA;
+    uint8_t *ptrB;
+    uint8_t *ptrD;  // output
+    uint8_t *ptrScale;
+    uint8_t *ptrPerTokenScale;
+};
+
+struct QuantMatmulGemmConfiguration {
+    uint32_t m;
+    uint32_t n;
+    uint32_t k;
+};
+
 
 // Arguments for grouped matmul slice M operations
 //
@@ -220,4 +254,4 @@ struct GroupedMatmulSliceMGemmConfiguration {
 }
 }
 
-#endif // CATLASS_LIBRARY_MANIFEST_H
+#endif // CATLASS_LIBRARY_OPERATION_H

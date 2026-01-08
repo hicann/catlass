@@ -150,5 +150,47 @@ private:
     Library::BasicMatmulGemmArguments arg_{};
     Library::BasicMatmulGemmConfiguration config_{};
 };
+
+
+class QuantMatmulGemmOpConfig : public GemmOpConfig {
+public:
+    explicit QuantMatmulGemmOpConfig(const Library::OperationDescription &desp)
+        : GemmOpConfig(desp)
+    {
+        subKind_ = static_cast<uint32_t>(Library::GemmKind::QuantMatmul);
+    }
+
+    bool InitConfig(CommandLineParser &parser) override;
+    bool InitArgument(Library::Operation *op) override;
+
+    void SaveMetric(Metric &metric) override;
+    void* GetConfig() override { return &config_; };
+    void* GetArg() override { return &arg_; };
+
+private:
+    struct ArgumentSize {
+        size_t lenA;
+        size_t lenB;
+        size_t lenC;
+        size_t lenScale;
+        size_t lenPerTokenScale;
+        size_t sizeA;
+        size_t sizeB;
+        size_t sizeD;  // ptrD的内存大小
+        size_t sizeScale;
+        size_t sizePerTokenScale;
+        size_t layoutASize;
+        size_t layoutBSize;
+        size_t layoutDSize;
+        size_t layoutScaleSize;
+        size_t layoutPerTokenScaleSize;
+    };
+
+    bool CheckArgument(const Library::QuantMatmulGemmOperationDescription &mdesp, ArgumentSize &argSize);
+    void GenerateInput(const Library::QuantMatmulGemmOperationDescription &mdesp, const ArgumentSize &argSize);
+
+    Library::QuantMatmulGemmArguments arg_{};
+    Library::QuantMatmulGemmConfiguration config_{};
+};
 } // namespace Catlass
 #endif // CATLASS_TUNER_GEMM_OP_CONFIG_H

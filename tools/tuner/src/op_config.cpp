@@ -60,6 +60,8 @@ std::shared_ptr<OpConfig> GetGemmOpConfig(const OperationDescription &desp)
             return std::make_shared<GroupedSliceMGemmOpConfig>(desp);
         case GemmKind::OptimizedMatmul:
             return std::make_shared<OptimizedGemmOpConfig>(desp);
+        case GemmKind::QuantMatmul:
+            return std::make_shared<QuantMatmulGemmOpConfig>(desp);
         default:
             LOGE("Matmul op type is invalid %u, config create failed", static_cast<uint32_t>(mDesp.gemmKind));
             break;

@@ -77,6 +77,10 @@ template <> struct LayoutMap<Catlass::layout::nN> {
     static LayoutType const typeId = LayoutType::nN;
 };
 
+template <> struct LayoutMap<Catlass::layout::VectorLayout> {
+    static LayoutType const typeId = LayoutType::VectorLayout;
+};
+
 template <typename Element, typename Layout>
 TensorDescription MakeTensorDescription()
 {

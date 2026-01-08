@@ -13,6 +13,8 @@
 #include "metrics.h"
 #include "library_helper.h"
 #include "catlass/gemm_coord.hpp"
+#include "catlass/catlass.hpp"
+#include "tiling/platform/platform_ascendc.h"
 
 namespace Catlass {
 
@@ -338,6 +340,74 @@ bool OptimizedGemmOpConfig::InitArgument(Library::Operation *op)
     if (!MallocDeviceMemory(params)) {
         return false;
     }
+    return true;
+}
+
+void QuantMatmulGemmOpConfig::SaveMetric(Metric &metric)
+{
+    GemmOpConfig::SaveMetric(metric);
+}
+
+bool QuantMatmulGemmOpConfig::InitConfig(CommandLineParser &parser)
+{
+    bool res = GemmOpConfig::InitConfig(parser);
+    if (!res) {
+        return false;
+    }
+    config_.m = m_;
+    config_.n = n_;
+    config_.k = k_;
+    return true;
+}
+
+bool QuantMatmulGemmOpConfig::CheckArgument(const Library::QuantMatmulGemmOperationDescription &mdesp, ArgumentSize &argSize)
+{
+    argSize.layoutASize = LibraryHelper::GetLayoutSize(mdesp.A.layout);
+    argSize.layoutBSize = LibraryHelper::GetLayoutSize(mdesp.B.layout);
+    argSize.layoutDSize = LibraryHelper::GetLayoutSize(mdesp.D.layout);
+    argSize.layoutScaleSize = LibraryHelper::GetLayoutSize(mdesp.Scale.layout);
+    argSize.layoutPerTokenScaleSize = LibraryHelper::GetLayoutSize(mdesp.PerTokenScale.layout);
+
+    if (!SafeMul<uint32_t>({config_.m, config_.k}, argSize.lenA) ||
+        !SafeMul<uint32_t>({config_.k, config_.n}, argSize.lenB) ||
+        !SafeMul<uint32_t>({config_.m, config_.n}, argSize.lenC) ||
+        !SafeMul<uint32_t>({config_.n}, argSize.lenScale) ||
+        !SafeMul<uint32_t>({config_.m}, argSize.lenPerTokenScale) ||
+        !SafeMul<size_t>({argSize.lenA, LibraryHelper::GetDataTypeSize(mdesp.A.element)}, argSize.sizeA) ||
+        !SafeMul<size_t>({argSize.lenB, LibraryHelper::GetDataTypeSize(mdesp.B.element)}, argSize.sizeB) ||
+        !SafeMul<size_t>({argSize.lenC, LibraryHelper::GetDataTypeSize(mdesp.D.element)}, argSize.sizeD) ||
+        !SafeMul<size_t>({argSize.lenScale, LibraryHelper::GetDataTypeSize(mdesp.Scale.element)}, argSize.sizeScale) ||
+        !SafeMul<size_t>({argSize.lenPerTokenScale, LibraryHelper::GetDataTypeSize(mdesp.PerTokenScale.element)}, argSize.sizePerTokenScale))
+    {
+        LOGE("Arguments size overflows, please check command line input --m --n --k");
+        return false;
+    }
+    return true;
+}
+
+bool QuantMatmulGemmOpConfig::InitArgument(Library::Operation *op)
+{
+    auto &mdesp = static_cast<const Library::QuantMatmulGemmOperationDescription &>(op->GetDescription());
+    ArgumentSize safeArg{};
+    if (!CheckArgument(mdesp, safeArg)) {
+        return false;
+    }
+
+    arg_.problemShape = Catlass::GemmCoord{config_.m, config_.n, config_.k};
+    arg_.aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
+
+    std::vector<DeviceMemoryParam> params{
+        {reinterpret_cast<void**>(&arg_.ptrA), safeArg.sizeA},
+        {reinterpret_cast<void**>(&arg_.ptrB), safeArg.sizeB},
+        {reinterpret_cast<void**>(&arg_.ptrD), safeArg.sizeD},
+        {reinterpret_cast<void**>(&arg_.ptrScale), safeArg.sizeScale},
+        {reinterpret_cast<void**>(&arg_.ptrPerTokenScale), safeArg.sizePerTokenScale}
+    };
+
+    if (!MallocDeviceMemory(params)) {
+        return false;
+    }
+
     return true;
 }
 } // namespace Catlass

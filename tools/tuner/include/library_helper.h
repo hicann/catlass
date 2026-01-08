@@ -14,6 +14,7 @@
 #include <unordered_map>
 #include "catlass/library/operation.h"
 #include "catlass/layout/matrix.hpp"
+#include "catlass/layout/vector.hpp"
 
 namespace Catlass {
 
