@@ -19,7 +19,7 @@
 #include "catlass/epilogue/block/block_epilogue.hpp"
 #include "catlass/epilogue/dispatch_policy.hpp"
 #include "catlass/epilogue/tile/tile_copy.hpp"
-#include "catlass/epilogue/tile/tile_elemwise_swish.hpp"
+#include "catlass/epilogue/tile/tile_elemwise_silu.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
 #include "catlass/gemm/device/device_gemm.hpp"
@@ -107,7 +107,7 @@ static void Run(const Options &options) {
     using EpilogueDispatchPolicy = Epilogue::EpilogueAtlasA2ElemWiseNoSource;
 
     constexpr uint32_t computeLength = 16384; // 64 * 128 * 2B
-    using TileElemWiseEpilogue = Epilogue::Tile::TileElemWiseSwish<ArchTag, CType, computeLength>;
+    using TileElemWiseEpilogue = Epilogue::Tile::TileElemWiseSilu<ArchTag, CType, computeLength>;
     using EpilogueTileCopy = Epilogue::Tile::TileCopy<
         ArchTag,
         CType, // CopyGmtoUbC
@@ -147,7 +147,7 @@ static void Run(const Options &options) {
 
     // Compute the golden result
     std::vector<float> hostGolden(lenD);
-    golden::ComputeMatmulElemWiseSwish(options.problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutD);
+    golden::ComputeMatmulElemWiseSilu(options.problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutD);
 
     // Compare the result
     std::vector<uint64_t> errorIndices = golden::CompareData(hostD, hostGolden, k);

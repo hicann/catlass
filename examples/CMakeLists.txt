@@ -124,7 +124,7 @@ foreach(EXAMPLE
     25_matmul_full_loadA
     26_matmul_relu
     27_matmul_gelu
-    28_matmul_swish
+    28_matmul_silu
     29_a2_fp8_e4m3_matmul
     30_w8a16_matmul
     31_small_matmul

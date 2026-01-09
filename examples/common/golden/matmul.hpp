@@ -402,7 +402,7 @@ template <class ElementT> struct Sigmoid {
     }
 };
 
-template <class ElementT> struct Swish {
+template <class ElementT> struct Silu {
     ElementT operator () (ElementT val) const
     {
         return val * Sigmoid<ElementT>{}(val);
@@ -445,12 +445,12 @@ void ComputeMatmulElemWiseGelu(const GemmCoord &problemShape, const std::vector<
 }
 
 template <class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementGolden, class LayoutGolden>
-void ComputeMatmulElemWiseSwish(const GemmCoord &problemShape, const std::vector<ElementA> &dataA,
+void ComputeMatmulElemWiseSilu(const GemmCoord &problemShape, const std::vector<ElementA> &dataA,
     const LayoutA &layoutA, const std::vector<ElementB> &dataB, const LayoutB &layoutB,
     std::vector<ElementGolden> &dataGolden, const LayoutGolden &layoutGolden)
 {
     ComputeMatmulElemWiseActivation(problemShape, dataA, layoutA, dataB, layoutB, dataGolden, layoutGolden,
-        Swish<ElementGolden>{});
+        Silu<ElementGolden>{});
 }
 } // namespace Catlass::golden
 

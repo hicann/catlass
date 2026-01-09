@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_EPILOGUE_TILE_TILE_ELEMWISE_SWISH_HPP
-#define CATLASS_EPILOGUE_TILE_TILE_ELEMWISE_SWISH_HPP
+#ifndef CATLASS_EPILOGUE_TILE_TILE_ELEMWISE_SILU_HPP
+#define CATLASS_EPILOGUE_TILE_TILE_ELEMWISE_SILU_HPP
 
 #include "catlass/catlass.hpp"
 
@@ -20,15 +20,15 @@ template <
     // / Compute data type
     class ComputeType_,
     // / COMPUTE_LENGTH of the compute buffer
-    uint32_t COMPUTE_COMPUTE_LENGTH_>
-struct TileElemWiseSwish {
+    uint32_t COMPUTE_LENGTH_>
+struct TileElemWiseSilu {
     using ArchTag = ArchTag_;
     using ElementCompute = typename ComputeType_::Element;
 
-    static constexpr uint32_t COMPUTE_LENGTH = COMPUTE_COMPUTE_LENGTH_;
+    static constexpr uint32_t COMPUTE_LENGTH = COMPUTE_LENGTH_;
 
     CATLASS_DEVICE
-    TileElemWiseSwish() {}
+    TileElemWiseSilu() {}
 
     CATLASS_DEVICE
     void operator () (AscendC::LocalTensor<ElementCompute> const & dstLocal,

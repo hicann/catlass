@@ -1,16 +1,16 @@
-# MatmulSwish Example Readme
+# MatmulSilu Example Readme
 ## 代码组织
 ```
-├── 28_matmul_swish
+├── 28_matmul_silu
 │   ├── CMakeLists.txt   # CMake编译文件
 │   ├── README.md
-│   └── matmul_swish.cpp # 主文件
+│   └── matmul_silu.cpp # 主文件
 ```
 ## 功能介绍
 
-Swish:
+SiLU:
 $$
-Swish(x) = x \cdot Sigmoid(x)
+SiLU(x) = x \cdot Sigmoid(x)
 $$
 Sigmoid：
 $$
@@ -29,11 +29,11 @@ $$
 - 执行算子
 ```
 # 编译指定用例
-bash scripts/build.sh 28_matmul_swish
+bash scripts/build.sh 28_matmul_silu
 cd output/bin
 # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID
 # Device ID可选，默认为0
-./28_matmul_swish 256 512 1024 0
+./28_matmul_silu 256 512 1024 0
 ```
 执行结果如下，说明精度比对成功。
 ```

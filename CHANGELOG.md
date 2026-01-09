@@ -61,7 +61,7 @@
     - [小矩阵优化Matmul算子](https://gitcode.com/cann/catlass/tree/v1.2.0/examples/31_small_matmul/README.md)
     - [MatmulRelu算子](https://gitcode.com/cann/catlass/tree/v1.2.0/examples/26_matmul_relu/README.md)
     - [MatmulGelu算子](https://gitcode.com/cann/catlass/tree/v1.2.0/examples/27_matmul_gelu/README.md)
-    - [MatmulSwish算子](https://gitcode.com/cann/catlass/tree/v1.2.0/examples/28_matmul_swish/README.md)
+    - [MatmulSilu算子](https://gitcode.com/cann/catlass/tree/v1.2.0/examples/28_matmul_silu/README.md)
     - [FP8类型反量化Matmul算子](https://gitcode.com/cann/catlass/tree/v1.2.0/examples/29_a2_fp8_e4m3_matmul/README.md)
     - [INT8类型反量化Matmul算子](https://gitcode.com/cann/catlass/tree/v1.2.0/examples/30_w8a16_matmul/README.md)
 

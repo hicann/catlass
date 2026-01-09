@@ -17,14 +17,13 @@
 #include "catlass/gemm_coord.hpp"
 #include "catlass/matrix_coord.hpp"
 #include "catlass/layout/layout.hpp"
+#include "catlass/epilogue/tile/tile_cast.hpp"
 
 namespace Catlass::Epilogue::Block {
-// 部分特化：当DispatchPolicy为EpilogueAtlasA2ElemWiseNoSource时的特化版本
 template <
-    class CType_, // fp32输入 Gemm::GemmType
-    class DType_, // half/bf16输出
+    class CType_,
+    class DType_,
     class TileElemWiseEpilogue_,
-    // TileCopy的方法
     class TileCopy_
 >
 class BlockEpilogue <
@@ -40,8 +39,6 @@ public:
     using ArchTag = typename DispatchPolicy::ArchTag;
     using ElementC = typename CType_::Element;
     using LayoutC = typename CType_::Layout;
-    using ElementX = typename CType_::Element; // X是fp32的计算结果，无GM
-    using LayoutX = typename CType_::Layout;
 
     using ElementD = typename DType_::Element;
     using LayoutD = typename DType_::Layout;
@@ -53,7 +50,6 @@ public:
     static constexpr uint32_t OPERANDS_NUM = DispatchPolicy::OPERANDS_NUM;
 
     using ElementCompute = ElementC;
-    using ElementOut = ElementD;
 
     using LayoutComputeInUb = layout::RowMajor;
 
@@ -90,9 +86,16 @@ public:
     BlockEpilogue(Arch::Resource<ArchTag> &resource, Params const &params) : params(params)
     {
         ubC = resource.ubBuf.template GetBufferByByte<ElementC>(0);
-        ubX = resource.ubBuf.template GetBufferByByte<ElementX>(COMPUTE_LENGTH * sizeof(ElementC));
-        ubD = resource.ubBuf.template GetBufferByByte<ElementD>(COMPUTE_LENGTH * sizeof(ElementC) * 2);
-
+        ubD = resource.ubBuf.template GetBufferByByte<ElementD>(COMPUTE_LENGTH * sizeof(ElementC));
+        if constexpr (!std::is_same_v<ElementCompute, ElementD>){
+            ubCompute = resource.ubBuf.template GetBufferByByte<ElementCompute>( 
+                COMPUTE_LENGTH * (sizeof(ElementC) + sizeof(ElementD))
+            );
+        } else {
+            // When ElementCompute is same as ElementD, it is not necessary to do Cast from ubCompute to ubD.
+            // Use the same buffer.
+            ubCompute = ubD;
+        }
         AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
         AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
     }
@@ -152,8 +155,10 @@ public:
         // Perform epilogue calculation
         AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
         AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
-        tileEpilogue(ubX, ubC);
-        AscendC::Cast(ubD, ubX, AscendC::RoundMode::CAST_RINT, COMPUTE_LENGTH);
+        tileEpilogue(ubCompute, ubC);
+        if constexpr (!std::is_same_v<ElementCompute, ElementD>){
+            AscendC::Cast(ubD, ubCompute, AscendC::RoundMode::CAST_NONE, COMPUTE_LENGTH);
+        }
         AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID0);
         AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
 
@@ -167,7 +172,7 @@ private:
     Params params;
 
     AscendC::LocalTensor<ElementC> ubC;
-    AscendC::LocalTensor<ElementC> ubX;
+    AscendC::LocalTensor<ElementCompute> ubCompute;
     AscendC::LocalTensor<ElementD> ubD;
 
     TileElemWiseEpilogue tileEpilogue;
