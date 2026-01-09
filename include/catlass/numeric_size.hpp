@@ -10,7 +10,7 @@ using AscendC::SizeOfBits;
 #else
 template <typename T>
 struct SizeOfBits {
-    static constexpr size_t value = sizeof(T);
+    static constexpr size_t value = sizeof(T) * 8;
 };
 #endif
 
