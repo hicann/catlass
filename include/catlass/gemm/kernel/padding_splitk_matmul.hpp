@@ -11,7 +11,6 @@
 #ifndef CATLASS_GEMM_KERNEL_PADDING_SPLITK_MATMUL_HPP
 #define CATLASS_GEMM_KERNEL_PADDING_SPLITK_MATMUL_HPP
 
-#include <cmath>
 #include "catlass/catlass.hpp"
 #include "catlass/arch/resource.hpp"
 #include "catlass/arch/cross_core_sync.hpp"
@@ -123,9 +122,9 @@ public:
         uint32_t k0 = L1TileShape::K;
 
         uint32_t baseTilesCount = CeilDiv(m, m0) * CeilDiv(n, n0);
-        splitkFactor = std::min(aicCoreNum / baseTilesCount, maxSplitkFactor);
+        splitkFactor = (aicCoreNum / baseTilesCount < maxSplitkFactor) ? (aicCoreNum / baseTilesCount) : maxSplitkFactor;
         // Prevent the split factor form being less than 1
-        splitkFactor = std::max(splitkFactor, static_cast<uint32_t>(1));
+        splitkFactor = (splitkFactor > static_cast<uint32_t>(1)) ? splitkFactor : static_cast<uint32_t>(1);
         if (baseTilesCount < aicCoreNum) {
             while (splitkFactor + 1 <= maxSplitkFactor &&
                 CeilDiv(baseTilesCount * splitkFactor, aicCoreNum) >=
@@ -134,17 +133,17 @@ public:
             }
         }
         // Ensure that splitkFactor is less than the number of base tiels in the k direction.
-        splitkFactor = std::min(CeilDiv(k, k0), splitkFactor);
+        splitkFactor = (CeilDiv(k, k0) < splitkFactor) ? CeilDiv(k, k0) : splitkFactor;
         // If k is very large, splitting k can lead to better cache utilization.
         // If k is greater than 8192.
         if (k > 8192) {
             // split the k direction into at least 2 parts.
-            splitkFactor = std::max(splitkFactor, static_cast<uint32_t>(2));
+            splitkFactor = (splitkFactor > static_cast<uint32_t>(2)) ? splitkFactor : static_cast<uint32_t>(2);
         }
         // If k is greater than 32768.
         if (k > 32768) {
             // split the k direction into at least 4 parts.
-            splitkFactor = std::max(splitkFactor, static_cast<uint32_t>(4));
+            splitkFactor = (splitkFactor > static_cast<uint32_t>(4)) ? splitkFactor : static_cast<uint32_t>(4);
         }
         return splitkFactor;
     }

@@ -791,7 +791,10 @@ public:
         ArchTag, Gemm::GemmType<ElementOut, Catlass::layout::RowMajor>>;
     using ComputeLayout = Catlass::layout::RowMajor;
 
-    constexpr static uint32_t ELE_NUM_PER_C0 = std::max(BYTE_PER_C0 / sizeof(ElementIn), BYTE_PER_C0 / sizeof(ElementOut));
+    constexpr static uint32_t ELE_NUM_PER_C0 = 
+        (BYTE_PER_C0 / sizeof(ElementIn) > BYTE_PER_C0 / sizeof(ElementOut))
+            ? BYTE_PER_C0 / sizeof(ElementIn)
+            : BYTE_PER_C0 / sizeof(ElementOut);
 
     static const PaddingTag paddingTag = paddingTag_;
     using LayoutIn = Layout_;
