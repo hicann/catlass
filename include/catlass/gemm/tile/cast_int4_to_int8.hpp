@@ -72,7 +72,7 @@ struct TileCastInt4ToInt8 {
 
                 ubEventList[i] = i;
                 AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(ubEventList[i]);
-                AscendC::SetFlag<AscendC::HardEvent::MTE3_S>(ubEventList[i]);
+                AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(ubEventList[i]);
             }
         }
     }
@@ -83,7 +83,7 @@ struct TileCastInt4ToInt8 {
         if constexpr (g_coreType == AscendC::AIV) {
             for (uint32_t i = 0; i < STAGES; i++) {
                 AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(ubEventList[i]);
-                AscendC::WaitFlag<AscendC::HardEvent::MTE3_S>(ubEventList[i]);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(ubEventList[i]);
             }
         }
     }
@@ -138,13 +138,10 @@ struct TileCastInt4ToInt8 {
             AscendC::DataCopyPad(ubInTensorList[pingpong],
                 gmSrc[taskOffsetSrc + tileOffsetSrc], dataCopyParamsIn, padParams);
 
-            AscendC::SetFlag<AscendC::HardEvent::MTE2_S>(ubEventList[pingpong]);
-            AscendC::WaitFlag<AscendC::HardEvent::MTE2_S>(ubEventList[pingpong]);
-
-            AscendC::WaitFlag<AscendC::HardEvent::MTE3_S>(ubEventList[pingpong]);
-
-            AscendC::SetFlag<AscendC::HardEvent::S_V>(ubEventList[pingpong]);
-            AscendC::WaitFlag<AscendC::HardEvent::S_V>(ubEventList[pingpong]);
+            AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(ubEventList[pingpong]);
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(ubEventList[pingpong]);
+            
+            AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(ubEventList[pingpong]);
 
             AscendC::Cast(ubWorkspaceList[pingpong], ubInTensorList[pingpong],
                 AscendC::RoundMode::CAST_NONE, actualTiles * tileLenRoundInt4);
@@ -167,7 +164,7 @@ struct TileCastInt4ToInt8 {
             );
             AscendC::DataCopyPad(gmDst[taskOffsetDst + tileOffsetDst],
                 ubOutTensorList[pingpong], dataCopyParamsOut);
-            AscendC::SetFlag<AscendC::HardEvent::MTE3_S>(ubEventList[pingpong]);
+            AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(ubEventList[pingpong]);
 
             pingpong = (pingpong + 1) % STAGES;
         }

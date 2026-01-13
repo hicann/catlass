@@ -67,6 +67,8 @@ static void Run(const Options &options) {
 
     half deqScalar = 1.5;
     half deqZeroPoint = 0.1;
+    fp16_t deqScalarFp16 = 1.5;
+    fp16_t deqZeroPointFp16 = 0.1;
 
     // if LayoutA and LayoutB is both ColumnMajor,
     // L1TileShape using GemmShape<256, 128, 256> can achieve better performance.
@@ -80,9 +82,9 @@ static void Run(const Options &options) {
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
-    std::vector<half> hostA(lenA);
+    std::vector<fp16_t> hostA(lenA);
     std::vector<int8_t> hostB(lenB);
-    golden::FillRandomData<half>(hostA, -5.0f, 5.0f);
+    golden::FillRandomData<fp16_t>(hostA, -5.0f, 5.0f);
     golden::FillRandomData<int8_t>(hostB, -8, 8);
 
     uint8_t *deviceA{nullptr};
@@ -150,12 +152,12 @@ static void Run(const Options &options) {
         RunAdapter(matmulOp, arguments, stream, aicCoreNum, fftsAddr);
     }
 
-    std::vector<half> hostBFp16(hostB.begin(), hostB.end());
+    std::vector<fp16_t> hostBFp16(hostB.begin(), hostB.end());
     for (size_t i = 0; i < hostBFp16.size(); i++) {
-        hostBFp16[i] = static_cast<half>((hostBFp16[i] + deqZeroPoint) * deqScalar);
+        hostBFp16[i] = static_cast<fp16_t>((hostBFp16[i] + deqZeroPointFp16) * deqScalarFp16);
     }
 
-    std::vector<half> hostC(lenC);
+    std::vector<fp16_t> hostC(lenC);
     ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
 
     std::vector<float> hostGolden(lenC);
