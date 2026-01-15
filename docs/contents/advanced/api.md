@@ -86,7 +86,7 @@ using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<>;
 // 第四步：在kernel层将mmad和后处理组合到一起
 using MatmulKernel = Gemm::Kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
 
-// 第四步：将kernel放入device适配器中，host侧处理kernel使用
+// 第五步：将kernel放入device适配器中，host侧处理kernel使用
 using Matmul = Catlass::Gemm::Device::DeviceGemm<MatmulKernel>;
 ```
 
@@ -106,9 +106,9 @@ Block中的不同硬件流水线（例如，MTE1、MTE2或FixPipe）提供不同
 
 ### Block Mmad
 
-`Catlass::Gemm::Block::BlockMmad`Block矩阵乘累加（MMAD）主循环的主要接口。
+`Catlass::Gemm::Block::BlockMmad`是矩阵乘（Block层级）累加（`MMAD`）主循环的主要接口。
 
-The `BlockMmad` 类定义在头文件中
+`BlockMmad`类定义在头文件中
 [include/catlass/gemm/block/block_mmad.hpp](../include/catlass/gemm/block/block_mmad.hpp).
 
 ```c++
@@ -153,15 +153,15 @@ CATLASS采用基于标签的调度策略类型来特例化Block层Mmad实现，�
 struct MmadAtlasA2Pingpong {
     using ArchTag = Arch::AtlasA2;
     static constexpr uint32_t STAGES = 2;
-    static constexpr bool ENABLE_UNIT_FLAG = True;
+    static constexpr bool ENABLE_UNIT_FLAG = true;
 };
 ```
 
 `STAGES` 参数使用户可以方便地调整多buffer场景的buffer片数，`ENABLE_UNIT_FLAG` 参数用于表示是否启用Mmad运算与L0C结果拷贝到全局内存的细粒度并行。
 
 采用Dispatch Policy的设计还有如下优点：
-* 它避免了代码重复，主循环可以与多个不同的内核使用。
-* 它使编写通用代码更容易，因为主要类型名称`BlockMma`在任何实现中都不会改变。
+* 它避免了代码重复，主循环可以被多个不同的内核使用。
+* 它使编写通用代码更容易，因为主要类型名称`BlockMmad`在任何实现中都不会改变。
 * 它提供了一个清晰、单一的扩展点，供用户插入针对他们自己调度策略特化实现的新的、定制的主循环。
 
 ### TileShape
@@ -170,7 +170,7 @@ struct MmadAtlasA2Pingpong {
 
 ### Epilogue
 
-尾处理实现了涉及输出矩阵的逐元素操作。用户可以提供自定义的尾处理，或者使用标准尾处理之一。这些尾处理位于目录include/catlass/epilogue/block/中，包括像`Catlass::Epilogue::Block::BlockEpilogue`这样的类。CATLASS提供的尾处理不在include/catlass/gemm目录下，也不在`Catlass::Gemm`命名空间中，因为它们可以用于除Gemm之外的其他计算。
+尾处理实现了涉及输出矩阵的逐元素操作。用户可以提供自定义的尾处理，或者使用标准尾处理之一。这些尾处理位于目录[`include/catlass/epilogue/block/`](../../../include/catlass/epilogue/block/block_epilogue.hpp)中，包括像`Catlass::Epilogue::Block::BlockEpilogue`这样的类。CATLASS提供的尾处理不在[`include/catlass/gemm`](../../../include/catlass/gemm/)目录下，也不在`Catlass::Gemm`命名空间中，因为它们可以用于除Gemm之外的其他计算。
 
 ## Kernel API
 

@@ -68,7 +68,7 @@
  - 工具支持
     - 更新[Python调用接口](https://gitcode.com/cann/catlass/tree/v1.2.0/examples/python_extension/README.md)内容
         + 调整工程组织结构
-        + 支持转置情形
+        + 支持转置情况
     - 新增[`msTuner_CATLASS`](https://gitcode.com/cann/catlass/tree/v1.2.0/tools/tuner/README.md)工具，用于Tiling自动寻优，在搜索空间内全量运行并获取性能数据
     - 支持使能[`msSanitizer`](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/83RC1alpha003/devaids/optool/atlasopdev_16_0039.html)地址消毒工具（编译选项加入`--enable_mssanitizer`）
   
@@ -99,7 +99,7 @@
 
  - 工具支持
     - 支持[`AscendC::Dump`](https://www.hiascend.com/document/detail/zh/canncommercial/83RC1/opdevg/Ascendcopdevg/atlas_ascendc_10_0075.html)与[`AscendC::printf`](https://www.hiascend.com/document/detail/zh/canncommercial/83RC1/opdevg/Ascendcopdevg/atlas_ascendc_10_0075.html)进行打印调试
-      - 编译选项中加入`--enable_print`，`--enable_ascendc_dump`以启用上述功能
+      - 编译选项中加入`--enable_ascendc_dump`和`--enable_print`以启用上述功能
       - 请参阅文档: [`ascendc_dump`](docs/tools/ascendc_dump.md)和[`print`](docs/tools/print.md)
   
  - 文档资料
@@ -109,7 +109,7 @@
  - Bugfix&优化
    - 优化`Kernel`层AIC程序，添加`PIPE_ALL`避免整网影响
    - 优化[`OptimizedMatmul`](https://gitcode.com/cann/catlass/tree/v1.1.0/examples/06_optimized_matmul/README.md)算子实现，在非必要Padding场景下不启动AIV核
-   - 修复`Block`层预加载`nextBlock`的出错
+   - 修复`Block`层预加载`nextBlock`时的错误
    - 隔离Kernel侧`AscendC`的`inline`定义，避免异构编程时无法使用部分标准库
    - 修改`l2offset`设置的重定义问题
    

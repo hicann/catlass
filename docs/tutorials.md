@@ -264,12 +264,12 @@ foreach(EXAMPLE
 )
 ```
 
-编译过程详情参考[算子编译](./quickstart.md#算子编译)，进入算子产物目录后执行测试，如出现`Compare success`。说明精度比对成功。
+编译过程详情参考[算子编译](./quickstart.md#算子编译)。进入算子产物目录后，执行测试，如出现`Compare success`，表明精度比对成功。
 ```bash
 cd output/bin
 ./basic_matmul 128 256 4096 0
 ```
-- 由于使用CPU进行精度对比，所以执行需要一点时间。
+- 由于使用CPU进行精度对比，所以执行需要一定时间。
 
 ### 性能测试
 
@@ -290,15 +290,15 @@ using L0TileShape = GemmShape<128, 256, 64>;
 **case1** `m, n, k = 128, 256, 4096`
 
 1. 使用初始的TileShape， `L1TileShape: <128,256,256>`, `L0TileShape: <128,256,64>`，
-执行命令`msprof op ./basic_matmul 128 256 4096 0`,测试算子在当前tileShape下的性能。
-2. 修改TileShape为 `L1TileShape: <32,128,256>`, `L0TileShape: <32,128,64>`，
-3. 重新编译后，执行命令`msprof op ./basic_matmul 128 256 4096 0`，测试算子修改tileShape后的性能。通过比对tileShape修改前后的性能，观察调整tiling对算子性能的影响。
+执行命令`msprof op ./basic_matmul 128 256 4096 0`,并测试算子在当前tileShape下的性能。
+2. 使用修改后的TileShape： `L1TileShape: <32,128,256>`, `L0TileShape: <32,128,64>`，
+3. 重新编译后，通过执行命令`msprof op ./basic_matmul 128 256 4096 0`来测试算子修改`tileShape`后的性能。通过比对`tileShape`修改前后的性能，观察调整tiling对算子性能的影响。
 
 **case2** `m, n, k = 16, 16, 32768`
 
 1. 使用初始的TileShape `L1TileShape: <128,256,256>`, `L0TileShape: <128,256,64>`，
 执行命令`msprof op ./basic_matmul 16 16 32768 0`,测试算子在当前tileShape下的性能。
-2. 修改TileShape为 `L1TileShape: <16,16,2048>`, `L0TileShape: <16,16, 64>`，
+2. 修改TileShape:`L1TileShape: <16,16,2048>`, `L0TileShape: <16,16, 64>`，
 3. 重新编译后，执行命令`msprof op ./basic_matmul 16 16 32768 0`，测试算子修改tileShape后的性能。通过比对tileShape修改前后的性能，观察调整tiling对算子性能的影响。
 
 ## SplitK Matmul体验
@@ -310,7 +310,7 @@ using L0TileShape = GemmShape<128, 256, 64>;
 </div>
 
 
-由于硬件约束，基本块的大小最小为`16x16`，如果Matmul的M和N轴很小，例如`M=16,N=16`,那么只能划分出一个基本块，只能利用一个计算核心，浪费了很多计算资源，如图所示，如果K方向足够大，可以对K方向进行切分，从而划分出更多的任务块，利用更多的计算核心，提高计算效率。
+由于硬件约束，基本块的大小最小为`16x16`，如果Matmul的M和N轴很小，例如`M=16,N=16`,那么只能划分出一个基本块，进而只能利用一个计算核心，浪费了很多计算资源，如图所示，如果K方向较大，可以对K方向进行切分，从而划分出更多的任务块，利用更多的计算核心，提高计算效率。
 
 ### 代码实现
 
@@ -616,7 +616,7 @@ bash scripts/build.sh splitk_matmul
 msprof op ./splitk_matmul 16 16 32768 0
 ```
 
-在当前目录下会生成profiling数据，查看`OpBasicInfo.csv`文件获取性能数据。可将该性能数据与Basic Matmul的性能数据进行比较，观察收益。
+在当前目录下会生成profiling数据，查看`OpBasicInfo.csv`文件获取性能数据。可将该性能数据与Basic Matmul的性能数据进行比较，评估性能提升。
 
 ## GroupMatmul体验
 

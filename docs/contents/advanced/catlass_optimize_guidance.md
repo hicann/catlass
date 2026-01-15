@@ -2,7 +2,7 @@
 
 ## CATLASS样例定位
 
-CATLASS算子模板库的定位，是针对GEMM类算子提供的模板样例库，与通常的算子库有所区别。 在通常的算子库中，会针对一类问题的不同的输入样例做泛化性的优化考虑，以提供在大多数场景下较优的开箱性能。 模板库当前主要的目标，是针对不同输入提供模板样例，示例在不同输入下快速自定义开发出高性能算子，理论上并不提供相较于算子库最优的泛化性能。 例如，对于matmul场景，CANN中的matmul算子或调用接口着重通过直接调用提供泛化场景性能；而在模板库中，通过提供basic-matmul, optimized-matmul, splitk-matmul, padding-splitk-matmul等等多种matmul以示例在不同输入场景下如何自定义定制开发以获取最优性能。 仓上的多个matmul样例针对不同输入case有不同的适用范围以及调优手段，可按需定制以获取最优性能。
+CATLASS算子模板库的定位，是针对GEMM类算子提供的模板样例库，与通常的算子库有所区别。 在通常的算子库中，会针对一类问题的不同的输入样例做泛化性的优化考虑，以提供在大多数场景下较优的开箱性能。 模板库当前主要的目标，是针对不同输入提供模板样例，以便在不同输入下快速自定义开发出高性能算子，理论上并不提供相较于算子库最优的泛化性能。 例如，对于matmul场景，CANN中的matmul算子或调用接口着重通过直接调用提供泛化场景性能；而在模板库中，通过提供basic-matmul, optimized-matmul, splitk-matmul, padding-splitk-matmul等等多种matmul以示例在不同输入场景下如何自定义定制开发以获取最优性能。 代码仓上的多个matmul样例针对不同输入case有不同的适用范围以及调优手段，可按需定制以获取最优性能。
 
 对于调优方法来说，总体分为**基础调优**和**进阶定制**两大类，本篇文章重点介绍第一类基础调优的方式，通过tiling调参及kernel组合的方式快速获得性能提升。
 
@@ -10,12 +10,12 @@ CATLASS算子模板库的定位，是针对GEMM类算子提供的模板样例库
 
 ### C矩阵切基本块分核
 
-首先是任务量分核逻辑，库上[00_basic_matmul](../examples/00_basic_matmul/basic_matmul.cpp)、[06_optimized_matmul](../examples/06_optimized_matmul/optimized_matmul.cpp)等样例都是对C矩阵切基本块后分核，C矩阵分别在M轴、N轴上基于`L1TileShape::M`和`L1TileShape::N`切分，得到`CeilDiv(M, L1TileShape::M) * CeilDiv(N, L1TileShape::N)`个基本块，而后基本块按照[swizzle策略](./swizzle_explanation.md)分配到cube上进行计算。
+首先是任务量分核逻辑，代码仓的[00_basic_matmul](../examples/00_basic_matmul/basic_matmul.cpp)、[06_optimized_matmul](../examples/06_optimized_matmul/optimized_matmul.cpp)等样例都是对C矩阵切基本块后分核，C矩阵分别在M轴、N轴上基于`L1TileShape::M`和`L1TileShape::N`切分，得到`CeilDiv(M, L1TileShape::M) * CeilDiv(N, L1TileShape::N)`个基本块，而后基本块按照[swizzle策略](./swizzle_explanation.md)分配到cube上进行计算。
 
 ### Matmul硬件可视化
 
 参考[昇腾社区文档-基本架构](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/83RC1alpha001/opdevg/Ascendcopdevg/atlas_ascendc_10_0008.html)。
-基础matmul切块、数据搬运、计算涉及的硬件架构如下图，由于使能了doubleBuffer，在L1/L0A/L0B上会存放两块Tile数据。
+基础matmul切块、数据搬运、计算涉及的硬件架构如下图，由于使能了doubleBuffer，在L1/L0A/L0B上会保存两块Tile数据。
 
 <img src="https://www.hiascend.com/doc_center/source/zh/CANNCommunityEdition/83RC1alpha001/opdevg/Ascendcopdevg/figure/zh-cn_image_0000002405923777.png" width="80%">
 
@@ -79,7 +79,7 @@ L0C实际占用 = L0::M * L0::N * 4(Byte)
 
 当前库上基础Matmul算子如下，更详细介绍请见[矩阵乘模板清单](./matmul_template_summary.md)：
 
-- [00_basic_matmul](../examples/00_basic_matmul/basic_matmul.cpp)，采用`MmadAtlasA2Pingpong`的dispatchPolicy，使能pingpong策略
+- [00_basic_matmul](../examples/00_basic_matmul/basic_matmul.cpp)，采用`MmadAtlasA2Pingpong`的dispatchPolicy，启用pingpong策略
 
 ```
 template <bool ENABLE_UNIT_FLAG_ = false>
@@ -90,7 +90,7 @@ struct MmadAtlasA2Pingpong : public MmadAtlasA2  {
 ```
 
 - [04_padding_matmul](../examples/04_padding_matmul/padding_matmul.cpp)，基于00_basic_matmul增加了输入矩阵的padding动作，实验发现RowMajor矩阵的shape[1]为512B对齐时，矩阵搬运效率更高，所以增加padding动作可以提高**非对齐场景**性能。
-- [06_optimized_matmul](../examples/06_optimized_matmul/optimized_matmul.cpp)，采用`MmadAtlasA2Preload`的dispatchPolicy，使能预加载和shuffleK动作。预加载动作减少搬运流水的中断情况；shuffleK打乱了不同核搬运L1Tile的顺序，减少了bank冲突，使得基本块同行或同列的核在访问AB矩阵时的地址错开。同时也增加了输入矩阵向L1TileShape对齐的padding动作。相比basic_matmul引入了更多优化动作，但也引入了vector核使能和一些scalar计算的开销。
+- [06_optimized_matmul](../examples/06_optimized_matmul/optimized_matmul.cpp)，采用`MmadAtlasA2Preload`的`dispatchPolicy`，使能预加载和`shuffleK`动作。预加载动作减少搬运流水的中断情况，`shuffleK`打乱了不同核搬运`L1Tile`的顺序，减少了Bank冲突，使得基本块同行或同列的核在访问AB矩阵时的地址错开。同时也增加了输入矩阵向`L1TileShape`对齐的`padding`动作。相比[`basic_matmul`](../../../examples/00_basic_matmul/README.md)引入了更多优化动作，但也引入了Vector核使能和一些scalar计算的开销。
 
 ```
 template <bool ENABLE_UNIT_FLAG_ = false, bool ENABLE_SHUFFLE_K_ = false>
@@ -114,7 +114,7 @@ struct MmadAtlasA2Preload : public MmadAtlasA2 {
 
 使用06_optimized_matmul，按照默认的L1TileShape<128,256,256>、L0TileShape<128,256,64>，耗时为**72.5us**（不同芯片平台、cann包、驱动下性能表现存在一定差异，仅供参考）。
 
-分析：切基本块数目为`CeilDiv(1024/128) * CeilDiv(576/256) = 24`，则20个AIC中有4个需要计算两个基本块、其余16个处理1个基本块，负载不均衡。
+分析：切分基本块数目为`CeilDiv(1024/128) * CeilDiv(576/256) = 24`，则20个AIC中有4个需要计算两个基本块、其余16个处理1个基本块，负载不均衡。
 
 调整L1TileShape<256,128,256>、L0TileShape<256,128,64>，切分基本块数目为`CeilDiv(1024/256) * CeilDiv(576/128) = 20`，则20个AIC都只处理1个基本块，负载均衡，任务耗时为**48.6us**。
 
@@ -124,9 +124,9 @@ struct MmadAtlasA2Preload : public MmadAtlasA2 {
 
 此时B矩阵为zN格式（同NZ格式），使用21_basic_matmul_preload_zN，按照默认的L1TileShape<128,256,256>、L0TileShape<128,256,64>，耗时为**181.4us**。
 
-分析：切基本块数目为`CeilDiv(20/128) * CeilDiv(6144/256) = 24`，则20个AIC中有4个需要计算两个基本块、其余16个处理1个基本块，负载不均衡。
+分析：基本块数目切分为`CeilDiv(20/128) * CeilDiv(6144/256) = 24`，则20个AIC中有4个需要计算两个基本块、其余16个处理1个基本块，负载不均衡。
 
-调整L1TileShape<32,320,128>、L0TileShape<32,320,32>，切分基本块数目为`CeilDiv(20/32) * CeilDiv(6144/320) = 20`，则20个AIC都只处理1个基本块，负载均衡，任务耗时为**139.6us**。
+调整L1TileShape<32,320,128>、L0TileShape<32,320,32>，切分基本块数目为`CeilDiv(20/32) * CeilDiv(6144/320) = 20`，因此有20个AIC均只处理1个基本块，负载均衡，任务耗时为**139.6us**。
 
 - 案例三
 
@@ -134,13 +134,13 @@ struct MmadAtlasA2Preload : public MmadAtlasA2 {
 
 此时AB矩阵数据都沿K轴排布。而K轴512B对齐，直接使用00_basic_matmul，按照fp32数据类型常用的L1TileShape<128,128,256>、L0TileShape<128,128,64>，耗时为**36.3us**。
 
-分析：切基本块数目为`CeilDiv(1/128) * CeilDiv(768/128) = 6`，则24个AIC仅6个进行工作，负载不均衡。
+分析：切基本块数目为`CeilDiv(1/128) * CeilDiv(768/128) = 6`，则24个AIC仅6个处理计算，负载不均衡。
 
-考虑到B矩阵为ColumnMajor，可以对N轴进行更细粒度切分，调整L1TileShape<16,32,1024>、L0TileShape<16,32,256>，切分基本块数目为`CeilDiv(1/16) * CeilDiv(768/32) = 24`，则24个AIC都进行工作并只处理1个基本块，负载均衡，任务耗时为**15.5us**。
+考虑到B矩阵为ColumnMajor，可以对N轴进行更细粒度切分，调整L1TileShape<16,32,1024>、L0TileShape<16,32,256>，从而基本块的切分数目为`CeilDiv(1/16) * CeilDiv(768/32) = 24`，则24个AIC都进行工作并只处理1个基本块，负载均衡，任务耗时为**15.5us**。
 
 - ⚠️ 注意点
 
-实验发现对于RowMajor/ColumnMajor格式，对应L1::M/L1::N/L1::K在256倍数时搬运性能更高，需要和负载均衡进行取舍；而zN格式下是否为256倍数的影响较小。
+实验发现对于RowMajor/ColumnMajor格式，对应L1::M/L1::N/L1::K在256倍数时搬运性能更高，但与负载均衡存在取舍关系；而zN格式下是否为256倍数的影响较小。
 如案例二中，若B矩阵是RowMajor而不是zN排布，则默认L1TileShape<128,256,256>、L0TileShape<128,256,64>下性能为**238.8us**，而调整L1TileShape<32,320,128>、L0TileShape<32,320,32>后性能为**252.4us**，负载均衡并没有带来收益。
 
 ### Swizzle调整
@@ -153,7 +153,7 @@ struct MmadAtlasA2Preload : public MmadAtlasA2 {
 
 使用21_basic_matmul_preload_zN，按照默认的L1TileShape<128,256,256>、L0TileShape<128,256,64>，swizzle设置为<3, 1>，耗时为**40.6us**。swizzle设置为<4, 1>，耗时为**35.3us**。
 
-分析C矩阵切基本块情况，M方向切（128 + 32）两块，N方向切24个长256的块，共48个基本块。swizzle<3, 1>和swizzle<4, 1>的基本块分配AIC情况如下图。swizzle<3, 1>时，1、2、5、6号核在M方向有最大任务量为（128 + 128 + 32）；swizzle<4, 1>时，12、13、14、15号核在M方向有最大任务量为（128 + 128），负载更加均衡。
+分析基本块情况，M轴方向划分为长度128和32的两块，N方向切24个长256的块，共48个基本块。swizzle<3, 1>和swizzle<4, 1>的基本块分配AIC情况如下图。swizzle<3, 1>时，1、2、5、6号核在M方向有最大任务量为（128 + 128 + 32）；swizzle<4, 1>时，12、13、14、15号核在M方向有最大任务量为（128 + 128），负载更加均衡。
 <img src="../../images/catlass_optimize_guidance/swizzle_case.png" width="100%">
 
 ### 浅述定制调优

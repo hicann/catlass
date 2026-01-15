@@ -4,7 +4,7 @@
 ├── 24_conv_bias
 │   ├── CMakeLists.txt   # CMake编译文件
 │   ├── README.md
-|   ├── gen_data.py   # 输入数据及标杆产生文件
+|   ├── gen_data.py   # 生成输入及标杆数据
 │   └── conv_bias.cpp # 主文件
 ```
 

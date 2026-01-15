@@ -19,7 +19,7 @@ python gen_data.py 1 1 128 16 16 128 half
 # 输入参数分别对应 batchSize，qSeqlen，kvSeqlen, qheadNum，numBlock, blockSize
 # qSeqlen表示需要推理的token个数，支持范围为1~4，即常规decode与mtp场景
 # kvSeqlen表示输入的序列长度
-# blockSize参数当前只支持128
+# blockSize参数当前支持128
 # 最后一个参数需要指明数据类型为“half”或“bf16”
 ```
 执行该命令后会在当前路径下生成data目录，包含算子的输入数据和用于精度验证的golden数据

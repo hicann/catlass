@@ -1,7 +1,6 @@
 # TLA Layouts
 
-这篇文档描述了CATLASS的TLA(Tensor Layout Abstraction)下的`Layout`。
-简单地讲，`Layout`提供了多维坐标与内存的映射关系。
+这篇文档描述了CATLASS的TLA(Tensor Layout Abstraction)下的`Layout`数据结构，它提供了多维坐标与内存的映射关系。
 
 `Layout`为多维数组的访问提供了一个通用接口，它将数组元素在内存中的组织细节抽象化。这使得用户能够编写通用的多维数组访问算法，从而在布局发生变化时，无需修改用户代码。
 
@@ -9,7 +8,7 @@
 
 ### Tuple
 
-TLA以元组[`tla::tuple`](../../include/tla/tuple.hpp)为起始，tla::tuple 包含了若干个元素组成的有限序列元组，其行为与 std::tuple 类似，但引入了一些 C++ templates arguments 的限制，并削减了部分实现以提升性能。
+TLA以元组[`tla::tuple`](../../include/tla/tuple.hpp)为起始，tla::tuple 包含了若干个元素组成的有限序列元组，其行为与 std::tuple 类似，但引入了一些 C++ template arguments 的限制，并削减了部分实现以提升性能。
 
 ### IntTuple
 
@@ -17,11 +16,11 @@ TLA 还定义了[`IntTuple`](../../include/tla/int_tuple.hpp)概念。`IntTuple`
 
 以下任何一个都是 `IntTuple` 的有效模板参数：
 
-* `int{2}`: 运行时整数，或者称之为动态整数，就是 C++ 的正常整数类型比如`int`/`size_t`等等，只要是`std::is_integral<T>`的都是。
+* `int{2}`: 运行时整数，也称为动态整数，就是 C++ 的正常整数类型比如`int`/`size_t`等等，只要是`std::is_integral<T>`的都是。
 
 * `Int<3>{}`： 编译期整数，或称之为静态整数。TLA 通过 `tla::C<Value>` 来定义兼容的静态整数类型，使得这些整数的计算能在编译期内完成。TLA 将别名 _1、_2、_3等定义为`Int<1>`、`Int<2>`、`Int<3>`等类型。更多信息可查看[`integral_constant`](../../include/tla/numeric/integral_constant.hpp)。
 
-* 带有任何模板参数的 IntTuple，比如 `make_tuple(int{2}, Int<3>{})`。
+* 带有任何模板参数的 IntTuple，例如 `make_tuple(int{2}, Int<3>{})`。
 
 TLA 不仅将 `IntTuple` 用在了`Layout`上，还会在很多其他的地方比如 `Shape` 和 `Stride` 等用到它，详见
 [`include/tla/layout.hpp`](../../include/tla/layout.hpp)。
@@ -30,7 +29,7 @@ TLA 不仅将 `IntTuple` 用在了`Layout`上，还会在很多其他的地方�
 
 * `rank(IntTuple)`: 返回 `IntTuple` 的元素个数。
 
-* `get<I>(IntTuple)`: 返回 `IntTuple` 的第 `Ith` 个元素。
+* `get<I>(IntTuple)`: 返回 `IntTuple` 的第 `I` 个元素。
 
 * `depth(IntTuple)`: 返回 `IntTuple` 的嵌套层数，整数为 0。
 
@@ -52,7 +51,7 @@ TLA 不仅将 `IntTuple` 用在了`Layout`上，还会在很多其他的地方�
 
 * `stride(Layout)`: 返回 `Layout` 的 `Stride` 。
 
-此外，为了方便使用，还定义了一些函数：
+此外，为了便于操作，还定义了下述一些函数：
 
 * `get<I0,I1,...,IN>(x) := get<IN>(...(get<I1>(get<I0>(x)))...)`： 获取第 `I0` 个单元的第 `I1` 个单元的 ... 的第 `IN` 个单元。
 
@@ -79,7 +78,7 @@ Layout w32xh48 = MakeLayout(MakeShape(MakeShape(16,2), MakeShape(16,3)),
 
  `MakeLayout` 函数返回 `Layout`。  `MakeShape` 函数返回 `Shape`。  `MakeStride` 函数返回 `Stride`。
 
-上述layout格式如下
+上述Layout格式如下
 
 ```
 w2xh4     :  (_2,4):(_12,_1)
@@ -90,7 +89,7 @@ w32xh48   :  ((16,2),(16,3)):((16,256),(1,512))
 
 ### Matrix examples
 
-可以定义一个matrix的 `layout` 如下几种：
+可以定义一个matrix的 `layout` 如下几种类型：
 
 2x3 `行优先` layout
 
@@ -120,7 +119,7 @@ w32xh48   :  ((16,2),(16,3)):((16,256),(1,512))
 
 定义了一个 2x3 的 tensor，2 行 3 列。至于 stride，在前一维度（行维度），stride=1，表示映射到一维空间中，按行方向递增时，内存跨度为1；在后一维度（列维度），stride=2，表示映射到一维空间中，按列方向递增时，内存跨度为2。
 
-`zN` layout（ `示例以4x4块展示，实际核内为 16x(32/sizeof(ElemType))` ），其余3种内部格式类似
+`zN` layout（ `示例展示为4x4块，实际核内为 16x(32/sizeof(ElemType))` ），其余3种内部格式类似
 
 ```
 ((4,2),(4,3)):((4,16),(1,32))

@@ -15,16 +15,16 @@
 
 CATLASS(**CA**NN **T**emplates for **L**inear **A**lgebra **S**ubroutine**s**)，中文名为昇腾算子模板库，是一个聚焦于提供高性能矩阵乘类算子基础模板的代码库。  
 
-通过抽象分层的方式将矩阵类算子代码模板化。算子计算逻辑可以进行白盒化组装，让算子代码可复用，可替换，可局部修改。针对昇腾硬件特点进行设计，可以支持复杂场景流水排布，如`Flash Attention`等算子。在上层代码逻辑共享的同时，可以支持底层硬件差异特化。
+通过抽象分层的方式将矩阵类算子代码模板化，从而实现算子计算逻辑的白盒化组装，让算子代码可复用，可替换，可局部修改。针对昇腾硬件特点进行设计，可以支持复杂场景流水排布，如`Flash Attention`等算子。在上层代码逻辑共享的同时，支持底层硬件差异特化。
 
-本代码仓为CATLASS联创代码仓。结合昇腾生态力量，共同设计研发算子模板，并提供典型算子的高性能实现代码样例，概述详情参考[这里](./docs/summary.md)。
+本代码库为CATLASS联创代码仓。结合昇腾生态力量，共同设计研发算子模板，并提供典型算子的高性能实现代码样例，概述详情参考[这里](./docs/summary.md)。
 
 ## ⚡️ 快速上手
 
 为快速体验CATLASS的算子开发与使用，请参考下述内容。
 
 - [快速入门](./docs/quickstart.md)：快速上手模板库使用，编译执行已有的算子样例。
-- [基础开发指南](./docs/dev_guide.md)：以基础Matmul算子为例，基于CATLASS的算子开发实践；
+- [基础开发指南](./docs/dev_guide.md)：以基础Matmul算子为例，介绍基于CATLASS的算子开发实践；
 - [开发者实践](./docs/tutorials.md): 从算子编写至编译测试，再到Tiling调优与算子优化，从新手到进阶的实践示例。
 
 ## 📚 进阶参考
@@ -67,7 +67,7 @@ CATLASS所需的软硬件环境依赖如下：
 
 - 昇腾产品：[Atlas A2训练/推理产品](https://www.hiascend.com/document/detail/zh/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html), [Atlas A3训练/推理产品](https://www.hiascend.com/document/detail/zh/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html)
 - CPU架构：`aarch64`/`x86_64`
-- 系统：主流Linux（进行[兼容性查询](https://www.hiascend.com/hardware/compatibility)）
+- 系统：支持的Linux（进行[兼容性查询](https://www.hiascend.com/hardware/compatibility)）
 - 软件依赖：
   - `gcc` >= 7.5, < 13.0
   - `cmake` >= 3.16
@@ -90,8 +90,8 @@ CATLASS所需的软硬件环境依赖如下：
   </thead>
   <tbody style="text-align: center">
   <tr>
-          <td><a href="https://gitcode.com/cann/catlass">当前提交</a>
-          <td>社区版<a href="https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.2">8.2.RC1</a></td>
+          <td><a href="https://gitcode.com/cann/releases/v1.2.2">v.1.2.2 及以上</a>
+          <td>社区版<a href="https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.2.RC1">8.2.RC1</a></td>
           <td><a href="https://www.hiascend.com/document/detail/zh/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html">Atlas A2训练/推理产品</a> <br>
           <a href="https://www.hiascend.com/document/detail/zh/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html">Atlas A3训练/推理产品</a></td>
       </tr>

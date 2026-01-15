@@ -138,8 +138,8 @@ bash scripts/build.sh -DCATLASS_BUILD_USAGE shared_lib
 ## 注意事项
 
 - 我们目前提供了四种典型算子作为示例：
-  - `BasicMatmul`：基本矩阵乘法，并实现了类型模板的实现方法
+  - `BasicMatmul`：基本矩阵乘法，提供类型模板的实现方法
   - `GroupedMatmul`：分组矩阵乘法，提供分组输入输出示例
   - `OptimizedMatmul`：优化矩阵乘法，提供CV融合的示例
   - `ConvBias`：卷积算子
-- 本节是算子打包成动态库的一个示例，可根据需要自行扩展功能，并不仅局限于已有的代码。
+- 本节是算子打包成动态库的一个示例，可根据需要自行扩展功能，不仅限于已有的代码。

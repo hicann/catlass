@@ -7,7 +7,7 @@
 │   └── grouped_matmul.cpp # 主文件
 ```
 ## 示例说明
-- 本grouped_matmul为通用kernel，示例内部为切k情况下的使用
+- 本grouped_matmul为通用kernel，示例为沿k轴切分场景。
 ## 使用示例
 - 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/quickstart.md#算子编译)
 - 执行算子

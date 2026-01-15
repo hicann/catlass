@@ -2,7 +2,7 @@
 ## 代码组织
 ```
 ├── 23_flash_attention_infer
-│   ├── CMakeLists.txt # CMake编译文件
+│   ├── CMakeLists.txt # CMake构建配置文件
 │   ├── gen_data.py
 │   ├── kernel_common.hpp 
 │   ├── main.cpp
@@ -45,7 +45,7 @@ function gen_data() {
     echo "Data gen finished"
 }
 
-function run_kernel {
+function run_kernel() {
     echo 'Case: B=' $batch ' qS=' $qSeqlen ' kvS=' $kvSeqlen ' qN=' $numHeads ' kvN=' $kvHeads ' D=' $headSize ' mask=' $maskType
     cd output/bin/
     ./23_flash_attention_infer $batch $qSeqlen $kvSeqlen $numHeads $kvHeads $headSize $isVariedLen $maskType --device $device --dtype $dtype

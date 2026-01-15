@@ -51,7 +51,7 @@ msprof op --application="./00_basic_matmul 256 512 1024 0"
 更多参数可参考[msProf工具概述](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/82RC1alpha003/devaids/optool/atlasopdev_16_0082.html)。
 
 - ⚠ 注意事项
-  - 工具默认会读取第一个算子的性能，使用example进行调测时可直接获取到结果；若接入其他工程，工程中可能存在其他算子（虽然只跑某一个算子的用例），所以性能分析时要通过--kernel-name指定算子名称的方式，否则读取不到结果。
+  - 工具默认会读取第一个算子的性能，使用example进行调测时可直接获取到结果；若接入其他工程，工程中可能存在其他算子（虽然只跑某一个算子的用例），如果性能分析时未通过`--kernel-name`指定算子名称，则可能读取不到结果。
   - 可设置环境变量`ASCEND_RT_VISIBLE_DEVICES`指定上板调测的Device Id号
 
 ```bash
@@ -174,7 +174,7 @@ msProf工具采集到的数据，可导入可视化工具[MindStudio Insight](ht
 bash scripts/build.sh --enable_profiling 00_basic_matmul
 ```
 
-2. 切换到可执行文件的编译目录`output/bin`下，用`msprof`执行算子样例程序。
+2. 切换到可执行文件的编译目录`output/bin`下，用`msProf`执行算子样例程序。
 
 ```bash
 cd output/bin

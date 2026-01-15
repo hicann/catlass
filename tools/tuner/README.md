@@ -1,6 +1,6 @@
 ## msTuner_CATLASS (MindStudio Tuner for CATLASS) - Tiling自动寻优工具
 
-mstuner_catlass 是一款用于 CATLASS 模板库算子 Tiling 参数寻优的工具，支持用户自定义搜索空间，能够实例化搜索空间内的所有算子，并批量完成在板性能测试，为算子 Tiling 参数的寻优提供参考依据。
+msTuner_CATLASS 是一款用于 CATLASS 模板库算子 Tiling 参数寻优的工具，支持用户自定义搜索空间，能够实例化搜索空间内的所有算子，并批量完成在板性能测试，为算子 Tiling 参数的寻优提供参考依据。
 
 ### 快速上手
 
@@ -10,7 +10,7 @@ mstuner_catlass 是一款用于 CATLASS 模板库算子 Tiling 参数寻优的�
 bash scripts/build.sh -DCATLASS_LIBRARY_KERNELS=00_basic_matmul mstuner_catlass
 ```
 
-输入mstuner_catlass命令，启动性能测试。
+输入`mstuner_catlass`命令，启动性能测试。
 
 ```bash
 export LD_LIBRARY_PATH=$PWD/output/lib64/:$LD_LIBRARY_PATH
@@ -58,7 +58,7 @@ case_id,task_duration(us),device_id,operation,description,m,n,k,A,B,C
 
 ### 编译
 
-支持通过`-DCATLASS_LIBRARY_KERNELS=<kernel_name>`命令过滤算子，当算子的description信息包含`kernel_name`时，该算子用例代码会被生成并编译，比如通过如下命令指定编译`00_basic_matmul`类算子。
+支持通过`-DCATLASS_LIBRARY_KERNELS=<kernel_name>`命令过滤算子，当算子的`description`信息包含`kernel_name`时，该算子用例代码会被生成并编译，比如通过如下命令指定编译`00_basic_matmul`类算子。
 
 ```bash
 bash scripts/build.sh -DCATLASS_LIBRARY_KERNELS=00_basic_matmul mstuner_catlass
@@ -94,7 +94,7 @@ cmake --install . --component mstuner_catlass
 
 ### 工具运行命令
 
-mstuner_catlass 支持以下命令。
+`mstuner_catlass`工具支持以下命令。
 
 | 命令          | 示例                          | 默认值 | 描述                                                         |
 | ------------- | ----------------------------- |-| ------------------------------------------------------------ |
@@ -118,9 +118,9 @@ mstuner_catlass 支持以下命令。
 
 ### 搜索空间配置
 
-mstuner_catlass支持对算子tiling参数的搜索空间进行自定义配置，支持自定义配置layouts、data types、L1/L0 Tile Shapes、Swizzle策略等参数自动正交生成全量搜索空间，自定义剪枝函数过滤筛选搜索空间，最终每种正交配置组合会实例化为一个独立算子，生成的算子实例化代码位于`build/tools/library/generated`目录中。
+msTuner_CATLASS支持对算子tiling参数的搜索空间进行自定义配置，支持自定义配置排布方式（layouts）、数据类型（data types）、L1/L0的TileShape、Swizzle策略等参数，自动正交生成全量搜索空间，并可自定义剪枝函数过滤搜索空间，最终每种正交配置组合会实例化为一个独立算子，生成的算子实例化代码位于`build/tools/library/generated`目录中。
 
-当搜索空间范围配置较广时，可能导致上万个算子被实例化，导致编译耗时较长，且过多的算子可能超过硬件限制无法保证编译成功，同时算子数量较多时，算子下发前注册耗时也较长，因此建议将搜索空间的规模控制在5000以内，以确保工具运行顺畅，获得最佳体验。
+当搜索空间范围配置较广时，可能导致上万个算子被实例化，代码膨胀致使编译耗时较长。此外，过多的算子可能超过硬件限制，无法保证编译成功。同时，算子数量较多时，算子下发前注册耗时也较长。因此建议将搜索空间的规模控制在5000以内，以确保工具运行顺畅，获得最佳体验。
 
 算子数量可通过查看日志文件`build/tools/library/catlass_library_code_generation.log`，如下所示，00_basic_matmul的搜索空间实例了1701个算子。
 
@@ -135,7 +135,7 @@ INFO:manifest:operations that will be generated in total: 1701
 
 #### 入门级配置
 
-mstuner_catlass支持在 `tools/library/scripts/search_space_config.py`文件中对算子tiling参数搜索空间进行入门级的简化配置，开发者可自由调整以下参数来设置搜索范围。
+msTuner_CATLASS支持对算子tiling参数搜索空间进行入门级的简化配置（见`tools/library/scripts/search_space_config.py`文件），开发者可自由调整以下参数来设置搜索范围。
 
 - kernel_type，算子类型
 - data_type_a/data_type_b/data_type_c：A/B/C输入矩阵的元素类型
@@ -179,16 +179,16 @@ def register(manifest):
 
 #### 高级配置
 
-mstuner_catlass支持在 `tools/library/scripts/search_space.py`文件中对算子tiling参数的搜索空间进行更为灵活的自定义配置，支持自定义配置layouts、data types、L1/L0 Tile Shapes、Swizzle策略等参数的正交组合方式，自定义剪枝函数过滤筛选搜索空间遍历。
+msTuner_CATLASS支持在 `tools/library/scripts/search_space.py`文件中对算子tiling参数的搜索空间进行更为灵活的自定义配置，支持自定义配置layouts、data types、L1/L0 Tile Shapes、Swizzle策略等参数的正交组合方式，自定义剪枝函数过滤筛选搜索空间遍历。
 
 以`00_basic_matmul`算子的搜索空间为例，其配置位于函数`register_gemm_00_basic_matmul_operation`中。
 
 - layouts配置
 
   ```python
-      layouts = [
-          [library.LayoutType.RowMajor, library.LayoutType.RowMajor, library.LayoutType.RowMajor],
-      ]
+layouts = [
+  [library.LayoutType.RowMajor, library.LayoutType.RowMajor, library.LayoutType.RowMajor],
+]
   ```
 
 - data types配置

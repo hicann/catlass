@@ -7,7 +7,7 @@
 │   └── padding_splitk_matmul.cpp # 主文件
 ```
 ## 功能介绍
-该算子支持A、B矩阵做完padding后，额外切分k轴用于分核，在m轴、n轴较小时提高cube核利用率。
+该算子支持A、B矩阵做完padding后，附加k轴方向切分用于分核，在`m`，`n`较小时提高Cube核利用率。
 ## 使用示例
 - 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/quickstart.md#算子编译)
 - 执行算子

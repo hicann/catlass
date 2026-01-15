@@ -7,7 +7,7 @@
 │   └── matmul_full_loadA.cpp # 主文件
 ```
 ## 功能介绍
-- 该算子在00_basic_matmul基础上支持A矩阵全载（需要一半的L1空间可以放入L1TileShape::M * problemShape.K），计算每个基本块时完整搬入A矩阵分块，而后pingpong搬入B矩阵；若L1空间不够A矩阵全载，则返回报错；
+- 该算子在00_basic_matmul基础上支持A矩阵全载（需要一半的L1空间分配给数据量为`L1TileShape::M * problemShape.K`的矩阵），计算每个基本块时完整搬入A矩阵分块，而后pingpong搬入B矩阵；若L1空间不够A矩阵全载，则返回报错；
 - A矩阵全载时，N轴越大，单核越能多次复用L1中的A矩阵、无需再从GM或L2Cache搬运A矩阵，性能收益就越大；
 - A矩阵全载时，N轴较小，无法复用A矩阵，性能收益较00_basic_matmul可能会出现劣化；
 - 若problemShape.M <= L1TileShape::M，即M方向不切块分核，此时常用GemmIdentityBlockSwizzle策略即可适用；

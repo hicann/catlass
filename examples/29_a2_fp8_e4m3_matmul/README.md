@@ -25,7 +25,7 @@ example使用
 # 编译指定用例
 bash scripts/build.sh 29_a2_fp8_e4m3_matmul
 ```
-- 第二步，首先执行`gen_data.py`，生成测试样例，测试用例需要从命令行输入
+- 第二步，执行`gen_data.py`生成测试数据，测试用例规格从命令行输入
 ```
 cd examples/29_a2_fp8_e4m3_matmul && python gen_data.py 256 512 1024 0 0 && cd ../..
 # 输入参数分别对应 m, n, k, trans_a, trans_b
@@ -41,7 +41,7 @@ cd examples/29_a2_fp8_e4m3_matmul && python gen_data.py 256 512 1024 0 0 && cd .
     └── expected_data.bin
 ```
 
-- 第三步，执行算子，这里要注意执行算子的输入shape和上面第二步生成数据的shape一致
+- 第三步，执行算子，注意提供给算子的输入shape和上面第二步生成数据的shape需一致
 ```
 # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID
 # Device ID可选，默认为0

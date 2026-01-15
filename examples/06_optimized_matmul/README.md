@@ -7,7 +7,7 @@
 │   └── optimized_matmul.cpp # 主文件
 ```
 ## 功能介绍
-matmul矩阵乘，相比00_basic_matmul样例替换dispatchPolicy为`MmadAtlasA2Preload`，并增加输入矩阵的padding前处理、提升矩阵乘时的搬入性能。
+matmul矩阵乘，相比00_basic_matmul样例替换dispatchPolicy为`MmadAtlasA2Preload`，并增加输入矩阵的padding前处理，提升数据搬入性能。
 ## 使用示例
 - 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/quickstart.md#算子编译)
 - 执行算子

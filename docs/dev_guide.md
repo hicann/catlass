@@ -45,7 +45,7 @@ graph LR
 
 `Kernel`层模板由`Block`层组件构成，需要利用以下三个`Block`层组件。
 
-1. `BlockMmad`封装了`Block`层的`mmad`计算(矩阵乘计算)，对应于昇腾NPU的一个`AI Core`上的计算。
+1. `BlockMmad`封装了`Block`层的`mmad`计算（矩阵乘计算），对应于昇腾NPU的一个`AI Core`上的计算。
 通过模板参数，`BlockMmad_`接收矩阵计算中的`Shape`（特征尺寸）、`Layout`（数据排布，如行优先、列优先排布）与`DType`（数据类型）方面的信息，具体如下：
 
 ```c++
@@ -87,7 +87,7 @@ using MatmulKernel = Catlass::Gemm::Kernel::BasicMatmul<BlockMmad, BlockEpilogue
 
 ### Device层算子定义
 
-在`Device`层级，只需要对`Kernel`层组装的算子进行一层封装即可完成核函数的编写,包括如下三个步骤：
+在`Device`层级，只需要对`Kernel`层组装的算子进行一层封装即可完成核函数的编写，包括如下三个步骤：
 
 1. 使用`CATLASS_GLOBAL`修饰符定义Matmul函数，传参包括`A`，`B`，`C`矩阵的地址与排布情况。
 
@@ -120,7 +120,7 @@ matmul(params);
 
 ### 算子调用
 
-以上即完成了`BasicMatmul`算子的构建，使用`<<<>>>`的方式调用核函数,传入指定矩阵的输入输出的数据类型和数据排布信息即可。
+以上即完成了`BasicMatmul`算子的构建，使用`<<<>>>`的方式调用核函数，传入指定矩阵的输入输出的数据类型和数据排布信息即可。
 
 ```c++
 BasicMatmul<<<BLOCK_NUM, nullptr, stream>>>(
@@ -166,4 +166,4 @@ cd output/bin
 ./00_basic_matmul 256 512 1024 0
 ```
 
-出现`Compare success.`打屏，说明算子运行成功，精度比较通过。
+返回`Compare success.`，说明算子运行成功，精度比较通过。

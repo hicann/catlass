@@ -9,7 +9,7 @@ DispatchPolicy是BlockMmad的一个重要模板参数，各个DispatchPolicy定�
 
 ## MmadAtlasA2Pingpong
 
-功能：在A2架构上采用L1和L0A/B Buffer上pingpong Buffer。
+功能：在A2架构上，在L1和L0A/B设置Pingpong Buffer的缓冲区机制。
 
 参数说明：
 
@@ -56,7 +56,7 @@ struct MmadAtlasA2Preload {
 参数说明：
 
 - `PRELOAD_STAGES`：用于表示经过PRELOAD_STAGES次GM到L1的数据读取后，启动L1到L0的数据搬运和Mmad计算，取值要求小于L1_STAGES。
-- `L1_STAGES`：用于表示L1开的buffer数量，需要满足L1TileShape的(M\*K\*矩阵A元素数据类型字节数+K\*N\*矩阵B元素数据类型字节数)<=L1大小。
+- `L1_STAGES`：用于表示L1开缓冲片数量，需要满足L1TileShape的(M\*K\*矩阵A元素数据类型字节数+K\*N\*矩阵B元素数据类型字节数)<=L1大小。
 - `L0A_STAGES`：用于表示L0A开的buffer数量，需要满足L0TileShape的M\*K\*矩阵A元素数据类型字节数<=L0A大小。
 - `L0B_STAGES`：用于表示L0B开的buffer数量，需要满足L0TileShape的K\*N\*矩阵B元素数据类型字节数<=L0B大小。
 - `L0C_STAGES`：用于表示L0C开的buffer数量，需要满足L0TileShape的M\*N\*Mmad计算数据类型字节数<=L0C大小。
@@ -81,7 +81,7 @@ struct MmadAtlasA2PreloadAsync {
 
 ## MmadAtlasA2PreloadAsyncWithCallback
 
-功能：在A2架构上采用L1 Buffer和L0A/L0B/L0C Buffer上的nBuffer，同时支持shufflek策略、block间的预加载以及group间的预加载。同时支持用户将aic和aiv之间的同步命令以callback的形式传入Block层，由Block层决定调用的时机。
+功能：在A2架构上采用L1 Buffer和L0A/L0B/L0C Buffer上的nBuffer，同时支持ShuffleK策略、Block间的预加载以及group间的预加载。同时支持用户将aic和aiv之间的同步命令以callback的形式传入Block层，由Block层决定调用的时机。
 
 参数说明：
 

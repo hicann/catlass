@@ -2,7 +2,7 @@
 
 ## 环境准备
 
-> **说明**：请先行确认[基础依赖](../README.md#-软硬件配套说明)、[NPU驱动](https://www.hiascend.com/hardware/firmware-drivers/community)和固件已安装，及[基础依赖](../README.md#-软硬件配套说明)是否满足。
+> **说明**：请先行确认[基础依赖](../README.md#-软硬件配套说明)、[NPU驱动](https://www.hiascend.com/hardware/firmware-drivers/community)和固件已安装。
 
 1. **安装社区版CANN toolkit包**
 
@@ -98,4 +98,4 @@ cd output/bin
 Compare success.
 ```
 
-请进一步参考[快速入门](./dev_guide.md#matmul算子开发)以开始第一个算子开发。
+请进一步参考[基础开发指南](./dev_guide.md#matmul算子开发)以开始第一个算子开发。

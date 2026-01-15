@@ -19,7 +19,7 @@ $$
 因此计算函数为：
 $$
 x = a \times b\\
-Sigmoid(out)=\frac{x}{1+e^{-x}}
+out=\frac{x}{1+e^{-x}}
 $$
 
 
@@ -35,7 +35,7 @@ cd output/bin
 # Device ID可选，默认为0
 ./28_matmul_silu 256 512 1024 0
 ```
-执行结果如下，说明精度比对成功。
+执行结果如下，表明精度验证通过。
 ```
 Compare success.
 ```

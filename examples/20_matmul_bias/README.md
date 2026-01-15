@@ -8,7 +8,7 @@
 ```
 ## 使用示例
 - 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/quickstart.md#算子编译)
-- matmul_bias在对float32输入数据计算时，为防止超过L1 Cache上限，建议搬运参数设置如下：
+- matmul_bias在对float32输入数据计算时，为防止超过L1 Cache上限，推荐tiling如下：
 ```cpp
 using L1TileShape = GemmShape<112, 128, 256>;
 using L0TileShape = GemmShape<112, 128, 64>;

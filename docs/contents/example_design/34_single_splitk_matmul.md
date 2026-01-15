@@ -1,7 +1,7 @@
 # CATLASS Single_core_splitK_Matmul 样例介绍
 
 ## 样例实现
-CATLASS [`34_single_core_splitk_matmul`样例](../../../examples/34_single_core_splitk_matmul/README.md)算子是基于CATLASS Gemm Api实现的亲和昇腾AtlasA2硬件的Matmul算子,针对大尺寸矩阵计算场景优化设计，关键算子件包括以下几部分:
+CATLASS [`34_single_core_splitk_matmul`样例](../../../examples/34_single_core_splitk_matmul/README.md)算子是基于CATLASS Gemm API实现的昇腾亲和Matmul算子,针对大尺寸矩阵计算场景优化设计，关键算子件包括以下几部分:
  - **Example组装**：[single_core_splitk.cpp](../../../examples/34_single_core_splitk_matmul/single_core_splitk.cpp)
  - **Kernel实现**：
    - 主Kernel文件：[single_core_slicek_matmul.hpp](../../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp)
@@ -43,7 +43,7 @@ graph LR
 <details>
 <summary><strong>组装<code>Padding</code>对象</strong></summary>
 
-*为便于数据搬运的对齐，先组装相关的Padding对象*
+*为便于数据搬运的对齐，组装Padding对象*
 
  - 定义不同的[`PaddingTag`](../../../examples/34_single_core_splitk_matmul/single_core_splitk.cpp#L90)
  - 通过PaddingBuilder组装出对于矩阵A/B的[Padding对象](../../../examples/34_single_core_splitk_matmul/single_core_splitk.cpp#L95)
@@ -101,8 +101,8 @@ graph LR
 以下是在[Kernel层](../../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp)所实现的结构体与关键函数
  - [`struct Params`](../../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#L84)：运行时算子执行所需的参数
  - [`struct Arguments`](../../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#L116)：封装Host侧传入的参数
- - [`static size_t GetWorkspaceSize`](../../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#L128)：预先计算对齐所需的准备的空间
- - [`static Params ToUnderlyingArguments`](../../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#L150)：将host侧入参解析为算子侧的`Params`结构体
+ - [`static size_t GetWorkspaceSize`](../../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#L128)：预先计算对齐所需的空间
+ - [`static Params ToUnderlyingArguments`](../../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#L150)：将Host侧入参解析为算子侧的`Params`结构体
  - [`void operator()<AscendC::AIV>`](../../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#L204)：AIV(Vector)部分执行代码
  - [`void operator()<AscendC::AIC>`](../../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#L253): AIC(Cube)部分执行代码
 
@@ -134,7 +134,7 @@ graph LR
  
  - [初始化`GlobalTensor`](../../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#270): `gmA`, `gmB`, `gmC`
  - 初始化[`BlockScheduler`](../../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#260)和[`BlockMmad`](../../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#300)对象
- - 获取当前AIC序号`coreIdx`、AIC总数`coreNum`(在[`Swizzle`策略](../../../include/catlass/gemm/block/block_swizzle.hpp)内)以及所需的[`coreLoops`](../../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#262)
+ - 获取当前AIC序号`coreIdx`、AIC总数`coreNum`（在[`Swizzle`策略](../../../include/catlass/gemm/block/block_swizzle.hpp)内）以及所需的[`coreLoops`](../../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#262)
  - 进入主循环（循环次`coreLoops`）
    - 计算当前A，B矩阵读入的偏移量[`gmOffsetA`](../../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#333), [`gmOffsetB`](../../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#334)以及下一块的偏移量[`gmOffsetNextA`](../../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#341), [`gmOffsetNextB`](../../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#342)(如果开DoubleBuffer)
    > 注意：优化算法下左矩阵重载，因此`gmOffsetNextA`实际不会“启用”
@@ -182,7 +182,7 @@ if (atomicAdd) {
 <summary><strong>数据搬运理论建模</strong></summary>
 
 我们首先分析下基础Matmul（详见本仓[00_basic_matmul](../../../examples/00_basic_matmul/README.md)样例）的内存访问量。设矩阵乘的尺寸为$(M, N, K)$，L1上的Tile尺寸相应为$m$, $n$, $k$。假设二者对齐。则单个分形（结果）矩阵从GM（Global Memory）至L1所需的搬运量是$K(mk+kn)/k$，加之分形矩阵个数为$MN/mn$，因此总的访问量为$MNK(1/m+1/n)$。另一方面，由于在L0C上进行累加，因此搬出的单位数据量即为$MN$。
-再考虑使用本优化策略后的内存访问，设复用左矩阵，则单核总的数据搬运量为$mK + KN$，总的访问量是$(mK + KN)M/m$，也即$MNK(1/m+1/N)$，显著小于基础Matmul的情形。另外由于计算结果并不能在L0C上进行累加，需“随算随搬”，因此搬出的数据量为$MNK/k$， 较基础有一定升高。
+再考虑使用本优化策略后的内存访问，设复用左矩阵，则单核总的数据搬运量为$mK + KN$，总的访问量是$(mK + KN)M/m$，也即$MNK(1/m+1/N)$，小于基础Matmul的情形。另外由于计算结果并不能在L0C上进行累加，需“随算随搬”，因此搬出的数据量为$MNK/k$， 较基础有一定升高。
 | 类别 | 内存访问操作总量 | 
 | --- | ------- | 
 | 基础矩阵乘 |  $MNK(1/m+1/n) + MN$    | 
@@ -237,9 +237,9 @@ for (uint32_t loopIdx = 0; loopIdx < coreLoops; ++loopIdx) {
 
 ### 性能收益
 
-经过实测，应用上述单核切K算法在大尺寸场景下有较好收益，且随着K轴的尺寸增大，GM至L1节省的正向收益高过重复写入GM的负向收益，可参考下表。
+经过实测，应用上述单核切K算法在大尺寸场景下较基础Matmul有正向收益，且随着K轴的尺寸增大，GM至L1节省的正向收益高过重复写入GM的负向收益，可参考下表。
 
-不过需要说明的是，在M，N过小，或者K偏低的情况下，会出现**分核负载不均衡**的情况，利用率偏低。
+不过需要说明的是，在M，N过小，或者K偏低的情况下，会出现**分核负载不均衡**的情况。
 
 | M | N | K | 耗时(us) | 耗时[标杆]`(us) | 加速比 | 
 | -- | -- | ---- | ----- | ----- | ----- | 

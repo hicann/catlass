@@ -35,13 +35,13 @@ output/python_extension
 
 ## 使用说明
 
-- 假设你已经在shared_lib中，增加了所需算子的实现和入口。
+- 假定开发者已在`shared_lib/`中，增加了所需算子的实现和入口。
 
 ### pybind接口实现
 
-由于pybind传入参数为at::Tensor而非AscendC中的GM地址指针，所以需要对python侧传来的数据进行处理。
+由于pybind传入参数为`at::Tensor`而非AscendC中的地址指针（`GM_ADDR`），所以需要对python端传来的数据进行处理。
 主要步骤为根据输入tensor的信息填充运行信息参数，申请输出内存。
-此部分较为灵活，与算子本身参数较为相关，可参考已有的BasicMatmul实现。
+此部分与算子本身参数相关，可参考已有的`BasicMatmul`实现。
 
 ### 编译
 
@@ -62,7 +62,7 @@ output/python_extension
 
 ### 安装
 
-- 对于torch扩展，你只需要在使用算子前增加如下代码加载：
+- 对于`torch`扩展，只需要在使用算子前增加如下代码：
 
 ```python
 torch.ops.load_library("output/python_extension/libcatlass_torch.so")

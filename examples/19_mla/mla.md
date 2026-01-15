@@ -11,12 +11,12 @@ CATLASS MLA是基于CATLASS Gemm Api实现的亲和昇腾AtlasA2硬件的Flash-M
 Tiling计算的逻辑位于[mla.cpp](./mla.cpp)文件中，在调用算子前，需要准备好tiling计算所需的各项参数，赋值给MLAInfo结构体，并调用`GetMLATilingParam`函数。[mla.cpp](./mla.cpp)中提供了一个示例
 
 ```c++
-// 准备Tiling计算所需的中间结构体以及HOST侧空间
+// 准备Tiling计算所需的中间结构体以及Host侧空间
 MLATiling::MLAInfo mlaInfo;
 ...
 MLATiling::GetMLATilingParam(mlaInfo, blockDim, (uint32_t *)tilingHost);
 ```
-`GetMLATilingParam`函数中，调用了两个函数`GetMLATilingCommon`与`GetMLATilingSpec`，分别对应了通用场景下/特化场景下的分核逻辑
+`GetMLATilingParam`函数中，调用了两个函数`GetMLATilingCommon`与`GetMLATilingSpec`，分别对应了通用场景下和特化场景下的分核逻辑
 
 ## Kernel
 本算子提供了两种Kernel实现:
@@ -65,7 +65,6 @@ using EpilogueMLARescaleO =
         Epilogue::Block::BlockEpilogue<Epilogue::EpilogueAtlasA2MLARescaleO, OType, OUpdateType, OTmpType>;
 
 // Epilogue Block模块, 实现Flash MLA中flash decoding
-using OType = Gemm::GemmType<ElementO, LayoutO>;
 using lType = Gemm::GemmType<ElementUpdate, LayoutUpdate>;
 constexpr uint32_t ComputeEleNum = 6144;
 using EpilogueMLAFDRescaleO =

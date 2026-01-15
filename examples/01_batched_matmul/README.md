@@ -15,7 +15,6 @@ bash scripts/build.sh 01_batched_matmul
 cd output/bin
 # 可执行文件名 batch轴|m轴|n轴|k轴|Device ID
 # Device ID可选，默认为0
-# 注意！这里相比basicMatmul多一个batch轴的输入参数
 ./01_batched_matmul 5 256 512 1024 0
 ```
 执行结果如下，说明精度比对成功。

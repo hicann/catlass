@@ -2,7 +2,7 @@
 
 ## 功能说明
 
- - 算子功能：优化的矩阵乘计算（优化策略详见[单核切K策略说明](../../docs/contents/example_design/34_single_slice_k_matmul.md))
+ - 算子功能：优化的矩阵乘计算（优化策略详见[单核切K策略说明](../../docs/contents/example_design/34_single_slice_k_matmul.md)）
 
 
 ## 参数说明

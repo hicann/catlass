@@ -17,7 +17,7 @@ cd ./output/bin
 # Device ID可选，默认为0
 ./33_basic_conv2d 2 33 43 112 80 3 3 2 2 2 2 1 1 1 1 0
 ```
-执行结果如下，说明精度比对成功。
+执行结果如下，表明精度验证通过。
 ```
 Compare success.
 ```

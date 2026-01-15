@@ -7,7 +7,7 @@
 │   └── basic_matmul_tla.cpp # 主文件
 ```
 ## 示例说明
-该用例总体设计与00_basic_matmul相同，区别为使用了TLA相关抽象，故作相关示例说明
+该用例总体设计与[`00_basic_matmul`](../00_basic_matmul/README.md)相同，区别为使用了TLA相关抽象，因此提供相关示例说明
 ## 使用示例
 - 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/quickstart.md#算子编译)
 - 执行算子

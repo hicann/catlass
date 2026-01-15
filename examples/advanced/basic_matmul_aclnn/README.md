@@ -42,7 +42,7 @@ msopgen gen -i catlass_basic_matmul.json -c ai_core-<soc_version> -lan cpp -out 
 [op_kernel/catlass_basic_matmul.cpp](./op_kernel/catlass_basic_matmul.cpp)
 **注意事项**
 
-- 我们需要增加编译选项来引入CATLASS的头文件。在`op_kernel/CMakeList.txt`中增加算子编译选项。其中`${CATLASS_INCLUDE_PATH}`是CATLASS代码仓下的`include`文件夹的路径，需根据环境实际情况进行配置。
+- 我们需要增加编译选项来引入CATLASS的头文件。在`op_kernel/CMakeLists.txt`中增加算子编译选项。其中`${CATLASS_INCLUDE_PATH}`是CATLASS代码仓下的`include`文件夹的路径，需根据环境实际情况进行配置。
 
     ```diff
     # set custom compile options
@@ -83,7 +83,7 @@ $ASCEND_HOME_PATH/opp/vendors/customize/op_api/include/aclnn_catlass_basic_matmu
 $ASCEND_HOME_PATH/opp/vendors/customize/op_api/lib/libcust_opapi.so
 ```
 
-这可作为`MakeFile`/`CMakeLists.txt`的编写参考。
+这可作为`Makefile`/`CMakeLists.txt`的编写参考。
 
 ## 5. 调用
 

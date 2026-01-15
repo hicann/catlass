@@ -6,13 +6,13 @@
 
 ## 使用示例
 
-下面以对`00_basic_matmul`为例，进行msDebug调试的使用说明。
+下面以`00_basic_matmul`为例，进行msDebug调试的使用说明。
 
 ### 使能驱动的调试功能
 
 参考[msDebug工具概述](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/83RC1/devaids/optool/atlasopdev_16_0062.html)，以`debug`模式安装驱动，或在`full`模式安装的驱动下执行`echo 1 > /proc/debug_switch`打开调试通道。
 
-为了避免出现安全问题，请勿在生产环境启用调试通道！
+为了避免出现安全问题，请勿在生产环境启用调试通道。
 
 - 若出现以下问题，说明驱动版本较低，需更新驱动。
 
@@ -56,7 +56,7 @@ Current executable set to '/home/catlass/output/bin/00_basic_matmul' (aarch64).
 
 #### 设置断点和程序执行
 
-通过命令`b basic_matmul.cpp:45`和`b basic_matmul.cpp:90`(在[`00_basic_matmul.cpp`](../../examples/00_basic_matmul/basic_matmul.cpp)中90~101行为类型别名定义，非运行时机器代码)设置两个断点，再用`breakpoint list`查看已有断点。
+通过命令`b basic_matmul.cpp:45`和`b basic_matmul.cpp:90`（在[`00_basic_matmul.cpp`](../../examples/00_basic_matmul/basic_matmul.cpp)中90~101行为类型别名定义，非运行时机器代码）设置两个断点，再用`breakpoint list`查看已有断点。
 
 ```bash
 (msdebug) b basic_matmul.cpp:45
@@ -278,7 +278,7 @@ Process 814339 stopped
 
 #### 退出调试
 
-调试完成后，通过命令`q`退出`msdebug`，若通过`Ctrl+C`等手段强行退出，则`msdebug`进程不会结束，仍在后台运行，此时可通过`ps -ef | grep msdebug`查找对应的进程pid，再用`kill -9 进程pid`杀掉对应进程即可。不能同时起多个`msdebug`进程进行调试。
+调试完成后，通过命令`q`退出`msdebug`，若通过`Ctrl+C`等手段强行退出，则`msdebug`进程不会结束，仍在后台运行，此时可通过`ps -ef | grep msdebug`查找对应的进程pid，再用`kill -9 进程pid`终止对应进程即可。不能同时启动多个`msdebug`进程进行调试。
 
 ```bash
 (msdebug) q
