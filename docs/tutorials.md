@@ -16,6 +16,7 @@
 ```bash
 cd catlass/examples
 mkdir -p basic_matmul
+cd basic_matmul
 touch basic_matmul.cpp 
 ```
 
@@ -264,8 +265,10 @@ foreach(EXAMPLE
 )
 ```
 
-编译过程详情参考[算子编译](./quickstart.md#算子编译)。进入算子产物目录后，执行测试，如出现`Compare success`，表明精度比对成功。
+参考如下命令完成算子编译。进入算子产物目录后，执行测试，如出现`Compare success`，表明精度比对成功。
+
 ```bash
+bash scripts/build.sh basic_matmul
 cd output/bin
 ./basic_matmul 128 256 4096 0
 ```
