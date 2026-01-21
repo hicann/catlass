@@ -419,10 +419,10 @@ struct SparseTileCopyTla {
         typename Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
 
     using LayoutTagL1A = typename helper::L1ATypeSelector<Gemm::GemmType<ElementA, LayoutTagA>>::L1AType::Layout;
-    using LayoutTagL1B = layout::zN;
+    using LayoutTagL1B = typename helper::L1BTypeSelector<Gemm::GemmType<ElementB, LayoutTagB>>::L1BType::Layout;
     using LayoutTagL0A = layout::zZ;
     using LayoutTagL0B = layout::nZ;
-    using LayoutTagL1BIdx = layout::zN;
+    using LayoutTagL1BIdx = typename helper::L1BTypeSelector<Gemm::GemmType<ElementB, LayoutTagB>>::L1BType::Layout;
 
     using LayoutA = detail::TagToLayout_t<ElementA, LayoutTagA>;
     using LayoutB = detail::TagToLayout_t<ElementB, LayoutTagB>;

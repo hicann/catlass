@@ -2019,6 +2019,63 @@ struct TileCopySparseTla<Arch::AtlasA2,
     }
 };
 
+template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+struct TileCopySparseTla<Arch::AtlasA2,
+    tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::GM>,
+    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::A1>,
+    std::enable_if_t<tla::detail::isColumnMajor<LayoutSrc>::value &&
+                    tla::detail::isnZ<ElementDst, LayoutDst>::value>> {
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
+
+    // Methods
+
+    CATLASS_DEVICE
+    TileCopySparseTla() {};
+
+    template <class TensorDst, class TensorSrc>
+    CATLASS_DEVICE
+    void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
+    {
+        static_assert((tla::detail::isColumnMajor<typename TensorSrc::Layout>::value) &&
+                    tla::detail::isnZ<typename TensorDst::Element, typename TensorDst::Layout>::value &&
+                    TensorSrc::position == AscendC::TPosition::GM &&
+                    TensorDst::position == AscendC::TPosition::A1,
+            "The input parameters do not match. TensorSrc must be GM and ColumnMajor, while TensorDst must be L1 and nZ");
+        const uint32_t nValue = tla::get<1>(srcTensor.shape());
+        const uint32_t dValue = tla::get<0>(srcTensor.shape());
+        const uint32_t srcDValue = tla::get<1>(srcTensor.stride());
+        const uint32_t dstInnerStrideRow = tla::get<1, 0>(dstTensor.stride());
+        const uint32_t dstOuterStrideCol = tla::get<0, 1>(dstTensor.stride());
+
+        AscendC::Nd2NzParams intriParams;
+
+        intriParams.ndNum = 1;
+        intriParams.dValue = dValue;
+        intriParams.srcNdMatrixStride = 0;
+        intriParams.dstNzC0Stride = dstOuterStrideCol / ELE_NUM_PER_C0;
+        intriParams.dstNzMatrixStride = 0;
+
+        auto dstOffset = dstTensor.layout()(dstTensor.coord());
+        auto srcOffset = srcTensor.layout()(srcTensor.coord());
+
+        if (srcDValue < STRIDE_LIMIT) {
+            intriParams.nValue = nValue;
+            intriParams.srcDValue = srcDValue;
+            intriParams.dstNzNStride = dstInnerStrideRow / ELE_NUM_PER_C0;
+            AscendC::DataCopy(dstTensor.data()[dstOffset], srcTensor.data()[srcOffset], intriParams);
+        } else {
+            intriParams.nValue = 1;
+            intriParams.srcDValue = 0;
+            intriParams.dstNzNStride = 0;
+            for (uint32_t i = 0; i < nValue; i++) {
+                AscendC::DataCopy(dstTensor.data()[dstOffset + i * ELE_NUM_PER_C0],
+                    srcTensor.data()[srcOffset + i * srcDValue],
+                    intriParams);
+            }
+        }
+    }
+};
+
 /// Partial specialization for CopyGmToL1, AtlasA2, sparse zn in and zN out.
 template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
 struct TileCopySparseTla<Arch::AtlasA2,
@@ -2060,6 +2117,47 @@ struct TileCopySparseTla<Arch::AtlasA2,
             {nburst, static_cast<uint16_t>(blockLen), static_cast<uint16_t>(srcStride), static_cast<uint16_t>(0)});
     }
 };
+
+/// Partial specialization for CopyGmToL1, AtlasA2, sparse nZ in and nZ out.
+template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+struct TileCopySparseTla<Arch::AtlasA2,
+    tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::GM>,
+    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::A1>,
+    std::enable_if_t<tla::detail::isnZ<uint32_t, LayoutSrc>::value &&
+                    tla::detail::isnZ<ElementDst, LayoutDst>::value>> {
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
+
+    // Methods
+
+    CATLASS_DEVICE
+    TileCopySparseTla() {};
+
+    template <class TensorDst, class TensorSrc>
+    CATLASS_DEVICE
+    void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
+    {
+        static_assert(tla::detail::isnZ<uint32_t, typename TensorSrc::Layout>::value &&
+                    tla::detail::isnZ<uint32_t, typename TensorDst::Layout>::value &&
+                    TensorSrc::position == AscendC::TPosition::GM &&
+                    TensorDst::position == AscendC::TPosition::A1,
+            "The input parameters do not match. TensorSrc must be GM and nZ, while TensorDst must be L1 and nZ");
+
+        using TransT = typename TensorSrc::Element;
+        auto srcShape = srcTensor.shape();
+        auto dstShape = dstTensor.shape();
+        auto coord = srcTensor.coord();
+        int32_t alignedGCol = tla::get<1, 0>(srcShape) * tla::get<1, 1>(srcShape);
+        auto alignCol = tla::get<1, 0>(dstShape) * tla::get<1, 1>(dstShape);
+        int32_t blockLen = alignCol * tla::get<0, 0>(dstShape) * sizeof(TransT) / BYTE_PER_C0;
+        int32_t srcStride = (alignedGCol - alignCol) * tla::get<0, 0>(srcShape) * sizeof(TransT) / BYTE_PER_C0;
+        uint16_t nburst = tla::get<0, 1>(dstShape);
+        auto offset = srcTensor.layout()(coord);
+        AscendC::DataCopy(
+            dstTensor.data(), srcTensor.data()[offset],
+            {nburst, static_cast<uint16_t>(blockLen), static_cast<uint16_t>(srcStride), static_cast<uint16_t>(0)});
+    }
+};
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 } // namespace Catlass::Gemm::Tile

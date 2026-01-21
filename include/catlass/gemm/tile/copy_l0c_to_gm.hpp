@@ -653,7 +653,7 @@ struct CopyL0CToGmSparseTla<Catlass::Arch::AtlasA2,
         params.dstStride = tla::get<0>(dstStride);
         params.quantPre = quantPre;
 
-        auto srcOffset = srcTensor.layout()(srcTensor.coord);
+        auto srcOffset = srcTensor.layout()(srcTensor.coord());
         auto dstOffset = dstTensor.layout()(coord);
         AscendC::Fixpipe<ElementDst, ElementSrc, AscendC::CFG_ROW_MAJOR>(dstTensor.data()[dstOffset], srcTensor.data()[srcOffset], params);
     }

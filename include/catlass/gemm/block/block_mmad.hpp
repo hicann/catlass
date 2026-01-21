@@ -49,6 +49,21 @@ struct BlockMmadTla {
     static_assert(DEPENDENT_FALSE<DispatchPolicy>, "BlockMmadTla is not implemented for this DispatchPolicy");
 };
 
+template <
+    class DispatchPolicy,
+    class L1TileShape,
+    class L0TileShape,
+    class ElementA,
+    class ElementB,
+    class ElementC,
+    class ElementBias = void,
+    class TileCopy = Gemm::Tile::SparseTileCopyTla<typename DispatchPolicy::ArchTag, ElementA, layout::RowMajor,
+        ElementB, layout::ColumnMajor, ElementC, layout::RowMajor>
+>
+struct BlockMmadSparseTla {
+    static_assert(DEPENDENT_FALSE<DispatchPolicy>, "BlockMmadSparseTla is not implemented for this DispatchPolicy");
+};
+
 /// new add for the reason that i am using the dispatchpolicy which is same as the policy of the optimized_matmul
 // so i add a new one class to avoid the conflict
 template <
@@ -111,4 +126,5 @@ struct BlockMmadAiv {
 #include "catlass/gemm/block/block_mmad_dynamic_aiv.hpp"
 #include "catlass/gemm/block/block_mmad_streamk.hpp"
 #include "catlass/gemm/block/block_mmad_w4a4_per_token_per_channel_dequant.hpp"
+#include "catlass/gemm/block/block_mmad_sparse_tla.hpp"
 #endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_HPP
