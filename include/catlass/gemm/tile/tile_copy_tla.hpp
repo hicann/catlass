@@ -60,6 +60,16 @@ struct CopyL1ToL0BSparseTla {
     static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported CopyL1ToL0BSparseTla, can not find the specialization.");
 };
 
+// used for FA LoadQ, multi matrix datacopy ND->NZ
+template <
+    class ArchTag,
+    class TensorSrc,
+    class TensorDst
+>
+struct TileCopyFAQTla {
+    static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported TileCopyFAQTla, can not find the specialization.");
+};
+
 } // namespace Catlass::Gemm::Tile
 
 #endif // CATLASS_GEMM_TILE_TILE_COPY_TLA_HPP

@@ -2158,6 +2158,68 @@ struct TileCopySparseTla<Arch::AtlasA2,
     }
 };
 
+///////////////////////////////////////////TileCopyFAQTla//////////////////////////////////////////////////////
+/// used for FA LoadQ, multi matrix datacopy ND->NZ
+template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+struct TileCopyFAQTla<Arch::AtlasA2,
+    tla::Tensor<AscendC::GlobalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::GM>,
+    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::A1>>{
+    static constexpr uint32_t ELE_NUM_PER_C0 = BytesToBits(BYTE_PER_C0) / SizeOfBits<ElementSrc>::value;
+
+    // Methods
+
+    CATLASS_DEVICE
+    TileCopyFAQTla() {};
+
+    template <class TensorDst, class TensorSrc>
+    CATLASS_DEVICE
+    void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
+    {
+        static_assert(tla::detail::iszN<typename TensorDst::Element, typename TensorDst::Layout>::value &&
+                      TensorSrc::position == AscendC::TPosition::GM &&
+                      TensorDst::position == AscendC::TPosition::A1,
+            "The input parameters do not match. TensorSrc must be GM, while TensorDst must be L1 and zN");
+        
+        const uint32_t nValue = tla::get<1>(srcTensor.shape());
+        const uint32_t dValue = tla::get<2>(srcTensor.shape());
+        const uint32_t srcDValue = tla::get<1>(srcTensor.stride());
+        const uint32_t ndNum = tla::get<0>(srcTensor.shape());
+        const uint32_t srcNdMatrixStride = tla::get<0>(srcTensor.stride());
+        const uint32_t dstNzNStride = tla::get<0>(srcTensor.shape());
+        const uint32_t dstNzMatrixStride = ELE_NUM_PER_C0;
+        const uint32_t dstNzC0Stride =  tla::get<0, 0>(dstTensor.shape()) * tla::get<0, 1>(dstTensor.shape());
+        const uint32_t dstInnerStrideRow = tla::get<0, 0>(dstTensor.stride());
+        const uint32_t dstOuterStrideCol = tla::get<1, 1>(dstTensor.stride());    
+
+        AscendC::Nd2NzParams intriParams;
+
+        intriParams.nValue = nValue;
+        intriParams.dValue = dValue;
+        intriParams.srcDValue = srcDValue;
+        intriParams.dstNzNStride = dstNzNStride;
+        intriParams.dstNzC0Stride = dstNzC0Stride;
+
+        auto dstOffset = dstTensor.layout()(dstTensor.coord());
+        auto srcOffset = srcTensor.layout()(srcTensor.coord());
+
+        if (srcNdMatrixStride < STRIDE_LIMIT) {
+            intriParams.ndNum = ndNum;
+            intriParams.srcNdMatrixStride = srcNdMatrixStride;
+            intriParams.dstNzMatrixStride = dstNzMatrixStride;
+            AscendC::DataCopy(dstTensor.data()[dstOffset], srcTensor.data()[srcOffset], intriParams);
+        } else {
+            intriParams.ndNum = 1;
+            intriParams.srcNdMatrixStride = 0;
+            intriParams.dstNzMatrixStride = 0;
+            for (uint32_t i = 0; i < nValue; i++) {
+                AscendC::DataCopy(dstTensor.data()[dstOffset + i * ELE_NUM_PER_C0],
+                    srcTensor.data()[srcOffset + i * srcDValue],
+                    intriParams);
+            }
+        }
+    }
+};
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 } // namespace Catlass::Gemm::Tile
