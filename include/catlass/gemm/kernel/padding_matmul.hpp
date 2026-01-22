@@ -622,13 +622,17 @@ public:
     CATLASS_DEVICE
     void operator()(AscendC::GlobalTensor<Element> const &dst,
                     AscendC::GlobalTensor<Element> const &src,
-                    Layout const &layoutDst, Layout const &layoutSrc)
+                    Layout const &layoutDst, Layout const &layoutSrc, bool useSingleCore = false)
     {
         ComputeLayout computeLayoutSrc = GetPaddingComputeLayout(layoutSrc);
         ComputeLayout computeLayoutDst = GetPaddingComputeLayout(layoutDst);
 
         uint32_t aivNum = AscendC::GetBlockNum() * AscendC::GetSubBlockNum();
         uint32_t aivId = AscendC::GetBlockIdx();
+        if (useSingleCore) {
+            aivNum = AscendC::GetSubBlockNum();
+            aivId = AscendC::GetSubBlockIdx();
+        }
 
         // Each line is a tile.
         uint32_t tilesNum = computeLayoutSrc.shape(0);

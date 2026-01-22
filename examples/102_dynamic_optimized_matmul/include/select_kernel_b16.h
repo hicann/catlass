@@ -292,6 +292,42 @@ bool SmallMatmulB16Handler(TilingParams &params, PlatformInfo& platformInfo)
     return false;
 }
 
+bool LocalPaddingCPaddingCommonMatmulB16Handler(TilingParams &params, PlatformInfo &platformInfo)
+{
+    uint8_t kernelSerial = 10;
+    uint32_t m = params.m;
+    uint32_t n = params.n;
+    uint32_t k = params.k;
+    uint32_t m1t = 128;
+    uint32_t n1t = 256;
+    uint32_t k1t = 256;
+    if (static_cast<size_t>(m) * n > 2048 * 2048 && n > 256 && (n % 256 != 0)) {
+        size_t totalDataSize = static_cast<size_t>(m) * k * CeilDiv(n, n1t) * 2
+                               + static_cast<size_t>(k) * n * CeilDiv(m, m1t) * 2 + static_cast<size_t>(m) * n * 2;
+        double ratio = static_cast<double>(
+                           static_cast<size_t>(m) * k * CeilDiv(n, n1t) + static_cast<size_t>(k) * n * CeilDiv(m, m1t)
+                       )
+                       / (static_cast<size_t>(m) * n);
+        if (totalDataSize >= 192 * 1024 * 1024 && ratio < 16) { // L2 cache size
+            params.m1 = m1t;
+            params.n1 = n1t;
+            params.k1 = k1t;
+            params.n1Factor = 12;
+            uint32_t taskBlocks = CeilDiv(m, params.m1 * params.m1Factor) * CeilDiv(n, params.n1 * params.n1Factor);
+            if (taskBlocks < 8 * platformInfo.coreNum && n > 1024) {
+                params.n1Factor = 1;
+            }
+            params.paddingTagC = static_cast<uint8_t>(PaddingTag::PADDING_ND);
+            params.tilingKey.SetTilingKey(
+                kernelSerial, params.layoutTagA, params.layoutTagB, 0, params.paddingTagA, params.paddingTagB,
+                params.paddingTagC
+            );
+            return true;
+        }
+    }
+    return false;
+}
+
 bool PaddingCommonMatmulB16Handler(TilingParams &params, PlatformInfo& platformInfo)
 {
     uint8_t kernelSerial = 2;
@@ -513,6 +549,7 @@ void SelectKernelB16(TilingParams &tilingParams, PlatformInfo& platformInfo)
         SmallMatmulB16Handler,
         PaddingMultiCoreSplitkMatmulB16Handler,
         PaddingStreamkMatmulB16Handler,
+        LocalPaddingCPaddingCommonMatmulB16Handler,
         PaddingCommonMatmulB16Handler,
         CommonMatmulB16Handler
     };
