@@ -202,14 +202,21 @@ struct CopyL1ToL0A<ArchTag, Catlass::Gemm::GemmType<Element, layout::NDC1HWC0, A
         AscendC::LocalTensor<Element> dstTensor,
         AscendC::LocalTensor<Element> srcTensor,
         LayoutDst layoutDst, LayoutSrc layoutSrc, 
-        uint32_t kStartPt, uint32_t mStartPt
+        uint32_t kStartPt, uint32_t mStartPt,
+        uint32_t l1H, uint32_t l1W, uint8_t* padList
     ){
+        loadData3Dv2Params.l1H = l1H;
+        loadData3Dv2Params.l1W = l1W;
+        loadData3Dv2Params.padList[0] = padList[0];
+        loadData3Dv2Params.padList[1] = padList[1];
+        loadData3Dv2Params.padList[2] = padList[2];
+        loadData3Dv2Params.padList[3] = padList[3];
         loadData3Dv2Params.kStartPt = kStartPt;
         loadData3Dv2Params.mStartPt = mStartPt;
         loadData3Dv2Params.kExtension = layoutDst.orgShape(1);
         loadData3Dv2Params.mExtension = layoutDst.orgShape(0);
         loadData3Dv2Params.channelSize = layoutSrc.orgShape(1) * layoutSrc.orgShape(2) * layoutSrc.orgShape(5);
-        static constexpr AscendC::IsResetLoad3dConfig CONV3D_LOAD3DV2_DEFAULT_CONFIG = {false, false};
+        static constexpr AscendC::IsResetLoad3dConfig CONV3D_LOAD3DV2_DEFAULT_CONFIG = {true, true};
         AscendC::LoadData<Element, CONV3D_LOAD3DV2_DEFAULT_CONFIG>(dstTensor, srcTensor, loadData3Dv2Params);
     }
 private:
