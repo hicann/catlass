@@ -17,6 +17,20 @@ CATLASS(**CA**NN **T**emplates for **L**inear **A**lgebra **S**ubroutine**s**)�
 
 通过抽象分层的方式将矩阵类算子代码模板化，从而实现算子计算逻辑的白盒化组装，让算子代码可复用，可替换，可局部修改。针对昇腾硬件特点进行设计，可以支持复杂场景流水排布，如`Flash Attention`等算子。在上层代码逻辑共享的同时，支持底层硬件差异特化。
 
+模板库针对定制场景使能快速开发能力，提供不同场景下的性能优化模块供开发者组装定制，在定制shape下的性能能达到相应算子标杆性能的0.98~1.2倍。
+
+<div align="center">
+
+<img src="./docs/images/homepage_perf_mm.png" alt="Matmul性能对比" style="width: 70%; max-width: 700px;">
+
+</div>
+
+<div align="center">
+
+<img src="./docs/images/homepage_perf_gmm.png" alt="GroupedMatmul性能对比" style="width: 90%; max-width: 900px;">
+
+</div>
+
 本代码库为CATLASS联创代码仓。结合昇腾生态力量，共同设计研发算子模板，并提供典型算子的高性能实现代码样例，概述详情参考[这里](./docs/summary.md)。
 
 ## ⚡️ 快速上手
