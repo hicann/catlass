@@ -134,14 +134,16 @@ public:
         if constexpr (isPaddingB) {
             workspace += GetPaddingSizeB(args);
         }
-
-        if constexpr (RemovePaddingNDAndCastC::paddingTag == PaddingTag::NO_PADDING && 
-            !std::is_same_v<ElementAccumulator, ElementC>) {
-            sizeWC = RemovePaddingNDAndCastC::GetWorkspaceSize(args.problemShape.m(), args.problemShape.n());
-        }else if constexpr (RemovePaddingNDAndCastC::paddingTag == PaddingTag::PADDING_ND) {
-            sizeWC = RemovePaddingNDAndCastC::GetWorkspaceSize(args.problemShape.m(), args.problemShape.n(),
-                 512 / sizeof(ElementAccumulator));
+        if constexpr (!std::is_void_v<RemovePaddingNDAndCastC>) {
+            if constexpr ((RemovePaddingNDAndCastC::paddingTag == PaddingTag::NO_PADDING) && 
+                !std::is_same_v<ElementAccumulator, ElementC>) {
+                sizeWC = RemovePaddingNDAndCastC::GetWorkspaceSize(args.problemShape.m(), args.problemShape.n());
+            }else if constexpr (RemovePaddingNDAndCastC::paddingTag == PaddingTag::PADDING_ND) {
+                sizeWC = RemovePaddingNDAndCastC::GetWorkspaceSize(args.problemShape.m(), args.problemShape.n(),
+                    512 / sizeof(ElementAccumulator));
+            }
         }
+        
         workspace += sizeWC;
 
         return workspace;
