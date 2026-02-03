@@ -1,7 +1,7 @@
 # SparseMatmulTla Example Readme
 ## 代码组织
 ```
-├── 40_sparse_matmul_tla
+├── 41_sparse_matmul_tla
 │   ├── CMakeLists.txt     # CMake编译文件
 │   ├── README.md
 │   ├── sparse_gen_data.py
@@ -21,11 +21,11 @@ k=64
 device=0
 
 function build() {
-    bash scripts/build.sh 40_sparse_matmul_tla
+    bash scripts/build.sh 41_sparse_matmul_tla
 }
 
 function gen_data() {
-    cd examples/40_sparse_matmul_tla
+    cd examples/41_sparse_matmul_tla
     python3 sparse_gen_data.py $m $n $k
     echo "Data gen finished"
 }
@@ -33,9 +33,9 @@ function gen_data() {
 function run_kernel {
     echo 'Case: m=' $m ' k=' $k ' n=' $n
     cd ../../output/bin/
-    cp -r ../../examples/40_sparse_matmul_tla/input .
-    cp -r ../../examples/40_sparse_matmul_tla/output .
-    ./40_sparse_matmul_tla $m $n $k $device
+    cp -r ../../examples/41_sparse_matmul_tla/input .
+    cp -r ../../examples/41_sparse_matmul_tla/output .
+    ./41_sparse_matmul_tla $m $n $k $device
 }
 
 build

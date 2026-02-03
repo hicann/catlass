@@ -135,6 +135,7 @@ foreach(EXAMPLE
     38_w4a4_matmul_per_token_per_channel_dequant
     39_big_matmul_tla
     40_flash_attention_infer_tla
+    41_sparse_matmul_tla
     102_dynamic_optimized_matmul
 )
     add_subdirectory(${EXAMPLE})
