@@ -3,6 +3,7 @@
 [msDebug](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/83RC1/devaids/optool/atlasopdev_16_0062.html)是用于调试在NPU侧运行的算子程序的一个工具，该工具向算子开发人员提供了在昇腾设备上调试算子的手段。调试手段包括了读取昇腾设备内存与寄存器、暂停与恢复程序运行状态等。
 
 - ⚠️ **注意** 此功能依赖社区版`CANN`包版本为[8.2.RC1.alpha003](https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.2.RC1.alpha003)。
+- ⚠️ **注意** 请检查驱动是否支持/设备节点`/dev/drv_debug`是否映射至容器内（参考[驱动检查](https://www.hiascend.com/document/caselibrary/detail/atlasopdev_0006)）
 
 ## 使用示例
 
