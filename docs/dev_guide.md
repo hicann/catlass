@@ -32,7 +32,7 @@ graph LR
 
 ## 环境准备
 
-模板库依赖于[CANN](https://www.hiascend.com/zh/developer/download/community/result?module=cann)环境，您可查阅[环境准备](./prerequisites.md)一节以了解具体配置过程。
+模板库依赖于[CANN](https://www.hiascend.com/zh/developer/download/community/result?module=cann)环境，您可查阅[环境准备](./quickstart.md)一节以了解具体配置过程。
 
 ## Matmul算子开发
 

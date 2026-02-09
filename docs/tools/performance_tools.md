@@ -108,7 +108,7 @@ msprof op simulator ./00_basic_matmul 256 512 1024 0
 
 - ⚠ 注意事项
   - 若需要查看**代码热点图**，需要在`examples/CMakeLists.txt`中增加`add_compile_options("SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-Xaicore-start -g -Xaicore-end")`。
-  - 性能结果中有大量明显`Vector`操作（如`Add`、`Div`）映射为`Scalar`操作导致性能结果明显异常(`vector_ratio<10%`，`scalar>90%`)，这是编译优化等级造成的，可在`examples/CMakeLists.txt`中增加`add_compile_options($<$<COMPILE_LANGUAGE:ASCEND>:"-Xaicore-start -O3 -Xaicore-end")`。
+  - 性能结果中有大量明显`Vector`操作（如`Add`、`Div`）映射为`Scalar`操作导致性能结果明显异常(`vector_ratio<10%`，`scalar>90%`)，这是编译优化等级造成的，可在`examples/CMakeLists.txt`中增加`add_compile_options($<$<COMPILE_LANGUAGE:ASCEND>:"-Xaicore-start -O3 -Xaicore-end">)`。
   - 仿真只能在0卡运行，不能指定NPU卡号。
 
 #### 仿真数据说明
