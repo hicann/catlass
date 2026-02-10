@@ -1,6 +1,36 @@
 # CHANGELOG
 
 ## CATLASS 1.X
+
+### CATLASS 1.4.0
+
+- 关键特性
+  - [Matmul泛化工程](https://gitcode.com/cann/catlass/tree/v1.4.0/examples/102_dynamic_optimized_matmul/README.md)新增
+    - `LocalPaddingCPaddingCommonMatmul`模板，使用局部workSpace对C矩阵做padding
+- 更多样例
+  - [StreamK Matmul算子](https://gitcode.com/cann/catlass/blob/v1.4.0/examples/37_streamk_matmul/README.md)
+  - [W4A4低精度Matmul算子](https://gitcode.com/cann/catlass/blob/v1.4.0/examples/38_w4a4_matmul_per_token_per_channel_dequant/README.md)
+  - [Matmul算子L2层级切分+错位分核](https://gitcode.com/cann/catlass/blob/v1.4.0/examples/39_big_matmul_tla/README.md)
+  - [Sparse Matmul算子](https://gitcode.com/cann/catlass/blob/v1.4.0/examples/41_sparse_matmul_tla/README.md)
+- 工具支持
+  - 增加[shared\_lib](https://gitcode.com/cann/catlass/blob/v1.4.0/examples/shared_lib/basic_matmul_shared_lib.cpp)使用示例
+- 文档资料
+  - 新增[单核切K优化Matmul算子的详设文档](https://gitcode.com/cann/catlass/blob/v1.4.0/docs/contents/example_design/34_single_splitk_matmul.md)，介绍单核切K矩阵乘的设计思路和代码拆解
+  - 新增[主页Matmul/GroupedMatmul算子性能展示数据](https://gitcode.com/cann/catlass/blob/v1.4.0/README.md)
+  - [msdebug文档](https://gitcode.com/cann/catlass/blob/v1.4.0/docs/tools/msdebug.md)新增驱动支持检查
+- Bugfix&优化
+  - 优化[grouped\_matmul\_slice\_m](https://gitcode.com/cann/catlass/blob/v1.4.0/examples/02_grouped_matmul_slice_m/README.md)样例支持`groupList`分段式输入
+  - BlockMmad增加`TileShape`的32B对齐约束
+  - 修复[w4a8 matmul](https://gitcode.com/cann/catlass/blob/v1.4.0/examples/32_w4a8_matmul/w4a8.cpp)样例构造数据长度问题
+  - [Matmul泛化工程](https://gitcode.com/cann/catlass/tree/v1.4.0/examples/102_dynamic_optimized_matmul/README.md)支持Stride大于Shape的场景
+  - [msTuner\_CATLASS工具](https://gitcode.com/cann/catlass/tree/v1.4.0/tools/tuner/README.md)支持`quant Matmul`做tiling寻优
+  - 修复device侧对`cmath`函数的不规范使用
+  - 修复[MatmulSilu](https://gitcode.com/cann/catlass/blob/v1.4.0/examples/28_matmul_silu/README.md)精度问题和命名错误
+  - 修复[cast\_int4\_to\_int8](https://gitcode.com/cann/catlass/blob/v1.4.0/include/catlass/gemm/tile/cast_int4_to_int8.hpp)组件的Vector同步问题
+  - 修复[w8a16 Matmul](https://gitcode.com/cann/catlass/blob/v1.4.0/examples/30_w8a16_matmul/w8a16_matmul.cpp)算子half类型使用问题
+  - 修复[单核切K Matmul算子](https://gitcode.com/cann/catlass/blob/v1.4.0/examples/34_single_core_splitk_matmul/single_core_splitk.cpp)在`RemovePaddingNDAndCastC`为空时的逻辑问题
+
+
 ### CATLASS 1.3.0
 
  - 关键特性
