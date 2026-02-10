@@ -19,8 +19,8 @@ DynamicOptimizedMatmul根据shape动态确定Tiling参数，并尝试选择最�
 | ------------ | ---- |
 | [CommonMatmul](./doc/CommonMatmul.md) | 基础模板 |
 | SmallMatmul | 文档待补充... |
-| MultiCoreSplitkMatmul | 文档待补充... |
-| StreamkMatmul | 文档待补充... |
+| [MultiCoreSplitkMatmul](./doc/MultiCoreSplitkMatmul.md) | 多核切K模板(适用于C矩阵较小场景) |
+| [StreamkMatmul](./doc/StreamkMatmul.md) | 负载更均衡的多核切K模板          |
 | SingleCoreSplitkMatmul | 文档待补充... |
 
 
