@@ -15,7 +15,6 @@
 #include "catlass/numeric_size.hpp"
 #include "catlass/layout/layout.hpp"
 #include "catlass/gemm/gemm_type.hpp"
-#include "tla/layout.hpp"
 
 namespace Catlass::Gemm::helper {
 
@@ -226,27 +225,6 @@ struct L1BiasTypeSelector<Gemm::GemmType<Element, layout::VectorLayout>, Element
     using GMBiasType = Gemm::GemmType<Element, layout::VectorLayout, AscendC::TPosition::GM>;
     using L1BiasType = Gemm::GemmType<Element, layout::VectorLayout, AscendC::TPosition::A1>;
     using L0BiasType = Gemm::GemmType<ElementAccumulator, layout::VectorLayout, AscendC::TPosition::C2>;
-};
-
-template<class Element, class Layout, class Enable = void>
-struct L1AlignHelperTla {
-    static_assert(DEPENDENT_FALSE<Element>, "Unsupported align helper tla, can not find the specialization.");
-};
-
-template<class Element, class Layout>
-struct L1AlignHelperTla<Element, Layout, std::enable_if_t<tla::detail::isRowMajor<Layout>::value>> {
-    static constexpr uint32_t ELE_NUM_PER_C0 = BytesToBits(BYTE_PER_C0) / SizeOfBits<Element>::value;
-    static constexpr uint32_t M_ALIGNED = C0_NUM_PER_FRACTAL;
-    static constexpr uint32_t K_ALIGNED = ELE_NUM_PER_C0;
-    static constexpr uint32_t N_ALIGNED = ELE_NUM_PER_C0;
-};
-
-template<class Element, class Layout>
-struct L1AlignHelperTla<Element, Layout, std::enable_if_t<tla::detail::isColumnMajor<Layout>::value>> {
-    static constexpr uint32_t ELE_NUM_PER_C0 = BytesToBits(BYTE_PER_C0) / SizeOfBits<Element>::value;
-    static constexpr uint32_t M_ALIGNED = ELE_NUM_PER_C0;
-    static constexpr uint32_t K_ALIGNED = ELE_NUM_PER_C0;
-    static constexpr uint32_t N_ALIGNED = C0_NUM_PER_FRACTAL;
 };
 
 ///////////////////////////////////////

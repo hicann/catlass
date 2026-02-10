@@ -14,7 +14,6 @@
 
 #include "catlass/catlass.hpp"
 #include "catlass/gemm/helper.hpp"
-#include "tla/tensor.hpp"
 namespace Catlass::Gemm::Tile {
 
 ///////////////////////////////////////////////////////

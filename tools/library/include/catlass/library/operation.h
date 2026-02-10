@@ -65,8 +65,6 @@ enum class GemmKind {
     GroupedMatmulSliceMPerTokenDequant,
     GroupedMatmulSliceKPerTokenDequant,
     QuantMatmul,
-    BasicMatmulTla,
-    OptimizedMatmulTla,
     KernelGemm,
     GroupedGemm,
     MatmulBias,

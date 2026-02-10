@@ -12,7 +12,6 @@
 #define CATLASS_GEMV_TILE_TILE_COPY_HPP
 
 #include "catlass/catlass.hpp"
-#include "catlass/detail/tag_to_layout.hpp"
 
 #include "catlass/gemv/tile/vec_copy_gm_to_ub.hpp"
 #include "catlass/gemv/tile/vec_copy_ub_to_gm.hpp"

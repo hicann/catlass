@@ -109,8 +109,6 @@ foreach(EXAMPLE
     10_grouped_matmul_slice_m_per_token_dequant
     11_grouped_matmul_slice_k_per_token_dequant
     12_quant_matmul
-    13_basic_matmul_tla
-    14_optimized_matmul_tla
     15_gemm
     16_group_gemm
     17_gemv_aiv
@@ -133,9 +131,6 @@ foreach(EXAMPLE
     34_single_core_splitk_matmul
     37_streamk_matmul
     38_w4a4_matmul_per_token_per_channel_dequant
-    39_big_matmul_tla
-    40_flash_attention_infer_tla
-    41_sparse_matmul_tla
     102_dynamic_optimized_matmul
 )
     add_subdirectory(${EXAMPLE})

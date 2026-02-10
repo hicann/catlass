@@ -32,37 +32,6 @@ struct BlockMmad {
     static_assert(DEPENDENT_FALSE<DispatchPolicy>, "BlockMmad is not implemented for this DispatchPolicy");
 };
 
-template <
-    class DispatchPolicy,
-    class L1TileShape,
-    class L0TileShape,
-    class ElementA,
-    class ElementB,
-    class ElementC,
-    class ElementBias = void,
-    class TileCopy = Gemm::Tile::PackedTileCopyTla<typename DispatchPolicy::ArchTag, ElementA, layout::RowMajor,
-        ElementB, layout::RowMajor, ElementC, layout::RowMajor, ElementBias, layout::RowMajor>,
-    class TileMmad =
-        Gemm::Tile::TileMmadTla<typename DispatchPolicy::ArchTag, ElementA, typename TileCopy::LayoutTagL1A>
->
-struct BlockMmadTla {
-    static_assert(DEPENDENT_FALSE<DispatchPolicy>, "BlockMmadTla is not implemented for this DispatchPolicy");
-};
-
-template <
-    class DispatchPolicy,
-    class L1TileShape,
-    class L0TileShape,
-    class ElementA,
-    class ElementB,
-    class ElementC,
-    class ElementBias = void,
-    class TileCopy = Gemm::Tile::SparseTileCopyTla<typename DispatchPolicy::ArchTag, ElementA, layout::RowMajor,
-        ElementB, layout::ColumnMajor, ElementC, layout::RowMajor>
->
-struct BlockMmadSparseTla {
-    static_assert(DEPENDENT_FALSE<DispatchPolicy>, "BlockMmadSparseTla is not implemented for this DispatchPolicy");
-};
 
 /// new add for the reason that i am using the dispatchpolicy which is same as the policy of the optimized_matmul
 // so i add a new one class to avoid the conflict
@@ -105,8 +74,6 @@ struct BlockMmadAiv {
 #include "catlass/gemm/block/block_mmad_mla_pv_tp1_spec.hpp"
 #include "catlass/gemm/block/block_mmad_preload.hpp"
 #include "catlass/gemm/block/block_mmad_preload_async.hpp"
-#include "catlass/gemm/block/block_mmad_pingpong_tla.hpp"
-#include "catlass/gemm/block/block_mmad_preload_tla.hpp"
 #include "catlass/gemm/block/block_mmad_preload_async_with_callback.hpp"
 #include "catlass/gemm/block/block_mmad_gemm.hpp"
 #include "catlass/gemm/block/block_mmad_pingpong_bias.hpp"
@@ -114,10 +81,6 @@ struct BlockMmadAiv {
 #include "catlass/gemm/block/block_mmad_fai_qk_normal.hpp"
 #include "catlass/gemm/block/block_mmad_fai_pv_head_tail.hpp"
 #include "catlass/gemm/block/block_mmad_fai_pv_normal.hpp"
-#include "catlass/gemm/block/block_mmad_fai_qk_head_tail_tla.hpp"
-#include "catlass/gemm/block/block_mmad_fai_qk_normal_tla.hpp"
-#include "catlass/gemm/block/block_mmad_fai_pv_head_tail_tla.hpp"
-#include "catlass/gemm/block/block_mmad_fai_pv_normal_tla.hpp"
 #include "catlass/gemm/block/block_mmad_pingpong_full_loadA.hpp"
 #include "catlass/gemm/block/block_mmad_pingpong_with_prologue.hpp"
 #include "catlass/gemm/block/block_mmad_pingpong_slice_k_with_prologue.hpp"
@@ -130,5 +93,4 @@ struct BlockMmadAiv {
 #include "catlass/gemm/block/block_mmad_dynamic_aiv.hpp"
 #include "catlass/gemm/block/block_mmad_streamk.hpp"
 #include "catlass/gemm/block/block_mmad_w4a4_per_token_per_channel_dequant.hpp"
-#include "catlass/gemm/block/block_mmad_sparse_tla.hpp"
 #endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_HPP

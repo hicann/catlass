@@ -13,7 +13,6 @@
 
 #include "catlass/catlass.hpp"
 #include "catlass/gemm/helper.hpp"
-#include "tla/tensor.hpp"
 namespace Catlass::Gemm::Tile {
 
 ///////////////////////////////////////////////////////////
@@ -102,52 +101,6 @@ struct TileMmad {
     }
 };
 
-///////////////////////////////////////////TileMmadTla/////////////////////////////////////////////////
-
-template <
-    /// Tag indicating architecture
-    class ArchTag,
-    /// Element for A matrix operand
-    class ElementA,
-    /// LayoutTag for A matrix operand in L1
-    class LayoutTagL1A
->
-struct TileMmadTla {
-    // Methods
-
-    CATLASS_DEVICE
-    TileMmadTla() {}
-
-    template <class TensorC, class TensorA, class TensorB>
-    CATLASS_DEVICE
-    void operator()(TensorC const &l0CTensor,
-         TensorA const &l0ATensor,
-         TensorB const &l0BTensor,
-         uint32_t m, uint32_t n, uint32_t k,
-         bool initC = true, uint8_t unitFlag = 0)
-    {
-        AscendC::MmadParams mmadParams;
-        mmadParams.m = m;
-        mmadParams.n = n;
-        mmadParams.k = k;
-        mmadParams.unitFlag = unitFlag;
-        mmadParams.cmatrixInitVal = initC;
-        if constexpr (std::is_same_v<ArchTag, Arch::AtlasA2> && std::is_same_v<ElementA, float> &&
-                      std::is_same_v<LayoutTagL1A, layout::nZ>) {
-            mmadParams.kDirectionAlign = true;
-        }
-
-        AscendC::Mmad(l0CTensor.data(),
-                      l0ATensor.data(),
-                      l0BTensor.data(),
-                      mmadParams);
-
-        const uint32_t PIPE_M_BARRIER_THRESHOLD = 10;
-        if ((m / C0_NUM_PER_FRACTAL) * (n / C0_NUM_PER_FRACTAL) < PIPE_M_BARRIER_THRESHOLD) {
-            AscendC::PipeBarrier<PIPE_M>();
-        }
-    }
-};
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

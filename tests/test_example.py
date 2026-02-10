@@ -87,13 +87,6 @@ class CatlassExampleTest(unittest.TestCase):
             CMAKE_EXAMPLES_PATH, "38_w4a4_matmul_per_token_per_channel_dequant", "gen_data.py")] + case_py)
         case_cpp = case_py
         self.run_case("38_w4a4_matmul_per_token_per_channel_dequant", case_cpp)
-    
-    def test_41_sparse_matmul_tla(self):
-        case_py = [str(i) for i in [160, 320, 64]] # (M, N, K)
-        ret = subprocess.run(["python", os.path.join(
-            CMAKE_EXAMPLES_PATH, "41_sparse_matmul_tla", "sparse_gen_data.py")] + case_py)
-        case_cpp = case_py
-        self.run_case("41_sparse_matmul_tla", case_cpp)
 
 normal_cases = ["00_basic_matmul 256 512 1024 0",
                 "01_batched_matmul 5 256 512 1024 0",
@@ -108,8 +101,6 @@ normal_cases = ["00_basic_matmul 256 512 1024 0",
                 "10_grouped_matmul_slice_m_per_token_dequant 128 512 1024 2048 0",
                 "11_grouped_matmul_slice_k_per_token_dequant 128 512 1024 2048 0",
                 "12_quant_matmul 256 512 1024 0",
-                "13_basic_matmul_tla 256 512 1024 0",
-                "14_optimized_matmul_tla 256 512 1024 0",
                 "15_gemm 256 512 1024 0",
                 "16_group_gemm 3 '128,256,512' '256,512,128' '512,256,128' 0",
                 "17_gemv_aiv 256 512 0",
