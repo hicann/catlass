@@ -1,5 +1,5 @@
 # -----------------------------------------------------------------------------------------------------------
-# Copyright (c) 2025 Huawei Technologies Co., Ltd.
+# Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
 # This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 # CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -39,6 +39,14 @@ add_link_options($<$<COMPILE_LANGUAGE:ASCEND>:-Wno-unused-command-line-argument>
 if(DEFINED ENABLE_PRINT AND ENABLE_PRINT)
     add_compile_options($<$<COMPILE_LANGUAGE:ASCEND>:--cce-enable-print>)
 endif()
+
+if(DEFINED ENABLE_ASCENDC_DUMP AND ENABLE_ASCENDC_DUMP)
+    add_compile_definitions(ENABLE_ASCENDC_DUMP)
+    add_compile_definitions(ASCENDC_DUMP=1)
+    add_compile_definitions(ASCENDC_DEBUG)
+    link_libraries(ascend_dump)
+endif()
+
 if(NOT DEFINED NPU_MODEL OR NPU_MODEL STREQUAL "")
     determine_npu_model(NPU_MODEL CATLASS_BISHENG_ARCH)
     if(NPU_MODEL STREQUAL "")
@@ -66,11 +74,11 @@ macro(catlass_example_add_executable NAME OPTYPE)
         message("Unsupported op type: ${OPTYPE}")
     endif()
     target_compile_options(${NAME} PRIVATE $<$<COMPILE_LANGUAGE:ASCEND>:--cce-aicore-arch=${CCE_AICORE_ARCH}>)
+    target_compile_definitions(${NAME} PRIVATE CATLASS_EXAMPLE_NAME=${NAME})
     if(DEFINED ENABLE_MSSANITIZER AND ENABLE_MSSANITIZER)
         target_compile_options(${NAME} PRIVATE "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-g --cce-enable-sanitizer>")
         target_link_options(${NAME} PRIVATE "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:--cce-enable-sanitizer --cce-aicore-arch=${CCE_AICORE_ARCH}>")
     endif()
-    target_compile_definitions(${NAME} PRIVATE CATLASS_EXAMPLE_NAME=${NAME})
     target_include_directories(${NAME} PRIVATE ${ASCEND_HOME_PATH}/include/aclnn)
     add_dependencies(catlass_examples ${NAME})
     install(TARGETS ${NAME} DESTINATION ${EXAMPLE_DESTINATION} COMPONENT ${NAME})
@@ -83,13 +91,6 @@ include_directories(
 )
 link_directories(${ASCEND_HOME_PATH}/lib64)
 link_libraries(dl tiling_api platform c_sec nnopbase ascendcl)
-
-if(DEFINED ENABLE_ASCENDC_DUMP AND ENABLE_ASCENDC_DUMP)
-    add_compile_definitions(ENABLE_ASCENDC_DUMP)
-    add_compile_definitions(ASCENDC_DUMP=1)
-    add_compile_definitions(ASCENDC_DEBUG)
-    link_libraries(ascend_dump)
-endif()
 
 link_directories(${ASCEND_HOME_PATH}/${CMAKE_SYSTEM_PROCESSOR}-linux/devlib)
 link_libraries(ascend_hal)

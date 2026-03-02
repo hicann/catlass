@@ -60,7 +60,7 @@ struct ConvKernelInfo {
 void BasicMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo);
 void GroupedMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo);
 void OptimizedMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo &kernelInfo);
-void ConvBias(uint32_t blockNum, aclrtStream stream, ConvKernelInfo kernelInfo);
+void ConvBias(const uint32_t blockNum, aclrtStream stream, ConvKernelInfo kernelInfo);
 } // namespace CatlassKernel
 
 #endif // SHARED_LIB_CATLASS_KERNEL_H

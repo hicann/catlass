@@ -10,6 +10,11 @@
 
 #include "wrapper/catlass_kernel_wrapper.h"
 
+#include <numeric>
+#include <sstream>
+#include <stdexcept>
+#include <unordered_map>
+
 #include <tiling/platform/platform_ascendc.h>
 #include <torch/torch.h>
 #include <torch_npu/csrc/core/npu/DeviceUtils.h>
@@ -17,15 +22,11 @@
 #include <torch_npu/csrc/core/npu/NPUFunctions.h>
 #include <torch_npu/csrc/core/npu/NPUStream.h>
 
-#include <numeric>
-#include <sstream>
-#include <stdexcept>
-#include <unordered_map>
-
 #include "catlass_kernel.h"
+#include "wrapper/conv.h"
 #include "wrapper/grouped_matmul.h"
 #include "wrapper/matmul.h"
-#include "wrapper/conv.h"
+#include "wrapper/run_npu_func.h"
 
 namespace py = pybind11;
 using namespace CatlassKernel;
@@ -38,23 +39,25 @@ at::Tensor RunBasicMatmul(const at::Tensor &mat1, const at::Tensor &mat2, const 
     at::Tensor output = MatmulLike::AllocOutput(kernelInfo);
     aclrtStream stream = c10_npu::getCurrentNPUStream().stream(false);
     uint32_t aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
-    BasicMatmul(aicCoreNum, stream, kernelInfo);
+    RUN_NPU_FUNC(BasicMatmul, aicCoreNum, stream, kernelInfo);
     return output;
 }
 
-at::Tensor RunGroupedMatmul(const at::Tensor &mat1,
-                            const at::Tensor &mat2,
-                            const at::Tensor &groupList,
-                            const std::string &outDType,
-                            const bool transA,
-                            const bool transB,
-                            const bool splitK)
+at::Tensor RunGroupedMatmul(
+    const at::Tensor &mat1,
+    const at::Tensor &mat2,
+    const at::Tensor &groupList,
+    const std::string &outDType,
+    const bool transA,
+    const bool transB,
+    const bool splitK
+)
 {
     KernelInfo kernelInfo = GroupedMatmulLike::GetKernelInfo(mat1, mat2, groupList, outDType, transA, transB, splitK);
     at::Tensor output = GroupedMatmulLike::AllocOutput(kernelInfo);
     aclrtStream stream = c10_npu::getCurrentNPUStream().stream(false);
     uint32_t aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
-    GroupedMatmul(aicCoreNum, stream, kernelInfo);
+    RUN_NPU_FUNC(GroupedMatmul, aicCoreNum, stream, kernelInfo);
     return output;
 }
 
@@ -64,21 +67,25 @@ at::Tensor RunOptimizedMatmul(const at::Tensor &mat1, const at::Tensor &mat2, co
     at::Tensor output = MatmulLike::AllocOutput(kernelInfo);
     aclrtStream stream = c10_npu::getCurrentNPUStream().stream(false);
     uint32_t aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
-    OptimizedMatmul(aicCoreNum, stream, kernelInfo);
+    RUN_NPU_FUNC(OptimizedMatmul, aicCoreNum, stream, kernelInfo);
     return output;
 }
 
-at::Tensor RunConvBias(const at::Tensor &fmap, const at::Tensor &filter, const at::Tensor &bias,
-                       const std::vector<int64_t> &strideList, const std::vector<int64_t> &padList,
-                       const std::vector<int64_t> &dilationList, const std::string &outDType)
+at::Tensor RunConvBias(
+    const at::Tensor &fmap,
+    const at::Tensor &filter,
+    const at::Tensor &bias,
+    const std::vector<int64_t> &strideList,
+    const std::vector<int64_t> &padList,
+    const std::vector<int64_t> &dilationList,
+    const std::string &outDType
+)
 {
-    ConvKernelInfo kernelInfo = ConvLike::GetKernelInfo(fmap, filter, bias,
-                                                        strideList, padList, dilationList,
-                                                        outDType);
+    ConvKernelInfo kernelInfo = ConvLike::GetKernelInfo(fmap, filter, bias, strideList, padList, dilationList, outDType);
     at::Tensor output = ConvLike::AllocOutput(kernelInfo);
     aclrtStream stream = c10_npu::getCurrentNPUStream().stream(false);
     uint32_t aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
-    ConvBias(aicCoreNum, stream, kernelInfo);
+    RUN_NPU_FUNC(ConvBias, aicCoreNum, stream, kernelInfo);
     return output;
 }
 } // namespace CatlassKernelWrapper

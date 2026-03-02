@@ -80,7 +80,7 @@ void ConvBiasImpl(const uint32_t blockNum, aclrtStream stream, const ConvKernelI
     RunAdapter<ConvAdapter>(convOp, arguments, stream, blockNum);
 }
 
-void ConvBias(uint32_t blockNum, aclrtStream stream, ConvKernelInfo kernelInfo)
+void ConvBias(const uint32_t blockNum, aclrtStream stream, ConvKernelInfo kernelInfo)
 {
     if (kernelInfo.inputDataType == ACL_FLOAT16) {
         ConvBiasImpl<layout::NDC1HWC0, layout::KDC1KHKWN1N0C0, layout::NDC1HWC0, half, half, half>(blockNum, stream, kernelInfo);
