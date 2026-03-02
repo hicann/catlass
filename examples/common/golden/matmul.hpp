@@ -275,14 +275,16 @@ void ComputeGroupedMatmulPerTokenDequant(
 template <
     class LayoutA,
     class LayoutB,
+    class LayoutScale,
+    class LayoutPerTokenScale,
     class ElementScale
 >
 void QuantMatmul(
     const GemmCoord &problemShape,
     const std::vector<int8_t> &dataA, const LayoutA &layoutA,
     const std::vector<int8_t> &dataB, const LayoutB &layoutB,
-    const std::vector<ElementScale> &dataScale, const layout::VectorLayout &layoutScale,
-    const std::vector<ElementScale> &dataPerTokenScale, const layout::VectorLayout &layoutPerTokenScale,
+    const std::vector<ElementScale> &dataScale, const LayoutScale &layoutScale,
+    const std::vector<ElementScale> &dataPerTokenScale, const LayoutPerTokenScale &layoutPerTokenScale,
     std::vector<float> &dataGolden, const layout::RowMajor &layoutGolden
 )
 {

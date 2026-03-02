@@ -175,7 +175,8 @@ public:
     CATLASS_DEVICE
     void operator()(
         TensorA &tensorA, TensorB &tensorB, TensorC &tensorC, TensorA &tensorNextA, TensorB &tensorNextB,
-        GemmCoord const &actualShape, GemmCoord const &actualShapeNext, bool isFirstBlock, bool hasNextBlock)
+        GemmCoord const &actualShape, GemmCoord const &actualShapeNext, bool isFirstBlock, bool hasNextBlock,
+        Callback const &callbackBeforeFixpipe = {}, Callback const &callbackAfterFixpipe = {})
     {
         uint32_t mBlockActual = actualShape.m();
         uint32_t kBlockActual = actualShape.k();
@@ -402,6 +403,7 @@ public:
             kActual = kActualNext;
         }
 
+        callbackBeforeFixpipe();
         // copy block out
         if constexpr (!ENABLE_UNIT_FLAG) {
             AscendC::SetFlag<AscendC::HardEvent::M_FIX>(EVENT_ID0);
@@ -411,6 +413,7 @@ public:
         } else {
             copyL0CToGm(tensorC, tensorL0C, 0b11);
         }
+        callbackAfterFixpipe();
     }
 
 protected:

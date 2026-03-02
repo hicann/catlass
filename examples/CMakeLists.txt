@@ -136,6 +136,7 @@ foreach(EXAMPLE
     39_big_matmul_tla
     40_flash_attention_infer_tla
     41_sparse_matmul_tla
+    42_quant_optimized_matmul_tla
     102_dynamic_optimized_matmul
 )
     add_subdirectory(${EXAMPLE})

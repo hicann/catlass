@@ -13,8 +13,11 @@
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
+#include "catlass/detail/tag_to_layout.hpp"
 #include "catlass/epilogue/tile/copy_gm_to_ub.hpp"
 #include "catlass/epilogue/tile/copy_ub_to_gm.hpp"
+#include "catlass/epilogue/tile/copy_gm_to_ub_tla.hpp"
+#include "catlass/epilogue/tile/copy_ub_to_gm_tla.hpp"
 
 namespace Catlass::Epilogue::Tile {
 
@@ -133,6 +136,52 @@ struct TileCopyW4A4Gemm {
     using CopyGmToUbPerTokenScale = CopyGm2Ub<ArchTag, PerTokenScaleType>;
     using CopyUbToGmD = CopyUb2Gm<ArchTag, DType>;
 };
+
+template <
+    class ArchTag,
+    /// GemmType for C matrix operand
+    class ElementC,
+    class LayoutTagC,
+    /// GemmType for X matrix operand
+    class ElementX,
+    class LayoutTagX,
+    /// GemmType for Y matrix operand
+    class ElementY,
+    class LayoutTagY,
+    /// GemmType for D matrix operand
+    class ElementD,
+    class LayoutTagD
+>
+struct TileCopyDequantTla {
+    using LayoutC = detail::TagToLayout_t<ElementC, LayoutTagC>;
+    using TensorUbC =
+        tla::Tensor<AscendC::LocalTensor<ElementC>, LayoutC, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::VECCALC>;
+
+    using LayoutX = detail::TagToLayout_t<ElementX, LayoutTagX>;
+    using TensorUbX =
+        tla::Tensor<AscendC::LocalTensor<ElementX>, LayoutX, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::VECCALC>;
+
+    using LayoutY = detail::TagToLayout_t<ElementY, LayoutTagY>;
+    using TensorUbY =
+        tla::Tensor<AscendC::LocalTensor<ElementY>, LayoutY, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::VECCALC>;
+
+    using LayoutD = detail::TagToLayout_t<ElementD, LayoutTagD>;
+    using TensorUbD =
+        tla::Tensor<AscendC::LocalTensor<ElementD>, LayoutD, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::VECCALC>;
+
+    template <class TensorC>
+    using CopyGmToUbC = CopyGm2UbTla<ArchTag, TensorC, TensorUbC>;
+
+    template <class TensorX>
+    using CopyGmToUbX = CopyGm2UbTla<ArchTag, TensorX, TensorUbX>;
+
+    template <class TensorY>
+    using CopyGmToUbY = CopyGm2UbTla<ArchTag, TensorY, TensorUbY>;
+
+    template <class TensorD>
+    using CopyUbToGmD = CopyUb2GmTla<ArchTag, TensorUbD, TensorD>;
+};
+
 } // namespace Catlass::Epilogue::Tile
 
 #endif  // CATLASS_EPILOGUE_TILE_TILE_COPY_HPP

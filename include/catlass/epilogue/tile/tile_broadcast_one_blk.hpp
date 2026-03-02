@@ -54,6 +54,46 @@ struct TileBroadcastOneBlk {
     }
 };
 
+template <
+    class ArchTag_,
+    class ElementCompute_,
+    uint32_t COMPUTE_LENGTH_
+>
+struct TileBroadcastOneBlkTla {
+    using ArchTag = ArchTag_;
+    using ElementCompute = ElementCompute_;
+    static constexpr uint32_t COMPUTE_LENGTH = COMPUTE_LENGTH_;
+
+    CATLASS_DEVICE
+    TileBroadcastOneBlkTla() {}
+
+    template<class TensorUbOut, class TensorUbIn>
+    CATLASS_DEVICE
+    void operator()(TensorUbOut &ubOut, TensorUbIn &ubIn)
+    {
+        constexpr uint32_t maxRepeatNum = 255;
+        constexpr uint32_t eleNumPerBlk = BYTE_PER_BLK / sizeof(ElementCompute);
+
+        AscendC::BrcbRepeatParams repeatParams;
+        repeatParams.dstBlkStride = 1;
+        repeatParams.dstRepStride = BLK_NUM_PER_VECTOR_FRACTAL;
+
+        auto ubOutOffset = ubOut.layout()(ubOut.coord());
+        auto ubInOffset = ubIn.layout()(ubIn.coord());
+
+        constexpr uint32_t eleNumPerCompute = RoundDown<eleNumPerBlk>(maxRepeatNum * BLK_NUM_PER_VECTOR_FRACTAL);
+        for (uint32_t offset = 0; offset < COMPUTE_LENGTH; offset += eleNumPerCompute) {
+            uint32_t residueM = COMPUTE_LENGTH - offset;
+            uint32_t computeM = (residueM > eleNumPerCompute) ? eleNumPerCompute : residueM;
+            uint8_t repeatTimes = static_cast<uint8_t>(CeilDiv<BLK_NUM_PER_VECTOR_FRACTAL>(computeM));
+            AscendC::Brcb(
+                ubOut.data()[ubOutOffset + offset * eleNumPerBlk], ubIn.data()[ubInOffset + offset],
+                repeatTimes, repeatParams
+            );
+        }
+    }
+};
+
 } // namespace Catlass::Epilogue::Tile
 
 #endif
