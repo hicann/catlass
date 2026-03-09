@@ -127,6 +127,7 @@ normal_cases = ["00_basic_matmul 256 512 1024 0",
                 "37_streamk_matmul 256 512 1024 0",
                 "34_single_core_splitk_matmul 256 512 1024 0",
                 "102_dynamic_optimized_matmul 256 512 1024 0 0 0"
+                "103_dynamic_optimized_quant_matmul_per_token_basic 256 512 1024 0 0 0"
                 ]
 
 

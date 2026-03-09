@@ -113,6 +113,20 @@ struct MmadAtlasA2PreloadAsyncWithCallback :
     > {
 };
 
+template <uint32_t PRELOAD_STAGES_, uint32_t L1_STAGES_, uint32_t L0A_STAGES_, uint32_t L0B_STAGES_,
+    uint32_t L0C_STAGES_, bool ENABLE_UNIT_FLAG_, bool ENABLE_SHUFFLE_K_>
+struct MmadAtlasA2DynamicPreloadAsyncWithCallback :
+    public MmadAtlasA2PreloadAsync<
+        PRELOAD_STAGES_,
+        L1_STAGES_,
+        L0A_STAGES_,
+        L0B_STAGES_,
+        L0C_STAGES_,
+        ENABLE_UNIT_FLAG_,
+        ENABLE_SHUFFLE_K_
+    > {
+};
+
 
 template <uint32_t PRELOAD_STAGES_, uint32_t L1_STAGES_, uint32_t L0A_STAGES_, uint32_t L0B_STAGES_,
     uint32_t L0C_STAGES_, bool ENABLE_UNIT_FLAG_, bool ENABLE_SHUFFLE_K_>

@@ -124,6 +124,7 @@ struct BlockMmadTla {
 #include "catlass/gemm/block/block_mmad_dynamic_small.hpp"
 #include "catlass/gemm/block/block_mmad_dynamic_streamk.hpp"
 #include "catlass/gemm/block/block_mmad_dynamic_single_core_splitk.hpp"
+#include "catlass/gemm/block/block_mmad_dynamic_preload_async_with_callback.hpp"
 #include "catlass/gemm/block/block_mmad_small.hpp"
 #include "catlass/gemm/block/block_mmad_single_core_splitk.hpp"
 #include "catlass/gemm/block/block_mmad_dynamic_aiv.hpp"
