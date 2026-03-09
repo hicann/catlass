@@ -51,9 +51,9 @@ ConvKernelInfo GetKernelInfo(const at::Tensor &fmap, const at::Tensor &filter, c
     ConvKernelInfo kernelInfo;
 
     kernelInfo.inputAddr.resize(3);
-    kernelInfo.inputAddr[0] = static_cast<uint8_t *>(const_cast<void *>(fmap.storage().data()));
-    kernelInfo.inputAddr[1] = static_cast<uint8_t *>(const_cast<void *>(filter.storage().data()));
-    kernelInfo.inputAddr[2] = static_cast<uint8_t *>(const_cast<void *>(bias.storage().data()));
+    kernelInfo.inputAddr[0] = static_cast<uint8_t *>(fmap.data_ptr());
+    kernelInfo.inputAddr[1] = static_cast<uint8_t *>(filter.data_ptr());
+    kernelInfo.inputAddr[2] = static_cast<uint8_t *>(bias.data_ptr());
 
     kernelInfo.fmapRelated.resize(6);
 

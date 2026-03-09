@@ -29,8 +29,8 @@ KernelInfo GetKernelInfo(const at::Tensor &mat1, const at::Tensor &mat2, const s
 {
     KernelInfo kernelInfo;
     kernelInfo.inputAddr.resize(2);
-    kernelInfo.inputAddr[0] = static_cast<uint8_t *>(const_cast<void *>(mat1.storage().data()));
-    kernelInfo.inputAddr[1] = static_cast<uint8_t *>(const_cast<void *>(mat2.storage().data()));
+    kernelInfo.inputAddr[0] = static_cast<uint8_t *>(mat1.data_ptr());
+    kernelInfo.inputAddr[1] = static_cast<uint8_t *>(mat2.data_ptr());
     int64_t m = mat1.sizes().at(0);
     int64_t k1 = mat1.sizes().at(1);
     int64_t k2 = mat2.sizes().at(0);

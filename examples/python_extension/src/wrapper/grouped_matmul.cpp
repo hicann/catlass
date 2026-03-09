@@ -23,9 +23,9 @@ KernelInfo GetKernelInfo(const at::Tensor &mat1, const at::Tensor &mat2, const a
     KernelInfo kernelInfo;
     // set input addr
     kernelInfo.inputAddr.resize(3);
-    kernelInfo.inputAddr[0] = static_cast<uint8_t *>(const_cast<void *>(mat1.storage().data()));
-    kernelInfo.inputAddr[1] = static_cast<uint8_t *>(const_cast<void *>(mat2.storage().data()));
-    kernelInfo.inputAddr[2] = static_cast<uint8_t *>(const_cast<void *>(groupList.storage().data()));
+    kernelInfo.inputAddr[0] = static_cast<uint8_t *>(mat1.data_ptr());
+    kernelInfo.inputAddr[1] = static_cast<uint8_t *>(mat2.data_ptr());
+    kernelInfo.inputAddr[2] = static_cast<uint8_t *>(groupList.data_ptr());
     // calculate groupList sum
     at::Tensor groupListHost = groupList.to(torch::kCPU).to(torch::kInt64);
     std::vector<int64_t> groupListVec(groupListHost.data_ptr<int64_t>(),
