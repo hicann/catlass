@@ -1,8 +1,21 @@
 # CATLASS
 
 ---
+### ⚠ 重要变更
+我们于2026年3月第一次社区会议正式确定CATLASS社区主线将开始新增对下一代昇腾硬件Ascend 950PR/Ascend 950DT的支持。
+该新增支持将引入新的编译宏，在某些场景下属于<font color="red">**不兼容**</font>变更，用户需要注意。
+- 新增宏：`CATLASS_ARCH`，用于指定目标架构。其取值可在[SIMD BuiltIn关键字和API](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/opdevg/Ascendcopdevg/atlas_ascendc_10_10053.html#ZH-CN_TOPIC_0000002534415727__table65291052154114)中查询（`__NPU_ARCH__`列）。
+    - `Atlas A2/A3`平台：`2201`
+    - `Ascend 950PR/Ascend 950DT`平台：`3510`（此数值尚未于CANN文档中公开，从相关开源仓获得）
+- 相关场景说明：
+    - `bisheng`命令行场景：`bisheng ... -DCATLASS_ARCH=2201 ...`
+    - `cmake`场景：`add_compile_definitions(CATLASS_ARCH=2201)`
+    - `msopgen/aclnn`工程场景：`add_ops_compile_options(ALL OPTIONS -DCATLASS_ARCH=2201 ...)`
+    - CATLASS源码仓：`bash scripts/build.sh -DCATLASS_ARCH=2201 ...`
+    - 库上代码参考：[examples/CMakeLists.txt](https://gitcode.com/cann/catlass/blob/master/examples/CMakeLists.txt#L18)
 
 ### Latest News
+- [2026/03] 社区主线正式开始新增对下一代昇腾硬件Ascend 950PR/Ascend 950DT的支持
 - [2026/02] 社区版[v1.4.0](https://gitcode.com/cann/catlass/releases/v1.4.0)发布，新增 [StreamK Matmul](https://gitcode.com/cann/catlass/blob/v1.4.0/examples/37_streamk_matmul/README.md)、[W4A4 Matmul](https://gitcode.com/cann/catlass/blob/v1.4.0/examples/38_w4a4_matmul_per_token_per_channel_dequant/README.md)、[Sparse Matmul](https://gitcode.com/cann/catlass/blob/v1.4.0/examples/41_sparse_matmul_tla/README.md)等示例
 - [2025/12] 社区版[v1.3.0](https://gitcode.com/cann/catlass/releases/v1.3.0)发布，支持[`FixPipe`随路量化](https://gitcode.com/cann/catlass/tree/v1.3.0/include/catlass/gemm/tile/tile_copy.hpp#L373)，[Matmul泛化工程](https://gitcode.com/cann/catlass/tree/v1.3.0/examples/102_dynamic_optimized_matmul/README.md)新增多个模板，并新增[INT4反量化](https://gitcode.com/cann/catlass/tree/v1.3.0/examples/32_w4a8_matmul/README.md)、[2D卷积](https://gitcode.com/cann/catlass/tree/v1.3.0/examples/33_basic_conv2d/README.md)等示例
 - [2025/10] 社区版[v1.2.0](https://gitcode.com/cann/catlass/releases/v1.2.0)发布，新增[Matmul算子泛化](https://gitcode.com/cann/catlass/tree/v1.2.0/examples/102_dynamic_optimized_matmul/README.md)等示例
@@ -80,7 +93,7 @@ catlass
 
 CATLASS所需的软硬件环境依赖如下：
 
-- 昇腾产品：[Atlas A2训练/推理产品](https://www.hiascend.com/document/detail/zh/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html), [Atlas A3训练/推理产品](https://www.hiascend.com/document/detail/zh/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html)
+- 昇腾产品：[Atlas A2训练/推理产品](https://www.hiascend.com/document/detail/zh/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html), [Atlas A3训练/推理产品](https://www.hiascend.com/document/detail/zh/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html), Ascend 950PR/Ascend 950DT
 - CPU架构：`aarch64`/`x86_64`
 - 系统：支持的Linux（进行[兼容性查询](https://www.hiascend.com/hardware/compatibility)）
 - 软件依赖：
@@ -90,79 +103,23 @@ CATLASS所需的软硬件环境依赖如下：
 
 不同CATLASS发行版可支持的硬件平台及所需的最低[CANN](https://www.hiascend.com/developer/download/community/result?module=cann)版本如下表：
 
-<table style="width: 75%; margin: 0 auto;">
-  <colgroup>
-    <col style="width: 25%">
-    <col style="width: 22%">
-    <col style="width: 22%">
-  </colgroup>
-  <thead>
-      <tr>
-          <th>CATLASS社区版本</th>
-          <th>最低支持CANN包版本</th>
-          <th>支持昇腾产品</th>
-      </tr>
-  </thead>
-  <tbody style="text-align: center">
-  <tr>
-          <td><a href="https://gitcode.com/cann/releases/v1.2.2">v.1.2.2 及以上</a>
-          <td>社区版<a href="https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.2.RC1">8.2.RC1</a></td>
-          <td><a href="https://www.hiascend.com/document/detail/zh/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html">Atlas A2训练/推理产品</a> <br>
-          <a href="https://www.hiascend.com/document/detail/zh/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html">Atlas A3训练/推理产品</a></td>
-      </tr>
-      <tr>
-          <td><a href="https://gitcode.com/cann/catlass/releases/v1.2.1">v1.2.1</a>~<a href="https://gitcode.com/cann/catlass/releases/v1.0.0">v1.0.0</a></td>
-          <td>社区版<a href="https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.2.RC1.alpha002">8.2.RC1.alpha002</a></td>
-          <td><a href="https://www.hiascend.com/document/detail/zh/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html">Atlas A2训练/推理产品</a> <br>
-          <a href="https://www.hiascend.com/document/detail/zh/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html">Atlas A3训练/推理产品</a></td>
-      </tr>
-  </tbody>
-</table>
+| CATLASS社区版本 | 最低支持CANN包版本 | 支持昇腾产品 |
+| --- | --- | --- |
+| 当前 | [8.2.RC1](https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.2.RC1)<br>9.0.0 (Ascend 950PR/Ascend 950DT) | [Atlas A2训练/推理产品](https://www.hiascend.com/document/detail/zh/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html) <br>[Atlas A3训练/推理产品](https://www.hiascend.com/document/detail/zh/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html)<br>Ascend 950PR/Ascend 950DT |
+| [v1.4.0-v.1.2.2](https://gitcode.com/cann/releases/v1.2.2) | [8.2.RC1](https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.2.RC1) | [Atlas A2训练/推理产品](https://www.hiascend.com/document/detail/zh/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html) <br>[Atlas A3训练/推理产品](https://www.hiascend.com/document/detail/zh/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html) |
+| [v1.2.1](https://gitcode.com/cann/catlass/releases/v1.2.1)~[v1.0.0](https://gitcode.com/cann/catlass/releases/v1.0.0) | [8.2.RC1.alpha002](https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.2.RC1.alpha002) | [Atlas A2训练/推理产品](https://www.hiascend.com/document/detail/zh/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html) <br>[Atlas A3训练/推理产品](https://www.hiascend.com/document/detail/zh/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html) |
+
 
 - 对于某些调测工具，可能需要较上述更新的CANN版本，详情参考[调测工具文档](./docs/evaluation_collections.md)。
+- 上述9.0.0版本为正式版本，尚未发布，敬请期待。当前最新社区版本9.0.0.beta1**并不支持Ascend 950PR/Ascend 950DT**。
 
 下述环境经测试支持[当前CATLASS](https://gitcode.com/cann/catlass)构建：
 
-<table style="width: 75%; margin: 0 auto;">
-  <colgroup>
-      <col style="width: 15%">
-      <col style="width: 15%">
-      <col style="width: 10%">
-      <col style="width: 10%">
-      <col style="width: 10%">
-  </colgroup>
-  <thead>
-      <tr style="text-align: center">
-          <th>系统</th>
-          <th><code>CANN</code></th>
-          <th><code>gcc</code></th>
-          <th><code>cmake</code></th>
-          <th><code>python</code></th>
-      </tr>
-  </thead>
-  <tbody style="text-align: center">
-      <tr>
-          <td>Ubuntu 20.04.5</td>
-          <td><code>8.2.RC1</code></td>
-          <td><code>9.3</code></td>
-          <td><code>3.16</code></td>
-          <td><code>3.10</code></td>
-      </tr><tr>
-          <td>Ubuntu 22.04.5</td>
-          <td><code>8.2.RC1</code></td>
-          <td><code>11.3</code></td>
-          <td><code>3.22</code></td>
-          <td><code>3.10</code></td>
-      </tr>
-      <tr>
-          <td>openEuler 22.03 SP4</td>
-          <td><code>8.2.RC1</code></td>
-          <td><code>10.3</code></td>
-          <td><code>3.22</code></td>
-          <td><code>3.10</code></td>
-      </tr>
-  </tbody>
-</table>
+| 系统                 | `CANN`    | `gcc`  | `cmake` | `python` |
+|----------------------|-----------|--------|---------|----------|
+| Ubuntu 20.04.5       | 8.2.RC1   | 9.3    | 3.16    | 3.10     |
+| Ubuntu 22.04.5       | 8.2.RC1   | 11.3   | 3.22    | 3.10     |
+| openEuler 22.03 SP4  | 8.2.RC1   | 10.3   | 3.22    | 3.10     |
 
 ## 👥 合作贡献者
 

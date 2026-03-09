@@ -36,7 +36,7 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::NC1HWC0, AscendC::TPo
 
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
 
-    // Mehtods
+    // Methods
 
     CATLASS_DEVICE
     CopyGmToL1() {};
@@ -80,7 +80,7 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::CI1KHKWCOCI0, AscendC
 
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
 
-    // Mehtods
+    // Methods
 
     CATLASS_DEVICE
     CopyGmToL1() {};

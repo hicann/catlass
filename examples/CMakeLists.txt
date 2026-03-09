@@ -13,8 +13,9 @@ set(CATLASS_EXAMPLES_COMMON_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/common)
 add_custom_target(catlass_examples)
 
 # arch specific compile options
-if(CATLASS_BISHENG_ARCH STREQUAL "a2" OR CATLASS_BISHENG_ARCH STREQUAL "a3")
+if(CATLASS_ARCH STREQUAL "2201")
     set(CCE_AICORE_ARCH_BASE dav-c220)
+    add_compile_definitions(CATLASS_ARCH=2201)
     add_compile_options(
         "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-stack-size=0x8000>"
         "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-function-stack-size=0x8000>"
@@ -23,11 +24,14 @@ if(CATLASS_BISHENG_ARCH STREQUAL "a2" OR CATLASS_BISHENG_ARCH STREQUAL "a3")
     )
 endif()
 
+if(CATLASS_ARCH STREQUAL "3510")
+    set(CCE_AICORE_ARCH_BASE dav-c310)
+    add_compile_definitions(CATLASS_ARCH=3510)
+endif()
 # common compile options
 add_compile_options(
     $<$<COMPILE_LANGUAGE:ASCEND>:-Wno-macro-redefined>
     $<$<COMPILE_LANGUAGE:ASCEND>:-Wno-ignored-attributes>
-    "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-addr-transform>"
     # these options may be removed after CANN 8.5.0
     $<$<COMPILE_LANGUAGE:ASCEND>:-Wno-unused-value>
 )
@@ -48,7 +52,7 @@ if(DEFINED ENABLE_ASCENDC_DUMP AND ENABLE_ASCENDC_DUMP)
 endif()
 
 if(NOT DEFINED NPU_MODEL OR NPU_MODEL STREQUAL "")
-    determine_npu_model(NPU_MODEL CATLASS_BISHENG_ARCH)
+    determine_npu_model(NPU_MODEL CATLASS_ARCH)
     if(NPU_MODEL STREQUAL "")
         message(FATAL_ERROR "Failed to determine NPU_MODEL. Please set NPU_MODEL manually by -DNPU_MODEL=Ascendxxxyy.")
         return()
@@ -96,7 +100,7 @@ link_directories(${ASCEND_HOME_PATH}/${CMAKE_SYSTEM_PROCESSOR}-linux/devlib)
 link_libraries(ascend_hal)
 
 # regular examples
-foreach(EXAMPLE
+set(EXAMPLE_ATLASA2
     00_basic_matmul
     01_batched_matmul
     02_grouped_matmul_slice_m
@@ -140,8 +144,21 @@ foreach(EXAMPLE
     42_quant_optimized_matmul_tla
     102_dynamic_optimized_matmul
 )
+
+set(EXAMPLE_ASCEND950
+    43_ascend950_basic_matmul
+)
+
+if(CATLASS_ARCH STREQUAL "2201")
+    set(EXAMPLE_LIST ${EXAMPLE_ATLASA2})
+elseif(CATLASS_ARCH STREQUAL "3510")
+    set(EXAMPLE_LIST ${EXAMPLE_ASCEND950})
+endif()
+
+foreach(EXAMPLE ${EXAMPLE_LIST})
     add_subdirectory(${EXAMPLE})
 endforeach()
+
 # advanded examples
 add_subdirectory(shared_lib)
 add_subdirectory(python_extension)

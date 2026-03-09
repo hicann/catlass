@@ -69,6 +69,7 @@ TLA 不仅将 `IntTuple` 用在了`Layout`上，还会在很多其他的地方�
 **注：在昇腾CUBE核内部，存在 `zN` 、 `nZ` 、 `zZ` 、 `nN` 格式，因此目前昇腾算子模板库中只定义与使用`行优先`、`列优先`和前述4种格式**。
 
 ```c++
+using namespace tla;
 Layout w2xh4 = MakeLayout(MakeShape(Int<2>{}, 4),
                           MakeStride(Int<12>{}, Int<1>{}));
 
@@ -161,6 +162,7 @@ print(crd2offset(tla::MakeCoord(1, 5), shape, stride));  // 37
 Tilelayout 可以用下列方式获取：
 
 ```cpp
+using namespace tla;
 Layout a   = Layout<Shape<Shape<_4,_2>,Shape<_4,_3>>, Stride<Stride<_4,_16>,Stride<_1,_32>>>{}; // ((4,2),(4,3)):((4,16),(1,32))
 Layout a0  = MakeLayoutTile(a, MakeShape(4, 4)); // ((4,1),(4,1)):((4,16),(1,32))
 ```

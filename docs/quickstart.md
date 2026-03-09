@@ -60,7 +60,7 @@ bash scripts/build.sh [options] <target>
    - `--enable_profiling`：使能Profiling工具，详见[CATLASS样例性能调优](./tools/performance_tools.md#profiling简介)。
    - `--enable_print`：启用编译器的打印功能，详见[基于`cce::printf`进行设备侧打印](./tools/print.md)。
    - `--enable_ascendc_dump`：启用`AscendC`相关算子调测API，详见[CATLASS样例使用AscendC算子调测API](./tools/ascendc_dump.md)。
-   - `-DCATLASS_BISHENG_ARCH`：指明NPU架构，当前支持`a2`或`a3`。
+   - `-DCATLASS_ARCH`：指明NPU架构，当前支持`2201`和`3510`。
    - `-D<option>`：给CMake传递其他的编译选项。
 
  - `target`： 要编译的算子样例，可指定为特定的样例名，也可指定为：

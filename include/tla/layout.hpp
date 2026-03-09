@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -246,6 +246,16 @@ struct is_layout<Layout<Shape, Stride>> : true_type {};
 namespace detail {
 
 template <class Layout, class Enable = void>
+struct isVector {
+    static bool const value = false;
+};
+
+template <class Layout>
+struct isVector<Layout, std::enable_if_t<Layout::depth == 1 && Layout::rank == 1>> {
+    static bool const value = (stride<0>(Layout{}) == 1);
+};
+
+template <class Layout, class Enable = void>
 struct isRowMajor {
     static bool const value = false;
 };
@@ -313,6 +323,14 @@ struct isnZ<Element, Layout, std::enable_if_t<Layout::depth == 2 && Layout::rank
 } // end namespace detail
 
 // Advanced Layout constructions
+// Make a vector layout.
+template <class T>
+CATLASS_HOST_DEVICE constexpr
+auto MakeLayout(T const& len)
+{
+    return MakeLayout(MakeShape(len), MakeStride(Int<1>{}));
+}
+
 // Make a inner layout with Rows and Cols.
 template <class Element, class LayoutTag, class T, class U>
 CATLASS_HOST_DEVICE constexpr
@@ -320,6 +338,7 @@ auto MakeLayout(T const& rows, U const& cols)
 {
     static_assert(std::is_same_v<LayoutTag, Catlass::layout::RowMajor> ||
                   std::is_same_v<LayoutTag, Catlass::layout::ColumnMajor> ||
+                  std::is_same_v<LayoutTag, Catlass::layout::VectorLayout> ||
                   std::is_same_v<LayoutTag, Catlass::layout::zN> ||
                   std::is_same_v<LayoutTag, Catlass::layout::nZ> ||
                   std::is_same_v<LayoutTag, Catlass::layout::zZ>,
@@ -329,7 +348,9 @@ auto MakeLayout(T const& rows, U const& cols)
     constexpr uint32_t ELE_NUM_PER_C0 = Catlass::BYTE_PER_C0 / sizeof(Element);
     constexpr uint32_t ELE_NUM_PER_FRACTAL = Catlass::BYTE_PER_FRACTAL / sizeof(Element);
 
-    if constexpr (std::is_same_v<LayoutTag, Catlass::layout::RowMajor>) {
+    if constexpr (std::is_same_v<LayoutTag, Catlass::layout::VectorLayout>) {
+        return MakeLayout(MakeShape(cols), MakeStride(Int<1>{}));
+    } else if constexpr (std::is_same_v<LayoutTag, Catlass::layout::RowMajor>) {
         return MakeLayout(MakeShape(rows, cols), MakeStride((int64_t)cols, Int<1>{}));
     } else if constexpr (std::is_same_v<LayoutTag, Catlass::layout::ColumnMajor>) {
         return MakeLayout(MakeShape(rows, cols), MakeStride(Int<1>{}, (int64_t)rows));
@@ -360,9 +381,11 @@ template <class Layout, class ShapeNew>
 CATLASS_HOST_DEVICE constexpr
 auto MakeLayoutTile(Layout const& layout, ShapeNew const& shapeNew)
 {
-    static_assert(is_tuple<ShapeNew>::value && depth_v<ShapeNew> == 1 && rank_v<ShapeNew> == 2);
+    static_assert(
+        is_tuple<ShapeNew>::value && depth_v<ShapeNew> == 1 && (rank_v<ShapeNew> == 1 || rank_v<ShapeNew> == 2)
+    );
 
-    if constexpr (Layout::depth == 1 && Layout::rank == 2) {
+    if constexpr (Layout::depth == 1 && (Layout::rank == 1 || Layout::rank == 2)) {
         return MakeLayout(shapeNew, layout.stride());
     } else if constexpr (is_static<decltype(shape<0, 0>(layout))>::value &&
                          is_static<decltype(shape<1, 0>(layout))>::value) {

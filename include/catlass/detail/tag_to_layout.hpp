@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -32,6 +32,11 @@ struct TagToLayout<Element, layout::RowMajor> {
 template <class Element>
 struct TagToLayout<Element, layout::ColumnMajor> {
     using type = tla::Layout<tla::Shape<uint32_t, uint32_t>, tla::Stride<tla::Int<1>, int64_t>>;
+};
+
+template <class Element>
+struct TagToLayout<Element, layout::VectorLayout> {
+    using type = tla::Layout<tla::Shape<uint32_t>, tla::Stride<tla::Int<1>>>;
 };
 
 template <class Element>

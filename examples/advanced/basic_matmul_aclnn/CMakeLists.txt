@@ -33,7 +33,7 @@ if(NOT EXISTS ${MSOPGEN_PROJECT_SOURCE_DIR})
         COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/op_host/catlass_basic_matmul.cpp ${MSOPGEN_PROJECT_SOURCE_DIR}/op_host
         COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/op_host/catlass_basic_matmul_tiling.h ${MSOPGEN_PROJECT_SOURCE_DIR}/op_host
         COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/op_kernel/catlass_basic_matmul.cpp ${MSOPGEN_PROJECT_SOURCE_DIR}/op_kernel
-        COMMAND ${CMAKE_COMMAND} -E echo "add_ops_compile_options\\(ALL OPTIONS -I${CATLASS_INCLUDE_DIR}\\)" >> ${MSOPGEN_PROJECT_SOURCE_DIR}/op_kernel/CMakeLists.txt
+        COMMAND ${CMAKE_COMMAND} -E echo "add_ops_compile_options\\(ALL OPTIONS -I${CATLASS_INCLUDE_DIR} -DCATLASS_ARCH=2201\\)" >> ${MSOPGEN_PROJECT_SOURCE_DIR}/op_kernel/CMakeLists.txt
         # uncomment this line to change the vendor name to "catlass" to avoid conflict
         # COMMAND sed -i "s/customize/catlass/g" ${MSOPGEN_PROJECT_SOURCE_DIR}/CMakePresets.json
         BYPRODUCTS ${MSOPGEN_PROJECT_SOURCE_DIR}

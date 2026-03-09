@@ -50,7 +50,7 @@ struct TileVmad<Arch::AtlasA2,
     using LayoutSrc = layout::RowMajor;
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementA);
 
-    // Mehtods
+    // Methods
 
     CATLASS_DEVICE
     TileVmad() {};
@@ -183,7 +183,7 @@ struct TileVmad<Arch::AtlasA2,
     using LayoutSrc = layout::RowMajor;
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementA);
 
-    // Mehtods
+    // Methods
 
     CATLASS_DEVICE
     TileVmad() {};
@@ -318,7 +318,7 @@ struct TileVmad<Arch::AtlasA2,
     using LayoutSrc = layout::ColumnMajor;
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementA);
 
-    // Mehtods
+    // Methods
 
     CATLASS_DEVICE
     TileVmad() {};
@@ -418,7 +418,7 @@ struct TileVmad<Arch::AtlasA2,
     using LayoutSrc = layout::ColumnMajor;
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementA);
 
-    // Mehtods
+    // Methods
 
     CATLASS_DEVICE
     TileVmad() {};

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -11,6 +11,7 @@
 #ifndef CATLASS_GEMM_HELPER_HPP
 #define CATLASS_GEMM_HELPER_HPP
 
+#include "catlass/arch/arch.hpp"
 #include "catlass/catlass.hpp"
 #include "catlass/numeric_size.hpp"
 #include "catlass/layout/layout.hpp"
@@ -111,6 +112,28 @@ struct ElementAccumulatorSelector<bfloat16_t, bfloat16_t> {
     using ElementAccumulator = float;
 };
 
+#if (defined (CATLASS_ARCH) && CATLASS_ARCH == 3510)
+template<>
+struct ElementAccumulatorSelector<float8_e4m3_t, float8_e4m3_t> {
+    using ElementAccumulator = float;
+};
+
+template<>
+struct ElementAccumulatorSelector<float8_e5m2_t, float8_e5m2_t> {
+    using ElementAccumulator = float;
+};
+
+template<>
+struct ElementAccumulatorSelector<float8_e4m3_t, float8_e5m2_t> {
+    using ElementAccumulator = float;
+};
+
+template<>
+struct ElementAccumulatorSelector<float8_e5m2_t, float8_e4m3_t> {
+    using ElementAccumulator = float;
+};
+#endif
+
 template<>
 struct ElementAccumulatorSelector<AscendC::int4b_t, AscendC::int4b_t> {
     using ElementAccumulator = int32_t;
@@ -120,6 +143,11 @@ template<class GmAType>
 struct L1ATypeSelector {
     static_assert(DEPENDENT_FALSE<GmAType>,
         "Unsupported layout selector, can not find the specialization.");
+};
+
+template<class Element>
+struct L1ATypeSelector<Gemm::GemmType<Element, layout::VectorLayout>> {
+    using L1AType = Gemm::GemmType<Element, layout::VectorLayout, AscendC::TPosition::A1>;
 };
 
 template<class Element>
@@ -226,6 +254,22 @@ struct L1BiasTypeSelector<Gemm::GemmType<Element, layout::VectorLayout>, Element
     using GMBiasType = Gemm::GemmType<Element, layout::VectorLayout, AscendC::TPosition::GM>;
     using L1BiasType = Gemm::GemmType<Element, layout::VectorLayout, AscendC::TPosition::A1>;
     using L0BiasType = Gemm::GemmType<ElementAccumulator, layout::VectorLayout, AscendC::TPosition::C2>;
+};
+
+template<class ArchTag>
+struct L0ALayoutSelector {
+    static_assert(DEPENDENT_FALSE<ArchTag>,
+        "Unsupported layout selector, can not find the specialization.");
+};
+
+template<>
+struct L0ALayoutSelector<Arch::AtlasA2> {
+    using Layout = layout::zZ;
+};
+
+template<>
+struct L0ALayoutSelector<Arch::Ascend950> {
+    using Layout = layout::zN;
 };
 
 template<class Element, class Layout, class Enable = void>

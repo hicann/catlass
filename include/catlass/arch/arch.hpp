@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -25,6 +25,17 @@ struct AtlasA2 {
     static constexpr uint32_t L0C_SIZE = 128 * 1024;
 };
 
+//Ascend950
+struct Ascend950 {
+    static constexpr uint32_t BIAS_SIZE = 4 * 1024;
+    static constexpr uint32_t FIXBUF_SIZE = 16 * 1024;
+    static constexpr uint32_t UB_SIZE = 248 * 1024;
+    static constexpr uint32_t L1_SIZE = 512 * 1024;
+    static constexpr uint32_t L0A_SIZE = 64 * 1024;
+    static constexpr uint32_t L0B_SIZE = 64 * 1024;
+    static constexpr uint32_t L0C_SIZE = 256 * 1024;
+};
+
 template <AscendC::TPosition POS>
 using PositionType = std::integral_constant<AscendC::TPosition, POS>;
 
@@ -33,6 +44,7 @@ using PositionL1 = PositionType<AscendC::TPosition::A1>;
 using PositionL0A = PositionType<AscendC::TPosition::A2>;
 using PositionL0B = PositionType<AscendC::TPosition::B2>;
 using PositionL0C = PositionType<AscendC::TPosition::CO1>;
+using PositionBias = PositionType<AscendC::TPosition::C2>;
 using PositionUB = PositionType<AscendC::TPosition::VECCALC>;
 
 } // namespace Catlass::Arch

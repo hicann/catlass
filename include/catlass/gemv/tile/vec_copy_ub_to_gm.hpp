@@ -35,7 +35,7 @@ struct VecCopyUBToGm<Arch::AtlasA2, Gemm::GemmType<Element, layout::VectorLayout
     using LayoutDst = layout::VectorLayout;
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
 
-    // Mehtods
+    // Methods
 
     CATLASS_DEVICE
     VecCopyUBToGm() {};
@@ -69,7 +69,7 @@ struct VecCopyUBToGm<Arch::AtlasA2, Gemm::GemmType<Element, layout::VectorLayout
     using LayoutDst = layout::VectorLayout;
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
 
-    // Mehtods
+    // Methods
 
     CATLASS_DEVICE
     VecCopyUBToGm() {};

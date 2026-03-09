@@ -10,8 +10,8 @@
 
 function(determine_npu_model var arch)
     # Only continue if arch is a2 or a3
-    if(NOT (${arch} STREQUAL "a2" OR ${arch} STREQUAL "a3"))
-        message(STATUS "determine_npu_model: arch is '${arch}', not a2 or a3, skipping.")
+    if(NOT (${arch} STREQUAL "2201" OR ${arch} STREQUAL "3510"))
+        message(STATUS "determine_npu_model: arch is '${arch}', not 2201 or 3510, skipping.")
         set(${var} "" PARENT_SCOPE)
         return()
     endif()
@@ -69,19 +69,19 @@ function(determine_npu_model var arch)
         OUTPUT_STRIP_TRAILING_WHITESPACE
         ERROR_QUIET
     )
-    # Extract NPU Name from npu-smi output
-    execute_process(
-        COMMAND bash -c "echo '${NPU_SMI_OUTPUT}' | awk '/NPU Name/ {print \$NF}'"
-        OUTPUT_VARIABLE NPU_SMI_NPU_NAME
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-        ERROR_QUIET
-    )
 
     # Compose npu_model according to arch
-    if(${arch} STREQUAL "a2")
-        set(npu_model "Ascend${NPU_SMI_CHIP_NAME}")
-    else()
+    if(${NPU_SMI_CHIP_NAME} STREQUAL "Ascend910")
+        # Extract NPU Name from npu-smi output
+        execute_process(
+            COMMAND bash -c "echo '${NPU_SMI_OUTPUT}' | awk '/NPU Name/ {print \$NF}'"
+            OUTPUT_VARIABLE NPU_SMI_NPU_NAME
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            ERROR_QUIET
+        )
         set(npu_model "${NPU_SMI_CHIP_NAME}_${NPU_SMI_NPU_NAME}")
+    else()
+        set(npu_model "Ascend${NPU_SMI_CHIP_NAME}")
     endif()
 
     set(${var} "${npu_model}" PARENT_SCOPE)

@@ -25,7 +25,7 @@ struct TileVmuls
     using Element = typename VType_::Element;
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
 
-    // Mehtods
+    // Methods
 
     CATLASS_DEVICE
     TileVmuls() {};

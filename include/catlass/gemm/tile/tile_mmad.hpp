@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -46,6 +46,7 @@ struct TileMmad {
          uint32_t m, uint32_t n, uint32_t k,
          bool initC = true, uint8_t unitFlag = 0)
     {
+#if (defined (__NPU_ARCH__) && __NPU_ARCH__ == 2201)        
         AscendC::MmadParams mmadParams;
         mmadParams.m = m;
         mmadParams.n = n;
@@ -67,6 +68,7 @@ struct TileMmad {
         if ((m / C0_NUM_PER_FRACTAL) * (n / C0_NUM_PER_FRACTAL) < PIPE_M_BARRIER_THRESHOLD) {
             AscendC::PipeBarrier<PIPE_M>();
         }
+#endif
     }
 
     CATLASS_DEVICE
@@ -77,6 +79,7 @@ struct TileMmad {
          uint32_t m, uint32_t n, uint32_t k,
          bool initC = true, uint8_t unitFlag = 0)
     {
+#if (defined (__NPU_ARCH__) && __NPU_ARCH__ == 2201)
         AscendC::MmadParams mmadParams;
         mmadParams.m = m;
         mmadParams.n = n;
@@ -99,6 +102,7 @@ struct TileMmad {
         if ((m / C0_NUM_PER_FRACTAL) * (n / C0_NUM_PER_FRACTAL) < PIPE_M_BARRIER_THRESHOLD) {
             AscendC::PipeBarrier<PIPE_M>();
         }
+#endif
     }
 };
 
@@ -132,10 +136,18 @@ struct TileMmadTla {
         mmadParams.k = k;
         mmadParams.unitFlag = unitFlag;
         mmadParams.cmatrixInitVal = initC;
-        if constexpr (std::is_same_v<ArchTag, Arch::AtlasA2> && std::is_same_v<ElementA, float> &&
-                      std::is_same_v<LayoutTagL1A, layout::nZ>) {
+#if (defined (__NPU_ARCH__) && __NPU_ARCH__ == 2201)
+        if constexpr (std::is_same_v<ElementA, float> && std::is_same_v<LayoutTagL1A, layout::nZ>) {
             mmadParams.kDirectionAlign = true;
         }
+#endif
+#if (defined (__NPU_ARCH__) && __NPU_ARCH__ == 3510)
+        if constexpr(std::is_same_v<LayoutTagL1A, layout::VectorLayout>) {
+            mmadParams.disableGemv = false;
+        } else {
+            mmadParams.disableGemv = true;
+        }
+#endif
 
         AscendC::Mmad(l0CTensor.data(),
                       l0ATensor.data(),
@@ -145,6 +157,74 @@ struct TileMmadTla {
         const uint32_t PIPE_M_BARRIER_THRESHOLD = 10;
         if ((m / C0_NUM_PER_FRACTAL) * (n / C0_NUM_PER_FRACTAL) < PIPE_M_BARRIER_THRESHOLD) {
             AscendC::PipeBarrier<PIPE_M>();
+        }
+    }
+
+    template <class TensorC, class TensorA, class TensorB, class TensorBias>
+    CATLASS_DEVICE
+    void operator()(TensorC const &l0CTensor,
+         TensorA const &l0ATensor,
+         TensorB const &l0BTensor,
+         TensorBias const &l0BiasTensor,
+         uint32_t m, uint32_t n, uint32_t k,
+         bool initC = true, uint8_t unitFlag = 0)
+    {
+        AscendC::MmadParams mmadParams;
+        mmadParams.m = m;
+        mmadParams.n = n;
+        mmadParams.k = k;
+        mmadParams.unitFlag = unitFlag;
+        mmadParams.cmatrixInitVal = false;
+#if (defined (__NPU_ARCH__) && __NPU_ARCH__ == 2201)
+        if constexpr (std::is_same_v<ElementA, float> && std::is_same_v<LayoutTagL1A, layout::nZ>) {
+            mmadParams.kDirectionAlign = true;
+        }
+#endif
+#if (defined (__NPU_ARCH__) && __NPU_ARCH__ == 3510)
+        mmadParams.disableGemv = true;
+#endif
+
+        AscendC::Mmad(l0CTensor.data(),
+                      l0ATensor.data(),
+                      l0BTensor.data(),
+                      l0BiasTensor.data(),
+                      mmadParams);
+
+        const uint32_t PIPE_M_BARRIER_THRESHOLD = 10;
+        if ((m / C0_NUM_PER_FRACTAL) * (n / C0_NUM_PER_FRACTAL) < PIPE_M_BARRIER_THRESHOLD) {
+            AscendC::PipeBarrier<PIPE_M>();
+        }
+    }
+
+    template <class TensorC, class TensorA, class TensorB>
+    CATLASS_DEVICE
+    void operator()(TensorC const &l0CTensor,
+         TensorA const &l0ATensor,
+         TensorB const &l0BTensor,
+         uint32_t m, uint32_t n, uint32_t k,
+         uint32_t l0Batch)
+    {
+        const uint32_t L0AM = tla::get<0, 0>(l0ATensor.shape()) * tla::get<0, 1>(l0ATensor.shape());
+        const uint32_t L0AK = tla::get<1, 0>(l0ATensor.shape()) * tla::get<1, 1>(l0ATensor.shape());
+        const uint32_t L0BK = tla::get<0, 0>(l0BTensor.shape()) * tla::get<0, 1>(l0BTensor.shape());
+        const uint32_t L0BN = tla::get<1, 0>(l0BTensor.shape()) * tla::get<1, 1>(l0BTensor.shape());
+        const uint32_t L0CM = tla::get<0, 0>(l0CTensor.shape()) * tla::get<0, 1>(l0CTensor.shape());
+        const uint32_t L0CN = tla::get<1, 0>(l0CTensor.shape()) * tla::get<1, 1>(l0CTensor.shape());
+
+        AscendC::MmadParams mmadParams;
+        mmadParams.m = m;
+        mmadParams.n = n;
+        mmadParams.k = k;
+        mmadParams.unitFlag = 0;
+        mmadParams.cmatrixInitVal = true;
+#if (defined (__NPU_ARCH__) && __NPU_ARCH__ == 3510)
+        mmadParams.disableGemv = true;
+#endif
+        for (uint32_t l0BatchIdx = 0; l0BatchIdx < l0Batch; l0BatchIdx++) {
+            AscendC::Mmad(l0CTensor.data()[l0BatchIdx * L0CM * L0CN],
+                l0ATensor.data()[l0BatchIdx * L0AM * L0AK],
+                l0BTensor.data()[l0BatchIdx * L0BK * L0BN],
+                mmadParams);
         }
     }
 };

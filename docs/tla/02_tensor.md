@@ -18,6 +18,7 @@
 有如下两种方式构造：
 
 ```cpp
+using namespace tla;
 GlobalTensor<float> A = ...;
 
 // 缺省Coord, 默认为（0， 0）
@@ -47,6 +48,7 @@ TLA `Tensor` 提供获取相应特性的接口：
 提供一个 `GetTile` 接口获取 `Tensor` 的一片子tensor，会根据输入坐标对coord进行更新，并依据新的Tile的shape变换layout（只是逻辑层面的数据组织形式），底层的数据实体不变更。
 
 ```cpp
+using namespace tla;
 Layout w8xh16 = MakeLayout(MakeShape(8, Int<16>{}), MakeStride(Int<16>{},Int< 1>{}));
 Tensor tensor_8x16 = MakeTensor(A, w8xh16, Arch::PositionGM{});
 

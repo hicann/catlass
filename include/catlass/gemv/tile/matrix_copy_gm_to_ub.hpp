@@ -37,7 +37,7 @@ struct MatrixCopyGmToUB<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>
 
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
 
-    // Mehtods
+    // Methods
 
     CATLASS_DEVICE
     MatrixCopyGmToUB() {};
@@ -126,7 +126,7 @@ struct MatrixCopyGmToUB<Arch::AtlasA2, Gemm::GemmType<Element, layout::ColumnMaj
 
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
 
-    // Mehtods
+    // Methods
 
     CATLASS_DEVICE
     MatrixCopyGmToUB() {};

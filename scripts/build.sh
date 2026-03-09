@@ -52,7 +52,7 @@ function show_help() {
     echo "  --enable_print  Enable built-in compiler print feature"
     echo "  --enable_ascendc_dump   Enable AscendC dump API"
     echo "  --tests         Enable building targets in tests"
-    echo "  -DCATLASS_BISHENG_ARCH  NPU arch. Only supports a2/a3."
+    echo "  -DCATLASS_ARCH  NPU arch. Supports 2201(AtlasA2/A3)/3510(Ascend950PR/DT)."
     echo "  -D<option>      Additional CMake options"
     echo -e "\n${BLUE}Targets:${NC}"
     echo "  catlass_examples  Build Catlass examples"
