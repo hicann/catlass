@@ -12,6 +12,7 @@
 
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -44,7 +45,7 @@ class CMakeBuild(build_ext):
         extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
 
         cmake_args = [
-            "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=" + extdir + "/torch_catlass",
+            "-DCMAKE_INSTALL_PREFIX=" + os.path.join(extdir, "torch_catlass"),
             "-DPython3_EXECUTABLE=" + sys.executable,
             "-DBUILD_PYBIND=True",
         ] + cmake_extra_args
@@ -61,6 +62,11 @@ class CMakeBuild(build_ext):
             ["cmake", "--build", ".", "--target", "_C", "-j"] + build_args,
             cwd=self.build_temp,
         )
+        subprocess.check_call(
+            ["cmake", "--install", ".", "--component", "_python_extension_lib"],
+            cwd=self.build_temp,
+        )
+
 
     def generate_pyi(self, ext):
         extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
@@ -89,7 +95,7 @@ setup(
     name="torch_catlass",
     version=version,
     author="Huawei Technologies Co., Ltd.",
-    description="A PyTorch extension for AscendC Tenplates with pybind11 bindings",
+    description="A PyTorch extension for CATLASS with pybind11 bindings",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
     packages=["torch_catlass"],

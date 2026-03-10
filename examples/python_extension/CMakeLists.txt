@@ -38,10 +38,9 @@ include_directories(${Python3_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}/src/include)
 
 link_directories(${ASCEND_HOME_PATH}/lib64
-    ${CMAKE_BINARY_DIR}
     ${Python3_SITELIB}/torch_npu/lib)
 
-link_libraries(catlass_kernel_static "${TORCH_LIBRARIES}" torch_npu tiling_api)
+link_libraries(${TORCH_LIBRARIES} torch_npu tiling_api)
 
 file(GLOB WRAPPER_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/wrapper/*.cpp)
 add_library(catlass_kernel_wrapper OBJECT ${WRAPPER_SOURCES})
@@ -51,12 +50,15 @@ if(BUILD_PYBIND)
     set(PYBIND_BINDINGS_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/bindings/pybind_bindings.cpp)
     pybind11_add_module(_C
         SHARED ${PYBIND_BINDINGS_SRC} $<TARGET_OBJECTS:catlass_kernel_wrapper>)
-    install(TARGETS _C DESTINATION .)
+    target_link_libraries(_C PRIVATE catlass_kernel)
+    install(TARGETS _C DESTINATION . COMPONENT _python_extension_lib)
+    install(TARGETS catlass_kernel DESTINATION lib COMPONENT _python_extension_lib)
 endif()
 
 if(BUILD_TORCH_LIB)
     set(TORCH_BINDINGS_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/bindings/torch_bindings.cpp)
     add_library(catlass_torch
         SHARED ${TORCH_BINDINGS_SRC} $<TARGET_OBJECTS:catlass_kernel_wrapper>)
+    target_link_libraries(catlass_torch PRIVATE catlass_kernel_static)
     install(TARGETS catlass_torch DESTINATION . COMPONENT catlass_torch)
 endif()

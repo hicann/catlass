@@ -19,6 +19,7 @@ add_library(catlass_kernel_static STATIC ${CATLASS_SHARED_LIB_SRC})
 set_target_properties(catlass_kernel PROPERTIES POSITION_INDEPENDENT_CODE ON)
 set_target_properties(catlass_kernel_static PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+set_target_properties(catlass_kernel PROPERTIES OUTPUT_NAME catlass_kernel)
 
 if(DEFINED ENABLE_MSSANITIZER AND ENABLE_MSSANITIZER)
     target_compile_options(catlass_kernel PRIVATE "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-g --cce-enable-sanitizer>")
@@ -30,6 +31,9 @@ endif()
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src/common
     ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+target_link_libraries(catlass_kernel PRIVATE runtime)
+target_link_libraries(catlass_kernel_static PRIVATE runtime)
 
 add_custom_target(shared_lib)
 add_dependencies(shared_lib catlass_kernel)
