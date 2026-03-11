@@ -16,6 +16,7 @@
 #include "platform_info.h"
 #include <opdev/bfloat16.h>
 #include <opdev/fp16_t.h>
+#include <array>
 
 using fp16_t = op::fp16_t;
 
