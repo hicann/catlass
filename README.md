@@ -3,7 +3,7 @@
 ---
 ### ⚠ 重要变更
 我们于2026年3月第一次社区会议正式确定CATLASS社区主线将开始新增对下一代昇腾硬件Ascend 950PR/Ascend 950DT的支持。
-该新增支持将引入新的编译宏，在某些场景下属于<font color="red">**不兼容**</font>变更，用户需要注意。
+该新增支持将引入新的编译宏，用户需要注意在对应编译命令中进行相应适配
 - 新增宏：`CATLASS_ARCH`，用于指定目标架构。其取值可在[SIMD BuiltIn关键字和API](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/opdevg/Ascendcopdevg/atlas_ascendc_10_10053.html#ZH-CN_TOPIC_0000002534415727__table65291052154114)中查询（`__NPU_ARCH__`列）。
     - `Atlas A2/A3`平台：`2201`
     - `Ascend 950PR/Ascend 950DT`平台：`3510`（此数值尚未于CANN文档中公开，从相关开源仓获得）
