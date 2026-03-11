@@ -51,6 +51,7 @@ target_link_libraries(mstuner_catlass PRIVATE
     runtime
     ${CATLASS_BUILD_DIR}/tools/library/libcatlass_kernels.so
     dfx_kernel
+    profapi
 )
 
 install(TARGETS mstuner_catlass
