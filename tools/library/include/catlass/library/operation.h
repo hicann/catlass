@@ -72,6 +72,7 @@ enum class GemmKind {
     MatmulBias,
     BasicMatmulPreload,
     PaddingSplitkMatmul,
+    MatmulGelu,
 
     Invalid
 };
@@ -251,6 +252,37 @@ struct GroupedMatmulSliceMGemmConfiguration {
     uint32_t k;
     uint32_t groupCount;
 };
+
+// Arguments for matmul gelu operations
+// 
+// OperationKind: Gemm
+// GemmKind:      MatmulGelu
+struct MatmulGeluGemmOperationDescription : public GemmOperationDescription {
+    TensorDescription D;  // output
+    MatmulGeluGemmOperationDescription(
+        GemmKind gemmKind = GemmKind::Invalid,
+        TensorDescription A = TensorDescription(),
+        TensorDescription B = TensorDescription(),
+        TensorDescription C = TensorDescription(),
+        TensorDescription D = TensorDescription(),
+        DataType epilogueElementType = DataType::Invalid
+    ) : GemmOperationDescription(gemmKind, A, B, C, epilogueElementType),
+        D(D) {}
+};
+
+struct MatmulGeluGemmArguments {
+    uint8_t *ptrA;
+    uint8_t *ptrB;
+    uint8_t *ptrD;
+};
+
+struct MatmulGeluGemmConfiguration {
+    uint32_t m;
+    uint32_t n;
+    uint32_t k;
+    size_t elementSize;
+};
+
 }
 }
 

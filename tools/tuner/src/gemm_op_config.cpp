@@ -410,4 +410,58 @@ bool QuantMatmulGemmOpConfig::InitArgument(Library::Operation *op)
 
     return true;
 }
+
+bool MatmulGeluGemmOpConfig::InitConfig(CommandLineParser &parser)
+{
+    bool res = GemmOpConfig::InitConfig(parser);
+    if (!res) {
+        return false;
+    }
+    config_.m = m_;
+    config_.n = n_;
+    config_.k = k_;
+    
+    if (!parser.HasKey("accu_dtype")) {
+        config_.elementSize = 4; // Default: fp32 (4 bytes)
+    } else {
+        std::string_view accuDtype;
+        GET_CHECK(parser.Get<std::string_view>("accu_dtype", accuDtype), "accu_dtype");
+        config_.elementSize = LibraryHelper::GetDataTypeSize(
+            LibraryHelper::GetDataTypeEnum(accuDtype)
+        );
+    }
+    return true;
+}
+
+bool MatmulGeluGemmOpConfig::InitArgument(Library::Operation *op)
+{
+    auto &mdesp = static_cast<const Library::MatmulGeluGemmOperationDescription &>(op->GetDescription());
+    ArgumentSize argSize{};
+    if (!SafeMul<uint32_t>({config_.m, config_.k}, argSize.lenA) ||
+        !SafeMul<uint32_t>({config_.k, config_.n}, argSize.lenB) ||
+        !SafeMul<uint32_t>({config_.m, config_.n}, argSize.lenD) || 
+        !SafeMul<size_t>({argSize.lenA, LibraryHelper::GetDataTypeSize(mdesp.A.element)}, argSize.sizeA) ||
+        !SafeMul<size_t>({argSize.lenB, LibraryHelper::GetDataTypeSize(mdesp.B.element)}, argSize.sizeB) ||
+        !SafeMul<size_t>({argSize.lenD, LibraryHelper::GetDataTypeSize(mdesp.D.element)}, argSize.sizeD)) {
+        LOGE("Arguments size overflows, please check command line input --m --n --k");
+        return false;
+    }
+
+    std::vector<DeviceMemoryParam> params{
+        {reinterpret_cast<void**>(&arg_.ptrA), argSize.sizeA},
+        {reinterpret_cast<void**>(&arg_.ptrB), argSize.sizeB},
+        {reinterpret_cast<void**>(&arg_.ptrD), argSize.sizeD},
+    };
+    if (!MallocDeviceMemory(params)) {
+        return false;
+    }
+    
+    return true;
+}
+
+void MatmulGeluGemmOpConfig::SaveMetric(Metric &metric)
+{
+    GemmOpConfig::SaveMetric(metric);
+    metric.SetField("element_size", std::to_string(config_.elementSize));
+}
 } // namespace Catlass

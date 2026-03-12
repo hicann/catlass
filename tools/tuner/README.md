@@ -77,6 +77,7 @@ bash scripts/build.sh -DCATLASS_LIBRARY_KERNELS=catlass_gemm_00_basic_matmul_fp1
 - 06_optimized_matmul
 - 08_grouped_matmul
 - 12_quant_matmul
+- 27_matmul_gelu
 
 注意：
 - 06_optimized_matmul 算子在不同的m/n/k输入时，会启用不同的kernel，包括：06_optimized_matmul_padding_ab, 06_optimized_matmul_padding_a_only, 06_optimized_matmul_padding_b_only, 06_optimized_matmul_without_padding，可直接指定预期运行的kernel以加速寻优过程，kernel匹配逻辑请参考 [optimized_matmul.cpp](../../examples/06_optimized_matmul/optimized_matmul.cpp)。

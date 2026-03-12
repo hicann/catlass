@@ -49,6 +49,7 @@ class GemmOperation:
             '06_optimized_matmul_padding_a_only': OptimizedMatmulPaddingAOnlyKernelInstance,
             '06_optimized_matmul_padding_b_only': OptimizedMatmulPaddingBOnlyKernelInstance,
             '12_quant_matmul': QuantMatmulKernelInstance,
+            '27_matmul_gelu': MatmulGeluKernelInstance,
         }
 
         self.body_template = """
@@ -749,5 +750,86 @@ class GroupedMatmulSliceMKernelInstance:
             layout_b=gemm_operation.b_type.layout.to_code(),
             layout_c=gemm_operation.c_type.layout.to_code(),
             block_swizzle=gemm_operation.block_swizzle
+        )
+        return src
+
+
+class MatmulGeluKernelInstance:
+    _element_accu_infer_map = {
+        (library.DataType.fp16, library.DataType.fp16): library.DataType.fp32,
+        (library.DataType.fp32, library.DataType.fp32): library.DataType.fp32,
+        (library.DataType.bf16, library.DataType.bf16): library.DataType.fp32,
+        (library.DataType.int8, library.DataType.int8): library.DataType.int32
+    }
+
+    def __init__(self) -> None:
+        self.cpp_instance = 'MatmulGeluGemmOperation'
+        self.custom_headers = '''
+                #include "catlass/arch/arch.hpp"
+                #include "catlass/catlass.hpp"
+                #include "catlass/epilogue/block/block_epilogue.hpp"
+                #include "catlass/epilogue/dispatch_policy.hpp"
+                #include "catlass/epilogue/tile/tile_copy.hpp"
+                #include "catlass/epilogue/tile/tile_elemwise_gelu.hpp"
+                #include "catlass/gemm/block/block_mmad.hpp"
+                #include "catlass/gemm/block/block_swizzle.hpp"
+                #include "catlass/gemm/device/device_gemm.hpp"
+                #include "catlass/gemm/dispatch_policy.hpp"
+                #include "catlass/gemm/gemm_type.hpp"
+                #include "catlass/gemm/kernel/matmul_activation.hpp"
+                #include "catlass/layout/layout.hpp"
+                #include "catlass/status.hpp"
+            '''
+        self.custom_common_decls = ''
+        self.template = """
+        Gemm::Device::DeviceGemm<
+            Gemm::Kernel::MatmulActivation<
+                Gemm::Block::BlockMmad<
+                    Gemm::MmadAtlasA2Pingpong<true>,
+                    GemmShape<{l1_m}, {l1_n}, {l1_k}>,
+                    GemmShape<{l0_m}, {l0_n}, {l0_k}>,
+                    Gemm::GemmType<{element_a}, {layout_a}>,
+                    Gemm::GemmType<{element_b}, {layout_b}>,
+                    Gemm::GemmType<{element_c}, {layout_c}>
+                >,
+                Epilogue::Block::BlockEpilogue<
+                    Epilogue::EpilogueAtlasA2ElemWiseNoSource,
+                    Gemm::GemmType<{element_c}, {layout_c}>,
+                    Gemm::GemmType<{element_d}, {layout_d}>,
+                    Epilogue::Tile::TileElemWiseGelu<{arch}, 
+                        Gemm::GemmType<{element_c}, {layout_c}>, 
+                        {compute_length}>,
+                    Epilogue::Tile::TileCopy<{arch},
+                        Gemm::GemmType<{element_c}, {layout_c}>,
+                        Gemm::GemmType<{element_d}, {layout_d}>
+                    >
+                >,
+                {block_swizzle}
+            >
+        >"""
+
+    def gen_src(self, gemm_operation):
+        _infer_element_accu = lambda element_a, element_b: self._element_accu_infer_map.get(
+            (element_a, element_b), library.DataType.fp32
+        )
+        src = self.template.format(
+            l1_m=str(gemm_operation.l1_tile_shape[0]),
+            l1_n=str(gemm_operation.l1_tile_shape[1]),
+            l1_k=str(gemm_operation.l1_tile_shape[2]),
+            l0_m=str(gemm_operation.l0_tile_shape[0]),
+            l0_n=str(gemm_operation.l0_tile_shape[1]),
+            l0_k=str(gemm_operation.l0_tile_shape[2]),
+            element_a=gemm_operation.a_type.element_type.to_code(),
+            element_b=gemm_operation.b_type.element_type.to_code(),
+            element_c=_infer_element_accu(gemm_operation.a_type.element_type, 
+                gemm_operation.b_type.element_type).to_code(),
+            element_d=gemm_operation.c_type.element_type.to_code(),
+            layout_a=gemm_operation.a_type.layout.to_code(),
+            layout_b=gemm_operation.b_type.layout.to_code(),
+            layout_c=gemm_operation.c_type.layout.to_code(),
+            layout_d=gemm_operation.c_type.layout.to_code(), # `LayoutC` equals to `LayoutD`
+            block_swizzle=gemm_operation.block_swizzle,
+            arch=gemm_operation.arch.to_code(),
+            compute_length=str(gemm_operation.l0_tile_shape[0] * gemm_operation.l0_tile_shape[1] // 2)
         )
         return src

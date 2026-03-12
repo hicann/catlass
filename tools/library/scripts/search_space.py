@@ -99,6 +99,7 @@ L1_SIZE_MAX = 512 * 1024
 L0A_SIZE_MAX = 64 * 1024
 L0B_SIZE_MAX = 64 * 1024
 L0C_SIZE_MAX = 128 * 1024
+UB_SIZE_MAX = 192 * 1024
 
 
 def tile_shape_constraint_for_pingpong(
@@ -182,6 +183,30 @@ def tile_shape_constraint_for_preload_async(
 
     return True
 
+def tile_shape_constraint_for_gelu(
+    l1_tile_shape,
+    l0_tile_shape,
+    element_sizes_tuple,
+    stages_tuple
+):
+    if not tile_shape_constraint_for_pingpong(l1_tile_shape, l0_tile_shape, element_sizes_tuple[:3], stages_tuple):
+        return False
+
+    _, _, l1_k = l1_tile_shape
+    l0_m, l0_n, l0_k = l0_tile_shape
+    _, _, element_accumulator_size, element_d_size = element_sizes_tuple 
+    operands_num = 2
+    compute_length = l0_m * l0_n // 2
+    
+    # UB Size limit
+    if compute_length * (operands_num * element_accumulator_size + element_d_size) > UB_SIZE_MAX:
+        return False
+
+    # L0 tileshape check
+    if l0_k > l1_k:
+        return False 
+
+    return True
 
 @dataclass
 class TileShapeRange:
@@ -667,3 +692,55 @@ def register_gemm_quant_matmul_operation(manifest):
         )
         manifest.append(op)
 ################## quant_matmul end ##################
+
+
+
+
+################### 27_matmul_gelu ##################
+@OperationRegistry.register('27_matmul_gelu')
+def register_gemm_27_matmul_gelu_operation(manifest):
+    layouts = [
+        [library.LayoutType.RowMajor, library.LayoutType.RowMajor, library.LayoutType.RowMajor],
+    ]
+    data_types = [
+        [library.DataType.fp16, library.DataType.fp16, library.DataType.fp16],
+        # ElementA, ElementB, ElementD
+    ]
+    block_swizzle_descriptions = [
+        'Gemm::Block::GemmIdentityBlockSwizzle<3, 0>',
+    ]
+    # generate L1/L0TileShape search space
+    tile_shapes = list(generate_tile_shapes(
+        tile_shape_constraint_for_gelu, # Gelu(with epilogue)减枝函数
+        element_sizes=(2, 2, 4, 2), # ElementA(half), ElementB(half), ElementAccu(float), ElementD(half)
+        stages=(2),
+        step=16,
+        tile_shape_range=TileShapeRange(
+            l1_tile_m_range=(64, 320),
+            l1_tile_n_range=(128, 256),
+            l1_tile_k_range=(64, 256),
+            l0_tile_m_range=(64, 320),
+            l0_tile_n_range=(128, 256),
+            l0_tile_k_range=(32, 128)
+        )
+    ))
+    LOGGER.info(f'27_matmul_gelu tile_shapes size={len(tile_shapes)}')
+    # 正交tiling参数组合
+    for layout, data_type, tile_shape, block_swizzle in product(
+        layouts, data_types, tile_shapes, block_swizzle_descriptions
+    ):
+        l1_tile_shape, l0_tile_shape = tile_shape
+        tensor_a = library.GemmTypeDescription(data_type[0], layout[0])
+        tensor_b = library.GemmTypeDescription(data_type[1], layout[1])
+        tensor_c = library.GemmTypeDescription(data_type[2], layout[2])
+        op = GemmOperation(
+            kernel_type='27_matmul_gelu',
+            l1_tile_shape=l1_tile_shape,
+            l0_tile_shape=l0_tile_shape,
+            a_type=tensor_a,
+            b_type=tensor_b,
+            c_type=tensor_c,
+            block_swizzle=block_swizzle,
+        )
+        manifest.append(op)
+################### 27_matmul_gelu end ##################

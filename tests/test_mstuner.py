@@ -98,6 +98,7 @@ class MsTunerCatlassTest(unittest.TestCase):
         ['06_optimized_matmul_without_padding', '--m=512', '--n=256', '--k=1024'],
         ['08_grouped_matmul', '--m=512', '--n=1024', '--k=2048', '--group_count=128'],
         ['12_grouped_matmul', '--m=256', '--n=512', '--k=1024'],
+        ['27_matmul_gelu', '--m=256', '--n=512', '--k=1024'], # Add matmul gelu mstuner (m, n, k)
     ]
 
 

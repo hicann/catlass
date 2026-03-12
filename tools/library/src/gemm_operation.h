@@ -299,6 +299,37 @@ private:
 };
 /********************* quant matmul end *********************/
 
+/********************* matmul gelu *********************/
+template <typename Operator_> 
+class MatmulGeluGemmOperation : public GemmOperationBase<Operator_, MatmulGeluGemmOperationDescription> {
+public:
+    using Operator = Operator_;
+    using OperatorArguments = typename Operator::Arguments;
+    using OperatorKernel = typename Operator::Kernel;
+
+    using ElementD = typename OperatorKernel::ElementD;
+    using LayoutD = typename OperatorKernel::LayoutD;
+
+    MatmulGeluGemmOperation(char const *name = "") : GemmOperationBase<Operator_, MatmulGeluGemmOperationDescription>(name)
+    {
+        this->description_.gemmKind = GemmKind::MatmulGelu;
+        this->description_.D = MakeTensorDescription<ElementD, LayoutD>();
+    }
+
+private:
+    virtual void BuildArgs(void *argsPtr, void *configPtr) override
+    {
+        MatmulGeluGemmArguments *arguments = (MatmulGeluGemmArguments *)argsPtr;
+        MatmulGeluGemmConfiguration *config = (MatmulGeluGemmConfiguration *)configPtr;
+
+        this->args_.problemShape = GemmCoord{config->m, config->n, config->k};
+        this->args_.elementSize = config->elementSize;
+        this->args_.ptrA = arguments->ptrA;
+        this->args_.ptrB = arguments->ptrB;
+        this->args_.ptrD = arguments->ptrD;
+    }
+};
+/********************* matmul gelu end *********************/
 }
 }
 
