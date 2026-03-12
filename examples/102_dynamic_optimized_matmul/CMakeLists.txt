@@ -42,8 +42,25 @@ if(COMPILE_DYNAMIC_OPTIMIZED_MATMUL)
     file(GLOB CATLASS_SHARED_LIB_SRC CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/impl/wrapper/*.cpp)
     set_source_files_properties(${CATLASS_SHARED_LIB_SRC} PROPERTIES LANGUAGE ASCEND)
 
-    add_library(dynamic_optimized_kernel STATIC ${CATLASS_SHARED_LIB_SRC})
-    set_target_properties(dynamic_optimized_kernel PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    set(BATCH_SIZE 200)
+    list(LENGTH CATLASS_SHARED_LIB_SRC TOTAL_FILES_NUM)
+    math(EXPR BATCH_COUNT "(${TOTAL_FILES_NUM} + ${BATCH_SIZE} - 1) / ${BATCH_SIZE} - 1")
+
+    set(102_DYNAMIC_OPTIMIZED_MATMUL_LIBS "")
+    foreach(BATCH_INDEX RANGE ${BATCH_COUNT})
+        math(EXPR START_INDEX "${BATCH_INDEX} * ${BATCH_SIZE}")
+        math(EXPR END_INDEX "${START_INDEX} + ${BATCH_SIZE}")
+        math(EXPR ACTUAL_SIZE "${BATCH_SIZE}")
+        if (${END_INDEX} GREATER TOTAL_FILES_NUM)
+            math(EXPR ACTUAL_SIZE "${TOTAL_FILES_NUM} - ${BATCH_INDEX} * ${BATCH_SIZE}")
+        endif()
+        list(SUBLIST CATLASS_SHARED_LIB_SRC ${START_INDEX} ${ACTUAL_SIZE} CURRENT_FILES)
+
+        set(SHARED_LIB_NAME "102_dynamic_optimized_kernel_batch_${BATCH_INDEX}")
+        add_library(${SHARED_LIB_NAME} SHARED ${CURRENT_FILES})
+        set_target_properties(${SHARED_LIB_NAME} PROPERTIES POSITION_INDEPENDENT_CODE ON)
+        list(APPEND 102_DYNAMIC_OPTIMIZED_MATMUL_LIBS ${SHARED_LIB_NAME})
+    endforeach()
 
     include_directories(
         ${ASCEND_HOME_PATH}/include
@@ -53,17 +70,36 @@ if(COMPILE_DYNAMIC_OPTIMIZED_MATMUL)
         ${CMAKE_CURRENT_SOURCE_DIR}/impl
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-    link_libraries(dynamic_optimized_kernel runtime)
+    link_libraries(${102_DYNAMIC_OPTIMIZED_MATMUL_LIBS} runtime)
     add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-O3>)
 
     add_executable(102_dynamic_optimized_matmul dynamic_optimized_matmul.cpp)
     add_dependencies(catlass_examples 102_dynamic_optimized_matmul)
-    add_dependencies(102_dynamic_optimized_matmul dynamic_optimized_kernel)
-    add_dependencies(dynamic_optimized_kernel auto_gen_code)
+    add_dependencies(102_dynamic_optimized_matmul ${102_DYNAMIC_OPTIMIZED_MATMUL_LIBS})
+    # target_link_options(102_dynamic_optimized_matmul PRIVATE "-Wl,-rpath,${CMAKE_SOURCE_DIR}/output/shared_lib")
 
-    install(TARGETS dynamic_optimized_kernel DESTINATION shared_lib/lib COMPONENT 102_dynamic_optimized_matmul)
-    install(TARGETS dynamic_optimized_kernel DESTINATION shared_lib/lib COMPONENT catlass_examples)
+    foreach(LIB ${102_DYNAMIC_OPTIMIZED_MATMUL_LIBS})
+        install(TARGETS ${LIB} DESTINATION shared_lib COMPONENT 102_dynamic_optimized_matmul)
+        install(TARGETS ${LIB} DESTINATION shared_lib COMPONENT catlass_examples)
+    endforeach()
     install(TARGETS 102_dynamic_optimized_matmul DESTINATION bin COMPONENT 102_dynamic_optimized_matmul)
     install(TARGETS 102_dynamic_optimized_matmul DESTINATION bin COMPONENT catlass_examples)
+
+    # show notice
+    add_custom_command(TARGET 102_dynamic_optimized_matmul POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E echo "========================================================================="
+        COMMAND ${CMAKE_COMMAND} -E echo "                            IMPORTANT NOTICE"
+        COMMAND ${CMAKE_COMMAND} -E echo "========================================================================="
+        COMMAND ${CMAKE_COMMAND} -E echo ""
+        COMMAND ${CMAKE_COMMAND} -E echo "The shared libraries have been built successfully!"
+        COMMAND ${CMAKE_COMMAND} -E echo ""
+        COMMAND ${CMAKE_COMMAND} -E echo "To use them, please add the shared library path to your LD_LIBRARY_PATH."
+        COMMAND ${CMAKE_COMMAND} -E echo ""
+        COMMAND ${CMAKE_COMMAND} -E echo "You can enter the following command:"
+        COMMAND ${CMAKE_COMMAND} -E echo ""
+        COMMAND ${CMAKE_COMMAND} -E echo "    export LD_LIBRARY_PATH=${CMAKE_SOURCE_DIR}/output/shared_lib:\\$$LD_LIBRARY_PATH"
+        COMMAND ${CMAKE_COMMAND} -E echo ""
+        COMMAND ${CMAKE_COMMAND} -E echo "========================================================================="
+    )
 
 endif()

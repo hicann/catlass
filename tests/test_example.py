@@ -20,7 +20,8 @@ CMAKE_BINARY_PATH = os.path.join(os.path.dirname(
     os.path.abspath(__file__)), "..", "output", "bin")
 CMAKE_EXAMPLES_PATH = os.path.join(os.path.dirname(
     os.path.abspath(__file__)), "..", "examples")
-
+os.environ['LD_LIBRARY_PATH'] = os.path.join(CMAKE_BINARY_PATH,
+    "..", "shared_lib:") + os.environ.get('LD_LIBRARY_PATH', '')
 
 class CatlassExampleTest(unittest.TestCase):
     def run_case(self, executable_name: str, args: List):
