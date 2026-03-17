@@ -1,10 +1,11 @@
 /**
- * This program is free software, you can redistribute it and/or modify.
  * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This file is a part of the CANN Open Software.
- * Licensed under CANN Open Software License Agreement Version 2.0 (the "License").
+ * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+ * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
@@ -16,17 +17,17 @@
 
 #include "catlass/gemm/kernel/w4a4_matmul_per_token_per_channel_dequant.hpp"
 
-#include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
-#include "catlass/gemm/block/block_mmad.hpp"
-#include "catlass/gemm/block/block_swizzle.hpp"
-#include "catlass/gemm/device/device_gemm.hpp"
-#include "catlass/gemm/dispatch_policy.hpp"
+#include "catlass/catlass.hpp"
 #include "catlass/epilogue/block/block_epilogue.hpp"
 #include "catlass/epilogue/dispatch_policy.hpp"
 #include "catlass/epilogue/tile/tile_broadcast_mul.hpp"
 #include "catlass/epilogue/tile/tile_broadcast_one_blk.hpp"
 #include "catlass/epilogue/tile/tile_swizzle.hpp"
+#include "catlass/gemm/block/block_mmad.hpp"
+#include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/device/device_gemm.hpp"
+#include "catlass/gemm/dispatch_policy.hpp"
 #include "catlass/layout/layout.hpp"
 #include "catlass/status.hpp"
 
@@ -98,7 +99,8 @@ void Run(Options const &options)
 
     void *hostPerTokenScale = nullptr;
     ACL_CHECK(aclrtMallocHost(&hostPerTokenScale, sizePerTokenScale));
-    std::string inputPerTokenScalePath = "../../examples/38_w4a4_matmul_per_token_per_channel_dequant/data/inputPerTokenScale.dat";
+    std::string inputPerTokenScalePath =
+        "../../examples/38_w4a4_matmul_per_token_per_channel_dequant/data/inputPerTokenScale.dat";
     ReadFile(inputPerTokenScalePath, hostPerTokenScale, sizePerTokenScale);
 
     std::vector<float> hExpected(goldenSize);
@@ -121,8 +123,9 @@ void Run(Options const &options)
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA, sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB, sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
     ACL_CHECK(aclrtMemcpy(deviceScale, sizeScale, hostScale, sizeScale, ACL_MEMCPY_HOST_TO_DEVICE));
-    ACL_CHECK(aclrtMemcpy(devicePerTokenScale, sizePerTokenScale, hostPerTokenScale,
-        sizePerTokenScale, ACL_MEMCPY_HOST_TO_DEVICE));
+    ACL_CHECK(aclrtMemcpy(
+        devicePerTokenScale, sizePerTokenScale, hostPerTokenScale, sizePerTokenScale, ACL_MEMCPY_HOST_TO_DEVICE
+    ));
 
     using ArchTag = Arch::AtlasA2;
     constexpr uint32_t preloadStages = 1;
@@ -145,12 +148,8 @@ void Run(Options const &options)
     using ScaleGranularity = Catlass::Gemm::Tile::ScaleGranularity;
 
     using TileCopyMmad = Gemm::Tile::QuantTileCopy<ArchTag, AType, BType, CType, void, ScaleGranularity::PER_CHANNEL>;
-    using BlockMmad = Gemm::Block::BlockMmad<
-        DispatchPolicy,
-        L1TileShape, L0TileShape,
-        AType, BType, CType,  void,
-        TileCopyMmad
-    >;
+    using BlockMmad =
+        Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType, void, TileCopyMmad>;
 
     // --------- Epilogue
     using EpilogueDispatchPolicy = Epilogue::EpilogueAtlasA2W4A4PerTokenPerChannelDequant;
@@ -169,30 +168,23 @@ void Run(Options const &options)
     using TileScheduler = Epilogue::Tile::EpilogueHorizontalTileSwizzle;
 
     using BlockEpilogue = Epilogue::Block::BlockEpilogue<
-        EpilogueDispatchPolicy, CType, PerTokenScaleType, DType, 
-        TileBroadcastOneBlk, TileOneBlkColumnBroadcastMul, 
+        EpilogueDispatchPolicy, CType, PerTokenScaleType, DType, TileBroadcastOneBlk, TileOneBlkColumnBroadcastMul,
         TileCopy, TileScheduler>;
     // --------- Epilogue
 
     // --------- Kernel
     using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
-    using MatmulKernel = Gemm::Kernel::W4A4MatmulPerTokenPerChannelDequant<BlockMmad, BlockEpilogue,
-        BlockScheduler, workspaceStages, ElementScale, LayoutScale>;
+    using MatmulKernel = Gemm::Kernel::W4A4MatmulPerTokenPerChannelDequant<
+        BlockMmad, BlockEpilogue, BlockScheduler, workspaceStages, ElementScale, LayoutScale>;
     // call a kernel
     using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
     // --------- Kernel
 
     MatmulAdapter matmulOp;
     typename MatmulKernel::Arguments arguments{
-        options.problemShape,
-        aicoreNum,
-        deviceA, layoutA,
-        deviceB, layoutB,
-        deviceScale, layoutScale,
-        devicePerTokenScale, layoutPerTokenScale,
-        deviceD, layoutD
-    };
-    
+        options.problemShape, aicoreNum,           deviceA, layoutA, deviceB, layoutB, deviceScale, layoutScale,
+        devicePerTokenScale,  layoutPerTokenScale, deviceD, layoutD};
+
     if (matmulOp.CanImplement(arguments) == Status::kInvalid) {
         std::cerr << "Matmul op cannot be implemented." << std::endl;
         return;
@@ -209,7 +201,7 @@ void Run(Options const &options)
     if (sizeWorkspace > 0) {
         ACL_CHECK(aclrtFree(deviceWorkspace));
     }
-   
+
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
     ACL_CHECK(aclrtFree(deviceA));
