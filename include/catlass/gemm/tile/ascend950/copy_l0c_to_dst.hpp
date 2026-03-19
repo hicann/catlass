@@ -33,10 +33,10 @@ template <
     ScaleGranularity DEQUANT_GRANULARITY = ScaleGranularity::NO_QUANT
 >
 struct CopyL0CToDstQuantMode {
-    static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy l0c to gm, can not find the specialization.");
+    static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy l0c to dst quant mode, can not find the specialization.");
 };
 
-// CopyL0CToGm fp32 to fp32
+// CopyL0CToDst fp32 to fp32
 template <class ArchTag>
 struct CopyL0CToDstQuantMode<
     ArchTag,
@@ -46,7 +46,7 @@ struct CopyL0CToDstQuantMode<
     static constexpr auto VALUE = QuantMode_t::NoQuant;
 };
 
-// CopyL0CToGm cast fp32 to fp16
+// CopyL0CToDst cast fp32 to fp16
 template <class ArchTag>
 struct CopyL0CToDstQuantMode<
     ArchTag,
@@ -65,7 +65,7 @@ struct CopyL0CToDstQuantMode<
     static constexpr auto VALUE = QuantMode_t::F322F16;
 };
 
-// CopyL0CToGm cast fp32 to bf16
+// CopyL0CToDst cast fp32 to bf16
 template <class ArchTag>
 struct CopyL0CToDstQuantMode<
     ArchTag,
@@ -84,7 +84,7 @@ struct CopyL0CToDstQuantMode<
     static constexpr auto VALUE = QuantMode_t::F322BF16;
 };
 
-// CopyL0CToGm cast float to uint8/int8
+// CopyL0CToDst cast float to uint8/int8
 template <class ArchTag>
 struct CopyL0CToDstQuantMode<
     ArchTag,
@@ -121,7 +121,7 @@ struct CopyL0CToDstQuantMode<
     static constexpr auto VALUE = QuantMode_t::VQF322B8_PRE;
 };
 
-// CopyL0CToGm output int32
+// CopyL0CToDst output int32
 template <class ArchTag>
 struct CopyL0CToDstQuantMode<
     ArchTag,
@@ -131,7 +131,7 @@ struct CopyL0CToDstQuantMode<
     static constexpr auto VALUE = QuantMode_t::NoQuant;
 };
 
-// CopyL0CToGm cast int32_t to fp16
+// CopyL0CToDst cast int32_t to fp16
 template <class ArchTag>
 struct CopyL0CToDstQuantMode<
     ArchTag,
@@ -150,7 +150,7 @@ struct CopyL0CToDstQuantMode<
     static constexpr auto VALUE = QuantMode_t::VDEQF16;
 };
 
-// CopyL0CToGm cast int32 to uint8/int8
+// CopyL0CToDst cast int32 to uint8/int8
 template <class ArchTag>
 struct CopyL0CToDstQuantMode<
     ArchTag,
@@ -185,6 +185,82 @@ struct CopyL0CToDstQuantMode<
     ScaleGranularity::PER_CHANNEL
 > {
     static constexpr auto VALUE = QuantMode_t::VREQ8;
+};
+
+// CopyL0CToDst cast int32 to bf16
+template <class ArchTag>
+struct CopyL0CToDstQuantMode<
+    ArchTag,
+    int32_t, bfloat16_t,
+    ScaleGranularity::PER_TENSOR
+> {
+    static constexpr auto VALUE = QuantMode_t::QS322BF16_PRE;
+};
+
+template <class ArchTag>
+struct CopyL0CToDstQuantMode<
+    ArchTag,
+    int32_t, bfloat16_t,
+    ScaleGranularity::PER_CHANNEL
+> {
+    static constexpr auto VALUE = QuantMode_t::VQS322BF16_PRE;
+};
+
+// CopyL0CToDst cast fp32 to fp16
+template <class ArchTag>
+struct CopyL0CToDstQuantMode<
+    ArchTag,
+    float, half,
+    ScaleGranularity::PER_TENSOR
+> {
+    static constexpr auto VALUE = QuantMode_t::QF322F16_PRE;
+};
+
+template <class ArchTag>
+struct CopyL0CToDstQuantMode<
+    ArchTag,
+    float, half,
+    ScaleGranularity::PER_CHANNEL
+> {
+    static constexpr auto VALUE = QuantMode_t::VQF322F16_PRE;
+};
+
+// CopyL0CToDst cast fp32 to bf16
+template <class ArchTag>
+struct CopyL0CToDstQuantMode<
+    ArchTag,
+    float, bfloat16_t,
+    ScaleGranularity::PER_TENSOR
+> {
+    static constexpr auto VALUE = QuantMode_t::QF322BF16_PRE;
+};
+
+template <class ArchTag>
+struct CopyL0CToDstQuantMode<
+    ArchTag,
+    float, bfloat16_t,
+    ScaleGranularity::PER_CHANNEL
+> {
+    static constexpr auto VALUE = QuantMode_t::VQF322BF16_PRE;
+};
+
+// CopyL0CToDst cast fp32 to fp32
+template <class ArchTag>
+struct CopyL0CToDstQuantMode<
+    ArchTag,
+    float, float,
+    ScaleGranularity::PER_TENSOR
+> {
+    static constexpr auto VALUE = QuantMode_t::QF322F32_PRE;
+};
+
+template <class ArchTag>
+struct CopyL0CToDstQuantMode<
+    ArchTag,
+    float, float,
+    ScaleGranularity::PER_CHANNEL
+> {
+    static constexpr auto VALUE = QuantMode_t::VQF322F32_PRE;
 };
 
 template <

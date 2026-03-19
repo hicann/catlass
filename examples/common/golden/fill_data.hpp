@@ -19,6 +19,14 @@
 namespace Catlass::golden {
 
 template <class Element, class ElementRandom>
+void GenRandomData(Element& data, ElementRandom low, ElementRandom high)
+{
+    ElementRandom randomValue = low +
+        (static_cast<ElementRandom>(rand()) / static_cast<ElementRandom>(RAND_MAX)) * (high - low);
+    data = static_cast<Element>(randomValue);
+}
+
+template <class Element, class ElementRandom>
 void FillRandomData(std::vector<Element>& data, ElementRandom low, ElementRandom high)
 {
     for (uint64_t i = 0; i < data.size(); ++i) {

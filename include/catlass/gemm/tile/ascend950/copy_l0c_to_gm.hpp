@@ -156,6 +156,122 @@ struct CopyL0CToGmTla<
     }
 };
 
+template <class TensorSrc_, class ElementDst_, class LayoutDst_, class CoordDst_, bool ReluEnable_>
+struct CopyL0CToGmTla<
+    Catlass::Arch::Ascend950,
+    TensorSrc_,
+    tla::Tensor<AscendC::GlobalTensor<ElementDst_>, LayoutDst_, CoordDst_, AscendC::TPosition::GM>,
+    ScaleGranularity::PER_TENSOR,
+    ReluEnable_,
+    std::enable_if_t<tla::detail::isRowMajor<LayoutDst_>::value>> {
+    using ArchTag = Catlass::Arch::Ascend950;
+    using ElementDst = ElementDst_;
+    using ElementSrc = typename TensorSrc_::Element;
+    static constexpr auto quantPre =
+        CopyL0CToDstQuantMode<ArchTag, ElementSrc, ElementDst, ScaleGranularity::PER_TENSOR>::VALUE;
+    static constexpr auto reluEn = ReluEnable_;
+
+    struct Params {
+        float scale = 1.0;
+
+        CATLASS_HOST_DEVICE
+        Params() = default;
+
+        CATLASS_HOST_DEVICE
+        Params(float scalar)
+        {
+            scale = scalar;
+        }
+    };
+    Params params;
+
+    CATLASS_DEVICE
+    CopyL0CToGmTla() = default;
+
+    CATLASS_DEVICE
+    CopyL0CToGmTla(Params const &params_) : params(params_) {};
+
+    template <class TensorDst, class TensorSrc>
+    CATLASS_DEVICE 
+    void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor, uint8_t unitFlag = 0)
+    {
+        static_assert(
+            tla::detail::isRowMajor<typename TensorDst::Layout>::value && TensorSrc::position == AscendC::TPosition::CO1
+                && TensorDst::position == AscendC::TPosition::GM,
+            "The input parameters do not match. TensorSrc must be L0C, while TensorDst must be GM and RowMajor"
+        );
+        
+        AscendC::FixpipeParamsC310 intriParams;
+
+        // Fixpipe layout information
+        intriParams.nSize = tla::get<1>(dstTensor.shape());
+        intriParams.mSize = tla::get<0>(dstTensor.shape());
+        intriParams.srcStride = tla::get<1, 1>(srcTensor.stride()) / tla::get<0, 0>(srcTensor.stride());
+        intriParams.dstStride = tla::get<0>(dstTensor.stride());
+
+        // Fixpipe auxiliary arguments
+        intriParams.quantPre = quantPre;
+        intriParams.deqScalar = static_cast<uint64_t>(*reinterpret_cast<int32_t*>(&params.scale));
+        intriParams.reluEn = reluEn;
+        intriParams.unitFlag = unitFlag;
+
+        auto dstOffset = dstTensor.layout()(dstTensor.coord());
+        auto srcOffset = srcTensor.layout()(srcTensor.coord());
+
+        // Call AscendC Fixpipe
+        AscendC::Fixpipe<ElementDst, ElementSrc, AscendC::CFG_ROW_MAJOR>(
+            dstTensor.data()[dstOffset], srcTensor.data()[srcOffset], intriParams);
+    }
+};
+
+template <class TensorSrc_, class ElementDst_, class LayoutDst_, class CoordDst_, bool ReluEnable_>
+struct CopyL0CToGmTla<
+    Catlass::Arch::Ascend950,
+    TensorSrc_,
+    tla::Tensor<AscendC::GlobalTensor<ElementDst_>, LayoutDst_, CoordDst_, AscendC::TPosition::GM>,
+    ScaleGranularity::PER_CHANNEL,
+    ReluEnable_,
+    std::enable_if_t<tla::detail::isRowMajor<LayoutDst_>::value>> {
+    using ArchTag = Catlass::Arch::Ascend950;
+    using ElementDst = ElementDst_;
+    using ElementSrc = typename TensorSrc_::Element;
+    static constexpr auto quantPre =
+        CopyL0CToDstQuantMode<ArchTag, ElementSrc, ElementDst, ScaleGranularity::PER_CHANNEL>::VALUE;
+    static constexpr auto reluEn = ReluEnable_;
+
+    template <class TensorDst, class TensorSrc, class TensorQuant>
+    CATLASS_DEVICE 
+    void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor, TensorQuant const &quantTensor, uint8_t unitFlag = 0)
+    {
+        static_assert(
+            tla::detail::isRowMajor<typename TensorDst::Layout>::value && TensorSrc::position == AscendC::TPosition::CO1
+                && TensorDst::position == AscendC::TPosition::GM,
+            "The input parameters do not match. TensorSrc must be L0C, while TensorDst must be GM and RowMajor"
+        );
+
+        AscendC::FixpipeParamsC310 intriParams;
+
+        // Fixpipe layout information
+        intriParams.nSize = tla::get<1>(dstTensor.shape());
+        intriParams.mSize = tla::get<0>(dstTensor.shape());
+        intriParams.srcStride = tla::get<1, 1>(srcTensor.stride()) / tla::get<0, 0>(srcTensor.stride());
+        intriParams.dstStride = tla::get<0>(dstTensor.stride());
+
+        // Fixpipe auxiliary arguments
+        intriParams.quantPre = quantPre;
+        intriParams.reluEn = reluEn;
+        intriParams.unitFlag = unitFlag;
+
+        auto dstOffset = dstTensor.layout()(dstTensor.coord());
+        auto srcOffset = srcTensor.layout()(srcTensor.coord());
+        auto quantOffset = quantTensor.layout()(quantTensor.coord());
+
+        // Call AscendC Fixpipe
+        AscendC::Fixpipe<ElementDst, ElementSrc, AscendC::CFG_ROW_MAJOR>(
+            dstTensor.data()[dstOffset], srcTensor.data()[srcOffset], quantTensor.data()[quantOffset], intriParams);
+    }
+};
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 } // namespace Catlass::Gemm::Tile

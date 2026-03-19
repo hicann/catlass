@@ -309,7 +309,7 @@ template <
     class LayoutTagC_,
     class ElementBias = void,
     bool ReluEnable_ = false,
-    ScaleGranularity DEQUANT_GRANULARITY = ScaleGranularity::NO_QUANT,
+    ScaleGranularity DEQUANT_GRANULARITY_ = ScaleGranularity::NO_QUANT,
     class L0CCopyMode = CopyToGM>
 struct PackedTileCopyTla {
     using ElementA = ElementA_;
@@ -319,8 +319,10 @@ struct PackedTileCopyTla {
     using LayoutTagC = LayoutTagC_;
     using ElementAccumulator = typename Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
     static constexpr bool ReluEnable = ReluEnable_;
+    static constexpr ScaleGranularity DEQUANT_GRANULARITY = DEQUANT_GRANULARITY_;
 
     static constexpr bool HAS_BIAS = !std::is_void_v<ElementBias>;
+    static constexpr bool HAS_QUANT_TENSOR = (DEQUANT_GRANULARITY == ScaleGranularity::PER_CHANNEL);
 
     using LayoutTagL1A = typename helper::L1ATypeSelector<Gemm::GemmType<ElementA, LayoutTagA>>::L1AType::Layout;
     using LayoutTagL1B = typename helper::L1BTypeSelector<Gemm::GemmType<ElementB, LayoutTagB>>::L1BType::Layout;
@@ -365,6 +367,13 @@ struct PackedTileCopyTla {
         detail::TagToLayout_t<ElementAccumulator, layout::VectorLayout>,
         tla::Coord<tla::_0>,
         AscendC::TPosition::C2>;
+    using TensorL1Quant = std::conditional_t<
+        HAS_QUANT_TENSOR,
+        tla::Tensor<AscendC::LocalTensor<uint64_t>, 
+            detail::TagToLayout_t<uint64_t, layout::VectorLayout>,            
+            tla::Coord<tla::_0>, 
+            AscendC::TPosition::A1>,
+        EmptyClass>;
 
     using L1AAlignHelper = Gemm::helper::L1AlignHelper<ElementA, LayoutTagA>;
     using L1BAlignHelper = Gemm::helper::L1AlignHelper<ElementB, LayoutTagB>;
@@ -378,6 +387,10 @@ struct PackedTileCopyTla {
     template <class TensorBias>
     using CopyGmToL1Bias =
         std::conditional_t<HAS_BIAS, Gemm::Tile::TileCopyTla<ArchTag, TensorBias, TensorL1Bias>, EmptyClass>;
+
+    template <class TensorQuant>
+    using CopyGmToL1Scale = 
+        std::conditional_t<HAS_QUANT_TENSOR, Gemm::Tile::TileCopyTla<ArchTag, TensorQuant, TensorL1Quant>, EmptyClass>;
 
     using CopyL1ToL0A = Gemm::Tile::TileCopyTla<ArchTag, TensorL1A, TensorL0A>;
     using CopyL1ToL0B = Gemm::Tile::TileCopyTla<ArchTag, TensorL1B, TensorL0B>;

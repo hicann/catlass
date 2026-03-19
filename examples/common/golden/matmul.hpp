@@ -11,6 +11,7 @@
 #ifndef EXAMPLES_COMMON_GOLDEN_MATMUL_HPP
 #define EXAMPLES_COMMON_GOLDEN_MATMUL_HPP
 
+#include <iostream>
 #include <vector>
 
 #include "catlass/layout/layout.hpp"
@@ -232,6 +233,47 @@ void ComputeMatmulElemWiseAdd(
             size_t offsetGolden = layoutGolden.GetOffset(MakeCoord(i, j));
             dataGolden[offsetGolden] = accumulator + static_cast<ElementGolden>(dataX[offsetGolden]);
         }
+    }
+}
+
+template <class ElementGroupList, class ElementScale, class LayoutB>
+void ComputeGroupedMatmulFixpipeDequant(
+    const GemmCoord &problemShape, uint32_t problemCount, const std::vector<ElementGroupList> &groupList,
+    const std::vector<int8_t> &dataA, const layout::RowMajor &layoutA,
+    const std::vector<int8_t> &dataB, const LayoutB &layoutB,
+    std::vector<float> &dataGolden, const layout::RowMajor &layoutGolden,
+    const int32_t quantMode,
+    const ElementScale &dataScale = 1.0,
+    const std::vector<ElementScale> &dataPerChannelScale = {}
+)
+{
+    size_t groupOffsetB = 0;
+    size_t groupOffsetScale = 0;
+    uint32_t startRow = 0;
+    for (uint32_t inGroupId = 0; inGroupId < problemCount; ++inGroupId) {
+        for (uint32_t i = startRow; i < groupList[inGroupId]; ++i) {
+            for (uint32_t j = 0; j < problemShape.n(); ++j) {
+                size_t offsetGolden = layoutGolden.GetOffset(MakeCoord(i, j));
+                int32_t accumulator = 0;
+                for (uint32_t k = 0; k < problemShape.k(); ++k) {
+                    size_t offsetA = layoutA.GetOffset(MakeCoord(i, k));
+                    size_t offsetB = groupOffsetB + layoutB.GetOffset(MakeCoord(k, j));
+                    accumulator += static_cast<int32_t>(dataA[offsetA]) * static_cast<int32_t>(dataB[offsetB]);
+                }
+                if (quantMode == 0) {              // perTensor
+                    dataGolden[offsetGolden] = static_cast<float>(accumulator) *
+                        static_cast<float>(dataScale);
+                } else if (quantMode == 1) {       // perChannel
+                    dataGolden[offsetGolden] = static_cast<float>(accumulator) *
+                        static_cast<float>(dataPerChannelScale[j]);
+                } else {
+                    std::cerr << "[ERROR] quantMode must be '0' or '1'." << std::endl; 
+                    return;
+                }         
+            }
+        }
+        groupOffsetB += static_cast<size_t>(problemShape.k()) * problemShape.n();
+        startRow = groupList[inGroupId];
     }
 }
 
