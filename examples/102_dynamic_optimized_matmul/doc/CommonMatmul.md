@@ -75,7 +75,7 @@ Preload的核心思想为，在计算当前Tile的Matmul前，预先加载下一
 
 右图为采用ShuffleK优化后的计算方式，右图中2号核心按2 3 0 1的顺序访问A矩阵基本块，而3号核心按3 0 1 2的顺序访问A矩阵基本块，在时间上错开，从而避免同地址访问冲突。
 
-图中的分块计算顺序采用GemmIdentityBlockSwizzle<2,1>，请参考[swizzle_explanation](../../../docs/contents/advanced/swizzle_explanation.md)
+图中的分块计算顺序采用GemmIdentityBlockSwizzle<2,1>，请参考[swizzle_explanation](../../../docs/2_Design/01_kernel_design/02_swizzle.md)
 ### 2.3 Padding
 
 在A2或A3上，当A或B矩阵为ND（RowMajor或ColumnMajor）格式时，如果矩阵的Stride为非512B对齐，则ND2NZ搬运接口的带宽会显著下降。为了规避这个问题，采用AIV提前对A或B矩阵进行数据格式转换（或数据填充），目的是让GM2L1搬运时候，避免非用512B对齐的Stride访问GM数据。

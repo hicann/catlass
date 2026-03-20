@@ -10,7 +10,7 @@ StreamkMatmul的具体详细原理请参考论文[Stream-K: Work-centric Paralle
 
 ![image-20260121101922888](https://raw.gitcode.com/weixin_42818618/picture0/raw/main/image-20260121101922888.png)
 
-如图所示，对于M=512，N=2048，K=1280的Shape，共有32个任务块，假设有20个核心，需要分两轮完成计算（图中的Swizzle请参考[swizzle_explanation](../../../docs/contents/advanced/swizzle_explanation.md)），第一轮每个核心都有一个任务块，负载是均衡的，所以不关心第一轮，但是第二轮，只有12个任务块计算，有8个核心空闲，如图所示：
+如图所示，对于M=512，N=2048，K=1280的Shape，共有32个任务块，假设有20个核心，需要分两轮完成计算（图中的Swizzle请参考[swizzle_explanation](../../../docs/2_Design/01_kernel_design/02_swizzle.md)），第一轮每个核心都有一个任务块，负载是均衡的，所以不关心第一轮，但是第二轮，只有12个任务块计算，有8个核心空闲，如图所示：
 
 ![image-20260121102302163](https://raw.gitcode.com/weixin_42818618/picture0/raw/main/image-20260121102302163.png)
 

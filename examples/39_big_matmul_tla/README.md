@@ -9,7 +9,7 @@
 ## 示例说明
 该用例使用了L2层级切分+错位分核的scheduler，针对大case场景，可以提升L2 cache命中率，并减少多核间同地址冲突
 ## 使用示例
-- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/quickstart.md#算子编译)
+- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/1_Practice/01_quick_start.md#算子编译)
 - 执行算子
 ```
 # 编译指定用例

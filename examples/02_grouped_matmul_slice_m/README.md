@@ -14,7 +14,7 @@
 如果需要输入grouplist配置（例如通过tensorList方式构造输入），可以参考python_extension中相应实现
 
 example使用
-- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/quickstart.md#算子编译)
+- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/1_Practice/01_quick_start.md#算子编译)
 - 执行算子
 ```
 # 编译指定用例
