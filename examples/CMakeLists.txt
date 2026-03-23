@@ -145,6 +145,7 @@ set(EXAMPLE_ATLASA2
 
 set(EXAMPLE_ASCEND950
     43_ascend950_basic_matmul
+    47_ascend950_grouped_matmul_slice_m_per_token_dequant
     48_ascend950_grouped_matmul_slice_m_per_tensor_per_channel_dequant
 )
 

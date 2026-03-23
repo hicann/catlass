@@ -140,31 +140,39 @@ struct TileCopyW4A4Gemm {
 template <
     class ArchTag,
     /// GemmType for C matrix operand
-    class ElementC,
-    class LayoutTagC,
+    class ElementC_,
+    class LayoutTagC_,
     /// GemmType for X matrix operand
-    class ElementX,
-    class LayoutTagX,
+    class ElementX_,
+    class LayoutTagX_,
     /// GemmType for Y matrix operand
-    class ElementY,
-    class LayoutTagY,
+    class ElementY_,
+    class LayoutTagY_,
     /// GemmType for D matrix operand
-    class ElementD,
-    class LayoutTagD
+    class ElementD_,
+    class LayoutTagD_
 >
 struct TileCopyDequantTla {
+    using ElementC = ElementC_;
+    using LayoutTagC = LayoutTagC_;
     using LayoutC = detail::TagToLayout_t<ElementC, LayoutTagC>;
     using TensorUbC =
         tla::Tensor<AscendC::LocalTensor<ElementC>, LayoutC, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::VECCALC>;
 
+    using ElementX = ElementX_;
+    using LayoutTagX = LayoutTagX_;
     using LayoutX = detail::TagToLayout_t<ElementX, LayoutTagX>;
     using TensorUbX =
         tla::Tensor<AscendC::LocalTensor<ElementX>, LayoutX, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::VECCALC>;
 
+    using ElementY = ElementY_;
+    using LayoutTagY = LayoutTagY_;
     using LayoutY = detail::TagToLayout_t<ElementY, LayoutTagY>;
     using TensorUbY =
         tla::Tensor<AscendC::LocalTensor<ElementY>, LayoutY, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::VECCALC>;
 
+    using ElementD = ElementD_;
+    using LayoutTagD = LayoutTagD_;
     using LayoutD = detail::TagToLayout_t<ElementD, LayoutTagD>;
     using TensorUbD =
         tla::Tensor<AscendC::LocalTensor<ElementD>, LayoutD, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::VECCALC>;
