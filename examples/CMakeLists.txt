@@ -147,6 +147,7 @@ set(EXAMPLE_ASCEND950
     43_ascend950_basic_matmul
     47_ascend950_grouped_matmul_slice_m_per_token_dequant
     48_ascend950_grouped_matmul_slice_m_per_tensor_per_channel_dequant
+    50_ascend950_basic_matmul_gemv
 )
 
 if(CATLASS_ARCH STREQUAL "2201")

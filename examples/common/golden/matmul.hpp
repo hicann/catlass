@@ -34,7 +34,12 @@ void ComputeMatmul(
             size_t offsetGolden = layoutGolden.GetOffset(MakeCoord(i, j));
             ElementGolden accumulator = 0;
             for (uint32_t k = 0; k < problemShape.k(); ++k) {
-                size_t offsetA = layoutA.GetOffset(MakeCoord(i, k));
+                size_t offsetA = 0;
+                if constexpr(std::is_same_v<LayoutA, layout::VectorLayout>) {
+                    offsetA = layoutA.GetOffset(MakeCoord(k));
+                } else {
+                    offsetA = layoutA.GetOffset(MakeCoord(i, k));
+                }
                 size_t offsetB = layoutB.GetOffset(MakeCoord(k, j));
                 accumulator += static_cast<ElementGolden>(dataA[offsetA]) * static_cast<ElementGolden>(dataB[offsetB]);
             }
