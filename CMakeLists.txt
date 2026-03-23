@@ -14,12 +14,25 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(ASCEND_CMAKE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules)
 list(APPEND CMAKE_MODULE_PATH ${ASCEND_CMAKE_PATH})
 project(Catlass LANGUAGES ASCEND CXX)
-include(cmake/funcs.cmake)
 
 if(NOT DEFINED ENV{ASCEND_HOME_PATH})
     message(FATAL_ERROR "Cannot find ASCEND_HOME_PATH, please run set_env.sh.")
 else()
     set(ASCEND_HOME_PATH $ENV{ASCEND_HOME_PATH})
+endif()
+
+if(NOT DEFINED NPU_MODEL OR NPU_MODEL STREQUAL "")
+    execute_process(
+        COMMAND python -c "import acl;print(acl.get_soc_name())"
+        OUTPUT_VARIABLE NPU_MODEL
+        ERROR_QUIET
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    if(NPU_MODEL STREQUAL "")
+        message(WARNING "Failed to get NPU_MODEL. Simulator or aclnn example may not work.\nYou can set NPU_MODEL manually by -DNPU_MODEL=Ascendxxxyy.")
+    else()
+        message("Detected NPU_MODEL: ${NPU_MODEL}")
+    endif()
 endif()
 
 set(CATLASS_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/include)

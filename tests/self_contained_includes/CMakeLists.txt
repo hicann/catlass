@@ -12,12 +12,34 @@ set_source_files_properties(test_self_contained_includes.cpp PROPERTIES LANGUAGE
 add_custom_target(test_self_contained_includes)
 
 include_directories(${CATLASS_INCLUDE_DIR})
-add_compile_options("--cce-aicore-arch=dav-c220")
-add_compile_definitions(CATLASS_ARCH=2201)
-
 file(GLOB_RECURSE CATLASS_HEADERS ${CATLASS_INCLUDE_DIR}/**/*.hpp)
 list(FILTER CATLASS_HEADERS EXCLUDE REGEX "block")
-list(FILTER CATLASS_HEADERS EXCLUDE REGEX "950")  # 950 compilation not support on CANN 8.5
+set(ARCH_CONFIGS
+    "2201\;dav-c220\;atlasa2"
+    "3510\;dav-c310\;ascend950"
+)
+
+foreach(ARCH_CONFIG ${ARCH_CONFIGS})
+    string(REPLACE ";" " " ARCH_CONFIG_STR ${ARCH_CONFIG})
+    message("ARCH_CONFIG: ${ARCH_CONFIG_STR}")
+
+    list(GET ARCH_CONFIG 0 NPU_ARCH)
+    list(GET ARCH_CONFIG 1 BISHENG_CCE_AICORE_ARCH)
+    list(GET ARCH_CONFIG 2 CATLASS_ARCH_TAG)
+
+    if(CATLASS_ARCH STREQUAL ${NPU_ARCH})
+        add_compile_options("--cce-aicore-arch=${BISHENG_CCE_AICORE_ARCH}")
+        add_compile_definitions(CATLASS_ARCH=${NPU_ARCH})
+    else()
+        list(FILTER CATLASS_HEADERS EXCLUDE REGEX ${CATLASS_ARCH_TAG})
+    endif()
+endforeach()
+
+# non-tla tile components of ascend950 is not ready, gemv and conv do not work.
+if(CATLASS_ARCH STREQUAL "3510")
+    list(FILTER CATLASS_HEADERS EXCLUDE REGEX "gemv")
+    list(FILTER CATLASS_HEADERS EXCLUDE REGEX "conv")
+endif()
 
 foreach(CATLASS_HEADER ${CATLASS_HEADERS})
     file(RELATIVE_PATH REL_CATLASS_HEADER ${CATLASS_INCLUDE_DIR} ${CATLASS_HEADER})
