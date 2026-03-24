@@ -54,6 +54,18 @@ struct EpilogueAtlasA2RescaleO {
     using ArchTag = Arch::AtlasA2;
 };
 
+// For Ascend950, FA Infer online Softmax
+template <bool ATTENTION_MASK_FLAG_ = false>
+struct EpilogueAscend950FASoftmax {
+    using ArchTag = Arch::Ascend950;
+    static constexpr bool ATTENTION_MASK_FLAG = ATTENTION_MASK_FLAG_;
+};
+
+// For Ascend950, FA Infer RescaleO
+struct EpilogueAscend950FARescaleO {
+    using ArchTag = Arch::Ascend950;
+};
+
 // For AtlasA2, MLA RescaleO
 struct EpilogueAtlasA2MLARescaleO {
     using ArchTag = Arch::AtlasA2;

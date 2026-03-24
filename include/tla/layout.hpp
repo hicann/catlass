@@ -363,6 +363,27 @@ struct iszN<Element, Layout, std::enable_if_t<Layout::depth == 2 && Layout::rank
                                stride<0, 1>(Layout{}) == ELE_NUM_PER_FRACTAL);
 };
 
+/*
+For matmul m axis is not c0 Aligned.
+Exp: oriShape(m, k) : (127, 256)
+zNUnAlign shape:((127, 1), (16, 256/16))  zN shape: ((16, Ceil(127/16)), (16, 256/16))
+*/
+template <class Element, class Layout, class Enable1 = void, class Enable2 = void>
+struct iszNUnAlign {
+    static bool const value = false;
+};
+
+template <class Element, class Layout>
+struct iszNUnAlign<Element, Layout,
+    std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>, std::enable_if_t<rank_v<decltype(shape<0>(Layout{}))> == 2 &&
+        rank_v<decltype(shape<1>(Layout{}))> == 2>> {
+    static constexpr uint32_t ELE_NUM_PER_C0 = Catlass::BYTE_PER_C0 / sizeof(Element);
+    static bool const value = (shape<0, 1>(Layout{}) == 1 &&
+                               shape<1, 0>(Layout{}) == ELE_NUM_PER_C0 &&
+                               stride<0, 0>(Layout{}) == ELE_NUM_PER_C0 &&
+                               stride<1, 0>(Layout{}) == 1);
+};
+
 template <class Element, class Layout, class Enable = void>
 struct iszZ {
     static bool const value = false;

@@ -41,4 +41,10 @@ class BlockEpilogue {
 #include "catlass/epilogue/block/block_epilogue_online_softmax_no_mask.hpp"
 #include "catlass/epilogue/block/block_epilogue_rescale_o_no_split_row.hpp"
 #include "catlass/epilogue/block/block_epilogue_w4a4_per_token_per_channel_dequant.hpp"
+
+#if (defined (CATLASS_ARCH) && CATLASS_ARCH == 3510)
+#include "catlass/epilogue/block/block_epilogue_fa_softmax_ascend950.hpp"
+#include "catlass/epilogue/block/block_epilogue_fa_rescale_o_ascend950.hpp"
+#endif
+
 #endif  // CATLASS_EPILOGUE_BLOCK_BLOCK_EPILOGUE_HPP
