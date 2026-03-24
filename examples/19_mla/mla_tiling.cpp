@@ -98,7 +98,7 @@ void GetMLATilingSpec(const MLAInfo &mmInfo, uint32_t &blockDim, uint32_t *tilin
 
 int32_t GetQNBlockTile(const MLAInfo &mlaInfo, int32_t qSeqLen, uint32_t specStrategyFlag) {
     int32_t tokenNum = qSeqLen;
-    if (specStrategyFlag) {
+    if (specStrategyFlag > 0) {
         tokenNum = NUM1;
     }
     int32_t tileListIdx = static_cast<int32_t>(std::ceil(std::log2(tokenNum)));
@@ -119,7 +119,7 @@ void GetTilingHead(
     // Calculating tiling parameters
     tilingHost[TILING_BATCH] = static_cast<uint32_t>(mlaInfo.batch);
     tilingHost[TILING_HEADSIZE] = static_cast<uint32_t>(TILING_HEAD_SIZE);
-    if (specStrategyFlag) {
+    if (specStrategyFlag > 0) {
         tilingHost[TILING_PARASIZE] = static_cast<uint32_t>(PARA_TILING_ELENUM_SPEC);
     } else {
         tilingHost[TILING_PARASIZE] = static_cast<uint32_t>(TILING_PARA_SIZE);
@@ -277,13 +277,13 @@ int32_t GetMLATilingParam(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *
     float tor = static_cast<float>(1.0 / sqrt(1.0 * (mlaInfo.embeddingSize + mlaInfo.embeddingSizeRope)));
     uint32_t *torPtr = reinterpret_cast<uint32_t *>(&tor);
     uint32_t specStrategyFlag = (mlaInfo.numHeads == NUM128) ? 1 : 0;
-    if (specStrategyFlag) {
+    if (specStrategyFlag > 0) {
         GetMLATilingSpec(mlaInfo, blockDim, tilingHost);
     } else {
         GetMLATilingCommon(mlaInfo, blockDim, tilingHost);
     }
     GetTilingHead(mlaInfo, tilingHost, torPtr, maxQseqlen, specStrategyFlag);
-    if (specStrategyFlag) {
+    if (specStrategyFlag > 0) {
         GetKVSplitParamSpec(mlaInfo, blockDim, tilingHost);
     } else {
         GetKVSplitParam(mlaInfo, blockDim, tilingHost);

@@ -38,7 +38,7 @@ using namespace Catlass;
 
 using Options = GemmOptions;
 
-void Run(Options const &options)
+static void Run(Options const &options)
 {
     aclrtStream stream{nullptr};
 

@@ -11,6 +11,8 @@
 #ifndef SELECT_KERNEL_HALF_H
 #define SELECT_KERNEL_HALF_H
 
+#include <cstdint>
+#include <cmath>
 #include <limits>
 #include "platform_info.h"
 

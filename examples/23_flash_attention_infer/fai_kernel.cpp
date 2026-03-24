@@ -658,7 +658,7 @@ class FAInferKernel {
     Arch::CrossCoreFlag pvReady{PV_READY_ID};
 };
 
-CATLASS_GLOBAL void FAInferFp16(
+extern "C" CATLASS_GLOBAL void FAInferFp16(
     uint64_t fftsAddr,
     GM_ADDR q,
     GM_ADDR k,
@@ -748,7 +748,7 @@ CATLASS_GLOBAL void FAInferFp16(
     flashAttnInfer(params);
 }
 
-CATLASS_GLOBAL void FAInferBf16(
+extern "C" CATLASS_GLOBAL void FAInferBf16(
     uint64_t fftsAddr,
     GM_ADDR q,
     GM_ADDR k,

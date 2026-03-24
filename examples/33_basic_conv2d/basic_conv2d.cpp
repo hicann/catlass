@@ -101,16 +101,7 @@ struct Options {
     }
 };
 
-int32_t Max(int32_t a, int32_t b)
-{
-    if (a > b) {
-        return a;
-    } else {
-        return b;
-    }
-}
-
-void Run(Options const &options)
+static void Run(Options const &options)
 {
     aclrtStream stream{nullptr};
 

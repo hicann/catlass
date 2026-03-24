@@ -17,7 +17,7 @@
 #include "dynamic_optimized_matmul_w8a8.h"
 
 
-void Run(aclrtStream &stream, uint32_t m, uint32_t n, uint32_t k, LayoutTag layoutTagA, LayoutTag layoutTagB,
+static void Run(aclrtStream &stream, uint32_t m, uint32_t n, uint32_t k, LayoutTag layoutTagA, LayoutTag layoutTagB,
     PlatformInfo &platformInfo)
 {
     uint32_t m_ori = m;

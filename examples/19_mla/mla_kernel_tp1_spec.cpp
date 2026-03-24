@@ -667,7 +667,7 @@ private:
     Arch::CrossCoreFlag pvReady{PV_READY_ID};
 };
 
-CATLASS_GLOBAL void MLATp1SpecFp16(
+extern "C" CATLASS_GLOBAL void MLATp1SpecFp16(
     uint64_t fftsAddr,
     GM_ADDR q,
     GM_ADDR qRope,
@@ -752,7 +752,7 @@ CATLASS_GLOBAL void MLATp1SpecFp16(
     mla(params);
 }
 
-CATLASS_GLOBAL void MLATp1SpecBf16(
+extern "C" CATLASS_GLOBAL void MLATp1SpecBf16(
     uint64_t fftsAddr,
     GM_ADDR q,
     GM_ADDR qRope,

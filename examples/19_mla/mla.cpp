@@ -161,7 +161,7 @@ static void Run(const Options &options)
         batch * ((maxKvSeqlen + blockSize - 1) / blockSize) * sizeof(int32_t)
     );
     uint32_t tilingSize = (MLATiling::TILING_HEAD_SIZE + batch * MLATiling::TILING_PARA_SIZE) * sizeof(int32_t);
-    if (specStraKey) {
+    if (specStraKey > 0) {
         tilingSize = (MLATiling::TILING_HEAD_SIZE + numTokens * MLATiling::TILING_PARA_SIZE) * sizeof(int32_t);
     }
 

@@ -13,7 +13,7 @@
 #include "catlass/layout/layout.hpp"
 #include "dynamic_optimized_matmul.h"
 
-void Run(aclrtStream &stream, uint32_t m, uint32_t n, uint32_t k, LayoutTag layoutTagA, LayoutTag layoutTagB,
+static void Run(aclrtStream &stream, uint32_t m, uint32_t n, uint32_t k, LayoutTag layoutTagA, LayoutTag layoutTagB,
     PlatformInfo &platformInfo)
 {
     LayoutTag layoutTagC = LayoutTag::TagRowMajor;

@@ -97,7 +97,6 @@ class CatlassTest(TestCase):
         self.assertEqual(transpose_a, False)
         if isinstance(group_list, list):
             a_list = torch.split(a, group_list)
-            # print(a_list)
             result_list = []
             for i in range(len(group_list)):
                 a_g = a_list[i] if not transpose_a else a_list[i].T
@@ -119,7 +118,6 @@ class CatlassTest(TestCase):
         if isinstance(group_list, list):
             a_list = torch.split(a, group_list)
             b_list = torch.split(b, group_list)
-            # print(a_list)
             result_list = []
             for i in range(len(group_list)):
                 a_g = a_list[i].T
