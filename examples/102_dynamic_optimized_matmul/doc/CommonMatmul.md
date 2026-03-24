@@ -1,5 +1,7 @@
 # CommonMatmul
+
 ## 1 模板说明
+
 在泛化Matmul中存在两个CommonMatmul模板，一个是纯CUBE类型，名为CommonMatmulKernel，一个是MIX类型，名为PaddingCommonMatmulKernel，如果需要用到AIV进行数据格式转换（参考2.3节），则会进入PaddingCommonMatmulKernel，之所以区分这两个模板，是因为编译一个Kernel的时候，要么指定这个Kernel是MIX类型的，要么指定这个Kernel是纯CUBE或纯AIV的，而MIX算子由于需要同时启动AIC和AIV，启动开销会比纯CUBE或纯AIV大，尤其在小shape场景下性能影响显著，如果不需要用到AIV，就不需要启动AIV，进入纯Cube类型的CommonMatmulKernel会有更好的性能。
 
 ![image-20251209154303323](https://raw.gitcode.com/weixin_42818618/picture0/raw/main/image-20251209154303323.png)
@@ -8,7 +10,7 @@ CommonMatmul的典型特征是使用L1上的基本块直接切分矩阵A、B、C
 
 ## 2 优化点
 
-此处介绍的优化点是[00_basic_matmul](../../example/00_basic_matmul/README.md)里面没有，但是CommonMatmul中有的优化，至于00_basic_matmul中已有的基础优化在此不做介绍。00_basic_matmul用到的优化点为CommonMatmul的子集。
+此处介绍的优化点是[00_basic_matmul](../../00_basic_matmul/README.md)里面没有，但是CommonMatmul中有的优化，至于00_basic_matmul中已有的基础优化在此不做介绍。00_basic_matmul用到的优化点为CommonMatmul的子集。
 
 ### 2.1 Preload
 
@@ -61,7 +63,7 @@ copyL0CToGm;
 
 Preload的核心思想为，在计算当前Tile的Matmul前，预先加载下一个需要计算的Tile块的数据，这样就做到了搬运指令的提前发射，可减少MTE2流水的空泡。
 
-关于Preload更细节的描述可以参考[矩阵乘模板总结-流水优化(Preload)](../../../docs/contents/advanced/matmul_template_summary.md)。
+关于Preload更细节的描述可以参考[矩阵乘模板总结-流水优化(Preload)](../../../docs/2_Design/01_kernel_design/04_matmul_summary.md)。
 
 ### 2.2 ShuffleK
 
@@ -76,6 +78,7 @@ Preload的核心思想为，在计算当前Tile的Matmul前，预先加载下一
 右图为采用ShuffleK优化后的计算方式，右图中2号核心按2 3 0 1的顺序访问A矩阵基本块，而3号核心按3 0 1 2的顺序访问A矩阵基本块，在时间上错开，从而避免同地址访问冲突。
 
 图中的分块计算顺序采用GemmIdentityBlockSwizzle<2,1>，请参考[swizzle_explanation](../../../docs/2_Design/01_kernel_design/02_swizzle.md)
+
 ### 2.3 Padding
 
 在A2或A3上，当A或B矩阵为ND（RowMajor或ColumnMajor）格式时，如果矩阵的Stride为非512B对齐，则ND2NZ搬运接口的带宽会显著下降。为了规避这个问题，采用AIV提前对A或B矩阵进行数据格式转换（或数据填充），目的是让GM2L1搬运时候，避免非用512B对齐的Stride访问GM数据。
@@ -238,4 +241,3 @@ for (int i = 0; i < nValue; ++i) {
 同理，当矩阵B为RowMajor，且N=1的时候，此时将B矩阵当作一个K x 1的ColumnMajor矩阵进行计算。此处的逻辑参考[select_kernel_bf16.h](../include/select_kernel_b16.h)。
 
 至于K=1的时候，需要交给特殊的模板（采用AIV计算）处理。
-

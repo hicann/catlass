@@ -1,11 +1,14 @@
 # MatmulGelu Example Readme
+
 ## 代码组织
+
 ```
 ├── 27_matmul_gelu
 │   ├── CMakeLists.txt   # CMake编译文件
 │   ├── README.md
 │   └── matmul_gelu.cpp # 主文件
 ```
+
 ## 功能介绍
 
 完成以下函数的计算
@@ -58,8 +61,9 @@ $$
 
 ## 使用示例
 
-- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/1_Practice/01_quick_start.md#算子编译)
+- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/1_Practice/01_quick_start.md#编译执行)
 - 执行算子
+
 ```
 # 编译指定用例
 bash scripts/build.sh 27_matmul_gelu
@@ -68,7 +72,9 @@ cd output/bin
 # Device ID可选，默认为0
 ./27_matmul_gelu 256 512 1024 0
 ```
+
 执行结果如下，说明精度比对成功。
+
 ```
 Compare success.
 ```

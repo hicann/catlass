@@ -1,4 +1,5 @@
 # DynamicOptimizedQuantMatmulPerTokenBasic Example Readme
+
 ## 1 背景
 
 基于泛化性要求，本样例在样例102之外，新增了处理量化Matmul的泛化工程实现，本样例目前支持PerToken-PerChannel量化Matmul基础模板。
@@ -14,9 +15,10 @@
 一般左矩阵代表激活activation（A）、右矩阵代表权重weight（W），本样例目前支持左右矩阵输入数据类型为int8、对左矩阵进行PerToken量化+对右矩阵进行PerChannel量化的场景，可简记为W8A8 PerToken-PerChannel 全量化Matmul场景。
 
 ## 2 文档索引和约束说明
+
 ### 2.1 工程说明
 
-泛化量化Matmul工程结构说明可参考：[工程结构说明](../102_dynamic_optimized_matmul_per_token_basic/doc/工程结构介绍.md)。本工程遵循与样例102类似的模板生成、Tiling计算、模板选择等流程，并根据量化Matmul计算特点进行了适配修改。
+泛化量化Matmul工程结构说明可参考：[工程结构说明](../102_dynamic_optimized_matmul/doc/工程结构介绍.md)。本工程遵循与样例102类似的模板生成、Tiling计算、模板选择等流程，并根据量化Matmul计算特点进行了适配修改。
 
 工程编译前会调用python脚本生成代码，具体包括调用各模板的外围代码，以及launch_map.h(包含tilingKey和具体Kernel的映射关系)。
 
@@ -62,17 +64,15 @@ export LD_LIBRARY_PATH=/path/to/catlass/output/shared_lib/lib/:$LD_LIBRARY_PATH
 | ------------ | ---- |
 | PerTokenBasicMatmul | PerToken 基础模板（文档待补充...） |
 
-
 ### 2.3 约束说明
 
 - A、B矩阵的数据类型支持int8。
 - C矩阵的数据类型支持fp16。
 - A、B、C矩阵的数据格式支持ND（RowMajor和ColumnMajor）。
 
-
 ## 使用示例
 
-- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/1_Practice/01_quick_start.md#算子编译)
+- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/1_Practice/01_quick_start.md#编译执行)
 - 执行算子
 
 # 编译指定用例
@@ -97,6 +97,7 @@ Compare success.
 --------------
 
 当前样例输出数据类型为`fp16`，如需修改为`bf16`，请进行以下代码修改后重新编译执行：
+
 - 在`examples/103_dynamic_optimized_quant_matmul_per_token_basic/include/do_tiling_b8.h`中，将所有`DoTilingB8LayoutXX`函数中使用的`fp16_t`替换为`bfloat16`。
 - 在`examples/103_dynamic_optimized_quant_matmul_per_token_basic/dynamic_optimized_quant_matmul_per_token_basic.cpp`中，搜索`fp16_t`替换为`bfloat16`。
 - 在`examples/103_dynamic_optimized_quant_matmul_per_token_basic/impl/scripts/per_token_matmul_template.py`中，将`element_c`由`half`替换为`bfloat16_t`。

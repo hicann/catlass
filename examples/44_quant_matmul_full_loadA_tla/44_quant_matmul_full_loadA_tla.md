@@ -1,6 +1,7 @@
 # CATLASS Quant Matmul Full LoadA Tla 样例介绍
 
 ## 原型设计
+
 |名称/Name|类型/Class|数据类型/Dtype|维度/Dims|格式/Format|描述/Description|
 |---|---|---|---|---|---|
 |matA|inTensor|int8|[m, k]|ND|左矩阵|
@@ -10,7 +11,9 @@
 |matD|outTensor|bf16|[m, n]|ND|输出矩阵|
 
 ## 样例实现
+
 CATLASS [`44_quant_matmul_full_loadA_tla`样例](./README.md)算子是基于CATLASS Gemm API实现的昇腾亲和Matmul算子,针对大尺寸矩阵计算场景优化设计，关键算子件包括以下几部分:
+
  - **Example组装**：[quant_matmul_full_loadA_tla.cpp](./quant_matmul_full_loadA_tla.cpp)
  - **Kernel实现**：
    - 主Kernel文件：[quant_matmul_full_loadA_tla.hpp](../../include/catlass/gemm/kernel/quant_matmul_full_loadA_tla.hpp)
@@ -21,6 +24,7 @@ CATLASS [`44_quant_matmul_full_loadA_tla`样例](./README.md)算子是基于CATL
     - 多核全载用的swizzle[GemmIdentityBlockSwizzleL1FullLoad](../../include/catlass/gemm/block/block_swizzle.hpp)s
 
 ## 方案设计
+
 - 如下图所示，模板库矩阵有关键参数 `L1TileShape<M, N, K>`，C矩阵按照`L1TileShape::M`和`L1TileShape::N`参数切分基本块并分核，而后普通Matmul模板会将A矩阵中`L1TileShape::M * L1TileShape::K`大小的矩阵块载入L1，而A矩阵全载模板会直接将`L1TileShape::M * K`大小的矩阵块载入L1，而对于B矩阵，普通模板和A矩阵全载模板都是载入`L1TileShape::K * L1TileShape::N`大小的矩阵块L1。
 
 ![A矩阵全载示意图](https://raw.gitcode.com/user-images/assets/7631999/38ccafec-7fd8-4b9f-a4bb-dd57085ffb63/53e318e0feb94c578d888e67365e4c97.png_tplv-a9rns2rl98-image-qvalue.png '53e318e0feb94c578d888e67365e4c97.png~tplv-a9rns2rl98-image-qvalue.png')

@@ -21,23 +21,20 @@ L0C的空间相比L1较小（在A2上L0C为128K，L1为256K），在增大L1Tile
 伪代码描述：
 
 ```c++
-for gmTileM1 in M:
-	for gmTileN1 in N:
-		for m1 in gmTileM1:
-			for k1 in K:
-				loadL1A(m1,k1)
-				for n1 in gmTileN1:
-					loadL1B(k1,n1)
-                      for m0 in m1:
-						for k0 in k1:
-							loadL0A(m0, k0)
-							for n0 in n1:
-								loadL0B(k0, n0)
-                     			  mmad(A, B)
-                      			  writeC(m0, n0)
+for gmTileN1 in N:	 
+    for m1 in gmTileM1:	 
+        for k1 in K:	 
+            loadL1A(m1,k1)	 
+            for n1 in gmTileN1:	 
+                loadL1B(k1,n1)	 
+                for m0 in m1:	 
+                    for k0 in k1:	 
+                        loadL0A(m0, k0)	 
+                            for n0 in n1:	 
+                                loadL0B(k0, n0)	 
+                                mmad(A, B)	 
+                                writeC(m0, n0)
 ```
-
-
 
 ### 2.1.1 工程优化
 
@@ -89,7 +86,6 @@ for k1 in K:
                         mmad(A, B)
                         writeC(m0, n0)
 ```
-
 
 SingleCoreSplitkKLoopOuterMatmul必须开辟与C矩阵相同元素量的缓冲区（累加类型与输出类型不同或者C矩阵非对齐的时候）
 

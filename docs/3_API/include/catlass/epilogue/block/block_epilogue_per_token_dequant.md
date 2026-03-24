@@ -1,7 +1,9 @@
 # Block Epilogue Per Token Dequant
+>
 > [代码位置](../../../../../../include/catlass/epilogue/block/block_epilogue_per_token_dequant.hpp)
 
 ## 功能说明
+
 - [BlockEpilogue](./block_epilogue.md)偏特化实现，使用perTokenScale和perChannelScale对block数据做perToken和perChannel的反量化。
 
 - 计算公式：$blockD_{ij} = blockC_{ij} * perChannelScale_j * perTokenScale_i$
@@ -43,6 +45,7 @@
 </table>
 
 ## 调度策略
+
 ```
 // For AtlasA2, per token dequant
 template <uint32_t UB_STAGES_>
@@ -53,8 +56,11 @@ struct EpilogueAtlasA2PerTokenDequant {
 ```
 
 ## 调用示例
+
 ### Block组装
+
 参考[样例12_quant_matmul](../../../../../../examples/12_quant_matmul/quant_matmul.cpp)
+
 ```
 constexpr uint32_t ubStages = 2;
 using EpilogueDispatchPolicy = Epilogue::EpilogueAtlasA2PerTokenDequant<ubStages>;
@@ -75,6 +81,7 @@ using TileOneBlkColumnBroadcastMul =
 using TileCopy = Epilogue::Tile::TileCopy<ArchTag, CType, ScaleType, PerTokenScaleType, DType>;
 using TileScheduler = Epilogue::Tile::EpilogueHorizontalTileSwizzle;
 ```
+
 ```
 using BlockEpilogue = Epilogue::Block::BlockEpilogue<
     EpilogueDispatchPolicy,         // 选用的后处理调度策略
@@ -91,13 +98,17 @@ using BlockEpilogue = Epilogue::Block::BlockEpilogue<
 ```
 
 ### Block实例化
+
 参考[quant_matmul_multistage_workspace](../../../../../../include/catlass/gemm/kernel/quant_matmul_multistage_workspace.hpp)，在`kernel`代码的`void operator()<AscendC::AIV>`函数中：
+
 ```
 BlockEpilogue blockEpilogue(resource);
 ```
 
 ### Block更新params
+
 参考[quant_matmul_multistage_workspace](../../../../../../include/catlass/gemm/kernel/quant_matmul_multistage_workspace.hpp)，在`kernel`代码的`void operator()<AscendC::AIV>`函数中：
+
 ```
 EpilogueParams epilogueParams{
     params.ptrScale,            // perChannelScale的GM地址
@@ -112,7 +123,9 @@ blockEpilogue.UpdateParams(epilogueParams);
 ```
 
 ### Block执行
+
 参考[basic_matmul](../../../../../../include/catlass/gemm/kernel/basic_matmul.hpp)，在`kernel`代码的`void operator()<AscendC::AIC>`函数中：
+
 ```
 blockEpilogue(
     blockShapeMNK,          // block的shape
@@ -124,4 +137,5 @@ blockEpilogue(
 ```
 
 ## 约束说明
+
 - 当前仅支持blockC、blockD的layout均为`RowMajor`，perChannelScale、perTokenScale的layout均为`VectorLayout`。

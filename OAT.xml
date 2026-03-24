@@ -42,7 +42,7 @@
                 <filteritem type="filepath" name="examples/[0-9]+_[a-zA-Z0-9_]+/README.OpenSource" desc="算子样例目录，不包含第三方(NO 3RD-PARTY CODE IN EXAMPLES SAMPLES!)"/>
             </filefilter>
             <filefilter name="binaryFileTypePolicyFilter" desc="Filters for binary file policies">
-                <filteritem type="filepath" name="docs/images/[a-zA-Z0-9\_]*/*.png" desc="排除docs/images/目录(及其子目录)下对图片(.png)的二进制检查"/>
+                <filteritem type="filepath" name="docs/figures/[a-zA-Z0-9\_]*/*.png" desc="排除docs/figures/目录(及其子目录)下对图片(.png)的二进制检查"/>
             </filefilter>
 
         </filefilterlist>

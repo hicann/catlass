@@ -43,11 +43,12 @@ git clone https://gitcode.com/cann/catlass.git
 
 ## 编译执行
 
-> 模板库提供了一套可复用的模板、基础组件，赋能矩阵乘法算子开发，算子样例可见[样例目录](../../examples/)。
+> 模板库提供了一套可复用的模板、基础组件，赋能矩阵乘法算子开发，算子样例可见[样例目录](../../examples)。
 
 1. **样例编译**
 
 进入项目根目录，可执行下述编译指令：
+
 ```bash
 bash scripts/build.sh [options] <target>
 ```
@@ -70,11 +71,14 @@ bash scripts/build.sh [options] <target>
    - `mstuner_catlass`：编译msTuner_CATLASS工具，详见[`mstuner_catlass`使用说明](../../tools/tuner/README.md)。
 
 以[basic_matmul](../../examples/00_basic_matmul/README.md)样例编译过程为例，执行下述指令：
+
 ```bash
 # 编译算子组件
 bash scripts/build.sh 00_basic_matmul
 ```
+
 若有下述提示信息，则编译成功。
+
 ```bash 
 "[INFO] Target '{target}' built successfully."
 ```
@@ -83,6 +87,7 @@ bash scripts/build.sh 00_basic_matmul
 
 算子编译产物在`output/bin`路径下，切换至该目录下可运行算子样例程序。
 以[basic_matmul]样例为例，可通过下述指令执行该算子：
+
 ```bash
 # 切换至编译产物目录
 cd output/bin
@@ -94,7 +99,8 @@ cd output/bin
  - `deviceId`可选（默认为0），指定NPU卡的ID号。
 
 执行该算子样例后，如出现下述结果则表明其计算符合精度预期（该样例中Matmul的左、右矩阵使用随机数填充，真值以cpu计算为准）。
-```
+
+```text
 Compare success.
 ```
 

@@ -3,15 +3,19 @@
 **注意：社区包暂不支持950能力，后续支持的版本敬请期待**
 
 ## 代码组织
+
 ```
 ├── 50_ascend950_basic_matmul_gemv
 │   ├── CMakeLists.txt     # CMake编译文件
 │   ├── README.md
 │   └── basic_matmul_tla.cpp # 主文件
 ```
+
 ## 使用示例
-- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/quickstart.md#算子编译)，本用例为Ascend950算子，编译时需加-DCATLASS_ARCH=3510
+
+- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/1_Practice/01_quick_start.md#编译执行)，本用例为Ascend950算子，编译时需加-DCATLASS_ARCH=3510
 - 执行算子
+
 ```
 # 编译指定用例
 bash scripts/build.sh 50_ascend950_basic_matmul_gemv -DCATLASS_ARCH=3510
@@ -20,12 +24,15 @@ cd output/bin
 # Device ID可选，默认为0
 ./50_ascend950_basic_matmul_gemv 1 128 127 0
 ```
+
 执行结果如下，说明精度比对成功。
+
 ```
 Compare success.
 ```
 
 ## 使用说明
+
 BasicMatmul默认使用的DispatchPolicy MmadPingpong支持以下几个模板参数：
 
 |模板参数|默认值|参数说明|

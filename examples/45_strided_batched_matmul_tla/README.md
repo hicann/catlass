@@ -1,14 +1,19 @@
 # StridedBatchedMatmulTla Example Readme
+
 ## 代码组织
+
 ```
 ├── 45_strided_batched_matmul_tla
 │   ├── CMakeLists.txt     # CMake编译文件
 │   ├── README.md
 │   └── strided_batched_matmul_tla.cpp # 主文件
 ```
+
 ## 使用示例
-- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/quickstart.md#算子编译)
+
+- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/1_Practice/01_quick_start.md#编译执行)
 - 执行算子
+
 ```
 # 编译指定用例
 bash scripts/build.sh 45_strided_batched_matmul_tla
@@ -40,7 +45,9 @@ cd output/bin
 # layout + stride 混用（当传 layoutA/layoutB 时，必须放在命令行最后两个参数位置）
 ./45_strided_batched_matmul_tla 5 256 512 1024 0 1100 600 600 300000 400000 500000 col row
 ```
+
 执行结果如下，说明精度比对成功。
+
 ```
 Compare success.
 ```

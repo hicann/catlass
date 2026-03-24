@@ -27,7 +27,7 @@ CATLASS算子模板库的定位，是针对GEMM类算子提供的模板样例库
 
 对于输入输出是fp16场景，为了计算精度，cube核进行mmad输出到L0C上的结果是fp32数据类型，fixpipe随路传回gm时cast到fp16数据类型。
 
-```
+```text
 L1大小512K
 L1实际占用 = L1::M * L1::K * 2(Byte) * 2(doubleBuffer) + L1::K * L1::N * 2(Byte) * 2(doubleBuffer)
         = 128 * 256 * 2 * 2 + 256 * 256 * 2 * 2
@@ -51,7 +51,7 @@ L0C实际占用 = L0::M * L0::N * 4(Byte)
 
 - 场景二：fp32输入输出，L1TileShape<128,128,256>，L0TileShape<128,128,64>
 
-```
+```text
 L1大小512K
 L1实际占用 = L1::M * L1::K * 4(Byte) * 2(doubleBuffer) + L1::K * L1::N * 4(Byte) * 2(doubleBuffer)
         = 128 * 256 * 4 * 2 + 128 * 256 * 4 * 2
@@ -81,7 +81,7 @@ L0C实际占用 = L0::M * L0::N * 4(Byte)
 
 - [00_basic_matmul](../../examples/00_basic_matmul/basic_matmul.cpp)，采用`MmadAtlasA2Pingpong`的dispatchPolicy，启用pingpong策略
 
-```
+```cpp
 template <bool ENABLE_UNIT_FLAG_ = false>
 struct MmadAtlasA2Pingpong : public MmadAtlasA2  {
     static constexpr uint32_t STAGES = 2;
@@ -92,7 +92,7 @@ struct MmadAtlasA2Pingpong : public MmadAtlasA2  {
 - [04_padding_matmul](../../examples/04_padding_matmul/padding_matmul.cpp)，基于00_basic_matmul增加了输入矩阵的padding动作，实验发现RowMajor矩阵的shape[1]为512B对齐时，矩阵搬运效率更高，所以增加padding动作可以提高**非对齐场景**性能。
 - [06_optimized_matmul](../../examples/06_optimized_matmul/optimized_matmul.cpp)，采用`MmadAtlasA2Preload`的`dispatchPolicy`，使能预加载和`shuffleK`动作。预加载动作减少搬运流水的中断情况，`shuffleK`打乱了不同核搬运`L1Tile`的顺序，减少了Bank冲突，使得基本块同行或同列的核在访问AB矩阵时的地址错开。同时也增加了输入矩阵向`L1TileShape`对齐的`padding`动作。相比[`basic_matmul`](../../../examples/00_basic_matmul/README.md)引入了更多优化动作，但也引入了Vector核使能和一些scalar计算的开销。
 
-```
+```cpp
 template <bool ENABLE_UNIT_FLAG_ = false, bool ENABLE_SHUFFLE_K_ = false>
 struct MmadAtlasA2Preload : public MmadAtlasA2 {
     static constexpr uint32_t STAGES = 2;
@@ -154,7 +154,7 @@ struct MmadAtlasA2Preload : public MmadAtlasA2 {
 使用21_basic_matmul_preload_zN，按照默认的L1TileShape<128,256,256>、L0TileShape<128,256,64>，swizzle设置为<3, 1>，耗时为**40.6us**。swizzle设置为<4, 1>，耗时为**35.3us**。
 
 分析基本块情况，M轴方向划分为长度128和32的两块，N方向切24个长256的块，共48个基本块。swizzle<3, 1>和swizzle<4, 1>的基本块分配AIC情况如下图。swizzle<3, 1>时，1、2、5、6号核在M方向有最大任务量为（128 + 128 + 32）；swizzle<4, 1>时，12、13、14、15号核在M方向有最大任务量为（128 + 128），负载更加均衡。
-<img src="../images/catlass_optimize_guidance/swizzle_case.png" width="100%">
+<img src="../figures/catlass_optimize_guidance/swizzle_case.png" width="100%">
 
 ### 浅述定制调优
 

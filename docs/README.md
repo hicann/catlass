@@ -1,6 +1,7 @@
 # CATLASS 项目文档
 
 ## 1 Practice
+>
 > 代码实践，指导开发者按步骤上手CATLASS各层级代码开发和使用，逐渐具备完整算子开发、测试、调优、模型使用的能力。
 
 - [01_quick_start](./1_Practice/01_quick_start.md)：介绍模板库的环境准备，和提供的算子样例的编译执行。
@@ -22,8 +23,8 @@
 - others（folder）：存放内部和外部贡献的难以归类的实践文档
     - tla_rebuild：TLA样例改造
 
-
 ## 2 Design
+
 - [00_project_overview](./2_Design/00_project_overview.md)：项目介绍、分层模块化设计、代码仓结构设计
 - 01_kernel_design：算法设计
     - [01_example_design](./2_Design/01_kernel_design/01_example_design.md)：库上样例设计文档一览（将各样例文档放到样例文件夹内，此处只做归纳、牵引）
@@ -38,12 +39,15 @@
 - 03_evg
 
 ## 3 API
+
 - [README](./3_API/README.md)：API清单入口
 - [gemm api](./3_API/gemm_api.md)：Gemm API
 - [Ascend C API](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/900beta1/API/ascendcopapi/atlasascendc_api_07_0003.html)：昇腾社区Ascend C API列表
 
 ## Appendix
+>
 >外部开源文章、视频
+
 - 常见问题 [Q&A](./Q&A.md)
 - 技术文章
     - 基础入门

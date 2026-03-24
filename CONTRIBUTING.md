@@ -7,7 +7,6 @@
 1. 提交PR时，请按照PR模板仔细填写本次PR的业务背景、目的、方案等信息。
 2. 若您的修改不是简单的bug修复，而是涉及到新增特性、新增接口、新增配置参数或者修改代码流程等，请务必先通过[Issue](https://gitcode.com/cann/community#%E6%8F%90%E4%BA%A4issue%E5%A4%84%E7%90%86issue%E4%BB%BB%E5%8A%A1)进行方案讨论，以避免您的代码被拒绝合入。若您不确定本次修改是否可被归为“简单的bug修复”，亦可通过提交Issue进行方案讨论。
 
-
 开发者贡献场景主要包括：
 
 - Bug修复
@@ -24,6 +23,7 @@
   然后在评论框中输入“/assign”或“/assign @yourself”，将该Issue分配给您进行处理。
   
   新增算子样例请放置在`examples/`目录下的`${id}_${op_name}`子目录下，其中`${id}`是唯一递增次序，`${op_name}`表示新增算子名称。
+
   ```bash
   catlass/examples              # 算子样例主目录
   ├── ${id}_${op_name}          # 单算子样例目录
@@ -32,6 +32,7 @@
   │   └── ${op_name}.cpp        # 主文件
   ...
   ```
+
   其中`README.md`是对该算子的简要说明，应包含“代码组织”、“使用示例”两方面内容（可参考Matmul的[README文档](https://gitcode.com/cann/catlass/blob/master/examples/00_basic_matmul/README.md)），以便开发者理解。
 
 - 贡献模板库代码

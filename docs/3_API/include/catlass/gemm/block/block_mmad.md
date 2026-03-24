@@ -1,4 +1,5 @@
 # Block Mmad基础模板
+>
 > [代码位置](../../../../../../include/catlass/gemm/block/block_mmad.hpp)
 
 [TOC]
@@ -6,9 +7,11 @@
 ## BlockMmad
 
 ### 功能说明
+
 block层级mmad计算，非TLA实现，实际计算由偏特化模板承载，通过[DisPatchPolicy](../../../../../../include/catlass/gemm/dispatch_policy.hpp)等模板参数命中偏特化分支。
 
 ### 模板说明
+
 ```
 template <
     class DispatchPolicy,   // 所用DisPatchPolicy
@@ -26,13 +29,16 @@ struct BlockMmad {
 };
 ```
 
-注意到模板参数中，BiasType默认使用`void`，TileCopy默认使用[Gemm::Tile::TileCopy](../../../../../../docs/04_api/include/catlass/gemm/tile/tile_copy.md)，TileMmad默认使用[Gemm::Tile::TileMmad](../../../../../../docs/04_api/include/catlass/gemm/tile/tile_mmad.md)
+注意到模板参数中，BiasType默认使用`void`，TileCopy默认使用[Gemm::Tile::TileCopy](../../../../../../docs/3_API/include/catlass/gemm/tile/tile_copy.md)，TileMmad默认使用[Gemm::Tile::TileMmad](../../../../../../docs/3_API/include/catlass/gemm/tile/tile_mmad.md)
 
 ## BlockMmadTla
+
 （待完善）
 
 ## BlockGemm
+
 （待完善）
 
 ## BlockMmadAiv
+
 （待完善）

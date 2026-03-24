@@ -295,7 +295,7 @@ Quitting LLDB will kill one or more processes. Do you really want to proceed: [Y
 |  continue | c |  继续运行 | c |
 |  print | p | 打印变量| p zLocal |
 |  frame variable | var | 打印当前帧所有变量 | var |
-|  memory read | x | 读内存<br>-m 指定内存位置，支持GM/UB/L0A/L0B/L0C<br>-f 指定[字节转换格式](#附录1)<br>-s 指定每行打印字节数<br>-c 指定打印的行数 |  x -m GM -f float16[] 1000 -c 2 -s 128  |
+|  memory read | x | 读内存<br>-m 指定内存位置，支持GM/UB/L0A/L0B/L0C<br>-f 指定[字节转换格式](#附录)<br>-s 指定每行打印字节数<br>-c 指定打印的行数 |  x -m GM -f float16[] 1000 -c 2 -s 128  |
 |  register read | re r | 读取寄存器值<br>-a 读取所有寄存器值<br>\$REG\_NAME 读取指定名称的寄存器值 | register read -are r \$PC |
 |  thread step-over |  next<br>n                          |  在同一个调用栈中，移动到下一个可执行的代码行                                                                                                                              |  n |
 |  ascend info devices |  /  |  查询device信息  |  ascend info devices |

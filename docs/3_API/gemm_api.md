@@ -1,7 +1,7 @@
 # CATLASS Gemm API
 
 CATLASS针对NPU上不同层级上执行的矩阵乘累加（MMAD）操作，提供了一个统一的编程模型。CATLASS的Gemm API对应于以下分层，由高到低分别是：
-![image](../images/api_level.png)
+![image](../figures/api_level.png)
 
 # CATLASS Gemm模型
 
@@ -160,6 +160,7 @@ struct MmadAtlasA2Pingpong {
 `STAGES` 参数使用户可以方便地调整多buffer场景的buffer片数，`ENABLE_UNIT_FLAG` 参数用于表示是否启用Mmad运算与L0C结果拷贝到全局内存的细粒度并行。
 
 采用Dispatch Policy的设计还有如下优点：
+
 * 它避免了代码重复，主循环可以被多个不同的内核使用。
 * 它使编写通用代码更容易，因为主要类型名称`BlockMmad`在任何实现中都不会改变。
 * 它提供了一个清晰、单一的扩展点，供用户插入针对他们自己调度策略特化实现的新的、定制的主循环。
@@ -175,6 +176,7 @@ struct MmadAtlasA2Pingpong {
 ## Kernel API
 
 Kernel对应了所有Block在NPU上执行逻辑的集合。Kernel层BasicMatmul承担以下功能：
+
 * 对包含的不同Block的逻辑进行组合，加入必要的同步逻辑。
 * 不同Block和处理全局内存上数据的对应关系（Swizzling）。
 * 将输入数据在Block粒度分片。

@@ -215,6 +215,7 @@ int main(int argc, const char **argv) {
 ### 1. 环境初始化与资源申请
 
 这部分代码主要完成以下工作：
+
 - 初始化ACL环境
 - 设置设备ID
 - 创建计算流
@@ -250,6 +251,7 @@ LayoutC layoutC{m, n};
 ### 2. 输入数据准备
 
 这部分代码主要完成以下工作：
+
 - 在Host侧创建输入数据缓冲区
 - 填充随机数据
 
@@ -263,6 +265,7 @@ golden::FillRandomData<fp16_t>(hostB, -5.0f, 5.0f);
 ### 3. 设备内存申请与数据拷贝
 
 这部分代码主要完成以下工作：
+
 - 在Device侧申请内存
 - 将Host侧数据拷贝到Device侧
 
@@ -285,6 +288,7 @@ ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC
 ### 4. 算子参数配置与调用
 
 这部分代码主要完成以下工作：
+
 - 选择架构和调度策略
 - 定义Tile形状
 - 组装Block层和Kernel层组件
@@ -335,6 +339,7 @@ ACL_CHECK(aclrtSynchronizeStream(stream));
 ### 5. 结果数据拷贝与验证
 
 这部分代码主要完成以下工作：
+
 - 将Device侧计算结果拷贝到Host侧
 - 计算黄金值并与结果进行比较
 
@@ -353,6 +358,7 @@ std::cout << "Compare " << (diff ? "failed" : "success") << std::endl;
 ### 6. 资源释放
 
 这部分代码主要完成以下工作：
+
 - 释放Device侧内存
 - 销毁计算流
 - 重置设备

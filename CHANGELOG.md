@@ -30,7 +30,6 @@
   - 修复[w8a16 Matmul](https://gitcode.com/cann/catlass/blob/v1.4.0/examples/30_w8a16_matmul/w8a16_matmul.cpp)算子half类型使用问题
   - 修复[单核切K Matmul算子](https://gitcode.com/cann/catlass/blob/v1.4.0/examples/34_single_core_splitk_matmul/single_core_splitk.cpp)在`RemovePaddingNDAndCastC`为空时的逻辑问题
 
-
 ### CATLASS 1.3.0
 
  - 关键特性
@@ -130,7 +129,7 @@
  - 工具支持
     - 支持[`AscendC::Dump`](https://www.hiascend.com/document/detail/zh/canncommercial/83RC1/opdevg/Ascendcopdevg/atlas_ascendc_10_0075.html)与[`AscendC::printf`](https://www.hiascend.com/document/detail/zh/canncommercial/83RC1/opdevg/Ascendcopdevg/atlas_ascendc_10_0075.html)进行打印调试
       - 编译选项中加入`--enable_ascendc_dump`和`--enable_print`以启用上述功能
-      - 请参阅文档: [`ascendc_dump`](docs/tools/ascendc_dump.md)和[`print`](docs/tools/print.md)
+      - 请参阅文档: [`ascendc_dump`](https://gitcode.com/cann/catlass/tree/v1.1.0/docs/tools/ascendc_dump.md)和[`print`](https://gitcode.com/cann/catlass/tree/v1.1.0/docs/tools/print.md)
   
  - 文档资料
    - 新增[tutorials快速上手示例](https://gitee.com/ascend/catlass/tree/v1.1.0/docs/tutorials.md)
@@ -144,10 +143,11 @@
    - 修改`l2offset`设置的重定义问题
    
 ### CATLASS 1.0.0
+
   - [CATLASS](https://gitcode.com/cann/catlass/)模板库正式开源发布
 
- - 关键特性
-   - 提供Kernel、Block、Tile、Basic分层算子开发能力
+  - 关键特性
+    - 提供Kernel、Block、Tile、Basic分层算子开发能力
 
- - 样例参考
-   - 提供包括基础Matmul及各种不同的优化策略在内的算子样例
+  - 样例参考
+    - 提供包括基础Matmul及各种不同的优化策略在内的算子样例

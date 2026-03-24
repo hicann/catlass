@@ -51,7 +51,7 @@ output
 // ...
 ```
 
-可参考[basic_matmul_shared_lib.cpp](examples/shared_lib/basic_matmul_shared_lib.cpp)获取详细的示例代码。
+可参考[basic_matmul_shared_lib.cpp](./basic_matmul_shared_lib.cpp)获取详细的示例代码。
 
 ## 扩展说明
 

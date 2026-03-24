@@ -1,9 +1,10 @@
 # Gemm/Block Sizzle类模板概述
+>
 > [代码位置](../../../../../../../include/catlass/gemm/block/block_swizzle.hpp)
 
 ## 功能说明
 
-Swizzle策略决定了AI Core对基本任务块的分配关系和计算顺序，详见[Swizzle解释](../../../../../../../docs/02_advanced/swizzle_explanation.md)
+Swizzle策略决定了AI Core对基本任务块的分配关系和计算顺序，详见[Swizzle解释](../../../../../../../docs/2_Design/01_kernel_design/02_swizzle.md)
 
 ## 常用Methods说明 
 
@@ -14,6 +15,7 @@ Swizzle策略决定了AI Core对基本任务块的分配关系和计算顺序，
 - 函数`GemmCoord GetActualBlockShape`。根据输入的基本块坐标`blockCoord`，返回基本块的实际shape（element粒度）。
 
 ## 具体Swizzle策略
+
 | 组件                        | 描述 |
 | :----------------------------------------------------------- | :------: |
-| [GemmIdentityBlockSwizzle](./block_swizzle/GemmIdentityBlockSwizzle.md)    |   Gemm算子基础swizzle策略  |
+| [GemmIdentityBlockSwizzle](./GemmIdentityBlockSwizzle.md)    |   Gemm算子基础swizzle策略  |
