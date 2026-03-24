@@ -50,8 +50,8 @@ struct CopyL0CToUBTla<
         AscendC::FixpipeParamsC310<AscendC::CO2Layout::ROW_MAJOR> intriParams;
 
         // Fixpipe layout information
-        intriParams.nSize = tla::get<1>(dstTensor.shape());
-        intriParams.mSize = tla::get<0>(dstTensor.shape());
+        intriParams.nSize = tla::get<1>(dstTensor.originShape());
+        intriParams.mSize = tla::get<0>(dstTensor.originShape());
         intriParams.srcStride = tla::get<1, 1>(srcTensor.stride()) / tla::get<0, 0>(srcTensor.stride());
         intriParams.dstStride = tla::get<0>(dstTensor.stride());
 
@@ -97,8 +97,8 @@ struct CopyL0CToUBTla<
         AscendC::FixpipeParamsC310<AscendC::CO2Layout::ROW_MAJOR> intriParams;
 
         // Fixpipe layout information
-        intriParams.nSize = tla::get<1>(dstTensor.shape());
-        intriParams.mSize = RoundUp(tla::get<0>(dstTensor.shape()), 2); // m must be even when spilt m
+        intriParams.nSize = tla::get<1>(dstTensor.originShape());
+        intriParams.mSize = RoundUp(tla::get<0>(dstTensor.originShape()), 2); // m must be even when spilt m
         intriParams.srcStride = tla::get<1, 1>(srcTensor.stride()) / tla::get<0, 0>(srcTensor.stride());
         intriParams.dstStride = tla::get<0>(dstTensor.stride());
 
@@ -145,8 +145,8 @@ struct CopyL0CToUBTla<
         AscendC::FixpipeParamsC310<AscendC::CO2Layout::ROW_MAJOR> intriParams;
 
         // Fixpipe layout information
-        intriParams.nSize = RoundUp(tla::get<1>(dstTensor.shape()), 32);
-        intriParams.mSize = tla::get<0>(dstTensor.shape()); // m must be even when spilt m
+        intriParams.nSize = RoundUp(tla::get<1>(dstTensor.originShape()), 32);
+        intriParams.mSize = tla::get<0>(dstTensor.originShape()); // m must be even when spilt m
         intriParams.srcStride = tla::get<1, 1>(srcTensor.stride()) / tla::get<0, 0>(srcTensor.stride());
         intriParams.dstStride = tla::get<0>(dstTensor.stride());
 

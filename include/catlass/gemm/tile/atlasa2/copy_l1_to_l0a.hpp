@@ -441,8 +441,8 @@ struct TileCopyTla<Arch::AtlasA2,
 
         const uint32_t srcOuterStrideRow = tla::get<0, 1>(srcTensor.stride());
         const uint32_t srcOuterStrideCol = tla::get<1, 1>(srcTensor.stride());
-        const uint32_t dstOuterShapeRow = tla::get<0, 1>(dstTensor.shape());
-        const uint32_t dstOuterShapeCol = tla::get<1, 1>(dstTensor.shape());
+        const uint32_t dstOuterShapeRow = CeilDiv(tla::get<0>(dstTensor.originShape()), tla::get<0, 0>(dstTensor.shape()));
+        const uint32_t dstOuterShapeCol = CeilDiv(tla::get<1>(dstTensor.originShape()), tla::get<1, 0>(dstTensor.shape()));
         const uint32_t dstOuterStrideRow = tla::get<0, 1>(dstTensor.stride());
 
         AscendC::LoadData2DParams loadDataParams;
@@ -496,9 +496,9 @@ struct TileCopyTla<Arch::AtlasA2,
 
         constexpr uint8_t PAD_LIST[4] = {0, 0, 0, 0};
         uint16_t l1M = tla::get<1, 1>(srcTensor.stride()) / tla::get<1, 0>(srcTensor.shape());
-        uint16_t l1K = tla::get<1, 0>(srcTensor.shape()) * tla::get<1, 1>(srcTensor.shape());
-        uint16_t l0M = tla::get<0, 0>(dstTensor.shape()) * tla::get<0, 1>(dstTensor.shape());
-        uint16_t l0K = tla::get<1, 0>(dstTensor.shape()) * tla::get<1, 1>(dstTensor.shape());
+        uint16_t l1K = RoundUp<ELE_NUM_PER_C0>(tla::get<1>(srcTensor.originShape()));
+        uint16_t l0M = RoundUp<ELE_NUM_PER_C0>(tla::get<0>(dstTensor.originShape()));
+        uint16_t l0K = RoundUp<ELE_NUM_PER_C0>(tla::get<1>(dstTensor.originShape()));
         AscendC::SetFmatrix(1, l1M, PAD_LIST, AscendC::FmatrixMode::FMATRIX_LEFT);
         static constexpr AscendC::IsResetLoad3dConfig config = {false, false};
         AscendC::LoadData3DParamsV2<Element> loadDataParams;
@@ -539,8 +539,8 @@ struct TileCopyTla<Arch::AtlasA2,
             "The input parameters do not match. TensorSrc must be L1 and nZ, while TensorDst must be L0A and zZ");
 
         const uint32_t srcOuterStrideRow = tla::get<0, 1>(srcTensor.stride());
-        const uint32_t dstOuterShapeRow = tla::get<0, 1>(dstTensor.shape());
-        const uint32_t dstOuterShapeCol = tla::get<1, 1>(dstTensor.shape());
+        const uint32_t dstOuterShapeRow = CeilDiv(tla::get<0>(dstTensor.originShape()), tla::get<0, 0>(dstTensor.shape()));
+        const uint32_t dstOuterShapeCol = CeilDiv(tla::get<1>(dstTensor.originShape()), tla::get<1, 0>(dstTensor.shape()));
         const uint32_t dstOuterStrideRow = tla::get<0, 1>(dstTensor.stride());
 
         AscendC::LoadData2DParams loadDataParams;
@@ -592,9 +592,9 @@ struct TileCopyTla<Arch::AtlasA2,
             "The input parameters do not match. TensorSrc must be int8_t, L1 and nZ, "
             "while TensorDst must be int8_t, L0A and zZ");
 
-        const uint32_t srcOuterShapeRow = tla::get<0, 1>(srcTensor.shape());
+        const uint32_t srcOuterShapeRow = CeilDiv(tla::get<0>(srcTensor.originShape()), tla::get<0, 0>(srcTensor.shape()));
         const uint32_t srcOuterStrideRow = tla::get<0, 1>(srcTensor.stride());
-        const uint32_t dstOuterShapeCol = tla::get<1, 1>(dstTensor.shape());
+        const uint32_t dstOuterShapeCol = CeilDiv(tla::get<1>(dstTensor.originShape()), tla::get<1, 0>(dstTensor.shape()));
         const uint32_t dstOuterStrideRow = tla::get<0, 1>(dstTensor.stride());
 
         AscendC::LoadData2dTransposeParams loadDataParams;
@@ -645,10 +645,10 @@ struct TileCopyTla<Arch::AtlasA2,
             "while TensorDst must be float, L0A and zZ");
 
         constexpr uint8_t PAD_LIST[4] = {0, 0, 0, 0};
-        uint16_t l1M = tla::get<0, 0>(srcTensor.shape()) * tla::get<0, 1>(srcTensor.shape());
+        uint16_t l1M = tla::get<0>(srcTensor.originShape());
         uint16_t l1K = tla::get<0, 1>(srcTensor.stride()) / tla::get<0, 0>(srcTensor.shape());
-        uint16_t l0M = tla::get<0, 0>(dstTensor.shape()) * tla::get<0, 1>(dstTensor.shape());
-        uint16_t l0K = tla::get<1, 0>(dstTensor.shape()) * tla::get<1, 1>(dstTensor.shape());
+        uint16_t l0M = tla::get<0>(dstTensor.originShape());
+        uint16_t l0K = tla::get<1>(dstTensor.originShape());
         // K, M need to be 16 aligned for f32
         uint16_t l1MAlign = RoundUp<C0_NUM_PER_FRACTAL>(l1M);
         uint16_t l1KAlign = RoundUp<C0_NUM_PER_FRACTAL>(l1K);
@@ -699,7 +699,7 @@ struct TileCopySparseTla<Arch::AtlasA2,
                       TensorSrc::position == AscendC::TPosition::A1 &&
                       TensorDst::position == AscendC::TPosition::A2,
             "The input parameters do not match. TensorSrc must be L1 and zN, while TensorDst must be L0A and zZ");
-
+        
         auto srcShape = srcTensor.shape();
         auto dstShape = dstTensor.shape();
         auto coord = srcTensor.coord();

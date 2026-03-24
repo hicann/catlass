@@ -44,8 +44,8 @@ struct CopyL0CToGmTla<
 
         AscendC::DataCopyCO12DstParams intriParams;
 
-        intriParams.nSize = tla::get<1>(dstTensor.shape());
-        intriParams.mSize = tla::get<0>(dstTensor.shape());
+        intriParams.nSize = tla::get<1>(dstTensor.originShape());
+        intriParams.mSize = tla::get<0>(dstTensor.originShape());
         intriParams.dstStride = tla::get<0>(dstTensor.stride());
         intriParams.srcStride = tla::get<1, 1>(srcTensor.stride()) / tla::get<0, 0>(srcTensor.stride());
         intriParams.quantPre = quantPre;
@@ -96,8 +96,8 @@ struct CopyL0CToGmTla<
 
         AscendC::DataCopyCO12DstParams intriParams;
 
-        intriParams.nSize = tla::get<1>(dstTensor.shape());
-        intriParams.mSize = tla::get<0>(dstTensor.shape());
+        intriParams.nSize = tla::get<1>(dstTensor.originShape());
+        intriParams.mSize = tla::get<0>(dstTensor.originShape());
         intriParams.dstStride = tla::get<0>(dstTensor.stride());
         intriParams.srcStride = tla::get<1, 1>(srcTensor.stride()) / tla::get<0, 0>(srcTensor.stride());
         intriParams.quantPre = quantPre;
@@ -136,8 +136,8 @@ struct CopyL0CToGmTla<
 
         AscendC::DataCopyCO12DstParams intriParams;
 
-        intriParams.nSize = tla::get<1, 0>(dstTensor.shape()) * tla::get<1, 1>(dstTensor.shape());
-        intriParams.mSize = tla::get<0, 0>(dstTensor.shape()) * tla::get<0, 1>(dstTensor.shape());
+        intriParams.nSize = tla::get<1>(dstTensor.originShape());
+        intriParams.mSize = tla::get<0>(dstTensor.originShape());
         intriParams.dstStride = tla::get<1, 1>(dstTensor.stride()) / (BYTE_PER_C0 / sizeof(ElementDst));
         intriParams.srcStride = tla::get<1, 1>(srcTensor.stride()) / tla::get<0, 0>(srcTensor.stride());
         intriParams.quantPre = quantPre;

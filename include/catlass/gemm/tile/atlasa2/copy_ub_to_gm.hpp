@@ -44,11 +44,14 @@ struct TileCopyTla<Arch::AtlasA2,
             "The input parameters do not match. TensorSrc must be GM and RowMajor, "
             "while TensorDst must be UB and RowMajor");
 
+        const uint16_t row = tla::get<0>(dstTensor.originShape());
+        const uint16_t col = tla::get<1>(dstTensor.originShape());
+
         AscendC::DataCopyExtParams dataCopyParams(
-            tla::get<0>(dstTensor.shape()),
-            tla::get<1>(dstTensor.shape()) * sizeof(ElementSrc),
-            (tla::get<0>(srcTensor.stride()) - tla::get<1>(srcTensor.shape())) / ELE_NUM_PER_C0,
-            (tla::get<0>(dstTensor.stride()) - tla::get<1>(dstTensor.shape())) * sizeof(ElementSrc),
+            row,
+            col * sizeof(ElementSrc),
+            (tla::get<0>(srcTensor.stride()) - col) / ELE_NUM_PER_C0,
+            (tla::get<0>(dstTensor.stride()) - col) * sizeof(ElementSrc),
             0
         );
         auto dstOffset = dstTensor.layout()(dstTensor.coord());

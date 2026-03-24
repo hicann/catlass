@@ -139,6 +139,7 @@ set(EXAMPLE_ATLASA2
     41_sparse_matmul_tla
     42_quant_optimized_matmul_tla
     44_quant_matmul_full_loadA_tla
+    45_strided_batched_matmul_tla
     102_dynamic_optimized_matmul
     103_dynamic_optimized_quant_matmul_per_token_basic
 )

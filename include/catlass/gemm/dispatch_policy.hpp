@@ -331,6 +331,13 @@ struct MmadPreloadAsyncWithCallback : public MmadBase<ArchTag_, true> {
     static constexpr bool ENABLE_L1_RESIDENT = ENABLE_L1_RESIDENT_;
 };
 
+// 基于TLA提供block层不感知尾块逻辑，tile层感知originShape的流程。使用TileView与MakeTensorLike。
+template <class ArchTag_, bool ENABLE_UNIT_FLAG_ = false>
+struct MmadPingpongTlaV2 : public MmadBase<ArchTag_, ENABLE_UNIT_FLAG_> {
+    static constexpr uint32_t STAGES = 2;
+    static constexpr bool ENABLE_UNIT_FLAG = ENABLE_UNIT_FLAG_;
+};
+
 template <class ArchTag_, bool ENABLE_UNIT_FLAG_ = false>
 struct SparseMatmulMultiBlockOnKAxis : public MmadBase<ArchTag_, false> {
     static constexpr uint32_t STAGES = 2;

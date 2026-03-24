@@ -538,8 +538,8 @@ struct TileCopyTla<Arch::AtlasA2,
 
         const uint32_t srcOuterStrideRow = tla::get<0, 1>(srcTensor.stride());
         const uint32_t srcOuterStrideCol = tla::get<1, 1>(srcTensor.stride());
-        const uint32_t dstOuterShapeRow = tla::get<0, 1>(dstTensor.shape());
-        const uint32_t dstOuterShapeCol = tla::get<1, 1>(dstTensor.shape());
+        const uint32_t dstOuterShapeRow = CeilDiv(tla::get<0>(dstTensor.originShape()), tla::get<0, 0>(dstTensor.shape()));
+        const uint32_t dstOuterShapeCol = CeilDiv(tla::get<1>(dstTensor.originShape()), tla::get<1, 0>(dstTensor.shape()));
         const uint32_t dstOuterStrideRow = tla::get<0, 1>(dstTensor.stride());
 
         AscendC::LoadData2DParams loadDataParams;
@@ -590,8 +590,8 @@ struct TileCopyTla<Arch::AtlasA2,
 
         const uint32_t srcOuterStrideRow = tla::get<0, 1>(srcTensor.stride());
         const uint32_t srcOuterStrideCol = tla::get<1, 1>(srcTensor.stride());
-        const uint32_t dstOuterShapeRow = tla::get<0, 1>(dstTensor.shape());
-        const uint32_t dstOuterShapeCol = tla::get<1, 1>(dstTensor.shape());
+        const uint32_t dstOuterShapeRow = CeilDiv(tla::get<0>(dstTensor.originShape()), tla::get<0, 0>(dstTensor.shape()));
+        const uint32_t dstOuterShapeCol = CeilDiv(tla::get<1>(dstTensor.originShape()), tla::get<1, 0>(dstTensor.shape()));
         const uint32_t dstOuterStrideRow = tla::get<0, 1>(dstTensor.stride());
 
         auto dstOffset = dstTensor.layout()(dstTensor.coord());
@@ -609,18 +609,18 @@ struct TileCopyTla<Arch::AtlasA2,
 
             AscendC::LoadData(dstTensor.data()[dstOffset], srcTensor.data()[srcOffset], loadDataParams);
         } else {
-        loadDataParams.startIndex = 0;
-        loadDataParams.repeatTimes = dstOuterShapeCol;
+            loadDataParams.startIndex = 0;
+            loadDataParams.repeatTimes = dstOuterShapeCol;
             loadDataParams.srcStride = 1;
-        loadDataParams.sid = 0;
-        loadDataParams.dstGap = 0;
-        loadDataParams.ifTranspose = false;
-        loadDataParams.addrMode = 0;
+            loadDataParams.sid = 0;
+            loadDataParams.dstGap = 0;
+            loadDataParams.ifTranspose = false;
+            loadDataParams.addrMode = 0;
 
-        for (uint32_t i = 0; i < dstOuterShapeRow; i++) {
-            AscendC::LoadData(dstTensor.data()[dstOffset + i * dstOuterStrideRow],
-                srcTensor.data()[srcOffset + i * srcOuterStrideRow],
-                loadDataParams);
+            for (uint32_t i = 0; i < dstOuterShapeRow; i++) {
+                AscendC::LoadData(dstTensor.data()[dstOffset + i * dstOuterStrideRow],
+                                srcTensor.data()[srcOffset + i * srcOuterStrideRow],
+                                loadDataParams);
             }
         }
     }
@@ -654,10 +654,10 @@ struct TileCopyTla<Arch::AtlasA2,
             "The input parameters do not match. TensorSrc must be int8_t, L1 and zN, "
             "while TensorDst must be int8_t, L0B and nZ");
 
-        const uint32_t srcOuterShapeCol = tla::get<1, 1>(srcTensor.shape());
+        const uint32_t srcOuterShapeCol = CeilDiv(tla::get<1>(srcTensor.originShape()), tla::get<1, 0>(srcTensor.shape()));
         const uint32_t srcOuterStrideRow = tla::get<0, 1>(srcTensor.stride());
         const uint32_t srcOuterStrideCol = tla::get<1, 1>(srcTensor.stride());
-        const uint32_t dstOuterShapeRow = tla::get<0, 1>(dstTensor.shape());
+        const uint32_t dstOuterShapeRow = CeilDiv(tla::get<0>(dstTensor.originShape()), tla::get<0, 0>(dstTensor.shape()));
         const uint32_t dstOuterStrideRow = tla::get<0, 1>(dstTensor.stride());
 
         AscendC::LoadData2dTransposeParams loadDataParams;
@@ -709,9 +709,9 @@ struct TileCopyTla<Arch::AtlasA2,
 
         constexpr uint8_t PAD_LIST[4] = {0, 0, 0, 0};
         uint16_t l1K = tla::get<1, 1>(srcTensor.stride()) / tla::get<1, 0>(srcTensor.shape());
-        uint16_t l1N = tla::get<1, 0>(srcTensor.shape()) * tla::get<1, 1>(srcTensor.shape());
-        uint16_t l0K = tla::get<0, 0>(dstTensor.shape()) * tla::get<0, 1>(dstTensor.shape());
-        uint16_t l0N = tla::get<1, 0>(dstTensor.shape()) * tla::get<1, 1>(dstTensor.shape());
+        uint16_t l1N = tla::get<1>(srcTensor.originShape());
+        uint16_t l0K = tla::get<0>(dstTensor.originShape());
+        uint16_t l0N = tla::get<1>(dstTensor.originShape());
         // K, N need to be 16 aligned for f32
         uint16_t l1KAlign = RoundUp<C0_NUM_PER_FRACTAL>(l1K);
         uint16_t l1NAlign = RoundUp<C0_NUM_PER_FRACTAL>(l1N);

@@ -1460,8 +1460,8 @@ struct TileCopyTla<Arch::AtlasA2,
                       TensorDst::position == AscendC::TPosition::A1,
             "The input parameters do not match. TensorSrc must be GM and RowMajor, while TensorDst must be L1 and zN");
 
-        const uint32_t nValue = tla::get<0>(srcTensor.shape());
-        const uint32_t dValue = tla::get<1>(srcTensor.shape());
+        const uint32_t nValue = tla::get<0>(srcTensor.originShape());
+        const uint32_t dValue = tla::get<1>(srcTensor.originShape());
         const uint32_t srcDValue = tla::get<0>(srcTensor.stride());
         const uint32_t dstInnerStrideRow = tla::get<0, 0>(dstTensor.stride());
         const uint32_t dstOuterStrideCol = tla::get<1, 1>(dstTensor.stride());
@@ -1520,8 +1520,8 @@ struct TileCopyTla<Arch::AtlasA2,
             "The input parameters do not match. TensorSrc must be GM and ColumnMajor, "
             "while TensorDst must be L1 and nZ");
 
-        const uint32_t nValue = tla::get<1>(srcTensor.shape());
-        const uint32_t dValue = tla::get<0>(srcTensor.shape());
+        const uint32_t nValue = tla::get<1>(srcTensor.originShape());
+        const uint32_t dValue = tla::get<0>(srcTensor.originShape());
         const uint32_t srcDValue = tla::get<1>(srcTensor.stride());
         const uint32_t dstInnerStrideRow = tla::get<1, 0>(dstTensor.stride());
         const uint32_t dstOuterStrideCol = tla::get<0, 1>(dstTensor.stride());
@@ -1582,8 +1582,8 @@ struct TileCopyTla<Arch::AtlasA2,
         const uint32_t srcOuterStrideCol = tla::get<1, 1>(srcTensor.stride());
         const uint32_t dstOuterStrideCol = tla::get<1, 1>(dstTensor.stride());
 
-        uint32_t blockCount = tla::get<1, 1>(srcTensor.shape());
-        uint32_t blockLen = tla::get<0, 0>(srcTensor.shape()) * tla::get<0, 1>(srcTensor.shape());
+        uint32_t blockCount = CeilDiv<ELE_NUM_PER_C0>(tla::get<1>(srcTensor.originShape()));
+        uint32_t blockLen = tla::get<0>(srcTensor.originShape());
 
         auto dstOffset = dstTensor.layout()(dstTensor.coord());
         auto srcOffset = srcTensor.layout()(srcTensor.coord());
@@ -1636,8 +1636,8 @@ struct TileCopyTla<Arch::AtlasA2,
         const uint32_t srcOuterStrideRow = tla::get<0, 1>(srcTensor.stride());
         const uint32_t dstOuterStrideRow = tla::get<0, 1>(dstTensor.stride());
 
-        uint32_t blockCount = tla::get<0, 1>(srcTensor.shape());
-        uint32_t blockLen = tla::get<1, 0>(srcTensor.shape()) * tla::get<1, 1>(srcTensor.shape());
+        uint32_t blockCount = CeilDiv<ELE_NUM_PER_C0>(tla::get<0>(srcTensor.originShape()));
+        uint32_t blockLen = tla::get<1>(srcTensor.originShape());
 
         auto dstOffset = dstTensor.layout()(dstTensor.coord());
         auto srcOffset = srcTensor.layout()(srcTensor.coord());

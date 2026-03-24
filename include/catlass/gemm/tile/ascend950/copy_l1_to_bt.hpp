@@ -46,7 +46,7 @@ struct TileCopyTla<
 
         AscendC::DataCopyParams intriParams;
         intriParams.blockCount = 1;
-        intriParams.blockLen = CeilDiv(tla::get<0>(srcTensor.shape()), ELE_NUM_PER_C0);
+        intriParams.blockLen = CeilDiv(tla::get<0>(srcTensor.originShape()), ELE_NUM_PER_C0);
         if (sizeof(ElementSrc) == 4) {
             // the burst length should be even when B32
             intriParams.blockLen = RoundUp(intriParams.blockLen, 2);

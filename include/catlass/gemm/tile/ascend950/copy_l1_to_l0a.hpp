@@ -43,8 +43,8 @@ struct TileCopyTla<
             "The input parameters do not match. TensorSrc must be L1 and zN, while TensorDst must be L0A and zN"
         );
 
-        const uint32_t dstOuterShapeRow = tla::get<0, 1>(dstTensor.shape());
-        const uint32_t dstOuterShapeCol = tla::get<1, 1>(dstTensor.shape());
+        const uint32_t dstOuterShapeRow = CeilDiv(tla::get<0>(dstTensor.originShape()), tla::get<0, 0>(dstTensor.shape()));
+        const uint32_t dstOuterShapeCol = CeilDiv(tla::get<1>(dstTensor.originShape()), tla::get<1, 0>(dstTensor.shape()));
         const uint32_t srcOuterStrideCol = tla::get<1, 1>(srcTensor.stride());
         const uint32_t dstOuterStrideCol = tla::get<1, 1>(dstTensor.stride());
         auto srcCoord = srcTensor.coord();
@@ -72,8 +72,8 @@ struct TileCopyTla<
             "The input parameters do not match. TensorSrc must be L1 and zN, while TensorDst must be L0A and zN"
         );
 
-        const uint32_t dstOuterShapeRow = tla::get<0, 1>(dstTensor.shape());
-        const uint32_t dstOuterShapeCol = tla::get<1, 1>(dstTensor.shape());
+        const uint32_t dstOuterShapeRow = CeilDiv(tla::get<0>(dstTensor.originShape()), tla::get<0, 0>(dstTensor.shape()));
+        const uint32_t dstOuterShapeCol = CeilDiv(tla::get<1>(dstTensor.originShape()), tla::get<1, 0>(dstTensor.shape()));
         const uint32_t srcOuterStrideCol = tla::get<1, 1>(srcTensor.stride());
         const uint32_t dstOuterStrideCol = tla::get<1, 1>(dstTensor.stride());
 
@@ -120,8 +120,8 @@ struct TileCopyTla<
             "The input parameters do not match. TensorSrc must be L1 and nZ, while TensorDst must be L0A and zN"
         );
 
-        const uint32_t L0M = tla::get<0, 0>(dstTensor.shape()) * tla::get<0, 1>(dstTensor.shape());
-        const uint32_t L0K = tla::get<1, 0>(dstTensor.shape()) * tla::get<1, 1>(dstTensor.shape());
+        const uint32_t L0M = tla::get<0>(dstTensor.originShape());
+        const uint32_t L0K = tla::get<1>(dstTensor.originShape());
         const uint32_t srcOuterStrideRow = tla::get<0, 1>(srcTensor.stride());
         const uint32_t dstOuterStrideCol = tla::get<1, 1>(dstTensor.stride());
         auto srcCoord = srcTensor.coord();
@@ -131,6 +131,9 @@ struct TileCopyTla<
         loadDataParams.kStartPosition = CeilDiv<ELE_NUM_PER_C0>(tla::get<0>(srcCoord));
         loadDataParams.mStep = CeilDiv<C0_NUM_PER_FRACTAL>(L0K);
         loadDataParams.kStep = CeilDiv<ELE_NUM_PER_C0>(L0M);
+        if constexpr (AscendC::Std::is_one_of_v<typename TensorSrc::Element, float, uint32_t, int32_t>) {
+            loadDataParams.kStep = RoundUp<2>(loadDataParams.kStep); // for b32 data types, ensure kStep is even
+        }
         loadDataParams.srcStride = CeilDiv<ELE_NUM_PER_FRACTAL>(srcOuterStrideRow);
         loadDataParams.dstStride = CeilDiv<ELE_NUM_PER_FRACTAL>(dstOuterStrideCol);
         loadDataParams.ifTranspose = true;
@@ -155,14 +158,19 @@ struct TileCopyTla<
         const uint32_t L1K = tla::get<1, 0>(srcTensor.shape()) * tla::get<1, 1>(srcTensor.shape());
         const uint32_t L0M = tla::get<0, 0>(dstTensor.shape()) * tla::get<0, 1>(dstTensor.shape());
         const uint32_t L0K = tla::get<1, 0>(dstTensor.shape()) * tla::get<1, 1>(dstTensor.shape());
+        const uint32_t L0MOrigin = tla::get<0>(dstTensor.originShape());
+        const uint32_t L0KOrigin = tla::get<1>(dstTensor.originShape());
         const uint32_t srcOuterStrideRow = tla::get<0, 1>(srcTensor.stride());
         const uint32_t dstOuterStrideCol = tla::get<1, 1>(dstTensor.stride());
 
         AscendC::LoadData2DParamsV2 loadDataParams;
         loadDataParams.mStartPosition = 0;
         loadDataParams.kStartPosition = 0;
-        loadDataParams.mStep = CeilDiv<C0_NUM_PER_FRACTAL>(L0K);
-        loadDataParams.kStep = CeilDiv<ELE_NUM_PER_C0>(L0M);
+        loadDataParams.mStep = CeilDiv<C0_NUM_PER_FRACTAL>(L0KOrigin);
+        loadDataParams.kStep = CeilDiv<ELE_NUM_PER_C0>(L0MOrigin);
+        if constexpr (AscendC::Std::is_one_of_v<typename TensorSrc::Element, float, uint32_t, int32_t>) {
+            loadDataParams.kStep = RoundUp<2>(loadDataParams.kStep); // for b32 data types, ensure kStep is even
+        }
         loadDataParams.srcStride = CeilDiv<ELE_NUM_PER_FRACTAL>(srcOuterStrideRow);
         loadDataParams.dstStride = CeilDiv<ELE_NUM_PER_FRACTAL>(dstOuterStrideCol);
         loadDataParams.ifTranspose = true;
@@ -205,18 +213,19 @@ struct TileCopyTla<
             "The input parameters do not match. TensorSrc must be L1 and nZ, while TensorDst must be L0A and zN"
         );
 
-        const uint32_t L0M = tla::get<0, 0>(dstTensor.shape()) * tla::get<0, 1>(dstTensor.shape());
-        const uint32_t L0K = tla::get<1, 0>(dstTensor.shape()) * tla::get<1, 1>(dstTensor.shape());
+        const uint32_t L0MPadded = tla::get<0, 0>(dstTensor.shape()) * tla::get<0, 1>(dstTensor.shape());
+        const uint32_t L0MOrigin = tla::get<0>(dstTensor.originShape());
+        const uint32_t L0KOrigin = tla::get<1>(dstTensor.originShape());
         const uint32_t srcOuterStrideRow = tla::get<0, 1>(srcTensor.stride());
         const uint32_t dstOuterStrideCol = tla::get<1, 1>(dstTensor.stride());
         auto srcCoord = srcTensor.coord();
 
         AscendC::LoadData2DParamsV2 loadDataParams;
-        if (L0M % ELE_NUM_PER_C0 == 0) {
+        if (RoundUp<C0_NUM_PER_FRACTAL>(L0MOrigin) % ELE_NUM_PER_C0 == 0) {
             loadDataParams.mStartPosition = CeilDiv<C0_NUM_PER_FRACTAL>(tla::get<1>(srcCoord));
             loadDataParams.kStartPosition = CeilDiv<ELE_NUM_PER_C0>(tla::get<0>(srcCoord));
-            loadDataParams.mStep = CeilDiv<C0_NUM_PER_FRACTAL>(L0K);
-            loadDataParams.kStep = CeilDiv<ELE_NUM_PER_C0>(L0M);
+            loadDataParams.mStep = RoundUp<2>(CeilDiv<C0_NUM_PER_FRACTAL>(L0KOrigin));
+            loadDataParams.kStep = CeilDiv<ELE_NUM_PER_C0>(L0MOrigin);
             loadDataParams.srcStride = CeilDiv<ELE_NUM_PER_FRACTAL>(srcOuterStrideRow);
             loadDataParams.dstStride = CeilDiv<ELE_NUM_PER_FRACTAL>(dstOuterStrideCol);
             loadDataParams.ifTranspose = true;
@@ -224,18 +233,18 @@ struct TileCopyTla<
             auto dstOffset = dstTensor.layout()(dstTensor.coord());
             AscendC::LoadData(dstTensor.data()[dstOffset], srcTensor.data(), loadDataParams);
         } else {
-            for (uint32_t kIdx = 0; kIdx < L0K / ELE_NUM_PER_C0; kIdx++) {
+            for (uint32_t kIdx = 0; kIdx < CeilDiv<ELE_NUM_PER_C0>(L0KOrigin); kIdx++) {
                 loadDataParams.mStartPosition = CeilDiv<C0_NUM_PER_FRACTAL>(tla::get<1>(srcCoord)) + kIdx * 2;
                 loadDataParams.kStartPosition = CeilDiv<ELE_NUM_PER_C0>(tla::get<0>(srcCoord));
                 loadDataParams.mStep = 2;
-                loadDataParams.kStep = CeilDiv<ELE_NUM_PER_C0>(L0M);
+                loadDataParams.kStep = CeilDiv<ELE_NUM_PER_C0>(L0MOrigin);
                 loadDataParams.srcStride = CeilDiv<ELE_NUM_PER_FRACTAL>(srcOuterStrideRow);
                 loadDataParams.dstStride = CeilDiv<ELE_NUM_PER_FRACTAL>(dstOuterStrideCol);
                 loadDataParams.ifTranspose = true;
 
                 auto dstOffset = dstTensor.layout()(dstTensor.coord());
                 AscendC::LoadData(
-                    dstTensor.data()[dstOffset + kIdx * L0M * ELE_NUM_PER_C0], srcTensor.data(), loadDataParams
+                    dstTensor.data()[dstOffset + kIdx * L0MPadded * ELE_NUM_PER_C0], srcTensor.data(), loadDataParams
                 );
             }
         }
@@ -257,36 +266,40 @@ struct TileCopyTla<
         const uint32_t L1K = tla::get<1, 0>(srcTensor.shape()) * tla::get<1, 1>(srcTensor.shape());
         const uint32_t L0M = tla::get<0, 0>(dstTensor.shape()) * tla::get<0, 1>(dstTensor.shape());
         const uint32_t L0K = tla::get<1, 0>(dstTensor.shape()) * tla::get<1, 1>(dstTensor.shape());
+        const uint32_t L0MPadded = L0M;
+        const uint32_t L0KPadded = L0K;
+        const uint32_t L0MOrigin = tla::get<0>(dstTensor.originShape());
+        const uint32_t L0KOrigin = tla::get<1>(dstTensor.originShape());
         const uint32_t srcOuterStrideRow = tla::get<0, 1>(srcTensor.stride());
         const uint32_t dstOuterStrideCol = tla::get<1, 1>(dstTensor.stride());
 
         AscendC::LoadData2DParamsV2 loadDataParams;
-        if (L0M % ELE_NUM_PER_C0 == 0) {
+        if (RoundUp<C0_NUM_PER_FRACTAL>(L0MOrigin) % ELE_NUM_PER_C0 == 0) {
             loadDataParams.mStartPosition = 0;
             loadDataParams.kStartPosition = 0;
-            loadDataParams.mStep = CeilDiv<C0_NUM_PER_FRACTAL>(L0K);
-            loadDataParams.kStep = CeilDiv<ELE_NUM_PER_C0>(L0M);
+            loadDataParams.mStep = RoundUp<2>(CeilDiv<C0_NUM_PER_FRACTAL>(L0KOrigin));
+            loadDataParams.kStep = CeilDiv<ELE_NUM_PER_C0>(L0MOrigin);
             loadDataParams.srcStride = CeilDiv<ELE_NUM_PER_FRACTAL>(srcOuterStrideRow);
             loadDataParams.dstStride = CeilDiv<ELE_NUM_PER_FRACTAL>(dstOuterStrideCol);
             loadDataParams.ifTranspose = true;
 
             for (uint32_t l0BatchIdx = 0; l0BatchIdx < l0Batch; l0BatchIdx++) {
                 AscendC::LoadData(
-                    dstTensor.data()[l0BatchIdx * L0M * L0K], srcTensor.data()[l0BatchIdx * L1M * L1K], loadDataParams
+                    dstTensor.data()[l0BatchIdx * L0MPadded * L0KPadded], srcTensor.data()[l0BatchIdx * L1M * L1K], loadDataParams
                 );
             }
         } else {
             loadDataParams.mStartPosition = 0;
             loadDataParams.kStartPosition = 0;
             loadDataParams.mStep = 2;
-            loadDataParams.kStep = CeilDiv<ELE_NUM_PER_C0>(L0M);
+            loadDataParams.kStep = CeilDiv<ELE_NUM_PER_C0>(L0MOrigin);
             loadDataParams.srcStride = CeilDiv<ELE_NUM_PER_FRACTAL>(srcOuterStrideRow);
             loadDataParams.dstStride = CeilDiv<ELE_NUM_PER_FRACTAL>(dstOuterStrideCol);
             loadDataParams.ifTranspose = true;
             for (uint32_t l0BatchIdx = 0; l0BatchIdx < l0Batch; l0BatchIdx++) {
-                for (uint32_t kIdx = 0; kIdx < L0K / ELE_NUM_PER_C0; kIdx++) {
+                for (uint32_t kIdx = 0; kIdx < CeilDiv<ELE_NUM_PER_C0>(L0KOrigin); kIdx++) {
                     AscendC::LoadData(
-                        dstTensor.data()[l0BatchIdx * L0M * L0K + kIdx * L0M * ELE_NUM_PER_C0],
+                        dstTensor.data()[l0BatchIdx * L0MPadded * L0KPadded + kIdx * L0MPadded * ELE_NUM_PER_C0],
                         srcTensor.data()[l0BatchIdx * L1M * L1K + kIdx * ELE_NUM_PER_FRACTAL * 2], loadDataParams
                     );
                 }
@@ -312,7 +325,7 @@ struct TileCopyTla<
     {
         uint16_t aL1M = tla::get<0, 0>(srcTensor.stride());
         uint16_t madM = tla::get<1, 1>(dstTensor.stride());
-        uint16_t madK = tla::get<1, 1>(dstTensor.shape());
+        uint16_t madK = CeilDiv(tla::get<1>(dstTensor.originShape()), tla::get<1, 0>(dstTensor.shape()));
 
         AscendC::LoadData2DParamsV2 loadDataParams;
         loadDataParams.mStartPosition = 0;

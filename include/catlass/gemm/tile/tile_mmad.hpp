@@ -227,6 +227,51 @@ struct TileMmadTla {
                 mmadParams);
         }
     }
+
+    // automatically extracts actual sizes from tensor originShape
+    template <class TensorC, class TensorA, class TensorB>
+    CATLASS_DEVICE
+    void operator()(TensorC const &l0CTensor,
+         TensorA const &l0ATensor,
+         TensorB const &l0BTensor,
+         bool initC = true, uint8_t unitFlag = 0)
+    {
+        // Get actual sizes from tensor originShape
+        uint32_t m = tla::get<0>(l0CTensor.layout().originShape());
+        uint32_t n = tla::get<1>(l0CTensor.layout().originShape());
+        uint32_t k = tla::get<1>(l0ATensor.layout().originShape());
+        AscendC::MmadParams mmadParams;
+#if (defined (__NPU_ARCH__) && __NPU_ARCH__ == 2201)
+        if constexpr (std::is_same_v<ElementA, float> && std::is_same_v<LayoutTagL1A, layout::nZ>) {
+            mmadParams.kDirectionAlign = true;
+        }
+        if constexpr (!std::is_same_v<LayoutTagL1A, layout::VectorLayout>) {
+            if (m == 1) m = 16; // avoid gemv mode
+        }
+#endif
+#if (defined (__NPU_ARCH__) && __NPU_ARCH__ == 3510)
+        if constexpr(std::is_same_v<LayoutTagL1A, layout::VectorLayout>) {
+            mmadParams.disableGemv = false;
+        } else {
+            mmadParams.disableGemv = true;
+        }
+#endif
+        mmadParams.m = m;
+        mmadParams.n = n;
+        mmadParams.k = k;
+        mmadParams.unitFlag = unitFlag;
+        mmadParams.cmatrixInitVal = initC;
+
+        AscendC::Mmad(l0CTensor.data(),
+                      l0ATensor.data(),
+                      l0BTensor.data(),
+                      mmadParams);
+
+        const uint32_t PIPE_M_BARRIER_THRESHOLD = 10;
+        if ((m / C0_NUM_PER_FRACTAL) * (n / C0_NUM_PER_FRACTAL) < PIPE_M_BARRIER_THRESHOLD) {
+            AscendC::PipeBarrier<PIPE_M>();
+        }
+    }
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////

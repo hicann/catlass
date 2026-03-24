@@ -328,6 +328,7 @@ struct PackedTileCopyTla {
     using LayoutTagL1B = typename helper::L1BTypeSelector<Gemm::GemmType<ElementB, LayoutTagB>>::L1BType::Layout;
     using LayoutTagL0A = typename helper::L0ALayoutSelector<ArchTag>::Layout;
     using LayoutTagL0B = layout::nZ;
+    using LayoutTagL0C = layout::L0C;
 
     using LayoutA = detail::TagToLayout_t<ElementA, LayoutTagA>;
     using LayoutB = detail::TagToLayout_t<ElementB, LayoutTagB>;

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -225,8 +225,30 @@ class FAInferKernelTla {
 
             auto layoutQCube = tla::MakeLayout(MakeShape(qSBlockSize, qNBlockSize, embed), 
                 MakeStride((int64_t)qHeads * embed, (int64_t)embed, (int64_t)Int<1>{}));
-            auto layoutKCube = tla::MakeLayout<ElementK, LayoutK>(strideKV, blockStackNum * pagedBlockSize);
-            auto layoutVCube = tla::MakeLayout<ElementV, LayoutV>(blockStackNum * pagedBlockSize, strideKV);
+            // Build kvHead-sliced physical views for K/V.
+            //
+            // Paged KV cache physical storage: [numBlocks, blockSize, kvHeads, embed]
+            // For a fixed kvHeadIdx, a token's embedding starts at:
+            //   base = gmOffsetK/V + token_slot * strideKV, where token_slot = blockId * blockSize + blockOffset
+            //
+            // express this as:
+            //   - paged:   token_slot in [0, numBlocks * blockSize)
+            //   - contig:  token_slot in [0, kvSeqlen)
+            //
+            //   K_head_view: shape [embed, token_slot_len], stride [1, strideKV]
+            //   V_head_view: shape [token_slot_len, embed], stride [strideKV, 1]
+            uint32_t kvPhysTokenSlots = 0;
+            if constexpr (PAGED_CACHE_FLAG) {
+                kvPhysTokenSlots = fATilingData->numBlocks * pagedBlockSize;
+            } else {
+                kvPhysTokenSlots = kvSeqlen;
+            }
+            auto layoutKCube = tla::MakeLayout(
+                MakeShape(embed, kvPhysTokenSlots),
+                MakeStride(Int<1>{}, (int64_t)strideKV));
+            auto layoutVCube = tla::MakeLayout(
+                MakeShape(kvPhysTokenSlots, embed),
+                MakeStride((int64_t)strideKV, Int<1>{}));
             auto layoutOTmpCube = tla::MakeLayout<ElementOTmp, LayoutOTmp>(rowNum, embed);
             auto tensorQ = tla::MakeTensor(gQ[gmQOffset], layoutQCube, Arch::PositionGM{});
             auto tensorK = tla::MakeTensor(gK[gmKOffset], layoutKCube, Arch::PositionGM{});
