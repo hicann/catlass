@@ -127,6 +127,12 @@ struct EpilogueAtlasA2Gemv {
     using ArchTag = Arch::AtlasA2;
 };
 ///////////////////////////
+// For Ascend950, fixpipe-opti
+template <bool SPLIT_M_>
+struct EpilogueAscend950Fixpipe {
+    using ArchTag = Arch::Ascend950;
+    static constexpr bool SPLIT_M = SPLIT_M_;
+};
 }  // namespace Catlass::Epilogue
 
 #endif  // CATLASS_EPILOGUE_DISPATCH_POLICY_HPP

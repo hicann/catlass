@@ -196,8 +196,8 @@ public:
             if constexpr (ENABLE_UNIT_FLAG && tla::detail::isRowMajor<LayoutC>::value) {
                 AscendC::SetMMLayoutTransform(true);
             }
-        uint32_t l1AOffset = l1BufAddrStart;
-        uint32_t l1BOffset = l1BufAddrStart + L1A_TILE_SIZE * L1A_STAGES;
+            uint32_t l1AOffset = l1BufAddrStart;
+            uint32_t l1BOffset = l1BufAddrStart + L1A_TILE_SIZE * L1A_STAGES;
             // Init buffers
             for (uint32_t i = 0; i < L1A_STAGES; i++) {
                 // Assign L1/L0A/L0B space for each stages
