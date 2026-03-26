@@ -244,7 +244,7 @@ void RunTest(Options const &options)
     ACL_CHECK(aclFinalize());
 }
 
-void Run(Options const &options)
+static void Run(Options const &options)
 {
     if (options.quantMode == 0) {
         RunTest<Gemm::Tile::ScaleGranularity::PER_TENSOR>(options);

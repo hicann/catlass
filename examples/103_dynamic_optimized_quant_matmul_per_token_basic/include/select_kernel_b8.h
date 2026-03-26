@@ -11,8 +11,11 @@
 #ifndef SELECT_KERNEL_B8_H
 #define SELECT_KERNEL_B8_H
 
-#include <limits>
+#include <cstdint>
+
+#include "catlass/detail/alignment.hpp"
 #include "platform_info.h"
+#include "tiling_params.h"
 
 bool PerTokenMatmulB8Handler(TilingParams &params, PlatformInfo& platformInfo)
 {

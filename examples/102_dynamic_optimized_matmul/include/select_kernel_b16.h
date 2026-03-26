@@ -14,7 +14,11 @@
 #include <cstdint>
 #include <cmath>
 #include <limits>
+
+#include "catlass/detail/alignment.hpp"
 #include "platform_info.h"
+#include "tiling_params.h"
+#include "utils.h"
 
 enum class PaddingTag : uint8_t { PADDING_NONE = 0, PADDING_ND = 1, PADDING_BLOCK_ND = 2, PADDING_NZ = 3};
 

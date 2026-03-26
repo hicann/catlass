@@ -44,7 +44,7 @@ using namespace tla;
 
 using Options = GroupedGemmOptions;
 
-void Run(Options const &options)
+static void Run(Options const &options)
 {
     aclrtStream stream{nullptr};
     ACL_CHECK(aclInit(nullptr));

@@ -127,11 +127,12 @@ static void Run(const Options &options)
         return;
     }
 
-    int32_t dTypeKey = (dataType == "half") ? 0 : 1;
-    int32_t specStraKey = (numHeads == MLATiling::NUM128) ? 1 : 0;
+    uint32_t dTypeKey = (dataType == "half") ? 0 : 1;
+    uint32_t specStraKey = (numHeads == MLATiling::NUM128) ? 1 : 0;
 
     // 3 bits for tilingKey(specStraKey : 1, dTypeKey : 2)
-    int32_t tilingKey = (specStraKey << MLATiling::NUM2) + dTypeKey;
+    uint32_t dTypeKeyBitLen = 2;
+    uint32_t tilingKey = (specStraKey << dTypeKeyBitLen) + dTypeKey;
     std::cout << "tilingKey : " << tilingKey << std::endl;
 
     // read qNtokens num
