@@ -149,6 +149,7 @@ set(EXAMPLE_ASCEND950
     46_ascend950_matmul_fixpipe_opti
     47_ascend950_grouped_matmul_slice_m_per_token_dequant
     48_ascend950_grouped_matmul_slice_m_per_tensor_per_channel_dequant
+    49_ascend950_flash_attention_infer
     50_ascend950_basic_matmul_gemv
 )
 

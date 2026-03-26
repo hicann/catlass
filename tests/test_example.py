@@ -170,6 +170,15 @@ class CatlassExampleTest(unittest.TestCase):
         )
         case_cpp = case_py
         self.run_case("41_sparse_matmul_tla", case_cpp)
+    
+    @only_on_3510
+    def test_49_ascend950_flash_attention_infer(self):
+        case_py = [str(i) for i in [1, 138, 100, 4, 2, 128, 0, 0, 0]] + ["half"]
+        ret = subprocess.run(["python", os.path.join(
+            CMAKE_EXAMPLES_PATH, "49_ascend950_flash_attention_infer", "gen_data.py")] + case_py)
+        case_cpp = [str(i) for i in [1, 138, 100, 4, 2, 128, 0, 0, 0]] + ["--dtype", "half",
+            "--datapath", os.path.join(CMAKE_EXAMPLES_PATH, "49_ascend950_flash_attention_infer", "data")]
+        self.run_case("49_ascend950_flash_attention_infer", case_cpp)
 
 
 normal_cases_2201 = [
