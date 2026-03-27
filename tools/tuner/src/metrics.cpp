@@ -102,11 +102,11 @@ bool CheckPermission(std::string_view path)
         LOGE("Get Path permission error: %s", pathStr.c_str());
         return false;
     }
-    if ((fileStat.st_mode & S_IWOTH) || (fileStat.st_mode & S_IWGRP)) {
+    if (((fileStat.st_mode & S_IWOTH) != 0) || ((fileStat.st_mode & S_IWGRP) != 0)) {
         LOGE("Path %s cannot be writable by group or other users", pathStr.c_str());
         return false;
     }
-    if (!(fileStat.st_mode & S_IRUSR) && !(fileStat.st_mode & S_IXUSR)) {
+    if (((fileStat.st_mode & S_IRUSR) == 0) && ((fileStat.st_mode & S_IXUSR) == 0)) {
         LOGE("Path %s is not readable or executable", pathStr.c_str());
         return false;
     }

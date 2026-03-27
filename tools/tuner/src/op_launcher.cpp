@@ -9,7 +9,6 @@
  */
 
 #include "op_launcher.h"
-#include <thread>
 #include "device_memory_manager.h"
 
 namespace Catlass {
