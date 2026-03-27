@@ -98,7 +98,7 @@ struct TileCopyTla<
         );
 
         uint32_t blockCount = CeilDiv<ELE_NUM_PER_C0>(tla::get<1>(srcTensor.originShape()));
-        uint32_t blockLen = RoundUp<C0_NUM_PER_FRACTAL>(tla::get<0>(srcTensor.originShape()));
+        uint32_t blockLen = tla::get<0>(srcTensor.originShape());
 
         AscendC::DataCopyParams repeatParams;
 
@@ -195,7 +195,7 @@ struct TileCopyTla<
         );
 
         uint32_t blockCount = CeilDiv<ELE_NUM_PER_C0>(tla::get<0>(srcTensor.originShape()));
-        uint32_t blockLen = RoundUp<C0_NUM_PER_FRACTAL>(tla::get<1>(srcTensor.originShape()));
+        uint32_t blockLen = tla::get<1>(srcTensor.originShape());
 
         AscendC::DataCopyParams repeatParams;
 

@@ -1246,7 +1246,7 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::zN>> {
         LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
     {
         uint32_t blockCount = CeilDiv<ELE_NUM_PER_C0>(layoutSrc.orgShape(1));
-        uint32_t blockLen = RoundUp<C0_NUM_PER_FRACTAL>(layoutSrc.orgShape(0));
+        uint32_t blockLen = layoutSrc.orgShape(0);
 
         AscendC::DataCopyParams repeatParams;
 
@@ -1294,7 +1294,7 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::nZ>> {
         LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
     {
         uint32_t blockCount = CeilDiv<ELE_NUM_PER_C0>(layoutSrc.orgShape(0));
-        uint32_t blockLen = RoundUp<C0_NUM_PER_FRACTAL>(layoutSrc.orgShape(1));
+        uint32_t blockLen = layoutSrc.orgShape(1);
 
         AscendC::DataCopyParams repeatParams;
 
@@ -1861,7 +1861,7 @@ struct TileCopyTlaExt<Arch::AtlasA2,
         const uint32_t dstOuterStrideCol = tla::get<1, 1>(dstTensor.stride());
 
         uint32_t blockCount = CeilDiv<ELE_NUM_PER_C0>(tla::get<1>(actualShape));
-        uint32_t blockLen = RoundUp<C0_NUM_PER_FRACTAL>(tla::get<0>(actualShape));
+        uint32_t blockLen = tla::get<0>(actualShape);
 
         auto dstOffset = dstTensor.layout()(dstTensor.coord());
         auto srcOffset = srcTensor.layout()(srcTensor.coord());
@@ -1916,7 +1916,7 @@ struct TileCopyTlaExt<Arch::AtlasA2,
         const uint32_t dstOuterStrideRow = tla::get<0, 1>(dstTensor.stride());
 
         uint32_t blockCount = CeilDiv<ELE_NUM_PER_C0>(tla::get<0>(actualShape));
-        uint32_t blockLen = RoundUp<C0_NUM_PER_FRACTAL>(tla::get<1>(actualShape));
+        uint32_t blockLen = tla::get<1>(actualShape);
 
         auto dstOffset = dstTensor.layout()(dstTensor.coord());
         auto srcOffset = srcTensor.layout()(srcTensor.coord());
