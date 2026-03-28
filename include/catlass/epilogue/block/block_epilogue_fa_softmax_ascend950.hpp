@@ -229,7 +229,7 @@ private:
     static constexpr int32_t SYNC_MODE = 4;
     static constexpr int64_t BLOCK_BYTES = 32;
     static constexpr uint32_t REPEAT_STRIDE = 1;
-    static constexpr float MIN_VALUE = -1000000;
+    static constexpr float MIN_VALUE = -3e38f;
     static constexpr uint16_t FLOAT_REP_SIZE = 64;
     static constexpr uint16_t DOUBLE_FLOAT_REP_SIZE = 128;
 

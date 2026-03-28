@@ -29,6 +29,8 @@ namespace Catlass::Gemm::Block {
 ////////////////////////////////////////////////////////////////////
 
 template <
+    bool PAGED_CACHE_FLAG_,
+    bool ENABLE_UNIT_FLAG_,
     class L1TileShape_,
     class L0TileShape_,
     class ElementA_,
@@ -36,11 +38,10 @@ template <
     class ElementC_,
     class ElementBias_,
     class TileCopy_,
-    class TileMmad_,
-    bool PAGED_CACHE_FLAG_
+    class TileMmad_
 >
 struct BlockMmadTla <
-    MmadAscend950FAIPV<PAGED_CACHE_FLAG_>,
+    MmadFAIPV<Arch::Ascend950, PAGED_CACHE_FLAG_, ENABLE_UNIT_FLAG_>,
     L1TileShape_,
     L0TileShape_,
     ElementA_,
@@ -51,7 +52,7 @@ struct BlockMmadTla <
     TileMmad_
 > {
 public:
-    using DispatchPolicy = MmadAscend950FAIPV<PAGED_CACHE_FLAG_>;
+    using DispatchPolicy = MmadFAIPV<Arch::Ascend950, PAGED_CACHE_FLAG_, ENABLE_UNIT_FLAG_>;
     using ArchTag = typename DispatchPolicy::ArchTag;
     using L1TileShape = L1TileShape_;
     using L0TileShape = L0TileShape_;

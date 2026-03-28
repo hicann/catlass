@@ -251,13 +251,13 @@ class FAInferKernel {
             runParam.batchOuterIdx = bnIdx / (this->constInfo.kvHeads * this->constInfo.headNumRatio);
             runParam.kvHeadsOuterIdx = (bnIdx / this->constInfo.headNumRatio) % this->constInfo.kvHeads; // 切核逻辑，先N2G再B
             ComputeParamBatch(runParam, this->constInfo, this->attenMaskInfo); // 计算runParam中参数值
-            ComputeQsqeLoopInfo<qSeqlenTemplateType>(runParam, this->constInfo, lastBN, nextQSeqAxisIdx);
-            int64_t tempQSeqAxisEnd = lastBN ? (runParam.qSqeLoopTimes + 3) : runParam.qSqeLoopTimes;
+            ComputeQseqLoopInfo<qSeqlenTemplateType>(runParam, this->constInfo, lastBN, nextQSeqAxisIdx);
+            int64_t tempQSeqAxisEnd = lastBN ? (runParam.qSeqLoopTimes + 3) : runParam.qSeqLoopTimes;
             for (int64_t qSeqAxisIndex = qSeqAxisStartIdx; qSeqAxisIndex < tempQSeqAxisEnd; ++qSeqAxisIndex) {
                 bool notLastThreeLoop = true;
                 bool notLastTwoLoop = true;
                 if (lastBN) {
-                    int32_t extraQSeqAxis = qSeqAxisIndex - runParam.qSqeLoopTimes;
+                    int32_t extraQSeqAxis = qSeqAxisIndex - runParam.qSeqLoopTimes;
                     switch (extraQSeqAxis) {
                         case -1:
                             isLastBmm1 = true;
@@ -296,32 +296,33 @@ class FAInferKernel {
                         if ASCEND_IS_AIC {
                             CalcKvSeqCoord(runInfo1, this->constInfo);
                             CalcQSeqCoord(runInfo1, this->constInfo);
-
-                            if constexpr (PAGED_CACHE_FLAG) {
-                                uint32_t maxBlockNumPerBatch = this->constInfo.blockTableDim2;
-                                uint64_t blockTableBaseOffset = runInfo1.batchOuterIdx * maxBlockNumPerBatch; // 块表的基偏移量
-                                uint32_t curKvSeqAxisIdx = runInfo1.kvSeqLoopCount * this->constInfo.kvSeqlenBase;
-                                uint64_t blockIdOffset = curKvSeqAxisIdx / this->constInfo.blockSize; // 获取block table上的索引
-                                runInfo1.blockTableOffset = blockTableBaseOffset + blockIdOffset;
-                            }
                             auto actualShape = tla::MakeShape(runInfo1.qSeqRealSize, runInfo1.kvSeqRealSize, this->constInfo.embed); 
                             auto layoutMM1O = tla::MakeLayout<ElementS, LayoutTagS>(runInfo1.qSeqRealSize, kvSeqlenTemplateType);
                             auto tensorMM1OWithLayout = tla::MakeTensor(bmm1TensorList[runInfo1.taskIdMod2] , layoutMM1O, Arch::PositionUB{});
 
                             auto tensorInQ = GetTile(
                                 tensorQWithLayout,
-                                tla::MakeCoord(runInfo1.batchOuterIdx * qSeqlen + coordInfo[runInfo1.taskIdMod3].qSeqCoord, runInfo1.kvHeadsOuterIdx * groupSize * embed + runInfo1.groupIdx * embed),
+                                tla::MakeCoord(runInfo1.batchOuterIdx * qSeqlen + coordInfo[runInfo1.taskIdMod3].qSeqCoord,
+                                    runInfo1.kvHeadsOuterIdx * groupSize * embed + runInfo1.groupIdx * embed),
                                 tla::MakeShape(runInfo1.qSeqRealSize, this->constInfo.embed)
                             );
                             auto kCoord = runInfo1.kvHeadsOuterIdx * embed;
-                            auto nCoord = coordInfo[runInfo1.taskIdMod3].curBIdx * kvSeqlen;
-                            if constexpr (!PAGED_CACHE_FLAG) {
-                                nCoord += coordInfo[runInfo1.taskIdMod3].kvSeqCoord;
+                            auto nCoord = 0;
+                            auto nShape = runInfo1.kvSeqRealSize;
+                            if constexpr (PAGED_CACHE_FLAG) {
+                                uint32_t maxBlockNumPerBatch = this->constInfo.blockTableDim2;
+                                uint64_t blockTableBaseOffset = runInfo1.batchOuterIdx * maxBlockNumPerBatch; // 块表的基偏移量
+                                uint32_t curKvSeqAxisIdx = runInfo1.kvSeqLoopCount * this->constInfo.kvSeqlenBase;
+                                uint64_t blockIdOffset = curKvSeqAxisIdx / this->constInfo.blockSize; // 获取block table上的索引
+                                runInfo1.blockTableOffset = blockTableBaseOffset + blockIdOffset;
+                                nShape = batch * kvSeqlen;
+                            } else {
+                                nCoord = coordInfo[runInfo1.taskIdMod3].curBIdx * kvSeqlen + coordInfo[runInfo1.taskIdMod3].kvSeqCoord;
                             }
                             auto tensorInK = GetTile(
                                 tensorKWithLayout,
                                 tla::MakeCoord(kCoord, nCoord),
-                                tla::MakeShape(this->constInfo.embed, runInfo1.kvSeqRealSize)
+                                tla::MakeShape(this->constInfo.embed, nShape)
                             );
 
                             auto tensorInTable = tensorTable[runInfo1.blockTableOffset];
@@ -393,15 +394,18 @@ class FAInferKernel {
 
                             auto layoutVec1O = tla::MakeLayout<ElementP, LayoutTagP>(qSeqlenTemplateType, kvSeqlenTemplateType);
                             auto mm2AL1Tensor = tla::MakeTensor(mm2AL1TensorList[taskIdMod3], layoutVec1O, Arch::PositionL1{});
-                            auto kCoord = coordInfo[runInfo2.taskIdMod3].curBIdx * kvSeqlen;
+                            auto kCoord = 0;
                             auto nCoord = runInfo2.kvHeadsOuterIdx * embed;
-                            if constexpr (!PAGED_CACHE_FLAG) {
-                                kCoord += coordInfo[runInfo2.taskIdMod3].kvSeqCoord;
+                            auto kShape = runInfo2.kvSeqRealSize;
+                            if constexpr (PAGED_CACHE_FLAG) {
+                                kShape = batch * kvSeqlen;
+                            } else {
+                                kCoord = coordInfo[runInfo2.taskIdMod3].curBIdx * kvSeqlen + coordInfo[runInfo2.taskIdMod3].kvSeqCoord;
                             }
                             auto tensorInV = GetTile(
                                 tensorVWithLayout,
                                 tla::MakeCoord(kCoord, nCoord),
-                                tla::MakeShape(runInfo2.kvSeqRealSize, this->constInfo.embed)
+                                tla::MakeShape(kShape, this->constInfo.embed)
                             );
                             auto actualShape = tla::MakeShape(runInfo2.qSeqRealSize, embedTemplateType, runInfo2.kvSeqRealSize);
                             auto tensorInTableV = tensorTable[runInfo2.blockTableOffset];
@@ -573,7 +577,7 @@ CATLASS_GLOBAL void FAInferTla(
     using L1TileShape = tla::Shape<_128, _128, _128>;
     using L0TileShape = L1TileShape;
     // GEMM Block模块，实现Flash Attention Infer的Q * K^T
-    using DispatchPolicyQK = Gemm::MmadAscend950FAIQK<enablePaFlag>;
+    using DispatchPolicyQK = Gemm::MmadFAIQK<ArchTag, enablePaFlag>;
     using TileCopyQK = Gemm::Tile::PackedTileCopyTlaToUB<
         ArchTag, ElementQ, LayoutTagQ, ElementK, LayoutTagK, ElementS, LayoutTagS, void, Gemm::Tile::CopyL0CToUBMode::SPLIT_M>;
     using TileMmadQK = Gemm::Tile::TileMmadTla<ArchTag, ElementQ, typename TileCopyQK::LayoutTagL1A>;
@@ -589,7 +593,7 @@ CATLASS_GLOBAL void FAInferTla(
         DispatchPolicySoftmax, L1TileShape, PType, SType, maskType>;
 
     // GEMM Block模块，实现Flash Attention Infer的P * V
-    using DispatchPolicyPV = Gemm::MmadAscend950FAIPV<enablePaFlag>; 
+    using DispatchPolicyPV = Gemm::MmadFAIPV<ArchTag, enablePaFlag>; 
     using TileCopyPV = Gemm::Tile::PackedTileCopyTlaToUB<
         ArchTag, ElementP, LayoutTagP, ElementV, LayoutTagV, ElementOTmp, LayoutTagV, void, Gemm::Tile::CopyL0CToUBMode::SPLIT_M>;
     using TileMmadPV = Gemm::Tile::TileMmadTla<ArchTag, ElementP, typename TileCopyPV::LayoutTagL1A>;

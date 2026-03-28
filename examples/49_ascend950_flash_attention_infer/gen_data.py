@@ -75,8 +75,8 @@ class TestFlashAttentionInfer():
         group_num = head // kv_head
         score = None
         for i in range(kv_head):
-            group_score = np.matmul(left[i * group_num:(i + 1) * group_num, :, :].astype(np.float32),
-                                    right[i:(i + 1), :, :].astype(np.float32))
+            group_score = np.matmul(left[i * group_num:(i + 1) * group_num, :, :],
+                                    right[i:(i + 1), :, :]).astype(np.float32)
             if score is None:
                 score = group_score
             else:

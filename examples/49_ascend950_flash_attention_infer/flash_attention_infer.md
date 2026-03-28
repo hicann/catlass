@@ -44,7 +44,7 @@ FAInferTiling::GetFATilingParam(faInfo, blockDim, faTilingData);
 这一过程也体现在Kernel入口的代码中：
 ```c++
 // GEMM Block模块，实现Flash Attention Infer的Q * K^T
-using DispatchPolicyQK = Gemm::MmadAscend950FAIQK<enablePaFlag>;
+using DispatchPolicyQK = Gemm::MmadFAIQK<ArchTag, enablePaFlag>;
 using TileCopyQK = Gemm::Tile::PackedTileCopyTlaToUB<
     ArchTag, ElementQ, LayoutTagQ, ElementK, LayoutTagK, ElementS, LayoutTagS, void, Gemm::Tile::CopyL0CToUBMode::SPLIT_M>;
 using TileMmadQK = Gemm::Tile::TileMmadTla<ArchTag, ElementQ, typename TileCopyQK::LayoutTagL1A>;
@@ -59,7 +59,7 @@ using EpilogueOnlineSoftmax = Epilogue::Block::BlockEpilogue<
     DispatchPolicySoftmax, L1TileShape, ElementP, ElementS, ElementMask, TileCopySoftmax>;
 
 // GEMM Block模块，实现Flash Attention Infer的P * V
-using DispatchPolicyPV = Gemm::MmadAscend950FAIPV<enablePaFlag>; 
+using DispatchPolicyPV = Gemm::MmadFAIPV<enablePaFlag>;
 using TileCopyPV = Gemm::Tile::PackedTileCopyTlaToUB<
     ArchTag, ElementP, LayoutTagP, ElementV, LayoutTagV, ElementOTmp, LayoutTagV, void, Gemm::Tile::CopyL0CToUBMode::SPLIT_M>;
 using TileMmadPV = Gemm::Tile::TileMmadTla<ArchTag, ElementP, typename TileCopyPV::LayoutTagL1A>;

@@ -94,7 +94,7 @@ struct RunParamStr {  // 分核与切块需要使用到参数
     uint32_t firstHalfQSeqRealSize;
     int64_t actualQSeqSize;      /* Q的actualSeqLength */
     int64_t actualKvSeqSize;    /* KV的actualSeqLength */
-    int64_t qSqeLoopTimes;
+    int64_t qSeqLoopTimes;
 };
 
 struct RunInfo {
@@ -188,16 +188,16 @@ CATLASS_DEVICE inline void ComputeParamBatch(RunParamStr& runParam, const ConstI
 }
 
 template <uint32_t qSeqlenTemplateType>
-CATLASS_DEVICE inline void ComputeQsqeLoopInfo(RunParamStr& runParam, const ConstInfo &constInfo, bool lastBN,
+CATLASS_DEVICE inline void ComputeQseqLoopInfo(RunParamStr& runParam, const ConstInfo &constInfo, bool lastBN,
     int64_t nextQSeqAxisIdx)
 {
     constexpr int32_t qSeqlenBase = static_cast<int32_t>(qSeqlenTemplateType);
-    int32_t qSqeLoopTimes = CeilDiv(runParam.actualQSeqSize, qSeqlenBase);
+    int32_t qSeqLoopTimes = CeilDiv(runParam.actualQSeqSize, qSeqlenBase);
     // 不是最后一个bn, 赋值souterBlockNum
     if (!lastBN) {
-        runParam.qSqeLoopTimes = qSqeLoopTimes;
+        runParam.qSeqLoopTimes = qSeqLoopTimes;
     } else { // 最后一个bn, 从数组下一个元素取值
-        runParam.qSqeLoopTimes = nextQSeqAxisIdx == 0 ? qSqeLoopTimes : nextQSeqAxisIdx;
+        runParam.qSeqLoopTimes = nextQSeqAxisIdx == 0 ? qSeqLoopTimes : nextQSeqAxisIdx;
     }
 }
 

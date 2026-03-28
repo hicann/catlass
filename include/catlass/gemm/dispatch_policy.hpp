@@ -27,9 +27,6 @@ struct MmadBase {
 using MmadAtlasA2 = MmadBase<Arch::AtlasA2, false>;
 using MmadAtlasA2Async = MmadBase<Arch::AtlasA2, true>;
 
-using MmadAscend950 = MmadBase<Arch::Ascend950, false>;
-using MmadAscend950Async = MmadBase<Arch::Ascend950, true>;
-
 // Now ENABLE_UNIT_FLAG_ must be false when intput element is int8
 template <bool ENABLE_UNIT_FLAG_ = false>
 struct MmadAtlasA2Pingpong : public MmadAtlasA2  {
@@ -146,18 +143,6 @@ struct MmadAtlasA2W4A4MatmulPerTokenPerChannelDequant :
 };
 ////////////////////
 // new add
-template <bool PAGED_CACHE_FLAG_ = false>
-struct MmadAscend950FAIQK : public MmadAscend950 {
-    static constexpr bool PAGED_CACHE_FLAG = PAGED_CACHE_FLAG_;
-    static constexpr uint32_t STAGES = 2;
-};
-
-template <bool PAGED_CACHE_FLAG_ = false>
-struct MmadAscend950FAIPV : public MmadAscend950 {
-    static constexpr bool PAGED_CACHE_FLAG = PAGED_CACHE_FLAG_;
-    static constexpr uint32_t STAGES = 2;
-};
-
 template <bool ENABLE_UNIT_FLAG_ = false, bool ENABLE_SHUFFLE_K_ = false, bool ENABLE_ABBA_ = false>
 struct GemmAtlasA2 : public MmadAtlasA2 {
     static constexpr uint32_t STAGES = 2;

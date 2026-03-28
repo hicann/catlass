@@ -223,11 +223,9 @@ void Run(const Options &options) {
     faInfo.headSize = embeddingSize;
     faInfo.scaleValue = static_cast<float>(1.0 / std::sqrt(1.0 * faInfo.headSize));
     faInfo.blockSize = blockSize;
+    faInfo.maxBlockNumPerBatch = (kvSeqlen + blockSize - 1) / blockSize;
 
     FATilingData faTilingData;
-    printf("batch:%d, numHeads:%d, kvHeads:%d, qSeqlen:%d, kvSeqlen:%d, embeddingSize%d, blockDim:%d=======\n",
-        batch, numHeads, kvHeads, qSeqlen, kvSeqlen, embeddingSize, blockDim);
-
     FAInferTiling::GetFATilingParam(faInfo, blockDim, faTilingData);
     tilingHost = reinterpret_cast<void *>(&faTilingData);
 
