@@ -47,3 +47,7 @@ if [[ "$CATLASS_ARCH" == 2201 ]]; then
     # mstuner_catlass
     python3 "$SCRIPT_PATH/test_mstuner.py"
 fi
+
+# unittest
+bash "$BUILD_SCRIPT_PATH" --clean --tests catlass_unittest || exit 1
+$SCRIPT_PATH/../build/tests/unittest/catlass_unittest

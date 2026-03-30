@@ -28,6 +28,7 @@ if(CATLASS_ARCH STREQUAL "3510")
     set(CCE_AICORE_ARCH_BASE dav-c310)
     add_compile_definitions(CATLASS_ARCH=3510)
 endif()
+
 # common compile options
 add_compile_options(
     $<$<COMPILE_LANGUAGE:ASCEND>:-Wno-macro-redefined>
@@ -44,6 +45,7 @@ if(DEFINED ENABLE_PRINT AND ENABLE_PRINT)
     add_compile_options($<$<COMPILE_LANGUAGE:ASCEND>:--cce-enable-print>)
 endif()
 
+# compile options for ascendc_dump
 if(DEFINED ENABLE_ASCENDC_DUMP AND ENABLE_ASCENDC_DUMP)
     add_compile_definitions(ENABLE_ASCENDC_DUMP)
     add_compile_definitions(ASCENDC_DUMP=1)
@@ -75,11 +77,14 @@ macro(catlass_example_add_executable NAME OPTYPE)
     endif()
     target_compile_options(${NAME} PRIVATE $<$<COMPILE_LANGUAGE:ASCEND>:--cce-aicore-arch=${CCE_AICORE_ARCH}>)
     target_compile_definitions(${NAME} PRIVATE CATLASS_EXAMPLE_NAME=${NAME})
+    target_include_directories(${NAME} PRIVATE ${ASCEND_HOME_PATH}/include/aclnn)
+    
+    # compile options for msSanitizer
     if(DEFINED ENABLE_MSSANITIZER AND ENABLE_MSSANITIZER)
         target_compile_options(${NAME} PRIVATE "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-g --cce-enable-sanitizer>")
         target_link_options(${NAME} PRIVATE "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:--cce-enable-sanitizer --cce-aicore-arch=${CCE_AICORE_ARCH}>")
     endif()
-    target_include_directories(${NAME} PRIVATE ${ASCEND_HOME_PATH}/include/aclnn)
+
     add_dependencies(catlass_examples ${NAME})
     install(TARGETS ${NAME} DESTINATION ${EXAMPLE_DESTINATION} COMPONENT ${NAME})
     install(TARGETS ${NAME} DESTINATION ${EXAMPLE_DESTINATION} COMPONENT catlass_examples)
@@ -89,6 +94,7 @@ include_directories(
     ${CATLASS_EXAMPLES_COMMON_SOURCE_DIR}
     ${CATLASS_INCLUDE_DIR}
 )
+
 link_directories(${ASCEND_HOME_PATH}/lib64)
 link_libraries(dl tiling_api platform c_sec nnopbase ascendcl)
 

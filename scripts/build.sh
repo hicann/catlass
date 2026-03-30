@@ -121,6 +121,19 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
+function check_3rdparty() {
+    if [[ ! -d "$CMAKE_SOURCE_DIR/3rdparty/googletest/CMakeLists.txt" && "$TARGET" == "catlass_unittest" ]]; then
+        echo -e "${INFO}googletest not found, pulling it as submodule...${NC}"
+        git submodule update --init --recursive 3rdparty/googletest
+        if [[ $? -ne 0 ]]; then
+            echo -e "${ERROR}Failed to pull googletest submodule${NC}"
+            exit 1
+        fi
+    fi
+}
+
+check_3rdparty
+
 if [[ "$CLEAN" == true ]]; then
     echo -e "${INFO}Cleaning build directories...\c"
     rm -rf "$BUILD_DIR" "$OUTPUT_DIR"
