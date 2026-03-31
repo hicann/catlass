@@ -46,18 +46,26 @@ struct TileMmad {
          uint32_t m, uint32_t n, uint32_t k,
          bool initC = true, uint8_t unitFlag = 0)
     {
-#if (defined (__NPU_ARCH__) && __NPU_ARCH__ == 2201)        
         AscendC::MmadParams mmadParams;
         mmadParams.m = m;
         mmadParams.n = n;
         mmadParams.k = k;
         mmadParams.unitFlag = unitFlag;
         mmadParams.cmatrixInitVal = initC;
+#if (defined(__NPU_ARCH__) && __NPU_ARCH__ == 2201)
         if constexpr (std::is_same_v<ElementA, float> &&
                       (std::is_same_v<typename AType_::Layout, layout::ColumnMajor> ||
                           std::is_same_v<typename AType_::Layout, layout::nZ>)) {
             mmadParams.kDirectionAlign = true;
         }
+#endif
+#if (defined(__NPU_ARCH__) && __NPU_ARCH__ == 3510)
+        if constexpr(std::is_same_v<typename AType_::Layout, layout::VectorLayout>) {
+            mmadParams.disableGemv = false;
+        } else {
+            mmadParams.disableGemv = true;
+        }
+#endif
 
         AscendC::Mmad(l0CTensor,
                       l0ATensor,
@@ -68,7 +76,6 @@ struct TileMmad {
         if ((m / C0_NUM_PER_FRACTAL) * (n / C0_NUM_PER_FRACTAL) < PIPE_M_BARRIER_THRESHOLD) {
             AscendC::PipeBarrier<PIPE_M>();
         }
-#endif
     }
 
     CATLASS_DEVICE
@@ -79,18 +86,21 @@ struct TileMmad {
          uint32_t m, uint32_t n, uint32_t k,
          bool initC = true, uint8_t unitFlag = 0)
     {
-#if (defined (__NPU_ARCH__) && __NPU_ARCH__ == 2201)
         AscendC::MmadParams mmadParams;
         mmadParams.m = m;
         mmadParams.n = n;
         mmadParams.k = k;
         mmadParams.unitFlag = unitFlag;
         mmadParams.cmatrixInitVal = false;
-        if constexpr (std::is_same_v<ElementA, float> &&
-                      (std::is_same_v<typename AType_::Layout, layout::ColumnMajor> ||
-                          std::is_same_v<typename AType_::Layout, layout::nZ>)) {
+#if (defined (__NPU_ARCH__) && __NPU_ARCH__ == 2201)
+        using LayoutL1A = typename helper::L1ATypeSelector<AType_>::L1AType::Layout;
+        if constexpr (std::is_same_v<ElementA, float> && std::is_same_v<LayoutL1A, layout::nZ>) {
             mmadParams.kDirectionAlign = true;
         }
+#endif
+#if (defined (__NPU_ARCH__) && __NPU_ARCH__ == 3510)
+        mmadParams.disableGemv = true;
+#endif
 
         AscendC::Mmad(l0CTensor,
                       l0ATensor,
@@ -102,7 +112,6 @@ struct TileMmad {
         if ((m / C0_NUM_PER_FRACTAL) * (n / C0_NUM_PER_FRACTAL) < PIPE_M_BARRIER_THRESHOLD) {
             AscendC::PipeBarrier<PIPE_M>();
         }
-#endif
     }
 };
 

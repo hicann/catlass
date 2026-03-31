@@ -15,6 +15,8 @@
 #include "catlass/catlass.hpp"
 #include "catlass/gemm/tile/tile_copy_tla.hpp"
 #include "catlass/numeric_size.hpp"
+#include "catlass/layout/layout.hpp"
+#include "catlass/gemm/gemm_type.hpp"
 #include "tla/tensor.hpp"
 
 namespace Catlass::Gemm::Tile {
@@ -60,6 +62,48 @@ struct TileCopyTla<
         AscendC::DataCopy(dstTensor.data()[dstOffset], srcTensor.data()[srcOffset], intriParams);
     }
 };
+
+////////////////////////////////////TileCopy(No-TLA, Ascend950)////////////////////////////////////////////////
+
+template <
+    class ArchTag,
+    class L1Type,
+    class L0Type = void
+>
+struct CopyL1ToBT {
+    static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy l1 to biasTable buffer, can not find the specialization.");
+};
+
+template<class ElementSrc, class ElementDst>
+struct CopyL1ToBT<Arch::Ascend950, Catlass::Gemm::GemmType<ElementSrc, layout::VectorLayout, AscendC::TPosition::A1>,
+    Catlass::Gemm::GemmType<ElementDst, layout::VectorLayout, AscendC::TPosition::C2>>{
+    using LayoutDst = layout::VectorLayout;
+    using LayoutSrc = layout::VectorLayout;
+
+    static constexpr uint32_t ELE_NUM_PER_C2 =  BYTE_PER_C2 / sizeof(ElementSrc);
+
+    CATLASS_DEVICE
+    CopyL1ToBT(){}
+
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<ElementDst> dstTensor,
+        AscendC::LocalTensor<ElementSrc> srcTensor,
+        LayoutDst layoutDst, LayoutSrc layoutSrc
+    ){
+        AscendC::DataCopyParams intriParams;
+        intriParams.blockCount = 1;
+        intriParams.blockLen = (layoutDst.shape(0) + ELE_NUM_PER_C2 - 1) / ELE_NUM_PER_C2;
+        if (sizeof(ElementSrc) == 4) {
+            // the burst length should be even when B32
+            intriParams.blockLen = RoundUp(intriParams.blockLen, 2);
+        }
+        intriParams.srcStride = 0;
+        intriParams.dstStride = 0;
+        AscendC::DataCopy(dstTensor, srcTensor, intriParams);
+    }
+};
+
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
