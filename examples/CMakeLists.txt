@@ -97,6 +97,10 @@ include_directories(
 
 link_directories(${ASCEND_HOME_PATH}/lib64)
 link_libraries(dl tiling_api platform c_sec nnopbase ascendcl)
+# CANN 9.0.0.beta2 incompatible change
+if(EXISTS ${ASCEND_HOME_PATH}/lib64/libunified_dlog.so)
+    link_libraries(unified_dlog)
+endif()
 
 link_directories(${ASCEND_HOME_PATH}/${CMAKE_SYSTEM_PROCESSOR}-linux/devlib)
 link_libraries(ascend_hal)

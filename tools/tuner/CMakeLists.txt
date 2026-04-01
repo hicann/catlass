@@ -54,6 +54,10 @@ target_link_libraries(mstuner_catlass PRIVATE
     profapi
 )
 
+if(EXISTS ${ASCEND_HOME_PATH}/lib64/libunified_dlog.so)
+    target_link_libraries(mstuner_catlass PRIVATE unified_dlog)
+endif()
+
 install(TARGETS mstuner_catlass
         DESTINATION bin
         COMPONENT mstuner_catlass)

@@ -35,6 +35,14 @@ if(NOT DEFINED NPU_MODEL OR NPU_MODEL STREQUAL "")
     endif()
 endif()
 
+execute_process(
+    COMMAND python -c "import acl;print(acl.get_cann_version(0)[0]['version'])"
+    OUTPUT_VARIABLE CANN_VERSION
+    ERROR_QUIET
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+message("Detected CANN_VERSION: ${CANN_VERSION}")
+
 set(CATLASS_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/include)
 set(CATLASS_3RDPARTY_DIR ${PROJECT_SOURCE_DIR}/3rdparty)
 

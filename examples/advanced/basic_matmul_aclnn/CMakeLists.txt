@@ -26,6 +26,18 @@ if(NOT EXISTS ${MSOPGEN_PROJECT_SOURCE_DIR})
         COMMAND chmod 644 ${CMAKE_CURRENT_BINARY_DIR}/tmp/catlass_basic_matmul.json
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     )
+    
+    if(DEFINED CANN_VERSION)
+        string(SUBSTRING ${CANN_VERSION} 0 1 CANN_MAJOR_VERSION)
+        if(CANN_MAJOR_VERSION LESS 9 OR CANN_VERSION STREQUAL "9.0.0.beta1")
+            message("use add_ops_compile_options for CANN_VERSION <= 9.0.0.beta1")
+            set(MSOPGEN_ADD_OPS_COMPILE_OPTIONS "add_ops_compile_options\\(ALL OPTIONS -I${CATLASS_INCLUDE_DIR} -DCATLASS_ARCH=2201\\)")
+        else()
+            message("use npu_op_kernel_options for CANN_VERSION > 9.0.0.beta1")
+            set(MSOPGEN_ADD_OPS_COMPILE_OPTIONS "npu_op_kernel_options\\(ascendc_kernels ALL OPTIONS -I${CATLASS_INCLUDE_DIR} -DCATLASS_ARCH=2201\\)")
+        endif()
+    endif()
+
     find_program(MSOPGEN NAMES msopgen HINTS ${ASCEND_HOME_PATH})
     add_custom_target(generated_msopgen_project
         COMMAND ${CMAKE_COMMAND} -E make_directory ${MSOPGEN_PROJECT_SOURCE_DIR}
@@ -33,7 +45,7 @@ if(NOT EXISTS ${MSOPGEN_PROJECT_SOURCE_DIR})
         COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/op_host/catlass_basic_matmul.cpp ${MSOPGEN_PROJECT_SOURCE_DIR}/op_host
         COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/op_host/catlass_basic_matmul_tiling.h ${MSOPGEN_PROJECT_SOURCE_DIR}/op_host
         COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/op_kernel/catlass_basic_matmul.cpp ${MSOPGEN_PROJECT_SOURCE_DIR}/op_kernel
-        COMMAND ${CMAKE_COMMAND} -E echo "add_ops_compile_options\\(ALL OPTIONS -I${CATLASS_INCLUDE_DIR} -DCATLASS_ARCH=2201\\)" >> ${MSOPGEN_PROJECT_SOURCE_DIR}/op_kernel/CMakeLists.txt
+        COMMAND ${CMAKE_COMMAND} -E echo ${MSOPGEN_ADD_OPS_COMPILE_OPTIONS} >> ${MSOPGEN_PROJECT_SOURCE_DIR}/op_kernel/CMakeLists.txt
         # uncomment this line to change the vendor name to "catlass" to avoid conflict
         # COMMAND sed -i "s/customize/catlass/g" ${MSOPGEN_PROJECT_SOURCE_DIR}/CMakePresets.json
         BYPRODUCTS ${MSOPGEN_PROJECT_SOURCE_DIR}

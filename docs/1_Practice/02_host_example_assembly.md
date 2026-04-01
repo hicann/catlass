@@ -341,7 +341,7 @@ ACL_CHECK(aclrtSynchronizeStream(stream));
 这部分代码主要完成以下工作：
 
 - 将Device侧计算结果拷贝到Host侧
-- 计算黄金值并与结果进行比较
+- 计算标杆结果并与结果进行比较
 
 ```cpp
 // 将输出数据搬出
