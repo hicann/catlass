@@ -111,6 +111,11 @@ struct EpilogueAscend950PerTokenDequantTla {
     static constexpr uint32_t UB_STAGES = UB_STAGES_;
 };
 
+// For Ascend950, perGroup + perBlock dequant
+struct BlockEpiloguePertile{
+    using ArchTag = Arch::Ascend950;
+};
+
 // For AtlasA2, W4A4 epilogue process
 struct EpilogueAtlasA2W4A4PerTokenPerChannelDequant {
     using ArchTag = Arch::AtlasA2;

@@ -224,6 +224,7 @@ normal_cases_3510 = [
     "43_ascend950_basic_matmul 256 512 1024 0",
     "46_ascend950_matmul_fixpipe_opti 256 512 1024 0",
     "48_ascend950_grouped_matmul_slice_m_per_tensor_per_channel_dequant 128 512 1024 2048 0 0",
+    "51_ascend950_quant_matmul_per_group_per_block_tla 256 512 1024 0",
 ]
 
 

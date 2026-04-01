@@ -46,6 +46,7 @@ class BlockEpilogue {
 #include "catlass/epilogue/block/block_epilogue_fa_softmax_ascend950.hpp"
 #include "catlass/epilogue/block/block_epilogue_fa_rescale_o_ascend950.hpp"
 #include "catlass/epilogue/block/block_epilogue_fixpipe.hpp"
+#include "catlass/epilogue/block/block_epilogue_per_group_per_block.hpp"
 #endif
 
 #endif  // CATLASS_EPILOGUE_BLOCK_BLOCK_EPILOGUE_HPP

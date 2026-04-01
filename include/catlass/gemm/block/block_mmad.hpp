@@ -145,4 +145,5 @@ struct BlockMmadTla {
 #include "catlass/gemm/block/block_mmad_preload_async_with_callback_tla.hpp"
 #include "catlass/gemm/block/block_mmad_fai_pv_tla.hpp"
 #include "catlass/gemm/block/block_mmad_fai_qk_tla.hpp"
+#include "catlass/gemm/block/block_mmad_pingpong_per_group_per_block_tla.hpp"
 #endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_HPP

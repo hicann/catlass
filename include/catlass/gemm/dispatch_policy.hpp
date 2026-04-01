@@ -371,6 +371,12 @@ struct MmadDequant : public MmadBase<ArchTag_, false> {
     static constexpr bool ENABLE_L1_RESIDENT = ENABLE_L1_RESIDENT_;
 };
 
+template <class ArchTag_, bool ENABLE_UNIT_FLAG_ = false>
+struct MmadPingpongPertile : public MmadBase<ArchTag_, false> {
+    static constexpr uint32_t STAGES = 2;
+    static constexpr bool ENABLE_UNIT_FLAG = ENABLE_UNIT_FLAG_;
+};
+
 }  // namespace Catlass::Gemm
 
 #endif  // CATLASS_GEMM_DISPATCH_POLICY_HPP

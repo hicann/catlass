@@ -501,6 +501,39 @@ void ComputeMatmulElemWiseSilu(const GemmCoord &problemShape, const std::vector<
     ComputeMatmulElemWiseActivation(problemShape, dataA, layoutA, dataB, layoutB, dataGolden, layoutGolden,
         Silu<ElementGolden>{});
 }
+
+template <
+    class LayoutA,
+    class LayoutB,
+    class LayoutScalex1,
+    class LayoutScalex2
+>
+void QuantMatmulPergroupPerBlockDequant(
+    const GemmCoord &problemShape,
+    const std::vector<int8_t> &dataA, const LayoutA &layoutA,
+    const std::vector<int8_t> &dataB, const LayoutB &layoutB,
+    const std::vector<float> &dataScalex1, const LayoutScalex1 &layoutScalex1,
+    const std::vector<float> &dataScalex2, const LayoutScalex2 &layoutScalex2,
+    std::vector<float> &dataGolden, const layout::RowMajor &layoutGolden,
+    uint32_t group_size, uint32_t block_size
+)
+{
+    for (uint32_t i = 0; i < problemShape.m(); ++i) {
+        for (uint32_t j = 0; j < problemShape.n(); ++j) {
+            float accumulator = 0;
+            for (uint32_t k = 0; k < problemShape.k(); ++k) {
+                size_t offsetA = layoutA.GetOffset(MakeCoord(i, k));
+                size_t offsetB = layoutB.GetOffset(MakeCoord(k, j));
+                size_t offset_x1 = layoutScalex1.GetOffset(MakeCoord(i, k/group_size));
+                size_t offset_x2 = layoutScalex2.GetOffset(MakeCoord(k/block_size, j/block_size));
+                accumulator += static_cast<float>(dataA[offsetA]) * static_cast<float>(dataB[offsetB]) *
+                               static_cast<float>(dataScalex1[offset_x1]) * static_cast<float>(dataScalex2[offset_x2]);
+            }
+            size_t offsetGolden = layoutGolden.GetOffset(MakeCoord(i, j));
+            dataGolden[offsetGolden] = static_cast<float>(accumulator);
+        }
+    }
+}
 } // namespace Catlass::golden
 
 #endif // EXAMPLES_COMMON_GOLDEN_MATMUL_HPP
