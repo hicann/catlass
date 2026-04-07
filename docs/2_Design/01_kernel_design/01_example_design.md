@@ -10,3 +10,4 @@
 - [19_mla](../../../examples/19_mla/mla.md) - 拆解模板库下的样例19、亲和昇腾AtlasA2硬件的Flash-MLA算子的实现。
 - [34_single_splitk_matmul](../../../examples/34_single_core_splitk_matmul/34_single_splitk_matmul.md) - 拆解模板库下的样例34单核切K矩阵乘样例，讲解算法实现和评估收益区间。
 - [44_quant_matmul_full_loadA_tla](../../../examples/19_mla/mla.md) - 拆解模板库下的样例44、quant量化下的A矩阵全载matmul样例的实现。
+- [49_ascend950_flash_attention_infer](../../../examples/49_ascend950_flash_attention_infer/flash_attention_infer.md) - 拆解模板库下的样例49，亲和昇腾950硬件的FlashAttention推理算子的实现。
