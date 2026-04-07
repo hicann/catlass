@@ -21,9 +21,11 @@ else()
     set(ASCEND_HOME_PATH $ENV{ASCEND_HOME_PATH})
 endif()
 
+find_package(Python3 REQUIRED)
+
 if(NOT DEFINED NPU_MODEL OR NPU_MODEL STREQUAL "")
     execute_process(
-        COMMAND python -c "import acl;print(acl.get_soc_name())"
+        COMMAND ${Python3_EXECUTABLE} -c "import acl;print(acl.get_soc_name())"
         OUTPUT_VARIABLE NPU_MODEL
         ERROR_QUIET
         OUTPUT_STRIP_TRAILING_WHITESPACE
@@ -36,7 +38,7 @@ if(NOT DEFINED NPU_MODEL OR NPU_MODEL STREQUAL "")
 endif()
 
 execute_process(
-    COMMAND python -c "import acl;print(acl.get_cann_version(0)[0]['version'])"
+    COMMAND ${Python3_EXECUTABLE} -c "import acl;print(acl.get_cann_version(0)[0]['version'])"
     OUTPUT_VARIABLE CANN_VERSION
     ERROR_QUIET
     OUTPUT_STRIP_TRAILING_WHITESPACE
