@@ -7,22 +7,22 @@
 我们于2026年3月第一次社区会议正式确定CATLASS社区主线将开始新增对下一代昇腾硬件Ascend 950PR/Ascend 950DT的支持。为在不同平台区分底层接口的实现，该新增支持将引入新的编译宏，用户需要注意在对应编译命令中进行相应适配。
 
 - 新增宏：`CATLASS_ARCH`，用于指定目标架构。其取值可在[SIMD BuiltIn关键字](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/900beta2/opdevg/Ascendcopdevg/atlas_ascendc_10_10053.html)中查询（`__NPU_ARCH__`列）。
-    - `Atlas A2 训练系列产品 / Atlas A2 推理系列产品`：`2201`
-    - `Atlas A3 训练系列产品 / Atlas A3 推理系列产品`：`2201`
-    - `Ascend 950PR/Ascend 950DT`：`3510`
+  - `Atlas A2 训练系列产品 / Atlas A2 推理系列产品`：`2201`
+  - `Atlas A3 训练系列产品 / Atlas A3 推理系列产品`：`2201`
+  - `Ascend 950PR/Ascend 950DT`：`3510`
 
 - 相关场景说明：
-    - `bisheng`命令行场景：`bisheng ... -DCATLASS_ARCH=2201 ...`
-    - `cmake`场景：`add_compile_definitions(CATLASS_ARCH=2201)`
-    - `msopgen/aclnn`工程场景：
-        - 旧写法：`add_ops_compile_options(ALL OPTIONS -DCATLASS_ARCH=2201 ...)`
-        - 新写法：`npu_op_kernel_options(ascendc_kernels ALL OPTIONS -DCATLASS_ARCH=2201)`（msopgen工程中，第一个参数默认为`ascendc_kernels`，可根据实际情况进行调整）
-    - CATLASS源码仓：`bash scripts/build.sh -DCATLASS_ARCH=2201 ...`
-    - 库上代码参考：[examples/CMakeLists.txt](https://gitcode.com/cann/catlass/blob/master/examples/CMakeLists.txt)
+  - `bisheng`命令行场景：`bisheng ... -DCATLASS_ARCH=2201 ...`
+  - `cmake`场景：`add_compile_definitions(CATLASS_ARCH=2201)`
+  - `msopgen/aclnn`工程场景：
+    - 旧写法：`add_ops_compile_options(ALL OPTIONS -DCATLASS_ARCH=2201 ...)`
+    - 新写法：`npu_op_kernel_options(ascendc_kernels ALL OPTIONS -DCATLASS_ARCH=2201)`（msopgen工程中，第一个参数默认为`ascendc_kernels`，可根据实际情况进行调整）
+  - CATLASS源码仓：`bash scripts/build.sh -DCATLASS_ARCH=2201 ...`
+  - 库上代码参考：[examples/CMakeLists.txt](https://gitcode.com/cann/catlass/blob/master/examples/CMakeLists.txt)
 
 ## Latest News
 
-- [2026/04] 社区版 [v1.5.0](https://gitcode.com/cann/catlass/releases/v1.5.0) 发布：合入 **Ascend950** 系列样例（如 [基础 Matmul](https://gitcode.com/cann/catlass/blob/v1.5.0/examples/43_ascend950_basic_matmul/README.md)、[Flash Attention 推理](https://gitcode.com/cann/catlass/blob/v1.5.0/examples/49_ascend950_flash_attention_infer/README.md)、[Per-Group & Per-Block Quant Matmul TLA](https://gitcode.com/cann/catlass/blob/v1.5.0/examples/51_ascend950_quant_matmul_per_group_per_block_tla/README.md) 等）、**TLA** 能力增强（含 `origin_shape`、`TileView` 等）；[Matmul 泛化工程](https://gitcode.com/cann/catlass/tree/v1.5.0/examples/102_dynamic_optimized_matmul/README.md) 新增 [103 动态 W8A8 Per-Token 量化](https://gitcode.com/cann/catlass/tree/v1.5.0/examples/103_dynamic_optimized_quant_matmul_per_token_basic/README.md)。详见 [CHANGELOG](CHANGELOG.md)。
+- [2026/04] 社区版 [v1.5.0](https://gitcode.com/cann/catlass/releases/v1.5.0) 发布：新增 **Ascend950** 系列样例（如 [基础 Matmul](https://gitcode.com/cann/catlass/blob/v1.5.0/examples/43_ascend950_basic_matmul/README.md)、[Flash Attention 推理](https://gitcode.com/cann/catlass/blob/v1.5.0/examples/49_ascend950_flash_attention_infer/README.md)、[Per-Group & Per-Block Quant Matmul TLA](https://gitcode.com/cann/catlass/blob/v1.5.0/examples/51_ascend950_quant_matmul_per_group_per_block_tla/README.md) 等）、**TLA** 能力增强（含 `origin_shape`、`TileView` 等）；[Matmul 泛化工程](https://gitcode.com/cann/catlass/tree/v1.5.0/examples/102_dynamic_optimized_matmul/README.md) 新增 [103 动态 W8A8 Per-Token 量化](https://gitcode.com/cann/catlass/tree/v1.5.0/examples/103_dynamic_optimized_quant_matmul_per_token_basic/README.md)。
 
 - [2026/03] 社区主线正式开始新增对下一代昇腾硬件Ascend 950PR/Ascend 950DT的支持
 
@@ -109,15 +109,15 @@ catlass
 CATLASS所需的软硬件环境依赖如下：
 
 - 昇腾产品：
-    - [Atlas A2 训练系列产品 / Atlas A2 推理系列产品](https://www.hiascend.com/document/detail/zh/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html)
-    - [Atlas A3 训练系列产品 / Atlas A3 推理系列产品](https://www.hiascend.com/document/detail/zh/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html)
-    - Ascend 950PR/Ascend 950DT
+  - [Atlas A2 训练系列产品 / Atlas A2 推理系列产品](https://www.hiascend.com/document/detail/zh/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html)
+  - [Atlas A3 训练系列产品 / Atlas A3 推理系列产品](https://www.hiascend.com/document/detail/zh/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html)
+  - Ascend 950PR/Ascend 950DT
 - CPU架构：`aarch64`/`x86_64`
 - 系统：CANN支持的Linux（进行[兼容性查询](https://www.hiascend.com/hardware/compatibility)）
 - 软件依赖：
-  - `gcc` >= 7.5, < 13.0
-  - `cmake` >= 3.16
-  - `python` >= 3.8, < 3.12
+  - `gcc` >= 7.5, < 13.0
+  - `cmake` >= 3.16
+  - `python` >= 3.8, < 3.12
 
 不同CATLASS发行版可支持的硬件平台及所需的最低[CANN](https://www.hiascend.com/developer/download/community/result?module=cann)版本如下表：
 
@@ -135,7 +135,7 @@ CATLASS所需的软硬件环境依赖如下：
 | Ubuntu 20.04.5                 | 8.5.0  | 9.3   | 3.16    | 3.10     |
 | Ubuntu 22.04.5                 | 8.5.0  | 11.3  | 3.22    | 3.10     |
 | openEuler 22.03 SP4            | 8.5.0  | 10.3  | 3.22    | 3.10     |
-| Ubuntu 22.04.5 （编译950样例） | 8.5.0  | 11.3  | 3.22    | 3.10     |
+| Ubuntu 22.04.5 （编译950样例） | 9.0.0.beta2  | 11.3  | 3.22    | 3.10     |
 
 ## 👥 合作贡献者
 

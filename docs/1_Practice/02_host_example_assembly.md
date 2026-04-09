@@ -19,6 +19,8 @@ Host侧代码通常包含以下几个核心部分：
 
 ## 完整示例代码
 
+创建`examples/basic_matmul`文件夹和`examples/basic_matmul/basic_matmul.cpp`文件，以下为该cpp文件的编写示例。
+
 ### 头文件与配置
 
 ```cpp
@@ -381,7 +383,7 @@ ACL_CHECK(aclFinalize());
 
 ### 编译
 
-创建CMakeLists.txt文件：
+创建`examples/basic_matmul/CMakeLists.txt`文件：
 
 ```cmake
 # CMakeLists.txt
@@ -390,6 +392,16 @@ catlass_example_add_executable(
     basic_matmul
     cube
     basic_matmul.cpp
+)
+```
+
+在[examples/CMakeLists.txt](examples/CMakeLists.txt)中将新增示例加入编译清单：
+
+```diff
+set(EXAMPLE_ATLASA2
+    00_basic_matmul
+    # ...
++   basic_matmul
 )
 ```
 
