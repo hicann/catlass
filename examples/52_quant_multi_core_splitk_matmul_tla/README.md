@@ -3,16 +3,16 @@
 ## 代码组织
 
 ```
-├── 44_quant_matmul_full_loadA_tla
+├── 52_quant_multi_core_splitk_matmul_tla
 │   ├── CMakeLists.txt     # CMake编译文件
 │   ├── README.md
-│   ├── 44_quant_matmul_full_loadA_tla.md # 设计文档
-│   └── quant_matmul_full_loadA_tla.cpp # 主文件
+│   ├── 52_quant_multi_core_splitk_matmul_tla.md # 设计文档
+│   └── quant_multi_core_splitk_matmul_tla.cpp # 主文件
 ```
 
 ## 功能介绍
 
-该算子在12_quant_matmul基础上支持A矩阵全载，支持单核将A矩阵全部载入L1Cache并常驻，以减少A矩阵在部分矩阵计算场景中的重复搬运，提高性能。当前A矩阵全载模板暂不支持输入包含bias。
+该模板为量化多核切K模板，通过切分K，划分出更多的任务块，从而利用更多的计算核心，并使用了TLA相关抽象，故作相关示例说明。
 
 ## 使用示例
 
@@ -21,11 +21,11 @@
 
 ```
 # 编译指定用例
-bash scripts/build.sh 44_quant_matmul_full_loadA_tla
+bash scripts/build.sh 52_quant_multi_core_splitk_matmul_tla
 cd output/bin
 # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID
 # Device ID可选，默认为0
-./44_quant_matmul_full_loadA_tla 256 512 1024 0
+./52_quant_multi_core_splitk_matmul_tla 256 512 1024 0
 ```
 
 执行结果如下，说明精度比对成功。

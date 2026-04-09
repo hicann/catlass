@@ -216,6 +216,7 @@ normal_cases_2201 = [
     "42_quant_optimized_matmul_tla 256 512 1024 0",
     "44_quant_matmul_full_loadA_tla 256 512 1024 0",
     "45_strided_batched_matmul_tla 5 256 512 1024 0",
+    "52_quant_multi_core_splitk_matmul_tla 256 512 1024 0",
     "102_dynamic_optimized_matmul 256 512 1024 0 0 0"
     "103_dynamic_optimized_quant_matmul_per_token_basic 256 512 1024 0 0 0",
 ]

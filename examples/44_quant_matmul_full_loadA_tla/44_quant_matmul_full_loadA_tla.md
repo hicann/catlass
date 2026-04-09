@@ -21,7 +21,7 @@ CATLASS [`44_quant_matmul_full_loadA_tla`样例](./README.md)算子是基于CATL
  - **Block组件**，包含：
     - 全载专门的mmad组件[block_mmad_pingpong_full_loadA_tla.hpp](../../include/catlass/gemm/block/block_mmad_pingpong_full_loadA_tla.hpp)
     - 反量化后处理组件[block_epilogue_per_token_dequant_tla.hpp](../../include/catlass/epilogue/block/block_epilogue_per_token_dequant_tla.hpp)；
-    - 多核全载用的swizzle[GemmIdentityBlockSwizzleL1FullLoad](../../include/catlass/gemm/block/block_swizzle.hpp)s
+    - 多核全载用的swizzle[GemmIdentityBlockSwizzleL1FullLoad](../../include/catlass/gemm/block/block_swizzle.hpp)
 
 ## 方案设计
 
