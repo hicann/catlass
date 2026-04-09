@@ -91,8 +91,10 @@ if(EXISTS ${ASCEND_HOME_PATH}/lib64/libunified_dlog.so)
     link_libraries(unified_dlog)
 endif()
 
-link_directories(${ASCEND_HOME_PATH}/${CMAKE_SYSTEM_PROCESSOR}-linux/devlib)
-link_libraries(ascend_hal)
+if(NOT DEFINED ENABLE_SIMULATOR OR NOT ENABLE_SIMULATOR)
+    link_directories(${ASCEND_HOME_PATH}/${CMAKE_SYSTEM_PROCESSOR}-linux/devlib)
+    link_libraries(ascend_hal)
+endif()
 
 # regular examples
 set(EXAMPLE_ATLASA2
