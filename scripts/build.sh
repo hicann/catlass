@@ -48,9 +48,9 @@ function show_help() {
     echo "  --debug         Build in debug mode"
     echo "  --msdebug       Enable msdebug support"
     echo "  --simulator     Compile example in simulator mode"
-    echo "  --enable_profiling Enable profiling"
+    echo "  --enable_profiling [Deprecated]Enable profiling"
     echo "  --enable_print  Enable built-in compiler print feature"
-    echo "  --enable_ascendc_dump   Enable AscendC dump API"
+    echo "  --enable_ascendc_dump   [Deprecated]Enable AscendC dump API"
     echo "  --tests         Enable building targets in tests"
     echo "  -DCATLASS_ARCH  NPU arch. Supports 2201(AtlasA2/A3)/3510(Ascend950PR/DT)."
     echo "  -D<option>      Additional CMake options"
@@ -94,10 +94,10 @@ while [[ $# -gt 0 ]]; do
             CMAKE_OPTIONS+=("-DBUILD_TESTS=True")
             ;;
         --enable_profiling)
-            CMAKE_OPTIONS+=("-DASCEND_ENABLE_MSPROF=True")
+            echo "${WARN}`--enable_profiling` is deprecated. The feature will be automatically enabled when the program is launched by msprof."
             ;;
         --enable_ascendc_dump)
-            CMAKE_OPTIONS+=("-DENABLE_ASCENDC_DUMP=True")
+            echo "${WARN}`--enable_ascendc_dump` is deprecated. The feature will be automatically enabled when debug code is inserted."
             ;;
         --enable_print)
             CMAKE_OPTIONS+=("-DENABLE_PRINT=True")
@@ -182,6 +182,8 @@ function build_mstuner_catlass() {
     cmake --install build --component mstuner_catlass
     echo -e "${INFO}mstuner_catlass built successfully${NC}"
 }
+
+CMAKE_OPTIONS+=("-DPython3_EXECUTABLE=$(which python3)")
 
 # 执行构建
 case "$TARGET" in

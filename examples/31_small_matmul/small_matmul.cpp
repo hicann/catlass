@@ -40,7 +40,7 @@ using L1TileShape = GemmShape<128, 256, 256>;
 using L0TileShape = GemmShape<128, 256, 64>;
 
 template <class LayoutA, class LayoutB, class LayoutC>
-CATLASS_GLOBAL void SmallMatmul(
+CATLASS_GLOBAL __attribute__((aic)) void SmallMatmul(
     GemmCoord problemShape,
     GM_ADDR gmA,
     LayoutA layoutA,

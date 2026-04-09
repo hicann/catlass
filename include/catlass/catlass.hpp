@@ -46,9 +46,4 @@ constexpr uint32_t MX_BASEK_FACTOR = 64;               // Data matrix alignment 
 #endif
 } // namespace Catlass
 
-
-#if defined(__CCE__) && defined(L2_CACHE_HINT) && defined(CATLASS_BUILD_LEGACY)
-inline __gm__ struct OpSystemRunCfg g_opSystemRunCfg{Catlass::L2_OFFSET};
-#endif
-
 #endif // CATLASS_CATLASS_HPP

@@ -9,9 +9,8 @@
 # -----------------------------------------------------------------------------------------------------------
 
 cmake_minimum_required(VERSION 3.16)
-set(ASCEND_CMAKE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules)
-list(APPEND CMAKE_MODULE_PATH ${ASCEND_CMAKE_PATH})
-project(Catlass LANGUAGES ASCEND CXX)
+find_package(ASC REQUIRED)
+project(Catlass LANGUAGES ASC CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -63,16 +62,14 @@ add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=1)
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     set(CMAKE_SKIP_RPATH TRUE)
     add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fstack-protector-strong>)
-    add_compile_options("SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-Xhost-start -fstack-protector-strong -Xhost-end>")
+    add_compile_options("SHELL:$<$<COMPILE_LANGUAGE:ASC>:-Xhost-start -fstack-protector-strong -Xhost-end>")
     add_link_options(-Wl,-z,relro,-z,now)
     add_link_options(-Wl,-z,noexecstack)
     add_link_options(-s)
 endif()
 
-add_compile_definitions(CATLASS_BUILD_LEGACY)
-
 add_subdirectory(examples)
-add_subdirectory(tools)
+# add_subdirectory(tools)
 add_subdirectory(3rdparty)
 
 if(DEFINED BUILD_TESTS AND BUILD_TESTS)

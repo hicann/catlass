@@ -8,5 +8,5 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
-set_source_files_properties(fp8_matmul.cpp PROPERTIES LANGUAGE ASCEND)
+set_source_files_properties(fp8_matmul.cpp PROPERTIES LANGUAGE ASC)
 catlass_example_add_executable(29_a2_fp8_e4m3_matmul mix fp8_matmul.cpp)

@@ -8,5 +8,5 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
-set_source_files_properties(padding_splitk_matmul.cpp PROPERTIES LANGUAGE ASCEND)
+set_source_files_properties(padding_splitk_matmul.cpp PROPERTIES LANGUAGE ASC)
 catlass_example_add_executable(22_padding_splitk_matmul mix padding_splitk_matmul.cpp)

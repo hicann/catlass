@@ -2,6 +2,42 @@
 
 ## CATLASS 1.X
 
+### CATLASS 1.5.0
+
+- 关键特性
+  - 新增支持 **Ascend950** 架构与配套底层模板组件
+  - **TLA** 增强：引入 `origin_shape`，新增 `TileView`、`MakeTensorLike`、Tensor `operator()` 等接口，并完善布局与张量表达
+  - **Matmul 泛化工程**扩展：支持 **W8A8 Per-Token + Per-Channel** 动态量化路径、**分批编译**，并补充相关设计文档
+  - **FixPipe** 能力延伸：新增/完善 Matmul FixPipe 优化与 **GMM + FixPipe + Dequant** 等组合模板与样例
+  - 适配 **CANN 9.0.0.beta2**；在使用 **g++** 与毕昇工具链链接时，需显式链接 **profapi**（编译器非兼容性变更说明）
+  - 新增 **单元测试**（unittest）与 **CI** 对 Ascend950 的适配
+- 更多样例
+  - [Ascend950 基础 Matmul](https://gitcode.com/cann/catlass/blob/v1.5.0/examples/43_ascend950_basic_matmul/README.md)
+  - [Ascend950 Matmul FixPipe 优化](https://gitcode.com/cann/catlass/blob/v1.5.0/examples/46_ascend950_matmul_fixpipe_opti/README.md)
+  - [Ascend950 Grouped Matmul SliceM Per-Token Dequant](https://gitcode.com/cann/catlass/blob/v1.5.0/examples/47_ascend950_grouped_matmul_slice_m_per_token_dequant/README.md)
+  - [Ascend950 Grouped Matmul Per-Tensor & Per-Channel Dequant](https://gitcode.com/cann/catlass/blob/v1.5.0/examples/48_ascend950_grouped_matmul_slice_m_per_tensor_per_channel_dequant/README.md)
+  - [Ascend950 Flash Attention 推理](https://gitcode.com/cann/catlass/blob/v1.5.0/examples/49_ascend950_flash_attention_infer/README.md)
+  - [Ascend950 基础 Matmul GEMV](https://gitcode.com/cann/catlass/blob/v1.5.0/examples/50_ascend950_basic_matmul_gemv/README.md)
+  - [Ascend950 Quant Matmul Per-Group & Per-Block TLA](https://gitcode.com/cann/catlass/blob/v1.5.0/examples/51_ascend950_quant_matmul_per_group_per_block_tla/README.md)（Per-Group × Per-Block 量化组合）
+  - [Quant Optimized Matmul TLA](https://gitcode.com/cann/catlass/blob/v1.5.0/examples/42_quant_optimized_matmul_tla/README.md)
+  - [Quant Matmul Full LoadA TLA](https://gitcode.com/cann/catlass/blob/v1.5.0/examples/44_quant_matmul_full_loadA_tla/README.md)
+  - [Strided Batched Matmul TLA](https://gitcode.com/cann/catlass/blob/v1.5.0/examples/45_strided_batched_matmul_tla/README.md)
+  - [Matmul 泛化工程：动态 W8A8 Per-Token 量化](https://gitcode.com/cann/catlass/tree/v1.5.0/examples/103_dynamic_optimized_quant_matmul_per_token_basic/README.md)
+- 工具支持
+  - [shared\_lib](https://gitcode.com/cann/catlass/tree/v1.5.0/examples/shared_lib/README.md) 输出产物增加 **soname**，Python 扩展依赖的共享库切换为带版本信息的 `.so`
+  - [Python 扩展](https://gitcode.com/cann/catlass/tree/v1.5.0/examples/python_extension/README.md) 支持 `build.sh` 编译选项传入，并支持异步模式；更新设备侧取指针等接入方式
+  - [msTuner\_CATLASS](https://gitcode.com/cann/catlass/tree/v1.5.0/tools/tuner/README.md) 扩展 GEMM 配置与搜索空间；[MatmulGelu](https://gitcode.com/cann/catlass/blob/v1.5.0/examples/27_matmul_gelu/README.md) 样例接入寻优示例
+- 文档资料
+  - 文档目录与资源路径调整（如 **figures** 目录），并做低错与内容修订
+  - 泛化工程补充 **MultiCoreSplitK**、**StreamK**、**单核切 K** 等相关说明文档
+  - 修复 [ascendc\_dump 文档](https://gitcode.com/cann/catlass/blob/v1.5.0/docs/1_Practice/evaluation_tools/ascendc_dump.md) 中的错误表述
+- Bugfix&优化
+  - 修复 TLA **OriginShape** 与 **Flash Attention Golden** 等相关问题；完善 Ascend950 FA 的 Block/Epilogue 等实现路径
+  - 调整 [CopyGmToL1](https://gitcode.com/cann/catlass/blob/v1.5.0/include/catlass/gemm/tile/copy_gm_to_l1.hpp) 中 `blockLen` 计算逻辑，无需再为对齐 **C0\_NUM\_PER\_FRACTAL** 做不必要向上取整
+  - **Nan 专项**：在 `exp11` 等路径为 **Ki=0** 场景补充清零，避免脏数据影响模型精度
+  - 修复 **CopyL0CToDstQuantMode** 等问题；Ascend950 架构标识由 **3501** 更正为 **3510**
+  - 修复间接头文件引用、License 注释与多处文档笔误；持续消除代码规范告警与风格清理
+
 ### CATLASS 1.4.0
 
 - 关键特性
@@ -99,7 +135,7 @@
         + 调整工程组织结构
         + 支持转置情况
     - 新增[`msTuner_CATLASS`](https://gitcode.com/cann/catlass/tree/v1.2.0/tools/tuner/README.md)工具，用于Tiling自动寻优，在搜索空间内全量运行并获取性能数据
-    - 支持使能[`msSanitizer`](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/83RC1alpha003/devaids/optool/atlasopdev_16_0039.html)地址消毒工具（编译选项加入`--enable_mssanitizer`）
+    - 支持使能[`msSanitizer`](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0039.html)地址消毒工具（编译选项加入`--enable_mssanitizer`）
   
  - 文档资料
    - 新增[`catlass_optimize_guidance.md`](https://gitcode.com/cann/catlass/tree/v1.2.0/docs/contents/advanced/catlass_optimize_guidance.md)文档，介绍CATLASS赋能下`Gemm`类算子常用的调优方式

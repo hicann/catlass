@@ -12,45 +12,31 @@ set(CATLASS_EXAMPLES_COMMON_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/common)
 
 add_custom_target(catlass_examples)
 
+add_compile_options($<$<COMPILE_LANGUAGE:ASC>:--npu-arch=dav-${CATLASS_ARCH}>)
+add_compile_definitions(CATLASS_ARCH=${CATLASS_ARCH})
+
 # arch specific compile options
 if(CATLASS_ARCH STREQUAL "2201")
-    set(CCE_AICORE_ARCH_BASE dav-c220)
-    add_compile_definitions(CATLASS_ARCH=2201)
     add_compile_options(
-        "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-stack-size=0x8000>"
-        "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-function-stack-size=0x8000>"
-        "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-record-overflow=true>"
-        "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-dcci-insert-for-scalar=false>"
+        "SHELL:$<$<COMPILE_LANGUAGE:ASC>:-mllvm -cce-aicore-record-overflow=true>"
+        "SHELL:$<$<COMPILE_LANGUAGE:ASC>:-mllvm -cce-aicore-dcci-insert-for-scalar=false>"
     )
-endif()
-
-if(CATLASS_ARCH STREQUAL "3510")
-    set(CCE_AICORE_ARCH_BASE dav-c310)
-    add_compile_definitions(CATLASS_ARCH=3510)
 endif()
 
 # common compile options
 add_compile_options(
-    $<$<COMPILE_LANGUAGE:ASCEND>:-Wno-macro-redefined>
-    $<$<COMPILE_LANGUAGE:ASCEND>:-Wno-ignored-attributes>
+    $<$<COMPILE_LANGUAGE:ASC>:-Wno-macro-redefined>
+    $<$<COMPILE_LANGUAGE:ASC>:-Wno-ignored-attributes>
     # these options may be removed after CANN 8.5.0
-    $<$<COMPILE_LANGUAGE:ASCEND>:-Wno-unused-value>
+    $<$<COMPILE_LANGUAGE:ASC>:-Wno-unused-value>
 )
 
 # these options may be removed after CANN 8.5.0
-add_link_options($<$<COMPILE_LANGUAGE:ASCEND>:-Wno-unused-command-line-argument>)
+add_link_options($<$<COMPILE_LANGUAGE:ASC>:-Wno-unused-command-line-argument>)
 
 # compile options for debug features
 if(DEFINED ENABLE_PRINT AND ENABLE_PRINT)
-    add_compile_options($<$<COMPILE_LANGUAGE:ASCEND>:--cce-enable-print>)
-endif()
-
-# compile options for ascendc_dump
-if(DEFINED ENABLE_ASCENDC_DUMP AND ENABLE_ASCENDC_DUMP)
-    add_compile_definitions(ENABLE_ASCENDC_DUMP)
-    add_compile_definitions(ASCENDC_DUMP=1)
-    add_compile_definitions(ASCENDC_DEBUG)
-    link_libraries(ascend_dump)
+    add_compile_options($<$<COMPILE_LANGUAGE:ASC>:--cce-enable-print>)
 endif()
 
 if(DEFINED ENABLE_SIMULATOR AND ENABLE_SIMULATOR)
@@ -64,26 +50,19 @@ if(DEFINED ENABLE_SIMULATOR AND ENABLE_SIMULATOR)
     message("export LD_PRELOAD=${ASCEND_HOME_PATH}/tools/simulator/${NPU_MODEL}/lib/libruntime_camodel.so:${ASCEND_HOME_PATH}/tools/simulator/${NPU_MODEL}/lib/libnpu_drv_camodel.so")
 endif()
 
+# compile options for msSanitizer
+if(DEFINED ENABLE_MSSANITIZER AND ENABLE_MSSANITIZER)
+    add_compile_options("SHELL:$<$<COMPILE_LANGUAGE:ASC>:-g --cce-enable-sanitizer>")
+    add_link_options("SHELL:$<$<COMPILE_LANGUAGE:ASC>:--cce-enable-sanitizer --npu-arch=dav-${CATLASS_ARCH}>")
+endif()
+
 macro(catlass_example_add_executable NAME OPTYPE)
     set(EXAMPLE_DESTINATION bin)
 
     add_executable(${NAME} ${ARGN})
-    if(${OPTYPE} STREQUAL "cube" OR ${OPTYPE} STREQUAL "vec")
-        set(CCE_AICORE_ARCH "${CCE_AICORE_ARCH_BASE}-${OPTYPE}")
-    elseif(${OPTYPE} STREQUAL "mix")
-        set(CCE_AICORE_ARCH "${CCE_AICORE_ARCH_BASE}")
-    else()
-        message("Unsupported op type: ${OPTYPE}")
-    endif()
-    target_compile_options(${NAME} PRIVATE $<$<COMPILE_LANGUAGE:ASCEND>:--cce-aicore-arch=${CCE_AICORE_ARCH}>)
+
     target_compile_definitions(${NAME} PRIVATE CATLASS_EXAMPLE_NAME=${NAME})
     target_include_directories(${NAME} PRIVATE ${ASCEND_HOME_PATH}/include/aclnn)
-    
-    # compile options for msSanitizer
-    if(DEFINED ENABLE_MSSANITIZER AND ENABLE_MSSANITIZER)
-        target_compile_options(${NAME} PRIVATE "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-g --cce-enable-sanitizer>")
-        target_link_options(${NAME} PRIVATE "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:--cce-enable-sanitizer --cce-aicore-arch=${CCE_AICORE_ARCH}>")
-    endif()
 
     add_dependencies(catlass_examples ${NAME})
     install(TARGETS ${NAME} DESTINATION ${EXAMPLE_DESTINATION} COMPONENT ${NAME})
@@ -96,8 +75,18 @@ include_directories(
 )
 
 link_directories(${ASCEND_HOME_PATH}/lib64)
-link_libraries(dl tiling_api platform c_sec nnopbase ascendcl)
+link_libraries(
+    # AscendC necessary libraries
+    ascendc_runtime runtime profapi mmpa ascend_dump c_sec error_manager ascendcl
+    # other necessary libraries
+    tiling_api nnopbase platform
+    # system libraries
+    dl
+)
 # CANN 9.0.0.beta2 incompatible change
+if(EXISTS ${ASCEND_HOME_PATH}/lib64/libascendalog.so)
+    link_libraries(ascendalog)
+endif()
 if(EXISTS ${ASCEND_HOME_PATH}/lib64/libunified_dlog.so)
     link_libraries(unified_dlog)
 endif()

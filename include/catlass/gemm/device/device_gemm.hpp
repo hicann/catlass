@@ -73,18 +73,6 @@ public:
     /// Supplied params struct must be construct by calling matmul Kernel::to_underling arguments
     inline Status Run(aclrtStream stream, uint32_t blockDim, uint64_t fftsAddr)
     {
-#if defined(ENABLE_ASCENDC_DUMP)
-        uint8_t *ptrDump{nullptr};
-        aclCheck(aclrtMalloc(reinterpret_cast<void **>(&ptrDump), ALL_DUMPSIZE, ACL_MEM_MALLOC_HUGE_FIRST));
-        if (fftsAddr == 0) {
-            Catlass::KernelAdapter<GemmKernel><<<blockDim, nullptr, stream>>>(params_, ptrDump);
-        } else {
-            Catlass::KernelAdapter<GemmKernel><<<blockDim, nullptr, stream>>>(params_, fftsAddr, ptrDump);
-        }
-        aclCheck(aclrtSynchronizeStream(stream));
-        Adx::AdumpPrintWorkSpace(ptrDump, ALL_DUMPSIZE, stream, "device_gemm");
-        aclCheck(aclrtFree(ptrDump));
-#else
 #if (defined (CATLASS_ARCH) && CATLASS_ARCH == 2201)
         if (fftsAddr == 0) {
             Catlass::KernelAdapter<GemmKernel><<<blockDim, nullptr, stream>>>(params_);
@@ -93,7 +81,6 @@ public:
         }
 #elif (defined (CATLASS_ARCH) && CATLASS_ARCH == 3510)
         Catlass::KernelAdapter<GemmKernel><<<blockDim, nullptr, stream>>>(params_);
-#endif
 #endif
         return Status::kSuccess;
     }

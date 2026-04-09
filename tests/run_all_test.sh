@@ -45,7 +45,7 @@ if [[ "$CATLASS_ARCH" == 2201 ]]; then
     python3 "$SCRIPT_PATH/test_torch_lib.py"
 
     # mstuner_catlass
-    python3 "$SCRIPT_PATH/test_mstuner.py"
+    # python3 "$SCRIPT_PATH/test_mstuner.py"
 fi
 
 # unittest

@@ -254,6 +254,6 @@ for (uint32_t loopIdx = 0; loopIdx < coreLoops; ++loopIdx) {
 说明：
 
  - 标杆为[`BasicMatmul`](../00_basic_matmul/README.md)算子；
- - 统计耗时均为核函数总耗时，使用[`msprof`](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850alpha001/devaids/optool/atlasopdev_16_0082.html)工具得到；
+ - 统计耗时均为核函数总耗时，使用[`msprof`](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html)工具得到；
  - 上述测试例中A，B及C矩阵均为`layout::RowMajor`排布方式；
  - 测试环境说明：NPU型号为910B2，CANN包版本为8.2.RC1

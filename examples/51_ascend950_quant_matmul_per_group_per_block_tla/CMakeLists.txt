@@ -8,6 +8,6 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # ----------------------------------------------------------------------------
 
-set_source_files_properties(quant_matmul_per_group_per_block.cpp PROPERTIES LANGUAGE ASCEND)
+set_source_files_properties(quant_matmul_per_group_per_block.cpp PROPERTIES LANGUAGE ASC)
 catlass_example_add_executable(51_ascend950_quant_matmul_per_group_per_block_tla mix quant_matmul_per_group_per_block.cpp)
 target_compile_definitions(51_ascend950_quant_matmul_per_group_per_block_tla PRIVATE L2_CACHE_HINT)

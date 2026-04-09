@@ -38,9 +38,8 @@ if(COMPILE_DYNAMIC_QBMM_OPTIMIZED_MATMUL)
     )
     
     add_compile_definitions(TILING_KEY_VAR)
-    add_compile_options($<$<COMPILE_LANGUAGE:ASCEND>:--cce-aicore-arch=dav-c220>)
     file(GLOB CATLASS_SHARED_LIB_SRC CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/impl/wrapper/*.cpp)
-    set_source_files_properties(${CATLASS_SHARED_LIB_SRC} PROPERTIES LANGUAGE ASCEND)
+    set_source_files_properties(${CATLASS_SHARED_LIB_SRC} PROPERTIES LANGUAGE ASC)
 
     add_library(dynamic_optimized_quant_matmul_per_token_basic SHARED ${CATLASS_SHARED_LIB_SRC})
     set_target_properties(dynamic_optimized_quant_matmul_per_token_basic PROPERTIES POSITION_INDEPENDENT_CODE ON)

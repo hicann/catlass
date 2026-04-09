@@ -23,9 +23,7 @@
 #include "catlass/layout/layout.hpp"
 #include "catlass/matrix_coord.hpp"
 
-inline __gm__ struct OpSystemRunCfg g_opSystemRunCfg {
-    Catlass::L2_OFFSET
-};
+
 
 namespace Catlass::Gemm::Kernel {
 

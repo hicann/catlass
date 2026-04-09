@@ -6,7 +6,7 @@ aclnn接口是CANN软件栈一直沿用的接口，msOpGen工具是CANN提供可
 
 ## 1. 创建算子工程
 
-参考[创建算子工程](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/83RC1alpha003/opdevg/Ascendcopdevg/atlas_ascendc_10_0060.html)链接编写一个算子原型的json文件，并生成对应工程。
+参考[创建算子工程](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/opdevg/Ascendcopdevg/atlas_ascendc_10_0060.html)链接编写一个算子原型的json文件，并生成对应工程。
 
 ### 编写json
 
@@ -26,9 +26,9 @@ msopgen gen -i catlass_basic_matmul.json -c ai_core-<soc_version> -lan cpp -out 
 
 ## 2. 编写Host代码
 
-参考[Host侧Tiling实现-基本流程](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/83RC1alpha003/opdevg/Ascendcopdevg/atlas_ascendc_10_00021.html)实现`TilingFunc`。
+参考[Host侧Tiling实现-基本流程](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/opdevg/Ascendcopdevg/atlas_ascendc_10_00021.html)实现`TilingFunc`。
 
-若需要使能**算子入图**，请参考[算子入图（GE）图开发](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/83RC1alpha003/opdevg/Ascendcopdevg/atlas_ascendc_10_0078.html)实现`InferShape`和`InferDataType`。
+若需要使能**算子入图**，请参考[算子入图（GE）图开发](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/opdevg/Ascendcopdevg/atlas_ascendc_10_0078.html)实现`InferShape`和`InferDataType`。
 
 相关示例代码：
 [op_host/catlass_basic_matmul.cpp](./op_host/catlass_basic_matmul.cpp)
@@ -36,7 +36,7 @@ msopgen gen -i catlass_basic_matmul.json -c ai_core-<soc_version> -lan cpp -out 
 
 ## 3. 编写Device代码
 
-参考[Kernel侧算子实现](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/83RC1alpha003/opdevg/Ascendcopdevg/atlas_ascendc_10_0063.html)，实现kernel代码。
+参考[Kernel侧算子实现](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/opdevg/Ascendcopdevg/atlas_ascendc_10_0063.html)，实现kernel代码。
 
 相关示例代码：
 [op_kernel/catlass_basic_matmul.cpp](./op_kernel/catlass_basic_matmul.cpp)
@@ -74,7 +74,7 @@ msopgen gen -i catlass_basic_matmul.json -c ai_core-<soc_version> -lan cpp -out 
 
 ## 4. 编译、部署
 
-参考[算子工程编译](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/83RC1alpha003/opdevg/Ascendcopdevg/atlas_ascendc_10_0068.html)、[算子包部署](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/83RC1alpha003/opdevg/Ascendcopdevg/atlas_ascendc_10_0069.html)进行编译、部署，并设定环境变量。
+参考[算子工程编译](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/opdevg/Ascendcopdevg/atlas_ascendc_10_0068.html)、[算子包部署](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/opdevg/Ascendcopdevg/atlas_ascendc_10_0069.html)进行编译、部署，并设定环境变量。
 
 一般来说，调用者需要添加头文件`aclnn_catlass_basic_matmul.h`并链接`libcust_opapi.so`。在不修改工程参数的情况下，这两个文件的位置如下：
 
@@ -87,7 +87,7 @@ $ASCEND_HOME_PATH/opp/vendors/customize/op_api/lib/libcust_opapi.so
 
 ## 5. 调用
 
-参考[接口简介](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/83RC1alpha003/API/aolapi/operatorlist_00001.html)了解aclnn接口的相关概念，并参考[basic_matmul_aclnn.cpp](./basic_matmul_aclnn.cpp)尝试调用。
+参考[接口简介](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/API/aolapi/operatorlist_00001.html)了解aclnn接口的相关概念，并参考[basic_matmul_aclnn.cpp](./basic_matmul_aclnn.cpp)尝试调用。
 
 可参考以下内容编写`CMakeLists.txt`：
 

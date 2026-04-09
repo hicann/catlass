@@ -8,6 +8,6 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
-set_source_files_properties(matmul_gelu.cpp PROPERTIES LANGUAGE ASCEND)
+set_source_files_properties(matmul_gelu.cpp PROPERTIES LANGUAGE ASC)
 catlass_example_add_executable(27_matmul_gelu mix matmul_gelu.cpp)
 target_link_libraries(27_matmul_gelu PRIVATE m)

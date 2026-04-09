@@ -8,7 +8,7 @@
 
 根据您所使用的[昇腾产品](https://www.hiascend.com/document/detail/zh/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html)类别，请下载对应的CANN开发套件包`Ascend-cann-toolkit_{version}_linux-{arch}.run`，下载链接见[CANN toolkit](https://www.hiascend.com/zh/developer/download/community/result?module=cann)（有关CATLASS的版本支持情况详见[软件硬件配套说明](../../README.md#软件硬件配套说明)）。
 
-随后安装CANN开发套件包（详情参考[CANN安装指南](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/83RC1/softwareinst/instg/instg_0008.html?Mode=PmIns&InstallType=local&OS=openEuler&Software=cannToolKit)）。
+随后安装CANN开发套件包（详情参考[CANN安装指南](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/softwareinst/instg/instg_0008.html?Mode=PmIns&InstallType=local&OS=openEuler&Software=cannToolKit)）。
 
 ```bash
 # 确保安装包有可执行权限
@@ -56,7 +56,7 @@ bash scripts/build.sh [options] <target>
  - `options`: 可选编译选项，当前支持的选项包括：
    - `--clean`: 清理此前编译及输出目录（默认路径分别为`/build`，`/output`）。
    - `--debug`: 以Debug模式进行编译。
-   - `--msdebug`：使能[msDebug](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/83RC1/devaids/optool/atlasopdev_16_0062.html)工具，详见[在CATLASS样例工程使用msDebug](./evaluation_tools/msdebug.md)。
+   - `--msdebug`：使能[msDebug](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0062.html)工具，详见[在CATLASS样例工程使用msDebug](./evaluation_tools/msdebug.md)。
    - `--simulator`：启用仿真器模式，该选项启用后将不在实际NPU上执行，详见[CATLASS样例仿真](./evaluation_tools/performance_tools.md#msprof-op-simulator使用示例)。
    - `--enable_profiling`：使能Profiling工具，详见[CATLASS样例性能调优](./evaluation_tools/performance_tools.md#profiling简介)。
    - `--enable_print`：启用编译器的打印功能，详见[基于`cce::printf`进行设备侧打印](./evaluation_tools/print.md)。

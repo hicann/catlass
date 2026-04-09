@@ -8,5 +8,5 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
-set_source_files_properties(streamk_matmul.cpp PROPERTIES LANGUAGE ASCEND)
+set_source_files_properties(streamk_matmul.cpp PROPERTIES LANGUAGE ASC)
 catlass_example_add_executable(37_streamk_matmul mix streamk_matmul.cpp)

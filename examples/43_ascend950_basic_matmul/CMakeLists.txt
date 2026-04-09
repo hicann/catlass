@@ -8,6 +8,6 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
-set_source_files_properties(basic_matmul_tla.cpp PROPERTIES LANGUAGE ASCEND)
+set_source_files_properties(basic_matmul_tla.cpp PROPERTIES LANGUAGE ASC)
 catlass_example_add_executable(43_ascend950_basic_matmul cube basic_matmul_tla.cpp)
 target_compile_definitions(43_ascend950_basic_matmul PRIVATE L2_CACHE_HINT)

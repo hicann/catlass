@@ -8,26 +8,25 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
-set_source_files_properties(test_self_contained_includes.cpp PROPERTIES LANGUAGE ASCEND)
+set_source_files_properties(test_self_contained_includes.cpp PROPERTIES LANGUAGE ASC)
 add_custom_target(test_self_contained_includes)
 
 include_directories(${CATLASS_INCLUDE_DIR})
 file(GLOB_RECURSE CATLASS_HEADERS ${CATLASS_INCLUDE_DIR}/**/*.hpp)
 list(FILTER CATLASS_HEADERS EXCLUDE REGEX "block")
 set(ARCH_CONFIGS
-    "2201\;dav-c220\;atlasa2"
-    "3510\;dav-c310\;ascend950"
+    "2201\;atlasa2"
+    "3510\;ascend950"
 )
 
 foreach(ARCH_CONFIG ${ARCH_CONFIGS})
     string(REPLACE ";" " " ARCH_CONFIG_STR ${ARCH_CONFIG})
 
     list(GET ARCH_CONFIG 0 NPU_ARCH)
-    list(GET ARCH_CONFIG 1 BISHENG_CCE_AICORE_ARCH)
-    list(GET ARCH_CONFIG 2 CATLASS_ARCH_TAG)
+    list(GET ARCH_CONFIG 1 CATLASS_ARCH_TAG)
 
     if(CATLASS_ARCH STREQUAL ${NPU_ARCH})
-        add_compile_options("--cce-aicore-arch=${BISHENG_CCE_AICORE_ARCH}")
+        add_compile_options("--npu-arch=dav-${NPU_ARCH}")
         add_compile_definitions(CATLASS_ARCH=${NPU_ARCH})
     else()
         list(FILTER CATLASS_HEADERS EXCLUDE REGEX ${CATLASS_ARCH_TAG})

@@ -1,12 +1,12 @@
 # 在CATLASS样例工程进行设备侧打印
 
-基于[CCE Intrinsic](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/83RC1/opdevg/cceintrinsicguide/cceprogram_0001.html)提供设备侧打印函数`cce::printf`进行调试，用法与C标准库的`printf`一致。
+编译器提供设备侧打印函数`cce::printf`进行调试，用法与C标准库的`printf`一致。
 
 - 支持`cube/vector/mix`算子
 - 支持格式化字符串
 - 支持打印常见整型与浮点数、指针、字符
 
-  - ⚠️ **注意** 这个功能在社区版CANN 8.3后（如[8.3.RC1.alpha001](https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.3.RC1.alpha001)）开始支持。
+  - ⚠️ **注意** 该特性功能有限，请优先使用[`AscendC调测API`](ascendc_dump.md)进行打印调试。
 
 ## 使用示例
 

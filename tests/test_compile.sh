@@ -31,9 +31,6 @@ if [[ "$CATLASS_ARCH" != 3510 ]]; then
     bash "$BUILD_SCRIPT_PATH" "${DEFAULT_BUILD_OPTIONS[@]}" --enable_mssanitizer catlass_examples || exit 1
 fi
 
-# ascendc_dump
-bash "$BUILD_SCRIPT_PATH" "${DEFAULT_BUILD_OPTIONS[@]}" --enable_ascendc_dump catlass_examples || exit 1
-
 # msopgen package build
 if [[ "$CATLASS_ARCH" == 2201 ]]; then
     bash "$BUILD_SCRIPT_PATH" "${DEFAULT_BUILD_OPTIONS[@]}" basic_matmul_aclnn || exit 1
