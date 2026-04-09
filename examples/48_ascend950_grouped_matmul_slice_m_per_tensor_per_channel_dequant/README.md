@@ -42,6 +42,7 @@ Fixpipe提供了两种不同粒度的随路量化/反量化模式，即per_tenso
 bash scripts/build.sh 48_ascend950_grouped_matmul_slice_m_per_tensor_per_channel_dequant -DCATLASS_ARCH=3510
 cd output/bin
 # 可执行文件名|group数量|矩阵m轴|n轴|k轴|量化模式|Device ID
+# group数量及矩阵m轴、n轴、k轴维度必须大于0
 # 量化模式可选0或1，0表示per_tensor，1表示per_channel
 # Device ID可选，默认为0
 ./48_ascend950_grouped_matmul_slice_m_per_tensor_per_channel_dequant 128 512 1024 2048 0 0

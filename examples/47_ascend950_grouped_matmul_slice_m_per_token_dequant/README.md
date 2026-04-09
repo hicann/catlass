@@ -40,6 +40,7 @@
 bash scripts/build.sh 47_ascend950_grouped_matmul_slice_m_per_token_dequant -DCATLASS_ARCH=3510
 cd output/bin
 # 可执行文件名|group数量|矩阵m轴|n轴|k轴|Device ID
+# group数量及矩阵m轴、n轴、k轴维度必须大于0
 # Device ID可选，默认为0
 ./47_ascend950_grouped_matmul_slice_m_per_token_dequant 128 512 1024 2048 0
 ```

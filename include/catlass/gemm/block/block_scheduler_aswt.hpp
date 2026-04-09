@@ -77,6 +77,11 @@ struct BlockSchedulerAswt {
         n_ = shape.n();
         k_ = shape.k();
 
+        if (m_ <= 0 || n_ <= 0 || k_ <= 0) {
+            round_ = 0;
+            return;
+        }
+
         mTileNum_ = CeilDiv(m_, ML1_);
         nTileNum_ = CeilDiv(n_, NL1_);
         tileNum_ = mTileNum_ * nTileNum_;
@@ -119,8 +124,11 @@ struct BlockSchedulerAswt {
             }
         }
 
-        mTailSplitCnt_ = mTile;
-        nTailSplitCnt_ = nTile;
+        uint32_t splitTailM = CeilDiv(tailL1M_, mTile);
+        uint32_t splitTailN = CeilDiv(tailL1N_, nTile);
+
+        mTailSplitCnt_ = CeilDiv(tailL1M_, splitTailM);
+        nTailSplitCnt_ = CeilDiv(tailL1N_, splitTailN);
         tailSplitCnt_ = mTailSplitCnt_ * nTailSplitCnt_;
 
         uint32_t newEndBlockIdx = tailSplitCnt_ * (endBlockIdx_ + 1) - 1;
