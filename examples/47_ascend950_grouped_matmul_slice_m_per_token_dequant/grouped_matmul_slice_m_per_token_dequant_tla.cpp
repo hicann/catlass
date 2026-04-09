@@ -142,7 +142,7 @@ static void Run(Options const &options)
     
     constexpr bool ubDB = false;
     constexpr uint32_t UB_STAGES = ubDB ?  2 : 1;
-    using EpilogueTileShape = MatrixShape<256, 256>;
+    using EpilogueTileShape = MatrixShape<tla::get<0>(L1TileShape{}), tla::get<1>(L1TileShape{})>;
     using DispatchPolicyDequant = Epilogue::EpilogueAscend950PerTokenDequantTla<UB_STAGES>;
     using TilePerTokenDequant = Epilogue::Tile::TilePerTokenDequant<
         ArchTag, ElementC, ElementScale, ElementPerToken, ElementD, EpilogueTileShape>;
