@@ -180,6 +180,38 @@ class CatlassExampleTest(unittest.TestCase):
             "--datapath", os.path.join(CMAKE_EXAMPLES_PATH, "49_ascend950_flash_attention_infer", "data")]
         self.run_case("49_ascend950_flash_attention_infer", case_cpp)
 
+    @only_on_3510
+    def test_53_ascend950_fp8_mx_matmul(self):
+        # gen_data: trans_a=0, trans_b=1 对应 RowMajor A + ColumnMajor B（与 example 中 layout 一致）
+        case_py = [str(i) for i in [256, 512, 1024, 0, 1]]
+        subprocess.run(
+            [
+                "python",
+                os.path.join(
+                    CMAKE_EXAMPLES_PATH, "53_ascend950_fp8_mx_matmul", "gen_data.py"
+                ),
+            ]
+            + case_py
+        )
+        case_cpp = [str(i) for i in [256, 512, 1024]]
+        self.run_case("53_ascend950_fp8_mx_matmul", case_cpp)
+
+    @only_on_3510
+    def test_54_ascend950_fp4_mx_matmul(self):
+        # 与 53 相同：trans_b=1 对应 B 为 ColumnMajor，与 fp4_mx_matmul.cpp 中 layout 一致
+        case_py = [str(i) for i in [256, 512, 1024, 0, 1]]
+        subprocess.run(
+            [
+                "python",
+                os.path.join(
+                    CMAKE_EXAMPLES_PATH, "54_ascend950_fp4_mx_matmul", "gen_data.py"
+                ),
+            ]
+            + case_py
+        )
+        case_cpp = [str(i) for i in [256, 512, 1024]]
+        self.run_case("54_ascend950_fp4_mx_matmul", case_cpp)
+
 
 normal_cases_2201 = [
     "00_basic_matmul 256 512 1024 0",

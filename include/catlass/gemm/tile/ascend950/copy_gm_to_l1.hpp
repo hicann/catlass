@@ -18,6 +18,7 @@
 #include "catlass/layout/layout.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 #include "tla/tensor.hpp"
+#include "tla/layout.hpp"
 
 namespace Catlass::Gemm::Tile {
 
@@ -62,8 +63,15 @@ struct TileCopyTla<
         intriParams.ndNum = ndNum;
         intriParams.nValue = nValue;
         intriParams.dValue = dValue;
+        // AscendC Nd2Nz for float4: pass dValue/srcDValue as int8 length (aligned with Ascend950 copy_gm_to_l1).
+        if constexpr (AscendC::Std::is_one_of_v<typename TensorSrc::Element, float4_e2m1x2_t, float4_e1m2x2_t>) {
+            intriParams.dValue = CeilDiv(intriParams.dValue, 2);
+        }
         intriParams.srcNdMatrixStride = srcNdMatrixStride;
         intriParams.srcDValue = srcDValue;
+        if constexpr (AscendC::Std::is_one_of_v<typename TensorSrc::Element, float4_e2m1x2_t, float4_e1m2x2_t>) {
+            intriParams.srcDValue = CeilDiv(intriParams.srcDValue, 2);
+        }
         intriParams.dstNzC0Stride = dstOuterStrideCol / ELE_NUM_PER_C0;
         intriParams.dstNzNStride = dstInnerStrideRow / ELE_NUM_PER_C0;
         intriParams.dstNzMatrixStride = dstNzMatrixStride;
@@ -158,8 +166,14 @@ struct TileCopyTla<
         intriParams.ndNum = ndNum;
         intriParams.nValue = nValue;
         intriParams.dValue = dValue;
+        if constexpr (AscendC::Std::is_one_of_v<typename TensorSrc::Element, float4_e2m1x2_t, float4_e1m2x2_t>) {
+            intriParams.dValue = CeilDiv(intriParams.dValue, 2);
+        }
         intriParams.srcNdMatrixStride = srcNdMatrixStride;
         intriParams.srcDValue = srcDValue;
+        if constexpr (AscendC::Std::is_one_of_v<typename TensorSrc::Element, float4_e2m1x2_t, float4_e1m2x2_t>) {
+            intriParams.srcDValue = CeilDiv(intriParams.srcDValue, 2);
+        }
         intriParams.dstNzC0Stride = dstOuterStrideRow / ELE_NUM_PER_C0;
         intriParams.dstNzNStride = dstInnerStrideCol / ELE_NUM_PER_C0;
         intriParams.dstNzMatrixStride = dstNzMatrixStride;
@@ -248,6 +262,202 @@ struct TileCopyTla<
         auto srcOffset = srcTensor.layout()(srcTensor.coord());
 
         AscendC::DataCopy(dstTensor.data()[dstOffset], srcTensor.data()[srcOffset], intriParams);
+    }
+};
+
+/// Partial specialization for CopyGmToL1 TLA, Ascend950, MX fp8 e8m0, MxScaleA RowMajor in and zZ out.
+template <class ElementMx, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+struct TileCopyTla<
+    Arch::Ascend950,
+    tla::Tensor<AscendC::GlobalTensor<ElementMx>, LayoutSrc, CoordSrc, AscendC::TPosition::GM>,
+    tla::Tensor<AscendC::LocalTensor<ElementMx>, LayoutDst, CoordDst, AscendC::TPosition::A1>,
+    std::enable_if_t<tla::detail::isMxScaleForRowMajorA<float8_e8m0_t, LayoutSrc>::value &&
+        tla::detail::isMxScaleForzZ<float8_e8m0_t, LayoutDst>::value>> {
+
+    CATLASS_DEVICE
+    TileCopyTla() {};
+
+    template <class TensorDst, class TensorSrc>
+    CATLASS_DEVICE void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
+    {
+        static_assert(
+            tla::detail::isMxScaleForRowMajorA<float8_e8m0_t, typename TensorSrc::Layout>::value &&
+            tla::detail::isMxScaleForzZ<float8_e8m0_t, typename TensorDst::Layout>::value &&
+            TensorSrc::position == AscendC::TPosition::GM && TensorDst::position == AscendC::TPosition::A1,
+            "The input parameters do not match. TensorSrc must be fp8_e8m0_t, GM and RowMajor, while TensorDst must be "
+            "fp8_e8m0_t, L1 and zZ"
+        );
+
+        const uint32_t rows = tla::get<0>(srcTensor.originShape());
+        const uint32_t cols = tla::get<1>(srcTensor.originShape());
+        const uint32_t srcDValue = tla::get<0>(srcTensor.stride());
+        const uint32_t dstOuterStrideRow = tla::get<0, 1>(dstTensor.stride());
+
+        AscendC::Dn2NzParams intriParams;
+
+        intriParams.dnNum = 1;
+        intriParams.nValue = CeilDiv<MX_SCALE_COPY_GROUP_NUM>(cols);
+        intriParams.dValue = rows;
+        intriParams.srcDnMatrixStride = 0;
+        intriParams.srcDValue = CeilDiv<MX_SCALE_COPY_GROUP_NUM>(srcDValue);
+        intriParams.dstNzC0Stride = dstOuterStrideRow / BYTE_PER_C0;
+        intriParams.dstNzNStride = 1;
+        intriParams.dstNzMatrixStride = 0;
+
+        auto dstOffset = dstTensor.layout()(dstTensor.coord());
+        auto srcOffset = srcTensor.layout()(srcTensor.coord());
+
+        auto srcHalf = srcTensor.data()[srcOffset].template ReinterpretCast<half>();
+        auto dstHalf = dstTensor.data()[dstOffset].template ReinterpretCast<half>();
+
+        AscendC::DataCopy(dstHalf, srcHalf, intriParams);
+    }
+};
+
+/// Partial specialization for CopyGmToL1 TLA, Ascend950, MX fp8 e8m0, MxScaleA ColumnMajor in and zZ out.
+template <class ElementMx, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+struct TileCopyTla<
+    Arch::Ascend950,
+    tla::Tensor<AscendC::GlobalTensor<ElementMx>, LayoutSrc, CoordSrc, AscendC::TPosition::GM>,
+    tla::Tensor<AscendC::LocalTensor<ElementMx>, LayoutDst, CoordDst, AscendC::TPosition::A1>,
+    std::enable_if_t<tla::detail::isMxScaleForColumnMajorA<float8_e8m0_t, LayoutSrc>::value &&
+        tla::detail::isMxScaleForzZ<float8_e8m0_t, LayoutDst>::value>> {
+
+    CATLASS_DEVICE
+    TileCopyTla() {};
+
+    template <class TensorDst, class TensorSrc>
+    CATLASS_DEVICE void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
+    {
+        static_assert(
+            tla::detail::isMxScaleForColumnMajorA<float8_e8m0_t, typename TensorSrc::Layout>::value &&
+            tla::detail::isMxScaleForzZ<float8_e8m0_t, typename TensorDst::Layout>::value &&
+            TensorSrc::position == AscendC::TPosition::GM && TensorDst::position == AscendC::TPosition::A1,
+            "The input parameters do not match. TensorSrc must be fp8_e8m0_t, GM and ColumnMajor, while TensorDst must "
+            "be fp8_e8m0_t, L1 and zZ"
+        );
+
+        const uint32_t rows = tla::get<0>(srcTensor.originShape());
+        const uint32_t cols = tla::get<1>(srcTensor.originShape());
+        const uint32_t srcDValue = tla::get<1, 1>(srcTensor.stride());
+        const uint32_t dstOuterStrideRow = tla::get<0, 1>(dstTensor.stride());
+
+        AscendC::Nd2NzParams intriParams;
+
+        intriParams.ndNum = 1;
+        intriParams.nValue = CeilDiv<MX_SCALE_COPY_GROUP_NUM>(cols);
+        intriParams.dValue = rows;
+        intriParams.srcNdMatrixStride = 0;
+        intriParams.srcDValue = CeilDiv<MX_SCALE_COPY_GROUP_NUM>(srcDValue);
+        intriParams.dstNzC0Stride = dstOuterStrideRow / BYTE_PER_C0;
+        intriParams.dstNzNStride = 1;
+        intriParams.dstNzMatrixStride = 0;
+
+        auto dstOffset = dstTensor.layout()(dstTensor.coord());
+        auto srcOffset = srcTensor.layout()(srcTensor.coord());
+
+        auto srcHalf = srcTensor.data()[srcOffset].template ReinterpretCast<half>();
+        auto dstHalf = dstTensor.data()[dstOffset].template ReinterpretCast<half>();
+
+        AscendC::DataCopy(dstHalf, srcHalf, intriParams);
+    }
+};
+
+/// Partial specialization for CopyGmToL1 TLA, Ascend950, MX fp8 e8m0, B RowMajor in and nN out.
+template <class ElementMx, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+struct TileCopyTla<
+    Arch::Ascend950,
+    tla::Tensor<AscendC::GlobalTensor<ElementMx>, LayoutSrc, CoordSrc, AscendC::TPosition::GM>,
+    tla::Tensor<AscendC::LocalTensor<ElementMx>, LayoutDst, CoordDst, AscendC::TPosition::A1>,
+    std::enable_if_t<tla::detail::isMxScaleForRowMajorB<float8_e8m0_t, LayoutSrc>::value &&
+        tla::detail::isMxScaleFornN<float8_e8m0_t, LayoutDst>::value>> {
+
+    CATLASS_DEVICE
+    TileCopyTla() {};
+
+    template <class TensorDst, class TensorSrc>
+    CATLASS_DEVICE void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
+    {
+        static_assert(
+            tla::detail::isMxScaleForRowMajorB<float8_e8m0_t, typename TensorSrc::Layout>::value &&
+            tla::detail::isMxScaleFornN<float8_e8m0_t, typename TensorDst::Layout>::value &&
+            TensorSrc::position == AscendC::TPosition::GM && TensorDst::position == AscendC::TPosition::A1,
+            "The input parameters do not match. TensorSrc must be fp8_e8m0_t, GM and RowMajor, while TensorDst must be "
+            "fp8_e8m0_t, L1 and nN"
+        );
+
+        const uint32_t rows = tla::get<0>(srcTensor.originShape());
+        const uint32_t cols = tla::get<1>(srcTensor.originShape());
+        const uint32_t srcDValue = tla::get<0, 1>(srcTensor.stride());
+        const uint32_t dstOuterStrideCol = tla::get<1, 1>(dstTensor.stride());
+
+        AscendC::Nd2NzParams intriParams;
+
+        intriParams.ndNum = 1;
+        intriParams.nValue = CeilDiv<MX_SCALE_COPY_GROUP_NUM>(rows);
+        intriParams.dValue = cols;
+        intriParams.srcNdMatrixStride = 0;
+        intriParams.srcDValue = CeilDiv<MX_SCALE_COPY_GROUP_NUM>(srcDValue);
+        intriParams.dstNzC0Stride = dstOuterStrideCol / BYTE_PER_C0;
+        intriParams.dstNzNStride = 1;
+        intriParams.dstNzMatrixStride = 0;
+
+        auto dstOffset = dstTensor.layout()(dstTensor.coord());
+        auto srcOffset = srcTensor.layout()(srcTensor.coord());
+
+        auto srcHalf = srcTensor.data()[srcOffset].template ReinterpretCast<half>();
+        auto dstHalf = dstTensor.data()[dstOffset].template ReinterpretCast<half>();
+
+        AscendC::DataCopy(dstHalf, srcHalf, intriParams);
+    }
+};
+
+/// Partial specialization for CopyGmToL1 TLA, Ascend950, MX fp8 e8m0, B ColumnMajor in and nN out.
+template <class ElementMx, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+struct TileCopyTla<
+    Arch::Ascend950,
+    tla::Tensor<AscendC::GlobalTensor<ElementMx>, LayoutSrc, CoordSrc, AscendC::TPosition::GM>,
+    tla::Tensor<AscendC::LocalTensor<ElementMx>, LayoutDst, CoordDst, AscendC::TPosition::A1>,
+    std::enable_if_t<tla::detail::isMxScaleForColumnMajorB<float8_e8m0_t, LayoutSrc>::value &&
+        tla::detail::isMxScaleFornN<float8_e8m0_t, LayoutDst>::value>> {
+
+    CATLASS_DEVICE
+    TileCopyTla() {};
+
+    template <class TensorDst, class TensorSrc>
+    CATLASS_DEVICE void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
+    {
+        static_assert(
+            tla::detail::isMxScaleForColumnMajorB<float8_e8m0_t, typename TensorSrc::Layout>::value &&
+            tla::detail::isMxScaleFornN<float8_e8m0_t, typename TensorDst::Layout>::value &&
+            TensorSrc::position == AscendC::TPosition::GM && TensorDst::position == AscendC::TPosition::A1,
+            "The input parameters do not match. TensorSrc must be fp8_e8m0_t, GM and ColumnMajor, while TensorDst must "
+            "be fp8_e8m0_t, L1 and nN"
+        );
+
+        const uint32_t rows = tla::get<0>(srcTensor.originShape());
+        const uint32_t cols = tla::get<1>(srcTensor.originShape());
+        const uint32_t srcDValue = tla::get<1>(srcTensor.stride());
+        const uint32_t dstOuterStrideCol = tla::get<1, 1>(dstTensor.stride());
+
+        AscendC::Dn2NzParams intriParams;
+
+        intriParams.dnNum = 1;
+        intriParams.nValue = CeilDiv<MX_SCALE_COPY_GROUP_NUM>(rows);
+        intriParams.dValue = cols;
+        intriParams.srcDnMatrixStride = 0;
+        intriParams.srcDValue = CeilDiv<MX_SCALE_COPY_GROUP_NUM>(srcDValue);
+        intriParams.dstNzC0Stride = dstOuterStrideCol / BYTE_PER_C0;
+        intriParams.dstNzNStride = 1;
+        intriParams.dstNzMatrixStride = 0;
+
+        auto dstOffset = dstTensor.layout()(dstTensor.coord());
+        auto srcOffset = srcTensor.layout()(srcTensor.coord());
+
+        auto srcHalf = srcTensor.data()[srcOffset].template ReinterpretCast<half>();
+        auto dstHalf = dstTensor.data()[dstOffset].template ReinterpretCast<half>();
+
+        AscendC::DataCopy(dstHalf, srcHalf, intriParams);
     }
 };
 

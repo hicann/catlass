@@ -132,6 +132,42 @@ template<>
 struct ElementAccumulatorSelector<float8_e5m2_t, float8_e4m3_t> {
     using ElementAccumulator = float;
 };
+
+template<>
+struct ElementAccumulatorSelector<float4_e2m1x2_t, float4_e2m1x2_t> {
+    using ElementAccumulator = float;
+};
+
+template<>
+struct ElementAccumulatorSelector<float4_e1m2x2_t, float4_e1m2x2_t> {
+    using ElementAccumulator = float;
+};
+
+template<>
+struct ElementAccumulatorSelector<float4_e2m1x2_t, float4_e1m2x2_t> {
+    using ElementAccumulator = float;
+};
+
+template<>
+struct ElementAccumulatorSelector<float4_e1m2x2_t, float4_e2m1x2_t> {
+    using ElementAccumulator = float;
+};
+#endif
+
+template <class Element_, bool isMx = false>
+struct GetL0Element {
+    using Element = Element_;
+};
+#if (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510)
+template <>
+struct GetL0Element<float8_e4m3_t, true> {
+    using Element = AscendC::mx_fp8_e4m3_t;
+};
+
+template <>
+struct GetL0Element<float8_e5m2_t, true> {
+    using Element = AscendC::mx_fp8_e5m2_t;
+};
 #endif
 
 template<>

@@ -12,6 +12,7 @@
 #define TLA_LAYOUT_HPP
 
 #include "catlass/catlass.hpp"
+#include "catlass/numeric_size.hpp"
 #include "tla/numeric/integral_constant.hpp"
 #include "tla/numeric/math.hpp"
 #include "tla/tuple.hpp"
@@ -348,15 +349,20 @@ struct isColumnMajor<Layout, std::enable_if_t<Layout::depth == 1 && Layout::rank
     static bool const value = (stride<0>(Layout{}) == 1);
 };
 
-template <class Element, class Layout, class Enable = void>
+template <class Element, class Layout, class Enable1 = void, class Enable2 = void>
 struct iszN {
     static bool const value = false;
 };
 
 template <class Element, class Layout>
-struct iszN<Element, Layout, std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>> {
-    static constexpr uint32_t ELE_NUM_PER_C0 = Catlass::BYTE_PER_C0 / sizeof(Element);
-    static constexpr uint32_t ELE_NUM_PER_FRACTAL = Catlass::BYTE_PER_FRACTAL / sizeof(Element);
+struct iszN<Element, Layout,
+    std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>,
+    std::enable_if_t<rank_v<decltype(shape<0>(Layout{}))> == 2 &&
+        rank_v<decltype(shape<1>(Layout{}))> == 2>> {
+    static constexpr uint32_t ELE_NUM_PER_C0 =
+        Catlass::BytesToBits(Catlass::BYTE_PER_C0) / Catlass::SizeOfBits<Element>::value;
+    static constexpr uint32_t ELE_NUM_PER_FRACTAL =
+        Catlass::BytesToBits(Catlass::BYTE_PER_FRACTAL) / Catlass::SizeOfBits<Element>::value;
     static bool const value = (shape<0, 0>(Layout{}) == Catlass::C0_NUM_PER_FRACTAL &&
                                shape<1, 0>(Layout{}) == ELE_NUM_PER_C0 &&
                                stride<1, 0>(Layout{}) == 1 &&
@@ -377,42 +383,159 @@ template <class Element, class Layout>
 struct iszNUnAlign<Element, Layout,
     std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>, std::enable_if_t<rank_v<decltype(shape<0>(Layout{}))> == 2 &&
         rank_v<decltype(shape<1>(Layout{}))> == 2>> {
-    static constexpr uint32_t ELE_NUM_PER_C0 = Catlass::BYTE_PER_C0 / sizeof(Element);
+    static constexpr uint32_t ELE_NUM_PER_C0 =
+        Catlass::BytesToBits(Catlass::BYTE_PER_C0) / Catlass::SizeOfBits<Element>::value;
     static bool const value = (shape<0, 1>(Layout{}) == 1 &&
                                shape<1, 0>(Layout{}) == ELE_NUM_PER_C0 &&
                                stride<0, 0>(Layout{}) == ELE_NUM_PER_C0 &&
                                stride<1, 0>(Layout{}) == 1);
 };
 
-template <class Element, class Layout, class Enable = void>
+template <class Element, class Layout, class Enable1 = void, class Enable2 = void>
 struct iszZ {
     static bool const value = false;
 };
 
 template <class Element, class Layout>
-struct iszZ<Element, Layout, std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>> {
-    static constexpr uint32_t ELE_NUM_PER_C0 = Catlass::BYTE_PER_C0 / sizeof(Element);
-    static constexpr uint32_t ELE_NUM_PER_FRACTAL = Catlass::BYTE_PER_FRACTAL / sizeof(Element);
+struct iszZ<Element, Layout,
+    std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>,
+    std::enable_if_t<rank_v<decltype(shape<0>(Layout{}))> == 2 &&
+        rank_v<decltype(shape<1>(Layout{}))> == 2>> {
+    static constexpr uint32_t ELE_NUM_PER_C0 =
+        Catlass::BytesToBits(Catlass::BYTE_PER_C0) / Catlass::SizeOfBits<Element>::value;
+    static constexpr uint32_t ELE_NUM_PER_FRACTAL =
+        Catlass::BytesToBits(Catlass::BYTE_PER_FRACTAL) / Catlass::SizeOfBits<Element>::value;
     static bool const value = (shape<0, 0>(Layout{}) == Catlass::C0_NUM_PER_FRACTAL &&
                                shape<1, 0>(Layout{}) == ELE_NUM_PER_C0 &&
                                stride<1, 0>(Layout{}) == 1 &&
                                stride<1, 1>(Layout{}) == ELE_NUM_PER_FRACTAL);
 };
 
-template <class Element, class Layout, class Enable = void>
+template <class Element, class Layout, class Enable1 = void, class Enable2 = void>
 struct isnZ {
     static bool const value = false;
 };
 
 template <class Element, class Layout>
-struct isnZ<Element, Layout, std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>> {
-    static constexpr uint32_t ELE_NUM_PER_C0 = Catlass::BYTE_PER_C0 / sizeof(Element);
-    static constexpr uint32_t ELE_NUM_PER_FRACTAL = Catlass::BYTE_PER_FRACTAL / sizeof(Element);
+struct isnZ<Element, Layout,
+    std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>,
+    std::enable_if_t<rank_v<decltype(shape<0>(Layout{}))> == 2 &&
+        rank_v<decltype(shape<1>(Layout{}))> == 2>> {
+    static constexpr uint32_t ELE_NUM_PER_C0 =
+        Catlass::BytesToBits(Catlass::BYTE_PER_C0) / Catlass::SizeOfBits<Element>::value;
+    static constexpr uint32_t ELE_NUM_PER_FRACTAL =
+        Catlass::BytesToBits(Catlass::BYTE_PER_FRACTAL) / Catlass::SizeOfBits<Element>::value;
     static bool const value = (shape<0, 0>(Layout{}) == ELE_NUM_PER_C0 &&
                                shape<1, 0>(Layout{}) == Catlass::C0_NUM_PER_FRACTAL &&
                                stride<0, 0>(Layout{}) == 1 &&
                                stride<1, 1>(Layout{}) == ELE_NUM_PER_FRACTAL);
 };
+
+#if (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510)
+// MX scale layout traits: align with catlass_dev (isMxScaleANoTrans/ATrans/BNoTrans/BTrans, isMxScalezZ/isMxScalenN),
+// but keep mix names isMxScaleFor* for ascend950 tile copy dispatch. Second enable_if uses shape mode ranks only;
+// stride subscripts are validated in value (or omitted from enable_if) to avoid ill-formed substitution.
+
+template <class Element, class Layout, class Enable1 = void, class Enable2 = void>
+struct isMxScaleForRowMajorA {
+    static bool const value = false;
+};
+
+template <class Layout>
+struct isMxScaleForRowMajorA<float8_e8m0_t, Layout,
+    std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>,
+    std::enable_if_t<rank_v<decltype(shape<0>(Layout{}))> == 1 &&
+        rank_v<decltype(shape<1>(Layout{}))> == 2>> {
+    static constexpr uint32_t ELE_NUM_PER_C0 = 2;
+    static bool const value =
+        (shape<1, 0>(Layout{}) == ELE_NUM_PER_C0 && stride<1, 0>(Layout{}) == 1 &&
+         stride<1, 1>(Layout{}) == ELE_NUM_PER_C0);
+};
+
+template <class Element, class Layout, class Enable1 = void, class Enable2 = void>
+struct isMxScaleForColumnMajorA {
+    static bool const value = false;
+};
+
+template <class Layout>
+struct isMxScaleForColumnMajorA<float8_e8m0_t, Layout,
+    std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>,
+    std::enable_if_t<rank_v<decltype(shape<0>(Layout{}))> == 1 &&
+        rank_v<decltype(shape<1>(Layout{}))> == 2>> {
+    static constexpr uint32_t ELE_NUM_PER_C0 = 2;
+    static bool const value =
+        (shape<1, 0>(Layout{}) == ELE_NUM_PER_C0 && stride<1, 0>(Layout{}) == 1 &&
+         stride<0>(Layout{}) == ELE_NUM_PER_C0);
+};
+
+template <class Element, class Layout, class Enable1 = void, class Enable2 = void>
+struct isMxScaleForRowMajorB {
+    static bool const value = false;
+};
+
+template <class Layout>
+struct isMxScaleForRowMajorB<float8_e8m0_t, Layout,
+    std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>,
+    std::enable_if_t<rank_v<decltype(shape<0>(Layout{}))> == 2 &&
+        rank_v<decltype(shape<1>(Layout{}))> == 1>> {
+    static constexpr uint32_t ELE_NUM_PER_C0 = 2;
+    static bool const value =
+        (shape<0, 0>(Layout{}) == ELE_NUM_PER_C0 && stride<0, 0>(Layout{}) == 1 &&
+         stride<0, 1>(Layout{}) == ELE_NUM_PER_C0);
+};
+
+template <class Element, class Layout, class Enable1 = void, class Enable2 = void>
+struct isMxScaleForColumnMajorB {
+    static bool const value = false;
+};
+
+template <class Layout>
+struct isMxScaleForColumnMajorB<float8_e8m0_t, Layout,
+    std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>,
+    std::enable_if_t<rank_v<decltype(shape<0>(Layout{}))> == 2 &&
+        rank_v<decltype(shape<1>(Layout{}))> == 1>> {
+    static constexpr uint32_t ELE_NUM_PER_C0 = 2;
+    static bool const value =
+        (shape<0, 0>(Layout{}) == ELE_NUM_PER_C0 && stride<0, 0>(Layout{}) == 1 &&
+         stride<1>(Layout{}) == ELE_NUM_PER_C0);
+};
+
+template <class Element, class Layout, class Enable1 = void, class Enable2 = void>
+struct isMxScaleForzZ {
+    static bool const value = false;
+};
+
+template <class Layout>
+struct isMxScaleForzZ<float8_e8m0_t, Layout,
+    std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>,
+    std::enable_if_t<rank_v<decltype(shape<0>(Layout{}))> == 2 &&
+        rank_v<decltype(shape<1>(Layout{}))> == 2>> {
+    static constexpr uint32_t ELE_NUM_PER_C0 = 2;
+    static constexpr uint32_t ELE_NUM_PER_FRACTAL = 32;
+    static bool const value = (shape<0, 0>(Layout{}) == Catlass::C0_NUM_PER_FRACTAL &&
+                               shape<1, 0>(Layout{}) == ELE_NUM_PER_C0 &&
+                               stride<1, 0>(Layout{}) == 1 &&
+                               stride<1, 1>(Layout{}) == ELE_NUM_PER_FRACTAL);
+};
+
+template <class Element, class Layout, class Enable1 = void, class Enable2 = void>
+struct isMxScaleFornN {
+    static bool const value = false;
+};
+
+template <class Layout>
+struct isMxScaleFornN<float8_e8m0_t, Layout,
+    std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>,
+    std::enable_if_t<rank_v<decltype(shape<0>(Layout{}))> == 2 &&
+        rank_v<decltype(shape<1>(Layout{}))> == 2>> {
+    static constexpr uint32_t ELE_NUM_PER_C0 = 2;
+    static constexpr uint32_t ELE_NUM_PER_FRACTAL = 32;
+    static bool const value = (shape<0, 0>(Layout{}) == ELE_NUM_PER_C0 &&
+                               shape<1, 0>(Layout{}) == Catlass::C0_NUM_PER_FRACTAL &&
+                               stride<0, 0>(Layout{}) == 1 &&
+                               stride<0, 1>(Layout{}) == ELE_NUM_PER_FRACTAL);
+};
+#endif
 
 } // end namespace detail
 
@@ -441,16 +564,32 @@ auto MakeLayout(T const& rows, U const& cols)
         "Unsupported LayoutTag for MakeLayoutFromTag, only support Catlass::layout::RowMajor or"
         "Catlass::layout::ColumnMajor or Catlass::layout::zN or Catlass::layout::nZ or Catlass::layout::zZ or Catlass::layout::L0C");
 
-    constexpr uint32_t ELE_NUM_PER_C0 = Catlass::BYTE_PER_C0 / sizeof(Element);
-    constexpr uint32_t ELE_NUM_PER_FRACTAL = Catlass::BYTE_PER_FRACTAL / sizeof(Element);
+    constexpr uint32_t ELE_NUM_PER_C0 =
+        Catlass::BytesToBits(Catlass::BYTE_PER_C0) / Catlass::SizeOfBits<Element>::value;
+    constexpr uint32_t ELE_NUM_PER_FRACTAL =
+        Catlass::BytesToBits(Catlass::BYTE_PER_FRACTAL) / Catlass::SizeOfBits<Element>::value;
 
     if constexpr (std::is_same_v<LayoutTag, Catlass::layout::VectorLayout>) {
         return MakeLayout(MakeShape(cols), MakeStride(Int<1>{}), MakeShape(cols));
     } else if constexpr (std::is_same_v<LayoutTag, Catlass::layout::RowMajor>) {
+#if (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510)
+        if constexpr (std::is_same_v<Element, float4_e2m1x2_t> || std::is_same_v<Element, float4_e1m2x2_t>) {
+            return MakeLayout(MakeShape(rows, cols),
+                MakeStride((int64_t)RoundUp(cols, 2), Int<1>{}),
+                MakeShape(rows, cols));
+        }
+#endif
         return MakeLayout(MakeShape(rows, cols),
                           MakeStride((int64_t)cols, Int<1>{}),
                           MakeShape(rows, cols));
     } else if constexpr (std::is_same_v<LayoutTag, Catlass::layout::ColumnMajor>) {
+#if (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510)
+        if constexpr (std::is_same_v<Element, float4_e2m1x2_t> || std::is_same_v<Element, float4_e1m2x2_t>) {
+            return MakeLayout(MakeShape(rows, cols),
+                MakeStride(Int<1>{}, (int64_t)RoundUp(rows, 2)),
+                MakeShape(rows, cols));
+        }
+#endif
         return MakeLayout(MakeShape(rows, cols),
                           MakeStride(Int<1>{}, (int64_t)rows),
                           MakeShape(rows, cols));
@@ -487,6 +626,76 @@ auto MakeLayout(T const& rows, U const& cols)
             MakeShape(rows, cols));
     }
 }
+
+#if (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510)
+template <class Element, class LayoutTag, bool isMxScaleB, class T, class U>
+CATLASS_HOST_DEVICE constexpr
+auto MakeMxScaleLayout(T const& rows, U const& cols)
+{
+    static_assert(
+        std::is_same_v<Element, float8_e8m0_t> &&
+            (std::is_same_v<LayoutTag, Catlass::layout::RowMajor> ||
+             std::is_same_v<LayoutTag, Catlass::layout::ColumnMajor> ||
+             std::is_same_v<LayoutTag, Catlass::layout::zZ> || std::is_same_v<LayoutTag, Catlass::layout::nN>),
+        "only support RowMajor, ColumnMajor, zZ, nN in fp8_e8m0_t dtype"
+    );
+
+    constexpr uint32_t ELE_NUM_PER_C0 = 2;
+    constexpr uint32_t ELE_NUM_PER_FRACTAL = 32;
+
+    if constexpr (std::is_same_v<LayoutTag, Catlass::layout::RowMajor>) {
+        if constexpr (!isMxScaleB) {
+            return MakeLayout(
+                MakeShape(rows, MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv(cols, Int<ELE_NUM_PER_C0>{}))),
+                MakeStride(RoundUp(cols, Int<ELE_NUM_PER_C0>{}), MakeStride(Int<1>{}, Int<ELE_NUM_PER_C0>{})),
+                MakeShape(rows, cols));
+        } else {
+            return MakeLayout(
+                MakeShape(MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv(rows, Int<ELE_NUM_PER_C0>{})), cols),
+                MakeStride(MakeStride(Int<1>{}, cols * ELE_NUM_PER_C0), Int<ELE_NUM_PER_C0>{}),
+                MakeShape(rows, cols));
+        }
+    } else if constexpr (std::is_same_v<LayoutTag, Catlass::layout::ColumnMajor>) {
+        if constexpr (!isMxScaleB) {
+            return MakeLayout(
+                MakeShape(rows, MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv(cols, Int<ELE_NUM_PER_C0>{}))),
+                MakeStride(Int<ELE_NUM_PER_C0>{}, MakeStride(Int<1>{}, rows * ELE_NUM_PER_C0)),
+                MakeShape(rows, cols));
+        } else {
+            return MakeLayout(
+                MakeShape(MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv(rows, Int<ELE_NUM_PER_C0>{})), cols),
+                MakeStride(MakeStride(Int<1>{}, Int<ELE_NUM_PER_C0>{}), RoundUp(rows, Int<ELE_NUM_PER_C0>{})),
+                MakeShape(rows, cols));
+        }
+    } else if constexpr (std::is_same_v<LayoutTag, Catlass::layout::zZ>) {
+        return MakeLayout(
+            MakeShape(
+                MakeShape(Int<Catlass::C0_NUM_PER_FRACTAL>{}, CeilDiv(rows, Int<Catlass::C0_NUM_PER_FRACTAL>{})),
+                MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv(cols, Int<ELE_NUM_PER_C0>{}))
+            ),
+            MakeStride(
+                MakeStride(
+                    Int<ELE_NUM_PER_C0>{}, RoundUp((int64_t)cols, Int<ELE_NUM_PER_C0>{}) * Catlass::C0_NUM_PER_FRACTAL
+                ),
+                MakeStride(Int<1>{}, Int<ELE_NUM_PER_FRACTAL>{})
+            ),
+            MakeShape(rows, cols));
+    } else {
+        return MakeLayout(
+            MakeShape(
+                MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv(rows, Int<ELE_NUM_PER_C0>{})),
+                MakeShape(Int<Catlass::C0_NUM_PER_FRACTAL>{}, CeilDiv(cols, Int<Catlass::C0_NUM_PER_FRACTAL>{}))
+            ),
+            MakeStride(
+                MakeStride(Int<1>{}, Int<ELE_NUM_PER_FRACTAL>{}),
+                MakeStride(
+                    Int<ELE_NUM_PER_C0>{}, RoundUp((int64_t)rows, Int<ELE_NUM_PER_C0>{}) * Catlass::C0_NUM_PER_FRACTAL
+                )
+            ),
+            MakeShape(rows, cols));
+    }
+}
+#endif
 
 
 namespace detail {
@@ -535,10 +744,32 @@ auto GetTileLayout(Layout const& layout, TileShape const& tileShape, Coord const
         static_assert(rank_v<TileShape> == 2,
                       "GetTileLayout: for depth>1 (fractal) layouts, TileShape must be rank-2 (rows, cols).");
 
-        if constexpr (is_static<decltype(shape<0, 0>(layout))>::value &&
-                      is_static<decltype(shape<1, 0>(layout))>::value) {
-            const uint32_t rows = get<0>(tileShape);
-            const uint32_t cols = get<1>(tileShape);
+        const uint32_t rows = get<0>(tileShape);
+        const uint32_t cols = get<1>(tileShape);
+
+        // MakeMxScaleLayout RowMajor A 等：第一维为行长度，第二维为 (C0, ceil(cols/C0))；与 catlass_dev `MakeLayoutTile` 中
+        // rank(shape<0>)==1 && rank(shape<1>)==2 分支一致。
+        if constexpr (Layout::depth == 2 && Layout::rank == 2 && rank_v<decltype(shape<0>(Layout{}))> == 1 &&
+                      rank_v<decltype(shape<1>(Layout{}))> == 2) {
+            constexpr uint32_t ELE_NUM_PER_C0 = decltype(shape<1, 0>(layout))::value;
+            return MakeLayout(
+                MakeShape(rows, MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv(cols, Int<ELE_NUM_PER_C0>{}))),
+                layout.stride(),
+                tileOriginShape);
+        }
+        // MakeMxScaleLayout B 侧等：shape 为 ((C0, ceil(rows/C0)), cols)；与 catlass_dev `MakeLayoutTile` 中
+        // rank(shape<0>)==2 && rank(shape<1>)==1 分支一致。
+        else if constexpr (Layout::depth == 2 && Layout::rank == 2 && rank_v<decltype(shape<0>(Layout{}))> == 2 &&
+                           rank_v<decltype(shape<1>(Layout{}))> == 1) {
+            constexpr uint32_t ELE_NUM_PER_C0 = decltype(shape<0, 0>(layout))::value;
+            return MakeLayout(
+                MakeShape(MakeShape(Int<ELE_NUM_PER_C0>{}, CeilDiv(rows, Int<ELE_NUM_PER_C0>{})), cols),
+                layout.stride(),
+                tileOriginShape);
+        }
+        // 典型 fractal（zN/nZ 等）：shape<0,0>、shape<1,0> 均为编译期常量；嵌套 ((r0,...),(c0,...))。
+        else if constexpr (is_static<decltype(shape<0, 0>(layout))>::value &&
+                           is_static<decltype(shape<1, 0>(layout))>::value) {
             constexpr uint32_t dstInnerShapeRow = decltype(shape<0, 0>(layout))::value;
             constexpr uint32_t dstInnerShapeCol = decltype(shape<1, 0>(layout))::value;
             return MakeLayout(
@@ -546,9 +777,9 @@ auto GetTileLayout(Layout const& layout, TileShape const& tileShape, Coord const
                           MakeShape(Int<dstInnerShapeCol>{}, CeilDiv<dstInnerShapeCol>(cols))),
                 layout.stride(),
                 tileOriginShape);
-        } else {
-            const uint32_t rows = get<0>(tileShape);
-            const uint32_t cols = get<1>(tileShape);
+        }
+        // 内层块尺寸非编译期常量：运行期从 layout 读取再分块。
+        else {
             const uint32_t dstInnerShapeRow = shape<0, 0>(layout);
             const uint32_t dstInnerShapeCol = shape<1, 0>(layout);
             return MakeLayout(
