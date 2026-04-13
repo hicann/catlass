@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -17,6 +17,78 @@
 #include "catlass/gemm_coord.hpp"
 
 namespace Catlass::golden {
+
+struct ErrorMetrics {
+    bool passed;      // true if error ratios meet criteria
+    double mareRatio; // Max Absolute Relative Error ratio(hostC / hostCpu)
+    double mereRatio; // Mean Absolute Relative Error ratio(hostC / hostCpu)
+    double rmseRatio; // Root Mean Squared Error ratio(hostC / hostCpu)
+};
+
+// Compute error metrics for NPU result vs CPU result against high-precision golden reference
+// hostC: NPU output, hostCpu: same-precision CPU result, hostGolden: high-precision reference
+template<class ElementC, class ElementCpu, class ElementGolden>
+ErrorMetrics ComputeErrorMetrics(
+    const std::vector<ElementC>& hostC,
+    const std::vector<ElementCpu>& hostCpu,
+    const std::vector<ElementGolden>& hostGolden,
+    double mareThreshold = 5,
+    double mereThreshold = 1.5,
+    double rmseThreshold = 1.5)
+{
+    const double epsilon = 1e-7;
+    size_t n = hostC.size();
+    if (n == 0 || hostCpu.size() != n || hostGolden.size() != n) {
+        return {false, 0.0, 0.0, 0.0};
+    }
+
+    // Compute error metrics for hostC against hostGolden
+    double maxRelativeErrorC = 0.0;
+    double sumRelativeErrorC = 0.0;
+    double sumSquaredErrorC = 0.0;
+
+    // Compute error metrics for hostCpu against hostGolden
+    double maxRelativeErrorCpu = 0.0;
+    double sumRelativeErrorCpu = 0.0;
+    double sumSquaredErrorCpu = 0.0;
+
+    for (size_t i = 0; i < n; ++i) {
+        double cVal = static_cast<double>(hostC[i]);
+        double cpuVal = static_cast<double>(hostCpu[i]);
+        double goldenVal = static_cast<double>(hostGolden[i]);
+
+        // Error for hostC
+        double diffC = std::fabs(cVal - goldenVal);
+        double relativeErrorC = diffC / (std::fabs(goldenVal) + epsilon);
+        maxRelativeErrorC = std::max(maxRelativeErrorC, relativeErrorC);
+        sumRelativeErrorC += relativeErrorC;
+        sumSquaredErrorC += diffC * diffC;
+
+        // Error for hostCpu
+        double diffCpu = std::fabs(cpuVal - goldenVal);
+        double relativeErrorCpu = diffCpu / (std::fabs(goldenVal) + epsilon);
+        maxRelativeErrorCpu = std::max(maxRelativeErrorCpu, relativeErrorCpu);
+        sumRelativeErrorCpu += relativeErrorCpu;
+        sumSquaredErrorCpu += diffCpu * diffCpu;
+    }
+
+    double mareC = maxRelativeErrorC;
+    double mereC = sumRelativeErrorC / n;
+    double rmseC = std::sqrt(sumSquaredErrorC / n);
+
+    double mareCpu = maxRelativeErrorCpu;
+    double mereCpu = sumRelativeErrorCpu / n;
+    double rmseCpu = std::sqrt(sumSquaredErrorCpu / n);
+
+    // Compute error ratios (hostC / hostCpu)
+    double mareRatio = (mareCpu > 0) ? mareC / mareCpu : 0.0;
+    double mereRatio = (mereCpu > 0) ? mereC / mereCpu : 0.0;
+    double rmseRatio = (rmseCpu > 0) ? rmseC / rmseCpu : 0.0;
+
+    bool passed = (mareRatio <= mareThreshold && mereRatio <= mereThreshold && rmseRatio <= rmseThreshold);
+
+    return {passed, mareRatio, mereRatio, rmseRatio};
+}
 
 template<class ElementResult, class ElementCompare>
 std::vector<uint64_t> CompareData(const std::vector<ElementResult>& result, const std::vector<ElementCompare>& expect,

@@ -11,3 +11,4 @@
 set_source_files_properties(basic_matmul_tla.cpp PROPERTIES LANGUAGE ASC)
 catlass_example_add_executable(43_ascend950_basic_matmul cube basic_matmul_tla.cpp)
 target_compile_definitions(43_ascend950_basic_matmul PRIVATE L2_CACHE_HINT)
+target_link_libraries(43_ascend950_basic_matmul PRIVATE m)

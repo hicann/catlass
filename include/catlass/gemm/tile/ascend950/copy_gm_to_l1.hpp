@@ -107,20 +107,33 @@ struct TileCopyTla<
             "The input parameters do not match. TensorSrc must be GM and zN, while TensorDst must be L1 and zN"
         );
 
+        const uint32_t srcOuterStrideCol = tla::get<1, 1>(srcTensor.stride());
+        const uint32_t dstOuterStrideCol = tla::get<1, 1>(dstTensor.stride());
+
         uint32_t blockCount = CeilDiv<ELE_NUM_PER_C0>(tla::get<1>(srcTensor.originShape()));
         uint32_t blockLen = tla::get<0>(srcTensor.originShape());
-
-        AscendC::DataCopyParams repeatParams;
-
-        repeatParams.blockCount = blockCount;
-        repeatParams.blockLen = blockLen;
-        repeatParams.srcStride = tla::get<1, 1>(srcTensor.stride()) / ELE_NUM_PER_C0 - blockLen;
-        repeatParams.dstStride = tla::get<1, 1>(dstTensor.stride()) / ELE_NUM_PER_C0 - blockLen;
 
         auto dstOffset = dstTensor.layout()(dstTensor.coord());
         auto srcOffset = srcTensor.layout()(srcTensor.coord());
 
-        AscendC::DataCopy(dstTensor.data()[dstOffset], srcTensor.data()[srcOffset], repeatParams);
+        AscendC::DataCopyParams repeatParams;
+        if (srcOuterStrideCol / ELE_NUM_PER_C0 <= STRIDE_LIMIT) {
+            repeatParams.blockCount = blockCount;
+            repeatParams.blockLen = blockLen;
+            repeatParams.srcStride = srcOuterStrideCol / ELE_NUM_PER_C0 - blockLen;
+            repeatParams.dstStride = dstOuterStrideCol / ELE_NUM_PER_C0 - blockLen;
+            AscendC::DataCopy(dstTensor.data()[dstOffset], srcTensor.data()[srcOffset], repeatParams);
+        } else {
+            repeatParams.blockCount = 1;
+            repeatParams.blockLen = blockLen;
+            repeatParams.srcStride = 0;
+            repeatParams.dstStride = 0;
+            for (uint32_t i = 0; i < blockCount; i++) {
+                AscendC::DataCopy(dstTensor.data()[dstOffset + i * dstOuterStrideCol],
+                    srcTensor.data()[srcOffset + i * srcOuterStrideCol],
+                    repeatParams);
+            }
+        }
     }
 };
 
@@ -619,13 +632,23 @@ struct CopyGmToL1<Arch::Ascend950, Gemm::GemmType<Element, layout::zN>> {
         const uint32_t blockLen = layoutSrc.shape(0) * layoutSrc.shape(1);
         AscendC::DataCopyParams repeatParams;
 
-        repeatParams.blockCount = layoutSrc.shape(3);
-        repeatParams.blockLen = blockLen;
-        
-        repeatParams.srcStride = layoutSrc.stride(3) / ELE_NUM_PER_C0 - blockLen;
-        repeatParams.dstStride = layoutDst.stride(3) / ELE_NUM_PER_C0 - blockLen;
-
-        AscendC::DataCopy(dstTensor, srcTensor, repeatParams);
+        if (layoutSrc.stride(3) / ELE_NUM_PER_C0 < STRIDE_LIMIT) {
+            repeatParams.blockCount = layoutSrc.shape(3);
+            repeatParams.blockLen = blockLen;
+            repeatParams.srcStride = layoutSrc.stride(3) / ELE_NUM_PER_C0 - blockLen;
+            repeatParams.dstStride = layoutDst.stride(3) / ELE_NUM_PER_C0 - blockLen;
+            AscendC::DataCopy(dstTensor, srcTensor, repeatParams);
+        } else {
+            repeatParams.blockCount = 1;
+            repeatParams.blockLen = blockLen;
+            repeatParams.srcStride = 0;
+            repeatParams.dstStride = 0;
+            for (uint32_t i = 0; i < layoutSrc.shape(3); i++) {
+                uint64_t dstOffset = i * layoutDst.stride(3);
+                uint64_t srcOffset = i * layoutSrc.stride(3);
+                AscendC::DataCopy(dstTensor[dstOffset], srcTensor[srcOffset], repeatParams);
+            }
+        }
     }
 };
 

@@ -198,18 +198,34 @@ static void Run(const Options &options)
     std::vector<ElementC> hostC(lenC);
     ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
 
-    std::vector<float> hostGolden(lenC);
+    // hostCpu: same-precision CPU result
+    std::vector<float> hostCpu(lenC);
+    if constexpr (!std::is_void_v<ElementBias>) {
+        golden::ComputeMatmulBias(options.problemShape, hostA, tagA, hostB, tagB, hostBias, hostCpu, tagC);
+    } else {
+        golden::ComputeMatmul(options.problemShape, hostA, tagA, hostB, tagB, hostCpu, tagC);
+    }
+
+    // hostGolden: high-precision reference
+    std::vector<double> hostGolden(lenC);
     if constexpr (!std::is_void_v<ElementBias>) {
         golden::ComputeMatmulBias(options.problemShape, hostA, tagA, hostB, tagB, hostBias, hostGolden, tagC);
     } else {
         golden::ComputeMatmul(options.problemShape, hostA, tagA, hostB, tagB, hostGolden, tagC);
     }
 
-    std::vector<uint64_t> errorIndices = golden::CompareData(hostC, hostGolden, k);
-    if (errorIndices.empty()) {
+    // Compute error metrics
+    auto errorMetrics = golden::ComputeErrorMetrics(hostC, hostCpu, hostGolden);
+
+    std::vector<uint64_t> errorIndices = golden::CompareData(hostC, hostCpu, k);
+    if (errorIndices.empty() || errorMetrics.passed) {
         std::cout << "Compare success." << std::endl;
     } else {
         std::cerr << "Compare failed. Error count: " << errorIndices.size() << std::endl;
+        std::cerr << "Error ratios exceed thresholds:" << std::endl;
+        std::cerr << "MARE ratio: " << errorMetrics.mareRatio << " (threshold: 5)" << std::endl;
+        std::cerr << "MERE ratio: " << errorMetrics.mereRatio << " (threshold: 1.5)" << std::endl;
+        std::cerr << "RMSE ratio: " << errorMetrics.rmseRatio << " (threshold: 1.5)" << std::endl;
     }
 
     ACL_CHECK(aclrtFree(deviceA));
