@@ -26,7 +26,7 @@ O = FlashAttention(Q, K, V, mask)
 - mask: Attention mask（可选）
 - O: Output tensor，形状 [batch, qSeqlen, qHeads, headDim]
 
-<img src="../../docs/figures/flash_attention_infer_operator.png" width="40%">
+<img src="../../docs/zh/figures/flash_attention_infer_operator.png" width="40%">
 
 * 支持GQA功能。
 * 支持Paged Attention模式，通过blockTable实现KV Cache的分页管理。
@@ -34,7 +34,7 @@ O = FlashAttention(Q, K, V, mask)
 * CV流水preload，AIC和AIV多级流水并行，提高计算效率。
 * 当前模板Kernel暂未支持ActualSeq可变长特性。
 
-<img src="../../docs/figures/flash_attention_infer_cv_pipeline.png" width="50%">
+<img src="../../docs/zh/figures/flash_attention_infer_cv_pipeline.png" width="50%">
 
 ---
 
@@ -120,7 +120,7 @@ using TileCopyRescaleO = Epilogue::Tile::TileCopyRescaleO<ArchTag, ElementO, Lay
 using CopyUbToL1P = Tile::CopyUb2L1Tla<ArchTag, decltype(vf1OutUb), TensorDst>;
 ```
 
-这些Tile组件负责数据在GM、L1、L0和UB之间的搬运，以及矩阵乘法和Sofemax的底层实现。PackedTileCopyTlaToUB支持TLA（Tensor Layout Abstraction）布局，能够高效地处理不同布局的数据搬运需求。Tile::CopyUb2L1Tla支持AIV Ub上的计算结果直接搬运到AIC L1上，相比之前Ub->GM->L1的搬运实现了效率提升。
+这些Tile组件负责数据在GM、L1、L0和UB之间的搬运，以及矩阵乘法和Softmax的底层实现。PackedTileCopyTlaToUB支持TLA（Tensor Layout Abstraction）布局，能够高效地处理不同布局的数据搬运需求。Tile::CopyUb2L1Tla支持AIV Ub上的计算结果直接搬运到AIC L1上，相比之前Ub->GM->L1的搬运实现了效率提升。
 
 ---
 
@@ -358,7 +358,7 @@ int32_t GetFATilingParam(const FAInfo &faInfo, uint32_t blockDim, FATilingData& 
 - `actualSeqLengthsKV`：KV实际序列长度数组
 - `sOuterSize`：外层块大小（128）
 - `sInnerSize`：内层块大小（128）
-- `coreWightTarget`：每个核的目标计算量
+- `coreWeightTarget`：每个核的目标计算量
 - `curCore`（输入/输出）：当前核索引
 
 **算法流程**：
@@ -382,7 +382,7 @@ int32_t GetFATilingParam(const FAInfo &faInfo, uint32_t blockDim, FATilingData& 
            sInnerBlockNums = GetSInnerBlockNums(...)
 
         2. 贪心判断是否切换到新核:
-           diff = coreWightTarget * (curCore + 1) - curWeight
+           diff = coreWeightTarget * (curCore + 1) - curWeight
            if sInnerBlockNums - diff > diff:
               curCore += 1
               bnAxisStartIdx[curCore] = batchIdx * qHeads + headNum
@@ -646,7 +646,7 @@ for (int64_t kvSeqLoopCount = runParam.kvSeqLoopStartIdx; kvSeqLoopCount <= kvSe
 
 ### 6.1 流水线时序图
 
-<img src="../../docs/figures/flash_attention_infer_cv_pipeline.png" width="50%">
+<img src="../../docs/zh/figures/flash_attention_infer_cv_pipeline.png" width="50%">
 
 ### 6.2 同步机制
 

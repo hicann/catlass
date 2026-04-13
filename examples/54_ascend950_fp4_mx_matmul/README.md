@@ -1,4 +1,13 @@
-# BasicMatmulTla Example Readme
+# MXFP4MatmulTla Example Readme
+
+**注意：社区包暂不支持 950 能力，后续支持的版本敬请期待**
+
+## 功能介绍
+
+- 演示 Ascend 950 上的 **MX FP4 矩阵乘**：左矩阵 A、右矩阵 B 经 MX 缩放（`float8_e8m0`）后在 Cube 上完成乘加，输出为 FP32。
+- 本示例中 A、B 元素类型为 `float4_e2m1x2_t`（E2M1 打包）；缩放因子为 `float8_e8m0_t`。未启用 Bias（`ElementBias` 为 `void`）。
+- 默认布局为 A `RowMajor`、B `ColumnMajor`、C `RowMajor`，与 `gen_data.py` 在 `trans_a=0, trans_b=1` 时生成的数据一致。
+
 ## 代码组织
 ```
 ├── 54_ascend950_fp4_mx_matmul
@@ -8,7 +17,7 @@
 │   └── fp4_mx_matmul.cpp # 主文件
 ```
 ## 使用示例
-- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/quickstart.md#算子编译)，本用例为 Ascend950（3510）算子，编译时需加 `-DCATLASS_ARCH=3510`。L1 分块为 256×256×448、L0 为 256×256×128，以满足 512KiB L1 与 L0 容量约束（勿随意增大 L1 的 K，否则 `L1TileShape exceeding the L1 space`）。
+- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)，本用例为 Ascend950（3510）算子，编译时需加 `-DCATLASS_ARCH=3510`。L1 分块为 256×256×448、L0 为 256×256×128，以满足 512KiB L1 与 L0 容量约束（勿随意增大 L1 的 K，否则 `L1TileShape exceeding the L1 space`）。
 - 执行算子
 ```
 # 编译指定用例
@@ -64,10 +73,10 @@ MxScaleA、MxScaleB支持数据类型为float8_e8m0
 |l1AStages | 2 | L1上加载矩阵A的Buffer数量 |
 |l1BStages | 2 | L1上加载矩阵B的Buffer数量 |
 |l0AStages | 2 | L0上加载矩阵A的Buffer数量 |
-|l0AStages | 2 | L0上加载矩阵B的Buffer数量 |
+|l0BStages | 2 | L0上加载矩阵B的Buffer数量 |
 
 设矩阵Shape为`M N K`, L1上的分块大小为`m1 n1 k1`，M方向的分块数量`mTiles = CeilDiv(M, m1)`，N方向的分块数量`nTiles = CeilDiv(N, n1)`，总任务数为`taskBlocks = mTiles * nTiles`，在以下两种情况下可以选择开启enableL1Resident：
 
-1.`mTies = 1`，且`nTiles > CoreNum`，且`K < 2 * k1`。此时还可以设置`l0CStages=2`(需要关闭enableUnitFlag)，如果空间不足无法设置`l0CStages=2`，则将`n1`设置为原来的一半。
+1.`mTiles = 1`，且`nTiles > CoreNum`，且`K < 2 * k1`。此时还可以设置`l0CStages=2`(需要关闭enableUnitFlag)，如果空间不足无法设置`l0CStages=2`，则将`n1`设置为原来的一半。
 
-2.`nTies = 1`，且`mTiles > CoreNum`, 且`K < 2 * k1`。此时还可以设置`l0CStages=2`(需要关闭enableUnitFlag)，如果空间不足无法设置`l0CStages=2`，则将`m1`设置为原来的一半。
+2.`nTiles = 1`，且`mTiles > CoreNum`, 且`K < 2 * k1`。此时还可以设置`l0CStages=2`(需要关闭enableUnitFlag)，如果空间不足无法设置`l0CStages=2`，则将`m1`设置为原来的一半。

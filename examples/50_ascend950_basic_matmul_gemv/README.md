@@ -13,7 +13,7 @@
 
 ## 使用示例
 
-- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/1_Practice/01_quick_start.md#编译执行)，本用例为Ascend950算子，编译时需加-DCATLASS_ARCH=3510
+- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)，本用例为Ascend950算子，编译时需加-DCATLASS_ARCH=3510
 - 执行算子
 
 ```
@@ -45,10 +45,10 @@ BasicMatmul默认使用的DispatchPolicy MmadPingpong支持以下几个模板参
 |l1AStages | 1 | L1上加载矩阵A的Buffer数量 |
 |l1BStages | 1 | L1上加载矩阵B的Buffer数量 |
 |l0AStages | 1 | L0上加载矩阵A的Buffer数量 |
-|l0AStages | 1 | L0上加载矩阵B的Buffer数量 |
+|l0BStages | 1 | L0上加载矩阵B的Buffer数量 |
 
 设矩阵Shape为`M N K`, L1上的分块大小为`m1 n1 k1`，M方向的分块数量`mTiles = CeilDiv(M, m1)`，N方向的分块数量`nTiles = CeilDiv(N, n1)`，总任务数为`taskBlocks = mTiles * nTiles`，在以下两种情况下可以选择开启enableL1Resident：
 
-1.`mTies = 1`，且`nTiles > CoreNum`，且`K < 2 * k1`。此时还可以设置`l0CStages=2`(需要关闭enableUnitFlag)，如果空间不足无法设置`l0CStages=2`，则将`n1`设置为原来的一半。
+1.`mTlies = 1`，且`nTiles > CoreNum`，且`K < 2 * k1`。此时还可以设置`l0CStages=2`(需要关闭enableUnitFlag)，如果空间不足无法设置`l0CStages=2`，则将`n1`设置为原来的一半。
 
-2.`nTies = 1`，且`mTiles > CoreNum`, 且`K < 2 * k1`。此时还可以设置`l0CStages=2`(需要关闭enableUnitFlag)，如果空间不足无法设置`l0CStages=2`，则将`m1`设置为原来的一半。
+2.`nTlies = 1`，且`mTiles > CoreNum`, 且`K < 2 * k1`。此时还可以设置`l0CStages=2`(需要关闭enableUnitFlag)，如果空间不足无法设置`l0CStages=2`，则将`m1`设置为原来的一半。

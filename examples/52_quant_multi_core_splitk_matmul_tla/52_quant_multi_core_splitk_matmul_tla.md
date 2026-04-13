@@ -12,7 +12,7 @@
 
 ## 样例实现
 
-CATLASS [`52_quant_multi_core_splitk_matmul_tla`样例](./README.md)算子是基于CATLASS Gemm API实现的昇腾亲和Matmul算子,针对大尺寸矩阵计算场景优化设计，关键算子件包括以下几部分:
+CATLASS [`52_quant_multi_core_splitk_matmul_tla`样例](./README.md)算子是基于CATLASS Gemm API实现的昇腾亲和Matmul算子，针对大尺寸矩阵计算场景优化设计，关键算子组件包括以下几部分:
 
  - **Example组装**：[quant_multi_core_splitk_matmul_tla.cpp](./quant_multi_core_splitk_matmul_tla.cpp)
  - **Kernel实现**：

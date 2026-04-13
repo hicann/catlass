@@ -8,11 +8,11 @@
 ```
 ## 功能介绍
 - 该算子支持左矩阵采用pergroup，右矩阵采用perblock的量化组合模式。
-- cube侧计算时沿L0shape的大小切块，每次计算baseK的数据后，搬运到ub，在vector侧对该部分数据，先取得对应左矩阵的缩放因子和对应有矩阵的缩放因子，再与该块数据计算,
+- cube侧计算时沿L0shape的大小切块，每次计算baseK的数据后，搬运到ub，在vector侧对该部分数据，先取得对应左矩阵的缩放因子和对应右矩阵的缩放因子，再与该块数据计算,
 - 最后再vector上完成累加后输出
 
 ## 使用示例
-- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/1_Practice/01_quick_start.md#编译执行)，本用例为Ascend 950算子，编译时需加-DCATLASS_ARCH=3510
+- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)，本用例为Ascend 950算子，编译时需加-DCATLASS_ARCH=3510
 - 执行算子
 ```
 # 编译指定用例

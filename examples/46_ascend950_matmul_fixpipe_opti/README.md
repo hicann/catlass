@@ -11,7 +11,7 @@
 该算子每完成一个基本块的计算，结果数据即通过Fixpipe搬出到UB上。当启用双目标模式控制（dualDstCtrl）时，计算结果矩阵会被分成两部分，并行写入两个Vector核（一个Cube核对应两个Vector核）的专属UB中。每个Vector核的UB支持独立开启Double Buffer以加速流水效率。
 
 ## 使用示例
-- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/quickstart.md#算子编译)，本用例为Ascend 950算子，编译时需加-DCATLASS_ARCH=3510
+- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)，本用例为Ascend 950算子，编译时需加-DCATLASS_ARCH=3510
 - 执行算子
 ```
 # 编译指定用例

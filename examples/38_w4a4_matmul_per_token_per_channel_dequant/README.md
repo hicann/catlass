@@ -65,7 +65,7 @@ $$
 
 ## 使用示例
 
-- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/1_Practice/01_quick_start.md#编译执行)   
+- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)   
 
 - 执行`gen_data.py`，生成测试样例
  
@@ -95,7 +95,7 @@ Compare success.
 ```
 
 --------------
-当前样例右矩阵采用NZ排布(即`LayoutB`为`layout::zN`，详见[`layout.hpp`](../../include/catlass/layout/layout.hpp))，如需修改为`layout::nZ`格式，请对`example/38_w4a4_matmul/w4a4_matmul.cpp`做调整：
+当前样例右矩阵采用NZ排布（即`LayoutB`为`layout::zN`，详见[`layout.hpp`](../../include/catlass/layout/layout.hpp)），如需修改为`layout::nZ`格式，请对`example/38_w4a4_matmul/w4a4_matmul.cpp`做调整：
 
 ```diff
 - using LayoutB = layout::zN;

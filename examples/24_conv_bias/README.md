@@ -41,7 +41,7 @@
 
 ## 使用示例
 
-- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/1_Practice/01_quick_start.md#编译执行)
+- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)
 - 第一步， 首先执行`gen_data.py`，生成测试样例，测试用例需要从命令行输入。
 
 ```

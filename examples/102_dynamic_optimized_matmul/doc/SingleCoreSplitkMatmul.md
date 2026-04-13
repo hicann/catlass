@@ -1,10 +1,10 @@
-# SingleCoreSplitkMamtul
+# SingleCoreSplitkMatmul
 
 ## 1 模板说明
 
 ![image-20260210002058199](https://raw.gitcode.com/weixin_42818618/picture0/raw/main/image-20260210002058199.png)
 
-CommonMatmul要求个任务块的完整计算结果在一个AI Core上产生。为了避免不必要的L1->L0的重复数据搬运，且能在L0C上完成整个K方向的累加，在CommonMatmul中，要求L0TileM=L1TileM，L0TileN=L1TileN，L0TileK在L0的空间约束下取最大值。
+CommonMatmul要求各任务块的完整计算结果在一个AI Core上产生。为了避免不必要的L1->L0的重复数据搬运，且能在L0C上完成整个K方向的累加，在CommonMatmul中，要求L0TileM=L1TileM，L0TileN=L1TileN，L0TileK在L0的空间约束下取最大值。
 
 L0C的空间相比L1较小（在A2上L0C为128K，L1为256K），在增大L1TileM和L1TileN的过程中，往往L0C先达到空间约束点，例如最常用的L1TileShape，假设数据类型为half，L1TileM=128，L1TileN=256，L1TileK=256，这时刚好用满L0C（`128*256*sizeof(float)=128K`），但是L1只用了`128*256*2*2+256*256*2*2=384K(双缓冲)`，如果L1TileShape增大为L1TileM=256，L1TileN=256，L1TileK=256，刚好用满L1，但是L0C上无法存放`256*256*sizeof(float)=256K`的基本块，这时就需要进行单核切K，将部分和暂存到GM上，通过原子加累加部分和。在单核切K模板中，可以L0TileM<L1TileM，L0TileN<L1TileN。如图所示，L1TileM=2L0TileM，L1TileN=L0TileN，L0C上每次产生`L0TileM*L0TileN`大小的部分和，之后将其通过原子加累加到GM上的workspace，图中的matmul一共产生了8个部分和，对应位置的部分和进行3次原子加得到最终的结果。
 

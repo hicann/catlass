@@ -10,7 +10,7 @@ StreamkMatmul的具体详细原理请参考论文[Stream-K: Work-centric Paralle
 
 ![image-20260121101922888](https://raw.gitcode.com/weixin_42818618/picture0/raw/main/image-20260121101922888.png)
 
-如图所示，对于M=512，N=2048，K=1280的Shape，共有32个任务块，假设有20个核心，需要分两轮完成计算（图中的Swizzle请参考[swizzle_explanation](../../../docs/2_Design/01_kernel_design/02_swizzle.md)），第一轮每个核心都有一个任务块，负载是均衡的，所以不关心第一轮，但是第二轮，只有12个任务块计算，有8个核心空闲，如图所示：
+如图所示，对于M=512，N=2048，K=1280的Shape，共有32个任务块，假设有20个核心，需要分两轮完成计算（图中的Swizzle请参考[swizzle_explanation](../../../docs/zh/2_Design/01_kernel_design/02_swizzle.md)），第一轮每个核心都有一个任务块，负载是均衡的，所以不关心第一轮，但是第二轮，只有12个任务块计算，有8个核心空闲，如图所示：
 
 ![image-20260121102302163](https://raw.gitcode.com/weixin_42818618/picture0/raw/main/image-20260121102302163.png)
 
@@ -18,11 +18,11 @@ StreamkMatmul的具体详细原理请参考论文[Stream-K: Work-centric Paralle
 
 ![image-20260121103528628](https://raw.gitcode.com/weixin_42818618/picture0/raw/main/image-20260121103528628.png)
 
-这样第二轮计算的负载就均匀分到了所有核心上。有的核心将会计算当前任务块尾段的K Tie以及下一个任务块首段的K Tile，例如core 1，这两段计算结果属于不同结果块的部分和，需要分开存储到workspace。
+这样第二轮计算的负载就均匀分到了所有核心上。有的核心将会计算当前任务块尾段的K Tile以及下一个任务块首段的K Tile，例如core 1，这两段计算结果属于不同结果块的部分和，需要分开存储到workspace。
 
 ![image-20260121114730452](https://raw.gitcode.com/weixin_42818618/picture0/raw/main/image-20260121114730452.png)
 
-每个核心分配两片workspace，总的workspace大小为`2*m1*n1*sizeof(ElementAccumulator)*CoreNum`，workspace大小和shape无关，为固定大小。Mamtul计算完成后，需要AIV进行部分和的累加，得到最终的完整结果，例如20号任务块有两个部分和，分别由core0和core1计算完成，那么由core1对应的两个AIV完成累加。21号块由core1、core2、core3计算完成，那么由core1、core2对应的四个AIV完成累加。
+每个核心分配两片workspace，总的workspace大小为`2*m1*n1*sizeof(ElementAccumulator)*CoreNum`，workspace大小和shape无关，为固定大小。Matmul计算完成后，需要AIV进行部分和的累加，得到最终的完整结果，例如20号任务块有两个部分和，分别由core0和core1计算完成，那么由core0对应的两个AIV完成累加。21号块由core1、core2、core3计算完成，那么由core1、core2对应的四个AIV完成累加。
 
 ### 1.2 关键优化点：尾轮切分
 
@@ -34,7 +34,7 @@ StreamkMatmul的具体详细原理请参考论文[Stream-K: Work-centric Paralle
 
 ![image-20260121121815177](https://raw.gitcode.com/weixin_42818618/picture0/raw/main/image-20260121121815177.png)
 
-将尾轮提前好处是，Vecotor可以提前开始累加操作，和后面的Cube计算并行处理，这样Vecotor的累加开销可以被掩盖掉。
+将尾轮提前好处是，Vector可以提前开始累加操作，和后面的Cube计算并行处理，这样Vector的累加开销可以被掩盖掉。
 
 ### 1.4 其他优化
 

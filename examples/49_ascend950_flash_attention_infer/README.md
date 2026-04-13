@@ -13,7 +13,7 @@
 │   └── README.md
 ```
 ## 使用示例
-- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/quickstart.md#算子编译)   
+- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)   
 
 - 接下来，先执行`gen_data.py`，生成测试样例，测试用例需要从命令行输入, 执行该命令后会在当前路径下生成data目录，包含算子的输入数据和用于精度验证的golden数据。   
 - 然后执行算子，这里要注意的是执行算子的输入shape和上面第一步生成数据的shape一致。
@@ -43,7 +43,7 @@ function gen_data() {
     echo "Data gen finished"
 }
 
-function run_kernel {
+function run_kernel() {
     echo 'Case: B=' $batch ' qS=' $qSeqlen ' kvS=' $kvSeqlen ' qN=' $numHeads ' kvN=' $kvHeads ' D=' $headSize ' mask=' $maskType
     cd output/bin/
     ./49_ascend950_flash_attention_infer $batch $qSeqlen $kvSeqlen $numHeads $kvHeads $headSize $isVariedLen $maskType $cacheMode --device $device --dtype $dtype

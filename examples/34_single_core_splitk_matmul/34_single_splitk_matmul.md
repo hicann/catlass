@@ -2,7 +2,7 @@
 
 ## 样例实现
 
-CATLASS [`34_single_core_splitk_matmul`样例](../34_single_core_splitk_matmul/README.md)算子是基于CATLASS Gemm API实现的昇腾亲和Matmul算子,针对大尺寸矩阵计算场景优化设计，关键算子件包括以下几部分:
+CATLASS [`34_single_core_splitk_matmul`样例](../34_single_core_splitk_matmul/README.md)算子是基于CATLASS Gemm API实现的昇腾亲和Matmul算子，针对大尺寸矩阵计算场景优化设计，关键算子组件包括以下几部分:
 
  - **Example组装**：[single_core_splitk.cpp](../34_single_core_splitk_matmul/single_core_splitk.cpp)
  - **Kernel实现**：

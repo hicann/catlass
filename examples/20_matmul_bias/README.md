@@ -11,7 +11,7 @@
 
 ## 使用示例
 
-- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/1_Practice/01_quick_start.md#编译执行)
+- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)
 - matmul_bias在对float32输入数据计算时，为防止超过L1 Cache上限，推荐tiling如下：
 
 ```cpp

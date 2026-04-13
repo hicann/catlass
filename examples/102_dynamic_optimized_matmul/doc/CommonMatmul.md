@@ -6,7 +6,7 @@
 
 ![image-20251209154303323](https://raw.gitcode.com/weixin_42818618/picture0/raw/main/image-20251209154303323.png)
 
-CommonMatmul的典型特征是使用L1上的基本块直接切分矩阵A、B、C，先将C矩阵划分未若干个大小为`L1TileM x L1TileN`的基本任务块，然后以`L1TileM x L1TileK`为粒度读取A矩阵到L1，以`L1TileK x L1TileN`为粒度读取B矩阵到L1。每个任务块的完整计算结果在一个AI Core上产生。为了避免不必要的L1->L0的重复数据搬运，在CommonMatmul中，L0TileM=L1TileM，L0TileN=L1TileN，L0TileK在L0的空间约束下取最大值。
+CommonMatmul的典型特征是使用L1上的基本块直接切分矩阵A、B、C，先将C矩阵划分为若干个大小为`L1TileM x L1TileN`的基本任务块，然后以`L1TileM x L1TileK`为粒度读取A矩阵到L1，以`L1TileK x L1TileN`为粒度读取B矩阵到L1。每个任务块的完整计算结果在一个AI Core上产生。为了避免不必要的L1->L0的重复数据搬运，在CommonMatmul中，L0TileM=L1TileM，L0TileN=L1TileN，L0TileK在L0的空间约束下取最大值。
 
 ## 2 优化点
 
@@ -63,7 +63,7 @@ copyL0CToGm;
 
 Preload的核心思想为，在计算当前Tile的Matmul前，预先加载下一个需要计算的Tile块的数据，这样就做到了搬运指令的提前发射，可减少MTE2流水的空泡。
 
-关于Preload更细节的描述可以参考[矩阵乘模板总结-流水优化(Preload)](../../../docs/2_Design/01_kernel_design/04_matmul_summary.md)。
+关于Preload更细节的描述可以参考[矩阵乘模板总结-流水优化(Preload)](../../../docs/zh/2_Design/01_kernel_design/04_matmul_summary.md)。
 
 ### 2.2 ShuffleK
 
@@ -77,7 +77,7 @@ Preload的核心思想为，在计算当前Tile的Matmul前，预先加载下一
 
 右图为采用ShuffleK优化后的计算方式，右图中2号核心按2 3 0 1的顺序访问A矩阵基本块，而3号核心按3 0 1 2的顺序访问A矩阵基本块，在时间上错开，从而避免同地址访问冲突。
 
-图中的分块计算顺序采用GemmIdentityBlockSwizzle<2,1>，请参考[swizzle_explanation](../../../docs/2_Design/01_kernel_design/02_swizzle.md)
+图中的分块计算顺序采用GemmIdentityBlockSwizzle<2,1>，请参考[swizzle_explanation](../../../docs/zh/2_Design/01_kernel_design/02_swizzle.md)
 
 ### 2.3 Padding
 
@@ -87,12 +87,12 @@ Preload的核心思想为，在计算当前Tile的Matmul前，预先加载下一
 
 当前泛化Matmul支持三种Padding方式，在[Padding_matmul.hpp](../../../include/catlass/gemm/kernel/padding_matmul.hpp)中定义了枚举值：
 
-```
+```cpp
 enum class PaddingTag {
     NO_PADDING,
     PADDING_ND,
     PADDING_BLOCK_ND,
-    PADDING_NZ    
+    PADDING_NZ
 };
 ```
 
@@ -219,7 +219,7 @@ for (int i = 0; i < nValue; ++i) {
     AscendC::DataCopyParams dataCopyParams {
         (dValue + 15) / 16, // repeat times
         1, // 一次搬运的数据量，以32B为单位
-        0，// Gm上的Stride，以32B为单位
+        0, // Gm上的Stride，以32B为单位
         (256 - 16) / 16  // L1上的Stride，以32B为单位
     };
     AscendC::DataCopy(buffer[i * 16], gmSrc[i * srcDValue], dataCopyParams);

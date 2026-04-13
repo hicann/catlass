@@ -16,7 +16,7 @@ A/B矩阵为int8类型，scale为bf16，输出结果为bf16
 
 ## 使用示例
 
-- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/1_Practice/01_quick_start.md#编译执行)
+- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)
 - 执行算子
 
 ```

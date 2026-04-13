@@ -1,14 +1,26 @@
-# BasicMatmulTla Example Readme
+# MXFP8MatmulTla Example Readme
+
+**注意：社区包暂不支持 950 能力，后续支持的版本敬请期待**
+
+## 功能介绍
+
+- 演示 Ascend 950 上的 **MX FP8 矩阵乘**：A、B 为 MX FP8，经 `float8_e8m0` 缩放后做矩阵乘，输出 FP32。
+- 本示例中 A、B 元素类型为 `float8_e4m3_t`；缩放因子为 `float8_e8m0_t`。未启用 Bias（`ElementBias` 为 `void`）。
+- 默认布局为 A `RowMajor`、B `ColumnMajor`、C `RowMajor`，与 `gen_data.py` 在 `trans_a=0, trans_b=1` 时生成的数据一致。
+
 ## 代码组织
+
 ```
 ├── 53_ascend950_fp8_mx_matmul
-│   ├── CMakeLists.txt     # CMake编译文件
-│   ├── README.md
-│   ├── gen_data.py
-│   └── fp8_mx_matmul.cpp # 主文件
+│   ├── CMakeLists.txt      # CMake 编译配置
+│   ├── README.md
+│   ├── gen_data.py         # 生成 input/ 与 golden/
+│   └── fp8_mx_matmul.cpp   # 主程序
 ```
+
 ## 使用示例
-- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/quickstart.md#算子编译)，本用例为 Ascend950（3510）算子，编译时需加 `-DCATLASS_ARCH=3510`
+
+- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)，本用例为 Ascend950（3510）算子，编译时需加 `-DCATLASS_ARCH=3510`
 - 执行算子
 ```
 # 编译指定用例
@@ -64,7 +76,7 @@ MxScaleA、MxScaleB支持数据类型为float8_e8m0
 |l1AStages | 2 | L1上加载矩阵A的Buffer数量 |
 |l1BStages | 2 | L1上加载矩阵B的Buffer数量 |
 |l0AStages | 2 | L0上加载矩阵A的Buffer数量 |
-|l0AStages | 2 | L0上加载矩阵B的Buffer数量 |
+|l0BStages | 2 | L0上加载矩阵B的Buffer数量 |
 
 设矩阵Shape为`M N K`, L1上的分块大小为`m1 n1 k1`，M方向的分块数量`mTiles = CeilDiv(M, m1)`，N方向的分块数量`nTiles = CeilDiv(N, n1)`，总任务数为`taskBlocks = mTiles * nTiles`，在以下两种情况下可以选择开启enableL1Resident：
 

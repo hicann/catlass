@@ -29,7 +29,7 @@
 example使用
 
 - 第一步，编译
-- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/1_Practice/01_quick_start.md#编译执行)
+- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)
 
 ```
 # 编译指定用例
@@ -86,4 +86,4 @@ Compare success.
 
 2、对比FP16 Matmul，该样例针对大shape的case有较为明显的显存收益
 
-3、针对小shape场景，可以参考[catlass_optimize_guidance](../../docs/1_Practice/10_matmul_optimization.md#tileshape调整)对样例进行tiling调优
+3、针对小shape场景，可以参考[catlass_optimize_guidance](../../docs/zh/1_Practice/10_matmul_optimization.md#tileshape调整)对样例进行tiling调优

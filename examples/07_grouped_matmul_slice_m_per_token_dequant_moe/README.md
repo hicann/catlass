@@ -16,9 +16,9 @@ A/B矩阵为int8类型，scale为fp32，输出结果为fp16
 
 ## 使用示例
 
-因为GroupedMatmul参数较多，所以该示例直接在代码中承载输出参数列表`groupList`。
+因为GroupedMatmul参数较多，所以该示例直接在代码中生成输入参数`groupList`。
 
-- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/1_Practice/01_quick_start.md#编译执行)
+- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)
 - 执行算子
 
 ```
