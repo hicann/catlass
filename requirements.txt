@@ -1,0 +1,17 @@
+absl-py
+attrs
+cffi
+cython
+decorator
+ml_dtypes
+numpy>=1.19.2,<=1.24.0
+pathlib2
+protobuf==3.20.0
+psutil
+pybind11
+pyyaml
+requests
+scipy
+sympy
+torch==2.9.0
+torch_npu==2.9.0
