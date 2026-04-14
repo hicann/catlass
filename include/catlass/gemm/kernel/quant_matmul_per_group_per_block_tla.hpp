@@ -220,7 +220,8 @@ public:
             uint32_t blockN = blockShape.n();
             uint32_t blockK = blockShape.k();
 
- 	        auto ubLayout = tla::MakeLayout<ElementC, LayoutTagC>(blockM, blockN);
+            int64_t alignN = RoundUp(blockN, UB_TWO_BANK_ELEMS_B32);
+            auto ubLayout = tla::MakeLayout<ElementC, LayoutTagC>(blockM, alignN);
             auto tensorC = tla::MakeTensor(mmResUb_, ubLayout, Arch::PositionUB{});
 
             if ASCEND_IS_AIC {
@@ -233,7 +234,7 @@ public:
                                             tla::MakeShape(blockK, blockN));
                 auto tensorBlockC = GetTile(tensorC,
                                             tla::MakeCoord(0, 0),
-                                            tla::MakeShape(blockM, blockN));
+                                            tla::MakeShape(blockM, alignN));
 
                 blockMmad(tensorBlockC, tensorBlockA, tensorBlockB, blockShape);
             }

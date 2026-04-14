@@ -110,6 +110,14 @@ public:
     constexpr static uint64_t L0B_TILE_SIZE = NL0_ * KL0_ * sizeof(ElementB);
     constexpr static uint64_t L0C_TILE_SIZE = ML0_ * NL0_ * sizeof(ElementAccumulator);
 
+    static_assert(ML1_ == ML0_ && NL1_ == NL0_ && KL1_ == KL0_,
+        "The situation where the basic blocks of L1 and L0 differ is not supported yet");
+
+#if (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510)
+    static_assert(TileCopy::CopyMode == Tile::CopyL0CToUBMode::SPLIT_M,
+        "only supported SPLIT_M yet");
+#endif
+
     CATLASS_DEVICE
     BlockMmadTla(const GemmCoord &shape)
     {

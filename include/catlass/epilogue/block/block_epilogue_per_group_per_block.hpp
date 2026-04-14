@@ -374,63 +374,37 @@ QBMM_BLOCK_EPILOGUE_PERTILE_CLASS_LOCAL_PARAMS
 CATLASS_DEVICE void BlockEpilogue<QBMM_BLOCK_EPILOGUE_PERTILE_FUNC_LOCAL_PARAMS>::UpdatePertileUBValidMN()
 {
     int64_t actualN = actualSingleShape_.n();
-    if (ubParams_.CopyOutWithSplitN) {
+    if (AscendC::GetSubBlockIdx() == 0) {
         ubParams_.validM = ubParams_.singleM;
-        uint64_t subBlockIdxOffset = AscendC::GetSubBlockIdx() * ubParams_.singleN;
-        uint64_t ndNumN = 2 * ubParams_.singleN + subBlockIdxOffset; // 2: the nSize of 2 ND, base is 2 ND
-        ubParams_.validN[0] = actualN < subBlockIdxOffset ? 0 : Min(ubParams_.singleN, actualN - subBlockIdxOffset);
-        ubParams_.validN[1] = actualN < ndNumN ? 0 : Min(ubParams_.singleN, actualN - ndNumN);
     } else {
-        if (AscendC::GetSubBlockIdx() == 0) {
-            ubParams_.validM = ubParams_.singleM;
-        } else {
-            ubParams_.validM = actualSingleShape_.m() - ubParams_.singleM;
-        }
-        ubParams_.validN[0] = Min(ubParams_.singleN, static_cast<uint64_t>(actualN));
-        ubParams_.validN[1] = actualN < ubParams_.singleN ? 0 : Min(ubParams_.singleN, actualN - ubParams_.singleN);
+        ubParams_.validM = actualSingleShape_.m() - ubParams_.singleM;
     }
+    ubParams_.validN[0] = Min(ubParams_.singleN, static_cast<uint64_t>(actualN));
+    ubParams_.validN[1] = actualN < ubParams_.singleN ? 0 : Min(ubParams_.singleN, actualN - ubParams_.singleN);
 }
 
 QBMM_BLOCK_EPILOGUE_PERTILE_CLASS_LOCAL_PARAMS
 CATLASS_DEVICE void BlockEpilogue<QBMM_BLOCK_EPILOGUE_PERTILE_FUNC_LOCAL_PARAMS>::UpdatePertileUBParam()
 {
-    ubParams_.CopyOutWithSplitN =
-        actualSingleShape_.n() > params_->groupSizeN || actualSingleShape_.m() == 1;
     uint32_t fixpipeN = 0;
-    if (ubParams_.CopyOutWithSplitN) {
-        // (m * n/2) is written to 2 UB, n must be multiples of 32
-        // | AIV0 singleN | AIV1 singleN | AIV0 singleN | AIV1 singleN |, max(singleN) = 64
-        ubParams_.ndNum = actualSingleShape_.n() > UB_TWO_BANK_ELEMS_B32 ? 2 : 1; // 2: 2 ND
-        int64_t alignedNBase =
-            actualSingleShape_.n() > PER_BLOCK_SIZE ? PER_BLOCK_SIZE : AscendC::ONE_BLK_SIZE * ubParams_.ndNum;
-        fixpipeN = RoundUp(actualSingleShape_.n(), static_cast<uint64_t>(alignedNBase)) / ubParams_.ndNum;
-        ubParams_.singleN = fixpipeN / static_cast<uint32_t>(AscendC::GetTaskRation());
-        ubParams_.singleM = actualSingleShape_.m();
-    } else {
-        // (m/2 * n) is written to 2 UB, m must be multiples of 2
-        // | AIV0 singleN | AIV0 singleN |
-        // | AIV1 singleN | AIV1 singleN |
-        ubParams_.ndNum = actualSingleShape_.n() > UB_SUB_BANK_ELEMS_B32 ? 2 : 1; // 2: 2 ND
-        fixpipeN = RoundUp(actualSingleShape_.n(), static_cast<uint64_t>(AscendC::BLOCK_CUBE) * ubParams_.ndNum) /
-                   ubParams_.ndNum;
-        ubParams_.singleN = fixpipeN;
-        ubParams_.singleM = CeilDiv(actualSingleShape_.m(), AscendC::GetTaskRation());
-    }
+    // (m/2 * n) is written to 2 UB, m must be multiples of 2
+    // | AIV0 singleN | AIV0 singleN |
+    // | AIV1 singleN | AIV1 singleN |
+    ubParams_.ndNum = actualSingleShape_.n() > UB_SUB_BANK_ELEMS_B32 ? 2 : 1; // 2: 2 ND
+    fixpipeN = RoundUp(actualSingleShape_.n(), static_cast<uint64_t>(AscendC::BLOCK_CUBE) * ubParams_.ndNum) /
+                ubParams_.ndNum;
+    ubParams_.singleN = fixpipeN;
+    ubParams_.singleM = CeilDiv(actualSingleShape_.m(), AscendC::GetTaskRation());
     
     UpdatePertileUBValidMN();
     int64_t offsetM = 0;
     int64_t offsetN0 = 0;
     int64_t offsetN1 = 0;
     
-    if (ubParams_.CopyOutWithSplitN) {
-        offsetN0 = ubParams_.validN[0] == 0 ? 0 : AscendC::GetSubBlockIdx() * ubParams_.singleN;
-        offsetN1 = ubParams_.validN[1] == 0 ? offsetN0 : offsetN0 + UB_SUB_BANK_NUM * ubParams_.singleN;
-    } else {
-        if (AscendC::GetSubBlockIdx() == 1) {
-            offsetM += ubParams_.singleM;
-        }
-        offsetN1 = ubParams_.validN[1] == 0 ? 0 : ubParams_.singleN;
+    if (AscendC::GetSubBlockIdx() == 1) {
+        offsetM += ubParams_.singleM;
     }
+    offsetN1 = ubParams_.validN[1] == 0 ? 0 : ubParams_.singleN;
     
     ubParams_.offsetScaleM = offsetM / params_->groupSizeM;
     ubParams_.offsetScaleN[0] = offsetN0 / params_->groupSizeN;
@@ -602,8 +576,8 @@ __simd_vf__ void BlockEpilogue<QBMM_BLOCK_EPILOGUE_PERTILE_FUNC_LOCAL_PARAMS>::A
             AscendC::MicroAPI::MaskReg maskN = AscendC::MicroAPI::UpdateMask<CType>(elementNum);
             // copy input from ub to register, addr of ub should align to 32B
             uint32_t offset = mIdx * UB_TWO_BANK_ELEMS_B32;
-            uint32_t l0cOutOffset = mIdx * (nSize0 + nSize1);
-            AscendC::MicroAPI::LoadAlign(l0cOutReg, l0cOut + l0cOutOffset);
+            uint32_t l0cOutOffset = offset;
+            AscendC::MicroAPI::LoadAlign(l0cOutReg, l0cOut + offset);
             // l0c_out * scale
             AscendC::MicroAPI::Muls(muledScaleReg, x1ScaleReg, x2Scale0, maskN);
             if constexpr (AscendC::IsSameType<CType, int32_t>::value) {
@@ -779,7 +753,7 @@ CATLASS_DEVICE void BlockEpilogue<QBMM_BLOCK_EPILOGUE_PERTILE_FUNC_LOCAL_PARAMS>
         // mov optimize in splitM, 0~63 + 64 ~127 -> 0~127
         AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(0);
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(0);
-        if (ubParams_.ndNum == 2 && !ubParams_.CopyOutWithSplitN) { // 2: 2ND, opt branch with splitM
+        if (ubParams_.ndNum == 2) { // 2: 2ND, opt branch with splitM
             uint32_t sumN = ubParams_.validN[0] + ubParams_.validN[1];
             CopyOut(mmAddUb, 0, ubParams_.validM, sumN, UB_TWO_BANK_ELEMS_B32 - sumN, problemShape_.n() - sumN,
                     ubParams_.offsetY[0]);
@@ -816,7 +790,7 @@ QBMM_BLOCK_EPILOGUE_PERTILE_CLASS_LOCAL_PARAMS
 CATLASS_DEVICE void BlockEpilogue<QBMM_BLOCK_EPILOGUE_PERTILE_FUNC_LOCAL_PARAMS>::CastAndCopyOut(
     const AscendC::LocalTensor<CalcType>& mmAddUb)
 {
-    if (ubParams_.ndNum == 2 && !ubParams_.CopyOutWithSplitN) { // 2: 2ND, opt branch with splitM
+    if (ubParams_.ndNum == 2) { // 2: 2ND, opt branch with splitM
         uint32_t sumN = ubParams_.validN[0] + ubParams_.validN[1];
         uint32_t mSizePing = CeilDiv(ubParams_.validM, static_cast<uint64_t>(QBMM_BUFFER_NUM));
         uint32_t mSize[QBMM_BUFFER_NUM] = {mSizePing, static_cast<uint32_t>(ubParams_.validM - mSizePing)};
