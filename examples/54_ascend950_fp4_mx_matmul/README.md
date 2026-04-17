@@ -62,18 +62,19 @@ MxScaleA、MxScaleB支持数据类型为float8_e8m0
 当B为RowMajor时，MxScaleB的shape为（ceil(k/64), n, 2）
 当B为ColumnMajor时，MxScaleB的shape为（n, ceil(k/64), 2）
 
-3、 MxMatmul默认使用的DispatchPolicy MxMmad支持以下几个模板参数：
+3、 `MxMatmulTla` 与 `BlockMmadTla` 搭配使用的 DispatchPolicy 为 **`Gemm::MmadMx`**（定义见 `include/catlass/gemm/dispatch_policy.hpp`），模板参数顺序与默认值如下：
 
-|模板参数|默认值|参数说明|
-|---------|-----------------|-----------------|
-|ArchTag| 无 | 指定架构型号 |
-|enableUnitFlag| false | 是否开启Unitflag，开启L0C多缓冲时必须设置为false |
-|l0CStages| 1 | 指定L0C的缓冲区数量，设置为2即可开启L0C双缓冲|
-|enableL1Resident| false | 是否开启L1常驻 |
-|l1AStages | 2 | L1上加载矩阵A的Buffer数量 |
-|l1BStages | 2 | L1上加载矩阵B的Buffer数量 |
-|l0AStages | 2 | L0上加载矩阵A的Buffer数量 |
-|l0BStages | 2 | L0上加载矩阵B的Buffer数量 |
+| 模板参数 | 默认值 | 参数说明 |
+|---------|--------|----------|
+| `ArchTag` | 无 | 架构标签，例如 `Arch::Ascend950` |
+| `ENABLE_UNIT_FLAG` | `false` | 是否开启 UnitFlag；当 `L0C_STAGES > 1`（L0C 多缓冲）时必须为 `false` |
+| `L1_SCALE_FACTOR_K` | `16` | GM→L1 的 MX scale 一次驻留所覆盖的 **L1 K 方向条带个数**；为 `1` 时表示每个 L1 K 条带各搬一次 scale（见类型内注释） |
+| `L0C_STAGES` | `1` | L0C 缓冲段数；设为 `2` 可开启 L0C 双缓冲（需与 `ENABLE_UNIT_FLAG` 约束一致） |
+| `ENABLE_L1_RESIDENT` | `false` | 是否开启 L1 常驻 |
+| `L1A_STAGES` | `2` | L1 上加载矩阵 A 的 buffer 数量 |
+| `L1B_STAGES` | `2` | L1 上加载矩阵 B 的 buffer 数量 |
+| `L0A_STAGES` | `2` | L0 上加载矩阵 A 的 buffer 数量 |
+| `L0B_STAGES` | `2` | L0 上加载矩阵 B 的 buffer 数量 |
 
 设矩阵Shape为`M N K`, L1上的分块大小为`m1 n1 k1`，M方向的分块数量`mTiles = CeilDiv(M, m1)`，N方向的分块数量`nTiles = CeilDiv(N, n1)`，总任务数为`taskBlocks = mTiles * nTiles`，在以下两种情况下可以选择开启enableL1Resident：
 

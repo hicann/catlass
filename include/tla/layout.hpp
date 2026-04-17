@@ -358,7 +358,8 @@ template <class Element, class Layout>
 struct iszN<Element, Layout,
     std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>,
     std::enable_if_t<rank_v<decltype(shape<0>(Layout{}))> == 2 &&
-        rank_v<decltype(shape<1>(Layout{}))> == 2>> {
+        rank_v<decltype(shape<1>(Layout{}))> == 2 && rank_v<decltype(stride<0>(Layout{}))> == 2 &&
+        rank_v<decltype(stride<1>(Layout{}))> == 2>> {
     static constexpr uint32_t ELE_NUM_PER_C0 =
         Catlass::BytesToBits(Catlass::BYTE_PER_C0) / Catlass::SizeOfBits<Element>::value;
     static constexpr uint32_t ELE_NUM_PER_FRACTAL =
@@ -391,16 +392,13 @@ struct iszNUnAlign<Element, Layout,
                                stride<1, 0>(Layout{}) == 1);
 };
 
-template <class Element, class Layout, class Enable1 = void, class Enable2 = void>
+template <class Element, class Layout, class Enable = void>
 struct iszZ {
     static bool const value = false;
 };
 
 template <class Element, class Layout>
-struct iszZ<Element, Layout,
-    std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>,
-    std::enable_if_t<rank_v<decltype(shape<0>(Layout{}))> == 2 &&
-        rank_v<decltype(shape<1>(Layout{}))> == 2>> {
+struct iszZ<Element, Layout, std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>> {
     static constexpr uint32_t ELE_NUM_PER_C0 =
         Catlass::BytesToBits(Catlass::BYTE_PER_C0) / Catlass::SizeOfBits<Element>::value;
     static constexpr uint32_t ELE_NUM_PER_FRACTAL =
@@ -419,8 +417,8 @@ struct isnZ {
 template <class Element, class Layout>
 struct isnZ<Element, Layout,
     std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>,
-    std::enable_if_t<rank_v<decltype(shape<0>(Layout{}))> == 2 &&
-        rank_v<decltype(shape<1>(Layout{}))> == 2>> {
+    std::enable_if_t<rank_v<decltype(stride<0>(Layout{}))> == 2 &&
+        rank_v<decltype(stride<1>(Layout{}))> == 2>> {
     static constexpr uint32_t ELE_NUM_PER_C0 =
         Catlass::BytesToBits(Catlass::BYTE_PER_C0) / Catlass::SizeOfBits<Element>::value;
     static constexpr uint32_t ELE_NUM_PER_FRACTAL =
@@ -432,10 +430,6 @@ struct isnZ<Element, Layout,
 };
 
 #if (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510)
-// MX scale layout traits: align with catlass_dev (isMxScaleANoTrans/ATrans/BNoTrans/BTrans, isMxScalezZ/isMxScalenN),
-// but keep mix names isMxScaleFor* for ascend950 tile copy dispatch. Second enable_if uses shape mode ranks only;
-// stride subscripts are validated in value (or omitted from enable_if) to avoid ill-formed substitution.
-
 template <class Element, class Layout, class Enable1 = void, class Enable2 = void>
 struct isMxScaleForRowMajorA {
     static bool const value = false;
@@ -444,12 +438,11 @@ struct isMxScaleForRowMajorA {
 template <class Layout>
 struct isMxScaleForRowMajorA<float8_e8m0_t, Layout,
     std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>,
-    std::enable_if_t<rank_v<decltype(shape<0>(Layout{}))> == 1 &&
-        rank_v<decltype(shape<1>(Layout{}))> == 2>> {
-    static constexpr uint32_t ELE_NUM_PER_C0 = 2;
-    static bool const value =
-        (shape<1, 0>(Layout{}) == ELE_NUM_PER_C0 && stride<1, 0>(Layout{}) == 1 &&
-         stride<1, 1>(Layout{}) == ELE_NUM_PER_C0);
+    std::enable_if_t<rank_v<decltype(stride<0>(Layout{}))> == 1 &&
+        rank_v<decltype(stride<1>(Layout{}))> == 2 && !is_constant<2, decltype(stride<0>(Layout{}))>::value &&
+        ((rank_v<decltype(shape<0>(Layout{}))> == 1 && rank_v<decltype(shape<1>(Layout{}))> == 2) ||
+            (rank_v<decltype(shape<0>(Layout{}))> == 2 && rank_v<decltype(shape<1>(Layout{}))> == 2))>> {
+    static bool const value = true;
 };
 
 template <class Element, class Layout, class Enable1 = void, class Enable2 = void>
@@ -460,15 +453,14 @@ struct isMxScaleForColumnMajorA {
 template <class Layout>
 struct isMxScaleForColumnMajorA<float8_e8m0_t, Layout,
     std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>,
-    std::enable_if_t<rank_v<decltype(shape<0>(Layout{}))> == 1 &&
-        rank_v<decltype(shape<1>(Layout{}))> == 2>> {
-    static constexpr uint32_t ELE_NUM_PER_C0 = 2;
-    static bool const value =
-        (shape<1, 0>(Layout{}) == ELE_NUM_PER_C0 && stride<1, 0>(Layout{}) == 1 &&
-         stride<0>(Layout{}) == ELE_NUM_PER_C0);
+    std::enable_if_t<rank_v<decltype(stride<0>(Layout{}))> == 1 &&
+        rank_v<decltype(stride<1>(Layout{}))> == 2 && is_constant<2, decltype(stride<0>(Layout{}))>::value &&
+        ((rank_v<decltype(shape<0>(Layout{}))> == 1 && rank_v<decltype(shape<1>(Layout{}))> == 2) ||
+            (rank_v<decltype(shape<0>(Layout{}))> == 2 && rank_v<decltype(shape<1>(Layout{}))> == 2))>> {
+    static bool const value = true;
 };
 
-template <class Element, class Layout, class Enable1 = void, class Enable2 = void>
+template <class Element, class Layout, class Enable1 = void, class Enable2 = void, class Enable3 = void>
 struct isMxScaleForRowMajorB {
     static bool const value = false;
 };
@@ -476,15 +468,15 @@ struct isMxScaleForRowMajorB {
 template <class Layout>
 struct isMxScaleForRowMajorB<float8_e8m0_t, Layout,
     std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>,
-    std::enable_if_t<rank_v<decltype(shape<0>(Layout{}))> == 2 &&
-        rank_v<decltype(shape<1>(Layout{}))> == 1>> {
-    static constexpr uint32_t ELE_NUM_PER_C0 = 2;
-    static bool const value =
-        (shape<0, 0>(Layout{}) == ELE_NUM_PER_C0 && stride<0, 0>(Layout{}) == 1 &&
-         stride<0, 1>(Layout{}) == ELE_NUM_PER_C0);
+    std::enable_if_t<rank_v<decltype(stride<0>(Layout{}))> == 2 &&
+        rank_v<decltype(stride<1>(Layout{}))> == 1>,
+    std::enable_if_t<!is_constant<2, decltype(stride<0, 1>(Layout{}))>::value &&
+        ((rank_v<decltype(shape<0>(Layout{}))> == 2 && rank_v<decltype(shape<1>(Layout{}))> == 1) ||
+            (rank_v<decltype(shape<0>(Layout{}))> == 2 && rank_v<decltype(shape<1>(Layout{}))> == 2))>> {
+    static bool const value = true;
 };
 
-template <class Element, class Layout, class Enable1 = void, class Enable2 = void>
+template <class Element, class Layout, class Enable1 = void, class Enable2 = void, class Enable3 = void>
 struct isMxScaleForColumnMajorB {
     static bool const value = false;
 };
@@ -492,12 +484,12 @@ struct isMxScaleForColumnMajorB {
 template <class Layout>
 struct isMxScaleForColumnMajorB<float8_e8m0_t, Layout,
     std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>,
-    std::enable_if_t<rank_v<decltype(shape<0>(Layout{}))> == 2 &&
-        rank_v<decltype(shape<1>(Layout{}))> == 1>> {
-    static constexpr uint32_t ELE_NUM_PER_C0 = 2;
-    static bool const value =
-        (shape<0, 0>(Layout{}) == ELE_NUM_PER_C0 && stride<0, 0>(Layout{}) == 1 &&
-         stride<1>(Layout{}) == ELE_NUM_PER_C0);
+    std::enable_if_t<rank_v<decltype(stride<0>(Layout{}))> == 2 &&
+        rank_v<decltype(stride<1>(Layout{}))> == 1>,
+    std::enable_if_t<is_constant<2, decltype(stride<0, 1>(Layout{}))>::value &&
+        ((rank_v<decltype(shape<0>(Layout{}))> == 2 && rank_v<decltype(shape<1>(Layout{}))> == 1) ||
+            (rank_v<decltype(shape<0>(Layout{}))> == 2 && rank_v<decltype(shape<1>(Layout{}))> == 2))>> {
+    static bool const value = true;
 };
 
 template <class Element, class Layout, class Enable1 = void, class Enable2 = void>
@@ -509,13 +501,10 @@ template <class Layout>
 struct isMxScaleForzZ<float8_e8m0_t, Layout,
     std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>,
     std::enable_if_t<rank_v<decltype(shape<0>(Layout{}))> == 2 &&
-        rank_v<decltype(shape<1>(Layout{}))> == 2>> {
-    static constexpr uint32_t ELE_NUM_PER_C0 = 2;
-    static constexpr uint32_t ELE_NUM_PER_FRACTAL = 32;
-    static bool const value = (shape<0, 0>(Layout{}) == Catlass::C0_NUM_PER_FRACTAL &&
-                               shape<1, 0>(Layout{}) == ELE_NUM_PER_C0 &&
-                               stride<1, 0>(Layout{}) == 1 &&
-                               stride<1, 1>(Layout{}) == ELE_NUM_PER_FRACTAL);
+        rank_v<decltype(shape<1>(Layout{}))> == 2 && rank_v<decltype(stride<0>(Layout{}))> == 2 &&
+        rank_v<decltype(stride<1>(Layout{}))> == 2>> {
+    // TagToLayout zZ for e8m0 uses BYTE_PER_C0 (32) in shape, not MX MakeMxScaleLayout's 2; match by rank only.
+    static bool const value = true;
 };
 
 template <class Element, class Layout, class Enable1 = void, class Enable2 = void>
@@ -527,13 +516,9 @@ template <class Layout>
 struct isMxScaleFornN<float8_e8m0_t, Layout,
     std::enable_if_t<Layout::depth == 2 && Layout::rank == 2>,
     std::enable_if_t<rank_v<decltype(shape<0>(Layout{}))> == 2 &&
-        rank_v<decltype(shape<1>(Layout{}))> == 2>> {
-    static constexpr uint32_t ELE_NUM_PER_C0 = 2;
-    static constexpr uint32_t ELE_NUM_PER_FRACTAL = 32;
-    static bool const value = (shape<0, 0>(Layout{}) == ELE_NUM_PER_C0 &&
-                               shape<1, 0>(Layout{}) == Catlass::C0_NUM_PER_FRACTAL &&
-                               stride<0, 0>(Layout{}) == 1 &&
-                               stride<0, 1>(Layout{}) == ELE_NUM_PER_FRACTAL);
+        rank_v<decltype(shape<1>(Layout{}))> == 2 && rank_v<decltype(stride<0>(Layout{}))> == 2 &&
+        rank_v<decltype(stride<1>(Layout{}))> == 2>> {
+    static bool const value = true;
 };
 #endif
 
