@@ -253,7 +253,7 @@ public:
         for (uint32_t loopIdx = aicoreIndex; loopIdx < coreLoops; loopIdx += aicoreNum) {
             // Compute block location
             layout::VectorLayout::TensorCoord blockCoord{loopIdx};
-            uint32_t MGmActual = (loopIdx == coreLoops) ? M - loopIdx * maxMPerBlock : maxMPerBlock;
+            uint32_t MGmActual = (loopIdx == coreLoops - 1) ? M - loopIdx * maxMPerBlock : maxMPerBlock;
 
             layout::VectorLayout::TensorCoord actualBlockShape{MGmActual};
 

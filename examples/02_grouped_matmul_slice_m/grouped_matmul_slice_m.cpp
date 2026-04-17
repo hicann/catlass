@@ -119,7 +119,7 @@ static void Run(const Options &options) {
         sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
         if (sizeWorkspace > 0) {
             ACL_CHECK(
-                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST);
+                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
             );
         }
         // initalize kernel argument

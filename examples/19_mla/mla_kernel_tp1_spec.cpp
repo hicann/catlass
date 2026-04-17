@@ -484,10 +484,10 @@ public:
                     LayoutP layoutP(rowNum, stackSeqTile, stackSeqTileRound);
                     LayoutS layoutS(rowNum, stackSeqTile, stackSeqTileRound);
                     GemmCoord actualBlockShapeQK{rowNum, stackSeqTile, embed};
-                    uint32_t gmOffsetP = (uint64_t)coreIdx * TMP_SIZE * 2
+                    uint64_t gmOffsetP = (uint64_t)coreIdx * TMP_SIZE * 2
                                          + (uint64_t)subBlockIdx * rowNum / 2 * stackSeqTileRound
                                          + (uint64_t)((nIdx / UNIT_BLOCK_STACK_NUM) % 2) * TMP_SIZE;
-                    uint32_t gmOffsetS = (int64_t)coreIdx * TMP_SIZE_DECODER * 4
+                    uint64_t gmOffsetS = (int64_t)coreIdx * TMP_SIZE_DECODER * 4
                                          + (int64_t)subBlockIdx * rowNum / 2 * stackSeqTileRound
                                          + (uint64_t)((nIdx / UNIT_BLOCK_STACK_NUM) % 2) * TMP_SIZE_DECODER * 2;
                     // Softmax one-stage calculation
@@ -555,10 +555,10 @@ public:
                     LayoutP layoutP(rowNum, stackSeqTile, stackSeqTileRound);
                     LayoutS layoutS(rowNum, stackSeqTile, stackSeqTileRound);
                     GemmCoord actualBlockShapeQK{rowNum, stackSeqTile, embed};
-                    uint32_t gmOffsetP = (uint64_t)coreIdx * TMP_SIZE * 2
+                    uint64_t gmOffsetP = (uint64_t)coreIdx * TMP_SIZE * 2
                                          + (uint64_t)subBlockIdx * rowNum / 2 * stackSeqTileRound
                                          + (uint64_t)((nIdx / UNIT_BLOCK_STACK_NUM) % 2) * TMP_SIZE;
-                    uint32_t gmOffsetS = (int64_t)coreIdx * TMP_SIZE_DECODER * 4
+                    uint64_t gmOffsetS = (int64_t)coreIdx * TMP_SIZE_DECODER * 4
                                          + (int64_t)subBlockIdx * rowNum / 2 * stackSeqTileRound
                                          + (uint64_t)((nIdx / UNIT_BLOCK_STACK_NUM) % 2) * TMP_SIZE_DECODER * 2;
                     // Softmax one-stage calculation
