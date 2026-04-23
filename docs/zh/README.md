@@ -38,11 +38,15 @@
     - 02_layout_tag：RowMajor、ColumnMajor、zN、nZ等layoutTag介绍和接口说明
     - [03_tensor](./2_Design/02_tla/03_tensor.md)：tensor结构体
 - 03_evg
+    - [01_evg_design](./2_Design/03_evg/01_evg_design.md)：EVG 的定位、分层关系、执行模型与图组织方式
+    - [02_evg_extension](./2_Design/03_evg/02_evg_extension.md)：EVG 的扩展规范，说明何时加 ComputeFn、何时加节点，以及实现时的约束
+    - [03_evg_quick_start](./2_Design/03_evg/03_evg_quick_start.md)：以 `Matmul + Add` 为例说明 EVG 的基础接入流程
 
 ## 3 API
 
 - [README](./3_API/README.md)：API清单入口
 - [gemm api](./3_API/gemm_api.md)：Gemm API
+- [evg api](./3_API/evg_api.md)：EVG 的接入方式、参数顺序和常用节点说明
 - [Ascend C API](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/900beta1/API/ascendcopapi/atlasascendc_api_07_0003.html)：昇腾社区Ascend C API列表
 
 ## Appendix

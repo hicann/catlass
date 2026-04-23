@@ -5,6 +5,8 @@
 | 组件名                         | 描述 |
 | :----------------------------------------------------------- | :------: |
 | [basic_matmul](./basic_matmul.md)     |   Common模板基础矩阵乘  |
+| [basic_matmul_tla_visitor](./basic_matmul_tla_visitor.md)     |   EVG 的 GM workspace kernel 入口  |
+| [basic_matmul_tla_ub_visitor](./basic_matmul_tla_ub_visitor.md)     |   EVG 的 UB workspace kernel 入口  |
 
 ## API 拆解
 
