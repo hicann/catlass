@@ -1,3 +1,13 @@
+# -----------------------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
+# Please refer to the License for details. You may not use this file except in compliance with the License.
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
+# -----------------------------------------------------------------------------------------------------------
+
 cmake_minimum_required(VERSION 3.16)
 
 find_package(ASC REQUIRED)
@@ -23,47 +33,39 @@ if(NOT DEFINED ENV{ASCEND_HOME_PATH})
 endif()
 set(ASCEND_HOME_PATH $ENV{ASCEND_HOME_PATH})
 
-execute_process(
-    COMMAND which python 
-    OUTPUT_VARIABLE Python_EXECUTABLE 
-    OUTPUT_STRIP_TRAILING_WHITESPACE 
-    ERROR_QUIET
-)
-
-if(NOT Python_EXECUTABLE)
-    execute_process(
-        COMMAND which python3 
-        OUTPUT_VARIABLE Python_EXECUTABLE 
-        OUTPUT_STRIP_TRAILING_WHITESPACE 
-        ERROR_QUIET
-    )
+if(NOT Python_EXECUTABLE AND NOT SKBUILD)
+    set(_VENV_PYTHON "${CMAKE_CURRENT_SOURCE_DIR}/.venv/bin/python")
+    if(EXISTS ${_VENV_PYTHON})
+        set(Python_EXECUTABLE ${_VENV_PYTHON})
+    endif()
 endif()
 
-find_package(Python REQUIRED COMPONENTS Interpreter Development)
+find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
 
-execute_process(
-    COMMAND ${Python_EXECUTABLE} -c "import sysconfig; print(sysconfig.get_path('include'), end='')"
-    OUTPUT_VARIABLE PYTHON_INCLUDE_DIR 
-    OUTPUT_STRIP_TRAILING_WHITESPACE 
-    ERROR_QUIET
-)
-
-execute_process(
-    COMMAND ${Python_EXECUTABLE} -c "import os; os.environ['TORCH_DEVICE_BACKEND_AUTOLOAD']='0'; import torch; print(os.path.dirname(torch.__file__), end='')"
-    OUTPUT_VARIABLE TORCH_DIR 
-    OUTPUT_STRIP_TRAILING_WHITESPACE 
-    ERROR_QUIET
-)
-
-if(CMAKE_PREFIX_PATH AND NOT CMAKE_PREFIX_PATH STREQUAL "")
-    list(APPEND CMAKE_PREFIX_PATH ${TORCH_DIR})
-else()
-    set(CMAKE_PREFIX_PATH ${TORCH_DIR})
-endif()
+list(APPEND CMAKE_PREFIX_PATH "${Python3_SITELIB}")
 
 find_package(Torch REQUIRED)
 
-set(CATLASS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
+include_directories(
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/include
+    ${Python3_INCLUDE_DIRS}
+    ${TORCH_INCLUDE_DIRS}
+    ${Python3_SITELIB}/torch_npu/include
+    ${ASCEND_HOME_PATH}/include
+)
+
+link_directories(
+    ${ASCEND_HOME_PATH}/lib64
+    ${Python3_SITELIB}/torch_npu/lib
+)
+
+set(TORCH_NPU_DIR "${Python3_SITELIB}/torch_npu")
+
+if(NOT DEFINED CATLASS_DIR)
+    set(CATLASS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../..)
+endif()
+set(CATLASS_INCLUDE_DIR ${CATLASS_DIR}/include)
 
 if(NOT DEFINED CATLASS_ARCH_LIST)
     set(CATLASS_ARCH_LIST "2201;3510")

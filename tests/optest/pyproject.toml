@@ -1,3 +1,7 @@
+[build-system]
+requires = ["scikit-build-core>=0.8.0"]
+build-backend = "scikit_build_core.build"
+
 [project]
 name = "torch-catlass"
 version = "0.1.0"
@@ -5,6 +9,19 @@ description = "Catlass-based PyTorch NPU operators with multi-architecture suppo
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "attrs",
+    "cython",
+    "numpy>=2.4.4",
+    "decorator",
+    "sympy",
+    "cffi",
+    "pyyaml>=6.0.3",
+    "pathlib2",
+    "psutil",
+    "protobuf==3.20.0",
+    "scipy",
+    "requests",
+    "absl-py",
     "torch>=2.0.0",
     "torch-npu>=2.9.0",
 ]
@@ -16,13 +33,23 @@ dev = [
     "isort>=5.0.0",
 ]
 
-[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+[tool.scikit-build]
+cmake.version = ">=3.16"
+cmake.args = [
+    "-DCMAKE_BUILD_TYPE=Release",
+]
+ninja.make-fallback = true
+wheel.packages = ["torch_catlass"]
+wheel.install-dir = "torch_catlass"
+editable.rebuild = false
+editable.verbose = false
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["torch_catlass*"]
+[tool.scikit-build.cmake.define]
+CATLASS_ARCH_LIST = {env = "CATLASS_ARCH_LIST", default = "2201;3510"}
+CATLASS_KERNEL_LIST = {env = "CATLASS_KERNEL_LIST", default = ""}
+
+[tool.uv]
+no-build-isolation-package = ["torch-catlass"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

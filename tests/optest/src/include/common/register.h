@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_TORCH_REGISTER_H
-#define CATLASS_TORCH_REGISTER_H
+#ifndef OPTEST_REGISTER_H
+#define OPTEST_REGISTER_H
 
 #include <tuple>
 
@@ -43,5 +43,4 @@ struct RegisterFunc {
 // register a single function
 #define REGISTER_TORCH_FUNC(opFunc) \
     catlass_torch::_register::RegisterFunc<decltype(&opFunc)> register_##opFunc(#opFunc, &opFunc)
-
 #endif

@@ -8,21 +8,14 @@
  * BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE. See LICENSE in the root of
  * the software repository for the full text of the License.
  */
+ 
+#ifndef OPTEST_CATLASS_TORCH_H
+#define OPTEST_CATLASS_TORCH_H
 
-#include <torch/torch.h>
-#include <torch_npu/csrc/core/npu/DeviceUtils.h>
-#include <torch_npu/csrc/core/npu/NPUFormat.h>
-#include <torch_npu/csrc/core/npu/NPUFunctions.h>
-#include <torch_npu/csrc/core/npu/NPUStream.h>
+#include <torch/extension.h>
 
-#include "catlass_kernel.h"
-#include "common/register.h"
-#include "template/matmul.h"
+at::Tensor basic_matmul(
+    const at::Tensor& mat1, const at::Tensor& mat2, const std::string& outDType, const bool transA, const bool transB,
+    const bool formatA, const bool formatB);
 
-namespace CatlassKernelWrapper {
-
-using BasicMatmulOp = MatmulLike<CatlassKernel::KernelInfo, CatlassKernel::BasicMatmul>;
-static auto& basic_matmul = BasicMatmulOp::Run;
-REGISTER_TORCH_FUNC(basic_matmul);
-
-} // namespace CatlassKernelWrapper
+#endif

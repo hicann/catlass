@@ -1,85 +1,97 @@
-set(CATLASS_KERNEL_SLICE_COUNT 4)
+# -----------------------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
+# Please refer to the License for details. You may not use this file except in compliance with the License.
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
+# -----------------------------------------------------------------------------------------------------------
 
 set(CATLASS_ALL_ARCHS "")
+include_directories(${CATLASS_INCLUDE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR})
 
 macro(add_kernel NAME ARCH)
-    if(DEFINED CATLASS_KERNEL_LIST)
+    if(DEFINED CATLASS_KERNEL_LIST AND NOT "${CATLASS_KERNEL_LIST}" STREQUAL "")
         list(FIND CATLASS_KERNEL_LIST ${NAME} _INDEX)
         if(_INDEX EQUAL -1)
             return()
         endif()
     endif()
-    
-    string(REPLACE ";" " " _ARCH_STR "${ARCH}")
-    separate_arguments(_ARCH_LIST UNIX_COMMAND "${_ARCH_STR}")
-    
+
+    if("${ARCH}" MATCHES ";")
+        set(_ARCH_LIST ${ARCH})
+    else()
+        set(_ARCH_LIST "${ARCH}")
+    endif()
+
     foreach(_ARCH ${_ARCH_LIST})
         list(FIND CATLASS_ARCH_LIST ${_ARCH} _ARCH_INDEX)
         if(_ARCH_INDEX EQUAL -1)
             continue()
         endif()
-        
+
         list(APPEND CATLASS_ALL_ARCHS ${_ARCH})
-        list(APPEND CATLASS_KERNELS_${_ARCH} ${NAME})
-        set(CATLASS_KERNEL_${NAME}_${_ARCH}_SOURCES "${ARGN}")
+
+        set(_LIB_NAME "catlass_kernel_${_ARCH}_${NAME}")
+        add_library(${_LIB_NAME} SHARED ${ARGN})
+
+        target_compile_definitions(${_LIB_NAME} PRIVATE CATLASS_ARCH=${_ARCH})
+
+        target_compile_options(${_LIB_NAME} PRIVATE
+            $<$<COMPILE_LANGUAGE:ASC>:--npu-arch=dav-${_ARCH}>
+            $<$<COMPILE_LANGUAGE:ASC>:-Wno-macro-redefined>
+            $<$<COMPILE_LANGUAGE:ASC>:-Wno-ignored-attributes>
+            $<$<COMPILE_LANGUAGE:ASC>:-Wno-unused-value>
+        )
+
+        if(_ARCH STREQUAL "2201")
+            target_compile_options(${_LIB_NAME} PRIVATE
+                "SHELL:$<$<COMPILE_LANGUAGE:ASC>:-mllvm -cce-aicore-record-overflow=true>"
+                "SHELL:$<$<COMPILE_LANGUAGE:ASC>:-mllvm -cce-aicore-dcci-insert-for-scalar=false>"
+            )
+        endif()
+
+        target_link_options(${_LIB_NAME} PRIVATE
+            $<$<COMPILE_LANGUAGE:ASC>:-Wno-unused-command-line-argument>
+        )
+
+        target_include_directories(${_LIB_NAME} PRIVATE
+            ${ASCEND_HOME_PATH}/include
+            ${CATLASS_DIR}/include
+        )
+
+        target_link_directories(${_LIB_NAME} PRIVATE
+            ${ASCEND_HOME_PATH}/lib64
+        )
+
+        target_link_libraries(${_LIB_NAME} PRIVATE
+            ascendc_runtime
+            runtime
+            profapi
+            mmpa
+            ascend_dump
+            c_sec
+            error_manager
+            ascendcl
+            tiling_api
+            nnopbase
+            platform
+            dl
+        )
+
+        if(EXISTS ${ASCEND_HOME_PATH}/lib64/libascendalog.so)
+            target_link_libraries(${_LIB_NAME} PRIVATE ascendalog)
+        endif()
+        if(EXISTS ${ASCEND_HOME_PATH}/lib64/libunified_dlog.so)
+            target_link_libraries(${_LIB_NAME} PRIVATE unified_dlog)
+        endif()
+
+        install(TARGETS ${_LIB_NAME}
+            DESTINATION lib/${_ARCH}
+        )
     endforeach()
 endmacro()
 
-function(generate_kernel_libs)
-    list(REMOVE_DUPLICATES CATLASS_ALL_ARCHS)
-    
-    foreach(_ARCH ${CATLASS_ALL_ARCHS})
-        set(_KERNELS "${CATLASS_KERNELS_${_ARCH}}")
-        list(REMOVE_DUPLICATES _KERNELS)
-        list(LENGTH _KERNELS _KERNEL_COUNT)
-        
-        set(_SLICE_INDEX 0)
-        set(_KERNEL_INDEX 0)
-        set(_SUB_LIBS "")
-        
-        while(_KERNEL_INDEX LESS _KERNEL_COUNT)
-            set(_SLICE_SOURCES "")
-            
-            foreach(_I RANGE 1 ${CATLASS_KERNEL_SLICE_COUNT})
-                if(_KERNEL_INDEX LESS _KERNEL_COUNT)
-                    list(GET _KERNELS ${_KERNEL_INDEX} _KERNEL_NAME)
-                    foreach(_SRC ${CATLASS_KERNEL_${_KERNEL_NAME}_${_ARCH}_SOURCES})
-                        get_filename_component(_SRC_ABS "${_SRC}" ABSOLUTE BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
-                        list(APPEND _SLICE_SOURCES "${_SRC_ABS}")
-                    endforeach()
-                    math(EXPR _KERNEL_INDEX "${_KERNEL_INDEX} + 1")
-                endif()
-            endforeach()
-            
-            if(_SLICE_SOURCES)
-                set(_SUB_LIB "catlass_kernel_${_ARCH}_slice_${_SLICE_INDEX}")
-                add_library(${_SUB_LIB} SHARED ${_SLICE_SOURCES})
-                
-                target_include_directories(${_SUB_LIB} PRIVATE
-                    ${ASCEND_HOME_PATH}/include
-                    ${CATLASS_DIR}/include
-                )
-                
-                install(TARGETS ${_SUB_LIB} 
-                    DESTINATION ${PROJECT_SOURCE_DIR}/torch_catlass/lib/${_ARCH}
-                )
-                
-                list(APPEND _SUB_LIBS ${_SUB_LIB})
-                math(EXPR _SLICE_INDEX "${_SLICE_INDEX} + 1")
-            endif()
-        endwhile()
-        
-        if(_SUB_LIBS)
-            add_library(catlass_kernel_${_ARCH} SHARED)
-            target_link_libraries(catlass_kernel_${_ARCH} ${_SUB_LIBS})
-            
-            install(TARGETS catlass_kernel_${_ARCH}
-                DESTINATION ${PROJECT_SOURCE_DIR}/torch_catlass/lib/${_ARCH}
-            )
-        endif()
-    endforeach()
-endfunction()
-
 add_subdirectory(00_basic_matmul)
-
-generate_kernel_libs()

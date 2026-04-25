@@ -8,8 +8,10 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_TORCH_RUN_NPU_FUNC_H
-#define CATLASS_TORCH_RUN_NPU_FUNC_H
+#ifndef OPTEST_RUN_NPU_FUNC_H
+#define OPTEST_RUN_NPU_FUNC_H
+
+#include <acl/acl.h>
 
 #include <torch_npu/csrc/core/npu/NPUFormat.h>
 #include <torch_npu/csrc/framework/utils/CalcuOpUtil.h>
@@ -22,6 +24,14 @@
                 std::string("Function pointer is null at ") + __FILE__ + ":" + std::to_string(__LINE__) + " in " + \
                 #func);                                                                                            \
         }                                                                                                          \
-    } while (false) at_npu::native::OpCommand::RunOpApiV2(#func, [=]() -> aclError { return func(__VA_ARGS__); });
+    } while (false);                                                                                               \
+    at_npu::native::OpCommand::RunOpApiV2(#func, [=]() -> aclError {                                               \
+        try {                                                                                                      \
+            func(__VA_ARGS__);                                                                                     \
+        } catch (...) {                                                                                            \
+            return ACL_ERROR_INTERNAL_ERROR;                                                                       \
+        }                                                                                                          \
+        return ACL_SUCCESS;                                                                                        \
+    });
 
 #endif
