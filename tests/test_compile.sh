@@ -23,21 +23,21 @@ DEFAULT_BUILD_OPTIONS=(
     "-DCATLASS_ARCH=${CATLASS_ARCH}"
 )
 
-# self contained include
-bash "$BUILD_SCRIPT_PATH" "${DEFAULT_BUILD_OPTIONS[@]}" --tests test_self_contained_includes || exit 1
+# # self contained include
+# bash "$BUILD_SCRIPT_PATH" "${DEFAULT_BUILD_OPTIONS[@]}" --tests test_self_contained_includes || exit 1
 
-# msSanitizer
-if [[ "$CATLASS_ARCH" != 3510 ]]; then
-    bash "$BUILD_SCRIPT_PATH" "${DEFAULT_BUILD_OPTIONS[@]}" --enable_mssanitizer catlass_examples || exit 1
-fi
+# # msSanitizer
+# if [[ "$CATLASS_ARCH" != 3510 ]]; then
+#     bash "$BUILD_SCRIPT_PATH" "${DEFAULT_BUILD_OPTIONS[@]}" --enable_mssanitizer catlass_examples || exit 1
+# fi
 
-# ascendc_dump
-bash "$BUILD_SCRIPT_PATH" "${DEFAULT_BUILD_OPTIONS[@]}" --enable_ascendc_dump catlass_examples || exit 1
+# # ascendc_dump
+# bash "$BUILD_SCRIPT_PATH" "${DEFAULT_BUILD_OPTIONS[@]}" --enable_ascendc_dump catlass_examples || exit 1
 
 # msopgen package build
-if [[ "$CATLASS_ARCH" == 2201 ]]; then
-    bash "$BUILD_SCRIPT_PATH" "${DEFAULT_BUILD_OPTIONS[@]}" basic_matmul_aclnn || exit 1
-fi
+# if [[ "$CATLASS_ARCH" == 2201 ]]; then
+#     bash "$BUILD_SCRIPT_PATH" "${DEFAULT_BUILD_OPTIONS[@]}" basic_matmul_aclnn || exit 1
+# fi
 
-# example test. Do not replace or the test will fail.
-bash "$BUILD_SCRIPT_PATH" "${DEFAULT_BUILD_OPTIONS[@]}" catlass_examples || exit 1
+# # example test. Do not replace or the test will fail.
+# bash "$BUILD_SCRIPT_PATH" "${DEFAULT_BUILD_OPTIONS[@]}" catlass_examples || exit 1

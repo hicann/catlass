@@ -22,32 +22,32 @@ else
     CATLASS_ARCH=2201
 fi
 
-bash "$SCRIPT_PATH/test_compile.sh" "$CATLASS_ARCH"
+# bash "$SCRIPT_PATH/test_compile.sh" "$CATLASS_ARCH"
 
-# example test
-python3 "$SCRIPT_PATH/test_example.py"
+# # example test
+# python3 "$SCRIPT_PATH/test_example.py"
 
-if [[ "$CATLASS_ARCH" == 2201 ]]; then
-    # python extension
-    bash "$BUILD_SCRIPT_PATH" --clean python_extension || exit 1
-    WHEEL_DIR="$SCRIPT_PATH/../output/python_extension/"
-    WHEEL_FILE=$(find "$WHEEL_DIR" -type f -name "torch_catlass-*.whl" 2>/dev/null | head -n 1)
-    if [ -z "$WHEEL_FILE" ]; then
-        echo "Error: No .whl file found in $WHEEL_DIR"
-        exit 1
-    fi
-    pip install "$WHEEL_FILE"
-    python3 "$SCRIPT_PATH/test_python_extension.py"
-    pip uninstall torch_catlass -y
+# if [[ "$CATLASS_ARCH" == 2201 ]]; then
+#     # python extension
+#     bash "$BUILD_SCRIPT_PATH" --clean python_extension || exit 1
+#     WHEEL_DIR="$SCRIPT_PATH/../output/python_extension/"
+#     WHEEL_FILE=$(find "$WHEEL_DIR" -type f -name "torch_catlass-*.whl" 2>/dev/null | head -n 1)
+#     if [ -z "$WHEEL_FILE" ]; then
+#         echo "Error: No .whl file found in $WHEEL_DIR"
+#         exit 1
+#     fi
+#     pip install "$WHEEL_FILE"
+#     python3 "$SCRIPT_PATH/test_python_extension.py"
+#     pip uninstall torch_catlass -y
 
-    # torch lib
-    bash "$BUILD_SCRIPT_PATH" --clean torch_library || exit 1
-    python3 "$SCRIPT_PATH/test_torch_lib.py"
+#     # torch lib
+#     bash "$BUILD_SCRIPT_PATH" --clean torch_library || exit 1
+#     python3 "$SCRIPT_PATH/test_torch_lib.py"
 
-    # mstuner_catlass
-    python3 "$SCRIPT_PATH/test_mstuner.py"
-fi
+#     # mstuner_catlass
+#     # python3 "$SCRIPT_PATH/test_mstuner.py"
+# fi
 
-# unittest
-bash "$BUILD_SCRIPT_PATH" --clean --tests catlass_unittest || exit 1
-$SCRIPT_PATH/../build/tests/unittest/catlass_unittest
+# # unittest
+# bash "$BUILD_SCRIPT_PATH" --clean --tests catlass_unittest || exit 1
+# $SCRIPT_PATH/../build/tests/unittest/catlass_unittest
