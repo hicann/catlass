@@ -80,7 +80,7 @@ struct CopyL1ToBT<Arch::Ascend950, Catlass::Gemm::GemmType<ElementSrc, layout::V
     using LayoutDst = layout::VectorLayout;
     using LayoutSrc = layout::VectorLayout;
 
-    static constexpr uint32_t ELE_NUM_PER_C2 =  BYTE_PER_C2 / sizeof(ElementSrc);
+    static constexpr uint32_t ELE_NUM_PER_C0 = BytesToBits(BYTE_PER_C0) / SizeOfBits<ElementSrc>::value;
 
     CATLASS_DEVICE
     CopyL1ToBT(){}
@@ -93,7 +93,7 @@ struct CopyL1ToBT<Arch::Ascend950, Catlass::Gemm::GemmType<ElementSrc, layout::V
     ){
         AscendC::DataCopyParams intriParams;
         intriParams.blockCount = 1;
-        intriParams.blockLen = (layoutDst.shape(0) + ELE_NUM_PER_C2 - 1) / ELE_NUM_PER_C2;
+        intriParams.blockLen = CeilDiv(layoutDst.shape(0), ELE_NUM_PER_C0);
         if (sizeof(ElementSrc) == 4) {
             // the burst length should be even when B32
             intriParams.blockLen = RoundUp(intriParams.blockLen, 2);
