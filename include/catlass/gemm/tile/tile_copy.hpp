@@ -28,7 +28,12 @@
 #include "catlass/gemm/tile/copy_l1_to_l0a.hpp"
 #include "catlass/gemm/tile/copy_l1_to_l0b.hpp"
 #include "catlass/gemm/tile/copy_ub_to_gm.hpp"
+#include "catlass/gemm/tile/copy_ub_to_l1.hpp"
+#include "catlass/gemm/tile/tile_add.hpp"
+#include "catlass/gemm/tile/tile_cast.hpp"
 #include "catlass/gemm/tile/tile_copy_tla.hpp"
+#include "catlass/gemm/tile/tile_dequant.hpp"
+#include "catlass/gemm/tile/tile_trans.hpp"
 #include "tla/tensor.hpp"
 
 namespace Catlass::Gemm::Tile {
@@ -298,6 +303,7 @@ struct SparseTileCopyTla {
 
 #endif
 
+#if (defined(CATLASS_ARCH) && (CATLASS_ARCH == 2201 || CATLASS_ARCH == 3510))
 template <
     /// Tag indicating architecture
     class ArchTag,
@@ -482,6 +488,7 @@ struct PaddingPackedTileCopyTla {
     using CopyL0CToGm = Gemm::Tile::CopyL0CToGmTla<ArchTag, TensorL0C, TensorC>;
 #endif
 };
+#endif
 
 #if (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510)
 template <
@@ -514,6 +521,207 @@ struct PackedTileCopyTlaToUB
     template <class TensorC>
     using CopyL0CToDst =
         Gemm::Tile::CopyL0CToUBTla<ArchTag, TensorL0C, TensorC, CopyMode, DEQUANT_GRANULARITY, ReluEnable>;
+};
+#endif
+
+#if (defined(CATLASS_ARCH) && CATLASS_ARCH == 2002)
+template <
+    /// Tag indicating architecture
+    class ArchTag,
+    /// GemmType for A matrix operand
+    class AType,
+    /// GemmType type for B matrix operand
+    class BType,
+    /// GemmType type for C matrix operand
+    class CType,
+    /// GemmType type for Bias operand
+    class BiasType = void>
+struct TileCopy {
+    using ElementA = typename AType::Element;
+    using ElementB = typename BType::Element;
+    using ElementC = typename CType::Element;
+    using ElementAccumulator = typename Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
+
+    using CopyGmToL1A = Gemm::Tile::CopyGmToL1<ArchTag, AType>;
+    using CopyGmToL1B = Gemm::Tile::CopyGmToL1<ArchTag, BType>;
+    using CopyL1ToL0A = Gemm::Tile::CopyL1ToL0A<ArchTag, typename helper::L1ATypeSelector<AType>::L1AType>;
+    using CopyL1ToL0B = Gemm::Tile::CopyL1ToL0B<ArchTag, typename helper::L1BTypeSelector<BType>::L1BType>;
+    // using CopyL0CToGm = Gemm::Tile::CopyL0CToGm<ArchTag, ElementAccumulator, CType>;
+    using CopyL0CToUB = Gemm::Tile::CopyL0CToUB<ArchTag, ElementAccumulator, ElementC>;
+    using CopyUBToGm = Gemm::Tile::CopyUb2Gm<ArchTag, CType>;
+};
+
+///////////////////////////////////
+/// 310Pw8a8
+template <
+    /// Tag indicating architecture
+    class ArchTag,
+    /// GemmType for A matrix operand
+    class AType,
+    /// GemmType type for B matrix operand
+    class BType,
+    /// GemmType type for C matrix operand
+    class CType,
+    /// GemmType type for Scale Tensor operand
+    class ScaleType,
+    /// GemmTpe type for Bias operand
+    class BiasType>
+struct TileCopyW8A8 {
+    using ElementA = typename AType::Element;
+    using ElementB = typename BType::Element;
+    using ElementC = typename CType::Element;
+    using ElementScale = typename ScaleType::Element;
+    using ElementBias = typename BiasType::Element;
+    using ElementAccumulator = typename Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
+    // change structual
+    using UBAInType = typename Gemm::helper::L1AndL0TypeSelectorW8A8<AType, BType>::UBAInType;
+    using UBBInType = typename Gemm::helper::L1AndL0TypeSelectorW8A8<AType, BType>::UBBInType;
+    using UBAOutType = typename Gemm::helper::L1AndL0TypeSelectorW8A8<AType, BType>::UBAOutType;
+    using UBBOutType = typename Gemm::helper::L1AndL0TypeSelectorW8A8<AType, BType>::UBBOutType;
+    using L1AType = typename Gemm::helper::L1AndL0TypeSelectorW8A8<AType, BType>::L1AType;
+    using L1BType = typename Gemm::helper::L1AndL0TypeSelectorW8A8<AType, BType>::L1BType;
+    using L0AType = typename Gemm::helper::L1AndL0TypeSelectorW8A8<AType, BType>::L0AType;
+    using L0BType = typename Gemm::helper::L1AndL0TypeSelectorW8A8<AType, BType>::L0BType;
+    using TileTransA = Gemm::Tile::TileTrans<ArchTag, UBAInType, UBAOutType>;
+    using TileTransB = Gemm::Tile::TileTrans<ArchTag, UBBInType, UBBOutType>;
+    using TileCastInt32ToFp32 = Gemm::Tile::TileCast<ArchTag, ElementScale, ElementAccumulator>;
+    using TileCastFp32ToFp16 = Gemm::Tile::TileCast<ArchTag, ElementC, ElementScale>;
+    using TileDequant = Gemm::Tile::TileDequant<
+        ArchTag,
+        Gemm::GemmType<ElementScale, layout::zN, AscendC::TPosition::VECCALC>,
+        Gemm::GemmType<ElementScale, layout::zN, AscendC::TPosition::VECCALC>,
+        Gemm::GemmType<ElementScale, layout::VectorLayout, AscendC::TPosition::VECCALC>>;
+    using TileAdd = Gemm::Tile::TileAdd<
+        ArchTag,
+        Gemm::GemmType<ElementAccumulator, layout::zN, AscendC::TPosition::VECCALC>,
+        Gemm::GemmType<ElementAccumulator, layout::zN, AscendC::TPosition::VECCALC>,
+        Gemm::GemmType<ElementAccumulator, layout::VectorLayout, AscendC::TPosition::VECCALC>>;
+    // using CopyGmToL1A = Gemm::Tile::CopyGmToL1<ArchTag, AType, L1AType>;
+    // using CopyGmToL1B = Gemm::Tile::CopyGmToL1<ArchTag, BType, L1BType>;
+    using CopyGmToUBA = Gemm::Tile::CopyGmToUB<ArchTag, AType, UBAInType>;
+    using CopyGmToUBB = Gemm::Tile::CopyGmToUB<ArchTag, BType, UBBInType>;
+    using CopyUBAToL1A = Gemm::Tile::CopyUBToL1<ArchTag, UBAOutType, L1AType>;
+    using CopyUBBToL1B = Gemm::Tile::CopyUBToL1<ArchTag, UBBOutType, L1BType>;
+    using CopyL1ToL0A = Gemm::Tile::CopyL1ToL0A<ArchTag, L1AType, L0AType>;
+    using CopyL1ToL0B = Gemm::Tile::CopyL1ToL0B<ArchTag, L1BType, L0BType>;
+    using CopyL0CToUB = Gemm::Tile::CopyL0CToUB<ArchTag, ElementAccumulator, ElementAccumulator>;
+    using CopyUBToGm = Gemm::Tile::CopyUb2Gm<ArchTag, CType>;
+    using CopyGmToUBScale = Gemm::Tile::CopyGmToUB<
+        ArchTag,
+        Gemm::GemmType<ElementScale, layout::VectorLayout, AscendC::TPosition::GM>,
+        Gemm::GemmType<ElementScale, layout::VectorLayout, AscendC::TPosition::VECCALC>>;
+    using CopyGmToUBBias = Gemm::Tile::CopyGmToUB<
+        ArchTag,
+        Gemm::GemmType<ElementBias, layout::VectorLayout, AscendC::TPosition::GM>,
+        Gemm::GemmType<ElementBias, layout::VectorLayout, AscendC::TPosition::VECCALC>>;
+};
+
+template <
+    /// Tag indicating architecture
+    class ArchTag,
+    /// GemmType for A matrix operand
+    class AType,
+    /// GemmType type for B matrix operand
+    class BType,
+    /// GemmType type for C matrix operand
+    class CType,
+    /// GemmType type for Scale Tensor operand
+    class ScaleType,
+    /// GemmTpe type for Bias operand
+    class BiasType>
+struct TileCopyW8A8_zN : public TileCopy<ArchTag, AType, BType, CType, BiasType> {
+    using ElementC = typename CType::Element;
+    using ElementScale = typename ScaleType::Element;
+    using ElementBias = typename BiasType::Element;
+    using ElementAccumulator = typename TileCopy<ArchTag, AType, BType, CType, BiasType>::ElementAccumulator;
+    using CopyL0CToUB = Gemm::Tile::CopyL0CToUB<ArchTag, ElementAccumulator, ElementAccumulator>;
+    using TileCastInt32ToFp32 = Gemm::Tile::TileCast<ArchTag, ElementScale, ElementAccumulator>;
+    using TileCastFp32ToFp16 = Gemm::Tile::TileCast<ArchTag, ElementC, ElementScale>;
+    using TileDequant = Gemm::Tile::TileDequant<
+        ArchTag,
+        Gemm::GemmType<ElementScale, layout::zN, AscendC::TPosition::VECCALC>,
+        Gemm::GemmType<ElementScale, layout::zN, AscendC::TPosition::VECCALC>,
+        Gemm::GemmType<ElementScale, layout::VectorLayout, AscendC::TPosition::VECCALC>>;
+    using TileAdd = Gemm::Tile::TileAdd<
+        ArchTag,
+        Gemm::GemmType<ElementBias, layout::zN, AscendC::TPosition::VECCALC>,
+        Gemm::GemmType<ElementBias, layout::zN, AscendC::TPosition::VECCALC>,
+        Gemm::GemmType<ElementBias, layout::VectorLayout, AscendC::TPosition::VECCALC>>;
+    using CopyGmToUBScale = Gemm::Tile::CopyGmToUB<
+        ArchTag,
+        Gemm::GemmType<ElementScale, layout::VectorLayout, AscendC::TPosition::GM>,
+        Gemm::GemmType<ElementScale, layout::VectorLayout, AscendC::TPosition::VECCALC>>;
+    using CopyGmToUBBias = Gemm::Tile::CopyGmToUB<
+        ArchTag,
+        Gemm::GemmType<ElementBias, layout::VectorLayout, AscendC::TPosition::GM>,
+        Gemm::GemmType<ElementBias, layout::VectorLayout, AscendC::TPosition::VECCALC>>;
+};
+#endif
+
+#if (defined(CATLASS_ARCH) && CATLASS_ARCH == 3002)
+template <
+    /// Tag indicating architecture
+    class ArchTag,
+    /// GemmType for A matrix operand
+    class AType,
+    /// GemmType type for B matrix operand
+    class BType,
+    /// GemmType type for C matrix operand
+    class CType,
+    /// GemmType type for Bias operand
+    class BiasType = void>
+struct TileCopy {
+    using ElementA = typename AType::Element;
+    using ElementB = typename BType::Element;
+    using ElementAccumulator = typename Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
+
+    using CopyGmToL1A = Gemm::Tile::CopyGmToL1<ArchTag, AType>;
+    using CopyGmToL1B = Gemm::Tile::CopyGmToL1<ArchTag, BType>;
+    using CopyL1ToL0A = Gemm::Tile::CopyL1ToL0A<ArchTag, typename helper::L1ATypeSelector<AType>::L1AType>;
+    using CopyL1ToL0B = Gemm::Tile::CopyL1ToL0B<ArchTag, typename helper::L1BTypeSelector<BType>::L1BType>;
+    using CopyL0CToGm = Gemm::Tile::CopyL0CToGm<ArchTag, ElementAccumulator, CType>;
+    using BiasTypeSelector = helper::L1BiasTypeSelector<BiasType, ElementAccumulator>;
+    using CopyGmToL1Bias = std::conditional_t<
+        std::is_same_v<BiasType, void>,
+        void,
+        Gemm::Tile::CopyGmToL1<ArchTag, typename BiasTypeSelector::GMBiasType, typename BiasTypeSelector::L1BiasType>>;
+    using CopyL1ToBT = std::conditional_t<
+        std::is_same_v<BiasType, void>,
+        void,
+        Gemm::Tile::CopyL1ToBT<ArchTag, typename BiasTypeSelector::L1BiasType, typename BiasTypeSelector::L0BiasType>>;
+};
+
+// fixpipe开启随路量化
+template <
+    /// Tag indicating architecture
+    class ArchTag,
+    /// GemmType for A matrix operand
+    class AType,
+    /// GemmType type for B matrix operand
+    class BType,
+    /// GemmType type for C matrix operand
+    class CType,
+    /// GemmType type for Scale operand
+    class ScaleType,
+    /// GemmType type for Bias operand
+    class BiasType,
+    /// GemmType type for Bias operand
+    ScaleGranularity SCALE_GRANU = ScaleGranularity::PER_TENSOR>
+struct QuantTileCopy : public TileCopy<ArchTag, AType, BType, CType, BiasType> {
+    // 重写 CopyL0CToGm
+    using ElementAccumulator = typename TileCopy<ArchTag, AType, BType, CType, BiasType>::ElementAccumulator;
+    using CopyL0CToGm = Gemm::Tile::CopyL0CToGm<ArchTag, ElementAccumulator, CType, SCALE_GRANU, false>;
+    using ElementScale = typename ScaleType::Element;
+    using ElementBias = typename BiasType::Element;
+    using CopyGmToL1Scale = Gemm::Tile::CopyGmToL1<
+        ArchTag,
+        Gemm::GemmType<uint64_t, layout::VectorLayout, AscendC::TPosition::GM>,
+        Gemm::GemmType<uint64_t, layout::VectorLayout, AscendC::TPosition::A1>>;
+
+    using CopyL1ToFP = Gemm::Tile::CopyL1ToFP<
+        ArchTag,
+        Gemm::GemmType<uint64_t, layout::VectorLayout, AscendC::TPosition::A1>,
+        Gemm::GemmType<uint64_t, layout::VectorLayout, AscendC::TPosition::C2PIPE2GM>>;
 };
 #endif
 

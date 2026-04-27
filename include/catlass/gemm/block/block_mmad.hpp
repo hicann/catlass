@@ -17,7 +17,7 @@
 
 namespace Catlass::Gemm::Block {
 
-#if (defined (CATLASS_ARCH) && CATLASS_ARCH == 2201)    
+#if (defined(CATLASS_ARCH) && (CATLASS_ARCH == 2201 || CATLASS_ARCH == 2002 || CATLASS_ARCH == 3002)) 
 template <
     class DispatchPolicy,
     class L1TileShape,
@@ -32,7 +32,9 @@ template <
 struct BlockMmad {
     static_assert(DEPENDENT_FALSE<DispatchPolicy>, "BlockMmad is not implemented for this DispatchPolicy");
 };
+#endif
 
+#if (defined(CATLASS_ARCH) && CATLASS_ARCH == 2201)
 /// new add for the reason that i am using the dispatchpolicy which is same as the policy of the optimized_matmul
 // so i add a new one class to avoid the conflict
 template <
@@ -81,6 +83,7 @@ struct BlockMmadSparseTla {
 
 #endif
 
+#if (defined(CATLASS_ARCH) && (CATLASS_ARCH == 2201 || CATLASS_ARCH == 3510))
 template <
     class DispatchPolicy,
     class L1TileShape,
@@ -97,6 +100,7 @@ template <
 struct BlockMmadTla {
     static_assert(DEPENDENT_FALSE<DispatchPolicy>, "BlockMmadTla is not implemented for this DispatchPolicy");
 };
+#endif
 
 } // namespace Catlass::Gemm::Block
 
@@ -136,8 +140,6 @@ struct BlockMmadTla {
 #include "catlass/gemm/block/block_mmad_fai_qk_normal_tla.hpp"
 #include "catlass/gemm/block/block_mmad_fai_pv_head_tail_tla.hpp"
 #include "catlass/gemm/block/block_mmad_fai_pv_normal_tla.hpp"
-#endif
-
 #include "catlass/gemm/block/block_mmad_pingpong_tla.hpp"
 #include "catlass/gemm/block/block_mmad_pingpong_dequant_tla.hpp"
 #include "catlass/gemm/block/block_mmad_pingpong_tla_v2.hpp"
@@ -145,4 +147,27 @@ struct BlockMmadTla {
 #include "catlass/gemm/block/block_mmad_preload_async_with_callback_tla.hpp"
 #include "catlass/gemm/block/block_mmad_fai_pv_tla.hpp"
 #include "catlass/gemm/block/block_mmad_fai_qk_tla.hpp"
+#endif
+
+#if (defined (CATLASS_ARCH) && CATLASS_ARCH == 3510)
+#include "catlass/gemm/block/block_mmad_pingpong_tla.hpp"
+#include "catlass/gemm/block/block_mmad_pingpong_dequant_tla.hpp"
+#include "catlass/gemm/block/block_mmad_pingpong_tla_v2.hpp"
+#include "catlass/gemm/block/block_mmad_preload_tla.hpp"
+#include "catlass/gemm/block/block_mmad_preload_async_with_callback_tla.hpp"
+#include "catlass/gemm/block/block_mmad_fai_pv_tla.hpp"
+#include "catlass/gemm/block/block_mmad_fai_qk_tla.hpp"
+#endif
+
+#if (defined(CATLASS_ARCH) && CATLASS_ARCH == 2002)
+#include "catlass/gemm/block/block_mmad_pingpong_atlas300i.hpp"
+#include "catlass/gemm/block/block_mmad_w8a8_atlas300i.hpp"
+#include "catlass/gemm/block/block_mmad_w8a8_zN_atlas300i.hpp"
+#endif
+
+#if (defined(CATLASS_ARCH) && CATLASS_ARCH == 3002)
+#include "catlass/gemm/block/block_mmad_preload_atlas200i.hpp"
+#include "catlass/gemm/block/block_mmad_w8a8_atlas200i.hpp"
+#endif
+
 #endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_HPP

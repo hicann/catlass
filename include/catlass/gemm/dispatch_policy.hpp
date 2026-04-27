@@ -371,6 +371,36 @@ struct MmadDequant : public MmadBase<ArchTag_, false> {
     static constexpr bool ENABLE_L1_RESIDENT = ENABLE_L1_RESIDENT_;
 };
 
+using MmadAtlas300I = MmadBase<Arch::Atlas300I, false>;
+
+template <bool ENABLE_ABBA_ = false>
+struct MmadAtlas300IPingpong : public MmadAtlas300I {
+    static constexpr uint32_t STAGES = 2;
+    static constexpr bool ENABLE_ABBA = ENABLE_ABBA_;
+};
+
+struct MmadAtlas300IW8a8 : public MmadAtlas300I {
+    static constexpr uint32_t STAGES = 2;
+};
+template <bool ENABLE_ABBA_ = false>
+struct MmadAtlas300IW8a8zN : public MmadAtlas300I {
+    static constexpr uint32_t STAGES = 2;
+    static constexpr bool ENABLE_ABBA = ENABLE_ABBA_;
+};
+
+using MmadAtlas200I = MmadBase<Arch::Atlas200I, false>;
+
+template <bool ENABLE_ABBA_ = false>
+struct MmadAtlas200IPreload : public MmadAtlas200I {
+    static constexpr uint32_t STAGES = 2;
+    static constexpr bool ENABLE_ABBA = ENABLE_ABBA_;
+};
+
+
+struct MmadAtlas200IW8a8 : public MmadAtlas200I {
+    static constexpr uint32_t STAGES = 2;
+};
+
 }  // namespace Catlass::Gemm
 
 #endif  // CATLASS_GEMM_DISPATCH_POLICY_HPP

@@ -29,6 +29,24 @@ if(CATLASS_ARCH STREQUAL "3510")
     add_compile_definitions(CATLASS_ARCH=3510)
 endif()
 
+if(CATLASS_ARCH STREQUAL "2002")
+    set(CCE_AICORE_ARCH_BASE dav-m200)
+    add_compile_definitions(CATLASS_ARCH=2002)
+endif()
+
+if(CATLASS_ARCH STREQUAL "3002")
+    set(CCE_AICORE_ARCH_BASE dav-m300)
+    add_compile_options(
+        "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-function-stack-size=0x4000>"
+        "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-record-overflow=true>"
+        "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm --cce-aicore-or-combine=false>"
+        "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -instcombine-code-sinking=false>"
+        "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-jump-expand=false>"
+        "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-mask-opt=false>"
+    )
+    add_compile_definitions(CATLASS_ARCH=3002)
+endif()
+
 # common compile options
 add_compile_options(
     $<$<COMPILE_LANGUAGE:ASCEND>:-Wno-macro-redefined>
@@ -68,12 +86,16 @@ macro(catlass_example_add_executable NAME OPTYPE)
     set(EXAMPLE_DESTINATION bin)
 
     add_executable(${NAME} ${ARGN})
-    if(${OPTYPE} STREQUAL "cube" OR ${OPTYPE} STREQUAL "vec")
-        set(CCE_AICORE_ARCH "${CCE_AICORE_ARCH_BASE}-${OPTYPE}")
-    elseif(${OPTYPE} STREQUAL "mix")
-        set(CCE_AICORE_ARCH "${CCE_AICORE_ARCH_BASE}")
+    if(${CCE_AICORE_ARCH_BASE} STREQUAL "dav-c220" OR ${CCE_AICORE_ARCH_BASE} STREQUAL "dav-c310")
+        if(${OPTYPE} STREQUAL "cube" OR ${OPTYPE} STREQUAL "vec")
+            set(CCE_AICORE_ARCH "${CCE_AICORE_ARCH_BASE}-${OPTYPE}")
+        elseif(${OPTYPE} STREQUAL "mix")
+            set(CCE_AICORE_ARCH "${CCE_AICORE_ARCH_BASE}")
+        else()
+            message("Unsupported op type: ${OPTYPE}")
+        endif()
     else()
-        message("Unsupported op type: ${OPTYPE}")
+        set(CCE_AICORE_ARCH "${CCE_AICORE_ARCH_BASE}")
     endif()
     target_compile_options(${NAME} PRIVATE $<$<COMPILE_LANGUAGE:ASCEND>:--cce-aicore-arch=${CCE_AICORE_ARCH}>)
     target_compile_definitions(${NAME} PRIVATE CATLASS_EXAMPLE_NAME=${NAME})
@@ -159,10 +181,24 @@ set(EXAMPLE_ASCEND950
     50_ascend950_basic_matmul_gemv
 )
 
+set(EXAMPLE_ATLAS300I
+    51_atlas300i_basic_matmul
+    52_atlas300i_w8a8_matmul
+)
+
+set(EXAMPLE_ATLAS200I
+    53_atlas200i_basic_matmul
+    54_atlas200i_w8a8_matmul
+)
+
 if(CATLASS_ARCH STREQUAL "2201")
     set(EXAMPLE_LIST ${EXAMPLE_ATLASA2})
 elseif(CATLASS_ARCH STREQUAL "3510")
     set(EXAMPLE_LIST ${EXAMPLE_ASCEND950})
+elseif(CATLASS_ARCH STREQUAL "2002")
+    set(EXAMPLE_LIST ${EXAMPLE_ATLAS300I})
+elseif(CATLASS_ARCH STREQUAL "3002")
+    set(EXAMPLE_LIST ${EXAMPLE_ATLAS200I})
 endif()
 
 foreach(EXAMPLE ${EXAMPLE_LIST})

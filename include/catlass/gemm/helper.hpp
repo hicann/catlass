@@ -107,10 +107,12 @@ struct ElementAccumulatorSelector<int8_t, int8_t> {
     using ElementAccumulator = int32_t;
 };
 
+#if (defined(CATLASS_ARCH) && CATLASS_ARCH != 2002)
 template<>
 struct ElementAccumulatorSelector<bfloat16_t, bfloat16_t> {
     using ElementAccumulator = float;
 };
+#endif
 
 #if (defined (CATLASS_ARCH) && CATLASS_ARCH == 3510)
 template<>
@@ -363,6 +365,61 @@ struct L1AndL0TypeSelectorGemm<Gemm::GemmType<int8_t, layout::ColumnMajor>, Gemm
     using L0AType = Gemm::GemmType<int8_t, layout::zZ, AscendC::TPosition::A2>;
     using L0BType = Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::B2>;
 };
+
+#if (defined(CATLASS_ARCH) && CATLASS_ARCH == 2002)
+template <class GmAType, class GmBType>
+struct L1AndL0TypeSelectorW8A8 {
+    static_assert(DEPENDENT_FALSE<GmAType>, "Unsupported layout selector, can not find the specialization.");
+    static_assert(DEPENDENT_FALSE<GmBType>, "Unsupported layout selector, can not find the specialization.");
+};
+template <>
+struct L1AndL0TypeSelectorW8A8<Gemm::GemmType<int8_t, layout::RowMajor>, Gemm::GemmType<int8_t, layout::RowMajor>> {
+    using UBAInType = Gemm::GemmType<int8_t, layout::zZ, AscendC::TPosition::VECCALC>;
+    using UBBInType = Gemm::GemmType<int8_t, layout::RowMajor, AscendC::TPosition::VECCALC>;
+    using UBAOutType = Gemm::GemmType<int8_t, layout::zZ, AscendC::TPosition::VECCALC>;
+    using UBBOutType = Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::VECCALC>;
+    using L1AType = Gemm::GemmType<int8_t, layout::zZ, AscendC::TPosition::A1>;
+    using L1BType = Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::B1>;
+    using L0AType = Gemm::GemmType<int8_t, layout::zZ, AscendC::TPosition::A2>;
+    using L0BType = Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::B2>;
+};
+
+template <>
+struct L1AndL0TypeSelectorW8A8<Gemm::GemmType<int8_t, layout::ColumnMajor>, Gemm::GemmType<int8_t, layout::ColumnMajor>> {
+    using UBAInType = Gemm::GemmType<int8_t, layout::ColumnMajor, AscendC::TPosition::VECCALC>;
+    using UBBInType = Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::VECCALC>;
+    using UBAOutType = Gemm::GemmType<int8_t, layout::zZ, AscendC::TPosition::VECCALC>;
+    using UBBOutType = Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::VECCALC>;
+    using L1AType = Gemm::GemmType<int8_t, layout::zZ, AscendC::TPosition::A1>;
+    using L1BType = Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::B1>;
+    using L0AType = Gemm::GemmType<int8_t, layout::zZ, AscendC::TPosition::A2>;
+    using L0BType = Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::B2>;
+};
+
+template <>
+struct L1AndL0TypeSelectorW8A8<Gemm::GemmType<int8_t, layout::RowMajor>, Gemm::GemmType<int8_t, layout::ColumnMajor>> {
+    using UBAInType = Gemm::GemmType<int8_t, layout::zZ, AscendC::TPosition::VECCALC>;
+    using UBBInType = Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::VECCALC>;
+    using UBAOutType = Gemm::GemmType<int8_t, layout::zZ, AscendC::TPosition::VECCALC>;
+    using UBBOutType = Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::VECCALC>;
+    using L1AType = Gemm::GemmType<int8_t, layout::zZ, AscendC::TPosition::A1>;
+    using L1BType = Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::B1>;
+    using L0AType = Gemm::GemmType<int8_t, layout::zZ, AscendC::TPosition::A2>;
+    using L0BType = Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::B2>;
+};
+
+template <>
+struct L1AndL0TypeSelectorW8A8<Gemm::GemmType<int8_t, layout::ColumnMajor>, Gemm::GemmType<int8_t, layout::RowMajor>> {
+    using UBAInType = Gemm::GemmType<int8_t, layout::ColumnMajor, AscendC::TPosition::VECCALC>;
+    using UBBInType = Gemm::GemmType<int8_t, layout::RowMajor, AscendC::TPosition::VECCALC>;
+    using UBAOutType = Gemm::GemmType<int8_t, layout::zZ, AscendC::TPosition::VECCALC>;
+    using UBBOutType = Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::VECCALC>;
+    using L1AType = Gemm::GemmType<int8_t, layout::zZ, AscendC::TPosition::A1>;
+    using L1BType = Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::B1>;
+    using L0AType = Gemm::GemmType<int8_t, layout::zZ, AscendC::TPosition::A2>;
+    using L0BType = Gemm::GemmType<int8_t, layout::nZ, AscendC::TPosition::B2>;
+};
+#endif
 
 ///////////////////////////////////////
 // Check for whether the tile shape is aligned (Default: 32Bytes).

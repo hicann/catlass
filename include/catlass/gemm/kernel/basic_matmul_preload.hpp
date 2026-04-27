@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -11,8 +11,8 @@
 #ifndef CATLASS_GEMM_KERNEL_MATMUL_PRELOAD_HPP
 #define CATLASS_GEMM_KERNEL_MATMUL_PRELOAD_HPP
 
-#include "catlass/catlass.hpp"
 #include "catlass/arch/resource.hpp"
+#include "catlass/catlass.hpp"
 #include "catlass/coord.hpp"
 #include "catlass/gemm_coord.hpp"
 #include "catlass/layout/layout.hpp"
@@ -83,7 +83,7 @@ public:
 
     static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
     {
-        LayoutA layoutA{args.problemShape.m(), args.problemShape.k()};
+        LayoutA layoutA = LayoutA::template MakeLayout<ElementA>(args.problemShape.m(), args.problemShape.k());
         LayoutB layoutB = LayoutB::template MakeLayout<ElementB>(args.problemShape.k(), args.problemShape.n());
         LayoutC layoutC{args.problemShape.m(), args.problemShape.n()};
         Params params{args.problemShape, args.ptrA, layoutA, args.ptrB, layoutB, args.ptrC, layoutC};
@@ -99,6 +99,7 @@ public:
     void operator()(Params const &params);
 
     /// Executes one Matmul
+#if (defined(CATLASS_ARCH) && CATLASS_ARCH == 2201)
     template <>
     CATLASS_DEVICE
     void operator()<AscendC::AIC>(Params const &params) {
@@ -158,6 +159,64 @@ public:
     template <>
     CATLASS_DEVICE
     void operator()<AscendC::AIV>(Params const &params) {}
+#endif
+
+#if (defined(CATLASS_ARCH) && CATLASS_ARCH == 3002)
+    template <>
+    CATLASS_DEVICE void operator()<AscendC::MIX>(Params const &params)
+    {
+        BlockScheduler matmulBlockScheduler(params.problemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
+        uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
+
+        Arch::Resource<ArchTag> resource;
+        BlockMmad blockMmad(resource);
+
+        // Represent the full gm
+        AscendC::GlobalTensor<ElementA> gmA;
+        gmA.SetGlobalBuffer((__gm__ ElementA *)params.ptrA);
+        AscendC::GlobalTensor<ElementB> gmB;
+        gmB.SetGlobalBuffer((__gm__ ElementB *)params.ptrB);
+        AscendC::GlobalTensor<ElementC> gmC;
+        gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrC);
+
+        for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()) {
+            // Compute block location
+            GemmCoord blockCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
+            GemmCoord actualBlockShape = matmulBlockScheduler.GetActualBlockShape(blockCoord);
+
+            // Compute initial location in logical coordinates
+            MatrixCoord offsetA{blockCoord.m() * L1TileShape::M, blockCoord.k() * L1TileShape::K};
+            MatrixCoord offsetB{blockCoord.k() * L1TileShape::K, blockCoord.n() * L1TileShape::N};
+            MatrixCoord offsetC{blockCoord.m() * L1TileShape::M, blockCoord.n() * L1TileShape::N};
+            int64_t gmOffsetA = params.layoutA.GetOffset(offsetA);
+            int64_t gmOffsetB = params.layoutB.GetOffset(offsetB);
+            int64_t gmOffsetC = params.layoutC.GetOffset(offsetC);
+
+            bool isFirstBlock = (loopIdx == AscendC::GetBlockIdx());
+            bool hasNextBlock = false;
+            GemmCoord nextBlockIdCoord;
+            GemmCoord nextActualBlockShape;
+            if (loopIdx + AscendC::GetBlockNum() < coreLoops) {
+                hasNextBlock = true;
+                nextBlockIdCoord = matmulBlockScheduler.GetBlockCoord(loopIdx + AscendC::GetBlockNum());
+                nextActualBlockShape = matmulBlockScheduler.GetActualBlockShape(nextBlockIdCoord);
+            }
+            MatrixCoord offsetNextA{nextBlockIdCoord.m() * L1TileShape::M, nextBlockIdCoord.k() * L1TileShape::K};
+            MatrixCoord offsetNextB{nextBlockIdCoord.k() * L1TileShape::K, nextBlockIdCoord.n() * L1TileShape::N};
+            int64_t gmOffsetNextA = params.layoutA.GetOffset(offsetNextA);
+            int64_t gmOffsetNextB = params.layoutB.GetOffset(offsetNextB);
+
+            // Compute block-scoped matrix multiply-add
+            blockMmad(
+                gmA[gmOffsetA], params.layoutA, gmB[gmOffsetB], params.layoutB, gmC[gmOffsetC], params.layoutC,
+                gmA[gmOffsetNextA], gmB[gmOffsetNextB], actualBlockShape, nextActualBlockShape, isFirstBlock,
+                hasNextBlock
+            );
+        }
+
+        AscendC::PipeBarrier<PIPE_ALL>();
+    }
+#endif
 };
 
 } // namespace Catlass::Gemm::Kernel

@@ -1,0 +1,499 @@
+/**
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd.
+ * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+ * CANN Open Software License Agreement Version 2.0 (the "License").
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
+ */
+
+#ifndef CATLASS_GEMM_BLOCK_BLOCK_MMAD_W8A8_ATLAS300I_HPP
+#define CATLASS_GEMM_BLOCK_BLOCK_MMAD_W8A8_ATLAS300I_HPP
+
+#include "catlass/arch/resource.hpp"
+#include "catlass/catlass.hpp"
+#include "catlass/coord.hpp"
+#include "catlass/gemm/dispatch_policy.hpp"
+#include "catlass/gemm/helper.hpp"
+#include "catlass/gemm/tile/tile_copy.hpp"
+#include "catlass/gemm/tile/tile_mmad.hpp"
+#include "catlass/gemm_coord.hpp"
+
+namespace Catlass::Gemm::Block {
+
+template <
+    class L1TileShape_,
+    class L0TileShape_,
+    class AType_,
+    class BType_,
+    class CType_,
+    class BiasType_,
+    class TileCopy_,
+    class TileMmad_>
+struct BlockMmad<MmadAtlas300IW8a8, L1TileShape_, L0TileShape_, AType_, BType_, CType_, BiasType_, TileCopy_, TileMmad_> {
+public:
+    // Type Aliases
+    using DispatchPolicy = MmadAtlas300IW8a8;
+    using ArchTag = typename DispatchPolicy::ArchTag;
+    using L1TileShape = L1TileShape_;
+    using L0TileShape = L0TileShape_;
+    using ElementA = typename AType_::Element;
+    using LayoutA = typename AType_::Layout;
+    using ElementB = typename BType_::Element;
+    using LayoutB = typename BType_::Layout;
+    using ElementC = typename CType_::Element;
+    using LayoutC = typename CType_::Layout;
+    using ElementScale = typename TileCopy_::ElementScale;
+    using LayoutScale = layout::VectorLayout;
+    using ElementBias = typename TileCopy_::ElementBias;
+    using LayoutBias = layout::VectorLayout;
+    using TileMmad = TileMmad_;
+    using CopyGmToUBA = typename TileCopy_::CopyGmToUBA;
+    using CopyGmToUBB = typename TileCopy_::CopyGmToUBB;
+    using CopyUBAToL1A = typename TileCopy_::CopyUBAToL1A;
+    using CopyUBBToL1B = typename TileCopy_::CopyUBBToL1B;
+    using CopyL1ToL0A = typename TileCopy_::CopyL1ToL0A;
+    using CopyL1ToL0B = typename TileCopy_::CopyL1ToL0B;
+    using TileTransA = typename TileCopy_::TileTransA;
+    using TileTransB = typename TileCopy_::TileTransB;
+    using CopyL0CToUB = typename TileCopy_::CopyL0CToUB;
+    using TileCastInt32ToFp32 = typename TileCopy_::TileCastInt32ToFp32;
+    using TileCastFp32ToFp16 = typename TileCopy_::TileCastFp32ToFp16;
+    using TileDequant = typename TileCopy_::TileDequant;
+    using TileAdd = typename TileCopy_::TileAdd;
+    using CopyGmToUBScale = typename TileCopy_::CopyGmToUBScale;
+    using CopyGmToUBBias = typename TileCopy_::CopyGmToUBBias;
+    using CopyUBToGm = typename TileCopy_::CopyUBToGm;
+    using ElementAccumulator = typename Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
+    using LayoutAInL0 = typename CopyL1ToL0A::LayoutSrc;
+    using LayoutBInL0 = typename CopyL1ToL0B::LayoutSrc;
+    using LayoutCInL0 = layout::zN;
+    using LayoutAInUB = typename TileCopy_::UBAInType::Layout;
+    using LayoutBInUB = typename TileCopy_::UBBInType::Layout;
+
+    using L1AAlignHelper = Gemm::helper::L1AlignHelper<ElementA, LayoutA>;
+    using L1BAlignHelper = Gemm::helper::L1AlignHelper<ElementB, LayoutB>;
+
+    static constexpr uint32_t STAGES = DispatchPolicy::STAGES;
+    static constexpr uint32_t L1A_SIZE = L1TileShape::M * L1TileShape::K * sizeof(ElementA);
+    static constexpr uint32_t L1B_SIZE = L1TileShape::N * L1TileShape::K * sizeof(ElementB);
+    static constexpr uint32_t L0A_SIZE = ArchTag::L0A_SIZE;
+    static constexpr uint32_t L0B_SIZE = ArchTag::L0B_SIZE;
+    static constexpr uint32_t L0C_SIZE = ArchTag::L0C_SIZE;
+    static constexpr uint32_t L0A_PINGPONG_BUF_SIZE = L0A_SIZE / STAGES;
+    static constexpr uint32_t L0B_PINGPONG_BUF_SIZE = L0B_SIZE / STAGES;
+
+    // Check LayoutC
+    static_assert(
+        (std::is_same_v<LayoutC, layout::RowMajor>) || (std::is_same_v<LayoutC, layout::zN>),
+        "LayoutC only support RowMajor and zN yet!"
+    );
+
+    // Check L1TileShape
+    static_assert((L1A_SIZE * STAGES + L1B_SIZE * STAGES) <= ArchTag::L1_SIZE, "L1TileShape exceeding the L1 space!");
+    static_assert(
+        (L1A_SIZE * STAGES + L1B_SIZE * STAGES + L1TileShape::M * L1TileShape::N * sizeof(ElementAccumulator)
+         + L1TileShape::N * sizeof(ElementScale) + L1TileShape::N * sizeof(ElementAccumulator)
+         + L1TileShape::M * L1TileShape::N * sizeof(ElementC))
+            <= ArchTag::UB_SIZE,
+        "L1TileShape exceeding the UB space!"
+    );
+
+    // Check L0TileShape
+    static constexpr uint32_t L0A_TILE_SIZE = L0TileShape::M * L0TileShape::K * sizeof(ElementA);
+    static constexpr uint32_t L0B_TILE_SIZE = L0TileShape::K * L0TileShape::N * sizeof(ElementB);
+    static constexpr uint32_t L0C_TILE_SIZE = L0TileShape::M * L0TileShape::N * sizeof(ElementAccumulator);
+    static_assert((L0A_TILE_SIZE * STAGES) <= L0A_SIZE, "L0TileShape exceeding the L0A space!");
+    static_assert((L0B_TILE_SIZE * STAGES) <= L0B_SIZE, "L0TileShape exceeding the L0B space!");
+    static_assert(L0C_TILE_SIZE <= L0C_SIZE, "L0TileShape exceeding the L0C space!");
+
+    // Check tileshape
+    static_assert(
+        L1TileShape::M == L0TileShape::M && L1TileShape::N == L0TileShape::N,
+        "The situation where the basic blocks of L1 and L0 differ on the m and n axes is not supported yet"
+    );
+    static_assert(L0TileShape::K <= L1TileShape::K, "L0TileShape::K cannot exceed L1TileShape::K");
+
+    // 32B (256b) aligned
+    static_assert(
+        Gemm::helper::TileShapeAlignChecker<L1TileShape, L0TileShape, ElementA, ElementB>::_ALIGN == 256,
+        "Tile shape must be 32B aligned."
+    );
+
+    /// Construct
+    CATLASS_DEVICE
+    BlockMmad(Arch::Resource<ArchTag> &resource, uint32_t l1BufAddrStart = 0)
+    {
+        uint32_t l1AOffset = l1BufAddrStart;
+        uint32_t l1BOffset = l1BufAddrStart + L1A_SIZE * STAGES;
+        // Init buffers
+        for (uint32_t i = 0; i < STAGES; i++) {
+            // Assign L1/L0A/L0B space for each stages
+            l1ATensorList[i] = resource.l1Buf.template GetBufferByByte<ElementA>(l1AOffset + L1A_SIZE * i);
+            l1BTensorList[i] = resource.l1Buf.template GetBufferByByte<ElementB>(l1BOffset + L1B_SIZE * i);
+            l0ATensorList[i] = resource.l0ABuf.template GetBufferByByte<ElementA>(L0A_PINGPONG_BUF_SIZE * i);
+            l0BTensorList[i] = resource.l0BBuf.template GetBufferByByte<ElementB>(L0B_PINGPONG_BUF_SIZE * i);
+
+            ubATensorList[i] = resource.ubBuf.template GetBufferByByte<ElementA>(l1AOffset + L1A_SIZE * i);
+            ubBTensorList[i] = resource.ubBuf.template GetBufferByByte<ElementB>(l1BOffset + L1B_SIZE * i);
+
+            // Assign event ID for each stages
+            l1AEventList[i] = i;
+            l1BEventList[i] = i + STAGES;
+            l0AEventList[i] = i;
+            l0BEventList[i] = i + STAGES;
+
+            // The event id that needs to be set before the loop
+            AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE3>(l1AEventList[i]);
+            AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE3>(l1BEventList[i]);
+            AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[i]);
+            AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[i]);
+        }
+        AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(ubAEvent);
+        AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(ubAEvent);
+        AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(ubBEvent);
+        AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(ubBEvent);
+        l0CTensor = resource.l0CBuf.template GetBufferByByte<ElementAccumulator>(0);
+        size_t ubOffset = l1BOffset + L1B_SIZE * STAGES;
+        l0C2Tensor = resource.ubBuf.template GetBufferByByte<ElementAccumulator>(ubOffset);
+        fp32Tensor = resource.ubBuf.template GetBufferByByte<ElementScale>(ubOffset); // reuse the l0C2Tensor's Memory
+        ubOffset += L0TileShape::M * L0TileShape::N * sizeof(ElementAccumulator);
+        scaleTensor = resource.ubBuf.template GetBufferByByte<ElementScale>(ubOffset);
+        ubOffset += L0TileShape::N * sizeof(ElementScale);
+        biasTensor = resource.ubBuf.template GetBufferByByte<ElementAccumulator>(ubOffset);
+        ubOffset += L0TileShape::N * sizeof(ElementAccumulator);
+        fp16Tensor = resource.ubBuf.template GetBufferByByte<ElementC>(ubOffset);
+        AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
+        AscendC::SetFlag<AscendC::HardEvent::V_M>(EVENT_ID0);
+        AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(ubQuantEvent);
+        AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(ubBiasEvent);
+    }
+
+    /// Destructor
+    CATLASS_DEVICE
+    ~BlockMmad()
+    {
+        for (uint32_t i = 0; i < STAGES; i++) {
+            AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE3>(l1AEventList[i]);
+            AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE3>(l1BEventList[i]);
+            AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[i]);
+            AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[i]);
+        }
+        // AscendC::WaitFlag<AscendC::HardEvent::FIX_M>(EVENT_ID0);
+        AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(ubAEvent);
+        AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(ubAEvent);
+        AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(ubBEvent);
+        AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(ubBEvent);
+        AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
+        AscendC::WaitFlag<AscendC::HardEvent::V_M>(EVENT_ID0);
+        AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(ubQuantEvent);
+        AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(ubBiasEvent);
+    }
+
+    /// Perform a block-scoped matrix multiply-accumulate
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::GlobalTensor<ElementA> const &gmA,
+        LayoutA const &layoutA,
+        AscendC::GlobalTensor<ElementB> const &gmB,
+        LayoutB const &layoutB,
+        AscendC::GlobalTensor<ElementC> const &gmC,
+        LayoutC const &layoutC,
+        AscendC::GlobalTensor<ElementScale> const &gmScale,
+        LayoutScale const &layoutScale,
+        AscendC::GlobalTensor<ElementBias> const &gmBias,
+        LayoutBias const &layoutBias,
+        GemmCoord const &actualShape
+    )
+    {
+        uint32_t kTileCount = CeilDiv<L1TileShape::K>(actualShape.k());
+        uint32_t mRound = RoundUp<L1AAlignHelper::M_ALIGNED>(actualShape.m());
+        uint32_t nRound = RoundUp<L1BAlignHelper::N_ALIGNED>(actualShape.n());
+
+        auto layoutAInL1 = LayoutAInL0::template MakeLayout<ElementA>(L1TileShape::M, L1TileShape::K);
+        auto layoutBInL1 = LayoutBInL0::template MakeLayout<ElementB>(L1TileShape::K, L1TileShape::N);
+        // auto layoutAInL1 = layoutAInL0;
+        // auto layoutBInL1 = layoutBInL0;
+        auto layoutInL0C = LayoutCInL0::MakeLayoutInL0C(MakeCoord(mRound, nRound));
+
+        // load scale from GM to UB
+        AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(ubQuantEvent);
+        auto layoutScaleInGM = LayoutScale(actualShape.n());
+        auto layoutScaleInUB = LayoutScale(nRound);
+        copyGmToUBScale(scaleTensor, gmScale, layoutScaleInUB, layoutScaleInGM);
+        AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(ubQuantEvent);
+
+        // load bias from GM to UB
+        AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(ubBiasEvent);
+        auto layoutBiasInGM = LayoutBias(actualShape.n());
+        auto layoutBiasInUB = LayoutBias(nRound);
+        copyGmToUBBias(biasTensor, gmBias, layoutBiasInUB, layoutBiasInGM);
+        AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(ubBiasEvent);
+
+        uint32_t kActual = min(actualShape.k(), L1TileShape::K);
+
+        // load first matrix A tile from GM to L1
+        AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(ubAEvent);
+        auto layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShape.m(), kActual));
+        auto layoutAInUB = LayoutAInUB::template MakeLayout<ElementA>(L1TileShape::M, L1TileShape::K);
+        copyGmToUBA(ubATensorList[0], gmA, layoutAInUB, layoutTileA);
+        AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(ubAEvent);
+        AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(ubAEvent);
+        AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(ubAEvent);
+        tileTransA(ubATensorList[1], ubATensorList[0], layoutAInL1, layoutAInUB);
+        AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(ubAEvent);
+        AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(ubAEvent);
+        AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(ubAEvent);
+        AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE3>(l1AEventList[l1ListId]);
+        copyUBAToL1A(l1ATensorList[l1ListId], ubATensorList[1], layoutAInL1, layoutAInL1);
+        AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(ubAEvent);
+        AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE1>(l1AEventList[l1ListId]);
+
+        AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(ubBEvent);
+        auto layoutTileB = layoutB.GetTileLayout(MakeCoord(kActual, actualShape.n()));
+        auto layoutBInUB = LayoutBInUB::template MakeLayout<ElementB>(L1TileShape::K, L1TileShape::N);
+        copyGmToUBB(ubBTensorList[0], gmB, layoutBInUB, layoutTileB);
+        AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(ubBEvent);
+        AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(ubBEvent);
+        AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(ubBEvent);
+        tileTransB(ubBTensorList[1], ubBTensorList[0], layoutBInL1, layoutBInUB);
+        AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(ubBEvent);
+        AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(ubBEvent);
+        AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(ubBEvent);
+        AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE3>(l1BEventList[l1ListId]);
+        copyUBBToL1B(l1BTensorList[l1ListId], ubBTensorList[1], layoutBInL1, layoutBInL1);
+        AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(ubBEvent);
+        AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE1>(l1BEventList[l1ListId]);
+
+        uint32_t mPartLoop = CeilDiv<L0TileShape::M>(mRound);
+        uint32_t nPartLoop = CeilDiv<L0TileShape::N>(nRound);
+
+        AscendC::WaitFlag<AscendC::HardEvent::V_M>(EVENT_ID0);
+        // main loop
+
+        for (uint32_t kLoopIdx = 0; kLoopIdx < kTileCount; kLoopIdx++) {
+            uint32_t l1ListIdNext = (l1ListId + 1 < STAGES) ? (l1ListId + 1) : 0;
+            uint32_t kActualNext{0};
+            // preload next tile from GM to L1
+            if (kLoopIdx < kTileCount - 1) {
+                uint32_t kLoopIdxNext = kLoopIdx + 1;
+                kActualNext = (kLoopIdxNext < kTileCount - 1) ? L1TileShape::K
+                                                              : (actualShape.k() - kLoopIdxNext * L1TileShape::K);
+
+                // Get L1 tensor for next stage
+                auto l1ATensor = l1ATensorList[l1ListIdNext];
+                auto l1BTensor = l1BTensorList[l1ListIdNext];
+                // Get GM tile for next stage
+                MatrixCoord gmTileAOffset{0, kLoopIdxNext * L1TileShape::K};
+                MatrixCoord gmTileBOffset{kLoopIdxNext * L1TileShape::K, 0};
+                auto gmTileA = gmA[layoutA.GetOffset(gmTileAOffset)];
+                auto gmTileB = gmB[layoutB.GetOffset(gmTileBOffset)];
+                layoutTileA = layoutA.GetTileLayout(MakeCoord(actualShape.m(), kActualNext));
+                layoutTileB = layoutB.GetTileLayout(MakeCoord(kActualNext, actualShape.n()));
+
+                AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(ubAEvent);
+                auto layoutAInUB = LayoutAInUB::template MakeLayout<ElementA>(L1TileShape::M, L1TileShape::K);
+                copyGmToUBA(ubATensorList[0], gmTileA, layoutAInUB, layoutTileA);
+                AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(ubAEvent);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(ubAEvent);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(ubAEvent);
+                tileTransA(ubATensorList[1], ubATensorList[0], layoutAInL1, layoutAInUB);
+                AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(ubAEvent);
+                AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(ubAEvent);
+                AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(ubAEvent);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE3>(l1AEventList[l1ListIdNext]);
+                copyUBAToL1A(l1ATensor, ubATensorList[1], layoutAInL1, layoutAInL1);
+                AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(ubAEvent);
+                AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE1>(l1AEventList[l1ListIdNext]);
+
+                AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(ubBEvent);
+                auto layoutBInUB = LayoutBInUB::template MakeLayout<ElementB>(L1TileShape::K, L1TileShape::N);
+                copyGmToUBB(ubBTensorList[0], gmTileB, layoutBInUB, layoutTileB);
+                AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(ubBEvent);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(ubBEvent);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(ubBEvent);
+                tileTransB(ubBTensorList[1], ubBTensorList[0], layoutBInL1, layoutBInUB);
+                AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(ubBEvent);
+                AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(ubBEvent);
+                AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(ubBEvent);
+                AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE3>(l1BEventList[l1ListIdNext]);
+                copyUBBToL1B(l1BTensor, ubBTensorList[1], layoutBInL1, layoutBInL1);
+                AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(ubBEvent);
+                AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE1>(l1BEventList[l1ListIdNext]);
+            }
+
+            // Get L1 tensor for current stage
+            auto l1ATensor = l1ATensorList[l1ListId];
+            auto l1BTensor = l1BTensorList[l1ListId];
+
+            // Get the loop nums on L0
+            uint32_t kPartLoop = CeilDiv<L0TileShape::K>(kActual);
+
+            for (int mPartIdx = 0; mPartIdx < mPartLoop; mPartIdx++) {
+                uint32_t mPartActual = (mPartIdx < mPartLoop - 1) ? L0TileShape::M
+                                                                  : (mRound - mPartIdx * L0TileShape::M);
+
+                for (int kPartIdx = 0; kPartIdx < kPartLoop; kPartIdx++) {
+                    uint32_t kPartActual = (kPartIdx < kPartLoop - 1) ? L0TileShape::K
+                                                                      : (kActual - kPartIdx * L0TileShape::K);
+
+                    // Locate the current tile on L0A
+                    auto l0ATile = l0ATensorList[l0AListId];
+                    LayoutAInL0 layoutAInL0 = LayoutAInL0::template MakeLayout<ElementA>(mPartActual, kPartActual);
+                    // Locate the current tile of matrix A on L1
+                    MatrixCoord l1AOffset{mPartIdx * L0TileShape::M, kPartIdx * L0TileShape::K};
+                    auto l1ATile = l1ATensor[layoutAInL1.GetOffset(l1AOffset)];
+
+                    AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0AListId]);
+                    if ((mPartIdx == 0) && (kPartIdx == 0)) {
+                        AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE1>(l1AEventList[l1ListId]);
+                    }
+
+                    // Load current tile from L1 to L0A
+                    copyL1ToL0A(l0ATile, l1ATile, layoutAInL0, layoutAInL1);
+
+                    if ((mPartIdx == mPartLoop - 1) && (kPartIdx == kPartLoop - 1)) {
+                        AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE3>(l1AEventList[l1ListId]);
+                    }
+
+                    for (int nPartIdx = 0; nPartIdx < nPartLoop; nPartIdx++) {
+                        uint32_t nPartActual = (nPartIdx < nPartLoop - 1) ? L0TileShape::N
+                                                                          : (nRound - nPartIdx * L0TileShape::N);
+
+                        // Locate the current tile on L0B
+                        auto l0BTile = l0BTensorList[l0BListId];
+                        LayoutBInL0 layoutBInL0 = LayoutBInL0::template MakeLayout<ElementB>(kPartActual, nPartActual);
+                        // Locate the current tile of matrix B on L1
+                        MatrixCoord l1BOffset{kPartIdx * L0TileShape::K, nPartIdx * L0TileShape::N};
+                        auto l1BTile = l1BTensor[layoutBInL1.GetOffset(l1BOffset)];
+
+                        // Wait for mmad finished
+                        AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0BListId]);
+                        // If the current tile is the first one on the k&n axis, wait for loading matrix B from GM to L1
+                        if ((kPartIdx == 0) && (nPartIdx == 0)) {
+                            AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE1>(l1BEventList[l1ListId]);
+                        }
+
+                        // Load current tile from L1 to L0B
+                        copyL1ToL0B(l0BTile, l1BTile, layoutBInL0, layoutBInL1);
+
+                        // If the current tile is the last one on the k&n axis, notify to load matrix B from GM to L1
+                        if ((kPartIdx == kPartLoop - 1) && (nPartIdx == nPartLoop - 1)) {
+                            AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE3>(l1BEventList[l1ListId]);
+                        }
+                        // Notify to do mmad
+                        AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(EVENT_ID0);
+
+                        // Locate the current tile on L0C
+                        MatrixCoord l0COffset{mPartIdx * L0TileShape::M, nPartIdx * L0TileShape::N};
+                        auto l0CTile = l0CTensor[layoutInL0C.GetOffset(l0COffset)];
+
+                        // Compute the matrix multiplication on L0A and L0B and write the result to the accumulator
+                        // Wait for loading L0B
+                        AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>(EVENT_ID0);
+
+                        // If the current tile is the first tile on the k axis, the accumulator needs to be reset to 0
+                        bool initC = ((kLoopIdx == 0) && (kPartIdx == 0));
+                        // If the unit flag is enabled, the unit flag is set according to the calculation progress
+                        uint8_t unitFlag = 0b00;
+                        // Perform calculation operations
+                        tileMmad(l0CTile, l0ATile, l0BTile, mPartActual, nPartActual, kPartActual, initC, unitFlag);
+
+                        // Notify to move the next L0B tile
+                        AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0BListId]);
+                        l0BListId = (l0BListId + 1 < STAGES) ? (l0BListId + 1) : 0;
+                    }
+                    AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0AListId]);
+                    l0AListId = (l0AListId + 1 < STAGES) ? (l0AListId + 1) : 0;
+                }
+            }
+            l1ListId = l1ListIdNext;
+            kActual = kActualNext;
+        }
+
+        // copy block out
+        LayoutC layoutBlock = layoutC.GetTileLayout(actualShape.GetCoordMN());
+
+        AscendC::SetFlag<AscendC::HardEvent::M_V>(EVENT_ID0);
+        AscendC::WaitFlag<AscendC::HardEvent::M_V>(EVENT_ID0);
+        AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
+        copyL0CToUB(l0C2Tensor, l0CTensor, layoutInL0C, layoutInL0C);
+        AscendC::SetFlag<AscendC::HardEvent::V_M>(EVENT_ID0);
+        AscendC::PipeBarrier<PIPE_V>();
+        AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(ubBiasEvent);
+        tileAdd(l0C2Tensor, l0C2Tensor, biasTensor, layoutInL0C, layoutInL0C, layoutBiasInUB);
+        AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(ubBiasEvent);
+        AscendC::PipeBarrier<PIPE_V>();
+        tileCastInt32ToFp32(fp32Tensor, l0C2Tensor, layoutInL0C, layoutInL0C);
+        AscendC::PipeBarrier<PIPE_V>();
+        AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(ubQuantEvent);
+        tileDequant(fp32Tensor, fp32Tensor, scaleTensor, layoutInL0C, layoutInL0C, layoutScaleInUB);
+        AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(ubQuantEvent);
+        AscendC::PipeBarrier<PIPE_V>();
+        tileCastFp32ToFp16(fp16Tensor, fp32Tensor, layoutInL0C, layoutInL0C);
+        AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
+        AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
+        // AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID0);
+        if constexpr (std::is_same_v<LayoutC, layout::zN>) {
+            copyUBToGm(gmC, fp16Tensor, layoutBlock, layoutInL0C, layoutC);
+        } else {
+            copyUBToGm(gmC, fp16Tensor, layoutBlock, layoutInL0C);
+        }
+        AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
+    }
+
+protected:
+    // Multi-stage tensors list
+
+    AscendC::LocalTensor<ElementA> l1ATensorList[STAGES];
+    AscendC::LocalTensor<ElementB> l1BTensorList[STAGES];
+    AscendC::LocalTensor<ElementA> l0ATensorList[STAGES];
+    AscendC::LocalTensor<ElementB> l0BTensorList[STAGES];
+    AscendC::LocalTensor<ElementA> ubATensorList[2];
+    AscendC::LocalTensor<ElementB> ubBTensorList[2];
+    AscendC::LocalTensor<ElementAccumulator> l0CTensor;
+    AscendC::LocalTensor<ElementAccumulator> l0C2Tensor;
+    AscendC::LocalTensor<ElementScale> scaleTensor;
+    AscendC::LocalTensor<ElementAccumulator> biasTensor;
+    AscendC::LocalTensor<ElementScale> fp32Tensor;
+    AscendC::LocalTensor<ElementC> fp16Tensor;
+
+    // Multi-stage event id list
+    int32_t l1AEventList[STAGES];
+    int32_t l1BEventList[STAGES];
+    int32_t l0AEventList[STAGES];
+    int32_t l0BEventList[STAGES];
+
+    int32_t ubAEvent = 1;
+    int32_t ubBEvent = 2;
+    int32_t ubBiasEvent = 3;
+    int32_t ubQuantEvent = 4;
+
+    // The id of current stage
+    uint32_t l1ListId{0};
+    uint32_t l0AListId{0};
+    uint32_t l0BListId{0};
+
+    TileMmad tileMmad;
+    CopyGmToUBA copyGmToUBA;
+    CopyGmToUBB copyGmToUBB;
+    TileTransB tileTransB;
+    TileTransA tileTransA;
+    CopyUBAToL1A copyUBAToL1A;
+    CopyUBBToL1B copyUBBToL1B;
+    CopyL1ToL0A copyL1ToL0A;
+    CopyL1ToL0B copyL1ToL0B;
+    CopyL0CToUB copyL0CToUB;
+    CopyUBToGm copyUBToGm;
+    CopyGmToUBScale copyGmToUBScale;
+    CopyGmToUBBias copyGmToUBBias;
+    TileCastInt32ToFp32 tileCastInt32ToFp32;
+    TileCastFp32ToFp16 tileCastFp32ToFp16;
+    TileDequant tileDequant;
+    TileAdd tileAdd;
+};
+
+} // namespace Catlass::Gemm::Block
+
+#endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_PINGPONG_HPP

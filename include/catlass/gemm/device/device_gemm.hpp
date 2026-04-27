@@ -91,7 +91,7 @@ public:
         } else {
             Catlass::KernelAdapter<GemmKernel><<<blockDim, nullptr, stream>>>(params_, fftsAddr);
         }
-#elif (defined (CATLASS_ARCH) && CATLASS_ARCH == 3510)
+#elif (defined(CATLASS_ARCH) && (CATLASS_ARCH == 3510 || CATLASS_ARCH == 2002 || CATLASS_ARCH == 3002))
         Catlass::KernelAdapter<GemmKernel><<<blockDim, nullptr, stream>>>(params_);
 #endif
 #endif

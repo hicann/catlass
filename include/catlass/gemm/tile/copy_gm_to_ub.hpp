@@ -14,5 +14,8 @@
 #if (defined(CATLASS_ARCH) && CATLASS_ARCH == 2201)
 #include "catlass/gemm/tile/atlasa2/copy_gm_to_ub.hpp"
 #endif
+#if (defined(CATLASS_ARCH) && CATLASS_ARCH == 2002)
+#include "catlass/gemm/tile/atlas300i/copy_gm_to_ub.hpp"
+#endif
 
 #endif

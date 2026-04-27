@@ -17,5 +17,11 @@
 #if (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510)
 #include "catlass/gemm/tile/ascend950/copy_l1_to_l0a.hpp"
 #endif
+#if (defined(CATLASS_ARCH) && CATLASS_ARCH == 2002)
+#include "catlass/gemm/tile/atlas300i/copy_l1_to_l0a.hpp"
+#endif
+#if (defined(CATLASS_ARCH) && CATLASS_ARCH == 3002)
+#include "catlass/gemm/tile/atlas200i/copy_l1_to_l0a.hpp"
+#endif
 
 #endif
