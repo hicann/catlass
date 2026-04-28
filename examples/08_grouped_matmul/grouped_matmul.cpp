@@ -32,6 +32,7 @@
 using namespace Catlass;
 
 using Options = GroupedGemmOptions;
+static constexpr uint32_t MAX_TENSOR_COUNT = 256;
 
 static void Run(const Options &options) {
     aclrtStream stream{nullptr};
@@ -43,6 +44,14 @@ static void Run(const Options &options) {
     uint32_t m = options.problemShape.m();
     uint32_t n = options.problemShape.n();
     uint32_t k = options.problemShape.k();
+
+    if (problemCount > MAX_TENSOR_COUNT) {
+        std::cout << "[ERROR] Do not support group count greater than 256." << std::endl;
+        ACL_CHECK(aclrtDestroyStream(stream));
+        ACL_CHECK(aclrtResetDevice(options.deviceId));
+        ACL_CHECK(aclFinalize());
+        return;
+    }
 
     size_t lenA = static_cast<size_t>(m) * k;
     size_t lenB = static_cast<size_t>(k) * n;

@@ -249,7 +249,7 @@ public:
 
     static size_t GetWorkspaceSize(const Arguments &args)
     {
-        return args.workspaceElementSize * args.problemShape.m() * args.problemShape.n() *
+        return static_cast<size_t>(args.workspaceElementSize) * args.problemShape.m() * args.problemShape.n() *
             GetSplitkFactor(args.problemShape.m(),
                 args.problemShape.n(),
                 args.problemShape.k(),
