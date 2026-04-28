@@ -22,8 +22,49 @@
 
 namespace Catlass::Gemm::Block {
 
+/// checker if the dispatch is `MmadAtlasA2Pingpong` or `MmadPingpong`
+template <class DispatchPolicy>
+struct MmadPingpongDispatchChecker {
+    static constexpr bool value = false;
+};
+
+template <bool ENABLE_UNIT_FLAG>
+struct MmadPingpongDispatchChecker<MmadAtlasA2Pingpong<ENABLE_UNIT_FLAG>> {
+    static constexpr bool value = true;
+};
+
+template <class ArchTag, bool ENABLE_UNIT_FLAG, bool USE_HF32_MODE, 
+    uint32_t L0C_STAGES, bool ENABLE_L1_RESIDENT, uint32_t L1A_STAGES, 
+    uint32_t L1B_STAGES, uint32_t L0A_STAGES, uint32_t L0B_STAGES>
+struct MmadPingpongDispatchChecker<MmadPingpong<ArchTag, ENABLE_UNIT_FLAG, USE_HF32_MODE, 
+    L0C_STAGES, ENABLE_L1_RESIDENT, L1A_STAGES, L1B_STAGES, L0A_STAGES, L0B_STAGES>> {
+    static constexpr bool value = true;
+};
+
+/// helper to determine the ping-pong stages
+template <class DispatchPolicy>
+struct DispatchStagesGetter {
+    static constexpr uint32_t STAGES = 1; // Fall back
+};
+
+template <bool ENABLE_UNIT_FLAG>
+struct DispatchStagesGetter<MmadAtlasA2Pingpong<ENABLE_UNIT_FLAG>> {
+    static constexpr uint32_t STAGES = 2;
+};
+
+template <class ArchTag, bool ENABLE_UNIT_FLAG, bool USE_HF32_MODE, 
+    uint32_t L0C_STAGES, bool ENABLE_L1_RESIDENT, uint32_t L1A_STAGES, 
+    uint32_t L1B_STAGES, uint32_t L0A_STAGES, uint32_t L0B_STAGES>
+struct DispatchStagesGetter<MmadPingpong<ArchTag, ENABLE_UNIT_FLAG, USE_HF32_MODE, 
+    L0C_STAGES, ENABLE_L1_RESIDENT, L1A_STAGES, L1B_STAGES, L0A_STAGES, L0B_STAGES>> {
+    // Strategy: select the lowest stage as the common STAGES
+    static constexpr uint32_t L1_STAGES = L1A_STAGES > L1B_STAGES ? L1B_STAGES : L1A_STAGES;
+    static constexpr uint32_t L0_STAGES = L0A_STAGES > L0B_STAGES ? L0B_STAGES : L0A_STAGES;
+    static constexpr uint32_t STAGES = L1_STAGES > L0_STAGES ? L0_STAGES : L1_STAGES;
+};
+
 template <
-    bool ENABLE_UNIT_FLAG_,
+    class DispatchPolicy_,
     class L1TileShape_,
     class L0TileShape_,
     class AType_,
@@ -34,7 +75,7 @@ template <
     class TileMmad_
 >
 struct BlockMmad <
-    MmadAtlasA2Pingpong<ENABLE_UNIT_FLAG_>,
+    DispatchPolicy_,
     L1TileShape_,
     L0TileShape_,
     AType_,
@@ -42,11 +83,11 @@ struct BlockMmad <
     CType_,
     BiasType_,
     TileCopy_,
-    TileMmad_
-> {
+    TileMmad_,
+    std::enable_if_t<MmadPingpongDispatchChecker<DispatchPolicy_>::value>> {
 public:
     // Type Aliases
-    using DispatchPolicy = MmadAtlasA2Pingpong<ENABLE_UNIT_FLAG_>;
+    using DispatchPolicy = DispatchPolicy_;
     using ArchTag = typename DispatchPolicy::ArchTag;
     using L1TileShape = L1TileShape_;
     using L0TileShape = L0TileShape_;
@@ -74,7 +115,7 @@ public:
     using L1BAlignHelper = Gemm::helper::L1AlignHelper<ElementB, LayoutB>;
 
     static constexpr bool ENABLE_UNIT_FLAG = DispatchPolicy::ENABLE_UNIT_FLAG;
-    static constexpr uint32_t STAGES = DispatchPolicy::STAGES;
+    static constexpr uint32_t STAGES = DispatchStagesGetter<DispatchPolicy>::STAGES;
     static constexpr uint32_t L1A_SIZE = L1TileShape::M * L1TileShape::K * sizeof(ElementA);
     static constexpr uint32_t L1B_SIZE = L1TileShape::N * L1TileShape::K * sizeof(ElementB);
     static constexpr uint32_t L0A_SIZE = ArchTag::L0A_SIZE;
@@ -82,6 +123,10 @@ public:
     static constexpr uint32_t L0C_SIZE = ArchTag::L0C_SIZE;
     static constexpr uint32_t L0A_PINGPONG_BUF_SIZE = L0A_SIZE / STAGES;
     static constexpr uint32_t L0B_PINGPONG_BUF_SIZE = L0B_SIZE / STAGES;
+
+    // Check ArchTag
+    static_assert(std::is_same_v<ArchTag, Arch::AtlasA2> || std::is_same_v<ArchTag, Arch::Ascend950>,
+        "ArchTag can only be AtlasA2 or Ascend950!");
 
     // Check LayoutC
     static_assert(std::is_same_v<LayoutC, layout::RowMajor>, "LayoutC only support RowMajor yet!");

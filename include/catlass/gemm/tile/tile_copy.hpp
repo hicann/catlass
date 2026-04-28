@@ -33,7 +33,6 @@
 
 namespace Catlass::Gemm::Tile {
 
-#if (defined(CATLASS_ARCH) && CATLASS_ARCH == 2201)
 template <
     /// Tag indicating architecture
     class ArchTag,
@@ -66,6 +65,7 @@ struct TileCopy {
         Gemm::Tile::CopyL1ToBT<ArchTag, typename BiasTypeSelector::L1BiasType, typename BiasTypeSelector::L0BiasType>>;
 };
 
+#if (defined(CATLASS_ARCH) && CATLASS_ARCH == 2201)
 template <class ArchTag, class AType, class BType, class CType, class PrologueA_, class PrologueB_, class BiasType = void>
 struct TileCopyWithPrologueDeqPerTensor {
     using ElementA = typename AType::Element;

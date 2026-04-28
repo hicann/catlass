@@ -176,7 +176,7 @@ class CatlassExampleTest(unittest.TestCase):
         case_py = [str(i) for i in [1, 138, 100, 4, 2, 128, 0, 0, 0]] + ["half"]
         ret = subprocess.run(["python", os.path.join(
             CMAKE_EXAMPLES_PATH, "49_ascend950_flash_attention_infer", "gen_data.py")] + case_py)
-        case_cpp = [str(i) for i in [1, 138, 100, 4, 2, 128, 0, 0, 0]] + ["--dtype", "half",
+        case_cpp = [str(i) for i in [1, 138, 100, 4, 2, 128, 0, 0, 0]] + ["--dtype", "half", "--device", "1",
             "--datapath", os.path.join(CMAKE_EXAMPLES_PATH, "49_ascend950_flash_attention_infer", "data")]
         self.run_case("49_ascend950_flash_attention_infer", case_cpp)
 
@@ -193,7 +193,7 @@ class CatlassExampleTest(unittest.TestCase):
             ]
             + case_py
         )
-        case_cpp = [str(i) for i in [256, 512, 1024]]
+        case_cpp = [str(i) for i in [256, 512, 1024]] + [1]
         self.run_case("53_ascend950_fp8_mx_matmul", case_cpp)
 
     @only_on_3510
@@ -209,7 +209,7 @@ class CatlassExampleTest(unittest.TestCase):
             ]
             + case_py
         )
-        case_cpp = [str(i) for i in [256, 512, 1024]]
+        case_cpp = [str(i) for i in [256, 512, 1024]] + [1]
         self.run_case("54_ascend950_fp4_mx_matmul", case_cpp)
 
 
@@ -260,6 +260,7 @@ normal_cases_3510 = [
     "48_ascend950_grouped_matmul_slice_m_per_tensor_per_channel_dequant 128 512 1024 2048 0 0",
     "50_ascend950_basic_matmul_gemv 1 128 127 0",
     "51_ascend950_quant_matmul_per_group_per_block_tla 256 512 1024 0",
+    "55_ascend950_basic_matmul_notla 256 512 1024 0",
     "56_ascend950_basic_conv2d_tla 2 33 43 112 80 3 3 2 2 2 2 1 1 1 1 0"
 ]
 

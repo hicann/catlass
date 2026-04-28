@@ -17,7 +17,6 @@
 
 namespace Catlass::Gemm::Block {
 
-#if (defined (CATLASS_ARCH) && CATLASS_ARCH == 2201)    
 template <
     class DispatchPolicy,
     class L1TileShape,
@@ -27,12 +26,14 @@ template <
     class CType,
     class BiasType = void,
     class TileCopy = Gemm::Tile::TileCopy<typename DispatchPolicy::ArchTag, AType, BType, CType, BiasType>,
-    class TileMmad = Gemm::Tile::TileMmad<typename DispatchPolicy::ArchTag, AType, BType, BiasType>
+    class TileMmad = Gemm::Tile::TileMmad<typename DispatchPolicy::ArchTag, AType, BType, BiasType>,
+    class Enable = void
 >
 struct BlockMmad {
     static_assert(DEPENDENT_FALSE<DispatchPolicy>, "BlockMmad is not implemented for this DispatchPolicy");
 };
 
+#if (defined (CATLASS_ARCH) && CATLASS_ARCH == 2201)   
 /// new add for the reason that i am using the dispatchpolicy which is same as the policy of the optimized_matmul
 // so i add a new one class to avoid the conflict
 template <
@@ -101,7 +102,6 @@ struct BlockMmadTla {
 } // namespace Catlass::Gemm::Block
 
 #if (defined (CATLASS_ARCH) && CATLASS_ARCH == 2201)
-#include "catlass/gemm/block/block_mmad_pingpong.hpp"
 #include "catlass/gemm/block/block_mmad_fa_qk.hpp"
 #include "catlass/gemm/block/block_mmad_fa_pv.hpp"
 #include "catlass/gemm/block/block_mmad_mla_qk.hpp"
@@ -138,6 +138,10 @@ struct BlockMmadTla {
 #include "catlass/gemm/block/block_mmad_fai_pv_normal_tla.hpp"
 #endif
 
+/// Compactible block utility
+#include "catlass/gemm/block/block_mmad_pingpong.hpp"
+
+/// TLA block utility
 #include "catlass/gemm/block/block_mmad_pingpong_tla.hpp"
 #include "catlass/gemm/block/block_mmad_pingpong_dequant_tla.hpp"
 #include "catlass/gemm/block/block_mmad_pingpong_tla_v2.hpp"
