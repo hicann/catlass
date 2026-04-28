@@ -72,6 +72,26 @@ void ComputeConv2d(
     }
 }
 
+template <class Element>
+void ClearInvalidOutput(std::vector<Element>& output, const Conv2dParams& params)
+{
+    uint32_t c0InvalidStart = params.cout() % params.C0;
+    if (c0InvalidStart == 0) {
+        return;
+    }
+    for (uint32_t batch = 0; batch < params.batch(); batch++) {
+        uint32_t baseOffset = batch * params.cout1() * params.ho() * params.wo() * params.C0 +
+            (params.cout1() - 1) * params.ho() * params.wo() * params.C0;
+        for (uint32_t ho = 0; ho < params.ho(); ho++) {
+            for (uint32_t wo = 0; wo < params.wo(); wo++) {
+                for (uint32_t c0 = c0InvalidStart; c0 < params.C0; c0++) {
+                    output[baseOffset + ho * params.wo() * params.C0 + wo * params.C0 + c0] = 0;
+                }
+            }
+        }
+    }
+}
+
 } // namespace Catlass::golden
 
 #endif // EXAMPLES_COMMON_GOLDEN_CONV2D_HPP

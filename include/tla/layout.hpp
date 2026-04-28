@@ -12,6 +12,7 @@
 #define TLA_LAYOUT_HPP
 
 #include "catlass/catlass.hpp"
+#include "catlass/arch/arch.hpp"
 #include "catlass/numeric_size.hpp"
 #include "tla/numeric/integral_constant.hpp"
 #include "tla/numeric/math.hpp"
@@ -787,6 +788,42 @@ auto MakeLayoutL0C(T const& rows, U const& cols)
         MakeStride(MakeStride(Int<Catlass::C0_NUM_PER_FRACTAL>{}, Int<ELE_NUM_PER_FRACTAL>{}),
                    MakeStride(Int<1>{}, RoundUp((int64_t)rows, Int<Catlass::C0_NUM_PER_FRACTAL>{}) * Catlass::C0_NUM_PER_FRACTAL)),
         MakeShape(rows, cols));
+}
+
+template <class Element, class T1, class T2, class T3, class T4>
+CATLASS_HOST_DEVICE constexpr
+auto MakeLayoutFmap(T1 const& batch, T2 const& cin1, T3 const& h, T4 const& w)
+{
+    constexpr uint32_t ELE_NUM_PER_C0 = Catlass::BYTE_PER_C0 / sizeof(Element);
+    const int64_t strideH = w * ELE_NUM_PER_C0;
+    const int64_t strideCin1 = h * strideH;
+    const int64_t strideBatch = cin1 * strideCin1;
+    return MakeLayout(
+        MakeShape(static_cast<uint32_t>(batch), static_cast<uint32_t>(cin1), static_cast<uint32_t>(h), 
+            static_cast<uint32_t>(w), Int<ELE_NUM_PER_C0>{}),
+        MakeStride(strideBatch, strideCin1, strideH, Int<ELE_NUM_PER_C0>{}, Int<1>{}),
+        MakeShape(static_cast<uint32_t>(batch), static_cast<uint32_t>(cin1), static_cast<uint32_t>(h), 
+            static_cast<uint32_t>(w), ELE_NUM_PER_C0)
+    );
+}
+
+template <class Element, class PositionType, class T1, class T2, class T3, class T4>
+CATLASS_HOST_DEVICE constexpr
+auto MakeLayoutFilter(T1 const& cin1, T2 const& kh, T3 const& kw, T4 const& cout)
+{
+    constexpr uint32_t ELE_NUM_PER_C0 = Catlass::BYTE_PER_C0 / sizeof(Element);
+    const uint32_t coutRound = std::is_same_v<PositionType, Catlass::Arch::PositionL1> ?
+        RoundUp(cout, Catlass::C0_NUM_PER_FRACTAL) : cout;
+    const int64_t strideKw = coutRound * ELE_NUM_PER_C0;
+    const int64_t strideKh = kw * strideKw;
+    const int64_t strideCin1 = kh * strideKh;
+    return MakeLayout(
+        MakeShape(static_cast<uint32_t>(cin1), static_cast<uint32_t>(kh), static_cast<uint32_t>(kw), 
+            static_cast<uint32_t>(coutRound), Int<ELE_NUM_PER_C0>{}),
+        MakeStride(strideCin1, strideKh, strideKw, Int<ELE_NUM_PER_C0>{}, Int<1>{}),
+        MakeShape(static_cast<uint32_t>(cin1), static_cast<uint32_t>(kh), static_cast<uint32_t>(kw), 
+            static_cast<uint32_t>(coutRound), ELE_NUM_PER_C0)
+    );
 }
 
 //
