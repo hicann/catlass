@@ -225,6 +225,9 @@ static void RunWithLayouts(const Options &options) {
     using ElementA = half;
     using ElementB = half;
     using ElementC = half;
+    using HostElementA = fp16_t;
+    using HostElementB = fp16_t;
+    using HostElementC = fp16_t;
 
     using LayoutTagC = layout::RowMajor; // must be RowMajor
     LayoutTagA tagA{m, k, options.lda};
@@ -248,21 +251,21 @@ static void RunWithLayouts(const Options &options) {
     size_t sizeC = lenC * sizeof(ElementC);
 
     // allocate memory of A and copy to device side
-    std::vector<ElementA> hostA(lenA, 1.0f);
-    golden::FillRandomData<ElementA>(hostA, -5.0f, 5.0f);
+    std::vector<HostElementA> hostA(lenA, 1.0f);
+    golden::FillRandomData<HostElementA>(hostA, -5.0f, 5.0f);
     uint8_t *deviceA{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
 
     // allocate memory of B and copy to device side
-    std::vector<ElementB> hostB(lenB, 1.0f);
-    golden::FillRandomData<ElementB>(hostB, -5.0f, 5.0f);
+    std::vector<HostElementB> hostB(lenB, 1.0f);
+    golden::FillRandomData<HostElementB>(hostB, -5.0f, 5.0f);
     uint8_t *deviceB{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
 
     // allocate memory of C
-    std::vector<ElementC> hostC(lenC);
+    std::vector<HostElementC> hostC(lenC);
     uint8_t *deviceC{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
@@ -336,7 +339,7 @@ static void RunWithLayouts(const Options &options) {
 
     // comparison of precision with matmul computed on cpu
     size_t packedLenC = static_cast<size_t>(batchCount) * m * n;
-    std::vector<ElementC> packedC(packedLenC);
+    std::vector<HostElementC> packedC(packedLenC);
     std::vector<float> packedGolden(packedLenC);
 
     for (uint32_t b = 0; b < batchCount; ++b) {
