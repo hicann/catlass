@@ -137,9 +137,12 @@ bash scripts/build.sh -DCATLASS_BUILD_USAGE shared_lib
 
 ## 注意事项
 
+- 本示例仅用于CATLASS算子编译成共享库、静态库的参考，为保证代码简洁，不进行泛化的支持，如多个算子、多个平台等。
 - 我们目前提供了四种典型算子作为示例：
   - `BasicMatmul`：基本矩阵乘法，提供类型模板的实现方法
   - `GroupedMatmul`：分组矩阵乘法，提供分组输入输出示例
   - `OptimizedMatmul`：优化矩阵乘法，提供CV融合的示例
   - `ConvBias`：卷积算子
-- 本节是算子打包成动态库的一个示例，可根据需要自行扩展功能，不仅限于已有的代码。
+- 示例仅支持以下产品：
+  - `Atlas A2 训练系列产品 / Atlas A2 推理系列产品`(`2201`架构)
+  - `Atlas A3 训练系列产品 / Atlas A3 推理系列产品`(`2201`架构)

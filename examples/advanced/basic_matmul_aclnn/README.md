@@ -42,16 +42,28 @@ msopgen gen -i catlass_basic_matmul.json -c ai_core-<soc_version> -lan cpp -out 
 [op_kernel/catlass_basic_matmul.cpp](./op_kernel/catlass_basic_matmul.cpp)
 **注意事项**
 
-- 我们需要增加编译选项来引入CATLASS的头文件。在`op_kernel/CMakeLists.txt`中增加算子编译选项。其中`${CATLASS_INCLUDE_PATH}`是CATLASS代码仓下的`include`文件夹的路径，需根据环境实际情况进行配置。
+- 我们需要增加编译选项来引入CATLASS的头文件。在`op_kernel/CMakeLists.txt`中增加**包含路径**和**架构宏**选项。
+  - 添加包含路径选项`-I${CATLASS_INCLUDE_PATH}`。其中`${CATLASS_INCLUDE_PATH}`是CATLASS代码仓下的`include`文件夹的路径，需根据环境实际情况进行配置。
+  - 添加架构宏选项`-DCATLASS_ARCH=${ARCH}`。其中`${ARCH}`是对应架构的编号。
+- 根据CANN版本的不同，默认写法有所不同：
+  - CANN版本>=`9.0.0.beta2`
+  
+      ```diff
+      # ...
+      + npu_op_kernel_options(ascendc_kernels ALL OPTIONS -I${CATLASS_INCLUDE_PATH})
+      # ...
+      ```
 
-    ```diff
-    # set custom compile options
-    if ("${CMAKE_BUILD_TYPE}x" STREQUAL "Debugx")
-        add_ops_compile_options(ALL OPTIONS -g -O0)
-    endif()
-    + add_ops_compile_options(ALL OPTIONS -I${CATLASS_INCLUDE_PATH})
-    add_kernels_compile()
-    ```
+  - CANN版本<`9.0.0.beta2`
+  
+      ```diff
+      # set custom compile options
+      if ("${CMAKE_BUILD_TYPE}x" STREQUAL "Debugx")
+          add_ops_compile_options(ALL OPTIONS -g -O0)
+      endif()
+      + add_ops_compile_options(ALL OPTIONS -I${CATLASS_INCLUDE_PATH})
+      add_kernels_compile()
+      ```
 
 - `msOpGen`工程的分离编译模式不支持直接将结构体（如`Catlass::GemmCoord`）作为kernel的参数传入。当需要使用结构体时，需要通过`tiling`地址传递成员数据，然后在kernel侧重新构造。
 
@@ -83,7 +95,7 @@ $ASCEND_HOME_PATH/opp/vendors/customize/op_api/include/aclnn_catlass_basic_matmu
 $ASCEND_HOME_PATH/opp/vendors/customize/op_api/lib/libcust_opapi.so
 ```
 
-这可作为`Makefile`/`CMakeLists.txt`的编写参考。
+这可作为`Makefile`/`CMakeLists.txt`的编写参考。可在[5. 调用](#5-调用)中查看CMake编写示例。
 
 ## 5. 调用
 
@@ -103,11 +115,20 @@ target_include_directories(basic_matmul_aclnn PRIVATE
     $ENV{ASCEND_HOME_PATH}/include/aclnn
     $ENV{ASCEND_HOME_PATH}/include/experiment/runtime
     $ENV{ASCEND_HOME_PATH}/include/experiment/msprof
-    $ENV{ASCEND_HOME_PATH}/opp/vendors/customize/op_api/include)
+    # 自定义算子包头文件目录
+    $ENV{ASCEND_HOME_PATH}/opp/vendors/customize/op_api/include
+)
 target_link_directories(basic_matmul_aclnn PRIVATE
     $ENV{ASCEND_HOME_PATH}/lib64
-    $ENV{ASCEND_HOME_PATH}/opp/vendors/customize/op_api/lib/)
-target_link_libraries(basic_matmul_aclnn PRIVATE ascendcl cust_opapi nnopbase)
+    # 自定义算子包库文件目录
+    $ENV{ASCEND_HOME_PATH}/opp/vendors/customize/op_api/lib/
+)
+target_link_libraries(basic_matmul_aclnn PRIVATE 
+    ascendcl 
+    nnopbase
+    # 自定义算子包库文件名称
+    cust_opapi 
+)
 ```
 
 ## 预置示例
@@ -130,6 +151,14 @@ cd output/bin
 
 执行结果如下，说明精度比对成功。
 
-```
+```sh
 Compare success.
 ```
+
+## 注意事项
+
+- 本示例仅用于CATLASS算子接入msopgen的参考，为保证代码简洁，不进行泛化的支持，如多个算子、多个平台等。
+- 目前仅提供`basic_matmul`算子接入示例。
+- 示例仅支持以下产品：
+  - `Atlas A2 训练系列产品 / Atlas A2 推理系列产品`(`2201`架构)
+  - `Atlas A3 训练系列产品 / Atlas A3 推理系列产品`(`2201`架构)

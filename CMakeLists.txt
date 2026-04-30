@@ -20,29 +20,18 @@ else()
     set(ASCEND_HOME_PATH $ENV{ASCEND_HOME_PATH})
 endif()
 
-find_package(Python3 REQUIRED)
+include(cmake/funcs.cmake)
 
 if(NOT DEFINED NPU_MODEL OR NPU_MODEL STREQUAL "")
-    execute_process(
-        COMMAND ${Python3_EXECUTABLE} -c "import acl;print(acl.get_soc_name())"
-        OUTPUT_VARIABLE NPU_MODEL
-        ERROR_QUIET
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-    if(NPU_MODEL STREQUAL "")
+    get_cann_version_and_soc_name()
+    if(NOT DEFINED NPU_MODEL OR NPU_MODEL STREQUAL "")
         message(WARNING "Failed to get NPU_MODEL. Simulator or aclnn example may not work.\nYou can set NPU_MODEL manually by -DNPU_MODEL=Ascendxxxyy.")
-    else()
-        message("Detected NPU_MODEL: ${NPU_MODEL}")
     endif()
 endif()
 
-execute_process(
-    COMMAND ${Python3_EXECUTABLE} -c "import acl;print(acl.get_cann_version(0)[0]['version'])"
-    OUTPUT_VARIABLE CANN_VERSION
-    ERROR_QUIET
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-message("Detected CANN_VERSION: ${CANN_VERSION}")
+if(NOT DEFINED CANN_VERSION OR CANN_VERSION STREQUAL "")
+    message(WARNING "Failed to get CANN_VERSION.")
+endif()
 
 set(CATLASS_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/include)
 set(CATLASS_3RDPARTY_DIR ${PROJECT_SOURCE_DIR}/3rdparty)

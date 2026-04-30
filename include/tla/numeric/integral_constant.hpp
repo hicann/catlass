@@ -102,7 +102,7 @@ struct Underscore {
     using type = Underscore;
 };
 
-CATLASS_HOST_DEVICE constexpr Underscore _{};
+constexpr Underscore _{};
 
 template <class T>
 struct is_underscore : false_type {};
