@@ -212,6 +212,30 @@ class CatlassExampleTest(unittest.TestCase):
         case_cpp = [str(i) for i in [256, 512, 1024]] + [1]
         self.run_case("54_ascend950_fp4_mx_matmul", case_cpp)
 
+    @only_on_3510
+    def test_57_ascend950_matmul_full_dequant(self):
+        case_py = ["--shape"] + ["513 513 513"] + ["--x1_quant_mode"] + ["per_token"] + ["--x2_quant_mode"] + ["per_channel"]
+        subprocess.run(
+            [
+                "python",
+                os.path.join(
+                    CMAKE_EXAMPLES_PATH, "57_ascend950_matmul_full_dequant", "scripts", "gen_data.py"
+                ),
+            ]
+            + case_py
+        )
+        subprocess.run(
+            [
+                "cp", "-r", "input", CMAKE_BINARY_PATH,
+            ]
+        )
+        subprocess.run(
+            [
+                "cp", "-r", "output", CMAKE_BINARY_PATH,
+            ]
+        )
+        case_cpp = [str(i) for i in [513, 513, 513]] + ["per_token"] + ["per_channel"]
+        self.run_case("57_ascend950_matmul_full_dequant", case_cpp)
 
 normal_cases_2201 = [
     "00_basic_matmul 256 512 1024 0",

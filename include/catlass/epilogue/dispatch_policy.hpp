@@ -138,6 +138,10 @@ struct EpilogueAscend950Fixpipe {
     using ArchTag = Arch::Ascend950;
     static constexpr bool SPLIT_M = SPLIT_M_;
 };
+// For Ascend950, full dequant
+struct BlockEpilogueDequant{
+    using ArchTag = Arch::Ascend950;
+};
 }  // namespace Catlass::Epilogue
 
 #endif  // CATLASS_EPILOGUE_DISPATCH_POLICY_HPP
