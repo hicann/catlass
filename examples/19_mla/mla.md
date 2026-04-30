@@ -1,6 +1,6 @@
 # CATLASS MLA
 
-CATLASS MLA是基于CATLASS Gemm Api实现的亲和昇腾AtlasA2硬件的Flash-MLA算子，算子的结构可以分为以下几部分
+CATLASS MLA是基于CATLASS Gemm API实现的亲和昇腾AtlasA2硬件的Flash-MLA算子，算子的结构可以分为以下几部分
 
 * Tiling计算；
 * Kernel实现，具体有两种实现，通用的[mla_kernel.cpp](./mla_kernel.cpp)以及特化的[mla_kernel_tp1_spec.cpp](./mla_kernel_tp1_spec.cpp)；
@@ -22,7 +22,7 @@ MLATiling::GetMLATilingParam(mlaInfo, blockDim, (uint32_t *)tilingHost);
 
 ## Kernel
 
-本算子提供了两种Kernel实现:
+本算子提供了两种Kernel实现：
 
 1. 通用的[mla_kernel.cpp](./mla_kernel.cpp)，在qHeadNum为16/32/64场景（分别对应模型侧TP8/4/2场景）性能更优。
 2. 特化的[mla_kernel_tp1_spec.cpp](./mla_kernel_tp1_spec.cpp)，在qHeadNum为128场景（对应模型侧TP1场景）性能更优。
@@ -37,7 +37,7 @@ MLATiling::GetMLATilingParam(mlaInfo, blockDim, (uint32_t *)tilingHost);
 
 * 采用FlashAttention的四阶段计算流程，对于输入的Q, QRope, K, KRope进行切块后运算。
 * 对输入序列长度`kvSeqlen`按照`blockSize`为单位进行切块，每次Attention运算的基块为四个block，使能提前下发一个基块的QK Mmad与softmax，让不同基块的CUBE与VECTOR阶段互相掩盖。
-* 由于基块大小的放大，使得该Kernel的PV Mmad阶段的搬出数据量降低，减少了搬出带宽占用，相应的，由于硬件buffer大小限制，取消了K的常驻。
+* 由于基块大小的放大，该Kernel的PV Mmad阶段的搬出数据量降低，减少了搬出带宽占用，相应的，由于硬件buffer大小限制，取消了K的常驻。
 
 在本算子中，使用了Block和Tile层级组件来组装Kernel，具体步骤为：
 
@@ -87,15 +87,15 @@ using MLAKernel = MLAKernel<BlockMmadQK, BlockMmadPV, EpilogueMLASoftmax,
 
 算子总共使用了两类Block Mmad组件，分别为：
 
-* `BlockMmadQK`为BlockMmad模板类的偏特化，用于处理Flash-MLA中的Q与K的矩阵乘操作，头文件[block_mmad_mla_qk.hpp](../../include/catlass/gemm/block/block_mmad_mla_qk.hpp)中的实现对应通用的[mla_kernel.cpp](./mla_kernel.cpp)，头文件[block_mmad_mla_qk_tp1_spec.hpp](../../include/catlass/gemm/block/block_mmad_mla_qk_tp1_spec.hpp)中的实现则对应特化的[mla_kernel_tp1_spec.cpp](./mla_kernel_tp1_spec.cpp).  
-* `BlockMmadPV`为BlockMmad模板类的偏特化，用于处理Flash-MLA中的P与V的矩阵乘操作，头文件[block_mmad_mla_pv.hpp](../../include/catlass/gemm/block/block_mmad_mla_pv.hpp)中的实现对应通用的[mla_kernel.cpp](./mla_kernel.cpp)，头文件[block_mmad_mla_pv_tp1_spec.hpp](../../include/catlass/gemm/block/block_mmad_mla_pv_tp1_spec.hpp)中的实现则对应特化的[mla_kernel_tp1_spec.cpp](./mla_kernel_tp1_spec.cpp).  
+* `BlockMmadQK`为BlockMmad模板类的偏特化，用于处理Flash-MLA中的Q与K的矩阵乘操作，头文件[block_mmad_mla_qk.hpp](../../include/catlass/gemm/block/block_mmad_mla_qk.hpp)中的实现对应通用的[mla_kernel.cpp](./mla_kernel.cpp)，头文件[block_mmad_mla_qk_tp1_spec.hpp](../../include/catlass/gemm/block/block_mmad_mla_qk_tp1_spec.hpp)中的实现则对应特化的[mla_kernel_tp1_spec.cpp](./mla_kernel_tp1_spec.cpp)。
+* `BlockMmadPV`为BlockMmad模板类的偏特化，用于处理Flash-MLA中的P与V的矩阵乘操作，头文件[block_mmad_mla_pv.hpp](../../include/catlass/gemm/block/block_mmad_mla_pv.hpp)中的实现对应通用的[mla_kernel.cpp](./mla_kernel.cpp)，头文件[block_mmad_mla_pv_tp1_spec.hpp](../../include/catlass/gemm/block/block_mmad_mla_pv_tp1_spec.hpp)中的实现则对应特化的[mla_kernel_tp1_spec.cpp](./mla_kernel_tp1_spec.cpp)。  
 
 ## Block Epilogue
 
 算子总共使用了三类Block Epilogue组件，分别为：
 
-* `EpilogueMLASoftmax`为BlockEpilogue模板类的偏特化，用于处理Flash-MLA中的online softmax操作，头文件[block_epilogue_mla_softmax.hpp](../../include/catlass/epilogue/block/block_epilogue_mla_softmax.hpp)中的实现对应通用的[mla_kernel.cpp](./mla_kernel.cpp)，头文件[block_epilogue_mla_tp1_softmax.hpp](../../include/catlass/epilogue/block/block_epilogue_mla_tp1_softmax.hpp)中的实现则对应特化的[mla_kernel_tp1_spec.cpp](./mla_kernel_tp1_spec.cpp).  
-* `EpilogueMLARescaleO`为BlockEpilogue模板类的偏特化，用于处理Flash-MLA中的rescaleO操作，头文件[block_epilogue_mla_rescale_o.hpp](../../include/catlass/epilogue/block/block_epilogue_mla_rescale_o.hpp)中的实现对应通用的[mla_kernel.cpp](./mla_kernel.cpp)，头文件[block_epilogue_mla_tp1_rescale_o.hpp](../../include/catlass/epilogue/block/block_epilogue_mla_tp1_rescale_o.hpp)中的实现则对应特化的[mla_kernel_tp1_spec.cpp](./mla_kernel_tp1_spec.cpp).  
+* `EpilogueMLASoftmax`为BlockEpilogue模板类的偏特化，用于处理Flash-MLA中的online softmax操作，头文件[block_epilogue_mla_softmax.hpp](../../include/catlass/epilogue/block/block_epilogue_mla_softmax.hpp)中的实现对应通用的[mla_kernel.cpp](./mla_kernel.cpp)，头文件[block_epilogue_mla_tp1_softmax.hpp](../../include/catlass/epilogue/block/block_epilogue_mla_tp1_softmax.hpp)中的实现则对应特化的[mla_kernel_tp1_spec.cpp](./mla_kernel_tp1_spec.cpp)。  
+* `EpilogueMLARescaleO`为BlockEpilogue模板类的偏特化，用于处理Flash-MLA中的rescaleO操作，头文件[block_epilogue_mla_rescale_o.hpp](../../include/catlass/epilogue/block/block_epilogue_mla_rescale_o.hpp)中的实现对应通用的[mla_kernel.cpp](./mla_kernel.cpp)，头文件[block_epilogue_mla_tp1_rescale_o.hpp](../../include/catlass/epilogue/block/block_epilogue_mla_tp1_rescale_o.hpp)中的实现则对应特化的[mla_kernel_tp1_spec.cpp](./mla_kernel_tp1_spec.cpp)。  
 * `EpilogueMLAFDRescaleO`为BlockEpilogue模板类的偏特化，用于处理Flash-MLA中的flashDecoding操作（如有必要），头文件[block_epilogue_mla_fd_rescale_o.hpp](../../include/catlass/epilogue/block/block_epilogue_mla_fd_rescale_o.hpp)中的实现为[mla_kernel.cpp](./mla_kernel.cpp)与[mla_kernel_tp1_spec.cpp](./mla_kernel_tp1_spec.cpp)两者共用。
 
 ## Tile Mmad & Tile Copy

@@ -328,7 +328,7 @@ for ... {
     copyGM2L1B
     preload_count++
     for (preload_count == PRELOAD_STAGES) {
-        # 计算前PRELOAD_STAGES轮次的数据
+        // 计算前PRELOAD_STAGES轮次的数据
         copyL12L0A
         copyL12L0B
         Mmad

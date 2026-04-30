@@ -73,7 +73,7 @@ Preload的核心思想为，在计算当前Tile的Matmul前，预先加载下一
 
 通常，所有核心都从K方向第一个分块开始计算，为了缓解上面的问题，让不同的核心从不同的分块开始计算，这样各个核心不再同时读取同一片GM数据。
 
-图中C矩阵的中的数字为核心序号，AB矩阵中的数字为任务块序号，左图为通常的计算方式，图中2号核心和3号核心同时按0 1 2 3的顺序访问A矩阵的同一片GM数据。
+图中C矩阵中的数字为核心序号，AB矩阵中的数字为任务块序号，左图为通常的计算方式，图中2号核心和3号核心同时按0 1 2 3的顺序访问A矩阵的同一片GM数据。
 
 右图为采用ShuffleK优化后的计算方式，右图中2号核心按2 3 0 1的顺序访问A矩阵基本块，而3号核心按3 0 1 2的顺序访问A矩阵基本块，在时间上错开，从而避免同地址访问冲突。
 
@@ -81,7 +81,7 @@ Preload的核心思想为，在计算当前Tile的Matmul前，预先加载下一
 
 ### 2.3 Padding
 
-在A2或A3上，当A或B矩阵为ND（RowMajor或ColumnMajor）格式时，如果矩阵的Stride为非512B对齐，则ND2NZ搬运接口的带宽会显著下降。为了规避这个问题，采用AIV提前对A或B矩阵进行数据格式转换（或数据填充），目的是让GM2L1搬运时候，避免非用512B对齐的Stride访问GM数据。
+在A2或A3上，当A或B矩阵为ND（RowMajor或ColumnMajor）格式时，如果矩阵的Stride为非512B对齐，则ND2NZ搬运接口的带宽会显著下降。为了规避这个问题，采用AIV提前对A或B矩阵进行数据格式转换（或数据填充），目的是让GM2L1搬运时候，避免用非512B对齐的Stride访问GM数据。
 
 #### 2.3.1 矩阵A或B的Padding模式说明
 
@@ -114,7 +114,7 @@ enum class PaddingTag {
 
   ![image-20251209193718695](https://raw.gitcode.com/weixin_42818618/picture0/raw/main/image-20251209193718695.png)
 
-PADDING_NZ直接将RowMajor的矩阵转换为zN的格式（如果是ColumMajor的话就是nZ），这样GM2L1读取的时候不再需要ND2NZ的随路转换，也就规避了ND2NZ存在的所有劣化问题。
+PADDING_NZ直接将RowMajor的矩阵转换为zN的格式（如果是ColumnMajor的话就是nZ），这样GM2L1读取的时候不再需要ND2NZ的随路转换，也就规避了ND2NZ存在的所有劣化问题。
 
 PADDING_NZ有两种实现，分别用于不同的场景：
 
@@ -203,7 +203,7 @@ if (static_cast<size_t>(m) * n > 2048 * 2048 && n > 256 && (n % 128 != 0)) {
 
 B_aiv、B_aic512、T_headcost这几个值在硬件相同时，可以简化认为是固定值，可通过实测获得。而B_aicunalign的值，和nd2nz的参数有关（nValue、dValue和srcDValue）需要通过实测数据进行曲线拟合得到计算公式。
 
-以上逻辑为Padding建模的简化过程，具体实现有更细节的考虑，参考[select_kernel_bf16.h](../include/select_kernel_b16.h)，其中的多项式拟合公式仅适用与A2、A3，如果是其他型号，需要自测数据拟合曲线。
+以上逻辑为Padding建模的简化过程，具体实现有更细节的考虑，参考[select_kernel_bf16.h](../include/select_kernel_b16.h)，其中的多项式拟合公式仅适用于A2、A3，如果是其他型号，需要自测数据拟合曲线。
 
 ### 2.4 特殊场景的读取优化
 

@@ -2,13 +2,13 @@
 
 ## 1. 概述
 
-CATLASS FlashAttention Infer是基于CATLASS Gemm Api实现的亲和昇腾Ascend950硬件的FlashAttention推理算子，算子的结构可以分为以下几部分：
+CATLASS FlashAttention Infer是基于CATLASS Gemm API实现的亲和昇腾Ascend950硬件的FlashAttention推理算子，算子的结构可以分为以下几部分：
 * Tiling计算；
 * Kernel实现；
 * Kernel中依赖适合FlashAttention推理运算的Block和Epilogue组件；
 * 使用的Block和Epilogue组件依赖模板库提供的Tile组件。
 
-本文档详细描述 Flash Attention Infer算子的Kernel实现，包括主流程逻辑、Cube/Vector 流水线、L1/UB 内存分配等关键设计。以及Tiling切分策略描述。
+本文档详细描述 Flash Attention Infer算子的Kernel实现，包括主流程逻辑、Cube/Vector 流水线、L1/UB 内存分配等关键设计，以及Tiling切分策略描述。
 
 ### 1.1 算子功能
 
@@ -557,7 +557,7 @@ for (int64_t qSeqAxisIndex = qSeqAxisStartIdx; qSeqAxisIndex < tempQSeqAxisEnd; 
 - Q序列按128（BLOCK_BASE_SIZE）切分
 - 最后3个循环用于尾块流水执行（确保所有任务完成）
 
-#### 4.3.3 第三层循环：KV序列轴
+#### 5.3.3 第三层循环：KV序列轴
 
 **位置**：`fai_kernel.h:291-452`
 
@@ -726,13 +726,13 @@ struct BlockMmadTla<MmadFAIQK<Arch::Ascend950, ...>, ...> {
 
 ```
 +------------------------+  l1BufAddrStart
-| L1A[Stage 0]         |  L1A_TILE_SIZE = 128 * 128 * sizeof(Dtype) = 16KB
+| L1A[Stage 0]         |  L1A_TILE_SIZE = 128 * 128 * sizeof(Dtype) = 32KB
 +------------------------+
-| L1B[Stage 0]         |  L1B_TILE_SIZE = 128 * 128 * sizeof(Dtype) = 16KB
+| L1B[Stage 0]         |  L1B_TILE_SIZE = 128 * 128 * sizeof(Dtype) = 32KB
 +------------------------+
-| L1A[Stage 1]         |  16KB
+| L1A[Stage 1]         |  32KB
 +------------------------+
-| L1B[Stage 1]         |  16KB
+| L1B[Stage 1]         |  32KB
 +------------------------+
 | ...                  |  ...
 +------------------------+
@@ -743,16 +743,16 @@ struct BlockMmadTla<MmadFAIQK<Arch::Ascend950, ...>, ...> {
 ```
 L0A Buffer:
 +------------------------+
-| L0A[Stage 0]         |  L0A_TILE_SIZE = 128 * 128 * sizeof(Dtype) = 16KB
+| L0A[Stage 0]         |  L0A_TILE_SIZE = 128 * 128 * sizeof(Dtype) = 32KB
 +------------------------+
-| L0A[Stage 1]         |  16KB
+| L0A[Stage 1]         |  32KB
 +------------------------+
 
 L0B Buffer:
 +------------------------+
-| L0B[Stage 0]         |  L0B_TILE_SIZE = 128 * 128 * sizeof(Dtype) = 16KB
+| L0B[Stage 0]         |  L0B_TILE_SIZE = 128 * 128 * sizeof(Dtype) = 32KB
 +------------------------+
-| L0B[Stage 1]         |  16KB
+| L0B[Stage 1]         |  32KB
 +------------------------+
 
 L0C Buffer:
@@ -1151,7 +1151,7 @@ void operator()(TensorDst &attenOutGm, const LocalTensor<ElementOTmp> &expMaxUb,
 
     // 2. 准备buffer指针
     __ubuf__ float *vec2ResUbAddr = vf2OutUb.GetPhyAddr();
-    __ubuf__ float *bmm2UbAddr = bmmmm2Res.data().GetPhyAddr();
+    __ubuf__ float *bmm2UbAddr = bmm2Res.data().GetPhyAddr();
     __ubuf__ float *expMaxUbAddr = expMaxUb.GetPhyAddr();
     __ubuf__ float *sumUbAddr = sumUb.GetPhyAddr();
 
@@ -1200,5 +1200,5 @@ void operator()(TensorDst &attenOutGm, const LocalTensor<ElementOTmp> &expMaxUb,
 ---
 
 ## 11. 下一步优化建议
-1. 当前仅实现了BlockMmadPV L0c输出-> UB -> EpilogueSoftMax，受UB空间限制，当前模板仅支持embed <= 128，若需支持更大embedSize需要扩展L0c输出-> GM -> UB -> EpilogueSoftMax流程。
+1. 当前仅实现了BlockMmadQK L0c输出-> UB -> EpilogueSoftMax，受UB空间限制，当前模板仅支持embed <= 128，若需支持更大embedSize需要扩展L0c输出-> GM -> UB -> EpilogueSoftMax流程。
 2. 当前模板Kernel未支持ActualSeq可变长特性，需适配。

@@ -202,7 +202,7 @@ class BasicMatmul;
 } // namespace Catlass::Gemm::Kernel
 ```
 
-注：无状态指调用者管理着内核的状态。例如，上述描述的设备API。内核仅接收输入和输出参数 (`Params`).
+注：无状态指调用者管理着内核的状态，例如上述描述的设备API。内核仅接收输入和输出参数 (`Params`).
 
 其中 *Block Mmad* 代表局部数据块上的矩阵乘加运算，*Block Epilogue* 代表mmad之后的运算，例如`C := beta * C + alpha * A * B`中的 `beta * C` 。
 

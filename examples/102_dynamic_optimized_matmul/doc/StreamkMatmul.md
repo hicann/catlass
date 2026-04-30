@@ -1,8 +1,8 @@
-# StreamkMamtul
+# StreamkMatmul
 
 ## 1 模板说明
 
-StreamkMatmul模板是为了更极致的负载均衡而设计，相比多核切K模板改进的地方在于，StreamkMatmul模板可以通过K方向的切分将任务量完全均衡的分配到所有核心上。例如M=512，N=2048，K=1280的Matmul，假设L1Tile为m1=128，n1=256，k1=256，这时划分出来的任务数量为32，假设核心数量为20，那么第二轮计算的时候，将有8个核心空闲，如果采用MultiCoreSplitkMamtul模板，将K方向切分一次，那么任务数变为64，那么第四轮计算的时候，有16个核心空闲，还是负载不均衡。但是如果使用StreamkMatmul模板， 可以将第二轮的计算任务均分到20个核心上，从而做到比较严格的负载均衡。
+StreamkMatmul模板是为了更极致的负载均衡而设计，相比多核切K模板改进的地方在于，StreamkMatmul模板可以通过K方向的切分将任务量完全均衡的分配到所有核心上。例如M=512，N=2048，K=1280的Matmul，假设L1Tile为m1=128，n1=256，k1=256，这时划分出来的任务数量为32，假设核心数量为20，那么第二轮计算的时候，将有8个核心空闲，如果采用MultiCoreSplitkMatmul模板，将K方向切分一次，那么任务数变为64，那么第四轮计算的时候，有16个核心空闲，还是负载不均衡。但是如果使用StreamkMatmul模板， 可以将第二轮的计算任务均分到20个核心上，从而做到比较严格的负载均衡。
 
 StreamkMatmul的具体详细原理请参考论文[Stream-K: Work-centric Parallel Decomposition for Dense Matrix-Matrix Multiplication on the GPU](https://arxiv.org/abs/2301.03598)。
 
@@ -38,7 +38,7 @@ StreamkMatmul的具体详细原理请参考论文[Stream-K: Work-centric Paralle
 
 ### 1.4 其他优化
 
-StreamkMatmul模板中用到了[Preload、ShuffleK、Padding以及特殊场景的读取优化](./CommonMatmul.md)等CommonMamtul中已有的优化点。
+StreamkMatmul模板中用到了[Preload、ShuffleK、Padding以及特殊场景的读取优化](./CommonMatmul.md)等CommonMatmul中已有的优化点。
 
 ## 2 适用场景
 

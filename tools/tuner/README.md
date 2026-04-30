@@ -81,7 +81,7 @@ bash scripts/build.sh -DCATLASS_LIBRARY_KERNELS=catlass_gemm_00_basic_matmul_fp1
 
 注意：
 
-- 06_optimized_matmul 算子在不同的m/n/k输入时，会启用不同的kernel，包括：06_optimized_matmul_padding_ab, 06_optimized_matmul_padding_a_only, 06_optimized_matmul_padding_b_only, 06_optimized_matmul_without_padding，可直接指定预期运行的kernel以加速寻优过程，kernel匹配逻辑请参考 [optimized_matmul.cpp](../../examples/06_optimized_matmul/optimized_matmul.cpp)。
+- 06_optimized_matmul 算子在不同的m/n/k输入时，会启用不同的kernel，包括：06_optimized_matmul_padding_ab, 06_optimized_matmul_padding_a_only, 06_optimized_matmul_padding_b_only, 06_optimized_matmul_without_padding。可直接指定预期运行的kernel以加速寻优过程，kernel匹配逻辑请参考 [optimized_matmul.cpp](../../examples/06_optimized_matmul/optimized_matmul.cpp)。
 
 除直接使用上述命令外，编译也可通过cmake命令完成。
 
@@ -98,8 +98,8 @@ cmake --install . --component mstuner_catlass
 
 `mstuner_catlass`工具支持以下命令。
 
-| 命令          | 示例                          | 默认值 | 描述                                                         |
-| ------------- | ----------------------------- |-| ------------------------------------------------------------ |
+| 命令          | 示例                          | 默认值 | 描述            |
+| ------------- | ------------------- |-----------| ------------------ |
 | --help, -h    | --help                        | / | 展示工具支持的命令。                                           |
 | --kernels     | --kernels=00_basic_matmul        | / | 过滤寻优的算子类型，其与算子的description列字符串进行子串匹配，未匹配时该算子会被跳过。 |
 | --output      | --output=./profile_result.csv | / | 指定算子性能数据落盘文件路径。                                 |

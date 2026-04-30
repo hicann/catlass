@@ -9,7 +9,7 @@
 ## 调度策略
 
 ```
-// Now ENABLE_UNIT_FLAG_ must be false when intput element is int8
+// Now ENABLE_UNIT_FLAG_ must be false when input element is int8
 template <bool ENABLE_UNIT_FLAG_ = false>
 struct MmadAtlasA2Pingpong : public MmadAtlasA2  {
     static constexpr uint32_t STAGES = 2;
@@ -17,7 +17,7 @@ struct MmadAtlasA2Pingpong : public MmadAtlasA2  {
 };
 ```
 
-当ENABLE_UNIT_FLAG_为`True`时使能`L0C`同时搬出和写入，提高流水并行度。
+当ENABLE_UNIT_FLAG_为`true`时使能`L0C`同时搬出和写入，提高流水并行度。
 
 ## 调用示例
 

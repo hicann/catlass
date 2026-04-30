@@ -16,7 +16,7 @@
 2. 需要申请workspace，将K方向分了多少段，就要申请多少份workspace，每个workspace大小为`C_SIZE*sizeof(ElementAccumulator)`，需要的workspace较大，所以此模板不适合C矩阵大的场景。
 3. Cube完成部分和的计算后，需要进行全核心同步，保证所有的部分和都计算完成，此时Vector可以开始进行累加操作，为保证计算结果的确定性，Vector将按顺序进行累加，即一次读取完所有的workspace的部分和结果到UB中（由于UB大小限制，一次只能读取每个workspace一小部分的部分和），然后按顺序循环将后面的部分和累加到第一个部分和上，得到部分最终结果，如果C矩阵的输出类型是float16，那么需要将float类型的结果在UB上Cast为float16，最后将数据写回到GM C上。
 4. 为了更高的数据写出和数据读取效率，Vector累加部分和的时候，按元素进行任务划分，例如16x16的C矩阵，假设有6个Vector，那么每个Vector分到`16*16/6=42`个元素，进一步考虑到Vector的指令效率，设置一个最小划分块，元素数量为`256/sizeof(ElementAccumulator)`，如果ElementAccumulator为32位类型，则最少一个核心划分得到64个元素，16x16的C矩阵被分成4份，由4个Vector进行处理，另外两个Vector空闲。这样的划分将C矩阵视为一个连续的一维数组，每个Vector处理其中连续的一段，这样Vector读取和写出的数据就是连续的一段，指令效率更高。这样也导致了此模板不适用于C矩阵非连续的场景，例如C矩阵的Shape为16x16，每行的Stride为17。
-5. MultiCoreSplitkMatmul模板中用到了[Preload、ShuffleK、Padding以及特殊场景的读取优化](./CommonMatmul.md)等CommonMamtul中已有的优化点。
+5. MultiCoreSplitkMatmul模板中用到了[Preload、ShuffleK、Padding以及特殊场景的读取优化](./CommonMatmul.md)等CommonMatmul中已有的优化点。
 
 ## 2 适用场景
 

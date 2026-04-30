@@ -38,7 +38,7 @@ CATLASS [`44_quant_matmul_full_loadA_tla`样例](./README.md)算子是基于CATL
 - A矩阵全载时，N轴较小，无法复用A矩阵，性能收益较00_basic_matmul可能会出现劣化。
 - 若`problemShape.M > L1TileShape::M`，可使用`GemmIdentityBlockSwizzleL1FullLoad<SwizzleOffset, SwizzleDirection, AicCoreNum>`策略，使得每个核需要处理的基本块尽可能地连在一起，提升A矩阵分核全载时的块间复用率。
 - 若`problemShape.M <= L1TileShape::M`，即M方向不切块分核，此时使用`GemmIdentityBlockSwizzle`策略即可适用，常用的策略参数选取可参考[swizzle_explanation](../../docs/zh/2_Design/01_kernel_design/02_swizzle.md)。
-- 以20个cube核为例，常用的`GemmIdentityBlockSwizzle`策略的基本块分核顺序为`0-1-2-...-18-19-0-1-2...-18-19-0-1-2...`，每个核需要处理的基本块跳跃分布，而`GemmIdentityBlockSwizzleL1FullLoad`策略的基本块分核顺序为`0-0..-0-1-1...-1-2-2...-19`，每个核需要处理的基本块连续分布。
+- 以20个cube核为例，常用的`GemmIdentityBlockSwizzle`策略的基本块分核顺序为`0-1-2-...-18-19-0-1-2...-18-19-0-1-2...`，每个核需要处理的基本块跳跃分布，而`GemmIdentityBlockSwizzleL1FullLoad`策略的基本块分核顺序为`0-0...-0-1-1...-1-2-2...-19`，每个核需要处理的基本块连续分布。
 
 ## 性能收益
 

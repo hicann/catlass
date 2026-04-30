@@ -63,7 +63,7 @@ graph LR
  - 声明不同矩阵所对应的[类型情况](../34_single_core_splitk_matmul/single_core_splitk.cpp#L124)
  - 设置[Dispatch策略](../34_single_core_splitk_matmul/single_core_splitk.cpp#L139)（用于选取BlockMmad组件）
  - 设置L1和L0的[Tile尺寸](../34_single_core_splitk_matmul/single_core_splitk.cpp#L136)，用于优化从GM到L1的搬运过程
- - 使用优化后的TileCopy组件，用于...
+ - 使用优化后的TileCopy组件
  - 使用上述模板入参[组装BlockMmad](../10_grouped_matmul_slice_m_per_token_dequant/grouped_matmul_slice_m_per_token_dequant.cpp#L162)
 
 </details>

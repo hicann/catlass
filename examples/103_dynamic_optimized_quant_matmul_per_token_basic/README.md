@@ -6,11 +6,11 @@
 
 量化被广泛应用于现代高性能计算的深度学习模型中，特别是在推理过程中。通过量化，模型可以在硬件上更高效地运行，减少计算资源的消耗和加速推理过程，同时降低模型的存储需求。
 
-根据对算子的不同输入Tensor采用不同的量化计算级别，可将目前的量化分为不同的量化模式。目前支持的量化计算模式包括：PerToken量化和PerChannel量化。在以下的介绍中，m、n、k变量分别表示Tensor计算的不同轴大小。左矩阵、右矩阵分别指进行矩阵乘法计算的两个输入Tensor。
+目前支持的量化计算模式包括：PerToken量化和PerChannel量化。在以下的介绍中，m、n、k变量分别表示Tensor计算的不同轴大小。左矩阵、右矩阵分别指进行矩阵乘法计算的两个输入Tensor。
 
-- PerToken量化：通常用于量化左矩阵，对每个Token（即左矩阵的一行）使用独立的量化参数进行计算。假设左矩阵shape为(m, k)，k为reduce轴，则生成的PerToken量化参数的shape为(m, )。
+- PerToken量化：通常用于量化左矩阵，对每个Token（即左矩阵的一行）使用独立的量化参数进行计算。假设左矩阵shape为(m, k)，k为reduce轴，则生成的PerToken量化参数的shape为(m,)。
 
-- PerChannel量化：通常用于量化右矩阵，对每个Channel（即右矩阵的一列）使用独立的量化参数进行计算。假设右矩阵shape为(k, n)，k为reduce轴，则生成的PerChannel量化参数的shape为(n, )。
+- PerChannel量化：通常用于量化右矩阵，对每个Channel（即右矩阵的一列）使用独立的量化参数进行计算。假设右矩阵shape为(k, n)，k为reduce轴，则生成的PerChannel量化参数的shape为(n,)。
 
 一般左矩阵代表激活activation（A）、右矩阵代表权重weight（W），本样例目前支持左右矩阵输入数据类型为int8、对左矩阵进行PerToken量化+对右矩阵进行PerChannel量化的场景，可简记为W8A8 PerToken-PerChannel 全量化Matmul场景。
 
@@ -58,24 +58,19 @@ export LD_LIBRARY_PATH=/path/to/catlass/output/shared_lib/lib/:$LD_LIBRARY_PATH
     └── utils.h
 ```
 
-### 2.2 模板文档
+### 2.3 模板文档
 
 | 模板名称     | 说明 |
 | ------------ | ---- |
 | PerTokenBasicMatmul | PerToken 基础模板（文档待补充...） |
 
-### 2.3 约束说明
+### 2.4 约束说明
 
 - A、B矩阵的数据类型支持int8。
 - C矩阵的数据类型支持fp16。
 - A、B、C矩阵的数据格式支持ND（RowMajor和ColumnMajor）。
 
-## 使用示例
-
-- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)
-- 执行算子
-
-# 编译指定用例
+## 3 编译指定用例
 
 ```shell
 bash scripts/build.sh 103_dynamic_optimized_quant_matmul_per_token_basic
