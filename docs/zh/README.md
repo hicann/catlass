@@ -22,6 +22,7 @@
     - [print](./1_Practice/evaluation_tools/print.md)
 - others（folder）：存放内部和外部贡献的难以归类的实践文档
     - tla_rebuild：TLA样例改造
+    - [migration_from_atlasA2_to_Ascend950_guildline](./1_Practice/others/migration_from_atlasA2_to_Ascend950_guildline.md)：介绍推荐的AtlasA2平台存量算子向Ascend950代际兼容方案
 
 ## 2 Design
 
