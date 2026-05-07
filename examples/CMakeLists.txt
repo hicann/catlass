@@ -158,6 +158,7 @@ set(EXAMPLE_ASCEND950
     54_ascend950_fp4_mx_matmul
     56_ascend950_basic_conv2d_tla
     57_ascend950_matmul_full_dequant
+    58_ascend950_fp8_mx_batch_matmul
 )
 
 if(CATLASS_ARCH STREQUAL "2201")
