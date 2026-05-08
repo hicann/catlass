@@ -9,15 +9,11 @@
  * the software repository for the full text of the License.
  */
 
-// By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0,
-// optimizing stack space. If you need to use the ShapeInfo of the AscendC Tensor, please undefine this macro.
 #ifndef K_MAX_SHAPE_DIM
 #define K_MAX_SHAPE_DIM 0
 #endif
 
-#include <string>
-
-#include "catlass/gemm/kernel/mx_matmul_tla.hpp"
+#include "catlass/gemm/kernel/a8w4_mx_matmul.hpp"
 
 #include "catlass/arch/arch.hpp"
 #include "catlass/catlass.hpp"
@@ -38,9 +34,6 @@ using namespace tla;
 
 using Options = GemmOptions;
 
-// Default data root when running from build output (e.g. output/bin), aligned with gen_data.py (WORKSPACE/data).
-static const std::string kDataRoot = "../../examples/54_ascend950_fp4_mx_matmul/data";
-
 static void Run(const Options &options)
 {
     aclrtStream stream{nullptr};
@@ -49,44 +42,54 @@ static void Run(const Options &options)
     ACL_CHECK(aclrtSetDevice(options.deviceId));
     ACL_CHECK(aclrtCreateStream(&stream));
 
+    // m、n、k
     uint32_t m = options.problemShape.m();
     uint32_t n = options.problemShape.n();
     uint32_t k = options.problemShape.k();
     uint32_t mxScaleK = CeilDiv<MX_SCALE_GROUP_NUM>(k);
 
-    using ElementA = float4_e2m1x2_t;
-    using ElementB = float4_e2m1x2_t;
+    using ElementA = float8_e4m3_t;
+    using ElementB = float8_e4m3_t;
+    using ElementPrologueB = float4_e2m1x2_t;
     using ElementMxScale = float8_e8m0_t;
     using ElementC = float;
-    // if no bias, set ElementBias to void
     using ElementBias = void;
 
     using ElementBiasType = std::conditional_t<std::is_void_v<ElementBias>, uint8_t, ElementBias>;
 
-    using LayoutTagA = layout::RowMajor;
-    using LayoutTagB = layout::ColumnMajor;
-    using LayoutTagC = layout::RowMajor;
-    LayoutTagA tagA = LayoutTagA::MakeLayout<ElementA>(m, k);
-    LayoutTagB tagB = LayoutTagB::MakeLayout<ElementB>(k, n);
-    LayoutTagC tagC = LayoutTagC::MakeLayout<ElementC>(m, n);
+    // basic layout
+    using LayoutA = layout::RowMajor;
+    using LayoutB = layout::nZ;
+    using LayoutPrologueB = layout::ColumnMajor;
+    using LayoutC = layout::RowMajor;
 
+    // makeLayout
+    LayoutA tagA = LayoutA::MakeLayout<ElementA>(m, k);
+    LayoutPrologueB tagPrologueB = LayoutPrologueB::MakeLayout<ElementPrologueB>(k, n);
+    LayoutC tagC = LayoutC::MakeLayout<ElementC>(m, n);
+
+    static constexpr uint32_t MX_k_ALIGN = 2;
+    static constexpr uint32_t SIZE_MAGNIFICATION = 2;
+
+    // data length
     size_t lenA = tagA.Capacity();
-    size_t lenB = tagB.Capacity();
-    // compute mxScale len, k must be multiples of 2
-    uint32_t mxScaleAlignedK = RoundUp<2>(mxScaleK);
+    size_t lenPrologueB = tagPrologueB.Capacity();
+    uint32_t mxScaleAlignedK = RoundUp<MX_k_ALIGN>(mxScaleK);
     size_t lenMxScaleA = m * mxScaleAlignedK;
     size_t lenMxScaleB = mxScaleAlignedK * n;
     size_t lenC = tagC.Capacity();
     size_t lenBias = static_cast<size_t>(n);
 
-    size_t sizeA = lenA / 2;
-    size_t sizeB = lenB / 2;
+    // data size(len * sizeof(element))
+    size_t sizeA = lenA * sizeof(ElementA);
+    size_t sizeB = lenPrologueB / SIZE_MAGNIFICATION;
     size_t sizeMxScaleA = lenMxScaleA * sizeof(ElementMxScale);
     size_t sizeMxScaleB = lenMxScaleB * sizeof(ElementMxScale);
     size_t sizeC = lenC * sizeof(ElementC);
     size_t sizeBias = lenBias * sizeof(ElementBiasType);
     size_t sizeWorkspace;
 
+    // host
     std::vector<int8_t> hostA(sizeA);
     std::vector<int8_t> hostB(sizeB);
     std::vector<int8_t> hostMxScaleA(lenMxScaleA);
@@ -98,29 +101,61 @@ static void Run(const Options &options)
         ACL_CHECK(aclrtResetDevice(options.deviceId));
         ACL_CHECK(aclFinalize());
     };
-    if (!ReadFile(kDataRoot + "/input/a_8.bin", hostA.data(), sizeA)) {
+    //file read
+    std::string inFileAName = "../../input/a_8.bin";
+    std::ifstream inFileA(inFileAName, std::ios::binary);
+    if (!inFileA.is_open()) {
+        std::cerr << "Failed to open inFileA: " << inFileAName << std::endl;
         releaseAclEarly();
         return;
+    } else {
+        inFileA.read(reinterpret_cast<char *>(hostA.data()), sizeA);
+        inFileA.close();
     }
-    if (!ReadFile(kDataRoot + "/input/b_8.bin", hostB.data(), sizeB)) {
+    std::string inFileBName = "../../input/b_4.bin";
+    std::ifstream inFileB(inFileBName, std::ios::binary);
+    if (!inFileB.is_open()) {
+        std::cerr << "Failed to open inFileB: " << inFileBName << std::endl;
         releaseAclEarly();
         return;
+    } else {
+        inFileB.read(reinterpret_cast<char *>(hostB.data()), sizeB);
+        inFileB.close();
     }
-    if (!ReadFile(kDataRoot + "/input/a_scale.bin", hostMxScaleA.data(), sizeMxScaleA)) {
+    std::string inFileMxScaleAName = "../../input/a_scale.bin";
+    std::ifstream inFileMxScaleA(inFileMxScaleAName, std::ios::binary);
+    if (!inFileMxScaleA.is_open()) {
+        std::cerr << "Failed to open inFileMxScaleA: " << inFileMxScaleAName << std::endl;
         releaseAclEarly();
         return;
+    } else {
+        inFileMxScaleA.read(reinterpret_cast<char *>(hostMxScaleA.data()), sizeMxScaleA);
+        inFileMxScaleA.close();
     }
-    if (!ReadFile(kDataRoot + "/input/b_scale.bin", hostMxScaleB.data(), sizeMxScaleB)) {
+    std::string inFileMxScaleBName = "../../input/b_scale.bin";
+    std::ifstream inFileMxScaleB(inFileMxScaleBName, std::ios::binary);
+    if (!inFileMxScaleB.is_open()) {
+        std::cerr << "Failed to open inFileMxScaleB: " << inFileMxScaleBName << std::endl;
         releaseAclEarly();
         return;
+    } else {
+        inFileMxScaleB.read(reinterpret_cast<char *>(hostMxScaleB.data()), sizeMxScaleB);
+        inFileMxScaleB.close();
     }
     if constexpr (!std::is_void_v<ElementBias>) {
-        if (!ReadFile(kDataRoot + "/input/bias.bin", hostBias.data(), sizeBias)) {
+        std::string inFileBiasName = "../../input/bias.bin";
+        std::ifstream inFileBias(inFileBiasName, std::ios::binary);
+        if (!inFileBias.is_open()) {
+            std::cerr << "Failed to open inFileBias: " << inFileBiasName << std::endl;
             releaseAclEarly();
             return;
+        } else {
+            inFileBias.read(reinterpret_cast<char *>(hostBias.data()), sizeBias);
+            inFileBias.close();
         }
     }
 
+    // device
     uint8_t *deviceA{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
@@ -151,46 +186,61 @@ static void Run(const Options &options)
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
+    // archtag uniflag
     using ArchTag = Arch::Ascend950;
-    constexpr bool enableUnitFlag = true;
-    using DispatchPolicy = Gemm::MmadMx<ArchTag, enableUnitFlag, 16>;
-    using L1TileShape = Shape<Int<256>, Int<256>, Int<512>>;
-    using L0TileShape = Shape<Int<256>, Int<256>, Int<256>>;
+    constexpr bool enableUnitFlag = false;
 
-    auto layoutA = tla::MakeLayout<ElementA, LayoutTagA>(m, k);
-    auto layoutB = tla::MakeLayout<ElementB, LayoutTagB>(k, n);
-    auto layoutMxScaleA = tla::MakeMxScaleLayout<ElementMxScale, LayoutTagA, false>(m, mxScaleK);
-    auto layoutMxScaleB = tla::MakeMxScaleLayout<ElementMxScale, LayoutTagB, true>(mxScaleK, n);
-    auto layoutC = tla::MakeLayout<ElementC, LayoutTagC>(m, n);
+    // shape & type
+    using L1TileShape = Shape<Int<128>, Int<128>, Int<128>>;
+    using L0TileShape = Shape<Int<128>, Int<128>, Int<128>>;
+    using PrologueSrcType = Gemm::GemmType<ElementPrologueB, LayoutPrologueB>;
+    using PrologueDstType = Gemm::GemmType<ElementB, LayoutB>;
 
-    using TileCopy = Gemm::Tile::PackedMxTileCopyTla<
-        ArchTag, ElementA, LayoutTagA, ElementB, LayoutTagB, ElementMxScale, decltype(layoutMxScaleA), ElementMxScale,
-        decltype(layoutMxScaleB), ElementC, LayoutTagC, ElementBias>;
-    using BlockMmad = Gemm::Block::BlockMmadTla<
-        DispatchPolicy, L1TileShape, L0TileShape, ElementA, ElementB, ElementC, ElementBias, TileCopy>;
+    // DispatchPolicy
+    using DispatchPolicyMmad = Gemm::MmadA8W4Mx<ArchTag, enableUnitFlag>;
+    using DispatchPolicyPrologue = Gemm::MxA8W4Prologue<ArchTag>;
+
+    // layout (tla)
+    auto layoutA = tla::MakeLayout<ElementA, LayoutA>(m, k);
+    auto layoutprologueB = tla::MakeLayout<ElementPrologueB, LayoutPrologueB>(k, n);
+    auto layoutMxScaleA = tla::MakeMxScaleLayout<ElementMxScale, LayoutA, false>(m, mxScaleK);
+    auto layoutMxScaleB = tla::MakeMxScaleLayout<ElementMxScale, LayoutPrologueB, true>(mxScaleK, n);
+    auto layoutC = tla::MakeLayout<ElementC, LayoutC>(m, n);
+
+    // tile
+    using TileCopy = Gemm::Tile::PackedMxA8W4TileCopyTla<
+        ArchTag, ElementA, LayoutA, ElementPrologueB, LayoutPrologueB, ElementB, LayoutB, ElementMxScale, decltype(layoutMxScaleA), ElementMxScale,
+        decltype(layoutMxScaleB), ElementC, LayoutC, ElementBias, false, Gemm::Tile::ScaleGranularity::PER_TENSOR>;
+
+    // BlockMmad
+    using BlockMmad = Gemm::Block::BlockMmadA8W4Mx<
+        DispatchPolicyMmad, L1TileShape, L0TileShape, ElementA, ElementB, ElementC, ElementPrologueB, ElementBias, TileCopy>;
+
+    using BlockPrologue = Gemm::Block::BlockPrologue<
+        DispatchPolicyPrologue, PrologueSrcType, PrologueDstType, L1TileShape, TileCopy>;
+
+    // Epilogue
     using BlockEpilogue = void;
+
+    //Swizzle offset is 3 and direction is 0.
+    using BlockScheduler=  typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
+
+    // kernel level
+    using MatmulKernel = Gemm::Kernel::A8W4MxMatmul<BlockMmad, BlockPrologue, BlockEpilogue, BlockScheduler>;
+
+    using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
+
+    MatmulKernel::Arguments arguments{
+        options.problemShape, deviceA,        layoutA,        deviceB, layoutprologueB, deviceMxScaleA,
+        layoutMxScaleA,       deviceMxScaleB, layoutMxScaleB, deviceC, layoutC, deviceBias
+    };
 
     uint32_t taskNum = CeilDiv(options.problemShape.m(), tla::get<0>(L1TileShape{})) *
                        CeilDiv(options.problemShape.n(), tla::get<1>(L1TileShape{}));
     uint32_t aicCoreUsed = min(aicCoreNum, taskNum);
 
-    // Swizzle offset is 3 and direction is 0.
-    using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
-
-    // kernel level
-    using MatmulKernel = Gemm::Kernel::MxMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler>;
-
-    using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-
-    MatmulKernel::Arguments arguments{
-        options.problemShape, deviceA,        layoutA,        deviceB, layoutB, deviceMxScaleA,
-        layoutMxScaleA,       deviceMxScaleB, layoutMxScaleB, deviceC, layoutC, deviceBias
-    };
-
     MatmulAdapter matmulOp;
-    if (matmulOp.CanImplement(arguments) == Status::kInvalid) {
-        std::cerr << "[ERROR]matmul op cannot be implemented" << std::endl;
-    }
+    matmulOp.CanImplement(arguments);
     sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
     if (sizeWorkspace > 0) {
         ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
@@ -204,7 +254,7 @@ static void Run(const Options &options)
     ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
 
     std::vector<float> hostGolden(lenC);
-    std::string outputFileName = kDataRoot + "/golden/expected_data.bin";
+    std::string outputFileName = "../../golden/expected_data.bin";
     if (!ReadFile(outputFileName, hostGolden.data(), sizeof(float) * hostGolden.size())) {
         ACL_CHECK(aclrtFree(deviceA));
         ACL_CHECK(aclrtFree(deviceB));

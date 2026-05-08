@@ -372,6 +372,24 @@ struct MmadMx : public MmadBase<ArchTag_, false> {
     static constexpr uint32_t L1_SCALE_FACTOR_K = L1_SCALE_FACTOR_K_;
 };
 
+template <class ArchTag_, bool ENABLE_UNIT_FLAG_ = false, uint32_t L0C_STAGES_ = 1,
+    bool ENABLE_L1_RESIDENT_ = false, uint32_t L1A_STAGES_ = 2, uint32_t L1B_STAGES_ = 2, uint32_t L0A_STAGES_ = 2,
+    uint32_t L0B_STAGES_ = 2>
+struct MmadA8W4Mx : public MmadBase<ArchTag_, false> {
+    static constexpr uint32_t L1A_STAGES = L1A_STAGES_;
+    static constexpr uint32_t L1B_STAGES = L1B_STAGES_;
+    static constexpr uint32_t L0A_STAGES = L0A_STAGES_;
+    static constexpr uint32_t L0B_STAGES = L0B_STAGES_;
+    static constexpr uint32_t L0C_STAGES = L0C_STAGES_;
+    static constexpr bool ENABLE_UNIT_FLAG = ENABLE_UNIT_FLAG_;
+    static constexpr bool ENABLE_L1_RESIDENT = ENABLE_L1_RESIDENT_;
+};
+
+template <class ArchTag_, uint32_t L1B_STAGES_ = 1>
+struct MxA8W4Prologue : public MmadBase<ArchTag_, false> {
+    static constexpr uint32_t L1B_STAGES = L1B_STAGES_;
+};
+
 template <class ArchTag_, bool ENABLE_UNIT_FLAG_ = false, bool USE_HF32_MODE_ = false, uint32_t L0C_STAGES_ = 1,
     bool ENABLE_L1_RESIDENT_ = false, uint32_t L1A_STAGES_ = 2, uint32_t L1B_STAGES_ = 2, uint32_t L0A_STAGES_ = 2,
     uint32_t L0B_STAGES_ = 2>

@@ -99,6 +99,35 @@ struct BlockMmadTla {
     static_assert(DEPENDENT_FALSE<DispatchPolicy>, "BlockMmadTla is not implemented for this DispatchPolicy");
 };
 
+template <
+    class DispatchPolicy,
+    class L1TileShape,
+    class L0TileShape,
+    class ElementA,
+    class ElementB,
+    class ElementC,
+    class ElementPrologueB,
+    class ElementBias = void,
+    class TileCopy = Gemm::Tile::PackedTileCopyTla<typename DispatchPolicy::ArchTag, ElementA, layout::zN,
+        ElementB, layout::zN, ElementC, layout::zN, ElementBias>,
+    class TileMmad =
+        Gemm::Tile::TileMmadTla<typename DispatchPolicy::ArchTag, ElementA, typename TileCopy::LayoutTagL1A>
+>
+struct BlockMmadA8W4Mx {
+    static_assert(DEPENDENT_FALSE<DispatchPolicy>, "BlockMmadA8W4Mx is not implemented for this DispatchPolicy");
+};
+
+template <
+    class DispatchPolicy,
+    class PrologueSrcType,
+    class PrologueDstType,
+    class L1TileShape,
+    class TileCopy
+>
+struct BlockPrologue {
+    static_assert(DEPENDENT_FALSE<DispatchPolicy>, "BlockPrologue is not implemented for this DispatchPolicy");
+};
+
 } // namespace Catlass::Gemm::Block
 
 #if (defined (CATLASS_ARCH) && CATLASS_ARCH == 2201)
@@ -151,4 +180,8 @@ struct BlockMmadTla {
 #include "catlass/gemm/block/block_mmad_fai_qk_tla.hpp"
 #include "catlass/gemm/block/block_mmad_pingpong_per_group_per_block_tla.hpp"
 #include "catlass/gemm/block/block_mmad_mx_tla.hpp"
+#if (defined (CATLASS_ARCH) && CATLASS_ARCH == 3510)
+#include "catlass/gemm/block/block_mx_a8w4_prologue.hpp"
+#include "catlass/gemm/block/block_mmad_mx_a8w4.hpp"
+#endif
 #endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_HPP

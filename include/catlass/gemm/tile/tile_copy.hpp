@@ -370,9 +370,9 @@ struct PackedTileCopyTla {
         AscendC::TPosition::C2>;
     using TensorL1Quant = std::conditional_t<
         HAS_QUANT_TENSOR,
-        tla::Tensor<AscendC::LocalTensor<uint64_t>, 
-            detail::TagToLayout_t<uint64_t, layout::VectorLayout>,            
-            tla::Coord<tla::_0>, 
+        tla::Tensor<AscendC::LocalTensor<uint64_t>,
+            detail::TagToLayout_t<uint64_t, layout::VectorLayout>,
+            tla::Coord<tla::_0>,
             AscendC::TPosition::A1>,
         EmptyClass>;
 
@@ -390,7 +390,7 @@ struct PackedTileCopyTla {
         std::conditional_t<HAS_BIAS, Gemm::Tile::TileCopyTla<ArchTag, TensorBias, TensorL1Bias>, EmptyClass>;
 
     template <class TensorQuant>
-    using CopyGmToL1Scale = 
+    using CopyGmToL1Scale =
         std::conditional_t<HAS_QUANT_TENSOR, Gemm::Tile::TileCopyTla<ArchTag, TensorQuant, TensorL1Quant>, EmptyClass>;
 
     using CopyL1ToL0A = Gemm::Tile::TileCopyTla<ArchTag, TensorL1A, TensorL0A>;
@@ -556,6 +556,65 @@ struct PackedMxTileCopyTla : public PackedTileCopyTla<ArchTag, ElementA_, Layout
     template <class TensorMxScaleB>
     using CopyGmToL1MxScaleB = Gemm::Tile::TileCopyTla<ArchTag, TensorMxScaleB, TensorL1MxScaleB>;
 };
+
+template <
+    class ArchTag,
+    class ElementA_,
+    class LayoutTagA,
+    class ElementPrologueB_,
+    class LayoutTagPrologueB,
+    class ElementB_,
+    class LayoutTagB,
+    class ElementMxScaleA_,
+    class LayoutMxScaleA_,
+    class ElementMxScaleB_,
+    class LayoutMxScaleB_,
+    class ElementC_,
+    class LayoutTagC,
+    class ElementBias = void,
+    bool ReluEnable_ = false,
+    ScaleGranularity DEQUANT_GRANULARITY = ScaleGranularity::NO_QUANT,
+    class L0CCopyMode = CopyToGM
+>
+struct PackedMxA8W4TileCopyTla : public PackedTileCopyTla<ArchTag, ElementA_, LayoutTagA, ElementB_, LayoutTagPrologueB,
+    ElementC_, LayoutTagC, ElementBias, ReluEnable_, DEQUANT_GRANULARITY, L0CCopyMode>{
+    using ElementMxScaleA = ElementMxScaleA_;
+    using ElementMxScaleB = ElementMxScaleB_;
+
+    using LayoutMxScaleA = LayoutMxScaleA_;
+    using LayoutMxScaleB = LayoutMxScaleB_;
+
+    using LayoutTagL1MxScaleA = layout::zZ;
+    using LayoutTagL1MxScaleB = layout::nN;
+    using LayoutL1MxScaleA = detail::TagToLayout_t<ElementMxScaleA, LayoutTagL1MxScaleA>;
+    using LayoutL1MxScaleB = detail::TagToLayout_t<ElementMxScaleB, LayoutTagL1MxScaleB>;
+
+    using LayoutB = detail::TagToLayout_t<ElementPrologueB_, LayoutTagPrologueB>;
+    using LayoutTagL1B = typename helper::L1BTypeSelector<Gemm::GemmType<ElementB_, LayoutTagB>>::L1BType::Layout;
+    using LayoutTagL0B = layout::nZ;
+
+    using LayoutL1B = detail::TagToLayout_t<ElementB_, LayoutTagL1B>;
+    using LayoutL0B = detail::TagToLayout_t<ElementB_, LayoutTagL0B>;
+
+    using TensorL1B =
+    	tla::Tensor<AscendC::LocalTensor<ElementB_>, LayoutL1B, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::A1>;
+    using TensorL0B =
+    	tla::Tensor<AscendC::LocalTensor<ElementB_>, LayoutL0B, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::B2>;
+
+    using TensorL1MxScaleA = tla::Tensor<AscendC::LocalTensor<ElementMxScaleA>, LayoutL1MxScaleA,
+        tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::A1>;
+    using TensorL1MxScaleB = tla::Tensor<AscendC::LocalTensor<ElementMxScaleB>, LayoutL1MxScaleB,
+        tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::A1>;
+
+    template <class TensorMxScaleA>
+    using CopyGmToL1MxScaleA = Gemm::Tile::TileCopyTla<ArchTag, TensorMxScaleA, TensorL1MxScaleA>;
+
+    template <class TensorMxScaleB>
+    using CopyGmToL1MxScaleB = Gemm::Tile::TileCopyTla<ArchTag, TensorMxScaleB, TensorL1MxScaleB>;
+
+    using CopyL1ToL0B = Gemm::Tile::TileCopyTla<ArchTag, TensorL1B, TensorL0B>;
+};
+
 #endif
 
 } // namespace Catlass::Gemm::Tile
