@@ -85,8 +85,8 @@ static void Run(const Options &options)
     auto tagPerTokenScale = LayoutTagPerTokenScale::MakeLayout<ElementPerTokenScale>(1, m);
     auto tagD = LayoutTagD::MakeLayout<ElementD>(m, n);
 
-    auto layoutA = MakeLayoutFromTag(tagA);
-    auto layoutB = MakeLayoutFromTag(tagB);
+    auto layoutA = tla::MakeLayout<ElementA, LayoutTagA>(m, k);
+    auto layoutB = tla::MakeLayout<ElementB, LayoutTagB>(k, n);
     auto layoutC = MakeLayoutFromTag(tagC);
     auto layoutScale = MakeLayoutFromTag(tagScale);
     auto layoutPerTokenScale = MakeLayoutFromTag(tagPerTokenScale);

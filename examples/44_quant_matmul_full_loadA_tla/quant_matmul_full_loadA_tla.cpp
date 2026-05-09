@@ -160,8 +160,8 @@ static void Run(const Options &options)
     using L1TileShape = Shape<Int<128>, Int<256>, Int<512>>;
     using L0TileShape = Shape<Int<128>, Int<256>, Int<128>>;
 
-    auto layoutA = MakeLayoutFromTag(tagA);
-    auto layoutB = MakeLayoutFromTag(tagB);
+    auto layoutA = tla::MakeLayout<ElementA, LayoutTagA>(m, k);
+    auto layoutB = tla::MakeLayout<ElementB, LayoutTagB>(k, n);
     auto layoutC = MakeLayoutFromTag(tagC);
     auto layoutScale = MakeLayoutFromTag(tagScale);
     auto layoutPerTokenScale = MakeLayoutFromTag(tagPerTokenScale);

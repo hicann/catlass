@@ -212,7 +212,7 @@ public:
                                         tla::MakeCoord((stageId * coreNum + coreIdx) * L1_TILE_M, 0),
                                         tla::MakeShape(actualBlockShape.m(), actualBlockShape.n()));
 
-            int64_t gmOffsetA = blockCoord.m() * L1_TILE_M * tla::get<0>(tensorA.stride()) + blockCoord.k() * L1_TILE_K;
+            int64_t gmOffsetA = params.mmadParams.layoutA(tla::MakeCoord(blockCoord.m() * L1_TILE_M, blockCoord.k() * L1_TILE_K));
 
             // Judge whether the current blockA is already on L1Cache
             bool isFirstBlock = (loopIdx == AscendC::GetBlockIdx());
