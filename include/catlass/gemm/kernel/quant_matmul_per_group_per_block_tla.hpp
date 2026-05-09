@@ -210,11 +210,11 @@ public:
             bs.UpdateBlockShape(loopIdx, isLastLoop);
 
             auto blockShape = bs.GetBlockShape();
-            auto blockCoord = bs.GetBlockCoord();
+            auto blkElemCoord = bs.GetBlockCoordByElement();
             
-            uint32_t mCoord = blockCoord.m();
-            uint32_t nCoord = blockCoord.n();
-            uint32_t kCoord = blockCoord.k();
+            uint32_t mCoord = blkElemCoord.m();
+            uint32_t nCoord = blkElemCoord.n();
+            uint32_t kCoord = blkElemCoord.k();
 
             uint32_t blockM = blockShape.m();
             uint32_t blockN = blockShape.n();

@@ -218,14 +218,14 @@ public:
                 blockScheduler.UpdateMNTileIdx(loopIdx, isLastGroupRound);
                 blockScheduler.UpdateBlockShape(loopIdx, isLastGroupRound);
                 auto blockShape = blockScheduler.GetBlockShape();
-                auto blockCoord = blockScheduler.GetBlockCoord();
+                auto blkElemCoord = blockScheduler.GetBlockCoordByElement();
 
-                uint32_t mCoord = blockCoord.m();
+                uint32_t mCoord = blkElemCoord.m();
                 uint32_t blockM = blockShape.m();
-                uint32_t nCoord = blockCoord.n();
+                uint32_t nCoord = blkElemCoord.n();
                 uint32_t blockN = blockShape.n();
 #ifdef __DAV_CUBE__
-                uint32_t kCoord = blockCoord.k();
+                uint32_t kCoord = blkElemCoord.k();
                 uint32_t blockK = blockShape.k();
                 auto gmATile = GetTile(gmATensor,
                                             tla::MakeCoord(totalM + mCoord, kCoord),

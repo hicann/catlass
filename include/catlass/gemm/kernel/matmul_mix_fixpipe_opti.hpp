@@ -123,7 +123,7 @@ public:
         // dualDstCtrl is not supported in quant/dequant scenarios
         constexpr bool enableDualDst = (AscendC::IsSameType<ElementC, ElementAccumulator>::value);
         if ASCEND_IS_AIV {
-            if constexpr (!enableDualDst && AscendC::GetSubBlockIdx() > 0) {
+            if (!enableDualDst && AscendC::GetSubBlockIdx() > 0) {
                 return;
             }
             curBlockIdx /= AscendC::GetTaskRation();
@@ -137,6 +137,7 @@ public:
             bs.UpdateTailTile();
         }
 
+        uint32_t ubPingPongFlag = UB_STAGES > 1 ? 1 : 0;
         uint32_t coreLoops = bs.round_;
         for (uint32_t loopIdx = 0; loopIdx < coreLoops; ++loopIdx) {
             bool isLastLoop = (loopIdx == coreLoops - 1 && curBlockIdx <= bs.endBlockIdx_);
@@ -144,13 +145,13 @@ public:
             bs.UpdateBlockShape(loopIdx, isLastLoop);
 
             auto blockShape = bs.GetBlockShape();
-            auto blockCoord = bs.GetBlockCoord();
+            auto blkElemCoord = bs.GetBlockCoordByElement();
 
             uint32_t blockM = blockShape.m();
             uint32_t blockN = blockShape.n();
              
-            uint32_t mCoord = blockCoord.m();
-            uint32_t nCoord = blockCoord.n();
+            uint32_t mCoord = blkElemCoord.m();
+            uint32_t nCoord = blkElemCoord.n();
 
             auto aTileTensor = GetTile(
                 aTlaTensor,
@@ -169,36 +170,37 @@ public:
                 tla::MakeCoord(mCoord, nCoord),
                 tla::MakeShape(blockM, blockN)
             );
-                            
+            
+            uint32_t ubListId = (loopIdx / blockNum) & ubPingPongFlag;
+            
             int64_t alignN = RoundUp(blockN, static_cast<int64_t>(Catlass::BYTE_PER_BLK / sizeof(ElementC)));
             auto ubLayout = tla::MakeLayout<ElementC, LayoutTagC>(blockM, alignN);
-            auto cLocalTensor = tla::MakeTensor(ubTensorList_[ubListId_], ubLayout, Arch::PositionUB{});
+            auto cLocalTensor = tla::MakeTensor(ubTensorList_[ubListId], ubLayout, Arch::PositionUB{});
 
             if ASCEND_IS_AIC {
                 // Synchronize with aiv
-                AscendC::CrossCoreWaitFlag<AIC_SYNC_AIV_MODE_4, PIPE_FIX>(AIV_SYNC_AIC_FLAG + (ubListId_));
+                AscendC::CrossCoreWaitFlag<AIC_SYNC_AIV_MODE_4, PIPE_FIX>(AIV_SYNC_AIC_FLAG + (ubListId));
                 if constexpr (enableDualDst) {
                     AscendC::CrossCoreWaitFlag<AIC_SYNC_AIV_MODE_4, PIPE_FIX>(
-                        AIV_SYNC_AIC_FLAG + (ubListId_) + FLAG_ID_MAX);
+                        AIV_SYNC_AIC_FLAG + (ubListId) + FLAG_ID_MAX);
                 }
                 // Calulate blockMmad
                 blockMmadOp(aTileTensor, bTileTensor, cLocalTensor, blockShape);
                 // Notify aiv
-                AscendC::CrossCoreSetFlag<AIC_SYNC_AIV_MODE_4, PIPE_FIX>(AIC_SYNC_AIV_FLAG + (ubListId_));
+                AscendC::CrossCoreSetFlag<AIC_SYNC_AIV_MODE_4, PIPE_FIX>(AIC_SYNC_AIV_FLAG + (ubListId));
                 if constexpr (enableDualDst) {
                     AscendC::CrossCoreSetFlag<AIC_SYNC_AIV_MODE_4, PIPE_FIX>(
-                        AIC_SYNC_AIV_FLAG + (ubListId_) + FLAG_ID_MAX);
+                        AIC_SYNC_AIV_FLAG + (ubListId) + FLAG_ID_MAX);
                 }
             }
             if ASCEND_IS_AIV {
                 // Synchronize with aic
-                AscendC::CrossCoreWaitFlag<AIC_SYNC_AIV_MODE_4, PIPE_MTE3>(AIC_SYNC_AIV_FLAG + (ubListId_));
+                AscendC::CrossCoreWaitFlag<AIC_SYNC_AIV_MODE_4, PIPE_MTE3>(AIC_SYNC_AIV_FLAG + (ubListId));
                 // Calulate epilogue
                 epilogueOp(cTileTensor, cLocalTensor);
                 // Notify aic
-                AscendC::CrossCoreSetFlag<AIC_SYNC_AIV_MODE_4, PIPE_MTE3>(AIV_SYNC_AIC_FLAG + (ubListId_));
+                AscendC::CrossCoreSetFlag<AIC_SYNC_AIV_MODE_4, PIPE_MTE3>(AIV_SYNC_AIC_FLAG + (ubListId));
             }
-            ubListId_ = (ubListId_ + 1 < UB_STAGES) ? (ubListId_ + 1) : 0;
         }
         AscendC::PipeBarrier<PIPE_ALL>();
     }
@@ -224,7 +226,6 @@ public:
 private:
     Arch::Resource<ArchTag> resource;
     AscendC::LocalTensor<ElementC> ubTensorList_[UB_STAGES];
-    uint32_t ubListId_{0};
     constexpr static uint16_t AIC_SYNC_AIV_MODE_4 = 4;
     constexpr static uint16_t AIV_SYNC_AIC_FLAG = 6;
     constexpr static uint16_t AIC_SYNC_AIV_FLAG = 8;

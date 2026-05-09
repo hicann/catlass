@@ -51,7 +51,7 @@ public:
     CATLASS_DEVICE 
     void operator()(TensorOut& tensorOut, TensorIn& tensorIn)
     {
-        if constexpr (!SPLIT_M && AscendC::GetSubBlockIdx() > 0) {
+        if (!SPLIT_M && AscendC::GetSubBlockIdx() > 0) {
             return;
         }
 

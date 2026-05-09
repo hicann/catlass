@@ -207,7 +207,7 @@ struct BlockSchedulerAswt {
     }
 
     CATLASS_DEVICE 
-    GemmCoord GetBlockCoord() const
+    GemmCoord GetBlockCoordByElement() const
     {
         return {mTileIdx_ * ML1_ + mSplitOffset_, nTileIdx_ * NL1_ + nSplitOffset_, 0};
     }
