@@ -161,7 +161,10 @@ static void Run(const Options &options) {
     // 定义适配器对象
     MatmulAdapter matmulOp;
     // 判断kernel对相关参数可执行
-    matmulOp.CanImplement(arguments);
+    if (matmulOp.CanImplement(arguments) == Status::kInvalid) {
+        std::cerr << "matmulOp cannot implement current arguments." << std::endl;
+        return;
+    }
     size_t sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
     uint8_t *deviceWorkspace = nullptr;
     if (sizeWorkspace > 0) {
@@ -183,9 +186,13 @@ static void Run(const Options &options) {
     
     // 计算精度标杆并与输出数据比对
     std::vector<float> hostGolden(lenC);
-    golden::ComputeMatmul(hostGolden, hostA, hostB, m, n, k);
-    auto diff = helper::CompareData(hostC, hostGolden);
-    std::cout << "Compare " << (diff ? "failed" : "success") << std::endl;
+    golden::ComputeMatmul(options.problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);
+    std::vector<uint64_t> errorIndices = golden::CompareData(hostC, hostGolden, k);
+    if (errorIndices.empty()) {
+        std::cout << "Compare success." << std::endl;
+    } else {
+        std::cerr << "Compare failed. Error count: " << errorIndices.size() << std::endl;
+    }
 
     /* 第五步，释放资源 */
     ACL_CHECK(aclrtFree(deviceA));

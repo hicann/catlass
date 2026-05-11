@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_CONV_KERNEL_BASIC_CONV3D_HPP
-#define CATLASS_CONV_KERNEL_BASIC_CONV3D_HPP
+#ifndef CATLASS_CONV_KERNEL_CONV3D_BIAS_HPP
+#define CATLASS_CONV_KERNEL_CONV3D_BIAS_HPP
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/resource.hpp"
@@ -184,4 +184,4 @@ public:
 };
 
 }  // namespace Catlass::Conv::Kernel
-#endif // CATLASS_CONV_KERNEL_BASIC_CONV3D_HPP
+#endif // CATLASS_CONV_KERNEL_CONV3D_BIAS_HPP

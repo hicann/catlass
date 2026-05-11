@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
  
-#ifndef INCLUDE_CATLASS_ARCH_MEMORY_H
-#define INCLUDE_CATLASS_ARCH_MEMORY_H
+#ifndef CATLASS_ARCH_LOCAL_TENSOR_BUFFER_HPP
+#define CATLASS_ARCH_LOCAL_TENSOR_BUFFER_HPP
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
@@ -227,4 +227,4 @@ public:
 
 }  // namespace Catlass::Arch
 
-#endif  // INCLUDE_CATLASS_ARCH_MEMORY_H
+#endif  // CATLASS_ARCH_LOCAL_TENSOR_BUFFER_HPP

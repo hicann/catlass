@@ -22,7 +22,7 @@
     - [print](./1_Practice/evaluation_tools/print.md)
 - others（folder）：存放内部和外部贡献的难以归类的实践文档
     - tla_rebuild：TLA样例改造
-    - [migration_from_atlasA2_to_Ascend950_guildline](./1_Practice/others/migration_from_atlasA2_to_Ascend950_guildline.md)：介绍推荐的AtlasA2平台存量算子向Ascend950代际兼容方案
+    - [migration_from_atlasA2_to_Ascend950_guideline](./1_Practice/others/migration_from_atlasA2_to_Ascend950_guideline.md)：介绍推荐的AtlasA2平台存量算子向Ascend950代际兼容方案
 
 ## 2 Design
 
@@ -36,7 +36,7 @@
     - 06_quant_summary：低精度专题
 - 02_tla：
     - [01_layout](./2_Design/02_tla/01_layout.md)：TLA设计的layout结构和相关接口说明
-    - 02_layout_tag：RowMajor、ColumnMajor、zN、nZ等layoutTag介绍和接口说明
+    - [02_layout_tag](./2_Design/02_tla/02_layout_tag.md)：RowMajor、ColumnMajor、zN、nZ等layoutTag介绍和接口说明
     - [03_tensor](./2_Design/02_tla/03_tensor.md)：tensor结构体
 - 03_evg
     - [01_evg_design](./2_Design/03_evg/01_evg_design.md)：EVG 的定位、分层关系、执行模型与图组织方式

@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_GEMM_TILE_ASCEND950_COPY_L0C_TO_UB_950_HPP
-#define CATLASS_GEMM_TILE_ASCEND950_COPY_L0C_TO_UB_950_HPP
+#ifndef CATLASS_GEMM_TILE_ASCEND950_COPY_L0C_TO_UB_HPP
+#define CATLASS_GEMM_TILE_ASCEND950_COPY_L0C_TO_UB_HPP
 
 #include "catlass/arch/arch.hpp"
 #include "catlass/catlass.hpp"
@@ -169,4 +169,4 @@ struct CopyL0CToUBTla<
 
 } // namespace Catlass::Gemm::Tile
 
-#endif // CATLASS_GEMM_TILE_ASCEND950_COPY_L0C_TO_UB_950_HPP
+#endif // CATLASS_GEMM_TILE_ASCEND950_COPY_L0C_TO_UB_HPP

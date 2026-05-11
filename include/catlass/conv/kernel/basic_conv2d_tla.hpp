@@ -9,8 +9,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_CONV_KERNEL_CONV2D_TLA_HPP
-#define CATLASS_CONV_KERNEL_CONV2D_TLA_HPP
+#ifndef CATLASS_CONV_KERNEL_BASIC_CONV2D_TLA_HPP
+#define CATLASS_CONV_KERNEL_BASIC_CONV2D_TLA_HPP
 
 #include "catlass/arch/resource.hpp"
 #include "catlass/catlass.hpp"
@@ -219,4 +219,4 @@ public:
 
 } // namespace Catlass::Conv::Kernel
 
-#endif // CATLASS_CONV_KERNEL_CONV2D_TLA_HPP
+#endif // CATLASS_CONV_KERNEL_BASIC_CONV2D_TLA_HPP

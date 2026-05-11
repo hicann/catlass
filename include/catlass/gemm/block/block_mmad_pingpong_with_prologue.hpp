@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_GEMM_BLOCK_BLOCK_MMAD_PINGPONG_WITH_PROLOGUE
-#define CATLASS_GEMM_BLOCK_BLOCK_MMAD_PINGPONG_WITH_PROLOGUE
+#ifndef CATLASS_GEMM_BLOCK_BLOCK_MMAD_PINGPONG_WITH_PROLOGUE_HPP
+#define CATLASS_GEMM_BLOCK_BLOCK_MMAD_PINGPONG_WITH_PROLOGUE_HPP
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/resource.hpp"
@@ -532,4 +532,4 @@ protected:
 
 } // namespace Catlass::Gemm::Block
 
-#endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_PINGPONG_WITH_PROLOGUE
+#endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_PINGPONG_WITH_PROLOGUE_HPP

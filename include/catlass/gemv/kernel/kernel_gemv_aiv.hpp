@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_GEMV_KERNLE_GEMV_AIV_HPP
-#define CATLASS_GEMV_KERNLE_GEMV_AIV_HPP
+#ifndef CATLASS_GEMV_KERNEL_GEMV_AIV_HPP
+#define CATLASS_GEMV_KERNEL_GEMV_AIV_HPP
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/resource.hpp"
@@ -19,7 +19,7 @@
 
 namespace Catlass::Gemv::Kernel {
 
-// tmeplate for gemv kernle, Compute z = αAx + βy
+// template for gemv kernel, Compute z = αAx + βy
 template <
     class BlockGemv_,
     class BlockEpilogue_
@@ -201,4 +201,4 @@ public:
 
 }
 
-#endif // CATLASS_GEMV_KERNLE_GEMV_AIV_HPP
+#endif // CATLASS_GEMV_KERNEL_GEMV_AIV_HPP

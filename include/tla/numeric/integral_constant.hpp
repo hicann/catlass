@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef TLA_NUMERIC_INTEGER_CONSTANT_HPP
-#define TLA_NUMERIC_INTEGER_CONSTANT_HPP
+#ifndef TLA_NUMERIC_INTEGRAL_CONSTANT_HPP
+#define TLA_NUMERIC_INTEGRAL_CONSTANT_HPP
 
 #include "catlass/detail/macros.hpp"
 #include "tla/type_traits.hpp"
@@ -194,4 +194,4 @@ TLA_NAMED_BINARY_FN(add);
 
 } // end namespace tla
 
-#endif // TLA_NUMERIC_INTEGER_CONSTANT_HPP
+#endif // TLA_NUMERIC_INTEGRAL_CONSTANT_HPP

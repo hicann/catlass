@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_GEMM_KERNEL_MATMUL_EPILOGUE_HPP
-#define CATLASS_GEMM_KERNEL_MATMUL_EPILOGUE_HPP
+#ifndef CATLASS_GEMM_KERNEL_MATMUL_ACTIVATION_HPP
+#define CATLASS_GEMM_KERNEL_MATMUL_ACTIVATION_HPP
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/resource.hpp"
@@ -212,4 +212,4 @@ private:
 
 } // namespace Catlass::Gemm::Kernel
 
-#endif // CATLASS_GEMM_KERNEL_MATMUL_EPILOGUE_HPP
+#endif // CATLASS_GEMM_KERNEL_MATMUL_ACTIVATION_HPP

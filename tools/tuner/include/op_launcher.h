@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_TUNER_OP_RUNNER_H
-#define CATLASS_TUNER_OP_RUNNER_H
+#ifndef CATLASS_TUNER_OP_LAUNCHER_H
+#define CATLASS_TUNER_OP_LAUNCHER_H
 
 #include "op_config.h"
 
@@ -42,4 +42,4 @@ private:
 };
 
 } // namespace Catlass
-#endif // CATLASS_TUNER_OP_RUNNER_H
+#endif // CATLASS_TUNER_OP_LAUNCHER_H

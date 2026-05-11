@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_GEMM_KERNEL_GROUPGEMM_HPP
-#define CATLASS_GEMM_KERNEL_GROUPGEMM_HPP
+#ifndef CATLASS_GEMM_KERNEL_GROUP_GEMM_HPP
+#define CATLASS_GEMM_KERNEL_GROUP_GEMM_HPP
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/cross_core_sync.hpp"
@@ -530,4 +530,4 @@ private:
 };
 }
 
-#endif // CATLASS_GEMM_KERNEL_GROUPGEMM_HPP
+#endif // CATLASS_GEMM_KERNEL_GROUP_GEMM_HPP

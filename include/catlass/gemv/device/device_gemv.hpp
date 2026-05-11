@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_GEMV_DEVICE_GEMV_UNIVERSAL_ADAPTER_HPP
-#define CATLASS_GEMV_DEVICE_GEMV_UNIVERSAL_ADAPTER_HPP
+#ifndef CATLASS_GEMV_DEVICE_DEVICE_GEMV_HPP
+#define CATLASS_GEMV_DEVICE_DEVICE_GEMV_HPP
 
 #include <acl/acl.h>
 #include "catlass/catlass.hpp"

@@ -54,8 +54,8 @@ class Manifest:
         for name, func in OperationRegistry.register_functions.items():
             if name in OperationRegistry.register_functions_high_priority:
                 LOGGER.info(
-                    f'skip seach space registration of {name} in search_space.py'
-                    f' due to a duplicate registration in seach_sapce_config.py'
+                    f'skip search space registration of {name} in search_space.py'
+                    f' due to a duplicate registration in search_space_config.py'
                 )
             else:
                 func(self)

@@ -7,8 +7,8 @@
  * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
  * See LICENSE in the root of the software repository for the full text of the License.
  */
-#ifndef CATLASS_GEMV_KERNLE_GEMV_AIC_HPP
-#define CATLASS_GEMV_KERNLE_GEMV_AIC_HPP
+#ifndef CATLASS_GEMV_KERNEL_GEMV_AIC_HPP
+#define CATLASS_GEMV_KERNEL_GEMV_AIC_HPP
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/cross_core_sync.hpp"
@@ -21,7 +21,7 @@
 
 namespace Catlass::Gemv::Kernel {
 
-// tmeplate for gemv kernle, Compute z = αAx + βy
+// template for gemv kernel, Compute z = αAx + βy
 template <
     class BlockGemv_,
     class BlockEpilogue_
@@ -287,4 +287,4 @@ private:
 
 }  // namespace Catlass::Gemv::kernel
 
-#endif  // CATLASS_GEMV_KERNLE_GEMV_EPILOGUE_HPP
+#endif  // CATLASS_GEMV_KERNEL_GEMV_AIC_HPP

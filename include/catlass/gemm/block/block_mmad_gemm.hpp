@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_BLOCK_BLOCK_MMAD_GEMM_HPP
-#define CATLASS_BLOCK_BLOCK_MMAD_GEMM_HPP
+#ifndef CATLASS_GEMM_BLOCK_BLOCK_MMAD_GEMM_HPP
+#define CATLASS_GEMM_BLOCK_BLOCK_MMAD_GEMM_HPP
 
 #include "catlass/catlass.hpp"
 #include "catlass/gemm/helper.hpp"
@@ -361,4 +361,4 @@ private:
 };
 }
 
-#endif // CATLASS_BLOCK_BLOCK_MMAD_GEMM_HPP
+#endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_GEMM_HPP
