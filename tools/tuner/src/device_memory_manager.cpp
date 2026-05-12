@@ -202,7 +202,7 @@ bool DeviceMemoryManager::InitCacheClear()
     for (int i = 0; i < CACHE_CLEAR_BUFF; ++i) {
         err = aclrtMalloc(&cacheClear_.cmoBuffers[i], cacheClear_.cacheSize, ACL_MEM_MALLOC_HUGE_FIRST);
         if (err != ACL_SUCCESS) {
-            LOGE("Call aclrtMalloc failed, err: %d, size 32", err);
+            LOGE("Call aclrtMalloc failed, err: %d, size %lu", err, cacheClear_.cacheSize);
             return false;
         }
     }
