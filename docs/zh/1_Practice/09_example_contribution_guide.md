@@ -92,7 +92,7 @@ bash scripts/build.sh ${id}_${op_name}
 
 ### 4.2 提交流程
 
-参考[贡献指南](../../../../CONTRIBUTING.md)，按照以下流程提交：
+参考[贡献指南](../../../CONTRIBUTING.md)，按照以下流程提交：
 
 1. **创建Issue**：在GitCode上创建`Requirement|需求建议`类Issue，说明新算子样例的设计方案
 2. **分配任务**：在Issue评论中输入"/assign"或"/assign @yourself"，将Issue分配给自己

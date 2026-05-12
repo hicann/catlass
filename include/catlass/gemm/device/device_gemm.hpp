@@ -70,7 +70,7 @@ public:
     }
 
     /// Primary run() entry point API that is static allowing users to create and manage their own params.
-    /// Supplied params struct must be construct by calling matmul Kernel::to_underling arguments
+    /// Supplied params struct must be construct by calling matmul Kernel::to_underlying arguments
     inline Status Run(aclrtStream stream, uint32_t blockDim, uint64_t fftsAddr)
     {
 #if (defined (CATLASS_ARCH) && CATLASS_ARCH == 2201)

@@ -273,7 +273,7 @@ max(2MB, L1TileShape::M * L1TileShape::N * sizeof(ElementAccumulator) * aicCoreN
 
 ### 案例三：FAI多阶段CV流水
 
-`examples/49_ascend950_flash_attention_infer`样例的详细性能优化分析在[FA算子性能优化](./FA_optimization.md)，本文只进行关键点概括。
+`examples/49_ascend950_flash_attention_infer`样例的详细性能优化分析在[FA算子性能优化](./FA_kernel_optimization.md)，本文只进行关键点概括。
 
 FAI计算链路为：
 
@@ -294,7 +294,7 @@ FAI样例中的关键优化方向包括：
 | Paged Attention | 检查block table、KV cache page连续性和对齐，避免MTE2跳读 |
 | FixPipe和workspace对齐 | 保证输出和workspace分段起始地址按512B等要求对齐 |
 
-更详细的参数解释、资源预算和调优路径可参考[FA算子性能优化](./FA_optimization.md)。
+更详细的参数解释、资源预算和调优路径可参考[FA算子性能优化](./FA_kernel_optimization.md)。
 
 ## 3. 融合算子调优检查表
 

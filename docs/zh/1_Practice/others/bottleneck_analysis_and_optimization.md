@@ -98,7 +98,7 @@ bash scripts/build.sh -DCATLASS_LIBRARY_KERNELS=00_basic_matmul mstuner_catlass
 ./output/bin/mstuner_catlass --m=256 --n=512 --k=1024 --device=0 --output=results.csv
 ```
 
-输出中每行包含`case_id`、`task_duration(us)`、`operation`、`l0_tile_shape`、`l1_tile_shape`、`swizzle`等信息，末尾汇总Top 10最优配置。搜索空间配置支持入门级和高级两种模式，详见[msTuner_CATLASS文档](../../../tools/tuner/README.md)。建议将搜索空间规模控制在5000以内，以避免编译耗时过长。
+输出中每行包含`case_id`、`task_duration(us)`、`operation`、`l0_tile_shape`、`l1_tile_shape`、`swizzle`等信息，末尾汇总Top 10最优配置。搜索空间配置支持入门级和高级两种模式，详见[msTuner_CATLASS文档](../../../../tools/tuner/README.md)。建议将搜索空间规模控制在5000以内，以避免编译耗时过长。
 
 ### 工具选型建议
 
@@ -220,5 +220,5 @@ Cube和Vector/Scalar分开计算后再求和，因为三者可并行执行到一
 | msProf（`msprof op`） | 单算子上板性能采集 | [msProf&Profiling](../evaluation_tools/performance_tools.md#用msprof进行单算子性能分析) |
 | msProf仿真（`msprof op simulator`） | 单算子仿真流水图采集 | [性能流水仿真](../evaluation_tools/performance_tools.md#性能流水仿真) |
 | Profiling（`msprof`） | 整网性能数据采集与分析 | [用Profiling进行整网性能分析](../evaluation_tools/performance_tools.md#用profiling进行整网性能分析) |
-| msTuner_CATLASS | Tiling参数自动寻优 | [msTuner_CATLASS README](../../../tools/tuner/README.md) |
+| msTuner_CATLASS | Tiling参数自动寻优 | [msTuner_CATLASS README](../../../../tools/tuner/README.md) |
 | MindStudio Insight | 性能数据可视化分析 | [MindStudio Insight用户指南](https://www.hiascend.com/document/detail/zh/mindstudio/80RC1/GUI_baseddevelopmenttool/msascendinsightug/Insight_userguide_0002.html) |
