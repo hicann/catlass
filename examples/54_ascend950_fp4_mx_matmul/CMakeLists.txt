@@ -11,3 +11,7 @@
 set_source_files_properties(fp4_mx_matmul.cpp PROPERTIES LANGUAGE ASC)
 catlass_example_add_executable(54_ascend950_fp4_mx_matmul cube fp4_mx_matmul.cpp)
 target_compile_definitions(54_ascend950_fp4_mx_matmul PRIVATE L2_CACHE_HINT)
+
+set_source_files_properties(fp4_mx_matmul_aswt.cpp PROPERTIES LANGUAGE ASC)
+catlass_example_add_executable(54_ascend950_fp4_mx_matmul_aswt cube fp4_mx_matmul_aswt.cpp)
+target_compile_definitions(54_ascend950_fp4_mx_matmul_aswt PRIVATE L2_CACHE_HINT)

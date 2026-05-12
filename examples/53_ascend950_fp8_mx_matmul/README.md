@@ -1,7 +1,5 @@
 # MXFP8MatmulTla Example Readme
 
-**注意：社区包暂不支持 950 能力，后续支持的版本敬请期待**
-
 ## 功能介绍
 
 - 演示 Ascend 950 上的 **MX FP8 矩阵乘**：A、B 为 MX FP8，经 `float8_e8m0` 缩放后做矩阵乘，输出 FP32。
@@ -15,7 +13,8 @@
 │   ├── CMakeLists.txt      # CMake 编译配置
 │   ├── README.md
 │   ├── gen_data.py         # 生成 input/ 与 golden/
-│   └── fp8_mx_matmul.cpp   # 主程序
+│   ├── fp8_mx_matmul.cpp   # 主程序
+│   └── fp8_mx_matmul_aswt.cpp   # BlockSchedulerAswt 变体
 ```
 
 ## 使用示例
@@ -27,11 +26,15 @@
 bash scripts/build.sh 53_ascend950_fp8_mx_matmul -DCATLASS_ARCH=3510
 # 生成测试样例（在 examples/53_ascend950_fp8_mx_matmul/data 下生成 input/ 与 golden/）
 python3 examples/53_ascend950_fp8_mx_matmul/gen_data.py 256 512 1024 0 1
+# 可选：--data-root <DIR> 指定在 DIR/data/ 下生成（默认在脚本所在目录下生成）
 # 输入参数分别对应 m, n, k, trans_a, trans_b
 # trans_a表示A矩阵是否转置，0是不转置，1是转置
 # trans_b表示B矩阵是否转置，0是不转置，1是转置
 # 执行测试样例
 ./output/bin/53_ascend950_fp8_mx_matmul 256 512 1024 0
+# ASWT 调度变体（与上共用同一 data/，需先 gen_data）
+bash scripts/build.sh 53_ascend950_fp8_mx_matmul_aswt -DCATLASS_ARCH=3510
+./output/bin/53_ascend950_fp8_mx_matmul_aswt 256 512 1024 0
 # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID
 # Device ID可选，默认为0
 ```

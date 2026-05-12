@@ -1,7 +1,5 @@
 # MXFP4MatmulTla Example Readme
 
-**注意：社区包暂不支持 950 能力，后续支持的版本敬请期待**
-
 ## 功能介绍
 
 - 演示 Ascend 950 上的 **MX FP4 矩阵乘**：左矩阵 A、右矩阵 B 经 MX 缩放（`float8_e8m0`）后在 Cube 上完成乘加，输出为 FP32。
@@ -14,8 +12,10 @@
 │   ├── CMakeLists.txt     # CMake编译文件
 │   ├── README.md
 │   ├── gen_data.py
-│   └── fp4_mx_matmul.cpp # 主文件
+│   ├── fp4_mx_matmul.cpp # 主文件
+│   └── fp4_mx_matmul_aswt.cpp   # BlockSchedulerAswt 变体
 ```
+
 ## 使用示例
 - 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)，本用例为 Ascend950（3510）算子，编译时需加 `-DCATLASS_ARCH=3510`。L1 分块为 256×256×448、L0 为 256×256×128，以满足 512KiB L1 与 L0 容量约束（勿随意增大 L1 的 K，否则 `L1TileShape exceeding the L1 space`）。
 - 执行算子
@@ -24,11 +24,15 @@
 bash scripts/build.sh 54_ascend950_fp4_mx_matmul -DCATLASS_ARCH=3510
 # 生成测试样例（在 examples/54_ascend950_fp4_mx_matmul/data 下生成 input/ 与 golden/）
 python3 examples/54_ascend950_fp4_mx_matmul/gen_data.py 256 512 1024 0 1
+# 可选：--data-root <DIR> 指定在 DIR/data/ 下生成（默认在脚本所在目录下生成）
 # 输入参数分别对应 m, n, k, trans_a, trans_b
 # trans_a表示A矩阵是否转置，0是不转置，1是转置
 # trans_b表示B矩阵是否转置，0是不转置，1是转置
 # 执行测试样例
 ./output/bin/54_ascend950_fp4_mx_matmul 256 512 1024 0
+# ASWT 调度变体（与上共用同一 data/，需先 gen_data）
+bash scripts/build.sh 54_ascend950_fp4_mx_matmul_aswt -DCATLASS_ARCH=3510
+./output/bin/54_ascend950_fp4_mx_matmul_aswt 256 512 1024 0
 # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID
 # Device ID可选，默认为0
 ```

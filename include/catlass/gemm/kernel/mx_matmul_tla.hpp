@@ -15,6 +15,8 @@
 #include "catlass/arch/resource.hpp"
 #include "catlass/catlass.hpp"
 #include "catlass/coord.hpp"
+#include "catlass/gemm/block/block_scheduler_aswt.hpp"
+#include "catlass/gemm/block/block_swizzle.hpp"
 #include "catlass/gemm_coord.hpp"
 #include "catlass/matrix_coord.hpp"
 #include "tla/layout.hpp"
@@ -24,12 +26,10 @@ namespace Catlass::Gemm::Kernel {
 
 #if (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510)
 
-// Template for MxMatmul kernel. Compute C = (MxScaleA x A) * (MxScaleB x B) + Bias
 template <class BlockMmad_, class BlockEpilogue_, class BlockScheduler_>
-class MxMatmulTla {
+class MxMatmulTlaBase {
 public:
     using BlockMmad = BlockMmad_;
-    /// Avoid name clash with AscendC/CANN identifiers named ArchTag (unqualified lookup can pick int).
     using MmadArchTag = typename BlockMmad::ArchTag;
     using L1TileShape = typename BlockMmad::L1TileShape;
     using ElementA = typename BlockMmad::ElementA;
@@ -44,8 +44,8 @@ public:
     using LayoutC = typename BlockMmad::LayoutC;
     using ElementBias = typename BlockMmad::ElementBias;
     using ElementAccumulator = typename BlockMmad::ElementAccumulator;
-
     using BlockScheduler = BlockScheduler_;
+    using BlockEpilogue = BlockEpilogue_;
 
     static constexpr uint32_t L1_TILE_M = tla::get<0>(L1TileShape{});
     static constexpr uint32_t L1_TILE_N = tla::get<1>(L1TileShape{});
@@ -133,8 +133,44 @@ public:
                       args.layoutMxScaleB, args.ptrC,        args.layoutC,        args.ptrBias};
         return params;
     }
+};
 
-    // Methods
+// Primary template is an explicit fallback. Supported schedulers are implemented via partial specializations.
+template <class BlockMmad_, class BlockEpilogue_, class BlockScheduler_>
+class MxMatmulTla {
+    static_assert(
+        DEPENDENT_FALSE<BlockScheduler_>,
+        "Unsupported BlockScheduler for MxMatmulTla. "
+        "Please use Gemm::Block::GemmIdentityBlockSwizzle<...> or "
+        "Gemm::Block::BlockSchedulerAswt<...>."
+    );
+};
+
+template <class BlockMmad_, class BlockEpilogue_, class L1TileShape_, class L0TileShape_, bool isGmm_>
+class MxMatmulTla<BlockMmad_, BlockEpilogue_, Gemm::Block::BlockSchedulerAswt<L1TileShape_, L0TileShape_, isGmm_>>
+    : public MxMatmulTlaBase<BlockMmad_, BlockEpilogue_, Gemm::Block::BlockSchedulerAswt<L1TileShape_, L0TileShape_, isGmm_>> {
+    using Base = MxMatmulTlaBase<BlockMmad_, BlockEpilogue_, Gemm::Block::BlockSchedulerAswt<L1TileShape_, L0TileShape_, isGmm_>>;
+
+public:
+    using Params = typename Base::Params;
+    using Arguments = typename Base::Arguments;
+    using BlockMmad = typename Base::BlockMmad;
+    using MmadArchTag = typename Base::MmadArchTag;
+    using L1TileShape = typename Base::L1TileShape;
+    using ElementA = typename Base::ElementA;
+    using LayoutA = typename Base::LayoutA;
+    using ElementB = typename Base::ElementB;
+    using LayoutB = typename Base::LayoutB;
+    using ElementMxScaleA = typename Base::ElementMxScaleA;
+    using LayoutMxScaleA = typename Base::LayoutMxScaleA;
+    using ElementMxScaleB = typename Base::ElementMxScaleB;
+    using LayoutMxScaleB = typename Base::LayoutMxScaleB;
+    using ElementC = typename Base::ElementC;
+    using LayoutC = typename Base::LayoutC;
+    using ElementBias = typename Base::ElementBias;
+    using ElementAccumulator = typename Base::ElementAccumulator;
+    using BlockScheduler = typename Base::BlockScheduler;
+
     CATLASS_DEVICE
     MxMatmulTla() {}
 
@@ -142,18 +178,21 @@ public:
     CATLASS_DEVICE
     void operator()(Params const &params);
 
-    /// Executes one Matmul
     template <>
     CATLASS_DEVICE
     void operator()<AscendC::AIC>(Params const &params)
     {
-        BlockScheduler matmulBlockScheduler(params.problemShape, MakeCoord(L1_TILE_M, L1_TILE_N));
-        uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
+        int64_t curBlockIdx = AscendC::GetBlockIdx();
+        int64_t blockNum = AscendC::GetBlockNum();
+        BlockScheduler matmulBlockScheduler(curBlockIdx, blockNum, params.problemShape);
+
+        if (matmulBlockScheduler.endBlockIdx_ + 1 <= blockNum / 2) {
+            matmulBlockScheduler.UpdateTailTile();
+        }
 
         Arch::Resource<MmadArchTag> resource;
         BlockMmad blockMmad(resource);
 
-        // Represent the full gm
         AscendC::GlobalTensor<ElementA> gmA;
         gmA.SetGlobalBuffer((__gm__ ElementA *)params.ptrA);
         AscendC::GlobalTensor<ElementB> gmB;
@@ -165,8 +204,150 @@ public:
         AscendC::GlobalTensor<ElementC> gmC;
         gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrC);
 
-        // Matrix A or Matrix B does not have duplicate data reads. Setting L2 Cache to Disable,
-        // data reads will bypass L2 Cache.
+        if (CeilDiv(params.problemShape.m(), Base::L1_TILE_M) == 1) {
+            gmB.SetL2CacheHint(AscendC::CacheMode::CACHE_MODE_DISABLE);
+        }
+        if (CeilDiv(params.problemShape.n(), Base::L1_TILE_N) == 1) {
+            gmA.SetL2CacheHint(AscendC::CacheMode::CACHE_MODE_DISABLE);
+        }
+
+        using GlobalTensorBiasType = std::conditional_t<std::is_void_v<ElementBias>, uint8_t, ElementBias>;
+        AscendC::GlobalTensor<GlobalTensorBiasType> gmBias;
+        if constexpr (!std::is_void_v<ElementBias>) {
+            gmBias.SetGlobalBuffer((__gm__ ElementBias *)params.ptrBias);
+        }
+
+        auto layoutBias = tla::MakeLayout(params.problemShape.n());
+        auto tensorA = tla::MakeTensor(gmA, params.layoutA, Arch::PositionGM{});
+        auto tensorB = tla::MakeTensor(gmB, params.layoutB, Arch::PositionGM{});
+        auto tensorMxScaleA = tla::MakeTensor(gmMxScaleA, params.layoutMxScaleA, Arch::PositionGM{});
+        auto tensorMxScaleB = tla::MakeTensor(gmMxScaleB, params.layoutMxScaleB, Arch::PositionGM{});
+        auto tensorC = tla::MakeTensor(gmC, params.layoutC, Arch::PositionGM{});
+        auto tensorBias = tla::MakeTensor(gmBias, layoutBias, Arch::PositionGM{});
+
+        uint32_t coreLoops = matmulBlockScheduler.round_;
+        for (uint32_t loopIdx = 0; loopIdx < coreLoops; ++loopIdx) {
+            bool isLastLoop = (loopIdx == coreLoops - 1 && curBlockIdx <= matmulBlockScheduler.endBlockIdx_);
+            matmulBlockScheduler.UpdateMNTileIdx(loopIdx, isLastLoop);
+            matmulBlockScheduler.UpdateBlockShape(loopIdx, isLastLoop);
+
+            auto blockShape = matmulBlockScheduler.GetBlockShape();
+            auto blkElemCoord = matmulBlockScheduler.GetBlockCoordByElement();
+
+            if (blockShape.m() == 0 || blockShape.n() == 0) {
+                continue;
+            }
+
+            uint32_t mOffset = blkElemCoord.m();
+            uint32_t nOffset = blkElemCoord.n();
+
+            auto tensorBlockA = GetTile(
+                tensorA, tla::MakeCoord(mOffset, 0),
+                tla::MakeShape(blockShape.m(), blockShape.k())
+            );
+            auto tensorBlockB = GetTile(
+                tensorB, tla::MakeCoord(0, nOffset),
+                tla::MakeShape(blockShape.k(), blockShape.n())
+            );
+            auto tensorBlockMxScaleA = GetTile(
+                tensorMxScaleA, tla::MakeCoord(mOffset, 0),
+                tla::MakeShape(blockShape.m(), CeilDiv<MX_SCALE_GROUP_NUM>(blockShape.k()))
+            );
+            auto tensorBlockMxScaleB = GetTile(
+                tensorMxScaleB, tla::MakeCoord(0, nOffset),
+                tla::MakeShape(CeilDiv<MX_SCALE_GROUP_NUM>(blockShape.k()), blockShape.n())
+            );
+            auto tensorBlockC = GetTile(
+                tensorC, tla::MakeCoord(mOffset, nOffset),
+                tla::MakeShape(blockShape.m(), blockShape.n())
+            );
+
+            if constexpr (std::is_void_v<ElementBias>) {
+                blockMmad(tensorBlockA, tensorBlockB, tensorBlockC, blockShape, tensorBlockMxScaleA, tensorBlockMxScaleB);
+            } else {
+                auto tensorBlockBias = GetTile(tensorBias, tla::MakeCoord(nOffset), tla::MakeShape(blockShape.n()));
+                blockMmad(
+                    tensorBlockA,
+                    tensorBlockB,
+                    tensorBlockC,
+                    blockShape,
+                    tensorBlockMxScaleA,
+                    tensorBlockMxScaleB,
+                    tensorBlockBias
+                );
+            }
+        }
+
+        AscendC::PipeBarrier<PIPE_ALL>();
+    }
+
+    template <>
+    CATLASS_DEVICE
+    void operator()<AscendC::AIV>(Params const &params)
+    {}
+};
+
+template <class BlockMmad_, class BlockEpilogue_, uint32_t SwizzleOffset, uint32_t SwizzleDirection>
+class MxMatmulTla<BlockMmad_, BlockEpilogue_, Gemm::Block::GemmIdentityBlockSwizzle<SwizzleOffset, SwizzleDirection>>
+    : public MxMatmulTlaBase<
+          BlockMmad_,
+          BlockEpilogue_,
+          Gemm::Block::GemmIdentityBlockSwizzle<SwizzleOffset, SwizzleDirection>> {
+    using Base =
+        MxMatmulTlaBase<BlockMmad_, BlockEpilogue_, Gemm::Block::GemmIdentityBlockSwizzle<SwizzleOffset, SwizzleDirection>>;
+
+public:
+    using Params = typename Base::Params;
+    using Arguments = typename Base::Arguments;
+    using BlockMmad = typename Base::BlockMmad;
+    using MmadArchTag = typename Base::MmadArchTag;
+    using L1TileShape = typename Base::L1TileShape;
+    using ElementA = typename Base::ElementA;
+    using LayoutA = typename Base::LayoutA;
+    using ElementB = typename Base::ElementB;
+    using LayoutB = typename Base::LayoutB;
+    using ElementMxScaleA = typename Base::ElementMxScaleA;
+    using LayoutMxScaleA = typename Base::LayoutMxScaleA;
+    using ElementMxScaleB = typename Base::ElementMxScaleB;
+    using LayoutMxScaleB = typename Base::LayoutMxScaleB;
+    using ElementC = typename Base::ElementC;
+    using LayoutC = typename Base::LayoutC;
+    using ElementBias = typename Base::ElementBias;
+    using ElementAccumulator = typename Base::ElementAccumulator;
+    using BlockScheduler = typename Base::BlockScheduler;
+
+    static constexpr uint32_t L1_TILE_M = Base::L1_TILE_M;
+    static constexpr uint32_t L1_TILE_N = Base::L1_TILE_N;
+    static constexpr uint32_t L1_TILE_K = Base::L1_TILE_K;
+
+    CATLASS_DEVICE
+    MxMatmulTla() {}
+
+    template <int32_t CORE_TYPE = g_coreType>
+    CATLASS_DEVICE
+    void operator()(Params const &params);
+
+    template <>
+    CATLASS_DEVICE
+    void operator()<AscendC::AIC>(Params const &params)
+    {
+        BlockScheduler matmulBlockScheduler(params.problemShape, MakeCoord(L1_TILE_M, L1_TILE_N));
+        uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
+
+        Arch::Resource<MmadArchTag> resource;
+        BlockMmad blockMmad(resource);
+
+        AscendC::GlobalTensor<ElementA> gmA;
+        gmA.SetGlobalBuffer((__gm__ ElementA *)params.ptrA);
+        AscendC::GlobalTensor<ElementB> gmB;
+        gmB.SetGlobalBuffer((__gm__ ElementB *)params.ptrB);
+        AscendC::GlobalTensor<ElementMxScaleA> gmMxScaleA;
+        gmMxScaleA.SetGlobalBuffer((__gm__ ElementMxScaleA *)params.ptrMxScaleA);
+        AscendC::GlobalTensor<ElementMxScaleB> gmMxScaleB;
+        gmMxScaleB.SetGlobalBuffer((__gm__ ElementMxScaleB *)params.ptrMxScaleB);
+        AscendC::GlobalTensor<ElementC> gmC;
+        gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrC);
+
         if (CeilDiv(params.problemShape.m(), L1_TILE_M) == 1) {
             gmB.SetL2CacheHint(AscendC::CacheMode::CACHE_MODE_DISABLE);
         }
@@ -181,8 +362,6 @@ public:
         }
 
         auto layoutBias = tla::MakeLayout(params.problemShape.n());
-
-        // Represent the full tensors
         auto tensorA = tla::MakeTensor(gmA, params.layoutA, Arch::PositionGM{});
         auto tensorB = tla::MakeTensor(gmB, params.layoutB, Arch::PositionGM{});
         auto tensorMxScaleA = tla::MakeTensor(gmMxScaleA, params.layoutMxScaleA, Arch::PositionGM{});
@@ -191,11 +370,9 @@ public:
         auto tensorBias = tla::MakeTensor(gmBias, layoutBias, Arch::PositionGM{});
 
         for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()) {
-            // Compute block location
             GemmCoord blockCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
             GemmCoord actualBlockShape = matmulBlockScheduler.GetActualBlockShape(blockCoord);
 
-            // Make tiled views
             auto tensorBlockA = GetTile(
                 tensorA, tla::MakeCoord(blockCoord.m() * L1_TILE_M, blockCoord.k() * L1_TILE_K),
                 tla::MakeShape(actualBlockShape.m(), actualBlockShape.k())
@@ -219,7 +396,6 @@ public:
                 tla::MakeShape(actualBlockShape.m(), actualBlockShape.n())
             );
 
-            // Compute block-scoped matrix multiply-add
             if constexpr (std::is_void_v<ElementBias>) {
                 blockMmad(
                     tensorBlockA, tensorBlockB, tensorBlockC, actualBlockShape, tensorBlockMxScaleA, tensorBlockMxScaleB
@@ -240,7 +416,8 @@ public:
 
     template <>
     CATLASS_DEVICE
-    void operator()<AscendC::AIV>(Params const &params) {}
+    void operator()<AscendC::AIV>(Params const &params)
+    {}
 };
 
 #endif // (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510)

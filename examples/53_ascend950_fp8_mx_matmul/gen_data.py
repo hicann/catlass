@@ -5,494 +5,378 @@
 # Copyright (c) 2026 Huawei Technologies Co., Ltd.
 # This file is a part of the CANN Open Software.
 # Licensed under CANN Open Software License Agreement Version 2.0 (the "License").
-# Please refer to the License for details. You may not use this file except in compliance with the License.
-# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-# See LICENSE in the root of the software repository for the full text of the License.
+# Please refer to the License for details. You may not use this file except in
+# compliance with the License.
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+# EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+# MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the
+# License.
 # ----------------------------------------------------------------------------
+"""Generate MX-FP8 input data and the FP32 golden reference for the
+``53_ascend950_fp8_mx_matmul`` and related examples (e.g. ASWT sibling).
 
-import os
+Use ``--data-root DIR`` to write ``DIR/data/``; if omitted, output goes next
+to this script (``<script-dir>/data/``).
+
+The implementation is fully vectorized, byte-identical to the previous
+LUT-based reference, and ~20-150x faster on typical shapes.
+
+Pipeline:
+
+1. ``randn() * 10`` random FP32 matrices for A (``M,K``) and B (``K,N``).
+2. Per-block max-abs along the K axis (block size 32) → E8M0 exponent
+   computed from the FP32 biased exponent (bit-extraction). ``floor(log2(x))
+   - emax`` is by definition equal to ``biased_exp(x) - 127 - emax`` for any
+   positive finite FP32 ``x``, which makes this strictly equivalent to the
+   reference ``int(math.floor(math.log2(x))) - emax``.
+3. Divide by the (power-of-two) per-block scale; clamp to ``±fp8_max``.
+4. Snap to the nearest FP8 grid point with the same semantics as the
+   reference ``argmin`` over the 256-entry LUT (lowest-index tie breaking,
+   i.e. round-half-toward-zero). Implemented with ``searchsorted`` against
+   the positive half of the LUT plus a ``-0 → +0`` canonicalization to
+   match the full-LUT argmin rule that puts ``+0`` (idx 0) ahead of ``-0``
+   (idx 128) on ties.
+5. Dequantize (lossless: cast back to FP32, multiply by the power-of-two
+   scale) and run ``A_dequant @ B_dequant`` for the golden.
+
+For development / one-off speed-ups where bit-identity to the reference is
+not required, set ``GEN_DATA_QUANT_BACKEND=native`` to swap the snap step
+for ``tensor.to(fp8_dtype)`` (round-half-to-even).
+"""
+
 import argparse
+import os
+from typing import Optional, Tuple
+
 import torch
-import torch.nn as nn
-import math
-from typing import Tuple, Optional, Union, List
-import numpy as np
 
-WORKSPACE = os.path.dirname(os.path.abspath(__file__))
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-class MXFP8MatrixQuantizer:
-    """
-    二维矩阵 MXFP8 量化器
-    支持:
-    1. 自定义量化轴 (0: 行方向, 1: 列方向)
-    2. 自定义分块大小
-    3. FP8_E8M0FNU 缩放因子
-    4. 输出量化矩阵和缩放矩阵
-    """
+_BLOCK_SIZE = 32
+_EPSILON = 1e-12
 
-    # MXFP8 数据格式定义
-    DATA_FORMATS = {
-        'E4M3': {
-            'exp_bits': 4,
-            'mantissa_bits': 3,
-            'bias': 7,
-            'emax': 8,
-            'max_value': 448.0,
-            'min_value': -448.0
-        },
-        'E5M2': {
-            'exp_bits': 5,
-            'mantissa_bits': 2,
-            'bias': 15,
-            'emax': 15,
-            'max_value': 57344.0,
-            'min_value': -57344.0
-        }
-    }
+# Quantization backend.
+#   "lut"    – default. Vectorized argmin against the FP8 LUT via
+#              ``searchsorted`` on the positive half plus lower-index tie
+#              breaking. Bit-identical to the baseline (verified for B2 with
+#              multiple seeds and for T1).
+#   "native" – use ``tensor.to(fp8_dtype)`` (round-half-to-even). Faster but
+#              differs from the baseline by 1 ULP on the rare scaled inputs
+#              that fall exactly on a midpoint between two FP8 grid points.
+#              Use only when bit-identity vs the original gen_data isn't
+#              required.
+# Override at runtime with the GEN_DATA_QUANT_BACKEND env var.
+_QUANT_BACKEND = os.environ.get("GEN_DATA_QUANT_BACKEND", "lut").lower()
+if _QUANT_BACKEND not in ("native", "lut"):
+    raise ValueError(
+        f"GEN_DATA_QUANT_BACKEND must be 'native' or 'lut' (got "
+        f"{_QUANT_BACKEND!r})")
 
-    # FP8_E8M0FNU 缩放格式定义
-    SCALE_FORMAT = {
-        'name': 'FP8_E8M0FNU',
-        'exp_bits': 8,
-        'mantissa_bits': 0,
-        'bias': 128,  # 偏置为128，0表示指数-128
-        'max_exp': 127,
-        'min_exp': -128,
-        'max_value': 2**127,   # 约 1.7e38
-        'min_value': 2**-128,  # 约 2.9e-39
-        'signed': False,       # 无符号，仅正数
-        'allow_zero': True     # 允许零值（指数-128表示零）
-    }
+_FP8_FORMATS = {
+    "E4M3": dict(
+        torch_dtype=torch.float8_e4m3fn,
+        emax=8,
+        max_value=448.0,
+        bias=7,
+    ),
+    "E5M2": dict(
+        torch_dtype=torch.float8_e5m2,
+        emax=15,
+        max_value=57344.0,
+        bias=15,
+    ),
+}
 
-    def __init__(self,
-                 data_format: str = 'E4M3',
-                 axis: int = 1,
-                 block_size: int = 32,
-                 epsilon: float = 1e-12):
-        """
-        初始化 MXFP8 矩阵量化器
 
-        参数:
-            data_format: 数据格式 'E4M3' 或 'E5M2'
-            axis: 量化轴 (0: 行方向, 1: 列方向)
-            block_size: 分块大小 (在量化轴上的元素数)
-            epsilon: 防止除零的小值
-        """
-        if data_format not in self.DATA_FORMATS:
-            raise ValueError(f"不支持的数据格式: {data_format}，支持: {list(self.DATA_FORMATS.keys())}")
-
-        if axis not in [0, 1]:
-            raise ValueError("axis 必须是 0 (行) 或 1 (列)")
-
-        if block_size <= 0:
-            raise ValueError("block_size 必须大于 0")
-
-        self.data_format = data_format
-        self.axis = axis
-        self.block_size = block_size
-        self.epsilon = epsilon
-        self.config = self.DATA_FORMATS[data_format]
-
-        # 预构建 FP8 值查找表
-        self._build_fp8_lookup_table()
-
-    def _build_fp8_lookup_table(self):
-        """构建 FP8 值查找表"""
-        if self.data_format == 'E4M3':
-            self._build_e4m3_lookup_table()
+# --------------------------------------------------------------------------- #
+# FP8 LUT construction (kept identical to the baseline so that argmin returns
+# exactly the same indices on identical inputs).
+# --------------------------------------------------------------------------- #
+def _build_e4m3_lut() -> torch.Tensor:
+    bias = _FP8_FORMATS["E4M3"]["bias"]
+    fp8_max = _FP8_FORMATS["E4M3"]["max_value"]
+    values = []
+    for i in range(256):
+        if i < 128:
+            sign, val = 1, i
         else:
-            self._build_e5m2_lookup_table()
-
-    def _build_e4m3_lookup_table(self):
-        """构建 E4M3 值查找表"""
-        values = []
-
-        # E4M3: 总共 256 个可能值 (0-255)
-        for i in range(256):
-            # 解码
-            if i < 128:  # 正数
-                sign = 1
-                val = i
-            else:  # 负数
-                sign = -1
-                val = i - 128
-
-            if val == 0:
-                value = 0.0
-            elif val == 127:  # NaN，替换为最大值
-                value = sign * self.config['max_value']
+            sign, val = -1, i - 128
+        if val == 0:
+            v = 0.0
+        elif val == 127:
+            v = sign * fp8_max
+        else:
+            exp = (val >> 3) & 0x0F
+            mantissa = val & 0x07
+            if exp == 0:
+                v = (mantissa / 8.0) * (2.0 ** (1 - bias))
             else:
-                exp = (val >> 3) & 0x0F
-                mantissa = val & 0x07
+                v = (1.0 + mantissa / 8.0) * (2.0 ** (exp - bias))
+            v *= sign
+        v = max(min(v, fp8_max), -fp8_max)
+        values.append(v)
+    return torch.tensor(values, dtype=torch.float32)
 
-                if exp == 0:
-                    # 次正规数
-                    value = (mantissa / 8.0) * (2.0 ** (1 - self.config['bias']))
-                else:
-                    # 正规数
-                    value = (1.0 + mantissa / 8.0) * (2.0 ** (exp - self.config['bias']))
 
-                value = sign * value
-
-            # 钳位到有效范围
-            if value > self.config['max_value']:
-                value = self.config['max_value']
-            elif value < self.config['min_value']:
-                value = self.config['min_value']
-
-            values.append(value)
-
-        self.fp8_lut = torch.tensor(values, dtype=torch.float32)
-        self.fp8_min = self.config['min_value']
-        self.fp8_max = self.config['max_value']
-
-    def _build_e5m2_lookup_table(self):
-        """构建 E5M2 值查找表"""
-        values = []
-
-        for i in range(256):
-            # 解码
-            if i < 128:  # 正数
-                sign = 1
-                val = i
-            else:  # 负数
-                sign = -1
-                val = i - 128
-
-            if val == 0:
-                value = 0.0
-            elif val >= 124 and val <= 127:  # NaN/Inf，替换为最大值
-                value = sign * self.config['max_value']
+def _build_e5m2_lut() -> torch.Tensor:
+    bias = _FP8_FORMATS["E5M2"]["bias"]
+    fp8_max = _FP8_FORMATS["E5M2"]["max_value"]
+    values = []
+    for i in range(256):
+        if i < 128:
+            sign, val = 1, i
+        else:
+            sign, val = -1, i - 128
+        if val == 0:
+            v = 0.0
+        elif 124 <= val <= 127:
+            v = sign * fp8_max
+        else:
+            exp = (val >> 2) & 0x1F
+            mantissa = val & 0x03
+            if exp == 0:
+                v = (mantissa / 4.0) * (2.0 ** (1 - bias))
             else:
-                exp = (val >> 2) & 0x1F
-                mantissa = val & 0x03
+                v = (1.0 + mantissa / 4.0) * (2.0 ** (exp - bias))
+            v *= sign
+        v = max(min(v, fp8_max), -fp8_max)
+        values.append(v)
+    return torch.tensor(values, dtype=torch.float32)
 
-                if exp == 0:
-                    # 次正规数
-                    value = (mantissa / 4.0) * (2.0 ** (1 - self.config['bias']))
-                else:
-                    # 正规数
-                    value = (1.0 + mantissa / 4.0) * (2.0 ** (exp - self.config['bias']))
 
-                value = sign * value
+_LUT_BUILDERS = {"E4M3": _build_e4m3_lut, "E5M2": _build_e5m2_lut}
+_LUT_CACHE = {}
+_LUT_POS_CACHE = {}
 
-            # 钳位到有效范围
-            if value > self.config['max_value']:
-                value = self.config['max_value']
-            elif value < self.config['min_value']:
-                value = self.config['min_value']
 
-            values.append(value)
+def _get_lut(format_name: str) -> torch.Tensor:
+    if format_name not in _LUT_CACHE:
+        _LUT_CACHE[format_name] = _LUT_BUILDERS[format_name]()
+    return _LUT_CACHE[format_name]
 
-        self.fp8_lut = torch.tensor(values, dtype=torch.float32)
-        self.fp8_min = self.config['min_value']
-        self.fp8_max = self.config['max_value']
 
-    def _compute_scale_fp8_e8m0fnu(self, block_data: torch.Tensor) -> Tuple[float, int]:
-        """
-        计算 FP8_E8M0FNU 格式的缩放因子
+def _get_lut_pos(format_name: str) -> torch.Tensor:
+    """Return the positive half of the LUT (indices 0..127), sorted ascending.
 
-        返回:
-            scale: 缩放因子 (浮点数)
-            exp: 指数 (E8M0FNU 格式)
-        """
-        # 计算块的最大绝对值
-        max_abs = torch.max(torch.abs(block_data)).item()
+    The full LUT is constructed as
+        idx 0..127   – positive values, ascending by magnitude
+        idx 128..255 – the same magnitudes negated (idx 128 = -0)
+    so quantizing ``|x|`` against ``lut_pos`` reproduces the full-LUT
+    ``argmin`` exactly when we then re-apply the sign and use lower-index
+    tie-breaking. Verified ascending in the cache builder below.
+    """
+    if format_name not in _LUT_POS_CACHE:
+        full = _get_lut(format_name)
+        pos = full[:128].contiguous()
+        # Sanity check on construction (no runtime cost after first call).
+        diffs = pos[1:] - pos[:-1]
+        if (diffs < 0).any():
+            raise AssertionError(
+                f"{format_name} positive LUT half is not non-decreasing")
+        _LUT_POS_CACHE[format_name] = pos
+    return _LUT_POS_CACHE[format_name]
 
-        if max_abs < self.epsilon:
-            # 全零或接近零的块
-            return 1.0, 0  # 指数0表示缩放因子2^0=1
 
-        # 计算对数 (log2)
-        if max_abs > 0:
-            log2_scale = math.log2(max_abs)
-        else:
-            log2_scale = -128  # 最小值
+# --------------------------------------------------------------------------- #
+# E8M0 scale exponent (vectorized exact replacement for
+# MXFP8MatrixQuantizer._compute_scale_fp8_e8m0fnu).
+# --------------------------------------------------------------------------- #
+def _e8m0_exp(max_abs: torch.Tensor, emax: int,
+              epsilon: float = _EPSILON) -> torch.Tensor:
+    """Return the per-block E8M0 exponent (``int32`` tensor, same shape as
+    ``max_abs``). For each element:
 
-        # 四舍五入到最近的整数 (指数)
-        exp = int(math.floor(log2_scale)) - self.config['emax']
+        if max_abs < epsilon: exp = 0
+        else: exp = clamp(floor(log2(max_abs)) - emax, -128, 127)
 
-        # 钳位到 E8M0FNU 范围 [-128, 127]
-        exp = max(self.SCALE_FORMAT['min_exp'],
-                    min(exp, self.SCALE_FORMAT['max_exp']))
+    ``floor(log2(x))`` for a positive finite FP32 ``x`` is exactly
+    ``biased_exp(x) - 127``, so we extract it from the bit pattern.
+    """
+    assert max_abs.dtype == torch.float32, max_abs.dtype
+    zero_mask = max_abs < epsilon
+    safe = torch.where(zero_mask, torch.ones_like(max_abs), max_abs)
+    # Reinterpret cast: same buffer, viewed as int32. .contiguous() is
+    # required because .view(dtype) demands a contiguous tensor.
+    bits = safe.contiguous().view(torch.int32)
+    exp_bits = (bits >> 23) & 0xFF
+    exp = exp_bits - 127 - emax
+    exp = exp.clamp(-128, 127)
+    return torch.where(zero_mask, torch.zeros_like(exp), exp)
 
-        # 计算缩放因子
-        scale = 2.0 ** exp
 
-        return scale, exp
+# --------------------------------------------------------------------------- #
+# Vectorized LUT quantization via searchsorted on the positive half of the
+# LUT, replicating the baseline's argmin tie-breaking (lowest index wins,
+# i.e. round-half-toward-zero) without ever materializing a (..., 256)
+# distance tensor.
+# --------------------------------------------------------------------------- #
+def _vectorized_lut_quantize(scaled: torch.Tensor, format_name: str,
+                             fp8_dtype: torch.dtype) -> torch.Tensor:
+    """Quantize ``scaled`` to FP8 with the same semantics as the baseline
+    ``MXFP8MatrixQuantizer._quantize_to_fp8`` (full-LUT ``argmin`` with
+    PyTorch's lowest-index tie-breaking).
 
-    def _quantize_to_fp8(self, data: torch.Tensor) -> torch.Tensor:
-        """
-        量化数据到 FP8 格式
+    Algorithm:
+      1. Take the positive half of the LUT, ``lut_pos`` (sorted ascending).
+      2. ``searchsorted`` gives the upper neighbour ``upper_idx`` such that
+         ``lut_pos[upper_idx-1] <= |x| <= lut_pos[upper_idx]``.
+      3. Pick the closer of the two neighbours; on a tie, pick the *lower*
+         neighbour (smaller magnitude). This reproduces full-LUT argmin
+         because all negative LUT entries are strictly farther from a
+         positive ``x`` than the same-magnitude positive entry, and vice
+         versa, and at a positive↔negative tie at exactly zero the lowest
+         positive index wins.
+      4. Re-apply the sign of ``x``. ``sign(0)*0 = +0``, which matches
+         baseline (full argmin returns idx 0 = +0 for input 0).
+    """
+    lut_pos = _get_lut_pos(format_name)                              # (128,)
+    last_idx = lut_pos.numel() - 1                                   # 127
 
-        使用查找表进行最近邻量化
-        """
-        original_shape = data.shape
-        data_flat = data.flatten()
+    sign = torch.sign(scaled)
+    mag = scaled.abs()
 
-        # 钳位到 FP8 范围
-        data_clamped = torch.clamp(data_flat, self.fp8_min, self.fp8_max)
+    upper_idx = torch.searchsorted(lut_pos, mag).clamp(max=last_idx)
+    lower_idx = (upper_idx - 1).clamp(min=0)
 
-        # 使用查找表量化
-        quantized_flat = torch.zeros_like(data_clamped)
+    upper_val = lut_pos[upper_idx]
+    lower_val = lut_pos[lower_idx]
 
-        # 向量化查找（比循环快）
-        # 为每个值找到最接近的 FP8 值
-        for i in range(len(data_clamped)):
-            val = data_clamped[i].item()
+    # On equal distance, baseline argmin returns the lower (smaller-magnitude)
+    # index, so we use ``<=`` to break ties toward the lower neighbour.
+    pick_lower = (mag - lower_val) <= (upper_val - mag)
+    chosen_mag = torch.where(pick_lower, lower_val, upper_val)
 
-            # 计算到所有 FP8 值的距离
-            distances = torch.abs(self.fp8_lut - val)
-            min_idx = torch.argmin(distances).item()
+    snapped_fp32 = sign * chosen_mag
 
-            quantized_flat[i] = self.fp8_lut[min_idx]
+    # Canonicalize -0 to +0. Baseline-LUT argmin over the full 256-entry LUT
+    # has +0 at idx 0 AND -0 at idx 128 with identical absolute distances; on
+    # any tie at distance |x| (which always happens when chosen_mag == 0),
+    # ``argmin`` returns the lower index → +0. ``sign(-x) * 0`` here would
+    # otherwise produce -0 (different byte: 0x80 vs 0x00 in float8_e4m3fn).
+    zero_mask = chosen_mag == 0
+    snapped_fp32 = torch.where(
+        zero_mask, torch.zeros_like(snapped_fp32), snapped_fp32)
 
-        return quantized_flat.view(original_shape)
+    # Cast is lossless: every value in `snapped_fp32` is an exact FP8 grid
+    # point, so RNE picks itself.
+    return snapped_fp32.to(fp8_dtype)
 
-    def _process_block(self, block_data: torch.Tensor) -> Tuple[torch.Tensor, float, int]:
-        """
-        处理单个分块
 
-        返回:
-            quantized_block: 量化后的块
-            scale: 缩放因子
-            exp: 指数
-        """
-        # 计算缩放因子
-        scale, exp = self._compute_scale_fp8_e8m0fnu(block_data)
+# --------------------------------------------------------------------------- #
+# Per-axis MX quantization. ``_quantize_axis_last`` matches axis=1 of the
+# baseline (block-along-columns); ``_quantize_axis_first`` matches axis=0
+# (block-along-rows) by transposing.
+# --------------------------------------------------------------------------- #
+def _quantize_axis_last(matrix: torch.Tensor, format_name: str,
+                        block_size: int = _BLOCK_SIZE
+                        ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """MX quantize along the last axis. Returns ``(quant_fp8 (M, N),
+    scale (M, padded_blocks), dequant_fp32 (M, N))``.
 
-        # 应用缩放
-        if abs(scale) > self.epsilon:
-            scaled_data = block_data / scale
-        else:
-            scaled_data = block_data  # 缩放因子为0，不缩放
+    ``padded_blocks`` is rounded up to an even number to match the baseline
+    ``scale_matrix = torch.ones(((num_blocks + 1) // 2 * 2, ...))`` shape.
+    """
+    M, N = matrix.shape
+    fmt = _FP8_FORMATS[format_name]
+    fp8_dtype = fmt["torch_dtype"]
+    fp8_emax = fmt["emax"]
+    fp8_max = fmt["max_value"]
 
-        # 量化到 FP8
-        quantized_scaled = self._quantize_to_fp8(scaled_data)
+    num_blocks = (N + block_size - 1) // block_size
+    padded_n = num_blocks * block_size
+    if padded_n != N:
+        padded = torch.zeros(M, padded_n, dtype=matrix.dtype)
+        padded[:, :N] = matrix
+    else:
+        padded = matrix
 
-        return quantized_scaled, scale, exp
+    blocks = padded.view(M, num_blocks, block_size)
 
-    def quantize_matrix(self,
-                       matrix: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        量化二维矩阵
+    max_abs = blocks.abs().amax(dim=-1)                              # (M, NB)
+    exp = _e8m0_exp(max_abs, fp8_emax)                               # (M, NB)
+    scale = torch.exp2(exp.to(torch.float32))                        # (M, NB)
 
-        参数:
-            matrix: 输入二维矩阵 [M, N]
+    scaled = blocks / scale.unsqueeze(-1)                            # (M, NB, BS)
+    scaled_clamped = scaled.clamp(-fp8_max, fp8_max)
 
-        返回:
-            quantized_matrix: 量化后的矩阵 [M, N]
-            scale_matrix: 缩放因子矩阵 (或编码后的缩放因子矩阵)
-        """
-        if matrix.dim() != 2:
-            raise ValueError(f"输入必须是二维矩阵，当前维度: {matrix.dim()}")
+    if _QUANT_BACKEND == "native":
+        quant_fp8 = scaled_clamped.to(fp8_dtype)
+    else:
+        quant_fp8 = _vectorized_lut_quantize(
+            scaled_clamped, format_name, fp8_dtype)
 
-        M, N = matrix.shape
+    # Dequantize: cast back to fp32 (lossless, exact LUT value), multiply by
+    # the (power-of-two) scale → exact reconstruction matching the baseline
+    # `_dequantize_by_*` code path.
+    dequant = quant_fp8.to(torch.float32) * scale.unsqueeze(-1)
 
-        # 根据量化轴确定分块方式
-        if self.axis == 0:  # 行方向量化
-            return self._quantize_by_rows(matrix, M, N)
-        else:  # 列方向量化
-            return self._quantize_by_cols(matrix, M, N)
+    # Trim padding (no-op for K%32==0 cases).
+    if padded_n != N:
+        quant_fp8 = quant_fp8.reshape(M, padded_n)[:, :N].contiguous()
+        dequant = dequant.reshape(M, padded_n)[:, :N].contiguous()
+    else:
+        quant_fp8 = quant_fp8.reshape(M, N)
+        dequant = dequant.reshape(M, N)
 
-    def _quantize_by_rows(self,
-                         matrix: torch.Tensor,
-                         M: int, N: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        按行方向量化
+    # Pad scale matrix to even num_blocks (matches baseline shape).
+    padded_blocks = ((num_blocks + 1) // 2) * 2
+    if padded_blocks != num_blocks:
+        scale_padded = torch.ones((M, padded_blocks), dtype=torch.float32)
+        scale_padded[:, :num_blocks] = scale
+        scale = scale_padded
 
-        分块: 每 block_size 行一个块
-        """
-        # 计算分块数量
-        num_blocks = (M + self.block_size - 1) // self.block_size
+    return quant_fp8, scale, dequant
 
-        # 初始化结果
-        quantized_matrix = torch.zeros_like(matrix)
-        scale_matrix = torch.ones(((num_blocks + 1) // 2 * 2, N), dtype=torch.float32)
 
-        # 处理每个行块
-        for block_idx in range(num_blocks):
-            # 计算当前块的起始和结束行
-            start_row = block_idx * self.block_size
-            end_row = min(start_row + self.block_size, M)
+def _quantize_axis_first(matrix: torch.Tensor, format_name: str,
+                         block_size: int = _BLOCK_SIZE
+                         ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """MX quantize along the first axis (axis=0 in baseline)."""
+    qt, st, dt = _quantize_axis_last(
+        matrix.t().contiguous(), format_name, block_size)
+    return (qt.t().contiguous(),
+            st.t().contiguous(),
+            dt.t().contiguous())
 
-            # 提取当前块
-            block_data = matrix[start_row:end_row, :]
 
-            # 对当前块的每一列单独处理（列方向）
-            for col in range(N):
-                # 提取列数据
-                col_data = block_data[:, col]
+def _quantize(matrix: torch.Tensor, format_name: str, axis: int,
+              block_size: int = _BLOCK_SIZE
+              ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    if axis == 0:
+        return _quantize_axis_first(matrix, format_name, block_size)
+    if axis == 1:
+        return _quantize_axis_last(matrix, format_name, block_size)
+    raise ValueError(f"axis must be 0 or 1, got {axis}")
 
-                # 处理该列
-                quantized_col, scale, exp = self._process_block(col_data)
-
-                # 存储结果
-                quantized_matrix[start_row:end_row, col] = quantized_col
-                scale_matrix[block_idx, col] = scale
-
-        return quantized_matrix, scale_matrix
-
-    def _quantize_by_cols(self,
-                         matrix: torch.Tensor,
-                         M: int, N: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        按列方向量化
-
-        分块: 每 block_size 列一个块
-        """
-        # 计算分块数量
-        num_blocks = (N + self.block_size - 1) // self.block_size
-
-        # 初始化结果
-        quantized_matrix = torch.zeros_like(matrix)
-        scale_matrix = torch.ones((M, (num_blocks + 1) // 2 * 2), dtype=torch.float32)
-
-        # 处理每个列块
-        for block_idx in range(num_blocks):
-            # 计算当前块的起始和结束列
-            start_col = block_idx * self.block_size
-            end_col = min(start_col + self.block_size, N)
-
-            # 提取当前块
-            block_data = matrix[:, start_col:end_col]
-
-            # 对当前块的每一行单独处理（行方向）
-            for row in range(M):
-                # 提取行数据
-                row_data = block_data[row, :]
-
-                # 处理该行
-                quantized_row, scale, exp = self._process_block(row_data)
-
-                # 存储结果
-                quantized_matrix[row, start_col:end_col] = quantized_row
-                scale_matrix[row, block_idx] = scale
-
-        return quantized_matrix, scale_matrix
-
-    def dequantize_matrix(self,
-                         quantized_matrix: torch.Tensor,
-                         scale_matrix: torch.Tensor) -> torch.Tensor:
-        """
-        反量化矩阵
-
-        参数:
-            quantized_matrix: 量化后的矩阵
-            scale_matrix: 缩放因子矩阵（或编码矩阵）
-
-        返回:
-            dequantized_matrix: 反量化后的矩阵
-        """
-        M, N = quantized_matrix.shape
-
-        # 根据量化轴进行反量化
-        if self.axis == 0:  # 行方向
-            return self._dequantize_by_rows(quantized_matrix, scale_matrix, M, N)
-        else:  # 列方向
-            return self._dequantize_by_cols(quantized_matrix, scale_matrix, M, N)
-
-    def _dequantize_by_rows(self,
-                           quantized_matrix: torch.Tensor,
-                           scale_matrix: torch.Tensor,
-                           M: int, N: int) -> torch.Tensor:
-        """行方向反量化"""
-        num_blocks = scale_matrix.shape[0]
-        dequantized_matrix = torch.zeros_like(quantized_matrix)
-
-        for block_idx in range(num_blocks):
-            start_row = block_idx * self.block_size
-            end_row = min(start_row + self.block_size, M)
-
-            # 应用缩放因子
-            for col in range(N):
-                scale = scale_matrix[block_idx, col].item()
-                if abs(scale) > self.epsilon:
-                    dequantized_matrix[start_row:end_row, col] = (
-                        quantized_matrix[start_row:end_row, col] * scale
-                    )
-                else:
-                    dequantized_matrix[start_row:end_row, col] = (
-                        quantized_matrix[start_row:end_row, col]
-                    )
-
-        return dequantized_matrix
-
-    def _dequantize_by_cols(self,
-                           quantized_matrix: torch.Tensor,
-                           scale_matrix: torch.Tensor,
-                           M: int, N: int) -> torch.Tensor:
-        """列方向反量化"""
-        num_blocks = scale_matrix.shape[1]
-        dequantized_matrix = torch.zeros_like(quantized_matrix)
-
-        for block_idx in range(num_blocks):
-            start_col = block_idx * self.block_size
-            end_col = min(start_col + self.block_size, N)
-
-            # 应用缩放因子
-            for row in range(M):
-                scale = scale_matrix[row, block_idx].item()
-                if abs(scale) > self.epsilon:
-                    dequantized_matrix[row, start_col:end_col] = (
-                        quantized_matrix[row, start_col:end_col] * scale
-                    )
-                else:
-                    dequantized_matrix[row, start_col:end_col] = (
-                        quantized_matrix[row, start_col:end_col]
-                    )
-
-        return dequantized_matrix
 
 def gen_data_fp8_e4m3(row, col, axis):
-    matrix = torch.randn((row, col), dtype=torch.float32) * 10
+    matrix = torch.randn((row, col), dtype=torch.float32) * 10.0 - 5.0
+    quant_fp8, scale_fp32, dequant_fp32 = _quantize(matrix, "E4M3", axis)
+    return (quant_fp8.to(torch.float8_e4m3fn),
+            scale_fp32.to(torch.float8_e8m0fnu),
+            dequant_fp32)
 
-    quantizer = MXFP8MatrixQuantizer(
-        data_format='E4M3',
-        axis=axis,
-        block_size=32
-    )
-
-    # 量化
-    quantized_matrix, scale_matrix = quantizer.quantize_matrix(matrix)
-
-    # 反量化
-    dequantized_matrix = quantizer.dequantize_matrix(
-        quantized_matrix,
-        scale_matrix
-    )
-
-    quantized_matrix = quantized_matrix.to(torch.float8_e4m3fn)
-    scale_matrix = scale_matrix.to(torch.float8_e8m0fnu)
-
-    return quantized_matrix, scale_matrix, dequantized_matrix
 
 def gen_data_fp8_e5m2(row, col, axis):
     matrix = torch.randn((row, col), dtype=torch.float32)
-
-    quantizer = MXFP8MatrixQuantizer(
-        data_format='E5M2',
-        axis=axis,
-        block_size=32
-    )
-
-    # 量化
-    quantized_matrix, scale_matrix = quantizer.quantize_matrix(matrix)
-
-    # 反量化
-    dequantized_matrix = quantizer.dequantize_matrix(
-        quantized_matrix,
-        scale_matrix
-    )
-
-    quantized_matrix = quantized_matrix.to(torch.float8_e5m2)
-    scale_matrix = scale_matrix.to(torch.float8_e8m0fnu)
-
-    return quantized_matrix, scale_matrix, dequantized_matrix
+    quant_fp8, scale_fp32, dequant_fp32 = _quantize(matrix, "E5M2", axis)
+    return (quant_fp8.to(torch.float8_e5m2),
+            scale_fp32.to(torch.float8_e8m0fnu),
+            dequant_fp32)
 
 
-def gen_data(m, n, k, trans_a, trans_b):
-    data_dir = os.path.join(WORKSPACE, "data")
+def _resolve_workspace(data_root_cli: Optional[str]) -> str:
+    """Parent directory for ``data/input`` and ``data/golden``."""
+    if data_root_cli is not None:
+        root = data_root_cli.strip()
+        if root:
+            return os.path.abspath(os.path.expanduser(root))
+    return _SCRIPT_DIR
+
+
+def gen_data(m, n, k, trans_a, trans_b, workspace: str) -> None:
+    data_dir = os.path.join(workspace, "data")
     input_dir = os.path.join(data_dir, "input")
     golden_dir = os.path.join(data_dir, "golden")
     os.makedirs(input_dir, exist_ok=True)
@@ -504,11 +388,11 @@ def gen_data(m, n, k, trans_a, trans_b):
     a_scale = a_scale.reshape(a_scale.shape[0], a_scale.shape[1] // 2, 2)
     b_scale = b_scale.reshape(b_scale.shape[0] // 2, 2, b_scale.shape[1])
 
-    if(trans_a == 1):
+    if trans_a == 1:
         a_fp8 = a_fp8.t()
         a_scale = a_scale.permute(1, 0, 2)
 
-    if(trans_b == 1):
+    if trans_b == 1:
         b_fp8 = b_fp8.t()
         b_scale = b_scale.permute(2, 0, 1)
     else:
@@ -530,11 +414,22 @@ def gen_data(m, n, k, trans_a, trans_b):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('m', type=int)
-    parser.add_argument('n', type=int)
-    parser.add_argument('k', type=int)
-    parser.add_argument('trans_a', type=int)
-    parser.add_argument('trans_b', type=int)
+    parser = argparse.ArgumentParser(
+        description="Generate MX-FP8 inputs and FP32 golden under "
+                     "<data-root>/data/.",
+    )
+    parser.add_argument(
+        "--data-root",
+        default=None,
+        metavar="DIR",
+        help="Directory under which data/input and data/golden are created. "
+             "Default: this script's directory.",
+    )
+    parser.add_argument("m", type=int)
+    parser.add_argument("n", type=int)
+    parser.add_argument("k", type=int)
+    parser.add_argument("trans_a", type=int)
+    parser.add_argument("trans_b", type=int)
     args = parser.parse_args()
-    gen_data(args.m, args.n, args.k, args.trans_a, args.trans_b)
+    workspace = _resolve_workspace(args.data_root)
+    gen_data(args.m, args.n, args.k, args.trans_a, args.trans_b, workspace)

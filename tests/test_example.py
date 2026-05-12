@@ -213,6 +213,129 @@ class CatlassExampleTest(unittest.TestCase):
         self.run_case("54_ascend950_fp4_mx_matmul", case_cpp)
 
     @only_on_3510
+    def test_53_ascend950_fp8_mx_matmul_aswt(self):
+        case_py = [str(i) for i in [256, 512, 1024, 0, 1]]
+        subprocess.run(
+            [
+                "python",
+                os.path.join(
+                    CMAKE_EXAMPLES_PATH, "53_ascend950_fp8_mx_matmul", "gen_data.py"
+                ),
+            ]
+            + case_py
+        )
+        case_cpp = [str(i) for i in [256, 512, 1024]] + [1]
+        self.run_case("53_ascend950_fp8_mx_matmul_aswt", case_cpp)
+
+    @only_on_3510
+    def test_54_ascend950_fp4_mx_matmul_aswt(self):
+        case_py = [str(i) for i in [256, 512, 1024, 0, 1]]
+        subprocess.run(
+            [
+                "python",
+                os.path.join(
+                    CMAKE_EXAMPLES_PATH, "54_ascend950_fp4_mx_matmul", "gen_data.py"
+                ),
+            ]
+            + case_py
+        )
+        case_cpp = [str(i) for i in [256, 512, 1024]] + [1]
+        self.run_case("54_ascend950_fp4_mx_matmul_aswt", case_cpp)
+
+    @only_on_3510
+    def test_53_ascend950_fp8_mx_matmul_small_shape(self):
+        # 与默认用例不同的小形状，仍使用 trans_a=0, trans_b=1（RowMajor A + ColumnMajor B）
+        case_py = [str(i) for i in [128, 256, 512, 0, 1]]
+        subprocess.run(
+            [
+                "python",
+                os.path.join(
+                    CMAKE_EXAMPLES_PATH, "53_ascend950_fp8_mx_matmul", "gen_data.py"
+                ),
+            ]
+            + case_py
+        )
+        case_cpp = [str(i) for i in [128, 256, 512]] + [1]
+        self.run_case("53_ascend950_fp8_mx_matmul", case_cpp)
+
+    @only_on_3510
+    def test_54_ascend950_fp4_mx_matmul_small_shape(self):
+        case_py = [str(i) for i in [128, 256, 512, 0, 1]]
+        subprocess.run(
+            [
+                "python",
+                os.path.join(
+                    CMAKE_EXAMPLES_PATH, "54_ascend950_fp4_mx_matmul", "gen_data.py"
+                ),
+            ]
+            + case_py
+        )
+        case_cpp = [str(i) for i in [128, 256, 512]] + [1]
+        self.run_case("54_ascend950_fp4_mx_matmul", case_cpp)
+
+    @only_on_3510
+    def test_53_ascend950_fp8_mx_matmul_cube_1024(self):
+        # 大方块形状，覆盖与 256×512×1024 不同的 tile 划分
+        case_py = [str(i) for i in [1024, 1024, 1024, 0, 1]]
+        subprocess.run(
+            [
+                "python",
+                os.path.join(
+                    CMAKE_EXAMPLES_PATH, "53_ascend950_fp8_mx_matmul", "gen_data.py"
+                ),
+            ]
+            + case_py
+        )
+        case_cpp = [str(i) for i in [1024, 1024, 1024]] + [1]
+        self.run_case("53_ascend950_fp8_mx_matmul", case_cpp)
+
+    @only_on_3510
+    def test_54_ascend950_fp4_mx_matmul_cube_1024(self):
+        case_py = [str(i) for i in [1024, 1024, 1024, 0, 1]]
+        subprocess.run(
+            [
+                "python",
+                os.path.join(
+                    CMAKE_EXAMPLES_PATH, "54_ascend950_fp4_mx_matmul", "gen_data.py"
+                ),
+            ]
+            + case_py
+        )
+        case_cpp = [str(i) for i in [1024, 1024, 1024]] + [1]
+        self.run_case("54_ascend950_fp4_mx_matmul", case_cpp)
+
+    @only_on_3510
+    def test_53_ascend950_fp8_mx_matmul_aswt_shape_512_1024_256(self):
+        # tile 划分与默认用例不同，便于覆盖 ASWT 调度路径（L1 M/N=256）
+        case_py = [str(i) for i in [512, 1024, 256, 0, 1]]
+        subprocess.run(
+            [
+                "python",
+                os.path.join(
+                    CMAKE_EXAMPLES_PATH, "53_ascend950_fp8_mx_matmul", "gen_data.py"
+                ),
+            ]
+            + case_py
+        )
+        case_cpp = [str(i) for i in [512, 1024, 256]] + [1]
+        self.run_case("53_ascend950_fp8_mx_matmul_aswt", case_cpp)
+
+    @only_on_3510
+    def test_54_ascend950_fp4_mx_matmul_aswt_shape_512_1024_256(self):
+        case_py = [str(i) for i in [512, 1024, 256, 0, 1]]
+        subprocess.run(
+            [
+                "python",
+                os.path.join(
+                    CMAKE_EXAMPLES_PATH, "54_ascend950_fp4_mx_matmul", "gen_data.py"
+                ),
+            ]
+            + case_py
+        )
+        case_cpp = [str(i) for i in [512, 1024, 256]] + [1]
+        self.run_case("54_ascend950_fp4_mx_matmul_aswt", case_cpp)
+
+    @only_on_3510
     def test_57_ascend950_matmul_full_dequant(self):
         case_py = ["--shape"] + ["513 513 513"] + ["--x1_quant_mode"] + ["per_token"] + ["--x2_quant_mode"] + ["per_channel"]
         subprocess.run(
