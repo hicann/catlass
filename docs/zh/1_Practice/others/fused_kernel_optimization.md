@@ -18,7 +18,7 @@ CV融合算子性能调优时不能只看单个阶段的算力利用率，它的
 
 ### 获取性能数据
 
-建议先按单算子方式执行样例并采集Profiling数据，确认AIC、AIV、MTE2、MTE3、FixPipe占比。CATLASS中性能工具的使用方式可参考[msProf&Profiling](../evaluation_tools/performance_tools.md)。
+建议先按单算子方式执行样例并采集Profiling数据，确认AIC、AIV、MTE2、MTE3、FixPipe占比。CATLASS中性能工具的使用方式可参考[msProf&Profiling](../evaluation/performance_tools.md)。
 
 采集数据时建议准备两组结果：
 
@@ -29,7 +29,7 @@ CV融合算子性能调优时不能只看单个阶段的算力利用率，它的
 | 每核任务量或每核耗时 | 判断核间负载是否均衡 |
 | workspace大小和对齐信息 | 判断CV阶段间中间结果是否引入额外GM瓶颈 |
 
-如果需要观察更细的流水并行关系，可以结合[性能流水仿真](../evaluation_tools/performance_tools.md#性能流水仿真)，重点看AIC和AIV之间是否存在长时间互等。
+如果需要观察更细的流水并行关系，可以结合[性能流水仿真](../evaluation/performance_tools.md#性能流水仿真)，重点看AIC和AIV之间是否存在长时间互等。
 
 ### 建立融合收益模型
 

@@ -11,32 +11,44 @@
 - [05_block_scheduler_development](./1_Practice/05_block_scheduler_development.md)：block_schedule代码拆解，模板组装机制、主要接口说明
 - [06_tile_development](./1_Practice/06_tile_development.md)：tile_copy/tile_mmad代码拆解，模板组装机制、主要接口说明
 - [07_epilogue_adaptation](./1_Practice/07_epilogue_adaptation.md)：gemm算子的host/kernel层适配epilogue，及epilogue的block/tile开发
-- [08_evaluation](./1_Practice/08_evaluation.md)：调测工具使用
+- [08_evaluation](./1_Practice/08_evaluation.md)：调测工具使用，精度问题定位，性能瓶颈分析
 - [09_example_contribution_guide](./1_Practice/09_example_contribution_guide.md)：完整样例的设计、开发、测试、合入流程
-- [10_matmul_optimization](./1_Practice/10_matmul_optimization.md)：介绍模板库下的基础调优方式，包括如何通过Tiling调参、应用不同的Dispatch策略的方式，快速获得性能提升。
-- 11_example_integration：样例适配、接入到整网的方式
-- evaluation_tools
-    - [ascendc_dump](./1_Practice/evaluation_tools/ascendc_dump.md)
-    - [msdebug](./1_Practice/evaluation_tools/msdebug.md)
-    - [performance_tools](./1_Practice/evaluation_tools/performance_tools.md)
-    - [print](./1_Practice/evaluation_tools/print.md)
+- [10_innovative_example_development_guide](./1_Practice/10_innovative_example_development_guide.md)：创新样例的开发流程指引
+- [11_matmul_optimization](./1_Practice/11_matmul_optimization.md)：介绍模板库下的基础调优方式，包括如何通过Tiling调参、应用不同的Dispatch策略的方式，快速获得性能提升。
+- 12_example_integration：样例适配、接入到整网的方式（待贡献）
+- evaluation（folder）：调测相关
+    - [ascendc_dump](./1_Practice/evaluation/ascendc_dump.md)工具
+    - [msdebug](./1_Practice/evaluation/msdebug.md)工具
+    - [performance_tools](./1_Practice/evaluation/performance_tools.md)工具
+    - [print](./1_Practice/evaluation/print.md)工具
+    - [precision_analysis_basics](./1_Practice/evaluation/precision_analysis_basics.md)：精度分析基础
+    - [precision_debug](./1_Practice/evaluation/precision_debug.md)：样例精度问题定位
+    - [bottleneck_analysis_and_optimization](./1_Practice/evaluation/bottleneck_analysis_and_optimization.md)：性能瓶颈分析及优化手段
 - others（folder）：存放内部和外部贡献的难以归类的实践文档
-    - tla_rebuild：TLA样例改造
+    - tla_rebuild：TLA样例改造（待贡献）
     - [migration_from_atlasA2_to_Ascend950_guideline](./1_Practice/others/migration_from_atlasA2_to_Ascend950_guideline.md)：介绍推荐的AtlasA2平台存量算子向Ascend950代际兼容方案
+    - [conv_kernel_development](./1_Practice/others/conv_kernel_development.md)：Conv类算子开发指南
+    - [conv_kernel_optimization](./1_Practice/others/conv_kernel_optimization.md)：Conv类算子性能优化
+    - [FA_kernel_optimization](./1_Practice/others/FA_kernel_optimization.md)：FA类算子性能优化
+    - [fused_kernel_optimization](./1_Practice/others/fused_kernel_optimization.md)：CV融合算子性能调优案例集
+    - [kernel_execution](./1_Practice/others/kernel_execution.md)：`<<<>>>`直调新开发算子
 
 ## 2 Design
 
 - [00_project_overview](./2_Design/00_project_overview.md)：项目介绍、分层模块化设计、代码仓结构设计
 - 01_kernel_design：算法设计
+    - 00_basics（folder）：CATLASS开发前置基础知识
+        - [atlasA2_hardware_info](./2_Design/01_kernel_design/00_basics/atlasA2_hardware_info.md)：AtlasA2 硬件信息
+        - [atlasA2_gemm_instruction_set](./2_Design/01_kernel_design/00_basics/atlasA2_gemm_instruction_set.md)：AtlasA2 GEMM类样例相关硬件指令集介绍
     - [01_example_design](./2_Design/01_kernel_design/01_example_design.md)：库上样例设计文档一览（将各样例文档放到样例文件夹内，此处只做归纳、牵引）
     - [02_swizzle](./2_Design/01_kernel_design/02_swizzle.md)：对模板库中`Swizzle`策略的基本介绍，这影响了AI Core上计算基本块间的顺序。
     - [03_dispatch_policies](./2_Design/01_kernel_design/03_dispatch_policies.md)：对模板库在`Block`层面上`BlockMmad`中的一个重要模板参数`DispatchPolicy`的介绍。
     - [04_matmul_summary](./2_Design/01_kernel_design/04_matmul_summary.md)：对模板库的`examples`目录内已有的`matmul`模板设计进行介绍，包含样例模板清单、理论模板清单、工程优化清单、模板应用浅述，可用于matmul性能调优时参考。
     - [05_aswt](./2_Design/01_kernel_design/05_aswt.md)：自适应滑窗tiling策略说明
-    - 06_quant_summary：低精度专题
+    - 06_quant_summary：低精度专题（待贡献）
 - 02_tla：
     - [01_layout](./2_Design/02_tla/01_layout.md)：TLA设计的layout结构和相关接口说明
-    - [02_layout_tag](./2_Design/02_tla/02_layout_tag.md)：RowMajor、ColumnMajor、zN、nZ等layoutTag介绍和接口说明
+    - [02_layout_tag](./2_Design/02_tla/02_layout_tag.md)：RowMajor、ColumnMajor、zN、nZ等layoutTag介绍和接口说明，即旧版layout结构
     - [03_tensor](./2_Design/02_tla/03_tensor.md)：tensor结构体
 - 03_evg
     - [01_evg_design](./2_Design/03_evg/01_evg_design.md)：EVG 的定位、分层关系、执行模型与图组织方式

@@ -86,4 +86,4 @@ Compare success.
 
 2、对比FP16 Matmul，该样例针对大shape的case有较为明显的显存收益
 
-3、针对小shape场景，可以参考[catlass_optimize_guidance](../../docs/zh/1_Practice/10_matmul_optimization.md#tileshape调整)对样例进行tiling调优
+3、针对小shape场景，可以参考[catlass_optimize_guidance](../../docs/zh/1_Practice/11_matmul_optimization.md#tileshape调整)对样例进行tiling调优

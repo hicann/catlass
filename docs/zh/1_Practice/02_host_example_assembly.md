@@ -359,9 +359,13 @@ ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_
 
 // 计算精度标杆并与输出数据比对
 std::vector<float> hostGolden(lenC);
-golden::ComputeMatmul(hostGolden, hostA, hostB, m, n, k);
-auto diff = helper::CompareData(hostC, hostGolden);
-std::cout << "Compare " << (diff ? "failed" : "success") << std::endl;
+golden::ComputeMatmul(options.problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);
+std::vector<uint64_t> errorIndices = golden::CompareData(hostC, hostGolden, k);
+if (errorIndices.empty()) {
+    std::cout << "Compare success." << std::endl;
+} else {
+    std::cerr << "Compare failed. Error count: " << errorIndices.size() << std::endl;
+}
 ```
 
 ### 6. 资源释放
@@ -412,7 +416,7 @@ set(EXAMPLE_ATLASA2
 )
 ```
 
-执行编译命令：
+完成CANN包安装和CANN环境使能后，执行编译命令：
 
 ```bash
 bash scripts/build.sh basic_matmul
@@ -423,4 +427,10 @@ bash scripts/build.sh basic_matmul
 ```bash
 cd output/bin
 ./basic_matmul 256 512 1024 0
+```
+
+获得回显
+
+```bash
+Compare success.
 ```

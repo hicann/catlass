@@ -10,7 +10,7 @@ CATLASS示例工程适配CANN提供的主流性能调测工具，工具的详细
 
 ### msProf — 单算子性能分析
 
-[msProf](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html)是单算子性能分析工具，对应指令为`msprof op`，支持上板和仿真两种运行模式。使用方式见[msProf&Profiling](../evaluation_tools/performance_tools.md#用msprof进行单算子性能分析)。
+[msProf](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html)是单算子性能分析工具，对应指令为`msprof op`，支持上板和仿真两种运行模式。使用方式见[msProf&Profiling](./performance_tools.md#用msprof进行单算子性能分析)。
 
 **上板性能采集**
 
@@ -84,7 +84,7 @@ cd output/bin
 msprof ./00_basic_matmul 256 512 1024 0
 ```
 
-详细使用教程见[用Profiling进行整网性能分析](../evaluation_tools/performance_tools.md#用profiling进行整网性能分析)。性能数据各字段含义参见[msProf性能数据文件参考](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/Profiling/atlasprofiling_16_0057.html)。
+详细使用教程见[用Profiling进行整网性能分析](./performance_tools.md#用profiling进行整网性能分析)。性能数据各字段含义参见[msProf性能数据文件参考](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/Profiling/atlasprofiling_16_0057.html)。
 
 ### msTuner_CATLASS — Tiling自动寻优
 
@@ -217,8 +217,8 @@ Cube和Vector/Scalar分开计算后再求和，因为三者可并行执行到一
 
 | 工具 | 用途 | CATLASS文档 |
 | --- | --- | --- |
-| msProf（`msprof op`） | 单算子上板性能采集 | [msProf&Profiling](../evaluation_tools/performance_tools.md#用msprof进行单算子性能分析) |
-| msProf仿真（`msprof op simulator`） | 单算子仿真流水图采集 | [性能流水仿真](../evaluation_tools/performance_tools.md#性能流水仿真) |
-| Profiling（`msprof`） | 整网性能数据采集与分析 | [用Profiling进行整网性能分析](../evaluation_tools/performance_tools.md#用profiling进行整网性能分析) |
+| msProf（`msprof op`） | 单算子上板性能采集 | [msProf&Profiling](./performance_tools.md#用msprof进行单算子性能分析) |
+| msProf仿真（`msprof op simulator`） | 单算子仿真流水图采集 | [性能流水仿真](./performance_tools.md#性能流水仿真) |
+| Profiling（`msprof`） | 整网性能数据采集与分析 | [用Profiling进行整网性能分析](./performance_tools.md#用profiling进行整网性能分析) |
 | msTuner_CATLASS | Tiling参数自动寻优 | [msTuner_CATLASS README](../../../../tools/tuner/README.md) |
 | MindStudio Insight | 性能数据可视化分析 | [MindStudio Insight用户指南](https://www.hiascend.com/document/detail/zh/mindstudio/80RC1/GUI_baseddevelopmenttool/msascendinsightug/Insight_userguide_0002.html) |

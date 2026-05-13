@@ -21,13 +21,15 @@ chmod +x Ascend-cann-toolkit_{version}_linux-{arch}.run
 - `{arch}`: 系统架构。
 - `{install_path}`: 指定安装路径，默认为`/usr/local/Ascend`
 
+其他在线安装方式可参考[CANN 快速安装](https://www.hiascend.com/cann/download)。
+
 2. **使能CANN 环境**
 
 安装完成后，执行下述指令即完成CANN环境使能。
 
 ```bash
 # 默认路径安装，以root用户为例（非root用户，将/usr/local替换为${HOME}）
-source /usr/local/Ascend/ascend_toolkit/set_env.sh
+source /usr/local/Ascend/ascend-toolkit/set_env.sh
 # 指定路径安装
 # source ${install_path}/set_env.sh
 ```
@@ -56,11 +58,11 @@ bash scripts/build.sh [options] <target>
  - `options`: 可选编译选项，当前支持的选项包括：
    - `--clean`: 清理此前编译及输出目录（默认路径分别为`/build`，`/output`）。
    - `--debug`: 以Debug模式进行编译。
-   - `--msdebug`：使能[msDebug](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0062.html)工具，详见[在CATLASS样例工程使用msDebug](./evaluation_tools/msdebug.md)。
-   - `--simulator`：启用仿真器模式，该选项启用后将不在实际NPU上执行，详见[CATLASS样例仿真](./evaluation_tools/performance_tools.md#msprof-op-simulator使用示例)。
-   - `--enable_profiling`：使能Profiling工具，详见[CATLASS样例性能调优](./evaluation_tools/performance_tools.md#profiling简介)。
-   - `--enable_print`：启用编译器的打印功能，详见[基于`cce::printf`进行设备侧打印](./evaluation_tools/print.md)。
-   - `--enable_ascendc_dump`：启用`AscendC`相关算子调测API，详见[CATLASS样例使用AscendC算子调测API](./evaluation_tools/ascendc_dump.md)。
+   - `--msdebug`：使能[msDebug](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0062.html)工具，详见[在CATLASS样例工程使用msDebug](./evaluation/msdebug.md)。
+   - `--simulator`：启用仿真器模式，该选项启用后将不在实际NPU上执行，详见[CATLASS样例仿真](./evaluation/performance_tools.md#msprof-op-simulator使用示例)。
+   - `--enable_profiling`：使能Profiling工具，详见[CATLASS样例性能调优](./evaluation/performance_tools.md#profiling简介)。
+   - `--enable_print`：启用编译器的打印功能，详见[基于`cce::printf`进行设备侧打印](./evaluation/print.md)。
+   - `--enable_ascendc_dump`：启用`AscendC`相关算子调测API，详见[CATLASS样例使用AscendC算子调测API](./evaluation/ascendc_dump.md)。
    - `-DCATLASS_ARCH`：指明NPU架构，当前支持`2201`和`3510`。
    - `-D<option>`：给CMake传递其他的编译选项。
 

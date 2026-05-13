@@ -564,7 +564,7 @@ struct TileCopyOpt : public Catlass::Gemm::Tile::TileCopy<ArchTag, AType, BType,
 <details>
 <summary><strong><font size="4">模板选择</font></strong></summary>
 
-先尝试基于[00_basic_matmul](../../../../examples/00_basic_matmul/basic_matmul.cpp)进行TileShape调优并获得**性能基线**，可参考[模板库优化指引](../../1_Practice/10_matmul_optimization.md)
+先尝试基于[00_basic_matmul](../../../../examples/00_basic_matmul/basic_matmul.cpp)进行TileShape调优并获得**性能基线**，可参考[模板库优化指引](../../1_Practice/11_matmul_optimization.md)
 
 依次识别是否满足各模板适合场景，并和性能基线作比较：
 
