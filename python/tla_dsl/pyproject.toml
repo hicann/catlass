@@ -1,0 +1,47 @@
+[build-system]
+requires = ["hatchling>=1.24.2", "hatch-vcs>=0.4.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ascend-catlass-dsl"
+description = "Ascend Catlass DSL (Tla IR / Python catlass), nested under the Catlass repository."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+  { name = "Ascend Catlass DSL Contributors" }
+]
+dynamic = ["version"]
+
+[tool.hatch.version]
+source = "vcs"
+raw-options = { version_scheme = "no-guess-dev", local_scheme = "node-and-date", fallback_version = "0.0.0" }
+
+[tool.hatch.build.hooks.vcs]
+version-file = "catlass/_version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["catlass"]
+pure-python = false
+
+[tool.hatch.build.targets.wheel.force-include]
+"csrc/mlir/build/lib/Tools/libtla_dsl_runtime_wrapper.so" = "catlass/bin/libtla_dsl_runtime_wrapper.so"
+"csrc/mlir/build/python/catlass" = "catlass"
+
+[tool.ruff]
+target-version = "py310"
+
+[tool.ruff.format]
+exclude = ["catlass/_mlir_bindings/tla_ops_gen.py"]
+
+[tool.ruff.lint.per-file-ignores]
+"catlass/_mlir_bindings/tla_ops_gen.py" = ["E402", "E701", "F401"]
+"catlass/base_dsl/__init__.py" = ["F403"]
+"catlass/core_api.py" = ["F401"]
+"catlass/runtime.py" = ["F401", "F822"]
+"catlass/types.py" = ["E402"]
+"examples/*.py" = ["F722"]
+"tests/lit/lit.cfg.py" = ["F821"]
+"tests/test_execution_lowering.py" = ["F841"]
+"tests/test_generated_ops_surface.py" = ["F841"]
+"tests/test_frontend_lowering.py" = ["F722", "F821"]

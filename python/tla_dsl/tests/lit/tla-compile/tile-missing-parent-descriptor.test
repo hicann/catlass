@@ -1,0 +1,15 @@
+// RUN: not %tla_compile %s -o %t 2>&1 | %filecheck %s --check-prefix=ERR
+
+module {
+  func.func @tile_missing_parent_desc(%buf: !tla.memref<16x16xf16, l1>) {
+    %tile = builtin.unrealized_conversion_cast %buf
+        : !tla.memref<16x16xf16, l1> to !tla.tensor<!tla.layout<!tla.shape<(16,1),(16,1)>, !tla.stride<(16,256),(1,256)>, !tla.shape<16,16>, zN>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>>
+    %sh8 = "tla.make_shape"() : () -> !tla.shape<8,8>
+    %cd00 = "tla.make_coord"() : () -> !tla.coord<0,0>
+    %sub = "tla.tile_view"(%tile, %sh8, %cd00)
+        : (!tla.tensor<!tla.layout<!tla.shape<(16,1),(16,1)>, !tla.stride<(16,256),(1,256)>, !tla.shape<16,16>, zN>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>>, !tla.shape<8,8>, !tla.coord<0,0>) -> !tla.tensor<!tla.layout<!tla.shape<(16,1),(16,1)>, !tla.stride<(16,256),(1,256)>, !tla.shape<8,8>, zN>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>>
+    func.return
+  }
+}
+
+// ERR: error: missing descriptor for tla.tile_view source tile

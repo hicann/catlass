@@ -1,0 +1,18 @@
+// RUN: not %tla_compile %s -o - 2>&1 | %filecheck %s
+
+module {
+  func.func @consume_root(%arg0: !tla.tensor<!tla.layout<!tla.shape<128,128>, !tla.stride<128,1>, !tla.shape<128,128>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) {
+    func.return
+  }
+
+  func.func @caller() {
+    %c0 = arith.constant 0 : i32
+    %bad = builtin.unrealized_conversion_cast %c0
+        : i32 to !tla.tensor<!tla.layout<!tla.shape<128,128>, !tla.stride<128,1>, !tla.shape<128,128>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>
+    call @consume_root(%bad)
+        : (!tla.tensor<!tla.layout<!tla.shape<128,128>, !tla.stride<128,1>, !tla.shape<128,128>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) -> ()
+    func.return
+  }
+}
+
+// CHECK: cannot lower tla.tensor operand for call @consume_root

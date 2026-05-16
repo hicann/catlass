@@ -1,0 +1,429 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+tla = pytest.importorskip("catlass", exc_type=ImportError)
+execution = pytest.importorskip("catlass.execution", exc_type=ImportError)
+base_dsl_mod = pytest.importorskip("catlass.base_dsl", exc_type=ImportError)
+compiler_bridge = pytest.importorskip("catlass.compiler_bridge", exc_type=ImportError)
+execution_triton = pytest.importorskip("catlass.execution_triton", exc_type=ImportError)
+
+
+class _FakeLowered:
+    def __init__(self, text: str, module: object | None = None) -> None:
+        self.module = module
+        self._text = text
+
+    def asm(self, *, generic: bool = False) -> str:
+        del generic
+        return self._text
+
+
+def _zero_arg_kernel() -> None:
+    pass
+
+
+@tla.kernel
+def _zero_arg_tla_kernel() -> None:
+    pass
+
+
+def test_public_compile_dry_run_invokes_typed_bridge_and_hivmc_a5(
+    monkeypatch, tmp_path
+) -> None:
+    tlair_mlir = "module {\n  tla.func @zero_arg_kernel() { tla.return }\n}"
+    lowered_module = object()
+    bridge_path = tmp_path / "_tla_type_bridge_native.so"
+    hivm_compile = tmp_path / "hivmc-a5"
+    template_bc = tmp_path / "meta_op.aic.c310.bc"
+    bridge_path.write_text("")
+    hivm_compile.write_text("")
+    template_bc.write_bytes(b"bc")
+
+    def fake_lower(
+        self, fn, *, kind, options, generic=False, type_args=None, location=None
+    ):
+        del self, fn, options, type_args, location
+        assert kind == "kernel"
+        assert generic is False
+        return _FakeLowered(tlair_mlir, module=lowered_module)
+
+    monkeypatch.setattr(base_dsl_mod.BaseDSL, "_lower", fake_lower)
+    monkeypatch.setattr(execution, "resolve_bridge_extension_path", lambda: bridge_path)
+    monkeypatch.setattr(execution, "_resolve_hivmc_a5", lambda _x: hivm_compile)
+    monkeypatch.setattr(execution, "_tool_version", lambda _x: "test-version")
+    monkeypatch.setattr(
+        execution,
+        "lower_tlair_module_to_mlir",
+        lambda module, **_kwargs: compiler_bridge.TlaLoweringResult(
+            "module { func.func @zero_arg_kernel() }\n"
+        ),
+    )
+    monkeypatch.setenv("TLA_DSL_HIVM_TEMPLATE_BC", str(template_bc))
+
+    recorded: list[tuple[str, list[str]]] = []
+
+    def fake_run_checked(cmd, *, label, cwd, stdin_text=None):
+        assert stdin_text is None
+        recorded.append((label, list(cmd)))
+        if label == "hivmc-a5":
+            Path(cwd, "kernel.o").write_bytes(b"obj")
+
+    monkeypatch.setattr(execution, "_run_checked", fake_run_checked)
+
+    artifact = tla.compile(
+        _zero_arg_tla_kernel,
+        cache=False,
+        cache_dir=tmp_path / "cache",
+        target_arch="c310",
+        core_type="aic",
+        kernel_mode="aic",
+        arch_scope="aic.c310",
+    )
+
+    assert artifact.compiler_bridge_path == bridge_path
+    assert artifact.lowered_llvm == "module { func.func @zero_arg_kernel() }\n"
+    assert recorded == [
+        (
+            "hivmc-a5",
+            [
+                str(hivm_compile),
+                str(artifact.cache_dir / "lowered.mlir"),
+                "--target=Ascend950PR_9589",
+                "--disable-ffts",
+                "--enable-hivm-compile=False",
+                f"--link-aicore-bitcode={template_bc}",
+                "-o",
+                str(artifact.kernel_binary_path),
+            ],
+        )
+    ]
+
+
+def test_generated_kernel_bridge_lowers_live_module(monkeypatch, tmp_path) -> None:
+    tlair_mlir = "module {\n  tla.func @zero_arg_kernel() { tla.return }\n}"
+    lowered_module = object()
+    hivm_compile = tmp_path / "hivmc-a5"
+    template_bc = tmp_path / "meta_op.aiv.c310.bc"
+    hivm_compile.write_text("")
+    template_bc.write_bytes(b"bc")
+
+    monkeypatch.setattr(
+        base_dsl_mod.BaseDSL,
+        "_lower",
+        lambda *_a, **_k: _FakeLowered(tlair_mlir, module=lowered_module),
+    )
+    monkeypatch.setattr(execution, "resolve_bridge_extension_path", lambda: None)
+    monkeypatch.setattr(execution, "_resolve_hivmc_a5", lambda _x: hivm_compile)
+    monkeypatch.setattr(execution, "_tool_version", lambda _x: "test-version")
+    monkeypatch.setenv("TLA_DSL_HIVM_TEMPLATE_BC", str(template_bc))
+
+    bridge_calls: list[tuple[object, dict[str, object]]] = []
+
+    def fake_lower_tlair_module_to_mlir(module, **kwargs):
+        bridge_calls.append((module, kwargs))
+        return compiler_bridge.TlaLoweringResult(
+            "module { func.func @zero_arg_kernel() }\n"
+        )
+
+    monkeypatch.setattr(
+        execution, "lower_tlair_module_to_mlir", fake_lower_tlair_module_to_mlir
+    )
+
+    def fake_run_checked(cmd, *, label, cwd, stdin_text=None):
+        del cmd, stdin_text
+        assert label == "hivmc-a5"
+        Path(cwd, "kernel.o").write_bytes(b"obj")
+
+    monkeypatch.setattr(execution, "_run_checked", fake_run_checked)
+
+    execution.compile_kernel(
+        _zero_arg_kernel,
+        kind="kernel",
+        options={},
+        runtime=execution.TlaRuntimeOptions(
+            cache_enabled=False, cache_dir=tmp_path / "cache"
+        ),
+        type_args=None,
+        decorator_location=None,
+    )
+
+    assert bridge_calls == [
+        (
+            lowered_module,
+            {
+                "mlir_print_ir_before": (),
+                "mlir_print_ir_after": (),
+                "mlir_print_ir_before_all": False,
+                "mlir_print_ir_after_all": False,
+            },
+        )
+    ]
+
+
+def test_runtime_options_ignore_removed_target_env_vars(monkeypatch) -> None:
+    monkeypatch.setenv("TLA_DSL_TARGET_ARCH", "c220")
+    monkeypatch.setenv("TLA_DSL_CORE_TYPE", "aic")
+    monkeypatch.setenv("TLA_DSL_ARCH_SCOPE", "aic.c220")
+    options = execution.runtime_options_from_kwargs({})
+
+    assert options.target_arch == "c310"
+    assert options.core_type == "aiv"
+    assert options.arch_scope == "aiv.c310"
+
+
+def test_typed_bridge_raises_without_live_module(tmp_path) -> None:
+    with pytest.raises(
+        execution.TlaCompilerBridgeUnavailableError, match="live MLIR module"
+    ):
+        execution._run_typed_bridge_to_mlir(
+            lowered_module=None, mlir_path=tmp_path / "lowered.mlir"
+        )
+
+
+def test_lower_tlair_module_to_mlir_uses_typed_extension(monkeypatch) -> None:
+    module = object()
+    calls: list[tuple[object, list[str], list[str], bool, bool]] = []
+
+    class _FakeExtension:
+        def lower_to_mlir(
+            self,
+            module_arg: object,
+            before: list[str],
+            after: list[str],
+            before_all: bool,
+            after_all: bool,
+        ) -> dict[str, str]:
+            calls.append((module_arg, before, after, before_all, after_all))
+            return {
+                "lowered_mlir": "module { func.func @zero_arg_kernel() }\n",
+                "pass_ir_dump": "after-pass-dump",
+            }
+
+    monkeypatch.setattr(
+        compiler_bridge, "_load_bridge_extension", lambda: _FakeExtension()
+    )
+
+    lowered = compiler_bridge.lower_tlair_module_to_mlir(
+        module,
+        mlir_print_ir_before=["tla-func-to-hacc"],
+        mlir_print_ir_after=["tla-lower-to-std"],
+        mlir_print_ir_before_all=True,
+    )
+
+    assert lowered.lowered_mlir == "module { func.func @zero_arg_kernel() }\n"
+    assert lowered.pass_ir_dump == "after-pass-dump"
+    assert calls == [
+        (
+            module,
+            ["tla-func-to-hacc"],
+            ["tla-lower-to-std"],
+            True,
+            False,
+        )
+    ]
+
+
+def test_lower_tlair_module_to_mlir_requires_typed_extension(monkeypatch) -> None:
+    module = object()
+
+    monkeypatch.setattr(
+        compiler_bridge,
+        "_load_bridge_extension",
+        lambda: (_ for _ in ()).throw(
+            compiler_bridge.BridgeUnavailableError("missing typed bridge")
+        ),
+    )
+
+    with pytest.raises(
+        compiler_bridge.BridgeUnavailableError, match="missing typed bridge"
+    ):
+        compiler_bridge.lower_tlair_module_to_mlir(module)
+
+
+def test_run_tla_lowering_to_mlir_falls_back_to_tla_compile(
+    monkeypatch, tmp_path
+) -> None:
+    lowered_path = tmp_path / "lowered.mlir"
+    tla_compile = tmp_path / "TlaCompile"
+    tla_compile.write_text("")
+
+    monkeypatch.setattr(
+        execution,
+        "_run_typed_bridge_to_mlir",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            execution.TlaKernelCompileError("typed bridge failed")
+        ),
+    )
+    monkeypatch.setattr(execution, "_resolve_tla_compile", lambda: tla_compile)
+
+    calls: list[tuple[list[str], dict[str, object]]] = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append((list(cmd), kwargs))
+        lowered_path.write_text("module { func.func @fallback() }\n")
+        return None
+
+    monkeypatch.setattr(execution.subprocess, "run", fake_run)
+
+    result = execution._run_tla_lowering_to_mlir(
+        lowered_module=object(),
+        tlair_mlir="module { tla.func @k() { tla.return } }\n",
+        mlir_path=lowered_path,
+        runtime=execution.TlaRuntimeOptions(),
+    )
+
+    assert result.lowered_mlir == "module { func.func @fallback() }\n"
+    assert result.pass_ir_dump == ""
+    assert calls == [
+        (
+            [
+                str(tla_compile),
+                str(tmp_path / "lowered.tlair.mlir"),
+                "-o",
+                str(lowered_path),
+            ],
+            {
+                "check": True,
+                "capture_output": True,
+                "text": True,
+                "env": execution._tla_compile_env(),
+            },
+        )
+    ]
+
+
+def test_run_tla_lowering_to_mlir_raises_when_no_fallback_exists(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setattr(
+        execution,
+        "_run_typed_bridge_to_mlir",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            execution.TlaKernelCompileError("typed bridge failed")
+        ),
+    )
+    monkeypatch.setattr(execution, "_resolve_tla_compile", lambda: None)
+
+    with pytest.raises(execution.TlaKernelCompileError, match="typed bridge failed"):
+        execution._run_tla_lowering_to_mlir(
+            lowered_module=object(),
+            tlair_mlir="module {}\n",
+            mlir_path=tmp_path / "lowered.mlir",
+            runtime=execution.TlaRuntimeOptions(),
+        )
+
+
+def test_runtime_options_for_offline_mlir_skips_triton_flag_for_cube_only_mlir() -> None:
+    runtime = execution.TlaRuntimeOptions()
+
+    updated = execution._runtime_options_for_offline_ascendnpuir_mlir(
+        runtime,
+        'module { func.func @kernel() { return } }',
+    )
+
+    assert not execution_triton.should_use_triton_compile_mode(updated.hivmc_args)
+
+
+def test_build_hivmc_a5_command_uses_triton_mode_without_template_link(
+    tmp_path,
+) -> None:
+    compiler = tmp_path / "hivmc-a5"
+    mlir_path = tmp_path / "kernel.mlir"
+    kernel_path = tmp_path / "kernel.o"
+
+    command = execution._build_hivmc_a5_command(
+        compiler=compiler,
+        mlir_path=mlir_path,
+        kernel_path=kernel_path,
+        runtime=execution.TlaRuntimeOptions(
+            hivmc_args=("--enable-triton-kernel-compile=true",)
+        ),
+    )
+
+    assert command == [
+        str(compiler),
+        str(mlir_path),
+        "--target=Ascend950PR_9589",
+        "--enable-triton-kernel-compile=true",
+        "-o",
+        str(kernel_path),
+    ]
+
+
+def test_execute_kernel_uses_triton_packed_launch_helper(monkeypatch, tmp_path) -> None:
+    packed_args = b"\x01" * 16
+    helper_calls: list[dict[str, object]] = []
+
+    def fake_try_build_packed_launch_args(**kwargs):
+        helper_calls.append(kwargs)
+        return packed_args
+
+    monkeypatch.setattr(
+        execution_triton,
+        "try_build_packed_launch_args",
+        fake_try_build_packed_launch_args,
+    )
+
+    launches: list[tuple[str, object]] = []
+
+    class _FakeLoader:
+        def get_current_device(self) -> int:
+            return 7
+
+        def get_current_stream(self, device: int) -> int:
+            assert device == 7
+            return 99
+
+        def load_binary(self, **kwargs):
+            launches.append(("load", kwargs))
+            return (11, 12)
+
+        def launch_with_packed_args(self, **kwargs) -> None:
+            launches.append(("packed", kwargs))
+
+        def launch_with_args(self, **kwargs) -> None:
+            raise AssertionError("flat launch path should not be used")
+
+        def launch_zero_arg(self, **kwargs) -> None:
+            raise AssertionError("zero-arg launch path should not be used")
+
+    monkeypatch.setattr(execution, "_AscendLoader", _FakeLoader)
+
+    artifact = execution.TlaKernelArtifact(
+        cache_key="cache",
+        cache_dir=tmp_path,
+        tlair_mlir="module {}",
+        lowered_llvm="module {}",
+        entrypoint="kernel",
+        compiler_bridge_path=None,
+        hivmc_path=tmp_path / "hivmc-a5",
+        kernel_binary_path=tmp_path / "kernel.o",
+    )
+    runtime = execution.TlaRuntimeOptions(shared=3)
+
+    result = execution.execute_kernel(
+        artifact,
+        runtime=runtime,
+        launch_args=[object()],
+        launch_kwargs={},
+    )
+
+    assert result.module_handle == 11
+    assert result.function_handle == 12
+    assert helper_calls and helper_calls[0]["artifact"] is artifact
+    assert helper_calls[0]["grid"] == (1, 1, 1)
+    assert helper_calls[0]["device"] == 7
+    assert (
+        "packed",
+        {
+            "function": 12,
+            "stream": 99,
+            "grid_x": 1,
+            "grid_y": 1,
+            "grid_z": 1,
+            "args": packed_args,
+        },
+    ) in launches

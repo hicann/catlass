@@ -1,0 +1,21 @@
+// RUN: printf 'module { func.func @bad_empty(%%arg0: !tla.shape<>) { return } }\n' > %t.empty.mlir && not %tla_compile %t.empty.mlir -o %t 2>&1 | %filecheck %s --check-prefix=EMPTY
+// RUN: printf 'module { func.func @bad_unbalanced(%%arg0: !tla.shape<(1,2>) { return } }\n' > %t.unbalanced.mlir && not %tla_compile %t.unbalanced.mlir -o %t 2>&1 | %filecheck %s --check-prefix=UNBALANCED
+// RUN: printf 'module { func.func @bad_trailing_comma(%%arg0: !tla.shape<1,>) { return } }\n' > %t.trailing.mlir && not %tla_compile %t.trailing.mlir -o %t 2>&1 | %filecheck %s --check-prefix=TRAILING
+// RUN: printf 'module { func.func @bad_adjacent(%%arg0: !tla.shape<1 2>) { return } }\n' > %t.adjacent.mlir && not %tla_compile %t.adjacent.mlir -o %t 2>&1 | %filecheck %s --check-prefix=ADJACENT
+// RUN: printf 'module { func.func @bad_nested(%%arg0: !tla.shape<((1,2),(3,4))>) { return } }\n' > %t.nested.mlir && not %tla_compile %t.nested.mlir -o %t 2>&1 | %filecheck %s --check-prefix=NESTED
+// RUN: printf 'module { func.func @bad_negative(%%arg0: !tla.shape<-1,2>) { return } }\n' > %t.negative.mlir && not %tla_compile %t.negative.mlir -o %t 2>&1 | %filecheck %s --check-prefix=NEGATIVE
+// RUN: printf 'module { func.func @bad_layout(%%arg0: !tla.layout<!tla.shape<(1,2),3>, !tla.stride<1,(2,3)>>) { return } }\n' > %t.layout.mlir && not %tla_compile %t.layout.mlir -o %t 2>&1 | %filecheck %s --check-prefix=LAYOUT
+
+// EMPTY: error:
+
+// UNBALANCED: error:
+
+// TRAILING: error:
+
+// ADJACENT: error:
+
+// NESTED: error:
+
+// NEGATIVE: error:
+
+// LAYOUT: error:

@@ -1,0 +1,10 @@
+// RUN: not %tla_compile %s -o %t 2>&1 | %filecheck %s --check-prefix=ERR
+
+module {
+  func.func @bad_syntax() {
+    tla.this_does_not_exist
+    func.return
+  }
+}
+
+// ERR: error:

@@ -1,0 +1,29 @@
+# Conda environment for Ascend Catlass DSL: Python package `catlass` plus LLVM/MLIR 19
+# (TableGen, bindings, FileCheck/lit) used to build and test Tla IR lowering.
+name: ascend-catlass-dsl
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip=26.0.1
+  - cmake=4.2.3
+  - defaults::mlir=19.1.7
+  - conda-forge::mlir-python-bindings=19.1.7
+  - conda-forge::pybind11>=3.0,<3.1
+  - conda-forge::ninja=1.13.2
+  - defaults::clang=19.1.7
+  - defaults::clangxx=19.1.7
+  - defaults::clang-tools=19.1.7
+  - defaults::lit=19.1.7
+  - conda-forge::gcc=11.3
+  - conda-forge::gxx=11.3
+  - pip:
+      - pytest==9.0.2
+      - ruff==0.15.1
+      - black==24.4.0
+      - mypy==1.19.1
+      - hatch==1.16.5
+      - hatch-vcs==0.5.0
+      - click==8.3.1
+      - pyyaml==6.0.3

@@ -1,0 +1,371 @@
+// Custom parsers/printers for Tla TypeDefs. Storage and uniquing live in
+// TlaDialect.cpp (GET_TYPEDEF_CLASSES + Types.cpp.inc).
+#ifndef TLA_DIALECT_TLA_IR_TLATYPESIMPL_INC
+#define TLA_DIALECT_TLA_IR_TLATYPESIMPL_INC
+
+#include "Dialect/Tla/IR/TlaTypes.h"
+
+#include "mlir/AsmParser/AsmParser.h"
+#include "mlir/IR/DialectImplementation.h"
+#include "mlir/IR/OpImplementation.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
+
+using namespace mlir;
+
+namespace {
+constexpr int64_t kTreeOpen = -2;
+constexpr int64_t kTreeClose = -3;
+
+ParseResult parseIndexTreeLeaf(AsmParser &parser, SmallVectorImpl<int64_t> &tree) {
+  if (succeeded(parser.parseOptionalQuestion())) {
+    tree.push_back(ShapedType::kDynamic);
+    return success();
+  }
+
+  int64_t value = 0;
+  if (parser.parseInteger(value))
+    return failure();
+  if (value < 0)
+    return parser.emitError(parser.getCurrentLocation())
+           << "cat index-tree leaves must be non-negative integers or ?";
+  tree.push_back(value);
+  return success();
+}
+
+ParseResult parseIndexTreeLeafList(AsmParser &parser, SmallVectorImpl<int64_t> &tree) {
+  if (parseIndexTreeLeaf(parser, tree))
+    return failure();
+  while (succeeded(parser.parseOptionalComma())) {
+    if (parseIndexTreeLeaf(parser, tree))
+      return failure();
+  }
+  return success();
+}
+
+ParseResult parseIndexTreeElement(AsmParser &parser, SmallVectorImpl<int64_t> &tree) {
+  if (succeeded(parser.parseOptionalLParen())) {
+    tree.push_back(kTreeOpen);
+    if (parseIndexTreeLeafList(parser, tree) || parser.parseRParen())
+      return failure();
+    tree.push_back(kTreeClose);
+    return success();
+  }
+  return parseIndexTreeLeaf(parser, tree);
+}
+
+ParseResult parseIndexTreeElementList(AsmParser &parser, SmallVectorImpl<int64_t> &tree) {
+  if (parseIndexTreeElement(parser, tree))
+    return failure();
+  while (succeeded(parser.parseOptionalComma())) {
+    if (parseIndexTreeElement(parser, tree))
+      return failure();
+  }
+  return success();
+}
+
+LogicalResult verifyIndexTree(ArrayRef<int64_t> tree) {
+  if (tree.empty())
+    return failure();
+  int64_t depth = 0;
+  int64_t currentGroupLeaves = 0;
+  bool sawLeaf = false;
+  for (int64_t token : tree) {
+    if (token == kTreeOpen) {
+      if (depth != 0)
+        return failure();
+      ++depth;
+      currentGroupLeaves = 0;
+      continue;
+    }
+    if (token == kTreeClose) {
+      if (depth != 1 || currentGroupLeaves == 0)
+        return failure();
+      --depth;
+      continue;
+    }
+    if (token < 0 && token != ShapedType::kDynamic)
+      return failure();
+    if (depth == 1)
+      ++currentGroupLeaves;
+    sawLeaf = true;
+  }
+  return success(sawLeaf && depth == 0);
+}
+
+void printIndexTree(AsmPrinter &printer, ArrayRef<int64_t> tree) {
+  SmallVector<bool, 4> firstStack;
+  firstStack.push_back(true);
+  auto printSeparatorForItem = [&] {
+    if (!firstStack.back())
+      printer << ",";
+    firstStack.back() = false;
+  };
+
+  for (int64_t token : tree) {
+    if (token == kTreeOpen) {
+      printSeparatorForItem();
+      printer << "(";
+      firstStack.push_back(true);
+      continue;
+    }
+    if (token == kTreeClose) {
+      printer << ")";
+      if (firstStack.size() > 1)
+        firstStack.pop_back();
+      continue;
+    }
+    printSeparatorForItem();
+    if (token == ShapedType::kDynamic)
+      printer << "?";
+    else
+      printer << token;
+  }
+}
+
+LogicalResult flattenIndexTree(ArrayRef<int64_t> tree, SmallVectorImpl<int64_t> &leaves) {
+  leaves.clear();
+  if (failed(verifyIndexTree(tree)))
+    return failure();
+  for (int64_t token : tree) {
+    if (token == kTreeOpen || token == kTreeClose)
+      continue;
+    leaves.push_back(token);
+  }
+  return success(!leaves.empty());
+}
+
+bool sameIndexTreeStructure(ArrayRef<int64_t> lhs, ArrayRef<int64_t> rhs) {
+  if (failed(verifyIndexTree(lhs)) || failed(verifyIndexTree(rhs)) || lhs.size() != rhs.size())
+    return false;
+  for (auto [left, right] : llvm::zip_equal(lhs, rhs)) {
+    if ((left == kTreeOpen) != (right == kTreeOpen) ||
+        (left == kTreeClose) != (right == kTreeClose))
+      return false;
+  }
+  return true;
+}
+
+template <typename TypeT> Type parseIndexTreeType(AsmParser &parser, StringRef mnemonic) {
+  SmallVector<int64_t, 8> tree;
+  if (parser.parseLess() || parseIndexTreeElementList(parser, tree) || parser.parseGreater())
+    return (parser.emitError(parser.getCurrentLocation())
+                << "invalid tla." << mnemonic << " index-tree",
+            Type{});
+  return TypeT::getChecked(
+      [&] { return parser.emitError(parser.getCurrentLocation()) << "invalid tla." << mnemonic; },
+      parser.getContext(), tree);
+}
+
+FailureOr<AddressSpace> parseAddressSpace(StringRef text) {
+  if (auto sym = symbolizeAddressSpace(text))
+    return *sym;
+  return failure();
+}
+
+Type parseTypeFromText(AsmParser &parser, StringRef text) {
+  Type type = parseType(text, parser.getContext());
+  if (!type)
+    parser.emitError(parser.getCurrentLocation()) << "invalid MLIR type: " << text;
+  return type;
+}
+
+} // namespace
+
+namespace tla {
+
+LogicalResult getTlaIndexTreeLeaves(ArrayRef<int64_t> tree, SmallVectorImpl<int64_t> &leaves) {
+  return flattenIndexTree(tree, leaves);
+}
+
+Type ShapeType::parse(AsmParser &parser) { return parseIndexTreeType<ShapeType>(parser, "shape"); }
+void ShapeType::print(AsmPrinter &printer) const {
+  printer << "<";
+  printIndexTree(printer, getTree());
+  printer << ">";
+}
+LogicalResult ShapeType::verify(function_ref<InFlightDiagnostic()> emitError,
+                                ArrayRef<int64_t> tree) {
+  if (failed(verifyIndexTree(tree)))
+    return emitError() << "invalid tla.shape index-tree";
+  return success();
+}
+
+Type CoordType::parse(AsmParser &parser) { return parseIndexTreeType<CoordType>(parser, "coord"); }
+void CoordType::print(AsmPrinter &printer) const {
+  printer << "<";
+  printIndexTree(printer, getTree());
+  printer << ">";
+}
+LogicalResult CoordType::verify(function_ref<InFlightDiagnostic()> emitError,
+                                ArrayRef<int64_t> tree) {
+  if (failed(verifyIndexTree(tree)))
+    return emitError() << "invalid tla.coord index-tree";
+  return success();
+}
+
+Type StrideType::parse(AsmParser &parser) {
+  return parseIndexTreeType<StrideType>(parser, "stride");
+}
+void StrideType::print(AsmPrinter &printer) const {
+  printer << "<";
+  printIndexTree(printer, getTree());
+  printer << ">";
+}
+LogicalResult StrideType::verify(function_ref<InFlightDiagnostic()> emitError,
+                                 ArrayRef<int64_t> tree) {
+  if (failed(verifyIndexTree(tree)))
+    return emitError() << "invalid tla.stride index-tree";
+  return success();
+}
+
+LogicalResult LayoutType::verify(function_ref<InFlightDiagnostic()> emitError, ShapeType shape,
+                                 StrideType stride, ShapeType origin, LayoutTag layoutTag) {
+  (void)layoutTag;
+  if (!shape || !stride || !origin)
+    return emitError() << "tla.layout shape, stride, and origin must be non-null";
+  SmallVector<int64_t, 8> shapeLeaves;
+  SmallVector<int64_t, 8> strideLeaves;
+  if (failed(flattenIndexTree(shape.getTree(), shapeLeaves)) ||
+      failed(flattenIndexTree(stride.getTree(), strideLeaves)) ||
+      shapeLeaves.size() != strideLeaves.size())
+    return emitError() << "tla.layout shape and stride must have the same leaf count";
+  if (!sameIndexTreeStructure(shape.getTree(), stride.getTree()))
+    return emitError() << "tla.layout shape and stride must have the same group structure";
+  SmallVector<int64_t, 8> originLeaves;
+  if (failed(flattenIndexTree(origin.getTree(), originLeaves)))
+    return emitError() << "tla.layout origin must be valid and non-empty";
+  if ((layoutTag == LayoutTag::row_major || layoutTag == LayoutTag::column_major) &&
+      originLeaves.size() != shapeLeaves.size())
+    return emitError() << "tla.layout linear origin must match shape leaf count";
+  return success();
+}
+
+LogicalResult TlaTensorType::verify(function_ref<InFlightDiagnostic()> emitError, LayoutType layout,
+                                    CoordType coord, PtrType ptr) {
+  if (!layout || !coord || !ptr)
+    return emitError() << "tla.tensor layout/coord/ptr fields must be non-null";
+  if (!ptr.getPointee())
+    return emitError() << "tla.tensor pointer pointee type must be non-null";
+  SmallVector<int64_t, 8> shapeLeaves;
+  SmallVector<int64_t, 8> strideLeaves;
+  SmallVector<int64_t, 8> coordLeaves;
+  SmallVector<int64_t, 8> originLeaves;
+  if (failed(flattenIndexTree(layout.getShape().getTree(), shapeLeaves)) ||
+      failed(flattenIndexTree(layout.getStride().getTree(), strideLeaves)) ||
+      failed(flattenIndexTree(coord.getTree(), coordLeaves)) ||
+      failed(flattenIndexTree(layout.getOrigin().getTree(), originLeaves)))
+    return emitError() << "tla.tensor index-tree fields must be valid and non-empty";
+  if (shapeLeaves.size() != strideLeaves.size())
+    return emitError() << "tla.tensor layout shape and stride must have the same leaf count";
+  if (coordLeaves.size() != originLeaves.size())
+    return emitError() << "tla.tensor coord and origin must have the same leaf count";
+  return success();
+}
+
+Type MemrefType::parse(AsmParser &parser) {
+  auto &dialectParser = static_cast<DialectAsmParser &>(parser);
+  StringRef full = dialectParser.getFullSymbolSpec();
+  if (!full.consume_front("memref") || !full.consume_front("<") || !full.ends_with(">"))
+    return (parser.emitError(parser.getCurrentLocation(),
+                             "expected `<` ... `>` around tla.memref parameters"),
+            Type{});
+  StringRef payload = full.drop_back();
+  size_t markerPos = payload.rfind(',');
+  if (markerPos == StringRef::npos)
+    return (
+        parser.emitError(parser.getCurrentLocation(), "expected `, <address-space>` in tla.memref"),
+        Type{});
+  StringRef shapeAndElem = payload.take_front(markerPos);
+  StringRef addrPayload = payload.drop_front(markerPos + 1).trim();
+  FailureOr<AddressSpace> addrspace = parseAddressSpace(addrPayload);
+  if (failed(addrspace))
+    return (parser.emitError(parser.getCurrentLocation())
+                << "unknown tla.memref address space: " << addrPayload,
+            Type{});
+
+  size_t elemSepPos = shapeAndElem.rfind('x');
+  if (elemSepPos == StringRef::npos)
+    return Type{};
+  StringRef shapeOnly = shapeAndElem.take_front(elemSepPos);
+  Type elementType = parseTypeFromText(parser, shapeAndElem.drop_front(elemSepPos + 1));
+  if (!elementType)
+    return Type{};
+  SmallVector<int64_t, 4> shape;
+  SmallVector<StringRef, 4> dims;
+  shapeOnly.split(dims, 'x');
+  for (StringRef dim : dims) {
+    dim = dim.trim();
+    if (dim == "?") {
+      shape.push_back(ShapedType::kDynamic);
+      continue;
+    }
+    int64_t parsed = 0;
+    if (dim.getAsInteger(10, parsed))
+      return (parser.emitError(parser.getCurrentLocation())
+                  << "invalid tla.memref dimension: " << dim,
+              Type{});
+    shape.push_back(parsed);
+  }
+  return MemrefType::getChecked(
+      [&] { return parser.emitError(parser.getCurrentLocation(), "invalid tla.memref"); },
+      parser.getContext(), shape, elementType, *addrspace);
+}
+
+void MemrefType::print(AsmPrinter &printer) const {
+  printer << "<";
+  llvm::interleave(
+      getShape(), printer,
+      [&](int64_t dim) {
+        if (dim == ShapedType::kDynamic)
+          printer << "?";
+        else
+          printer << dim;
+      },
+      "x");
+  printer << "x" << getElementType() << ", " << stringifyAddressSpace(getAddressSpace()) << ">";
+}
+
+LogicalResult MemrefType::verify(function_ref<InFlightDiagnostic()> emitError,
+                                 ArrayRef<int64_t> shape, Type elementType,
+                                 AddressSpace addressSpace) {
+  (void)addressSpace;
+  if (shape.empty())
+    return emitError() << "tla.memref shape must be non-empty";
+  if (!elementType)
+    return emitError() << "tla.memref element type must be non-null";
+  for (int64_t dim : shape) {
+    if (dim < 0 && dim != ShapedType::kDynamic)
+      return emitError() << "tla.memref dimensions must be non-negative or dynamic";
+  }
+  return success();
+}
+
+Type ValueType::parse(AsmParser &parser) {
+  auto &dialectParser = static_cast<DialectAsmParser &>(parser);
+  StringRef full = dialectParser.getFullSymbolSpec();
+  if (!full.consume_front("value"))
+    return Type{};
+  Type elementType;
+  if (full.empty()) {
+    return ValueType::get(parser.getContext(), elementType);
+  }
+  if (!full.consume_front("<") || !full.ends_with(">"))
+    return (parser.emitError(parser.getCurrentLocation(),
+                             "expected optional `<` ... `>` around tla.value element type"),
+            Type{});
+  elementType = parseTypeFromText(parser, full.drop_back());
+  if (!elementType)
+    return Type{};
+  return ValueType::get(parser.getContext(), elementType);
+}
+
+void ValueType::print(AsmPrinter &printer) const {
+  if (getElementType())
+    printer << "<" << getElementType() << ">";
+}
+
+} // namespace tla
+
+#endif // TLA_DIALECT_TLA_IR_TLATYPESIMPL_INC

@@ -40,6 +40,9 @@
 __pycache__/
 *.egg-info
 dist/
+# hatch-vcs generated (see pyproject.toml [tool.hatch.build.hooks.vcs])
+python/tla_dsl/catlass/_version.py
+python/tla_dsl/.artifacts/
 # data bin
 *.bin
 *.dat
