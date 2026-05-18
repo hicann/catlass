@@ -57,6 +57,8 @@ if(TLA_DSL_BUILD_RUNTIME_WRAPPER)
     ${ASCEND_HOME_PATH}/include
     ${ASCEND_HOME_PATH}/include/experiment
     ${ASCEND_HOME_PATH}/include/experiment/msprof
+    ${ASCEND_HOME_PATH}/../ascend-toolkit/latest/x86_64-linux/pkg_inc
+    ${ASCEND_HOME_PATH}/../ascend-toolkit/latest/aarch64-linux/pkg_inc
     ${ASCEND_HOME_PATH}/../ascend-toolkit/latest/x86_64-linux/pkg_inc/runtime
     ${ASCEND_HOME_PATH}/../ascend-toolkit/latest/aarch64-linux/pkg_inc/runtime
   )

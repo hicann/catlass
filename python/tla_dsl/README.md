@@ -13,10 +13,11 @@
 |------|------|
 | `catlass/` | DSL 前端、运行时、与 MLIR Python 绑定的桥接逻辑 |
 | `csrc/mlir/` | `TlaCompile` 编译器、CMake 工程 `tla`、LLVM/MLIR Pass 与 lit 用例 |
+| `csrc/mlir/lib/Tools/CMakeLists.txt` | `TlaCompilePipeline`、`_tla_type_bridge_native`（Python 类型桥接）及可选 runtime wrapper 目标 |
 | `3rdparty/AscendNPU-IR` | AscendNPU-IR 子模块（`git submodule`）；TLA 需其 **`build/`** 下 TableGen 生成头与多份 `libBiShengIR*` |
 | `tests/` | `pytest` 与 `lit` |
 | `tools/generate_tla_python_bindings.py` | 由 TableGen 结果生成 `catlass/_mlir_bindings/tla_ops_gen.py` |
-| `build.sh`、`scripts/build_wheels.sh` | 与 **`catlass_DSL/build.sh`** 等价的一键流程：配置 **`csrc/mlir`**、`ninja tla-compiler`、可选 **`pip install -e .`** 与 **`hatch build`**（需已配置 **§2.2–2.4** 与 **`ASCEND_HOME_PATH`**） |
+| `build.sh`、`scripts/build_wheels.sh` | 一键配置 **`csrc/mlir`**、`ninja tla-compiler`、可选 **`pip install -e .`** 与 **`hatch build`**（需 **§2.2–2.4** 与 **`ASCEND_HOME_PATH`**） |
 | `examples/` | 端到端示例（如 `end_to_end/basic_mmad`） |
 
 ---
@@ -34,7 +35,7 @@ cd "${CATLASS_ROOT}"
 
 ### 2.2 创建 Conda 环境并安装依赖
 
-依赖由 **`python/tla_dsl/environment.yml`**（及 **`catlass_DSL/environment.yml`** 镜像）统一安装，下表为与 **TLA / MLIR 19.1.x** 对齐的版本摘要；**请勿**在未改 YAML 的情况下将 **`mlir` / `lit`** 等升到 **22+** 主版本，否则缺少 **`PybindAdaptors.h`**，`csrc/mlir` 配置会失败。
+依赖由 **`python/tla_dsl/environment.yml`** 统一安装，下表为与 **TLA / MLIR 19.1.x** 对齐的版本摘要；**请勿**在未改 YAML 的情况下将 **`mlir` / `lit`** 等升到 **22+** 主版本，否则缺少 **`PybindAdaptors.h`**，`csrc/mlir` 配置会失败。
 
 #### 2.2.1 依赖版本
 
@@ -95,47 +96,38 @@ source "${ASCEND_HOME_PATH}/../ascend-toolkit/set_env.sh"
 
 ### 2.4 拉取并构建 AscendNPU-IR
 
-`python/tla_dsl/csrc/mlir/CMakeLists.txt` 默认使用 **DSL 树内的** AscendNPU-IR 检出目录（与主仓 **`3rdparty/`** 命名一致，三方源码放在 **`python/tla_dsl/3rdparty/`** 下）：
+`python/tla_dsl/csrc/mlir/CMakeLists.txt`（及 **`csrc/mlir/lib/Tools/CMakeLists.txt`** 中的 `_tla_type_bridge_native`）默认链接 **DSL 树内** 的 AscendNPU-IR：
 
 ```text
 ${CATLASS_ROOT}/python/tla_dsl/3rdparty/AscendNPU-IR
 ```
 
-
-#### 完整源码构建流程
-
-**环境与版本（官方要求摘要）**
-
-- **CMake ≥ 3.28**、**Ninja ≥ 1.12**；推荐 **clang/clang++**（或按官方说明指定编译器）。  
-- 已安装 **CANN**，并已 **`source .../set_env.sh`**，保证 **`ASCEND_HOME_PATH`** 等与 TLA §2.3 一致。  
-- 首次完整构建前：**必须**拉齐嵌套子模块并（按官方）打补丁。
-
-**推荐一键流程（首次构建）**
+需 **CMake ≥ 3.28**、**Ninja ≥ 1.12**、**clang/clang++**，且 **§2.3** 中 CANN / **`ASCEND_HOME_PATH`** 已就绪。
 
 ```bash
-cd "${CATLASS_ROOT}/python/tla_dsl/3rdparty/AscendNPU-IR"
+cd "${CATLASS_ROOT}"
+git submodule update --init python/tla_dsl/3rdparty/AscendNPU-IR
 
-# 1) 嵌套子模块（含 llvm-project 等），耗时长、占磁盘大
-git submodule update --init --recursive
-
-# 2) 配置 + Ninja + 安装（首次建议 --apply-patches，见官方 build.sh 说明）
-./build-tools/build.sh -o ./build --build-type Release --apply-patches
+cd python/tla_dsl/3rdparty/AscendNPU-IR
+git submodule update --init
+mkdir -p build
+cd build
+cmake ../third-party/llvm-project/llvm -G Ninja \
+    -DCMAKE_C_COMPILER=clang \
+    -DCMAKE_CXX_COMPILER=clang++ \
+    -DCMAKE_CXX_FLAGS="-Wno-c2y-extensions" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DLLVM_ENABLE_PROJECTS="mlir" \
+    -DLLVM_EXTERNAL_PROJECTS="bishengir" \
+    -DLLVM_EXTERNAL_BISHENGIR_SOURCE_DIR=../ \
+    -DBSPUB_DAVINCI_BISHENGIR=ON \
+    -DBISHENGIR_BUILD_STANDALONE_IR_ONLY=ON \
+    -DMLIR_INCLUDE_TESTS=OFF \
+    -DLLVM_INCLUDE_TESTS=OFF
+ninja -j"$(nproc)"
 ```
 
-**后续增量构建**（已有 `build/` 且已打过补丁时）：
-
-```bash
-cd "${CATLASS_ROOT}/python/tla_dsl/3rdparty/AscendNPU-IR"
-./build-tools/build.sh -o ./build --build-type Release
-```
-
-**彻底重配构建目录**：
-
-```bash
-./build-tools/build.sh -o ./build --build-type Release -r --apply-patches
-```
-
-**校验 TableGen / 生成物是否就绪**（路径随 AscendNPU-IR 版本可能略有差异，以你盘上实际为准）：
+**校验 TableGen / 生成物是否就绪**（路径以本机构建树为准）：
 
 ```bash
 IR="${CATLASS_ROOT}/python/tla_dsl/3rdparty/AscendNPU-IR"
@@ -147,8 +139,6 @@ ls "$IR/build/lib"/libBiShengIRHIVMDialect.so 2>/dev/null || ls "$IR/build/lib"/
 上述检查通过后，**无需**再设 `TLA_DSL_PREBUILT`（默认即使用该路径）；或在其它机器上把 **`TLA_DSL_PREBUILT_ASCENDNPU_IR`** 指到同一套**已构建根目录**。
 
 #### 使用已构建的 AscendNPU-IR（不重复编译）
-
-若 AscendNPU-IR 已在其它目录构建完成（例如另一份工作区），可将根目录指给环境变量（**该根下仍须已有 `build/` 生成物**）：
 
 ```bash
 export TLA_DSL_PREBUILT_ASCENDNPU_IR="/path/to/built/AscendNPU-IR"
