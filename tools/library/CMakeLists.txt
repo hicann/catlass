@@ -39,29 +39,29 @@ message(STATUS "Catlass library operator code was generated successfully.")
 
 list(APPEND CATLASS_LIBRARY_GENERATED_SRCS src/manifest.cpp)
 
-set_source_files_properties(${CATLASS_LIBRARY_GENERATED_SRCS} PROPERTIES LANGUAGE ASCEND)
+set_source_files_properties(${CATLASS_LIBRARY_GENERATED_SRCS} PROPERTIES LANGUAGE ASC)
 
+add_compile_options($<$<COMPILE_LANGUAGE:ASC>:--npu-arch=dav-${CATLASS_ARCH}>)
+add_compile_definitions(CATLASS_ARCH=${CATLASS_ARCH})
+
+# common compile options
 add_compile_options(
-    $<$<COMPILE_LANGUAGE:ASCEND>:-Wno-macro-redefined>
-    $<$<COMPILE_LANGUAGE:ASCEND>:-Wno-ignored-attributes>
-
-    "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-stack-size=0x8000>"
-    "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-function-stack-size=0x8000>"
-    "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-record-overflow=true>"
-    "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-addr-transform>"
-    "SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-mllvm -cce-aicore-dcci-insert-for-scalar=false>"
+    $<$<COMPILE_LANGUAGE:ASC>:-Wno-macro-redefined>
+    $<$<COMPILE_LANGUAGE:ASC>:-Wno-ignored-attributes>
+    # these options may be removed after CANN 8.5.0
+    $<$<COMPILE_LANGUAGE:ASC>:-Wno-unused-value>
 )
 
-add_compile_definitions(L2_CACHE_HINT)
-add_compile_definitions(TILING_KEY_VAR)
+# these options may be removed after CANN 8.5.0
+add_link_options($<$<COMPILE_LANGUAGE:ASC>:-Wno-unused-command-line-argument>)
+
+#add_compile_definitions(L2_CACHE_HINT)
+#add_compile_definitions(TILING_KEY_VAR)
 
 add_library(catlass_kernels SHARED
     ${CATLASS_LIBRARY_GENERATED_SRCS}
     src/manifest.cpp
 )
-
-set(AICORE_ARCH dav-c220)
-target_compile_options(catlass_kernels PRIVATE $<$<COMPILE_LANGUAGE:ASCEND>:--cce-aicore-arch=${AICORE_ARCH}>)
 
 set_target_properties(catlass_kernels PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
@@ -71,6 +71,16 @@ target_include_directories(catlass_kernels PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include
     ${CMAKE_CURRENT_SOURCE_DIR}/../../examples/common
     ${_CMAKE_ASCEND_HOME_PATH}/include
+)
+
+target_link_directories(catlass_kernels PRIVATE ${ASCEND_HOME_PATH}/lib64)
+target_link_libraries(catlass_kernels PRIVATE
+    # AscendC necessary libraries
+    ascendc_runtime runtime profapi mmpa ascend_dump c_sec error_manager ascendcl
+    # other necessary libraries
+    tiling_api nnopbase platform
+    # system libraries
+    dl
 )
 
 set(CMAKE_INSTALL_PREFIX ${CMAKE_CURRENT_SOURCE_DIR}/../../output CACHE PATH "Installation prefix for CATLASS" FORCE)

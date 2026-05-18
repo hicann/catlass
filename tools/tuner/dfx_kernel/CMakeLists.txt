@@ -8,8 +8,21 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
-add_compile_definitions(TILING_KEY_VAR)
-add_compile_options(--cce-aicore-arch=dav-c220)
 file(GLOB DFX_SRC ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
-set_source_files_properties(${DFX_SRC} PROPERTIES LANGUAGE ASCEND)
+set_source_files_properties(${DFX_SRC} PROPERTIES LANGUAGE ASC)
 add_library(dfx_kernel STATIC ${DFX_SRC})
+
+target_compile_options(dfx_kernel PRIVATE
+    $<$<COMPILE_LANGUAGE:ASC>: --npu-arch=dav-${CATLASS_ARCH}>
+)
+
+target_link_directories(dfx_kernel PRIVATE ${ASCEND_HOME_PATH}/lib64)
+target_link_libraries(dfx_kernel PRIVATE
+    # AscendC necessary libraries
+    ascendc_runtime mmpa
+    runtime
+    profapi ascend_dump c_sec error_manager ascendcl
+    # other necessary libraries
+    tiling_api nnopbase platform
+)
+

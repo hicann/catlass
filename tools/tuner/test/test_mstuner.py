@@ -20,10 +20,10 @@ import unittest
 class MsTunerCatlassTest(unittest.TestCase):
 
     CATLASS_OUTPUT_BINARY_PATH = os.path.join(os.path.dirname(
-        os.path.abspath(__file__)), "..", "output", "bin"
+        os.path.abspath(__file__)), "..", "..", "..", "output", "bin"
     )
     CATLASS_OUTPUT_LIB_PATH = os.path.join(os.path.dirname(
-        os.path.abspath(__file__)), "..", "output", "lib64"
+        os.path.abspath(__file__)), "..", "..", "..", "output", "lib64"
     )
     MSTUNER_TEST_TEMP_PATH = os.path.join(os.path.dirname(
         os.path.abspath(__file__)), "mstuner_test_temp"

@@ -58,7 +58,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
 endif()
 
 add_subdirectory(examples)
-# add_subdirectory(tools)
+add_subdirectory(tools)
 add_subdirectory(3rdparty)
 
 if(DEFINED BUILD_TESTS AND BUILD_TESTS)
