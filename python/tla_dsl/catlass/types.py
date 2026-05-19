@@ -572,8 +572,12 @@ def _slice_indices(index: slice, length: int) -> list[int]:
 
 
 def _coerce_nested_tensor_value(value: Any) -> Any:
-    if hasattr(value, "tolist") and not isinstance(value, (list, tuple)):
+    # Keep numpy arrays as-is to avoid expensive tolist() conversion
+    np = _require_numpy()
+    if hasattr(value, "tolist") and not isinstance(value, (list, tuple, np.ndarray)):
         return value.tolist()
+    if isinstance(value, np.ndarray):
+        return value
     return value
 
 
@@ -588,6 +592,15 @@ def _enumerate_leaf_paths_with_prefix(
         return [list(prefix)]
     tail_lists = [list(t) for t in product(*[range(d) for d in tail_dims])]
     return [prefix + tl for tl in tail_lists]
+
+
+def _path_to_flat_index(path: list[int], dims: tuple[int, ...]) -> int:
+    flat_idx = 0
+    multiplier = 1
+    for idx, dim in zip(reversed(path), reversed(dims)):
+        flat_idx += idx * multiplier
+        multiplier *= dim
+    return flat_idx
 
 
 def _assign_tensor_data_view(
@@ -616,14 +629,31 @@ def _assign_tensor_data_view(
         if not view._path_leaves:
             view._storage.clear()
         flat = arr.ravel(order="C")
-        for idx_list, v in zip(
-            _enumerate_leaf_paths_with_prefix(view._shape_comp, view._path_leaves),
-            flat,
-        ):
-            k = _pack_nested_key_from_leaf_indices(view._shape_comp, idx_list)
-            _set_tensor_storage_value(
-                view._storage, k, v.item() if hasattr(v, "item") else v
-            )
+        # Use flat index directly for much faster bulk storage
+        total_dims = view._dims
+        prefix_len = len(view._path_leaves)
+        if prefix_len == 0:
+            # Fast path: root level, direct sequential storage
+            for i, v in enumerate(flat):
+                view._storage[i] = v.item() if hasattr(v, "item") else v
+        else:
+            # Nested path: compute base index and use multipliers
+            base_idx = _path_to_flat_index(view._path_leaves, total_dims)
+            # Pre-compute multipliers for remaining dimensions
+            remaining_dims = total_dims[prefix_len:]
+            multipliers = [1]
+            for d in reversed(remaining_dims[1:]):
+                multipliers.insert(0, multipliers[0] * d)
+            # Assign values with computed flat indices
+            for i, v in enumerate(flat):
+                # Calculate offset within the remaining dimensions
+                offset = 0
+                temp_i = i
+                for dim, mult in zip(remaining_dims, multipliers):
+                    offset += (temp_i % dim) * mult
+                    temp_i //= dim
+                flat_idx = base_idx + offset
+                view._storage[flat_idx] = v.item() if hasattr(v, "item") else v
         if view._on_mutate is not None:
             view._on_mutate()
         return
@@ -715,7 +745,7 @@ class _TensorDataList:
             raise IndexError("tensor data index out of range")
         new_path = self._path_leaves + [normalized]
         if len(new_path) == len(self._dims):
-            key = _pack_nested_key_from_leaf_indices(self._shape_comp, new_path)
+            key = _path_to_flat_index(new_path, self._dims)
             return self._storage.get(key)
         return _TensorDataList(
             self._storage,
@@ -750,7 +780,7 @@ class _TensorDataList:
             raise IndexError("tensor data index out of range")
         new_path = self._path_leaves + [normalized]
         if len(new_path) == len(self._dims):
-            key = _pack_nested_key_from_leaf_indices(self._shape_comp, new_path)
+            key = _path_to_flat_index(new_path, self._dims)
             _set_tensor_storage_value(self._storage, key, value)
             if self._on_mutate is not None:
                 self._on_mutate()
@@ -833,11 +863,11 @@ def _tensor_storage_to_nested_list(storage: dict[Any, Any], shape_comp: Any) -> 
     """Nested Python lists aligned with leaf axes; structure follows ``shape_comp`` grouping."""
     dims = _leaf_dims(shape_comp)
     if not dims:
-        return storage.get(_pack_nested_key_from_leaf_indices(shape_comp, []))
+        return storage.get(_path_to_flat_index([], dims))
 
     def build(path: list[int]) -> Any:
         if len(path) == len(dims):
-            return storage.get(_pack_nested_key_from_leaf_indices(shape_comp, path))
+            return storage.get(_path_to_flat_index(path, dims))
         return [build(path + [i]) for i in range(dims[len(path)])]
 
     return build([])
@@ -886,9 +916,13 @@ def _register_runtime_pointer(kind: str, ptr: int) -> None:
 
 
 def _has_tensor_host_data(storage: dict[Any, Any], shape_comp: Any) -> bool:
-    for idx in _enumerate_leaf_paths_with_prefix(shape_comp, []):
-        k = _pack_nested_key_from_leaf_indices(shape_comp, idx)
-        if k not in storage or storage[k] is None:
+    dims = _leaf_dims(shape_comp)
+    # Check all flat indices from 0 to product(dims)-1
+    total = 1
+    for d in dims:
+        total *= d
+    for i in range(total):
+        if i not in storage or storage[i] is None:
             return False
     return True
 
