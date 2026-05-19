@@ -362,6 +362,10 @@ public:
         auto tensorL0C = tla::MakeTensor(l0CTensorList[l0CListId], layoutInL0C, Arch::PositionL0C{});
         auto tensorL0Bias = tla::MakeTensor(l0BiasTensor, L0BIAS_LAYOUT, Arch::PositionBias{});
 
+        if constexpr (!ENABLE_UNIT_FLAG) {
+            AscendC::WaitFlag<AscendC::HardEvent::FIX_M>(l0CEventList[l0CListId]);
+        }
+
         // main loop
         uint32_t kL1Loop = CeilDiv<L1_TILE_K>(kBlockActual);
         for (uint32_t kL1Idx = 0; kL1Idx < kL1Loop; kL1Idx++) {

@@ -28,7 +28,8 @@ python3 examples/59_ascend950_a8w4_mx_matmul/gen_data.py 128 128 128 0 1
 # trans_a表示A矩阵是否转置，0是不转置，1是转置
 # trans_b表示B矩阵是否转置，0是不转置，1是转置
 # 执行测试样例
-./output/bin/59_ascend950_a8w4_mx_matmul 128 128 128 0
+cd output/bin
+./59_ascend950_a8w4_mx_matmul 128 128 128 0
 # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID
 # Device ID可选，默认为0
 ```
