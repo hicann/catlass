@@ -108,6 +108,23 @@ std::vector<T> GenerateGroupList(uint32_t m, uint32_t problemCount)
     return groupList;
 }
 
+// Generate an ascending random sequence as grouplist
+template <typename T = int32_t, bool isCumsum = true>
+std::vector<T> GenerateAverageGroupList(uint32_t m, uint32_t problemCount)
+{
+    uint32_t groupSize = m / problemCount;
+    std::vector<T> groupList(problemCount);
+    for (int i = 0; i < problemCount; ++i) {
+        if constexpr (isCumsum) {
+            groupList[i] = groupSize * (i + 1);
+        }else {
+            groupList[i] = groupSize;
+        }
+    }
+
+    return groupList;
+}
+
 } // namespace Catlass::golden
 
 #endif // EXAMPLES_COMMON_GOLDEN_FILL_DATA_HPP

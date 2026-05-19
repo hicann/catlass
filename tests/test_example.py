@@ -12,6 +12,7 @@
 
 import os
 import re
+import itertools
 import subprocess
 import unittest
 from typing import List, Type
@@ -61,6 +62,9 @@ class CatlassExampleTest(unittest.TestCase):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
+        self._ret_check(ret)
+    
+    def _ret_check(self, ret: subprocess.CompletedProcess):
         for error_log_line in ret.stderr.decode().splitlines():
             acl_match = re.match(r"^.*aclError:.*([1-9][0-9]{5})", error_log_line)
             rt_match = re.match(r"^.*rtError:.*([1-9][0-9]{5})", error_log_line)
@@ -334,6 +338,18 @@ class CatlassExampleTest(unittest.TestCase):
         )
         case_cpp = [str(i) for i in [512, 1024, 256]] + [1]
         self.run_case("54_ascend950_fp4_mx_matmul_aswt", case_cpp)
+    
+    @only_on_3510
+    def test_55_ascend950_mx_grouped_matmul_slice_m(self):
+        for (trans, quant_type) in itertools.product(("0", "1"), ("float8_e4m3fn", "float8_e5m2", "float4_e2m1fn_x2")):
+            case_py = [str(i) for i in [2, 588, 988, 1030]] + [trans, quant_type, '0']  # G, M, N, K, trans_b, quant_type, device_id
+            ret = subprocess.run(
+                ["python", os.path.join(
+                    CMAKE_EXAMPLES_PATH, "55_ascend950_mx_grouped_matmul_slice_m", "gen_data_compare.py")] + case_py,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self._ret_check(ret)
 
     @only_on_3510
     def test_57_ascend950_matmul_full_dequant(self):
