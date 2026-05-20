@@ -128,6 +128,8 @@ CATLASS所需的软硬件环境依赖如下：
 | [v1.4.0](https://gitcode.com/cann/catlass/releases/v1.4.0)~[v1.2.2](https://gitcode.com/cann/catlass/releases/v1.2.2) | [8.2.RC1](https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.2.RC1)                                                                                                                                           | [Atlas A2 训练系列产品 / Atlas A2 推理系列产品](https://www.hiascend.com/document/detail/zh/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html) <br>[Atlas A3 训练系列产品 / Atlas A3 推理系列产品](https://www.hiascend.com/document/detail/zh/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html)                              |
 | [v1.2.1](https://gitcode.com/cann/catlass/releases/v1.2.1)~[v1.0.0](https://gitcode.com/cann/catlass/releases/v1.0.0) | [8.2.RC1.alpha002](https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.2.RC1.alpha002)                                                                                                                         | [Atlas A2 训练系列产品 / Atlas A2 推理系列产品](https://www.hiascend.com/document/detail/zh/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html) <br>[Atlas A3 训练系列产品 / Atlas A3 推理系列产品](https://www.hiascend.com/document/detail/zh/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html)                              |
 
+- 若您需要使用`pytorch`进行精度测试等辅助开发，需要安装`cann-ops`包（如`cann-910b-ops`/`cann-a3-ops`/`cann-950-ops`以调用其中的算子实现。在`Ascend 950PR/Ascend 950DT`系列产品中，`cann-950-ops`仅在CANN 9.0.0正式版提供。
+
 下述环境经测试支持[当前CATLASS](https://gitcode.com/cann/catlass)构建：
 
 | 系统                           | `CANN` | `gcc` | `cmake` | `python` |

@@ -13,5 +13,5 @@ pyyaml
 requests
 scipy
 sympy
-torch==2.9.0
-torch_npu==2.9.0
+torch
+torch_npu
