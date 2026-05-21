@@ -20,6 +20,41 @@ from manifest import OperationRegistry
 
 LOGGER = logging.getLogger(__name__)
 
+@dataclass
+class ArchInfo:
+    l1_max_size: int
+    l0a_max_size: int
+    l0b_max_size: int
+    l0c_max_size: int
+
+
+ATLAS_A2_INFO = ArchInfo(
+    l1_max_size=512 * 1024,
+    l0a_max_size=64 * 1024,
+    l0b_max_size=64 * 1024,
+    l0c_max_size=128 * 1024
+)
+
+
+ASCEND_950_INFO = ArchInfo(
+    l1_max_size=512 * 1024,
+    l0a_max_size=64 * 1024,
+    l0b_max_size=64 * 1024,
+    l0c_max_size=256 * 1024
+)
+
+
+ARCH_INFO_MAP = {
+    library.ArchTag.A2: ATLAS_A2_INFO,
+    library.ArchTag.ASCEND_950: ASCEND_950_INFO
+}
+
+
+ATLAS_A2_L1_SIZE_MAX = 512 * 1024
+ATLAS_A2_L0A_SIZE_MAX = 64 * 1024
+ATLAS_A2_L0B_SIZE_MAX = 64 * 1024
+ATLAS_A2_L0C_SIZE_MAX = 128 * 1024
+
 
 @dataclass
 class SearchSpaceConfiguration:
@@ -41,6 +76,7 @@ class SearchSpaceConfiguration:
 
 
 def generate_tile_shape_default(
+    arch_tag: library.ArchTag,
     l1_tile_m_range: tuple,
     l1_tile_n_range: tuple,
     l1_tile_k_range: tuple,
@@ -49,8 +85,12 @@ def generate_tile_shape_default(
     l0_tile_n_range = l1_tile_n_range
     l0_tile_k_range = tuple(int(x / 4) for x in l1_tile_k_range)
 
+    if arch_tag not in ARCH_INFO_MAP.keys():
+        raise Exception(f'cannot find arch info from an unknown ArchTag')
+
     tile_shapes = list(generate_tile_shapes(
         tile_shape_constraint_for_pingpong, # 默认减枝函数
+        arch_tag=arch_tag,
         element_sizes=(2, 2, 4), # size of ElementA, ElementB, ElementAccumulator
         stages=(2),
         step=16,
@@ -72,6 +112,7 @@ def register_custom_kernel(
 ):
 
     tile_shapes = generate_tile_shape_default(
+        manifest.arch,
         config.l1_tile_m_range, config.l1_tile_n_range, config.l1_tile_k_range
     )
 
@@ -95,14 +136,8 @@ def register_custom_kernel(
 
 
 ############### search space generation methods ###############
-L1_SIZE_MAX = 512 * 1024
-L0A_SIZE_MAX = 64 * 1024
-L0B_SIZE_MAX = 64 * 1024
-L0C_SIZE_MAX = 128 * 1024
-UB_SIZE_MAX = 192 * 1024
-
-
 def tile_shape_constraint_for_pingpong(
+    arch_info: ArchInfo,
     l1_tile_shape,
     l0_tile_shape,
     element_sizes_tuple,
@@ -124,26 +159,77 @@ def tile_shape_constraint_for_pingpong(
     if l1_m != l0_m or l1_n != l0_n:
         return False
 
+    # L0TileShape::K cannot exceed L1TileShape::K
+    if l0_k > l1_k:
+        return False
+
     # check L1
-    if (l1a_tile_size * stages + l1b_tile_size * stages) > L1_SIZE_MAX:
+    if (l1a_tile_size * stages + l1b_tile_size * stages) > arch_info.l1_max_size:
         return False
 
     # check L0A
-    if l0a_tile_size * stages > L0A_SIZE_MAX:
+    if l0a_tile_size * stages > arch_info.l0a_max_size:
         return False
 
     # check L0B
-    if l0b_tile_size * stages > L0B_SIZE_MAX:
+    if l0b_tile_size * stages > arch_info.l0b_max_size:
         return False
 
     # check L0C
-    if l0c_tile_size > L0C_SIZE_MAX:
+    if l0c_tile_size > arch_info.l0c_max_size:
+        return False
+
+    return True
+
+
+def tile_shape_constraint_for_tla_pingpong(
+    arch_info: ArchInfo,
+    l1_tile_shape,
+    l0_tile_shape,
+    element_sizes_tuple,
+    stages_tuple,
+):
+    # constraint function for "Gemm::MmadAtlasA2Pingpong"
+    l1_m, l1_n, l1_k = l1_tile_shape
+    l0_m, l0_n, l0_k = l0_tile_shape
+    element_a_size, element_b_size, element_accumulator_size = element_sizes_tuple
+    l0a_stages, l0b_stages, l0c_stages, l1a_stages, l1b_stages = stages_tuple
+
+    l1a_tile_size = l1_m * l1_k * element_a_size
+    l1b_tile_size = l1_n * l1_k * element_b_size
+    l0a_tile_size = l0_m * l0_k * element_a_size
+    l0b_tile_size = l0_k * l0_n * element_b_size
+    l0c_tile_size = l1_m * l1_n * element_accumulator_size
+
+    # the basic blocks of L1 and L0 differ on the m and n axes is not supported yet
+    if l1_m != l0_m or l1_n != l0_n:
+        return False
+
+    # L0TileShape::K cannot exceed L1TileShape::K
+    if l0_k > l1_k:
+        return False
+
+    # check L1
+    if (l1a_tile_size * l1a_stages + l1b_tile_size * l1b_stages) > arch_info.l1_max_size:
+        return False
+
+    # check L0A
+    if l0a_tile_size * l0a_stages > arch_info.l0a_max_size:
+        return False
+
+    # check L0B
+    if l0b_tile_size * l0b_stages > arch_info.l0b_max_size:
+        return False
+
+    # check L0C
+    if l0c_tile_size * l0c_stages > arch_info.l0c_max_size:
         return False
 
     return True
 
 
 def tile_shape_constraint_for_preload_async(
+    arch_info: ArchInfo,
     l1_tile_shape,
     l0_tile_shape,
     element_sizes_tuple,
@@ -165,31 +251,36 @@ def tile_shape_constraint_for_preload_async(
     if l1_m != l0_m or l1_n != l0_n:
         return False
 
+    # L0TileShape::K cannot exceed L1TileShape::K
+    if l0_k > l1_k:
+        return False
+
     # check L1
-    if (l1a_tile_size * l1_stages + l1b_tile_size * l1_stages) > L1_SIZE_MAX:
+    if (l1a_tile_size * l1_stages + l1b_tile_size * l1_stages) > arch_info.l1_max_size:
         return False
 
     # check L0A
-    if l0a_tile_size * l0a_stages > L0A_SIZE_MAX:
+    if l0a_tile_size * l0a_stages > arch_info.l0a_max_size:
         return False
 
     # check L0B
-    if l0b_tile_size * l0b_stages > L0B_SIZE_MAX:
+    if l0b_tile_size * l0b_stages > arch_info.l0b_max_size:
         return False
 
     # check L0C
-    if l0c_tile_size * l0c_stages > L0C_SIZE_MAX:
+    if l0c_tile_size * l0c_stages > arch_info.l0c_max_size:
         return False
 
     return True
 
 def tile_shape_constraint_for_gelu(
+    arch_info: ArchInfo,
     l1_tile_shape,
     l0_tile_shape,
     element_sizes_tuple,
     stages_tuple
 ):
-    if not tile_shape_constraint_for_pingpong(l1_tile_shape, l0_tile_shape, element_sizes_tuple[:3], stages_tuple):
+    if not tile_shape_constraint_for_pingpong(arch_info, l1_tile_shape, l0_tile_shape, element_sizes_tuple[:3], stages_tuple):
         return False
 
     _, _, l1_k = l1_tile_shape
@@ -197,8 +288,9 @@ def tile_shape_constraint_for_gelu(
     _, _, element_accumulator_size, element_d_size = element_sizes_tuple 
     operands_num = 2
     compute_length = l0_m * l0_n // 2
-    
+
     # UB Size limit
+    UB_SIZE_MAX = 192 * 1024
     if compute_length * (operands_num * element_accumulator_size + element_d_size) > UB_SIZE_MAX:
         return False
 
@@ -220,6 +312,7 @@ class TileShapeRange:
 
 def generate_tile_shapes(
     constraint_func: callable = tile_shape_constraint_for_pingpong,
+    arch_tag: library.ArchTag = library.ArchTag.A2,
     element_sizes: tuple = (2, 2, 4),
     stages: tuple = (2),
     step: int = 16,
@@ -235,6 +328,11 @@ def generate_tile_shapes(
     if step % 16 != 0:
         raise ValueError(f"step must be multiples of 16")
 
+    if arch_tag not in ARCH_INFO_MAP.keys():
+        raise Exception(f'cannot find arch info from an unknown ArchTag')
+
+    arch_info = ARCH_INFO_MAP[arch_tag]
+
     def generator(
         element_sizes,
         stages
@@ -249,6 +347,7 @@ def generate_tile_shapes(
         ]
         for l1_m, l1_n, l1_k, l0_m, l0_n, l0_k in product(*params_ranges):
             if constraint_func is None or constraint_func(
+                arch_info,
                 (l1_m, l1_n, l1_k),
                 (l0_m, l0_n, l0_k),
                 element_sizes,
@@ -275,6 +374,7 @@ def register_gemm_00_basic_matmul_operation(manifest):
     # 设定L1/L0TileShape的搜索范围、搜索步长、减枝函数，生成范围内全量搜索结点
     tile_shapes = list(generate_tile_shapes(
         tile_shape_constraint_for_pingpong, # 自定义减枝函数
+        arch_tag = manifest.arch,
         element_sizes=(2, 2, 4), # size of ElementA, ElementB, ElementAccumulator
         stages=(2),
         step=16,
@@ -332,6 +432,7 @@ def register_gemm_08_grouped_matmul_operation(manifest):
     # generate L1/L0TileShape search space
     tile_shapes = list(generate_tile_shapes(
         tile_shape_constraint_for_preload_async, # 自定义减枝函数
+        arch_tag = manifest.arch,
         element_sizes=(2, 2, 4), # size of ElementA, ElementB, ElementAccumulator
         stages=(1, 2, 4, 2, 1), # Preload/L1/L0A/L0B/L0C stages
         step=16,
@@ -384,6 +485,7 @@ def register_gemm_06_optimized_matmul_padding_ab_operation(manifest):
     # generate L1/L0TileShape search space
     tile_shapes = list(generate_tile_shapes(
         tile_shape_constraint_for_pingpong, # 自定义减枝函数
+        arch_tag = manifest.arch,
         element_sizes=(2, 2, 4), # size of ElementA, ElementB, ElementAccumulator
         stages=(2),
         step=16,
@@ -439,6 +541,7 @@ def register_gemm_06_optimized_matmul_padding_a_only_operation(manifest):
     # generate L1/L0TileShape search space
     tile_shapes = list(generate_tile_shapes(
         tile_shape_constraint_for_pingpong, # 自定义减枝函数
+        arch_tag = manifest.arch,
         element_sizes=(2, 2, 4), # size of ElementA, ElementB, ElementAccumulator
         stages=(2),
         step=16,
@@ -494,6 +597,7 @@ def register_gemm_06_optimized_matmul_padding_b_only_operation(manifest):
     # generate L1/L0TileShape search space
     tile_shapes = list(generate_tile_shapes(
         tile_shape_constraint_for_pingpong, # 自定义减枝函数
+        arch_tag = manifest.arch,
         element_sizes=(2, 2, 4), # size of ElementA, ElementB, ElementAccumulator
         stages=(2),
         step=16,
@@ -549,6 +653,7 @@ def register_gemm_06_optimized_matmul_without_padding_operation(manifest):
     # generate L1/L0TileShape search space
     tile_shapes = list(generate_tile_shapes(
         tile_shape_constraint_for_pingpong, # 自定义减枝函数
+        arch_tag = manifest.arch,
         element_sizes=(2, 2, 4), # size of ElementA, ElementB, ElementAccumulator
         stages=(2),
         step=16,
@@ -604,6 +709,7 @@ def register_gemm_08_grouped_matmul_operation(manifest):
     # generate L1/L0TileShape search space
     tile_shapes = list(generate_tile_shapes(
         tile_shape_constraint_for_preload_async, # 自定义减枝函数
+        arch_tag = manifest.arch,
         element_sizes=(2, 2, 4), # size of ElementA, ElementB, ElementAccumulator
         stages=(1, 2, 4, 2, 1), # Preload/L1/L0A/L0B/L0C stages
         step=16,
@@ -639,8 +745,6 @@ def register_gemm_08_grouped_matmul_operation(manifest):
 ################## 08_grouped_matmul end ##################
 
 
-
-
 ################## 12_quant_matmul ##################
 @OperationRegistry.register('12_quant_matmul')
 def register_gemm_quant_matmul_operation(manifest):
@@ -658,6 +762,7 @@ def register_gemm_quant_matmul_operation(manifest):
     # generate L1/L0TileShape search space
     tile_shapes = list(generate_tile_shapes(
         tile_shape_constraint_for_preload_async, # 自定义减枝函数
+        arch_tag = manifest.arch,
         element_sizes=(1, 1, 4), # size of ElementA, ElementB, ElementAccumulator
         stages=(1, 2, 4, 2, 1), # Preload/L1/L0A/L0B/L0C stages
         step=32,
@@ -694,8 +799,6 @@ def register_gemm_quant_matmul_operation(manifest):
 ################## quant_matmul end ##################
 
 
-
-
 ################### 27_matmul_gelu ##################
 @OperationRegistry.register('27_matmul_gelu')
 def register_gemm_27_matmul_gelu_operation(manifest):
@@ -712,6 +815,7 @@ def register_gemm_27_matmul_gelu_operation(manifest):
     # generate L1/L0TileShape search space
     tile_shapes = list(generate_tile_shapes(
         tile_shape_constraint_for_gelu, # Gelu(with epilogue)减枝函数
+        arch_tag = manifest.arch,
         element_sizes=(2, 2, 4, 2), # ElementA(half), ElementB(half), ElementAccu(float), ElementD(half)
         stages=(2),
         step=16,
@@ -744,3 +848,56 @@ def register_gemm_27_matmul_gelu_operation(manifest):
         )
         manifest.append(op)
 ################### 27_matmul_gelu end ##################
+
+
+################## 43_ascend950_basic_matmul ##################
+@OperationRegistry.register('43_ascend950_basic_matmul', [library.ArchTag.ASCEND_950])
+def register_gemm_43_ascend950_basic_matmul_operation(manifest):
+
+    layouts = [
+        [library.LayoutType.RowMajor, library.LayoutType.RowMajor, library.LayoutType.RowMajor],
+    ]
+    data_types = [
+        [library.DataType.fp32, library.DataType.fp32, library.DataType.fp32],
+    ]
+    block_swizzle_descriptions = [
+        'Gemm::Block::GemmIdentityBlockSwizzle<3, 1>',
+    ]
+
+    # generate L1/L0TileShape search space
+    tile_shapes = list(generate_tile_shapes(
+        tile_shape_constraint_for_tla_pingpong, # 自定义减枝函数
+        arch_tag = manifest.arch,
+        element_sizes=(4, 4, 4), # size of ElementA, ElementB, ElementC
+        stages=(2, 2, 1, 2, 2), # L0A/L0B/L0C/L1A/L1B stages
+        step=16,
+        tile_shape_range=TileShapeRange(
+            l1_tile_m_range=(128, 256),
+            l1_tile_n_range=(128, 256),
+            l1_tile_k_range=(128, 256),
+            l0_tile_m_range=(128, 256),
+            l0_tile_n_range=(128, 256),
+            l0_tile_k_range=(32, 64)
+        )
+    ))
+    LOGGER.info(f'43_ascend950_basic_matmul tile_shapes size={len(tile_shapes)}')
+
+    # 正交tiling参数组合
+    for layout, data_type, tile_shape, block_swizzle in product(
+        layouts, data_types, tile_shapes, block_swizzle_descriptions
+    ):
+        l1_tile_shape, l0_tile_shape = tile_shape
+        tensor_a = library.GemmTypeDescription(data_type[0], layout[0])
+        tensor_b = library.GemmTypeDescription(data_type[1], layout[1])
+        tensor_c = library.GemmTypeDescription(data_type[2], layout[2])
+        op = GemmOperation(
+            kernel_type='43_ascend950_basic_matmul',
+            l1_tile_shape=l1_tile_shape,
+            l0_tile_shape=l0_tile_shape,
+            a_type=tensor_a,
+            b_type=tensor_b,
+            c_type=tensor_c,
+            block_swizzle=block_swizzle,
+        )
+        manifest.append(op)
+################## 43_ascend950_basic_matmul end ##################

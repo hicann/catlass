@@ -193,7 +193,6 @@ private:
     Library::QuantMatmulGemmConfiguration config_{};
 };
 
-
 struct MatmulGeluGemmOpConfig : public GemmOpConfig {
     explicit MatmulGeluGemmOpConfig(const Library::OperationDescription &desp)
         : GemmOpConfig(desp)
@@ -204,10 +203,8 @@ struct MatmulGeluGemmOpConfig : public GemmOpConfig {
     bool InitConfig(CommandLineParser &parser) override;
     bool InitArgument(Library::Operation *op) override;
     void SaveMetric(Metric &metric) override;
-    
     void* GetConfig() override { return &config_; };
     void* GetArg() override { return &arg_; }; 
-
 
 private:
     struct ArgumentSize {
@@ -224,6 +221,25 @@ private:
 
     Library::MatmulGeluGemmArguments arg_{};
     Library::MatmulGeluGemmConfiguration config_{};
+};
+
+class BasicMatmulTla950GemmOpConfig : public GemmOpConfig {
+public:
+    explicit BasicMatmulTla950GemmOpConfig(const Library::OperationDescription &desp)
+        : GemmOpConfig(desp)
+    {
+        subKind_ = static_cast<uint32_t>(Library::GemmKind::BasicMatmulTla950);
+    }
+
+    bool InitConfig(CommandLineParser &parser) override;
+    bool InitArgument(Library::Operation *op) override;
+
+    void* GetConfig() override { return &config_; };
+    void* GetArg() override { return &arg_; };
+
+private:
+    Library::BasicMatmulGemmArguments arg_{};
+    Library::BasicMatmulGemmConfiguration config_{};
 };
 } // namespace Catlass
 #endif // CATLASS_TUNER_GEMM_OP_CONFIG_H

@@ -14,25 +14,31 @@ import os
 import shutil
 import logging
 import gemm_operation
+import library
 
 LOGGER = logging.getLogger(__name__)
 
 
 class OperationRegistry:
-    register_functions = {}
-    register_functions_high_priority = {}
+    archs = list(library.ArchTag)
+    register_functions = {arch: {} for arch in archs}
+    register_functions_high_priority = {arch: {} for arch in archs}
 
     @classmethod
-    def register(cls, name):
+    def register(cls, name, arch_list=None):
         def decorator(func):
-            cls.register_functions[name] = func
+            archs = arch_list or [library.ArchTag.A2]
+            for arch in archs:
+                cls.register_functions[arch][name] = func
             return func
         return decorator
 
     @classmethod
-    def register_high_priority(cls, name):
+    def register_high_priority(cls, name, arch_list=None):
         def decorator(func):
-            cls.register_functions_high_priority[name] = func
+            archs = arch_list or [library.ArchTag.A2]
+            for arch in archs:
+                cls.register_functions_high_priority[arch][name] = func
             return func
         return decorator
 
@@ -45,20 +51,36 @@ class Manifest:
         self.operations_dict = {}
         self.enable_filter_out = True
         self.filtered_kernels = [args.kernels]
+        self.arch = library.ArchTag.A2
 
         self.target_generator = {
             'gemm': gemm_operation.GemmOperationGenerator
         }
-        for _, func in OperationRegistry.register_functions_high_priority.items():
-            func(self)
-        for name, func in OperationRegistry.register_functions.items():
-            if name in OperationRegistry.register_functions_high_priority:
-                LOGGER.info(
-                    f'skip search space registration of {name} in search_space.py'
-                    f' due to a duplicate registration in search_space_config.py'
-                )
-            else:
+
+        if args.arch in library.ARCH_TAG_DICT.keys():
+            self.arch = library.ARCH_TAG_DICT[args.arch]
+        else:
+            raise Exception(f'unknown arch {args.arch}')
+        LOGGER.info(f'arch tag is {self.arch.to_code()}')
+
+        for arch, inner_dict in OperationRegistry.register_functions_high_priority.items():
+            if arch is not self.arch:
+                continue
+            for _, func in inner_dict.items():
                 func(self)
+
+        for arch, inner_dict in OperationRegistry.register_functions.items():
+            if arch is not self.arch:
+                continue
+            for name, func in inner_dict.items():
+                if name in OperationRegistry.register_functions_high_priority[arch]:
+                    LOGGER.info(
+                        f'skip seach space registration of {name} in search_space.py'
+                        f' due to a duplicate registration in seach_sapce_config.py'
+                    )
+                else:
+                    func(self)
+
         LOGGER.info(f'operations that will be generated in total: {len(self.operations)}')
 
         if len(self.operations) > 10000:

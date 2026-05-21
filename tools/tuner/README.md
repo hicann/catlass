@@ -64,13 +64,27 @@ case_id,task_duration(us),device_id,operation,description,m,n,k,A,B,C
 bash scripts/build.sh -DCATLASS_LIBRARY_KERNELS=00_basic_matmul mstuner_catlass
 ```
 
+支持通过`-DCATLASS_ARCH=<arch>`指定目标架构，已支持如下架构，目前默认使用`2201`
+
+- Atlas A2 训练系列产品 / Atlas A2 推理系列产品：`2201`
+- Atlas A3 训练系列产品 / Atlas A3 推理系列产品：`2201`
+- Ascend 950PR/Ascend 950DT：`3510`
+
+比如使用如下命令，指定Ascend 950PR架构编译`43_ascend950_basic_matmul`类算子
+
+```bash
+bash scripts/build.sh -DCATLASS_ARCH=3510 -DCATLASS_LIBRARY_KERNELS=43_ascend950_basic_matmul mstuner_catlass
+```
+
 可直接指定具体的单个算子实例的description信息，比如使用如下命令，仅编译快速上手中所展示的case_id为1的算子。
 
 ```bash
-bash scripts/build.sh -DCATLASS_LIBRARY_KERNELS=catlass_gemm_00_basic_matmul_fp16xRowMajor_fp16xRowMajor_fp16xRowMajor_32x128x128_32x128x32_swizzle3x1 mstuner_catlass
+bash scripts/build.sh -DCATLASS_LIBRARY_KERNELS=catlass_gemm_00_basic_matmul_fp16xRowMajor_fp16xRowMajor_fp16xRowMajor_32x128x128_32x128x32_swizzle3x0 mstuner_catlass
 ```
 
 当前已支持如下算子类型。
+
+Atlas A2/A3架构：
 
 - 00_basic_matmul
 - 02_grouped_matmul_slice_m
@@ -78,6 +92,10 @@ bash scripts/build.sh -DCATLASS_LIBRARY_KERNELS=catlass_gemm_00_basic_matmul_fp1
 - 08_grouped_matmul
 - 12_quant_matmul
 - 27_matmul_gelu
+
+Ascend 950PR/950DT架构：
+
+- 43_ascend950_basic_matmul
 
 注意：
 

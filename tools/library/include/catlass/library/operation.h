@@ -42,6 +42,8 @@ enum class LayoutType {
     PaddingRowMajor,
     PaddingColumnMajor,
     nN,
+    NDC1HWC0,
+    KDC1KHKWN1N0C0,
     VectorLayout,
     Invalid
 };
@@ -72,6 +74,7 @@ enum class GemmKind {
     MatmulBias,
     BasicMatmulPreload,
     PaddingSplitkMatmul,
+    BasicMatmulTla950,
     MatmulGelu,
 
     Invalid

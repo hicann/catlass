@@ -77,6 +77,14 @@ template <> struct LayoutMap<Catlass::layout::nN> {
     static LayoutType const typeId = LayoutType::nN;
 };
 
+template <> struct LayoutMap<Catlass::layout::NDC1HWC0> {
+    static LayoutType const typeId = LayoutType::NDC1HWC0;
+};
+
+template <> struct LayoutMap<Catlass::layout::KDC1KHKWN1N0C0> {
+    static LayoutType const typeId = LayoutType::KDC1KHKWN1N0C0;
+};
+
 template <> struct LayoutMap<Catlass::layout::VectorLayout> {
     static LayoutType const typeId = LayoutType::VectorLayout;
 };

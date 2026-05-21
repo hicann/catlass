@@ -17,11 +17,26 @@ namespace {
 constexpr uint32_t STARS_ENABLE_FLAG = 1;
 constexpr uint32_t PROF_CFG_PERIOD = 0;
 constexpr uint32_t PROF_REAL = 1;
+constexpr uint32_t CHANNEL_STARS_SOC_LOG_BUFFER = 50;   /* add for ascend910B */
+constexpr uint16_t ACSQ_A2_LENGTH = 64U;
+constexpr uint16_t ACSQ_950_LENGTH = 32U;
 
 enum class PROF_CHANNEL_TYPE {
     PROF_TS_TYPE,
     PROF_PERIPHERAL_TYPE,
     PROF_CHANNEL_TYPE_MAX,
+};
+
+enum class TimeType : uint16_t {
+    START = 0,
+    END,
+    OTHERS
+};
+
+enum class TaskType : uint16_t {
+    AIC_TYPE = 0,
+    AIV_TYPE,
+    MIX_TYPE,
 };
 
 using ProfStartParaT = struct prof_start_para {
@@ -43,6 +58,8 @@ using StarsSocLogConfigT = struct TagStarsSocLogConfig {
     uint32_t fftsThreadTask;   // 1-enable,2-disable
     uint32_t fftsBlock;        // 1-enable,2-disable
     uint32_t sdmaDmu;          // 1-enable,2-disable
+    uint32_t tag;               // bit0==0-enable immediately, bit0==1-enable delay
+    uint32_t block_shrink_flag;   // 1-enable,2-disable
 };
 
 using ProfPollInfoT = struct prof_poll_info {
@@ -50,18 +67,29 @@ using ProfPollInfoT = struct prof_poll_info {
     uint32_t channelId;
 };
 
-constexpr uint32_t CHANNEL_STARS_SOC_LOG_BUFFER = 50;   /* add for ascend910B */
-
-enum class TimeType : uint16_t {
-    START = 0,
-    END,
-    OTHERS
-};
-
+using ArchTag =  Catlass::ArchTag;
 struct AcsqBean {
 public:
-    explicit AcsqBean(const std::vector<char> &bin)
+    // format: 4short 1longlong 2short 11int, total 64B
+    struct AcsqA2Construct {
+        uint16_t shortNums1[4];
+        uint64_t longlongNums[1];
+        uint16_t shortNums2[2];
+        uint32_t intNums[11];
+    };
+
+    // format: 4short 1longlong 2short 3int, total 32B
+    struct Acsq950Construct {
+        uint16_t shortNums1[4];
+        uint64_t longlongNums[1];
+        uint16_t shortNums2[2];
+        uint32_t intNums[3];
+    };
+
+    template<ArchTag Arch>
+    bool Parse(const std::vector<char> &bin)
     {
+        using AcsqConstructType = AcsqConstructTypeMap_t<Arch>;
         constexpr uint16_t typeIndex = 0;
         constexpr uint16_t streamIdIndex = 2;
         constexpr uint16_t streamIdOffset = 11;
@@ -69,7 +97,8 @@ public:
         constexpr uint16_t taskTypeOffset = 10;
         constexpr uint16_t funcTypeAndOperation = 63;
         constexpr uint16_t systemTimeIndex = 0;
-        auto ptr = reinterpret_cast<const AcsqConstruct*>(&bin[0]);
+
+        auto ptr = reinterpret_cast<const AcsqConstructType*>(&bin[0]);
         acsqData_.taskType = ptr->shortNums1[typeIndex] >> taskTypeOffset;
         acsqData_.funcType = ptr->shortNums1[typeIndex] & funcTypeAndOperation;
         acsqData_.systemTime = ptr->longlongNums[systemTimeIndex];
@@ -86,6 +115,7 @@ public:
             acsqData_.taskId = hardwareTaskId;
             acsqData_.streamId = hardwareStreamId % (1 << streamIdOffset);
         }
+        return true;
     }
 
     uint16_t GetTaskType() const
@@ -119,14 +149,6 @@ public:
     }
 
 private:
-    // format: 4short 1longlong 2short 11int, total 64B
-    struct AcsqConstruct {
-        uint16_t shortNums1[4];
-        uint64_t longlongNums[1];
-        uint16_t shortNums2[2];
-        uint32_t intNums[11];
-    };
-
     struct AcsqData {
         uint16_t taskType;
         uint16_t funcType;
@@ -134,6 +156,24 @@ private:
         uint16_t streamId;
         uint64_t systemTime;
     } acsqData_{};
+
+    template<ArchTag Type>
+    struct AcsqConstructTypeMap;
+
+    template<ArchTag Arch>
+    using AcsqConstructTypeMap_t = typename AcsqConstructTypeMap<Arch>::type;
+};
+
+template<> struct AcsqBean::AcsqConstructTypeMap<ArchTag::A2> {
+    using type = AcsqBean::AcsqA2Construct;
+};
+
+template<> struct AcsqBean::AcsqConstructTypeMap<ArchTag::A3> {
+    using type = AcsqBean::AcsqA2Construct;
+};
+
+template<> struct AcsqBean::AcsqConstructTypeMap<ArchTag::Ascend950> {
+    using type = AcsqBean::Acsq950Construct;
 };
 
 bool GetStarsTask(ProfStartParaT &starsProfStartPara)
@@ -212,15 +252,30 @@ void Profiler::Stop()
 
 void Profiler::GetDurations(const std::vector<char> &data, std::vector<uint64_t> &starts, std::vector<uint64_t> &ends)
 {
-    constexpr uint16_t ACSQ_LENGTH = 64;
-    for (size_t i = 0; i + ACSQ_LENGTH <= data.size(); i += ACSQ_LENGTH) {
-        std::vector<char> splitBinData{&data[i], &data[i] + ACSQ_LENGTH};
-        AcsqBean acsqBean(splitBinData);
+    ArchTag arch = DeviceMemoryManager::Instance().GetArch();
+    if (arch == ArchTag::Invalid) {
+        LOGE("failed to parse profile data due to unknown arch");
+        return;
+    }
+
+    uint16_t acsqLen = (arch == ArchTag::Ascend950) ? ACSQ_950_LENGTH : ACSQ_A2_LENGTH;
+
+    for (size_t i = 0; i + acsqLen <= data.size(); i += acsqLen) {
+        std::vector<char> splitBinData{&data[i], &data[i] + acsqLen};
+        AcsqBean acsqBean;
+        if (arch == ArchTag::A2) {
+            acsqBean.Parse<ArchTag::A2>(splitBinData);
+        } else if (arch == ArchTag::A3) {
+            acsqBean.Parse<ArchTag::A3>(splitBinData);
+        } else if (arch == ArchTag::Ascend950) {
+            acsqBean.Parse<ArchTag::Ascend950>(splitBinData);
+        }
+
         uint16_t taskType = acsqBean.GetTaskType();
         TimeType timeType = acsqBean.GetTimeType();
         uint64_t systemTime = acsqBean.GetSystemTime();
-        // AI_CORE type = 0, save last group time
-        if (taskType == 0) {
+        if (taskType >= static_cast<uint16_t>(TaskType::AIC_TYPE) &&
+            taskType <= static_cast<uint16_t>(TaskType::MIX_TYPE)) {
             if (timeType == TimeType::START) {
                 starts.emplace_back(systemTime);
             } else if (timeType == TimeType::END) {

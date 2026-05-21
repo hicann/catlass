@@ -103,8 +103,7 @@ bool CheckPermission(std::string_view path)
         return false;
     }
     if (((fileStat.st_mode & S_IWOTH) != 0) || ((fileStat.st_mode & S_IWGRP) != 0)) {
-        LOGW("Potential security issue: Path %s cannot be writable by group or other users",
-            pathStr.c_str());
+        LOGE("Path %s cannot be writable by group or other users", pathStr.c_str());
         return false;
     }
     if (((fileStat.st_mode & S_IRUSR) == 0) && ((fileStat.st_mode & S_IXUSR) == 0)) {

@@ -21,6 +21,9 @@ int main(int argc, const char* argv[])
         return 0;
     }
     CatlassTuner tuner(parser);
+    if (!tuner.Init()) {
+        return -1;
+    }
     tuner.Run();
     return 0;
 }

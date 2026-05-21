@@ -24,6 +24,7 @@ class CatlassTuner {
 public:
     explicit CatlassTuner(CommandLineParser parser);
     ~CatlassTuner();
+    bool Init();
     void Run();
 
 private:

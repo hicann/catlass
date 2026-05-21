@@ -49,6 +49,7 @@ class GemmOperation:
             '06_optimized_matmul_padding_a_only': OptimizedMatmulPaddingAOnlyKernelInstance,
             '06_optimized_matmul_padding_b_only': OptimizedMatmulPaddingBOnlyKernelInstance,
             '12_quant_matmul': QuantMatmulKernelInstance,
+            '43_ascend950_basic_matmul': BasicMatmul950KernelInstance,
             '27_matmul_gelu': MatmulGeluKernelInstance,
         }
 
@@ -746,6 +747,64 @@ class GroupedMatmulSliceMKernelInstance:
             element_a=gemm_operation.a_type.element_type.to_code(),
             element_b=gemm_operation.b_type.element_type.to_code(),
             element_c=gemm_operation.c_type.element_type.to_code(),
+            layout_a=gemm_operation.a_type.layout.to_code(),
+            layout_b=gemm_operation.b_type.layout.to_code(),
+            layout_c=gemm_operation.c_type.layout.to_code(),
+            block_swizzle=gemm_operation.block_swizzle
+        )
+        return src
+
+
+class BasicMatmul950KernelInstance:
+    def __init__(self):
+        self.cpp_instance = 'BasicMatmul950GemmOperation'
+        self.custom_headers = """
+#include "catlass/gemm/kernel/basic_matmul_tla.hpp"
+#include "tla/layout.hpp"
+"""
+
+        self.custom_common_decls = ''
+        self.template = """
+            Gemm::Device::DeviceGemm<
+                Gemm::Kernel::BasicMatmulTla<
+                    Gemm::Block::BlockMmadTla<
+                        Gemm::MmadPingpong<
+                            Arch::Ascend950,
+                            true, false, 1, false,
+                            2, 2, 2, 2
+                        >,
+                        tla::Shape<tla::Int<{l1_m}>, tla::Int<{l1_n}>, tla::Int<{l1_k}>>,
+                        tla::Shape<tla::Int<{l0_m}>, tla::Int<{l0_n}>, tla::Int<{l0_k}>>,
+                        {element_a},
+                        {element_b},
+                        {element_c},
+                        void,
+                        Gemm::Tile::PackedTileCopyTla<
+                            Arch::Ascend950,
+                            {element_a}, {layout_a},
+                            {element_b}, {layout_b},
+                            {element_c}, {layout_c},
+                            {element_bias}
+                        >
+                    >,
+                    void,
+                    {block_swizzle}
+                >
+            >"""
+
+
+    def gen_src(self, gemm_operation):
+        src = self.template.format(
+            l1_m=str(gemm_operation.l1_tile_shape[0]),
+            l1_n=str(gemm_operation.l1_tile_shape[1]),
+            l1_k=str(gemm_operation.l1_tile_shape[2]),
+            l0_m=str(gemm_operation.l0_tile_shape[0]),
+            l0_n=str(gemm_operation.l0_tile_shape[1]),
+            l0_k=str(gemm_operation.l0_tile_shape[2]),
+            element_a=gemm_operation.a_type.element_type.to_code(),
+            element_b=gemm_operation.b_type.element_type.to_code(),
+            element_c=gemm_operation.c_type.element_type.to_code(),
+            element_bias='void',
             layout_a=gemm_operation.a_type.layout.to_code(),
             layout_b=gemm_operation.b_type.layout.to_code(),
             layout_c=gemm_operation.c_type.layout.to_code(),

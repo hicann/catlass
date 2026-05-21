@@ -15,16 +15,23 @@ from enum import Enum, auto
 
 class ArchTag(Enum):
     A2 = auto(),
+    ASCEND_950 = auto(),
 
     def to_code(self):
         code_map = {
-            ArchTag.A2: 'Arch::AtlasA2'
+            ArchTag.A2: 'Arch::AtlasA2',
+            ArchTag.ASCEND_950: 'Arch::Ascend950'
         }
         if self in code_map.keys():
             return code_map[self]
         else:
             return 'unknown_type'
 
+ 
+ARCH_TAG_DICT = {
+    'a2': ArchTag.A2,
+    'Ascend950': ArchTag.ASCEND_950,
+}
 
 class DataType(Enum):
     uint8 = auto(),

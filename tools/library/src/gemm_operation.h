@@ -13,6 +13,7 @@
 
 #include <type_traits>
 #include "catlass/library/operation.h"
+#include "tla/layout.hpp"
 #include "library_utils.h"
 
 namespace Catlass {
@@ -42,14 +43,30 @@ public:
         this->description_.name = name;
         this->description_.kind = OperationKind::Gemm;
 
-        this->description_.A = MakeTensorDescription<ElementA, LayoutA>();
-        this->description_.B = MakeTensorDescription<ElementB, LayoutB>();
-        this->description_.C = MakeTensorDescription<ElementC, LayoutC>();
+        // for non-tla operator
+        if constexpr (std::is_same<LayoutA, Catlass::layout::RowMajor>::value ||
+            std::is_same<LayoutA, Catlass::layout::ColumnMajor>::value ||
+            std::is_same<LayoutA, Catlass::layout::nZ>::value ||
+            std::is_same<LayoutA, Catlass::layout::zN>::value ||
+            std::is_same<LayoutA, Catlass::layout::zZ>::value ||
+            std::is_same<LayoutA, Catlass::layout::PaddingRowMajor>::value ||
+            std::is_same<LayoutA, Catlass::layout::PaddingColumnMajor>::value ||
+            std::is_same<LayoutA, Catlass::layout::nN>::value ||
+            std::is_same<LayoutA, Catlass::layout::NDC1HWC0>::value ||
+            std::is_same<LayoutA, Catlass::layout::KDC1KHKWN1N0C0>::value ||
+            std::is_same<LayoutA, Catlass::layout::VectorLayout>::value ||
+            std::is_same<LayoutA, Catlass::layout::PaddingRowMajor>::value) {
+            this->description_.A = MakeTensorDescription<ElementA, LayoutA>();
+            this->description_.B = MakeTensorDescription<ElementB, LayoutB>();
+            this->description_.C = MakeTensorDescription<ElementC, LayoutC>();
+        }
 
-        this->description_.tileDescription.L1TileShape =
-            GemmShapeDescription(L1TileShape::M, L1TileShape::N, L1TileShape::K);
-        this->description_.tileDescription.L0TileShape =
-            GemmShapeDescription(L0TileShape::M, L0TileShape::N, L0TileShape::K);
+        if constexpr (std::is_same<L1TileShape, Catlass::GemmCoord>::value) {
+            this->description_.tileDescription.L1TileShape =
+                GemmShapeDescription(L1TileShape::M, L1TileShape::N, L1TileShape::K);
+            this->description_.tileDescription.L0TileShape =
+                GemmShapeDescription(L0TileShape::M, L0TileShape::N, L0TileShape::K);
+        }
     }
 
     virtual OperationDescription const &GetDescription() const override
@@ -298,6 +315,73 @@ private:
 private:
 };
 /********************* quant matmul end *********************/
+
+/********************* Ascend950 basic matmul tla *********************/
+template <typename Operator_>
+class BasicMatmul950GemmOperation : public GemmOperationBase<Operator_, GemmOperationDescription> {
+    using Operator = Operator_;
+    using OperatorKernel = typename Operator::Kernel;
+    using ElementA = typename OperatorKernel::ElementA;
+    using ElementB = typename OperatorKernel::ElementB;
+    using ElementC = typename OperatorKernel::ElementC;
+    using LayoutTagA = typename OperatorKernel::BlockMmad::TileCopy::LayoutTagA;
+    using LayoutTagB = typename OperatorKernel::BlockMmad::TileCopy::LayoutTagB;
+    using LayoutTagC = typename OperatorKernel::BlockMmad::TileCopy::LayoutTagC;
+    using L1TileShape = typename OperatorKernel::BlockMmad::L1TileShape;
+    using L0TileShape = typename OperatorKernel::BlockMmad::L0TileShape;
+public:
+    BasicMatmul950GemmOperation(char const *name = "") : GemmOperationBase<Operator_, GemmOperationDescription>(name)
+    {
+        this->description_.gemmKind = GemmKind::BasicMatmulTla950;
+        this->description_.A = MakeTensorDescription<ElementA, LayoutTagA>();
+        this->description_.B = MakeTensorDescription<ElementB, LayoutTagB>();
+        this->description_.C = MakeTensorDescription<ElementC, LayoutTagC>();
+
+        static constexpr uint32_t L1_TILE_M = tla::get<0>(L1TileShape{});
+        static constexpr uint32_t L1_TILE_N = tla::get<1>(L1TileShape{});
+        static constexpr uint32_t L1_TILE_K = tla::get<2>(L1TileShape{});
+        static constexpr uint32_t L0_TILE_M = tla::get<0>(L0TileShape{});
+        static constexpr uint32_t L0_TILE_N = tla::get<1>(L0TileShape{});
+        static constexpr uint32_t L0_TILE_K = tla::get<2>(L0TileShape{});
+
+        this->description_.tileDescription.L1TileShape =
+            GemmShapeDescription(L1_TILE_M, L1_TILE_N, L1_TILE_K);
+        this->description_.tileDescription.L0TileShape =
+            GemmShapeDescription(L0_TILE_M, L0_TILE_N, L0_TILE_K);
+    }
+
+private:
+    virtual void BuildArgs(void *argsPtr, void *configPtr) override
+    {
+        BasicMatmulGemmArguments *arguments = (BasicMatmulGemmArguments *)argsPtr;
+        BasicMatmulGemmConfiguration *config = (BasicMatmulGemmConfiguration *)configPtr;
+
+        this->args_.problemShape = GemmCoord{config->m, config->n, config->k};
+        this->args_.ptrA = arguments->A;
+        this->args_.ptrB = arguments->B;
+        this->args_.ptrC = arguments->C;
+        this->args_.ptrBias = nullptr;
+
+        auto m = config->m;
+        auto n = config->n;
+        auto k = config->k;
+        using LayoutTagA = layout::RowMajor;
+        using LayoutTagB = layout::RowMajor;
+        using LayoutTagC = layout::RowMajor;
+        using ElementA = float32_t;
+        using ElementB = float32_t;
+        this->args_.layoutA = tla::MakeLayout<ElementA, LayoutTagA>(m, k);
+        this->args_.layoutB = tla::MakeLayout<ElementB, LayoutTagB>(k, n);
+        this->args_.layoutC = tla::MakeLayout<ElementC, LayoutTagC>(m, n);
+    }
+
+    virtual Status Run(aclrtStream stream, uint32_t blockDim, uint64_t fftsAddr) override
+    {
+        return this->op_.Run(stream, blockDim, 0U);
+    }
+};
+/********************* Ascend950 basic matmul tla end *********************/
+
 
 /********************* matmul gelu *********************/
 template <typename Operator_> 

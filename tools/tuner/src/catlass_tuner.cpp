@@ -17,41 +17,53 @@ namespace Catlass {
 
 static constexpr int RUN_TIMES = 5;
 
-CatlassTuner::CatlassTuner(CommandLineParser parser) : parser_(std::move(parser))
+CatlassTuner::CatlassTuner(CommandLineParser parser) : parser_(std::move(parser)) {}
+
+CatlassTuner::~CatlassTuner()
+{
+    DeviceMemoryManager::Instance().Finalize();
+}
+
+bool CatlassTuner::Init()
 {
     if (parser_.HasKey("device")) {
         deviceId_ = -1;
         GET_CHECK(parser_.Get<decltype(deviceId_)>("device", deviceId_), "device");
         if (deviceId_ == -1) {
-            return;
+            return false;
         }
         metrics_.SetDeviceId(deviceId_);
     }
     // 调优通道需要做device id映射
     if (!profileHandler_.SetDeviceId(deviceId_)) {
-        return;
+        return false;
     }
 
     if (parser_.HasKey("output")) {
         std::string_view output;
         GET_CHECK(parser_.Get<std::string_view>("output", output), "output");
         if (output.empty() || !metrics_.SetOutputPath(output)) {
-            return;
+            return false;
         }
     }
+
+    stream_ = DeviceMemoryManager::Instance().Initialize(deviceId_);
+    if (stream_ == nullptr) {
+        LOGE("Initialize device failed, will not run kernels");
+        return false;
+    }
+
     if (!profileHandler_.Init()) {
         LOGE("Start profile channel failed, will not run operators");
-        return;
-    } else if (stream_ = DeviceMemoryManager::Instance().Initialize(deviceId_); !stream_) {
-        LOGE("Initialize device failed, will not run kernels");
-    } else if (!DeviceMemoryManager::Instance().InitCacheClear()) {
-        LOGW("Init resource for clear l2cache failed, won't clear l2cache before each kernel");
+        return false;
     }
-}
 
-CatlassTuner::~CatlassTuner()
-{
-    DeviceMemoryManager::Instance().Finalize();
+    if (!DeviceMemoryManager::Instance().InitCacheClear()) {
+        LOGW("Init resource for clear l2cache failed, won't clear l2cache before each kernel");
+        return false;
+    }
+
+    return true;
 }
 
 bool CatlassTuner::InitOperators(OpConfigPool &pool)

@@ -411,6 +411,46 @@ bool QuantMatmulGemmOpConfig::InitArgument(Library::Operation *op)
     return true;
 }
 
+/*********************** BasicMatmulTla950GemmOpConfig ************************/ 
+bool BasicMatmulTla950GemmOpConfig::InitConfig(CommandLineParser &parser)
+{
+    bool res = GemmOpConfig::InitConfig(parser);
+    if (!res) {
+        return false;
+    }
+    config_.m = m_;
+    config_.n = n_;
+    config_.k = k_;
+    return true;
+}
+
+bool BasicMatmulTla950GemmOpConfig::InitArgument(Library::Operation *op)
+{
+    auto &mdesp = static_cast<const Library::GemmOperationDescription &>(op->GetDescription());
+
+    size_t lenA = LibraryHelper::GetLayoutCapacity(mdesp.A.layout, mdesp.A.element, config_.m, config_.k);
+    size_t lenB = LibraryHelper::GetLayoutCapacity(mdesp.B.layout, mdesp.B.element, config_.k, config_.n);
+    size_t lenC= LibraryHelper::GetLayoutCapacity(mdesp.C.layout, mdesp.C.element, config_.m, config_.n);
+    size_t sizeA = lenA * LibraryHelper::GetDataTypeSize(mdesp.A.element);
+    size_t sizeB = lenB * LibraryHelper::GetDataTypeSize(mdesp.B.element);
+    size_t sizeC = lenC * LibraryHelper::GetDataTypeSize(mdesp.C.element);
+
+    if (sizeA == 0U || sizeB == 0U || sizeC == 0U) {
+        LOGE("Calculate size of tensor A/B/C failed");
+        return false;
+    }
+    std::vector<DeviceMemoryParam> params{
+        {reinterpret_cast<void**>(&arg_.A), sizeA},
+        {reinterpret_cast<void**>(&arg_.B), sizeB},
+        {reinterpret_cast<void**>(&arg_.C), sizeC},
+    };
+    if (!MallocDeviceMemory(params)) {
+        return false;
+    }
+    return true;
+}
+/*********************** BasicMatmulTla950GemmOpConfig end ************************/ 
+
 bool MatmulGeluGemmOpConfig::InitConfig(CommandLineParser &parser)
 {
     bool res = GemmOpConfig::InitConfig(parser);

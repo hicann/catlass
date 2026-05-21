@@ -10,6 +10,9 @@
  
 #include "device_memory_manager.h"
 
+#include <string>
+#include <map>
+
 namespace Catlass {
 
 void DoClearL2Cache(uint32_t blockDim, uint8_t* l2ctrl, uint8_t* stream, uint8_t* buffer, uint8_t* tilingSize);
@@ -20,7 +23,7 @@ struct L2CacheClearTiling {
     uint32_t aicCoreNum;
 };
 
-bool GetTiling(L2CacheClearTiling &tiling)
+bool GetTiling(std::string socName, L2CacheClearTiling &tiling)
 {
     const static std::unordered_map<std::string_view, L2CacheClearTiling> TILING_MAP = {
         {"Ascend910B1", {8388608, 24}},
@@ -29,19 +32,80 @@ bool GetTiling(L2CacheClearTiling &tiling)
         {"Ascend910B3", {10485760, 20}},
         {"Ascend910B4", {5242880, 20}},
         {"Ascend910B4-1", {10485760, 20}},
+
+        {"Ascend910_9391", {8388608, 24}},
+        {"Ascend910_9392", {8388608, 24}},
+        {"Ascend910_9381", {8388608, 24}},
+        {"Ascend910_9382", {8388608, 24}},
+        {"Ascend910_9372", {10485760, 20}},
+        {"Ascend910_9362", {10485760, 20}},
+
+        {"Ascend950DT_950x", {4194304, 8}},
+        {"Ascend950DT_950y", {4194304, 8}},
+        {"Ascend950DT_9571", {4794880, 28}},
+        {"Ascend950DT_9572", {4794880, 28}},
+        {"Ascend950DT_9573", {4194304, 28}},
+        {"Ascend950DT_9574", {4194304, 28}},
+        {"Ascend950DT_9575", {4794880, 28}},
+        {"Ascend950DT_9576", {4794880, 28}},
+        {"Ascend950DT_9577", {4194304, 28}},
+        {"Ascend950DT_9578", {4194304, 28}},
+        {"Ascend950DT_9581", {4194304, 32}},
+        {"Ascend950DT_9582", {4194304, 32}},
+        {"Ascend950DT_9583", {3670016, 32}},
+        {"Ascend950DT_9584", {3670016, 32}},
+        {"Ascend950DT_9585", {4194304, 32}},
+        {"Ascend950DT_9586", {4194304, 32}},
+        {"Ascend950DT_9587", {3670016, 32}},
+        {"Ascend950DT_9588", {3670016, 32}},
+        {"Ascend950DT_9591", {3729920, 36}},
+        {"Ascend950DT_9592", {3729920, 36}},
+        {"Ascend950DT_9595", {3729920, 36}},
+        {"Ascend950DT_9596", {3729920, 36}},
+        {"Ascend950DT_95A1", {3728280, 36}},
+        {"Ascend950DT_95A2", {3728280, 36}},
+
+        {"Ascend950PR_950z", {2097152, 8}},
+        {"Ascend950PR_9579", {4794880, 28}},
+        {"Ascend950PR_957b", {4194304, 28}},
+        {"Ascend950PR_957c", {4194304, 28}},
+        {"Ascend950PR_957d", {3596800, 28}},
+        {"Ascend950PR_9589", {4194304, 32}},
+        {"Ascend950PR_958b", {3670016, 32}},
+        {"Ascend950PR_9599", {3729920, 36}},
     };
-    auto soc = aclrtGetSocName();
-    if (!soc) {
-        LOGW("Call aclrtGetSocName failed");
+    if (socName == "") {
+        LOGW("cannot find corresponding L2 cache clear tiling for empty soc name");
         return false;
     }
-    auto it = TILING_MAP.find(soc);
+    auto it = TILING_MAP.find(socName);
     if (it == TILING_MAP.end()) {
-        LOGW("Cannot get l2cache clear params of current soc: %s", soc);
+        LOGW("Cannot get l2cache clear params for current soc: %s", socName.c_str());
         return false;
     }
     tiling = it->second;
     return true;
+}
+
+ArchTag GetArchTag(std::string socName)
+{
+    static std::map<std::string, ArchTag> socNameMap = {
+        {"Ascend910B", ArchTag::A2},
+        {"Ascend910_93", ArchTag::A3},
+        {"Ascend910_95", ArchTag::Ascend950},
+        {"Ascend950", ArchTag::Ascend950},
+    };
+
+    ArchTag arch = ArchTag::Invalid;
+
+    for (auto it: socNameMap) {
+        if ((socName.length() > it.first.length()) && (socName.rfind(it.first, 0)) == 0) {
+            arch = it.second;
+            break;
+        }
+    }
+
+    return arch;
 }
 }
 
@@ -104,6 +168,15 @@ aclrtStream DeviceMemoryManager::Initialize(int32_t deviceId)
         LOGE("Call aclrtSetDevice failed: %d, device id: %d", err, deviceId_);
         return nullptr;
     }
+
+    auto soc = aclrtGetSocName();
+    if (!soc) {
+        LOGW("Call aclrtGetSocName failed");
+        return nullptr;
+    }
+    socName_ = soc;
+    arch_ = GetArchTag(soc);
+
     err = aclrtCreateStream(&stream_);
     if (err != ACL_SUCCESS) {
         LOGE("Call aclrtCreateStream failed: %d", err);
@@ -164,7 +237,7 @@ bool DeviceMemoryManager::Free(void *addr)
 bool DeviceMemoryManager::InitCacheClear()
 {
     L2CacheClearTiling tiling{};
-    if (!GetTiling(tiling)) {
+    if (!GetTiling(socName_, tiling)) {
         return false;
     }
     cacheClear_.cacheSize = tiling.clearSizePerCore * tiling.aicCoreNum;
@@ -202,7 +275,7 @@ bool DeviceMemoryManager::InitCacheClear()
     for (int i = 0; i < CACHE_CLEAR_BUFF; ++i) {
         err = aclrtMalloc(&cacheClear_.cmoBuffers[i], cacheClear_.cacheSize, ACL_MEM_MALLOC_HUGE_FIRST);
         if (err != ACL_SUCCESS) {
-            LOGE("Call aclrtMalloc failed, err: %d, size %lu", err, cacheClear_.cacheSize);
+            LOGE("Call aclrtMalloc failed, err: %d, size 32", err);
             return false;
         }
     }

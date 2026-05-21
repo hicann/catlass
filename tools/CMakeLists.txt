@@ -9,14 +9,6 @@
 # -----------------------------------------------------------------------------------------------------------
 
 if(DEFINED CATLASS_LIBRARY_KERNELS)
-    set(CCE_AICORE_ARCH_BASE dav-c220)
-
-    if(CATLASS_ARCH STREQUAL "2201")
-        set(CCE_AICORE_ARCH_BASE dav-c220)
-        add_compile_definitions(CATLASS_ARCH=2201)
-    else()
-        message(FATAL_ERROR ${CCE_AICORE_ARCH_BASE} "CCE_AICORE_ARCH_BASE " ${CCE_AICORE_ARCH_BASE} " is unsupported")
-    endif()
     add_subdirectory(library)
     add_subdirectory(tuner)
 endif()

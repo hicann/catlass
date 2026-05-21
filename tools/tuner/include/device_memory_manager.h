@@ -29,7 +29,7 @@ extern "C" int rtGetVisibleDeviceIdByLogicDeviceId(const int32_t, int32_t * cons
     do {                                                                        \
         aclError err = status;                                                  \
         if (err != ACL_SUCCESS) {                                               \
-            LOGE("%s:%d call " func "failed: %d", __FILE__, __LINE__, err);     \
+            LOGE("%s:%d call " func " failed: %d", __FILE__, __LINE__, err);     \
         }                                                                       \
     } while (0)
 
@@ -41,6 +41,13 @@ extern "C" int rtGetVisibleDeviceIdByLogicDeviceId(const int32_t, int32_t * cons
             LOGE("%s:%d call " func " rtError: %d", __FILE__, __LINE__, error);              \
         }                                                                                    \
     } while (0)
+
+enum class ArchTag : uint32_t {
+    A2,
+    A3,
+    Ascend950,
+    Invalid
+};
 
 struct DeviceMemoryParam {
     void **addr;
@@ -62,11 +69,15 @@ public:
 
     inline uint64_t GetFftsAddr()
     {
-        uint32_t fftsLen{0};
-        if (fftsAddr_ == 0) {
-            RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr_, &fftsLen), "rtGetC2cCtrlAddr");
+        if (arch_ == ArchTag::A2 || arch_ == ArchTag::A3) {
+            uint32_t fftsLen = 0U;
+            if (fftsAddr_ == 0) {
+                RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr_, &fftsLen), "rtGetC2cCtrlAddr");
+            }
+            return fftsAddr_;
+        } else {
+            return 0U;
         }
-        return fftsAddr_;
     }
 
     inline bool FreeWorkspace()
@@ -87,6 +98,7 @@ public:
     bool ClearL2Cache(uint32_t blockDim);
     bool InitCacheClear();
     aclError SetCacheClearTiling(uint64_t clearSizePerCore);
+    ArchTag GetArch() const { return arch_; };
 
 private:
     struct CacheClear {
@@ -115,7 +127,10 @@ private:
     aclrtStream stream_{nullptr};
     CacheClear cacheClear_{};
     uint64_t fftsAddr_{0};
+
     int32_t deviceId_{0};
+    std::string socName_{""};
+    ArchTag arch_{ArchTag::Invalid};
 };
 
 } // namespace Catlass
