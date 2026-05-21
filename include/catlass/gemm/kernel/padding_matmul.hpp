@@ -993,8 +993,8 @@ private:
     uint32_t bufferIndex{ 0 };
     static constexpr uint32_t COMPUTE_LENGTH = 
         std::is_same_v<ElementIn, ElementOut> ? 
-        ArchTag::UB_SIZE / sizeof(ElementIn) / BUFFER_NUM :
-        ArchTag::UB_SIZE / (sizeof(ElementIn) + sizeof(ElementOut)) / BUFFER_NUM;
+        RoundDown<BYTE_PER_BLK>(ArchTag::UB_SIZE / sizeof(ElementIn) / BUFFER_NUM) :
+        RoundDown<BYTE_PER_BLK>(ArchTag::UB_SIZE / (sizeof(ElementIn) + sizeof(ElementOut)) / BUFFER_NUM);
     static_assert(
         std::is_same_v<ElementIn, ElementOut> ? 
         BUFFER_NUM * COMPUTE_LENGTH * sizeof(ElementIn) <= ArchTag::UB_SIZE :
