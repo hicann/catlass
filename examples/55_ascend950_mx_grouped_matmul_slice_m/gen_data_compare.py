@@ -16,7 +16,7 @@ import math
 import time
 import subprocess
 from itertools import accumulate
-from typing import Tuple
+from typing import Tuple, Dict
 
 import torch
 import numpy as np
