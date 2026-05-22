@@ -183,5 +183,6 @@ struct BlockPrologue {
 #if (defined (CATLASS_ARCH) && CATLASS_ARCH == 3510)
 #include "catlass/gemm/block/block_mx_a8w4_prologue.hpp"
 #include "catlass/gemm/block/block_mmad_mx_a8w4.hpp"
+#include "catlass/gemm/block/block_mmad_svd_quant_tla.hpp"
 #endif
 #endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_HPP
