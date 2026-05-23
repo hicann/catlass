@@ -90,19 +90,9 @@ JitEntryFn JitCompiler::getKernel(const char* templatePath, const MacroMap& macr
     };
 
     auto makeCacheKey = [&](const MacroMap& macroValues) -> std::string {
-        std::vector<std::pair<std::string, std::string>> sortedMacros;
-        sortedMacros.reserve(macroValues.size());
-        for (const auto& kv : macroValues) {
-            JIT_CHECK(!kv.first.empty(), "empty macro name");
-            sortedMacros.emplace_back(kv.first, kv.second);
-        }
-        std::sort(sortedMacros.begin(), sortedMacros.end());
-
-        std::string key = targetName + "_arch" + npuArch_;
-        for (const auto& kv : sortedMacros) {
-            key += "_" + kv.first + "_" + kv.second;
-        }
-        return sanitize(key);
+        auto it = macroValues.find("CATLASS_JIT_KERNEL_NAME");
+        std::string kn = (it != macroValues.end() && !it->second.empty()) ? it->second : targetName;
+        return sanitize(kn + "_arch" + npuArch_);
     };
 
     const std::string cacheKey = makeCacheKey(macros);
