@@ -1200,5 +1200,5 @@ void operator()(TensorDst &attenOutGm, const LocalTensor<ElementOTmp> &expMaxUb,
 ---
 
 ## 11. 下一步优化建议
-1. 当前仅实现了BlockMmadQK L0c输出-> UB -> EpilogueSoftMax，受UB空间限制，当前模板仅支持embed <= 128，若需支持更大embedSize需要扩展L0c输出-> GM -> UB -> EpilogueSoftMax流程。
+1. 当前仅实现了BlockMmadQK L0C输出-> UB -> EpilogueSoftMax，受UB空间限制，当前模板仅支持embed <= 128，若需支持更大embedSize需要扩展L0C输出-> GM -> UB -> EpilogueSoftMax流程。
 2. 当前模板Kernel未支持ActualSeq可变长特性，需适配。

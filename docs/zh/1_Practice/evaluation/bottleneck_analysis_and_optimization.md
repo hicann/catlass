@@ -125,7 +125,7 @@ bash scripts/build.sh -DCATLASS_LIBRARY_KERNELS=00_basic_matmul mstuner_catlass
 
 ### 计算流水理论耗时
 
-计算相关流水（Cube/Vector/Scalar）的理论耗时计算公式为"计算数据量（Element）除以理论算力"。假设`float16`类型Vector理论峰值算力11.06 TOPS为例，32K个`float16` Element单指令计算理论耗时如下：
+计算相关流水（Cube/Vector/Scalar）的理论耗时计算公式为"计算数据量（Element）除以理论算力"。以`float16`类型Vector理论峰值算力11.06 TOPS为例，32K个`float16` Element单指令计算理论耗时如下：
 
 ```
 32K / 11.06TOPS ≈ 0.003 μs

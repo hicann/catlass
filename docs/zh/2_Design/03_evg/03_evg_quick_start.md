@@ -134,7 +134,7 @@ typename MatmulKernel::Arguments arguments{
 };
 ```
 
-这里有一个当前实现里的固定点：公开 `Arguments` 里虽然保留了 `ptrC/layoutC`，但 visitor 路径真正的写回位置还是由 `evg_args` 里的 `VisitorAuxStore` 决定。
+这里有一个当前实现里的注意点：公开 `Arguments` 里虽然保留了 `ptrC/layoutC`，但 visitor 路径真正的写回位置还是由 `evg_args` 里的 `VisitorAuxStore` 决定。
 
 ## 第五步：编译与执行
 

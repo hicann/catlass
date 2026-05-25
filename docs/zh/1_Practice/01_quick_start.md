@@ -69,8 +69,8 @@ bash scripts/build.sh [options] <target>
  - `target`： 要编译的算子样例，可指定为特定的样例名，也可指定为：
    - `catlass_examples`：对当前仓样例进行全量编译。
    - `python_extension`：编译pybind扩展，详见基于[Python调用CATLASS样例](../../../examples/python_extension/README.md)。
-   - `torch_library`：编译torch扩展,详见[Python调用CATLASS样例](../../../examples/python_extension/README.md)。
-   - `mstuner_catlass`：编译msTuner_CATLASS工具,详见[`mstuner_catlass`使用说明](../../../tools/tuner/README.md)。
+   - `torch_library`：编译torch扩展，详见[Python调用CATLASS样例](../../../examples/python_extension/README.md)。
+   - `mstuner_catlass`：编译msTuner_CATLASS工具，详见[`mstuner_catlass`使用说明](../../../tools/tuner/README.md)。
 
 以[basic_matmul](../../../examples/00_basic_matmul/README.md)样例编译过程为例，执行下述指令：
 
@@ -97,7 +97,7 @@ cd output/bin
 ./00_basic_matmul 256 512 1024 0
 ```
 
- - `256`， `512`， `1024`分别为矩阵乘法的在m轴、n轴、k轴的维度（左/右矩阵数据随机生成）
+ - `256`， `512`， `1024`分别为矩阵乘法在m轴、n轴、k轴的维度（左/右矩阵数据随机生成）
  - `deviceId`可选（默认为0），指定NPU卡的ID号。
 
 执行该算子样例后，如出现下述结果则表明其计算符合精度预期（该样例中Matmul的左、右矩阵使用随机数填充，真值以cpu计算为准）。

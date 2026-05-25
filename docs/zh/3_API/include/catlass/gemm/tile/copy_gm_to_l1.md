@@ -49,7 +49,7 @@ struct CopyGmToL1
 ```
 void operator()(
     AscendC::LocalTensor<Element> const &dstTensor,     // 目的操作数LocalTensor
-    AscendC::GlobalTensor<Element> const &srcTensor,    // 源操作数LocalTensor
+    AscendC::GlobalTensor<Element> const &srcTensor,    // 源操作数GlobalTensor
     LayoutDst const &layoutDst,         // 目的操作数layout
     LayoutSrc const &layoutSrc          // 源操作数layout
 )

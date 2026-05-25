@@ -35,7 +35,7 @@ void operator() (
     uint32_t n,             // tile块实际shape的N对齐
     uint32_t k,             // tile块实际shape的K对齐
     bool initC = true,      // 是否初始化L0C，True为直接覆盖，False为原子累加
-    uint8_t unitFlag = 0    // 是否开始unitFlag，True则mmad计算和L0C2GM搬运并行
+    uint8_t unitFlag = 0    // 是否开启unitFlag，1则mmad计算和L0C2GM搬运并行
     )
 ```
 
@@ -51,7 +51,7 @@ void operator() (
     uint32_t n,             // tile块实际shape的N对齐
     uint32_t k,             // tile块实际shape的K对齐
     bool initC = true,      // 是否初始化L0C，True为直接覆盖，False为原子累加
-    uint8_t unitFlag = 0    // 是否开始uniFlag，True则mmad计算和L0C2GM搬运并行
+    uint8_t unitFlag = 0    // 是否开启unitFlag，1则mmad计算和L0C2GM搬运并行
     )
 ```
 
@@ -89,7 +89,7 @@ void operator() (
     uint32_t n,                 // tile块实际shape的N对齐
     uint32_t k,                 // tile块实际shape的K对齐
     bool initC = true,          // 是否初始化L0C，True为直接覆盖，False为原子累加
-    uint8_t unitFlag = 0        // 是否开始uniFlag，True则mmad计算和L0C2GM搬运并行
+    uint8_t unitFlag = 0        // 是否开启unitFlag，1则mmad计算和L0C2GM搬运并行
     )
 ```
 

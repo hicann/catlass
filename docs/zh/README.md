@@ -8,7 +8,7 @@
 - [02_host_example_assembly](./1_Practice/02_host_example_assembly.md)：host侧组装matmul讲解
 - [03_kernel_development](./1_Practice/03_kernel_development.md)：kernel代码拆解，展示模板组装机制、arguments、params及关键函数等代码
 - [04_block_mmad_development](./1_Practice/04_block_mmad_development.md)：block_mmad代码拆解，模板组装机制、主要接口说明
-- [05_block_scheduler_development](./1_Practice/05_block_scheduler_development.md)：block_schedule代码拆解，模板组装机制、主要接口说明
+- [05_block_scheduler_development](./1_Practice/05_block_scheduler_development.md)：block_scheduler代码拆解，模板组装机制、主要接口说明
 - [06_tile_development](./1_Practice/06_tile_development.md)：tile_copy/tile_mmad代码拆解，模板组装机制、主要接口说明
 - [07_epilogue_adaptation](./1_Practice/07_epilogue_adaptation.md)：gemm算子的host/kernel层适配epilogue，及epilogue的block/tile开发
 - [08_evaluation](./1_Practice/08_evaluation.md)：调测工具使用，精度问题定位，性能瓶颈分析

@@ -8,7 +8,7 @@
 
 ## Dispatch组件调整
 原AtlasA2平台的存量算子使用A2代际语义的Dispatch组件以路由至所需的Block组件（如[`00_basic_matmul`](../../../../examples/00_basic_matmul/README.md)所使用的Dispatch组件为[`MmadAtlasA2Pingpong`](../../../../include/catlass/gemm/dispatch_policy.hpp#L32)），我们建议迁移后算子使用公共代际语义的Dispatch组件（除新算子需使用Ascend950代际独有的特性外），例如[`MmadPingpong`](../../../../include/catlass/gemm/dispatch_policy.hpp#L292)。
-如果[`dispatch_policy.hpp`](../../../../include/catlass/gemm/dispatch_policy.hpp)下不包含公共代际语义的Dispatch组件，例如[`MmadAtlasA2Streamk`](../../../../include/catlass/gemm/dispatch_policy.hpp#L237)。由于当前代码仓上不包含组件`MmadStreamk`，需要进行补充：
+如果[`dispatch_policy.hpp`](../../../../include/catlass/gemm/dispatch_policy.hpp)下不包含公共代际语义的Dispatch组件，例如[`MmadAtlasA2Streamk`](../../../../include/catlass/gemm/dispatch_policy.hpp#L237)，由于当前代码仓上不包含组件`MmadStreamk`，需要进行补充：
 ```cpp
 template <class ArchTag, bool ENABLE_UNIT_FLAG_ = false, bool ENABLE_SHUFFLE_K_ = false>
 struct MmadStreamk : public MmadBase<ArchTag, false> {

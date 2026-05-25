@@ -23,21 +23,17 @@
 以下是一个完整的shell脚本示例
 
 ```
-batch=1
-qSeqlen=177
-kvSeqlen=512
-numHeads=1
-kvHeads=1
-headSize=128
-isVariedLen=0
-maskType=1
-dtype="bf16"
-cacheMode=1
-layout_dtype=0
-num_blocks=2048
-inner_prec=0
-lse_flag=0
-device=0
+batch=1           # batch大小
+qSeqlen=177       # query序列长度
+kvSeqlen=512      # key/value序列长度
+numHeads=1        # query head数量
+kvHeads=1         # key/value head数量
+headSize=128      # embeddingSize
+isVariedLen=0     # 是否使用变长序列，当前仅支持0
+maskType=1        # mask类型，0表示无mask，1表示使用mask
+dtype="bf16"      # 数据类型，支持"half"或"bf16"
+cacheMode=1       # 缓存模式，0表示非Paged Attention，1表示Paged Attention
+device=0          # 设备ID
 
 function build() {
     rm -rf build
@@ -46,7 +42,7 @@ function build() {
 }
 
 function gen_data() {
-    python3 examples/40_flash_attention_infer_tla/gen_data.py $batch $qSeqlen $kvSeqlen $numHeads $kvHeads $headSize $isVariedLen $maskType "$dtype" $cacheMode $layout_dtype $num_blocks $inner_prec $lse_flag
+    python3 examples/40_flash_attention_infer_tla/gen_data.py $batch $qSeqlen $kvSeqlen $numHeads $kvHeads $headSize $isVariedLen $maskType "$dtype" $cacheMode
     echo "Data gen finished"
 }
 

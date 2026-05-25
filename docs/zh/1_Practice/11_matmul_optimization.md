@@ -28,22 +28,22 @@ CATLASS算子模板库的定位，是针对GEMM类算子提供的模板样例库
 对于输入输出是fp16场景，为了计算精度，cube核进行mmad输出到L0C上的结果是fp32数据类型，fixpipe随路传回gm时cast到fp16数据类型。
 
 ```text
-L1大小512K
+L1大小512KB
 L1实际占用 = L1::M * L1::K * 2(Byte) * 2(doubleBuffer) + L1::K * L1::N * 2(Byte) * 2(doubleBuffer)
         = 128 * 256 * 2 * 2 + 256 * 256 * 2 * 2
         = 393216 B = 384 KB = 3/4 L1_SIZE
 
-L0A大小64K
+L0A大小64KB
 L0A实际占用 = L0::M * L0::K * 2(Byte) * 2(doubleBuffer)
         = 128 * 64 * 2 * 2
         = 32768 B = 32 KB = 1/2 L0A_SIZE
 
-L0B大小64K
+L0B大小64KB
 L0B实际占用 = L0::K * L0::N * 2(Byte) * 2(doubleBuffer)
         = 64 * 256 * 2 * 2
         = 65536 B = 64 KB = 1 L0B_SIZE
 
-L0C大小128K
+L0C大小128KB
 L0C实际占用 = L0::M * L0::N * 4(Byte)
         = 128 * 256 * 4
         = 131072 B = 128 KB = 1 L0C_SIZE
@@ -52,22 +52,22 @@ L0C实际占用 = L0::M * L0::N * 4(Byte)
 - 场景二：fp32输入输出，L1TileShape<128,128,256>，L0TileShape<128,128,64>
 
 ```text
-L1大小512K
+L1大小512KB
 L1实际占用 = L1::M * L1::K * 4(Byte) * 2(doubleBuffer) + L1::K * L1::N * 4(Byte) * 2(doubleBuffer)
         = 128 * 256 * 4 * 2 + 128 * 256 * 4 * 2
         = 524288 B = 512 KB = 1 L1_SIZE
 
-L0A大小64K
+L0A大小64KB
 L0A实际占用 = L0::M * L0::K * 4(Byte) * 2(doubleBuffer)
         = 128 * 64 * 4 * 2
         = 65536 B = 64 KB = 1 L0A_SIZE
 
-L0B大小64K
+L0B大小64KB
 L0B实际占用 = L0::K * L0::N * 4(Byte) * 2(doubleBuffer)
         = 64 * 128 * 4 * 2
         = 65536 B = 64 KB = 1 L0B_SIZE
 
-L0C大小128K
+L0C大小128KB
 L0C实际占用 = L0::M * L0::N * 4(Byte)
         = 128 * 128 * 4
         = 65536 B = 64 KB = 1/2 L0C_SIZE

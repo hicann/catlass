@@ -4,7 +4,7 @@
 
 ## 功能说明
 
-基础矩阵乘，cube算子，无AIV计算，非TLA实现。
+基础矩阵乘，Cube算子，无AIV计算，非TLA实现。
 
 ## 类模板概述
 
@@ -24,7 +24,7 @@ struct Params {
     GM_ADDR ptrC;               //输出matC的GM起始地址
     LayoutC layoutC;            //输出matC的layout
 ...
-}
+};
 ```
 
 - Arguments：
@@ -53,4 +53,4 @@ using MatmulKernel = Gemm::Kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockSc
 
 ## 约束说明
 
-该kernel在void operator()\<AscendC::AIC\>核函数中，调用`blockMmad`的方式不涉及异步和Preload，故仅支持[block_mmad_pingpong](../block/block_mmad_pingpong.md)等简单blockMmad组件
+该kernel在void operator()\<AscendC::AIC\>核函数中，调用`blockMmad`的方式不涉及异步和Preload，故仅支持[block_mmad_pingpong](../block/block_mmad_pingpong.md)等简单blockMmad组件。

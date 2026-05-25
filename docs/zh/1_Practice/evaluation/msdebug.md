@@ -187,7 +187,7 @@ Process 814339 stopped
 (msdebug) 
 ```
 
-如果想逐行调试，运行命令`n`，使程序运行至下一行
+如果想逐行调试，运行命令`n`，使程序运行至下一行。
 
 ```bash
 (msdebug) n
@@ -305,7 +305,7 @@ Quitting LLDB will kill one or more processes. Do you really want to proceed: [Y
 |  ascend aic core  |  /  |  切换调试器所聚焦的cube核 |  ascend aic 1  |
 |  ascend aiv core  |  /  |  切换调试器所聚焦的vector核  |  ascend aiv 5 |
 |  target modules addkernel.o  |  image addkernel.o  |  PyTorch框架拉起算子时，导入算子调试信息 <br>（注：当程序执行run命令后再执行本命令导入调试信息，<br>则还需额外执行image load命令以使调试信息生效） |  image addAddCustom\_xxx.o  |
-|  target modules load –f kernel.o –s address  |  image load -f kernel.o -s address  |  在程序运行后，使导入的调试信息生效                                                                                                                                       |  image load -f AddCustom\_xxx.o -s 0  |
+|  target modules load -f kernel.o -s address  |  image load -f kernel.o -s address  |  在程序运行后，使导入的调试信息生效                                                                                                                                       |  image load -f AddCustom\_xxx.o -s 0  |
 
 ## 附录
 

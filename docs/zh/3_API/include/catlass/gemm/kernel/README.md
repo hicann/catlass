@@ -14,8 +14,8 @@
 
 | 类型         | 名称 |功能|
 | :----------------------------------------------------------- | :------: |------: |
-| struct    |   Params  |kernel通过`<<<>>>>`调用核函数时的入参|
-| struct    |   Arguments  |device封装后kernel后使用的入参|
+| struct    |   Params  |kernel通过`<<< >>>`调用核函数时的入参|
+| struct    |   Arguments  |device封装后kernel使用的入参|
 | 静态函数    |   bool CanImplement  |Arguments校验接口|
 | 静态函数    |   size_t GetWorkspaceSize  |基于Arguments计算需要的workSpaceSize|
 | 静态函数    |   Params ToUnderlyingArguments  |将Arguments转换为核函数入参Params|

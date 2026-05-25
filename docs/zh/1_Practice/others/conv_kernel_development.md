@@ -82,10 +82,12 @@ ACL_CHECK(aclrtCreateStream(&stream));
 uint32_t c0 = options.problemParams.C0;        // 16
 uint32_t batch = options.problemParams.batch();
 uint32_t hi = options.problemParams.hi();
+uint32_t wi = options.problemParams.wi();
 uint32_t cin1 = options.problemParams.cin1();
 uint32_t ho = options.problemParams.ho();
 uint32_t wo = options.problemParams.wo();
 uint32_t cout1 = options.problemParams.cout1();
+uint32_t cout = options.problemParams.cout();
 uint32_t coutRound = options.problemParams.coutRound();
 uint32_t kh = options.problemParams.kh();
 uint32_t kw = options.problemParams.kw();
@@ -224,7 +226,7 @@ for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < loops; loopIdx += Asce
 }
 ```
 
-边界处理逻辑：根据`hoStart / woStart`、stride、dilation和padding计算对应的`hiStart / hiEnd`和`wiStart / wiEnd`，当起始位置超出边界时记录padding量并裁减范围。
+边界处理逻辑：根据`hoStart / woStart`、stride、dilation和padding计算对应的`hiStart / hiEnd`和`wiStart / wiEnd`，当起始位置超出边界时记录padding量并裁剪范围。
 
 **6. 执行与精度验证**
 

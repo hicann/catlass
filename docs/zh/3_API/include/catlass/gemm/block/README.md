@@ -20,7 +20,7 @@
 
 ### blockMmad
 >
->封装了Block层的mmad计算（矩阵乘计算），对应于昇腾NPU的一个AI Core上的计算。 通过模板参数，BlockMmad_接收矩阵计算中的Shape（特征尺寸）、Layout（数据排布，如行优先、列优先排布）与DType（数据类型）方面的信息。
+>封装了Block层的mmad计算（矩阵乘计算），对应于昇腾NPU的一个AI Core上的计算。 通过模板参数，BlockMmad接收矩阵计算中的Shape（特征尺寸）、Layout（数据排布，如行优先、列优先排布）与DType（数据类型）方面的信息。
 
 命名空间为`Catlass::Gemm::Block`，包含如下核心成员：
 

@@ -87,7 +87,7 @@ void custom_matmul(
 }
 ```
 
-- 在`src/host`文件夹中创建`custom_matmul.cpp`，实现host接口，该接口负责整理输入后使用`内核调用符`调用算子。
+- 在`src/kernels`文件夹中创建`custom_matmul.cpp`，实现host接口，该接口负责整理输入后使用`内核调用符`调用算子。
 
 ```cpp
 // ...

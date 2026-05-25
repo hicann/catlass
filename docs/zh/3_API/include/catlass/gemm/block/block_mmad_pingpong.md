@@ -17,7 +17,7 @@ struct MmadAtlasA2Pingpong : public MmadAtlasA2  {
 };
 ```
 
-当ENABLE_UNIT_FLAG_为`true`时使能`L0C`同时搬出和写入，提高流水并行度。
+当ENABLE_UNIT_FLAG_为`true`时使能`L0C`同时搬出和写入，提高流水并行度。**注意：当输入数据为int8类型时，该参数必须为`false`，否则可能会导致计算异常。** 
 
 ## 调用示例
 

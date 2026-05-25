@@ -61,5 +61,5 @@ sizeof(ElementC) * M * N + EVG::get_workspace_size(...)
 
 ## 适用条件
 
-- `BlockEpilogue::USE_UB_WORKSPACE` 对应 `false`
+- `BlockEpilogue_::USE_UB_WORKSPACE` 对应 `false`
 - 适用于先把 MMAD 结果落到 GM 再做尾处理的场景

@@ -1,4 +1,4 @@
-# Gemm/Block Sizzle类模板概述
+# Gemm/Block Swizzle类模板概述
 >
 > [代码位置](../../../../../../../../include/catlass/gemm/block/block_swizzle.hpp)
 
