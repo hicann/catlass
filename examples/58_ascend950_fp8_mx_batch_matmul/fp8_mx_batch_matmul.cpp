@@ -55,12 +55,7 @@ bool SaveResult(const std::string &filename, const std::vector<T> &data) {
     }
 
     std::vector<char> buffer(dataSize);
-    errno_t err = memcpy_s(buffer.data(), dataSize, data.data(), dataSize);
-    if (err != EOK) {
-        std::cerr << "memcpy_s failed with error: " << err << std::endl;
-        file.close();
-        return false;
-    }
+    memcpy(buffer.data(), data.data(), dataSize);
 
     file.write(buffer.data(), dataSize);
     if (!file) {
