@@ -168,4 +168,39 @@ struct JitMacroGenerator<MatmulTParams> {
     }
 };
 
+template <>
+struct JitMacroGenerator<QuantMatmulTParams> {
+    static void appendTo(std::unordered_map<std::string, std::string>& macros, const QuantMatmulTParams& p) {
+        JitMacroGenerator<MatmulTParams>::appendTo(macros, static_cast<const MatmulTParams&>(p));
+        macros["CATLASS_JIT_SCALE_DTYPE"] = AclDtypeToBishengTypeStr(p.scaleDataType);
+        macros["CATLASS_JIT_PER_TOKEN_SCALE_DTYPE"] = AclDtypeToBishengTypeStr(p.perTokenScaleDataType);
+        // ElementD is the actual output type, read from the dedicated field
+        macros["CATLASS_JIT_ELEMENT_D"] = AclDtypeToBishengTypeStr(p.elementD);
+    }
+
+    static std::unordered_map<std::string, std::string> generate(
+        const char* kernelName, const QuantMatmulTParams& p)
+    {
+        std::unordered_map<std::string, std::string> macros;
+        macros["CATLASS_KERNEL_NAME"] = kernelName;
+        appendTo(macros, p);
+        macros["CATLASS_JIT_KERNEL_NAME"] = makeKernelName(macros, p);
+        return macros;
+    }
+
+    static std::string makeKernelName(
+        const std::unordered_map<std::string, std::string>& macros, const QuantMatmulTParams& /*p*/)
+    {
+        auto get = [&](const std::string& key) -> const std::string& {
+            static const std::string empty;
+            auto it = macros.find(key);
+            return it != macros.end() ? it->second : empty;
+        };
+        return "quant_matmul_" + get("CATLASS_JIT_ELEMENT_A") + "_" + get("CATLASS_JIT_ELEMENT_B") + "_" +
+               get("CATLASS_JIT_ELEMENT_C") + "_" + get("CATLASS_JIT_LAYOUT_A") + "_" +
+               get("CATLASS_JIT_LAYOUT_B") + "_" + get("CATLASS_JIT_LAYOUT_C") + "_" +
+               get("CATLASS_JIT_SCALE_DTYPE") + "_" + get("CATLASS_JIT_PER_TOKEN_SCALE_DTYPE");
+    }
+};
+
 } // namespace CatlassKernel

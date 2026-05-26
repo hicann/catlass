@@ -8,5 +8,6 @@
 # the software repository for the full text of the License.
 
 from .basic_matmul import basic_matmul
+from .quant_optimized_matmul_tla import quant_optimized_matmul_tla
 
-__all__ = ["basic_matmul"]
+__all__ = ["basic_matmul", "quant_optimized_matmul_tla"]

@@ -207,6 +207,7 @@ macro(add_kernel)
 endmacro()
 
 add_subdirectory(00_basic_matmul)
+add_subdirectory(42_quant_optimized_matmul_tla)
 
 if(_JIT_KERNEL_ENTRIES)
     set(_JIT_TARGET catlass_kernel_jit)

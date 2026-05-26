@@ -25,7 +25,7 @@ __catlass_commit__ = _vers["commit"]
 # Expose to JIT compiler at runtime
 os.environ["TORCH_CATLASS_VERSION"] = _vers["full"]
 
-__all__ = ["ops", "basic_matmul", "__version__", "__catlass_version__"]
+__all__ = ["ops", "basic_matmul", "quant_optimized_matmul_tla", "__version__", "__catlass_version__"]
 
 _catlass_loaded: bool = False
 
@@ -63,13 +63,37 @@ def _load_so_files(lib_dir):
             ctypes.CDLL(lib_path, mode=_dl_mode)
 
 
+def _find_pkg_dir():
+    """Return the directory that contains the compiled ``lib/`` tree.
+
+    In a normal install this is simply the package directory (``__file__``).
+    In an editable install the Python sources live in the source tree while
+    the compiled artefacts are installed inside site-packages, so we fall
+    back to the site-packages location.
+    """
+    src_base = os.path.dirname(__file__)
+    if os.path.isdir(os.path.join(src_base, "lib")):
+        return src_base
+
+    from importlib.metadata import distribution
+    try:
+        dist = distribution("torch-catlass")
+        sp_dir = dist.locate_file("torch_catlass")
+        sp_dir_str = str(sp_dir)  # Convert PosixPath to string
+        if os.path.isdir(os.path.join(sp_dir_str, "lib")):
+            return sp_dir_str
+    except Exception:
+        pass
+
+    return src_base
+
+
 def _load_kernel_libs():
     """Load JIT and architecture-specific kernel libraries once per process."""
     global _catlass_loaded
     if not _catlass_loaded:
-        base = os.path.dirname(__file__)
+        base = _find_pkg_dir()
 
-        # 设置包根路径环境变量（供 JIT 编译器运行时使用）
         os.environ["TORCH_CATLASS_PKG_DIR"] = base
 
         # 1. JIT 编译器 & JIT kernel 入口 — 先加载编译器，再加载统一入口库
@@ -99,8 +123,9 @@ def _load_kernel_libs():
 
 def _load_main_lib():
     """Load the PyTorch extension that registers ``torch.ops.catlass`` ops."""
+    base = _find_pkg_dir()
     torch.ops.load_library(
-        os.path.join(os.path.dirname(__file__), "lib", "libcatlass_torch.so")
+        os.path.join(base, "lib", "libcatlass_torch.so")
     )
 
 

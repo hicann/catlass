@@ -18,11 +18,16 @@
 #include "catlass_kernel.h"
 #include "common/register.h"
 #include "template/matmul.h"
+#include "template/quant_matmul.h"
 
 namespace CatlassKernelWrapper {
 
 using BasicMatmulOp = MatmulLike<CatlassKernel::BasicMatmul>;
 static auto& basic_matmul = BasicMatmulOp::Run;
 REGISTER_TORCH_FUNC(basic_matmul);
+
+using QuantOptimizedMatmulTLAOp = QuantMatmulLike<CatlassKernel::QuantOptimizedMatmulTLA>;
+static auto& quant_optimized_matmul_tla = QuantOptimizedMatmulTLAOp::Run;
+REGISTER_TORCH_FUNC(quant_optimized_matmul_tla);
 
 } // namespace CatlassKernelWrapper

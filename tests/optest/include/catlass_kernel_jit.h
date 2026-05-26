@@ -66,8 +66,9 @@ struct GroupedMatmulParams : public MatmulParams {
  * @brief Compile-time parameters for quantized matmul examples.
  */
 struct QuantMatmulTParams : public MatmulTParams {
-    aclDataType scaleDataType = aclDataType::ACL_FLOAT16;         ///< Scale tensor element type.
-    aclDataType perTokenScaleDataType = aclDataType::ACL_FLOAT16; ///< Per-token scale element type.
+    aclDataType scaleDataType = aclDataType::ACL_FLOAT;         ///< Scale tensor element type.
+    aclDataType perTokenScaleDataType = aclDataType::ACL_FLOAT; ///< Per-token scale element type.
+    aclDataType elementD = aclDataType::ACL_BF16;                 ///< Final output tensor element type (D = scale * C).
 };
 
 /**
