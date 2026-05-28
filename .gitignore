@@ -58,3 +58,4 @@ OPPROF*/
 # OAT pre-commit (oat_check.sh 也会按需追加)
 oat_reports/
 log/
+**/.DS_Store
