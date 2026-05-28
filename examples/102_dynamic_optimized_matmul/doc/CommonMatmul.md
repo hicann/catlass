@@ -81,7 +81,7 @@ Preload的核心思想为，在计算当前Tile的Matmul前，预先加载下一
 
 ### 2.3 Padding
 
-在A2或A3上，当A或B矩阵为ND（RowMajor或ColumnMajor）格式时，如果矩阵的Stride为非512B对齐，则ND2NZ搬运接口的带宽会显著下降。为了规避这个问题，采用AIV提前对A或B矩阵进行数据格式转换（或数据填充），目的是让GM2L1搬运时候，避免用非512B对齐的Stride访问GM数据。
+在A2或A3上，当A或B矩阵为ND（RowMajor或ColumnMajor）格式时，如果矩阵的Stride为非512B对齐，则ND2NZ搬运接口的带宽会显著下降。为了规避这个问题，采用AIV提前对A或B矩阵进行数据格式转换（或数据填充），目的是让GM2L1搬运的时候，避免用非512B对齐的Stride访问GM数据。
 
 #### 2.3.1 矩阵A或B的Padding模式说明
 

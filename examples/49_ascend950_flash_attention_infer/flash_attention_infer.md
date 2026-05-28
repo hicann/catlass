@@ -105,7 +105,7 @@ using EpilogueRescaleO = Epilogue::Block::BlockEpilogue<...>;
 
 #### Tile Mmad & Tile Copy
 
-在Kernel使用的Block组件中，使用了位于tile_mmad.hpp中的TileMmadTla组件和位于tile_copy.hpp中的PackedTileCopyTlaToUB组件，并新增了针对FA Epilogue处理的TileCopySoftmax和TileCopyRescaleO组件，以及Ascend950新增的ub->l1通路CopyUb2L1Tla组件，例如：
+在Kernel使用的Block组件中，使用了位于tile_mmad.hpp中的TileMmadTla组件和位于tile_copy.hpp中的PackedTileCopyTlaToUB组件，并新增了针对FA Epilogue处理的TileCopySoftmax和TileCopyRescaleO组件，以及Ascend950新增的Ub->L1通路CopyUb2L1Tla组件，例如：
 
 ```c++
 using TileCopyQK = Gemm::Tile::PackedTileCopyTlaToUB<
