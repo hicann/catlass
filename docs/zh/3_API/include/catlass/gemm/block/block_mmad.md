@@ -29,7 +29,7 @@ struct BlockMmad {
 };
 ```
 
-注意到模板参数中，BiasType默认使用`void`，TileCopy默认使用[Gemm::Tile::TileCopy](../tile/tile_copy.md)，TileMmad默认使用[Gemm::Tile::TileMmad](../tile/tile_mmad.md)
+注意到模板参数中，BiasType默认使用`void`，TileCopy默认使用[Gemm::Tile::TileCopy](../tile/tile_copy/README.md)，TileMmad默认使用[Gemm::Tile::TileMmad](../tile/tile_mmad/README.md)
 
 ## BlockMmadTla
 

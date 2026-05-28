@@ -10,4 +10,6 @@ CATLASS提供分层的Gemm API接口，从低到高（Basic/Tile/Block/Kernel/De
 | [epilogue/block](./include/catlass/epilogue/block/README.md)   |    Gemm的尾处理组件，也可用于Gemm之外的其他计算 |
 | [epilogue/fusion](./include/catlass/epilogue/fusion/README.md)  |    EVG 的图组织器与基础节点组件   |
 | [epilogue/tile](./include/catlass/epilogue/tile/README.md)  |    使用基础API构建尾处理涉及的NPU微内核   |
+| [conv/tile](./include/catlass/conv/tile/README.md)  |    使用基础API构建Conv涉及的NPU微内核   |
+| [gemv/tile](./include/catlass/gemv/tile/README.md)  |    使用基础API构建Gemv涉及的NPU微内核   |
 |[TLA](./include/tla/README.md)   |   抽象数据存储细节，提供通用的访问多维数组算法  |

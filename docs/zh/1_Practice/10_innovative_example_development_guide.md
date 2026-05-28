@@ -214,7 +214,7 @@ bash scripts/build.sh 44_quant_matmul_full_loadA_tla
 
 - 与标杆算子进行性能对比，验证新特性的收益。样例44以`12_quant_matmul`为标杆，在N轴较大的场景下性能提升5%~15%
 - 在算子设计文档中记录性能数据、测试环境和标杆信息
-- 若性能未达预期，参考[性能瓶颈分析及优化手段](./bottleneck_analysis_and_optimization.md)进行定位和优化
+- 若性能未达预期，参考[性能瓶颈分析及优化手段](./evaluation/bottleneck_analysis_and_optimization.md)进行定位和优化
 
 ## 5. 合入阶段
 
