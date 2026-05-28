@@ -9,24 +9,27 @@
  * the software repository for the full text of the License.
  */
 
-#ifndef OPTEST_JIT_COMPILER_HPP
-#define OPTEST_JIT_COMPILER_HPP
+#ifndef OPTEST_JIT_COMPILER_H
+#define OPTEST_JIT_COMPILER_H
 
-#include "jit_logger.h"
-#include "jit_util.h"
-
-#include <dlfcn.h>
 #include <cstdint>
 #include <mutex>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
+
+#include <dlfcn.h>
+
+#include "jit_config.h"
+#include "jit_logger.h"
+#include "jit_util.h"
 
 namespace CatlassKernel {
 
 /** @brief Compiled JIT kernel ABI entry function pointer type. */
-using JitEntryFn = void (*)(uint32_t blockNum, aclrtStream stream, const void* tParams, const void* params);
+using JitEntryFn = void (*)(uint32_t blockNum, aclrtStream stream, const void* params);
 
 /**
  * @brief RAII wrapper around ``dlopen`` and ``dlclose``.
@@ -137,9 +140,10 @@ public:
      *
      * @param templatePath Template path relative to the resolved template base.
      * @param macros Preprocessor macros that define the template specialization.
+     * @param kt Kernel type (AIC/AIV/MIX) for compiler flag selection.
      * @return ABI-compatible ``run`` symbol from the loaded shared object.
      */
-    JitEntryFn getKernel(const char* templatePath, const MacroMap& macros);
+    JitEntryFn getKernel(const char* templatePath, const MacroMap& macros, JitKernelType kt = AIC);
 
     /**
      * @brief Drop in-memory loaded kernel handles.
@@ -157,15 +161,28 @@ private:
 
     /**
      * @brief Compile one template specialization into a shared object.
+     * @param name Kernel short name used for diagnostics and fallback macro naming.
+     * @param templatePath Path to the Ascend C template source file.
+     * @param macros Preprocessor definitions for template specialization.
+     * @param kt Kernel type used to select the KERNEL_TYPE compiler flag.
+     * @param soPath Output path for the compiled shared object.
      */
     void compile(
-        std::string_view name, std::string_view templatePath, const MacroMap& macros, const std::string& soPath);
+        std::string_view name, std::string_view templatePath, const MacroMap& macros, JitKernelType kt,
+        const std::string& soPath);
 
     /**
      * @brief Build the bisheng command line for a JIT compilation.
+     * @param name Kernel short name used for diagnostics and fallback macro naming.
+     * @param templatePath Path to the Ascend C template source file.
+     * @param macros Preprocessor definitions for template specialization.
+     * @param kt Kernel type used to select the KERNEL_TYPE compiler flag.
+     * @param soPath Output path for the compiled shared object.
+     * @return Complete compiler argument vector ready for subprocess invocation.
      */
     [[nodiscard]] std::vector<std::string> buildCompilerArgs(
-        std::string_view name, std::string_view templatePath, const MacroMap& macros, const std::string& soPath);
+        std::string_view name, std::string_view templatePath, const MacroMap& macros, JitKernelType kt,
+        const std::string& soPath);
 
     std::once_flag initFlag_;
     std::string cacheDir_;
@@ -183,4 +200,4 @@ private:
 };
 
 } // namespace CatlassKernel
-#endif // OPTEST_JIT_COMPILER_HPP
+#endif // OPTEST_JIT_COMPILER_H

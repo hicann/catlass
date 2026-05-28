@@ -13,14 +13,27 @@
 #define K_MAX_SHAPE_DIM 0
 #endif
 
-#include <cstddef>
-using std::size_t;
+#include "catlass/arch/arch.hpp"
+#include "catlass/catlass.hpp"
+#include "catlass/epilogue/block/block_epilogue.hpp"
+#include "catlass/epilogue/dispatch_policy.hpp"
+#include "catlass/epilogue/tile/tile_broadcast_mul.hpp"
+#include "catlass/epilogue/tile/tile_broadcast_one_blk.hpp"
+#include "catlass/epilogue/tile/tile_swizzle.hpp"
+#include "catlass/gemm/block/block_mmad.hpp"
+#include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/dispatch_policy.hpp"
+#include "catlass/gemm/gemm_type.hpp"
+#include "catlass/gemm/kernel/quant_optimized_matmul_tla.hpp"
+#include "catlass/gemm_coord.hpp"
+#include "catlass/layout/layout.hpp"
+#include "catlass/status.hpp"
 
-#include <kernel_operator.h>
-
-#include <iostream>
-
-extern "C" int rtGetC2cCtrlAddr(uint64_t *, uint32_t *);
+#include "../common/common.h"
+#include "catlass_kernel.h"
+#include "common/kernel_runner.h"
+#include "tla/layout.hpp"
+#include "tla/tensor.hpp"
 
 #ifndef CATLASS_JIT_ELEMENT_A
 #define CATLASS_JIT_ELEMENT_A int8_t
@@ -40,35 +53,15 @@ extern "C" int rtGetC2cCtrlAddr(uint64_t *, uint32_t *);
 #ifndef CATLASS_JIT_LAYOUT_C
 #define CATLASS_JIT_LAYOUT_C RowMajor
 #endif
-#ifndef CATLASS_JIT_SCALE_DTYPE
-#define CATLASS_JIT_SCALE_DTYPE float
+#ifndef CATLASS_JIT_ELEMENT_SCALE
+#define CATLASS_JIT_ELEMENT_SCALE float
 #endif
-#ifndef CATLASS_JIT_PER_TOKEN_SCALE_DTYPE
-#define CATLASS_JIT_PER_TOKEN_SCALE_DTYPE float
+#ifndef CATLASS_JIT_ELEMENT_PER_TOKEN_SCALE
+#define CATLASS_JIT_ELEMENT_PER_TOKEN_SCALE float
 #endif
 #ifndef CATLASS_JIT_ELEMENT_D
 #define CATLASS_JIT_ELEMENT_D bfloat16_t
 #endif
-
-#include "catlass/layout/layout.hpp"
-#include "catlass/gemm/dispatch_policy.hpp"
-#include "catlass/gemm/gemm_type.hpp"
-#include "catlass/gemm_coord.hpp"
-#include "catlass/arch/arch.hpp"
-#include "catlass/catlass.hpp"
-#include "catlass/gemm/kernel/quant_optimized_matmul_tla.hpp"
-#include "catlass/epilogue/block/block_epilogue.hpp"
-#include "catlass/epilogue/dispatch_policy.hpp"
-#include "catlass/epilogue/tile/tile_broadcast_mul.hpp"
-#include "catlass/epilogue/tile/tile_broadcast_one_blk.hpp"
-#include "catlass/epilogue/tile/tile_swizzle.hpp"
-#include "catlass/gemm/block/block_mmad.hpp"
-#include "catlass/gemm/block/block_swizzle.hpp"
-#include "catlass/gemm/device/device_gemm.hpp"
-#include "catlass/status.hpp"
-#include "tla/layout.hpp"
-#include "tla/tensor.hpp"
-#include "../common/common.h"
 
 using namespace Catlass;
 using namespace tla;
@@ -76,8 +69,8 @@ using namespace tla;
 using ElementA = CATLASS_JIT_ELEMENT_A;
 using ElementB = CATLASS_JIT_ELEMENT_B;
 using ElementC = CATLASS_JIT_ELEMENT_C;
-using ElementScale = CATLASS_JIT_SCALE_DTYPE;
-using ElementPerTokenScale = CATLASS_JIT_PER_TOKEN_SCALE_DTYPE;
+using ElementScale = CATLASS_JIT_ELEMENT_SCALE;
+using ElementPerTokenScale = CATLASS_JIT_ELEMENT_PER_TOKEN_SCALE;
 using ElementD = CATLASS_JIT_ELEMENT_D;
 using ArchTag = Arch::AtlasA2;
 
@@ -89,61 +82,29 @@ using LayoutTagPerTokenScale = LayoutTagScale;
 using LayoutTagD = LayoutTagC;
 
 template <class LayoutTag>
-auto GetPaddingLayout(LayoutTag layout, uint32_t blockRows, uint32_t blockCols) {
+auto GetPaddingLayout(LayoutTag layout, uint32_t blockRows, uint32_t blockCols)
+{
     if constexpr (std::is_same_v<LayoutTag, layout::RowMajor>) {
         auto shape = MakeShape(
             MakeShape(blockRows, CeilDiv(layout.shape(0), blockRows)),
-            MakeShape(blockCols, CeilDiv(layout.shape(1), blockCols))
-        );
+            MakeShape(blockCols, CeilDiv(layout.shape(1), blockCols)));
         auto stride = MakeStride(
             MakeStride(
-                static_cast<int64_t>(blockCols), static_cast<int64_t>(blockRows) * RoundUp(layout.shape(1), blockCols)
-            ),
-            MakeStride(Int<1>{}, static_cast<int64_t>(blockRows) * blockCols)
-        );
+                static_cast<int64_t>(blockCols), static_cast<int64_t>(blockRows) * RoundUp(layout.shape(1), blockCols)),
+            MakeStride(Int<1>{}, static_cast<int64_t>(blockRows) * blockCols));
         return MakeLayout(shape, stride);
     } else {
         auto shape = MakeShape(
             MakeShape(blockRows, CeilDiv(layout.shape(0), blockRows)),
-            MakeShape(blockCols, CeilDiv(layout.shape(1), blockCols))
-        );
+            MakeShape(blockCols, CeilDiv(layout.shape(1), blockCols)));
         auto stride = MakeStride(
             MakeStride(Int<1>{}, static_cast<int64_t>(blockRows) * blockCols),
             MakeStride(
-                static_cast<int64_t>(blockRows), RoundUp(layout.shape(0), blockRows) * static_cast<int64_t>(blockCols)
-            )
-        );
+                static_cast<int64_t>(blockRows),
+                RoundUp(layout.shape(0), blockRows) * static_cast<int64_t>(blockCols)));
         return MakeLayout(shape, stride);
     }
 }
-
-template <class LayoutTag>
-size_t GetWorkspaceLen(LayoutTag layout, size_t blockRows, size_t blockCols) {
-    return RoundUp(static_cast<size_t>(layout.shape(0)), blockRows)
-           * RoundUp(static_cast<size_t>(layout.shape(1)), blockCols);
-}
-
-template <class Adapter>
-inline void RunAdapter(
-    Adapter opAdapter,
-    typename Adapter::Arguments args,
-    aclrtStream stream,
-    uint32_t coreNum,
-    uint64_t fftsAddr = 0)
-{
-    size_t sizeWorkspace = opAdapter.GetWorkspaceSize(args);
-    uint8_t *deviceWorkspace = nullptr;
-    if (sizeWorkspace > 0) {
-        aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST);
-    }
-    opAdapter.Initialize(args, deviceWorkspace);
-    opAdapter(stream, coreNum, fftsAddr);
-    aclrtSynchronizeStream(stream);
-    if (sizeWorkspace > 0) {
-        aclrtFree(deviceWorkspace);
-    }
-}
-
 
 const uint32_t align = 256;
 
@@ -167,30 +128,33 @@ using ElementCompute = float;
 using EpilogueTileShape = MatrixShape<32, 256>;
 
 using TileRowBroadcastMul = Epilogue::Tile::TileRowBroadcastMulTla<ArchTag, ElementCompute, EpilogueTileShape>;
-using TileBroadcastOneBlk =
-    Epilogue::Tile::TileBroadcastOneBlkTla<ArchTag, ElementCompute, EpilogueTileShape::ROW>;
+using TileBroadcastOneBlk = Epilogue::Tile::TileBroadcastOneBlkTla<ArchTag, ElementCompute, EpilogueTileShape::ROW>;
 using TileOneBlkColumnBroadcastMul =
     Epilogue::Tile::TileOneBlkColumnBroadcastMulTla<ArchTag, ElementCompute, EpilogueTileShape>;
 using EpilogueTileCopy = Epilogue::Tile::TileCopyDequantTla<
-    ArchTag, ElementC, LayoutTagC, ElementScale, LayoutTagScale, ElementPerTokenScale, LayoutTagPerTokenScale,
-    ElementD, LayoutTagD>;
+    ArchTag, ElementC, LayoutTagC, ElementScale, LayoutTagScale, ElementPerTokenScale, LayoutTagPerTokenScale, ElementD,
+    LayoutTagD>;
 using EpilogueTileScheduler = Epilogue::Tile::EpilogueHorizontalTileSwizzle;
 
 using BlockEpilogue = Epilogue::Block::BlockEpilogue<
-    EpilogueDispatchPolicy, ElementC, ElementScale, ElementPerTokenScale, ElementD, TileRowBroadcastMul, TileBroadcastOneBlk,
-    TileOneBlkColumnBroadcastMul, EpilogueTileCopy, EpilogueTileScheduler>;
+    EpilogueDispatchPolicy, ElementC, ElementScale, ElementPerTokenScale, ElementD, TileRowBroadcastMul,
+    TileBroadcastOneBlk, TileOneBlkColumnBroadcastMul, EpilogueTileCopy, EpilogueTileScheduler>;
 
 constexpr uint32_t workspaceStages = 2;
-
-#ifndef CATLASS_JIT_KERNEL_NAME
-#define CATLASS_JIT_KERNEL_NAME QuantOptimizedMatmulTLAKernel
+#ifndef CATLASS_JIT_NEED_PADDING_A
+#define CATLASS_JIT_NEED_PADDING_A false
+#endif
+#ifndef CATLASS_JIT_NEED_PADDING_B
+#define CATLASS_JIT_NEED_PADDING_B false
 #endif
 
-#include "catlass_kernel.h"
+#ifndef CATLASS_JIT_BLOCK_SCHEDULER
+#define CATLASS_JIT_BLOCK_SCHEDULER BlockScheduler30
+#endif
 
-extern "C" void run(
-    uint32_t blockNum, aclrtStream stream, const CatlassKernel::QuantMatmulTParams* /*tParams*/,
-    const CatlassKernel::MatmulParams* params)
+using BlockScheduler = CATLASS_JIT_BLOCK_SCHEDULER;
+
+extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::MatmulParams* params)
 {
     uint32_t m = params->m;
     uint32_t n = params->n;
@@ -209,17 +173,12 @@ extern "C" void run(
     auto layoutPerTokenScale = MakeLayoutFromTag(tagPerTokenScale);
     auto layoutD = MakeLayoutFromTag(tagC);
 
-    using TensorA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutA), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
-    using TensorB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutB), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
-    using TensorC = Tensor<AscendC::GlobalTensor<ElementC>, decltype(layoutC), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
-
-    constexpr const uint32_t computeLengthA = 96 * 1024 / sizeof(ElementA);
-    using PaddingA = Catlass::Gemm::Kernel::PaddingMatrixBlockND<ArchTag, TensorA, computeLengthA>;
-    constexpr const uint32_t computeLengthB = 96 * 1024 / sizeof(ElementB);
-    using PaddingB = Catlass::Gemm::Kernel::PaddingMatrixBlockND<ArchTag, TensorB, computeLengthB>;
-
-    bool isNeedPaddingA = CatlassKernel::IsNeedPadding(tagA, align);
-    bool isNeedPaddingB = CatlassKernel::IsNeedPadding(tagB, align);
+    using TensorA = Tensor<
+        AscendC::GlobalTensor<ElementA>, decltype(layoutA), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
+    using TensorB = Tensor<
+        AscendC::GlobalTensor<ElementB>, decltype(layoutB), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
+    using TensorC = Tensor<
+        AscendC::GlobalTensor<ElementC>, decltype(layoutC), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
 
     uint8_t* deviceA = params->inputAddr[0];
     uint8_t* deviceB = params->inputAddr[1];
@@ -227,129 +186,38 @@ extern "C" void run(
     uint8_t* devicePerTokenScale = params->inputAddr[3];
     uint8_t* deviceD = params->outputAddr[0];
 
-    uint64_t fftsAddr{0};
-    uint32_t fftsLen{0};
-    (void)rtGetC2cCtrlAddr(&fftsAddr, &fftsLen);
+#if defined(CATLASS_JIT_NEED_PADDING_A) && CATLASS_JIT_NEED_PADDING_A
+    auto layoutWA = GetPaddingLayout(tagA, get<0>(L1TileShape{}), get<2>(L1TileShape{}));
+    constexpr const uint32_t computeLengthA = 96 * 1024 / sizeof(ElementA);
+    using PaddingA = Catlass::Gemm::Kernel::PaddingMatrixBlockND<ArchTag, TensorA, computeLengthA>;
+#else
+    auto layoutWA = MakeLayout(layoutA.shape(), layoutA.stride());
+    using PaddingA = void;
+#endif
+#if defined(CATLASS_JIT_NEED_PADDING_B) && CATLASS_JIT_NEED_PADDING_B
+    auto layoutWB = GetPaddingLayout(tagB, get<2>(L1TileShape{}), get<1>(L1TileShape{}));
+    constexpr const uint32_t computeLengthB = 96 * 1024 / sizeof(ElementB);
+    using PaddingB = Catlass::Gemm::Kernel::PaddingMatrixBlockND<ArchTag, TensorB, computeLengthB>;
+#else
+    auto layoutWB = MakeLayout(layoutB.shape(), layoutB.stride());
+    using PaddingB = void;
+#endif
+    using TensorWA = Tensor<
+        AscendC::GlobalTensor<ElementA>, decltype(layoutWA), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
+    using TensorWB = Tensor<
+        AscendC::GlobalTensor<ElementB>, decltype(layoutWB), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
+    using TileCopy = Gemm::Tile::PaddingPackedTileCopyTla<
+        ArchTag, TensorWA, LayoutTagA, TensorWB, LayoutTagB, TensorC, LayoutTagC, void, void,
+        CATLASS_JIT_NEED_PADDING_A, CATLASS_JIT_NEED_PADDING_B>;
+    using BlockMmad = Gemm::Block::BlockMmadTla<
+        DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB, TensorC, void, TileCopy>;
 
-    if (!isNeedPaddingA && !isNeedPaddingB) {
-        auto layoutWA = MakeLayout(layoutA.shape(), layoutA.stride());
-        auto layoutWB = MakeLayout(layoutB.shape(), layoutB.stride());
-        using TensorWA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutWA), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
-        using TensorWB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutWB), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
-        using TileCopy = Gemm::Tile::PaddingPackedTileCopyTla<
-            ArchTag, TensorWA, LayoutTagA, TensorWB, LayoutTagB, TensorC, LayoutTagC, void, void, false, false>;
-        using BlockMmad = Gemm::Block::BlockMmadTla<
-            DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB, TensorC, void, TileCopy>;
-        if (m > n) {
-            using MatmulKernel = Gemm::Kernel::QuantOptimizedMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler30, void, void, workspaceStages>;
-            using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-            typename MatmulKernel::Arguments arguments{
-                Catlass::GemmCoord{m, n, k}, blockNum,
-                {deviceA, layoutA, deviceB, layoutB, deviceA, layoutWA, deviceB, layoutWB},
-                {deviceScale, layoutScale, devicePerTokenScale, layoutPerTokenScale, deviceD, layoutD}
-            };
-            MatmulAdapter matmulOp;
-            RunAdapter(matmulOp, arguments, stream, blockNum, fftsAddr);
-        } else {
-            using MatmulKernel = Gemm::Kernel::QuantOptimizedMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler31, void, void, workspaceStages>;
-            using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-            typename MatmulKernel::Arguments arguments{
-                Catlass::GemmCoord{m, n, k}, blockNum,
-                {deviceA, layoutA, deviceB, layoutB, deviceA, layoutWA, deviceB, layoutWB},
-                {deviceScale, layoutScale, devicePerTokenScale, layoutPerTokenScale, deviceD, layoutD}
-            };
-            MatmulAdapter matmulOp;
-            RunAdapter(matmulOp, arguments, stream, blockNum, fftsAddr);
-        }
-    } else if (!isNeedPaddingA && isNeedPaddingB) {
-        auto layoutWA = MakeLayout(layoutA.shape(), layoutA.stride());
-        auto layoutWB = GetPaddingLayout(tagB, get<2>(L1TileShape{}), get<1>(L1TileShape{}));
-        using TensorWA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutWA), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
-        using TensorWB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutWB), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
-        using TileCopy = Gemm::Tile::PaddingPackedTileCopyTla<
-            ArchTag, TensorWA, LayoutTagA, TensorWB, LayoutTagB, TensorC, LayoutTagC, void, void, false, true>;
-        using BlockMmad = Gemm::Block::BlockMmadTla<
-            DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB, TensorC, void, TileCopy>;
-        if (m > n) {
-            using MatmulKernel = Gemm::Kernel::QuantOptimizedMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler30, void, PaddingB, workspaceStages>;
-            using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-            typename MatmulKernel::Arguments arguments{
-                Catlass::GemmCoord{m, n, k}, blockNum,
-                {deviceA, layoutA, deviceB, layoutB, deviceA, layoutWA, deviceB, layoutWB},
-                {deviceScale, layoutScale, devicePerTokenScale, layoutPerTokenScale, deviceD, layoutD}
-            };
-            MatmulAdapter matmulOp;
-            RunAdapter(matmulOp, arguments, stream, blockNum, fftsAddr);
-        } else {
-            using MatmulKernel = Gemm::Kernel::QuantOptimizedMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler31, void, PaddingB, workspaceStages>;
-            using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-            typename MatmulKernel::Arguments arguments{
-                Catlass::GemmCoord{m, n, k}, blockNum,
-                {deviceA, layoutA, deviceB, layoutB, deviceA, layoutWA, deviceB, layoutWB},
-                {deviceScale, layoutScale, devicePerTokenScale, layoutPerTokenScale, deviceD, layoutD}
-            };
-            MatmulAdapter matmulOp;
-            RunAdapter(matmulOp, arguments, stream, blockNum, fftsAddr);
-        }
-    } else if (isNeedPaddingA && !isNeedPaddingB) {
-        auto layoutWA = GetPaddingLayout(tagA, get<0>(L1TileShape{}), get<2>(L1TileShape{}));
-        auto layoutWB = MakeLayout(layoutB.shape(), layoutB.stride());
-        using TensorWA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutWA), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
-        using TensorWB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutWB), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
-        using TileCopy = Gemm::Tile::PaddingPackedTileCopyTla<
-            ArchTag, TensorWA, LayoutTagA, TensorWB, LayoutTagB, TensorC, LayoutTagC, void, void, true, false>;
-        using BlockMmad = Gemm::Block::BlockMmadTla<
-            DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB, TensorC, void, TileCopy>;
-        if (m > n) {
-            using MatmulKernel = Gemm::Kernel::QuantOptimizedMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler30, PaddingA, void, workspaceStages>;
-            using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-            typename MatmulKernel::Arguments arguments{
-                Catlass::GemmCoord{m, n, k}, blockNum,
-                {deviceA, layoutA, deviceB, layoutB, deviceA, layoutWA, deviceB, layoutWB},
-                {deviceScale, layoutScale, devicePerTokenScale, layoutPerTokenScale, deviceD, layoutD}
-            };
-            MatmulAdapter matmulOp;
-            RunAdapter(matmulOp, arguments, stream, blockNum, fftsAddr);
-        } else {
-            using MatmulKernel = Gemm::Kernel::QuantOptimizedMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler31, PaddingA, void, workspaceStages>;
-            using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-            typename MatmulKernel::Arguments arguments{
-                Catlass::GemmCoord{m, n, k}, blockNum,
-                {deviceA, layoutA, deviceB, layoutB, deviceA, layoutWA, deviceB, layoutWB},
-                {deviceScale, layoutScale, devicePerTokenScale, layoutPerTokenScale, deviceD, layoutD}
-            };
-            MatmulAdapter matmulOp;
-            RunAdapter(matmulOp, arguments, stream, blockNum, fftsAddr);
-        }
-    } else {
-        auto layoutWA = GetPaddingLayout(tagA, get<0>(L1TileShape{}), get<2>(L1TileShape{}));
-        auto layoutWB = GetPaddingLayout(tagB, get<2>(L1TileShape{}), get<1>(L1TileShape{}));
-        using TensorWA = Tensor<AscendC::GlobalTensor<ElementA>, decltype(layoutWA), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
-        using TensorWB = Tensor<AscendC::GlobalTensor<ElementB>, decltype(layoutWB), tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
-        using TileCopy = Gemm::Tile::PaddingPackedTileCopyTla<
-            ArchTag, TensorWA, LayoutTagA, TensorWB, LayoutTagB, TensorC, LayoutTagC, void, void, true, true>;
-        using BlockMmad = Gemm::Block::BlockMmadTla<
-            DispatchPolicy, L1TileShape, L0TileShape, TensorWA, TensorWB, TensorC, void, TileCopy>;
-        if (m > n) {
-            using MatmulKernel = Gemm::Kernel::QuantOptimizedMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler30, PaddingA, PaddingB, workspaceStages>;
-            using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-            typename MatmulKernel::Arguments arguments{
-                Catlass::GemmCoord{m, n, k}, blockNum,
-                {deviceA, layoutA, deviceB, layoutB, deviceA, layoutWA, deviceB, layoutWB},
-                {deviceScale, layoutScale, devicePerTokenScale, layoutPerTokenScale, deviceD, layoutD}
-            };
-            MatmulAdapter matmulOp;
-            RunAdapter(matmulOp, arguments, stream, blockNum, fftsAddr);
-        } else {
-            using MatmulKernel = Gemm::Kernel::QuantOptimizedMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler31, PaddingA, PaddingB, workspaceStages>;
-            using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-            typename MatmulKernel::Arguments arguments{
-                Catlass::GemmCoord{m, n, k}, blockNum,
-                {deviceA, layoutA, deviceB, layoutB, deviceA, layoutWA, deviceB, layoutWB},
-                {deviceScale, layoutScale, devicePerTokenScale, layoutPerTokenScale, deviceD, layoutD}
-            };
-            MatmulAdapter matmulOp;
-            RunAdapter(matmulOp, arguments, stream, blockNum, fftsAddr);
-        }
-    }
+    using MatmulKernel = Gemm::Kernel::QuantOptimizedMatmulTla<
+        BlockMmad, BlockEpilogue, BlockScheduler, PaddingA, PaddingB, workspaceStages>;
+    typename MatmulKernel::Arguments arguments{
+        Catlass::GemmCoord{m, n, k},
+        blockNum,
+        {deviceA, layoutA, deviceB, layoutB, deviceA, layoutWA, deviceB, layoutWB},
+        {deviceScale, layoutScale, devicePerTokenScale, layoutPerTokenScale, deviceD, layoutD}};
+    Catlass::RunKernel<MatmulKernel>(arguments, stream, blockNum);
 }

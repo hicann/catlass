@@ -91,7 +91,12 @@ install(DIRECTORY ${CATLASS_INCLUDE_DIR}/catlass/
     FILES_MATCHING
     PATTERN "*.hpp"
     PATTERN "*.h"
-    PATTERN "*.hip"
+    PATTERN "fa" EXCLUDE
+    PATTERN "mla" EXCLUDE
+    PATTERN "kernel_adapter" EXCLUDE
+    PATTERN "device" EXCLUDE
+    PATTERN "dynamic" EXCLUDE
+    PATTERN "conv" EXCLUDE
 )
 
 install(DIRECTORY ${CATLASS_INCLUDE_DIR}/tla/
@@ -99,6 +104,13 @@ install(DIRECTORY ${CATLASS_INCLUDE_DIR}/tla/
     FILES_MATCHING
     PATTERN "*.hpp"
     PATTERN "*.h"
+)
+
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/kernels/common/
+    DESTINATION jit/common
+    FILES_MATCHING
+    PATTERN "*.h"
+    PATTERN "*.hpp"
 )
 
 add_subdirectory(kernels)

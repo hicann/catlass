@@ -9,12 +9,27 @@
  * the software repository for the full text of the License.
  */
 
-#pragma once
+#ifndef OPTEST_JIT_CONFIG_H
+#define OPTEST_JIT_CONFIG_H
 
+#include <cstdlib>
 #include <string>
 #include <vector>
 
 namespace CatlassKernel {
+
+/**
+ * @brief Kernel type classification for JIT compilation.
+ *
+ * Determines the Ascend C kernel execution mode and corresponding compiler flags.
+ */
+enum JitKernelType : int
+{
+    AIC = 0, ///< Cube kernel (__cube__)
+    AIV = 1, ///< Vector kernel (__vector__)
+    MIX = 2  ///< Mixed cube+vector kernel (__mix__)
+};
+
 namespace JitConfig {
 
 // ── 环境变量名称 ──
@@ -24,6 +39,10 @@ inline constexpr const char* kSanitizeEnv = "MS_SANITIZE_MEMORY";
 inline constexpr const char* kVersionEnv = "TORCH_CATLASS_VERSION";
 inline constexpr const char* kAscendHomeEnv = "ASCEND_HOME_PATH";
 inline constexpr const char* kPkgDirEnv = "TORCH_CATLASS_PKG_DIR";
+
+inline constexpr const char* kAicAsMix = "CATLASS_JIT_AIC_AS_MIX";
+inline constexpr const char* kAivAsMix = "CATLASS_JIT_AIV_AS_MIX";
+inline constexpr const char* kMixCV11 = "CATLASS_JIT_MIX_CV_11";
 
 // ── 默认路径 ──
 inline constexpr const char* kDefaultCacheDir = "/tmp/catlass_jit";
@@ -54,6 +73,38 @@ inline std::vector<std::string> ArchFlags(const std::string& arch)
 }
 
 /**
+ * @brief Compiler flags for a given kernel type.
+ *
+ * Maps JitKernelType to the corresponding -DKERNEL_TYPE=... flag.
+ * Supports environment variable overrides:
+ *   - CATLASS_JIT_AIC_AS_MIX  — emit __mix__(1,0) instead of __cube__ for AIC
+ *   - CATLASS_JIT_AIV_AS_MIX  — emit __mix__(0,1) instead of __vector__ for AIV
+ *   - CATLASS_JIT_MIX_CV_11   — emit __mix__(1,1) instead of __mix__(1,2) for MIX
+ * @param kt Kernel type to generate flags for.
+ */
+inline std::vector<std::string> KernelTypeFlags(JitKernelType kt)
+{
+    switch (kt) {
+        case AIC: {
+            if (std::getenv(kAicAsMix))
+                return {"-DKERNEL_TYPE=__mix__(1,0)"};
+            return {"-DKERNEL_TYPE=__cube__"};
+        }
+        case AIV: {
+            if (std::getenv(kAivAsMix))
+                return {"-DKERNEL_TYPE=__mix__(0,1)"};
+            return {"-DKERNEL_TYPE=__vector__"};
+        }
+        case MIX: {
+            if (std::getenv(kMixCV11))
+                return {"-DKERNEL_TYPE=__mix__(1,1)"};
+            return {"-DKERNEL_TYPE=__mix__(1,2)"};
+        }
+    }
+    return {};
+}
+
+/**
  * @brief Build the preprocessor define carrying the package version.
  * @param version Version string exported by the Python package loader.
  */
@@ -64,3 +115,4 @@ inline std::string VersionDefine(const std::string& version)
 
 } // namespace JitConfig
 } // namespace CatlassKernel
+#endif // OPTEST_JIT_CONFIG_H

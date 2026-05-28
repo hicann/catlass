@@ -11,11 +11,7 @@
 
 #include "type_utils.hpp"
 
-namespace CatlassKernel {
-
-const char* AclDtypeToBishengTypeStr(aclDataType dt)
+extern "C" const char* AclDtypeToBishengTypeStr(aclDataType dt)
 {
     return test_utils::TypeCast<aclDataType, const char*>(dt);
 }
-
-} // namespace CatlassKernel

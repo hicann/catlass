@@ -8,7 +8,7 @@
  * BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE. See LICENSE in the root of
  * the software repository for the full text of the License.
  */
- 
+
 #ifndef OPTEST_CATLASS_TORCH_H
 #define OPTEST_CATLASS_TORCH_H
 
@@ -30,8 +30,8 @@
  * @return Output matrix tensor.
  */
 at::Tensor basic_matmul(
-    const at::Tensor& mat1, const at::Tensor& mat2, const c10::ScalarType& outDType, const bool transA, const bool transB,
-    const bool formatA, const bool formatB);
+    const at::Tensor& mat1, const at::Tensor& mat2, const c10::ScalarType& outDType, const bool transA,
+    const bool transB, const bool formatA, const bool formatB);
 
 /**
  * @brief PyTorch extension entry for CATLASS quantized optimized matmul (TLA).
@@ -51,9 +51,7 @@ at::Tensor basic_matmul(
  * @return Output matrix tensor.
  */
 at::Tensor quant_optimized_matmul_tla(
-    const at::Tensor& mat1, const at::Tensor& mat2,
-    const at::Tensor& scale, const at::Tensor& perTokenScale,
-    const c10::ScalarType& outDType, const bool transA, const bool transB,
-    const bool formatA, const bool formatB);
+    const at::Tensor& mat1, const at::Tensor& mat2, const at::Tensor& scale, const at::Tensor& perTokenScale,
+    const c10::ScalarType& outDType, const bool transA, const bool transB, const bool formatA, const bool formatB);
 
 #endif

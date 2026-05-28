@@ -10,9 +10,6 @@
  */
 
 #include "jit_util.h"
-#include "jit_config.h"
-
-#include <sys/wait.h>
 
 #include <cerrno>
 #include <cstdio>
@@ -21,7 +18,10 @@
 #include <filesystem>
 #include <stdexcept>
 
+#include <sys/wait.h>
 #include <tiling/platform/platform_ascendc.h>
+
+#include "jit_config.h"
 
 #ifndef ENABLE_ASCEND950
 #define ENABLE_ASCEND950
@@ -44,6 +44,24 @@ const char* EnvOrEmpty(const char* name)
 
 } // anonymous namespace
 
+namespace {
+
+std::string shellQuote(const std::string& arg)
+{
+    std::string result = "'";
+    for (char c : arg) {
+        if (c == '\'') {
+            result += "'\\''";
+        } else {
+            result += c;
+        }
+    }
+    result += "'";
+    return result;
+}
+
+} // anonymous namespace
+
 ProcessResult RunProcessCapture(const std::vector<std::string>& args)
 {
     JIT_THROW_IF(args.empty() || args[0].empty(), "empty compiler command");
@@ -52,7 +70,7 @@ ProcessResult RunProcessCapture(const std::vector<std::string>& args)
     for (size_t i = 0; i < args.size(); ++i) {
         if (i > 0)
             cmd += ' ';
-        cmd += args[i];
+        cmd += shellQuote(args[i]);
     }
     cmd += " 2>&1";
 

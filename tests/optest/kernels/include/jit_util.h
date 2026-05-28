@@ -9,14 +9,15 @@
  * the software repository for the full text of the License.
  */
 
-#ifndef OPTEST_JIT_UTIL_HPP
-#define OPTEST_JIT_UTIL_HPP
+#ifndef OPTEST_JIT_UTIL_H
+#define OPTEST_JIT_UTIL_H
 
-#include <acl/acl.h>
 #include <cstdint>
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+#include <acl/acl.h>
 
 #include "jit_macros.h"
 
@@ -62,4 +63,4 @@ struct ProcessResult {
 [[nodiscard]] std::string ResolveTemplateBase();
 
 } // namespace CatlassKernel
-#endif // OPTEST_JIT_UTIL_HPP
+#endif // OPTEST_JIT_UTIL_H

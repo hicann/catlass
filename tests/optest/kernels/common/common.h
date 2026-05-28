@@ -13,7 +13,6 @@
 
 #include <acl/acl.h>
 
-#include "catlass/debug.hpp"
 #include "catlass/detail/dependent_false.hpp"
 #include "catlass/layout/layout.hpp"
 

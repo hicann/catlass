@@ -15,13 +15,15 @@ include_directories(${CATLASS_INCLUDE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../utils)
 
-include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jit_try_compile_check.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jit_verify_template.cmake)
 
 set(_JIT_COMPILER_TARGET catlass_kernel_jit_compiler)
 add_library(${_JIT_COMPILER_TARGET} SHARED
     ${CMAKE_CURRENT_SOURCE_DIR}/jit/jit_compiler.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/jit/jit_macro_generator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/jit/jit_util.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/jit/jit_logger.cpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/jit/jit_logger.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/jit/workspace_alloc.cpp)
 target_include_directories(${_JIT_COMPILER_TARGET} PRIVATE
     ${ASCEND_HOME_PATH}/include
     ${CATLASS_INCLUDE_DIR}
@@ -51,18 +53,6 @@ install(TARGETS ${_JIT_COMPILER_TARGET}
 set(_JIT_KERNEL_ENTRIES "")
 set(_JIT_KERNEL_TEMPLATES "")
 
-# compile options for msSanitizer
-# 支持两种方式启用：
-#   1. cmake -DENABLE_MSSANITIZER=ON
-#   2. export MS_SANITIZE_MEMORY=1  (从环境变量自动检测)
-if(NOT DEFINED ENABLE_MSSANITIZER)
-    if(DEFINED ENV{MS_SANITIZE_MEMORY} AND "$ENV{MS_SANITIZE_MEMORY}" STREQUAL "1")
-        set(ENABLE_MSSANITIZER ON)
-    endif()
-endif()
-if(DEFINED ENABLE_MSSANITIZER AND ENABLE_MSSANITIZER)
-    message(STATUS "msSanitizer ENABLED (via cmake arg or MS_SANITIZE_MEMORY env)")
-endif()
 
 macro(add_kernel)
     set(_K_OPTIONS "")
@@ -105,7 +95,7 @@ macro(add_kernel)
                 "${CMAKE_BINARY_DIR}"
             )
 
-            jit_try_compile_check(
+            jit_verify_template(
                 NAME "${_K_NAME}"
                 TEMPLATE "${_KERNEL_TEMPLATE}"
                 NPU_ARCH_LIST ${_K_NPU_ARCH_LIST}
@@ -114,6 +104,7 @@ macro(add_kernel)
         endif()
 
     elseif("${_K_KERNEL_TYPE}" STREQUAL "prebuilt")
+        # prebuilt kernel 默认为每个 arch 编译两份：普通版本和 _ms (sanitizer) 版本
         foreach(_ARCH ${_K_NPU_ARCH_LIST})
             list(FIND CATLASS_ARCH_LIST ${_ARCH} _ARCH_INDEX)
             if(_ARCH_INDEX EQUAL -1)
@@ -137,13 +128,6 @@ macro(add_kernel)
                     $<$<COMPILE_LANGUAGE:ASC>:-Wno-ignored-attributes>
                     $<$<COMPILE_LANGUAGE:ASC>:-Wno-unused-value>
                 )
-
-                if(_ARCH STREQUAL "2201")
-                    target_compile_options(${_LIB_NAME} PRIVATE
-                        "SHELL:$<$<COMPILE_LANGUAGE:ASC>:-mllvm -cce-aicore-record-overflow=true>"
-                        "SHELL:$<$<COMPILE_LANGUAGE:ASC>:-mllvm -cce-aicore-dcci-insert-for-scalar=false>"
-                    )
-                endif()
 
                 # _ms 版本附加 sanitizer 标志
                 if(_MS_SUFFIX STREQUAL "_ms")
@@ -227,6 +211,11 @@ if(_JIT_KERNEL_ENTRIES)
         catlass_kernel_utils
         dl
     )
+
+    get_property(_JIT_VERIFY_TARGETS GLOBAL PROPERTY _JIT_VERIFY_TARGETS)
+    foreach(_TGT ${_JIT_VERIFY_TARGETS})
+        add_dependencies(${_JIT_TARGET} ${_TGT})
+    endforeach()
 
     install(TARGETS ${_JIT_TARGET}
         DESTINATION lib/jit)

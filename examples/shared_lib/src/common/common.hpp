@@ -12,67 +12,38 @@
 #ifndef SHARED_LIB_COMMON_COMMON_HPP
 #define SHARED_LIB_COMMON_COMMON_HPP
 
+#include <iostream>
+
 #include <acl/acl.h>
 
-#include "catlass/debug.hpp"
-#include "catlass/detail/dependent_false.hpp"
 #include "catlass/layout/layout.hpp"
+
+// Macro function for unwinding acl errors.
+#define ACL_CHECK(status)                                                                   \
+    do {                                                                                    \
+        aclError error = status;                                                            \
+        if (error != ACL_ERROR_NONE) {                                                      \
+            std::cerr << __FILE__ << ":" << __LINE__ << " aclError:" << error << std::endl; \
+        }                                                                                   \
+    } while (0)
 
 namespace CatlassKernel {
 using namespace Catlass;
 
-template <aclDataType T>
-struct AclType2Type {};
-
-template <>
-struct AclType2Type<ACL_FLOAT> {
-    using type = float;
-};
-
-template <>
-struct AclType2Type<ACL_INT32> {
-    using type = int32_t;
-};
-
-template <>
-struct AclType2Type<ACL_INT8> {
-    using type = int8_t;
-};
-
-template <>
-struct AclType2Type<ACL_FLOAT16> {
-    using type = half;
-};
-
-template <>
-struct AclType2Type<ACL_BF16> {
-    using type = bfloat16_t;
-};
-
-template <bool IS_TRANSPOSE>
-struct Transpose2Layout {
-    using layout = std::conditional_t<IS_TRANSPOSE, Catlass::layout::ColumnMajor, Catlass::layout::RowMajor>;
-};
-
 template <class Adapter>
 void RunAdapter(
-    Adapter matmulOp,
-    typename Adapter::Arguments args,
-    aclrtStream stream,
-    uint32_t aicCoreNum,
-    uint64_t fftsAddr = 0
-)
+    Adapter matmulOp, typename Adapter::Arguments args, aclrtStream stream, uint32_t aicCoreNum)
 {
     size_t sizeWorkspace = matmulOp.GetWorkspaceSize(args);
-    uint8_t *deviceWorkspace = nullptr;
+    uint8_t* deviceWorkspace = nullptr;
     if (sizeWorkspace > 0) {
-        aclCheck(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
     }
     matmulOp.Initialize(args, deviceWorkspace);
-    matmulOp(stream, aicCoreNum, fftsAddr);
-    aclCheck(aclrtSynchronizeStream(stream));
+    matmulOp(stream, aicCoreNum);
+    ACL_CHECK(aclrtSynchronizeStream(stream));
     if (sizeWorkspace > 0) {
-        aclCheck(aclrtFree(deviceWorkspace));
+        ACL_CHECK(aclrtFree(deviceWorkspace));
     }
 }
 
@@ -107,16 +78,5 @@ inline bool IsNeedPadding(layout::nZ layout, uint32_t align)
 }
 
 } // namespace CatlassKernel
-
-extern "C" int rtGetC2cCtrlAddr(uint64_t *, uint32_t *);
-
-// Macro function for unwinding rt errors.
-#define RT_CHECK(status)                                                                                               \
-    do {                                                                                                               \
-        int32_t error = status;                                                                                        \
-        if (error != 0) {                                                                                              \
-            std::cerr << __FILE__ << ":" << __LINE__ << " rtError:" << error << std::endl;                             \
-        }                                                                                                              \
-    } while (0)
 
 #endif

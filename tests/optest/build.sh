@@ -15,7 +15,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-PYTHON="$(which python3)"
+PYTHON="${PYTHON:-$(which python3)}"
 echo "Using python: $($PYTHON --version 2>&1) at $PYTHON"
 
 usage() {

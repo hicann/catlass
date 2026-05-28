@@ -22,7 +22,7 @@
 
 namespace CatlassKernelWrapper {
 
-template <void (*KernelFunc)(uint32_t, aclrtStream, const CatlassKernel::MatmulTParams&, const CatlassKernel::MatmulParams&)>
+template <auto KernelFunc>
 struct MatmulLike {
     using OutputType = at::Tensor;
 
@@ -47,15 +47,15 @@ struct MatmulLike {
         CatlassKernel::MatmulParams& params)
     {
         auto aclType = TorchDtypeToAclDtype(mat1.scalar_type());
-        tParams.elementA = aclType;
-        tParams.elementB = aclType;
-        tParams.elementC = TorchDtypeToAclDtype(outDType);
-        tParams.transA = transA;
-        tParams.transB = transB;
-        tParams.transC = false;
-        tParams.useNzA = formatA;
-        tParams.useNzB = formatB;
-        tParams.useNzC = false;
+        tParams.element["A"] = aclType;
+        tParams.element["B"] = aclType;
+        tParams.element["C"] = TorchDtypeToAclDtype(outDType);
+        tParams.transpose["A"] = transA;
+        tParams.transpose["B"] = transB;
+        tParams.transpose["C"] = false;
+        tParams.useNz["A"] = formatA;
+        tParams.useNz["B"] = formatB;
+        tParams.useNz["C"] = false;
 
         params.inputAddr.resize(2);
         params.inputAddr[0] = static_cast<uint8_t*>(const_cast<void*>(mat1.storage().data()));
@@ -89,7 +89,7 @@ struct MatmulLike {
         const CatlassKernel::MatmulTParams& tParams, CatlassKernel::MatmulParams& params)
     {
         OutputType output = GetOutputTensor(
-            {params.m, params.n}, AclDtypeToTorchDtype(tParams.elementC));
+            {params.m, params.n}, AclDtypeToTorchDtype(tParams.elem("C")));
         params.outputAddr.resize(1);
         params.outputAddr[0] = static_cast<uint8_t*>(const_cast<void*>(output.storage().data()));
         return output;

@@ -10,14 +10,15 @@
  */
 
 #include "jit_compiler.h"
-#include "jit_config.h"
+
+#include <algorithm>
+#include <cstdlib>
+#include <filesystem>
 
 #include <unistd.h>
 
-#include <algorithm>
-#include <cctype>
-#include <cstdlib>
-#include <filesystem>
+#include "jit_config.h"
+#include "jit_sha256.h"
 
 namespace fs = std::filesystem;
 
@@ -66,7 +67,7 @@ void JitCompiler::lazyInit()
     });
 }
 
-JitEntryFn JitCompiler::getKernel(const char* templatePath, const MacroMap& macros)
+JitEntryFn JitCompiler::getKernel(const char* templatePath, const MacroMap& macros, JitKernelType kt)
 {
     lazyInit();
 
@@ -77,26 +78,25 @@ JitEntryFn JitCompiler::getKernel(const char* templatePath, const MacroMap& macr
 
     JIT_CHECK(templatePath && templatePath[0], "templatePath is empty");
 
-    auto sanitize = [](const std::string& s) -> std::string {
-        std::string out;
-        out.reserve(s.size());
-        for (unsigned char c : s) {
-            if (std::isalnum(c) || c == '_' || c == '-' || c == '.')
-                out += static_cast<char>(c);
-            else
-                out += '_';
+    auto makeKernelUuid = [&](const MacroMap& macroValues) -> std::string {
+        std::vector<std::pair<std::string, std::string>> sorted;
+        sorted.reserve(macroValues.size() + 2);
+        for (const auto& kv : macroValues) {
+            sorted.emplace_back(kv.first, kv.second);
         }
-        return (out.empty() || out == "." || out == "..") ? "unnamed" : out;
+        sorted.emplace_back("__ARCH__", npuArch_);
+        sorted.emplace_back("__KT__", std::to_string(static_cast<int>(kt)));
+        std::sort(sorted.begin(), sorted.end());
+
+        std::string input;
+        for (const auto& kv : sorted) {
+            input += kv.first + "=" + kv.second + "&";
+        }
+        return Sha256::hash(input);
     };
 
-    auto makeCacheKey = [&](const MacroMap& macroValues) -> std::string {
-        auto it = macroValues.find("CATLASS_JIT_KERNEL_NAME");
-        std::string kn = (it != macroValues.end() && !it->second.empty()) ? it->second : targetName;
-        return sanitize(kn + "_arch" + npuArch_);
-    };
-
-    const std::string cacheKey = makeCacheKey(macros);
-    const std::string soPath = cacheDir_ + "/" + sanitize(cacheKey) + ".so";
+    const std::string cacheKey = makeKernelUuid(macros);
+    const std::string soPath = cacheDir_ + "/" + cacheKey + ".so";
 
     {
         std::lock_guard<std::mutex> lk(mutex_);
@@ -123,7 +123,7 @@ JitEntryFn JitCompiler::getKernel(const char* templatePath, const MacroMap& macr
 
                 fs::create_directories(fs::path(soPath).parent_path(), ec);
                 JIT_CHECK(!ec, "mkdir failed: " + std::string(fs::path(soPath).parent_path()) + ": " + ec.message());
-                compile(targetName, templatePath, macros, soPath);
+                compile(targetName, templatePath, macros, kt, soPath);
             }
         }
     }
@@ -144,9 +144,10 @@ JitEntryFn JitCompiler::getKernel(const char* templatePath, const MacroMap& macr
 }
 
 void JitCompiler::compile(
-    std::string_view name, std::string_view templatePath, const MacroMap& macros, const std::string& soPath)
+    std::string_view name, std::string_view templatePath, const MacroMap& macros, JitKernelType kt,
+    const std::string& soPath)
 {
-    auto args = buildCompilerArgs(name, templatePath, macros, soPath);
+    auto args = buildCompilerArgs(name, templatePath, macros, kt, soPath);
 
     auto cmdJoin = [](const std::vector<std::string>& args) -> std::string {
         std::string cmd;
@@ -177,7 +178,8 @@ void JitCompiler::compile(
 }
 
 std::vector<std::string> JitCompiler::buildCompilerArgs(
-    std::string_view name, std::string_view templatePath, const MacroMap& macros, const std::string& soPath)
+    std::string_view name, std::string_view templatePath, const MacroMap& macros, JitKernelType kt,
+    const std::string& soPath)
 {
     std::vector<std::string> args;
     args.reserve(32);
@@ -195,6 +197,13 @@ std::vector<std::string> JitCompiler::buildCompilerArgs(
     {
         auto archFlags = JitConfig::ArchFlags(npuArch_);
         args.insert(args.end(), archFlags.begin(), archFlags.end());
+    }
+
+    if (macros.count("KERNEL_TYPE")) {
+        JIT_LOG(JitLogLevel::Info, "KERNEL_TYPE already set in macros, skip KernelTypeFlags");
+    } else {
+        auto ktFlags = JitConfig::KernelTypeFlags(kt);
+        args.insert(args.end(), ktFlags.begin(), ktFlags.end());
     }
 
     {
@@ -229,6 +238,7 @@ std::vector<std::string> JitCompiler::buildCompilerArgs(
     {
         auto it = macros.find("CATLASS_JIT_KERNEL_NAME");
         std::string kn = (it != macros.end() && !it->second.empty()) ? it->second : std::string(name);
+        args.push_back("-DKERNEL_NAME=" + kn);
         kn += "_arch" + npuArch_;
         args.push_back("-DCATLASS_JIT_KERNEL_NAME=" + kn);
     }

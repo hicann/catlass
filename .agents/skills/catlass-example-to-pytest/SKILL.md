@@ -32,7 +32,7 @@ example source
 2. `matmul/gemm/gemv` 归入 JIT 接口头：`include/catlass_kernel_jit.h`。
 3. 其他（如 conv / flash-attention / mla）归入 prebuilt 接口头：`include/catlass_kernel_prebuilt.h`。
 4. 不大量引入 `using XxxParams = ...` 去伪装兼容；优先使用统一结构体或结构体继承表达兼容关系。
-5. grouped quant 场景避免把运行时 dtype 再塞回 `Params`；dtype 应放在 `QuantMatmulTParams` 这类模板参数结构。
+5. grouped quant 场景避免把运行时 dtype 再塞回 `Params`；dtype 应放在 `QuantTParams` 这类模板参数结构。
 6. 架构识别逻辑遵循现有实现：JIT 侧从 `GetCurrentNPUArch()` 获取，不新增环境变量分支。
 7. 任何已有用户改动不可回滚；发现冲突先停并问用户。
 
@@ -77,10 +77,10 @@ example source
 在 `include/catlass_kernel_jit.h`：
 
 - 复用或扩展统一结构体：
-  - `MatmulTParams`
+  - `TParams`
   - `MatmulParams`
   - `GroupedMatmulParams`
-  - `QuantMatmulTParams`
+  - `QuantTParams`
   - `GemmParams`
 - 添加函数声明，并写明 example 编号和目录名的 docstring：
   - `@brief Reserved JIT interface for example <nn>_<name>.`
@@ -114,6 +114,8 @@ example source
 
 - 模板默认宏齐全（dtype/layout/transpose 等）。
 - 运行入口签名与 ABI 声明一致。
+- **JIT 模板中 kernel 启动统一使用 `Catlass::RunKernel<Kernel>()`（来自 `common/kernel_runner.h`），禁止引入 `catlass/gemm/device/device_gemm.hpp`。**
+- 模板引用 `kernels/common/` 下的头文件（如 `kernel_runner.h`、`tile_shape_scaler.h`、`common.h`、`workspace_alloc.h`）时，需确认对应头文件已通过顶置 `CMakeLists.txt` 安装到 `jit/common/`。
 - 不把 example 的命令行/数据生成逻辑带入内核模板。
 
 ### 2.2 Prebuilt 类接入
@@ -143,6 +145,7 @@ example source
 
 - 参数名与 C++ adapter 对齐。
 - dtype 字符串解析保持白名单/显式映射，不使用隐式 `eval`。
+- 填充 `TParams` 使用直接 map 访问（如 `tParams.element["A"] = ...`）。
 - docstring 写清：
   - 来源 example 编号名称
   - 参数语义
@@ -181,6 +184,7 @@ example source
 - 编译错误：先修 ABI/签名/CMake 路径问题。
 - 导入错误：先查 `torch_catlass/__init__.py` 动态库加载顺序与符号。
 - 运行错误：核对 `TParams/Params` 填充及 dtype/layout 映射。
+- JIT 编译报 `Syntax error: "(" unexpected`：检查编译器参数是否含 shell 特殊字符（如 `__mix__(1,2)`），`RunProcessCapture` 已通过单引号转义处理，新增宏值若含特殊字符需验证转义生效。
 
 ## Checklists
 
@@ -191,6 +195,8 @@ example source
 - [ ] docstring 含 example 编号名称
 - [ ] 参数模型与 `TParams + Params` 保持一致
 - [ ] 无不必要 `using XxxParams` 别名滥用
+- [ ] JIT 模板使用 `common/kernel_runner.h` 启动 kernel，未引入 `device_gemm.hpp`
+- [ ] 模板依赖的 `kernels/common/` 头文件已通过 CMake install rule 安装到 `jit/common/`
 
 ### Runtime Checklist
 
@@ -198,6 +204,7 @@ example source
 - [ ] `import torch_catlass` 成功
 - [ ] pytest 通过或因无 NPU 合理 skip
 - [ ] 与参考实现数值一致
+- [ ] JIT 编译无 shell 转义错误（`__cube__`/`__mix__` 等含特殊字符的宏值正确编译）
 
 ## Output Contract
 

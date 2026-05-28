@@ -90,6 +90,39 @@ bash build.sh
 pytest tests/ -v
 ```
 
+## 环境变量
+
+### 外部配置（用户可设置）
+
+| 变量 | 作用 | 可接受值 | 默认值 |
+| --- | --- | --- | --- |
+| `ASCEND_HOME_PATH` | CANN 安装根目录，查找 compiler(`ccec`) 和 runtime 库 | 绝对路径 | —（必设） |
+| `TORCH_CATLASS_CACHE_DIR` | JIT 编译产物 `.so` 磁盘缓存目录 | 绝对路径 | `~/.cache/catlass/jit_cache` |
+| `CATLASS_JIT_LOG_LEVEL` | JIT 编译日志等级 | `0`=None, `1`=Info, `2`=Debug | `0` |
+| `MS_SANITIZE_MEMORY` | 启用 Ascend memory sanitizer 调试 | `1` | — |
+| `CATLASS_JIT_AIC_AS_MIX` | 强制 AIC kernel 以 `__mix__(1,0)` 编译 | 任意非空 | —（默认 `__cube__`） |
+| `CATLASS_JIT_AIV_AS_MIX` | 强制 AIV kernel 以 `__mix__(0,1)` 编译 | 任意非空 | —（默认 `__vector__`） |
+| `CATLASS_JIT_MIX_CV_11` | 强制 MIX kernel 以 `__mix__(1,1)` 编译 | 任意非空 | —（默认 `__mix__(1,2)`） |
+| `PYTHON` | `build.sh` 使用的 Python 解释器路径 | `which python3` 的输出 | `$(which python3)` |
+
+### 包内注入（import 时自动设置，用户不直接改）
+
+| 变量 | 作用 | 来源 |
+| --- | --- | --- |
+| `TORCH_CATLASS_VERSION` | 注入 JIT 编译的版本标识 `-DCATLASS_VERSION_FULL` | `torch_catlass/__init__.py` 从 catlass git 推导 |
+| `TORCH_CATLASS_PKG_DIR` | Python 包安装目录，JIT 依据此路径定位 templates 和 include | `torch_catlass/__init__.py` 通过 `_find_pkg_dir()` 解析 |
+
+### 构建选项
+
+| 变量 / 参数 | 作用 | 可接受值 |
+| --- | --- | --- |
+| `build.sh --build-type` | CMake 构建类型 | `Release`（默认）, `Debug` |
+| `build.sh --skip-wheel` | 跳过 wheel 打包，使用 editable install | — |
+| `build.sh --clean` | 清理 JIT 缓存 + 构建产物 | — |
+| `CATLASS_ARCH_LIST` (CMake) | 限制 prebuilt kernel 编译的 NPU 架构 | 分号分隔列表，如 `2201;3510` |
+
+> prebuilt kernel 默认为每个 arch 编译两份：普通版本和 `_ms` (sanitizer) 版本，无需额外选项。
+
 ## 使用示例
 
 ```python

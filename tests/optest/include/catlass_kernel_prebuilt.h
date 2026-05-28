@@ -45,17 +45,17 @@ struct ConvParams : public PrebuiltParams {
  * @brief Runtime parameters for flash-attention style examples.
  */
 struct FlashAttentionParams : public PrebuiltParams {
-    uint32_t qNtokens = 0;                  ///< Total Q tokens for variable-length input.
-    uint32_t batch = 0;                     ///< Batch size.
-    uint32_t qSeqlen = 0;                   ///< Q sequence length.
-    uint32_t kvSeqlen = 0;                  ///< KV sequence length.
-    uint32_t numHeads = 0;                  ///< Number of Q heads.
-    uint32_t kvHeads = 0;                   ///< Number of KV heads.
-    uint32_t embeddingSize = 0;             ///< Per-head embedding dimension.
-    uint32_t isVariedLen = 0;               ///< Whether variable-length input is used.
-    uint32_t maskType = 0;                  ///< Mask mode.
-    uint32_t blockSize = 128;               ///< Tile block size.
-    aclDataType dataType = ACL_FLOAT16;     ///< Input/output element type.
+    uint32_t qNtokens = 0;              ///< Total Q tokens for variable-length input.
+    uint32_t batch = 0;                 ///< Batch size.
+    uint32_t qSeqlen = 0;               ///< Q sequence length.
+    uint32_t kvSeqlen = 0;              ///< KV sequence length.
+    uint32_t numHeads = 0;              ///< Number of Q heads.
+    uint32_t kvHeads = 0;               ///< Number of KV heads.
+    uint32_t embeddingSize = 0;         ///< Per-head embedding dimension.
+    uint32_t isVariedLen = 0;           ///< Whether variable-length input is used.
+    uint32_t maskType = 0;              ///< Mask mode.
+    uint32_t blockSize = 128;           ///< Tile block size.
+    aclDataType dataType = ACL_FLOAT16; ///< Input/output element type.
 };
 
 /**

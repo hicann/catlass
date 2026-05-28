@@ -10,17 +10,16 @@
  */
 
 #include "jit_logger.h"
-#include "jit_config.h"
 
 #include <cstdlib>
 
-namespace CatlassKernel {
+#include "jit_config.h"
 
-int GetJitLogLevel()
+extern "C" int GetJitLogLevel()
 {
     static int level = -1;
     if (level < 0) {
-        const char* env = std::getenv(JitConfig::kLogLevelEnv);
+        const char* env = std::getenv(CatlassKernel::JitConfig::kLogLevelEnv);
         level = env ? std::atoi(env) : 0;
         if (level < static_cast<int>(JitLogLevel::None))
             level = static_cast<int>(JitLogLevel::None);
@@ -29,5 +28,3 @@ int GetJitLogLevel()
     }
     return level;
 }
-
-} // namespace CatlassKernel

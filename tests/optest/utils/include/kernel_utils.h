@@ -14,7 +14,7 @@
 
 #include <acl/acl.h>
 
-namespace CatlassKernel {
+extern "C" {
 
 /**
  * @brief Convert an ACL dtype to the bisheng C++ type token used by JIT macros.
@@ -23,6 +23,6 @@ namespace CatlassKernel {
  */
 const char* AclDtypeToBishengTypeStr(aclDataType dt);
 
-} // namespace CatlassKernel
+} // extern "C"
 
 #endif // OPTEST_KERNEL_UTILS_H

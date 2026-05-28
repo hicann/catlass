@@ -22,7 +22,7 @@
 
 namespace CatlassKernelWrapper {
 
-template <void (*KernelFunc)(uint32_t, aclrtStream, const CatlassKernel::QuantMatmulTParams&, const CatlassKernel::MatmulParams&)>
+template <auto KernelFunc>
 struct QuantMatmulLike {
     using OutputType = at::Tensor;
 
@@ -31,21 +31,21 @@ struct QuantMatmulLike {
         const at::Tensor& scale, const at::Tensor& perTokenScale,
         const c10::ScalarType& outDType, bool transA, bool transB,
         bool formatA, bool formatB,
-        CatlassKernel::QuantMatmulTParams& tParams,
+        CatlassKernel::MatmulTParams& tParams,
         CatlassKernel::MatmulParams& params)
     {
-        tParams.elementA = TorchDtypeToAclDtype(mat1.scalar_type());
-        tParams.elementB = TorchDtypeToAclDtype(mat2.scalar_type());
-        tParams.elementC = ACL_INT32;
-        tParams.transA = transA;
-        tParams.transB = transB;
-        tParams.transC = false;
-        tParams.useNzA = formatA;
-        tParams.useNzB = formatB;
-        tParams.useNzC = false;
-        tParams.scaleDataType = TorchDtypeToAclDtype(scale.scalar_type());
-        tParams.perTokenScaleDataType = TorchDtypeToAclDtype(perTokenScale.scalar_type());
-        tParams.elementD = TorchDtypeToAclDtype(outDType);
+        tParams.element["A"] = TorchDtypeToAclDtype(mat1.scalar_type());
+        tParams.element["B"] = TorchDtypeToAclDtype(mat2.scalar_type());
+        tParams.element["C"] = ACL_INT32;
+        tParams.transpose["A"] = transA;
+        tParams.transpose["B"] = transB;
+        tParams.transpose["C"] = false;
+        tParams.useNz["A"] = formatA;
+        tParams.useNz["B"] = formatB;
+        tParams.useNz["C"] = false;
+        tParams.element["SCALE"] = TorchDtypeToAclDtype(scale.scalar_type());
+        tParams.element["PER_TOKEN_SCALE"] = TorchDtypeToAclDtype(perTokenScale.scalar_type());
+        tParams.element["D"] = TorchDtypeToAclDtype(outDType);
 
         params.inputAddr.resize(4);
         params.inputAddr[0] = static_cast<uint8_t*>(const_cast<void*>(mat1.storage().data()));
@@ -72,10 +72,10 @@ struct QuantMatmulLike {
     }
 
     static OutputType AllocOutput(
-        const CatlassKernel::QuantMatmulTParams& tParams, CatlassKernel::MatmulParams& params)
+        const CatlassKernel::MatmulTParams& tParams, CatlassKernel::MatmulParams& params)
     {
         OutputType output = GetOutputTensor(
-            {params.m, params.n}, AclDtypeToTorchDtype(tParams.elementD));
+            {params.m, params.n}, AclDtypeToTorchDtype(tParams.elem("D")));
         params.outputAddr.resize(1);
         params.outputAddr[0] = static_cast<uint8_t*>(const_cast<void*>(output.storage().data()));
         return output;
@@ -87,7 +87,7 @@ struct QuantMatmulLike {
         const c10::ScalarType& outDType, bool transA, bool transB,
         bool formatA, bool formatB)
     {
-        CatlassKernel::QuantMatmulTParams tParams;
+        CatlassKernel::MatmulTParams tParams;
         CatlassKernel::MatmulParams params;
         GetKernelInfo(mat1, mat2, scale, perTokenScale, outDType, transA, transB, formatA, formatB, tParams, params);
         OutputType output = AllocOutput(tParams, params);

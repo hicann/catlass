@@ -16,10 +16,6 @@
 #include "catlass/status.hpp"
 #include "catlass/detail/kernel_adapter.hpp"
 
-#if defined(ENABLE_ASCENDC_DUMP)
-#include "catlass/debug.hpp"
-#endif
-
 namespace Catlass::Gemv::Device {
 
 template <class GemvKernel>

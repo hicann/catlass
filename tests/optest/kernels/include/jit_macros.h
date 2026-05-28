@@ -9,8 +9,8 @@
  * the software repository for the full text of the License.
  */
 
-#ifndef OPTEST_JIT_MACROS_HPP
-#define OPTEST_JIT_MACROS_HPP
+#ifndef OPTEST_JIT_MACROS_H
+#define OPTEST_JIT_MACROS_H
 
 #include <stdexcept>
 #include <string>
@@ -40,4 +40,4 @@
         }                       \
     } while (0)
 
-#endif // OPTEST_JIT_MACROS_HPP
+#endif // OPTEST_JIT_MACROS_H

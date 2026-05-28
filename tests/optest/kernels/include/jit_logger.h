@@ -9,12 +9,10 @@
  * the software repository for the full text of the License.
  */
 
-#ifndef OPTEST_JIT_LOGGER_HPP
-#define OPTEST_JIT_LOGGER_HPP
+#ifndef OPTEST_JIT_LOGGER_H
+#define OPTEST_JIT_LOGGER_H
 
 #include <cstdio>
-
-namespace CatlassKernel {
 
 enum class JitLogLevel : int
 {
@@ -26,7 +24,7 @@ enum class JitLogLevel : int
 /**
  * @brief Return the cached runtime JIT log level from CATLASS_JIT_LOG_LEVEL.
  */
-int GetJitLogLevel();
+extern "C" int GetJitLogLevel();
 
 /**
  * @brief Convert a JIT log level enum to a stable printable label.
@@ -43,17 +41,14 @@ inline const char* JitLevelStr(JitLogLevel level)
     }
 }
 
-} // namespace CatlassKernel
+#define JIT_LOGE(fmt, ...) JIT_LOG(JitLogLevel::Info, fmt, ##__VA_ARGS__)
 
-#define JIT_LOGE(fmt, ...) JIT_LOG(CatlassKernel::JitLogLevel::Info, fmt, ##__VA_ARGS__)
-
-#define JIT_LOG(level_, fmt, ...)                                                                             \
-    do {                                                                                                      \
-        if (CatlassKernel::GetJitLogLevel() >= static_cast<int>(level_)) {                                    \
-            fprintf(                                                                                          \
-                stderr, "[JIT][%s] %s:%d] " fmt "\n", CatlassKernel::JitLevelStr(level_), __FILE__, __LINE__, \
-                ##__VA_ARGS__);                                                                               \
-        }                                                                                                     \
+#define JIT_LOG(level_, fmt, ...)                                                         \
+    do {                                                                                  \
+        if (GetJitLogLevel() >= static_cast<int>(level_)) {                               \
+            fprintf(stderr, "[JIT][%s] %s:%d] " fmt "\n", JitLevelStr(level_), __FILE__,  \
+                __LINE__, ##__VA_ARGS__);                                                 \
+        }                                                                                 \
     } while (0)
 
-#endif // OPTEST_JIT_LOGGER_HPP
+#endif // OPTEST_JIT_LOGGER_H

@@ -22,6 +22,8 @@ def basic_matmul(
 ) -> Tensor:
     """Run CATLASS basic matrix multiplication on NPU tensors.
 
+    Source: example 00_basic_matmul.
+
     Args:
         mat1: Left input matrix. Shape is interpreted as ``(M, K)`` unless
             ``transA`` is true.

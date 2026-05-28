@@ -16,15 +16,15 @@
 namespace CatlassKernel {
 
 /**
- * @brief Resolve and launch the JIT-specialized basic matmul implementation.
+ * @brief example 00_basic_matmul: Resolve and launch the JIT-specialized basic matmul implementation.
  */
-void BasicMatmul(const uint32_t blockNum, aclrtStream stream, const MatmulTParams& tParams, const MatmulParams& params)
+extern "C" void BasicMatmul(
+    const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params)
 {
     auto* entry = JitCompiler::instance().getKernel(
-        "basic_matmul_impl.cpp",
-        JitMacroGenerator<MatmulTParams>::generate("basic_matmul", tParams));
+        "basic_matmul_impl.cpp", JitMacroGenerator<TParams>::generate("basic_matmul", tParams), JitKernelType::AIC);
     if (entry) {
-        entry(blockNum, stream, &tParams, &params);
+        entry(blockNum, stream, &params);
     }
     aclrtSynchronizeStream(stream);
 }
