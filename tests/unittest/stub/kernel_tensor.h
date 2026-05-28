@@ -43,6 +43,16 @@ public:
         return position_;
     }
 
+    uint32_t GetAddr() const
+    {
+        return addr_;
+    }
+
+    void SetAddr(uint32_t addr)
+    {
+        addr_ = addr;
+    }
+
     template <typename U>
     LocalTensor<U> ReinterpretCast() const
     {
@@ -92,6 +102,11 @@ public:
     uint64_t GetSize() const
     {
         return bufferSize_;
+    }
+
+    uintptr_t GetAddr() const
+    {
+        return reinterpret_cast<uintptr_t>(addr_);
     }
 
     GlobalTensor operator[](uint64_t offset) const

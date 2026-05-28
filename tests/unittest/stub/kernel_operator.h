@@ -11,19 +11,31 @@
 #ifndef ASCENDC_STUB_KERNEL_OPERATOR_H
 #define ASCENDC_STUB_KERNEL_OPERATOR_H
 
+#include <cstdint>
+
 #define __aicore__
 #define __gm__
 #define __forceinline__
+#define __ca__ // mx table
+#define __cb__
+#define __cbuf__
 
-struct half {};
-struct bfloat16_t {};
+struct half { uint16_t _; };
+struct bfloat16_t { uint16_t _; };
+struct float8_e8m0_t { uint8_t _; };
+struct float4_e2m1x2_t { };
+struct float4_e1m2x2_t { };
+struct float8_e4m3_t { uint8_t _; };
+struct float8_e5m2_t { uint8_t _; };
 
 #include "kernel_tensor.h"
 #include "kernel_struct_mm.h"
+#include "kernel_struct_fixpipe.h"
 #include "kernel_struct_unary.h"
 #include "kernel_operator_mm_intf.h"
 #include "kernel_operator_data_copy.h"
 #include "kernel_operator_data_copy_ext.h"
+#include "kernel_operator_fixpipe_intf.h"
 #include "kernel_operator_sync.h"
 #include "kernel_operator_sys_var_intf.h"
 #include "kernel_operator_vec_unary_intf.h"
@@ -31,6 +43,15 @@ struct bfloat16_t {};
 #include "kernel_operator_vec_vconv_intf.h"
 
 namespace AscendC {
+
+struct mx_fp8_e4m3_t {uint8_t _;};
+struct mx_fp8_e5m2_t {uint8_t _;};
+struct fp8_e8m0_t {uint8_t _;};
+struct fp8_e5m2_t {uint8_t _;};
+struct fp8_e4m3fn_t {uint8_t _;};
+struct hifloat8_t {uint8_t _;};
+struct fp4x2_e1m2_t {uint8_t _;};
+struct fp4x2_e2m1_t {uint8_t _;};
 
 enum class TPosition : int32_t
 {
@@ -62,6 +83,11 @@ struct is_one_of : std::disjunction<std::is_same<T, Types>...> {};
 template <typename T, typename... Types>
 inline constexpr bool is_one_of_v = is_one_of<T, Types...>::value;
 } // namespace Std
+
+template <typename T, typename U>
+struct IsSameType {
+    static constexpr bool value = std::is_same_v<T, U>;
+};
 
 } // namespace AscendC
 

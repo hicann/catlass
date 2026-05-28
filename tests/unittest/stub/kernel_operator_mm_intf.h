@@ -34,11 +34,85 @@ inline void LoadData(const LocalTensor<T>& dst, const GlobalTensor<T>& src, cons
 }
 
 template <typename T>
+inline void LoadData(const LocalTensor<T>& dst, const LocalTensor<T>& src, const LoadData2DParams& params)
+{
+    const std::vector<Arg> argsT = {Arg::MakeArg<T>()};
+    const std::vector<Arg> args = {dst, src, params};
+    ASCENDC_LOG_CALL_T(LoadData, argsT, args);
+}
+
+template <typename T>
+inline void LoadData(const LocalTensor<T>& dst, const GlobalTensor<T>& src, const LoadData2DParams& params)
+{
+    const std::vector<Arg> argsT = {Arg::MakeArg<T>()};
+    const std::vector<Arg> args = {dst, src, params};
+    ASCENDC_LOG_CALL_T(LoadData, argsT, args);
+}
+
+#if (defined(__NPU_ARCH__) && __NPU_ARCH__==3510)
+template <typename T>
 inline void LoadData(const LocalTensor<T>& dst, const LocalTensor<T>& src, const LoadData2DMxParams& params)
 {
     const std::vector<Arg> argsT = {Arg::MakeArg<T>()};
     const std::vector<Arg> args = {dst, src, params};
     ASCENDC_LOG_CALL_T(LoadData, argsT, args);  
+}
+#endif // __NPU_ARCH__ == 3510
+
+// Load 3D模式
+template <typename T, const IsResetLoad3dConfig &defaultConfig = IS_RESER_LOAD3D_DEFAULT_CONFIG>
+inline void LoadData(const LocalTensor<T>& dst, const LocalTensor<T>& src, const LoadData3DParamsV2<T>& loadDataParams)
+{
+    const std::vector<Arg> argsT = {Arg::MakeArg<T>(), Arg::MakeArg<IsResetLoad3dConfig>()};
+    const std::vector<Arg> args = {dst, src, loadDataParams};
+    ASCENDC_LOG_CALL_T(LoadData, argsT, args);
+}
+
+template <typename T>
+inline void LoadData(const LocalTensor<T>& dst, const LocalTensor<T>& src, const LoadData3DParamsV2Pro& loadDataParams)
+{
+    const std::vector<Arg> argsT = {Arg::MakeArg<T>()};
+    const std::vector<Arg> args = {dst, src, loadDataParams};
+    ASCENDC_LOG_CALL_T(LoadData, argsT, args);
+}
+
+// 辅助函数
+inline void Load3DSetFMatrixCal(uint16_t l1H, uint16_t l1W, const uint8_t padList[4])
+{
+    const std::vector<Arg> args = {l1H, l1W, padList};
+    ASCENDC_LOG_CALL_T(Load3DSetFMatrixCal, {}, args);
+}
+
+inline void Load3DSetFMatrixCal(uint64_t regFMatrix)
+{
+    const std::vector<Arg> args = {regFMatrix};
+    ASCENDC_LOG_CALL_T(Load3DSetFMatrixCal, {}, args);
+}
+
+// 带转置
+template <typename T>
+inline void LoadDataWithTranspose(const LocalTensor<T>& dst, const LocalTensor<T>& src, const LoadData2dTransposeParams& loadDataParams)
+{
+    const std::vector<Arg> argsT = {Arg::MakeArg<T>()};
+    const std::vector<Arg> args = {dst, src, loadDataParams};
+    ASCENDC_LOG_CALL_T(LoadDataWithTranspose, argsT, args);
+}
+
+template <typename T>
+inline void LoadDataWithTranspose(const LocalTensor<T>& dst, const LocalTensor<T>& src, const LoadData2dTransposeParamsV2& loadDataParams)
+{
+    const std::vector<Arg> argsT = {Arg::MakeArg<T>()};
+    const std::vector<Arg> args = {dst, src, loadDataParams};
+    ASCENDC_LOG_CALL_T(LoadDataWithTranspose, argsT, args);
+}
+
+// Sparse version
+template <typename T>
+inline void LoadDataWithSparse(const LocalTensor<T>& dst, const LocalTensor<T>& src, const LocalTensor<uint8_t> index, const LoadData2dParams& loadDataParams)
+{
+    const std::vector<Arg> argsT = {Arg::MakeArg<T>()};
+    const std::vector<Arg> args = {dst, src, index, loadDataParams};
+    ASCENDC_LOG_CALL_T(LoadDataWithSparse, argsT, args);
 }
 
 template <typename T, typename U, typename S>
@@ -61,5 +135,17 @@ inline void Mmad(
 }
 
 } // namespace AscendC
+
+inline void load_cbuf_to_cb_mx(uint64_t dst, void* src, uint16_t x_start_pos, uint16_t y_start_pos, uint8_t x_step, uint8_t y_step, uint16_t src_stride, uint16_t dst_stride)
+{
+    const std::vector<Arg> args = {dst, src, x_start_pos, y_start_pos, x_step, y_step, src_stride, dst_stride};
+    ASCENDC_LOG_CALL_T(load_cbuf_to_cb_mx, {}, args);
+}
+
+inline void load_cbuf_to_ca_mx(uint64_t dst, void* src, uint16_t x_start_pos, uint16_t y_start_pos, uint8_t x_step, uint8_t y_step, uint16_t src_stride, uint16_t dst_stride)
+{
+    const std::vector<Arg> args = {dst, src, x_start_pos, y_start_pos, x_step, y_step, src_stride, dst_stride};
+    ASCENDC_LOG_CALL_T(load_cbuf_to_ca_mx, {}, args);
+}
 
 #endif // ASCENDC_STUB_KERNEL_OPERATOR_MM_INTF_H

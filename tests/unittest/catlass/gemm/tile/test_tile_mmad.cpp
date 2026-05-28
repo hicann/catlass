@@ -8,6 +8,7 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+#if !defined(CATLASS_ARCH) || CATLASS_ARCH == 2201
 #include <gtest/gtest.h>
 #include "stub/ascendc_test_fixture.h"
 #include "stub/kernel_operator.h"
@@ -141,3 +142,4 @@ TEST_F(TileMmadTest, MmadWithBias)
     const std::type_index& T0 = logMmad.GetArgsTAt(0).Type();  // 获取第一个参数的数据类型
     ASSERT_EQ(T0, typeid(ElementMmad));  // 验证数据类型为float
 }
+#endif // CATLASS_ARCH == 2201

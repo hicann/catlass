@@ -32,4 +32,51 @@ protected:
     }
 };
 
+/// TileCopyTest, for AIC related data copy tile-level ut
+class TileCopyTest : public AscendCTest {
+protected:
+
+    template <class Element, bool isTrans = false>
+    void _setShape(uint32_t row, uint32_t col) {
+        constexpr uint32_t C0_NUM_PER_FRACTAL = 16;
+        constexpr uint32_t ELE_NUM_PER_C0 = 32 / sizeof(Element);
+        
+        _row = row;
+        _col = col;
+        if constexpr (isTrans) {
+            _row_round = (row + ELE_NUM_PER_C0 - 1) / ELE_NUM_PER_C0 * ELE_NUM_PER_C0;
+            _col_round = (col + C0_NUM_PER_FRACTAL - 1) / C0_NUM_PER_FRACTAL * C0_NUM_PER_FRACTAL;
+            _rows_by_fractal = _row_round / ELE_NUM_PER_C0;
+            _cols_by_fractal = _col_round / C0_NUM_PER_FRACTAL;
+        } else {
+            _row_round = (row + C0_NUM_PER_FRACTAL - 1) / C0_NUM_PER_FRACTAL * C0_NUM_PER_FRACTAL;
+            _col_round = (col + ELE_NUM_PER_C0 - 1) / ELE_NUM_PER_C0 * ELE_NUM_PER_C0;
+            _rows_by_fractal = _row_round / C0_NUM_PER_FRACTAL;
+            _cols_by_fractal = _col_round / ELE_NUM_PER_C0;
+        }
+    }
+protected:
+    uint32_t _row = 128;
+    uint32_t _col = 256;
+    uint32_t _row_round = 0;
+    uint32_t _col_round = 0;
+    uint32_t _rows_by_fractal = 0;
+    uint32_t _cols_by_fractal = 0;
+    // call 'setShape' firstly in every testcase
+};
+
+/// UBTileCopyTest, for AIV related data copy tile-level ut
+class UBTileCopyTest : public AscendCTest {
+protected:
+    void _setShape(const uint32_t blkLen, const uint16_t blkCnt) {
+        _blkLen = blkLen;
+        _blkCnt = blkCnt;
+        _totalLen = blkLen * blkCnt;
+    }
+protected:
+    uint32_t _blkLen = 128;
+    uint16_t _blkCnt = 1;
+    uint32_t _totalLen = 128;
+};
+
 #endif // ASCENDC_STUB_TEST_BASE_H

@@ -11,42 +11,137 @@
 #ifndef ASCENDC_STUB_KERNEL_OPERATOR_DATA_COPY_EXT_H
 #define ASCENDC_STUB_KERNEL_OPERATOR_DATA_COPY_EXT_H
 
+#include "kernel_operator.h"
 #include "kernel_tensor.h"
 #include "kernel_struct_mm.h"
+#include "kernel_constants.h"
 #include "ascendc_logger.h"
 #include "arg.h"
 
 namespace AscendC {
 
-struct DataCopyExtParams {
-#if defined(__NPU_ARCH__) && __NPU_ARCH == 3510
-    using StrideType = int64_t;
+struct DataCopyExtParams {   
+    DataCopyExtParams() {}
+
+#if (defined(__NPU_ARCH__) && __NPU_ARCH__ == 3510)
+    DataCopyExtParams(const uint16_t count, const uint32_t len, const int64_t srcStrideIn,
+        const int64_t dstStrideIn, const uint32_t rsvIn)
 #else
-    using StrideType = uint32_t;
+    DataCopyExtParams(const uint16_t count, const uint32_t len, const uint32_t srcStrideIn,
+        const uint32_t dstStrideIn, const uint32_t rsvIn)
 #endif
-    uint16_t blockCount = 0;
-    uint32_t blockLen = 32;
-    StrideType srcStride = 0;
-    StrideType dstStride = 0;
-    uint8_t rsv = 1;
+        : blockCount(count),
+          blockLen(len),
+          srcStride(srcStrideIn),
+          dstStride(dstStrideIn),
+          rsv(rsvIn)
+    {}
+
+    uint16_t blockCount = DEFAULT_DATA_COPY_NBURST;
+    uint32_t blockLen = 0;
+#if (defined(__NPU_ARCH__) && __NPU_ARCH__ == 3510)
+    int64_t srcStride = static_cast<int64_t>(DEFAULT_DATA_COPY_STRIDE);
+    int64_t dstStride = static_cast<int64_t>(DEFAULT_DATA_COPY_STRIDE);
+#else
+    uint32_t srcStride = DEFAULT_DATA_COPY_STRIDE;
+    uint32_t dstStride = DEFAULT_DATA_COPY_STRIDE;
+#endif
+    uint32_t rsv = 0; // reserved
 
     std::string toString() const
     {
         char buffer[256];
-
+#if (defined(__NPU_ARCH__) && __NPU_ARCH__ == 3510)
         snprintf(
-            buffer,
-            sizeof(buffer),
-            "DataCopyExtParams(blockCount=%u, blockLen=%u, srcStride=%lld, dstStride=%lld, rsv=%u)",
-            static_cast<unsigned>(blockCount),
-            static_cast<unsigned>(blockLen),
-            static_cast<long long>(srcStride),
-            static_cast<long long>(dstStride),
-            static_cast<unsigned>(rsv)
-        );
-
+            buffer, sizeof(buffer), "DataCopyExtParams(blockCount=%u, blockLen=%u, srcStride=%ld, dstStride=%ld, rsv=%u)",
+            blockCount, blockLen, srcStride, dstStride, rsv);
+#else
+        snprintf(
+            buffer, sizeof(buffer), "DataCopyExtParams(blockCount=%u, blockLen=%u, srcStride=%u, dstStride=%u, rsv=%u)",
+            blockCount, blockLen, srcStride, dstStride, rsv);
+#endif
         return std::string(buffer);
     }
+};
+
+// ============================================================================
+// GetPadValueType (from kernel_utils_constants.h, helper for DataCopyPadExtParams::TYPE)
+// ============================================================================
+
+template <typename T> struct GetPadValueType {
+    using Type = T;
+};
+
+#if (defined(__NPU_ARCH__) && (__NPU_ARCH__ == 3510))
+// To support FP8 datacopypad, pad type needs transfer to b8
+template <> struct GetPadValueType<fp8_e5m2_t> {
+    using Type = uint8_t;
+};
+
+template <> struct GetPadValueType<fp8_e4m3fn_t> {
+    using Type = uint8_t;
+};
+
+template <> struct GetPadValueType<fp8_e8m0_t> {
+    using Type = uint8_t;
+};
+
+template <> struct GetPadValueType<hifloat8_t> {
+    using Type = uint8_t;
+};
+
+// To support FP4 datacopypad, pad type needs transfer to b8
+template <> struct GetPadValueType<fp4x2_e1m2_t> {
+    using Type = uint8_t;
+};
+
+template <> struct GetPadValueType<fp4x2_e2m1_t> {
+    using Type = uint8_t;
+};
+#endif
+
+// ============================================================================
+// DataCopyPadExtParams (from kernel_struct_data_copy.h)
+// ============================================================================
+
+template <typename T> struct DataCopyPadExtParams {
+#if (defined(__NPU_ARCH__) && (__NPU_ARCH__ == 3510))
+    using TYPE = typename GetPadValueType<T>::Type;
+     DataCopyPadExtParams()
+    {
+        isPad = false;
+        leftPadding = 0;
+        rightPadding = 0;
+        paddingValue = 0;
+    }
+    DataCopyPadExtParams(const bool isPadValue, const uint8_t leftPadValue, const uint8_t rightPadValue,
+        T padValue)
+    {
+        isPad = isPadValue;
+        leftPadding = leftPadValue;
+        rightPadding = rightPadValue;
+        paddingValue = *(reinterpret_cast<TYPE *>(&padValue));
+    }
+    bool isPad = false;
+    uint8_t leftPadding = 0;
+    uint8_t rightPadding = 0;
+    TYPE paddingValue = 0;
+#else
+    DataCopyPadExtParams() {}
+
+    DataCopyPadExtParams(const bool isPadValue, const uint8_t leftPadValue, const uint8_t rightPadValue,
+        T padValue)
+        : isPad(isPadValue),
+          leftPadding(leftPadValue),
+          rightPadding(rightPadValue),
+          paddingValue(padValue)
+    {}
+
+    bool isPad = false;
+    uint8_t leftPadding = 0;
+    uint8_t rightPadding = 0;
+    T paddingValue = 0;
+#endif
 };
 
 enum class CopyMode
@@ -63,6 +158,11 @@ enum class PadMode
     PAD_NZ = 1,
     PAD_N1 = 2,
     PAD_NZ2 = 3
+};
+
+enum class PaddingMode : uint8_t {
+    Normal = 0,
+    Compact,
 };
 
 struct PadParams {
@@ -141,6 +241,7 @@ inline void DataCopyPad(
     ASCENDC_LOG_CALL_T(DataCopyPad, argsT, args);
 }
 
+#if (!defined(__NPU_ARCH__) || __NPU_ARCH__==2201)
 template <typename T>
 inline void DataCopyPad(
     const LocalTensor<T>& dst, const GlobalTensor<T>& src, const DataCopyParams& params, const PadParams& padParams)
@@ -149,6 +250,59 @@ inline void DataCopyPad(
     const std::vector<Arg> args = {dst, src, params, padParams};
     ASCENDC_LOG_CALL_T(DataCopyPad, argsT, args);
 }
+
+template <typename T>
+inline void DataCopyPad(const LocalTensor<T>& dst, const GlobalTensor<T>& src, const DataCopyExtParams& dataCopyParams, const DataCopyPadExtParams<T>& padParams)
+{
+    const std::vector<Arg> argsT = {Arg::MakeArg<T>()};
+    const std::vector<Arg> args = {dst, src, dataCopyParams, padParams};
+    ASCENDC_LOG_CALL_T(DataCopyPad, argsT, args);
+}
+
+template <typename T>
+inline void DataCopyPad(const GlobalTensor<T>& dst, const LocalTensor<T>& src, const DataCopyExtParams& dataCopyParams)
+{
+    const std::vector<Arg> argsT = {Arg::MakeArg<T>()};
+    const std::vector<Arg> args = {dst, src, dataCopyParams};
+    ASCENDC_LOG_CALL_T(DataCopyPad, argsT, args);
+}
+#elif (defined(__NPU_ARCH__) && __NPU_ARCH__ == 3510)
+template <typename T, PaddingMode mode = PaddingMode::Normal>
+inline void DataCopyPad(
+    const LocalTensor<T>& dst, const GlobalTensor<T>& src, const DataCopyParams& params, const PadParams& padParams)
+{
+    const std::vector<Arg> argsT = {Arg::MakeArg<T>(), Arg::MakeArgWithValue<PaddingMode>(mode)};
+    const std::vector<Arg> args = {dst, src, params, padParams};
+    ASCENDC_LOG_CALL_T(DataCopyPad, argsT, args);
+}
+
+template <typename T, PaddingMode mode = PaddingMode::Normal>
+inline void DataCopyPad(
+    const LocalTensor<T>& dst, const GlobalTensor<T>& src, const DataCopyExtParams& params, const DataCopyPadExtParams<T>& padParams)
+{
+    const std::vector<Arg> argsT = {Arg::MakeArg<T>(), Arg::MakeArgWithValue<PaddingMode>(mode)};
+    const std::vector<Arg> args = {dst, src, params, padParams};
+    ASCENDC_LOG_CALL_T(DataCopyPad, argsT, args);
+}
+
+template <typename T, PaddingMode mode = PaddingMode::Normal>
+inline void DataCopyPad(
+    const GlobalTensor<T>& dst, const LocalTensor<T>& src, const DataCopyExtParams& params, const DataCopyPadExtParams<T>& padParams)
+{
+    const std::vector<Arg> argsT = {Arg::MakeArg<T>(), Arg::MakeArgWithValue<PaddingMode>(mode)};
+    const std::vector<Arg> args = {dst, src, params, padParams};
+    ASCENDC_LOG_CALL_T(DataCopyPad, argsT, args);
+}
+
+template <typename T, PaddingMode mode = PaddingMode::Normal>
+inline void DataCopyPad(
+    const GlobalTensor<T>& dst, const LocalTensor<T>& src, const DataCopyExtParams& params)
+{
+    const std::vector<Arg> argsT = {Arg::MakeArg<T>(), Arg::MakeArgWithValue<PaddingMode>(mode)};
+    const std::vector<Arg> args = {dst, src, params};
+    ASCENDC_LOG_CALL_T(DataCopyPad, argsT, args);
+}
+#endif
 
 template <typename T>
 inline void DataCopyPad(
@@ -177,18 +331,10 @@ inline void Copy(const LocalTensor<T>& dst, const LocalTensor<T>& src, const int
     ASCENDC_LOG_CALL_T(Copy, argsT, args);
 }
 
-enum class FmatrixMode
+inline void SetFmatrix(uint16_t l1H, uint16_t l1W, const uint8_t padList[PAD_SIZE], const FmatrixMode& fmatrixMode)
 {
-    FMATRIX_LEFT = 0,
-    FMATRIX_RIGHT = 1,
-    FMATRIX_LEFT_N = 2,
-    FMATRIX_RIGHT_N = 3
-};
-
-inline void SetFmatrix(uint32_t m, uint32_t k, const uint16_t* padList, FmatrixMode mode)
-{
-    const std::vector<Arg> argsT = {Arg::MakeArg<uint32_t>(), Arg::MakeArg<uint32_t>(), Arg::MakeArg<FmatrixMode>()};
-    const std::vector<Arg> args = {m, k, padList, mode};
+    const std::vector<Arg> argsT = {Arg::MakeArg<FmatrixMode>()};
+    const std::vector<Arg> args = {l1H, l1W, padList, fmatrixMode};
     ASCENDC_LOG_CALL_T(SetFmatrix, argsT, args);
 }
 

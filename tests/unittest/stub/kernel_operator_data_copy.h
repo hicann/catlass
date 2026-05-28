@@ -16,12 +16,29 @@
 #include "ascendc_logger.h"
 
 namespace AscendC {
+// 连续搬运
+template <typename T>
+inline void DataCopy(const LocalTensor<T>&dst, const GlobalTensor<T>& src, const uint32_t count) 
+{
+    const std::vector<Arg> argsT = {Arg::MakeArg<T>(), Arg::MakeArg<T>()};
+    const std::vector<Arg> args = {dst, src, count};
+    ASCENDC_LOG_CALL_T(DataCopy, argsT, args);
+}
 
+// 非连续/连续搬运
 template <typename T>
 inline void DataCopy(const LocalTensor<T>& dst, const GlobalTensor<T>& src, const DataCopyParams& params)
 {
     const std::vector<Arg> argsT = {Arg::MakeArg<T>()};
     const std::vector<Arg> args = {dst, src, params};
+    ASCENDC_LOG_CALL_T(DataCopy, argsT, args);
+}
+
+template <typename T>
+inline void DataCopy(const GlobalTensor<T>& dst, const LocalTensor<T>& src, const uint32_t count)
+{
+    const std::vector<Arg> argsT = {Arg::MakeArg<T>()};
+    const std::vector<Arg> args = {dst, src, count};
     ASCENDC_LOG_CALL_T(DataCopy, argsT, args);
 }
 
@@ -54,6 +71,23 @@ inline void DataCopy(const LocalTensor<T>& dst, const GlobalTensor<T>& src, cons
 {
     const std::vector<Arg> argsT = {Arg::MakeArg<T>()};
     const std::vector<Arg> args = {dst, src, params};
+    ASCENDC_LOG_CALL_T(DataCopy, argsT, args);  
+}
+
+// data copy enhanced
+template <typename T, typename U>
+inline void DataCopy(const LocalTensor<T>& dst, const LocalTensor<U>& src, const DataCopyCO12DstParams& intriParams)
+{
+    const std::vector<Arg> argsT = {Arg::MakeArg<T>(), Arg::MakeArg<U>()};
+    const std::vector<Arg> args = {dst, src, intriParams};
+    ASCENDC_LOG_CALL_T(DataCopy, argsT, args);  
+}
+
+template <typename T, typename U>
+inline void DataCopy(const GlobalTensor<T>& dst, const LocalTensor<U>& src, const DataCopyCO12DstParams& intriParams)
+{
+    const std::vector<Arg> argsT = {Arg::MakeArg<T>(), Arg::MakeArg<U>()};
+    const std::vector<Arg> args = {dst, src, intriParams};
     ASCENDC_LOG_CALL_T(DataCopy, argsT, args);  
 }
 

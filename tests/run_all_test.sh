@@ -50,4 +50,4 @@ fi
 
 # unittest
 bash "$BUILD_SCRIPT_PATH" --clean --tests catlass_unittest || exit 1
-$SCRIPT_PATH/../build/tests/unittest/catlass_unittest
+$SCRIPT_PATH/../build/tests/unittest/catlass_unittest_"$CATLASS_ARCH"
