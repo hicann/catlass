@@ -14,6 +14,7 @@
 #include "catlass/arch/arch.hpp"
 #include "catlass/catlass.hpp"
 #include "catlass/gemm/tile/ascend950/copy_l0c_to_dst.hpp"
+#include "catlass/numeric_size.hpp"
 #include "tla/tensor.hpp"
 
 #if defined(__NPU_ARCH__) && (__NPU_ARCH__ == 3510)
@@ -34,6 +35,7 @@ struct CopyL0CToUBTla<
     using ArchTag = Catlass::Arch::Ascend950;
     using ElementDst = ElementDst_;
     using ElementSrc = typename TensorSrc_::Element;
+    static constexpr uint32_t ELE_NUM_PER_BLK = BytesToBits(BYTE_PER_BLK) / SizeOfBits<ElementDst>::value;
     static constexpr auto quantPre =
         CopyL0CToDstQuantMode<ArchTag, ElementSrc, ElementDst, ScaleGranularity::NO_QUANT>::VALUE;
     static constexpr auto reluEn = ReluEnable_;
@@ -50,7 +52,7 @@ struct CopyL0CToUBTla<
         AscendC::FixpipeParamsC310<AscendC::CO2Layout::ROW_MAJOR> intriParams;
 
         // Fixpipe layout information
-        intriParams.nSize = tla::get<1>(dstTensor.originShape());
+        intriParams.nSize = RoundUp(tla::get<1>(dstTensor.originShape()), ELE_NUM_PER_BLK);
         intriParams.mSize = tla::get<0>(dstTensor.originShape());
         intriParams.srcStride = tla::get<1, 1>(srcTensor.stride()) / tla::get<0, 0>(srcTensor.stride());
         intriParams.dstStride = tla::get<0>(dstTensor.stride());
@@ -81,6 +83,7 @@ struct CopyL0CToUBTla<
     using ArchTag = Catlass::Arch::Ascend950;
     using ElementDst = ElementDst_;
     using ElementSrc = typename TensorSrc_::Element;
+    static constexpr uint32_t ELE_NUM_PER_BLK = BytesToBits(BYTE_PER_BLK) / SizeOfBits<ElementDst>::value;
     static constexpr auto quantPre =
         CopyL0CToDstQuantMode<ArchTag, ElementSrc, ElementDst, ScaleGranularity::NO_QUANT>::VALUE;
     static constexpr auto reluEn = ReluEnable_;
@@ -97,8 +100,8 @@ struct CopyL0CToUBTla<
         AscendC::FixpipeParamsC310<AscendC::CO2Layout::ROW_MAJOR> intriParams;
 
         // Fixpipe layout information
-        intriParams.nSize = tla::get<1>(dstTensor.originShape());
-        intriParams.mSize = RoundUp(tla::get<0>(dstTensor.originShape()), 2); // m must be even when spilt m
+        intriParams.nSize = RoundUp(tla::get<1>(dstTensor.originShape()), ELE_NUM_PER_BLK);
+        intriParams.mSize = RoundUp(tla::get<0>(dstTensor.originShape()), 2); // m must be even when split m
         intriParams.srcStride = tla::get<1, 1>(srcTensor.stride()) / tla::get<0, 0>(srcTensor.stride());
         intriParams.dstStride = tla::get<0>(dstTensor.stride());
 
@@ -145,8 +148,8 @@ struct CopyL0CToUBTla<
         AscendC::FixpipeParamsC310<AscendC::CO2Layout::ROW_MAJOR> intriParams;
 
         // Fixpipe layout information
-        intriParams.nSize = RoundUp(tla::get<1>(dstTensor.originShape()), 32);
-        intriParams.mSize = tla::get<0>(dstTensor.originShape()); // m must be even when spilt m
+        intriParams.nSize = RoundUp(tla::get<1>(dstTensor.originShape()), 32); // n must be multiple of 32 when split n
+        intriParams.mSize = tla::get<0>(dstTensor.originShape());
         intriParams.srcStride = tla::get<1, 1>(srcTensor.stride()) / tla::get<0, 0>(srcTensor.stride());
         intriParams.dstStride = tla::get<0>(dstTensor.stride());
 
