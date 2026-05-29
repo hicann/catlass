@@ -142,6 +142,13 @@ struct EpilogueAscend950Fixpipe {
 struct BlockEpilogueDequant{
     using ArchTag = Arch::Ascend950;
 };
+
+// For Ascend950, per block quant tla
+template <uint32_t UB_STAGES_>
+struct EpilogueAscend950PerBlockQuantTla{
+    using ArchTag = Arch::Ascend950;
+    static constexpr uint32_t UB_STAGES = UB_STAGES_;
+};
 }  // namespace Catlass::Epilogue
 
 #endif  // CATLASS_EPILOGUE_DISPATCH_POLICY_HPP

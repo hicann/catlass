@@ -163,6 +163,7 @@ set(EXAMPLE_ASCEND950
     59_ascend950_a8w4_mx_matmul
     60_ascend950_grouped_matmul_slice_m
     61_ascend950_svd_quant_matmul
+    62_ascend950_broadcast_matmul_perblock_quant
 )
 
 if(CATLASS_ARCH STREQUAL "2201")
