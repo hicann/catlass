@@ -35,10 +35,10 @@ n = 444
 k = 555
 l1_tm = 256
 l1_tn = 256
-l1_tk = 256
+l1_tk = 128
 l0_tm = 256
 l0_tn = 256
-l0_tk = 64
+l0_tk = 32
 
 
 @tla.kernel

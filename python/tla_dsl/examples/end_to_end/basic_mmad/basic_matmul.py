@@ -101,6 +101,16 @@ def _apply_kernel_dtypes(dtype_a: ElemDType, dtype_b: ElemDType, dtype_c: ElemDT
     _kernels.DTYPE_C = tla.Float32
 
 
+def _apply_problem_size(m_val: int, n_val: int, k_val: int) -> None:
+    global m, n, k
+    if m_val <= 0 or n_val <= 0 or k_val <= 0:
+        raise ValueError(f"m, n, k must be positive; got m={m_val}, n={n_val}, k={k_val}")
+    _kernels.m = m_val
+    _kernels.n = n_val
+    _kernels.k = k_val
+    m, n, k = m_val, n_val, k_val
+
+
 def _np_elem_dtype(token: ElemDType) -> Any:
     if token == "f16":
         return np.float16
@@ -293,6 +303,7 @@ def run_single_case(
     artifact = tla.compile(basic_mmad_kernel, mem_a, mem_b, mem_c, **runtime_kwargs)
     print(
         "compile_ok=True "
+        f"m={m} n={n} k={k} "
         f"layout_a={layout_a} layout_b={layout_b} "
         f"dtype_a={dtype_a} dtype_b={dtype_b} dtype_c={dtype_c}"
     )
@@ -385,6 +396,24 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Compile, launch, and compare the full output matrix. This is the default.",
     )
     parser.add_argument("--device", type=int, default=2, help="NPU device id.")
+    parser.add_argument(
+        "--m",
+        type=int,
+        default=_kernels.m,
+        help=f"GEMM M dimension (default: {_kernels.m}).",
+    )
+    parser.add_argument(
+        "--n",
+        type=int,
+        default=_kernels.n,
+        help=f"GEMM N dimension (default: {_kernels.n}).",
+    )
+    parser.add_argument(
+        "--k",
+        type=int,
+        default=_kernels.k,
+        help=f"GEMM K dimension (default: {_kernels.k}).",
+    )
     parser.add_argument("--block", type=int, default=1, help="Launch block count.")
     parser.add_argument("--sentinel", type=float, default=-7.0, help="Initial C value.")
     parser.add_argument(
@@ -458,6 +487,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = _build_parser().parse_args()
+    _apply_problem_size(args.m, args.n, args.k)
     if not args.all_mmad_dtypes:
         _validate_mmad_dtype_triple(args.dtype_a, args.dtype_b, args.dtype_c)
     if args.dump_tlair:
