@@ -143,6 +143,15 @@ struct BlockEpilogueDequant{
     using ArchTag = Arch::Ascend950;
 };
 
+// For Ascend950, dual-level quantization + MX format
+template <uint32_t UB_STAGES_>
+struct EpilogueAscend950DualLevelQuantMx {
+    using ArchTag = Arch::Ascend950;
+    static constexpr uint32_t UB_STAGES = UB_STAGES_;
+    static constexpr uint32_t OPERANDS_NUM = 8;
+};
+
+
 // For Ascend950, per block quant tla
 template <uint32_t UB_STAGES_>
 struct EpilogueAscend950PerBlockQuantTla{

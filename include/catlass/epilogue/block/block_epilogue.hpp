@@ -48,6 +48,7 @@ class BlockEpilogue {
 #include "catlass/epilogue/block/block_epilogue_fixpipe.hpp"
 #include "catlass/epilogue/block/block_epilogue_per_group_per_block.hpp"
 #include "catlass/epilogue/block/block_epilogue_dequant.hpp"
+#include "catlass/epilogue/block/block_epilogue_dual_level_quant_mx.hpp"
 #include "catlass/epilogue/block/block_epilogue_per_block_quant_tla.hpp"
 #endif
 
