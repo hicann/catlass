@@ -25,7 +25,15 @@ __catlass_commit__ = _vers["commit"]
 # Expose to JIT compiler at runtime
 os.environ["TORCH_CATLASS_VERSION"] = _vers["full"]
 
-__all__ = ["ops", "basic_matmul", "quant_optimized_matmul_tla", "__version__", "__catlass_version__"]
+__all__ = [
+    "ops",
+    "basic_matmul",
+    "quant_optimized_matmul_tla",
+    "ascend950_fp8_mx_matmul_aswt",
+    "ascend950_fp4_mx_matmul_aswt",
+    "__version__",
+    "__catlass_version__",
+]
 
 _catlass_loaded: bool = False
 

@@ -18,6 +18,7 @@
 #include "catlass_kernel.h"
 #include "common/register.h"
 #include "template/matmul.h"
+#include "template/mx_matmul.h"
 #include "template/quant_matmul.h"
 
 namespace CatlassKernelWrapper {
@@ -29,5 +30,13 @@ REGISTER_TORCH_FUNC(basic_matmul);
 using QuantOptimizedMatmulTLAOp = QuantMatmulLike<CatlassKernel::QuantOptimizedMatmulTLA>;
 static auto& quant_optimized_matmul_tla = QuantOptimizedMatmulTLAOp::Run;
 REGISTER_TORCH_FUNC(quant_optimized_matmul_tla);
+
+using Ascend950Fp8MxMatmulAswtOp = MxMatmulLike<CatlassKernel::Ascend950Fp8MxMatmulAswt>;
+static auto& ascend950_fp8_mx_matmul_aswt = Ascend950Fp8MxMatmulAswtOp::Run;
+REGISTER_TORCH_FUNC(ascend950_fp8_mx_matmul_aswt);
+
+using Ascend950Fp4MxMatmulAswtOp = MxMatmulLike<CatlassKernel::Ascend950Fp4MxMatmulAswt>;
+static auto& ascend950_fp4_mx_matmul_aswt = Ascend950Fp4MxMatmulAswtOp::Run;
+REGISTER_TORCH_FUNC(ascend950_fp4_mx_matmul_aswt);
 
 } // namespace CatlassKernelWrapper

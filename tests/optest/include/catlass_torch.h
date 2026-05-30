@@ -54,4 +54,22 @@ at::Tensor quant_optimized_matmul_tla(
     const at::Tensor& mat1, const at::Tensor& mat2, const at::Tensor& scale, const at::Tensor& perTokenScale,
     const c10::ScalarType& outDType, const bool transA, const bool transB, const bool formatA, const bool formatB);
 
+/**
+ * @brief PyTorch extension entry for CATLASS Ascend950 MX FP8 matmul ASWT (TLA).
+ *
+ * Source: example 53_ascend950_fp8_mx_matmul_aswt.
+ */
+at::Tensor ascend950_fp8_mx_matmul_aswt(
+    const at::Tensor& mat1, const at::Tensor& mat2, const at::Tensor& mx_scale_a, const at::Tensor& mx_scale_b,
+    const bool transA, const bool transB);
+
+/**
+ * @brief PyTorch extension entry for CATLASS Ascend950 MX FP4 matmul ASWT (TLA).
+ *
+ * Source: example 54_ascend950_fp4_mx_matmul_aswt.
+ */
+at::Tensor ascend950_fp4_mx_matmul_aswt(
+    const at::Tensor& mat1, const at::Tensor& mat2, const at::Tensor& mx_scale_a, const at::Tensor& mx_scale_b,
+    const bool transA, const bool transB);
+
 #endif

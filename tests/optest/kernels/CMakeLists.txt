@@ -192,6 +192,8 @@ endmacro()
 
 add_subdirectory(00_basic_matmul)
 add_subdirectory(42_quant_optimized_matmul_tla)
+add_subdirectory(53_ascend950_fp8_mx_matmul)
+add_subdirectory(54_ascend950_fp4_mx_matmul)
 
 if(_JIT_KERNEL_ENTRIES)
     set(_JIT_TARGET catlass_kernel_jit)

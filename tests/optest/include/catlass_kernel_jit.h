@@ -357,9 +357,21 @@ void Ascend950Fp8MxMatmul(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
+ * @brief JIT interface for example 53_ascend950_fp8_mx_matmul_aswt.
+ */
+void Ascend950Fp8MxMatmulAswt(
+    const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+
+/**
  * @brief Reserved JIT interface for example 54_ascend950_fp4_mx_matmul.
  */
 void Ascend950Fp4MxMatmul(
+    const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+
+/**
+ * @brief JIT interface for example 54_ascend950_fp4_mx_matmul_aswt.
+ */
+void Ascend950Fp4MxMatmulAswt(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**

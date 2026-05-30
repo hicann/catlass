@@ -7,7 +7,13 @@
 # BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE. See LICENSE in the root of
 # the software repository for the full text of the License.
 
+from .ascend950_mx_matmul import ascend950_fp4_mx_matmul_aswt, ascend950_fp8_mx_matmul_aswt
 from .basic_matmul import basic_matmul
 from .quant_optimized_matmul_tla import quant_optimized_matmul_tla
 
-__all__ = ["basic_matmul", "quant_optimized_matmul_tla"]
+__all__ = [
+    "basic_matmul",
+    "quant_optimized_matmul_tla",
+    "ascend950_fp8_mx_matmul_aswt",
+    "ascend950_fp4_mx_matmul_aswt",
+]
