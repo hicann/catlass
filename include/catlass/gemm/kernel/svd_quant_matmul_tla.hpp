@@ -1308,7 +1308,7 @@ public:
         CATLASS_DEVICE
         ~Mmad23Params()
         {
-#ifdef __DAV__VEC__
+#ifdef __DAV_VEC__
             return;
 #endif
 
