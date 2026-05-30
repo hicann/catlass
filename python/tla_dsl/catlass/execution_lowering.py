@@ -18,7 +18,7 @@ from .mixed_kernel_attrs import (
     MixedKernelModuleAttrInputs,
     build_mixed_kernel_module_attrs,
 )
-from .types import Tensor
+from .tla.typing import Tensor
 
 
 class TlaLoweringError(RuntimeError):

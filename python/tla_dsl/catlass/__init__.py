@@ -10,7 +10,9 @@ except ImportError:  # pragma: no cover - fallback for source tree
     __version__ = "0.0.0"
 
 from . import dsl as _dsl
+from . import tla
 from . import types as types
+from .tla.runtime import _Tensor
 from . import core_api as core
 from .address_space import AddressSpace
 from .base_dsl.typing import Constexpr, JitArgument, Pointer
@@ -39,7 +41,8 @@ compile = _dsl.compile
 jit = _dsl.jit
 kernel = _dsl.kernel
 ascendnpuir_kernel = _dsl.ascendnpuir_kernel
-Tensor = types.Tensor
+Tensor = _Tensor
+TypedTensor = tla.TypedTensor
 Scalar = types.Scalar
 Numeric = types.Numeric
 Bool = types.Bool
@@ -56,7 +59,6 @@ Float32 = types.Float32
 Float64 = types.Float64
 Float16 = types.Float16
 BFloat16 = types.BFloat16
-constexpr = _runtime.constexpr
 const_expr = _runtime.const_expr
 initialize = _runtime.initialize
 finalize = _runtime.finalize
@@ -95,15 +97,16 @@ __all__ = [
     "DSLLocation",
     "BaseDSL",
     "const_expr",
-    "constexpr",
     "initialize",
     "finalize",
     "runtime_state",
     "current_device_id",
     "current_stream",
+    "tla",
     "types",
     "core",
     "Tensor",
+    "TypedTensor",
     "Pointer",
     "Scalar",
     "Numeric",

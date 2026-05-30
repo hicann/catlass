@@ -1,12 +1,55 @@
+from typing import Any
+from unittest.mock import patch
+
 import pytest
 
 import catlass as tla
 import catlass.core_api as core_api_mod
 import catlass.runtime as runtime_mod
+from catlass.base_dsl.runtime.dlpack_types import DLDeviceType
 from catlass.execution_lowering import TlaLoweringError
 from mlir import ir as mlir_ir
 
-np = pytest.importorskip("numpy")
+
+class _DlpackSentinel:
+    """Minimal ``__dlpack__`` stub; capsule contents are ignored when parse is mocked."""
+
+    def __dlpack__(self) -> Any:
+        return object()
+
+
+def _from_dlpack_with_parsed(
+    parsed: dict[str, Any],
+    **from_dlpack_kwargs: Any,
+) -> tla.Tensor:
+    """Run ``from_dlpack`` with a mocked capsule parse returning ``parsed``."""
+
+    def _fake_parse(_capsule: Any) -> dict[str, Any]:
+        return parsed
+
+    with patch.object(runtime_mod._Tensor, "_parse_capsule", _fake_parse):
+        return runtime_mod.from_dlpack(_DlpackSentinel(), **from_dlpack_kwargs)
+
+
+def _device_dlpack_fields(
+    *,
+    shape: tuple[int, ...] = (2, 3),
+    strides: tuple[int, ...] = (3, 1),
+    data_ptr: int = 0xCAFE,
+    device_type: int = int(DLDeviceType.kDLNpuCandidate1),
+    dtype_code: int = 2,
+    dtype_bits: int = 32,
+) -> dict[str, Any]:
+    return {
+        "data_ptr": data_ptr,
+        "device_type": device_type,
+        "device_id": 0,
+        "shape": shape,
+        "strides": strides,
+        "dtype_code": dtype_code,
+        "dtype_bits": dtype_bits,
+        "dtype_lanes": 1,
+    }
 
 
 def test_tla_type_descriptors_construct_native_mlir_types() -> None:
@@ -84,7 +127,6 @@ def test_tensor_defaults_without_affecting_tla_type() -> None:
     assert tensor.__tla_type__() == (
         "!tla.tensor<!tla.layout<!tla.shape<1,128>, !tla.stride<128,1>, !tla.shape<1,128>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>"
     )
-    assert tensor.stale is False
 
 
 def test_nested_shape_emits_make_shape_style_type_fields() -> None:
@@ -101,10 +143,9 @@ def test_nested_shape_emits_make_shape_style_type_fields() -> None:
     assert tensor.__tla_type__() == (
         "!tla.tensor<!tla.layout<!tla.shape<(4,8),16>, !tla.stride<(128,16),1>, !tla.shape<(4,8),16>, row_major>, !tla.coord<(0,0),0>, !tla.ptr<f16, gm, 2>>"
     )
-    assert len(tensor) == 4
-    assert len(tensor.data[0]) == 8
-    assert len(tensor.data[0][0]) == 16
-    assert tensor.data[0][0][0] is None
+    assert tensor._shape_tuple == (4, 8, 16)
+    with pytest.raises(TypeError, match="not indexable"):
+        len(tensor)
 
 
 def test_deep_nested_shape_groups_are_rejected() -> None:
@@ -169,7 +210,7 @@ def test_tensor_exposes_structured_type_descriptor() -> None:
     )
 
 
-def test_tensor_repr_includes_stale_state() -> None:
+def test_tensor_repr_includes_metadata() -> None:
     with runtime_mod._eager_capture():
         tensor = tla.Tensor(
             tla.make_shape(1, 128),
@@ -181,7 +222,7 @@ def test_tensor_repr_includes_stale_state() -> None:
 
     assert repr(tensor) == (
         "Tensor(shape=(1, 128), dtype='f32', addrspace='ub', data_ptr=123, "
-        "stale=False, origin_shape=(1, 128), coord=(0, 0), stride=(128, 1), "
+        "origin_shape=(1, 128), coord=(0, 0), stride=(128, 1), "
         "layout_tag='row_major')"
     )
 
@@ -234,266 +275,166 @@ def test_tensor_c_pointers_emit_raw_device_pointer() -> None:
     assert tensor.__c_pointers__() == [1234]
 
 
-def test_tensor_tobytes_matches_dtype_layout() -> None:
-    with runtime_mod._eager_capture():
-        tensor = tla.Tensor(
-            tla.make_shape(2, 2), tla.Float32, origin_shape=tla.make_shape(2, 2)
-        )
-    tensor.data = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
-
-    expected = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32).tobytes()
-    assert tensor.tobytes() == expected
-    assert tensor.size_bytes == len(expected)
-
-
-def test_tensor_data_is_mutable_via_nested_indexing() -> None:
-    with runtime_mod._eager_capture():
-        tensor = tla.Tensor(
-            tla.make_shape(2, 3), tla.Float32, origin_shape=tla.make_shape(2, 3)
-        )
-
-    tensor[0][1] = 3.5
-    tensor[1] = [1.0, 2.0, 3.0]
-
-    assert tensor[0][1] == 3.5
-    assert tensor[1][0] == 1.0
-    assert tensor[1][2] == 3.0
-
-
-def test_tensor_data_accepts_numpy_assignment() -> None:
-    with runtime_mod._eager_capture():
-        tensor = tla.Tensor(
-            tla.make_shape(2, 3), tla.Float32, origin_shape=tla.make_shape(2, 3)
-        )
-
-    tensor.data = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
-
-    assert tensor[0][0] == 1.0
-    assert tensor[0][2] == 3.0
-    assert tensor[1][0] == 4.0
-    assert tensor[1][2] == 6.0
-
-
-def test_tensor_data_rejects_numpy_shape_mismatch() -> None:
-    with runtime_mod._eager_capture():
-        tensor = tla.Tensor(
-            tla.make_shape(2, 3), tla.Float32, origin_shape=tla.make_shape(2, 3)
-        )
-
-    with pytest.raises(ValueError, match="expected shape \\(2, 3\\)"):
-        tensor.data = np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
-
-
-def test_stale_tensor_auto_downloads_on_first_access(monkeypatch) -> None:
-    download_bytes = np.array(
-        [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], dtype=np.float32
-    ).tobytes()
-
-    class FakeRt:
-        def malloc(self, size_bytes, policy):
-            return (333, 0)
-
-        def memcpy(self, dst, dst_size, src, src_size, kind):
-            return 0
-
-        def malloc_host(self, size_bytes):
-            return (334, 0)
-
-    class FakeUtil:
-        def bytes_to_ptr(self, value):
-            return 444
-
-        def ptr_to_bytes(self, ptr, size_bytes):
-            return download_bytes
-
-    class FakeAcl:
-        rt = FakeRt()
-        util = FakeUtil()
-
-    monkeypatch.setattr(tla.types, "_load_acl", lambda: FakeAcl())
-
-    with runtime_mod._eager_capture():
-        tensor = tla.Tensor(
-            tla.make_shape(2, 3), tla.Float32, origin_shape=tla.make_shape(2, 3)
-        )
-    tensor[0] = [1.0, 2.0, 3.0]
-    tensor.upload_data()
-
-    assert tensor.stale is True
-
-    assert tensor[0][2] == 3.0
-    assert tensor.stale is False
-
-    tensor[0] = [1.0, 2.0, 3.0]
-    assert tensor[0][2] == 3.0
-
-
-def test_upload_data_allocates_once_and_reuses_device_pointer(monkeypatch) -> None:
-    calls: list[object] = []
-
-    class FakeRt:
-        def malloc(self, size_bytes, policy):
-            calls.append(("malloc", size_bytes, policy))
-            return (987654, 0)
-
-        def memcpy(self, dst, dst_size, src, src_size, kind):
-            calls.append(("memcpy", dst, dst_size, src, src_size, kind))
-            return 0
-
-        def malloc_host(self, size_bytes):
-            calls.append(("malloc_host", size_bytes))
-            return (765432, 0)
-
-    class FakeUtil:
-        def bytes_to_ptr(self, value):
-            calls.append(("bytes_to_ptr", value))
-            return 123456
-
-        def ptr_to_bytes(self, ptr, size_bytes):
-            calls.append(("ptr_to_bytes", ptr, size_bytes))
-            return np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32).tobytes()
-
-    class FakeAcl:
-        rt = FakeRt()
-        util = FakeUtil()
-
-    monkeypatch.setattr(
-        tla.runtime,
-        "_GLOBAL_RUNTIME_STATE",
-        tla.runtime.TlaRuntimeState(device_id=0, stream=1),
+def test_runtime_tensor_is_not_indexable() -> None:
+    tensor = _from_dlpack_with_parsed(
+        _device_dlpack_fields(), layout_tag=tla.arch.RowMajor
     )
-    monkeypatch.setattr(tla.types, "_load_acl", lambda: FakeAcl())
+    with pytest.raises(TypeError, match="not indexable"):
+        _ = tensor.data
+    with pytest.raises(TypeError, match="not indexable"):
+        tensor[0, 0] = 1.0
 
+
+@pytest.mark.parametrize(
+    "device_type",
+    [int(DLDeviceType.kDLNpuCandidate1), int(DLDeviceType.kDLExtDev)],
+)
+def test_from_dlpack_row_major_metadata(device_type: int) -> None:
+    parsed = _device_dlpack_fields(
+        shape=(2, 3), strides=(3, 1), device_type=device_type
+    )
+    tensor = _from_dlpack_with_parsed(parsed, layout_tag=tla.arch.RowMajor)
+
+    assert tensor._shape_tuple == (2, 3)
+    assert tensor.layout_tag == "row_major"
+    assert tensor.stride == (3, 1)
+    assert tensor.data_ptr == 0xCAFE
+    assert tensor._external_binding is True
+    tensor.prepare_for_launch()
+
+
+def test_from_dlpack_column_major_row_major_physical() -> None:
+    """``permute(1, 0).contiguous()``: row-major physical (k, m), logical (m, k)."""
+    parsed = _device_dlpack_fields(shape=(3, 2), strides=(2, 1))
+    tensor = _from_dlpack_with_parsed(parsed, layout_tag=tla.arch.ColumnMajor)
+
+    assert tensor._shape_tuple == (2, 3)
+    assert tensor.layout_tag == "column_major"
+    assert tensor.stride == (1, 2)
+    assert tensor.origin_shape == (2, 3)
+
+
+def test_from_dlpack_column_major_rejects_npu_column_major_physical() -> None:
+    """Only ``permute(1, 0).contiguous()`` (row-major physical) is accepted for column-major."""
+    parsed = _device_dlpack_fields(shape=(2, 1), strides=(1, 2))
+    with pytest.raises(
+        tla.types.RuntimeTensorError, match=r"permute\(1, 0\)\.contiguous\(\)"
+    ):
+        _from_dlpack_with_parsed(parsed, layout_tag=tla.arch.ColumnMajor)
+
+
+def test_from_dlpack_explicit_origin_shape() -> None:
+    parsed = _device_dlpack_fields(shape=(3, 2), strides=(2, 1))
+    with runtime_mod._eager_capture():
+        origin = tla.make_shape(5, 7)
+    tensor = _from_dlpack_with_parsed(
+        parsed,
+        layout_tag=tla.arch.ColumnMajor,
+        origin_shape=origin,
+    )
+
+    assert tensor.origin_shape == (5, 7)
+    assert tensor._shape_tuple == (5, 7)
+    assert tensor.stride == (1, 5)
+
+
+def test_from_dlpack_explicit_origin_shape_skips_stride_validation() -> None:
+    parsed = _device_dlpack_fields(shape=(3, 2), strides=(1, 3))
+    with runtime_mod._eager_capture():
+        origin = tla.make_shape(3, 2)
+    tensor = _from_dlpack_with_parsed(
+        parsed,
+        layout_tag=tla.arch.RowMajor,
+        origin_shape=origin,
+    )
+
+    assert tensor.origin_shape == (3, 2)
+
+
+def test_from_dlpack_explicit_origin_shape_rejects_raw_tuple() -> None:
+    parsed = _device_dlpack_fields()
+    with pytest.raises(TypeError, match="tla.make_shape"):
+        _from_dlpack_with_parsed(
+            parsed,
+            layout_tag=tla.arch.RowMajor,
+            origin_shape=(2, 3),
+        )
+
+
+def test_from_dlpack_row_major_rejects_column_major_physical() -> None:
+    parsed = _device_dlpack_fields(shape=(3, 2), strides=(1, 3))
+    with pytest.raises(tla.types.RuntimeTensorError, match=r"tensor\.contiguous\(\)"):
+        _from_dlpack_with_parsed(parsed, layout_tag=tla.arch.RowMajor)
+
+
+def test_from_dlpack_row_major_non_2d_skips_stride_validation() -> None:
+    """Non-2-D buffers skip row/col stride checks; layout remap may still reject them."""
+    parsed = _device_dlpack_fields(shape=(2, 3, 4), strides=(1, 2, 6))
+    with pytest.raises(
+        tla.types.RuntimeTensorError, match="cannot derive layout metadata"
+    ):
+        _from_dlpack_with_parsed(parsed, layout_tag=tla.arch.RowMajor)
+
+
+def test_from_dlpack_column_major_rejects_non_contiguous_physical() -> None:
+    parsed = _device_dlpack_fields(shape=(3, 2), strides=(4, 2))
+    with pytest.raises(
+        tla.types.RuntimeTensorError, match=r"permute\(1, 0\)\.contiguous\(\)"
+    ):
+        _from_dlpack_with_parsed(parsed, layout_tag=tla.arch.ColumnMajor)
+
+
+def test_from_dlpack_requires_layout_tag() -> None:
+    with pytest.raises(TypeError, match=r"required keyword-only argument: 'layout_tag'"):
+        runtime_mod.from_dlpack(_DlpackSentinel())
+
+
+def test_from_dlpack_rejects_cpu_buffer() -> None:
+    parsed = _device_dlpack_fields(device_type=int(DLDeviceType.kDLCPU))
+    with pytest.raises(tla.types.RuntimeTensorError, match="Ascend/NPU device"):
+        _from_dlpack_with_parsed(parsed, layout_tag=tla.arch.RowMajor)
+
+
+def test_from_dlpack_rejects_scalar_tensor() -> None:
+    parsed = _device_dlpack_fields(shape=(), strides=())
+    with pytest.raises(
+        tla.types.RuntimeTensorError, match="cannot derive layout metadata"
+    ):
+        _from_dlpack_with_parsed(parsed, layout_tag=tla.arch.RowMajor)
+
+
+def test_mark_layout_dynamic_updates_stride_metadata() -> None:
+    tensor = _from_dlpack_with_parsed(
+        _device_dlpack_fields(shape=(4, 8), strides=(8, 1)),
+        layout_tag=tla.arch.RowMajor,
+    )
+    updated = tensor.mark_layout_dynamic(leading_dim=1)
+    assert updated._dynamic_stride_tree == (None, 1)
+
+
+def test_manual_tensor_can_bind_device_view() -> None:
     with runtime_mod._eager_capture():
         tensor = tla.Tensor(
-            tla.make_shape(2, 2), tla.Float32, origin_shape=tla.make_shape(2, 2)
+            tla.make_shape((16, 1), (16, 1)),
+            tla.Float16,
+            addrspace=tla.AddressSpace.l1,
+            layout_tag=tla.arch.zN,
+            origin_shape=tla.make_shape(16, 16),
         )
-    tensor.data = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
-
-    tensor.upload_data()
-    first_ptr = tensor.data_ptr
-    tensor.download_data()
-    tensor.upload_data()
-
-    assert first_ptr == 987654
-    assert tensor.data_ptr == 987654
-    assert tensor.stale is True
-    assert calls[0] == ("malloc", 16, 0)
-    assert calls.count(("malloc", 16, 0)) == 1
-    assert tla.runtime.runtime_state().device_ptrs == (987654,)
-    memcpy_calls = [call for call in calls if call[0] == "memcpy"]
-    assert len(memcpy_calls) == 3
-    assert memcpy_calls[0][1] == 987654
-    assert memcpy_calls[0][2] == 16
-    assert memcpy_calls[0][4] == 16
-    assert memcpy_calls[0][5] == 1
-    assert memcpy_calls[1] == ("memcpy", 765432, 16, 987654, 16, 2)
-    assert memcpy_calls[2][5] == 1
-
-
-def test_download_data_allocates_host_once_and_reuses_host_pointer(monkeypatch) -> None:
-    calls: list[object] = []
-    download_bytes = np.array([[9.0, 8.0], [7.0, 6.0]], dtype=np.float32).tobytes()
-
-    class FakeRt:
-        def malloc_host(self, size_bytes):
-            calls.append(("malloc_host", size_bytes))
-            return (222333, 0)
-
-        def memcpy(self, dst, dst_size, src, src_size, kind):
-            calls.append(("memcpy", dst, dst_size, src, src_size, kind))
-            return 0
-
-    class FakeUtil:
-        def ptr_to_bytes(self, ptr, size_bytes):
-            calls.append(("ptr_to_bytes", ptr, size_bytes))
-            return download_bytes
-
-    class FakeAcl:
-        rt = FakeRt()
-        util = FakeUtil()
-
-    monkeypatch.setattr(
-        tla.runtime,
-        "_GLOBAL_RUNTIME_STATE",
-        tla.runtime.TlaRuntimeState(device_id=0, stream=1),
+    fields = _device_dlpack_fields(
+        data_ptr=0xBEEF, shape=(16, 1, 16, 1), strides=(16, 256, 1, 256)
     )
-    monkeypatch.setattr(tla.types, "_load_acl", lambda: FakeAcl())
+    tensor.data_ptr = int(fields["data_ptr"])
+    tensor._external_binding = True
+    assert tensor.data_ptr == 0xBEEF
 
+
+def test_prepare_for_launch_requires_binding() -> None:
     with runtime_mod._eager_capture():
         tensor = tla.Tensor(
             tla.make_shape(2, 2),
             tla.Float32,
-            data_ptr=999888,
-            stale=True,
             origin_shape=tla.make_shape(2, 2),
         )
-
-    tensor.download_data()
-    assert tensor.host_ptr == 222333
-    assert tensor.stale is False
-    assert tensor[0][0] == 9.0
-    assert tensor[1][1] == 6.0
-    assert tla.runtime.runtime_state().host_ptrs == (222333,)
-
-    tensor.stale = True
-    tensor.download_data()
-    assert calls.count(("malloc_host", 16)) == 1
-    memcpy_calls = [call for call in calls if call[0] == "memcpy"]
-    assert len(memcpy_calls) == 2
-    assert memcpy_calls[0] == ("memcpy", 222333, 16, 999888, 16, 2)
-
-
-def test_upload_data_marks_tensor_stale_again(monkeypatch) -> None:
-    with runtime_mod._eager_capture():
-        tensor = tla.Tensor(
-            tla.make_shape(1, 2), tla.Float32, origin_shape=tla.make_shape(1, 2)
-        )
-
-    tensor[0][0] = 7.0
-
-    class FakeRt:
-        def malloc(self, size_bytes, policy):
-            return (111, 0)
-
-        def memcpy(self, dst, dst_size, src, src_size, kind):
-            return 0
-
-        def malloc_host(self, size_bytes):
-            return (112, 0)
-
-    class FakeUtil:
-        def bytes_to_ptr(self, value):
-            return 222
-
-        def ptr_to_bytes(self, ptr, size_bytes):
-            return np.array([[7.0, 0.0]], dtype=np.float32).tobytes()
-
-    class FakeAcl:
-        rt = FakeRt()
-        util = FakeUtil()
-
-    monkeypatch.setattr(tla.types, "_load_acl", lambda: FakeAcl())
-    tensor.upload_data()
-
-    assert tensor.stale is True
-    assert tensor[0][0] == 7.0
-    assert tensor.stale is False
-
-
-def test_download_data_requires_existing_device_pointer() -> None:
-    with runtime_mod._eager_capture():
-        tensor = tla.Tensor(
-            tla.make_shape(1, 2),
-            tla.Float32,
-            stale=True,
-            origin_shape=tla.make_shape(1, 2),
-        )
-
-    with pytest.raises(RuntimeError, match="prior upload_data"):
-        tensor.download_data()
-
-
-def test_tensor_rejects_symbolic_string_shape() -> None:
-    with pytest.raises(TypeError, match="tla.make_shape"):
-        tla.Tensor("1x128", tla.Float32)
+    with pytest.raises(RuntimeError, match="buffer is not bound"):
+        tensor.prepare_for_launch()

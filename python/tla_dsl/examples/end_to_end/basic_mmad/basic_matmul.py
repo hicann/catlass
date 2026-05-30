@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-import numpy as np
 from typing import Any, Literal
 
 import catlass as tla
-from catlass import runtime as runtime_mod
+from catlass.runtime import from_dlpack
 
 import basic_mmad_kernels as _kernels
 
@@ -111,38 +110,49 @@ def _apply_problem_size(m_val: int, n_val: int, k_val: int) -> None:
     m, n, k = m_val, n_val, k_val
 
 
-def _np_elem_dtype(token: ElemDType) -> Any:
-    if token == "f16":
-        return np.float16
-    if token == "f32":
-        return np.float32
-    # NumPy often does not register ``bfloat16`` until ``ml_dtypes`` is imported.
+def _require_torch() -> Any:
     try:
-        return np.dtype("bfloat16")
-    except (TypeError, ValueError):
-        try:
-            import ml_dtypes  # noqa: F401
-        except ImportError as exc:
-            raise SystemExit(
-                "bf16 host tensors need the ``bfloat16`` NumPy dtype. "
-                "Install ``ml_dtypes`` (``pip install ml_dtypes``) or use a NumPy "
-                "build that supports ``np.dtype('bfloat16')``."
-            ) from exc
-        try:
-            return np.dtype("bfloat16")
-        except (TypeError, ValueError):
-            from ml_dtypes import bfloat16
-
-            return np.dtype(bfloat16)
+        import torch
+    except ImportError as exc:
+        raise SystemExit(
+            "Host-side tensors in this example require PyTorch. "
+            "Install it with ``pip install torch``."
+        ) from exc
+    return torch
 
 
-def _make_type_args(
+def _torch_dtype(token: ElemDType) -> Any:
+    torch = _require_torch()
+    if token == "f16":
+        return torch.float16
+    if token == "bf16":
+        return torch.bfloat16
+    return torch.float32
+
+
+def _require_torch_npu(device_id: int) -> Any:
+    """Import torch_npu and select the NPU device (``tla.initialize`` sets ACL device)."""
+    torch = _require_torch()
+    try:
+        import torch_npu  # noqa: F401
+    except ImportError as exc:
+        raise SystemExit(
+            "This example requires torch_npu for device DLPack bindings."
+        ) from exc
+    torch.npu.set_device(device_id)
+    return torch
+
+
+def _compile_only_type_args(
     layout_a: LayoutChoice,
     layout_b: LayoutChoice,
     dtype_a: ElemDType,
     dtype_b: ElemDType,
     dtype_c: ElemDType,
 ) -> tuple[Any, Any, Any]:
+    """Metadata-only tensors for ``dump_mlir`` (no device buffer required)."""
+    from catlass import runtime as runtime_mod
+
     ta = _tla_elem_dtype(dtype_a)
     tb = _tla_elem_dtype(dtype_b)
     tc = _tla_elem_dtype(dtype_c)
@@ -169,49 +179,19 @@ def _make_type_args(
         )
 
 
-def _runtime_tensors(
-    layout_a: LayoutChoice,
-    layout_b: LayoutChoice,
-    dtype_a: ElemDType,
-    dtype_b: ElemDType,
-    dtype_c: ElemDType,
-) -> tuple[Any, Any, Any]:
-    ta = _tla_elem_dtype(dtype_a)
-    tb = _tla_elem_dtype(dtype_b)
-    tc = _tla_elem_dtype(dtype_c)
-    with runtime_mod._eager_capture():
-        mem_a = tla.Tensor(
-            tla.make_shape(m, k),
-            ta,
-            origin_shape=tla.make_shape(m, k),
-            layout_tag=_gm_layout_tag(layout_a),
-        )
-        mem_b = tla.Tensor(
-            tla.make_shape(k, n),
-            tb,
-            origin_shape=tla.make_shape(k, n),
-            layout_tag=_gm_layout_tag(layout_b),
-        )
-        mem_c = tla.Tensor(
-            tla.make_shape(m, n),
-            tc,
-            origin_shape=tla.make_shape(m, n),
-            layout_tag=tla.arch.RowMajor,
-        )
-    return mem_a, mem_b, mem_c
-
-
-def _fill_gm_from_dense(mem: Any, dense: Any, choice: LayoutChoice) -> None:
+def _device_buffer_for_layout(dense: Any, choice: LayoutChoice) -> Any:
+    """Prepare NPU storage whose GM layout matches ``layout_tag`` (Torch only)."""
     if choice == "row":
-        mem.data = dense
-        return
-    # Golden matrices stay row-major dense; GM ``column_major`` expects the device linear
-    # order (Fortran order of the logical ``(rows, cols)`` matrix). Host ``Tensor`` uses
-    # C-order ``tobytes`` traversal: column-major element order equals
-    # ``transpose(dense)`` flattened in C order, then viewed as an ``(rows, cols)`` row-major
-    # buffer (same as ``dense.flatten(order="F").reshape(rows, cols)``).
-    rows, cols = int(dense.shape[0]), int(dense.shape[1])
-    mem.data = np.transpose(dense).flatten().reshape(rows, cols)
+        return dense.contiguous()
+    return dense.permute(1, 0).contiguous()
+
+
+def _create_tla_tensor(dev_buf: Any, layout: LayoutChoice) -> Any:
+    """Wrap one device buffer as a ``tla.Tensor`` via DLPack (``layout_tag`` required)."""
+    return from_dlpack(
+        _device_buffer_for_layout(dev_buf, layout),
+        layout_tag=_gm_layout_tag(layout),
+    )
 
 
 def dump_tlair(
@@ -222,7 +202,9 @@ def dump_tlair(
     dtype_c: ElemDType,
 ) -> str:
     return basic_mmad_kernel.dump_mlir(
-        type_args=_make_type_args(layout_a, layout_b, dtype_a, dtype_b, dtype_c)
+        type_args=_compile_only_type_args(
+            layout_a, layout_b, dtype_a, dtype_b, dtype_c
+        )
     )
 
 
@@ -235,28 +217,64 @@ def _runtime_kwargs(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
-def _first_mismatch(
+def _comparison_atol(dtype_c: ElemDType, args: argparse.Namespace) -> float:
+    if dtype_c in ("f16", "bf16"):
+        return max(float(args.atol), 5e-3)
+    return float(args.atol)
+
+
+def _first_mismatch_torch(
     actual: Any, expected: Any, *, atol: float
 ) -> dict[str, Any] | None:
-    import numpy as np
-
-    indices = np.argwhere(~np.isclose(actual, expected, rtol=0.0, atol=atol))
-    if indices.size == 0:
+    torch = _require_torch()
+    close = torch.isclose(actual, expected, rtol=0.0, atol=atol)
+    if bool(close.all()):
         return None
-    row, col = (int(value) for value in indices[0])
+    row, col = (int(value) for value in close.logical_not().nonzero(as_tuple=False)[0])
     return {
         "index": [row, col],
-        "actual": float(actual[row, col]),
-        "expected": float(expected[row, col]),
+        "actual": float(actual[row, col].item()),
+        "expected": float(expected[row, col].item()),
     }
+
+
+def _print_case_result(
+    *,
+    host: str,
+    layout_a: LayoutChoice,
+    layout_b: LayoutChoice,
+    dtype_a: ElemDType,
+    dtype_b: ElemDType,
+    dtype_c: ElemDType,
+    artifact: Any,
+    unchanged_all: bool,
+    expected_match_all: bool,
+    changed_count: int,
+    first_mismatch: dict[str, Any] | None,
+) -> None:
+    print(
+        "compile_ok=True "
+        f"host={host} layout_a={layout_a} layout_b={layout_b} "
+        f"dtype_a={dtype_a} dtype_b={dtype_b} dtype_c={dtype_c}"
+    )
+    print(f"kernel.o path={artifact.kernel_binary_path}")
+    print("launch_ok=True")
+    print(f"C unchanged? {unchanged_all}")
+    print(f"C equals expected matmul? {expected_match_all}")
+    print(f"C changed count={changed_count}")
+    print(f"first mismatch={first_mismatch}")
 
 
 def build_only(args: argparse.Namespace) -> int:
     _apply_kernel_dtypes(args.dtype_a, args.dtype_b, args.dtype_c)
     artifact = tla.compile(
         basic_mmad_kernel,
-        *_make_type_args(
-            args.layout_a, args.layout_b, args.dtype_a, args.dtype_b, args.dtype_c
+        *_compile_only_type_args(
+            args.layout_a,
+            args.layout_b,
+            args.dtype_a,
+            args.dtype_b,
+            args.dtype_c,
         ),
         **_runtime_kwargs(args),
     )
@@ -274,53 +292,62 @@ def run_single_case(
     dtype_c: ElemDType,
 ) -> int:
     _apply_kernel_dtypes(dtype_a, dtype_b, dtype_c)
-    mem_a, mem_b, mem_c = _runtime_tensors(
-        layout_a, layout_b, dtype_a, dtype_b, dtype_c
+    torch = _require_torch_npu(args.device)
+    device = "npu"
+    torch_dtype_a = _torch_dtype(dtype_a)
+    torch_dtype_b = _torch_dtype(dtype_b)
+    torch_dtype_c = _torch_dtype(dtype_c)
+    torch_tensor_a = (
+        (torch.arange(m * k, dtype=torch.float32, device=device).reshape(m, k) % 7.0)
+        - 3.0
+    ).to(torch_dtype_a)
+    torch_tensor_b = (
+        (torch.arange(k * n, dtype=torch.float32, device=device).reshape(k, n) % 5.0)
+        - 2.0
+    ).to(torch_dtype_b)
+    torch_tensor_c = torch.full(
+        (m, n), args.sentinel, dtype=torch_dtype_c, device=device
     )
-    np_a = _np_elem_dtype(dtype_a)
-    np_b = _np_elem_dtype(dtype_b)
-    np_c = _np_elem_dtype(dtype_c)
-    a_host = ((np.arange(m * k, dtype=np.float32).reshape(m, k) % 7.0) - 3.0).astype(
-        np_a
-    )
-    b_host = ((np.arange(k * n, dtype=np.float32).reshape(k, n) % 5.0) - 2.0).astype(
-        np_b
-    )
-    sentinel = np.full((m, n), args.sentinel, dtype=np_c)
-    expected_f32 = a_host.astype(np.float32) @ b_host.astype(np.float32)
+    expected_f32 = torch_tensor_a.to(torch.float32) @ torch_tensor_b.to(torch.float32)
     if dtype_c in ("f16", "bf16"):
-        expected = expected_f32.astype(np_c).astype(np.float32)
-        atol = max(float(args.atol), 5e-3)
+        expected = expected_f32.to(torch_dtype_c).to(torch.float32)
     else:
         expected = expected_f32
-        atol = float(args.atol)
+    atol = _comparison_atol(dtype_c, args)
 
-    _fill_gm_from_dense(mem_a, a_host, layout_a)
-    _fill_gm_from_dense(mem_b, b_host, layout_b)
-    mem_c.data = sentinel
+    tla_tensor_a = _create_tla_tensor(torch_tensor_a, layout_a)
+    tla_tensor_b = _create_tla_tensor(torch_tensor_b, layout_b)
+    tla_tensor_c = _create_tla_tensor(torch_tensor_c, "row")
 
-    runtime_kwargs = _runtime_kwargs(args)
-    artifact = tla.compile(basic_mmad_kernel, mem_a, mem_b, mem_c, **runtime_kwargs)
-    print(
-        "compile_ok=True "
-        f"m={m} n={n} k={k} "
-        f"layout_a={layout_a} layout_b={layout_b} "
-        f"dtype_a={dtype_a} dtype_b={dtype_b} dtype_c={dtype_c}"
+    artifact = tla.compile(
+        basic_mmad_kernel,
+        tla_tensor_a,
+        tla_tensor_b,
+        tla_tensor_c,
+        **_runtime_kwargs(args),
     )
-    print(f"kernel.o path={artifact.kernel_binary_path}")
-    artifact(mem_a, mem_b, mem_c, block=args.block)
-    print("launch_ok=True")
+    artifact(tla_tensor_a, tla_tensor_b, tla_tensor_c, block=args.block)
 
-    mem_c.download_data()
-    actual = np.asarray(mem_c.data, dtype=np.float32)
-    unchanged = np.isclose(actual, sentinel.astype(np.float32), rtol=0.0, atol=atol)
-    expected_match = np.isclose(actual, expected, rtol=0.0, atol=atol)
-    first_mismatch = _first_mismatch(actual, expected, atol=atol)
+    torch.npu.synchronize()
+    actual = torch_tensor_c.to(torch.float32)
+    sentinel_f32 = torch.full_like(actual, args.sentinel)
+    unchanged = torch.isclose(actual, sentinel_f32, rtol=0.0, atol=atol)
+    expected_match = torch.isclose(actual, expected, rtol=0.0, atol=atol)
+    first_mismatch = _first_mismatch_torch(actual, expected, atol=atol)
 
-    print(f"C unchanged? {bool(np.all(unchanged))}")
-    print(f"C equals expected matmul? {bool(np.all(expected_match))}")
-    print(f"C changed count={int(np.count_nonzero(~unchanged))}")
-    print(f"first mismatch={first_mismatch}")
+    _print_case_result(
+        host="torch_npu",
+        layout_a=layout_a,
+        layout_b=layout_b,
+        dtype_a=dtype_a,
+        dtype_b=dtype_b,
+        dtype_c=dtype_c,
+        artifact=artifact,
+        unchanged_all=bool(unchanged.all()),
+        expected_match_all=bool(expected_match.all()),
+        changed_count=int((~unchanged).sum().item()),
+        first_mismatch=first_mismatch,
+    )
     return 0 if first_mismatch is None else 1
 
 
@@ -358,6 +385,7 @@ def run(args: argparse.Namespace) -> int:
             for layout_a, layout_b in _layout_pairs(args):
                 print(
                     "---",
+                    "backend=torch_npu",
                     f"dtype_a={dtype_a}",
                     f"dtype_b={dtype_b}",
                     f"dtype_c={dtype_c}",

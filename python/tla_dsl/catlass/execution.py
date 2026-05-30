@@ -471,8 +471,6 @@ def _mark_tensor_launch_args_uploaded(args: Sequence[Any]) -> None:
     for arg in args:
         if hasattr(arg, "prepare_for_launch") and callable(arg.prepare_for_launch):
             arg.prepare_for_launch()
-        elif hasattr(arg, "upload_data") and callable(arg.upload_data):
-            arg.upload_data()
 
 
 def _flatten_launch_args(args: Sequence[Any]) -> list[int]:

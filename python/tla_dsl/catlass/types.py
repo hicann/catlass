@@ -6,8 +6,7 @@ import ctypes
 import importlib
 import struct
 import weakref
-from dataclasses import dataclass, field
-from itertools import product
+from dataclasses import dataclass
 from typing import Any, Iterable, Iterator, Literal, TypeAlias
 
 from .base_dsl.typing import (
@@ -87,7 +86,7 @@ class PtrType(mlir_ir.Type):
         *,
         context: mlir_ir.Context | None = None,
     ) -> PtrType:
-        """Build ``!tla.ptr<pointee, tok, align>`` (frontend uses arch tokens, e.g. ``l0c``)."""
+        """Build ``!tla.ptr<pointee, token, align>`` (frontend uses arch tokens, e.g. ``l0c``)."""
         ctx = context if context is not None else pointee.context
         return PtrType(
             _tla_type_bridge.ptr_type_get(ctx, pointee, str(addrspace), int(alignment))
@@ -567,272 +566,6 @@ def annotation_to_category(annotation: Any) -> str | None:
     return _ANNOTATION_CATEGORY.get(annotation)
 
 
-def _slice_indices(index: slice, length: int) -> list[int]:
-    return list(range(*index.indices(length)))
-
-
-def _coerce_nested_tensor_value(value: Any) -> Any:
-    # Keep numpy arrays as-is to avoid expensive tolist() conversion
-    np = _require_numpy()
-    if hasattr(value, "tolist") and not isinstance(value, (list, tuple, np.ndarray)):
-        return value.tolist()
-    if isinstance(value, np.ndarray):
-        return value
-    return value
-
-
-def _enumerate_leaf_paths_with_prefix(
-    shape_comp: Any, prefix: list[int]
-) -> list[list[int]]:
-    dims = _leaf_dims(shape_comp)
-    if len(prefix) > len(dims):
-        return []
-    tail_dims = dims[len(prefix) :]
-    if not tail_dims:
-        return [list(prefix)]
-    tail_lists = [list(t) for t in product(*[range(d) for d in tail_dims])]
-    return [prefix + tl for tl in tail_lists]
-
-
-def _path_to_flat_index(path: list[int], dims: tuple[int, ...]) -> int:
-    flat_idx = 0
-    multiplier = 1
-    for idx, dim in zip(reversed(path), reversed(dims)):
-        flat_idx += idx * multiplier
-        multiplier *= dim
-    return flat_idx
-
-
-def _assign_tensor_data_view(
-    view: list[Any] | _TensorDataList,
-    value: Any,
-    *,
-    layout_tag: str | None = None,
-) -> None:
-    del layout_tag
-    coerced = _coerce_nested_tensor_value(value)
-    if isinstance(view, _TensorDataList):
-        np = _require_numpy()
-        arr = np.asarray(coerced)
-        dims_tail = _leaf_dims(view._shape_comp)[len(view._path_leaves) :]
-        expected = int(np.prod(dims_tail, dtype=np.int64)) if dims_tail else 1
-        if arr.size != expected:
-            raise ValueError(
-                f"tensor data assignment expected {expected} value(s), got {arr.size}"
-            )
-        expected_shape = tuple(dims_tail)
-        if expected_shape and tuple(arr.shape) != expected_shape:
-            raise ValueError(
-                "tensor data assignment expected shape "
-                f"{expected_shape}, got {tuple(arr.shape)}"
-            )
-        if not view._path_leaves:
-            view._storage.clear()
-        flat = arr.ravel(order="C")
-        # Use flat index directly for much faster bulk storage
-        total_dims = view._dims
-        prefix_len = len(view._path_leaves)
-        if prefix_len == 0:
-            # Fast path: root level, direct sequential storage
-            for i, v in enumerate(flat):
-                view._storage[i] = v.item() if hasattr(v, "item") else v
-        else:
-            # Nested path: compute base index and use multipliers
-            base_idx = _path_to_flat_index(view._path_leaves, total_dims)
-            # Pre-compute multipliers for remaining dimensions
-            remaining_dims = total_dims[prefix_len:]
-            multipliers = [1]
-            for d in reversed(remaining_dims[1:]):
-                multipliers.insert(0, multipliers[0] * d)
-            # Assign values with computed flat indices
-            for i, v in enumerate(flat):
-                # Calculate offset within the remaining dimensions
-                offset = 0
-                temp_i = i
-                for dim, mult in zip(remaining_dims, multipliers):
-                    offset += (temp_i % dim) * mult
-                    temp_i //= dim
-                flat_idx = base_idx + offset
-                view._storage[flat_idx] = v.item() if hasattr(v, "item") else v
-        if view._on_mutate is not None:
-            view._on_mutate()
-        return
-    if not isinstance(coerced, (list, tuple)):
-        raise TypeError(
-            "tensor data assignment requires a list, tuple, or numpy-like value"
-        )
-    if len(view) != len(coerced):
-        raise ValueError(
-            f"tensor data assignment expected {len(view)} values, got {len(coerced)}"
-        )
-    view[:] = list(coerced)
-
-
-def _set_tensor_storage_value(storage: dict[Any, Any], key: Any, value: Any) -> None:
-    if value is None:
-        storage.pop(key, None)
-    else:
-        storage[key] = value
-
-
-def _pack_nested_key_from_leaf_indices(shape_comp: Any, leaf_idx: list[int]) -> Any:
-    """Build a storage key isomorphic to ``shape_comp`` (nested tuple tree of indices)."""
-    it = iter(leaf_idx)
-
-    def walk(node: Any) -> Any:
-        if isinstance(node, int):
-            return next(it)
-        if not isinstance(node, tuple) or not node:
-            raise TypeError("invalid shape component tree")
-        if all(isinstance(x, int) for x in node):
-            return tuple(next(it) for _ in node)
-        return tuple(walk(x) for x in node)
-
-    return walk(shape_comp)
-
-
-def _leaf_dims(shape_comp: Any) -> tuple[int, ...]:
-    return tuple(_flatten_int_leaves_tree(shape_comp))
-
-
-def _tensor_data_view(
-    storage: dict[Any, Any],
-    shape_comp: Any | None,
-    *,
-    on_mutate: Any | None = None,
-    path_leaves: list[int] | None = None,
-) -> list[Any] | _TensorDataList | None:
-    if shape_comp is None:
-        return None
-    if shape_comp == ():
-        return []
-    return _TensorDataList(
-        storage, shape_comp, path_leaves=list(path_leaves or []), on_mutate=on_mutate
-    )
-
-
-class _TensorDataList:
-    """Host-side view over ``dict`` storage with keys matching the shape component tree."""
-
-    def __init__(
-        self,
-        storage: dict[Any, Any],
-        shape_comp: Any,
-        *,
-        path_leaves: list[int],
-        on_mutate: Any | None = None,
-    ) -> None:
-        self._storage = storage
-        self._shape_comp = shape_comp
-        self._path_leaves = path_leaves
-        self._on_mutate = on_mutate
-        self._dims = _leaf_dims(shape_comp)
-
-    def __len__(self) -> int:
-        if len(self._path_leaves) >= len(self._dims):
-            return 0
-        return self._dims[len(self._path_leaves)]
-
-    def __iter__(self) -> Iterator[Any]:
-        for index in range(len(self)):
-            yield self[index]
-
-    def __getitem__(self, index: int | slice) -> Any:
-        if isinstance(index, slice):
-            return [self[i] for i in _slice_indices(index, len(self))]
-        normalized = index + len(self) if index < 0 else index
-        if normalized < 0 or normalized >= len(self):
-            raise IndexError("tensor data index out of range")
-        new_path = self._path_leaves + [normalized]
-        if len(new_path) == len(self._dims):
-            key = _path_to_flat_index(new_path, self._dims)
-            return self._storage.get(key)
-        return _TensorDataList(
-            self._storage,
-            self._shape_comp,
-            path_leaves=new_path,
-            on_mutate=self._on_mutate,
-        )
-
-    def __repr__(self) -> str:
-        total = 1
-        for dim in self._dims:
-            total *= dim
-        if total <= 64:
-            return repr(list(self))
-        return f"TensorData(shape_comp={self._shape_comp!r})"
-
-    def __setitem__(self, index: int | slice, value: Any) -> None:
-        if isinstance(index, slice):
-            indices = _slice_indices(index, len(self))
-            coerced = _coerce_nested_tensor_value(value)
-            values = list(coerced)
-            if len(indices) != len(values):
-                raise ValueError(
-                    f"attempt to assign sequence of size {len(values)} "
-                    f"to extended slice of size {len(indices)}"
-                )
-            for offset, item in zip(indices, values):
-                self[offset] = item
-            return
-        normalized = index + len(self) if index < 0 else index
-        if normalized < 0 or normalized >= len(self):
-            raise IndexError("tensor data index out of range")
-        new_path = self._path_leaves + [normalized]
-        if len(new_path) == len(self._dims):
-            key = _path_to_flat_index(new_path, self._dims)
-            _set_tensor_storage_value(self._storage, key, value)
-            if self._on_mutate is not None:
-                self._on_mutate()
-            return
-        coerced = _coerce_nested_tensor_value(value)
-        if not isinstance(coerced, (list, tuple)):
-            raise TypeError(
-                "nested tensor data assignment requires a list or tuple value"
-            )
-        child = _TensorDataList(
-            self._storage,
-            self._shape_comp,
-            path_leaves=new_path,
-            on_mutate=self._on_mutate,
-        )
-        child[:] = coerced
-
-    def __delitem__(self, index: int | slice) -> None:
-        raise TypeError("tensor data has fixed dimensions")
-
-    def append(self, value: Any) -> None:
-        raise TypeError("tensor data has fixed dimensions")
-
-    def extend(self, values: Iterable[Any]) -> None:
-        raise TypeError("tensor data has fixed dimensions")
-
-    def insert(self, index: int, value: Any) -> None:
-        raise TypeError("tensor data has fixed dimensions")
-
-    def pop(self, index: int = -1) -> None:
-        raise TypeError("tensor data has fixed dimensions")
-
-    def clear(self) -> None:
-        self[:] = [None] * len(self)
-
-
-_TENSOR_DTYPE_TO_NUMPY: dict[str, str] = {
-    "i1": "bool",
-    "i8": "int8",
-    "i16": "int16",
-    "i32": "int32",
-    "i64": "int64",
-    "u8": "uint8",
-    "u16": "uint16",
-    "u32": "uint32",
-    "u64": "uint64",
-    "f16": "float16",
-    "bf16": "bfloat16",
-    "f32": "float32",
-    "f64": "float64",
-}
-
 _TENSOR_DTYPE_SIZES: dict[str, int] = {
     "i1": 1,
     "i8": 1,
@@ -859,74 +592,6 @@ def dtype_size_bytes(dtype: str) -> int:
     return int(_TENSOR_DTYPE_SIZES.get(dtype.strip().lower(), 0))
 
 
-def _tensor_storage_to_nested_list(storage: dict[Any, Any], shape_comp: Any) -> Any:
-    """Nested Python lists aligned with leaf axes; structure follows ``shape_comp`` grouping."""
-    dims = _leaf_dims(shape_comp)
-    if not dims:
-        return storage.get(_path_to_flat_index([], dims))
-
-    def build(path: list[int]) -> Any:
-        if len(path) == len(dims):
-            return storage.get(_path_to_flat_index(path, dims))
-        return [build(path + [i]) for i in range(dims[len(path)])]
-
-    return build([])
-
-
-def _load_acl() -> Any:
-    try:
-        return importlib.import_module("acl")
-    except ImportError as exc:
-        raise RuntimeError(
-            "Failed to import `acl`. Ensure the Ascend runtime is installed."
-        ) from exc
-
-
-def _require_acl_success(ret: Any, op_name: str) -> None:
-    if int(ret) != 0:
-        raise RuntimeError(f"{op_name} failed with ret={int(ret)}")
-
-
-def _require_numpy() -> Any:
-    try:
-        import numpy as np  # type: ignore
-    except ImportError as exc:
-        raise RuntimeError(
-            "NumPy is required for Tensor host/device transfers."
-        ) from exc
-    return np
-
-
-def _register_runtime_pointer(kind: str, ptr: int) -> None:
-    if ptr == 0:
-        return
-    try:
-        from . import runtime as runtime_mod
-    except Exception:
-        return
-    try:
-        if kind == "device":
-            runtime_mod.register_device_ptr(int(ptr))
-        elif kind == "host":
-            runtime_mod.register_host_ptr(int(ptr))
-    except Exception:
-        # Tensor allocation can still be used even if the global runtime registry
-        # is unavailable or uninitialized.
-        return
-
-
-def _has_tensor_host_data(storage: dict[Any, Any], shape_comp: Any) -> bool:
-    dims = _leaf_dims(shape_comp)
-    # Check all flat indices from 0 to product(dims)-1
-    total = 1
-    for d in dims:
-        total *= d
-    for i in range(total):
-        if i not in storage or storage[i] is None:
-            return False
-    return True
-
-
 _LIVE_TENSORS: dict[int, weakref.ReferenceType[Any]] = {}
 
 
@@ -942,23 +607,18 @@ def _track_live_tensor(tensor: Any) -> None:
 def invalidate_runtime_allocations(
     *,
     device_ptrs: Iterable[int] = (),
-    host_ptrs: Iterable[int] = (),
 ) -> None:
     freed_device_ptrs = {int(ptr) for ptr in device_ptrs if int(ptr) != 0}
-    freed_host_ptrs = {int(ptr) for ptr in host_ptrs if int(ptr) != 0}
-    if not freed_device_ptrs and not freed_host_ptrs:
+    if not freed_device_ptrs:
         return
     for tensor_ref in list(_LIVE_TENSORS.values()):
         tensor = tensor_ref()
         if tensor is None:
             continue
         if tensor.data_ptr in freed_device_ptrs:
-            if tensor.stale:
-                tensor._device_data_lost = True
+            if getattr(tensor, "_external_binding", False):
+                continue
             tensor.data_ptr = 0
-            tensor.stale = False
-        if tensor.host_ptr in freed_host_ptrs:
-            tensor.host_ptr = 0
 
 
 def _flatten_int_leaves_tree(tree: Any) -> list[int]:
@@ -984,7 +644,7 @@ def _try_remap_stride_coord_trees(
     comp: tuple[Any, ...],
     origin_components: tuple[Any, ...],
     dtype: str,
-    layout_tok: str,
+    layout_token: str,
 ) -> tuple[tuple[Any, ...] | None, tuple[Any, ...] | None]:
     """Use :func:`catlass.core_api._remap_tensor_like_prefix_fields_for_layout_trees` for defaults.
 
@@ -995,7 +655,7 @@ def _try_remap_stride_coord_trees(
     from .core_api import _remap_tensor_like_prefix_fields_for_layout_trees
 
     trees = _remap_tensor_like_prefix_fields_for_layout_trees(
-        origin_components, dtype.strip().lower(), layout_tok.strip()
+        origin_components, dtype.strip().lower(), layout_token.strip()
     )
     if trees is None:
         return (None, None)
@@ -1004,359 +664,43 @@ def _try_remap_stride_coord_trees(
     return (stride_tree if stride_ok else None, coord_tree)
 
 
-@dataclass
-class Tensor:
-    """Tensor annotation that lowers to a first-class ``!tla.tensor`` type.
+class RuntimeTensorError(RuntimeError):
+    """Raised when tensor buffer binding or layout validation fails."""
 
-    Non-symbolic tensors must use :func:`catlass.core_api.make_shape` for ``shape`` and
-    for ``origin_shape`` (required), :func:`catlass.core_api.make_coord` for ``coord``, and
-    :func:`catlass.core_api.make_stride` for ``stride``.
-    When ``coord`` / ``stride`` are omitted, defaults come only from
-    :func:`catlass.core_api._remap_tensor_like_prefix_fields_for_layout_trees` (requires a flat
-    logical ``origin_shape`` tree ``M,N`` and a stride tree matching
-    ``shape``); otherwise construction raises ``ValueError``—pass ``tla.make_coord`` /
-    ``tla.make_stride`` explicitly.
-    These ops must run under an active frontend session (e.g. :func:`catlass.runtime._eager_capture`).
 
-    ``dtype`` must be a compile-time element class such as ``tla.Float16`` (not a string token).
-    ``addrspace`` must be :class:`~catlass.address_space.AddressSpace` (e.g. ``tla.AddressSpace.gm``,
-    ``tla.AddressSpace.l0a``); the sixth field of ``!tla.tensor<…>`` uses the same keyword
-    (``gm``, ``l0a``, ``l1``, …).
+def _flat_layout_leaves(tree: Any) -> tuple[int, ...]:
+    """Preorder flatten of positive-int leaves from a shape/stride component tree."""
+    return tuple(int(x) for x in _flatten_int_leaves_tree(tree))
 
-    ``layout_tag`` must be a ``tla.arch`` layout sentinel (e.g. ``tla.arch.RowMajor``); omit it
-    to default to row-major. Raw strings are not accepted.
 
-    Tensor shape metadata is carried by Tla shape/coord/stride values, not Python
-    strings.
-    """
-
-    shape: Any
-    dtype: Any
-    addrspace: Any = AddressSpace.gm
-    data_ptr: int = 0
-    host_ptr: int = 0
-    stale: bool = False
-    origin_shape: Iterable[Any] | None = None
-    coord: Iterable[Any] | None = None
-    stride: Any | None = None
-    layout_tag: Any | None = None
-    _shape_components: tuple[Any, ...] | None = field(
-        default=None, repr=False, compare=False
+def _deduce_leading_dim(
+    shape: tuple[int, ...],
+    strides: tuple[int, ...],
+) -> int:
+    unit_dims = [index for index, stride in enumerate(strides) if int(stride) == 1]
+    if not unit_dims:
+        raise RuntimeTensorError(
+            "cannot deduce leading_dim: no dimension has stride 1"
+        )
+    if len(unit_dims) == 1:
+        return unit_dims[0]
+    sized = [index for index in unit_dims if int(shape[index]) > 1]
+    if len(sized) == 1:
+        return sized[0]
+    raise RuntimeTensorError(
+        "cannot deduce leading_dim: multiple dimensions have stride 1"
     )
-    _shape_tuple: tuple[int, ...] | None = field(
-        default=None, repr=False, compare=False
-    )
-    _data_storage: dict[Any, Any] | None = field(
-        default=None, repr=False, compare=False
-    )
-    _device_data_lost: bool = field(default=False, repr=False, compare=False)
 
-    def __post_init__(self) -> None:
-        from .core_api import _Coord, _Shape, _Stride, _resolve_arch_layout_tag
 
-        self.dtype = _coerce_host_tensor_dtype(self.dtype)
-        self.addrspace = _coerce_host_tensor_addrspace(self.addrspace)
-        self.layout_tag = _resolve_arch_layout_tag(self.layout_tag, for_op="Tensor")
+def _replace_flat_leaves_in_tree(tree: Any, new_leaves: Iterable[Any]) -> Any:
+    iterator = iter(new_leaves)
 
-        if not isinstance(self.shape, _Shape):
-            raise TypeError(
-                "Tensor(shape=...): shape must be the result of tla.make_shape(...)"
-            )
+    def _visit(node: Any) -> Any:
+        if isinstance(node, (tuple, list)):
+            return tuple(_visit(child) for child in node)
+        return next(iterator)
 
-        comp = self.shape._components
-        self.shape = comp
-        flat = tuple(_flatten_int_leaves_tree(comp))
-        self._shape_tuple = flat
-        self._shape_components = comp
-
-        if self.origin_shape is None:
-            raise TypeError(
-                "Tensor(shape=tla.make_shape(...)): origin_shape is required; "
-                "pass tla.make_shape(...) for logical bounds"
-            )
-        if isinstance(self.origin_shape, _Shape):
-            self.origin_shape = self.origin_shape._components
-        else:
-            raise TypeError(
-                "Tensor origin_shape=... must be the result of tla.make_shape(...)"
-            )
-
-        rs_stride, rs_coord = _try_remap_stride_coord_trees(
-            comp, self.origin_shape, self.dtype, self.layout_tag
-        )
-
-        if self.coord is None:
-            if rs_coord is None:
-                raise ValueError(
-                    "Tensor(coord=None): cannot derive coord from layout remap; "
-                    "use a flat logical origin_shape (M,N) without nested parentheses, "
-                    "or pass tla.make_coord(...)"
-                )
-            self.coord = rs_coord
-        elif isinstance(self.coord, _Coord):
-            self.coord = self.coord._components
-        else:
-            raise TypeError(
-                "Tensor coord=... must be None or the result of tla.make_coord(...)"
-            )
-
-        if self.stride is None:
-            if rs_stride is None:
-                raise ValueError(
-                    "Tensor(stride=None): cannot derive stride from layout remap "
-                    "(remap stride tree must match shape tree); pass tla.make_stride(...)"
-                )
-            self.stride = rs_stride
-        elif isinstance(self.stride, _Stride):
-            sc = self.stride._components
-            if _tree_structure_mask(sc) != _tree_structure_mask(comp):
-                raise ValueError(
-                    "Tensor stride component tree must match shape tree structure"
-                )
-            self.stride = sc
-        else:
-            raise TypeError(
-                "Tensor stride=... must be None or the result of tla.make_stride(...)"
-            )
-
-        if self._data_storage is None:
-            self._data_storage = {}
-        _track_live_tensor(self)
-
-    def _mark_host_data_authoritative(self) -> None:
-        self._device_data_lost = False
-        self.stale = False
-
-    def _require_device_data_available(self) -> None:
-        if self._device_data_lost:
-            raise RuntimeError(
-                "Tensor device-resident data was freed during tla.finalize(); "
-                "repopulate host data before reuse."
-            )
-
-    def tla_tensor_type_descriptor(self) -> TlaTensorTypeDescriptor:
-        """Structured ``!tla.tensor`` descriptor from host metadata."""
-        st = self._shape_tuple
-        addr_kw = (self.addrspace or "gm").strip()
-        if st is None or self.stride is None or self.layout_tag is None:
-            raise TypeError(
-                "Tensor metadata is incomplete; construct tensors with tla.make_shape, "
-                "origin_shape, coord, and stride metadata"
-            )
-        assert self._shape_components is not None
-        return TlaTensorTypeDescriptor(
-            layout=TlaLayoutDescriptor(
-                shape=TlaIndexTreeType("shape", self._shape_components),
-                stride=TlaIndexTreeType("stride", self.stride),
-                origin_shape=TlaIndexTreeType("shape", self.origin_shape),
-                layout_tag=str(self.layout_tag),
-            ),
-            coord=self.coord,
-            element_type=str(self.dtype),
-            addrspace=addr_kw,
-            ptr_alignment=max(1, dtype_size_bytes(str(self.dtype))),
-        )
-
-    def __tla_type__(self) -> str:
-        return str(self.tla_tensor_type_descriptor().to_mlir_type())
-
-    def __c_pointers__(self) -> list[int]:
-        return [int(self.data_ptr)]
-
-    def __get_mlir_types__(
-        self, context: mlir_ir.Context | None = None
-    ) -> list[mlir_ir.Type]:
-        return [self.tla_tensor_type_descriptor().to_mlir_type(context)]
-
-    def __new_from_mlir_values__(self, values: list[Any]) -> "Tensor":
-        del values
-        return self
-
-    @property
-    def size_bytes(self) -> int:
-        if self._shape_tuple is None:
-            raise TypeError(
-                "Tensor size is unavailable without concrete shape metadata."
-            )
-        if self.dtype not in _TENSOR_DTYPE_SIZES:
-            raise ValueError(
-                f"Unsupported tensor dtype for upload_data(): {self.dtype}"
-            )
-        elements = 1
-        for dim in self._shape_tuple:
-            elements *= dim
-        return elements * _TENSOR_DTYPE_SIZES[self.dtype]
-
-    def tobytes(self) -> bytes:
-        self._require_device_data_available()
-        if self._shape_tuple is None:
-            raise TypeError(
-                "Tensor bytes are unavailable without concrete shape metadata."
-            )
-        if self.dtype not in _TENSOR_DTYPE_TO_NUMPY:
-            raise ValueError(f"Unsupported tensor dtype for tobytes(): {self.dtype}")
-        np = _require_numpy()
-        storage = self._data_storage
-        if storage is None:
-            raise TypeError(
-                "Tensor data is unavailable without concrete shape metadata."
-            )
-        assert self._shape_components is not None
-        nested = _tensor_storage_to_nested_list(storage, self._shape_components)
-        array = np.asarray(nested, dtype=_TENSOR_DTYPE_TO_NUMPY[self.dtype])
-        return bytes(array.tobytes())
-
-    def download_data(self) -> None:
-        if self.data_ptr == 0:
-            raise RuntimeError(
-                "Tensor download_data() requires a prior upload_data() call."
-            )
-        if self._shape_tuple is None:
-            raise TypeError(
-                "Tensor download_data() is unavailable without concrete shape metadata."
-            )
-        if self.dtype not in _TENSOR_DTYPE_TO_NUMPY:
-            raise ValueError(
-                f"Unsupported tensor dtype for download_data(): {self.dtype}"
-            )
-        np = _require_numpy()
-        acl = _load_acl()
-        size_bytes = self.size_bytes
-        if self.host_ptr == 0:
-            host_ptr, ret = acl.rt.malloc_host(size_bytes)
-            _require_acl_success(ret, "acl.rt.malloc_host")
-            self.host_ptr = int(host_ptr)
-            _register_runtime_pointer("host", self.host_ptr)
-        ret = acl.rt.memcpy(self.host_ptr, size_bytes, self.data_ptr, size_bytes, 2)
-        _require_acl_success(ret, "acl.rt.memcpy")
-        bytes_ptr = acl.util.ptr_to_bytes(self.host_ptr, size_bytes)
-        flat = np.frombuffer(bytes_ptr, dtype=_TENSOR_DTYPE_TO_NUMPY[self.dtype])
-        assert self._shape_components is not None
-        reshaped = flat.reshape(self._shape_tuple)
-        self._device_data_lost = False
-        self.stale = False
-        self.data = reshaped
-
-    def upload_data(self) -> None:
-        self._require_device_data_available()
-        acl = _load_acl()
-        size_bytes = self.size_bytes
-        if self.data_ptr == 0:
-            dev_ptr, ret = acl.rt.malloc(size_bytes, 0)
-            _require_acl_success(ret, "acl.rt.malloc")
-            self.data_ptr = int(dev_ptr)
-            _register_runtime_pointer("device", self.data_ptr)
-        bytes_vector = self.tobytes()
-        bytes_ptr = acl.util.bytes_to_ptr(bytes_vector)
-        ret = acl.rt.memcpy(self.data_ptr, size_bytes, bytes_ptr, size_bytes, 1)
-        _require_acl_success(ret, "acl.rt.memcpy")
-        self._device_data_lost = False
-        self.stale = True
-
-    def prepare_for_launch(self) -> None:
-        self._require_device_data_available()
-        if self._shape_tuple is None:
-            return
-        if self.data_ptr == 0:
-            storage = self._data_storage
-            if storage is None:
-                raise TypeError(
-                    "Tensor data is unavailable without concrete shape metadata."
-                )
-            assert self._shape_components is not None
-            if _has_tensor_host_data(storage, self._shape_components):
-                self.upload_data()
-                return
-            acl = _load_acl()
-            dev_ptr, ret = acl.rt.malloc(self.size_bytes, 0)
-            _require_acl_success(ret, "acl.rt.malloc")
-            self.data_ptr = int(dev_ptr)
-            _register_runtime_pointer("device", self.data_ptr)
-            self.stale = True
-            return
-        if not self.stale:
-            self.upload_data()
-
-    def _ensure_fresh_data(self) -> None:
-        self._require_device_data_available()
-        if self.stale:
-            self.download_data()
-
-    @property
-    def data(self) -> list[Any] | _TensorDataList | None:
-        self._ensure_fresh_data()
-        storage = self._data_storage
-        if storage is None:
-            return None
-        return _tensor_data_view(
-            storage,
-            self._shape_components,
-            on_mutate=self._mark_host_data_authoritative,
-        )
-
-    @data.setter
-    def data(self, value: Any) -> None:
-        if not self._device_data_lost:
-            self._ensure_fresh_data()
-        storage = self._data_storage
-        if storage is None:
-            raise TypeError(
-                "Tensor data is unavailable without concrete shape metadata."
-            )
-        view = _tensor_data_view(
-            storage,
-            self._shape_components,
-            on_mutate=self._mark_host_data_authoritative,
-        )
-        if view is None:
-            raise TypeError(
-                "Tensor data is unavailable without concrete shape metadata."
-            )
-        _assign_tensor_data_view(view, value, layout_tag=self.layout_tag)
-        self._mark_host_data_authoritative()
-
-    def __len__(self) -> int:
-        data = self.data
-        if data is None:
-            raise TypeError(
-                "Tensor data is unavailable without concrete shape metadata."
-            )
-        return len(data)
-
-    def __iter__(self) -> Iterator[Any]:
-        data = self.data
-        if data is None:
-            raise TypeError(
-                "Tensor data is unavailable without concrete shape metadata."
-            )
-        return iter(data)
-
-    def __getitem__(self, index: int | slice) -> Any:
-        data = self.data
-        if data is None:
-            raise TypeError(
-                "Tensor data is unavailable without concrete shape metadata."
-            )
-        return data[index]
-
-    def __setitem__(self, index: int | slice, value: Any) -> None:
-        data = self.data
-        if data is None:
-            raise TypeError(
-                "Tensor data is unavailable without concrete shape metadata."
-            )
-        data[index] = value
-
-    def __str__(self) -> str:
-        return self.__tla_type__()
-
-    def __repr__(self) -> str:
-        return (
-            f"Tensor(shape={self.shape!r}, dtype={self.dtype!r}, "
-            f"addrspace={self.addrspace!r}, data_ptr={self.data_ptr!r}, stale={self.stale!r}, "
-            f"origin_shape={self.origin_shape!r}, coord={self.coord!r}, "
-            f"stride={self.stride!r}, layout_tag={self.layout_tag!r})"
-        )
+    return _visit(tree)
 
 
 @dataclass(frozen=True)
@@ -1522,6 +866,7 @@ __all__ = [
     "TlaRegion",
     "Tensor",
     "Scalar",
+    "RuntimeTensorError",
     "Numeric",
     "Bool",
     "Int8",

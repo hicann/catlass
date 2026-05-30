@@ -6,8 +6,13 @@ import contextvars
 import importlib
 import inspect
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field  # noqa: F401 — field used below
 from typing import Any, Callable
+
+from .base_dsl.runtime.dlpack_types import (
+    ASCEND_DEVICE_TYPES,
+    DLDeviceType,
+)
 
 from .execution import (
     TlaBackendCompilerNotFoundError,
@@ -23,6 +28,7 @@ from .execution import (
     runtime_options_for_launch,
     runtime_options_from_kwargs,
 )
+from .types import RuntimeTensorError
 
 
 class TlaIRNotExecutableError(RuntimeError):
@@ -40,7 +46,6 @@ class TlaRuntimeState:
     device_id: int | None = None
     stream: Any | None = None
     device_ptrs: tuple[int, ...] = field(default_factory=tuple)
-    host_ptrs: tuple[int, ...] = field(default_factory=tuple)
 
 
 @dataclass
@@ -51,7 +56,7 @@ class _FrontendEmitState:
     category_bindings: dict[int, str]
     module: Any | None = None
     exec_units: set[str] = field(default_factory=set)
-    #: ``id(mlir.Value)`` -> host :class:`~catlass.types.Tensor` for execution lowering.
+    #: ``id(mlir.Value)`` -> host :class:`~catlass.tla.runtime._Tensor` for execution lowering.
     tensor_host_by_value_id: dict[int, Any] = field(default_factory=dict)
     #: ``id(mlir.Value)`` -> structured Tla tensor type descriptor.
     tensor_type_by_value_id: dict[int, Any] = field(default_factory=dict)
@@ -135,7 +140,6 @@ def initialize(device: int | str | None = None) -> TlaRuntimeState:
         device_id=device_id,
         stream=stream,
         device_ptrs=(),
-        host_ptrs=(),
     )
     return _GLOBAL_RUNTIME_STATE
 
@@ -156,13 +160,8 @@ def finalize() -> None:
         types_mod = None
     for dev_ptr in state.device_ptrs:
         _require_acl_success(acl.rt.free(dev_ptr), "acl.rt.free")
-    for host_ptr in state.host_ptrs:
-        _require_acl_success(acl.rt.free_host(host_ptr), "acl.rt.free_host")
     if types_mod is not None:
-        types_mod.invalidate_runtime_allocations(
-            device_ptrs=state.device_ptrs,
-            host_ptrs=state.host_ptrs,
-        )
+        types_mod.invalidate_runtime_allocations(device_ptrs=state.device_ptrs)
     _require_acl_success(acl.rt.reset_device(state.device_id), "acl.rt.reset_device")
     _require_acl_success(acl.finalize(), "acl.finalize")
     _GLOBAL_RUNTIME_STATE = TlaRuntimeState()
@@ -196,21 +195,6 @@ def register_device_ptr(ptr: int) -> None:
         device_id=_GLOBAL_RUNTIME_STATE.device_id,
         stream=_GLOBAL_RUNTIME_STATE.stream,
         device_ptrs=_GLOBAL_RUNTIME_STATE.device_ptrs + (int(ptr),),
-        host_ptrs=_GLOBAL_RUNTIME_STATE.host_ptrs,
-    )
-
-
-def register_host_ptr(ptr: int) -> None:
-    """Track a host allocation for cleanup during finalize."""
-
-    global _GLOBAL_RUNTIME_STATE
-    if ptr == 0 or ptr in _GLOBAL_RUNTIME_STATE.host_ptrs:
-        return
-    _GLOBAL_RUNTIME_STATE = TlaRuntimeState(
-        device_id=_GLOBAL_RUNTIME_STATE.device_id,
-        stream=_GLOBAL_RUNTIME_STATE.stream,
-        device_ptrs=_GLOBAL_RUNTIME_STATE.device_ptrs,
-        host_ptrs=_GLOBAL_RUNTIME_STATE.host_ptrs + (int(ptr),),
     )
 
 
@@ -666,6 +650,15 @@ def __dir__() -> list[str]:
     return sorted(set(globals()) | set(_CORE_API_EXPORTS))
 
 
+from .tla.runtime import (  # noqa: E402
+    DlpackBridgeError,
+    export_dlpack_capsule,
+    from_dlpack,
+    make_fake_tensor,
+    _Tensor,
+)
+
+
 __all__ = [
     "TlaCoreAPIError",
     "TlaIRNotExecutableError",
@@ -678,6 +671,14 @@ __all__ = [
     "TlaKernelArtifact",
     "TlaExecutionResult",
     "TlaRuntimeState",
+    "RuntimeTensorError",
+    "DlpackBridgeError",
+    "ASCEND_DEVICE_TYPES",
+    "DLDeviceType",
+    "export_dlpack_capsule",
+    "from_dlpack",
+    "make_fake_tensor",
+    "_Tensor",
     "arch",
     "const_expr",
     "constexpr",

@@ -21,8 +21,10 @@ from .base_dsl.typing import Int8, Numeric
 from .base_dsl.typing import Pointer as PointerABC
 from .base_dsl.typing import Pointer as PointerTypeHint
 from .tla.tensor import normalize_tile_view_coord
+from .tla.typing import Tensor
 from .utils.localmem_allocator import LocalmemAllocator
 from . import runtime as _runtime
+from .tla.tensor import _Tensor
 from .runtime import (
     TlaCoreAPIError,
     TlaIRNotExecutableError,
@@ -49,7 +51,6 @@ from .types import (
     TlaTile,
     TlaValue,
     Scalar,
-    Tensor,
     annotation_to_category,
     dtype_size_bytes,
 )
@@ -284,65 +285,10 @@ class _Pointer(PointerABC):
         return AddressSpace.from_mlir_token(self._ptr_ty.addrspace)
 
 
-class _TensorValue:
-    """Frontend proxy for an SSA ``!tla.tensor`` value."""
-
-    def __init__(self, value: mlir_ir.Value) -> None:
-        if not isinstance(value, mlir_ir.Value):
-            raise TypeError(
-                f"Tensor value expects mlir.ir.Value, got {type(value).__name__}"
-            )
-        if not _tla_type_bridge.type_is_tensor(value.type):
-            raise TypeError(f"Tensor value expects !tla.tensor<...>, got {value.type}")
-        self.value = value
-        self.__tla_category__ = "tensor"
-        _runtime._bind_frontend_value(self, value)
-        _runtime._bind_frontend_category(self, "tensor")
-        _runtime._bind_frontend_category(value, "tensor")
-
-    def __tla_type__(self) -> str:
-        return str(self.value.type)
-
-    def __get_mlir_types__(self, context: mlir_ir.Context | None = None) -> list[Any]:
-        del context
-        return [self.value.type]
-
-    def __extract_mlir_values__(self) -> list[Any]:
-        return [self.value]
-
-    @property
-    def shape(self) -> Any:
-        return _tensor_metadata_field(self.value, "shape")
-
-    @property
-    def stride(self) -> Any:
-        return _tensor_metadata_field(self.value, "stride")
-
-    @property
-    def coord(self) -> Any:
-        return _tensor_metadata_field(self.value, "coord")
-
-    @property
-    def origin_shape(self) -> Any:
-        return _tensor_metadata_field(self.value, "origin_shape")
-
-    @property
-    def dtype(self) -> str:
-        return str(_tensor_metadata_field(self.value, "dtype"))
-
-    @property
-    def addrspace(self) -> str:
-        return str(_tensor_metadata_field(self.value, "addrspace"))
-
-    @property
-    def layout_tag(self) -> str:
-        return str(_tensor_metadata_field(self.value, "layout_tag"))
-
-
 class _RmemTensorValue:
     """Frontend proxy for a register-fragment tensor backed by a UB tensor view."""
 
-    def __init__(self, value: mlir_ir.Value, source: _TensorValue) -> None:
+    def __init__(self, value: mlir_ir.Value, source: _Tensor) -> None:
         if not isinstance(value, mlir_ir.Value):
             raise TypeError(
                 f"Rmem tensor expects mlir.ir.Value, got {type(value).__name__}"
@@ -578,12 +524,12 @@ def _as_i64_value(value: Any, *, loc: mlir_ir.Location | None = None) -> mlir_ir
 
 
 def _coerce_inttoptr_address(
-    addr_tok: str,
+    addr_token: str,
     value: int | mlir_ir.Value,
     loc: mlir_ir.Location | None,
 ) -> mlir_ir.Value:
     """Integer SSA for ``tla.inttoptr`` (``gm`` / ``generic`` → i64, else i32)."""
-    t = addr_tok.strip().lower()
+    t = addr_token.strip().lower()
     target_ty = (
         mlir_ir.IntegerType.get_signless(64)
         if t in ("gm", "generic")
@@ -638,7 +584,7 @@ def _as_value(value: Any) -> mlir_ir.Value:
     resolved = _resolve_bound_value(value)
     if isinstance(resolved, _Pointer):
         resolved = _resolve_bound_value(resolved.value)
-    if isinstance(resolved, _TensorValue):
+    if isinstance(resolved, _Tensor):
         resolved = _resolve_bound_value(resolved.value)
     if isinstance(resolved, _RmemTensorValue):
         resolved = _resolve_bound_value(resolved.value)
@@ -680,7 +626,7 @@ def _wrap_frontend_value(value: mlir_ir.Value) -> Any:
     if PtrType.isinstance(value.type):
         return _Pointer(value)
     if _tla_type_bridge.type_is_tensor(value.type):
-        return _TensorValue(value)
+        return _Tensor(value)
     if isinstance(value.type, mlir_ir.IndexType):
         return _runtime._IndexExpr(value)
     if mlir_ir.IntegerType.isinstance(value.type):
@@ -1770,7 +1716,7 @@ def _category(value: Any) -> str | None:
         return "layout"
     if isinstance(value, _Pointer):
         return "pointer"
-    if isinstance(value, _TensorValue):
+    if isinstance(value, _Tensor):
         return "tensor"
     category = getattr(value, "__tla_category__", None)
     if isinstance(category, str):
@@ -2052,21 +1998,21 @@ def make_layout(
             f"got {_type_name(origin_shape)}",
         )
     _require_frontend_state("make_layout")
-    layout_tok = _resolve_arch_layout_tag(layoutTag, for_op="make_layout")
+    layout_token = _resolve_arch_layout_tag(layoutTag, for_op="make_layout")
     shape_val = shape._shape_value
     stride_val = stride._stride_value
     origin_for_type: mlir_ir.Value | None = (
         origin_shape._shape_value if origin_shape is not None else None
     )
     layout_ty = LayoutType.get(
-        shape_val, stride_val, origin_for_type, layout_tag=layout_tok
+        shape_val, stride_val, origin_for_type, layout_tag=layout_token
     )
     origin_ssa: mlir_ir.Value | None = None
     if origin_shape is not None and origin_shape._shape_value is not shape_val:
         origin_ssa = origin_shape._shape_value
     attrs: dict[str, mlir_ir.Attribute] = {}
-    if layout_tok != "row_major":
-        attrs["layoutTag"] = mlir_ir.StringAttr.get(layout_tok)
+    if layout_token != "row_major":
+        attrs["layoutTag"] = mlir_ir.StringAttr.get(layout_token)
     operands: list[mlir_ir.Value] = [shape_val, stride_val]
     if origin_ssa is not None:
         operands.append(origin_ssa)
@@ -2133,7 +2079,7 @@ def _emit_tile_view(
     except Exception:
         # Keep lowering permissive: metadata property access falls back to type parsing.
         pass
-    return _TensorValue(result)
+    return _Tensor(result)
 
 
 @dsl_user_op
@@ -2326,7 +2272,7 @@ def make_tensor_like(
         _register_tla_tensor_metadata(out, metadata)
     except Exception:
         pass
-    return _TensorValue(out)
+    return _Tensor(out)
 
 
 @dsl_user_op
@@ -2338,7 +2284,7 @@ def make_rmem_tensor(
     _require_frontend_state("make_rmem_tensor")
     source_value = _as_value(source)
     source_tensor = (
-        source if isinstance(source, _TensorValue) else _TensorValue(source_value)
+        source if isinstance(source, _Tensor) else _Tensor(source_value)
     )
     if source_tensor.addrspace != "ub":
         raise TlaLoweringError(
@@ -2824,7 +2770,7 @@ def make_ptr(
     dt = Int8 if dtype is None else dtype
     ctx = loc.context if loc is not None else mlir_ir.Context()
     pointee = dt.mlir_type(ctx)
-    addr_tok = _require_pointer_addrspace("make_ptr", mem_space, 2)
+    addr_token = _require_pointer_addrspace("make_ptr", mem_space, 2)
     bytes_per_elt = max(1, int(dt.width) // 8)
     align = assumed_align if assumed_align is not None else bytes_per_elt
     if bytes_per_elt % align != 0 and align % bytes_per_elt != 0:
@@ -2834,8 +2780,8 @@ def make_ptr(
         )
     if align <= 0 or (align & (align - 1)) != 0:
         _op_error("make_ptr", "assumed_align must be a positive power of 2")
-    out_ptr_ty = PtrType.get(pointee, addr_tok, align, context=ctx)
-    addr_ssa = _coerce_inttoptr_address(addr_tok, value, loc)
+    out_ptr_ty = PtrType.get(pointee, addr_token, align, context=ctx)
+    addr_ssa = _coerce_inttoptr_address(addr_token, value, loc)
     return _Pointer(_tla_ops_gen.inttoptr(out_ptr_ty, addr_ssa, loc=loc, ip=None))
 
 
@@ -2923,18 +2869,18 @@ arch._set("L0Clayout", _LayoutTagSentinel("L0Clayout"))
 def _resolve_arch_layout_tag(value: Any | None, *, for_op: str) -> str:
     """Normalize ``Tensor(..., layout_tag=...)`` to the MLIR layout token string."""
     if value is None:
-        tok = _name_token(arch.RowMajor)
-        assert tok is not None
-        return tok
+        token = _name_token(arch.RowMajor)
+        assert token is not None
+        return token
     if not isinstance(value, _LayoutTagSentinel):
         raise TypeError(
             f"{for_op}: layout_tag must be a tla.arch layout sentinel "
             f"(e.g. tla.arch.RowMajor); got {_type_name(value)}"
         )
-    tok = _name_token(value)
-    if tok is None:
+    token = _name_token(value)
+    if token is None:
         raise TypeError(f"{for_op}: layout sentinel produced no token: {value!r}")
-    return tok
+    return token
 
 
 setattr(_runtime.utils, "LocalmemAllocator", LocalmemAllocator)

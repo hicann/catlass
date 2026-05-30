@@ -212,6 +212,7 @@ llvm-lit -sv csrc/mlir/build/tests/lit
 
 | 主题 | 位置 |
 |------|------|
+| DLPack → TLA `Tensor` 字段来源与 layout 转换 | `docs/dlpack_to_tla_tensor.md` |
 | MMAD 端到端示例与运行参数 | `examples/end_to_end/basic_mmad/README.md` |
 | AscendNPU-IR 子模块、`build.sh`、TableGen 校验与 `TLA_DSL_PREBUILT` | 上文 **2.4** |
 | 依赖版本表、`python/tla_dsl/environment.yml`、`lit` 与 MLIR 19.1.7 同栈 | 上文 **2.2.1** |

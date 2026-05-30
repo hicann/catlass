@@ -18,7 +18,7 @@ from mlir import ir as mlir_ir  # type: ignore[assignment]
 _T = TypeVar("_T")
 
 # -----------------------------------------------------------------------------
-# Numeric element types (``Type[Numeric]`` parity — minimal subset)
+# Numeric element types (minimal subset)
 # -----------------------------------------------------------------------------
 
 _TOKEN_TO_NUMERIC: dict[str, type["Numeric"]] = {}
@@ -61,9 +61,9 @@ class Numeric(ABC):
 
     @classmethod
     def from_mlir_type(cls, ty: mlir_ir.Type) -> type[Numeric]:
-        tok = _mlir_type_to_elem_token(ty)
+        token = _mlir_type_to_elem_token(ty)
         try:
-            return _TOKEN_TO_NUMERIC[tok]
+            return _TOKEN_TO_NUMERIC[token]
         except KeyError as exc:
             raise TypeError(f"unsupported element type for Numeric: {ty!r}") from exc
 
