@@ -70,7 +70,7 @@
 - 技术文章
     - 基础入门
         - [C++ template详解](https://www.runoob.com/w3cnote/c-templates-detail.html)
-        - [Ascend C算子开发文档](https://www.hiascend.com/document/detail/zh/canncommercial/850/opdevg/Ascendcopdevg/atlas_ascendc_map_10_0002.html)
+        - [Ascend C算子开发文档](https://www.hiascend.com/document/redirect/CannCommunityOpdevAscendC)
     - 概念理解
     - 问题定位
     - 性能优化

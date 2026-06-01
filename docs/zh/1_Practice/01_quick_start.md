@@ -8,7 +8,7 @@
 
 根据您所使用的[昇腾产品](https://www.hiascend.com/document/detail/zh/AscendFAQ/ProduTech/productform/hardwaredesc_0001.html)类别，请下载对应的CANN开发套件包`Ascend-cann-toolkit_{version}_linux-{arch}.run`，下载链接见[CANN toolkit](https://www.hiascend.com/zh/developer/download/community/result?module=cann)（有关CATLASS的版本支持情况详见[软件硬件配套说明](../../../README.md#软件硬件配套说明)）。
 
-随后安装CANN开发套件包（详情参考[CANN安装指南](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/softwareinst/instg/instg_0008.html?Mode=PmIns&InstallType=local&OS=openEuler&Software=cannToolKit)）。
+随后安装CANN开发套件包（详情参考[CANN安装指南](https://www.hiascend.com/cann/download)）。
 
 ```bash
 # 确保安装包有可执行权限
@@ -58,12 +58,12 @@ bash scripts/build.sh [options] <target>
  - `options`: 可选编译选项，当前支持的选项包括：
    - `--clean`: 清理此前编译及输出目录（默认路径分别为`/build`，`/output`）。
    - `--debug`: 以Debug模式进行编译。
-   - `--msdebug`：使能[msDebug](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0062.html)工具，详见[在CATLASS样例工程使用msDebug](./evaluation/msdebug.md)。
+   - `--msdebug`：使能[msDebug](https://www.hiascend.com/document/redirect/CannCommunityToolMsdebug)工具，详见[在CATLASS样例工程使用msDebug](./evaluation/msdebug.md)。
    - `--simulator`：启用仿真器模式，该选项启用后将不在实际NPU上执行，详见[CATLASS样例仿真](./evaluation/performance_tools.md#msprof-op-simulator使用示例)。
    - `--enable_profiling`：使能Profiling工具，详见[CATLASS样例性能调优](./evaluation/performance_tools.md#profiling简介)。
    - `--enable_print`：启用编译器的打印功能，详见[基于`cce::printf`进行设备侧打印](./evaluation/print.md)。
    - `--enable_ascendc_dump`：启用`AscendC`相关算子调测API，详见[CATLASS样例使用AscendC算子调测API](./evaluation/ascendc_dump.md)。
-   - `-DCATLASS_ARCH`：指明NPU架构，当前支持`2201`和`3510`。
+   - `-DCATLASS_ARCH`：指明NPU架构，当前支持`2201`和`3510`，不指明则默认为2201。
    - `-D<option>`：给CMake传递其他的编译选项。
 
  - `target`： 要编译的算子样例，可指定为特定的样例名，也可指定为：
@@ -72,7 +72,7 @@ bash scripts/build.sh [options] <target>
    - `torch_library`：编译torch扩展，详见[Python调用CATLASS样例](../../../examples/python_extension/README.md)。
    - `mstuner_catlass`：编译msTuner_CATLASS工具，详见[`mstuner_catlass`使用说明](../../../tools/tuner/README.md)。
 
-以[basic_matmul](../../../examples/00_basic_matmul/README.md)样例编译过程为例，执行下述指令：
+以[basic_matmul](../../../examples/00_basic_matmul/README.md)样例编译过程为例，执行下述指令（若为Ascend950，需要添加`-DCATLASS_ARCH=3501`）：
 
 ```bash
 # 编译算子组件

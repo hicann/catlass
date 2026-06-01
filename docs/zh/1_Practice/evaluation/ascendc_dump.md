@@ -1,10 +1,10 @@
 # 在CATLASS样例工程使用AscendC算子调测API
 
-AscendC算子调测API是AscendC提供的调试能力，可进行kernel内部的打印([`printf`](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/API/ascendcopapi/atlasascendc_api_07_0193.html))、Tensor内容的查看([`DumpTensor`](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/API/ascendcopapi/atlasascendc_api_07_0192.html))。
+AscendC算子调测API是AscendC提供的调试能力，可进行kernel内部的打印([`printf`](https://www.hiascend.com/document/redirect/CannCommunityascendcapiprintf))、Tensor内容的查看([`DumpTensor`](https://www.hiascend.com/document/redirect/CannCommunityascendcapidumptensor))。
 
 ## 使用示例
 
-下面以`00_basic_matmul`为例，演示基于[AscendC算子调测API](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/API/ascendcopapi/atlasascendc_api_07_0192.html)的测试过程。
+下面以`00_basic_matmul`为例，演示基于[AscendC算子调测API](https://www.hiascend.com/document/redirect/CannCommunityascendcapidumptensor)的测试过程。
 
 ### 插入调试代码
 
@@ -68,7 +68,7 @@ cd output/bin
 ```
 
 - ⚠ 注意事项
-  - 目前[`DumpTensor`](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/API/ascendcopapi/atlasascendc_api_07_0192.html)**不**支持打印`L0A`、`L0B`、`FixPipe`上的数值。特别地，在`Ascend 950PR/Ascend 950DT`上，额外**不**支持打印`L1`上的数值。
+  - 目前[`DumpTensor`](https://www.hiascend.com/document/redirect/CannCommunityascendcapidumptensor)**不**支持打印`L0A`、`L0B`、`FixPipe`上的数值。特别地，在`Ascend 950PR/Ascend 950DT`上，额外**不**支持打印`L1`上的数值。
 
 ### 输出示例（仅为示例，实际输出可能因硬件和算子实现不同而有所差异）
 

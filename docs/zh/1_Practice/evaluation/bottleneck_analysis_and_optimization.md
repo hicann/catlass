@@ -73,7 +73,7 @@ msprof op simulator ./00_basic_matmul 256 512 1024 0
 
 ### Profiling — 整网性能分析
 
-[Profiling](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/devaids/Profiling/atlasprofiling_16_0010.html)是整网性能分析工具，对应指令为`msprof`。虽然CATLASS主要面向单算子场景，单算子调用示例也可使用Profiling进行分析：
+[Profiling](https://www.hiascend.com/document/redirect/CannCommunitymsopprofuserguide)是整网性能分析工具，对应指令为`msprof`。虽然CATLASS主要面向单算子场景，单算子调用示例也可使用Profiling进行分析：
 
 ```bash
 # 编译时使能 Profiling API
