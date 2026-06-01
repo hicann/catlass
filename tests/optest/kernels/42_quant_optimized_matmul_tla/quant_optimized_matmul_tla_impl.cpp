@@ -32,6 +32,7 @@
 #include "../common/common.h"
 #include "catlass_kernel.h"
 #include "common/kernel_runner.h"
+#include "common/workspace_alloc.h"
 #include "tla/layout.hpp"
 #include "tla/tensor.hpp"
 
@@ -108,15 +109,19 @@ auto GetPaddingLayout(LayoutTag layout, uint32_t blockRows, uint32_t blockCols)
 
 const uint32_t align = 256;
 
+template <class LayoutTag>
+size_t GetWorkspaceLen(LayoutTag layout, size_t blockRows, size_t blockCols)
+{
+    return RoundUp(static_cast<size_t>(layout.shape(0)), blockRows)
+         * RoundUp(static_cast<size_t>(layout.shape(1)), blockCols);
+}
+
 using L1TileShape = std::conditional_t<
     std::is_same_v<LayoutTagA, layout::ColumnMajor> && std::is_same_v<LayoutTagB, layout::ColumnMajor>,
     Shape<_256, _128, _512>, Shape<_128, _256, _512>>;
 using L0TileShape = std::conditional_t<
     std::is_same_v<LayoutTagA, layout::ColumnMajor> && std::is_same_v<LayoutTagB, layout::ColumnMajor>,
     Shape<_256, _128, _128>, Shape<_128, _256, _128>>;
-
-using BlockScheduler30 = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
-using BlockScheduler31 = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
 
 constexpr bool enableUnitFlag = false;
 constexpr bool enableShuffleK = true;
@@ -149,10 +154,11 @@ constexpr uint32_t workspaceStages = 2;
 #endif
 
 #ifndef CATLASS_JIT_BLOCK_SCHEDULER
-#define CATLASS_JIT_BLOCK_SCHEDULER BlockScheduler30
+#define CATLASS_JIT_BLOCK_SCHEDULER 30
 #endif
 
-using BlockScheduler = CATLASS_JIT_BLOCK_SCHEDULER;
+using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<
+    (CATLASS_JIT_BLOCK_SCHEDULER / 10), (CATLASS_JIT_BLOCK_SCHEDULER % 10)>;
 
 extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::MatmulParams* params)
 {
@@ -214,10 +220,49 @@ extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::
 
     using MatmulKernel = Gemm::Kernel::QuantOptimizedMatmulTla<
         BlockMmad, BlockEpilogue, BlockScheduler, PaddingA, PaddingB, workspaceStages>;
+
+    uint8_t* deviceWA = deviceA;
+    uint8_t* deviceWB = deviceB;
+    bool allocWA = false;
+    bool allocWB = false;
+#if CATLASS_JIT_NEED_PADDING_A
+    {
+        size_t sizeWA = GetWorkspaceLen(tagA, get<0>(L1TileShape{}), get<2>(L1TileShape{})) * sizeof(ElementA);
+        if (g_catlassWorkspaceAlloc) {
+            deviceWA = g_catlassWorkspaceAlloc(sizeWA);
+        } else {
+            aclrtMalloc(reinterpret_cast<void**>(&deviceWA), sizeWA, ACL_MEM_MALLOC_HUGE_FIRST);
+        }
+        allocWA = true;
+    }
+#endif
+#if CATLASS_JIT_NEED_PADDING_B
+    {
+        size_t sizeWB = GetWorkspaceLen(tagB, get<2>(L1TileShape{}), get<1>(L1TileShape{})) * sizeof(ElementB);
+        if (g_catlassWorkspaceAlloc) {
+            deviceWB = g_catlassWorkspaceAlloc(sizeWB);
+        } else {
+            aclrtMalloc(reinterpret_cast<void**>(&deviceWB), sizeWB, ACL_MEM_MALLOC_HUGE_FIRST);
+        }
+        allocWB = true;
+    }
+#endif
+
     typename MatmulKernel::Arguments arguments{
         Catlass::GemmCoord{m, n, k},
         blockNum,
-        {deviceA, layoutA, deviceB, layoutB, deviceA, layoutWA, deviceB, layoutWB},
+        {deviceA, layoutA, deviceB, layoutB, deviceWA, layoutWA, deviceWB, layoutWB},
         {deviceScale, layoutScale, devicePerTokenScale, layoutPerTokenScale, deviceD, layoutD}};
     Catlass::RunKernel<MatmulKernel>(arguments, stream, blockNum);
+
+#if CATLASS_JIT_NEED_PADDING_A
+    if (!g_catlassWorkspaceAlloc) {
+        aclrtFree(deviceWA);
+    }
+#endif
+#if CATLASS_JIT_NEED_PADDING_B
+    if (!g_catlassWorkspaceAlloc) {
+        aclrtFree(deviceWB);
+    }
+#endif
 }

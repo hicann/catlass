@@ -48,7 +48,7 @@ inline void ApplyOptMacros(
 
     macros["CATLASS_JIT_NEED_PADDING_A"] = needPadded(isNzA, isTransA, m, k) ? "1" : "0";
     macros["CATLASS_JIT_NEED_PADDING_B"] = needPadded(isNzB, isTransB, k, n) ? "1" : "0";
-    macros["CATLASS_JIT_BLOCK_SCHEDULER"] = (m > n) ? "BlockScheduler30" : "BlockScheduler31";
+    macros["CATLASS_JIT_BLOCK_SCHEDULER"] = (m > n) ? "30" : "31";
 }
 
 #endif // OPTEST_KERNELS_COMMON_OPTIMIZED_MACRO_GENERATOR_H

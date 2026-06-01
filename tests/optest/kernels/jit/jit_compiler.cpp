@@ -52,6 +52,14 @@ void JitCompiler::lazyInit()
         }
         fs::create_directories(cacheDir, ec);
         JIT_CHECK(!ec, "mkdir failed: " + cacheDir + ": " + ec.message());
+
+        const char* ver = std::getenv(JitConfig::kVersionEnv);
+        if (ver && *ver) {
+            cacheDir += "/" + std::string(ver);
+            fs::create_directories(cacheDir, ec);
+            JIT_CHECK(!ec, "mkdir failed: " + cacheDir + ": " + ec.message());
+        }
+
         cacheDir_ = std::move(cacheDir);
 
         bishengPath_ = FindCompilerPath();

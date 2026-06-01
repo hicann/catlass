@@ -66,7 +66,46 @@ example source
 - `torch_catlass/ops/<name>.py`
 - `tests/test_<nn>_<name>.py` 或 `tests/test_<name>.py`
 
-重复时默认“增量更新不覆盖”，除非用户明确要求覆盖。
+重复时默认"增量更新不覆盖"，除非用户明确要求覆盖。
+
+### 0.4 自动提取 kernel 类型
+
+从 example 的 `CMakeLists.txt` 读取 `cube`/`mix`，自动填入入口 cpp：
+
+```bash
+python scripts/gen_entry.py <nn> <name>
+```
+
+对应关系：`cube` → `JitKernelType::AIC`，`mix` → `JitKernelType::MIX`。
+
+## Automation Scripts
+
+`scripts/` 目录提供代码生成，减少手工模板填充：
+
+| Script | 作用 | 用法 |
+|--------|------|------|
+| `gen_entry.py` | 生成 JIT 入口 cpp，自动读取 example CMakeLists 的 kernel type | `python scripts/gen_entry.py <nn> <name> [--macros none\|scheduler\|apply_opt]` |
+| `gen_cmake.py` | 生成 kernel CMakeLists.txt | `python scripts/gen_cmake.py <nn> <name>` |
+| `gen_python.py` | 生成 Python wrapper | `python scripts/gen_python.py <nn> <name>` |
+| `gen_test.py` | 生成 pytest | `python scripts/gen_test.py <nn> <name> [--transB] [--padding] [--small]` |
+
+### gen_entry 宏模式
+
+`--macros` 控制入口是否带条件宏：
+
+| 模式 | 适用 | 示例 |
+|------|------|------|
+| `none`（默认） | 无运行时条件分支 | 21, 31, 37, 39 |
+| `scheduler` | swizzle 方向依 m>n | 13, 14, 25 |
+| `apply_opt` | ApplyOptMacros（scheduler 数字 "30"/"31" + padding） | 04, 06 |
+
+### 接入修改清单（自动生成外需手动）
+
+1. `kernels/CMakeLists.txt`：补 `add_subdirectory(<nn>_<name>)`
+2. `src/catlass_torch.cpp`：补 `MatmulLike<...>::Run` + `REGISTER_TORCH_FUNC`
+3. `torch_catlass/ops/__init__.py`：补 import + `__all__`
+4. `README.md`：更新接入清单
+5. `<name>_impl.cpp`：**模板须手动编写**（遵循原始 example kernel 结构）
 
 ## Phase 1: ABI Reservation First
 
@@ -115,7 +154,10 @@ example source
 - 模板默认宏齐全（dtype/layout/transpose 等）。
 - 运行入口签名与 ABI 声明一致。
 - **JIT 模板中 kernel 启动统一使用 `Catlass::RunKernel<Kernel>()`（来自 `common/kernel_runner.h`），禁止引入 `catlass/gemm/device/device_gemm.hpp`。**
+- **L1/L0 TileShape 统一使用 `CatlassKernel::TileShapeScaler<ElementA, half, BaseShape>::type`（或 TLA 变体 `TileShapeScalerTLA`），确保元素类型变化时 K 维度按字节宽度等比缩放。不硬编码 `GemmShape<...>`。**
+- **`CATLASS_JIT_BLOCK_SCHEDULER` 使用数字编码：末位=direction，前位=offset。`GemmIdentityBlockSwizzle<3, 0>` → 默认值 `30`。模板中通过 `(CATLASS_JIT_BLOCK_SCHEDULER / 10)` 取 offset、`(CATLASS_JIT_BLOCK_SCHEDULER % 10)` 取 direction。**
 - 模板引用 `kernels/common/` 下的头文件（如 `kernel_runner.h`、`tile_shape_scaler.h`、`common.h`、`workspace_alloc.h`）时，需确认对应头文件已通过顶置 `CMakeLists.txt` 安装到 `jit/common/`。
+- **Padding 路径需为 `deviceWA`/`deviceWB` 单独分配缓冲区**，通过 `g_catlassWorkspaceAlloc`（回退 `aclrtMalloc`），不可复用原始 `deviceA`/`deviceB` 指针。模板变更后须清除 JIT 缓存目录（`torch_catlass.clear_jit_cache()`），否则旧 `.so` 仍被命中。
 - 不把 example 的命令行/数据生成逻辑带入内核模板。
 
 ### 2.2 Prebuilt 类接入
@@ -196,6 +238,8 @@ example source
 - [ ] 参数模型与 `TParams + Params` 保持一致
 - [ ] 无不必要 `using XxxParams` 别名滥用
 - [ ] JIT 模板使用 `common/kernel_runner.h` 启动 kernel，未引入 `device_gemm.hpp`
+- [ ] L1/L0 TileShape 使用 `TileShapeScaler`（非硬编码）
+- [ ] `CATLASS_JIT_BLOCK_SCHEDULER` 使用数字编码（末位 direction，前位 offset）
 - [ ] 模板依赖的 `kernels/common/` 头文件已通过 CMake install rule 安装到 `jit/common/`
 
 ### Runtime Checklist

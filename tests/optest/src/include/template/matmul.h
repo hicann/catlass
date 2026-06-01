@@ -15,14 +15,16 @@
 #include <torch/torch.h>
 #include <tiling/platform/platform_ascendc.h>
 
-#include "catlass_kernel.h"
+#include "catlass_kernel_jit.h"
 #include "common/run_npu_func.h"
 #include "torch_utils.h"
 #include "type_utils.hpp"
 
 namespace CatlassKernelWrapper {
 
-template <auto KernelFunc>
+using KernelFn = void (*)(const uint32_t, aclrtStream, const CatlassKernel::TParams&, const CatlassKernel::MatmulParams&);
+
+template <KernelFn KernelFunc>
 struct MatmulLike {
     using OutputType = at::Tensor;
 

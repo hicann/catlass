@@ -146,6 +146,7 @@ echo ""
 
 # Ensure pip is available in the venv (no-op if already installed)
 $PYTHON -m ensurepip --upgrade >/dev/null 2>&1 || true
+$PYTHON -m pip install --upgrade pip 2>/dev/null || true
 
 CONFIG_SETTINGS=()
 

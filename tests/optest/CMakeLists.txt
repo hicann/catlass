@@ -86,6 +86,9 @@ install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/
     PATTERN "*.hpp"
 )
 
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/torch_catlass/_version.py
+    DESTINATION .)
+
 install(DIRECTORY ${CATLASS_INCLUDE_DIR}/catlass/
     DESTINATION jit/catlass
     FILES_MATCHING

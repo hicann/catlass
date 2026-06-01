@@ -23,7 +23,7 @@ __catlass_version__ = _vers["full"]
 __catlass_tag__ = _vers["tag"]
 __catlass_commit__ = _vers["commit"]
 # Expose to JIT compiler at runtime
-os.environ["TORCH_CATLASS_VERSION"] = _vers["full"]
+os.environ["CATLASS_JIT_VERSION"] = _vers["full"]
 
 __all__ = [
     "ops",
@@ -31,6 +31,7 @@ __all__ = [
     "quant_optimized_matmul_tla",
     "ascend950_fp8_mx_matmul_aswt",
     "ascend950_fp4_mx_matmul_aswt",
+    "clear_jit_cache",
     "__version__",
     "__catlass_version__",
 ]
@@ -41,6 +42,24 @@ _catlass_loaded: bool = False
 def enable_mssanitizer():
     """Enable Ascend memory sanitizer for subsequent JIT compilations."""
     os.environ["MS_SANITIZE_MEMORY"] = "1"
+
+
+def clear_jit_cache():
+    """Remove all JIT-compiled kernel cache files on disk."""
+    import shutil
+    import glob as _glob
+
+    cache_dir = os.environ.get("CATLASS_JIT_CACHE_DIR", "")
+    if cache_dir and os.path.isdir(cache_dir):
+        shutil.rmtree(cache_dir, ignore_errors=True)
+
+    home_cache = os.path.expanduser("~/.cache/catlass/jit_cache")
+    if os.path.isdir(home_cache):
+        shutil.rmtree(home_cache, ignore_errors=True)
+
+    tmp_cache = "/tmp/catlass_jit"
+    if os.path.isdir(tmp_cache):
+        shutil.rmtree(tmp_cache, ignore_errors=True)
 
 
 def get_npu_arch():
@@ -102,7 +121,7 @@ def _load_kernel_libs():
     if not _catlass_loaded:
         base = _find_pkg_dir()
 
-        os.environ["TORCH_CATLASS_PKG_DIR"] = base
+        os.environ["CATLASS_JIT_PKG_DIR"] = base
 
         # 1. JIT 编译器 & JIT kernel 入口 — 先加载编译器，再加载统一入口库
         jit_dir = os.path.join(base, "lib", "jit")

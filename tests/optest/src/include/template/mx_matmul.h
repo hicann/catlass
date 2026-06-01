@@ -50,7 +50,9 @@ inline void ComputeMxScaleShapes(
     scaleBNumel = static_cast<int64_t>(n) * static_cast<int64_t>(mxScaleAlignedK);
 }
 
-template <auto KernelFunc>
+using KernelFn = void (*)(const uint32_t, aclrtStream, const CatlassKernel::TParams&, const CatlassKernel::MatmulParams&);
+
+template <KernelFn KernelFunc>
 struct MxMatmulLike {
     using OutputType = at::Tensor;
 

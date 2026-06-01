@@ -15,7 +15,7 @@
 #include <torch_npu/csrc/core/npu/NPUFunctions.h>
 #include <torch_npu/csrc/core/npu/NPUStream.h>
 
-#include "catlass_kernel.h"
+#include "catlass_kernel_jit.h"
 #include "common/register.h"
 #include "template/matmul.h"
 #include "template/mx_matmul.h"
@@ -26,6 +26,46 @@ namespace CatlassKernelWrapper {
 using BasicMatmulOp = MatmulLike<CatlassKernel::BasicMatmul>;
 static auto& basic_matmul = BasicMatmulOp::Run;
 REGISTER_TORCH_FUNC(basic_matmul);
+
+using PaddingMatmulOp = MatmulLike<CatlassKernel::PaddingMatmul>;
+static auto& padding_matmul = PaddingMatmulOp::Run;
+REGISTER_TORCH_FUNC(padding_matmul);
+
+using OptimizedMatmulOp = MatmulLike<CatlassKernel::OptimizedMatmul>;
+static auto& optimized_matmul = OptimizedMatmulOp::Run;
+REGISTER_TORCH_FUNC(optimized_matmul);
+
+using BasicMatmulTLAOp = MatmulLike<CatlassKernel::BasicMatmulTLA>;
+static auto& basic_matmul_tla = BasicMatmulTLAOp::Run;
+REGISTER_TORCH_FUNC(basic_matmul_tla);
+
+using OptimizedMatmulTLAOp = MatmulLike<CatlassKernel::OptimizedMatmulTLA>;
+static auto& optimized_matmul_tla = OptimizedMatmulTLAOp::Run;
+REGISTER_TORCH_FUNC(optimized_matmul_tla);
+
+using BasicMatmulPreloadZNOp = MatmulLike<CatlassKernel::BasicMatmulPreloadZN>;
+static auto& basic_matmul_preload_zN = BasicMatmulPreloadZNOp::Run;
+REGISTER_TORCH_FUNC(basic_matmul_preload_zN);
+
+using MatmulFullLoadAOp = MatmulLike<CatlassKernel::MatmulFullLoadA>;
+static auto& matmul_full_loadA = MatmulFullLoadAOp::Run;
+REGISTER_TORCH_FUNC(matmul_full_loadA);
+
+using SmallMatmulOp = MatmulLike<CatlassKernel::SmallMatmul>;
+static auto& small_matmul = SmallMatmulOp::Run;
+REGISTER_TORCH_FUNC(small_matmul);
+
+using SingleCoreSplitkMatmulOp = MatmulLike<CatlassKernel::SingleCoreSplitkMatmul>;
+static auto& single_core_splitk_matmul = SingleCoreSplitkMatmulOp::Run;
+REGISTER_TORCH_FUNC(single_core_splitk_matmul);
+
+using StreamkMatmulOp = MatmulLike<CatlassKernel::StreamkMatmul>;
+static auto& streamk_matmul = StreamkMatmulOp::Run;
+REGISTER_TORCH_FUNC(streamk_matmul);
+
+using BigMatmulTLAOp = MatmulLike<CatlassKernel::BigMatmulTLA>;
+static auto& big_matmul_tla = BigMatmulTLAOp::Run;
+REGISTER_TORCH_FUNC(big_matmul_tla);
 
 using QuantOptimizedMatmulTLAOp = QuantMatmulLike<CatlassKernel::QuantOptimizedMatmulTLA>;
 static auto& quant_optimized_matmul_tla = QuantOptimizedMatmulTLAOp::Run;

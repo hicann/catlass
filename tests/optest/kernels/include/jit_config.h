@@ -34,11 +34,11 @@ namespace JitConfig {
 
 // ── 环境变量名称 ──
 inline constexpr const char* kLogLevelEnv = "CATLASS_JIT_LOG_LEVEL";
-inline constexpr const char* kCacheDirEnv = "TORCH_CATLASS_CACHE_DIR";
+inline constexpr const char* kCacheDirEnv = "CATLASS_JIT_CACHE_DIR";
 inline constexpr const char* kSanitizeEnv = "MS_SANITIZE_MEMORY";
-inline constexpr const char* kVersionEnv = "TORCH_CATLASS_VERSION";
+inline constexpr const char* kVersionEnv = "CATLASS_JIT_VERSION";
 inline constexpr const char* kAscendHomeEnv = "ASCEND_HOME_PATH";
-inline constexpr const char* kPkgDirEnv = "TORCH_CATLASS_PKG_DIR";
+inline constexpr const char* kPkgDirEnv = "CATLASS_JIT_PKG_DIR";
 
 inline constexpr const char* kAicAsMix = "CATLASS_JIT_AIC_AS_MIX";
 inline constexpr const char* kAivAsMix = "CATLASS_JIT_AIV_AS_MIX";

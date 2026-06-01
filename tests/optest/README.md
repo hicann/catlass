@@ -21,6 +21,76 @@ Python API (`torch_catlass.ops.*`)
 - adapter 层负责 Tensor 参数到 kernel ABI 参数的转换。
 - kernel 层负责 prebuilt kernel 与 JIT kernel 的实现和执行。
 
+## 算子接入清单
+
+### 已接入（A2 基础矩阵乘类）
+
+- [x] 00_basic_matmul
+- [x] 04_padding_matmul
+- [x] 06_optimized_matmul
+- [x] 13_basic_matmul_tla
+- [x] 21_basic_matmul_preload_zN
+- [x] 25_matmul_full_loadA
+- [x] 31_small_matmul
+- [x] 34_single_core_splitk_matmul
+- [x] 37_streamk_matmul
+- [x] 39_big_matmul_tla
+- [x] 42_quant_optimized_matmul_tla
+- [x] 53_ascend950_fp8_mx_matmul (Ascend950)
+- [x] 54_ascend950_fp4_mx_matmul (Ascend950)
+
+### 暂未接入
+
+- [ ] 01_batched_matmul
+- [ ] 02_grouped_matmul_slice_m
+- [ ] 03_matmul_add
+- [ ] 05_grouped_matmul_slice_k
+- [ ] 07_grouped_slice_m_per_token_dequant_moe
+- [ ] 08_grouped_matmul
+- [ ] 09_splitk_matmul
+- [ ] 10_grouped_slice_m_per_token_dequant
+- [ ] 11_grouped_slice_k_per_token_dequant
+- [ ] 12_quant_matmul
+- [ ] 14_optimized_matmul_tla
+- [ ] 15_gemm
+- [ ] 16_group_gemm
+- [ ] 17_gemv_aiv
+- [ ] 18_gemv_aic
+- [ ] 19_mla
+- [ ] 20_matmul_bias
+- [ ] 22_padding_splitk_matmul
+- [ ] 23_flash_attention_infer
+- [ ] 24_conv_bias
+- [ ] 26_matmul_relu
+- [ ] 27_matmul_gelu
+- [ ] 28_matmul_silu
+- [ ] 29_a2_fp8_e4m3_matmul
+- [ ] 30_w8a16_matmul
+- [ ] 32_w4a8_matmul
+- [ ] 33_basic_conv2d
+- [ ] 38_w4a4_per_token_per_channel_dequant
+- [ ] 40_flash_attention_infer_tla
+- [ ] 41_sparse_matmul_tla
+- [ ] 43_ascend950_basic_matmul
+- [ ] 44_quant_matmul_full_loadA_tla
+- [ ] 45_strided_batched_matmul_tla
+- [ ] 46_ascend950_matmul_fixpipe_opti
+- [ ] 47_ascend950_grouped_slice_m_dequant
+- [ ] 48_ascend950_grouped_slice_m_pt_pc_dequant
+- [ ] 49_ascend950_flash_attention_infer
+- [ ] 50_ascend950_basic_matmul_gemv
+- [ ] 51_ascend950_quant_per_group_per_block
+- [ ] 52_quant_multi_core_splitk_tla
+- [ ] 55_ascend950_mx_grouped_slice_m
+- [ ] 56_ascend950_basic_conv2d_tla
+- [ ] 57_ascend950_matmul_full_dequant
+- [ ] 58_ascend950_fp8_mx_batch_matmul
+- [ ] 59_ascend950_a8w4_mx_matmul
+- [ ] 60_ascend950_grouped_matmul_slice_m
+- [ ] 61_ascend950_svd_quant_matmul
+- [ ] 102_dynamic_optimized_matmul
+- [ ] 103_dynamic_optimized_quant_matmul_per_token_basic
+
 ## 目录结构
 
 ```text
@@ -97,7 +167,7 @@ pytest tests/ -v
 | 变量 | 作用 | 可接受值 | 默认值 |
 | --- | --- | --- | --- |
 | `ASCEND_HOME_PATH` | CANN 安装根目录，查找 compiler(`ccec`) 和 runtime 库 | 绝对路径 | —（必设） |
-| `TORCH_CATLASS_CACHE_DIR` | JIT 编译产物 `.so` 磁盘缓存目录 | 绝对路径 | `~/.cache/catlass/jit_cache` |
+| `CATLASS_JIT_CACHE_DIR` | JIT 编译产物 `.so` 磁盘缓存根目录，版本号作为二级目录 | 绝对路径 | `~/.cache/catlass/jit_cache` |
 | `CATLASS_JIT_LOG_LEVEL` | JIT 编译日志等级 | `0`=None, `1`=Info, `2`=Debug | `0` |
 | `MS_SANITIZE_MEMORY` | 启用 Ascend memory sanitizer 调试 | `1` | — |
 | `CATLASS_JIT_AIC_AS_MIX` | 强制 AIC kernel 以 `__mix__(1,0)` 编译 | 任意非空 | —（默认 `__cube__`） |
@@ -109,8 +179,8 @@ pytest tests/ -v
 
 | 变量 | 作用 | 来源 |
 | --- | --- | --- |
-| `TORCH_CATLASS_VERSION` | 注入 JIT 编译的版本标识 `-DCATLASS_VERSION_FULL` | `torch_catlass/__init__.py` 从 catlass git 推导 |
-| `TORCH_CATLASS_PKG_DIR` | Python 包安装目录，JIT 依据此路径定位 templates 和 include | `torch_catlass/__init__.py` 通过 `_find_pkg_dir()` 解析 |
+| `CATLASS_JIT_VERSION` | 注入 JIT 编译的版本标识 `-DCATLASS_VERSION_FULL`，同时作为缓存目录的二级目录名 | `torch_catlass/__init__.py` 从 catlass git 推导 |
+| `CATLASS_JIT_PKG_DIR` | Python 包安装目录，JIT 依据此路径定位 templates 和 include | `torch_catlass/__init__.py` 通过 `_find_pkg_dir()` 解析 |
 
 ### 构建选项
 
