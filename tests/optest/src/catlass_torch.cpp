@@ -71,6 +71,14 @@ using QuantOptimizedMatmulTLAOp = QuantMatmulLike<CatlassKernel::QuantOptimizedM
 static auto& quant_optimized_matmul_tla = QuantOptimizedMatmulTLAOp::Run;
 REGISTER_TORCH_FUNC(quant_optimized_matmul_tla);
 
+using QuantMatmulFullLoadATLAOp = QuantMatmulLike<CatlassKernel::QuantMatmulFullLoadATLA>;
+static auto& quant_matmul_full_loadA_tla = QuantMatmulFullLoadATLAOp::Run;
+REGISTER_TORCH_FUNC(quant_matmul_full_loadA_tla);
+
+using QuantMultiCoreSplitkMatmulTLAOp = QuantMatmulLike<CatlassKernel::QuantMultiCoreSplitkMatmulTLA>;
+static auto& quant_multi_core_splitk_matmul_tla = QuantMultiCoreSplitkMatmulTLAOp::Run;
+REGISTER_TORCH_FUNC(quant_multi_core_splitk_matmul_tla);
+
 using Ascend950Fp8MxMatmulAswtOp = MxMatmulLike<CatlassKernel::Ascend950Fp8MxMatmulAswt>;
 static auto& ascend950_fp8_mx_matmul_aswt = Ascend950Fp8MxMatmulAswtOp::Run;
 REGISTER_TORCH_FUNC(ascend950_fp8_mx_matmul_aswt);

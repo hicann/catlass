@@ -55,6 +55,48 @@ at::Tensor quant_optimized_matmul_tla(
     const c10::ScalarType& outDType, const bool transA, const bool transB, const bool formatA, const bool formatB);
 
 /**
+ * @brief PyTorch extension entry for CATLASS quantized matmul with full loadA (TLA).
+ *
+ * Source: example 44_quant_matmul_full_loadA_tla.
+ * Implementation provided by ``QuantMatmulLike<QuantMatmulFullLoadATLA>::Run``.
+ *
+ * @param mat1 Left input matrix (int8).
+ * @param mat2 Right input matrix (int8).
+ * @param scale Per-column scale tensor (float).
+ * @param perTokenScale Per-row scale tensor (float).
+ * @param outDType Output scalar dtype.
+ * @param transA Whether to read mat1 as transposed.
+ * @param transB Whether to read mat2 as transposed.
+ * @param formatA Whether mat1 uses CATLASS NZ block format.
+ * @param formatB Whether mat2 uses CATLASS NZ block format.
+ * @return Output matrix tensor.
+ */
+at::Tensor quant_matmul_full_loadA_tla(
+    const at::Tensor& mat1, const at::Tensor& mat2, const at::Tensor& scale, const at::Tensor& perTokenScale,
+    const c10::ScalarType& outDType, const bool transA, const bool transB, const bool formatA, const bool formatB);
+
+/**
+ * @brief PyTorch extension entry for CATLASS quantized multi-core splitK matmul (TLA).
+ *
+ * Source: example 52_quant_multi_core_splitk_matmul_tla.
+ * Implementation provided by ``QuantMatmulLike<QuantMultiCoreSplitkMatmulTLA>::Run``.
+ *
+ * @param mat1 Left input matrix (int8).
+ * @param mat2 Right input matrix (int8).
+ * @param scale Per-column scale tensor (float).
+ * @param perTokenScale Per-row scale tensor (float).
+ * @param outDType Output scalar dtype.
+ * @param transA Whether to read mat1 as transposed.
+ * @param transB Whether to read mat2 as transposed.
+ * @param formatA Whether mat1 uses CATLASS NZ block format.
+ * @param formatB Whether mat2 uses CATLASS NZ block format.
+ * @return Output matrix tensor.
+ */
+at::Tensor quant_multi_core_splitk_matmul_tla(
+    const at::Tensor& mat1, const at::Tensor& mat2, const at::Tensor& scale, const at::Tensor& perTokenScale,
+    const c10::ScalarType& outDType, const bool transA, const bool transB, const bool formatA, const bool formatB);
+
+/**
  * @brief PyTorch extension entry for CATLASS Ascend950 MX FP8 matmul ASWT (TLA).
  *
  * Source: example 53_ascend950_fp8_mx_matmul_aswt.

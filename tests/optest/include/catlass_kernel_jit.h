@@ -94,7 +94,7 @@ struct GemmParams : public MatmulParams {
 extern "C" {
 
 /**
- * @brief Reserved JIT interface for example 00_basic_matmul.
+ * @brief JIT interface for example 00_basic_matmul.
  */
 void BasicMatmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
@@ -291,7 +291,7 @@ void BigMatmulTLA(const uint32_t blockNum, aclrtStream stream, const TParams& tP
 void SparseMatmulTLA(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
- * @brief Reserved JIT interface for example 42_quant_optimized_matmul_tla.
+ * @brief JIT interface for example 42_quant_optimized_matmul_tla.
  */
 void QuantOptimizedMatmulTLA(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
@@ -303,7 +303,7 @@ void Ascend950BasicMatmul(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
- * @brief Reserved JIT interface for example 44_quant_matmul_full_loadA_tla.
+ * @brief JIT interface for example 44_quant_matmul_full_loadA_tla.
  */
 void QuantMatmulFullLoadATLA(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
@@ -345,7 +345,7 @@ void Ascend950QuantMatmulPerGroupPerBlockTLA(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
- * @brief Reserved JIT interface for example 52_quant_multi_core_splitk_matmul_tla.
+ * @brief JIT interface for example 52_quant_multi_core_splitk_matmul_tla.
  */
 void QuantMultiCoreSplitkMatmulTLA(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);

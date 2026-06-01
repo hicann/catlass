@@ -202,6 +202,8 @@ add_subdirectory(34_single_core_splitk_matmul)
 add_subdirectory(37_streamk_matmul)
 add_subdirectory(39_big_matmul_tla)
 add_subdirectory(42_quant_optimized_matmul_tla)
+add_subdirectory(44_quant_matmul_full_loadA_tla)
+add_subdirectory(52_quant_multi_core_splitk_matmul_tla)
 add_subdirectory(53_ascend950_fp8_mx_matmul)
 add_subdirectory(54_ascend950_fp4_mx_matmul)
 

@@ -29,6 +29,8 @@ __all__ = [
     "ops",
     "basic_matmul",
     "quant_optimized_matmul_tla",
+    "quant_matmul_full_loadA_tla",
+    "quant_multi_core_splitk_matmul_tla",
     "ascend950_fp8_mx_matmul_aswt",
     "ascend950_fp4_mx_matmul_aswt",
     "clear_jit_cache",
