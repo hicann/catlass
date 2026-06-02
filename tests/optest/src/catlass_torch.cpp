@@ -18,6 +18,7 @@
 #include "catlass_kernel_jit.h"
 #include "common/register.h"
 #include "template/matmul.h"
+#include "template/matmul_extra.h"
 #include "template/mx_matmul.h"
 #include "template/quant_matmul.h"
 
@@ -27,6 +28,10 @@ using BasicMatmulOp = MatmulLike<CatlassKernel::BasicMatmul>;
 static auto& basic_matmul = BasicMatmulOp::Run;
 REGISTER_TORCH_FUNC(basic_matmul);
 
+using MatmulAddOp = MatmulExtraLike<CatlassKernel::MatmulAdd, false>;
+static auto& matmul_add = MatmulAddOp::Run;
+REGISTER_TORCH_FUNC(matmul_add);
+
 using PaddingMatmulOp = MatmulLike<CatlassKernel::PaddingMatmul>;
 static auto& padding_matmul = PaddingMatmulOp::Run;
 REGISTER_TORCH_FUNC(padding_matmul);
@@ -35,9 +40,25 @@ using OptimizedMatmulOp = MatmulLike<CatlassKernel::OptimizedMatmul>;
 static auto& optimized_matmul = OptimizedMatmulOp::Run;
 REGISTER_TORCH_FUNC(optimized_matmul);
 
+using MatmulBiasOp = MatmulExtraLike<CatlassKernel::MatmulBias, true>;
+static auto& matmul_bias = MatmulBiasOp::Run;
+REGISTER_TORCH_FUNC(matmul_bias);
+
 using BasicMatmulTLAOp = MatmulLike<CatlassKernel::BasicMatmulTLA>;
 static auto& basic_matmul_tla = BasicMatmulTLAOp::Run;
 REGISTER_TORCH_FUNC(basic_matmul_tla);
+
+using MatmulReluOp = MatmulLike<CatlassKernel::MatmulRelu>;
+static auto& matmul_relu = MatmulReluOp::Run;
+REGISTER_TORCH_FUNC(matmul_relu);
+
+using MatmulGeluOp = MatmulLike<CatlassKernel::MatmulGelu>;
+static auto& matmul_gelu = MatmulGeluOp::Run;
+REGISTER_TORCH_FUNC(matmul_gelu);
+
+using MatmulSiluOp = MatmulLike<CatlassKernel::MatmulSilu>;
+static auto& matmul_silu = MatmulSiluOp::Run;
+REGISTER_TORCH_FUNC(matmul_silu);
 
 using OptimizedMatmulTLAOp = MatmulLike<CatlassKernel::OptimizedMatmulTLA>;
 static auto& optimized_matmul_tla = OptimizedMatmulTLAOp::Run;

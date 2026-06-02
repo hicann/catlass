@@ -8,12 +8,17 @@
 # the software repository for the full text of the License.
 
 from .basic_matmul import basic_matmul  # example 00
+from .matmul_add import matmul_add  # example 03
 from .padding_matmul import padding_matmul  # example 04
 from .optimized_matmul import optimized_matmul  # example 06
 from .basic_matmul_tla import basic_matmul_tla  # example 13
 from .optimized_matmul_tla import optimized_matmul_tla  # example 14
+from .matmul_bias import matmul_bias  # example 20
 from .basic_matmul_preload_zN import basic_matmul_preload_zN  # example 21
 from .matmul_full_loadA import matmul_full_loadA  # example 25
+from .matmul_relu import matmul_relu  # example 26
+from .matmul_gelu import matmul_gelu  # example 27
+from .matmul_silu import matmul_silu  # example 28
 from .small_matmul import small_matmul  # example 31
 from .single_core_splitk_matmul import single_core_splitk_matmul  # example 34
 from .streamk_matmul import streamk_matmul  # example 37
@@ -25,12 +30,17 @@ from .ascend950_mx_matmul import ascend950_fp8_mx_matmul_aswt, ascend950_fp4_mx_
 
 __all__ = [
     "basic_matmul",                       # example 00
+    "matmul_add",                         # example 03
     "padding_matmul",                     # example 04
     "optimized_matmul",                   # example 06
     "basic_matmul_tla",                   # example 13
     "optimized_matmul_tla",               # example 14
+    "matmul_bias",                        # example 20
     "basic_matmul_preload_zN",            # example 21
     "matmul_full_loadA",                  # example 25
+    "matmul_relu",                        # example 26
+    "matmul_gelu",                        # example 27
+    "matmul_silu",                        # example 28
     "small_matmul",                       # example 31
     "single_core_splitk_matmul",          # example 34
     "streamk_matmul",                     # example 37

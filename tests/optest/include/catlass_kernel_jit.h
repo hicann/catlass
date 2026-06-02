@@ -110,7 +110,7 @@ void GroupedMatmulSliceM(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GroupedMatmulParams& params);
 
 /**
- * @brief Reserved JIT interface for example 03_matmul_add.
+ * @brief JIT interface for example 03_matmul_add.
  */
 void MatmulAdd(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
@@ -196,7 +196,7 @@ void GemvAIV(const uint32_t blockNum, aclrtStream stream, const TParams& tParams
 void GemvAIC(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
- * @brief Reserved JIT interface for example 20_matmul_bias.
+ * @brief JIT interface for example 20_matmul_bias.
  */
 void MatmulBias(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
@@ -218,17 +218,17 @@ void PaddingSplitkMatmul(
 void MatmulFullLoadA(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
- * @brief Reserved JIT interface for example 26_matmul_relu.
+ * @brief JIT interface for example 26_matmul_relu.
  */
 void MatmulRelu(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
- * @brief Reserved JIT interface for example 27_matmul_gelu.
+ * @brief JIT interface for example 27_matmul_gelu.
  */
 void MatmulGelu(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
- * @brief Reserved JIT interface for example 28_matmul_silu.
+ * @brief JIT interface for example 28_matmul_silu.
  */
 void MatmulSilu(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 

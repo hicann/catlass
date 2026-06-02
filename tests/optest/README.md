@@ -23,14 +23,19 @@ Python API (`torch_catlass.ops.*`)
 
 ## 算子接入清单
 
-### 已接入（A2 基础矩阵乘类）
+### 已接入（A2 基础矩阵乘类 + Epilogue 融合类）
 
 - [x] 00_basic_matmul
+- [x] 03_matmul_add
 - [x] 04_padding_matmul
 - [x] 06_optimized_matmul
 - [x] 13_basic_matmul_tla
+- [x] 20_matmul_bias
 - [x] 21_basic_matmul_preload_zN
 - [x] 25_matmul_full_loadA
+- [x] 26_matmul_relu
+- [x] 27_matmul_gelu
+- [x] 28_matmul_silu
 - [x] 31_small_matmul
 - [x] 34_single_core_splitk_matmul
 - [x] 37_streamk_matmul
@@ -43,7 +48,6 @@ Python API (`torch_catlass.ops.*`)
 
 - [ ] 01_batched_matmul
 - [ ] 02_grouped_matmul_slice_m
-- [ ] 03_matmul_add
 - [ ] 05_grouped_matmul_slice_k
 - [ ] 07_grouped_slice_m_per_token_dequant_moe
 - [ ] 08_grouped_matmul
@@ -57,13 +61,9 @@ Python API (`torch_catlass.ops.*`)
 - [ ] 17_gemv_aiv
 - [ ] 18_gemv_aic
 - [ ] 19_mla
-- [ ] 20_matmul_bias
 - [ ] 22_padding_splitk_matmul
 - [ ] 23_flash_attention_infer
 - [ ] 24_conv_bias
-- [ ] 26_matmul_relu
-- [ ] 27_matmul_gelu
-- [ ] 28_matmul_silu
 - [ ] 29_a2_fp8_e4m3_matmul
 - [ ] 30_w8a16_matmul
 - [ ] 32_w4a8_matmul
