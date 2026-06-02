@@ -151,18 +151,46 @@ class _Runner:
         return subprocess.run(*args, check=False, **kwargs)
 
 
+def _prebuilt_binaries_exist(build_dir: Path) -> bool:
+    type_bridge_glob = list(
+        (build_dir / "python" / "catlass").glob("_tla_type_bridge_native*.so")
+    )
+    tla_compile = build_dir / "tools" / "tla-compile" / "TlaCompile"
+    return len(type_bridge_glob) > 0 and tla_compile.is_file()
+
+
 def ensure_pretest_mlir_build(repo_root: Path) -> None:
-    """Configure + build Tla MLIR artifacts before pytest collection."""
+    """Ensure Tla MLIR build artifacts are available for tests.
+
+    By default, checks whether pre-built binaries already exist on disk
+    (from a prior ``build.sh`` invocation).  If they do, the build is
+    skipped.  If they are missing, a fresh cmake + ninja build is
+    triggered automatically.
+
+    Environment variables
+    ---------------------
+    TLA_DSL_SKIP_PRETEST_BUILD : str
+        If truthy (1/true/on/yes), unconditionally skip the build.
+    TLA_DSL_FORCE_PRETEST_BUILD : str
+        If truthy, unconditionally trigger a full cmake + ninja build,
+        even when pre-built binaries already exist.
+    """
     env = dict(os.environ)
+
     if _is_truthy(env.get("TLA_DSL_SKIP_PRETEST_BUILD")):
         return
+
+    build_dir = repo_root / "csrc" / "mlir" / "build"
+
+    if not _is_truthy(env.get("TLA_DSL_FORCE_PRETEST_BUILD")):
+        if _prebuilt_binaries_exist(build_dir):
+            return
 
     runner = _Runner()
     include_dir = _resolve_mlir_include_dir(env=env, repo_root=repo_root, runner=runner)
     mlir_dir = _resolve_mlir_dir(env=env)
     c_compiler = _resolve_compiler(env=env, var_name="CC", fallback="gcc")
     cxx_compiler = _resolve_compiler(env=env, var_name="CXX", fallback="g++")
-    build_dir = repo_root / "csrc" / "mlir" / "build"
     _reset_build_dir_if_compiler_drift(
         build_dir=build_dir, c_compiler=c_compiler, cxx_compiler=cxx_compiler
     )

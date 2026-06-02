@@ -8,7 +8,7 @@ import pytest
 
 
 def _load_pretest_bootstrap(repo_root: Path):  # type: ignore[no-untyped-def]
-    module_path = repo_root / "catlass" / "test_bootstrap.py"
+    module_path = repo_root / "tests" / "_bootstrap.py"
     spec = importlib.util.spec_from_file_location("catlass_test_bootstrap", module_path)
     if spec is None or spec.loader is None:
         raise RuntimeError(
