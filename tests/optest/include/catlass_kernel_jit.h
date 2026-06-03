@@ -84,6 +84,18 @@ struct GroupedMatmulParams : public MatmulParams {
 };
 
 /**
+ * @brief Runtime parameters for strided batched matmul examples.
+ */
+struct StridedBatchedMatmulParams : public MatmulParams {
+    int64_t strideA = -1; ///< Stride between batches for A (elements).
+    int64_t strideB = -1; ///< Stride between batches for B (elements).
+    int64_t strideC = -1; ///< Stride between batches for C (elements).
+    int64_t lda = -1;     ///< Leading dimension of A.
+    int64_t ldb = -1;     ///< Leading dimension of B.
+    int64_t ldc = -1;     ///< Leading dimension of C.
+};
+
+/**
  * @brief Runtime parameters for GEMM examples with alpha and beta scaling.
  */
 struct GemmParams : public MatmulParams {
@@ -233,12 +245,7 @@ void MatmulGelu(const uint32_t blockNum, aclrtStream stream, const TParams& tPar
 void MatmulSilu(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
- * @brief Reserved JIT interface for example 29_a2_fp8_e4m3_matmul.
- */
-void A2Fp8E4M3Matmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
-
-/**
- * @brief Reserved JIT interface for example 30_w8a16_matmul.
+ * @brief JIT interface for example 30_w8a16_matmul.
  */
 void W8A16Matmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
@@ -248,7 +255,7 @@ void W8A16Matmul(const uint32_t blockNum, aclrtStream stream, const TParams& tPa
 void SmallMatmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
- * @brief Reserved JIT interface for example 32_w4a8_matmul.
+ * @brief JIT interface for example 32_w4a8_matmul.
  */
 void W4A8Matmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
@@ -312,7 +319,7 @@ void QuantMatmulFullLoadATLA(
  * @brief Reserved JIT interface for example 45_strided_batched_matmul_tla.
  */
 void StridedBatchedMatmulTLA(
-    const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+    const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const StridedBatchedMatmulParams& params);
 
 /**
  * @brief Reserved JIT interface for example 46_ascend950_matmul_fixpipe_opti.

@@ -227,6 +227,7 @@ python scripts/gen_entry.py <nn> <name>
 - 导入错误：先查 `torch_catlass/__init__.py` 动态库加载顺序与符号。
 - 运行错误：核对 `TParams/Params` 填充及 dtype/layout 映射。
 - JIT 编译报 `Syntax error: "(" unexpected`：检查编译器参数是否含 shell 特殊字符（如 `__mix__(1,2)`），`RunProcessCapture` 已通过单引号转义处理，新增宏值若含特殊字符需验证转义生效。
+- JIT 编译报 `#include "..." file not found`：设 `CATLASS_JIT_LOG_LEVEL=2` 查看完整编译命令，核对缺少的头文件是否被 `CMakeLists.txt` 的 install 规则排除（如 `PATTERN "device" EXCLUDE` 排除了 `device_gemm.hpp`）。JIT 模板不得引入被排除路径下的头文件。`RunKernel` 方式无需 `catlass/gemm/device/device_gemm.hpp`，直接删除即可。
 
 ## Checklists
 

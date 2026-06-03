@@ -17,6 +17,8 @@
 
 #include <acl/acl.h>
 
+#include "catlass_kernel_jit.h"
+
 namespace CatlassKernel {
 
 /**
@@ -100,6 +102,11 @@ void Ascend950FlashAttentionInfer(const uint32_t blockNum, aclrtStream stream, c
  * @brief Reserved prebuilt interface for example 56_ascend950_basic_conv2d_tla.
  */
 void Ascend950BasicConv2dTLA(const uint32_t blockNum, aclrtStream stream, const ConvParams& params);
+
+/**
+ * @brief Prebuilt interface for example 29_a2_fp8_e4m3_matmul.
+ */
+extern "C" void A2Fp8E4M3Matmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 } // namespace CatlassKernel
 

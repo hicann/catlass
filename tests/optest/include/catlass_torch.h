@@ -114,4 +114,52 @@ at::Tensor ascend950_fp4_mx_matmul_aswt(
     const at::Tensor& mat1, const at::Tensor& mat2, const at::Tensor& mx_scale_a, const at::Tensor& mx_scale_b,
     const bool transA, const bool transB);
 
+/**
+ * @brief PyTorch extension entry for CATLASS FP8 E4M3 matmul (prologue dequant).
+ *
+ * Source: example 29_a2_fp8_e4m3_matmul.
+ */
+at::Tensor a2_fp8_e4m3_matmul(
+    const at::Tensor& mat1, const at::Tensor& mat2, const c10::ScalarType& outDType,
+    const bool transA, const bool transB, const bool formatA, const bool formatB);
+
+/**
+ * @brief PyTorch extension entry for CATLASS W8A16 matmul (int8 weight dequant).
+ *
+ * Source: example 30_w8a16_matmul.
+ */
+at::Tensor w8a16_matmul(
+    const at::Tensor& mat1, const at::Tensor& mat2, const c10::ScalarType& outDType,
+    const bool transA, const bool transB, const bool formatA, const bool formatB);
+
+/**
+ * @brief PyTorch extension entry for CATLASS W4A8 matmul (int4 weight dequant).
+ *
+ * Source: example 32_w4a8_matmul.
+ */
+at::Tensor w4a8_matmul(
+    const at::Tensor& mat1, const at::Tensor& mat2, const c10::ScalarType& outDType,
+    const bool transA, const bool transB, const bool formatA, const bool formatB);
+
+/**
+ * @brief PyTorch extension entry for CATLASS 4:2 sparse matmul (TLA).
+ *
+ * Source: example 41_sparse_matmul_tla.
+ * Implementation provided by ``SparseMatmulLike<SparseMatmulTLA>::Run``.
+ */
+at::Tensor sparse_matmul_tla(
+    const at::Tensor& mat1, const at::Tensor& mat2, const at::Tensor& idx,
+    const c10::ScalarType& outDType, const bool transA, const bool transB,
+    const bool formatA, const bool formatB);
+
+/**
+ * @brief PyTorch extension entry for CATLASS strided batched matmul (TLA).
+ *
+ * Source: example 45_strided_batched_matmul_tla.
+ * Implementation provided by ``StridedBatchedMatmulLike<StridedBatchedMatmulTLA>::Run``.
+ */
+at::Tensor strided_batched_matmul_tla(
+    const at::Tensor& mat1, const at::Tensor& mat2, const c10::ScalarType& outDType,
+    const bool transA, const bool transB, const bool formatA, const bool formatB);
+
 #endif

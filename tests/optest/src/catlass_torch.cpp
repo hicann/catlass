@@ -16,12 +16,16 @@
 #include <torch_npu/csrc/core/npu/NPUStream.h>
 
 #include "catlass_kernel_jit.h"
+#include "catlass_kernel_prebuilt.h"
 #include "common/register.h"
 #include "template/flash_attention.h"
 #include "template/matmul.h"
 #include "template/matmul_extra.h"
 #include "template/mx_matmul.h"
 #include "template/quant_matmul.h"
+#include "template/sparse_matmul.h"
+#include "template/strided_batched_matmul.h"
+#include "template/w4a8_matmul.h"
 
 namespace CatlassKernelWrapper {
 
@@ -115,5 +119,25 @@ REGISTER_TORCH_FUNC(ascend950_fp4_mx_matmul_aswt);
 
 static auto& flash_attention_infer = FlashAttentionInferOp::Run;
 REGISTER_TORCH_FUNC(flash_attention_infer);
+
+using A2Fp8E4M3MatmulOp = MatmulLike<CatlassKernel::A2Fp8E4M3Matmul>;
+static auto& a2_fp8_e4m3_matmul = A2Fp8E4M3MatmulOp::Run;
+REGISTER_TORCH_FUNC(a2_fp8_e4m3_matmul);
+
+using W8A16MatmulOp = MatmulLike<CatlassKernel::W8A16Matmul>;
+static auto& w8a16_matmul = W8A16MatmulOp::Run;
+REGISTER_TORCH_FUNC(w8a16_matmul);
+
+using W4A8MatmulOp = W4A8MatmulLike<CatlassKernel::W4A8Matmul>;
+static auto& w4a8_matmul = W4A8MatmulOp::Run;
+REGISTER_TORCH_FUNC(w4a8_matmul);
+
+using SparseMatmulTLAOp = SparseMatmulLike<CatlassKernel::SparseMatmulTLA>;
+static auto& sparse_matmul_tla = SparseMatmulTLAOp::Run;
+REGISTER_TORCH_FUNC(sparse_matmul_tla);
+
+using StridedBatchedMatmulTLAOp = StridedBatchedMatmulLike<CatlassKernel::StridedBatchedMatmulTLA>;
+static auto& strided_batched_matmul_tla = StridedBatchedMatmulTLAOp::Run;
+REGISTER_TORCH_FUNC(strided_batched_matmul_tla);
 
 } // namespace CatlassKernelWrapper

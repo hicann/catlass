@@ -1,16 +1,16 @@
 /**
  * This program is free software, you can redistribute it and/or modify.
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd.
  * This file is a part of the CANN Open Software.
  * Licensed under CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
- * BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE. See LICENSE in the root of
+ * the software repository for the full text of the License.
  */
 
-#ifndef OPTEST_MATMUL_H
-#define OPTEST_MATMUL_H
+#ifndef OPTEST_W4A8_MATMUL_H
+#define OPTEST_W4A8_MATMUL_H
 
 #include <torch/torch.h>
 #include <tiling/platform/platform_ascendc.h>
@@ -25,22 +25,9 @@ namespace CatlassKernelWrapper {
 using KernelFn = void (*)(const uint32_t, aclrtStream, const CatlassKernel::TParams&, const CatlassKernel::MatmulParams&);
 
 template <KernelFn KernelFunc>
-struct MatmulLike {
+struct W4A8MatmulLike {
     using OutputType = at::Tensor;
 
-    /**
-     * @brief Build compile-time and runtime kernel parameter structs from tensors.
-     *
-     * @param mat1 Left input matrix.
-     * @param mat2 Right input matrix.
-     * @param outDType Requested output dtype.
-     * @param transA Whether to interpret mat1 as transposed.
-     * @param transB Whether to interpret mat2 as transposed.
-     * @param formatA Whether mat1 uses CATLASS NZ block format.
-     * @param formatB Whether mat2 uses CATLASS NZ block format.
-     * @param tParams Output compile-time JIT parameters.
-     * @param params Output runtime parameters and input addresses.
-     */
     static void GetKernelInfo(
         const at::Tensor& mat1, const at::Tensor& mat2,
         const c10::ScalarType& outDType, bool transA, bool transB,
@@ -73,19 +60,14 @@ struct MatmulLike {
         } else {
             k2 = mat2.size(0); n = mat2.size(1);
         }
+        // W4A8: B is int4 packed, physical columns = logical N / 2.
         TORCH_CHECK(k1 == k2, "mat1 and mat2 shapes cannot be multiplied (",
                     m, "x", k1, " and ", k2, "x", n, ")");
         params.m = static_cast<uint32_t>(m);
         params.k = static_cast<uint32_t>(k1);
-        params.n = static_cast<uint32_t>(n);
+        params.n = static_cast<uint32_t>(n * 2);
     }
 
-    /**
-     * @brief Allocate the output tensor and attach its address to runtime params.
-     * @param tParams Compile-time parameters containing output dtype.
-     * @param params Runtime parameters containing the output matrix shape.
-     * @return Allocated output tensor.
-     */
     static OutputType AllocOutput(
         const CatlassKernel::MatmulTParams& tParams, CatlassKernel::MatmulParams& params)
     {
@@ -96,22 +78,13 @@ struct MatmulLike {
         return output;
     }
 
-    /**
-     * @brief Execute the matmul kernel through the current NPU stream.
-     *
-     * The method is the function registered into ``torch.ops.catlass``. It
-     * prepares parameters, allocates output memory, finds the current NPU
-     * stream and launches the supplied kernel entry.
-     *
-     * @return Kernel output tensor.
-     */
     static OutputType Run(
         const at::Tensor& mat1, const at::Tensor& mat2,
         const c10::ScalarType& outDType, bool transA, bool transB,
         bool formatA, bool formatB)
     {
         CatlassKernel::MatmulTParams tParams;
-        CatlassKernel::MatmulParams  params;
+        CatlassKernel::MatmulParams params;
         GetKernelInfo(mat1, mat2, outDType, transA, transB, formatA, formatB, tParams, params);
         OutputType output = AllocOutput(tParams, params);
         aclrtStream stream = c10_npu::getCurrentNPUStream().stream(false);
