@@ -15,6 +15,7 @@ from .basic_matmul_tla import basic_matmul_tla  # example 13
 from .optimized_matmul_tla import optimized_matmul_tla  # example 14
 from .matmul_bias import matmul_bias  # example 20
 from .basic_matmul_preload_zN import basic_matmul_preload_zN  # example 21
+from .flash_attention_infer import flash_attention_infer  # example 23
 from .matmul_full_loadA import matmul_full_loadA  # example 25
 from .matmul_relu import matmul_relu  # example 26
 from .matmul_gelu import matmul_gelu  # example 27
@@ -24,6 +25,7 @@ from .single_core_splitk_matmul import single_core_splitk_matmul  # example 34
 from .streamk_matmul import streamk_matmul  # example 37
 from .big_matmul_tla import big_matmul_tla  # example 39
 from .quant_optimized_matmul_tla import quant_optimized_matmul_tla  # example 42
+from .ascend950_basic_matmul import ascend950_basic_matmul  # example 43
 from .quant_matmul_full_loadA_tla import quant_matmul_full_loadA_tla  # example 44
 from .quant_multi_core_splitk_matmul_tla import quant_multi_core_splitk_matmul_tla  # example 52
 from .ascend950_mx_matmul import ascend950_fp8_mx_matmul_aswt, ascend950_fp4_mx_matmul_aswt  # example 53, 54
@@ -37,6 +39,7 @@ __all__ = [
     "optimized_matmul_tla",               # example 14
     "matmul_bias",                        # example 20
     "basic_matmul_preload_zN",            # example 21
+    "flash_attention_infer",              # example 23
     "matmul_full_loadA",                  # example 25
     "matmul_relu",                        # example 26
     "matmul_gelu",                        # example 27
@@ -46,6 +49,7 @@ __all__ = [
     "streamk_matmul",                     # example 37
     "big_matmul_tla",                     # example 39
     "quant_optimized_matmul_tla",         # example 42
+    "ascend950_basic_matmul",             # example 43
     "quant_matmul_full_loadA_tla",        # example 44
     "quant_multi_core_splitk_matmul_tla", # example 52
     "ascend950_fp8_mx_matmul_aswt",       # example 53

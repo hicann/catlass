@@ -34,6 +34,7 @@ target_link_libraries(catlass_torch PRIVATE
     ${TORCH_LIBRARIES}
     torch_npu
     tiling_api
+    dl
 )
 
 file(GLOB_RECURSE SRC_FILES "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp")

@@ -49,6 +49,15 @@ dist/
 build/
 output/
 
+# tests/optest 构建产物（torch-catlass / scikit-build）
+tests/optest/_build/
+tests/optest/_skbuild/
+tests/optest/out/
+tests/optest/torch_catlass/lib/
+tests/optest/torch_catlass/jit/
+tests/optest/torch_catlass/include/
+tests/optest/torch_catlass/_version.py
+
 # msprof
 OPPROF*/
 

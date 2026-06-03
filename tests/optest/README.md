@@ -32,6 +32,7 @@ Python API (`torch_catlass.ops.*`)
 - [x] 13_basic_matmul_tla
 - [x] 20_matmul_bias
 - [x] 21_basic_matmul_preload_zN
+- [x] 23_flash_attention_infer
 - [x] 25_matmul_full_loadA
 - [x] 26_matmul_relu
 - [x] 27_matmul_gelu
@@ -41,6 +42,7 @@ Python API (`torch_catlass.ops.*`)
 - [x] 37_streamk_matmul
 - [x] 39_big_matmul_tla
 - [x] 42_quant_optimized_matmul_tla
+- [x] 43_ascend950_basic_matmul
 - [x] 53_ascend950_fp8_mx_matmul (Ascend950)
 - [x] 54_ascend950_fp4_mx_matmul (Ascend950)
 
@@ -62,7 +64,6 @@ Python API (`torch_catlass.ops.*`)
 - [ ] 18_gemv_aic
 - [ ] 19_mla
 - [ ] 22_padding_splitk_matmul
-- [ ] 23_flash_attention_infer
 - [ ] 24_conv_bias
 - [ ] 29_a2_fp8_e4m3_matmul
 - [ ] 30_w8a16_matmul
@@ -71,7 +72,6 @@ Python API (`torch_catlass.ops.*`)
 - [ ] 38_w4a4_per_token_per_channel_dequant
 - [ ] 40_flash_attention_infer_tla
 - [ ] 41_sparse_matmul_tla
-- [ ] 43_ascend950_basic_matmul
 - [ ] 44_quant_matmul_full_loadA_tla
 - [ ] 45_strided_batched_matmul_tla
 - [ ] 46_ascend950_matmul_fixpipe_opti

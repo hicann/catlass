@@ -297,7 +297,7 @@ void QuantOptimizedMatmulTLA(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
- * @brief Reserved JIT interface for example 43_ascend950_basic_matmul.
+ * @brief JIT interface for example 43_ascend950_basic_matmul.
  */
 void Ascend950BasicMatmul(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);

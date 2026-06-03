@@ -17,6 +17,7 @@
 
 #include "catlass_kernel_jit.h"
 #include "common/register.h"
+#include "template/flash_attention.h"
 #include "template/matmul.h"
 #include "template/matmul_extra.h"
 #include "template/mx_matmul.h"
@@ -92,6 +93,10 @@ using QuantOptimizedMatmulTLAOp = QuantMatmulLike<CatlassKernel::QuantOptimizedM
 static auto& quant_optimized_matmul_tla = QuantOptimizedMatmulTLAOp::Run;
 REGISTER_TORCH_FUNC(quant_optimized_matmul_tla);
 
+using Ascend950BasicMatmulOp = MatmulLike<CatlassKernel::Ascend950BasicMatmul>;
+static auto& ascend950_basic_matmul = Ascend950BasicMatmulOp::Run;
+REGISTER_TORCH_FUNC(ascend950_basic_matmul);
+
 using QuantMatmulFullLoadATLAOp = QuantMatmulLike<CatlassKernel::QuantMatmulFullLoadATLA>;
 static auto& quant_matmul_full_loadA_tla = QuantMatmulFullLoadATLAOp::Run;
 REGISTER_TORCH_FUNC(quant_matmul_full_loadA_tla);
@@ -107,5 +112,8 @@ REGISTER_TORCH_FUNC(ascend950_fp8_mx_matmul_aswt);
 using Ascend950Fp4MxMatmulAswtOp = MxMatmulLike<CatlassKernel::Ascend950Fp4MxMatmulAswt>;
 static auto& ascend950_fp4_mx_matmul_aswt = Ascend950Fp4MxMatmulAswtOp::Run;
 REGISTER_TORCH_FUNC(ascend950_fp4_mx_matmul_aswt);
+
+static auto& flash_attention_infer = FlashAttentionInferOp::Run;
+REGISTER_TORCH_FUNC(flash_attention_infer);
 
 } // namespace CatlassKernelWrapper

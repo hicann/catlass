@@ -1,5 +1,8 @@
 # 构建
 build/
+_build/
+_skbuild/
+out/
 compile_commands.json
 
 # Python
