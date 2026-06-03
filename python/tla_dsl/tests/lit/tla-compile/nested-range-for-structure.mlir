@@ -28,11 +28,11 @@ module {
 }
 
 // CHECK-LABEL: func.func @nested_range_for_structure
-// CHECK: scf.for
+// CHECK: cf.br
 // CHECK: arith.divui
 // CHECK: arith.remui
-// CHECK: scf.for
-// CHECK: scf.for
+// CHECK: cf.br
+// CHECK: cf.br
 // CHECK: arith.remui
 // CHECK: arith.addi
 // CHECK: memref.store

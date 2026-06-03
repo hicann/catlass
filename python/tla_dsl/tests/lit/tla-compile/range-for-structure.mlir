@@ -14,7 +14,7 @@ module {
 }
 
 // CHECK-LABEL: func.func @range_for_structure(
-// CHECK: scf.for
+// CHECK: cf.br
 // CHECK: memref.store
 // CHECK-NOT: tla.range
 // CHECK-NOT: tla.for

@@ -90,6 +90,7 @@ void buildTlaPipeline(OpPassManager &pm) {
   pm.addPass(createTlaFuncToHaccPass());
   pm.addPass(createAddKernelPrologueEpiloguePass());
   pm.addPass(createCSEPass());
+  pm.addPass(createConvertSCFToCFPass());
 }
 
 } // namespace tla

@@ -43,4 +43,5 @@ target_link_libraries(TlaPasses
     MLIRLLVMCommonConversion
     MLIRConvertToLLVMInterface
     MLIRLLVMDialect
+    MLIRSCFToControlFlow
 )
