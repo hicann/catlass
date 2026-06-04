@@ -16,6 +16,8 @@ from typing import Dict, Tuple
 
 import torch
 
+WORKSPACE = os.path.dirname(os.path.abspath(__file__))
+
 _BLOCK_SIZE = 32
 _EPSILON = 1e-12
 _MIN_SCALE_EXP = -128
@@ -390,8 +392,11 @@ def gen_data_fp4_e2m1(row, col, axis, trans):
 
 
 def gen_data(m, n, k, trans_a, trans_b) -> None:
-    os.makedirs('./input', exist_ok=True)
-    os.makedirs('./golden', exist_ok=True)
+    data_dir = os.path.join(WORKSPACE, "data")
+    input_dir = os.path.join(data_dir, "input")
+    golden_dir = os.path.join(data_dir, "golden")
+    os.makedirs(input_dir, exist_ok=True)
+    os.makedirs(golden_dir, exist_ok=True)
 
     a_fp8, a_scale, a_fp32 = gen_data_fp8_e4m3(m, k, 1)
     b_fp4, b_scale, b_fp32 = gen_data_fp4_e2m1(k, n, 0, trans_b)
@@ -409,17 +414,17 @@ def gen_data(m, n, k, trans_a, trans_b) -> None:
 
     a_np = torch.tensor(a_fp8.flatten().untyped_storage(), dtype=torch.int8).numpy()
     b_np = torch.tensor(b_fp4.flatten().untyped_storage(), dtype=torch.int8).numpy()
-    a_np.tofile('./input/a_8.bin')
-    b_np.tofile('./input/b_4.bin')
+    a_np.tofile(os.path.join(input_dir, "a_8.bin"))
+    b_np.tofile(os.path.join(input_dir, "b_4.bin"))
 
     a_scale_np = torch.tensor(a_scale.flatten().untyped_storage(), dtype=torch.int8).numpy()
     b_scale_np = torch.tensor(b_scale.flatten().untyped_storage(), dtype=torch.int8).numpy()
-    a_scale_np.tofile('./input/a_scale.bin')
-    b_scale_np.tofile('./input/b_scale.bin')
+    a_scale_np.tofile(os.path.join(input_dir, "a_scale.bin"))
+    b_scale_np.tofile(os.path.join(input_dir, "b_scale.bin"))
 
     c_fp32 = a_fp32 @ b_fp32
     c_np = c_fp32.numpy()
-    c_np.tofile('./golden/expected_data.bin')
+    c_np.tofile(os.path.join(golden_dir, "expected_data.bin"))
 
 
 if __name__ == "__main__":

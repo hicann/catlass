@@ -34,6 +34,9 @@ using namespace tla;
 
 using Options = GemmOptions;
 
+// Default data root when running from build output (e.g. output/bin), aligned with gen_data.py (WORKSPACE/data).
+static const std::string kDataRoot = "./examples/59_ascend950_a8w4_mx_matmul/data";
+
 static void Run(const Options &options)
 {
     aclrtStream stream{nullptr};
@@ -102,56 +105,26 @@ static void Run(const Options &options)
         ACL_CHECK(aclFinalize());
     };
     //file read
-    std::string inFileAName = "../../input/a_8.bin";
-    std::ifstream inFileA(inFileAName, std::ios::binary);
-    if (!inFileA.is_open()) {
-        std::cerr << "Failed to open inFileA: " << inFileAName << std::endl;
+    if (!ReadFile(kDataRoot + "/input/a_8.bin", hostA.data(), sizeA)) {
         releaseAclEarly();
         return;
-    } else {
-        inFileA.read(reinterpret_cast<char *>(hostA.data()), sizeA);
-        inFileA.close();
     }
-    std::string inFileBName = "../../input/b_4.bin";
-    std::ifstream inFileB(inFileBName, std::ios::binary);
-    if (!inFileB.is_open()) {
-        std::cerr << "Failed to open inFileB: " << inFileBName << std::endl;
+    if (!ReadFile(kDataRoot + "/input/b_4.bin", hostB.data(), sizeB)) {
         releaseAclEarly();
         return;
-    } else {
-        inFileB.read(reinterpret_cast<char *>(hostB.data()), sizeB);
-        inFileB.close();
     }
-    std::string inFileMxScaleAName = "../../input/a_scale.bin";
-    std::ifstream inFileMxScaleA(inFileMxScaleAName, std::ios::binary);
-    if (!inFileMxScaleA.is_open()) {
-        std::cerr << "Failed to open inFileMxScaleA: " << inFileMxScaleAName << std::endl;
+    if (!ReadFile(kDataRoot + "/input/a_scale.bin", hostMxScaleA.data(), sizeMxScaleA)) {
         releaseAclEarly();
         return;
-    } else {
-        inFileMxScaleA.read(reinterpret_cast<char *>(hostMxScaleA.data()), sizeMxScaleA);
-        inFileMxScaleA.close();
     }
-    std::string inFileMxScaleBName = "../../input/b_scale.bin";
-    std::ifstream inFileMxScaleB(inFileMxScaleBName, std::ios::binary);
-    if (!inFileMxScaleB.is_open()) {
-        std::cerr << "Failed to open inFileMxScaleB: " << inFileMxScaleBName << std::endl;
+    if (!ReadFile(kDataRoot + "/input/b_scale.bin", hostMxScaleB.data(), sizeMxScaleB)) {
         releaseAclEarly();
         return;
-    } else {
-        inFileMxScaleB.read(reinterpret_cast<char *>(hostMxScaleB.data()), sizeMxScaleB);
-        inFileMxScaleB.close();
     }
     if constexpr (!std::is_void_v<ElementBias>) {
-        std::string inFileBiasName = "../../input/bias.bin";
-        std::ifstream inFileBias(inFileBiasName, std::ios::binary);
-        if (!inFileBias.is_open()) {
-            std::cerr << "Failed to open inFileBias: " << inFileBiasName << std::endl;
+        if (!ReadFile(kDataRoot + "/input/bias.bin", hostBias.data(), sizeBias)) {
             releaseAclEarly();
             return;
-        } else {
-            inFileBias.read(reinterpret_cast<char *>(hostBias.data()), sizeBias);
-            inFileBias.close();
         }
     }
 
@@ -254,7 +227,7 @@ static void Run(const Options &options)
     ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
 
     std::vector<float> hostGolden(lenC);
-    std::string outputFileName = "../../golden/expected_data.bin";
+    std::string outputFileName = kDataRoot + "/golden/expected_data.bin";
     if (!ReadFile(outputFileName, hostGolden.data(), sizeof(float) * hostGolden.size())) {
         ACL_CHECK(aclrtFree(deviceA));
         ACL_CHECK(aclrtFree(deviceB));
