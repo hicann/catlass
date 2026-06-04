@@ -199,9 +199,9 @@ public:
                     actualBlockShape);
             }
 
-            inGroupOffsetA += problemShape.m() * problemShape.k();
-            inGroupOffsetB += problemShape.k() * problemShape.n();
-            inGroupOffsetC += problemShape.m() * problemShape.n();
+            inGroupOffsetA += static_cast<int64_t>(problemShape.m()) * problemShape.k();
+            inGroupOffsetB += static_cast<int64_t>(problemShape.k()) * problemShape.n();
+            inGroupOffsetC += static_cast<int64_t>(problemShape.m()) * problemShape.n();
 
             startCoreIdx = (startCoreIdx + coreLoops) % coreNum;
         }

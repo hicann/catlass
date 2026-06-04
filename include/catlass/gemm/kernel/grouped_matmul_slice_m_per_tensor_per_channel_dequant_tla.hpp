@@ -142,7 +142,7 @@ public:
         AscendC::GlobalTensor<uint64_t> gmScale;
         gmScale.SetGlobalBuffer(params.ptrPerChannelScale);
 
-        uint32_t gmGroupOffsetB = 0;
+        int64_t gmGroupOffsetB = 0;
         uint32_t mStart = 0;
 
         auto tensorA = tla::MakeTensor(gmA, params.layoutA, Arch::PositionGM{});
@@ -212,7 +212,7 @@ public:
                 );
             }
             mStart += inGroupProblemShape.m();
-            gmGroupOffsetB += inGroupProblemShape.k() * inGroupProblemShape.n();
+            gmGroupOffsetB += static_cast<int64_t>(inGroupProblemShape.k()) * inGroupProblemShape.n();
         }
 
         AscendC::PipeBarrier<PIPE_ALL>();

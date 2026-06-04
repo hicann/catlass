@@ -438,7 +438,7 @@ public:
             uint32_t curBatch = gTiling.GetValue(offsetTiling);
             uint32_t curTokenWiseOffset = gTiling.GetValue(offsetTiling + 1);
             uint32_t kvSeqlen = gTiling.GetValue(offsetTiling + 2);
-            uint64_t gmOffsetO = curTokenWiseOffset * qHeads * embed;
+            uint64_t gmOffsetO = static_cast<uint64_t>(curTokenWiseOffset) * qHeads * embed;
             if (kvSeqlen == 0) {
                 continue;
             }
@@ -534,7 +534,7 @@ public:
             uint32_t curBatch = gTiling.GetValue(offsetTiling);
             uint32_t curTokenWiseOffset = gTiling.GetValue(offsetTiling + 1);
             uint32_t kvSeqlen = gTiling.GetValue(offsetTiling + 2);
-            uint64_t gmOffsetO = curTokenWiseOffset * qHeads * embed;
+            uint64_t gmOffsetO = static_cast<uint64_t>(curTokenWiseOffset) * qHeads * embed;
             if (kvSeqlen == 0) {
                 continue;
             }

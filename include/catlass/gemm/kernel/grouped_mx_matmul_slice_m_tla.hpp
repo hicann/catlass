@@ -238,10 +238,10 @@ public:
             totalM += inGroupProblemShape.m();
             if constexpr (AscendC::Std::is_one_of_v<ElementB, float4_e2m1x2_t, float4_e1m2x2_t>) {
                 gmGroupOffsetB += std::is_same_v<LayoutB, layout::ColumnMajor> ? 
-                    CeilDiv<2>(inGroupProblemShape.k()) * inGroupProblemShape.n() : 
-                    CeilDiv<2>(inGroupProblemShape.n()) * inGroupProblemShape.k();
+                    static_cast<int64_t>(CeilDiv<2>(inGroupProblemShape.k())) * inGroupProblemShape.n() : 
+                    static_cast<int64_t>(CeilDiv<2>(inGroupProblemShape.n())) * inGroupProblemShape.k();
             }else{
-                gmGroupOffsetB += inGroupProblemShape.k() * inGroupProblemShape.n();
+                gmGroupOffsetB += static_cast<int64_t>(inGroupProblemShape.k()) * inGroupProblemShape.n();
             }
             gmGroupOffsetMxScaleA += inGroupProblemShape.m() * mxScaleAlignedK;
             gmGroupOffsetMxScaleB += mxScaleAlignedK * inGroupProblemShape.n();

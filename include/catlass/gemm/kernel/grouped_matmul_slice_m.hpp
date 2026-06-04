@@ -190,9 +190,9 @@ public:
                 );
             }
 
-            gmGroupOffsetA += inGroupProblemShape.m() * inGroupProblemShape.k();
-            gmGroupOffsetB += inGroupProblemShape.k() * inGroupProblemShape.n();
-            gmGroupOffsetC += inGroupProblemShape.m() * inGroupProblemShape.n();
+            gmGroupOffsetA += static_cast<int64_t>(inGroupProblemShape.m()) * inGroupProblemShape.k();
+            gmGroupOffsetB += static_cast<int64_t>(inGroupProblemShape.k()) * inGroupProblemShape.n();
+            gmGroupOffsetC += static_cast<int64_t>(inGroupProblemShape.m()) * inGroupProblemShape.n();
 
             startCoreIdx = (startCoreIdx + coreLoops) % coreNum;
         }

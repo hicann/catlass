@@ -95,9 +95,9 @@ public:
         uint32_t m = problemShape.m();
         uint32_t n = problemShape.n();
         uint32_t k = problemShape.k();
-        int64_t strideA = problemShape.m() * problemShape.k();
-        int64_t strideB = problemShape.k() * problemShape.n();
-        int64_t strideC = problemShape.m() * problemShape.n();
+        int64_t strideA = static_cast<int64_t>(problemShape.m()) * problemShape.k();
+        int64_t strideB = static_cast<int64_t>(problemShape.k()) * problemShape.n();
+        int64_t strideC = static_cast<int64_t>(problemShape.m()) * problemShape.n();
         LayoutA layoutA{args.problemShape.m(), args.problemShape.k()};
         LayoutB layoutB{args.problemShape.k(), args.problemShape.n()};
         LayoutC layoutC{args.problemShape.m(), args.problemShape.n()};

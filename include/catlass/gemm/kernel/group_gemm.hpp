@@ -420,7 +420,7 @@ public:
             }
             inGroupOffsetA += GetWorkspaceLen(layoutWA);
             inGroupOffsetB += GetWorkspaceLen(layoutWB);
-            inGroupOffsetWorkspace += problemShape.m() * problemShape.n();
+            inGroupOffsetWorkspace += static_cast<int64_t>(problemShape.m()) * problemShape.n();
             startCoreIdx = (startCoreIdx + coreLoops) % coreNum;
             #pragma unroll
             for (uint32_t i = 0; i < l0CBlockNum; i++) {
@@ -509,11 +509,11 @@ public:
                 Arch::CrossCoreWaitFlagWithReverse<0x2, PIPE_MTE3>(flagAicFinishStore);
                 blockEpilogue(actualShape, blockCoord, gmC, layoutWorkspace, inGroupOffsetWorkspace);
             }
-            inGroupOffsetA += problemShape.m() * problemShape.k();
+            inGroupOffsetA += static_cast<int64_t>(problemShape.m()) * problemShape.k();
             inGroupOffsetWA += GetWorkspaceLen(layoutWA);
-            inGroupOffsetB += problemShape.k() * problemShape.n();
+            inGroupOffsetB += static_cast<int64_t>(problemShape.k()) * problemShape.n();
             inGroupOffsetWB += GetWorkspaceLen(layoutWB);
-            inGroupOffsetWorkspace += problemShape.m() * problemShape.n();
+            inGroupOffsetWorkspace += static_cast<int64_t>(problemShape.m()) * problemShape.n();
 
             startCoreIdx = (startCoreIdx + coreLoops) % coreNum;
         }

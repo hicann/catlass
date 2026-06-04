@@ -458,7 +458,7 @@ public:
         // uint32_t curTotalTaskNum = 0;
         uint32_t preTotalTaskNum = 0;
         uint32_t curBatch = 0;
-        uint32_t oBatchOffset = 0;
+        int64_t oBatchOffset = 0;
         uint32_t qSeqlen = static_cast<uint32_t>(gActualQseqlen.GetValue(curBatch));
         uint32_t kvSeqlen = static_cast<uint32_t>(gActualKvseqlen.GetValue(curBatch));
         uint32_t curQNBlockTile = GetQNBlockTile(qSeqlen, groupSize);
@@ -475,7 +475,7 @@ public:
             // Get the offset of each core on the GM.
             while (taskIdx >= curTotalTaskNum) {
                 curBatch++;
-                oBatchOffset += qSeqlen * qHeads * embed;
+                oBatchOffset += static_cast<int64_t>(qSeqlen) * qHeads * embed;
                 preTotalTaskNum = curTotalTaskNum;
                 qSeqlen = static_cast<uint32_t>(gActualQseqlen.GetValue(curBatch));
                 kvSeqlen = static_cast<uint32_t>(gActualKvseqlen.GetValue(curBatch));
@@ -495,7 +495,7 @@ public:
             uint32_t kvNIdx = qNBlockIdx / qNBlockNumPerGroup;
             uint32_t qStartNIdx = kvNIdx * groupSize + qNBlockIdxCurGroup * curQNBlockTile;
             uint32_t oNOffset = qStartNIdx * embed;
-            uint32_t gmOffsetO = oBatchOffset + oSOffset + oNOffset;
+            int64_t gmOffsetO = oBatchOffset + oSOffset + oNOffset;
 
             uint32_t qSBlockSize = (qSBlockIdx == (curQSBlockNum - 1)) ?
                 (qSeqlen - qSBlockIdx * curQSBlockTile) : curQSBlockTile;

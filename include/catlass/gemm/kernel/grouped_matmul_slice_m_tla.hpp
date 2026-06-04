@@ -180,7 +180,7 @@ public:
                 );
             }
             totalM += inGroupProblemShape.m();
-            gmGroupOffsetB += inGroupProblemShape.k() * inGroupProblemShape.n();
+            gmGroupOffsetB += static_cast<int64_t>(inGroupProblemShape.k()) * inGroupProblemShape.n();
 
             startCoreIdx = (startCoreIdx + coreLoops) % coreNum;
         }

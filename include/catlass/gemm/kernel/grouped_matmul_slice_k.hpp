@@ -202,9 +202,9 @@ public:
             GemmCoord problemShape{params.problemShape.m(), params.problemShape.n(), currentK};
 
             if (currentK == 0) {
-                inGroupOffsetA += problemShape.m() * problemShape.k();
-                inGroupOffsetB += problemShape.k() * problemShape.n();
-                inGroupOffsetC += problemShape.m() * problemShape.n();
+                inGroupOffsetA += static_cast<int64_t>(problemShape.m()) * problemShape.k();
+                inGroupOffsetB += static_cast<int64_t>(problemShape.k()) * problemShape.n();
+                inGroupOffsetC += static_cast<int64_t>(problemShape.m()) * problemShape.n();
                 continue;
             }
 
@@ -244,9 +244,9 @@ public:
                     actualBlockShape);
             }
 
-            inGroupOffsetA += problemShape.m() * problemShape.k();
-            inGroupOffsetB += problemShape.k() * problemShape.n();
-            inGroupOffsetC += problemShape.m() * problemShape.n();
+            inGroupOffsetA += static_cast<int64_t>(problemShape.m()) * problemShape.k();
+            inGroupOffsetB += static_cast<int64_t>(problemShape.k()) * problemShape.n();
+            inGroupOffsetC += static_cast<int64_t>(problemShape.m()) * problemShape.n();
 
             startCoreIdx = (startCoreIdx + coreLoops) % coreNum;
         }
@@ -276,9 +276,9 @@ public:
             GemmCoord problemShape{params.problemShape.m(), params.problemShape.n(), currentK};
 
             if (currentK == 0) {
-                memFill0(gmC[inGroupOffsetC], problemShape.m() * problemShape.n(), 0);
+                memFill0(gmC[inGroupOffsetC], static_cast<int64_t>(problemShape.m()) * problemShape.n(), 0);
             }
-            inGroupOffsetC += problemShape.m() * problemShape.n();
+            inGroupOffsetC += static_cast<int64_t>(problemShape.m()) * problemShape.n();
         }
         AscendC::PipeBarrier<PIPE_ALL>();
     }

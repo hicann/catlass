@@ -250,9 +250,9 @@ public:
                 }
             }
 
-            gmGroupOffsetA += inGroupProblemShape.m() * inGroupProblemShape.k();
-            gmGroupOffsetB += inGroupProblemShape.k() * inGroupProblemShape.n();
-            gmGroupOffsetC += inGroupProblemShape.m() * inGroupProblemShape.n();
+            gmGroupOffsetA += static_cast<int64_t>(inGroupProblemShape.m()) * inGroupProblemShape.k();
+            gmGroupOffsetB += static_cast<int64_t>(inGroupProblemShape.k()) * inGroupProblemShape.n();
+            gmGroupOffsetC += static_cast<int64_t>(inGroupProblemShape.m()) * inGroupProblemShape.n();
 
             startCoreIdx = (startCoreIdx + coreLoops) % coreNum;
         }
@@ -324,10 +324,10 @@ public:
                 );
             }
 
-            gmGroupOffsetC += inGroupProblemShape.m() * inGroupProblemShape.n();
+            gmGroupOffsetC += static_cast<int64_t>(inGroupProblemShape.m()) * inGroupProblemShape.n();
             gmGroupOffsetScale += inGroupProblemShape.n();
             gmGroupOffsetPerTokenScale += inGroupProblemShape.m();
-            gmGroupOffsetD += inGroupProblemShape.m() * inGroupProblemShape.n();
+            gmGroupOffsetD += static_cast<int64_t>(inGroupProblemShape.m()) * inGroupProblemShape.n();
 
             startCoreIdx = (startCoreIdx + coreLoops) % coreNum;
         }
