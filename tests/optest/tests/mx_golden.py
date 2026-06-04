@@ -152,12 +152,12 @@ def _quantize_fp4(
     raise ValueError(f"axis must be 0 or 1, got {axis}")
 
 
-def _gen_fp4_e2m1(row: int, col: int, axis: int, trans: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+def _gen_fp4_e2m1(row: int, col: int, axis: int, trans: bool) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Generate packed FP4 matrix, MX scale, and dequant FP32 (example 54 gen_data_fp4_e2m1)."""
     matrix = torch.randn((row, col), dtype=torch.float32)
     quantized_matrix, scale_matrix, dequantized_matrix = _quantize_fp4(matrix, "E2M1", axis)
 
-    if trans == 1:
+    if trans:
         quantized_matrix = quantized_matrix.t().contiguous()
 
     _, fp4_indices = _quantize_to_fp4_lut(quantized_matrix, "E2M1")
@@ -230,9 +230,18 @@ def _move_kernel_inputs_to_npu(
 
 
 def prepare_fp8_mx_inputs(
-    m: int, n: int, k: int, device: str = "npu"
+    m: int,
+    n: int,
+    k: int,
+    trans_a: bool = False,
+    trans_b: bool = True,
+    device: str = "npu",
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Build MX-FP8 inputs for trans_a=0, trans_b=1 (default example layout).
+    """Build MX-FP8 inputs for the given transpose flags (aligned with example 53 layout).
+
+    ``trans_a`` / ``trans_b`` match the ``torch.ops.catlass`` MX matmul API:
+    - ``trans_a=False``: ``mat1`` stored as ``(M, K)``; ``trans_a=True``: ``(K, M)``.
+    - ``trans_b=True``: ``mat2`` stored as ``(N, K)``; ``trans_b=False``: ``(K, N)``.
 
     Quantization and reference matmul run on CPU; kernel inputs are moved to NPU
     when ``device="npu"``. ``expected`` stays on CPU for numerical comparison.
@@ -248,8 +257,18 @@ def prepare_fp8_mx_inputs(
 
     a_scale = a_scale.reshape(m, a_scale.shape[1] // 2, 2).contiguous()
     b_scale = b_scale.reshape(b_scale.shape[0] // 2, 2, b_scale.shape[1]).permute(2, 0, 1).contiguous()
-    b_fp8 = b_fp8.t().contiguous()
-    a_fp8 = a_fp8.contiguous()
+
+    if trans_a:
+        a_fp8 = a_fp8.t().contiguous()
+        a_scale = a_scale.permute(1, 0, 2).contiguous()
+    else:
+        a_fp8 = a_fp8.contiguous()
+    
+    if trans_b:
+        b_fp8 = b_fp8.t().contiguous()
+    else:
+        b_fp8 = b_fp8.contiguous()
+        b_scale = b_scale.permute(1, 0, 2).contiguous()
 
     expected = a_deq @ b_deq
     if device == "npu":
@@ -258,7 +277,7 @@ def prepare_fp8_mx_inputs(
 
 
 def prepare_fp4_mx_inputs(
-    m: int, n: int, k: int, device: str = "npu", trans_a: int = 0, trans_b: int = 1
+    m: int, n: int, k: int, device: str = "npu", trans_a: bool = False, trans_b: bool = True
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """Build MX-FP4 inputs for trans_a=0, trans_b=1 (aligned with example 54 gen_data.py).
 
@@ -270,18 +289,22 @@ def prepare_fp4_mx_inputs(
 
     a_scale = a_scale.reshape(a_scale.shape[0], a_scale.shape[1] // 2, 2).contiguous()
     b_scale = b_scale.reshape(b_scale.shape[0] // 2, 2, b_scale.shape[1]).contiguous()
-    if trans_a == 1:
+    if trans_a:
         a_scale = a_scale.permute(1, 0, 2).contiguous()
-    if trans_b == 1:
+    if trans_b:
         b_scale = b_scale.permute(2, 0, 1).contiguous()
     else:
         b_scale = b_scale.permute(0, 2, 1).contiguous()
 
-    if trans_b == 1:
+    if trans_a:
+        a_fp4 = _packed_uint8_to_fp4(a_packed, k, m)
+    else:
+        a_fp4 = _packed_uint8_to_fp4(a_packed, m, k)
+
+    if trans_b:
         b_fp4 = _packed_uint8_to_fp4(b_packed, n, k)
     else:
-        b_fp4 = _packed_uint8_to_fp4(b_packed, k, n).t().contiguous()
-    a_fp4 = _packed_uint8_to_fp4(a_packed, m, k)
+        b_fp4 = _packed_uint8_to_fp4(b_packed, k, n)
 
     expected = a_deq @ b_deq
     if device == "npu":

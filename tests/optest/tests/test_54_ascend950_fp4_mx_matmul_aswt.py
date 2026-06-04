@@ -47,15 +47,27 @@ pytestmark = [
 ]
 
 
-def test_ascend950_fp4_mx_matmul_aswt():
-    """Compare CATLASS MX FP4 matmul (ASWT) against dequant reference."""
+@pytest.mark.parametrize(
+    "trans_a,trans_b",
+    [
+        (False, False),
+        (False, True),
+        (True, False),
+        (True, True),
+    ],
+    ids=["nn", "nt", "tn", "tt"],
+)
+def test_ascend950_fp4_mx_matmul_aswt(trans_a, trans_b):
+    """Compare CATLASS MX FP4 matmul (ASWT) against dequant reference for all transpose pairs."""
     import torch_catlass
 
     m, n, k = 256, 512, 1024
-    a, b, a_scale, b_scale, expected = prepare_fp4_mx_inputs(m, n, k, device="npu")
+    a, b, a_scale, b_scale, expected = prepare_fp4_mx_inputs(
+        m, n, k, device="npu", trans_a=trans_a, trans_b=trans_b
+    )
 
     result = torch_catlass.ascend950_fp4_mx_matmul_aswt(
-        a, b, a_scale, b_scale, transA=False, transB=True
+        a, b, a_scale, b_scale, transA=trans_a, transB=trans_b
     )
 
     assert result.shape == (m, n)
@@ -64,7 +76,8 @@ def test_ascend950_fp4_mx_matmul_aswt():
 
     rtol, atol = 1e-1, 1e-1
     assert torch.allclose(result.cpu(), expected, rtol=rtol, atol=atol), (
-        f"max diff = {(result.cpu() - expected).abs().max().item()}"
+        f"trans_a={trans_a}, trans_b={trans_b}: max diff = "
+        f"{(result.cpu() - expected).abs().max().item()}"
     )
 
 
