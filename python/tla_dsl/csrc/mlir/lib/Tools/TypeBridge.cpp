@@ -250,6 +250,11 @@ MlirType crossFlagTypeGet(MlirContext context) {
   return toMlirType(::tla::CrossFlagType::get(ctx), "tla.cross_flag");
 }
 
+MlirType mutexTypeGet(MlirContext context) {
+  MLIRContext *ctx = bridgeContext(context);
+  return toMlirType(::tla::MutexType::get(ctx), "tla.mutex");
+}
+
 MlirType tensorTypeGet(MlirContext context, const std::vector<int64_t> &shapeTree,
                        const std::vector<int64_t> &strideTree,
                        const std::vector<int64_t> &coordTree,
@@ -294,6 +299,8 @@ std::optional<std::string> tlaTypeCategory(MlirType type) {
     return "flag";
   if (isa<::tla::CrossFlagType>(unwrapped))
     return "cross_flag";
+  if (isa<::tla::MutexType>(unwrapped))
+    return "mutex";
   return std::nullopt;
 }
 
@@ -370,6 +377,7 @@ PYBIND11_MODULE(_tla_type_bridge_native, m) {
   m.def("value_type_get", &valueTypeGet, py::arg("context"), py::arg("element_type") = py::none());
   m.def("flag_type_get", &flagTypeGet, py::arg("context"));
   m.def("cross_flag_type_get", &crossFlagTypeGet, py::arg("context"));
+  m.def("mutex_type_get", &mutexTypeGet, py::arg("context"));
 
   m.def("type_is_ptr", &typeIs<::tla::PtrType>, py::arg("type"));
   m.def("type_is_tensor", &typeIs<::tla::TlaTensorType>, py::arg("type"));
@@ -381,6 +389,7 @@ PYBIND11_MODULE(_tla_type_bridge_native, m) {
   m.def("type_is_value", &typeIs<::tla::ValueType>, py::arg("type"));
   m.def("type_is_flag", &typeIs<::tla::FlagType>, py::arg("type"));
   m.def("type_is_cross_flag", &typeIs<::tla::CrossFlagType>, py::arg("type"));
+  m.def("type_is_mutex", &typeIs<::tla::MutexType>, py::arg("type"));
   m.def("tla_type_category", &tlaTypeCategory, py::arg("type"));
 
   m.def("ptr_pointee_type_get", &ptrPointeeTypeGet, py::arg("ptr_type"));

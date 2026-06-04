@@ -32,6 +32,13 @@ def Tla_FlagType : TypeDef<TlaDialect, "Flag", []> {
 }
 
 
+def Tla_MutexType : TypeDef<TlaDialect, "Mutex", []> {
+  let mnemonic = "mutex";
+  let summary = "Synchronization mutex used for resource coordination.";
+  let assemblyFormat = "";
+}
+
+
 def Tla_MemrefType : TypeDef<TlaDialect, "Memref", []> {
   let mnemonic = "memref";
   let summary = "Memory buffer with an explicit Tla address space.";
@@ -518,6 +525,42 @@ def Tla_PipeBarrierOp : Tla_Op<"pipe_barrier", []> {
   let arguments = (ins Tla_PipeAttr:$pipe);
   let assemblyFormat = [{
     `[` $pipe `]` attr-dict
+  }];
+}
+
+def Tla_MutexOp : Tla_Op<"mutex", [Pure]> {
+  let summary = "Mutex literal";
+  let description = [{
+    Materialize a static mutex associated with a semantic resource.
+    ``id = -1`` means the compiler may allocate the hardware MutexID later;
+    ``0`` through ``31`` are user-provided hardware MutexIDs.
+  }];
+  let arguments = (ins StrAttr:$resource, I64Attr:$id);
+  let results = (outs Tla_MutexType:$mutex);
+  let assemblyFormat = [{
+    $resource attr-dict `->` qualified(type($mutex))
+  }];
+}
+
+def Tla_MutexLockOp : Tla_Op<"mutex_lock", []> {
+  let summary = "Mutex lock";
+  let description = [{
+    Acquire a mutex from the specified pipe.
+  }];
+  let arguments = (ins Tla_MutexType:$mutex, Tla_PipeAttr:$pipe);
+  let assemblyFormat = [{
+    $mutex `[` $pipe `]` `:` qualified(type($mutex)) attr-dict
+  }];
+}
+
+def Tla_MutexUnlockOp : Tla_Op<"mutex_unlock", []> {
+  let summary = "Mutex unlock";
+  let description = [{
+    Release a mutex from the specified pipe.
+  }];
+  let arguments = (ins Tla_MutexType:$mutex, Tla_PipeAttr:$pipe);
+  let assemblyFormat = [{
+    $mutex `[` $pipe `]` `:` qualified(type($mutex)) attr-dict
   }];
 }
 

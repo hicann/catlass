@@ -113,6 +113,29 @@ def test_cross_flag_requires_valid_mode() -> None:
             tla.cross_flag("x", "gpu", tla.pipes.MTE2)
 
 
+def test_mutex_requires_valid_resource_and_id() -> None:
+    with runtime_mod._eager_capture():
+        with pytest.raises(tla.TlaCoreAPIError, match="tla.mutex"):
+            tla.mutex(resource="", id=-1)
+        with pytest.raises(tla.TlaCoreAPIError, match="tla.mutex"):
+            tla.mutex(resource=123, id=-1)  # type: ignore[arg-type]
+        with pytest.raises(tla.TlaCoreAPIError, match="tla.mutex"):
+            tla.mutex(resource="l0a_ping", id=True)  # type: ignore[arg-type]
+        with pytest.raises(tla.TlaCoreAPIError, match="tla.mutex"):
+            tla.mutex(resource="l0a_ping", id=-2)
+        with pytest.raises(tla.TlaCoreAPIError, match="tla.mutex"):
+            tla.mutex(resource="l0a_ping", id=32)
+
+
+def test_mutex_lock_unlock_require_valid_pipe() -> None:
+    with runtime_mod._eager_capture():
+        m = tla.mutex(resource="l0a_ping", id=0)
+        with pytest.raises(tla.TlaCoreAPIError, match="tla.mutex_lock"):
+            m.lock(pipe="gpu")
+        with pytest.raises(tla.TlaCoreAPIError, match="tla.mutex_unlock"):
+            m.unlock(pipe="gpu")
+
+
 # Nested ``make_shape`` trees for L0 zN / nZ / L0C layouts (must match remap stride trees);
 # flat ``origin_shape`` is the logical M×N bounds, aligned with ``tile_view`` targets.
 _M128_64_FRACTAL_ZN = ((16, 8), (16, 4))

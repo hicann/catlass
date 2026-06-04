@@ -44,6 +44,7 @@ from .types import (
     TlaFlag,
     TlaIndex,
     TlaLayout,
+    TlaMutex,
     TlaRegion,
     TlaShape,
     TlaStride,
@@ -145,6 +146,7 @@ TileLike: TypeAlias = mlir_ir.Value
 MemrefLike: TypeAlias = Tensor | mlir_ir.Value
 FlagLike: TypeAlias = mlir_ir.Value
 CrossFlagLike: TypeAlias = mlir_ir.Value
+MutexLike: TypeAlias = mlir_ir.Value
 PipeLike: TypeAlias = str | _Sentinel
 CrossModeLike: TypeAlias = str | _Sentinel
 AddressSpaceLike: TypeAlias = AddressSpace | _Sentinel
@@ -371,6 +373,55 @@ class _RmemExprValue:
         _runtime._bind_frontend_category(self, "rmem_expr")
 
 
+class _MutexValue:
+    """Frontend proxy for an SSA ``!tla.mutex`` value."""
+
+    def __init__(self, value: mlir_ir.Value, resource: str, mutex_id: int) -> None:
+        if not isinstance(value, mlir_ir.Value):
+            raise TypeError(
+                f"Mutex value expects mlir.ir.Value, got {type(value).__name__}"
+            )
+        if not _tla_type_bridge.type_is_mutex(value.type):
+            raise TypeError(f"Mutex value expects !tla.mutex, got {value.type}")
+        self.value = value
+        self.resource = resource
+        self.id = mutex_id
+        self.__tla_category__ = "mutex"
+        _runtime._bind_frontend_value(self, value)
+        _runtime._bind_frontend_category(self, "mutex")
+        _runtime._bind_frontend_category(value, "mutex")
+
+    def __tla_type__(self) -> str:
+        return str(self.value.type)
+
+    def __get_mlir_types__(self, context: mlir_ir.Context | None = None) -> list[Any]:
+        del context
+        return [self.value.type]
+
+    def __extract_mlir_values__(self) -> list[Any]:
+        return [self.value]
+
+    def __new_from_mlir_values__(self, values: list[Any]) -> "_MutexValue":
+        if len(values) != 1:
+            raise ValueError(f"Mutex expects 1 MLIR value, got {len(values)}")
+        v0 = values[0]
+        if isinstance(v0, _MutexValue):
+            inner = v0.value
+        elif isinstance(v0, mlir_ir.Value):
+            inner = v0
+        else:
+            raise TypeError(
+                f"Expected _MutexValue or mlir.ir.Value, but got {type(v0).__name__}"
+            )
+        return _MutexValue(inner, self.resource, self.id)
+
+    def lock(self, *, pipe: PipeLike, loc: mlir_ir.Location | None = None) -> None:
+        return mutex_lock(self, pipe=pipe, loc=loc)
+
+    def unlock(self, *, pipe: PipeLike, loc: mlir_ir.Location | None = None) -> None:
+        return mutex_unlock(self, pipe=pipe, loc=loc)
+
+
 class _Namespace:
     def __init__(self) -> None:
         self._members: dict[str, Callable[..., Any]] = {}
@@ -588,6 +639,8 @@ def _as_value(value: Any) -> mlir_ir.Value:
         resolved = _resolve_bound_value(resolved.value)
     if isinstance(resolved, _RmemTensorValue):
         resolved = _resolve_bound_value(resolved.value)
+    if isinstance(resolved, _MutexValue):
+        resolved = _resolve_bound_value(resolved.value)
     if isinstance(resolved, mlir_ir.Value):
         st = _runtime._current_frontend_state()
         if st is not None:
@@ -627,6 +680,8 @@ def _wrap_frontend_value(value: mlir_ir.Value) -> Any:
         return _Pointer(value)
     if _tla_type_bridge.type_is_tensor(value.type):
         return _Tensor(value)
+    if _tla_type_bridge.type_is_mutex(value.type):
+        return _MutexValue(value, "", -1)
     if isinstance(value.type, mlir_ir.IndexType):
         return _runtime._IndexExpr(value)
     if mlir_ir.IntegerType.isinstance(value.type):
@@ -1733,6 +1788,8 @@ def _category(value: Any) -> str | None:
         if isinstance(category, str):
             return category
         value = resolved
+    if isinstance(value, _MutexValue):
+        return "mutex"
     if isinstance(value, mlir_ir.Value):
         if isinstance(value.type, mlir_ir.IndexType):
             return "index"
@@ -2498,6 +2555,65 @@ def pipe_barrier(pipe: PipeLike, *, loc: mlir_ir.Location | None = None) -> None
 
 
 @dsl_user_op
+def mutex(
+    resource: str,
+    id: int = -1,
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> TlaMutex:
+    """Materialize a mutex associated with a semantic resource."""
+    if not isinstance(resource, str):
+        _op_error(
+            "mutex",
+            f"invalid argument 'resource' (position 0): expected non-empty str, got {_type_name(resource)}",
+        )
+    resource_value = resource.strip()
+    if not resource_value:
+        _op_error("mutex", "resource must be non-empty")
+    if isinstance(id, bool) or not isinstance(id, int):
+        _op_error(
+            "mutex",
+            f"invalid argument 'id' (position 1): expected int in {{-1, 0..31}}, got {_type_name(id)}",
+        )
+    if id != -1 and not 0 <= id <= 31:
+        _op_error("mutex", "id must be -1 or in range 0..31")
+    _require_frontend_state("mutex")
+    ctx = loc.context if loc is not None else mlir_ir.Context.current
+    value = _tla_ops_gen.mutex(
+        _tla_type_bridge.mutex_type_get(ctx), resource_value, int(id), loc=loc
+    )
+    return _MutexValue(value, resource_value, int(id))
+
+
+@dsl_user_op
+def mutex_lock(
+    mutex_value: MutexLike, *, pipe: PipeLike, loc: mlir_ir.Location | None = None
+) -> None:
+    """Acquire a mutex from the specified pipe."""
+    _require_category("mutex_lock", "mutex", mutex_value, "mutex", 0)
+    _require_pipe("mutex_lock", "pipe", pipe, 1)
+    _require_frontend_state("mutex_lock")
+    ctx = loc.context if loc is not None else mlir_ir.Context.current
+    pipe_value = str(_token(pipe)).lower()
+    pipe_attr = mlir_ir.Attribute.parse(f"#tla.pipe<{pipe_value}>", context=ctx)
+    return _tla_ops_gen.mutex_lock(_as_value(mutex_value), pipe_attr, loc=loc)
+
+
+@dsl_user_op
+def mutex_unlock(
+    mutex_value: MutexLike, *, pipe: PipeLike, loc: mlir_ir.Location | None = None
+) -> None:
+    """Release a mutex from the specified pipe."""
+    _require_category("mutex_unlock", "mutex", mutex_value, "mutex", 0)
+    _require_pipe("mutex_unlock", "pipe", pipe, 1)
+    _require_frontend_state("mutex_unlock")
+    ctx = loc.context if loc is not None else mlir_ir.Context.current
+    pipe_value = str(_token(pipe)).lower()
+    pipe_attr = mlir_ir.Attribute.parse(f"#tla.pipe<{pipe_value}>", context=ctx)
+    return _tla_ops_gen.mutex_unlock(_as_value(mutex_value), pipe_attr, loc=loc)
+
+
+@dsl_user_op
 def range(
     start: IndexLike,
     end: IndexLike | None = None,
@@ -2832,6 +2948,9 @@ _require_generated("set_flag")
 _require_generated("store")
 _require_generated("wait_flag")
 _require_generated("pipe_barrier")
+_require_generated("mutex")
+_require_generated("mutex_lock")
+_require_generated("mutex_unlock")
 _require_generated("cube")
 _require_generated("vector")
 _require_generated("mmad")
@@ -2902,6 +3021,9 @@ __all__ = [
     "store",
     "wait_flag",
     "pipe_barrier",
+    "mutex",
+    "mutex_lock",
+    "mutex_unlock",
     "range",
     "cube",
     "vector",

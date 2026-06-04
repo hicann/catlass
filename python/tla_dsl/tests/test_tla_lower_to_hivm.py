@@ -1,4 +1,5 @@
 import pathlib
+import os
 import subprocess
 import tempfile
 
@@ -13,7 +14,9 @@ def _require_hivm_tla_compile() -> pathlib.Path:
     tla_compile = repo_root / "csrc" / "mlir" / "build" / "tools" / "tla-compile" / "TlaCompile"
     if not tla_compile.exists():
         raise AssertionError("TlaCompile binary not found. Build csrc/mlir first.")
-    ascendnpuir_root = repo_root / "3rdparty" / "AscendNPU-IR"
+    ascendnpuir_root = pathlib.Path(
+        os.environ.get("TLA_DSL_PREBUILT_ASCENDNPU_IR", repo_root / "3rdparty" / "AscendNPU-IR")
+    )
     generated_inc_candidates = [
         ascendnpuir_root
         / "build"
@@ -132,6 +135,47 @@ def test_tla_blockidx_compile_lowers_to_hivm() -> None:
 
     output = _run_tla_compile(mlir_text)
     assert "hivm.hir.get_block_idx" in output
+
+
+def test_mutex_dynamic_if_loop_carried_id_lowers_to_runtime_calls() -> None:
+    mlir_text = """module {
+  tla.func @mutex_for_iter_arg_dynamic_if() {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c2 = arith.constant 2 : index
+    %cond = arith.cmpi slt, %c0, %c1 : index
+    %mutex0 = tla.mutex "l1a0" {id = 4 : i64} -> !tla.mutex
+    %mutex1 = tla.mutex "l1a1" {id = 5 : i64} -> !tla.mutex
+
+    %chosen = scf.if %cond -> (!tla.mutex) {
+      scf.yield %mutex0 : !tla.mutex
+    } else {
+      scf.yield %mutex1 : !tla.mutex
+    }
+
+    %result = scf.for %i = %c0 to %c2 step %c1
+        iter_args(%m = %chosen) -> (!tla.mutex) {
+      tla.mutex_lock %m [#tla.pipe<mte1>] : !tla.mutex
+      tla.mutex_unlock %m [#tla.pipe<mte1>] : !tla.mutex
+      scf.yield %m : !tla.mutex
+    }
+
+    tla.mutex_lock %result [#tla.pipe<cube>] : !tla.mutex
+    tla.return
+  }
+}
+"""
+
+    output = _run_tla_compile(mlir_text)
+
+    assert "call @get_buf_mte1" in output
+    assert "call @rls_buf_mte1" in output
+    assert "call @get_buf_m" in output
+    assert "cf.cond_br" in output
+    assert "cf.br" in output
+    assert "i8" in output
+    assert "!tla.mutex" not in output
+    assert "tla.mutex" not in output
 
 
 def test_cube_tla_compile_emits_minimal_hivm_attrs_after_tla_func_to_hacc() -> None:

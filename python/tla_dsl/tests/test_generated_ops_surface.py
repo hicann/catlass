@@ -24,6 +24,13 @@ def _ops_surface_kernel(src: tla.Tensor, dst: tla.Tensor) -> None:
     tla.cross_core_set_flag(cross)
     tla.cross_core_wait_flag(cross)
     tla.pipe_barrier(tla.pipes.MTE3)
+    mutex_ping = tla.mutex(resource="l0a_ping", id=0)
+    mutex_pong = tla.mutex(resource="l0a_pong", id=1)
+    block_range = tla.range(0, 10, 1)
+    for idx in block_range:
+        mutex = mutex_ping if idx % 2 == 0 else mutex_pong
+        mutex.lock(pipe=tla.arch.MTE2)
+        mutex.unlock(pipe=tla.arch.MTE2)
 
 
 def test_generated_binding_symbols_exist_for_wrapped_ops() -> None:
@@ -37,6 +44,9 @@ def test_generated_binding_symbols_exist_for_wrapped_ops() -> None:
         "set_flag",
         "wait_flag",
         "pipe_barrier",
+        "mutex",
+        "mutex_lock",
+        "mutex_unlock",
         "make_shape",
         "make_coord",
         "make_stride",
@@ -56,6 +66,7 @@ def test_public_api_exports_representative_helpers() -> None:
     assert callable(tla.copy)
     assert callable(tla.flag)
     assert callable(tla.cross_flag)
+    assert callable(tla.mutex)
     assert callable(tla.make_tensor_like)
     assert callable(tla.range_constexpr)
     assert callable(tla.arch.block_idx)
@@ -85,6 +96,9 @@ def test_ops_surface_kernel_lowers_key_op_families() -> None:
         "tla.cross_core_set_flag",
         "tla.cross_core_wait_flag",
         "tla.pipe_barrier",
+        "tla.mutex",
+        "tla.mutex_lock",
+        "tla.mutex_unlock",
         "tla.make_shape",
         "tla.make_coord",
     ):

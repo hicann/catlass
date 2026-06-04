@@ -19,6 +19,7 @@ using cross_flag = ::mlir::Type;
 using flag = ::mlir::Type;
 using index = ::mlir::IndexType;
 using memref = ::mlir::Type;
+using mutex = ::mlir::Type;
 using range = ::mlir::Type;
 using shape = ::mlir::Type;
 using stride = ::mlir::Type;

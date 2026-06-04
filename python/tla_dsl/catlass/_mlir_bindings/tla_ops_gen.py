@@ -838,6 +838,131 @@ def mmad(acc, lhs, rhs, init_c, *, loc=None, ip=None) -> _ods_ir.Operation:
   return _get_op_result_or_op_results(MmadOp(acc=acc, lhs=lhs, rhs=rhs, init_c=init_c, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
+class MutexLockOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.mutex_lock"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, mutex, pipe, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(mutex))
+    _ods_context = _ods_get_default_loc_context(loc)
+    attributes["pipe"] = (pipe if (
+    isinstance(pipe, _ods_ir.Attribute) or
+    not _ods_ir.AttrBuilder.contains('Tla_PipeAttr')) else
+      _ods_ir.AttrBuilder.get('Tla_PipeAttr')(pipe, context=_ods_context))
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def mutex(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def pipe(self):
+    return self.operation.attributes["pipe"]
+
+  @pipe.setter
+  def pipe(self, value):
+    if value is None:
+      raise ValueError("'None' not allowed as value for mandatory attributes")
+    self.operation.attributes["pipe"] = value
+
+def mutex_lock(mutex, pipe, *, loc=None, ip=None) -> _ods_ir.Operation:
+  return _get_op_result_or_op_results(MutexLockOp(mutex=mutex, pipe=pipe, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
+class MutexOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.mutex"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, mutex, resource, id, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    _ods_context = _ods_get_default_loc_context(loc)
+    attributes["resource"] = (resource if (
+    isinstance(resource, _ods_ir.Attribute) or
+    not _ods_ir.AttrBuilder.contains('StrAttr')) else
+      _ods_ir.AttrBuilder.get('StrAttr')(resource, context=_ods_context))
+    attributes["id"] = (id if (
+    isinstance(id, _ods_ir.Attribute) or
+    not _ods_ir.AttrBuilder.contains('I64Attr')) else
+      _ods_ir.AttrBuilder.get('I64Attr')(id, context=_ods_context))
+    results.append(mutex)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def resource(self):
+    return self.operation.attributes["resource"]
+
+  @resource.setter
+  def resource(self, value):
+    if value is None:
+      raise ValueError("'None' not allowed as value for mandatory attributes")
+    self.operation.attributes["resource"] = value
+
+  @builtins.property
+  def id(self):
+    return self.operation.attributes["id"]
+
+  @id.setter
+  def id(self, value):
+    if value is None:
+      raise ValueError("'None' not allowed as value for mandatory attributes")
+    self.operation.attributes["id"] = value
+
+  @builtins.property
+  def mutex(self):
+    return self.operation.results[0]
+
+def mutex(mutex, resource, id, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(MutexOp(mutex=mutex, resource=resource, id=id, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
+class MutexUnlockOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.mutex_unlock"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, mutex, pipe, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(mutex))
+    _ods_context = _ods_get_default_loc_context(loc)
+    attributes["pipe"] = (pipe if (
+    isinstance(pipe, _ods_ir.Attribute) or
+    not _ods_ir.AttrBuilder.contains('Tla_PipeAttr')) else
+      _ods_ir.AttrBuilder.get('Tla_PipeAttr')(pipe, context=_ods_context))
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def mutex(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def pipe(self):
+    return self.operation.attributes["pipe"]
+
+  @pipe.setter
+  def pipe(self, value):
+    if value is None:
+      raise ValueError("'None' not allowed as value for mandatory attributes")
+    self.operation.attributes["pipe"] = value
+
+def mutex_unlock(mutex, pipe, *, loc=None, ip=None) -> _ods_ir.Operation:
+  return _get_op_result_or_op_results(MutexUnlockOp(mutex=mutex, pipe=pipe, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
 class PipeBarrierOp(_ods_ir.OpView):
   OPERATION_NAME = "tla.pipe_barrier"
 

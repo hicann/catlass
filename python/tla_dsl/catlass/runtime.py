@@ -581,6 +581,7 @@ _CORE_API_EXPORTS = (
     "store",
     "wait_flag",
     "pipe_barrier",
+    "mutex",
     "range",
     "cube",
     "vector",

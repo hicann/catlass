@@ -139,6 +139,9 @@ def test_representative_ops_work_without_explicit_loc() -> None:
         cf = tla.cross_flag("x", tla.cross_modes.SINGLE_CORE, tla.pipes.MTE3)
         tla.cross_core_set_flag(cf)
         tla.cross_core_wait_flag(cf)
+        mutex = tla.mutex(resource="l0a_ping", id=-1)
+        mutex.lock(pipe=tla.arch.MTE2)
+        mutex.unlock(pipe=tla.arch.MTE2)
 
     mlir = state.module.operation.get_asm(
         print_generic_op_form=True, assume_verified=False
@@ -153,5 +156,8 @@ def test_representative_ops_work_without_explicit_loc() -> None:
         "tla.cross_flag",
         "tla.cross_core_set_flag",
         "tla.cross_core_wait_flag",
+        "tla.mutex",
+        "tla.mutex_lock",
+        "tla.mutex_unlock",
     ):
         assert op_name in mlir

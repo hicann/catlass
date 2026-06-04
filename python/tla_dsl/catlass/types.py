@@ -522,6 +522,10 @@ class TlaCrossFlag:
     """Marker annotation for Tla cross-flag values."""
 
 
+class TlaMutex:
+    """Marker annotation for Tla mutex values."""
+
+
 class TlaIndex:
     """Marker annotation for index values."""
 
@@ -552,6 +556,7 @@ _ANNOTATION_CATEGORY = {
     TlaAllocPtr: "alloc_ptr",
     TlaFlag: "flag",
     TlaCrossFlag: "cross_flag",
+    TlaMutex: "mutex",
     TlaIndex: "index",
     TlaShape: "shape",
     TlaCoord: "coord",
