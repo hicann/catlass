@@ -307,7 +307,7 @@ public:
     __aicore__ inline void AntiQuantComputeNKMxNz()
     {
         static_assert(
-            SupportType<ElementIn, fp4x2_e2m1_t, fp4x2_e1m2_t>(), "only support fp4x2_e2m1_t and fp4x2_e1m2_t");
+            AscendC::Std::is_one_of_v<ElementIn, fp4x2_e2m1_t, fp4x2_e1m2_t>, "only support fp4x2_e2m1_t and fp4x2_e1m2_t");
         VfParamsNz wParams;
         wParams.shiftLeftSize =
             AscendC::IsSameType<ElementIn, fp4x2_e2m1_t>::value ? E2M1_SHIFT_LEFT_SIZE : E1M2_SHIFT_LEFT_SIZE;
