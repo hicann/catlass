@@ -84,25 +84,48 @@ static void Run(const Options &options, QuantMode x1QuantMode, QuantMode x2Quant
     size_t goldenSize = lenC * sizeof(float);
     size_t sizeWorkspace;
 
+    uint8_t *deviceA{nullptr};
+    uint8_t *deviceB{nullptr};
+    uint8_t *deviceC{nullptr};
+    uint8_t *deviceWorkspace{nullptr};
+    uint8_t *x1ScaleDevice{nullptr};
+    uint8_t *x2ScaleDevice{nullptr};
+    uint8_t *quantBiasDevice{nullptr};
+
+    const auto cleanupAndFinalize = [&]() {
+        if (deviceA) ACL_CHECK(aclrtFree(deviceA));
+        if (deviceB) ACL_CHECK(aclrtFree(deviceB));
+        if (x1ScaleDevice) ACL_CHECK(aclrtFree(x1ScaleDevice));
+        if (x2ScaleDevice) ACL_CHECK(aclrtFree(x2ScaleDevice));
+        if (quantBiasDevice) ACL_CHECK(aclrtFree(quantBiasDevice));
+        if (deviceC) ACL_CHECK(aclrtFree(deviceC));
+        if (sizeWorkspace > 0 && deviceWorkspace) ACL_CHECK(aclrtFree(deviceWorkspace));
+        ACL_CHECK(aclrtDestroyStream(stream));
+        ACL_CHECK(aclrtResetDevice(options.deviceId));
+        ACL_CHECK(aclFinalize());
+    };
+
     uint8_t *hostA;
     ACL_CHECK(aclrtMallocHost((void **)(&hostA), sizeA));
-    ReadFile("./input/x1.bin", hostA, sizeA);
-    uint8_t *deviceA{nullptr};
+    if (!ReadFile("./input/x1.bin", hostA, sizeA)) {
+        cleanupAndFinalize();
+        return;
+    }
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA, sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
 
     uint8_t *hostB;
     ACL_CHECK(aclrtMallocHost((void **)(&hostB), sizeB));
-    ReadFile("./input/x2.bin", hostB, sizeB);
-    uint8_t *deviceB{nullptr};
+    if (!ReadFile("./input/x2.bin", hostB, sizeB)) {
+        cleanupAndFinalize();
+        return;
+    }
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB, sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceC{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
     uint8_t *x1ScaleHost = nullptr;
-    uint8_t *x1ScaleDevice = nullptr;
     size_t x1ScaleFileSize = 0;
     if (x1QuantMode == QuantMode::PERTENSOR_MODE) {
         x1ScaleFileSize = sizeof(float);
@@ -112,12 +135,14 @@ static void Run(const Options &options, QuantMode x1QuantMode, QuantMode x2Quant
     if (x1QuantMode != QuantMode::DEFAULT) {
         ACL_CHECK(aclrtMallocHost((void **)(&x1ScaleHost), x1ScaleFileSize));
         ACL_CHECK(aclrtMalloc((void **)&x1ScaleDevice, x1ScaleFileSize, ACL_MEM_MALLOC_HUGE_FIRST));
-        ReadFile("./input/x1_scale.bin", x1ScaleHost, x1ScaleFileSize);
+        if (!ReadFile("./input/x1_scale.bin", x1ScaleHost, x1ScaleFileSize)) {
+            cleanupAndFinalize();
+            return;
+        }
         ACL_CHECK(aclrtMemcpy(x1ScaleDevice, x1ScaleFileSize, x1ScaleHost, x1ScaleFileSize, ACL_MEMCPY_HOST_TO_DEVICE));
     }
 
     uint8_t *x2ScaleHost = nullptr;
-    uint8_t *x2ScaleDevice = nullptr;
     size_t x2ScaleFileSize = 0;
     if (x2QuantMode == QuantMode::PERTENSOR_MODE) {
         x2ScaleFileSize = sizeof(float);
@@ -127,21 +152,24 @@ static void Run(const Options &options, QuantMode x1QuantMode, QuantMode x2Quant
     if (x2QuantMode != QuantMode::DEFAULT) {
         ACL_CHECK(aclrtMallocHost((void **)(&x2ScaleHost), x2ScaleFileSize));
         ACL_CHECK(aclrtMalloc((void **)&x2ScaleDevice, x2ScaleFileSize, ACL_MEM_MALLOC_HUGE_FIRST));
-        ReadFile("./input/x2_scale.bin", x2ScaleHost, x2ScaleFileSize);
+        if (!ReadFile("./input/x2_scale.bin", x2ScaleHost, x2ScaleFileSize)) {
+            cleanupAndFinalize();
+            return;
+        }
         ACL_CHECK(aclrtMemcpy(x2ScaleDevice, x2ScaleFileSize, x2ScaleHost, x2ScaleFileSize, ACL_MEMCPY_HOST_TO_DEVICE));
     }
 
     uint8_t *quantBiasHost = nullptr;
-    uint8_t *quantBiasDevice = nullptr;
     if (hasQuantBias) {
         size_t quantBiasFileSize = n * sizeof(float);
         ACL_CHECK(aclrtMallocHost((void **)(&quantBiasHost), quantBiasFileSize));
         ACL_CHECK(aclrtMalloc((void **)&quantBiasDevice, quantBiasFileSize, ACL_MEM_MALLOC_HUGE_FIRST));
-        ReadFile("./input/bias.bin", quantBiasHost, quantBiasFileSize);
+        if (!ReadFile("./input/bias.bin", quantBiasHost, quantBiasFileSize)) {
+            cleanupAndFinalize();
+            return;
+        }
         ACL_CHECK(aclrtMemcpy(quantBiasDevice, quantBiasFileSize, quantBiasHost, quantBiasFileSize, ACL_MEMCPY_HOST_TO_DEVICE));
     }
-
-    uint8_t *deviceWorkspace{nullptr};
 
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
@@ -215,7 +243,10 @@ static void Run(const Options &options, QuantMode x1QuantMode, QuantMode x2Quant
 
     std::vector<float> hostGolden(lenC);
     std::string expected_path = "./output/golden_o.bin";
-    ReadFile(expected_path, hostGolden.data(), goldenSize);
+    if (!ReadFile(expected_path, hostGolden.data(), goldenSize)) {
+        cleanupAndFinalize();
+        return;
+    }
 
     std::vector<uint64_t> errorIndices = golden::CompareData(hostC, hostGolden, k);
     if (errorIndices.empty()) {
@@ -224,25 +255,7 @@ static void Run(const Options &options, QuantMode x1QuantMode, QuantMode x2Quant
         std::cerr << "Compare failed. Error count: " << errorIndices.size() << std::endl;
     }
 
-    ACL_CHECK(aclrtFree(deviceA));
-    ACL_CHECK(aclrtFree(deviceB));
-    ACL_CHECK(aclrtFree(deviceC));
-    if (x1QuantMode != QuantMode::DEFAULT) {
-        ACL_CHECK(aclrtFree(x1ScaleDevice));
-    }
-    if (x2QuantMode != QuantMode::DEFAULT) {
-        ACL_CHECK(aclrtFree(x2ScaleDevice));
-    }
-    if (hasQuantBias) {
-        ACL_CHECK(aclrtFree(quantBiasDevice));
-    }
-    if (sizeWorkspace > 0) {
-        ACL_CHECK(aclrtFree(deviceWorkspace));
-    }
-
-    ACL_CHECK(aclrtDestroyStream(stream));
-    ACL_CHECK(aclrtResetDevice(options.deviceId));
-    ACL_CHECK(aclFinalize());
+    cleanupAndFinalize();
 }
 
 QuantMode StringToQuantMode(const std::string& s)
