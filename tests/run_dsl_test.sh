@@ -229,5 +229,6 @@ _run_basic_mmad_case() {
 
 _run_basic_mmad_case "default MNK"
 _run_basic_mmad_case "m=1 n=2 k=3" --m 1 --n 2 --k 3
+_run_basic_mmad_case "mutex mode" --use-mutex
 
 echo "==> run_dsl_test.sh finished successfully"
