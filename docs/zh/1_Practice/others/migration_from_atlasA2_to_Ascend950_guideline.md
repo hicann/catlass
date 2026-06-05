@@ -99,7 +99,7 @@ struct DispatchStagesGetter<MmadPingpong<ArchTag, ENABLE_UNIT_FLAG, USE_HF32_MOD
 注意，如果涉及到`Epilogue`层级的改动，同样需要对其[`block`层组件](../../../../include/catlass/epilogue/block/)进行调整，这里不再赘述。
 
 ## 算子修改
-完成上述两方面修改后，在算子侧，只需要调整`ArchTag`标识和相应的Dispatch组件(**原A2代际下Dispatch特化仍在AtlasA2下兼容**)即可，例如：
+完成上述两方面修改后，在算子侧，需要调整`ArchTag`标识和相应的Dispatch组件(**原A2代际下Dispatch特化仍在AtlasA2下兼容**)，例如：
 ```diff
 // examples/00_basic_matmul/basic_matmul.cpp(previous)
 
@@ -114,7 +114,32 @@ using L0TileShape = GemmShape<128, 256, 64>;
 
 // ...
 ```
+
+此外，与AtlasA2不同地，`rtGetC2cCtrlAddr` 调用及 `fftsAddr` 变量应从Ascend950相关代码中移除，`RunAdapter` 调用签名同步简化：
+
+```diff
+-    // Prepare FFTS address
+-    uint64_t fftsAddr{0};
+-    uint32_t fftsLen{0};
+-    RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
+
+-    RunAdapter(gemm_op, arguments, stream, aicCoreNum, fftsAddr);
++    RunAdapter(gemm_op, arguments, stream, aicCoreNum);
+```
 随后即可编译运行适配于Ascend950平台的算子（备注：编译选项请添加`-DCATLASS_ARCH=3510`）
 
+## 完整迁移检查清单
+
+算子从 AtlasA2 迁移到 Ascend950 时，逐项确认以下内容：
+
+- [ ] **ArchTag**：`Arch::AtlasA2` → `Arch::Ascend950`
+- [ ] **Gemm Dispatch**：如无公共代际版本则新增（参考 `GemmPingpong`），算子侧替换
+- [ ] **Epilogue Dispatch**：如无公共代际版本则新增（参考 `EpilogueGemm`），算子侧替换
+- [ ] **Block 特化**：为新的公共 Dispatch 增加 Block 特化（参考 `BlockGemm<GemmPingpong>`）
+- [ ] **Epilogue Block 特化**：为新的公共 Epilogue Dispatch 增加 BlockEpilogue 特化
+- [ ] **Tile 类型选择器**：检查 `L1AndL0TypeSelector` 是否需 arch-aware 版本，Ascend950 L0 类型可能不同
+- [ ] **Arch Guard**：检查是否使用 `__NPU_ARCH__`(Device侧) 或 `CATLASS_ARCH`(Host侧) 守卫，根据需要补充
+- [ ] **fftsAddr 移除**：删除 `rtGetC2cCtrlAddr` 调用，`RunAdapter` 去掉第三个参数
+- [ ] **编译验证**：编译选项加 `-DCATLASS_ARCH=3510`
 
 ---
