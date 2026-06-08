@@ -35,7 +35,11 @@ constexpr uint32_t BYTE_PER_VECTOR_FRACTAL = BYTE_PER_BLK * BLK_NUM_PER_VECTOR_F
 constexpr uint64_t L2_OFFSET = 0;
 constexpr uint32_t STRIDE_LIMIT = 65536;
 
-constexpr uint32_t BYTE_PER_BLK_FP = 128;  /// datablock size of A1->C2PiPE2GM
+#if !defined(CATLASS_ARCH) || CATLASS_ARCH == 2201 
+    constexpr uint32_t BYTE_PER_BLK_FP = 128;  /// datablock size of A1->C2PiPE2GM
+#elif defined(CATLASS_ARCH) && CATLASS_ARCH == 3510 
+    constexpr uint32_t BYTE_PER_BLK_FP = 64;
+#endif
 
 class EmptyClass {};
 
