@@ -63,10 +63,30 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [ "$CLEAN" = true ]; then
-    echo "Cleaning JIT disk cache: /tmp/catlass_jit/"
-    rm -rf /tmp/catlass_jit/
+    # JIT cache priority (kernels/jit/jit_compiler.cpp):
+    #   1. $CATLASS_JIT_CACHE_DIR  (env override)
+    #   2. $HOME/.cache/catlass/jit_cache  (default, with <version> subdir)
+    #   3. /tmp/catlass_jit  (fallback when HOME is unset)
+    if [ -n "${CATLASS_JIT_CACHE_DIR:-}" ] && [ -d "$CATLASS_JIT_CACHE_DIR" ]; then
+        echo "Cleaning JIT disk cache (env): \$CATLASS_JIT_CACHE_DIR=$CATLASS_JIT_CACHE_DIR"
+        rm -rf "$CATLASS_JIT_CACHE_DIR"
+    fi
+    if [ -d "$HOME/.cache/catlass/jit_cache" ]; then
+        echo "Cleaning JIT disk cache (default): $HOME/.cache/catlass/jit_cache"
+        rm -rf "$HOME/.cache/catlass/jit_cache"
+    fi
+    if [ -d /tmp/catlass_jit ]; then
+        echo "Cleaning JIT disk cache (fallback): /tmp/catlass_jit"
+        rm -rf /tmp/catlass_jit
+    fi
     echo "Cleaning build artifacts: dist/ *.egg-info _skbuild/"
     rm -rf dist/ *.egg-info _skbuild/
+    echo "Cleaning pytest cache: .pytest_cache tests/__pycache__"
+    rm -rf .pytest_cache tests/__pycache__
+    echo "Cleaning test log: tests/test.log"
+    rm -f tests/test.log
+    echo "Cleaning ruff cache: .ruff_cache"
+    rm -rf .ruff_cache
     echo "Clean complete."
     exit 0
 fi

@@ -8,15 +8,26 @@
 # the software repository for the full text of the License.
 
 from .basic_matmul import basic_matmul  # example 00
+from .batched_matmul import batched_matmul  # example 01
+from .grouped_matmul_slice_m import grouped_matmul_slice_m  # example 02
 from .matmul_add import matmul_add  # example 03
 from .padding_matmul import padding_matmul  # example 04
+from .grouped_matmul_slice_k import grouped_matmul_slice_k  # example 05
 from .optimized_matmul import optimized_matmul  # example 06
 from .basic_matmul_tla import basic_matmul_tla  # example 13
 from .optimized_matmul_tla import optimized_matmul_tla  # example 14
 from .matmul_bias import matmul_bias  # example 20
 from .basic_matmul_preload_zN import basic_matmul_preload_zN  # example 21
 from .flash_attention_infer import flash_attention_infer  # example 23
+from .grouped_matmul_slice_m_per_token_dequant import (
+    grouped_matmul_slice_m_per_token_dequant,               # example 07
+    grouped_matmul_slice_m_per_token_dequant_multistage,    # example 10
+    grouped_matmul_slice_k_per_token_dequant,               # example 11
+)
 from .matmul_full_loadA import matmul_full_loadA  # example 25
+from .splitk_matmul import splitk_matmul  # example 09
+from .quant_matmul import quant_matmul  # example 12
+from .padding_splitk_matmul import padding_splitk_matmul  # example 22
 from .matmul_relu import matmul_relu  # example 26
 from .matmul_gelu import matmul_gelu  # example 27
 from .matmul_silu import matmul_silu  # example 28
@@ -37,14 +48,23 @@ from .ascend950_mx_matmul import ascend950_fp8_mx_matmul_aswt, ascend950_fp4_mx_
 
 __all__ = [
     "basic_matmul",                       # example 00
+    "batched_matmul",                     # example 01
+    "grouped_matmul_slice_m",             # example 02
     "matmul_add",                         # example 03
     "padding_matmul",                     # example 04
+    "grouped_matmul_slice_k",             # example 05
     "optimized_matmul",                   # example 06
     "basic_matmul_tla",                   # example 13
     "optimized_matmul_tla",               # example 14
+    "splitk_matmul",                      # example 09
     "matmul_bias",                        # example 20
     "basic_matmul_preload_zN",            # example 21
     "flash_attention_infer",              # example 23
+    "grouped_matmul_slice_m_per_token_dequant",               # example 07
+    "grouped_matmul_slice_m_per_token_dequant_multistage",    # example 10
+    "grouped_matmul_slice_k_per_token_dequant",               # example 11
+    "quant_matmul",                       # example 12
+    "padding_splitk_matmul",              # example 22
     "matmul_full_loadA",                  # example 25
     "matmul_relu",                        # example 26
     "matmul_gelu",                        # example 27

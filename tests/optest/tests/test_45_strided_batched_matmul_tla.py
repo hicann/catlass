@@ -1,6 +1,7 @@
 import pytest
 import torch
 import torch_npu
+import torch_catlass
 
 pytestmark = pytest.mark.skipif(
     torch_npu.npu.device_count() <= 0,
@@ -16,8 +17,6 @@ def test_strided_batched_matmul_tla():
     where A[b] is [M, K] and B[b] is [K, N], with strided memory access
     between batches.
     """
-    import torch_catlass
-
     batch, m, n, k = 2, 256, 256, 256
 
     a = torch.randn(batch, m, k, dtype=torch.float16, device="npu")

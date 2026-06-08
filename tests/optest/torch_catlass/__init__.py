@@ -103,9 +103,7 @@ def _load_so_files(lib_dir):
     for lib_file in os.listdir(lib_dir):
         if lib_file.endswith(".so"):
             lib_path = os.path.join(lib_dir, lib_file)
-            _dl_mode = getattr(os, "RTLD_NOW", 0x2) | getattr(
-                os, "RTLD_GLOBAL", 0x100
-            )
+            _dl_mode = getattr(os, "RTLD_NOW", 0x2) | getattr(os, "RTLD_GLOBAL", 0x100)
             ctypes.CDLL(lib_path, mode=_dl_mode)
 
 
@@ -122,6 +120,7 @@ def _find_pkg_dir():
         return src_base
 
     from importlib.metadata import distribution
+
     try:
         dist = distribution("torch-catlass")
         sp_dir = dist.locate_file("torch_catlass")
@@ -160,9 +159,7 @@ def _load_kernel_libs():
             _load_so_files(arch_dir)
 
         if not os.path.exists(jit_dir) and not os.path.exists(arch_dir):
-            raise RuntimeError(
-                f"No library directory found: checked {jit_dir} and {arch_dir}"
-            )
+            raise RuntimeError(f"No library directory found: checked {jit_dir} and {arch_dir}")
 
         _catlass_loaded = True
 
@@ -170,9 +167,7 @@ def _load_kernel_libs():
 def _load_main_lib():
     """Load the PyTorch extension that registers ``torch.ops.catlass`` ops."""
     base = _find_pkg_dir()
-    torch.ops.load_library(
-        os.path.join(base, "lib", "libcatlass_torch.so")
-    )
+    torch.ops.load_library(os.path.join(base, "lib", "libcatlass_torch.so"))
 
 
 _load_kernel_libs()

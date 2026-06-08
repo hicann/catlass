@@ -1,6 +1,7 @@
 import pytest
 import torch
 import torch_npu
+import torch_catlass
 
 pytestmark = pytest.mark.skipif(
     torch_npu.npu.device_count() <= 0,
@@ -9,8 +10,6 @@ pytestmark = pytest.mark.skipif(
 
 
 def test_big_matmul_tla():
-    import torch_catlass
-
     m, n, k = 512, 256, 256
     a = torch.randn(m, k, dtype=torch.float16, device="npu")
     b = torch.randn(k, n, dtype=torch.float16, device="npu")

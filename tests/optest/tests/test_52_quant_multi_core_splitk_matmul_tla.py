@@ -11,6 +11,7 @@
 import pytest
 import torch
 import torch_npu
+import torch_catlass
 
 pytestmark = pytest.mark.skipif(
     torch_npu.npu.device_count() <= 0,
@@ -20,8 +21,6 @@ pytestmark = pytest.mark.skipif(
 
 def test_quant_multi_core_splitk_matmul_tla():
     """Compare the CATLASS quant multi-core splitK matmul (TLA) wrapper against a reference computation."""
-    import torch_catlass
-
     m, n, k = 256, 512, 1024
 
     a = torch.randint(-5, 5, (m, k), dtype=torch.int8, device="npu")
@@ -46,7 +45,7 @@ def test_quant_multi_core_splitk_matmul_tla():
 
     rtol = 1e-1
     atol = 1e-1
-    print(f"result: {result}")
+    print(f"result shape: {result.shape}")
     print(f"expected: {expected}")
     assert torch.allclose(result.float(), expected.float(), rtol=rtol, atol=atol), (
         f"Results not close: max diff = {(result.float() - expected.float()).abs().max().item()}"

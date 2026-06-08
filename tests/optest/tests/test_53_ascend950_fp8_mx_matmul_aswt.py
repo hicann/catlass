@@ -12,6 +12,7 @@ import re
 import pytest
 import torch
 import torch_npu
+import torch_catlass
 
 from mx_golden import prepare_fp8_mx_inputs
 
@@ -41,8 +42,6 @@ pytestmark = pytest.mark.skipif(
 )
 def test_ascend950_fp8_mx_matmul_aswt(trans_a, trans_b):
     """Compare CATLASS MX FP8 matmul (ASWT) against dequant reference for all transpose pairs."""
-    import torch_catlass
-
     m, n, k = 256, 512, 1024
     a, b, a_scale, b_scale, expected = prepare_fp8_mx_inputs(
         m, n, k, device="npu", trans_a=trans_a, trans_b=trans_b

@@ -11,6 +11,7 @@
 import pytest
 import torch
 import torch_npu
+import torch_catlass
 
 pytestmark = pytest.mark.skipif(
     torch_npu.npu.device_count() <= 0,
@@ -20,8 +21,6 @@ pytestmark = pytest.mark.skipif(
 
 def test_quant_optimized_matmul_tla():
     """Compare the CATLASS quant optimized matmul (TLA) wrapper against a reference computation."""
-    import torch_catlass
-
     m, n, k = 256, 512, 1024
 
     a = torch.randint(-5, 5, (m, k), dtype=torch.int8, device="npu")

@@ -155,6 +155,7 @@ python scripts/gen_entry.py <nn> <name>
 - 运行入口签名与 ABI 声明一致。
 - **JIT 模板中 kernel 启动统一使用 `Catlass::RunKernel<Kernel>()`（来自 `common/kernel_runner.h`），禁止引入 `catlass/gemm/device/device_gemm.hpp`。**
 - **L1/L0 TileShape 统一使用 `CatlassKernel::TileShapeScaler<ElementA, half, BaseShape>::type`（或 TLA 变体 `TileShapeScalerTLA`），确保元素类型变化时 K 维度按字节宽度等比缩放。不硬编码 `GemmShape<...>`。**
+- **⚠️ 累加器类型（CType）不可用 `CATLASS_JIT_ELEMENT_C` 宏推导**：Split-K/Padding 等 kernel 的 CType 是累加器类型（如 `float`），而 `CATLASS_JIT_ELEMENT_C` 由 adapter 的 `outDType` 设置，会覆盖为 `half`。必须用 `#define CATLASS_JIT_ELEMENT_C float`（非 `#ifndef`）固定，防止 JIT 宏覆盖导致 workspace 步长错乱产生 inf。模板修改后须清理 JIT 缓存（`rm -rf ~/.cache/catlass/jit_cache/`），否则旧 `.so` 仍被命中。
 - **`CATLASS_JIT_BLOCK_SCHEDULER` 使用数字编码：末位=direction，前位=offset。`GemmIdentityBlockSwizzle<3, 0>` → 默认值 `30`。模板中通过 `(CATLASS_JIT_BLOCK_SCHEDULER / 10)` 取 offset、`(CATLASS_JIT_BLOCK_SCHEDULER % 10)` 取 direction。**
 - 模板引用 `kernels/common/` 下的头文件（如 `kernel_runner.h`、`tile_shape_scaler.h`、`common.h`、`workspace_alloc.h`）时，需确认对应头文件已通过顶置 `CMakeLists.txt` 安装到 `jit/common/`。
 - **Padding 路径需为 `deviceWA`/`deviceWB` 单独分配缓冲区**，通过 `g_catlassWorkspaceAlloc`（回退 `aclrtMalloc`），不可复用原始 `deviceA`/`deviceB` 指针。模板变更后须清除 JIT 缓存目录（`torch_catlass.clear_jit_cache()`），否则旧 `.so` 仍被命中。
@@ -188,6 +189,8 @@ python scripts/gen_entry.py <nn> <name>
 - 参数名与 C++ adapter 对齐。
 - dtype 字符串解析保持白名单/显式映射，不使用隐式 `eval`。
 - 填充 `TParams` 使用直接 map 访问（如 `tParams.element["A"] = ...`）。
+- `transA`/`transB`/`useNzA`/`useNzB` 全部声明为 `bool = False`，不再使用 `Optional`。
+  调用 `torch.ops.catlass.*` 时直接传参。
 - docstring 写清：
   - 来源 example 编号名称
   - 参数语义
@@ -227,7 +230,6 @@ python scripts/gen_entry.py <nn> <name>
 - 导入错误：先查 `torch_catlass/__init__.py` 动态库加载顺序与符号。
 - 运行错误：核对 `TParams/Params` 填充及 dtype/layout 映射。
 - JIT 编译报 `Syntax error: "(" unexpected`：检查编译器参数是否含 shell 特殊字符（如 `__mix__(1,2)`），`RunProcessCapture` 已通过单引号转义处理，新增宏值若含特殊字符需验证转义生效。
-- JIT 编译报 `#include "..." file not found`：设 `CATLASS_JIT_LOG_LEVEL=2` 查看完整编译命令，核对缺少的头文件是否被 `CMakeLists.txt` 的 install 规则排除（如 `PATTERN "device" EXCLUDE` 排除了 `device_gemm.hpp`）。JIT 模板不得引入被排除路径下的头文件。`RunKernel` 方式无需 `catlass/gemm/device/device_gemm.hpp`，直接删除即可。
 
 ## Checklists
 
@@ -238,9 +240,11 @@ python scripts/gen_entry.py <nn> <name>
 - [ ] docstring 含 example 编号名称
 - [ ] 参数模型与 `TParams + Params` 保持一致
 - [ ] 无不必要 `using XxxParams` 别名滥用
+- [ ] Python 接口 `transA/B`/`useNzA/B` 声明为 `bool = False`（非 `Optional[bool]`）
 - [ ] JIT 模板使用 `common/kernel_runner.h` 启动 kernel，未引入 `device_gemm.hpp`
 - [ ] L1/L0 TileShape 使用 `TileShapeScaler`（非硬编码）
 - [ ] `CATLASS_JIT_BLOCK_SCHEDULER` 使用数字编码（末位 direction，前位 offset）
+- [ ] ⚠️ 累加器 CType 须用 `#define` 固定（非 `#ifndef`），防止 JIT 宏覆盖
 - [ ] 模板依赖的 `kernels/common/` 头文件已通过 CMake install rule 安装到 `jit/common/`
 
 ### Runtime Checklist

@@ -11,10 +11,11 @@
 import pytest
 import torch
 import torch_npu
+import torch_catlass
 
 pytestmark = pytest.mark.skipif(
     torch_npu.npu.device_count() <= 0,
-    reason="torch-catlass integration tests require an available Ascend NPU",
+    reason="requires Ascend NPU",
 )
 
 
@@ -90,8 +91,6 @@ def _reference_flash_attention(
 
 def test_flash_attention_infer_paged():
     """Compare flash attention infer against a PyTorch reference implementation."""
-    import torch_catlass
-
     torch.manual_seed(1)
     batch = 2
     q_seqlen = 64

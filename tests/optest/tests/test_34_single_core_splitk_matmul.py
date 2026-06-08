@@ -1,6 +1,7 @@
 import pytest
 import torch
 import torch_npu
+import torch_catlass
 
 pytestmark = pytest.mark.skipif(
     torch_npu.npu.device_count() <= 0,
@@ -9,8 +10,6 @@ pytestmark = pytest.mark.skipif(
 
 
 def test_single_core_splitk_matmul():
-    import torch_catlass
-
     m, n, k = 256, 128, 256
     a = torch.randn(m, k, dtype=torch.float16, device="npu")
     b = torch.randn(n, k, dtype=torch.float16, device="npu")

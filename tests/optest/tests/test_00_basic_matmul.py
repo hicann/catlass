@@ -11,6 +11,7 @@
 import pytest
 import torch
 import torch_npu
+import torch_catlass
 
 pytestmark = pytest.mark.skipif(
     torch_npu.npu.device_count() <= 0,
@@ -20,8 +21,6 @@ pytestmark = pytest.mark.skipif(
 
 def test_basic_matmul():
     """Compare the CATLASS basic matmul wrapper against ``torch.matmul``."""
-    import torch_catlass
-
     m, n, k = 16, 16, 16
 
     a = torch.randn(m, k, dtype=torch.float16, device="npu")
@@ -35,12 +34,7 @@ def test_basic_matmul():
     result = torch_catlass.basic_matmul(a, b, "float16", False, False, False, False)
     expected = torch.matmul(a, b)
 
-    print(f"\nResult shape: {result.shape}, dtype: {result.dtype}")
-    print(f"Expected shape: {expected.shape}, dtype: {expected.dtype}")
-    print(f"Result sample: {result}")
-    print(f"Expected sample: {expected}")
-    print(f"Max diff: {(result - expected).abs().max().item()}")
-    print(f"Mean diff: {(result - expected).abs().mean().item()}")
+    print(f"Shape: {result.shape}, dtype: {result.dtype}")
 
     assert result.shape == (m, n)
     assert result.dtype == torch.float16

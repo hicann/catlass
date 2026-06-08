@@ -22,12 +22,15 @@
 #include <cstdint>
 
 using WorkspaceAllocFn = uint8_t* (*)(size_t size);
+using WorkspaceFreeFn = void (*)(uint8_t* ptr, size_t size);
 
 extern "C" {
 
 extern WorkspaceAllocFn g_catlassWorkspaceAlloc;
+extern WorkspaceFreeFn  g_catlassWorkspaceFree;
 
 void CatlassSetWorkspaceAlloc(WorkspaceAllocFn alloc);
+void CatlassSetWorkspaceFree(WorkspaceFreeFn free_fn);
 
 } // extern "C"
 

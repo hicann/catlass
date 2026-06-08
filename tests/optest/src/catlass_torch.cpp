@@ -18,7 +18,11 @@
 #include "catlass_kernel_jit.h"
 #include "catlass_kernel_prebuilt.h"
 #include "common/register.h"
+#include "common/workspace.h"
+#include "template/batched_matmul.h"
 #include "template/flash_attention.h"
+#include "template/grouped_matmul.h"
+#include "template/grouped_quant_matmul.h"
 #include "template/matmul.h"
 #include "template/matmul_extra.h"
 #include "template/mx_matmul.h"
@@ -27,11 +31,55 @@
 #include "template/strided_batched_matmul.h"
 #include "template/w4a8_matmul.h"
 
+// ── Workspace allocator bridge ──
+// 通过 dlsym 注入到 g_catlassWorkspaceAlloc，使 JIT 模板分配 NPU tensor
+// 而非裸 aclrtMalloc。tensor 保存在静态池中，kernel 执行期间有效。
+#include <dlfcn.h>
+#include <vector>
+
+namespace {
+static std::vector<at::Tensor> g_wsPool;
+
+uint8_t* wsAlloc(size_t size) {
+    auto opts = at::TensorOptions().dtype(torch::kInt8).device(torch_npu::utils::get_npu_device_type());
+    auto t = at::empty({static_cast<int64_t>(size)}, opts);
+    auto* p = static_cast<uint8_t*>(const_cast<void*>(t.storage().data()));
+    g_wsPool.push_back(std::move(t));
+    return p;
+}
+
+void wsFree(uint8_t* p, size_t) {
+    for (auto it = g_wsPool.begin(); it != g_wsPool.end(); ++it)
+        if (it->storage().data() == p) { g_wsPool.erase(it); break; }
+}
+
+struct _WsInit {
+    _WsInit() {
+        auto sa = (void (*)( decltype(wsAlloc)*))dlsym(RTLD_DEFAULT, "CatlassSetWorkspaceAlloc");
+        auto sf = (void (*)( decltype(wsFree)*)) dlsym(RTLD_DEFAULT, "CatlassSetWorkspaceFree");
+        if (sa) sa(wsAlloc);
+        if (sf) sf(wsFree);
+    }
+} _wsInit;
+}
+
 namespace CatlassKernelWrapper {
 
 using BasicMatmulOp = MatmulLike<CatlassKernel::BasicMatmul>;
 static auto& basic_matmul = BasicMatmulOp::Run;
 REGISTER_TORCH_FUNC(basic_matmul);
+
+using BatchedMatmulOp = BatchedMatmulLike<CatlassKernel::BatchedMatmul>;
+static auto& batched_matmul = BatchedMatmulOp::Run;
+REGISTER_TORCH_FUNC(batched_matmul);
+
+using GroupedMatmulSliceMOp = GroupedMatmulLike<CatlassKernel::GroupedMatmulSliceM, GmmSliceDir::M>;
+static auto& grouped_matmul_slice_m = GroupedMatmulSliceMOp::Run;
+REGISTER_TORCH_FUNC(grouped_matmul_slice_m);
+
+using GroupedMatmulSliceKOp = GroupedMatmulLike<CatlassKernel::GroupedMatmulSliceK, GmmSliceDir::K>;
+static auto& grouped_matmul_slice_k = GroupedMatmulSliceKOp::Run;
+REGISTER_TORCH_FUNC(grouped_matmul_slice_k);
 
 using MatmulAddOp = MatmulExtraLike<CatlassKernel::MatmulAdd, false>;
 static auto& matmul_add = MatmulAddOp::Run;
@@ -48,6 +96,33 @@ REGISTER_TORCH_FUNC(optimized_matmul);
 using MatmulBiasOp = MatmulExtraLike<CatlassKernel::MatmulBias, true>;
 static auto& matmul_bias = MatmulBiasOp::Run;
 REGISTER_TORCH_FUNC(matmul_bias);
+
+using GroupedMatmulSliceMPerTokenDequantMoeOp =
+    GroupedQuantMatmulLike<CatlassKernel::GroupedMatmulSliceMPerTokenDequantMoe, GmmSliceDir::M>;
+static auto& grouped_matmul_slice_m_per_token_dequant_moe = GroupedMatmulSliceMPerTokenDequantMoeOp::Run;
+REGISTER_TORCH_FUNC(grouped_matmul_slice_m_per_token_dequant_moe);
+
+using GroupedMatmulSliceMPerTokenDequantOp =
+    GroupedQuantMatmulLike<CatlassKernel::GroupedMatmulSliceMPerTokenDequant, GmmSliceDir::M>;
+static auto& grouped_matmul_slice_m_per_token_dequant = GroupedMatmulSliceMPerTokenDequantOp::Run;
+REGISTER_TORCH_FUNC(grouped_matmul_slice_m_per_token_dequant);
+
+using GroupedMatmulSliceKPerTokenDequantOp =
+    GroupedQuantMatmulLike<CatlassKernel::GroupedMatmulSliceKPerTokenDequant, GmmSliceDir::K>;
+static auto& grouped_matmul_slice_k_per_token_dequant = GroupedMatmulSliceKPerTokenDequantOp::Run;
+REGISTER_TORCH_FUNC(grouped_matmul_slice_k_per_token_dequant);
+
+using SplitkMatmulOp = MatmulLike<CatlassKernel::SplitkMatmul>;
+static auto& splitk_matmul = SplitkMatmulOp::Run;
+REGISTER_TORCH_FUNC(splitk_matmul);
+
+using QuantMatmulOp = QuantMatmulLike<CatlassKernel::QuantMatmul>;
+static auto& quant_matmul = QuantMatmulOp::Run;
+REGISTER_TORCH_FUNC(quant_matmul);
+
+using PaddingSplitkMatmulOp = MatmulLike<CatlassKernel::PaddingSplitkMatmul>;
+static auto& padding_splitk_matmul = PaddingSplitkMatmulOp::Run;
+REGISTER_TORCH_FUNC(padding_splitk_matmul);
 
 using BasicMatmulTLAOp = MatmulLike<CatlassKernel::BasicMatmulTLA>;
 static auto& basic_matmul_tla = BasicMatmulTLAOp::Run;

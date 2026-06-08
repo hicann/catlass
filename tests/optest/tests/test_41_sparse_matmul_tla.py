@@ -2,6 +2,7 @@ import pytest
 import torch
 import numpy as np
 import torch_npu
+import torch_catlass
 
 pytestmark = pytest.mark.skipif(
     torch_npu.npu.device_count() <= 0,
@@ -118,8 +119,6 @@ def test_sparse_matmul_tla():
     K elements are kept for each N column.
     C = A @ sparse(B) with int32 accumulation.
     """
-    import torch_catlass
-
     m, n, k = 128, 256, 256
 
     a, b_sparse, idx, expected = _generate_sparse_data(m, n, k)

@@ -28,6 +28,7 @@
 #include "kernel_operator.h"
 
 #include "catlass_kernel_prebuilt.h"
+#include "../common/workspace_alloc.h"
 
 extern "C" int rtGetC2cCtrlAddr(uint64_t *, uint32_t *);
 
@@ -830,17 +831,12 @@ void FAImpl(const uint32_t blockNum, aclrtStream stream, const FlashAttentionPar
     uint64_t UpdateSize = blockNum * FAInferTiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(float) * FAInferTiling::NUM3;
     uint64_t workSpaceSize = mm1OutSize + smOnlineOutSize + mm2OutSize + UpdateSize;
     
-    uint8_t *sDevice;
-    ACL_CHECK(aclrtMalloc((void **)(&sDevice), mm1OutSize, ACL_MEM_MALLOC_HUGE_FIRST));
-    uint8_t *pDevice;
-    ACL_CHECK(aclrtMalloc((void **)(&pDevice), smOnlineOutSize, ACL_MEM_MALLOC_HUGE_FIRST));
-    uint8_t *oTempDevice;
-    ACL_CHECK(aclrtMalloc((void **)(&oTempDevice), mm2OutSize, ACL_MEM_MALLOC_HUGE_FIRST));
-    uint8_t *oUpdateDevice;
-    ACL_CHECK(aclrtMalloc((void **)(&oUpdateDevice), UpdateSize, ACL_MEM_MALLOC_HUGE_FIRST));
-    
-    uint8_t *tilingDevice;
-    ACL_CHECK(aclrtMalloc((void **)(&tilingDevice), tilingSize, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t *sDevice = g_catlassWorkspaceAlloc(mm1OutSize);
+    uint8_t *pDevice = g_catlassWorkspaceAlloc(smOnlineOutSize);
+    uint8_t *oTempDevice = g_catlassWorkspaceAlloc(mm2OutSize);
+    uint8_t *oUpdateDevice = g_catlassWorkspaceAlloc(UpdateSize);
+
+    uint8_t *tilingDevice = g_catlassWorkspaceAlloc(tilingSize);
 
     // get tiling
     void *tilingHost = nullptr;

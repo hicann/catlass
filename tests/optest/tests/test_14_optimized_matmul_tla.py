@@ -1,6 +1,7 @@
 import pytest
 import torch
 import torch_npu
+import torch_catlass
 
 pytestmark = pytest.mark.skipif(
     torch_npu.npu.device_count() <= 0,
@@ -9,8 +10,6 @@ pytestmark = pytest.mark.skipif(
 
 
 def test_optimized_matmul_tla():
-    import torch_catlass
-
     m, n, k = 256, 256, 256
     a = torch.randn(m, k, dtype=torch.float16, device="npu")
     b = torch.randn(n, k, dtype=torch.float16, device="npu")
@@ -25,8 +24,6 @@ def test_optimized_matmul_tla():
 
 
 def test_optimized_matmul_tla_padding():
-    import torch_catlass
-
     m, n, k = 128, 256, 64
     a = torch.randn(m, k, dtype=torch.float16, device="npu")
     b = torch.randn(n, k, dtype=torch.float16, device="npu")

@@ -13,10 +13,8 @@
  *
  * 提供 RunKernel<Kernel> —— 一站式 host 函数。
  *
- * Workspace 由外部（torch 层）统一管理，在加载 .so 后 / 首次 kernel 调用前调用：
- *   CatlassSetWorkspaceAlloc(myAlloc);
- *
- * 如果未设置，RunKernel 回退到 aclrtMalloc（裸 NPU 内存）。
+ * Workspace 由外部（torch 层）统一管理，通过 CatlassSetWorkspaceAlloc 注入。
+ * torch 层静态初始化器保证 g_catlassWorkspaceAlloc 始终有效。
  */
 
 #ifndef OPTEST_KERNELS_COMMON_KERNEL_RUNNER_H
@@ -62,11 +60,7 @@ inline void RunKernel(typename Kernel::Arguments args, aclrtStream stream, uint3
     size_t wsSize = Kernel::GetWorkspaceSize(args);
     uint8_t* ws = nullptr;
     if (wsSize > 0) {
-        if (g_catlassWorkspaceAlloc) {
-            ws = g_catlassWorkspaceAlloc(wsSize);
-        } else {
-            aclrtMalloc(reinterpret_cast<void**>(&ws), wsSize, ACL_MEM_MALLOC_HUGE_FIRST);
-        }
+        ws = g_catlassWorkspaceAlloc(wsSize);
     }
     auto params = Kernel::ToUnderlyingArguments(args, ws);
     KERNEL_NAME<Kernel><<<coreNum, nullptr, stream>>>(params);

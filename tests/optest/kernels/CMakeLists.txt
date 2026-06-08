@@ -119,7 +119,9 @@ macro(add_kernel)
                 list(APPEND _INSTALL_TARGETS ${_LIB_NAME})
                 add_library(${_LIB_NAME} SHARED ${_K_UNPARSED_ARGUMENTS})
 
-                target_compile_definitions(${_LIB_NAME} PRIVATE CATLASS_ARCH=${_ARCH})
+                target_compile_definitions(${_LIB_NAME} PRIVATE
+                    CATLASS_ARCH=${_ARCH}
+                    KERNEL_NAME=${_K_NAME}_entry)
 
                 # 通用 ASC 编译选项
                 target_compile_options(${_LIB_NAME} PRIVATE
@@ -191,13 +193,22 @@ macro(add_kernel)
 endmacro()
 
 add_subdirectory(00_basic_matmul)
+add_subdirectory(01_batched_matmul)
+add_subdirectory(02_grouped_matmul_slice_m)
 add_subdirectory(03_matmul_add)
 add_subdirectory(04_padding_matmul)
+add_subdirectory(05_grouped_matmul_slice_k)
 add_subdirectory(06_optimized_matmul)
+add_subdirectory(07_grouped_matmul_slice_m_per_token_dequant_moe)
+add_subdirectory(09_splitk_matmul)
+add_subdirectory(10_grouped_matmul_slice_m_per_token_dequant)
+add_subdirectory(11_grouped_matmul_slice_k_per_token_dequant)
+add_subdirectory(12_quant_matmul)
 add_subdirectory(13_basic_matmul_tla)
 add_subdirectory(14_optimized_matmul_tla)
 add_subdirectory(20_matmul_bias)
 add_subdirectory(21_basic_matmul_preload_zN)
+add_subdirectory(22_padding_splitk_matmul)
 add_subdirectory(23_flash_attention_infer)
 add_subdirectory(25_matmul_full_loadA)
 add_subdirectory(26_matmul_relu)

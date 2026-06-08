@@ -23,64 +23,64 @@ Python API (`torch_catlass.ops.*`)
 
 ## 算子接入清单
 
-### 已接入（A2 基础矩阵乘类 + Epilogue 融合类）
+### 已接入
 
 - [x] 00_basic_matmul
+- [x] 01_batched_matmul
+- [x] 02_grouped_matmul_slice_m
 - [x] 03_matmul_add
 - [x] 04_padding_matmul
+- [x] 05_grouped_matmul_slice_k
 - [x] 06_optimized_matmul
+- [x] 07_grouped_matmul_slice_m_per_token_dequant_moe
+- [x] 09_splitk_matmul
+- [x] 10_grouped_matmul_slice_m_per_token_dequant
+- [x] 11_grouped_matmul_slice_k_per_token_dequant
+- [x] 12_quant_matmul
 - [x] 13_basic_matmul_tla
+- [x] 14_optimized_matmul_tla
 - [x] 20_matmul_bias
 - [x] 21_basic_matmul_preload_zN
+- [x] 22_padding_splitk_matmul
 - [x] 23_flash_attention_infer
 - [x] 25_matmul_full_loadA
 - [x] 26_matmul_relu
 - [x] 27_matmul_gelu
 - [x] 28_matmul_silu
+- [x] 29_a2_fp8_e4m3_matmul
+- [x] 30_w8a16_matmul
 - [x] 31_small_matmul
+- [x] 32_w4a8_matmul
 - [x] 34_single_core_splitk_matmul
 - [x] 37_streamk_matmul
 - [x] 39_big_matmul_tla
+- [x] 41_sparse_matmul_tla
 - [x] 42_quant_optimized_matmul_tla
 - [x] 43_ascend950_basic_matmul
+- [x] 44_quant_matmul_full_loadA_tla
+- [x] 45_strided_batched_matmul_tla
+- [x] 52_quant_multi_core_splitk_matmul_tla
 - [x] 53_ascend950_fp8_mx_matmul (Ascend950)
 - [x] 54_ascend950_fp4_mx_matmul (Ascend950)
 
 ### 暂未接入
 
-- [ ] 01_batched_matmul
-- [ ] 02_grouped_matmul_slice_m
-- [ ] 05_grouped_matmul_slice_k
-- [ ] 07_grouped_slice_m_per_token_dequant_moe
 - [ ] 08_grouped_matmul
-- [ ] 09_splitk_matmul
-- [ ] 10_grouped_slice_m_per_token_dequant
-- [ ] 11_grouped_slice_k_per_token_dequant
-- [ ] 12_quant_matmul
-- [ ] 14_optimized_matmul_tla
 - [ ] 15_gemm
 - [ ] 16_group_gemm
 - [ ] 17_gemv_aiv
 - [ ] 18_gemv_aic
 - [ ] 19_mla
-- [ ] 22_padding_splitk_matmul
 - [ ] 24_conv_bias
-- [ ] 29_a2_fp8_e4m3_matmul
-- [ ] 30_w8a16_matmul
-- [ ] 32_w4a8_matmul
 - [ ] 33_basic_conv2d
 - [ ] 38_w4a4_per_token_per_channel_dequant
 - [ ] 40_flash_attention_infer_tla
-- [ ] 41_sparse_matmul_tla
-- [ ] 44_quant_matmul_full_loadA_tla
-- [ ] 45_strided_batched_matmul_tla
 - [ ] 46_ascend950_matmul_fixpipe_opti
 - [ ] 47_ascend950_grouped_slice_m_dequant
 - [ ] 48_ascend950_grouped_slice_m_pt_pc_dequant
 - [ ] 49_ascend950_flash_attention_infer
 - [ ] 50_ascend950_basic_matmul_gemv
 - [ ] 51_ascend950_quant_per_group_per_block
-- [ ] 52_quant_multi_core_splitk_tla
 - [ ] 55_ascend950_mx_grouped_slice_m
 - [ ] 56_ascend950_basic_conv2d_tla
 - [ ] 57_ascend950_matmul_full_dequant

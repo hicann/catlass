@@ -1,6 +1,7 @@
 import pytest
 import torch
 import torch_npu
+import torch_catlass
 
 pytestmark = pytest.mark.skipif(
     torch_npu.npu.device_count() <= 0,
@@ -16,8 +17,6 @@ def test_a2_fp8_e4m3_matmul():
     prologue, then matmul with fp32 accumulator. Reference:
       C = fp16(fp8_A) @ fp16(fp8_B)  in fp32 precision.
     """
-    import torch_catlass
-
     m, n, k = 256, 256, 256
 
     a_f32 = torch.randn(m, k, dtype=torch.float32)

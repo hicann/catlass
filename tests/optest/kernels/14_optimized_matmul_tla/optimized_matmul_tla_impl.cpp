@@ -166,21 +166,13 @@ extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::
 #if CATLASS_JIT_NEED_PADDING_A
     {
         size_t sizeWA = GetWorkspaceLen(tagA, get<0>(L1TileShape{}), get<2>(L1TileShape{})) * sizeof(ElementA);
-        if (g_catlassWorkspaceAlloc) {
-            deviceWA = g_catlassWorkspaceAlloc(sizeWA);
-        } else {
-            aclrtMalloc(reinterpret_cast<void**>(&deviceWA), sizeWA, ACL_MEM_MALLOC_HUGE_FIRST);
-        }
+        deviceWA = g_catlassWorkspaceAlloc(sizeWA);
     }
 #endif
 #if CATLASS_JIT_NEED_PADDING_B
     {
         size_t sizeWB = GetWorkspaceLen(tagB, get<2>(L1TileShape{}), get<1>(L1TileShape{})) * sizeof(ElementB);
-        if (g_catlassWorkspaceAlloc) {
-            deviceWB = g_catlassWorkspaceAlloc(sizeWB);
-        } else {
-            aclrtMalloc(reinterpret_cast<void**>(&deviceWB), sizeWB, ACL_MEM_MALLOC_HUGE_FIRST);
-        }
+        deviceWB = g_catlassWorkspaceAlloc(sizeWB);
     }
 #endif
 

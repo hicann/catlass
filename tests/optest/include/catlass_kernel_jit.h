@@ -111,12 +111,12 @@ extern "C" {
 void BasicMatmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
- * @brief Reserved JIT interface for example 01_batched_matmul.
+ * @brief JIT interface for example 01_batched_matmul.
  */
 void BatchedMatmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
- * @brief Reserved JIT interface for example 02_grouped_matmul_slice_m.
+ * @brief JIT interface for example 02_grouped_matmul_slice_m.
  */
 void GroupedMatmulSliceM(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GroupedMatmulParams& params);
@@ -132,7 +132,7 @@ void MatmulAdd(const uint32_t blockNum, aclrtStream stream, const TParams& tPara
 void PaddingMatmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
- * @brief Reserved JIT interface for example 05_grouped_matmul_slice_k.
+ * @brief JIT interface for example 05_grouped_matmul_slice_k.
  */
 void GroupedMatmulSliceK(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GroupedMatmulParams& params);
@@ -143,7 +143,7 @@ void GroupedMatmulSliceK(
 void OptimizedMatmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
- * @brief Reserved JIT interface for example 07_grouped_matmul_slice_m_per_token_dequant_moe.
+ * @brief JIT interface for example 07_grouped_matmul_slice_m_per_token_dequant_moe.
  */
 void GroupedMatmulSliceMPerTokenDequantMoe(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GroupedMatmulParams& params);
@@ -155,24 +155,24 @@ void GroupedMatmul(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GroupedMatmulParams& params);
 
 /**
- * @brief Reserved JIT interface for example 09_splitk_matmul.
+ * @brief JIT interface for example 09_splitk_matmul.
  */
 void SplitkMatmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
- * @brief Reserved JIT interface for example 10_grouped_matmul_slice_m_per_token_dequant.
+ * @brief JIT interface for example 10_grouped_matmul_slice_m_per_token_dequant.
  */
 void GroupedMatmulSliceMPerTokenDequant(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GroupedMatmulParams& params);
 
 /**
- * @brief Reserved JIT interface for example 11_grouped_matmul_slice_k_per_token_dequant.
+ * @brief JIT interface for example 11_grouped_matmul_slice_k_per_token_dequant.
  */
 void GroupedMatmulSliceKPerTokenDequant(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GroupedMatmulParams& params);
 
 /**
- * @brief Reserved JIT interface for example 12_quant_matmul.
+ * @brief JIT interface for example 12_quant_matmul.
  */
 void QuantMatmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
@@ -219,7 +219,7 @@ void BasicMatmulPreloadZN(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
- * @brief Reserved JIT interface for example 22_padding_splitk_matmul.
+ * @brief JIT interface for example 22_padding_splitk_matmul.
  */
 void PaddingSplitkMatmul(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);

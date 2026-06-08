@@ -1,6 +1,7 @@
 import pytest
 import torch
 import torch_npu
+import torch_catlass
 
 pytestmark = pytest.mark.skipif(
     torch_npu.npu.device_count() <= 0,
@@ -41,8 +42,6 @@ def test_w4a8_matmul():
     The golden uses the original (unpacked) int8 B values (B_orig), NOT the
     packed int4 data passed to the kernel.
     """
-    import torch_catlass
-
     m, n, k = 256, 256, 256
 
     a = torch.randint(-8, 8, (m, k), dtype=torch.int8, device="npu")

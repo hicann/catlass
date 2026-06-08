@@ -12,6 +12,7 @@ import re
 import pytest
 import torch
 import torch_npu
+import torch_catlass
 
 
 def _is_ascend950() -> bool:
@@ -29,8 +30,6 @@ pytestmark = pytest.mark.skipif(
 
 def test_ascend950_basic_matmul():
     """Compare CATLASS Ascend950 basic matmul TLA against torch.matmul."""
-    import torch_catlass
-
     m, n, k = 256, 512, 1024
     a = torch.randn(m, k, dtype=torch.float32, device="npu")
     b = torch.randn(k, n, dtype=torch.float32, device="npu")

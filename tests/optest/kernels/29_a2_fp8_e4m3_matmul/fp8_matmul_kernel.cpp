@@ -8,14 +8,13 @@
 #include "catlass/catlass.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
-#include "catlass/gemm/device/device_gemm.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 #include "catlass/layout/layout.hpp"
-#include "catlass/status.hpp"
 
 #include "catlass_kernel.h"
 #include "common/workspace_alloc.h"
+#include "common/kernel_runner.h"
 
 using namespace Catlass;
 
@@ -63,52 +62,17 @@ using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
 
 using MatmulKernel = Gemm::Kernel::FP8Matmul<BlockMmadOpt, BlockEpilogue, BlockScheduler, mScalar, nScalar, splitkLength>;
 
-__global__ __aicore__ void fp8_matmul_entry(MatmulKernel::Params params)
-{
-    MatmulKernel op;
-    op(params);
-}
-
-extern "C" int rtGetC2cCtrlAddr(uint64_t*, uint32_t*);
-
 extern "C" void A2Fp8E4M3Matmul(
     const uint32_t blockNum, aclrtStream stream, const CatlassKernel::TParams& tParams,
     const CatlassKernel::MatmulParams& params)
 {
-    uint32_t m = params.m;
-    uint32_t n = params.n;
-    uint32_t k = params.k;
-
-    uint8_t* deviceA = params.inputAddr[0];
-    uint8_t* deviceB = params.inputAddr[1];
-    uint8_t* deviceC = params.outputAddr[0];
-
+    GemmCoord shape{params.m, params.n, params.k};
     half scalar = 1.0;
     half zeroPoint = 0.0;
 
-    uint64_t fftsAddr{0};
-    uint32_t fftsLen{0};
-    rtGetC2cCtrlAddr(&fftsAddr, &fftsLen);
+    typename MatmulKernel::Arguments arguments{
+        shape, blockNum, params.inputAddr[0], params.inputAddr[1],
+        params.outputAddr[0], scalar, zeroPoint};
 
-    using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
-    MatmulKernel::Arguments arguments{
-        GemmCoord{m, n, k}, blockNum, deviceA, deviceB, deviceC,
-        scalar, zeroPoint};
-
-    size_t wsSize = MatmulAdapter::GetWorkspaceSize(arguments);
-    uint8_t* ws = nullptr;
-    if (wsSize > 0) {
-        if (g_catlassWorkspaceAlloc) {
-            ws = g_catlassWorkspaceAlloc(wsSize);
-        } else {
-            aclrtMalloc(reinterpret_cast<void**>(&ws), wsSize, ACL_MEM_MALLOC_HUGE_FIRST);
-        }
-    }
-    MatmulAdapter matmulOp;
-    matmulOp.Initialize(arguments, ws);
-    matmulOp.Run(stream, blockNum, fftsAddr);
-    aclrtSynchronizeStream(stream);
-    if (ws && !g_catlassWorkspaceAlloc) {
-        aclrtFree(ws);
-    }
+    Catlass::RunKernel<MatmulKernel>(arguments, stream, blockNum);
 }

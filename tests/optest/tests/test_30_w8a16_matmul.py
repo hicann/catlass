@@ -1,6 +1,7 @@
 import pytest
 import torch
 import torch_npu
+import torch_catlass
 
 pytestmark = pytest.mark.skipif(
     torch_npu.npu.device_count() <= 0,
@@ -15,8 +16,6 @@ def test_w8a16_matmul():
     A is fp16, B is int8 dequantized to fp16 via prologue (identity: val * 1.0 + 0.0).
     Then C = A @ B_fp16
     """
-    import torch_catlass
-
     m, n, k = 256, 256, 256
 
     a = torch.randn(m, k, dtype=torch.float16, device="npu")
