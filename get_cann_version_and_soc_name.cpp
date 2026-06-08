@@ -39,11 +39,11 @@ int main()
     }
 
     const char* socName = aclrtGetSocName();
-    fprintf(stderr, "[ERROR] aclrtGetSocName failed\n");
     if (socName) {
         fprintf(stdout, "%s %s\n", version, socName);
     } else {
         fprintf(stdout, "%s\n", version);
+        fprintf(stderr, "[ERROR] aclrtGetSocName failed\n"); // cmake only gets stdout
     }
     return 0;
 }
