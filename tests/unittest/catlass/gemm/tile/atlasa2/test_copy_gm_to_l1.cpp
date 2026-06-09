@@ -424,6 +424,42 @@ TEST_P(TileCopyGmToL1TestAtlasA2, PaddingRowMajorTozNIntervalDataCopyHalf)
     }
 }
 
+
+// RowMajorToVectorTestBasic
+TEST_P(TileCopyGmToL1TestAtlasA2, RowMajorToVectorTestBasic)
+{
+    using Element = float;
+    using ArchTag = Catlass::Arch::AtlasA2;
+    using LayoutSrc = layout::RowMajor;
+    using LayoutDst = layout::VectorLayout;
+    using GmTypeSrc = Gemm::GemmType<Element, LayoutSrc, AscendC::TPosition::GM>;
+    using L1TypeDst = Gemm::GemmType<Element, LayoutDst, AscendC::TPosition::A1>;
+    constexpr uint32_t ELE_NUM_PER_C0 = BytesToBits(BYTE_PER_C0) / SizeOfBits<Element>::value;
+
+    CopyGmToL1<ArchTag, GmTypeSrc, L1TypeDst> copyGmToL1;
+
+    AscendC::GlobalTensor<Element> gmTensor;
+    AscendC::LocalTensor<Element> l1Tensor;
+
+    setShape<Element>();
+    LayoutSrc layoutSrc{_row, _col};
+    LayoutDst layoutDst{_col};
+
+    // Call this datacopy
+    copyGmToL1(l1Tensor, gmTensor, layoutDst, layoutSrc);
+
+    auto logs = AscendCCallLogger::Instance().GetLogs();
+    ASSERT_EQ(logs.size(), 1);
+    AscendCCallLog logTileCopy = logs[0];
+    BaseCheck<Element>(logTileCopy);
+
+    const auto* p = logTileCopy.GetArgsAt(2).Value<AscendC::DataCopyParams>();
+    ASSERT_EQ(p->blockCount, 1);
+    ASSERT_EQ(p->blockLen, _cols_by_fractal);
+    ASSERT_EQ(p->srcStride, 0);
+    ASSERT_EQ(p->dstStride, 0);
+}
+
 ///////////////////////////// TEST WITH PARAMETERIC GROUPS
 INSTANTIATE_TEST_SUITE_P(
     CopyGmToL1,

@@ -1970,6 +1970,34 @@ struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::VectorLayout, AscendC
     }
 };
 
+// For copying fused per channel / group dequant scale from GM to L1.
+// Scale data is stored as RowMajor in GM and loaded as VectorLayout in L1.
+template <class ArchTag, class Element>
+struct CopyGmToL1<ArchTag, Gemm::GemmType<Element, layout::RowMajor, AscendC::TPosition::GM>,
+    Gemm::GemmType<Element, layout::VectorLayout, AscendC::TPosition::A1>> {
+    using LayoutDst = layout::VectorLayout;
+    using LayoutSrc = layout::RowMajor;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = BytesToBits(BYTE_PER_C0) / SizeOfBits<Element>::value;
+
+    CATLASS_DEVICE
+    CopyGmToL1() {};
+
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::GlobalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+    {
+        AscendC::DataCopyParams intriParams;
+        intriParams.blockCount = 1;
+        intriParams.blockLen = CeilDiv<ELE_NUM_PER_C0>(layoutDst.shape(0));
+        intriParams.srcStride = 0;
+        intriParams.dstStride = 0;
+        AscendC::DataCopy(dstTensor, srcTensor, intriParams);
+    }
+};
+
 /// Partial specialization for CopyGmToL1, AtlasA2, RowMajor or ColumnMajor in and zN out.
 template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
 struct TileCopySparseTla<Arch::AtlasA2,
