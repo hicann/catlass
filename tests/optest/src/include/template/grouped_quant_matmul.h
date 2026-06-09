@@ -26,7 +26,7 @@ struct GroupedQuantMatmulLike {
         const at::Tensor& perTokenScale,
         const c10::ScalarType& outDType, bool transA, bool transB,
         bool useNzA, bool useNzB,
-        CatlassKernel::MatmulTParams& tParams,
+        CatlassKernel::TParams& tParams,
         CatlassKernel::GroupedMatmulParams& params)
     {
         tParams.element["A"] = TorchDtypeToAclDtype(mat1.scalar_type());
@@ -105,7 +105,7 @@ struct GroupedQuantMatmulLike {
         const c10::ScalarType& outDType, bool transA, bool transB,
         bool useNzA, bool useNzB)
     {
-        CatlassKernel::MatmulTParams tParams;
+        CatlassKernel::TParams tParams;
         CatlassKernel::GroupedMatmulParams params;
         GetKernelInfo(mat1, mat2, groupList, scale, perTokenScale,
                       outDType, transA, transB, useNzA, useNzB, tParams, params);

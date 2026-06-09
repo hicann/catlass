@@ -90,6 +90,9 @@ struct tuple : detail::TupleBase<make_index_sequence<sizeof...(T)>, T...> {
     tuple(T const&... t) : detail::TupleBase<make_index_sequence<sizeof...(T)>, T...>(t...) {}
 };
 
+template <>
+struct tuple<> {};
+
 // get for tla::tuple
 template <size_t I, class... T>
 CATLASS_HOST_DEVICE constexpr

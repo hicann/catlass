@@ -138,15 +138,15 @@ typename MatmulKernel::Arguments arguments{
 
 ## 第五步：编译与执行
 
-以 `39_ascend950_matmul_add_evg` 为例，编译方式和其他样例一致：
+以 [`64_ascend950_matmul_evg_add`](../../../../examples/64_ascend950_matmul_evg/matmul_evg_add.cpp) 为例，编译方式和其他样例一致：
 
 ```bash
-bash scripts/build.sh 39_ascend950_matmul_add_evg -DCATLASS_ARCH=3510
+bash scripts/build.sh 64_ascend950_matmul_evg_add -DCATLASS_ARCH=3510
 ```
 
 ```bash
 cd output/bin
-./39_ascend950_matmul_add_evg 256 512 1024 0
+./64_ascend950_matmul_evg_add 256 512 1024 0
 ```
 
 出现 `Compare success.` 说明这条 `Matmul + Add` 链路的结果符合预期。
@@ -164,4 +164,14 @@ cd output/bin
 - `include/catlass/epilogue/fusion/fusion.hpp`
 - `include/catlass/gemm/kernel/basic_matmul_tla_visitor.hpp`
 - `include/catlass/epilogue/block/block_epilogue_visitor.hpp`
-- EVG 样例代码
+- EVG 样例代码（均位于 [`examples/64_ascend950_matmul_evg/`](../../../../examples/64_ascend950_matmul_evg/)）：
+
+| 场景 | 源文件 | 说明 |
+|------|--------|------|
+| D = C + X（本文示例） | [`matmul_evg_add.cpp`](../../../../examples/64_ascend950_matmul_evg/matmul_evg_add.cpp) | `TreeVisitor`，GM workspace |
+| D = LeakyRelu(C) | [`matmul_evg_leaky_relu.cpp`](../../../../examples/64_ascend950_matmul_evg/matmul_evg_leaky_relu.cpp) | 单算子激活 |
+| D = Sigmoid(C) | [`matmul_evg_sigmoid.cpp`](../../../../examples/64_ascend950_matmul_evg/matmul_evg_sigmoid.cpp) | 单算子激活 |
+| D = Silu(C) | [`matmul_evg_silu.cpp`](../../../../examples/64_ascend950_matmul_evg/matmul_evg_silu.cpp) | 单算子激活 |
+| D = Tanh(C) | [`matmul_evg_tanh.cpp`](../../../../examples/64_ascend950_matmul_evg/matmul_evg_tanh.cpp) | `TopologicalVisitor` 多节点图 |
+| D = C + bias | [`matmul_evg_bias.cpp`](../../../../examples/64_ascend950_matmul_evg/matmul_evg_bias.cpp) | `VisitorRowBroadcast` 行广播 |
+| D = C + X（UB 路径） | [`matmul_evg_add_ub.cpp`](../../../../examples/64_ascend950_matmul_evg/matmul_evg_add_ub.cpp) | L0C→UB workspace，配合 `BasicMatmulTlaUbVisitor` |

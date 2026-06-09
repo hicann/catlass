@@ -158,6 +158,15 @@ struct EpilogueAscend950PerBlockQuantTla{
     using ArchTag = Arch::Ascend950;
     static constexpr uint32_t UB_STAGES = UB_STAGES_;
 };
+
+// For Epilogue with Visitor(EVG)
+// 模板参数 USE_UB_WORKSPACE_ 控制是否使用 UB 作为 MMAD 的 workspace
+// - false: 使用 GM workspace
+// - true:  使用 UB workspace
+template<bool USE_UB_WORKSPACE_ = false>
+struct EpilogueVisitor {
+    static constexpr bool USE_UB_WORKSPACE = USE_UB_WORKSPACE_;
+};
 }  // namespace Catlass::Epilogue
 
 #endif  // CATLASS_EPILOGUE_DISPATCH_POLICY_HPP

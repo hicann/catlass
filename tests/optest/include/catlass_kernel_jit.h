@@ -55,8 +55,6 @@ struct TParams : TParamsBase {
     }
 };
 
-using MatmulTParams = TParams;
-
 /**
  * @brief Runtime matrix parameters shared by numbered matmul-family examples.
  */
@@ -67,6 +65,11 @@ struct MatmulParams {
     uint32_t batch = 1;               ///< Batch dimension for batched variants.
     std::vector<uint8_t*> inputAddr;  ///< Input buffer addresses.
     std::vector<uint8_t*> outputAddr; ///< Output buffer addresses.
+};
+
+struct MatmulEvgParams : public MatmulParams {
+    std::string evgType; ///< EVG postprocess mode (example 64 matmul_evg).
+    float negativeSlope = 1;
 };
 
 /**
@@ -404,6 +407,13 @@ void Ascend950A8W4MxMatmul(
  */
 void Ascend950GroupedMatmulSliceM(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GroupedMatmulParams& params);
+
+/**
+ * @brief JIT interface for example 64_ascend950_matmul_evg (unified EVG matmul entry).
+ *
+ * Selects the JIT template via ``params.evgType`` (e.g. add, add_ub, bias, leaky_relu, ...).
+ */
+void MatmulEvg(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulEvgParams& params);
 
 /**
  * @brief Reserved JIT interface for example 102_dynamic_optimized_matmul.

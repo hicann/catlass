@@ -58,7 +58,7 @@ struct MxMatmulLike {
 
     static void GetKernelInfo(
         const at::Tensor& mat1, const at::Tensor& mat2, const at::Tensor& mx_scale_a,
-        const at::Tensor& mx_scale_b, bool transA, bool transB, CatlassKernel::MatmulTParams& tParams,
+        const at::Tensor& mx_scale_b, bool transA, bool transB, CatlassKernel::TParams& tParams,
         CatlassKernel::MatmulParams& params)
     {
         tParams.element["A"] = TorchDtypeToAclDtype(mat1.scalar_type());
@@ -128,7 +128,7 @@ struct MxMatmulLike {
         const at::Tensor& mat1, const at::Tensor& mat2, const at::Tensor& mx_scale_a,
         const at::Tensor& mx_scale_b, bool transA, bool transB)
     {
-        CatlassKernel::MatmulTParams tParams;
+        CatlassKernel::TParams tParams;
         CatlassKernel::MatmulParams params;
         GetKernelInfo(mat1, mat2, mx_scale_a, mx_scale_b, transA, transB, tParams, params);
         OutputType output = AllocOutput(params);

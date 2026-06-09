@@ -24,6 +24,7 @@
 #include "template/grouped_matmul.h"
 #include "template/grouped_quant_matmul.h"
 #include "template/matmul.h"
+#include "template/matmul_evg.h"
 #include "template/matmul_extra.h"
 #include "template/mla.h"
 #include "template/mx_matmul.h"
@@ -192,6 +193,10 @@ REGISTER_TORCH_FUNC(ascend950_fp8_mx_matmul_aswt);
 using Ascend950Fp4MxMatmulAswtOp = MxMatmulLike<CatlassKernel::Ascend950Fp4MxMatmulAswt>;
 static auto& ascend950_fp4_mx_matmul_aswt = Ascend950Fp4MxMatmulAswtOp::Run;
 REGISTER_TORCH_FUNC(ascend950_fp4_mx_matmul_aswt);
+
+using MatmulEvgOp = MatmulEvgLike<CatlassKernel::MatmulEvg>;
+static auto& matmul_evg = MatmulEvgOp::Run;
+REGISTER_TORCH_FUNC(matmul_evg);
 
 static auto& mla = MlaOp::Run;
 REGISTER_TORCH_FUNC(mla);

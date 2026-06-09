@@ -60,6 +60,8 @@ __all__ = [
     "ascend950_fp8_mx_matmul_aswt",
     "ascend950_fp4_mx_matmul_aswt",
     "mla",
+    "ascend950_matmul_evg",
+    "EvgPostprocessMode",
     "flash_attention_infer",
     "flash_attention_infer_tla",
     "clear_jit_cache",

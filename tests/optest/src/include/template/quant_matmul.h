@@ -33,7 +33,7 @@ struct QuantMatmulLike {
         const at::Tensor& scale, const at::Tensor& perTokenScale,
         const c10::ScalarType& outDType, bool transA, bool transB,
         bool formatA, bool formatB,
-        CatlassKernel::MatmulTParams& tParams,
+        CatlassKernel::TParams& tParams,
         CatlassKernel::MatmulParams& params)
     {
         tParams.element["A"] = TorchDtypeToAclDtype(mat1.scalar_type());
@@ -74,7 +74,7 @@ struct QuantMatmulLike {
     }
 
     static OutputType AllocOutput(
-        const CatlassKernel::MatmulTParams& tParams, CatlassKernel::MatmulParams& params)
+        const CatlassKernel::TParams& tParams, CatlassKernel::MatmulParams& params)
     {
         OutputType output = GetOutputTensor(
             {params.m, params.n}, AclDtypeToTorchDtype(tParams.elem("D")));
@@ -89,7 +89,7 @@ struct QuantMatmulLike {
         const c10::ScalarType& outDType, bool transA, bool transB,
         bool formatA, bool formatB)
     {
-        CatlassKernel::MatmulTParams tParams;
+        CatlassKernel::TParams tParams;
         CatlassKernel::MatmulParams params;
         GetKernelInfo(mat1, mat2, scale, perTokenScale, outDType, transA, transB, formatA, formatB, tParams, params);
         OutputType output = AllocOutput(tParams, params);

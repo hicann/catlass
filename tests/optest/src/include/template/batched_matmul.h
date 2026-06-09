@@ -21,7 +21,7 @@ struct BatchedMatmulLike {
         const at::Tensor& mat1, const at::Tensor& mat2,
         const c10::ScalarType& outDType, bool transA, bool transB,
         bool useNzA, bool useNzB,
-        CatlassKernel::MatmulTParams& tParams,
+        CatlassKernel::TParams& tParams,
         CatlassKernel::MatmulParams& params)
     {
         auto aclType = TorchDtypeToAclDtype(mat1.scalar_type());
@@ -63,7 +63,7 @@ struct BatchedMatmulLike {
     }
 
     static OutputType AllocOutput(
-        const CatlassKernel::MatmulTParams& tParams, CatlassKernel::MatmulParams& params)
+        const CatlassKernel::TParams& tParams, CatlassKernel::MatmulParams& params)
     {
         OutputType output = GetOutputTensor(
             {static_cast<int64_t>(params.batch), params.m, params.n},
@@ -78,7 +78,7 @@ struct BatchedMatmulLike {
         const c10::ScalarType& outDType, bool transA, bool transB,
         bool useNzA, bool useNzB)
     {
-        CatlassKernel::MatmulTParams tParams;
+        CatlassKernel::TParams tParams;
         CatlassKernel::MatmulParams  params;
         GetKernelInfo(mat1, mat2, outDType, transA, transB, useNzA, useNzB, tParams, params);
         OutputType output = AllocOutput(tParams, params);

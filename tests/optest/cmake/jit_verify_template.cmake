@@ -24,24 +24,28 @@
 # ---------------------------------------------------------------------------
 
 function(jit_verify_template)
-    cmake_parse_arguments(_TV "" "NAME;TEMPLATE" "NPU_ARCH_LIST;INCLUDE_DIRS" ${ARGN})
+    cmake_parse_arguments(_TV "" "NAME" "NPU_ARCH_LIST;INCLUDE_DIRS;TEMPLATE" ${ARGN})
 
     if(NOT _TV_NAME OR NOT _TV_TEMPLATE OR NOT _TV_NPU_ARCH_LIST)
         message(FATAL_ERROR "jit_verify_template: NAME, TEMPLATE, NPU_ARCH_LIST required")
     endif()
 
-    if(NOT IS_ABSOLUTE "${_TV_TEMPLATE}")
-        set(_TV_TEMPLATE "${CMAKE_CURRENT_SOURCE_DIR}/${_TV_TEMPLATE}")
-    endif()
-
-    if(NOT EXISTS "${_TV_TEMPLATE}")
-        message(FATAL_ERROR "jit_verify_template: template not found at ${_TV_TEMPLATE}")
-    endif()
+    # 将所有 template 路径解析为绝对路径，并校验存在
+    set(_TV_TEMPLATE_ABS "")
+    foreach(_TPL ${_TV_TEMPLATE})
+        if(NOT IS_ABSOLUTE "${_TPL}")
+            set(_TPL "${CMAKE_CURRENT_SOURCE_DIR}/${_TPL}")
+        endif()
+        if(NOT EXISTS "${_TPL}")
+            message(FATAL_ERROR "jit_verify_template: template not found at ${_TPL}")
+        endif()
+        list(APPEND _TV_TEMPLATE_ABS "${_TPL}")
+    endforeach()
 
     foreach(_ARCH ${_TV_NPU_ARCH_LIST})
         set(_TGT jit_verify_${_TV_NAME}_${_ARCH})
-        add_library(${_TGT} OBJECT EXCLUDE_FROM_ALL ${_TV_TEMPLATE})
-        set_source_files_properties(${_TV_TEMPLATE} PROPERTIES LANGUAGE ASC)
+        add_library(${_TGT} OBJECT EXCLUDE_FROM_ALL ${_TV_TEMPLATE_ABS})
+        set_source_files_properties(${_TV_TEMPLATE_ABS} PROPERTIES LANGUAGE ASC)
         target_compile_options(${_TGT} PRIVATE
             -DCATLASS_ARCH=${_ARCH}
             --npu-arch=dav-${_ARCH}

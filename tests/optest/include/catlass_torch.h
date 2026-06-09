@@ -115,6 +115,17 @@ at::Tensor ascend950_fp4_mx_matmul_aswt(
     const bool transA, const bool transB);
 
 /**
+ * @brief PyTorch extension entry for CATLASS Ascend950 EVG matmul (example 64_ascend950_matmul_evg).
+ *
+ * Post-processing mode is selected via ``evgType`` (add, add_ub, bias, leaky_relu, sigmoid, silu, tanh).
+ * ``extra`` is required for add/add_ub (2-D) and bias (1-D); ignored for unary activation modes.
+ */
+at::Tensor matmul_evg(
+    const at::Tensor& mat1, const at::Tensor& mat2, const at::Tensor& extra, const c10::ScalarType& outDType,
+    const std::string& evgType, const double negativeSlope, const bool transA, const bool transB, const bool formatA,
+    const bool formatB);
+
+/**
  * @brief PyTorch extension entry for CATLASS FP8 E4M3 matmul (prologue dequant).
  *
  * Source: example 29_a2_fp8_e4m3_matmul.

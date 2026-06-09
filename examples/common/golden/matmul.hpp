@@ -502,6 +502,78 @@ void ComputeMatmulElemWiseSilu(const GemmCoord &problemShape, const std::vector<
         Silu<ElementGolden>{});
 }
 
+template <class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementGolden, class LayoutGolden>
+void ComputeMatmulElemWiseLeakyRelu(
+    const GemmCoord &problemShape, const std::vector<ElementA> &dataA, const LayoutA &layoutA,
+    const std::vector<ElementB> &dataB, const LayoutB &layoutB, std::vector<ElementGolden> &dataGolden,
+    const LayoutGolden &layoutGolden, ElementGolden scalar)
+{
+    for (uint32_t i = 0; i < problemShape.m(); ++i) {
+        for (uint32_t j = 0; j < problemShape.n(); ++j) {
+            size_t offsetGolden = layoutGolden.GetOffset(MakeCoord(i, j));
+            ElementGolden accumulator = 0;
+            for (uint32_t k = 0; k < problemShape.k(); ++k) {
+                size_t offsetA = layoutA.GetOffset(MakeCoord(i, k));
+                size_t offsetB = layoutB.GetOffset(MakeCoord(k, j));
+                accumulator += static_cast<ElementGolden>(dataA[offsetA]) * static_cast<ElementGolden>(dataB[offsetB]);
+            }
+            dataGolden[offsetGolden] = accumulator < ElementGolden(0) ? scalar * accumulator : accumulator;
+        }
+    }
+}
+
+template <
+    class ElementA, class LayoutA,
+    class ElementB, class LayoutB,
+    class ElementGolden, class LayoutGolden
+>
+void ComputeMatmulElemWiseTanh(
+    const GemmCoord &problemShape,
+    const std::vector<ElementA> &dataA, const LayoutA &layoutA,
+    const std::vector<ElementB> &dataB, const LayoutB &layoutB,
+    std::vector<ElementGolden> &dataGolden, const LayoutGolden &layoutGolden
+)
+{
+    for (uint32_t i = 0; i < problemShape.m(); ++i) {
+        for (uint32_t j = 0; j < problemShape.n(); ++j) {
+            ElementGolden accumulator = 0;
+            for (uint32_t k = 0; k < problemShape.k(); ++k) {
+                size_t offsetA = layoutA.GetOffset(MakeCoord(i, k));
+                size_t offsetB = layoutB.GetOffset(MakeCoord(k, j));
+                accumulator += static_cast<ElementGolden>(dataA[offsetA]) * static_cast<ElementGolden>(dataB[offsetB]);
+            }
+            size_t offsetGolden = layoutGolden.GetOffset(MakeCoord(i, j));
+            dataGolden[offsetGolden] = tanh(accumulator);
+        }
+    }
+}
+
+template <
+    class ElementA, class LayoutA,
+    class ElementB, class LayoutB,
+    class ElementGolden, class LayoutGolden
+>
+void ComputeMatmulElemWiseSigmoid(
+    const GemmCoord &problemShape,
+    const std::vector<ElementA> &dataA, const LayoutA &layoutA,
+    const std::vector<ElementB> &dataB, const LayoutB &layoutB,
+    std::vector<ElementGolden> &dataGolden, const LayoutGolden &layoutGolden
+)
+{
+    for (uint32_t i = 0; i < problemShape.m(); ++i) {
+        for (uint32_t j = 0; j < problemShape.n(); ++j) {
+            ElementGolden accumulator = 0;
+            for (uint32_t k = 0; k < problemShape.k(); ++k) {
+                size_t offsetA = layoutA.GetOffset(MakeCoord(i, k));
+                size_t offsetB = layoutB.GetOffset(MakeCoord(k, j));
+                accumulator += static_cast<ElementGolden>(dataA[offsetA]) * static_cast<ElementGolden>(dataB[offsetB]);
+            }
+            size_t offsetGolden = layoutGolden.GetOffset(MakeCoord(i, j));
+            dataGolden[offsetGolden] = 1 / (1 + exp(-accumulator));
+        }
+    }
+}
+
 template <
     class LayoutA,
     class LayoutB,

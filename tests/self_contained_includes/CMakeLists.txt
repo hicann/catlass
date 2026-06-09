@@ -33,6 +33,11 @@ foreach(ARCH_CONFIG ${ARCH_CONFIGS})
     endif()
 endforeach()
 
+# EVG (epilogue/fusion) is Ascend950-only; skip on Atlas A2/A3 UT.
+if(NOT CATLASS_ARCH STREQUAL "3510")
+    list(FILTER CATLASS_HEADERS EXCLUDE REGEX "epilogue/fusion")
+endif()
+
 # non-tla tile components of ascend950 is not ready, gemv and conv do not work.
 if(CATLASS_ARCH STREQUAL "3510")
     list(FILTER CATLASS_HEADERS EXCLUDE REGEX "gemv")

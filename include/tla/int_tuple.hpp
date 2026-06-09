@@ -66,6 +66,28 @@ auto transform_apply(T&& t, F&& f, G&& g)
     }
 }
 
+template <class T0, class T1, class F, class G>
+CATLASS_HOST_DEVICE constexpr
+auto transform_apply(T0&& t0, T1&& t1, F&& f, G&& g)
+{
+    if constexpr (is_tuple<remove_cvref_t<T0>>::value) {
+        return detail::tapply(static_cast<T0&&>(t0), static_cast<T1&&>(t1), f, g, tuple_seq<T0>{});
+    } else {
+        return g(f(static_cast<T0&&>(t0), static_cast<T1&&>(t1)));
+    }
+}
+
+template <class T, class F>
+CATLASS_HOST_DEVICE constexpr
+void for_each(T&& t, F&& f)
+{
+    if constexpr (is_tuple<remove_cvref_t<T>>::value) {
+        return detail::apply(t, [&](auto&&... a) { (f(static_cast<decltype(a)&&>(a)), ...); }, tuple_seq<T>{});
+    } else {
+        return f(static_cast<T&&>(t));
+    }
+}
+
 struct UnpackedMakeTuple {
     template <class... T>
     CATLASS_HOST_DEVICE constexpr

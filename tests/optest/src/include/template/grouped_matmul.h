@@ -24,7 +24,7 @@ struct GroupedMatmulLike {
         const at::Tensor& mat1, const at::Tensor& mat2, const at::Tensor& groupOnDevice,
         const c10::ScalarType& outDType, bool transA, bool transB,
         bool useNzA, bool useNzB,
-        CatlassKernel::MatmulTParams& tParams,
+        CatlassKernel::TParams& tParams,
         CatlassKernel::GroupedMatmulParams& params)
     {
         auto aclType = TorchDtypeToAclDtype(mat1.scalar_type());
@@ -93,7 +93,7 @@ struct GroupedMatmulLike {
         const c10::ScalarType& outDType, bool transA, bool transB,
         bool useNzA, bool useNzB)
     {
-        CatlassKernel::MatmulTParams tParams;
+        CatlassKernel::TParams tParams;
         CatlassKernel::GroupedMatmulParams params;
         TORCH_CHECK(groupList.dtype() == torch::kInt64, "groupList must be int64");
         GetKernelInfo(mat1, mat2, groupList, outDType, transA, transB, useNzA, useNzB, tParams, params);

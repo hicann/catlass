@@ -56,8 +56,8 @@ set(_JIT_KERNEL_TEMPLATES "")
 
 macro(add_kernel)
     set(_K_OPTIONS "")
-    set(_K_ONE_VALUE "NAME;KERNEL_TYPE;TEMPLATE")
-    set(_K_MULTI_VALUE "NPU_ARCH_LIST")
+    set(_K_ONE_VALUE "NAME;KERNEL_TYPE")
+    set(_K_MULTI_VALUE "NPU_ARCH_LIST;TEMPLATE")
     cmake_parse_arguments(_K "${_K_OPTIONS}" "${_K_ONE_VALUE}" "${_K_MULTI_VALUE}" ${ARGN})
 
     # 参数校验
@@ -76,14 +76,16 @@ macro(add_kernel)
         # JIT 模式 — 收集源文件到统一库
         # -------------------------------------------------------
         set(_KERNEL_ENTRY "${_K_UNPARSED_ARGUMENTS}")
-        set(_KERNEL_TEMPLATE "${_K_TEMPLATE}")
 
         # 收集 entry 源文件到列表，构建时统一编译
         list(APPEND _JIT_KERNEL_ENTRIES "${_KERNEL_ENTRY}")
         set(_JIT_KERNEL_ENTRIES ${_JIT_KERNEL_ENTRIES} PARENT_SCOPE)
 
-        if(_KERNEL_TEMPLATE)
-            list(APPEND _JIT_KERNEL_TEMPLATES "${_KERNEL_TEMPLATE}")
+        if(_K_TEMPLATE)
+            # 收集所有 template 源文件，用于运行时分发
+            foreach(_TEMPLATE_FILE ${_K_TEMPLATE})
+                list(APPEND _JIT_KERNEL_TEMPLATES "${_TEMPLATE_FILE}")
+            endforeach()
             set(_JIT_KERNEL_TEMPLATES ${_JIT_KERNEL_TEMPLATES} PARENT_SCOPE)
 
             set(_JIT_INCLUDE_DIRS
@@ -95,12 +97,16 @@ macro(add_kernel)
                 "${CMAKE_BINARY_DIR}"
             )
 
-            jit_verify_template(
-                NAME "${_K_NAME}"
-                TEMPLATE "${_KERNEL_TEMPLATE}"
-                NPU_ARCH_LIST ${_K_NPU_ARCH_LIST}
-                INCLUDE_DIRS ${_JIT_INCLUDE_DIRS}
-            )
+            # 为每个 template 生成独立的 verify 目标（target 名按文件 stem 区分）
+            foreach(_TEMPLATE_FILE ${_K_TEMPLATE})
+                get_filename_component(_TEMPLATE_STEM ${_TEMPLATE_FILE} NAME_WE)
+                jit_verify_template(
+                    NAME "${_K_NAME}_${_TEMPLATE_STEM}"
+                    TEMPLATE "${_TEMPLATE_FILE}"
+                    NPU_ARCH_LIST ${_K_NPU_ARCH_LIST}
+                    INCLUDE_DIRS ${_JIT_INCLUDE_DIRS}
+                )
+            endforeach()
         endif()
 
     elseif("${_K_KERNEL_TYPE}" STREQUAL "prebuilt")
@@ -231,6 +237,7 @@ add_subdirectory(45_strided_batched_matmul_tla)
 add_subdirectory(52_quant_multi_core_splitk_matmul_tla)
 add_subdirectory(53_ascend950_fp8_mx_matmul)
 add_subdirectory(54_ascend950_fp4_mx_matmul)
+add_subdirectory(64_ascend950_matmul_evg)
 
 if(_JIT_KERNEL_ENTRIES)
     set(_JIT_TARGET catlass_kernel_jit)

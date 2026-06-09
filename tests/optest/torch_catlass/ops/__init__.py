@@ -47,6 +47,7 @@ from .quant_matmul_full_loadA_tla import quant_matmul_full_loadA_tla  # example 
 from .strided_batched_matmul_tla import strided_batched_matmul_tla  # example 45
 from .quant_multi_core_splitk_matmul_tla import quant_multi_core_splitk_matmul_tla  # example 52
 from .ascend950_mx_matmul import ascend950_fp8_mx_matmul_aswt, ascend950_fp4_mx_matmul_aswt  # example 53, 54
+from .ascend950_matmul_evg import EvgPostprocessMode, ascend950_matmul_evg  # example 64
 
 __all__ = [
     "basic_matmul",                       # example 00
@@ -88,4 +89,6 @@ __all__ = [
     "quant_multi_core_splitk_matmul_tla", # example 52
     "ascend950_fp8_mx_matmul_aswt",       # example 53
     "ascend950_fp4_mx_matmul_aswt",       # example 54
+    "ascend950_matmul_evg",               # example 64
+    "EvgPostprocessMode",                 # example 64
 ]

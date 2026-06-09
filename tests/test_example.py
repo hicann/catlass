@@ -439,7 +439,14 @@ normal_cases_3510 = [
     "50_ascend950_basic_matmul_gemv 1 128 127 0",
     "51_ascend950_quant_matmul_per_group_per_block_tla 256 512 1024 0",
     "56_ascend950_basic_conv2d_tla 2 33 43 112 80 3 3 2 2 2 2 1 1 1 1 0",
-    "60_ascend950_grouped_matmul_slice_m 128 512 1024 2048 0"
+    "60_ascend950_grouped_matmul_slice_m 128 512 1024 2048 0",
+    "64_ascend950_matmul_evg_add 256 512 1024 0",
+    "64_ascend950_matmul_evg_leaky_relu 256 512 1024 0",
+    "64_ascend950_matmul_evg_sigmoid 256 512 1024 0",
+    "64_ascend950_matmul_evg_silu 256 512 1024 0",
+    "64_ascend950_matmul_evg_tanh 256 512 1024 0",
+    "64_ascend950_matmul_evg_bias 256 512 1024 0",
+    "64_ascend950_matmul_evg_add_ub 256 512 1024 0",
 ]
 
 

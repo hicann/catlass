@@ -32,7 +32,7 @@ struct StridedBatchedMatmulLike {
         const at::Tensor& mat1, const at::Tensor& mat2,
         const c10::ScalarType& outDType, bool transA, bool transB,
         bool formatA, bool formatB,
-        CatlassKernel::MatmulTParams& tParams,
+        CatlassKernel::TParams& tParams,
         CatlassKernel::StridedBatchedMatmulParams& params)
     {
         tParams.element["A"] = TorchDtypeToAclDtype(mat1.scalar_type());
@@ -78,7 +78,7 @@ struct StridedBatchedMatmulLike {
     }
 
     static OutputType AllocOutput(
-        const CatlassKernel::MatmulTParams& tParams, CatlassKernel::StridedBatchedMatmulParams& params)
+        const CatlassKernel::TParams& tParams, CatlassKernel::StridedBatchedMatmulParams& params)
     {
         OutputType output = GetOutputTensor(
             {params.batch, params.m, params.n}, AclDtypeToTorchDtype(tParams.elem("C")));
@@ -92,7 +92,7 @@ struct StridedBatchedMatmulLike {
         const c10::ScalarType& outDType, bool transA, bool transB,
         bool formatA, bool formatB)
     {
-        CatlassKernel::MatmulTParams tParams;
+        CatlassKernel::TParams tParams;
         CatlassKernel::StridedBatchedMatmulParams params;
         GetKernelInfo(mat1, mat2, outDType, transA, transB, formatA, formatB, tParams, params);
         OutputType output = AllocOutput(tParams, params);
