@@ -14,27 +14,29 @@ from .matmul_add import matmul_add  # example 03
 from .padding_matmul import padding_matmul  # example 04
 from .grouped_matmul_slice_k import grouped_matmul_slice_k  # example 05
 from .optimized_matmul import optimized_matmul  # example 06
-from .basic_matmul_tla import basic_matmul_tla  # example 13
-from .optimized_matmul_tla import optimized_matmul_tla  # example 14
-from .matmul_bias import matmul_bias  # example 20
-from .basic_matmul_preload_zN import basic_matmul_preload_zN  # example 21
-from .flash_attention_infer import flash_attention_infer  # example 23
 from .grouped_matmul_slice_m_per_token_dequant import (
     grouped_matmul_slice_m_per_token_dequant,               # example 07
     grouped_matmul_slice_m_per_token_dequant_multistage,    # example 10
     grouped_matmul_slice_k_per_token_dequant,               # example 11
 )
-from .matmul_full_loadA import matmul_full_loadA  # example 25
 from .splitk_matmul import splitk_matmul  # example 09
 from .quant_matmul import quant_matmul  # example 12
+from .basic_matmul_tla import basic_matmul_tla  # example 13
+from .optimized_matmul_tla import optimized_matmul_tla  # example 14
+from .mla import mla  # example 19
+from .matmul_bias import matmul_bias  # example 20
+from .basic_matmul_preload_zN import basic_matmul_preload_zN  # example 21
 from .padding_splitk_matmul import padding_splitk_matmul  # example 22
+from .flash_attention_infer import flash_attention_infer  # example 23
+from .flash_attention_infer_tla import flash_attention_infer_tla  # example 40
+from .matmul_full_loadA import matmul_full_loadA  # example 25
 from .matmul_relu import matmul_relu  # example 26
 from .matmul_gelu import matmul_gelu  # example 27
 from .matmul_silu import matmul_silu  # example 28
 from .a2_fp8_e4m3_matmul import a2_fp8_e4m3_matmul  # example 29
 from .w8a16_matmul import w8a16_matmul  # example 30
-from .w4a8_matmul import w4a8_matmul  # example 32
 from .small_matmul import small_matmul  # example 31
+from .w4a8_matmul import w4a8_matmul  # example 32
 from .single_core_splitk_matmul import single_core_splitk_matmul  # example 34
 from .streamk_matmul import streamk_matmul  # example 37
 from .big_matmul_tla import big_matmul_tla  # example 39
@@ -54,25 +56,27 @@ __all__ = [
     "padding_matmul",                     # example 04
     "grouped_matmul_slice_k",             # example 05
     "optimized_matmul",                   # example 06
-    "basic_matmul_tla",                   # example 13
-    "optimized_matmul_tla",               # example 14
-    "splitk_matmul",                      # example 09
-    "matmul_bias",                        # example 20
-    "basic_matmul_preload_zN",            # example 21
-    "flash_attention_infer",              # example 23
     "grouped_matmul_slice_m_per_token_dequant",               # example 07
+    "splitk_matmul",                      # example 09
     "grouped_matmul_slice_m_per_token_dequant_multistage",    # example 10
     "grouped_matmul_slice_k_per_token_dequant",               # example 11
     "quant_matmul",                       # example 12
+    "basic_matmul_tla",                   # example 13
+    "optimized_matmul_tla",               # example 14
+    "mla",                                # example 19
+    "matmul_bias",                        # example 20
+    "basic_matmul_preload_zN",            # example 21
     "padding_splitk_matmul",              # example 22
+    "flash_attention_infer",              # example 23
+    "flash_attention_infer_tla",          # example 40
     "matmul_full_loadA",                  # example 25
     "matmul_relu",                        # example 26
     "matmul_gelu",                        # example 27
     "matmul_silu",                        # example 28
     "a2_fp8_e4m3_matmul",                # example 29
     "w8a16_matmul",                       # example 30
-    "w4a8_matmul",                        # example 32
     "small_matmul",                       # example 31
+    "w4a8_matmul",                        # example 32
     "single_core_splitk_matmul",          # example 34
     "streamk_matmul",                     # example 37
     "big_matmul_tla",                     # example 39

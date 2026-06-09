@@ -39,10 +39,12 @@ Python API (`torch_catlass.ops.*`)
 - [x] 12_quant_matmul
 - [x] 13_basic_matmul_tla
 - [x] 14_optimized_matmul_tla
+- [x] 19_mla
 - [x] 20_matmul_bias
 - [x] 21_basic_matmul_preload_zN
 - [x] 22_padding_splitk_matmul
 - [x] 23_flash_attention_infer
+- [x] 40_flash_attention_infer_tla
 - [x] 25_matmul_full_loadA
 - [x] 26_matmul_relu
 - [x] 27_matmul_gelu
@@ -70,11 +72,9 @@ Python API (`torch_catlass.ops.*`)
 - [ ] 16_group_gemm
 - [ ] 17_gemv_aiv
 - [ ] 18_gemv_aic
-- [ ] 19_mla
 - [ ] 24_conv_bias
 - [ ] 33_basic_conv2d
 - [ ] 38_w4a4_per_token_per_channel_dequant
-- [ ] 40_flash_attention_infer_tla
 - [ ] 46_ascend950_matmul_fixpipe_opti
 - [ ] 47_ascend950_grouped_slice_m_dequant
 - [ ] 48_ascend950_grouped_slice_m_pt_pc_dequant

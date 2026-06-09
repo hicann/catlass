@@ -66,17 +66,16 @@ struct FlashAttentionParams : public PrebuiltParams {
 struct MlaParams : public FlashAttentionParams {
     uint32_t qRopeHeadDim = 0;  ///< Q rope head dimension.
     uint32_t kvRopeHeadDim = 0; ///< KV rope head dimension.
+    uint32_t numBlocks = 0;     ///< Total paged KV cache blocks.
+    std::vector<int32_t> qSeqHost;  ///< Host-side Q sequence lengths for tiling.
+    std::vector<int32_t> kvSeqHost; ///< Host-side KV sequence lengths for tiling.
+    std::vector<uint8_t> outputHost; ///< Host-side output staging buffer.
 };
 
 /**
  * @brief Reserved prebuilt interface for example 19_mla.
  */
-void Mla(const uint32_t blockNum, aclrtStream stream, const MlaParams& params);
-
-/**
- * @brief Reserved prebuilt interface for example 23_flash_attention_infer.
- */
-void FlashAttentionInfer(const uint32_t blockNum, aclrtStream stream, const FlashAttentionParams& params);
+void Mla(const uint32_t blockNum, aclrtStream stream, MlaParams& params);
 
 /**
  * @brief Reserved prebuilt interface for example 24_conv_bias.

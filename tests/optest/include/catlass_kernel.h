@@ -147,14 +147,6 @@ void QuantMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo& 
 void ConvBias(uint32_t blockNum, aclrtStream stream, ConvKernelInfo kernelInfo);
 
 /**
- * @brief Flash Attention 推理 kernel。
- * @param blockNum  启用的 AI Core 数量。
- * @param stream    ACL 计算流。
- * @param kernelInfo FlashAttention 参数。
- */
-void FlashAttentionInfer(const uint32_t blockNum, aclrtStream stream, FAKernelInfo kernelInfo);
-
-/**
  * @brief W4A4 量化 MatMul kernel。
  * @param blockNum  启用的 AI Core 数量。
  * @param stream    ACL 计算流。

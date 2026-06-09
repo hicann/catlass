@@ -28,12 +28,22 @@ os.environ["CATLASS_JIT_VERSION"] = _vers["full"]
 __all__ = [
     "ops",
     "basic_matmul",
+    "batched_matmul",
+    "grouped_matmul_slice_m",
+    "matmul_add",
     "padding_matmul",
+    "grouped_matmul_slice_k",
     "optimized_matmul",
+    "grouped_matmul_slice_m_per_token_dequant",
+    "grouped_matmul_slice_m_per_token_dequant_multistage",
+    "grouped_matmul_slice_k_per_token_dequant",
+    "splitk_matmul",
+    "quant_matmul",
     "basic_matmul_tla",
     "optimized_matmul_tla",
     "basic_matmul_preload_zN",
     "matmul_full_loadA",
+    "padding_splitk_matmul",
     "a2_fp8_e4m3_matmul",
     "w8a16_matmul",
     "w4a8_matmul",
@@ -49,7 +59,9 @@ __all__ = [
     "quant_multi_core_splitk_matmul_tla",
     "ascend950_fp8_mx_matmul_aswt",
     "ascend950_fp4_mx_matmul_aswt",
+    "mla",
     "flash_attention_infer",
+    "flash_attention_infer_tla",
     "clear_jit_cache",
     "__version__",
     "__catlass_version__",
@@ -100,10 +112,16 @@ def get_npu_arch():
 
 def _load_so_files(lib_dir):
     """Load every shared object in ``lib_dir`` with global symbol visibility."""
-    for lib_file in os.listdir(lib_dir):
+    for lib_file in sorted(os.listdir(lib_dir)):
         if lib_file.endswith(".so"):
             lib_path = os.path.join(lib_dir, lib_file)
-            _dl_mode = getattr(os, "RTLD_NOW", 0x2) | getattr(os, "RTLD_GLOBAL", 0x100)
+            _dl_mode = getattr(os, "RTLD_NOW", 0x2)
+            if lib_file.endswith("_ms.so"):
+                # Sanitizer builds export the same kernel symbols; keep them local
+                # so dlsym(RTLD_DEFAULT) resolves to the production prebuilt libs.
+                _dl_mode |= getattr(os, "RTLD_LOCAL", 0)
+            else:
+                _dl_mode |= getattr(os, "RTLD_GLOBAL", 0x100)
             ctypes.CDLL(lib_path, mode=_dl_mode)
 
 

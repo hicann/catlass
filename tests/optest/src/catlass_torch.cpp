@@ -25,6 +25,7 @@
 #include "template/grouped_quant_matmul.h"
 #include "template/matmul.h"
 #include "template/matmul_extra.h"
+#include "template/mla.h"
 #include "template/mx_matmul.h"
 #include "template/quant_matmul.h"
 #include "template/sparse_matmul.h"
@@ -192,8 +193,14 @@ using Ascend950Fp4MxMatmulAswtOp = MxMatmulLike<CatlassKernel::Ascend950Fp4MxMat
 static auto& ascend950_fp4_mx_matmul_aswt = Ascend950Fp4MxMatmulAswtOp::Run;
 REGISTER_TORCH_FUNC(ascend950_fp4_mx_matmul_aswt);
 
+static auto& mla = MlaOp::Run;
+REGISTER_TORCH_FUNC(mla);
+
 static auto& flash_attention_infer = FlashAttentionInferOp::Run;
 REGISTER_TORCH_FUNC(flash_attention_infer);
+
+static auto& flash_attention_infer_tla = FlashAttentionInferTLAOp::Run;
+REGISTER_TORCH_FUNC(flash_attention_infer_tla);
 
 using A2Fp8E4M3MatmulOp = MatmulLike<CatlassKernel::A2Fp8E4M3Matmul>;
 static auto& a2_fp8_e4m3_matmul = A2Fp8E4M3MatmulOp::Run;
