@@ -681,14 +681,14 @@ constexpr uint32_t computeLength =
     (ArchTag::UB_SIZE / 3 / 2 / sizeof(ElementC)) / BYTE_PER_C0 * BYTE_PER_C0;
 ```
 
-A5架构中，EVG 样例里通常不会直接按满额去算，按 `216 * 1024` 作为可用预算来计算 `computeLength`，避免实际运行时触发 UB 空间相关报错。写法可以记成：
+Ascend950架构中，EVG 样例里通常不会直接按满额去算，按 `216 * 1024` 作为可用预算来计算 `computeLength`，避免实际运行时触发 UB 空间相关报错。写法可以记成：
 
 ```cpp
 constexpr uint32_t computeLength =
     (216 * 1024 / 3 / 2 / sizeof(ElementC)) / BYTE_PER_C0 * BYTE_PER_C0;
 ```
 
-这里的 `216 * 1024` 是A5架构中的保守可用预算。
+这里的 `216 * 1024` 是Ascend950架构中的保守可用预算。
 
 ### 计算示例 2：UB workspace 通路的 `D = C + X`
 

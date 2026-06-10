@@ -51,7 +51,7 @@ protected:
     }
 };
 
-// Testcase, from RowMajor -> zN, AtlasA5, long stride场景
+// Testcase, from RowMajor -> zN, Ascend950, long stride场景
 TEST_P(TileCopyGmToL1TestAscend950, RowMajorTozNTestLongStride)
 {
     using Element = float;

@@ -569,14 +569,14 @@ struct CopyGmToL1<Arch::Ascend950, Gemm::GemmType<Element, layout::RowMajor>> {
     }
 };
 
-/// Partial specialization for CopyGmToL1(AtlasA5 no-tla), ColumnMajor in and nZ out.
+/// Partial specialization for CopyGmToL1(Ascend950 no-tla), ColumnMajor in and nZ out.
 template <class Element>
 struct CopyGmToL1<Arch::Ascend950, Gemm::GemmType<Element, layout::ColumnMajor>> {
     using LayoutDst = layout::nZ;
     using LayoutSrc = layout::ColumnMajor;
 
     static constexpr uint32_t ELE_NUM_PER_C0 = BytesToBits(BYTE_PER_C0) / SizeOfBits<Element>::value;
-    // Note: AscendC::int4b_t no longer supported on A5-platform
+    // Note: AscendC::int4b_t no longer supported on Ascend950-platform
 
     // Methods
     CATLASS_DEVICE
@@ -610,14 +610,14 @@ struct CopyGmToL1<Arch::Ascend950, Gemm::GemmType<Element, layout::ColumnMajor>>
     }
 };
 
-/// Partial specialization for CopyGmToL1(AtlasA5 no-tla), zN in and zN out.
+/// Partial specialization for CopyGmToL1(Ascend950 no-tla), zN in and zN out.
 template <class Element>
 struct CopyGmToL1<Arch::Ascend950, Gemm::GemmType<Element, layout::zN>> {
     using LayoutDst = layout::zN;
     using LayoutSrc = layout::zN;
 
     static constexpr uint32_t ELE_NUM_PER_C0 = BytesToBits(BYTE_PER_C0) / SizeOfBits<Element>::value;
-    // Note: AscendC::int4b_t no longer supported on A5-platform
+    // Note: AscendC::int4b_t no longer supported on Ascend950-platform
 
     // Methods
     CATLASS_DEVICE
@@ -652,14 +652,14 @@ struct CopyGmToL1<Arch::Ascend950, Gemm::GemmType<Element, layout::zN>> {
     }
 };
 
-/// Partial specialization for CopyGmToL1(AtlasA5 no-tla), nZ in and nZ out.
+/// Partial specialization for CopyGmToL1(Ascend950 no-tla), nZ in and nZ out.
 template <class Element>
 struct CopyGmToL1<Arch::Ascend950, Gemm::GemmType<Element, layout::nZ>> {
     using LayoutDst = layout::nZ;
     using LayoutSrc = layout::nZ;
     
     static constexpr uint32_t ELE_NUM_PER_C0 = BytesToBits(BYTE_PER_C0) / SizeOfBits<Element>::value;
-    // Note: AscendC::int4b_t no longer supported on A5-platform
+    // Note: AscendC::int4b_t no longer supported on Ascend950-platform
 
     CATLASS_DEVICE 
     CopyGmToL1() {};
@@ -683,7 +683,7 @@ struct CopyGmToL1<Arch::Ascend950, Gemm::GemmType<Element, layout::nZ>> {
     }
 };
 
-/// Partial specialization for CopyGmToL1(no-tla), AtlasA5, fp8_e8m0_t, MxScaleA RowMajor in and zZ out.
+/// Partial specialization for CopyGmToL1(no-tla), Ascend950, fp8_e8m0_t, MxScaleA RowMajor in and zZ out.
 template <class Element>
 struct CopyGmToL1<Arch::Ascend950, 
     Gemm::GemmType<Element, layout::RowMajor>, 
