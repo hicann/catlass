@@ -235,7 +235,7 @@ void Run(const Options &options) {
 
     // Allocate matrices in host and device memory and load Matrix block_table.
     AllocMem(&blockTableHost, &blockTableDevice, blockTableSize);
-    if (!ReadFile(dataPath + "/block_table.bin", blockTableHost, blockTableSize)) {
+    if (cacheMode > 0 && !ReadFile(dataPath + "/block_table.bin", blockTableHost, blockTableSize)) {
         cleanupAndFinalize();
         return;
     }
