@@ -30,7 +30,7 @@
 #include "catlass_kernel_prebuilt.h"
 #include "../common/workspace_alloc.h"
 
-extern "C" int rtGetC2cCtrlAddr(uint64_t *, uint32_t *);
+
 
 namespace CatlassKernel {
 using namespace Catlass;
@@ -698,7 +698,7 @@ private:
 };
 
 template <class DType>
-CATLASS_GLOBAL void FAInfer(uint64_t fftsAddr,
+CATLASS_GLOBAL void FAInfer(uint64_t hardwareSyncAddr,
                                 GM_ADDR q,
                                 GM_ADDR k,
                                 GM_ADDR v,
@@ -713,7 +713,7 @@ CATLASS_GLOBAL void FAInfer(uint64_t fftsAddr,
                                 GM_ADDR oUpdate,
                                 GM_ADDR tiling)
 {
-    AscendC::SetSyncBaseAddr(fftsAddr);
+    AscendC::SetSyncBaseAddr(hardwareSyncAddr);
 
     using ArchTag = Arch::AtlasA2;
     using ElementQ = DType;
@@ -873,12 +873,11 @@ void FAImpl(const uint32_t blockNum, aclrtStream stream, const FlashAttentionPar
 
     ACL_CHECK(aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    // Prepare FFTS address
-    uint64_t fftsAddr{0};
-    uint32_t fftsLen{0};
-    RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
+    // Prepare hardware sync address
+    uint64_t hardwareSyncAddr{0};
+    ACL_CHECK(aclrtGetHardwareSyncAddr(reinterpret_cast<void**>(&hardwareSyncAddr)));
     
-    FAInfer<DType><<<blockDim, nullptr, stream>>>(fftsAddr, qDevice, kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice, pDevice, oTempDevice, oUpdateDevice, tilingDevice);
+    FAInfer<DType><<<blockDim, nullptr, stream>>>(hardwareSyncAddr, qDevice, kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice, pDevice, oTempDevice, oUpdateDevice, tilingDevice);
     ACL_CHECK(aclrtSynchronizeStream(stream));
 }
 

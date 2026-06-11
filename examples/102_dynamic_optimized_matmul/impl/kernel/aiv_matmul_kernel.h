@@ -173,7 +173,7 @@ template <
     DispatchPolicyTag dispatchPolicyTag>
 void LaunchAivMatmulKernel(
     aclrtStream &stream,
-    uint64_t fftsAddr,
+    uint64_t hardwareSyncAddr,
     uint8_t *dA,
     uint8_t *dB,
     uint8_t *dC,

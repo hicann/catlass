@@ -119,11 +119,10 @@ static void Run(const Options &options) {
     uint8_t *deviceC{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
-    // Prepare FFTS address
-    uint64_t fftsAddr{0};
-    uint32_t fftsLen{0};
-    // AscendC::SetSyncBaseAddr(fftsAddr);
-    RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
+    // Prepare hardware sync address
+    uint64_t hardwareSyncAddr{0};
+    // AscendC::SetSyncBaseAddr(hardwareSyncAddr);
+    ACL_CHECK(aclrtGetHardwareSyncAddr(reinterpret_cast<void**>(&hardwareSyncAddr)));
 
     using AType = Catlass::Gemm::GemmType<ElementA, typename PaddingBuilderA::LayoutAfterPadding>;
     using BType = Catlass::Gemm::GemmType<ElementB, typename PaddingBuilderB::LayoutAfterPadding>;
@@ -150,7 +149,7 @@ static void Run(const Options &options) {
         MatmulKernel::Arguments arguments{options.problemShape, deviceA, deviceB, deviceC};
 
         MatmulAdapter matmulOp;
-        RunAdapter(matmulOp, arguments, stream, aicCoreNum, fftsAddr);
+        RunAdapter(matmulOp, arguments, stream, aicCoreNum, hardwareSyncAddr);
     }else {
         constexpr uint32_t l1AStages = 1;
         constexpr uint32_t l1BStages = 2;
@@ -167,7 +166,7 @@ static void Run(const Options &options) {
         MatmulKernel::Arguments arguments{options.problemShape, deviceA, deviceB, deviceC};
 
         MatmulAdapter matmulOp;
-        RunAdapter(matmulOp, arguments, stream, aicCoreNum, fftsAddr);
+        RunAdapter(matmulOp, arguments, stream, aicCoreNum, hardwareSyncAddr);
     }
 
     std::vector<fp16_t> hostC(lenC);

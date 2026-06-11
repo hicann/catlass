@@ -697,7 +697,7 @@ class FAInferKernelTla {
 
 template <class Dtype>
 CATLASS_GLOBAL void FAInferTla(
-    uint64_t fftsAddr,
+    uint64_t hardwareSyncAddr,
     GM_ADDR q,
     GM_ADDR k,
     GM_ADDR v,
@@ -712,7 +712,7 @@ CATLASS_GLOBAL void FAInferTla(
     GM_ADDR oUpdate,
     GM_ADDR tiling
 ) {
-    AscendC::SetSyncBaseAddr(fftsAddr);
+    AscendC::SetSyncBaseAddr(hardwareSyncAddr);
 
     using ArchTag = Arch::AtlasA2;
     using ElementQ = Dtype;

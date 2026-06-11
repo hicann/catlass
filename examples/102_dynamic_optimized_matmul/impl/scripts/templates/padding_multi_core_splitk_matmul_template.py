@@ -19,7 +19,7 @@ class PaddingMultiCoreSplitkMatmulTemplate:
 
     TEMPLATE = """
 #include "kernel/padding_multi_core_splitk_matmul_kernel.h"
-void {launch_kernel_func_name}(aclrtStream& stream, uint64_t fftsAddr,
+void {launch_kernel_func_name}(aclrtStream& stream, uint64_t hardwareSyncAddr,
     uint8_t* dA, uint8_t* dB, uint8_t* dC, uint8_t* dW, uint8_t* dTilingParams, TilingParams& tilingParams)
 {{
     using ArchTag = Catlass::Arch::AtlasA2;
@@ -33,7 +33,7 @@ void {launch_kernel_func_name}(aclrtStream& stream, uint64_t fftsAddr,
     constexpr PaddingTag paddingTagB = {padding_tag_b};
     LaunchPaddingMultiCoreSplitkMatmulKernel<ArchTag, ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC,
         paddingTagA, paddingTagB>(
-        stream, fftsAddr, dA, dB, dC, dW, dTilingParams, tilingParams);
+        stream, hardwareSyncAddr, dA, dB, dC, dW, dTilingParams, tilingParams);
 }}
 
 size_t {get_workspace_func_name}(TilingParams& tilingParams)

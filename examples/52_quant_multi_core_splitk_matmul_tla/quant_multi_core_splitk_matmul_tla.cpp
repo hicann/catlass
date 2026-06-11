@@ -126,9 +126,8 @@ static void Run(const Options &options)
 
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
-    uint64_t fftsAddr{0};
-    uint32_t fftsLen{0};
-    RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
+    uint64_t hardwareSyncAddr{0};
+    ACL_CHECK(aclrtGetHardwareSyncAddr(reinterpret_cast<void**>(&hardwareSyncAddr)));
 
     using L1TileShape = Shape<_128, _256, _512>;
     using L0TileShape = Shape<_128, _256, _128>;
@@ -215,7 +214,7 @@ static void Run(const Options &options)
     }
 
     matmulOp.Initialize(arguments, deviceWorkspace);
-    matmulOp(stream, aicCoreNum, fftsAddr);
+    matmulOp(stream, aicCoreNum, hardwareSyncAddr);
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
     std::vector<bfloat16> hostD(lenD);

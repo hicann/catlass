@@ -162,10 +162,9 @@ static void Run(const Options &options) {
     uint8_t *deviceC{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
-    // Prepare FFTS address
-    uint32_t fftsLen{0};
-    uint64_t fftsAddr{0};
-    RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
+    // Prepare hardware sync address
+    uint64_t hardwareSyncAddr{0};
+    ACL_CHECK(aclrtGetHardwareSyncAddr(reinterpret_cast<void**>(&hardwareSyncAddr)));
 
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
@@ -184,7 +183,7 @@ static void Run(const Options &options) {
             MatmulKernel::Arguments arguments{options.problemShape, deviceA, deviceB, deviceC};
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
             MatmulAdapter matmulOp;
-            RunAdapter(matmulOp, arguments, stream, aicCoreNum, fftsAddr);
+            RunAdapter(matmulOp, arguments, stream, aicCoreNum, hardwareSyncAddr);
         } else if (isNeedPaddingA) {
             using LayoutMmadA = typename PaddingBuilderA::LayoutAfterPadding;
             using ATypeMmad = Gemm::GemmType<ElementA, LayoutMmadA>;
@@ -196,7 +195,7 @@ static void Run(const Options &options) {
             MatmulKernel::Arguments arguments{options.problemShape, deviceA, deviceB, deviceC};
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
             MatmulAdapter matmulOp;
-            RunAdapter(matmulOp, arguments, stream, aicCoreNum, fftsAddr);
+            RunAdapter(matmulOp, arguments, stream, aicCoreNum, hardwareSyncAddr);
         } else if (isNeedPaddingB) {
             using LayoutMmadB = typename PaddingBuilderB::LayoutAfterPadding;
             using BTypeMmad = Gemm::GemmType<ElementB, LayoutMmadB>;
@@ -208,7 +207,7 @@ static void Run(const Options &options) {
             MatmulKernel::Arguments arguments{options.problemShape, deviceA, deviceB, deviceC};
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
             MatmulAdapter matmulOp;
-            RunAdapter(matmulOp, arguments, stream, aicCoreNum, fftsAddr);
+            RunAdapter(matmulOp, arguments, stream, aicCoreNum, hardwareSyncAddr);
         } else {
             using TileCopy = TileCopyOpt<ArchTag, AType, BType, CType>;
             using BlockMmadOpt =
@@ -218,7 +217,7 @@ static void Run(const Options &options) {
             MatmulKernel::Arguments arguments{options.problemShape, deviceA, deviceB, deviceC};
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
             MatmulAdapter matmulOp;
-            RunAdapter(matmulOp, arguments, stream, aicCoreNum, fftsAddr);
+            RunAdapter(matmulOp, arguments, stream, aicCoreNum, hardwareSyncAddr);
         }
     } else {
         if (isNeedPaddingA && isNeedPaddingB) {
@@ -234,7 +233,7 @@ static void Run(const Options &options) {
             MatmulKernel::Arguments arguments{options.problemShape, deviceA, deviceB, deviceC};
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
             MatmulAdapter matmulOp;
-            RunAdapter(matmulOp, arguments, stream, aicCoreNum, fftsAddr);
+            RunAdapter(matmulOp, arguments, stream, aicCoreNum, hardwareSyncAddr);
         } else if (isNeedPaddingA) {
             using LayoutMmadA = typename PaddingBuilderA::LayoutAfterPadding;
             using ATypeMmad = Gemm::GemmType<ElementA, LayoutMmadA>;
@@ -246,7 +245,7 @@ static void Run(const Options &options) {
             MatmulKernel::Arguments arguments{options.problemShape, deviceA, deviceB, deviceC};
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
             MatmulAdapter matmulOp;
-            RunAdapter(matmulOp, arguments, stream, aicCoreNum, fftsAddr);
+            RunAdapter(matmulOp, arguments, stream, aicCoreNum, hardwareSyncAddr);
         } else if (isNeedPaddingB) {
             using LayoutMmadB = typename PaddingBuilderB::LayoutAfterPadding;
             using BTypeMmad = Gemm::GemmType<ElementB, LayoutMmadB>;
@@ -258,7 +257,7 @@ static void Run(const Options &options) {
             MatmulKernel::Arguments arguments{options.problemShape, deviceA, deviceB, deviceC};
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
             MatmulAdapter matmulOp;
-            RunAdapter(matmulOp, arguments, stream, aicCoreNum, fftsAddr);
+            RunAdapter(matmulOp, arguments, stream, aicCoreNum, hardwareSyncAddr);
         } else {
             using TileCopy = TileCopyOpt<ArchTag, AType, BType, CType>;
             using BlockMmadOpt =
@@ -268,7 +267,7 @@ static void Run(const Options &options) {
             MatmulKernel::Arguments arguments{options.problemShape, deviceA, deviceB, deviceC};
             using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
             MatmulAdapter matmulOp;
-            RunAdapter(matmulOp, arguments, stream, aicCoreNum, fftsAddr);
+            RunAdapter(matmulOp, arguments, stream, aicCoreNum, hardwareSyncAddr);
         }
     }
 

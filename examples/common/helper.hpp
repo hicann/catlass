@@ -28,23 +28,12 @@
 using op::bfloat16;
 using op::fp16_t;
 
-extern "C" int rtGetC2cCtrlAddr(uint64_t *, uint32_t *);
-
 // Macro function for unwinding acl errors.
 #define ACL_CHECK(status)                                                                                              \
     do {                                                                                                               \
         aclError error = status;                                                                                       \
         if (error != ACL_ERROR_NONE) {                                                                                 \
             std::cerr << __FILE__ << ":" << __LINE__ << " aclError:" << error << std::endl;                            \
-        }                                                                                                              \
-    } while (0)
-
-// Macro function for unwinding rt errors.
-#define RT_CHECK(status)                                                                                               \
-    do {                                                                                                               \
-        int32_t error = status;                                                                                      \
-        if (error != 0) {                                                                                  \
-            std::cerr << __FILE__ << ":" << __LINE__ << " rtError:" << error << std::endl;                             \
         }                                                                                                              \
     } while (0)
 
@@ -86,7 +75,7 @@ inline void RunAdapter(
     typename Adapter::Arguments args,
     aclrtStream stream,
     uint32_t coreNum,
-    uint64_t fftsAddr = 0
+    uint64_t hardwareSyncAddr = 0
 ) {
     size_t sizeWorkspace = opAdapter.GetWorkspaceSize(args);
     uint8_t *deviceWorkspace = nullptr;
@@ -94,7 +83,7 @@ inline void RunAdapter(
         ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
     }
     opAdapter.Initialize(args, deviceWorkspace);
-    opAdapter(stream, coreNum, fftsAddr);
+    opAdapter(stream, coreNum, hardwareSyncAddr);
     ACL_CHECK(aclrtSynchronizeStream(stream));
     if (sizeWorkspace > 0) {
         ACL_CHECK(aclrtFree(deviceWorkspace));

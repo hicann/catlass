@@ -21,7 +21,7 @@
 #include "mla_kernel.cpp"
 #include "mla_kernel_tp1_spec.cpp"
 
-extern "C" int rtGetC2cCtrlAddr(uint64_t *, uint32_t *);
+
 
 namespace CatlassKernel {
 
@@ -154,25 +154,24 @@ void MLAImpl(const uint32_t blockNum, aclrtStream stream, MlaParams &params)
     uint8_t *oScratchDevice;
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&oScratchDevice), qoSize, ACL_MEM_MALLOC_HUGE_FIRST));
 
-    uint64_t fftsAddr{0};
-    uint32_t fftsLen{0};
-    RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
+    uint64_t hardwareSyncAddr{0};
+    ACL_CHECK(aclrtGetHardwareSyncAddr(reinterpret_cast<void**>(&hardwareSyncAddr)));
 
     if (tilingKey == 0) {
         MLAFp16<<<blockDim, nullptr, stream>>>(
-            fftsAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oScratchDevice, sDevice, pDevice,
+            hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oScratchDevice, sDevice, pDevice,
             oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
     } else if (tilingKey == 1) {
         MLABf16<<<blockDim, nullptr, stream>>>(
-            fftsAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oScratchDevice, sDevice, pDevice,
+            hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oScratchDevice, sDevice, pDevice,
             oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
     } else if (tilingKey == 4) {
         MLATp1SpecFp16<<<blockDim, nullptr, stream>>>(
-            fftsAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oScratchDevice, sDevice, pDevice,
+            hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oScratchDevice, sDevice, pDevice,
             oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
     } else if (tilingKey == 5) {
         MLATp1SpecBf16<<<blockDim, nullptr, stream>>>(
-            fftsAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oScratchDevice, sDevice, pDevice,
+            hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oScratchDevice, sDevice, pDevice,
             oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
     }
     ACL_CHECK(aclrtSynchronizeStream(stream));

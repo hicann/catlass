@@ -98,10 +98,9 @@ static void Run(Options options) {
 
     uint8_t *deviceWorkspace{nullptr};
 
-    // Prepare FFTS address
-    uint64_t fftsAddr{0};
-    uint32_t fftsLen{0};
-    RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
+    // Prepare hardware sync address
+    uint64_t hardwareSyncAddr{0};
+    ACL_CHECK(aclrtGetHardwareSyncAddr(reinterpret_cast<void**>(&hardwareSyncAddr)));
 
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
@@ -149,7 +148,7 @@ static void Run(Options options) {
     using GemvAdapter = Gemv::Device::DeviceGemv<GemvKernel>;
     GemvKernel::Arguments arguments{options.problemShape, alpha, beta, sizeof(float), deviceX, deviceA, deviceZ};
     GemvAdapter gemv_op;
-    RunAdapter(gemv_op, arguments, stream, aicCoreNum, fftsAddr);
+    RunAdapter(gemv_op, arguments, stream, aicCoreNum, hardwareSyncAddr);
 
     std::vector<float> hostRes(lenZ);
     ACL_CHECK(aclrtMemcpy(hostRes.data(), sizeZ, deviceZ, sizeZ, ACL_MEMCPY_DEVICE_TO_HOST));

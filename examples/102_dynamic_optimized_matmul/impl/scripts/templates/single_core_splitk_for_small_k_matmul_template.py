@@ -19,7 +19,7 @@ class SingleCoreSplitkForSmallKMatmulTemplate:
 
     TEMPLATE = """
 #include "kernel/single_core_splitk_for_small_k_matmul_kernel.h"
-void {launch_kernel_func_name}(aclrtStream& stream, uint64_t fftsAddr,
+void {launch_kernel_func_name}(aclrtStream& stream, uint64_t hardwareSyncAddr,
     uint8_t* dA, uint8_t* dB, uint8_t* dC, uint8_t* dW, uint8_t* dTilingParams, TilingParams& tilingParams)
 {{
     using ArchTag = Catlass::Arch::AtlasA2;
@@ -30,7 +30,7 @@ void {launch_kernel_func_name}(aclrtStream& stream, uint64_t fftsAddr,
     using LayoutB = {layout_b};
     using LayoutC = {layout_c};
     LaunchSingleCoreSplitkForSmallKMatmulKernel<ArchTag, ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC>(
-        stream, fftsAddr, dA, dB, dC, dTilingParams, tilingParams);
+        stream, hardwareSyncAddr, dA, dB, dC, dTilingParams, tilingParams);
 }}
 
 size_t {get_workspace_func_name}(TilingParams& tilingParams)

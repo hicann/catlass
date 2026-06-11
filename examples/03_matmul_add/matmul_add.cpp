@@ -87,10 +87,9 @@ static void Run(const Options &options) {
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceD), sizeD, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceD, sizeD, hostX.data(), sizeD, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    // Prepare FFTS address
-    uint64_t fftsAddr{0};
-    uint32_t fftsLen{0};
-    RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
+    // Prepare hardware sync address
+    uint64_t hardwareSyncAddr{0};
+    ACL_CHECK(aclrtGetHardwareSyncAddr(reinterpret_cast<void**>(&hardwareSyncAddr)));
 
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
@@ -136,7 +135,7 @@ static void Run(const Options &options) {
             );
         }
         matmulOp.Initialize(arguments, deviceWorkspace);
-        matmulOp(stream, aicCoreNum, fftsAddr);
+        matmulOp(stream, aicCoreNum, hardwareSyncAddr);
         ACL_CHECK(aclrtSynchronizeStream(stream));
         if (sizeWorkspace > 0) {
             ACL_CHECK(aclrtFree(deviceWorkspace));
@@ -161,7 +160,7 @@ static void Run(const Options &options) {
             );
         }
         matmulOp.Initialize(arguments, deviceWorkspace);
-        matmulOp(stream, aicCoreNum, fftsAddr);
+        matmulOp(stream, aicCoreNum, hardwareSyncAddr);
         ACL_CHECK(aclrtSynchronizeStream(stream));
         if (sizeWorkspace > 0) {
             ACL_CHECK(aclrtFree(deviceWorkspace));

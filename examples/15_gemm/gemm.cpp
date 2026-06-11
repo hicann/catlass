@@ -146,10 +146,9 @@ static void Run(Options options) {
     uint8_t *gmWorkspace{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&gmWorkspace), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
-    // Prepare FFTS address
-    uint64_t fftsAddr{0};
-    uint32_t fftsLen{0};
-    RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
+    // Prepare hardware sync address
+    uint64_t hardwareSyncAddr{0};
+    ACL_CHECK(aclrtGetHardwareSyncAddr(reinterpret_cast<void**>(&hardwareSyncAddr)));
 
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
@@ -184,7 +183,7 @@ static void Run(Options options) {
     using GemmAdapter = Gemm::Device::DeviceGemm<GemmKernel>;
     GemmAdapter gemm_op;
     gemm_op.CanImplement(arguments);
-    RunAdapter(gemm_op, arguments, stream, aicCoreNum, fftsAddr);
+    RunAdapter(gemm_op, arguments, stream, aicCoreNum, hardwareSyncAddr);
 
     std::vector<float> hostRes(lenX);
     ACL_CHECK(aclrtMemcpy(hostRes.data(), sizeX, deviceX, sizeX, ACL_MEMCPY_DEVICE_TO_HOST));

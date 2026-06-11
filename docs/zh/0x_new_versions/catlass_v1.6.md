@@ -623,7 +623,7 @@ void operator()<AscendC::AIC>(Params const &params) {
 
 ### Device层新特性
 
-950平台无ffts\_address参数，Device层在这一代际无此入参，已有设计已可支持
+950平台无`hardwareSyncAddress`参数，Device层在这一代际无此入参，已有设计已可支持
 
 # 新增接口能力扩展
 

@@ -45,11 +45,11 @@ size_t DynamicOptimizedMatmulGetWorkspace(TilingParams &tilingParams)
     return getWorkspaceFuncMap[tilingParams.tilingKey.value](tilingParams);
 }
 
-void ExecuteDynamicOptimizedMatmul(aclrtStream &stream, uint64_t fftsAddr, uint8_t *dA, uint8_t *dB, uint8_t *dC,
+void ExecuteDynamicOptimizedMatmul(aclrtStream &stream, uint64_t hardwareSyncAddr, uint8_t *dA, uint8_t *dB, uint8_t *dC,
     uint8_t *dW, uint8_t *dTilingParams, TilingParams &tilingParams)
 {
 
-    launchKernelFuncMap[tilingParams.tilingKey.value](stream, fftsAddr, dA, dB, dC, dW, dTilingParams, tilingParams);
+    launchKernelFuncMap[tilingParams.tilingKey.value](stream, hardwareSyncAddr, dA, dB, dC, dW, dTilingParams, tilingParams);
 }
 
 template <class DType>

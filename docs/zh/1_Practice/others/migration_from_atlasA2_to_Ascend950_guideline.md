@@ -115,15 +115,14 @@ using L0TileShape = GemmShape<128, 256, 64>;
 // ...
 ```
 
-此外，与AtlasA2不同地，`rtGetC2cCtrlAddr` 调用及 `fftsAddr` 变量应从Ascend950相关代码中移除，`RunAdapter` 调用签名同步简化：
+此外，与AtlasA2不同地，`aclrtGetHardwareSyncAddr` 调用及 `hardwareSyncAddr` 变量应从Ascend950相关代码中移除，`RunAdapter` 调用签名同步简化：
 
 ```diff
--    // Prepare FFTS address
--    uint64_t fftsAddr{0};
--    uint32_t fftsLen{0};
--    RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
+-    // Prepare hardware sync address
+-    uint64_t hardwareSyncAddr{0};
+--    ACL_CHECK(aclrtGetHardwareSyncAddr(reinterpret_cast<void**>(&hardwareSyncAddr)));
 
--    RunAdapter(gemm_op, arguments, stream, aicCoreNum, fftsAddr);
+-    RunAdapter(gemm_op, arguments, stream, aicCoreNum, hardwareSyncAddr);
 +    RunAdapter(gemm_op, arguments, stream, aicCoreNum);
 ```
 随后即可编译运行适配于Ascend950平台的算子（备注：编译选项请添加`-DCATLASS_ARCH=3510`）
@@ -139,7 +138,7 @@ using L0TileShape = GemmShape<128, 256, 64>;
 - [ ] **Epilogue Block 特化**：为新的公共 Epilogue Dispatch 增加 BlockEpilogue 特化
 - [ ] **Tile 类型选择器**：检查 `L1AndL0TypeSelector` 是否需 arch-aware 版本，Ascend950 L0 类型可能不同
 - [ ] **Arch Guard**：检查是否使用 `__NPU_ARCH__`(Device侧) 或 `CATLASS_ARCH`(Host侧) 守卫，根据需要补充
-- [ ] **fftsAddr 移除**：删除 `rtGetC2cCtrlAddr` 调用，`RunAdapter` 去掉第三个参数
+- [ ] **hardwareSyncAddr 移除**：删除 `aclrtGetHardwareSyncAddr` 调用，`RunAdapter` 去掉第三个参数
 - [ ] **编译验证**：编译选项加 `-DCATLASS_ARCH=3510`
 
 ---

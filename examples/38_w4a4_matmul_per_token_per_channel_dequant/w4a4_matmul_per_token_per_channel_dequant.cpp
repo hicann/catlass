@@ -107,9 +107,9 @@ static void Run(Options const &options)
     std::string expected_path = "../../examples/38_w4a4_matmul_per_token_per_channel_dequant/data/expected.dat";
     ReadFile(expected_path, hExpected.data(), goldenSize);
 
-    uint64_t fftsAddr{0};
-    uint32_t fftsLen{0};
-    rtGetC2cCtrlAddr(&fftsAddr, &fftsLen);
+    // Prepare hardware sync address
+    uint64_t hardwareSyncAddr{0};
+    ACL_CHECK(aclrtGetHardwareSyncAddr(reinterpret_cast<void**>(&hardwareSyncAddr)));
 
     uint8_t *deviceA, *deviceB, *deviceScale, *devicePerTokenScale;
     uint8_t *deviceD;
@@ -197,7 +197,7 @@ static void Run(Options const &options)
     }
 
     matmulOp.Initialize(arguments, deviceWorkspace);
-    matmulOp(stream, aicoreNum, fftsAddr);
+    matmulOp(stream, aicoreNum, hardwareSyncAddr);
     if (sizeWorkspace > 0) {
         ACL_CHECK(aclrtFree(deviceWorkspace));
     }

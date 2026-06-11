@@ -668,7 +668,7 @@ private:
 };
 
 extern "C" CATLASS_GLOBAL void MLATp1SpecFp16(
-    uint64_t fftsAddr,
+    uint64_t hardwareSyncAddr,
     GM_ADDR q,
     GM_ADDR qRope,
     GM_ADDR k,
@@ -683,8 +683,8 @@ extern "C" CATLASS_GLOBAL void MLATp1SpecFp16(
     GM_ADDR l,
     GM_ADDR tiling
 ) {
-    // Set FFTS address
-    AscendC::SetSyncBaseAddr(fftsAddr);
+    // Set hardware sync address
+    AscendC::SetSyncBaseAddr(hardwareSyncAddr);
 
     using ArchTag = Arch::AtlasA2;
     using ElementQ = half;
@@ -753,7 +753,7 @@ extern "C" CATLASS_GLOBAL void MLATp1SpecFp16(
 }
 
 extern "C" CATLASS_GLOBAL void MLATp1SpecBf16(
-    uint64_t fftsAddr,
+    uint64_t hardwareSyncAddr,
     GM_ADDR q,
     GM_ADDR qRope,
     GM_ADDR k,
@@ -768,8 +768,8 @@ extern "C" CATLASS_GLOBAL void MLATp1SpecBf16(
     GM_ADDR l,
     GM_ADDR tiling
 ) {
-    // Set FFTS address
-    AscendC::SetSyncBaseAddr(fftsAddr);
+    // Set hardware sync address
+    AscendC::SetSyncBaseAddr(hardwareSyncAddr);
 
     using ArchTag = Arch::AtlasA2;
     using ElementQ = bfloat16_t;

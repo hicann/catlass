@@ -138,10 +138,9 @@ static void Run(const Options &options)
 
     uint8_t *deviceWorkspace{nullptr};
 
-    // Prepare FFTS address
-    uint64_t fftsAddr{0};
-    uint32_t fftsLen{0};
-    RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
+    // Prepare hardware sync address
+    uint64_t hardwareSyncAddr{0};
+    ACL_CHECK(aclrtGetHardwareSyncAddr(reinterpret_cast<void**>(&hardwareSyncAddr)));
 
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
@@ -235,7 +234,7 @@ static void Run(const Options &options)
             );
         }
         matmulOp.Initialize(arguments, deviceWorkspace);
-        matmulOp(stream, aicCoreUsed, fftsAddr);
+        matmulOp(stream, aicCoreUsed, hardwareSyncAddr);
     } else {
          // Swizzle offset is 3 and direction is 0.
         using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
@@ -268,7 +267,7 @@ static void Run(const Options &options)
             );
         }
         matmulOp.Initialize(arguments, deviceWorkspace);
-        matmulOp(stream, aicCoreUsed, fftsAddr);
+        matmulOp(stream, aicCoreUsed, hardwareSyncAddr);
     }
     ACL_CHECK(aclrtSynchronizeStream(stream));
 

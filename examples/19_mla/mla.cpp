@@ -263,30 +263,29 @@ static void Run(const Options &options)
     uint8_t *lDevice;
     ACL_CHECK(aclrtMalloc((void **)(&lDevice), lSize, ACL_MEM_MALLOC_HUGE_FIRST));
 
-    // Prepare FFTS address
-    uint64_t fftsAddr{0};
-    uint32_t fftsLen{0};
-    RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
+    // Prepare hardware sync address
+    uint64_t hardwareSyncAddr{0};
+    ACL_CHECK(aclrtGetHardwareSyncAddr(reinterpret_cast<void**>(&hardwareSyncAddr)));
 
     // use Tp1Spec kernel to get better performance when numHeads = 128
     if (tilingKey == 0) {
         MLAFp16<<<blockDim, nullptr, stream>>>(
-            fftsAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oDevice, sDevice, pDevice,
+            hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oDevice, sDevice, pDevice,
             oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice
         );
     } else if (tilingKey == 1) {
         MLABf16<<<blockDim, nullptr, stream>>>(
-            fftsAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oDevice, sDevice, pDevice,
+            hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oDevice, sDevice, pDevice,
             oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice
         );
     } else if (tilingKey == 4) {
         MLATp1SpecFp16<<<blockDim, nullptr, stream>>>(
-            fftsAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oDevice, sDevice, pDevice,
+            hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oDevice, sDevice, pDevice,
             oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice
         );
     } else if (tilingKey == 5) {
         MLATp1SpecBf16<<<blockDim, nullptr, stream>>>(
-            fftsAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oDevice, sDevice, pDevice,
+            hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oDevice, sDevice, pDevice,
             oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice
         );
     }

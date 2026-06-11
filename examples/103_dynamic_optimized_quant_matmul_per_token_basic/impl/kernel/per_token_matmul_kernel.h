@@ -33,10 +33,10 @@
 #include "catlass/gemm/gemm_type.hpp"
 
 template <class ArchTag, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC>
-[[bisheng::core_ratio(1, 2)]] CATLASS_GLOBAL void PerTokenMatmulKernel(uint64_t fftsAddr, __gm__ uint8_t *__restrict__ gmA,
+[[bisheng::core_ratio(1, 2)]] CATLASS_GLOBAL void PerTokenMatmulKernel(uint64_t hardwareSyncAddr, __gm__ uint8_t *__restrict__ gmA,
     __gm__ uint8_t *__restrict__ gmB, __gm__ uint8_t *__restrict__ gmC, __gm__ uint8_t *__restrict__ gmWQuant, __gm__ uint8_t *__restrict__ gmScale, __gm__ uint8_t *__restrict__ gmPerTokenScale, __gm__ uint8_t *__restrict__ tilingData)
 {
-    AscendC::SetSyncBaseAddr(fftsAddr);
+    AscendC::SetSyncBaseAddr(hardwareSyncAddr);
     Catlass::Arch::Resource<ArchTag> resource;
 
     /*
@@ -172,7 +172,7 @@ template <class ArchTag, class ElementA, class LayoutA, class ElementB, class La
 }
 
 template <class ArchTag, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC>
-void LaunchPerTokenMatmulKernel(aclrtStream &stream, uint64_t fftsAddr, uint8_t *dA, uint8_t *dB, uint8_t *dC,
+void LaunchPerTokenMatmulKernel(aclrtStream &stream, uint64_t hardwareSyncAddr, uint8_t *dA, uint8_t *dB, uint8_t *dC,
     uint8_t *dW, uint8_t *dScale, uint8_t *dPerTokenScale, uint8_t *dTilingParams, TilingParams &tilingParams)
 {
     uint32_t m = tilingParams.m;
@@ -196,7 +196,7 @@ void LaunchPerTokenMatmulKernel(aclrtStream &stream, uint64_t fftsAddr, uint8_t 
     sizeWQuant = m1 * n1 * CORENUM * workspaceStages * sizeof(int32_t);
     
     PerTokenMatmulKernel<ArchTag, ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC>
-        <<<tilingParams.blockDim, nullptr, stream>>>(fftsAddr, dA, dB, dC, dwQuant, dScale, dPerTokenScale, dTilingParams);
+        <<<tilingParams.blockDim, nullptr, stream>>>(hardwareSyncAddr, dA, dB, dC, dwQuant, dScale, dPerTokenScale, dTilingParams);
 }
 
 template <class ArchTag, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC>

@@ -52,7 +52,7 @@ template <
     PaddingTag paddingTagA,
     PaddingTag paddingTagB>
 [[bisheng::core_ratio(1, 2)]] CATLASS_GLOBAL void PaddingStreamkMatmulKernel(
-    uint64_t fftsAddr,
+    uint64_t hardwareSyncAddr,
     __gm__ uint8_t *__restrict__ gmA,
     __gm__ uint8_t *__restrict__ gmB,
     __gm__ uint8_t *__restrict__ gmC,
@@ -62,7 +62,7 @@ template <
     __gm__ uint8_t *__restrict__ tilingData
 )
 {
-    AscendC::SetSyncBaseAddr(fftsAddr);
+    AscendC::SetSyncBaseAddr(hardwareSyncAddr);
     Catlass::Arch::Resource<ArchTag> resource;
 
     /*
@@ -163,7 +163,7 @@ template <
     PaddingTag paddingTagB>
 void LaunchPaddingStreamkMatmulKernel(
     aclrtStream &stream,
-    uint64_t fftsAddr,
+    uint64_t hardwareSyncAddr,
     uint8_t *dA,
     uint8_t *dB,
     uint8_t *dC,
@@ -208,7 +208,7 @@ void LaunchPaddingStreamkMatmulKernel(
     dReduceW = dW + sizeWA + sizeWB;
 
     PaddingStreamkMatmulKernel<ArchTag, ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC, paddingTagA, paddingTagB>
-        <<<tilingParams.blockDim, nullptr, stream>>>(fftsAddr, dA, dB, dC, dWA, dWB, dReduceW, dTilingParams);
+        <<<tilingParams.blockDim, nullptr, stream>>>(hardwareSyncAddr, dA, dB, dC, dWA, dWB, dReduceW, dTilingParams);
 }
 
 template <

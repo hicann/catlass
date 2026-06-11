@@ -111,7 +111,7 @@ CATLASS_GLOBAL __attribute__((aic)) void SmallMatmulKernel(__gm__ uint8_t *__res
 }
 
 template <class ArchTag, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC>
-void LaunchSmallMatmulKernel(aclrtStream &stream, uint64_t fftsAddr, uint8_t *dA, uint8_t *dB, uint8_t *dC,
+void LaunchSmallMatmulKernel(aclrtStream &stream, uint64_t hardwareSyncAddr, uint8_t *dA, uint8_t *dB, uint8_t *dC,
     uint8_t *dTilingParams, TilingParams &tilingParams)
 {
     SmallMatmulKernel<ArchTag, ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC>

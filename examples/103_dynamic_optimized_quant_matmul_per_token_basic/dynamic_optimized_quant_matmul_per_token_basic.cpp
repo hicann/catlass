@@ -73,14 +73,13 @@ static void Run(aclrtStream &stream, uint32_t m, uint32_t n, uint32_t k, LayoutT
         ACL_CHECK(aclrtMalloc((void **)&dW, workspaceSize, ACL_MEM_MALLOC_HUGE_FIRST));
     }
 
-    uint64_t fftsAddr{0};
-    uint32_t fftsLen{0};
-    RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
+    uint64_t hardwareSyncAddr{0};
+    ACL_CHECK(aclrtGetHardwareSyncAddr(reinterpret_cast<void**>(&hardwareSyncAddr)));
 
     ACL_CHECK(aclrtMemcpy(
         dTilingParams, sizeof(TilingParams), &tilingParams, sizeof(TilingParams), ACL_MEMCPY_HOST_TO_DEVICE));
 
-    ExecuteDynamicOptimizedMatmul(stream, fftsAddr, dA, dB, dC, dW, dScale, dPerTokenScale, dTilingParams, tilingParams);
+    ExecuteDynamicOptimizedMatmul(stream, hardwareSyncAddr, dA, dB, dC, dW, dScale, dPerTokenScale, dTilingParams, tilingParams);
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
     ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, dC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));

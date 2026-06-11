@@ -67,13 +67,13 @@ public:
 
     /// Primary run() entry point API that is static allowing users to create and manage their own params.
     /// Supplied params struct must be construct by calling matmul Kernel::to_underlying arguments
-    inline Status Run(aclrtStream stream, uint32_t blockDim, uint64_t fftsAddr)
+    inline Status Run(aclrtStream stream, uint32_t blockDim, uint64_t hardwareSyncAddr)
     {
 #if (defined (CATLASS_ARCH) && CATLASS_ARCH == 2201)
-        if (fftsAddr == 0) {
+        if (hardwareSyncAddr == 0) {
             Catlass::KernelAdapter<GemmKernel><<<blockDim, nullptr, stream>>>(params_);
         } else {
-            Catlass::KernelAdapter<GemmKernel><<<blockDim, nullptr, stream>>>(params_, fftsAddr);
+            Catlass::KernelAdapter<GemmKernel><<<blockDim, nullptr, stream>>>(params_, hardwareSyncAddr);
         }
 #elif (defined (CATLASS_ARCH) && CATLASS_ARCH == 3510)
         Catlass::KernelAdapter<GemmKernel><<<blockDim, nullptr, stream>>>(params_);
@@ -87,9 +87,9 @@ public:
         return Run(stream, blockDim, 0);
     }
 
-    inline Status operator()(aclrtStream stream, uint32_t blockDim, uint64_t fftsAddr)
+    inline Status operator()(aclrtStream stream, uint32_t blockDim, uint64_t hardwareSyncAddr)
     {
-        return Run(stream, blockDim, fftsAddr);
+        return Run(stream, blockDim, hardwareSyncAddr);
     }
 };
 ///////////////////////////////////////////////////////////////////////////////////

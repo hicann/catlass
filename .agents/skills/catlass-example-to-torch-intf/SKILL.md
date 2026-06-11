@@ -59,9 +59,9 @@ Always use `reinterpret_cast<uint8_t*>` when converting `void*` to device pointe
 
 `aclrtStream` is `typedef void *aclrtStream`. To avoid ASC compiler type resolution issues, always use `void*` directly in `.asc` files. In `.cpp` files (host compiler), `aclrtStream` can be used normally.
 
-### Rule 4: No FFTS Handling Required
+### Rule 4: No Hardware Sync Handling Required
 
-FFTS (Fast Frame Transmission Sync) is NOT needed. Do NOT add any FFTS-related code (`rtGetC2cCtrlAddr`, `SetSyncBaseAddr`, `fftsAddr`) anywhere in the project — neither in `.asc` files nor in `.cpp` files.
+Hardware sync address is NOT needed. Do NOT add any hardware sync-related code (`aclrtGetHardwareSyncAddr`, `SetSyncBaseAddr`, `hardwareSyncAddr`) anywhere in the project — neither in `.asc` files nor in `.cpp` files.
 
 ### Rule 5: Workspace Allocation via `GetWorkspaceSize` + `at::empty`
 

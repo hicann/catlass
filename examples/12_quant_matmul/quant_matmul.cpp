@@ -106,10 +106,9 @@ static void Run(const Options &options) {
     layout::VectorLayout layoutPerTokenScale{m};
     layout::RowMajor layoutD{m, n};
 
-    // Prepare FFTS address
-    uint64_t fftsAddr{0};
-    uint32_t fftsLen{0};
-    RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
+    // Prepare hardware sync address
+    uint64_t hardwareSyncAddr{0};
+    ACL_CHECK(aclrtGetHardwareSyncAddr(reinterpret_cast<void**>(&hardwareSyncAddr)));
 
     using ArchTag = Arch::AtlasA2;
     constexpr uint32_t preloadStages = 1;
@@ -172,7 +171,7 @@ static void Run(const Options &options) {
             );
         }
         matmulOp.Initialize(arguments, deviceWorkspace);
-        matmulOp(stream, aicCoreNum, fftsAddr);
+        matmulOp(stream, aicCoreNum, hardwareSyncAddr);
     } else {
         using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
 
@@ -193,7 +192,7 @@ static void Run(const Options &options) {
             );
         }
         matmulOp.Initialize(arguments, deviceWorkspace);
-        matmulOp(stream, aicCoreNum, fftsAddr);
+        matmulOp(stream, aicCoreNum, hardwareSyncAddr);
     }
     ACL_CHECK(aclrtSynchronizeStream(stream));
 

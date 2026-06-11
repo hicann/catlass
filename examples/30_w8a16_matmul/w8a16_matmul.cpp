@@ -98,10 +98,9 @@ static void Run(const Options &options) {
     uint8_t *deviceC{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
-    // Prepare FFTS address
-    uint32_t fftsLen{0};
-    uint64_t fftsAddr{0};
-    RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
+    // Prepare hardware sync address
+    uint64_t hardwareSyncAddr{0};
+    ACL_CHECK(aclrtGetHardwareSyncAddr(reinterpret_cast<void**>(&hardwareSyncAddr)));
 
     using ArchTag = Arch::AtlasA2;
     constexpr bool ENABLE_UNIT_FLAG = true;
@@ -135,7 +134,7 @@ static void Run(const Options &options) {
             };
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
         MatmulAdapter matmulOp;
-        RunAdapter(matmulOp, arguments, stream, aicCoreNum, fftsAddr);
+        RunAdapter(matmulOp, arguments, stream, aicCoreNum, hardwareSyncAddr);
     } else {
         using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
         using MatmulKernel = Gemm::Kernel::W8A16Matmul<BlockMmadOpt, BlockEpilogue, BlockScheduler>;
@@ -149,7 +148,7 @@ static void Run(const Options &options) {
             };
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
         MatmulAdapter matmulOp;
-        RunAdapter(matmulOp, arguments, stream, aicCoreNum, fftsAddr);
+        RunAdapter(matmulOp, arguments, stream, aicCoreNum, hardwareSyncAddr);
     }
 
     std::vector<fp16_t> hostBFp16(hostB.begin(), hostB.end());

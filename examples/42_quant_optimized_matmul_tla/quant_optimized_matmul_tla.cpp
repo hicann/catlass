@@ -202,10 +202,9 @@ static void Run(const Options &options) {
         // no need to padding B
         deviceWB = deviceB;
     }
-    // Prepare FFTS address
-    uint64_t fftsAddr{0};
-    uint32_t fftsLen{0};
-    RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
+    // Prepare hardware sync address
+    uint64_t hardwareSyncAddr{0};
+    ACL_CHECK(aclrtGetHardwareSyncAddr(reinterpret_cast<void**>(&hardwareSyncAddr)));
 
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
@@ -261,7 +260,7 @@ static void Run(const Options &options) {
             };
 
             MatmulAdapter matmulOp;
-            RunAdapter(matmulOp, arguments, stream, aicCoreNum, fftsAddr);
+            RunAdapter(matmulOp, arguments, stream, aicCoreNum, hardwareSyncAddr);
         } else {
             // kernel level
             using MatmulKernel =
@@ -275,7 +274,7 @@ static void Run(const Options &options) {
             };
 
             MatmulAdapter matmulOp;
-            RunAdapter(matmulOp, arguments, stream, aicCoreNum, fftsAddr);
+            RunAdapter(matmulOp, arguments, stream, aicCoreNum, hardwareSyncAddr);
         }
     } else if (!isNeedPaddingA && isNeedPaddingB) {
         // no need to padding A, but B needs padding.
@@ -302,7 +301,7 @@ static void Run(const Options &options) {
             };
 
             MatmulAdapter matmulOp;
-            RunAdapter(matmulOp, arguments, stream, aicCoreNum, fftsAddr);
+            RunAdapter(matmulOp, arguments, stream, aicCoreNum, hardwareSyncAddr);
         } else {
             // kernel level
             using MatmulKernel =
@@ -316,7 +315,7 @@ static void Run(const Options &options) {
             };
 
             MatmulAdapter matmulOp;
-            RunAdapter(matmulOp, arguments, stream, aicCoreNum, fftsAddr);
+            RunAdapter(matmulOp, arguments, stream, aicCoreNum, hardwareSyncAddr);
         }
     } else if (isNeedPaddingA && !isNeedPaddingB) {
         // no need to padding B, but A needs padding.
@@ -343,7 +342,7 @@ static void Run(const Options &options) {
             };
 
             MatmulAdapter matmulOp;
-            RunAdapter(matmulOp, arguments, stream, aicCoreNum, fftsAddr);
+            RunAdapter(matmulOp, arguments, stream, aicCoreNum, hardwareSyncAddr);
         } else {
             // kernel level
             using MatmulKernel =
@@ -357,7 +356,7 @@ static void Run(const Options &options) {
             };
 
             MatmulAdapter matmulOp;
-            RunAdapter(matmulOp, arguments, stream, aicCoreNum, fftsAddr);
+            RunAdapter(matmulOp, arguments, stream, aicCoreNum, hardwareSyncAddr);
         }
     } else {
         // Both A and B need padding.
@@ -384,7 +383,7 @@ static void Run(const Options &options) {
             };
 
             MatmulAdapter matmulOp;
-            RunAdapter(matmulOp, arguments, stream, aicCoreNum, fftsAddr);
+            RunAdapter(matmulOp, arguments, stream, aicCoreNum, hardwareSyncAddr);
         } else {
             // kernel level
             using MatmulKernel =
@@ -398,7 +397,7 @@ static void Run(const Options &options) {
             };
 
             MatmulAdapter matmulOp;
-            RunAdapter(matmulOp, arguments, stream, aicCoreNum, fftsAddr);
+            RunAdapter(matmulOp, arguments, stream, aicCoreNum, hardwareSyncAddr);
         }
     }
     ACL_CHECK(aclrtSynchronizeStream(stream));

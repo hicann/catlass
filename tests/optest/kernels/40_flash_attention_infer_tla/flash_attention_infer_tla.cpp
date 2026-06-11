@@ -20,7 +20,7 @@
 
 #include "fai_kernel.cpp"
 
-extern "C" int rtGetC2cCtrlAddr(uint64_t *, uint32_t *);
+
 
 namespace CatlassKernel {
 
@@ -117,12 +117,11 @@ void FAImpl(const uint32_t blockNum, aclrtStream stream, const FlashAttentionPar
     FAInferTiling::GetFATilingParam(faInfo, blockDim, faTilingData);
     ACL_CHECK(aclrtMemcpy(tilingDevice, tilingSize, &faTilingData, tilingSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint64_t fftsAddr{0};
-    uint32_t fftsLen{0};
-    RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
+    uint64_t hardwareSyncAddr{0};
+    ACL_CHECK(aclrtGetHardwareSyncAddr(reinterpret_cast<void**>(&hardwareSyncAddr)));
 
     FAInferTla<DType><<<blockDim, nullptr, stream>>>(
-        fftsAddr, qDevice, kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice,
+        hardwareSyncAddr, qDevice, kDevice, vDevice, maskDevice, blockTableDevice, oDevice, qSeqDevice, kvSeqDevice, sDevice,
         pDevice, oTempDevice, oUpdateDevice, tilingDevice);
     ACL_CHECK(aclrtSynchronizeStream(stream));
 

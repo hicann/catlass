@@ -141,10 +141,9 @@ static void Run(const Options &options) {
         deviceWB = deviceB;
     }
     uint8_t *deviceWorkspace{nullptr};
-    // Prepare FFTS address
-    uint64_t fftsAddr{0};
-    uint32_t fftsLen{0};
-    RT_CHECK(rtGetC2cCtrlAddr(&fftsAddr, &fftsLen));
+    // Prepare hardware sync address
+    uint64_t hardwareSyncAddr{0};
+    ACL_CHECK(aclrtGetHardwareSyncAddr(reinterpret_cast<void**>(&hardwareSyncAddr)));
 
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
@@ -219,7 +218,7 @@ static void Run(const Options &options) {
                 );
             }
             matmulOp.Initialize(arguments, deviceWorkspace);
-            matmulOp(stream, aicCoreNum, fftsAddr);
+            matmulOp(stream, aicCoreNum, hardwareSyncAddr);
         } else {
             using TileScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
             using BlockEpilogue = void;
@@ -249,7 +248,7 @@ static void Run(const Options &options) {
                 );
             }
             matmulOp.Initialize(arguments, deviceWorkspace);
-            matmulOp(stream, aicCoreNum, fftsAddr);
+            matmulOp(stream, aicCoreNum, hardwareSyncAddr);
         }
     } else if (!isNeedPaddingA && isNeedPaddingB) {
         // no need to padding A, but B needs padding.
@@ -295,7 +294,7 @@ static void Run(const Options &options) {
                 );
             }
             matmulOp.Initialize(arguments, deviceWorkspace);
-            matmulOp(stream, aicCoreNum, fftsAddr);
+            matmulOp(stream, aicCoreNum, hardwareSyncAddr);
         } else {
             using TileScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
             using BlockEpilogue = void;
@@ -325,7 +324,7 @@ static void Run(const Options &options) {
                 );
             }
             matmulOp.Initialize(arguments, deviceWorkspace);
-            matmulOp(stream, aicCoreNum, fftsAddr);
+            matmulOp(stream, aicCoreNum, hardwareSyncAddr);
         }
     } else if (isNeedPaddingA && !isNeedPaddingB) {
         // no need to padding B, but A needs padding.
@@ -371,7 +370,7 @@ static void Run(const Options &options) {
                 );
             }
             matmulOp.Initialize(arguments, deviceWorkspace);
-            matmulOp(stream, aicCoreNum, fftsAddr);
+            matmulOp(stream, aicCoreNum, hardwareSyncAddr);
         } else {
             using TileScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
             using BlockEpilogue = void;
@@ -401,7 +400,7 @@ static void Run(const Options &options) {
                 );
             }
             matmulOp.Initialize(arguments, deviceWorkspace);
-            matmulOp(stream, aicCoreNum, fftsAddr);
+            matmulOp(stream, aicCoreNum, hardwareSyncAddr);
         }
     } else {
         // Both A and B need padding.
@@ -448,7 +447,7 @@ static void Run(const Options &options) {
                 );
             }
             matmulOp.Initialize(arguments, deviceWorkspace);
-            matmulOp(stream, aicCoreNum, fftsAddr);
+            matmulOp(stream, aicCoreNum, hardwareSyncAddr);
         } else {
             using TileScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
             using BlockEpilogue = void;
@@ -478,7 +477,7 @@ static void Run(const Options &options) {
                 );
             }
             matmulOp.Initialize(arguments, deviceWorkspace);
-            matmulOp(stream, aicCoreNum, fftsAddr);
+            matmulOp(stream, aicCoreNum, hardwareSyncAddr);
         }
     }
     ACL_CHECK(aclrtSynchronizeStream(stream));

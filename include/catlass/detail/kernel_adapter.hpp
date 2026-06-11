@@ -23,9 +23,9 @@ CATLASS_GLOBAL void KernelAdapter(typename Operator::Params params)
 }
 
 template <class Operator>
-CATLASS_GLOBAL void KernelAdapter(typename Operator::Params params, uint64_t fftsAddr)
+CATLASS_GLOBAL void KernelAdapter(typename Operator::Params params, uint64_t hardwareSyncAddr)
 {
-    AscendC::SetSyncBaseAddr(fftsAddr);
+    AscendC::SetSyncBaseAddr(hardwareSyncAddr);
     Operator op;
     op(params);
 }
