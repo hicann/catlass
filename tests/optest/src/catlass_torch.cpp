@@ -84,6 +84,10 @@ using GroupedMatmulSliceKOp = GroupedMatmulLike<CatlassKernel::GroupedMatmulSlic
 static auto& grouped_matmul_slice_k = GroupedMatmulSliceKOp::Run;
 REGISTER_TORCH_FUNC(grouped_matmul_slice_k);
 
+using GroupedMatmulOp = GroupedMatmulLike<CatlassKernel::GroupedMatmul, GmmSliceDir::K>;
+static auto& grouped_matmul = GroupedMatmulOp::Run;
+REGISTER_TORCH_FUNC(grouped_matmul);
+
 using MatmulAddOp = MatmulExtraLike<CatlassKernel::MatmulAdd, false>;
 static auto& matmul_add = MatmulAddOp::Run;
 REGISTER_TORCH_FUNC(matmul_add);

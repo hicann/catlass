@@ -19,6 +19,7 @@ from .grouped_matmul_slice_m_per_token_dequant import (
     grouped_matmul_slice_m_per_token_dequant_multistage,    # example 10
     grouped_matmul_slice_k_per_token_dequant,               # example 11
 )
+from .grouped_matmul import grouped_matmul  # example 08
 from .splitk_matmul import splitk_matmul  # example 09
 from .quant_matmul import quant_matmul  # example 12
 from .basic_matmul_tla import basic_matmul_tla  # example 13
@@ -59,6 +60,7 @@ __all__ = [
     "grouped_matmul_slice_k",             # example 05
     "optimized_matmul",                   # example 06
     "grouped_matmul_slice_m_per_token_dequant",               # example 07
+    "grouped_matmul",                     # example 08
     "splitk_matmul",                      # example 09
     "grouped_matmul_slice_m_per_token_dequant_multistage",    # example 10
     "grouped_matmul_slice_k_per_token_dequant",               # example 11

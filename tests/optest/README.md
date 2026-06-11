@@ -33,6 +33,7 @@ Python API (`torch_catlass.ops.*`)
 - [x] 05_grouped_matmul_slice_k
 - [x] 06_optimized_matmul
 - [x] 07_grouped_matmul_slice_m_per_token_dequant_moe
+- [x] 08_grouped_matmul
 - [x] 09_splitk_matmul
 - [x] 10_grouped_matmul_slice_m_per_token_dequant
 - [x] 11_grouped_matmul_slice_k_per_token_dequant
@@ -67,7 +68,6 @@ Python API (`torch_catlass.ops.*`)
 
 ### 暂未接入
 
-- [ ] 08_grouped_matmul
 - [ ] 15_gemm
 - [ ] 16_group_gemm
 - [ ] 17_gemv_aiv
