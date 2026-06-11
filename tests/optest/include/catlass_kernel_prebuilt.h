@@ -107,6 +107,15 @@ void Ascend950BasicConv2dTLA(const uint32_t blockNum, aclrtStream stream, const 
  */
 extern "C" void A2Fp8E4M3Matmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
+/**
+ * @brief Broadcast MatMul with Per-Block Quantization（Ascend 950 TLA）。
+ * @param blockNum  启用的 AI Core 数量。
+ * @param stream    ACL 计算流。
+ * @param params    运行期参数（M/N/K/batch、地址）。
+ */
+__attribute__((weak))
+void BroadcastMatmulPerblockQuant(const uint32_t blockNum, aclrtStream stream, const MatmulParams& params);
+
 } // namespace CatlassKernel
 
 #endif // OPTEST_CATLASS_KERNEL_PREBUILT_H

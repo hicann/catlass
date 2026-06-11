@@ -137,8 +137,8 @@ macro(add_kernel)
                     $<$<COMPILE_LANGUAGE:ASC>:-Wno-unused-value>
                 )
 
-                # _ms 版本附加 sanitizer 标志
-                if(_MS_SUFFIX STREQUAL "_ms")
+                # _ms 版本附加 sanitizer 标志 (ARCH 3510不需要静态插桩)
+                if(_MS_SUFFIX STREQUAL "_ms" AND NOT _ARCH EQUAL 3510)
                     target_compile_options(${_LIB_NAME} PRIVATE
                         "SHELL:$<$<COMPILE_LANGUAGE:ASC>:-g --cce-enable-sanitizer>"
                     )
@@ -237,6 +237,7 @@ add_subdirectory(45_strided_batched_matmul_tla)
 add_subdirectory(52_quant_multi_core_splitk_matmul_tla)
 add_subdirectory(53_ascend950_fp8_mx_matmul)
 add_subdirectory(54_ascend950_fp4_mx_matmul)
+add_subdirectory(62_ascend950_broadcast_matmul_perblock_quant)
 add_subdirectory(64_ascend950_matmul_evg)
 
 if(_JIT_KERNEL_ENTRIES)

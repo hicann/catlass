@@ -64,6 +64,7 @@ __all__ = [
     "EvgPostprocessMode",
     "flash_attention_infer",
     "flash_attention_infer_tla",
+    "broadcast_matmul_perblock_quant",
     "clear_jit_cache",
     "__version__",
     "__catlass_version__",

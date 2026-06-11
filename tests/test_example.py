@@ -63,7 +63,7 @@ class CatlassExampleTest(unittest.TestCase):
             stderr=subprocess.PIPE,
         )
         self._ret_check(ret)
-    
+
     def _ret_check(self, ret: subprocess.CompletedProcess):
         for error_log_line in ret.stderr.decode().splitlines():
             acl_match = re.match(r"^.*aclError:.*([1-9][0-9]{5})", error_log_line)
@@ -174,7 +174,7 @@ class CatlassExampleTest(unittest.TestCase):
         )
         case_cpp = case_py
         self.run_case("41_sparse_matmul_tla", case_cpp)
-    
+
     @only_on_3510
     def test_49_ascend950_flash_attention_infer(self):
         case_py = [str(i) for i in [1, 138, 100, 4, 2, 128, 0, 0, 0]] + ["half"]
@@ -338,7 +338,7 @@ class CatlassExampleTest(unittest.TestCase):
         )
         case_cpp = [str(i) for i in [512, 1024, 256]] + [1]
         self.run_case("54_ascend950_fp4_mx_matmul_aswt", case_cpp)
-    
+
     @only_on_3510
     def test_55_ascend950_mx_grouped_matmul_slice_m(self):
         for (trans, quant_type) in itertools.product(("0", "1"), ("float8_e4m3fn", "float8_e5m2", "float4_e2m1fn_x2")):
@@ -390,6 +390,17 @@ class CatlassExampleTest(unittest.TestCase):
         )
         case_cpp = [str(i) for i in [256, 128, 128]] + [1]
         self.run_case("59_ascend950_a8w4_mx_matmul", case_cpp)
+
+    @only_on_3510
+    def test_62_ascend950_broadcast_matmul_perblock_quant(self):
+        case_py = [str(i) for i in [5920, 128, 128, 128, 0]]  # batch_count, m, n, k, device_id
+        ret = subprocess.run(
+            ["python", os.path.join(
+                CMAKE_EXAMPLES_PATH, "62_ascend950_broadcast_matmul_perblock_quant", "gen_data_compare.py")] + case_py,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            )
+        self._ret_check(ret)
 
 normal_cases_2201 = [
     "00_basic_matmul 256 512 1024 0",

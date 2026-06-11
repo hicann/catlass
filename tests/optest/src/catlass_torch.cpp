@@ -32,6 +32,7 @@
 #include "template/sparse_matmul.h"
 #include "template/strided_batched_matmul.h"
 #include "template/w4a8_matmul.h"
+#include "template/broadcast_matmul_perblock_quant.h"
 
 // ── Workspace allocator bridge ──
 // 通过 dlsym 注入到 g_catlassWorkspaceAlloc，使 JIT 模板分配 NPU tensor
@@ -226,5 +227,9 @@ REGISTER_TORCH_FUNC(sparse_matmul_tla);
 using StridedBatchedMatmulTLAOp = StridedBatchedMatmulLike<CatlassKernel::StridedBatchedMatmulTLA>;
 static auto& strided_batched_matmul_tla = StridedBatchedMatmulTLAOp::Run;
 REGISTER_TORCH_FUNC(strided_batched_matmul_tla);
+
+using BroadcastMatmulPerblockQuantOp = BroadcastMatmulPerblockQuantLike<CatlassKernel::BroadcastMatmulPerblockQuant>;
+static auto& broadcast_matmul_perblock_quant = BroadcastMatmulPerblockQuantOp::Run;
+REGISTER_TORCH_FUNC(broadcast_matmul_perblock_quant);
 
 } // namespace CatlassKernelWrapper

@@ -12,9 +12,6 @@
 #ifndef CATLASS_GEMM_KERNEL_BROADCAST_MATMUL_PERBLOCK_QUANT_TLA_HPP
 #define CATLASS_GEMM_KERNEL_BROADCAST_MATMUL_PERBLOCK_QUANT_TLA_HPP
 
-#include <kernel_operator_block_sync_intf.h>
-#include <kernel_operator_sys_var_intf.h>
-
 #include "catlass/catlass.hpp"
 #include "catlass/arch/resource.hpp"
 #include "catlass/coord.hpp"
@@ -55,6 +52,17 @@ public:
     using ElementAccumulator = typename BlockMmad::ElementAccumulator;
 
     using BlockScheduler = BlockScheduler_;
+
+    static_assert(std::is_same_v<LayoutA, detail::TagToLayout_t<ElementA, layout::RowMajor>>,
+        "LayoutA must be RowMajor");
+    static_assert(std::is_same_v<LayoutB, detail::TagToLayout_t<ElementB, layout::RowMajor>>,
+        "LayoutB must be RowMajor");
+    static_assert(std::is_same_v<LayoutC, detail::TagToLayout_t<ElementC, layout::RowMajor>>,
+        "LayoutC must be RowMajor");
+    static_assert(std::is_same_v<LayoutDst, detail::TagToLayout_t<ElementDst, layout::RowMajor>>,
+        "LayoutDst must be RowMajor");
+    static_assert(std::is_same_v<ElementA, bfloat16_t> && std::is_same_v<ElementB, bfloat16_t> &&
+        std::is_same_v<ElementC, bfloat16_t>, "ElementA, ElementB, ElementC must be bfloat16_t");
 
     static constexpr uint32_t L1_TILE_M = tla::get<0>(L1TileShape{});
     static constexpr uint32_t L1_TILE_N = tla::get<1>(L1TileShape{});
@@ -107,8 +115,6 @@ public:
 
     static bool CanImplement(const Arguments &args)
     {
-        static_assert(std::is_same_v<ElementA, bfloat16_t> && std::is_same_v<ElementB, bfloat16_t> &&
-            std::is_same_v<ElementC, bfloat16_t>, "ElementA, ElementB, ElementC must be bfloat16_t");
         if (args.batchCount <= 0 || args.batchCount > 65536) {
             return false;
         }
