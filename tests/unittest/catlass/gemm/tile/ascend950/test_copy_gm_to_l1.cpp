@@ -47,8 +47,11 @@ protected:
 
     template <class Element>
     void BaseCheck(AscendCCallLog const &logTileCopy){
-
+        ASSERT_EQ(logTileCopy.name, "DataCopy");
+        ASSERT_EQ(logTileCopy.args.size(), 3);
+        ASSERT_EQ(logTileCopy.GetArgsTAt(0).Type(), typeid(Element));
     }
+
 };
 
 // Testcase, from RowMajor -> zN, Ascend950, long stride场景
@@ -99,6 +102,420 @@ TEST_P(TileCopyGmToL1TestAscend950, RowMajorTozNTestLongStride)
     ASSERT_EQ(nd2nzArg->dstNzMatrixStride, _0);
 }
 
+// ColumnMajor -> nZ(B1), 3-param Ascend950 specialization.
+TEST_P(TileCopyGmToL1TestAscend950, ColumnMajorTonZB1TestBasic)
+{
+    using Element = float;
+    using ArchTag = Catlass::Arch::Ascend950;
+    using LayoutSrc = layout::ColumnMajor;
+    using LayoutDst = layout::nZ;
+    using GmType = Gemm::GemmType<Element, LayoutSrc>;
+    using L1Type = Gemm::GemmType<Element, LayoutDst, AscendC::TPosition::B1>;
+
+    setShape<Element, true>();
+    LayoutSrc layoutSrc = LayoutSrc::template MakeLayout<Element>(_row, _col);
+    LayoutDst layoutDst = LayoutDst::template MakeLayout<Element>(_row, _col);
+
+    CopyGmToL1<ArchTag, GmType, L1Type> copyGmToL1;
+    AscendC::GlobalTensor<Element> gmTensor;
+    AscendC::LocalTensor<Element> l1Tensor;
+    copyGmToL1(l1Tensor, gmTensor, layoutDst, layoutSrc);
+
+    auto logs = AscendCCallLogger::Instance().GetLogs();
+    ASSERT_EQ(logs.size(), _1);
+    auto logTileCopy = logs[0];
+    BaseCheck<Element>(logTileCopy);
+    ASSERT_EQ(logTileCopy.GetArgsAt(0).RawValue(), &l1Tensor);
+    ASSERT_EQ(logTileCopy.GetArgsAt(1).RawValue(), &gmTensor);
+
+    const auto* p = logTileCopy.GetArgsAt(2).Value<AscendC::Nd2NzParams>();
+    ASSERT_EQ(p->ndNum, _1);
+    ASSERT_EQ(p->nValue, _col);
+    ASSERT_EQ(p->dValue, _row);
+    ASSERT_EQ(p->srcDValue, _row);
+    ASSERT_EQ(p->dstNzC0Stride, _col_round);
+    ASSERT_EQ(p->dstNzNStride, _1);
+}
+
+// RowMajor -> zN(A1), 3-param Ascend950 specialization, long-stride split path.
+TEST_P(TileCopyGmToL1TestAscend950, RowMajorTozNA1TestLongStride)
+{
+    using Element = float;
+    using ArchTag = Catlass::Arch::Ascend950;
+    using LayoutSrc = layout::RowMajor;
+    using LayoutDst = layout::zN;
+    using GmType = Gemm::GemmType<Element, LayoutSrc>;
+    using L1Type = Gemm::GemmType<Element, LayoutDst, AscendC::TPosition::A1>;
+    constexpr uint32_t ELE_NUM_PER_C0 = GetEleNumPerC0<Element>();
+
+    setShape<Element>();
+    uint32_t veryLongStride = STRIDE_LIMIT + 1;
+    LayoutSrc layoutSrc{_row, _col, veryLongStride};
+    LayoutDst layoutDst = LayoutDst::template MakeLayout<Element>(_row, _col);
+
+    CopyGmToL1<ArchTag, GmType, L1Type> copyGmToL1;
+    AscendC::GlobalTensor<Element> gmTensor;
+    AscendC::LocalTensor<Element> l1Tensor;
+    copyGmToL1(l1Tensor, gmTensor, layoutDst, layoutSrc);
+
+    auto logs = AscendCCallLogger::Instance().GetLogs();
+    ASSERT_EQ(logs.size(), _row);
+    for (uint32_t i = 0; i < logs.size(); ++i) {
+        BaseCheck<Element>(logs[i]);
+        ASSERT_EQ(logs[i].GetArgsAt(0).GetInstAddr(), i * ELE_NUM_PER_C0 * sizeof(Element));
+        ASSERT_EQ(logs[i].GetArgsAt(1).GetInstAddr(), i * veryLongStride * sizeof(Element));
+        const auto* p = logs[i].GetArgsAt(2).Value<AscendC::Nd2NzParams>();
+        ASSERT_EQ(p->nValue, _1);
+        ASSERT_EQ(p->dValue, _col);
+        ASSERT_EQ(p->srcDValue, _0);
+        ASSERT_EQ(p->dstNzNStride, _0);
+    }
+}
+
+// RowMajor -> zN(B1), 3-param Ascend950 specialization.
+TEST_P(TileCopyGmToL1TestAscend950, RowMajorTozNB1TestBasic)
+{
+    using Element = float;
+    using ArchTag = Catlass::Arch::Ascend950;
+    using LayoutSrc = layout::RowMajor;
+    using LayoutDst = layout::zN;
+    using GmType = Gemm::GemmType<Element, LayoutSrc>;
+    using L1Type = Gemm::GemmType<Element, LayoutDst, AscendC::TPosition::B1>;
+
+    setShape<Element>();
+    LayoutSrc layoutSrc = LayoutSrc::template MakeLayout<Element>(_row, _col);
+    LayoutDst layoutDst = LayoutDst::template MakeLayout<Element>(_row, _col);
+
+    CopyGmToL1<ArchTag, GmType, L1Type> copyGmToL1;
+    AscendC::GlobalTensor<Element> gmTensor;
+    AscendC::LocalTensor<Element> l1Tensor;
+    copyGmToL1(l1Tensor, gmTensor, layoutDst, layoutSrc);
+
+    auto logs = AscendCCallLogger::Instance().GetLogs();
+    ASSERT_EQ(logs.size(), _1);
+    auto logTileCopy = logs[0];
+    BaseCheck<Element>(logTileCopy);
+    ASSERT_EQ(logTileCopy.GetArgsAt(0).RawValue(), &l1Tensor);
+    ASSERT_EQ(logTileCopy.GetArgsAt(1).RawValue(), &gmTensor);
+
+    const auto* p = logTileCopy.GetArgsAt(2).Value<AscendC::Nd2NzParams>();
+    ASSERT_EQ(p->ndNum, _1);
+    ASSERT_EQ(p->nValue, _row);
+    ASSERT_EQ(p->dValue, _col);
+    ASSERT_EQ(p->srcDValue, _col);
+    ASSERT_EQ(p->dstNzC0Stride, _row_round);
+    ASSERT_EQ(p->dstNzNStride, _1);
+}
+
+// RowMajor -> zZ(B1), 3-param Ascend950 specialization.
+TEST_P(TileCopyGmToL1TestAscend950, RowMajorTozZB1TestBasic)
+{
+    using Element = float;
+    using ArchTag = Catlass::Arch::Ascend950;
+    using LayoutSrc = layout::RowMajor;
+    using LayoutDst = layout::zZ;
+    using GmType = Gemm::GemmType<Element, LayoutSrc>;
+    using L1Type = Gemm::GemmType<Element, LayoutDst, AscendC::TPosition::B1>;
+    constexpr uint32_t ELE_NUM_PER_C0 = GetEleNumPerC0<Element>();
+
+    setShape<Element, true>();
+    LayoutSrc layoutSrc = LayoutSrc::template MakeLayout<Element>(_row, _col);
+    LayoutDst layoutDst = LayoutDst::template MakeLayout<Element>(_row, _col);
+
+    CopyGmToL1<ArchTag, GmType, L1Type> copyGmToL1;
+    AscendC::GlobalTensor<Element> gmTensor;
+    AscendC::LocalTensor<Element> l1Tensor;
+    copyGmToL1(l1Tensor, gmTensor, layoutDst, layoutSrc);
+
+    auto logs = AscendCCallLogger::Instance().GetLogs();
+    uint32_t ndNum = _row / C0_NUM_PER_FRACTAL;
+    uint32_t remains = _row % C0_NUM_PER_FRACTAL;
+    ASSERT_EQ(logs.size(), (ndNum ? 1U : 0U) + (remains ? 1U : 0U));
+
+    uint32_t srcNdStride = C0_NUM_PER_FRACTAL * _col;
+    uint32_t dstMatrixStride = RoundUp<ELE_NUM_PER_C0>(_col) * C0_NUM_PER_FRACTAL;
+    uint32_t logIdx = 0;
+    if (ndNum) {
+        BaseCheck<Element>(logs[logIdx]);
+        const auto* p = logs[logIdx].GetArgsAt(2).Value<AscendC::Nd2NzParams>();
+        ASSERT_EQ(p->ndNum, ndNum);
+        ASSERT_EQ(p->nValue, C0_NUM_PER_FRACTAL);
+        ASSERT_EQ(p->dValue, _col);
+        ASSERT_EQ(p->srcNdMatrixStride, srcNdStride);
+        ASSERT_EQ(p->srcDValue, _col);
+        ASSERT_EQ(p->dstNzC0Stride, C0_NUM_PER_FRACTAL);
+        ASSERT_EQ(p->dstNzNStride, _1);
+        ASSERT_EQ(p->dstNzMatrixStride, dstMatrixStride);
+        ++logIdx;
+    }
+    if (remains) {
+        BaseCheck<Element>(logs[logIdx]);
+        ASSERT_EQ(logs[logIdx].GetArgsAt(0).GetInstAddr(), ndNum * dstMatrixStride * sizeof(Element));
+        ASSERT_EQ(logs[logIdx].GetArgsAt(1).GetInstAddr(), ndNum * srcNdStride * sizeof(Element));
+        const auto* p = logs[logIdx].GetArgsAt(2).Value<AscendC::Nd2NzParams>();
+        ASSERT_EQ(p->ndNum, _1);
+        ASSERT_EQ(p->nValue, remains);
+        ASSERT_EQ(p->dValue, _col);
+        ASSERT_EQ(p->srcNdMatrixStride, srcNdStride);
+        ASSERT_EQ(p->srcDValue, _col);
+        ASSERT_EQ(p->dstNzC0Stride, C0_NUM_PER_FRACTAL);
+        ASSERT_EQ(p->dstNzNStride, _1);
+        ASSERT_EQ(p->dstNzMatrixStride, _0);
+    }
+}
+
+// RowMajor -> RowMajor(A1), 3-param Ascend950 specialization.
+TEST_P(TileCopyGmToL1TestAscend950, RowMajorToRowMajorA1ContiguousTest)
+{
+    using Element = float;
+    using ArchTag = Catlass::Arch::Ascend950;
+    using Layout = layout::RowMajor;
+    using GmType = Gemm::GemmType<Element, Layout>;
+    using L1Type = Gemm::GemmType<Element, Layout, AscendC::TPosition::A1>;
+
+    setShape<Element>();
+    Layout layoutSrc = Layout::template MakeLayout<Element>(_row, _col);
+    Layout layoutDst = Layout::template MakeLayout<Element>(_row, _col);
+
+    CopyGmToL1<ArchTag, GmType, L1Type> copyGmToL1;
+    AscendC::GlobalTensor<Element> gmTensor;
+    AscendC::LocalTensor<Element> l1Tensor;
+    copyGmToL1(l1Tensor, gmTensor, layoutDst, layoutSrc);
+
+    auto logs = AscendCCallLogger::Instance().GetLogs();
+    ASSERT_EQ(logs.size(), _1);
+    BaseCheck<Element>(logs[0]);
+    ASSERT_EQ(*logs[0].GetArgsAt(2).Value<uint32_t>(), _row * _col);
+}
+
+// ColumnMajor -> nN(A1/B1), 3-param Ascend950 specializations.
+TEST_P(TileCopyGmToL1TestAscend950, ColumnMajorTonNA1TestBasic)
+{
+    using Element = float;
+    using ArchTag = Catlass::Arch::Ascend950;
+    using LayoutSrc = layout::ColumnMajor;
+    using LayoutDst = layout::nN;
+    using GmType = Gemm::GemmType<Element, LayoutSrc>;
+    using L1Type = Gemm::GemmType<Element, LayoutDst, AscendC::TPosition::A1>;
+    constexpr uint32_t ELE_NUM_PER_C0 = GetEleNumPerC0<Element>();
+
+    setShape<Element, true>();
+    LayoutSrc layoutSrc = LayoutSrc::template MakeLayout<Element>(_row, _col);
+    LayoutDst layoutDst = LayoutDst::template MakeLayout<Element>(_row, _col);
+
+    CopyGmToL1<ArchTag, GmType, L1Type> copyGmToL1;
+    AscendC::GlobalTensor<Element> gmTensor;
+    AscendC::LocalTensor<Element> l1Tensor;
+    copyGmToL1(l1Tensor, gmTensor, layoutDst, layoutSrc);
+
+    const auto logs = AscendCCallLogger::Instance().GetLogs();
+    uint32_t ndNum = _col / C0_NUM_PER_FRACTAL;
+    uint32_t remains = _col % C0_NUM_PER_FRACTAL;
+    ASSERT_EQ(logs.size(), (ndNum ? 1U : 0U) + (remains ? 1U : 0U));
+
+    uint32_t srcNdStride = C0_NUM_PER_FRACTAL * _row;
+    uint32_t dstMatrixStride = RoundUp<ELE_NUM_PER_C0>(_row) * C0_NUM_PER_FRACTAL;
+    uint32_t logIdx = 0;
+    if (ndNum) {
+        BaseCheck<Element>(logs[logIdx]);
+        const auto* p = logs[logIdx].GetArgsAt(2).Value<AscendC::Nd2NzParams>();
+        ASSERT_EQ(p->ndNum, ndNum);
+        ASSERT_EQ(p->nValue, C0_NUM_PER_FRACTAL);
+        ASSERT_EQ(p->dValue, _row);
+        ASSERT_EQ(p->srcNdMatrixStride, srcNdStride);
+        ASSERT_EQ(p->srcDValue, _row);
+        ASSERT_EQ(p->dstNzC0Stride, C0_NUM_PER_FRACTAL);
+        ASSERT_EQ(p->dstNzNStride, _1);
+        ASSERT_EQ(p->dstNzMatrixStride, dstMatrixStride);
+        ++logIdx;
+    }
+    if (remains) {
+        BaseCheck<Element>(logs[logIdx]);
+        ASSERT_EQ(logs[logIdx].GetArgsAt(0).GetInstAddr(), ndNum * dstMatrixStride * sizeof(Element));
+        ASSERT_EQ(logs[logIdx].GetArgsAt(1).GetInstAddr(), ndNum * srcNdStride * sizeof(Element));
+        const auto* p = logs[logIdx].GetArgsAt(2).Value<AscendC::Nd2NzParams>();
+        ASSERT_EQ(p->ndNum, _1);
+        ASSERT_EQ(p->nValue, remains);
+        ASSERT_EQ(p->dValue, _row);
+        ASSERT_EQ(p->srcNdMatrixStride, srcNdStride);
+        ASSERT_EQ(p->srcDValue, _row);
+        ASSERT_EQ(p->dstNzC0Stride, C0_NUM_PER_FRACTAL);
+        ASSERT_EQ(p->dstNzNStride, _1);
+        ASSERT_EQ(p->dstNzMatrixStride, _0);
+    }
+}
+
+TEST_P(TileCopyGmToL1TestAscend950, ColumnMajorTonNB1TestBasic)
+{
+    using Element = float;
+    using ArchTag = Catlass::Arch::Ascend950;
+    using LayoutSrc = layout::ColumnMajor;
+    using LayoutDst = layout::nN;
+    using GmType = Gemm::GemmType<Element, LayoutSrc>;
+    using L1Type = Gemm::GemmType<Element, LayoutDst, AscendC::TPosition::B1>;
+    constexpr uint32_t ELE_NUM_PER_C0 = GetEleNumPerC0<Element>();
+
+    setShape<Element, true>();
+    LayoutSrc layoutSrc = LayoutSrc::template MakeLayout<Element>(_row, _col);
+    LayoutDst layoutDst = LayoutDst::template MakeLayout<Element>(_row, _col);
+
+    CopyGmToL1<ArchTag, GmType, L1Type> copyGmToL1;
+    AscendC::GlobalTensor<Element> gmTensor;
+    AscendC::LocalTensor<Element> l1Tensor;
+    copyGmToL1(l1Tensor, gmTensor, layoutDst, layoutSrc);
+
+    const auto logs = AscendCCallLogger::Instance().GetLogs();
+    uint32_t ndNum = _col / C0_NUM_PER_FRACTAL;
+    uint32_t remains = _col % C0_NUM_PER_FRACTAL;
+    ASSERT_EQ(logs.size(), (ndNum ? 1U : 0U) + (remains ? 1U : 0U));
+
+    uint32_t srcNdStride = C0_NUM_PER_FRACTAL * _row;
+    uint32_t dstMatrixStride = RoundUp<ELE_NUM_PER_C0>(_row) * C0_NUM_PER_FRACTAL;
+    uint32_t logIdx = 0;
+    if (ndNum) {
+        BaseCheck<Element>(logs[logIdx]);
+        const auto* p = logs[logIdx].GetArgsAt(2).Value<AscendC::Nd2NzParams>();
+        ASSERT_EQ(p->ndNum, ndNum);
+        ASSERT_EQ(p->nValue, C0_NUM_PER_FRACTAL);
+        ASSERT_EQ(p->dValue, _row);
+        ASSERT_EQ(p->srcNdMatrixStride, srcNdStride);
+        ASSERT_EQ(p->srcDValue, _row);
+        ASSERT_EQ(p->dstNzC0Stride, C0_NUM_PER_FRACTAL);
+        ASSERT_EQ(p->dstNzNStride, _1);
+        ASSERT_EQ(p->dstNzMatrixStride, dstMatrixStride);
+        ++logIdx;
+    }
+    if (remains) {
+        BaseCheck<Element>(logs[logIdx]);
+        ASSERT_EQ(logs[logIdx].GetArgsAt(0).GetInstAddr(), ndNum * dstMatrixStride * sizeof(Element));
+        ASSERT_EQ(logs[logIdx].GetArgsAt(1).GetInstAddr(), ndNum * srcNdStride * sizeof(Element));
+        const auto* p = logs[logIdx].GetArgsAt(2).Value<AscendC::Nd2NzParams>();
+        ASSERT_EQ(p->ndNum, _1);
+        ASSERT_EQ(p->nValue, remains);
+        ASSERT_EQ(p->dValue, _row);
+        ASSERT_EQ(p->srcNdMatrixStride, srcNdStride);
+        ASSERT_EQ(p->srcDValue, _row);
+        ASSERT_EQ(p->dstNzC0Stride, C0_NUM_PER_FRACTAL);
+        ASSERT_EQ(p->dstNzNStride, _1);
+        ASSERT_EQ(p->dstNzMatrixStride, _0);
+    }
+}
+
+// VectorLayout -> zN(A1), 3-param Ascend950 specialization.
+TEST_P(TileCopyGmToL1TestAscend950, VectorTozNA1TestBasic)
+{
+    using Element = float;
+    using ArchTag = Catlass::Arch::Ascend950;
+    using LayoutSrc = layout::VectorLayout;
+    using LayoutDst = layout::zN;
+    using GmType = Gemm::GemmType<Element, LayoutSrc>;
+    using L1Type = Gemm::GemmType<Element, LayoutDst, AscendC::TPosition::A1>;
+
+    setShape<Element>();
+    LayoutSrc layoutSrc(_col);
+    LayoutDst layoutDst = LayoutDst::template MakeLayout<Element>(_1, _col);
+
+    CopyGmToL1<ArchTag, GmType, L1Type> copyGmToL1;
+    AscendC::GlobalTensor<Element> gmTensor;
+    AscendC::LocalTensor<Element> l1Tensor;
+    copyGmToL1(l1Tensor, gmTensor, layoutDst, layoutSrc);
+
+    auto logs = AscendCCallLogger::Instance().GetLogs();
+    ASSERT_EQ(logs.size(), _1);
+    const auto* p = logs[0].GetArgsAt(2).Value<AscendC::Nd2NzParams>();
+    ASSERT_EQ(p->ndNum, _1);
+    ASSERT_EQ(p->nValue, _1);
+    ASSERT_EQ(p->dValue, _col);
+    ASSERT_EQ(p->srcDValue, _col);
+    ASSERT_EQ(p->dstNzC0Stride, C0_NUM_PER_FRACTAL);
+    ASSERT_EQ(p->dstNzNStride, _1);
+}
+
+// VectorLayout(GM) -> VectorLayout(A1), 3-param Ascend950 specialization.
+TEST_P(TileCopyGmToL1TestAscend950, VectorToVectorA1TestBasic)
+{
+    using Element = float;
+    using ArchTag = Catlass::Arch::Ascend950;
+    using Layout = layout::VectorLayout;
+    using GmType = Gemm::GemmType<Element, Layout, AscendC::TPosition::GM>;
+    using L1Type = Gemm::GemmType<Element, Layout, AscendC::TPosition::A1>;
+    constexpr uint32_t ELE_NUM_PER_C0 = GetEleNumPerC0<Element>();
+
+    setShape<Element>();
+    Layout layoutSrc(_col);
+    Layout layoutDst(_col);
+
+    CopyGmToL1<ArchTag, GmType, L1Type> copyGmToL1;
+    AscendC::GlobalTensor<Element> gmTensor;
+    AscendC::LocalTensor<Element> l1Tensor;
+    copyGmToL1(l1Tensor, gmTensor, layoutDst, layoutSrc);
+
+    auto logs = AscendCCallLogger::Instance().GetLogs();
+    ASSERT_EQ(logs.size(), _1);
+    BaseCheck<Element>(logs[0]);
+    const auto* p = logs[0].GetArgsAt(2).Value<AscendC::DataCopyParams>();
+    ASSERT_EQ(p->blockCount, _1);
+    ASSERT_EQ(p->blockLen, _col / ELE_NUM_PER_C0);
+    ASSERT_EQ(p->srcStride, _0);
+    ASSERT_EQ(p->dstStride, _0);
+}
+
+// DynamicOptimized PaddingRowMajor -> zN, direct Ascend950 coverage.
+TEST_P(TileCopyGmToL1TestAscend950, DynamicOptimizedPaddingRowMajorTozNTest)
+{
+    using Element = half;
+    using ArchTag = Catlass::Arch::Ascend950;
+    using LayoutSrc = layout::PaddingRowMajor;
+    using LayoutDst = layout::zN;
+    using GmType = Gemm::GemmType<Element, LayoutSrc>;
+    constexpr uint32_t ELE_NUM_PER_C0 = GetEleNumPerC0<Element>();
+
+    setShape<Element>();
+    LayoutSrc layoutSrc(_row, _col, C0_NUM_PER_FRACTAL, ELE_NUM_PER_C0);
+    LayoutDst layoutDst = LayoutDst::template MakeLayout<Element>(_row, _col);
+
+    CopyGmToL1DynamicOptimized<ArchTag, GmType> copyGmToL1;
+    AscendC::GlobalTensor<Element> gmTensor;
+    AscendC::LocalTensor<Element> l1Tensor;
+    copyGmToL1(l1Tensor, gmTensor, layoutDst, layoutSrc);
+
+    auto logs = AscendCCallLogger::Instance().GetLogs();
+    ASSERT_EQ(logs.size(), _1);
+    const auto* p = logs[0].GetArgsAt(2).Value<AscendC::Nd2NzParams>();
+    ASSERT_EQ(p->nValue, _row);
+    ASSERT_EQ(p->dValue, _col);
+    ASSERT_EQ(p->srcDValue, ELE_NUM_PER_C0);
+    ASSERT_EQ(p->dstNzC0Stride, _row_round);
+}
+
+// DynamicOptimized PaddingColumnMajor -> nZ, direct Ascend950 coverage.
+TEST_P(TileCopyGmToL1TestAscend950, DynamicOptimizedPaddingColumnMajorTonZTest)
+{
+    using Element = half;
+    using ArchTag = Catlass::Arch::Ascend950;
+    using LayoutSrc = layout::PaddingColumnMajor;
+    using LayoutDst = layout::nZ;
+    using GmType = Gemm::GemmType<Element, LayoutSrc>;
+    constexpr uint32_t ELE_NUM_PER_C0 = GetEleNumPerC0<Element>();
+
+    setShape<Element, true>();
+    LayoutSrc layoutSrc(_row, _col, ELE_NUM_PER_C0, C0_NUM_PER_FRACTAL);
+    LayoutDst layoutDst = LayoutDst::template MakeLayout<Element>(_row, _col);
+
+    CopyGmToL1DynamicOptimized<ArchTag, GmType> copyGmToL1;
+    AscendC::GlobalTensor<Element> gmTensor;
+    AscendC::LocalTensor<Element> l1Tensor;
+    copyGmToL1(l1Tensor, gmTensor, layoutDst, layoutSrc);
+
+    auto logs = AscendCCallLogger::Instance().GetLogs();
+    ASSERT_EQ(logs.size(), _1);
+    const auto* p = logs[0].GetArgsAt(2).Value<AscendC::Nd2NzParams>();
+    ASSERT_EQ(p->nValue, _col);
+    ASSERT_EQ(p->dValue, _row);
+    ASSERT_EQ(p->srcDValue, ELE_NUM_PER_C0);
+    ASSERT_EQ(p->dstNzC0Stride, _col_round);
+}
+
 ///////////////////////////// TEST WITH PARAMETERIC GROUPS
 INSTANTIATE_TEST_SUITE_P(
     CopyGmToL1,
@@ -112,4 +529,3 @@ INSTANTIATE_TEST_SUITE_P(
 );
 
 #endif // CATLASS_ARCH == 3510
-

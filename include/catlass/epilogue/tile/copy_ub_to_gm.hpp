@@ -139,7 +139,9 @@ struct CopyUb2GmAligned<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>
 };
 
 //////////////////////////// CopyUb2Gm(Ascend950, No TLA) ////////////////////////////
-//Partial specialization for CopyUb2Gm(Ascend950 wo-tla), RowMajor in and RowMajor out.
+
+#if (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510) || (defined(__NPU_ARCH__) && __NPU_ARCH__ == 3510)
+//Partial specialization for CopyUb2Gm(AtlasA5 wo-tla), RowMajor in and RowMajor out.
 template <typename Element>
 struct CopyUb2Gm<Arch::Ascend950, Gemm::GemmType<Element, layout::RowMajor>> {
     using LayoutDst = layout::RowMajor;
@@ -167,6 +169,41 @@ struct CopyUb2Gm<Arch::Ascend950, Gemm::GemmType<Element, layout::RowMajor>> {
         AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams);
     }
 };
+
+template <typename Element>
+struct CopyUb2Gm<Arch::Ascend950, Gemm::GemmType<Element, layout::VectorLayout>> {
+    using LayoutDst = layout::VectorLayout;
+    using LayoutSrc = layout::VectorLayout;
+
+    static constexpr uint32_t ELE_NUM_PER_BLK = BYTE_PER_BLK / sizeof(Element);
+
+    CATLASS_DEVICE
+    CopyUb2Gm() = default;
+
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::GlobalTensor<Element> const &dstTensor,
+        AscendC::LocalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst,
+        LayoutSrc const &layoutSrc)
+    {
+        AscendC::DataCopyExtParams dataCopyParams(
+            1,
+            layoutDst.shape(0) * sizeof(Element),
+            0,
+            0,
+            0
+        );
+        if constexpr (AscendC::Std::is_one_of_v<Element, float8_e4m3_t, float8_e5m2_t, float4_e2m1x2_t,
+                          float4_e1m2x2_t>) {
+            AscendC::DataCopyPad(dstTensor.template ReinterpretCast<int8_t>(),
+                srcTensor.template ReinterpretCast<int8_t>(), dataCopyParams);
+        } else {
+            AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams);
+        }
+    };
+};
+#endif // CATLASS_ARCH == 3510 || __NPU_ARCH__ == 3510
 
 }  // Catlass::Epilogue::Tile
 

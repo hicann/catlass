@@ -236,4 +236,157 @@ TYPED_TEST(TileCopyGmToL1Test, nZTozNTestBasic)
     }
 }
 
+// RowMajor -> zN, interval datacopy action (use DataCopy instead of nd2nz)
+TYPED_TEST(TileCopyGmToL1Test, RowMajorTozNIntervalDataCopy)
+{
+    using ArchTag = TypeParam;
+    if constexpr ((kEnableAtlasA2 && std::is_same_v<ArchTag, Catlass::Arch::AtlasA2>) ||
+                  (kEnableAscend950 && std::is_same_v<ArchTag, Catlass::Arch::Ascend950>)) {
+        using Element = half; // fixed to be `half`
+        using LayoutSrc = layout::RowMajor;
+        using LayoutDst = layout::zN;
+        using GmType = Gemm::GemmType<Element, LayoutSrc>;
+        constexpr uint32_t ELE_NUM_PER_C0 = GetEleNumPerC0<Element>();
 
+        CopyGmToL1IntervalDataCopy<ArchTag, GmType> copyGmToL1;
+        AscendC::GlobalTensor<Element> gmTensor;
+        AscendC::LocalTensor<Element> l1Tensor;
+
+        LayoutSrc layoutSrc;
+        LayoutDst layoutDst;
+        this->template setShape<Element>();
+        setLayout<Element>(this->_row, this->_col, layoutSrc, layoutDst);
+
+        // call this copyGmToL1
+        copyGmToL1(l1Tensor, gmTensor, layoutDst, layoutSrc);
+
+        auto logs = AscendCCallLogger::Instance().GetLogs();
+        ASSERT_EQ(logs.size(), this->_row);
+
+        for (int i = 0; i < this->_row; i++) {
+            AscendCCallLog logTileCopy = logs[i];
+            this->template BaseCheck<Element>(logTileCopy);
+
+            const AscendC::DataCopyParams* logDataCopy = logTileCopy.GetArgsAt(2).Value<AscendC::DataCopyParams>();
+            ASSERT_EQ(logDataCopy->blockCount, this->_cols_by_fractal);
+            ASSERT_EQ(logDataCopy->blockLen, _1);                 
+            ASSERT_EQ(logDataCopy->srcGap, _0);
+            ASSERT_EQ(logDataCopy->dstGap, this->_row_round - 1);
+        }
+    } 
+}
+
+// ColumnMajor -> nZ, interval datacopy action (use DataCopy instead of nd2nz)
+TYPED_TEST(TileCopyGmToL1Test, ColumnMajorTonZIntervalDataCopy)
+{
+    using ArchTag = TypeParam;
+    if constexpr ((kEnableAtlasA2 && std::is_same_v<ArchTag, Catlass::Arch::AtlasA2>) ||
+                  (kEnableAscend950 && std::is_same_v<ArchTag, Catlass::Arch::Ascend950>)) {
+        using Element = half;
+        using LayoutSrc = layout::ColumnMajor;
+        using LayoutDst = layout::nZ;
+        using GmType = Gemm::GemmType<Element, LayoutSrc>;
+        constexpr uint32_t ELE_NUM_PER_C0 = GetEleNumPerC0<Element>();
+
+        CopyGmToL1IntervalDataCopy<ArchTag, GmType> copyGmToL1;
+        AscendC::GlobalTensor<Element> gmTensor;
+        AscendC::LocalTensor<Element> l1Tensor;
+
+        this->template setShape<Element, true>();
+        LayoutSrc layoutSrc;
+        LayoutDst layoutDst;
+        setLayout<Element>(this->_row, this->_col, layoutSrc, layoutDst);
+
+        copyGmToL1(l1Tensor, gmTensor, layoutDst, layoutSrc);
+
+        auto logs = AscendCCallLogger::Instance().GetLogs();
+        ASSERT_EQ(logs.size(), this->_col);
+
+        for (int i = 0; i < this->_col; i++) {
+            AscendCCallLog logTileCopy = logs[i];
+            this->template BaseCheck<Element>(logTileCopy);
+
+            const AscendC::DataCopyParams* logDataCopy = logTileCopy.GetArgsAt(2).Value<AscendC::DataCopyParams>();
+            ASSERT_EQ(logDataCopy->blockCount, this->_rows_by_fractal);
+            ASSERT_EQ(logDataCopy->blockLen, _1);
+            ASSERT_EQ(logDataCopy->srcGap, _0);
+            ASSERT_EQ(logDataCopy->dstGap, this->_col_round - 1);
+        }
+    }
+}
+
+// PaddingRowMajor -> zN, interval datacopy action
+TYPED_TEST(TileCopyGmToL1Test, PaddingRowMajorTozNIntervalDataCopy)
+{
+    using ArchTag = TypeParam;
+    if constexpr ((kEnableAtlasA2 && std::is_same_v<ArchTag, Catlass::Arch::AtlasA2>) ||
+                  (kEnableAscend950 && std::is_same_v<ArchTag, Catlass::Arch::Ascend950>)) {
+        using Element = half;
+        using LayoutSrc = layout::PaddingRowMajor;
+        using LayoutDst = layout::zN;
+        using GmType = Gemm::GemmType<Element, LayoutSrc>;
+        constexpr uint32_t ELE_NUM_PER_C0 = GetEleNumPerC0<Element>();
+
+        CopyGmToL1IntervalDataCopy<ArchTag, GmType> copyGmToL1;
+        AscendC::GlobalTensor<Element> gmTensor;
+        AscendC::LocalTensor<Element> l1Tensor;
+
+        this->template setShape<Element>();
+        LayoutSrc layoutSrc(this->_row, this->_col, ELE_NUM_PER_C0, C0_NUM_PER_FRACTAL);
+        LayoutDst layoutDst = LayoutDst::template MakeLayout<Element>(this->_row, this->_col);
+
+        copyGmToL1(l1Tensor, gmTensor, layoutDst, layoutSrc);
+
+        auto logs = AscendCCallLogger::Instance().GetLogs();
+        ASSERT_EQ(logs.size(), this->_row);
+
+        for (int i = 0; i < this->_row; i++) {
+            AscendCCallLog logTileCopy = logs[i];
+            this->template BaseCheck<Element>(logTileCopy);
+
+            const AscendC::DataCopyParams* logDataCopy = logTileCopy.GetArgsAt(2).Value<AscendC::DataCopyParams>();
+            ASSERT_EQ(logDataCopy->blockCount, this->_cols_by_fractal);
+            ASSERT_EQ(logDataCopy->blockLen, _1);
+            ASSERT_EQ(logDataCopy->srcGap, _0);
+            ASSERT_EQ(logDataCopy->dstGap, this->_row_round - 1);
+        }
+    }
+}
+
+// PaddingColumnMajor -> nZ, interval datacopy action
+TYPED_TEST(TileCopyGmToL1Test, PaddingColumnMajorTonZIntervalDataCopy)
+{
+    using ArchTag = TypeParam;
+    if constexpr ((kEnableAtlasA2 && std::is_same_v<ArchTag, Catlass::Arch::AtlasA2>) ||
+                  (kEnableAscend950 && std::is_same_v<ArchTag, Catlass::Arch::Ascend950>)) {
+        using Element = half;
+        using LayoutSrc = layout::PaddingColumnMajor;
+        using LayoutDst = layout::nZ;
+        using GmType = Gemm::GemmType<Element, LayoutSrc>;
+        constexpr uint32_t ELE_NUM_PER_C0 = GetEleNumPerC0<Element>();
+
+        CopyGmToL1IntervalDataCopy<ArchTag, GmType> copyGmToL1;
+        AscendC::GlobalTensor<Element> gmTensor;
+        AscendC::LocalTensor<Element> l1Tensor;
+
+        this->template setShape<Element, true>();
+        LayoutSrc layoutSrc(this->_row, this->_col, ELE_NUM_PER_C0, C0_NUM_PER_FRACTAL);
+        LayoutDst layoutDst = LayoutDst::template MakeLayout<Element>(this->_row, this->_col);
+
+        copyGmToL1(l1Tensor, gmTensor, layoutDst, layoutSrc);
+
+        auto logs = AscendCCallLogger::Instance().GetLogs();
+        ASSERT_EQ(logs.size(), this->_col);
+
+        for (int i = 0; i < this->_col; i++) {
+            AscendCCallLog logTileCopy = logs[i];
+            this->template BaseCheck<Element>(logTileCopy);
+
+            const AscendC::DataCopyParams* logDataCopy = logTileCopy.GetArgsAt(2).Value<AscendC::DataCopyParams>();
+            ASSERT_EQ(logDataCopy->blockCount, this->_rows_by_fractal);
+            ASSERT_EQ(logDataCopy->blockLen, _1);
+            ASSERT_EQ(logDataCopy->srcGap, _0);
+            ASSERT_EQ(logDataCopy->dstGap, this->_col_round - 1);
+        }
+    }
+}

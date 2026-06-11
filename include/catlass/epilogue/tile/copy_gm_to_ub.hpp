@@ -15,6 +15,7 @@
 #include "catlass/arch/arch.hpp"
 #include "catlass/layout/layout.hpp"
 #include "catlass/gemm/gemm_type.hpp"
+#include "catlass/numeric_size.hpp"
 
 namespace Catlass::Epilogue::Tile {
 
@@ -184,6 +185,7 @@ struct CopyGm2UbAligned<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>
 
 
 //////////////////////////// CopyGm2Ub(Ascend950, No TLA) ////////////////////////////
+#if (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510) || (defined(__NPU_ARCH__) && __NPU_ARCH__ == 3510)
 // Partial specialization for CopyGm2Ub(Ascend950, No TLA), RowMajor in and RowMajor out.
 template <class Element>
 struct CopyGm2Ub<Arch::Ascend950, Gemm::GemmType<Element, layout::RowMajor>> {
@@ -236,9 +238,66 @@ struct CopyGm2Ub<Arch::Ascend950, Gemm::GemmType<Element, layout::VectorLayout>>
             0,
             0
         );
-        AscendC::DataCopyPadExtParams<Element> padParams(false, 0, 0, 0);
-        AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams, padParams);
+        if constexpr (AscendC::Std::is_one_of_v<Element, float8_e4m3_t, float8_e5m2_t, float4_e2m1x2_t,
+                          float4_e1m2x2_t>) {
+            AscendC::DataCopyPadExtParams<uint8_t> padParams(false, 0, 0, 0);
+            AscendC::DataCopyPad(
+                dstTensor.template ReinterpretCast<uint8_t>(),
+                srcTensor.template ReinterpretCast<uint8_t>(), dataCopyParams, padParams);
+        } else {
+            AscendC::DataCopyPadExtParams<Element> padParams(false, 0, 0, 0);
+            AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams, padParams);
+        }
     };
+};
+#endif // CATLASS_ARCH == 3510 || __NPU_ARCH__ == 3510
+
+template <class Element>
+struct CopyGm2UbAligned<Arch::Ascend950, Gemm::GemmType<Element, layout::RowMajor>> {
+    using LayoutSrc = layout::RowMajor;
+    using LayoutDst = layout::RowMajor;
+
+    static constexpr uint32_t ELE_NUM_PER_BLK = BytesToBits(BYTE_PER_BLK) / SizeOfBits<Element>::value;
+    static constexpr uint32_t BLOCK_LEN_LIMIT = 65536;
+    static constexpr uint32_t MAX_REPEAT = 4095;
+    static constexpr uint32_t STRIDE_LIMIT = 65536;
+
+    CATLASS_DEVICE
+    CopyGm2UbAligned() = default;
+
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::GlobalTensor<Element> const &srcTensor,
+        layout::RowMajor const &layoutDst,
+        layout::RowMajor const &layoutSrc)
+    {
+        uint32_t rows = layoutSrc.shape(0);
+        uint32_t cols = layoutSrc.shape(1);
+        uint32_t srcStride = (layoutSrc.stride(0) - layoutSrc.shape(1)) / ELE_NUM_PER_BLK;
+        uint32_t dstStride = (layoutDst.stride(0) - layoutDst.shape(1)) / ELE_NUM_PER_BLK;
+
+        if ((cols == layoutSrc.stride(0)) && (layoutDst.shape(1) == layoutDst.stride(0))) {
+            // continuous case
+            DataCopy(dstTensor, srcTensor, rows * cols);
+        } else if (srcStride < STRIDE_LIMIT && dstStride < STRIDE_LIMIT && (cols / ELE_NUM_PER_BLK) < BLOCK_LEN_LIMIT) {
+            // "small" stride
+            uint32_t rLoops = CeilDiv(rows, MAX_REPEAT);
+            for (uint32_t i = 0; i < rLoops; ++i) {
+                uint32_t rActual = (i < rLoops - 1) ? MAX_REPEAT : rows - i * MAX_REPEAT;
+                AscendC::DataCopyParams dataCopyParams(
+                    rActual, cols / ELE_NUM_PER_BLK, srcStride, dstStride
+                );
+                DataCopy(dstTensor[i * MAX_REPEAT * layoutDst.stride(0)],
+                         srcTensor[i * MAX_REPEAT * layoutSrc.stride(0)], dataCopyParams);
+            }
+        } else {
+            // long stride
+            for (uint32_t i = 0; i < rows; ++i) {
+                DataCopy(dstTensor[i * layoutDst.stride(0)], srcTensor[i * layoutSrc.stride(0)], cols);
+            }
+        }
+    }
 };
 
 }  // Catlass::Epilogue::Tile

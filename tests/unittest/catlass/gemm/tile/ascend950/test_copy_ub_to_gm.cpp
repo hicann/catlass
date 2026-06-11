@@ -95,6 +95,40 @@ TEST_P(TileCopyUbToGmTestAscend950, RowMajorToRowMajorTestBasic)
     ASSERT_EQ(dataCopyParams->dstStride, _0);
 }
 
+TEST_P(TileCopyUbToGmTestAscend950, VectorToVectorTestBasic)
+{
+    using Element = float;
+    using ArchTag = Catlass::Arch::Ascend950;
+    using LayoutSrc = layout::VectorLayout;
+    using LayoutDst = layout::VectorLayout;
+
+    using GmType = Gemm::GemmType<Element, LayoutSrc>;
+    CopyUb2Gm<ArchTag, GmType> copyUbToGm;
+
+    AscendC::GlobalTensor<Element> gmTensor;
+    AscendC::LocalTensor<Element> ubTensor;
+
+    setShape();
+    LayoutSrc layoutSrc{_totalLen};
+    LayoutDst layoutDst{_totalLen};
+    ASSERT_TRUE(isContiguous(layoutSrc) && isContiguous(layoutDst));
+
+    copyUbToGm(gmTensor, ubTensor, layoutDst, layoutSrc);
+
+    AscendCCallLogger& logger = AscendCCallLogger::Instance();
+    auto logs = logger.GetLogs();
+    ASSERT_EQ(logs.size(), 1);
+
+    AscendCCallLog logVecCopy = logs[0];
+    BaseCheck<Element>(logVecCopy, gmTensor, ubTensor);
+
+    const AscendC::DataCopyExtParams* dataCopyParams = logVecCopy.GetArgsAt(2).Value<AscendC::DataCopyExtParams>();
+    ASSERT_EQ(dataCopyParams->blockCount, _1);
+    ASSERT_EQ(dataCopyParams->blockLen, _totalLen * sizeof(Element));
+    ASSERT_EQ(dataCopyParams->srcStride, _0);
+    ASSERT_EQ(dataCopyParams->dstStride, _0);
+}
+
 INSTANTIATE_TEST_SUITE_P(
     CopyUbToGm,
     TileCopyUbToGmTestAscend950,

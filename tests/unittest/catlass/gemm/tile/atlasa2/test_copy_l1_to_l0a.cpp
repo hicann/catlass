@@ -171,6 +171,56 @@ TEST_P(TileCopyL1ToL0ATest, nNTozZTestBasic)
     }
 }
 
+// nNTozZTestFloat, from nN -> zZ (AtlasA2), float specialization
+TEST_P(TileCopyL1ToL0ATest, nNTozZTestFloat)
+{
+    using Element = float;
+    using ArchTag = Catlass::Arch::AtlasA2;
+
+    using LayoutSrc = layout::nN;
+    using LayoutDst = layout::zZ;
+
+    using L1Type = Gemm::GemmType<Element, LayoutSrc, AscendC::TPosition::A1>;
+    using L0AType = Gemm::GemmType<Element, LayoutDst, AscendC::TPosition::A2>;
+
+    CopyL1ToL0A<ArchTag, L1Type, L0AType> copyL1ToL0A;
+
+    AscendC::LocalTensor<Element> l1Tensor;
+    AscendC::LocalTensor<Element> l0aTensor;
+
+    LayoutSrc layoutSrc;
+    LayoutDst layoutDst;
+    setShape<Element>();
+    setLayout<Element>(_row, _col, layoutSrc, layoutDst);
+    ASSERT_TRUE(isContiguous(layoutSrc));
+    ASSERT_TRUE(isContiguous(layoutDst));
+
+    copyL1ToL0A(l0aTensor, l1Tensor, layoutDst, layoutSrc);
+
+    uint32_t _cols_by_fractal_with_trans = CeilDiv<C0_NUM_PER_FRACTAL>(_col); 
+    // Commonly, the row-axis is divied by C0_NUM_PER_FRACTAL(16-ele), while in the tranposed case, it is neccessary
+    // that we should consider the column-axis which can be divided as well.
+    auto logs = AscendCCallLogger::Instance().GetLogs();
+    ASSERT_EQ(logs.size(), _rows_by_fractal);
+
+    for (uint32_t i = 0; i < logs.size(); i++) {
+        AscendCCallLog logTileCopy = logs[i];
+        BaseCheck<Element, true>(logTileCopy);
+
+        ASSERT_EQ(logTileCopy.GetArgsAt(0).GetInstAddr(), i * layoutDst.stride(1) * sizeof(Element));
+        ASSERT_EQ(logTileCopy.GetArgsAt(1).GetInstAddr(), i * layoutSrc.stride(1) * 2 * sizeof(Element));
+
+        const auto* p = logTileCopy.GetArgsAt(2).Value<AscendC::LoadData2dTransposeParams>();
+        ASSERT_EQ(p->startIndex, _0);
+        ASSERT_EQ(p->repeatTimes, static_cast<uint8_t>(_cols_by_fractal_with_trans));
+        // std::cout << "orgshape(1): " << layoutDst.orgShape(1) << ", _cols: " << _col << std::endl;
+        ASSERT_EQ(p->srcStride, _rows_by_fractal);
+        ASSERT_EQ(p->dstGap, _1);
+        ASSERT_EQ(p->dstFracGap, _0);
+        ASSERT_EQ(p->addrMode, _0);
+    }
+}
+
 // zNTozZTest2Param (#6): 2-param L1Type only, zN(A1)→zZ auto-deduced
 TEST_P(TileCopyL1ToL0ATest, zNTozZTest)
 {

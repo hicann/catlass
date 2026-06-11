@@ -66,6 +66,95 @@ protected:
 
 };
 
+#define CATLASS_TILE_TEST_CONCAT_IMPL(a, b) a##b
+#define CATLASS_TILE_TEST_CONCAT(a, b) CATLASS_TILE_TEST_CONCAT_IMPL(a, b)
+#define CATLASS_TILE_TEST_SUFFIX_half Half
+#define CATLASS_TILE_TEST_SUFFIX_float Float
+#define CATLASS_TILE_TEST_SUFFIX(TYPE) CATLASS_TILE_TEST_CONCAT(CATLASS_TILE_TEST_SUFFIX_, TYPE)
+#define CATLASS_TILE_TEST_NAME(PREFIX, TYPE) CATLASS_TILE_TEST_CONCAT(PREFIX, CATLASS_TILE_TEST_SUFFIX(TYPE))
+
+#define ADD_TILE_COPY_TEST_L1_TO_L0A_ZN_TO_ZN(TYPE)                                                   \
+TEST_P(TileCopyL1ToL0ATestAscend950, CATLASS_TILE_TEST_NAME(zNTozNTripleTest, TYPE))                  \
+{                                                                                                      \
+    using Element = TYPE;                                                                              \
+    using ArchTag = Catlass::Arch::Ascend950;                                                          \
+    using LayoutSrc = layout::zN;                                                                      \
+    using LayoutDst = layout::zN;                                                                      \
+    using L1Type = Gemm::GemmType<Element, LayoutSrc, AscendC::TPosition::A1>;                         \
+    using L0AType = Gemm::GemmType<Element, LayoutDst, AscendC::TPosition::A2>;                        \
+                                                                                                       \
+    setShape<Element>();                                                                               \
+    LayoutSrc layoutSrc = LayoutSrc::template MakeLayout<Element>(_row, _col);                         \
+    LayoutDst layoutDst = LayoutDst::template MakeLayout<Element>(_row, _col);                         \
+                                                                                                       \
+    CopyL1ToL0A<ArchTag, L1Type, L0AType> copyL1ToL0A;                                                 \
+    AscendC::LocalTensor<Element> l1Tensor;                                                            \
+    AscendC::LocalTensor<Element> l0aTensor;                                                           \
+    copyL1ToL0A(l0aTensor, l1Tensor, layoutDst, layoutSrc);                                            \
+                                                                                                       \
+    auto logs = AscendCCallLogger::Instance().GetLogs();                                               \
+    ASSERT_EQ(logs.size(), _1);                                                                        \
+    auto logTileCopy = logs[0];                                                                        \
+    BaseCheck<Element>(logTileCopy, l0aTensor, l1Tensor);                                              \
+                                                                                                       \
+    const auto* loadDataArg = logTileCopy.GetArgsAt(2).Value<AscendC::LoadData2DParamsV2>();           \
+    ASSERT_EQ(loadDataArg->mStartPosition, _0);                                                        \
+    ASSERT_EQ(loadDataArg->kStartPosition, _0);                                                        \
+    ASSERT_EQ(loadDataArg->mStep, _rows_by_fractal);                                                   \
+    ASSERT_EQ(loadDataArg->kStep, _cols_by_fractal);                                                   \
+    ASSERT_EQ(loadDataArg->srcStride, _rows_by_fractal);                                               \
+    ASSERT_EQ(loadDataArg->dstStride, _rows_by_fractal);                                               \
+    ASSERT_EQ(loadDataArg->ifTranspose, false);                                                        \
+}
+
+#define ADD_TILE_COPY_TEST_L1_TO_L0A_NN_TO_ZN(TYPE)                                                    \
+TEST_P(TileCopyL1ToL0ATestAscend950, CATLASS_TILE_TEST_NAME(nNTozNTest, TYPE))                         \
+{                                                                                                      \
+    using Element = TYPE;                                                                              \
+    using ArchTag = Catlass::Arch::Ascend950;                                                          \
+    using LayoutSrc = layout::nN;                                                                      \
+    using LayoutDst = layout::zN;                                                                      \
+    using L1Type = Gemm::GemmType<Element, LayoutSrc, AscendC::TPosition::A1>;                         \
+    using L0AType = Gemm::GemmType<Element, LayoutDst, AscendC::TPosition::A2>;                        \
+    constexpr uint32_t ELE_NUM_PER_C0 = GetEleNumPerC0<Element>();                                     \
+    constexpr uint32_t ELE_NUM_PER_FRACTAL = BytesToBits(BYTE_PER_FRACTAL) / SizeOfBits<Element>::value; \
+                                                                                                       \
+    setShape<Element>();                                                                               \
+    LayoutSrc layoutSrc = LayoutSrc::template MakeLayout<Element>(_row, _col);                         \
+    LayoutDst layoutDst = LayoutDst::template MakeLayout<Element>(_row, _col);                         \
+    ASSERT_TRUE(isContiguous(layoutSrc));                                                              \
+    ASSERT_TRUE(isContiguous(layoutDst));                                                              \
+                                                                                                       \
+    CopyL1ToL0A<ArchTag, L1Type, L0AType> copyL1ToL0A;                                                 \
+    AscendC::LocalTensor<Element> l1Tensor;                                                            \
+    AscendC::LocalTensor<Element> l0aTensor;                                                           \
+    copyL1ToL0A(l0aTensor, l1Tensor, layoutDst, layoutSrc);                                            \
+                                                                                                       \
+    auto logs = AscendCCallLogger::Instance().GetLogs();                                               \
+    ASSERT_EQ(logs.size(), CeilDiv<C0_NUM_PER_FRACTAL>(_col_round));                                   \
+    uint32_t expectedDstOffsetStep = _row_round * C0_NUM_PER_FRACTAL;                                  \
+    uint32_t expectedSrcOffsetStep = RoundUp<ELE_NUM_PER_C0>(_row) * C0_NUM_PER_FRACTAL;               \
+    uint32_t expectedKStep = CeilDiv<ELE_NUM_PER_C0>(_row_round);                                      \
+    if constexpr (std::is_same_v<Element, float>) {                                                    \
+        expectedKStep = RoundUp<2>(expectedKStep);                                                     \
+    }                                                                                                  \
+    for (uint32_t i = 0; i < logs.size(); ++i) {                                                       \
+        auto logTileCopy = logs[i];                                                                    \
+        ASSERT_EQ(logTileCopy.name, "LoadData");                                                      \
+        ASSERT_EQ(logTileCopy.GetArgsTAt(0).Type(), typeid(Element));                                  \
+        ASSERT_EQ(logTileCopy.GetArgsAt(0).GetInstAddr(), i * expectedDstOffsetStep * sizeof(Element)); \
+        ASSERT_EQ(logTileCopy.GetArgsAt(1).GetInstAddr(), i * expectedSrcOffsetStep * sizeof(Element)); \
+        const auto* loadDataArg = logTileCopy.GetArgsAt(2).Value<AscendC::LoadData2DParamsV2>();       \
+        ASSERT_EQ(loadDataArg->mStartPosition, _0);                                                    \
+        ASSERT_EQ(loadDataArg->kStartPosition, _0);                                                    \
+        ASSERT_EQ(loadDataArg->mStep, _1);                                                             \
+        ASSERT_EQ(loadDataArg->kStep, expectedKStep);                                                  \
+        ASSERT_EQ(loadDataArg->srcStride, _1);                                                         \
+        ASSERT_EQ(loadDataArg->dstStride, _rows_by_fractal);                                           \
+        ASSERT_EQ(loadDataArg->ifTranspose, true);                                                     \
+    }                                                                                                  \
+}
+
 // zNTozN Basic test, from zN->zN, Ascend950, basic
 TEST_P(TileCopyL1ToL0ATestAscend950, zNTozNTestBasic)
 {
@@ -106,6 +195,9 @@ TEST_P(TileCopyL1ToL0ATestAscend950, zNTozNTestBasic)
     ASSERT_EQ(loadDataArg->ifTranspose, false);
 }
 
+// zN(A1) -> zN(A2), 3-param Ascend950 specialization.
+ADD_TILE_COPY_TEST_L1_TO_L0A_ZN_TO_ZN(float);
+
 // nZTozN basic test, from nZ->zN, Ascend950, transpose
 TEST_P(TileCopyL1ToL0ATestAscend950, nZTozNTest)
 {
@@ -145,6 +237,19 @@ TEST_P(TileCopyL1ToL0ATestAscend950, nZTozNTest)
     ASSERT_EQ(loadDataArg->dstStride, _rows_by_fractal);            // Unit: 512(Byte)
     ASSERT_EQ(loadDataArg->ifTranspose, true);
 }
+
+// nNTozN basic test, from nN->zN, Ascend950.
+ADD_TILE_COPY_TEST_L1_TO_L0A_NN_TO_ZN(half);
+ADD_TILE_COPY_TEST_L1_TO_L0A_NN_TO_ZN(float);
+
+#undef ADD_TILE_COPY_TEST_L1_TO_L0A_NN_TO_ZN
+#undef ADD_TILE_COPY_TEST_L1_TO_L0A_ZN_TO_ZN
+#undef CATLASS_TILE_TEST_NAME
+#undef CATLASS_TILE_TEST_SUFFIX
+#undef CATLASS_TILE_TEST_SUFFIX_float
+#undef CATLASS_TILE_TEST_SUFFIX_half
+#undef CATLASS_TILE_TEST_CONCAT
+#undef CATLASS_TILE_TEST_CONCAT_IMPL
 
 ///////////////////////////// TEST WITH PARAMETERIC GROUPS
 INSTANTIATE_TEST_SUITE_P(

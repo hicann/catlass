@@ -177,6 +177,52 @@ TEST_P(TileCopyL1ToL0BTest, zZTonZTestBasic)
     }
 }
 
+// Testcase, from zZ -> nZ (AtlasA2), float specialization
+TEST_P(TileCopyL1ToL0BTest, zZTonZTestFloat)
+{
+    using Element = float;
+    using ArchTag = Catlass::Arch::AtlasA2;
+
+    using LayoutSrc = layout::zZ;
+    using LayoutDst = layout::nZ;
+
+    using L1Type = Gemm::GemmType<Element, LayoutSrc, AscendC::TPosition::B1>;
+    using L0BType = Gemm::GemmType<Element, LayoutDst, AscendC::TPosition::B2>;
+
+    CopyL1ToL0B<ArchTag, L1Type, L0BType> copyL1ToL0B;
+
+    AscendC::LocalTensor<Element> l1Tensor;
+    AscendC::LocalTensor<Element> l0bTensor;
+
+    LayoutSrc layoutSrc;
+    LayoutDst layoutDst;
+    setShape<Element, true>();
+    setLayout<Element>(_row, _col, layoutSrc, layoutDst);
+    ASSERT_TRUE(isContiguous(layoutSrc));
+    ASSERT_TRUE(isContiguous(layoutDst));
+
+    copyL1ToL0B(l0bTensor, l1Tensor, layoutDst, layoutSrc);
+
+    auto logs = AscendCCallLogger::Instance().GetLogs();
+    ASSERT_EQ(logs.size(), CeilDiv<C0_NUM_PER_FRACTAL>(layoutDst.orgShape(0)));
+
+    for (uint32_t i = 0; i < logs.size(); i++) {
+        AscendCCallLog logTileCopy = logs[i];
+        BaseCheck<Element, true>(logTileCopy);
+
+        ASSERT_EQ(logTileCopy.GetArgsAt(0).GetInstAddr(), i * layoutDst.stride(1) * 2 * sizeof(Element));
+        ASSERT_EQ(logTileCopy.GetArgsAt(1).GetInstAddr(), i * layoutSrc.stride(1) * sizeof(Element));
+
+        const auto* p = logTileCopy.GetArgsAt(2).Value<AscendC::LoadData2dTransposeParams>();
+        ASSERT_EQ(p->startIndex, static_cast<uint16_t>(0));
+        ASSERT_EQ(p->repeatTimes, static_cast<uint8_t>(CeilDiv<C0_NUM_PER_FRACTAL>(layoutSrc.orgShape(1))));
+        ASSERT_EQ(p->srcStride, static_cast<uint16_t>(1));
+        ASSERT_EQ(p->dstGap, static_cast<uint16_t>(0));
+        ASSERT_EQ(p->dstFracGap, static_cast<uint16_t>(CeilDiv<C0_NUM_PER_FRACTAL>(layoutDst.orgShape(1)) - 1));
+        ASSERT_EQ(p->addrMode, static_cast<uint8_t>(0));
+    }
+}
+
 // zNTozNTestBasic (#5): 3-param zN(B1)→zN(B2), LoadData, no transpose
 TEST_P(TileCopyL1ToL0BTest, zNTozNTestBasic)
 {

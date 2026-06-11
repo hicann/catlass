@@ -21,6 +21,7 @@ namespace AscendC {
 
 template <typename T>
 class LocalTensor {
+    template <typename> friend class LocalTensor;
 public:
     using PrimType = T;
 
@@ -86,6 +87,7 @@ private:
 
 template <typename T>
 class GlobalTensor {
+    template <typename> friend class GlobalTensor;
 public:
     using PrimType = T;
 
@@ -114,6 +116,15 @@ public:
         GlobalTensor result = *this;
         result.addr_ = reinterpret_cast<T*>(reinterpret_cast<uintptr_t>(addr_) + offset * sizeof(T));
         result.bufferSize_ -= offset;
+        return result;
+    }
+
+    template <typename U>
+    GlobalTensor<U> ReinterpretCast() const
+    {
+        GlobalTensor<U> result;
+        result.addr_ = reinterpret_cast<U*>(addr_);
+        result.bufferSize_ = bufferSize_;
         return result;
     }
 

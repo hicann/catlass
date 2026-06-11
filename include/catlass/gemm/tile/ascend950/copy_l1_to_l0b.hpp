@@ -496,7 +496,92 @@ struct CopyL1ToL0B<Arch::Ascend950, Gemm::GemmType<Element, layout::nZ, AscendC:
     }
 };
 
-/// Partial specialization for CopyL1ToL0B, Ascend950, not B8 or B4, zN in and nZ out.
+/// Partial specialization for CopyL1ToL0B, Ascend950, nZ B1 in and nZ B2 out.
+template <class Element>
+struct CopyL1ToL0B<Arch::Ascend950, Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::B1>,
+    Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::B2>> {
+    using LayoutDst = layout::nZ;
+    using LayoutSrc = layout::nZ;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = BytesToBits(BYTE_PER_C0) / SizeOfBits<Element>::value;
+    static constexpr uint32_t ELE_NUM_PER_FRACTAL = BytesToBits(BYTE_PER_FRACTAL) / SizeOfBits<Element>::value;
+
+    CATLASS_DEVICE
+    CopyL1ToL0B() {};
+
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::LocalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+    {
+        const uint32_t dstOuterShapeRow = layoutDst.shape(1);
+        const uint32_t dstOuterShapeCol = layoutDst.shape(3);
+        const uint32_t srcOuterStrideRow = layoutSrc.stride(1);
+        const uint32_t dstOuterStrideRow = layoutDst.stride(1);
+
+        AscendC::LoadData2DParamsV2 loadDataParams;
+        loadDataParams.mStartPosition = 0;
+        loadDataParams.kStartPosition = 0;
+        loadDataParams.mStep = dstOuterShapeCol;
+        loadDataParams.kStep = dstOuterShapeRow;
+        loadDataParams.srcStride = CeilDiv<ELE_NUM_PER_FRACTAL>(srcOuterStrideRow);
+        loadDataParams.dstStride = CeilDiv<ELE_NUM_PER_FRACTAL>(dstOuterStrideRow);
+        loadDataParams.ifTranspose = false;
+
+        AscendC::LoadData(dstTensor, srcTensor, loadDataParams);
+    }
+};
+
+/// Partial specialization for CopyL1ToL0B, AtlasA5, not B8 or B4, zZ in and nZ out. (gemm/AtlasA2 compatibility)
+template <class Element>
+struct CopyL1ToL0B<Arch::Ascend950, Gemm::GemmType<Element, layout::zZ, AscendC::TPosition::B1>,
+    Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::B2>,
+    std::enable_if_t<
+        !AscendC::Std::is_one_of_v<Element, int8_t, float8_e4m3_t, float8_e5m2_t, float4_e2m1x2_t, float4_e1m2x2_t>>> {
+    using LayoutDst = layout::nZ;
+    using LayoutSrc = layout::zZ;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = BytesToBits(BYTE_PER_C0) / SizeOfBits<Element>::value;
+    static constexpr uint32_t ELE_NUM_PER_FRACTAL = BytesToBits(BYTE_PER_FRACTAL) / SizeOfBits<Element>::value;
+
+    CATLASS_DEVICE
+    CopyL1ToL0B() {};
+
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::LocalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+    {
+        const uint32_t L0K = layoutDst.shape(0) * layoutDst.shape(1);
+        const uint32_t L0N = layoutDst.shape(2) * layoutDst.shape(3);
+        const uint32_t srcOuterStrideCol = layoutSrc.stride(3);
+        const uint32_t dstOuterStrideRow = layoutDst.stride(1);
+        const uint32_t kFractalLoops = CeilDiv<C0_NUM_PER_FRACTAL>(layoutDst.orgShape(0));
+
+        AscendC::LoadData2DParamsV2 loadDataParams;
+        loadDataParams.kStartPosition = 0;
+        loadDataParams.mStep = 1;
+        loadDataParams.kStep = CeilDiv<ELE_NUM_PER_C0>(L0N);
+        if constexpr (AscendC::Std::is_one_of_v<Element, float, uint32_t, int32_t>) {
+            loadDataParams.kStep = RoundUp<2>(loadDataParams.kStep);
+        }
+        loadDataParams.srcStride = CeilDiv<ELE_NUM_PER_FRACTAL>(srcOuterStrideCol);
+        loadDataParams.dstStride = CeilDiv<ELE_NUM_PER_FRACTAL>(dstOuterStrideRow);
+        loadDataParams.ifTranspose = true;
+
+        for (uint32_t kIdx = 0; kIdx < kFractalLoops; ++kIdx) {
+            loadDataParams.mStartPosition = 0;
+            AscendC::LoadData(
+                dstTensor[kIdx * L0N * C0_NUM_PER_FRACTAL],
+                srcTensor[kIdx * layoutSrc.stride(1)],
+                loadDataParams);
+        }
+    }
+};
+
+/// Partial specialization for CopyL1ToL0B, AtlasA5, not B8 or B4, zN in and nZ out.
 template <class Element>
 struct CopyL1ToL0B<Arch::Ascend950, Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>, void,
     std::enable_if_t<
@@ -536,7 +621,7 @@ struct CopyL1ToL0B<Arch::Ascend950, Gemm::GemmType<Element, layout::zN, AscendC:
     }
 };
 
-/// Partial specialization for CopyL1ToL0B, Ascend950, B8 or B4, zN in and nZ out.
+/// Partial specialization for CopyL1ToL0B, AtlasA5, B8 or B4, zN in and nZ out.
 template <class Element>
 struct CopyL1ToL0B<Arch::Ascend950, Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>, void,
     std::enable_if_t<
@@ -546,8 +631,104 @@ struct CopyL1ToL0B<Arch::Ascend950, Gemm::GemmType<Element, layout::zN, AscendC:
 
     static constexpr uint32_t ELE_NUM_PER_C0 = BytesToBits(BYTE_PER_C0) / SizeOfBits<Element>::value;
     static constexpr uint32_t ELE_NUM_PER_FRACTAL = BytesToBits(BYTE_PER_FRACTAL) / SizeOfBits<Element>::value;
+    static_assert(ELE_NUM_PER_C0 % C0_NUM_PER_FRACTAL == 0);
+    static constexpr uint32_t TAIL_M_STEP = ELE_NUM_PER_C0 / C0_NUM_PER_FRACTAL;
 
     // Methods
+
+    CATLASS_DEVICE
+    CopyL1ToL0B() {};
+
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::LocalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+    {
+        const uint32_t L0K = layoutDst.shape(0) * layoutDst.shape(1);
+        const uint32_t L0N = layoutDst.shape(2) * layoutDst.shape(3);
+        const uint32_t srcOuterStrideCol = layoutSrc.stride(3);
+        const uint32_t dstOuterStrideRow = layoutDst.stride(1);
+
+        AscendC::LoadData2DParamsV2 loadDataParams;
+        if (L0N % ELE_NUM_PER_C0 == 0) {
+            loadDataParams.mStartPosition = 0;
+            loadDataParams.kStartPosition = 0;
+            loadDataParams.mStep = CeilDiv<C0_NUM_PER_FRACTAL>(L0K);
+            loadDataParams.kStep = CeilDiv<ELE_NUM_PER_C0>(L0N);
+            loadDataParams.srcStride = CeilDiv<ELE_NUM_PER_FRACTAL>(srcOuterStrideCol);
+            loadDataParams.dstStride = CeilDiv<ELE_NUM_PER_FRACTAL>(dstOuterStrideRow);
+            loadDataParams.ifTranspose = true;
+
+            AscendC::LoadData(dstTensor, srcTensor, loadDataParams);
+        } else {
+            for (uint32_t kIdx = 0; kIdx < L0K / ELE_NUM_PER_C0; kIdx++) {
+                loadDataParams.mStartPosition = kIdx * TAIL_M_STEP;
+                loadDataParams.kStartPosition = 0;
+                loadDataParams.mStep = TAIL_M_STEP;
+                loadDataParams.kStep = CeilDiv<ELE_NUM_PER_C0>(L0N);
+                loadDataParams.srcStride = CeilDiv<ELE_NUM_PER_FRACTAL>(srcOuterStrideCol);
+                loadDataParams.dstStride = CeilDiv<ELE_NUM_PER_FRACTAL>(dstOuterStrideRow);
+                loadDataParams.ifTranspose = true;
+
+                AscendC::LoadData(
+                    dstTensor[kIdx * L0N * ELE_NUM_PER_C0], srcTensor, loadDataParams
+                );
+            }
+        }
+    }
+};
+
+/// Partial specialization for CopyL1ToL0B, Ascend950, not B8 or B4, zN in (B1 position) and nZ out.
+template <class Element>
+struct CopyL1ToL0B<Arch::Ascend950, Gemm::GemmType<Element, layout::zN, AscendC::TPosition::B1>,
+    Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::B2>,
+    std::enable_if_t<
+        !AscendC::Std::is_one_of_v<Element, int8_t, float8_e4m3_t, float8_e5m2_t, float4_e2m1x2_t, float4_e1m2x2_t>>> {
+    using LayoutDst = layout::nZ;
+    using LayoutSrc = layout::zN;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = BytesToBits(BYTE_PER_C0) / SizeOfBits<Element>::value;
+    static constexpr uint32_t ELE_NUM_PER_FRACTAL = BytesToBits(BYTE_PER_FRACTAL) / SizeOfBits<Element>::value;
+
+    CATLASS_DEVICE
+    CopyL1ToL0B() {};
+
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::LocalTensor<Element> const &srcTensor,
+        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+    {
+        const uint32_t L0K = layoutDst.shape(0) * layoutDst.shape(1);
+        const uint32_t L0N = layoutDst.shape(2) * layoutDst.shape(3);
+        const uint32_t srcOuterStrideCol = layoutSrc.stride(3);
+        const uint32_t dstOuterStrideRow = layoutDst.stride(1);
+
+        AscendC::LoadData2DParamsV2 loadDataParams;
+        loadDataParams.mStartPosition = 0;
+        loadDataParams.kStartPosition = 0;
+        loadDataParams.mStep = CeilDiv<C0_NUM_PER_FRACTAL>(L0K);
+        loadDataParams.kStep = CeilDiv<ELE_NUM_PER_C0>(L0N);
+        loadDataParams.srcStride = CeilDiv<ELE_NUM_PER_FRACTAL>(srcOuterStrideCol);
+        loadDataParams.dstStride = CeilDiv<ELE_NUM_PER_FRACTAL>(dstOuterStrideRow);
+        loadDataParams.ifTranspose = true;
+
+        AscendC::LoadData(dstTensor, srcTensor, loadDataParams);
+    }
+};
+
+/// Partial specialization for CopyL1ToL0B, Ascend950, B8 or B4, zN in (B1 position) and nZ out.
+template <class Element>
+struct CopyL1ToL0B<Arch::Ascend950, Gemm::GemmType<Element, layout::zN, AscendC::TPosition::B1>,
+    Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::B2>,
+    std::enable_if_t<
+        AscendC::Std::is_one_of_v<Element, int8_t, float8_e4m3_t, float8_e5m2_t, float4_e2m1x2_t, float4_e1m2x2_t>>> {
+    using LayoutDst = layout::nZ;
+    using LayoutSrc = layout::zN;
+
+    static constexpr uint32_t ELE_NUM_PER_C0 = BytesToBits(BYTE_PER_C0) / SizeOfBits<Element>::value;
+    static constexpr uint32_t ELE_NUM_PER_FRACTAL = BytesToBits(BYTE_PER_FRACTAL) / SizeOfBits<Element>::value;
 
     CATLASS_DEVICE
     CopyL1ToL0B() {};
@@ -585,8 +766,7 @@ struct CopyL1ToL0B<Arch::Ascend950, Gemm::GemmType<Element, layout::zN, AscendC:
                 loadDataParams.ifTranspose = true;
 
                 AscendC::LoadData(
-                    dstTensor[kIdx * L0N * ELE_NUM_PER_C0], srcTensor, loadDataParams
-                );
+                    dstTensor[kIdx * L0N * ELE_NUM_PER_C0], srcTensor, loadDataParams);
             }
         }
     }
