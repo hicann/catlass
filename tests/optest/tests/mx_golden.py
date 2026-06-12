@@ -14,6 +14,7 @@ from __future__ import annotations
 import math
 from typing import Dict, Tuple
 
+import numpy as np
 import torch
 
 MX_SCALE_GROUP_NUM = 32
@@ -276,6 +277,48 @@ def prepare_fp8_mx_inputs(
     return a_fp8, b_fp8, a_scale, b_scale, expected
 
 
+def prepare_fp8_mx_batch_inputs(
+    batch: int, m: int, n: int, k: int, device: str = "npu"
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Build batched MX-FP8 inputs for example 58 (trans_a=0, trans_b=1)."""
+    fp8_dtype = torch.float8_e4m3fn
+    emax, fp8_max = 8, 448.0
+
+    a_list = []
+    b_list = []
+    a_scale_list = []
+    b_scale_list = []
+    expected_list = []
+
+    for _ in range(batch):
+        a_fp32 = torch.randn(m, k, dtype=torch.float32) * 10.0 - 5.0
+        b_fp32 = torch.randn(k, n, dtype=torch.float32) * 10.0 - 5.0
+
+        a_fp8, a_scale, a_deq = _quantize_axis_last(a_fp32, fp8_dtype, emax, fp8_max)
+        b_fp8, b_scale, b_deq = _quantize_axis_first(b_fp32, fp8_dtype, emax, fp8_max)
+
+        a_list.append(a_fp8.contiguous())
+        b_list.append(b_fp8.t().contiguous())
+        a_scale_list.append(a_scale.reshape(m, a_scale.shape[1] // 2, 2).contiguous())
+        b_scale_list.append(
+            b_scale.reshape(b_scale.shape[0] // 2, 2, b_scale.shape[1]).permute(2, 0, 1).contiguous()
+        )
+        expected_list.append(a_deq @ b_deq)
+
+    a = torch.stack(a_list, dim=0)
+    b = torch.stack(b_list, dim=0)
+    a_scale = torch.stack(a_scale_list, dim=0)
+    b_scale = torch.stack(b_scale_list, dim=0)
+    expected = torch.stack(expected_list, dim=0)
+
+    if device == "npu":
+        a = a.contiguous().npu()
+        b = b.contiguous().npu()
+        a_scale = a_scale.contiguous().npu()
+        b_scale = b_scale.contiguous().npu()
+    return a, b, a_scale, b_scale, expected
+
+
 def prepare_fp4_mx_inputs(
     m: int, n: int, k: int, device: str = "npu", trans_a: bool = False, trans_b: bool = True
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -310,3 +353,130 @@ def prepare_fp4_mx_inputs(
     if device == "npu":
         a_fp4, b_fp4, a_scale, b_scale = _move_kernel_inputs_to_npu(a_fp4, b_fp4, a_scale, b_scale)
     return a_fp4, b_fp4, a_scale, b_scale, expected
+
+
+_LEVEL0_BLOCK_SIZE = 512
+_LEVEL1_BLOCK_SIZE = 32
+_FP4_E2M1_MAX = 6.0
+_FP4_E2M1_EMAX = 2
+_FP4_E2M1_UNSIGNED_LUT = np.array([0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0], dtype=np.float64)
+_FP4_E2M1_LUT = np.concatenate(
+    [_FP4_E2M1_UNSIGNED_LUT, -_FP4_E2M1_UNSIGNED_LUT]
+).astype(np.float32)
+
+
+def _fp4_rint_codes(values: np.ndarray) -> np.ndarray:
+    values_f64 = np.asarray(values, dtype=np.float32).reshape(-1).astype(np.float64)
+    sign = np.signbit(values_f64).astype(np.uint8)
+    abs_values = np.minimum(np.abs(values_f64), _FP4_E2M1_MAX)
+    hi = np.searchsorted(_FP4_E2M1_UNSIGNED_LUT, abs_values, side="right")
+    hi = np.clip(hi, 1, len(_FP4_E2M1_UNSIGNED_LUT) - 1)
+    lo = hi - 1
+    lo_val = _FP4_E2M1_UNSIGNED_LUT[lo]
+    hi_val = _FP4_E2M1_UNSIGNED_LUT[hi]
+    mid = (lo_val + hi_val) / 2.0
+    pick_lo = (abs_values < mid) | ((abs_values == mid) & ((lo & 1) == 0))
+    chosen = np.where(pick_lo, lo, hi).astype(np.uint8)
+    return (chosen | (sign << 3)).reshape(np.asarray(values).shape).astype(np.uint8)
+
+
+def _pack_fp4_codes(codes: np.ndarray) -> np.ndarray:
+    if codes.shape[-1] % 2 != 0:
+        pad = np.zeros((*codes.shape[:-1], 1), dtype=np.uint8)
+        codes = np.concatenate([codes, pad], axis=-1)
+    pair = codes.reshape(*codes.shape[:-1], codes.shape[-1] // 2, 2)
+    return (pair[..., 0] | (pair[..., 1] << 4)).astype(np.uint8)
+
+
+def _unpack_fp4_codes(packed: np.ndarray, k: int) -> np.ndarray:
+    low = packed & np.uint8(0x0F)
+    high = (packed >> np.uint8(4)) & np.uint8(0x0F)
+    unpacked = np.stack([low, high], axis=-1).reshape(*packed.shape[:-1], -1)
+    return unpacked[..., :k]
+
+
+def _compute_e8m0_scale(max_abs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    zero_mask = max_abs < 1e-12
+    safe_abs = np.where(zero_mask, 1.0, max_abs)
+    exp = np.floor(np.log2(safe_abs)).astype(np.int64) - _FP4_E2M1_EMAX
+    exp = np.clip(exp, -128, 127)
+    scale_float = np.where(zero_mask, np.float64(1.0), np.ldexp(np.float64(1.0), exp.astype(np.int32)))
+    scale_u8 = np.where(zero_mask, np.uint8(127), (exp + 127).astype(np.uint8))
+    return scale_float, scale_u8.astype(np.uint8)
+
+
+def _dual_level_quantize_rows(matrix: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    matrix = np.asarray(matrix, dtype=np.float32)
+    rows, k = matrix.shape
+    if k % 2 != 0:
+        raise ValueError(f"K must be even for FP4 packing: k={k}")
+
+    num_l0 = math.ceil(k / _LEVEL0_BLOCK_SIZE)
+    num_l1 = math.ceil(k / _LEVEL1_BLOCK_SIZE)
+    k_padded = num_l0 * _LEVEL0_BLOCK_SIZE
+    num_l1_padded = k_padded // _LEVEL1_BLOCK_SIZE
+
+    work = np.zeros((rows, k_padded), dtype=np.float32)
+    work[:, :k] = matrix
+
+    l0 = work.reshape(rows, num_l0, _LEVEL0_BLOCK_SIZE)
+    max_abs0 = np.max(np.abs(l0), axis=-1)
+    scale0 = np.where(max_abs0 < 1e-12, np.float32(1.0), (max_abs0 / _FP4_E2M1_MAX).astype(np.float32))
+    temp = (work / np.repeat(scale0, _LEVEL0_BLOCK_SIZE, axis=1)).astype(np.float16).astype(np.float32)
+
+    l1 = temp.reshape(rows, num_l1_padded, _LEVEL1_BLOCK_SIZE)
+    max_abs1 = np.max(np.abs(l1), axis=-1)
+    scale1_float, scale1_u8 = _compute_e8m0_scale(max_abs1)
+    scaled = (l1.astype(np.float64) / scale1_float[..., np.newaxis]).reshape(rows, k_padded)[:, :k]
+    codes = _fp4_rint_codes(scaled)
+    return _pack_fp4_codes(codes), scale1_u8[:, :num_l1]
+
+
+def _dequantize_mx_only(quant_data: np.ndarray, scale1: np.ndarray, k: int) -> np.ndarray:
+    codes = _unpack_fp4_codes(quant_data, k)
+    fp4_vals = _FP4_E2M1_LUT[codes]
+    exp = scale1.astype(np.int32) - 127
+    scale = np.ldexp(np.float64(1.0), exp)
+    scale_expanded = np.repeat(scale, _LEVEL1_BLOCK_SIZE, axis=1)[:, :k]
+    return (fp4_vals.astype(np.float64) * scale_expanded).astype(np.float32)
+
+
+def _bf16_round_float32(values: np.ndarray) -> torch.Tensor:
+    return torch.from_numpy(np.asarray(values, dtype=np.float32)).to(torch.bfloat16).to(torch.float32)
+
+
+def prepare_dual_level_quant_mx_batch_inputs(
+    batch: int, m: int, n: int, k: int, device: str = "npu", dtype: torch.dtype = torch.float16
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Build fp16/bf16 inputs and golden for example 63."""
+    if k % 2 != 0:
+        raise ValueError(f"K must be even for FP4 packing: k={k}")
+
+    a_list = []
+    b_list = []
+    expected_list = []
+
+    for _ in range(batch):
+        a = (torch.randn(m, k, dtype=torch.float32) * 2.0).to(dtype)
+        b = (torch.randn(k, n, dtype=torch.float32) * 2.0).to(dtype)
+
+        a_np = a.to(torch.float16 if dtype == torch.float16 else torch.bfloat16).to(torch.float32).numpy()
+        b_np = b.to(torch.float16 if dtype == torch.float16 else torch.bfloat16).to(torch.float32).numpy()
+
+        quant_a, scale1_a = _dual_level_quantize_rows(a_np)
+        quant_b, scale1_b = _dual_level_quantize_rows(b_np.T.copy())
+        dequant_a = _dequantize_mx_only(quant_a, scale1_a, k)
+        dequant_b = _dequantize_mx_only(quant_b, scale1_b, k).T.copy()
+        expected_list.append(_bf16_round_float32(dequant_a @ dequant_b))
+
+        a_list.append(a.contiguous())
+        b_list.append(b.t().contiguous())
+
+    a_batch = torch.stack(a_list, dim=0)
+    b_batch = torch.stack(b_list, dim=0)
+    expected = torch.stack(expected_list, dim=0)
+
+    if device == "npu":
+        a_batch = a_batch.contiguous().npu()
+        b_batch = b_batch.contiguous().npu()
+    return a_batch, b_batch, expected

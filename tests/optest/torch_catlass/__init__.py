@@ -65,6 +65,8 @@ __all__ = [
     "flash_attention_infer",
     "flash_attention_infer_tla",
     "broadcast_matmul_perblock_quant",
+    "ascend950_fp8_mx_batch_matmul",
+    "ascend950_dual_level_quant_mx_batch_matmul",
     "clear_jit_cache",
     "__version__",
     "__catlass_version__",

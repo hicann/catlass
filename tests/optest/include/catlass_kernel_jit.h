@@ -391,9 +391,15 @@ void Ascend950MatmulFullDequant(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
- * @brief Reserved JIT interface for example 58_ascend950_fp8_mx_batch_matmul.
+ * @brief JIT interface for example 58_ascend950_fp8_mx_batch_matmul.
  */
 void Ascend950Fp8MxBatchMatmul(
+    const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+
+/**
+ * @brief JIT interface for example 63_ascend950_dual_level_quant_mx_batch_matmul.
+ */
+void Ascend950DualLevelQuantMxBatchMatmul(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**

@@ -65,6 +65,8 @@ Python API (`torch_catlass.ops.*`)
 - [x] 52_quant_multi_core_splitk_matmul_tla
 - [x] 53_ascend950_fp8_mx_matmul (Ascend950)
 - [x] 54_ascend950_fp4_mx_matmul (Ascend950)
+- [x] 58_ascend950_fp8_mx_batch_matmul (Ascend950)
+- [x] 63_ascend950_dual_level_quant_mx_batch_matmul (Ascend950)
 
 ### 暂未接入
 
@@ -84,7 +86,6 @@ Python API (`torch_catlass.ops.*`)
 - [ ] 55_ascend950_mx_grouped_slice_m
 - [ ] 56_ascend950_basic_conv2d_tla
 - [ ] 57_ascend950_matmul_full_dequant
-- [ ] 58_ascend950_fp8_mx_batch_matmul
 - [ ] 59_ascend950_a8w4_mx_matmul
 - [ ] 60_ascend950_grouped_matmul_slice_m
 - [ ] 61_ascend950_svd_quant_matmul

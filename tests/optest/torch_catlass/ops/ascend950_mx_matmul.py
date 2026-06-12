@@ -73,3 +73,51 @@ def ascend950_fp4_mx_matmul_aswt(
     return torch.ops.catlass.ascend950_fp4_mx_matmul_aswt(
         mat1, mat2, mx_scale_a, mx_scale_b, transA, transB
     )
+
+
+def ascend950_fp8_mx_batch_matmul(
+    mat1: Tensor,
+    mat2: Tensor,
+    mx_scale_a: Tensor,
+    mx_scale_b: Tensor,
+    transA: bool = False,
+    transB: bool = True,
+) -> Tensor:
+    """Run CATLASS Ascend950 MX FP8 batch matmul on NPU tensors.
+
+    Source: example 58_ascend950_fp8_mx_batch_matmul.
+    This wrapper follows the example path and currently supports only
+    ``transA=False`` and ``transB=True``.
+
+    Args:
+        mat1: Left input (float8_e4m3fn), shape ``(B, M, K)`` unless ``transA``.
+        mat2: Right input (float8_e4m3fn), shape ``(B, N, K)`` when ``transB=True``.
+        mx_scale_a: Batched MX scale for A (float8_e8m0fnu).
+        mx_scale_b: Batched MX scale for B (float8_e8m0fnu).
+        transA: Must be ``False``.
+        transB: Must be ``True``.
+
+    Returns:
+        BF16 output tensor with shape ``(B, M, N)``.
+    """
+    return torch.ops.catlass.ascend950_fp8_mx_batch_matmul(
+        mat1, mat2, mx_scale_a, mx_scale_b, transA, transB
+    )
+
+
+def ascend950_dual_level_quant_mx_batch_matmul(
+    mat1: Tensor,
+    mat2: Tensor,
+) -> Tensor:
+    """Run CATLASS Ascend950 dual-level quant MX FP4 batch matmul.
+
+    Source: example 63_ascend950_dual_level_quant_mx_batch_matmul.
+
+    Args:
+        mat1: Left input, shape ``(B, M, K)``, dtype fp16/bf16.
+        mat2: Right input physically stored as ``(B, N, K)``, same dtype as ``mat1``.
+
+    Returns:
+        BF16 output tensor with shape ``(B, M, N)``.
+    """
+    return torch.ops.catlass.ascend950_dual_level_quant_mx_batch_matmul(mat1, mat2)

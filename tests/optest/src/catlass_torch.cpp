@@ -203,6 +203,41 @@ using MatmulEvgOp = MatmulEvgLike<CatlassKernel::MatmulEvg>;
 static auto& matmul_evg = MatmulEvgOp::Run;
 REGISTER_TORCH_FUNC(matmul_evg);
 
+using DynamicMatmulKernelFn =
+    void (*)(const uint32_t, aclrtStream, const CatlassKernel::TParams&, const CatlassKernel::MatmulParams&);
+
+inline DynamicMatmulKernelFn ResolveA2Fp8E4M3MatmulKernel()
+{
+    static DynamicMatmulKernelFn kernel = nullptr;
+    static bool resolved = false;
+    if (!resolved) {
+        resolved = true;
+        kernel = reinterpret_cast<DynamicMatmulKernelFn>(dlsym(RTLD_DEFAULT, "A2Fp8E4M3Matmul"));
+    }
+    return kernel;
+}
+
+struct A2Fp8E4M3MatmulOp {
+    using OutputType = at::Tensor;
+
+    static OutputType Run(
+        const at::Tensor& mat1, const at::Tensor& mat2, const c10::ScalarType& outDType, bool transA, bool transB,
+        bool formatA, bool formatB)
+    {
+        auto kernel = ResolveA2Fp8E4M3MatmulKernel();
+        TORCH_CHECK(kernel != nullptr, "a2_fp8_e4m3_matmul is not available on this NPU architecture");
+        CatlassKernel::TParams tParams;
+        CatlassKernel::MatmulParams params;
+        MatmulLike<CatlassKernel::BasicMatmul>::GetKernelInfo(
+            mat1, mat2, outDType, transA, transB, formatA, formatB, tParams, params);
+        OutputType output = MatmulLike<CatlassKernel::BasicMatmul>::AllocOutput(tParams, params);
+        aclrtStream stream = c10_npu::getCurrentNPUStream().stream(false);
+        uint32_t aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
+        RUN_NPU_FUNC(kernel, aicCoreNum, stream, tParams, params);
+        return output;
+    }
+};
+
 static auto& mla = MlaOp::Run;
 REGISTER_TORCH_FUNC(mla);
 
@@ -212,7 +247,6 @@ REGISTER_TORCH_FUNC(flash_attention_infer);
 static auto& flash_attention_infer_tla = FlashAttentionInferTLAOp::Run;
 REGISTER_TORCH_FUNC(flash_attention_infer_tla);
 
-using A2Fp8E4M3MatmulOp = MatmulLike<CatlassKernel::A2Fp8E4M3Matmul>;
 static auto& a2_fp8_e4m3_matmul = A2Fp8E4M3MatmulOp::Run;
 REGISTER_TORCH_FUNC(a2_fp8_e4m3_matmul);
 
@@ -232,8 +266,17 @@ using StridedBatchedMatmulTLAOp = StridedBatchedMatmulLike<CatlassKernel::Stride
 static auto& strided_batched_matmul_tla = StridedBatchedMatmulTLAOp::Run;
 REGISTER_TORCH_FUNC(strided_batched_matmul_tla);
 
+using Ascend950Fp8MxBatchMatmulOp = MxBatchedMatmulLike<CatlassKernel::Ascend950Fp8MxBatchMatmul>;
+static auto& ascend950_fp8_mx_batch_matmul = Ascend950Fp8MxBatchMatmulOp::Run;
+REGISTER_TORCH_FUNC(ascend950_fp8_mx_batch_matmul);
+
 using BroadcastMatmulPerblockQuantOp = BroadcastMatmulPerblockQuantLike<CatlassKernel::BroadcastMatmulPerblockQuant>;
 static auto& broadcast_matmul_perblock_quant = BroadcastMatmulPerblockQuantOp::Run;
 REGISTER_TORCH_FUNC(broadcast_matmul_perblock_quant);
+
+using Ascend950DualLevelQuantMxBatchMatmulOp =
+    DualLevelQuantMxBatchedMatmulLike<CatlassKernel::Ascend950DualLevelQuantMxBatchMatmul>;
+static auto& ascend950_dual_level_quant_mx_batch_matmul = Ascend950DualLevelQuantMxBatchMatmulOp::Run;
+REGISTER_TORCH_FUNC(ascend950_dual_level_quant_mx_batch_matmul);
 
 } // namespace CatlassKernelWrapper

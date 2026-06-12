@@ -173,4 +173,20 @@ at::Tensor strided_batched_matmul_tla(
     const at::Tensor& mat1, const at::Tensor& mat2, const c10::ScalarType& outDType,
     const bool transA, const bool transB, const bool formatA, const bool formatB);
 
+/**
+ * @brief PyTorch extension entry for CATLASS Ascend950 MX FP8 batch matmul (TLA).
+ *
+ * Source: example 58_ascend950_fp8_mx_batch_matmul.
+ */
+at::Tensor ascend950_fp8_mx_batch_matmul(
+    const at::Tensor& mat1, const at::Tensor& mat2, const at::Tensor& mx_scale_a, const at::Tensor& mx_scale_b,
+    const bool transA, const bool transB);
+
+/**
+ * @brief PyTorch extension entry for CATLASS Ascend950 dual-level quant MX batch matmul.
+ *
+ * Source: example 63_ascend950_dual_level_quant_mx_batch_matmul.
+ */
+at::Tensor ascend950_dual_level_quant_mx_batch_matmul(const at::Tensor& mat1, const at::Tensor& mat2);
+
 #endif
