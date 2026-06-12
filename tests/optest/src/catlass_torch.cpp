@@ -216,6 +216,9 @@ REGISTER_TORCH_FUNC(flash_attention_infer);
 static auto& flash_attention_infer_tla = FlashAttentionInferTLAOp::Run;
 REGISTER_TORCH_FUNC(flash_attention_infer_tla);
 
+static auto& ascend950_flash_attention_infer = Ascend950FlashAttentionInferOp::Run;
+REGISTER_TORCH_FUNC(ascend950_flash_attention_infer);
+
 using W8A16MatmulOp = MatmulLike<CatlassKernel::W8A16Matmul>;
 static auto& w8a16_matmul = W8A16MatmulOp::Run;
 REGISTER_TORCH_FUNC(w8a16_matmul);

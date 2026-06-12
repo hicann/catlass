@@ -68,7 +68,11 @@ endif()
 set(CATLASS_INCLUDE_DIR ${CATLASS_DIR}/include)
 
 if(NOT DEFINED CATLASS_ARCH_LIST)
-    set(CATLASS_ARCH_LIST "2201;3510")
+    set(CATLASS_ARCH_LIST 2201 3510)
+else()
+    string(REPLACE "\\;" ";" _CATLASS_ARCH_STR "${CATLASS_ARCH_LIST}")
+    string(REPLACE ";" " " _CATLASS_ARCH_STR "${_CATLASS_ARCH_STR}")
+    separate_arguments(CATLASS_ARCH_LIST UNIX_COMMAND "${_CATLASS_ARCH_STR}")
 endif()
 
 # ===================================================================

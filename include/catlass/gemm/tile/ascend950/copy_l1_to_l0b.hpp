@@ -533,7 +533,7 @@ struct CopyL1ToL0B<Arch::Ascend950, Gemm::GemmType<Element, layout::nZ, AscendC:
     }
 };
 
-/// Partial specialization for CopyL1ToL0B, AtlasA5, not B8 or B4, zZ in and nZ out. (gemm/AtlasA2 compatibility)
+/// Partial specialization for CopyL1ToL0B, Ascend950, not B8 or B4, zZ in and nZ out. (gemm/AtlasA2 compatibility)
 template <class Element>
 struct CopyL1ToL0B<Arch::Ascend950, Gemm::GemmType<Element, layout::zZ, AscendC::TPosition::B1>,
     Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::B2>,
@@ -581,7 +581,7 @@ struct CopyL1ToL0B<Arch::Ascend950, Gemm::GemmType<Element, layout::zZ, AscendC:
     }
 };
 
-/// Partial specialization for CopyL1ToL0B, AtlasA5, not B8 or B4, zN in and nZ out.
+/// Partial specialization for CopyL1ToL0B, Ascend950, not B8 or B4, zN in and nZ out.
 template <class Element>
 struct CopyL1ToL0B<Arch::Ascend950, Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>, void,
     std::enable_if_t<
@@ -621,7 +621,7 @@ struct CopyL1ToL0B<Arch::Ascend950, Gemm::GemmType<Element, layout::zN, AscendC:
     }
 };
 
-/// Partial specialization for CopyL1ToL0B, AtlasA5, B8 or B4, zN in and nZ out.
+/// Partial specialization for CopyL1ToL0B, Ascend950, B8 or B4, zN in and nZ out.
 template <class Element>
 struct CopyL1ToL0B<Arch::Ascend950, Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>, void,
     std::enable_if_t<

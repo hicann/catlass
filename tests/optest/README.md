@@ -62,6 +62,7 @@ Python API (`torch_catlass.ops.*`)
 - [x] 43_ascend950_basic_matmul
 - [x] 44_quant_matmul_full_loadA_tla
 - [x] 45_strided_batched_matmul_tla
+- [x] 49_ascend950_flash_attention_infer
 - [x] 52_quant_multi_core_splitk_matmul_tla
 - [x] 53_ascend950_fp8_mx_matmul (Ascend950)
 - [x] 54_ascend950_fp4_mx_matmul (Ascend950)
@@ -80,7 +81,6 @@ Python API (`torch_catlass.ops.*`)
 - [ ] 46_ascend950_matmul_fixpipe_opti
 - [ ] 47_ascend950_grouped_slice_m_dequant
 - [ ] 48_ascend950_grouped_slice_m_pt_pc_dequant
-- [ ] 49_ascend950_flash_attention_infer
 - [ ] 50_ascend950_basic_matmul_gemv
 - [ ] 51_ascend950_quant_per_group_per_block
 - [ ] 55_ascend950_mx_grouped_slice_m

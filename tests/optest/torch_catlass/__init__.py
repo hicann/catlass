@@ -64,6 +64,7 @@ __all__ = [
     "EvgPostprocessMode",
     "flash_attention_infer",
     "flash_attention_infer_tla",
+    "ascend950_flash_attention_infer",
     "broadcast_matmul_perblock_quant",
     "ascend950_fp8_mx_batch_matmul",
     "ascend950_dual_level_quant_mx_batch_matmul",

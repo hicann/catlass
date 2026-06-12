@@ -141,7 +141,7 @@ struct CopyUb2GmAligned<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>
 //////////////////////////// CopyUb2Gm(Ascend950, No TLA) ////////////////////////////
 
 #if (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510) || (defined(__NPU_ARCH__) && __NPU_ARCH__ == 3510)
-//Partial specialization for CopyUb2Gm(AtlasA5 wo-tla), RowMajor in and RowMajor out.
+//Partial specialization for CopyUb2Gm(Ascend950, no-tla), RowMajor in and RowMajor out.
 template <typename Element>
 struct CopyUb2Gm<Arch::Ascend950, Gemm::GemmType<Element, layout::RowMajor>> {
     using LayoutDst = layout::RowMajor;

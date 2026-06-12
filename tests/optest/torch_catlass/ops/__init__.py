@@ -30,6 +30,7 @@ from .basic_matmul_preload_zN import basic_matmul_preload_zN  # example 21
 from .padding_splitk_matmul import padding_splitk_matmul  # example 22
 from .flash_attention_infer import flash_attention_infer  # example 23
 from .flash_attention_infer_tla import flash_attention_infer_tla  # example 40
+from .ascend950_flash_attention_infer import ascend950_flash_attention_infer  # example 49
 from .matmul_full_loadA import matmul_full_loadA  # example 25
 from .matmul_relu import matmul_relu  # example 26
 from .matmul_gelu import matmul_gelu  # example 27
@@ -78,6 +79,7 @@ __all__ = [
     "padding_splitk_matmul",              # example 22
     "flash_attention_infer",              # example 23
     "flash_attention_infer_tla",          # example 40
+    "ascend950_flash_attention_infer",    # example 49
     "matmul_full_loadA",                  # example 25
     "matmul_relu",                        # example 26
     "matmul_gelu",                        # example 27

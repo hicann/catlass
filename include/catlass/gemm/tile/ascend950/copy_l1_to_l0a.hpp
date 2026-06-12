@@ -488,7 +488,7 @@ struct CopyL1ToL0A {
     static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy l1 to l0, can not find the specialization.");
 };
 
-/// Partial specialization for CopyL1ToL0A, AtlasA5, zN in and zN out.
+/// Partial specialization for CopyL1ToL0A, Ascend950, zN in and zN out.
 template <class Element>
 struct CopyL1ToL0A<Arch::Ascend950, Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A1>> {
     using LayoutDst = layout::zN;
@@ -553,7 +553,7 @@ struct CopyL1ToL0A<Arch::Ascend950, Gemm::GemmType<Element, layout::zN, AscendC:
     }
 };
 
-/// Partial specialization for CopyL1ToL0A, AtlasA5, not B8 or B4, nN in and zN out. (gemm/AtlasA2 compatibility)
+/// Partial specialization for CopyL1ToL0A, Ascend950, not B8 or B4, nN in and zN out. (gemm/AtlasA2 compatibility)
 template <class Element>
 struct CopyL1ToL0A<Arch::Ascend950, Gemm::GemmType<Element, layout::nN, AscendC::TPosition::A1>,
     Gemm::GemmType<Element, layout::zN, AscendC::TPosition::A2>,
@@ -601,7 +601,7 @@ struct CopyL1ToL0A<Arch::Ascend950, Gemm::GemmType<Element, layout::nN, AscendC:
     }
 };
 
-/// Partial specialization for CopyL1ToL0A, AtlasA5, not B8 or B4, nZ in and zN out. (Transpose A)
+/// Partial specialization for CopyL1ToL0A, Ascend950, not B8 or B4, nZ in and zN out. (Transpose A)
 template <class Element>
 struct CopyL1ToL0A<Arch::Ascend950, Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::A1>, void,
     std::enable_if_t<
@@ -641,7 +641,7 @@ struct CopyL1ToL0A<Arch::Ascend950, Gemm::GemmType<Element, layout::nZ, AscendC:
     }
 };
 
-/// Partial specialization for CopyL1ToL0A, AtlasA5, B8 or B4, nZ in and zN out. (Transpose A)
+/// Partial specialization for CopyL1ToL0A, Ascend950, B8 or B4, nZ in and zN out. (Transpose A)
 template <class Element>
 struct CopyL1ToL0A<Arch::Ascend950, Gemm::GemmType<Element, layout::nZ, AscendC::TPosition::A1>, void,
     std::enable_if_t<
