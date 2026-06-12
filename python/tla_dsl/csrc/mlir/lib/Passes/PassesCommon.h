@@ -305,7 +305,13 @@ struct ObserveCoreOpPattern : public OpRewritePattern<OpTy> {
       return failure();
     if (moduleCoreAllows(module, coreKind))
       return failure();
-    return setModuleCoreKind(rewriter, module, coreKind);
+    if (failed(setModuleCoreKind(rewriter, module, coreKind)))
+      return failure();
+    // Dialect conversion requires a successful pattern to replace or update
+    // its root operation. This pattern observes the root op but mutates the
+    // module-level core attribute that makes the root dynamically legal.
+    rewriter.modifyOpInPlace(op, [] {});
+    return success();
   }
 };
 

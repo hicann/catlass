@@ -38,7 +38,9 @@ target_link_libraries(_tla_type_bridge_native PRIVATE
   Python3::Module
   $<TARGET_FILE:TlaCompilePipeline>
   $<TARGET_FILE:TlaPasses>
-  ${TLA_DSL_HIVM_REQUIRED_LIBS}
+  -Wl,--start-group
+  ${TLA_DSL_HIVM_REQUIRED_LIB_FILES}
+  -Wl,--end-group
   ${TLA_DSL_MLIR_PYTHON_CAPI_LIBRARY}
 )
 if(pybind11_FOUND)

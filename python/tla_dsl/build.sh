@@ -98,6 +98,9 @@ cmake_args=(
   -G Ninja
   -S csrc/mlir
   -B csrc/mlir/build
+  -DCMAKE_C_COMPILER=$(which clang)
+  -DCMAKE_CXX_COMPILER=$(which clang++)
+  -DCMAKE_SYSROOT=/
   -DCMAKE_SUPPRESS_REGENERATION=ON
   -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE:-Release}"
   -DMLIR_TBLGEN_INCLUDE_DIR="${mlir_include_dir}"

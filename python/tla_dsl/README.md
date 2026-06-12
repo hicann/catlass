@@ -14,7 +14,7 @@
 | `catlass/` | DSL 前端、运行时、与 MLIR Python 绑定的桥接逻辑 |
 | `csrc/mlir/` | `TlaCompile` 编译器、CMake 工程 `tla`、LLVM/MLIR Pass 与 lit 用例 |
 | `csrc/mlir/lib/Tools/CMakeLists.txt` | `TlaCompilePipeline`、`_tla_type_bridge_native`（Python 类型桥接）及可选 runtime wrapper 目标 |
-| `3rdparty/AscendNPU-IR` | AscendNPU-IR 子模块（`git submodule`）；TLA 需其 **`build/`** 下 TableGen 生成头与多份 `libBiShengIR*` |
+| `3rdparty/AscendNPU-IR-Dev` | AscendNPU-IR-Dev 子模块（`git submodule`）；TLA 需其 **`build/`** / **`build/install`** 下 TableGen 生成头、MLIR/LLVM CMake 包与多份 `libMLIR*` / `libBiShengIR*` |
 | `tests/` | `pytest` 与 `lit` |
 | `tools/generate_tla_python_bindings.py` | 由 TableGen 结果生成 `catlass/_mlir_bindings/tla_ops_gen.py` |
 | `build.sh`、`scripts/build_wheels.sh` | 一键配置 **`csrc/mlir`**、`ninja tla-compiler`、可选 **`pip install -e .`** 与 **`hatch build`**（需 **§2.2–2.4** 与 **`ASCEND_HOME_PATH`**） |
@@ -35,7 +35,7 @@ cd "${CATLASS_ROOT}"
 
 ### 2.2 创建 Conda 环境并安装依赖
 
-依赖由 **`python/tla_dsl/environment.yml`** 统一安装，下表为与 **TLA / MLIR 19.1.x** 对齐的版本摘要；**请勿**在未改 YAML 的情况下将 **`mlir` / `lit`** 等升到 **22+** 主版本，否则缺少 **`PybindAdaptors.h`**，`csrc/mlir` 配置会失败。
+依赖由 **`python/tla_dsl/environment.yml`** 统一安装。该 conda 环境只负责 Python、CMake/Ninja、编译器和 Python 打包/测试工具；**LLVM / MLIR 由 AscendNPU-IR-Dev 构建产物提供**。
 
 #### 2.2.1 依赖版本
 
@@ -45,13 +45,13 @@ cd "${CATLASS_ROOT}"
 | pip | **26.0.1** |
 | CMake | **4.2.3** |
 | Ninja | **1.13.2** |
-| LLVM / MLIR / TableGen / `lit` | **19.1.7** |
-| MLIR Python 绑定 | **19.1.7** |
+| `lit` 测试运行器 | **19.1.7** |
 | Clang 工具链（可选） | **19.1.7** |
 | GCC / G++ | **11.3** |
 | NumPy | **2.4.4** |
 | pytest | **9.0.2** |
-| pybind11 | **3.0.3–3.0.4** |
+| PyTorch / torch-npu | 手动安装，见 **§2.2.2**（`--run` 上板端到端示例需要；`--build-only` 不需要） |
+| pybind11 | **2.13.6** |
 | setuptools / wheel | **82.0.1** / **0.46.3–0.47.0** |
 | hatchling / hatch-vcs | **1.29.0** / **0.5.0** |
 | hatch（开发 CLI） | **1.16.5** |
@@ -65,88 +65,105 @@ conda env create -f python/tla_dsl/environment.yml
 conda activate ascend-catlass-dsl
 ```
 
-`lit` 用于运行 `tests/lit`；若你更倾向使用 **AscendNPU-IR / llvm-project** 源码树内的 **`llvm-lit`**，须保证其 **LLVM 主版本与 conda 中 MLIR 19.1.x 一致**，否则 FileCheck / 测试前端行为可能不匹配。
+不要从 conda 安装或使用 MLIR / LLVM 作为 TLA DSL 的构建运行时依赖；后续步骤会显式导出 AscendNPU-IR-Dev 的 `MLIR_DIR`、`LLVM_DIR`、`PYTHONPATH` 与 `LD_LIBRARY_PATH`。
 
-将 **MLIR 的 CMake 包** 与 **可执行文件** 暴露到当前环境（与 `catlass/test_bootstrap.py` 的探测逻辑一致）：
+#### 2.2.2 手动安装 PyTorch / torch-npu（仅上板运行需要）
 
-```bash
-export MLIR_DIR="${CONDA_PREFIX}/lib/cmake/mlir"
-export PATH="${CONDA_PREFIX}/bin:${PATH}"
-```
+`torch` 与 `torch-npu` 都是开源软件包。请按照下表选择适合您的架构的版本，并注意要选择适配当前 Python版本(3.11)的wheel，也就是说wheel的文件名中应该有`cp311`的字样：
 
-**校验 MLIR 与 Python 绑定**（构建 `tla` 工程前必须能通过）：
-
-```bash
-python -c "import mlir; import mlir.ir as ir; print('MLIR python OK:', ir.Context())"
-test -f "${CONDA_PREFIX}/include/mlir/Bindings/Python/PybindAdaptors.h" \
-  && echo "C++ PybindAdaptors.h OK (required by tla mlir CMake)" \
-  || echo "FAIL: missing PybindAdaptors.h — your MLIR is too new (nanobind-only); pin llvm/mlir/mlir-python-bindings/lit to 19.1.7 as §2.2.1"
-```
+| 架构 | 推荐版本 |
+|------|----------|
+| `x86_64` | `torch==2.9.0+cpu`，`torch-npu==2.9.0.post2` |
+| `aarch64` / ARM | `torch==2.9.0`，`torch-npu==2.9.0.post2` |
 
 ### 2.3 昇腾 CANN / 工具链
 
-`python/tla_dsl/csrc/mlir` 的 CMake **要求**环境变量 **`ASCEND_HOME_PATH`** 指向已安装的 **CANN / ascend-toolkit**（需存在 `include/acl/acl.h` 或安装布局与 CMake 中的探测一致）。
+请 source 一个 `CANN 9.1.0` 的 `set_env.sh`
+
 
 ```bash
-# 示例：按本机 CANN 实际路径修改（常见为 toolkit 的 `latest` 目录）
-export ASCEND_HOME_PATH="/usr/local/Ascend/ascend-toolkit/latest"
-# 若安装脚本提供 set_env.sh，建议 source 一次，将运行时库路径写入当前 shell：
-source "${ASCEND_HOME_PATH}/../ascend-toolkit/set_env.sh"
+# 示例：按本机 CANN 9.1.0 实际路径修改
+source /usr/local/cann_9.1.B106/Ascend/ascend-toolkit/set_env.sh
 ```
 
-### 2.4 拉取并构建 AscendNPU-IR
+以上命令会自动把环境变量 **`ASCEND_HOME_PATH`** 指向已安装的 **CANN / ascend-toolkit**
 
-`python/tla_dsl/csrc/mlir/CMakeLists.txt`（及 **`csrc/mlir/lib/Tools/CMakeLists.txt`** 中的 `_tla_type_bridge_native`）默认链接 **DSL 树内** 的 AscendNPU-IR：
+### 2.4 拉取并构建 AscendNPU-IR-Dev
+
+`python/tla_dsl/csrc/mlir/CMakeLists.txt`（及 **`csrc/mlir/lib/Tools/CMakeLists.txt`** 中的 `_tla_type_bridge_native`）默认链接 **DSL 树内** 的 AscendNPU-IR-Dev：
 
 ```text
-${CATLASS_ROOT}/python/tla_dsl/3rdparty/AscendNPU-IR
+${CATLASS_ROOT}/python/tla_dsl/3rdparty/AscendNPU-IR-Dev
 ```
 
-需 **CMake ≥ 3.28**、**Ninja ≥ 1.12**、**clang/clang++**，且 **§2.3** 中 CANN / **`ASCEND_HOME_PATH`** 已就绪。
-
+需 **CMake ≥ 3.28**、**Ninja ≥ 1.12**、**clang/clang++**，且 **§2.3** 中 CANN / **`ASCEND_HOME_PATH`** 已就绪。若在共享测试环境中工作，可以复用已经构建好的 `AscendNPU-IR-Dev`（配置方式见 [设置 AscendNPU-IR-Dev 构建根目录](#设置-ascendnpu-ir-dev-构建根目录)）。
 ```bash
 cd "${CATLASS_ROOT}"
-git submodule update --init python/tla_dsl/3rdparty/AscendNPU-IR
+git submodule sync --recursive
+# 可选：如果你的环境有本地的AscendNPU-IR-Dev，或需要改用 SSH URL，可在 sync 之后覆盖本地 URL。
+# git config --local submodule.python/tla_dsl/3rdparty/AscendNPU-IR-Dev.url /path/to/local/AscendNPU-IR-Dev
+git submodule update --init python/tla_dsl/3rdparty/AscendNPU-IR-Dev
 
-cd python/tla_dsl/3rdparty/AscendNPU-IR
+cd python/tla_dsl/3rdparty/AscendNPU-IR-Dev
 git submodule update --init
-mkdir -p build
-cd build
-cmake ../third-party/llvm-project/llvm -G Ninja \
-    -DCMAKE_C_COMPILER=clang \
-    -DCMAKE_CXX_COMPILER=clang++ \
-    -DCMAKE_CXX_FLAGS="-Wno-c2y-extensions" \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DLLVM_ENABLE_PROJECTS="mlir" \
-    -DLLVM_EXTERNAL_PROJECTS="bishengir" \
-    -DLLVM_EXTERNAL_BISHENGIR_SOURCE_DIR=../ \
-    -DBSPUB_DAVINCI_BISHENGIR=ON \
-    -DBISHENGIR_BUILD_STANDALONE_IR_ONLY=ON \
-    -DMLIR_INCLUDE_TESTS=OFF \
-    -DLLVM_INCLUDE_TESTS=OFF
-ninja -j"$(nproc)"
+./build-tools/build.sh \
+  --c-compiler clang \
+  --cxx-compiler clang++ \
+  '--add-cmake-options=-DCMAKE_SYSROOT=/' \
+  '--add-cmake-options=-DLLVM_ENABLE_ZSTD=OFF' \
+  '--add-cmake-options=-DLLVM_ENABLE_RTTI=ON' \
+  --build-type Release \
+  -j 128 \
+  --enable-assertion \
+  --disable-werror \
+  --disable-mlir-werror \
+  --disable-bishengir-werror \
+  --build-triton \
+  --enable-lld \
+  --build ./build \
+  --apply-patches \
+  --python-binding
+```
+
+#### 设置 AscendNPU-IR-Dev 构建根目录
+
+默认使用仓库内submodule的路径：
+```bash
+export TLA_DSL_PREBUILT_ASCENDNPU_IR="${CATLASS_ROOT}/python/tla_dsl/3rdparty/AscendNPU-IR-Dev"
+```
+如果复用已经构建好的AscendNPU-IR：
+```bash
+# export TLA_DSL_PREBUILT_ASCENDNPU_IR="/path/to/prebuilt/AscendNPU-IR-Dev"
 ```
 
 **校验 TableGen / 生成物是否就绪**（路径以本机构建树为准）：
 
 ```bash
-IR="${CATLASS_ROOT}/python/tla_dsl/3rdparty/AscendNPU-IR"
-test -f "$IR/bishengir/include/bishengir/Dialect/HIVM/IR/HIVM.h" && echo "HIVM.h OK"
-test -f "$IR/build/tools/bishengir/bishengir/include/bishengir/Interfaces/BiShengIREnums.h.inc" && echo "TableGen inc OK"
-ls "$IR/build/lib"/libBiShengIRHIVMDialect.so 2>/dev/null || ls "$IR/build/lib"/libBiShengIRHIVMDialect.a 2>/dev/null && echo "HIVM lib OK"
+test -f "$TLA_DSL_PREBUILT_ASCENDNPU_IR/bishengir/include/bishengir/Dialect/HIVM/IR/HIVM.h" && echo "HIVM.h OK"
+test -f "$TLA_DSL_PREBUILT_ASCENDNPU_IR/build/tools/bishengir/include/bishengir/Interfaces/BiShengIREnums.h.inc" && echo "TableGen inc OK"
+test -f "$TLA_DSL_PREBUILT_ASCENDNPU_IR/build/install/lib/cmake/mlir/MLIRConfig.cmake" && echo "Ascend MLIR CMake package OK"
+ls "$TLA_DSL_PREBUILT_ASCENDNPU_IR/build/lib"/libMLIRHIVMDialect.so 2>/dev/null || ls "$TLA_DSL_PREBUILT_ASCENDNPU_IR/build/lib"/libMLIRHIVMDialect.a 2>/dev/null && echo "HIVM lib OK"
 ```
 
-上述检查通过后，**无需**再设 `TLA_DSL_PREBUILT`（默认即使用该路径）；或在其它机器上把 **`TLA_DSL_PREBUILT_ASCENDNPU_IR`** 指到同一套**已构建根目录**。
+#### 暴露 AscendNPU-IR-Dev 的 MLIR / LLVM 运行环境
 
-#### 使用已构建的 AscendNPU-IR（不重复编译）
+构建和运行 TLA DSL 时，应使用 AscendNPU-IR-Dev 构建出的 MLIR Python 包与动态库，不要使用 conda 的 MLIR binding：
 
 ```bash
-export TLA_DSL_PREBUILT_ASCENDNPU_IR="/path/to/built/AscendNPU-IR"
+export MLIR_TBLGEN_INCLUDE_DIR="$TLA_DSL_PREBUILT_ASCENDNPU_IR/build/install/include"
+export PYTHONPATH="$TLA_DSL_PREBUILT_ASCENDNPU_IR/build/install/python_packages/mlir_core:${PYTHONPATH:-}"
 ```
+
+
+> `tools/generate_tla_python_bindings.py` 通常不在 `./build.sh` 路径上；只有在修改 `csrc/mlir/include/Dialect/Tla/IR/Tla.td` 等 TLA 方言 TableGen 定义、需要重新生成并提交 `catlass/_mlir_bindings/tla_ops_gen.py` 时，开发者才需要手动调用它。调用前请先把 AscendNPU-IR-Dev 的 `mlir-tblgen` 放到 `PATH`，例如：
+>
+> ```bash
+> export PATH="$TLA_DSL_PREBUILT_ASCENDNPU_IR/build/install/bin:$TLA_DSL_PREBUILT_ASCENDNPU_IR/build/bin:${PATH}"
+> ```
 
 ### 2.5 配置并编译 `tla`
 
-**推荐一键**（须已 **`conda activate`**、已设 **`ASCEND_HOME_PATH`** / **`MLIR_DIR`**（或 **`CONDA_PREFIX`** 可解析 MLIR），且 **§2.4** AscendNPU-IR 已就绪或已设 **`TLA_DSL_PREBUILT_ASCENDNPU_IR`**）：
+**推荐一键**（须已 **`conda activate`**、已设 **`ASCEND_HOME_PATH`**，且 **§2.4** AscendNPU-IR-Dev 已就绪或已设 **`TLA_DSL_PREBUILT_ASCENDNPU_IR`**；建议同时导出上文 AscendNPU-IR-Dev 的 **`PYTHONPATH`** / **`LD_LIBRARY_PATH`**）：
 
 ```bash
 cd "${CATLASS_ROOT}/python/tla_dsl"
@@ -156,22 +173,26 @@ cd "${CATLASS_ROOT}/python/tla_dsl"
 **手动**
 
 ```bash
-cd "${CATLASS_ROOT}"
+cd "${CATLASS_ROOT}/python/tla_dsl"
 
 cmake -G Ninja \
-  -S python/tla_dsl/csrc/mlir \
-  -B python/tla_dsl/csrc/mlir/build \
-  -DMLIR_DIR="${MLIR_DIR}" \
-  -DMLIR_TBLGEN_INCLUDE_DIR="${CONDA_PREFIX}/include" \
-  -DCMAKE_BUILD_TYPE=Release
+  -S csrc/mlir \
+  -B csrc/mlir/build \
+  -DCMAKE_C_COMPILER="$(which clang)" \
+  -DCMAKE_CXX_COMPILER="$(which clang++)" \
+  -DCMAKE_SYSROOT=/ \
+  -DCMAKE_SUPPRESS_REGENERATION=ON \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DMLIR_TBLGEN_INCLUDE_DIR="${MLIR_TBLGEN_INCLUDE_DIR}" \
+  -DBISHENG_COMPILER_PATH="${BISHENG_COMPILER_PATH}"
 
-ninja -C python/tla_dsl/csrc/mlir/build tla-compiler
+ninja -C csrc/mlir/build tla-compiler
 ```
 
-完成后应存在可执行文件（路径以构建树为准）：
+完成后应存在可执行文件：
 
 ```text
-python/tla_dsl/csrc/mlir/build/tools/tla-compile/TlaCompile
+csrc/mlir/build/tools/tla-compile/TlaCompile
 ```
 
 ### 2.6 安装 Python 包（可编辑模式）
@@ -191,12 +212,25 @@ cd "${CATLASS_ROOT}/python/tla_dsl"
 python -m pytest -q tests
 ```
 
-`lit` 需系统或 conda 提供 **`lit`/`llvm-lit`** 可执行文件；若已安装：
+`lit` 测试使用环境中的 **`lit`/`llvm-lit`** 可执行文件：
 
 ```bash
 cd "${CATLASS_ROOT}/python/tla_dsl"
 llvm-lit -sv csrc/mlir/build/tests/lit
 ```
+**端到端示例**
+```bash
+cd "${CATLASS_ROOT}/python/tla_dsl"
+python examples/end_to_end/basic_mmad/basic_matmul.py --build-only
+```
+上板执行
+```bash
+python examples/end_to_end/basic_mmad/basic_matmul.py --run --device 0 
+python examples/end_to_end/basic_mmad/basic_matmul.py --run --device 0 --all-layouts --m 1 --n 2 --k 3
+python examples/end_to_end/basic_mmad/basic_matmul.py --run --device 0 --use-mutex
+```
+
+
 
 ---
 
@@ -214,7 +248,7 @@ llvm-lit -sv csrc/mlir/build/tests/lit
 |------|------|
 | DLPack → TLA `Tensor` 字段来源与 layout 转换 | `docs/dlpack_to_tla_tensor.md` |
 | MMAD 端到端示例与运行参数 | `examples/end_to_end/basic_mmad/README.md` |
-| AscendNPU-IR 子模块、`build.sh`、TableGen 校验与 `TLA_DSL_PREBUILT` | 上文 **2.4** |
+| AscendNPU-IR-Dev 子模块、`build.sh`、TableGen 校验与 `TLA_DSL_PREBUILT` | 上文 **2.4** |
 | 依赖版本表、`python/tla_dsl/environment.yml`、`lit` 与 MLIR 19.1.7 同栈 | 上文 **2.2.1** |
 | 一键构建（`build.sh` / `hatch build`） | 上文 **2.5** |
 | 仅配置 MLIR 子目录（不跑完整 Catlass） | 见上文 **2.5** 的 **`./build.sh`** 或 `cmake` / `ninja` |

@@ -22,9 +22,12 @@ else()
 endif()
 message("-- TLA_DSL_CATLASS_INCLUDE_DIR Value: ${TLA_DSL_CATLASS_INCLUDE_DIR}")
 
-# AscendNPU-IR lives under python/tla_dsl/3rdparty (mlir is under python/tla_dsl/csrc/mlir).
+# AscendNPU-IR-Dev lives under python/tla_dsl/3rdparty (mlir is under
+# python/tla_dsl/csrc/mlir). The TLA compiler intentionally uses the Dev
+# BiShengIR tree for all bishengir headers/libs so pass declarations and linked
+# implementations stay from the same checkout.
 set(TLA_DSL_ASCENDNPU_IR_ROOT
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../3rdparty/AscendNPU-IR)
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../3rdparty/AscendNPU-IR-Dev)
 if(DEFINED ENV{TLA_DSL_PREBUILT_ASCENDNPU_IR}
    AND NOT "$ENV{TLA_DSL_PREBUILT_ASCENDNPU_IR}" STREQUAL "")
   set(TLA_DSL_ASCENDNPU_IR_ROOT "$ENV{TLA_DSL_PREBUILT_ASCENDNPU_IR}")
@@ -34,7 +37,7 @@ message("-- TLA_DSL_ASCENDNPU_IR_ROOT Value: ${TLA_DSL_ASCENDNPU_IR_ROOT}")
 set(TLA_DSL_HIVM_SOURCE_INCLUDE_DIR
     ${TLA_DSL_ASCENDNPU_IR_ROOT}/bishengir/include)
 set(TLA_DSL_HIVM_GENERATED_INCLUDE_DIR
-    ${TLA_DSL_ASCENDNPU_IR_ROOT}/build/tools/bishengir/bishengir/include)
+    ${TLA_DSL_ASCENDNPU_IR_ROOT}/build/tools/bishengir/include)
 set(TLA_DSL_HIVM_LIB_DIR
     ${TLA_DSL_ASCENDNPU_IR_ROOT}/build/lib)
 set(TLA_DSL_HIVM_HEADER
@@ -42,22 +45,28 @@ set(TLA_DSL_HIVM_HEADER
 set(TLA_DSL_HIVM_ENUMS_INC
     ${TLA_DSL_HIVM_GENERATED_INCLUDE_DIR}/bishengir/Interfaces/BiShengIREnums.h.inc)
 set(TLA_DSL_HIVM_REQUIRED_LIBS
-    BiShengIRHIVMDialect
-    BiShengIRAnnotationDialect
+    MLIRHIVMUtils
+    MLIRHIVMDialect
+    MLIRHIVMTransforms
+    MLIRTensorUtils
+    MLIRAnnotationDialect
     BiShengIRDialectUtils
     BiShengIRTensorDialect
-    BiShengIRHFusionDialect
-    BiShengIRMathExtDialect
+    MLIRHFusionDialect
+    MLIRHFusionUtils
+    MLIRMathExtDialect
     BiShengIRSymbolDialect
     BiShengIRMemRefDialect
-    BiShengIRMemRefExtDialect
-    BiShengIRHACCUtils
-    BiShengIRHACCTransforms
-    BiShengIRHACCDialect)
+    MLIRMemRefExtDialect
+    MLIRHACCUtils
+    MLIRHACCTransforms
+    MLIRHACCDialect
+    MLIRHMAPDialect
+    BiShengIRScopeDialect)
 if(NOT EXISTS ${TLA_DSL_HIVM_HEADER} OR NOT EXISTS ${TLA_DSL_HIVM_ENUMS_INC})
   message(FATAL_ERROR
           "AscendNPU-IR generated headers are required. Build "
-          "python/tla_dsl/3rdparty/AscendNPU-IR first or set TLA_DSL_PREBUILT_ASCENDNPU_IR.")
+          "python/tla_dsl/3rdparty/AscendNPU-IR-Dev first or set TLA_DSL_PREBUILT_ASCENDNPU_IR.")
 endif()
 foreach(tla_dsl_hivm_lib IN LISTS TLA_DSL_HIVM_REQUIRED_LIBS)
   file(GLOB tla_dsl_hivm_matches
@@ -67,9 +76,15 @@ foreach(tla_dsl_hivm_lib IN LISTS TLA_DSL_HIVM_REQUIRED_LIBS)
   if("${tla_dsl_hivm_matches}" STREQUAL "")
     message(FATAL_ERROR
             "AscendNPU-IR library ${tla_dsl_hivm_lib} is required. Build "
-            "python/tla_dsl/3rdparty/AscendNPU-IR first or set TLA_DSL_PREBUILT_ASCENDNPU_IR.")
+            "python/tla_dsl/3rdparty/AscendNPU-IR-Dev first or set TLA_DSL_PREBUILT_ASCENDNPU_IR.")
   endif()
+  list(GET tla_dsl_hivm_matches 0 tla_dsl_hivm_match)
+  list(APPEND TLA_DSL_HIVM_REQUIRED_LIB_FILES "${tla_dsl_hivm_match}")
 endforeach()
+
+set(MLIR_DIR ${TLA_DSL_ASCENDNPU_IR_ROOT}/build/install/lib/cmake/mlir)
+set(LLVM_DIR ${TLA_DSL_ASCENDNPU_IR_ROOT}/build/install/lib/cmake/llvm)
+set(MLIR_TBLGEN_INCLUDE_DIR ${TLA_DSL_ASCENDNPU_IR_ROOT}/build/install/include)
 
 set(TLA_DSL_RUNTIME_WRAPPER_DEFAULT OFF)
 if(DEFINED ASCEND_HOME_PATH)
@@ -229,6 +244,9 @@ add_custom_target(TlaTblgen DEPENDS
   ${CMAKE_CURRENT_BINARY_DIR}/tblgen/tla/Ops.cpp.inc
   ${CMAKE_CURRENT_BINARY_DIR}/tblgen/tla/Ops.h.inc
 )
+
+include_directories(${LLVM_INCLUDE_DIRS})
+include_directories(${MLIR_INCLUDE_DIRS})
 
 include_directories(${TLA_DSL_HIVM_SOURCE_INCLUDE_DIR} ${TLA_DSL_HIVM_GENERATED_INCLUDE_DIR})
 link_directories(${TLA_DSL_HIVM_LIB_DIR})

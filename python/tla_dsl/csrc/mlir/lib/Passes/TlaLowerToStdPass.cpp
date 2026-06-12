@@ -1156,6 +1156,12 @@ public:
       yieldOp.erase();
   }
 
+  static bool hasNonScfYieldOps(Block *block) {
+    if (!block)
+      return false;
+    return llvm::any_of(*block, [](Operation &op) { return !isa<scf::YieldOp>(op); });
+  }
+
   static FailureOr<Value> materializeMutexIdImpl(PatternRewriter &rewriter, Value value,
                                                  Operation *diagnosticOp,
                                                  std::function<Value(Operation *, int64_t, unsigned)> getOrCreateConstant,
@@ -1393,7 +1399,6 @@ public:
     }
     if (!changed)
       return false;
-
     SmallVector<Type> keptResultTypes;
     SmallVector<unsigned> keptIndices;
     SmallVector<Value> keptThenOperands;
@@ -1409,6 +1414,16 @@ public:
       keptElseOperands.push_back(elseYield.getOperand(i));
     }
 
+    if (keptResultTypes.empty() && !hasNonScfYieldOps(ifOp.thenBlock()) &&
+        !hasNonScfYieldOps(ifOp.elseBlock())) {
+      for (unsigned i = 0, e = ifOp.getNumResults(); i < e; ++i) {
+        if (dropResult[i] && replacementValues[i])
+          ifOp.getResult(i).replaceAllUsesWith(replacementValues[i]);
+      }
+      ifOp.erase();
+      return true;
+    }
+
     OpBuilder builder(ifOp);
     auto newIfOp = builder.create<scf::IfOp>(ifOp.getLoc(), keptResultTypes,
                                              ifOp.getCondition(), true);
@@ -1417,7 +1432,7 @@ public:
     eraseTrailingScfYield(newIfOp.elseBlock());
 
     IRMapping thenMapping;
-    builder = newIfOp.getThenBodyBuilder();
+    builder.setInsertionPointToEnd(newIfOp.thenBlock());
     for (Operation &op : ifOp.thenBlock()->without_terminator())
       builder.clone(op, thenMapping);
     SmallVector<Value> mappedThenOperands;
@@ -1426,7 +1441,7 @@ public:
     builder.create<scf::YieldOp>(thenYield.getLoc(), mappedThenOperands);
 
     IRMapping elseMapping;
-    builder = newIfOp.getElseBodyBuilder();
+    builder.setInsertionPointToEnd(newIfOp.elseBlock());
     for (Operation &op : ifOp.elseBlock()->without_terminator())
       builder.clone(op, elseMapping);
     SmallVector<Value> mappedElseOperands;

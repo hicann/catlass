@@ -18,7 +18,7 @@ target_include_directories(TlaPasses PUBLIC
   ${PROJECT_BINARY_DIR}/tblgen
   ${MLIR_INCLUDE_DIRS}
 )
-target_link_libraries(TlaPasses PUBLIC ${TLA_DSL_HIVM_REQUIRED_LIBS})
+target_link_libraries(TlaPasses PUBLIC -Wl,--start-group ${TLA_DSL_HIVM_REQUIRED_LIBS} -Wl,--end-group)
 target_link_libraries(TlaPasses
   PUBLIC
     MLIRIR
