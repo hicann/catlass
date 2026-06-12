@@ -17,16 +17,16 @@ module {
   }
 }
 
-// CHECK-DAG: func.func private @get_buf_mte2(i8)
-// CHECK-DAG: func.func private @rls_buf_mte2(i8)
-// CHECK-DAG: func.func private @get_buf_m(i8)
-// CHECK-DAG: func.func private @rls_buf_m(i8)
+// CHECK-DAG: func.func private @get_buf_mte2
+// CHECK-DAG: func.func private @rls_buf_mte2
+// CHECK-DAG: func.func private @get_buf_m
+// CHECK-DAG: func.func private @rls_buf_m
 // CHECK-LABEL: func.func @mutex_cube_pipe()
-// CHECK-DAG: [[CUBE_ID:%.*]] = arith.constant 3 : i8
+// CHECK-DAG: [[CUBE_ID:%.*]] = llvm.mlir.constant(3 : i8) : i8
 // CHECK: call @get_buf_m([[CUBE_ID]])
 // CHECK: call @rls_buf_m([[CUBE_ID]])
 // CHECK-LABEL: func.func @mutex_roundtrip()
-// CHECK-DAG: [[ID:%.*]] = arith.constant 7 : i8
+// CHECK-DAG: [[ID:%.*]] = llvm.mlir.constant(7 : i8) : i8
 // CHECK: call @get_buf_mte2([[ID]])
 // CHECK: call @rls_buf_mte2([[ID]])
 // CHECK-NOT: tla.mutex

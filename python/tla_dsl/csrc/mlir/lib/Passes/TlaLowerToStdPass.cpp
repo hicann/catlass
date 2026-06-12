@@ -154,12 +154,26 @@ public:
     info.layoutTag = *layoutTag;
 
     info.rank = static_cast<int64_t>(info.coordDims.size());
-    if (info.rank != 2 || info.originShapeDims.size() != 2)
-      return failure();
     if (isLinearLayout(info.layoutTag)) {
-      if (info.shapeDims.size() != 2 || info.strideDims.size() != 2)
+      if (info.rank == 1 && info.shapeDims.size() == 1 && info.strideDims.size() == 1 &&
+          info.originShapeDims.size() == 1) {
+        int64_t extent = info.shapeDims[0];
+        int64_t stride = info.strideDims[0];
+        int64_t origin = info.originShapeDims[0];
+        int64_t coord = info.coordDims[0];
+        info.shapeDims = {1, extent};
+        info.strideDims = {extent == ShapedType::kDynamic ? ShapedType::kDynamic : stride * extent,
+                           stride};
+        info.originShapeDims = {1, origin};
+        info.coordDims = {0, coord};
+        info.rank = 2;
+      }
+      if (info.rank != 2 || info.shapeDims.size() != 2 || info.strideDims.size() != 2 ||
+          info.originShapeDims.size() != 2)
         return failure();
     } else if (isPackedLayout(info.layoutTag)) {
+      if (info.rank != 2 || info.originShapeDims.size() != 2)
+        return failure();
       if (info.shapeDims.size() != 4 || info.strideDims.size() != 4)
         return failure();
     } else {
@@ -272,6 +286,16 @@ public:
 
   static Value makeI64Constant(OpBuilder &builder, Location loc, int64_t value) {
     return builder.create<arith::ConstantIntOp>(loc, value, 64);
+  }
+
+  static FailureOr<Value> makeZeroValue(OpBuilder &builder, Location loc, Type type) {
+    if (isa<FloatType>(type))
+      return builder.create<arith::ConstantOp>(loc, type, builder.getFloatAttr(type, 0.0))
+          .getResult();
+    if (isa<IntegerType>(type))
+      return builder.create<arith::ConstantOp>(loc, type, builder.getIntegerAttr(type, 0))
+          .getResult();
+    return failure();
   }
 
   static FailureOr<Value> makeStaticTensorInfoIndex(OpBuilder &builder, Operation *op,
@@ -839,18 +863,6 @@ public:
         return {};
       return Twine("copy_cc_to_gm_row_major_").concat(suffix).str();
     }
-    if (*srcSpace == hivm::AddressSpace::GM && *dstSpace == hivm::AddressSpace::UB &&
-        srcLayout == TensorLayoutTag::RowMajor && dstLayout == TensorLayoutTag::RowMajor) {
-      if (srcElementType != "f32" || dstElem != "f32")
-        return {};
-      return "copy_gm_to_ubuf_1d_float";
-    }
-    if (*srcSpace == hivm::AddressSpace::UB && *dstSpace == hivm::AddressSpace::GM &&
-        srcLayout == TensorLayoutTag::RowMajor && dstLayout == TensorLayoutTag::RowMajor) {
-      if (srcElementType != "f32" || dstElem != "f32")
-        return {};
-      return "copy_ubuf_to_gm_1d_float";
-    }
     return {};
   }
 
@@ -908,7 +920,7 @@ public:
     auto unitAttr = StringAttr::get(ctx, execUnit);
     region.walk([&](Operation *nestedOp) {
       StringRef name = nestedOp->getName().getStringRef();
-      if (name != "tla.vadd")
+      if (name != "tla.add")
         return;
       nestedOp->setAttr(kExecUnitAttrName, unitAttr);
     });
@@ -926,7 +938,7 @@ public:
     module.walk([&](::tla::FuncOp funcOp) {
       bool isVectorKernel = false;
       funcOp.walk([&](Operation *op) {
-        if (llvm::isa<::tla::VectorOp, ::tla::VaddOp>(op)) {
+        if (llvm::isa<::tla::VectorOp, ::tla::AddOp>(op)) {
           isVectorKernel = true;
           return WalkResult::interrupt();
         }
@@ -2193,13 +2205,13 @@ public:
     SmallVectorImpl<Operation *> &toErase;
   };
 
-  struct LowerTlaVaddPattern : public OpRewritePattern<::tla::VaddOp> {
-    LowerTlaVaddPattern(MLIRContext *ctx, ModuleOp module, SmallVectorImpl<Operation *> &toErase)
-        : OpRewritePattern<::tla::VaddOp>(ctx), module(module), toErase(toErase) {}
+  struct LowerTlaAddPattern : public OpRewritePattern<::tla::AddOp> {
+    LowerTlaAddPattern(MLIRContext *ctx, ModuleOp module, SmallVectorImpl<Operation *> &toErase)
+        : OpRewritePattern<::tla::AddOp>(ctx), module(module), toErase(toErase) {}
 
-    LogicalResult matchAndRewrite(::tla::VaddOp op, PatternRewriter &rewriter) const override {
+    LogicalResult matchAndRewrite(::tla::AddOp op, PatternRewriter &rewriter) const override {
       if (op->getNumOperands() != 3 || op->getNumResults() != 0) {
-        op.emitError() << "expected tla.vadd to have exactly 3 operands and 0 results";
+        op.emitError() << "expected tla.add to have exactly 3 operands and 0 results";
         return failure();
       }
 
@@ -2214,27 +2226,27 @@ public:
       int64_t rhsRank = 0;
       int64_t dstRank = 0;
       if (!TlaLowerToStdPass::parseMemrefMetadataOrEmit(
-              op, lhsType, "tla.vadd currently requires typed !tla.memref operand types",
+              op, lhsType, "tla.add currently requires typed !tla.memref operand types",
               lhsAddrspace, lhsElementType, lhsRank) ||
           !TlaLowerToStdPass::parseMemrefMetadataOrEmit(
-              op, rhsType, "tla.vadd currently requires typed !tla.memref operand types",
+              op, rhsType, "tla.add currently requires typed !tla.memref operand types",
               rhsAddrspace, rhsElementType, rhsRank) ||
           !TlaLowerToStdPass::parseMemrefMetadataOrEmit(
-              op, dstType, "tla.vadd currently requires typed !tla.memref operand types",
+              op, dstType, "tla.add currently requires typed !tla.memref operand types",
               dstAddrspace, dstElementType, dstRank)) {
         return failure();
       }
 
       if (lhsRank != 1 || rhsRank != 1 || dstRank != 1) {
-        op.emitError() << "tla.vadd currently supports rank-1 memrefs only";
+        op.emitError() << "tla.add currently supports rank-1 memrefs only";
         return failure();
       }
       if (lhsAddrspace != "ub" || rhsAddrspace != "ub" || dstAddrspace != "ub") {
-        op.emitError() << "tla.vadd requires lhs/rhs/dst in ub addrspace";
+        op.emitError() << "tla.add requires lhs/rhs/dst in ub addrspace";
         return failure();
       }
       if (lhsElementType != "f32" || rhsElementType != "f32" || dstElementType != "f32") {
-        op.emitError() << "tla.vadd currently supports f32 memrefs only";
+        op.emitError() << "tla.add currently supports f32 memrefs only";
         return failure();
       }
 
@@ -2242,12 +2254,12 @@ public:
       auto rhsInfo = TlaLowerToStdPass::bridgeTlaMemrefType(rhsType);
       auto dstInfo = TlaLowerToStdPass::bridgeTlaMemrefType(dstType);
       if (failed(lhsInfo) || failed(rhsInfo) || failed(dstInfo)) {
-        op.emitError() << "failed to decode tla.vadd memref operand types";
+        op.emitError() << "failed to decode tla.add memref operand types";
         return failure();
       }
       if (lhsInfo->getShape() != rhsInfo->getShape() ||
           lhsInfo->getShape() != dstInfo->getShape()) {
-        op.emitError() << "tla.vadd requires matching operand shapes";
+        op.emitError() << "tla.add requires matching operand shapes";
         return failure();
       }
 
@@ -2366,12 +2378,24 @@ public:
       }
       StringRef srcAddrspace = srcDesc.addrspace;
       StringRef dstAddrspace = dstDesc.addrspace;
+      bool rankOk = dstDesc.rank == srcDesc.rank;
+      bool sameElem = dstDesc.elementType == srcDesc.elementType;
+      auto buildRuntimeMemref = [&](const TensorDescriptor &desc) -> FailureOr<Value> {
+        FailureOr<Value> baseMemref = TlaLowerToStdPass::materializeDescriptorBaseMemref(
+            rewriter, op.getLoc(), desc, allocatorState, op.getOperation());
+        if (failed(baseMemref))
+          return failure();
+        auto baseType = dyn_cast<MemRefType>((*baseMemref).getType());
+        if (!baseType)
+          return failure();
+        MemRefType runtimeType = TlaLowerToStdPass::getDynamicStridedMemrefType(baseType);
+        return TlaLowerToStdPass::castMemrefToType(rewriter, op.getLoc(), *baseMemref,
+                                                   runtimeType);
+      };
       std::string calleeName = TlaLowerToStdPass::getCopyRouteCallee(
           op.getContext(), srcAddrspace, dstAddrspace, srcDesc.layoutTag, dstDesc.layoutTag,
           srcDesc.elementType, dstDesc.elementType);
       if (!calleeName.empty()) {
-        bool rankOk = dstDesc.rank == srcDesc.rank;
-        bool sameElem = dstDesc.elementType == srcDesc.elementType;
         bool l0cGmNarrow = srcAddrspace == "l0c" && dstAddrspace == "gm" &&
                            srcDesc.layoutTag == TensorLayoutTag::L0C &&
                            dstDesc.layoutTag == TensorLayoutTag::RowMajor &&
@@ -2382,18 +2406,6 @@ public:
                             "(rank/element type)";
           return failure();
         }
-        auto buildRuntimeMemref = [&](const TensorDescriptor &desc) -> FailureOr<Value> {
-          FailureOr<Value> baseMemref = TlaLowerToStdPass::materializeDescriptorBaseMemref(
-              rewriter, op.getLoc(), desc, allocatorState, op.getOperation());
-          if (failed(baseMemref))
-            return failure();
-          auto baseType = dyn_cast<MemRefType>((*baseMemref).getType());
-          if (!baseType)
-            return failure();
-          MemRefType runtimeType = TlaLowerToStdPass::getDynamicStridedMemrefType(baseType);
-          return TlaLowerToStdPass::castMemrefToType(rewriter, op.getLoc(), *baseMemref,
-                                                     runtimeType);
-        };
 
         FailureOr<Value> dstRuntimeMemref = buildRuntimeMemref(dstDesc);
         FailureOr<Value> srcRuntimeMemref = buildRuntimeMemref(srcDesc);
@@ -2412,6 +2424,40 @@ public:
         rewriter.create<func::CallOp>(op.getLoc(), callee, operands);
         toErase.push_back(op.getOperation());
         return success();
+      }
+
+      if (rankOk && sameElem && srcDesc.layoutTag == TensorLayoutTag::RowMajor &&
+          dstDesc.layoutTag == TensorLayoutTag::RowMajor) {
+        FailureOr<Value> dstRuntimeMemref = buildRuntimeMemref(dstDesc);
+        FailureOr<Value> srcRuntimeMemref = buildRuntimeMemref(srcDesc);
+        if (failed(dstRuntimeMemref) || failed(srcRuntimeMemref))
+          return failure();
+
+        if (srcAddrspace == "gm" && dstAddrspace == "ub") {
+          auto srcType = dyn_cast<MemRefType>((*srcRuntimeMemref).getType());
+          if (!srcType)
+            return failure();
+          FailureOr<Value> zeroValue =
+              TlaLowerToStdPass::makeZeroValue(rewriter, op.getLoc(), srcType.getElementType());
+          if (failed(zeroValue))
+            return failure();
+          auto padModeAttr = rewriter.getAttr<hivm::PadModeAttr>(hivm::PadMode::PadValue);
+          Value zeroIndex = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), 0);
+          auto load = rewriter.create<hivm::LoadOp>(op.getLoc(), TypeRange{}, *srcRuntimeMemref,
+                                                    *dstRuntimeMemref, padModeAttr, *zeroValue,
+                                                    zeroIndex);
+          load->removeAttr("init_out_buffer");
+          load->removeAttr("may_implicit_transpose_with_last_axis");
+          toErase.push_back(op.getOperation());
+          return success();
+        }
+
+        if (srcAddrspace == "ub" && dstAddrspace == "gm") {
+          rewriter.create<hivm::StoreOp>(op.getLoc(), TypeRange{}, *srcRuntimeMemref,
+                                         *dstRuntimeMemref);
+          toErase.push_back(op.getOperation());
+          return success();
+        }
       }
 
       op.emitError() << "tla.copy descriptor/layout combination is unsupported: " << srcAddrspace
@@ -2626,14 +2672,22 @@ public:
       SmallVector<int64_t, 2> leaves;
       if (kind == "shape") {
         auto shapeTy = dyn_cast<::tla::ShapeType>(packedValue.getType());
-        if (!shapeTy || shapeTy.getTree().size() != 2 ||
-            failed(::tla::getTlaIndexTreeLeaves(shapeTy.getTree(), leaves))) {
+        if (!shapeTy || failed(::tla::getTlaIndexTreeLeaves(shapeTy.getTree(), leaves))) {
+          return emitPackedError("expected flat rank-2 tla.shape operand");
+        }
+        if (shapeTy.getTree().size() == 1 && leaves.size() == 1) {
+          leaves = {1, leaves[0]};
+        } else if (shapeTy.getTree().size() != 2) {
           return emitPackedError("expected flat rank-2 tla.shape operand");
         }
       } else {
         auto coordTy = dyn_cast<::tla::CoordType>(packedValue.getType());
-        if (!coordTy || coordTy.getTree().size() != 2 ||
-            failed(::tla::getTlaIndexTreeLeaves(coordTy.getTree(), leaves))) {
+        if (!coordTy || failed(::tla::getTlaIndexTreeLeaves(coordTy.getTree(), leaves))) {
+          return emitPackedError("expected flat rank-2 tla.coord operand");
+        }
+        if (coordTy.getTree().size() == 1 && leaves.size() == 1) {
+          leaves = {0, leaves[0]};
+        } else if (coordTy.getTree().size() != 2) {
           return emitPackedError("expected flat rank-2 tla.coord operand");
         }
       }
@@ -3665,10 +3719,10 @@ public:
     // Stage 8B: lower residual compute ops.
     LowerTlaMmadPattern lowerMmad(&getContext(), module, tensorDescriptorByValue, toErase);
     LowerTlaGmAddPattern lowerGmAdd(&getContext(), module, toErase);
-    LowerTlaVaddPattern lowerVadd(&getContext(), module, toErase);
+    LowerTlaAddPattern lowerAdd(&getContext(), module, toErase);
     SmallVector<Operation *, 16> execUnitOps;
     module.walk([&](Operation *op) {
-      if (llvm::isa<::tla::MmadOp, ::tla::GmAddOp, ::tla::VaddOp>(op))
+      if (llvm::isa<::tla::MmadOp, ::tla::GmAddOp, ::tla::AddOp>(op))
         execUnitOps.push_back(op);
     });
     for (Operation *op : execUnitOps) {
@@ -3681,8 +3735,8 @@ public:
         lowered = lowerMmad.matchAndRewrite(mmadOp, rewriter);
       } else if (auto gmAddOp = llvm::dyn_cast<::tla::GmAddOp>(op)) {
         lowered = lowerGmAdd.matchAndRewrite(gmAddOp, rewriter);
-      } else if (auto vaddOp = llvm::dyn_cast<::tla::VaddOp>(op)) {
-        lowered = lowerVadd.matchAndRewrite(vaddOp, rewriter);
+      } else if (auto addOp = llvm::dyn_cast<::tla::AddOp>(op)) {
+        lowered = lowerAdd.matchAndRewrite(addOp, rewriter);
       }
       if (failed(lowered)) {
         signalPassFailure();
@@ -3803,11 +3857,11 @@ public:
                            mlir::memref::MemRefDialect, scf::SCFDialect, hivm::HIVMDialect>();
     target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
     target.addIllegalOp<::tla::TileViewOp, ::tla::CopyOp, ::tla::MakeTensorLikeOp,
-                        ::tla::MakeRmemTensorOp, ::tla::LoadOp, ::tla::StoreOp, ::tla::FuncOp,
+                        ::tla::LoadOp, ::tla::StoreOp, ::tla::FuncOp,
                         ::tla::ReturnOp, ::tla::SplatOp, ::tla::MutexOp,
                         ::tla::MutexLockOp, ::tla::MutexUnlockOp, ::tla::CrossFlagOp,
                         ::tla::CrossCoreSetFlagOp, ::tla::CrossCoreWaitFlagOp, ::tla::CubeOp,
-                        ::tla::VectorOp, ::tla::MmadOp, ::tla::VaddOp>();
+                        ::tla::VectorOp, ::tla::MmadOp, ::tla::AddOp>();
     target.addDynamicallyLegalOp<::tla::MakeShapeOp, ::tla::MakeCoordOp, ::tla::MakeStrideOp,
                                  ::tla::MakeLayoutOp, ::tla::AllocPtrOp, ::tla::RecastPtrOp>(
         [](Operation *op) { return !hasNoResultUses(op); });

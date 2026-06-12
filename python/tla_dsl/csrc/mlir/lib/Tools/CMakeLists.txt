@@ -15,6 +15,7 @@ target_link_libraries(TlaCompilePipeline
     MLIRArithDialect
     MLIRSCFDialect
     MLIRMemRefDialect
+    MLIRMemRefTransforms
     MLIRLLVMDialect
     MLIRTargetLLVMIRExport
     MLIRToLLVMIRTranslationRegistration

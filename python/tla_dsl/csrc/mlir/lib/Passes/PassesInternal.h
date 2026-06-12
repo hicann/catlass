@@ -6,7 +6,6 @@ namespace tla {
 
 void registerTlaFuncToHaccPass();
 void registerTlaLowerToHivmPass();
-void registerSupportTritonPass();
 void registerConvertTlaToVectorPass();
 void registerTlaSyncToHivmPass();
 void registerTlaAllocPtrToHivmPointerCastPass();

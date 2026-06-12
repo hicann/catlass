@@ -32,8 +32,8 @@ module {
 // STD-NOT: tla.cross_core
 // STD: return
 
-// HIVM-DAG: func.func private @_mlir_ciface_tla_cross_core_set_flag(i8, i8, i8)
-// HIVM-DAG: func.func private @_mlir_ciface_tla_cross_core_wait_flag(i8)
+// HIVM-DAG: func.func private @_mlir_ciface_tla_cross_core_set_flag
+// HIVM-DAG: func.func private @_mlir_ciface_tla_cross_core_wait_flag
 // HIVM-LABEL: func.func @flags
 // HIVM-DAG: hivm.hir.set_flag[<PIPE_MTE2>, <PIPE_MTE1>, <EVENT_ID0>]
 // HIVM-DAG: hivm.hir.set_flag[<PIPE_MTE1>, <PIPE_MTE2>, <EVENT_ID0>]

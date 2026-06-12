@@ -10,7 +10,6 @@ std::unique_ptr<mlir::Pass> createTlaLowerToStdPass();
 std::unique_ptr<mlir::Pass> createTlaSyncToHivmPass();
 std::unique_ptr<mlir::Pass> createTlaFuncToHaccPass();
 std::unique_ptr<mlir::Pass> createTlaLowerToHivmPass();
-std::unique_ptr<mlir::Pass> createSupportTritonPass();
 std::unique_ptr<mlir::Pass> createConvertTlaToVectorPass();
 std::unique_ptr<mlir::Pass> createAddKernelPrologueEpiloguePass();
 

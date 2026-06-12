@@ -24,8 +24,7 @@ module {
 // CHECK-DAG: [[SRC:%.*]] = memref.cast %arg0 : memref<128x128xf32, #hivm.address_space<gm>> to memref<?x?xf32, strided<[?, ?], offset: ?>, #hivm.address_space<gm>>
 // CHECK-DAG: [[DST_BASE:%.*]] = hivm.hir.pointer_cast{{.*}} : memref<1024xf32, #hivm.address_space<cbuf>>
 // CHECK-DAG: [[DST:%.*]] = memref.cast [[DST_BASE]] : memref<1024xf32, #hivm.address_space<cbuf>> to memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<cbuf>>
-// CHECK-DAG: [[PACKED_STRIDE_INDEX:%.*]] = arith.constant 999 : index
-// CHECK-DAG: [[PACKED_STRIDE:%.*]] = arith.index_cast [[PACKED_STRIDE_INDEX]] : index to i64
+// CHECK-DAG: [[PACKED_STRIDE:%.*]] = llvm.mlir.constant(999 : i64) : i64
 // CHECK-NOT: memref.subview
 // CHECK: call @copy_gm_row_major_to_cbuf_zN_float([[SRC]], [[DST]]
 // CHECK-SAME: [[PACKED_STRIDE]]

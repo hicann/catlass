@@ -268,7 +268,6 @@ def Tla_TernaryOpsTrait : NativeOpTrait<"::mlir::tla::trait::TernaryOps">;
 def Tla_TileTrait : NativeOpTrait<"::mlir::tla::trait::Tile">;
 def Tla_TileCountTrait : NativeOpTrait<"::mlir::tla::trait::TileCount">;
 def Tla_UnaryOpsTrait : NativeOpTrait<"::mlir::tla::trait::UnaryOps">;
-def Tla_VaddTrait : NativeOpTrait<"::mlir::tla::trait::Vadd">;
 def Tla_VectorTrait : NativeOpTrait<"::mlir::tla::trait::Vector">;
 def Tla_VectorBinaryOpsTrait : NativeOpTrait<"::mlir::tla::trait::VectorBinaryOps">;
 def Tla_WaitFlagTrait : NativeOpTrait<"::mlir::tla::trait::WaitFlag">;
@@ -440,11 +439,12 @@ def Tla_GmAddOp : Tla_Op<"gm_add", []> {
 def Tla_LoadOp : Tla_Op<"load", []> {
   let summary = "Load";
   let description = [{
-    Register-fragment load marker on a tensor tile.
+    Load a tensor tile into vector SSA.
   }];
-  let arguments = (ins Tla_TensorType:$dest, Tla_TensorType:$source);
+  let arguments = (ins Tla_TensorType:$source);
+  let results = (outs Tla_TensorType:$result);
   let assemblyFormat = [{
-    $dest `,` $source attr-dict `:` type($dest) `,` type($source)
+    $source attr-dict `:` type($source) `->` type($result)
   }];
 }
 
@@ -490,19 +490,6 @@ def Tla_MakeTensorLikeOp : Tla_Op<"make_tensor_like", []> {
   let results = (outs Tla_TensorType:$tile);
   let assemblyFormat = [{
     $ptr `like` $like `layoutTag` `(` $layoutTag `)` attr-dict `:` qualified(type($ptr)) `,` qualified(type($like)) `->` qualified(type($tile))
-  }];
-}
-
-def Tla_MakeRmemTensorOp : Tla_Op<"make_rmem_tensor", [Pure]> {
-  let summary = "Mark tensor as register fragment";
-  let description = [{
-    Mark a UB-backed tensor view as participating in register-fragment vector lowering.
-    This is a frontend/intermediate marker consumed by tla-to-vector.
-  }];
-  let arguments = (ins Tla_TensorType:$source);
-  let results = (outs Tla_TensorType:$fragment);
-  let assemblyFormat = [{
-    $source attr-dict `:` type($source) `->` type($fragment)
   }];
 }
 
@@ -670,14 +657,15 @@ def Tla_TileViewOp : Tla_Op<"tile_view", []> {
   }];
 }
 
-def Tla_VaddOp : Tla_Op<"vadd", []> {
+def Tla_AddOp : Tla_Op<"add", []> {
   let summary = "Vector add for tensor fragments";
   let description = [{
     Element-wise add on tensor fragments / vector tiles.
   }];
-  let arguments = (ins Tla_TensorType:$dst, Tla_TensorType:$lhs, Tla_TensorType:$rhs);
+  let arguments = (ins Tla_TensorType:$lhs, Tla_TensorType:$rhs);
+  let results = (outs Tla_TensorType:$result);
   let assemblyFormat = [{
-    $dst `,` $lhs `,` $rhs attr-dict `:` type($dst) `,` type($lhs) `,` type($rhs)
+    $lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs) `->` type($result)
   }];
 }
 
@@ -685,6 +673,14 @@ def Tla_VectorOp : Tla_Op<"vector", [NoTerminator, SingleBlock]> {
   let summary = "Vector region";
   let description = [{
     Launch a vector region for post-processing and epilogue ops.
+  }];
+  let regions = (region AnyRegion:$body);
+}
+
+def Tla_VecFuncOp : Tla_Op<"vec.func", [NoTerminator, SingleBlock]> {
+  let summary = "Vector compute function region";
+  let description = [{
+    Group register-resident vector compute ops inside a vector region.
   }];
   let regions = (region AnyRegion:$body);
 }

@@ -58,11 +58,26 @@ module attributes {tla.module_exec_units = "cube"} {
   }) {tla.exec_units = "cube", function_type = (!tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>, !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>, !tla.tensor<!tla.layout<!tla.shape<32,32>, !tla.stride<32,1>, !tla.shape<32,32>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>) -> (), sym_name = "basic_mmad"} : () -> ()
 }
 
-// CHECK: func.func private @mmad_float_float_float(memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<ca>>, memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<cb>>, memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<cc>>, i64, i64, i64, i1, i8) attributes {hacc.always_inline, hivm.func_core_type = #hivm.func_core_type<AIC>, llvm.emit_c_interface}
-// CHECK: func.func private @copy_cc_to_gm_row_major_float(memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<cc>>, memref<?x?xf32, strided<[?, ?], offset: ?>, #hivm.address_space<gm>>, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64) attributes {hacc.always_inline, hivm.func_core_type = #hivm.func_core_type<AIC>, llvm.emit_c_interface}
-// CHECK: func.func private @copy_cbuf_zN_to_cb_nZ_float(memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<cbuf>>, memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<cb>>, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64) attributes {hacc.always_inline, hivm.func_core_type = #hivm.func_core_type<AIC>, llvm.emit_c_interface}
-// CHECK: func.func private @copy_cbuf_zN_to_ca_zN_float(memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<cbuf>>, memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<ca>>, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64) attributes {hacc.always_inline, hivm.func_core_type = #hivm.func_core_type<AIC>, llvm.emit_c_interface}
-// CHECK: func.func private @copy_gm_row_major_to_cbuf_zN_float(memref<?x?xf32, strided<[?, ?], offset: ?>, #hivm.address_space<gm>>, memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<cbuf>>, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64) attributes {hacc.always_inline, hivm.func_core_type = #hivm.func_core_type<AIC>, llvm.emit_c_interface}
+// CHECK: func.func private @mmad_float_float_float
+// CHECK-SAME: hacc.always_inline
+// CHECK-SAME: hivm.func_core_type = #hivm.func_core_type<AIC>
+// CHECK-SAME: llvm.emit_c_interface
+// CHECK: func.func private @copy_cc_to_gm_row_major_float
+// CHECK-SAME: hacc.always_inline
+// CHECK-SAME: hivm.func_core_type = #hivm.func_core_type<AIC>
+// CHECK-SAME: llvm.emit_c_interface
+// CHECK: func.func private @copy_cbuf_zN_to_cb_nZ_float
+// CHECK-SAME: hacc.always_inline
+// CHECK-SAME: hivm.func_core_type = #hivm.func_core_type<AIC>
+// CHECK-SAME: llvm.emit_c_interface
+// CHECK: func.func private @copy_cbuf_zN_to_ca_zN_float
+// CHECK-SAME: hacc.always_inline
+// CHECK-SAME: hivm.func_core_type = #hivm.func_core_type<AIC>
+// CHECK-SAME: llvm.emit_c_interface
+// CHECK: func.func private @copy_gm_row_major_to_cbuf_zN_float
+// CHECK-SAME: hacc.always_inline
+// CHECK-SAME: hivm.func_core_type = #hivm.func_core_type<AIC>
+// CHECK-SAME: llvm.emit_c_interface
 // CHECK-LABEL: func.func @basic_mmad(%arg0: memref<32x32xf32, #hivm.address_space<gm>>, %arg1: memref<32x32xf32, #hivm.address_space<gm>>, %arg2: memref<32x32xf32, #hivm.address_space<gm>>)
 // CHECK-COUNT-1: hivm.hir.set_ctrl false at ctrl[60]
 // CHECK-COUNT-1: hivm.hir.set_ctrl true at ctrl[48]

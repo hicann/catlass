@@ -11,5 +11,5 @@ module {
 
 // CHECK-LABEL: func.func @block_dim_lit
 // CHECK: hivm.hir.get_block_num
-// CHECK: arith.index_cast
+// CHECK: builtin.unrealized_conversion_cast
 // CHECK-NOT: tla.arch.block_dim

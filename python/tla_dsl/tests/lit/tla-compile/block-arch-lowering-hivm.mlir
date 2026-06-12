@@ -15,10 +15,9 @@ module {
 // HIVM-NOT: tla.arch.block_idx
 // HIVM-NOT: tla.arch.block_dim
 // HIVM: hivm.hir.get_block_idx
-// HIVM: arith.index_cast
 // HIVM: hivm.hir.get_block_num
-// HIVM: arith.index_cast
-// HIVM: arith.addi
+// HIVM: llvm.add
+// HIVM: builtin.unrealized_conversion_cast
 // HIVM: memref.store
 // HIVM-NOT: tla.arch.block_idx
 // HIVM-NOT: tla.arch.block_dim

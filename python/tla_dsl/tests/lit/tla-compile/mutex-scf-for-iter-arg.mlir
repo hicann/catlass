@@ -19,10 +19,10 @@ module {
   }
 }
 
-// CHECK-DAG: func.func private @get_buf_mte2(i8)
-// CHECK-DAG: func.func private @rls_buf_mte2(i8)
+// CHECK-DAG: func.func private @get_buf_mte2
+// CHECK-DAG: func.func private @rls_buf_mte2
 // CHECK-LABEL: func.func @mutex_for_iter_arg()
-// CHECK-DAG: [[ID:%.*]] = arith.constant 5 : i8
+// CHECK-DAG: [[ID:%.*]] = llvm.mlir.constant(5 : i8) : i8
 // CHECK: call @get_buf_mte2([[ID]])
 // CHECK: call @rls_buf_mte2([[ID]])
 // CHECK: call @get_buf_mte2([[ID]])

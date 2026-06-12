@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import inspect
 import math
-from functools import wraps
 from itertools import chain
-from typing import Any, Callable, Sequence, TypeAlias, get_type_hints
+from typing import Any, Callable, Sequence, TypeAlias
 
 from mlir import ir as mlir_ir  # type: ignore[assignment]
 from mlir._mlir_libs._mlir import (  # type: ignore[import-not-found]
@@ -17,6 +15,7 @@ from mlir.dialects import arith as _mlir_arith  # type: ignore[import-not-found]
 from . import _tla_type_bridge
 from ._mlir_bindings import tla_ops_gen as _tla_ops_gen
 from .base_dsl import ast_helpers as _ast_helpers
+from .base_dsl.op import dsl_user_op, _capture_user_loc
 from .base_dsl.typing import Int8, Numeric
 from .base_dsl.typing import Pointer as PointerABC
 from .base_dsl.typing import Pointer as PointerTypeHint
@@ -52,7 +51,6 @@ from .types import (
     TlaTile,
     TlaValue,
     Scalar,
-    annotation_to_category,
     dtype_size_bytes,
 )
 
@@ -156,30 +154,6 @@ LiteralLike: TypeAlias = bool | int | float | str | mlir_ir.Type
 
 class _LayoutTagSentinel(_Sentinel):
     """Marks ``tla.arch.*`` values that are valid ``Tensor.layout_tag`` / ``make_tensor_like`` tags."""
-
-
-def dsl_user_op(op_func: Callable[..., Any]) -> Callable[..., Any]:
-    """Attach caller source location to user-facing DSL op calls."""
-    return_annotation = get_type_hints(op_func, globalns=op_func.__globals__).get(
-        "return"
-    )
-    return_category = annotation_to_category(return_annotation)
-
-    @wraps(op_func)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
-        loc = kwargs.pop("loc", None)
-        if loc is None and _runtime._current_frontend_state() is not None:
-            loc = _capture_user_loc()
-        elif loc is not None and not isinstance(loc, mlir_ir.Location):
-            raise TypeError(
-                f"loc must be mlir.ir.Location or None, got {type(loc).__name__}"
-            )
-        result = op_func(*args, loc=loc, **kwargs)
-        if return_category is not None and result is not None:
-            _record_category(result, return_category)
-        return result
-
-    return wrapper
 
 
 @_register_value_caster(PtrType.get_static_typeid(), replace=True)
@@ -287,90 +261,37 @@ class _Pointer(PointerABC):
         return AddressSpace.from_mlir_token(self._ptr_ty.addrspace)
 
 
-class _RmemTensorValue:
-    """Frontend proxy for a register-fragment tensor backed by a UB tensor view."""
+class VectorSSA:
+    """Frontend proxy for loaded vector SSA values."""
 
-    def __init__(self, value: mlir_ir.Value, source: _Tensor) -> None:
+    def __init__(self, value: mlir_ir.Value) -> None:
         if not isinstance(value, mlir_ir.Value):
             raise TypeError(
-                f"Rmem tensor expects mlir.ir.Value, got {type(value).__name__}"
+                f"VectorSSA expects mlir.ir.Value, got {type(value).__name__}"
             )
-        type_text = str(value.type)
-        if not type_text.startswith("!tla.tensor<"):
-            raise TypeError(f"Rmem tensor expects !tla.tensor<...>, got {type_text}")
+        if not _tla_type_bridge.type_is_tensor(value.type):
+            raise TypeError(f"VectorSSA expects !tla.tensor<...>, got {value.type}")
         self.value = value
-        self.source = source
-        self.__tla_category__ = "rmem_tensor"
+        self.__tla_category__ = "vector_ssa"
         _runtime._bind_frontend_value(self, value)
-        _runtime._bind_frontend_category(self, "rmem_tensor")
-        _runtime._bind_frontend_category(value, "rmem_tensor")
+        _runtime._bind_frontend_category(self, "vector_ssa")
+        _runtime._bind_frontend_category(value, "vector_ssa")
 
     def __tla_type__(self) -> str:
         return str(self.value.type)
 
-    def __get_mlir_types__(self) -> list[Any]:
+    def __get_mlir_types__(self, context: mlir_ir.Context | None = None) -> list[Any]:
+        del context
         return [self.value.type]
 
     def __extract_mlir_values__(self) -> list[Any]:
         return [self.value]
 
-    def load(self, *, loc: mlir_ir.Location | None = None) -> "_RmemLoadedValue":
-        _require_frontend_state("load")
-        _tla_ops_gen.load(self.value, self.value, loc=loc)
-        return _RmemLoadedValue(self)
+    def __add__(self, other: Any) -> "VectorSSA":
+        return add(self, other)
 
-    def store(
-        self,
-        value: "_RmemExprValue | _RmemLoadedValue",
-        *,
-        loc: mlir_ir.Location | None = None,
-    ) -> None:
-        _require_frontend_state("store")
-        if isinstance(value, _RmemExprValue):
-            if value.op_name != "vadd":
-                raise TlaLoweringError(
-                    f"Unsupported register expression '{value.op_name}' for rmem store"
-                )
-            _tla_ops_gen.vadd(
-                self.value, value.lhs.fragment.value, value.rhs.fragment.value, loc=loc
-            )
-            _tla_ops_gen.store(self.value, self.value, loc=loc)
-            return
-        if isinstance(value, _RmemLoadedValue):
-            _tla_ops_gen.store(self.value, value.fragment.value, loc=loc)
-            return
-        raise TlaLoweringError(
-            "rmem store expects a loaded fragment or register expression"
-        )
-
-
-class _RmemLoadedValue:
-    """Frontend proxy for a loaded register fragment value."""
-
-    def __init__(self, fragment: _RmemTensorValue) -> None:
-        self.fragment = fragment
-        self.__tla_category__ = "rmem_value"
-        _runtime._bind_frontend_category(self, "rmem_value")
-
-    def __add__(self, other: Any) -> "_RmemExprValue":
-        if not isinstance(other, _RmemLoadedValue):
-            raise TlaLoweringError(
-                f"rmem add expects another loaded fragment, got {_type_name(other)}"
-            )
-        return _RmemExprValue("vadd", self, other)
-
-
-class _RmemExprValue:
-    """Frontend proxy for a register-fragment expression tree."""
-
-    def __init__(
-        self, op_name: str, lhs: _RmemLoadedValue, rhs: _RmemLoadedValue
-    ) -> None:
-        self.op_name = op_name
-        self.lhs = lhs
-        self.rhs = rhs
-        self.__tla_category__ = "rmem_expr"
-        _runtime._bind_frontend_category(self, "rmem_expr")
+    def __radd__(self, other: Any) -> "VectorSSA":
+        return add(other, self)
 
 
 class _MutexValue:
@@ -456,27 +377,6 @@ def _region_stub(op_name: str) -> _RegionStub:
     return _RegionStub(f"tla.{op_name}")
 
 
-def _capture_user_loc() -> mlir_ir.Location | None:
-    frame = inspect.currentframe()
-    caller = (
-        frame.f_back.f_back
-        if frame is not None
-        and frame.f_back is not None
-        and frame.f_back.f_back is not None
-        else None
-    )
-    if caller is None:
-        return None
-    frame_info = inspect.getframeinfo(caller)
-    positions = getattr(frame_info, "positions", None)
-    col_offset = int(getattr(positions, "col_offset", 0) or 0)
-    lineno = int(getattr(positions, "lineno", frame_info.lineno) or frame_info.lineno)
-    if lineno <= 0:
-        return mlir_ir.Location.unknown()
-    file_loc = mlir_ir.Location.file(frame_info.filename, lineno, col_offset)
-    return mlir_ir.Location.name(frame_info.function, childLoc=file_loc)
-
-
 def _resolve_bound_value(value: Any) -> Any:
     if isinstance(value, mlir_ir.Value):
         return value
@@ -489,14 +389,6 @@ def _resolve_bound_value(value: Any) -> Any:
 def _coerce_pointer_arg(x: Any) -> _Pointer:
     """Resolve frontend bindings, then same path as :meth:`_Pointer.__new_from_mlir_values__`."""
     return _Pointer.__new_from_mlir_values__(None, [_resolve_bound_value(x)])  # type: ignore[arg-type]
-
-
-def _record_category(value: Any, category: str) -> None:
-    _runtime._bind_frontend_category(value, category)
-    try:
-        setattr(value, "__tla_category__", category)
-    except (AttributeError, TypeError):
-        pass
 
 
 def _const_index(value: int) -> mlir_ir.Value:
@@ -637,7 +529,7 @@ def _as_value(value: Any) -> mlir_ir.Value:
         resolved = _resolve_bound_value(resolved.value)
     if isinstance(resolved, _Tensor):
         resolved = _resolve_bound_value(resolved.value)
-    if isinstance(resolved, _RmemTensorValue):
+    if isinstance(resolved, VectorSSA):
         resolved = _resolve_bound_value(resolved.value)
     if isinstance(resolved, _MutexValue):
         resolved = _resolve_bound_value(resolved.value)
@@ -893,7 +785,7 @@ def _tla_tensor_descriptor_from_type_or_value(
     if isinstance(source, TlaTensorTypeDescriptor):
         return source
     raise TlaLoweringError(
-        "expected a tensor SSA value with registered TlaTensorTypeDescriptor "
+        "expected a vector SSA value with registered TlaTensorTypeDescriptor "
         f"or a TlaTensorTypeDescriptor, got {type(source).__name__}"
     )
 
@@ -2206,7 +2098,7 @@ def make_tensor_like(
     dtype = like_type.element_type
     if dst_dtype is not None:
         dtype = _dtype_to_str(dst_dtype).lower()
-    if dtype not in {"f16", "bf16", "f32", "i32", "i1", "i8"}:
+    if dtype not in {"f16", "bf16", "f32", "i32", "i16", "i1", "i8"}:
         raise TlaLoweringError(
             f"tla.make_tensor_like expects a supported element type, got [{dtype}]"
         )
@@ -2330,90 +2222,6 @@ def make_tensor_like(
     except Exception:
         pass
     return _Tensor(out)
-
-
-@dsl_user_op
-def make_rmem_tensor(
-    source: TileLike, *, loc: mlir_ir.Location | None = None
-) -> _RmemTensorValue:
-    """Mark a UB-backed rank-1 f32 tensor as a register fragment source."""
-    _require_category("make_rmem_tensor", "source", source, "tensor", 0)
-    _require_frontend_state("make_rmem_tensor")
-    source_value = _as_value(source)
-    source_tensor = (
-        source if isinstance(source, _Tensor) else _Tensor(source_value)
-    )
-    if source_tensor.addrspace != "ub":
-        raise TlaLoweringError(
-            "tla.make_rmem_tensor currently supports UB-backed tensors only"
-        )
-    if source_tensor.dtype != "f32":
-        raise TlaLoweringError(
-            "tla.make_rmem_tensor currently supports f32 tensors only"
-        )
-    logical_shape = _logical_tensor_shape_from_metadata(source_value)
-    if logical_shape != (64,):
-        raise TlaLoweringError(
-            "tla.make_rmem_tensor currently supports logical shape (64,) only"
-        )
-    op = mlir_ir.Operation.create(
-        "tla.make_rmem_tensor",
-        operands=[source_value],
-        results=[source_value.type],
-        loc=loc,
-    )
-    out = op.results[0]
-    try:
-        source_desc = _tla_tensor_type_for_mlir_value(source_value)
-    except Exception:
-        source_desc = None
-    if source_desc is not None:
-        _register_tla_tensor_type(out, source_desc)
-    try:
-        _register_tla_tensor_metadata(
-            out,
-            {
-                "shape": _tensor_metadata_field(source_value, "shape"),
-                "stride": _tensor_metadata_field(source_value, "stride"),
-                "coord": _tensor_metadata_field(source_value, "coord"),
-                "origin_shape": _tensor_metadata_field(source_value, "origin_shape"),
-                "dtype": _tensor_metadata_field(source_value, "dtype"),
-                "addrspace": _tensor_metadata_field(source_value, "addrspace"),
-                "layout_tag": _tensor_metadata_field(source_value, "layout_tag"),
-            },
-        )
-    except Exception:
-        pass
-    return _RmemTensorValue(out, source_tensor)
-
-
-@dsl_user_op
-def load(
-    fragment: _RmemTensorValue, *, loc: mlir_ir.Location | None = None
-) -> _RmemLoadedValue:
-    """Emit a fragment load marker inside a vector region."""
-    if not isinstance(fragment, _RmemTensorValue):
-        _op_error(
-            "load",
-            f"invalid argument 'fragment' (position 0): expected rmem tensor, got {_type_name(fragment)}",
-        )
-    return fragment.load(loc=loc)
-
-
-@dsl_user_op
-def store(
-    fragment: _RmemTensorValue,
-    value: _RmemExprValue | _RmemLoadedValue,
-    *,
-    loc: mlir_ir.Location | None = None,
-) -> None:
-    """Emit a fragment store marker inside a vector region."""
-    if not isinstance(fragment, _RmemTensorValue):
-        _op_error(
-            "store",
-            f"invalid argument 'fragment' (position 0): expected rmem tensor, got {_type_name(fragment)}",
-        )
-    fragment.store(value, loc=loc)
 
 
 @dsl_user_op
@@ -2737,6 +2545,25 @@ def vector(*, loc: mlir_ir.Location | None = None) -> TlaRegion:
     return _region_stub("vector")
 
 
+_VEC_FUNC_MODES = {"simd", "SIMD", "simt", "SIMT"}
+
+
+def _validate_vec_func_mode(mode: str) -> None:
+    if not isinstance(mode, str):
+        _op_error("vec.func", f"mode must be a string; got {_type_name(mode)}")
+    if mode not in _VEC_FUNC_MODES:
+        accepted = ", ".join(sorted(repr(value) for value in _VEC_FUNC_MODES))
+        _op_error("vec.func", f"mode must be one of {accepted}; got {mode!r}")
+
+
+@dsl_user_op
+def _vec_func(*, mode: str = "simd", loc: mlir_ir.Location | None = None) -> TlaRegion:
+    """Create a vector function region stub for lowering-only usage."""
+    del loc
+    _validate_vec_func_mode(mode)
+    return _region_stub("vec.func")
+
+
 @dsl_user_op
 def mmad(
     acc: TileLike,
@@ -2836,21 +2663,26 @@ def broadcast(
 
 
 @dsl_user_op
-def vadd(
-    dst: MemrefLike,
-    lhs: MemrefLike,
-    rhs: MemrefLike,
+def add(
+    lhs: VectorSSA,
+    rhs: VectorSSA,
     *,
     loc: mlir_ir.Location | None = None,
-) -> None:
-    """Emit element-wise add for ``!tla.tensor`` buffers."""
-    _require_categories("vadd", "dst", dst, ("tensor", "rmem_tensor"), 0)
-    _require_categories("vadd", "lhs", lhs, ("tensor", "rmem_tensor"), 1)
-    _require_categories("vadd", "rhs", rhs, ("tensor", "rmem_tensor"), 2)
-    _require_frontend_state("vadd")
+) -> VectorSSA:
+    """Emit element-wise add for loaded vector SSA values."""
+    _require_category("add", "lhs", lhs, "vector_ssa", 0)
+    _require_category("add", "rhs", rhs, "vector_ssa", 1)
+    _require_frontend_state("add")
+    _runtime._check_frontend_region_op("add", {"vector"})
     _runtime._mark_frontend_exec_unit("vector")
-    _tla_ops_gen.vadd(_as_value(dst), _as_value(lhs), _as_value(rhs), loc=loc)
-    return None
+    lhs_value = _as_value(lhs)
+    rhs_value = _as_value(rhs)
+    if str(lhs_value.type) != str(rhs_value.type):
+        raise TlaLoweringError(
+            f"tla.add operands must have identical !tla.tensor types; "
+            f"got {lhs_value.type} and {rhs_value.type}"
+        )
+    return VectorSSA(_tla_ops_gen.add(lhs_value.type, lhs_value, rhs_value, loc=loc))
 
 
 @dsl_user_op
@@ -2955,7 +2787,7 @@ _require_generated("cube")
 _require_generated("vector")
 _require_generated("mmad")
 _require_generated("broadcast")
-_require_generated("vadd")
+_require_generated("add")
 _require_generated("arch_block_idx")
 _require_generated("arch_block_dim")
 _require_generated("inttoptr")
@@ -2984,6 +2816,9 @@ arch._set("RowMajor", _LayoutTagSentinel("row_major"))
 arch._set("ColumnMajor", _LayoutTagSentinel("column_major"))
 arch._set("L0Clayout", _LayoutTagSentinel("L0Clayout"))
 
+vec = _Namespace()
+vec._set("func", _vec_func)
+
 
 def _resolve_arch_layout_tag(value: Any | None, *, for_op: str) -> str:
     """Normalize ``Tensor(..., layout_tag=...)`` to the MLIR layout token string."""
@@ -3010,15 +2845,12 @@ __all__ = [
     "arch",
     "tile_view",
     "make_tensor_like",
-    "make_rmem_tensor",
     "copy",
-    "load",
     "flag",
     "cross_flag",
     "cross_core_set_flag",
     "cross_core_wait_flag",
     "set_flag",
-    "store",
     "wait_flag",
     "pipe_barrier",
     "mutex",
@@ -3029,7 +2861,7 @@ __all__ = [
     "vector",
     "mmad",
     "broadcast",
-    "vadd",
+    "add",
     "make_ptr",
     "recast_ptr",
     "make_shape",
@@ -3039,5 +2871,6 @@ __all__ = [
     "IndexTree",
     "range_constexpr",
     "_Pointer",
+    "VectorSSA",
     "LocalmemAllocator",
 ]

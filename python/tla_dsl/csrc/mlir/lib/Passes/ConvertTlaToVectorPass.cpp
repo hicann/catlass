@@ -1,5 +1,6 @@
 #include "PassesCommon.h"
 #include "PassesInternal.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
@@ -8,9 +9,10 @@ namespace tla {
 namespace {
 struct ParsedTensorInfo {
   SmallVector<int64_t, 2> shape;
+  SmallVector<int64_t, 2> originShape;
   SmallVector<int64_t, 2> coord;
   AddressSpace addressSpace;
-  std::string elementType;
+  Type elementType;
   std::string layoutTag;
 };
 
@@ -20,12 +22,11 @@ static FailureOr<ParsedTensorInfo> parseTensorInfo(Type tensorType) {
     auto layout = tensorTy.getLayout();
     auto ptr = tensorTy.getPtr();
     if (failed(::tla::getTlaIndexTreeLeaves(layout.getShape().getTree(), info.shape)) ||
+        failed(::tla::getTlaIndexTreeLeaves(layout.getOrigin().getTree(), info.originShape)) ||
         failed(::tla::getTlaIndexTreeLeaves(tensorTy.getCoord().getTree(), info.coord))) {
       return failure();
     }
-    llvm::raw_string_ostream os(info.elementType);
-    os << ptr.getPointee();
-    os.flush();
+    info.elementType = ptr.getPointee();
     info.addressSpace = ptr.getAddrspace();
     info.layoutTag = stringifyLayoutTag(layout.getLayoutTag()).str();
     return info;
@@ -40,6 +41,98 @@ static FailureOr<MemRefType> getBridgedTensorMemrefType(Value tensor) {
   return *bridged;
 }
 
+static FailureOr<int64_t> getStaticNumElements(ArrayRef<int64_t> shape) {
+  int64_t numElements = 1;
+  for (int64_t dim : shape) {
+    if (dim <= 0 || dim == ShapedType::kDynamic)
+      return failure();
+    numElements *= dim;
+  }
+  return numElements;
+}
+
+static FailureOr<int64_t> getElementByteWidth(Type elementType) {
+  if (auto intType = dyn_cast<IntegerType>(elementType)) {
+    int64_t width = intType.getWidth();
+    if (width <= 0 || width % 8 != 0)
+      return failure();
+    return width / 8;
+  }
+  if (auto floatType = dyn_cast<FloatType>(elementType)) {
+    int64_t width = floatType.getWidth();
+    if (width <= 0 || width % 8 != 0)
+      return failure();
+    return width / 8;
+  }
+  return failure();
+}
+
+static FailureOr<int64_t> getVectorLanesForMemref(MemRefType type) {
+  if (type.getRank() != 1 && type.getRank() != 2)
+    return failure();
+  auto numElements = getStaticNumElements(type.getShape());
+  auto elementBytes = getElementByteWidth(type.getElementType());
+  if (failed(numElements) || failed(elementBytes) || *numElements <= 0 || *elementBytes <= 0)
+    return failure();
+  constexpr int64_t kVectorBytes = 256;
+  int64_t lanes = kVectorBytes / *elementBytes;
+  if (lanes <= 0 || *numElements > lanes)
+    return failure();
+  return lanes;
+}
+
+static bool isSupportedVectorTile(MemRefType type) {
+  return succeeded(getVectorLanesForMemref(type));
+}
+
+static FailureOr<MemRefType> getVectorHelperMemrefType(Value tensor) {
+  auto bridged = getBridgedTensorMemrefType(tensor);
+  if (failed(bridged))
+    return failure();
+  if (!isSupportedVectorTile(*bridged))
+    return failure();
+  auto numElements = getStaticNumElements(bridged->getShape());
+  if (failed(numElements))
+    return failure();
+  auto info = parseTensorInfo(tensor.getType());
+  if (succeeded(info)) {
+    auto originElements = getStaticNumElements(info->originShape);
+    if (succeeded(originElements) && *originElements > 0 && *originElements <= *numElements)
+      numElements = originElements;
+  }
+  auto layout =
+      StridedLayoutAttr::get(bridged->getContext(), ShapedType::kDynamic, ArrayRef<int64_t>{1});
+  return MemRefType::get({*numElements}, bridged->getElementType(), layout,
+                         bridged->getMemorySpace());
+}
+
+static LogicalResult verifyHelperMemrefType(MemRefType type, VectorType vectorType) {
+  if (!type || type.getRank() != 1 || vectorType.getRank() != 1)
+    return failure();
+  if (type.getElementType() != vectorType.getElementType())
+    return failure();
+  auto validLanes = getStaticNumElements(type.getShape());
+  if (failed(validLanes) || *validLanes <= 0 || *validLanes > vectorType.getDimSize(0))
+    return failure();
+  auto lanes = getVectorLanesForMemref(type);
+  if (failed(lanes) || *lanes != vectorType.getDimSize(0))
+    return failure();
+  return success();
+}
+
+static FailureOr<Value> createZeroValue(OpBuilder &builder, Location loc, Type elementType) {
+  if (elementType.isF32())
+    return builder.create<arith::ConstantOp>(loc, builder.getF32FloatAttr(0.0)).getResult();
+  if (elementType.isF16())
+    return builder.create<arith::ConstantOp>(loc, builder.getF16FloatAttr(0.0)).getResult();
+  if (isa<BFloat16Type>(elementType))
+    return builder.create<arith::ConstantOp>(loc, builder.getFloatAttr(elementType, 0.0))
+        .getResult();
+  if (auto intType = dyn_cast<IntegerType>(elementType))
+    return builder.create<arith::ConstantOp>(loc, builder.getIntegerAttr(intType, 0)).getResult();
+  return failure();
+}
+
 static FailureOr<Value> castMemrefToExpected(PatternRewriter &rewriter, Location loc, Value value,
                                              MemRefType expectedType) {
   if (value.getType() == expectedType)
@@ -50,10 +143,72 @@ static FailureOr<Value> castMemrefToExpected(PatternRewriter &rewriter, Location
 }
 
 static FailureOr<Value> materializeBaseMemref(PatternRewriter &rewriter, Location loc,
-                                              Value tensor) {
-  if (auto makeRmem = tensor.getDefiningOp<::tla::MakeRmemTensorOp>())
-    return materializeBaseMemref(rewriter, loc, makeRmem.getSource());
+                                              Value tensor);
 
+static FailureOr<Value> materializeSingleCoordIndex(PatternRewriter &rewriter, Location loc,
+                                                    Value coord) {
+  auto coordType = dyn_cast<::tla::CoordType>(coord.getType());
+  if (!coordType)
+    return failure();
+  SmallVector<int64_t, 1> leaves;
+  if (failed(::tla::getTlaIndexTreeLeaves(coordType.getTree(), leaves)) || leaves.size() != 1)
+    return failure();
+  if (leaves[0] != ShapedType::kDynamic)
+    return rewriter.create<arith::ConstantIndexOp>(loc, leaves[0]).getResult();
+
+  auto makeCoord = coord.getDefiningOp<::tla::MakeCoordOp>();
+  if (!makeCoord || makeCoord.getDynElems().size() != 1)
+    return failure();
+  Value dynCoord = *makeCoord.getDynElems().begin();
+  if (!dynCoord.getType().isIndex())
+    return failure();
+  return dynCoord;
+}
+
+static FailureOr<Value> materializeTileViewMemref(PatternRewriter &rewriter, Location loc,
+                                                  Value tensor, ::tla::TileViewOp tileView,
+                                                  bool useVectorHelperType = false) {
+  auto info = parseTensorInfo(tensor.getType());
+  if (failed(info))
+    return failure();
+  if (info->shape.size() != 1 || info->coord.size() != 1 || info->layoutTag != "row_major")
+    return failure();
+  auto numElements = getStaticNumElements(info->shape);
+  if (failed(numElements))
+    return failure();
+
+  auto expected =
+      useVectorHelperType ? getVectorHelperMemrefType(tensor) : getBridgedTensorMemrefType(tensor);
+  if (failed(expected) || expected->getRank() != 1)
+    return failure();
+
+  auto baseMemref = materializeBaseMemref(rewriter, loc, tileView.getSource());
+  if (failed(baseMemref))
+    return failure();
+  auto baseType = dyn_cast<MemRefType>((*baseMemref).getType());
+  if (!baseType || baseType.getRank() != 1)
+    return failure();
+
+  Value offset = rewriter.create<arith::ConstantIndexOp>(loc, 0);
+  if (!baseType.hasStaticShape() || baseType.getDimSize(0) != info->shape[0]) {
+    auto dynamicOffset = materializeSingleCoordIndex(rewriter, loc, tileView.getCoord());
+    if (failed(dynamicOffset))
+      return failure();
+    offset = *dynamicOffset;
+  }
+
+  int64_t sizeElements =
+      useVectorHelperType && expected->hasStaticShape() ? expected->getDimSize(0) : *numElements;
+  Value size = rewriter.create<arith::ConstantIndexOp>(loc, sizeElements);
+  Value stride = rewriter.create<arith::ConstantIndexOp>(loc, 1);
+  return rewriter
+      .create<mlir::memref::ReinterpretCastOp>(loc, *expected, *baseMemref, offset,
+                                               ValueRange{size}, ValueRange{stride})
+      .getResult();
+}
+
+static FailureOr<Value> materializeBaseMemref(PatternRewriter &rewriter, Location loc,
+                                              Value tensor) {
   if (auto castOp = tensor.getDefiningOp<UnrealizedConversionCastOp>()) {
     if (castOp.getNumOperands() == 1 && isa<MemRefType>(castOp.getOperand(0).getType())) {
       auto expected = getBridgedTensorMemrefType(tensor);
@@ -84,7 +239,14 @@ static FailureOr<Value> materializeBaseMemref(PatternRewriter &rewriter, Locatio
 
   if (auto tileView = tensor.getDefiningOp<::tla::TileViewOp>()) {
     Value source = tileView.getSource();
+    auto info = parseTensorInfo(tensor.getType());
+    if (succeeded(info) && info->shape.size() == 1 &&
+        succeeded(getVectorHelperMemrefType(tensor)))
+      return materializeTileViewMemref(rewriter, loc, tensor, tileView,
+                                       /*useVectorHelperType=*/true);
     if (isa<MemRefType>(source.getType())) {
+      if (succeeded(info) && info->shape.size() == 1)
+        return materializeTileViewMemref(rewriter, loc, tensor, tileView);
       auto expected = getBridgedTensorMemrefType(tensor);
       if (failed(expected))
         return failure();
@@ -104,7 +266,7 @@ static FailureOr<Value> materializeCopySubview1D(PatternRewriter &rewriter, Loca
   auto info = parseTensorInfo(tensor.getType());
   if (failed(info))
     return failure();
-  if (info->shape.size() != 1 || info->coord.size() != 1 || info->elementType != "f32" ||
+  if (info->shape.size() != 1 || info->coord.size() != 1 || !info->elementType.isF32() ||
       info->layoutTag != "row_major")
     return failure();
   if (info->shape[0] != 64 || info->coord[0] != 0)
@@ -132,12 +294,6 @@ static FailureOr<Value> materializeCopySubview1D(PatternRewriter &rewriter, Loca
       .getResult();
 }
 
-static Value unwrapFragmentSource(Value value) {
-  if (auto makeRmem = value.getDefiningOp<::tla::MakeRmemTensorOp>())
-    return makeRmem.getSource();
-  return value;
-}
-
 static std::string buildUniqueVectorHelperName(ModuleOp module, int &nextVectorRegionId) {
   std::string helperName;
   do {
@@ -147,7 +303,7 @@ static std::string buildUniqueVectorHelperName(ModuleOp module, int &nextVectorR
 }
 
 static FailureOr<func::FuncOp> buildHelperFunc(ModuleOp module, func::FuncOp parentFunc,
-                                               ::tla::VectorOp vectorOp, Value dst, Value lhs,
+                                               Operation *vectorOp, Value dst, Value lhs,
                                                Value rhs, int &nextVectorRegionId) {
   MLIRContext *ctx = module.getContext();
   OpBuilder moduleBuilder(module.getBodyRegion());
@@ -155,15 +311,15 @@ static FailureOr<func::FuncOp> buildHelperFunc(ModuleOp module, func::FuncOp par
 
   std::string helperName = buildUniqueVectorHelperName(module, nextVectorRegionId);
 
-  auto dstType = getBridgedTensorMemrefType(dst);
-  auto lhsType = getBridgedTensorMemrefType(lhs);
-  auto rhsType = getBridgedTensorMemrefType(rhs);
+  auto dstType = getVectorHelperMemrefType(dst);
+  auto lhsType = getVectorHelperMemrefType(lhs);
+  auto rhsType = getVectorHelperMemrefType(rhs);
   if (failed(dstType) || failed(lhsType) || failed(rhsType))
     return failure();
 
   auto funcType =
       moduleBuilder.getFunctionType(TypeRange{*lhsType, *rhsType, *dstType}, TypeRange{});
-  auto helper = moduleBuilder.create<func::FuncOp>(vectorOp.getLoc(), helperName, funcType);
+  auto helper = moduleBuilder.create<func::FuncOp>(vectorOp->getLoc(), helperName, funcType);
   helper.setPrivate();
   helper->setAttr(hivm::TFuncCoreTypeAttr::name,
                   hivm::TFuncCoreTypeAttr::get(ctx, hivm::TFuncCoreType::AIV));
@@ -172,67 +328,106 @@ static FailureOr<func::FuncOp> buildHelperFunc(ModuleOp module, func::FuncOp par
 
   Block *entry = helper.addEntryBlock();
   OpBuilder b = OpBuilder::atBlockBegin(entry);
-  Value zero = b.create<arith::ConstantIndexOp>(vectorOp.getLoc(), 0);
-  Value zeroF32 = b.create<arith::ConstantOp>(vectorOp.getLoc(), b.getF32FloatAttr(0.0));
-  auto vecType = VectorType::get({64}, b.getF32Type());
-  auto inBoundsAttr = b.getDenseBoolArrayAttr({true});
-  auto lhsVec = b.create<vector::TransferReadOp>(vectorOp.getLoc(), vecType, entry->getArgument(0),
-                                                 ValueRange{zero}, zeroF32, inBoundsAttr);
-  auto rhsVec = b.create<vector::TransferReadOp>(vectorOp.getLoc(), vecType, entry->getArgument(1),
-                                                 ValueRange{zero}, zeroF32, inBoundsAttr);
-  auto sum = b.create<arith::AddFOp>(vectorOp.getLoc(), lhsVec, rhsVec);
-  b.create<vector::TransferWriteOp>(vectorOp.getLoc(), sum, entry->getArgument(2), ValueRange{zero},
-                                    inBoundsAttr);
-  b.create<func::ReturnOp>(vectorOp.getLoc());
+  auto lhsMemrefType = dyn_cast<MemRefType>(entry->getArgument(0).getType());
+  auto rhsMemrefType = dyn_cast<MemRefType>(entry->getArgument(1).getType());
+  auto dstMemrefType = dyn_cast<MemRefType>(entry->getArgument(2).getType());
+  if (!lhsMemrefType || !rhsMemrefType || !dstMemrefType)
+    return failure();
+  auto lanes = getVectorLanesForMemref(lhsMemrefType);
+  if (failed(lanes))
+    return failure();
+  auto vecType = VectorType::get({*lanes}, lhsMemrefType.getElementType());
+  if (failed(verifyHelperMemrefType(lhsMemrefType, vecType)) ||
+      failed(verifyHelperMemrefType(rhsMemrefType, vecType)) ||
+      failed(verifyHelperMemrefType(dstMemrefType, vecType)))
+    return failure();
+  auto zeroValue = createZeroValue(b, vectorOp->getLoc(), lhsMemrefType.getElementType());
+  if (failed(zeroValue))
+    return failure();
+  Value zero = b.create<arith::ConstantIndexOp>(vectorOp->getLoc(), 0);
+  auto getInBoundsAttr = [&](MemRefType type) {
+    return b.getBoolArrayAttr({type.getDimSize(0) == vecType.getDimSize(0)});
+  };
+  auto lhsPermutationMap = AffineMap::getMinorIdentityMap(lhsMemrefType.getRank(), vecType.getRank(), ctx);
+  auto rhsPermutationMap = AffineMap::getMinorIdentityMap(rhsMemrefType.getRank(), vecType.getRank(), ctx);
+  auto dstPermutationMap = AffineMap::getMinorIdentityMap(dstMemrefType.getRank(), vecType.getRank(), ctx);
+  auto lhsVec = b.create<vector::TransferReadOp>(
+      vectorOp->getLoc(), vecType, entry->getArgument(0), ValueRange{zero},
+      AffineMapAttr::get(lhsPermutationMap), *zeroValue, Value(), getInBoundsAttr(lhsMemrefType));
+  auto rhsVec = b.create<vector::TransferReadOp>(
+      vectorOp->getLoc(), vecType, entry->getArgument(1), ValueRange{zero},
+      AffineMapAttr::get(rhsPermutationMap), *zeroValue, Value(), getInBoundsAttr(rhsMemrefType));
+  Value sum;
+  Type elementType = vecType.getElementType();
+  if (isa<IntegerType>(elementType)) {
+    sum = b.create<arith::AddIOp>(vectorOp->getLoc(), lhsVec, rhsVec);
+  } else if (isa<FloatType>(elementType)) {
+    sum = b.create<arith::AddFOp>(vectorOp->getLoc(), lhsVec, rhsVec);
+  } else {
+    return vectorOp->emitError("unsupported element type for vector add helper: ")
+           << elementType;
+  }
+  b.create<vector::TransferWriteOp>(vectorOp->getLoc(), sum, entry->getArgument(2),
+                                    ValueRange{zero}, AffineMapAttr::get(dstPermutationMap),
+                                    Value(), getInBoundsAttr(dstMemrefType));
+  b.create<func::ReturnOp>(vectorOp->getLoc());
 
   return helper;
 }
 
-class LowerVectorRegionPattern : public OpRewritePattern<::tla::VectorOp> {
+template <typename RegionOpT> class LowerVectorRegionPattern : public OpRewritePattern<RegionOpT> {
 public:
   LowerVectorRegionPattern(MLIRContext *context, ModuleOp module, int &nextVectorRegionId)
-      : OpRewritePattern<::tla::VectorOp>(context), module(module),
-        nextVectorRegionId(nextVectorRegionId) {}
+      : OpRewritePattern<RegionOpT>(context), module(module), nextVectorRegionId(nextVectorRegionId) {}
 
-  LogicalResult matchAndRewrite(::tla::VectorOp vectorOp,
-                                PatternRewriter &rewriter) const override {
+  LogicalResult matchAndRewrite(RegionOpT vectorOp, PatternRewriter &rewriter) const override {
     auto *body = vectorOp.getBody().empty() ? nullptr : &vectorOp.getBody().front();
     if (!body) {
       return rewriter.notifyMatchFailure(vectorOp, "expected tla.vector body");
     }
 
-    ::tla::VaddOp vadd;
-    for (Operation &op : body->without_terminator()) {
-      if (auto candidate = dyn_cast<::tla::VaddOp>(op)) {
-        if (vadd) {
-          return rewriter.notifyMatchFailure(vectorOp,
-                                             "expected exactly one tla.vadd in tla.vector body");
+    ::tla::StoreOp store;
+    vectorOp->walk([&](::tla::StoreOp candidate) {
+        if (store) {
+          return WalkResult::interrupt();
         }
-        vadd = candidate;
-        continue;
+        store = candidate;
+        return WalkResult::advance();
+    });
+    int storeCount = 0;
+    vectorOp->walk([&](::tla::StoreOp) { ++storeCount; });
+    if (storeCount > 1) {
+      return rewriter.notifyMatchFailure(vectorOp,
+                                         "expected exactly one tla.store in tla.vector body");
       }
-      if (!isa<::tla::LoadOp, ::tla::StoreOp>(op)) {
-        return rewriter.notifyMatchFailure(
-            vectorOp, "expected tla.vector body to contain only tla.load/tla.store/tla.vadd");
-      }
-    }
-    if (!vadd)
-      return rewriter.notifyMatchFailure(vectorOp, "expected tla.vector body to contain tla.vadd");
+    if (!store)
+      return rewriter.notifyMatchFailure(vectorOp, "expected tla.vector body to contain tla.store");
 
-    auto funcOp = vectorOp->getParentOfType<func::FuncOp>();
+    auto add = store.getSource().getDefiningOp<::tla::AddOp>();
+    if (!add)
+      return rewriter.notifyMatchFailure(vectorOp, "expected tla.store source to be tla.add");
+
+    auto lhsLoad = add.getLhs().getDefiningOp<::tla::LoadOp>();
+    auto rhsLoad = add.getRhs().getDefiningOp<::tla::LoadOp>();
+    if (!lhsLoad || !rhsLoad)
+      return rewriter.notifyMatchFailure(vectorOp, "expected tla.add operands to be tla.load");
+
+    auto funcOp = vectorOp.getOperation()->template getParentOfType<func::FuncOp>();
     if (!funcOp)
       return rewriter.notifyMatchFailure(vectorOp, "expected enclosing func.func");
 
-    Value dst = unwrapFragmentSource(vadd.getDst());
-    Value lhs = unwrapFragmentSource(vadd.getLhs());
-    Value rhs = unwrapFragmentSource(vadd.getRhs());
+    Value dst = store.getDest();
+    Value lhs = lhsLoad.getSource();
+    Value rhs = rhsLoad.getSource();
 
-    auto helperOr = buildHelperFunc(module, funcOp, vectorOp, dst, lhs, rhs, nextVectorRegionId);
+    auto helperOr =
+        buildHelperFunc(module, funcOp, vectorOp.getOperation(), dst, lhs, rhs, nextVectorRegionId);
     if (failed(helperOr)) {
       return rewriter.notifyMatchFailure(vectorOp, "failed to build vector helper function");
     }
     auto helper = *helperOr;
 
+    rewriter.setInsertionPoint(store);
     auto lhsBase = materializeBaseMemref(rewriter, vectorOp.getLoc(), lhs);
     auto rhsBase = materializeBaseMemref(rewriter, vectorOp.getLoc(), rhs);
     auto dstBase = materializeBaseMemref(rewriter, vectorOp.getLoc(), dst);
@@ -241,9 +436,9 @@ public:
                                          "failed to materialize UB memrefs for vector helper call");
     }
 
-    auto lhsType = getBridgedTensorMemrefType(lhs);
-    auto rhsType = getBridgedTensorMemrefType(rhs);
-    auto dstType = getBridgedTensorMemrefType(dst);
+    auto lhsType = getVectorHelperMemrefType(lhs);
+    auto rhsType = getVectorHelperMemrefType(rhs);
+    auto dstType = getVectorHelperMemrefType(dst);
     if (failed(lhsType) || failed(rhsType) || failed(dstType)) {
       return rewriter.notifyMatchFailure(vectorOp, "failed to derive helper memref signature");
     }
@@ -259,6 +454,11 @@ public:
                                               ValueRange{*lhsArg, *rhsArg, *dstArg});
     call->setAttr("hivm.vector_function", UnitAttr::get(rewriter.getContext()));
     call->setAttr("no_inline", UnitAttr::get(rewriter.getContext()));
+    rewriter.eraseOp(store);
+    rewriter.eraseOp(add);
+    rewriter.eraseOp(lhsLoad);
+    rewriter.eraseOp(rhsLoad);
+    rewriter.inlineBlockBefore(body, vectorOp->getBlock(), vectorOp->getIterator());
     rewriter.eraseOp(vectorOp);
     return success();
   }
@@ -321,10 +521,10 @@ public:
 static void populateTlaToVectorPatterns(RewritePatternSet &patterns, ModuleOp module,
                                         int &nextVectorRegionId) {
   MLIRContext *ctx = patterns.getContext();
-  patterns.add<LowerVectorRegionPattern>(ctx, module, nextVectorRegionId);
+  patterns.add<LowerVectorRegionPattern<::tla::VectorOp>, LowerVectorRegionPattern<::tla::VecFuncOp>>(
+      ctx, module, nextVectorRegionId);
   patterns.add<LowerCopyPattern>(ctx);
-  patterns.add<EraseDeadTlaScaffoldingPattern<::tla::MakeRmemTensorOp>,
-               EraseDeadTlaScaffoldingPattern<::tla::MakeTensorLikeOp>,
+  patterns.add<EraseDeadTlaScaffoldingPattern<::tla::MakeTensorLikeOp>,
                EraseDeadTlaScaffoldingPattern<::tla::TileViewOp>,
                EraseDeadTlaScaffoldingPattern<::tla::MakeShapeOp>,
                EraseDeadTlaScaffoldingPattern<::tla::MakeCoordOp>,

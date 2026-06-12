@@ -33,7 +33,8 @@ static llvm::cl::opt<bool> allowUnregistered("allow-unregistered-dialect",
                                              llvm::cl::init(true));
 
 static llvm::cl::opt<std::string> emitAction("emit", llvm::cl::desc("Output format"),
-                                             llvm::cl::value_desc("tlair|mlir|llvm"),
+                                             llvm::cl::value_desc(
+                                                 "tlair|tla-mlir|tla-mlir-no-verify|mlir|llvm"),
                                              llvm::cl::init("mlir"));
 
 static llvm::cl::opt<std::string> printPipeline("print-pipeline",
@@ -95,6 +96,27 @@ int main(int argc, char **argv) {
 
   if (emitAction == "tlair") {
     std::string errorMessage;
+    std::unique_ptr<llvm::ToolOutputFile> outFile =
+        mlir::openOutputFile(outputFilename, &errorMessage);
+    if (!outFile) {
+      llvm::errs() << "Failed to open output: " << errorMessage << "\n";
+      return 1;
+    }
+    moduleRef->print(outFile->os());
+    outFile->keep();
+    return 0;
+  }
+
+  if (emitAction == "tla-mlir" || emitAction == "tla-mlir-no-verify") {
+    PassManager frontendPm(&context);
+    ::tla::buildTlaPipeline(frontendPm);
+    if (emitAction == "tla-mlir-no-verify")
+      frontendPm.enableVerifier(false);
+    auto _ignoreFrontend = mlir::applyPassManagerCLOptions(frontendPm);
+    if (failed(frontendPm.run(moduleRef.get()))) {
+      llvm::errs() << "Failed to run Tla frontend pipeline.\n";
+      return 1;
+    }
     std::unique_ptr<llvm::ToolOutputFile> outFile =
         mlir::openOutputFile(outputFilename, &errorMessage);
     if (!outFile) {

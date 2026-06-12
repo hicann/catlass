@@ -15,11 +15,10 @@ module {
 
 // CHECK-COUNT-1: func.func private @mmad_float_float_float(
 // CHECK-LABEL: func.func @mmad_runtime_call_f32(
+// CHECK-DAG: [[INIT:%.*]] = llvm.mlir.constant(true) : i1
+// CHECK-DAG: [[MN:%.*]] = llvm.mlir.constant(32 : i64) : i64
 // CHECK-COUNT-1: hivm.hir.set_ctrl false at ctrl[60]
 // CHECK-COUNT-1: hivm.hir.set_ctrl true at ctrl[48]
-// CHECK-DAG: [[INIT:%.*]] = arith.constant true
-// CHECK-DAG: [[MN_IDX:%.*]] = arith.constant 32 : index
-// CHECK-DAG: [[MN:%.*]] = arith.index_cast [[MN_IDX]] : index to i64
 // CHECK: call @mmad_float_float_float({{%.*}}, {{%.*}}, {{%.*}}, [[MN]], [[MN]], [[MN]], [[INIT]], {{%.*}})
 // CHECK: return
 // CHECK-NOT: tla.mmad

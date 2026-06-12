@@ -63,6 +63,8 @@ class _FrontendEmitState:
     #: ``id(mlir.Value)`` -> resolved tensor metadata fields (shape/stride/coord/origin_shape/...).
     tensor_metadata_by_value_id: dict[int, dict[str, Any]] = field(default_factory=dict)
     has_vector_region: bool = False
+    active_regions: list[str] = field(default_factory=list)
+    active_region_roles: list[str] = field(default_factory=list)
 
 
 _FRONTEND_EMIT_STATE: contextvars.ContextVar[_FrontendEmitState | None] = (
@@ -269,6 +271,15 @@ def _mark_frontend_exec_unit(exec_unit: str) -> None:
     state.exec_units.add(exec_unit)
     if exec_unit == "vector":
         state.has_vector_region = True
+
+
+def _check_frontend_region_op(op_name: str, allowed_regions: set[str]) -> None:
+    state = _FRONTEND_EMIT_STATE.get()
+    if state is None or not state.active_regions:
+        return
+    region = state.active_regions[-1]
+    if region not in allowed_regions:
+        raise TlaCoreAPIError(f"tla.{op_name} is not allowed inside tla.{region}()")
 
 
 def _frontend_exec_units_attr_value(exec_units: set[str]) -> str | None:
@@ -549,17 +560,50 @@ def _internal_frontend_for(
     )
 
 
-def _internal_frontend_region(kind: str, body_fn: Callable[[], Any]) -> None:
+_VEC_FUNC_MODES = {"simd", "SIMD", "simt", "SIMT"}
+
+
+def _validate_vec_func_mode(mode: Any) -> None:
+    if not isinstance(mode, str):
+        raise TlaCoreAPIError(
+            f"tla.vec.func: mode must be a string; got {type(mode).__name__}"
+        )
+    if mode not in _VEC_FUNC_MODES:
+        accepted = ", ".join(sorted(repr(value) for value in _VEC_FUNC_MODES))
+        raise TlaCoreAPIError(
+            f"tla.vec.func: mode must be one of {accepted}; got {mode!r}"
+        )
+
+
+def _internal_frontend_region(
+    kind: str, body_fn: Callable[[], Any], *, mode: Any = None
+) -> None:
     from mlir import ir as mlir_ir  # type: ignore[assignment]
 
-    if kind not in {"cube", "vector"}:
+    if kind not in {"cube", "vector", "vec.func"}:
         raise TlaIRNotExecutableError(f"Unsupported TLA region wrapper: {kind}")
-    _mark_frontend_exec_unit(kind)
+    exec_kind = "vector" if kind == "vec.func" else kind
+    if mode is not None:
+        if kind != "vec.func":
+            raise TlaCoreAPIError(f"tla.{kind}: unexpected mode argument")
+        _validate_vec_func_mode(mode)
+    _mark_frontend_exec_unit(exec_kind)
     mlir_loc = _capture_caller_location()
     op = mlir_ir.Operation.create(f"tla.{kind}", regions=1, loc=mlir_loc)
+    if kind == "vec.func":
+        op.attributes["mode"] = mlir_ir.StringAttr.get("simd" if mode is None else mode)
     block = op.regions[0].blocks.append()
+    state = _FRONTEND_EMIT_STATE.get()
     with mlir_ir.InsertionPoint(block):
-        body_fn()
+        if state is not None:
+            state.active_regions.append(exec_kind)
+            state.active_region_roles.append("func" if kind == "vec.func" else "region")
+        try:
+            body_fn()
+        finally:
+            if state is not None:
+                state.active_regions.pop()
+                state.active_region_roles.pop()
 
 
 utils = _Utils()
@@ -568,17 +612,15 @@ cross_modes = _CrossModes()
 _CORE_API_EXPORTS = (
     "dsl_user_op",
     "arch",
+    "vec",
     "tile_view",
     "make_tensor_like",
-    "make_rmem_tensor",
     "copy",
-    "load",
     "flag",
     "cross_flag",
     "cross_core_set_flag",
     "cross_core_wait_flag",
     "set_flag",
-    "store",
     "wait_flag",
     "pipe_barrier",
     "mutex",
@@ -587,7 +629,8 @@ _CORE_API_EXPORTS = (
     "vector",
     "mmad",
     "broadcast",
-    "vadd",
+    "add",
+    "add",
     "make_ptr",
     "recast_ptr",
     "make_shape",

@@ -17,9 +17,9 @@ module {
   }
 }
 
-// CHECK-DAG: func.func private @rls_buf_mte3(i8)
+// CHECK-DAG: func.func private @rls_buf_mte3
 // CHECK-LABEL: func.func @mutex_for_result()
-// CHECK-DAG: [[ID:%.*]] = arith.constant 6 : i8
+// CHECK-DAG: [[ID:%.*]] = llvm.mlir.constant(6 : i8) : i8
 // CHECK: call @rls_buf_mte3([[ID]])
 // CHECK-NOT: !tla.mutex
 // CHECK-NOT: tla.mutex

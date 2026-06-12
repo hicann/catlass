@@ -287,12 +287,6 @@ public:
 };
 
 template <typename ConcreteType>
-class Vadd : public ::mlir::OpTrait::TraitBase<ConcreteType, Vadd> {
-public:
-  static constexpr ::llvm::StringLiteral getTraitName() { return "Vadd"; }
-};
-
-template <typename ConcreteType>
 class Vector : public ::mlir::OpTrait::TraitBase<ConcreteType, Vector> {
 public:
   static constexpr ::llvm::StringLiteral getTraitName() { return "Vector"; }
@@ -357,7 +351,6 @@ inline constexpr NamedOpMetadata kOpMetadataByName[] = {
     {"tla.inttoptr", {"unary", "intermediate"}},
     {"tla.recast_ptr", {"unary", "intermediate"}},
     {"tla.load", {"unary", "dependent"}},
-    {"tla.make_rmem_tensor", {"unary", "intermediate"}},
     {"tla.mmad", {"binary", "cube"}},
     {"tla.pipe_barrier", {"unary", "intermediate"}},
     {"tla.return", {"control", "intermediate"}},
@@ -365,7 +358,7 @@ inline constexpr NamedOpMetadata kOpMetadataByName[] = {
     {"tla.splat", {"unary", "intermediate"}},
     {"tla.store", {"binary", "dependent"}},
     {"tla.tile_view", {"unary", "intermediate"}},
-    {"tla.vadd", {"binary", "vector"}},
+    {"tla.add", {"binary", "vector"}},
     {"tla.vector", {"control", "intermediate"}},
     {"tla.wait_flag", {"unary", "intermediate"}},
 };

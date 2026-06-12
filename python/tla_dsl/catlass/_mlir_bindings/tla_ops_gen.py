@@ -23,6 +23,39 @@ class _Dialect(_ods_ir.Dialect):
   DIALECT_NAMESPACE = "tla"
 
 @_ods_cext.register_operation(_Dialect)
+class AddOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.add"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, lhs, rhs, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(lhs))
+    operands.append(_get_op_result_or_value(rhs))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def lhs(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def rhs(self):
+    return self.operation.operands[1]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def add(result, lhs, rhs, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(AddOp(result=result, lhs=lhs, rhs=rhs, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
 class AllocPtrOp(_ods_ir.OpView):
   OPERATION_NAME = "tla.alloc_ptr"
 
@@ -547,27 +580,27 @@ class LoadOp(_ods_ir.OpView):
 
   _ODS_REGIONS = (0, True)
 
-  def __init__(self, dest, source, *, loc=None, ip=None):
+  def __init__(self, result, source, *, loc=None, ip=None):
     operands = []
     results = []
     attributes = {}
     regions = None
-    operands.append(_get_op_result_or_value(dest))
     operands.append(_get_op_result_or_value(source))
     _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
     _ods_successors = None
     super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
 
   @builtins.property
-  def dest(self):
+  def source(self):
     return self.operation.operands[0]
 
   @builtins.property
-  def source(self):
-    return self.operation.operands[1]
+  def result(self):
+    return self.operation.results[0]
 
-def load(dest, source, *, loc=None, ip=None) -> _ods_ir.Operation:
-  return _get_op_result_or_op_results(LoadOp(dest=dest, source=source, loc=loc, ip=ip))
+def load(result, source, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(LoadOp(result=result, source=source, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
 class MakeCoordOp(_ods_ir.OpView):
@@ -656,34 +689,6 @@ class MakeLayoutOp(_ods_ir.OpView):
 
 def make_layout(result, shape, stride, *, origin_shape=None, layout_tag=None, loc=None, ip=None) -> _ods_ir.Value:
   return _get_op_result_or_op_results(MakeLayoutOp(result=result, shape=shape, stride=stride, origin_shape=origin_shape, layoutTag=layout_tag, loc=loc, ip=ip))
-
-@_ods_cext.register_operation(_Dialect)
-class MakeRmemTensorOp(_ods_ir.OpView):
-  OPERATION_NAME = "tla.make_rmem_tensor"
-
-  _ODS_REGIONS = (0, True)
-
-  def __init__(self, fragment, source, *, loc=None, ip=None):
-    operands = []
-    results = []
-    attributes = {}
-    regions = None
-    operands.append(_get_op_result_or_value(source))
-    _ods_context = _ods_get_default_loc_context(loc)
-    results.append(fragment)
-    _ods_successors = None
-    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
-
-  @builtins.property
-  def source(self):
-    return self.operation.operands[0]
-
-  @builtins.property
-  def fragment(self):
-    return self.operation.results[0]
-
-def make_rmem_tensor(fragment, source, *, loc=None, ip=None) -> _ods_ir.Value:
-  return _get_op_result_or_op_results(MakeRmemTensorOp(fragment=fragment, source=source, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
 class MakeShapeOp(_ods_ir.OpView):
@@ -1188,37 +1193,26 @@ def tile_view(view, source, shape, coord, *, layouttag=None, loc=None, ip=None) 
   return _get_op_result_or_op_results(TileViewOp(view=view, source=source, shape=shape, coord=coord, layouttag=layouttag, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
-class VaddOp(_ods_ir.OpView):
-  OPERATION_NAME = "tla.vadd"
+class VecFuncOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.vec.func"
 
-  _ODS_REGIONS = (0, True)
+  _ODS_REGIONS = (1, True)
 
-  def __init__(self, dst, lhs, rhs, *, loc=None, ip=None):
+  def __init__(self, *, loc=None, ip=None):
     operands = []
     results = []
     attributes = {}
     regions = None
-    operands.append(_get_op_result_or_value(dst))
-    operands.append(_get_op_result_or_value(lhs))
-    operands.append(_get_op_result_or_value(rhs))
     _ods_context = _ods_get_default_loc_context(loc)
     _ods_successors = None
     super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
 
   @builtins.property
-  def dst(self):
-    return self.operation.operands[0]
+  def body(self):
+    return self.regions[0]
 
-  @builtins.property
-  def lhs(self):
-    return self.operation.operands[1]
-
-  @builtins.property
-  def rhs(self):
-    return self.operation.operands[2]
-
-def vadd(dst, lhs, rhs, *, loc=None, ip=None) -> _ods_ir.Operation:
-  return _get_op_result_or_op_results(VaddOp(dst=dst, lhs=lhs, rhs=rhs, loc=loc, ip=ip))
+def vec_func(*, loc=None, ip=None) -> _ods_ir.Operation:
+  return _get_op_result_or_op_results(VecFuncOp(loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
 class VectorOp(_ods_ir.OpView):

@@ -8,7 +8,6 @@ tla = pytest.importorskip("catlass", exc_type=ImportError)
 execution = pytest.importorskip("catlass.execution", exc_type=ImportError)
 base_dsl_mod = pytest.importorskip("catlass.base_dsl", exc_type=ImportError)
 compiler_bridge = pytest.importorskip("catlass.compiler_bridge", exc_type=ImportError)
-execution_triton = pytest.importorskip("catlass.execution_triton", exc_type=ImportError)
 
 
 class _FakeLowered:
@@ -316,30 +315,35 @@ def test_run_tla_lowering_to_mlir_raises_when_no_fallback_exists(
         )
 
 
-def test_runtime_options_for_offline_mlir_skips_triton_flag_for_cube_only_mlir() -> None:
+def test_runtime_options_for_offline_mlir_preserves_hivmc_args() -> None:
     runtime = execution.TlaRuntimeOptions()
 
     updated = execution._runtime_options_for_offline_ascendnpuir_mlir(
         runtime,
-        'module { func.func @kernel() { return } }',
+        'module { func.func @kernel() { vector.transfer_read %arg0[%c0], %cst : memref<1xf32>, vector<1xf32> } }',
     )
 
-    assert not execution_triton.should_use_triton_compile_mode(updated.hivmc_args)
+    assert updated.hivmc_args == ()
 
 
-def test_build_hivmc_a5_command_uses_triton_mode_without_template_link(
-    tmp_path,
+def test_build_hivmc_a5_command_links_template_bitcode_for_aic(
+    monkeypatch, tmp_path
 ) -> None:
     compiler = tmp_path / "hivmc-a5"
     mlir_path = tmp_path / "kernel.mlir"
     kernel_path = tmp_path / "kernel.o"
+    template_bc = tmp_path / "meta_op.aic.c310.bc"
+    template_bc.write_bytes(b"bc")
+    monkeypatch.setenv("TLA_DSL_HIVM_TEMPLATE_BC", str(template_bc))
 
     command = execution._build_hivmc_a5_command(
         compiler=compiler,
         mlir_path=mlir_path,
         kernel_path=kernel_path,
         runtime=execution.TlaRuntimeOptions(
-            hivmc_args=("--enable-triton-kernel-compile=true",)
+            core_type="aic",
+            kernel_mode="aic",
+            hivmc_args=("--extra-flag",)
         ),
     )
 
@@ -347,26 +351,45 @@ def test_build_hivmc_a5_command_uses_triton_mode_without_template_link(
         str(compiler),
         str(mlir_path),
         "--target=Ascend950PR_9589",
-        "--enable-triton-kernel-compile=true",
+        "--disable-ffts",
+        "--enable-hivm-compile=False",
+        f"--link-aicore-bitcode={template_bc}",
+        "-o",
+        str(kernel_path),
+        "--extra-flag",
+    ]
+
+
+def test_build_hivmc_a5_command_links_template_bitcode_for_aiv(
+    monkeypatch, tmp_path
+) -> None:
+    compiler = tmp_path / "hivmc-a5"
+    mlir_path = tmp_path / "kernel.mlir"
+    kernel_path = tmp_path / "kernel.o"
+    template_bc = tmp_path / "meta_op.aiv.c310.bc"
+    template_bc.write_bytes(b"bc")
+    monkeypatch.setenv("TLA_DSL_HIVM_TEMPLATE_BC", str(template_bc))
+
+    command = execution._build_hivmc_a5_command(
+        compiler=compiler,
+        mlir_path=mlir_path,
+        kernel_path=kernel_path,
+        runtime=execution.TlaRuntimeOptions(core_type="aiv", kernel_mode="aiv"),
+    )
+
+    assert command == [
+        str(compiler),
+        str(mlir_path),
+        "--target=Ascend950PR_9589",
+        "--disable-ffts",
+        "--enable-hivm-compile=False",
+        f"--link-aicore-bitcode={template_bc}",
         "-o",
         str(kernel_path),
     ]
 
 
-def test_execute_kernel_uses_triton_packed_launch_helper(monkeypatch, tmp_path) -> None:
-    packed_args = b"\x01" * 16
-    helper_calls: list[dict[str, object]] = []
-
-    def fake_try_build_packed_launch_args(**kwargs):
-        helper_calls.append(kwargs)
-        return packed_args
-
-    monkeypatch.setattr(
-        execution_triton,
-        "try_build_packed_launch_args",
-        fake_try_build_packed_launch_args,
-    )
-
+def test_execute_kernel_uses_flat_launch_args(monkeypatch, tmp_path) -> None:
     launches: list[tuple[str, object]] = []
 
     class _FakeLoader:
@@ -381,11 +404,8 @@ def test_execute_kernel_uses_triton_packed_launch_helper(monkeypatch, tmp_path) 
             launches.append(("load", kwargs))
             return (11, 12)
 
-        def launch_with_packed_args(self, **kwargs) -> None:
-            launches.append(("packed", kwargs))
-
         def launch_with_args(self, **kwargs) -> None:
-            raise AssertionError("flat launch path should not be used")
+            launches.append(("flat", kwargs))
 
         def launch_zero_arg(self, **kwargs) -> None:
             raise AssertionError("zero-arg launch path should not be used")
@@ -407,23 +427,20 @@ def test_execute_kernel_uses_triton_packed_launch_helper(monkeypatch, tmp_path) 
     result = execution.execute_kernel(
         artifact,
         runtime=runtime,
-        launch_args=[object()],
+        launch_args=[123],
         launch_kwargs={},
     )
 
     assert result.module_handle == 11
     assert result.function_handle == 12
-    assert helper_calls and helper_calls[0]["artifact"] is artifact
-    assert helper_calls[0]["grid"] == (1, 1, 1)
-    assert helper_calls[0]["device"] == 7
     assert (
-        "packed",
+        "flat",
         {
             "function": 12,
             "stream": 99,
             "grid_x": 1,
             "grid_y": 1,
             "grid_z": 1,
-            "args": packed_args,
+            "args": [123],
         },
     ) in launches

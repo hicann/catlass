@@ -18,11 +18,9 @@ module {
 // CHECK-SAME: hivm.func_core_type = #hivm.func_core_type<AIC>
 // CHECK-SAME: llvm.emit_c_interface
 // CHECK-LABEL: func.func @mmad_runtime_call_positive(
-// CHECK-DAG: [[INIT:%.*]] = arith.constant true
-// CHECK-DAG: [[MN_IDX:%.*]] = arith.constant 128 : index
-// CHECK-DAG: [[K_IDX:%.*]] = arith.constant 64 : index
-// CHECK-DAG: [[MN:%.*]] = arith.index_cast [[MN_IDX]] : index to i64
-// CHECK-DAG: [[K:%.*]] = arith.index_cast [[K_IDX]] : index to i64
+// CHECK-DAG: [[INIT:%.*]] = llvm.mlir.constant(true) : i1
+// CHECK-DAG: [[MN:%.*]] = llvm.mlir.constant(128 : i64) : i64
+// CHECK-DAG: [[K:%.*]] = llvm.mlir.constant(64 : i64) : i64
 // CHECK: call @mmad_half_half_float({{%.*}}, {{%.*}}, {{%.*}}, [[MN]], [[MN]], [[K]], [[INIT]], {{%.*}})
 // CHECK: return
 // CHECK-NOT: tla.mmad

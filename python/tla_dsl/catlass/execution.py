@@ -31,7 +31,6 @@ from .compiler_bridge import (
     lower_tlair_module_to_mlir,
     resolve_bridge_extension_path,
 )
-from . import execution_triton
 
 DEFAULT_ARCH_SCOPE = "aiv.c310"
 SUPPORTED_ARCH_SCOPES = ("aiv.c310", "aic.c310")
@@ -423,34 +422,15 @@ def execute_kernel(
     )
     if launch_args:
         _mark_tensor_launch_args_uploaded(launch_args)
-        packed_args = execution_triton.try_build_packed_launch_args(
-            artifact=artifact,
-            launch_args=launch_args,
-            grid=(int(grid[0]), int(grid[1]), int(grid[2])),
-            device=device,
-            try_extract_entrypoint=_try_extract_entrypoint,
-            unsupported_abi_error=TlaUnsupportedAbiError,
-            runtime_unavailable_error=TlaRuntimeUnavailableError,
+        flat_args = _flatten_launch_args(launch_args)
+        loader.launch_with_args(
+            function=function_handle,
+            stream=int(stream),
+            grid_x=int(grid[0]),
+            grid_y=int(grid[1]),
+            grid_z=int(grid[2]),
+            args=flat_args,
         )
-        if packed_args is not None:
-            loader.launch_with_packed_args(
-                function=function_handle,
-                stream=int(stream),
-                grid_x=int(grid[0]),
-                grid_y=int(grid[1]),
-                grid_z=int(grid[2]),
-                args=packed_args,
-            )
-        else:
-            flat_args = _flatten_launch_args(launch_args)
-            loader.launch_with_args(
-                function=function_handle,
-                stream=int(stream),
-                grid_x=int(grid[0]),
-                grid_y=int(grid[1]),
-                grid_z=int(grid[2]),
-                args=flat_args,
-            )
     else:
         loader.launch_zero_arg(
             function=function_handle,
@@ -583,8 +563,6 @@ def _runtime_options_for_offline_ascendnpuir_mlir(
 
     if "dav-c310" in mlir_text or 'hacc.target<"Ascend950PR_9589">' in mlir_text:
         target_arch = "c310"
-
-    hivmc_args = execution_triton.infer_hivmc_args(mlir_text, hivmc_args)
 
     arch_scope = _arch_scope_for_target(target_arch=target_arch, core_type=core_type)
     if (
@@ -815,29 +793,23 @@ def _build_hivmc_a5_command(
     kernel_path: Path,
     runtime: TlaRuntimeOptions,
 ) -> list[str]:
-    if execution_triton.should_use_triton_compile_mode(runtime.hivmc_args):
-        return [
-            str(compiler),
-            str(mlir_path),
-            "--target=Ascend950PR_9589",
-            *runtime.hivmc_args,
-            "-o",
-            str(kernel_path),
-        ]
-
-    template_bitcode = _resolve_hivm_template_bitcode(runtime)
-    return [
+    hivmc_args = runtime.hivmc_args
+    command = [
         str(compiler),
         str(mlir_path),
         "--target=Ascend950PR_9589",
-        "--disable-ffts",
-        "--enable-hivm-compile=False",
-        f"--link-aicore-bitcode={template_bitcode}",
-        "-o",
-        str(kernel_path),
-        *runtime.hivmc_args,
     ]
-
+    command.extend(
+        [
+            "--disable-ffts",
+            "--enable-hivm-compile=False",
+            f"--link-aicore-bitcode={_resolve_hivm_template_bitcode(runtime)}",
+            "-o",
+            str(kernel_path),
+        ]
+    )
+    command.extend(hivmc_args)
+    return command
 
 def _mlir_build_dirs() -> list[Path]:
     # .../python/tla_dsl/catlass/execution.py -> .../python/tla_dsl/csrc/mlir/build
@@ -870,6 +842,13 @@ def _resolve_hivm_template_bitcode(runtime: TlaRuntimeOptions) -> str:
                 ]
             )
     else:
+        ascend_home = os.getenv("ASCEND_HOME_PATH")
+        if ascend_home:
+            cann_aiv_bc = (
+                Path(ascend_home) / "tools" / "bishengir" / "lib" / "meta_op.aiv.c310.bc"
+            )
+            if cann_aiv_bc.exists():
+                return str(cann_aiv_bc.resolve())
         for build_dir in _mlir_build_dirs():
             candidates.append(build_dir / "bc" / "meta_op.aiv.c310.bc")
     existing = [path.resolve() for path in candidates if path.exists()]

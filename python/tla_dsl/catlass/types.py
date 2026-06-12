@@ -659,6 +659,15 @@ def _try_remap_stride_coord_trees(
     """
     from .core_api import _remap_tensor_like_prefix_fields_for_layout_trees
 
+    if (
+        layout_token.strip() == "row_major"
+        and len(comp) == 1
+        and len(origin_components) == 1
+        and not isinstance(comp[0], (tuple, list))
+        and not isinstance(origin_components[0], (tuple, list))
+    ):
+        return ((1,), (0,))
+
     trees = _remap_tensor_like_prefix_fields_for_layout_trees(
         origin_components, dtype.strip().lower(), layout_token.strip()
     )

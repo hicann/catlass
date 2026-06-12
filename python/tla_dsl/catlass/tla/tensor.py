@@ -7,6 +7,8 @@ from typing import Any
 from mlir import ir as mlir_ir  # type: ignore[assignment]
 
 from .. import _tla_type_bridge
+from .._mlir_bindings import tla_ops_gen as _tla_ops_gen
+from ..base_dsl.op import dsl_user_op
 from .. import runtime as _runtime
 from .typing import Tensor as TensorABC
 
@@ -64,6 +66,65 @@ class _Tensor(TensorABC):
     @property
     def layout_tag(self) -> str:
         return str(_tensor_metadata_field(self.value, "layout_tag"))
+
+    @dsl_user_op
+    def load(self, *, loc: mlir_ir.Location | None = None) -> Any:
+        """Load this tensor tile into vector SSA inside a vector region."""
+        from ..core_api import (
+            VectorSSA,
+            _as_value,
+            _register_tla_tensor_metadata,
+            _register_tla_tensor_type,
+            _require_frontend_state,
+            _tla_tensor_type_for_mlir_value,
+            _tensor_metadata_field,
+        )
+
+        loc = _normalize_user_loc(loc)
+        _require_frontend_state("load")
+        _runtime._check_frontend_region_op("load", {"vector"})
+        _runtime._mark_frontend_exec_unit("vector")
+        source = _as_value(self)
+        result = _tla_ops_gen.load(source.type, source, loc=loc)
+        try:
+            _register_tla_tensor_type(result, _tla_tensor_type_for_mlir_value(source))
+            _register_tla_tensor_metadata(
+                result,
+                {
+                    "shape": _tensor_metadata_field(source, "shape"),
+                    "stride": _tensor_metadata_field(source, "stride"),
+                    "coord": _tensor_metadata_field(source, "coord"),
+                    "origin_shape": _tensor_metadata_field(source, "origin_shape"),
+                    "dtype": _tensor_metadata_field(source, "dtype"),
+                    "addrspace": _tensor_metadata_field(source, "addrspace"),
+                    "layout_tag": _tensor_metadata_field(source, "layout_tag"),
+                },
+            )
+        except Exception:
+            pass
+        return VectorSSA(result)
+
+    @dsl_user_op
+    def store(self, value: Any, *, loc: mlir_ir.Location | None = None) -> None:
+        """Store a vector SSA value into this tensor tile inside a vector region."""
+        from ..core_api import _as_value, _require_category, _require_frontend_state
+
+        loc = _normalize_user_loc(loc)
+        _require_category("store", "value", value, "vector_ssa", 1)
+        _require_frontend_state("store")
+        _runtime._check_frontend_region_op("store", {"vector"})
+        _runtime._mark_frontend_exec_unit("vector")
+        _tla_ops_gen.store(_as_value(self), _as_value(value), loc=loc)
+
+
+def _normalize_user_loc(loc: mlir_ir.Location | None) -> mlir_ir.Location | None:
+    if loc is None and _runtime._current_frontend_state() is not None:
+        from ..core_api import _capture_user_loc
+
+        return _capture_user_loc()
+    if loc is not None and not isinstance(loc, mlir_ir.Location):
+        raise TypeError(f"loc must be mlir.ir.Location or None, got {type(loc).__name__}")
+    return loc
 
 
 def _tensor_metadata_field(value: mlir_ir.Value, field: str) -> Any:

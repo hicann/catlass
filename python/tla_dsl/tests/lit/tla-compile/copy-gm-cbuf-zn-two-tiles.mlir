@@ -24,7 +24,10 @@ module {
   }) {function_type = (!tla.tensor<!tla.layout<!tla.shape<200,260>, !tla.stride<88,1>, !tla.shape<72,88>, row_major>, !tla.coord<0,0>, !tla.ptr<f32, gm, 4>>, !tla.tensor<!tla.layout<!tla.shape<100,140>, !tla.stride<92,1>, !tla.shape<56,92>, row_major>, !tla.coord<0,0>, !tla.ptr<i8, gm, 1>>) -> (), sym_name = "_kernel_copy_gm_row_major_to_cbuf_zn"} : () -> ()
 }
 
-// CHECK: func.func private @copy_gm_row_major_to_cbuf_zN_float(memref<?x?xf32, strided<[?, ?], offset: ?>, #hivm.address_space<gm>>, memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<cbuf>>, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64) attributes {hacc.always_inline, hivm.func_core_type = #hivm.func_core_type<AIC>, llvm.emit_c_interface}
+// CHECK: func.func private @copy_gm_row_major_to_cbuf_zN_float
+// CHECK-SAME: hacc.always_inline
+// CHECK-SAME: hivm.func_core_type = #hivm.func_core_type<AIC>
+// CHECK-SAME: llvm.emit_c_interface
 // CHECK: func.func @_kernel_copy_gm_row_major_to_cbuf_zn(%arg0: memref<200x260xf32, strided<[88, 1], offset: ?>, #hivm.address_space<gm>>, %arg1: memref<100x140xi8, strided<[92, 1], offset: ?>, #hivm.address_space<gm>>)
 // CHECK-DAG: hivm.hir.pointer_cast{{.*}}memref<1024xf32, #hivm.address_space<cbuf>>
 // CHECK-DAG: memref.cast{{.*}}memref<1024xf32, #hivm.address_space<cbuf>> to memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<cbuf>>

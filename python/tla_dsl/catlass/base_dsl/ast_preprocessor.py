@@ -947,8 +947,9 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
         region_name = _region_name_from_with_item(node.items[0])
         if region_name is None:
             return node
+        region_mode = _region_mode_from_with_item(node.items[0])
 
-        body_name = self._fresh(f"{region_name}_body")
+        body_name = self._fresh(f"{region_name.replace('.', '_')}_body")
         body_fn = ast.FunctionDef(
             name=body_name,
             args=ast.arguments(
@@ -974,7 +975,11 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
                     ast.Constant(value=region_name),
                     ast.Name(id=body_name, ctx=ast.Load()),
                 ],
-                keywords=[],
+                keywords=(
+                    []
+                    if region_mode is None
+                    else [ast.keyword(arg="mode", value=region_mode)]
+                ),
             )
         )
         ast.copy_location(helper_call, node)
@@ -1012,6 +1017,7 @@ def maybe_transform_for_lowering(
         and "tla.cube" not in source
         and "tla.vector" not in source
         and "tla.vector" not in source
+        and "tla.vec.func" not in source
         and "range(" not in source
         and "range_constexpr(" not in source
         and " if " not in source
@@ -1368,7 +1374,44 @@ def _region_name_from_with_item(item: ast.withitem) -> str | None:
     if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
         if func.value.id in {"tla"} and func.attr in {"cube", "vector"}:
             return func.attr
+    if _is_tla_vec_func(func):
+        return "vec.func"
     return None
+
+
+def _is_tla_vec_func(func: ast.expr) -> bool:
+    return (
+        isinstance(func, ast.Attribute)
+        and func.attr == "func"
+        and isinstance(func.value, ast.Attribute)
+        and func.value.attr == "vec"
+        and isinstance(func.value.value, ast.Name)
+        and func.value.value.id == "tla"
+    )
+
+
+def _raise_vec_func_error(message: str) -> None:
+    from catlass.runtime import TlaCoreAPIError
+
+    raise TlaCoreAPIError(f"tla.vec.func: {message}")
+
+
+def _region_mode_from_with_item(item: ast.withitem) -> ast.expr | None:
+    context_expr = item.context_expr
+    if not isinstance(context_expr, ast.Call):
+        return None
+    if not _is_tla_vec_func(context_expr.func):
+        return None
+    if context_expr.args:
+        _raise_vec_func_error("mode must be passed by keyword")
+    mode_expr: ast.expr | None = None
+    for keyword in context_expr.keywords:
+        if keyword.arg != "mode":
+            _raise_vec_func_error(f"unknown keyword argument: {keyword.arg}")
+        if mode_expr is not None:
+            _raise_vec_func_error("mode was passed multiple times")
+        mode_expr = keyword.value
+    return mode_expr if mode_expr is not None else ast.Constant(value="simd")
 
 
 def _is_constexpr_cf_test(

@@ -31,13 +31,9 @@ module {
 // CHECK-DAG: func.func private @rls_buf_mte1(i8)
 // CHECK-DAG: func.func private @get_buf_m(i8)
 // CHECK-LABEL: func.func @mutex_for_iter_arg_dynamic_if()
-// CHECK-DAG: [[ID0:%.*]] = arith.constant 4 : i8
-// CHECK-DAG: [[ID1:%.*]] = arith.constant 5 : i8
-// CHECK: cf.cond_br {{%.*}}, ^[[THEN:.*]], ^[[ELSE:.*]]
-// CHECK: ^[[THEN]]:
-// CHECK: cf.br ^[[MERGE:.*]]([[ID0]] : i8)
-// CHECK: ^[[ELSE]]:
-// CHECK: cf.br ^[[MERGE]]([[ID1]] : i8)
+// CHECK-DAG: [[ID0:%.*]] = llvm.mlir.constant(4 : i8) : i8
+// CHECK-DAG: [[ID1:%.*]] = llvm.mlir.constant(5 : i8) : i8
+// CHECK: cf.cond_br {{%.*}}, ^[[MERGE:bb[0-9]+]]([[ID0]] : i8), ^[[MERGE]]([[ID1]] : i8)
 // CHECK: ^[[MERGE]]([[BUFID:%.*]]: i8):
 // CHECK: call @get_buf_mte1([[BUFID]])
 // CHECK: call @rls_buf_mte1([[BUFID]])

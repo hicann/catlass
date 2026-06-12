@@ -17,6 +17,7 @@
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Target/LLVMIR/Dialect/Builtin/BuiltinToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
@@ -38,6 +39,8 @@
 
 #include "bishengir/Dialect/HACC/IR/HACC.h"
 #include "bishengir/Dialect/HIVM/IR/HIVM.h"
+#include "bishengir/Dialect/HIVMAVE/IR/HIVMAVE.h"
+#include "bishengir/Dialect/HIVMRegbaseIntrins/IR/HIVMRegbaseIntrins.h"
 using namespace mlir;
 
 namespace {
@@ -1016,12 +1019,16 @@ namespace tla::tools {
 
 void registerTlaCompileDialectsAndTranslations(DialectRegistry &registry) {
   registry.insert<arith::ArithDialect, mlir::DLTIDialect, func::FuncDialect, scf::SCFDialect,
-                  LLVM::LLVMDialect, ::mlir::memref::MemRefDialect, ::tla::TlaDialect>();
-  registry.insert<hacc::HACCDialect, hivm::HIVMDialect>();
+                  LLVM::LLVMDialect, ::mlir::memref::MemRefDialect, vector::VectorDialect,
+                  ::tla::TlaDialect>();
+  registry.insert<hacc::HACCDialect, hivm::HIVMDialect, hivmave::AVEDialect,
+                  hivm_regbaseintrins::HIVMRegbaseIntrinsDialect>();
   registerTlaCompileTranslationsAndInterfaces(registry);
 }
 
 void registerTlaCompileTranslationsAndInterfaces(DialectRegistry &registry) {
+  mlir::hacc::func_ext::registerHACCDialectExtension(registry);
+  mlir::hacc::llvm_ext::registerHACCDialectExtension(registry);
   mlir::arith::registerConvertArithToLLVMInterface(registry);
   mlir::registerConvertFuncToLLVMInterface(registry);
   mlir::registerConvertMemRefToLLVMInterface(registry);
@@ -1036,9 +1043,12 @@ void loadTlaCompileDialects(MLIRContext &context) {
   context.getOrLoadDialect<scf::SCFDialect>();
   context.getOrLoadDialect<LLVM::LLVMDialect>();
   context.getOrLoadDialect<::mlir::memref::MemRefDialect>();
+  context.getOrLoadDialect<vector::VectorDialect>();
   context.getOrLoadDialect<::tla::TlaDialect>();
   context.getOrLoadDialect<hacc::HACCDialect>();
   context.getOrLoadDialect<hivm::HIVMDialect>();
+  context.getOrLoadDialect<hivmave::AVEDialect>();
+  context.getOrLoadDialect<hivm_regbaseintrins::HIVMRegbaseIntrinsDialect>();
 }
 
 void buildTlaCompilePassManagers(MLIRContext &context, PassManager &tlaPm, PassManager &llvmPm) {

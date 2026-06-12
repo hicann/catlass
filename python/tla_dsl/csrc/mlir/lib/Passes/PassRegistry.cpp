@@ -1,6 +1,11 @@
 #include "PassesCommon.h"
 #include "PassesInternal.h"
 
+#include "bishengir/Conversion/ArithToHIVMAVE/ArithToHIVMAVE.h"
+#include "bishengir/Conversion/HIVMAVEToAVEIntrin/HIVMAVEToAVEIntrin.h"
+#include "bishengir/Conversion/HIVMToStandard/HIVMToStandard.h"
+#include "bishengir/Conversion/VectorToHIVMAVE/VectorToHIVMAVE.h"
+
 namespace tla {
 namespace {
 
@@ -67,7 +72,6 @@ std::unique_ptr<Pass> createAddKernelPrologueEpiloguePass() {
 void registerTlaPasses() {
   registerTlaFuncToHaccPass();
   registerTlaLowerToHivmPass();
-  registerSupportTritonPass();
   registerConvertTlaToVectorPass();
   registerTlaSyncToHivmPass();
   registerTlaAllocPtrToHivmPointerCastPass();
@@ -84,13 +88,17 @@ void buildTlaPipeline(OpPassManager &pm) {
   pm.addPass(createTlaLowerToHivmPass());
   pm.addPass(createTlaSyncToHivmPass());
   pm.addPass(createTlaAllocPtrToHivmPointerCastPass());
-  pm.addPass(createSupportTritonPass());
   pm.addPass(createConvertTlaToVectorPass());
   pm.addPass(createTlaLowerToStdPass());
   pm.addPass(createTlaFuncToHaccPass());
   pm.addPass(createAddKernelPrologueEpiloguePass());
   pm.addPass(createCSEPass());
   pm.addPass(createConvertSCFToCFPass());
+  pm.addPass(mlir::createVectorToHIVMAVEConversionPass());
+  pm.nest<func::FuncOp>().addPass(mlir::createArithToHIVMAVEConversionPass());
+  mlir::ConvertHIVMToStandardOptions hivmToStdOptions;
+  pm.addPass(mlir::createConvertHIVMToStandardPass(hivmToStdOptions));
+  pm.addPass(mlir::createConvertHIVMAVEToAVEIntrinPass());
 }
 
 } // namespace tla

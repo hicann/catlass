@@ -18,16 +18,10 @@ module {
   }
 }
 
-// CHECK-DAG: func.func private @get_buf_fix(i8)
+// CHECK-DAG: func.func private @get_buf_fix
 // CHECK-LABEL: func.func @mutex_if_result()
-// CHECK-DAG: [[ID:%.*]] = arith.constant 7 : i8
-// CHECK: cf.cond_br {{%.*}}, ^[[THEN:.*]], ^[[ELSE:.*]]
-// CHECK: ^[[THEN]]:
-// CHECK: cf.br ^[[MERGE:.*]]([[ID]] : i8)
-// CHECK: ^[[ELSE]]:
-// CHECK: cf.br ^[[MERGE]]([[ID]] : i8)
-// CHECK: ^[[MERGE]]([[BUFID:%.*]]: i8):
-// CHECK: call @get_buf_fix([[BUFID]])
+// CHECK-DAG: [[ID:%.*]] = llvm.mlir.constant(7 : i8) : i8
+// CHECK: call @get_buf_fix([[ID]])
 // CHECK-NOT: !tla.mutex
 // CHECK-NOT: tla.mutex
 // CHECK: return

@@ -9,7 +9,8 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 #
-# End-to-end validation for python/tla_dsl/examples/end_to_end/basic_mmad (basic_matmul.py).
+# End-to-end validation for python/tla_dsl/examples/end_to_end/basic_mmad (basic_matmul.py)
+# and python/tla_dsl/examples/end_to_end/basic_vadd (basic_vadd.py).
 #
 # Fixed toolchain paths relative to WORKSPACE_ROOT (= parent of catlass repo):
 #   CANN:             Ascend/9.1.0-beta.1/ascend-toolkit/set_env.sh
@@ -39,6 +40,7 @@ DEVICE_ID="${DEVICE_ID:-1}"
 SKIP_PREPARE="${SKIP_PREPARE:-0}"
 
 BASIC_MMAD_REL="examples/end_to_end/basic_mmad/basic_matmul.py"
+BASIC_VADD_REL="examples/end_to_end/basic_vadd/basic_vadd.py"
 
 _ascendnpu_ir_dev_is_prebuilt() {
     local root="$1"
@@ -52,8 +54,10 @@ usage() {
     cat <<EOF
 Usage: $(basename "$0") [options]
 
-Run basic_mmad end-to-end validation (basic_matmul.py --run --all-layouts --all-mmad-dtypes).
-Runs default MNK plus m=1, n=2, k=3.
+Run end-to-end validation for:
+  - basic_mmad (basic_matmul.py --run --all-layouts --all-mmad-dtypes)
+  - basic_vadd (basic_vadd.py --run --all-dtypes)
+Runs basic_mmad default MNK plus m=1, n=2, k=3.
 Activates conda env "${CONDA_ENV}", sources CANN set_env.sh, exports AscendNPU-IR-Dev MLIR/LLVM
 env, then builds (optional) and runs the test.
 
@@ -226,6 +230,10 @@ if [[ ! -f "${TLA_DSL_DIR}/${BASIC_MMAD_REL}" ]]; then
     echo "error: missing ${BASIC_MMAD_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
+if [[ ! -f "${TLA_DSL_DIR}/${BASIC_VADD_REL}" ]]; then
+    echo "error: missing ${BASIC_VADD_REL} under ${TLA_DSL_DIR}" >&2
+    exit 1
+fi
 
 _run_basic_mmad_case() {
     local label="$1"
@@ -240,5 +248,15 @@ _run_basic_mmad_case() {
 _run_basic_mmad_case "default MNK"
 _run_basic_mmad_case "m=1 n=2 k=3" --m 1 --n 2 --k 3
 _run_basic_mmad_case "mutex mode" --use-mutex
+
+_run_basic_vadd_case() {
+    echo "==> Running basic_vadd validation [all dtypes]: --run --all-dtypes --device ${DEVICE_ID}"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${BASIC_VADD_REL}" --run --all-dtypes --device "${DEVICE_ID}"
+    )
+}
+
+_run_basic_vadd_case
 
 echo "==> run_dsl_test.sh finished successfully"

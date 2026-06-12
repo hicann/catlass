@@ -5,7 +5,6 @@ add_library(TlaPasses
   TlaAllocPtrToHivmPointerCastPass.cpp
   TlaLowerToStdPass.cpp
   TlaSyncToHivmPass.cpp
-  SupportTritonPass.cpp
   ConvertTlaToVectorPass.cpp
   ../Dialect/Tla/IR/TlaDialect.cpp
   ../Dialect/Tla/IR/TlaAttrs.cpp
