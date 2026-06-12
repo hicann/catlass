@@ -696,7 +696,7 @@ class FAInferKernelTla {
 };
 
 template <class Dtype>
-CATLASS_GLOBAL void FAInferTla(
+CATLASS_GLOBAL __mix__(1,2) void FAInferTla(
     uint64_t hardwareSyncAddr,
     GM_ADDR q,
     GM_ADDR k,

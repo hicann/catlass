@@ -203,40 +203,9 @@ using MatmulEvgOp = MatmulEvgLike<CatlassKernel::MatmulEvg>;
 static auto& matmul_evg = MatmulEvgOp::Run;
 REGISTER_TORCH_FUNC(matmul_evg);
 
-using DynamicMatmulKernelFn =
-    void (*)(const uint32_t, aclrtStream, const CatlassKernel::TParams&, const CatlassKernel::MatmulParams&);
-
-inline DynamicMatmulKernelFn ResolveA2Fp8E4M3MatmulKernel()
-{
-    static DynamicMatmulKernelFn kernel = nullptr;
-    static bool resolved = false;
-    if (!resolved) {
-        resolved = true;
-        kernel = reinterpret_cast<DynamicMatmulKernelFn>(dlsym(RTLD_DEFAULT, "A2Fp8E4M3Matmul"));
-    }
-    return kernel;
-}
-
-struct A2Fp8E4M3MatmulOp {
-    using OutputType = at::Tensor;
-
-    static OutputType Run(
-        const at::Tensor& mat1, const at::Tensor& mat2, const c10::ScalarType& outDType, bool transA, bool transB,
-        bool formatA, bool formatB)
-    {
-        auto kernel = ResolveA2Fp8E4M3MatmulKernel();
-        TORCH_CHECK(kernel != nullptr, "a2_fp8_e4m3_matmul is not available on this NPU architecture");
-        CatlassKernel::TParams tParams;
-        CatlassKernel::MatmulParams params;
-        MatmulLike<CatlassKernel::BasicMatmul>::GetKernelInfo(
-            mat1, mat2, outDType, transA, transB, formatA, formatB, tParams, params);
-        OutputType output = MatmulLike<CatlassKernel::BasicMatmul>::AllocOutput(tParams, params);
-        aclrtStream stream = c10_npu::getCurrentNPUStream().stream(false);
-        uint32_t aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
-        RUN_NPU_FUNC(kernel, aicCoreNum, stream, tParams, params);
-        return output;
-    }
-};
+using A2Fp8E4M3MatmulOp = MatmulLike<CatlassKernel::A2Fp8E4M3Matmul>;
+static auto& a2_fp8_e4m3_matmul = A2Fp8E4M3MatmulOp::Run;
+REGISTER_TORCH_FUNC(a2_fp8_e4m3_matmul);
 
 static auto& mla = MlaOp::Run;
 REGISTER_TORCH_FUNC(mla);
@@ -246,9 +215,6 @@ REGISTER_TORCH_FUNC(flash_attention_infer);
 
 static auto& flash_attention_infer_tla = FlashAttentionInferTLAOp::Run;
 REGISTER_TORCH_FUNC(flash_attention_infer_tla);
-
-static auto& a2_fp8_e4m3_matmul = A2Fp8E4M3MatmulOp::Run;
-REGISTER_TORCH_FUNC(a2_fp8_e4m3_matmul);
 
 using W8A16MatmulOp = MatmulLike<CatlassKernel::W8A16Matmul>;
 static auto& w8a16_matmul = W8A16MatmulOp::Run;

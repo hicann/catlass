@@ -47,7 +47,7 @@ static void CopyHostToDevice(uint8_t *dst, uint8_t *src, uint64_t size)
 }
 
 template <typename DType>
-void MLAImpl(const uint32_t blockNum, aclrtStream stream, MlaParams &params)
+void MLAImpl(const uint32_t blockNum, aclrtStream stream, const MlaParams &params)
 {
     int32_t batch = static_cast<int32_t>(params.batch);
     int32_t kvSeqlen = static_cast<int32_t>(params.kvSeqlen);
@@ -75,24 +75,12 @@ void MLAImpl(const uint32_t blockNum, aclrtStream stream, MlaParams &params)
         tilingSize = (MLATiling::TILING_HEAD_SIZE + numTokens * MLATiling::TILING_PARA_SIZE) * sizeof(int32_t);
     }
 
-    uint8_t *qDevice;
-    uint8_t *qRopeDevice;
-    uint8_t *kDevice;
-    uint8_t *kRopeDevice;
-    uint8_t *blockTableDevice;
-    uint64_t outputHostBytes = qoSize;
-
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&qDevice), qoSize, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&qRopeDevice), qRopeSize, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&kDevice), kvSize, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&kRopeDevice), kRopeSize, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&blockTableDevice), blockTableSize, ACL_MEM_MALLOC_HUGE_FIRST));
-
-    CopyHostToDevice(qDevice, params.inputAddr.at(0), qoSize);
-    CopyHostToDevice(qRopeDevice, params.inputAddr.at(1), qRopeSize);
-    CopyHostToDevice(kDevice, params.inputAddr.at(2), kvSize);
-    CopyHostToDevice(kRopeDevice, params.inputAddr.at(3), kRopeSize);
-    CopyHostToDevice(blockTableDevice, params.inputAddr.at(4), blockTableSize);
+    uint8_t *qDevice = params.inputAddr.at(0);
+    uint8_t *qRopeDevice = params.inputAddr.at(1);
+    uint8_t *kDevice = params.inputAddr.at(2);
+    uint8_t *kRopeDevice = params.inputAddr.at(3);
+    uint8_t *blockTableDevice = params.inputAddr.at(4);
+    uint8_t *oScratchDevice = params.outputAddr.at(0);
 
     uint8_t *sDevice;
     ACL_CHECK(aclrtMalloc(
@@ -151,9 +139,6 @@ void MLAImpl(const uint32_t blockNum, aclrtStream stream, MlaParams &params)
     uint8_t *lDevice;
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&lDevice), lSize, ACL_MEM_MALLOC_HUGE_FIRST));
 
-    uint8_t *oScratchDevice;
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&oScratchDevice), qoSize, ACL_MEM_MALLOC_HUGE_FIRST));
-
     uint64_t hardwareSyncAddr{0};
     ACL_CHECK(aclrtGetHardwareSyncAddr(reinterpret_cast<void**>(&hardwareSyncAddr)));
 
@@ -176,16 +161,6 @@ void MLAImpl(const uint32_t blockNum, aclrtStream stream, MlaParams &params)
     }
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
-    params.outputHost.resize(static_cast<size_t>(outputHostBytes));
-    ACL_CHECK(aclrtMemcpy(
-        params.outputHost.data(), outputHostBytes, oScratchDevice, outputHostBytes, ACL_MEMCPY_DEVICE_TO_HOST));
-
-    aclrtFree(qDevice);
-    aclrtFree(qRopeDevice);
-    aclrtFree(kDevice);
-    aclrtFree(kRopeDevice);
-    aclrtFree(blockTableDevice);
-    aclrtFree(oScratchDevice);
     aclrtFree(sDevice);
     aclrtFree(pDevice);
     aclrtFree(oTmpDevice);
@@ -196,7 +171,7 @@ void MLAImpl(const uint32_t blockNum, aclrtStream stream, MlaParams &params)
     aclrtFreeHost(tilingHost);
 }
 
-void Mla(uint32_t blockNum, aclrtStream stream, MlaParams &params)
+void Mla(const uint32_t blockNum, aclrtStream stream, const MlaParams &params)
 {
     if (params.dataType == ACL_FLOAT16) {
         MLAImpl<half>(blockNum, stream, params);

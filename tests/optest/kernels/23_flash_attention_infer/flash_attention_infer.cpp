@@ -698,7 +698,7 @@ private:
 };
 
 template <class DType>
-CATLASS_GLOBAL void FAInfer(uint64_t hardwareSyncAddr,
+CATLASS_GLOBAL void __mix__(1,2) FAInfer(uint64_t hardwareSyncAddr,
                                 GM_ADDR q,
                                 GM_ADDR k,
                                 GM_ADDR v,

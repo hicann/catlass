@@ -69,43 +69,48 @@ struct MlaParams : public FlashAttentionParams {
     uint32_t numBlocks = 0;     ///< Total paged KV cache blocks.
     std::vector<int32_t> qSeqHost;  ///< Host-side Q sequence lengths for tiling.
     std::vector<int32_t> kvSeqHost; ///< Host-side KV sequence lengths for tiling.
-    std::vector<uint8_t> outputHost; ///< Host-side output staging buffer.
+    mutable std::vector<uint8_t> outputHost; ///< Host-side output staging buffer.
 };
 
 /**
  * @brief Reserved prebuilt interface for example 19_mla.
  */
-void Mla(const uint32_t blockNum, aclrtStream stream, MlaParams& params);
+__attribute__((weak)) void Mla(const uint32_t blockNum, aclrtStream stream, const MlaParams& params);
+
+/**
+ * @brief Reserved prebuilt interface for example 23_flash_attention_infer.
+ */
+__attribute__((weak)) void FlashAttentionInfer(const uint32_t blockNum, aclrtStream stream, const FlashAttentionParams& params);
 
 /**
  * @brief Reserved prebuilt interface for example 24_conv_bias.
  */
-void ConvBias(const uint32_t blockNum, aclrtStream stream, const ConvParams& params);
+__attribute__((weak)) void ConvBias(const uint32_t blockNum, aclrtStream stream, const ConvParams& params);
 
 /**
  * @brief Reserved prebuilt interface for example 33_basic_conv2d.
  */
-void BasicConv2d(const uint32_t blockNum, aclrtStream stream, const ConvParams& params);
+__attribute__((weak)) void BasicConv2d(const uint32_t blockNum, aclrtStream stream, const ConvParams& params);
 
 /**
  * @brief Reserved prebuilt interface for example 40_flash_attention_infer_tla.
  */
-void FlashAttentionInferTLA(const uint32_t blockNum, aclrtStream stream, const FlashAttentionParams& params);
+__attribute__((weak)) void FlashAttentionInferTLA(const uint32_t blockNum, aclrtStream stream, const FlashAttentionParams& params);
 
 /**
  * @brief Reserved prebuilt interface for example 49_ascend950_flash_attention_infer.
  */
-void Ascend950FlashAttentionInfer(const uint32_t blockNum, aclrtStream stream, const FlashAttentionParams& params);
+__attribute__((weak)) void Ascend950FlashAttentionInfer(const uint32_t blockNum, aclrtStream stream, const FlashAttentionParams& params);
 
 /**
  * @brief Reserved prebuilt interface for example 56_ascend950_basic_conv2d_tla.
  */
-void Ascend950BasicConv2dTLA(const uint32_t blockNum, aclrtStream stream, const ConvParams& params);
+__attribute__((weak)) void Ascend950BasicConv2dTLA(const uint32_t blockNum, aclrtStream stream, const ConvParams& params);
 
 /**
  * @brief Prebuilt interface for example 29_a2_fp8_e4m3_matmul.
  */
-extern "C" void A2Fp8E4M3Matmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+extern "C" __attribute__((weak)) void A2Fp8E4M3Matmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
  * @brief Broadcast MatMul with Per-Block Quantization（Ascend 950 TLA）。

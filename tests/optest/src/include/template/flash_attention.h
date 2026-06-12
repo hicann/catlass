@@ -12,8 +12,6 @@
 #ifndef OPTEST_FLASH_ATTENTION_H
 #define OPTEST_FLASH_ATTENTION_H
 
-#include <dlfcn.h>
-
 #include <stdexcept>
 #include <string>
 
@@ -25,21 +23,6 @@
 #include "torch_utils.h"
 
 namespace CatlassKernelWrapper {
-
-using FlashAttentionKernelFn = void (*)(const uint32_t, aclrtStream, const CatlassKernel::FlashAttentionParams&);
-
-inline FlashAttentionKernelFn ResolveFlashAttentionInferKernel()
-{
-    static FlashAttentionKernelFn kernel = nullptr;
-    static bool resolved = false;
-    if (!resolved) {
-        resolved = true;
-        kernel = reinterpret_cast<FlashAttentionKernelFn>(dlsym(
-            RTLD_DEFAULT,
-            "_ZN13CatlassKernel19FlashAttentionInferEjPvRKNS_20FlashAttentionParamsE"));
-    }
-    return kernel;
-}
 
 struct FlashAttentionHost {
     using OutputType = at::Tensor;
@@ -121,34 +104,6 @@ struct FlashAttentionHost {
     }
 };
 
-template <FlashAttentionKernelFn KernelFunc>
-struct FlashAttentionLike : FlashAttentionHost {
-    static OutputType Run(
-        const at::Tensor& query,
-        const at::Tensor& key,
-        const at::Tensor& value,
-        const at::Tensor& actual_seq_lengths,
-        const at::Tensor& actual_seq_lengths_kv,
-        const at::Tensor& atten_mask,
-        const at::Tensor& block_table,
-        const std::string& input_layout,
-        int64_t num_heads,
-        int64_t num_key_value_heads,
-        int64_t sparse_mode)
-    {
-        CatlassKernel::FlashAttentionParams params;
-        GetKernelInfo(
-            query, key, value, actual_seq_lengths, actual_seq_lengths_kv,
-            atten_mask, block_table, input_layout, num_heads,
-            num_key_value_heads, sparse_mode, params);
-        OutputType output = AllocOutput(params);
-        aclrtStream stream = c10_npu::getCurrentNPUStream().stream(false);
-        uint32_t aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
-        RUN_NPU_FUNC(KernelFunc, aicCoreNum, stream, params);
-        return output;
-    }
-};
-
 struct FlashAttentionInferOp : FlashAttentionHost {
     static OutputType Run(
         const at::Tensor& query,
@@ -163,10 +118,6 @@ struct FlashAttentionInferOp : FlashAttentionHost {
         int64_t num_key_value_heads,
         int64_t sparse_mode)
     {
-        auto kernel = ResolveFlashAttentionInferKernel();
-        TORCH_CHECK(
-            kernel != nullptr,
-            "flash_attention_infer is not available on this NPU architecture");
         CatlassKernel::FlashAttentionParams params;
         GetKernelInfo(
             query, key, value, actual_seq_lengths, actual_seq_lengths_kv,
@@ -175,23 +126,10 @@ struct FlashAttentionInferOp : FlashAttentionHost {
         OutputType output = AllocOutput(params);
         aclrtStream stream = c10_npu::getCurrentNPUStream().stream(false);
         uint32_t aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
-        RUN_NPU_FUNC(kernel, aicCoreNum, stream, params);
+        RUN_NPU_FUNC(CatlassKernel::FlashAttentionInfer, aicCoreNum, stream, params);
         return output;
     }
 };
-
-inline FlashAttentionKernelFn ResolveFlashAttentionInferTLAKernel()
-{
-    static FlashAttentionKernelFn kernel = nullptr;
-    static bool resolved = false;
-    if (!resolved) {
-        resolved = true;
-        kernel = reinterpret_cast<FlashAttentionKernelFn>(dlsym(
-            RTLD_DEFAULT,
-            "_ZN13CatlassKernel22FlashAttentionInferTLAEjPvRKNS_20FlashAttentionParamsE"));
-    }
-    return kernel;
-}
 
 struct FlashAttentionInferTLAOp : FlashAttentionHost {
     static OutputType Run(
@@ -207,10 +145,6 @@ struct FlashAttentionInferTLAOp : FlashAttentionHost {
         int64_t num_key_value_heads,
         int64_t sparse_mode)
     {
-        auto kernel = ResolveFlashAttentionInferTLAKernel();
-        TORCH_CHECK(
-            kernel != nullptr,
-            "flash_attention_infer_tla is not available on this NPU architecture");
         CatlassKernel::FlashAttentionParams params;
         GetKernelInfo(
             query, key, value, actual_seq_lengths, actual_seq_lengths_kv,
@@ -219,7 +153,7 @@ struct FlashAttentionInferTLAOp : FlashAttentionHost {
         OutputType output = AllocOutput(params);
         aclrtStream stream = c10_npu::getCurrentNPUStream().stream(false);
         uint32_t aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
-        RUN_NPU_FUNC(kernel, aicCoreNum, stream, params);
+        RUN_NPU_FUNC(CatlassKernel::FlashAttentionInferTLA, aicCoreNum, stream, params);
         return output;
     }
 };

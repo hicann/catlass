@@ -12,8 +12,6 @@
 #ifndef OPTEST_MLA_H
 #define OPTEST_MLA_H
 
-#include <dlfcn.h>
-
 #include <stdexcept>
 #include <string>
 
@@ -25,20 +23,6 @@
 #include "torch_utils.h"
 
 namespace CatlassKernelWrapper {
-
-using MlaKernelFn = void (*)(const uint32_t, aclrtStream, CatlassKernel::MlaParams&);
-
-inline MlaKernelFn ResolveMlaKernel()
-{
-    static MlaKernelFn kernel = nullptr;
-    static bool resolved = false;
-    if (!resolved) {
-        resolved = true;
-        kernel = reinterpret_cast<MlaKernelFn>(dlsym(
-            RTLD_DEFAULT, "_ZN13CatlassKernel3MlaEjPvRNS_9MlaParamsE"));
-    }
-    return kernel;
-}
 
 struct MlaHost {
     using OutputType = at::Tensor;
@@ -56,13 +40,6 @@ struct MlaHost {
         int64_t sparse_mode,
         CatlassKernel::MlaParams& params)
     {
-        TORCH_CHECK(
-            query_nope.device().is_cpu() && query_rope.device().is_cpu(),
-            "query tensors must be CPU tensors");
-        TORCH_CHECK(
-            key_cache.device().is_cpu() && key_rope_cache.device().is_cpu(),
-            "key cache tensors must be CPU tensors");
-        TORCH_CHECK(block_table.device().is_cpu(), "block_table must be a CPU tensor");
         aclDataType queryDtype = TorchDtypeToAclDtype(query_nope.scalar_type());
         aclDataType keyDtype = TorchDtypeToAclDtype(key_cache.scalar_type());
         TORCH_CHECK(
@@ -110,16 +87,16 @@ struct MlaHost {
         }
 
         params.inputAddr.resize(5);
-        params.inputAddr[0] = reinterpret_cast<uint8_t*>(query_nope.data_ptr());
-        params.inputAddr[1] = reinterpret_cast<uint8_t*>(query_rope.data_ptr());
-        params.inputAddr[2] = reinterpret_cast<uint8_t*>(key_cache.data_ptr());
-        params.inputAddr[3] = reinterpret_cast<uint8_t*>(key_rope_cache.data_ptr());
-        params.inputAddr[4] = reinterpret_cast<uint8_t*>(block_table.data_ptr());
+        params.inputAddr[0] = static_cast<uint8_t*>(const_cast<void*>(query_nope.storage().data()));
+        params.inputAddr[1] = static_cast<uint8_t*>(const_cast<void*>(query_rope.storage().data()));
+        params.inputAddr[2] = static_cast<uint8_t*>(const_cast<void*>(key_cache.storage().data()));
+        params.inputAddr[3] = static_cast<uint8_t*>(const_cast<void*>(key_rope_cache.storage().data()));
+        params.inputAddr[4] = static_cast<uint8_t*>(const_cast<void*>(block_table.storage().data()));
 
-        params.qSeqHost.resize(batch);
-        params.kvSeqHost.resize(batch);
         auto qSeqCpu = actual_seq_lengths.contiguous().cpu().to(at::kLong);
         auto kvSeqCpu = actual_seq_lengths_kv.contiguous().cpu().to(at::kLong);
+        params.qSeqHost.resize(batch);
+        params.kvSeqHost.resize(batch);
         for (int64_t i = 0; i < batch; ++i) {
             params.qSeqHost[static_cast<size_t>(i)] = static_cast<int32_t>(qSeqCpu[i].item<int64_t>());
             params.kvSeqHost[static_cast<size_t>(i)] = static_cast<int32_t>(kvSeqCpu[i].item<int64_t>());
@@ -146,33 +123,24 @@ struct MlaHost {
             {params.qNtokens, params.numHeads, params.embeddingSize},
             AclDtypeToTorchDtype(params.dataType));
         params.outputAddr.resize(1);
-        params.outputAddr[0] = nullptr;
+        params.outputAddr[0] = static_cast<uint8_t*>(const_cast<void*>(output.storage().data()));
         return output;
     }
 };
 
 struct MlaOp : MlaHost {
     static OutputType Run(
-        const at::Tensor& query_nope_in,
-        const at::Tensor& query_rope_in,
-        const at::Tensor& key_cache_in,
-        const at::Tensor& key_rope_cache_in,
+        const at::Tensor& query_nope,
+        const at::Tensor& query_rope,
+        const at::Tensor& key_cache,
+        const at::Tensor& key_rope_cache,
         const at::Tensor& actual_seq_lengths,
         const at::Tensor& actual_seq_lengths_kv,
-        const at::Tensor& block_table_in,
+        const at::Tensor& block_table,
         int64_t num_heads,
         int64_t num_key_value_heads,
         int64_t sparse_mode)
     {
-        auto kernel = ResolveMlaKernel();
-        TORCH_CHECK(
-            kernel != nullptr,
-            "mla is not available on this NPU architecture");
-        at::Tensor query_nope = query_nope_in.contiguous().cpu();
-        at::Tensor query_rope = query_rope_in.contiguous().cpu();
-        at::Tensor key_cache = key_cache_in.contiguous().cpu();
-        at::Tensor key_rope_cache = key_rope_cache_in.contiguous().cpu();
-        at::Tensor block_table = block_table_in.contiguous().cpu();
         CatlassKernel::MlaParams params;
         GetKernelInfo(
             query_nope, query_rope, key_cache, key_rope_cache,
@@ -181,16 +149,7 @@ struct MlaOp : MlaHost {
         OutputType output = AllocOutput(params);
         aclrtStream stream = c10_npu::getCurrentNPUStream().stream(false);
         uint32_t aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
-        kernel(aicCoreNum, stream, params);
-        TORCH_CHECK(!params.outputHost.empty(), "mla kernel did not produce output");
-        auto hostOptions = output.options().device(at::kCPU);
-        at::Tensor hostOut = at::from_blob(
-            params.outputHost.data(),
-            {static_cast<int64_t>(params.qNtokens), static_cast<int64_t>(params.numHeads),
-             static_cast<int64_t>(params.embeddingSize)},
-            [](void*) {},
-            hostOptions);
-        output.copy_(hostOut);
+        RUN_NPU_FUNC(CatlassKernel::Mla, aicCoreNum, stream, params);
         return output;
     }
 };

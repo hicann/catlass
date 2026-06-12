@@ -28,8 +28,8 @@
     do {                                                                                                           \
         if ((func) == nullptr) {                                                                                   \
             throw std::runtime_error(                                                                              \
-                std::string("Function pointer is null at ") + __FILE__ + ":" + std::to_string(__LINE__) + " in " + \
-                #func);                                                                                            \
+                std::string("Kernel '") + #func + "' is not available on this NPU architecture. "                  \
+                "At " + __FILE__ + ":" + std::to_string(__LINE__));                                                \
         }                                                                                                          \
     } while (false);                                                                                               \
     at_npu::native::OpCommand::RunOpApiV2(#func, [=]() -> aclError {                                               \

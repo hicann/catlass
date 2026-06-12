@@ -47,10 +47,10 @@ function(jit_verify_template)
         add_library(${_TGT} OBJECT EXCLUDE_FROM_ALL ${_TV_TEMPLATE_ABS})
         set_source_files_properties(${_TV_TEMPLATE_ABS} PROPERTIES LANGUAGE ASC)
         target_compile_options(${_TGT} PRIVATE
-            -DCATLASS_ARCH=${_ARCH}
             --npu-arch=dav-${_ARCH}
             -Wno-macro-redefined
         )
+        target_compile_definitions(${_TGT} PRIVATE CATLASS_ARCH=${_ARCH} "KERNEL_TYPE=__mix__(1,2)")
         target_include_directories(${_TGT} PRIVATE ${_TV_INCLUDE_DIRS})
         set_property(GLOBAL APPEND PROPERTY _JIT_VERIFY_TARGETS ${_TGT})
     endforeach()
