@@ -48,9 +48,9 @@ static void Run(const Options &options) {
     uint32_t n = options.problemShape.n();
     uint32_t k = options.problemShape.k();
 
-    // fp16 inputs, fp32 output/aux (L0C accumulates in fp32; Fixpipe F32->F32 on UB path).
-    using ElementA = half;
-    using ElementB = half;
+    // fp32 inputs, fp32 output/aux (L0C accumulates in fp32; Fixpipe F32->F32 on UB path).
+    using ElementA = float;
+    using ElementB = float;
     using ElementC = float;
 
     std::cout << "matmul_evg_add_ub: ElementA/B=fp16, ElementC/X/D=fp32, RowMajor" << std::endl;
