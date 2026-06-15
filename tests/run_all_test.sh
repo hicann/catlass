@@ -46,10 +46,10 @@ if [[ "$CATLASS_ARCH" == 2201 ]]; then
 
     # mstuner_catlass
     python3 "$SCRIPT_PATH/../tools/tuner/test/test_mstuner.py"
-
-    # optest
-    bash "$SCRIPT_PATH/run_optest.sh"
 fi
+
+# optest
+bash "$SCRIPT_PATH/run_optest.sh"
 
 # unittest
 bash "$BUILD_SCRIPT_PATH" --clean --tests catlass_unittest || exit 1

@@ -3,10 +3,8 @@ import torch
 import torch_npu
 import torch_catlass
 
-pytestmark = pytest.mark.skipif(
-    torch_npu.npu.device_count() <= 0,
-    reason="torch-catlass integration tests require an available Ascend NPU",
-)
+
+from common import only_on_2201
 
 
 def _pack_int4(data: torch.Tensor) -> torch.Tensor:
@@ -30,6 +28,7 @@ def _pack_int4(data: torch.Tensor) -> torch.Tensor:
     return packed.to(torch.int8).reshape(k, -1)
 
 
+@only_on_2201
 def test_w4a8_matmul():
     """Compare the CATLASS W4A8 matmul wrapper against a reference computation.
 

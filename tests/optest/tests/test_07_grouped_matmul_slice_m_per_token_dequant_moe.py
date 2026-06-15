@@ -3,12 +3,11 @@ import torch
 import torch_npu
 import torch_catlass
 
-pytestmark = pytest.mark.skipif(
-    torch_npu.npu.device_count() <= 0,
-    reason="torch-catlass integration tests require an available Ascend NPU",
-)
+
+from common import only_on_2201
 
 
+@only_on_2201
 def test_grouped_matmul_slice_m_per_token_dequant_moe():
     G = 4
     M_total = 512

@@ -4,10 +4,8 @@ import numpy as np
 import torch_npu
 import torch_catlass
 
-pytestmark = pytest.mark.skipif(
-    torch_npu.npu.device_count() <= 0,
-    reason="torch-catlass integration tests require an available Ascend NPU",
-)
+
+from common import only_on_2201
 
 
 def _generate_sparse_data(m, n, k):
@@ -110,6 +108,7 @@ def _generate_sparse_data(m, n, k):
     )
 
 
+@only_on_2201
 def test_sparse_matmul_tla():
     """Compare the CATLASS 4:2 sparse matmul (TLA) wrapper against a reference computation.
 

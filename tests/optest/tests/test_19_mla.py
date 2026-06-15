@@ -12,10 +12,8 @@ import pytest
 import torch
 import torch_npu
 
-pytestmark = pytest.mark.skipif(
-    torch_npu.npu.device_count() <= 0,
-    reason="torch-catlass integration tests require an available Ascend NPU",
-)
+
+from common import only_on_2201
 
 
 def _group_matmul(head: int, kv_head: int, left, right):
@@ -100,10 +98,10 @@ def _reference_mla(
     return torch.cat(outputs, dim=0).to(query_nope.dtype)
 
 
+@only_on_2201
 def test_mla_decode():
     """Compare MLA against a PyTorch reference implementation."""
     import torch_catlass
-
     torch.manual_seed(1)
     batch = 1
     q_seqlen = 1

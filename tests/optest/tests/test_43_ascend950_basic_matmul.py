@@ -7,27 +7,16 @@
 # BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE. See LICENSE in the root of
 # the software repository for the full text of the License.
 
-import re
-
 import pytest
 import torch
 import torch_npu
 import torch_catlass
 
 
-def _is_ascend950() -> bool:
-    if torch_npu.npu.device_count() <= 0:
-        return False
-    name = torch_npu.npu.get_device_name()
-    return bool(re.search(r"Ascend950(PR|DT)", name, re.I))
+from common import only_on_3510
 
 
-pytestmark = pytest.mark.skipif(
-    not _is_ascend950(),
-    reason="example 43_ascend950_basic_matmul requires Ascend 950 NPU",
-)
-
-
+@only_on_3510
 def test_ascend950_basic_matmul():
     """Compare CATLASS Ascend950 basic matmul TLA against torch.matmul."""
     m, n, k = 256, 512, 1024

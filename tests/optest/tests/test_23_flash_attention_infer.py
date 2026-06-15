@@ -13,10 +13,8 @@ import torch
 import torch_npu
 import torch_catlass
 
-pytestmark = pytest.mark.skipif(
-    torch_npu.npu.device_count() <= 0,
-    reason="requires Ascend NPU",
-)
+
+from common import only_on_2201
 
 
 def _group_matmul(head: int, kv_head: int, left, right):
@@ -89,6 +87,7 @@ def _reference_flash_attention(
     return torch.cat(outputs, dim=0).to(query.dtype)
 
 
+@only_on_2201
 def test_flash_attention_infer_paged():
     """Compare flash attention infer against a PyTorch reference implementation."""
     torch.manual_seed(1)

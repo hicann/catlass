@@ -3,11 +3,11 @@ import torch
 import torch_npu
 import torch_catlass
 
-pytestmark = pytest.mark.skipif(
-    torch_npu.npu.device_count() <= 0,
-    reason="requires Ascend NPU",
-)
 
+from common import only_on_2201
+
+
+@only_on_2201
 def test_padding_splitk_matmul():
     for m, n, k in [(256, 512, 1024), (128, 128, 128), (13, 14, 15)]:
         a = torch.randn(m, k, dtype=torch.float16, device="npu")

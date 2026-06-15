@@ -8,8 +8,6 @@
 # the software repository for the full text of the License.
 
 
-import re
-
 import pytest
 import torch
 import torch_npu
@@ -17,17 +15,7 @@ import numpy as np
 from ml_dtypes import float8_e4m3fn
 
 
-def _is_ascend950() -> bool:
-    if torch_npu.npu.device_count() <= 0:
-        return False
-    name = torch_npu.npu.get_device_name()
-    return bool(re.search(r"Ascend950(PR|DT)", name, re.I))
-
-
-pytestmark = pytest.mark.skipif(
-    not _is_ascend950(),
-    reason="example 62_ascend950_broadcast_matmul_perblock_quant requires Ascend 950 NPU",
-)
+from common import only_on_3510
 
 
 E4M3_MAX = 448.0
@@ -115,6 +103,7 @@ def _compare_small_data(result_dst_flat, golden_dst_flat, golden_dst_upgrade_fla
     return (error_count_result_small / max(error_count_golden_small, 1)) < 2
 
 
+@only_on_3510
 def test_broadcast_matmul_perblock_quant():
     """Compare the CATLASS broadcast matmul per-block quant wrapper against a reference computation."""
     import torch_catlass
@@ -135,6 +124,7 @@ def test_broadcast_matmul_perblock_quant():
     assert scale.device.type == "npu"
 
 
+@only_on_3510
 def test_broadcast_matmul_perblock_quant_correctness():
     """Verify the broadcast matmul per-block quant output against golden reference with comprehensive metrics."""
     import torch_catlass

@@ -9,25 +9,14 @@
 
 from __future__ import annotations
 
-import re
-
 import pytest
 import torch
 import torch.nn.functional as F
 import torch_npu
 
 
-def _is_ascend950() -> bool:
-    if torch_npu.npu.device_count() <= 0:
-        return False
-    name = torch_npu.npu.get_device_name()
-    return bool(re.search(r"Ascend950(PR|DT)", name, re.I))
+from common import only_on_3510
 
-
-pytestmark = pytest.mark.skipif(
-    not _is_ascend950(),
-    reason="example 64_ascend950_matmul_evg requires Ascend 950 NPU",
-)
 
 M, N, K = 256, 512, 1024
 RTOL, ATOL = 1e-3, 1e-3
@@ -87,6 +76,7 @@ def _make_inputs(
     "mode",
     ["add", "add_ub", "bias", "leaky_relu", "sigmoid", "silu", "tanh"],
 )
+@only_on_3510
 def test_ascend950_matmul_evg(mode: str):
     import torch_catlass
     from torch_catlass.ops.ascend950_matmul_evg import EvgPostprocessMode

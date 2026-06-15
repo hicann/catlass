@@ -7,14 +7,15 @@
 # BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE. See LICENSE in the root of
 # the software repository for the full text of the License.
 
-import re
-
 import pytest
 import torch
 import torch_npu
 import torch_catlass
 
 from mx_golden import prepare_fp4_mx_inputs
+
+
+from common import only_on_3510
 
 
 def _fp4_dtype_supported() -> bool:
@@ -27,25 +28,10 @@ def _fp4_dtype_supported() -> bool:
         return out.shape == (2, 2)
     except (RuntimeError, TypeError):
         return False
-
-
-def _is_ascend950() -> bool:
-    if torch_npu.npu.device_count() <= 0:
-        return False
-    name = torch_npu.npu.get_device_name()
-    return bool(re.search(r"Ascend950(PR|DT)", name, re.I))
-
-
-pytestmark = [
-    pytest.mark.skipif(
-        not _is_ascend950(),
-        reason="example 54_ascend950_fp4_mx_matmul_aswt requires Ascend 950 NPU",
-    ),
-    pytest.mark.skipif(
-        not _fp4_dtype_supported(),
-        reason="torch.float4_e2m1fn_x2 tensor construction is unavailable in this PyTorch build",
-    ),
-]
+pytestmark = pytest.mark.skipif(
+    not _fp4_dtype_supported(),
+    reason="torch.float4_e2m1fn_x2 tensor construction is unavailable in this PyTorch build",
+)
 
 
 @pytest.mark.parametrize(
@@ -58,6 +44,7 @@ pytestmark = [
     ],
     ids=["nn", "nt", "tn", "tt"],
 )
+@only_on_3510
 def test_ascend950_fp4_mx_matmul_aswt(trans_a, trans_b):
     """Compare CATLASS MX FP4 matmul (ASWT) against dequant reference for all transpose pairs."""
     m, n, k = 256, 512, 1024

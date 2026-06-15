@@ -3,11 +3,11 @@ import torch
 import torch_npu
 import torch_catlass
 
-pytestmark = pytest.mark.skipif(
-    torch_npu.npu.device_count() <= 0,
-    reason="requires Ascend NPU",
-)
 
+from common import only_on_2201
+
+
+@only_on_2201
 def test_quant_matmul():
     m, n, k = 128, 64, 256
     a = torch.randint(-8, 8, (m, k), dtype=torch.int8, device="npu")

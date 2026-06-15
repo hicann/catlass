@@ -213,7 +213,8 @@ python scripts/gen_entry.py <nn> <name>
 
 ### 4.2 无设备处理
 
-- 用 `pytest.mark.skipif(torch_npu.npu.device_count() <= 0, ...)`。
+- 用 `pytest.mark.skipif(torch_npu.npu.device_count() <= 0, ...)` 检查是否有可用的NPU卡。
+- 根据算子适用架构，用`@only_on_2201`或者`@only_on_3510`做隔离，确保测试脚本只在支持的硬件环境下工作。
 - 跳过只用于环境不可用，不用于掩盖接口错误。
 
 ## Phase 5: Verify & Fix Loop

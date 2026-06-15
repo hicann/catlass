@@ -12,10 +12,8 @@ import pytest
 import torch
 import torch_npu
 
-pytestmark = pytest.mark.skipif(
-    torch_npu.npu.device_count() <= 0,
-    reason="torch-catlass integration tests require an available Ascend NPU",
-)
+
+from common import only_on_2201
 
 
 def _group_matmul(head: int, kv_head: int, left, right):
@@ -88,6 +86,7 @@ def _reference_flash_attention(
     return torch.cat(outputs, dim=0).to(query.dtype)
 
 
+@only_on_2201
 def test_flash_attention_infer_tla_paged():
     """Compare TLA flash attention infer against a PyTorch reference implementation."""
     import torch_catlass

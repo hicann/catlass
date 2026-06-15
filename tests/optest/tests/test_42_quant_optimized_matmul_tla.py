@@ -13,12 +13,11 @@ import torch
 import torch_npu
 import torch_catlass
 
-pytestmark = pytest.mark.skipif(
-    torch_npu.npu.device_count() <= 0,
-    reason="torch-catlass integration tests require an available Ascend NPU",
-)
+
+from common import only_on_2201
 
 
+@only_on_2201
 def test_quant_optimized_matmul_tla():
     """Compare the CATLASS quant optimized matmul (TLA) wrapper against a reference computation."""
     m, n, k = 256, 512, 1024
