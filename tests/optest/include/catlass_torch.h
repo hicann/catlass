@@ -174,6 +174,52 @@ at::Tensor strided_batched_matmul_tla(
     const bool transA, const bool transB, const bool formatA, const bool formatB);
 
 /**
+ * @brief PyTorch extension entry for CATLASS Ascend950 matmul fixpipe optimization.
+ *
+ * Source: example 46_ascend950_matmul_fixpipe_opti.
+ * Implementation provided by ``MatmulLike<Ascend950MatmulFixpipeOpti>::Run``.
+ */
+at::Tensor ascend950_matmul_fixpipe_opti(
+    const at::Tensor& mat1, const at::Tensor& mat2, const c10::ScalarType& outDType,
+    const bool transA, const bool transB, const bool formatA, const bool formatB);
+
+/**
+ * @brief PyTorch extension entry for CATLASS Ascend950 basic matmul GEMV.
+ *
+ * Source: example 50_ascend950_basic_matmul_gemv.
+ * Implementation provided by ``MatmulLike<Ascend950BasicMatmulGemv>::Run``.
+ */
+at::Tensor ascend950_basic_matmul_gemv(
+    const at::Tensor& mat1, const at::Tensor& mat2, const c10::ScalarType& outDType,
+    const bool transA, const bool transB, const bool formatA, const bool formatB);
+
+/**
+ * @brief PyTorch extension entry for CATLASS Ascend950 quant matmul per-group per-block (TLA).
+ *
+ * Source: example 51_ascend950_quant_matmul_per_group_per_block_tla.
+ * Implementation provided by ``QuantPerGroupPerBlockMatmulLike<Ascend950QuantMatmulPerGroupPerBlockTLA>::Run``.
+ */
+at::Tensor ascend950_quant_matmul_per_group_per_block_tla(
+    const at::Tensor& mat1, const at::Tensor& mat2,
+    const at::Tensor& x1Scale, const at::Tensor& x2Scale,
+    const c10::ScalarType& outDType, const bool transA, const bool transB,
+    const bool formatA, const bool formatB);
+
+/**
+ * @brief PyTorch extension entry for CATLASS Ascend950 matmul full dequant.
+ *
+ * Source: example 57_ascend950_matmul_full_dequant.
+ * Implementation provided by ``MatmulFullDequantLike<Ascend950MatmulFullDequant>::Run``.
+ */
+at::Tensor ascend950_matmul_full_dequant(
+    const at::Tensor& mat1, const at::Tensor& mat2,
+    const c10::optional<at::Tensor>& x1Scale, const c10::optional<at::Tensor>& x2Scale,
+    const c10::optional<at::Tensor>& bias,
+    const c10::ScalarType& outDType, const bool transA, const bool transB,
+    const bool formatA, const bool formatB,
+    const std::string& x1QuantMode, const std::string& x2QuantMode);
+
+/**
  * @brief PyTorch extension entry for CATLASS Ascend950 MX FP8 batch matmul (TLA).
  *
  * Source: example 58_ascend950_fp8_mx_batch_matmul.

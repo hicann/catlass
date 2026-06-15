@@ -56,6 +56,10 @@ from .ascend950_mx_matmul import (  # example 53, 54, 58, 63
 )
 from .broadcast_matmul_perblock_quant import broadcast_matmul_perblock_quant  # example 62
 from .ascend950_matmul_evg import EvgPostprocessMode, ascend950_matmul_evg  # example 64
+from .ascend950_matmul_fixpipe_opti import ascend950_matmul_fixpipe_opti  # example 46
+from .ascend950_basic_matmul_gemv import ascend950_basic_matmul_gemv  # example 50
+from .ascend950_quant_matmul_per_group_per_block_tla import ascend950_quant_matmul_per_group_per_block_tla  # example 51
+from .ascend950_matmul_full_dequant import ascend950_matmul_full_dequant  # example 57
 
 __all__ = [
     "basic_matmul",                       # example 00
@@ -104,4 +108,8 @@ __all__ = [
     "ascend950_dual_level_quant_mx_batch_matmul", # example 63
     "ascend950_matmul_evg",               # example 64
     "EvgPostprocessMode",                 # example 64
+    "ascend950_matmul_fixpipe_opti",      # example 46
+    "ascend950_basic_matmul_gemv",        # example 50
+    "ascend950_quant_matmul_per_group_per_block_tla",  # example 51
+    "ascend950_matmul_full_dequant",      # example 57
 ]

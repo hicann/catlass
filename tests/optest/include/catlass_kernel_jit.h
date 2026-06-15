@@ -65,6 +65,9 @@ struct MatmulParams {
     uint32_t batch = 1;               ///< Batch dimension for batched variants.
     std::vector<uint8_t*> inputAddr;  ///< Input buffer addresses.
     std::vector<uint8_t*> outputAddr; ///< Output buffer addresses.
+    uint32_t x1QuantMode = 0;         ///< Example 57 x1 quant mode (QuantMode enum value).
+    uint32_t x2QuantMode = 0;         ///< Example 57 x2 quant mode (QuantMode enum value).
+    bool hasQuantBias = false;        ///< Example 57 optional bias flag.
 };
 
 struct MatmulEvgParams : public MatmulParams {

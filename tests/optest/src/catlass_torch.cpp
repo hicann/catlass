@@ -26,9 +26,11 @@
 #include "template/matmul.h"
 #include "template/matmul_evg.h"
 #include "template/matmul_extra.h"
+#include "template/matmul_full_dequant.h"
 #include "template/mla.h"
 #include "template/mx_matmul.h"
 #include "template/quant_matmul.h"
+#include "template/quant_per_group_per_block_matmul.h"
 #include "template/sparse_matmul.h"
 #include "template/strided_batched_matmul.h"
 #include "template/w4a8_matmul.h"
@@ -234,6 +236,22 @@ REGISTER_TORCH_FUNC(sparse_matmul_tla);
 using StridedBatchedMatmulTLAOp = StridedBatchedMatmulLike<CatlassKernel::StridedBatchedMatmulTLA>;
 static auto& strided_batched_matmul_tla = StridedBatchedMatmulTLAOp::Run;
 REGISTER_TORCH_FUNC(strided_batched_matmul_tla);
+
+using Ascend950MatmulFixpipeOptiOp = MatmulLike<CatlassKernel::Ascend950MatmulFixpipeOpti>;
+static auto& ascend950_matmul_fixpipe_opti = Ascend950MatmulFixpipeOptiOp::Run;
+REGISTER_TORCH_FUNC(ascend950_matmul_fixpipe_opti);
+
+using Ascend950BasicMatmulGemvOp = MatmulLike<CatlassKernel::Ascend950BasicMatmulGemv>;
+static auto& ascend950_basic_matmul_gemv = Ascend950BasicMatmulGemvOp::Run;
+REGISTER_TORCH_FUNC(ascend950_basic_matmul_gemv);
+
+using Ascend950QuantMatmulPerGroupPerBlockTLAOp = QuantPerGroupPerBlockMatmulLike<CatlassKernel::Ascend950QuantMatmulPerGroupPerBlockTLA>;
+static auto& ascend950_quant_matmul_per_group_per_block_tla = Ascend950QuantMatmulPerGroupPerBlockTLAOp::Run;
+REGISTER_TORCH_FUNC(ascend950_quant_matmul_per_group_per_block_tla);
+
+using Ascend950MatmulFullDequantOp = MatmulFullDequantLike<CatlassKernel::Ascend950MatmulFullDequant>;
+static auto& ascend950_matmul_full_dequant = Ascend950MatmulFullDequantOp::Run;
+REGISTER_TORCH_FUNC(ascend950_matmul_full_dequant);
 
 using Ascend950Fp8MxBatchMatmulOp = MxBatchedMatmulLike<CatlassKernel::Ascend950Fp8MxBatchMatmul>;
 static auto& ascend950_fp8_mx_batch_matmul = Ascend950Fp8MxBatchMatmulOp::Run;
