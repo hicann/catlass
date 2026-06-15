@@ -3,6 +3,7 @@ add_library(TlaPasses
   TlaFuncToHaccPass.cpp
   TlaLowerToHivmPass.cpp
   TlaAllocPtrToHivmPointerCastPass.cpp
+  TlaLowerMutexToStdPass.cpp
   TlaLowerToStdPass.cpp
   TlaSyncToHivmPass.cpp
   ConvertTlaToVectorPass.cpp
