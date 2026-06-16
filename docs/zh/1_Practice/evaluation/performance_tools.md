@@ -140,9 +140,9 @@ msprof op simulator ./00_basic_matmul 256 512 1024 0
 
 根据浏览器，选择以下工具：
 
-- [Edge Trace Viewer](edge://tracing)(Edge浏览器)
-- [Chrome Trace Viewer](chrome://tracing)(Chrome浏览器/基于Chrome内核的浏览器)
-- [Perfetto](https://ui.perfetto.dev/)(通用)
+- Edge浏览器使用工具Edge Trace Viewer：url输入`edge://tracing`
+- Chrome浏览器使用工具Chrome Trace Viewer：url输入`chrome://tracing`
+- 通用工具Perfetto：url输入`https://ui.perfetto.dev/`
 
 导入`trace.json`即可查看仿真指令流水图。
 
