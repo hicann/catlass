@@ -60,6 +60,7 @@ from .ascend950_matmul_fixpipe_opti import ascend950_matmul_fixpipe_opti  # exam
 from .ascend950_basic_matmul_gemv import ascend950_basic_matmul_gemv  # example 50
 from .ascend950_quant_matmul_per_group_per_block_tla import ascend950_quant_matmul_per_group_per_block_tla  # example 51
 from .ascend950_matmul_full_dequant import ascend950_matmul_full_dequant  # example 57
+from .multi_core_splitk_matmul import ascend950_multi_core_splitk_matmul  # example 68
 
 __all__ = [
     "basic_matmul",                       # example 00
@@ -112,4 +113,5 @@ __all__ = [
     "ascend950_basic_matmul_gemv",        # example 50
     "ascend950_quant_matmul_per_group_per_block_tla",  # example 51
     "ascend950_matmul_full_dequant",      # example 57
+    "ascend950_multi_core_splitk_matmul",  # example 68
 ]

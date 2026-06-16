@@ -266,4 +266,8 @@ using Ascend950DualLevelQuantMxBatchMatmulOp =
 static auto& ascend950_dual_level_quant_mx_batch_matmul = Ascend950DualLevelQuantMxBatchMatmulOp::Run;
 REGISTER_TORCH_FUNC(ascend950_dual_level_quant_mx_batch_matmul);
 
+using Ascend950MultiCoreSplitkMatmulOp = MatmulLike<CatlassKernel::Ascend950MultiCoreSplitkMatmul>;
+static auto& ascend950_multi_core_splitk_matmul = Ascend950MultiCoreSplitkMatmulOp::Run;
+REGISTER_TORCH_FUNC(ascend950_multi_core_splitk_matmul);
+
 } // namespace CatlassKernelWrapper
