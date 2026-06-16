@@ -90,6 +90,16 @@ struct EpilogueAtlasA2MLATP1RescaleO {
     using ArchTag = Arch::AtlasA2;
 };
 
+// For AtlasA2, AMLA TP1 Softmax
+struct EpilogueAtlasA2AMLATP1Softmax {
+    using ArchTag = Arch::AtlasA2;
+};
+
+// For AtlasA2, AMLA TP1 RescaleO
+struct EpilogueAtlasA2AMLATP1RescaleO {
+    using ArchTag = Arch::AtlasA2;
+};
+
 // For AtlasA2, per token dequant
 template <uint32_t UB_STAGES_>
 struct EpilogueAtlasA2PerTokenDequant {

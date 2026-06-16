@@ -46,9 +46,9 @@ public:
     static constexpr uint32_t STAGES = 2;
 
     CATLASS_DEVICE
-    BlockEpilogue(Arch::Resource<ArchTag> &resource, uint32_t kvSplitCoreNum_)
+    BlockEpilogue(Arch::Resource<ArchTag> &resource, uint32_t maxKvSplitCoreNum_)
     {
-        kvSplitCoreNum = kvSplitCoreNum_;
+        maxKvSplitCoreNum = maxKvSplitCoreNum_;
 
         uint32_t ubOffset = 0;
         oIn[0] = resource.ubBuf.template GetBufferByByte<float>(ubOffset);
@@ -112,7 +112,7 @@ public:
         AscendC::GlobalTensor<ElementOutput> gOutput,
         AscendC::GlobalTensor<ElementInput> gOCoreTmp,
         AscendC::GlobalTensor<ElementInput> gl,
-        uint32_t actualHeads, uint32_t headsProcess, uint32_t headSize)
+        uint32_t actualHeads, uint32_t headsProcess, uint32_t headSize, uint32_t kvSplitCoreNum)
     {
         uint32_t kvSplitRound = (kvSplitCoreNum + FLOAT_BLOCK_SIZE - 1) / FLOAT_BLOCK_SIZE * FLOAT_BLOCK_SIZE;
 
@@ -120,7 +120,7 @@ public:
         AscendC::DataCopyPad(
             lIn, gl,
             AscendC::DataCopyExtParams(
-                actualHeads, kvSplitCoreNum * sizeof(ElementInput), 0,
+                actualHeads, kvSplitCoreNum * sizeof(ElementInput), (maxKvSplitCoreNum - kvSplitCoreNum) * sizeof(ElementInput),
                 (KV_SPLIT_MAX - kvSplitCoreNum) / FLOAT_BLOCK_SIZE, 0),
             AscendC::DataCopyPadExtParams<ElementInput>(false, 0, 0, 0));
 
@@ -205,7 +205,7 @@ public:
             oIn[0], gOCoreTmp,
             AscendC::DataCopyExtParams(
                 actualHeads, headSize * sizeof(ElementInput),
-                (kvSplitCoreNum * headSize - headSize) * sizeof(ElementInput), 0, 0),
+                (maxKvSplitCoreNum * headSize - headSize) * sizeof(ElementInput), 0, 0),
             AscendC::DataCopyPadExtParams<ElementInput>(false, 0, 0, 0));
         AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID0);
 
@@ -223,7 +223,7 @@ public:
                     oIn[nextBufferId], gOCoreTmp[(i + 1) * headSize],
                     AscendC::DataCopyExtParams(
                         actualHeads, headSize * sizeof(ElementInput),
-                        (kvSplitCoreNum * headSize - headSize) * sizeof(ElementInput), 0, 0),
+                        (maxKvSplitCoreNum * headSize - headSize) * sizeof(ElementInput), 0, 0),
                     AscendC::DataCopyPadExtParams<ElementInput>(false, 0, 0, 0));
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(oInEventList[nextBufferId]);
             }
@@ -289,7 +289,7 @@ public:
     }
 
 private:
-    uint32_t kvSplitCoreNum = 1;
+    uint32_t maxKvSplitCoreNum = 1;
     AscendC::LocalTensor<ElementOutput> out;
     AscendC::LocalTensor<float> oIn[STAGES];
     AscendC::LocalTensor<float> oTemp[STAGES];

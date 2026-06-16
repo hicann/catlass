@@ -37,7 +37,11 @@ const int32_t TILING_TOTAL_QTOKENS = 18;
 const int32_t TILING_FORMERTASKNUM = 19;
 const int32_t TILING_TAILTASKNUM = 20;
 
-const int32_t TILING_HEAD_SIZE = 24;
+const int32_t TILING_PROCESSNUM = 21;
+
+const int32_t TILING_HEAD_SIZE = 400;
+const int32_t CUTASK_START_OFFSET = 25;
+const int32_t CUTASK_MAX_LENGTH = 130;
 const int32_t TILING_PARA_SIZE = 17;
 
 const int32_t PARA_TILING_ELENUM_SPEC = 17;

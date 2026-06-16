@@ -7,9 +7,10 @@
 │   ├── CMakeLists.txt # CMake编译文件
 │   ├── gen_data.py
 │   ├── kernel_common.hpp #两个不同的kernel实现中的共同变量与宏
-│   ├── main.cpp
+│   ├── mla.cpp
 │   ├── mla_kernel.cpp # MLA TP 2/4/8 模板
 │   ├── mla_kernel_tp1_spec.cpp # MLA TP 1 模板
+│   ├── amla_kernel_tp1_spec.cpp # AMLA TP 1 模板
 │   └── README.md
 ```
 
@@ -20,7 +21,7 @@
 
 ```
 # 在./examples/19_mla目录下执行
-python gen_data.py 1 1 128 16 16 128 half
+python gen_data.py 4 "1,2,3,4" "128,256,512,1024" 16 16 128 half
 # 输入参数分别对应 batchSize，qSeqlen，kvSeqlen, qheadNum，numBlock, blockSize
 # qSeqlen表示需要推理的token个数，支持范围为1~4，即常规decode与mtp场景
 # kvSeqlen表示输入的序列长度
@@ -49,9 +50,9 @@ python gen_data.py 1 1 128 16 16 128 half
 # 编译指定用例（在CATLASS代码仓目录下）
 bash scripts/build.sh 19_mla
 cd output/bin
-./19_mla 1 1 128 16 16 128
+./19_mla 4 "1,2,3,4" "128,256,512,1024" 16 16 128
 # 此处的参数和生成数据的参数保持一致
-# 完整参数为 batchSize, qSeqlen, kvSeqlen, qheadNum, numBlock, blockSize [--dtype DTYPE --datapath DATA_PATH --device DEVICE_ID]，dtype默认为half, datapath默认为../../examples/19_mla/data, device默认为0。
+# 完整参数为 batch "qSeqlenList" "kvSeqlenList" numHeads numBlocks blockSize [--dtype DTYPE --datapath DATA_PATH --device DEVICE_ID]，dtype默认为half, datapath默认为../../examples/19_mla/data, device默认为0。
 ```
 
 执行结果如下，说明精度比对成功。
