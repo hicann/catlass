@@ -251,6 +251,7 @@ add_subdirectory(62_ascend950_broadcast_matmul_perblock_quant)
 add_subdirectory(63_ascend950_dual_level_quant_mx_batch_matmul)
 add_subdirectory(64_ascend950_matmul_evg)
 add_subdirectory(68_ascend950_multi_core_splitk_matmul)
+add_subdirectory(69_ascend950_tail_multi_core_splitk_matmul)
 
 if(_JIT_KERNEL_ENTRIES)
     set(_JIT_TARGET catlass_kernel_jit)

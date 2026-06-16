@@ -61,6 +61,7 @@ from .ascend950_basic_matmul_gemv import ascend950_basic_matmul_gemv  # example 
 from .ascend950_quant_matmul_per_group_per_block_tla import ascend950_quant_matmul_per_group_per_block_tla  # example 51
 from .ascend950_matmul_full_dequant import ascend950_matmul_full_dequant  # example 57
 from .multi_core_splitk_matmul import ascend950_multi_core_splitk_matmul  # example 68
+from .tail_multi_core_splitk_matmul import ascend950_tail_multi_core_splitk_matmul  # example 69
 
 __all__ = [
     "basic_matmul",                       # example 00
@@ -114,4 +115,5 @@ __all__ = [
     "ascend950_quant_matmul_per_group_per_block_tla",  # example 51
     "ascend950_matmul_full_dequant",      # example 57
     "ascend950_multi_core_splitk_matmul",  # example 68
+    "ascend950_tail_multi_core_splitk_matmul",  # example 69
 ]

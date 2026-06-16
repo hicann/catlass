@@ -442,6 +442,12 @@ void DynamicOptimizedQuantMatmulPerTokenBasic(
 void Ascend950MultiCoreSplitkMatmul(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
+/**
+ * @brief JIT interface for example 69_ascend950_tail_multi_core_splitk_matmul.
+ */
+void Ascend950TailMultiCoreSplitkMatmul(
+    const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+
 } // extern "C"
 
 } // namespace CatlassKernel

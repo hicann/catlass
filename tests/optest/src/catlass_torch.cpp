@@ -270,4 +270,8 @@ using Ascend950MultiCoreSplitkMatmulOp = MatmulLike<CatlassKernel::Ascend950Mult
 static auto& ascend950_multi_core_splitk_matmul = Ascend950MultiCoreSplitkMatmulOp::Run;
 REGISTER_TORCH_FUNC(ascend950_multi_core_splitk_matmul);
 
+using Ascend950TailMultiCoreSplitkMatmulOp = MatmulLike<CatlassKernel::Ascend950TailMultiCoreSplitkMatmul>;
+static auto& ascend950_tail_multi_core_splitk_matmul = Ascend950TailMultiCoreSplitkMatmulOp::Run;
+REGISTER_TORCH_FUNC(ascend950_tail_multi_core_splitk_matmul);
+
 } // namespace CatlassKernelWrapper
