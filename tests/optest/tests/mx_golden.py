@@ -480,3 +480,12 @@ def prepare_dual_level_quant_mx_batch_inputs(
         a_batch = a_batch.contiguous().npu()
         b_batch = b_batch.contiguous().npu()
     return a_batch, b_batch, expected
+
+
+def prepare_a8w4_mx_inputs(
+    m: int, n: int, k: int, device: str = "npu"
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Deprecated wrapper; use a8w4_golden.prepare_a8w4_mx_inputs."""
+    from a8w4_golden import prepare_a8w4_mx_inputs as _prepare
+
+    return _prepare(m, n, k, device=device)

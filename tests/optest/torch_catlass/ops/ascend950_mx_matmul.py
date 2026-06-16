@@ -105,6 +105,32 @@ def ascend950_fp8_mx_batch_matmul(
     )
 
 
+def ascend950_a8w4_mx_matmul(
+    mat1: Tensor,
+    mat2: Tensor,
+    mx_scale_a: Tensor,
+    mx_scale_b: Tensor,
+) -> Tensor:
+    """Run CATLASS Ascend950 A8W4 MX matmul on NPU tensors.
+
+    Source: example 59_ascend950_a8w4_mx_matmul.
+
+    Computes ``C = (MxScaleA * A_fp8) @ (MxScaleB * B_fp4)`` with fixed layouts
+    ``A:(M,K) RowMajor`` and prologue ``B`` as int8 packed bytes (ColumnMajor KxN).
+    Output is FP32.
+
+    Args:
+        mat1: Left input (float8_e4m3fn), shape ``(M, K)``.
+        mat2: Packed FP4 prologue bytes (int8), flat buffer length ``K*N/2``.
+        mx_scale_a: MX scale for A (float8_e8m0fnu), shape ``(M, mxScaleAlignedK/2, 2)``.
+        mx_scale_b: MX scale for B (float8_e8m0fnu), shape ``(N, mxScaleAlignedK/2, 2)``.
+
+    Returns:
+        FP32 output tensor with shape ``(M, N)``.
+    """
+    return torch.ops.catlass.ascend950_a8w4_mx_matmul(mat1, mat2, mx_scale_a, mx_scale_b)
+
+
 def ascend950_dual_level_quant_mx_batch_matmul(
     mat1: Tensor,
     mat2: Tensor,

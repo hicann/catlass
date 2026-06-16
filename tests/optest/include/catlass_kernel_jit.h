@@ -76,6 +76,17 @@ struct MatmulEvgParams : public MatmulParams {
 };
 
 /**
+ * @brief Runtime parameters for per-channel/per-token fixpipe dequant.
+ */
+struct MatmulFixPipeParams : public MatmulParams {
+    enum class FixPipeQuantMode: uint8_t {
+        PerChannel = 0,
+        PerTensor = 1,
+    } fixPipeQuantMode = FixPipeQuantMode::PerChannel;  ///< Quant mode selection.
+    float perTensorScale = 1.0f;                        ///< Host scalar used by per-tensor fixpipe dequant.
+};
+
+/**
  * @brief Runtime parameters for grouped matmul examples.
  */
 struct GroupedMatmulParams : public MatmulParams {
@@ -107,6 +118,14 @@ struct StridedBatchedMatmulParams : public MatmulParams {
 struct GemmParams : public MatmulParams {
     float alpha = 1.0f; ///< Alpha scale in D = alpha * A * B + beta * C.
     float beta = 0.0f;  ///< Beta scale in D = alpha * A * B + beta * C.
+};
+
+/**
+ * @brief Runtime parameters for example 61_ascend950_svd_quant_matmul.
+ */
+struct SvdQuantMatmulParams : public MatmulParams {
+    uint32_t r = 32;   ///< SVD rank.
+    float qmax = 8.0f; ///< SmoothQuant qmax.
 };
 
 extern "C" {
@@ -406,10 +425,16 @@ void Ascend950DualLevelQuantMxBatchMatmul(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
- * @brief Reserved JIT interface for example 59_ascend950_a8w4_mx_matmul.
+ * @brief JIT interface for example 59_ascend950_a8w4_mx_matmul.
  */
 void Ascend950A8W4MxMatmul(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+
+/**
+ * @brief JIT interface for example 61_ascend950_svd_quant_matmul.
+ */
+void Ascend950SvdQuantMatmul(
+    const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const SvdQuantMatmulParams& params);
 
 /**
  * @brief Reserved JIT interface for example 60_ascend950_grouped_matmul_slice_m.
@@ -423,6 +448,21 @@ void Ascend950GroupedMatmulSliceM(
  * Selects the JIT template via ``params.evgType`` (e.g. add, add_ub, bias, leaky_relu, ...).
  */
 void MatmulEvg(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulEvgParams& params);
+ 
+/**
+ * @brief JIT interface for example 67_ascend950_batched_matmul.
+ */
+void Ascend950BatchedMatmul(
+    const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+
+/**
+ * @brief JIT interface for example 70_ascend950_grouped_matmul_slice_m_fixpipe_dequant.
+ *
+ * Selects ScaleGranularity (PER_CHANNEL / PER_TENSOR) at JIT compile time
+ * via ``params.fixPipeQuantMode``.
+ */
+void Ascend950GroupedMatmulSliceMFixpipeDequant(
+    const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulFixPipeParams& params);
 
 /**
  * @brief JIT interface for example 66_ascend950_streamk_matmul.

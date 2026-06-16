@@ -304,6 +304,13 @@ struct MmadPingpong : public MmadBase<ArchTag_, false> {
     static constexpr bool ENABLE_L1_RESIDENT = ENABLE_L1_RESIDENT_;
 };
 
+template <class ArchTag_, bool USE_HF32_MODE_ = false, uint32_t L0C_STAGES_ = 2>
+struct MmadMultiBatch : public MmadBase<ArchTag_, false> {
+    static constexpr uint32_t STAGES = 2;
+    static constexpr bool USE_HF32_MODE = USE_HF32_MODE_;
+    static constexpr uint32_t L0C_STAGES = L0C_STAGES_;
+};
+
 template <class ArchTag_, uint32_t PRELOAD_STAGES_, uint32_t L1A_STAGES_, uint32_t L1B_STAGES_, uint32_t L0A_STAGES_,
     uint32_t L0B_STAGES_, uint32_t L0C_STAGES_, bool ENABLE_UNIT_FLAG_, bool ENABLE_SHUFFLE_K_,
     bool USE_HF32_MODE_ = false, bool ENABLE_L1_RESIDENT_ = false>

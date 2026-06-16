@@ -33,8 +33,11 @@
 #include "template/quant_per_group_per_block_matmul.h"
 #include "template/sparse_matmul.h"
 #include "template/strided_batched_matmul.h"
+#include "template/grouped_matmul_slice_m_fixpipe_dequant.h"
 #include "template/w4a8_matmul.h"
 #include "template/broadcast_matmul_perblock_quant.h"
+#include "template/a8w4_mx_matmul.h"
+#include "template/svd_quant_matmul.h"
 
 // ── Workspace allocator bridge ──
 // 通过 dlsym 注入到 g_catlassWorkspaceAlloc，使 JIT 模板分配 NPU tensor
@@ -185,6 +188,10 @@ using Ascend950BasicMatmulOp = MatmulLike<CatlassKernel::Ascend950BasicMatmul>;
 static auto& ascend950_basic_matmul = Ascend950BasicMatmulOp::Run;
 REGISTER_TORCH_FUNC(ascend950_basic_matmul);
 
+using Ascend950BatchedMatmulOp = BatchedMatmulLike<CatlassKernel::Ascend950BatchedMatmul>;
+static auto& ascend950_batched_matmul = Ascend950BatchedMatmulOp::Run;
+REGISTER_TORCH_FUNC(ascend950_batched_matmul);
+
 using Ascend950StreamkMatmulOp = MatmulLike<CatlassKernel::Ascend950StreamkMatmul>;
 static auto& ascend950_streamk_matmul = Ascend950StreamkMatmulOp::Run;
 REGISTER_TORCH_FUNC(ascend950_streamk_matmul);
@@ -270,12 +277,25 @@ using Ascend950DualLevelQuantMxBatchMatmulOp =
 static auto& ascend950_dual_level_quant_mx_batch_matmul = Ascend950DualLevelQuantMxBatchMatmulOp::Run;
 REGISTER_TORCH_FUNC(ascend950_dual_level_quant_mx_batch_matmul);
 
+using Ascend950SvdQuantMatmulOp = SvdQuantMatmulLike<CatlassKernel::Ascend950SvdQuantMatmul>;
+static auto& ascend950_svd_quant_matmul = Ascend950SvdQuantMatmulOp::Run;
+REGISTER_TORCH_FUNC(ascend950_svd_quant_matmul);
+
 using Ascend950MultiCoreSplitkMatmulOp = MatmulLike<CatlassKernel::Ascend950MultiCoreSplitkMatmul>;
 static auto& ascend950_multi_core_splitk_matmul = Ascend950MultiCoreSplitkMatmulOp::Run;
 REGISTER_TORCH_FUNC(ascend950_multi_core_splitk_matmul);
 
+using Ascend950A8W4MxMatmulOp = A8W4MxMatmulLike<CatlassKernel::Ascend950A8W4MxMatmul>;
+static auto& ascend950_a8w4_mx_matmul = Ascend950A8W4MxMatmulOp::Run;
+REGISTER_TORCH_FUNC(ascend950_a8w4_mx_matmul);
+
 using Ascend950TailMultiCoreSplitkMatmulOp = MatmulLike<CatlassKernel::Ascend950TailMultiCoreSplitkMatmul>;
 static auto& ascend950_tail_multi_core_splitk_matmul = Ascend950TailMultiCoreSplitkMatmulOp::Run;
 REGISTER_TORCH_FUNC(ascend950_tail_multi_core_splitk_matmul);
+
+using Ascend950GroupedMatmulSliceMFixpipeDequantOp =
+    GroupedMatmulSliceMFixpipeDequantLike<CatlassKernel::Ascend950GroupedMatmulSliceMFixpipeDequant>;
+static auto& grouped_matmul_slice_m_fixpipe_dequant = Ascend950GroupedMatmulSliceMFixpipeDequantOp::Run;
+REGISTER_TORCH_FUNC(grouped_matmul_slice_m_fixpipe_dequant);
 
 } // namespace CatlassKernelWrapper

@@ -167,8 +167,10 @@ set(EXAMPLE_ASCEND950
     63_ascend950_dual_level_quant_mx_batch_matmul
     64_ascend950_matmul_evg
     66_ascend950_streamk_matmul
+    67_ascend950_batched_matmul
     68_ascend950_multi_core_splitk_matmul
     69_ascend950_tail_multi_core_splitk_matmul
+    70_ascend950_grouped_matmul_slice_m_fixpipe_dequant
 )
 
 if(CATLASS_ARCH STREQUAL "2201")
