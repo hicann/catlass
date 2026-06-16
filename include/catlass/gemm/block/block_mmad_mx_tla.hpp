@@ -388,7 +388,9 @@ public:
                 tla::get<0>(tensorTileA.coord()) != lastCoordA[l1AListId].row() ||
                 tla::get<1>(tensorTileA.coord()) != lastCoordA[l1AListId].column()) {
                 copyGmToL1A(tensorL1A, tensorTileA);
-                lastCoordA[l1AListId] = MatrixCoord{tla::get<0>(tensorTileA.coord()), tla::get<1>(tensorTileA.coord())};
+                lastCoordA[l1AListId] = MatrixCoord{
+                    static_cast<MatrixCoord::Index>(tla::get<0>(tensorTileA.coord())),
+                    static_cast<MatrixCoord::Index>(tla::get<1>(tensorTileA.coord()))};
                 lastAddrA[l1AListId] = const_cast<__gm__ typename AscendC::GlobalTensor<ElementA>::PrimType *>(
                     tensorTileA.data().GetPhyAddr()
                 );
@@ -418,7 +420,9 @@ public:
                 tla::get<0>(tensorTileB.coord()) != lastCoordB[l1BListId].row() ||
                 tla::get<1>(tensorTileB.coord()) != lastCoordB[l1BListId].column()) {
                 copyGmToL1B(tensorL1B, tensorTileB);
-                lastCoordB[l1BListId] = MatrixCoord{tla::get<0>(tensorTileB.coord()), tla::get<1>(tensorTileB.coord())};
+                lastCoordB[l1BListId] = MatrixCoord{
+                    static_cast<MatrixCoord::Index>(tla::get<0>(tensorTileB.coord())),
+                    static_cast<MatrixCoord::Index>(tla::get<1>(tensorTileB.coord()))};
                 lastAddrB[l1BListId] = const_cast<__gm__ typename AscendC::GlobalTensor<ElementB>::PrimType *>(
                     tensorTileB.data().GetPhyAddr()
                 );
@@ -490,8 +494,9 @@ public:
                         tla::get<0>(tensorTileA.coord()) != lastCoordA[l1AListIdNext].row() ||
                         tla::get<1>(tensorTileA.coord()) != lastCoordA[l1AListIdNext].column()) {
                         copyGmToL1A(tensorL1A, tensorTileA);
-                        lastCoordA[l1AListIdNext] =
-                            MatrixCoord{tla::get<0>(tensorTileA.coord()), tla::get<1>(tensorTileA.coord())};
+                        lastCoordA[l1AListIdNext] = MatrixCoord{
+                            static_cast<MatrixCoord::Index>(tla::get<0>(tensorTileA.coord())),
+                            static_cast<MatrixCoord::Index>(tla::get<1>(tensorTileA.coord()))};
                         lastAddrA[l1AListIdNext] =
                             const_cast<__gm__ typename AscendC::GlobalTensor<ElementA>::PrimType *>(
                                 tensorTileA.data().GetPhyAddr()
@@ -528,8 +533,9 @@ public:
                         tla::get<0>(tensorTileB.coord()) != lastCoordB[l1BListIdNext].row() ||
                         tla::get<1>(tensorTileB.coord()) != lastCoordB[l1BListIdNext].column()) {
                         copyGmToL1B(tensorL1B, tensorTileB);
-                        lastCoordB[l1BListIdNext] =
-                            MatrixCoord{tla::get<0>(tensorTileB.coord()), tla::get<1>(tensorTileB.coord())};
+                        lastCoordB[l1BListIdNext] = MatrixCoord{
+                            static_cast<MatrixCoord::Index>(tla::get<0>(tensorTileB.coord())),
+                            static_cast<MatrixCoord::Index>(tla::get<1>(tensorTileB.coord()))};
                         lastAddrB[l1BListIdNext] =
                             const_cast<__gm__ typename AscendC::GlobalTensor<ElementB>::PrimType *>(
                                 tensorTileB.data().GetPhyAddr()

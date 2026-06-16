@@ -698,6 +698,14 @@ def gen_data_fp4(m, n, k, trans_a, trans_b, problem_count, quant_type="e2m1"):
     return data_fp32, data_fp8
 
 ##################### Double-standard evalucator
+def get_error_floor(dtype):
+    # This follows the device output precision, not result.bin's FP32 storage type.
+    if dtype == "half":
+        return 2 ** (-11)
+    if dtype == "bf16":
+        return 2 ** (-8)
+    return 2 ** (-12)
+
 def compute_rela_errors(
         result,
         golden
@@ -711,10 +719,7 @@ def compare_mare(
         mare_upgrade,
         dtype
 ):
-    if dtype == "half":
-        err = 2 ** (-11)
-    else:
-        err = 2 ** (-12)
+    err = get_error_floor(dtype)
     res = True if (mare_npu / max(mare_upgrade, err)) < 10 else False
     return res
 
@@ -723,10 +728,7 @@ def compare_mere(
         mere_upgrade,
         dtype
 ):
-    if dtype == "half":
-        err = 2 ** (-11)
-    else:
-        err = 2 ** (-12)
+    err = get_error_floor(dtype)
     res = True if (mere_npu / max(mere_upgrade, err)) < 2 else False
     return res
 
@@ -735,16 +737,13 @@ def compare_rmse(
         rmse_upgrade,
         dtype
 ):
-    if dtype == "half":
-        err = 2 ** (-11)
-    else:
-        err = 2 ** (-12)
+    err = get_error_floor(dtype)
     res = True if (rmse_npu / max(rmse_upgrade, err)) < 2 else False
     return res
 
 
 if __name__ == "__main__":
-    dtype = "fp32"
+    dtype = "bf16"
     start_time = time.time()
     parser = argparse.ArgumentParser()
     parser.add_argument('problem_count', type=int)
@@ -754,6 +753,14 @@ if __name__ == "__main__":
     parser.add_argument('trans_b', type=int)
     parser.add_argument('quant_type', type=str, default="float8_e5m2")
     parser.add_argument('device_id', type=int)
+    # 可选：选择 output/bin 下的可执行文件名。默认基线；ASWT+tail 变体传
+    # --bin 55_ascend950_mx_grouped_matmul_slice_m_aswt 即可用同一脚本做精度比对。
+    default_bin_name = os.environ.get(
+        "CATLASS_EXAMPLE_BIN_NAME",
+        "55_ascend950_mx_grouped_matmul_slice_m"
+    )
+    parser.add_argument('--bin', type=str, default=default_bin_name,
+                        dest="bin_name")
     args = parser.parse_args()
     m = args.m
     n = args.n
@@ -778,7 +785,8 @@ if __name__ == "__main__":
     # 获取算子路径并执行算子用例
     current_dir = os.path.dirname(os.path.abspath(__file__))
     catlass_home_dir = os.path.dirname(os.path.dirname(current_dir))
-    op_path = os.path.join(catlass_home_dir, "output", "bin", "55_ascend950_mx_grouped_matmul_slice_m")
+    op_path = os.path.join(catlass_home_dir, "output", "bin", args.bin_name)
+    print(f"npu op path = {op_path}")
 
     result = subprocess.run(
         [op_path, str(problem_count), str(m), str(n), str(k), str(trans_b), quant_type, str(device_id)],
