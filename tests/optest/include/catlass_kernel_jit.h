@@ -425,6 +425,12 @@ void Ascend950GroupedMatmulSliceM(
 void MatmulEvg(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulEvgParams& params);
 
 /**
+ * @brief JIT interface for example 66_ascend950_streamk_matmul.
+ */
+void Ascend950StreamkMatmul(
+    const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+
+/**
  * @brief Reserved JIT interface for example 102_dynamic_optimized_matmul.
  */
 void DynamicOptimizedMatmul(

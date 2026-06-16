@@ -60,7 +60,9 @@ link_directories(
     ${Python3_SITELIB}/torch_npu/lib
 )
 
-set(TORCH_NPU_DIR "${Python3_SITELIB}/torch_npu")
+if(NOT DEFINED TORCH_NPU_DIR)
+    set(TORCH_NPU_DIR "${Python3_SITELIB}/torch_npu")
+endif()
 
 if(NOT DEFINED CATLASS_DIR)
     set(CATLASS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../..)

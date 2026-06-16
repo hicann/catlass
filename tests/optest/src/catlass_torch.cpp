@@ -185,6 +185,10 @@ using Ascend950BasicMatmulOp = MatmulLike<CatlassKernel::Ascend950BasicMatmul>;
 static auto& ascend950_basic_matmul = Ascend950BasicMatmulOp::Run;
 REGISTER_TORCH_FUNC(ascend950_basic_matmul);
 
+using Ascend950StreamkMatmulOp = MatmulLike<CatlassKernel::Ascend950StreamkMatmul>;
+static auto& ascend950_streamk_matmul = Ascend950StreamkMatmulOp::Run;
+REGISTER_TORCH_FUNC(ascend950_streamk_matmul);
+
 using QuantMatmulFullLoadATLAOp = QuantMatmulLike<CatlassKernel::QuantMatmulFullLoadATLA>;
 static auto& quant_matmul_full_loadA_tla = QuantMatmulFullLoadATLAOp::Run;
 REGISTER_TORCH_FUNC(quant_matmul_full_loadA_tla);

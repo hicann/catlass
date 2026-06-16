@@ -1,5 +1,5 @@
 # -----------------------------------------------------------------------------------------------------------
-# Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
 # This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 # CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -166,6 +166,7 @@ set(EXAMPLE_ASCEND950
     62_ascend950_broadcast_matmul_perblock_quant
     63_ascend950_dual_level_quant_mx_batch_matmul
     64_ascend950_matmul_evg
+    66_ascend950_streamk_matmul
     68_ascend950_multi_core_splitk_matmul
     69_ascend950_tail_multi_core_splitk_matmul
 )

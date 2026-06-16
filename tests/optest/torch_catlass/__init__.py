@@ -66,6 +66,7 @@ __all__ = [
     "mla",
     "ascend950_matmul_evg",
     "EvgPostprocessMode",
+    "ascend950_streamk_matmul",
     "flash_attention_infer",
     "flash_attention_infer_tla",
     "ascend950_flash_attention_infer",
