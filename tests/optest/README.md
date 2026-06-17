@@ -70,6 +70,7 @@ Python API (`torch_catlass.ops.*`)
 - [x] 59_ascend950_a8w4_mx_matmul (Ascend950)
 - [x] 61_ascend950_svd_quant_matmul (Ascend950)
 - [x] 63_ascend950_dual_level_quant_mx_batch_matmul (Ascend950)
+- [x] 71_ascend950_fp8_mx_grouped_matmul_finalize_routing (Ascend950)
 
 ### 暂未接入
 

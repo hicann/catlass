@@ -1135,6 +1135,128 @@ struct DynamicStreamkGemmIdentityBlockSwizzle : public StreamkGemmIdentityBlockS
     }
 };
 
+/**
+ * ColumnBlockSwizzle:  split column
+ */
+struct ColumnBlockSwizzle : public GemmIdentityBlockSwizzle<> {
+    uint32_t nBlocks;
+    uint32_t mBlocks;
+    uint32_t blocksPerCore;
+    uint32_t remainder;
+    uint32_t coreIdx;
+    uint32_t coreNum;
+    uint32_t perCoreTailColumns;
+    uint32_t tailTaskStartIdx;
+
+    CATLASS_DEVICE
+    ColumnBlockSwizzle() {}
+
+    CATLASS_DEVICE
+    ColumnBlockSwizzle(GemmCoord const &problemShape_, MatrixCoord const &tileMN_)
+        : GemmIdentityBlockSwizzle<>(problemShape_, tileMN_)
+    {
+        coreNum = AscendC::GetBlockNum();
+        coreIdx = AscendC::GetBlockIdx();
+        if (AscendC::GetSubBlockNum() != 1) {
+            coreIdx /= 2;
+        }
+
+        SplitTask();
+    }
+
+    CATLASS_DEVICE
+    void Update(GemmCoord const &problemShape_, MatrixCoord const &tileMN_)
+    {
+        problemShape = problemShape_;
+        tileMN = tileMN_;
+
+        loopsMN = CeilDiv(MatrixCoord(problemShape.GetCoordMN()), tileMN);
+        SplitTask();
+    }
+
+    CATLASS_DEVICE
+    void SplitTask()
+    {
+        nBlocks = loopsMN.column();
+        mBlocks = loopsMN.row();
+        // 每个核处理平均处理的列block数
+        blocksPerCore = problemShape.n() / (coreNum * tileMN.column());
+        uint32_t tailColumn = problemShape.n() % (coreNum * tileMN.column());
+
+        perCoreTailColumns = tailColumn / coreNum;
+
+        remainder = tailColumn % coreNum;
+
+        tailTaskStartIdx = blocksPerCore * mBlocks;
+    }
+
+    CATLASS_DEVICE
+    uint32_t GetCoreLoops() const
+    {
+        uint32_t blockPerRowBlock = blocksPerCore;
+        if (perCoreTailColumns > 0 || remainder > coreIdx) {
+            blockPerRowBlock += 1;
+        }
+        return mBlocks * blockPerRowBlock;
+    }
+
+    CATLASS_DEVICE
+    uint32_t GetIsTail(uint32_t taskIdx) const
+    {
+        return (taskIdx >= tailTaskStartIdx);
+    }
+
+    CATLASS_DEVICE
+    uint32_t GetTailOffset() const
+    {
+        uint32_t tailOffset = coreIdx * perCoreTailColumns;
+        tailOffset += (remainder > coreIdx ? coreIdx : remainder);
+        return tailOffset;
+    }
+
+    CATLASS_DEVICE
+    GemmCoord GetBlockCoord(uint32_t taskIdx)
+    {
+        uint32_t mIdx = taskIdx % mBlocks;
+        uint32_t columnLocalIdx = taskIdx / mBlocks;
+
+        uint32_t nIdx;
+        if (taskIdx < tailTaskStartIdx) {
+            nIdx = blocksPerCore * coreIdx + columnLocalIdx;
+        } else {
+            nIdx = blocksPerCore * coreNum;
+        }
+
+        return GemmCoord{mIdx, nIdx, 0};
+    }
+
+    /**
+     * GetActualBlockShape: 根据 blockCoord 计算实际块形状（重写基类方法）
+     */
+    CATLASS_DEVICE
+    GemmCoord GetActualBlockShape(GemmCoord blockCoord)
+    {
+        if (blockCoord.n() >= loopsMN.column()) {
+            return GemmCoord{0, 0, problemShape.k()};
+        }
+
+        uint32_t mActual = (blockCoord.m() == (loopsMN.row() - 1)) ?
+            (problemShape.m() - blockCoord.m() * tileMN.row()) : tileMN.row();
+        uint32_t kActual = problemShape.k();
+        
+        uint32_t nActual;
+        if (blockCoord.n() < blocksPerCore * coreNum) {
+            nActual = tileMN.column();
+        } else if (remainder > coreIdx) {
+            nActual = perCoreTailColumns + 1;
+        } else {
+            nActual = perCoreTailColumns;
+        }
+
+        return GemmCoord{mActual, nActual, kActual};
+    }
+};
+
 }  // namespace Catlass::Gemm::Block
 
 #endif  // CATLASS_GEMM_BLOCK_BLOCK_SWIZZLE_HPP

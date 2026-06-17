@@ -305,4 +305,9 @@ using Ascend950GroupedMatmulSliceMFixpipeDequantOp =
 static auto& grouped_matmul_slice_m_fixpipe_dequant = Ascend950GroupedMatmulSliceMFixpipeDequantOp::Run;
 REGISTER_TORCH_FUNC(grouped_matmul_slice_m_fixpipe_dequant);
 
+using Ascend950Fp8MxGroupedMatmulFinalizeRoutingOp =
+    MxGroupedMatmulFinalizeRoutingLike<CatlassKernel::Ascend950Fp8MxGroupedMatmulFinalizeRouting>;
+static auto& ascend950_fp8_mx_grouped_matmul_finalize_routing = Ascend950Fp8MxGroupedMatmulFinalizeRoutingOp::Run;
+REGISTER_TORCH_FUNC(ascend950_fp8_mx_grouped_matmul_finalize_routing);
+
 } // namespace CatlassKernelWrapper

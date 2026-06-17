@@ -235,4 +235,20 @@ at::Tensor ascend950_fp8_mx_batch_matmul(
  */
 at::Tensor ascend950_dual_level_quant_mx_batch_matmul(const at::Tensor& mat1, const at::Tensor& mat2);
 
+/**
+ * @brief PyTorch extension entry for CATLASS Ascend950 MX FP8 grouped matmul + finalize routing.
+ *
+ * Source: example 71_ascend950_fp8_mx_grouped_matmul_finalize_routing.
+ */
+at::Tensor ascend950_fp8_mx_grouped_matmul_finalize_routing(
+    const at::Tensor& mat1, const at::Tensor& mat2,
+    const at::Tensor& mx_scale_a, const at::Tensor& mx_scale_b,
+    const at::Tensor& group_list, const at::Tensor& logit,
+    const at::Tensor& row_index, const at::Tensor& bias,
+    const at::Tensor& shared_input,
+    bool transA, bool transB,
+    int64_t batch, int64_t data_parallel_size,
+    double shared_input_weight, int64_t shared_input_offset,
+    int64_t group_list_type);
+
 #endif

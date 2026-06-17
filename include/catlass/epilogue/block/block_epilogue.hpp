@@ -54,6 +54,7 @@ class BlockEpilogue {
 #include "catlass/epilogue/block/block_epilogue_per_block_quant_tla.hpp"
 #include "catlass/epilogue/block/block_epilogue_visitor.hpp"
 #include "catlass/epilogue/block/block_epilogue_swiglu_mx_quant.hpp"
+#include "catlass/epilogue/block/block_epilogue_finalize_routing.hpp"
 #endif
 
 #endif  // CATLASS_EPILOGUE_BLOCK_BLOCK_EPILOGUE_HPP

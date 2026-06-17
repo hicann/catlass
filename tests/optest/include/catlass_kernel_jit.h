@@ -477,6 +477,24 @@ void Ascend950StreamkMatmul(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
+ * @brief Runtime parameters for example 71_ascend950_fp8_mx_grouped_matmul_finalize_routing.
+ */
+struct GroupedMxFinalizeRoutingParams : public MatmulParams {
+    uint32_t problemCount = 1;
+    uint32_t groupListType = 0;
+    float sharedInputWeight = 0.0f;
+    uint32_t sharedInputOffset = 0;
+    uint32_t bsdp = 1;
+};
+
+/**
+ * @brief Reserved JIT interface for example 71_ascend950_fp8_mx_grouped_matmul_finalize_routing.
+ */
+void Ascend950Fp8MxGroupedMatmulFinalizeRouting(
+    const uint32_t blockNum, aclrtStream stream, const TParams& tParams,
+    const GroupedMxFinalizeRoutingParams& params);
+
+/**
  * @brief Reserved JIT interface for example 102_dynamic_optimized_matmul.
  */
 void DynamicOptimizedMatmul(

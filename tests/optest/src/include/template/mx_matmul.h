@@ -377,6 +377,129 @@ struct DualLevelQuantMxBatchedMatmulLike {
     }
 };
 
+using GroupedMxFinalizeRoutingKernelFn = void (*)(
+    const uint32_t, aclrtStream, const CatlassKernel::TParams&,
+    const CatlassKernel::GroupedMxFinalizeRoutingParams&);
+
+template <GroupedMxFinalizeRoutingKernelFn KernelFunc>
+struct MxGroupedMatmulFinalizeRoutingLike {
+    using OutputType = at::Tensor;
+
+    static OutputType Run(
+        const at::Tensor& mat1,
+        const at::Tensor& mat2,
+        const at::Tensor& mx_scale_a,
+        const at::Tensor& mx_scale_b,
+        const at::Tensor& group_list,
+        const at::Tensor& logit,
+        const at::Tensor& row_index,
+        const at::Tensor& bias,
+        const at::Tensor& shared_input,
+        bool transA,
+        bool transB,
+        int64_t batch,
+        int64_t data_parallel_size,
+        double shared_input_weight,
+        int64_t shared_input_offset,
+        int64_t group_list_type)
+    {
+        CheckNpuTensor(mat1, "mat1");
+        CheckNpuTensor(mat2, "mat2");
+        CheckNpuTensor(mx_scale_a, "mx_scale_a");
+        CheckNpuTensor(mx_scale_b, "mx_scale_b");
+        CheckNpuTensor(group_list, "group_list");
+        CheckNpuTensor(logit, "logit");
+        CheckNpuTensor(row_index, "row_index");
+        TORCH_CHECK(mat1.scalar_type() == torch::kFloat8_e4m3fn || mat1.scalar_type() == torch::kFloat8_e5m2,
+                    "mat1 must be float8_e4m3fn or float8_e5m2");
+        TORCH_CHECK(mat2.scalar_type() == torch::kFloat8_e4m3fn || mat2.scalar_type() == torch::kFloat8_e5m2,
+                    "mat2 must be float8_e4m3fn or float8_e5m2");
+        CheckMxScaleDType(mx_scale_a, "mx_scale_a");
+        CheckMxScaleDType(mx_scale_b, "mx_scale_b");
+        TORCH_CHECK(group_list.dtype() == torch::kInt64, "group_list must be int64");
+        TORCH_CHECK(logit.dtype() == torch::kFloat32, "logit must be float32");
+        TORCH_CHECK(row_index.dtype() == torch::kInt64, "row_index must be int64");
+
+        bool enableBias = bias.defined() && bias.numel() > 0;
+        bool enableSharedInput = shared_input.defined() && shared_input.numel() > 0;
+        if (enableBias) {
+            CheckNpuTensor(bias, "bias");
+            TORCH_CHECK(bias.dtype() == torch::kBFloat16, "bias must be bfloat16");
+        }
+        if (enableSharedInput) {
+            CheckNpuTensor(shared_input, "shared_input");
+            TORCH_CHECK(shared_input.dtype() == torch::kBFloat16, "shared_input must be bfloat16");
+        }
+
+        CatlassKernel::TParams tParams;
+        tParams.element["A"] = TorchDtypeToAclDtype(mat1.scalar_type());
+        tParams.element["B"] = TorchDtypeToAclDtype(mat2.scalar_type());
+        tParams.element["C"] = ACL_FLOAT;
+        tParams.element["MX_SCALE"] = test_utils::TypeCast<std::string, aclDataType>("float8_e8m0fnu");
+        tParams.transpose["A"] = transA;
+        tParams.transpose["B"] = transB;
+        tParams.transpose["C"] = false;
+        tParams.useNz["A"] = false;
+        tParams.useNz["B"] = false;
+        tParams.useNz["C"] = false;
+
+        int64_t m, k1, k2, n;
+        if (transA) {
+            m = mat1.size(1);
+            k1 = mat1.size(0);
+        } else {
+            m = mat1.size(0);
+            k1 = mat1.size(1);
+        }
+        if (transB) {
+            k2 = mat2.size(mat2.dim() - 1);
+            n = mat2.size(mat2.dim() - 2);
+        } else {
+            k2 = mat2.size(mat2.dim() - 2);
+            n = mat2.size(mat2.dim() - 1);
+        }
+        TORCH_CHECK(k1 == k2, "mat1 and mat2 k dim mismatch (", k1, " vs ", k2, ")");
+
+        uint32_t problemCount = static_cast<uint32_t>(group_list.numel());
+        int64_t bsdp = batch / data_parallel_size;
+
+        CatlassKernel::GroupedMxFinalizeRoutingParams params;
+        params.m = static_cast<uint32_t>(m);
+        params.n = static_cast<uint32_t>(n);
+        params.k = static_cast<uint32_t>(k1);
+        params.batch = static_cast<uint32_t>(batch);
+        params.problemCount = problemCount;
+        params.groupListType = static_cast<uint32_t>(group_list_type);
+        params.sharedInputWeight = static_cast<float>(shared_input_weight);
+        params.sharedInputOffset = static_cast<uint32_t>(shared_input_offset);
+        params.bsdp = static_cast<uint32_t>(bsdp);
+
+        params.inputAddr.resize(9);
+        params.inputAddr[0] = static_cast<uint8_t*>(const_cast<void*>(mat1.storage().data()));
+        params.inputAddr[1] = static_cast<uint8_t*>(const_cast<void*>(mat2.storage().data()));
+        params.inputAddr[2] = static_cast<uint8_t*>(const_cast<void*>(mx_scale_a.storage().data()));
+        params.inputAddr[3] = static_cast<uint8_t*>(const_cast<void*>(mx_scale_b.storage().data()));
+        params.inputAddr[4] = static_cast<uint8_t*>(const_cast<void*>(group_list.storage().data()));
+        params.inputAddr[5] = static_cast<uint8_t*>(const_cast<void*>(logit.storage().data()));
+        params.inputAddr[6] = static_cast<uint8_t*>(const_cast<void*>(row_index.storage().data()));
+        params.inputAddr[7] = enableBias
+            ? static_cast<uint8_t*>(const_cast<void*>(bias.storage().data()))
+            : nullptr;
+        params.inputAddr[8] = enableSharedInput
+            ? static_cast<uint8_t*>(const_cast<void*>(shared_input.storage().data()))
+            : nullptr;
+
+        OutputType output = GetOutputTensor({static_cast<int64_t>(batch), static_cast<int64_t>(n)}, torch::kFloat32);
+        params.outputAddr.resize(1);
+        params.outputAddr[0] = static_cast<uint8_t*>(const_cast<void*>(output.storage().data()));
+
+        aclrtStream stream = c10_npu::getCurrentNPUStream().stream(false);
+        uint32_t aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
+        RUN_NPU_FUNC(KernelFunc, aicCoreNum, stream, tParams, params);
+        return output;
+    }
+};
+
 } // namespace CatlassKernelWrapper
 
 #endif

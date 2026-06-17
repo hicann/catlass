@@ -182,6 +182,15 @@ struct EpilogueVisitor {
 struct BlockEpilogueSwigluMxQuant {
     using ArchTag = Arch::Ascend950;
 };
+
+// For Ascend950, finalize routing epilogue (AIV post-processing)
+// template <uint32_t UB_STAGES_>
+template <uint32_t UB_STAGES_>
+struct EpilogueAscend950FinalizeRouting {
+    using ArchTag = Arch::Ascend950;
+    static constexpr uint32_t UB_STAGES = UB_STAGES_;
+};
+
 }  // namespace Catlass::Epilogue
 
 #endif  // CATLASS_EPILOGUE_DISPATCH_POLICY_HPP

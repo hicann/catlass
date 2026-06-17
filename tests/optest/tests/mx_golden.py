@@ -658,3 +658,120 @@ def prepare_grouped_mx_swiglu_quant_inputs(
 
     return (a_fp8_npu, b_fp8_trans_npu, a_scale_npu, b_scale_trans_npu,
             group_list_noncum, expected_q, expected_q_scale)
+
+
+def prepare_fp8_mx_grouped_matmul_finalize_routing_inputs(
+    m: int,
+    n: int,
+    k: int,
+    problem_count: int,
+    batch: int,
+    data_parallel_size: int = 1,
+    enable_bias: bool = True,
+    enable_shared_input: bool = True,
+    shared_input_weight: float = 0.5,
+    shared_input_offset: int = 0,
+    group_list_type: int = 0,
+    trans_b: bool = False,
+    quant_type: torch.dtype = torch.float8_e4m3fn,
+    device: str = "npu",
+) -> Tuple[torch.Tensor, ...]:
+    """Build MX-FP8 grouped matmul + finalize routing inputs and golden (example 65).
+
+    Returns:
+        (a_fp8, b_fp8, a_scale, b_scale, group_list, logit, row_index,
+         bias, shared_input, expected)
+    """
+    from itertools import accumulate
+
+    _FP8_FORMAT = {
+        torch.float8_e4m3fn: (8, 448.0),
+        torch.float8_e5m2: (15, 57344.0),
+    }
+    fp8_dtype = quant_type
+    emax, fp8_max = _FP8_FORMAT[quant_type]
+    bsdp = batch // data_parallel_size
+
+    if problem_count == 1:
+        group_sizes = [m]
+    else:
+        weights = list(range(1, problem_count + 1))
+        total_weight = sum(weights)
+        group_sizes = [max(1, m * w // total_weight) for w in weights]
+        diff = m - sum(group_sizes)
+        group_sizes[-1] += diff
+
+    if group_list_type == 0:
+        group_list = torch.tensor(list(accumulate(group_sizes)), dtype=torch.int64)
+    else:
+        group_list = torch.tensor(group_sizes, dtype=torch.int64)
+
+    a_fp32 = torch.randn(m, k, dtype=torch.float32)
+    a_fp8, a_scale, a_deq = _quantize_axis_last(a_fp32, fp8_dtype, emax, fp8_max)
+    a_scale = a_scale.reshape(m, a_scale.shape[1] // 2, 2).contiguous()
+
+    b_deq_list = []
+    b_fp8_list = []
+    b_scale_list = []
+    for _ in range(problem_count):
+        b_fp32 = torch.randn(k, n, dtype=torch.float32)
+        b_fp8_i, b_scale_i, b_deq_i = _quantize_axis_first(b_fp32, fp8_dtype, emax, fp8_max)
+        b_scale_i = b_scale_i.reshape(b_scale_i.shape[0] // 2, 2, b_scale_i.shape[1])
+        if trans_b:
+            b_fp8_i = b_fp8_i.t().contiguous()
+            b_scale_i = b_scale_i.permute(2, 0, 1).contiguous()
+        else:
+            b_scale_i = b_scale_i.permute(0, 2, 1).contiguous()
+        b_fp8_list.append(b_fp8_i)
+        b_scale_list.append(b_scale_i)
+        b_deq_list.append(b_deq_i)
+
+    b_fp8 = torch.stack(b_fp8_list, dim=0)
+    b_scale = torch.stack(b_scale_list, dim=0)
+
+    logit = torch.randn(m, dtype=torch.float32)
+    row_index = torch.arange(m, dtype=torch.int64) % batch
+
+    bias = torch.empty(0, dtype=torch.bfloat16)
+    if enable_bias:
+        bias = torch.randn(problem_count, n, dtype=torch.bfloat16)
+
+    shared_input = torch.empty(0, dtype=torch.bfloat16)
+    if enable_shared_input:
+        shared_input = torch.randn(bsdp, n, dtype=torch.bfloat16)
+
+    c_parts = []
+    offset = 0
+    for i in range(problem_count):
+        mi = group_sizes[i]
+        a_slice = a_deq[offset:offset + mi, :]
+        c_part = torch.matmul(a_slice, b_deq_list[i])
+        if enable_bias:
+            c_part += bias[i, :].to(torch.float32).unsqueeze(0)
+        c_parts.append(c_part)
+        offset += mi
+
+    c_fp32 = torch.cat(c_parts, dim=0)
+    out_fp32 = torch.zeros(batch, n, dtype=torch.float32)
+
+    if enable_shared_input:
+        contribution = shared_input_weight * shared_input.to(torch.float32)
+        out_fp32[shared_input_offset:(shared_input_offset + bsdp), :] += contribution
+
+    weighted = logit.unsqueeze(1) * c_fp32
+    out_fp32.index_add_(0, row_index, weighted)
+
+    if device == "npu":
+        a_fp8 = a_fp8.contiguous().npu()
+        b_fp8 = b_fp8.contiguous().npu()
+        a_scale = a_scale.contiguous().npu()
+        b_scale = b_scale.contiguous().npu()
+        group_list = group_list.contiguous().npu()
+        logit = logit.contiguous().npu()
+        row_index = row_index.contiguous().npu()
+        if enable_bias:
+            bias = bias.contiguous().npu()
+        if enable_shared_input:
+            shared_input = shared_input.contiguous().npu()
+
+    return a_fp8, b_fp8, a_scale, b_scale, group_list, logit, row_index, bias, shared_input, out_fp32

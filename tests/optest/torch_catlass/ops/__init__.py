@@ -68,6 +68,9 @@ from .ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant import (
     ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant,  # example 65
 )
 from .ascend950_streamk_matmul import ascend950_streamk_matmul  # example 66
+from .ascend950_fp8_mx_grouped_matmul_finalize_routing import (  # example 71
+    ascend950_fp8_mx_grouped_matmul_finalize_routing,
+)
 from .multi_core_splitk_matmul import ascend950_multi_core_splitk_matmul  # example 68
 from .tail_multi_core_splitk_matmul import ascend950_tail_multi_core_splitk_matmul  # example 69
 
@@ -128,6 +131,7 @@ __all__ = [
     "ascend950_matmul_full_dequant",      # example 57
     "ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant",  # example 65
     "ascend950_streamk_matmul",           # example 66
+    "ascend950_fp8_mx_grouped_matmul_finalize_routing",  # example 71
     "ascend950_multi_core_splitk_matmul",  # example 68
     "ascend950_tail_multi_core_splitk_matmul",  # example 69
 ]
