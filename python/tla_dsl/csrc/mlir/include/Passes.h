@@ -9,6 +9,7 @@ std::unique_ptr<mlir::Pass> createTlaAllocPtrToHivmPointerCastPass();
 std::unique_ptr<mlir::Pass> createTlaLowerToStdPass();
 std::unique_ptr<mlir::Pass> createTlaSyncToHivmPass();
 std::unique_ptr<mlir::Pass> createTlaFuncToHaccPass();
+std::unique_ptr<mlir::Pass> createTlaSplitMixedFuncPass();
 std::unique_ptr<mlir::Pass> createTlaLowerToHivmPass();
 std::unique_ptr<mlir::Pass> createConvertTlaToVectorPass();
 std::unique_ptr<mlir::Pass> createAddKernelPrologueEpiloguePass();

@@ -84,6 +84,45 @@ def _rewrite_imports(text: str) -> str:
     )
     text = re.sub(r"_ods_ir\.OpResult\[[^\]]+\]", "_ods_ir.OpResult", text)
     text = re.sub(r"_ods_ir\.Value\[[^\]]+\]", "_ods_ir.Value", text)
+    text = text.replace(
+        "def __init__(self, flag, *, loc=None, ip=None):\n"
+        "    operands = []\n"
+        "    results = []\n"
+        "    attributes = {}\n"
+        "    regions = None\n"
+        "    operands.append(_get_op_result_or_value(flag))",
+        "def __init__(self, cross_flag_value, *, loc=None, ip=None):\n"
+        "    operands = []\n"
+        "    results = []\n"
+        "    attributes = {}\n"
+        "    regions = None\n"
+        "    operands.append(_get_op_result_or_value(cross_flag_value))",
+        2,
+    )
+    text = text.replace(
+        "def cross_core_set_flag(flag, *, loc=None, ip=None) -> _ods_ir.Operation:\n"
+        "  return _get_op_result_or_op_results(CrossCoreSetFlagOp(flag=flag, loc=loc, ip=ip))",
+        "def cross_core_set_flag(cross_flag_value, *, loc=None, ip=None) -> _ods_ir.Operation:\n"
+        "  return _get_op_result_or_op_results(CrossCoreSetFlagOp(cross_flag_value=cross_flag_value, loc=loc, ip=ip))",
+    )
+    text = text.replace(
+        "def cross_core_wait_flag(flag, *, loc=None, ip=None) -> _ods_ir.Operation:\n"
+        "  return _get_op_result_or_op_results(CrossCoreWaitFlagOp(flag=flag, loc=loc, ip=ip))",
+        "def cross_core_wait_flag(cross_flag_value, *, loc=None, ip=None) -> _ods_ir.Operation:\n"
+        "  return _get_op_result_or_op_results(CrossCoreWaitFlagOp(cross_flag_value=cross_flag_value, loc=loc, ip=ip))",
+    )
+    text = text.replace(
+        "def __init__(self, flag, name, src_pipe, dst_pipe, mode=None, *, loc=None, ip=None):",
+        "def __init__(self, cross_flag_value, name, src_pipe, dst_pipe, mode=None, *, loc=None, ip=None):",
+        1,
+    )
+    text = text.replace("    results.append(flag)", "    results.append(cross_flag_value)", 1)
+    text = text.replace(
+        "def cross_flag(flag, name, src_pipe, dst_pipe, mode=None, *, loc=None, ip=None) -> _ods_ir.Value:\n"
+        "  return _get_op_result_or_op_results(CrossFlagOp(flag=flag, name=name, src_pipe=src_pipe, dst_pipe=dst_pipe, mode=mode, loc=loc, ip=ip))",
+        "def cross_flag(cross_flag_value, name, src_pipe, dst_pipe, mode=None, *, loc=None, ip=None) -> _ods_ir.Value:\n"
+        "  return _get_op_result_or_op_results(CrossFlagOp(cross_flag_value=cross_flag_value, name=name, src_pipe=src_pipe, dst_pipe=dst_pipe, mode=mode, loc=loc, ip=ip))",
+    )
     return text
 
 

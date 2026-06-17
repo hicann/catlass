@@ -3,8 +3,11 @@
 
 #include "bishengir/Conversion/ArithToHIVMAVE/ArithToHIVMAVE.h"
 #include "bishengir/Conversion/HIVMAVEToAVEIntrin/HIVMAVEToAVEIntrin.h"
+#include "bishengir/Conversion/HIVMAVEToStandard/HIVMAVEToStandard.h"
 #include "bishengir/Conversion/HIVMToStandard/HIVMToStandard.h"
 #include "bishengir/Conversion/VectorToHIVMAVE/VectorToHIVMAVE.h"
+
+#include "mlir/Dialect/MemRef/Transforms/Passes.h"
 
 namespace tla {
 namespace {
@@ -71,6 +74,7 @@ std::unique_ptr<Pass> createAddKernelPrologueEpiloguePass() {
 
 void registerTlaPasses() {
   registerTlaFuncToHaccPass();
+  registerTlaSplitMixedFuncPass();
   registerTlaLowerToHivmPass();
   registerConvertTlaToVectorPass();
   registerTlaSyncToHivmPass();
@@ -86,6 +90,7 @@ void buildTlaPipeline(OpPassManager &pm) {
   // tla-lower-to-std to repair required HACC/HIVM attrs on any func.func ops
   // introduced or modified by later lowering.
   pm.addPass(createTlaFuncToHaccPass());
+  pm.addPass(createTlaSplitMixedFuncPass());
   pm.addPass(createTlaLowerToHivmPass());
   pm.addPass(createTlaSyncToHivmPass());
   pm.addPass(createTlaAllocPtrToHivmPointerCastPass());
@@ -95,12 +100,14 @@ void buildTlaPipeline(OpPassManager &pm) {
   pm.addPass(createTlaFuncToHaccPass());
   pm.addPass(createAddKernelPrologueEpiloguePass());
   pm.addPass(createCSEPass());
-  pm.addPass(createConvertSCFToCFPass());
   pm.addPass(mlir::createVectorToHIVMAVEConversionPass());
   pm.nest<func::FuncOp>().addPass(mlir::createArithToHIVMAVEConversionPass());
   mlir::ConvertHIVMToStandardOptions hivmToStdOptions;
   pm.addPass(mlir::createConvertHIVMToStandardPass(hivmToStdOptions));
+  pm.addPass(mlir::createConvertHIVMAVEToStandardPass());
+  pm.addPass(mlir::memref::createExpandStridedMetadataPass());
   pm.addPass(mlir::createConvertHIVMAVEToAVEIntrinPass());
+  pm.addPass(createConvertSCFToCFPass());
 }
 
 } // namespace tla

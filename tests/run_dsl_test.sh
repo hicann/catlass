@@ -9,8 +9,9 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 #
-# End-to-end validation for python/tla_dsl/examples/end_to_end/basic_mmad (basic_matmul.py)
-# and python/tla_dsl/examples/end_to_end/basic_vadd (basic_vadd.py).
+# End-to-end validation for python/tla_dsl/examples/end_to_end/basic_mmad (basic_matmul.py),
+# python/tla_dsl/examples/end_to_end/basic_vadd (basic_vadd.py), and
+# python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed.py).
 #
 # Fixed toolchain paths relative to WORKSPACE_ROOT (= parent of catlass repo):
 #   CANN:             Ascend/9.1.0-beta.1/ascend-toolkit/set_env.sh
@@ -41,6 +42,7 @@ SKIP_PREPARE="${SKIP_PREPARE:-0}"
 
 BASIC_MMAD_REL="examples/end_to_end/basic_mmad/basic_matmul.py"
 BASIC_VADD_REL="examples/end_to_end/basic_vadd/basic_vadd.py"
+BASIC_MIXED_REL="examples/end_to_end/basic_mixed/basic_mixed.py"
 
 _ascendnpu_ir_dev_is_prebuilt() {
     local root="$1"
@@ -57,6 +59,7 @@ Usage: $(basename "$0") [options]
 Run end-to-end validation for:
   - basic_mmad (basic_matmul.py --run --all-layouts --all-mmad-dtypes)
   - basic_vadd (basic_vadd.py --run --all-dtypes)
+  - basic_mixed (basic_mixed.py --run)
 Runs basic_mmad default MNK plus m=1, n=2, k=3.
 Activates conda env "${CONDA_ENV}", sources CANN set_env.sh, exports AscendNPU-IR-Dev MLIR/LLVM
 env, then builds (optional) and runs the test.
@@ -234,6 +237,10 @@ if [[ ! -f "${TLA_DSL_DIR}/${BASIC_VADD_REL}" ]]; then
     echo "error: missing ${BASIC_VADD_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
+if [[ ! -f "${TLA_DSL_DIR}/${BASIC_MIXED_REL}" ]]; then
+    echo "error: missing ${BASIC_MIXED_REL} under ${TLA_DSL_DIR}" >&2
+    exit 1
+fi
 
 _run_basic_mmad_case() {
     local label="$1"
@@ -258,5 +265,15 @@ _run_basic_vadd_case() {
 }
 
 _run_basic_vadd_case
+
+_run_basic_mixed_case() {
+    echo "==> Running basic_mixed validation [fixed shape/dtypes]: --run --device ${DEVICE_ID}"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${BASIC_MIXED_REL}" --run --device "${DEVICE_ID}"
+    )
+}
+
+_run_basic_mixed_case
 
 echo "==> run_dsl_test.sh finished successfully"

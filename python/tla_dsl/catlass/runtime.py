@@ -590,6 +590,8 @@ def _internal_frontend_region(
     _mark_frontend_exec_unit(exec_kind)
     mlir_loc = _capture_caller_location()
     op = mlir_ir.Operation.create(f"tla.{kind}", regions=1, loc=mlir_loc)
+    if kind == "vector":
+        op.attributes["tla.vector_role"] = mlir_ir.StringAttr.get("region")
     if kind == "vec.func":
         op.attributes["mode"] = mlir_ir.StringAttr.get("simd" if mode is None else mode)
     block = op.regions[0].blocks.append()

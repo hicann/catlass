@@ -2287,9 +2287,10 @@ def flag(
 @dsl_user_op
 def cross_flag(
     name: str,
-    mode: CrossModeLike,
-    pipe: PipeLike,
+    src_pipe: PipeLike,
+    dst_pipe: PipeLike,
     *,
+    mode: int = 2,
     loc: mlir_ir.Location | None = None,
 ) -> TlaCrossFlag:
     """Materialize a cross-core synchronization flag."""
@@ -2298,41 +2299,58 @@ def cross_flag(
             "cross_flag",
             f"invalid argument 'name' (position 0): expected str, got {_type_name(name)}",
         )
-    _require_cross_mode("cross_flag", mode, 1)
-    _require_pipe("cross_flag", "pipe", pipe, 2)
+    if not isinstance(mode, int) or mode not in (0, 1, 2):
+        _op_error(
+            "cross_flag",
+            f"invalid argument 'mode': expected one of 0, 1, or 2, got {mode!r}",
+        )
+    _require_pipe("cross_flag", "src_pipe", src_pipe, 1)
+    _require_pipe("cross_flag", "dst_pipe", dst_pipe, 2)
     _require_frontend_state("cross_flag")
     ctx = loc.context if loc is not None else mlir_ir.Context.current
-    op = mlir_ir.Operation.create(
-        "tla.cross_flag",
-        attributes={
-            "name": mlir_ir.StringAttr.get(name),
-            "mode": mlir_ir.StringAttr.get(str(_token(mode))),
-            "pipe": mlir_ir.StringAttr.get(str(_token(pipe))),
-        },
-        results=[_tla_type_bridge.cross_flag_type_get(ctx)],
+    src_value = str(_token(src_pipe)).lower()
+    dst_value = str(_token(dst_pipe)).lower()
+    src_attr = mlir_ir.Attribute.parse(f"#tla.pipe<{src_value}>", context=ctx)
+    dst_attr = mlir_ir.Attribute.parse(f"#tla.pipe<{dst_value}>", context=ctx)
+    mode_attr = None
+    if mode != 2:
+        mode_attr = mlir_ir.IntegerAttr.get(
+            mlir_ir.IntegerType.get_signless(64, context=ctx), mode
+        )
+    return _tla_ops_gen.cross_flag(
+        _tla_type_bridge.cross_flag_type_get(ctx),
+        name,
+        src_attr,
+        dst_attr,
+        mode=mode_attr,
         loc=loc,
     )
-    return op.results[0]
 
 
 @dsl_user_op
 def cross_core_set_flag(
-    flag_value: CrossFlagLike, *, loc: mlir_ir.Location | None = None
+    cross_flag_value: CrossFlagLike, *, loc: mlir_ir.Location | None = None
 ) -> None:
     """Set a cross-core synchronization flag."""
-    _require_category("cross_core_set_flag", "flag", flag_value, "cross_flag", 0)
+    _require_category(
+        "cross_core_set_flag", "flag", cross_flag_value, "cross_flag", 0
+    )
     _require_frontend_state("cross_core_set_flag")
-    return _tla_ops_gen.cross_core_set_flag(_as_value(flag_value), loc=loc)
+    _runtime._check_frontend_region_op("cross_core_set_flag", {"cube", "vector"})
+    return _tla_ops_gen.cross_core_set_flag(_as_value(cross_flag_value), loc=loc)
 
 
 @dsl_user_op
 def cross_core_wait_flag(
-    flag_value: CrossFlagLike, *, loc: mlir_ir.Location | None = None
+    cross_flag_value: CrossFlagLike, *, loc: mlir_ir.Location | None = None
 ) -> None:
     """Wait on a cross-core synchronization flag."""
-    _require_category("cross_core_wait_flag", "flag", flag_value, "cross_flag", 0)
+    _require_category(
+        "cross_core_wait_flag", "flag", cross_flag_value, "cross_flag", 0
+    )
     _require_frontend_state("cross_core_wait_flag")
-    return _tla_ops_gen.cross_core_wait_flag(_as_value(flag_value), loc=loc)
+    _runtime._check_frontend_region_op("cross_core_wait_flag", {"cube", "vector"})
+    return _tla_ops_gen.cross_core_wait_flag(_as_value(cross_flag_value), loc=loc)
 
 
 @dsl_user_op
@@ -2689,14 +2707,24 @@ def add(
 def arch_block_idx(*, loc: mlir_ir.Location | None = None) -> TlaIndex:
     """Return block index in Tla execution model."""
     _require_frontend_state("arch.block_idx")
-    return _tla_ops_gen.arch_block_idx(mlir_ir.IndexType.get(), loc=loc)
+    value = _tla_ops_gen.arch_block_idx(mlir_ir.IndexType.get(), loc=loc)
+    return _wrap_frontend_value(value)
+
+
+@dsl_user_op
+def arch_sub_block_idx(*, loc: mlir_ir.Location | None = None) -> TlaIndex:
+    """Return sub-block index in Tla execution model."""
+    _require_frontend_state("arch.sub_block_idx")
+    value = _tla_ops_gen.arch_sub_block_idx(mlir_ir.IndexType.get(), loc=loc)
+    return _wrap_frontend_value(value)
 
 
 @dsl_user_op
 def arch_block_dim(*, loc: mlir_ir.Location | None = None) -> TlaIndex:
     """Return block dimension in Tla execution model."""
     _require_frontend_state("arch.block_dim")
-    return _tla_ops_gen.arch_block_dim(mlir_ir.IndexType.get(), loc=loc)
+    value = _tla_ops_gen.arch_block_dim(mlir_ir.IndexType.get(), loc=loc)
+    return _wrap_frontend_value(value)
 
 
 @dsl_user_op
@@ -2789,12 +2817,14 @@ _require_generated("mmad")
 _require_generated("broadcast")
 _require_generated("add")
 _require_generated("arch_block_idx")
+_require_generated("arch_sub_block_idx")
 _require_generated("arch_block_dim")
 _require_generated("inttoptr")
 _require_generated("recast_ptr")
 
 arch = _Namespace()
 arch._set("block_idx", arch_block_idx)
+arch._set("sub_block_idx", arch_sub_block_idx)
 arch._set("block_dim", arch_block_dim)
 arch._set("L1", _runtime.utils.L1)
 arch._set("L0A", _runtime.utils.L0A)

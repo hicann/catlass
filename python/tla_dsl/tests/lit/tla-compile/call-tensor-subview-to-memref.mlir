@@ -20,8 +20,9 @@ module {
 // CHECK-SAME: %{{.*}}: memref<32x32xf32, strided<[128, 1], offset: ?>, #hivm.address_space<gm>>
 // CHECK-LABEL: func.func @caller(
 // CHECK-SAME: %[[ARG0:.*]]: memref<128x128xf32, #hivm.address_space<gm>>
-// CHECK: %[[SUBVIEW:.*]] = memref.subview %[[ARG0]]
-// CHECK: %[[CAST:.*]] = memref.cast %[[SUBVIEW]]
+// CHECK: %[[BASE:.*]], %{{.*}}, %{{.*}}:2, %{{.*}}:2 = memref.extract_strided_metadata %[[ARG0]]
+// CHECK: %[[TILE:.*]] = memref.reinterpret_cast %[[BASE]] to offset: [4128], sizes: [32, 32], strides: [128, 1]
+// CHECK: %[[CAST:.*]] = memref.cast %[[TILE]]
 // CHECK-SAME: to memref<32x32xf32, strided<[128, 1], offset: ?>, #hivm.address_space<gm>>
 // CHECK: call @consume_tile(%[[CAST]])
 // CHECK-NOT: !tla.tensor

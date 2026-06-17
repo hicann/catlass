@@ -11,6 +11,7 @@
 namespace tla {
 
 void registerTlaFuncToHaccPass();
+void registerTlaSplitMixedFuncPass();
 void registerTlaLowerToHivmPass();
 void registerConvertTlaToVectorPass();
 void registerTlaSyncToHivmPass();

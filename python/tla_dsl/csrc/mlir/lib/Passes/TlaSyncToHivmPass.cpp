@@ -37,6 +37,16 @@ private:
     Operation *firstWaitOp = nullptr;
   };
 
+  struct CrossFlagInfo {
+    int64_t id = -1;
+    PipeAttr srcPipe;
+    PipeAttr dstPipe;
+    int64_t mode = 2;
+    bool hasSet = false;
+    bool hasWait = false;
+    Operation *firstWaitOp = nullptr;
+  };
+
   static FailureOr<hivm::PIPE> getHivmPipe(Pipe pipe) {
     switch (pipe) {
     case Pipe::scalar:
@@ -65,6 +75,27 @@ private:
     if (failed(pipe))
       return failure();
     return hivm::PipeAttr::get(ctx, *pipe);
+  }
+
+  static FailureOr<hivm::TCoreType> inferCrossCoreFlagCore(Operation *op) {
+    if (auto funcOp = op->getParentOfType<func::FuncOp>()) {
+      auto coreType =
+          funcOp->getAttrOfType<hivm::TFuncCoreTypeAttr>(hivm::TFuncCoreTypeAttr::name);
+      if (coreType && coreType.getFuncCoreType() == hivm::TFuncCoreType::AIC)
+        return hivm::TCoreType::CUBE;
+      if (coreType && coreType.getFuncCoreType() == hivm::TFuncCoreType::AIV)
+        return hivm::TCoreType::VECTOR;
+    }
+
+    for (Operation *parent = op->getParentOp(); parent; parent = parent->getParentOp()) {
+      if (isa<::tla::CubeOp>(parent))
+        return hivm::TCoreType::CUBE;
+      if (isa<::tla::VectorOp, ::tla::VecFuncOp>(parent))
+        return hivm::TCoreType::VECTOR;
+    }
+    op->emitError() << "expected " << op->getName().getStringRef()
+                    << " to be inside tla.cube/tla.vector or a split mixed function";
+    return failure();
   }
 
   static FailureOr<StringRef> resolveFlagName(Operation *op, Value flagOperand) {
@@ -156,6 +187,66 @@ private:
     return success();
   }
 
+  LogicalResult lowerCrossCoreSetOrWaitFlag(Operation *op, bool isSet,
+                                            llvm::StringMap<CrossFlagInfo> &crossFlagInfoByName,
+                                            SmallVectorImpl<Operation *> &toErase) const {
+    if (op->getNumOperands() != 1) {
+      op->emitError() << "expected " << op->getName().getStringRef()
+                      << " to have exactly 1 operand";
+      return failure();
+    }
+
+    auto flagDef = op->getOperand(0).getDefiningOp<::tla::CrossFlagOp>();
+    if (!flagDef || !flagDef->getAttrOfType<StringAttr>("name")) {
+      op->emitError() << "expected " << op->getName().getStringRef()
+                      << " to have a tla.cross_flag operand";
+      return failure();
+    }
+    StringRef flagName = flagDef->getAttrOfType<StringAttr>("name").getValue();
+    auto flagIt = crossFlagInfoByName.find(flagName);
+    if (flagIt == crossFlagInfoByName.end() || flagIt->second.id < 0) {
+      op->emitError() << "unknown cross flag name '" << flagName << "'";
+      return failure();
+    }
+
+    CrossFlagInfo &info = flagIt->second;
+    if (isSet) {
+      info.hasSet = true;
+    } else {
+      info.hasWait = true;
+      if (!info.firstWaitOp)
+        info.firstWaitOp = op;
+    }
+
+    if (info.mode != 2) {
+      op->emitError() << "unsupported cross_flag mode " << info.mode
+                      << "; only mode 2 is currently supported";
+      return failure();
+    }
+
+    auto core = inferCrossCoreFlagCore(op);
+    auto setPipeAttr = getHivmPipeAttr(op->getContext(), info.srcPipe);
+    auto waitPipeAttr = getHivmPipeAttr(op->getContext(), info.dstPipe);
+    if (failed(core) || failed(setPipeAttr) || failed(waitPipeAttr)) {
+      op->emitError() << "unsupported core or pipe for HIVM cross-core flag lowering";
+      return failure();
+    }
+
+    PatternRewriter rewriter(op->getContext());
+    rewriter.setInsertionPoint(op);
+    auto coreTypeAttr = hivm::TCoreTypeAttr::get(op->getContext(), *core);
+    OpFoldResult flag = IntegerAttr::get(IntegerType::get(op->getContext(), 64), info.id);
+    if (isSet) {
+      rewriter.create<hivm::SyncBlockSetOp>(op->getLoc(), coreTypeAttr, *setPipeAttr,
+                                            *waitPipeAttr, flag);
+    } else {
+      rewriter.create<hivm::SyncBlockWaitOp>(op->getLoc(), coreTypeAttr, *setPipeAttr,
+                                             *waitPipeAttr, flag);
+    }
+    toErase.push_back(op);
+    return success();
+  }
+
   LogicalResult lowerPipeBarrier(::tla::PipeBarrierOp op) const {
     auto pipeAttr = op->getAttrOfType<PipeAttr>("pipe");
     if (!pipeAttr) {
@@ -186,16 +277,21 @@ public:
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<::tla::TlaDialect, hivm::HIVMDialect, arith::ArithDialect>();
+    registry.insert<::tla::TlaDialect, hivm::HIVMDialect, arith::ArithDialect,
+                    func::FuncDialect>();
   }
 
   void runOnOperation() override {
     ModuleOp module = getOperation();
     SmallVector<::tla::FlagOp, 8> tlaFlagOps;
+    SmallVector<::tla::CrossFlagOp, 8> tlaCrossFlagOps;
     SmallVector<Operation *, 8> flagUseOps;
+    SmallVector<Operation *, 8> crossCoreUseOps;
     SmallVector<::tla::PipeBarrierOp, 8> pipeBarrierOps;
     DenseMap<PipePair, int64_t, PipePairInfo> nextEventIdByPipe;
     llvm::StringMap<FlagInfo> flagInfoByName;
+    llvm::StringMap<CrossFlagInfo> crossFlagInfoByName;
+    int64_t nextCrossFlagId = 0;
     SmallVector<Operation *, 8> toErase;
 
     module.walk([&](::tla::FlagOp op) { tlaFlagOps.push_back(op); });
@@ -264,6 +360,93 @@ public:
       return;
     }
 
+    module.walk([&](::tla::CrossFlagOp op) { tlaCrossFlagOps.push_back(op); });
+    for (::tla::CrossFlagOp flagOp : tlaCrossFlagOps) {
+      if (flagOp->getNumResults() != 1) {
+        flagOp->emitError() << "expected tla.cross_flag to have exactly 1 result";
+        signalPassFailure();
+        return;
+      }
+      auto nameAttr = flagOp->getAttrOfType<StringAttr>("name");
+      if (!nameAttr) {
+        flagOp->emitError() << "expected tla.cross_flag to have a 'name' attribute";
+        signalPassFailure();
+        return;
+      }
+      auto srcPipeAttr = flagOp->getAttrOfType<PipeAttr>("src_pipe");
+      auto dstPipeAttr = flagOp->getAttrOfType<PipeAttr>("dst_pipe");
+      auto modeAttr = flagOp->getAttrOfType<IntegerAttr>("mode");
+      int64_t mode = modeAttr ? modeAttr.getInt() : 2;
+      if (!srcPipeAttr || !dstPipeAttr) {
+        flagOp->emitError() << "expected tla.cross_flag to have src_pipe and dst_pipe";
+        signalPassFailure();
+        return;
+      }
+      auto insert = crossFlagInfoByName.try_emplace(nameAttr.getValue(), CrossFlagInfo{});
+      if (!insert.second) {
+        CrossFlagInfo &existing = insert.first->second;
+        if ((existing.srcPipe && existing.srcPipe != srcPipeAttr) ||
+            (existing.dstPipe && existing.dstPipe != dstPipeAttr) || existing.mode != mode) {
+          flagOp->emitError() << "conflicting tla.cross_flag definition for name '"
+                              << nameAttr.getValue() << "'";
+          signalPassFailure();
+          return;
+        }
+      }
+      CrossFlagInfo &info = insert.first->second;
+      if (info.id < 0) {
+        if (nextCrossFlagId > 10) {
+          flagOp->emitError() << "cross flag id exhausted (max id 10, 11 flags)";
+          signalPassFailure();
+          return;
+        }
+        info.id = nextCrossFlagId++;
+      }
+      if (!info.srcPipe)
+        info.srcPipe = srcPipeAttr;
+      if (!info.dstPipe)
+        info.dstPipe = dstPipeAttr;
+      info.mode = mode;
+      for (auto &use : flagOp->getResult(0).getUses()) {
+        Operation *userOp = use.getOwner();
+        if (llvm::isa<::tla::CrossCoreSetFlagOp, ::tla::CrossCoreWaitFlagOp>(userOp))
+          continue;
+        flagOp->emitError() << "tla.cross_flag result is used by unsupported op '"
+                            << userOp->getName().getStringRef() << "'";
+        signalPassFailure();
+        return;
+      }
+    }
+
+    module.walk([&](Operation *op) {
+      if (llvm::isa<::tla::CrossCoreSetFlagOp, ::tla::CrossCoreWaitFlagOp>(op))
+        crossCoreUseOps.push_back(op);
+    });
+    for (Operation *op : crossCoreUseOps) {
+      if (!op->getBlock())
+        continue;
+      bool isSet = llvm::isa<::tla::CrossCoreSetFlagOp>(op);
+      if (failed(lowerCrossCoreSetOrWaitFlag(op, isSet, crossFlagInfoByName, toErase))) {
+        signalPassFailure();
+        return;
+      }
+    }
+
+    for (auto &entry : crossFlagInfoByName) {
+      CrossFlagInfo &info = entry.getValue();
+      if (!info.hasWait || info.hasSet)
+        continue;
+      if (info.firstWaitOp) {
+        info.firstWaitOp->emitError()
+            << "cross_core_wait_flag used without cross_core_set_flag for '" << entry.getKey() << "'";
+      } else {
+        module.emitError() << "cross_core_wait_flag used without cross_core_set_flag for '"
+                           << entry.getKey() << "'";
+      }
+      signalPassFailure();
+      return;
+    }
+
     for (::tla::FlagOp flagOp : tlaFlagOps) {
       Operation *flagRaw = flagOp.getOperation();
       if (!flagRaw->getBlock() || flagRaw->getNumResults() != 1)
@@ -280,6 +463,12 @@ public:
         }
       }
       if (allUsersErased)
+        toErase.push_back(flagRaw);
+    }
+
+    for (::tla::CrossFlagOp flagOp : tlaCrossFlagOps) {
+      Operation *flagRaw = flagOp.getOperation();
+      if (flagRaw && flagRaw->getBlock())
         toErase.push_back(flagRaw);
     }
 
@@ -300,7 +489,9 @@ public:
 
     ConversionTarget target(getContext());
     target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
-    target.addIllegalOp<::tla::FlagOp, ::tla::SetFlagOp, ::tla::WaitFlagOp, ::tla::PipeBarrierOp>();
+    target.addIllegalOp<::tla::FlagOp, ::tla::SetFlagOp, ::tla::WaitFlagOp,
+                        ::tla::CrossFlagOp, ::tla::CrossCoreSetFlagOp,
+                        ::tla::CrossCoreWaitFlagOp, ::tla::PipeBarrierOp>();
 
     RewritePatternSet patterns(&getContext());
     if (failed(applyPartialConversion(module, target, std::move(patterns))))

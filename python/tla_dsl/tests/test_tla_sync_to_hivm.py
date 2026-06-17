@@ -115,3 +115,42 @@ def test_tla_sync_to_hivm_allocates_distinct_event_ids_for_same_pipe_pair() -> N
         result.stdout.count("hivm.hir.wait_flag[<PIPE_MTE2>, <PIPE_MTE1>, <EVENT_ID1>]")
         == 1
     )
+
+
+def test_tla_sync_to_hivm_rejects_unsupported_cross_flag_mode() -> None:
+    tla_compile = _tla_compile_path()
+    env = _tla_compile_env()
+    pipeline = subprocess.run(
+        [str(tla_compile), "--print-pipeline=mlir", "/dev/null"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    if "tla-sync-to-hivm" not in (pipeline.stdout + pipeline.stderr):
+        pytest.skip("TlaCompile pipeline does not include tla-sync-to-hivm")
+
+    mlir_text = """module {
+  tla.func @flags() {
+    %cross = tla.cross_flag "cross" {
+      src_pipe = #tla.pipe<mte3>,
+      dst_pipe = #tla.pipe<scalar>,
+      mode = 0 : i64
+    } -> !tla.cross_flag
+    tla.cross_core_set_flag %cross : !tla.cross_flag
+    tla.return
+  }
+}
+"""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        input_path = pathlib.Path(tmpdir) / "input.mlir"
+        input_path.write_text(mlir_text)
+        result = subprocess.run(
+            [str(tla_compile), str(input_path), "--emit=mlir"],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+    assert result.returncode != 0
+    assert "unsupported cross_flag mode 0" in result.stderr

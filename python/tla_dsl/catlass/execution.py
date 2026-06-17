@@ -34,6 +34,7 @@ from .compiler_bridge import (
 
 DEFAULT_ARCH_SCOPE = "aiv.c310"
 SUPPORTED_ARCH_SCOPES = ("aiv.c310", "aic.c310")
+_POINTER_ABI_SIZE = 8
 
 
 class TlaExecutionError(RuntimeError):
@@ -99,6 +100,20 @@ class TlaRuntimeOptions:
     mlir_print_ir_after: tuple[str, ...] = ()
     mlir_print_ir_before_all: bool = False
     mlir_print_ir_after_all: bool = False
+
+
+@dataclass(frozen=True)
+class _KernelLaunchPlan:
+    entrypoint: str
+    kernel_mode: str
+    grid: tuple[int, int, int]
+    payload: bytes
+
+
+@dataclass(frozen=True)
+class _LogicalMixedHandoff:
+    entrypoint: str
+    arg_types: tuple[str, ...]
 
 
 _MEMORY_COMPILE_CACHE_LOCK = threading.RLock()
@@ -405,45 +420,81 @@ def execute_kernel(
     launch_kwargs: Mapping[str, Any],
 ) -> TlaExecutionResult:
     loader = _AscendLoader()
-    grid = launch_kwargs.get("grid", (1, 1, 1))
-    if isinstance(grid, int):
-        grid = (int(grid), 1, 1)
-    if len(grid) != 3:
-        raise TlaUnsupportedAbiError("`grid` must be an int or a 3-tuple.")
-    device = int(launch_kwargs.get("device", loader.get_current_device()))
-    stream = launch_kwargs.get("stream")
-    if stream is None:
-        stream = loader.get_current_stream(device)
+    grid = _normalize_launch_grid(launch_kwargs.get("grid", (1, 1, 1)))
+    device, stream = _resolve_launch_context(loader, launch_kwargs)
+    if launch_args:
+        _mark_tensor_launch_args_uploaded(launch_args)
+    plan = _build_kernel_launch_plan(
+        artifact=artifact,
+        runtime=runtime,
+        launch_args=launch_args,
+        grid=grid,
+    )
+
     module_handle, function_handle = loader.load_binary(
-        name=f"{artifact.entrypoint} {runtime.kernel_mode}",
+        name=f"{plan.entrypoint} {plan.kernel_mode}",
         kernel_path=artifact.kernel_binary_path,
         shared=runtime.shared,
         device=device,
     )
-    if launch_args:
-        _mark_tensor_launch_args_uploaded(launch_args)
-        flat_args = _flatten_launch_args(launch_args)
-        loader.launch_with_args(
-            function=function_handle,
-            stream=int(stream),
-            grid_x=int(grid[0]),
-            grid_y=int(grid[1]),
-            grid_z=int(grid[2]),
-            args=flat_args,
-        )
-    else:
-        loader.launch_zero_arg(
-            function=function_handle,
-            stream=int(stream),
-            grid_x=int(grid[0]),
-            grid_y=int(grid[1]),
-            grid_z=int(grid[2]),
-        )
+    loader.launch_with_args(
+        function=function_handle,
+        stream=int(stream),
+        grid_x=int(plan.grid[0]),
+        grid_y=int(plan.grid[1]),
+        grid_z=int(plan.grid[2]),
+        args=plan.payload,
+    )
     return TlaExecutionResult(
         artifact=artifact,
         module_handle=module_handle,
         function_handle=function_handle,
         device=device,
+    )
+
+
+def _normalize_launch_grid(grid: Any) -> tuple[int, int, int]:
+    if isinstance(grid, int):
+        return (int(grid), 1, 1)
+    if len(grid) != 3:
+        raise TlaUnsupportedAbiError("`grid` must be an int or a 3-tuple.")
+    return tuple(int(item) for item in grid)
+
+
+def _resolve_launch_context(
+    loader: "_AscendLoader", launch_kwargs: Mapping[str, Any]
+) -> tuple[int, int]:
+    device = int(launch_kwargs.get("device", loader.get_current_device()))
+    stream = launch_kwargs.get("stream")
+    if stream is None:
+        stream = loader.get_current_stream(device)
+    return device, int(stream)
+
+
+def _build_kernel_launch_plan(
+    *,
+    artifact: TlaKernelArtifact,
+    runtime: TlaRuntimeOptions,
+    launch_args: Sequence[Any],
+    grid: tuple[int, int, int],
+) -> _KernelLaunchPlan:
+    logical_mixed_handoff = _extract_logical_mixed_handoff(artifact.lowered_llvm)
+    if logical_mixed_handoff is not None and runtime.kernel_mode == "mix":
+        payload, effective_grid = _build_logical_mixed_handoff_launch_args(
+            launch_args, grid, logical_mixed_handoff.arg_types
+        )
+        return _KernelLaunchPlan(
+            entrypoint=logical_mixed_handoff.entrypoint,
+            kernel_mode="mix",
+            grid=effective_grid,
+            payload=payload,
+        )
+    payload = _pack_launch_args(launch_args, artifact.tlair_mlir) if launch_args else b""
+    return _KernelLaunchPlan(
+        entrypoint=artifact.entrypoint,
+        kernel_mode=runtime.kernel_mode,
+        grid=grid,
+        payload=payload,
     )
 
 
@@ -453,32 +504,147 @@ def _mark_tensor_launch_args_uploaded(args: Sequence[Any]) -> None:
             arg.prepare_for_launch()
 
 
-def _flatten_launch_args(args: Sequence[Any]) -> list[int]:
-    flattened: list[int] = []
-    for arg in args:
-        if hasattr(arg, "__c_pointers__"):
-            ptrs = arg.__c_pointers__()
-            flattened.extend(int(ptr) for ptr in ptrs)
-            continue
-        if hasattr(arg, "data_ptr") and callable(arg.data_ptr):
-            flattened.append(int(arg.data_ptr()))
-            continue
-        if isinstance(arg, bool):
-            flattened.append(int(arg))
-            continue
-        if isinstance(arg, int):
-            flattened.append(int(arg))
-            continue
-        if isinstance(arg, float):
-            import struct
+def _runtime_arg_values(arg: Any) -> list[int]:
+    if hasattr(arg, "__c_pointers__"):
+        return [int(ptr) for ptr in arg.__c_pointers__()]
+    data_ptr = getattr(arg, "data_ptr", None)
+    if callable(data_ptr):
+        return [int(data_ptr())]
+    if data_ptr is not None:
+        return [int(data_ptr)]
+    value = getattr(arg, "value", arg)
+    if isinstance(value, bool):
+        return [1 if value else 0]
+    if isinstance(value, int):
+        return [value]
+    raise TlaUnsupportedAbiError(
+        "Launch arguments must provide __c_pointers__(), data_ptr(), or be int."
+    )
 
-            packed = struct.unpack("Q", struct.pack("d", arg))[0]
-            flattened.append(int(packed))
-            continue
+
+def _pack_uint64_slot(value: int) -> bytes:
+    return int(value & ((1 << 64) - 1)).to_bytes(
+        _POINTER_ABI_SIZE, byteorder="little", signed=False
+    )
+
+
+def _pack_launch_args(args: Sequence[Any], mlir_text: str | None = None) -> bytes:
+    del mlir_text
+    payload = bytearray()
+    for arg in args:
+        for value in _runtime_arg_values(arg):
+            payload.extend(_pack_uint64_slot(value))
+    return bytes(payload)
+
+
+def _split_top_level_csv(text: str) -> list[str]:
+    result: list[str] = []
+    start = 0
+    angle_depth = 0
+    paren_depth = 0
+    for index, char in enumerate(text):
+        if char == "<":
+            angle_depth += 1
+        elif char == ">" and angle_depth > 0:
+            angle_depth -= 1
+        elif char == "(" and angle_depth == 0:
+            paren_depth += 1
+        elif char == ")" and angle_depth == 0 and paren_depth > 0:
+            paren_depth -= 1
+        elif char == "," and angle_depth == 0 and paren_depth == 0:
+            item = text[start:index].strip()
+            if item:
+                result.append(item)
+            start = index + 1
+    tail = text[start:].strip()
+    if tail:
+        result.append(tail)
+    return result
+
+
+def _find_matching_function_type_paren(text: str, start: int) -> int:
+    angle_depth = 0
+    depth = 0
+    for index in range(start, len(text)):
+        char = text[index]
+        if char == "<":
+            angle_depth += 1
+        elif char == ">" and angle_depth > 0:
+            angle_depth -= 1
+        elif char == "(" and angle_depth == 0:
+            depth += 1
+        elif char == ")" and angle_depth == 0:
+            depth -= 1
+            if depth == 0:
+                return index
+    return -1
+
+
+def _extract_named_func_arg_types(mlir_text: str, func_name: str) -> list[str]:
+    match = re.search(
+        rf"(?:func\.func|\"func\.func\")\s+(?:private\s+)?@{re.escape(func_name)}\s*\(",
+        mlir_text,
+    )
+    if not match:
+        return []
+    start = match.end() - 1
+    end = _find_matching_function_type_paren(mlir_text, start)
+    if end <= start:
+        return []
+    params = _split_top_level_csv(mlir_text[start + 1 : end])
+    arg_types: list[str] = []
+    for param in params:
+        if ":" in param:
+            arg_types.append(param.split(":", 1)[1].strip())
+        else:
+            arg_types.append(param.strip())
+    return arg_types
+
+
+def _extract_mixed_handoff_entrypoints(mlir_text: str) -> tuple[str, str] | None:
+    names = re.findall(
+        r"(?:func\.func|\"func\.func\")\s+@([A-Za-z_][A-Za-z0-9_]*)",
+        mlir_text,
+    )
+    aic_names = [name for name in names if name.endswith("_mix_aic")]
+    aiv_names = [name for name in names if name.endswith("_mix_aiv")]
+    if len(aic_names) != 1 or len(aiv_names) != 1:
+        return None
+    return aic_names[0], aiv_names[0]
+
+
+def _extract_logical_mixed_handoff(mlir_text: str) -> _LogicalMixedHandoff | None:
+    entrypoints = _extract_mixed_handoff_entrypoints(mlir_text)
+    if entrypoints is None:
+        return None
+    aic_name, aiv_name = entrypoints
+    base_name = aic_name.removesuffix("_mix_aic")
+    if aiv_name.removesuffix("_mix_aiv") != base_name:
+        return None
+    arg_types = _extract_named_func_arg_types(mlir_text, aic_name)
+    if not arg_types:
         raise TlaUnsupportedAbiError(
-            "Launch arguments must provide __c_pointers__(), data_ptr(), or be int/float."
+            "mixed handoff AIC split function must expose argument types"
         )
-    return flattened
+    return _LogicalMixedHandoff(base_name, tuple(arg_types))
+
+
+def _extract_logical_mixed_handoff_entrypoint(mlir_text: str) -> str | None:
+    handoff = _extract_logical_mixed_handoff(mlir_text)
+    return None if handoff is None else handoff.entrypoint
+
+
+def _build_logical_mixed_handoff_launch_args(
+    launch_args: Sequence[Any],
+    grid: Sequence[int],
+    arg_types: Sequence[str],
+) -> tuple[bytes, tuple[int, int, int]]:
+    if len(launch_args) != len(arg_types):
+        raise TlaUnsupportedAbiError(
+            "mixed handoff launch argument count does not match split function "
+            f"signature: got {len(launch_args)}, expected {len(arg_types)}"
+        )
+    return _pack_launch_args(launch_args), tuple(int(item) for item in grid)
 
 
 def runtime_options_from_kwargs(kwargs: Mapping[str, Any]) -> TlaRuntimeOptions:
@@ -503,7 +669,7 @@ def runtime_options_from_kwargs(kwargs: Mapping[str, Any]) -> TlaRuntimeOptions:
             target_arch=target_arch, core_type=core_type
         )
     kernel_mode = str(kwargs.get("kernel_mode", core_type)).lower()
-    if kernel_mode != core_type:
+    if kernel_mode != "mix" and kernel_mode != core_type:
         raise TlaExecutionError(
             f"kernel_mode={kernel_mode!r} does not match core_type={core_type!r}."
         )
@@ -548,18 +714,24 @@ def _runtime_options_for_offline_ascendnpuir_mlir(
 ) -> TlaRuntimeOptions:
     target_arch = runtime.target_arch
     core_type = runtime.core_type
+    kernel_mode = runtime.kernel_mode
     hivmc_args = runtime.hivmc_args
 
-    if (
+    if _extract_logical_mixed_handoff_entrypoint(mlir_text) is not None:
+        core_type = "aic"
+        kernel_mode = "mix"
+    elif (
         "hivm.module_core_type<AIC>" in mlir_text
         or "hivm.func_core_type = #hivm.func_core_type<AIC>" in mlir_text
     ):
         core_type = "aic"
+        kernel_mode = "aic"
     elif (
         "hivm.module_core_type<AIV>" in mlir_text
         or "hivm.func_core_type = #hivm.func_core_type<AIV>" in mlir_text
     ):
         core_type = "aiv"
+        kernel_mode = "aiv"
 
     if "dav-c310" in mlir_text or 'hacc.target<"Ascend950PR_9589">' in mlir_text:
         target_arch = "c310"
@@ -568,7 +740,7 @@ def _runtime_options_for_offline_ascendnpuir_mlir(
     if (
         runtime.target_arch == target_arch
         and runtime.core_type == core_type
-        and runtime.kernel_mode == core_type
+        and runtime.kernel_mode == kernel_mode
         and runtime.arch_scope == arch_scope
         and runtime.hivmc_args == hivmc_args
     ):
@@ -577,7 +749,7 @@ def _runtime_options_for_offline_ascendnpuir_mlir(
         runtime,
         target_arch=target_arch,
         core_type=core_type,
-        kernel_mode=core_type,
+        kernel_mode=kernel_mode,
         arch_scope=arch_scope,
         hivmc_args=hivmc_args,
     )
@@ -799,15 +971,25 @@ def _build_hivmc_a5_command(
         str(mlir_path),
         "--target=Ascend950PR_9589",
     ]
-    command.extend(
-        [
-            "--disable-ffts",
-            "--enable-hivm-compile=False",
-            f"--link-aicore-bitcode={_resolve_hivm_template_bitcode(runtime)}",
-            "-o",
-            str(kernel_path),
-        ]
-    )
+    if runtime.kernel_mode == "mix":
+        command.extend(
+            [
+                "--disable-ffts",
+                f"--link-aicore-bitcode={_resolve_hivm_template_bitcode(runtime)}",
+                "-o",
+                str(kernel_path),
+            ]
+        )
+    else:
+        command.extend(
+            [
+                "--disable-ffts",
+                "--enable-hivm-compile=False",
+                f"--link-aicore-bitcode={_resolve_hivm_template_bitcode(runtime)}",
+                "-o",
+                str(kernel_path),
+            ]
+        )
     command.extend(hivmc_args)
     return command
 
@@ -833,6 +1015,28 @@ def _resolve_hivm_template_bitcode(runtime: TlaRuntimeOptions) -> str:
         return ",".join(str(path) for path in paths)
 
     candidates: list[Path] = []
+    if runtime.kernel_mode == "mix":
+        repo_aic_candidates: list[Path] = []
+        for build_dir in _mlir_build_dirs():
+            repo_aic_candidates.append(build_dir / "bc" / "meta_op.aic.c310.bc")
+
+        aiv_candidates: list[Path] = []
+        ascend_home = os.getenv("ASCEND_HOME_PATH")
+        if ascend_home:
+            cann_lib = Path(ascend_home) / "tools" / "bishengir" / "lib"
+            aiv_candidates.append(cann_lib / "meta_op.aiv.c310.bc")
+        else:
+            for build_dir in _mlir_build_dirs():
+                aiv_candidates.append(build_dir / "bc" / "meta_op.aiv.c310.bc")
+        repo_aic = next((path.resolve() for path in repo_aic_candidates if path.exists()), None)
+        aiv_bc = next((path.resolve() for path in aiv_candidates if path.exists()), None)
+        if repo_aic is not None and aiv_bc is not None:
+            return f"{repo_aic},{aiv_bc}"
+        raise TlaRuntimeUnavailableError(
+            "C310 mixed HIVM template bitcode not found. Expected repo AIC bitcode "
+            "and CANN AIV bitcode, or set `TLA_DSL_HIVM_TEMPLATE_BC`."
+        )
+
     if runtime.core_type == "aic":
         for build_dir in _mlir_build_dirs():
             candidates.extend(
@@ -1181,56 +1385,22 @@ static PyObject *loadKernelBinary(PyObject *, PyObject *args) {
   return Py_BuildValue("(KK)", reinterpret_cast<uint64_t>(module), reinterpret_cast<uint64_t>(stub_ptr));
 }
 
-static PyObject *launchZeroArg(PyObject *, PyObject *args) {
-  unsigned long long function_u64;
-  unsigned long long stream_u64;
-  int gx, gy, gz;
-  if (!PyArg_ParseTuple(args, "KKiii", &function_u64, &stream_u64, &gx, &gy, &gz)) {
-    return NULL;
-  }
-  const void *function = reinterpret_cast<const void *>(function_u64);
-  rtStream_t stream = reinterpret_cast<rtStream_t>(stream_u64);
-  uint32_t block_num = static_cast<uint32_t>(gx) * static_cast<uint32_t>(gy) * static_cast<uint32_t>(gz);
-  rtError_t ret = rtKernelLaunch(function, block_num, NULL, 0, NULL, stream);
-  if (ret != RT_ERROR_NONE) {
-    PyErr_Format(PyExc_RuntimeError, "rtKernelLaunch failed: 0x%x", ret);
-    return NULL;
-  }
-  Py_RETURN_NONE;
-}
-
 static PyObject *launchWithArgs(PyObject *, PyObject *args) {
   unsigned long long function_u64;
   unsigned long long stream_u64;
   int gx, gy, gz;
-  PyObject *arg_seq = nullptr;
-  if (!PyArg_ParseTuple(args, "KKiiiO", &function_u64, &stream_u64, &gx, &gy, &gz, &arg_seq)) {
+  const char *arg_data = nullptr;
+  Py_ssize_t arg_size = 0;
+  if (!PyArg_ParseTuple(args, "KKiiiy#", &function_u64, &stream_u64, &gx, &gy, &gz, &arg_data, &arg_size)) {
     return NULL;
   }
-  PyObject *seq = PySequence_Fast(arg_seq, "args must be a sequence");
-  if (!seq) {
-    return NULL;
-  }
-  Py_ssize_t n = PySequence_Fast_GET_SIZE(seq);
-  std::vector<uint64_t> values;
-  values.reserve(static_cast<size_t>(n));
-  for (Py_ssize_t i = 0; i < n; ++i) {
-    PyObject *item = PySequence_Fast_GET_ITEM(seq, i);
-    unsigned long long val = PyLong_AsUnsignedLongLong(item);
-    if (PyErr_Occurred()) {
-      Py_DECREF(seq);
-      return NULL;
-    }
-    values.push_back(static_cast<uint64_t>(val));
-  }
-  Py_DECREF(seq);
 
   const void *function = reinterpret_cast<const void *>(function_u64);
   rtStream_t stream = reinterpret_cast<rtStream_t>(stream_u64);
   uint32_t block_num = static_cast<uint32_t>(gx) * static_cast<uint32_t>(gy) * static_cast<uint32_t>(gz);
-  void *args_array = values.empty() ? NULL : static_cast<void *>(values.data());
+  void *args_array = arg_size == 0 ? NULL : const_cast<char *>(arg_data);
   rtError_t ret = rtKernelLaunch(function, block_num, args_array,
-                                 values.size() * sizeof(uint64_t), NULL, stream);
+                                 static_cast<size_t>(arg_size), NULL, stream);
   if (ret != RT_ERROR_NONE) {
     PyErr_Format(PyExc_RuntimeError, "rtKernelLaunch failed: 0x%x", ret);
     return NULL;
@@ -1240,7 +1410,6 @@ static PyObject *launchWithArgs(PyObject *, PyObject *args) {
 
 static PyMethodDef Methods[] = {
     {"load_kernel_binary", loadKernelBinary, METH_VARARGS, "Load kernel binary"},
-    {"launch_zero_arg", launchZeroArg, METH_VARARGS, "Launch zero-arg kernel"},
     {"launch_with_args", launchWithArgs, METH_VARARGS, "Launch kernel with args"},
     {NULL, NULL, 0, NULL},
 };
@@ -1352,47 +1521,7 @@ class _AscendLoader:
             raise TlaRuntimeUnavailableError(self._last_error())
         return int(module_handle.value), int(function_handle.value)
 
-    def launch_zero_arg(
-        self, *, function: int, stream: int, grid_x: int, grid_y: int, grid_z: int
-    ) -> None:
-        self._ensure_loaded()
-        ret = self._module.tla_runtime_launch_kernel(
-            ctypes.c_uint64(int(function)),
-            ctypes.c_uint64(int(stream)),
-            int(grid_x),
-            int(grid_y),
-            int(grid_z),
-            ctypes.POINTER(ctypes.c_uint64)(),
-            0,
-        )
-        if ret != 0:
-            raise TlaRuntimeUnavailableError(self._last_error())
-
     def launch_with_args(
-        self,
-        *,
-        function: int,
-        stream: int,
-        grid_x: int,
-        grid_y: int,
-        grid_z: int,
-        args: Sequence[int],
-    ) -> None:
-        self._ensure_loaded()
-        arg_array = (ctypes.c_uint64 * len(args))(*[int(arg) for arg in args])
-        ret = self._module.tla_runtime_launch_kernel(
-            ctypes.c_uint64(int(function)),
-            ctypes.c_uint64(int(stream)),
-            int(grid_x),
-            int(grid_y),
-            int(grid_z),
-            arg_array,
-            len(args),
-        )
-        if ret != 0:
-            raise TlaRuntimeUnavailableError(self._last_error())
-
-    def launch_with_packed_args(
         self,
         *,
         function: int,

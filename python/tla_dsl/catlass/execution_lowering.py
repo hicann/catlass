@@ -265,6 +265,8 @@ def _set_func_exec_units_attr(func_op: mlir_ir.Operation, exec_units: set[str]) 
     if attr_value is None or attr_value == "vector":
         return
     func_op.attributes["tla.exec_units"] = mlir_ir.StringAttr.get(attr_value)
+    if attr_value == "cube_vector":
+        func_op.attributes["tla.mixed_split"] = mlir_ir.UnitAttr.get(func_op.context)
 
 
 def _set_module_has_vector_region_attr(

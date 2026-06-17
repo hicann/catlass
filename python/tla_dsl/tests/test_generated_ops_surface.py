@@ -20,7 +20,7 @@ def _ops_surface_kernel(src: tla.Tensor, dst: tla.Tensor) -> None:
     ready = tla.flag("ready")
     tla.set_flag(ready)
     tla.wait_flag(ready)
-    cross = tla.cross_flag("x", tla.cross_modes.SINGLE_CORE, tla.pipes.MTE3)
+    cross = tla.cross_flag("x", tla.pipes.MTE3, tla.pipes.SCALAR)
     tla.cross_core_set_flag(cross)
     tla.cross_core_wait_flag(cross)
     tla.pipe_barrier(tla.pipes.MTE3)

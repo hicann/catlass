@@ -136,7 +136,7 @@ def test_representative_ops_work_without_explicit_loc() -> None:
         tla.set_flag(f)
         tla.wait_flag(f)
         tla.pipe_barrier(tla.pipes.MTE3)
-        cf = tla.cross_flag("x", tla.cross_modes.SINGLE_CORE, tla.pipes.MTE3)
+        cf = tla.cross_flag("x", tla.pipes.MTE3, tla.pipes.SCALAR)
         tla.cross_core_set_flag(cf)
         tla.cross_core_wait_flag(cf)
         mutex = tla.mutex(resource="l0a_ping", id=-1)

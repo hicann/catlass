@@ -23,7 +23,11 @@ module {
 // CHECK-LABEL: func.func @mutex_if_dynamic_id()
 // CHECK-DAG: [[ID0:%.*]] = llvm.mlir.constant(1 : i8) : i8
 // CHECK-DAG: [[ID1:%.*]] = llvm.mlir.constant(2 : i8) : i8
-// CHECK: cf.cond_br {{%.*}}, ^[[MERGE:bb[0-9]+]]([[ID0]] : i8), ^[[MERGE]]([[ID1]] : i8)
+// CHECK: cf.cond_br {{%.*}}, ^[[THEN:bb[0-9]+]], ^[[ELSE:bb[0-9]+]]
+// CHECK: ^[[THEN]]:
+// CHECK: cf.br ^[[MERGE:bb[0-9]+]]([[ID0]] : i8)
+// CHECK: ^[[ELSE]]:
+// CHECK: cf.br ^[[MERGE]]([[ID1]] : i8)
 // CHECK: ^[[MERGE]]([[BUFID:%.*]]: i8):
 // CHECK: call @get_buf_mte2([[BUFID]])
 // CHECK-NOT: !tla.mutex

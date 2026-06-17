@@ -294,6 +294,17 @@ def Tla_BlockIdxOp : Tla_Op<"arch.block_idx", [Pure]> {
   }];
 }
 
+def Tla_SubBlockIdxOp : Tla_Op<"arch.sub_block_idx", [Pure]> {
+  let summary = "Sub-block index";
+  let description = [{
+    Return the current sub-block index.
+  }];
+  let results = (outs Index:$index);
+  let assemblyFormat = [{
+    attr-dict `->` type($index)
+  }];
+}
+
 def Tla_IntToPtrOp : Tla_Op<"inttoptr", [Pure]> {
   let summary = "Integer SSA to tla.ptr (``tla.inttoptr`` parity)";
   let description = [{
@@ -347,36 +358,37 @@ def Tla_CopyOp : Tla_Op<"copy", []> {
 }
 
 def Tla_CrossCoreSetFlagOp : Tla_Op<"cross_core_set_flag", []> {
-  let summary = "Cross-core set flag";
+  let summary = "Cross-core flag set";
   let description = [{
     Set a cross-core synchronization flag.
   }];
   let arguments = (ins Tla_CrossFlagType:$flag);
   let assemblyFormat = [{
-    $flag `:` qualified(type($flag)) attr-dict
+    $flag attr-dict `:` qualified(type($flag))
   }];
 }
 
 def Tla_CrossCoreWaitFlagOp : Tla_Op<"cross_core_wait_flag", []> {
-  let summary = "Cross-core wait flag";
+  let summary = "Cross-core flag wait";
   let description = [{
     Wait on a cross-core synchronization flag.
   }];
   let arguments = (ins Tla_CrossFlagType:$flag);
   let assemblyFormat = [{
-    $flag `:` qualified(type($flag)) attr-dict
+    $flag attr-dict `:` qualified(type($flag))
   }];
 }
 
 def Tla_CrossFlagOp : Tla_Op<"cross_flag", [Pure]> {
-  let summary = "Cross-core flag literal";
+  let summary = "Cross-block flag literal";
   let description = [{
-    Materialize a static cross-core synchronization flag.
+    Materialize a cross-core synchronization flag.
   }];
-  let arguments = (ins StrAttr:$name, Tla_CrossModeAttr:$mode, Tla_PipeAttr:$pipe);
+  let arguments = (ins StrAttr:$name, Tla_PipeAttr:$src_pipe, Tla_PipeAttr:$dst_pipe,
+                       DefaultValuedOptionalAttr<I64Attr, "2">:$mode);
   let results = (outs Tla_CrossFlagType:$flag);
   let assemblyFormat = [{
-    $name `[` $mode `,` $pipe `]` attr-dict `->` qualified(type($flag))
+    $name attr-dict `->` qualified(type($flag))
   }];
 }
 

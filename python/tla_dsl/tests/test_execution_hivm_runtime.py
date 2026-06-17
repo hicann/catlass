@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import struct
 
 import pytest
 
@@ -389,7 +390,144 @@ def test_build_hivmc_a5_command_links_template_bitcode_for_aiv(
     ]
 
 
-def test_execute_kernel_uses_flat_launch_args(monkeypatch, tmp_path) -> None:
+def test_pack_launch_args_uses_uint64_slots_for_typed_scalars() -> None:
+    mlir = (
+        'module { "tla.func"() ({}) '
+        '{function_type = (i32, f32) -> (), sym_name = "kernel"} : () -> () }'
+    )
+
+    payload = execution._pack_launch_args([tla.Int32(-7), tla.Float32(1.5)], mlir)
+
+    assert payload == struct.pack("<QQ", 0xFFFFFFF9, 0x3FC00000)
+
+
+def test_pack_launch_args_uses_uint64_slots_for_mixed_scalar_and_pointer() -> None:
+    class _Ptr:
+        def __c_pointers__(self):
+            return [0x123456789ABCDEF0]
+
+    mlir = (
+        'module { "tla.func"() ({}) '
+        '{function_type = (i32, !tla.ptr<f32, gm, 4>) -> (), sym_name = "kernel"} '
+        ': () -> () }'
+    )
+
+    payload = execution._pack_launch_args([tla.Int32(5), _Ptr()], mlir)
+
+    assert payload == struct.pack("<QQ", 5, 0x123456789ABCDEF0)
+
+
+def test_build_kernel_launch_plan_uses_logical_mixed_handoff(tmp_path) -> None:
+    class _Tensor:
+        def __init__(self, ptr: int, shape: tuple[int, int]) -> None:
+            self._ptr = ptr
+            self._shape_tuple = shape
+            self.stride = (shape[1], 1)
+
+        def data_ptr(self) -> int:
+            return self._ptr
+
+    artifact = execution.TlaKernelArtifact(
+        cache_key="cache",
+        cache_dir=tmp_path,
+        tlair_mlir="module {}",
+        lowered_llvm=(
+            "module { "
+            "func.func @basic_mixed_mix_aic("
+            "%arg0: memref<32x32xf32>, %arg1: memref<32x32xf32>, "
+            "%arg2: memref<32x32xf32>, %arg3: memref<32x32xf32>"
+            ') attributes {mix_mode = "mix"} '
+            "func.func @basic_mixed_mix_aiv("
+            "%arg0: memref<32x32xf32>, %arg1: memref<32x32xf32>, "
+            "%arg2: memref<32x32xf32>, %arg3: memref<32x32xf32>"
+            ') attributes {mix_mode = "mix"} }'
+        ),
+        entrypoint="ignored",
+        compiler_bridge_path=None,
+        hivmc_path=tmp_path / "hivmc-a5",
+        kernel_binary_path=tmp_path / "kernel.o",
+    )
+
+    plan = execution._build_kernel_launch_plan(
+        artifact=artifact,
+        runtime=execution.TlaRuntimeOptions(kernel_mode="mix"),
+        launch_args=[
+            _Tensor(0x1000, (32, 32)),
+            _Tensor(0x2000, (32, 32)),
+            _Tensor(0x3000, (32, 32)),
+            _Tensor(0x4000, (32, 32)),
+        ],
+        grid=(1, 1, 1),
+    )
+
+    assert plan.entrypoint == "basic_mixed"
+    assert plan.kernel_mode == "mix"
+    assert plan.grid == (1, 1, 1)
+    assert plan.payload == struct.pack("<QQQQ", 0x1000, 0x2000, 0x3000, 0x4000)
+
+
+def test_mixed_handoff_payload_follows_split_signature_not_fixed_four_args(
+    tmp_path,
+) -> None:
+    class _Tensor:
+        def __init__(self, ptr: int, shape: tuple[int, int]) -> None:
+            self._ptr = ptr
+            self._shape_tuple = shape
+            self.stride = (shape[1], 1)
+
+        def data_ptr(self) -> int:
+            return self._ptr
+
+    artifact = execution.TlaKernelArtifact(
+        cache_key="cache",
+        cache_dir=tmp_path,
+        tlair_mlir="module {}",
+        lowered_llvm=(
+            "module { "
+            "func.func @custom_mix_aic("
+            "%arg0: i32, %arg1: memref<16x64xf32>, "
+            "%arg2: memref<64x48xf32>, %arg3: memref<16x48xf32>, "
+            "%arg4: memref<16x48xf32>"
+            ') attributes {mix_mode = "mix"} '
+            "func.func @custom_mix_aiv("
+            "%arg0: i32, %arg1: memref<16x64xf32>, "
+            "%arg2: memref<64x48xf32>, %arg3: memref<16x48xf32>, "
+            "%arg4: memref<16x48xf32>"
+            ') attributes {mix_mode = "mix"} }'
+        ),
+        entrypoint="ignored",
+        compiler_bridge_path=None,
+        hivmc_path=tmp_path / "hivmc-a5",
+        kernel_binary_path=tmp_path / "kernel.o",
+    )
+
+    plan = execution._build_kernel_launch_plan(
+        artifact=artifact,
+        runtime=execution.TlaRuntimeOptions(kernel_mode="mix"),
+        launch_args=[
+            tla.Int32(7),
+            _Tensor(0x1000, (16, 64)),
+            _Tensor(0x2000, (64, 48)),
+            _Tensor(0x3000, (16, 48)),
+            _Tensor(0x4000, (16, 48)),
+        ],
+        grid=(5, 6, 7),
+    )
+
+    assert plan.entrypoint == "custom"
+    assert plan.kernel_mode == "mix"
+    assert plan.grid == (5, 6, 7)
+    assert plan.payload == struct.pack(
+        "<QQQQQ",
+        7,
+        0x1000,
+        0x2000,
+        0x3000,
+        0x4000,
+    )
+
+
+def test_execute_kernel_uses_typed_launch_payload(monkeypatch, tmp_path) -> None:
     launches: list[tuple[str, object]] = []
 
     class _FakeLoader:
@@ -407,15 +545,15 @@ def test_execute_kernel_uses_flat_launch_args(monkeypatch, tmp_path) -> None:
         def launch_with_args(self, **kwargs) -> None:
             launches.append(("flat", kwargs))
 
-        def launch_zero_arg(self, **kwargs) -> None:
-            raise AssertionError("zero-arg launch path should not be used")
-
     monkeypatch.setattr(execution, "_AscendLoader", _FakeLoader)
 
     artifact = execution.TlaKernelArtifact(
         cache_key="cache",
         cache_dir=tmp_path,
-        tlair_mlir="module {}",
+        tlair_mlir=(
+            'module { "tla.func"() ({}) '
+            '{function_type = (i32) -> (), sym_name = "kernel"} : () -> () }'
+        ),
         lowered_llvm="module {}",
         entrypoint="kernel",
         compiler_bridge_path=None,
@@ -441,6 +579,60 @@ def test_execute_kernel_uses_flat_launch_args(monkeypatch, tmp_path) -> None:
             "grid_x": 1,
             "grid_y": 1,
             "grid_z": 1,
-            "args": [123],
+            "args": struct.pack("<Q", 123),
+        },
+    ) in launches
+
+
+def test_execute_kernel_uses_empty_payload_for_zero_arg(monkeypatch, tmp_path) -> None:
+    launches: list[tuple[str, object]] = []
+
+    class _FakeLoader:
+        def get_current_device(self) -> int:
+            return 7
+
+        def get_current_stream(self, device: int) -> int:
+            assert device == 7
+            return 99
+
+        def load_binary(self, **kwargs):
+            launches.append(("load", kwargs))
+            return (11, 12)
+
+        def launch_with_args(self, **kwargs) -> None:
+            launches.append(("flat", kwargs))
+
+    monkeypatch.setattr(execution, "_AscendLoader", _FakeLoader)
+
+    artifact = execution.TlaKernelArtifact(
+        cache_key="cache",
+        cache_dir=tmp_path,
+        tlair_mlir='module { "tla.func"() ({}) {function_type = () -> (), sym_name = "kernel"} : () -> () }',
+        lowered_llvm="module {}",
+        entrypoint="kernel",
+        compiler_bridge_path=None,
+        hivmc_path=tmp_path / "hivmc-a5",
+        kernel_binary_path=tmp_path / "kernel.o",
+    )
+    runtime = execution.TlaRuntimeOptions(shared=3)
+
+    result = execution.execute_kernel(
+        artifact,
+        runtime=runtime,
+        launch_args=[],
+        launch_kwargs={},
+    )
+
+    assert result.module_handle == 11
+    assert result.function_handle == 12
+    assert (
+        "flat",
+        {
+            "function": 12,
+            "stream": 99,
+            "grid_x": 1,
+            "grid_y": 1,
+            "grid_z": 1,
+            "args": b"",
         },
     ) in launches

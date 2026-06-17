@@ -52,6 +52,7 @@ set(TLA_DSL_HIVM_REQUIRED_LIBS
     MLIRAVEDialect
     MLIRAVEUtils
     MLIRHIVMAVEToAVEIntrin
+    MLIRHIVMAVEToStandard
     MLIRHIVMRegbaseIntrinsDialect
     MLIRHIVMRegbaseIntrinsUtils
     MLIRArithToHIVMAVE

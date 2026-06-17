@@ -4,7 +4,7 @@ module {
   tla.func @flags() {
     %first = tla.flag "first" {src_pipe = #tla.pipe<mte2>, dst_pipe = #tla.pipe<mte1>} -> !tla.flag
     %second = tla.flag "second" {src_pipe = #tla.pipe<mte1>, dst_pipe = #tla.pipe<mte2>} -> !tla.flag
-    %cross = tla.cross_flag "cross" [#tla.cross_mode<single_core>, #tla.pipe<mte3>] -> !tla.cross_flag
+    %cross = tla.cross_flag "cross" {src_pipe = #tla.pipe<mte3>, dst_pipe = #tla.pipe<scalar>} -> !tla.cross_flag
     tla.set_flag %first : !tla.flag
     tla.set_flag %second : !tla.flag
     tla.wait_flag %first : !tla.flag
@@ -32,17 +32,16 @@ module {
 // STD-NOT: tla.cross_core
 // STD: return
 
-// HIVM-DAG: func.func private @_mlir_ciface_tla_cross_core_set_flag
-// HIVM-DAG: func.func private @_mlir_ciface_tla_cross_core_wait_flag
 // HIVM-LABEL: func.func @flags
 // HIVM-DAG: hivm.hir.set_flag[<PIPE_MTE2>, <PIPE_MTE1>, <EVENT_ID0>]
 // HIVM-DAG: hivm.hir.set_flag[<PIPE_MTE1>, <PIPE_MTE2>, <EVENT_ID0>]
 // HIVM-DAG: hivm.hir.wait_flag[<PIPE_MTE2>, <PIPE_MTE1>, <EVENT_ID0>]
 // HIVM-DAG: hivm.hir.wait_flag[<PIPE_MTE1>, <PIPE_MTE2>, <EVENT_ID0>]
-// HIVM-DAG: call @_mlir_ciface_tla_cross_core_set_flag
-// HIVM-DAG: call @_mlir_ciface_tla_cross_core_wait_flag
+// HIVM-DAG: hivm.hir.sync_block_set[<CUBE>, <PIPE_MTE3>, <PIPE_S>] flag = 0
+// HIVM-DAG: hivm.hir.sync_block_wait[<CUBE>, <PIPE_MTE3>, <PIPE_S>] flag = 0
 // HIVM-NOT: llvm.hivm.SET.FLAG.IMM
 // HIVM-NOT: llvm.hivm.WAIT.FLAG.IMM
+// HIVM-NOT: _mlir_ciface_tla_sync_block
 // HIVM-NOT: tla.flag
 // HIVM-NOT: tla.cross_flag
 // HIVM-NOT: tla.cross_core

@@ -61,15 +61,6 @@ private:
     const char *llvmIntrinsicName;
   };
 
-  struct CrossFlagInfo {
-    int64_t id = -1;
-    CrossModeAttr mode;
-    PipeAttr pipe;
-    bool hasSet = false;
-    bool hasWait = false;
-    Operation *firstWaitOp = nullptr;
-  };
-
 public:
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TlaLowerToStdPass)
 
@@ -1251,105 +1242,6 @@ public:
     }
   };
 
-  struct LowerTlaCrossCoreSetFlagPattern : public OpRewritePattern<::tla::CrossCoreSetFlagOp> {
-    LowerTlaCrossCoreSetFlagPattern(
-        MLIRContext *ctx, ModuleOp module, llvm::StringMap<CrossFlagInfo> &crossFlagInfoByName,
-        std::function<Value(Operation *, int64_t, unsigned)> getOrCreateConstant,
-        SmallVectorImpl<Operation *> &toErase)
-        : OpRewritePattern<::tla::CrossCoreSetFlagOp>(ctx), module(module),
-          crossFlagInfoByName(crossFlagInfoByName), getOrCreateConstant(getOrCreateConstant),
-          toErase(toErase) {}
-
-    LogicalResult matchAndRewrite(::tla::CrossCoreSetFlagOp op,
-                                  PatternRewriter &rewriter) const override {
-      if (op->getNumOperands() != 1) {
-        op.emitError() << "expected tla.cross_core_set_flag to have exactly 1 operand";
-        return failure();
-      }
-
-      auto flagDef = op.getOperand().getDefiningOp<::tla::CrossFlagOp>();
-      if (!flagDef || !flagDef->getAttrOfType<StringAttr>("name")) {
-        op.emitError() << "expected tla.cross_core_set_flag to have a tla.cross_flag operand";
-        return failure();
-      }
-      StringRef flagName = flagDef->getAttrOfType<StringAttr>("name").getValue();
-      auto flagIt = crossFlagInfoByName.find(flagName);
-      if (flagIt == crossFlagInfoByName.end() || flagIt->second.id < 0) {
-        op.emitError() << "unknown cross flag name '" << flagName << "'";
-        return failure();
-      }
-
-      CrossFlagInfo &info = flagIt->second;
-      info.hasSet = true;
-      auto modeConst = getOrCreateConstant(op, static_cast<int64_t>(info.mode.getCrossMode()), 8);
-      auto pipeConst = getOrCreateConstant(op, static_cast<int64_t>(info.pipe.getPipe()), 8);
-      auto flagConst = getOrCreateConstant(op, info.id, 8);
-      auto i8Type = rewriter.getI8Type();
-      SmallVector<Type, 3> operandTypes = {i8Type, i8Type, i8Type};
-      auto callee = TlaLowerToStdPass::getOrCreateRuntimeCall(
-          module, "_mlir_ciface_tla_cross_core_set_flag", operandTypes);
-      rewriter.create<func::CallOp>(op.getLoc(), callee,
-                                    ValueRange{modeConst, pipeConst, flagConst});
-      toErase.push_back(op.getOperation());
-      return success();
-    }
-
-  private:
-    ModuleOp module;
-    llvm::StringMap<CrossFlagInfo> &crossFlagInfoByName;
-    std::function<Value(Operation *, int64_t, unsigned)> getOrCreateConstant;
-    SmallVectorImpl<Operation *> &toErase;
-  };
-
-  struct LowerTlaCrossCoreWaitFlagPattern : public OpRewritePattern<::tla::CrossCoreWaitFlagOp> {
-    LowerTlaCrossCoreWaitFlagPattern(
-        MLIRContext *ctx, ModuleOp module, llvm::StringMap<CrossFlagInfo> &crossFlagInfoByName,
-        std::function<Value(Operation *, int64_t, unsigned)> getOrCreateConstant,
-        SmallVectorImpl<Operation *> &toErase)
-        : OpRewritePattern<::tla::CrossCoreWaitFlagOp>(ctx), module(module),
-          crossFlagInfoByName(crossFlagInfoByName), getOrCreateConstant(getOrCreateConstant),
-          toErase(toErase) {}
-
-    LogicalResult matchAndRewrite(::tla::CrossCoreWaitFlagOp op,
-                                  PatternRewriter &rewriter) const override {
-      if (op->getNumOperands() != 1) {
-        op.emitError() << "expected tla.cross_core_wait_flag to have exactly 1 operand";
-        return failure();
-      }
-
-      auto flagDef = op.getOperand().getDefiningOp<::tla::CrossFlagOp>();
-      if (!flagDef || !flagDef->getAttrOfType<StringAttr>("name")) {
-        op.emitError() << "expected tla.cross_core_wait_flag to have a tla.cross_flag operand";
-        return failure();
-      }
-      StringRef flagName = flagDef->getAttrOfType<StringAttr>("name").getValue();
-      auto flagIt = crossFlagInfoByName.find(flagName);
-      if (flagIt == crossFlagInfoByName.end() || flagIt->second.id < 0) {
-        op.emitError() << "unknown cross flag name '" << flagName << "'";
-        return failure();
-      }
-
-      CrossFlagInfo &info = flagIt->second;
-      info.hasWait = true;
-      if (!info.firstWaitOp)
-        info.firstWaitOp = op;
-      auto flagConst = getOrCreateConstant(op, info.id, 8);
-      auto i8Type = rewriter.getI8Type();
-      SmallVector<Type, 1> operandTypes = {i8Type};
-      auto callee = TlaLowerToStdPass::getOrCreateRuntimeCall(
-          module, "_mlir_ciface_tla_cross_core_wait_flag", operandTypes);
-      rewriter.create<func::CallOp>(op.getLoc(), callee, ValueRange{flagConst});
-      toErase.push_back(op.getOperation());
-      return success();
-    }
-
-  private:
-    ModuleOp module;
-    llvm::StringMap<CrossFlagInfo> &crossFlagInfoByName;
-    std::function<Value(Operation *, int64_t, unsigned)> getOrCreateConstant;
-    SmallVectorImpl<Operation *> &toErase;
-  };
-
   struct LowerTlaMmadPattern : public OpRewritePattern<::tla::MmadOp> {
     LowerTlaMmadPattern(MLIRContext *ctx, ModuleOp module,
                         DenseMap<Value, TensorDescriptor> &tensorDescriptorByValue,
@@ -2047,10 +1939,7 @@ public:
       }
       static bool isEqual(const ConstantKey &lhs, const ConstantKey &rhs) { return lhs == rhs; }
     };
-    SmallVector<::tla::CrossFlagOp, 8> tlaCrossFlagOps;
     DenseMap<Block *, DenseMap<ConstantKey, Value, ConstantKeyInfo>> constantByScope;
-    llvm::StringMap<CrossFlagInfo> crossFlagInfoByName;
-    int64_t nextCrossFlagId = 0;
 
     auto getOrCreateConstant = [&](Operation *anchor, int64_t value, unsigned bits) -> Value {
       ConstantKey key{value, bits};
@@ -2943,118 +2832,6 @@ public:
         signalPassFailure();
         return;
       }
-    }
-
-    // Stage 3: collect tla.cross_flag metadata and assign deterministic IDs.
-    module.walk([&](::tla::CrossFlagOp op) { tlaCrossFlagOps.push_back(op); });
-    for (::tla::CrossFlagOp flagOp : tlaCrossFlagOps) {
-      if (flagOp->getNumResults() != 1) {
-        flagOp->emitError() << "expected tla.cross_flag to have exactly 1 result";
-        signalPassFailure();
-        return;
-      }
-      auto nameAttr = flagOp->getAttrOfType<StringAttr>("name");
-      if (!nameAttr) {
-        flagOp->emitError() << "expected tla.cross_flag to have a 'name' attribute";
-        signalPassFailure();
-        return;
-      }
-      auto insert = crossFlagInfoByName.try_emplace(nameAttr.getValue(), CrossFlagInfo{});
-      if (!insert.second && insert.first->second.id >= 0) {
-        flagOp->emitError() << "duplicate tla.cross_flag name '" << nameAttr.getValue() << "'";
-        signalPassFailure();
-        return;
-      }
-      CrossFlagInfo &info = insert.first->second;
-      if (info.id < 0) {
-        if (nextCrossFlagId > 10) {
-          flagOp->emitError() << "cross flag id exhausted (max id 10, 11 flags)";
-          signalPassFailure();
-          return;
-        }
-        info.id = nextCrossFlagId++;
-      }
-      if (!info.mode) {
-        info.mode = flagOp->getAttrOfType<CrossModeAttr>("mode");
-      }
-      if (!info.pipe) {
-        info.pipe = flagOp->getAttrOfType<PipeAttr>("pipe");
-      }
-      if (!info.mode || !info.pipe) {
-        flagOp->emitError() << "expected tla.cross_flag to have mode and pipe";
-        signalPassFailure();
-        return;
-      }
-      Value flagValue = flagOp->getResult(0);
-      for (auto &use : flagValue.getUses()) {
-        Operation *userOp = use.getOwner();
-        if (llvm::isa<::tla::CrossCoreSetFlagOp>(userOp)) {
-          continue;
-        } else if (llvm::isa<::tla::CrossCoreWaitFlagOp>(userOp)) {
-          continue;
-        } else {
-          flagOp->emitError() << "tla.cross_flag result is used by unsupported op '"
-                              << userOp->getName().getStringRef() << "'";
-          signalPassFailure();
-          return;
-        }
-      }
-    }
-
-    // Stage 3b: typed pattern lowering for cross-core flag runtime calls.
-    LowerTlaCrossCoreSetFlagPattern lowerCrossSetFlag(&getContext(), module, crossFlagInfoByName,
-                                                      getOrCreateConstant, toErase);
-    LowerTlaCrossCoreWaitFlagPattern lowerCrossWaitFlag(&getContext(), module, crossFlagInfoByName,
-                                                        getOrCreateConstant, toErase);
-    SmallVector<Operation *, 8> flagUseOps;
-    module.walk([&](Operation *op) {
-      if (llvm::isa<::tla::CrossCoreSetFlagOp, ::tla::CrossCoreWaitFlagOp>(op))
-        flagUseOps.push_back(op);
-    });
-    for (Operation *op : flagUseOps) {
-      if (!op->getBlock())
-        continue;
-      PatternRewriter rewriter(op->getContext());
-      rewriter.setInsertionPoint(op);
-      LogicalResult lowered = success();
-      if (auto crossSetOp = llvm::dyn_cast<::tla::CrossCoreSetFlagOp>(op)) {
-        lowered = lowerCrossSetFlag.matchAndRewrite(crossSetOp, rewriter);
-      } else if (auto crossWaitOp = llvm::dyn_cast<::tla::CrossCoreWaitFlagOp>(op)) {
-        lowered = lowerCrossWaitFlag.matchAndRewrite(crossWaitOp, rewriter);
-      }
-      if (failed(lowered)) {
-        signalPassFailure();
-        return;
-      }
-    }
-
-    // Stage 3c.1: ensure cross_core_wait_flag has a matching cross_core_set_flag.
-    bool missingCrossSetForWait = false;
-    for (auto &entry : crossFlagInfoByName) {
-      const auto &flagName = entry.getKey();
-      CrossFlagInfo &info = entry.getValue();
-      if (!info.hasWait || info.hasSet)
-        continue;
-      missingCrossSetForWait = true;
-      if (info.firstWaitOp) {
-        info.firstWaitOp->emitError()
-            << "cross_core_wait_flag used without cross_core_set_flag for '" << flagName << "'";
-      } else {
-        module.emitError() << "cross_core_wait_flag used without cross_core_set_flag for '"
-                           << flagName << "'";
-      }
-    }
-    if (missingCrossSetForWait) {
-      signalPassFailure();
-      return;
-    }
-
-    // Stage 3d: erase tla.cross_flag ops once their users are lowered.
-    for (::tla::CrossFlagOp flagOp : tlaCrossFlagOps) {
-      Operation *flagRaw = flagOp.getOperation();
-      if (!flagRaw->getBlock())
-        continue;
-      toErase.push_back(flagRaw);
     }
 
     // Stage 7: erase dead tile-construction handles after loop conversion.

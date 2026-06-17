@@ -1,6 +1,7 @@
 add_library(TlaPasses
   PassRegistry.cpp
   TlaFuncToHaccPass.cpp
+  TlaSplitMixedFuncPass.cpp
   TlaLowerToHivmPass.cpp
   TlaAllocPtrToHivmPointerCastPass.cpp
   TlaLowerMutexToStdPass.cpp
@@ -29,11 +30,15 @@ target_link_libraries(TlaPasses
     MLIRSupport
     MLIRFuncDialect
     MLIRArithDialect
+    MLIRArithTransforms
+    MLIRAffineToStandard
+    MLIRAffineTransforms
     MLIRSCFDialect
     MLIRDestinationStyleOpInterface
     MLIRLinalgDialect
     MLIRMathDialect
     MLIRMemRefDialect
+    MLIRMemRefTransforms
     MLIRMeshDialect
     MLIRSideEffectInterfaces
     MLIRTensorDialect
