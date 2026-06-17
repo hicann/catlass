@@ -561,6 +561,36 @@ template <
     class ArchTag,
     class ElementA_,
     class LayoutTagA,
+    class ElementB_,
+    class LayoutTagB,
+    class ElementMxScaleA_,
+    class LayoutMxScaleA_,
+    class ElementMxScaleB_,
+    class LayoutMxScaleB_,
+    class ElementC_,
+    class LayoutTagC,
+    class ElementBias = void,
+    CopyL0CToUBMode CopyMode_ = CopyL0CToUBMode::NO_SPLIT,
+    ScaleGranularity DEQUANT_GRANULARITY = ScaleGranularity::NO_QUANT>
+struct PackedMxTileCopyTlaToUB
+    : public PackedMxTileCopyTla<ArchTag, ElementA_, LayoutTagA, ElementB_, LayoutTagB,
+        ElementMxScaleA_, LayoutMxScaleA_, ElementMxScaleB_, LayoutMxScaleB_,
+        ElementC_, LayoutTagC, ElementBias> {
+    static constexpr CopyL0CToUBMode CopyMode = CopyMode_;
+
+    using TensorL0C = typename PackedMxTileCopyTla<ArchTag, ElementA_, LayoutTagA, ElementB_, LayoutTagB,
+        ElementMxScaleA_, LayoutMxScaleA_, ElementMxScaleB_, LayoutMxScaleB_,
+        ElementC_, LayoutTagC, ElementBias>::TensorL0C;
+
+    template <class TensorC>
+    using CopyL0CToDst =
+        Gemm::Tile::CopyL0CToUBTla<ArchTag, TensorL0C, TensorC, CopyMode, DEQUANT_GRANULARITY, false>;
+};
+
+template <
+    class ArchTag,
+    class ElementA_,
+    class LayoutTagA,
     class ElementPrologueB_,
     class LayoutTagPrologueB,
     class ElementB_,

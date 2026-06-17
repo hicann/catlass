@@ -12,3 +12,4 @@
 - [44_quant_matmul_full_loadA_tla](../../../../examples/44_quant_matmul_full_loadA_tla/44_quant_matmul_full_loadA_tla.md) - 拆解模板库下的样例44、quant量化下的A矩阵全载matmul样例的实现。
 - [49_ascend950_flash_attention_infer](../../../../examples/49_ascend950_flash_attention_infer/flash_attention_infer.md) - 拆解模板库下的样例49，亲和昇腾950硬件的FlashAttention推理算子的实现。
 - [52_quant_multi_core_splitk_matmul_tla](../../../../examples/52_quant_multi_core_splitk_matmul_tla/52_quant_multi_core_splitk_matmul_tla.md) - 拆解模板库下的样例52、quant量化下的多核切K样例的实现。
+- [65_ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant](../../../../examples/65_ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant/ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant.md) - 拆解模板库下的样例65、MxMatmul下的MxQuant后处理。

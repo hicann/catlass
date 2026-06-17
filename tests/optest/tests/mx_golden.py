@@ -489,3 +489,172 @@ def prepare_a8w4_mx_inputs(
     from a8w4_golden import prepare_a8w4_mx_inputs as _prepare
 
     return _prepare(m, n, k, device=device)
+
+def _mx_fp8_quant_output(swiglu_out: torch.Tensor) -> tuple:
+    """Replicate gen_data.py quant() for MX FP8 output quantization (block_size=32, axis=col)."""
+    MX_BLOCK_SIZE = 32
+    MAX_EXP_FOR_BF16 = 0x7F80
+    BF16_EXP_BIAS = 0x7F00
+    SHR_NUM_FOR_BF16 = 7
+    EMAX_SHIFTED = 0x0400
+    NAN_CUSTOMIZATION = 0x7F81
+    MAX_EXP_FOR_FP8 = 0x00FF
+    SPECIAL_EXP_THRESHOLD = 0x0040
+
+    data_bf16 = swiglu_out.to(torch.bfloat16)
+    M, N = data_bf16.shape
+
+    data_uint16 = data_bf16.contiguous().view(torch.int16).to(torch.int32) & 0xFFFF
+    exp_field = data_uint16 & MAX_EXP_FOR_BF16
+
+    n_blocks = (N + MX_BLOCK_SIZE - 1) // MX_BLOCK_SIZE
+    N_padded = n_blocks * MX_BLOCK_SIZE
+
+    if N_padded > N:
+        exp_padded = torch.zeros(M, N_padded, dtype=torch.int32)
+        exp_padded[:, :N] = exp_field
+        data_padded = torch.zeros(M, N_padded, dtype=torch.bfloat16)
+        data_padded[:, :N] = data_bf16
+    else:
+        exp_padded = exp_field
+        data_padded = data_bf16
+
+    exp_blocks = exp_padded.reshape(M, n_blocks, MX_BLOCK_SIZE)
+    max_exp = exp_blocks.max(dim=-1).values
+
+    cmp_result = max_exp != MAX_EXP_FOR_BF16
+    zero_mask = max_exp != 0
+    invalid_data_mask = max_exp <= EMAX_SHIFTED
+
+    t_emax_shifted = torch.tensor(EMAX_SHIFTED, dtype=torch.int32)
+    t_max_exp_fp8 = torch.tensor(MAX_EXP_FOR_FP8, dtype=torch.int32)
+    t_zero = torch.tensor(0, dtype=torch.int32)
+    t_nan_cust = torch.tensor(NAN_CUSTOMIZATION, dtype=torch.int32)
+    t_special = torch.tensor(SPECIAL_EXP_THRESHOLD, dtype=torch.int32)
+
+    max_exp_clamped = torch.where(invalid_data_mask, t_emax_shifted, max_exp)
+    shared_exp = max_exp_clamped - EMAX_SHIFTED
+    scale_value = shared_exp >> SHR_NUM_FOR_BF16
+
+    scale_value = torch.where(cmp_result, scale_value, t_max_exp_fp8)
+    scale_value = torch.where(zero_mask, scale_value, t_zero)
+
+    special_data_mask = shared_exp == BF16_EXP_BIAS
+    half_scale_val = BF16_EXP_BIAS - shared_exp
+    half_scale_val = torch.where(cmp_result, half_scale_val, t_nan_cust)
+    half_scale_val = torch.where(zero_mask, half_scale_val, t_zero)
+    half_scale_val = torch.where(special_data_mask, t_special, half_scale_val)
+
+    half_scale_expanded = half_scale_val.unsqueeze(-1).expand(-1, -1, MX_BLOCK_SIZE).reshape(M, N_padded)
+    half_scale_bf16 = half_scale_expanded.to(torch.int16).contiguous().view(torch.bfloat16)
+
+    scaled_data = data_padded * half_scale_bf16
+    scaled_data_f32 = scaled_data.to(torch.float32)[:, :N]
+
+    scaled_data_f32 = torch.clamp(scaled_data_f32, -448.0, 448.0)
+    quant_out = scaled_data_f32.to(torch.float8_e4m3fn)
+
+    return quant_out, scale_value.to(torch.uint8)
+
+
+def prepare_grouped_mx_swiglu_quant_inputs(
+    m: int, n: int, k: int, group_count: int, device: str = "npu"
+) -> tuple:
+    """Build inputs and golden reference for example 66 grouped MX FP8 matmul + SwiGLU + MX quant.
+
+    Aligned with examples/65_*/gen_data.py golden_compute().
+
+    Returns:
+        (a_fp8, b_fp8_trans, a_scale, b_scale_trans, group_list, expected_q, expected_q_scale)
+        where kernel inputs are on ``device`` and golden outputs are on CPU.
+    """
+    torch.manual_seed(42)
+
+    fp8_dtype = torch.float8_e4m3fn
+    emax, fp8_max = 8, 448.0
+
+    a_fp32 = torch.randn(m, k, dtype=torch.float32) * 10.0
+    a_fp8, a_scale_raw, _ = _quantize_axis_last(a_fp32, fp8_dtype, emax, fp8_max)
+
+    k0 = mx_scale_k(k)
+
+    b_fp8_list = []
+    b_deq_list = []
+    b_scale_raw_list = []
+    for _ in range(group_count):
+        b_fp32 = torch.randn(k, n, dtype=torch.float32) * 10.0
+        b_fp8, b_scale_raw, b_deq = _quantize_axis_first(b_fp32, fp8_dtype, emax, fp8_max)
+        b_fp8_list.append(b_fp8)
+        b_deq_list.append(b_deq)
+        b_scale_raw_list.append(b_scale_raw)
+
+    a_scale_packed = a_scale_raw.reshape(m, k0 // 2, 2).contiguous()
+
+    b_fp8_trans_list = []
+    b_scale_trans_list = []
+    for i in range(group_count):
+        b_fp8_trans = b_fp8_list[i].t().contiguous()
+        b_fp8_trans_list.append(b_fp8_trans)
+        b_sr = b_scale_raw_list[i]
+        b_scale_reshaped = b_sr.reshape(b_sr.shape[0] // 2, 2, b_sr.shape[1])
+        b_scale_t = b_scale_reshaped.permute(2, 0, 1).contiguous()
+        b_scale_trans_list.append(b_scale_t)
+
+    b_fp8_trans_all = torch.stack(b_fp8_trans_list, dim=0)
+    b_scale_trans_all = torch.stack(b_scale_trans_list, dim=0)
+
+    a_fp8_npu = a_fp8.to(fp8_dtype)
+    b_fp8_trans_npu = b_fp8_trans_all.to(fp8_dtype)
+    a_scale_npu = a_scale_packed.to(torch.float8_e8m0fnu)
+    b_scale_trans_npu = b_scale_trans_all.to(torch.float8_e8m0fnu)
+
+    group_size = m // group_count
+    group_list_noncum = torch.tensor([group_size] * group_count, dtype=torch.int64)
+
+    if device == "npu":
+        a_fp8_npu = a_fp8_npu.contiguous().npu()
+        b_fp8_trans_npu = b_fp8_trans_npu.contiguous().npu()
+        a_scale_npu = a_scale_npu.contiguous().npu()
+        b_scale_trans_npu = b_scale_trans_npu.contiguous().npu()
+        group_list_noncum = group_list_noncum.npu()
+
+    group_list_cum = torch.cumsum(group_list_noncum, dim=0)
+
+    x = a_fp8.to(torch.float32)
+    x_s = a_scale_raw.reshape(m, k0).repeat_interleave(32, dim=-1)
+    if k0 * 32 > k:
+        x_padded = torch.zeros(m, k0 * 32, dtype=torch.float32)
+        x_padded[:, :k] = x
+        x = x_padded
+    x1 = x.float() * x_s.float()
+
+    grouped_q = []
+    grouped_q_scale = []
+    for i in range(group_count):
+        w = b_fp8_list[i].to(torch.float32)
+        w_s_raw = b_scale_raw_list[i]
+        w_s = w_s_raw.reshape(k0, n).repeat_interleave(32, dim=0)
+        if k0 * 32 > k:
+            w_padded = torch.zeros(k0 * 32, n, dtype=torch.float32)
+            w_padded[:k, :] = w
+            w = w_padded
+        x2 = w.float() * w_s.float()
+
+        start = 0 if i == 0 else group_list_cum[i - 1].item()
+        end = group_list_cum[i].item()
+        x1_slice = x1[start:end, :]
+
+        gmm_out = torch.matmul(x1_slice, x2)
+        act, gate = gmm_out.chunk(2, dim=-1)
+        swiglu_out = act / (1.0 + torch.exp(-act)) * gate
+        swiglu_out = swiglu_out.to(torch.bfloat16).to(torch.float32)
+
+        q_out, q_scale_out = _mx_fp8_quant_output(swiglu_out)
+        grouped_q.append(q_out)
+        grouped_q_scale.append(q_scale_out)
+
+    expected_q = torch.cat(grouped_q, dim=0)
+    expected_q_scale = torch.cat(grouped_q_scale, dim=0)
+
+    return (a_fp8_npu, b_fp8_trans_npu, a_scale_npu, b_scale_trans_npu,
+            group_list_noncum, expected_q, expected_q_scale)

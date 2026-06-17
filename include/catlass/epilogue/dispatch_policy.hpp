@@ -177,6 +177,11 @@ template<bool USE_UB_WORKSPACE_ = false>
 struct EpilogueVisitor {
     static constexpr bool USE_UB_WORKSPACE = USE_UB_WORKSPACE_;
 };
+
+// For Ascend950, SwiGLU activation + MX quant output
+struct BlockEpilogueSwigluMxQuant {
+    using ArchTag = Arch::Ascend950;
+};
 }  // namespace Catlass::Epilogue
 
 #endif  // CATLASS_EPILOGUE_DISPATCH_POLICY_HPP

@@ -53,6 +53,7 @@ class BlockEpilogue {
 #include "catlass/epilogue/block/block_epilogue_dual_level_quant_mx.hpp"
 #include "catlass/epilogue/block/block_epilogue_per_block_quant_tla.hpp"
 #include "catlass/epilogue/block/block_epilogue_visitor.hpp"
+#include "catlass/epilogue/block/block_epilogue_swiglu_mx_quant.hpp"
 #endif
 
 #endif  // CATLASS_EPILOGUE_BLOCK_BLOCK_EPILOGUE_HPP

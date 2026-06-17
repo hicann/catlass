@@ -464,6 +464,12 @@ void Ascend950BatchedMatmul(
 void Ascend950GroupedMatmulSliceMFixpipeDequant(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulFixPipeParams& params);
 
+/** 
+ * @brief Reserved JIT interface for example 65_ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant.
+ */
+void Ascend950Fp8MxGroupedMatmulSliceMSwigluMxQuant(
+    const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GroupedMatmulParams& params);
+
 /**
  * @brief JIT interface for example 66_ascend950_streamk_matmul.
  */
