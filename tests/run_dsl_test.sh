@@ -255,6 +255,7 @@ _run_basic_mmad_case() {
 _run_basic_mmad_case "default MNK"
 _run_basic_mmad_case "m=1 n=2 k=3" --m 1 --n 2 --k 3
 _run_basic_mmad_case "mutex mode" --use-mutex
+_run_basic_mmad_case "mutex with mode" --use-mutex-with
 
 _run_basic_vadd_case() {
     echo "==> Running basic_vadd validation [all dtypes]: --run --all-dtypes --device ${DEVICE_ID}"

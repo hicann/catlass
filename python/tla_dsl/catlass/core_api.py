@@ -343,6 +343,66 @@ class _MutexValue:
         return mutex_unlock(self, pipe=pipe, loc=loc)
 
 
+class _MutexGuard:
+    """Context manager that wraps a TLA op block with inferred mutex access."""
+
+    def __init__(
+        self, mutexes: tuple[Any, ...], loc: mlir_ir.Location | None = None
+    ) -> None:
+        self._mutexes = mutexes
+        self._loc = loc
+        self._state: Any | None = None
+        self._block: Any | None = None
+        self._start_op_count = 0
+        self._entered = False
+
+    def __enter__(self) -> "_MutexGuard":
+        state = _runtime._current_frontend_state()
+        if state is None:
+            raise TlaIRNotExecutableError(
+                "tla.mutex_guard is only available in lowered Tla IR"
+            )
+        for index, mutex_value in enumerate(self._mutexes):
+            _require_category(
+                "mutex_guard", f"mutex[{index}]", mutex_value, "mutex", index
+            )
+        try:
+            block = mlir_ir.InsertionPoint.current.block
+        except Exception as exc:
+            raise TlaLoweringError(
+                "tla.mutex_guard requires an active MLIR insertion point"
+            ) from exc
+        self._state = state
+        self._block = block
+        self._start_op_count = len(list(block.operations))
+        state.mutex_guard_depth += 1
+        self._entered = True
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
+        del exc, tb
+        if self._state is not None and self._entered:
+            self._state.mutex_guard_depth = max(0, self._state.mutex_guard_depth - 1)
+        if exc_type is not None:
+            return False
+        if self._block is None:
+            raise TlaLoweringError("tla.mutex_guard lost its MLIR insertion block")
+        block_ops = list(self._block.operations)
+        body_ops = block_ops[self._start_op_count :]
+        if not body_ops:
+            raise TlaLoweringError(
+                "tla.mutex_guard body must emit at least one tla.copy or tla.mmad"
+            )
+        pipe = _infer_mutex_guard_pipe(body_ops)
+        first_body_op = _raw_operation(body_ops[0])
+        with mlir_ir.InsertionPoint(first_body_op):
+            for mutex_value in self._mutexes:
+                _emit_mutex_lock_op(mutex_value, pipe=pipe, loc=self._loc)
+        for mutex_value in reversed(self._mutexes):
+            _emit_mutex_unlock_op(mutex_value, pipe=pipe, loc=self._loc)
+        return False
+
+
 class _Namespace:
     def __init__(self) -> None:
         self._members: dict[str, Callable[..., Any]] = {}
@@ -536,13 +596,9 @@ def _as_value(value: Any) -> mlir_ir.Value:
     if isinstance(resolved, mlir_ir.Value):
         st = _runtime._current_frontend_state()
         if st is not None:
-            host = st.tensor_host_by_value_id.get(id(value))
-            for key in _mlir_value_keys(resolved):
-                if host is None:
-                    host = st.tensor_host_by_value_id.get(key)
+            host = st.tensor_host_by_value.get(resolved)
             if host is not None:
-                for key in _mlir_value_keys(resolved):
-                    st.tensor_host_by_value_id[key] = host
+                st.tensor_host_by_value[resolved] = host
         return resolved
     if isinstance(resolved, Scalar):
         return _const_for_scalar(resolved)
@@ -747,29 +803,21 @@ def _register_tla_tensor_type(
     st = _runtime._current_frontend_state()
     if st is None:
         return
-    for key in _mlir_value_keys(value):
-        st.tensor_type_by_value_id[key] = tensor_type
-
-
-def _mlir_value_keys(value: mlir_ir.Value) -> tuple[Any, ...]:
-    return (id(value),)
+    st.tensor_type_by_value[value] = tensor_type
 
 
 def _tla_tensor_type_for_mlir_value(v: mlir_ir.Value) -> TlaTensorTypeDescriptor:
     """Resolve structured ``!tla.tensor`` metadata for an SSA value."""
     st = _runtime._current_frontend_state()
     if st is not None:
-        for key in _mlir_value_keys(v):
-            cached = st.tensor_type_by_value_id.get(key)
-            if cached is not None:
-                return cached
-        for key in _mlir_value_keys(v):
-            host = st.tensor_host_by_value_id.get(key)
-            if host is not None:
-                desc = host.tla_tensor_type_descriptor()
-                for register_key in _mlir_value_keys(v):
-                    st.tensor_type_by_value_id[register_key] = desc
-                return desc
+        cached = st.tensor_type_by_value.get(v)
+        if cached is not None:
+            return cached
+        host = st.tensor_host_by_value.get(v)
+        if host is not None:
+            desc = host.tla_tensor_type_descriptor()
+            st.tensor_type_by_value[v] = desc
+            return desc
     raise TlaLoweringError(
         "missing structured Tla tensor metadata for SSA value; tensor values used by "
         "Python lowering must come from a host tla.Tensor argument or a Tla Python op "
@@ -796,18 +844,18 @@ def _register_tla_tensor_metadata(
     st = _runtime._current_frontend_state()
     if st is None:
         return
-    st.tensor_metadata_by_value_id[id(value)] = metadata
+    st.tensor_metadata_by_value[value] = metadata
 
 
 def _tensor_metadata_field(value: mlir_ir.Value, field: str) -> Any:
     st = _runtime._current_frontend_state()
     if st is not None:
-        cached = st.tensor_metadata_by_value_id.get(id(value))
+        cached = st.tensor_metadata_by_value.get(value)
         if cached is not None and field in cached:
             return cached[field]
     metadata = _tla_tensor_type_for_mlir_value(value).metadata()
     if st is not None:
-        st.tensor_metadata_by_value_id[id(value)] = metadata
+        st.tensor_metadata_by_value[value] = metadata
     if field not in metadata:
         raise TlaLoweringError(f"unknown tensor metadata field: {field}")
     return metadata[field]
@@ -1170,10 +1218,10 @@ def _validate_mmad_contract(
         lhs_desc.addrspace,
         rhs_desc.addrspace,
     )
-    if addrspaces not in {("cc", "ca", "cb"), ("l0c", "l0a", "l0b")}:
+    if addrspaces != ("l0c", "l0a", "l0b"):
         raise TlaLoweringError(
             "unsupported tla.mmad tile addrspaces; expected acc/lhs/rhs in "
-            "cc/ca/cb or l0c/l0a/l0b"
+            "l0c/l0a/l0b"
         )
 
     element_types = (
@@ -1824,6 +1872,88 @@ def _require_pipe(op_name: str, name: str, value: Any, position: int) -> None:
         )
 
 
+def _pipe_attr_from_token(
+    pipe: PipeLike | str, *, loc: mlir_ir.Location | None = None
+) -> mlir_ir.Attribute:
+    ctx = loc.context if loc is not None else mlir_ir.Context.current
+    pipe_value = str(_token(pipe)).lower()
+    return mlir_ir.Attribute.parse(f"#tla.pipe<{pipe_value}>", context=ctx)
+
+
+def _ensure_no_explicit_mutex_access_in_guard() -> None:
+    state = _runtime._current_frontend_state()
+    if state is None or state.mutex_guard_depth <= 0:
+        return
+    raise TlaCoreAPIError(
+        "tla.mutex_guard body cannot contain explicit mutex lock/unlock calls"
+    )
+
+
+def _raw_operation(op_or_view: Any) -> mlir_ir.Operation:
+    operation = getattr(op_or_view, "operation", op_or_view)
+    if not isinstance(operation, mlir_ir.Operation):
+        raise TlaLoweringError(
+            "expected MLIR operation while scanning tla.mutex_guard body, got "
+            f"{type(op_or_view).__name__}"
+        )
+    return operation
+
+
+def _walk_mutex_guard_ops(ops: Sequence[Any]) -> list[mlir_ir.Operation]:
+    walked: list[mlir_ir.Operation] = []
+
+    def visit(op_or_view: Any) -> None:
+        op = _raw_operation(op_or_view)
+        walked.append(op)
+        for region in op.regions:
+            for block in region.blocks:
+                for child in block.operations:
+                    visit(child)
+
+    for op in ops:
+        visit(op)
+    return walked
+
+
+def _infer_copy_mutex_pipe(copy_op: mlir_ir.Operation) -> str:
+    operands = list(copy_op.operands)
+    if len(operands) != 2:
+        raise TlaLoweringError("malformed tla.copy op in tla.mutex_guard body")
+    src_addrspace = _tla_tensor_type_for_mlir_value(operands[1]).addrspace.lower()
+    if src_addrspace == "gm":
+        return "mte2"
+    if src_addrspace == "l1":
+        return "mte1"
+    if src_addrspace == "l0c":
+        return "fix"
+    raise TlaLoweringError(
+        "tla.mutex_guard cannot infer pipe for tla.copy with source addrspace "
+        f"{src_addrspace!r}"
+    )
+
+def _infer_mutex_guard_pipe(body_ops: Sequence[Any]) -> str:
+    inferred: list[str] = []
+    for op in _walk_mutex_guard_ops(body_ops):
+        name = op.name
+        if name in {"tla.mutex_lock", "tla.mutex_unlock"}:
+            raise TlaCoreAPIError(
+                "tla.mutex_guard body cannot contain explicit mutex lock/unlock calls"
+            )
+        if name == "tla.copy":
+            inferred.append(_infer_copy_mutex_pipe(op))
+        elif name == "tla.mmad":
+            inferred.append("cube")
+    if not inferred:
+        raise TlaLoweringError(
+            "tla.mutex_guard body must emit at least one tla.copy or tla.mmad"
+        )
+    unique = set(inferred)
+    if len(unique) != 1:
+        pipes = ", ".join(sorted(unique))
+        raise TlaLoweringError(f"tla.mutex_guard body inferred multiple pipes: {pipes}")
+    return inferred[0]
+
+
 def _require_cross_mode(op_name: str, value: Any, position: int) -> None:
     token = _token(value)
     if token is None or token not in _CROSS_MODE_VALUES:
@@ -2412,17 +2542,39 @@ def mutex(
 
 
 @dsl_user_op
+def mutex_guard(
+    *mutexes: MutexLike, loc: mlir_ir.Location | None = None
+) -> _MutexGuard:
+    """Create a context manager that wraps a block with inferred mutex access."""
+    if not mutexes:
+        _op_error("mutex_guard", "expected at least one mutex")
+    return _MutexGuard(tuple(mutexes), loc=loc)
+
+
+def _emit_mutex_lock_op(
+    mutex_value: MutexLike, *, pipe: PipeLike | str, loc: mlir_ir.Location | None = None
+) -> None:
+    pipe_attr = _pipe_attr_from_token(pipe, loc=loc)
+    return _tla_ops_gen.mutex_lock(_as_value(mutex_value), pipe_attr, loc=loc)
+
+
+def _emit_mutex_unlock_op(
+    mutex_value: MutexLike, *, pipe: PipeLike | str, loc: mlir_ir.Location | None = None
+) -> None:
+    pipe_attr = _pipe_attr_from_token(pipe, loc=loc)
+    return _tla_ops_gen.mutex_unlock(_as_value(mutex_value), pipe_attr, loc=loc)
+
+
+@dsl_user_op
 def mutex_lock(
     mutex_value: MutexLike, *, pipe: PipeLike, loc: mlir_ir.Location | None = None
 ) -> None:
     """Acquire a mutex from the specified pipe."""
+    _ensure_no_explicit_mutex_access_in_guard()
     _require_category("mutex_lock", "mutex", mutex_value, "mutex", 0)
     _require_pipe("mutex_lock", "pipe", pipe, 1)
     _require_frontend_state("mutex_lock")
-    ctx = loc.context if loc is not None else mlir_ir.Context.current
-    pipe_value = str(_token(pipe)).lower()
-    pipe_attr = mlir_ir.Attribute.parse(f"#tla.pipe<{pipe_value}>", context=ctx)
-    return _tla_ops_gen.mutex_lock(_as_value(mutex_value), pipe_attr, loc=loc)
+    return _emit_mutex_lock_op(mutex_value, pipe=pipe, loc=loc)
 
 
 @dsl_user_op
@@ -2430,13 +2582,11 @@ def mutex_unlock(
     mutex_value: MutexLike, *, pipe: PipeLike, loc: mlir_ir.Location | None = None
 ) -> None:
     """Release a mutex from the specified pipe."""
+    _ensure_no_explicit_mutex_access_in_guard()
     _require_category("mutex_unlock", "mutex", mutex_value, "mutex", 0)
     _require_pipe("mutex_unlock", "pipe", pipe, 1)
     _require_frontend_state("mutex_unlock")
-    ctx = loc.context if loc is not None else mlir_ir.Context.current
-    pipe_value = str(_token(pipe)).lower()
-    pipe_attr = mlir_ir.Attribute.parse(f"#tla.pipe<{pipe_value}>", context=ctx)
-    return _tla_ops_gen.mutex_unlock(_as_value(mutex_value), pipe_attr, loc=loc)
+    return _emit_mutex_unlock_op(mutex_value, pipe=pipe, loc=loc)
 
 
 @dsl_user_op
@@ -2884,6 +3034,7 @@ __all__ = [
     "wait_flag",
     "pipe_barrier",
     "mutex",
+    "mutex_guard",
     "mutex_lock",
     "mutex_unlock",
     "range",

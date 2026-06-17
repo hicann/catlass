@@ -228,21 +228,20 @@ def _build_tla_func(
         category_bindings[id(proxy)] = category
         category_bindings[id(value)] = category
 
-    tensor_host_by_value_id: dict[int, Any] = {}
+    tensor_host_by_value: dict[Any, Any] = {}
     for pos, name in enumerate(arg_names):
         if name in constexpr_names:
             continue
         v = call_args[pos]
         if isinstance(v, Tensor):
             j = runtime_arg_names.index(name)
-            tensor_host_by_value_id[id(proxies[j])] = v
-            tensor_host_by_value_id[id(entry.arguments[j])] = v
+            tensor_host_by_value[entry.arguments[j]] = v
 
     with mlir_ir.InsertionPoint(entry):
         with runtime_mod._frontend_emission(
             arg_bindings=arg_bindings,
             category_bindings=category_bindings,
-            tensor_host_by_value_id=tensor_host_by_value_id,
+            tensor_host_by_value=tensor_host_by_value,
             module=module,
         ) as emit_state:
             try:

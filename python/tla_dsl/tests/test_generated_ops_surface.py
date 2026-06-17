@@ -67,6 +67,7 @@ def test_public_api_exports_representative_helpers() -> None:
     assert callable(tla.flag)
     assert callable(tla.cross_flag)
     assert callable(tla.mutex)
+    assert callable(tla.mutex_guard)
     assert callable(tla.make_tensor_like)
     assert callable(tla.range_constexpr)
     assert callable(tla.arch.block_idx)

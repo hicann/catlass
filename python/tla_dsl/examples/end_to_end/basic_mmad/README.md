@@ -6,6 +6,8 @@
 |------|------|
 | **`basic_matmul.py`** | 主入口：可配置 GM **布局**与 **元素类型**，多 block、K 维分块、L1/L0 双缓冲；**`--run`** 用 **torch + torch_npu** 上板并校验；**`--build-only`** 仅编译；**`--dump-tlair`** 仅导出 TLA MLIR。 |
 | **`basic_mmad_kernels.py`** | 设备内核（`@tla.kernel` 的 `basic_mmad_kernel`）及问题规模 `m/n/k`、分块常量。 |
+| **`basic_mmad_kernels_mutex.py`** | 使用显式 `mutex.lock/unlock` 的同步版本，可通过 `--use-mutex` 选择。 |
+| **`basic_mmad_kernels_mutex_with.py`** | 使用 `with tla.mutex_guard(...)` 的同步版本，可通过 `--use-mutex-with` 选择。 |
 
 矩阵尺寸、dtype 与 CLI 默认值以源码与 **`--help`** 为准。
 

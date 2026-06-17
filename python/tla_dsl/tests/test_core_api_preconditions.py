@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 from typing import Any
 
+from mlir import ir as mlir_ir
 import pytest
 
 import catlass as tla
@@ -12,6 +13,35 @@ from catlass.base_dsl.typing import Int8
 from catlass.core_api import _category
 from catlass.execution_lowering import TlaLoweringError
 import catlass.runtime as runtime_mod
+
+
+def test_mlir_value_identity_is_stable_across_operand_wrappers() -> None:
+    with mlir_ir.Context() as ctx, mlir_ir.Location.unknown():
+        ctx.allow_unregistered_dialects = True
+        module = mlir_ir.Module.parse(
+            """
+module {
+  func.func @probe(%arg0: i64) -> i64 {
+    %c1 = arith.constant 1 : i64
+    %sum = arith.addi %arg0, %c1 : i64
+    return %sum : i64
+  }
+}
+"""
+        )
+        block = list(module.body.operations[0].regions[0].blocks)[0]
+        ops = list(block.operations)
+
+        equivalent_values = (
+            (block.arguments[0], ops[1].operands[0]),
+            (ops[0].results[0], ops[1].operands[1]),
+            (ops[1].results[0], ops[2].operands[0]),
+        )
+        for registered, lookup in equivalent_values:
+            assert registered is not lookup
+            assert registered == lookup
+            assert hash(registered) == hash(lookup)
+            assert {registered: "metadata"}[lookup] == "metadata"
 
 
 def test_copy_preconditions_require_tiles() -> None:
@@ -134,6 +164,16 @@ def test_mutex_lock_unlock_require_valid_pipe() -> None:
             m.lock(pipe="gpu")
         with pytest.raises(tla.TlaCoreAPIError, match="tla.mutex_unlock"):
             m.unlock(pipe="gpu")
+
+
+def test_mutex_guard_requires_mutex_arguments() -> None:
+    with pytest.raises(tla.TlaCoreAPIError, match="tla.mutex_guard"):
+        tla.mutex_guard()
+    with runtime_mod._eager_capture():
+        shape = tla.make_shape(1, 1)
+        with pytest.raises(tla.TlaCoreAPIError, match="tla.mutex_guard"):
+            with tla.mutex_guard(shape):
+                pass
 
 
 # Nested ``make_shape`` trees for L0 zN / nZ / L0C layouts (must match remap stride trees);

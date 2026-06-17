@@ -1,4 +1,5 @@
 import builtins
+import re
 from typing import Any
 
 import pytest
@@ -33,6 +34,22 @@ def _mmad_tensor_args() -> tuple[tla.Tensor, tla.Tensor, tla.Tensor]:
                 origin_shape=tla.make_shape(128, 128),
                 layout_tag=tla.arch.L0Clayout,
             ),
+        )
+
+
+def _tensor_arg(
+    addrspace: tla.AddressSpace,
+    *,
+    dtype: type[tla.Numeric] = tla.Float16,
+    layout_tag: Any | None = None,
+) -> tla.Tensor:
+    with runtime_mod._eager_capture():
+        return tla.Tensor(
+            tla.make_shape(16, 16),
+            dtype,
+            addrspace=addrspace,
+            origin_shape=tla.make_shape(16, 16),
+            layout_tag=layout_tag or tla.arch.RowMajor,
         )
 
 
@@ -96,6 +113,109 @@ def cube_static_kernel(mem_a: tla.Tensor, mem_b: tla.Tensor, mem_c: tla.Tensor) 
     acc = tla.tile_view(mem_c, tla.make_shape(16, 16), tla.make_coord(0, 0))
     with tla.cube():
         tla.mmad(acc, lhs, rhs, init_c=False)
+
+
+@tla.kernel
+def mutex_guard_copy_kernel(dst: tla.Tensor, src: tla.Tensor) -> None:
+    mutex = tla.mutex(resource="copy_mutex", id=0)
+    dst_tile = tla.tile_view(dst, tla.make_shape(16, 16), tla.make_coord(0, 0))
+    src_tile = tla.tile_view(src, tla.make_shape(16, 16), tla.make_coord(0, 0))
+    with tla.mutex_guard(mutex):
+        tla.copy(dst_tile, src_tile)
+
+
+@tla.kernel
+def mutex_guard_two_copy_kernel(dst: tla.Tensor, src: tla.Tensor) -> None:
+    mutex = tla.mutex(resource="copy_mutex", id=0)
+    dst_tile = tla.tile_view(dst, tla.make_shape(16, 16), tla.make_coord(0, 0))
+    src_tile = tla.tile_view(src, tla.make_shape(16, 16), tla.make_coord(0, 0))
+    with tla.mutex_guard(mutex):
+        tla.copy(dst_tile, src_tile)
+        tla.copy(dst_tile, src_tile)
+
+
+@tla.kernel
+def mutex_guard_mixed_pipe_kernel(
+    gm: tla.Tensor, l1: tla.Tensor, l0a: tla.Tensor
+) -> None:
+    mutex = tla.mutex(resource="mixed_mutex", id=0)
+    gm_tile = tla.tile_view(gm, tla.make_shape(16, 16), tla.make_coord(0, 0))
+    l1_tile = tla.tile_view(l1, tla.make_shape(16, 16), tla.make_coord(0, 0))
+    l0a_tile = tla.tile_view(l0a, tla.make_shape(16, 16), tla.make_coord(0, 0))
+    with tla.mutex_guard(mutex):
+        tla.copy(l1_tile, gm_tile)
+        tla.copy(l0a_tile, l1_tile)
+
+
+@tla.kernel
+def mutex_guard_explicit_lock_kernel(dst: tla.Tensor, src: tla.Tensor) -> None:
+    mutex = tla.mutex(resource="bad_mutex", id=0)
+    dst_tile = tla.tile_view(dst, tla.make_shape(16, 16), tla.make_coord(0, 0))
+    src_tile = tla.tile_view(src, tla.make_shape(16, 16), tla.make_coord(0, 0))
+    with tla.mutex_guard(mutex):
+        mutex.lock(pipe=tla.arch.MTE2)
+        tla.copy(dst_tile, src_tile)
+
+
+@tla.kernel
+def mutex_guard_empty_kernel() -> None:
+    mutex = tla.mutex(resource="empty_mutex", id=0)
+    with tla.mutex_guard(mutex):
+        tla.make_shape(16, 16)
+
+
+@tla.kernel
+def mutex_guard_multi_mmad_kernel(
+    lhs_mem: tla.Tensor, rhs_mem: tla.Tensor, acc_mem: tla.Tensor
+) -> None:
+    lhs = tla.tile_view(lhs_mem, tla.make_shape(16, 16), tla.make_coord(0, 0))
+    rhs = tla.tile_view(rhs_mem, tla.make_shape(16, 16), tla.make_coord(0, 0))
+    acc = tla.tile_view(acc_mem, tla.make_shape(16, 16), tla.make_coord(0, 0))
+    mutex_l0a = tla.mutex(resource="l0a", id=0)
+    mutex_l0b = tla.mutex(resource="l0b", id=1)
+    mutex_l0c = tla.mutex(resource="l0c", id=2)
+    with tla.mutex_guard(mutex_l0a, mutex_l0b, mutex_l0c):
+        tla.mmad(acc, lhs, rhs, init_c=False)
+
+
+@tla.kernel
+def mutex_guard_dynamic_mutex_kernel(dst: tla.Tensor, src: tla.Tensor) -> None:
+    mutex_l1a0 = tla.mutex(resource="l1a0", id=0)
+    mutex_l1a1 = tla.mutex(resource="l1a1", id=1)
+    mutex_l0a0 = tla.mutex(resource="l0a0", id=2)
+    mutex_l0a1 = tla.mutex(resource="l0a1", id=3)
+    dst_tile = tla.tile_view(dst, tla.make_shape(16, 16), tla.make_coord(0, 0))
+    src_tile = tla.tile_view(src, tla.make_shape(16, 16), tla.make_coord(0, 0))
+    for i in tla.range(0, 2, 1):
+        mutex_l1a = mutex_l1a0 if i == 0 else mutex_l1a1
+        mutex_l0a = mutex_l0a0 if i == 0 else mutex_l0a1
+        with tla.mutex_guard(mutex_l1a, mutex_l0a):
+            tla.copy(dst_tile, src_tile)
+
+
+@tla.kernel
+def mutex_guard_control_flow_body_kernel(dst: tla.Tensor, src: tla.Tensor) -> None:
+    mutex = tla.mutex(resource="cf_mutex", id=0)
+    dst_tile = tla.tile_view(dst, tla.make_shape(16, 16), tla.make_coord(0, 0))
+    src_tile = tla.tile_view(src, tla.make_shape(16, 16), tla.make_coord(0, 0))
+    for i in tla.range(0, 2, 1):
+        with tla.mutex_guard(mutex):
+            if i == 0:
+                tla.copy(dst_tile, src_tile)
+            else:
+                tla.copy(dst_tile, src_tile)
+
+
+def _assert_guard_order(mlir: str, pipe: str) -> None:
+    assert f"#tla.pipe<{pipe}>" in mlir or f"<{pipe}>" in mlir
+    assert mlir.index("tla.mutex_lock") < mlir.index("tla.copy")
+    assert mlir.rindex("tla.copy") < mlir.rindex("tla.mutex_unlock")
+
+
+def _mutex_operands(mlir: str, op_name: str) -> list[str]:
+    generic = re.findall(rf'"{op_name}"\((%[\w\d]+)\)', mlir)
+    custom = re.findall(rf"{op_name} (%[\w\d]+)\[", mlir)
+    return generic + custom
 
 
 @tla.kernel
@@ -168,6 +288,94 @@ def test_cube_region_lowering_emits_exec_units() -> None:
     assert "tla.mmad" in mlir
     assert 'tla.exec_units = "cube"' in mlir
     assert 'tla.module_exec_units = "cube"' in mlir
+
+
+def test_mutex_guard_copy_infers_mte2_from_gm_source() -> None:
+    dst = _tensor_arg(tla.AddressSpace.l1)
+    src = _tensor_arg(tla.AddressSpace.gm)
+    mlir = mutex_guard_copy_kernel.dump_mlir(type_args=(dst, src))
+    _assert_guard_order(mlir, "mte2")
+
+
+def test_mutex_guard_copy_infers_mte1_from_l1_source() -> None:
+    dst = _tensor_arg(tla.AddressSpace.l0a)
+    src = _tensor_arg(tla.AddressSpace.l1)
+    mlir = mutex_guard_copy_kernel.dump_mlir(type_args=(dst, src))
+    _assert_guard_order(mlir, "mte1")
+
+
+def test_mutex_guard_copy_infers_fix_from_l0c_source() -> None:
+    dst = _tensor_arg(tla.AddressSpace.gm, dtype=tla.Float32)
+    src = _tensor_arg(tla.AddressSpace.l0c, dtype=tla.Float32)
+    mlir = mutex_guard_copy_kernel.dump_mlir(type_args=(dst, src))
+    _assert_guard_order(mlir, "fix")
+
+
+def test_mutex_guard_multi_mutex_mmad_uses_cube_and_stack_unlock_order() -> None:
+    lhs, rhs, acc = _mmad_tensor_args()
+    try:
+        mlir = mutex_guard_multi_mmad_kernel.dump_mlir(type_args=(lhs, rhs, acc))
+    except TlaLoweringError as e:
+        _skip_if_mmad_rank2_tile_view_regression(e)
+        raise
+    assert "#tla.pipe<cube>" in mlir or "<cube>" in mlir
+    locks = _mutex_operands(mlir, "tla.mutex_lock")
+    unlocks = _mutex_operands(mlir, "tla.mutex_unlock")
+    assert len(locks) == 3
+    assert unlocks == list(reversed(locks))
+    assert mlir.index("tla.mutex_lock") < mlir.index("tla.mmad")
+    assert mlir.rindex("tla.mmad") < mlir.rindex("tla.mutex_unlock")
+
+
+def test_mutex_guard_wraps_multiple_same_pipe_ops_once() -> None:
+    dst = _tensor_arg(tla.AddressSpace.l1)
+    src = _tensor_arg(tla.AddressSpace.gm)
+    mlir = mutex_guard_two_copy_kernel.dump_mlir(type_args=(dst, src))
+    assert mlir.count("tla.copy") == 2
+    assert mlir.count("tla.mutex_lock") == 1
+    assert mlir.count("tla.mutex_unlock") == 1
+    _assert_guard_order(mlir, "mte2")
+
+
+def test_mutex_guard_rejects_multiple_inferred_pipes() -> None:
+    gm = _tensor_arg(tla.AddressSpace.gm)
+    l1 = _tensor_arg(tla.AddressSpace.l1)
+    l0a = _tensor_arg(tla.AddressSpace.l0a)
+    with pytest.raises(TlaLoweringError, match="inferred multiple pipes"):
+        mutex_guard_mixed_pipe_kernel.dump_mlir(type_args=(gm, l1, l0a))
+
+
+def test_mutex_guard_rejects_explicit_lock_inside_body() -> None:
+    dst = _tensor_arg(tla.AddressSpace.l1)
+    src = _tensor_arg(tla.AddressSpace.gm)
+    with pytest.raises(tla.TlaCoreAPIError, match="explicit mutex lock/unlock"):
+        mutex_guard_explicit_lock_kernel.dump_mlir(type_args=(dst, src))
+
+
+def test_mutex_guard_requires_copy_or_mmad_body() -> None:
+    with pytest.raises(TlaLoweringError, match="at least one tla.copy or tla.mmad"):
+        mutex_guard_empty_kernel.dump_mlir()
+
+
+def test_mutex_guard_supports_dynamic_mutex_values() -> None:
+    dst = _tensor_arg(tla.AddressSpace.l0a)
+    src = _tensor_arg(tla.AddressSpace.l1)
+    mlir = mutex_guard_dynamic_mutex_kernel.dump_mlir(type_args=(dst, src))
+    assert "scf.if" in mlir
+    assert mlir.count("tla.mutex_lock") == 2
+    assert mlir.count("tla.mutex_unlock") == 2
+    _assert_guard_order(mlir, "mte1")
+
+
+def test_mutex_guard_infers_pipe_from_control_flow_body() -> None:
+    dst = _tensor_arg(tla.AddressSpace.l1)
+    src = _tensor_arg(tla.AddressSpace.gm)
+    mlir = mutex_guard_control_flow_body_kernel.dump_mlir(type_args=(dst, src))
+    assert "scf.if" in mlir
+    assert mlir.count("tla.copy") == 2
+    assert mlir.count("tla.mutex_lock") == 1
+    assert mlir.count("tla.mutex_unlock") == 1
+    _assert_guard_order(mlir, "mte2")
 
 
 def test_vec_func_default_mode_lowering() -> None:

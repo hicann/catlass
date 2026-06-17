@@ -9,6 +9,7 @@ from catlass.runtime import from_dlpack
 
 import basic_mmad_kernels as _kernels
 import basic_mmad_kernels_mutex as _kernels_mutex
+import basic_mmad_kernels_mutex_with as _kernels_mutex_with
 
 DEMO_DIR = Path(__file__).resolve().parent
 DEFAULT_CACHE_DIR = DEMO_DIR / "artifacts" / "runtime-cache"
@@ -98,7 +99,7 @@ def _apply_kernel_dtypes(dtype_a: ElemDType, dtype_b: ElemDType, dtype_c: ElemDT
     dtype_a_tla = _tla_elem_dtype(dtype_a)
     dtype_b_tla = _tla_elem_dtype(dtype_b)
     dtype_c_tla = _tla_elem_dtype(dtype_c)
-    for kernel_mod in (_kernels, _kernels_mutex):
+    for kernel_mod in (_kernels, _kernels_mutex, _kernels_mutex_with):
         kernel_mod.DTYPE_A = dtype_a_tla
         kernel_mod.DTYPE_B = dtype_b_tla
         kernel_mod.DTYPE_GM_C = dtype_c_tla
@@ -109,7 +110,7 @@ def _apply_problem_size(m_val: int, n_val: int, k_val: int) -> None:
     global m, n, k
     if m_val <= 0 or n_val <= 0 or k_val <= 0:
         raise ValueError(f"m, n, k must be positive; got m={m_val}, n={n_val}, k={k_val}")
-    for kernel_mod in (_kernels, _kernels_mutex):
+    for kernel_mod in (_kernels, _kernels_mutex, _kernels_mutex_with):
         kernel_mod.m = m_val
         kernel_mod.n = n_val
         kernel_mod.k = k_val
@@ -522,14 +523,24 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="use mutex instead of flag for sync",
     )
+    parser.add_argument(
+        "--use-mutex-with",
+        action="store_true",
+        help="use mutex_guard with-syntax instead of explicit mutex lock/unlock",
+    )
     return parser
 
 
 def main() -> int:
+    global basic_mmad_kernel
+
     args = _build_parser().parse_args()
+    if args.use_mutex and args.use_mutex_with:
+        raise SystemExit("--use-mutex and --use-mutex-with are mutually exclusive.")
     if args.use_mutex:
-        global basic_mmad_kernel
         basic_mmad_kernel = _kernels_mutex.basic_mmad_kernel
+    if args.use_mutex_with:
+        basic_mmad_kernel = _kernels_mutex_with.basic_mmad_kernel
     _apply_problem_size(args.m, args.n, args.k)
     if not args.all_mmad_dtypes:
         _validate_mmad_dtype_triple(args.dtype_a, args.dtype_b, args.dtype_c)

@@ -56,13 +56,14 @@ class _FrontendEmitState:
     category_bindings: dict[int, str]
     module: Any | None = None
     exec_units: set[str] = field(default_factory=set)
-    #: ``id(mlir.Value)`` -> host :class:`~catlass.tla.runtime._Tensor` for execution lowering.
-    tensor_host_by_value_id: dict[int, Any] = field(default_factory=dict)
-    #: ``id(mlir.Value)`` -> structured Tla tensor type descriptor.
-    tensor_type_by_value_id: dict[int, Any] = field(default_factory=dict)
-    #: ``id(mlir.Value)`` -> resolved tensor metadata fields (shape/stride/coord/origin_shape/...).
-    tensor_metadata_by_value_id: dict[int, dict[str, Any]] = field(default_factory=dict)
+    #: ``mlir.Value`` -> host :class:`~catlass.tla.runtime._Tensor` for execution lowering.
+    tensor_host_by_value: dict[Any, Any] = field(default_factory=dict)
+    #: ``mlir.Value`` -> structured Tla tensor type descriptor.
+    tensor_type_by_value: dict[Any, Any] = field(default_factory=dict)
+    #: ``mlir.Value`` -> resolved tensor metadata fields (shape/stride/coord/origin_shape/...).
+    tensor_metadata_by_value: dict[Any, dict[str, Any]] = field(default_factory=dict)
     has_vector_region: bool = False
+    mutex_guard_depth: int = 0
     active_regions: list[str] = field(default_factory=list)
     active_region_roles: list[str] = field(default_factory=list)
 
@@ -205,14 +206,14 @@ def _frontend_emission(
     *,
     arg_bindings: dict[int, Any] | None = None,
     category_bindings: dict[int, str] | None = None,
-    tensor_host_by_value_id: dict[int, Any] | None = None,
+    tensor_host_by_value: dict[Any, Any] | None = None,
     module: Any | None = None,
 ) -> Any:
     """Activate frontend direct-op emission context."""
     state = _FrontendEmitState(
         arg_bindings=dict(arg_bindings or {}),
         category_bindings=dict(category_bindings or {}),
-        tensor_host_by_value_id=dict(tensor_host_by_value_id or {}),
+        tensor_host_by_value=dict(tensor_host_by_value or {}),
         module=module,
     )
     token = _FRONTEND_EMIT_STATE.set(state)
@@ -626,6 +627,7 @@ _CORE_API_EXPORTS = (
     "wait_flag",
     "pipe_barrier",
     "mutex",
+    "mutex_guard",
     "range",
     "cube",
     "vector",
