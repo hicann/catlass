@@ -61,6 +61,7 @@ from .svd_quant_matmul import ascend950_svd_quant_matmul  # example 61
 from .broadcast_matmul_perblock_quant import broadcast_matmul_perblock_quant  # example 62
 from .grouped_matmul_slice_m_fixpipe_dequant import grouped_matmul_slice_m_fixpipe_dequant  # example 70
 from .ascend950_matmul_evg import EvgPostprocessMode, ascend950_matmul_evg  # example 64
+from .ascend950_matmul_full_loadA import ascend950_matmul_full_loadA  # example 73
 from .ascend950_batched_matmul import ascend950_batched_matmul  # example 67
 from .ascend950_matmul_fixpipe_opti import ascend950_matmul_fixpipe_opti  # example 46
 from .ascend950_basic_matmul_gemv import ascend950_basic_matmul_gemv  # example 50
@@ -125,6 +126,7 @@ __all__ = [
     "ascend950_svd_quant_matmul",         # example 61
     "ascend950_matmul_evg",               # example 64
     "EvgPostprocessMode",                 # example 64
+    "ascend950_matmul_full_loadA",         # example 73
     "grouped_matmul_slice_m_fixpipe_dequant",  # example 70
     "ascend950_batched_matmul",           # example 67
     "ascend950_matmul_fixpipe_opti",      # example 46

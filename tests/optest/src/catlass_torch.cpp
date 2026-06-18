@@ -218,6 +218,9 @@ using MatmulEvgOp = MatmulEvgLike<CatlassKernel::MatmulEvg>;
 static auto& matmul_evg = MatmulEvgOp::Run;
 REGISTER_TORCH_FUNC(matmul_evg);
 
+using Ascend950MatmulFullLoadAOp = MatmulLike<CatlassKernel::Ascend950MatmulFullLoadA>;
+static auto& ascend950_matmul_full_loadA = Ascend950MatmulFullLoadAOp::Run;
+REGISTER_TORCH_FUNC(ascend950_matmul_full_loadA);
 using A2Fp8E4M3MatmulOp = MatmulLike<CatlassKernel::A2Fp8E4M3Matmul>;
 static auto& a2_fp8_e4m3_matmul = A2Fp8E4M3MatmulOp::Run;
 REGISTER_TORCH_FUNC(a2_fp8_e4m3_matmul);

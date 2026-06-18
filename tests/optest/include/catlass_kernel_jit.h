@@ -495,6 +495,12 @@ void Ascend950Fp8MxGroupedMatmulFinalizeRouting(
     const GroupedMxFinalizeRoutingParams& params);
 
 /**
+ * @brief JIT interface for example 73_ascend950_matmul_full_loadA.
+ */
+void Ascend950MatmulFullLoadA(
+    const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+
+/**
  * @brief Reserved JIT interface for example 102_dynamic_optimized_matmul.
  */
 void DynamicOptimizedMatmul(
