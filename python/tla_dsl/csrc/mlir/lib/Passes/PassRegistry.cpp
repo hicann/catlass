@@ -66,6 +66,28 @@ public:
   }
 };
 
+class EnsureC310RegbaseTargetAttrPass
+    : public PassWrapper<EnsureC310RegbaseTargetAttrPass, OperationPass<ModuleOp>> {
+public:
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(EnsureC310RegbaseTargetAttrPass)
+
+  StringRef getArgument() const override { return "tla-ensure-c310-regbase-target-attr"; }
+  StringRef getName() const override { return "EnsureC310RegbaseTargetAttrPass"; }
+
+  void runOnOperation() override {
+    MLIRContext *ctx = &getContext();
+    auto targetAttr = hivm_regbaseintrins::SIMT_TargetAttr::get(ctx, "dav-c310");
+
+    getOperation().walk([&](func::FuncOp funcOp) {
+      auto functionKind =
+          funcOp->getAttrOfType<hacc::HACCFuncTypeAttr>(hacc::HACCFuncTypeAttr::name);
+      if (!functionKind || functionKind.getFunctionKind() != hacc::HACCFuncType::DEVICE)
+        return;
+      funcOp->setAttr(hivm_regbaseintrins::kDavinciTargetAttrName, targetAttr);
+    });
+  }
+};
+
 } // namespace
 
 std::unique_ptr<Pass> createAddKernelPrologueEpiloguePass() {
@@ -107,6 +129,7 @@ void buildTlaPipeline(OpPassManager &pm) {
   pm.addPass(mlir::createConvertHIVMAVEToStandardPass());
   pm.addPass(mlir::memref::createExpandStridedMetadataPass());
   pm.addPass(mlir::createConvertHIVMAVEToAVEIntrinPass());
+  pm.addPass(std::make_unique<EnsureC310RegbaseTargetAttrPass>());
   pm.addPass(createConvertSCFToCFPass());
 }
 

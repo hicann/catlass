@@ -56,6 +56,105 @@ def add(result, lhs, rhs, *, loc=None, ip=None) -> _ods_ir.Value:
   return _get_op_result_or_op_results(AddOp(result=result, lhs=lhs, rhs=rhs, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
+class SubOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.sub"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, lhs, rhs, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(lhs))
+    operands.append(_get_op_result_or_value(rhs))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def lhs(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def rhs(self):
+    return self.operation.operands[1]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def sub(result, lhs, rhs, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(SubOp(result=result, lhs=lhs, rhs=rhs, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
+class MulOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.mul"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, lhs, rhs, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(lhs))
+    operands.append(_get_op_result_or_value(rhs))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def lhs(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def rhs(self):
+    return self.operation.operands[1]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def mul(result, lhs, rhs, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(MulOp(result=result, lhs=lhs, rhs=rhs, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
+class DivOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.div"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, lhs, rhs, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(lhs))
+    operands.append(_get_op_result_or_value(rhs))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def lhs(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def rhs(self):
+    return self.operation.operands[1]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def div(result, lhs, rhs, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(DivOp(result=result, lhs=lhs, rhs=rhs, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
 class AllocPtrOp(_ods_ir.OpView):
   OPERATION_NAME = "tla.alloc_ptr"
 

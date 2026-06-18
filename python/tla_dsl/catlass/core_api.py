@@ -293,6 +293,18 @@ class VectorSSA:
     def __radd__(self, other: Any) -> "VectorSSA":
         return add(other, self)
 
+    def __sub__(self, other: Any) -> "VectorSSA":
+        return sub(self, other)
+
+    def __mul__(self, other: Any) -> "VectorSSA":
+        return mul(self, other)
+
+    def __rmul__(self, other: Any) -> "VectorSSA":
+        return mul(other, self)
+
+    def __truediv__(self, other: Any) -> "VectorSSA":
+        return div(self, other)
+
 
 class _MutexValue:
     """Frontend proxy for an SSA ``!tla.mutex`` value."""
@@ -2830,6 +2842,30 @@ def broadcast(
     )
 
 
+def _emit_vector_binary(
+    op_name: str,
+    emitter: Any,
+    lhs: VectorSSA,
+    rhs: VectorSSA,
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> VectorSSA:
+    """Shared lowering for element-wise vector-vector binary ops."""
+    _require_category(op_name, "lhs", lhs, "vector_ssa", 0)
+    _require_category(op_name, "rhs", rhs, "vector_ssa", 1)
+    _require_frontend_state(op_name)
+    _runtime._check_frontend_region_op(op_name, {"vector"})
+    _runtime._mark_frontend_exec_unit("vector")
+    lhs_value = _as_value(lhs)
+    rhs_value = _as_value(rhs)
+    if str(lhs_value.type) != str(rhs_value.type):
+        raise TlaLoweringError(
+            f"tla.{op_name} operands must have identical !tla.tensor types; "
+            f"got {lhs_value.type} and {rhs_value.type}"
+        )
+    return VectorSSA(emitter(lhs_value.type, lhs_value, rhs_value, loc=loc))
+
+
 @dsl_user_op
 def add(
     lhs: VectorSSA,
@@ -2838,19 +2874,40 @@ def add(
     loc: mlir_ir.Location | None = None,
 ) -> VectorSSA:
     """Emit element-wise add for loaded vector SSA values."""
-    _require_category("add", "lhs", lhs, "vector_ssa", 0)
-    _require_category("add", "rhs", rhs, "vector_ssa", 1)
-    _require_frontend_state("add")
-    _runtime._check_frontend_region_op("add", {"vector"})
-    _runtime._mark_frontend_exec_unit("vector")
-    lhs_value = _as_value(lhs)
-    rhs_value = _as_value(rhs)
-    if str(lhs_value.type) != str(rhs_value.type):
-        raise TlaLoweringError(
-            f"tla.add operands must have identical !tla.tensor types; "
-            f"got {lhs_value.type} and {rhs_value.type}"
-        )
-    return VectorSSA(_tla_ops_gen.add(lhs_value.type, lhs_value, rhs_value, loc=loc))
+    return _emit_vector_binary("add", _tla_ops_gen.add, lhs, rhs, loc=loc)
+
+
+@dsl_user_op
+def sub(
+    lhs: VectorSSA,
+    rhs: VectorSSA,
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> VectorSSA:
+    """Emit element-wise subtract for loaded vector SSA values."""
+    return _emit_vector_binary("sub", _tla_ops_gen.sub, lhs, rhs, loc=loc)
+
+
+@dsl_user_op
+def mul(
+    lhs: VectorSSA,
+    rhs: VectorSSA,
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> VectorSSA:
+    """Emit element-wise multiply for loaded vector SSA values."""
+    return _emit_vector_binary("mul", _tla_ops_gen.mul, lhs, rhs, loc=loc)
+
+
+@dsl_user_op
+def div(
+    lhs: VectorSSA,
+    rhs: VectorSSA,
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> VectorSSA:
+    """Emit element-wise divide for loaded vector SSA values."""
+    return _emit_vector_binary("div", _tla_ops_gen.div, lhs, rhs, loc=loc)
 
 
 @dsl_user_op
@@ -2966,6 +3023,9 @@ _require_generated("vector")
 _require_generated("mmad")
 _require_generated("broadcast")
 _require_generated("add")
+_require_generated("sub")
+_require_generated("mul")
+_require_generated("div")
 _require_generated("arch_block_idx")
 _require_generated("arch_sub_block_idx")
 _require_generated("arch_block_dim")
@@ -3043,6 +3103,9 @@ __all__ = [
     "mmad",
     "broadcast",
     "add",
+    "sub",
+    "mul",
+    "div",
     "make_ptr",
     "recast_ptr",
     "make_shape",

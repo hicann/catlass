@@ -669,17 +669,32 @@ def Tla_TileViewOp : Tla_Op<"tile_view", []> {
   }];
 }
 
-def Tla_AddOp : Tla_Op<"add", []> {
-  let summary = "Vector add for tensor fragments";
-  let description = [{
-    Element-wise add on tensor fragments / vector tiles.
-  }];
+class Tla_VectorBinaryOp<string mnemonic, string opSummary, string opDescription>
+    : Tla_Op<mnemonic, [Pure]> {
+  let summary = opSummary;
+  let description = opDescription;
   let arguments = (ins Tla_TensorType:$lhs, Tla_TensorType:$rhs);
   let results = (outs Tla_TensorType:$result);
   let assemblyFormat = [{
     $lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs) `->` type($result)
   }];
 }
+
+def Tla_AddOp : Tla_VectorBinaryOp<"add",
+    "Vector add for tensor fragments",
+    "Element-wise add on tensor fragments / vector tiles.">;
+
+def Tla_SubOp : Tla_VectorBinaryOp<"sub",
+    "Vector subtract for tensor fragments",
+    "Element-wise subtract on tensor fragments / vector tiles.">;
+
+def Tla_MulOp : Tla_VectorBinaryOp<"mul",
+    "Vector multiply for tensor fragments",
+    "Element-wise multiply on tensor fragments / vector tiles.">;
+
+def Tla_DivOp : Tla_VectorBinaryOp<"div",
+    "Vector divide for tensor fragments",
+    "Element-wise divide on tensor fragments / vector tiles.">;
 
 def Tla_VectorOp : Tla_Op<"vector", [NoTerminator, SingleBlock]> {
   let summary = "Vector region";

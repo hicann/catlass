@@ -912,7 +912,7 @@ public:
     auto unitAttr = StringAttr::get(ctx, execUnit);
     region.walk([&](Operation *nestedOp) {
       StringRef name = nestedOp->getName().getStringRef();
-      if (name != "tla.add")
+      if (name != "tla.add" && name != "tla.sub" && name != "tla.mul" && name != "tla.div")
         return;
       nestedOp->setAttr(kExecUnitAttrName, unitAttr);
     });
@@ -930,7 +930,8 @@ public:
     module.walk([&](::tla::FuncOp funcOp) {
       bool isVectorKernel = false;
       funcOp.walk([&](Operation *op) {
-        if (llvm::isa<::tla::VectorOp, ::tla::AddOp>(op)) {
+        if (llvm::isa<::tla::VectorOp, ::tla::AddOp, ::tla::SubOp, ::tla::MulOp,
+                      ::tla::DivOp>(op)) {
           isVectorKernel = true;
           return WalkResult::interrupt();
         }

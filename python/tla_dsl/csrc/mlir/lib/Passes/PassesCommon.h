@@ -377,7 +377,8 @@ inline LogicalResult applyHaccHivmC310AttrPatterns(ModuleOp module, MLIRContext 
     target.addDynamicallyLegalOp<::tla::CubeOp, ::tla::MmadOp>([](Operation *op) {
       return moduleCoreAllows(op->getParentOfType<ModuleOp>(), HivmCoreKind::AIC);
     });
-    target.addDynamicallyLegalOp<::tla::VectorOp, ::tla::AddOp>([](Operation *op) {
+    target.addDynamicallyLegalOp<::tla::VectorOp, ::tla::AddOp, ::tla::SubOp, ::tla::MulOp,
+                                 ::tla::DivOp>([](Operation *op) {
       return moduleCoreAllows(op->getParentOfType<ModuleOp>(), HivmCoreKind::AIV);
     });
     target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
@@ -386,7 +387,10 @@ inline LogicalResult applyHaccHivmC310AttrPatterns(ModuleOp module, MLIRContext 
     patterns.add<ObserveCoreOpPattern<::tla::CubeOp, HivmCoreKind::AIC>,
                  ObserveCoreOpPattern<::tla::MmadOp, HivmCoreKind::AIC>,
                  ObserveCoreOpPattern<::tla::VectorOp, HivmCoreKind::AIV>,
-                 ObserveCoreOpPattern<::tla::AddOp, HivmCoreKind::AIV>>(ctx);
+                 ObserveCoreOpPattern<::tla::AddOp, HivmCoreKind::AIV>,
+                 ObserveCoreOpPattern<::tla::SubOp, HivmCoreKind::AIV>,
+                 ObserveCoreOpPattern<::tla::MulOp, HivmCoreKind::AIV>,
+                 ObserveCoreOpPattern<::tla::DivOp, HivmCoreKind::AIV>>(ctx);
     if (failed(applyPartialConversion(module, target, std::move(patterns))))
       return failure();
   }

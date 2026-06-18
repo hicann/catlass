@@ -1,5 +1,6 @@
 #include "PassesCommon.h"
 #include "PassesInternal.h"
+#include "bishengir/Dialect/HIVMAVE/IR/HIVMAVE.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
@@ -612,8 +613,57 @@ static std::string buildUniqueVectorHelperName(ModuleOp module, int &nextVectorR
   return helperName;
 }
 
+enum class VectorBinaryKind { Add, Sub, Mul, Div };
+
+struct VectorBinaryInfo {
+  VectorBinaryKind kind;
+  StringRef name;
+};
+
+static std::optional<VectorBinaryInfo> getVectorBinaryInfo(Operation *op) {
+  if (!op)
+    return std::nullopt;
+  if (isa<::tla::AddOp>(op))
+    return VectorBinaryInfo{VectorBinaryKind::Add, "add"};
+  if (isa<::tla::SubOp>(op))
+    return VectorBinaryInfo{VectorBinaryKind::Sub, "sub"};
+  if (isa<::tla::MulOp>(op))
+    return VectorBinaryInfo{VectorBinaryKind::Mul, "mul"};
+  if (isa<::tla::DivOp>(op))
+    return VectorBinaryInfo{VectorBinaryKind::Div, "div"};
+  return std::nullopt;
+}
+
+// Build the AVE vector op for a tla binary op. The mask is the all-true
+// predicate; pass-thru is omitted. For div the signedness is carried as the
+// TypeFn cast attribute (cast_unsigned for unsigned integer element types,
+// cast_signed otherwise).
+static Value createVectorBinaryResult(OpBuilder &b, Location loc, VectorBinaryKind kind,
+                                      Type elementType, VectorType vecType, Value lhs,
+                                      Value rhs, Value mask) {
+  switch (kind) {
+  case VectorBinaryKind::Add:
+    return b.create<hivmave::VFAddOp>(loc, vecType, lhs, rhs, mask, /*pass_thru=*/nullptr);
+  case VectorBinaryKind::Sub:
+    return b.create<hivmave::VFSubOp>(loc, vecType, lhs, rhs, mask, /*pass_thru=*/nullptr);
+  case VectorBinaryKind::Mul:
+    return b.create<hivmave::VFMulOp>(loc, vecType, lhs, rhs, mask, /*pass_thru=*/nullptr);
+  case VectorBinaryKind::Div: {
+    auto cast = hivm::TypeFn::cast_signed;
+    if (auto intType = dyn_cast<IntegerType>(elementType))
+      if (intType.getSignedness() == IntegerType::Unsigned)
+        cast = hivm::TypeFn::cast_unsigned;
+    return b.create<hivmave::VFDivOp>(loc, vecType, lhs, rhs, mask,
+                                      hivm::TypeFnAttr::get(b.getContext(), cast),
+                                      /*pass_thru=*/nullptr);
+  }
+  }
+  return nullptr;
+}
+
 static FailureOr<func::FuncOp> buildHelperFunc(ModuleOp module, func::FuncOp parentFunc,
-                                               Operation *vectorOp, Value dst, Value lhs,
+                                               Operation *vectorOp, VectorBinaryKind binaryKind,
+                                               StringRef binaryName, Value dst, Value lhs,
                                                Value rhs, int &nextVectorRegionId,
                                                DenseMap<Value, Value> &handoffMemrefByTensor,
                                                llvm::StringMap<func::FuncOp> &helperCache) {
@@ -632,7 +682,7 @@ static FailureOr<func::FuncOp> buildHelperFunc(ModuleOp module, func::FuncOp par
 
   std::string cacheKey;
   llvm::raw_string_ostream cacheKeyStream(cacheKey);
-  cacheKeyStream << "add:";
+  cacheKeyStream << binaryName << ":";
   funcType.print(cacheKeyStream);
   cacheKeyStream.flush();
   auto cached = helperCache.find(cacheKey);
@@ -666,31 +716,28 @@ static FailureOr<func::FuncOp> buildHelperFunc(ModuleOp module, func::FuncOp par
   if (failed(zeroValue))
     return failure();
   Value zero = b.create<arith::ConstantIndexOp>(vectorOp->getLoc(), 0);
-  auto getInBoundsAttr = [&](MemRefType type) {
-    return b.getBoolArrayAttr({type.getDimSize(0) == vecType.getDimSize(0)});
-  };
-  auto lhsPermutationMap = AffineMap::getMinorIdentityMap(lhsMemrefType.getRank(), vecType.getRank(), ctx);
-  auto rhsPermutationMap = AffineMap::getMinorIdentityMap(rhsMemrefType.getRank(), vecType.getRank(), ctx);
-  auto dstPermutationMap = AffineMap::getMinorIdentityMap(dstMemrefType.getRank(), vecType.getRank(), ctx);
-  auto lhsVec = b.create<vector::TransferReadOp>(
-      vectorOp->getLoc(), vecType, entry->getArgument(0), ValueRange{zero},
-      AffineMapAttr::get(lhsPermutationMap), *zeroValue, Value(), getInBoundsAttr(lhsMemrefType));
-  auto rhsVec = b.create<vector::TransferReadOp>(
-      vectorOp->getLoc(), vecType, entry->getArgument(1), ValueRange{zero},
-      AffineMapAttr::get(rhsPermutationMap), *zeroValue, Value(), getInBoundsAttr(rhsMemrefType));
-  Value sum;
+  Value lhsVec = b.create<hivmave::VFLoadOp>(
+      vectorOp->getLoc(), vecType, entry->getArgument(0), ValueRange{zero})
+                     .getRes();
+  Value rhsVec = b.create<hivmave::VFLoadOp>(
+      vectorOp->getLoc(), vecType, entry->getArgument(1), ValueRange{zero})
+                     .getRes();
   Type elementType = vecType.getElementType();
-  if (isa<IntegerType>(elementType)) {
-    sum = b.create<arith::AddIOp>(vectorOp->getLoc(), lhsVec, rhsVec);
-  } else if (isa<FloatType>(elementType)) {
-    sum = b.create<arith::AddFOp>(vectorOp->getLoc(), lhsVec, rhsVec);
-  } else {
-    return vectorOp->emitError("unsupported element type for vector add helper: ")
+  if (!isa<IntegerType>(elementType) && !isa<FloatType>(elementType)) {
+    return vectorOp->emitError("unsupported element type for vector binary helper: ")
            << elementType;
   }
-  b.create<vector::TransferWriteOp>(vectorOp->getLoc(), sum, entry->getArgument(2),
-                                    ValueRange{zero}, AffineMapAttr::get(dstPermutationMap),
-                                    Value(), getInBoundsAttr(dstMemrefType));
+  auto maskVecType = VectorType::get({*lanes}, b.getI1Type());
+  Value opMask =
+      b.create<hivmave::VFPgeOp>(vectorOp->getLoc(), maskVecType, hivmave::PgePattern::ALL);
+  Value result = createVectorBinaryResult(b, vectorOp->getLoc(), binaryKind, elementType, vecType,
+                                          lhsVec, rhsVec, opMask);
+  if (!result)
+    return vectorOp->emitError("unsupported binary op for element type: ") << elementType;
+  Value storeMask =
+      b.create<hivmave::VFPgeOp>(vectorOp->getLoc(), maskVecType, hivmave::PgePattern::ALL);
+  b.create<hivmave::VFMaskedStoreOp>(vectorOp->getLoc(), entry->getArgument(2),
+                                     ValueRange{zero}, storeMask, result);
   b.create<func::ReturnOp>(vectorOp->getLoc());
 
   helperCache[cacheKey] = helper;
@@ -731,14 +778,17 @@ public:
       return rewriter.notifyMatchFailure(vecFuncOp,
                                          "expected tla.vec.func body to contain tla.store");
 
-    auto add = store.getSource().getDefiningOp<::tla::AddOp>();
-    if (!add)
-      return rewriter.notifyMatchFailure(vecFuncOp, "expected tla.store source to be tla.add");
+    Operation *binaryOp = store.getSource().getDefiningOp();
+    auto binaryInfo = getVectorBinaryInfo(binaryOp);
+    if (!binaryInfo || binaryOp->getNumOperands() != 2)
+      return rewriter.notifyMatchFailure(
+          vecFuncOp, "expected tla.store source to be a supported tla binary op");
 
-    auto lhsLoad = add.getLhs().getDefiningOp<::tla::LoadOp>();
-    auto rhsLoad = add.getRhs().getDefiningOp<::tla::LoadOp>();
+    auto lhsLoad = binaryOp->getOperand(0).getDefiningOp<::tla::LoadOp>();
+    auto rhsLoad = binaryOp->getOperand(1).getDefiningOp<::tla::LoadOp>();
     if (!lhsLoad || !rhsLoad)
-      return rewriter.notifyMatchFailure(vecFuncOp, "expected tla.add operands to be tla.load");
+      return rewriter.notifyMatchFailure(vecFuncOp,
+                                         "expected tla binary op operands to be tla.load");
 
     auto funcOp = vecFuncOp->getParentOfType<func::FuncOp>();
     if (!funcOp)
@@ -749,7 +799,8 @@ public:
     Value rhs = rhsLoad.getSource();
 
     auto helperOr =
-        buildHelperFunc(module, funcOp, vecFuncOp.getOperation(), dst, lhs, rhs, nextVectorRegionId,
+        buildHelperFunc(module, funcOp, vecFuncOp.getOperation(), binaryInfo->kind,
+                        binaryInfo->name, dst, lhs, rhs, nextVectorRegionId,
                         handoffMemrefByTensor, helperCache);
     if (failed(helperOr)) {
       return rewriter.notifyMatchFailure(vecFuncOp, "failed to build vector helper function");
@@ -790,7 +841,7 @@ public:
     call->setAttr("hivm.vector_function", UnitAttr::get(rewriter.getContext()));
     call->setAttr("no_inline", UnitAttr::get(rewriter.getContext()));
     rewriter.eraseOp(store);
-    rewriter.eraseOp(add);
+    rewriter.eraseOp(binaryOp);
     rewriter.eraseOp(lhsLoad);
     rewriter.eraseOp(rhsLoad);
     rewriter.inlineBlockBefore(body, vecFuncOp->getBlock(), vecFuncOp->getIterator());
@@ -954,7 +1005,8 @@ public:
 
   void getDependentDialects(DialectRegistry &registry) const override {
     registry.insert<arith::ArithDialect, func::FuncDialect, mlir::memref::MemRefDialect,
-                    hivm::HIVMDialect, vector::VectorDialect, ::tla::TlaDialect>();
+                    hivm::HIVMDialect, hivmave::AVEDialect, vector::VectorDialect,
+                    ::tla::TlaDialect>();
   }
 
   void runOnOperation() override {
