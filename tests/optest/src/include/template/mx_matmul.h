@@ -12,6 +12,8 @@
 #ifndef OPTEST_MX_MATMUL_H
 #define OPTEST_MX_MATMUL_H
 
+#include <tuple>
+
 #include <torch/torch.h>
 #include <tiling/platform/platform_ascendc.h>
 
@@ -289,7 +291,8 @@ struct MxBatchedMatmulLike {
 
 template <KernelFn KernelFunc>
 struct DualLevelQuantMxBatchedMatmulLike {
-    using OutputType = at::Tensor;
+    using OutputType =
+        std::tuple<at::Tensor, at::Tensor, at::Tensor, at::Tensor, at::Tensor>;
 
     struct ScratchBundle {
         at::Tensor output;
@@ -373,7 +376,12 @@ struct DualLevelQuantMxBatchedMatmulLike {
         aclrtStream stream = c10_npu::getCurrentNPUStream().stream(false);
         uint32_t aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
         RUN_NPU_FUNC(KernelFunc, aicCoreNum, stream, tParams, params);
-        return scratch.output;
+        return {
+            scratch.output,
+            scratch.scaleA1,
+            scratch.scaleA2,
+            scratch.scaleB1,
+            scratch.scaleB2};
     }
 };
 

@@ -36,11 +36,28 @@ def test_ascend950_dual_level_quant_mx_batch_matmul():
     batch, m, n, k = 1, 256, 512, 1024
     a, b, expected = prepare_dual_level_quant_mx_batch_inputs(batch, m, n, k, device="npu")
 
-    result = torch_catlass.ascend950_dual_level_quant_mx_batch_matmul(a, b)
+    result, scale_a1, scale_a2, scale_b1, scale_b2 = (
+        torch_catlass.ascend950_dual_level_quant_mx_batch_matmul(a, b)
+    )
+
+    scale1_k = (k + 511) // 512
+    mx_scale_k = (k + 31) // 32
+    mx_scale_aligned_k = ((mx_scale_k + 1) // 2) * 2
 
     assert result.shape == (batch, m, n)
+    assert scale_a1.shape == (batch, m, scale1_k)
+    assert scale_a2.shape == (batch, m, mx_scale_aligned_k)
+    assert scale_b1.shape == (batch, n, scale1_k)
+    assert scale_b2.shape == (batch, n, mx_scale_aligned_k)
+
     assert result.dtype == torch.bfloat16
-    assert result.device.type == "npu"
+    assert scale_a1.dtype == torch.float32
+    assert scale_a2.dtype == torch.float8_e8m0fnu
+    assert scale_b1.dtype == torch.float32
+    assert scale_b2.dtype == torch.float8_e8m0fnu
+
+    for tensor in (result, scale_a1, scale_a2, scale_b1, scale_b2):
+        assert tensor.device.type == "npu"
 
     rtol, atol = 1e-1, 1e-1
     assert torch.allclose(result.cpu().float(), expected, rtol=rtol, atol=atol), (

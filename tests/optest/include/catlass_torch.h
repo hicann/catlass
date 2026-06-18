@@ -12,6 +12,8 @@
 #ifndef OPTEST_CATLASS_TORCH_H
 #define OPTEST_CATLASS_TORCH_H
 
+#include <tuple>
+
 #include <torch/extension.h>
 
 /**
@@ -233,7 +235,8 @@ at::Tensor ascend950_fp8_mx_batch_matmul(
  *
  * Source: example 63_ascend950_dual_level_quant_mx_batch_matmul.
  */
-at::Tensor ascend950_dual_level_quant_mx_batch_matmul(const at::Tensor& mat1, const at::Tensor& mat2);
+std::tuple<at::Tensor, at::Tensor, at::Tensor, at::Tensor, at::Tensor>
+ascend950_dual_level_quant_mx_batch_matmul(const at::Tensor& mat1, const at::Tensor& mat2);
 
 /**
  * @brief PyTorch extension entry for CATLASS Ascend950 MX FP8 grouped matmul + finalize routing.

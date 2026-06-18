@@ -7,6 +7,8 @@
 # BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE. See LICENSE in the root of
 # the software repository for the full text of the License.
 
+from typing import Tuple
+
 import torch
 from torch import Tensor
 
@@ -134,7 +136,7 @@ def ascend950_a8w4_mx_matmul(
 def ascend950_dual_level_quant_mx_batch_matmul(
     mat1: Tensor,
     mat2: Tensor,
-) -> Tensor:
+) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
     """Run CATLASS Ascend950 dual-level quant MX FP4 batch matmul.
 
     Source: example 63_ascend950_dual_level_quant_mx_batch_matmul.
@@ -144,6 +146,7 @@ def ascend950_dual_level_quant_mx_batch_matmul(
         mat2: Right input physically stored as ``(B, N, K)``, same dtype as ``mat1``.
 
     Returns:
-        BF16 output tensor with shape ``(B, M, N)``.
+        Tuple of ``(output, scale_a1, scale_a2, scale_b1, scale_b2)`` where
+        ``output`` is BF16 with shape ``(B, M, N)``.
     """
     return torch.ops.catlass.ascend950_dual_level_quant_mx_batch_matmul(mat1, mat2)
