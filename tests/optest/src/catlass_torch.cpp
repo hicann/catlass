@@ -29,11 +29,12 @@
 #include "template/matmul_full_dequant.h"
 #include "template/mla.h"
 #include "template/mx_matmul.h"
+#include "template/mx_grouped_matmul.h"
+#include "template/grouped_fixpipe_dequant_matmul.h"
 #include "template/quant_matmul.h"
 #include "template/quant_per_group_per_block_matmul.h"
 #include "template/sparse_matmul.h"
 #include "template/strided_batched_matmul.h"
-#include "template/grouped_matmul_slice_m_fixpipe_dequant.h"
 #include "template/w4a8_matmul.h"
 #include "template/ascend950_mxfp8_flash_attention.h"
 #include "template/broadcast_matmul_perblock_quant.h"
@@ -306,11 +307,26 @@ REGISTER_TORCH_FUNC(ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant);
 using Ascend950TailMultiCoreSplitkMatmulOp = MatmulLike<CatlassKernel::Ascend950TailMultiCoreSplitkMatmul>;
 static auto& ascend950_tail_multi_core_splitk_matmul = Ascend950TailMultiCoreSplitkMatmulOp::Run;
 REGISTER_TORCH_FUNC(ascend950_tail_multi_core_splitk_matmul);
+using Ascend950GroupedMatmulSliceMPerTokenDequantOp =
+    GroupedQuantMatmulLike<CatlassKernel::Ascend950GroupedMatmulSliceMPerTokenDequant, GmmSliceDir::M>;
+static auto& ascend950_grouped_matmul_slice_m_per_token_dequant = Ascend950GroupedMatmulSliceMPerTokenDequantOp::Run;
+REGISTER_TORCH_FUNC(ascend950_grouped_matmul_slice_m_per_token_dequant);
 
-using Ascend950GroupedMatmulSliceMFixpipeDequantOp =
-    GroupedMatmulSliceMFixpipeDequantLike<CatlassKernel::Ascend950GroupedMatmulSliceMFixpipeDequant>;
-static auto& grouped_matmul_slice_m_fixpipe_dequant = Ascend950GroupedMatmulSliceMFixpipeDequantOp::Run;
-REGISTER_TORCH_FUNC(grouped_matmul_slice_m_fixpipe_dequant);
+using Ascend950GroupedMatmulSliceMPerTensorPerChannelDequantOp =
+    GroupedFixpipeDequantMatmulLike<CatlassKernel::Ascend950GroupedMatmulSliceMPerTensorPerChannelDequant>;
+static auto& ascend950_grouped_matmul_slice_m_per_tensor_per_channel_dequant =
+    Ascend950GroupedMatmulSliceMPerTensorPerChannelDequantOp::Run;
+REGISTER_TORCH_FUNC(ascend950_grouped_matmul_slice_m_per_tensor_per_channel_dequant);
+
+using Ascend950MxGroupedMatmulSliceMOp =
+    MxGroupedMatmulLike<CatlassKernel::Ascend950MxGroupedMatmulSliceM>;
+static auto& ascend950_mx_grouped_matmul_slice_m = Ascend950MxGroupedMatmulSliceMOp::Run;
+REGISTER_TORCH_FUNC(ascend950_mx_grouped_matmul_slice_m);
+
+using Ascend950GroupedMatmulSliceMOp =
+    GroupedMatmulLike<CatlassKernel::Ascend950GroupedMatmulSliceM, GmmSliceDir::M>;
+static auto& ascend950_grouped_matmul_slice_m = Ascend950GroupedMatmulSliceMOp::Run;
+REGISTER_TORCH_FUNC(ascend950_grouped_matmul_slice_m);
 
 using Ascend950Fp8MxGroupedMatmulFinalizeRoutingOp =
     MxGroupedMatmulFinalizeRoutingLike<CatlassKernel::Ascend950Fp8MxGroupedMatmulFinalizeRouting>;

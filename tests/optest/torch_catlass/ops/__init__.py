@@ -48,7 +48,13 @@ from .quant_optimized_matmul_tla import quant_optimized_matmul_tla  # example 42
 from .ascend950_basic_matmul import ascend950_basic_matmul  # example 43
 from .quant_matmul_full_loadA_tla import quant_matmul_full_loadA_tla  # example 44
 from .strided_batched_matmul_tla import strided_batched_matmul_tla  # example 45
+from .ascend950_matmul_fixpipe_opti import ascend950_matmul_fixpipe_opti  # example 46
+from .ascend950_grouped_matmul_slice_m_per_token_dequant import \
+    ascend950_grouped_matmul_slice_m_per_token_dequant  # example 47
+from .ascend950_grouped_matmul_slice_m_per_tensor_per_channel_dequant import \
+    ascend950_grouped_matmul_slice_m_per_tensor_per_channel_dequant  # example 48
 from .quant_multi_core_splitk_matmul_tla import quant_multi_core_splitk_matmul_tla  # example 52
+from .ascend950_mx_grouped_matmul_slice_m import ascend950_mx_grouped_matmul_slice_m  # example 55
 from .ascend950_matmul_full_dequant import ascend950_matmul_full_dequant  # example 57
 from .ascend950_mx_matmul import (  # example 53, 54, 58, 59, 63
     ascend950_a8w4_mx_matmul,
@@ -59,23 +65,25 @@ from .ascend950_mx_matmul import (  # example 53, 54, 58, 59, 63
 )
 from .svd_quant_matmul import ascend950_svd_quant_matmul  # example 61
 from .broadcast_matmul_perblock_quant import broadcast_matmul_perblock_quant  # example 62
-from .grouped_matmul_slice_m_fixpipe_dequant import grouped_matmul_slice_m_fixpipe_dequant  # example 70
 from .ascend950_matmul_evg import EvgPostprocessMode, ascend950_matmul_evg  # example 64
 from .ascend950_matmul_full_loadA import ascend950_matmul_full_loadA  # example 73
 from .ascend950_batched_matmul import ascend950_batched_matmul  # example 67
-from .ascend950_matmul_fixpipe_opti import ascend950_matmul_fixpipe_opti  # example 46
 from .ascend950_basic_matmul_gemv import ascend950_basic_matmul_gemv  # example 50
 from .ascend950_quant_matmul_per_group_per_block_tla import ascend950_quant_matmul_per_group_per_block_tla  # example 51
 from .ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant import (
     ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant,  # example 65
 )
+from .ascend950_grouped_matmul_slice_m import ascend950_grouped_matmul_slice_m  # example 60
+from .svd_quant_matmul import ascend950_svd_quant_matmul  # example 61
+from .broadcast_matmul_perblock_quant import broadcast_matmul_perblock_quant  # example 62
+from .ascend950_matmul_evg import EvgPostprocessMode, ascend950_matmul_evg  # example 64
 from .ascend950_streamk_matmul import ascend950_streamk_matmul  # example 66
+from .ascend950_batched_matmul import ascend950_batched_matmul  # example 67
+from .multi_core_splitk_matmul import ascend950_multi_core_splitk_matmul  # example 68
+from .tail_multi_core_splitk_matmul import ascend950_tail_multi_core_splitk_matmul  # example 69
 from .ascend950_fp8_mx_grouped_matmul_finalize_routing import (  # example 71
     ascend950_fp8_mx_grouped_matmul_finalize_routing,
 )
-from .multi_core_splitk_matmul import ascend950_multi_core_splitk_matmul  # example 68
-from .tail_multi_core_splitk_matmul import ascend950_tail_multi_core_splitk_matmul  # example 69
-
 __all__ = [
     "basic_matmul",                       # example 00
     "batched_matmul",                     # example 01
@@ -116,18 +124,24 @@ __all__ = [
     "ascend950_basic_matmul",             # example 43
     "quant_matmul_full_loadA_tla",        # example 44
     "strided_batched_matmul_tla",         # example 45
+    "ascend950_matmul_fixpipe_opti",      # example 46
+    "ascend950_grouped_matmul_slice_m_per_token_dequant",  # example 47
+    "ascend950_grouped_matmul_slice_m_per_tensor_per_channel_dequant",  # example 48
+    "ascend950_basic_matmul_gemv",        # example 50
+    "ascend950_quant_matmul_per_group_per_block_tla",  # example 51
+    "ascend950_matmul_full_dequant",      # example 57
     "quant_multi_core_splitk_matmul_tla", # example 52
     "ascend950_fp8_mx_matmul_aswt",       # example 53
     "ascend950_fp4_mx_matmul_aswt",       # example 54
+    "ascend950_mx_grouped_matmul_slice_m",  # example 55
     "ascend950_fp8_mx_batch_matmul",      # example 58
     "ascend950_a8w4_mx_matmul",           # example 59
+    "ascend950_grouped_matmul_slice_m",   # example 60
     "broadcast_matmul_perblock_quant",    # example 62
     "ascend950_dual_level_quant_mx_batch_matmul", # example 63
     "ascend950_svd_quant_matmul",         # example 61
     "ascend950_matmul_evg",               # example 64
     "EvgPostprocessMode",                 # example 64
-    "ascend950_matmul_full_loadA",         # example 73
-    "grouped_matmul_slice_m_fixpipe_dequant",  # example 70
     "ascend950_batched_matmul",           # example 67
     "ascend950_matmul_fixpipe_opti",      # example 46
     "ascend950_basic_matmul_gemv",        # example 50
@@ -135,7 +149,9 @@ __all__ = [
     "ascend950_matmul_full_dequant",      # example 57
     "ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant",  # example 65
     "ascend950_streamk_matmul",           # example 66
-    "ascend950_fp8_mx_grouped_matmul_finalize_routing",  # example 71
+    "ascend950_batched_matmul",           # example 67
     "ascend950_multi_core_splitk_matmul",  # example 68
     "ascend950_tail_multi_core_splitk_matmul",  # example 69
+    "ascend950_fp8_mx_grouped_matmul_finalize_routing",  # example 71
+    "ascend950_matmul_full_loadA",         # example 73
 ]

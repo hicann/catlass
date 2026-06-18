@@ -102,7 +102,8 @@ public:
         if (aicCoreNum / blockNum > 0) {
             splitkFactor = aicCoreNum / blockNum;
         }
-        splitkFactor = std::min(splitkFactor, kTileNum);
+        // splitkFactor = std::min(splitkFactor, kTileNum);
+        splitkFactor = splitkFactor < kTileNum ? splitkFactor:kTileNum;
         return splitkFactor;
     }
 

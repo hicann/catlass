@@ -76,17 +76,6 @@ struct MatmulEvgParams : public MatmulParams {
 };
 
 /**
- * @brief Runtime parameters for per-channel/per-token fixpipe dequant.
- */
-struct MatmulFixPipeParams : public MatmulParams {
-    enum class FixPipeQuantMode: uint8_t {
-        PerChannel = 0,
-        PerTensor = 1,
-    } fixPipeQuantMode = FixPipeQuantMode::PerChannel;  ///< Quant mode selection.
-    float perTensorScale = 1.0f;                        ///< Host scalar used by per-tensor fixpipe dequant.
-};
-
-/**
  * @brief Runtime parameters for grouped matmul examples.
  */
 struct GroupedMatmulParams : public MatmulParams {
@@ -407,6 +396,12 @@ void Ascend950Fp4MxMatmulAswt(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
+ * @brief Reserved JIT interface for example 55_ascend950_mx_grouped_matmul_slice_m.
+ */
+void Ascend950MxGroupedMatmulSliceM(
+    const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GroupedMatmulParams& params);
+
+/**
  * @brief Reserved JIT interface for example 57_ascend950_matmul_full_dequant.
  */
 void Ascend950MatmulFullDequant(
@@ -454,15 +449,6 @@ void MatmulEvg(const uint32_t blockNum, aclrtStream stream, const TParams& tPara
  */
 void Ascend950BatchedMatmul(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
-
-/**
- * @brief JIT interface for example 70_ascend950_grouped_matmul_slice_m_fixpipe_dequant.
- *
- * Selects ScaleGranularity (PER_CHANNEL / PER_TENSOR) at JIT compile time
- * via ``params.fixPipeQuantMode``.
- */
-void Ascend950GroupedMatmulSliceMFixpipeDequant(
-    const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulFixPipeParams& params);
 
 /** 
  * @brief Reserved JIT interface for example 65_ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant.

@@ -68,17 +68,17 @@ static void Run(const Options &options)
     size_t lenC = tagC.Capacity();
     size_t lenBias = static_cast<size_t>(n);
 
-    size_t sizeA = lenA * sizeof(ElementA);
-    size_t sizeB = lenB * sizeof(ElementB);
-    size_t sizeC = lenC * sizeof(ElementC);
+    size_t sizeA = lenA * sizeof(fp16_t);
+    size_t sizeB = lenB * sizeof(fp16_t);
+    size_t sizeC = lenC * sizeof(fp16_t);
     size_t sizeBias = lenBias * sizeof(ElementBiasType);
     size_t sizeWorkspace;
 
-    std::vector<ElementA> hostA(lenA);
-    std::vector<ElementB> hostB(lenB);
+    std::vector<fp16_t> hostA(lenA);
+    std::vector<fp16_t> hostB(lenB);
     std::vector<ElementBiasType> hostBias(lenBias);
-    golden::FillRandomData<ElementA>(hostA, -5.0f, 5.0f);
-    golden::FillRandomData<ElementB>(hostB, -5.0f, 5.0f);
+    golden::FillRandomData<fp16_t>(hostA, -5.0f, 5.0f);
+    golden::FillRandomData<fp16_t>(hostB, -5.0f, 5.0f);
     if constexpr (!std::is_void_v<ElementBias>) {
         golden::FillRandomData<ElementBiasType>(hostBias, -5.0f, 5.0f);
     }
@@ -213,12 +213,16 @@ static void Run(const Options &options)
     }
 
     std::vector<uint64_t> errorIndices;
-    if constexpr (!std::is_same_v<ElementC, bfloat16_t>) {
-        std::vector<ElementC> hostC(lenC);
+    if constexpr (std::is_same_v<ElementC, bfloat16_t>) {
+        std::vector<bfloat16> hostC(lenC);
+        ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
+        errorIndices = golden::CompareData(hostC, hostGolden, k);
+    } else if constexpr (std::is_same_v<ElementC, half>) {
+        std::vector<fp16_t> hostC(lenC);
         ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
         errorIndices = golden::CompareData(hostC, hostGolden, k);
     } else {
-        std::vector<bfloat16> hostC(lenC);
+        std::vector<ElementC> hostC(lenC);
         ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
         errorIndices = golden::CompareData(hostC, hostGolden, k);
     }

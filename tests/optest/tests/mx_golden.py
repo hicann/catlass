@@ -12,7 +12,7 @@
 from __future__ import annotations
 
 import math
-from typing import Dict, Tuple
+from typing import Dict, Sequence, Tuple
 
 import numpy as np
 import torch
@@ -317,6 +317,61 @@ def prepare_fp8_mx_batch_inputs(
         a_scale = a_scale.contiguous().npu()
         b_scale = b_scale.contiguous().npu()
     return a, b, a_scale, b_scale, expected
+
+
+def prepare_fp8_mx_grouped_slice_m_inputs(
+    group_sizes: Sequence[int],
+    n: int,
+    k: int,
+    device: str = "npu",
+    trans_b: bool = False,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Build grouped MX-FP8 Slice-M inputs for example 55.
+
+    ``group_sizes`` is the non-cumsum groupList consumed by the kernel. A is
+    stored as ``(sum(group_sizes), K)``. B is stored as ``(G, K, N)`` when
+    ``trans_b=False`` and ``(G, N, K)`` when ``trans_b=True``.
+    """
+    group_sizes = tuple(group_sizes)
+    if not group_sizes:
+        raise ValueError("group_sizes must not be empty")
+    if any(size <= 0 for size in group_sizes):
+        raise ValueError(f"group_sizes must be positive, got {group_sizes}")
+
+    fp8_dtype = torch.float8_e4m3fn
+    emax, fp8_max = 8, 448.0
+    m = sum(group_sizes)
+
+    a_fp32 = torch.randn(m, k, dtype=torch.float32) * 10.0 - 5.0
+    a_fp8, a_scale, a_deq = _quantize_axis_last(a_fp32, fp8_dtype, emax, fp8_max)
+    a_scale = a_scale.reshape(m, a_scale.shape[1] // 2, 2).contiguous()
+
+    b_list = []
+    b_scale_list = []
+    expected_list = []
+    offset = 0
+    for group_size in group_sizes:
+        b_fp32 = torch.randn(k, n, dtype=torch.float32) * 10.0 - 5.0
+        b_fp8, b_scale, b_deq = _quantize_axis_first(b_fp32, fp8_dtype, emax, fp8_max)
+        b_scale = b_scale.reshape(b_scale.shape[0] // 2, 2, b_scale.shape[1])
+
+        if trans_b:
+            b_list.append(b_fp8.t().contiguous())
+            b_scale_list.append(b_scale.permute(2, 0, 1).contiguous())
+        else:
+            b_list.append(b_fp8.contiguous())
+            b_scale_list.append(b_scale.permute(0, 2, 1).contiguous())
+
+        expected_list.append(a_deq[offset : offset + group_size] @ b_deq)
+        offset += group_size
+
+    b = torch.stack(b_list, dim=0)
+    b_scale = torch.stack(b_scale_list, dim=0)
+    expected = torch.cat(expected_list, dim=0)
+
+    if device == "npu":
+        a_fp8, b, a_scale, b_scale = _move_kernel_inputs_to_npu(a_fp8, b, a_scale, b_scale)
+    return a_fp8, b, a_scale, b_scale, expected
 
 
 def prepare_fp4_mx_inputs(
