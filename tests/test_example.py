@@ -409,6 +409,15 @@ class CatlassExampleTest(unittest.TestCase):
             stderr=subprocess.PIPE,
             )
         self._ret_check(ret)
+    
+    @only_on_3510
+    def test_72_ascend950_fp8_mx_flash_attention_infer(self):
+        case_py = [str(i) for i in [1, 138, 128, 4, 2, 128, 0, 0, 0]] + ["half", "1"]
+        ret = subprocess.run(["python", os.path.join(
+            CMAKE_EXAMPLES_PATH, "72_ascend950_fp8_mx_flash_attention_infer", "gen_data.py")] + case_py)
+        case_cpp = [str(i) for i in [1, 138, 128, 4, 2, 128, 0, 0, 0, 1]] + ["--dtype", "half", "--device", "1",
+            "--datapath", os.path.join(CMAKE_EXAMPLES_PATH, "72_ascend950_fp8_mx_flash_attention_infer", "data")]
+        self.run_case("72_ascend950_fp8_mx_flash_attention_infer", case_cpp)
 
 normal_cases_2201 = [
     "00_basic_matmul 256 512 1024 0",

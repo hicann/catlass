@@ -35,6 +35,7 @@
 #include "template/strided_batched_matmul.h"
 #include "template/grouped_matmul_slice_m_fixpipe_dequant.h"
 #include "template/w4a8_matmul.h"
+#include "template/ascend950_mxfp8_flash_attention.h"
 #include "template/broadcast_matmul_perblock_quant.h"
 #include "template/mx_grouped_matmul_swiglu_mx_quant.h"
 #include "template/a8w4_mx_matmul.h"
@@ -232,6 +233,9 @@ REGISTER_TORCH_FUNC(flash_attention_infer_tla);
 
 static auto& ascend950_flash_attention_infer = Ascend950FlashAttentionInferOp::Run;
 REGISTER_TORCH_FUNC(ascend950_flash_attention_infer);
+
+static auto& ascend950_fp8_mx_flash_attention_infer = Ascend950MxFp8FlashAttentionInferOp::Run;
+REGISTER_TORCH_FUNC(ascend950_fp8_mx_flash_attention_infer);
 
 using W8A16MatmulOp = MatmulLike<CatlassKernel::W8A16Matmul>;
 static auto& w8a16_matmul = W8A16MatmulOp::Run;

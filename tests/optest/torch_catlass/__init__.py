@@ -71,6 +71,7 @@ __all__ = [
     "flash_attention_infer",
     "flash_attention_infer_tla",
     "ascend950_flash_attention_infer",
+    "ascend950_fp8_mx_flash_attention_infer",
     "broadcast_matmul_perblock_quant",
     "grouped_matmul_slice_m_fixpipe_dequant",
     "ascend950_fp8_mx_batch_matmul",

@@ -355,6 +355,9 @@ struct MmadFAITailQK : public MmadBase<ArchTag_, false> {
 };
 
 template <class ArchTag_, bool PAGED_CACHE_FLAG_ = false, bool ENABLE_UNIT_FLAG_ = false>
+struct MmadFAIQKMx : public MmadFAIQK<ArchTag_, PAGED_CACHE_FLAG_, ENABLE_UNIT_FLAG_> {};
+
+template <class ArchTag_, bool PAGED_CACHE_FLAG_ = false, bool ENABLE_UNIT_FLAG_ = false>
 struct MmadFAIPV : public MmadBase<ArchTag_, false> {
     static constexpr uint32_t STAGES = 2;
     static constexpr bool PAGED_CACHE_FLAG = PAGED_CACHE_FLAG_;
@@ -367,6 +370,9 @@ struct MmadFAITailPV : public MmadBase<ArchTag_, false> {
     static constexpr bool PAGED_CACHE_FLAG = PAGED_CACHE_FLAG_;
     static constexpr bool ENABLE_UNIT_FLAG = ENABLE_UNIT_FLAG_;
 };
+
+template <class ArchTag_, bool PAGED_CACHE_FLAG_ = false, bool ENABLE_UNIT_FLAG_ = false>
+struct MmadFAIPVMx : public MmadFAIPV<ArchTag_, PAGED_CACHE_FLAG_, ENABLE_UNIT_FLAG_> {};
 
 template <class ArchTag_, bool ENABLE_UNIT_FLAG_ = false, uint32_t L1_SCALE_FACTOR_K_ = 16, uint32_t L0C_STAGES_ = 1,
     bool ENABLE_L1_RESIDENT_ = false, uint32_t L1A_STAGES_ = 2, uint32_t L1B_STAGES_ = 2, uint32_t L0A_STAGES_ = 2,

@@ -55,10 +55,11 @@ struct EpilogueAtlasA2RescaleO {
 };
 
 // For Ascend950, FA Infer online Softmax
-template <bool ATTENTION_MASK_FLAG_ = false>
+template <bool ATTENTION_MASK_FLAG_ = false, bool ENABLE_P_SCALE_ = false>
 struct EpilogueAscend950FASoftmax {
     using ArchTag = Arch::Ascend950;
     static constexpr bool ATTENTION_MASK_FLAG = ATTENTION_MASK_FLAG_;
+    static constexpr bool ENABLE_P_SCALE = ENABLE_P_SCALE_;
 };
 
 // For Ascend950, FA Infer RescaleO

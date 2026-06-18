@@ -108,6 +108,19 @@ __attribute__((weak)) void Ascend950FlashAttentionInfer(const uint32_t blockNum,
 __attribute__((weak)) void Ascend950BasicConv2dTLA(const uint32_t blockNum, aclrtStream stream, const ConvParams& params);
 
 /**
+ * @brief Runtime parameters for Ascend950 MXFP8 flash attention examples.
+ */
+struct Ascend950MxFp8FlashAttentionParams : public FlashAttentionParams {
+    uint32_t usePscale = 0;             ///< Whether to use P matrix quantization scale.
+};
+
+/**
+ * @brief Prebuilt interface for example 72_ascend950_fp8_mx_flash_attention_infer.
+ */
+__attribute__((weak)) void Ascend950MxFp8FlashAttentionInfer(const uint32_t blockNum, aclrtStream stream,
+                                       const Ascend950MxFp8FlashAttentionParams& params);
+
+/**
  * @brief Prebuilt interface for example 29_a2_fp8_e4m3_matmul.
  */
 extern "C" __attribute__((weak)) void A2Fp8E4M3Matmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);

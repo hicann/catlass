@@ -173,6 +173,7 @@ set(EXAMPLE_ASCEND950
     69_ascend950_tail_multi_core_splitk_matmul
     70_ascend950_grouped_matmul_slice_m_fixpipe_dequant
     71_ascend950_fp8_mx_grouped_matmul_finalize_routing
+    72_ascend950_fp8_mx_flash_attention_infer
 )
 
 if(CATLASS_ARCH STREQUAL "2201")
