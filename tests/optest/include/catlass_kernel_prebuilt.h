@@ -12,6 +12,8 @@
 #ifndef OPTEST_CATLASS_KERNEL_PREBUILT_H
 #define OPTEST_CATLASS_KERNEL_PREBUILT_H
 
+#include <string>
+
 #include <cstdint>
 #include <vector>
 
@@ -73,6 +75,26 @@ struct MlaParams : public FlashAttentionParams {
 };
 
 /**
+ * @brief Runtime parameters for flash-attention style examples.
+ */
+struct FlashAttentionChunkPrefillParams : public PrebuiltParams {
+    uint32_t qNtokens = 0;              ///< Total Q tokens for variable-length input.
+    uint32_t batch = 0;                 ///< Batch size.
+    uint32_t qSeqlen = 0;               ///< Q sequence length.
+    uint32_t kvSeqlen = 0;              ///< KV sequence length.
+    uint32_t numHeads = 0;              ///< Number of Q heads.
+    uint32_t kvHeads = 0;               ///< Number of KV heads.
+    uint32_t qkembeddingSize = 0;         ///< Per-head embedding dimension.
+    uint32_t vembeddingSize = 0;         ///< Per-head embedding dimension.
+    uint32_t isVariedLen = 0;           ///< Whether variable-length input is used.
+    uint32_t maskType = 0;              ///< Mask mode.
+    uint32_t blockSize = 128;           ///< Tile block size.
+    uint32_t numBlocks = 2048;           ///< Tile block num.
+    std::string cacheLayout = "nd";
+    aclDataType dataType = ACL_FLOAT16; ///< Input/output element type.
+};
+
+/**
  * @brief Reserved prebuilt interface for example 19_mla.
  */
 __attribute__((weak)) void Mla(const uint32_t blockNum, aclrtStream stream, const MlaParams& params);
@@ -124,6 +146,11 @@ __attribute__((weak)) void Ascend950MxFp8FlashAttentionInfer(const uint32_t bloc
  * @brief Prebuilt interface for example 29_a2_fp8_e4m3_matmul.
  */
 extern "C" __attribute__((weak)) void A2Fp8E4M3Matmul(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+
+/**
+ * @brief Reserved prebuilt interface for example 70_ascend950_flash_attention_chunk_prefill.
+ */
+__attribute__((weak)) void FlashAttentionChunkPrefill(const uint32_t blockNum, aclrtStream stream, const FlashAttentionChunkPrefillParams& params);
 
 /**
  * @brief Broadcast MatMul with Per-Block Quantization（Ascend 950 TLA）。

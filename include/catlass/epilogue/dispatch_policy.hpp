@@ -192,6 +192,15 @@ struct EpilogueAscend950FinalizeRouting {
     static constexpr uint32_t UB_STAGES = UB_STAGES_;
 };
 
+// For Ascend950, flash_attention_chunk_prefill softmax
+struct EpilogueFAOnlineSoftmax{
+    using ArchTag = Arch::Ascend950;
+};
+
+// For Ascend950, flash_attention_chunk_prefill rescaleO
+struct EpilogueFARescaleO{
+    using ArchTag = Arch::Ascend950;
+};
 }  // namespace Catlass::Epilogue
 
 #endif  // CATLASS_EPILOGUE_DISPATCH_POLICY_HPP

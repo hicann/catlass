@@ -478,6 +478,28 @@ struct MmadSvd3 : public MmadBase<ArchTag_, false> {
     static constexpr uint32_t L1_SCALE_FACTOR_K = L1_SCALE_FACTOR_K_;
 };
 
+template <
+    class ArchTag_, bool PAGED_CACHE_FLAG_ = false, bool NZ_LAYOUT_FLAG_ = false, bool PA_BNNBSD_FLAG_ = 0,
+    bool ENABLE_DN_ = false>
+struct MmadFlashAttentionQK : public MmadBase<ArchTag_, false> {
+    static constexpr uint32_t L0_STAGES = 2;
+    static constexpr uint32_t PA_BNNBSD_FLAG = PA_BNNBSD_FLAG_;
+    static constexpr bool PAGED_CACHE_FLAG = PAGED_CACHE_FLAG_;
+    static constexpr bool NZ_LAYOUT_FLAG = NZ_LAYOUT_FLAG_;
+    static constexpr bool ENABLE_DN = ENABLE_DN_;
+};
+
+template <
+    class ArchTag_, bool PAGED_CACHE_FLAG_ = false, bool NZ_LAYOUT_FLAG_ = false, bool PA_BNNBSD_FLAG_ = 0,
+    bool ENABLE_DN_ = false>
+struct MmadFlashAttentionPV : public MmadBase<ArchTag_, false> {
+    static constexpr uint32_t L0_STAGES = 2;
+    static constexpr uint32_t PA_BNNBSD_FLAG = PA_BNNBSD_FLAG_;
+    static constexpr bool PAGED_CACHE_FLAG = PAGED_CACHE_FLAG_;
+    static constexpr bool NZ_LAYOUT_FLAG = NZ_LAYOUT_FLAG_;
+    static constexpr bool ENABLE_DN = ENABLE_DN_;
+};
+
 }  // namespace Catlass::Gemm
 
 #endif  // CATLASS_GEMM_DISPATCH_POLICY_HPP

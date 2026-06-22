@@ -419,6 +419,15 @@ class CatlassExampleTest(unittest.TestCase):
             "--datapath", os.path.join(CMAKE_EXAMPLES_PATH, "72_ascend950_fp8_mx_flash_attention_infer", "data")]
         self.run_case("72_ascend950_fp8_mx_flash_attention_infer", case_cpp)
 
+    @only_on_3510
+    def test_70_ascend950_flash_attention_chunk_prefill(self):
+        case_py = [str(i) for i in [1, 100, 138, 8, 1, 128, 128, 0]] + ["half"] + [str(i) for i in [2, 0, 128]] + ["nd"]
+        ret = subprocess.run(["python", os.path.join(
+            CMAKE_EXAMPLES_PATH, "70_ascend950_flash_attention_chunk_prefill", "gen_data.py")] + case_py)
+        case_cpp = [str(i) for i in [1, 100, 138, 8, 1, 128, 128, 0, 2, 128]] + ["--dtype", "half", "--cache_layout", "nd","--device", "1",
+        "--datapath", os.path.join(CMAKE_EXAMPLES_PATH, "70_ascend950_flash_attention_chunk_prefill", "data")]
+        self.run_case("70_ascend950_flash_attention_chunk_prefill", case_cpp)
+
 normal_cases_2201 = [
     "00_basic_matmul 256 512 1024 0",
     "01_batched_matmul 5 256 512 1024 0",

@@ -79,6 +79,7 @@ __all__ = [
     "ascend950_dual_level_quant_mx_batch_matmul",
     "ascend950_multi_core_splitk_matmul",
     "ascend950_tail_multi_core_splitk_matmul",
+    "ascend950_flash_attention_chunk_prefill",
     "clear_jit_cache",
     "__version__",
     "__catlass_version__",

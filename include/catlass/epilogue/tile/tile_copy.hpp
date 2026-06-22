@@ -195,6 +195,47 @@ struct TileCopyDequantTla {
     using CopyUbToGmD = CopyUb2GmTla<ArchTag, TensorUbD, TensorD>;
 };
 
+template <
+    class ArchTag,
+    class ElementMask_,
+    class ElementP_,
+    class LayoutTagMask_,
+    class LayoutTagP_
+> 
+struct TileCopySoftmax{
+    using ElementMask = ElementMask_;
+    using ElementP = ElementP_;
+
+    using LayoutTagMask = LayoutTagMask_;
+    using LayoutTagP = LayoutTagP_;
+
+    using LayoutMask = detail::TagToLayout_t<ElementMask, LayoutTagMask>;
+    using LayoutP = detail::TagToLayout_t<ElementP, LayoutTagP>;
+    
+    using TensorGmMask = tla::Tensor<AscendC::GlobalTensor<ElementMask>, LayoutMask, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
+    using TensorUbMask = tla::Tensor<AscendC::LocalTensor<ElementMask>, LayoutMask, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::VECCALC>;
+
+    using CopyGmToUbMask = Tile::CopyGm2UbTla<ArchTag, TensorGmMask, TensorUbMask>;
+};
+
+template <
+    class ArchTag,
+    class ElementO_,
+    class LayoutTagO_,
+    class LayoutTagOTmp_
+> 
+struct TileCopyRescaleO{
+    using ElementO = ElementO_;
+    using LayoutTagO = LayoutTagO_;
+    using LayoutTagOTmp = LayoutTagOTmp_;
+    using LayoutO = detail::TagToLayout_t<ElementO, LayoutTagO>;
+    
+    using TensorUbO = tla::Tensor<AscendC::LocalTensor<ElementO>, LayoutO, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::VECCALC>;
+    using TensorGmO = tla::Tensor<AscendC::GlobalTensor<ElementO>, LayoutO, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::GM>;
+
+    using CopyUbToGmO = Tile::CopyUb2GmTla<ArchTag, TensorUbO, TensorGmO>;
+};
+
 } // namespace Catlass::Epilogue::Tile
 
 #endif  // CATLASS_EPILOGUE_TILE_TILE_COPY_HPP

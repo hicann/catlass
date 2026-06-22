@@ -55,6 +55,9 @@ class BlockEpilogue {
 #include "catlass/epilogue/block/block_epilogue_visitor.hpp"
 #include "catlass/epilogue/block/block_epilogue_swiglu_mx_quant.hpp"
 #include "catlass/epilogue/block/block_epilogue_finalize_routing.hpp"
+#include "catlass/epilogue/block/block_epilogue_flash_attention_online_softmax_high_prec.hpp"
+#include "catlass/epilogue/block/block_epilogue_flash_attention_online_softmax_low_prec.hpp"
+#include "catlass/epilogue/block/block_epilogue_flash_attention_rescale_o.hpp"
 #endif
 
 #endif  // CATLASS_EPILOGUE_BLOCK_BLOCK_EPILOGUE_HPP

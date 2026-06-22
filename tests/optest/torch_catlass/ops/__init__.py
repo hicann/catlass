@@ -82,9 +82,11 @@ from .ascend950_streamk_matmul import ascend950_streamk_matmul  # example 66
 from .ascend950_batched_matmul import ascend950_batched_matmul  # example 67
 from .multi_core_splitk_matmul import ascend950_multi_core_splitk_matmul  # example 68
 from .tail_multi_core_splitk_matmul import ascend950_tail_multi_core_splitk_matmul  # example 69
+from .ascend950_flash_attention_chunk_prefill import ascend950_flash_attention_chunk_prefill  # example 70
 from .ascend950_fp8_mx_grouped_matmul_finalize_routing import (  # example 71
     ascend950_fp8_mx_grouped_matmul_finalize_routing,
 )
+
 __all__ = [
     "basic_matmul",                       # example 00
     "batched_matmul",                     # example 01
@@ -154,6 +156,7 @@ __all__ = [
     "ascend950_batched_matmul",           # example 67
     "ascend950_multi_core_splitk_matmul",  # example 68
     "ascend950_tail_multi_core_splitk_matmul",  # example 69
+    "ascend950_flash_attention_chunk_prefill",   # example 70
     "ascend950_fp8_mx_grouped_matmul_finalize_routing",  # example 71
     "ascend950_matmul_full_loadA",         # example 73
 ]

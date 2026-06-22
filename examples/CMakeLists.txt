@@ -171,6 +171,7 @@ set(EXAMPLE_ASCEND950
     67_ascend950_batched_matmul
     68_ascend950_multi_core_splitk_matmul
     69_ascend950_tail_multi_core_splitk_matmul
+    70_ascend950_flash_attention_chunk_prefill
     71_ascend950_fp8_mx_grouped_matmul_finalize_routing
     73_ascend950_matmul_full_loadA
     72_ascend950_fp8_mx_flash_attention_infer
