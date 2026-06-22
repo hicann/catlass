@@ -35,6 +35,7 @@
 #include "template/quant_per_group_per_block_matmul.h"
 #include "template/sparse_matmul.h"
 #include "template/strided_batched_matmul.h"
+#include "template/w4a4_matmul_per_token_per_channel_dequant.h"
 #include "template/w4a8_matmul.h"
 #include "template/ascend950_mxfp8_flash_attention.h"
 #include "template/broadcast_matmul_perblock_quant.h"
@@ -248,6 +249,10 @@ REGISTER_TORCH_FUNC(w8a16_matmul);
 using W4A8MatmulOp = W4A8MatmulLike<CatlassKernel::W4A8Matmul>;
 static auto& w4a8_matmul = W4A8MatmulOp::Run;
 REGISTER_TORCH_FUNC(w4a8_matmul);
+
+using W4A4MatmulPerTokenPerChannelDequantOp = W4A4MatmulPerTokenPerChannelDequantLike<CatlassKernel::W4A4MatmulPerTokenPerChannelDequant>;
+static auto& w4a4_matmul_per_token_per_channel_dequant = W4A4MatmulPerTokenPerChannelDequantOp::Run;
+REGISTER_TORCH_FUNC(w4a4_matmul_per_token_per_channel_dequant);
 
 using SparseMatmulTLAOp = SparseMatmulLike<CatlassKernel::SparseMatmulTLA>;
 static auto& sparse_matmul_tla = SparseMatmulTLAOp::Run;

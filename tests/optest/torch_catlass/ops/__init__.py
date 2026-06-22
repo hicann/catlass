@@ -42,6 +42,7 @@ from .small_matmul import small_matmul  # example 31
 from .w4a8_matmul import w4a8_matmul  # example 32
 from .single_core_splitk_matmul import single_core_splitk_matmul  # example 34
 from .streamk_matmul import streamk_matmul  # example 37
+from .w4a4_matmul_per_token_per_channel_dequant import w4a4_matmul_per_token_per_channel_dequant  # example 38
 from .big_matmul_tla import big_matmul_tla  # example 39
 from .sparse_matmul_tla import sparse_matmul_tla  # example 41
 from .quant_optimized_matmul_tla import quant_optimized_matmul_tla  # example 42
@@ -118,6 +119,7 @@ __all__ = [
     "w4a8_matmul",                        # example 32
     "single_core_splitk_matmul",          # example 34
     "streamk_matmul",                     # example 37
+    "w4a4_matmul_per_token_per_channel_dequant",  # example 38
     "big_matmul_tla",                     # example 39
     "sparse_matmul_tla",                  # example 41
     "quant_optimized_matmul_tla",         # example 42
