@@ -369,9 +369,10 @@ public:
                 auto gmScale1Tile = gmScaleA1[s1Off];
                 auto layoutScale1Tile = params.layoutScaleA1.GetTileLayout(s1ActualShape);
 
-                // Scale2 tile [rows, ceil(actualK/32)]
+                // Scale2 tile [rows, round_up(ceil(actualK/32), 2)].
                 MatrixCoord s2AbsOffset{ rowStart, kStart / LEVEL1_BLOCK_SIZE };
-                MatrixCoord s2ActualShape{ actualRows, CeilDiv<LEVEL1_BLOCK_SIZE>(actualK) };
+                uint32_t s2Cols = RoundUp<2>(CeilDiv<LEVEL1_BLOCK_SIZE>(actualK));
+                MatrixCoord s2ActualShape{ actualRows, s2Cols };
                 int64_t s2Off = t.batchIdx * params.strideMxScaleA
                               + params.layoutScaleA2.GetOffset(s2AbsOffset);
                 auto gmScale2Tile = gmScaleA2[s2Off];
@@ -408,7 +409,8 @@ public:
                 auto layoutScale1Tile = params.layoutScaleB1.GetTileLayout(s1ActualShape);
 
                 MatrixCoord s2AbsOffset{ rowStart, kStart / LEVEL1_BLOCK_SIZE };
-                MatrixCoord s2ActualShape{ actualRows, CeilDiv<LEVEL1_BLOCK_SIZE>(actualK) };
+                uint32_t s2Cols = RoundUp<2>(CeilDiv<LEVEL1_BLOCK_SIZE>(actualK));
+                MatrixCoord s2ActualShape{ actualRows, s2Cols };
                 int64_t s2Off = t.batchIdx * params.strideMxScaleB
                               + params.layoutScaleB2.GetOffset(s2AbsOffset);
                 auto gmScale2Tile = gmScaleB2[s2Off];

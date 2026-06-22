@@ -246,10 +246,9 @@ public:
         auto layoutScale1Ub = layout::RowMajor::template MakeLayoutInUb<ElementScale1>(scale1TileShape);
         copyUbToGmScale1(gmScale1Tile, ubScale1, layoutScale1TileGm, layoutScale1Ub);
 
-        // Scale2: fp8_e8m0, RowMajor [rows, ceil(actualK/32)]
-        MatrixCoord scale2TileShape{
-            actualTileShape.row(),
-            CeilDiv<LEVEL1_BLOCK_SIZE>(actualTileShape.column()) };
+        // Scale2: fp8_e8m0, RowMajor [rows, round_up(ceil(actualK/32), 2)].
+        uint32_t scale2Cols = RoundUp<2>(CeilDiv<LEVEL1_BLOCK_SIZE>(actualTileShape.column()));
+        MatrixCoord scale2TileShape{ actualTileShape.row(), scale2Cols };
         auto layoutScale2Ub = layout::RowMajor::template MakeLayoutInUb<ElementScale2>(scale2TileShape);
         auto ubScale2Typed = ubScale2.template ReinterpretCast<ElementScale2>();
         copyUbToGmScale2(gmScale2Tile, ubScale2Typed, layoutScale2TileGm, layoutScale2Ub);
