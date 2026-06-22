@@ -17,6 +17,9 @@
 
 #include "kernel_struct_fixpipe.h"
 #include "kernel_constants.h"
+#include "kernel_fp_types.h"
+
+using namespace AscendC;
 
 namespace AscendC {
 
@@ -195,8 +198,8 @@ struct LoadData2DMxParams {
 
 template <typename TYPE>
 struct LoadData3DParamsV1 {
-#if defined(__NPU_ARCH__) && __NPU_ARCH__ == 3501
-    using T = typename std::conditional_t<is_one_of<TYPE, fp8_e5m2_t, fp8_e4m3fn_t, fp8_e8m0_t, hifloat8_t, fp4x2_e1m2_t, fp4x2_e2m1_t>, uint8_t, TYPE>;
+#if defined(__NPU_ARCH__) && __NPU_ARCH__ == 3510
+    using T = typename std::conditional_t<Std::is_one_of_v<TYPE, fp8_e5m2_t, fp8_e4m3fn_t, fp8_e8m0_t, hifloat8_t, fp4x2_e1m2_t, fp4x2_e2m1_t>, uint8_t, TYPE>;
 #else
     using T = TYPE;
 #endif
@@ -237,8 +240,8 @@ struct LoadData3DParamsV1 {
 
 template <typename TYPE>
 struct LoadData3DParamsV2 {
-#if defined(__NPU_ARCH__) && __NPU_ARCH__ == 3501
-    using T = typename std::conditional_t<is_one_of<TYPE, fp8_e5m2_t, fp8_e4m3fn_t, fp8_e8m0_t, hifloat8_t, fp4x2_e1m2_t, fp4x2_e2m1_t>, uint8_t, TYPE>;
+#if defined(__NPU_ARCH__) && __NPU_ARCH__ == 3510
+    using T = typename std::conditional_t<Std::is_one_of_v<TYPE, fp8_e5m2_t, fp8_e4m3fn_t, fp8_e8m0_t, hifloat8_t, fp4x2_e1m2_t, fp4x2_e2m1_t>, uint8_t, TYPE>;
 #else
     using T = TYPE;
 #endif

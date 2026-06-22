@@ -42,16 +42,9 @@ struct float8_e5m2_t { uint8_t _; };
 #include "kernel_operator_vec_binary_intf.h"
 #include "kernel_operator_vec_vconv_intf.h"
 
-namespace AscendC {
+#include "kernel_fp_types.h"
 
-struct mx_fp8_e4m3_t {uint8_t _;};
-struct mx_fp8_e5m2_t {uint8_t _;};
-struct fp8_e8m0_t {uint8_t _;};
-struct fp8_e5m2_t {uint8_t _;};
-struct fp8_e4m3fn_t {uint8_t _;};
-struct hifloat8_t {uint8_t _;};
-struct fp4x2_e1m2_t {uint8_t _;};
-struct fp4x2_e2m1_t {uint8_t _;};
+namespace AscendC {
 
 enum class TPosition : int32_t
 {
@@ -75,14 +68,6 @@ enum class TPosition : int32_t
 };
 
 struct int4b_t {};
-
-namespace Std {
-template <typename T, typename... Types>
-struct is_one_of : std::disjunction<std::is_same<T, Types>...> {};
-
-template <typename T, typename... Types>
-inline constexpr bool is_one_of_v = is_one_of<T, Types...>::value;
-} // namespace Std
 
 template <typename T, typename U>
 struct IsSameType {
