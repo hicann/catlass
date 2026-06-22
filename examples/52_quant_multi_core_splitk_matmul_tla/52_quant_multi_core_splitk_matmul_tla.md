@@ -24,7 +24,7 @@ CATLASS [`52_quant_multi_core_splitk_matmul_tla`样例](./README.md)算子是基
 
 ## 方案设计
 
-基础的多核切K方案[参考](../102_dynamic_optimized_matmul/doc/MultiCoreSplitkMatmul.md)，这里主要说明多核切K下量化后处理适配的两种方案，且本样例根据`Plan B`实现。
+基础的多核切K方案[参考](../102_dynamic_optimized_matmul/docs/zh/MultiCoreSplitkMatmul.md)，这里主要说明多核切K下量化后处理适配的两种方案，且本样例根据`Plan B`实现。
 
 ![多核切K融合quant后处理示意图](https://raw.gitcode.com/user-images/assets/7801479/3116a627-a26f-422a-a11f-e1b4eb647bd7/quant_splitk.png 'quant_splitk.png')
 

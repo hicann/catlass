@@ -169,7 +169,7 @@ using ReduceAdd =
     Catlass::Gemm::Kernel::StreamkReduceAdd<ArchTag, BlockScheduler, ElementAccumulator, ElementC, computeLength>;
 ```
 
-Stream-K的详细原理可参考[StreamkMatmul说明](../../../../examples/102_dynamic_optimized_matmul/doc/StreamkMatmul.md)。在CV融合视角下，它有两个关键点：
+Stream-K的详细原理可参考[StreamkMatmul说明](../../../../examples/102_dynamic_optimized_matmul/docs/zh/StreamkMatmul.md)。在CV融合视角下，它有两个关键点：
 
 | 优化 | CV融合含义 |
 | --- | --- |

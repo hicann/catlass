@@ -10,7 +10,7 @@ CommonMatmul的典型特征是使用L1上的基本块直接切分矩阵A、B、C
 
 ## 2 优化点
 
-此处介绍的优化点是[00_basic_matmul](../../00_basic_matmul/README.md)里面没有，但是CommonMatmul中有的优化，至于00_basic_matmul中已有的基础优化在此不做介绍。00_basic_matmul用到的优化点为CommonMatmul的子集。
+此处介绍的优化点是[00_basic_matmul](../../../00_basic_matmul/README.md)里面没有，但是CommonMatmul中有的优化，至于00_basic_matmul中已有的基础优化在此不做介绍。00_basic_matmul用到的优化点为CommonMatmul的子集。
 
 ### 2.1 Preload
 
@@ -53,7 +53,7 @@ copyL0CToGm;
 ...
 ```
 
-实际代码实现见[block_mmad_dynamic_common.h](../../../include/catlass/gemm/block/block_mmad_dynamic_common.hpp)。
+实际代码实现见[block_mmad_dynamic_common.h](../../../../include/catlass/gemm/block/block_mmad_dynamic_common.hpp)。
 
 `isFirstBlock`：是否为当前核心计算的第一个C Block。如果是则为`true`。
 
@@ -63,7 +63,7 @@ copyL0CToGm;
 
 Preload的核心思想为，在计算当前Tile的Matmul前，预先加载下一个需要计算的Tile块的数据，这样就做到了搬运指令的提前发射，可减少MTE2流水的空泡。
 
-关于Preload更细节的描述可以参考[矩阵乘模板总结-流水优化(Preload)](../../../docs/zh/2_Design/01_kernel_design/04_matmul_summary.md)。
+关于Preload更细节的描述可以参考[矩阵乘模板总结-流水优化(Preload)](../../../../docs/zh/2_Design/01_kernel_design/04_matmul_summary.md)。
 
 ### 2.2 ShuffleK
 
@@ -77,7 +77,7 @@ Preload的核心思想为，在计算当前Tile的Matmul前，预先加载下一
 
 右图为采用ShuffleK优化后的计算方式，右图中2号核心按2 3 0 1的顺序访问A矩阵基本块，而3号核心按3 0 1 2的顺序访问A矩阵基本块，在时间上错开，从而避免同地址访问冲突。
 
-图中的分块计算顺序采用GemmIdentityBlockSwizzle<2,1>，请参考[swizzle_explanation](../../../docs/zh/2_Design/01_kernel_design/02_swizzle.md)
+图中的分块计算顺序采用GemmIdentityBlockSwizzle<2,1>，请参考[swizzle_explanation](../../../../docs/zh/2_Design/01_kernel_design/02_swizzle.md)
 
 ### 2.3 Padding
 
@@ -85,7 +85,7 @@ Preload的核心思想为，在计算当前Tile的Matmul前，预先加载下一
 
 #### 2.3.1 矩阵A或B的Padding模式说明
 
-当前泛化Matmul支持三种Padding方式，在[Padding_matmul.hpp](../../../include/catlass/gemm/kernel/padding_matmul.hpp)中定义了枚举值：
+当前泛化Matmul支持三种Padding方式，在[Padding_matmul.hpp](../../../../include/catlass/gemm/kernel/padding_matmul.hpp)中定义了枚举值：
 
 ```cpp
 enum class PaddingTag {
@@ -203,7 +203,7 @@ if (static_cast<size_t>(m) * n > 2048 * 2048 && n > 256 && (n % 128 != 0)) {
 
 B_aiv、B_aic512、T_headcost这几个值在硬件相同时，可以简化认为是固定值，可通过实测获得。而B_aicunalign的值，和nd2nz的参数有关（nValue、dValue和srcDValue）需要通过实测数据进行曲线拟合得到计算公式。
 
-以上逻辑为Padding建模的简化过程，具体实现有更细节的考虑，参考[select_kernel_bf16.h](../include/select_kernel_b16.h)，其中的多项式拟合公式仅适用于A2、A3，如果是其他型号，需要自测数据拟合曲线。
+以上逻辑为Padding建模的简化过程，具体实现有更细节的考虑，参考[select_kernel_bf16.h](../../include/select_kernel_b16.h)，其中的多项式拟合公式仅适用于A2、A3，如果是其他型号，需要自测数据拟合曲线。
 
 ### 2.4 特殊场景的读取优化
 
@@ -238,6 +238,6 @@ for (int i = 0; i < nValue; ++i) {
 
 当矩阵A为ColumnMajor，且M=1的时候，此时GM2L1读取的时候，每行只有一个元素，读取效率会非常低，此时将A矩阵当作一个1 x K的RowMajor矩阵进行计算（因为A矩阵相当于是一个向量，既可以是行优先也可以是列优先，两者是等价的），这样读取A矩阵的时候，A矩阵就是一个行向量，读取效率就会高很多。
 
-同理，当矩阵B为RowMajor，且N=1的时候，此时将B矩阵当作一个K x 1的ColumnMajor矩阵进行计算。此处的逻辑参考[select_kernel_bf16.h](../include/select_kernel_b16.h)。
+同理，当矩阵B为RowMajor，且N=1的时候，此时将B矩阵当作一个K x 1的ColumnMajor矩阵进行计算。此处的逻辑参考[select_kernel_bf16.h](../../include/select_kernel_b16.h)。
 
 至于K=1的时候，需要交给特殊的模板（采用AIV计算）处理。
