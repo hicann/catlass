@@ -70,10 +70,10 @@ extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::
     GemmCoord shape{params->m, params->n, params->k};
     const uint32_t align = 256;
 
-    bool needPaddingA = CatlassKernel::IsNeedPadding(
-        Catlass::layout::RowMajor(params->m, params->k), align);
-    bool needPaddingB = CatlassKernel::IsNeedPadding(
-        Catlass::layout::ColumnMajor(params->k, params->n), align);
+    LayoutA layoutA{params->m, params->k};
+    LayoutB layoutB{params->k, params->n};
+    bool needPaddingA = CatlassKernel::IsNeedPadding(layoutA, align);
+    bool needPaddingB = CatlassKernel::IsNeedPadding(layoutB, align);
 
     typename MatmulKernel::Arguments arguments{
         shape, blockNum, align, needPaddingA, needPaddingB,
