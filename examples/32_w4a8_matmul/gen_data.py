@@ -14,7 +14,6 @@ import os
 import sys
 import torch
 import numpy as np
-import pandas as pd
 from enum import Enum
 
 CONST_16 = 16
