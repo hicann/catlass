@@ -10,7 +10,9 @@
 
 #if defined(CATLASS_ARCH) && CATLASS_ARCH == 2201
 #include "catlass/gemm/tile/atlasa2/test_copy_ub_to_gm.cpp"
+#include "catlass/gemm/tile/atlasa2/test_copy_ub_to_gm_tla.cpp"
 #endif
 #if defined(CATLASS_ARCH) && CATLASS_ARCH == 3510
 #include "catlass/gemm/tile/ascend950/test_copy_ub_to_gm.cpp"
+#include "catlass/gemm/tile/ascend950/test_copy_ub_to_gm_tla.cpp"
 #endif

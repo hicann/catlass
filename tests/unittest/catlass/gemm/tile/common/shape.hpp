@@ -19,6 +19,23 @@ struct TestMatrixShape {
     uint32_t col;
 };
 
+struct TestMatrixShapeWithCoord {
+    uint32_t row;
+    uint32_t col;
+    uint32_t rowCoord;
+    uint32_t colCoord;
+    uint32_t dstRow;
+    uint32_t dstCol;
+};
+
+struct TestCubeMatrixShapeWithUnitflag {
+    uint32_t m;
+    uint32_t n;
+    uint32_t k;
+    bool initC;
+    uint8_t unitFlag;
+};
+
 struct TestVectorShape {
     uint32_t blkLen;
     uint16_t blkCnt;

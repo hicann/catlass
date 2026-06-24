@@ -66,6 +66,55 @@ bool isContiguous(Layout layout) {
     }
 }
 
+// Helper struct for determine if the caculation should consider trans
+template <class Layout>
+struct isTrans {
+    static_assert(DEPENDENT_FALSE<Layout>, "trans auto-derivation not supported");
+};
+
+template <>
+struct isTrans<layout::RowMajor> {
+    static constexpr bool value = false;
+};
+
+template <>
+struct isTrans<layout::ColumnMajor> {
+    static constexpr bool value = true;
+};
+
+template <>
+struct isTrans<layout::zN> {
+    static constexpr bool value = false;
+};
+
+template <>
+struct isTrans<layout::zZ> {
+    static constexpr bool value = false;
+};
+
+template <>
+struct isTrans<layout::nN> {
+    static constexpr bool value = true;
+};
+
+template <>
+struct isTrans<layout::nZ> {
+    static constexpr bool value = true;
+};
+
+template <>
+struct isTrans<layout::PaddingRowMajor> {
+    static constexpr bool value = false;
+};
+
+template <>
+struct isTrans<layout::PaddingColumnMajor> {
+    static constexpr bool value = true;
+};
+
+template <class Layout>
+static constexpr bool isTrans_v = isTrans<Layout>::value;
+
 }
 
 

@@ -31,7 +31,7 @@ namespace AscendC {
 template <pipe_t pipe>
 inline void PipeBarrier()
 {
-    ASCENDC_LOG_CALL_T(PipeBarrier, {Arg::MakeArg<pipe_t>()}, {});
+    ASCENDC_LOG_CALL_T(PipeBarrier, {Arg::MakeArgWithValue<pipe_t>(pipe)}, {});
 }
 
 enum class HardEvent

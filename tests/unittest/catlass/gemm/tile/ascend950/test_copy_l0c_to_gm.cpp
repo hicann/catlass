@@ -1,12 +1,12 @@
 /**
- * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
- */
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd.
+ * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+ * CANN Open Software License Agreement Version 2.0 (the "License").
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
+ */
 
 #include <iostream>
 #include <gtest/gtest.h>
@@ -63,6 +63,8 @@ protected:
         auto logTileCopyL0cTensor = logTileCopy.GetArgsAt(1).RawValue();
         ASSERT_EQ(logTileCopyGmTensor, &gmTensor);  // 验证GM张量地址一致
         ASSERT_EQ(logTileCopyL0cTensor, &l0cTensor);  // 验证L0C张量地址一致
+        ASSERT_EQ(logTileCopy.GetArgsAt(0).GetInstAddr(), 0);
+        ASSERT_EQ(logTileCopy.GetArgsAt(1).GetInstAddr(), 0);
 
         const std::type_index& T0 = logTileCopy.GetArgsTAt(0).Type();
         ASSERT_EQ(T0, typeid(ElementDst));
@@ -80,8 +82,14 @@ protected:
     bool _channelSplit = false;
 };
 
-// NoQuantTestBasic, from L0C(zN) -> RowMajor, Ascend950
-TEST_P(TileCopyL0CToGmTestAscend950, NoQuantFloatTestBasic)
+// ============================================================================
+// Testsuite from **zN**
+// ============================================================================
+
+// Data-path: zN (L0C) → RowMajor (GM)
+// Element-type: no-except (float → float)
+// Speciality: NoQuant (no-quant DataCopy path, nz2nd enabled)
+TEST_P(TileCopyL0CToGmTestAscend950, zNToRowMajorTestNoQuant)
 {
     using ElementAccumulator = float;
     using ElementDst = float;
@@ -131,8 +139,107 @@ TEST_P(TileCopyL0CToGmTestAscend950, NoQuantFloatTestBasic)
     ASSERT_EQ(dataCopyArg->quantPre, quantPre);
 }
 
-// PerTensorQuant, from L0C(zN) -> RowMajor, Ascend950
-TEST_P(TileCopyL0CToGmTestAscend950, PerTensorQuantTestBasic) 
+// Data-path: zN (L0C) → zN (GM)
+// Element-type: no-except (float → float)
+// Speciality: NoQuant (no-quant DataCopy, float→float enables channelSplit)
+TEST_P(TileCopyL0CToGmTestAscend950, zNTozNTestNoQuant)
+{
+    using ElementAccumulator = float;
+    using ElementDst = float;
+
+    using LayoutSrc = layout::zN;
+    using LayoutDst = layout::zN;
+    constexpr auto quantPre = CopyL0CToDstQuantMode<ArchTag, ElementAccumulator, ElementDst,
+        ScaleGranularity::NO_QUANT>::VALUE;
+
+    CopyL0CToGm<ArchTag, ElementAccumulator, Gemm::GemmType<ElementDst, LayoutDst>> copyL0CToGm;
+
+    AscendC::GlobalTensor<ElementDst> gmTensor;
+    AscendC::LocalTensor<ElementAccumulator> l0cTensor;
+
+    LayoutSrc layoutSrc;
+    LayoutDst layoutDst;
+    setShape<ElementAccumulator>();
+    layoutSrc = LayoutSrc::template MakeLayout<ElementAccumulator>(_m, _n);
+    layoutDst = LayoutDst::template MakeLayout<ElementDst>(_m, _n);
+    ASSERT_TRUE(isContiguous(layoutSrc));
+    ASSERT_TRUE(isContiguous(layoutDst));
+
+    copyL0CToGm(gmTensor, l0cTensor, layoutDst, layoutSrc, _unitFlag);
+
+    AscendCCallLogger& logger = AscendCCallLogger::Instance();
+    auto logs = logger.GetLogs();
+    ASSERT_EQ(logs.size(), 1);
+
+    AscendCCallLog logTileCopy = logs[0];
+    BaseCheck<ElementDst, ElementAccumulator, false>(logTileCopy, gmTensor, l0cTensor);
+
+    uint32_t expectedMSize = layoutDst.shape(0) * layoutDst.shape(1);
+    uint32_t expectedNSize = layoutDst.shape(2) * layoutDst.shape(3);
+
+    const AscendC::DataCopyCO12DstParams* dataCopyArg = logTileCopy.GetArgsAt(2).Value<AscendC::DataCopyCO12DstParams>();
+    ASSERT_EQ(dataCopyArg->mSize, expectedMSize);
+    ASSERT_EQ(dataCopyArg->nSize, expectedNSize);
+    ASSERT_EQ(dataCopyArg->srcStride, _m_round);
+    ASSERT_EQ(dataCopyArg->dstStride, _m_round);       // zN dstStride = stride(3)/(32/sizeof)=m_round
+    ASSERT_EQ(dataCopyArg->unitFlag, _unitFlag);
+    ASSERT_EQ(dataCopyArg->nz2ndEn, false);
+    ASSERT_EQ(dataCopyArg->channelSplit, true);         // float→float channelSplit=true
+    ASSERT_EQ(dataCopyArg->quantPre, quantPre);
+}
+
+// Data-path: zN (L0C) → zN (GM)
+// Element-type: float → half
+// Speciality: NoQuantFloatToHalf (no-quant DataCopy, float→half disables channelSplit)
+TEST_P(TileCopyL0CToGmTestAscend950, zNTozNTestNoQuantFloatToHalf)
+{
+    using ElementAccumulator = float;
+    using ElementDst = half;
+
+    using LayoutSrc = layout::zN;
+    using LayoutDst = layout::zN;
+    constexpr auto quantPre = CopyL0CToDstQuantMode<ArchTag, ElementAccumulator, ElementDst,
+        ScaleGranularity::NO_QUANT>::VALUE;
+
+    CopyL0CToGm<ArchTag, ElementAccumulator, Gemm::GemmType<ElementDst, LayoutDst>> copyL0CToGm;
+
+    AscendC::GlobalTensor<ElementDst> gmTensor;
+    AscendC::LocalTensor<ElementAccumulator> l0cTensor;
+
+    LayoutSrc layoutSrc;
+    LayoutDst layoutDst;
+    setShape<ElementAccumulator>();
+    layoutSrc = LayoutSrc::template MakeLayout<ElementAccumulator>(_m, _n);
+    layoutDst = LayoutDst::template MakeLayout<ElementDst>(_m, _n);
+    ASSERT_TRUE(isContiguous(layoutSrc));
+    ASSERT_TRUE(isContiguous(layoutDst));
+
+    copyL0CToGm(gmTensor, l0cTensor, layoutDst, layoutSrc, _unitFlag);
+
+    AscendCCallLogger& logger = AscendCCallLogger::Instance();
+    auto logs = logger.GetLogs();
+    ASSERT_EQ(logs.size(), 1);
+
+    AscendCCallLog logTileCopy = logs[0];
+    BaseCheck<ElementDst, ElementAccumulator, false>(logTileCopy, gmTensor, l0cTensor);
+
+    uint32_t expectedMSize = layoutDst.shape(0) * layoutDst.shape(1);
+    uint32_t expectedNSize = layoutDst.shape(2) * layoutDst.shape(3);
+
+    const AscendC::DataCopyCO12DstParams* dataCopyArg = logTileCopy.GetArgsAt(2).Value<AscendC::DataCopyCO12DstParams>();
+    ASSERT_EQ(dataCopyArg->mSize, expectedMSize);
+    ASSERT_EQ(dataCopyArg->nSize, expectedNSize);
+    ASSERT_EQ(dataCopyArg->srcStride, _m_round);
+    ASSERT_EQ(dataCopyArg->unitFlag, _unitFlag);
+    ASSERT_EQ(dataCopyArg->nz2ndEn, false);
+    ASSERT_EQ(dataCopyArg->channelSplit, false);        // float→half no channelSplit
+    ASSERT_EQ(dataCopyArg->quantPre, quantPre);
+}
+
+// Data-path: zN (L0C) → RowMajor (GM)
+// Element-type: float → half
+// Speciality: PerTensor (per-tensor quant via Fixpipe, deqScalar applied)
+TEST_P(TileCopyL0CToGmTestAscend950, zNToRowMajorTestPerTensor) 
 {
     using ElementAccumulator = float;
     using ElementDst = half;
@@ -181,101 +288,10 @@ TEST_P(TileCopyL0CToGmTestAscend950, PerTensorQuantTestBasic)
     ASSERT_EQ(fixpipeCfg->format, fixpipeFmt);
 }
 
-// NoQuantzNOut, from L0C(zN) -> zN, Ascend950, channelSplit
-TEST_P(TileCopyL0CToGmTestAscend950, NoQuantzNOutTest)
-{
-    using ElementAccumulator = float;
-    using ElementDst = float;
-
-    using LayoutSrc = layout::zN;
-    using LayoutDst = layout::zN;
-    constexpr auto quantPre = CopyL0CToDstQuantMode<ArchTag, ElementAccumulator, ElementDst,
-        ScaleGranularity::NO_QUANT>::VALUE;
-
-    CopyL0CToGm<ArchTag, ElementAccumulator, Gemm::GemmType<ElementDst, LayoutDst>> copyL0CToGm;
-
-    AscendC::GlobalTensor<ElementDst> gmTensor;
-    AscendC::LocalTensor<ElementAccumulator> l0cTensor;
-
-    LayoutSrc layoutSrc;
-    LayoutDst layoutDst;
-    setShape<ElementAccumulator>();
-    layoutSrc = LayoutSrc::template MakeLayout<ElementAccumulator>(_m, _n);
-    layoutDst = LayoutDst::template MakeLayout<ElementDst>(_m, _n);
-    ASSERT_TRUE(isContiguous(layoutSrc));
-    ASSERT_TRUE(isContiguous(layoutDst));
-
-    copyL0CToGm(gmTensor, l0cTensor, layoutDst, layoutSrc, _unitFlag);
-
-    AscendCCallLogger& logger = AscendCCallLogger::Instance();
-    auto logs = logger.GetLogs();
-    ASSERT_EQ(logs.size(), 1);
-
-    AscendCCallLog logTileCopy = logs[0];
-    BaseCheck<ElementDst, ElementAccumulator, false>(logTileCopy, gmTensor, l0cTensor);
-
-    uint32_t expectedMSize = layoutDst.shape(0) * layoutDst.shape(1);
-    uint32_t expectedNSize = layoutDst.shape(2) * layoutDst.shape(3);
-
-    const AscendC::DataCopyCO12DstParams* dataCopyArg = logTileCopy.GetArgsAt(2).Value<AscendC::DataCopyCO12DstParams>();
-    ASSERT_EQ(dataCopyArg->mSize, expectedMSize);
-    ASSERT_EQ(dataCopyArg->nSize, expectedNSize);
-    ASSERT_EQ(dataCopyArg->srcStride, _m_round);
-    ASSERT_EQ(dataCopyArg->dstStride, _m_round);       // zN dstStride = stride(3)/(32/sizeof)=m_round
-    ASSERT_EQ(dataCopyArg->unitFlag, _unitFlag);
-    ASSERT_EQ(dataCopyArg->nz2ndEn, false);
-    ASSERT_EQ(dataCopyArg->channelSplit, true);         // float→float channelSplit=true
-    ASSERT_EQ(dataCopyArg->quantPre, quantPre);
-}
-
-// NoQuantzNOutFloatToHalf, from L0C(zN) -> zN, float→half, Ascend950
-TEST_P(TileCopyL0CToGmTestAscend950, NoQuantzNOutFloatToHalfTest)
-{
-    using ElementAccumulator = float;
-    using ElementDst = half;
-
-    using LayoutSrc = layout::zN;
-    using LayoutDst = layout::zN;
-    constexpr auto quantPre = CopyL0CToDstQuantMode<ArchTag, ElementAccumulator, ElementDst,
-        ScaleGranularity::NO_QUANT>::VALUE;
-
-    CopyL0CToGm<ArchTag, ElementAccumulator, Gemm::GemmType<ElementDst, LayoutDst>> copyL0CToGm;
-
-    AscendC::GlobalTensor<ElementDst> gmTensor;
-    AscendC::LocalTensor<ElementAccumulator> l0cTensor;
-
-    LayoutSrc layoutSrc;
-    LayoutDst layoutDst;
-    setShape<ElementAccumulator>();
-    layoutSrc = LayoutSrc::template MakeLayout<ElementAccumulator>(_m, _n);
-    layoutDst = LayoutDst::template MakeLayout<ElementDst>(_m, _n);
-    ASSERT_TRUE(isContiguous(layoutSrc));
-    ASSERT_TRUE(isContiguous(layoutDst));
-
-    copyL0CToGm(gmTensor, l0cTensor, layoutDst, layoutSrc, _unitFlag);
-
-    AscendCCallLogger& logger = AscendCCallLogger::Instance();
-    auto logs = logger.GetLogs();
-    ASSERT_EQ(logs.size(), 1);
-
-    AscendCCallLog logTileCopy = logs[0];
-    BaseCheck<ElementDst, ElementAccumulator, false>(logTileCopy, gmTensor, l0cTensor);
-
-    uint32_t expectedMSize = layoutDst.shape(0) * layoutDst.shape(1);
-    uint32_t expectedNSize = layoutDst.shape(2) * layoutDst.shape(3);
-
-    const AscendC::DataCopyCO12DstParams* dataCopyArg = logTileCopy.GetArgsAt(2).Value<AscendC::DataCopyCO12DstParams>();
-    ASSERT_EQ(dataCopyArg->mSize, expectedMSize);
-    ASSERT_EQ(dataCopyArg->nSize, expectedNSize);
-    ASSERT_EQ(dataCopyArg->srcStride, _m_round);
-    ASSERT_EQ(dataCopyArg->unitFlag, _unitFlag);
-    ASSERT_EQ(dataCopyArg->nz2ndEn, false);
-    ASSERT_EQ(dataCopyArg->channelSplit, false);        // float→half no channelSplit
-    ASSERT_EQ(dataCopyArg->quantPre, quantPre);
-}
-
-// PerChannelQuant, from L0C(zN) -> RowMajor, Ascend950
-TEST_P(TileCopyL0CToGmTestAscend950, PerChannelQuantTest)
+// Data-path: zN (L0C) → RowMajor (GM)
+// Element-type: float → half
+// Speciality: PerChannel (per-channel quant via Fixpipe with scale tensor arg)
+TEST_P(TileCopyL0CToGmTestAscend950, zNToRowMajorTestPerChannel)
 {
     using ElementAccumulator = float;
     using ElementDst = half;
@@ -316,6 +332,9 @@ TEST_P(TileCopyL0CToGmTestAscend950, PerChannelQuantTest)
     ASSERT_EQ(logGmTensor, &gmTensor);
     ASSERT_EQ(logL0cTensor, &l0cTensor);
     ASSERT_EQ(logScaleTensor, &scaleTensor);
+    ASSERT_EQ(logfixpipe.GetArgsAt(0).GetInstAddr(), 0);
+    ASSERT_EQ(logfixpipe.GetArgsAt(1).GetInstAddr(), 0);
+    ASSERT_EQ(logfixpipe.GetArgsAt(2).GetInstAddr(), 0);
 
     const std::type_index& T0 = logfixpipe.GetArgsTAt(0).Type();
     ASSERT_EQ(T0, typeid(ElementDst));

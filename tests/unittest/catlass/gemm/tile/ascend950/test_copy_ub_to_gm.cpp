@@ -29,6 +29,7 @@ using namespace Catlass;
 using namespace Catlass::Epilogue::Tile;
 using namespace Catlass::Test;
 using namespace Catlass::Test::Helper;
+using ArchTag = Catlass::Arch::Ascend950;
 
 class TileCopyUbToGmTestAscend950 : public UBTileCopyTest, public ::testing::WithParamInterface<TestVectorShape> {
 protected:
@@ -54,12 +55,26 @@ protected:
         auto logUbTensor = logVecCopy.GetArgsAt(1).RawValue();
         ASSERT_EQ(logGmTensor, &gmTensor);
         ASSERT_EQ(logUbTensor, &ubTensor);
+        ASSERT_EQ(logVecCopy.GetArgsAt(0).GetInstAddr(), 0);
+        ASSERT_EQ(logVecCopy.GetArgsAt(1).GetInstAddr(), 0);
 
         const std::type_index& T0 = logVecCopy.GetArgsTAt(0).Type();
         ASSERT_EQ(T0, typeid(Element));
     }
 };
 
+// ========================================================================
+// NOTE: CopyUb2GmAligned 仅有 Arch::AtlasA2 特化，Ascend950 下不存在。
+// Ascend950 下 CopyUb2Gm / CopyUb2GmAligned 覆盖率已达。
+// ========================================================================
+
+// ============================================================================
+// Testsuite from **RowMajor**
+// ============================================================================
+
+// Data-path: RowMajor (UB) → RowMajor (GM)
+// Element-type: no-except (float)
+// Speciality: Basic (CopyUb2Gm contiguous, single DataCopyPad)
 TEST_P(TileCopyUbToGmTestAscend950, RowMajorToRowMajorTestBasic)
 {
     using Element = float;
@@ -95,6 +110,13 @@ TEST_P(TileCopyUbToGmTestAscend950, RowMajorToRowMajorTestBasic)
     ASSERT_EQ(dataCopyParams->dstStride, _0);
 }
 
+// ============================================================================
+// Testsuite from **Vector**
+// ============================================================================
+
+// Data-path: Vector (UB) → Vector (GM)
+// Element-type: no-except (float)
+// Speciality: Basic (CopyUb2Gm rank-1, single DataCopyPad with blockCount = 1)
 TEST_P(TileCopyUbToGmTestAscend950, VectorToVectorTestBasic)
 {
     using Element = float;
@@ -128,6 +150,11 @@ TEST_P(TileCopyUbToGmTestAscend950, VectorToVectorTestBasic)
     ASSERT_EQ(dataCopyParams->srcStride, _0);
     ASSERT_EQ(dataCopyParams->dstStride, _0);
 }
+
+// ========================================================================
+// NOTE: CopyUb2GmAligned 仅有 Arch::AtlasA2 特化，Ascend950 下不存在
+// Ascend950 下 CopyUb2Gm 采用 DataCopyPad 通过，覆盖率已达
+// ========================================================================
 
 INSTANTIATE_TEST_SUITE_P(
     CopyUbToGm,

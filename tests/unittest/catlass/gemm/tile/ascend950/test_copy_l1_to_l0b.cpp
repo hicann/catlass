@@ -58,6 +58,8 @@ protected:
         auto logTileCopyL1Tensor = logTileCopy.GetArgsAt(1).RawValue();
         ASSERT_EQ(logTileCopyL0BTensor, &l0bTensor);
         ASSERT_EQ(logTileCopyL1Tensor, &l1Tensor);
+        ASSERT_EQ(logTileCopy.GetArgsAt(0).GetInstAddr(), 0);
+        ASSERT_EQ(logTileCopy.GetArgsAt(1).GetInstAddr(), 0);
 
         // Check for the data type
         const std::type_index& T0 = logTileCopy.GetArgsTAt(0).Type();
@@ -180,7 +182,7 @@ TEST_P(TileCopyL1ToL0BTestAscend950, CATLASS_TILE_TEST_NAME(zNB1TonZTest, TYPE))
                                                                                                        \
     auto logs = AscendCCallLogger::Instance().GetLogs();                                               \
     bool singleLoad = !IS_B8_B4 || (_col_round % ELE_NUM_PER_C0 == 0);                                 \
-    ASSERT_EQ(logs.size(), singleLoad ? 1U : _row_round / ELE_NUM_PER_C0);                             \
+    ASSERT_EQ(logs.size(), singleLoad ? 1U : _rows_by_fractal);                                        \
     uint32_t expectedSrcStride = CeilDiv<ELE_NUM_PER_FRACTAL>(RoundUp<C0_NUM_PER_FRACTAL>(_row) * ELE_NUM_PER_C0); \
                                                                                                        \
     for (uint32_t i = 0; i < logs.size(); ++i) {                                                       \
@@ -203,7 +205,13 @@ TEST_P(TileCopyL1ToL0BTestAscend950, CATLASS_TILE_TEST_NAME(zNB1TonZTest, TYPE))
     }                                                                                                  \
 }
 
-// nZTonZ basic test, from nZ->nZ, Ascend950, basic
+// ============================================================================
+// Testsuite from **nZ**
+// ============================================================================
+
+// Data-path: nZ (L1) → nZ (L0B)
+// Element-type: no-except (float)
+// Speciality: Basic (single LoadData, no transpose)
 TEST_P(TileCopyL1ToL0BTestAscend950, nZTonZTestBasic)
 {
     using Element = float;
@@ -244,8 +252,14 @@ TEST_P(TileCopyL1ToL0BTestAscend950, nZTonZTestBasic)
 // nZ(B1) -> nZ(B2), 3-param Ascend950 specialization.
 ADD_TILE_COPY_TEST_L1_TO_L0B_NZ_TO_NZ(float);
 
-// zNTonZ basic test, from zN->nZ, Ascend950, transpose
-TEST_P(TileCopyL1ToL0BTestAscend950, zNTonZTest)
+// ============================================================================
+// Testsuite from **zN**
+// ============================================================================
+
+// Data-path: zN (L1) → nZ (L0B)
+// Element-type: no-except (float)
+// Speciality: Basic (single LoadData with ifTranspose enabled)
+TEST_P(TileCopyL1ToL0BTestAscend950, zNTonZTestBasic)
 {
     using Element = float;
     using ArchTag = Catlass::Arch::Ascend950;
@@ -283,13 +297,17 @@ TEST_P(TileCopyL1ToL0BTestAscend950, zNTonZTest)
     ASSERT_EQ(loadDataArg->ifTranspose, true);
 }
 
-// zZTonZ basic test, from zZ->nZ, Ascend950.
-ADD_TILE_COPY_TEST_L1_TO_L0B_ZZ_TO_NZ(half);
-ADD_TILE_COPY_TEST_L1_TO_L0B_ZZ_TO_NZ(float);
-
 // zN(B1) -> nZ(B2), Ascend950 3-param transpose specializations.
 ADD_TILE_COPY_TEST_L1_TO_L0B_ZN_B1_TO_NZ(half);
 ADD_TILE_COPY_TEST_L1_TO_L0B_ZN_B1_TO_NZ(int8_t);
+
+// ============================================================================
+// Testsuite from **zZ**
+// ============================================================================
+
+// zZTonZ basic test, from zZ->nZ, Ascend950.
+ADD_TILE_COPY_TEST_L1_TO_L0B_ZZ_TO_NZ(half);
+ADD_TILE_COPY_TEST_L1_TO_L0B_ZZ_TO_NZ(float);
 
 #undef ADD_TILE_COPY_TEST_L1_TO_L0B_ZN_B1_TO_NZ
 #undef ADD_TILE_COPY_TEST_L1_TO_L0B_ZZ_TO_NZ

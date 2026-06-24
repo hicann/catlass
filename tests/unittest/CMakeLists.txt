@@ -51,6 +51,38 @@ function(testcase MODE ARCH)
     endforeach()
 endfunction()
 
+################ COVERAGE ################
+if(DEFINED ENABLE_COVERAGE AND ENABLE_COVERAGE)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --coverage -fno-inline -fprofile-arcs -ftest-coverage")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} --coverage")
+    message(STATUS "Coverage reporting enabled")
+
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    find_program(LCOV lcov REQUIRED)
+    find_program(GENHTML genhtml REQUIRED)
+
+    set(COVERAGE_OUTPUT_DIR ${CMAKE_BINARY_DIR}/coverage)
+    set(COVERAGE_INFO_FILE ${COVERAGE_OUTPUT_DIR}/coverage.info)
+    set(COVERAGE_HTML_DIR ${COVERAGE_OUTPUT_DIR}/html)
+
+    add_custom_target(coverage_collect
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${COVERAGE_OUTPUT_DIR}
+        COMMAND ${LCOV} --capture --directory ${CMAKE_BINARY_DIR} --output-file ${COVERAGE_INFO_FILE}.raw --gcov-tool /usr/bin/gcov
+        COMMAND ${LCOV} --remove ${COVERAGE_INFO_FILE}.raw
+            '*/tests/*'
+            '*/3rdparty/*'
+            '*/googletest/*'
+            '/usr/*'
+            --output-file ${COVERAGE_INFO_FILE}
+        COMMAND ${GENHTML} ${COVERAGE_INFO_FILE} --output-directory ${COVERAGE_HTML_DIR}
+        COMMAND ${LCOV} --list ${COVERAGE_INFO_FILE}
+        COMMENT "Generating coverage report"
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    )
+endif()
+################ COVERAGE ################
+
 file(GLOB CATLASS_UNITTEST_SRCS_TILE_STUB ${CMAKE_CURRENT_SOURCE_DIR}/catlass/gemm/tile/*.cpp)
 testcase(STUB 2201 ${CATLASS_UNITTEST_SRCS_TILE_STUB})
 testcase(STUB 3510 ${CATLASS_UNITTEST_SRCS_TILE_STUB})

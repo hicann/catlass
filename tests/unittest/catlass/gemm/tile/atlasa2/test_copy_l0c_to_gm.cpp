@@ -77,8 +77,14 @@ protected:
     uint16_t _n_round = 0;
 };
 
-// NoQuantTestBasic, from L0C(zN) -> RowMajor, AtlasA2
-TEST_P(TileCopyL0CToGmTest, NoQuantTestBasic)
+// ============================================================================
+// Testsuite from **zN**
+// ============================================================================
+
+// Data-path: zN → RowMajor
+// Element-type: no-except (float)
+// Speciality: basic (NO_QUANT Fixpipe, single call)
+TEST_P(TileCopyL0CToGmTest, zNToRowMajorTestBasic)
 {
     using ElementAccumulator = float;
     using ElementDst = float;
@@ -120,6 +126,8 @@ TEST_P(TileCopyL0CToGmTest, NoQuantTestBasic)
     auto logTileCopyL0cTensor = logTileCopy.GetArgsAt(1).RawValue();  // 获取日志中L0C张量地址
     ASSERT_EQ(logTileCopyGmTensor, &gmTensor);  // 验证GM张量地址一致
     ASSERT_EQ(logTileCopyL0cTensor, &l0cTensor);  // 验证L0C张量地址一致
+    ASSERT_EQ(logTileCopy.GetArgsAt(0).GetInstAddr(), 0);
+    ASSERT_EQ(logTileCopy.GetArgsAt(1).GetInstAddr(), 0);
 
     // 验证参数是否正确
     const AscendC::FixpipeParamsV220* intriParams = logTileCopy.GetArgsAt(2).Value<AscendC::FixpipeParamsV220>();  // 获取FixpipeParams参数
@@ -132,8 +140,10 @@ TEST_P(TileCopyL0CToGmTest, NoQuantTestBasic)
     ASSERT_EQ(intriParams->unitFlag, unitFlag);  // 单位标志位
 }
 
-// NoQuantzNOutTest, from L0C(zN) -> zN, AtlasA2
-TEST_P(TileCopyL0CToGmTest, NoQuantzNOutTest)
+// Data-path: zN → zN
+// Element-type: no-except (float)
+// Speciality: basic (NO_QUANT zN output, channelSplit enabled)
+TEST_P(TileCopyL0CToGmTest, zNTozNTestBasic)
 {
     using ElementAccumulator = float;
     using ElementDst = float;
@@ -187,8 +197,10 @@ TEST_P(TileCopyL0CToGmTest, NoQuantzNOutTest)
     ASSERT_TRUE(intriParams->isChannelSplit);
 }
 
-// NoQuantFloatToHalfTest (#1 variant): L0C(zN)→RowMajor, float→half, F322F16
-TEST_P(TileCopyL0CToGmTest, NoQuantFloatToHalfTest)
+// Data-path: zN → RowMajor
+// Element-type: half
+// Speciality: half (NO_QUANT type-cast fp32→fp16, F322F16)
+TEST_P(TileCopyL0CToGmTest, zNToRowMajorTestHalf)
 {
     using ElementAccumulator = float;
     using ElementDst = half;
@@ -236,8 +248,10 @@ TEST_P(TileCopyL0CToGmTest, NoQuantFloatToHalfTest)
     ASSERT_EQ(p->unitFlag, unitFlag);
 }
 
-// PerTensorQuantTest (#2): L0C(zN)→RowMajor, float→half, PER_TENSOR, deqScalar
-TEST_P(TileCopyL0CToGmTest, PerTensorQuantTest)
+// Data-path: zN → RowMajor
+// Element-type: half
+// Speciality: per-tensor-quant (PER_TENSOR scale, deqScalar set)
+TEST_P(TileCopyL0CToGmTest, zNToRowMajorTestPerTensorQuant)
 {
     using ElementAccumulator = float;
     using ElementDst = half;

@@ -58,6 +58,8 @@ protected:
         auto logTileCopyL1Tensor = logTileCopy.GetArgsAt(1).RawValue();
         ASSERT_EQ(logTileCopyL0ATensor, &l0aTensor);
         ASSERT_EQ(logTileCopyL1Tensor, &l1Tensor);
+        ASSERT_EQ(logTileCopy.GetArgsAt(0).GetInstAddr(), 0);
+        ASSERT_EQ(logTileCopy.GetArgsAt(1).GetInstAddr(), 0);
 
         // Check for the data type
         const std::type_index& T0 = logTileCopy.GetArgsTAt(0).Type();
@@ -155,7 +157,13 @@ TEST_P(TileCopyL1ToL0ATestAscend950, CATLASS_TILE_TEST_NAME(nNTozNTest, TYPE))  
     }                                                                                                  \
 }
 
-// zNTozN Basic test, from zN->zN, Ascend950, basic
+// ============================================================================
+// Testsuite from **zN**
+// ============================================================================
+
+// Data-path: zN (L1) → zN (L0A)
+// Element-type: no-except (float)
+// Speciality: Basic (single LoadData, no transpose)
 TEST_P(TileCopyL1ToL0ATestAscend950, zNTozNTestBasic)
 {
     using Element = float;
@@ -198,8 +206,14 @@ TEST_P(TileCopyL1ToL0ATestAscend950, zNTozNTestBasic)
 // zN(A1) -> zN(A2), 3-param Ascend950 specialization.
 ADD_TILE_COPY_TEST_L1_TO_L0A_ZN_TO_ZN(float);
 
-// nZTozN basic test, from nZ->zN, Ascend950, transpose
-TEST_P(TileCopyL1ToL0ATestAscend950, nZTozNTest)
+// ============================================================================
+// Testsuite from **nZ**
+// ============================================================================
+
+// Data-path: nZ (L1) → zN (L0A)
+// Element-type: no-except (float)
+// Speciality: Basic (single LoadData with ifTranspose enabled)
+TEST_P(TileCopyL1ToL0ATestAscend950, nZTozNTestBasic)
 {
     using Element = float;
     using ArchTag = Catlass::Arch::Ascend950;
@@ -237,6 +251,10 @@ TEST_P(TileCopyL1ToL0ATestAscend950, nZTozNTest)
     ASSERT_EQ(loadDataArg->dstStride, _rows_by_fractal);            // Unit: 512(Byte)
     ASSERT_EQ(loadDataArg->ifTranspose, true);
 }
+
+// ============================================================================
+// Testsuite from **nN**
+// ============================================================================
 
 // nNTozN basic test, from nN->zN, Ascend950.
 ADD_TILE_COPY_TEST_L1_TO_L0A_NN_TO_ZN(half);

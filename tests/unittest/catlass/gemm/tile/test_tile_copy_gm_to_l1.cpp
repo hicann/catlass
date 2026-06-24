@@ -156,13 +156,15 @@ TYPED_TEST(TileCopyGmToL1Test, ColumnMajorTonZTestBasic)
         AscendCCallLog logTileCopy = logs[0];
         this->template BaseCheck<Element>(logTileCopy);
 
-        const auto* p = logTileCopy.GetArgsAt(2).Value<AscendC::Nd2NzParams>();
-        ASSERT_EQ(p->ndNum, _1);
-        ASSERT_EQ(p->nValue, this->_col);
-        ASSERT_EQ(p->dValue, this->_row);
-        ASSERT_EQ(p->srcDValue, this->_row);
-        ASSERT_EQ(p->dstNzC0Stride, layoutDst.stride(1) / ELE_NUM_PER_C0);
-        ASSERT_EQ(p->dstNzNStride, layoutDst.stride(2) / ELE_NUM_PER_C0);
+        const auto* nd2nzArg = logTileCopy.GetArgsAt(2).Value<AscendC::Nd2NzParams>();
+        ASSERT_EQ(nd2nzArg->ndNum, _1);
+        ASSERT_EQ(nd2nzArg->nValue, this->_col);
+        ASSERT_EQ(nd2nzArg->dValue, this->_row);
+        ASSERT_EQ(nd2nzArg->srcNdMatrixStride, _0);
+        ASSERT_EQ(nd2nzArg->srcDValue, this->_row);
+        ASSERT_EQ(nd2nzArg->dstNzC0Stride, layoutDst.stride(1) / ELE_NUM_PER_C0);
+        ASSERT_EQ(nd2nzArg->dstNzNStride, layoutDst.stride(2) / ELE_NUM_PER_C0);
+        ASSERT_EQ(nd2nzArg->dstNzMatrixStride, _0);
     }
 }
 

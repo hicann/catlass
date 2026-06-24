@@ -1,12 +1,12 @@
 /**
- * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
- */
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd.
+ * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+ * CANN Open Software License Agreement Version 2.0 (the "License").
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
+ */
 
 #include <iostream>
 #include <gtest/gtest.h>
@@ -55,6 +55,8 @@ protected:
         auto logUbTensor = logVecCopy.GetArgsAt(0).RawValue();
         ASSERT_EQ(logGmTensor, &gmTensor);
         ASSERT_EQ(logUbTensor, &ubTensor);
+        ASSERT_EQ(logVecCopy.GetArgsAt(1).GetInstAddr(), 0);
+        ASSERT_EQ(logVecCopy.GetArgsAt(0).GetInstAddr(), 0);
 
         const std::type_index& T0 = logVecCopy.GetArgsTAt(0).Type();
         ASSERT_EQ(T0, typeid(Element));
@@ -99,6 +101,13 @@ protected:
     static constexpr uint32_t STRIDE_LIMIT = 65536;
 };
 
+// ============================================================================
+// Testsuite from **RowMajor**
+// ============================================================================
+
+// Data-path: RowMajor → RowMajor
+// Element-type: no-except (float)
+// Speciality: basic (contiguous, single DataCopyPad)
 TEST_P(TileCopyGmToUbTestAscend950, RowMajorToRowMajorTestBasic)
 {
     using Element = float;
@@ -136,44 +145,12 @@ TEST_P(TileCopyGmToUbTestAscend950, RowMajorToRowMajorTestBasic)
     ASSERT_EQ(padParams->isPad, false);
 }
 
-TEST_P(TileCopyGmToUbTestAscend950, VectorToVectorTestBasic)
-{
-    using Element = float;
-    using LayoutSrc = layout::VectorLayout;
-    using LayoutDst = layout::VectorLayout;
-
-    using GmType = Gemm::GemmType<Element, LayoutSrc>;
-    CopyGm2Ub<ArchTag, GmType> copyGmToUb;
-
-    AscendC::GlobalTensor<Element> gmTensor;
-    AscendC::LocalTensor<Element> ubTensor;
-    
-    setShape();
-    LayoutSrc layoutSrc{_totalLen};
-    LayoutDst layoutDst{_totalLen};
-    ASSERT_TRUE(isContiguous(layoutSrc) && isContiguous(layoutDst));
-
-    copyGmToUb(ubTensor, gmTensor, layoutDst, layoutSrc);
-
-    AscendCCallLogger& logger = AscendCCallLogger::Instance();
-    auto logs = logger.GetLogs();
-    ASSERT_EQ(logs.size(), 1);
-
-    AscendCCallLog logVecCopy = logs[0];
-    BaseCheck<Element>(logVecCopy, gmTensor, ubTensor);
-
-    const AscendC::DataCopyExtParams* dataCopyParams = logVecCopy.GetArgsAt(2).Value<AscendC::DataCopyExtParams>();
-    const AscendC::DataCopyPadExtParams<Element>* padParams = logVecCopy.GetArgsAt(3).Value<AscendC::DataCopyPadExtParams<Element>>();  
-    ASSERT_EQ(dataCopyParams->blockCount, _1);
-    ASSERT_EQ(dataCopyParams->blockLen, _totalLen * sizeof(Element));
-    ASSERT_EQ(dataCopyParams->srcStride, _0);
-    ASSERT_EQ(dataCopyParams->dstStride, _0);
-    ASSERT_EQ(padParams->isPad, false);
-}
-
 //////////////////////////// CopyGm2UbAligned ////////////////////////////
 
-TEST_P(TileCopyGmToUbTestAscend950, RowMajorToRowMajorAlignedSimple)
+// Data-path: RowMajor → RowMajor
+// Element-type: no-except (float)
+// Speciality: aligned-contiguous (CopyGm2UbAligned, single DataCopy by total count)
+TEST_P(TileCopyGmToUbTestAscend950, RowMajorToRowMajorTestAligned)
 {
     using Element = float;
     using LayoutSrc = layout::RowMajor;
@@ -205,6 +182,8 @@ TEST_P(TileCopyGmToUbTestAscend950, RowMajorToRowMajorAlignedSimple)
     auto logUbTensor = logVecCopy.GetArgsAt(0).RawValue();
     ASSERT_EQ(logGmTensor, &gmTensor);
     ASSERT_EQ(logUbTensor, &ubTensor);
+    ASSERT_EQ(logVecCopy.GetArgsAt(1).GetInstAddr(), 0);
+    ASSERT_EQ(logVecCopy.GetArgsAt(0).GetInstAddr(), 0);
 
     const std::type_index& T0 = logVecCopy.GetArgsTAt(0).Type();
     ASSERT_EQ(T0, typeid(Element));
@@ -213,7 +192,10 @@ TEST_P(TileCopyGmToUbTestAscend950, RowMajorToRowMajorAlignedSimple)
     ASSERT_EQ(*count, _totalLen);
 }
 
-TEST_P(TileCopyGmToUbNonContiguousTestAscend950, RowMajorToRowMajorAlignedNonContiguous)
+// Data-path: RowMajor → RowMajor
+// Element-type: no-except (float)
+// Speciality: aligned-non-contiguous (CopyGm2UbAligned, per-block DataCopyParams)
+TEST_P(TileCopyGmToUbNonContiguousTestAscend950, RowMajorToRowMajorTestNonContiguous)
 {
     using Element = float;
     using LayoutSrc = layout::RowMajor;
@@ -253,6 +235,85 @@ TEST_P(TileCopyGmToUbNonContiguousTestAscend950, RowMajorToRowMajorAlignedNonCon
         ASSERT_EQ(dataCopyParams->srcGap, (_srcStride - _blkLen) / ELE_NUM_PER_BLK);
         ASSERT_EQ(dataCopyParams->dstGap, (_dstStride - _blkLen) / ELE_NUM_PER_BLK);
     }
+}
+
+// RowMajor→RowMajor with long stride
+// Data-path: RowMajor → RowMajor
+// Element-type: no-except (float)
+// Speciality: aligned-long-stride (CopyGm2UbAligned, row-by-row DataCopyParams)
+TEST_P(TileCopyGmToUbNonContiguousTestAscend950, RowMajorToRowMajorTestLongStride)
+{
+    using Element = float;
+    using LayoutSrc = layout::RowMajor;
+    using LayoutDst = layout::RowMajor;
+    constexpr uint32_t ELE_NUM_PER_BLK = BytesToBits(BYTE_PER_BLK) / SizeOfBits<Element>::value;
+
+    using GmType = Gemm::GemmType<Element, LayoutSrc>;
+    CopyGm2UbAligned<ArchTag, GmType> copyGmToUb;
+
+    AscendC::GlobalTensor<Element> gmTensor;
+    AscendC::LocalTensor<Element> ubTensor;
+
+    setShape();
+    uint32_t longStride = _blkLen + STRIDE_LIMIT * ELE_NUM_PER_BLK + STRIDE_LIMIT;
+    LayoutSrc layoutSrc{_blkCnt, _blkLen, longStride};
+    LayoutDst layoutDst{_blkCnt, _blkLen, longStride};
+
+    copyGmToUb(ubTensor, gmTensor, layoutDst, layoutSrc);
+
+    AscendCCallLogger& logger = AscendCCallLogger::Instance();
+    auto logs = logger.GetLogs();
+    ASSERT_EQ(logs.size(), _blkCnt);
+
+    for (uint32_t i = 0; i < _blkCnt; i++) {
+        AscendCCallLog logVecCopy = logs[i];
+        BaseCheck<Element, false>(logVecCopy);
+        ASSERT_EQ(logVecCopy.GetArgsAt(1).GetInstAddr(), i * longStride * sizeof(Element));
+        ASSERT_EQ(logVecCopy.GetArgsAt(0).GetInstAddr(), i * longStride * sizeof(Element));
+        ASSERT_EQ(*logVecCopy.GetArgsAt(2).Value<uint32_t>(), _blkLen);
+    }
+}
+
+// ============================================================================
+// Testsuite from **Vector**
+// ============================================================================
+
+// Data-path: Vector → Vector
+// Element-type: no-except (float)
+// Speciality: basic (single DataCopyPad, blockCount = 1)
+TEST_P(TileCopyGmToUbTestAscend950, VectorToVectorTestBasic)
+{
+    using Element = float;
+    using LayoutSrc = layout::VectorLayout;
+    using LayoutDst = layout::VectorLayout;
+
+    using GmType = Gemm::GemmType<Element, LayoutSrc>;
+    CopyGm2Ub<ArchTag, GmType> copyGmToUb;
+
+    AscendC::GlobalTensor<Element> gmTensor;
+    AscendC::LocalTensor<Element> ubTensor;
+    
+    setShape();
+    LayoutSrc layoutSrc{_totalLen};
+    LayoutDst layoutDst{_totalLen};
+    ASSERT_TRUE(isContiguous(layoutSrc) && isContiguous(layoutDst));
+
+    copyGmToUb(ubTensor, gmTensor, layoutDst, layoutSrc);
+
+    AscendCCallLogger& logger = AscendCCallLogger::Instance();
+    auto logs = logger.GetLogs();
+    ASSERT_EQ(logs.size(), 1);
+
+    AscendCCallLog logVecCopy = logs[0];
+    BaseCheck<Element>(logVecCopy, gmTensor, ubTensor);
+
+    const AscendC::DataCopyExtParams* dataCopyParams = logVecCopy.GetArgsAt(2).Value<AscendC::DataCopyExtParams>();
+    const AscendC::DataCopyPadExtParams<Element>* padParams = logVecCopy.GetArgsAt(3).Value<AscendC::DataCopyPadExtParams<Element>>();  
+    ASSERT_EQ(dataCopyParams->blockCount, _1);
+    ASSERT_EQ(dataCopyParams->blockLen, _totalLen * sizeof(Element));
+    ASSERT_EQ(dataCopyParams->srcStride, _0);
+    ASSERT_EQ(dataCopyParams->dstStride, _0);
+    ASSERT_EQ(padParams->isPad, false);
 }
 
 INSTANTIATE_TEST_SUITE_P(

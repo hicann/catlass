@@ -22,16 +22,16 @@ struct IntegerSequence {
     static constexpr size_t size() { return sizeof...(Ns); }
 };
 
-template <typename Sequence, typename T, size_t N>
+template <typename Sequence, typename T, size_t N, typename = void>
 struct MakeIntegerSequenceImpl;
 
-template <typename T, size_t... Ns>
-struct MakeIntegerSequenceImpl<IntegerSequence<T, Ns...>, T, 0> {
-    typedef IntegerSequence<T, Ns...> type;
+template <typename T, typename NS>
+struct MakeIntegerSequenceImpl<NS, T, 0> {
+    typedef NS type;
 };
 
-template <typename T, size_t N, size_t... Ns>
-struct MakeIntegerSequenceImpl<IntegerSequence<T, Ns...>, T, N> {
+template <typename T, T... Ns, size_t N>
+struct MakeIntegerSequenceImpl<IntegerSequence<T, Ns...>, T, N, TLA_REQUIRES_T(N > 0)> {
     typedef typename MakeIntegerSequenceImpl<IntegerSequence<T, N - 1, Ns...>, T, N - 1>::type type;
 };
 

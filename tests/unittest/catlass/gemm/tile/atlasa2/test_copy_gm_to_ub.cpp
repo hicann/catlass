@@ -1,12 +1,12 @@
 /**
- * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
- */
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd.
+ * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+ * CANN Open Software License Agreement Version 2.0 (the "License").
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
+ */
 
 #include <iostream>
 #include <gtest/gtest.h>
@@ -64,6 +64,8 @@ protected:
         auto logUbTensor = logVecCopy.GetArgsAt(0).RawValue();
         ASSERT_EQ(logGmTensor, &gmTensor);
         ASSERT_EQ(logUbTensor, &ubTensor);
+        ASSERT_EQ(logVecCopy.GetArgsAt(1).GetInstAddr(), 0);
+        ASSERT_EQ(logVecCopy.GetArgsAt(0).GetInstAddr(), 0);
 
         // check if the data-type is match
         const std::type_index& T0 = logVecCopy.GetArgsTAt(0).Type();
@@ -113,6 +115,13 @@ protected:
     static constexpr uint32_t MAX_REPEAT = 4095;
 };
 
+// ============================================================================
+// Testsuite from **RowMajor**
+// ============================================================================
+
+// Data-path: RowMajor → RowMajor
+// Element-type: no-except (float)
+// Speciality: basic (contiguous, single DataCopyPad)
 TEST_P(TileCopyGmToUbTest, RowMajorToRowMajorTestBasic)
 {
     using Element = float;
@@ -153,45 +162,10 @@ TEST_P(TileCopyGmToUbTest, RowMajorToRowMajorTestBasic)
     ASSERT_EQ(padParams->isPad, false);
 }
 
-TEST_P(TileCopyGmToUbTest, VectorToVectorTestBasic)
-{
-    using Element = float;
-    using ArchTag = Catlass::Arch::AtlasA2;
-    using LayoutSrc = layout::VectorLayout;
-    using LayoutDst = layout::VectorLayout;
-
-    using GmType = Gemm::GemmType<Element, LayoutSrc>;
-    CopyGm2Ub<ArchTag, GmType> copyGmToUb;
-
-    AscendC::GlobalTensor<Element> gmTensor;
-    AscendC::LocalTensor<Element> ubTensor;
-    
-    setShape();
-    LayoutSrc layoutSrc{_totalLen};
-    LayoutDst layoutDst{_totalLen};
-    ASSERT_TRUE(isContiguous(layoutSrc) && isContiguous(layoutDst));
-    // caller
-    copyGmToUb(ubTensor, gmTensor, layoutDst, layoutSrc);
-
-    // Get logs
-    AscendCCallLogger& logger = AscendCCallLogger::Instance();
-    auto logs = logger.GetLogs();
-    ASSERT_EQ(logs.size(), 1);
-
-    AscendCCallLog logVecCopy = logs[0];
-    BaseCheck<Element>(logVecCopy, gmTensor, ubTensor);
-
-    const AscendC::DataCopyExtParams* dataCopyParams = logVecCopy.GetArgsAt(2).Value<AscendC::DataCopyExtParams>();
-    const AscendC::DataCopyPadExtParams<Element>* padParams = logVecCopy.GetArgsAt(3).Value<AscendC::DataCopyPadExtParams<Element>>();  
-    ASSERT_EQ(dataCopyParams->blockCount, _1);
-    ASSERT_EQ(dataCopyParams->blockLen, _totalLen * sizeof(Element));
-    ASSERT_EQ(dataCopyParams->srcStride, _0);                // 源操作数相邻数据块间的间隔(单位:32B[OnLocal]/Byte[GM])
-    ASSERT_EQ(dataCopyParams->dstStride, _0);                // 目的操作数相邻数据块间的间隔(单位:32B[OnLocal]/Byte[UB])
-
-    ASSERT_EQ(padParams->isPad, false);
-}
-
-TEST_P(TileCopyGmToUbTest, RowMajorToRowMajorAlignedSimple)
+// Data-path: RowMajor → RowMajor
+// Element-type: no-except (float)
+// Speciality: aligned-contiguous (CopyGm2UbAligned, single DataCopy by total count)
+TEST_P(TileCopyGmToUbTest, RowMajorToRowMajorTestAligned)
 {
     using Element = float;
     using ArchTag = Catlass::Arch::AtlasA2;
@@ -225,7 +199,10 @@ TEST_P(TileCopyGmToUbTest, RowMajorToRowMajorAlignedSimple)
     ASSERT_EQ(*count, _totalLen);
 }
 
-TEST_P(TileCopyGmToUbNonContiguousTest, RowMajorToRowMajorAlignedNonContiguous)
+// Data-path: RowMajor → RowMajor
+// Element-type: no-except (float)
+// Speciality: aligned-non-contiguous (CopyGm2UbAligned, per-block DataCopyParams)
+TEST_P(TileCopyGmToUbNonContiguousTest, RowMajorToRowMajorTestNonContiguous)
 {
     using Element = float;
     using ArchTag = Catlass::Arch::AtlasA2;
@@ -271,6 +248,88 @@ TEST_P(TileCopyGmToUbNonContiguousTest, RowMajorToRowMajorAlignedNonContiguous)
         ASSERT_EQ(dataCopyParams->srcGap, (_srcStride - _blkLen) / ELE_NUM_PER_BLK); // May fail ?
         ASSERT_EQ(dataCopyParams->dstGap, (_dstStride - _blkLen) / ELE_NUM_PER_BLK); // May fail ?
     }
+}
+
+// Data-path: RowMajor → RowMajor
+// Element-type: no-except (float)
+// Speciality: aligned-long-stride (CopyGm2UbAligned, row-by-row DataCopyParams)
+TEST_P(TileCopyGmToUbNonContiguousTest, RowMajorToRowMajorTestLongStride)
+{
+    using Element = float;
+    using ArchTag = Catlass::Arch::AtlasA2;
+    using LayoutSrc = layout::RowMajor;
+    using LayoutDst = layout::RowMajor;
+    constexpr uint32_t ELE_NUM_PER_BLK = BYTE_PER_BLK / sizeof(Element);
+
+    using GmType = Gemm::GemmType<Element, LayoutSrc>;
+    CopyGm2UbAligned<ArchTag, GmType> copyGmToUb;
+
+    AscendC::GlobalTensor<Element> gmTensor;
+    AscendC::LocalTensor<Element> ubTensor;
+
+    setShape();
+    uint32_t longStride = _blkLen + STRIDE_LIMIT * ELE_NUM_PER_BLK + STRIDE_LIMIT;
+    LayoutSrc layoutSrc{_blkCnt, _blkLen, longStride};
+    LayoutDst layoutDst{_blkCnt, _blkLen, longStride};
+
+    copyGmToUb(ubTensor, gmTensor, layoutDst, layoutSrc);
+
+    AscendCCallLogger& logger = AscendCCallLogger::Instance();
+    auto logs = logger.GetLogs();
+    ASSERT_EQ(logs.size(), _blkCnt);
+
+    for (uint32_t i = 0; i < _blkCnt; i++) {
+        AscendCCallLog logVecCopy = logs[i];
+        BaseCheck<Element, false>(logVecCopy);
+        ASSERT_EQ(logVecCopy.GetArgsAt(1).GetInstAddr(), i * longStride * sizeof(Element));
+        ASSERT_EQ(logVecCopy.GetArgsAt(0).GetInstAddr(), i * longStride * sizeof(Element));
+        ASSERT_EQ(*logVecCopy.GetArgsAt(2).Value<uint32_t>(), _blkLen);
+    }
+}
+
+// ============================================================================
+// Testsuite from **Vector**
+// ============================================================================
+
+// Data-path: Vector → Vector
+// Element-type: no-except (float)
+// Speciality: basic (single DataCopyPad, blockCount = 1)
+TEST_P(TileCopyGmToUbTest, VectorToVectorTestBasic)
+{
+    using Element = float;
+    using ArchTag = Catlass::Arch::AtlasA2;
+    using LayoutSrc = layout::VectorLayout;
+    using LayoutDst = layout::VectorLayout;
+
+    using GmType = Gemm::GemmType<Element, LayoutSrc>;
+    CopyGm2Ub<ArchTag, GmType> copyGmToUb;
+
+    AscendC::GlobalTensor<Element> gmTensor;
+    AscendC::LocalTensor<Element> ubTensor;
+    
+    setShape();
+    LayoutSrc layoutSrc{_totalLen};
+    LayoutDst layoutDst{_totalLen};
+    ASSERT_TRUE(isContiguous(layoutSrc) && isContiguous(layoutDst));
+    // caller
+    copyGmToUb(ubTensor, gmTensor, layoutDst, layoutSrc);
+
+    // Get logs
+    AscendCCallLogger& logger = AscendCCallLogger::Instance();
+    auto logs = logger.GetLogs();
+    ASSERT_EQ(logs.size(), 1);
+
+    AscendCCallLog logVecCopy = logs[0];
+    BaseCheck<Element>(logVecCopy, gmTensor, ubTensor);
+
+    const AscendC::DataCopyExtParams* dataCopyParams = logVecCopy.GetArgsAt(2).Value<AscendC::DataCopyExtParams>();
+    const AscendC::DataCopyPadExtParams<Element>* padParams = logVecCopy.GetArgsAt(3).Value<AscendC::DataCopyPadExtParams<Element>>();  
+    ASSERT_EQ(dataCopyParams->blockCount, _1);
+    ASSERT_EQ(dataCopyParams->blockLen, _totalLen * sizeof(Element));
+    ASSERT_EQ(dataCopyParams->srcStride, _0);                // 源操作数相邻数据块间的间隔(单位:32B[OnLocal]/Byte[GM])
+    ASSERT_EQ(dataCopyParams->dstStride, _0);                // 目的操作数相邻数据块间的间隔(单位:32B[OnLocal]/Byte[UB])
+
+    ASSERT_EQ(padParams->isPad, false);
 }
 
 INSTANTIATE_TEST_SUITE_P(

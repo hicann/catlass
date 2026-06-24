@@ -35,12 +35,12 @@ protected:
 /// TileCopyTest, for AIC related data copy tile-level ut
 class TileCopyTest : public AscendCTest {
 protected:
-
     template <class Element, bool isTrans = false>
-    void _setShape(uint32_t row, uint32_t col) {
+    void _setShape(uint32_t row, uint32_t col)
+    {
         constexpr uint32_t C0_NUM_PER_FRACTAL = 16;
         constexpr uint32_t ELE_NUM_PER_C0 = 32 / sizeof(Element);
-        
+
         _row = row;
         _col = col;
         if constexpr (isTrans) {
@@ -55,6 +55,7 @@ protected:
             _cols_by_fractal = _col_round / ELE_NUM_PER_C0;
         }
     }
+
 protected:
     uint32_t _row = 128;
     uint32_t _col = 256;
@@ -65,14 +66,88 @@ protected:
     // call 'setShape' firstly in every testcase
 };
 
+class TileCopyTlaTest : public AscendCTest {
+protected:
+    template <class Element, bool isSrcTrans = false, bool isDstTrans = false>
+    void _setShape(uint32_t row, uint32_t col)
+    {
+        constexpr uint32_t C0_NUM_PER_FRACTAL = 16;
+        constexpr uint32_t ELE_NUM_PER_C0 = 32 / sizeof(Element);
+
+        if constexpr (isSrcTrans) {
+            _row_round = (row + ELE_NUM_PER_C0 - 1) / ELE_NUM_PER_C0 * ELE_NUM_PER_C0;
+            _col_round = (col + C0_NUM_PER_FRACTAL - 1) / C0_NUM_PER_FRACTAL * C0_NUM_PER_FRACTAL;
+            _rows_by_fractal = _row_round / ELE_NUM_PER_C0;
+            _cols_by_fractal = _col_round / C0_NUM_PER_FRACTAL;
+        } else {
+            _row_round = (row + C0_NUM_PER_FRACTAL - 1) / C0_NUM_PER_FRACTAL * C0_NUM_PER_FRACTAL;
+            _col_round = (col + ELE_NUM_PER_C0 - 1) / ELE_NUM_PER_C0 * ELE_NUM_PER_C0;
+            _rows_by_fractal = _row_round / C0_NUM_PER_FRACTAL;
+            _cols_by_fractal = _col_round / ELE_NUM_PER_C0;
+        }
+
+        if constexpr (isDstTrans) {
+            _dst_row_round = (_dst_row + ELE_NUM_PER_C0 - 1) / ELE_NUM_PER_C0 * ELE_NUM_PER_C0;
+            _dst_col_round = (_dst_col + C0_NUM_PER_FRACTAL - 1) / C0_NUM_PER_FRACTAL * C0_NUM_PER_FRACTAL;
+            _dst_row_by_fractal = _dst_row_round / ELE_NUM_PER_C0;
+            _dst_cols_by_fractal = _dst_col_round / C0_NUM_PER_FRACTAL;
+        } else {
+            _dst_row_round = (_dst_row + C0_NUM_PER_FRACTAL - 1) / C0_NUM_PER_FRACTAL * C0_NUM_PER_FRACTAL;
+            _dst_col_round = (_dst_col + ELE_NUM_PER_C0 - 1) / ELE_NUM_PER_C0 * ELE_NUM_PER_C0;
+            _dst_row_by_fractal = _dst_row_round / C0_NUM_PER_FRACTAL;
+            _dst_cols_by_fractal = _dst_col_round / ELE_NUM_PER_C0;
+        }
+    }
+
+    bool isValidDataCopy() const
+    {
+        return (_row_coord + _dst_row < _row) && (_col_coord + _dst_col < _col);
+    }
+
+protected:
+    uint32_t _row = 128;
+    uint32_t _col = 256;
+    uint32_t _row_round = 128;
+    uint32_t _col_round = 256;
+    uint32_t _rows_by_fractal = 16;
+    uint32_t _cols_by_fractal = 32;
+    // coord
+    uint32_t _row_coord = 16;
+    uint32_t _col_coord = 32;
+    uint32_t _dst_row = 67;
+    uint32_t _dst_col = 128;
+    uint32_t _dst_row_round = 80;
+    uint32_t _dst_col_round = 128;
+    uint32_t _dst_row_by_fractal = 80;
+    uint32_t _dst_cols_by_fractal = 128;
+};
+
+/// TileMmadTest, for AIC related mmad tile-level ut
+class TileMmadTest : public AscendCTest {
+protected:
+    void _setShape(uint32_t m, uint32_t n, uint32_t k)
+    {
+        _m = m;
+        _n = n;
+        _k = k;
+    }
+
+protected:
+    uint32_t _m = 128;
+    uint32_t _n = 256;
+    uint32_t _k = 128;
+};
+
 /// UBTileCopyTest, for AIV related data copy tile-level ut
 class UBTileCopyTest : public AscendCTest {
 protected:
-    void _setShape(const uint32_t blkLen, const uint16_t blkCnt) {
+    void _setShape(const uint32_t blkLen, const uint16_t blkCnt)
+    {
         _blkLen = blkLen;
         _blkCnt = blkCnt;
         _totalLen = blkLen * blkCnt;
     }
+
 protected:
     uint32_t _blkLen = 128;
     uint16_t _blkCnt = 1;

@@ -64,6 +64,7 @@ enum class TPosition : int32_t
     SPM,
     SHM = SPM,
     TSCM,
+    C2PIPE2GM,
     MAX,
 };
 

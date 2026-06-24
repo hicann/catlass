@@ -1,12 +1,12 @@
 /**
- * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
- */
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd.
+ * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+ * CANN Open Software License Agreement Version 2.0 (the "License").
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
+ */
 
 #include <iostream>
 #include <gtest/gtest.h>
@@ -62,7 +62,13 @@ protected:
     }
 };
 
-// zNTozZTestBasic, from zN -> zZ (AtlasA2), basic场景
+// ============================================================================
+// Testsuite from **zN**
+// ============================================================================
+
+// Data-path: zN → zZ
+// Element-type: no-except (float)
+// Speciality: basic (per-fractal LoadData, no transpose)
 TEST_P(TileCopyL1ToL0ATest, zNTozZTestBasic)
 {
     using Element = float;
@@ -109,13 +115,67 @@ TEST_P(TileCopyL1ToL0ATest, zNTozZTestBasic)
         ASSERT_EQ(loadDataArg->repeatTimes, _cols_by_fractal);  // 搬运的分型迭代次数（每个迭代处理512B数据)
         ASSERT_EQ(loadDataArg->srcStride, _rows_by_fractal);    // 相邻分形间前一个分形和后一分形起始地址间隔(单位:512B)
         ASSERT_EQ(loadDataArg->sid, _0);                        // 预留参数(AtlasA2), 为0
-        ASSERT_EQ(loadDataArg->dstGap, _0);  // 相邻迭代间目的操作数前一个至后一个分形起始间隔(单位:512B)
+        ASSERT_EQ(loadDataArg->dstGap, _0);                     // 相邻迭代间目的操作数前一个至后一个分形起始间隔(单位:512B)
         ASSERT_EQ(loadDataArg->ifTranspose, _0);                // 分形内是否启用转置，为False
         ASSERT_EQ(loadDataArg->addrMode, _0);                   // 预留参数(AtlasA2), 为0
     }
 }
 
-// nNTozZTestBasic, from nN -> zZ (AtlasA2), basic场景, 非float/int8/int4
+// Data-path: zN → zZ
+// Element-type: half
+// Speciality: 2Param (single L1Type, L0A type auto-deduced as zZ)
+TEST_P(TileCopyL1ToL0ATest, zNTozZTest2Param)
+{
+    using Element = half; // need to be float
+    using ArchTag = Catlass::Arch::AtlasA2;
+
+    using LayoutSrc = layout::zN;
+    using LayoutDst = layout::zZ;
+
+    using L1Type = Gemm::GemmType<Element, LayoutSrc, AscendC::TPosition::A1>;
+    // L0Type = void (default) — L0A type auto-deduced as zZ
+
+    CopyL1ToL0A<ArchTag, L1Type> copyL1ToL0A;
+
+    AscendC::LocalTensor<Element> l1Tensor;
+    AscendC::LocalTensor<Element> l0aTensor;
+
+    LayoutSrc layoutSrc;
+    LayoutDst layoutDst;
+    setShape<Element>();
+    setLayout<Element>(_row, _col, layoutSrc, layoutDst);
+    ASSERT_TRUE(isContiguous(layoutSrc));
+    ASSERT_TRUE(isContiguous(layoutDst));
+
+    copyL1ToL0A(l0aTensor, l1Tensor, layoutDst, layoutSrc);
+    
+    auto logs = AscendCCallLogger::Instance().GetLogs();
+    ASSERT_EQ(logs.size(), _rows_by_fractal);
+
+    for (uint32_t i = 0; i < _rows_by_fractal; i++) {
+        AscendCCallLog logTileCopy = logs[i];
+        BaseCheck<Element>(logTileCopy);
+
+        ASSERT_EQ(logTileCopy.GetArgsAt(0).GetInstAddr(), i * BYTE_PER_FRACTAL * _cols_by_fractal);
+        ASSERT_EQ(logTileCopy.GetArgsAt(1).GetInstAddr(), i * BYTE_PER_FRACTAL);
+
+        const auto* p = logTileCopy.GetArgsAt(2).Value<AscendC::LoadData2DParams>();
+        ASSERT_EQ(p->startIndex, _0);
+        ASSERT_EQ(p->repeatTimes, _cols_by_fractal);
+        ASSERT_EQ(p->srcStride, _rows_by_fractal);
+        ASSERT_EQ(p->dstGap, _0);
+        ASSERT_EQ(p->ifTranspose, _0);
+        ASSERT_EQ(p->addrMode, _0);
+    }
+}
+
+// ============================================================================
+// Testsuite from **nN**
+// ============================================================================
+
+// Data-path: nN → zZ
+// Element-type: half
+// Speciality: basic (LoadData with in-fractal transpose, 2-byte element)
 TEST_P(TileCopyL1ToL0ATest, nNTozZTestBasic)
 {
     using Element = half;
@@ -171,7 +231,9 @@ TEST_P(TileCopyL1ToL0ATest, nNTozZTestBasic)
     }
 }
 
-// nNTozZTestFloat, from nN -> zZ (AtlasA2), float specialization
+// Data-path: nN → zZ
+// Element-type: no-except (float)
+// Speciality: float (LoadDataWithTranspose, LoadData2dTransposeParams)
 TEST_P(TileCopyL1ToL0ATest, nNTozZTestFloat)
 {
     using Element = float;
@@ -197,9 +259,9 @@ TEST_P(TileCopyL1ToL0ATest, nNTozZTestFloat)
 
     copyL1ToL0A(l0aTensor, l1Tensor, layoutDst, layoutSrc);
 
+    // in the tranposed case, small fractal "n"
     uint32_t _cols_by_fractal_with_trans = CeilDiv<C0_NUM_PER_FRACTAL>(_col); 
-    // Commonly, the row-axis is divied by C0_NUM_PER_FRACTAL(16-ele), while in the tranposed case, it is neccessary
-    // that we should consider the column-axis which can be divided as well.
+
     auto logs = AscendCCallLogger::Instance().GetLogs();
     ASSERT_EQ(logs.size(), _rows_by_fractal);
 
@@ -221,53 +283,13 @@ TEST_P(TileCopyL1ToL0ATest, nNTozZTestFloat)
     }
 }
 
-// zNTozZTest2Param (#6): 2-param L1Type only, zN(A1)→zZ auto-deduced
-TEST_P(TileCopyL1ToL0ATest, zNTozZTest)
-{
-    using Element = half; // need to be float
-    using ArchTag = Catlass::Arch::AtlasA2;
+// ============================================================================
+// Testsuite from **nZ**
+// ============================================================================
 
-    using LayoutSrc = layout::zN;
-    using LayoutDst = layout::zZ;
-
-    using L1Type = Gemm::GemmType<Element, LayoutSrc, AscendC::TPosition::A1>;
-    // L0Type = void (default) — L0A type auto-deduced as zZ
-
-    CopyL1ToL0A<ArchTag, L1Type> copyL1ToL0A;
-
-    AscendC::LocalTensor<Element> l1Tensor;
-    AscendC::LocalTensor<Element> l0aTensor;
-
-    LayoutSrc layoutSrc;
-    LayoutDst layoutDst;
-    setShape<Element>();
-    setLayout<Element>(_row, _col, layoutSrc, layoutDst);
-    ASSERT_TRUE(isContiguous(layoutSrc));
-    ASSERT_TRUE(isContiguous(layoutDst));
-
-    copyL1ToL0A(l0aTensor, l1Tensor, layoutDst, layoutSrc);
-    
-    auto logs = AscendCCallLogger::Instance().GetLogs();
-    ASSERT_EQ(logs.size(), _rows_by_fractal);
-
-    for (uint32_t i = 0; i < _rows_by_fractal; i++) {
-        AscendCCallLog logTileCopy = logs[i];
-        BaseCheck<Element>(logTileCopy);
-
-        ASSERT_EQ(logTileCopy.GetArgsAt(0).GetInstAddr(), i * BYTE_PER_FRACTAL * _cols_by_fractal);
-        ASSERT_EQ(logTileCopy.GetArgsAt(1).GetInstAddr(), i * BYTE_PER_FRACTAL);
-
-        const auto* p = logTileCopy.GetArgsAt(2).Value<AscendC::LoadData2DParams>();
-        ASSERT_EQ(p->startIndex, _0);
-        ASSERT_EQ(p->repeatTimes, _cols_by_fractal);
-        ASSERT_EQ(p->srcStride, _rows_by_fractal);
-        ASSERT_EQ(p->dstGap, _0);
-        ASSERT_EQ(p->ifTranspose, _0);
-        ASSERT_EQ(p->addrMode, _0);
-    }
-}
-
-// nZTozZTestBasic (#8): 2-param L1Type only, nZ(A1)→zZ, generic transpose
+// Data-path: nZ → zZ
+// Element-type: half
+// Speciality: basic (generic transpose via LoadData, ifTranspose=1)
 TEST_P(TileCopyL1ToL0ATest, nZTozZTestBasic)
 {
     using Element = half;
@@ -315,7 +337,9 @@ TEST_P(TileCopyL1ToL0ATest, nZTozZTestBasic)
     }
 }
 
-// nZTozZTestInt8 (#9): 2-param int8_t nZ(A1)→zZ, LoadDataWithTranspose
+// Data-path: nZ → zZ
+// Element-type: int8
+// Speciality: int8 (LoadDataWithTranspose, LoadData2dTransposeParams)
 TEST_P(TileCopyL1ToL0ATest, nZTozZTestInt8)
 {
     using Element = int8_t;

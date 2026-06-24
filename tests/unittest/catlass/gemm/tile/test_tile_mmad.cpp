@@ -1,145 +1,507 @@
 /**
- * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
- */
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd.
+ * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+ * CANN Open Software License Agreement Version 2.0 (the "License").
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
+ */
 
-#if !defined(CATLASS_ARCH) || CATLASS_ARCH == 2201
 #include <gtest/gtest.h>
 #include "stub/ascendc_test_fixture.h"
 #include "stub/kernel_operator.h"
-#include "catlass/gemm/tile/tile_mmad.hpp"
 #include "stub/ascendc_logger.h"
 
+#include "catlass/catlass.hpp"
+#include "catlass/numeric_size.hpp"
+#include "catlass/layout/layout.hpp"
+
+#include "tla/tensor.hpp"
+#include "catlass/gemm/tile/tile_mmad.hpp"
+
+#include "common/helper.hpp"
+#include "common/shape.hpp"
+
+using namespace Catlass;
 using namespace Catlass::Gemm::Tile;
 using namespace Catlass::Test;
+using namespace Catlass::Test::Helper;
 
 // 定义TileMmadTest测试类，继承自AscendCTest测试框架基类
-class TileMmadTest : public AscendCTest {
+template <class ArchTag>
+class TypedTileMmadTest : public TileMmadTest, public testing::WithParamInterface<TestCubeMatrixShapeWithUnitflag> {
 protected:
-    // 重写SetUp方法，在每个测试用例执行前进行初始化操作
     void SetUp() override
     {
-        // 调用父类的SetUp方法完成基础初始化
         AscendCTest::SetUp();
     }
+
+    void setShape()
+    {
+        TileMmadTest::_setShape(GetParam().m, GetParam().n, GetParam().k);
+    }
+
+    void setUnitFlag()
+    {
+        unitFlag = GetParam().unitFlag;
+        initC = GetParam().initC;
+    }
+
+    const bool isSmallCube()
+    {
+        return (_m / C0_NUM_PER_FRACTAL) *
+            (_n / C0_NUM_PER_FRACTAL) < PIPE_M_BARRIER_THRESHOLD;
+    }
+
+    template <class ElementMmad, bool withBias = false>
+    void BaseCheck(AscendCCallLog const &logTileMmad)
+    {
+        ASSERT_EQ(logTileMmad.name, "Mmad");
+        if constexpr (withBias) {
+            ASSERT_EQ(logTileMmad.args.size(), 5); // C, A, B, Bias, MmadParams
+        } else {
+            ASSERT_EQ(logTileMmad.args.size(), 4); // C, A, B, MmadParams
+        }
+
+        const std::type_index& T0 = logTileMmad.GetArgsTAt(0).Type();
+        ASSERT_EQ(T0, typeid(ElementMmad));
+    }
+
+    // ===================== Non-TLA TileMmad callers =====================
+
+    /// Base version, without bias, direct call to TileMmad
+    template <class AType, class BType, class ElementMmad = typename AType::Element>
+    auto MakeCall(
+        const AscendC::LocalTensor<ElementMmad>& l0CTensor,
+        const AscendC::LocalTensor<ElementMmad>& l0ATensor,
+        const AscendC::LocalTensor<ElementMmad>& l0BTensor)
+    {
+        using ElementA = typename AType::Element;
+        using ElementB = typename BType::Element;
+        static_assert(std::is_same_v<ElementA, ElementB> && std::is_same_v<ElementA, ElementMmad>,
+            "ElementA and ElementB should be the same");
+
+        TileMmad<ArchTag, AType, BType, void> tileMmad;
+
+        setShape();
+        setUnitFlag();
+        tileMmad(l0CTensor, l0ATensor, l0BTensor, _m, _n, _k, initC, unitFlag);
+
+        return AscendCCallLogger::Instance().GetLogs();
+    }
+
+    /// With bias passed to TileMmad
+    template <class AType, class BType, class BiasType, class ElementMmad = typename AType::Element>
+    auto MakeCall(
+        const AscendC::LocalTensor<ElementMmad>& l0CTensor,
+        const AscendC::LocalTensor<ElementMmad>& l0ATensor,
+        const AscendC::LocalTensor<ElementMmad>& l0BTensor,
+        const AscendC::LocalTensor<BiasType>& l0BiasTensor)
+    {
+        using ElementA = typename AType::Element;
+        using ElementB = typename BType::Element;
+        static_assert(std::is_same_v<ElementA, ElementB> && std::is_same_v<ElementA, ElementMmad>,
+            "ElementA and ElementB should be the same");
+
+        TileMmad<ArchTag, AType, BType, BiasType> tileMmad;
+
+        setShape();
+        setUnitFlag();
+        tileMmad(l0CTensor, l0ATensor, l0BTensor, l0BiasTensor, _m, _n, _k, initC, unitFlag);
+
+        return AscendCCallLogger::Instance().GetLogs();
+    }
+
+    // ===================== TLA TileMmadTla callers =====================
+    // L0 tla tensors are built with the L0C nested layout (only data()/shape()/
+    // originShape() are inspected by the stub), so MakeLayoutL0C suffices for C/A/B.
+    using CoordZero = tla::Coord<tla::Int<0>, tla::Int<0>>;
+
+    template <class ElementMmad>
+    auto MakeTensorC(const AscendC::LocalTensor<ElementMmad>& t, uint32_t m, uint32_t n)
+    {
+        return tla::Tensor<AscendC::LocalTensor<ElementMmad>, decltype(tla::MakeLayoutL0C(m, n)),
+            CoordZero, AscendC::TPosition::CO1>(t, tla::MakeLayoutL0C(m, n));
+    }
+    template <class ElementMmad>
+    auto MakeTensorA(const AscendC::LocalTensor<ElementMmad>& t, uint32_t m, uint32_t k)
+    {
+        return tla::Tensor<AscendC::LocalTensor<ElementMmad>, decltype(tla::MakeLayoutL0C(m, k)),
+            CoordZero, AscendC::TPosition::A2>(t, tla::MakeLayoutL0C(m, k));
+    }
+    template <class ElementMmad>
+    auto MakeTensorB(const AscendC::LocalTensor<ElementMmad>& t, uint32_t k, uint32_t n)
+    {
+        return tla::Tensor<AscendC::LocalTensor<ElementMmad>, decltype(tla::MakeLayoutL0C(k, n)),
+            CoordZero, AscendC::TPosition::B2>(t, tla::MakeLayoutL0C(k, n));
+    }
+
+    /// TLA without bias, explicit dims
+    template <class ElementMmad>
+    auto MakeCallTla(
+        const AscendC::LocalTensor<ElementMmad>& l0CTensor,
+        const AscendC::LocalTensor<ElementMmad>& l0ATensor,
+        const AscendC::LocalTensor<ElementMmad>& l0BTensor)
+    {
+        setShape();
+        setUnitFlag();
+        TileMmadTla<ArchTag, ElementMmad, layout::zN> tileMmadTla;
+        tileMmadTla(MakeTensorC(l0CTensor, _m, _n), MakeTensorA(l0ATensor, _m, _k),
+            MakeTensorB(l0BTensor, _k, _n), _m, _n, _k, initC, unitFlag);
+        return AscendCCallLogger::Instance().GetLogs();
+    }
+
+    /// TLA with bias
+    template <class ElementMmad>
+    auto MakeCallTlaBias(
+        const AscendC::LocalTensor<ElementMmad>& l0CTensor,
+        const AscendC::LocalTensor<ElementMmad>& l0ATensor,
+        const AscendC::LocalTensor<ElementMmad>& l0BTensor,
+        const AscendC::LocalTensor<ElementMmad>& l0BiasTensor)
+    {
+        setShape();
+        setUnitFlag();
+        TileMmadTla<ArchTag, ElementMmad, layout::zN> tileMmadTla;
+        tileMmadTla(MakeTensorC(l0CTensor, _m, _n), MakeTensorA(l0ATensor, _m, _k),
+            MakeTensorB(l0BTensor, _k, _n), MakeTensorC(l0BiasTensor, _m, _n), _m, _n, _k, initC, unitFlag);
+        return AscendCCallLogger::Instance().GetLogs();
+    }
+
+    /// TLA auto dims from originShape, shape auto derived from tensor in
+    template <class ElementMmad>
+    auto MakeCallTlaAuto(
+        const AscendC::LocalTensor<ElementMmad>& l0CTensor,
+        const AscendC::LocalTensor<ElementMmad>& l0ATensor,
+        const AscendC::LocalTensor<ElementMmad>& l0BTensor)
+    {
+        setShape();
+        setUnitFlag();
+        TileMmadTla<ArchTag, ElementMmad, layout::zN> tileMmadTla;
+        tileMmadTla(MakeTensorC(l0CTensor, _m, _n), MakeTensorA(l0ATensor, _m, _k),
+            MakeTensorB(l0BTensor, _k, _n), initC, unitFlag);
+        return AscendCCallLogger::Instance().GetLogs();
+    }
+
+    // TLA batched
+    template <class ElementMmad>
+    auto MakeCallTlaBatch(
+        const AscendC::LocalTensor<ElementMmad>& l0CTensor,
+        const AscendC::LocalTensor<ElementMmad>& l0ATensor,
+        const AscendC::LocalTensor<ElementMmad>& l0BTensor,
+        uint32_t l0Batch)
+    {
+        setShape();
+        setUnitFlag();
+        TileMmadTla<ArchTag, ElementMmad, layout::zN> tileMmadTla;
+        tileMmadTla(MakeTensorC(l0CTensor, _m, _n), MakeTensorA(l0ATensor, _m, _k),
+            MakeTensorB(l0BTensor, _k, _n), _m, _n, _k, l0Batch);
+        return AscendCCallLogger::Instance().GetLogs();
+    }
+
+protected:
+    static const uint32_t PIPE_M_BARRIER_THRESHOLD = 10;
+    bool initC = false;
+    uint8_t unitFlag = 0b00;
 };
 
-// 测试用例：基础Mmad功能测试（无偏置）
-TEST_F(TileMmadTest, BasicMmad)
-{
-    // 定义数据类型和架构标签
-    using ElementMmad = float;                  // 定义计算数据类型为float
-    using ArchTag = Catlass::Arch::AtlasA2;     // 指定目标架构为AtlasA2
-    using AType = Catlass::Gemm::GemmType<ElementMmad, Catlass::layout::RowMajor>;  // 定义矩阵A的类型（行优先布局）
-    using BType = Catlass::Gemm::GemmType<ElementMmad, Catlass::layout::RowMajor>;  // 定义矩阵B的类型（行优先布局）
-    using BiasType = void;                      // 无偏置，使用void类型
+// ============================================================================
+// Common test bodies shared by AtlasA2 / Ascend950 suites.
+// ============================================================================
+#define DEFINE_TILE_MMAD_TESTS(SuiteName)                                                                              \
+                                                                                                                       \
+    /* 基础Mmad功能测试（无偏置, non-TLA） */                                                                          \
+    /* Data-path: A·B → C (Mmad) */ \
+    /* Element-type: no-except (float) */ \
+    /* Speciality: basic non-TLA Mmad, explicit m/n/k (optional PIPE_M barrier) */ \
+    TEST_P(SuiteName, MmadTestBasic)                                                                                       \
+    {                                                                                                                  \
+        using ElementMmad = float;                                                                                    \
+        using AType = Catlass::Gemm::GemmType<ElementMmad, Catlass::layout::RowMajor>;                                \
+        using BType = Catlass::Gemm::GemmType<ElementMmad, Catlass::layout::RowMajor>;                                \
+                                                                                                                       \
+        AscendC::LocalTensor<ElementMmad> l0CTensor;                                                                  \
+        AscendC::LocalTensor<ElementMmad> l0ATensor;                                                                  \
+        AscendC::LocalTensor<ElementMmad> l0BTensor;                                                                  \
+                                                                                                                       \
+        auto logs = MakeCall<AType, BType>(l0CTensor, l0ATensor, l0BTensor);                                          \
+        const bool hasPipeM = (_m / C0_NUM_PER_FRACTAL) * (_n / C0_NUM_PER_FRACTAL) < PIPE_M_BARRIER_THRESHOLD;       \
+                                                                                                                       \
+        ASSERT_EQ(logs.size(), hasPipeM ? 2 : 1);                                                                     \
+        AscendCCallLog logMmad = logs[0];                                                                             \
+        BaseCheck<ElementMmad>(logMmad);                                                                              \
+        ASSERT_EQ(logMmad.GetArgsAt(0).RawValue(), &l0CTensor);                                                       \
+        ASSERT_EQ(logMmad.GetArgsAt(1).RawValue(), &l0ATensor);                                                       \
+        ASSERT_EQ(logMmad.GetArgsAt(2).RawValue(), &l0BTensor);                                                       \
+                                                                                                                       \
+        const AscendC::MmadParams* mmadArg = logMmad.GetArgsAt(3).Value<AscendC::MmadParams>();                       \
+        ASSERT_EQ(mmadArg->m, _m);                                                                                    \
+        ASSERT_EQ(mmadArg->n, _n);                                                                                    \
+        ASSERT_EQ(mmadArg->k, _k);                                                                                    \
+        ASSERT_EQ(mmadArg->cmatrixInitVal, initC);                                                                    \
+        ASSERT_EQ(mmadArg->unitFlag, unitFlag);                                                                       \
+                                                                                                                       \
+        if (hasPipeM) {                                                                                               \
+            AscendCCallLog logPipeBarrier = logs[1];                                                                  \
+            ASSERT_EQ(logPipeBarrier.name, "PipeBarrier");                                                            \
+            ASSERT_EQ(*logPipeBarrier.GetArgsTAt(0).Value<pipe_t>(), pipe_t::PIPE_M);                                 \
+        }                                                                                                            \
+    }                                                                                                                  \
+                                                                                                                       \
+    /* 带偏置的Mmad功能测试（non-TLA） */                                                                              \
+    /* Data-path: A·B + Bias → C (Mmad) */ \
+    /* Element-type: no-except (float) */ \
+    /* Speciality: non-TLA Mmad with bias */ \
+    /* (cmatrixInitVal forced false -- initial c-matrix comes from bias table) */ \
+    TEST_P(SuiteName, MmadTestWithBias)                                                                                   \
+    {                                                                                                                  \
+        using ElementMmad = float;                                                                                    \
+        using AType = Catlass::Gemm::GemmType<ElementMmad, Catlass::layout::RowMajor>;                                \
+        using BType = Catlass::Gemm::GemmType<ElementMmad, Catlass::layout::RowMajor>;                                \
+        using BiasType = ElementMmad;                                                                                  \
+                                                                                                                       \
+        AscendC::LocalTensor<ElementMmad> l0CTensor;                                                                  \
+        AscendC::LocalTensor<ElementMmad> l0ATensor;                                                                  \
+        AscendC::LocalTensor<ElementMmad> l0BTensor;                                                                  \
+        AscendC::LocalTensor<ElementMmad> l0BiasTensor;                                                               \
+                                                                                                                       \
+        auto logs = MakeCall<AType, BType, BiasType, ElementMmad>(l0CTensor, l0ATensor, l0BTensor, l0BiasTensor);     \
+        const bool hasPipeM = (_m / C0_NUM_PER_FRACTAL) * (_n / C0_NUM_PER_FRACTAL) < PIPE_M_BARRIER_THRESHOLD;       \
+                                                                                                                       \
+        ASSERT_EQ(logs.size(), hasPipeM ? 2 : 1);                                                                     \
+        AscendCCallLog logMmad = logs[0];                                                                             \
+        BaseCheck<ElementMmad, true>(logMmad);                                                                        \
+        ASSERT_EQ(logMmad.GetArgsAt(0).RawValue(), &l0CTensor);                                                       \
+        ASSERT_EQ(logMmad.GetArgsAt(1).RawValue(), &l0ATensor);                                                       \
+        ASSERT_EQ(logMmad.GetArgsAt(2).RawValue(), &l0BTensor);                                                       \
+        ASSERT_EQ(logMmad.GetArgsAt(3).RawValue(), &l0BiasTensor);                                                    \
+                                                                                                                       \
+        const AscendC::MmadParams* mmadArg = logMmad.GetArgsAt(4).Value<AscendC::MmadParams>();                       \
+        ASSERT_EQ(mmadArg->m, _m);                                                                                    \
+        ASSERT_EQ(mmadArg->n, _n);                                                                                    \
+        ASSERT_EQ(mmadArg->k, _k);                                                                                    \
+        ASSERT_EQ(mmadArg->cmatrixInitVal, false);                                                                    \
+        ASSERT_EQ(mmadArg->unitFlag, unitFlag);                                                                       \
+                                                                                                                       \
+        if (hasPipeM) {                                                                                               \
+            AscendCCallLog logPipeBarrier = logs[1];                                                                  \
+            ASSERT_EQ(logPipeBarrier.name, "PipeBarrier");                                                            \
+            ASSERT_EQ(*logPipeBarrier.GetArgsTAt(0).Value<pipe_t>(), pipe_t::PIPE_M);                                 \
+        }                                                                                                            \
+    }                                                                                                                  \
+                                                                                                                       \
+    /* TileMmadTla 无偏置, 显式 m/n/k (overload 1) */                                                                  \
+    /* Data-path: A·B → C (Mmad) */ \
+    /* Element-type: no-except (float) */ \
+    /* Speciality: TLA Mmad with explicit m/n/k (overload 1) */ \
+    TEST_P(SuiteName, MmadTestTlaBasic)                                                                                   \
+    {                                                                                                                  \
+        using ElementMmad = float;                                                                                    \
+        AscendC::LocalTensor<ElementMmad> l0CTensor;                                                                  \
+        AscendC::LocalTensor<ElementMmad> l0ATensor;                                                                  \
+        AscendC::LocalTensor<ElementMmad> l0BTensor;                                                                  \
+                                                                                                                       \
+        auto logs = MakeCallTla<ElementMmad>(l0CTensor, l0ATensor, l0BTensor);                                        \
+        const bool hasPipeM = (_m / C0_NUM_PER_FRACTAL) * (_n / C0_NUM_PER_FRACTAL) < PIPE_M_BARRIER_THRESHOLD;       \
+                                                                                                                       \
+        ASSERT_EQ(logs.size(), hasPipeM ? 2 : 1);                                                                     \
+        AscendCCallLog logMmad = logs[0];                                                                             \
+        BaseCheck<ElementMmad>(logMmad);                                                                              \
+        ASSERT_EQ(logMmad.GetArgsAt(0).GetInstAddr(), 0);                                                             \
+        ASSERT_EQ(logMmad.GetArgsAt(1).GetInstAddr(), 0);                                                             \
+        ASSERT_EQ(logMmad.GetArgsAt(2).GetInstAddr(), 0);                                                             \
+                                                                                                                       \
+        const AscendC::MmadParams* mmadArg = logMmad.GetArgsAt(3).Value<AscendC::MmadParams>();                       \
+        ASSERT_EQ(mmadArg->m, _m);                                                                                    \
+        ASSERT_EQ(mmadArg->n, _n);                                                                                    \
+        ASSERT_EQ(mmadArg->k, _k);                                                                                    \
+        ASSERT_EQ(mmadArg->cmatrixInitVal, initC);                                                                    \
+        ASSERT_EQ(mmadArg->unitFlag, unitFlag);                                                                       \
+                                                                                                                       \
+        if (hasPipeM) {                                                                                               \
+            AscendCCallLog logPipeBarrier = logs[1];                                                                  \
+            ASSERT_EQ(logPipeBarrier.name, "PipeBarrier");                                                            \
+            ASSERT_EQ(*logPipeBarrier.GetArgsTAt(0).Value<pipe_t>(), pipe_t::PIPE_M);                                 \
+        }                                                                                                            \
+    }                                                                                                                  \
+                                                                                                                       \
+    /* TileMmadTla 带偏置 (overload 2) */                                                                              \
+    /* Data-path: A·B + Bias → C (Mmad) */ \
+    /* Element-type: no-except (float) */ \
+    /* Speciality: TLA Mmad with bias (overload 2, cmatrixInitVal false) */ \
+    TEST_P(SuiteName, MmadTestTlaWithBias)                                                                                \
+    {                                                                                                                  \
+        using ElementMmad = float;                                                                                    \
+        AscendC::LocalTensor<ElementMmad> l0CTensor;                                                                  \
+        AscendC::LocalTensor<ElementMmad> l0ATensor;                                                                  \
+        AscendC::LocalTensor<ElementMmad> l0BTensor;                                                                  \
+        AscendC::LocalTensor<ElementMmad> l0BiasTensor;                                                               \
+                                                                                                                       \
+        auto logs = MakeCallTlaBias<ElementMmad>(l0CTensor, l0ATensor, l0BTensor, l0BiasTensor);                      \
+        const bool hasPipeM = (_m / C0_NUM_PER_FRACTAL) * (_n / C0_NUM_PER_FRACTAL) < PIPE_M_BARRIER_THRESHOLD;       \
+                                                                                                                       \
+        ASSERT_EQ(logs.size(), hasPipeM ? 2 : 1);                                                                     \
+        AscendCCallLog logMmad = logs[0];                                                                             \
+        BaseCheck<ElementMmad, true>(logMmad);                                                                        \
+                                                                                                                       \
+        const AscendC::MmadParams* mmadArg = logMmad.GetArgsAt(4).Value<AscendC::MmadParams>();                       \
+        ASSERT_EQ(mmadArg->m, _m);                                                                                    \
+        ASSERT_EQ(mmadArg->n, _n);                                                                                    \
+        ASSERT_EQ(mmadArg->k, _k);                                                                                    \
+        ASSERT_EQ(mmadArg->cmatrixInitVal, false);                                                                    \
+        ASSERT_EQ(mmadArg->unitFlag, unitFlag);                                                                       \
+                                                                                                                       \
+        if (hasPipeM) {                                                                                               \
+            AscendCCallLog logPipeBarrier = logs[1];                                                                  \
+            ASSERT_EQ(logPipeBarrier.name, "PipeBarrier");                                                            \
+            ASSERT_EQ(*logPipeBarrier.GetArgsTAt(0).Value<pipe_t>(), pipe_t::PIPE_M);                                 \
+        }                                                                                                            \
+    }                                                                                                                  \
+                                                                                                                       \
+    /* TileMmadTla 自动推导 m/n/k (overload 4) */                                                                      \
+    /* Data-path: A·B → C (Mmad) */ \
+    /* Element-type: no-except (float) */ \
+    /* Speciality: TLA Mmad, m/n/k auto-deduced from originShape (overload 4) */ \
+    TEST_P(SuiteName, MmadTestTlaAutoShape)                                                                               \
+    {                                                                                                                  \
+        using ElementMmad = float;                                                                                    \
+        AscendC::LocalTensor<ElementMmad> l0CTensor;                                                                  \
+        AscendC::LocalTensor<ElementMmad> l0ATensor;                                                                  \
+        AscendC::LocalTensor<ElementMmad> l0BTensor;                                                                  \
+                                                                                                                       \
+        auto logs = MakeCallTlaAuto<ElementMmad>(l0CTensor, l0ATensor, l0BTensor);                                    \
+        ASSERT_GE(logs.size(), 1U);                                                                                   \
+        AscendCCallLog logMmad = logs[0];                                                                             \
+        BaseCheck<ElementMmad>(logMmad);                                                                              \
+                                                                                                                       \
+        const AscendC::MmadParams* mmadArg = logMmad.GetArgsAt(3).Value<AscendC::MmadParams>();                       \
+        ASSERT_EQ(mmadArg->m, _m);                                                                                    \
+        ASSERT_EQ(mmadArg->n, _n);                                                                                    \
+        ASSERT_EQ(mmadArg->k, _k);                                                                                    \
+        ASSERT_EQ(mmadArg->cmatrixInitVal, initC);                                                                    \
+        ASSERT_EQ(mmadArg->unitFlag, unitFlag);                                                                       \
+    }                                                                                                                  \
+                                                                                                                       \
+    /* TileMmadTla 批量 (overload 3) */                                                                               \
+    /* Data-path: A·B → C (Mmad, batched) */ \
+    /* Element-type: no-except (float) */ \
+    /* Speciality: TLA batched Mmad (overload 3, l0Batch repeats, initC=true) */ \
+    TEST_P(SuiteName, MmadTestTlaBatch)                                                                                   \
+    {                                                                                                                  \
+        using ElementMmad = float;                                                                                    \
+        AscendC::LocalTensor<ElementMmad> l0CTensor;                                                                  \
+        AscendC::LocalTensor<ElementMmad> l0ATensor;                                                                  \
+        AscendC::LocalTensor<ElementMmad> l0BTensor;                                                                  \
+                                                                                                                       \
+        const uint32_t l0Batch = 3;                                                                                   \
+        auto logs = MakeCallTlaBatch<ElementMmad>(l0CTensor, l0ATensor, l0BTensor, l0Batch);                          \
+        ASSERT_EQ(logs.size(), l0Batch);                                                                              \
+        for (uint32_t i = 0; i < l0Batch; ++i) {                                                                      \
+            BaseCheck<ElementMmad>(logs[i]);                                                                          \
+            const AscendC::MmadParams* mmadArg = logs[i].GetArgsAt(3).Value<AscendC::MmadParams>();                   \
+            ASSERT_EQ(mmadArg->m, _m);                                                                                \
+            ASSERT_EQ(mmadArg->n, _n);                                                                                \
+            ASSERT_EQ(mmadArg->k, _k);                                                                                \
+            ASSERT_EQ(mmadArg->cmatrixInitVal, true);                                                                 \
+            ASSERT_EQ(mmadArg->unitFlag, _0);                                                                         \
+        }                                                                                                            \
+    }
 
-    // 创建TileMmad实例，指定架构标签和矩阵类型
-    TileMmad<ArchTag, AType, BType, BiasType> tileMmad;
+#define INSTANTIATE_TILE_MMAD_SUITE(Prefix, SuiteName)                                                                \
+    INSTANTIATE_TEST_SUITE_P(Prefix, SuiteName,                                                                       \
+        ::testing::Values(                                                                                            \
+            TestCubeMatrixShapeWithUnitflag{128U, 128U, 128U, true, 0b00},                                           \
+            TestCubeMatrixShapeWithUnitflag{128U, 128U, 128U, false, 0b00},                                          \
+            TestCubeMatrixShapeWithUnitflag{128U, 128U, 128U, true, 0b10},                                           \
+            TestCubeMatrixShapeWithUnitflag{128U, 128U, 128U, false, 0b10},                                          \
+            TestCubeMatrixShapeWithUnitflag{128U, 128U, 128U, false, 0b11},                                          \
+            TestCubeMatrixShapeWithUnitflag{32U, 32U, 32U, true, 0b00},                                              \
+            TestCubeMatrixShapeWithUnitflag{32U, 32U, 32U, false, 0b00},                                             \
+            TestCubeMatrixShapeWithUnitflag{32U, 32U, 32U, true, 0b10},                                              \
+            TestCubeMatrixShapeWithUnitflag{32U, 32U, 32U, false, 0b10},                                             \
+            TestCubeMatrixShapeWithUnitflag{32U, 32U, 32U, false, 0b11},                                             \
+            TestCubeMatrixShapeWithUnitflag{33U, 18U, 256U, true, 0b00},                                             \
+            TestCubeMatrixShapeWithUnitflag{33U, 18U, 256U, false, 0b00},                                            \
+            TestCubeMatrixShapeWithUnitflag{33U, 18U, 256U, true, 0b10},                                             \
+            TestCubeMatrixShapeWithUnitflag{33U, 18U, 256U, false, 0b10},                                            \
+            TestCubeMatrixShapeWithUnitflag{33U, 18U, 256U, false, 0b11}))
 
-    // 创建本地张量对象，用于存储输入输出数据
-    AscendC::LocalTensor<ElementMmad> l0CTensor;  // 输出矩阵C的本地张量
-    AscendC::LocalTensor<ElementMmad> l0ATensor;  // 输入矩阵A的本地张量
-    AscendC::LocalTensor<ElementMmad> l0BTensor;  // 输入矩阵B的本地张量
+// ============================================================================
+// Instantiate for Catlass::Arch::AtlasA2
+// ============================================================================
+#if defined(CATLASS_ARCH) && CATLASS_ARCH == 2201
+using TypedTileMmadA2Suite = TypedTileMmadTest<Catlass::Arch::AtlasA2>;
 
-    // 设置GEMM计算的维度参数（m=128, n=128, k=128）
-    int m = 128;  // 矩阵A的行数/C的行数
-    int n = 128;  // 矩阵B的列数/C的列数
-    int k = 128;  // 矩阵A的列数/B的行数
+DEFINE_TILE_MMAD_TESTS(TypedTileMmadA2Suite)
 
-    // 调用TileMmad的计算接口，执行矩阵乘法操作
-    tileMmad(l0CTensor, l0ATensor, l0BTensor, m, n, k);
-
-    // 获取AscendC调用日志记录器实例，用于验证底层调用是否符合预期
-    AscendCCallLogger& logger = AscendCCallLogger::Instance();
-    auto logs = logger.GetLogs();  // 获取所有调用日志
-    AscendCCallLog logMmad = logs[0];  // 获取第一条日志（预期为Mmad调用）
-
-    // 验证日志数量：应只有1条Mmad调用记录
-    ASSERT_EQ(logs.size(), 1);
-    // 验证调用名称：应为"Mmad"
-    ASSERT_EQ(logMmad.name, "Mmad");
-    // 验证参数数量：Mmad无偏置版本应包含4个参数（C, A, B, MmadParams）
-    ASSERT_EQ(logMmad.args.size(), 4);
-
-    // 验证输入输出张量的地址是否匹配
-    auto logMmadL0CTensor = logMmad.GetArgsAt(0).RawValue();  // 获取日志中C张量地址
-    auto logMmadL0ATensor = logMmad.GetArgsAt(1).RawValue();  // 获取日志中A张量地址
-    auto logMmadL0BTensor = logMmad.GetArgsAt(2).RawValue();  // 获取日志中B张量地址
-    ASSERT_EQ(logMmadL0CTensor, &l0CTensor);  // 验证C张量地址一致
-    ASSERT_EQ(logMmadL0ATensor, &l0ATensor);  // 验证A张量地址一致
-    ASSERT_EQ(logMmadL0BTensor, &l0BTensor);  // 验证B张量地址一致
-
-    // 验证MmadParams中的维度参数是否正确
-    const AscendC::MmadParams* arg3 = logMmad.GetArgsAt(3).Value<AscendC::MmadParams>();  // 获取MmadParams参数
-    ASSERT_EQ(arg3->m, m);  // 验证m维度
-    ASSERT_EQ(arg3->n, n);  // 验证n维度
-    ASSERT_EQ(arg3->k, k);  // 验证k维度
-
-    // 验证数据类型是否正确
-    const std::type_index& T0 = logMmad.GetArgsTAt(0).Type();  // 获取第一个参数的数据类型
-    ASSERT_EQ(T0, typeid(ElementMmad));  // 验证数据类型为float
-}
-
-// 测试用例：带偏置的Mmad功能测试
-TEST_F(TileMmadTest, MmadWithBias)
-{
-    // 定义数据类型和架构标签
-    using ElementMmad = float;                  // 定义计算数据类型为float
-    using ArchTag = Catlass::Arch::AtlasA2;     // 指定目标架构为AtlasA2
-    using AType = Catlass::Gemm::GemmType<ElementMmad, Catlass::layout::RowMajor>;  // 定义矩阵A的类型（行优先布局）
-    using BType = Catlass::Gemm::GemmType<ElementMmad, Catlass::layout::RowMajor>;  // 定义矩阵B的类型（行优先布局）
-    using BiasType = ElementMmad;               // 定义偏置类型为float
-    using TileMmadTest = TileMmad<ArchTag, AType, BType, BiasType>;  // 定义带偏置的TileMmad类型
-
-    // 创建带偏置的TileMmad实例
-    TileMmadTest tileMmad;
-
-    // 创建本地张量对象，用于存储输入输出数据（包含偏置张量）
-    AscendC::LocalTensor<ElementMmad> l0CTensor;    // 输出矩阵C的本地张量
-    AscendC::LocalTensor<ElementMmad> l0ATensor;    // 输入矩阵A的本地张量
-    AscendC::LocalTensor<ElementMmad> l0BTensor;    // 输入矩阵B的本地张量
-    AscendC::LocalTensor<ElementMmad> l0BiasTensor; // 偏置张量
-
-    // 调用TileMmad的计算接口，执行带偏置的矩阵乘法操作（m=128, n=128, k=128）
-    tileMmad(l0CTensor, l0ATensor, l0BTensor, l0BiasTensor, 128, 128, 128);
-
-    // 获取AscendC调用日志记录器实例，验证底层调用是否符合预期
-    AscendCCallLogger& logger = AscendCCallLogger::Instance();
-    auto logs = logger.GetLogs();  // 获取所有调用日志
-
-    // 验证日志数量：应只有1条Mmad调用记录
-    ASSERT_EQ(logs.size(), 1);
-    // 获取第一条日志（预期为Mmad调用）
-    AscendCCallLog logMmad = logs[0];
-    // 验证调用名称：应为"Mmad"
-    ASSERT_EQ(logMmad.name, "Mmad");
-    // 验证参数数量：Mmad带偏置版本应包含5个参数（C, A, B, Bias, MmadParams）
-    ASSERT_EQ(logMmad.args.size(), 5);
-
-    // 验证输入输出张量及偏置张量的地址是否匹配
-    auto logMmadL0CTensor = logMmad.GetArgsAt(0).RawValue();    // 获取日志中C张量地址
-    auto logMmadL0ATensor = logMmad.GetArgsAt(1).RawValue();    // 获取日志中A张量地址
-    auto logMmadL0BTensor = logMmad.GetArgsAt(2).RawValue();    // 获取日志中B张量地址
-    auto logMmadL0BiasTensor = logMmad.GetArgsAt(3).RawValue(); // 获取日志中偏置张量地址
-    ASSERT_EQ(logMmadL0CTensor, &l0CTensor);  // 验证C张量地址一致
-    ASSERT_EQ(logMmadL0ATensor, &l0ATensor);  // 验证A张量地址一致
-    ASSERT_EQ(logMmadL0BTensor, &l0BTensor);  // 验证B张量地址一致
-    ASSERT_EQ(logMmadL0BiasTensor, &l0BiasTensor); // 验证偏置张量地址一致
-    
-    // 验证MmadParams中的维度参数是否正确
-    const AscendC::MmadParams* arg4 = logMmad.GetArgsAt(4).Value<AscendC::MmadParams>();  // 获取MmadParams参数
-    ASSERT_EQ(arg4->m, 128);  // 验证m维度
-    ASSERT_EQ(arg4->n, 128);  // 验证n维度
-    ASSERT_EQ(arg4->k, 128);  // 验证k维度
-
-        // 验证数据类型是否正确
-    const std::type_index& T0 = logMmad.GetArgsTAt(0).Type();  // 获取第一个参数的数据类型
-    ASSERT_EQ(T0, typeid(ElementMmad));  // 验证数据类型为float
-}
+INSTANTIATE_TILE_MMAD_SUITE(AtlasA2, TypedTileMmadA2Suite);
 #endif // CATLASS_ARCH == 2201
+
+// ============================================================================
+// Instantiate for Catlass::Arch::Ascend950
+// ============================================================================
+#if defined(CATLASS_ARCH) && CATLASS_ARCH == 3510
+using TypedTileMmadA950Suite = TypedTileMmadTest<Catlass::Arch::Ascend950>;
+
+DEFINE_TILE_MMAD_TESTS(TypedTileMmadA950Suite)
+
+// Ascend950-only: VectorLayout A enables gemv mode (disableGemv == false)
+// Data-path: A(Vector)·B → C (Mmad)
+// Element-type: no-except (float)
+// Speciality: Ascend950 gemv mode (VectorLayout A → disableGemv=false)
+TEST_P(TypedTileMmadA950Suite, MmadTestGemv)
+{
+    using ElementMmad = float;
+    using AType = Catlass::Gemm::GemmType<ElementMmad, Catlass::layout::VectorLayout>;
+    using BType = Catlass::Gemm::GemmType<ElementMmad, Catlass::layout::RowMajor>;
+
+    AscendC::LocalTensor<ElementMmad> l0CTensor;
+    AscendC::LocalTensor<ElementMmad> l0ATensor;
+    AscendC::LocalTensor<ElementMmad> l0BTensor;
+
+    auto logs = MakeCall<AType, BType>(l0CTensor, l0ATensor, l0BTensor);
+    const bool hasPipeM = (_m / C0_NUM_PER_FRACTAL) * (_n / C0_NUM_PER_FRACTAL) < PIPE_M_BARRIER_THRESHOLD;
+
+    ASSERT_EQ(logs.size(), hasPipeM ? 2 : 1);
+    AscendCCallLog logMmad = logs[0];
+    BaseCheck<ElementMmad>(logMmad);
+
+    const AscendC::MmadParams* mmadArg = logMmad.GetArgsAt(3).Value<AscendC::MmadParams>();
+    ASSERT_EQ(mmadArg->m, _m);
+    ASSERT_EQ(mmadArg->n, _n);
+    ASSERT_EQ(mmadArg->k, _k);
+    ASSERT_EQ(mmadArg->disableGemv, false);
+    ASSERT_EQ(mmadArg->cmatrixInitVal, initC);
+    ASSERT_EQ(mmadArg->unitFlag, unitFlag);
+
+    if (hasPipeM) {
+        AscendCCallLog logPipeBarrier = logs[1];
+        ASSERT_EQ(logPipeBarrier.name, "PipeBarrier");
+        ASSERT_EQ(*logPipeBarrier.GetArgsTAt(0).Value<pipe_t>(), pipe_t::PIPE_M);
+    }
+}
+
+// Ascend950-only: non-vector layout keeps gemv disabled (disableGemv == true)
+// Data-path: A·B → C (Mmad)
+// Element-type: no-except (float)
+// Speciality: Ascend950 non-vector A keeps gemv disabled (disableGemv=true)
+TEST_P(TypedTileMmadA950Suite, MmadTestDisableGemv)
+{
+    using ElementMmad = float;
+    using AType = Catlass::Gemm::GemmType<ElementMmad, Catlass::layout::RowMajor>;
+    using BType = Catlass::Gemm::GemmType<ElementMmad, Catlass::layout::RowMajor>;
+
+    AscendC::LocalTensor<ElementMmad> l0CTensor;
+    AscendC::LocalTensor<ElementMmad> l0ATensor;
+    AscendC::LocalTensor<ElementMmad> l0BTensor;
+
+    auto logs = MakeCall<AType, BType>(l0CTensor, l0ATensor, l0BTensor);
+    AscendCCallLog logMmad = logs[0];
+    BaseCheck<ElementMmad>(logMmad);
+
+    const AscendC::MmadParams* mmadArg = logMmad.GetArgsAt(3).Value<AscendC::MmadParams>();
+    ASSERT_EQ(mmadArg->disableGemv, true);
+}
+
+INSTANTIATE_TILE_MMAD_SUITE(Ascend950, TypedTileMmadA950Suite);
+#endif // CATLASS_ARCH == 3510
