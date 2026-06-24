@@ -318,6 +318,22 @@ struct MmadPingpong : public MmadBase<ArchTag_, false> {
     static constexpr bool ENABLE_L1_RESIDENT = ENABLE_L1_RESIDENT_;
 };
 
+template <class ArchTag_, bool ENABLE_UNIT_FLAG_ = false, bool USE_HF32_MODE_ = false, uint32_t L0C_STAGES_ = 1,
+    bool ENABLE_L1_RESIDENT_ = false, uint32_t L1A_STAGES_ = 2, uint32_t L1B_STAGES_ = 2, uint32_t L0A_STAGES_ = 2,
+    uint32_t L0B_STAGES_ = 2>
+struct MmadPingpongMutex : public MmadBase<ArchTag_, false> {
+    static_assert(std::is_same_v<ArchTag_, Arch::Ascend950>,
+        "MmadPingpongMutex only supports Arch::Ascend950");
+    static constexpr uint32_t L1A_STAGES = L1A_STAGES_;
+    static constexpr uint32_t L1B_STAGES = L1B_STAGES_;
+    static constexpr uint32_t L0A_STAGES = L0A_STAGES_;
+    static constexpr uint32_t L0B_STAGES = L0B_STAGES_;
+    static constexpr uint32_t L0C_STAGES = L0C_STAGES_;
+    static constexpr bool ENABLE_UNIT_FLAG = ENABLE_UNIT_FLAG_;
+    static constexpr bool USE_HF32_MODE = USE_HF32_MODE_;
+    static constexpr bool ENABLE_L1_RESIDENT = ENABLE_L1_RESIDENT_;
+};
+
 template <class ArchTag_, bool USE_HF32_MODE_ = false, uint32_t L0C_STAGES_ = 2>
 struct MmadMultiBatch : public MmadBase<ArchTag_, false> {
     static constexpr uint32_t STAGES = 2;

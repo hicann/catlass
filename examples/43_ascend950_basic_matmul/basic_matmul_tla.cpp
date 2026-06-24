@@ -114,6 +114,11 @@ static void Run(const Options &options)
     constexpr uint32_t l1BStages = 2;
     constexpr uint32_t l0AStages = 2;
     constexpr uint32_t l0BStages = 2;
+    // using DispatchPolicy = Gemm::MmadPingpongMutex<
+    //     ArchTag,
+    //     enableUnitFlag, useHF32, l0CStages, enableL1Resident,
+    //     l1AStages, l1BStages, l0AStages, l0BStages
+    // >;
     using DispatchPolicy = Gemm::MmadPingpong<
         ArchTag,
         enableUnitFlag, useHF32, l0CStages, enableL1Resident,

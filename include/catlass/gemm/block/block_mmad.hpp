@@ -184,6 +184,7 @@ struct BlockPrologue {
 #include "catlass/gemm/block/block_mmad_pingpong_per_group_per_block_tla.hpp"
 #include "catlass/gemm/block/block_mmad_mx_tla.hpp"
 #if (defined (CATLASS_ARCH) && CATLASS_ARCH == 3510)
+#include "catlass/gemm/block/block_mmad_pingpong_mutex_tla.hpp"
 #include "catlass/gemm/block/block_mmad_fai_pv_mx_tla.hpp"
 #include "catlass/gemm/block/block_mmad_fai_qk_mx_tla.hpp"
 #include "catlass/gemm/block/block_mx_a8w4_prologue.hpp"

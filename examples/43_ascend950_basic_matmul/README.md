@@ -53,6 +53,9 @@ BasicMatmul默认使用的DispatchPolicy MmadPingpong支持以下几个模板参
 
 2.`nTiles = 1`，且`mTiles > CoreNum`, 且`K < 2 * k1`。此时还可以设置`l0CStages=2`(需要关闭enableUnitFlag)，如果空间不足无法设置`l0CStages=2`，则将`m1`设置为原来的一半。
 
+BasicMatmul还支持DispatchPolicy MmadPingpongMutex，其功能与MmadPingpong完全一致，差别在于MmadPingpongMutex的Block层实现采用了A5新增的Mutex同步原语，相比原有的Set/Wait同步原语，简化了代码实现，性能保持不变。
+Mutex使用说明详见AscendC文档https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/900/API/ascendcopapi/atlasascendc_api_07_00133.html
+
 BasicMatmul还支持DispatchPolicy MmadPreloadAsyncWithCallback，支持以下几个模板参数：
 
 |模板参数|默认值|参数说明|
