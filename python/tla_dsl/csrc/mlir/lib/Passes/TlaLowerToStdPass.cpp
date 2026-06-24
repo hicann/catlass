@@ -1518,85 +1518,6 @@ public:
     SmallVectorImpl<Operation *> &toErase;
   };
 
-  struct LowerTlaAddPattern : public OpRewritePattern<::tla::AddOp> {
-    LowerTlaAddPattern(MLIRContext *ctx, ModuleOp module, SmallVectorImpl<Operation *> &toErase)
-        : OpRewritePattern<::tla::AddOp>(ctx), module(module), toErase(toErase) {}
-
-    LogicalResult matchAndRewrite(::tla::AddOp op, PatternRewriter &rewriter) const override {
-      if (op->getNumOperands() != 3 || op->getNumResults() != 0) {
-        op.emitError() << "expected tla.add to have exactly 3 operands and 0 results";
-        return failure();
-      }
-
-      Type lhsType = op->getOperand(1).getType();
-      Type rhsType = op->getOperand(2).getType();
-      Type dstType = op->getOperand(0).getType();
-
-      std::string lhsAddrspace, lhsElementType;
-      std::string rhsAddrspace, rhsElementType;
-      std::string dstAddrspace, dstElementType;
-      int64_t lhsRank = 0;
-      int64_t rhsRank = 0;
-      int64_t dstRank = 0;
-      if (!TlaLowerToStdPass::parseMemrefMetadataOrEmit(
-              op, lhsType, "tla.add currently requires typed !tla.memref operand types",
-              lhsAddrspace, lhsElementType, lhsRank) ||
-          !TlaLowerToStdPass::parseMemrefMetadataOrEmit(
-              op, rhsType, "tla.add currently requires typed !tla.memref operand types",
-              rhsAddrspace, rhsElementType, rhsRank) ||
-          !TlaLowerToStdPass::parseMemrefMetadataOrEmit(
-              op, dstType, "tla.add currently requires typed !tla.memref operand types",
-              dstAddrspace, dstElementType, dstRank)) {
-        return failure();
-      }
-
-      if (lhsRank != 1 || rhsRank != 1 || dstRank != 1) {
-        op.emitError() << "tla.add currently supports rank-1 memrefs only";
-        return failure();
-      }
-      if (lhsAddrspace != "ub" || rhsAddrspace != "ub" || dstAddrspace != "ub") {
-        op.emitError() << "tla.add requires lhs/rhs/dst in ub addrspace";
-        return failure();
-      }
-      if (lhsElementType != "f32" || rhsElementType != "f32" || dstElementType != "f32") {
-        op.emitError() << "tla.add currently supports f32 memrefs only";
-        return failure();
-      }
-
-      auto lhsInfo = TlaLowerToStdPass::bridgeTlaMemrefType(lhsType);
-      auto rhsInfo = TlaLowerToStdPass::bridgeTlaMemrefType(rhsType);
-      auto dstInfo = TlaLowerToStdPass::bridgeTlaMemrefType(dstType);
-      if (failed(lhsInfo) || failed(rhsInfo) || failed(dstInfo)) {
-        op.emitError() << "failed to decode tla.add memref operand types";
-        return failure();
-      }
-      if (lhsInfo->getShape() != rhsInfo->getShape() ||
-          lhsInfo->getShape() != dstInfo->getShape()) {
-        op.emitError() << "tla.add requires matching operand shapes";
-        return failure();
-      }
-
-      SmallVector<Type, 4> operandTypes = {*lhsInfo, *rhsInfo, *dstInfo, *dstInfo};
-      auto callee = TlaLowerToStdPass::getOrCreateRuntimeCall(module, "_mlir_ciface_vadd_1d_float",
-                                                              operandTypes);
-      auto lhsMemref = TlaLowerToStdPass::materializeTlaMemrefValue(rewriter, op.getLoc(),
-                                                                    op->getOperand(1), *lhsInfo);
-      auto rhsMemref = TlaLowerToStdPass::materializeTlaMemrefValue(rewriter, op.getLoc(),
-                                                                    op->getOperand(2), *rhsInfo);
-      auto dstMemref = TlaLowerToStdPass::materializeTlaMemrefValue(rewriter, op.getLoc(),
-                                                                    op->getOperand(0), *dstInfo);
-      if (failed(lhsMemref) || failed(rhsMemref) || failed(dstMemref))
-        return failure();
-      SmallVector<Value, 4> operands = {*lhsMemref, *rhsMemref, *dstMemref, *dstMemref};
-      rewriter.create<func::CallOp>(op.getLoc(), callee, operands);
-      toErase.push_back(op.getOperation());
-      return success();
-    }
-
-  private:
-    ModuleOp module;
-    SmallVectorImpl<Operation *> &toErase;
-  };
 
   struct LowerTlaCubePattern : public OpRewritePattern<::tla::CubeOp> {
     using OpRewritePattern<::tla::CubeOp>::OpRewritePattern;
@@ -2880,10 +2801,9 @@ public:
     // Stage 8B: lower residual compute ops.
     LowerTlaMmadPattern lowerMmad(&getContext(), module, tensorDescriptorByValue, toErase);
     LowerTlaGmAddPattern lowerGmAdd(&getContext(), module, toErase);
-    LowerTlaAddPattern lowerAdd(&getContext(), module, toErase);
     SmallVector<Operation *, 16> execUnitOps;
     module.walk([&](Operation *op) {
-      if (llvm::isa<::tla::MmadOp, ::tla::GmAddOp, ::tla::AddOp>(op))
+      if (llvm::isa<::tla::MmadOp, ::tla::GmAddOp>(op))
         execUnitOps.push_back(op);
     });
     for (Operation *op : execUnitOps) {
@@ -2896,8 +2816,6 @@ public:
         lowered = lowerMmad.matchAndRewrite(mmadOp, rewriter);
       } else if (auto gmAddOp = llvm::dyn_cast<::tla::GmAddOp>(op)) {
         lowered = lowerGmAdd.matchAndRewrite(gmAddOp, rewriter);
-      } else if (auto addOp = llvm::dyn_cast<::tla::AddOp>(op)) {
-        lowered = lowerAdd.matchAndRewrite(addOp, rewriter);
       }
       if (failed(lowered)) {
         signalPassFailure();
@@ -3022,7 +2940,7 @@ public:
                         ::tla::ReturnOp, ::tla::SplatOp, ::tla::MutexOp,
                         ::tla::MutexLockOp, ::tla::MutexUnlockOp, ::tla::CrossFlagOp,
                         ::tla::CrossCoreSetFlagOp, ::tla::CrossCoreWaitFlagOp, ::tla::CubeOp,
-                        ::tla::VectorOp, ::tla::MmadOp, ::tla::AddOp>();
+                        ::tla::VectorOp, ::tla::MmadOp>();
     target.addDynamicallyLegalOp<::tla::MakeShapeOp, ::tla::MakeCoordOp, ::tla::MakeStrideOp,
                                  ::tla::MakeLayoutOp, ::tla::AllocPtrOp, ::tla::RecastPtrOp>(
         [](Operation *op) { return !hasNoResultUses(op); });

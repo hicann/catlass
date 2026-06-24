@@ -4,6 +4,7 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 namespace tla {
@@ -121,18 +122,13 @@ getVectorHelperMemrefType(Value tensor,
                          bridged->getMemorySpace());
 }
 
-static LogicalResult verifyHelperMemrefType(MemRefType type, VectorType vectorType) {
-  if (!type || type.getRank() != 1 || vectorType.getRank() != 1)
-    return failure();
-  if (type.getElementType() != vectorType.getElementType())
-    return failure();
-  auto validLanes = getStaticNumElements(type.getShape());
-  if (failed(validLanes) || *validLanes <= 0 || *validLanes > vectorType.getDimSize(0))
-    return failure();
-  auto lanes = getVectorLanesForMemref(type);
-  if (failed(lanes) || *lanes != vectorType.getDimSize(0))
-    return failure();
-  return success();
+// The full UB tensor that a tile_view chunk views into. tla.load/tla.store
+// operate on per-iteration chunk tile_views; the helper argument is the whole
+// tensor those chunks come from.
+static Value getFullTensorOf(Value tile) {
+  while (auto tileView = tile.getDefiningOp<::tla::TileViewOp>())
+    tile = tileView.getSource();
+  return tile;
 }
 
 static FailureOr<Value> createZeroValue(OpBuilder &builder, Location loc, Type elementType) {
@@ -371,6 +367,18 @@ static FailureOr<Value> getMakeTensorLikeFlatMemref(Value tensor) {
   return failure();
 }
 
+static FailureOr<MemRefType> getVectorHelperArgMemrefType(Value operand) {
+  if (auto flat = getMakeTensorLikeFlatMemref(operand); succeeded(flat)) {
+    if (auto flatType = dyn_cast<MemRefType>((*flat).getType());
+        flatType && flatType.getRank() == 1 && flatType.hasStaticShape())
+      return flatType;
+  }
+  auto bridged = getBridgedTensorMemrefType(operand);
+  if (failed(bridged) || bridged->getRank() != 1)
+    return failure();
+  return *bridged;
+}
+
 static FailureOr<Value>
 materializeBaseMemref(PatternRewriter &rewriter, Location loc, Value tensor,
                       DenseMap<Value, Value> *handoffMemrefByTensor) {
@@ -436,40 +444,6 @@ materializeBaseMemref(PatternRewriter &rewriter, Location loc, Value tensor,
     return tensor;
 
   return failure();
-}
-
-static FailureOr<Value> materializeVectorHelperBaseMemref(PatternRewriter &rewriter, Location loc,
-                                                          Value tensor,
-                                                          DenseMap<Value, Value>
-                                                              *handoffMemrefByTensor) {
-  auto expected = getVectorHelperMemrefType(tensor, handoffMemrefByTensor);
-  if (failed(expected))
-    return failure();
-
-  if (handoffMemrefByTensor) {
-    auto handoff = handoffMemrefByTensor->find(tensor);
-    if (handoff != handoffMemrefByTensor->end()) {
-      if (tensor.getDefiningOp<::tla::MakeTensorLikeOp>()) {
-        if (auto handoffType = dyn_cast<MemRefType>(handoff->second.getType())) {
-          if (handoffType.getRank() == 2 && handoffType.hasStaticShape()) {
-            auto localSubview = materializeCopySubviewRank2(
-                rewriter, loc, tensor, /*handoffMemrefByTensor=*/nullptr, handoffType.getShape());
-            if (succeeded(localSubview))
-              return castMemrefToExpected(rewriter, loc, *localSubview, *expected);
-          }
-        }
-      }
-      return castMemrefToExpected(rewriter, loc, handoff->second, *expected);
-    }
-  }
-
-  if (auto flatMemref = getMakeTensorLikeFlatMemref(tensor); succeeded(flatMemref))
-    return castMemrefToExpected(rewriter, loc, *flatMemref, *expected);
-
-  auto base = materializeBaseMemref(rewriter, loc, tensor, handoffMemrefByTensor);
-  if (failed(base))
-    return failure();
-  return castMemrefToExpected(rewriter, loc, *base, *expected);
 }
 
 static FailureOr<Value> materializeCopySubview1D(PatternRewriter &rewriter, Location loc,
@@ -615,22 +589,17 @@ static std::string buildUniqueVectorHelperName(ModuleOp module, int &nextVectorR
 
 enum class VectorBinaryKind { Add, Sub, Mul, Div };
 
-struct VectorBinaryInfo {
-  VectorBinaryKind kind;
-  StringRef name;
-};
-
-static std::optional<VectorBinaryInfo> getVectorBinaryInfo(Operation *op) {
+static std::optional<VectorBinaryKind> getVectorBinaryKind(Operation *op) {
   if (!op)
     return std::nullopt;
   if (isa<::tla::AddOp>(op))
-    return VectorBinaryInfo{VectorBinaryKind::Add, "add"};
+    return VectorBinaryKind::Add;
   if (isa<::tla::SubOp>(op))
-    return VectorBinaryInfo{VectorBinaryKind::Sub, "sub"};
+    return VectorBinaryKind::Sub;
   if (isa<::tla::MulOp>(op))
-    return VectorBinaryInfo{VectorBinaryKind::Mul, "mul"};
+    return VectorBinaryKind::Mul;
   if (isa<::tla::DivOp>(op))
-    return VectorBinaryInfo{VectorBinaryKind::Div, "div"};
+    return VectorBinaryKind::Div;
   return std::nullopt;
 }
 
@@ -661,33 +630,314 @@ static Value createVectorBinaryResult(OpBuilder &b, Location loc, VectorBinaryKi
   return nullptr;
 }
 
+// Shared state while re-creating a tla.vec.func body inside the helper function.
+struct VecLowerCtx {
+  int64_t lanes;
+  Type elementType;
+  VectorType vecType;
+  VectorType maskVecType;
+};
+
+// Return the value already mapped into the helper, or clone an arith.constant
+// on demand (loop bounds / index math constants are pulled in lazily this way).
+static Value lookupOrCloneScalarValue(OpBuilder &b, Value value,
+                                      DenseMap<Value, Value> &valueMap) {
+  if (Value mapped = valueMap.lookup(value))
+    return mapped;
+  Operation *def = value.getDefiningOp();
+  if (!def || def->getNumResults() != 1 || !isa<arith::ConstantOp>(def))
+    return nullptr;
+  Operation *cloned = b.clone(*def);
+  valueMap[value] = cloned->getResult(0);
+  return cloned->getResult(0);
+}
+
+// Per-iteration element offset of a tile_view chunk, expressed against the
+// helper's (cloned) index arithmetic.
+static FailureOr<Value> materializeCoordOffsetInHelper(OpBuilder &b, Location loc, Value coord,
+                                                       DenseMap<Value, Value> &valueMap) {
+  auto coordType = dyn_cast<::tla::CoordType>(coord.getType());
+  if (!coordType)
+    return failure();
+  SmallVector<int64_t, 1> leaves;
+  if (failed(::tla::getTlaIndexTreeLeaves(coordType.getTree(), leaves)) || leaves.size() != 1)
+    return failure();
+  if (leaves[0] != ShapedType::kDynamic)
+    return b.create<arith::ConstantIndexOp>(loc, leaves[0]).getResult();
+
+  auto makeCoord = coord.getDefiningOp<::tla::MakeCoordOp>();
+  if (!makeCoord || makeCoord.getDynElems().size() != 1)
+    return failure();
+  Value mapped = lookupOrCloneScalarValue(b, *makeCoord.getDynElems().begin(), valueMap);
+  if (!mapped || !mapped.getType().isIndex())
+    return failure();
+  return mapped;
+}
+
+// Lower a tla.tile_view inside the helper to a 256-byte (lanes-wide) tile of the
+// mapped full-size helper argument, at the chunk's per-iteration element offset.
+static FailureOr<Value> lowerTileViewInHelper(OpBuilder &b, Location loc,
+                                              ::tla::TileViewOp tileView,
+                                              DenseMap<Value, Value> &valueMap, int64_t lanes) {
+  Value source = valueMap.lookup(getFullTensorOf(tileView.getSource()));
+  if (!source)
+    source = valueMap.lookup(tileView.getSource());
+  if (!source)
+    return tileView.emitError("failed to map tla.tile_view source in vector helper"), failure();
+  auto sourceType = dyn_cast<MemRefType>(source.getType());
+  if (!sourceType || sourceType.getRank() != 1)
+    return tileView.emitError("expected rank-1 memref source for vector tile_view"), failure();
+  auto offset = materializeCoordOffsetInHelper(b, loc, tileView.getCoord(), valueMap);
+  if (failed(offset))
+    return tileView.emitError("failed to materialize tile_view coordinate"), failure();
+  auto layout =
+      StridedLayoutAttr::get(b.getContext(), ShapedType::kDynamic, ArrayRef<int64_t>{1});
+  auto tileType =
+      MemRefType::get({lanes}, sourceType.getElementType(), layout, sourceType.getMemorySpace());
+  Value size = b.create<arith::ConstantIndexOp>(loc, lanes);
+  Value stride = b.create<arith::ConstantIndexOp>(loc, 1);
+  return b
+      .create<mlir::memref::ReinterpretCastOp>(loc, tileType, source, *offset, ValueRange{size},
+                                               ValueRange{stride})
+      .getResult();
+}
+
+static LogicalResult lowerNestedVectorBlock(Block *sourceBlock, OpBuilder &b,
+                                            DenseMap<Value, Value> &valueMap, VecLowerCtx &ctx);
+
+// Re-create one vec.func body op inside the helper: tla ops become AVE vector
+// ops; scf control flow and index arithmetic are carried verbatim.
+static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
+                                         DenseMap<Value, Value> &valueMap, VecLowerCtx &ctx) {
+  Location loc = op.getLoc();
+
+  // make_shape / make_coord feed only tile_view offsets (recomputed below); map
+  // them to themselves so lookups succeed.
+  if (isa<::tla::MakeShapeOp, ::tla::MakeCoordOp>(op)) {
+    valueMap[op.getResult(0)] = op.getResult(0);
+    return success();
+  }
+
+  if (auto constant = dyn_cast<arith::ConstantOp>(op)) {
+    valueMap[constant.getResult()] = b.clone(op)->getResult(0);
+    return success();
+  }
+
+  if (auto tileView = dyn_cast<::tla::TileViewOp>(op)) {
+    auto tile = lowerTileViewInHelper(b, loc, tileView, valueMap, ctx.lanes);
+    if (failed(tile))
+      return failure();
+    valueMap[tileView.getResult()] = *tile;
+    return success();
+  }
+
+  if (auto loadOp = dyn_cast<::tla::LoadOp>(op)) {
+    Value source = valueMap.lookup(loadOp.getSource());
+    if (!source)
+      return failure();
+    Value zero = b.create<arith::ConstantIndexOp>(loc, 0);
+    valueMap[loadOp.getResult()] =
+        b.create<hivmave::VFLoadOp>(loc, ctx.vecType, source, ValueRange{zero}).getRes();
+    return success();
+  }
+
+  if (auto kind = getVectorBinaryKind(&op)) {
+    if (op.getNumOperands() != 2 || op.getNumResults() != 1)
+      return failure();
+    Value lhs = valueMap.lookup(op.getOperand(0));
+    Value rhs = valueMap.lookup(op.getOperand(1));
+    if (!lhs || !rhs)
+      return failure();
+    Value mask = b.create<hivmave::VFPgeOp>(loc, ctx.maskVecType, hivmave::PgePattern::ALL);
+    Value result = createVectorBinaryResult(b, loc, *kind, ctx.elementType, ctx.vecType, lhs,
+                                            rhs, mask);
+    if (!result)
+      return failure();
+    valueMap[op.getResult(0)] = result;
+    return success();
+  }
+
+  if (auto storeOp = dyn_cast<::tla::StoreOp>(op)) {
+    Value dest = valueMap.lookup(storeOp.getDest());
+    Value source = valueMap.lookup(storeOp.getSource());
+    if (!dest || !source)
+      return failure();
+    Value zero = b.create<arith::ConstantIndexOp>(loc, 0);
+    Value mask = b.create<hivmave::VFPgeOp>(loc, ctx.maskVecType, hivmave::PgePattern::ALL);
+    b.create<hivmave::VFMaskedStoreOp>(loc, dest, ValueRange{zero}, mask, source);
+    return success();
+  }
+
+  // scf.for: rebuild the loop (iter_args unsupported) and lower its body.
+  if (auto forOp = dyn_cast<scf::ForOp>(op)) {
+    if (!forOp.getInitArgs().empty())
+      return failure();
+    Value lb = lookupOrCloneScalarValue(b, forOp.getLowerBound(), valueMap);
+    Value ub = lookupOrCloneScalarValue(b, forOp.getUpperBound(), valueMap);
+    Value step = lookupOrCloneScalarValue(b, forOp.getStep(), valueMap);
+    if (!lb || !ub || !step)
+      return failure();
+    auto newFor = b.create<scf::ForOp>(loc, lb, ub, step);
+    DenseMap<Value, Value> nestedMap = valueMap;
+    nestedMap[forOp.getInductionVar()] = newFor.getInductionVar();
+    OpBuilder nb(newFor.getBody()->getTerminator());
+    if (failed(lowerNestedVectorBlock(forOp.getBody(), nb, nestedMap, ctx)))
+      return failure();
+    return success();
+  }
+
+  // scf.if: rebuild as a result-less conditional (carried results must be
+  // unused) and lower both regions. The condition is already in the value map.
+  if (auto ifOp = dyn_cast<scf::IfOp>(op)) {
+    for (Value result : ifOp.getResults())
+      if (!result.use_empty())
+        return failure();
+    Value cond = lookupOrCloneScalarValue(b, ifOp.getCondition(), valueMap);
+    if (!cond)
+      return failure();
+    bool hasElse = !ifOp.getElseRegion().empty();
+    auto newIf = b.create<scf::IfOp>(loc, TypeRange{}, cond, hasElse);
+    DenseMap<Value, Value> thenMap = valueMap;
+    OpBuilder tb(newIf.thenBlock()->getTerminator());
+    if (failed(lowerNestedVectorBlock(ifOp.thenBlock(), tb, thenMap, ctx)))
+      return failure();
+    if (hasElse) {
+      DenseMap<Value, Value> elseMap = valueMap;
+      OpBuilder eb(newIf.elseBlock()->getTerminator());
+      if (failed(lowerNestedVectorBlock(ifOp.elseBlock(), eb, elseMap, ctx)))
+        return failure();
+    }
+    return success();
+  }
+
+  // Index/scalar arithmetic (arith.*) feeding offsets/conditions: clone with
+  // mapped operands.
+  if (op.getDialect()->getNamespace() == arith::ArithDialect::getDialectNamespace()) {
+    IRMapping mapper;
+    for (Value operand : op.getOperands()) {
+      Value mapped = lookupOrCloneScalarValue(b, operand, valueMap);
+      if (!mapped)
+        return failure();
+      mapper.map(operand, mapped);
+    }
+    Operation *cloned = b.clone(op, mapper);
+    for (auto [oldResult, newResult] : llvm::zip(op.getResults(), cloned->getResults()))
+      valueMap[oldResult] = newResult;
+    return success();
+  }
+
+  if (op.hasTrait<OpTrait::IsTerminator>())
+    return success();
+
+  return failure();
+}
+
+static LogicalResult lowerNestedVectorBlock(Block *sourceBlock, OpBuilder &b,
+                                            DenseMap<Value, Value> &valueMap, VecLowerCtx &ctx) {
+  for (Operation &op : sourceBlock->getOperations()) {
+    // Terminators are reproduced by the enclosing op (scf.for/scf.if) or by
+    // buildHelperFunc's func.return.
+    if (op.hasTrait<OpTrait::IsTerminator>())
+      continue;
+    if (failed(lowerNestedVectorOp(op, b, valueMap, ctx)))
+      return failure();
+  }
+  return success();
+}
+
+// Collect, in body order, the unique full UB tensors that tla.load/tla.store
+// chunks reference. These become the helper's arguments.
+static void collectVectorHelperOperands(Block *block, SmallVectorImpl<Value> &operands) {
+  for (Operation &op : block->getOperations()) {
+    if (auto loadOp = dyn_cast<::tla::LoadOp>(op)) {
+      Value root = getFullTensorOf(loadOp.getSource());
+      if (!llvm::is_contained(operands, root))
+        operands.push_back(root);
+      continue;
+    }
+    if (auto storeOp = dyn_cast<::tla::StoreOp>(op)) {
+      Value root = getFullTensorOf(storeOp.getDest());
+      if (!llvm::is_contained(operands, root))
+        operands.push_back(root);
+      continue;
+    }
+    for (Region &region : op.getRegions())
+      for (Block &nested : region)
+        collectVectorHelperOperands(&nested, operands);
+  }
+}
+
+// Collect unique scalar (int/index) values used inside the region but defined
+// outside it (e.g. a sub_block_idx/block_idx computed at the top of the kernel).
+// They are passed in as trailing scalar arguments rather than recomputed inside
+// the outlined vector function.
+static void collectVectorHelperScalarOperands(::tla::VecFuncOp vecFuncOp,
+                                              SmallVectorImpl<Value> &scalars) {
+  vecFuncOp.walk([&](Operation *op) {
+    for (Value operand : op->getOperands()) {
+      if (!operand.getType().isIntOrIndex())
+        continue;
+      Region *defRegion = operand.getParentRegion();
+      if (defRegion && !vecFuncOp.getBody().isAncestor(defRegion) &&
+          !llvm::is_contained(scalars, operand))
+        scalars.push_back(operand);
+    }
+  });
+}
+
+// Build a vector_region helper for a tla.vec.func body. The helper receives one
+// full-size UB memref per referenced tensor; the for/if control flow is carried
+// inside the helper, where each tla.load/store is lowered to an AVE
+// vload/masked-store over a 256-byte tile carved from the full memref at the
+// per-iteration offset.
 static FailureOr<func::FuncOp> buildHelperFunc(ModuleOp module, func::FuncOp parentFunc,
-                                               Operation *vectorOp, VectorBinaryKind binaryKind,
-                                               StringRef binaryName, Value dst, Value lhs,
-                                               Value rhs, int &nextVectorRegionId,
-                                               DenseMap<Value, Value> &handoffMemrefByTensor,
-                                               llvm::StringMap<func::FuncOp> &helperCache) {
+                                               ::tla::VecFuncOp vecFuncOp,
+                                               ArrayRef<Value> helperOperands,
+                                               ArrayRef<Value> scalarOperands,
+                                               int &nextVectorRegionId,
+                                               DenseMap<Value, Value> &handoffMemrefByTensor) {
   MLIRContext *ctx = module.getContext();
+  Operation *vectorOp = vecFuncOp.getOperation();
   OpBuilder moduleBuilder(module.getBodyRegion());
   moduleBuilder.setInsertionPointAfter(parentFunc);
 
-  auto dstType = getVectorHelperMemrefType(dst, &handoffMemrefByTensor);
-  auto lhsType = getVectorHelperMemrefType(lhs, &handoffMemrefByTensor);
-  auto rhsType = getVectorHelperMemrefType(rhs, &handoffMemrefByTensor);
-  if (failed(dstType) || failed(lhsType) || failed(rhsType))
+  Block *body = vecFuncOp.getBody().empty() ? nullptr : &vecFuncOp.getBody().front();
+  if (!body || helperOperands.empty())
     return failure();
 
-  auto funcType =
-      moduleBuilder.getFunctionType(TypeRange{*lhsType, *rhsType, *dstType}, TypeRange{});
+  SmallVector<Type> functionInputs;
+  functionInputs.reserve(helperOperands.size());
+  for (Value operand : helperOperands) {
+    auto operandType = getVectorHelperArgMemrefType(operand);
+    if (failed(operandType))
+      return failure();
+    functionInputs.push_back(*operandType);
+  }
+  // Trailing scalar args: scalars captured from outside the region.
+  for (Value scalar : scalarOperands)
+    functionInputs.push_back(scalar.getType());
+  auto funcType = moduleBuilder.getFunctionType(functionInputs, TypeRange{});
 
-  std::string cacheKey;
-  llvm::raw_string_ostream cacheKeyStream(cacheKey);
-  cacheKeyStream << binaryName << ":";
-  funcType.print(cacheKeyStream);
-  cacheKeyStream.flush();
-  auto cached = helperCache.find(cacheKey);
-  if (cached != helperCache.end())
-    return cached->getValue();
+  // The per-iteration vector tile is one 256-byte register's worth of elements.
+  // A single VecLowerCtx (lanes/vecType/mask) is built from this element type and
+  // reused for every op, so for now all operand tiles are expected to share one
+  // element type; validate that each tile operand is a supported int/float type
+  // (the trailing scalar args are index/int and are handled separately). This runs
+  // before the helper is created so a validation failure leaks no partial IR.
+  Type elementType = cast<MemRefType>(functionInputs.front()).getElementType();
+  for (size_t i = 0; i < helperOperands.size(); ++i) {
+    Type tileElementType = cast<MemRefType>(functionInputs[i]).getElementType();
+    if (!isa<IntegerType>(tileElementType) && !isa<FloatType>(tileElementType))
+      return vectorOp->emitError("unsupported element type for vector binary helper: ")
+             << tileElementType;
+  }
+  auto elementBytes = getElementByteWidth(elementType);
+  if (failed(elementBytes) || *elementBytes <= 0)
+    return failure();
+  constexpr int64_t kVectorBytes = 256;
+  int64_t lanes = kVectorBytes / *elementBytes;
+  if (lanes <= 0)
+    return failure();
 
   std::string helperName = buildUniqueVectorHelperName(module, nextVectorRegionId);
   auto helper = moduleBuilder.create<func::FuncOp>(vectorOp->getLoc(), helperName, funcType);
@@ -699,152 +949,131 @@ static FailureOr<func::FuncOp> buildHelperFunc(ModuleOp module, func::FuncOp par
 
   Block *entry = helper.addEntryBlock();
   OpBuilder b = OpBuilder::atBlockBegin(entry);
-  auto lhsMemrefType = dyn_cast<MemRefType>(entry->getArgument(0).getType());
-  auto rhsMemrefType = dyn_cast<MemRefType>(entry->getArgument(1).getType());
-  auto dstMemrefType = dyn_cast<MemRefType>(entry->getArgument(2).getType());
-  if (!lhsMemrefType || !rhsMemrefType || !dstMemrefType)
-    return failure();
-  auto lanes = getVectorLanesForMemref(lhsMemrefType);
-  if (failed(lanes))
-    return failure();
-  auto vecType = VectorType::get({*lanes}, lhsMemrefType.getElementType());
-  if (failed(verifyHelperMemrefType(lhsMemrefType, vecType)) ||
-      failed(verifyHelperMemrefType(rhsMemrefType, vecType)) ||
-      failed(verifyHelperMemrefType(dstMemrefType, vecType)))
-    return failure();
-  auto zeroValue = createZeroValue(b, vectorOp->getLoc(), lhsMemrefType.getElementType());
-  if (failed(zeroValue))
-    return failure();
-  Value zero = b.create<arith::ConstantIndexOp>(vectorOp->getLoc(), 0);
-  Value lhsVec = b.create<hivmave::VFLoadOp>(
-      vectorOp->getLoc(), vecType, entry->getArgument(0), ValueRange{zero})
-                     .getRes();
-  Value rhsVec = b.create<hivmave::VFLoadOp>(
-      vectorOp->getLoc(), vecType, entry->getArgument(1), ValueRange{zero})
-                     .getRes();
-  Type elementType = vecType.getElementType();
-  if (!isa<IntegerType>(elementType) && !isa<FloatType>(elementType)) {
-    return vectorOp->emitError("unsupported element type for vector binary helper: ")
-           << elementType;
-  }
-  auto maskVecType = VectorType::get({*lanes}, b.getI1Type());
-  Value opMask =
-      b.create<hivmave::VFPgeOp>(vectorOp->getLoc(), maskVecType, hivmave::PgePattern::ALL);
-  Value result = createVectorBinaryResult(b, vectorOp->getLoc(), binaryKind, elementType, vecType,
-                                          lhsVec, rhsVec, opMask);
-  if (!result)
-    return vectorOp->emitError("unsupported binary op for element type: ") << elementType;
-  Value storeMask =
-      b.create<hivmave::VFPgeOp>(vectorOp->getLoc(), maskVecType, hivmave::PgePattern::ALL);
-  b.create<hivmave::VFMaskedStoreOp>(vectorOp->getLoc(), entry->getArgument(2),
-                                     ValueRange{zero}, storeMask, result);
-  b.create<func::ReturnOp>(vectorOp->getLoc());
 
-  helperCache[cacheKey] = helper;
+  VecLowerCtx lowerCtx{lanes, elementType, VectorType::get({lanes}, elementType),
+                       VectorType::get({lanes}, b.getI1Type())};
+  DenseMap<Value, Value> valueMap;
+  for (auto [i, operand] : llvm::enumerate(helperOperands))
+    valueMap[operand] = entry->getArgument(i);
+  // Captured scalars map to their trailing block arguments.
+  for (auto [j, scalar] : llvm::enumerate(scalarOperands))
+    valueMap[scalar] = entry->getArgument(helperOperands.size() + j);
+  if (failed(lowerNestedVectorBlock(body, b, valueMap, lowerCtx))) {
+    // Discard the partially-built helper so an unsupported construct fails
+    // cleanly (the vec.func is left intact) instead of leaking malformed IR.
+    helper.erase();
+    return failure();
+  }
+  b.create<func::ReturnOp>(vectorOp->getLoc());
   return helper;
 }
 
 class LowerVecFuncRegionPattern : public OpRewritePattern<::tla::VecFuncOp> {
 public:
   LowerVecFuncRegionPattern(MLIRContext *context, ModuleOp module, int &nextVectorRegionId,
-                            DenseMap<Value, Value> &handoffMemrefByTensor,
-                            llvm::StringMap<func::FuncOp> &helperCache)
+                            DenseMap<Value, Value> &handoffMemrefByTensor)
       : OpRewritePattern<::tla::VecFuncOp>(context, /*benefit=*/2), module(module),
-        nextVectorRegionId(nextVectorRegionId), handoffMemrefByTensor(handoffMemrefByTensor),
-        helperCache(helperCache) {}
+        nextVectorRegionId(nextVectorRegionId), handoffMemrefByTensor(handoffMemrefByTensor) {}
 
   LogicalResult matchAndRewrite(::tla::VecFuncOp vecFuncOp,
                                 PatternRewriter &rewriter) const override {
     auto *body = vecFuncOp.getBody().empty() ? nullptr : &vecFuncOp.getBody().front();
-    if (!body) {
+    if (!body)
       return rewriter.notifyMatchFailure(vecFuncOp, "expected tla.vec.func body");
-    }
 
-    ::tla::StoreOp store;
-    vecFuncOp->walk([&](::tla::StoreOp candidate) {
-        if (store) {
-          return WalkResult::interrupt();
-        }
-        store = candidate;
-        return WalkResult::advance();
+    // Collect the load / binary compute / store ops (used for arg dedup and
+    // graph validation); the helper builder walks the region itself to carry
+    // the control flow structure.
+    SmallVector<::tla::LoadOp, 4> loads;
+    SmallVector<Operation *, 4> computeOps;
+    SmallVector<::tla::StoreOp, 2> stores;
+    vecFuncOp->walk([&](Operation *op) {
+      if (auto load = dyn_cast<::tla::LoadOp>(op)) {
+        loads.push_back(load);
+      } else if (auto store = dyn_cast<::tla::StoreOp>(op)) {
+        stores.push_back(store);
+      } else if (getVectorBinaryKind(op)) {
+        computeOps.push_back(op);
+      }
+      return WalkResult::advance();
     });
-    int storeCount = 0;
-    vecFuncOp->walk([&](::tla::StoreOp) { ++storeCount; });
-    if (storeCount > 1) {
-      return rewriter.notifyMatchFailure(vecFuncOp,
-                                         "expected exactly one tla.store in tla.vec.func body");
-    }
-    if (!store)
-      return rewriter.notifyMatchFailure(vecFuncOp,
-                                         "expected tla.vec.func body to contain tla.store");
-
-    Operation *binaryOp = store.getSource().getDefiningOp();
-    auto binaryInfo = getVectorBinaryInfo(binaryOp);
-    if (!binaryInfo || binaryOp->getNumOperands() != 2)
+    if (stores.empty())
       return rewriter.notifyMatchFailure(
-          vecFuncOp, "expected tla.store source to be a supported tla binary op");
+          vecFuncOp, "expected tla.vec.func body with a tla.store");
 
-    auto lhsLoad = binaryOp->getOperand(0).getDefiningOp<::tla::LoadOp>();
-    auto rhsLoad = binaryOp->getOperand(1).getDefiningOp<::tla::LoadOp>();
-    if (!lhsLoad || !rhsLoad)
-      return rewriter.notifyMatchFailure(vecFuncOp,
-                                         "expected tla binary op operands to be tla.load");
+    // Validate the graph: every compute operand and store source must come from
+    // a tla.load result or a prior compute result inside this region.
+    DenseSet<Value> producedValues;
+    for (::tla::LoadOp load : loads)
+      producedValues.insert(load.getResult());
+    for (Operation *computeOp : computeOps) {
+      auto kind = getVectorBinaryKind(computeOp);
+      if (!kind || computeOp->getNumOperands() != 2 || computeOp->getNumResults() != 1)
+        return rewriter.notifyMatchFailure(vecFuncOp, "unexpected tla binary op shape");
+      for (Value operand : computeOp->getOperands())
+        if (!producedValues.contains(operand))
+          return rewriter.notifyMatchFailure(
+              vecFuncOp, "expected binary op operand from tla.load or prior compute op");
+      producedValues.insert(computeOp->getResult(0));
+    }
+    for (::tla::StoreOp store : stores)
+      if (!producedValues.contains(store.getSource()))
+        return rewriter.notifyMatchFailure(
+            vecFuncOp, "expected tla.store source from tla.load or compute op");
 
     auto funcOp = vecFuncOp->getParentOfType<func::FuncOp>();
     if (!funcOp)
       return rewriter.notifyMatchFailure(vecFuncOp, "expected enclosing func.func");
 
-    Value dst = store.getDest();
-    Value lhs = lhsLoad.getSource();
-    Value rhs = rhsLoad.getSource();
+    // The helper takes one full-size UB memref per referenced tensor, in body
+    // order. Compute that operand list once and use it for both the helper
+    // signature and the call.
+    SmallVector<Value> helperOperands;
+    collectVectorHelperOperands(body, helperOperands);
+    if (helperOperands.empty())
+      return rewriter.notifyMatchFailure(vecFuncOp, "expected vector region tensor operands");
+    // Scalars captured from outside the region (e.g. a sub_block_idx computed at
+    // the top of the kernel) are passed as trailing scalar arguments.
+    SmallVector<Value> scalarOperands;
+    collectVectorHelperScalarOperands(vecFuncOp, scalarOperands);
 
-    auto helperOr =
-        buildHelperFunc(module, funcOp, vecFuncOp.getOperation(), binaryInfo->kind,
-                        binaryInfo->name, dst, lhs, rhs, nextVectorRegionId,
-                        handoffMemrefByTensor, helperCache);
-    if (failed(helperOr)) {
+    auto helperOr = buildHelperFunc(module, funcOp, vecFuncOp, helperOperands, scalarOperands,
+                                    nextVectorRegionId, handoffMemrefByTensor);
+    if (failed(helperOr))
       return rewriter.notifyMatchFailure(vecFuncOp, "failed to build vector helper function");
-    }
     auto helper = *helperOr;
 
-    rewriter.setInsertionPoint(store);
-    auto lhsBase =
-        materializeVectorHelperBaseMemref(rewriter, vecFuncOp.getLoc(), lhs,
-                                          &handoffMemrefByTensor);
-    auto rhsBase =
-        materializeVectorHelperBaseMemref(rewriter, vecFuncOp.getLoc(), rhs,
-                                          &handoffMemrefByTensor);
-    auto dstBase =
-        materializeVectorHelperBaseMemref(rewriter, vecFuncOp.getLoc(), dst,
-                                          &handoffMemrefByTensor);
-    if (failed(lhsBase) || failed(rhsBase) || failed(dstBase)) {
-      return rewriter.notifyMatchFailure(vecFuncOp,
-                                         "failed to materialize UB memrefs for vector helper call");
+    // The for/if control flow now lives inside the helper, so this is a single
+    // call (passing the full UB memrefs) that replaces the whole vec.func region.
+    rewriter.setInsertionPoint(vecFuncOp);
+    SmallVector<Value, 8> callOperands;
+    callOperands.reserve(helperOperands.size());
+    for (Value tensor : helperOperands) {
+      auto type = getVectorHelperArgMemrefType(tensor);
+      if (failed(type))
+        return rewriter.notifyMatchFailure(
+            vecFuncOp, "failed to type UB memref for vector helper call");
+      FailureOr<Value> base = getMakeTensorLikeFlatMemref(tensor);
+      if (failed(base))
+        base = materializeBaseMemref(rewriter, vecFuncOp.getLoc(), tensor,
+                                     /*handoffMemrefByTensor=*/nullptr);
+      if (failed(base))
+        return rewriter.notifyMatchFailure(
+            vecFuncOp, "failed to materialize UB memref for vector helper call");
+      auto arg = castMemrefToExpected(rewriter, vecFuncOp.getLoc(), *base, *type);
+      if (failed(arg))
+        return rewriter.notifyMatchFailure(vecFuncOp,
+                                           "failed to cast helper operand to expected memref type");
+      callOperands.push_back(*arg);
     }
+    // Captured scalars are defined in the parent (before this region), so they
+    // dominate the call — pass them directly as trailing call operands.
+    for (Value scalar : scalarOperands)
+      callOperands.push_back(scalar);
 
-    auto lhsType = getVectorHelperMemrefType(lhs, &handoffMemrefByTensor);
-    auto rhsType = getVectorHelperMemrefType(rhs, &handoffMemrefByTensor);
-    auto dstType = getVectorHelperMemrefType(dst, &handoffMemrefByTensor);
-    if (failed(lhsType) || failed(rhsType) || failed(dstType)) {
-      return rewriter.notifyMatchFailure(vecFuncOp, "failed to derive helper memref signature");
-    }
-    auto lhsArg = castMemrefToExpected(rewriter, vecFuncOp.getLoc(), *lhsBase, *lhsType);
-    auto rhsArg = castMemrefToExpected(rewriter, vecFuncOp.getLoc(), *rhsBase, *rhsType);
-    auto dstArg = castMemrefToExpected(rewriter, vecFuncOp.getLoc(), *dstBase, *dstType);
-    if (failed(lhsArg) || failed(rhsArg) || failed(dstArg)) {
-      return rewriter.notifyMatchFailure(vecFuncOp,
-                                         "failed to cast helper operands to expected memref types");
-    }
-
-    auto call = rewriter.create<func::CallOp>(vecFuncOp.getLoc(), helper,
-                                              ValueRange{*lhsArg, *rhsArg, *dstArg});
+    auto call = rewriter.create<func::CallOp>(vecFuncOp.getLoc(), helper, callOperands);
     call->setAttr("hivm.vector_function", UnitAttr::get(rewriter.getContext()));
     call->setAttr("no_inline", UnitAttr::get(rewriter.getContext()));
-    rewriter.eraseOp(store);
-    rewriter.eraseOp(binaryOp);
-    rewriter.eraseOp(lhsLoad);
-    rewriter.eraseOp(rhsLoad);
-    rewriter.inlineBlockBefore(body, vecFuncOp->getBlock(), vecFuncOp->getIterator());
     rewriter.eraseOp(vecFuncOp);
     return success();
   }
@@ -853,7 +1082,6 @@ private:
   ModuleOp module;
   int &nextVectorRegionId;
   DenseMap<Value, Value> &handoffMemrefByTensor;
-  llvm::StringMap<func::FuncOp> &helperCache;
 };
 
 class LowerCopyPattern : public OpRewritePattern<::tla::CopyOp> {
@@ -978,12 +1206,11 @@ public:
 
 static void populateTlaToVectorPatterns(RewritePatternSet &patterns, ModuleOp module,
                                         int &nextVectorRegionId,
-                                        DenseMap<Value, Value> &handoffMemrefByTensor,
-                                        llvm::StringMap<func::FuncOp> &helperCache) {
+                                        DenseMap<Value, Value> &handoffMemrefByTensor) {
   MLIRContext *ctx = patterns.getContext();
   patterns.add<InlineVectorRegionWrapperPattern>(ctx);
   patterns.add<LowerVecFuncRegionPattern>(ctx, module, nextVectorRegionId,
-                                          handoffMemrefByTensor, helperCache);
+                                          handoffMemrefByTensor);
   patterns.add<LowerCopyPattern>(ctx, handoffMemrefByTensor);
   patterns.add<EraseDeadTlaScaffoldingPattern<::tla::MakeTensorLikeOp>,
                EraseDeadTlaScaffoldingPattern<::tla::TileViewOp>,
@@ -991,6 +1218,45 @@ static void populateTlaToVectorPatterns(RewritePatternSet &patterns, ModuleOp mo
                EraseDeadTlaScaffoldingPattern<::tla::MakeCoordOp>,
                EraseDeadTlaScaffoldingPattern<::tla::RecastPtrOp>,
                EraseDeadTlaScaffoldingPattern<::tla::HivmMemrefAsPtrOp>>(ctx);
+}
+
+// Per-core identity queries (block_idx / block_dim / sub_block_idx) must be
+// computed outside a tla.vec.func and passed in; emitting them inside the vector
+// region produces an op the vector backend cannot codegen. tla-lower-to-hivm runs
+// before this pass, so an in-region query already appears as its lowered hivm form
+// (block_idx -> hivm.get_block_idx, block_dim -> hivm.get_block_num,
+// sub_block_idx -> hivm.get_sub_block_idx); match both spellings.
+static bool isIllegalVecFuncArchOp(Operation *op, StringRef &dslName) {
+  if (isa<::tla::BlockIdxOp, hivm::GetBlockIdxOp>(op)) {
+    dslName = "tla.arch.block_idx";
+    return true;
+  }
+  if (isa<::tla::BlockDimOp, hivm::GetBlockNumOp>(op)) {
+    dslName = "tla.arch.block_dim";
+    return true;
+  }
+  if (isa<::tla::SubBlockIdxOp, hivm::GetSubBlockIdxOp>(op)) {
+    dslName = "tla.arch.sub_block_idx";
+    return true;
+  }
+  return false;
+}
+
+// Fail compilation if any per-core identity query is used inside a tla.vec.func.
+static LogicalResult checkNoArchOpsInVecFunc(func::FuncOp funcOp) {
+  LogicalResult result = success();
+  funcOp.walk([&](::tla::VecFuncOp vecFuncOp) {
+    vecFuncOp.getBody().walk([&](Operation *op) {
+      StringRef dslName;
+      if (isIllegalVecFuncArchOp(op, dslName)) {
+        op->emitOpError() << "'" << dslName
+                          << "' is not allowed inside a tla.vec.func region; compute it "
+                             "outside the region and pass the value in";
+        result = failure();
+      }
+    });
+  });
+  return result;
 }
 
 class ConvertTlaToVectorPass : public PassWrapper<ConvertTlaToVectorPass, OperationPass<ModuleOp>> {
@@ -1015,16 +1281,25 @@ public:
       return;
 
     nextVectorRegionId = 0;
-    llvm::StringMap<func::FuncOp> helperCache;
 
-    for (func::FuncOp funcOp : module.getOps<func::FuncOp>()) {
+    // Snapshot the functions up front: lowering a vec.func appends a new
+    // vector_region helper to the module, and that helper must not be fed back
+    // through the lowering/folding driver (it already holds lowered AVE ops and
+    // the carried scf control flow).
+    SmallVector<func::FuncOp, 4> funcOps(module.getOps<func::FuncOp>());
+    for (func::FuncOp funcOp : funcOps) {
       if (funcOp.isDeclaration())
         continue;
+      if (funcOp->hasAttr(kHivmVectorFunctionAttrName))
+        continue;
+      if (failed(checkNoArchOpsInVecFunc(funcOp))) {
+        signalPassFailure();
+        return;
+      }
       inlineVectorRegionWrappers(funcOp);
       DenseMap<Value, Value> handoffMemrefByTensor;
       RewritePatternSet patterns(&getContext());
-      populateTlaToVectorPatterns(patterns, module, nextVectorRegionId, handoffMemrefByTensor,
-                                  helperCache);
+      populateTlaToVectorPatterns(patterns, module, nextVectorRegionId, handoffMemrefByTensor);
       if (failed(mlir::applyPatternsAndFoldGreedily(funcOp, std::move(patterns)))) {
         signalPassFailure();
         return;
