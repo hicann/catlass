@@ -154,13 +154,7 @@ export MLIR_TBLGEN_INCLUDE_DIR="$TLA_DSL_PREBUILT_ASCENDNPU_IR/build/install/inc
 export PYTHONPATH="$TLA_DSL_PREBUILT_ASCENDNPU_IR/build/install/python_packages/mlir_core:${PYTHONPATH:-}"
 ```
 
-
-> `tools/generate_tla_python_bindings.py` 通常不在 `./build.sh` 路径上；只有在修改 `csrc/mlir/include/Dialect/Tla/IR/Tla.td` 等 TLA 方言 TableGen 定义、需要重新生成并提交 `catlass/_mlir_bindings/tla_ops_gen.py` 时，开发者才需要手动调用它。调用前请先把 AscendNPU-IR-Dev 的 `mlir-tblgen` 放到 `PATH`，例如：
->
-> ```bash
-> export PATH="$TLA_DSL_PREBUILT_ASCENDNPU_IR/build/install/bin:$TLA_DSL_PREBUILT_ASCENDNPU_IR/build/bin:${PATH}"
-> ```
-
+> `./build.sh` 会在配置 CMake 前调用 `tools/generate_tla_python_bindings.py`，脚本会使用$TLA_DSL_PREBUILT_ASCENDNPU_IR/build/bin/mlir-tblgen，根据 `csrc/mlir/include/Dialect/Tla/IR/Tla.td` 重新生成 `catlass/_mlir_bindings/tla_ops_gen.py`，避免手动修改生成文件后与 TD 定义不一致。
 ### 2.5 配置并编译 `tla`
 
 **推荐一键**（须已 **`conda activate`**、已设 **`ASCEND_HOME_PATH`**，且 **§2.4** AscendNPU-IR-Dev 已就绪或已设 **`TLA_DSL_PREBUILT_ASCENDNPU_IR`**；建议同时导出上文 AscendNPU-IR-Dev 的 **`PYTHONPATH`** / **`LD_LIBRARY_PATH`**）：

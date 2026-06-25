@@ -56,105 +56,6 @@ def add(result, lhs, rhs, *, loc=None, ip=None) -> _ods_ir.Value:
   return _get_op_result_or_op_results(AddOp(result=result, lhs=lhs, rhs=rhs, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
-class SubOp(_ods_ir.OpView):
-  OPERATION_NAME = "tla.sub"
-
-  _ODS_REGIONS = (0, True)
-
-  def __init__(self, result, lhs, rhs, *, loc=None, ip=None):
-    operands = []
-    results = []
-    attributes = {}
-    regions = None
-    operands.append(_get_op_result_or_value(lhs))
-    operands.append(_get_op_result_or_value(rhs))
-    _ods_context = _ods_get_default_loc_context(loc)
-    results.append(result)
-    _ods_successors = None
-    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
-
-  @builtins.property
-  def lhs(self):
-    return self.operation.operands[0]
-
-  @builtins.property
-  def rhs(self):
-    return self.operation.operands[1]
-
-  @builtins.property
-  def result(self):
-    return self.operation.results[0]
-
-def sub(result, lhs, rhs, *, loc=None, ip=None) -> _ods_ir.Value:
-  return _get_op_result_or_op_results(SubOp(result=result, lhs=lhs, rhs=rhs, loc=loc, ip=ip))
-
-@_ods_cext.register_operation(_Dialect)
-class MulOp(_ods_ir.OpView):
-  OPERATION_NAME = "tla.mul"
-
-  _ODS_REGIONS = (0, True)
-
-  def __init__(self, result, lhs, rhs, *, loc=None, ip=None):
-    operands = []
-    results = []
-    attributes = {}
-    regions = None
-    operands.append(_get_op_result_or_value(lhs))
-    operands.append(_get_op_result_or_value(rhs))
-    _ods_context = _ods_get_default_loc_context(loc)
-    results.append(result)
-    _ods_successors = None
-    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
-
-  @builtins.property
-  def lhs(self):
-    return self.operation.operands[0]
-
-  @builtins.property
-  def rhs(self):
-    return self.operation.operands[1]
-
-  @builtins.property
-  def result(self):
-    return self.operation.results[0]
-
-def mul(result, lhs, rhs, *, loc=None, ip=None) -> _ods_ir.Value:
-  return _get_op_result_or_op_results(MulOp(result=result, lhs=lhs, rhs=rhs, loc=loc, ip=ip))
-
-@_ods_cext.register_operation(_Dialect)
-class DivOp(_ods_ir.OpView):
-  OPERATION_NAME = "tla.div"
-
-  _ODS_REGIONS = (0, True)
-
-  def __init__(self, result, lhs, rhs, *, loc=None, ip=None):
-    operands = []
-    results = []
-    attributes = {}
-    regions = None
-    operands.append(_get_op_result_or_value(lhs))
-    operands.append(_get_op_result_or_value(rhs))
-    _ods_context = _ods_get_default_loc_context(loc)
-    results.append(result)
-    _ods_successors = None
-    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
-
-  @builtins.property
-  def lhs(self):
-    return self.operation.operands[0]
-
-  @builtins.property
-  def rhs(self):
-    return self.operation.operands[1]
-
-  @builtins.property
-  def result(self):
-    return self.operation.results[0]
-
-def div(result, lhs, rhs, *, loc=None, ip=None) -> _ods_ir.Value:
-  return _get_op_result_or_op_results(DivOp(result=result, lhs=lhs, rhs=rhs, loc=loc, ip=ip))
-
-@_ods_cext.register_operation(_Dialect)
 class AllocPtrOp(_ods_ir.OpView):
   OPERATION_NAME = "tla.alloc_ptr"
 
@@ -238,29 +139,6 @@ def arch_block_idx(index, *, loc=None, ip=None) -> _ods_ir.Value:
   return _get_op_result_or_op_results(BlockIdxOp(index=index, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
-class SubBlockIdxOp(_ods_ir.OpView):
-  OPERATION_NAME = "tla.arch.sub_block_idx"
-
-  _ODS_REGIONS = (0, True)
-
-  def __init__(self, index, *, loc=None, ip=None):
-    operands = []
-    results = []
-    attributes = {}
-    regions = None
-    _ods_context = _ods_get_default_loc_context(loc)
-    results.append(index)
-    _ods_successors = None
-    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
-
-  @builtins.property
-  def index(self):
-    return self.operation.results[0]
-
-def arch_sub_block_idx(index, *, loc=None, ip=None) -> _ods_ir.Value:
-  return _get_op_result_or_op_results(SubBlockIdxOp(index=index, loc=loc, ip=ip))
-
-@_ods_cext.register_operation(_Dialect)
 class BroadcastOp(_ods_ir.OpView):
   OPERATION_NAME = "tla.broadcast"
 
@@ -327,12 +205,12 @@ class CrossCoreSetFlagOp(_ods_ir.OpView):
 
   _ODS_REGIONS = (0, True)
 
-  def __init__(self, cross_flag_value, *, loc=None, ip=None):
+  def __init__(self, flag, *, loc=None, ip=None):
     operands = []
     results = []
     attributes = {}
     regions = None
-    operands.append(_get_op_result_or_value(cross_flag_value))
+    operands.append(_get_op_result_or_value(flag))
     _ods_context = _ods_get_default_loc_context(loc)
     _ods_successors = None
     super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
@@ -341,8 +219,8 @@ class CrossCoreSetFlagOp(_ods_ir.OpView):
   def flag(self):
     return self.operation.operands[0]
 
-def cross_core_set_flag(cross_flag_value, *, loc=None, ip=None) -> _ods_ir.Operation:
-  return _get_op_result_or_op_results(CrossCoreSetFlagOp(cross_flag_value=cross_flag_value, loc=loc, ip=ip))
+def cross_core_set_flag(flag, *, loc=None, ip=None) -> _ods_ir.Operation:
+  return _get_op_result_or_op_results(CrossCoreSetFlagOp(flag=flag, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
 class CrossCoreWaitFlagOp(_ods_ir.OpView):
@@ -350,12 +228,12 @@ class CrossCoreWaitFlagOp(_ods_ir.OpView):
 
   _ODS_REGIONS = (0, True)
 
-  def __init__(self, cross_flag_value, *, loc=None, ip=None):
+  def __init__(self, flag, *, loc=None, ip=None):
     operands = []
     results = []
     attributes = {}
     regions = None
-    operands.append(_get_op_result_or_value(cross_flag_value))
+    operands.append(_get_op_result_or_value(flag))
     _ods_context = _ods_get_default_loc_context(loc)
     _ods_successors = None
     super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
@@ -364,8 +242,8 @@ class CrossCoreWaitFlagOp(_ods_ir.OpView):
   def flag(self):
     return self.operation.operands[0]
 
-def cross_core_wait_flag(cross_flag_value, *, loc=None, ip=None) -> _ods_ir.Operation:
-  return _get_op_result_or_op_results(CrossCoreWaitFlagOp(cross_flag_value=cross_flag_value, loc=loc, ip=ip))
+def cross_core_wait_flag(flag, *, loc=None, ip=None) -> _ods_ir.Operation:
+  return _get_op_result_or_op_results(CrossCoreWaitFlagOp(flag=flag, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
 class CrossFlagOp(_ods_ir.OpView):
@@ -373,7 +251,7 @@ class CrossFlagOp(_ods_ir.OpView):
 
   _ODS_REGIONS = (0, True)
 
-  def __init__(self, cross_flag_value, name, src_pipe, dst_pipe, mode=None, *, loc=None, ip=None):
+  def __init__(self, flag, name, src_pipe, dst_pipe, *, mode=None, loc=None, ip=None):
     operands = []
     results = []
     attributes = {}
@@ -391,12 +269,11 @@ class CrossFlagOp(_ods_ir.OpView):
     isinstance(dst_pipe, _ods_ir.Attribute) or
     not _ods_ir.AttrBuilder.contains('Tla_PipeAttr')) else
       _ods_ir.AttrBuilder.get('Tla_PipeAttr')(dst_pipe, context=_ods_context))
-    if mode is not None:
-      attributes["mode"] = (mode if (
-      isinstance(mode, _ods_ir.Attribute) or
-      not _ods_ir.AttrBuilder.contains('I64Attr')) else
-        _ods_ir.AttrBuilder.get('I64Attr')(mode, context=_ods_context))
-    results.append(cross_flag_value)
+    if mode is not None: attributes["mode"] = (mode if (
+        isinstance(mode, _ods_ir.Attribute) or
+        not _ods_ir.AttrBuilder.contains('I64Attr')) else
+          _ods_ir.AttrBuilder.get('I64Attr')(mode, context=_ods_context))
+    results.append(flag)
     _ods_successors = None
     super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
 
@@ -432,22 +309,27 @@ class CrossFlagOp(_ods_ir.OpView):
 
   @builtins.property
   def mode(self):
-    return self.operation.attributes.get("mode")
+    if "mode" not in self.operation.attributes:
+      return None
+    return self.operation.attributes["mode"]
 
   @mode.setter
   def mode(self, value):
-    if value is None:
-      if "mode" in self.operation.attributes:
-        del self.operation.attributes["mode"]
-    else:
+    if value is not None:
       self.operation.attributes["mode"] = value
+    elif "mode" in self.operation.attributes:
+      del self.operation.attributes["mode"]
+
+  @mode.deleter
+  def mode(self):
+    del self.operation.attributes["mode"]
 
   @builtins.property
   def flag(self):
     return self.operation.results[0]
 
-def cross_flag(cross_flag_value, name, src_pipe, dst_pipe, mode=None, *, loc=None, ip=None) -> _ods_ir.Value:
-  return _get_op_result_or_op_results(CrossFlagOp(cross_flag_value=cross_flag_value, name=name, src_pipe=src_pipe, dst_pipe=dst_pipe, mode=mode, loc=loc, ip=ip))
+def cross_flag(flag, name, src_pipe, dst_pipe, *, mode=None, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(CrossFlagOp(flag=flag, name=name, src_pipe=src_pipe, dst_pipe=dst_pipe, mode=mode, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
 class CubeOp(_ods_ir.OpView):
@@ -470,6 +352,39 @@ class CubeOp(_ods_ir.OpView):
 
 def cube(*, loc=None, ip=None) -> _ods_ir.Operation:
   return _get_op_result_or_op_results(CubeOp(loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
+class DivOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.div"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, lhs, rhs, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(lhs))
+    operands.append(_get_op_result_or_value(rhs))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def lhs(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def rhs(self):
+    return self.operation.operands[1]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def div(result, lhs, rhs, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(DivOp(result=result, lhs=lhs, rhs=rhs, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
 class FlagOp(_ods_ir.OpView):
@@ -982,6 +897,39 @@ def mmad(acc, lhs, rhs, init_c, *, loc=None, ip=None) -> _ods_ir.Operation:
   return _get_op_result_or_op_results(MmadOp(acc=acc, lhs=lhs, rhs=rhs, init_c=init_c, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
+class MulOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.mul"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, lhs, rhs, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(lhs))
+    operands.append(_get_op_result_or_value(rhs))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def lhs(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def rhs(self):
+    return self.operation.operands[1]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def mul(result, lhs, rhs, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(MulOp(result=result, lhs=lhs, rhs=rhs, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
 class MutexLockOp(_ods_ir.OpView):
   OPERATION_NAME = "tla.mutex_lock"
 
@@ -1271,6 +1219,62 @@ class StoreOp(_ods_ir.OpView):
 
 def store(dest, source, *, loc=None, ip=None) -> _ods_ir.Operation:
   return _get_op_result_or_op_results(StoreOp(dest=dest, source=source, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
+class SubBlockIdxOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.arch.sub_block_idx"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, index, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(index)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def index(self):
+    return self.operation.results[0]
+
+def arch_sub_block_idx(index, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(SubBlockIdxOp(index=index, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
+class SubOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.sub"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, lhs, rhs, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(lhs))
+    operands.append(_get_op_result_or_value(rhs))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def lhs(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def rhs(self):
+    return self.operation.operands[1]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def sub(result, lhs, rhs, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(SubOp(result=result, lhs=lhs, rhs=rhs, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
 class TileViewOp(_ods_ir.OpView):

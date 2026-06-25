@@ -84,6 +84,20 @@ find_mlir_include_dir() {
   return 1
 }
 
+find_mlir_tblgen() {
+  if [[ -n "${TLA_DSL_PREBUILT_ASCENDNPU_IR:-}" && -x "${TLA_DSL_PREBUILT_ASCENDNPU_IR}/build/bin/mlir-tblgen" ]]; then
+    printf '%s\n' "${TLA_DSL_PREBUILT_ASCENDNPU_IR}/build/bin/mlir-tblgen"
+    return 0
+  fi
+
+  if command -v mlir-tblgen >/dev/null 2>&1; then
+    command -v mlir-tblgen
+    return 0
+  fi
+
+  return 1
+}
+
 echo "==> Configuring MLIR build (csrc/mlir)"
 ensure_pybind11_headers
 mlir_include_dir="$(find_mlir_include_dir)" || {
@@ -93,6 +107,18 @@ Set MLIR_TBLGEN_INCLUDE_DIR or CONDA_PREFIX, or ensure llvm-config is on PATH.
 EOF
   exit 1
 }
+mlir_tblgen="$(find_mlir_tblgen)" || {
+  cat <<'EOF'
+error: unable to locate mlir-tblgen.
+Set TLA_DSL_PREBUILT_ASCENDNPU_IR or ensure mlir-tblgen is on PATH.
+EOF
+  exit 1
+}
+
+echo "==> Generating Tla Python op bindings"
+python tools/generate_tla_python_bindings.py \
+  --tblgen "${mlir_tblgen}" \
+  --include-dir "${mlir_include_dir}"
 
 cmake_args=(
   -G Ninja

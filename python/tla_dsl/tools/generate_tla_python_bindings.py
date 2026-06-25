@@ -23,14 +23,29 @@ TLA_TD = (
 OUT = REPO_ROOT / "catlass" / "_mlir_bindings" / "tla_ops_gen.py"
 
 
-def _resolve_tblgen() -> str:
+def _resolve_tblgen(explicit: str | None = None) -> str:
+    if explicit:
+        p = Path(explicit)
+        if p.is_file():
+            return str(p)
+        raise SystemExit(f"mlir-tblgen not found: {p}")
+    prebuilt = os.environ.get("TLA_DSL_PREBUILT_ASCENDNPU_IR")
+    if prebuilt:
+        p = Path(prebuilt) / "build" / "bin" / "mlir-tblgen"
+        if p.is_file():
+            return str(p)
     tblgen = shutil.which("mlir-tblgen")
     if tblgen:
         return tblgen
     raise SystemExit("mlir-tblgen not found in PATH")
 
 
-def _resolve_include() -> Path:
+def _resolve_include(explicit: str | None = None) -> Path:
+    if explicit:
+        p = Path(explicit)
+        if (p / "mlir" / "IR" / "OpBase.td").is_file():
+            return p
+        raise SystemExit(f"include dir does not contain mlir/IR/OpBase.td: {p}")
     env = os.environ.get("MLIR_TBLGEN_INCLUDE_DIR")
     if env:
         p = Path(env)
@@ -84,51 +99,12 @@ def _rewrite_imports(text: str) -> str:
     )
     text = re.sub(r"_ods_ir\.OpResult\[[^\]]+\]", "_ods_ir.OpResult", text)
     text = re.sub(r"_ods_ir\.Value\[[^\]]+\]", "_ods_ir.Value", text)
-    text = text.replace(
-        "def __init__(self, flag, *, loc=None, ip=None):\n"
-        "    operands = []\n"
-        "    results = []\n"
-        "    attributes = {}\n"
-        "    regions = None\n"
-        "    operands.append(_get_op_result_or_value(flag))",
-        "def __init__(self, cross_flag_value, *, loc=None, ip=None):\n"
-        "    operands = []\n"
-        "    results = []\n"
-        "    attributes = {}\n"
-        "    regions = None\n"
-        "    operands.append(_get_op_result_or_value(cross_flag_value))",
-        2,
-    )
-    text = text.replace(
-        "def cross_core_set_flag(flag, *, loc=None, ip=None) -> _ods_ir.Operation:\n"
-        "  return _get_op_result_or_op_results(CrossCoreSetFlagOp(flag=flag, loc=loc, ip=ip))",
-        "def cross_core_set_flag(cross_flag_value, *, loc=None, ip=None) -> _ods_ir.Operation:\n"
-        "  return _get_op_result_or_op_results(CrossCoreSetFlagOp(cross_flag_value=cross_flag_value, loc=loc, ip=ip))",
-    )
-    text = text.replace(
-        "def cross_core_wait_flag(flag, *, loc=None, ip=None) -> _ods_ir.Operation:\n"
-        "  return _get_op_result_or_op_results(CrossCoreWaitFlagOp(flag=flag, loc=loc, ip=ip))",
-        "def cross_core_wait_flag(cross_flag_value, *, loc=None, ip=None) -> _ods_ir.Operation:\n"
-        "  return _get_op_result_or_op_results(CrossCoreWaitFlagOp(cross_flag_value=cross_flag_value, loc=loc, ip=ip))",
-    )
-    text = text.replace(
-        "def __init__(self, flag, name, src_pipe, dst_pipe, mode=None, *, loc=None, ip=None):",
-        "def __init__(self, cross_flag_value, name, src_pipe, dst_pipe, mode=None, *, loc=None, ip=None):",
-        1,
-    )
-    text = text.replace("    results.append(flag)", "    results.append(cross_flag_value)", 1)
-    text = text.replace(
-        "def cross_flag(flag, name, src_pipe, dst_pipe, mode=None, *, loc=None, ip=None) -> _ods_ir.Value:\n"
-        "  return _get_op_result_or_op_results(CrossFlagOp(flag=flag, name=name, src_pipe=src_pipe, dst_pipe=dst_pipe, mode=mode, loc=loc, ip=ip))",
-        "def cross_flag(cross_flag_value, name, src_pipe, dst_pipe, mode=None, *, loc=None, ip=None) -> _ods_ir.Value:\n"
-        "  return _get_op_result_or_op_results(CrossFlagOp(cross_flag_value=cross_flag_value, name=name, src_pipe=src_pipe, dst_pipe=dst_pipe, mode=mode, loc=loc, ip=ip))",
-    )
     return text
 
 
-def _generate() -> str:
-    tblgen = _resolve_tblgen()
-    include = _resolve_include()
+def _generate(tblgen_arg: str | None = None, include_arg: str | None = None) -> str:
+    tblgen = _resolve_tblgen(tblgen_arg)
+    include = _resolve_include(include_arg)
     with tempfile.TemporaryDirectory() as tmp:
         tmp_out = Path(tmp) / "tla_ops_gen.py"
         cmd = [
@@ -175,9 +151,14 @@ def _check(expected: str) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true")
+    parser.add_argument("--tblgen", help="Path to mlir-tblgen.")
+    parser.add_argument(
+        "--include-dir",
+        help="MLIR TableGen include dir containing mlir/IR/OpBase.td.",
+    )
     args = parser.parse_args()
 
-    generated = _generate()
+    generated = _generate(args.tblgen, args.include_dir)
     if args.check:
         return _check(generated)
 
