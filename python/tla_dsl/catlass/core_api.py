@@ -53,6 +53,7 @@ from .types import (
     Scalar,
     dtype_size_bytes,
 )
+from .params import CopyParams, CopyL0C2DstParams, QuantMode, L0C2UBMode
 
 
 _PIPE_VALUES = {
@@ -461,6 +462,28 @@ def _resolve_bound_value(value: Any) -> Any:
 def _coerce_pointer_arg(x: Any) -> _Pointer:
     """Resolve frontend bindings, then same path as :meth:`_Pointer.__new_from_mlir_values__`."""
     return _Pointer.__new_from_mlir_values__(None, [_resolve_bound_value(x)])  # type: ignore[arg-type]
+
+
+def _const_bool(value: bool) -> mlir_ir.Value:
+    i1_type = mlir_ir.IntegerType.get_signless(1)
+    op = mlir_ir.Operation.create(
+        "arith.constant",
+        results=[i1_type],
+        attributes={
+            "value": mlir_ir.IntegerAttr.get(i1_type, bool(value))
+        },
+    )
+    return op.results[0]
+
+
+def _as_i1_value(value: Any) ->mlir_ir.Value:
+    if isinstance(value, bool):
+        val = _const_bool(value)
+    elif _category(value) == "bool":
+        val = _as_value(value)
+    else:
+        raise TlaLoweringError(f"value expected to be a bool, got {type(value).__name__}")
+    return val
 
 
 def _const_index(value: int) -> mlir_ir.Value:
@@ -1929,9 +1952,14 @@ def _walk_mutex_guard_ops(ops: Sequence[Any]) -> list[mlir_ir.Operation]:
 
 def _infer_copy_mutex_pipe(copy_op: mlir_ir.Operation) -> str:
     operands = list(copy_op.operands)
-    if len(operands) != 2:
+    if len(operands) != 2 and len(operands) != 3:
         raise TlaLoweringError("malformed tla.copy op in tla.mutex_guard body")
     src_addrspace = _tla_tensor_type_for_mlir_value(operands[1]).addrspace.lower()
+    if src_addrspace == "l0c":
+        if len(operands) != 3:
+            raise TlaLoweringError("malformed tla.copy op in tla.mutex_guard body")
+    elif len(operands) != 2:
+        raise TlaLoweringError("malformed tla.copy op in tla.mutex_guard body")
     if src_addrspace == "gm":
         return "mte2"
     if src_addrspace == "l1":
@@ -2367,7 +2395,7 @@ def make_tensor_like(
 
 
 @dsl_user_op
-def copy(dst: TileLike, src: TileLike, *, loc: mlir_ir.Location | None = None) -> None:
+def copy(dst: TileLike, src: TileLike, params: CopyParams | None = None, *, loc: mlir_ir.Location | None = None) -> None:
     """Copy between Tla tensor/view values.
 
     Frontend policy is intentionally minimal: ``tla.copy`` accepts only tensor
@@ -2376,7 +2404,43 @@ def copy(dst: TileLike, src: TileLike, *, loc: mlir_ir.Location | None = None) -
     _require_category("copy", "dst", dst, "tensor", 0)
     _require_category("copy", "src", src, "tensor", 1)
     _require_frontend_state("copy")
-    return _tla_ops_gen.copy(_as_value(dst), _as_value(src), loc=loc)
+
+    if src.addrspace == "l0c":
+        if params is None:
+            params = CopyL0C2DstParams() # use default
+        if isinstance(params, CopyL0C2DstParams):
+            params._validate()
+            if params.quant_mode != QuantMode.NO_QUANT:
+                raise NotImplementedError(f"currently unsupported quant mode {params.quant_mode}")
+            if params.relu_enable != False:
+                raise NotImplementedError(f"currently unsupported relu_enable {params.relu_enable}")
+            if dst.addrspace == "ub" and params.l0c2ub_mode != L0C2UBMode.NO_SPLIT_VEC_0:
+                raise NotImplementedError(f"currently unsupported l0c2ub_mode {params.l0c2ub_mode}")
+
+            ctx = loc.context if loc is not None else mlir_ir.Context.current
+            quant_mode_attr = mlir_ir.Attribute.parse(f"#tla.quant_mode<{params.quant_mode}>", context=ctx)
+            l0c2ub_mode_attr = mlir_ir.Attribute.parse(f"#tla.l0c2ub_mode<{params.l0c2ub_mode}>", context=ctx)
+            quant_scale_or_tensor = None
+            if params.quant_mode == QuantMode.PER_TENSOR:
+                quant_scale_or_tensor = _const_f32(params.quant_scale)
+            elif params.quant_mode == QuantMode.PER_CHANNEL:
+                quant_scale_or_tensor = _as_value(params.quant_tensor)
+            params_value = _tla_ops_gen.CopyL0C2DstParams(
+                _tla_type_bridge.copy_l0c2dst_params_type_get(ctx),
+                params.unit_flag,
+                params.relu_enable,
+                quant_mode_attr,
+                l0c2ub_mode_attr,
+                quant_scale_or_tensor=quant_scale_or_tensor
+            )
+        else:
+            raise TlaLoweringError(
+                f"tla.copy operand `params` expects to be a CopyL0C2DstParams when {src.addrspace} -> {dst.addrspace}"
+            )
+    else:
+        params_value = None
+
+    return _tla_ops_gen.copy(_as_value(dst), _as_value(src), params=params_value, loc=loc)
 
 
 @dsl_user_op
@@ -2750,6 +2814,7 @@ def mmad(
     lhs: TileLike,
     rhs: TileLike,
     init_c: bool | ValueLike | None = None,
+    unit_flag: int | ValueLike | None = None,
     acc_type: DTypeLike | None = None,
     loc: mlir_ir.Location | None = None,
     **extra_kwargs: Any,
@@ -2768,39 +2833,31 @@ def mmad(
     _require_category("mmad", "acc", acc, "tensor", 0)
     _require_category("mmad", "lhs", lhs, "tensor", 1)
     _require_category("mmad", "rhs", rhs, "tensor", 2)
-    extra: list[Any] = []
-    if init_c is not None:
-        _require_bool_or_value("mmad", "init_c", init_c, 3)
-        extra.append(init_c)
-    if acc_type is not None:
-        _require_dtype("mmad", "acc_type", acc_type, 4)
-        extra.append(acc_type)
     _require_frontend_state("mmad")
-    extras = list(extra)
-    if len(extras) == 1 and _looks_dtype_literal(extras[0]):
-        extras = [False, extras[0]]
-    init_c_value = False
-    if extras:
-        if _category(extras[0]) == "bool":
-            from mlir.dialects import scf  # type: ignore[import-not-found]
 
-            cond = _as_branch_value(extras[0])
-            lhs_value = _as_value(lhs)
-            rhs_value = _as_value(rhs)
-            acc_value = _as_value(acc)
-            if_op = scf.IfOp(cond, [], hasElse=True, loc=loc)
-            with mlir_ir.InsertionPoint(if_op.then_block):
-                _tla_ops_gen.mmad(acc_value, lhs_value, rhs_value, True, loc=loc)
-                scf.YieldOp([])
-            with mlir_ir.InsertionPoint(if_op.else_block):
-                _tla_ops_gen.mmad(acc_value, lhs_value, rhs_value, False, loc=loc)
-                scf.YieldOp([])
-            return if_op
-        if not isinstance(extras[0], bool):
-            raise TlaLoweringError("tla.mmad init_c must be a compile-time bool")
-        init_c_value = bool(extras[0])
-    if len(extras) >= 2 and extras[1] is not None:
-        acc_type_value = _dtype_to_str(extras[1]).lower()
+    if init_c is None:
+        init_c = False
+    _require_bool_or_value("mmad", "init_c", init_c, 3)
+    init_c_value = _as_i1_value(init_c)
+
+    if unit_flag is None:
+        unit_flag = 0
+    _require_index("mmad", "unit_flag", unit_flag, 4)
+    if isinstance(unit_flag, int):
+        if unit_flag not in [0b00, 0b10, 0b11]:
+            raise TlaLoweringError(
+                "tla.mmad operand 'unit_flag' expects values [0b00, 0b10, 0b11], "
+                f"got [{unit_flag}]"
+            )
+        unit_flag_value = _const_i64(unit_flag)
+    elif _category(unit_flag) == "index": # _IndexExpr
+        unit_flag_value = _as_i64_value(unit_flag)
+    else:
+        raise TlaLoweringError("tla.mmad unit_flag must be a int")
+
+    if acc_type is not None:
+        _require_dtype("mmad", "acc_type", acc_type, 5)
+        acc_type_value = _dtype_to_str(acc_type).lower()
         if acc_type_value not in {"f16", "bf16", "f32"}:
             raise TlaLoweringError(
                 "tla.mmad attribute 'acc_type' expects dtype(s) [bf16, f16, f32], "
@@ -2815,6 +2872,7 @@ def mmad(
         lhs_value,
         rhs_value,
         init_c_value,
+        unit_flag_value,
         loc=loc,
     )
 

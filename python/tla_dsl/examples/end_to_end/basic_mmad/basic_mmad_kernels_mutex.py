@@ -23,6 +23,7 @@ DTYPE_B = tla.Float16
 DTYPE_C = tla.Float32
 DTYPE_GM_C = tla.Float32
 
+ENABLE_UNIT_FLAG = True
 
 def _elem_bytes(num_elems: int, dtype_tla: Any) -> int:
     return num_elems * dtype_size_bytes(dtype_tla.dtype)
@@ -168,20 +169,33 @@ def basic_mmad_kernel(mem_a: tla.Tensor, mem_b: tla.Tensor, mem_c: tla.Tensor) -
 
                 mutex_l0a.lock(pipe=tla.arch.CUBE)
                 mutex_l0b.lock(pipe=tla.arch.CUBE)
-                mutex_l0c.lock(pipe=tla.arch.CUBE)
-                tla.mmad(
-                    l0_c, l0_a, l0_b, init_c=True if k_l1 == 0 and k_l0 == 0 else False
-                )
-                mutex_l0c.unlock(pipe=tla.arch.CUBE)
+                if not ENABLE_UNIT_FLAG:
+                    mutex_l0c.lock(pipe=tla.arch.CUBE)
+
+                init_c = True if k_l1 == 0 and k_l0 == 0 else False
+                unit_flag = 0
+                if ENABLE_UNIT_FLAG:
+                    if (k_l1 == k_l1_count - 1) and (k_l0 == k_l0_count - 1):
+                        unit_flag = 0b11
+                    else:
+                        unit_flag = 0b10
+
+                tla.mmad(l0_c, l0_a, l0_b, init_c=init_c, unit_flag=unit_flag)
+
+                if not ENABLE_UNIT_FLAG:
+                    mutex_l0c.unlock(pipe=tla.arch.CUBE)
                 mutex_l0b.unlock(pipe=tla.arch.CUBE)
                 mutex_l0a.unlock(pipe=tla.arch.CUBE)
 
                 l0_buf_idx = c1 - l0_buf_idx
             l1_buf_idx = c1 - l1_buf_idx
 
-        mutex_l0c.lock(pipe=tla.arch.FIX)
-        tla.copy(gm_c_by_core, l0_c)
-        mutex_l0c.unlock(pipe=tla.arch.FIX)
+        if not ENABLE_UNIT_FLAG:
+            mutex_l0c.lock(pipe=tla.arch.FIX)
+            tla.copy(gm_c_by_core, l0_c)
+            mutex_l0c.unlock(pipe=tla.arch.FIX)
+        else:
+            tla.copy(gm_c_by_core, l0_c, tla.params.CopyL0C2DstParams(unit_flag=0b11))
 
 
 

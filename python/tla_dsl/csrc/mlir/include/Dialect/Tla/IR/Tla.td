@@ -223,6 +223,48 @@ def Tla_PipeAttr : Tla_EnumAttr<"Pipe", "pipe"> {
   }];
 }
 
+// QuantMode Enum Attr
+def Tla_QuantMode_NoQuant : I32EnumAttrCase<"NO_QUANT", 0>;
+def Tla_QuantMode_PerTensor : I32EnumAttrCase<"PER_TENSOR", 1>;
+def Tla_QuantMode_PerChannel : I32EnumAttrCase<"PER_CHANNEL", 2>;
+def Tla_QuantModeEnum : Tla_I32Enum<"QuantMode", "Quant Mode when l0c2dst.", [
+  Tla_QuantMode_NoQuant,
+  Tla_QuantMode_PerTensor,
+  Tla_QuantMode_PerChannel
+]>;
+def Tla_QuantModeAttr : Tla_EnumAttr<"QuantMode", "quant_mode"> {
+  let parameters = (ins EnumParameter<Tla_QuantModeEnum>:$quant_mode);
+  let assemblyFormat = "`<` params `>`";
+  let description = [{
+    Copy L0C to Dst quant mode.
+  }];
+}
+
+// L0C2UBMode Enum Attr
+def Tla_L0C2UBMode_NoSplitVec0 : I32EnumAttrCase<"NO_SPLIT_VEC_0", 0>;
+def Tla_L0C2UBMode_NoSplitVec1 : I32EnumAttrCase<"NO_SPLIT_VEC_1", 1>;
+def Tla_L0C2UBMode_SplitM : I32EnumAttrCase<"SPLIT_M", 2>;
+def Tla_L0C2UBMode_SplitN : I32EnumAttrCase<"SPLIT_N", 3>;
+def Tla_L0C2UBModeEnum : Tla_I32Enum<"L0C2UBMode", "L0C 2 UB split mode.", [
+  Tla_L0C2UBMode_NoSplitVec0,
+  Tla_L0C2UBMode_NoSplitVec1,
+  Tla_L0C2UBMode_SplitM,
+  Tla_L0C2UBMode_SplitN
+]>;
+def Tla_L0C2UBModeAttr : Tla_EnumAttr<"L0C2UBMode", "l0c2ub_mode"> {
+  let parameters = (ins EnumParameter<Tla_L0C2UBModeEnum>:$l0c2ub_mode);
+  let assemblyFormat = "`<` params `>`";
+  let description = [{
+    Copy L0C 2 UB split mode.
+  }];
+}
+
+def Tla_CopyL0C2DstParamsType : TypeDef<TlaDialect, "CopyL0C2DstParams", []> {
+  let mnemonic = "copy_l0c2dst_params";
+  let summary = "CopyL0C2DstParams for tla.copy.";
+  let assemblyFormat = "";
+}
+
 def Tla_BinaryOpsTrait : NativeOpTrait<"::mlir::tla::trait::BinaryOps">;
 def Tla_BlockDimTrait : NativeOpTrait<"::mlir::tla::trait::BlockDim">;
 def Tla_BlockIdxTrait : NativeOpTrait<"::mlir::tla::trait::BlockIdx">;
@@ -346,14 +388,30 @@ def Tla_BroadcastOp : Tla_Op<"broadcast", [Pure]> {
   }];
 }
 
+def Tla_CopyL0C2DstParamsOp : Tla_Op<"CopyL0C2DstParams", [Pure]> {
+  let summary = "CopyL0C2DstParams op";
+  let arguments = (ins 
+  // attributes
+    I64Attr:$unit_flag,
+    BoolAttr:$relu_enable,
+    Tla_QuantModeAttr:$quant_mode,
+    Tla_L0C2UBModeAttr:$l0c2ub_mode,
+  // operands
+    Optional<AnyTypeOf<[F32, Tla_TensorType]>>:$quant_scale_or_tensor
+  );
+  let results = (outs Tla_CopyL0C2DstParamsType:$params);
+}
+
 def Tla_CopyOp : Tla_Op<"copy", []> {
   let summary = "Copy";
   let description = [{
     Copy between tensors/views in different address spaces.
   }];
-  let arguments = (ins Tla_TensorType:$dst, Tla_TensorType:$src);
+  let arguments = (ins
+    Tla_TensorType:$dst, Tla_TensorType:$src,
+    Optional<AnyTypeOf<[Tla_CopyL0C2DstParamsType]>>:$params);
   let assemblyFormat = [{
-    $dst `,` $src attr-dict `:` qualified(type($dst)) `,` qualified(type($src))
+    $dst `,` $src `,` (`params` $params^)? attr-dict `:` qualified(type($dst)) `,` qualified(type($src)) `,` qualified(type($params))
   }];
 }
 
@@ -510,9 +568,10 @@ def Tla_MmadOp : Tla_Op<"mmad", []> {
   let description = [{
     Perform a matrix multiply-accumulate on tensor views.
   }];
-  let arguments = (ins Tla_TensorType:$acc, Tla_TensorType:$lhs, Tla_TensorType:$rhs, BoolAttr:$init_c);
+  let arguments = (ins Tla_TensorType:$acc, Tla_TensorType:$lhs, Tla_TensorType:$rhs, I1:$init_c, I64:$unit_flag);
   let assemblyFormat = [{
-    $acc `,` $lhs `,` $rhs `init_c` `(` $init_c `)` attr-dict `:` qualified(type($acc)) `,` qualified(type($lhs)) `,` qualified(type($rhs))
+    $acc `,` $lhs `,` $rhs `,` $init_c `,` $unit_flag attr-dict `:` 
+    qualified(type($acc)) `,` qualified(type($lhs)) `,` qualified(type($rhs)) `,` type($init_c) `,` type($unit_flag)
   }];
 }
 

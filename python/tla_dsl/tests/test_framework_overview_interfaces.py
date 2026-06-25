@@ -535,7 +535,8 @@ def test_interface_mmad_nested_shape_contract_lowers_at_frontend(
         )
     mlir = compiler_tlair(_kernel_mmad_interface_example, type_args=(lhs, rhs, acc))
     assert "tla.mmad" in mlir
-    assert "init_c = true" in mlir
+    assert '"arith.constant"() <{value = true}> : () -> i1' in mlir
+    assert '"arith.constant"() <{value = 0 : i64}> : () -> i64' in mlir
     assert "!tla.ptr<f16, l0a, 2>" in mlir
     assert "!tla.ptr<f16, l0b, 2>" in mlir
     assert "!tla.ptr<f32, l0c, 4>" in mlir

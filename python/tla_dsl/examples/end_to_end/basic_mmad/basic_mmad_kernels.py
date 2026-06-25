@@ -23,6 +23,7 @@ DTYPE_B = tla.Float16
 DTYPE_C = tla.Float32
 DTYPE_GM_C = tla.Float32
 
+ENABLE_UNIT_FLAG = True
 
 def _elem_bytes(num_elems: int, dtype_tla: Any) -> int:
     return num_elems * dtype_size_bytes(dtype_tla.dtype)
@@ -121,7 +122,8 @@ def basic_mmad_kernel(mem_a: tla.Tensor, mem_b: tla.Tensor, mem_c: tla.Tensor) -
 
         l0_c = tla.make_tensor_like(l0c_ptr, gm_c_by_core, dst_dtype=DTYPE_C)
 
-        tla.wait_flag(fix_done)
+        if not ENABLE_UNIT_FLAG:
+            tla.wait_flag(fix_done)
         for k_l1 in k_l1_range:
             gm_a_l1 = tla.tile_view(
                 gm_a_by_core, tla.make_shape(l1_tm, l1_tk), tla.make_coord(c0, k_l1)
@@ -209,9 +211,14 @@ def basic_mmad_kernel(mem_a: tla.Tensor, mem_b: tla.Tensor, mem_c: tla.Tensor) -
                 tla.set_flag(l0_copy_end)
                 tla.wait_flag(l0_copy_end)
 
-                tla.mmad(
-                    l0_c, l0_a, l0_b, init_c=True if k_l1 == 0 and k_l0 == 0 else False
-                )
+                unit_flag = 0
+                if ENABLE_UNIT_FLAG:
+                    if (k_l1 == k_l1_count - 1) and (k_l0 == k_l0_count - 1):
+                        unit_flag = 0b11
+                    else:
+                        unit_flag = 0b10
+                init_c = True if k_l1 == 0 and k_l0 == 0 else False
+                tla.mmad(l0_c, l0_a, l0_b, init_c=init_c, unit_flag=unit_flag)
                 if l0_buf_idx == c0:
                     tla.set_flag(l0a0_copy_start)
                     tla.set_flag(l0b0_copy_start)
@@ -221,10 +228,13 @@ def basic_mmad_kernel(mem_a: tla.Tensor, mem_b: tla.Tensor, mem_c: tla.Tensor) -
                 l0_buf_idx = c1 - l0_buf_idx
             l1_buf_idx = c1 - l1_buf_idx
 
-        tla.set_flag(mmad_done)
-        tla.wait_flag(mmad_done)
-        tla.copy(gm_c_by_core, l0_c)
-        tla.set_flag(fix_done)
+        if not ENABLE_UNIT_FLAG:
+            tla.set_flag(mmad_done)
+            tla.wait_flag(mmad_done)
+            tla.copy(gm_c_by_core, l0_c)
+            tla.set_flag(fix_done)
+        else:
+            tla.copy(gm_c_by_core, l0_c, tla.params.CopyL0C2DstParams(unit_flag=0b11))
 
     tla.wait_flag(l1a0_copy_start)
     tla.wait_flag(l1a1_copy_start)

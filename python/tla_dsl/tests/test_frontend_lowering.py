@@ -219,7 +219,7 @@ def pointer_conditional_kernel(mem_a: tla.Tensor) -> None:
 
 
 @tla.kernel
-def dynamic_mmad_init_kernel(
+def dynamic_mmad_initc_unit_flag_kernel(
     mem_a: tla.Tensor, mem_b: tla.Tensor, mem_c: tla.Tensor
 ) -> None:
     acc = tla.tile_view(mem_c, tla.make_shape(16, 16), tla.make_coord(0, 0))
@@ -229,7 +229,9 @@ def dynamic_mmad_init_kernel(
     for outer in outer_range:
         inner_range = tla.range(0, 2, 1)
         for inner in inner_range:
-            tla.mmad(acc, lhs, rhs, init_c=True if outer == 0 and inner == 0 else False)
+            init_c = True if outer == 0 and inner == 0 else False
+            unit_flag = 0b11 if (outer == 1) and (inner == 1) else 0b10
+            tla.mmad(acc, lhs, rhs, init_c=init_c, unit_flag=unit_flag)
 
 
 @tla.kernel
@@ -549,7 +551,7 @@ def test_pointer_conditional_expression_lowers_to_scf_if() -> None:
     assert "tla.make_tensor_like" in mlir
 
 
-def test_dynamic_mmad_init_expression_lowers_to_scf_if(compiler_tlair) -> None:
+def test_dynamic_mmad_initc_unit_flag_expression_lowers_to_scf_if(compiler_tlair) -> None:
     with runtime_mod._eager_capture():
         mem_a = tla.Tensor(
             tla.make_shape((16, 1), (16, 1)),
@@ -572,15 +574,17 @@ def test_dynamic_mmad_init_expression_lowers_to_scf_if(compiler_tlair) -> None:
             origin_shape=tla.make_shape(16, 16),
             layout_tag=tla.arch.L0Clayout,
         )
-    mlir = compiler_tlair(dynamic_mmad_init_kernel, type_args=(mem_a, mem_b, mem_c))
+    mlir = compiler_tlair(dynamic_mmad_initc_unit_flag_kernel, type_args=(mem_a, mem_b, mem_c))
     assert "scf.for" in mlir
     assert "tla.for" not in mlir
     assert "arith.cmpi" in mlir
     assert "arith.andi" in mlir
     assert "scf.if" in mlir
-    assert mlir.count("scf.yield") >= 2
-    assert "init_c = true" in mlir
-    assert "init_c = false" in mlir
+    assert mlir.count("scf.yield") >= 4
+    assert '"arith.constant"() <{value = true}> : () -> i1' in mlir
+    assert '"arith.constant"() <{value = false}> : () -> i1' in mlir
+    assert '"arith.constant"() <{value = 3 : index}> : () -> index' in mlir
+    assert '"arith.constant"() <{value = 2 : index}> : () -> index' in mlir
     assert "!tla.ptr<f32, l0c, 4>" in mlir
     assert (
         "!tla.layout<!tla.shape<(16,1),(16,1)>, !tla.stride<(16,256),(1,256)>, !tla.shape<16,16>, zN>"

@@ -304,24 +304,24 @@ CATLASS_DEVICE void copyCbufnZToCbnZ(
 template <class ArchTag, typename T>
 CATLASS_DEVICE void copyCcToGmRowMajor(
     memref_t<__cc__ T, 1> *src, memref_t<__gm__ T, 2> *dst,
-    const TensorDesc4D &srcDesc, const TensorDesc2D &dstDesc) {
+    const TensorDesc4D &srcDesc, const TensorDesc2D &dstDesc, uint8_t unitFlag) {
     auto srcTensor = makeL0CTensor(src, srcDesc);
     auto dstTensor = makeGMTensor(dst, dstDesc);
     Catlass::Gemm::Tile::CopyL0CToGmTla<ArchTag, decltype(srcTensor),
                                         decltype(dstTensor)>{}(dstTensor,
-                                                               srcTensor);
+                                                               srcTensor, unitFlag);
 }
 
 // L0C holds fp32 MMAD accumulator; cast to fp16/bf16 when writing GM row-major (Ascend950 fixpipe).
 template <class ArchTag, typename ElementDst>
 CATLASS_DEVICE void copyCcFloatToGmRowMajorCast(
     memref_t<__cc__ float, 1> *src, memref_t<__gm__ ElementDst, 2> *dst,
-    const TensorDesc4D &srcDesc, const TensorDesc2D &dstDesc) {
+    const TensorDesc4D &srcDesc, const TensorDesc2D &dstDesc, uint8_t unitFlag) {
     auto srcTensor = makeL0CTensor<float>(src, srcDesc);
     auto dstTensor = makeGMTensor(dst, dstDesc);
     Catlass::Gemm::Tile::CopyL0CToGmTla<ArchTag, decltype(srcTensor),
                                         decltype(dstTensor)>{}(dstTensor,
-                                                               srcTensor);
+                                                               srcTensor, unitFlag);
 }
 
 template <class ArchTag, typename T>
@@ -470,14 +470,15 @@ void _mlir_ciface_copy_cc_to_gm_row_major_float(
     int64_t srcCoord1, int64_t srcOrgShape0, int64_t srcOrgShape1,
     int64_t dstShape0, int64_t dstShape1, int64_t dstStride0,
     int64_t dstStride1, int64_t dstCoord0, int64_t dstCoord1,
-    int64_t dstOrgShape0, int64_t dstOrgShape1) {
+    int64_t dstOrgShape0, int64_t dstOrgShape1, uint8_t unitFlag) {
     copyCcToGmRowMajor<Catlass::Arch::Ascend950>(
         src, dst,
         TensorDesc4D{(uint32_t)srcShape0, (uint32_t)srcShape1, (uint32_t)srcShape2, (uint32_t)srcShape3, srcStride0,
                        srcStride1, srcStride2, srcStride3, (uint32_t)srcCoord0, (uint32_t)srcCoord1,
                        (uint32_t)srcOrgShape0, (uint32_t)srcOrgShape1},
         TensorDesc2D{(uint32_t)dstShape0, (uint32_t)dstShape1, dstStride0, dstStride1,
-                         (uint32_t)dstCoord0, (uint32_t)dstCoord1, (uint32_t)dstOrgShape0, (uint32_t)dstOrgShape1});
+                         (uint32_t)dstCoord0, (uint32_t)dstCoord1, (uint32_t)dstOrgShape0, (uint32_t)dstOrgShape1},
+        unitFlag);
 }
 
 [aicore] __attribute__((always_inline))
@@ -489,14 +490,15 @@ void _mlir_ciface_copy_cc_to_gm_row_major_half(
     int64_t srcCoord1, int64_t srcOrgShape0, int64_t srcOrgShape1,
     int64_t dstShape0, int64_t dstShape1, int64_t dstStride0,
     int64_t dstStride1, int64_t dstCoord0, int64_t dstCoord1,
-    int64_t dstOrgShape0, int64_t dstOrgShape1) {
+    int64_t dstOrgShape0, int64_t dstOrgShape1, uint8_t unitFlag) {
     copyCcFloatToGmRowMajorCast<Catlass::Arch::Ascend950, half>(
         src, dst,
         TensorDesc4D{(uint32_t)srcShape0, (uint32_t)srcShape1, (uint32_t)srcShape2, (uint32_t)srcShape3, srcStride0,
                        srcStride1, srcStride2, srcStride3, (uint32_t)srcCoord0, (uint32_t)srcCoord1,
                        (uint32_t)srcOrgShape0, (uint32_t)srcOrgShape1},
         TensorDesc2D{(uint32_t)dstShape0, (uint32_t)dstShape1, dstStride0, dstStride1,
-                         (uint32_t)dstCoord0, (uint32_t)dstCoord1, (uint32_t)dstOrgShape0, (uint32_t)dstOrgShape1});
+                         (uint32_t)dstCoord0, (uint32_t)dstCoord1, (uint32_t)dstOrgShape0, (uint32_t)dstOrgShape1},
+        unitFlag);
 }
 
 [aicore] __attribute__((always_inline))
@@ -508,14 +510,15 @@ void _mlir_ciface_copy_cc_to_gm_row_major_bf16(
     int64_t srcCoord1, int64_t srcOrgShape0, int64_t srcOrgShape1,
     int64_t dstShape0, int64_t dstShape1, int64_t dstStride0,
     int64_t dstStride1, int64_t dstCoord0, int64_t dstCoord1,
-    int64_t dstOrgShape0, int64_t dstOrgShape1) {
+    int64_t dstOrgShape0, int64_t dstOrgShape1, uint8_t unitFlag) {
     copyCcFloatToGmRowMajorCast<Catlass::Arch::Ascend950, bfloat16_t>(
         src, dst,
         TensorDesc4D{(uint32_t)srcShape0, (uint32_t)srcShape1, (uint32_t)srcShape2, (uint32_t)srcShape3, srcStride0,
                        srcStride1, srcStride2, srcStride3, (uint32_t)srcCoord0, (uint32_t)srcCoord1,
                        (uint32_t)srcOrgShape0, (uint32_t)srcOrgShape1},
         TensorDesc2D{(uint32_t)dstShape0, (uint32_t)dstShape1, dstStride0, dstStride1,
-                         (uint32_t)dstCoord0, (uint32_t)dstCoord1, (uint32_t)dstOrgShape0, (uint32_t)dstOrgShape1});
+                         (uint32_t)dstCoord0, (uint32_t)dstCoord1, (uint32_t)dstOrgShape0, (uint32_t)dstOrgShape1},
+        unitFlag);
 }
 
 [aicore] __attribute__((always_inline))

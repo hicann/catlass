@@ -20,6 +20,7 @@ from . import runtime as _runtime
 from . import core_api as _core_api  # noqa: F401
 from .base_dsl import BaseDSL, DSLLocation
 from .base_dsl.jit_executor import TlaJitExecutor as _TlaJitExecutor
+from . import params as _params
 
 PASSES = ()
 
@@ -72,6 +73,7 @@ arch = _runtime.arch
 fp16 = "f16"
 bf16 = "bf16"
 fp32 = "f32"
+params = _params
 
 
 __all__ = [
@@ -126,6 +128,7 @@ __all__ = [
     "BFloat16",
     "JitArgument",
     "AddressSpace",
+    "params",
     "Constexpr",
     "utils",
     "pipes",

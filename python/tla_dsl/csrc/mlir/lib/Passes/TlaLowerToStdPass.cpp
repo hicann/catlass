@@ -1231,20 +1231,15 @@ public:
       Type lhsType = lhs.getType();
       Type rhsType = rhs.getType();
 
-      auto initAttr = op->getAttr("init_c");
-      bool initVal = false;
-      if (auto boolAttr = llvm::dyn_cast_or_null<BoolAttr>(initAttr)) {
-        initVal = boolAttr.getValue();
-      } else if (auto intAttr = llvm::dyn_cast_or_null<IntegerAttr>(initAttr)) {
-        initVal = intAttr.getInt() != 0;
-      }
+      Value initC = op->getOperand(3);
+      Value unitFlag = op->getOperand(4);
 
       auto i1Type = rewriter.getI1Type();
       auto i64Type = rewriter.getI64Type();
       auto i8Type = rewriter.getI8Type();
 
-      auto initConst = rewriter.create<arith::ConstantIntOp>(op.getLoc(), initVal, 1);
-      auto unitFlagConst = rewriter.create<arith::ConstantIntOp>(op.getLoc(), 0, 8);
+      Value initCVal = initC;
+      Value unitFlagVal = rewriter.create<arith::TruncIOp>(op.getLoc(), i8Type, unitFlag);
 
       auto lhsInfo = TlaLowerToStdPass::decodeTileTypeInfo(lhsType);
       auto rhsInfo = TlaLowerToStdPass::decodeTileTypeInfo(rhsType);
@@ -1384,7 +1379,7 @@ public:
       auto callee = TlaLowerToStdPass::getOrCreateRuntimeCall(module, calleeName, operandTypes);
       SmallVector<Value, 8> operands = {
           *lhsRuntime, *rhsRuntime, *accRuntime,           mI64,
-          nI64,        kI64,        initConst.getResult(), unitFlagConst.getResult(),
+          nI64,        kI64,        initCVal,              unitFlagVal
       };
       rewriter.create<func::CallOp>(op.getLoc(), callee, operands);
       toErase.push_back(op.getOperation());
@@ -1544,8 +1539,8 @@ public:
           allocatorState(allocatorState) {}
 
     LogicalResult matchAndRewrite(::tla::CopyOp op, PatternRewriter &rewriter) const override {
-      if (op->getNumOperands() != 2 || op->getNumResults() != 0) {
-        op.emitError() << "expected tla.copy to have exactly 2 operands and 0 results";
+      if ((op->getNumOperands() != 2 && op->getNumOperands() != 3) || op->getNumResults() != 0) {
+        op.emitError() << "expected tla.copy to have 2 or 3 operands and 0 results";
         return failure();
       }
 
@@ -1578,6 +1573,16 @@ public:
       }
       StringRef srcAddrspace = srcDesc.addrspace;
       StringRef dstAddrspace = dstDesc.addrspace;
+      std::string src2Dst = std::string(srcDesc.addrspace) + "2" + std::string(dstAddrspace);
+      if (srcAddrspace == "l0c") {
+        if (op->getNumOperands() != 3) {
+          op.emitError() << "expected tla.copy " << src2Dst << " has 3 operands";
+          return failure();
+        }
+      } else if (op->getNumOperands() != 2) {
+        op.emitError() << "expected tla.copy " << src2Dst << " has 2 operands";
+        return failure();
+      }
       bool rankOk = dstDesc.rank == srcDesc.rank;
       bool sameElem = dstDesc.elementType == srcDesc.elementType;
       auto buildRuntimeMemref = [&](const TensorDescriptor &desc) -> FailureOr<Value> {
@@ -1618,9 +1623,21 @@ public:
         operandTypes.reserve(2 + payload.size());
         for (Value payloadValue : payload)
           operandTypes.push_back(payloadValue.getType());
-        auto callee = TlaLowerToStdPass::getOrCreateRuntimeCall(module, calleeName, operandTypes);
         SmallVector<Value, 22> operands = {*srcRuntimeMemref, *dstRuntimeMemref};
         operands.append(payload.begin(), payload.end());
+        if (srcAddrspace == "l0c") {
+          auto params = op->getOperand(2);
+          auto paramsOpPtr = params.getDefiningOp();
+          uint8_t unitFlagVal = 0;
+          auto unitFlagAttr = paramsOpPtr->getAttr("unit_flag");
+          if (auto intAttr = llvm::dyn_cast_or_null<IntegerAttr>(unitFlagAttr)) {
+            unitFlagVal = static_cast<uint8_t>(intAttr.getInt());
+          }
+          auto unitFlagConst = rewriter.create<arith::ConstantIntOp>(op.getLoc(), unitFlagVal, 8);
+          operands.push_back(unitFlagConst);
+          operandTypes.push_back(rewriter.getI8Type());
+        }
+        auto callee = TlaLowerToStdPass::getOrCreateRuntimeCall(module, calleeName, operandTypes);
         rewriter.create<func::CallOp>(op.getLoc(), callee, operands);
         toErase.push_back(op.getOperation());
         return success();

@@ -131,6 +131,34 @@ Attribute TlaDialect::parseAttribute(DialectAsmParser &parser, Type type) const 
     return ::tla::CrossModeAttr::get(getContext(), *symbolized);
   }
 
+  if (attrTag == "quant_mode") {
+    if (parser.parseLess())
+      return {};
+    StringRef modeKeyword;
+    if (parser.parseKeyword(&modeKeyword) || parser.parseGreater())
+      return {};
+    auto symbolized = ::symbolizeQuantMode(modeKeyword);
+    if (!symbolized) {
+      parser.emitError(parser.getNameLoc()) << "invalid tla.quant_mode value: " << modeKeyword;
+      return {};
+    }
+    return ::tla::QuantModeAttr::get(getContext(), *symbolized);
+  }
+
+  if (attrTag == "l0c2ub_mode") {
+    if (parser.parseLess())
+      return {};
+    StringRef modeKeyword;
+    if (parser.parseKeyword(&modeKeyword) || parser.parseGreater())
+      return {};
+    auto symbolized = ::symbolizeL0C2UBMode(modeKeyword);
+    if (!symbolized) {
+      parser.emitError(parser.getNameLoc()) << "invalid tla.l0c2ub_mode value: " << modeKeyword;
+      return {};
+    }
+    return ::tla::L0C2UBModeAttr::get(getContext(), *symbolized);
+  }
+
   StringRef mnemonic = attrTag;
   Attribute value;
   OptionalParseResult parseResult = generatedAttributeParser(parser, &mnemonic, type, value);

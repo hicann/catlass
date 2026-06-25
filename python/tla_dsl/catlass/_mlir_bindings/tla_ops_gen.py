@@ -172,18 +172,103 @@ def broadcast(result, value, shape, *, loc=None, ip=None) -> _ods_ir.Value:
   return _get_op_result_or_op_results(BroadcastOp(result=result, value=value, shape=shape, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
+class CopyL0C2DstParamsOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.CopyL0C2DstParams"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, params, unit_flag, relu_enable, quant_mode, l0c2ub_mode, *, quant_scale_or_tensor=None, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    if quant_scale_or_tensor is not None: operands.append(_get_op_result_or_value(quant_scale_or_tensor))
+    _ods_context = _ods_get_default_loc_context(loc)
+    attributes["unit_flag"] = (unit_flag if (
+    isinstance(unit_flag, _ods_ir.Attribute) or
+    not _ods_ir.AttrBuilder.contains('I64Attr')) else
+      _ods_ir.AttrBuilder.get('I64Attr')(unit_flag, context=_ods_context))
+    attributes["relu_enable"] = (relu_enable if (
+    isinstance(relu_enable, _ods_ir.Attribute) or
+    not _ods_ir.AttrBuilder.contains('BoolAttr')) else
+      _ods_ir.AttrBuilder.get('BoolAttr')(relu_enable, context=_ods_context))
+    attributes["quant_mode"] = (quant_mode if (
+    isinstance(quant_mode, _ods_ir.Attribute) or
+    not _ods_ir.AttrBuilder.contains('Tla_QuantModeAttr')) else
+      _ods_ir.AttrBuilder.get('Tla_QuantModeAttr')(quant_mode, context=_ods_context))
+    attributes["l0c2ub_mode"] = (l0c2ub_mode if (
+    isinstance(l0c2ub_mode, _ods_ir.Attribute) or
+    not _ods_ir.AttrBuilder.contains('Tla_L0C2UBModeAttr')) else
+      _ods_ir.AttrBuilder.get('Tla_L0C2UBModeAttr')(l0c2ub_mode, context=_ods_context))
+    results.append(params)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def quant_scale_or_tensor(self):
+    return None if len(self.operation.operands) < 1 else self.operation.operands[0]
+
+  @builtins.property
+  def unit_flag(self):
+    return self.operation.attributes["unit_flag"]
+
+  @unit_flag.setter
+  def unit_flag(self, value):
+    if value is None:
+      raise ValueError("'None' not allowed as value for mandatory attributes")
+    self.operation.attributes["unit_flag"] = value
+
+  @builtins.property
+  def relu_enable(self):
+    return self.operation.attributes["relu_enable"]
+
+  @relu_enable.setter
+  def relu_enable(self, value):
+    if value is None:
+      raise ValueError("'None' not allowed as value for mandatory attributes")
+    self.operation.attributes["relu_enable"] = value
+
+  @builtins.property
+  def quant_mode(self):
+    return self.operation.attributes["quant_mode"]
+
+  @quant_mode.setter
+  def quant_mode(self, value):
+    if value is None:
+      raise ValueError("'None' not allowed as value for mandatory attributes")
+    self.operation.attributes["quant_mode"] = value
+
+  @builtins.property
+  def l0c2ub_mode(self):
+    return self.operation.attributes["l0c2ub_mode"]
+
+  @l0c2ub_mode.setter
+  def l0c2ub_mode(self, value):
+    if value is None:
+      raise ValueError("'None' not allowed as value for mandatory attributes")
+    self.operation.attributes["l0c2ub_mode"] = value
+
+  @builtins.property
+  def params(self):
+    return self.operation.results[0]
+
+def CopyL0C2DstParams(params, unit_flag, relu_enable, quant_mode, l0c2ub_mode, *, quant_scale_or_tensor=None, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(CopyL0C2DstParamsOp(params=params, unit_flag=unit_flag, relu_enable=relu_enable, quant_mode=quant_mode, l0c2ub_mode=l0c2ub_mode, quant_scale_or_tensor=quant_scale_or_tensor, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
 class CopyOp(_ods_ir.OpView):
   OPERATION_NAME = "tla.copy"
 
   _ODS_REGIONS = (0, True)
 
-  def __init__(self, dst, src, *, loc=None, ip=None):
+  def __init__(self, dst, src, *, params=None, loc=None, ip=None):
     operands = []
     results = []
     attributes = {}
     regions = None
     operands.append(_get_op_result_or_value(dst))
     operands.append(_get_op_result_or_value(src))
+    if params is not None: operands.append(_get_op_result_or_value(params))
     _ods_context = _ods_get_default_loc_context(loc)
     _ods_successors = None
     super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
@@ -196,8 +281,12 @@ class CopyOp(_ods_ir.OpView):
   def src(self):
     return self.operation.operands[1]
 
-def copy(dst, src, *, loc=None, ip=None) -> _ods_ir.Operation:
-  return _get_op_result_or_op_results(CopyOp(dst=dst, src=src, loc=loc, ip=ip))
+  @builtins.property
+  def params(self):
+    return None if len(self.operation.operands) < 3 else self.operation.operands[2]
+
+def copy(dst, src, *, params=None, loc=None, ip=None) -> _ods_ir.Operation:
+  return _get_op_result_or_op_results(CopyOp(dst=dst, src=src, params=params, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
 class CrossCoreSetFlagOp(_ods_ir.OpView):
@@ -855,7 +944,7 @@ class MmadOp(_ods_ir.OpView):
 
   _ODS_REGIONS = (0, True)
 
-  def __init__(self, acc, lhs, rhs, init_c, *, loc=None, ip=None):
+  def __init__(self, acc, lhs, rhs, init_c, unit_flag, *, loc=None, ip=None):
     operands = []
     results = []
     attributes = {}
@@ -863,11 +952,9 @@ class MmadOp(_ods_ir.OpView):
     operands.append(_get_op_result_or_value(acc))
     operands.append(_get_op_result_or_value(lhs))
     operands.append(_get_op_result_or_value(rhs))
+    operands.append(_get_op_result_or_value(init_c))
+    operands.append(_get_op_result_or_value(unit_flag))
     _ods_context = _ods_get_default_loc_context(loc)
-    attributes["init_c"] = (init_c if (
-    isinstance(init_c, _ods_ir.Attribute) or
-    not _ods_ir.AttrBuilder.contains('BoolAttr')) else
-      _ods_ir.AttrBuilder.get('BoolAttr')(init_c, context=_ods_context))
     _ods_successors = None
     super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
 
@@ -885,16 +972,14 @@ class MmadOp(_ods_ir.OpView):
 
   @builtins.property
   def init_c(self):
-    return self.operation.attributes["init_c"]
+    return self.operation.operands[3]
 
-  @init_c.setter
-  def init_c(self, value):
-    if value is None:
-      raise ValueError("'None' not allowed as value for mandatory attributes")
-    self.operation.attributes["init_c"] = value
+  @builtins.property
+  def unit_flag(self):
+    return self.operation.operands[4]
 
-def mmad(acc, lhs, rhs, init_c, *, loc=None, ip=None) -> _ods_ir.Operation:
-  return _get_op_result_or_op_results(MmadOp(acc=acc, lhs=lhs, rhs=rhs, init_c=init_c, loc=loc, ip=ip))
+def mmad(acc, lhs, rhs, init_c, unit_flag, *, loc=None, ip=None) -> _ods_ir.Operation:
+  return _get_op_result_or_op_results(MmadOp(acc=acc, lhs=lhs, rhs=rhs, init_c=init_c, unit_flag=unit_flag, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
 class MulOp(_ods_ir.OpView):
