@@ -83,7 +83,6 @@ class _Tensor(TensorABC):
         loc = _normalize_user_loc(loc)
         _require_frontend_state("load")
         _runtime._check_frontend_region_op("load", {"vector"})
-        _runtime._mark_frontend_exec_unit("vector")
         source = _as_value(self)
         result = _tla_ops_gen.load(source.type, source, loc=loc)
         try:
@@ -113,7 +112,6 @@ class _Tensor(TensorABC):
         _require_category("store", "value", value, "vector_ssa", 1)
         _require_frontend_state("store")
         _runtime._check_frontend_region_op("store", {"vector"})
-        _runtime._mark_frontend_exec_unit("vector")
         _tla_ops_gen.store(_as_value(self), _as_value(value), loc=loc)
 
 

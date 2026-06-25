@@ -97,6 +97,7 @@ std::unique_ptr<Pass> createAddKernelPrologueEpiloguePass() {
 void registerTlaPasses() {
   registerTlaFuncToHaccPass();
   registerTlaSplitMixedFuncPass();
+  registerTlaInferFuncCoreTypePass();
   registerTlaLowerToHivmPass();
   registerConvertTlaToVectorPass();
   registerTlaSyncToHivmPass();
@@ -111,6 +112,10 @@ void buildTlaPipeline(OpPassManager &pm) {
   // before downstream passes and tools inspect the module. Run again after
   // tla-lower-to-std to repair required HACC/HIVM attrs on any func.func ops
   // introduced or modified by later lowering.
+  // Establish AIC/AIV/MIX core types from the tla op structure up front, so the
+  // HACC attribute machinery and the mixed-func split consume a single,
+  // structure-derived classification instead of bespoke op observation.
+  pm.addPass(createTlaInferFuncCoreTypePass());
   pm.addPass(createTlaFuncToHaccPass());
   pm.addPass(createTlaSplitMixedFuncPass());
   pm.addPass(createTlaLowerToHivmPass());
@@ -119,7 +124,6 @@ void buildTlaPipeline(OpPassManager &pm) {
   pm.addPass(createConvertTlaToVectorPass());
   pm.addPass(createTlaLowerMutexToStdPass());
   pm.addPass(createTlaLowerToStdPass());
-  pm.addPass(createTlaFuncToHaccPass());
   pm.addPass(createAddKernelPrologueEpiloguePass());
   pm.addPass(createCSEPass());
   pm.addPass(mlir::createVectorToHIVMAVEConversionPass());

@@ -14,10 +14,6 @@ from . import tla_ast_decorators as ast_decorators
 from .base_dsl.ast_preprocessor import maybe_transform_for_lowering
 from .base_dsl import DSLLocation
 from .base_dsl.typing import Constexpr, _elem_token_to_mlir_type
-from .mixed_kernel_attrs import (
-    MixedKernelModuleAttrInputs,
-    build_mixed_kernel_module_attrs,
-)
 from .tla.typing import Tensor
 
 
@@ -48,25 +44,6 @@ class LoweredTlaIR:
                 )
             self.generic = emit_generic
         return self._asm
-
-
-_DEFAULT_MIXED_KERNEL_TARGET_SYSTEM_SPEC = (
-    '#dlti.target_system_spec<"NPU" : #hacc.target_device_spec<'
-    '#dlti.dl_entry<"AI_CORE_COUNT", 32 : i32>, '
-    '#dlti.dl_entry<"CUBE_CORE_COUNT", 32 : i32>, '
-    '#dlti.dl_entry<"VECTOR_CORE_COUNT", 64 : i32>, '
-    '#dlti.dl_entry<"UB_SIZE", 2031616 : i32>, '
-    '#dlti.dl_entry<"L1_SIZE", 4194304 : i32>, '
-    '#dlti.dl_entry<"L0A_SIZE", 524288 : i32>, '
-    '#dlti.dl_entry<"L0B_SIZE", 524288 : i32>, '
-    '#dlti.dl_entry<"L0C_SIZE", 2097152 : i32>, '
-    '#dlti.dl_entry<"UB_ALIGN_SIZE", 256 : i32>, '
-    '#dlti.dl_entry<"L1_ALIGN_SIZE", 256 : i32>, '
-    '#dlti.dl_entry<"L0C_ALIGN_SIZE", 4096 : i32>, '
-    '#dlti.dl_entry<"MINIMAL_D_CACHE_SIZE", 262144 : i32>, '
-    '#dlti.dl_entry<"MAXIMUM_D_CACHE_SIZE", 983040 : i32>, '
-    '#dlti.dl_entry<"ARCH", "dav-c310">>>'
-)
 
 
 def lower_jit_to_tlair_by_execution(
@@ -147,7 +124,6 @@ def lower_jit_to_tlair_module_by_execution(
                     ctx=ctx,
                     fn_loc=fn_loc,
                 )
-                _set_module_exec_units_attr(module)
     lowered = LoweredTlaIR(context=ctx, module=module, generic=bool(generic))
     lowered._asm = module.operation.get_asm(
         print_generic_op_form=bool(generic),
@@ -254,62 +230,7 @@ def _build_tla_func(
                 raise UnsupportedExecutionLowering(
                     f"Execution-mode lowering failed while running `{fn.__name__}`: {exc}"
                 ) from exc
-        _set_module_has_vector_region_attr(module, emit_state.has_vector_region)
-        _set_func_exec_units_attr(func_op, emit_state.exec_units)
         mlir_ir.Operation.create("tla.return", loc=fn_loc)
-
-
-def _set_func_exec_units_attr(func_op: mlir_ir.Operation, exec_units: set[str]) -> None:
-    attr_value = runtime_mod._frontend_exec_units_attr_value(exec_units)
-    if attr_value is None or attr_value == "vector":
-        return
-    func_op.attributes["tla.exec_units"] = mlir_ir.StringAttr.get(attr_value)
-    if attr_value == "cube_vector":
-        func_op.attributes["tla.mixed_split"] = mlir_ir.UnitAttr.get(func_op.context)
-
-
-def _set_module_has_vector_region_attr(
-    module: mlir_ir.Module, has_vector_region: bool
-) -> None:
-    if not has_vector_region:
-        return
-    module.operation.attributes["tla.has_vector_region"] = mlir_ir.UnitAttr.get(
-        module.context
-    )
-
-
-def _set_module_exec_units_attr(module: mlir_ir.Module) -> None:
-    exec_units: set[str] = set()
-    for op in module.body.operations:
-        try:
-            attr = op.attributes["tla.exec_units"]
-        except KeyError:
-            continue
-        value = str(mlir_ir.StringAttr(attr).value)
-        if value in {"cube", "cube_vector"}:
-            exec_units.add("cube")
-        if value in {"vector", "cube_vector"}:
-            exec_units.add("vector")
-    attr_value = runtime_mod._frontend_exec_units_attr_value(exec_units)
-    if attr_value is None or attr_value == "vector":
-        return
-    if attr_value == "cube_vector":
-        _validate_mixed_kernel_target_contract()
-    module.operation.attributes["tla.module_exec_units"] = mlir_ir.StringAttr.get(
-        attr_value
-    )
-
-
-def _get_default_mixed_kernel_module_attr_inputs() -> MixedKernelModuleAttrInputs:
-    return MixedKernelModuleAttrInputs(
-        target_name="Ascend950PR_9589",
-        module_core_type="MIX",
-        target_system_spec=_DEFAULT_MIXED_KERNEL_TARGET_SYSTEM_SPEC,
-    )
-
-
-def _validate_mixed_kernel_target_contract() -> None:
-    build_mixed_kernel_module_attrs(_get_default_mixed_kernel_module_attr_inputs())
 
 
 def _coerce_location(

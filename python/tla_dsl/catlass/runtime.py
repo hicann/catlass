@@ -55,14 +55,12 @@ class _FrontendEmitState:
     arg_bindings: dict[int, Any]
     category_bindings: dict[int, str]
     module: Any | None = None
-    exec_units: set[str] = field(default_factory=set)
     #: ``mlir.Value`` -> host :class:`~catlass.tla.runtime._Tensor` for execution lowering.
     tensor_host_by_value: dict[Any, Any] = field(default_factory=dict)
     #: ``mlir.Value`` -> structured Tla tensor type descriptor.
     tensor_type_by_value: dict[Any, Any] = field(default_factory=dict)
     #: ``mlir.Value`` -> resolved tensor metadata fields (shape/stride/coord/origin_shape/...).
     tensor_metadata_by_value: dict[Any, dict[str, Any]] = field(default_factory=dict)
-    has_vector_region: bool = False
     mutex_guard_depth: int = 0
     active_regions: list[str] = field(default_factory=list)
     active_region_roles: list[str] = field(default_factory=list)
@@ -263,17 +261,6 @@ def _bind_frontend_category(value: Any, category: str) -> None:
     state.category_bindings[id(value)] = category
 
 
-def _mark_frontend_exec_unit(exec_unit: str) -> None:
-    state = _FRONTEND_EMIT_STATE.get()
-    if state is None:
-        return
-    if exec_unit not in {"cube", "vector"}:
-        raise TlaCoreAPIError(f"Unsupported Tla execution unit: {exec_unit}")
-    state.exec_units.add(exec_unit)
-    if exec_unit == "vector":
-        state.has_vector_region = True
-
-
 def _check_frontend_region_op(op_name: str, allowed_regions: set[str]) -> None:
     state = _FRONTEND_EMIT_STATE.get()
     if state is None or not state.active_regions:
@@ -281,18 +268,6 @@ def _check_frontend_region_op(op_name: str, allowed_regions: set[str]) -> None:
     region = state.active_regions[-1]
     if region not in allowed_regions:
         raise TlaCoreAPIError(f"tla.{op_name} is not allowed inside tla.{region}()")
-
-
-def _frontend_exec_units_attr_value(exec_units: set[str]) -> str | None:
-    has_cube = "cube" in exec_units
-    has_vector = "vector" in exec_units
-    if has_cube and has_vector:
-        return "cube_vector"
-    if has_cube:
-        return "cube"
-    if has_vector:
-        return "vector"
-    return None
 
 
 def _resolve_frontend_bound_category(value: Any) -> str | None:
@@ -588,11 +563,8 @@ def _internal_frontend_region(
         if kind != "vec.func":
             raise TlaCoreAPIError(f"tla.{kind}: unexpected mode argument")
         _validate_vec_func_mode(mode)
-    _mark_frontend_exec_unit(exec_kind)
     mlir_loc = _capture_caller_location()
     op = mlir_ir.Operation.create(f"tla.{kind}", regions=1, loc=mlir_loc)
-    if kind == "vector":
-        op.attributes["tla.vector_role"] = mlir_ir.StringAttr.get("region")
     if kind == "vec.func":
         op.attributes["mode"] = mlir_ir.StringAttr.get("simd" if mode is None else mode)
     block = op.regions[0].blocks.append()

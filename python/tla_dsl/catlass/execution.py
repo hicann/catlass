@@ -1536,12 +1536,16 @@ class _AscendLoader:
             raise TlaRuntimeUnavailableError(
                 "Packed kernel arguments must be a multiple of 8 bytes."
             )
+        # The Ascend runtime rejects rtKernelLaunch with a zero-size argument
+        # buffer (0x107000) -- verified that this is about arg_size == 0, not a
+        # NULL pointer: passing a non-NULL pointer to an empty array fails the
+        # same way. Pad a single zero slot so a no-argument kernel presents a
+        # non-empty buffer (arg_size == 8); the kernel never reads it.
+        if not args:
+            args = b"\x00" * ctypes.sizeof(ctypes.c_uint64)
         arg_count = len(args) // ctypes.sizeof(ctypes.c_uint64)
-        if arg_count == 0:
-            raw_ptr = None
-        else:
-            arg_array = (ctypes.c_uint64 * arg_count).from_buffer_copy(args)
-            raw_ptr = ctypes.cast(arg_array, ctypes.POINTER(ctypes.c_uint64))
+        arg_array = (ctypes.c_uint64 * arg_count).from_buffer_copy(args)
+        raw_ptr = ctypes.cast(arg_array, ctypes.POINTER(ctypes.c_uint64))
         ret = self._module.tla_runtime_launch_kernel(
             ctypes.c_uint64(int(function)),
             ctypes.c_uint64(int(stream)),

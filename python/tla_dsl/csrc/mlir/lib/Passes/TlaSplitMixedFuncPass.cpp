@@ -18,18 +18,11 @@
 namespace tla {
 namespace {
 
-static constexpr StringLiteral kSplitMixedExecUnitsAttrValue = "cube_vector";
-static constexpr StringLiteral kCubeExecUnitsAttrValue = "cube";
-static constexpr StringLiteral kVectorExecUnitsAttrValue = "vector";
 static bool isMixedSplitCandidate(func::FuncOp funcOp) {
   if (funcOp.isDeclaration() || isPrivateSymbol(funcOp))
     return false;
-  if (!funcOp->hasAttr(kTlaMixedSplitAttrName))
-    return false;
-  auto execUnits = funcOp->getAttrOfType<StringAttr>(kTlaExecUnitsAttrName);
   auto coreType = funcOp->getAttrOfType<hivm::TFuncCoreTypeAttr>(hivm::TFuncCoreTypeAttr::name);
-  return execUnits && execUnits.getValue() == kSplitMixedExecUnitsAttrValue && coreType &&
-         coreType.getFuncCoreType() == hivm::TFuncCoreType::MIX;
+  return coreType && coreType.getFuncCoreType() == hivm::TFuncCoreType::MIX;
 }
 
 struct MixedRegionTopology {
@@ -280,17 +273,10 @@ static void eraseUnusedSplitHelpers(Block &entry) {
   }
 }
 
-static bool isFrontendVectorRegionWrapper(::tla::VectorOp vectorOp) {
-  auto role = vectorOp->getAttrOfType<StringAttr>("tla.vector_role");
-  return role && role.getValue() == "region";
-}
-
 static void inlineFrontendVectorRegionWrappers(func::FuncOp funcOp) {
+  // Every tla.vector op is a frontend-authored wrapper region; inline it.
   SmallVector<::tla::VectorOp, 4> wrappers;
-  funcOp.walk([&](::tla::VectorOp vectorOp) {
-    if (isFrontendVectorRegionWrapper(vectorOp))
-      wrappers.push_back(vectorOp);
-  });
+  funcOp.walk([&](::tla::VectorOp vectorOp) { wrappers.push_back(vectorOp); });
 
   IRRewriter rewriter(funcOp.getContext());
   for (::tla::VectorOp vectorOp : wrappers) {
@@ -304,19 +290,17 @@ static void inlineFrontendVectorRegionWrappers(func::FuncOp funcOp) {
 
 static FailureOr<func::FuncOp> createSplitFunctionLike(func::FuncOp source, StringRef newName,
                                                        ArrayRef<Operation *> orderedOps,
-                                                       StringRef execUnits, HivmCoreKind coreKind) {
+                                                       HivmCoreKind coreKind) {
   MLIRContext *ctx = source.getContext();
   auto newType = source.getFunctionType();
   auto newFunc = func::FuncOp::create(source.getLoc(), newName, newType);
   for (NamedAttribute attr : source->getAttrs()) {
     StringRef name = attr.getName().getValue();
-    if (name == SymbolTable::getSymbolAttrName() || name == "function_type" ||
-        name == kTlaMixedSplitAttrName)
+    if (name == SymbolTable::getSymbolAttrName() || name == "function_type")
       continue;
     newFunc->setAttr(attr.getName(), attr.getValue());
   }
 
-  newFunc->setAttr(kTlaExecUnitsAttrName, StringAttr::get(ctx, execUnits));
   setRequiredHaccEntryAttrs(newFunc, ctx);
   setC310RegbaseTargetAttr(newFunc, ctx);
   newFunc->setAttr(hivm::TFuncCoreTypeAttr::name,
@@ -399,10 +383,10 @@ public:
       OpBuilder builder(funcOp);
       FailureOr<func::FuncOp> aicFunc =
           createSplitFunctionLike(funcOp, (funcOp.getSymName() + "_mix_aic").str(), *aicOps,
-                                  kCubeExecUnitsAttrValue, HivmCoreKind::AIC);
+                                  HivmCoreKind::AIC);
       FailureOr<func::FuncOp> aivFunc =
           createSplitFunctionLike(funcOp, (funcOp.getSymName() + "_mix_aiv").str(), *aivOps,
-                                  kVectorExecUnitsAttrValue, HivmCoreKind::AIV);
+                                  HivmCoreKind::AIV);
       if (failed(aicFunc) || failed(aivFunc)) {
         signalPassFailure();
         return;

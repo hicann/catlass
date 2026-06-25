@@ -1,4 +1,4 @@
-// RUN: %tla_compile %s -o %t --mlir-print-ir-before=tla-lower-to-std 2>&1 | %filecheck %s
+// RUN: %tla_compile %s -o %t --mlir-print-ir-before=tla-to-vector 2>&1 | %filecheck %s
 
 module {
   func.func @structured_type_roundtrip(

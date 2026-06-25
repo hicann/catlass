@@ -1162,9 +1162,7 @@ public:
 
   LogicalResult matchAndRewrite(::tla::VectorOp vectorOp,
                                 PatternRewriter &rewriter) const override {
-    auto role = vectorOp->getAttrOfType<StringAttr>("tla.vector_role");
-    if (!role || role.getValue() != "region")
-      return failure();
+    // Every tla.vector op is a frontend-authored wrapper region; inline it.
     auto *body = vectorOp.getBody().empty() ? nullptr : &vectorOp.getBody().front();
     if (!body)
       return failure();
@@ -1176,11 +1174,7 @@ public:
 
 static void inlineVectorRegionWrappers(func::FuncOp funcOp) {
   SmallVector<::tla::VectorOp, 4> wrappers;
-  funcOp.walk([&](::tla::VectorOp vectorOp) {
-    auto role = vectorOp->getAttrOfType<StringAttr>("tla.vector_role");
-    if (role && role.getValue() == "region")
-      wrappers.push_back(vectorOp);
-  });
+  funcOp.walk([&](::tla::VectorOp vectorOp) { wrappers.push_back(vectorOp); });
 
   IRRewriter rewriter(funcOp.getContext());
   for (::tla::VectorOp vectorOp : wrappers) {
@@ -1277,8 +1271,6 @@ public:
 
   void runOnOperation() override {
     ModuleOp module = getOperation();
-    if (!module->hasAttr(kTlaHasVectorRegionAttrName))
-      return;
 
     nextVectorRegionId = 0;
 
@@ -1290,7 +1282,16 @@ public:
     for (func::FuncOp funcOp : funcOps) {
       if (funcOp.isDeclaration())
         continue;
+      // Skip the generated vector_region helpers: they already hold lowered AVE
+      // ops and the carried scf control flow, and must not be re-driven.
       if (funcOp->hasAttr(kHivmVectorFunctionAttrName))
+        continue;
+      // Only AIV (and not-yet-split MIX) functions hold vector work. Their core
+      // kind is the func_core_type set by the infer pass, falling back to the
+      // module core type for pure-vector entries (whose func_core_type is
+      // intentionally stripped by the HACC attr convention).
+      std::optional<HivmCoreKind> coreKind = getExpectedFunctionCoreKind(funcOp.getOperation());
+      if (coreKind != HivmCoreKind::AIV && coreKind != HivmCoreKind::MIX)
         continue;
       if (failed(checkNoArchOpsInVecFunc(funcOp))) {
         signalPassFailure();
@@ -1305,8 +1306,6 @@ public:
         return;
       }
     }
-
-    module->removeAttr(kTlaHasVectorRegionAttrName);
   }
 
 private:

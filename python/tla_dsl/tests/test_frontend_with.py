@@ -277,7 +277,7 @@ def test_generic_with_as_binding_shadows_tla_range_alias() -> None:
     assert "!tla.coord<1,0>" in mlir
 
 
-def test_cube_region_lowering_emits_exec_units() -> None:
+def test_cube_region_lowering() -> None:
     ta, tb, tc = _mmad_tensor_args()
     try:
         mlir = cube_static_kernel.dump_mlir(type_args=(ta, tb, tc))
@@ -286,8 +286,6 @@ def test_cube_region_lowering_emits_exec_units() -> None:
         raise
     assert "tla.cube" in mlir
     assert "tla.mmad" in mlir
-    assert 'tla.exec_units = "cube"' in mlir
-    assert 'tla.module_exec_units = "cube"' in mlir
 
 
 def test_mutex_guard_copy_infers_mte2_from_gm_source() -> None:
@@ -383,7 +381,6 @@ def test_vec_func_default_mode_lowering() -> None:
 
     assert "tla.vec.func" in mlir
     assert 'mode = "simd"' in mlir
-    assert 'tla.has_vector_region' in mlir
 
 
 def test_vec_func_simd_mode_lowering() -> None:

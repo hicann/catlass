@@ -22,7 +22,9 @@ public:
   StringRef getArgument() const override { return "tla-func-to-hacc"; }
   StringRef getName() const override { return "TlaFuncToHaccPass"; }
   StringRef getDescription() const override {
-    return "Attach C310 HACC/HIVM module and function attributes.";
+    return "Lower tla.func containers to func.func and attach C310 module target "
+           "attributes. The per-function HACC/HIVM attributes are stamped earlier "
+           "by tla-infer-func-core-type.";
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {
@@ -37,8 +39,6 @@ public:
       return;
     }
     ensureC310TargetAttrs(module);
-    if (failed(applyHaccHivmC310AttrPatterns(module, &getContext())))
-      signalPassFailure();
   }
 };
 

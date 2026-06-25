@@ -2810,7 +2810,6 @@ def mmad(
     lhs_value = _as_value(lhs)
     rhs_value = _as_value(rhs)
     _validate_mmad_contract(acc_value, lhs_value, rhs_value)
-    _runtime._mark_frontend_exec_unit("cube")
     return _tla_ops_gen.mmad(
         acc_value,
         lhs_value,
@@ -2855,7 +2854,6 @@ def _emit_vector_binary(
     _require_category(op_name, "rhs", rhs, "vector_ssa", 1)
     _require_frontend_state(op_name)
     _runtime._check_frontend_region_op(op_name, {"vector"})
-    _runtime._mark_frontend_exec_unit("vector")
     lhs_value = _as_value(lhs)
     rhs_value = _as_value(rhs)
     if str(lhs_value.type) != str(rhs_value.type):

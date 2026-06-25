@@ -386,7 +386,7 @@ def test_mmad_rejects_unsupported_acc_type() -> None:
         _ = bad_mmad_acc_dtype.dump_mlir(type_args=(mem,))
 
 
-def test_mmad_marks_cube_exec_units_without_region() -> None:
+def test_mmad_without_region_lowers() -> None:
     ta, tb, tc = _mmad_tensor_args()
     try:
         mlir = cube_mmad_without_region_kernel.dump_mlir(type_args=(ta, tb, tc))
@@ -394,8 +394,6 @@ def test_mmad_marks_cube_exec_units_without_region() -> None:
         _skip_if_mmad_rank2_tile_view_regression(e)
         raise
     assert "tla.mmad" in mlir
-    assert 'tla.exec_units = "cube"' in mlir
-    assert 'tla.module_exec_units = "cube"' in mlir
 
 
 def test_make_shape_accepts_index_typed_components() -> None:

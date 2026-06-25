@@ -46,10 +46,6 @@ using namespace mlir;
 namespace tla {
 
 inline constexpr StringLiteral kDltiTargetSystemSpecAttrName = "dlti.target_system_spec";
-inline constexpr StringLiteral kTlaExecUnitsAttrName = "tla.exec_units";
-inline constexpr StringLiteral kTlaModuleExecUnitsAttrName = "tla.module_exec_units";
-inline constexpr StringLiteral kTlaHasVectorRegionAttrName = "tla.has_vector_region";
-inline constexpr StringLiteral kTlaMixedSplitAttrName = "tla.mixed_split";
 inline constexpr StringLiteral kMixModeAttrName = "mix_mode";
 inline constexpr StringLiteral kParallelModeAttrName = "parallel_mode";
 inline constexpr StringLiteral kHivmVectorFunctionAttrName = "hivm.vector_function";
@@ -92,6 +88,18 @@ inline HivmCoreKind fromModuleCoreType(hivm::TModuleCoreType coreType) {
   llvm_unreachable("unknown HIVM module core type");
 }
 
+inline HivmCoreKind fromFuncCoreType(hivm::TFuncCoreType coreType) {
+  switch (coreType) {
+  case hivm::TFuncCoreType::AIC:
+    return HivmCoreKind::AIC;
+  case hivm::TFuncCoreType::AIV:
+    return HivmCoreKind::AIV;
+  case hivm::TFuncCoreType::MIX:
+    return HivmCoreKind::MIX;
+  }
+  llvm_unreachable("unknown HIVM func core type");
+}
+
 inline std::optional<HivmCoreKind> getModuleCoreKind(ModuleOp module) {
   if (!module)
     return std::nullopt;
@@ -101,39 +109,41 @@ inline std::optional<HivmCoreKind> getModuleCoreKind(ModuleOp module) {
   return fromModuleCoreType(attr.getModuleCoreType());
 }
 
-inline HivmCoreKind promoteCoreKind(std::optional<HivmCoreKind> current, HivmCoreKind observed) {
-  if (!current)
-    return observed;
-  if (*current == observed || *current == HivmCoreKind::MIX)
-    return *current;
-  return HivmCoreKind::MIX;
-}
-
-inline std::optional<HivmCoreKind> coreKindFromExecUnitsAttr(Operation *op, StringRef attrName) {
+// Single source of truth: classify the execution unit a tla op requires.
+// Returns std::nullopt for ops that do not constrain the core type.
+//  - cube core (AIC): tla.cube / tla.mmad, or on-chip scratch allocated in L1.
+//  - vector core (AIV): tla.vector / tla.vec.func, or on-chip scratch allocated
+//    in UB.
+inline std::optional<HivmCoreKind> getTlaOpCoreKind(Operation *op) {
   if (!op)
     return std::nullopt;
-  auto attr = op->getAttrOfType<StringAttr>(attrName);
+  if (isa<::tla::CubeOp, ::tla::MmadOp>(op))
+    return HivmCoreKind::AIC;
+  if (isa<::tla::VectorOp, ::tla::VecFuncOp>(op))
+    return HivmCoreKind::AIV;
+  if (auto alloc = dyn_cast<::tla::AllocPtrOp>(op)) {
+    if (auto ptrTy = dyn_cast<::tla::PtrType>(alloc.getResult().getType())) {
+      if (ptrTy.getAddrspace() == AddressSpace::ub)
+        return HivmCoreKind::AIV;
+      if (ptrTy.getAddrspace() == AddressSpace::l1)
+        return HivmCoreKind::AIC;
+    }
+  }
+  return std::nullopt;
+}
+
+// The function's core-type hint, persisted as the typed hivm.func_core_type
+// attribute by TlaInferFuncCoreTypePass. This is the single carrier of the
+// per-function AIC/AIV/MIX classification through the lowering pipeline.
+inline std::optional<HivmCoreKind> funcCoreKindHint(Operation *op) {
+  if (!op)
+    return std::nullopt;
+  auto attr = op->getAttrOfType<hivm::TFuncCoreTypeAttr>(hivm::TFuncCoreTypeAttr::name);
   if (!attr)
     return std::nullopt;
-  return llvm::StringSwitch<std::optional<HivmCoreKind>>(attr.getValue())
-      .Case("cube", HivmCoreKind::AIC)
-      .Case("vector", HivmCoreKind::AIV)
-      .Case("cube_vector", HivmCoreKind::MIX)
-      .Default(std::nullopt);
+  return fromFuncCoreType(attr.getFuncCoreType());
 }
 
-inline std::optional<HivmCoreKind> coreKindFromExecUnitsAttr(Operation *op) {
-  return coreKindFromExecUnitsAttr(op, kTlaExecUnitsAttrName);
-}
-
-inline bool moduleCoreAllows(ModuleOp module, HivmCoreKind observed) {
-  if (!module)
-    return false;
-  std::optional<HivmCoreKind> current = getModuleCoreKind(module);
-  if (!current)
-    return false;
-  return *current == observed || *current == HivmCoreKind::MIX;
-}
 
 inline bool isPrivateSymbol(Operation *op) {
   if (auto visibility = op->getAttrOfType<StringAttr>(SymbolTable::getVisibilityAttrName()))
@@ -142,34 +152,9 @@ inline bool isPrivateSymbol(Operation *op) {
 }
 
 inline std::optional<HivmCoreKind> getExpectedFunctionCoreKind(Operation *op) {
-  if (std::optional<HivmCoreKind> hinted = coreKindFromExecUnitsAttr(op))
+  if (std::optional<HivmCoreKind> hinted = funcCoreKindHint(op))
     return hinted;
   return getModuleCoreKind(op->getParentOfType<ModuleOp>());
-}
-
-inline void applyTlaExecUnitHints(ModuleOp module) {
-  std::optional<HivmCoreKind> hinted =
-      coreKindFromExecUnitsAttr(module.getOperation(), kTlaModuleExecUnitsAttrName);
-  auto accumulateHint = [&](Operation *op) {
-    if (isPrivateSymbol(op))
-      return;
-    std::optional<HivmCoreKind> funcHint = coreKindFromExecUnitsAttr(op);
-    if (!funcHint)
-      return;
-    hinted = promoteCoreKind(hinted, *funcHint);
-  };
-  for (func::FuncOp funcOp : module.getOps<func::FuncOp>())
-    accumulateHint(funcOp);
-  for (::tla::FuncOp funcOp : module.getOps<::tla::FuncOp>())
-    accumulateHint(funcOp);
-  if (!hinted)
-    return;
-  std::optional<HivmCoreKind> current = getModuleCoreKind(module);
-  HivmCoreKind promoted = promoteCoreKind(current, *hinted);
-  if (current && *current == promoted)
-    return;
-  module->setAttr(hivm::TModuleCoreTypeAttr::name,
-                  hivm::TModuleCoreTypeAttr::get(module.getContext(), toModuleCoreType(promoted)));
 }
 
 inline bool hasC310TargetAttrs(ModuleOp module) {
@@ -210,35 +195,10 @@ inline void ensureC310TargetAttrs(ModuleOp module) {
   hacc::utils::setNPUTargetSpec(module, targetSpec);
 }
 
-inline LogicalResult setModuleCoreKind(PatternRewriter &rewriter, ModuleOp module,
-                                       HivmCoreKind coreKind) {
-  std::optional<HivmCoreKind> current = getModuleCoreKind(module);
-  HivmCoreKind promoted = promoteCoreKind(current, coreKind);
-  if (current && *current == promoted)
-    return failure();
-
-  MLIRContext *ctx = module.getContext();
-  rewriter.modifyOpInPlace(module, [&] {
-    module->setAttr(hivm::TModuleCoreTypeAttr::name,
-                    hivm::TModuleCoreTypeAttr::get(ctx, toModuleCoreType(promoted)));
-  });
-  return success();
-}
-
 inline bool hasRequiredHaccEntryAttrs(Operation *op) {
   auto functionKind = op->getAttrOfType<hacc::HACCFuncTypeAttr>(hacc::HACCFuncTypeAttr::name);
   return op->hasAttr(hacc::stringifyEnum(hacc::HACCToLLVMIRTranslateAttr::ENTRY)) && functionKind &&
          functionKind.getFunctionKind() == hacc::HACCFuncType::DEVICE;
-}
-
-inline bool shouldOmitPureVectorEntryCoreAttrs(Operation *op, HivmCoreKind coreKind) {
-  if (!op || coreKind != HivmCoreKind::AIV)
-    return false;
-  if (op->hasAttr("hivm.part_of_mix"))
-    return false;
-  if (isPrivateSymbol(op))
-    return false;
-  return true;
 }
 
 inline void setRequiredHaccEntryAttrs(Operation *op, MLIRContext *ctx) {
@@ -252,104 +212,6 @@ inline void setC310RegbaseTargetAttr(Operation *op, MLIRContext *ctx) {
               hivm_regbaseintrins::SIMT_TargetAttr::get(ctx, "dav-c310"));
 }
 
-inline bool hasExpectedFunctionAttrs(Operation *op, HivmCoreKind coreKind) {
-  MLIRContext *ctx = op->getContext();
-  if (shouldOmitPureVectorEntryCoreAttrs(op, coreKind)) {
-    return hasRequiredHaccEntryAttrs(op) && !op->hasAttr(hivm::TFuncCoreTypeAttr::name) &&
-           !op->hasAttr(kMixModeAttrName) && !op->hasAttr(kParallelModeAttrName);
-  }
-  StringRef expectedMixMode =
-      coreKind == HivmCoreKind::AIV && !op->hasAttr("hivm.part_of_mix") ? "aiv" : "mix";
-  auto functionKind = op->getAttrOfType<hacc::HACCFuncTypeAttr>(hacc::HACCFuncTypeAttr::name);
-  auto functionCoreType = op->getAttrOfType<hivm::TFuncCoreTypeAttr>(hivm::TFuncCoreTypeAttr::name);
-  auto mixMode = op->getAttrOfType<StringAttr>(kMixModeAttrName);
-  auto parallelMode = op->getAttrOfType<StringAttr>(kParallelModeAttrName);
-  return op->hasAttr(hacc::stringifyEnum(hacc::HACCToLLVMIRTranslateAttr::ENTRY)) && functionKind &&
-         functionKind.getFunctionKind() == hacc::HACCFuncType::DEVICE && functionCoreType &&
-         functionCoreType.getFuncCoreType() == toFuncCoreType(coreKind) && mixMode &&
-         mixMode == StringAttr::get(ctx, expectedMixMode) && parallelMode &&
-         parallelMode == StringAttr::get(ctx, "simd");
-}
-
-inline LogicalResult ensureFunctionAttrs(PatternRewriter &rewriter, Operation *op,
-                                         HivmCoreKind coreKind) {
-  if (isPrivateSymbol(op))
-    return failure();
-  if (hasExpectedFunctionAttrs(op, coreKind))
-    return failure();
-
-  if (coreKind == HivmCoreKind::AIV && !coreKindFromExecUnitsAttr(op) &&
-      !op->hasAttr("hivm.part_of_mix")) {
-    MLIRContext *ctx = op->getContext();
-    rewriter.modifyOpInPlace(op, [&] { setRequiredHaccEntryAttrs(op, ctx); });
-    return success();
-  }
-
-  if (shouldOmitPureVectorEntryCoreAttrs(op, coreKind)) {
-    MLIRContext *ctx = op->getContext();
-    rewriter.modifyOpInPlace(op, [&] { setRequiredHaccEntryAttrs(op, ctx); });
-    return success();
-  }
-
-  MLIRContext *ctx = op->getContext();
-  StringRef mixMode =
-      coreKind == HivmCoreKind::AIV && !op->hasAttr("hivm.part_of_mix") ? "aiv" : "mix";
-  Attribute functionKind = hacc::HACCFuncTypeAttr::get(ctx, hacc::HACCFuncType::DEVICE);
-  Attribute functionCoreType = hivm::TFuncCoreTypeAttr::get(ctx, toFuncCoreType(coreKind));
-
-  rewriter.modifyOpInPlace(op, [&] {
-    op->setAttr(hacc::stringifyEnum(hacc::HACCToLLVMIRTranslateAttr::ENTRY), UnitAttr::get(ctx));
-    op->setAttr(hacc::HACCFuncTypeAttr::name, functionKind);
-    op->setAttr(hivm::TFuncCoreTypeAttr::name, functionCoreType);
-    op->setAttr(kMixModeAttrName, StringAttr::get(ctx, mixMode));
-    op->setAttr(kParallelModeAttrName, StringAttr::get(ctx, "simd"));
-  });
-  return success();
-}
-
-template <typename OpTy, HivmCoreKind coreKind>
-struct ObserveCoreOpPattern : public OpRewritePattern<OpTy> {
-  using OpRewritePattern<OpTy>::OpRewritePattern;
-
-  LogicalResult matchAndRewrite(OpTy op, PatternRewriter &rewriter) const override {
-    ModuleOp module = op->template getParentOfType<ModuleOp>();
-    if (!module)
-      return failure();
-    if (moduleCoreAllows(module, coreKind))
-      return failure();
-    if (failed(setModuleCoreKind(rewriter, module, coreKind)))
-      return failure();
-    // Dialect conversion requires a successful pattern to replace or update
-    // its root operation. This pattern observes the root op but mutates the
-    // module-level core attribute that makes the root dynamically legal.
-    rewriter.modifyOpInPlace(op, [] {});
-    return success();
-  }
-};
-
-struct DefaultModuleCoreTypePattern : public OpRewritePattern<ModuleOp> {
-  using OpRewritePattern<ModuleOp>::OpRewritePattern;
-
-  LogicalResult matchAndRewrite(ModuleOp module, PatternRewriter &rewriter) const override {
-    if (getModuleCoreKind(module))
-      return failure();
-    return setModuleCoreKind(rewriter, module, HivmCoreKind::AIC);
-  }
-};
-
-template <typename FuncOpTy> struct EnsureFunctionAttrsPattern : public OpRewritePattern<FuncOpTy> {
-  using OpRewritePattern<FuncOpTy>::OpRewritePattern;
-
-  LogicalResult matchAndRewrite(FuncOpTy op, PatternRewriter &rewriter) const override {
-    ModuleOp module = op->template getParentOfType<ModuleOp>();
-    if (!module)
-      return failure();
-    HivmCoreKind coreKind =
-        getExpectedFunctionCoreKind(op.getOperation()).value_or(HivmCoreKind::AIC);
-    return ensureFunctionAttrs(rewriter, op.getOperation(), coreKind);
-  }
-};
-
 struct LowerTlaReturnToFuncReturnPattern : public OpRewritePattern<::tla::ReturnOp> {
   using OpRewritePattern<::tla::ReturnOp>::OpRewritePattern;
 
@@ -358,59 +220,6 @@ struct LowerTlaReturnToFuncReturnPattern : public OpRewritePattern<::tla::Return
     return success();
   }
 };
-
-inline bool functionAttrsAreLegal(Operation *op) {
-  if (isPrivateSymbol(op))
-    return true;
-  ModuleOp module = op->getParentOfType<ModuleOp>();
-  if (!module)
-    return true;
-  std::optional<HivmCoreKind> coreKind = getExpectedFunctionCoreKind(op);
-  return coreKind && hasExpectedFunctionAttrs(op, *coreKind);
-}
-
-inline LogicalResult applyHaccHivmC310AttrPatterns(ModuleOp module, MLIRContext *ctx) {
-  applyTlaExecUnitHints(module);
-  {
-    ConversionTarget target(*ctx);
-    target.addDynamicallyLegalOp<ModuleOp>(hasC310TargetAttrs);
-    target.addDynamicallyLegalOp<::tla::CubeOp, ::tla::MmadOp>([](Operation *op) {
-      return moduleCoreAllows(op->getParentOfType<ModuleOp>(), HivmCoreKind::AIC);
-    });
-    target.addDynamicallyLegalOp<::tla::VectorOp, ::tla::AddOp, ::tla::SubOp, ::tla::MulOp,
-                                 ::tla::DivOp>([](Operation *op) {
-      return moduleCoreAllows(op->getParentOfType<ModuleOp>(), HivmCoreKind::AIV);
-    });
-    target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
-
-    RewritePatternSet patterns(ctx);
-    patterns.add<ObserveCoreOpPattern<::tla::CubeOp, HivmCoreKind::AIC>,
-                 ObserveCoreOpPattern<::tla::MmadOp, HivmCoreKind::AIC>,
-                 ObserveCoreOpPattern<::tla::VectorOp, HivmCoreKind::AIV>,
-                 ObserveCoreOpPattern<::tla::AddOp, HivmCoreKind::AIV>,
-                 ObserveCoreOpPattern<::tla::SubOp, HivmCoreKind::AIV>,
-                 ObserveCoreOpPattern<::tla::MulOp, HivmCoreKind::AIV>,
-                 ObserveCoreOpPattern<::tla::DivOp, HivmCoreKind::AIV>>(ctx);
-    if (failed(applyPartialConversion(module, target, std::move(patterns))))
-      return failure();
-  }
-
-  {
-    ConversionTarget target(*ctx);
-    target.addDynamicallyLegalOp<ModuleOp>(
-        [](ModuleOp module) { return getModuleCoreKind(module).has_value(); });
-    target.addDynamicallyLegalOp<func::FuncOp>(
-        [](func::FuncOp op) { return functionAttrsAreLegal(op); });
-    target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
-
-    RewritePatternSet patterns(ctx);
-    patterns.add<DefaultModuleCoreTypePattern, EnsureFunctionAttrsPattern<func::FuncOp>>(ctx);
-    if (failed(applyPartialConversion(module, target, std::move(patterns))))
-      return failure();
-  }
-
-  return success();
-}
 
 inline FailureOr<hivm::AddressSpace> mapTlaAddressSpaceToHivm(AddressSpace addressSpace) {
   switch (addressSpace) {

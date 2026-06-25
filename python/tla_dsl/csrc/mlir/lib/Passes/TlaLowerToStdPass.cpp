@@ -7,11 +7,6 @@ namespace {
 
 class TlaLowerToStdPass : public PassWrapper<TlaLowerToStdPass, OperationPass<ModuleOp>> {
 private:
-  // Region provenance used to route execution-unit-specific rewrites.
-  static constexpr StringLiteral kExecUnitAttrName = "tla.exec_unit";
-  static constexpr StringLiteral kExecUnitCube = "cube";
-  static constexpr StringLiteral kExecUnitVector = "vector";
-
   // Pass-local tensor layout semantics (descriptor v1).
   // This model drives rewrites and validation; it is not serialized in IR.
   enum class TensorLayoutTag {
@@ -906,37 +901,12 @@ public:
            idxAttr.getInt() == expectedIdx;
   }
 
-  // Preserve wrapper context before flattening for ops that still dispatch on
-  // execution unit metadata.
-  static void annotateExecUnit(Region &region, StringRef execUnit, MLIRContext *ctx) {
-    auto unitAttr = StringAttr::get(ctx, execUnit);
-    region.walk([&](Operation *nestedOp) {
-      StringRef name = nestedOp->getName().getStringRef();
-      if (name != "tla.add" && name != "tla.sub" && name != "tla.mul" && name != "tla.div")
-        return;
-      nestedOp->setAttr(kExecUnitAttrName, unitAttr);
-    });
-  }
-
-  static StringRef getExecUnit(Operation *op) {
-    auto attr = op->getAttrOfType<StringAttr>(kExecUnitAttrName);
-    if (!attr)
-      return {};
-    return attr.getValue();
-  }
-
   static llvm::StringMap<bool> collectVectorKernelNames(ModuleOp module) {
     llvm::StringMap<bool> vectorKernelNames;
     module.walk([&](::tla::FuncOp funcOp) {
       bool isVectorKernel = false;
       funcOp.walk([&](Operation *op) {
-        if (llvm::isa<::tla::VectorOp, ::tla::AddOp, ::tla::SubOp, ::tla::MulOp,
-                      ::tla::DivOp>(op)) {
-          isVectorKernel = true;
-          return WalkResult::interrupt();
-        }
-        auto execUnit = op->getAttrOfType<StringAttr>(kExecUnitAttrName);
-        if (execUnit && execUnit.getValue() == kExecUnitVector) {
+        if (getTlaOpCoreKind(op) == HivmCoreKind::AIV) {
           isVectorKernel = true;
           return WalkResult::interrupt();
         }
@@ -1533,8 +1503,6 @@ public:
         return success();
       }
 
-      TlaLowerToStdPass::annotateExecUnit(region, TlaLowerToStdPass::kExecUnitCube,
-                                          op->getContext());
       Block &body = region.front();
       Block *parentBlock = op->getBlock();
       parentBlock->getOperations().splice(op->getIterator(), body.getOperations(), body.begin(),
@@ -1558,8 +1526,6 @@ public:
         return success();
       }
 
-      TlaLowerToStdPass::annotateExecUnit(region, TlaLowerToStdPass::kExecUnitVector,
-                                          op->getContext());
       Block &body = region.front();
       Block *parentBlock = op->getBlock();
       parentBlock->getOperations().splice(op->getIterator(), body.getOperations(), body.begin(),
@@ -2768,12 +2734,9 @@ public:
       makeTensorLikeOp->erase();
     }
 
-    // Stage 6A: flatten region wrappers while preserving dispatch metadata for
-    // ops that still depend on wrapper execution units.
-    // Dispatch policy:
-    //   tla.cube   => tla.exec_unit = "cube"
-    //   tla.vector => tla.exec_unit = "vector"
-    // This metadata is consumed by Stage 6B vector rewrites.
+    // Stage 6A: flatten tla.cube / tla.vector region wrappers into their parent
+    // block. The ops they contain carry their own execution-unit semantics, so
+    // no provenance metadata is needed once the wrapper is gone.
     LowerTlaCubePattern lowerCube(&getContext());
     LowerTlaVectorPattern lowerVector(&getContext());
     SmallVector<Operation *, 16> wrapperOps;
