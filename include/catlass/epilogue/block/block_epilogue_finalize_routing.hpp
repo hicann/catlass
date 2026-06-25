@@ -228,6 +228,7 @@ public:
             AscendC::SetFlag<AscendC::HardEvent::S_MTE3>(EVENT_ID4);
             AscendC::WaitFlag<AscendC::HardEvent::S_MTE3>(EVENT_ID4);
             copyUb2GmMatrix(gmOutTile[resRowIdx * problemShape.n()], ubBufGmm[ubOffset], layoutMatricOutDst, layoutMatricOutSrc);
+            AscendC::PipeBarrier<PIPE_MTE3>();
         }
         AscendC::DisableDmaAtomic();
     }
