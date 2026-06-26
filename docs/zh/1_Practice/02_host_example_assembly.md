@@ -298,7 +298,7 @@ ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC
 
 这部分代码主要完成以下工作：
 
-- 选择架构和调度策略
+- 选择架构和调度策略（Atlas A2/Atlas A3产品设置`ArchTag = Arch::AtlasA2`，Ascend 950PR/Ascend 950DT产品使用`ArchTag = Arch::Ascend950`）
 - 定义Tile形状
 - 组装Block层和Kernel层组件
 - 初始化Device层适配器
@@ -406,7 +406,7 @@ catlass_example_add_executable(
 )
 ```
 
-在[examples/CMakeLists.txt](../../../examples/CMakeLists.txt)中将新增示例加入编译清单：
+在[examples/CMakeLists.txt](../../../examples/CMakeLists.txt)中将新增示例加入编译清单，注意根据样例支持的产品形态确认对应编译清单：
 
 ```diff
 set(EXAMPLE_ATLASA2
@@ -416,7 +416,7 @@ set(EXAMPLE_ATLASA2
 )
 ```
 
-完成CANN包安装和CANN环境使能后，执行编译命令：
+完成CANN包安装和CANN环境使能后，执行编译命令（若为Ascend950，需要添加`-DCATLASS_ARCH=3510`）：
 
 ```bash
 bash scripts/build.sh basic_matmul
