@@ -9,6 +9,8 @@ extern "C" void Ascend950MxGroupedMatmulSliceM(
 {
     auto macros = JitMacroGenerator<TParams>::generate("ascend950_mx_grouped_matmul_slice_m", tParams);
     macros["L2_CACHE_HINT"] = "1";
+    macros["MX_GMM_ENABLE_ASWT"] = tParams.flagOn("ASWT") ? "1" : "0";
+    macros["MX_GMM_ENABLE_PRELOAD"] = tParams.flagOn("PRELOAD") ? "1" : "0";
     auto* entry = JitCompiler::instance().getKernel(
         "mx_grouped_matmul_slice_m_impl.cpp", macros, JitKernelType::AIC);
     if (entry) {

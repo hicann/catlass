@@ -13,7 +13,10 @@
 
 namespace CatlassKernelWrapper {
 
-template <GroupedKernelFn KernelFunc>
+using MxGroupedKernelFn = void (*)(
+    const uint32_t, aclrtStream, const CatlassKernel::TParams&, const CatlassKernel::GroupedMatmulParams&);
+
+template <MxGroupedKernelFn KernelFunc>
 struct MxGroupedMatmulLike {
     using OutputType = at::Tensor;
 
@@ -21,7 +24,8 @@ struct MxGroupedMatmulLike {
         const at::Tensor& mat1, const at::Tensor& mat2,
         const at::Tensor& groupList,
         const at::Tensor& mx_scale_a, const at::Tensor& mx_scale_b,
-        bool transA, bool transB)
+        bool transA, bool transB,
+        bool enableAswt, bool enablePreload)
     {
         CatlassKernel::TParams tParams;
         CatlassKernel::GroupedMatmulParams params;
@@ -36,6 +40,8 @@ struct MxGroupedMatmulLike {
         tParams.useNz["A"] = false;
         tParams.useNz["B"] = false;
         tParams.useNz["C"] = false;
+        tParams.flag["ASWT"] = enableAswt;
+        tParams.flag["PRELOAD"] = enablePreload;
 
         TORCH_CHECK(mat1.dim() == 2, "mat1 must be 2-D (M, K)");
         TORCH_CHECK(mat2.dim() == 3, "mat2 must be 3-D (G, K, N)");

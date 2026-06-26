@@ -11,11 +11,22 @@ using std::size_t;
 
 #include "catlass/arch/arch.hpp"
 #include "catlass/catlass.hpp"
-#include "catlass/gemm/block/block_mmad.hpp"
+
+// Swizzle: Base -- GemmIdentityBlockSwizzle
+//          ASWT -- GemmGroupedAswtTailSplitSwizzle
 #include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/block/block_swizzle_grouped_aswt.hpp"
+// Block: Base: BlockMmadTla (with dispatch: MmadMx)
+//        Preload: BlockMmadMxPreloadTla (with dispatch: MmadMxPreload)
+#include "catlass/gemm/block/block_mmad.hpp"
+#include "catlass/gemm/block/block_mmad_mx_preload_tla.hpp"
+// Kernel: Base: GroupedMxMatmulSliceMTla
+//         ASWT: GroupedMxMatmulSliceMAswtTla
+#include "catlass/gemm/kernel/grouped_mx_matmul_slice_m_tla.hpp"
+#include "catlass/gemm/kernel/grouped_mx_matmul_slice_m_aswt_tla.hpp"
+
 #include "catlass/gemm/dispatch_policy.hpp"
 #include "catlass/gemm/gemm_type.hpp"
-#include "catlass/gemm/kernel/grouped_mx_matmul_slice_m_tla.hpp"
 #include "catlass/layout/layout.hpp"
 #include "catlass/epilogue/block/block_epilogue.hpp"
 #include "tla/layout.hpp"
@@ -42,6 +53,18 @@ using std::size_t;
 #define CATLASS_JIT_LAYOUT_B RowMajor
 #endif
 
+/// Advanced optimization flags: MX_GMM_ENABLE_PRELOAD
+#ifndef MX_GMM_ENABLE_PRELOAD
+#define MX_GMM_ENABLE_PRELOAD 0
+#endif
+#ifndef MX_GMM_ENABLE_ASWT
+#define MX_GMM_ENABLE_ASWT 0
+#define MX_GMM_ENABLE_BASE_M 0
+#endif
+#if MX_GMM_ENABLE_ASWT
+#define MX_GMM_ENABLE_BASE_M 1 // baseM strategy is enabled by default (with ASWT)
+#endif 
+
 using ElementA = CATLASS_JIT_ELEMENT_A;
 using ElementB = CATLASS_JIT_ELEMENT_B;
 using ElementC = CATLASS_JIT_ELEMENT_C;
@@ -53,15 +76,24 @@ using LayoutTagB = Catlass::layout::CATLASS_JIT_LAYOUT_B;
 using LayoutTagC = Catlass::layout::RowMajor;
 
 using ArchTag = Catlass::Arch::Ascend950;
-constexpr bool enableUnitFlag = true;
 constexpr bool isFp4 = std::is_same_v<ElementA, float4_e2m1x2_t>;
-using DispatchPolicy = Catlass::Gemm::MmadMx<ArchTag, enableUnitFlag>;
 using L1TileShape = std::conditional_t<isFp4,
     tla::Shape<tla::Int<256>, tla::Int<256>, tla::Int<512>>,
     tla::Shape<tla::Int<256>, tla::Int<256>, tla::Int<256>>>;
 using L0TileShape = std::conditional_t<isFp4,
     tla::Shape<tla::Int<256>, tla::Int<256>, tla::Int<256>>,
     tla::Shape<tla::Int<256>, tla::Int<256>, tla::Int<128>>>;
+
+constexpr bool enableUnitFlag = true;
+constexpr uint32_t l1ScaleFactorK = 16;
+constexpr uint32_t l0cStages = 1;  // 与 enableUnitFlag=true 配套，只能为 1
+constexpr uint32_t preloadStages = 1;
+constexpr bool enableL1Resident = true;
+#if MX_GMM_ENABLE_PRELOAD
+using DispatchPolicy = Catlass::Gemm::MmadMxPreload<ArchTag, preloadStages, enableUnitFlag, l1ScaleFactorK, l0cStages, enableL1Resident>;
+#else
+using DispatchPolicy = Catlass::Gemm::MmadMx<ArchTag, enableUnitFlag, l1ScaleFactorK, l0cStages, enableL1Resident>;
+#endif
 
 extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::MatmulParams* params)
 {
@@ -89,18 +121,54 @@ extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::
     using TileCopy = Catlass::Gemm::Tile::PackedMxTileCopyTla<
         ArchTag, ElementA, LayoutTagA, ElementB, LayoutTagB, ElementMxScale, decltype(layoutMxScaleA), ElementMxScale,
         decltype(layoutMxScaleB), ElementC, LayoutTagC, void>;
+
+#if MX_GMM_ENABLE_PRELOAD
+    using BlockMmad = Catlass::Gemm::Block::BlockMmadMxPreloadTla<
+        DispatchPolicy, L1TileShape, L0TileShape, ElementA, ElementB, ElementC, void, TileCopy>;
+#else
     using BlockMmad = Catlass::Gemm::Block::BlockMmadTla<
         DispatchPolicy, L1TileShape, L0TileShape, ElementA, ElementB, ElementC, void, TileCopy>;
-    using BlockEpilogue = void;
-    using BlockScheduler = typename Catlass::Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
-    using MatmulKernel = Catlass::Gemm::Kernel::GroupedMxMatmulSliceMTla<
-        BlockMmad, BlockEpilogue, BlockScheduler, ElementGroupList>;
+#endif
 
+    using BlockEpilogue = void;
+#if MX_GMM_ENABLE_ASWT
+    constexpr bool transB = (std::is_same_v<LayoutTagB, Catlass::layout::ColumnMajor> || std::is_same_v<LayoutTagB, Catlass::layout::nZ>) ? true : false;
+    using BlockScheduler = typename Catlass::Gemm::Block::GemmGroupedAswtTailSplitSwizzle<4, false, transB>;
+    using MatmulKernel = Catlass::Gemm::Kernel::GroupedMxMatmulSliceMAswtTla<BlockMmad,
+        BlockEpilogue, BlockScheduler, ElementGroupList, (MX_GMM_ENABLE_BASE_M != 0)>;
     typename MatmulKernel::Arguments arguments{
         problemShape, groupCount,
         deviceGroupList, deviceA, layoutA, deviceB, layoutB,
         deviceMxScaleA, layoutMxScaleA, deviceMxScaleB, layoutMxScaleB,
         deviceC, layoutC};
-
     Catlass::RunKernel<MatmulKernel>(arguments, stream, blockNum);
+#else
+    if (m >= n * groupCount) {
+        using BlockScheduler = typename Catlass::Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
+        using MatmulKernel = Catlass::Gemm::Kernel::GroupedMxMatmulSliceMTla<
+            BlockMmad, BlockEpilogue, BlockScheduler, ElementGroupList>;
+
+        typename MatmulKernel::Arguments arguments{
+            problemShape, groupCount,
+            deviceGroupList, deviceA, layoutA, deviceB, layoutB,
+            deviceMxScaleA, layoutMxScaleA, deviceMxScaleB, layoutMxScaleB,
+            deviceC, layoutC};
+
+        Catlass::RunKernel<MatmulKernel>(arguments, stream, blockNum);
+    } else {
+        using BlockScheduler = typename Catlass::Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
+        using MatmulKernel = Catlass::Gemm::Kernel::GroupedMxMatmulSliceMTla<
+            BlockMmad, BlockEpilogue, BlockScheduler, ElementGroupList>;
+
+        typename MatmulKernel::Arguments arguments{
+            problemShape, groupCount,
+            deviceGroupList, deviceA, layoutA, deviceB, layoutB,
+            deviceMxScaleA, layoutMxScaleA, deviceMxScaleB, layoutMxScaleB,
+            deviceC, layoutC};
+
+        Catlass::RunKernel<MatmulKernel>(arguments, stream, blockNum);
+    }
+   
+#endif
+    
 }

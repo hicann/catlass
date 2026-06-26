@@ -114,11 +114,12 @@ public:
 
     static bool CanImplement(const Arguments &args)
     {
+        using LayoutTagA = typename BlockMmad::TileCopy::LayoutTagA;
         return AscendC::Std::is_one_of_v<ElementA, float8_e4m3_t, float8_e5m2_t, float4_e2m1x2_t, float4_e1m2x2_t> &&
                AscendC::Std::is_one_of_v<ElementB, float8_e4m3_t, float8_e5m2_t, float4_e2m1x2_t, float4_e1m2x2_t> && 
                std::is_same_v<ElementMxScaleA, float8_e8m0_t> &&
                std::is_same_v<ElementMxScaleB, float8_e8m0_t> && 
-               (std::is_same_v<LayoutB, layout::RowMajor> || std::is_same_v<LayoutB, layout::ColumnMajor>);
+               std::is_same_v<LayoutTagA, layout::RowMajor>;
     }
     static size_t GetWorkspaceSize(const Arguments &args)
     {

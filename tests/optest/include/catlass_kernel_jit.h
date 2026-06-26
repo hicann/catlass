@@ -37,6 +37,7 @@ struct TParams : TParamsBase {
     std::unordered_map<std::string, aclDataType> element;
     std::unordered_map<std::string, bool> transpose;
     std::unordered_map<std::string, bool> useNz;
+    std::unordered_map<std::string, bool> flag; ///< Generic compile-time boolean options
 
     aclDataType elem(const std::string& k, aclDataType def = ACL_FLOAT16) const
     {
@@ -52,6 +53,11 @@ struct TParams : TParamsBase {
     {
         auto it = useNz.find(k);
         return it != useNz.end() ? it->second : def;
+    }
+    bool flagOn(const std::string& k, bool def = false) const
+    {
+        auto it = flag.find(k);
+        return it != flag.end() ? it->second : def;
     }
 };
 

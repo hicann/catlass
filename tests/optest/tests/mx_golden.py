@@ -237,6 +237,9 @@ def prepare_fp8_mx_inputs(
     trans_a: bool = False,
     trans_b: bool = True,
     device: str = "npu",
+    fp8_dtype: torch.dtype = torch.float8_e4m3fn,
+    emax: int = 8,
+    fp8_max: float = 448.0,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """Build MX-FP8 inputs for the given transpose flags (aligned with example 53 layout).
 
@@ -244,12 +247,12 @@ def prepare_fp8_mx_inputs(
     - ``trans_a=False``: ``mat1`` stored as ``(M, K)``; ``trans_a=True``: ``(K, M)``.
     - ``trans_b=True``: ``mat2`` stored as ``(N, K)``; ``trans_b=False``: ``(K, N)``.
 
+    ``fp8_dtype`` / ``emax`` / ``fp8_max`` select the MX-FP8 format
+    (E4M3: ``emax=8, fp8_max=448.0``; E5M2: ``emax=15, fp8_max=57344.0``).
+
     Quantization and reference matmul run on CPU; kernel inputs are moved to NPU
     when ``device="npu"``. ``expected`` stays on CPU for numerical comparison.
     """
-    fp8_dtype = torch.float8_e4m3fn
-    emax, fp8_max = 8, 448.0
-
     a_fp32 = torch.randn(m, k, dtype=torch.float32) * 10.0 - 5.0
     b_fp32 = torch.randn(k, n, dtype=torch.float32) * 10.0 - 5.0
 
