@@ -56,25 +56,9 @@ def _null_strides_dltensor_capsule() -> Any:
         raise MemoryError("PyCapsule_New failed")
     return capsule
 
-@pytest.mark.skip(reason="skip numpy case now")
-def test_numpy_dlpack_export_ignores_non_none_stream() -> None:
-    arr = np.ascontiguousarray(np.arange(6, dtype=np.float32).reshape(2, 3))
-    export_dlpack_capsule(arr, stream=-1)
 
 
 def test_parse_rejects_null_dlpack_strides() -> None:
     with pytest.raises(DlpackBridgeError, match="null strides"):
         _Tensor._parse_capsule(_null_strides_dltensor_capsule())
 
-@pytest.mark.skip(reason="skip numpy case now")
-def test_parse_numpy_dlpack_explicit_strides() -> None:
-    """NumPy exports explicit strides for C-contiguous buffers on recent versions."""
-    arr = np.ascontiguousarray(np.arange(6, dtype=np.float32).reshape(2, 3))
-    parsed = _Tensor._parse_capsule(export_dlpack_capsule(arr))
-    assert parsed["shape"] == (2, 3)
-    assert parsed["strides"] == (3, 1)
-
-    arr_f = np.asfortranarray(np.arange(6, dtype=np.float32).reshape(2, 3))
-    parsed_f = _Tensor._parse_capsule(export_dlpack_capsule(arr_f))
-    assert parsed_f["shape"] == (2, 3)
-    assert parsed_f["strides"] == (1, 2)

@@ -74,6 +74,130 @@ def basic_vadd(mem_x: tla.Tensor, mem_y: tla.Tensor, mem_z: tla.Tensor) -> None:
     tla.pipe_barrier(tla.pipes.ALL)
 
 
+@tla.kernel
+def basic_vadd_mutex(mem_x: tla.Tensor, mem_y: tla.Tensor, mem_z: tla.Tensor) -> None:
+    mutex_x_ub = tla.mutex(resource="x_ub", id=0)
+    mutex_y_ub = tla.mutex(resource="y_ub", id=1)
+    mutex_z_ub = tla.mutex(resource="z_ub", id=2)
+
+    allocator = tla.utils.LocalmemAllocator()
+
+    x_gm = tla.tile_view(mem_x, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
+    y_gm = tla.tile_view(mem_y, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
+    z_gm = tla.tile_view(mem_z, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
+
+    x_ub_ptr = allocator.allocate(
+        VECTOR_ELE * _KERNEL_ELEMENT_BYTES, 256, tla.AddressSpace.ub
+    )
+    y_ub_ptr = allocator.allocate(
+        VECTOR_ELE * _KERNEL_ELEMENT_BYTES, 256, tla.AddressSpace.ub
+    )
+    z_ub_ptr = allocator.allocate(
+        VECTOR_ELE * _KERNEL_ELEMENT_BYTES, 256, tla.AddressSpace.ub
+    )
+    x_ub_ptr = tla.recast_ptr(x_ub_ptr, dtype=_KERNEL_DTYPE)
+    y_ub_ptr = tla.recast_ptr(y_ub_ptr, dtype=_KERNEL_DTYPE)
+    z_ub_ptr = tla.recast_ptr(z_ub_ptr, dtype=_KERNEL_DTYPE)
+
+    x_ub = tla.make_tensor_like(x_ub_ptr, x_gm, tla.arch.RowMajor)
+    y_ub = tla.make_tensor_like(y_ub_ptr, y_gm, tla.arch.RowMajor)
+    z_ub = tla.make_tensor_like(z_ub_ptr, z_gm, tla.arch.RowMajor)
+
+    mutex_x_ub.lock(pipe=tla.arch.MTE2)
+    tla.copy(x_ub, x_gm)
+    mutex_x_ub.unlock(pipe=tla.arch.MTE2)
+
+    mutex_y_ub.lock(pipe=tla.arch.MTE2)
+    tla.copy(y_ub, y_gm)
+    mutex_y_ub.unlock(pipe=tla.arch.MTE2)
+
+    mutex_x_ub.lock(pipe=tla.arch.VECTOR)
+    mutex_y_ub.lock(pipe=tla.arch.VECTOR)
+    mutex_z_ub.lock(pipe=tla.arch.VECTOR)
+    with tla.vec.func(mode="simd"):
+        for i in tla.range(LOOPS):
+            x_tile = tla.tile_view(
+                x_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
+            )
+            y_tile = tla.tile_view(
+                y_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
+            )
+            z_tile = tla.tile_view(
+                z_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
+            )
+
+            x_reg = x_tile.load()
+            y_reg = y_tile.load()
+            z_reg = tla.add(x_reg, y_reg)
+            z_tile.store(z_reg)
+    mutex_z_ub.unlock(pipe=tla.arch.VECTOR)
+    mutex_y_ub.unlock(pipe=tla.arch.VECTOR)
+    mutex_x_ub.unlock(pipe=tla.arch.VECTOR)
+
+    mutex_z_ub.lock(pipe=tla.arch.MTE3)
+    tla.copy(z_gm, z_ub)
+    mutex_z_ub.unlock(pipe=tla.arch.MTE3)
+    tla.pipe_barrier(tla.pipes.ALL)
+
+
+@tla.kernel
+def basic_vadd_mutex_with(mem_x: tla.Tensor, mem_y: tla.Tensor, mem_z: tla.Tensor) -> None:
+    mutex_x_ub = tla.mutex(resource="x_ub", id=0)
+    mutex_y_ub = tla.mutex(resource="y_ub", id=1)
+    mutex_z_ub = tla.mutex(resource="z_ub", id=2)
+
+    allocator = tla.utils.LocalmemAllocator()
+
+    x_gm = tla.tile_view(mem_x, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
+    y_gm = tla.tile_view(mem_y, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
+    z_gm = tla.tile_view(mem_z, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
+
+    x_ub_ptr = allocator.allocate(
+        VECTOR_ELE * _KERNEL_ELEMENT_BYTES, 256, tla.AddressSpace.ub
+    )
+    y_ub_ptr = allocator.allocate(
+        VECTOR_ELE * _KERNEL_ELEMENT_BYTES, 256, tla.AddressSpace.ub
+    )
+    z_ub_ptr = allocator.allocate(
+        VECTOR_ELE * _KERNEL_ELEMENT_BYTES, 256, tla.AddressSpace.ub
+    )
+    x_ub_ptr = tla.recast_ptr(x_ub_ptr, dtype=_KERNEL_DTYPE)
+    y_ub_ptr = tla.recast_ptr(y_ub_ptr, dtype=_KERNEL_DTYPE)
+    z_ub_ptr = tla.recast_ptr(z_ub_ptr, dtype=_KERNEL_DTYPE)
+
+    x_ub = tla.make_tensor_like(x_ub_ptr, x_gm, tla.arch.RowMajor)
+    y_ub = tla.make_tensor_like(y_ub_ptr, y_gm, tla.arch.RowMajor)
+    z_ub = tla.make_tensor_like(z_ub_ptr, z_gm, tla.arch.RowMajor)
+
+    with tla.mutex_guard(mutex_x_ub):
+        tla.copy(x_ub, x_gm)
+
+    with tla.mutex_guard(mutex_y_ub):
+        tla.copy(y_ub, y_gm)
+
+    with tla.mutex_guard(mutex_x_ub, mutex_y_ub, mutex_z_ub):
+        with tla.vec.func(mode="simd"):
+            for i in tla.range(LOOPS):
+                x_tile = tla.tile_view(
+                    x_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
+                )
+                y_tile = tla.tile_view(
+                    y_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
+                )
+                z_tile = tla.tile_view(
+                    z_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
+                )
+
+                x_reg = x_tile.load()
+                y_reg = y_tile.load()
+                z_reg = tla.add(x_reg, y_reg)
+                z_tile.store(z_reg)
+
+    with tla.mutex_guard(mutex_z_ub):
+        tla.copy(z_gm, z_ub)
+    tla.pipe_barrier(tla.pipes.ALL)
+
+
 def _dtype_config(dtype_name: str) -> tuple[type[Any], Any, float | int, int, int]:
     try:
         import torch
@@ -147,14 +271,24 @@ def _runtime_kwargs(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
+def _select_kernel(args: argparse.Namespace) -> Any:
+    if getattr(args, "use_mutex", False):
+        return basic_vadd_mutex
+    if getattr(args, "use_mutex_with", False):
+        return basic_vadd_mutex_with
+    return basic_vadd
+
+
 def dump_tlair(args: argparse.Namespace) -> str:
-    return basic_vadd.dump_mlir(type_args=_compile_only_type_args(args.dtype))
+    return _select_kernel(args).dump_mlir(type_args=_compile_only_type_args(args.dtype))
 
 
 def build_only(args: argparse.Namespace) -> int:
+    kernel = _select_kernel(args)
     artifact = tla.compile(
-        basic_vadd,
+        kernel,
         *_compile_only_type_args(args.dtype),
+        mlir_print_ir_after_all=True,
         **_runtime_kwargs(args),
     )
     print("compile_ok=True")
@@ -214,8 +348,9 @@ def _run_single_case(args: argparse.Namespace, dtype_name: str, torch: Any) -> i
     tla_y = _create_tla_tensor(y, tla_dtype)
     tla_z = _create_tla_tensor(z, tla_dtype)
 
+    kernel = _select_kernel(args)
     artifact = tla.compile(
-        basic_vadd,
+        kernel,
         tla_x,
         tla_y,
         tla_z,
@@ -289,6 +424,15 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
     parser.add_argument("--force-recompile", action="store_true")
     parser.add_argument("--no-cache", action="store_true")
+    sync = parser.add_mutually_exclusive_group()
+    sync.add_argument(
+        "--use-mutex", action="store_true", help="Use explicit mutex lock/unlock sync."
+    )
+    sync.add_argument(
+        "--use-mutex-with",
+        action="store_true",
+        help="Use tla.mutex_guard with-syntax sync.",
+    )
     parser.add_argument("--dump-tlair", action="store_true")
     return parser
 

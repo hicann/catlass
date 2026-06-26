@@ -1021,13 +1021,12 @@ def _resolve_hivm_template_bitcode(runtime: TlaRuntimeOptions) -> str:
             repo_aic_candidates.append(build_dir / "bc" / "meta_op.aic.c310.bc")
 
         aiv_candidates: list[Path] = []
+        for build_dir in _mlir_build_dirs():
+            aiv_candidates.append(build_dir / "bc" / "meta_op.aiv.c310.bc")
         ascend_home = os.getenv("ASCEND_HOME_PATH")
         if ascend_home:
             cann_lib = Path(ascend_home) / "tools" / "bishengir" / "lib"
             aiv_candidates.append(cann_lib / "meta_op.aiv.c310.bc")
-        else:
-            for build_dir in _mlir_build_dirs():
-                aiv_candidates.append(build_dir / "bc" / "meta_op.aiv.c310.bc")
         repo_aic = next((path.resolve() for path in repo_aic_candidates if path.exists()), None)
         aiv_bc = next((path.resolve() for path in aiv_candidates if path.exists()), None)
         if repo_aic is not None and aiv_bc is not None:
@@ -1046,18 +1045,16 @@ def _resolve_hivm_template_bitcode(runtime: TlaRuntimeOptions) -> str:
                 ]
             )
     else:
-        ascend_home = os.getenv("ASCEND_HOME_PATH")
-        if ascend_home:
-            cann_aiv_bc = (
-                Path(ascend_home) / "tools" / "bishengir" / "lib" / "meta_op.aiv.c310.bc"
-            )
-            if cann_aiv_bc.exists():
-                return str(cann_aiv_bc.resolve())
         for build_dir in _mlir_build_dirs():
             candidates.append(build_dir / "bc" / "meta_op.aiv.c310.bc")
-    existing = [path.resolve() for path in candidates if path.exists()]
-    if existing:
-        return ",".join(str(path) for path in existing)
+        ascend_home = os.getenv("ASCEND_HOME_PATH")
+        if ascend_home:
+            candidates.append(
+                Path(ascend_home) / "tools" / "bishengir" / "lib" / "meta_op.aiv.c310.bc"
+            )
+    existing = next((path.resolve() for path in candidates if path.exists()), None)
+    if existing is not None:
+        return str(existing)
     raise TlaRuntimeUnavailableError(
         "C310 HIVM template bitcode not found. Build Tla DSL templates or set "
         "`TLA_DSL_HIVM_TEMPLATE_BC`."

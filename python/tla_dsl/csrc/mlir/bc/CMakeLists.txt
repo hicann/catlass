@@ -205,5 +205,13 @@ if(BISHENGIR_BUILD_TEMPLATE STREQUAL "ON")
 
     add_custom_target(bishengir_template_bitcode ALL)
     add_subdirectory(Cube)
+    add_subdirectory(Vector)
+
+    set(_cann_aiv_template "${ASCEND_HOME_PATH}/tools/bishengir/lib/meta_op.aiv.c310.bc")
+    if(EXISTS "${_cann_aiv_template}")
+        set_property(GLOBAL APPEND PROPERTY c310_aiv_op_list "${_cann_aiv_template}")
+        set_property(GLOBAL APPEND PROPERTY c310_mix_aiv_op_list "${_cann_aiv_template}")
+    endif()
+
     link_all_to_meta_op()
 endif()

@@ -1940,6 +1940,8 @@ def _walk_mutex_guard_ops(ops: Sequence[Any]) -> list[mlir_ir.Operation]:
     def visit(op_or_view: Any) -> None:
         op = _raw_operation(op_or_view)
         walked.append(op)
+        if op.name == "tla.vec.func":
+            return
         for region in op.regions:
             for block in region.blocks:
                 for child in block.operations:
@@ -1964,6 +1966,8 @@ def _infer_copy_mutex_pipe(copy_op: mlir_ir.Operation) -> str:
         return "mte2"
     if src_addrspace == "l1":
         return "mte1"
+    if src_addrspace == "ub":
+        return "mte3"
     if src_addrspace == "l0c":
         return "fix"
     raise TlaLoweringError(
@@ -1983,9 +1987,12 @@ def _infer_mutex_guard_pipe(body_ops: Sequence[Any]) -> str:
             inferred.append(_infer_copy_mutex_pipe(op))
         elif name == "tla.mmad":
             inferred.append("cube")
+        elif name == "tla.vec.func":
+            inferred.append("vector")
     if not inferred:
         raise TlaLoweringError(
-            "tla.mutex_guard body must emit at least one tla.copy or tla.mmad"
+            "tla.mutex_guard body must emit at least one tla.copy, tla.mmad, "
+            "or tla.vec.func"
         )
     unique = set(inferred)
     if len(unique) != 1:

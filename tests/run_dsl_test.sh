@@ -58,7 +58,7 @@ Usage: $(basename "$0") [options]
 
 Run end-to-end validation for:
   - basic_mmad (basic_matmul.py --run --all-layouts --all-mmad-dtypes)
-  - basic_vadd (basic_vadd.py --run --all-dtypes)
+  - basic_vadd (basic_vadd.py --run --all-dtypes, plus mutex variants)
   - basic_mixed (basic_mixed.py --run)
 Runs basic_mmad default MNK plus m=1, n=2, k=3.
 Activates conda env "${CONDA_ENV}", sources CANN set_env.sh, exports AscendNPU-IR-Dev MLIR/LLVM
@@ -258,14 +258,18 @@ _run_basic_mmad_case "mutex mode" --use-mutex
 _run_basic_mmad_case "mutex with mode" --use-mutex-with
 
 _run_basic_vadd_case() {
-    echo "==> Running basic_vadd validation [all dtypes]: --run --all-dtypes --device ${DEVICE_ID}"
+    local label="$1"
+    shift
+    echo "==> Running basic_vadd validation [${label}]: --run --all-dtypes --device ${DEVICE_ID} $*"
     (
         cd "${TLA_DSL_DIR}"
-        python "${BASIC_VADD_REL}" --run --all-dtypes --device "${DEVICE_ID}"
+        python "${BASIC_VADD_REL}" --run --all-dtypes --device "${DEVICE_ID}" "$@"
     )
 }
 
-_run_basic_vadd_case
+_run_basic_vadd_case "all dtypes"
+_run_basic_vadd_case "mutex mode" --use-mutex
+_run_basic_vadd_case "mutex with mode" --use-mutex-with
 
 _run_basic_mixed_case() {
     echo "==> Running basic_mixed validation [fixed shape/dtypes]: --run --device ${DEVICE_ID}"

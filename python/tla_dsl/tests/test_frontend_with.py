@@ -254,6 +254,21 @@ def vec_vector_ssa_kernel(lhs: tla.Tensor, rhs: tla.Tensor, dst: tla.Tensor) -> 
 
 
 @tla.kernel
+def mutex_guard_vec_func_kernel(
+    lhs: tla.Tensor, rhs: tla.Tensor, dst: tla.Tensor
+) -> None:
+    mutex = tla.mutex(resource="vec_mutex", id=0)
+    lhs_tile = tla.tile_view(lhs, tla.make_shape(64), tla.make_coord(0))
+    rhs_tile = tla.tile_view(rhs, tla.make_shape(64), tla.make_coord(0))
+    dst_tile = tla.tile_view(dst, tla.make_shape(64), tla.make_coord(0))
+    with tla.mutex_guard(mutex):
+        with tla.vec.func(mode="simd"):
+            lhs_reg = lhs_tile.load()
+            rhs_reg = rhs_tile.load()
+            dst_tile.store(tla.add(lhs_reg, rhs_reg))
+
+
+@tla.kernel
 def vec_store_rejects_raw_tensor_kernel(lhs: tla.Tensor, dst: tla.Tensor) -> None:
     lhs_tile = tla.tile_view(lhs, tla.make_shape(64), tla.make_coord(0))
     dst_tile = tla.tile_view(dst, tla.make_shape(64), tla.make_coord(0))
@@ -309,6 +324,13 @@ def test_mutex_guard_copy_infers_fix_from_l0c_source() -> None:
     _assert_guard_order(mlir, "fix")
 
 
+def test_mutex_guard_copy_infers_mte3_from_ub_source() -> None:
+    dst = _tensor_arg(tla.AddressSpace.gm)
+    src = _tensor_arg(tla.AddressSpace.ub)
+    mlir = mutex_guard_copy_kernel.dump_mlir(type_args=(dst, src))
+    _assert_guard_order(mlir, "mte3")
+
+
 def test_mutex_guard_multi_mutex_mmad_uses_cube_and_stack_unlock_order() -> None:
     lhs, rhs, acc = _mmad_tensor_args()
     try:
@@ -350,8 +372,8 @@ def test_mutex_guard_rejects_explicit_lock_inside_body() -> None:
         mutex_guard_explicit_lock_kernel.dump_mlir(type_args=(dst, src))
 
 
-def test_mutex_guard_requires_copy_or_mmad_body() -> None:
-    with pytest.raises(TlaLoweringError, match="at least one tla.copy or tla.mmad"):
+def test_mutex_guard_requires_copy_mmad_or_vec_func_body() -> None:
+    with pytest.raises(TlaLoweringError, match="at least one tla.copy, tla.mmad"):
         mutex_guard_empty_kernel.dump_mlir()
 
 
@@ -381,6 +403,14 @@ def test_vec_func_default_mode_lowering() -> None:
 
     assert "tla.vec.func" in mlir
     assert 'mode = "simd"' in mlir
+
+
+def test_mutex_guard_vec_func_infers_vector_pipe() -> None:
+    mlir = mutex_guard_vec_func_kernel.dump_mlir(type_args=_vector_tensor_args())
+
+    assert "#tla.pipe<vector>" in mlir or "<vector>" in mlir
+    assert mlir.index("tla.mutex_lock") < mlir.index("tla.vec.func")
+    assert mlir.rindex("tla.vec.func") < mlir.rindex("tla.mutex_unlock")
 
 
 def test_vec_func_simd_mode_lowering() -> None:

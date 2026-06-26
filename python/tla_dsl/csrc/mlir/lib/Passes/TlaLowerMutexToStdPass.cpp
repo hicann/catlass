@@ -24,6 +24,8 @@ static func::FuncOp getOrCreateRuntimeCall(ModuleOp module, StringRef name,
 
 static FailureOr<std::string> getMutexPipeSuffix(PipeAttr pipeAttr) {
   switch (pipeAttr.getPipe()) {
+  case Pipe::vector:
+    return std::string("v");
   case Pipe::cube:
     return std::string("m");
   case Pipe::mte1:
