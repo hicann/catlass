@@ -158,7 +158,12 @@ python scripts/gen_entry.py <nn> <name>
 - **⚠️ 累加器类型（CType）不可用 `CATLASS_JIT_ELEMENT_C` 宏推导**：Split-K/Padding 等 kernel 的 CType 是累加器类型（如 `float`），而 `CATLASS_JIT_ELEMENT_C` 由 adapter 的 `outDType` 设置，会覆盖为 `half`。必须用 `#define CATLASS_JIT_ELEMENT_C float`（非 `#ifndef`）固定，防止 JIT 宏覆盖导致 workspace 步长错乱产生 inf。模板修改后须清理 JIT 缓存（`rm -rf ~/.cache/catlass/jit_cache/`），否则旧 `.so` 仍被命中。
 - **`CATLASS_JIT_BLOCK_SCHEDULER` 使用数字编码：末位=direction，前位=offset。`GemmIdentityBlockSwizzle<3, 0>` → 默认值 `30`。模板中通过 `(CATLASS_JIT_BLOCK_SCHEDULER / 10)` 取 offset、`(CATLASS_JIT_BLOCK_SCHEDULER % 10)` 取 direction。**
 - 模板引用 `kernels/common/` 下的头文件（如 `kernel_runner.h`、`tile_shape_scaler.h`、`common.h`、`workspace_alloc.h`）时，需确认对应头文件已通过顶置 `CMakeLists.txt` 安装到 `jit/common/`。
-- **Padding 路径需为 `deviceWA`/`deviceWB` 单独分配缓冲区**，通过 `g_catlassWorkspaceAlloc`（回退 `aclrtMalloc`），不可复用原始 `deviceA`/`deviceB` 指针。模板变更后须清除 JIT 缓存目录（`torch_catlass.clear_jit_cache()`），否则旧 `.so` 仍被命中。
+- **Device 内存分配统一使用 workspace 全局函数**（`#include "common/workspace_alloc.h"`），详见 [WORKSPACE.md](WORKSPACE.md)：
+  - kernel 写入的 buffer → `g_catlassWorkspaceAlloc(size)`
+  - 需 H2D 的 struct 数组 → `g_catlassWorkspaceAllocFromHost(hostData, size)`
+  - **禁止** `aclrtMalloc` + `aclrtMemcpy`（torch tensor 内存不支持）、**禁止** `memset`（device 内存不能 host memset）
+  - **无需手动 free**，workspace pool 自动管理
+- **Padding 路径需为 `deviceWA`/`deviceWB` 单独分配缓冲区**，通过 `g_catlassWorkspaceAlloc`，不可复用原始 `deviceA`/`deviceB` 指针。模板变更后须清除 JIT 缓存目录（`torch_catlass.clear_jit_cache()`），否则旧 `.so` 仍被命中。
 - 不把 example 的命令行/数据生成逻辑带入内核模板。
 
 ### 2.2 Prebuilt 类接入
@@ -247,6 +252,8 @@ python scripts/gen_entry.py <nn> <name>
 - [ ] `CATLASS_JIT_BLOCK_SCHEDULER` 使用数字编码（末位 direction，前位 offset）
 - [ ] ⚠️ 累加器 CType 须用 `#define` 固定（非 `#ifndef`），防止 JIT 宏覆盖
 - [ ] 模板依赖的 `kernels/common/` 头文件已通过 CMake install rule 安装到 `jit/common/`
+- [ ] 内存分配仅用 `g_catlassWorkspaceAlloc` / `g_catlassWorkspaceAllocFromHost`，无裸 `aclrtMalloc`/`aclrtMemcpy`/`memset`/`aclrtFree`
+- [ ] 需 H2D 的 struct 数组用 `g_catlassWorkspaceAllocFromHost`，纯 workspace 用 `g_catlassWorkspaceAlloc`
 
 ### Runtime Checklist
 

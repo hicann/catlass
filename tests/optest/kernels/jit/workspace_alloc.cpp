@@ -14,6 +14,7 @@ extern "C" {
 
 WorkspaceAllocFn g_catlassWorkspaceAlloc = nullptr;
 WorkspaceFreeFn  g_catlassWorkspaceFree  = nullptr;
+WorkspaceAllocCopyFn g_catlassWorkspaceAllocFromHost = nullptr;
 
 void CatlassSetWorkspaceAlloc(WorkspaceAllocFn alloc)
 {
@@ -23,6 +24,11 @@ void CatlassSetWorkspaceAlloc(WorkspaceAllocFn alloc)
 void CatlassSetWorkspaceFree(WorkspaceFreeFn free_fn)
 {
     g_catlassWorkspaceFree = free_fn;
+}
+
+void CatlassSetWorkspaceAllocFromHost(WorkspaceAllocCopyFn allocCopy)
+{
+    g_catlassWorkspaceAllocFromHost = allocCopy;
 }
 
 } // extern "C"

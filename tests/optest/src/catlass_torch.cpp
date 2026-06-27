@@ -40,6 +40,8 @@
 #include "template/w4a8_matmul.h"
 #include "template/ascend950_mxfp8_flash_attention.h"
 #include "template/broadcast_matmul_perblock_quant.h"
+#include "template/gemm.h"
+#include "template/group_gemm.h"
 #include "template/mx_grouped_matmul_swiglu_mx_quant.h"
 #include "template/a8w4_mx_matmul.h"
 #include "template/svd_quant_matmul.h"
@@ -61,6 +63,15 @@ uint8_t* wsAlloc(size_t size) {
     return p;
 }
 
+uint8_t* wsAllocFromHost(const void* hostData, size_t size) {
+    auto opts = at::TensorOptions().dtype(torch::kInt8).device(torch_npu::utils::get_npu_device_type());
+    auto dst = at::empty({static_cast<int64_t>(size)}, opts);
+    auto* p = static_cast<uint8_t*>(const_cast<void*>(dst.storage().data()));
+    aclrtMemcpy(p, size, hostData, size, ACL_MEMCPY_HOST_TO_DEVICE);
+    g_wsPool.push_back(std::move(dst));
+    return p;
+}
+
 void wsFree(uint8_t* p, size_t) {
     for (auto it = g_wsPool.begin(); it != g_wsPool.end(); ++it)
         if (it->storage().data() == p) { g_wsPool.erase(it); break; }
@@ -70,8 +81,10 @@ struct _WsInit {
     _WsInit() {
         auto sa = (void (*)( decltype(wsAlloc)*))dlsym(RTLD_DEFAULT, "CatlassSetWorkspaceAlloc");
         auto sf = (void (*)( decltype(wsFree)*)) dlsym(RTLD_DEFAULT, "CatlassSetWorkspaceFree");
+        auto sc = (void (*)( decltype(wsAllocFromHost)*))dlsym(RTLD_DEFAULT, "CatlassSetWorkspaceAllocFromHost");
         if (sa) sa(wsAlloc);
         if (sf) sf(wsFree);
+        if (sc) sc(wsAllocFromHost);
     }
 } _wsInit;
 }
@@ -292,6 +305,25 @@ using Ascend950DualLevelQuantMxBatchMatmulOp =
 static auto& ascend950_dual_level_quant_mx_batch_matmul = Ascend950DualLevelQuantMxBatchMatmulOp::Run;
 REGISTER_TORCH_FUNC(ascend950_dual_level_quant_mx_batch_matmul);
 
+// ── example 15_gemm ──
+using GemmOp = GemmLike<CatlassKernel::Gemm>;
+static auto& gemm = GemmOp::Run;
+REGISTER_TORCH_FUNC(gemm);
+
+// ── example 16_group_gemm ──
+using GroupGemmOp = GroupGemmLike<CatlassKernel::GroupGemm>;
+static auto& group_gemm = GroupGemmOp::Run;
+REGISTER_TORCH_FUNC(group_gemm);
+
+// ── example 17_gemv_aiv ──
+using GemvAIVOp = GemmLike<CatlassKernel::GemvAIV, true>;
+static auto& gemv_aiv = GemvAIVOp::Run;
+REGISTER_TORCH_FUNC(gemv_aiv);
+
+// ── example 18_gemv_aic ──
+using GemvAICOp = GemmLike<CatlassKernel::GemvAIC, true>;
+static auto& gemv_aic = GemvAICOp::Run;
+REGISTER_TORCH_FUNC(gemv_aic);
 using Ascend950SvdQuantMatmulOp = SvdQuantMatmulLike<CatlassKernel::Ascend950SvdQuantMatmul>;
 static auto& ascend950_svd_quant_matmul = Ascend950SvdQuantMatmulOp::Run;
 REGISTER_TORCH_FUNC(ascend950_svd_quant_matmul);

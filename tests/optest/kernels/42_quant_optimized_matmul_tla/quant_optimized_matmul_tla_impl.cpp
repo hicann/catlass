@@ -233,6 +233,7 @@ extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::
     {
         size_t sizeWB = GetWorkspaceLen(tagB, get<2>(L1TileShape{}), get<1>(L1TileShape{})) * sizeof(ElementB);
         deviceWB = g_catlassWorkspaceAlloc(sizeWB);
+        allocWB = true;
     }
 #endif
 
@@ -242,15 +243,4 @@ extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::
         {deviceA, layoutA, deviceB, layoutB, deviceWA, layoutWA, deviceWB, layoutWB},
         {deviceScale, layoutScale, devicePerTokenScale, layoutPerTokenScale, deviceD, layoutD}};
     Catlass::RunKernel<MatmulKernel>(arguments, stream, blockNum);
-
-#if CATLASS_JIT_NEED_PADDING_A
-    if (!g_catlassWorkspaceAlloc) {
-        aclrtFree(deviceWA);
-    }
-#endif
-#if CATLASS_JIT_NEED_PADDING_B
-    if (!g_catlassWorkspaceAlloc) {
-        aclrtFree(deviceWB);
-    }
-#endif
 }

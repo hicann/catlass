@@ -8,7 +8,8 @@
 
 | Skill | Description | Location |
 |-------|-------------|----------|
-| `catlass-example-to-torch-intf` | 将 catlass 示例迁移为 PyTorch extension 接口（`torch.ops.catlass.*`）。 | `.agents/skills/catlass-example-to-torch-intf/` |
+| `catlass-example-to-pytest` | 将 numbered CATLASS examples 接入 tests/optest 测试框架。 | `.agents/skills/catlass-example-to-pytest/` |
+| `catlass-example-to-torch-intf` | 将 catlass 示例迁移为 PyTorch extension 接口。 | `.agents/skills/catlass-example-to-torch-intf/` |
 
 ## 目录快速导航
 

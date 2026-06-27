@@ -24,6 +24,10 @@ from .splitk_matmul import splitk_matmul  # example 09
 from .quant_matmul import quant_matmul  # example 12
 from .basic_matmul_tla import basic_matmul_tla  # example 13
 from .optimized_matmul_tla import optimized_matmul_tla  # example 14
+from .gemm import gemm  # example 15
+from .group_gemm import group_gemm  # example 16
+from .gemv_aiv import gemv_aiv  # example 17
+from .gemv_aic import gemv_aic  # example 18
 from .mla import mla  # example 19
 from .matmul_bias import matmul_bias  # example 20
 from .basic_matmul_preload_zN import basic_matmul_preload_zN  # example 21
@@ -103,6 +107,10 @@ __all__ = [
     "quant_matmul",                       # example 12
     "basic_matmul_tla",                   # example 13
     "optimized_matmul_tla",               # example 14
+    "gemm",                               # example 15
+    "group_gemm",                         # example 16
+    "gemv_aiv",                           # example 17
+    "gemv_aic",                           # example 18
     "mla",                                # example 19
     "matmul_bias",                        # example 20
     "basic_matmul_preload_zN",            # example 21

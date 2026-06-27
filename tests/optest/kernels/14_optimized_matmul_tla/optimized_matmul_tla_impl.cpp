@@ -182,15 +182,4 @@ extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::
         deviceWA, layoutWA, deviceWB, layoutWB};
 
     Catlass::RunKernel<MatmulKernel>(arguments, stream, blockNum);
-
-#if CATLASS_JIT_NEED_PADDING_A
-    if (!g_catlassWorkspaceAlloc) {
-        aclrtFree(deviceWA);
-    }
-#endif
-#if CATLASS_JIT_NEED_PADDING_B
-    if (!g_catlassWorkspaceAlloc) {
-        aclrtFree(deviceWB);
-    }
-#endif
 }

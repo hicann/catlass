@@ -12,6 +12,7 @@
 #include "catlass_kernel.h"
 #include "common/kernel_runner.h"
 #include "common/tile_shape_scaler.h"
+#include "common/workspace_alloc.h"
 
 #ifndef CATLASS_JIT_ELEMENT_A
 #define CATLASS_JIT_ELEMENT_A half
@@ -85,28 +86,10 @@ extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::
         hostLayoutC[i] = LayoutC::template MakeLayout<ElementC>(m, n);
     }
 
-    GemmCoord* problemShapeListDevice = nullptr;
-    LayoutA* layoutAListDevice = nullptr;
-    LayoutB* layoutBListDevice = nullptr;
-    LayoutC* layoutCListDevice = nullptr;
-
-    aclrtMalloc(reinterpret_cast<void**>(&problemShapeListDevice), problemCount * sizeof(GemmCoord), ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc(reinterpret_cast<void**>(&layoutAListDevice), problemCount * sizeof(LayoutA), ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc(reinterpret_cast<void**>(&layoutBListDevice), problemCount * sizeof(LayoutB), ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc(reinterpret_cast<void**>(&layoutCListDevice), problemCount * sizeof(LayoutC), ACL_MEM_MALLOC_HUGE_FIRST);
-
-    aclrtMemcpy(problemShapeListDevice, problemCount * sizeof(GemmCoord),
-                hostProblemShapes.data(), problemCount * sizeof(GemmCoord),
-                ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(layoutAListDevice, problemCount * sizeof(LayoutA),
-                hostLayoutA.data(), problemCount * sizeof(LayoutA),
-                ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(layoutBListDevice, problemCount * sizeof(LayoutB),
-                hostLayoutB.data(), problemCount * sizeof(LayoutB),
-                ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(layoutCListDevice, problemCount * sizeof(LayoutC),
-                hostLayoutC.data(), problemCount * sizeof(LayoutC),
-                ACL_MEMCPY_HOST_TO_DEVICE);
+    GemmCoord* problemShapeListDevice = (GemmCoord*)g_catlassWorkspaceAllocFromHost(hostProblemShapes.data(), problemCount * sizeof(GemmCoord));
+    LayoutA* layoutAListDevice = (LayoutA*)g_catlassWorkspaceAllocFromHost(hostLayoutA.data(), problemCount * sizeof(LayoutA));
+    LayoutB* layoutBListDevice = (LayoutB*)g_catlassWorkspaceAllocFromHost(hostLayoutB.data(), problemCount * sizeof(LayoutB));
+    LayoutC* layoutCListDevice = (LayoutC*)g_catlassWorkspaceAllocFromHost(hostLayoutC.data(), problemCount * sizeof(LayoutC));
 
     typename MatmulKernel::Arguments arguments{
         problemCount, reinterpret_cast<uint8_t*>(problemShapeListDevice), params->inputAddr[0],
@@ -117,9 +100,4 @@ extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::
     Catlass::RunKernel<MatmulKernel>(arguments, stream, blockNum);
 
     aclrtSynchronizeStream(stream);
-
-    aclrtFree(problemShapeListDevice);
-    aclrtFree(layoutAListDevice);
-    aclrtFree(layoutBListDevice);
-    aclrtFree(layoutCListDevice);
 }

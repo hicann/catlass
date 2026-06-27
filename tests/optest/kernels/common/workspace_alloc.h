@@ -21,16 +21,19 @@
 #include <cstddef>
 #include <cstdint>
 
-using WorkspaceAllocFn = uint8_t* (*)(size_t size);
-using WorkspaceFreeFn = void (*)(uint8_t* ptr, size_t size);
+using WorkspaceAllocFn     = uint8_t* (*)(size_t size);
+using WorkspaceFreeFn      = void (*)(uint8_t* ptr, size_t size);
+using WorkspaceAllocCopyFn = uint8_t* (*)(const void* hostData, size_t size);
 
 extern "C" {
 
-extern WorkspaceAllocFn g_catlassWorkspaceAlloc;
-extern WorkspaceFreeFn  g_catlassWorkspaceFree;
+extern WorkspaceAllocFn     g_catlassWorkspaceAlloc;
+extern WorkspaceFreeFn      g_catlassWorkspaceFree;
+extern WorkspaceAllocCopyFn g_catlassWorkspaceAllocFromHost;
 
 void CatlassSetWorkspaceAlloc(WorkspaceAllocFn alloc);
 void CatlassSetWorkspaceFree(WorkspaceFreeFn free_fn);
+void CatlassSetWorkspaceAllocFromHost(WorkspaceAllocCopyFn allocCopy);
 
 } // extern "C"
 

@@ -215,17 +215,17 @@ void Gemm(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, c
 /**
  * @brief Reserved JIT interface for example 16_group_gemm.
  */
-void GroupGemm(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GroupedMatmulParams& params);
+void GroupGemm(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GemmParams& params);
 
 /**
  * @brief Reserved JIT interface for example 17_gemv_aiv.
  */
-void GemvAIV(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+void GemvAIV(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GemmParams& params);
 
 /**
  * @brief Reserved JIT interface for example 18_gemv_aic.
  */
-void GemvAIC(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
+void GemvAIC(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GemmParams& params);
 
 /**
  * @brief JIT interface for example 20_matmul_bias.
