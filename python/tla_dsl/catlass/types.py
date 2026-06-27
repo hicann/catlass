@@ -46,7 +46,6 @@ def _coerce_host_tensor_addrspace(value: Any) -> str:
 
 
 _cached_ptr_typeid: mlir_ir.TypeID | None = None
-_cached_memref_typeid: mlir_ir.TypeID | None = None
 
 
 class PtrType(mlir_ir.Type):
@@ -107,67 +106,6 @@ class PtrType(mlir_ir.Type):
     @property
     def mlir_type(self) -> mlir_ir.Type:
         """Former façade field: the underlying MLIR type is ``self``."""
-        return self
-
-
-class MemrefType(mlir_ir.Type):
-    """``!tla.memref<...>`` as a Python subclass of :class:`mlir.ir.Type`."""
-
-    def __init__(self, cast_from_type: mlir_ir.Type) -> None:
-        super().__init__(cast_from_type)
-
-    def __repr__(self) -> str:
-        return f"MemrefType({str(self)})"
-
-    @classmethod
-    def get_static_typeid(cls) -> mlir_ir.TypeID:
-        global _cached_memref_typeid
-        if _cached_memref_typeid is None:
-            ctx = mlir_ir.Context()
-            with ctx:
-                probe = cls.get((1,), mlir_ir.IndexType.get(), "gm", context=ctx)
-            _cached_memref_typeid = probe.typeid
-        return _cached_memref_typeid
-
-    @classmethod
-    def isinstance(cls, ty: mlir_ir.Type) -> bool:
-        return _tla_type_bridge.type_is_memref(ty)
-
-    @classmethod
-    def try_cast(cls, ty: mlir_ir.Type) -> "MemrefType | None":
-        if not cls.isinstance(ty):
-            return None
-        return ty if isinstance(ty, cls) else cls(ty)
-
-    @staticmethod
-    def get(
-        shape: tuple[int | None, ...],
-        element_type: mlir_ir.Type,
-        addrspace: str,
-        *,
-        context: mlir_ir.Context | None = None,
-    ) -> "MemrefType":
-        ctx = context if context is not None else element_type.context
-        return MemrefType(
-            _tla_type_bridge.memref_type_get(
-                ctx, tuple(shape), element_type, str(addrspace)
-            )
-        )
-
-    @property
-    def shape(self) -> tuple[int | None, ...]:
-        return _tla_type_bridge.memref_shape(self)
-
-    @property
-    def element_type(self) -> mlir_ir.Type:
-        return _tla_type_bridge.memref_element_type_get(self.context, self)
-
-    @property
-    def addrspace(self) -> str:
-        return _tla_type_bridge.memref_addrspace(self)
-
-    @property
-    def mlir_type(self) -> mlir_ir.Type:
         return self
 
 
@@ -860,7 +798,6 @@ from .base_dsl.typing import (
 __all__ = [
     "AddressSpace",
     "PtrType",
-    "MemrefType",
     "TlaIndexTreeKind",
     "TlaIndexTreeLeaf",
     "TlaIndexTree",

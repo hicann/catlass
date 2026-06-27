@@ -3,7 +3,6 @@
 
 module {
   func.func @print_ir_pass_selection_smoke() {
-    %v = "tla.splat"() {value = 9 : i32} : () -> !tla.value<i32>
     func.return
   }
 }

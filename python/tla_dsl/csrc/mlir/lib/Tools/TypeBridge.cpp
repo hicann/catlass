@@ -158,40 +158,6 @@ unsigned ptrAlignment(MlirType ptrType) {
   return ptr.getAlignment();
 }
 
-MlirType memrefTypeGet(MlirContext context, const std::vector<int64_t> &shape, MlirType elementType,
-                       const std::string &addrspaceText) {
-  MLIRContext *ctx = bridgeContext(context);
-  Type element = bridgeType(elementType, "element type");
-  auto addrspace = parseRequiredAddressSpace(addrspaceText);
-  Type type = ::tla::MemrefType::getChecked(
-      [&] { return emitBridgeError(ctx, "invalid tla.memref type bridge input"); }, ctx,
-      treeRef(shape, "tla.memref shape"), element, *addrspace);
-  return toMlirType(type, "tla.memref");
-}
-
-MlirType memrefElementTypeGet(MlirType memrefType) {
-  auto memref = checkedTlaType<::tla::MemrefType>(memrefType, "!tla.memref type");
-  return toMlirType(memref.getElementType(), "memref element type");
-}
-
-std::string memrefAddrspace(MlirType memrefType) {
-  auto memref = checkedTlaType<::tla::MemrefType>(memrefType, "!tla.memref type");
-  return stringifyAddressSpace(memref.getAddressSpace()).str();
-}
-
-py::tuple memrefShape(MlirType memrefType) {
-  auto memref = checkedTlaType<::tla::MemrefType>(memrefType, "!tla.memref type");
-  ArrayRef<int64_t> shape = memref.getShape();
-  py::tuple result(shape.size());
-  for (auto [index, dim] : llvm::enumerate(shape)) {
-    if (dim == ShapedType::kDynamic)
-      result[index] = py::none();
-    else
-      result[index] = py::int_(dim);
-  }
-  return result;
-}
-
 MlirType layoutTypeFromComponentsGet(MlirContext context, MlirType shapeType, MlirType strideType,
                                      py::object originShapeType, const std::string &layoutText) {
   MLIRContext *ctx = bridgeContext(context);
@@ -286,7 +252,7 @@ MlirType tensorTypeGet(MlirContext context, const std::vector<int64_t> &shapeTre
 
 std::optional<std::string> tlaTypeCategory(MlirType type) {
   Type unwrapped = bridgeType(type);
-  if (isa<::tla::TlaTensorType, ::tla::MemrefType>(unwrapped))
+  if (isa<::tla::TlaTensorType>(unwrapped))
     return "tensor";
   if (isa<::tla::ValueType>(unwrapped))
     return "value";
@@ -379,8 +345,6 @@ PYBIND11_MODULE(_tla_type_bridge_native, m) {
         py::arg("element_type"), py::arg("addrspace"), py::arg("layout"), py::arg("ptr_alignment"));
   m.def("ptr_type_get", &ptrTypeGet, py::arg("context"), py::arg("pointee"), py::arg("addrspace"),
         py::arg("alignment"));
-  m.def("memref_type_get", &memrefTypeGet, py::arg("context"), py::arg("shape"),
-        py::arg("element_type"), py::arg("addrspace"));
   m.def("value_type_get", &valueTypeGet, py::arg("context"), py::arg("element_type") = py::none());
   m.def("flag_type_get", &flagTypeGet, py::arg("context"));
   m.def("cross_flag_type_get", &crossFlagTypeGet, py::arg("context"));
@@ -389,7 +353,6 @@ PYBIND11_MODULE(_tla_type_bridge_native, m) {
 
   m.def("type_is_ptr", &typeIs<::tla::PtrType>, py::arg("type"));
   m.def("type_is_tensor", &typeIs<::tla::TlaTensorType>, py::arg("type"));
-  m.def("type_is_memref", &typeIs<::tla::MemrefType>, py::arg("type"));
   m.def("type_is_shape", &typeIs<::tla::ShapeType>, py::arg("type"));
   m.def("type_is_coord", &typeIs<::tla::CoordType>, py::arg("type"));
   m.def("type_is_stride", &typeIs<::tla::StrideType>, py::arg("type"));
@@ -404,9 +367,6 @@ PYBIND11_MODULE(_tla_type_bridge_native, m) {
   m.def("ptr_pointee_type_get", &ptrPointeeTypeGet, py::arg("ptr_type"));
   m.def("ptr_addrspace", &ptrAddrspace, py::arg("ptr_type"));
   m.def("ptr_alignment", &ptrAlignment, py::arg("ptr_type"));
-  m.def("memref_element_type_get", &memrefElementTypeGet, py::arg("memref_type"));
-  m.def("memref_addrspace", &memrefAddrspace, py::arg("memref_type"));
-  m.def("memref_shape", &memrefShape, py::arg("memref_type"));
   m.def("value_element_type_get", &valueElementTypeGet, py::arg("value_type"));
   m.def("lower_to_mlir", &lowerToMlir, py::arg("module"), py::arg("mlir_print_ir_before"),
         py::arg("mlir_print_ir_after"), py::arg("mlir_print_ir_before_all"),

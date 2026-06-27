@@ -112,37 +112,6 @@ def ptr_alignment(ptr_type: mlir_ir.Type) -> int:
     return int(_load_bridge_extension().ptr_alignment(ptr_type))
 
 
-def memref_type_get(
-    context: mlir_ir.Context,
-    shape: Any,
-    element_type: mlir_ir.Type,
-    addrspace: str,
-) -> mlir_ir.Type:
-    if not isinstance(element_type, mlir_ir.Type):
-        raise TypeError(
-            "Tla memref bridge expects element_type as mlir.ir.Type, "
-            f"got {type(element_type).__name__}"
-        )
-    return _load_bridge_extension().memref_type_get(
-        context, list(_encode_memref_shape(shape)), element_type, str(addrspace)
-    )
-
-
-def memref_element_type_get(
-    context: mlir_ir.Context, memref_type: mlir_ir.Type
-) -> mlir_ir.Type:
-    del context
-    return _load_bridge_extension().memref_element_type_get(memref_type)
-
-
-def memref_addrspace(memref_type: mlir_ir.Type) -> str:
-    return str(_load_bridge_extension().memref_addrspace(memref_type))
-
-
-def memref_shape(memref_type: mlir_ir.Type) -> tuple[int | None, ...]:
-    return tuple(_load_bridge_extension().memref_shape(memref_type))
-
-
 def layout_type_from_components_get(
     context: mlir_ir.Context,
     shape_type: mlir_ir.Type,
@@ -203,10 +172,6 @@ def type_is_tensor(type_like: mlir_ir.Type) -> bool:
     return bool(_load_bridge_extension().type_is_tensor(type_like))
 
 
-def type_is_memref(type_like: mlir_ir.Type) -> bool:
-    return bool(_load_bridge_extension().type_is_memref(type_like))
-
-
 def type_is_shape(type_like: mlir_ir.Type) -> bool:
     return bool(_load_bridge_extension().type_is_shape(type_like))
 
@@ -244,34 +209,6 @@ def type_is_copy_l0c2dst_params(type_like: mlir_ir.Type) -> bool:
 def tla_type_category(type_like: mlir_ir.Type) -> str | None:
     category = _load_bridge_extension().tla_type_category(type_like)
     return None if category is None else str(category)
-
-
-def _encode_memref_shape(shape: Any) -> tuple[int, ...]:
-    if isinstance(shape, int) or shape is None:
-        dims = (shape,)
-    elif isinstance(shape, tuple):
-        dims = shape
-    else:
-        raise TypeError(
-            "Tla memref shape expects an int/None dimension or a tuple of dimensions; "
-            f"got {type(shape).__name__}"
-        )
-    encoded: list[int] = []
-    for dim in dims:
-        if isinstance(dim, bool):
-            raise TypeError("boolean not allowed in Tla memref shape")
-        if dim is None:
-            encoded.append(_DYNAMIC)
-        elif isinstance(dim, int):
-            if dim < 0:
-                raise ValueError("Tla memref dimensions must be non-negative or None")
-            encoded.append(int(dim))
-        else:
-            raise TypeError(
-                "Tla memref shape expects static int dimensions or None; "
-                f"got {type(dim).__name__}"
-            )
-    return tuple(encoded)
 
 
 def _encode_index_tree(tree: Any) -> tuple[int, ...]:
@@ -383,10 +320,6 @@ __all__ = [
     "layout_type_get",
     "load_tla_dialect",
     "mutex_type_get",
-    "memref_addrspace",
-    "memref_element_type_get",
-    "memref_shape",
-    "memref_type_get",
     "ptr_addrspace",
     "ptr_alignment",
     "ptr_pointee_type_get",
@@ -398,7 +331,6 @@ __all__ = [
     "type_is_cross_flag",
     "type_is_flag",
     "type_is_layout",
-    "type_is_memref",
     "type_is_mutex",
     "type_is_ptr",
     "type_is_shape",

@@ -169,22 +169,6 @@ public:
     return info;
   }
 
-  static bool parseMemrefTypeMetadata(Type memrefType, std::string &addrspace,
-                                      std::string &elementType, int64_t &rank) {
-    auto tlaMemref = dyn_cast<::tla::MemrefType>(memrefType);
-    if (!tlaMemref)
-      return false;
-
-    rank = static_cast<int64_t>(tlaMemref.getShape().size());
-    std::string elemBuf;
-    llvm::raw_string_ostream elemOs(elemBuf);
-    elemOs << tlaMemref.getElementType();
-    elemOs.flush();
-    elementType = std::move(elemBuf);
-    addrspace = stringifyAddressSpace(tlaMemref.getAddressSpace()).str();
-    return !elementType.empty() && !addrspace.empty();
-  }
-
   static bool validateTensorDescriptorV1(Operation *op, const TensorDescriptor &desc,
                                          StringRef errorMessage, bool requireShapeOperands) {
     if (!desc.bridgedBaseMemrefType || desc.rank != 2 || desc.addrspace.empty() ||
@@ -509,20 +493,6 @@ public:
     return parseTensorLayoutTagAttr(layoutTagAttr.getValue());
   }
 
-  static bool parseMemrefMetadataOrEmit(Operation *op, Type memrefType, StringRef parseError,
-                                        std::string &addrspace, std::string &elementType,
-                                        int64_t &rank) {
-    if (!parseMemrefTypeMetadata(memrefType, addrspace, elementType, rank)) {
-      op->emitError() << parseError;
-      return false;
-    }
-    return true;
-  }
-
-  static FailureOr<MemRefType> bridgeTlaMemrefType(Type tlaMemrefType) {
-    return bridgeTlaFuncMemrefType(tlaMemrefType);
-  }
-
   // Bridge structured !tla.tensor<...> to builtin memref<..., memspace>.
   // Root tensor arguments reuse the tensor's full static shape as the backing
   // storage extent so descriptor-driven view lowering can materialize subviews
@@ -717,6 +687,12 @@ public:
           pushStagedErase(allocatorState->toErase, ptrBridge.getOperation());
           return *ptrResult;
         }
+      }
+      if (auto ifOp = desc.base.getDefiningOp<scf::IfOp>()) {
+        FailureOr<Value> ifResult = materializePtrIfAsMemref(rewriter, loc, ifOp, memrefType,
+                                                             *allocatorState, diagnosticOp);
+        if (succeeded(ifResult))
+          return *ifResult;
       }
       auto castOp = dyn_cast_or_null<UnrealizedConversionCastOp>(desc.base.getDefiningOp());
       if (castOp && castOp->getNumOperands() == 1) {
@@ -1179,40 +1155,6 @@ public:
     return newIf.getResult(0);
   }
 
-  struct LowerTlaSplatPattern : public OpRewritePattern<::tla::SplatOp> {
-    using OpRewritePattern<::tla::SplatOp>::OpRewritePattern;
-
-    LogicalResult matchAndRewrite(::tla::SplatOp op, PatternRewriter &rewriter) const override {
-      auto valueAttr = op->getAttrOfType<Attribute>("value");
-      if (!valueAttr) {
-        op.emitError() << "expected tla.splat to have a 'value' attribute";
-        return failure();
-      }
-
-      Type resultType = rewriter.getF32Type();
-      if (auto floatAttr = llvm::dyn_cast<FloatAttr>(valueAttr))
-        resultType = floatAttr.getType();
-      if (auto intAttr = llvm::dyn_cast<IntegerAttr>(valueAttr))
-        resultType = intAttr.getType();
-
-      auto newAttr = llvm::dyn_cast<TypedAttr>(valueAttr);
-      if (!newAttr) {
-        if (auto intAttr = llvm::dyn_cast<IntegerAttr>(valueAttr)) {
-          newAttr = IntegerAttr::get(resultType, intAttr.getInt());
-        } else if (auto floatAttr = llvm::dyn_cast<FloatAttr>(valueAttr)) {
-          newAttr = FloatAttr::get(resultType, floatAttr.getValueAsDouble());
-        }
-      }
-      if (!newAttr) {
-        op.emitError() << "unsupported tla.splat value attribute type";
-        return failure();
-      }
-
-      rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, resultType, newAttr);
-      return success();
-    }
-  };
-
   struct LowerTlaMmadPattern : public OpRewritePattern<::tla::MmadOp> {
     LowerTlaMmadPattern(MLIRContext *ctx, ModuleOp module,
                         DenseMap<Value, TensorDescriptor> &tensorDescriptorByValue,
@@ -1391,98 +1333,6 @@ public:
     DenseMap<Value, TensorDescriptor> &tensorDescriptorByValue;
     SmallVectorImpl<Operation *> &toErase;
   };
-
-  struct LowerTlaGmAddPattern : public OpRewritePattern<::tla::GmAddOp> {
-    LowerTlaGmAddPattern(MLIRContext *ctx, ModuleOp module, SmallVectorImpl<Operation *> &toErase)
-        : OpRewritePattern<::tla::GmAddOp>(ctx), module(module), toErase(toErase) {}
-
-    LogicalResult matchAndRewrite(::tla::GmAddOp op, PatternRewriter &rewriter) const override {
-      if (op->getNumOperands() != 3 || op->getNumResults() != 0) {
-        op.emitError() << "expected tla.gm_add to have exactly 3 operands and 0 results";
-        return failure();
-      }
-
-      Type lhsType = op->getOperand(0).getType();
-      Type rhsType = op->getOperand(1).getType();
-      Type dstType = op->getOperand(2).getType();
-
-      std::string lhsAddrspace, lhsElementType;
-      std::string rhsAddrspace, rhsElementType;
-      std::string dstAddrspace, dstElementType;
-      int64_t lhsRank = 0;
-      int64_t rhsRank = 0;
-      int64_t dstRank = 0;
-      if (!TlaLowerToStdPass::parseMemrefMetadataOrEmit(
-              op, lhsType, "tla.gm_add currently requires typed !tla.memref operand types",
-              lhsAddrspace, lhsElementType, lhsRank) ||
-          !TlaLowerToStdPass::parseMemrefMetadataOrEmit(
-              op, rhsType, "tla.gm_add currently requires typed !tla.memref operand types",
-              rhsAddrspace, rhsElementType, rhsRank) ||
-          !TlaLowerToStdPass::parseMemrefMetadataOrEmit(
-              op, dstType, "tla.gm_add currently requires typed !tla.memref operand types",
-              dstAddrspace, dstElementType, dstRank)) {
-        return failure();
-      }
-
-      if (lhsRank != 1 || rhsRank != 1 || dstRank != 1) {
-        op.emitError() << "tla.gm_add currently supports rank-1 memrefs only";
-        return failure();
-      }
-      if (lhsAddrspace != "gm" || rhsAddrspace != "gm" || dstAddrspace != "gm") {
-        op.emitError() << "tla.gm_add requires lhs/rhs/dst in gm addrspace";
-        return failure();
-      }
-      if (lhsElementType != "f16" || rhsElementType != "f16" || dstElementType != "f16") {
-        op.emitError() << "tla.gm_add currently supports f16 memrefs only";
-        return failure();
-      }
-
-      auto lhsInfo = TlaLowerToStdPass::bridgeTlaMemrefType(lhsType);
-      auto rhsInfo = TlaLowerToStdPass::bridgeTlaMemrefType(rhsType);
-      auto dstInfo = TlaLowerToStdPass::bridgeTlaMemrefType(dstType);
-      if (failed(lhsInfo) || failed(rhsInfo) || failed(dstInfo)) {
-        op.emitError() << "failed to decode tla.gm_add memref operand types";
-        return failure();
-      }
-      if (lhsInfo->getShape() != rhsInfo->getShape() ||
-          lhsInfo->getShape() != dstInfo->getShape()) {
-        op.emitError() << "tla.gm_add requires matching operand shapes";
-        return failure();
-      }
-
-      int64_t length = lhsInfo->getShape()[0];
-      auto i64Type = rewriter.getI64Type();
-      SmallVector<Type, 4> operandTypes = {*lhsInfo, *rhsInfo, *dstInfo, i64Type};
-      auto callee = TlaLowerToStdPass::getOrCreateRuntimeCall(
-          module, "_mlir_ciface_tla_gm_add_half", operandTypes);
-      Value lhsMemref = rewriter
-                            .create<UnrealizedConversionCastOp>(op.getLoc(), TypeRange{*lhsInfo},
-                                                                ValueRange{op->getOperand(0)})
-                            .getResult(0);
-      Value rhsMemref = rewriter
-                            .create<UnrealizedConversionCastOp>(op.getLoc(), TypeRange{*rhsInfo},
-                                                                ValueRange{op->getOperand(1)})
-                            .getResult(0);
-      Value dstMemref = rewriter
-                            .create<UnrealizedConversionCastOp>(op.getLoc(), TypeRange{*dstInfo},
-                                                                ValueRange{op->getOperand(2)})
-                            .getResult(0);
-      SmallVector<Value, 4> operands = {
-          lhsMemref,
-          rhsMemref,
-          dstMemref,
-          rewriter.create<arith::ConstantIntOp>(op.getLoc(), length, 64).getResult(),
-      };
-      rewriter.create<func::CallOp>(op.getLoc(), callee, operands);
-      toErase.push_back(op.getOperation());
-      return success();
-    }
-
-  private:
-    ModuleOp module;
-    SmallVectorImpl<Operation *> &toErase;
-  };
-
 
   struct LowerTlaCubePattern : public OpRewritePattern<::tla::CubeOp> {
     using OpRewritePattern<::tla::CubeOp>::OpRewritePattern;
@@ -2259,17 +2109,8 @@ public:
         }
 
         Value source = tileOp.getOperand(0);
-        if (isa<::tla::MemrefType>(source.getType()) || isa<MemRefType>(source.getType())) {
-          FailureOr<MemRefType> bridgedBaseType =
-              isa<MemRefType>(source.getType())
-                  ? FailureOr<MemRefType>(cast<MemRefType>(source.getType()))
-                  : bridgeTlaMemrefType(source.getType());
-          if (failed(bridgedBaseType)) {
-            op->emitError()
-                << "tla.tile_view source memref must be bridgeable to builtin memref type";
-            signalPassFailure();
-            return;
-          }
+        if (auto srcMemref = dyn_cast<MemRefType>(source.getType())) {
+          FailureOr<MemRefType> bridgedBaseType = srcMemref;
 
           auto explicitLayout = getExplicitTensorLayoutTagAttr(op);
           if (succeeded(explicitLayout)) {
@@ -2364,7 +2205,7 @@ public:
           return;
         }
 
-        op->emitError() << "tla.tile_view source must be either !tla.memref or !tla.tensor";
+        op->emitError() << "tla.tile_view source must be either a builtin memref or !tla.tensor";
         signalPassFailure();
         return;
       }
@@ -2417,11 +2258,6 @@ public:
           return;
         }
 
-        // Buffer element count for the synthetic !tla.memref type below. Today this path only
-        // supports 1D/2D logical tiles: either we read a static 1D length from an HIVM
-        // pointer-cast bridge, or we multiply the first two origin_shape dimensions. If we
-        // ever need higher-rank tiles here, we will likely flatten the backing memref to 1D
-        // and drive everything from a single linear element count.
         int64_t flatElemCount = ShapedType::kDynamic;
         if (auto n = getStatic1DElementCountFromHivmPtrBridge(ptrValue); succeeded(n) && *n > 0) {
           flatElemCount = *n;
@@ -2433,10 +2269,9 @@ public:
           if (dim0 > 0 && dim1 > 0)
             flatElemCount = dim0 * dim1;
         }
-        Type typedBufferType =
-            ::tla::MemrefType::get(op->getContext(), {flatElemCount}, childInfo->mlirElementType,
-                                   childInfo->tlaAddressSpace);
-        auto bridgedBaseType = bridgeTlaMemrefType(typedBufferType);
+        auto bridgedBaseType =
+            buildHivmMemrefType(op->getContext(), {flatElemCount}, childInfo->mlirElementType,
+                                childInfo->tlaAddressSpace);
         if (failed(bridgedBaseType)) {
           op->emitError()
               << "tla.make_tensor_like buffer memref must be bridgeable to builtin memref type";
@@ -2465,10 +2300,7 @@ public:
           signalPassFailure();
           return;
         }
-        Value typedBuffer = builder
-                                .create<UnrealizedConversionCastOp>(
-                                    op->getLoc(), TypeRange{typedBufferType}, ValueRange{ptrValue})
-                                .getResult(0);
+        Value typedBuffer = ptrValue;
         auto materializeLeafFromTypeOrParent = [&](int64_t leaf, Value parentValue,
                                                    StringRef fieldName) -> FailureOr<Value> {
           if (leaf == ShapedType::kDynamic) {
@@ -2780,10 +2612,9 @@ public:
 
     // Stage 8B: lower residual compute ops.
     LowerTlaMmadPattern lowerMmad(&getContext(), module, tensorDescriptorByValue, toErase);
-    LowerTlaGmAddPattern lowerGmAdd(&getContext(), module, toErase);
     SmallVector<Operation *, 16> execUnitOps;
     module.walk([&](Operation *op) {
-      if (llvm::isa<::tla::MmadOp, ::tla::GmAddOp>(op))
+      if (llvm::isa<::tla::MmadOp>(op))
         execUnitOps.push_back(op);
     });
     for (Operation *op : execUnitOps) {
@@ -2794,8 +2625,6 @@ public:
       LogicalResult lowered = success();
       if (auto mmadOp = llvm::dyn_cast<::tla::MmadOp>(op)) {
         lowered = lowerMmad.matchAndRewrite(mmadOp, rewriter);
-      } else if (auto gmAddOp = llvm::dyn_cast<::tla::GmAddOp>(op)) {
-        lowered = lowerGmAdd.matchAndRewrite(gmAddOp, rewriter);
       }
       if (failed(lowered)) {
         signalPassFailure();
@@ -2824,7 +2653,6 @@ public:
 
     // Stage P: typed rewrite patterns for simple Tla ops without global
     // greedy simplification so output structure remains stable for fixtures.
-    LowerTlaSplatPattern lowerSplat(&getContext());
     LowerTlaReturnToFuncReturnPattern lowerReturn(&getContext());
     LowerTlaFuncToFuncPattern<LowerTlaFuncToFuncAttrPolicy::OmitAttrs> lowerTlaFunc(&getContext());
     auto applyPattern = [&](auto op, auto &pattern) -> LogicalResult {
@@ -2834,15 +2662,6 @@ public:
       rewriter.setInsertionPoint(op);
       return pattern.matchAndRewrite(op, rewriter);
     };
-
-    SmallVector<::tla::SplatOp, 8> splatOps;
-    module.walk([&](::tla::SplatOp op) { splatOps.push_back(op); });
-    for (::tla::SplatOp op : splatOps) {
-      if (failed(applyPattern(op, lowerSplat))) {
-        signalPassFailure();
-        return;
-      }
-    }
 
     SmallVector<::tla::ReturnOp, 8> returnOps;
     module.walk([&](::tla::ReturnOp op) { returnOps.push_back(op); });
@@ -2917,7 +2736,7 @@ public:
     target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
     target.addIllegalOp<::tla::TileViewOp, ::tla::CopyOp, ::tla::MakeTensorLikeOp,
                         ::tla::LoadOp, ::tla::StoreOp, ::tla::FuncOp,
-                        ::tla::ReturnOp, ::tla::SplatOp, ::tla::MutexOp,
+                        ::tla::ReturnOp, ::tla::MutexOp,
                         ::tla::MutexLockOp, ::tla::MutexUnlockOp, ::tla::CrossFlagOp,
                         ::tla::CrossCoreSetFlagOp, ::tla::CrossCoreWaitFlagOp, ::tla::CubeOp,
                         ::tla::VectorOp, ::tla::MmadOp>();

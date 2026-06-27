@@ -39,18 +39,6 @@ def Tla_MutexType : TypeDef<TlaDialect, "Mutex", []> {
 }
 
 
-def Tla_MemrefType : TypeDef<TlaDialect, "Memref", []> {
-  let mnemonic = "memref";
-  let summary = "Memory buffer with an explicit Tla address space.";
-  let parameters = (ins
-    ArrayRefParameter<"int64_t", "memref shape">:$shape,
-    TypeParameter<"::mlir::Type", "element type">:$elementType,
-    TypeParameter<"::AddressSpace", "address space">:$addressSpace
-  );
-  let hasCustomAssemblyFormat = 1;
-  let genVerifyDecl = 1;
-}
-
 def Tla_AddressSpaceTypeParameter
     : TypeParameter<"::AddressSpace", "Tla address-space keyword"> {
   let parser = [{ [&]() -> ::mlir::FailureOr<::AddressSpace> {
@@ -280,7 +268,6 @@ def Tla_DependentBinaryOpsTrait : NativeOpTrait<"::mlir::tla::trait::DependentBi
 def Tla_DependentUnaryOpsTrait : NativeOpTrait<"::mlir::tla::trait::DependentUnaryOps">;
 def Tla_FlagTrait : NativeOpTrait<"::mlir::tla::trait::Flag">;
 def Tla_FmaTrait : NativeOpTrait<"::mlir::tla::trait::Fma">;
-def Tla_GmAddTrait : NativeOpTrait<"::mlir::tla::trait::GmAdd">;
 def Tla_IntermediateBinaryOpsTrait : NativeOpTrait<"::mlir::tla::trait::IntermediateBinaryOps">;
 def Tla_IntermediateMemoryOpsTrait : NativeOpTrait<"::mlir::tla::trait::IntermediateMemoryOps">;
 def Tla_IntermediateUnaryOpsTrait : NativeOpTrait<"::mlir::tla::trait::IntermediateUnaryOps">;
@@ -303,7 +290,6 @@ def Tla_RegionControlOpsTrait : NativeOpTrait<"::mlir::tla::trait::RegionControl
 def Tla_RegionOpsTrait : NativeOpTrait<"::mlir::tla::trait::RegionOps">;
 def Tla_ScalarControlOpsTrait : NativeOpTrait<"::mlir::tla::trait::ScalarControlOps">;
 def Tla_SetFlagTrait : NativeOpTrait<"::mlir::tla::trait::SetFlag">;
-def Tla_SplatTrait : NativeOpTrait<"::mlir::tla::trait::Splat">;
 def Tla_StoreTrait : NativeOpTrait<"::mlir::tla::trait::Store">;
 def Tla_SubtileTrait : NativeOpTrait<"::mlir::tla::trait::Subtile">;
 def Tla_TernaryOpsTrait : NativeOpTrait<"::mlir::tla::trait::TernaryOps">;
@@ -365,12 +351,11 @@ def Tla_RecastPtrOp : Tla_Op<"recast_ptr", [Pure]> {
   let summary = "Recast pointer element type (``tla.recast_ptr`` parity, dtype-only)";
   let description = [{
     Reinterprets a ``!tla.ptr`` SSA as a different logical pointee type while preserving
-    address space and alignment. Allocator-backed recasts may materialize a typed
-    ``!tla.memref`` so the HIVM lowering can emit pointer casts from allocator offsets.
+    address space and alignment.
     **No swizzle** metadata (Tla does not model swizzle on ``!tla.ptr``).
   }];
   let arguments = (ins Tla_PtrType:$src);
-  let results = (outs AnyTypeOf<[Tla_PtrType, Tla_MemrefType]>:$ptr);
+  let results = (outs Tla_PtrType:$ptr);
   let assemblyFormat = [{
     $src attr-dict `:` qualified(type($src)) `->` qualified(type($ptr))
   }];
@@ -488,22 +473,11 @@ def Tla_FmaOp : Tla_Op<"fma", [Pure]> {
 def Tla_FuncOp : Tla_Op<"func", []> {
   let summary = "Tla kernel function";
   let description = [{
-    Defines a Tla kernel entry point. The body is an isolated region with Tla IR operations and arguments typed as tla.memref.
+    Defines a Tla kernel entry point. The body is an isolated region with Tla IR operations.
   }];
   let arguments = (ins SymbolNameAttr:$sym_name, TypeAttr:$function_type);
   let regions = (region AnyRegion:$body);
   let hasCustomAssemblyFormat = 1;
-}
-
-def Tla_GmAddOp : Tla_Op<"gm_add", []> {
-  let summary = "Global-memory vector add";
-  let description = [{
-    Runtime-backed GM add over memref operands.
-  }];
-  let arguments = (ins Tla_MemrefType:$lhs, Tla_MemrefType:$rhs, Tla_MemrefType:$dst);
-  let assemblyFormat = [{
-    $lhs `,` $rhs `,` $dst attr-dict `:` type($lhs) `,` type($rhs) `,` type($dst)
-  }];
 }
 
 def Tla_LoadOp : Tla_Op<"load", []> {
@@ -695,15 +669,6 @@ def Tla_SetFlagOp : Tla_Op<"set_flag", []> {
   }];
 }
 
-def Tla_SplatOp : Tla_Op<"splat", [Pure]> {
-  let summary = "Splat";
-  let description = [{
-    Materialize a scalar or vector value by splatting a literal.
-  }];
-  let arguments = (ins AnyAttr:$value);
-  let results = (outs Tla_ValueType:$result);
-}
-
 def Tla_StoreOp : Tla_Op<"store", []> {
   let summary = "Store";
   let description = [{
@@ -718,10 +683,10 @@ def Tla_StoreOp : Tla_Op<"store", []> {
 def Tla_TileViewOp : Tla_Op<"tile_view", []> {
   let summary = "Tile view";
   let description = [{
-    Create a tensor view over either a tla.memref buffer or an existing tla.tensor
+    Create a tensor view over either a builtin memref buffer or an existing tla.tensor
     using packed ``!tla.shape`` and ``!tla.coord`` values.
   }];
-  let arguments = (ins AnyTypeOf<[Tla_MemrefType, Tla_TensorType, AnyMemRef]>:$source, Tla_ShapeType:$shape, Tla_CoordType:$coord, OptionalAttr<StrAttr>:$layouttag);
+  let arguments = (ins AnyTypeOf<[Tla_TensorType, AnyMemRef]>:$source, Tla_ShapeType:$shape, Tla_CoordType:$coord, OptionalAttr<StrAttr>:$layouttag);
   let results = (outs Tla_TensorType:$view);
   let assemblyFormat = [{
     $source `,` $shape `,` $coord attr-dict `:` qualified(type($source)) `,` qualified(type($shape)) `,` qualified(type($coord)) `->` qualified(type($view))

@@ -2,7 +2,6 @@
 
 module {
   func.func @print_ir_smoke() {
-    %v = "tla.splat"() {value = 7 : i32} : () -> !tla.value<i32>
     func.return
   }
 }

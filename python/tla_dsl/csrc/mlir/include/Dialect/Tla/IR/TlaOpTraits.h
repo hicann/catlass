@@ -105,12 +105,6 @@ public:
 };
 
 template <typename ConcreteType>
-class GmAdd : public ::mlir::OpTrait::TraitBase<ConcreteType, GmAdd> {
-public:
-  static constexpr ::llvm::StringLiteral getTraitName() { return "GmAdd"; }
-};
-
-template <typename ConcreteType>
 class IntermediateBinaryOps
     : public ::mlir::OpTrait::TraitBase<ConcreteType, IntermediateBinaryOps> {
 public:
@@ -245,12 +239,6 @@ public:
 };
 
 template <typename ConcreteType>
-class Splat : public ::mlir::OpTrait::TraitBase<ConcreteType, Splat> {
-public:
-  static constexpr ::llvm::StringLiteral getTraitName() { return "Splat"; }
-};
-
-template <typename ConcreteType>
 class Store : public ::mlir::OpTrait::TraitBase<ConcreteType, Store> {
 public:
   static constexpr ::llvm::StringLiteral getTraitName() { return "Store"; }
@@ -347,7 +335,6 @@ inline constexpr NamedOpMetadata kOpMetadataByName[] = {
     {"tla.flag", {"unary", "intermediate"}},
     {"tla.fma", {"binary", "vector"}},
     {"tla.func", {"control", "intermediate"}},
-    {"tla.gm_add", {"binary", "vector"}},
     {"tla.inttoptr", {"unary", "intermediate"}},
     {"tla.recast_ptr", {"unary", "intermediate"}},
     {"tla.load", {"unary", "dependent"}},
@@ -355,7 +342,6 @@ inline constexpr NamedOpMetadata kOpMetadataByName[] = {
     {"tla.pipe_barrier", {"unary", "intermediate"}},
     {"tla.return", {"control", "intermediate"}},
     {"tla.set_flag", {"unary", "intermediate"}},
-    {"tla.splat", {"unary", "intermediate"}},
     {"tla.store", {"binary", "dependent"}},
     {"tla.tile_view", {"unary", "intermediate"}},
     {"tla.add", {"binary", "vector"}},
@@ -379,14 +365,8 @@ inline constexpr FoldRule ktla_fmaFoldRules[] = {
      "fold to arith.constant(lhs * rhs + acc)", ""},
 };
 
-inline constexpr FoldRule ktla_splatFoldRules[] = {
-    {"constant-splat", "value is compile-time literal",
-     "fold to tla.splat literal with inferred result dtype", ""},
-};
-
 inline constexpr NamedOpFoldRules kFoldRulesByOpName[] = {
     {"tla.fma", {ktla_fmaFoldRules, sizeof(ktla_fmaFoldRules) / sizeof(FoldRule)}},
-    {"tla.splat", {ktla_splatFoldRules, sizeof(ktla_splatFoldRules) / sizeof(FoldRule)}},
 };
 
 inline FoldRuleSpan lookupFoldRules(::llvm::StringRef opName) {

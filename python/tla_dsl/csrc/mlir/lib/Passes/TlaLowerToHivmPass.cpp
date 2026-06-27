@@ -43,11 +43,10 @@ struct LowerBlockDimOp : public OpRewritePattern<::tla::BlockDimOp> {
 };
 
 static FailureOr<Type> convertTlaBoundaryTypeToHivm(Type type) {
+  // !tla.memref boundary types were removed; there is nothing to convert here.
   // Tensor boundaries are converted in TlaLowerToStd after tile_view lowering
   // has materialized the memref bridge for view-typed call operands.
-  auto bridged = bridgeTlaFuncMemrefType(type);
-  if (succeeded(bridged))
-    return *bridged;
+  (void)type;
   return failure();
 }
 

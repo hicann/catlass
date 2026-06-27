@@ -92,19 +92,6 @@ def test_ptr_type_uses_bridge_accessors_for_nested_pointee() -> None:
         assert ptr_type.alignment == 32
 
 
-def test_memref_type_uses_bridge_accessors_for_dynamic_shape() -> None:
-    with mlir_ir.Context() as ctx:
-        element_type = tla.Float32.mlir_type(ctx)
-        memref_type = tla.types.MemrefType.get(
-            (4, None), element_type, "gm", context=ctx
-        )
-
-        assert tla.types.MemrefType.isinstance(memref_type)
-        assert memref_type.shape == (4, None)
-        assert memref_type.element_type == element_type
-        assert memref_type.addrspace == "gm"
-
-
 def test_tla_type_descriptors_require_native_bridge(monkeypatch) -> None:
     monkeypatch.setattr(tla.types._tla_type_bridge, "_EXTENSION", None)
     monkeypatch.setattr(

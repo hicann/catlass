@@ -270,17 +270,12 @@ inline bool hasDefaultRowMajorStrides(ArrayRef<int64_t> shape, ArrayRef<int64_t>
   return true;
 }
 
-inline FailureOr<MemRefType> bridgeTlaFuncMemrefType(Type tlaMemrefType) {
-  auto tlaMemref = dyn_cast<::tla::MemrefType>(tlaMemrefType);
-  if (!tlaMemref)
-    return failure();
-
-  FailureOr<Attribute> memorySpaceOr =
-      mapTlaAddressSpaceToHivmMemspace(tlaMemrefType.getContext(), tlaMemref.getAddressSpace());
+inline FailureOr<MemRefType> buildHivmMemrefType(MLIRContext *ctx, ArrayRef<int64_t> shape,
+                                                 Type elementType, ::AddressSpace addrSpace) {
+  FailureOr<Attribute> memorySpaceOr = mapTlaAddressSpaceToHivmMemspace(ctx, addrSpace);
   if (failed(memorySpaceOr))
     return failure();
-  return MemRefType::get(tlaMemref.getShape(), tlaMemref.getElementType(), AffineMap(),
-                         *memorySpaceOr);
+  return MemRefType::get(shape, elementType, AffineMap(), *memorySpaceOr);
 }
 
 inline FailureOr<MemRefType> bridgeTlaFuncTensorType(Type tlaTensorType) {
@@ -376,17 +371,13 @@ struct LowerTlaFuncToFuncPattern : public OpRewritePattern<::tla::FuncOp> {
     SmallVector<Type, 8> bridgedInputs;
     bridgedInputs.reserve(funcType.getNumInputs());
     for (Type input : funcType.getInputs()) {
-      FailureOr<MemRefType> bridged = bridgeTlaFuncMemrefType(input);
-      if (failed(bridged))
-        bridged = bridgeTlaFuncTensorType(input);
+      FailureOr<MemRefType> bridged = bridgeTlaFuncTensorType(input);
       bridgedInputs.push_back(succeeded(bridged) ? *bridged : input);
     }
     SmallVector<Type, 4> bridgedResults;
     bridgedResults.reserve(funcType.getNumResults());
     for (Type result : funcType.getResults()) {
-      FailureOr<MemRefType> bridged = bridgeTlaFuncMemrefType(result);
-      if (failed(bridged))
-        bridged = bridgeTlaFuncTensorType(result);
+      FailureOr<MemRefType> bridged = bridgeTlaFuncTensorType(result);
       bridgedResults.push_back(succeeded(bridged) ? *bridged : result);
     }
 
