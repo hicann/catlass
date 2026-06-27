@@ -906,6 +906,44 @@ def make_tensor_like(tile, ptr, like, layout_tag, *, loc=None, ip=None) -> _ods_
   return _get_op_result_or_op_results(MakeTensorLikeOp(tile=tile, ptr=ptr, like=like, layoutTag=layout_tag, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
+class MakeTensorOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.make_tensor"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, ptr, layout, coord, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(ptr))
+    operands.append(_get_op_result_or_value(layout))
+    operands.append(_get_op_result_or_value(coord))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def ptr(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def layout(self):
+    return self.operation.operands[1]
+
+  @builtins.property
+  def coord(self):
+    return self.operation.operands[2]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def make_tensor(result, ptr, layout, coord, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(MakeTensorOp(result=result, ptr=ptr, layout=layout, coord=coord, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
 class MmadOp(_ods_ir.OpView):
   OPERATION_NAME = "tla.mmad"
 

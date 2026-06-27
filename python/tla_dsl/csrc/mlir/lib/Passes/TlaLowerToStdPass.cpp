@@ -1090,7 +1090,8 @@ public:
       progress = false;
       SmallVector<Operation *, 8> newlyDead;
       module.walk([&](Operation *op) {
-        if (!llvm::isa<::tla::TileViewOp, ::tla::MakeTensorLikeOp>(op) ||
+        if (!llvm::isa<::tla::TileViewOp, ::tla::MakeTensorLikeOp, ::tla::MakeTensorOp>(
+                op) ||
             llvm::is_contained(toErase, op))
           return;
         if (hasOnlyStagedResultUsers(op, toErase))
@@ -2517,6 +2518,177 @@ public:
         tensorDescriptorByValue[op->getResult(0)] = std::move(desc);
         return;
       }
+
+      if (llvm::isa<::tla::MakeTensorOp>(op)) {
+        if (op->getNumOperands() != 3 || op->getNumResults() != 1) {
+          op->emitError()
+              << "expected tla.make_tensor to have exactly 3 operands and 1 result";
+          signalPassFailure();
+          return;
+        }
+
+        Value ptrValue = op->getOperand(0);
+        if (!llvm::isa<::tla::PtrType>(ptrValue.getType())) {
+          op->emitError() << "tla.make_tensor pointer operand must be !tla.ptr";
+          signalPassFailure();
+          return;
+        }
+        Value layoutValue = op->getOperand(1);
+        Value coordValue = op->getOperand(2);
+        auto makeLayout = layoutValue.getDefiningOp<::tla::MakeLayoutOp>();
+        if (!makeLayout) {
+          op->emitError()
+              << "tla.make_tensor layout operand must come from tla.make_layout";
+          signalPassFailure();
+          return;
+        }
+
+        auto childInfo = decodeTileTypeInfo(op->getResult(0).getType());
+        if (failed(childInfo)) {
+          op->emitError() << "tla.make_tensor currently requires a structured tla.tensor "
+                             "result type";
+          signalPassFailure();
+          return;
+        }
+        if (!isLinearLayout(childInfo->layoutTag)) {
+          op->emitError() << "tla.make_tensor currently supports only linear layouts "
+                             "(RowMajor/ColumnMajor); packed layouts require make_tensor_like";
+          signalPassFailure();
+          return;
+        }
+
+        // Buffer element count for the synthetic !tla.memref type: prefer a static 1D
+        // length from an HIVM pointer-cast bridge (allocator-backed ptr), else multiply
+        // the first two origin_shape dims (e.g. inttoptr-backed ptr with static layout).
+        int64_t flatElemCount = ShapedType::kDynamic;
+        if (auto n = getStatic1DElementCountFromHivmPtrBridge(ptrValue); succeeded(n) && *n > 0) {
+          flatElemCount = *n;
+        } else if (childInfo->originShapeDims.size() >= 2 &&
+                   childInfo->originShapeDims[0] != ShapedType::kDynamic &&
+                   childInfo->originShapeDims[1] != ShapedType::kDynamic) {
+          int64_t dim0 = childInfo->originShapeDims[0];
+          int64_t dim1 = childInfo->originShapeDims[1];
+          if (dim0 > 0 && dim1 > 0)
+            flatElemCount = dim0 * dim1;
+        }
+        auto bridgedBaseType =
+            buildHivmMemrefType(op->getContext(), {flatElemCount}, childInfo->mlirElementType,
+                                childInfo->tlaAddressSpace);
+        if (failed(bridgedBaseType)) {
+          op->emitError()
+              << "tla.make_tensor buffer memref must be bridgeable to builtin memref type";
+          signalPassFailure();
+          return;
+        }
+
+        Value typedBuffer = ptrValue;
+
+        // Materialize index-tree leaves from the operand defining ops. Static leaves
+        // become constants; dynamic leaves are pulled from tla.make_shape/make_stride/
+        // make_coord dyn-elems in leaf order. A derived dynamic leaf that is not directly
+        // operand-backed (e.g. rank-1 linear stride0 = extent*stride with dynamic extent)
+        // is rejected with a clear error. ``childInfo`` already promotes rank-1 linear to
+        // rank-2, so the leading synthetic ``1``/``0`` leaves are static here.
+        auto materializeLeaves = [&](Value packedValue, ArrayRef<int64_t> leaves,
+                                     StringRef kind) -> FailureOr<SmallVector<Value, 4>> {
+          SmallVector<Value, 4> result;
+          unsigned dynLeafCount = 0;
+          for (int64_t leaf : leaves)
+            if (leaf == ShapedType::kDynamic)
+              ++dynLeafCount;
+          SmallVector<Value, 4> dynElems;
+          if (dynLeafCount > 0) {
+            if (kind == "shape") {
+              if (auto ms = packedValue.getDefiningOp<::tla::MakeShapeOp>())
+                dynElems.append(ms.getDynElems().begin(), ms.getDynElems().end());
+            } else if (kind == "stride") {
+              if (auto mst = packedValue.getDefiningOp<::tla::MakeStrideOp>())
+                dynElems.append(mst.getDynElems().begin(), mst.getDynElems().end());
+            } else {
+              if (auto mc = packedValue.getDefiningOp<::tla::MakeCoordOp>())
+                dynElems.append(mc.getDynElems().begin(), mc.getDynElems().end());
+            }
+            if (dynElems.size() < dynLeafCount) {
+              op->emitError()
+                  << "tla.make_tensor " << kind
+                  << " has a derived dynamic leaf that is not directly operand-backed "
+                     "(e.g. rank-1 stride with dynamic extent); pass explicit leaves via tla.make_"
+                  << kind;
+              return failure();
+            }
+          }
+          size_t di = 0;
+          for (int64_t leaf : leaves) {
+            if (leaf == ShapedType::kDynamic) {
+              Value dv = dynElems[di++];
+              if (!dv.getType().isIndex()) {
+                op->emitError() << "tla.make_tensor " << kind
+                                << " dynamic operands must be index type";
+                return failure();
+              }
+              result.push_back(dv);
+            } else {
+              result.push_back(getOrCreateConstant(op, leaf, 0));
+            }
+          }
+          return result;
+        };
+
+        auto shapeLeaves =
+            materializeLeaves(makeLayout.getShape(), childInfo->shapeDims, "shape");
+        auto strideLeaves =
+            materializeLeaves(makeLayout.getStride(), childInfo->strideDims, "stride");
+        auto coordLeaves = materializeLeaves(coordValue, childInfo->coordDims, "coord");
+        if (failed(shapeLeaves) || failed(strideLeaves) || failed(coordLeaves)) {
+          signalPassFailure();
+          return;
+        }
+        Value shape0 = (*shapeLeaves)[0];
+        Value shape1 = (*shapeLeaves)[1];
+        Value stride0 = (*strideLeaves)[0];
+        Value stride1 = (*strideLeaves)[1];
+        Value coord0 = (*coordLeaves)[0];
+        Value coord1 = (*coordLeaves)[1];
+
+        // Origin defaults to shape; honor an explicit make_layout origin operand.
+        Value origin0 = shape0;
+        Value origin1 = shape1;
+        if (Value originOperand = makeLayout.getOriginShape()) {
+          auto originLeaves =
+              materializeLeaves(originOperand, childInfo->originShapeDims, "shape");
+          if (failed(originLeaves)) {
+            signalPassFailure();
+            return;
+          }
+          origin0 = (*originLeaves)[0];
+          origin1 = (*originLeaves)[1];
+        }
+
+        SmallVector<Value, 4> packedShape;
+        SmallVector<Value, 4> packedStride;
+        TensorDescriptor desc{
+            typedBuffer,
+            *bridgedBaseType,
+            coord0,
+            coord1,
+            stride0,
+            stride1,
+            shape0,
+            shape1,
+            origin0,
+            origin1,
+            coord0,
+            coord1,
+            childInfo->layoutTag,
+            childInfo->addressSpace,
+            childInfo->elementType,
+            childInfo->rank,
+            std::move(packedShape),
+            std::move(packedStride),
+        };
+        tensorDescriptorByValue[op->getResult(0)] = std::move(desc);
+        return;
+      }
     });
 
     // Stage 2: descriptor-driven tla.copy lowering.
@@ -2549,9 +2721,11 @@ public:
                                                              &allocatorState);
     LowerTlaTileViewPattern<::tla::MakeTensorLikeOp> lowerMakeTensorLikeView(
         &getContext(), tensorDescriptorByValue, &allocatorState);
+    LowerTlaTileViewPattern<::tla::MakeTensorOp> lowerMakeTensorView(
+        &getContext(), tensorDescriptorByValue, &allocatorState);
     SmallVector<Operation *, 8> tileViewOps;
     module.walk([&](Operation *op) {
-      if (llvm::isa<::tla::TileViewOp, ::tla::MakeTensorLikeOp>(op))
+      if (llvm::isa<::tla::TileViewOp, ::tla::MakeTensorLikeOp, ::tla::MakeTensorOp>(op))
         tileViewOps.push_back(op);
     });
     for (Operation *op : tileViewOps) {
@@ -2564,6 +2738,8 @@ public:
         lowered = lowerTileView.matchAndRewrite(tileOp, rewriter);
       } else if (auto makeTensorLikeOp = llvm::dyn_cast<::tla::MakeTensorLikeOp>(op)) {
         lowered = lowerMakeTensorLikeView.matchAndRewrite(makeTensorLikeOp, rewriter);
+      } else if (auto makeTensorOp = llvm::dyn_cast<::tla::MakeTensorOp>(op)) {
+        lowered = lowerMakeTensorView.matchAndRewrite(makeTensorOp, rewriter);
       }
       if (failed(lowered)) {
         signalPassFailure();
@@ -2581,6 +2757,16 @@ public:
       if (!makeTensorLikeOp->getBlock() || llvm::is_contained(toErase, makeTensorLikeOp))
         continue;
       makeTensorLikeOp->erase();
+    }
+    SmallVector<Operation *, 8> deadMakeTensorOps;
+    module.walk([&](::tla::MakeTensorOp op) {
+      if (op.getResult().use_empty())
+        deadMakeTensorOps.push_back(op.getOperation());
+    });
+    for (Operation *makeTensorOp : deadMakeTensorOps) {
+      if (!makeTensorOp->getBlock() || llvm::is_contained(toErase, makeTensorOp))
+        continue;
+      makeTensorOp->erase();
     }
 
     // Stage 6A: flatten tla.cube / tla.vector region wrappers into their parent
@@ -2735,7 +2921,7 @@ public:
                            mlir::memref::MemRefDialect, scf::SCFDialect, hivm::HIVMDialect>();
     target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
     target.addIllegalOp<::tla::TileViewOp, ::tla::CopyOp, ::tla::MakeTensorLikeOp,
-                        ::tla::LoadOp, ::tla::StoreOp, ::tla::FuncOp,
+                        ::tla::MakeTensorOp, ::tla::LoadOp, ::tla::StoreOp, ::tla::FuncOp,
                         ::tla::ReturnOp, ::tla::MutexOp,
                         ::tla::MutexLockOp, ::tla::MutexUnlockOp, ::tla::CrossFlagOp,
                         ::tla::CrossCoreSetFlagOp, ::tla::CrossCoreWaitFlagOp, ::tla::CubeOp,

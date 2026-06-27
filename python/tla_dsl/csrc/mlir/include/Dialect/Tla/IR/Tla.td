@@ -537,6 +537,24 @@ def Tla_MakeTensorLikeOp : Tla_Op<"make_tensor_like", []> {
   }];
 }
 
+def Tla_MakeTensorOp : Tla_Op<"make_tensor", [Pure]> {
+  let summary = "Construct a tensor from an explicit pointer, layout, and coord";
+  let description = [{
+    Build a `!tla.tensor<layout, coord, ptr>` from explicit operands. Unlike
+    `tla.make_tensor_like` (which clones layout/coord from a reference tensor), this op
+    takes the layout and coord directly as operands, mirroring the tensor type's
+    `(layout, coord, ptr)` structure. Address space and element type come from the `ptr`
+    operand's `!tla.ptr` type; the layout tag, shape, stride, and origin come from the
+    `!tla.layout` operand.
+  }];
+  let arguments = (ins Tla_PtrType:$ptr, Tla_LayoutType:$layout, Tla_CoordType:$coord);
+  let results = (outs Tla_TensorType:$result);
+  let assemblyFormat = [{
+    $ptr `,` $layout `,` $coord attr-dict `:`
+    qualified(type($ptr)) `,` qualified(type($layout)) `,` qualified(type($coord)) `->` qualified(type($result))
+  }];
+}
+
 def Tla_MmadOp : Tla_Op<"mmad", []> {
   let summary = "Matrix multiply-accumulate";
   let description = [{

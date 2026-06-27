@@ -589,6 +589,7 @@ _CORE_API_EXPORTS = (
     "arch",
     "vec",
     "tile_view",
+    "make_tensor",
     "make_tensor_like",
     "copy",
     "flag",

@@ -354,10 +354,13 @@ static FailureOr<Value> materializeTileViewMemref(PatternRewriter &rewriter, Loc
 }
 
 static FailureOr<Value> getMakeTensorLikeFlatMemref(Value tensor) {
-  auto makeTensor = tensor.getDefiningOp<::tla::MakeTensorLikeOp>();
-  if (!makeTensor)
+  Value ptr;
+  if (auto makeTensorLike = tensor.getDefiningOp<::tla::MakeTensorLikeOp>())
+    ptr = makeTensorLike.getPtr();
+  else if (auto makeTensor = tensor.getDefiningOp<::tla::MakeTensorOp>())
+    ptr = makeTensor.getPtr();
+  else
     return failure();
-  Value ptr = makeTensor.getPtr();
   if (auto bridge = ptr.getDefiningOp<::tla::HivmMemrefAsPtrOp>())
     return bridge.getMemref();
   if (auto ptrCast = ptr.getDefiningOp<UnrealizedConversionCastOp>()) {
@@ -402,6 +405,25 @@ materializeBaseMemref(PatternRewriter &rewriter, Location loc, Value tensor,
   }
 
   if (auto makeTensor = tensor.getDefiningOp<::tla::MakeTensorLikeOp>()) {
+    Value ptr = makeTensor.getPtr();
+    if (auto bridge = ptr.getDefiningOp<::tla::HivmMemrefAsPtrOp>()) {
+      auto expected = getBridgedTensorMemrefType(tensor);
+      if (failed(expected))
+        return failure();
+      return castMemrefToExpected(rewriter, loc, bridge.getMemref(), *expected);
+    }
+    if (auto ptrCast = ptr.getDefiningOp<UnrealizedConversionCastOp>()) {
+      if (ptrCast.getNumOperands() == 1 && isa<MemRefType>(ptrCast.getOperand(0).getType())) {
+        auto expected = getBridgedTensorMemrefType(tensor);
+        if (failed(expected))
+          return failure();
+        return castMemrefToExpected(rewriter, loc, ptrCast.getOperand(0), *expected);
+      }
+    }
+    return failure();
+  }
+
+  if (auto makeTensor = tensor.getDefiningOp<::tla::MakeTensorOp>()) {
     Value ptr = makeTensor.getPtr();
     if (auto bridge = ptr.getDefiningOp<::tla::HivmMemrefAsPtrOp>()) {
       auto expected = getBridgedTensorMemrefType(tensor);
@@ -1207,6 +1229,7 @@ static void populateTlaToVectorPatterns(RewritePatternSet &patterns, ModuleOp mo
                                           handoffMemrefByTensor);
   patterns.add<LowerCopyPattern>(ctx, handoffMemrefByTensor);
   patterns.add<EraseDeadTlaScaffoldingPattern<::tla::MakeTensorLikeOp>,
+               EraseDeadTlaScaffoldingPattern<::tla::MakeTensorOp>,
                EraseDeadTlaScaffoldingPattern<::tla::TileViewOp>,
                EraseDeadTlaScaffoldingPattern<::tla::MakeShapeOp>,
                EraseDeadTlaScaffoldingPattern<::tla::MakeCoordOp>,

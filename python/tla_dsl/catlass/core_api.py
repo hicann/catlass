@@ -125,14 +125,29 @@ class _Stride:
 class _Layout:
     """SSA wrapper for ``make_layout`` (``!tla.layout<...>``).
 
-    Only the fused layout SSA is stored; use the operand ``_Shape`` / ``_Stride`` values for
-    component trees (same pattern as MLIR: layout type is derived from shape+stride types).
+    The fused layout SSA is the primary payload. The source ``_Shape`` / ``_Stride`` /
+    origin ``_Shape`` wrappers and the resolved layout-tag token are also retained so
+    ``make_tensor`` can rebuild the Python layout/tensor descriptor trees without
+    re-parsing the MLIR type string (same component trees as MLIR: layout type is derived
+    from shape+stride types).
     """
 
-    __slots__ = ("_layout_value",)
+    __slots__ = ("_layout_value", "_shape", "_stride", "_origin_shape", "_layout_tag")
 
-    def __init__(self, *, layout_value: mlir_ir.Value) -> None:
+    def __init__(
+        self,
+        *,
+        layout_value: mlir_ir.Value,
+        shape: _Shape | None = None,
+        stride: _Stride | None = None,
+        origin_shape: _Shape | None = None,
+        layout_tag: str | None = None,
+    ) -> None:
         self._layout_value = layout_value
+        self._shape = shape
+        self._stride = stride
+        self._origin_shape = origin_shape
+        self._layout_tag = layout_tag
 
 
 IndexLike: TypeAlias = int | mlir_ir.Value
@@ -2149,7 +2164,13 @@ def make_layout(
         attributes=attrs,
         loc=loc,
     )
-    return _Layout(layout_value=op.results[0])
+    return _Layout(
+        layout_value=op.results[0],
+        shape=shape,
+        stride=stride,
+        origin_shape=origin_shape,
+        layout_tag=layout_token,
+    )
 
 
 def _emit_tile_view(
@@ -2233,6 +2254,120 @@ def tile_view(
         make_coord(*normalized_coord, loc=loc),
         loc=loc,
     )
+
+
+@dsl_user_op
+def make_tensor(
+    ptr: Any,
+    layout: TlaLayout,
+    coord: CoordLike | None = None,
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> TlaTensor:
+    """Construct a ``!tla.tensor`` from an explicit pointer, layout, and coord.
+
+    Unlike :func:`make_tensor_like` (which clones layout/coord from a reference tensor),
+    this takes the layout and coord directly, mirroring the
+    ``!tla.tensor<layout, coord, ptr>`` type structure:
+
+        tla.make_tensor(ptr, tla.make_layout(shape, stride), coord=tla.make_coord(...))
+
+    ``coord`` defaults to a zero coord matching the layout's rank (rank-2 layout ->
+    ``make_coord(0, 0)``, rank-1 -> ``make_coord(0)``). Element type and address space
+    come from ``ptr``'s ``!tla.ptr`` type; the layout tag, shape, stride, and origin come
+    from the ``!tla.layout`` operand (origin defaults to ``shape``).
+
+    Lowering supports linear layouts (RowMajor/ColumnMajor). Like :func:`make_tensor_like`,
+    a full compile requires ``ptr`` to carry backing storage; an allocator-backed pointer
+    (from :class:`~catlass.utils.LocalmemAllocator` + :func:`recast_ptr`) is the supported
+    form for runnable kernels.
+    """
+    _require_category("make_tensor", "ptr", ptr, "pointer", 0)
+    if not isinstance(layout, _Layout):
+        _op_error(
+            "make_tensor",
+            "invalid argument 'layout': expected tla.make_layout (TlaLayout); "
+            f"got {_type_name(layout)}",
+        )
+    _require_frontend_state("make_tensor")
+    ptr_value = _as_value(ptr)
+    if not PtrType.isinstance(ptr_value.type):
+        _op_error(
+            "make_tensor",
+            f"invalid argument 'ptr': expected !tla.ptr, got {ptr_value.type}",
+        )
+    ptr_ty = PtrType(ptr_value.type)
+    addr = ptr_ty.addrspace
+    try:
+        dtype = _dtype_to_str(ptr_ty.pointee).lower()
+    except TypeError as exc:
+        raise TlaLoweringError(
+            f"tla.make_tensor cannot derive element type from ptr pointee {ptr_ty.pointee}"
+        ) from exc
+    if dtype not in {"f16", "bf16", "f32", "i32", "i16", "i1", "i8"}:
+        raise TlaLoweringError(
+            f"tla.make_tensor expects a supported element type, got [{dtype}]"
+        )
+
+    shape_tree = _components_to_index_tree(layout._shape._components)
+    stride_tree = _components_to_index_tree(layout._stride._components)
+    origin_tree = (
+        _components_to_index_tree(layout._origin_shape._components)
+        if layout._origin_shape is not None
+        else shape_tree
+    )
+
+    shape_rank = len(_flatten_tla_tuple(shape_tree))
+    stride_rank = len(_flatten_tla_tuple(stride_tree))
+    if shape_rank not in (1, 2) or stride_rank not in (1, 2):
+        raise TlaLoweringError(
+            f"tla.make_tensor supports at most 2-D layouts (got shape rank "
+            f"{shape_rank}, stride rank {stride_rank})"
+        )
+
+    if coord is None:
+        rank = shape_rank
+        coord = make_coord(*([0] * rank), loc=loc)
+    elif not isinstance(coord, _Coord):
+        _op_error(
+            "make_tensor",
+            "invalid argument 'coord': expected tla.make_coord (TlaCoord) or None; "
+            f"got {_type_name(coord)}",
+        )
+    coord_tree = _components_to_index_tree(coord._components)
+    coord_rank = len(_flatten_tla_tuple(coord_tree))
+    if coord_rank != shape_rank:
+        raise TlaLoweringError(
+            f"tla.make_tensor coord rank must match layout rank (got coord rank "
+            f"{coord_rank}, expected {shape_rank})"
+        )
+
+    result_desc = TlaTensorTypeDescriptor(
+        layout=TlaLayoutDescriptor(
+            shape=TlaIndexTreeType("shape", shape_tree),
+            stride=TlaIndexTreeType("stride", stride_tree),
+            origin_shape=TlaIndexTreeType("shape", origin_tree),
+            layout_tag=layout._layout_tag,
+        ),
+        coord=coord_tree,
+        element_type=dtype,
+        addrspace=addr,
+        ptr_alignment=ptr_ty.alignment,
+    )
+    op = mlir_ir.Operation.create(
+        "tla.make_tensor",
+        operands=[ptr_value, layout._layout_value, coord._coord_value],
+        results=[_coerce_type(result_desc)],
+        loc=loc,
+    )
+    out = op.results[0]
+    _register_tla_tensor_type(out, result_desc)
+    try:
+        _register_tla_tensor_metadata(out, result_desc.metadata())
+    except Exception:
+        # Metadata property access falls back to type parsing when unavailable.
+        pass
+    return _Tensor(out)
 
 
 @dsl_user_op
@@ -3147,6 +3282,7 @@ __all__ = [
     "dsl_user_op",
     "arch",
     "tile_view",
+    "make_tensor",
     "make_tensor_like",
     "copy",
     "flag",
