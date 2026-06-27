@@ -396,7 +396,7 @@ def Tla_CopyOp : Tla_Op<"copy", []> {
     Tla_TensorType:$dst, Tla_TensorType:$src,
     Optional<AnyTypeOf<[Tla_CopyL0C2DstParamsType]>>:$params);
   let assemblyFormat = [{
-    $dst `,` $src `,` (`params` $params^)? attr-dict `:` qualified(type($dst)) `,` qualified(type($src)) `,` qualified(type($params))
+    $dst `,` $src (`,` $params^)? attr-dict `:` qualified(type($dst)) `,` qualified(type($src)) (`,` qualified(type($params))^)?
   }];
 }
 
