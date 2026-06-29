@@ -35,19 +35,27 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.mark.parametrize(
-    "trans_a,trans_b",
+    "m,n,k,trans_a,trans_b",
     [
-        (False, False),
-        (False, True),
-        (True, False),
-        (True, True),
+        (65537,4,2,False,False),
+        (9216,17,129,False,False),
+        (513,5120,33,False,False),
+        (3072,1025,63,True,False),
+        (131073,1025,63,False,False),
+        (513,5120,33,False,True),
     ],
-    ids=["nn", "nt", "tn", "tt"],
+    ids=[
+        "m65537_n4_k2_nn",
+        "m9216_n17_k129_nn",
+        "m513_n5120_k33_nn",
+        "m3072_n1025_k63_tn",
+        "m131073_n1025_k63_nn",
+        "m513_n5120_k33_nt",
+    ],
 )
 @only_on_3510
-def test_ascend950_fp4_mx_matmul_aswt(trans_a, trans_b):
+def test_ascend950_fp4_mx_matmul_aswt(m, n, k, trans_a, trans_b):
     """Compare CATLASS MX FP4 matmul (ASWT) against dequant reference for all transpose pairs."""
-    m, n, k = 256, 512, 1024
     a, b, a_scale, b_scale, expected = prepare_fp4_mx_inputs(
         m, n, k, device="npu", trans_a=trans_a, trans_b=trans_b
     )

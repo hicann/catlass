@@ -186,8 +186,14 @@ public:
         int64_t blockNum = AscendC::GetBlockNum();
         BlockScheduler matmulBlockScheduler(curBlockIdx, blockNum, params.problemShape);
 
-        if (matmulBlockScheduler.endBlockIdx_ + 1 <= blockNum / 2) {
-            matmulBlockScheduler.UpdateTailTile();
+        constexpr bool isMxFp8 = std::is_same_v<ElementA, ElementB> &&
+                                 (std::is_same_v<ElementA, float8_e4m3_t> || std::is_same_v<ElementA, float8_e5m2_t>);
+        if constexpr (isMxFp8) {
+            // enable tail wave workload balance only when ElementA and ElementB are both float8_e4m3_t or
+            // float8_e5m2_t.
+            if (matmulBlockScheduler.endBlockIdx_ + 1 <= blockNum / 2) {
+                matmulBlockScheduler.UpdateTailTile();
+            }
         }
 
         Arch::Resource<MmadArchTag> resource;
