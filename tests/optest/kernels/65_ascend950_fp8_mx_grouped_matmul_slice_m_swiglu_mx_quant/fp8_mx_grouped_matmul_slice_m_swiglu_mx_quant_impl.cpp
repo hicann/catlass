@@ -13,6 +13,8 @@
 #define K_MAX_SHAPE_DIM 0
 #endif
 
+#include <acl/acl.h>
+#include <iostream>
 #include <algorithm>
 #include <cstddef>
 using std::size_t;
@@ -34,6 +36,14 @@ using std::size_t;
 
 #include "catlass_kernel.h"
 #include "common/kernel_runner.h"
+
+#define ACL_CHECK(status)                                                                    \
+    do {                                                                                     \
+        aclError error = status;                                                             \
+        if (error != ACL_ERROR_NONE) {                                                       \
+            std::cerr << __FILE__ << ":" << __LINE__ << " aclError:" << error << std::endl;  \
+        }                                                                                    \
+    } while (0)
 
 #ifndef CATLASS_JIT_ELEMENT_A
 #define CATLASS_JIT_ELEMENT_A float8_e4m3_t
@@ -138,10 +148,25 @@ extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::
         epilogueParams
     };
 
-    uint64_t taskNum64 = static_cast<uint64_t>(CeilDiv(m, tla::get<0>(L1TileShape{}))) *
-                          static_cast<uint64_t>(CeilDiv(N_half, tla::get<1>(L1TileShape{})));
-    uint32_t taskNum = static_cast<uint32_t>(std::min(taskNum64, static_cast<uint64_t>(UINT32_MAX)));
-    uint32_t aicCoreUsed = std::min(blockNum, taskNum);
+    std::vector<int64_t> hostGroupList(groupCount);
+    ACL_CHECK(aclrtMemcpy(hostGroupList.data(), groupCount * sizeof(int64_t),
+                deviceGroupList, groupCount * sizeof(int64_t),
+                ACL_MEMCPY_DEVICE_TO_HOST));
 
-    Catlass::RunKernel<MatmulKernel>(arguments, stream, aicCoreUsed);
+    constexpr int64_t L1_TILE_M = 128;
+    constexpr int64_t L1_TILE_N = 256;
+    int64_t totalCoreLoops = 0;
+    for (int64_t g = 0; g < groupCount; ++g) {
+        int64_t currentM = static_cast<int64_t>(hostGroupList[g]);
+        if (currentM == 0) continue;
+        int64_t loopsM = (currentM + L1_TILE_M - 1) / L1_TILE_M;
+        int64_t loopsN = (N_half + L1_TILE_N - 1) / L1_TILE_N;
+        totalCoreLoops += loopsM * loopsN;
+        if (totalCoreLoops >= blockNum) {
+            totalCoreLoops = blockNum;
+            break;
+        }
+    }
+
+    Catlass::RunKernel<MatmulKernel>(arguments, stream, totalCoreLoops);
 }
