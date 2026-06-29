@@ -571,6 +571,11 @@ def _internal_frontend_compare(
         current = comparator
     if not results:
         return True
+    # A single comparison returns its result directly (a _BoolExpr for scalar
+    # comparisons, or a MaskSSA for vector comparisons). Equivalent to the
+    # bool-and path for one element, and lets vector masks pass through.
+    if len(results) == 1:
+        return results[0]
     if all(isinstance(result, bool) for result in results):
         return all(results)
     return _internal_frontend_bool_and(*results)

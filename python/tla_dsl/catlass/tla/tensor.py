@@ -104,15 +104,34 @@ class _Tensor(TensorABC):
         return VectorSSA(result)
 
     @dsl_user_op
-    def store(self, value: Any, *, loc: mlir_ir.Location | None = None) -> None:
-        """Store a vector SSA value into this tensor tile inside a vector region."""
-        from ..core_api import _as_value, _require_category, _require_frontend_state
+    def store(
+        self,
+        value: Any,
+        *,
+        mask: Any | None = None,
+        loc: mlir_ir.Location | None = None,
+    ) -> None:
+        """Store a vector SSA value into this tensor tile inside a vector region.
+
+        An optional ``mask`` (a ``MaskSSA`` from ``tla.create_mask`` or
+        ``tla.update_mask``) predicates which lanes are written; masked-out lanes
+        are left untouched. Only a ``MaskSSA`` is accepted (validated below); a
+        ``mask`` here is typed ``Any`` to avoid a circular import of ``MaskSSA``.
+        """
+        from ..core_api import (
+            _as_value,
+            _require_category,
+            _require_frontend_state,
+        )
 
         loc = _normalize_user_loc(loc)
         _require_category("store", "value", value, "vector_ssa", 1)
+        if mask is not None:
+            _require_category("store", "mask", mask, "mask_ssa", 2)
         _require_frontend_state("store")
         _runtime._check_frontend_region_op("store", {"vector"})
-        _tla_ops_gen.store(_as_value(self), _as_value(value), loc=loc)
+        mask_val = _as_value(mask) if mask is not None else None
+        _tla_ops_gen.store(_as_value(self), _as_value(value), mask=mask_val, loc=loc)
 
 
 def _normalize_user_loc(loc: mlir_ir.Location | None) -> mlir_ir.Location | None:

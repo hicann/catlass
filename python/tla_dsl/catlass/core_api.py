@@ -16,7 +16,7 @@ from . import _tla_type_bridge
 from ._mlir_bindings import tla_ops_gen as _tla_ops_gen
 from .base_dsl import ast_helpers as _ast_helpers
 from .base_dsl.op import dsl_user_op, _capture_user_loc
-from .base_dsl.typing import Int8, Numeric
+from .base_dsl.typing import Float32, Int8, Numeric
 from .base_dsl.typing import Pointer as PointerABC
 from .base_dsl.typing import Pointer as PointerTypeHint
 from .tla.tensor import normalize_tile_view_coord
@@ -320,6 +320,33 @@ class VectorSSA:
 
     def __truediv__(self, other: Any) -> "VectorSSA":
         return div(self, other)
+
+
+class MaskSSA:
+    """Frontend proxy for a vector predicate/mask SSA value (`!tla.mask`)."""
+
+    def __init__(self, value: mlir_ir.Value) -> None:
+        if not isinstance(value, mlir_ir.Value):
+            raise TypeError(
+                f"MaskSSA expects mlir.ir.Value, got {type(value).__name__}"
+            )
+        if str(value.type) != "!tla.mask":
+            raise TypeError(f"MaskSSA expects !tla.mask, got {value.type}")
+        self.value = value
+        self.__tla_category__ = "mask_ssa"
+        _runtime._bind_frontend_value(self, value)
+        _runtime._bind_frontend_category(self, "mask_ssa")
+        _runtime._bind_frontend_category(value, "mask_ssa")
+
+    def __tla_type__(self) -> str:
+        return str(self.value.type)
+
+    def __get_mlir_types__(self, context: mlir_ir.Context | None = None) -> list[Any]:
+        del context
+        return [self.value.type]
+
+    def __extract_mlir_values__(self) -> list[Any]:
+        return [self.value]
 
 
 class _MutexValue:
@@ -3047,11 +3074,19 @@ def _emit_vector_binary(
     lhs: VectorSSA,
     rhs: VectorSSA,
     *,
+    mask: MaskSSA | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> VectorSSA:
-    """Shared lowering for element-wise vector-vector binary ops."""
+    """Shared lowering for element-wise vector-vector binary ops.
+
+    Optional ``mask`` (a ``MaskSSA`` from ``tla.create_mask`` or
+    ``tla.update_mask``) predicates which lanes are computed; masked-out lanes
+    are undefined/zeroed.
+    """
     _require_category(op_name, "lhs", lhs, "vector_ssa", 0)
     _require_category(op_name, "rhs", rhs, "vector_ssa", 1)
+    if mask is not None:
+        _require_category(op_name, "mask", mask, "mask_ssa", 2)
     _require_frontend_state(op_name)
     _runtime._check_frontend_region_op(op_name, {"vector"})
     lhs_value = _as_value(lhs)
@@ -3061,7 +3096,16 @@ def _emit_vector_binary(
             f"tla.{op_name} operands must have identical !tla.tensor types; "
             f"got {lhs_value.type} and {rhs_value.type}"
         )
-    return VectorSSA(emitter(lhs_value.type, lhs_value, rhs_value, loc=loc))
+    mask_value = _as_value(mask) if mask is not None else None
+    return VectorSSA(
+        emitter(
+            lhs_value.type,
+            lhs_value,
+            rhs_value,
+            mask=mask_value,
+            loc=loc,
+        )
+    )
 
 
 @dsl_user_op
@@ -3069,10 +3113,13 @@ def add(
     lhs: VectorSSA,
     rhs: VectorSSA,
     *,
+    mask: MaskSSA | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> VectorSSA:
     """Emit element-wise add for loaded vector SSA values."""
-    return _emit_vector_binary("add", _tla_ops_gen.add, lhs, rhs, loc=loc)
+    return _emit_vector_binary(
+        "add", _tla_ops_gen.add, lhs, rhs, mask=mask, loc=loc
+    )
 
 
 @dsl_user_op
@@ -3080,10 +3127,13 @@ def sub(
     lhs: VectorSSA,
     rhs: VectorSSA,
     *,
+    mask: MaskSSA | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> VectorSSA:
     """Emit element-wise subtract for loaded vector SSA values."""
-    return _emit_vector_binary("sub", _tla_ops_gen.sub, lhs, rhs, loc=loc)
+    return _emit_vector_binary(
+        "sub", _tla_ops_gen.sub, lhs, rhs, mask=mask, loc=loc
+    )
 
 
 @dsl_user_op
@@ -3091,10 +3141,13 @@ def mul(
     lhs: VectorSSA,
     rhs: VectorSSA,
     *,
+    mask: MaskSSA | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> VectorSSA:
     """Emit element-wise multiply for loaded vector SSA values."""
-    return _emit_vector_binary("mul", _tla_ops_gen.mul, lhs, rhs, loc=loc)
+    return _emit_vector_binary(
+        "mul", _tla_ops_gen.mul, lhs, rhs, mask=mask, loc=loc
+    )
 
 
 @dsl_user_op
@@ -3102,10 +3155,13 @@ def div(
     lhs: VectorSSA,
     rhs: VectorSSA,
     *,
+    mask: MaskSSA | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> VectorSSA:
     """Emit element-wise divide for loaded vector SSA values."""
-    return _emit_vector_binary("div", _tla_ops_gen.div, lhs, rhs, loc=loc)
+    return _emit_vector_binary(
+        "div", _tla_ops_gen.div, lhs, rhs, mask=mask, loc=loc
+    )
 
 
 @dsl_user_op
@@ -3258,6 +3314,126 @@ vec = _Namespace()
 vec._set("func", _vec_func)
 
 
+class _MaskPatternSentinel:
+    """A fixed ``tla.mask`` pattern (e.g. ``tla.mask.ALL``, ``tla.mask.VL8``).
+
+    Pass it to ``tla.create_mask(pattern=...)`` to materialize a ``MaskSSA``;
+    ops that take ``mask=`` accept only a ``MaskSSA`` (from ``tla.create_mask``
+    or ``tla.update_mask``), not a pattern sentinel directly.
+    """
+
+    __slots__ = ("_token",)
+
+    def __init__(self, token: str) -> None:
+        self._token = token
+
+    def __repr__(self) -> str:
+        return f"tla.mask.{self._token}"
+
+
+# AVE pge patterns exposed under the tla.mask namespace.
+_MASK_PATTERN_TOKENS = (
+    "ALL",
+    "ALLF",
+    "VL1",
+    "VL2",
+    "VL3",
+    "VL4",
+    "VL8",
+    "VL16",
+    "VL32",
+    "VL64",
+    "VL128",
+    "M3",
+    "M4",
+    "H",
+    "Q",
+)
+
+
+def _mask_elem_type(
+    op_name: str, dtype: Any, loc: mlir_ir.Location | None
+) -> mlir_ir.Type:
+    """Resolve a mask ``dtype`` (Numeric type or mlir.ir.Type) to an element type.
+
+    The element width fixes the mask lane count (256 bytes / dtype size).
+    """
+    ctx = loc.context if loc is not None else mlir_ir.Context.current
+    if isinstance(dtype, mlir_ir.Type):
+        return dtype
+    if isinstance(dtype, type) and issubclass(dtype, Numeric) and dtype.dtype:
+        return dtype.mlir_type(ctx)
+    _op_error(
+        op_name,
+        f"expects dtype to be a Numeric type (e.g. tla.Float32) or mlir.ir.Type, got {dtype}",
+    )
+
+
+@dsl_user_op
+def create_mask(
+    *,
+    pattern: Any,
+    dtype: Any = Float32,
+    loc: mlir_ir.Location | None = None,
+) -> MaskSSA:
+    """Create a vector predicate mask inside a vector region from a fixed pattern.
+
+    ``pattern=tla.mask.ALL`` (or ``VL8``, ``H``, ``Q``, ``M4``, ...) emits a
+    fixed AVE pge pattern. ``dtype`` (default ``f32``) fixes the mask lane count
+    (256 bytes / dtype size) and must match the enclosing vector region's element
+    width. For tail handling over a loop, use :func:`update_mask`.
+    """
+    if pattern is None:
+        _op_error("create_mask", "pattern is required")
+    _require_frontend_state("create_mask")
+    _runtime._check_frontend_region_op("create_mask", {"vector"})
+    elem_type = _mask_elem_type("create_mask", dtype, loc)
+    mask_ty = mlir_ir.Type.parse("!tla.mask")
+    token = pattern._token if isinstance(pattern, _MaskPatternSentinel) else str(pattern)
+    return MaskSSA(
+        _tla_ops_gen.create_mask(
+            mask_ty, pattern=token, dtype=mlir_ir.TypeAttr.get(elem_type), loc=loc
+        )
+    )
+
+
+@dsl_user_op
+def update_mask(
+    true_shape: Any,
+    dtype: Any = Float32,
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> tuple[MaskSSA, Any]:
+    """Create a tail predicate mask and the remaining element count.
+
+    Maps to AVE ``plt``. Given ``true_shape`` (the number of elements still to
+    process), returns ``(mask, new_true_shape)`` where ``mask`` activates lane
+    ``i`` iff ``i < true_shape`` (saturating to all-true once ``true_shape``
+    reaches the lane count) and ``new_true_shape = true_shape - lanes`` with
+    ``lanes = 256 bytes / dtype size`` (= 64 for ``f32``).
+
+    Seed a loop-carried counter with the total element count and thread
+    ``new_true_shape`` back each iteration to mask successive chunks, including
+    the partial tail. ``dtype`` (default ``f32``) fixes the lane count and must
+    match the enclosing vector region's element width.
+    """
+    _require_frontend_state("update_mask")
+    _runtime._check_frontend_region_op("update_mask", {"vector"})
+    elem_type = _mask_elem_type("update_mask", dtype, loc)
+    true_shape_value = _as_index_value(true_shape)
+    mask_ty = mlir_ir.Type.parse("!tla.mask")
+    index_ty = mlir_ir.IndexType.get()
+    mask_value, new_true_shape = _tla_ops_gen.update_mask(
+        mask_ty, index_ty, true_shape_value, mlir_ir.TypeAttr.get(elem_type), loc=loc
+    )
+    return MaskSSA(mask_value), _runtime._IndexExpr(new_true_shape)
+
+
+mask = _Namespace()
+for _mask_pattern_token in _MASK_PATTERN_TOKENS:
+    mask._set(_mask_pattern_token, _MaskPatternSentinel(_mask_pattern_token))
+
+
 def _resolve_arch_layout_tag(value: Any | None, *, for_op: str) -> str:
     """Normalize ``Tensor(..., layout_tag=...)`` to the MLIR layout token string."""
     if value is None:
@@ -3281,6 +3457,9 @@ __all__ = [
     "TlaCoreAPIError",
     "dsl_user_op",
     "arch",
+    "mask",
+    "create_mask",
+    "update_mask",
     "tile_view",
     "make_tensor",
     "make_tensor_like",

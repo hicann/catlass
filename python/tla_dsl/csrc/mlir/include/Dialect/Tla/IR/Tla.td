@@ -31,6 +31,12 @@ def Tla_FlagType : TypeDef<TlaDialect, "Flag", []> {
   let assemblyFormat = "";
 }
 
+def Tla_MaskType : TypeDef<TlaDialect, "Mask", []> {
+  let mnemonic = "mask";
+  let summary = "Vector element-wise predicate/mask for conditional vector ops.";
+  let assemblyFormat = "";
+}
+
 
 def Tla_MutexType : TypeDef<TlaDialect, "Mutex", []> {
   let mnemonic = "mutex";
@@ -690,11 +696,52 @@ def Tla_SetFlagOp : Tla_Op<"set_flag", []> {
 def Tla_StoreOp : Tla_Op<"store", []> {
   let summary = "Store";
   let description = [{
-    Register-fragment store marker on a tensor tile.
+    Register-fragment store marker on a tensor tile. An optional mask predicates
+    which lanes are written (masked-out lanes are left untouched).
   }];
-  let arguments = (ins Tla_TensorType:$dest, Tla_TensorType:$source);
+  let arguments = (ins Tla_TensorType:$dest, Tla_TensorType:$source,
+                       Optional<Tla_MaskType>:$mask);
   let assemblyFormat = [{
-    $dest `,` $source attr-dict `:` type($dest) `,` type($source)
+    $dest `,` $source (`mask` $mask^)? attr-dict `:` type($dest) `,` type($source)
+    (`mask` qualified(type($mask))^)?
+  }];
+}
+
+def Tla_CreateMaskOp : Tla_Op<"create_mask", [Pure]> {
+  let summary = "Create a vector predicate mask from a fixed pattern";
+  let description = [{
+    Create an element-wise predicate mask from a fixed AVE ``pge`` pattern, e.g.
+    ``ALL``, ``ALLF``, ``VL8`` (lowest 8 lanes), ``H`` (lowest half), ``Q``
+    (lowest quarter), ``M3``/``M4`` (multiples of 3/4).
+
+    ``dtype`` fixes the mask lane count (256 bytes / dtype size) and must match
+    the enclosing vector region's element width.
+  }];
+  let arguments = (ins StrAttr:$pattern, TypeAttr:$dtype);
+  let results = (outs Tla_MaskType:$result);
+  let assemblyFormat = [{
+    attr-dict `:` qualified(type($result))
+  }];
+}
+
+def Tla_UpdateMaskOp : Tla_Op<"update_mask", [Pure]> {
+  let summary = "Tail predicate mask plus the remaining element count";
+  let description = [{
+    Tail-loop helper mapping to AVE ``plt``. Given the number of elements still
+    to process (``true_shape``), produce a predicate mask (lane ``i`` is active
+    iff ``i < true_shape``, saturating to all-true once ``true_shape`` reaches
+    the lane count) together with the remaining count after this iteration,
+    ``new_true_shape = true_shape - lanes`` where ``lanes = 256 bytes / dtype
+    size`` (= 64 for f32). Thread ``new_true_shape`` back through the loop's
+    carried values to mask successive chunks, including the partial tail.
+
+    ``dtype`` fixes the lane count and therefore the decrement; it must match the
+    enclosing vector region's element width.
+  }];
+  let arguments = (ins Index:$true_shape, TypeAttr:$dtype);
+  let results = (outs Tla_MaskType:$mask, Index:$new_true_shape);
+  let assemblyFormat = [{
+    $true_shape `,` $dtype attr-dict `:` qualified(type($mask)) `,` type($new_true_shape)
   }];
 }
 
@@ -714,11 +761,17 @@ def Tla_TileViewOp : Tla_Op<"tile_view", []> {
 class Tla_VectorBinaryOp<string mnemonic, string opSummary, string opDescription>
     : Tla_Op<mnemonic, [Pure]> {
   let summary = opSummary;
-  let description = opDescription;
-  let arguments = (ins Tla_TensorType:$lhs, Tla_TensorType:$rhs);
+  let description = opDescription # [{
+
+    An optional mask predicates which lanes are computed; masked-out lanes are
+    undefined/zeroed.
+  }];
+  let arguments = (ins Tla_TensorType:$lhs, Tla_TensorType:$rhs,
+                       Optional<Tla_MaskType>:$mask);
   let results = (outs Tla_TensorType:$result);
   let assemblyFormat = [{
-    $lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs) `->` type($result)
+    $lhs `,` $rhs (`mask` $mask^)? attr-dict `:`
+    type($lhs) `,` type($rhs) (`mask` qualified(type($mask))^)? `->` type($result)
   }];
 }
 

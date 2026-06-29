@@ -941,7 +941,18 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
         for item in node.items:
             if isinstance(item.optional_vars, ast.Name):
                 self._scope_manager.add_to_scope(item.optional_vars.id)
-        node = self.generic_visit(node)
+        node.items = [self.visit(item) for item in node.items]
+        # A region body (e.g. ``with tla.vec.func():``) is hoisted into its own
+        # nested function below, so process it like a function body: a fresh
+        # scope with sequential statement-by-statement registration. This lets
+        # loop-carried values defined inside the region (seeded before a
+        # ``tla.range`` loop and reassigned in it) be detected as carried.
+        self._range_alias_stack.append(set())
+        try:
+            with self._scope_manager.enter_local_scope():
+                node.body = self._visit_statement_list(node.body) or [ast.Pass()]
+        finally:
+            self._range_alias_stack.pop()
         if len(node.items) != 1:
             return node
         region_name = _region_name_from_with_item(node.items[0])
