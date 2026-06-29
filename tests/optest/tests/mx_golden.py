@@ -413,6 +413,105 @@ def prepare_fp4_mx_inputs(
     return a_fp4, b_fp4, a_scale, b_scale, expected
 
 
+_E8M0_ONE = 127
+_FP4_E2M1_MAX_VALUE = 6.0
+_FP8_E4M3_MAX_VALUE = 448.0
+
+
+def _scale_to_fp8_e4m3(scale: torch.Tensor) -> torch.Tensor:
+    return scale.to(torch.float8_e4m3fn)
+
+
+def prepare_fp4_mx_pertoken_perchannel_inputs(
+    m: int, n: int, k: int, device: str = "npu"
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Build inputs for example 74 FP4 MX matmul + per-token/per-channel scales."""
+    if k % 2 != 0:
+        raise ValueError(f"K must be even for FP4 packing: k={k}")
+    if n % 2 != 0:
+        raise ValueError(f"N must be even for FP4 packing: n={n}")
+
+    torch.manual_seed(7400 + m + n + k)
+    a_fp32 = torch.randn((m, k), dtype=torch.float32) * 2
+    b_fp32 = torch.randn((k, n), dtype=torch.float32) * 2
+
+    a_max = a_fp32.abs().max(dim=1).values
+    b_max = b_fp32.abs().max(dim=0).values
+    a_max[a_max == 0] = 1.0
+    b_max[b_max == 0] = 1.0
+
+    a_scale_fp8 = _scale_to_fp8_e4m3(a_max / _FP4_E2M1_MAX_VALUE)
+    b_scale_fp8 = _scale_to_fp8_e4m3(b_max / _FP4_E2M1_MAX_VALUE)
+    a_scale_f32 = a_scale_fp8.to(torch.float32)
+    b_scale_f32 = b_scale_fp8.to(torch.float32)
+
+    a_scaled = a_fp32 / a_scale_f32.view(-1, 1)
+    b_scaled = b_fp32 / b_scale_f32.view(1, -1)
+    _, a_codes = _quantize_to_fp4_lut(a_scaled, "E2M1")
+    _, b_codes = _quantize_to_fp4_lut(b_scaled, "E2M1")
+    a_packed = _pack_fp4_nibbles(a_codes)
+    b_packed = _pack_fp4_nibbles(b_codes)
+
+    a_fp4 = _packed_uint8_to_fp4(a_packed, m, k)
+    b_fp4 = _packed_uint8_to_fp4(b_packed, k, n)
+    a_val = _FP4_LUT["E2M1"][a_codes.to(torch.long)].to(torch.float32)
+    b_val = _FP4_LUT["E2M1"][b_codes.to(torch.long)].to(torch.float32)
+    expected = (a_val @ b_val) * a_scale_f32.view(-1, 1) * b_scale_f32.view(1, -1)
+
+    k0 = mx_scale_k(k)
+    mx_scale_a = torch.full((m, k0 // 2, 2), _E8M0_ONE, dtype=torch.uint8).view(torch.float8_e8m0fnu)
+    mx_scale_b = torch.full((n, k0 // 2, 2), _E8M0_ONE, dtype=torch.uint8).view(torch.float8_e8m0fnu)
+
+    if device == "npu":
+        a_fp4 = a_fp4.contiguous().npu()
+        b_fp4 = b_fp4.contiguous().npu()
+        mx_scale_a = mx_scale_a.contiguous().npu()
+        mx_scale_b = mx_scale_b.contiguous().npu()
+        a_scale_fp8 = a_scale_fp8.contiguous().npu()
+        b_scale_fp8 = b_scale_fp8.contiguous().npu()
+    return a_fp4, b_fp4, mx_scale_a, mx_scale_b, a_scale_fp8, b_scale_fp8, expected
+
+
+def prepare_fp8_epilogue_quant_matmul_inputs(
+    m: int, n: int, k: int, device: str = "npu"
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Build inputs for example 75 FP8 matmul + per-token/per-channel scales."""
+    torch.manual_seed(7500 + m + n + k)
+    a_fp32 = torch.randn((m, k), dtype=torch.float32) * 2
+    b_fp32 = torch.randn((k, n), dtype=torch.float32) * 2
+
+    a_max = a_fp32.abs().max(dim=1).values
+    b_max = b_fp32.abs().max(dim=0).values
+    a_max[a_max == 0] = 1.0
+    b_max[b_max == 0] = 1.0
+
+    a_scale_fp8 = _scale_to_fp8_e4m3(a_max / _FP8_E4M3_MAX_VALUE)
+    b_scale_fp8 = _scale_to_fp8_e4m3(b_max / _FP8_E4M3_MAX_VALUE)
+    a_scale_f32 = a_scale_fp8.to(torch.float32)
+    b_scale_f32 = b_scale_fp8.to(torch.float32)
+
+    a_scaled = torch.clamp(
+        a_fp32 / a_scale_f32.view(-1, 1),
+        -_FP8_E4M3_MAX_VALUE,
+        _FP8_E4M3_MAX_VALUE,
+    )
+    b_scaled = torch.clamp(
+        b_fp32 / b_scale_f32.view(1, -1),
+        -_FP8_E4M3_MAX_VALUE,
+        _FP8_E4M3_MAX_VALUE,
+    )
+    a_fp8 = a_scaled.to(torch.float8_e4m3fn)
+    b_fp8 = b_scaled.to(torch.float8_e4m3fn)
+    expected = (a_fp8.to(torch.float32) @ b_fp8.to(torch.float32)) * a_scale_f32.view(-1, 1) * b_scale_f32.view(1, -1)
+
+    if device == "npu":
+        a_fp8 = a_fp8.contiguous().npu()
+        b_fp8 = b_fp8.contiguous().npu()
+        a_scale_fp8 = a_scale_fp8.contiguous().npu()
+        b_scale_fp8 = b_scale_fp8.contiguous().npu()
+    return a_fp8, b_fp8, a_scale_fp8, b_scale_fp8, expected
+
+
 _LEVEL0_BLOCK_SIZE = 512
 _LEVEL1_BLOCK_SIZE = 32
 _FP4_E2M1_MAX = 6.0

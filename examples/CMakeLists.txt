@@ -175,6 +175,8 @@ set(EXAMPLE_ASCEND950
     71_ascend950_fp8_mx_grouped_matmul_finalize_routing
     73_ascend950_matmul_full_loadA
     72_ascend950_fp8_mx_flash_attention_infer
+    74_ascend950_fp4_mx_matmul_pertoken_perchannel
+    75_ascend950_fp8_epilogue_quant_matmul
 )
 
 if(CATLASS_ARCH STREQUAL "2201")

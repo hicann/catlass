@@ -236,6 +236,19 @@ struct TileCopyRescaleO{
     using CopyUbToGmO = Tile::CopyUb2GmTla<ArchTag, TensorUbO, TensorGmO>;
 };
 
+template <class ArchTag, class CType, class ScaleType, class PerTokenScaleType, class DType>
+struct TileCopyPerTokenPerChannelDequant {
+    using ElementC = typename CType::Element;
+    using ElementScale = typename ScaleType::Element;
+    using ElementPerTokenScale = typename PerTokenScaleType::Element;
+    using ElementD = typename DType::Element;
+
+    using CopyGmToUbC = CopyGm2Ub<ArchTag, CType>;
+    using CopyGmToUbPerChannelScale = CopyGm2UbQuant<ArchTag, ScaleType>;
+    using CopyGmToUbPerTokenScale = CopyGm2UbQuant<ArchTag, PerTokenScaleType>;
+    using CopyUbToGmD = CopyUb2Gm<ArchTag, DType>;
+};
+
 } // namespace Catlass::Epilogue::Tile
 
 #endif  // CATLASS_EPILOGUE_TILE_TILE_COPY_HPP

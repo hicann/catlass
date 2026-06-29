@@ -122,6 +122,13 @@ struct EpilogueAscend950PerTokenDequantTla {
     static constexpr uint32_t UB_STAGES = UB_STAGES_;
 };
 
+// For Ascend950, per token dequant (epilogue-based, AIC/AIV pipeline)
+template <uint32_t UB_STAGES_>
+struct EpilogueAscend950PerTokenDequant {
+    using ArchTag = Arch::Ascend950;
+    static constexpr uint32_t UB_STAGES = UB_STAGES_;
+};
+
 // For Ascend950, perGroup + perBlock dequant
 struct BlockEpiloguePertile{
     using ArchTag = Arch::Ascend950;
@@ -201,6 +208,13 @@ struct EpilogueFAOnlineSoftmax{
 struct EpilogueFARescaleO{
     using ArchTag = Arch::Ascend950;
 };
+
+template <uint32_t UB_STAGES_>
+struct EpilogueAscend950PerTokenPerChannelQuant {
+    using ArchTag = Arch::Ascend950;
+    static constexpr uint32_t UB_STAGES = UB_STAGES_;
+};
+
 }  // namespace Catlass::Epilogue
 
 #endif  // CATLASS_EPILOGUE_DISPATCH_POLICY_HPP

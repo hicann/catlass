@@ -91,6 +91,10 @@ from .ascend950_fp8_mx_grouped_matmul_finalize_routing import (  # example 71
     ascend950_fp8_mx_grouped_matmul_finalize_routing,
 )
 
+from .ascend950_epilogue_quant_matmul import (  # example 74, 75
+    ascend950_fp4_mx_matmul_pertoken_perchannel,
+    ascend950_fp8_epilogue_quant_matmul,
+)
 __all__ = [
     "basic_matmul",                       # example 00
     "batched_matmul",                     # example 01
@@ -167,4 +171,6 @@ __all__ = [
     "ascend950_flash_attention_chunk_prefill",   # example 70
     "ascend950_fp8_mx_grouped_matmul_finalize_routing",  # example 71
     "ascend950_matmul_full_loadA",         # example 73
+    "ascend950_fp4_mx_matmul_pertoken_perchannel",  # example 74
+    "ascend950_fp8_epilogue_quant_matmul",  # example 75
 ]
