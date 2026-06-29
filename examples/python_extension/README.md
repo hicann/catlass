@@ -19,7 +19,7 @@ python_extension
 │   │       └── catlass_kernel_wrapper.h    # wrapper头文件
 │   └── wrapper
 │       └── catlass_kernel_wrapper.cpp      # catlass算子wrapper文件
-└── torch_catlass                       
+└── torch_catlass
     └── __init__.py                     # 初始化入口，用于打包
 tests
 └── test_python_extension.py        # 测试脚本
@@ -54,9 +54,9 @@ output/python_extension
 
 - 必须：
   - `pybind11`
-  - `gcc` *版本为9.0+*
-  - `torch`*建议使用2.1+*
-  - `torch-npu`*配套`torch`和`CANN`的最新版本，可在[Ascend/pytorch](https://gitcode.com/ascend/pytorch)查询*
+  - `gcc` _版本为9.0+_
+  - `torch`_建议使用2.1+_
+  - `torch-npu`_配套`torch`和`CANN`的最新版本，可在[Ascend/pytorch](https://gitcode.com/ascend/pytorch)查询_
 - 可选：
   - `pybind11-stubgen`
 
@@ -92,7 +92,7 @@ class CatlassTest(TestCase):
         result = torch.ops.CatlassTorch.basic_matmul(a, b, "float16")
         golden = torch.mm(a, b)
         self.assertRtolEqual(result, golden)
-        
+
 if __name__ == "__main__":
     run_tests()
 ```

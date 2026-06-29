@@ -1,5 +1,5 @@
 # Basic Tile MMAD Template
->
+
 > [Code location](../../../../../../../include/catlass/gemm/tile/tile_mmad.hpp)
 
 [TOC]
@@ -14,7 +14,7 @@ Performs matrix multiply-accumulate ($C += A \times B$) operations using the [As
 
 - Structure template
 
-```
+```cpp
 template <
     class ArchTag_,         // Architecture tag
     class AType_,           // GEMM type for matrix A operand
@@ -26,7 +26,7 @@ struct TileMmad
 
 - Invocation without bias input
 
-```
+```cpp
 void operator() (
     AscendC::LocalTensor<ElementAccumulator> const &l0CTensor,  // Destination matrix in L0C
     AscendC::LocalTensor<ElementA> const &l0ATensor,            // Left matrix in L0A
@@ -41,7 +41,7 @@ void operator() (
 
 - Invocation with bias input
 
-```
+```cpp
 void operator() (
     AscendC::LocalTensor<ElementAccumulator> const &l0CTensor,  // Destination matrix in L0C
     AscendC::LocalTensor<ElementA> const &l0ATensor,            // Left matrix in L0A
@@ -69,7 +69,7 @@ Performs matrix multiply-accumulate ($C += A \times B$) operations using the [As
 
 - Structure template
 
-```
+```cpp
 template <
     class ArchTag_,         // Architecture tag
     class ElementA,         // Element type for matrix A operand
@@ -80,7 +80,7 @@ struct TileMmadTla
 
 - Invocation (bias not supported)
 
-```
+```cpp
 void operator() (
     TensorC const &l0CTensor,   // Destination matrix tensor in L0C
     TensorA const &l0ATensor,   // Left matrix tensor in L0A

@@ -10,12 +10,12 @@
 
 ## API 清单
 
-| API | 风格 | 广播模式 | 说明 |
-| :------ | :------ | :------ | :------ |
-| [TileRowBroadcastMul](./tile_row_broadcast_mul.md) | 非 TLA | 行广播 | (1,n)→(m,n)，`Mul` + `src1RepStride=0` |
-| [TileRowBroadcastMulTla](./tile_row_broadcast_mul_tla.md) | TLA | 行广播 | TLA 版本行广播乘法 |
-| [TileOneBlkColumnBroadcastMul](./tile_one_blk_column_broadcast_mul.md) | 非 TLA | 列广播（1Blk） | (m,1)→(m,n)，`Mul` + block 级重复 |
-| [TileOneBlkColumnBroadcastMulTla](./tile_one_blk_column_broadcast_mul_tla.md) | TLA | 列广播（1Blk） | TLA 版本列广播乘法 |
+| API                                                                           | 风格   | 广播模式       | 说明                                   |
+| :---------------------------------------------------------------------------- | :----- | :------------- | :------------------------------------- |
+| [TileRowBroadcastMul](./tile_row_broadcast_mul.md)                            | 非 TLA | 行广播         | (1,n)→(m,n)，`Mul` + `src1RepStride=0` |
+| [TileRowBroadcastMulTla](./tile_row_broadcast_mul_tla.md)                     | TLA    | 行广播         | TLA 版本行广播乘法                     |
+| [TileOneBlkColumnBroadcastMul](./tile_one_blk_column_broadcast_mul.md)        | 非 TLA | 列广播（1Blk） | (m,1)→(m,n)，`Mul` + block 级重复      |
+| [TileOneBlkColumnBroadcastMulTla](./tile_one_blk_column_broadcast_mul_tla.md) | TLA    | 列广播（1Blk） | TLA 版本列广播乘法                     |
 
 ## 调用示例
 

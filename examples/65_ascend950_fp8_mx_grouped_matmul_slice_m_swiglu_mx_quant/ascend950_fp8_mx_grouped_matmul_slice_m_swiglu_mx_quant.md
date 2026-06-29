@@ -13,33 +13,35 @@
         ↓ MX Quant
    Q(m,n/2), QScale(m,ceil(n/2/64),2)
 ```
+
 Swish公式为$Swish(x)=\frac{x}{1+e^{-x}}$
 
 MX Quant过程如下:
 
-  $shared\_exp = \left\lfloor \log_2(max_i(|S_i|)) \right\rfloor - emax$
+$shared\_exp = \left\lfloor \log_2(max_i(|S_i|)) \right\rfloor - emax$
 
-  $QScale = 2 ^ {shared\_exp}$
+$QScale = 2 ^ {shared\_exp}$
 
-  $Q_i = quantize\_to\_element\_format(S_i/Qscale), \space i\space from\space 1\space to\space blocksize$
-  - $emax$: 对应数据类型的最大正则数的指数位。
+$Q_i = quantize\_to\_element\_format(S_i/Qscale), \space i\space from\space 1\space to\space blocksize$
 
-    |   DataType    | emax |
-    | :-----------: | :--: |
-    | FLOAT8_E4M3FN |  8   |
-    |  FLOAT8_E5M2  |  15  |
+- $emax$: 对应数据类型的最大正则数的指数位。
 
-  - $blocksize$：指每次量化的元素个数，仅支持32。
+  |   DataType    | emax |
+  | :-----------: | :--: |
+  | FLOAT8_E4M3FN |  8   |
+  |  FLOAT8_E5M2  |  15  |
+
+- $blocksize$：指每次量化的元素个数，仅支持32。
 
 ### 模板组装
 
-| 组件 | 模板类 | 说明 |
-|------|--------|------|
-| Kernel | [GroupedMxMatmulSliceMSwigluMxQuantTla](../../include/catlass/gemm/kernel/grouped_mx_matmul_slice_m_swiglu_mx_quant_tla.hpp) | AIC/AIV双核协作，按group遍历，Slice-M分组调度 |
-| BlockMmad | [BlockMmadTla](../../include/catlass/gemm/block/block_mmad_pingpong_tla.hpp) | MX量化矩阵乘，DispatchPolicy=`MmadMx<Ascend950, true, 16>` |
-| TileCopy | [PackedMxTileCopyTlaToUB](../../include/catlass/gemm/block/block_mmad.hpp) | GM→L1→UB数据搬运，`SPLIT_M`模式 |
-| BlockEpilogue | [BlockEpilogue\<BlockEpilogueSwigluMxQuant\>](../../include/catlass/epilogue/block/block_epilogue_swiglu_mx_quant.hpp) | SwiGLU激活 + MX FP8量化输出 |
-| BlockScheduler | [GemmIdentityBlockSwizzle\<3,1\>](../../include/catlass/gemm/block/block_swizzle.hpp) | 按(M,N)平铺分块，轮转分配到各AICore |
+| 组件           | 模板类                                                                                                                       | 说明                                                       |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Kernel         | [GroupedMxMatmulSliceMSwigluMxQuantTla](../../include/catlass/gemm/kernel/grouped_mx_matmul_slice_m_swiglu_mx_quant_tla.hpp) | AIC/AIV双核协作，按group遍历，Slice-M分组调度              |
+| BlockMmad      | [BlockMmadTla](../../include/catlass/gemm/block/block_mmad_pingpong_tla.hpp)                                                 | MX量化矩阵乘，DispatchPolicy=`MmadMx<Ascend950, true, 16>` |
+| TileCopy       | [PackedMxTileCopyTlaToUB](../../include/catlass/gemm/block/block_mmad.hpp)                                                   | GM→L1→UB数据搬运，`SPLIT_M`模式                            |
+| BlockEpilogue  | [BlockEpilogue\<BlockEpilogueSwigluMxQuant\>](../../include/catlass/epilogue/block/block_epilogue_swiglu_mx_quant.hpp)       | SwiGLU激活 + MX FP8量化输出                                |
+| BlockScheduler | [GemmIdentityBlockSwizzle\<3,1\>](../../include/catlass/gemm/block/block_swizzle.hpp)                                        | 按(M,N)平铺分块，轮转分配到各AICore                        |
 
 ### AIC/AIV双核协作
 
@@ -75,15 +77,15 @@ Q (FP8), QScale (E8M0)
 
 对每个block的 `max_exp` 进行如下处理：
 
-| 步骤 | 操作 | 说明 |
-|------|------|------|
-| 特殊值判断 | `cmpResult = (max_exp != 0x7F80)` | 排除Inf/NaN |
-| 零值判断 | `zeroMask = (max_exp != 0)` | 排除全零block |
-| 计算shared_exp | `shared_exp = max_exp - EMAX` | `EMAX = emax << 7`，在BF16指数域上等价于 `floor(log2(max)) - emax` |
-| 计算QScale (E8M0) | `scale_value = shared_exp >> 7` | 右移7位提取E8M0格式的scale字节 |
-| 特殊值修正 | 若为Inf/NaN → `scale_value = 0xFF`；若为零 → `scale_value = 0` | 处理边界情况 |
-| 计算HalfScale | `half_scale_val = BF16_EXP_BIAS(0x7F00) - shared_exp` | 构造一个BF16数，其指数域表示 `2^(-shared_exp)`，即 `1/QScale` |
-| HalfScale特殊修正 | Inf/NaN → `0x7F81`；零 → `0`；`shared_exp == 0x7F00` → `0x0040` | 处理边界情况 |
+| 步骤              | 操作                                                            | 说明                                                               |
+| ----------------- | --------------------------------------------------------------- | ------------------------------------------------------------------ |
+| 特殊值判断        | `cmpResult = (max_exp != 0x7F80)`                               | 排除Inf/NaN                                                        |
+| 零值判断          | `zeroMask = (max_exp != 0)`                                     | 排除全零block                                                      |
+| 计算shared_exp    | `shared_exp = max_exp - EMAX`                                   | `EMAX = emax << 7`，在BF16指数域上等价于 `floor(log2(max)) - emax` |
+| 计算QScale (E8M0) | `scale_value = shared_exp >> 7`                                 | 右移7位提取E8M0格式的scale字节                                     |
+| 特殊值修正        | 若为Inf/NaN → `scale_value = 0xFF`；若为零 → `scale_value = 0`  | 处理边界情况                                                       |
+| 计算HalfScale     | `half_scale_val = BF16_EXP_BIAS(0x7F00) - shared_exp`           | 构造一个BF16数，其指数域表示 `2^(-shared_exp)`，即 `1/QScale`      |
+| HalfScale特殊修正 | Inf/NaN → `0x7F81`；零 → `0`；`shared_exp == 0x7F00` → `0x0040` | 处理边界情况                                                       |
 
 **关键设计**：`half_scale_val` 是一个合法的BF16位模式，其指数域为 `0x7F00 - shared_exp`。当用它乘以原数据时，硬件BF16乘法器自动完成 `S_i × 2^(-shared_exp)` = `S_i / QScale` 的效果，无需显式计算 `2^x` 或做浮点除法。
 
@@ -96,19 +98,19 @@ Q (FP8), QScale (E8M0)
 
 #### 常量表
 
-| 常量 | 值 | 含义 |
-|------|----|------|
-| `MAX_EXP_FOR_BF16` | `0x7F80` | BF16指数域掩码（Inf/NaN的指数域值） |
-| `BF16_EXP_BIAS` | `0x7F00` | BF16指数偏置（对应指数0） |
-| `EMAX_SHIFTED` | `0x0400`或`0x0780` | 对应数据类型的最大正则数的指数位 |
-| `SHR_NUM_FOR_BF16` | `7` | BF16指数域到E8M0 scale的右移位数 |
-| `MAX_EXP_FOR_FP8` | `0xFF` | E8M0格式的Inf/NaN标记 |
-| `NAN_CUSTOMIZATION` | `0x7F81` | NaN场景下的half_scale特殊值 |
-| `SPECIAL_EXP_THRESHOLD` | `0x0040` | shared_exp恰好等于BF16_EXP_BIAS时的half_scale修正值 |
+| 常量                    | 值                 | 含义                                                |
+| ----------------------- | ------------------ | --------------------------------------------------- |
+| `MAX_EXP_FOR_BF16`      | `0x7F80`           | BF16指数域掩码（Inf/NaN的指数域值）                 |
+| `BF16_EXP_BIAS`         | `0x7F00`           | BF16指数偏置（对应指数0）                           |
+| `EMAX_SHIFTED`          | `0x0400`或`0x0780` | 对应数据类型的最大正则数的指数位                    |
+| `SHR_NUM_FOR_BF16`      | `7`                | BF16指数域到E8M0 scale的右移位数                    |
+| `MAX_EXP_FOR_FP8`       | `0xFF`             | E8M0格式的Inf/NaN标记                               |
+| `NAN_CUSTOMIZATION`     | `0x7F81`           | NaN场景下的half_scale特殊值                         |
+| `SPECIAL_EXP_THRESHOLD` | `0x0040`           | shared_exp恰好等于BF16_EXP_BIAS时的half_scale修正值 |
 
 ### Tile参数
 
-| 层级 | Shape (M×N×K) |
-|------|---------------|
+| 层级   | Shape (M×N×K)   |
+| ------ | --------------- |
 | L1Tile | 128 × 256 × 256 |
 | L0Tile | 128 × 256 × 128 |

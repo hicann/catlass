@@ -23,7 +23,7 @@ chmod +x Ascend-cann-toolkit_{version}_linux-{arch}.run
 
 For details about other online installation methods, see [CANN Quick Installation](https://www.hiascend.com/cann/download).
 
-2. **Enabling the CANN Environment**
+1. **Enabling the CANN Environment**
 
 After installation, execute the following command to enable the CANN environment.
 
@@ -34,7 +34,7 @@ source /usr/local/Ascend/ascend-toolkit/set_env.sh
 # source ${install_path}/set_env.sh
 ```
 
-3. **Downloading the Source Code**
+1. **Downloading the Source Code**
 
 Download the CATLASS code repository to the local PC.
 
@@ -55,22 +55,22 @@ Go to the root directory of the project and run the following build command:
 bash scripts/build.sh [options] <target>
 ```
 
- - `options`: Optional build options. Currently supported options include:
-   - `--clean`: Clears the previous build and output directories (the default paths are `/build` and `/output`, respectively).
-   - `--debug`: Compiles in debug mode.
-   - `--msdebug`: Enables [msDebug](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0062.html). For details, see [Using msDebug in a CATLASS Sample Project](./evaluation/msdebug.md).
-   - `--simulator`: Enables the simulator mode. After this option is enabled, the code will not run on an actual NPU. For details, see [CATLASS Sample Simulation](./evaluation/performance_tools.md#example-with-msprof-op-simulator).
-   - `--enable_profiling`: Enables the profiling tool. For details, see [Tuning Performance in a CATLASS Sample Project](./evaluation/performance_tools.md#profiling-overview).
-   - `--enable_print`: Enables the compiler's print functionality. For details, see [Device-Side Printing Based on `cce::printf`](./evaluation/print.md).
-   - `--enable_ascendc_dump`: Enables `Ascend C` operator debugging APIs. For details, see [Using Ascend C Operator Debugging APIs in a CATLASS Sample Project](./evaluation/ascendc_dump.md).
-   - `-DCATLASS_ARCH`: Specifies the NPU architecture. Currently, `2201` and `3510` are supported.
-   - `-D<option>`: Passes other build options to CMake.
+- `options`: Optional build options. Currently supported options include:
+  - `--clean`: Clears the previous build and output directories (the default paths are `/build` and `/output`, respectively).
+  - `--debug`: Compiles in debug mode.
+  - `--msdebug`: Enables [msDebug](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0062.html). For details, see [Using msDebug in a CATLASS Sample Project](./evaluation/msdebug.md).
+  - `--simulator`: Enables the simulator mode. After this option is enabled, the code will not run on an actual NPU. For details, see [CATLASS Sample Simulation](./evaluation/performance_tools.md#example-with-msprof-op-simulator).
+  - `--enable_profiling`: Enables the profiling tool. For details, see [Tuning Performance in a CATLASS Sample Project](./evaluation/performance_tools.md#profiling-overview).
+  - `--enable_print`: Enables the compiler's print functionality. For details, see [Device-Side Printing Based on `cce::printf`](./evaluation/print.md).
+  - `--enable_ascendc_dump`: Enables `Ascend C` operator debugging APIs. For details, see [Using Ascend C Operator Debugging APIs in a CATLASS Sample Project](./evaluation/ascendc_dump.md).
+  - `-DCATLASS_ARCH`: Specifies the NPU architecture. Currently, `2201` and `3510` are supported.
+  - `-D<option>`: Passes other build options to CMake.
 
- - `target`: Specifies the operator sample to build. You can specify a specific sample name or one of the following:
-   - `catlass_examples`: Builds all samples in the repository.
-   - `python_extension`: Builds the Pybind extension. For details, see [Python-based CATLASS Sample Calls](../../../examples/python_extension/README.md).
-   - `torch_library`: Builds the Torch extension. For details, see [Python-based CATLASS Sample Calls](../../../examples/python_extension/README.md).
-   - `mstuner_catlass`: Builds msTuner_CATLASS. For details, see [`mstuner_catlass` Usage Guide](../../../tools/tuner/README.md).
+- `target`: Specifies the operator sample to build. You can specify a specific sample name or one of the following:
+  - `catlass_examples`: Builds all samples in the repository.
+  - `python_extension`: Builds the Pybind extension. For details, see [Python-based CATLASS Sample Calls](../../../examples/python_extension/README.md).
+  - `torch_library`: Builds the Torch extension. For details, see [Python-based CATLASS Sample Calls](../../../examples/python_extension/README.md).
+  - `mstuner_catlass`: Builds msTuner_CATLASS. For details, see [`mstuner_catlass` Usage Guide](../../../tools/tuner/README.md).
 
 Take the [basic_matmul](../../../examples/00_basic_matmul/README.md) sample as an example. Run the following command:
 
@@ -81,11 +81,11 @@ bash scripts/build.sh 00_basic_matmul
 
 If the following prompt appears, the build succeeded.
 
-```bash 
+```bash
 "[INFO] Target "{target}" built successfully."
 ```
 
-2. **Executing Operators**
+1. **Executing Operators**
 
 The operator build output is located in the `output/bin` directory. Switch to this directory to run the operator sample program.
 Take the [basic_matmul] sample as an example. You can run the operator by executing the following commands:
@@ -97,8 +97,8 @@ cd output/bin
 ./00_basic_matmul 256 512 1024 0
 ```
 
- - `256`, `512`, and `1024` are the dimensions of the matrix multiplication along the M-axis, N-axis, and K-axis, respectively (left/right matrix data is randomly generated).
- - `deviceId` (optional, default value: 0) specifies the NPU ID.
+- `256`, `512`, and `1024` are the dimensions of the matrix multiplication along the M-axis, N-axis, and K-axis, respectively (left/right matrix data is randomly generated).
+- `deviceId` (optional, default value: 0) specifies the NPU ID.
 
 After executing the operator sample, the following result indicates that the computation meets the precision expectations (in this sample, the left and right matrices of the matmul are filled with random numbers, and the ground truth is based on CPU computation).
 

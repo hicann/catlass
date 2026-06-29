@@ -14,15 +14,15 @@
 
 ## 引用的 Tile 组件
 
-| 成员别名 | 引用的底层模板 | 说明 |
-| :------ | :------ | :------ |
-| `CopyGmToL1A` | `CopyGmToL1<ArchTag, AType>` | A 矩阵 GM→L1 |
-| `CopyGmToL1B` | `CopyGmToL1<ArchTag, BType>` | B 矩阵 GM→L1 |
-| `CopyL1ToL0A` | `CopyL1ToL0A<ArchTag, L1AType>` | A 矩阵 L1→L0A |
-| `CopyL1ToL0B` | `CopyL1ToL0B<ArchTag, L1BType>` | B 矩阵 L1→L0B |
-| `CopyL0CToGm` | `CopyL0CToGm<ArchTag, ElementAccumulator, CType, PER_TENSOR>` | L0C→GM（per-tensor） |
-| `CopyGmToL1Bias` | `CopyGmToL1<ArchTag, ...>` 或 `void` | Bias GM→L1 |
-| `CopyL1ToBT` | `CopyL1ToBT<ArchTag, ...>` 或 `void` | Bias L1→BT |
+| 成员别名         | 引用的底层模板                                                | 说明                 |
+| :--------------- | :------------------------------------------------------------ | :------------------- |
+| `CopyGmToL1A`    | `CopyGmToL1<ArchTag, AType>`                                  | A 矩阵 GM→L1         |
+| `CopyGmToL1B`    | `CopyGmToL1<ArchTag, BType>`                                  | B 矩阵 GM→L1         |
+| `CopyL1ToL0A`    | `CopyL1ToL0A<ArchTag, L1AType>`                               | A 矩阵 L1→L0A        |
+| `CopyL1ToL0B`    | `CopyL1ToL0B<ArchTag, L1BType>`                               | B 矩阵 L1→L0B        |
+| `CopyL0CToGm`    | `CopyL0CToGm<ArchTag, ElementAccumulator, CType, PER_TENSOR>` | L0C→GM（per-tensor） |
+| `CopyGmToL1Bias` | `CopyGmToL1<ArchTag, ...>` 或 `void`                          | Bias GM→L1           |
+| `CopyL1ToBT`     | `CopyL1ToBT<ArchTag, ...>` 或 `void`                          | Bias L1→BT           |
 
 ## 模板原型
 

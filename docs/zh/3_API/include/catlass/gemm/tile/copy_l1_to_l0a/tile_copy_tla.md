@@ -26,22 +26,22 @@ L1 → L0A 的偏特化通过 SFINAE 匹配：源 tensor 的 Position 为 `Ascen
 
 ### AtlasA2
 
-| 源 Tensor | 目标 Tensor | SFINAE 条件 | 说明 |
-| :------ | :------ | :------ | :------ |
-| zN L1 | zZ L0A | `iszN<LayoutSrc> && iszZ<LayoutDst>` | 基础 Nd 拷贝 |
-| zN L1 (float) | zZ L0A (float) | `iszN<float, LayoutSrc> && iszZ<float, LayoutDst>` | float 专用 LoadData3D |
-| nZ L1 | zZ L0A | `isnZ<LayoutSrc> && iszZ<LayoutDst>` | 转置拷贝 |
-| nZ L1 (int8_t) | zZ L0A (int8_t) | `isnZ<int8_t, LayoutSrc> && iszZ<int8_t, LayoutDst>` | int8_t 转置（LoadDataWithTranspose） |
-| nZ L1 (float) | zZ L0A (float) | `isnZ<float, LayoutSrc> && iszZ<float, LayoutDst>` | float 转置（LoadData3D + SetFmatrix） |
+| 源 Tensor      | 目标 Tensor     | SFINAE 条件                                          | 说明                                  |
+| :------------- | :-------------- | :--------------------------------------------------- | :------------------------------------ |
+| zN L1          | zZ L0A          | `iszN<LayoutSrc> && iszZ<LayoutDst>`                 | 基础 Nd 拷贝                          |
+| zN L1 (float)  | zZ L0A (float)  | `iszN<float, LayoutSrc> && iszZ<float, LayoutDst>`   | float 专用 LoadData3D                 |
+| nZ L1          | zZ L0A          | `isnZ<LayoutSrc> && iszZ<LayoutDst>`                 | 转置拷贝                              |
+| nZ L1 (int8_t) | zZ L0A (int8_t) | `isnZ<int8_t, LayoutSrc> && iszZ<int8_t, LayoutDst>` | int8_t 转置（LoadDataWithTranspose）  |
+| nZ L1 (float)  | zZ L0A (float)  | `isnZ<float, LayoutSrc> && iszZ<float, LayoutDst>`   | float 转置（LoadData3D + SetFmatrix） |
 
 ### Ascend950
 
-| 源 Tensor | 目标 Tensor | SFINAE 条件 | 说明 |
-| :------ | :------ | :------ | :------ |
-| zN L1 | zN L0A | `iszN<LayoutSrc> && iszN<LayoutDst>` | 基础 Nd 拷贝。支持 l0Batch 重载和 MX Scale 重载 |
-| nZ L1（非 B8/B4） | zN L0A（非 B8/B4） | `!is_one_of_v<Element, int8_t, float8_...> && isnZ && iszN` | 转置拷贝。支持 l0Batch 重载 |
-| nZ L1（B8/B4） | zN L0A（B8/B4） | `is_one_of_v<Element, int8_t, float8_...> && isnZ && iszN` | B8/B4 转置拷贝。支持 l0Batch 和 MX Scale 重载 |
-| Vector L1 | L0A | `isVector<LayoutSrc>` | Vector layout 专用路径 |
+| 源 Tensor         | 目标 Tensor        | SFINAE 条件                                                 | 说明                                            |
+| :---------------- | :----------------- | :---------------------------------------------------------- | :---------------------------------------------- |
+| zN L1             | zN L0A             | `iszN<LayoutSrc> && iszN<LayoutDst>`                        | 基础 Nd 拷贝。支持 l0Batch 重载和 MX Scale 重载 |
+| nZ L1（非 B8/B4） | zN L0A（非 B8/B4） | `!is_one_of_v<Element, int8_t, float8_...> && isnZ && iszN` | 转置拷贝。支持 l0Batch 重载                     |
+| nZ L1（B8/B4）    | zN L0A（B8/B4）    | `is_one_of_v<Element, int8_t, float8_...> && isnZ && iszN`  | B8/B4 转置拷贝。支持 l0Batch 和 MX Scale 重载   |
+| Vector L1         | L0A                | `isVector<LayoutSrc>`                                       | Vector layout 专用路径                          |
 
 > **注意**：Ascend950 的 TLA L1→L0A 目标 layout 为 zN（非 zZ），且支持 MX Scale 浮点量化场景和 l0Batch 批量搬运。
 

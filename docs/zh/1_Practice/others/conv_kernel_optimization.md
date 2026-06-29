@@ -6,17 +6,17 @@
 
 当前`33_basic_conv2d`的默认配置：
 
-| 参数 | 值 |
-|------|-----|
-| DispatchPolicy |`ConvAtlasA2Pingpong<2, 2, 2, 2, 1, false>`|
-| FmapL1TileShape |`<8, 12, 8>`Ho, Wo, Cin1 |
-| FilterL1TileShape |`<96, 8>`Cout, Cin1 |
-| L0TileShape |`<16, 96, 16>`M, N, K |
-| BlockScheduler |`Conv2dIdentityBlockSwizzle<3, 0>`|
+| 参数              | 值                                          |
+| ----------------- | ------------------------------------------- |
+| DispatchPolicy    | `ConvAtlasA2Pingpong<2, 2, 2, 2, 1, false>` |
+| FmapL1TileShape   | `<8, 12, 8>`Ho, Wo, Cin1                    |
+| FilterL1TileShape | `<96, 8>`Cout, Cin1                         |
+| L0TileShape       | `<16, 96, 16>`M, N, K                       |
+| BlockScheduler    | `Conv2dIdentityBlockSwizzle<3, 0>`          |
 
 任务空间维度为`{Batch, Ho, Wo, Cout, Cin1}`，基本块数量：
 
-```
+```text
 totalLoops = batch * ceilDiv(Ho, 8) * ceilDiv(Wo, 12) * ceilDiv(Cout, 96)
 ```
 
@@ -58,21 +58,22 @@ uint32_t totalLoops = batch * hoTiles * woTiles * coTiles;
 
 调整方向：
 
-| 现象 | 调整 | 副作用 |
-|------|------|--------|
-|`totalLoops < 48`| 减小`FmapL1TileShape::Ho/Wo`或`FilterL1TileShape::Cout`| 增加循环次数，可能放大MTE2搬运量 |
-|`totalLoops`远大于48且尾轮不均 | 尝试调整`SwizzleOffset`和`SwizzleDirection`| 不影响搬运量，仅重排任务分配 |
+| 现象                           | 调整                                                    | 副作用                           |
+| ------------------------------ | ------------------------------------------------------- | -------------------------------- |
+| `totalLoops < 48`              | 减小`FmapL1TileShape::Ho/Wo`或`FilterL1TileShape::Cout` | 增加循环次数，可能放大MTE2搬运量 |
+| `totalLoops`远大于48且尾轮不均 | 尝试调整`SwizzleOffset`和`SwizzleDirection`             | 不影响搬运量，仅重排任务分配     |
 
 **调整 Swizzle 参数实现尾轮均衡。**`Conv2dIdentityBlockSwizzle<offset, direction>`的两种direction：
 
 -`direction = 0`（默认）：按`Ho → Wo → Cout`顺序遍历。适合`hoTiles * woTiles`较大的场景。
--`direction = 1`：按`Cout → Ho → Wo`顺序遍历。适合`coTiles`较大的场景。
+\-`direction = 1`：按`Cout → Ho → Wo`顺序遍历。适合`coTiles`较大的场景。
 
 `SwizzleOffset`控制Swizzle块大小，通过改变任务分配顺序让尾轮工作更均匀地分布在核间。
 
 **经验判断**
 
 -`totalLoops`在`[48, 96)`区间时，尾轮负载不均问题最突出。
+
 - 若`totalLoops`刚好是48的整数倍，Swizzle调整通常无收益。
 - 小batch场景（batch=1）更容易出现任务块不足，需优先考虑减小tile shape。
 - Swizzle调整不改变搬运量，仅重排任务，是低风险的优化起点。
@@ -108,18 +109,18 @@ constexpr uint32_t L1B_STAGES = 3;
 
 L1空间预算的粗略估算：
 
-| Buffer | 每个stage大小 | 3 stages 总大小 |
-|--------|-------------|----------------|
-| L1A Fmap |`Ho × Wo × Cin1 × C0 × sizeof(fp16)`| 3倍单stage |
-| L1B Filter |`Cin1 × Kh × Kw × Cout × C0 × sizeof(fp16)`| 3倍单stage |
-| 合计 | — | 需 < 512KB (L1容量) |
+| Buffer     | 每个stage大小                               | 3 stages 总大小     |
+| ---------- | ------------------------------------------- | ------------------- |
+| L1A Fmap   | `Ho × Wo × Cin1 × C0 × sizeof(fp16)`        | 3倍单stage          |
+| L1B Filter | `Cin1 × Kh × Kw × Cout × C0 × sizeof(fp16)` | 3倍单stage          |
+| 合计       | —                                           | 需 < 512KB (L1容量) |
 
 **经验判断**
 
 - 当Profiling显示MTE2占比高且Cube利用率偏低时，优先增大stage数。
 - L0C流水`L0C_STAGES=2`收益在K循环较长的场景更明显（Cin1较大）。
 - L1 stage从2增加到3时，需确认L1能容纳所有buffer。若超限，可考虑减小Fmap或Filter的tile shape以降低单stage大小。
--`conv_bias`样例使用`L1A=1, L1B=1, L0C=1, UnitFlag=true`，无双缓冲但有unit flag。说明非流水场景不需要L1双缓冲，但L0C unit flag对写出仍有帮助。
+  \-`conv_bias`样例使用`L1A=1, L1B=1, L0C=1, UnitFlag=true`，无双缓冲但有unit flag。说明非流水场景不需要L1双缓冲，但L0C unit flag对写出仍有帮助。
 
 ### 案例三：Tile Shape选择与调优
 
@@ -127,11 +128,11 @@ L1空间预算的粗略估算：
 
 Conv2D的三个Tile Shape分别控制不同存储层级上的分块粒度：
 
-| Tile Shape | 控制粒度 | 影响 |
-|-----------|---------|------|
-|`FmapL1TileShape<Ho, Wo, Cin1>`| Fmap每次加载到L1的tile大小 | Ho×Wo循环次数、L1占用 |
-|`FilterL1TileShape<Cout, Cin1>`| Filter每次加载到L1的tile大小 | Cout循环次数、L1占用 |
-|`L0TileShape<M, N, K>`| Cube单次Mmad的计算粒度 | Cube利用率 |
+| Tile Shape                      | 控制粒度                     | 影响                  |
+| ------------------------------- | ---------------------------- | --------------------- |
+| `FmapL1TileShape<Ho, Wo, Cin1>` | Fmap每次加载到L1的tile大小   | Ho×Wo循环次数、L1占用 |
+| `FilterL1TileShape<Cout, Cin1>` | Filter每次加载到L1的tile大小 | Cout循环次数、L1占用  |
+| `L0TileShape<M, N, K>`          | Cube单次Mmad的计算粒度       | Cube利用率            |
 
 三者通过`K_FMAP_PER_FILTER = FilterL1TileShape::Cin1 / FmapL1TileShape::Cin1`关联。每加载一块Filter tile，需要在K方向循环`K_FMAP_PER_FILTER`次Fmap tile。
 
@@ -155,11 +156,11 @@ Filter重复读取次数 ≈ batch × hoTiles × woTiles × cin1Tiles × (coTile
 
 **增大L0TileShape的M/N/K。** L0TileShape影响Cube单次Mmad的算力利用率。M/N过小会导致Cube未满负荷；过大则可能超过L0A/L0B容量。
 
-| L0Shape | 单次Mmad计算次数 | L0A大小 | 典型场景 |
-|---------|---------------|--------|----------|
-|`<16, 96, 16>`| 24K | 16×16 fp16 | 当前默认 |
-|`<32, 96, 32>`| 96K | 32×32 fp16 | Cube bound, 空间充裕 |
-|`<16, 128, 16>`| 32K | 16×16 fp16 | Cube bound, N轴增大 |
+| L0Shape         | 单次Mmad计算次数 | L0A大小    | 典型场景             |
+| --------------- | ---------------- | ---------- | -------------------- |
+| `<16, 96, 16>`  | 24K              | 16×16 fp16 | 当前默认             |
+| `<32, 96, 32>`  | 96K              | 32×32 fp16 | Cube bound, 空间充裕 |
+| `<16, 128, 16>` | 32K              | 16×16 fp16 | Cube bound, N轴增大  |
 
 **经验判断**
 

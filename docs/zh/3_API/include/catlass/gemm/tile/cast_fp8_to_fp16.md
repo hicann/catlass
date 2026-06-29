@@ -43,6 +43,7 @@ TileCastFp8ToFp16Dequant(Arch::Resource<ArchTag> &resource, Params const &params
 ```
 
 从 `Arch::Resource` 的 UB buffer 中分配双缓冲：
+
 - `inputBuffer[2]` × `COMPUTE_LENGTH` × 1 byte（FP8 输入）
 - `outputBuffer[2]` × `COMPUTE_LENGTH` × 2 bytes（FP16 输出）
 - `workspace[2]` × `COMPUTE_LENGTH` × 2 bytes（计算 workspace）

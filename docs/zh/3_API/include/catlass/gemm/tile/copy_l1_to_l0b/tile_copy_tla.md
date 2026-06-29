@@ -26,20 +26,20 @@ L1 → L0B 的偏特化通过 SFINAE 匹配：源 tensor 的 Position 为 `Ascen
 
 ### AtlasA2
 
-| 源 Tensor | 目标 Tensor | SFINAE 条件 | 说明 |
-| :------ | :------ | :------ | :------ |
-| zN L1 | nZ L0B | `iszN<LayoutSrc> && isnZ<LayoutDst>` | 基础转置拷贝（Transpose B） |
-| zN L1 (int8_t) | nZ L0B (int8_t) | `iszN<int8_t, LayoutSrc> && isnZ<int8_t, LayoutDst>` | int8_t 转置（LoadDataWithTranspose） |
-| zN L1 (float) | nZ L0B (float) | `iszN<float, LayoutSrc> && isnZ<float, LayoutDst>` | float 转置（LoadData3D + SetFmatrix） |
-| nZ L1 | nZ L0B | `isnZ<LayoutSrc> && isnZ<LayoutDst>` | 非转置拷贝（直传） |
+| 源 Tensor      | 目标 Tensor     | SFINAE 条件                                          | 说明                                  |
+| :------------- | :-------------- | :--------------------------------------------------- | :------------------------------------ |
+| zN L1          | nZ L0B          | `iszN<LayoutSrc> && isnZ<LayoutDst>`                 | 基础转置拷贝（Transpose B）           |
+| zN L1 (int8_t) | nZ L0B (int8_t) | `iszN<int8_t, LayoutSrc> && isnZ<int8_t, LayoutDst>` | int8_t 转置（LoadDataWithTranspose）  |
+| zN L1 (float)  | nZ L0B (float)  | `iszN<float, LayoutSrc> && isnZ<float, LayoutDst>`   | float 转置（LoadData3D + SetFmatrix） |
+| nZ L1          | nZ L0B          | `isnZ<LayoutSrc> && isnZ<LayoutDst>`                 | 非转置拷贝（直传）                    |
 
 ### Ascend950
 
-| 源 Tensor | 目标 Tensor | SFINAE 条件 | 说明 |
-| :------ | :------ | :------ | :------ |
-| zN L1（非 B8/B4） | nZ L0B（非 B8/B4） | `!is_one_of_v<Element, int8_t, float8_...> && iszN && isnZ` | 转置拷贝。支持 l0Batch 重载 |
-| zN L1（B8/B4） | nZ L0B（B8/B4） | `is_one_of_v<Element, int8_t, float8_...> && iszN && isnZ` | B8/B4 转置拷贝。支持 l0Batch 和 MX Scale 重载 |
-| nZ L1 | nZ L0B | `isnZ<LayoutSrc> && isnZ<LayoutDst>` | 非转置拷贝（Transpose B）。支持 l0Batch 和 MX Scale 重载 |
+| 源 Tensor         | 目标 Tensor        | SFINAE 条件                                                 | 说明                                                     |
+| :---------------- | :----------------- | :---------------------------------------------------------- | :------------------------------------------------------- |
+| zN L1（非 B8/B4） | nZ L0B（非 B8/B4） | `!is_one_of_v<Element, int8_t, float8_...> && iszN && isnZ` | 转置拷贝。支持 l0Batch 重载                              |
+| zN L1（B8/B4）    | nZ L0B（B8/B4）    | `is_one_of_v<Element, int8_t, float8_...> && iszN && isnZ`  | B8/B4 转置拷贝。支持 l0Batch 和 MX Scale 重载            |
+| nZ L1             | nZ L0B             | `isnZ<LayoutSrc> && isnZ<LayoutDst>`                        | 非转置拷贝（Transpose B）。支持 l0Batch 和 MX Scale 重载 |
 
 > **注意**：Ascend950 的 TLA L1→L0B 目标 layout 为 nZ，且支持 MX Scale 浮点量化场景和 l0Batch 批量搬运。
 

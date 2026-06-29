@@ -27,11 +27,11 @@ struct TileCopySparseTla {
 
 ## 偏特化实现清单（全 AtlasA2）
 
-| 方向 | 说明 | 实现位置 | API 文档 |
-| :------ | :------ | :------ | :------ |
-| GM→L1A | 稀疏 A 矩阵 GM RowMajor → L1 RowMajor | `atlasa2/copy_gm_to_l1.hpp` | [copy_gm_to_l1](../copy_gm_to_l1/tile_copy_sparse_tla.md) |
-| GM→L1B | 稀疏 B 矩阵 GM ColumnMajor → L1 ColumnMajor | `atlasa2/copy_gm_to_l1.hpp` | [copy_gm_to_l1](../copy_gm_to_l1/tile_copy_sparse_tla.md) |
-| L1→L0A | 稀疏 A 矩阵 L1→L0A zZ | `atlasa2/copy_l1_to_l0a.hpp` | [copy_l1_to_l0a](../copy_l1_to_l0a/tile_copy_sparse_tla.md) |
+| 方向   | 说明                                        | 实现位置                     | API 文档                                                    |
+| :----- | :------------------------------------------ | :--------------------------- | :---------------------------------------------------------- |
+| GM→L1A | 稀疏 A 矩阵 GM RowMajor → L1 RowMajor       | `atlasa2/copy_gm_to_l1.hpp`  | [copy_gm_to_l1](../copy_gm_to_l1/tile_copy_sparse_tla.md)   |
+| GM→L1B | 稀疏 B 矩阵 GM ColumnMajor → L1 ColumnMajor | `atlasa2/copy_gm_to_l1.hpp`  | [copy_gm_to_l1](../copy_gm_to_l1/tile_copy_sparse_tla.md)   |
+| L1→L0A | 稀疏 A 矩阵 L1→L0A zZ                       | `atlasa2/copy_l1_to_l0a.hpp` | [copy_l1_to_l0a](../copy_l1_to_l0a/tile_copy_sparse_tla.md) |
 
 ## 调用接口
 

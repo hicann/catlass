@@ -28,33 +28,33 @@ struct CopyGmToL1DynamicOptimized
 
 ### 模板参数说明
 
-| 参数 | 说明 |
-| :------ | :------ |
+| 参数      | 说明                                                |
+| :-------- | :-------------------------------------------------- |
 | `ArchTag` | 架构标签，可选 `Arch::AtlasA2` 或 `Arch::Ascend950` |
-| `GmType` | GM 上源操作数的 Gemm 类型 |
-| `L1Type` | L1 上目的操作数的 Gemm 类型，默认为 `void` |
+| `GmType`  | GM 上源操作数的 Gemm 类型                           |
+| `L1Type`  | L1 上目的操作数的 Gemm 类型，默认为 `void`          |
 
 ## 偏特化实现
 
 ### AtlasA2 偏特化
 
-| GmType | 目的 Layout | 实现方式 |
-| :------ | :------ | :------ |
-| `GemmType<Element, RowMajor>` | `zN` | 自主实现，动态选择策略 |
-| `GemmType<Element, ColumnMajor>` | `nZ` | 自主实现，动态选择策略 |
-| `GemmType<Element, zN>` | `zN` | 继承自 `CopyGmToL1<AtlasA2, GmType<Element, zN>>` |
-| `GemmType<Element, nZ>` | `nZ` | 继承自 `CopyGmToL1<AtlasA2, GmType<Element, nZ>>` |
-| `GemmType<Element, PaddingRowMajor>` | `zN` | 继承自 `CopyGmToL1<AtlasA2, GmType<Element, PaddingRowMajor>>` |
-| `GemmType<Element, PaddingColumnMajor>` | `nZ` | 继承自 `CopyGmToL1<AtlasA2, GmType<Element, PaddingColumnMajor>>` |
+| GmType                                  | 目的 Layout | 实现方式                                                          |
+| :-------------------------------------- | :---------- | :---------------------------------------------------------------- |
+| `GemmType<Element, RowMajor>`           | `zN`        | 自主实现，动态选择策略                                            |
+| `GemmType<Element, ColumnMajor>`        | `nZ`        | 自主实现，动态选择策略                                            |
+| `GemmType<Element, zN>`                 | `zN`        | 继承自 `CopyGmToL1<AtlasA2, GmType<Element, zN>>`                 |
+| `GemmType<Element, nZ>`                 | `nZ`        | 继承自 `CopyGmToL1<AtlasA2, GmType<Element, nZ>>`                 |
+| `GemmType<Element, PaddingRowMajor>`    | `zN`        | 继承自 `CopyGmToL1<AtlasA2, GmType<Element, PaddingRowMajor>>`    |
+| `GemmType<Element, PaddingColumnMajor>` | `nZ`        | 继承自 `CopyGmToL1<AtlasA2, GmType<Element, PaddingColumnMajor>>` |
 
 ### Ascend950 偏特化
 
-| GmType | 目的 Layout | 实现方式 |
-| :------ | :------ | :------ |
-| `GemmType<Element, RowMajor>` | `zN` | 自主实现，动态选择策略 |
-| `GemmType<Element, ColumnMajor>` | `nZ` | 自主实现，动态选择策略 |
-| `GemmType<Element, zN>` | `zN` | 继承自 `CopyGmToL1<Ascend950, GmType<Element, zN>>` |
-| `GemmType<Element, nZ>` | `nZ` | 继承自 `CopyGmToL1<Ascend950, GmType<Element, nZ>>` |
+| GmType                           | 目的 Layout | 实现方式                                            |
+| :------------------------------- | :---------- | :-------------------------------------------------- |
+| `GemmType<Element, RowMajor>`    | `zN`        | 自主实现，动态选择策略                              |
+| `GemmType<Element, ColumnMajor>` | `nZ`        | 自主实现，动态选择策略                              |
+| `GemmType<Element, zN>`          | `zN`        | 继承自 `CopyGmToL1<Ascend950, GmType<Element, zN>>` |
+| `GemmType<Element, nZ>`          | `nZ`        | 继承自 `CopyGmToL1<Ascend950, GmType<Element, nZ>>` |
 
 ## 调用接口
 
@@ -69,12 +69,12 @@ void operator()(
 )
 ```
 
-| 参数 | 说明 |
-| :------ | :------ |
-| `dstTensor` | 目的 L1 LocalTensor |
-| `srcTensor` | 源 GM GlobalTensor |
+| 参数        | 说明                     |
+| :---------- | :----------------------- |
+| `dstTensor` | 目的 L1 LocalTensor      |
+| `srcTensor` | 源 GM GlobalTensor       |
 | `layoutDst` | 目的操作数的 layout 描述 |
-| `layoutSrc` | 源操作数的 layout 描述 |
+| `layoutSrc` | 源操作数的 layout 描述   |
 
 ## 调用示例
 

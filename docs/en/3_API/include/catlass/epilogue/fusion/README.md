@@ -9,16 +9,16 @@ This document serves only as a directory index. Node parameters, `Arguments` str
 
 ## File Responsibilities
 
-| Component| Description|
-| --- | --- |
-| `fusion.hpp` | Main entry header file, which directly includes common graph orchestrators and nodes.|
-| `tree_visitor.hpp` | Organization logic for `TreeVisitor`.|
-| `topological_visitor.hpp` | Organization logic for `TopologicalVisitor`.|
-| `VisitorImplBase` | Aggregates `Arguments`, `Params`, workspace calculations, and feasibility checks.|
-| `VisitorImpl` | Constructs callbacks in a unified manner and provides a general framework for all nodes.|
-| `visitor_*.hpp` | Specific node implementation.|
-| `operations.hpp` | Operator encapsulation used by `VisitorCompute`.|
-| `visitor_impl_base.hpp` | Definitions for `VisitStage` and the core basic framework.|
+| Component                 | Description                                                                              |
+| ------------------------- | ---------------------------------------------------------------------------------------- |
+| `fusion.hpp`              | Main entry header file, which directly includes common graph orchestrators and nodes.    |
+| `tree_visitor.hpp`        | Organization logic for `TreeVisitor`.                                                    |
+| `topological_visitor.hpp` | Organization logic for `TopologicalVisitor`.                                             |
+| `VisitorImplBase`         | Aggregates `Arguments`, `Params`, workspace calculations, and feasibility checks.        |
+| `VisitorImpl`             | Constructs callbacks in a unified manner and provides a general framework for all nodes. |
+| `visitor_*.hpp`           | Specific node implementation.                                                            |
+| `operations.hpp`          | Operator encapsulation used by `VisitorCompute`.                                         |
+| `visitor_impl_base.hpp`   | Definitions for `VisitStage` and the core basic framework.                               |
 
 ## References
 

@@ -109,11 +109,11 @@ void CustomMatmul(uint32_t blockNum, aclrtStream stream, kernelInfo kernelInfo) 
 
 The parameter descriptions are outlined below:
 
-| Parameter      | Type         | Purpose                                               |
-| ------------ | ------------- | --------------------------------------------------- |
-| `blockNum`   | `uint32_t`    | Specifies the AI Core count.                                     |
-| `stream`     | `aclrtStream` | NPU Stream.                                              |
-| `kernelInfo` | `KernelInfo`  | Contains data addresses and shape details for operator execution, such as the m, n, and k dimensions.|
+| Parameter    | Type          | Purpose                                                                                               |
+| ------------ | ------------- | ----------------------------------------------------------------------------------------------------- |
+| `blockNum`   | `uint32_t`    | Specifies the AI Core count.                                                                          |
+| `stream`     | `aclrtStream` | NPU Stream.                                                                                           |
+| `kernelInfo` | `KernelInfo`  | Contains data addresses and shape details for operator execution, such as the m, n, and k dimensions. |
 
 You can modify the parameters as required.
 

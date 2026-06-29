@@ -2,8 +2,8 @@
 
 ## System Security Hardening
 
-- You can enable ASLR (Level 2) during system configuration to enhance system security and ensure system randomization is activated. 
-Refer to the following method for configuration:
+- You can enable ASLR (Level 2) during system configuration to enhance system security and ensure system randomization is activated.
+  Refer to the following method for configuration:
 
   ```sh
   echo 2 > /proc/sys/kernel/randomize_va_space
@@ -56,22 +56,22 @@ Refer to the following method for configuration:
 
 ### A-Recommended maximum permissions for files and folders
 
-| Type          | Maximum Linux Permission|
-| -------------- | ---------------  |
-| Home directory                       |   750 (rwxr-x---)           |
-| Program files (including scripts and libraries)      |   550 (r-xr-x---)            |
-| Program file directory                     |   550 (r-xr-x---)           |
-| Configuration files                         |  640 (rw-r-----)            |
-| Configuration file directory                     |   750 (rwxr-x---)           |
-| Log files (recorded or archived)       |  440 (r--r-----)            |
-| Log files (being recorded)               |    640 (rw-r-----)          |
-| Log file directory                     |   750 (rwxr-x---)           |
-| Debug files                        |  640 (rw-r-----)        |
-| Debug file directory                    |   750 (rwxr-x---) |
-| Temporary file directory                     |   750 (rwxr-x---)  |
-| Maintenance and upgrade file directory                 |   770 (rwxrwx---)   |
-| Service data files                     |   640 (rw-r-----)   |
-| Service data file directory                 |   750 (rwxr-x---)     |
-| Key components, private keys, certificates, and ciphertext file directory   |  700 (rwx------)     |
-| Key components, private keys, certificates, and ciphertext files       | 600 (rw-------)     |
-| APIs and scripts for encryption and decryption           |   500 (r-x------)       |
+| Type                                                                      | Maximum Linux Permission |
+| ------------------------------------------------------------------------- | ------------------------ |
+| Home directory                                                            | 750 (rwxr-x---)          |
+| Program files (including scripts and libraries)                           | 550 (r-xr-x---)          |
+| Program file directory                                                    | 550 (r-xr-x---)          |
+| Configuration files                                                       | 640 (rw-r-----)          |
+| Configuration file directory                                              | 750 (rwxr-x---)          |
+| Log files (recorded or archived)                                          | 440 (r--r-----)          |
+| Log files (being recorded)                                                | 640 (rw-r-----)          |
+| Log file directory                                                        | 750 (rwxr-x---)          |
+| Debug files                                                               | 640 (rw-r-----)          |
+| Debug file directory                                                      | 750 (rwxr-x---)          |
+| Temporary file directory                                                  | 750 (rwxr-x---)          |
+| Maintenance and upgrade file directory                                    | 770 (rwxrwx---)          |
+| Service data files                                                        | 640 (rw-r-----)          |
+| Service data file directory                                               | 750 (rwxr-x---)          |
+| Key components, private keys, certificates, and ciphertext file directory | 700 (rwx------)          |
+| Key components, private keys, certificates, and ciphertext files          | 600 (rw-------)          |
+| APIs and scripts for encryption and decryption                            | 500 (r-x------)          |

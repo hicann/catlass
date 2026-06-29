@@ -132,7 +132,7 @@ tests/optest/
 - Python loader 侧：通过 `torch_npu.npu.get_device_name()` 映射 arch id，用于加载 `torch_catlass/lib/<arch>/` 下的预构建库。
 - JIT 编译侧：通过 `GetCurrentNPUArch()`（AscendC 平台 API）获取当前 SoC 对应架构，用于设置编译参数。
 - 当前代码中的映射：
-`Ascend910B.*` / `Ascend910_93` -> `2201`，`Ascend950` -> `3510`。
+  `Ascend910B.*` / `Ascend910_93` -> `2201`，`Ascend950` -> `3510`。
 
 ## 公共 ABI 与接口分层
 
@@ -142,6 +142,7 @@ tests/optest/
 - [catlass_kernel_prebuilt.h](include/catlass_kernel_prebuilt.h)：flash-attention/conv/mla 等 prebuilt 接口。
 
 其中：
+
 - `TParams` 表示编译期模板参数（dtype/layout/transpose 等）。
 - `Params` 表示运行期参数（shape、buffer address 等）。
 
@@ -170,32 +171,32 @@ pytest tests/ -v
 
 ### 外部配置（用户可设置）
 
-| 变量 | 作用 | 可接受值 | 默认值 |
-| --- | --- | --- | --- |
-| `ASCEND_HOME_PATH` | CANN 安装根目录，查找 compiler(`ccec`) 和 runtime 库 | 绝对路径 | —（必设） |
-| `CATLASS_JIT_CACHE_DIR` | JIT 编译产物 `.so` 磁盘缓存根目录，版本号作为二级目录 | 绝对路径 | `~/.cache/catlass/jit_cache` |
-| `CATLASS_JIT_LOG_LEVEL` | JIT 编译日志等级 | `0`=None, `1`=Info, `2`=Debug | `0` |
-| `MS_SANITIZE_MEMORY` | 启用 Ascend memory sanitizer 调试 | `1` | — |
-| `CATLASS_JIT_AIC_AS_MIX` | 强制 AIC kernel 以 `__mix__(1,0)` 编译 | 任意非空 | —（默认 `__cube__`） |
-| `CATLASS_JIT_AIV_AS_MIX` | 强制 AIV kernel 以 `__mix__(0,1)` 编译 | 任意非空 | —（默认 `__vector__`） |
-| `CATLASS_JIT_MIX_CV_11` | 强制 MIX kernel 以 `__mix__(1,1)` 编译 | 任意非空 | —（默认 `__mix__(1,2)`） |
-| `PYTHON` | `build.sh` 使用的 Python 解释器路径 | `which python3` 的输出 | `$(which python3)` |
+| 变量                     | 作用                                                  | 可接受值                      | 默认值                       |
+| ------------------------ | ----------------------------------------------------- | ----------------------------- | ---------------------------- |
+| `ASCEND_HOME_PATH`       | CANN 安装根目录，查找 compiler(`ccec`) 和 runtime 库  | 绝对路径                      | —（必设）                    |
+| `CATLASS_JIT_CACHE_DIR`  | JIT 编译产物 `.so` 磁盘缓存根目录，版本号作为二级目录 | 绝对路径                      | `~/.cache/catlass/jit_cache` |
+| `CATLASS_JIT_LOG_LEVEL`  | JIT 编译日志等级                                      | `0`=None, `1`=Info, `2`=Debug | `0`                          |
+| `MS_SANITIZE_MEMORY`     | 启用 Ascend memory sanitizer 调试                     | `1`                           | —                            |
+| `CATLASS_JIT_AIC_AS_MIX` | 强制 AIC kernel 以 `__mix__(1,0)` 编译                | 任意非空                      | —（默认 `__cube__`）         |
+| `CATLASS_JIT_AIV_AS_MIX` | 强制 AIV kernel 以 `__mix__(0,1)` 编译                | 任意非空                      | —（默认 `__vector__`）       |
+| `CATLASS_JIT_MIX_CV_11`  | 强制 MIX kernel 以 `__mix__(1,1)` 编译                | 任意非空                      | —（默认 `__mix__(1,2)`）     |
+| `PYTHON`                 | `build.sh` 使用的 Python 解释器路径                   | `which python3` 的输出        | `$(which python3)`           |
 
 ### 包内注入（import 时自动设置，用户不直接改）
 
-| 变量 | 作用 | 来源 |
-| --- | --- | --- |
-| `CATLASS_JIT_VERSION` | 注入 JIT 编译的版本标识 `-DCATLASS_VERSION_FULL`，同时作为缓存目录的二级目录名 | `torch_catlass/__init__.py` 从 catlass git 推导 |
-| `CATLASS_JIT_PKG_DIR` | Python 包安装目录，JIT 依据此路径定位 templates 和 include | `torch_catlass/__init__.py` 通过 `_find_pkg_dir()` 解析 |
+| 变量                  | 作用                                                                           | 来源                                                    |
+| --------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------- |
+| `CATLASS_JIT_VERSION` | 注入 JIT 编译的版本标识 `-DCATLASS_VERSION_FULL`，同时作为缓存目录的二级目录名 | `torch_catlass/__init__.py` 从 catlass git 推导         |
+| `CATLASS_JIT_PKG_DIR` | Python 包安装目录，JIT 依据此路径定位 templates 和 include                     | `torch_catlass/__init__.py` 通过 `_find_pkg_dir()` 解析 |
 
 ### 构建选项
 
-| 变量 / 参数 | 作用 | 可接受值 |
-| --- | --- | --- |
-| `build.sh --build-type` | CMake 构建类型 | `Release`（默认）, `Debug` |
-| `build.sh --skip-wheel` | 跳过 wheel 打包，使用 editable install | — |
-| `build.sh --clean` | 清理 JIT 缓存 + 构建产物 | — |
-| `CATLASS_ARCH_LIST` (CMake) | 限制 prebuilt kernel 编译的 NPU 架构 | 分号分隔列表，如 `2201;3510` |
+| 变量 / 参数                 | 作用                                   | 可接受值                     |
+| --------------------------- | -------------------------------------- | ---------------------------- |
+| `build.sh --build-type`     | CMake 构建类型                         | `Release`（默认）, `Debug`   |
+| `build.sh --skip-wheel`     | 跳过 wheel 打包，使用 editable install | —                            |
+| `build.sh --clean`          | 清理 JIT 缓存 + 构建产物               | —                            |
+| `CATLASS_ARCH_LIST` (CMake) | 限制 prebuilt kernel 编译的 NPU 架构   | 分号分隔列表，如 `2201;3510` |
 
 > prebuilt kernel 默认为每个 arch 编译两份：普通版本和 `_ms` (sanitizer) 版本，无需额外选项。
 

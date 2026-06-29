@@ -53,13 +53,13 @@
 
 ## 层次职责
 
-| 层次 | 职责 | 关键文件 |
-|------|------|----------|
-| **Python 层** | 用户 API 入口、动态库加载、架构识别、版本管理 | `torch_catlass/__init__.py`, `torch_catlass/ops/*.py` |
-| **C++ 桥接层** | `torch.ops.catlass.*` 注册、NPU OpCommand 分发、Tensor → kernel ABI 转换 | `src/common/register.h`, `src/common/run_npu_func.h`, `src/include/template/*.h` |
-| **JIT 编译层** | 运行时编译 Ascend C 模板、磁盘/内存缓存、SHA256 UUID、宏生成 | `kernels/jit/*.cpp`, `kernels/include/jit_*.h` |
-| **内核公共层** | JIT 模板与预编译内核共享的工具：padding 判定、kernel 启动器、workspace 分配器 | `kernels/common/*.h` |
-| **构建系统** | 多架构预编译内核、JIT 模板构建期验证、wheel 打包、版本管理 | `CMakeLists.txt`, `build.sh`, `pyproject.toml` |
+| 层次           | 职责                                                                          | 关键文件                                                                         |
+| -------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| **Python 层**  | 用户 API 入口、动态库加载、架构识别、版本管理                                 | `torch_catlass/__init__.py`, `torch_catlass/ops/*.py`                            |
+| **C++ 桥接层** | `torch.ops.catlass.*` 注册、NPU OpCommand 分发、Tensor → kernel ABI 转换      | `src/common/register.h`, `src/common/run_npu_func.h`, `src/include/template/*.h` |
+| **JIT 编译层** | 运行时编译 Ascend C 模板、磁盘/内存缓存、SHA256 UUID、宏生成                  | `kernels/jit/*.cpp`, `kernels/include/jit_*.h`                                   |
+| **内核公共层** | JIT 模板与预编译内核共享的工具：padding 判定、kernel 启动器、workspace 分配器 | `kernels/common/*.h`                                                             |
+| **构建系统**   | 多架构预编译内核、JIT 模板构建期验证、wheel 打包、版本管理                    | `CMakeLists.txt`, `build.sh`, `pyproject.toml`                                   |
 
 ## 设计原则
 

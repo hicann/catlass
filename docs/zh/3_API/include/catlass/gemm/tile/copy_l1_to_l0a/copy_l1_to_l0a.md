@@ -9,6 +9,7 @@
 `CopyL1ToL0A` 模板负责将 A 矩阵的 tile 块从 L1（Local Memory，A1 Buffer）搬运到 L0A（A2 Buffer），支持多种数据排布格式（layout）转换。
 
 根据源 layout 和目标 layout 的不同，内部会选择合适的硬件搬运指令：
+
 - **zN → zZ**：Nd 转置拷贝，`ifTranspose = false`
 - **nZ → zZ**：转置拷贝（Transpose A），`ifTranspose = true`，对于 int8_t 使用 `LoadDataWithTranspose`
 - **NDC1HWC0 → zZ**：卷积专用路径，使用 `LoadData3Dv2`
@@ -36,24 +37,24 @@ struct CopyL1ToL0A {
 
 ### AtlasA2
 
-| 源 Layout | 目标 Layout | 元素类型 | 说明 |
-| :------ | :------ | :------ | :------ |
-| zN | zZ | 任意 | 基础 Nd 拷贝，使用 LoadData2D |
-| zN | zZ | float | float 专用，使用 LoadData3D 路径 |
-| nZ | zZ | 任意（非 int8_t） | 转置拷贝，使用 LoadData2D（ifTranspose=true） |
-| nZ | zZ | int8_t | 转置拷贝，使用 LoadDataWithTranspose |
-| nZ | zZ | float | 转置拷贝，使用 LoadData3D（含 SetFmatrix 对齐） |
-| nN | zZ | 任意 | nN 转 zZ 拷贝，使用 LoadData2D |
-| nN | zZ | float | float 专用，使用 LoadData2dTranspose |
-| NDC1HWC0 | zZ | 任意 | 卷积专用，使用 LoadData3Dv2 |
+| 源 Layout | 目标 Layout | 元素类型          | 说明                                            |
+| :-------- | :---------- | :---------------- | :---------------------------------------------- |
+| zN        | zZ          | 任意              | 基础 Nd 拷贝，使用 LoadData2D                   |
+| zN        | zZ          | float             | float 专用，使用 LoadData3D 路径                |
+| nZ        | zZ          | 任意（非 int8_t） | 转置拷贝，使用 LoadData2D（ifTranspose=true）   |
+| nZ        | zZ          | int8_t            | 转置拷贝，使用 LoadDataWithTranspose            |
+| nZ        | zZ          | float             | 转置拷贝，使用 LoadData3D（含 SetFmatrix 对齐） |
+| nN        | zZ          | 任意              | nN 转 zZ 拷贝，使用 LoadData2D                  |
+| nN        | zZ          | float             | float 专用，使用 LoadData2dTranspose            |
+| NDC1HWC0  | zZ          | 任意              | 卷积专用，使用 LoadData3Dv2                     |
 
 ### Ascend950
 
-| 源 Layout | 目标 Layout | 元素类型 | 说明 |
-| :------ | :------ | :------ | :------ |
-| zN | zN | 任意 | 基础 Nd 拷贝，使用 LoadData2DParamsV2 |
-| nZ | zN | 非 B8/B4（int8_t/float8_e4m3_t/float8_e5m2_t/float4 等） | 转置拷贝，使用 LoadData2DParamsV2 |
-| nZ | zN | B8/B4（int8_t/float8_e4m3_t/float8_e5m2_t/float4 等） | 转置拷贝，根据 L0M 对齐情况选择单次或分步 LoadData |
+| 源 Layout | 目标 Layout | 元素类型                                                 | 说明                                               |
+| :-------- | :---------- | :------------------------------------------------------- | :------------------------------------------------- |
+| zN        | zN          | 任意                                                     | 基础 Nd 拷贝，使用 LoadData2DParamsV2              |
+| nZ        | zN          | 非 B8/B4（int8_t/float8_e4m3_t/float8_e5m2_t/float4 等） | 转置拷贝，使用 LoadData2DParamsV2                  |
+| nZ        | zN          | B8/B4（int8_t/float8_e4m3_t/float8_e5m2_t/float4 等）    | 转置拷贝，根据 L0M 对齐情况选择单次或分步 LoadData |
 
 > **注意**：Ascend950 的 `L0Type` 目标 layout 均为 zN（非 zZ），与 AtlasA2 不同。
 

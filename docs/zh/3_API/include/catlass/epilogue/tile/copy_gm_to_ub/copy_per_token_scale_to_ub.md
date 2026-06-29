@@ -25,10 +25,10 @@ template <
 struct CopyPerTokenScale2Ub;
 ```
 
-| 模板参数 | 说明 |
-| :------ | :------ |
-| `ArchTag` | 架构标签 |
-| `GmType` | GM 数据类型，`Layout` 静态断言为 `ColumnMajor` |
+| 模板参数  | 说明                                           |
+| :-------- | :--------------------------------------------- |
+| `ArchTag` | 架构标签                                       |
+| `GmType`  | GM 数据类型，`Layout` 静态断言为 `ColumnMajor` |
 
 ## 调用接口
 
@@ -41,12 +41,12 @@ void operator()(
 )
 ```
 
-| 参数 | 说明 |
-| :------ | :------ |
+| 参数        | 说明                                                             |
+| :---------- | :--------------------------------------------------------------- |
 | `dstTensor` | 目的 UB LocalTensor，RowMajor 布局，scale 写入每行首列并 padding |
-| `srcTensor` | 源 GM GlobalTensor，ColumnMajor 布局 (m, 1) |
-| `layoutDst` | 目的 UB layout，`layoutDst.shape(1)` 用于计算 dstStride |
-| `layoutSrc` | 源 GM layout，`layoutSrc.shape(0)` 为 m |
+| `srcTensor` | 源 GM GlobalTensor，ColumnMajor 布局 (m, 1)                      |
+| `layoutDst` | 目的 UB layout，`layoutDst.shape(1)` 用于计算 dstStride          |
+| `layoutSrc` | 源 GM layout，`layoutSrc.shape(0)` 为 m                          |
 
 内部使用 `DataCopyPad` 的 padding 参数 `isPad = true` 确保每行首列数据填充到完整 block。
 

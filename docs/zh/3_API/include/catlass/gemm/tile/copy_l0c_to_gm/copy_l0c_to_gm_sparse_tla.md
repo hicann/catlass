@@ -27,21 +27,21 @@ struct CopyL0CToGmSparseTla {
 };
 ```
 
-| 模板参数 | 说明 |
-| :------ | :------ |
-| `ArchTag` | 架构标签，仅支持 `Arch::AtlasA2` |
-| `TensorSrc` | 源 Tensor：`tla::Tensor<LocalTensor<ElementSrc>, Layout, Coord, CO1>` |
-| `TensorDst` | 目标 Tensor：`tla::Tensor<GlobalTensor<ElementDst>, Layout, Coord, GM>` |
-| `DEQUANT_GRANULARITY` | 量化模式，仅 `NO_QUANT` |
-| `Enable` | SFINAE 条件 |
+| 模板参数              | 说明                                                                    |
+| :-------------------- | :---------------------------------------------------------------------- |
+| `ArchTag`             | 架构标签，仅支持 `Arch::AtlasA2`                                        |
+| `TensorSrc`           | 源 Tensor：`tla::Tensor<LocalTensor<ElementSrc>, Layout, Coord, CO1>`   |
+| `TensorDst`           | 目标 Tensor：`tla::Tensor<GlobalTensor<ElementDst>, Layout, Coord, GM>` |
+| `DEQUANT_GRANULARITY` | 量化模式，仅 `NO_QUANT`                                                 |
+| `Enable`              | SFINAE 条件                                                             |
 
 ## 偏特化实现
 
 ### AtlasA2
 
-| 源 | 目标 Layout | 量化模式 | SFINAE 条件 | 说明 |
-| :------ | :------ | :------ | :------ | :------ |
-| L0C（zN） | RowMajor | NO_QUANT | `isRowMajor<LayoutDst>` | Fixpipe v220，CFG_ROW_MAJOR |
+| 源        | 目标 Layout | 量化模式 | SFINAE 条件             | 说明                        |
+| :-------- | :---------- | :------- | :---------------------- | :-------------------------- |
+| L0C（zN） | RowMajor    | NO_QUANT | `isRowMajor<LayoutDst>` | Fixpipe v220，CFG_ROW_MAJOR |
 
 通过 `FixpipeParamsV220` 参数结构体控制搬运尺寸（`nSize`、`mSize`），通过 `CopyL0CToGmQuantMode` 自动推导量化精度。
 

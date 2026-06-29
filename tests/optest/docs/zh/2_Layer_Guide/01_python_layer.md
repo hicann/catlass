@@ -40,12 +40,13 @@ import torch_catlass
 
 将 torch NPU 设备名映射到 CATLASS 架构 ID：
 
-| 设备名 | 架构 ID |
-|---------|---------|
-| Ascend910B* | 2201 |
-| Ascend950* | 3510 |
+| 设备名      | 架构 ID |
+| ----------- | ------- |
+| Ascend910B* | 2201    |
+| Ascend950*  | 3510    |
 
 无支持设备时抛出 `RuntimeError`。架构 ID 影响：
+
 - 预编译内核选取（加载哪个 `.so`）
 - JIT 编译器的 `--npu-arch` 标志
 - 模板中的 `CATLASS_ARCH` 预处理器定义
@@ -57,6 +58,7 @@ import torch_catlass
 ### `_load_kernel_libs()`
 
 单次初始化守卫（`_catlass_loaded` 标志）。加载顺序重要：
+
 1. JIT 编译器先加载 — 提供 `JitCompiler` 单例和 workspace 分配器符号
 2. JIT 内核入口 — 包含算子分发函数（如 `BasicMatmul`）
 3. 预编译架构特定内核 — 架构优化后的 `.so`

@@ -12,11 +12,11 @@
 
 与 [TileCopyTla](./tile_copy_tla.md) 的区别：
 
-| 特性 | TileCopyTla | TileCopyTlaExt |
-| :------ | :------ | :------ |
-| 分发方式 | SFINAE trait（`isRowMajor` 等） | 显式 LayoutTag 模板参数 |
-| LayoutTag 参数 | 无（自动推导） | `LayoutTagSrc`, `LayoutTagDst` |
-| Padding layout | 不支持 | 支持 via `PaddingRowMajor`/`PaddingColumnMajor` |
+| 特性           | TileCopyTla                     | TileCopyTlaExt                                  |
+| :------------- | :------------------------------ | :---------------------------------------------- |
+| 分发方式       | SFINAE trait（`isRowMajor` 等） | 显式 LayoutTag 模板参数                         |
+| LayoutTag 参数 | 无（自动推导）                  | `LayoutTagSrc`, `LayoutTagDst`                  |
+| Padding layout | 不支持                          | 支持 via `PaddingRowMajor`/`PaddingColumnMajor` |
 
 ## 基类声明
 
@@ -38,11 +38,11 @@ struct TileCopyTlaExt {
 
 ## 偏特化实现清单（全 AtlasA2）
 
-| LayoutTagSrc | LayoutTagDst | 源位置 | 目标位置 | 实现位置 | API 文档 |
-| :------ | :------ | :------ | :------ | :------ | :------ |
-| RowMajor / PaddingRowMajor | RowMajor | GM | L1 A1 | `atlasa2/copy_gm_to_l1.hpp` | [copy_gm_to_l1](../copy_gm_to_l1/tile_copy_tla_ext.md) |
-| ColumnMajor / PaddingColumnMajor | RowMajor | GM | L1 A1 | `atlasa2/copy_gm_to_l1.hpp` | [copy_gm_to_l1](../copy_gm_to_l1/tile_copy_tla_ext.md) |
-| RowMajor | PaddingRowMajor | UB VECCALC | GM | `atlasa2/copy_ub_to_gm.hpp` | [copy_ub_to_gm](../copy_ub_to_gm/tile_copy_tla_ext.md) |
+| LayoutTagSrc                     | LayoutTagDst    | 源位置     | 目标位置 | 实现位置                    | API 文档                                               |
+| :------------------------------- | :-------------- | :--------- | :------- | :-------------------------- | :----------------------------------------------------- |
+| RowMajor / PaddingRowMajor       | RowMajor        | GM         | L1 A1    | `atlasa2/copy_gm_to_l1.hpp` | [copy_gm_to_l1](../copy_gm_to_l1/tile_copy_tla_ext.md) |
+| ColumnMajor / PaddingColumnMajor | RowMajor        | GM         | L1 A1    | `atlasa2/copy_gm_to_l1.hpp` | [copy_gm_to_l1](../copy_gm_to_l1/tile_copy_tla_ext.md) |
+| RowMajor                         | PaddingRowMajor | UB VECCALC | GM       | `atlasa2/copy_ub_to_gm.hpp` | [copy_ub_to_gm](../copy_ub_to_gm/tile_copy_tla_ext.md) |
 
 ## 调用接口
 

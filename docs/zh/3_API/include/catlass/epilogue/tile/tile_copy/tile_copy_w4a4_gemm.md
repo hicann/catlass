@@ -24,8 +24,8 @@ struct TileCopyW4A4Gemm;
 
 ## 成员类型定义
 
-| 成员类型 | 说明 |
-| :------ | :------ |
-| `CopyGmToUbC` | `CopyGm2Ub<Arch, CType>` |
+| 成员类型                  | 说明                                 |
+| :------------------------ | :----------------------------------- |
+| `CopyGmToUbC`             | `CopyGm2Ub<Arch, CType>`             |
 | `CopyGmToUbPerTokenScale` | `CopyGm2Ub<Arch, PerTokenScaleType>` |
-| `CopyUbToGmD` | `CopyUb2Gm<Arch, DType>` |
+| `CopyUbToGmD`             | `CopyUb2Gm<Arch, DType>`             |

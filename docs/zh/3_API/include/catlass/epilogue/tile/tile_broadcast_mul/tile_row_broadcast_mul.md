@@ -22,11 +22,11 @@ template <
 struct TileRowBroadcastMul;
 ```
 
-| 模板参数 | 说明 |
-| :------ | :------ |
-| `ArchTag_` | 架构标签 |
+| 模板参数       | 说明                                       |
+| :------------- | :----------------------------------------- |
+| `ArchTag_`     | 架构标签                                   |
 | `ComputeType_` | `Gemm::GemmType<ElementCompute, RowMajor>` |
-| `TileShape_` | Tile 形状，`Shape<ROW, COLUMN>` |
+| `TileShape_`   | Tile 形状，`Shape<ROW, COLUMN>`            |
 
 ## 调用接口
 

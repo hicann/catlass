@@ -38,7 +38,7 @@ Compare success.
 样例里当前padding动作使用的是`PADDING_NZ`，也可以替换为`PADDING_BLOCK_ND`来测试性能表现
 
 - **PADDING_NZ**
-代码位置如下
+  代码位置如下
 
 ```cpp
     constexpr PaddingTag paddingTagA = (std::is_same_v<LayoutA, layout::zN> || std::is_same_v<LayoutA, layout::nZ>)
@@ -57,7 +57,7 @@ static const uint32_t COMPUTE_LENGTH_B = 48 * 1024 / sizeof(ElementB);
 ```
 
 - **PADDING_BLOCK_ND**
-替换`PADDING_BLOCK_ND`的代码修改如下，当输入矩阵非NZ格式时使能，会将矩阵按照`L1TileShape`对齐来做padding
+  替换`PADDING_BLOCK_ND`的代码修改如下，当输入矩阵非NZ格式时使能，会将矩阵按照`L1TileShape`对齐来做padding
 
 ```diff
     constexpr PaddingTag paddingTagA = (std::is_same_v<LayoutA, layout::zN> || std::is_same_v<LayoutA, layout::nZ>)

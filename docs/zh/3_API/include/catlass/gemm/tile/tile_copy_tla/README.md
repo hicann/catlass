@@ -10,17 +10,17 @@
 
 ## API 清单
 
-| 模板 | 分发方式 | 适用硬件 | 说明 |
-| :------ | :------ | :------ | :------ |
-| [TileCopyTla](./tile_copy_tla.md) | SFINAE trait | AtlasA2 + Ascend950 | 核心 TLA 搬运，自动匹配 layout |
-| [TileCopyTlaExt](./tile_copy_tla_ext.md) | 显式 LayoutTag | AtlasA2 | 扩展版，支持 Padding layout |
-| [TileCopySparseTla](./tile_copy_sparse_tla.md) | SFINAE trait | AtlasA2 | 稀疏 GEMM 搬运 |
-| [CopyL1ToL0BSparseTla](./copy_l1_to_l0b_sparse_tla.md) | SFINAE trait | AtlasA2 | 稀疏 B L1→L0B（带 index） |
-| [TileCopyFAQTla](./tile_copy_faq_tla.md) | 固定匹配 | AtlasA2 | FA LoadQ GM→L1 zN |
+| 模板                                                   | 分发方式       | 适用硬件            | 说明                           |
+| :----------------------------------------------------- | :------------- | :------------------ | :----------------------------- |
+| [TileCopyTla](./tile_copy_tla.md)                      | SFINAE trait   | AtlasA2 + Ascend950 | 核心 TLA 搬运，自动匹配 layout |
+| [TileCopyTlaExt](./tile_copy_tla_ext.md)               | 显式 LayoutTag | AtlasA2             | 扩展版，支持 Padding layout    |
+| [TileCopySparseTla](./tile_copy_sparse_tla.md)         | SFINAE trait   | AtlasA2             | 稀疏 GEMM 搬运                 |
+| [CopyL1ToL0BSparseTla](./copy_l1_to_l0b_sparse_tla.md) | SFINAE trait   | AtlasA2             | 稀疏 B L1→L0B（带 index）      |
+| [TileCopyFAQTla](./tile_copy_faq_tla.md)               | 固定匹配       | AtlasA2             | FA LoadQ GM→L1 zN              |
 
 ## 模板关系图
 
-```
+```cpp
 tile_copy_tla.hpp
 ├── TileCopyTla           → 9 个偏特化（GM→L1, L1→L0A/B, GM→UB, UB→GM, L1→BT）
 ├── TileCopyTlaExt        → 3 个偏特化（PaddingRowMajor, PaddingColumnMajor）
@@ -33,27 +33,27 @@ tile_copy_tla.hpp
 
 各偏特化实现分布如下：
 
-| 实现文件 | 包含的偏特化 |
-| :------ | :------ |
-| `atlasa2/copy_gm_to_l1.hpp` | TileCopyTla×3, TileCopyTlaExt×2, TileCopySparseTla×2, TileCopyFAQTla×1 |
-| `atlasa2/copy_gm_to_ub.hpp` | TileCopyTla×1 |
-| `atlasa2/copy_l1_to_l0a.hpp` | TileCopyTla×2, TileCopySparseTla×1 |
-| `atlasa2/copy_l1_to_l0b.hpp` | TileCopyTla×2, CopyL1ToL0BSparseTla×1 |
-| `atlasa2/copy_ub_to_gm.hpp` | TileCopyTla×1, TileCopyTlaExt×1 |
-| `ascend950/copy_gm_to_l1.hpp` | TileCopyTla×2 |
-| `ascend950/copy_l1_to_l0a.hpp` | TileCopyTla×2 |
-| `ascend950/copy_l1_to_l0b.hpp` | TileCopyTla×1 |
-| `ascend950/copy_l1_to_bt.hpp` | TileCopyTla×1 |
+| 实现文件                       | 包含的偏特化                                                           |
+| :----------------------------- | :--------------------------------------------------------------------- |
+| `atlasa2/copy_gm_to_l1.hpp`    | TileCopyTla×3, TileCopyTlaExt×2, TileCopySparseTla×2, TileCopyFAQTla×1 |
+| `atlasa2/copy_gm_to_ub.hpp`    | TileCopyTla×1                                                          |
+| `atlasa2/copy_l1_to_l0a.hpp`   | TileCopyTla×2, TileCopySparseTla×1                                     |
+| `atlasa2/copy_l1_to_l0b.hpp`   | TileCopyTla×2, CopyL1ToL0BSparseTla×1                                  |
+| `atlasa2/copy_ub_to_gm.hpp`    | TileCopyTla×1, TileCopyTlaExt×1                                        |
+| `ascend950/copy_gm_to_l1.hpp`  | TileCopyTla×2                                                          |
+| `ascend950/copy_l1_to_l0a.hpp` | TileCopyTla×2                                                          |
+| `ascend950/copy_l1_to_l0b.hpp` | TileCopyTla×1                                                          |
+| `ascend950/copy_l1_to_bt.hpp`  | TileCopyTla×1                                                          |
 
 ## 模板选择指南
 
-| 场景 | 推荐 |
-| :------ | :------ |
-| 常规 GM→L1 搬运 | `TileCopyTla` |
-| L1→L0A/L0B 搬运 | `TileCopyTla` |
-| GM 源为 PaddingRowMajor/PaddingColumnMajor | `TileCopyTlaExt` |
-| 稀疏 GEMM | `TileCopySparseTla` + `CopyL1ToL0BSparseTla` |
-| FlashAttention Q 加载 | `TileCopyFAQTla` |
+| 场景                                       | 推荐                                         |
+| :----------------------------------------- | :------------------------------------------- |
+| 常规 GM→L1 搬运                            | `TileCopyTla`                                |
+| L1→L0A/L0B 搬运                            | `TileCopyTla`                                |
+| GM 源为 PaddingRowMajor/PaddingColumnMajor | `TileCopyTlaExt`                             |
+| 稀疏 GEMM                                  | `TileCopySparseTla` + `CopyL1ToL0BSparseTla` |
+| FlashAttention Q 加载                      | `TileCopyFAQTla`                             |
 
 ## 调用示例
 

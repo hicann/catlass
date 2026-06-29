@@ -1,5 +1,5 @@
 # Block Epilogue基础模板
->
+
 > [代码位置](../../../../../../../include/catlass/epilogue/block/block_epilogue.hpp)
 
 [TOC]
@@ -12,7 +12,7 @@ block层级尾处理，通过[DispatchPolicy](../../../../../../../include/catla
 
 ### 模板说明
 
-```
+```cpp
 template <
     class DispatchPolicy,   // 所用DispatchPolicy
     class... Args           // 其他模板参数

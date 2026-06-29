@@ -21,18 +21,18 @@ Three SingleCoreSplitK template variants are derived based on distinct data-loop
 Pseudocode description:
 
 ```c++
-for gmTileN1 in N:	 
-    for m1 in gmTileM1:	 
-        for k1 in K:	 
-            loadL1A(m1,k1)	 
-            for n1 in gmTileN1:	 
-                loadL1B(k1,n1)	 
-                for m0 in m1:	 
-                    for k0 in k1:	 
-                        loadL0A(m0, k0)	 
-                            for n0 in n1:	 
-                                loadL0B(k0, n0)	 
-                                mmad(A, B)	 
+for gmTileN1 in N:
+    for m1 in gmTileM1:
+        for k1 in K:
+            loadL1A(m1,k1)
+            for n1 in gmTileN1:
+                loadL1B(k1,n1)
+                for m0 in m1:
+                    for k0 in k1:
+                        loadL0A(m0, k0)
+                            for n0 in n1:
+                                loadL0B(k0, n0)
+                                mmad(A, B)
                                 writeC(m0, n0)
 ```
 
@@ -73,7 +73,7 @@ Disadvantage: Each core is assigned a relatively large spatial tile of Matrix C,
 Pseudocode description:
 
 ```c++
-for k1 in K: 
+for k1 in K:
     for m1 in M:
         loadL1A(m1,k1)
         for n1 in N:

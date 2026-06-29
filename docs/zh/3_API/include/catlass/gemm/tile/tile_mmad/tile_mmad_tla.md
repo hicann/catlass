@@ -9,6 +9,7 @@
 `TileMmadTla` 是 [TileMmad](./tile_mmad.md) 的 TLA 版本，使用 `AscendC::Mmad` 完成 `C += A * B`。所有操作数通过 `tla::Tensor` 封装（`l0ATensor.data()` + `.layout().originShape()` 自动提取维度）。
 
 支持四种调用模式：
+
 1. 标准矩阵乘加（无 Bias）
 2. 带 Bias 矩阵乘加
 3. L0 Batch 批量 Mmad（多 batch 矩阵）
@@ -16,10 +17,10 @@
 
 ### 架构差异
 
-| 架构 | `kDirectionAlign` | `disableGemv` | 自动 GEMV 规避 |
-| :------ | :------ | :------ | :------ |
-| AtlasA2 (2201) | `float` + L1A `nZ` 时开启 | — | 模式 4 中 M=1 → M=16 |
-| Ascend950 (3510) | — | L1A `VectorLayout` 时 false | — |
+| 架构             | `kDirectionAlign`         | `disableGemv`               | 自动 GEMV 规避       |
+| :--------------- | :------------------------ | :-------------------------- | :------------------- |
+| AtlasA2 (2201)   | `float` + L1A `nZ` 时开启 | —                           | 模式 4 中 M=1 → M=16 |
+| Ascend950 (3510) | —                         | L1A `VectorLayout` 时 false | —                    |
 
 ## 模板原型
 
@@ -94,6 +95,7 @@ void operator()(
 ```
 
 维度推导：
+
 - `m = tla::get<0>(l0CTensor.layout().originShape())`
 - `n = tla::get<1>(l0CTensor.layout().originShape())`
 - `k = tla::get<1>(l0ATensor.layout().originShape())`

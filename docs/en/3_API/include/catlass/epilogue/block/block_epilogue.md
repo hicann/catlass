@@ -1,5 +1,5 @@
 # Block Epilogue Basic Template
->
+
 > [Code location](../../../../../../../include/catlass/epilogue/block/block_epilogue.hpp)
 
 [TOC]
@@ -12,7 +12,7 @@ Block-level epilogue. Template parameters such as [`DispatchPolicy`](../../../..
 
 ### Template Description
 
-```
+```cpp
 template <
     class DispatchPolicy,   // DispatchPolicy used
     class... Args           // Other template parameters

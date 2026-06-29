@@ -1,12 +1,12 @@
 # Tuning Performance in a CATLASS Sample Project
 
-CANN provides performance tuning tools for two operator development scenarios: single-operator and whole-network. These tools are [**msProf**](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html) and [**Profiling**](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/devaids/Profiling/atlasprofiling_16_0010.html).  
+CANN provides performance tuning tools for two operator development scenarios: single-operator and whole-network. These tools are [**msProf**](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html) and [**Profiling**](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/devaids/Profiling/atlasprofiling_16_0010.html).
 
 ## Performance Tuning Tool Overview
 
 ### msProf
 
-[msProf](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html) is a single-operator profiler. The corresponding commands are `msprof op` and `msopprof`.  
+[msProf](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html) is a single-operator profiler. The corresponding commands are `msprof op` and `msopprof`.
 
 [msProf](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html) collects and analyzes key profile data of operators running on Ascend AI processors. Based on the output profile data, you can quickly locate software and hardware performance bottlenecks in operators, improving the efficiency of operator profiling.
 
@@ -39,14 +39,14 @@ msprof op --application="./00_basic_matmul 256 512 1024 0"
 
 Common parameters:
 
-| Parameter            | Mandatory      | Description                                        | Value                         | Note/Associated Parameter           |
-| ---------------- | -------------- | -------------------------------------------- | ----------------------------- | ---------------------------- |
-| `--application`  | Yes (one of two)| Specifies the executable file or command.                     | Valid path or command               | Mutually exclusive with `--config`.          |
-| `--config`       | Yes (one of two)| Specifies the `.o` binary file.                         | Valid path                     | Mutually exclusive with `--application`.     |
-| `--kernel-name`  | No          | Specifies the name of the operator to collect. (Fuzzy match and multi-operator collection are supported.)| Example: `"conv*"` or `"add\|mul"`| Must be used with `--launch-count`.|
-| `--launch-count` | No          | Specifies the maximum number of operators to collect.                        | Integer ranging from 1 to 100 (default: 1)         | Must be used with `--kernel-name`. |
-| `--warm-up`      | No          | Specifies the number of warm-up times (for chip frequency increasing).              | Integer (default: 5)               | For small shape scenarios, consider increasing to 30.  |
-| `--output`       | No          | Specifies the data output path.                            | Valid path (default: the current directory)     | Ensure that the path is writable.              |
+| Parameter        | Mandatory        | Description                                                                                               | Value                                       | Note/Associated Parameter                             |
+| ---------------- | ---------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------- | ----------------------------------------------------- |
+| `--application`  | Yes (one of two) | Specifies the executable file or command.                                                                 | Valid path or command                       | Mutually exclusive with `--config`.                   |
+| `--config`       | Yes (one of two) | Specifies the `.o` binary file.                                                                           | Valid path                                  | Mutually exclusive with `--application`.              |
+| `--kernel-name`  | No               | Specifies the name of the operator to collect. (Fuzzy match and multi-operator collection are supported.) | Example: `"conv*"` or `"add\|mul"`          | Must be used with `--launch-count`.                   |
+| `--launch-count` | No               | Specifies the maximum number of operators to collect.                                                     | Integer ranging from 1 to 100 (default: 1)  | Must be used with `--kernel-name`.                    |
+| `--warm-up`      | No               | Specifies the number of warm-up times (for chip frequency increasing).                                    | Integer (default: 5)                        | For small shape scenarios, consider increasing to 30. |
+| `--output`       | No               | Specifies the data output path.                                                                           | Valid path (default: the current directory) | Ensure that the path is writable.                     |
 
 For more parameters, see [msProf Overview](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html).
 
@@ -90,7 +90,7 @@ bash scripts/build.sh --simulator 00_basic_matmul
 
 - This option does not actually change the built binary program. The difference is whether it outputs the simulator path prompt in step 2.
 
-2. After the build completes, load the simulator binary path based on the prompt.
+1. After the build completes, load the simulator binary path based on the prompt.
 
 ```bash
 # Execute based on the actual output from step 1.
@@ -98,7 +98,7 @@ export LD_LIBRARY_PATH=/usr/local/Ascend/ascend-toolkit/latest/tools/simulator/A
 export LD_PRELOAD=/usr/local/Ascend/ascend-toolkit/latest/tools/simulator/Ascendxxxyy/lib/libruntime_camodel.so:/usr/local/Ascend/ascend-toolkit/latest/tools/simulator/Ascendxxxyy/lib/libnpu_drv_camodel.so
 ```
 
-3. Change to the executable build directory `output/bin` and execute the operator sample program using `msprof op simulator`.
+1. Change to the executable build directory `output/bin` and execute the operator sample program using `msprof op simulator`.
 
 ```bash
 cd output/bin
@@ -174,7 +174,7 @@ The following uses `00_basic_matmul` as an example.
 bash scripts/build.sh --enable_profiling 00_basic_matmul
 ```
 
-2. Change to the executable build directory `output/bin` and execute the operator sample program with `msProf`.
+1. Change to the executable build directory `output/bin` and execute the operator sample program with `msProf`.
 
 ```bash
 cd output/bin

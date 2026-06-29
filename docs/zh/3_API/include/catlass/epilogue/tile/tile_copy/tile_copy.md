@@ -29,15 +29,15 @@ struct TileCopy;
 
 ## 成员类型定义
 
-| 模板 | 成员类型 | 说明 |
-| :------ | :------ | :------ |
-| `TileCopy<Arch, C, D>` | `CopyGmToUbC` | `CopyGm2Ub<Arch, CType>` |
-| | `CopyUbToGmD` | `CopyUb2Gm<Arch, DType>` |
-| `TileCopy<Arch, C, X, D>` | `CopyGmToUbC` | `CopyGm2Ub<Arch, CType>` |
-| | `CopyGmToUbX` | `CopyGm2Ub<Arch, XType>` |
-| | `CopyUbToGmD` | `CopyUb2Gm<Arch, DType>` |
-| `TileCopy<Arch, C, X, Y, D>` | `CopyGmToUbC` / `CopyGmToUbX` / `CopyGmToUbY` | `CopyGm2Ub<...>` |
-| | `CopyUbToGmD` | `CopyUb2Gm<Arch, DType>` |
+| 模板                         | 成员类型                                      | 说明                     |
+| :--------------------------- | :-------------------------------------------- | :----------------------- |
+| `TileCopy<Arch, C, D>`       | `CopyGmToUbC`                                 | `CopyGm2Ub<Arch, CType>` |
+|                              | `CopyUbToGmD`                                 | `CopyUb2Gm<Arch, DType>` |
+| `TileCopy<Arch, C, X, D>`    | `CopyGmToUbC`                                 | `CopyGm2Ub<Arch, CType>` |
+|                              | `CopyGmToUbX`                                 | `CopyGm2Ub<Arch, XType>` |
+|                              | `CopyUbToGmD`                                 | `CopyUb2Gm<Arch, DType>` |
+| `TileCopy<Arch, C, X, Y, D>` | `CopyGmToUbC` / `CopyGmToUbX` / `CopyGmToUbY` | `CopyGm2Ub<...>`         |
+|                              | `CopyUbToGmD`                                 | `CopyUb2Gm<Arch, DType>` |
 
 ## 调用示例
 

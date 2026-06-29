@@ -47,42 +47,42 @@ msopgen gen -i catlass_basic_matmul.json -c ai_core-<soc_version> -lan cpp -out 
   - 添加架构宏选项`-DCATLASS_ARCH=${ARCH}`。其中`${ARCH}`是对应架构的编号。
 - 根据CANN版本的不同，默认写法有所不同：
   - CANN版本>=`9.0.0.beta2`
-  
-      ```diff
-      # ...
-      + npu_op_kernel_options(ascendc_kernels ALL OPTIONS -I${CATLASS_INCLUDE_PATH})
-      # ...
-      ```
+
+    ```diff
+    # ...
+    + npu_op_kernel_options(ascendc_kernels ALL OPTIONS -I${CATLASS_INCLUDE_PATH})
+    # ...
+    ```
 
   - CANN版本<`9.0.0.beta2`
-  
-      ```diff
-      # set custom compile options
-      if ("${CMAKE_BUILD_TYPE}x" STREQUAL "Debugx")
-          add_ops_compile_options(ALL OPTIONS -g -O0)
-      endif()
-      + add_ops_compile_options(ALL OPTIONS -I${CATLASS_INCLUDE_PATH})
-      add_kernels_compile()
-      ```
+
+    ```diff
+    # set custom compile options
+    if ("${CMAKE_BUILD_TYPE}x" STREQUAL "Debugx")
+        add_ops_compile_options(ALL OPTIONS -g -O0)
+    endif()
+    + add_ops_compile_options(ALL OPTIONS -I${CATLASS_INCLUDE_PATH})
+    add_kernels_compile()
+    ```
 
 - `msOpGen`工程的分离编译模式不支持直接将结构体（如`Catlass::GemmCoord`）作为kernel的参数传入。当需要使用结构体时，需要通过`tiling`地址传递成员数据，然后在kernel侧重新构造。
 
-    ```cpp
-    // 正确
-    extern "C" __global__ __aicore__ void
-    catlass_basic_matmul(GM_ADDR self, GM_ADDR mat2, GM_ADDR out, GM_ADDR workspace, GM_ADDR tiling)
-    {
-        GET_TILING_DATA(tiling_data, tiling);
-        Catlass::GemmCoord problemShape{tiling_data.m, tiling_data.n, tiling_data.k};
-        // ...
-    }
-    // 暂不支持
-    extern "C" __global__ __aicore__ void
-    catlass_basic_matmul(GM_ADDR self, GM_ADDR mat2, GM_ADDR out, GM_ADDR workspace,  Catlass::GemmCoord problemShape)
-    {
-        // ...
-    }
-    ```
+  ```cpp
+  // 正确
+  extern "C" __global__ __aicore__ void
+  catlass_basic_matmul(GM_ADDR self, GM_ADDR mat2, GM_ADDR out, GM_ADDR workspace, GM_ADDR tiling)
+  {
+      GET_TILING_DATA(tiling_data, tiling);
+      Catlass::GemmCoord problemShape{tiling_data.m, tiling_data.n, tiling_data.k};
+      // ...
+  }
+  // 暂不支持
+  extern "C" __global__ __aicore__ void
+  catlass_basic_matmul(GM_ADDR self, GM_ADDR mat2, GM_ADDR out, GM_ADDR workspace,  Catlass::GemmCoord problemShape)
+  {
+      // ...
+  }
+  ```
 
 ## 4. 编译、部署
 
@@ -123,11 +123,11 @@ target_link_directories(basic_matmul_aclnn PRIVATE
     # 自定义算子包库文件目录
     $ENV{ASCEND_HOME_PATH}/opp/vendors/customize/op_api/lib/
 )
-target_link_libraries(basic_matmul_aclnn PRIVATE 
-    ascendcl 
+target_link_libraries(basic_matmul_aclnn PRIVATE
+    ascendcl
     nnopbase
     # 自定义算子包库文件名称
-    cust_opapi 
+    cust_opapi
 )
 ```
 

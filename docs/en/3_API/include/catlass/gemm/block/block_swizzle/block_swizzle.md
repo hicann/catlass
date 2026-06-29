@@ -1,5 +1,5 @@
 # GEMM Block Swizzle Class Template Overview
->
+
 > [Code location](../../../../../../../../include/catlass/gemm/block/block_swizzle.hpp)
 
 ## Description
@@ -16,6 +16,6 @@ The swizzle policy determines the allocation relationship and computation sequen
 
 ## Specific Swizzle Policies
 
-| Component                       | Description|
-| :----------------------------------------------------------- | :------: |
-| [GemmIdentityBlockSwizzle](./GemmIdentityBlockSwizzle.md)    |   Basic swizzle policy for the GEMM operator |
+| Component                                                 |                Description                 |
+| :-------------------------------------------------------- | :----------------------------------------: |
+| [GemmIdentityBlockSwizzle](./GemmIdentityBlockSwizzle.md) | Basic swizzle policy for the GEMM operator |

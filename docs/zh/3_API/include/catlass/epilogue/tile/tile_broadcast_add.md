@@ -23,11 +23,11 @@ template <
 struct TileRowBroadcastAdd;
 ```
 
-| 模板参数 | 说明 |
-| :------ | :------ |
-| `ArchTag_` | 架构标签 |
+| 模板参数       | 说明                                                    |
+| :------------- | :------------------------------------------------------ |
+| `ArchTag_`     | 架构标签                                                |
 | `ComputeType_` | 计算数据类型，通过 `ComputeType_::Element` 获取元素类型 |
-| `TileShape_` | Tile 形状，`TileShape_::COLUMN` 用于计算分块参数 |
+| `TileShape_`   | Tile 形状，`TileShape_::COLUMN` 用于计算分块参数        |
 
 ## 调用接口
 
@@ -40,11 +40,11 @@ void operator()(
 )
 ```
 
-| 参数 | 说明 |
-| :------ | :------ |
-| `ubOut` | 目标 UB Tensor，存放 `ubIn0[i] + ubIn1` 结果 |
-| `ubIn0` | (m, n) 形状的 UB Tensor |
-| `ubIn1` | (1, n) 形状的行向量，广播后与 ubIn0 逐元素相加 |
+| 参数              | 说明                                            |
+| :---------------- | :---------------------------------------------- |
+| `ubOut`           | 目标 UB Tensor，存放 `ubIn0[i] + ubIn1` 结果    |
+| `ubIn0`           | (m, n) 形状的 UB Tensor                         |
+| `ubIn1`           | (1, n) 形状的行向量，广播后与 ubIn0 逐元素相加  |
 | `actualTileShape` | `MatrixCoord{rows, cols}`，实际处理的 tile 维度 |
 
 ## 调用示例

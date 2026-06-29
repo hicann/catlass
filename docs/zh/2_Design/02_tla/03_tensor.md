@@ -127,7 +127,7 @@ auto tileA = GetTile(tensorA_sub, MakeCoord(2, 4), MakeShape(4, 8));
 2. `tensorA_sub` 从BuiltinTensor所表达的父逻辑空间的 `(1, 5)` 开始观察，因此起点变为 `(1, 5)`。
 3. `tileA` 在 `tensorA_sub` 的基础上再取一个起点为 `(2, 4)` 的 tile，因此新视图起点是 `(1, 5) + (2, 4) = (3, 9)`。
 
-![Origin_Shape-tensor_1.png](https://raw.gitcode.com/user-images/assets/7631999/004cd08b-cda4-4c99-a5c1-63770d71f151/Origin_Shape-tensor_1.png 'Origin_Shape-tensor_1.png')
+![Origin_Shape-tensor_1.png](https://raw.gitcode.com/user-images/assets/7631999/004cd08b-cda4-4c99-a5c1-63770d71f151/Origin_Shape-tensor_1.png "Origin_Shape-tensor_1.png")
 
 ## 使用 `operator()` 进行索引与切片
 
@@ -160,7 +160,7 @@ auto A2 = A3(b, tla::_, tla::_);  // 3D -> 2D，得到 (M, K) 视图
 auto A1 = A2(r, tla::_) // 2D -> 1D，得到 (K)视图
 ```
 
-![Origin_Shape-tensor_2.png](https://raw.gitcode.com/user-images/assets/7631999/dd1a947a-2371-4e6e-9fef-51a5ceb1556a/Origin_Shape-tensor_2.png 'Origin_Shape-tensor_2.png')
+![Origin_Shape-tensor_2.png](https://raw.gitcode.com/user-images/assets/7631999/dd1a947a-2371-4e6e-9fef-51a5ceb1556a/Origin_Shape-tensor_2.png "Origin_Shape-tensor_2.png")
 
 ## 获取 TileTensor
 
@@ -261,7 +261,7 @@ TileView(t, tileCoord, tileShape) = GetTile(t, tileCoord ⊙ tileShape, tileShap
 
 因此，两者的差别只在于调用者提供的是哪一种坐标单位，而不是返回结果的逻辑语义。
 
-![Origin_Shape-tensor_3.png](https://raw.gitcode.com/user-images/assets/7631999/b543ee2b-c938-4e19-87b8-40abd0c81b53/Origin_Shape-tensor_3.png 'Origin_Shape-tensor_3.png')
+![Origin_Shape-tensor_3.png](https://raw.gitcode.com/user-images/assets/7631999/b543ee2b-c938-4e19-87b8-40abd0c81b53/Origin_Shape-tensor_3.png "Origin_Shape-tensor_3.png")
 
 ### 为什么 `TileView` 更适合分块循环
 

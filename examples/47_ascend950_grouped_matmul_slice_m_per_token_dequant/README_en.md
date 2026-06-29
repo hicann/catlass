@@ -21,14 +21,14 @@ This CV fusion operator implements grouped matrix multiplication and dequantizat
 
 ## Parameters
 
-|Name|Class|Data Type|Dimensions|Format|Description|
-|---|---|---|---|---|---|
-|matA|inTensor|int8|[m, k]|ND|Left matrix|
-|matB|inTensor|int8|[groupCount, n, k]|ND|Right matrix, supports transposition|
-|groupList|inTensor|int32|[groupCount]|ND|Group size in the m-axis direction, accumulation list|
-|scale|inTensor|bf16/fp16/fp32|[groupCount, n]|ND|perChannel quantization scale|
-|perToken|inTensor|bf16/fp16/fp32|[m]|ND|perToken quantization scale|
-|matD|outTensor|bf16/fp16/fp32|[m, n]|ND|Output matrix|
+| Name      | Class     | Data Type      | Dimensions         | Format | Description                                           |
+| --------- | --------- | -------------- | ------------------ | ------ | ----------------------------------------------------- |
+| matA      | inTensor  | int8           | [m, k]             | ND     | Left matrix                                           |
+| matB      | inTensor  | int8           | [groupCount, n, k] | ND     | Right matrix, supports transposition                  |
+| groupList | inTensor  | int32          | [groupCount]       | ND     | Group size in the m-axis direction, accumulation list |
+| scale     | inTensor  | bf16/fp16/fp32 | [groupCount, n]    | ND     | perChannel quantization scale                         |
+| perToken  | inTensor  | bf16/fp16/fp32 | [m]                | ND     | perToken quantization scale                           |
+| matD      | outTensor | bf16/fp16/fp32 | [m, n]             | ND     | Output matrix                                         |
 
 ## Example
 

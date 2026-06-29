@@ -37,20 +37,22 @@ Y &= X W = X' W' \\
 $$
 
 因此原始矩阵乘XW可以分解为2路进行计算：
+
 - 主通路$X'R$: W4A4
 - 低秩旁路 $X'L_{1}L_{2}$: 高精度计算(fp16/bf16)
 
 计算的数据流如下图所示：
 
-
 ![SvdQuant数据流](https://raw.gitcode.com/lavateinn/images/raw/main/svd_quant_matmul/svd_quant_data_flow.png)
 
 在本样例的实现中，Quant(R) 采用标准的量化实现，scale的计算
+
 $$
 scaleR = 2 ** (log_{2} (abs(R))) - emax
 $$
 
 在本算子的实现中, Quant(X')的scale用如下公式计算
+
 $$
 scaleX = 2 ** (log_{2} (abs(X') / qmax))
 $$
@@ -58,7 +60,6 @@ $$
 其中qamx是外部传入的参数，后续不用像标准实现一样减去emax。
 
 SvdQuant更多细节参考[SvdQuant论文](https://arxiv.org/abs/2411.05007)
-
 
 ## 输入输出tensor
 
@@ -102,8 +103,8 @@ SvdQuant更多细节参考[SvdQuant论文](https://arxiv.org/abs/2411.05007)
 
 ![算子计算流程](https://raw.gitcode.com/lavateinn/images/raw/main/svd_quant_matmul/svd_quant_kernel_overview.png)
 
-
 ## 代码组织
+
 ```
 examples
 ├── 61_ascend950_svd_quant_matmul
@@ -114,6 +115,7 @@ examples
 ```
 
 ## 编译及运行
+
 - 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)，本用例为 Ascend950（3510）算子，编译时需加 `-DCATLASS_ARCH=3510`。
 
 ```shell
@@ -130,6 +132,7 @@ python examples/61_ascend950_svd_quant_matmul/gen_data.py 256 256 512 32
 ```
 
 执行结果如下，说明精度比对成功。
+
 ```
 Compare success.
 ```
@@ -162,7 +165,7 @@ options:
 
 3个DispatchPolicy参数顺序与默认值如下：
 
-1. `Gemm::MmadSvd1` 
+1. `Gemm::MmadSvd1`
 
 | 模板参数             | 默认值  | 参数说明                                                                     |
 | -------------------- | ------- | ---------------------------------------------------------------------------- |
@@ -201,14 +204,16 @@ options:
 | `L0B_STAGES`        | `2`     | L0 上加载矩阵 B 的 buffer 数量                                                                                      |
 
 约束：
+
 - `MmadSvd1`的 `L1A_STAGES`需和SmoothQuant的STAGE相等
 - `MmadSvd2`和`MmadSvd3`的`L0C_STAGES`、`L1A_STAGES`、`L1B_STAGES`、`L0A_STAGES`、`L0B_STAGES`必须相等，Mmad2和Mmad3共享L1上的buffer，并交替使用。
 
 ## 性能优化点
 
-
 ### Tiling
+
 根据SvdQuantMatmul的典型场景，本样例提供了两组Tiling配置，可根据需求自行扩展。
+
 ```cpp
 enum class SvdQuantTilingTag
 {
@@ -239,10 +244,9 @@ struct TilingTag2Config<SvdQuantTilingTag::Small> {
 
 选用策略是用 `m1=256, n1=256` 估计任务数, 当划分的任务数大于核数的时候用Common配置，否则用Small配置，主要区别是Small减小了Mmad2和Mmad3的m1，可以使用更多核数。
 
-
 ### SmoothQuant+Mmad1 部分的负载均衡优化
 
-这部分的Mmad1 的problemShape为`{m, r, k}`， SmoothQuant的输入X 经过UB计算得到smoothX，随即搬运到L1(没有smooth的场景是先搬运到UB然后立即搬运至L1), 
+这部分的Mmad1 的problemShape为`{m, r, k}`， SmoothQuant的输入X 经过UB计算得到smoothX，随即搬运到L1(没有smooth的场景是先搬运到UB然后立即搬运至L1),
 在UB上smoothX继续进行量化计算，在L1上smoothX是Mmad1的左矩阵参与矩阵乘，两边并行执行，可以掩盖Mmad1的搬运计算开销。
 
 ![SmoothQuant+Mmad1负载均衡](https://raw.gitcode.com/lavateinn/images/raw/main/svd_quant_matmul/svd_quant_quant_tile.png)
@@ -256,6 +260,7 @@ struct TilingTag2Config<SvdQuantTilingTag::Small> {
 
 Mmad2的problemShape为`{m, n, r}`，输入类型为`fp16/bf161`，Mmad3的problemShape为`{m, n, k}`， 输入类型为mxfp4，输出的shape是一样的，可以共用BlockSwizzle进行任务划分。
 kernel层伪代码如下
+
 ```cpp
 for (uint32_t loopIdx = aiCoreIdx; loopIdx < normalBlockNum23 + aiCoreNum; loopIdx += aiCoreNum) {
     // Get tensor A2 B2 C
@@ -264,6 +269,7 @@ for (uint32_t loopIdx = aiCoreIdx; loopIdx < normalBlockNum23 + aiCoreNum; loopI
     mmad3(A3, MxScale3, B3, MxScale3, C);
 }
 ```
+
 2个Mmad交替串行执行，结果在L0C上累加，在mmad3中写出GM。
 
 经过负载均衡后同样是先处理完整块，当尾块数量小于核数的一半时，对尾块进行切分，当尾块 m>n 时，切m，当尾块 m<n 时，切n。

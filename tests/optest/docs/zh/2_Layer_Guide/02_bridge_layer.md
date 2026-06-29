@@ -62,6 +62,7 @@ RUN_NPU_FUNC(func, blockNum, stream, tParams, params)
 ```
 
 这确保：
+
 - NPU runtime 正确跟踪内核启动上下文
 - C++ 异常转换为 `ACL_ERROR_INTERNAL_ERROR`
 - 分发前检查函数指针非空
@@ -85,6 +86,7 @@ Run(mat1, mat2, ...)
 ```
 
 每个包装器处理：
+
 - 从输入 tensor 推导形状（考虑 `transA`/`transB`）
 - dtype 转换（torch ↔ acl）
 - NPU 上创建输出 tensor

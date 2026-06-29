@@ -23,7 +23,7 @@ chmod +x Ascend-cann-toolkit_{version}_linux-{arch}.run
 
 其他在线安装方式可参考[CANN 快速安装](https://www.hiascend.com/cann/download)。
 
-2. **使能CANN 环境**
+1. **使能CANN 环境**
 
 安装完成后，执行下述指令即完成CANN环境使能。
 
@@ -34,7 +34,7 @@ source /usr/local/Ascend/ascend-toolkit/set_env.sh
 # source ${install_path}/set_env.sh
 ```
 
-3. **下载源码**
+1. **下载源码**
 
 将CATLASS代码仓下载到本地。
 
@@ -58,22 +58,22 @@ git clone https://gitcode.com/cann/catlass.git
 bash scripts/build.sh [options] <target>
 ```
 
- - `options`: 可选编译选项，当前支持的选项包括：
-   - `--clean`: 清理此前编译及输出目录（默认路径分别为`/build`，`/output`）。
-   - `--debug`: 以Debug模式进行编译。
-   - `--msdebug`：使能[msDebug](https://www.hiascend.com/document/redirect/CannCommunityToolMsdebug)工具，详见[在CATLASS样例工程使用msDebug](./evaluation/msdebug.md)。
-   - `--simulator`：启用仿真器模式，该选项启用后将不在实际NPU上执行，详见[CATLASS样例仿真](./evaluation/performance_tools.md#msprof-op-simulator使用示例)。
-   - `--enable_profiling`：使能Profiling工具，详见[CATLASS样例性能调优](./evaluation/performance_tools.md#profiling简介)。
-   - `--enable_print`：启用编译器的打印功能，详见[基于`cce::printf`进行设备侧打印](./evaluation/print.md)。
-   - `--enable_ascendc_dump`：启用`AscendC`相关算子调测API，详见[CATLASS样例使用AscendC算子调测API](./evaluation/ascendc_dump.md)。
-   - `-DCATLASS_ARCH`：指明NPU架构，当前支持`2201`和`3510`，不指明则默认为2201（Atlas A2/Atlas A3产品）。
-   - `-D<option>`：给CMake传递其他的编译选项。
+- `options`: 可选编译选项，当前支持的选项包括：
+  - `--clean`: 清理此前编译及输出目录（默认路径分别为`/build`，`/output`）。
+  - `--debug`: 以Debug模式进行编译。
+  - `--msdebug`：使能[msDebug](https://www.hiascend.com/document/redirect/CannCommunityToolMsdebug)工具，详见[在CATLASS样例工程使用msDebug](./evaluation/msdebug.md)。
+  - `--simulator`：启用仿真器模式，该选项启用后将不在实际NPU上执行，详见[CATLASS样例仿真](./evaluation/performance_tools.md#msprof-op-simulator使用示例)。
+  - `--enable_profiling`：使能Profiling工具，详见[CATLASS样例性能调优](./evaluation/performance_tools.md#profiling简介)。
+  - `--enable_print`：启用编译器的打印功能，详见[基于`cce::printf`进行设备侧打印](./evaluation/print.md)。
+  - `--enable_ascendc_dump`：启用`AscendC`相关算子调测API，详见[CATLASS样例使用AscendC算子调测API](./evaluation/ascendc_dump.md)。
+  - `-DCATLASS_ARCH`：指明NPU架构，当前支持`2201`和`3510`，不指明则默认为2201（Atlas A2/Atlas A3产品）。
+  - `-D<option>`：给CMake传递其他的编译选项。
 
- - `target`： 要编译的算子样例，可指定为特定的样例名，也可指定为：
-   - `catlass_examples`：对当前仓样例进行全量编译。
-   - `python_extension`：编译pybind扩展，详见基于[Python调用CATLASS样例](../../../examples/python_extension/README.md)。
-   - `torch_library`：编译torch扩展，详见[Python调用CATLASS样例](../../../examples/python_extension/README.md)。
-   - `mstuner_catlass`：编译msTuner_CATLASS工具，详见[`mstuner_catlass`使用说明](../../../tools/tuner/README.md)。
+- `target`： 要编译的算子样例，可指定为特定的样例名，也可指定为：
+  - `catlass_examples`：对当前仓样例进行全量编译。
+  - `python_extension`：编译pybind扩展，详见基于[Python调用CATLASS样例](../../../examples/python_extension/README.md)。
+  - `torch_library`：编译torch扩展，详见[Python调用CATLASS样例](../../../examples/python_extension/README.md)。
+  - `mstuner_catlass`：编译msTuner_CATLASS工具，详见[`mstuner_catlass`使用说明](../../../tools/tuner/README.md)。
 
 以[basic_matmul](../../../examples/00_basic_matmul/README.md)样例编译过程为例，执行下述指令（若为Ascend950，需要添加`-DCATLASS_ARCH=3510`）：
 
@@ -84,11 +84,11 @@ bash scripts/build.sh 00_basic_matmul
 
 若有下述提示信息，则编译成功。
 
-```bash 
+```bash
 "[INFO] Target "{target}" built successfully."
 ```
 
-2. **算子执行**
+1. **算子执行**
 
 算子编译产物在`output/bin`路径下，切换至该目录下可运行算子样例程序。
 以[basic_matmul]样例为例，可通过下述指令执行该算子：
@@ -100,8 +100,8 @@ cd output/bin
 ./00_basic_matmul 256 512 1024 0
 ```
 
- - `256`， `512`， `1024`分别为矩阵乘法在m轴、n轴、k轴的维度（左/右矩阵数据随机生成）
- - `deviceId`可选（默认为0），指定NPU卡的ID号。
+- `256`， `512`， `1024`分别为矩阵乘法在m轴、n轴、k轴的维度（左/右矩阵数据随机生成）
+- `deviceId`可选（默认为0），指定NPU卡的ID号。
 
 执行该算子样例后，如出现下述结果则表明其计算符合精度预期（该样例中Matmul的左、右矩阵使用随机数填充，真值以cpu计算为准）。
 

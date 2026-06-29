@@ -19,18 +19,18 @@ template <class ArchTag, class ElementAccumulator, class GmType,
 struct CopyL0CToGm;
 ```
 
-| 模板参数 | 说明 |
-| :------ | :------ |
-| `ArchTag` | 架构标签 |
-| `ElementAccumulator` | 累加元素类型，如 `float` |
-| `GmType` | `Gemm::GemmType<ElementDst, NC1HWC0>` |
+| 模板参数              | 说明                                                           |
+| :-------------------- | :------------------------------------------------------------- |
+| `ArchTag`             | 架构标签                                                       |
+| `ElementAccumulator`  | 累加元素类型，如 `float`                                       |
+| `GmType`              | `Gemm::GemmType<ElementDst, NC1HWC0>`                          |
 | `DEQUANT_GRANULARITY` | 量化模式：`NO_QUANT`、`PER_TENSOR`、`PER_CHANNEL`、`PER_GROUP` |
-| `ReluEnable` | 是否启用 ReLU，默认 `false` |
+| `ReluEnable`          | 是否启用 ReLU，默认 `false`                                    |
 
 ## 偏特化实现
 
-| 偏特化 | GmType | 说明 |
-| :------ | :------ | :------ |
+| 偏特化       | GmType                          | 说明                         |
+| :----------- | :------------------------------ | :--------------------------- |
 | A2, NO_QUANT | `GemmType<ElementDst, NC1HWC0>` | zN→NC1HWC0，逐 Ho 行 Fixpipe |
 
 ## 调用接口

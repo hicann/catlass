@@ -66,11 +66,11 @@ Common operations include:
 
 A `Layout` consists of three `IntTuple` objects: `Shape`, `Stride`, and `OriginShape`.
 
-| Field| Purpose| Focus|
-| --- | --- | --- |
-| `Shape` | Size description used for memory layout calculation| Determines the layout structure, which may not necessarily equal the actual logical size.|
-| `Stride` | Stride in each dimension| Determines how a coordinate maps to a linear address.|
-| `OriginShape` | Actual logical size of the Tensor| Determines which elements are logically valid.|
+| Field         | Purpose                                             | Focus                                                                                     |
+| ------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `Shape`       | Size description used for memory layout calculation | Determines the layout structure, which may not necessarily equal the actual logical size. |
+| `Stride`      | Stride in each dimension                            | Determines how a coordinate maps to a linear address.                                     |
+| `OriginShape` | Actual logical size of the Tensor                   | Determines which elements are logically valid.                                            |
 
 These can be understood as:
 
@@ -83,7 +83,7 @@ These can be understood as:
 - `Shape` is oriented towards layout calculation and allows for structures after alignment, tiling, or padding.
 - `OriginShape`, designed for logical semantics, describes only the true valid data range.
 
-![Origin_Shape-layout_1.png](https://raw.gitcode.com/user-images/assets/7631999/936388d2-81b6-400d-afe2-788eaf140f81/Origin_Shape-layout_1.png 'Origin_Shape-layout_1.png')
+![Origin_Shape-layout_1.png](https://raw.gitcode.com/user-images/assets/7631999/936388d2-81b6-400d-afe2-788eaf140f81/Origin_Shape-layout_1.png "Origin_Shape-layout_1.png")
 
 `OriginShape` separates "how memory is structured" from "which data is logically valid."
 
@@ -189,14 +189,14 @@ Meaning:
 
 Therefore, the linear address order is:
 
-| Logical Coordinate| Linear Address|
-| --- | --- |
-| `(0, 0)` | `0` |
-| `(0, 1)` | `1` |
-| `(0, 2)` | `2` |
-| `(1, 0)` | `3` |
-| `(1, 1)` | `4` |
-| `(1, 2)` | `5` |
+| Logical Coordinate | Linear Address |
+| ------------------ | -------------- |
+| `(0, 0)`           | `0`            |
+| `(0, 1)`           | `1`            |
+| `(0, 2)`           | `2`            |
+| `(1, 0)`           | `3`            |
+| `(1, 1)`           | `4`            |
+| `(1, 2)`           | `5`            |
 
 ### 2x3 Column-Major
 
@@ -212,14 +212,14 @@ Meaning:
 
 Therefore, the linear address order is:
 
-| Logical Coordinate| Linear Address|
-| --- | --- |
-| `(0, 0)` | `0` |
-| `(1, 0)` | `1` |
-| `(0, 1)` | `2` |
-| `(1, 1)` | `3` |
-| `(0, 2)` | `4` |
-| `(1, 2)` | `5` |
+| Logical Coordinate | Linear Address |
+| ------------------ | -------------- |
+| `(0, 0)`           | `0`            |
+| `(1, 0)`           | `1`            |
+| `(0, 1)`           | `2`            |
+| `(1, 1)`           | `3`            |
+| `(0, 2)`           | `4`            |
+| `(1, 2)`           | `5`            |
 
 ### Understanding Nested Layouts Using `zN` as an Example
 
@@ -327,7 +327,7 @@ What happens here is a structure conversion, not a data rearrangement:
 
 This ensures that the parent layout and tile layout maintain a consistent structural hierarchy.
 
-![Origin_Shape-layout_2.png](https://raw.gitcode.com/user-images/assets/7631999/649c84f3-981f-49eb-be77-6cbf6fd1e5b3/Origin_Shape-layout_2.png 'Origin_Shape-layout_2.png')
+![Origin_Shape-layout_2.png](https://raw.gitcode.com/user-images/assets/7631999/649c84f3-981f-49eb-be77-6cbf6fd1e5b3/Origin_Shape-layout_2.png "Origin_Shape-layout_2.png")
 
 ### Parameter Constraints
 

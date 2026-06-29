@@ -15,23 +15,23 @@
 
 ## API 清单
 
-| 组件名 | 风格 | 适用硬件 | 说明 |
-| :------ | :------ | :------ | :------ |
-| [CopyGmToL1](./copy_gm_to_l1.md) | 非 TLA | AtlasA2 / Ascend950 | 基础 GM→L1 搬运模板，支持多种 layout 转换 |
-| [CopyGmToL1IntervalDataCopy](./copy_gm_to_l1_interval_data_copy.md) | 非 TLA | AtlasA2 | 基于 strided DataCopy 的逐行/逐列搬运，适用于矮宽/高窄数据块 |
-| [CopyGmToL1GMMPTD](./copy_gm_to_l1_gmmptd.md) | 非 TLA | AtlasA2 / Ascend950 | GMM PTD 场景专用搬运，含单行优化和手动 stride 接口 |
-| [CopyGmToL1DynamicOptimized](./copy_gm_to_l1_dynamic_optimized.md) | 非 TLA | AtlasA2 / Ascend950 | 运行时动态选择最优搬运策略（小矩阵用 strided DataCopy，大矩阵用 Nd2Nz） |
-| [TileCopyTla](./tile_copy_tla.md) | TLA | AtlasA2 / Ascend950 | TLA 风格 GM→L1 搬运，通过 tla::Tensor 封装简化调用 |
-| [TileCopyTlaExt](./tile_copy_tla_ext.md) | TLA | AtlasA2 | TLA 扩展搬运，支持 ActualShape 部分搬运和 Padding layout |
-| [TileCopySparseTla](./tile_copy_sparse_tla.md) | TLA | AtlasA2 | Sparse GEMM GM→L1 搬运，支持 RowMajor/ColumnMajor/zN/nZ→zN/nZ |
-| [TileCopyFAQTla](./tile_copy_faq_tla.md) | TLA | AtlasA2 | FlashAttention LoadQ 搬运，支持 3D 多矩阵 GM→L1 zN 转换 |
+| 组件名                                                              | 风格   | 适用硬件            | 说明                                                                    |
+| :------------------------------------------------------------------ | :----- | :------------------ | :---------------------------------------------------------------------- |
+| [CopyGmToL1](./copy_gm_to_l1.md)                                    | 非 TLA | AtlasA2 / Ascend950 | 基础 GM→L1 搬运模板，支持多种 layout 转换                               |
+| [CopyGmToL1IntervalDataCopy](./copy_gm_to_l1_interval_data_copy.md) | 非 TLA | AtlasA2             | 基于 strided DataCopy 的逐行/逐列搬运，适用于矮宽/高窄数据块            |
+| [CopyGmToL1GMMPTD](./copy_gm_to_l1_gmmptd.md)                       | 非 TLA | AtlasA2 / Ascend950 | GMM PTD 场景专用搬运，含单行优化和手动 stride 接口                      |
+| [CopyGmToL1DynamicOptimized](./copy_gm_to_l1_dynamic_optimized.md)  | 非 TLA | AtlasA2 / Ascend950 | 运行时动态选择最优搬运策略（小矩阵用 strided DataCopy，大矩阵用 Nd2Nz） |
+| [TileCopyTla](./tile_copy_tla.md)                                   | TLA    | AtlasA2 / Ascend950 | TLA 风格 GM→L1 搬运，通过 tla::Tensor 封装简化调用                      |
+| [TileCopyTlaExt](./tile_copy_tla_ext.md)                            | TLA    | AtlasA2             | TLA 扩展搬运，支持 ActualShape 部分搬运和 Padding layout                |
+| [TileCopySparseTla](./tile_copy_sparse_tla.md)                      | TLA    | AtlasA2             | Sparse GEMM GM→L1 搬运，支持 RowMajor/ColumnMajor/zN/nZ→zN/nZ           |
+| [TileCopyFAQTla](./tile_copy_faq_tla.md)                            | TLA    | AtlasA2             | FlashAttention LoadQ 搬运，支持 3D 多矩阵 GM→L1 zN 转换                 |
 
 ## 适用硬件型号说明
 
-| 硬件型号 | 架构标识 | ARCH 宏 | 支持的非 TLA 模板 | 支持的 TLA 模板 |
-| :------ | :------ | :------ | :------ | :------ |
-| Atlas A2 | `Arch::AtlasA2` | `CATLASS_ARCH == 2201` | CopyGmToL1 / CopyGmToL1IntervalDataCopy / CopyGmToL1GMMPTD / CopyGmToL1DynamicOptimized | TileCopyTla / TileCopyTlaExt |
-| Ascend 950 | `Arch::Ascend950` | `CATLASS_ARCH == 3510` | CopyGmToL1 / CopyGmToL1GMMPTD / CopyGmToL1DynamicOptimized | TileCopyTla |
+| 硬件型号   | 架构标识          | ARCH 宏                | 支持的非 TLA 模板                                                                       | 支持的 TLA 模板              |
+| :--------- | :---------------- | :--------------------- | :-------------------------------------------------------------------------------------- | :--------------------------- |
+| Atlas A2   | `Arch::AtlasA2`   | `CATLASS_ARCH == 2201` | CopyGmToL1 / CopyGmToL1IntervalDataCopy / CopyGmToL1GMMPTD / CopyGmToL1DynamicOptimized | TileCopyTla / TileCopyTlaExt |
+| Ascend 950 | `Arch::Ascend950` | `CATLASS_ARCH == 3510` | CopyGmToL1 / CopyGmToL1GMMPTD / CopyGmToL1DynamicOptimized                              | TileCopyTla                  |
 
 ## 接口调用示例
 
@@ -226,10 +226,10 @@ copyOp(dstTensor, srcTensor, layoutDst, layoutSrc);
 
 ## 模板选择指南
 
-| 场景 | 推荐模板 |
-| :------ | :------ |
-| 通用矩阵乘 tile 搬运 | `CopyGmToL1`（非 TLA）或 `TileCopyTla`（TLA） |
-| 数据块形状不确定，需要运行时自适应 | `CopyGmToL1DynamicOptimized` |
-| GMM PTD 场景，需要手动控制 stride | `CopyGmToL1GMMPTD` |
-| 矮宽/高窄数据块（仅 half 类型） | `CopyGmToL1IntervalDataCopy` |
-| 需要部分搬运或 Padding 场景 | `TileCopyTlaExt` |
+| 场景                               | 推荐模板                                      |
+| :--------------------------------- | :-------------------------------------------- |
+| 通用矩阵乘 tile 搬运               | `CopyGmToL1`（非 TLA）或 `TileCopyTla`（TLA） |
+| 数据块形状不确定，需要运行时自适应 | `CopyGmToL1DynamicOptimized`                  |
+| GMM PTD 场景，需要手动控制 stride  | `CopyGmToL1GMMPTD`                            |
+| 矮宽/高窄数据块（仅 half 类型）    | `CopyGmToL1IntervalDataCopy`                  |
+| 需要部分搬运或 Padding 场景        | `TileCopyTlaExt`                              |

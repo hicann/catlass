@@ -29,15 +29,15 @@ struct BlockMmad {
 
 ### 2.1 核心模板参数
 
-| 参数名 | 描述 |
-|--------|------|
-| DispatchPolicy | 调度策略，控制计算任务的分配和执行流程 |
-| L1TileShape | L1缓存级别Tile的形状，定义M、N、K三个维度的大小 |
-| L0TileShape | L0缓存级别Tile的形状，定义M、N、K三个维度的大小 |
-| AType/BType/CType | 输入矩阵A、B和输出矩阵C的数据类型和布局信息 |
-| BiasType | 偏置数据类型（可选） |
-| TileCopy | Tile级别的数据拷贝组件，负责不同内存层级间的数据传输 |
-| TileMmad | Tile级别的矩阵乘法组件，负责实际的计算操作 |
+| 参数名            | 描述                                                 |
+| ----------------- | ---------------------------------------------------- |
+| DispatchPolicy    | 调度策略，控制计算任务的分配和执行流程               |
+| L1TileShape       | L1缓存级别Tile的形状，定义M、N、K三个维度的大小      |
+| L0TileShape       | L0缓存级别Tile的形状，定义M、N、K三个维度的大小      |
+| AType/BType/CType | 输入矩阵A、B和输出矩阵C的数据类型和布局信息          |
+| BiasType          | 偏置数据类型（可选）                                 |
+| TileCopy          | Tile级别的数据拷贝组件，负责不同内存层级间的数据传输 |
+| TileMmad          | Tile级别的矩阵乘法组件，负责实际的计算操作           |
 
 ### 2.2 类型导出
 
@@ -233,7 +233,7 @@ uint32_t kTileCount = CeilDiv<L1TileShape::K>(actualShape.k());
 for (uint32_t kLoopIdx = 0; kLoopIdx < kTileCount; kLoopIdx++) {
     uint32_t l1ListIdNext = (l1ListId + 1 < STAGES) ? (l1ListId + 1) : 0;
     uint32_t kActualNext{0};
-    
+
     // 预加载下一批数据到L1缓存
     if (kLoopIdx < kTileCount - 1) {
         // ... 预加载逻辑 ...
@@ -262,7 +262,7 @@ for (int mPartIdx = 0; mPartIdx < mPartLoop; mPartIdx++) {
         // ... K维度循环 ...
         for (int nPartIdx = 0; nPartIdx < nPartLoop; nPartIdx++) {
             // ... N维度循环 ...
-            
+
             // 执行Tile级矩阵乘法
             bool initC = ((kLoopIdx == 0) && (kPartIdx == 0));
             uint8_t unitFlag = 0b00;

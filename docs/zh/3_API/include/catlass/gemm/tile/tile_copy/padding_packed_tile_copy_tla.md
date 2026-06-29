@@ -12,14 +12,14 @@
 
 ## 引用的 Tile 组件
 
-| 成员别名 | 引用的底层模板 | 说明 |
-| :------ | :------ | :------ |
-| `CopyGmToL1A` | `TileCopyTlaExt<ArchTag, TensorA, TensorL1A, PaddingTag/RowMajor, LayoutTagL1A>` | A 矩阵 GM→L1（Ext） |
-| `CopyGmToL1B` | `TileCopyTlaExt<ArchTag, TensorB, TensorL1B, PaddingTag/ColumnMajor, LayoutTagL1B>` | B 矩阵 GM→L1（Ext） |
-| `CopyL1ToL0A` | `TileCopyTla<ArchTag, TensorL1A, TensorL0A>` | A 矩阵 L1→L0A（TLA） |
-| `CopyL1ToL0B` | `TileCopyTla<ArchTag, TensorL1B, TensorL0B>` | B 矩阵 L1→L0B（TLA） |
-| `CopyL0CToDst` (Ascend950) | `CopyL0CToGmTla<ArchTag, TensorL0C, TensorC>` | L0C→Dst |
-| `CopyL0CToGm` (AtlasA2) | `CopyL0CToGmTla<ArchTag, TensorL0C, TensorC>` | L0C→GM |
+| 成员别名                   | 引用的底层模板                                                                      | 说明                 |
+| :------------------------- | :---------------------------------------------------------------------------------- | :------------------- |
+| `CopyGmToL1A`              | `TileCopyTlaExt<ArchTag, TensorA, TensorL1A, PaddingTag/RowMajor, LayoutTagL1A>`    | A 矩阵 GM→L1（Ext）  |
+| `CopyGmToL1B`              | `TileCopyTlaExt<ArchTag, TensorB, TensorL1B, PaddingTag/ColumnMajor, LayoutTagL1B>` | B 矩阵 GM→L1（Ext）  |
+| `CopyL1ToL0A`              | `TileCopyTla<ArchTag, TensorL1A, TensorL0A>`                                        | A 矩阵 L1→L0A（TLA） |
+| `CopyL1ToL0B`              | `TileCopyTla<ArchTag, TensorL1B, TensorL0B>`                                        | B 矩阵 L1→L0B（TLA） |
+| `CopyL0CToDst` (Ascend950) | `CopyL0CToGmTla<ArchTag, TensorL0C, TensorC>`                                       | L0C→Dst              |
+| `CopyL0CToGm` (AtlasA2)    | `CopyL0CToGmTla<ArchTag, TensorL0C, TensorC>`                                       | L0C→GM               |
 
 ## 模板原型
 
@@ -45,6 +45,7 @@ struct PaddingPackedTileCopyTla;
 ## Padding 逻辑
 
 当 `IS_PADDING_A = true` 时：
+
 ```cpp
 using LayoutPaddingTagA = std::conditional_t<
     std::is_same_v<LayoutTagA, layout::RowMajor>,
@@ -57,9 +58,9 @@ using CopyGmToL1A = TileCopyTlaExt<ArchTag, TensorA, TensorL1A,
 
 ## 与 PackedTileCopyTla 的区别
 
-| 模板 | GM→L1 算子 | 源端 Padding | 模板参数风格 |
-| :------ | :------ | :------ | :------ |
-| `PackedTileCopyTla` | `TileCopyTla` | 不支持 | Element + LayoutTag（非 Tensor） |
+| 模板                       | GM→L1 算子       | 源端 Padding        | 模板参数风格                     |
+| :------------------------- | :--------------- | :------------------ | :------------------------------- |
+| `PackedTileCopyTla`        | `TileCopyTla`    | 不支持              | Element + LayoutTag（非 Tensor） |
 | `PaddingPackedTileCopyTla` | `TileCopyTlaExt` | 支持 IS_PADDING_A/B | Tensor 参数（含 Padding Layout） |
 
 ## 调用示例

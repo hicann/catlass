@@ -10,10 +10,10 @@
 
 ## API 清单
 
-| API | 风格 | 说明 |
-| :------ | :------ | :------ |
-| [TileBroadcastOneBlk](./tile_broadcast_one_blk.md) | 非 TLA | `AscendC::Brcb` + `BrcbRepeatParams` |
-| [TileBroadcastOneBlkTla](./tile_broadcast_one_blk_tla.md) | TLA | TLA 版本，`tensor.layout()(tensor.coord())` 偏移 |
+| API                                                       | 风格   | 说明                                             |
+| :-------------------------------------------------------- | :----- | :----------------------------------------------- |
+| [TileBroadcastOneBlk](./tile_broadcast_one_blk.md)        | 非 TLA | `AscendC::Brcb` + `BrcbRepeatParams`             |
+| [TileBroadcastOneBlkTla](./tile_broadcast_one_blk_tla.md) | TLA    | TLA 版本，`tensor.layout()(tensor.coord())` 偏移 |
 
 ## 调用示例
 

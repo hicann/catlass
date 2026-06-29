@@ -1,5 +1,5 @@
 # Basic Matmul
->
+
 > [Code location](../../../../../../../include/catlass/gemm/kernel/basic_matmul.hpp)
 
 ## Description
@@ -9,12 +9,12 @@ Basic matrix multiplication, Cube-core operator, without AIV computation or TLA 
 ## Class Template Overview
 
 - Template input parameters
-    - class BlockMmad_: `blockMmad` class, which serves as the matrix multiplication component.
-    - class BlockEpilogue_: `blockEpilogue` class, which serves as the epilogue component (not used in practice).
-    - class BlockScheduler_: `blockScheduler` class, which strictly supports only [Gemm::Block::GemmIdentityBlockSwizzle](../block/block_swizzle/block_swizzle.md).
+  - class BlockMmad_: `blockMmad` class, which serves as the matrix multiplication component.
+  - class BlockEpilogue_: `blockEpilogue` class, which serves as the epilogue component (not used in practice).
+  - class BlockScheduler_: `blockScheduler` class, which strictly supports only [Gemm::Block::GemmIdentityBlockSwizzle](../block/block_swizzle/block_swizzle.md).
 - Params:
 
-```
+```cpp
 struct Params {
     GemmCoord problemShape;     // Shape of the test case
     GM_ADDR ptrA;               // GM start address of input matrix A
@@ -29,7 +29,7 @@ struct Params {
 
 - Arguments:
 
-```
+```cpp
 struct Arguments {
     GemmCoord problemShape;     // Shape of the test case
     GM_ADDR ptrA;               // GM start address of input matrix A
@@ -42,7 +42,7 @@ struct Arguments {
 
 Kernel assembly
 
-```
+```cpp
 using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
 using BlockEpilogue = void;
 using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;

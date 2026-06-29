@@ -12,14 +12,19 @@
 ## Function
 
 SiLU:
+
 $$
 SiLU(x) = x \cdot Sigmoid(x)
 $$
+
 Sigmoid:
+
 $$
 Sigmoid(x)=\frac{1}{1+e^{-x}}
 $$
+
 Therefore, the calculation function is as follows:
+
 $$
 x = a \times b\\
 out=\frac{x}{1+e^{-x}}

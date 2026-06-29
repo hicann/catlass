@@ -6,10 +6,10 @@
 
 优先做这一步，避免把本来只需新增一个算子的事情做成新节点。
 
-| 场景 | 处理方式 |
-| --- | --- |
-| 只是逐元素计算，输入输出都在 UB，不需要 GM、layout、workspace | 新增 `ComputeFn` |
-| 需要读 GM、写 GM、管理 layout、申请 UB，或需要自己的 `Arguments / Params` | 新增节点 |
+| 场景                                                                      | 处理方式         |
+| ------------------------------------------------------------------------- | ---------------- |
+| 只是逐元素计算，输入输出都在 UB，不需要 GM、layout、workspace             | 新增 `ComputeFn` |
+| 需要读 GM、写 GM、管理 layout、申请 UB，或需要自己的 `Arguments / Params` | 新增节点         |
 
 可以直接按下面的口径判断：
 
@@ -200,16 +200,16 @@ struct VisitorSomeNode : VisitorImpl<> {
 
 ### 必备组成与职责
 
-| 组成 | 作用 | 约束 |
-| --- | --- | --- |
-| `ElementOutput` | 告诉图组织器节点输出类型 | 与实际输出一致 |
-| `Arguments` | 用户侧直接填写的参数 | 保持简单，支持花括号初始化 |
-| `Params` | device 侧真正使用的参数 | 尽量只保留执行需要的信息 |
+| 组成                      | 作用                         | 约束                            |
+| ------------------------- | ---------------------------- | ------------------------------- |
+| `ElementOutput`           | 告诉图组织器节点输出类型     | 与实际输出一致                  |
+| `Arguments`               | 用户侧直接填写的参数         | 保持简单，支持花括号初始化      |
+| `Params`                  | device 侧真正使用的参数      | 尽量只保留执行需要的信息        |
 | `to_underlying_arguments` | 把 `Arguments` 转成 `Params` | 需要 workspace 时在这里完成映射 |
-| `get_workspace_size` | 声明节点自有 workspace | 只计算自己那一段 |
-| `can_implement` | 轻量合法性检查 | 至少检查容易误用的参数 |
-| `Callbacks::visit` | 执行节点动作 | 严格按阶段写逻辑 |
-| `get_callbacks` | 申请 UB 并构造回调 | 谁申请 UB，谁推进 `ub_offset` |
+| `get_workspace_size`      | 声明节点自有 workspace       | 只计算自己那一段                |
+| `can_implement`           | 轻量合法性检查               | 至少检查容易误用的参数          |
+| `Callbacks::visit`        | 执行节点动作                 | 严格按阶段写逻辑                |
+| `get_callbacks`           | 申请 UB 并构造回调           | 谁申请 UB，谁推进 `ub_offset`   |
 
 ### 当前约束
 

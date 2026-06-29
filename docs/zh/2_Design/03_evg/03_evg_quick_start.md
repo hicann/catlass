@@ -166,12 +166,12 @@ cd output/bin
 - `include/catlass/epilogue/block/block_epilogue_visitor.hpp`
 - EVG 样例代码（均位于 [`examples/64_ascend950_matmul_evg/`](../../../../examples/64_ascend950_matmul_evg/)）：
 
-| 场景 | 源文件 | 说明 |
-|------|--------|------|
-| D = C + X（本文示例） | [`matmul_evg_add.cpp`](../../../../examples/64_ascend950_matmul_evg/matmul_evg_add.cpp) | `TreeVisitor`，GM workspace |
-| D = LeakyRelu(C) | [`matmul_evg_leaky_relu.cpp`](../../../../examples/64_ascend950_matmul_evg/matmul_evg_leaky_relu.cpp) | 单算子激活 |
-| D = Sigmoid(C) | [`matmul_evg_sigmoid.cpp`](../../../../examples/64_ascend950_matmul_evg/matmul_evg_sigmoid.cpp) | 单算子激活 |
-| D = Silu(C) | [`matmul_evg_silu.cpp`](../../../../examples/64_ascend950_matmul_evg/matmul_evg_silu.cpp) | 单算子激活 |
-| D = Tanh(C) | [`matmul_evg_tanh.cpp`](../../../../examples/64_ascend950_matmul_evg/matmul_evg_tanh.cpp) | `TopologicalVisitor` 多节点图 |
-| D = C + bias | [`matmul_evg_bias.cpp`](../../../../examples/64_ascend950_matmul_evg/matmul_evg_bias.cpp) | `VisitorRowBroadcast` 行广播 |
-| D = C + X（UB 路径） | [`matmul_evg_add_ub.cpp`](../../../../examples/64_ascend950_matmul_evg/matmul_evg_add_ub.cpp) | L0C→UB workspace，配合 `BasicMatmulTlaUbVisitor` |
+| 场景                  | 源文件                                                                                                | 说明                                             |
+| --------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| D = C + X（本文示例） | [`matmul_evg_add.cpp`](../../../../examples/64_ascend950_matmul_evg/matmul_evg_add.cpp)               | `TreeVisitor`，GM workspace                      |
+| D = LeakyRelu(C)      | [`matmul_evg_leaky_relu.cpp`](../../../../examples/64_ascend950_matmul_evg/matmul_evg_leaky_relu.cpp) | 单算子激活                                       |
+| D = Sigmoid(C)        | [`matmul_evg_sigmoid.cpp`](../../../../examples/64_ascend950_matmul_evg/matmul_evg_sigmoid.cpp)       | 单算子激活                                       |
+| D = Silu(C)           | [`matmul_evg_silu.cpp`](../../../../examples/64_ascend950_matmul_evg/matmul_evg_silu.cpp)             | 单算子激活                                       |
+| D = Tanh(C)           | [`matmul_evg_tanh.cpp`](../../../../examples/64_ascend950_matmul_evg/matmul_evg_tanh.cpp)             | `TopologicalVisitor` 多节点图                    |
+| D = C + bias          | [`matmul_evg_bias.cpp`](../../../../examples/64_ascend950_matmul_evg/matmul_evg_bias.cpp)             | `VisitorRowBroadcast` 行广播                     |
+| D = C + X（UB 路径）  | [`matmul_evg_add_ub.cpp`](../../../../examples/64_ascend950_matmul_evg/matmul_evg_add_ub.cpp)         | L0C→UB workspace，配合 `BasicMatmulTlaUbVisitor` |

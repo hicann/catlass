@@ -38,10 +38,10 @@ struct CopyL1ToL0BSparseTla {
 
 ### AtlasA2
 
-| 源 Tensor | 目标 Tensor | Index Tensor | SFINAE 条件 | 说明 |
-| :------ | :------ | :------ | :------ | :------ |
-| zN L1 | nZ L0B | zN L1 (`uint8_t`) | `iszN<LayoutSrc> && isnZ<LayoutDst> && iszN<LayoutIdx>` | Sparse 转置拷贝 |
-| nZ L1 | nZ L0B | nZ L1 (`uint8_t`) | `isnZ<LayoutSrc> && isnZ<LayoutDst> && isnZ<LayoutIdx>` | Sparse 非转置拷贝（Transpose B） |
+| 源 Tensor | 目标 Tensor | Index Tensor      | SFINAE 条件                                             | 说明                             |
+| :-------- | :---------- | :---------------- | :------------------------------------------------------ | :------------------------------- |
+| zN L1     | nZ L0B      | zN L1 (`uint8_t`) | `iszN<LayoutSrc> && isnZ<LayoutDst> && iszN<LayoutIdx>` | Sparse 转置拷贝                  |
+| nZ L1     | nZ L0B      | nZ L1 (`uint8_t`) | `isnZ<LayoutSrc> && isnZ<LayoutDst> && isnZ<LayoutIdx>` | Sparse 非转置拷贝（Transpose B） |
 
 ## 调用接口
 

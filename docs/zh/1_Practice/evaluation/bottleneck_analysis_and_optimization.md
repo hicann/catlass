@@ -22,27 +22,27 @@ msprof op --application="./00_basic_matmul 256 512 1024 0"
 
 常用参数：
 
-| 参数 | 说明 |
-| --- | --- |
-| `--application` | 指定可执行文件及参数（与`--config`二选一） |
-| `--config` | 指定算子二进制`.o`文件（与`--application`二选一） |
-| `--kernel-name` | 指定采集的算子名称，支持模糊匹配 |
-| `--launch-count` | 最大采集算子数量，默认1 |
-| `--warm-up` | 预热次数，默认5。小shape场景建议提高到30，以解决芯片未提频问题 |
-| `--output` | 性能数据输出路径，默认当前目录 |
+| 参数             | 说明                                                           |
+| ---------------- | -------------------------------------------------------------- |
+| `--application`  | 指定可执行文件及参数（与`--config`二选一）                     |
+| `--config`       | 指定算子二进制`.o`文件（与`--application`二选一）              |
+| `--kernel-name`  | 指定采集的算子名称，支持模糊匹配                               |
+| `--launch-count` | 最大采集算子数量，默认1                                        |
+| `--warm-up`      | 预热次数，默认5。小shape场景建议提高到30，以解决芯片未提频问题 |
+| `--output`       | 性能数据输出路径，默认当前目录                                 |
 
 采集后生成的关键性能数据文件：
 
-| 文件 | 内容 | 瓶颈分析用途 |
-| --- | --- | --- |
-| `PipeUtilization.csv` | 各流水线（Cube/Vector/MTE2/MTE3）耗时及占比 | 定位流水线bound阶段 |
-| `ArithmeticUtilization.csv` | Cube/Vector指令cycle占比 | 判断计算单元利用效率 |
-| `L2Cache.csv` | L2 Cache命中率 | 判断搬运效率是否受Cache影响 |
-| `Memory.csv` | UB、L1和主存储器读写带宽（GB/s） | 判断带宽利用率 |
-| `MemoryL0.csv` | L0A、L0B、L0C读写带宽 | 判断L0数据读写带宽速率 |
-| `MemoryUB.csv` | Vector/Scalar到UB的读写带宽 | 判断UB访问效率 |
-| `OpBasicInfo.csv` | 算子基础信息（Block Dim等） | 分析多核利用率、算子执行耗时和频率表现 |
-| `ResourceConflictRatio.csv` | UB Bank Group/Bank Conflict占比 | 判断UB访问冲突程度 |
+| 文件                        | 内容                                        | 瓶颈分析用途                           |
+| --------------------------- | ------------------------------------------- | -------------------------------------- |
+| `PipeUtilization.csv`       | 各流水线（Cube/Vector/MTE2/MTE3）耗时及占比 | 定位流水线bound阶段                    |
+| `ArithmeticUtilization.csv` | Cube/Vector指令cycle占比                    | 判断计算单元利用效率                   |
+| `L2Cache.csv`               | L2 Cache命中率                              | 判断搬运效率是否受Cache影响            |
+| `Memory.csv`                | UB、L1和主存储器读写带宽（GB/s）            | 判断带宽利用率                         |
+| `MemoryL0.csv`              | L0A、L0B、L0C读写带宽                       | 判断L0数据读写带宽速率                 |
+| `MemoryUB.csv`              | Vector/Scalar到UB的读写带宽                 | 判断UB访问效率                         |
+| `OpBasicInfo.csv`           | 算子基础信息（Block Dim等）                 | 分析多核利用率、算子执行耗时和频率表现 |
+| `ResourceConflictRatio.csv` | UB Bank Group/Bank Conflict占比             | 判断UB访问冲突程度                     |
 
 **性能流水仿真**
 
@@ -102,12 +102,12 @@ bash scripts/build.sh -DCATLASS_LIBRARY_KERNELS=00_basic_matmul mstuner_catlass
 
 ### 工具选型建议
 
-| 阶段 | 推荐工具 | 目的 |
-| --- | --- | --- |
-| 初测性能 | `msprof op`（上板） | 获取算子实际耗时和流水占比，判断性能是否达标 |
-| 深入定位 | `msprof op simulator`（仿真） | 查看指令级流水图，定位断流原因 |
-| 整网场景 | Profiling（`msprof`） | 在整网上下文中分析算子性能 |
-| Tiling选参 | msTuner_CATLASS | 自动搜索最优TileShape / Swizzle组合 |
+| 阶段       | 推荐工具                      | 目的                                         |
+| ---------- | ----------------------------- | -------------------------------------------- |
+| 初测性能   | `msprof op`（上板）           | 获取算子实际耗时和流水占比，判断性能是否达标 |
+| 深入定位   | `msprof op simulator`（仿真） | 查看指令级流水图，定位断流原因               |
+| 整网场景   | Profiling（`msprof`）         | 在整网上下文中分析算子性能                   |
+| Tiling选参 | msTuner_CATLASS               | 自动搜索最优TileShape / Swizzle组合          |
 
 ## 2. 理论性能计算
 
@@ -117,7 +117,7 @@ bash scripts/build.sh -DCATLASS_LIBRARY_KERNELS=00_basic_matmul mstuner_catlass
 
 搬运相关流水（MTE1/MTE2/MTE3）的理论耗时计算公式为"搬运数据量（Byte）除以理论带宽"。假设GM峰值带宽约1.8 TB/s，`float16`类型的4096×4096矩阵搬运理论耗时如下：
 
-```
+```text
 2 × 4096 × 4096 / 1.8TB/s ≈ 18.64 μs
 ```
 
@@ -127,7 +127,7 @@ bash scripts/build.sh -DCATLASS_LIBRARY_KERNELS=00_basic_matmul mstuner_catlass
 
 计算相关流水（Cube/Vector/Scalar）的理论耗时计算公式为"计算数据量（Element）除以理论算力"。以`float16`类型Vector理论峰值算力11.06 TOPS为例，32K个`float16` Element单指令计算理论耗时如下：
 
-```
+```text
 32K / 11.06TOPS ≈ 0.003 μs
 ```
 
@@ -143,20 +143,20 @@ Cube和Vector/Scalar分开计算后再求和，因为三者可并行执行到一
 
 关键指标：
 
-| 指标 | 含义 |
-| --- | --- |
-| `aic_mac_ratio` | Cube流水利用率，越接近100% 说明计算单元利用越充分 |
-| `aic_mte2_ratio` | MTE2流水利用率 |
-| `aiv_mte2_time` / `aic_mte2_time` | MTE2实际耗时（μs） |
-| `aiv_vec_time` | Vector指令执行时间。SIMT与SIMD场景均计入此项 |
+| 指标                              | 含义                                              |
+| --------------------------------- | ------------------------------------------------- |
+| `aic_mac_ratio`                   | Cube流水利用率，越接近100% 说明计算单元利用越充分 |
+| `aic_mte2_ratio`                  | MTE2流水利用率                                    |
+| `aiv_mte2_time` / `aic_mte2_time` | MTE2实际耗时（μs）                                |
+| `aiv_vec_time`                    | Vector指令执行时间。SIMT与SIMD场景均计入此项      |
 
 分析步骤：先根据算子数据量计算理论搬运耗时和理论计算耗时；再对比`aic_mte2_time`与理论搬运耗时，若实际值远大于理论值，说明存在数据重复搬运或搬运效率低的问题；接着对比`aic_mac_ratio`与理论水平，若利用率显著偏低，说明计算单元未充分发挥算力；最后判断瓶颈类型。
 
-| 现象 | 瓶颈类型 | 优化方向 |
-| --- | --- | --- |
-| MTE2耗时与总执行时间持平 | MTE2 bound | 流水优化 + Tiling优化 |
-| Cube/Vector耗时占主导 | Compute bound | 计算流水优化 |
-| 两者均不接近理论值 | 流水隐藏不足 | 用仿真流水图进一步分析 |
+| 现象                     | 瓶颈类型      | 优化方向               |
+| ------------------------ | ------------- | ---------------------- |
+| MTE2耗时与总执行时间持平 | MTE2 bound    | 流水优化 + Tiling优化  |
+| Cube/Vector耗时占主导    | Compute bound | 计算流水优化           |
+| 两者均不接近理论值       | 流水隐藏不足  | 用仿真流水图进一步分析 |
 
 示例：MatMul算子shape为 (2048, 12288) × (12288, 6144)，bfloat16类型。理论搬运约111.8 μs，但实际`aic_mte2_time`远大于该值。原因是输入数据总大小超过L1空间（512 KB），矩阵数据需重复搬运，应结合Tiling优化和仿真流水图进一步分析。
 
@@ -170,12 +170,12 @@ Cube和Vector/Scalar分开计算后再求和，因为三者可并行执行到一
 
 观察重点：
 
-| 现象 | 可能原因 | 排查方向 |
-| --- | --- | --- |
-| MTE2/MTE3规律性断流 | 数据搬运未与计算充分重叠 | 检查搬运与计算指令的排布和双缓冲策略 |
-| Cube与Vector之间存在长间隙 | 数据依赖导致等待 | 检查CV流水同步点和中间数据通路 |
-| 某条流水线持续空闲 | 该流水线任务量不足或被阻塞 | 检查TileShape导致的各流水线任务分配 |
-| 多个核的流水图形态差异大 | 多核负载不均衡 | 检查分核策略和尾块处理 |
+| 现象                       | 可能原因                   | 排查方向                             |
+| -------------------------- | -------------------------- | ------------------------------------ |
+| MTE2/MTE3规律性断流        | 数据搬运未与计算充分重叠   | 检查搬运与计算指令的排布和双缓冲策略 |
+| Cube与Vector之间存在长间隙 | 数据依赖导致等待           | 检查CV流水同步点和中间数据通路       |
+| 某条流水线持续空闲         | 该流水线任务量不足或被阻塞 | 检查TileShape导致的各流水线任务分配  |
+| 多个核的流水图形态差异大   | 多核负载不均衡             | 检查分核策略和尾块处理               |
 
 优化方向优先级为流水优化优先于Tiling优化，Tiling优化优先于内存优化。
 
@@ -215,10 +215,10 @@ Cube和Vector/Scalar分开计算后再求和，因为三者可并行执行到一
 
 ## 5. 工具与文档索引
 
-| 工具 | 用途 | CATLASS文档 |
-| --- | --- | --- |
-| msProf（`msprof op`） | 单算子上板性能采集 | [msProf&Profiling](./performance_tools.md#用msprof进行单算子性能分析) |
-| msProf仿真（`msprof op simulator`） | 单算子仿真流水图采集 | [性能流水仿真](./performance_tools.md#性能流水仿真) |
-| Profiling（`msprof`） | 整网性能数据采集与分析 | [用Profiling进行整网性能分析](./performance_tools.md#用profiling进行整网性能分析) |
-| msTuner_CATLASS | Tiling参数自动寻优 | [msTuner_CATLASS README](../../../../tools/tuner/README.md) |
-| MindStudio Insight | 性能数据可视化分析 | [MindStudio Insight用户指南](https://www.hiascend.com/document/detail/zh/mindstudio/80RC1/GUI_baseddevelopmenttool/msascendinsightug/Insight_userguide_0002.html) |
+| 工具                                | 用途                   | CATLASS文档                                                                                                                                                       |
+| ----------------------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| msProf（`msprof op`）               | 单算子上板性能采集     | [msProf&Profiling](./performance_tools.md#用msprof进行单算子性能分析)                                                                                             |
+| msProf仿真（`msprof op simulator`） | 单算子仿真流水图采集   | [性能流水仿真](./performance_tools.md#性能流水仿真)                                                                                                               |
+| Profiling（`msprof`）               | 整网性能数据采集与分析 | [用Profiling进行整网性能分析](./performance_tools.md#用profiling进行整网性能分析)                                                                                 |
+| msTuner_CATLASS                     | Tiling参数自动寻优     | [msTuner_CATLASS README](../../../../tools/tuner/README.md)                                                                                                       |
+| MindStudio Insight                  | 性能数据可视化分析     | [MindStudio Insight用户指南](https://www.hiascend.com/document/detail/zh/mindstudio/80RC1/GUI_baseddevelopmenttool/msascendinsightug/Insight_userguide_0002.html) |

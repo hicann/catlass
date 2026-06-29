@@ -1,5 +1,5 @@
 # Block Epilogue Per Token Dequant
->
+
 > [代码位置](../../../../../../../include/catlass/epilogue/block/block_epilogue_per_token_dequant.hpp)
 
 ## 功能说明
@@ -46,7 +46,7 @@
 
 ## 调度策略
 
-```
+```cpp
 // For AtlasA2, per token dequant
 template <uint32_t UB_STAGES_>
 struct EpilogueAtlasA2PerTokenDequant {
@@ -61,7 +61,7 @@ struct EpilogueAtlasA2PerTokenDequant {
 
 参考[样例12_quant_matmul](../../../../../../../examples/12_quant_matmul/quant_matmul.cpp)
 
-```
+```cpp
 constexpr uint32_t ubStages = 2;
 using EpilogueDispatchPolicy = Epilogue::EpilogueAtlasA2PerTokenDequant<ubStages>;
 using ScaleType = Gemm::GemmType<bfloat16_t, layout::VectorLayout>;
@@ -82,7 +82,7 @@ using TileCopy = Epilogue::Tile::TileCopy<ArchTag, CType, ScaleType, PerTokenSca
 using TileScheduler = Epilogue::Tile::EpilogueHorizontalTileSwizzle;
 ```
 
-```
+```cpp
 using BlockEpilogue = Epilogue::Block::BlockEpilogue<
     EpilogueDispatchPolicy,         // 选用的后处理调度策略
     CType,                          // 反量化前block的类型
@@ -101,7 +101,7 @@ using BlockEpilogue = Epilogue::Block::BlockEpilogue<
 
 参考[quant_matmul_multistage_workspace](../../../../../../../include/catlass/gemm/kernel/quant_matmul_multistage_workspace.hpp)，在`kernel`代码的`void operator()<AscendC::AIV>`函数中：
 
-```
+```cpp
 BlockEpilogue blockEpilogue(resource);
 ```
 
@@ -109,7 +109,7 @@ BlockEpilogue blockEpilogue(resource);
 
 参考[quant_matmul_multistage_workspace](../../../../../../../include/catlass/gemm/kernel/quant_matmul_multistage_workspace.hpp)，在`kernel`代码的`void operator()<AscendC::AIV>`函数中：
 
-```
+```cpp
 EpilogueParams epilogueParams{
     params.ptrScale,            // perChannelScale的GM地址
     layoutScale,                // perChannelScale的layout
@@ -126,7 +126,7 @@ blockEpilogue.UpdateParams(epilogueParams);
 
 参考[basic_matmul](../../../../../../../include/catlass/gemm/kernel/basic_matmul.hpp)，在`kernel`代码的`void operator()<AscendC::AIC>`函数中：
 
-```
+```cpp
 blockEpilogue(
     blockShapeMNK,          // block的shape
     blockCoordMNK,          // block在输出矩阵中的坐标（block粒度）

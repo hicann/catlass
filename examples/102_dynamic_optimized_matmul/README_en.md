@@ -17,13 +17,13 @@ DynamicOptimizedMatmul dynamically determines the tiling parameters based on the
 
 ### 2.2 Template Documents
 
-| Template Name    | Description|
-| ------------ | ---- |
-| [CommonMatmul](./docs/en/CommonMatmul_en.md) | Basic template|
-| SmallMatmul | Doc to be supplemented...|
-| [MultiCoreSplitkMatmul](./docs/en/MultiCoreSplitkMatmul_en.md) | Multi-core Split-K template (applicable to scenarios where matrix C is small)|
-| [StreamkMatmul](./docs/en/StreamkMatmul_en.md) | Multi-core Split-K template with more balanced load         |
-| [SingleCoreSplitkMatmul](./docs/en/SingleCoreSplitkMatmul_en.md) | Single-core Split-K template|
+| Template Name                                                    | Description                                                                   |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| [CommonMatmul](./docs/en/CommonMatmul_en.md)                     | Basic template                                                                |
+| SmallMatmul                                                      | Doc to be supplemented...                                                     |
+| [MultiCoreSplitkMatmul](./docs/en/MultiCoreSplitkMatmul_en.md)   | Multi-core Split-K template (applicable to scenarios where matrix C is small) |
+| [StreamkMatmul](./docs/en/StreamkMatmul_en.md)                   | Multi-core Split-K template with more balanced load                           |
+| [SingleCoreSplitkMatmul](./docs/en/SingleCoreSplitkMatmul_en.md) | Single-core Split-K template                                                  |
 
 ### 2.3 Related Constraints
 

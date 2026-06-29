@@ -75,7 +75,7 @@ bash scripts/build.sh ${id}_${op_name}
 
 ### 3.1 Precision Test
 
-Perform generalization precision testing on at least 200 cases, covering different input shapes and data types. If the test benchmark cannot reuse an existing benchmark from `examples/common/golden`, supplement it with a custom benchmark. **The precision test results must be described in the pull request (PR).  **
+Perform generalization precision testing on at least 200 cases, covering different input shapes and data types. If the test benchmark cannot reuse an existing benchmark from `examples/common/golden`, supplement it with a custom benchmark. **The precision test results must be described in the pull request (PR).**
 
 ### 3.2 Performance Test
 

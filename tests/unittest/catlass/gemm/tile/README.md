@@ -1,12 +1,13 @@
 # Catlass Unittest
 
 `tests/unittest/catlass/gemm/tile` 目录下包含对当前Catlass GEMM类算子Tile组件的全量打桩单元测试，验证范围包括：
+
 1. 组件实例化正确性：模板特化能否被正确选择；
 2. API 调用正确性：调用的`AscendC`基础API名称, 形参数量是否符合预期；
 3. 参数计算正确性：`AscendC`基础API所使用的结构体（如`AscendC::MmadParams`）的各字段值与逻辑推导是否一致；
 4. 分支覆盖：对`include/catlass/gemm/tile`下的全量Tile层组件均有用例覆盖。
 
-## 目录结构 
+## 目录结构
 
 ```plain
 tests/unittest/catlass/gemm/tile
@@ -32,6 +33,7 @@ tests/unittest/catlass/gemm/tile
 本套测试采用**打桩（stub）单元测试**方式，**不依赖真实 NPU 硬件**即可在主机侧（Host）编译运行：将被测组件实际调用的`AscendC`基础API（如 `DataCopy` / `LoadData` / `Fixpipe` / `Mmad` 等）替换为打桩实现，每次调用会被 `AscendCCallLogger` 单例记录下来，测试用例据此断言被测组件调用的逻辑正确性。
 
 整体分为四层，自上而下依次为：
+
 - 测试用例层（`test_tile_*.cpp`，基于已有的Fixture，构造`layout/tensor`、调用被测组件、捕获日志并断言）
 - 打桩层（`tests/unittest/stub/*.h`，拦截并记录 `AscendC`基础API调用
 - 被测源码层（`include/catlass/gemm/tile/` 等）。每个测试单元的典型流程如下图所示：
@@ -59,6 +61,7 @@ tests/unittest/catlass/gemm/tile
 ### 环境要求
 
 以下是UT测试组件的构建要求：
+
 - `gcc` >= 7.5, < 13.0
 - `cmake` >= 3.16
 - `googletest` >= 1.14.0 (可自动拉取)
@@ -66,6 +69,7 @@ tests/unittest/catlass/gemm/tile
 ### 编译与测试
 
 在主目录下执行下述编译：
+
 ```bash
 bash scripts/build.sh --tests catlass_unittest
 
@@ -74,26 +78,29 @@ bash scripts/build.sh --tests catlass_unittest -DENABLE_COVERAGE=ON
 ```
 
 默认在`build/test/unittest/`下生成可执行文件，并以代际编号区分，分别执行如下：
+
 ```bash
 # AtlasA2 代际下Tile组件单元测试
-./build/tests/unittest/catlass_unittest_2201 
+./build/tests/unittest/catlass_unittest_2201
 
 # Ascend950 代际下Tile组件单元测试
 ./build/tests/unittest/catlass_unittest_3510
 ```
 
 执行上述测试动作后可进一步生成覆盖率报告（默认在`build/coverage/`目录下生成），执行：
+
 ```bash
 cd build && make coverage_collect
 ```
 
 上述过程也可以直接运行测试脚本`tests/run_unittest.sh`完成，预期测试例通过且全覆盖。
+
 ```plain
 Overall coverage rate:
   lines......: 100.0% (2516 of 2516 lines)
   functions..: 99.3% (1479 of 1489 functions)
 Reading tracefile /home/pacr_zhb/WKS/catlass_clean/build/coverage/coverage.info
-                                               |Lines      |Functions|Branches  
+                                               |Lines      |Functions|Branches
 Filename                                       |Rate    Num|Rate  Num|Rate   Num
 ================================================================================
 [/xxx/catlass/include/]
@@ -131,8 +138,3 @@ tla/tuple.hpp                                  | 100%    22|98.7% 552|    -    0
                                          Total:| 100%  2516|99.3%  1k|    -    0
 Built target coverage_collect
 ```
-
-
-
-
-

@@ -2,14 +2,14 @@
 
 ## Prototype Design
 
-|Name|Class|Data Type|Dimensions|Format|Description|
-|---|---|---|---|---|---|
-|matA|inTensor|int8|[m, k]|ND|Left matrix|
-|matB|inTensor|int8|[groupCount, n, k]|ND|Right matrix, supports transposition|
-|groupList|inTensor|int|[groupCount]|ND|Group size in the m-axis direction, accumulation list|
-|scale|inTensor|bf16|[groupCount, n]|ND|perChannel quantization scale|
-|perTokenScale|inTensor|bf16|[m]|ND|perToken quantization scale|
-|matD|outTensor|bf16|[m, n]|ND|Output matrix|
+| Name          | Class     | Data Type | Dimensions         | Format | Description                                           |
+| ------------- | --------- | --------- | ------------------ | ------ | ----------------------------------------------------- |
+| matA          | inTensor  | int8      | [m, k]             | ND     | Left matrix                                           |
+| matB          | inTensor  | int8      | [groupCount, n, k] | ND     | Right matrix, supports transposition                  |
+| groupList     | inTensor  | int       | [groupCount]       | ND     | Group size in the m-axis direction, accumulation list |
+| scale         | inTensor  | bf16      | [groupCount, n]    | ND     | perChannel quantization scale                         |
+| perTokenScale | inTensor  | bf16      | [m]                | ND     | perToken quantization scale                           |
+| matD          | outTensor | bf16      | [m, n]             | ND     | Output matrix                                         |
 
 ## Sample Implementation
 
@@ -18,13 +18,13 @@ The CATLASS GMM_sliceM_perToken_Dequant sample operator is implemented based on 
 - **Example assembly**, [grouped_matmul_slice_m_per_token_dequant.cpp](../10_grouped_matmul_slice_m_per_token_dequant/grouped_matmul_slice_m_per_token_dequant.cpp);
 - **Kernel implementation**, [grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp](../../include/catlass/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp);
 - **Block components**, including:
-    - General mmad component [block_mmad_preload_async_with_callback.hpp](../../include/catlass/gemm/block/block_mmad_preload_async_with_callback.hpp);
-    - Customized epilogue component [block_epilogue_per_token_dequant.hpp](../../include/catlass/epilogue/block/block_epilogue_per_token_dequant.hpp);
+  - General mmad component [block_mmad_preload_async_with_callback.hpp](../../include/catlass/gemm/block/block_mmad_preload_async_with_callback.hpp);
+  - Customized epilogue component [block_epilogue_per_token_dequant.hpp](../../include/catlass/epilogue/block/block_epilogue_per_token_dequant.hpp);
 - **Tile components**. In addition to the basic Tile_copy and tile_mmad components, pay attention to the following components:
-    - `BlockMmad`[CopyGmToL1GMMPTD](../../include/catlass/gemm/tile/copy_gm_to_l1.hpp)
-    - [TileRowBroadcastMul](../../include/catlass/epilogue/tile/tile_broadcast_mul.hpp#L32) in epilogue
-    - [TileBroadcastOneBlk](../../include/catlass/epilogue/tile/tile_broadcast_one_blk.hpp#L23) in epilogue
-    - [TileOneBlkColumnBroadcastMul](../../include/catlass/epilogue/tile/tile_broadcast_mul.hpp#L88) in epilogue
+  - `BlockMmad`[CopyGmToL1GMMPTD](../../include/catlass/gemm/tile/copy_gm_to_l1.hpp)
+  - [TileRowBroadcastMul](../../include/catlass/epilogue/tile/tile_broadcast_mul.hpp#L32) in epilogue
+  - [TileBroadcastOneBlk](../../include/catlass/epilogue/tile/tile_broadcast_one_blk.hpp#L23) in epilogue
+  - [TileOneBlkColumnBroadcastMul](../../include/catlass/epilogue/tile/tile_broadcast_mul.hpp#L88) in epilogue
 
 ## Example Assembly
 
@@ -107,28 +107,28 @@ The CATLASS GMM_sliceM_perToken_Dequant sample operator is implemented based on 
 - Obtain the current AIC sequence number (coreIdx) and the total number of AICs (coreNum). [Code](../../include/catlass/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp#L179)
 - Initialize the computation parameters: address offset of matrix A in the GM (gmGroupOffsetA), address offset of matrix B in the GM (gmGroupOffsetB), output data layout in the workspace (layoutC), stage ID and stageUsed corresponding to the WORKSPACE_STAGES operation, and start AIC sequence number of the current group (startCoreIdx). [Code](../../include/catlass/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp#L181)
 - Group loop. [Code](../../include/catlass/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp#L191)
-    - Calculate M of the current group. [Code](../../include/catlass/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp#L192)
-    - Determine whether to enable the L2 cache bypass for matrix A. [Code](../../include/catlass/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp#L204)
-    - Calculate the start index of the current core in the tile of the current group. [Code](../../include/catlass/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp#L209)
-    - Tile loop of the current core in the current group. [Code](../../include/catlass/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp#L211)
-        - Calculate the input parameters required by blockMmad. [Code](../../include/catlass/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp#L213)
-        - Call different blockMmads based on whether the asynchronous solution is used. ([code](../../include/catlass/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp#L232)). In the current example, the asynchronous solution is used. The callback needs to be passed into blockMmad to schedule the invocation.
-        - Update stageId. [Code](../../include/catlass/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp#L252)
-    - Update gmGroupOffsetA, gmGroupOffsetB, and startCoreIdx. [Code](../../include/catlass/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp#L255)
-- The asynchronous solution blockMmad completes the remaining computation.[Code](../../include/catlass/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp#L261) 
+  - Calculate M of the current group. [Code](../../include/catlass/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp#L192)
+  - Determine whether to enable the L2 cache bypass for matrix A. [Code](../../include/catlass/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp#L204)
+  - Calculate the start index of the current core in the tile of the current group. [Code](../../include/catlass/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp#L209)
+  - Tile loop of the current core in the current group. [Code](../../include/catlass/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp#L211)
+    - Calculate the input parameters required by blockMmad. [Code](../../include/catlass/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp#L213)
+    - Call different blockMmads based on whether the asynchronous solution is used. ([code](../../include/catlass/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp#L232)). In the current example, the asynchronous solution is used. The callback needs to be passed into blockMmad to schedule the invocation.
+    - Update stageId. [Code](../../include/catlass/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp#L252)
+  - Update gmGroupOffsetA, gmGroupOffsetB, and startCoreIdx. [Code](../../include/catlass/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp#L255)
+- The asynchronous solution blockMmad completes the remaining computation.[Code](../../include/catlass/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp#L261)
 
 The AIV execution flow is identical to that of the AIC, except that the call to `blockMmad()` is replaced by `blockEpilogue()`, and inter-core synchronization is performed within the kernel code via the callback component.
 
 ### Basic Block Splitting by Core
 
 - Basic blocks are split in each group (with the size of `[currentM, N]`) according to the size of `[L1TileShape::M, L1TileShape::N]`.
-- Cores are assigned continuously across groups to achieve load balancing among different AICs. 
+- Cores are assigned continuously across groups to achieve load balancing among different AICs.
 - Related variables:
-    - `groupIdx`: ID of the current group
-    - `coreLoops`: number of blocks in the current group
-    - `startCoreIdx`: ID of the AIC of the start block (in the current group)
-    - `startLoopIdx`: ID of the start block of the current core (in the current group)
-    - `loopIdx`: ID of the block to be processed by the current core (in the current group)
+  - `groupIdx`: ID of the current group
+  - `coreLoops`: number of blocks in the current group
+  - `startCoreIdx`: ID of the AIC of the start block (in the current group)
+  - `startLoopIdx`: ID of the start block of the current core (in the current group)
+  - `loopIdx`: ID of the block to be processed by the current core (in the current group)
 - Example:
 
 <img src="https://raw.gitcode.com/user-images/assets/7801479/6029234c-39e4-4853-99de-1d4263f4e91f/Block_Partitioning_Scheme.png" width="100%">

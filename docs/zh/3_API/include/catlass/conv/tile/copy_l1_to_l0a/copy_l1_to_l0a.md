@@ -18,17 +18,17 @@ template <class ArchTag, class L1Type, class L0Type = void>
 struct CopyL1ToL0A;
 ```
 
-| 模板参数 | 说明 |
-| :------ | :------ |
-| `ArchTag` | 架构标签 |
-| `L1Type` | `Gemm::GemmType<Element, NC1HWC0>` |
-| `L0Type` | L0A 类型，默认 `void` |
+| 模板参数  | 说明                               |
+| :-------- | :--------------------------------- |
+| `ArchTag` | 架构标签                           |
+| `L1Type`  | `Gemm::GemmType<Element, NC1HWC0>` |
+| `L0Type`  | L0A 类型，默认 `void`              |
 
 ## 偏特化实现
 
-| 偏特化 | L1Type | LayoutSrc→LayoutDst | 说明 |
-| :------ | :------ | :------ | :------ |
-| A2 | `GemmType<Element, NC1HWC0>` | NC1HWC0→zZ | LoadData 3D v2，含 im2col |
+| 偏特化 | L1Type                       | LayoutSrc→LayoutDst | 说明                      |
+| :----- | :--------------------------- | :------------------ | :------------------------ |
+| A2     | `GemmType<Element, NC1HWC0>` | NC1HWC0→zZ          | LoadData 3D v2，含 im2col |
 
 构造函数接收 `Conv2dFilterParams` 参数。
 

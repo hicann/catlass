@@ -1,5 +1,5 @@
 # Block Epilogue Per Token Dequant
->
+
 > [Code location](../../../../../../../include/catlass/epilogue/block/block_epilogue_per_token_dequant.hpp)
 
 ## Description
@@ -46,7 +46,7 @@
 
 ## Dispatch Policy
 
-```
+```cpp
 // For AtlasA2, per token dequant
 template <uint32_t UB_STAGES_>
 struct EpilogueAtlasA2PerTokenDequant {
@@ -61,7 +61,7 @@ struct EpilogueAtlasA2PerTokenDequant {
 
 See [Sample 12_quant_matmul](../../../../../../../examples/12_quant_matmul/quant_matmul.cpp).
 
-```
+```cpp
 constexpr uint32_t ubStages = 2;
 using EpilogueDispatchPolicy = Epilogue::EpilogueAtlasA2PerTokenDequant<ubStages>;
 using ScaleType = Gemm::GemmType<bfloat16_t, layout::VectorLayout>;
@@ -82,7 +82,7 @@ using TileCopy = Epilogue::Tile::TileCopy<ArchTag, CType, ScaleType, PerTokenSca
 using TileScheduler = Epilogue::Tile::EpilogueHorizontalTileSwizzle;
 ```
 
-```
+```cpp
 using BlockEpilogue = Epilogue::Block::BlockEpilogue<
     EpilogueDispatchPolicy,        // Epilogue dispatch policy configuration
     CType,                         // Block tensor type before dequantization
@@ -101,7 +101,7 @@ using BlockEpilogue = Epilogue::Block::BlockEpilogue<
 
 In the `void operator()<AscendC::AIV>` function of the kernel code (see [quant_matmul_multistage_workspace](../../../../../../../include/catlass/gemm/kernel/quant_matmul_multistage_workspace.hpp)):
 
-```
+```cpp
 BlockEpilogue blockEpilogue(resource);
 ```
 
@@ -109,7 +109,7 @@ BlockEpilogue blockEpilogue(resource);
 
 In the `void operator()<AscendC::AIV>` function of the kernel code (see [quant_matmul_multistage_workspace](../../../../../../../include/catlass/gemm/kernel/quant_matmul_multistage_workspace.hpp)):
 
-```
+```cpp
 EpilogueParams epilogueParams{
     params.ptrScale,          // GM address of perChannelScale
     layoutScale,              // Tensor layout of perChannelScale
@@ -126,7 +126,7 @@ blockEpilogue.UpdateParams(epilogueParams);
 
 In the `void operator()<AscendC::AIC>` function of the kernel code (see [basic_matmul](../../../../../../../include/catlass/gemm/kernel/basic_matmul.hpp)):
 
-```
+```cpp
 blockEpilogue(
     blockShapeMNK,          // Shape of the block
     blockCoordMNK,          // Block coordinates in the destination matrix (block granularity)

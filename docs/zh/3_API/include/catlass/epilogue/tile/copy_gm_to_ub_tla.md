@@ -21,10 +21,10 @@ struct CopyGm2UbTla;
 
 ## 偏特化实现
 
-| 架构 | SFINAE 条件 | 搬运方式 |
-| :------ | :------ | :------ |
-| AtlasA2 | `isRowMajor<Src> && isRowMajor<Dst>` | `DataCopyPad` + `DataCopyPadExtParams` |
-| Ascend950 | `isVector<Src> && isVector<Dst>` | `DataCopyPad`，单 block 搬运 |
+| 架构      | SFINAE 条件                          | 搬运方式                               |
+| :-------- | :----------------------------------- | :------------------------------------- |
+| AtlasA2   | `isRowMajor<Src> && isRowMajor<Dst>` | `DataCopyPad` + `DataCopyPadExtParams` |
+| Ascend950 | `isVector<Src> && isVector<Dst>`     | `DataCopyPad`，单 block 搬运           |
 | Ascend950 | `isRowMajor<Src> && isRowMajor<Dst>` | `DataCopyPad` + `DataCopyPadExtParams` |
 
 ## 调用接口
@@ -34,10 +34,10 @@ template <class TensorDst, class TensorSrc>
 void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
 ```
 
-| 参数 | 说明 |
-| :------ | :------ |
+| 参数        | 说明                           |
+| :---------- | :----------------------------- |
 | `dstTensor` | 目的 TLA Tensor（UB, VECCALC） |
-| `srcTensor` | 源 TLA Tensor（GM） |
+| `srcTensor` | 源 TLA Tensor（GM）            |
 
 ## 调用示例
 

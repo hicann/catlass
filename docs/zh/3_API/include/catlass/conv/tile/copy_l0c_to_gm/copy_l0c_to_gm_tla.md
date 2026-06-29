@@ -19,13 +19,13 @@ template <class ArchTag, class TensorSrc, class TensorDst,
 struct CopyL0CToGmTla;
 ```
 
-| 模板参数 | 说明 |
-| :------ | :------ |
-| `ArchTag` | 架构标签 |
-| `TensorSrc` | TLA Tensor 类型（L0C, zN） |
-| `TensorDst` | TLA Tensor 类型（GM, NC1HWC0） |
-| `DEQUANT_GRANULARITY` | 量化模式 |
-| `ReluEnable` | 是否启用 ReLU |
+| 模板参数              | 说明                           |
+| :-------------------- | :----------------------------- |
+| `ArchTag`             | 架构标签                       |
+| `TensorSrc`           | TLA Tensor 类型（L0C, zN）     |
+| `TensorDst`           | TLA Tensor 类型（GM, NC1HWC0） |
+| `DEQUANT_GRANULARITY` | 量化模式                       |
+| `ReluEnable`          | 是否启用 ReLU                  |
 
 ## 调用接口
 

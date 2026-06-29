@@ -22,11 +22,11 @@ template <
 struct TileBroadcastOneBlk;
 ```
 
-| 模板参数 | 说明 |
-| :------ | :------ |
-| `ArchTag_` | 架构标签 |
-| `ComputeType_` | 计算数据类型，通过 `ComputeType_::Element` 获取元素类型 |
-| `COMPUTE_LENGTH_` | 需要广播的元素总数 |
+| 模板参数          | 说明                                                    |
+| :---------------- | :------------------------------------------------------ |
+| `ArchTag_`        | 架构标签                                                |
+| `ComputeType_`    | 计算数据类型，通过 `ComputeType_::Element` 获取元素类型 |
+| `COMPUTE_LENGTH_` | 需要广播的元素总数                                      |
 
 ## 调用接口
 

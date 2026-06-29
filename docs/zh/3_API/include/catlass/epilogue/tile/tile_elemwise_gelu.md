@@ -24,11 +24,11 @@ template <
 struct TileElemWiseGelu;
 ```
 
-| 模板参数 | 说明 |
-| :------ | :------ |
-| `ArchTag_` | 架构标签 |
-| `ComputeType_` | 计算数据类型，通过 `ComputeType_::Element` 获取元素类型 |
-| `COMPUTE_LENGTH_` | 计算长度 |
+| 模板参数          | 说明                                                    |
+| :---------------- | :------------------------------------------------------ |
+| `ArchTag_`        | 架构标签                                                |
+| `ComputeType_`    | 计算数据类型，通过 `ComputeType_::Element` 获取元素类型 |
+| `COMPUTE_LENGTH_` | 计算长度                                                |
 
 ## 调用接口
 
@@ -39,10 +39,10 @@ void operator()(
 )
 ```
 
-| 参数 | 说明 |
-| :------ | :------ |
+| 参数       | 说明                                        |
+| :--------- | :------------------------------------------ |
 | `dstLocal` | 目标 UB Tensor（被覆盖），存放 GELU(x) 结果 |
-| `srcLocal` | 源 UB Tensor，输入值 x |
+| `srcLocal` | 源 UB Tensor，输入值 x                      |
 
 ## 调用示例
 

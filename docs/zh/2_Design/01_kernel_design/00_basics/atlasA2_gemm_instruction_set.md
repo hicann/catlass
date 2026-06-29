@@ -16,9 +16,9 @@
 
 4. FractalSize：小分形所包含的元素个数，为16\*(32/sizeof(T))，当输入数据类型分别为int8/f16/f32时，该变量取值为512/256/128
 
-5. DataCopy系列接口使用方式：相关接口[详见](https://www.hiascend.com/document/detail/zh/canncommercial/850/API/ascendcopapi/atlasascendc\_api\_07\_00127.html)
+5. DataCopy系列接口使用方式：相关接口[详见](https://www.hiascend.com/document/detail/zh/canncommercial/850/API/ascendcopapi/atlasascendc_api_07_00127.html)
 
-6. LoadData系列接口使用方式：相关接口[详见](https://www.hiascend.com/document/detail/zh/canncommercial/850/API/ascendcopapi/atlasascendc\_api\_07\_00169.html)
+6. LoadData系列接口使用方式：相关接口[详见](https://www.hiascend.com/document/detail/zh/canncommercial/850/API/ascendcopapi/atlasascendc_api_07_00169.html)
 
 7. 具体使用情况如下(这里转置指的是L1-小分形到L0-小分形的变化)：
 
@@ -30,17 +30,16 @@
 
    L1到L0的LoadData系列指令的使用情况总结如下
 
-   | 输入矩阵(GM)      | fp16     | int8                  | fp32         |
+   | 输入矩阵(GM)  | fp16     | int8                  | fp32         |
    | ------------- | -------- | --------------------- | ------------ |
    | A-RowMajor    | LoadData | LoadData              | LoadData     |
    | A-ColumnMajor | LoadData | LoadDataWithTranspose | LoadData3Dv2 |
    | B-RowMajor    | LoadData | LoadDataWithTranspose | LoadData3Dv2 |
    | B-ColumnMajor | LoadData | LoadData              | LoadData     |
 
-
 #### A-RowMajor-Half
 
-![图1](<https://raw.gitcode.com/user-images/assets/9091846/0c69a5ae-56c1-4662-b99d-fa7f4d44afe3/AscendC-basic-knowledge-image.png>)
+![图1](https://raw.gitcode.com/user-images/assets/9091846/0c69a5ae-56c1-4662-b99d-fa7f4d44afe3/AscendC-basic-knowledge-image.png)
 
 1. GM->L1
 
@@ -51,7 +50,7 @@ nd2nzA1Params.ndNum = 1;
 nd2nzA1Params.nValue = m;   //40
 nd2nzA1Params.dValue = k;   //56
 nd2nzA1Params.srcNdMatrixStride = 0;
-nd2nzA1Params.srcDValue = k; 
+nd2nzA1Params.srcDValue = k;
 
 // 以下这个参数取A矩阵在L1上，高度方向的对齐后的长度
 // 由于A不转置，因此对于三种数据类型该参数均相同
@@ -61,7 +60,7 @@ nd2nzA1Params.dstNzNStride = 1;
 nd2nzA1Params.dstNzMatrixStride = 0;
 ```
 
-* L1->L0
+- L1->L0
 
 由于A-Rowmajor的情况下，小分形也是RowMajor的，所以使用LoadData接口
 
@@ -97,7 +96,7 @@ __aicore__ inline void SplitA()
 
 #### A-ColumnMajor-Half
 
-![图2：A矩阵ColumnMajor，half数据类型下，GM-->L1-->L0A的数据排布示意图](<https://raw.gitcode.com/user-images/assets/9091846/83119a38-4518-42b6-b29e-497641cc6c87/AscendC-basic-knowledge-image-1.png>)
+![图2：A矩阵ColumnMajor，half数据类型下，GM-->L1-->L0A的数据排布示意图](https://raw.gitcode.com/user-images/assets/9091846/83119a38-4518-42b6-b29e-497641cc6c87/AscendC-basic-knowledge-image-1.png)
 
 1. GM->L1
 
@@ -116,7 +115,7 @@ if constexpr (AscendC::IsSameType<T, half>::value && AscendC::IsSameType<U, floa
 }
 ```
 
-* L1->L0A
+- L1->L0A
 
 当A矩阵排布为ColumnMajor时，小分型在L1上为n，在L0A上为z。针对这种情况，使用LoadData指令完成数据搬运，并且设置ifTranspose=True
 
@@ -139,13 +138,13 @@ for (int i = 0; i < CeilDivision(m, fractalShape[1]); ++i) {
 
 #### A-ColumnMajor-Int8
 
-![图3：A矩阵ColumnMajor，int8数据类型下，GM-->L1-->L0A数据排布示意图](<https://raw.gitcode.com/user-images/assets/9091846/311fc412-cbf4-40e9-a636-4f13ec1d272e/AscendC-basic-knowledge-image-2.png>)
+![图3：A矩阵ColumnMajor，int8数据类型下，GM-->L1-->L0A数据排布示意图](https://raw.gitcode.com/user-images/assets/9091846/311fc412-cbf4-40e9-a636-4f13ec1d272e/AscendC-basic-knowledge-image-2.png)
 
 1. GM->L1
 
 配置Nd2NzParams结构体成员时需要注意，源操作数的shape为(K, M)，dstNzC0Stride的单位为32B，该参数取值为L1上zN矩阵的对齐后的行数
 
-* L1->L0A
+- L1->L0A
 
 矩阵在GM、L1、L0A上的数据排布分别是RowMajor，nZ和zZ，从nZ到zZ的小分形是转置的，所以需要调用LoadDataWithTranspose接口。如图3所示，以M轴方向作为外轴进行for循环，以K轴方向作为内轴来配置loadDataParams.repeatTimes。需要注意的是，由于转置时连续两个分形合并成一个方阵，因此loadDataParams.repeatTimes=CeilDivision(k, fractalShape\[0] \* fractalNum)。另外，如图2所示，L0A中转置前处于同一个方阵中的两个分形在L1的物理排布上是连续的，转置后前一个分形结束的地址与后一个分形其实地址的间隔为CeilDivision(k, fractalShape\[1]) - 1，单位是512B(16\*32)
 
@@ -170,7 +169,7 @@ for (int i = 0; i < CeilDivision(m, fractalShape[1]); ++i) {
 
 #### A-ColumnMajor-Fp32
 
-![图4：L1上排布的A矩阵，无法调用LoadDataWithTranspose指令示意图](<https://raw.gitcode.com/user-images/assets/9091846/27c54a9f-f0ea-49bf-92cb-ae68dfe74d44/AscendC-basic-knowledge-image-3.png>)
+![图4：L1上排布的A矩阵，无法调用LoadDataWithTranspose指令示意图](https://raw.gitcode.com/user-images/assets/9091846/27c54a9f-f0ea-49bf-92cb-ae68dfe74d44/AscendC-basic-knowledge-image-3.png)
 
 在L1上的数据不能直接调用LoadDataWithTranspose指令进行转置，因为在K轴方向两个连续的分型不能合并为一个16\*16的方阵
 
@@ -195,7 +194,7 @@ nd2nzA1Params.dstNzNStride = 1;
 nd2nzA1Params.dstNzMatrixStride = 0;
 ```
 
-* L1->L0
+- L1->L0
 
 因为无法合并为方阵进行搬运，需要调用LoadData3DV2接口，在写入L0A之前会先分别将A矩阵高度和宽度轴向16, 8对齐，接着该指令会将A矩阵的大小分型都进行转置，最终以zZ排布写入到L0A
 
@@ -233,7 +232,7 @@ loadDataParams.enTranspose = true;
 
 #### B-RowMajor-Half
 
-![图5: B矩阵不转置，half数据类型下，GM-->L1-->L0B的数据搬运示意图](<https://raw.gitcode.com/user-images/assets/9091846/227a5505-1fcd-49fa-afd6-601d8543b281/AscendC-basic-knowledge-image-4.png>)
+![图5: B矩阵不转置，half数据类型下，GM-->L1-->L0B的数据搬运示意图](https://raw.gitcode.com/user-images/assets/9091846/227a5505-1fcd-49fa-afd6-601d8543b281/AscendC-basic-knowledge-image-4.png)
 
 1. GM->L1
 
@@ -249,12 +248,12 @@ nd2nzB1Params.srcDValue = n;
 // 由于A转置，因此三种数据类型下，该参数的配置不相同
      if constexpr (AscendC::IsSameType<T, half>::value && AscendC::IsSameType<U, float>::value) {
     nd2nzB1Params.dstNzC0Stride = CeilAlign(k, fractalShape[0]);
-} 
+}
 nd2nzB1Params.dstNzNStride = 1;
 nd2nzB1Params.dstNzMatrixStride = 0;
 ```
 
-* L1->L0
+- L1->L0
 
 L1上分形到L0上分形发生转置，且为fp16数据类型方阵，使用LoadData指令进行数据搬运
 
@@ -276,7 +275,7 @@ for (int i = 0; i < CeilDivision(k, fractalShape[0] * fractalNum); ++i) {
 
 #### B-RowMajor-Int
 
-![图6: B矩阵RowMajor, int8数据类型下, GM-->L1-->L0B的数据排布示意图](<https://raw.gitcode.com/user-images/assets/9091846/7d56129c-58ee-4a8b-bc9c-1a0c9fe67e1f/AscendC-basic-knowledge-image-5.png>)
+![图6: B矩阵RowMajor, int8数据类型下, GM-->L1-->L0B的数据排布示意图](https://raw.gitcode.com/user-images/assets/9091846/7d56129c-58ee-4a8b-bc9c-1a0c9fe67e1f/AscendC-basic-knowledge-image-5.png)
 
 1. GM->L1
 
@@ -292,12 +291,12 @@ nd2nzB1Params.srcDValue = n;
 // 由于A转置，因此三种数据类型下，该参数的配置不相同
 if constexpr (AscendC::IsSameType<T, int8_t>::value && AscendC::IsSameType<U, int32_t>::value) {
     nd2nzB1Params.dstNzC0Stride = CeilAlign(k, fractalShape[0] * fractalNum);
-} 
+}
 nd2nzB1Params.dstNzNStride = 1;
 nd2nzB1Params.dstNzMatrixStride = 0;
 ```
 
-* L1->L0
+- L1->L0
 
 由于L1上分形到L0B上的分形发生了转置，且是非FP16方阵场景，调用LoadDataWithTranspose接口
 
@@ -342,7 +341,7 @@ nd2nzB1Params.dstNzNStride = 1;
 nd2nzB1Params.dstNzMatrixStride = 0;
 ```
 
-* L1->L0
+- L1->L0
 
 fp32数据类型的搬运需要针对Load3Dv2指令的接口进行相应配置
 
@@ -368,7 +367,7 @@ loadDataParams.fMatrixCtrl = false;
 
 #### B-ColumnMajor-Half
 
-![图7: B矩阵转置，half数据类型下，GM-->L1-->L0B数据排布示意图](<https://raw.gitcode.com/user-images/assets/9091846/47b2e408-f9c9-4668-9496-65287a9a3d22/AscendC-basic-knowledge-image-6.png>)
+![图7: B矩阵转置，half数据类型下，GM-->L1-->L0B数据排布示意图](https://raw.gitcode.com/user-images/assets/9091846/47b2e408-f9c9-4668-9496-65287a9a3d22/AscendC-basic-knowledge-image-6.png)
 
 1. GM->L1
 
@@ -388,7 +387,7 @@ nd2nzB1Params.dstNzNStride = 1;
 nd2nzB1Params.dstNzMatrixStride = 0;
 ```
 
-* L1->L0
+- L1->L0
 
 在B矩阵ColumnMajor输入的情况下，L1上nZ表示，L0上nZ表示，可直接调用Load2D进行数据搬运
 
@@ -462,14 +461,13 @@ fixpipeParams.dstNdStride = 0;
 
 如图8右图所示，如果设置mmadParams.n=CeilAlign(n, FractalShape\[0]\*FractalNum)=96, 此时会读入所有分形。虽然矩阵计算结果中包含了无效数据，但是在Fixpipe指令搬出数据时通过设置fixpipePrams.nSize可以保证无效数据参与计算的结果不会被搬出。
 
-![图8: B矩阵RowMajor，int8数据类型下, N轴实际对齐要求](<https://raw.gitcode.com/user-images/assets/9091846/70f3155f-4db7-4c4c-a6a4-95a42c1aa6c1/AscendC-basic-knowledge-image-7.png>)
+![图8: B矩阵RowMajor，int8数据类型下, N轴实际对齐要求](https://raw.gitcode.com/user-images/assets/9091846/70f3155f-4db7-4c4c-a6a4-95a42c1aa6c1/AscendC-basic-knowledge-image-7.png)
 
 与上述场景类似，当输入数据类型为float且A矩阵为ColumnMajor时，K轴实际对齐要求与MMad指令默认的对齐要求也不一致，但是此种场景下的解决方案与上述场景有所不同，需要单独引入mmadParams.kDirectionAlign参数来解决
 
 根据矩阵乘法的计算公式可知，K轴作为A/B矩阵的公共维度，此时如果像上述场景那样设置mmadParams.k=CeilAlign(k, fractalSh2ape\[1]\*fractalNum)会导致C矩阵中每个元素的数值都收到多读入的无效数据的影响，并且也不同通过设置fixpipeParams的参数在搬出阶段舍弃无效数据
 
 如图9所示，mmadParams.kDirectionAlign仅在输入数据类型为float时生效。当A矩阵是ColumnMajor时，kDirectionAlign设置为true，此时L0A上A矩阵在K方向16对齐，矩阵计算单元从L0A读取数据会跳过填充的无效数据，其余场景下该参数取默认值为false，此时L0A上A矩阵在K方向按8对齐
-
 
 也就是说，针对L0A矩阵为float的读入时，默认K方向按8元素对齐。但如果是A矩阵转置且为FP32的时候，L1上为nZ的8\*16排布，因为要合并成16\*16的搬运，所以在K方向就是16对齐。
 
@@ -479,7 +477,7 @@ fixpipeParams.dstNdStride = 0;
 
 所以设置kDirectionAlign=ture的目的，就是把L0A上对齐到16并且在计算时候skip不该算的那部分
 
-![图9: A矩阵转置，float数据类型下，K轴实际对齐情况](<https://raw.gitcode.com/user-images/assets/9091846/717fe7f3-2267-4603-8e45-a894ad6f5569/AscendC-basic-knowledge-image-8.png>)
+![图9: A矩阵转置，float数据类型下，K轴实际对齐情况](https://raw.gitcode.com/user-images/assets/9091846/717fe7f3-2267-4603-8e45-a894ad6f5569/AscendC-basic-knowledge-image-8.png)
 
 ```c++
 AscendC::MmadParams mmadParams;
@@ -512,24 +510,25 @@ if constexpr (AscendC::IsSameType<T, float>::value && AscendC::IsSameType<U, flo
 
 AIC/AIV内并行的指令流水一共有8条
 
-| 流水类型       | 含义                                            |
-| ---------- | --------------------------------------------- |
-| PIPE\_S    | 标量流水线，使用Tensor GetValue函数时为此流水                |
-| PIPE\_V    | Vector流水线                                     |
-| PIPE\_M    | Cube流水线                                       |
-| PIPE\_MTE1 | L1 buffer出发的流水线，包括L1->L0A, L1->L0B, L1->BT    |
-| PIPE\_MTE2 | GM出发的流水线，包括GM->L1, GM->L0A, GM->L0B, GM->UB   |
-| PIPE\_MTE3 | UB/L1回到GM的流水线，包括UB->GM，L1->GM                 |
+| 流水类型   | 含义                                                     |
+| ---------- | -------------------------------------------------------- |
+| PIPE\_S    | 标量流水线，使用Tensor GetValue函数时为此流水            |
+| PIPE\_V    | Vector流水线                                             |
+| PIPE\_M    | Cube流水线                                               |
+| PIPE\_MTE1 | L1 buffer出发的流水线，包括L1->L0A, L1->L0B, L1->BT      |
+| PIPE\_MTE2 | GM出发的流水线，包括GM->L1, GM->L0A, GM->L0B, GM->UB     |
+| PIPE\_MTE3 | UB/L1回到GM的流水线，包括UB->GM，L1->GM                  |
 | PIPE\_FIX  | Fixpipe相关的流水线，包括L0C->GM，L0C->L1，L1->FP buffer |
-| PIPE\_ALL  | 所有流水                                          |
+| PIPE\_ALL  | 所有流水                                                 |
 
-![](<https://raw.gitcode.com/user-images/assets/9091846/718dc2fa-e681-453f-9b6f-0a6da9313fd6/AscendC-basic-knowledge-image-9.png>)
+![](https://raw.gitcode.com/user-images/assets/9091846/718dc2fa-e681-453f-9b6f-0a6da9313fd6/AscendC-basic-knowledge-image-9.png)
 
 ### 核间同步
 
 核间同步机制仅适用于AIC/AIV Mix算子，不适用于纯AIC算子或纯AIV算子。（AIC指Cube；AIV指Vector）。
 
 核间同步常用指令集有：
+
 - [SyncAll](https://www.hiascend.com/document/detail/zh/canncommercial/900/API/ascendcopapi/atlasascendc_api_07_0204.html)
 - [CrossCoreSetFlag](https://www.hiascend.com/document/detail/zh/canncommercial/900/API/ascendcopapi/atlasascendc_api_07_0273.html)配套[CrossCoreWaitFlag](https://www.hiascend.com/document/detail/zh/canncommercial/900/API/ascendcopapi/atlasascendc_api_07_0274.html)
 
@@ -539,4 +538,4 @@ AIC/AIV内并行的指令流水一共有8条
 - `模式1`：AI Core内部，AIV核之间的同步控制。如果两个AIV核都运行了CrossCoreSetFlag，CrossCoreWaitFlag后续的指令才会执行。
 - `模式2`：AI Core内部，AIC与AIV之间的同步控制。在AIC核执行CrossCoreSetFlag之后， 两个AIV上CrossCoreWaitFlag后续的指令才会继续执行；两个AIV都执行CrossCoreSetFlag后，AIC上CrossCoreWaitFlag后续的指令才能执行。
 
-![](<https://www.hiascend.com/doc_center/source/zh/canncommercial/900/API/ascendcopapi/figure/zh-cn_image_0000002562462709.png>)
+![](https://www.hiascend.com/doc_center/source/zh/canncommercial/900/API/ascendcopapi/figure/zh-cn_image_0000002562462709.png)

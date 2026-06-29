@@ -9,6 +9,7 @@
 - 默认布局为 A `RowMajor`、B `ColumnMajor`、C `RowMajor`，与 `gen_data.py` 在 `trans_a=0, trans_b=1` 时生成的数据一致。
 
 ## 代码组织
+
 ```
 ├── 59_ascend950_a8w4_mx_matmul
 │   ├── CMakeLists.txt     # CMake编译文件
@@ -16,9 +17,12 @@
 │   ├── gen_data.py
 │   └── a8w4_mx_matmul.cpp # 主文件
 ```
+
 ## 使用示例
+
 - 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)，本用例为 Ascend950（3510）算子，编译时需加 `-DCATLASS_ARCH=3510`。
 - 执行算子
+
 ```
 # 编译指定用例
 bash scripts/build.sh 59_ascend950_a8w4_mx_matmul -DCATLASS_ARCH=3510
@@ -32,12 +36,15 @@ python3 examples/59_ascend950_a8w4_mx_matmul/gen_data.py 128 128 128 0 1
 # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID
 # Device ID可选，默认为0
 ```
+
 执行结果如下，说明精度比对成功。
+
 ```
 Compare success.
 ```
 
 ## 使用说明
+
 1、 `gen_data.py`的输入支持trans_a和trans_b，但59_ascend950_a8w4_mx_matmul可执行文件不支持，仅仅是trans_a为0及trans_b为1的example示例。
 
 若要对应转置情况请修改example示例中的layout，因为layout隐式表征转置状态，即layout::RowMajor表示不转置，layout::ColumnMajor表示转置。
@@ -45,7 +52,7 @@ Compare success.
 其对应关系如下表：
 
 | trans_a | trans_b | LayoutA             | LayoutB             |
-|---------|---------|---------------------|---------------------|
+| ------- | ------- | ------------------- | ------------------- |
 | 0       | 0       | layout::RowMajor    | layout::RowMajor    |
 | 0       | 1       | layout::RowMajor    | layout::ColumnMajor |
 | 1       | 0       | layout::ColumnMajor | layout::RowMajor    |

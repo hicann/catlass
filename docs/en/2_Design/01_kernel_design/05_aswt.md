@@ -24,15 +24,15 @@ In this case, the ASWT policy tiles the basic blocks, which are then assigned to
 
 The following table compares the performance of basic_matmul using ASWT with that using [Swizzle](./02_swizzle.md) when the same tileShape and data type are used.
 
-|[M, N, K]|basic_matmul_swizzle|basic_matmul_aswt|Acceleration Ratio|
-|---------|--------------|-------------------|-------|
-|[1024, 1024, 1024]| 14.95 µs| 15.08 µs| 0.99 |
-|[2048, 2048, 256]| 11.95 µs| 12.09 µs| 0.99 |
-|[2208, 2048, 512]| 22.07 µs| 18.65 µs| 1.18 |  
-|[2208, 2048, 1024]| 38.15 µs| 30.51 µs| 1.25 |
-|[1024, 2368, 512]| 16.02 µs| 12.00 µs| 1.34 |
-|[1024, 2368, 1024]| 26.18 µs| 19.82 µs| 1.32 |
-|[1024, 2368, 2048]| 45.88 µs| 34.25 µs| 1.34 |
+| [M, N, K]          | basic_matmul_swizzle | basic_matmul_aswt | Acceleration Ratio |
+| ------------------ | -------------------- | ----------------- | ------------------ |
+| [1024, 1024, 1024] | 14.95 µs             | 15.08 µs          | 0.99               |
+| [2048, 2048, 256]  | 11.95 µs             | 12.09 µs          | 0.99               |
+| [2208, 2048, 512]  | 22.07 µs             | 18.65 µs          | 1.18               |
+| [2208, 2048, 1024] | 38.15 µs             | 30.51 µs          | 1.25               |
+| [1024, 2368, 512]  | 16.02 µs             | 12.00 µs          | 1.34               |
+| [1024, 2368, 1024] | 26.18 µs             | 19.82 µs          | 1.32               |
+| [1024, 2368, 2048] | 45.88 µs             | 34.25 µs          | 1.34               |
 
 ### Remarks
 

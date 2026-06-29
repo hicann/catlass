@@ -12,9 +12,9 @@
 
 ## Example
 
-- After obtaining the code, compile the operator executable file. For details, see [Template Library Quick Start](../../docs/en/1_Practice/01_quick_start.md#build-and-execution).  
+- After obtaining the code, compile the operator executable file. For details, see [Template Library Quick Start](../../docs/en/1_Practice/01_quick_start.md#build-and-execution).
 
-- Run `sparse_gen_data.py` to generate a test sample. The test sample needs to be input from the command line. After the command is executed, the `input` and `output` directories are generated in the specified path, including the input data of the operator and the golden data used for precision verification.  
+- Run `sparse_gen_data.py` to generate a test sample. The test sample needs to be input from the command line. After the command is executed, the `input` and `output` directories are generated in the specified path, including the input data of the operator and the golden data used for precision verification.
 - Then, execute the operator. Note that the input shape of the operator must match the shape of the data generated in the first step. In addition, this sample supports only the `int8_t` data type for the input of matrix A or B.
 
 The following is a complete shell script example (run in the project directory):

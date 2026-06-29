@@ -3,6 +3,7 @@
 ## 写在前面
 
 该文档主要说明，如何从算子结构和源码实现出发，对`examples/49_ascend950_flash_attention_infer`中的FlashAttention Infer(FAI)样例进行性能分析和调优。本文主要从以下几个角度进行FAI样例调优方案分析：
+
 - FAI样例的主要性能瓶颈可能来自哪里。
 - 哪些参数是编译期模板参数，哪些参数来自tiling或runtime输入。
 - 调整TileShape、CV流水、分核策略、输入布局或Paged Attention参数时，会影响哪些片上资源和执行路径。
@@ -19,12 +20,12 @@ O = P * V
 
 在源码实现中，该计算被拆成四个主要阶段：
 
-| 阶段 | 执行单元 | 主要工作 | 数据流 |
-| --- | --- | --- | --- |
-| QK | AIC | 计算`Q * K^T` | Q/K -> S |
-| Online Softmax | AIV | 处理mask、max、sum、exp并生成P | S -> P |
-| PV | AIC | 计算`P * V` | P/V -> Otmp |
-| RescaleO | AIV | 按online softmax状态归一化更新O | Otmp -> O |
+| 阶段           | 执行单元 | 主要工作                        | 数据流      |
+| -------------- | -------- | ------------------------------- | ----------- |
+| QK             | AIC      | 计算`Q * K^T`                   | Q/K -> S    |
+| Online Softmax | AIV      | 处理mask、max、sum、exp并生成P  | S -> P      |
+| PV             | AIC      | 计算`P * V`                     | P/V -> Otmp |
+| RescaleO       | AIV      | 按online softmax状态归一化更新O | Otmp -> O   |
 
 FAI计算涉及多个CV操作，优化FAI算子的目标集中于让`QK -> Online Softmax -> PV -> RescaleO`这条链路在AIC/AIV之间尽量形成稳定流水，并在多核之间尽量避免长尾。
 
@@ -63,22 +64,22 @@ MM2_LEFT_SIZE = qSeqBase * kvSeqBase * sizeof(ElementP);
 
 这些资源项主要影响：
 
-| 资源 | 主要占用 |
-| --- | --- |
-| UB | `bmm1TensorList[2]`、`bmm2TensorList[2]`、`sumUb`、`expUb`、`maxUb` |
-| L1 | `mm2AL1TensorList[KERNEL_TASK_NUM]` |
-| L0A/L0B/L0C | QK/PV的BlockMmad tile |
-| 同步事件 | C1/V1、V1/C2、C2/V2之间的流水同步 |
+| 资源        | 主要占用                                                            |
+| ----------- | ------------------------------------------------------------------- |
+| UB          | `bmm1TensorList[2]`、`bmm2TensorList[2]`、`sumUb`、`expUb`、`maxUb` |
+| L1          | `mm2AL1TensorList[KERNEL_TASK_NUM]`                                 |
+| L0A/L0B/L0C | QK/PV的BlockMmad tile                                               |
+| 同步事件    | C1/V1、V1/C2、C2/V2之间的流水同步                                   |
 
 常见调整方向如下：
 
-| 现象 | 调整方向 | 风险 |
-| --- | --- | --- |
-| q/kv外层循环次数多，同步频繁 | 增大`qSeqBase`或`kvSeqBase` | UB/L1/L0占用上升 |
-| AIV Softmax或RescaleO频繁启动 | 优先增大`qSeqBase` | q尾块浪费可能增加 |
-| QK/PV小块matmul过多 | 优先增大`kvSeqBase` | causal或稀疏mask下无效kv块可能增加 |
-| causal mask尾块浪费明显 | 谨慎增大`kvSeqBase`，必要时减小kv tile | 循环和同步次数会上升 |
-| `headDim != 128` | 同步修改`L1TileShape::K`并检查静态buffer | BlockMmad和中间buffer约束可能不满足 |
+| 现象                          | 调整方向                                 | 风险                                |
+| ----------------------------- | ---------------------------------------- | ----------------------------------- |
+| q/kv外层循环次数多，同步频繁  | 增大`qSeqBase`或`kvSeqBase`              | UB/L1/L0占用上升                    |
+| AIV Softmax或RescaleO频繁启动 | 优先增大`qSeqBase`                       | q尾块浪费可能增加                   |
+| QK/PV小块matmul过多           | 优先增大`kvSeqBase`                      | causal或稀疏mask下无效kv块可能增加  |
+| causal mask尾块浪费明显       | 谨慎增大`kvSeqBase`，必要时减小kv tile   | 循环和同步次数会上升                |
+| `headDim != 128`              | 同步修改`L1TileShape::K`并检查静态buffer | BlockMmad和中间buffer约束可能不满足 |
 
 如果只是把TileShape调大而不计算资源预算，优化很容易变成随机试错。更合理的做法是先根据目标shape列出候选`qSeqBase/kvSeqBase/embedBase`，确认UB/L1/L0资源可容纳，再做性能验证。
 
@@ -95,22 +96,22 @@ task t+3:   AIV RescaleO
 
 源码中与流水相关的关键对象包括：
 
-| 对象 | 作用 |
-| --- | --- |
-| `taskId` | 流水任务编号 |
-| `runInfo[4]` | 保存不同流水阶段的执行状态 |
-| `bmm1TensorList[2]` | QK输出UB双缓冲 |
-| `bmm2TensorList[2]` | PV输出UB双缓冲 |
-| `mm2AL1TensorList[KERNEL_TASK_NUM]` | Softmax结果P的L1缓存 |
-| `sumUb/maxUb/expUb[KERNEL_TASK_NUM]` | Online Softmax状态缓存 |
+| 对象                                 | 作用                       |
+| ------------------------------------ | -------------------------- |
+| `taskId`                             | 流水任务编号               |
+| `runInfo[4]`                         | 保存不同流水阶段的执行状态 |
+| `bmm1TensorList[2]`                  | QK输出UB双缓冲             |
+| `bmm2TensorList[2]`                  | PV输出UB双缓冲             |
+| `mm2AL1TensorList[KERNEL_TASK_NUM]`  | Softmax结果P的L1缓存       |
+| `sumUb/maxUb/expUb[KERNEL_TASK_NUM]` | Online Softmax状态缓存     |
 
 同步路径如下：
 
-| 同步flag | 方向 | 含义 |
-| --- | --- | --- |
+| 同步flag          | 方向       | 含义                         |
+| ----------------- | ---------- | ---------------------------- |
 | `SYNC_C1_V1_FLAG` | AIC -> AIV | QK结果就绪，AIV可执行Softmax |
-| `SYNC_V1_C2_FLAG` | AIV -> AIC | P已搬到L1，AIC可执行PV |
-| `SYNC_C2_V2_FLAG` | AIC -> AIV | PV结果就绪，AIV可更新O |
+| `SYNC_V1_C2_FLAG` | AIV -> AIC | P已搬到L1，AIC可执行PV       |
+| `SYNC_C2_V2_FLAG` | AIC -> AIV | PV结果就绪，AIV可更新O       |
 
 样例中的关键数据通路是AIV将Softmax结果P从UB直接搬到AIC侧L1：
 
@@ -131,12 +132,12 @@ Causal或稀疏mask场景下，不同`qSeq`块可见的`kvSeq`块数量不同。
 
 FAI在tiling阶段按有效block数做贪心切分，核心逻辑位于`examples/49_ascend950_flash_attention_infer/fai_tiling.h`：
 
-| 函数或字段 | 作用 |
-| --- | --- |
+| 函数或字段                | 作用                                         |
+| ------------------------- | -------------------------------------------- |
 | `GetCalcBlockNumsOneHead` | 统计单head下mask后的有效`qSeq x kvSeq`块数量 |
-| `ComputeSplitNBSeq` | 沿Batch/Head/qSeq三轴做贪心切分 |
-| `bnAxisStartIdx` | 记录每个AI Core的起始batch/head |
-| `sparseStartIdx` | 记录每个AI Core的起始qSeq block |
+| `ComputeSplitNBSeq`       | 沿Batch/Head/qSeq三轴做贪心切分              |
+| `bnAxisStartIdx`          | 记录每个AI Core的起始batch/head              |
+| `sparseStartIdx`          | 记录每个AI Core的起始qSeq block              |
 
 可以用以下抽象权重理解分核策略：
 
@@ -179,4 +180,5 @@ kvSeqlen = RoundUp(kvSeqlen, blockSize);
 如果只有Paged Attention场景出现MTE2偏高或核间耗时差异，优先检查block table和KV cache物理布局，而不是直接缩小TileShape。TileShape只能改变单次计算粒度，不能消除由page组织方式造成的随机跳读。
 
 ## 3. 总结
+
 融合算子场景可以参考此案例优化

@@ -12,13 +12,13 @@
 
 ## 引用的 Tile 组件
 
-| 成员别名 | 引用的底层模板 | 说明 |
-| :------ | :------ | :------ |
-| `CopyGmToL1A` | `CopyGmToL1<ArchTag, AType, L1AType>` | A 矩阵 GM→L1（显式 L1 布局） |
-| `CopyGmToL1B` | `CopyGmToL1<ArchTag, BType, L1BType>` | B 矩阵 GM→L1（显式 L1 布局） |
-| `CopyL1ToL0A` | `CopyL1ToL0A<ArchTag, L1AType, L0AType>` | A 矩阵 L1→L0A |
-| `CopyL1ToL0B` | `CopyL1ToL0B<ArchTag, L1BType, L0BType>` | B 矩阵 L1→L0B |
-| `CopyL0CToGm` | `CopyL0CToGm<ArchTag, ElementAccumulator, CType>` | L0C→GM |
+| 成员别名      | 引用的底层模板                                    | 说明                         |
+| :------------ | :------------------------------------------------ | :--------------------------- |
+| `CopyGmToL1A` | `CopyGmToL1<ArchTag, AType, L1AType>`             | A 矩阵 GM→L1（显式 L1 布局） |
+| `CopyGmToL1B` | `CopyGmToL1<ArchTag, BType, L1BType>`             | B 矩阵 GM→L1（显式 L1 布局） |
+| `CopyL1ToL0A` | `CopyL1ToL0A<ArchTag, L1AType, L0AType>`          | A 矩阵 L1→L0A                |
+| `CopyL1ToL0B` | `CopyL1ToL0B<ArchTag, L1BType, L0BType>`          | B 矩阵 L1→L0B                |
+| `CopyL0CToGm` | `CopyL0CToGm<ArchTag, ElementAccumulator, CType>` | L0C→GM                       |
 
 ## 模板原型
 
@@ -55,10 +55,10 @@ using CopyL0CToGm = CopyL0CToGm<ArchTag, ElementAccumulator, CType>;
 
 ## 与 TileCopy 的区别
 
-| 模板 | GM→L1 选择器 | L1→L0 选择器 | 用途 |
-| :------ | :------ | :------ | :------ |
-| `TileCopy` | `L1ATypeSelector` / `L1BTypeSelector` | 同 L1 | 通用场景 |
-| `TileCopyGemm` | `L1AndL0TypeSelectorGemm` | `L1AndL0TypeSelectorGemm` | GEMM 专用，显式 L0 推导 |
+| 模板           | GM→L1 选择器                          | L1→L0 选择器              | 用途                    |
+| :------------- | :------------------------------------ | :------------------------ | :---------------------- |
+| `TileCopy`     | `L1ATypeSelector` / `L1BTypeSelector` | 同 L1                     | 通用场景                |
+| `TileCopyGemm` | `L1AndL0TypeSelectorGemm`             | `L1AndL0TypeSelectorGemm` | GEMM 专用，显式 L0 推导 |
 
 ## 调用示例
 

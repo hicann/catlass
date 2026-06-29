@@ -23,18 +23,18 @@ struct CopyGmToL1GMMPTD
 
 ### 模板参数说明
 
-| 参数 | 说明 |
-| :------ | :------ |
+| 参数      | 说明                                                |
+| :-------- | :-------------------------------------------------- |
 | `ArchTag` | 架构标签，可选 `Arch::AtlasA2` 或 `Arch::Ascend950` |
-| `GmType` | GM 上源操作数的 Gemm 类型 |
-| `L1Type` | L1 上目的操作数的 Gemm 类型，默认为 `void` |
+| `GmType`  | GM 上源操作数的 Gemm 类型                           |
+| `L1Type`  | L1 上目的操作数的 Gemm 类型，默认为 `void`          |
 
 ## 偏特化实现
 
-| ArchTag | GmType | 目的 Layout | 说明 |
-| :------ | :------ | :------ | :------ |
-| `Arch::AtlasA2` | `GemmType<Element, RowMajor>` | `zN` | RowMajor → zN，含单行优化 |
-| `Arch::Ascend950` | `GemmType<Element, RowMajor>` | `zN` | RowMajor → zN，含单行优化 |
+| ArchTag           | GmType                        | 目的 Layout | 说明                      |
+| :---------------- | :---------------------------- | :---------- | :------------------------ |
+| `Arch::AtlasA2`   | `GemmType<Element, RowMajor>` | `zN`        | RowMajor → zN，含单行优化 |
+| `Arch::Ascend950` | `GemmType<Element, RowMajor>` | `zN`        | RowMajor → zN，含单行优化 |
 
 ## 调用接口
 
@@ -49,12 +49,12 @@ void operator()(
 )
 ```
 
-| 参数 | 说明 |
-| :------ | :------ |
-| `dstTensor` | 目的 L1 LocalTensor |
-| `srcTensor` | 源 GM GlobalTensor |
+| 参数        | 说明                     |
+| :---------- | :----------------------- |
+| `dstTensor` | 目的 L1 LocalTensor      |
+| `srcTensor` | 源 GM GlobalTensor       |
 | `layoutDst` | 目的操作数的 layout 描述 |
-| `layoutSrc` | 源操作数的 layout 描述 |
+| `layoutSrc` | 源操作数的 layout 描述   |
 
 ### 扩展调用接口（手动指定 stride）
 
@@ -72,13 +72,13 @@ void operator()(
 )
 ```
 
-| 参数 | 说明 |
-| :------ | :------ |
-| `ndNum` | 连续搬运的 ND 矩阵数量 |
-| `srcNdMatrixStride` | 源端相邻 ND 矩阵间的 stride |
-| `dstNzNStride` | 目的端 n 方向的 stride（覆盖 layout 默认值） |
+| 参数                | 说明                                            |
+| :------------------ | :---------------------------------------------- |
+| `ndNum`             | 连续搬运的 ND 矩阵数量                          |
+| `srcNdMatrixStride` | 源端相邻 ND 矩阵间的 stride                     |
+| `dstNzNStride`      | 目的端 n 方向的 stride（覆盖 layout 默认值）    |
 | `dstNzMatrixStride` | 目的端相邻矩阵间的 stride（覆盖 layout 默认值） |
-| `dstNzC0Stride` | 目的端 C0 方向的 stride（覆盖 layout 默认值） |
+| `dstNzC0Stride`     | 目的端 C0 方向的 stride（覆盖 layout 默认值）   |
 
 ## 调用示例
 

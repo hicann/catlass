@@ -78,7 +78,7 @@ To handle transposed cases, modify the layout in the example, as the layout impl
 The table below lists the kernels and applicable systems.
 
 | trans_a | trans_b | LayoutA             | LayoutB             |
-|---------|---------|---------------------|---------------------|
+| ------- | ------- | ------------------- | ------------------- |
 | 0       | 0       | layout::RowMajor    | layout::RowMajor    |
 | 0       | 1       | layout::RowMajor    | layout::ColumnMajor |
 | 1       | 0       | layout::ColumnMajor | layout::RowMajor    |

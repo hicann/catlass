@@ -38,28 +38,28 @@ struct CopyL0CToGm {
 
 ### NO_QUANT（纯类型转换）
 
-| 架构 | 目标 Layout | 源 Layout | 搬运方式 | 说明 |
-| :------ | :------ | :------ | :------ | :------ |
-| AtlasA2 | RowMajor | zN | `AscendC::Fixpipe` + `CFG_ROW_MAJOR` | 支持 float→half/bf16 等 cast |
-| AtlasA2 | zN | zN | `AscendC::Fixpipe` + `CFG_NZ` | zN 排布保持，float→float 时 `channelSplit=true` |
-| AtlasA2 | NDC1HWC0 | zN | `AscendC::Fixpipe` + `CFG_NZ` | Conv 5D tensor |
-| Ascend950 | RowMajor | zN | `AscendC::DataCopy` + `SetFixpipeNz2ndFlag` | NZ→RowMajor 转排布 |
-| Ascend950 | zN | zN | `AscendC::DataCopy` | zN 排布保持，float→float 时 `channelSplit=true` |
-| Ascend950 | NDC1HWC0 | zN | `AscendC::Fixpipe` + `CFG_NZ` | Conv 5D tensor |
+| 架构      | 目标 Layout | 源 Layout | 搬运方式                                    | 说明                                            |
+| :-------- | :---------- | :-------- | :------------------------------------------ | :---------------------------------------------- |
+| AtlasA2   | RowMajor    | zN        | `AscendC::Fixpipe` + `CFG_ROW_MAJOR`        | 支持 float→half/bf16 等 cast                    |
+| AtlasA2   | zN          | zN        | `AscendC::Fixpipe` + `CFG_NZ`               | zN 排布保持，float→float 时 `channelSplit=true` |
+| AtlasA2   | NDC1HWC0    | zN        | `AscendC::Fixpipe` + `CFG_NZ`               | Conv 5D tensor                                  |
+| Ascend950 | RowMajor    | zN        | `AscendC::DataCopy` + `SetFixpipeNz2ndFlag` | NZ→RowMajor 转排布                              |
+| Ascend950 | zN          | zN        | `AscendC::DataCopy`                         | zN 排布保持，float→float 时 `channelSplit=true` |
+| Ascend950 | NDC1HWC0    | zN        | `AscendC::Fixpipe` + `CFG_NZ`               | Conv 5D tensor                                  |
 
 ### PER_TENSOR（per-tensor 量化/反量化）
 
-| 架构 | 目标 Layout | 源 Layout | 搬运方式 | Params |
-| :------ | :------ | :------ | :------ | :------ |
-| AtlasA2 | RowMajor | zN | `AscendC::Fixpipe` + `CFG_ROW_MAJOR` + `deqScalar` | `float scale = 1.0` |
-| Ascend950 | RowMajor | zN | `AscendC::Fixpipe` + `CFG_ROW_MAJOR` + `deqScalar` | `float scale = 1.0` |
+| 架构      | 目标 Layout | 源 Layout | 搬运方式                                           | Params              |
+| :-------- | :---------- | :-------- | :------------------------------------------------- | :------------------ |
+| AtlasA2   | RowMajor    | zN        | `AscendC::Fixpipe` + `CFG_ROW_MAJOR` + `deqScalar` | `float scale = 1.0` |
+| Ascend950 | RowMajor    | zN        | `AscendC::Fixpipe` + `CFG_ROW_MAJOR` + `deqScalar` | `float scale = 1.0` |
 
 ### PER_CHANNEL（per-channel 量化/反量化）
 
-| 架构 | 目标 Layout | 源 Layout | 搬运方式 | scale 参数 |
-| :------ | :------ | :------ | :------ | :------ |
-| AtlasA2 | RowMajor | zN | `AscendC::Fixpipe` + `CFG_ROW_MAJOR` + `SetFixPipeConfig` | `LocalTensor<uint64_t>` 旁路 |
-| Ascend950 | RowMajor | zN | `AscendC::Fixpipe` + `CFG_ROW_MAJOR` 三参数 | `LocalTensor<uint64_t>` 直接传入 |
+| 架构      | 目标 Layout | 源 Layout | 搬运方式                                                  | scale 参数                       |
+| :-------- | :---------- | :-------- | :-------------------------------------------------------- | :------------------------------- |
+| AtlasA2   | RowMajor    | zN        | `AscendC::Fixpipe` + `CFG_ROW_MAJOR` + `SetFixPipeConfig` | `LocalTensor<uint64_t>` 旁路     |
+| Ascend950 | RowMajor    | zN        | `AscendC::Fixpipe` + `CFG_ROW_MAJOR` 三参数               | `LocalTensor<uint64_t>` 直接传入 |
 
 ## 调用接口
 

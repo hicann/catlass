@@ -22,19 +22,19 @@ template <
 struct CopyGm2Ub;
 ```
 
-| 模板参数 | 说明 |
-| :------ | :------ |
-| `ArchTag` | 架构标签：`Arch::AtlasA2` 或 `Arch::Ascend950` |
-| `GmType` | GM 数据类型，`Gemm::GemmType<Element, Layout>`，Layout 触发不同偏特化 |
+| 模板参数  | 说明                                                                  |
+| :-------- | :-------------------------------------------------------------------- |
+| `ArchTag` | 架构标签：`Arch::AtlasA2` 或 `Arch::Ascend950`                        |
+| `GmType`  | GM 数据类型，`Gemm::GemmType<Element, Layout>`，Layout 触发不同偏特化 |
 
 ## 偏特化实现
 
-| 架构 | GM Layout | UB Layout | 说明 |
-| :------ | :------ | :------ | :------ |
-| AtlasA2 | `RowMajor` | `RowMajor` | 二维矩阵搬运，`DataCopyPad` |
-| AtlasA2 | `VectorLayout` | `VectorLayout` | 一维向量搬运 |
-| Ascend950 | `RowMajor` | `RowMajor` | 二维矩阵搬运，`DataCopyPad` |
-| Ascend950 | `VectorLayout` | `VectorLayout` | 一维向量搬运 |
+| 架构      | GM Layout      | UB Layout      | 说明                        |
+| :-------- | :------------- | :------------- | :-------------------------- |
+| AtlasA2   | `RowMajor`     | `RowMajor`     | 二维矩阵搬运，`DataCopyPad` |
+| AtlasA2   | `VectorLayout` | `VectorLayout` | 一维向量搬运                |
+| Ascend950 | `RowMajor`     | `RowMajor`     | 二维矩阵搬运，`DataCopyPad` |
+| Ascend950 | `VectorLayout` | `VectorLayout` | 一维向量搬运                |
 
 ## 调用接口
 
@@ -47,12 +47,12 @@ void operator()(
 )
 ```
 
-| 参数 | 说明 |
-| :------ | :------ |
-| `dstTensor` | 目的 UB LocalTensor |
-| `srcTensor` | 源 GM GlobalTensor |
+| 参数        | 说明                                    |
+| :---------- | :-------------------------------------- |
+| `dstTensor` | 目的 UB LocalTensor                     |
+| `srcTensor` | 源 GM GlobalTensor                      |
 | `layoutDst` | 目的 UB 的 layout，包含 shape 和 stride |
-| `layoutSrc` | 源 GM 的 layout，包含 shape 和 stride |
+| `layoutSrc` | 源 GM 的 layout，包含 shape 和 stride   |
 
 ## 调用示例
 

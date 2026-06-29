@@ -14,14 +14,14 @@ Developer contribution scenarios include:
   If you find some bugs in this project and want to fix them, you are welcome to create an issue for feedback and tracking.
 
   You can create a `Bug-Report` issue to describe the bug according to the [Submitting an Issue/Handling an Issue Task](https://gitcode.com/cann/community#Submitting-an-Issue/Handling-an-Issue-Task]) guide, and then enter "/assign" or "/assign @yourself" in the comment box to assign the Issue to yourself for handling.
-  
+
 - Contributing New Operator Examples
 
   If you have ideas for generalization enhancement/performance optimization for the reference implementation of a certain operator during the use of the template library, or have implemented a certain type of new operator and want to contribute it as a reference example, you are welcome to contribute example operators.
 
   You can create a `Requirement/Suggestion Issue` to describe the new sample operator and provide your design solution by following the instructions in [Submitting an Issue/Handling an Issue Task](https://gitcode.com/cann/community#Submitting-an-Issue/Handling-an-Issue-Task).
   Enter /assign or /assign @yourself in the comment box to assign the issue to you for processing.
-  
+
   Place the new operator sample in the `${id}_${op_name}` subdirectory under the `examples/` directory. `${id}` indicates the unique ascending sequence, and `${op_name}` indicates the name of the new operator.
 
   ```bash
@@ -36,7 +36,7 @@ Developer contribution scenarios include:
   The `README.md` file provides a brief description of the operator, including code organization and usage examples (for details, see the [README file](https://gitcode.com/cann/catlass/blob/master/examples/00_basic_matmul/README.md) of Matmul).
 
 - Contributing Template Library Code
-  
+
   If you have new feature implementations for a certain part of the template library code, you are welcome to propose new ideas and designs in an Issue.
 
   You can create a `Requirement|Suggestion` Issue to describe the new feature design by following the instructions in [Submitting an Issue/Handling an Issue Task](https://gitcode.com/cann/community#Submitting-an-Issue/Handling-an-Issue-Task) an Issue/Handling an Issue Task. Project members will communicate with you to confirm the design and provide a suitable location under `include/catlass/` for you to contribute your feature code.
@@ -48,7 +48,7 @@ Developer contribution scenarios include:
   If you find any errors or unclear descriptions in the documents of this project, you are welcome to create an Issue for feedback and correction.
 
   You can create a `Documentation|Document Feedback` Issue to point out the problem in the corresponding document by following the instructions in [Submitting an Issue/Handling an Issue Task](https://gitcode.com/cann/community#Submitting-an-Issue/Handling-an-Issue-Task). Then, enter /assign or /assign @yourself in the comment box to assign the Issue to yourself for correcting the document description.
-  
+
 - Helping Resolve Others' Issues
 
   If you have a suitable solution to a problem encountered by others in the community, you are welcome to comment and communicate in the Issue to help others solve problems and pain points, and jointly optimize ease of use.

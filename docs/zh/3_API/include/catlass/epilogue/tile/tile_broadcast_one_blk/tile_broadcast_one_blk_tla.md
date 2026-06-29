@@ -22,11 +22,11 @@ template <
 struct TileBroadcastOneBlkTla;
 ```
 
-| 模板参数 | 说明 |
-| :------ | :------ |
-| `ArchTag_` | 架构标签 |
+| 模板参数          | 说明                    |
+| :---------------- | :---------------------- |
+| `ArchTag_`        | 架构标签                |
 | `ElementCompute_` | 计算元素类型，如 `half` |
-| `COMPUTE_LENGTH_` | 需要广播的元素总数 |
+| `COMPUTE_LENGTH_` | 需要广播的元素总数      |
 
 ## 调用接口
 

@@ -29,7 +29,7 @@ catlass
 |   |   ├── basic_matmul.cpp  # Operator calling on the host
 |   |   ├── CMakeLists.txt
 |   |   └── README.md         # Operator sample description
-|   ├── ...   
+|   ├── ...
 |   └── python_extension      # CATLASS operator calls in Python
 |                             # Project components
 ├── include                   # Template header files

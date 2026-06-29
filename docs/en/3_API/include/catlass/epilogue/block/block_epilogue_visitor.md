@@ -1,5 +1,5 @@
 # Block Epilogue Visitor Partial Specialization
->
+
 > Code location: `include/catlass/epilogue/block/block_epilogue_visitor.hpp`
 
 ## Description

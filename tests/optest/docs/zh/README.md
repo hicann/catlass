@@ -20,13 +20,13 @@ docs/zh/
 
 ## 分层概览
 
-| 层次 | 职责 | 关键文件 |
-|------|------|----------|
-| **Python 层** | 用户 API、动态库加载、版本管理 | `torch_catlass/*.py` |
-| **C++ 桥接层** | `torch.ops` 注册、NPU runtime 分发 | `src/*` |
-| **JIT 编译层** | 运行时内核编译、缓存、宏注入 | `kernels/jit/*`, `kernels/include/*` |
-| **内核公共层** | 内核模板共享工具（padding、runner、workspace） | `kernels/common/*` |
-| **构建系统** | 多架构预编译、JIT 模板验证、wheel | `CMakeLists.txt`, `build.sh` |
+| 层次           | 职责                                           | 关键文件                             |
+| -------------- | ---------------------------------------------- | ------------------------------------ |
+| **Python 层**  | 用户 API、动态库加载、版本管理                 | `torch_catlass/*.py`                 |
+| **C++ 桥接层** | `torch.ops` 注册、NPU runtime 分发             | `src/*`                              |
+| **JIT 编译层** | 运行时内核编译、缓存、宏注入                   | `kernels/jit/*`, `kernels/include/*` |
+| **内核公共层** | 内核模板共享工具（padding、runner、workspace） | `kernels/common/*`                   |
+| **构建系统**   | 多架构预编译、JIT 模板验证、wheel              | `CMakeLists.txt`, `build.sh`         |
 
 ## 设计原则
 

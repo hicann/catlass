@@ -6,7 +6,7 @@
 ├── 23_flash_attention_infer
 │   ├── CMakeLists.txt # CMake build configuration file
 │   ├── gen_data.py
-│   ├── kernel_common.hpp 
+│   ├── kernel_common.hpp
 │   ├── main.cpp
 │   ├── fai_kernel.cpp
 │   ├── fai_tiling.cpp
@@ -15,9 +15,9 @@
 
 ## Example
 
-- After obtaining the code, compile the operator executable file. For details, see [Template Library Quick Start](../../docs/en/1_Practice/01_quick_start.md#build-and-execution).  
+- After obtaining the code, compile the operator executable file. For details, see [Template Library Quick Start](../../docs/en/1_Practice/01_quick_start.md#build-and-execution).
 
-- Run `gen_data.py` to generate a test sample. The test sample needs to be input from the command line. After the command is executed, a `data` directory is generated in the current path, including the input data of the operator and the golden data used for precision verification.  
+- Run `gen_data.py` to generate a test sample. The test sample needs to be input from the command line. After the command is executed, a `data` directory is generated in the current path, including the input data of the operator and the golden data used for precision verification.
 - Then, execute the operator. Note that the input shape of the operator must be the same as the shape of the data generated in the first step.
 
 The following is a complete shell script example.

@@ -19,7 +19,7 @@ python_extension
 │   │       └── catlass_kernel_wrapper.h   # Wrapper header file
 │   └── wrapper
 │       └── catlass_kernel_wrapper.cpp      # Wrapper file of the CATLASS operator
-└── torch_catlass                       
+└── torch_catlass
     └── __init__.py                     # Initialization entry, used for packaging
 tests
 └── test_python_extension.py        # Test script
@@ -50,12 +50,12 @@ Once all components are complete:
 - Use `bash scripts/build.sh python_extension` to compile the pybind extension.
 - Use `bash scripts/build.sh torch_library` to compile the torch extension.
 
-The compilation environment is identical to the main [README](../../README.md), with the addition of the following Python dependencies: 
+The compilation environment is identical to the main [README](../../README.md), with the addition of the following Python dependencies:
 
 - Required:
   - `pybind11`
-  - gcc *9.0 or later*
-  - torch *2.1 or later recommended*
+  - gcc _9.0 or later_
+  - torch _2.1 or later recommended_
   - `torch-npu` (the latest version matching your `torch` and `CANN` installation. See [Ascend/pytorch](https://gitcode.com/ascend/pytorch).
 - Optional:
   - `pybind11-stubgen`
@@ -92,7 +92,7 @@ class CatlassTest(TestCase):
         result = torch.ops.CatlassTorch.basic_matmul(a, b, "float16")
         golden = torch.mm(a, b)
         self.assertRtolEqual(result, golden)
-        
+
 if __name__ == "__main__":
     run_tests()
 ```

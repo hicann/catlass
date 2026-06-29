@@ -25,12 +25,12 @@ struct TileCopyPerTokenDequant;
 
 ## 成员类型定义
 
-| 成员类型 | 说明 |
-| :------ | :------ |
-| `CopyGmToUbC` | `CopyGm2Ub<Arch, CType>` |
-| `CopyGmToUbScale` | `CopyGm2Ub<Arch, ScaleType>` |
+| 成员类型                  | 说明                                            |
+| :------------------------ | :---------------------------------------------- |
+| `CopyGmToUbC`             | `CopyGm2Ub<Arch, CType>`                        |
+| `CopyGmToUbScale`         | `CopyGm2Ub<Arch, ScaleType>`                    |
 | `CopyGmToUbPerTokenScale` | `CopyPerTokenScale2Ub<Arch, PerTokenScaleType>` |
-| `CopyUbToGmD` | `CopyUb2Gm<Arch, DType>` |
+| `CopyUbToGmD`             | `CopyUb2Gm<Arch, DType>`                        |
 
 ## 调用示例
 

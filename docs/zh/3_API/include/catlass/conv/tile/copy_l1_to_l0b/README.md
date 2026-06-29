@@ -10,10 +10,10 @@
 
 ## API 清单
 
-| API | 风格 | 适用硬件 | 说明 |
-| :------ | :------ | :------ | :------ |
-| [CopyL1ToL0B](./copy_l1_to_l0b.md) | 非 TLA | AtlasA2 | LoadData 2D |
-| [CopyL1ToL0BTla](./copy_l1_to_l0b_tla.md) | TLA | AtlasA2, Ascend950 | TLA 版本 |
+| API                                       | 风格   | 适用硬件           | 说明        |
+| :---------------------------------------- | :----- | :----------------- | :---------- |
+| [CopyL1ToL0B](./copy_l1_to_l0b.md)        | 非 TLA | AtlasA2            | LoadData 2D |
+| [CopyL1ToL0BTla](./copy_l1_to_l0b_tla.md) | TLA    | AtlasA2, Ascend950 | TLA 版本    |
 
 ## 调用示例
 

@@ -18,18 +18,18 @@ template <class ArchTag, class GmType, bool is_atoadd = false>
 struct VecCopyUBToGm;
 ```
 
-| 模板参数 | 说明 |
-| :------ | :------ |
-| `ArchTag` | 架构标签 |
-| `GmType` | `Gemm::GemmType<Element, VectorLayout>` |
-| `is_atoadd` | 是否启用 atomic add 模式 |
+| 模板参数    | 说明                                    |
+| :---------- | :-------------------------------------- |
+| `ArchTag`   | 架构标签                                |
+| `GmType`    | `Gemm::GemmType<Element, VectorLayout>` |
+| `is_atoadd` | 是否启用 atomic add 模式                |
 
 ## 偏特化实现
 
-| 架构 | GmType | is_atoadd | 说明 |
-| :------ | :------ | :------ | :------ |
-| AtlasA2 | `VectorLayout` | `false`（默认） | 标准 `DataCopyPad` 搬运 |
-| AtlasA2 | `VectorLayout` | `true` | `SetAtomicAdd` + `DataCopyPad` |
+| 架构    | GmType         | is_atoadd       | 说明                           |
+| :------ | :------------- | :-------------- | :----------------------------- |
+| AtlasA2 | `VectorLayout` | `false`（默认） | 标准 `DataCopyPad` 搬运        |
+| AtlasA2 | `VectorLayout` | `true`          | `SetAtomicAdd` + `DataCopyPad` |
 
 ## 调用接口
 

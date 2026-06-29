@@ -22,10 +22,10 @@ template <
 struct CopyUb2GmAligned;
 ```
 
-| 模板参数 | 说明 |
-| :------ | :------ |
-| `ArchTag` | 仅 `Arch::AtlasA2` 有特化 |
-| `GmType` | GM 数据类型，Layout 固定 `RowMajor` |
+| 模板参数  | 说明                                |
+| :-------- | :---------------------------------- |
+| `ArchTag` | 仅 `Arch::AtlasA2` 有特化           |
+| `GmType`  | GM 数据类型，Layout 固定 `RowMajor` |
 
 ## 调用接口
 
@@ -38,12 +38,12 @@ void operator()(
 )
 ```
 
-| 参数 | 说明 |
-| :------ | :------ |
-| `dstTensor` | 目的 GM GlobalTensor |
-| `srcTensor` | 源 UB LocalTensor |
+| 参数        | 说明                       |
+| :---------- | :------------------------- |
+| `dstTensor` | 目的 GM GlobalTensor       |
+| `srcTensor` | 源 UB LocalTensor          |
 | `layoutDst` | 目的 GM 的 RowMajor layout |
-| `layoutSrc` | 源 UB 的 RowMajor layout |
+| `layoutSrc` | 源 UB 的 RowMajor layout   |
 
 内部根据 stride 和 dimension 自动选择最优搬运策略：连续内存直接 `DataCopy`；小 stride 分块 `DataCopy`；大 stride 逐行搬运。
 

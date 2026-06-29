@@ -15,11 +15,11 @@ kernel_name<<<blockDim, l2ctrl, stream>>>(argument_list);
 
 三个参数的含义如下：
 
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `blockDim` | `uint32_t` | 用多少个AI Core来执行该算子 |
-| `l2ctrl` | `void*` | 保留参数，固定设为`nullptr` |
-| `stream` | `aclrtStream` | 管理异步操作执行顺序的流对象 |
+| 参数       | 类型          | 说明                         |
+| ---------- | ------------- | ---------------------------- |
+| `blockDim` | `uint32_t`    | 用多少个AI Core来执行该算子  |
+| `l2ctrl`   | `void*`       | 保留参数，固定设为`nullptr`  |
+| `stream`   | `aclrtStream` | 管理异步操作执行顺序的流对象 |
 
 其中`blockDim`表示需要多少个硬件AI Core来执行算子，一般通过`platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic()`。算子内可通过`GetBlockIdx()`获取当前核索引，通过`GetBlockNum()`获取总核数。
 
@@ -33,10 +33,12 @@ kernel_name<<<blockDim, l2ctrl, stream>>>(argument_list);
 2. 数据准备：`aclrtMallocHost`分配并初始化Host内存，`aclrtMalloc`分配Device内存，`aclrtMemcpy`将数据拷入Device。
 3. 组装模板组件：选择ArchTag、DispatchPolicy、TileShape、数据类型，组装BlockMmad等组件，拼出Kernel类型。
 4. 使用`<<<>>>`调用算子：
-    ```cpp
-    auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
-    Catlass::KernelAdapter<MyKernel><<<aicCoreNum, nullptr, stream>>>(params);
-    ```
+
+   ```cpp
+   auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
+   Catlass::KernelAdapter<MyKernel><<<aicCoreNum, nullptr, stream>>>(params);
+   ```
+
 5. 结果拷回：通过`aclrtMemcpy`将Device上的运算结果拷贝回Host。
 6. 同步等待：`aclrtSynchronizeStream`。
 7. 资源释放：`aclrtDestroyStream`、`aclrtResetDevice`、`aclFinalize`。
@@ -45,11 +47,10 @@ kernel_name<<<blockDim, l2ctrl, stream>>>(argument_list);
 
 CATLASS的Device层（如`DeviceGemm`）内部就是通过`<<<>>>`启动算子的，并额外封装了`CanImplement`检查、Workspace管理等便利功能。
 
-| 对比维度 | `<<<>>>`直调 | `DeviceGemm` |
-|---------|-------------|-------------|
-| 调用方式 | 手写`KernelAdapter<...><<<>>>(params)` | `matmulOp(stream, blockDim)` |
-| Workspace管理 | 需手动处理 | 封装在适配器内 |
-| 推荐场景 | 原型开发、调测阶段、非标Kernel | 标准GEMM/GEMV/Conv |
+| 对比维度      | `<<<>>>`直调                           | `DeviceGemm`                 |
+| ------------- | -------------------------------------- | ---------------------------- |
+| 调用方式      | 手写`KernelAdapter<...><<<>>>(params)` | `matmulOp(stream, blockDim)` |
+| Workspace管理 | 需手动处理                             | 封装在适配器内               |
+| 推荐场景      | 原型开发、调测阶段、非标Kernel         | 标准GEMM/GEMV/Conv           |
 
 简单来说，开发标准算子推荐用`DeviceGemm`；需要更多控制权时再选择直调。
-

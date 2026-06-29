@@ -26,11 +26,12 @@ struct CopyUb2Gm {
 
 ## 偏特化实现
 
-| 架构 | Layout | 搬运指令 | 说明 |
-| :------ | :------ | :------ | :------ |
+| 架构    | Layout              | 搬运指令               | 说明                                       |
+| :------ | :------------------ | :--------------------- | :----------------------------------------- |
 | AtlasA2 | RowMajor → RowMajor | `AscendC::DataCopyPad` | 逐行拷贝，行数 `shape(0)`，行长 `shape(1)` |
 
 stride 计算：
+
 - `srcStride = (layoutSrc.stride(0) - shape(1)) / ELE_NUM_PER_C0`
 - `dstStride = (layoutDst.stride(0) - shape(1)) * sizeof(Element)`
 

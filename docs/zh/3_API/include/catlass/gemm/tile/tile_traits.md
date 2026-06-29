@@ -9,6 +9,7 @@
 `PrologueTraits` 是一个 trait 模板，将 Prologue 算子（如 `TileCastInt8ToFp16Dequant`）的接口包装为统一的 Tensor 类型别名，方便上层模板（如 blockMmad）获取 Prologue 相关的输入/输出 Tensor 类型。
 
 关键作用：
+
 - 从 `Prologue::ElementSrc` / `Prologue::ElementDst` 推导出 `TensorSrc` / `TensorDst` 的 `AscendC::GlobalTensor<T>` 完整类型
 - 对 `void` 偏特化，提供安全的空类型回退
 
@@ -49,15 +50,15 @@ struct PrologueTraits<void> {
 
 ## 成员类型
 
-| 成员 | 来源 | 说明 |
-| :------ | :------ | :------ |
-| `ElementSrc` | `Prologue::ElementSrc` | Prologue 输入元素类型 |
-| `ElementDst` | `Prologue::ElementDst` | Prologue 输出元素类型 |
-| `LayoutSrc` | `Prologue::LayoutSrc` | Prologue 输入 layout |
-| `LayoutDst` | `Prologue::LayoutDst` | Prologue 输出 layout |
-| `TensorSrc` | `GlobalTensor<ElementSrc>` | 完整 GM Tensor 类型 |
-| `TensorDst` | `GlobalTensor<ElementDst>` | 完整 GM Tensor 类型 |
-| `Params` | `Prologue::Params` | Prologue 参数结构体 |
+| 成员         | 来源                       | 说明                  |
+| :----------- | :------------------------- | :-------------------- |
+| `ElementSrc` | `Prologue::ElementSrc`     | Prologue 输入元素类型 |
+| `ElementDst` | `Prologue::ElementDst`     | Prologue 输出元素类型 |
+| `LayoutSrc`  | `Prologue::LayoutSrc`      | Prologue 输入 layout  |
+| `LayoutDst`  | `Prologue::LayoutDst`      | Prologue 输出 layout  |
+| `TensorSrc`  | `GlobalTensor<ElementSrc>` | 完整 GM Tensor 类型   |
+| `TensorDst`  | `GlobalTensor<ElementDst>` | 完整 GM Tensor 类型   |
+| `Params`     | `Prologue::Params`         | Prologue 参数结构体   |
 
 ## 调用示例
 

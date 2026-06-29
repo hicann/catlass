@@ -18,8 +18,8 @@ template <class Element>
 struct CopyL1ToL0ATla;
 ```
 
-| 模板参数 | 说明 |
-| :------ | :------ |
+| 模板参数  | 说明                |
+| :-------- | :------------------ |
 | `Element` | 元素类型，如 `half` |
 
 构造函数接收 `Conv2dFilterParams` 参数。

@@ -21,11 +21,11 @@ For specific input and output data types, Fixpipe allows you to configure the qu
 
 - Matmul quantization scenario: During Matmul computation, the left matrix A and right matrix B are of the `half` type, and the output C matrix is of the `int8_t` type. In this scenario, when the data of the C matrix is moved from CO1 to Global Memory, the quantization operation is performed to quantize the final result into the `int8_t` type, as shown in the following figure.
 
-    ![alt text](../../docs/en/figures/fixpipe_quant.png)
+  ![alt text](../../docs/en/figures/fixpipe_quant.png)
 
 - Matmul dequantization scenario: During Matmul computation, the left matrix A and right matrix B are of the `int8_t` type, and the output C matrix is of the `half` type. In this scenario, when the data of the C matrix is moved from CO1 to Global Memory, the dequantization operation is performed to dequantize the final result into the corresponding half type, as shown in the following figure.
 
-    ![alt text](../../docs/en/figures/fixpipe_dequant.png)
+  ![alt text](../../docs/en/figures/fixpipe_dequant.png)
 
 Fixpipe provides two different granularities of quantization/dequantization modes: per_tensor and per_channel.
 
@@ -58,17 +58,17 @@ Compare success.
 
 The `DispatchPolicy MmadDequant` used by `GroupedMatmulSliceMPerTensorPerChannelDequant` by default supports the following template parameters:
 
-|Template Parameter|Default Value|Description|
-|---------|-----------------|-----------------|
-|ArchTag| None| Specifies the architecture model.| 
-|enableUnitFlag| false | Whether to enable Unitflag. This parameter must be set to `false` when the L0C multi-buffer is enabled.|
-|useHF32| false | Whether to enable HF32. Only the float type is supported.|
-|l0CStages| 1 | Specifies the number of L0C buffers. Setting this parameter to `2` enables the L0C dual-buffer.|
-|enableL1Resident| false | Whether to enable L1 resident.|
-|l1AStages | 2 | Number of buffers for loading matrix A to L1.|
-|l1BStages | 2 | Number of buffers for loading matrix B to L1.|
-|l0AStages | 2 | Number of buffers for loading matrix A to L0.|
-|l0BStages | 2 | Number of buffers for loading matrix B to L0.|
+| Template Parameter | Default Value | Description                                                                                             |
+| ------------------ | ------------- | ------------------------------------------------------------------------------------------------------- |
+| ArchTag            | None          | Specifies the architecture model.                                                                       |
+| enableUnitFlag     | false         | Whether to enable Unitflag. This parameter must be set to `false` when the L0C multi-buffer is enabled. |
+| useHF32            | false         | Whether to enable HF32. Only the float type is supported.                                               |
+| l0CStages          | 1             | Specifies the number of L0C buffers. Setting this parameter to `2` enables the L0C dual-buffer.         |
+| enableL1Resident   | false         | Whether to enable L1 resident.                                                                          |
+| l1AStages          | 2             | Number of buffers for loading matrix A to L1.                                                           |
+| l1BStages          | 2             | Number of buffers for loading matrix B to L1.                                                           |
+| l0AStages          | 2             | Number of buffers for loading matrix A to L0.                                                           |
+| l0BStages          | 2             | Number of buffers for loading matrix B to L0.                                                           |
 
 Assume that the matrix shape is `M N K`, the tile size on L1 is `m1 n1 k1`, the number of blocks in the M direction is `mTiles = CeilDiv(M, m1)`, the number of blocks in the N direction is `nTiles = CeilDiv(N, n1)`, and the total number of tasks is `taskBlocks = mTiles × nTiles`. In the following two cases, `enableL1Resident` can be enabled:
 

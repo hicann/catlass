@@ -1,5 +1,5 @@
 # Block Mmad Pingpong
->
+
 > [代码位置](../../../../../../../include/catlass/gemm/block/block_mmad_pingpong.hpp)
 
 ## 功能说明
@@ -8,7 +8,7 @@
 
 ## 调度策略
 
-```
+```cpp
 // Now ENABLE_UNIT_FLAG_ must be false when input element is int8
 template <bool ENABLE_UNIT_FLAG_ = false>
 struct MmadAtlasA2Pingpong : public MmadAtlasA2  {
@@ -17,7 +17,7 @@ struct MmadAtlasA2Pingpong : public MmadAtlasA2  {
 };
 ```
 
-当ENABLE_UNIT_FLAG_为`true`时使能`L0C`同时搬出和写入，提高流水并行度。**注意：当输入数据为int8类型时，该参数必须为`false`，否则可能会导致计算异常。** 
+当ENABLE_UNIT_FLAG_为`true`时使能`L0C`同时搬出和写入，提高流水并行度。**注意：当输入数据为int8类型时，该参数必须为`false`，否则可能会导致计算异常。**
 
 ## 调用示例
 
@@ -25,7 +25,7 @@ struct MmadAtlasA2Pingpong : public MmadAtlasA2  {
 
 参考[basic_matmul](../../../../../../../examples/00_basic_matmul/basic_matmul.cpp)
 
-```
+```cpp
 constexpr bool enableUnitFlag = true;
 using MmadDispatchPolicy = Gemm::MmadAtlasA2Pingpong<enableUnitFlag>;
 using L1TileShape = GemmShape<128, 256, 256>;
@@ -35,7 +35,7 @@ using BType = Gemm::GemmType<half, LayoutB>;
 using CType = Gemm::GemmType<half, LayoutC>;
 ```
 
-```
+```cpp
 using BlockMmad = Gemm::Block::BlockMmad<MmadDispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
 ```
 
@@ -43,7 +43,7 @@ using BlockMmad = Gemm::Block::BlockMmad<MmadDispatchPolicy, L1TileShape, L0Tile
 
 参考[basic_matmul](../../../../../../../include/catlass/gemm/kernel/basic_matmul.hpp)，在`kernel`代码的`void operator()<AscendC::AIC>`函数中：
 
-```
+```cpp
 Arch::Resource<ArchTag> resource;
 BlockMmad blockMmad(resource);
 ```
@@ -52,7 +52,7 @@ BlockMmad blockMmad(resource);
 
 参考[basic_matmul](../../../../../../../include/catlass/gemm/kernel/basic_matmul.hpp)，在`kernel`代码的`void operator()<AscendC::AIC>`函数中：
 
-```
+```cpp
 blockMmad(gmA[gmOffsetA],       // A矩阵的block块在GM上起始地址
         params.layoutA,         // A矩阵在GM上的layout
         gmB[gmOffsetB],         // B矩阵的block块在GM上起始地址

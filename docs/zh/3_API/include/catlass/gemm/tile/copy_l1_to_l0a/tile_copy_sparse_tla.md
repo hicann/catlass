@@ -24,20 +24,20 @@ struct TileCopySparseTla {
 };
 ```
 
-| 模板参数 | 说明 |
-| :------ | :------ |
-| `ArchTag` | 架构标签，仅支持 `Arch::AtlasA2` |
-| `TensorSrc` | 源 Tensor：`tla::Tensor<LocalTensor<Element>, Layout, Coord, A1>` |
+| 模板参数    | 说明                                                                |
+| :---------- | :------------------------------------------------------------------ |
+| `ArchTag`   | 架构标签，仅支持 `Arch::AtlasA2`                                    |
+| `TensorSrc` | 源 Tensor：`tla::Tensor<LocalTensor<Element>, Layout, Coord, A1>`   |
 | `TensorDst` | 目标 Tensor：`tla::Tensor<LocalTensor<Element>, Layout, Coord, A2>` |
-| `Enable` | SFINAE 条件，根据 Layout 自动派发偏特化 |
+| `Enable`    | SFINAE 条件，根据 Layout 自动派发偏特化                             |
 
 ## 偏特化实现
 
 ### AtlasA2
 
-| 源 Layout | 目标 Layout | SFINAE 条件 | 说明 |
-| :------ | :------ | :------ | :------ |
-| zN | zZ | `iszN<LayoutSrc> && iszZ<LayoutDst>` | LoadData3D v2 Pro，16 对齐 |
+| 源 Layout | 目标 Layout | SFINAE 条件                          | 说明                       |
+| :-------- | :---------- | :----------------------------------- | :------------------------- |
+| zN        | zZ          | `iszN<LayoutSrc> && iszZ<LayoutDst>` | LoadData3D v2 Pro，16 对齐 |
 
 硬件参数：`HW_N0 = 16`, `HW_M0 = 16`，通过 `Load3DSetFMatrixCal` 设置矩阵计算参数，`LoadData3DParamsV2Pro.extConfig` 携带 M/K 坐标偏移和步长。
 

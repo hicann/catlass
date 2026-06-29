@@ -25,9 +25,9 @@ struct TileCopyTla<Arch::AtlasA2,
 
 ## 偏特化实现
 
-| 架构 | 源位置 | 目标位置 | Layout 要求 | 搬运指令 |
-| :------ | :------ | :------ | :------ | :------ |
-| AtlasA2 | VECCALC | GM | RowMajor → RowMajor | `AscendC::DataCopyPad` |
+| 架构    | 源位置  | 目标位置 | Layout 要求         | 搬运指令               |
+| :------ | :------ | :------- | :------------------ | :--------------------- |
+| AtlasA2 | VECCALC | GM       | RowMajor → RowMajor | `AscendC::DataCopyPad` |
 
 ## 调用接口
 
@@ -40,6 +40,7 @@ void operator()(
 ```
 
 静态约束：
+
 - `TensorSrc::position == VECCALC`，`TensorSrc::Layout` 为 RowMajor
 - `TensorDst::position == GM`，`TensorDst::Layout` 为 RowMajor
 

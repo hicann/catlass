@@ -4,8 +4,8 @@
 
 ## 必需环境
 
-| 变量 | 用途 |
-|------|------|
+| 变量               | 用途                                                                 |
+| ------------------ | -------------------------------------------------------------------- |
 | `ASCEND_HOME_PATH` | CANN 安装根目录，须指向包含 compiler 和 runtime 的有效 Ascend 工具包 |
 
 ## 构建入口
@@ -116,6 +116,7 @@ jit_verify_template(NAME basic_matmul TEMPLATE basic_matmul_impl.cpp NPU_ARCH_LI
 ```
 
 验证：
+
 - 模板语法正确
 - 所需头文件可访问
 - 架构特定代码路径可编译
@@ -134,6 +135,7 @@ git describe --tags --always --dirty
 ```
 
 版本用于：
+
 1. 写入 `torch_catlass/_version.py`
 2. 暴露为 `os.environ["TORCH_CATLASS_VERSION"]`
 3. 注入 JIT 内核编译：`-DCATLASS_VERSION_FULL=...`

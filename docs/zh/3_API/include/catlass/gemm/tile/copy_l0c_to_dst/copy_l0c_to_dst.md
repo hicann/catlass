@@ -24,12 +24,12 @@ enum class ScaleGranularity {
 };
 ```
 
-| 粒度 | 说明 | scale 数据形式 | 典型场景 |
-| :------ | :------ | :------ | :------ |
-| `NO_QUANT` | 不量化 | 无 | int32→int32、float→half/bf16 纯类型转换 |
-| `PER_TENSOR` | 单一 scale | 1 个 `float` 标量 | 粗粒度量化 |
-| `PER_CHANNEL` | 逐通道 scale | `uint64_t` 向量（FixPipe 旁路） | 细粒度量化 |
-| `PER_GROUP` | per-group | — | 保留 |
+| 粒度          | 说明         | scale 数据形式                  | 典型场景                                |
+| :------------ | :----------- | :------------------------------ | :-------------------------------------- |
+| `NO_QUANT`    | 不量化       | 无                              | int32→int32、float→half/bf16 纯类型转换 |
+| `PER_TENSOR`  | 单一 scale   | 1 个 `float` 标量               | 粗粒度量化                              |
+| `PER_CHANNEL` | 逐通道 scale | `uint64_t` 向量（FixPipe 旁路） | 细粒度量化                              |
+| `PER_GROUP`   | per-group    | —                               | 保留                                    |
 
 ## CopyL0CToDstQuantMode（Ascend950）
 
@@ -37,36 +37,36 @@ enum class ScaleGranularity {
 
 ### NO_QUANT
 
-| ElementSrc | ElementDst | VALUE |
-| :------ | :------ | :------ |
-| `float` | `float` | `NoQuant` |
-| `float` | `half` | `F322F16` |
-| `float` | `bfloat16_t` | `F322BF16` |
-| `int32_t` | `int32_t` | `NoQuant` |
+| ElementSrc | ElementDst   | VALUE      |
+| :--------- | :----------- | :--------- |
+| `float`    | `float`      | `NoQuant`  |
+| `float`    | `half`       | `F322F16`  |
+| `float`    | `bfloat16_t` | `F322BF16` |
+| `int32_t`  | `int32_t`    | `NoQuant`  |
 
 ### PER_TENSOR
 
-| ElementSrc | ElementDst | VALUE |
-| :------ | :------ | :------ |
-| `float` | `uint8_t` / `int8_t` | `QF322B8_PRE` |
-| `int32_t` | `half` | `DEQF16` |
-| `int32_t` | `uint8_t` / `int8_t` | `REQ8` |
-| `int32_t` | `bfloat16_t` | `QS322BF16_PRE` |
-| `float` | `half` | `QF322F16_PRE` |
-| `float` | `bfloat16_t` | `QF322BF16_PRE` |
-| `float` | `float` | `QF322F32_PRE` |
+| ElementSrc | ElementDst           | VALUE           |
+| :--------- | :------------------- | :-------------- |
+| `float`    | `uint8_t` / `int8_t` | `QF322B8_PRE`   |
+| `int32_t`  | `half`               | `DEQF16`        |
+| `int32_t`  | `uint8_t` / `int8_t` | `REQ8`          |
+| `int32_t`  | `bfloat16_t`         | `QS322BF16_PRE` |
+| `float`    | `half`               | `QF322F16_PRE`  |
+| `float`    | `bfloat16_t`         | `QF322BF16_PRE` |
+| `float`    | `float`              | `QF322F32_PRE`  |
 
 ### PER_CHANNEL
 
-| ElementSrc | ElementDst | VALUE |
-| :------ | :------ | :------ |
-| `float` | `uint8_t` / `int8_t` | `VQF322B8_PRE` |
-| `int32_t` | `half` | `VDEQF16` |
-| `int32_t` | `uint8_t` / `int8_t` | `VREQ8` |
-| `int32_t` | `bfloat16_t` | `VQS322BF16_PRE` |
-| `float` | `half` | `VQF322F16_PRE` |
-| `float` | `bfloat16_t` | `VQF322BF16_PRE` |
-| `float` | `float` | `VQF322F32_PRE` |
+| ElementSrc | ElementDst           | VALUE            |
+| :--------- | :------------------- | :--------------- |
+| `float`    | `uint8_t` / `int8_t` | `VQF322B8_PRE`   |
+| `int32_t`  | `half`               | `VDEQF16`        |
+| `int32_t`  | `uint8_t` / `int8_t` | `VREQ8`          |
+| `int32_t`  | `bfloat16_t`         | `VQS322BF16_PRE` |
+| `float`    | `half`               | `VQF322F16_PRE`  |
+| `float`    | `bfloat16_t`         | `VQF322BF16_PRE` |
+| `float`    | `float`              | `VQF322F32_PRE`  |
 
 > AtlasA2 的 `CopyL0CToGmQuantMode` 不支持 `QS322BF16`、`QF322F16`、`QF322BF16`、`QF322F32` 等模式。
 
@@ -83,11 +83,11 @@ enum class CopyL0CToUBMode {
 };
 ```
 
-| 模式 | M 要求 | N 要求 | dualDstCtl |
-| :------ | :------ | :------ | :------ |
-| `NO_SPLIT` | — | — | — |
-| `SPLIT_M` | `RoundUp(M, 2)` | — | `1` |
-| `SPLIT_N` | — | `RoundUp(N, 32)` | `2` |
+| 模式       | M 要求          | N 要求           | dualDstCtl |
+| :--------- | :-------------- | :--------------- | :--------- |
+| `NO_SPLIT` | —               | —                | —          |
+| `SPLIT_M`  | `RoundUp(M, 2)` | —                | `1`        |
+| `SPLIT_N`  | —               | `RoundUp(N, 32)` | `2`        |
 
 ## 模板声明
 

@@ -12,9 +12,9 @@ Note that this document only summarizes samples related to matrix multiplication
 - Theoretical template: `Common`
 - Engineering optimization: `Pipeline optimization (Multi-Buffer)`
 - Key deliverables
-    - host: [00_basic_matmul](../../../../examples/00_basic_matmul/basic_matmul.cpp)
-    - kernel: [basic_matmul.hpp](../../../../include/catlass/gemm/kernel/basic_matmul.hpp)
-    - blockMmad: [block_mmad_pingpong.hpp](../../../../include/catlass/gemm/block/block_mmad_pingpong.hpp)
+  - host: [00_basic_matmul](../../../../examples/00_basic_matmul/basic_matmul.cpp)
+  - kernel: [basic_matmul.hpp](../../../../include/catlass/gemm/kernel/basic_matmul.hpp)
+  - blockMmad: [block_mmad_pingpong.hpp](../../../../include/catlass/gemm/block/block_mmad_pingpong.hpp)
 - dispatchPolicy: `MmadAtlasA2Pingpong`
 
 </details>
@@ -24,12 +24,12 @@ Note that this document only summarizes samples related to matrix multiplication
 
 - Theoretical template: `Common`
 - Engineering optimization:
-    - `Pipeline optimization (Multi-Buffer)`
-    - `Read bandwidth optimization (padding) - PaddingMatrixND`
+  - `Pipeline optimization (Multi-Buffer)`
+  - `Read bandwidth optimization (padding) - PaddingMatrixND`
 - Key deliverables
-    - host: [04_padding_matmul](../../../../examples/04_padding_matmul/padding_matmul.cpp)
-    - kernel: [padding_matmul.hpp](../../../../include/catlass/gemm/kernel/padding_matmul.hpp)
-    - blockMmad: [block_mmad_pingpong.hpp](../../../../include/catlass/gemm/block/block_mmad_pingpong.hpp)
+  - host: [04_padding_matmul](../../../../examples/04_padding_matmul/padding_matmul.cpp)
+  - kernel: [padding_matmul.hpp](../../../../include/catlass/gemm/kernel/padding_matmul.hpp)
+  - blockMmad: [block_mmad_pingpong.hpp](../../../../include/catlass/gemm/block/block_mmad_pingpong.hpp)
 - dispatchPolicy: `MmadAtlasA2Pingpong`
 
 </details>
@@ -39,16 +39,16 @@ Note that this document only summarizes samples related to matrix multiplication
 
 - Theoretical template: `Common`
 - Engineering optimization:
-    - `Pipeline optimization (Multi-Buffer)`
-    - `Pipeline optimization (Preload)`
-    - `Read bandwidth optimization (padding) - PaddingMatrixNZ`
-    - `Read bandwidth optimization (ShuffleK)`
-    - `Read bandwidth optimization (instruction replacement in small-M scenarios)` (requires modifying the sample to enable)
+  - `Pipeline optimization (Multi-Buffer)`
+  - `Pipeline optimization (Preload)`
+  - `Read bandwidth optimization (padding) - PaddingMatrixNZ`
+  - `Read bandwidth optimization (ShuffleK)`
+  - `Read bandwidth optimization (instruction replacement in small-M scenarios)` (requires modifying the sample to enable)
 - Key deliverables
-    - host: [06_optimized_matmul](../../../../examples/06_optimized_matmul/optimized_matmul.cpp)
-    - kernel: [optimized_matmul.hpp](../../../../include/catlass/gemm/kernel/optimized_matmul.hpp)
-    - Padding prologue component: [padding_matmul.hpp](../../../../include/catlass/gemm/kernel/padding_matmul.hpp)
-    - blockMmad: [block_mmad_preload.hpp](../../../../include/catlass/gemm/block/block_mmad_preload.hpp)
+  - host: [06_optimized_matmul](../../../../examples/06_optimized_matmul/optimized_matmul.cpp)
+  - kernel: [optimized_matmul.hpp](../../../../include/catlass/gemm/kernel/optimized_matmul.hpp)
+  - Padding prologue component: [padding_matmul.hpp](../../../../include/catlass/gemm/kernel/padding_matmul.hpp)
+  - blockMmad: [block_mmad_preload.hpp](../../../../include/catlass/gemm/block/block_mmad_preload.hpp)
 - dispatchPolicy: `MmadAtlasA2Preload`
 - ⚠️ Note: Even without `PaddingMatrixNZ` prologue, there is still overhead from MIX operator compilation and CV1:0 launch (greater than the overhead of launching only AIC).
 
@@ -60,9 +60,9 @@ Note that this document only summarizes samples related to matrix multiplication
 - Theoretical template: `MultiCoreSplitK`
 - Engineering optimization: `Pipeline optimization (Multi-Buffer)`
 - Key deliverables
-    - host: [09_splitk_matmul](../../../../examples/09_splitk_matmul/splitk_matmul.cpp)
-    - kernel: [splitk_matmul.hpp](../../../../include/catlass/gemm/kernel/splitk_matmul.hpp)
-    - blockMmad: [block_mmad_pingpong.hpp](../../../../include/catlass/gemm/block/block_mmad_pingpong.hpp)
+  - host: [09_splitk_matmul](../../../../examples/09_splitk_matmul/splitk_matmul.cpp)
+  - kernel: [splitk_matmul.hpp](../../../../include/catlass/gemm/kernel/splitk_matmul.hpp)
+  - blockMmad: [block_mmad_pingpong.hpp](../../../../include/catlass/gemm/block/block_mmad_pingpong.hpp)
 - dispatchPolicy: `MmadAtlasA2Pingpong`
 
 </details>
@@ -74,13 +74,13 @@ Note that this document only summarizes samples related to matrix multiplication
 
 - Theoretical template: `Common`
 - Engineering optimization:
-    - `Pipeline optimization (Multi-Buffer)`
-    - `Pipeline optimization (Preload)`
-    - `Read bandwidth optimization (ShuffleK)`
+  - `Pipeline optimization (Multi-Buffer)`
+  - `Pipeline optimization (Preload)`
+  - `Read bandwidth optimization (ShuffleK)`
 - Key deliverables
-    - host: [21_basic_matmul_preload_zN](../../../../examples/21_basic_matmul_preload_zN/basic_matmul_preload_zN.cpp)
-    - kernel: [basic_matmul_preload.hpp](../../../../include/catlass/gemm/kernel/basic_matmul_preload.hpp)
-    - blockMmad: [block_mmad_preload.hpp](../../../../include/catlass/gemm/block/block_mmad_preload.hpp)
+  - host: [21_basic_matmul_preload_zN](../../../../examples/21_basic_matmul_preload_zN/basic_matmul_preload_zN.cpp)
+  - kernel: [basic_matmul_preload.hpp](../../../../include/catlass/gemm/kernel/basic_matmul_preload.hpp)
+  - blockMmad: [block_mmad_preload.hpp](../../../../include/catlass/gemm/block/block_mmad_preload.hpp)
 - dispatchPolicy: `MmadAtlasA2Preload`
 
 </details>
@@ -90,14 +90,14 @@ Note that this document only summarizes samples related to matrix multiplication
 
 - Theoretical template: `MultiCoreSplitK`
 - Engineering optimization:
-    - `Pipeline optimization (Multi-Buffer)`
-    - `Read bandwidth optimization (padding) - PaddingMatrixND`
+  - `Pipeline optimization (Multi-Buffer)`
+  - `Read bandwidth optimization (padding) - PaddingMatrixND`
 - Key deliverables
-    - host: [22_padding_splitk_matmul](../../../../examples/22_padding_splitk_matmul/padding_splitk_matmul.cpp)
-    - kernel: [padding_splitk_matmul.hpp](../../../../include/catlass/gemm/kernel/padding_splitk_matmul.hpp)
-    - Padding prologue component: [padding_matmul.hpp](../../../../include/catlass/gemm/kernel/padding_matmul.hpp)
-    - SplitkReduceAdd epilogue component: [splitk_matmul.hpp](../../../../include/catlass/gemm/kernel/splitk_matmul.hpp)
-    - blockMmad: [block_mmad_pingpong.hpp](../../../../include/catlass/gemm/block/block_mmad_pingpong.hpp)
+  - host: [22_padding_splitk_matmul](../../../../examples/22_padding_splitk_matmul/padding_splitk_matmul.cpp)
+  - kernel: [padding_splitk_matmul.hpp](../../../../include/catlass/gemm/kernel/padding_splitk_matmul.hpp)
+  - Padding prologue component: [padding_matmul.hpp](../../../../include/catlass/gemm/kernel/padding_matmul.hpp)
+  - SplitkReduceAdd epilogue component: [splitk_matmul.hpp](../../../../include/catlass/gemm/kernel/splitk_matmul.hpp)
+  - blockMmad: [block_mmad_pingpong.hpp](../../../../include/catlass/gemm/block/block_mmad_pingpong.hpp)
 - dispatchPolicy: `MmadAtlasA2Pingpong`
 
 </details>
@@ -109,12 +109,12 @@ Note that this document only summarizes samples related to matrix multiplication
 
 - Theoretical template: `Common`
 - Engineering optimization:
-    - `Pipeline optimization (Multi-Buffer)` (The fully loaded matrix A does not use multi-buffering in L1.)
-    - `Read bandwidth optimization (L1 residency)`
+  - `Pipeline optimization (Multi-Buffer)` (The fully loaded matrix A does not use multi-buffering in L1.)
+  - `Read bandwidth optimization (L1 residency)`
 - Key deliverables
-    - host: [25_matmul_full_loadA](../../../../examples/25_matmul_full_loadA/matmul_full_loadA.cpp)
-    - kernel: [matmul_full_loadA.hpp](../../../../include/catlass/gemm/kernel/matmul_full_loadA.hpp)
-    - blockMmad: [block_mmad_pingpong_full_loadA.hpp](../../../../include/catlass/gemm/block/block_mmad_pingpong_full_loadA.hpp)
+  - host: [25_matmul_full_loadA](../../../../examples/25_matmul_full_loadA/matmul_full_loadA.cpp)
+  - kernel: [matmul_full_loadA.hpp](../../../../include/catlass/gemm/kernel/matmul_full_loadA.hpp)
+  - blockMmad: [block_mmad_pingpong_full_loadA.hpp](../../../../include/catlass/gemm/block/block_mmad_pingpong_full_loadA.hpp)
 - dispatchPolicy: `MmadAtlasA2FullLoadA`
 - BlockScheduler: `GemmIdentityBlockSwizzleL1FullLoad`
 
@@ -125,12 +125,12 @@ Note that this document only summarizes samples related to matrix multiplication
 
 - Theoretical template: <idp:inline displayname="code" id="code85531551151311">Common</idp:inline>
 - Engineering optimization:
-    - <idp:inline displayname="code" id="code191623240184">Pipeline optimization (Multi-Buffer)</idp:inline>
-    - `Scalar overhead reduction`
+  - <idp:inline displayname="code" id="code191623240184">Pipeline optimization (Multi-Buffer)</idp:inline>
+  - `Scalar overhead reduction`
 - Key deliverables
-    - host: [31_small_matmul](../../../../examples/31_small_matmul/small_matmul.cpp)
-    - kernel: [small_matmul.hpp](../../../../include/catlass/gemm/kernel/small_matmul.hpp)
-    - blockMmad: [block_mmad_small.hpp](../../../../include/catlass/gemm/block/block_mmad_small.hpp)
+  - host: [31_small_matmul](../../../../examples/31_small_matmul/small_matmul.cpp)
+  - kernel: [small_matmul.hpp](../../../../include/catlass/gemm/kernel/small_matmul.hpp)
+  - blockMmad: [block_mmad_small.hpp](../../../../include/catlass/gemm/block/block_mmad_small.hpp)
 - dispatchPolicy: `MmadAtlasA2Small`
 - BlockScheduler: not actually used in the kernel
 
@@ -141,14 +141,14 @@ Note that this document only summarizes samples related to matrix multiplication
 
 - Theoretical template: `SingleCoreSplitK`
 - Engineering optimization:
-    - <idp:inline displayname="code" id="code416252411819">Pipeline optimization (Multi-Buffer)</idp:inline>
-    - <idp:inline displayname="code" id="code11507244191919">Read bandwidth optimization (padding) - PaddingMatrixNZ</idp:inline>
-    - `Write bandwidth optimization`
+  - <idp:inline displayname="code" id="code416252411819">Pipeline optimization (Multi-Buffer)</idp:inline>
+  - <idp:inline displayname="code" id="code11507244191919">Read bandwidth optimization (padding) - PaddingMatrixNZ</idp:inline>
+  - `Write bandwidth optimization`
 - Key deliverables
-    - host: [34_single_core_splitk_matmul](../../../../examples/34_single_core_splitk_matmul/single_core_splitk.cpp)
-    - kernel: [single_core_slicek_matmul.hpp](../../../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp)
-    - Padding prologue component and RemovePaddingNDAndCast epilogue component: [padding_matmul.hpp](../../../../include/catlass/gemm/kernel/padding_matmul.hpp)
-    - blockMmad: [block_mmad_single_core_splitk.hpp](../../../../include/catlass/gemm/block/block_mmad_single_core_splitk.hpp)
+  - host: [34_single_core_splitk_matmul](../../../../examples/34_single_core_splitk_matmul/single_core_splitk.cpp)
+  - kernel: [single_core_slicek_matmul.hpp](../../../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp)
+  - Padding prologue component and RemovePaddingNDAndCast epilogue component: [padding_matmul.hpp](../../../../include/catlass/gemm/kernel/padding_matmul.hpp)
+  - blockMmad: [block_mmad_single_core_splitk.hpp](../../../../include/catlass/gemm/block/block_mmad_single_core_splitk.hpp)
 - dispatchPolicy: `MmadAtlasA2SingleCoreSplitk`
 - BlockScheduler: `SingleCoreSplitkGemmIdentityBlockSwizzle`
 
@@ -479,15 +479,15 @@ In practice, a tile can be made resident in L1, reducing repeated reads of tile 
 ### Code Location for the Feature
 
 - For details about the `Common` template, see [25_matmul_full_loadA](../../../../examples/25_matmul_full_loadA/matmul_full_loadA.cpp) and related deliverables. This example optimizes performance in specific scenarios by fully loading matrix A on a single core or multiple cores along the M axis, and uses a dedicated swizzle policy to increase the reuse frequency of the fully loaded matrix A block in L1.
-    - kernel: [matmul_full_loadA.hpp](../../../../include/catlass/gemm/kernel/matmul_full_loadA.hpp)
-    - blockMmad: [block_mmad_pingpong_full_loadA.hpp](../../../../include/catlass/gemm/block/block_mmad_pingpong_full_loadA.hpp)
-    - dispatchPolicy: <idp:inline displayname="code" id="code413194620281">MmadAtlasA2FullLoadA</idp:inline>
-    - BlockScheduler: <idp:inline displayname="code" id="code13616124752811">GemmIdentityBlockSwizzleL1FullLoad</idp:inline>
+  - kernel: [matmul_full_loadA.hpp](../../../../include/catlass/gemm/kernel/matmul_full_loadA.hpp)
+  - blockMmad: [block_mmad_pingpong_full_loadA.hpp](../../../../include/catlass/gemm/block/block_mmad_pingpong_full_loadA.hpp)
+  - dispatchPolicy: <idp:inline displayname="code" id="code413194620281">MmadAtlasA2FullLoadA</idp:inline>
+  - BlockScheduler: <idp:inline displayname="code" id="code13616124752811">GemmIdentityBlockSwizzleL1FullLoad</idp:inline>
 - The `single-core split-K` template ([34_single_core_splitk_matmul](../../../../examples/34_single_core_splitk_matmul/single_core_splitk.cpp)) considers the optimization of L1Tile block residency in its theoretical design.
-    - kernel: [single_core_slicek_matmul.hpp](../../../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp)
-    - blockMmad: [block_mmad_single_core_splitk.hpp](../../../../include/catlass/gemm/block/block_mmad_single_core_splitk.hpp)
-    - dispatchPolicy: <idp:inline displayname="code" id="code94861649152910">MmadAtlasA2SingleCoreSplitk</idp:inline>
-    - BlockScheduler: <idp:inline displayname="code" id="code17850135052918">SingleCoreSplitkGemmIdentityBlockSwizzle</idp:inline>
+  - kernel: [single_core_slicek_matmul.hpp](../../../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp)
+  - blockMmad: [block_mmad_single_core_splitk.hpp](../../../../include/catlass/gemm/block/block_mmad_single_core_splitk.hpp)
+  - dispatchPolicy: <idp:inline displayname="code" id="code94861649152910">MmadAtlasA2SingleCoreSplitk</idp:inline>
+  - BlockScheduler: <idp:inline displayname="code" id="code17850135052918">SingleCoreSplitkGemmIdentityBlockSwizzle</idp:inline>
 
 </details>
 
@@ -516,8 +516,8 @@ Reduce redundant scalar computations.
 ### Code Location for the Feature
 
 - For details, see [31_small_matmul](../../../../examples/31_small_matmul/small_matmul.cpp). You can compare it with the deliverables of [00_basic_matmul](../../../../examples/00_basic_matmul/basic_matmul.cpp) to deepen your understanding.
-    - kernel: [small_matmul.hpp](../../../../include/catlass/gemm/kernel/small_matmul.hpp)
-    - blockMmad: [block_mmad_small.hpp](../../../../include/catlass/gemm/block/block_mmad_small.hpp)
+  - kernel: [small_matmul.hpp](../../../../include/catlass/gemm/kernel/small_matmul.hpp)
+  - blockMmad: [block_mmad_small.hpp](../../../../include/catlass/gemm/block/block_mmad_small.hpp)
 
 </details>
 
@@ -569,32 +569,32 @@ First, try to tune TileShape based on [00_basic_matmul](../../../../examples/00_
 Then, identify whether the scenario fits each template and compare with the performance baseline:
 
 - [31_small_matmul](../../../../examples/31_small_matmul/small_matmul.cpp):
-    - Calculate the number of current basic task blocks taskBlocks.
+  - Calculate the number of current basic task blocks taskBlocks.
 
-        ```cpp
-        taskBlocks = CeilDiv(M, m1) * CeilDiv(N, n1);
-        ```
+    ```cpp
+    taskBlocks = CeilDiv(M, m1) * CeilDiv(N, n1);
+    ```
 
-    - The number of basic task blocks is less than the number of AIC cores: $taskBlocks < aicCoreNum$
-    - The $K$ axis is small: $K <= k_1$
+  - The number of basic task blocks is less than the number of AIC cores: $taskBlocks < aicCoreNum$
+  - The $K$ axis is small: $K <= k_1$
 - [09_splitk_matmul](../../../../examples/09_splitk_matmul/splitk_matmul.cpp) or [22_padding_splitk_matmul](../../../../examples/22_padding_splitk_matmul/padding_splitk_matmul.cpp) (with padding prologue)
-    - Select $m_1$, $n_1$, and $k_1$.
-        - Set $m_1 = 128$, $n_1 = 256$, and $k_1 = 256$.
-        - If either of the following conditions is met, change to $m_1 = 256$ and $n_1 = 128$.
-            - Both matrices A and B are column-major.
-            - Matrix A is column-major, matrix B is row-major, and $M > N$.
-    - Calculate the number of current basic task blocks taskBlocks.
+  - Select $m_1$, $n_1$, and $k_1$.
+    - Set $m_1 = 128$, $n_1 = 256$, and $k_1 = 256$.
+    - If either of the following conditions is met, change to $m_1 = 256$ and $n_1 = 128$.
+      - Both matrices A and B are column-major.
+      - Matrix A is column-major, matrix B is row-major, and $M > N$.
+  - Calculate the number of current basic task blocks taskBlocks.
 
-        ```cpp
-        taskBlocks = CeilDiv(M, m1) * CeilDiv(N, n1);
-        ```
+    ```cpp
+    taskBlocks = CeilDiv(M, m1) * CeilDiv(N, n1);
+    ```
 
-    - The following two scenarios are met:
-        - The number of basic task blocks is less than half of the number of AIC cores, and the $K$ axis is sufficiently large: $taskBlocks < aicCoreNum / 2, K > 5120$
-        - The number of basic task blocks is less than 3, and the $K$ axis is not small: $taskBlocks <= 2, K > 1024$
+  - The following two scenarios are met:
+    - The number of basic task blocks is less than half of the number of AIC cores, and the $K$ axis is sufficiently large: $taskBlocks < aicCoreNum / 2, K > 5120$
+    - The number of basic task blocks is less than 3, and the $K$ axis is not small: $taskBlocks <= 2, K > 1024$
 - [06_optimized_matmul](../../../../examples/06_optimized_matmul/optimized_matmul.cpp) (with padding prologue) and [21_basic_matmul_preload_zN](../../../../examples/21_basic_matmul_preload_zN/basic_matmul_preload_zN.cpp) (manually change to ND input)
-    - These feature stronger generalization and are suitable for the remaining scenarios.
-    - If padding is not required, you are advised to use the [21_basic_matmul_preload_zN](../../../../examples/21_basic_matmul_preload_zN/basic_matmul_preload_zN.cpp) template to reduce the overhead of MIX operator compilation and launch.
+  - These feature stronger generalization and are suitable for the remaining scenarios.
+  - If padding is not required, you are advised to use the [21_basic_matmul_preload_zN](../../../../examples/21_basic_matmul_preload_zN/basic_matmul_preload_zN.cpp) template to reduce the overhead of MIX operator compilation and launch.
 
 ⚠️ The applicable scenarios for the full-load feature in [25_matmul_full_loadA](../../../../examples/25_matmul_full_loadA/matmul_full_loadA.cpp) and the single-core split-K solution in [34_single_core_splitk_matmul](../../../../examples/34_single_core_splitk_matmul/single_core_splitk.cpp) are yet to refine.
 

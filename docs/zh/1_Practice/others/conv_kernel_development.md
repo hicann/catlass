@@ -27,18 +27,18 @@ Conv2D本质上可以转化为矩阵乘（Im2col + GEMM），Catlass中通过til
 
 Conv2D涉及三种数据布局，均为5维Tensor：
 
-| 张量 | Layout | 维度含义 | 默认C0 |
-|------|--------|---------|--------|
-| Fmap |`NC1HWC0`|`[Batch, Cin1, Hi, Wi, C0]`| 16 |
-| Filter |`CI1KHKWCOCI0`|`[Cin1, Kh, Kw, Cout, C0]`| 16 |
-| Output |`NC1HWC0`|`[Batch, Cout1, Ho, Wo, C0]`| 16 |
+| 张量   | Layout         | 维度含义                     | 默认C0 |
+| ------ | -------------- | ---------------------------- | ------ |
+| Fmap   | `NC1HWC0`      | `[Batch, Cin1, Hi, Wi, C0]`  | 16     |
+| Filter | `CI1KHKWCOCI0` | `[Cin1, Kh, Kw, Cout, C0]`   | 16     |
+| Output | `NC1HWC0`      | `[Batch, Cout1, Ho, Wo, C0]` | 16     |
 
 其中`C0 = 16`为硬件对齐粒度（`BYTE_PER_C0 / sizeof(fp16)`），`Cin1 = CeilDiv(Cin, C0)`，`Cout1 = CeilDiv(Cout, C0)`。
 
 Catlass中对应的Layout类型定义在`include/catlass/layout/tensor.hpp`：
 
 -`layout::NC1HWC0`— Fmap和Output使用，strides为`[Cin1*Hi*Wi*C0, Hi*Wi*C0, Wi*C0, C0, 1]`
--`layout::CI1KHKWCOCI0`— Filter使用，strides为`[Kh*Kw*Cout*C0, Kw*Cout*C0, Cout*C0, C0, 1]`
+\-`layout::CI1KHKWCOCI0`— Filter使用，strides为`[Kh*Kw*Cout*C0, Kw*Cout*C0, Cout*C0, C0, 1]`
 
 ## 完整代码解析
 
@@ -62,14 +62,14 @@ struct Options {
 
 `Conv2dParams`（`include/catlass/conv_coord.hpp`）根据输入shape自动计算以下导出量：
 
-| 字段 | 含义 | 计算方式 |
-|------|------|---------|
-|`cin1()`| 输入C1维 |`CeilDiv(cin, C0)`|
-|`cout()`| 输出通道 | 用户指定 |
-|`cout1()`| 输出C1维 |`CeilDiv(cout, C0)`|
-|`coutRound()`| 对齐后的输出通道 |`(cout + C0 - 1) / C0 * C0`|
-|`ho()`/`wo()`| 输出空间维度 | 由pad/stride/dilation公式计算 |
-|`postIm2colShape`| 任务空间 |`{Batch, Ho, Wo, Cout, Cin1}`|
+| 字段              | 含义             | 计算方式                      |
+| ----------------- | ---------------- | ----------------------------- |
+| `cin1()`          | 输入C1维         | `CeilDiv(cin, C0)`            |
+| `cout()`          | 输出通道         | 用户指定                      |
+| `cout1()`         | 输出C1维         | `CeilDiv(cout, C0)`           |
+| `coutRound()`     | 对齐后的输出通道 | `(cout + C0 - 1) / C0 * C0`   |
+| `ho()`/`wo()`     | 输出空间维度     | 由pad/stride/dilation公式计算 |
+| `postIm2colShape` | 任务空间         | `{Batch, Ho, Wo, Cout, Cin1}` |
 
 **2. 环境初始化与内存分配**
 
@@ -147,14 +147,14 @@ using DispatchPolicy =
 
 `ConvAtlasA2Pingpong`控制各级存储（L1/L0A/L0B/L0C）的Double Buffer stage数：
 
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-|`L1A_STAGES`| 2 | Fmap从GM到L1的多buffer深度 |
-|`L1B_STAGES`| 2 | Filter从GM到L1的多buffer深度 |
-|`L0A_STAGES`| 2 | Fmap从L1到L0A的多buffer深度 |
-|`L0B_STAGES`| 2 | Filter从L1到L0B的多buffer深度 |
-|`L0C_STAGES`| 1 | L0C输出buffer深度 |
-|`ENABLE_UNIT_FLAG`| false | 是否启用unit flag |
+| 参数               | 默认值 | 说明                          |
+| ------------------ | ------ | ----------------------------- |
+| `L1A_STAGES`       | 2      | Fmap从GM到L1的多buffer深度    |
+| `L1B_STAGES`       | 2      | Filter从GM到L1的多buffer深度  |
+| `L0A_STAGES`       | 2      | Fmap从L1到L0A的多buffer深度   |
+| `L0B_STAGES`       | 2      | Filter从L1到L0B的多buffer深度 |
+| `L0C_STAGES`       | 1      | L0C输出buffer深度             |
+| `ENABLE_UNIT_FLAG` | false  | 是否启用unit flag             |
 
 `BlockConv2d`内部会对stage数做cap：`L1A_STAGES = min(DispatchPolicy::L1A_STAGES, MAX_STAGES)`，`MAX_STAGES = 2`。
 
@@ -168,11 +168,11 @@ using L0TileShape = Catlass::Conv2dL0Shape<16, 96, 16>;         // (mL0, nL0, kL
 
 这三个Tile Shape决定了卷积计算在各级存储上的分块粒度：
 
-| Tile Shape | 含义 | 作用 |
-|-----------|------|------|
-|`FmapL1TileShape<Ho, Wo, Cin1>`| Fmap加载到L1的基本块 | 每次加载`[Ho, Wo, Cin1, C0]`的Fmap tile |
-|`FilterL1TileShape<Cout, Cin1>`| Filter加载到L1的基本块 | 每次加载`[Cin1, Kh, Kw, Cout, C0]`的Filter tile |
-|`L0TileShape<M, N, K>`| L0A/L0B上的Mmad tile | 每次Matrix Multiply的计算粒度 |
+| Tile Shape                      | 含义                   | 作用                                            |
+| ------------------------------- | ---------------------- | ----------------------------------------------- |
+| `FmapL1TileShape<Ho, Wo, Cin1>` | Fmap加载到L1的基本块   | 每次加载`[Ho, Wo, Cin1, C0]`的Fmap tile         |
+| `FilterL1TileShape<Cout, Cin1>` | Filter加载到L1的基本块 | 每次加载`[Cin1, Kh, Kw, Cout, C0]`的Filter tile |
+| `L0TileShape<M, N, K>`          | L0A/L0B上的Mmad tile   | 每次Matrix Multiply的计算粒度                   |
 
 注意`FmapL1TileShape::Cin1`和`FilterL1TileShape::Cin1`的关系：`K_FMAP_PER_FILTER = FilterL1TileShape::Cin1 / FmapL1TileShape::Cin1`，表示每加载一块Filter需要在K方向循环多次Fmap tile。
 
@@ -200,13 +200,13 @@ using Conv2dKernel = Conv::Kernel::BasicConv2d<BlockConv2d, BlockEpilogue, Block
 using Conv2dAdapter = Conv::Device::DeviceConv<Conv2dKernel>;
 ```
 
-| 组件 | 作用 |
-|------|------|
-|`BlockConv2d`| 实现单次`Fmap_tile * Filter_tile -> Output_tile`的矩阵乘计算 |
-|`BlockEpilogue`| 后处理（当前为`void`，无后处理） |
-|`BlockScheduler`| 任务切分策略，决定每个AI Core处理哪块输出tile |
-|`BasicConv2d`| Kernel级封装，包含循环调度和边界处理 |
-|`DeviceConv`| Host端适配器，封装CanImplement、GetWorkspaceSize、Initialize和执行 |
+| 组件             | 作用                                                               |
+| ---------------- | ------------------------------------------------------------------ |
+| `BlockConv2d`    | 实现单次`Fmap_tile * Filter_tile -> Output_tile`的矩阵乘计算       |
+| `BlockEpilogue`  | 后处理（当前为`void`，无后处理）                                   |
+| `BlockScheduler` | 任务切分策略，决定每个AI Core处理哪块输出tile                      |
+| `BasicConv2d`    | Kernel级封装，包含循环调度和边界处理                               |
+| `DeviceConv`     | Host端适配器，封装CanImplement、GetWorkspaceSize、Initialize和执行 |
 
 **5. 任务调度与边界处理**
 
@@ -250,8 +250,8 @@ std::vector<uint64_t> errorIndices = golden::CompareData(hostOutput, hostGolden,
 ```
 
 -`CanImplement`：检查当前shape是否在Kernel支持范围内（BasicConv2d始终返回true）
--`GetWorkspaceSize`：返回所需workspace大小（BasicConv2d返回0）
--`golden::ComputeConv2d`：CPU参考实现，用于精度对比
+\-`GetWorkspaceSize`：返回所需workspace大小（BasicConv2d返回0）
+\-`golden::ComputeConv2d`：CPU参考实现，用于精度对比
 
 **7. 资源释放**
 
@@ -268,7 +268,7 @@ ACL_CHECK(aclFinalize());
 
 `BasicConv2d`的Kernel实现在`include/catlass/conv/kernel/basic_conv2d.hpp`，其核心流程如下：
 
-```
+```text
 [GM] Fmap ──GM→L1──→ [L1] Fmap Tile ──L1→L0A──→ [L0A] zN format
 [GM] Filter ──GM→L1──→ [L1] Filter Tile ──L1→L0B──→ [L0B] nZ format
                                                      ↓
@@ -277,7 +277,7 @@ ACL_CHECK(aclFinalize());
 [GM] Output ←──L0C→GM── [L0C] Accumulator
 ```
 
-工作流说明: 
+工作流说明:
 
 1. **GM → L1**：Fmap和Filter按tile从Global Memory搬运到L1，搬运过程中完成格式转换（随路NZ）
 2. **L1 → L0A/L0B**：从L1到L0A/L0B的再搬运，进一步调整为Cube计算所需格式

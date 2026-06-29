@@ -36,7 +36,9 @@ python3 examples/65_ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant/gen_
 # 可执行文件名 | problem_count | M | n | K | Device ID
 # Device ID 可选，默认为 0
 ```
+
 执行结果如下，说明精度比对成功。
+
 ```
 Compare success.
 ```

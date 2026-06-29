@@ -23,22 +23,22 @@ struct CopyGmToL1IntervalDataCopy
 
 ### 模板参数说明
 
-| 参数 | 说明 |
-| :------ | :------ |
-| `ArchTag` | 架构标签，当前仅支持 `Arch::AtlasA2` |
-| `GmType` | GM 上源操作数的 Gemm 类型 |
-| `L1Type` | L1 上目的操作数的 Gemm 类型，默认为 `void` |
+| 参数      | 说明                                       |
+| :-------- | :----------------------------------------- |
+| `ArchTag` | 架构标签，当前仅支持 `Arch::AtlasA2`       |
+| `GmType`  | GM 上源操作数的 Gemm 类型                  |
+| `L1Type`  | L1 上目的操作数的 Gemm 类型，默认为 `void` |
 
 ## 偏特化实现
 
 所有偏特化仅适用于 `Arch::AtlasA2`，数据类型固定为 `half`。
 
-| GmType | 目的 Layout | 说明 |
-| :------ | :------ | :------ |
-| `GemmType<half, RowMajor>` | `zN` | RowMajor → zN，逐行间隔搬运 |
-| `GemmType<half, PaddingRowMajor>` | `zN` | PaddingRowMajor → zN，逐行间隔搬运 |
-| `GemmType<half, ColumnMajor>` | `nZ` | ColumnMajor → nZ，逐列间隔搬运 |
-| `GemmType<half, PaddingColumnMajor>` | `nZ` | PaddingColumnMajor → nZ，逐列间隔搬运 |
+| GmType                               | 目的 Layout | 说明                                  |
+| :----------------------------------- | :---------- | :------------------------------------ |
+| `GemmType<half, RowMajor>`           | `zN`        | RowMajor → zN，逐行间隔搬运           |
+| `GemmType<half, PaddingRowMajor>`    | `zN`        | PaddingRowMajor → zN，逐行间隔搬运    |
+| `GemmType<half, ColumnMajor>`        | `nZ`        | ColumnMajor → nZ，逐列间隔搬运        |
+| `GemmType<half, PaddingColumnMajor>` | `nZ`        | PaddingColumnMajor → nZ，逐列间隔搬运 |
 
 ## 调用接口
 
@@ -53,12 +53,12 @@ void operator()(
 )
 ```
 
-| 参数 | 说明 |
-| :------ | :------ |
+| 参数        | 说明                                   |
+| :---------- | :------------------------------------- |
 | `dstTensor` | 目的 L1 LocalTensor，元素类型为 `half` |
-| `srcTensor` | 源 GM GlobalTensor，元素类型为 `half` |
-| `layoutDst` | 目的操作数的 layout 描述 |
-| `layoutSrc` | 源操作数的 layout 描述 |
+| `srcTensor` | 源 GM GlobalTensor，元素类型为 `half`  |
+| `layoutDst` | 目的操作数的 layout 描述               |
+| `layoutSrc` | 源操作数的 layout 描述                 |
 
 ## 调用示例
 

@@ -32,14 +32,14 @@ struct CopyL0CToGmTla {
 
 偏特化通过 `Enable` SFINAE 自动派发：
 
-| 架构 | SFINAE 条件 | 说明 |
-| :------ | :------ | :------ |
-| AtlasA2 | `isRowMajor<LayoutDst>` | GM RowMajor，`AscendC::Fixpipe` + `CFG_ROW_MAJOR` |
-| AtlasA2 | `iszN<ElementDst, LayoutDst>` | GM zN，`AscendC::Fixpipe` + `CFG_NZ` |
-| Ascend950 | `isRowMajor<LayoutDst>` + NO_QUANT | `AscendC::DataCopy` + `SetFixpipeNz2ndFlag` |
-| Ascend950 | `iszN<ElementDst, LayoutDst>` + NO_QUANT | `AscendC::DataCopy`，zN 保持 |
-| Ascend950 | `isRowMajor<LayoutDst>` + PER_TENSOR | `AscendC::Fixpipe` + `deqScalar` |
-| Ascend950 | `isRowMajor<LayoutDst>` + PER_CHANNEL | `AscendC::Fixpipe` 三参数，Scale 向量直接传入 |
+| 架构      | SFINAE 条件                              | 说明                                              |
+| :-------- | :--------------------------------------- | :------------------------------------------------ |
+| AtlasA2   | `isRowMajor<LayoutDst>`                  | GM RowMajor，`AscendC::Fixpipe` + `CFG_ROW_MAJOR` |
+| AtlasA2   | `iszN<ElementDst, LayoutDst>`            | GM zN，`AscendC::Fixpipe` + `CFG_NZ`              |
+| Ascend950 | `isRowMajor<LayoutDst>` + NO_QUANT       | `AscendC::DataCopy` + `SetFixpipeNz2ndFlag`       |
+| Ascend950 | `iszN<ElementDst, LayoutDst>` + NO_QUANT | `AscendC::DataCopy`，zN 保持                      |
+| Ascend950 | `isRowMajor<LayoutDst>` + PER_TENSOR     | `AscendC::Fixpipe` + `deqScalar`                  |
+| Ascend950 | `isRowMajor<LayoutDst>` + PER_CHANNEL    | `AscendC::Fixpipe` 三参数，Scale 向量直接传入     |
 
 ## 调用接口
 

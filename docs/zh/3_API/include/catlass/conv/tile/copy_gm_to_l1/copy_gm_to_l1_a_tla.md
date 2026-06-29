@@ -18,8 +18,8 @@ template <class Element>
 struct CopyGmToL1ATla;
 ```
 
-| 模板参数 | 说明 |
-| :------ | :------ |
+| 模板参数  | 说明                |
+| :-------- | :------------------ |
 | `Element` | 元素类型，如 `half` |
 
 ## 调用接口

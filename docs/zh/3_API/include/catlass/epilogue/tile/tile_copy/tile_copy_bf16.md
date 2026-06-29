@@ -25,9 +25,9 @@ struct TileCopyBf16;
 
 ## 成员类型定义
 
-| 成员类型 | 说明 |
-| :------ | :------ |
-| `CopyGmToUbC` | `CopyGm2Ub<Arch, CType>` |
+| 成员类型      | 说明                                             |
+| :------------ | :----------------------------------------------- |
+| `CopyGmToUbC` | `CopyGm2Ub<Arch, CType>`                         |
 | `CopyGmToUbX` | `CopyGm2Ub<Arch, GemmType<bfloat16_t, XLayout>>` |
 | `CopyGmToUbY` | `CopyGm2Ub<Arch, GemmType<bfloat16_t, YLayout>>` |
 | `CopyUbToGmD` | `CopyUb2Gm<Arch, GemmType<bfloat16_t, DLayout>>` |

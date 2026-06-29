@@ -12,11 +12,11 @@ UB→GM 搬运模块，负责将数据从 UB（Unified Buffer）写回 GM（Glob
 
 ## API 清单
 
-| API | 风格 | 适用硬件 | Layout | 说明 |
-| :------ | :------ | :------ | :------ | :------ |
-| [CopyUb2Gm](./copy_ub_to_gm.md) | 非 TLA | AtlasA2 | RowMajor | UB RowMajor → GM RowMajor |
-| [TileCopyTla](./tile_copy_tla.md) | TLA | AtlasA2 | RowMajor | TLA 封装，RowMajor 目标 |
-| [TileCopyTlaExt](./tile_copy_tla_ext.md) | TLA Ext | AtlasA2 | PaddingRowMajor | TLA 封装，PaddingRowMajor 目标 |
+| API                                      | 风格    | 适用硬件 | Layout          | 说明                           |
+| :--------------------------------------- | :------ | :------- | :-------------- | :----------------------------- |
+| [CopyUb2Gm](./copy_ub_to_gm.md)          | 非 TLA  | AtlasA2  | RowMajor        | UB RowMajor → GM RowMajor      |
+| [TileCopyTla](./tile_copy_tla.md)        | TLA     | AtlasA2  | RowMajor        | TLA 封装，RowMajor 目标        |
+| [TileCopyTlaExt](./tile_copy_tla_ext.md) | TLA Ext | AtlasA2  | PaddingRowMajor | TLA 封装，PaddingRowMajor 目标 |
 
 ## 调用示例
 
@@ -65,8 +65,8 @@ copyOp(dstTensor, srcTensor);
 
 ## 模板选择指南
 
-| 场景 | 推荐 | 风格 |
-| :------ | :------ | :------ |
-| 普通 RowMajor 写回 | `CopyUb2Gm` | 非 TLA |
-| TLA 风格 RowMajor 写回 | `TileCopyTla` | TLA |
+| 场景                       | 推荐             | 风格    |
+| :------------------------- | :--------------- | :------ |
+| 普通 RowMajor 写回         | `CopyUb2Gm`      | 非 TLA  |
+| TLA 风格 RowMajor 写回     | `TileCopyTla`    | TLA     |
 | Padding 后的 RowMajor 写回 | `TileCopyTlaExt` | TLA Ext |

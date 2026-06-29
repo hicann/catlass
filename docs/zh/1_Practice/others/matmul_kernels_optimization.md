@@ -12,13 +12,13 @@ Matmul极致性能调优建议按以下顺序推进：
 2. 使用`msprof op`获取上板性能数据，判断主要瓶颈是Cube利用率不足、MTE2读带宽不足、MTE3/Fixpipe写出不足、Vector后处理不足，还是Scalar头开销过大。
 3. 计算任务块数量：
 
-    ```cpp
-    mTiles = CeilDiv(M, m1);
-    nTiles = CeilDiv(N, n1);
-    taskBlocks = mTiles * nTiles;
-    ```
+   ```cpp
+   mTiles = CeilDiv(M, m1);
+   nTiles = CeilDiv(N, n1);
+   taskBlocks = mTiles * nTiles;
+   ```
 
-    若`taskBlocks`与AIC核数不匹配，优先调`m1/n1`或切换分核模板。
+   若`taskBlocks`与AIC核数不匹配，优先调`m1/n1`或切换分核模板。
 
 4. 对当前瓶颈做单点优化，避免一次叠加多个特性导致收益来源不可判断。
 5. 用仿真流水图检查MTE2、MTE3、Cube、Vector、Scalar是否存在长空泡或互等。
@@ -38,29 +38,29 @@ Matmul极致性能调优建议按以下顺序推进：
 
 1. **先调任务块数量。**
 
-    对Common模板，基本任务块数量为`CeilDiv(M, m1) * CeilDiv(N, n1)`。当任务块数少于AIC核数时，优先减小`m1`或`n1`；当任务块数远多于AIC核数且每轮负载不均时，优先尝试Swizzle或StreamK。
+   对Common模板，基本任务块数量为`CeilDiv(M, m1) * CeilDiv(N, n1)`。当任务块数少于AIC核数时，优先减小`m1`或`n1`；当任务块数远多于AIC核数且每轮负载不均时，优先尝试Swizzle或StreamK。
 
 2. **再调基本块形状。**
 
-    在L1/L0A/L0B/L0C容量约束内，`m1/n1`越大，A/B重复读取次数越少；但`m1/n1`过大又会减少任务块数量，造成负载不均。读取量可用以下公式做一阶估计：
+   在L1/L0A/L0B/L0C容量约束内，`m1/n1`越大，A/B重复读取次数越少；但`m1/n1`过大又会减少任务块数量，造成负载不均。读取量可用以下公式做一阶估计：
 
-    ```text
-    readBytes ~= sizeof(input) * M * N * K * (1 / m1 + 1 / n1)
-    ```
+   ```text
+   readBytes ~= sizeof(input) * M * N * K * (1 / m1 + 1 / n1)
+   ```
 
-    因此，MTE2 bound场景通常希望增大`m1/n1`；Cube利用率不足时通常希望减小`m1/n1`或引入K轴分核。
+   因此，MTE2 bound场景通常希望增大`m1/n1`；Cube利用率不足时通常希望减小`m1/n1`或引入K轴分核。
 
 3. **启用Multi Buffer。**
 
-    Multi Buffer是基础优化，目标是在L1/L0A/L0B/L0C上让搬运和计算重叠。绝大多数blockMmad组件默认承载此能力。调参时需要确认各级buffer stage没有超出对应片上存储空间。
+   Multi Buffer是基础优化，目标是在L1/L0A/L0B/L0C上让搬运和计算重叠。绝大多数blockMmad组件默认承载此能力。调参时需要确认各级buffer stage没有超出对应片上存储空间。
 
 4. **启用Preload。**
 
-    当仿真流水图显示MTE2在K循环或C block切换处有空泡时，使用`MmadAtlasA2Preload`、`MmadPreloadAsyncWithCallback`等策略提前发射下一轮GM到L1的搬运。参考[06_optimized_matmul](../../../../examples/06_optimized_matmul/optimized_matmul.cpp)、[21_basic_matmul_preload_zN](../../../../examples/21_basic_matmul_preload_zN/basic_matmul_preload_zN.cpp)和[43_ascend950_basic_matmul](../../../../examples/43_ascend950_basic_matmul/README.md)。
+   当仿真流水图显示MTE2在K循环或C block切换处有空泡时，使用`MmadAtlasA2Preload`、`MmadPreloadAsyncWithCallback`等策略提前发射下一轮GM到L1的搬运。参考[06_optimized_matmul](../../../../examples/06_optimized_matmul/optimized_matmul.cpp)、[21_basic_matmul_preload_zN](../../../../examples/21_basic_matmul_preload_zN/basic_matmul_preload_zN.cpp)和[43_ascend950_basic_matmul](../../../../examples/43_ascend950_basic_matmul/README.md)。
 
 5. **按需启用ShuffleK。**
 
-    当多个AIC同时从相同K分块起步，GM同地址访问冲突明显时，启用K方向错峰读取。A2/A3上大K且A/B均非全载时更值得尝试；具体收益依赖shape、layout和硬件代际。
+   当多个AIC同时从相同K分块起步，GM同地址访问冲突明显时，启用K方向错峰读取。A2/A3上大K且A/B均非全载时更值得尝试；具体收益依赖shape、layout和硬件代际。
 
 **经验判断**
 
@@ -82,11 +82,11 @@ MTE2 bound往往来自三类问题：
 
 当stride非对齐导致GM到L1搬运带宽明显下降时，可用AIV对A/B做Padding或格式重排，使AIC后续读取更规整。仓内已有三类Padding思路：
 
-| 方式 | 特点 | 适用倾向 |
-| --- | --- | --- |
-| `PADDING_ND` | 只补齐stride，实现简单 | stride非对齐但转换需求轻 |
-| `PADDING_BLOCK_ND` | 按L1 tile粒度重排 | stride很大或tile内访问需规整 |
-| `PADDING_NZ` | 转成贴近L1读取的zN/nZ排布 | 随路转换损失较大或泛化性能优先 |
+| 方式               | 特点                      | 适用倾向                       |
+| ------------------ | ------------------------- | ------------------------------ |
+| `PADDING_ND`       | 只补齐stride，实现简单    | stride非对齐但转换需求轻       |
+| `PADDING_BLOCK_ND` | 按L1 tile粒度重排         | stride很大或tile内访问需规整   |
+| `PADDING_NZ`       | 转成贴近L1读取的zN/nZ排布 | 随路转换损失较大或泛化性能优先 |
 
 参考[06_optimized_matmul](../../../../examples/06_optimized_matmul/optimized_matmul.cpp)和[102_dynamic_optimized_matmul/doc/CommonMatmul.md](../../../../examples/102_dynamic_optimized_matmul/doc/CommonMatmul.md)。实际选择时建议用模型估算：
 

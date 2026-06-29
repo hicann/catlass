@@ -40,6 +40,7 @@ void operator()(
 ```
 
 执行流程：
+
 1. `SetMaskCount()` → `SetVectorMask<Element, COUNTER>(len)` 设置掩码
 2. `Muls<Element, false>(dst, src, scalar, MASK_PLACEHOLDER, 1, {} )`
 3. `SetMaskNorm()` → `ResetMask()` 恢复掩码

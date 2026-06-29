@@ -1,5 +1,5 @@
 # Block Mmad Pingpong
->
+
 > [Code location](../../../../../../../include/catlass/gemm/block/block_mmad_pingpong.hpp)
 
 ## Description
@@ -8,7 +8,7 @@ A partial specialization implementation of [BlockMmad](./block_mmad.md#blockmmad
 
 ## Scheduling Policy
 
-```
+```cpp
 // Now ENABLE_UNIT_FLAG_ must be false when input element is int8
 template <bool ENABLE_UNIT_FLAG_ = false>
 struct MmadAtlasA2Pingpong : public MmadAtlasA2  {
@@ -25,7 +25,7 @@ When `ENABLE_UNIT_FLAG_` is set to `true`, concurrent read-out and write-in for 
 
 See [basic_matmul ](../../../../../../../ examples/00_basic_matmul/basic_matmul.cpp).
 
-```
+```cpp
 constexpr bool enableUnitFlag = true;
 using MmadDispatchPolicy = Gemm::MmadAtlasA2Pingpong<enableUnitFlag>;
 using L1TileShape = GemmShape<128, 256, 256>;
@@ -35,7 +35,7 @@ using BType = Gemm::GemmType<half, LayoutB>;
 using CType = Gemm::GemmType<half, LayoutC>;
 ```
 
-```
+```cpp
 using BlockMmad = Gemm::Block::BlockMmad<MmadDispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
 ```
 
@@ -43,7 +43,7 @@ using BlockMmad = Gemm::Block::BlockMmad<MmadDispatchPolicy, L1TileShape, L0Tile
 
 Executed inside the `void operator()<AscendC::AIC>` core function of the kernel code by referring to [basic_matmul](../../../../../../../include/catlass/gemm/kernel/basic_matmul.hpp).
 
-```
+```cpp
 Arch::Resource<ArchTag> resource;
 BlockMmad blockMmad(resource);
 ```
@@ -52,7 +52,7 @@ BlockMmad blockMmad(resource);
 
 Executed inside the `void operator()<AscendC::AIC>` core function of the kernel code by referring to [basic_matmul](../../../../../../../include/catlass/gemm/kernel/basic_matmul.hpp).
 
-```
+```cpp
 blockMmad(gmA[gmOffsetA],       // GM start address of the tile block for matrix A
         params.layoutA,         // Storage layout of matrix A in GM
         gmB[gmOffsetB],         // GM start address of the tile block for matrix B

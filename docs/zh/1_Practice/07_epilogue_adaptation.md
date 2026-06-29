@@ -113,6 +113,7 @@ static size_t GetWorkspaceSize(const Arguments &args) {
 ```
 
 **代码说明**：
+
 - `L1TileShape::M/N`：表示L1 Tile的形状，即每个AIC核每次处理的矩阵块大小
 - `args.aicCoreNum`：参与计算的AIC核数量
 - `WORKSPACE_STAGES`：Workspace的多阶段数量，用于实现AIC和AIV的流水线并行
@@ -128,7 +129,7 @@ template <>
 CATLASS_DEVICE
 void operator()<AscendC::AIC>(Params const &params) {
     // ... 初始化和准备代码 ...
-    
+
     AscendC::GlobalTensor<ElementC> gmC;
     gmC.SetGlobalBuffer(reinterpret_cast<__gm__ ElementC *>(params.ptrWorkspace));
     auto layoutC = layout::RowMajor{L1TileShape::M * coreNum * WORKSPACE_STAGES, L1TileShape::N};
@@ -139,7 +140,7 @@ void operator()<AscendC::AIC>(Params const &params) {
     // 循环处理每个矩阵块
     for (uint32_t loopIdx = coreIdx; loopIdx < coreLoops; loopIdx += coreNum) {
         // ... 计算块位置和偏移 ...
-        
+
         // 计算当前阶段的Workspace偏移
         MatrixCoord offsetC{(stageId * coreNum + coreIdx) * L1TileShape::M, 0};
         int64_t gmOffsetC = layoutC.GetOffset(offsetC);
@@ -167,12 +168,13 @@ void operator()<AscendC::AIC>(Params const &params) {
         // 切换到下一个阶段
         stageId = (stageId + 1 < WORKSPACE_STAGES) ? (stageId + 1) : 0;
     }
-    
+
     // ... 后续同步和清理代码 ...
 }
 ```
 
 **代码说明**：
+
 - `gmC`：指向Workspace的全局张量
 - `layoutC`：Workspace的布局，使用RowMajor格式
 - `stageId`：当前使用的Workspace阶段ID
@@ -190,7 +192,7 @@ template <>
 CATLASS_DEVICE
 void operator()<AscendC::AIV>(Params const &params) {
     // ... 初始化和准备代码 ...
-    
+
     AscendC::GlobalTensor<ElementC> gmC;
     gmC.SetGlobalBuffer(reinterpret_cast<__gm__ ElementC *>(params.ptrWorkspace));
     auto layoutC = layout::RowMajor{L1TileShape::M * coreNum * WORKSPACE_STAGES, L1TileShape::N};
@@ -201,7 +203,7 @@ void operator()<AscendC::AIV>(Params const &params) {
 
     for (uint32_t loopIdx = coreIdx; loopIdx < coreLoops; loopIdx += coreNum) {
         // ... 获取块坐标和实际块形状 ...
-        
+
         // 计算当前阶段的Workspace偏移
         MatrixCoord offsetC{(stageId * coreNum + coreIdx) * L1TileShape::M, 0};
         int64_t gmOffsetC = layoutC.GetOffset(offsetC);
@@ -210,22 +212,23 @@ void operator()<AscendC::AIV>(Params const &params) {
 
         // 等待AIC核完成当前阶段的计算
         Arch::CrossCoreWaitFlag(flagAicFinishStoreList[stageId]);
-        
+
         // 执行Epilogue后处理操作
         blockEpilogue(blockShapeMNK, blockCoordMNK, actualBlockShapeMNK, gmBlockC, layoutBlockC);
-        
+
         // 通知AIC核当前阶段的计算已完成
         Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(flagAivFinishComputeList[stageId]);
 
         // 切换到下一个阶段
         stageId = (stageId + 1 < WORKSPACE_STAGES) ? (stageId + 1) : 0;
     }
-    
+
     // ... 后续同步和清理代码 ...
 }
 ```
 
 **代码说明**：
+
 - `gmC`：指向Workspace的全局张量，与AIC核使用同一个Workspace
 - `layoutC`：Workspace的布局，与AIC核保持一致
 - `stageId`：当前使用的Workspace阶段ID，与AIC核同步
@@ -241,16 +244,16 @@ void operator()<AscendC::AIV>(Params const &params) {
 
 以[EpilogueAtlasA2PerTokenDequant](../../../include/catlass/epilogue/block/block_epilogue_per_token_dequant.hpp)为例，BlockEpilogue的模板参数如下表所示：
 
-| 参数名 | 类型 | 描述 |
-|-------|------|------|
-| DispatchPolicy | struct | Epilogue调度策略 |
-| CType | typename | 输入矩阵C的元素类型 |
-| ScaleType | typename | 全局缩放因子类型 |
-| PerTokenScaleType | typename | Per-token缩放因子类型 |
-| DType | typename | 输出矩阵D的元素类型 |
-| TileRowBroadcastMul | typename | 行广播乘法Tile组件 |
-| TileBroadcastOneBlk | typename | 单块广播Tile组件 |
-| TileCopy | typename | 数据复制Tile组件 |
+| 参数名              | 类型     | 描述                  |
+| ------------------- | -------- | --------------------- |
+| DispatchPolicy      | struct   | Epilogue调度策略      |
+| CType               | typename | 输入矩阵C的元素类型   |
+| ScaleType           | typename | 全局缩放因子类型      |
+| PerTokenScaleType   | typename | Per-token缩放因子类型 |
+| DType               | typename | 输出矩阵D的元素类型   |
+| TileRowBroadcastMul | typename | 行广播乘法Tile组件    |
+| TileBroadcastOneBlk | typename | 单块广播Tile组件      |
+| TileCopy            | typename | 数据复制Tile组件      |
 
 ### 4.2 核心方法
 

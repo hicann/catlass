@@ -21,11 +21,11 @@ struct EpilogueIdentityTileSwizzle;
 
 ## 公共接口
 
-| 方法 | 返回值 | 说明 |
-| :------ | :------ | :------ |
-| `GetLoops()` | `uint32_t` | 返回总 tile 数 = `loopsMN.row() * loopsMN.column()` |
-| `GetTileCoord(loopIdx)` | `MatrixCoord` | 返回 `(i / cols, i % cols)` |
-| `GetActualTileShape(tileCoord)` | `MatrixCoord` | 返回实际 tile shape（边界可能小于 `tileShape`） |
+| 方法                            | 返回值        | 说明                                                |
+| :------------------------------ | :------------ | :-------------------------------------------------- |
+| `GetLoops()`                    | `uint32_t`    | 返回总 tile 数 = `loopsMN.row() * loopsMN.column()` |
+| `GetTileCoord(loopIdx)`         | `MatrixCoord` | 返回 `(i / cols, i % cols)`                         |
+| `GetActualTileShape(tileCoord)` | `MatrixCoord` | 返回实际 tile shape（边界可能小于 `tileShape`）     |
 
 ## 遍历顺序
 

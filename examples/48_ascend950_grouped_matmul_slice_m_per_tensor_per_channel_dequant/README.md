@@ -21,11 +21,11 @@ A/B矩阵为int8类型，scale为float，输出结果为half。
 
 - Matmul量化场景：Matmul计算时左矩阵A、右矩阵B为half数据类型，输出C矩阵为int8_t数据类型。该场景下，C矩阵的数据从CO1搬出到Global Memory时，会执行量化操作，将最终结果量化为int8_t类型，如下图所示。
 
-    ![alt text](../../docs/zh/figures/fixpipe_quant.png)
+  ![alt text](../../docs/zh/figures/fixpipe_quant.png)
 
 - Matmul反量化场景：Matmul计算时左矩阵A、右矩阵B为int8_t数据类型，输出C矩阵为half数据类型。该场景下，C矩阵的数据从CO1搬出到Global Memory时，会执行反量化操作，将最终结果反量化为对应的half类型，如下图所示。
 
-    ![alt text](../../docs/zh/figures/fixpipe_dequant.png)
+  ![alt text](../../docs/zh/figures/fixpipe_dequant.png)
 
 Fixpipe提供了两种不同粒度的随路量化/反量化模式，即per_tensor和per_channel。
 
@@ -58,17 +58,17 @@ Compare success.
 
 GroupedMatmulSliceMPerTensorPerChannelDequant默认使用的DispatchPolicy MmadDequant支持以下几个模板参数：
 
-|模板参数|默认值|参数说明|
-|---------|-----------------|-----------------|
-|ArchTag| 无 | 指定架构型号 | 
-|enableUnitFlag| false | 是否开启Unitflag，开启L0C多缓冲时必须设置为false |
-|useHF32| false | 是否开启HF32，仅float类型支持 |
-|l0CStages| 1 | 指定L0C的缓冲区数量，设置为2即可开启L0C双缓冲|
-|enableL1Resident| false | 是否开启L1常驻 |
-|l1AStages | 2 | L1上加载矩阵A的Buffer数量 |
-|l1BStages | 2 | L1上加载矩阵B的Buffer数量 |
-|l0AStages | 2 | L0上加载矩阵A的Buffer数量 |
-|l0BStages | 2 | L0上加载矩阵B的Buffer数量 |
+| 模板参数         | 默认值 | 参数说明                                         |
+| ---------------- | ------ | ------------------------------------------------ |
+| ArchTag          | 无     | 指定架构型号                                     |
+| enableUnitFlag   | false  | 是否开启Unitflag，开启L0C多缓冲时必须设置为false |
+| useHF32          | false  | 是否开启HF32，仅float类型支持                    |
+| l0CStages        | 1      | 指定L0C的缓冲区数量，设置为2即可开启L0C双缓冲    |
+| enableL1Resident | false  | 是否开启L1常驻                                   |
+| l1AStages        | 2      | L1上加载矩阵A的Buffer数量                        |
+| l1BStages        | 2      | L1上加载矩阵B的Buffer数量                        |
+| l0AStages        | 2      | L0上加载矩阵A的Buffer数量                        |
+| l0BStages        | 2      | L0上加载矩阵B的Buffer数量                        |
 
 设矩阵Shape为`M N K`, L1上的分块大小为`m1 n1 k1`，M方向的分块数量`mTiles = CeilDiv(M, m1)`，N方向的分块数量`nTiles = CeilDiv(N, n1)`，总任务数为`taskBlocks = mTiles * nTiles`，在以下两种情况下可以选择开启enableL1Resident：
 

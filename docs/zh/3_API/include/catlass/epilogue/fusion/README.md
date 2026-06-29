@@ -9,16 +9,16 @@
 
 ## 文件分工
 
-| 组件 | 说明 |
-| --- | --- |
-| `fusion.hpp` | 总入口头文件，直接包含常用图组织器与节点 |
-| `tree_visitor.hpp` | `TreeVisitor` 的组织逻辑 |
-| `topological_visitor.hpp` | `TopologicalVisitor` 的组织逻辑 |
-| `VisitorImplBase` | 汇总 `Arguments`、`Params`、workspace 与可实现性检查 |
-| `VisitorImpl` | 统一构造 callbacks，并为所有节点提供通用骨架 |
-| `visitor_*.hpp` | 具体节点实现 |
-| `operations.hpp` | `VisitorCompute` 使用的算子封装 |
-| `visitor_impl_base.hpp` | `VisitStage` 与基础框架定义 |
+| 组件                      | 说明                                                 |
+| ------------------------- | ---------------------------------------------------- |
+| `fusion.hpp`              | 总入口头文件，直接包含常用图组织器与节点             |
+| `tree_visitor.hpp`        | `TreeVisitor` 的组织逻辑                             |
+| `topological_visitor.hpp` | `TopologicalVisitor` 的组织逻辑                      |
+| `VisitorImplBase`         | 汇总 `Arguments`、`Params`、workspace 与可实现性检查 |
+| `VisitorImpl`             | 统一构造 callbacks，并为所有节点提供通用骨架         |
+| `visitor_*.hpp`           | 具体节点实现                                         |
+| `operations.hpp`          | `VisitorCompute` 使用的算子封装                      |
+| `visitor_impl_base.hpp`   | `VisitStage` 与基础框架定义                          |
 
 ## 相关文档
 

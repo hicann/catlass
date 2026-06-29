@@ -4,12 +4,12 @@
 
 The CATLASS [34_single_core_splitk_matmul sample](../34_single_core_splitk_matmul/README.md) is an Ascend-native Matmul operator implemented using the CATLASS Gemm API. It is optimized for large-scale matrix computation scenarios. The core operator components include the following:
 
- - **Example assembly**: [single_core_splitk.cpp](../34_single_core_splitk_matmul/single_core_splitk.cpp)
- - **Kernel implementation**:
-   - Main kernel file: [single_core_slicek_matmul.hpp](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp)
-   - Reusable padding component: [padding_matmul.hpp](../../include/catlass/gemm/kernel/padding_matmul.hpp)
+- **Example assembly**: [single_core_splitk.cpp](../34_single_core_splitk_matmul/single_core_splitk.cpp)
+- **Kernel implementation**:
+  - Main kernel file: [single_core_slicek_matmul.hpp](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp)
+  - Reusable padding component: [padding_matmul.hpp](../../include/catlass/gemm/kernel/padding_matmul.hpp)
 
- - **Block component**: [block_mmad_single_core_splitk.hpp](../../include/catlass/gemm/block/block_mmad_single_core_splitk.hpp)
+- **Block component**: [block_mmad_single_core_splitk.hpp](../../include/catlass/gemm/block/block_mmad_single_core_splitk.hpp)
 
 ## Example Assembly
 
@@ -34,61 +34,61 @@ Consistent with the development paradigm of standard template libraries, the exe
 <details>
 <summary><strong>Construct Input</strong></summary>
 
-*Generate the left and right matrices for computation.*
+_Generate the left and right matrices for computation._
 
- - Calculate the dimension properties of each [input matrix](../34_single_core_splitk_matmul/single_core_splitk.cpp#L71).
- - Generate data for each [input matrix on the host side](../34_single_core_splitk_matmul/single_core_splitk.cpp#L101).
- - Construct the [input on the device](../34_single_core_splitk_matmul/single_core_splitk.cpp#L107).
+- Calculate the dimension properties of each [input matrix](../34_single_core_splitk_matmul/single_core_splitk.cpp#L71).
+- Generate data for each [input matrix on the host side](../34_single_core_splitk_matmul/single_core_splitk.cpp#L101).
+- Construct the [input on the device](../34_single_core_splitk_matmul/single_core_splitk.cpp#L107).
 
 </details>
 
 <details>
 <summary><strong>Assemble <code>Padding</code> Object</strong></summary>
 
-*Assemble Padding objects to facilitate data movement alignment.*
+_Assemble Padding objects to facilitate data movement alignment._
 
- - Define different [`PaddingTag` configurations](../34_single_core_splitk_matmul/single_core_splitk.cpp#L90).
- - Assemble the [Padding objects](../34_single_core_splitk_matmul/single_core_splitk.cpp#L95) for Matrix A/B via `PaddingBuilder`.
- - Instantiate the predefined [PaddingC object](../34_single_core_splitk_matmul/single_core_splitk.cpp#L97).
- - Determine whether to [enable the PaddingC object](../34_single_core_splitk_matmul/single_core_splitk.cpp#L98).
+- Define different [`PaddingTag` configurations](../34_single_core_splitk_matmul/single_core_splitk.cpp#L90).
+- Assemble the [Padding objects](../34_single_core_splitk_matmul/single_core_splitk.cpp#L95) for Matrix A/B via `PaddingBuilder`.
+- Instantiate the predefined [PaddingC object](../34_single_core_splitk_matmul/single_core_splitk.cpp#L97).
+- Determine whether to [enable the PaddingC object](../34_single_core_splitk_matmul/single_core_splitk.cpp#L98).
 
 </details>
 
 <details>
 <summary><strong>Assemble <code>blockMmad</code></strong></summary>
 
-*Assemble related Padding objects to facilitate data movement alignment.*
+_Assemble related Padding objects to facilitate data movement alignment._
 
- - Define the [layout characteristics](../34_single_core_splitk_matmul/single_core_splitk.cpp#L78) for each input.
- - Declare the corresponding [matrix data types](../34_single_core_splitk_matmul/single_core_splitk.cpp#L124).
- - Set the [Dispatch policy](../34_single_core_splitk_matmul/single_core_splitk.cpp#L139) used to select the `BlockMmad` component.
- - Set the L1 and L0 [tile sizes](../34_single_core_splitk_matmul/single_core_splitk.cpp#L136) to optimize data transfer from GM to L1.
- - Use the optimized TileCopy component.
- - [Assemble BlockMMAD](../10_grouped_matmul_slice_m_per_token_dequant/grouped_matmul_slice_m_per_token_dequant.cpp#L162) using the above template input parameters.
+- Define the [layout characteristics](../34_single_core_splitk_matmul/single_core_splitk.cpp#L78) for each input.
+- Declare the corresponding [matrix data types](../34_single_core_splitk_matmul/single_core_splitk.cpp#L124).
+- Set the [Dispatch policy](../34_single_core_splitk_matmul/single_core_splitk.cpp#L139) used to select the `BlockMmad` component.
+- Set the L1 and L0 [tile sizes](../34_single_core_splitk_matmul/single_core_splitk.cpp#L136) to optimize data transfer from GM to L1.
+- Use the optimized TileCopy component.
+- [Assemble BlockMMAD](../10_grouped_matmul_slice_m_per_token_dequant/grouped_matmul_slice_m_per_token_dequant.cpp#L162) using the above template input parameters.
 
 </details>
 
 <details>
 <summary><strong>Assemble and Execute <code>Kernel</code></strong></summary>
 
-*Assemble the Kernel and instantiate the object to complete operator computation.*
+_Assemble the Kernel and instantiate the object to complete operator computation._
 
- - Use the new S-shaped [swizzle policy](../34_single_core_splitk_matmul/single_core_splitk.cpp#L140).
- - [Assemble the kernel](../34_single_core_splitk_matmul/single_core_splitk.cpp#L143) using the preceding template.
- - [Pass the kernel to the adapter](../34_single_core_splitk_matmul/single_core_splitk.cpp#L160) and [instantiate it](../34_single_core_splitk_matmul/single_core_splitk.cpp#L148).
- - Construct the [input arguments](../34_single_core_splitk_matmul/single_core_splitk.cpp#L163).
- - [Pass arguments](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#L150) to the kernel side.
- - Call the kernel layer to [calculate workspace requirements](../34_single_core_splitk_matmul/single_core_splitk.cpp#L166).
- - [Allocate workspace on the device side](../34_single_core_splitk_matmul/single_core_splitk.cpp#L166) (if necessary).
- - [Initialize the operator with the adapter](../34_single_core_splitk_matmul/single_core_splitk.cpp#L166).
- - [Execute the operator](../34_single_core_splitk_matmul/single_core_splitk.cpp#L166).
+- Use the new S-shaped [swizzle policy](../34_single_core_splitk_matmul/single_core_splitk.cpp#L140).
+- [Assemble the kernel](../34_single_core_splitk_matmul/single_core_splitk.cpp#L143) using the preceding template.
+- [Pass the kernel to the adapter](../34_single_core_splitk_matmul/single_core_splitk.cpp#L160) and [instantiate it](../34_single_core_splitk_matmul/single_core_splitk.cpp#L148).
+- Construct the [input arguments](../34_single_core_splitk_matmul/single_core_splitk.cpp#L163).
+- [Pass arguments](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#L150) to the kernel side.
+- Call the kernel layer to [calculate workspace requirements](../34_single_core_splitk_matmul/single_core_splitk.cpp#L166).
+- [Allocate workspace on the device side](../34_single_core_splitk_matmul/single_core_splitk.cpp#L166) (if necessary).
+- [Initialize the operator with the adapter](../34_single_core_splitk_matmul/single_core_splitk.cpp#L166).
+- [Execute the operator](../34_single_core_splitk_matmul/single_core_splitk.cpp#L166).
 
 </details>
 
 <details>
 <summary><strong>Precision Verification and Space Release</strong></summary>
 
-*Validate the final execution results and reclaim resources.*
+_Validate the final execution results and reclaim resources._
 
 - Copy the operator output results [back to the host side](../10_grouped_matmul_slice_m_per_token_dequant/grouped_matmul_slice_m_per_token_dequant.cpp#L213).
 - [Compute the golden benchmark](../10_grouped_matmul_slice_m_per_token_dequant/grouped_matmul_slice_m_per_token_dequant.cpp#L216).
@@ -105,12 +105,12 @@ This section describes the structures and key functions at the kernel level, the
 
 The following structures and key functions are implemented in the [kernel layer](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp):
 
- - [struct Params](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#L84): parameters required for operator execution at runtime
- - [struct Arguments](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#L116): encapsulates the parameters passed from the host side.
- - [static size_t GetWorkspaceSize](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#L128): pre-calculates the space required for alignment.
- - [static Params ToUnderlyingArguments](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#L150): parses the input parameters on the host side into the `Params` structure on the operator side.
- - [void operator()<AscendC::AIV>](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#L204): execution code for the AIV (Vector) part.
- - [void operator()<AscendC::AIC>](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#L253): execution code for the AIC (Cube) part.
+- [struct Params](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#L84): parameters required for operator execution at runtime
+- [struct Arguments](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#L116): encapsulates the parameters passed from the host side.
+- [static size_t GetWorkspaceSize](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#L128): pre-calculates the space required for alignment.
+- [static Params ToUnderlyingArguments](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#L150): parses the input parameters on the host side into the `Params` structure on the operator side.
+- [void operator()<AscendC::AIV>](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#L204): execution code for the AIV (Vector) part.
+- [void operator()<AscendC::AIC>](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#L253): execution code for the AIC (Cube) part.
 
 ## AIV/AIC Computation Process
 
@@ -134,22 +134,22 @@ The following describes the specific execution steps performed by the AIV and AI
 
 <details>
 <summary><strong>Operation Performed by AIC</strong></summary>
- 
- - If the left or right matrix requires alignment:
-   - Perform inter-core synchronization and [wait for the AIV completion flag](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#255) (`CrossCoreWaitFlag`).
-   - [Initialize GlobalTensor](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#270): `gmWA`, `gmWB`.
- 
- - [Initialize `GlobalTensor`]((../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#270): `gmA`, `gmB`, `gmC`)
- - Initialize the [`BlockScheduler`](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#260) and [`BlockMmad`](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#300) objects.
- - Fetch the current AIC identifier `coreIdx`, total AIC count `coreNum` (resolved within the [swizzle policy](../../include/catlass/gemm/block/block_swizzle.hpp)), and the required `coreLoops`.
- - Enter the main loop (loop times `coreLoops`).
-   - Calculate the current matrix read offsets [`gmOffsetA`](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#333) and [`gmOffsetB`](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#334), alongside the next data block offsets [`gmOffsetNextA`](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#341) and [`gmOffsetNextB`](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#342) (if double-buffering is enabled).
-   > Note: Under the current optimized algorithm, the left matrix is overloaded, meaning `gmOffsetNextA` is not actively enabled.
-   - Calculate [`needLoadNextA`](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#325) and [`needLoadNextB`](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#326) to identify whether to preload.
-   - Invoke `blockMmad` to execute an [AIC computation block](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#345), resolving the corresponding fractal matrix operations on L1A and L1B caches.
-   > Note: `blockMmad` dynamically evaluates the K-axis tiling state to decide whether to enable atomic additions on GM.
-   - Set the synchronization flag bit to notify the AIV that computation is complete.
-   - Disable atomic addition states.
+
+- If the left or right matrix requires alignment:
+  - Perform inter-core synchronization and [wait for the AIV completion flag](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#255) (`CrossCoreWaitFlag`).
+  - [Initialize GlobalTensor](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#270): `gmWA`, `gmWB`.
+
+- [Initialize `GlobalTensor`]((../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#270): `gmA`, `gmB`, `gmC`)
+- Initialize the [`BlockScheduler`](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#260) and [`BlockMmad`](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#300) objects.
+- Fetch the current AIC identifier `coreIdx`, total AIC count `coreNum` (resolved within the [swizzle policy](../../include/catlass/gemm/block/block_swizzle.hpp)), and the required `coreLoops`.
+- Enter the main loop (loop times `coreLoops`).
+  - Calculate the current matrix read offsets [`gmOffsetA`](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#333) and [`gmOffsetB`](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#334), alongside the next data block offsets [`gmOffsetNextA`](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#341) and [`gmOffsetNextB`](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#342) (if double-buffering is enabled).
+  > Note: Under the current optimized algorithm, the left matrix is overloaded, meaning `gmOffsetNextA` is not actively enabled.
+  - Calculate [`needLoadNextA`](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#325) and [`needLoadNextB`](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#326) to identify whether to preload.
+  - Invoke `blockMmad` to execute an [AIC computation block](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#345), resolving the corresponding fractal matrix operations on L1A and L1B caches.
+  > Note: `blockMmad` dynamically evaluates the K-axis tiling state to decide whether to enable atomic additions on GM.
+  - Set the synchronization flag bit to notify the AIV that computation is complete.
+  - Disable atomic addition states.
 
 </details>
 
@@ -180,8 +180,8 @@ if (atomicAdd) {
 }
 ```
 
- - Increasing L1 utilization space
- Based on simple modeling (see the supplement below), the amount of data transferred from L0C back to the GM is proportional to $MNK/k_{\text{L1}}$, where $M$, $N$, and $K$ are the sizes of the input matrices, and $k_{\text{L1}}$ is the tile size on the K-axis in L1. Under the condition that the physical sizes of L1A and L1B are limited, a larger $k_{\text{L1}}$ can reduce the number of writes. It is recommended to configure `L1TileShape` according to the table below.
+- Increasing L1 utilization space
+  Based on simple modeling (see the supplement below), the amount of data transferred from L0C back to the GM is proportional to $MNK/k_{\text{L1}}$, where $M$, $N$, and $K$ are the sizes of the input matrices, and $k_{\text{L1}}$ is the tile size on the K-axis in L1. Under the condition that the physical sizes of L1A and L1B are limited, a larger $k_{\text{L1}}$ can reduce the number of writes. It is recommended to configure `L1TileShape` according to the table below.
 
 <details>
 
@@ -190,40 +190,40 @@ if (atomicAdd) {
 First, let's analyze the memory access volume of the [basic Matmul operator](../00_basic_matmul/README.md). Assume that the matrix multiplication size is $(M, N, K)$, and the corresponding tile size on L1 is $m$, $n$, and $k$. Assuming they are perfectly aligned, the data volume transferred from GM to L1 for a single fractal block is $K(mk+kn)/k$. Combined with the total number of fractal blocks $MN/mn$, the total read access volume is $MNK(1/m+1/n)$. On the other hand, since accumulation is performed directly on L0C, the write-out data volume is simply $MN$.
 Now consider the memory access pattern after applying this optimization strategy. Assuming the left matrix is reused, the total data read volume for a single core is $mK + KN$, making the total read access volume $(mK + KN)M/m$, which simplifies to $MNK(1/m+1/N)$. This is smaller than that of the basic Matmul. However, since the computation results cannot be fully accumulated on L0C and must be moved out immediately during computation, the write-out data volume becomes $MNK/k$, which is higher than the basic Matmul baseline.
 
-| Category| Total Memory Access Operations| 
-| --- | ------- | 
-| Basic matrix multiplication|  $MNK(1/m+1/n) + MN$    | 
-| Single-core split-K   | $MNK(1/m+1/N) + MNK/k$ |
+| Category                    | Total Memory Access Operations |
+| --------------------------- | ------------------------------ |
+| Basic matrix multiplication | $MNK(1/m+1/n) + MN$            |
+| Single-core split-K         | $MNK(1/m+1/N) + MNK/k$         |
 
 </details>
- 
-| Data Type| `L1TileShape::M` | `L1TileShape::N` | `L1TileShape::K` | 
-| --- | --- | --- | --- |
-| FP16/BF16 | 256 | 128 | 512 | 
-| FP32 | 256 | 128 | 256 | 
 
- - Data alignment
- If data type conversion is required, data alignment must be applied to maximize the data transfer bandwidth throughout the processing pipeline.
+| Data Type | `L1TileShape::M` | `L1TileShape::N` | `L1TileShape::K` |
+| --------- | ---------------- | ---------------- | ---------------- |
+| FP16/BF16 | 256              | 128              | 512              |
+| FP32      | 256              | 128              | 256              |
 
- ```cpp
+- Data alignment
+  If data type conversion is required, data alignment must be applied to maximize the data transfer bandwidth throughout the processing pipeline.
+
+```cpp
 // Core processing logic of RemovePaddingNDAndCast
 uint32_t loopsPerTile = RoundUp(tileLen, COMPUTE_LENGTH);
 uint32_t coreLoops = tilesPerAiv * loopsPerTile;
 
 for (uint32_t loopIdx = 0; loopIdx < coreLoops; ++loopIdx) {
-  // Calculate the offset for gmWC data transfer.
+ // Calculate the offset for gmWC data transfer.
 
-  // Transfer data from gmWC (src) to inputBuffer.
-  copyGm2Ub(inputBuffer, src, ubLayout, srcLayout);
-  // ...
+ // Transfer data from gmWC (src) to inputBuffer.
+ copyGm2Ub(inputBuffer, src, ubLayout, srcLayout);
+ // ...
 
-  // Cast to half.
-  AscendC::Cast(outputBuffer, inputBuffer,AscendC::RoundMode::CAST_RINT, actualDataNum);
-  // ...
+ // Cast to half.
+ AscendC::Cast(outputBuffer, inputBuffer,AscendC::RoundMode::CAST_RINT, actualDataNum);
+ // ...
 
-  // Transfer data from outputBuffer out to gmC (dst).
-  copyUb2Gm(dst, outputBuffer[bufferIndex], dstLayout, ubLayout);
-  // ...
+ // Transfer data from outputBuffer out to gmC (dst).
+ copyUb2Gm(dst, outputBuffer[bufferIndex], dstLayout, ubLayout);
+ // ...
 }
 
 ```
@@ -244,16 +244,16 @@ Actual measurements indicate that the single-core split-K algorithm yields posit
 
 However, it should be noted that if the M and N dimensions are too small, or if the K dimension is relatively low, **load imbalance across cores** may occur.
 
-| M | N | K | Time (μs)| Benchmark Time (μs)| Speedup ratio| 
-| -- | -- | ---- | ----- | ----- | ----- | 
-| 2048 | 4096 | 4000 | 261 |  445 | 1.7049 | 
-| 4096 | 4096 | 8000 | 917 | 1231 | 1.3424 |
-| 4096 | 4096 | 40000 | 4669 | 7775 | 1.6652 | 
-| 2048 | 4096 | 80000 | 16850 | 57144 | 1.7499 | 
+| M    | N    | K     | Time (μs) | Benchmark Time (μs) | Speedup ratio |
+| ---- | ---- | ----- | --------- | ------------------- | ------------- |
+| 2048 | 4096 | 4000  | 261       | 445                 | 1.7049        |
+| 4096 | 4096 | 8000  | 917       | 1231                | 1.3424        |
+| 4096 | 4096 | 40000 | 4669      | 7775                | 1.6652        |
+| 2048 | 4096 | 80000 | 16850     | 57144               | 1.7499        |
 
 Note:
 
- - The benchmark refers to the [BasicMatmul](../00_basic_matmul/README.md) operator.
- - All recorded metrics represent the total execution time of the kernel function, collected with the [`msprof`](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html) profiling tool.
- - In the preceding test case, matrices A, B, and C are in `layout::RowMajor` format.
- - Test environment: The NPU model is 910B2, and the CANN package version is 8.2.RC1.
+- The benchmark refers to the [BasicMatmul](../00_basic_matmul/README.md) operator.
+- All recorded metrics represent the total execution time of the kernel function, collected with the [`msprof`](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html) profiling tool.
+- In the preceding test case, matrices A, B, and C are in `layout::RowMajor` format.
+- Test environment: The NPU model is 910B2, and the CANN package version is 8.2.RC1.

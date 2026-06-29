@@ -6,10 +6,10 @@ This document organizes the current EVG extension boundaries. It answers two que
 
 Do this first to avoid turning a new operator into a new node.
 
-| Scenario| Approach|
-| --- | --- |
-| Only element-wise computation is performed. The input and output are in the UB. GM, layout, and workspace are not required.| Adding a `ComputeFn`|
-| GM read/write, layout management, UB allocation, or your own `Arguments / Params` is required.| Adding a node|
+| Scenario                                                                                                                    | Approach             |
+| --------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| Only element-wise computation is performed. The input and output are in the UB. GM, layout, and workspace are not required. | Adding a `ComputeFn` |
+| GM read/write, layout management, UB allocation, or your own `Arguments / Params` is required.                              | Adding a node        |
 
 A simple rule of thumb:
 
@@ -200,16 +200,16 @@ struct VisitorSomeNode : VisitorImpl<> {
 
 ### Required Components and Responsibilities
 
-| Component| Purpose| Constraint|
-| --- | --- | --- |
-| `ElementOutput` | Tells the graph organizer the node's output type.| Must match the actual output.|
-| `Arguments` | Parameters filled directly by the user.| Keep it simple and support brace initialization.|
-| `Params` | Parameters actually used by the device.| Keep only the information needed for execution.|
-| `to_underlying_arguments` | Converts `Arguments` to `Params`.| Perform workspace mapping here if needed.|
-| `get_workspace_size` | Declares the node's own workspace.| Calculate only its own portion.|
-| `can_implement` | Performs lightweight validity check.| Check at least the easily misused parameters.|
-| `Callbacks::visit` | Executes node actions.| Write logic strictly by stage.|
-| `get_callbacks` | Allocates UB and constructs callback.| Whoever allocates UB advances `ub_offset`.|
+| Component                 | Purpose                                           | Constraint                                       |
+| ------------------------- | ------------------------------------------------- | ------------------------------------------------ |
+| `ElementOutput`           | Tells the graph organizer the node's output type. | Must match the actual output.                    |
+| `Arguments`               | Parameters filled directly by the user.           | Keep it simple and support brace initialization. |
+| `Params`                  | Parameters actually used by the device.           | Keep only the information needed for execution.  |
+| `to_underlying_arguments` | Converts `Arguments` to `Params`.                 | Perform workspace mapping here if needed.        |
+| `get_workspace_size`      | Declares the node's own workspace.                | Calculate only its own portion.                  |
+| `can_implement`           | Performs lightweight validity check.              | Check at least the easily misused parameters.    |
+| `Callbacks::visit`        | Executes node actions.                            | Write logic strictly by stage.                   |
+| `get_callbacks`           | Allocates UB and constructs callback.             | Whoever allocates UB advances `ub_offset`.       |
 
 ### Current Constraints
 
@@ -229,7 +229,7 @@ Clear rules:
 
 #### 2. Node Responsibilities Remain Single
 
-The current implementation favors letting one node take on only one type of responsibility, such as reading, computing, writing, or broadcasting. 
+The current implementation favors letting one node take on only one type of responsibility, such as reading, computing, writing, or broadcasting.
 Compound behaviors like "Read GM + Compute + Write GM" are better split into multiple nodes, which better aligns with the existing graph organization.
 
 #### 3. Layouts Are Always Interpreted as Full Tensors
@@ -266,7 +266,7 @@ If a node significantly complicates the parameter initialization of the entire g
 
 #### 7. Reuse Existing Nodes First, Then Decide Whether to Add a New One
 
-If the requirement is simply to add an element-wise operator, continue with `ComputeFn + VisitorCompute`. 
+If the requirement is simply to add an element-wise operator, continue with `ComputeFn + VisitorCompute`.
 Add a new node only when the existing nodes cannot express the required data access, layout, or resource behavior.
 
 ### `visit` Signature

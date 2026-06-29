@@ -21,14 +21,14 @@
 
 ## 参数说明
 
-|名称/Name|类型/Class|数据类型/Dtype|维度/Dims|格式/Format|描述/Description|
-|---|---|---|---|---|---|
-|matA|inTensor|int8|[m, k]|ND|左矩阵|
-|matB|inTensor|int8|[groupCount, n, k]|ND|右矩阵，支持转置|
-|groupList|inTensor|int32|[groupCount]|ND|m轴方向分组大小，累加和列表|
-|scale|inTensor|bf16/fp16/fp32|[groupCount, n]|ND|perChannel量化系数|
-|perToken|inTensor|bf16/fp16/fp32|[m]|ND|perToken量化系数|
-|matD|outTensor|bf16/fp16/fp32|[m, n]|ND|输出矩阵|
+| 名称/Name | 类型/Class | 数据类型/Dtype | 维度/Dims          | 格式/Format | 描述/Description            |
+| --------- | ---------- | -------------- | ------------------ | ----------- | --------------------------- |
+| matA      | inTensor   | int8           | [m, k]             | ND          | 左矩阵                      |
+| matB      | inTensor   | int8           | [groupCount, n, k] | ND          | 右矩阵，支持转置            |
+| groupList | inTensor   | int32          | [groupCount]       | ND          | m轴方向分组大小，累加和列表 |
+| scale     | inTensor   | bf16/fp16/fp32 | [groupCount, n]    | ND          | perChannel量化系数          |
+| perToken  | inTensor   | bf16/fp16/fp32 | [m]                | ND          | perToken量化系数            |
+| matD      | outTensor  | bf16/fp16/fp32 | [m, n]             | ND          | 输出矩阵                    |
 
 ## 使用示例
 

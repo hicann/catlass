@@ -31,12 +31,12 @@ tla::Tensor<AscendC::LocalTensor<ElementDst>,  LayoutDst, CoordDst, AscendC::TPo
 
 ### 模板参数说明
 
-| 参数 | 说明 |
-| :------ | :------ |
-| `ArchTag` | 架构标签，可选 `Arch::AtlasA2` 或 `Arch::Ascend950` |
-| `TensorSrc` | 源 TLA Tensor，封装 GM GlobalTensor、layout、coord 和 TPosition::GM |
+| 参数        | 说明                                                                 |
+| :---------- | :------------------------------------------------------------------- |
+| `ArchTag`   | 架构标签，可选 `Arch::AtlasA2` 或 `Arch::Ascend950`                  |
+| `TensorSrc` | 源 TLA Tensor，封装 GM GlobalTensor、layout、coord 和 TPosition::GM  |
 | `TensorDst` | 目的 TLA Tensor，封装 L1 LocalTensor、layout、coord 和 TPosition::A1 |
-| `Enable` | SFINAE 条件，通过 `std::enable_if_t` 限制合法的 layout 组合 |
+| `Enable`    | SFINAE 条件，通过 `std::enable_if_t` 限制合法的 layout 组合          |
 
 ## 偏特化实现
 
@@ -44,25 +44,25 @@ tla::Tensor<AscendC::LocalTensor<ElementDst>,  LayoutDst, CoordDst, AscendC::TPo
 
 所有偏特化的 `Enable` 条件通过 `std::enable_if_t<cond>` 约束。
 
-| 源 Layout 条件 | 目的 Layout 条件 | 说明 |
-| :------ | :------ | :------ |
-| `isRowMajor<LayoutSrc>` | `iszN<ElementDst, LayoutDst>` | RowMajor → zN |
-| `isColumnMajor<LayoutSrc>` | `isnZ<ElementDst, LayoutDst>` | ColumnMajor → nZ |
+| 源 Layout 条件                | 目的 Layout 条件              | 说明                |
+| :---------------------------- | :---------------------------- | :------------------ |
+| `isRowMajor<LayoutSrc>`       | `iszN<ElementDst, LayoutDst>` | RowMajor → zN       |
+| `isColumnMajor<LayoutSrc>`    | `isnZ<ElementDst, LayoutDst>` | ColumnMajor → nZ    |
 | `iszN<ElementSrc, LayoutSrc>` | `iszN<ElementDst, LayoutDst>` | zN → zN（保持格式） |
 | `isnZ<ElementSrc, LayoutSrc>` | `isnZ<ElementDst, LayoutDst>` | nZ → nZ（保持格式） |
 
 ### Ascend950 偏特化
 
-| 源 Layout 条件 | 目的 Layout 条件 | 说明 |
-| :------ | :------ | :------ |
-| `isRowMajor<LayoutSrc>` | `iszN<ElementDst, LayoutDst>` | RowMajor → zN |
-| `iszN<ElementSrc, LayoutSrc>` | `iszN<ElementDst, LayoutDst>` | zN → zN（保持格式） |
-| `isColumnMajor<LayoutSrc>` | `isnZ<ElementDst, LayoutDst>` | ColumnMajor → nZ |
-| `isnZ<ElementSrc, LayoutSrc>` | `isnZ<ElementDst, LayoutDst>` | nZ → nZ（保持格式） |
-| `isVector<LayoutSrc>` | `isVector<LayoutDst>` | Vector → Vector（保持格式） |
-| `isMxScaleForRowMajorA<fp8_e8m0_t, LayoutSrc>` | `isMxScaleForzZ<fp8_e8m0_t, LayoutDst>` | MX Scale RowMajor A → zZ |
+| 源 Layout 条件                                    | 目的 Layout 条件                        | 说明                        |
+| :------------------------------------------------ | :-------------------------------------- | :-------------------------- |
+| `isRowMajor<LayoutSrc>`                           | `iszN<ElementDst, LayoutDst>`           | RowMajor → zN               |
+| `iszN<ElementSrc, LayoutSrc>`                     | `iszN<ElementDst, LayoutDst>`           | zN → zN（保持格式）         |
+| `isColumnMajor<LayoutSrc>`                        | `isnZ<ElementDst, LayoutDst>`           | ColumnMajor → nZ            |
+| `isnZ<ElementSrc, LayoutSrc>`                     | `isnZ<ElementDst, LayoutDst>`           | nZ → nZ（保持格式）         |
+| `isVector<LayoutSrc>`                             | `isVector<LayoutDst>`                   | Vector → Vector（保持格式） |
+| `isMxScaleForRowMajorA<fp8_e8m0_t, LayoutSrc>`    | `isMxScaleForzZ<fp8_e8m0_t, LayoutDst>` | MX Scale RowMajor A → zZ    |
 | `isMxScaleForColumnMajorA<fp8_e8m0_t, LayoutSrc>` | `isMxScaleForzZ<fp8_e8m0_t, LayoutDst>` | MX Scale ColumnMajor A → zZ |
-| `isMxScaleForRowMajorB<fp8_e8m0_t, LayoutSrc>` | `isMxScaleFornN<fp8_e8m0_t, LayoutDst>` | MX Scale RowMajor B → nN |
+| `isMxScaleForRowMajorB<fp8_e8m0_t, LayoutSrc>`    | `isMxScaleFornN<fp8_e8m0_t, LayoutDst>` | MX Scale RowMajor B → nN    |
 | `isMxScaleForColumnMajorB<fp8_e8m0_t, LayoutSrc>` | `isMxScaleFornN<fp8_e8m0_t, LayoutDst>` | MX Scale ColumnMajor B → nN |
 
 ## 调用接口
@@ -77,10 +77,10 @@ void operator()(
 )
 ```
 
-| 参数 | 说明 |
-| :------ | :------ |
+| 参数        | 说明                                 |
+| :---------- | :----------------------------------- |
 | `dstTensor` | 目的 TLA Tensor（L1, TPosition::A1） |
-| `srcTensor` | 源 TLA Tensor（GM, TPosition::GM） |
+| `srcTensor` | 源 TLA Tensor（GM, TPosition::GM）   |
 
 ### 扩展调用接口（Ascend950 RowMajor/ColumnMajor 偏特化）
 
@@ -97,11 +97,11 @@ void operator()(
 )
 ```
 
-| 参数 | 说明 |
-| :------ | :------ |
-| `ndNum` | 连续搬运的 ND 矩阵数量，默认为 1 |
+| 参数                | 说明                                  |
+| :------------------ | :------------------------------------ |
+| `ndNum`             | 连续搬运的 ND 矩阵数量，默认为 1      |
 | `srcNdMatrixStride` | 源端相邻 ND 矩阵间的 stride，默认为 0 |
-| `dstNzMatrixStride` | 目的端相邻矩阵间的 stride，默认为 0 |
+| `dstNzMatrixStride` | 目的端相邻矩阵间的 stride，默认为 0   |
 
 ## 调用示例
 

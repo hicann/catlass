@@ -27,8 +27,8 @@ L1 → BT 的偏特化通过 SFINAE 匹配：源 tensor 的 Layout 为 `VectorLa
 
 ### Ascend950
 
-| 源 Tensor | 目标 Tensor | SFINAE 条件 | 说明 |
-| :------ | :------ | :------ | :------ |
+| 源 Tensor             | 目标 Tensor           | SFINAE 条件                                  | 说明                                                              |
+| :-------------------- | :-------------------- | :------------------------------------------- | :---------------------------------------------------------------- |
 | VectorLayout L1（A1） | VectorLayout BT（C2） | `isVector<LayoutSrc> && isVector<LayoutDst>` | 一维向量拷贝，使用 `AscendC::DataCopy`，B32 类型自动对齐 blockLen |
 
 ## 调用接口

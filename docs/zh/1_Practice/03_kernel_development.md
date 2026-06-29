@@ -34,15 +34,16 @@ public:
 
 ### 2.1 核心模板参数
 
-| 模板参数 | 描述 |
-|---------|------|
-| BlockMmad_ | 负责矩阵乘法的核心计算组件 |
-| BlockEpilogue_ | 负责计算结果的后处理（如激活函数、量化等） |
-| BlockScheduler_ | 负责调度和分配计算任务到不同的计算核心 |
+| 模板参数        | 描述                                       |
+| --------------- | ------------------------------------------ |
+| BlockMmad_      | 负责矩阵乘法的核心计算组件                 |
+| BlockEpilogue_  | 负责计算结果的后处理（如激活函数、量化等） |
+| BlockScheduler_ | 负责调度和分配计算任务到不同的计算核心     |
 
 ### 2.2 类型导出
 
 通过模板参数导出的类型形成了Kernel的核心类型系统，包括：
+
 - 架构标签（ArchTag）
 - L1缓存 tile 形状（L1TileShape）
 - 数据类型（ElementA/B/C/Accumulator）
@@ -188,18 +189,21 @@ void operator()<AscendC::AIC>(Params const &params) {
 Kernel的执行流程可以概括为以下几个步骤：
 
 ### 5.1 初始化调度器
+
 ```cpp
 BlockScheduler matmulBlockScheduler(params.problemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
 uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
 ```
 
 ### 5.2 初始化资源和计算组件
+
 ```cpp
 Arch::Resource<ArchTag> resource;
 BlockMmad blockMmad(resource);
 ```
 
 ### 5.3 设置全局内存张量
+
 ```cpp
 AscendC::GlobalTensor<ElementA> gmA;
 gmA.SetGlobalBuffer((__gm__ ElementA *)params.ptrA);
@@ -207,18 +211,19 @@ gmA.SetGlobalBuffer((__gm__ ElementA *)params.ptrA);
 ```
 
 ### 5.4 循环处理每个计算块
+
 ```cpp
 for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()) {
     // 1. 计算块坐标
     GemmCoord blockCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
     GemmCoord actualBlockShape = matmulBlockScheduler.GetActualBlockShape(blockCoord);
-    
+
     // 2. 计算内存偏移
     MatrixCoord offsetA{blockCoord.m() * L1TileShape::M, blockCoord.k() * L1TileShape::K};
     // 计算offsetB和offsetC...
     int64_t gmOffsetA = params.layoutA.GetOffset(offsetA);
     // 计算gmOffsetB和gmOffsetC...
-    
+
     // 3. 执行块级矩阵乘法
     blockMmad(gmA[gmOffsetA], params.layoutA,
               gmB[gmOffsetB], params.layoutB,
@@ -228,6 +233,7 @@ for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += 
 ```
 
 ### 5.5 同步操作
+
 ```cpp
 AscendC::PipeBarrier<PIPE_ALL>();
 ```

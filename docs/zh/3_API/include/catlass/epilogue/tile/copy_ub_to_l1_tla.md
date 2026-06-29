@@ -27,9 +27,9 @@ struct CopyUb2L1Tla;
 
 底层通过 SFINAE 匹配 `iszNUnAlign<ElementSrc, LayoutSrc>` && `iszN<ElementDst, LayoutDst>` 且 `TPosition::VECCALC` → `TPosition::A1`。
 
-| 模板参数 | 说明 |
-| :------ | :------ |
-| `ArchTag` | 架构标签，仅 Ascend950 有特化 |
+| 模板参数    | 说明                                  |
+| :---------- | :------------------------------------ |
+| `ArchTag`   | 架构标签，仅 Ascend950 有特化         |
 | `TensorSrc` | 源 TLA Tensor，UB 位置，zN 非对齐布局 |
 | `TensorDst` | 目的 TLA Tensor，L1 位置，zN 对齐布局 |
 
@@ -40,9 +40,9 @@ template <class TensorDst, class TensorSrc>
 void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
 ```
 
-| 参数 | 说明 |
-| :------ | :------ |
-| `dstTensor` | 目的 L1 TLA Tensor（zN 对齐布局，TPosition::A1） |
+| 参数        | 说明                                                  |
+| :---------- | :---------------------------------------------------- |
+| `dstTensor` | 目的 L1 TLA Tensor（zN 对齐布局，TPosition::A1）      |
 | `srcTensor` | 源 UB TLA Tensor（zN 非对齐布局，TPosition::VECCALC） |
 
 内部使用 `AscendC::DataCopy(dstData[dstOffset], srcData[srcOffset], dataCopyParams)`，按 zN 格式分段搬运。

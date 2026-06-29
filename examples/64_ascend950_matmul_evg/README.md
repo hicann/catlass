@@ -2,15 +2,15 @@
 
 本目录集中展示 EVG（Epilogue Visitor Graph）在 Ascend950 GEMM 尾处理中的典型用法，包含 7 个可执行文件：
 
-| 可执行文件 | 源文件 | 场景 | EVG 组织 | 数据通路 |
-|-----------|--------|------|----------|----------|
-| `64_ascend950_matmul_evg_add` | `matmul_evg_add.cpp` | D = A×B + X | TreeVisitor | GM workspace |
-| `64_ascend950_matmul_evg_leaky_relu` | `matmul_evg_leaky_relu.cpp` | D = LeakyRelu(A×B) | TreeVisitor | GM workspace |
-| `64_ascend950_matmul_evg_sigmoid` | `matmul_evg_sigmoid.cpp` | D = Sigmoid(A×B) | TreeVisitor | GM workspace |
-| `64_ascend950_matmul_evg_silu` | `matmul_evg_silu.cpp` | D = Silu(A×B) | TreeVisitor | GM workspace |
-| `64_ascend950_matmul_evg_tanh` | `matmul_evg_tanh.cpp` | D = Tanh(A×B) | TopologicalVisitor | GM workspace |
-| `64_ascend950_matmul_evg_bias` | `matmul_evg_bias.cpp` | D = A×B + bias | TreeVisitor + RowBroadcast | GM workspace |
-| `64_ascend950_matmul_evg_add_ub` | `matmul_evg_add_ub.cpp` | D = A×B + X | TreeVisitor | L0C→UB workspace |
+| 可执行文件                           | 源文件                      | 场景               | EVG 组织                   | 数据通路         |
+| ------------------------------------ | --------------------------- | ------------------ | -------------------------- | ---------------- |
+| `64_ascend950_matmul_evg_add`        | `matmul_evg_add.cpp`        | D = A×B + X        | TreeVisitor                | GM workspace     |
+| `64_ascend950_matmul_evg_leaky_relu` | `matmul_evg_leaky_relu.cpp` | D = LeakyRelu(A×B) | TreeVisitor                | GM workspace     |
+| `64_ascend950_matmul_evg_sigmoid`    | `matmul_evg_sigmoid.cpp`    | D = Sigmoid(A×B)   | TreeVisitor                | GM workspace     |
+| `64_ascend950_matmul_evg_silu`       | `matmul_evg_silu.cpp`       | D = Silu(A×B)      | TreeVisitor                | GM workspace     |
+| `64_ascend950_matmul_evg_tanh`       | `matmul_evg_tanh.cpp`       | D = Tanh(A×B)      | TopologicalVisitor         | GM workspace     |
+| `64_ascend950_matmul_evg_bias`       | `matmul_evg_bias.cpp`       | D = A×B + bias     | TreeVisitor + RowBroadcast | GM workspace     |
+| `64_ascend950_matmul_evg_add_ub`     | `matmul_evg_add_ub.cpp`     | D = A×B + X        | TreeVisitor                | L0C→UB workspace |
 
 ## 编译
 

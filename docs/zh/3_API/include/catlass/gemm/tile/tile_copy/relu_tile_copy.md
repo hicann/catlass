@@ -12,10 +12,10 @@
 
 ## 引用的 Tile 组件
 
-| 成员别名 | 来源 |
-| :------ | :------ |
-| `CopyGmToL1A` ~ `CopyL1ToBT` | 继承自 `TileCopy<ArchTag, AType, BType, CType, BiasType>` |
-| `CopyL0CToGm`（重写） | `CopyL0CToGm<ArchTag, ElementAccumulator, CType, NO_QUANT, true>` |
+| 成员别名                     | 来源                                                              |
+| :--------------------------- | :---------------------------------------------------------------- |
+| `CopyGmToL1A` ~ `CopyL1ToBT` | 继承自 `TileCopy<ArchTag, AType, BType, CType, BiasType>`         |
+| `CopyL0CToGm`（重写）        | `CopyL0CToGm<ArchTag, ElementAccumulator, CType, NO_QUANT, true>` |
 
 ## 模板原型
 

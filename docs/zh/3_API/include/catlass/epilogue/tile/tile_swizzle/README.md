@@ -10,14 +10,14 @@
 
 ## API 清单
 
-| API | 遍历方式 | GetTileCoord(i) | 说明 |
-| :------ | :------ | :------ | :------ |
-| [EpilogueIdentityTileSwizzle](./epilogue_identity_tile_swizzle.md) | 行列优先 | `(i / cols, i % cols)` | 默认策略 |
+| API                                                                    | 遍历方式 | GetTileCoord(i)        | 说明         |
+| :--------------------------------------------------------------------- | :------- | :--------------------- | :----------- |
+| [EpilogueIdentityTileSwizzle](./epilogue_identity_tile_swizzle.md)     | 行列优先 | `(i / cols, i % cols)` | 默认策略     |
 | [EpilogueHorizontalTileSwizzle](./epilogue_horizontal_tile_swizzle.md) | 水平优先 | `(i % rows, i / rows)` | 水平方向优先 |
 
 ## 遍历顺序对比
 
-```
+```cpp
 blockShape(64, 128), tileShape(32, 64)
 
 Identity:   loop0→(0,0)  loop1→(0,1)  loop2→(1,0)  loop3→(1,1)

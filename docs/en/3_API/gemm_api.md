@@ -41,13 +41,13 @@ Within the two nested `for` loops, global memory (GM) is tiled, and the tiles ar
 
 CATLASS uses the following components to express the loop nesting described above. These components are specialized based on data types, data layouts, and mathematical instructions.
 
-| API Level            | API Class and/or Function Name                  |
-| ---                  | ---                                               |
-| Device               | `Catlass::Gemm::Device::DeviceGemm`     |
-| Kernel               | `Catlass::Gemm::Kernel::BasicMatmul`            |
-| Block           | `Catlass::Gemm::Block::BlockMmad` <br> `Catlass::Epilogue::Block::BlockEpilogue` <br>|
-| Tile (MMAD and Copy) | `TileMmad` and `TileCopy` <br>|
-| Basic                 | `AscendC::Mmad` and `AscendC::DataCopy` |
+| API Level            | API Class and/or Function Name                                                        |
+| -------------------- | ------------------------------------------------------------------------------------- |
+| Device               | `Catlass::Gemm::Device::DeviceGemm`                                                   |
+| Kernel               | `Catlass::Gemm::Kernel::BasicMatmul`                                                  |
+| Block                | `Catlass::Gemm::Block::BlockMmad` <br> `Catlass::Epilogue::Block::BlockEpilogue` <br> |
+| Tile (MMAD and Copy) | `TileMmad` and `TileCopy` <br>                                                        |
+| Basic                | `AscendC::Mmad` and `AscendC::DataCopy`                                               |
 
 In CATLASS, kernels are assembled by first combining the Block main loop and Block epilogue at the Kernel layer, and then wrapping them with a host-side adapter.
 
@@ -96,9 +96,9 @@ The Block API encompasses matrix multiply-accumulate operations and the epilogue
 
 In the SPMD programming model of the Ascend NPU, a Block represents a process, which corresponds to a logical core. It abstracts the following hardware features:
 
-* Asynchronous memory copy (for example, from GM to L1 Buffer)
-* MMAD instructions on tile-granularity data residing in the L0 Buffer
-* Synchronization operations: Managing coordination across multiple cores as well as between different hardware pipelines within a single core to ensure asynchronous data dependencies are met.
+- Asynchronous memory copy (for example, from GM to L1 Buffer)
+- MMAD instructions on tile-granularity data residing in the L0 Buffer
+- Synchronization operations: Managing coordination across multiple cores as well as between different hardware pipelines within a single core to ensure asynchronous data dependencies are met.
 
 A Block utilizes the `TileMma` and `TileCopy` APIs (detailed below) to perform tile-granularity data transfers and MMAD computations.
 
@@ -134,11 +134,11 @@ struct BlockMmad {};
 
 ```
 
-* `DispatchPolicy`: A critical configuration parameter for the Block layer, detailed in the subsequent section.
-* `L1TileShape` and `L0TileShape`: Define the base tile dimensions utilized within the L1 Buffer and L0 Buffer, respectively. These are covered in detail later.
-* `AType`, `BType`, `CType`, and `BiasType`: Specialized instances of `GemmType` that encapsulate the data types and data layouts of the A, B, and C matrices, along with the bias vector in GM.
-* `TileCopy`: An instance of `Tile::TileCopy` that encapsulates tile-granularity data transfers between different memory hierarchy levels, for example, GM to L1 Buffer, and L1 Buffer to L0 Buffer.
-* `TileMmad`: An instance of `Tile::TileMmad` that executes the matrix multiply-accumulate operations at the base tile granularity within the L0 Buffer.
+- `DispatchPolicy`: A critical configuration parameter for the Block layer, detailed in the subsequent section.
+- `L1TileShape` and `L0TileShape`: Define the base tile dimensions utilized within the L1 Buffer and L0 Buffer, respectively. These are covered in detail later.
+- `AType`, `BType`, `CType`, and `BiasType`: Specialized instances of `GemmType` that encapsulate the data types and data layouts of the A, B, and C matrices, along with the bias vector in GM.
+- `TileCopy`: An instance of `Tile::TileCopy` that encapsulates tile-granularity data transfers between different memory hierarchy levels, for example, GM to L1 Buffer, and L1 Buffer to L0 Buffer.
+- `TileMmad`: An instance of `Tile::TileMmad` that executes the matrix multiply-accumulate operations at the base tile granularity within the L0 Buffer.
 
 ### Block Dispatch Policies
 
@@ -161,9 +161,9 @@ The `STAGES` parameter allows users to easily adjust the number of buffers in mu
 
 Adopting this dispatch policy design provides the following advantages:
 
-* Eliminates code duplication: The main loop can be reused across different kernels.
-* Simplifies generic programming: The core structure name `BlockMmad` remains identical across all implementations.
-* Provides a single extension point: It offers a clean, unified boundary for users to insert new, custom main loops specialized for their own dispatch policies.
+- Eliminates code duplication: The main loop can be reused across different kernels.
+- Simplifies generic programming: The core structure name `BlockMmad` remains identical across all implementations.
+- Provides a single extension point: It offers a clean, unified boundary for users to insert new, custom main loops specialized for their own dispatch policies.
 
 ### TileShape
 
@@ -177,9 +177,9 @@ The epilogue implements element-wise operations involving the output matrix. Use
 
 The Kernel layer encapsulates the collective execution logic of all Blocks scheduled on the NPU. Specifically, `BasicMatmul` at the Kernel layer provides the following functionality:
 
-* Combines the individual logic of different Blocks and injects necessary synchronization primitives.
-* Manages Block swizzling, which defines the mapping and relationship between different Blocks and their target data partitions in GM.
-* Tiles and fragments the input data at Block granularity.
+- Combines the individual logic of different Blocks and injects necessary synchronization primitives.
+- Manages Block swizzling, which defines the mapping and relationship between different Blocks and their target data partitions in GM.
+- Tiles and fragments the input data at Block granularity.
 
 The Kernel layer API serves as the entry point for device-side execution and acts as the integration point for fusing sequential matrix multiplications, epilogues, or other custom operations.
 
@@ -188,8 +188,8 @@ The kernel API entry is defined with
 [include/catlass/gemm/kernel/basic_matmul.hpp](../../../include/catlass/gemm/kernel/basic_matmul.hpp).
 `BasicMatmul` is a stateless device-side kernel. The matrix multiplication it implements consists of two parts:
 
-* Block Mmad
-* Block Epilogue
+- Block Mmad
+- Block Epilogue
 
 ```cpp
 namespace Catlass::Gemm::Kernel {

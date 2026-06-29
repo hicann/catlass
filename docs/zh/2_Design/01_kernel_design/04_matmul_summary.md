@@ -12,9 +12,9 @@
 - 理论模板：`Common模板`
 - 工程优化：`流水优化（Multi Buffer）`
 - 关键交付件
-    - host：[00_basic_matmul](../../../../examples/00_basic_matmul/basic_matmul.cpp)
-    - kernel：[basic_matmul.hpp](../../../../include/catlass/gemm/kernel/basic_matmul.hpp)
-    - blockMmad：[block_mmad_pingpong.hpp](../../../../include/catlass/gemm/block/block_mmad_pingpong.hpp)
+  - host：[00_basic_matmul](../../../../examples/00_basic_matmul/basic_matmul.cpp)
+  - kernel：[basic_matmul.hpp](../../../../include/catlass/gemm/kernel/basic_matmul.hpp)
+  - blockMmad：[block_mmad_pingpong.hpp](../../../../include/catlass/gemm/block/block_mmad_pingpong.hpp)
 - dispatchPolicy：`MmadAtlasA2Pingpong`
 
 </details>
@@ -24,12 +24,12 @@
 
 - 理论模板：`Common模板`
 - 工程优化：
-    - `流水优化（Multi Buffer）`
-    - `读取带宽优化（padding）- PaddingMatrixND`
+  - `流水优化（Multi Buffer）`
+  - `读取带宽优化（padding）- PaddingMatrixND`
 - 关键交付件
-    - host：[04_padding_matmul](../../../../examples/04_padding_matmul/padding_matmul.cpp)
-    - kernel：[padding_matmul.hpp](../../../../include/catlass/gemm/kernel/padding_matmul.hpp)
-    - blockMmad：[block_mmad_pingpong.hpp](../../../../include/catlass/gemm/block/block_mmad_pingpong.hpp)
+  - host：[04_padding_matmul](../../../../examples/04_padding_matmul/padding_matmul.cpp)
+  - kernel：[padding_matmul.hpp](../../../../include/catlass/gemm/kernel/padding_matmul.hpp)
+  - blockMmad：[block_mmad_pingpong.hpp](../../../../include/catlass/gemm/block/block_mmad_pingpong.hpp)
 - dispatchPolicy：`MmadAtlasA2Pingpong`
 
 </details>
@@ -39,16 +39,16 @@
 
 - 理论模板：`Common模板`
 - 工程优化：
-    - `流水优化（Multi Buffer）`
-    - `流水优化（Preload）`
-    - `读取带宽优化（Padding）- PaddingMatrixNZ`
-    - `读取带宽优化（ShuffleK）`
-    - `读取带宽优化（小M下指令替换）`（需要修改样例使能）
+  - `流水优化（Multi Buffer）`
+  - `流水优化（Preload）`
+  - `读取带宽优化（Padding）- PaddingMatrixNZ`
+  - `读取带宽优化（ShuffleK）`
+  - `读取带宽优化（小M下指令替换）`（需要修改样例使能）
 - 关键交付件
-    - host：[06_optimized_matmul](../../../../examples/06_optimized_matmul/optimized_matmul.cpp)
-    - kernel：[optimized_matmul.hpp](../../../../include/catlass/gemm/kernel/optimized_matmul.hpp)
-    - Padding前处理组件：[padding_matmul.hpp](../../../../include/catlass/gemm/kernel/padding_matmul.hpp)
-    - blockMmad：[block_mmad_preload.hpp](../../../../include/catlass/gemm/block/block_mmad_preload.hpp)
+  - host：[06_optimized_matmul](../../../../examples/06_optimized_matmul/optimized_matmul.cpp)
+  - kernel：[optimized_matmul.hpp](../../../../include/catlass/gemm/kernel/optimized_matmul.hpp)
+  - Padding前处理组件：[padding_matmul.hpp](../../../../include/catlass/gemm/kernel/padding_matmul.hpp)
+  - blockMmad：[block_mmad_preload.hpp](../../../../include/catlass/gemm/block/block_mmad_preload.hpp)
 - dispatchPolicy：`MmadAtlasA2Preload`
 - ⚠️ 注意：即使没有使用`PaddingMatrixNZ`前处理，依然会产生MIX算子编译和CV1:0启动的开销（比仅AIC启动的开销大）
 
@@ -60,9 +60,9 @@
 - 理论模板：`多核切K模板 MultiCoreSplitK`
 - 工程优化：`流水优化（Multi Buffer）`
 - 关键交付件
-    - host：[09_splitk_matmul](../../../../examples/09_splitk_matmul/splitk_matmul.cpp)
-    - kernel：[splitk_matmul.hpp](../../../../include/catlass/gemm/kernel/splitk_matmul.hpp)
-    - blockMmad：[block_mmad_pingpong.hpp](../../../../include/catlass/gemm/block/block_mmad_pingpong.hpp)
+  - host：[09_splitk_matmul](../../../../examples/09_splitk_matmul/splitk_matmul.cpp)
+  - kernel：[splitk_matmul.hpp](../../../../include/catlass/gemm/kernel/splitk_matmul.hpp)
+  - blockMmad：[block_mmad_pingpong.hpp](../../../../include/catlass/gemm/block/block_mmad_pingpong.hpp)
 - dispatchPolicy：`MmadAtlasA2Pingpong`
 
 </details>
@@ -74,13 +74,13 @@
 
 - 理论模板：`Common模板`
 - 工程优化：
-    - `流水优化（Multi Buffer）`
-    - `流水优化（Preload）`
-    - `读取带宽优化（ShuffleK）`
+  - `流水优化（Multi Buffer）`
+  - `流水优化（Preload）`
+  - `读取带宽优化（ShuffleK）`
 - 关键交付件
-    - host：[21_basic_matmul_preload_zN](../../../../examples/21_basic_matmul_preload_zN/basic_matmul_preload_zN.cpp)
-    - kernel：[basic_matmul_preload.hpp](../../../../include/catlass/gemm/kernel/basic_matmul_preload.hpp)
-    - blockMmad：[block_mmad_preload.hpp](../../../../include/catlass/gemm/block/block_mmad_preload.hpp)
+  - host：[21_basic_matmul_preload_zN](../../../../examples/21_basic_matmul_preload_zN/basic_matmul_preload_zN.cpp)
+  - kernel：[basic_matmul_preload.hpp](../../../../include/catlass/gemm/kernel/basic_matmul_preload.hpp)
+  - blockMmad：[block_mmad_preload.hpp](../../../../include/catlass/gemm/block/block_mmad_preload.hpp)
 - dispatchPolicy：`MmadAtlasA2Preload`
 
 </details>
@@ -90,14 +90,14 @@
 
 - 理论模板：`多核切K模板 MultiCoreSplitK`
 - 工程优化：
-    - `流水优化（Multi Buffer）`
-    - `读取带宽优化（padding）- PaddingMatrixND`
+  - `流水优化（Multi Buffer）`
+  - `读取带宽优化（padding）- PaddingMatrixND`
 - 关键交付件
-    - host：[22_padding_splitk_matmul](../../../../examples/22_padding_splitk_matmul/padding_splitk_matmul.cpp)
-    - kernel：[padding_splitk_matmul.hpp](../../../../include/catlass/gemm/kernel/padding_splitk_matmul.hpp)
-    - Padding前处理组件：[padding_matmul.hpp](../../../../include/catlass/gemm/kernel/padding_matmul.hpp)
-    - SplitkReduceAdd后处理组件：[splitk_matmul.hpp](../../../../include/catlass/gemm/kernel/splitk_matmul.hpp)
-    - blockMmad：[block_mmad_pingpong.hpp](../../../../include/catlass/gemm/block/block_mmad_pingpong.hpp)
+  - host：[22_padding_splitk_matmul](../../../../examples/22_padding_splitk_matmul/padding_splitk_matmul.cpp)
+  - kernel：[padding_splitk_matmul.hpp](../../../../include/catlass/gemm/kernel/padding_splitk_matmul.hpp)
+  - Padding前处理组件：[padding_matmul.hpp](../../../../include/catlass/gemm/kernel/padding_matmul.hpp)
+  - SplitkReduceAdd后处理组件：[splitk_matmul.hpp](../../../../include/catlass/gemm/kernel/splitk_matmul.hpp)
+  - blockMmad：[block_mmad_pingpong.hpp](../../../../include/catlass/gemm/block/block_mmad_pingpong.hpp)
 - dispatchPolicy：`MmadAtlasA2Pingpong`
 
 </details>
@@ -109,12 +109,12 @@
 
 - 理论模板：`Common模板`
 - 工程优化：
-    - `流水优化（Multi Buffer）`(全载的A矩阵在L1上不使用多buffer)
-    - `读取带宽优化（L1常驻）`
+  - `流水优化（Multi Buffer）`(全载的A矩阵在L1上不使用多buffer)
+  - `读取带宽优化（L1常驻）`
 - 关键交付件
-    - host：[25_matmul_full_loadA](../../../../examples/25_matmul_full_loadA/matmul_full_loadA.cpp)
-    - kernel：[matmul_full_loadA.hpp](../../../../include/catlass/gemm/kernel/matmul_full_loadA.hpp)
-    - blockMmad：[block_mmad_pingpong_full_loadA.hpp](../../../../include/catlass/gemm/block/block_mmad_pingpong_full_loadA.hpp)
+  - host：[25_matmul_full_loadA](../../../../examples/25_matmul_full_loadA/matmul_full_loadA.cpp)
+  - kernel：[matmul_full_loadA.hpp](../../../../include/catlass/gemm/kernel/matmul_full_loadA.hpp)
+  - blockMmad：[block_mmad_pingpong_full_loadA.hpp](../../../../include/catlass/gemm/block/block_mmad_pingpong_full_loadA.hpp)
 - dispatchPolicy：`MmadAtlasA2FullLoadA`
 - BlockScheduler：`GemmIdentityBlockSwizzleL1FullLoad`
 
@@ -125,12 +125,12 @@
 
 - 理论模板：`Common模板`
 - 工程优化：
-    - `流水优化（Multi Buffer）`
-    - `Scalar开销消减`
+  - `流水优化（Multi Buffer）`
+  - `Scalar开销消减`
 - 关键交付件
-    - host：[31_small_matmul](../../../../examples/31_small_matmul/small_matmul.cpp)
-    - kernel：[small_matmul.hpp](../../../../include/catlass/gemm/kernel/small_matmul.hpp)
-    - blockMmad：[block_mmad_small.hpp](../../../../include/catlass/gemm/block/block_mmad_small.hpp)
+  - host：[31_small_matmul](../../../../examples/31_small_matmul/small_matmul.cpp)
+  - kernel：[small_matmul.hpp](../../../../include/catlass/gemm/kernel/small_matmul.hpp)
+  - blockMmad：[block_mmad_small.hpp](../../../../include/catlass/gemm/block/block_mmad_small.hpp)
 - dispatchPolicy：`MmadAtlasA2Small`
 - BlockScheduler：kernel内实际不使用
 
@@ -141,14 +141,14 @@
 
 - 理论模板：`单核切K模板 SingleCoreSplitK`
 - 工程优化：
-    - `流水优化（Multi Buffer）`
-    - `读取带宽优化（Padding）- PaddingMatrixNZ`
-    - `写出带宽优化`
+  - `流水优化（Multi Buffer）`
+  - `读取带宽优化（Padding）- PaddingMatrixNZ`
+  - `写出带宽优化`
 - 关键交付件
-    - host：[34_single_core_splitk_matmul](../../../../examples/34_single_core_splitk_matmul/single_core_splitk.cpp)
-    - kernel：[single_core_slicek_matmul.hpp](../../../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp)
-    - Padding前处理组件和RemovePaddingNDAndCast后处理组件：[padding_matmul.hpp](../../../../include/catlass/gemm/kernel/padding_matmul.hpp)
-    - blockMmad：[block_mmad_single_core_splitk.hpp](../../../../include/catlass/gemm/block/block_mmad_single_core_splitk.hpp)
+  - host：[34_single_core_splitk_matmul](../../../../examples/34_single_core_splitk_matmul/single_core_splitk.cpp)
+  - kernel：[single_core_slicek_matmul.hpp](../../../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp)
+  - Padding前处理组件和RemovePaddingNDAndCast后处理组件：[padding_matmul.hpp](../../../../include/catlass/gemm/kernel/padding_matmul.hpp)
+  - blockMmad：[block_mmad_single_core_splitk.hpp](../../../../include/catlass/gemm/block/block_mmad_single_core_splitk.hpp)
 - dispatchPolicy：`MmadAtlasA2SingleCoreSplitk`
 - BlockScheduler：`SingleCoreSplitkGemmIdentityBlockSwizzle`
 
@@ -479,15 +479,15 @@ struct TileCopyOpt : public Catlass::Gemm::Tile::TileCopy<ArchTag, AType, BType,
 ### 特性承载代码
 
 - `Common`模板可参考[25_matmul_full_loadA](../../../../examples/25_matmul_full_loadA/matmul_full_loadA.cpp)及相关交付件，该样例通过$M$轴上的单核全载或多核全载来在特定场景下优化性能，并配合专门的swizzle策略来提高L1上全载的A矩阵块的复用频率。
-    - kernel：[matmul_full_loadA.hpp](../../../../include/catlass/gemm/kernel/matmul_full_loadA.hpp)
-    - blockMmad：[block_mmad_pingpong_full_loadA.hpp](../../../../include/catlass/gemm/block/block_mmad_pingpong_full_loadA.hpp)
-    - dispatchPolicy：`MmadAtlasA2FullLoadA`
-    - BlockScheduler：`GemmIdentityBlockSwizzleL1FullLoad`
+  - kernel：[matmul_full_loadA.hpp](../../../../include/catlass/gemm/kernel/matmul_full_loadA.hpp)
+  - blockMmad：[block_mmad_pingpong_full_loadA.hpp](../../../../include/catlass/gemm/block/block_mmad_pingpong_full_loadA.hpp)
+  - dispatchPolicy：`MmadAtlasA2FullLoadA`
+  - BlockScheduler：`GemmIdentityBlockSwizzleL1FullLoad`
 - `单核切K模板`[34_single_core_splitk_matmul](../../../../examples/34_single_core_splitk_matmul/single_core_splitk.cpp)在理论设计上就考虑了L1Tile块常驻的优化点。
-    - kernel：[single_core_slicek_matmul.hpp](../../../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp)
-    - blockMmad：[block_mmad_single_core_splitk.hpp](../../../../include/catlass/gemm/block/block_mmad_single_core_splitk.hpp)
-    - dispatchPolicy：`MmadAtlasA2SingleCoreSplitk`
-    - BlockScheduler：`SingleCoreSplitkGemmIdentityBlockSwizzle`
+  - kernel：[single_core_slicek_matmul.hpp](../../../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp)
+  - blockMmad：[block_mmad_single_core_splitk.hpp](../../../../include/catlass/gemm/block/block_mmad_single_core_splitk.hpp)
+  - dispatchPolicy：`MmadAtlasA2SingleCoreSplitk`
+  - BlockScheduler：`SingleCoreSplitkGemmIdentityBlockSwizzle`
 
 </details>
 
@@ -516,8 +516,8 @@ struct TileCopyOpt : public Catlass::Gemm::Tile::TileCopy<ArchTag, AType, BType,
 ### 特性承载代码
 
 - 参考[31_small_matmul](../../../../examples/31_small_matmul/small_matmul.cpp)，可以和[00_basic_matmul](../../../../examples/00_basic_matmul/basic_matmul.cpp)的相关交付件对比来加深理解
-    - kernel：[small_matmul.hpp](../../../../include/catlass/gemm/kernel/small_matmul.hpp)
-    - blockMmad：[block_mmad_small.hpp](../../../../include/catlass/gemm/block/block_mmad_small.hpp)
+  - kernel：[small_matmul.hpp](../../../../include/catlass/gemm/kernel/small_matmul.hpp)
+  - blockMmad：[block_mmad_small.hpp](../../../../include/catlass/gemm/block/block_mmad_small.hpp)
 
 </details>
 
@@ -569,32 +569,32 @@ struct TileCopyOpt : public Catlass::Gemm::Tile::TileCopy<ArchTag, AType, BType,
 依次识别是否满足各模板适合场景，并和性能基线作比较：
 
 - [31_small_matmul](../../../../examples/31_small_matmul/small_matmul.cpp)：
-    - 计算当前基本任务块 taskBlocks
+  - 计算当前基本任务块 taskBlocks
 
-        ```cpp
-        taskBlocks = CeilDiv(M, m1) * CeilDiv(N, n1);
-        ```
+    ```cpp
+    taskBlocks = CeilDiv(M, m1) * CeilDiv(N, n1);
+    ```
 
-    - 基本任务块小于AIC数： $taskBlocks < aicCoreNum$
-    - $K$轴较小，$K <= k_1$
+  - 基本任务块小于AIC数： $taskBlocks < aicCoreNum$
+  - $K$轴较小，$K <= k_1$
 - [09_splitk_matmul](../../../../examples/09_splitk_matmul/splitk_matmul.cpp)或[22_padding_splitk_matmul](../../../../examples/22_padding_splitk_matmul/padding_splitk_matmul.cpp)（带Padding前处理）
-    - 选择$m_1$、$n_1$、$k_1$
-        - 先设置$m_1 = 128$、$n_1 = 256$、$k_1 = 256$
-        - 满足下列场景其一，修改$m_1 = 256$、$n_1 = 128$
-            - A矩阵和B矩阵均为ColumnMajor
-            - A矩阵为ColumnMajor，B矩阵为RowMajor，且$M > N$
-    - 计算当前基本任务块 taskBlocks
+  - 选择$m_1$、$n_1$、$k_1$
+    - 先设置$m_1 = 128$、$n_1 = 256$、$k_1 = 256$
+    - 满足下列场景其一，修改$m_1 = 256$、$n_1 = 128$
+      - A矩阵和B矩阵均为ColumnMajor
+      - A矩阵为ColumnMajor，B矩阵为RowMajor，且$M > N$
+  - 计算当前基本任务块 taskBlocks
 
-        ```cpp
-        taskBlocks = CeilDiv(M, m1) * CeilDiv(N, n1);
-        ```
+    ```cpp
+    taskBlocks = CeilDiv(M, m1) * CeilDiv(N, n1);
+    ```
 
-    - 满足下列两种场景：
-        - 基本任务块小于一半AIC数，且$K$轴够大：$taskBlocks < aicCoreNum / 2, K > 5120$
-        - 基本任务块小于3块，且$K$轴不会小：$taskBlocks <= 2, K > 1024$
+  - 满足下列两种场景：
+    - 基本任务块小于一半AIC数，且$K$轴够大：$taskBlocks < aicCoreNum / 2, K > 5120$
+    - 基本任务块小于3块，且$K$轴不会小：$taskBlocks <= 2, K > 1024$
 - [06_optimized_matmul](../../../../examples/06_optimized_matmul/optimized_matmul.cpp)（带Padding前处理）和[21_basic_matmul_preload_zN](../../../../examples/21_basic_matmul_preload_zN/basic_matmul_preload_zN.cpp)（手动改为ND输入）
-    - 泛化性更强，适用于剩余场景
-    - 不需要使用Padding时，为了节约MIX算子编译启动的开销，建议使用[21_basic_matmul_preload_zN](../../../../examples/21_basic_matmul_preload_zN/basic_matmul_preload_zN.cpp)模板
+  - 泛化性更强，适用于剩余场景
+  - 不需要使用Padding时，为了节约MIX算子编译启动的开销，建议使用[21_basic_matmul_preload_zN](../../../../examples/21_basic_matmul_preload_zN/basic_matmul_preload_zN.cpp)模板
 
 ⚠️ 全载特性的使用[25_matmul_full_loadA](../../../../examples/25_matmul_full_loadA/matmul_full_loadA.cpp) 和 单核切K方案[34_single_core_splitk_matmul](../../../../examples/34_single_core_splitk_matmul/single_core_splitk.cpp)的适用场景待完善
 

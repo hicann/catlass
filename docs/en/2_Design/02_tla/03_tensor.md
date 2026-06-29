@@ -127,7 +127,7 @@ From the above:
 2. `tensorA_sub` observes `(1, 5)` of the parent logical space expressed by the BuiltinTensor, so the starting point changes to `(1, 5)`.
 3. `tileA` takes a tile whose starting point is `(2, 4)` based on `tensorA_sub`. Therefore, the starting point of the new view is `(1, 5) + (2, 4) = (3, 9)`.
 
-![Origin_Shape-tensor_1.png](https://raw.gitcode.com/user-images/assets/7631999/004cd08b-cda4-4c99-a5c1-63770d71f151/Origin_Shape-tensor_1.png 'Origin_Shape-tensor_1.png')
+![Origin_Shape-tensor_1.png](https://raw.gitcode.com/user-images/assets/7631999/004cd08b-cda4-4c99-a5c1-63770d71f151/Origin_Shape-tensor_1.png "Origin_Shape-tensor_1.png")
 
 ## Using `operator()` for Indexing and Slicing
 
@@ -160,7 +160,7 @@ auto A2 = A3(b, tla::_, tla::_);  // 3D -> 2D. The (M, K) view is obtained.
 auto A1 = A2(r, tla::_) // 2D -> 1D. The (K) view is obtained.
 ```
 
-![Origin_Shape-tensor_2.png](https://raw.gitcode.com/user-images/assets/7631999/dd1a947a-2371-4e6e-9fef-51a5ceb1556a/Origin_Shape-tensor_2.png 'Origin_Shape-tensor_2.png')
+![Origin_Shape-tensor_2.png](https://raw.gitcode.com/user-images/assets/7631999/dd1a947a-2371-4e6e-9fef-51a5ceb1556a/Origin_Shape-tensor_2.png "Origin_Shape-tensor_2.png")
 
 ## Obtaining TileTensor
 
@@ -261,7 +261,7 @@ This equation indicates that:
 
 Therefore, the difference between the two lies only in the coordinate unit provided by the caller, rather than the logical semantics of the returned result.
 
-![Origin_Shape-tensor_3.png](https://raw.gitcode.com/user-images/assets/7631999/b543ee2b-c938-4e19-87b8-40abd0c81b53/Origin_Shape-tensor_3.png 'Origin_Shape-tensor_3.png')
+![Origin_Shape-tensor_3.png](https://raw.gitcode.com/user-images/assets/7631999/b543ee2b-c938-4e19-87b8-40abd0c81b53/Origin_Shape-tensor_3.png "Origin_Shape-tensor_3.png")
 
 ### Why `TileView` Is More Suitable for Tile Looping
 

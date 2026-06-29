@@ -1,6 +1,7 @@
 # Flash Attention Infer Example Readme
 
 ## Code Organization
+
 ```
 ├── 49_ascend950_flash_attention_infer
 │   ├── CMakeLists.txt           # CMake build file
@@ -12,13 +13,16 @@
 │   ├── fai_tiling.h             # Tiling computing implementation
 │   └── README.md
 ```
+
 ## Examples
+
 - After obtaining the code, build the corresponding operator executable file. For details, see [quickstart](../../docs/en/1_Practice/01_quick_start.md#build-and-execution).
 
-- Run `gen_data.py` to generate a test sample. The test sample needs to be input from the command line. After the command is executed, a data directory is generated in the current path, including the input data of the operator and the golden data used for precision verification.  
+- Run `gen_data.py` to generate a test sample. The test sample needs to be input from the command line. After the command is executed, a data directory is generated in the current path, including the input data of the operator and the golden data used for precision verification.
 - Then, execute the operator. Note that the input shape of the operator must be the same as the shape of the data generated in the first step.
 
 The following is a complete shell script example:
+
 ```
 batch=1          # Batch size
 qSeqlen=177      # Query sequence length
@@ -55,6 +59,7 @@ run_kernel
 ```
 
 If the following information is displayed, the accuracy comparison is successful.
+
 ```
 Compare success.
 ```

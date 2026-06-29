@@ -14,19 +14,26 @@
 完成以下函数的计算
 
 Gelu:
+
 $$
 out = Gelu(a × b)
 
 $$
+
 其中Gelu的公式为：
+
 $$
 Gelu(x) =0.5∗x∗(1+Tanh(\sqrt {2/π}∗(x+0.044715∗x^3 )))
 $$
+
 Sigmoid：
+
 $$
 Sigmoid(x)=\frac{1}{1+e^{-x}}
 $$
+
 Tanh:
+
 $$
 \begin{aligned}
 Tanh(x) &= \frac{(e^x - e^{-x})}{(e^x + e^{-x})}\\
@@ -37,24 +44,33 @@ Tanh(x) &= \frac{(e^x - e^{-x})}{(e^x + e^{-x})}\\
 &= 1 - 2\times (1 - Sigmoid(2x))
 \end{aligned}
 $$
+
 因此可化简为：
+
 $$
 Tanh(x) = 2\times Sigmoid(2x) - 1
 $$
 
 基于上述讨论，回顾Gelu的计算式：
+
 $$
 Gelu(x) =0.5∗x∗(1+Tanh(\sqrt {2/π}∗(x+0.044715∗x^3 )))
 $$
+
 让$Z=\sqrt {2/π}∗(x+0.044715∗x^3)$，代入上式化简得：
+
 $$
 Gelu(x) =x∗Sigmoid( 2Z )
 $$
+
 再次展开，并取近似：$\sqrt {8/π}\approx 1.595769$，有:
+
 $$
 Gelu(x) \approx x∗Sigmoid( 1.595769∗(x+0.044715∗x^3 ))
 $$
+
 在上式中展开$Sigmoid$函数，最终Gelu的计算形式为：
+
 $$
 Gelu(x) = \frac{x}{1+e^{-1.595769∗(x+0.044715∗x^3 )}}
 $$

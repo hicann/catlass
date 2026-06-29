@@ -66,11 +66,11 @@ TLA 以 [`tla::tuple`](../../../../include/tla/tuple.hpp) 为基础。它与 `st
 
 `Layout` 本质上由三个 `IntTuple` 组成：`Shape`、`Stride` 和 `OriginShape`。
 
-| 字段 | 作用 | 关注点 |
-| --- | --- | --- |
-| `Shape` | 用于内存布局计算的尺寸描述 | 决定布局结构，不一定等于逻辑实际尺寸 |
-| `Stride` | 各维度上的步长 | 决定坐标如何映射到线性地址 |
-| `OriginShape` | Tensor 的逻辑实际尺寸 | 决定哪些元素在逻辑上有效 |
+| 字段          | 作用                       | 关注点                               |
+| ------------- | -------------------------- | ------------------------------------ |
+| `Shape`       | 用于内存布局计算的尺寸描述 | 决定布局结构，不一定等于逻辑实际尺寸 |
+| `Stride`      | 各维度上的步长             | 决定坐标如何映射到线性地址           |
+| `OriginShape` | Tensor 的逻辑实际尺寸      | 决定哪些元素在逻辑上有效             |
 
 可以先把它们理解成：
 
@@ -83,7 +83,7 @@ TLA 以 [`tla::tuple`](../../../../include/tla/tuple.hpp) 为基础。它与 `st
 - `Shape` 面向布局计算，允许包含对齐、分块和填充后的结构。
 - `OriginShape` 面向逻辑语义，只描述真实有效的数据范围。
 
-![Origin_Shape-layout_1.png](https://raw.gitcode.com/user-images/assets/7631999/936388d2-81b6-400d-afe2-788eaf140f81/Origin_Shape-layout_1.png 'Origin_Shape-layout_1.png')
+![Origin_Shape-layout_1.png](https://raw.gitcode.com/user-images/assets/7631999/936388d2-81b6-400d-afe2-788eaf140f81/Origin_Shape-layout_1.png "Origin_Shape-layout_1.png")
 
 `OriginShape` 用于把“内存怎样排”与“逻辑上哪些数据有效”区分开。
 
@@ -190,13 +190,13 @@ stride = (3, 1)
 因此线性地址顺序为：
 
 | 逻辑坐标 | 线性地址 |
-| --- | --- |
-| `(0, 0)` | `0` |
-| `(0, 1)` | `1` |
-| `(0, 2)` | `2` |
-| `(1, 0)` | `3` |
-| `(1, 1)` | `4` |
-| `(1, 2)` | `5` |
+| -------- | -------- |
+| `(0, 0)` | `0`      |
+| `(0, 1)` | `1`      |
+| `(0, 2)` | `2`      |
+| `(1, 0)` | `3`      |
+| `(1, 1)` | `4`      |
+| `(1, 2)` | `5`      |
 
 ### 2x3 列优先
 
@@ -213,13 +213,13 @@ stride = (1, 2)
 因此线性地址顺序为：
 
 | 逻辑坐标 | 线性地址 |
-| --- | --- |
-| `(0, 0)` | `0` |
-| `(1, 0)` | `1` |
-| `(0, 1)` | `2` |
-| `(1, 1)` | `3` |
-| `(0, 2)` | `4` |
-| `(1, 2)` | `5` |
+| -------- | -------- |
+| `(0, 0)` | `0`      |
+| `(1, 0)` | `1`      |
+| `(0, 1)` | `2`      |
+| `(1, 1)` | `3`      |
+| `(0, 2)` | `4`      |
+| `(1, 2)` | `5`      |
 
 ### 以 `zN` 为例理解嵌套布局
 
@@ -327,7 +327,7 @@ tile shape         = ((16, 2), (16, 3))
 
 这样做的目的，是保证父 layout 和 tile layout 在结构层次上保持一致。
 
-![Origin_Shape-layout_2.png](https://raw.gitcode.com/user-images/assets/7631999/649c84f3-981f-49eb-be77-6cbf6fd1e5b3/Origin_Shape-layout_2.png 'Origin_Shape-layout_2.png')
+![Origin_Shape-layout_2.png](https://raw.gitcode.com/user-images/assets/7631999/649c84f3-981f-49eb-be77-6cbf6fd1e5b3/Origin_Shape-layout_2.png "Origin_Shape-layout_2.png")
 
 ### 参数约束
 

@@ -93,32 +93,30 @@ MXFP8（Microscale FP8）是一种基于分块的浮点量化方案：
 
 ### 3.2 算子中的数据布局
 
-| 输入 | 数据类型 | Shape | 说明 |
-|------|---------|-------|------|
-| Q | `float8_e4m3_t` | [B, N, S, D] | Query矩阵 |
-| K | `float8_e4m3_t` | [B, N, S, D] | Key矩阵 |
-| V | `float8_e4m3_t` | [B, N, S, D] | Value矩阵 |
+| 输入     | 数据类型        | Shape              | 说明                             |
+| -------- | --------------- | ------------------ | -------------------------------- |
+| Q        | `float8_e4m3_t` | [B, N, S, D]       | Query矩阵                        |
+| K        | `float8_e4m3_t` | [B, N, S, D]       | Key矩阵                          |
+| V        | `float8_e4m3_t` | [B, N, S, D]       | Value矩阵                        |
 | mxScaleQ | `float8_e8m0_t` | [B, N, S, D/64, 2] | Q的MX缩放因子（沿embed维度分块） |
-| mxScaleK | `float8_e8m0_t` | [B, N, S, D/64, 2] | K的MX缩放因子（沿seq维度分块） |
-| mxScaleV | `float8_e8m0_t` | [B, N, S/64, D, 2] | V的MX缩放因子（沿seq维度分块） |
+| mxScaleK | `float8_e8m0_t` | [B, N, S, D/64, 2] | K的MX缩放因子（沿seq维度分块）   |
+| mxScaleV | `float8_e8m0_t` | [B, N, S/64, D, 2] | V的MX缩放因子（沿seq维度分块）   |
 
 > **注意**：MX Scale 的量化轴方向由矩阵乘的语义决定。Q×K^T 中，Q 沿 embed 维度分块，K 沿 embed 维度分块；P×V 中，V 沿 seq 维度分块。
-
 
 ### 3.3 Q×K^T（BMM1）的 MXFP8 矩阵乘
 
 Q×K^T 的 BlockMmad 从样例49的 [block_mmad_fai_qk_tla.hpp](../../include/catlass/gemm/block/block_mmad_fai_qk_tla.hpp) 切换到 MX 版本的 [block_mmad_fai_qk_mx_tla.hpp](../../include/catlass/gemm/block/block_mmad_fai_qk_mx_tla.hpp)，核心变化如下：
 
-| 对比项 | 样例49 | 样例62 (MX版本) |
-|--------|--------|----------------|
-| 元素类型 A/B | FP16/BF16 | `float8_e4m3_t` |
-| L1新增 MX Scale A | — | `L1_TILE_M × L1_TILE_K / 32 × sizeof(uint8_t)` |
-| L1新增 MX Scale B | — | `L1_TILE_N × L1_TILE_K / 32 × sizeof(uint8_t)` |
-| BLOCK_L1_SIZE | `(L1A + L1B) × STAGES` | `(L1A + L1B + L1ScaleA + L1ScaleB) × STAGES` |
-| GM→L1搬运 | 只搬运A/B | A/B + mxScaleA/mxScaleB |
-| L1→L0搬运 | `copyL1ToL0A(L0, L1_tile)` | `copyL1ToL0A(L0, L1_tile, L1_scale_tile)` |
-| DispatchPolicy | `MmadFAIQK` | `MmadFAIQKMx`（继承自 `MmadFAIQK`） |
-
+| 对比项            | 样例49                     | 样例62 (MX版本)                                |
+| ----------------- | -------------------------- | ---------------------------------------------- |
+| 元素类型 A/B      | FP16/BF16                  | `float8_e4m3_t`                                |
+| L1新增 MX Scale A | —                          | `L1_TILE_M × L1_TILE_K / 32 × sizeof(uint8_t)` |
+| L1新增 MX Scale B | —                          | `L1_TILE_N × L1_TILE_K / 32 × sizeof(uint8_t)` |
+| BLOCK_L1_SIZE     | `(L1A + L1B) × STAGES`     | `(L1A + L1B + L1ScaleA + L1ScaleB) × STAGES`   |
+| GM→L1搬运         | 只搬运A/B                  | A/B + mxScaleA/mxScaleB                        |
+| L1→L0搬运         | `copyL1ToL0A(L0, L1_tile)` | `copyL1ToL0A(L0, L1_tile, L1_scale_tile)`      |
+| DispatchPolicy    | `MmadFAIQK`                | `MmadFAIQKMx`（继承自 `MmadFAIQK`）            |
 
 ---
 
@@ -267,12 +265,12 @@ void InitOneInL1MxScaleA()
                      +-----------+
 ```
 
-| 对比项 | 样例49 | 样例62 (MX版本) |
-|--------|--------|----------------|
-| 头文件 | `block_mmad_fai_pv_tla.hpp` | `block_mmad_fai_pv_mx_tla.hpp` |
-| P的来源 | L1（AIV Softmax写入，FP16/BF16） | L1（AIV Softmax写入，fp8_e4m3） |
-| P的scale | — | L1常驻全1 scale（`InitOneInL1MxScaleA`） |
-| V的来源 | GM→L1，FP16/BF16 | GM→L1，fp8_e4m3 + mxScaleV |
-| DispatchPolicy | `MmadFAIPV` | `MmadFAIPVMx`（继承自 `MmadFAIPV`） |
+| 对比项         | 样例49                           | 样例62 (MX版本)                          |
+| -------------- | -------------------------------- | ---------------------------------------- |
+| 头文件         | `block_mmad_fai_pv_tla.hpp`      | `block_mmad_fai_pv_mx_tla.hpp`           |
+| P的来源        | L1（AIV Softmax写入，FP16/BF16） | L1（AIV Softmax写入，fp8_e4m3）          |
+| P的scale       | —                                | L1常驻全1 scale（`InitOneInL1MxScaleA`） |
+| V的来源        | GM→L1，FP16/BF16                 | GM→L1，fp8_e4m3 + mxScaleV               |
+| DispatchPolicy | `MmadFAIPV`                      | `MmadFAIPVMx`（继承自 `MmadFAIPV`）      |
 
 ---

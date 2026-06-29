@@ -15,32 +15,32 @@
 
 ## API 清单
 
-| 组件名 | 风格 | 适用硬件 | 说明 |
-| :------ | :------ | :------ | :------ |
-| [CopyL1ToL0B](./copy_l1_to_l0b.md) | 非 TLA | AtlasA2 / Ascend950 | 基础 L1→L0B 搬运模板，支持多种 layout 转换 |
-| [TileCopyTla](./tile_copy_tla.md) | TLA | AtlasA2 / Ascend950 | TLA 风格 L1→L0B 搬运，通过 tla::Tensor 封装简化调用 |
-| [CopyL1ToL0BSparseTla](./copy_l1_to_l0b_sparse_tla.md) | TLA | AtlasA2 | Sparse L1→L0B 搬运（仅 AtlasA2），需传入 index tensor |
+| 组件名                                                 | 风格   | 适用硬件            | 说明                                                  |
+| :----------------------------------------------------- | :----- | :------------------ | :---------------------------------------------------- |
+| [CopyL1ToL0B](./copy_l1_to_l0b.md)                     | 非 TLA | AtlasA2 / Ascend950 | 基础 L1→L0B 搬运模板，支持多种 layout 转换            |
+| [TileCopyTla](./tile_copy_tla.md)                      | TLA    | AtlasA2 / Ascend950 | TLA 风格 L1→L0B 搬运，通过 tla::Tensor 封装简化调用   |
+| [CopyL1ToL0BSparseTla](./copy_l1_to_l0b_sparse_tla.md) | TLA    | AtlasA2             | Sparse L1→L0B 搬运（仅 AtlasA2），需传入 index tensor |
 
 > **说明**：该模块通常不直接使用，而是作为 [TileCopy](../tile_copy/README.md) 的成员类型（`CopyL1ToL0B`），由 [blockMmad](../../block/block_mmad.md) 自动管理。仅在需要自定义 kernel 模板组装时显式声明。
 
 ## 适用硬件型号说明
 
-| 硬件型号 | 架构标识 | ARCH 宏 | 支持的非 TLA 模板 | 支持的 TLA 模板 |
-| :------ | :------ | :------ | :------ | :------ |
-| Atlas A2 | `Arch::AtlasA2` | `CATLASS_ARCH == 2201` | CopyL1ToL0B | TileCopyTla / CopyL1ToL0BSparseTla |
-| Ascend 950 | `Arch::Ascend950` | `CATLASS_ARCH == 3510` | CopyL1ToL0B | TileCopyTla |
+| 硬件型号   | 架构标识          | ARCH 宏                | 支持的非 TLA 模板 | 支持的 TLA 模板                    |
+| :--------- | :---------------- | :--------------------- | :---------------- | :--------------------------------- |
+| Atlas A2   | `Arch::AtlasA2`   | `CATLASS_ARCH == 2201` | CopyL1ToL0B       | TileCopyTla / CopyL1ToL0BSparseTla |
+| Ascend 950 | `Arch::Ascend950` | `CATLASS_ARCH == 3510` | CopyL1ToL0B       | TileCopyTla                        |
 
 ### 架构差异
 
-| 特性 | AtlasA2 | Ascend950 |
-| :------ | :------ | :------ |
-| 主要搬运方向 | zZ→nZ（转置）、zN→nZ（转置）、nZ→nZ（直传） | zN→nZ（转置）、nZ→nZ（直传） |
-| 基础搬运指令 | LoadData2D / LoadData2dTranspose / LoadData3D | LoadData2DParamsV2 |
-| l0Batch 批量搬运 | 不支持 | 支持（`operator()` 重载） |
-| MX Scale 浮点量化 | 不支持 | 支持（`operator()` 重载，B 侧 scale layout 为 nN） |
-| B8/B4 窄类型 | 支持（int8_t/float8_ 等） | 支持（含 MX Scale） |
-| Sparse 搬运 | 支持（CopyL1ToL0BSparseTla） | 不支持 |
-| GEMV 场景 | 支持（zN→zN、nN→zN、nZ→zN） | 不支持 |
+| 特性              | AtlasA2                                       | Ascend950                                          |
+| :---------------- | :-------------------------------------------- | :------------------------------------------------- |
+| 主要搬运方向      | zZ→nZ（转置）、zN→nZ（转置）、nZ→nZ（直传）   | zN→nZ（转置）、nZ→nZ（直传）                       |
+| 基础搬运指令      | LoadData2D / LoadData2dTranspose / LoadData3D | LoadData2DParamsV2                                 |
+| l0Batch 批量搬运  | 不支持                                        | 支持（`operator()` 重载）                          |
+| MX Scale 浮点量化 | 不支持                                        | 支持（`operator()` 重载，B 侧 scale layout 为 nN） |
+| B8/B4 窄类型      | 支持（int8_t/float8_ 等）                     | 支持（含 MX Scale）                                |
+| Sparse 搬运       | 支持（CopyL1ToL0BSparseTla）                  | 不支持                                             |
+| GEMV 场景         | 支持（zN→zN、nN→zN、nZ→zN）                   | 不支持                                             |
 
 ## 接口调用示例
 
@@ -172,14 +172,14 @@ copyOp(dstTensor, srcTensor, scaleTensor);
 
 ## 模板选择指南
 
-| 场景 | 推荐模板 |
-| :------ | :------ |
-| 通用矩阵乘 tile L1→L0B 搬运 | `CopyL1ToL0B`（非 TLA）或 `TileCopyTla`（TLA） |
-| zZ→nZ 转置搬运（AtlasA2） | `CopyL1ToL0B` 或 `TileCopyTla`（自动匹配） |
-| zN→nZ 转置搬运 | `CopyL1ToL0B` 或 `TileCopyTla`（自动匹配） |
-| nZ→nZ 直传（Transpose B） | `CopyL1ToL0B` 或 `TileCopyTla`（自动匹配） |
-| Ascend950 多 batch 搬运 | `TileCopyTla`（l0Batch 重载） |
+| 场景                          | 推荐模板                                        |
+| :---------------------------- | :---------------------------------------------- |
+| 通用矩阵乘 tile L1→L0B 搬运   | `CopyL1ToL0B`（非 TLA）或 `TileCopyTla`（TLA）  |
+| zZ→nZ 转置搬运（AtlasA2）     | `CopyL1ToL0B` 或 `TileCopyTla`（自动匹配）      |
+| zN→nZ 转置搬运                | `CopyL1ToL0B` 或 `TileCopyTla`（自动匹配）      |
+| nZ→nZ 直传（Transpose B）     | `CopyL1ToL0B` 或 `TileCopyTla`（自动匹配）      |
+| Ascend950 多 batch 搬运       | `TileCopyTla`（l0Batch 重载）                   |
 | Ascend950 MX 浮点量化（B 侧） | `TileCopyTla`（MX Scale 重载，scale layout nN） |
-| AtlasA2 Sparse 搬运 | `CopyL1ToL0BSparseTla` |
-| AtlasA2 GEMV 场景 | `CopyL1ToL0B`（非 TLA） |
-| 已使用 TLA 编程范式 | `TileCopyTla`（统一风格） |
+| AtlasA2 Sparse 搬运           | `CopyL1ToL0BSparseTla`                          |
+| AtlasA2 GEMV 场景             | `CopyL1ToL0B`（非 TLA）                         |
+| 已使用 TLA 编程范式           | `TileCopyTla`（统一风格）                       |

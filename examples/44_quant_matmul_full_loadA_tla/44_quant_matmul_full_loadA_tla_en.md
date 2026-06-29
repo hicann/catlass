@@ -2,36 +2,36 @@
 
 ## Prototype Design
 
-|Name|Type|Data Type|Dimension|Format|Description|
-|---|---|---|---|---|---|
-|matA|inTensor|int8|[m, k]|ND|Left matrix|
-|matB|inTensor|int8|[n, k]|ND|Right matrix. Transpose is supported.|
-|scale|inTensor|float|[n]|ND|Per-channel quantization scale|
-|perTokenScale|inTensor|float|[m]|ND|Per-token quantization scale|
-|matD|outTensor|bf16|[m, n]|ND|Output matrix|
+| Name          | Type      | Data Type | Dimension | Format | Description                           |
+| ------------- | --------- | --------- | --------- | ------ | ------------------------------------- |
+| matA          | inTensor  | int8      | [m, k]    | ND     | Left matrix                           |
+| matB          | inTensor  | int8      | [n, k]    | ND     | Right matrix. Transpose is supported. |
+| scale         | inTensor  | float     | [n]       | ND     | Per-channel quantization scale        |
+| perTokenScale | inTensor  | float     | [m]       | ND     | Per-token quantization scale          |
+| matD          | outTensor | bf16      | [m, n]    | ND     | Output matrix                         |
 
 ## Sample Implementation
 
 The CATLASS [44_quant_matmul_full_loadA_tla example](./README.md) operator is an Ascend-friendly Matmul operator implemented based on the CATLASS Gemm API. It is optimized for large matrix computation scenarios. The key operator components include the following parts:
 
- - Example: [quant_matmul_full_loadA_tla.cpp](./quant_matmul_full_loadA_tla.cpp)
- - Kernel implementation:
-   - Main kernel file: [quant_matmul_full_loadA_tla.hpp](../../include/catlass/gemm/kernel/quant_matmul_full_loadA_tla.hpp)
+- Example: [quant_matmul_full_loadA_tla.cpp](./quant_matmul_full_loadA_tla.cpp)
+- Kernel implementation:
+  - Main kernel file: [quant_matmul_full_loadA_tla.hpp](../../include/catlass/gemm/kernel/quant_matmul_full_loadA_tla.hpp)
 
- - **Block components**, including:
-    - Full-load dedicated mmad component [block_mmad_pingpong_full_loadA_tla.hpp](../../include/catlass/gemm/block/block_mmad_pingpong_full_loadA_tla.hpp)
-    - Dequantization post-processing component [block_epilogue_per_token_dequant_tla.hpp](../../include/catlass/epilogue/block/block_epilogue_per_token_dequant_tla.hpp)
-    - Multi-core full-load swizzle[GemmIdentityBlockSwizzleL1FullLoad](../../include/catlass/gemm/block/block_swizzle.hpp)
+- **Block components**, including:
+  - Full-load dedicated mmad component [block_mmad_pingpong_full_loadA_tla.hpp](../../include/catlass/gemm/block/block_mmad_pingpong_full_loadA_tla.hpp)
+  - Dequantization post-processing component [block_epilogue_per_token_dequant_tla.hpp](../../include/catlass/epilogue/block/block_epilogue_per_token_dequant_tla.hpp)
+  - Multi-core full-load swizzle[GemmIdentityBlockSwizzleL1FullLoad](../../include/catlass/gemm/block/block_swizzle.hpp)
 
 ## Solution Design
 
 - As shown in the following figure, the key parameter `L1TileShape<M, N, K>` exists in the template library matrix. Matrix C is used to divide basic blocks and cores according to the `L1TileShape::M` and `L1TileShape::N` parameters. Then, the common Matmul template loads the matrix blocks of size `L1TileShape::M * L1TileShape::K` in matrix A to L1, while the full-load template of matrix A directly loads a matrix block of size `L1TileShape::M * K` into L1. For matrix B, both the common template and the full-load template of matrix A load a matrix block of size `L1TileShape::K * L1TileShape::N` into L1.
 
-![Full-load matrix A](https://raw.gitcode.com/user-images/assets/7631999/38ccafec-7fd8-4b9f-a4bb-dd57085ffb63/53e318e0feb94c578d888e67365e4c97.png_tplv-a9rns2rl98-image-qvalue.png '53e318e0feb94c578d888e67365e4c97.png~tplv-a9rns2rl98-image-qvalue.png')
+![Full-load matrix A](https://raw.gitcode.com/user-images/assets/7631999/38ccafec-7fd8-4b9f-a4bb-dd57085ffb63/53e318e0feb94c578d888e67365e4c97.png_tplv-a9rns2rl98-image-qvalue.png "53e318e0feb94c578d888e67365e4c97.png~tplv-a9rns2rl98-image-qvalue.png")
 
 - The following figure shows the pipeline changes of the full-load template of matrix A compared with the common template. With the full-load solution, at the beginning of the calculation, the data blocks of matrix A are completely moved to L1 through MTE2, and then ping-pong data movement is performed with matrix B for calculation.
 
-! [Full-load pipeline of matrix A](https://raw.gitcode.com/user-images/assets/7631999/1de46727-7c46-411e-936c-7a437d951a3a/3e9c799e1de0405d89f07a6bfd7d7c54.png_tplv-a9rns2rl98-image-qvalue.png '3e9c799e1de0405d89f07a6bfd7d7c54.png~tplv-a9rns2rl98-image-qvalue.png')
+! [Full-load pipeline of matrix A](https://raw.gitcode.com/user-images/assets/7631999/1de46727-7c46-411e-936c-7a437d951a3a/3e9c799e1de0405d89f07a6bfd7d7c54.png_tplv-a9rns2rl98-image-qvalue.png "3e9c799e1de0405d89f07a6bfd7d7c54.png~tplv-a9rns2rl98-image-qvalue.png")
 
 - When the full-load template of matrix A is used, half of the L1 space is required to store the `L1TileShape::M * problemShape.K` data. If the L1 space is insufficient for the full-load template of matrix A, an error is reported.
 - When matrix A is fully loaded, a larger N-axis indicates that a single core can reuse matrix A in L1 multiple times without transferring matrix A from GM or L2 cache. In this case, the performance gain is greater.

@@ -24,23 +24,23 @@ struct TileCopySparseTla {
 };
 ```
 
-| 模板参数 | 说明 |
-| :------ | :------ |
-| `ArchTag` | 架构标签，仅支持 `Arch::AtlasA2` |
-| `TensorSrc` | 源 Tensor：`tla::Tensor<GlobalTensor<Element>, Layout, Coord, GM>` |
+| 模板参数    | 说明                                                                |
+| :---------- | :------------------------------------------------------------------ |
+| `ArchTag`   | 架构标签，仅支持 `Arch::AtlasA2`                                    |
+| `TensorSrc` | 源 Tensor：`tla::Tensor<GlobalTensor<Element>, Layout, Coord, GM>`  |
 | `TensorDst` | 目标 Tensor：`tla::Tensor<LocalTensor<Element>, Layout, Coord, A1>` |
-| `Enable` | SFINAE 条件，根据 Layout 自动派发偏特化 |
+| `Enable`    | SFINAE 条件，根据 Layout 自动派发偏特化                             |
 
 ## 偏特化实现
 
 ### AtlasA2
 
-| 源 Layout | 目标 Layout | SFINAE 条件 | 说明 |
-| :------ | :------ | :------ | :------ |
-| RowMajor / ColumnMajor | zN | `(isRowMajor \|\| isColumnMajor) && iszN` | ND→zN 转换，通过 `Nd2NzParams` |
-| ColumnMajor | nZ | `isColumnMajor && isnZ` | ND→nZ 转换，含大 stride 逐行回退 |
-| zN（uint32_t 压缩） | zN | `iszN<uint32_t> && iszN` | zN→zN 直传，处理 16 对齐 |
-| nZ（uint32_t 压缩） | nZ | `isnZ<uint32_t> && isnZ` | nZ→nZ 直传 |
+| 源 Layout              | 目标 Layout | SFINAE 条件                               | 说明                             |
+| :--------------------- | :---------- | :---------------------------------------- | :------------------------------- |
+| RowMajor / ColumnMajor | zN          | `(isRowMajor \|\| isColumnMajor) && iszN` | ND→zN 转换，通过 `Nd2NzParams`   |
+| ColumnMajor            | nZ          | `isColumnMajor && isnZ`                   | ND→nZ 转换，含大 stride 逐行回退 |
+| zN（uint32_t 压缩）    | zN          | `iszN<uint32_t> && iszN`                  | zN→zN 直传，处理 16 对齐         |
+| nZ（uint32_t 压缩）    | nZ          | `isnZ<uint32_t> && isnZ`                  | nZ→nZ 直传                       |
 
 ## 调用接口
 

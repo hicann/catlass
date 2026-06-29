@@ -38,7 +38,7 @@ Compare success.
 In this example, the default padding action uses `PADDING_NZ`. You can switch this to `PADDING_BLOCK_ND` to evaluate alternative performance profiles.
 
 - **PADDING_NZ**
-The code configuration is as follows:
+  The code configuration is as follows:
 
 ```cpp
     constexpr PaddingTag paddingTagA = (std::is_same_v<LayoutA, layout::zN> || std::is_same_v<LayoutA, layout::nZ>)
@@ -57,7 +57,7 @@ static const uint32_t COMPUTE_LENGTH_B = 48 * 1024 / sizeof(ElementB);
 ```
 
 - **PADDING_BLOCK_ND**
-The modifications required to enable `PADDING_BLOCK_ND` are shown below. When the input matrix is not in NZ format, this policy aligns and pads the matrix according to `L1TileShape`:
+  The modifications required to enable `PADDING_BLOCK_ND` are shown below. When the input matrix is not in NZ format, this policy aligns and pads the matrix according to `L1TileShape`:
 
 ```diff
     constexpr PaddingTag paddingTagA = (std::is_same_v<LayoutA, layout::zN> || std::is_same_v<LayoutA, layout::nZ>)

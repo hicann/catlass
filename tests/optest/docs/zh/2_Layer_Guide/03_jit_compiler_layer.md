@@ -84,6 +84,7 @@ makeKernelUuid(macros):
 ```
 
 UUID 同时作为：
+
 - 内存缓存键（`loaded_` 映射）
 - 磁盘文件名：`{cacheDir}/{uuid}.so`
 
@@ -114,28 +115,29 @@ extern "C" void run(uint32_t blockNum, aclrtStream stream,
 
 环境变量：
 
-| 变量 | 用途 | 可接受值 | 默认值 |
-|------|------|----------|--------|
-| `CATLASS_JIT_LOG_LEVEL` | 日志级别 | `0`=None, `1`=Info, `2`=Debug | `0` |
-| `TORCH_CATLASS_CACHE_DIR` | JIT 磁盘缓存目录 | 绝对路径 | `~/.cache/catlass/jit_cache` |
-| `MS_SANITIZE_MEMORY` | 启用 Ascend 内存消毒器 (`--cce-enable-sanitizer`) | `1` | — |
-| `TORCH_CATLASS_VERSION` | 版本字符串注入 `-DCATLASS_VERSION_FULL` | 包内自动设置 | "unknown" |
-| `ASCEND_HOME_PATH` | CANN 安装根目录，查找 `ccec` 编译器和 runtime 库 | 绝对路径 | 必设 |
-| `TORCH_CATLASS_PKG_DIR` | 包安装目录，JIT 依据此路径定位 include 和模板 | 包内自动设置 | — |
-| `CATLASS_JIT_AIC_AS_MIX` | 强制 AIC 发射 `__mix__(1,0)` 替代默认 `__cube__` | 任意非空 | — |
-| `CATLASS_JIT_AIV_AS_MIX` | 强制 AIV 发射 `__mix__(0,1)` 替代默认 `__vector__` | 任意非空 | — |
-| `CATLASS_JIT_MIX_CV_11` | 强制 MIX 发射 `__mix__(1,1)` 替代默认 `__mix__(1,2)` | 任意非空 | — |
+| 变量                      | 用途                                                 | 可接受值                      | 默认值                       |
+| ------------------------- | ---------------------------------------------------- | ----------------------------- | ---------------------------- |
+| `CATLASS_JIT_LOG_LEVEL`   | 日志级别                                             | `0`=None, `1`=Info, `2`=Debug | `0`                          |
+| `TORCH_CATLASS_CACHE_DIR` | JIT 磁盘缓存目录                                     | 绝对路径                      | `~/.cache/catlass/jit_cache` |
+| `MS_SANITIZE_MEMORY`      | 启用 Ascend 内存消毒器 (`--cce-enable-sanitizer`)    | `1`                           | —                            |
+| `TORCH_CATLASS_VERSION`   | 版本字符串注入 `-DCATLASS_VERSION_FULL`              | 包内自动设置                  | "unknown"                    |
+| `ASCEND_HOME_PATH`        | CANN 安装根目录，查找 `ccec` 编译器和 runtime 库     | 绝对路径                      | 必设                         |
+| `TORCH_CATLASS_PKG_DIR`   | 包安装目录，JIT 依据此路径定位 include 和模板        | 包内自动设置                  | —                            |
+| `CATLASS_JIT_AIC_AS_MIX`  | 强制 AIC 发射 `__mix__(1,0)` 替代默认 `__cube__`     | 任意非空                      | —                            |
+| `CATLASS_JIT_AIV_AS_MIX`  | 强制 AIV 发射 `__mix__(0,1)` 替代默认 `__vector__`   | 任意非空                      | —                            |
+| `CATLASS_JIT_MIX_CV_11`   | 强制 MIX 发射 `__mix__(1,1)` 替代默认 `__mix__(1,2)` | 任意非空                      | —                            |
 
 环境变量分为两类：
+
 - **外部配置**：`ASCEND_HOME_PATH`、`TORCH_CATLASS_CACHE_DIR`、`CATLASS_JIT_LOG_LEVEL`、`MS_SANITIZE_MEMORY`、`CATLASS_JIT_*_AS_MIX` — 用户按需设置。
 - **包内注入**：`TORCH_CATLASS_VERSION`、`TORCH_CATLASS_PKG_DIR` — Python loader 在 import 时自动设置。
 
 `JitKernelType` 枚举：
 
-| 值 | 编译器标志 | 描述 |
-|-----|-------------|------|
-| `AIC` | `-DKERNEL_TYPE=__cube__` | 纯 Cube 内核 |
-| `AIV` | `-DKERNEL_TYPE=__vector__` | 纯 Vector 内核 |
+| 值    | 编译器标志                   | 描述               |
+| ----- | ---------------------------- | ------------------ |
+| `AIC` | `-DKERNEL_TYPE=__cube__`     | 纯 Cube 内核       |
+| `AIV` | `-DKERNEL_TYPE=__vector__`   | 纯 Vector 内核     |
 | `MIX` | `-DKERNEL_TYPE=__mix__(1,2)` | Cube + Vector 混合 |
 
 ## 宏生成 (jit_macro_generator.h / .cpp)

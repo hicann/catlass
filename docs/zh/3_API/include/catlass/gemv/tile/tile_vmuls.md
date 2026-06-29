@@ -18,10 +18,10 @@ template <class ArchTag, class VType_>
 struct TileVmuls;
 ```
 
-| 模板参数 | 说明 |
-| :------ | :------ |
-| `ArchTag` | 架构标签 |
-| `VType_` | 向量数据类型，通过 `VType_::Element` 获取元素类型 |
+| 模板参数  | 说明                                              |
+| :-------- | :------------------------------------------------ |
+| `ArchTag` | 架构标签                                          |
+| `VType_`  | 向量数据类型，通过 `VType_::Element` 获取元素类型 |
 
 ## 调用接口
 

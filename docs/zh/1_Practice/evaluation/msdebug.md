@@ -33,7 +33,7 @@ bash scripts/build.sh --debug --msdebug 00_basic_matmul
 - `--debug`同时控制host与device侧代码的debug开关，`--msdebug`控制device侧代码的debug开关。
 - 若只增加`--debug`，只会启用host的调试功能，仅能用gdb/lldb调试host侧代码。
 
-2. 切换到可执行文件的编译目录 `output/bin` 下，使用`msdebug`执行算子样例程序。
+1. 切换到可执行文件的编译目录 `output/bin` 下，使用`msdebug`执行算子样例程序。
 
 ```bash
 cd output/bin
@@ -49,7 +49,7 @@ This enables developers to debug Ascend kernels without being affected by potent
 (msdebug) target create "./00_basic_matmul"
 Current executable set to '/home/catlass/output/bin/00_basic_matmul' (aarch64).
 (msdebug) settings set -- target.run-args  "256" "512" "1024" "0"
-(msdebug) 
+(msdebug)
 ```
 
 ### 命令行调试
@@ -66,12 +66,12 @@ Breakpoint 2: where = 00_basic_matmul`Run(GemmOptions const&) + 2816 at basic_ma
 (msdebug) breakpoint list
 Current breakpoints:
 1: file = 'basic_matmul.cpp', line = 45, exact_match = 0, locations = 1
-  1.1: where = 00_basic_matmul`Run(GemmOptions const&) + 460 at basic_matmul.cpp:45:18, address = 00_basic_matmul[0x000000000016df8c], unresolved, hit count = 0 
+  1.1: where = 00_basic_matmul`Run(GemmOptions const&) + 460 at basic_matmul.cpp:45:18, address = 00_basic_matmul[0x000000000016df8c], unresolved, hit count = 0
 
 2: file = 'basic_matmul.cpp', line = 90, exact_match = 0, locations = 1
-  2.1: where = 00_basic_matmul`Run(GemmOptions const&) + 2816 at basic_matmul.cpp:101:39, address = 00_basic_matmul[0x000000000016e8c0], unresolved, hit count = 0 
+  2.1: where = 00_basic_matmul`Run(GemmOptions const&) + 2816 at basic_matmul.cpp:101:39, address = 00_basic_matmul[0x000000000016e8c0], unresolved, hit count = 0
 
-(msdebug) 
+(msdebug)
 ```
 
 执行命令`r`，程序将开始运行直到第一个断点处，再执行命令`c`，程序将运行到下一个断点。需要注意的是，对于多核程序而言，算子程序通常会被下发至多个加速核并发运行，一旦某一个加速核命中了断点，会通过中断通知其他的加速核立即停下，因此不保证其他的加速核也一定同时在该断点停下，而且相同的断点也可能被其他的加速核再次命中，开发者可配合禁用/删除断点命令来防止加速核不停命中同一个断点的情况。
@@ -82,11 +82,11 @@ Process 813993 launched: '/home/catlass/output/bin/00_basic_matmul' (aarch64)
 Process 813993 stopped
 * thread #1, name = '00_basic_matmul', stop reason = breakpoint 1.1
     frame #0: 0x0000aaaaaac0df8c 00_basic_matmul`Run(options=0x0000ffffffffe340) at basic_matmul.cpp:45:18
-   42  
+   42
    43       uint32_t m = options.problemShape.m();
    44       uint32_t n = options.problemShape.n();
 -> 45       uint32_t k = options.problemShape.k();
-   46  
+   46
    47       size_t lenA = static_cast<size_t>(m) * k;
    48       size_t lenB = static_cast<size_t>(k) * n;
 (msdebug) c
@@ -95,7 +95,7 @@ Process 813993 stopped
 * thread #1, name = '00_basic_matmul', stop reason = breakpoint 2.1
     frame #0: 0x0000aaaaaac0e8c0 00_basic_matmul`Run(options=0x0000ffffffffe340) at basic_matmul.cpp:101:39
    98      using MatmulKernel = Gemm::Kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
-   99 
+   99
    100      using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
 -> 101      MatmulKernel::Arguments arguments{options.problemShape, deviceA, deviceB, deviceC};
    102      MatmulAdapter matmulOp;
@@ -105,8 +105,8 @@ Process 813993 stopped
 Process 813993 resuming
 [Launch of Kernel _ZN7Catlass13KernelAdapterINS_4Gemm6Kernel11BasicMatmulINS1_5Blo on Device 0]
 Compare success.
-Process 813993 exited with status = 0 (0x00000000) 
-(msdebug) 
+Process 813993 exited with status = 0 (0x00000000)
+(msdebug)
 ```
 
 #### 查看变量和内存
@@ -118,11 +118,11 @@ Process 813993 launched: '/home/catlass/output/bin/00_basic_matmul' (aarch64)
 Process 813993 stopped
 * thread #1, name = '00_basic_matmul', stop reason = breakpoint 1.1
     frame #0: 0x0000aaaaaac0df8c 00_basic_matmul`Run(options=0x0000ffffffffe340) at basic_matmul.cpp:45:18
-   42  
+   42
    43       uint32_t m = options.problemShape.m();
    44       uint32_t n = options.problemShape.n();
 -> 45       uint32_t k = options.problemShape.k();
-   46  
+   46
    47       size_t lenA = static_cast<size_t>(m) * k;
    48       size_t lenB = static_cast<size_t>(k) * n;
 (msdebug) p n
@@ -140,12 +140,12 @@ Process 814339 stopped
 [Switching to focus on Kernel _ZN7Catlass13KernelAdapterINS_4Gemm6Kernel12SplitkMatmulINS1_5Bl, CoreId 0, Type aiv]
 * thread #1, name = '09_splitk_matmu', stop reason = breakpoint 2.1
     frame #0: 0x000000000000bf98 device_debugdata`_ZN7Catlass4Gemm6Kernel9ReduceAddINS_4Arch7AtlasA2EfDhLj8192EEclERKN7AscendC12GlobalTensorIDhEERKNS7_IfEEmj_mix_aiv(this=0x00000000001cf838, dst=0x00000000001cf930, src=0x00000000001cf908, elementCount=131072, splitkFactor=2) at splitk_matmul.hpp:136:19
-   133 
+   133
    134              AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(outputEventIds[bufferIndex]);
    135              AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(outputEventIds[bufferIndex]);
 -> 136              Ub2Gm(dst[loopIdx * tileLen], outputBuffer[bufferIndex], actualTileLen);
    137              AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(outputEventIds[bufferIndex]);
-   138 
+   138
    139              bufferIndex = (bufferIndex + 1) % BUFFER_NUM;
 (msdebug) p outputBuffer
 (AscendC::LocalTensor<__fp16>[2]) $2 = {
@@ -184,7 +184,7 @@ Process 814339 stopped
 0x00010008: {-104.875 -156 232 -100.75}
 0x00010010: {-47.4062 105.875 -322.5 -265.75}
 0x00010018: {260 200.125 -139.25 -190.625}
-(msdebug) 
+(msdebug)
 ```
 
 如果想逐行调试，运行命令`n`，使程序运行至下一行。
@@ -199,7 +199,7 @@ Process 814339 stopped
    135              AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(outputEventIds[bufferIndex]);
    136              Ub2Gm(dst[loopIdx * tileLen], outputBuffer[bufferIndex], actualTileLen);
 -> 137              AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(outputEventIds[bufferIndex]);
-   138 
+   138
    139              bufferIndex = (bufferIndex + 1) % BUFFER_NUM;
    140          }
 (msdebug) n
@@ -209,10 +209,10 @@ Process 814339 stopped
     frame #0: 0x000000000000c000 device_debugdata`_ZN7Catlass4Gemm6Kernel9ReduceAddINS_4Arch7AtlasA2EfDhLj8192EEclERKN7AscendC12GlobalTensorIDhEERKNS7_IfEEmj_mix_aiv(this=0x00000000001cf838, dst=0x00000000001cf930, src=0x00000000001cf908, elementCount=131072, splitkFactor=2) at splitk_matmul.hpp:139:28
    136              Ub2Gm(dst[loopIdx * tileLen], outputBuffer[bufferIndex], actualTileLen);
    137              AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(outputEventIds[bufferIndex]);
-   138 
+   138
 -> 139              bufferIndex = (bufferIndex + 1) % BUFFER_NUM;
    140          }
-   141 
+   141
    142          AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(inputEventIds[0]);
 (msdebug) n
 Process 814339 stopped
@@ -220,13 +220,13 @@ Process 814339 stopped
 * thread #1, name = '09_splitk_matmu', stop reason = step over
     frame #0: 0x000000000000c014 device_debugdata`_ZN7Catlass4Gemm6Kernel9ReduceAddINS_4Arch7AtlasA2EfDhLj8192EEclERKN7AscendC12GlobalTensorIDhEERKNS7_IfEEmj_mix_aiv(this=0x00000000001cf838, dst=0x00000000001cf930, src=0x00000000001cf908, elementCount=131072, splitkFactor=2) at splitk_matmul.hpp:96:68
    93           AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(accumulatorEventIds[1]);
-   94  
+   94
    95           uint32_t loops = (elementCount + tileLen - 1) / tileLen;
 -> 96           for (uint32_t loopIdx = aivId; loopIdx < loops; loopIdx += aivNum) {
    97               uint32_t actualTileLen = tileLen;
    98               if (loopIdx == loops - 1) {
    99                   actualTileLen = elementCount - loopIdx * tileLen;
-(msdebug) 
+(msdebug)
 ```
 
 通过`var`命令，可以查看当前栈帧的全部变量。
@@ -273,7 +273,7 @@ Process 814339 stopped
 (uint32_t) tileLen = 2752
 (uint32_t) loops = 48
 (uint32_t) loopIdx = 26
-(msdebug) 
+(msdebug)
 ```
 
 #### 退出调试
@@ -287,25 +287,25 @@ Quitting LLDB will kill one or more processes. Do you really want to proceed: [Y
 
 #### 常用命令表
 
-|  命令  |  命令缩写  |  作用  |  示例  |
-| ------ | ---------- | ------ | ------- |
-|  breakpoint filename:lineNo | b | 增加断点 |  b add\_custom.cpp:85<br>b my\_function |
-|  run  | r | 重新运行 | r |
-|  continue | c |  继续运行 | c |
-|  print | p | 打印变量| p zLocal |
-|  frame variable | var | 打印当前帧所有变量 | var |
-|  memory read | x | 读内存<br>-m 指定内存位置，支持GM/UB/L0A/L0B/L0C<br>-f 指定[字节转换格式](#附录)<br>-s 指定每行打印字节数<br>-c 指定打印的行数 |  x -m GM -f float16[] 1000 -c 2 -s 128  |
-|  register read | re r | 读取寄存器值<br>-a 读取所有寄存器值<br>\$REG\_NAME 读取指定名称的寄存器值 | register read -are r \$PC |
-|  thread step-over |  next<br>n                          |  在同一个调用栈中，移动到下一个可执行的代码行                                                                                                                              |  n |
-|  ascend info devices |  /  |  查询device信息  |  ascend info devices |
-|  ascend info cores  |  /  |  查询算子所运行的aicore相关信息 |  ascend info cores  |
-|  ascend info tasks  |  /  |  查询算子所运行的task相关信息  |  ascend info tasks  |
-|  ascend info stream  |  /    |  查询算子所运行的stream相关信息 |  ascend info stream  |
-|  ascend info blocks  |  /  |  查询算子所运行的block相关信息<br>可选参数： -d/–details显示所有blocks当前中断处代码                                                                                        |  ascend info blocks  |
-|  ascend aic core  |  /  |  切换调试器所聚焦的cube核 |  ascend aic 1  |
-|  ascend aiv core  |  /  |  切换调试器所聚焦的vector核  |  ascend aiv 5 |
-|  target modules addkernel.o  |  image addkernel.o  |  PyTorch框架拉起算子时，导入算子调试信息 <br>（注：当程序执行run命令后再执行本命令导入调试信息，<br>则还需额外执行image load命令以使调试信息生效） |  image addAddCustom\_xxx.o  |
-|  target modules load -f kernel.o -s address  |  image load -f kernel.o -s address  |  在程序运行后，使导入的调试信息生效                                                                                                                                       |  image load -f AddCustom\_xxx.o -s 0  |
+| 命令                                       | 命令缩写                          | 作用                                                                                                                                              | 示例                                   |
+| ------------------------------------------ | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| breakpoint filename:lineNo                 | b                                 | 增加断点                                                                                                                                          | b add\_custom.cpp:85<br>b my\_function |
+| run                                        | r                                 | 重新运行                                                                                                                                          | r                                      |
+| continue                                   | c                                 | 继续运行                                                                                                                                          | c                                      |
+| print                                      | p                                 | 打印变量                                                                                                                                          | p zLocal                               |
+| frame variable                             | var                               | 打印当前帧所有变量                                                                                                                                | var                                    |
+| memory read                                | x                                 | 读内存<br>-m 指定内存位置，支持GM/UB/L0A/L0B/L0C<br>-f 指定[字节转换格式](#附录)<br>-s 指定每行打印字节数<br>-c 指定打印的行数                    | x -m GM -f float16[] 1000 -c 2 -s 128  |
+| register read                              | re r                              | 读取寄存器值<br>-a 读取所有寄存器值<br>\$REG\_NAME 读取指定名称的寄存器值                                                                         | register read -are r \$PC              |
+| thread step-over                           | next<br>n                         | 在同一个调用栈中，移动到下一个可执行的代码行                                                                                                      | n                                      |
+| ascend info devices                        | /                                 | 查询device信息                                                                                                                                    | ascend info devices                    |
+| ascend info cores                          | /                                 | 查询算子所运行的aicore相关信息                                                                                                                    | ascend info cores                      |
+| ascend info tasks                          | /                                 | 查询算子所运行的task相关信息                                                                                                                      | ascend info tasks                      |
+| ascend info stream                         | /                                 | 查询算子所运行的stream相关信息                                                                                                                    | ascend info stream                     |
+| ascend info blocks                         | /                                 | 查询算子所运行的block相关信息<br>可选参数： -d/–details显示所有blocks当前中断处代码                                                               | ascend info blocks                     |
+| ascend aic core                            | /                                 | 切换调试器所聚焦的cube核                                                                                                                          | ascend aic 1                           |
+| ascend aiv core                            | /                                 | 切换调试器所聚焦的vector核                                                                                                                        | ascend aiv 5                           |
+| target modules addkernel.o                 | image addkernel.o                 | PyTorch框架拉起算子时，导入算子调试信息 <br>（注：当程序执行run命令后再执行本命令导入调试信息，<br>则还需额外执行image load命令以使调试信息生效） | image addAddCustom\_xxx.o              |
+| target modules load -f kernel.o -s address | image load -f kernel.o -s address | 在程序运行后，使导入的调试信息生效                                                                                                                | image load -f AddCustom\_xxx.o -s 0    |
 
 ## 附录
 

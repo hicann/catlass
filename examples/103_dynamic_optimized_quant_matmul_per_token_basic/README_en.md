@@ -60,8 +60,8 @@ export LD_LIBRARY_PATH=/path/to/catlass/output/shared_lib/lib/:$LD_LIBRARY_PATH
 
 ### 2.3 Template Documentation
 
-| Template Name     | Description |
-| ------------ | ---- |
+| Template Name       | Description                                            |
+| ------------------- | ------------------------------------------------------ |
 | PerTokenBasicMatmul | PerToken basic template (documentation to be added...) |
 
 ### 2.4 Constraints
@@ -89,7 +89,7 @@ Compare success.
 
 If batch performance testing is required, comment out the precision comparison code, because precision comparison uses the CPU to compute golden data and takes a long time.
 
---------------
+---
 
 The current example output data type is `fp16`. To change it to `bf16`, modify the following code and then recompile and execute:
 

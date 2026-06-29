@@ -9,6 +9,7 @@
 `CopyL1ToL0B` 模板负责将 B 矩阵的 tile 块从 L1（Local Memory，B1 Buffer）搬运到 L0B（B2 Buffer），支持多种数据排布格式（layout）转换。
 
 根据源 layout 和目标 layout 的不同，内部会选择合适的硬件搬运指令：
+
 - **zZ → nZ**：转置拷贝（Transpose B），`ifTranspose = true`，对于 float 使用 `LoadDataWithTranspose`
 - **zN → nZ**：转置拷贝，对于 int8_t 使用 `LoadDataWithTranspose`，float 使用 `LoadData3D + SetFmatrix`
 - **nZ → nZ**：非转置拷贝（直传），`ifTranspose = false`
@@ -37,34 +38,34 @@ struct CopyL1ToL0B {
 
 ### AtlasA2 — Gemm 场景（zZ/zN → nZ）
 
-| 源 Layout | 目标 Layout | 元素类型 | 说明 |
-| :------ | :------ | :------ | :------ |
-| zZ （B1） | nZ （B2） | 任意 | 基础转置拷贝，使用 LoadData2D（ifTranspose=true） |
-| zZ （B1） | nZ （B2） | float | float 专用，使用 LoadData2dTranspose |
-| zN （B1） | nZ （B2） | int8_t | int8_t 转置，使用 LoadDataWithTranspose |
-| zN （A1） | nZ （B2） | int8_t | int8_t zN→nZ 转置（单参数 L1Type 偏特化） |
-| zN （A1） | nZ （B2） | float | float zN→nZ 转置，使用 LoadData3D + SetFmatrix |
-| zN （A1） | nZ （B2） | 任意（非 int8_t/float） | 通用 zN→nZ 转置 |
-| zN （A1） | nZ （B2） | AscendC::int4b_t | int4b_t zN→nZ 转置，使用 LoadDataWithTranspose |
-| nZ （B1） | nZ （B2） | 任意 | nZ→nZ 非转置拷贝（直传） |
-| nZ （A1） | nZ （B2） | 任意 | nZ→nZ 直传（单参数 L1Type 偏特化） |
+| 源 Layout | 目标 Layout | 元素类型                | 说明                                              |
+| :-------- | :---------- | :---------------------- | :------------------------------------------------ |
+| zZ （B1） | nZ （B2）   | 任意                    | 基础转置拷贝，使用 LoadData2D（ifTranspose=true） |
+| zZ （B1） | nZ （B2）   | float                   | float 专用，使用 LoadData2dTranspose              |
+| zN （B1） | nZ （B2）   | int8_t                  | int8_t 转置，使用 LoadDataWithTranspose           |
+| zN （A1） | nZ （B2）   | int8_t                  | int8_t zN→nZ 转置（单参数 L1Type 偏特化）         |
+| zN （A1） | nZ （B2）   | float                   | float zN→nZ 转置，使用 LoadData3D + SetFmatrix    |
+| zN （A1） | nZ （B2）   | 任意（非 int8_t/float） | 通用 zN→nZ 转置                                   |
+| zN （A1） | nZ （B2）   | AscendC::int4b_t        | int4b_t zN→nZ 转置，使用 LoadDataWithTranspose    |
+| nZ （B1） | nZ （B2）   | 任意                    | nZ→nZ 非转置拷贝（直传）                          |
+| nZ （A1） | nZ （B2）   | 任意                    | nZ→nZ 直传（单参数 L1Type 偏特化）                |
 
 ### AtlasA2 — GEMV 场景（zN/nN → zN）
 
-| 源 Layout | 目标 Layout | 元素类型 | 说明 |
-| :------ | :------ | :------ | :------ |
-| zN （B1） | zN （B2） | 任意 | GEMV 用 zN→zN 拷贝 |
-| nN （B1） | zN （B2） | 任意 | GEMV 用 nN→zN 转置拷贝 |
-| nN （B1） | zN （B2） | float | float GEMV 用 nN→zN 转置 |
-| nZ （B1） | zN （B2） | int8_t | int8_t GEMV 用 nZ→zN 转置 |
+| 源 Layout | 目标 Layout | 元素类型 | 说明                      |
+| :-------- | :---------- | :------- | :------------------------ |
+| zN （B1） | zN （B2）   | 任意     | GEMV 用 zN→zN 拷贝        |
+| nN （B1） | zN （B2）   | 任意     | GEMV 用 nN→zN 转置拷贝    |
+| nN （B1） | zN （B2）   | float    | float GEMV 用 nN→zN 转置  |
+| nZ （B1） | zN （B2）   | int8_t   | int8_t GEMV 用 nZ→zN 转置 |
 
 ### Ascend950
 
-| 源 Layout | 目标 Layout | 元素类型 | 说明 |
-| :------ | :------ | :------ | :------ |
-| nZ （A1） | nZ （B2） | 任意 | nZ→nZ 非转置拷贝，使用 LoadData2DParamsV2 |
-| zN （A1），非 B8/B4 | nZ （B2） | 非 int8_t/float8_/float4 等 | zN→nZ 转置拷贝，使用 LoadData2DParamsV2 |
-| zN （A1），B8/B4 | nZ （B2） | int8_t/float8_/float4 等 | B8/B4 zN→nZ 转置拷贝，根据 L0N 对齐情况选择单次或分步 LoadData |
+| 源 Layout           | 目标 Layout | 元素类型                    | 说明                                                           |
+| :------------------ | :---------- | :-------------------------- | :------------------------------------------------------------- |
+| nZ （A1）           | nZ （B2）   | 任意                        | nZ→nZ 非转置拷贝，使用 LoadData2DParamsV2                      |
+| zN （A1），非 B8/B4 | nZ （B2）   | 非 int8_t/float8_/float4 等 | zN→nZ 转置拷贝，使用 LoadData2DParamsV2                        |
+| zN （A1），B8/B4    | nZ （B2）   | int8_t/float8_/float4 等    | B8/B4 zN→nZ 转置拷贝，根据 L0N 对齐情况选择单次或分步 LoadData |
 
 > **注意**：Ascend950 的 L0Type 目标 layout 为 nZ（非 zZ），且 L1Type 的 Position 为 A1（非 B1），与 AtlasA2 不同。
 

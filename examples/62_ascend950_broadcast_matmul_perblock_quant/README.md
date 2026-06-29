@@ -1,6 +1,7 @@
 # BroadcastMatmulPerblockQuant Example Readme
 
 ## 代码组织
+
 ```
 ├── 62_ascend950_broadcast_matmul_perblock_quant
 │   ├── CMakeLists.txt              # CMake编译文件
@@ -10,16 +11,18 @@
 ```
 
 ## 功能说明
+
 该算子实现了张量A (shape [B,M,K])和矩阵B(shape [K,N])的广播矩阵乘法，并对计算结果进行perblock量化(block大小为[M,K])。
 算子典型应用场景为Q,K,V与旋转矩阵进行矩阵乘法以平滑数据分布，然后进行MXFP8(E4M3)量化。
 
 ## 参数说明
-| 参数名   | 输入/输出 | 描述                | 数据类型          | 数据格式 | Layout       |
-|-------|-------|-------------------|---------------|------|--------------|
-| a     | 输入    | 张量a               | bfloat16      | ND   | RowMajor     |
-| b     | 输入    | 矩阵b               | bfloat16      | ND   | RowMajor     |
-| out   | 输出    | a与b的广播矩阵乘法的量化结果   | float8_e4m3fn | ND   | RowMajor     |
-| scale | 输出    | a与b的广播矩阵乘法的量化缩放系数 | float32       | ND   | VectorLayout |
+
+| 参数名 | 输入/输出 | 描述                             | 数据类型      | 数据格式 | Layout       |
+| ------ | --------- | -------------------------------- | ------------- | -------- | ------------ |
+| a      | 输入      | 张量a                            | bfloat16      | ND       | RowMajor     |
+| b      | 输入      | 矩阵b                            | bfloat16      | ND       | RowMajor     |
+| out    | 输出      | a与b的广播矩阵乘法的量化结果     | float8_e4m3fn | ND       | RowMajor     |
+| scale  | 输出      | a与b的广播矩阵乘法的量化缩放系数 | float32       | ND       | VectorLayout |
 
 - 输入a的shape为[B,M,K]
 - 输入b的shape为[K,N]
@@ -27,12 +30,15 @@
 - 输出scale的shape为[B]
 
 ## 约束说明
+
 - B的取值范围为[1,65536]; 对应Q,K,V按照MXFP8量化分块后block的数量。
 - M的取值范围为{128,256}; 对应MXFP8量化的block大小。
 - N和K的取值范围为{128}; 对应旋转矩阵的大小
 
 ## 使用示例
+
 ### 数据生成与精度比对
+
 ```bash
 # 编译指定用例
 bash scripts/build.sh 62_ascend950_broadcast_matmul_perblock_quant -DCATLASS_ARCH=3510
@@ -45,6 +51,7 @@ python3 gen_data_compare.py 1024 128 128 128 0
 ```
 
 执行结果如下，说明dst和scale精度比对成功。
+
 ```
 ------ 生成测试数据 ------
 batch_count=1024, m=128, n=128, k=128

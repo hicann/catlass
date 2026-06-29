@@ -44,6 +44,7 @@ TileCastInt8ToFp16Dequant(Arch::Resource<ArchTag> const &resource, Params const 
 ```
 
 从 Resource UB buffer 分配双缓冲：
+
 - `ubInTensor[2]` × `COMPUTE_LEN` bytes（INT8 输入）
 - `ubOutTensor[2]` × `COMPUTE_LEN * sizeof(half)` bytes（FP16 输出）
 

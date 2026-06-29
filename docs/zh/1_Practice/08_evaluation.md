@@ -7,21 +7,25 @@ CATLASS示例工程可适配大多数[CANN](https://www.hiascend.com/cann)提供
 ## 功能调试
 
 工具介绍：
+
 - [msDebug](./evaluation/msdebug.md) - 类gdb/lldb的调试工具[msDebug](https://www.hiascend.com/document/redirect/CannCommunityToolMsdebug)
 - [printf](./evaluation/print.md) - 基于[CCE Intrinsic](https://www.hiascend.com/document/redirect/CannCommunityccedev)，在算子device侧进行打印调试
 - [ascendc_dump](./evaluation/ascendc_dump.md) - 基于[原生AscendC API](https://www.hiascend.com/document/redirect/CannCommunityascendcapidumptensor)，对关键数据打点调测
 
 相关实践：
+
 - [precision_analysis_basics](./evaluation/precision_analysis_basics.md)：精度分析基础
 - [precision_debug](./evaluation/precision_debug.md)：样例精度问题定位
 
 ## 性能调优
 
 工具介绍：
+
 - [msProf&Profiling](./evaluation/performance_tools.md) - 基于性能调优工具[msProf](https://www.hiascend.com/document/redirect/CannCommunitymsopprofuserguide)和[Profiling](https://www.hiascend.com/document/detail/zh/canncommercial/850/graph/graphdevg/atlasag_25_0056.html)进行调优实践
   - [单算子性能分析：msProf](./evaluation/performance_tools.md#使用msProf进行单算子性能分析)
   - [整网性能分析：Profiling](./evaluation/performance_tools.md#使用Profiling进行整网性能分析)
 - [msTuner_CATLASS](../../../tools/tuner/README.md) - Tiling自动寻优工具
 
 相关实践：
+
 - [bottleneck_analysis_and_optimization](./evaluation/bottleneck_analysis_and_optimization.md)：性能瓶颈分析及优化手段

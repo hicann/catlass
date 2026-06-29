@@ -18,21 +18,21 @@ template <class ArchTag, class AType, class XType, class YType, class BiasType =
 struct TileCopyGemvAiv;
 ```
 
-| 模板参数 | 说明 |
-| :------ | :------ |
-| `ArchTag` | 架构标签 |
-| `AType` | A 矩阵类型 `GemmType<ElementA, RowMajor/ColumnMajor>` |
-| `XType` | X 向量类型 `GemmType<ElementX, VectorLayout>` |
-| `YType` | Y 向量类型 `GemmType<ElementY, VectorLayout>` |
-| `BiasType` | 偏置类型，默认 `void` |
+| 模板参数   | 说明                                                  |
+| :--------- | :---------------------------------------------------- |
+| `ArchTag`  | 架构标签                                              |
+| `AType`    | A 矩阵类型 `GemmType<ElementA, RowMajor/ColumnMajor>` |
+| `XType`    | X 向量类型 `GemmType<ElementX, VectorLayout>`         |
+| `YType`    | Y 向量类型 `GemmType<ElementY, VectorLayout>`         |
+| `BiasType` | 偏置类型，默认 `void`                                 |
 
 ## 成员类型定义
 
-| 成员类型 | 对应子组件 | 说明 |
-| :------ | :------ | :------ |
-| `VecCopyGmToUb` | `Gemv::Tile::VecCopyGmToUB` | 向量 X: GM→UB |
-| `VecCopyUbToGm` | `Gemv::Tile::VecCopyUBToGm` | 向量 Y: UB→GM（可选 atomic add） |
-| `MatrixCopyGmToUb` | `Gemv::Tile::MatrixCopyGmToUB` | 矩阵 A: GM→UB |
+| 成员类型           | 对应子组件                     | 说明                             |
+| :----------------- | :----------------------------- | :------------------------------- |
+| `VecCopyGmToUb`    | `Gemv::Tile::VecCopyGmToUB`    | 向量 X: GM→UB                    |
+| `VecCopyUbToGm`    | `Gemv::Tile::VecCopyUBToGm`    | 向量 Y: UB→GM（可选 atomic add） |
+| `MatrixCopyGmToUb` | `Gemv::Tile::MatrixCopyGmToUB` | 矩阵 A: GM→UB                    |
 
 ## 调用示例
 

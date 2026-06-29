@@ -27,14 +27,14 @@ template <
 struct TilePerTokenDequant;
 ```
 
-| 模板参数 | 说明 |
-| :------ | :------ |
-| `ArchTag_` | 仅支持 `Arch::Ascend950`，编译期断言检查 |
-| `ElementSrc_` | 源元素类型，仅支持 `int32_t` |
-| `ElementScale_` | per-channel scale 元素类型：`half` / `bfloat16_t` / `float` |
-| `ElementPerToken_` | per-token scale 元素类型：`half` / `bfloat16_t` / `float` |
-| `ElementDst_` | 目标元素类型：`half` / `bfloat16_t` / `float` |
-| `TileShape_` | Tile 形状，`TileShape_::COLUMN` 用于确定 N_BASE_SIZE |
+| 模板参数           | 说明                                                        |
+| :----------------- | :---------------------------------------------------------- |
+| `ArchTag_`         | 仅支持 `Arch::Ascend950`，编译期断言检查                    |
+| `ElementSrc_`      | 源元素类型，仅支持 `int32_t`                                |
+| `ElementScale_`    | per-channel scale 元素类型：`half` / `bfloat16_t` / `float` |
+| `ElementPerToken_` | per-token scale 元素类型：`half` / `bfloat16_t` / `float`   |
+| `ElementDst_`      | 目标元素类型：`half` / `bfloat16_t` / `float`               |
+| `TileShape_`       | Tile 形状，`TileShape_::COLUMN` 用于确定 N_BASE_SIZE        |
 
 ## 调用接口
 
@@ -48,11 +48,11 @@ void operator()(
 )
 ```
 
-| 参数 | 说明 |
-| :------ | :------ |
-| `ubOut` | UB TLA Tensor，类型 `ElementDst`，布局 `RowMajor` |
-| `ubIn` | UB TLA Tensor，类型 `int32_t`，布局 `RowMajor`，MMAD 累加输出 |
-| `ubScale` | per-channel scale，类型 `ElementScale`，布局 `VectorLayout`（status=0），长度 = n |
+| 参数         | 说明                                                                               |
+| :----------- | :--------------------------------------------------------------------------------- |
+| `ubOut`      | UB TLA Tensor，类型 `ElementDst`，布局 `RowMajor`                                  |
+| `ubIn`       | UB TLA Tensor，类型 `int32_t`，布局 `RowMajor`，MMAD 累加输出                      |
+| `ubScale`    | per-channel scale，类型 `ElementScale`，布局 `VectorLayout`（status=0），长度 = n  |
 | `ubPerToken` | per-token scale，类型 `ElementPerToken`，布局 `VectorLayout`（status=0），长度 = m |
 
 静态断言确保所有 Tensor 的 position 为 `VECCALC`，且布局匹配。

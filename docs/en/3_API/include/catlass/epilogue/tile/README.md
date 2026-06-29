@@ -4,5 +4,5 @@ The tile-layer API of the epilogue acts as a template parameter for [BlockEpilog
 
 ## API List
 
-| Component                        | Description|
-| :---------------------- | :------: |
+| Component | Description |
+| :-------- | :---------: |

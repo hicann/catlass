@@ -18,17 +18,17 @@ template <class ArchTag, class GmType, class L1Type = void>
 struct CopyGmToL1;
 ```
 
-| 模板参数 | 说明 |
-| :------ | :------ |
-| `ArchTag` | 架构标签 |
-| `GmType` | `Gemm::GemmType<Element, LayoutTag>`，含 Element 和 Layout |
-| `L1Type` | L1 数据类型，默认 `void`（自动推导） |
+| 模板参数  | 说明                                                       |
+| :-------- | :--------------------------------------------------------- |
+| `ArchTag` | 架构标签                                                   |
+| `GmType`  | `Gemm::GemmType<Element, LayoutTag>`，含 Element 和 Layout |
+| `L1Type`  | L1 数据类型，默认 `void`（自动推导）                       |
 
 ## 偏特化实现
 
-| 偏特化 | GmType | 说明 |
-| :------ | :------ | :------ |
-| Fmap-A | `GemmType<Element, NC1HWC0>` | NC1HWC0→NC1HWC0，逐 Cin1 搬运 |
+| 偏特化   | GmType                            | 说明                                    |
+| :------- | :-------------------------------- | :-------------------------------------- |
+| Fmap-A   | `GemmType<Element, NC1HWC0>`      | NC1HWC0→NC1HWC0，逐 Cin1 搬运           |
 | Filter-B | `GemmType<Element, CI1KHKWCOCI0>` | CI1KHKWCOCI0→CI1KHKWCOCI0，含 Cout 对齐 |
 
 ## 调用接口

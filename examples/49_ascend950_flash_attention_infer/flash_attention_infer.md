@@ -3,10 +3,11 @@
 ## 1. 概述
 
 CATLASS FlashAttention Infer是基于CATLASS Gemm API实现的亲和昇腾Ascend950硬件的FlashAttention推理算子，算子的结构可以分为以下几部分：
-* Tiling计算；
-* Kernel实现；
-* Kernel中依赖适合FlashAttention推理运算的Block和Epilogue组件；
-* 使用的Block和Epilogue组件依赖模板库提供的Tile组件。
+
+- Tiling计算；
+- Kernel实现；
+- Kernel中依赖适合FlashAttention推理运算的Block和Epilogue组件；
+- 使用的Block和Epilogue组件依赖模板库提供的Tile组件。
 
 本文档详细描述 Flash Attention Infer算子的Kernel实现，包括主流程逻辑、Cube/Vector 流水线、L1/UB 内存分配等关键设计，以及Tiling切分策略描述。
 
@@ -20,6 +21,7 @@ O = FlashAttention(Q, K, V, mask)
 ```
 
 其中：
+
 - Q: Query tensor，形状 [batch, qSeqlen, qHeads, headDim]
 - K: Key tensor，形状 [batch, kvSeqlen, kvHeads, headDim]
 - V: Value tensor，形状 [batch, kvSeqlen, kvHeads, headDim]
@@ -28,11 +30,11 @@ O = FlashAttention(Q, K, V, mask)
 
 <img src="../../docs/zh/figures/flash_attention_infer_operator.png" width="40%">
 
-* 支持GQA功能。
-* 支持Paged Attention模式，通过blockTable实现KV Cache的分页管理。
-* 支持Attention Mask功能，支持左上和右下两种mask模式。
-* CV流水preload，AIC和AIV多级流水并行，提高计算效率。
-* 当前模板Kernel暂未支持ActualSeq可变长特性。
+- 支持GQA功能。
+- 支持Paged Attention模式，通过blockTable实现KV Cache的分页管理。
+- 支持Attention Mask功能，支持左上和右下两种mask模式。
+- CV流水preload，AIC和AIV多级流水并行，提高计算效率。
+- 当前模板Kernel暂未支持ActualSeq可变长特性。
 
 <img src="../../docs/zh/figures/flash_attention_infer_cv_pipeline.png" width="50%">
 
@@ -90,18 +92,19 @@ using DispatchPolicyRescaleO = Epilogue::EpilogueAscend950FARescaleO;
 using EpilogueRescaleO = Epilogue::Block::BlockEpilogue<...>;
 ```
 
-
 #### Block Mmad
 
 算子总共使用了两类Block Mmad组件，分别为：
-* `BlockMmadQK`为BlockMmad模板类的偏特化，用于处理FlashAttention Infer中的Q与K的矩阵乘操作，头文件[block_mmad_fai_qk_tla.hpp](../../include/catlass/gemm/block/block_mmad_fai_qk_tla.hpp)。
-* `BlockMmadPV`为BlockMmad模板类的偏特化，用于处理FlashAttention Infer中的P与V的矩阵乘操作，头文件[block_mmad_fai_pv_tla.hpp](../../include/catlass/gemm/block/block_mmad_fai_pv_tla.hpp)。
+
+- `BlockMmadQK`为BlockMmad模板类的偏特化，用于处理FlashAttention Infer中的Q与K的矩阵乘操作，头文件[block_mmad_fai_qk_tla.hpp](../../include/catlass/gemm/block/block_mmad_fai_qk_tla.hpp)。
+- `BlockMmadPV`为BlockMmad模板类的偏特化，用于处理FlashAttention Infer中的P与V的矩阵乘操作，头文件[block_mmad_fai_pv_tla.hpp](../../include/catlass/gemm/block/block_mmad_fai_pv_tla.hpp)。
 
 #### Block Epilogue
 
 算子总共使用了两类Block Epilogue组件，分别为：
-* `EpilogueOnlineSoftmax`为BlockEpilogue模板类的偏特化，用于处理FlashAttention Infer中的online softmax操作，头文件[block_epilogue_fa_softmax_ascend950.hpp](../../include/catlass/epilogue/block/block_epilogue_fa_softmax_ascend950.hpp)。
-* `EpilogueRescaleO`为BlockEpilogue模板类的偏特化，用于处理FlashAttention Infer中的rescaleO操作，头文件[block_epilogue_fa_rescale_o_ascend950.hpp](../../include/catlass/epilogue/block/block_epilogue_fa_rescale_o_ascend950.hpp)。
+
+- `EpilogueOnlineSoftmax`为BlockEpilogue模板类的偏特化，用于处理FlashAttention Infer中的online softmax操作，头文件[block_epilogue_fa_softmax_ascend950.hpp](../../include/catlass/epilogue/block/block_epilogue_fa_softmax_ascend950.hpp)。
+- `EpilogueRescaleO`为BlockEpilogue模板类的偏特化，用于处理FlashAttention Infer中的rescaleO操作，头文件[block_epilogue_fa_rescale_o_ascend950.hpp](../../include/catlass/epilogue/block/block_epilogue_fa_rescale_o_ascend950.hpp)。
 
 #### Tile Mmad & Tile Copy
 
@@ -144,19 +147,19 @@ class FAInferKernel {
 
 ### 3.2 成员变量
 
-| 变量名 | 类型 | 说明 |
-|--------|------|------|
-| `bmm1TensorList[NUM2]` | LocalTensor<ElementS> | BMM1结果（S矩阵）双缓存 |
-| `bmm2TensorList[NUM2]` | LocalTensor<ElementOTmp> | BMM2结果（O临时）双缓存 |
-| `mm2AL1TensorList[KERNEL_TASK_NUM]` | LocalTensor<ElementP> | MM2输入（P矩阵）L1缓存 |
-| `expUb[KERNEL_TASK_NUM]` | LocalTensor<ElementS> | exp值UB缓存 |
-| `sumUb[KERNEL_TASK_NUM]` | LocalTensor<ElementS> | sum值UB缓存 |
-| `maxUb[KERNEL_TASK_NUM]` | LocalTensor<ElementS> | max值UB缓存 |
-| `constInfo` | ConstInfo | 常量信息 |
-| `runInfo[4]` | RunInfo | 运行时信息（环形缓存） |
-| `runParam` | RunParamStr | 运行参数 |
-| `blockIdx` | uint32_t | 当前AI Core索引 |
-| `subBlockIdx` | uint32_t | AIV核子索引 |
+| 变量名                              | 类型                     | 说明                    |
+| ----------------------------------- | ------------------------ | ----------------------- |
+| `bmm1TensorList[NUM2]`              | LocalTensor<ElementS>    | BMM1结果（S矩阵）双缓存 |
+| `bmm2TensorList[NUM2]`              | LocalTensor<ElementOTmp> | BMM2结果（O临时）双缓存 |
+| `mm2AL1TensorList[KERNEL_TASK_NUM]` | LocalTensor<ElementP>    | MM2输入（P矩阵）L1缓存  |
+| `expUb[KERNEL_TASK_NUM]`            | LocalTensor<ElementS>    | exp值UB缓存             |
+| `sumUb[KERNEL_TASK_NUM]`            | LocalTensor<ElementS>    | sum值UB缓存             |
+| `maxUb[KERNEL_TASK_NUM]`            | LocalTensor<ElementS>    | max值UB缓存             |
+| `constInfo`                         | ConstInfo                | 常量信息                |
+| `runInfo[4]`                        | RunInfo                  | 运行时信息（环形缓存）  |
+| `runParam`                          | RunParamStr              | 运行参数                |
+| `blockIdx`                          | uint32_t                 | 当前AI Core索引         |
+| `subBlockIdx`                       | uint32_t                 | AIV核子索引             |
 
 ### 3.3 内存布局
 
@@ -213,13 +216,14 @@ class FAInferKernel {
 ---
 
 ## 4. 多核Tiling算法
+
 Tiling 切分算法，主要用于将计算任务均匀分配到多个 AI Core 上，实现高效的并行计算。
+
 ### 4.1 核心目标
 
 - **负载均衡**：使每个 AI Core 的计算量尽可能均衡
 - **内存高效**：合理利用片上内存（UB/L1）
 - **并行优化**：最大化多核并行度
-
 
 ### 4.2. 数据结构
 
@@ -257,41 +261,39 @@ public:
 
 InputParamsRegbase - 输入参数
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| batch | int64_t | Batch大小 |
-| qHeads | int64_t | Query头数 |
-| kvHeads | int64_t | Key/Value头数 |
-| groupSize | int64_t | 分组大小（qHeads / kvHeads） |
-| qSeqlen | int64_t | Query序列长度 |
-| kvSeqlen | int64_t | Key/Value序列长度 |
-| embed | int64_t | 嵌入维度（embedding dimension） |
-| scaleValue | float | 缩放因子 |
-| attenMaskCompressMode | uint8_t | Attention mask压缩模式 |
-| isActualSeqLengthsNull | uint8_t | Q实际序列长度是否为空 |
-| isActualSeqLengthsKVNull | uint8_t | KV实际序列长度是否为空 |
-| actualSeqLengthsSize | uint32_t | Q实际序列长度数组大小 |
-| actualSeqLengthsKVSize | uint32_t | KV实际序列长度数组大小 |
-| headNumRatio | uint32_t | 头数比率（qHeads / kvHeads） |
-| blockSize | uint32_t | Block大小 |
-| blockTableDim2 | uint32_t | Block表维度 |
-| paBlockNumSum | uint32_t | block总数 |
-| attenMaskQSeqlen | uint32_t | Attention mask Q序列长度 |
-| attenMaskKvSeqlen | uint32_t | Attention mask KV序列长度 |
+| 字段                     | 类型     | 说明                            |
+| ------------------------ | -------- | ------------------------------- |
+| batch                    | int64_t  | Batch大小                       |
+| qHeads                   | int64_t  | Query头数                       |
+| kvHeads                  | int64_t  | Key/Value头数                   |
+| groupSize                | int64_t  | 分组大小（qHeads / kvHeads）    |
+| qSeqlen                  | int64_t  | Query序列长度                   |
+| kvSeqlen                 | int64_t  | Key/Value序列长度               |
+| embed                    | int64_t  | 嵌入维度（embedding dimension） |
+| scaleValue               | float    | 缩放因子                        |
+| attenMaskCompressMode    | uint8_t  | Attention mask压缩模式          |
+| isActualSeqLengthsNull   | uint8_t  | Q实际序列长度是否为空           |
+| isActualSeqLengthsKVNull | uint8_t  | KV实际序列长度是否为空          |
+| actualSeqLengthsSize     | uint32_t | Q实际序列长度数组大小           |
+| actualSeqLengthsKVSize   | uint32_t | KV实际序列长度数组大小          |
+| headNumRatio             | uint32_t | 头数比率（qHeads / kvHeads）    |
+| blockSize                | uint32_t | Block大小                       |
+| blockTableDim2           | uint32_t | Block表维度                     |
+| paBlockNumSum            | uint32_t | block总数                       |
+| attenMaskQSeqlen         | uint32_t | Attention mask Q序列长度        |
+| attenMaskKvSeqlen        | uint32_t | Attention mask KV序列长度       |
 
 MultiCoreParamsRegbase - 多核参数
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| coreNum | int32_t | 实际使用的核数 |
-| totalSize | int64_t | 总计算量（block数） |
-| qSeqlenOuterSize | int64_t | Q序列外层块数 |
-| splitFactorSize | int64_t | `totalSize / coreNum` |
-| splitFactorTailSize | int64_t | `totalSize % coreNum` |
+| 字段                         | 类型     | 说明                     |
+| ---------------------------- | -------- | ------------------------ |
+| coreNum                      | int32_t  | 实际使用的核数           |
+| totalSize                    | int64_t  | 总计算量（block数）      |
+| qSeqlenOuterSize             | int64_t  | Q序列外层块数            |
+| splitFactorSize              | int64_t  | `totalSize / coreNum`    |
+| splitFactorTailSize          | int64_t  | `totalSize % coreNum`    |
 | bnAxisStartIdx[MAX_CORE_NUM] | uint32_t | Batch-Head轴起始索引数组 |
-| sparseStartIdx[MAX_CORE_NUM] | int64_t | qSeq起始索引数组 |
-
-
+| sparseStartIdx[MAX_CORE_NUM] | int64_t  | qSeq起始索引数组         |
 
 ### 4.3. 核心算法流程
 
@@ -300,11 +302,13 @@ MultiCoreParamsRegbase - 多核参数
 **位置**：`fai_tiling.h:283-333`
 
 **函数签名**：
+
 ```cpp
 int32_t GetFATilingParam(const FAInfo &faInfo, uint32_t blockDim, FATilingData& faTilingData)
 ```
 
 **参数说明**：
+
 - `faInfo`：输入参数
 - `blockDim`：可用的AI Core数量
 - `faTilingData`：输出Tiling数据
@@ -344,7 +348,6 @@ int32_t GetFATilingParam(const FAInfo &faInfo, uint32_t blockDim, FATilingData& 
    └─ splitFactorTailSize = totalSize % splitFactorSize
 ```
 
-
 #### 4.3.2 ComputeSplitNBSeq - 贪心多核切分
 
 **位置**：`fai_tiling.h:183-235`
@@ -352,6 +355,7 @@ int32_t GetFATilingParam(const FAInfo &faInfo, uint32_t blockDim, FATilingData& 
 **功能**：沿Batch/HeadNum/QSeqLen三轴使用贪心算法切分任务
 
 **参数**：
+
 - `batchSize`：Batch大小
 - `tilingElementArrayLen`：Tiling数组长度（MAX_CORE_NUM）
 - `actualSeqLengths`：Q实际序列长度数组
@@ -393,9 +397,11 @@ int32_t GetFATilingParam(const FAInfo &faInfo, uint32_t blockDim, FATilingData& 
 ```
 
 **贪心策略**：
+
 - 每次添加一个外层块（sOuterBlock）时，检查是否超过目标计算量
 - 如果 `sInnerBlockNums - diff > diff`，说明当前核的计算量已经接近目标，切换到新核
 - 这种策略确保每个核的计算量尽可能均衡
+
 ---
 
 ## 5. 主流程逻辑
@@ -517,6 +523,7 @@ for (uint32_t bnIdx = bnAxisStartIdx; bnIdx < bnAxisEndIdx; ++bnIdx) {
 ```
 
 **说明**：
+
 - 按照Tiling切分的结果遍历Batch-Head轴
 - 支持GQA（Grouped Query Attention）：多个Query head共享KV head
 
@@ -554,6 +561,7 @@ for (int64_t qSeqAxisIndex = qSeqAxisStartIdx; qSeqAxisIndex < tempQSeqAxisEnd; 
 ```
 
 **说明**：
+
 - Q序列按128（BLOCK_BASE_SIZE）切分
 - 最后3个循环用于尾块流水执行（确保所有任务完成）
 
@@ -637,6 +645,7 @@ for (int64_t kvSeqLoopCount = runParam.kvSeqLoopStartIdx; kvSeqLoopCount <= kvSe
 ```
 
 **说明**：
+
 - 四阶段流水线：Q*K^T → Softmax → P*V → O更新
 - 使用taskId实现CV流水线
 
@@ -902,11 +911,13 @@ class BlockEpilogue<EpilogueAscend950FASoftmax<ATTENTION_MASK_FLAG_>, ...> {
 #### 8.3.1 数学原理
 
 标准Softmax：
+
 ```
 P[i,j] = exp(S[i,j] - max(S[i,:])) / sum(exp(S[i,:] - max(S[i,:])))
 ```
 
 在线Softmax（分步计算）：
+
 ```
 初始化:
   max[i] = -inf
@@ -1011,15 +1022,15 @@ struct BlockMmadTla<MmadFAIPV<Arch::Ascend950, ...>, ...> {
 
 ### 9.2 与BlockMmadQK的区别
 
-| 特性 | BlockMmadQK | BlockMmadPV |
-|------|-------------|-------------|
-| 输入A | Q (GM) | P (L1) |
-| 输入B | K (GM) | V (GM) |
-| 输出C | S (UB) | O_tmp (UB) |
-| L1A | 从GM加载 | 输入L1 |
-| L1B | 从GM加载 | 从GM加载 |
-| K循环 | 沿embed维度切分 | 无 |
-| N循环 | 无 | 沿embed维度切分 |
+| 特性  | BlockMmadQK     | BlockMmadPV     |
+| ----- | --------------- | --------------- |
+| 输入A | Q (GM)          | P (L1)          |
+| 输入B | K (GM)          | V (GM)          |
+| 输出C | S (UB)          | O_tmp (UB)      |
+| L1A   | 从GM加载        | 输入L1          |
+| L1B   | 从GM加载        | 从GM加载        |
+| K循环 | 沿embed维度切分 | 无              |
+| N循环 | 无              | 沿embed维度切分 |
 
 ### 9.3 流操作流程
 
@@ -1117,11 +1128,13 @@ class BlockEpilogue<EpilogueAscend950FARescaleO, ...> {
 #### 10.3.1 数学原理
 
 标准Flash Attention：
+
 ```
 O = softmax(Q * K^T / sqrt(d)) * V
 ```
 
 在线计算：
+
 ```
 初始化:
   O[i] = 0
@@ -1200,5 +1213,6 @@ void operator()(TensorDst &attenOutGm, const LocalTensor<ElementOTmp> &expMaxUb,
 ---
 
 ## 11. 下一步优化建议
+
 1. 当前仅实现了BlockMmadQK L0C输出-> UB -> EpilogueSoftMax，受UB空间限制，当前模板仅支持embed <= 128，若需支持更大embedSize需要扩展L0C输出-> GM -> UB -> EpilogueSoftMax流程。
 2. 当前模板Kernel未支持ActualSeq可变长特性，需适配。

@@ -42,7 +42,6 @@ Where:
 
 <img src="../../docs/zh/figures/flash_attention_infer_cv_pipeline.png" width="50%">
 
-
 ---
 
 ## 2. Data Structures and Type Definitions
@@ -97,18 +96,19 @@ using DispatchPolicyRescaleO = Epilogue::EpilogueAscend950FARescaleO;
 using EpilogueRescaleO = Epilogue::Block::BlockEpilogue<...>;
 ```
 
-
 #### Block Mmad
 
 The operator uses two types of Block Mmad components:
-* `BlockMmadQK` is a partial specialization of the BlockMmad template class, used to handle the matrix multiplication of Q and K in FlashAttention Infer. Header file:  [block_mmad_fai_qk_tla.hpp](../../include/catlass/gemm/block/block_mmad_fai_qk_tla.hpp).
-* `BlockMmadPV` is a partial specialization of the BlockMmad template class, used to handle the matrix multiplication of P and V in FlashAttention Infer. Header file: [block_mmad_fai_pv_tla.hpp](../../include/catlass/gemm/block/block_mmad_fai_pv_tla.hpp).
+
+- `BlockMmadQK` is a partial specialization of the BlockMmad template class, used to handle the matrix multiplication of Q and K in FlashAttention Infer. Header file: [block_mmad_fai_qk_tla.hpp](../../include/catlass/gemm/block/block_mmad_fai_qk_tla.hpp).
+- `BlockMmadPV` is a partial specialization of the BlockMmad template class, used to handle the matrix multiplication of P and V in FlashAttention Infer. Header file: [block_mmad_fai_pv_tla.hpp](../../include/catlass/gemm/block/block_mmad_fai_pv_tla.hpp).
 
 #### Block Epilogue
 
 The operator uses two types of Block Epilogue components:
-* `EpilogueOnlineSoftmax` is a partial specialization of the BlockEpilogue template class, used to handle the online softmax operation in FlashAttention Infer. Header file: [block_epilogue_fa_softmax_ascend950.hpp](../../include/catlass/epilogue/block/block_epilogue_fa_softmax_ascend950.hpp).
-* `EpilogueRescaleO` is a partial specialization of the BlockEpilogue template class, used to handle the rescaleO operation in FlashAttention Infer. Header file: [block_epilogue_fa_rescale_o_ascend950.hpp](../../include/catlass/epilogue/block/block_epilogue_fa_rescale_o_ascend950.hpp).
+
+- `EpilogueOnlineSoftmax` is a partial specialization of the BlockEpilogue template class, used to handle the online softmax operation in FlashAttention Infer. Header file: [block_epilogue_fa_softmax_ascend950.hpp](../../include/catlass/epilogue/block/block_epilogue_fa_softmax_ascend950.hpp).
+- `EpilogueRescaleO` is a partial specialization of the BlockEpilogue template class, used to handle the rescaleO operation in FlashAttention Infer. Header file: [block_epilogue_fa_rescale_o_ascend950.hpp](../../include/catlass/epilogue/block/block_epilogue_fa_rescale_o_ascend950.hpp).
 
 #### Tile Mmad & Tile Copy
 
@@ -151,19 +151,19 @@ class FAInferKernel {
 
 ### 3.2 Member Variables
 
-| Variable Name| Type | Description |
-|--------|------|------|
-| `bmm1TensorList[NUM2]` | LocalTensor<ElementS> | Double buffer for BMM1 results (S matrix) |
-| `bmm2TensorList[NUM2]` | LocalTensor<ElementOTmp> | Double buffer for BMM2 results (O temporary) |
-| `mm2AL1TensorList[KERNEL_TASK_NUM]` | LocalTensor<ElementP> | L1 cache for MM2 input (P matrix) |
-| `expUb[KERNEL_TASK_NUM]` | LocalTensor<ElementS> | UB cache for exp values |
-| `sumUb[KERNEL_TASK_NUM]` | LocalTensor<ElementS> | UB cache for sum values |
-| `maxUb[KERNEL_TASK_NUM]` | LocalTensor<ElementS> | UB cache for max values |
-| `constInfo` | ConstInfo | Constant information |
-| `runInfo[4]` | RunInfo | Runtime information (circular buffer) |
-| `runParam` | RunParamStr | Runtime parameters |
-| `blockIdx` | uint32_t | Current AI Core index |
-| `subBlockIdx` | uint32_t | AIV core sub-index |
+| Variable Name                       | Type                     | Description                                  |
+| ----------------------------------- | ------------------------ | -------------------------------------------- |
+| `bmm1TensorList[NUM2]`              | LocalTensor<ElementS>    | Double buffer for BMM1 results (S matrix)    |
+| `bmm2TensorList[NUM2]`              | LocalTensor<ElementOTmp> | Double buffer for BMM2 results (O temporary) |
+| `mm2AL1TensorList[KERNEL_TASK_NUM]` | LocalTensor<ElementP>    | L1 cache for MM2 input (P matrix)            |
+| `expUb[KERNEL_TASK_NUM]`            | LocalTensor<ElementS>    | UB cache for exp values                      |
+| `sumUb[KERNEL_TASK_NUM]`            | LocalTensor<ElementS>    | UB cache for sum values                      |
+| `maxUb[KERNEL_TASK_NUM]`            | LocalTensor<ElementS>    | UB cache for max values                      |
+| `constInfo`                         | ConstInfo                | Constant information                         |
+| `runInfo[4]`                        | RunInfo                  | Runtime information (circular buffer)        |
+| `runParam`                          | RunParamStr              | Runtime parameters                           |
+| `blockIdx`                          | uint32_t                 | Current AI Core index                        |
+| `subBlockIdx`                       | uint32_t                 | AIV core sub-index                           |
 
 ### 3.3 Memory Layout
 
@@ -220,13 +220,14 @@ class FAInferKernel {
 ---
 
 ## 4. Multi-Core Tiling Algorithm
+
 The Tiling segmentation algorithm is mainly used to evenly distribute computing tasks to multiple AI Cores to achieve efficient parallel computing.
+
 ### 4.1 Core Objectives
 
 - **Load balancing**: Make the computation load of each AI core as balanced as possible
 - **Memory efficiency**: Rational utilization of on-chip memory (UB/L1)
 - **Parallel optimization**: Maximum multi-core parallelism
-
 
 ### 4.2. Data Structures
 
@@ -264,59 +265,59 @@ public:
 
 InputParamsRegbase - Input Parameters
 
-| Field | Type | Description |
-|-------|------|-------------|
-| batch | int64_t | Batch size |
-| qHeads | int64_t | Number of Query heads |
-| kvHeads | int64_t | Number of Key/Value heads |
-| groupSize | int64_t | Group size (qHeads / kvHeads) |
-| qSeqlen | int64_t | Query sequence length |
-| kvSeqlen | int64_t | Key/Value sequence length |
-| embed | int64_t | Embedding dimension |
-| scaleValue | float | Scaling factor |
-| attenMaskCompressMode | uint8_t | Attention mask compression mode |
-| isActualSeqLengthsNull | uint8_t | Whether Q actual sequence length is null |
-| isActualSeqLengthsKVNull | uint8_t | Whether KV actual sequence length is null |
-| actualSeqLengthsSize | uint32_t | Size of Q actual sequence length array |
-| actualSeqLengthsKVSize | uint32_t | Size of KV actual sequence length array |
-| headNumRatio | uint32_t | Head number ratio (qHeads / kvHeads) |
-| blockSize | uint32_t | Block size |
-| blockTableDim2 | uint32_t | Block table dimension |
-| paBlockNumSum | uint32_t | Total number of blocks |
-| attenMaskQSeqlen | uint32_t | Attention mask Q sequence length |
-| attenMaskKvSeqlen | uint32_t | Attention mask KV sequence length |
+| Field                    | Type     | Description                               |
+| ------------------------ | -------- | ----------------------------------------- |
+| batch                    | int64_t  | Batch size                                |
+| qHeads                   | int64_t  | Number of Query heads                     |
+| kvHeads                  | int64_t  | Number of Key/Value heads                 |
+| groupSize                | int64_t  | Group size (qHeads / kvHeads)             |
+| qSeqlen                  | int64_t  | Query sequence length                     |
+| kvSeqlen                 | int64_t  | Key/Value sequence length                 |
+| embed                    | int64_t  | Embedding dimension                       |
+| scaleValue               | float    | Scaling factor                            |
+| attenMaskCompressMode    | uint8_t  | Attention mask compression mode           |
+| isActualSeqLengthsNull   | uint8_t  | Whether Q actual sequence length is null  |
+| isActualSeqLengthsKVNull | uint8_t  | Whether KV actual sequence length is null |
+| actualSeqLengthsSize     | uint32_t | Size of Q actual sequence length array    |
+| actualSeqLengthsKVSize   | uint32_t | Size of KV actual sequence length array   |
+| headNumRatio             | uint32_t | Head number ratio (qHeads / kvHeads)      |
+| blockSize                | uint32_t | Block size                                |
+| blockTableDim2           | uint32_t | Block table dimension                     |
+| paBlockNumSum            | uint32_t | Total number of blocks                    |
+| attenMaskQSeqlen         | uint32_t | Attention mask Q sequence length          |
+| attenMaskKvSeqlen        | uint32_t | Attention mask KV sequence length         |
 
 MultiCoreParamsRegbase - Multi-core Parameters
 
-| Field | Type | Description |
-|-------|------|-------------|
-| coreNum | int32_t | Actual number of cores used |
-| totalSize | int64_t | Total computation amount (number of blocks) |
-| qSeqlenOuterSize | int64_t | Number of outer blocks in Q sequence |
-| splitFactorSize | int64_t | totalSize / coreNum |
-| splitFactorTailSize | int64_t | totalSize % coreNum |
-| bnAxisStartIdx[MAX_CORE_NUM] | uint32_t | Batch-Head axis start index array |
-| sparseStartIdx[MAX_CORE_NUM] | int64_t | qSeq start index array |
-
-
+| Field                        | Type     | Description                                 |
+| ---------------------------- | -------- | ------------------------------------------- |
+| coreNum                      | int32_t  | Actual number of cores used                 |
+| totalSize                    | int64_t  | Total computation amount (number of blocks) |
+| qSeqlenOuterSize             | int64_t  | Number of outer blocks in Q sequence        |
+| splitFactorSize              | int64_t  | totalSize / coreNum                         |
+| splitFactorTailSize          | int64_t  | totalSize % coreNum                         |
+| bnAxisStartIdx[MAX_CORE_NUM] | uint32_t | Batch-Head axis start index array           |
+| sparseStartIdx[MAX_CORE_NUM] | int64_t  | qSeq start index array                      |
 
 ### 4.3. Core Algorithm Flow
 
-#### 4.3.1  Main Function: GetFATilingParam
+#### 4.3.1 Main Function: GetFATilingParam
 
 **Location**:`fai_tiling.h:283-333`
 
-**Function Signature**: 
+**Function Signature**:
+
 ```cpp
 int32_t GetFATilingParam(const FAInfo &faInfo, uint32_t blockDim, FATilingData& faTilingData)
 ```
 
-**Parameter Description:**: 
+**Parameter Description:**:
+
 - `faInfo`: Input parameters
 - `blockDim`: Number of available AI Cores
 - `faTilingData`: Output tiling data
 
-**Algorithm Flow**: 
+**Algorithm Flow**:
 
 ```
 1. Fill input parameters (FillInputParams)
@@ -351,14 +352,14 @@ int32_t GetFATilingParam(const FAInfo &faInfo, uint32_t blockDim, FATilingData& 
    └─ splitFactorTailSize = totalSize % splitFactorSize
 ```
 
-
 #### 4.3.2 ComputeSplitNBSeq - Greedy Multi-Core Segmentation
 
 **Location**: `fai_tiling.h:183-235`
 
 **Functionality**: Use greedy algorithm to split tasks along Batch/HeadNum/QSeqLen axes
 
-**Parameters**: 
+**Parameters**:
+
 - `batchSize`: Batch size
 - `tilingElementArrayLen`: Tiling array length (MAX_CORE_NUM)
 - `actualSeqLengths`: Q actual sequence length array
@@ -368,7 +369,7 @@ int32_t GetFATilingParam(const FAInfo &faInfo, uint32_t blockDim, FATilingData& 
 - `coreWeightTarget`: Target computation amount per core
 - `curCore`: Current core index (input/output)
 
-**Algorithm Flow**: 
+**Algorithm Flow**:
 
 ```
 Initialization:
@@ -400,9 +401,11 @@ Iterate over three axes:
 ```
 
 **Greedy Strategy:**
+
 - Check if target computation amount is exceeded when adding an outer block (sOuterBlock)
 - If `sInnerBlockNums - diff > diff`, it means the computation amount of current core is close to target, switch to new core
 - This strategy ensures that the computation amount of each core is as balanced as possible
+
 ---
 
 ## 5. Main Process Logic
@@ -524,6 +527,7 @@ for (uint32_t bnIdx = bnAxisStartIdx; bnIdx < bnAxisEndIdx; ++bnIdx) {
 ```
 
 **Explanation**:
+
 - Iterate over Batch-Head axis according to Tiling segmentation results
 - Support GQA (Grouped Query Attention): Multiple Query heads share KV heads
 
@@ -561,6 +565,7 @@ for (int64_t qSeqAxisIndex = qSeqAxisStartIdx; qSeqAxisIndex < tempQSeqAxisEnd; 
 ```
 
 **Explanation**:
+
 - Q sequence is segmented by 128 (BLOCK_BASE_SIZE)
 - Last 3 loops are used for pipelined execution of tail blocks (ensure all tasks are completed)
 
@@ -644,8 +649,10 @@ for (int64_t kvSeqLoopCount = runParam.kvSeqLoopStartIdx; kvSeqLoopCount <= kvSe
 ```
 
 **Explanation**:
+
 - Four-stage pipeline: QK^T → Softmax → PV → O update
 - Use taskId to implement CV pipeline
+
 ---
 
 ## 6. Pipeline Detailed Explanation
@@ -908,11 +915,13 @@ class BlockEpilogue<EpilogueAscend950FASoftmax<ATTENTION_MASK_FLAG_>, ...> {
 #### 8.3.1 Mathematical Principle
 
 Standard Softmax:
+
 ```
 P[i,j] = exp(S[i,j] - max(S[i,:])) / sum(exp(S[i,:] - max(S[i,:])))
 ```
 
 Online Softmax (step-by-step calculation):
+
 ```
 Initialization:
   max[i] = -inf
@@ -1017,15 +1026,15 @@ struct BlockMmadTla<MmadFAIPV<Arch::Ascend950, ...>, ...> {
 
 ### 9.2 Differences from BlockMmadQK
 
-| Feature | BlockMmadQK | BlockMmadPV |
-|---------|-------------|-------------|
-| Input A | Q (GM) | P (L1) |
-| Input B | K (GM) | V (GM) |
-| Output C | S (UB) | O_tmp (UB) |
-| L1A | Loaded from GM | Input from L1 |
-| L1B | Loaded from GM | Loaded from GM |
-| K Loop | Segmented along embed dimension | None |
-| N Loop | None | Segmented along embed dimension |
+| Feature  | BlockMmadQK                     | BlockMmadPV                     |
+| -------- | ------------------------------- | ------------------------------- |
+| Input A  | Q (GM)                          | P (L1)                          |
+| Input B  | K (GM)                          | V (GM)                          |
+| Output C | S (UB)                          | O_tmp (UB)                      |
+| L1A      | Loaded from GM                  | Input from L1                   |
+| L1B      | Loaded from GM                  | Loaded from GM                  |
+| K Loop   | Segmented along embed dimension | None                            |
+| N Loop   | None                            | Segmented along embed dimension |
 
 ### 9.3 Stream Operation Flow
 
@@ -1123,11 +1132,13 @@ class BlockEpilogue<EpilogueAscend950FARescaleO, ...> {
 #### 10.3.1 Mathematical Principle
 
 Standard Flash Attention:
+
 ```
 O = softmax(Q * K^T / sqrt(d)) * V
 ```
 
 Online calculation:
+
 ```
 Initialization:
   O[i] = 0
@@ -1206,5 +1217,6 @@ void operator()(TensorDst &attenOutGm, const LocalTensor<ElementOTmp> &expMaxUb,
 ---
 
 ## 11. Next Step Optimization Suggestions
+
 1. Currently, only BlockMmadQK L0c output-> UB -> EpilogueSoftMax is implemented. Due to UB space limitations, the current template only supports embed <= 128. To support larger embedSize, it is necessary to extend the L0c output-> GM -> UB -> EpilogueSoftMax flow.
 2. The current template Kernel does not support the variable-length ActualSeq feature and needs to be adapted.

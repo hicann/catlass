@@ -6,7 +6,7 @@
 ├── 32_w4a8_matmul
 │   ├── CMakeLists.txt # CMake build file
 │   ├── gen_data.py
-│   ├── w4a8.cpp 
+│   ├── w4a8.cpp
 │   └── README.md
 ```
 
@@ -17,9 +17,9 @@
 
 ## Example
 
-- After obtaining the code, compile the operator executable file. For details, see [Template Library Quick Start](../../docs/en/1_Practice/01_quick_start.md#build-and-execution).  
+- After obtaining the code, compile the operator executable file. For details, see [Template Library Quick Start](../../docs/en/1_Practice/01_quick_start.md#build-and-execution).
 
-- Run `gen_data.py` to generate test data. The test sample specifications are passed as command-line arguments. After the command is executed, a data directory is generated in the current path, containing the operator input data and the golden data used for accuracy verification.  
+- Run `gen_data.py` to generate test data. The test sample specifications are passed as command-line arguments. After the command is executed, a data directory is generated in the current path, containing the operator input data and the golden data used for accuracy verification.
 - Execute the operator. Ensure that the input shape of the operator is the same as that of the test sample.
 
 The following is a complete shell script example (executed in the sample directory `./examples/32_w4a8_matmul`):

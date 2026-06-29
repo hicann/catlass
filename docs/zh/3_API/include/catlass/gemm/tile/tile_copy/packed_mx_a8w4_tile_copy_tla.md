@@ -9,6 +9,7 @@
 `PackedMxA8W4TileCopyTla` 继承自 [PackedTileCopyTla](./packed_tile_copy_tla.md)，同时管理 MX Scale 搬运和 A8W4 量化 B 矩阵搬运。它是 [PackedMxTileCopyTla](./packed_mx_tile_copy_tla.md) 在 A8W4（INT4 weight）场景下的扩展变体。
 
 关键特点：
+
 - A 矩阵为 FP8（`ElementA_`），通过 MX Scale 搬运
 - B 矩阵为 INT4（`ElementPrologueB_`，Prologue 前类型）→ INT8（`ElementB_`，Prologue 后类型）
 - **重写** `CopyL1ToL0B` 以适配 Prologue 后的 B 数据类型
@@ -17,12 +18,12 @@
 
 ## 引用的 Tile 组件
 
-| 成员别名 | 来源 |
-| :------ | :------ |
+| 成员别名                                  | 来源                                                                                           |
+| :---------------------------------------- | :--------------------------------------------------------------------------------------------- |
 | `CopyGmToL1A` ~ `CopyL1ToBT`（除 L0B 外） | 继承自 `PackedTileCopyTla<ArchTag, ElementA_, LayoutTagA, ElementB_, LayoutTagPrologueB, ...>` |
-| `CopyL1ToL0B`（重写） | `TileCopyTla<ArchTag, TensorL1B, TensorL0B>`（Prologue 后类型） |
-| `CopyGmToL1MxScaleA`（新增） | `TileCopyTla<ArchTag, TensorMxScaleA, TensorL1MxScaleA>` |
-| `CopyGmToL1MxScaleB`（新增） | `TileCopyTla<ArchTag, TensorMxScaleB, TensorL1MxScaleB>` |
+| `CopyL1ToL0B`（重写）                     | `TileCopyTla<ArchTag, TensorL1B, TensorL0B>`（Prologue 后类型）                                |
+| `CopyGmToL1MxScaleA`（新增）              | `TileCopyTla<ArchTag, TensorMxScaleA, TensorL1MxScaleA>`                                       |
+| `CopyGmToL1MxScaleB`（新增）              | `TileCopyTla<ArchTag, TensorMxScaleB, TensorL1MxScaleB>`                                       |
 
 ## 模板原型
 

@@ -94,8 +94,8 @@ DECLARE_KERNEL_FUNC(CommonMatmulKernelHalfLayout01)
 DECLARE_KERNEL_FUNC(CommonMatmulKernelHalfLayout10)
 DECLARE_KERNEL_FUNC(CommonMatmulKernelHalfLayout11)
 
-std::unordered_map<uint64_t, void(*)(aclrtStream&, uint64_t, 
-    uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, TilingParams&)> launchKernelFuncMap = { 
+std::unordered_map<uint64_t, void(*)(aclrtStream&, uint64_t,
+    uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, TilingParams&)> launchKernelFuncMap = {
 { 0x0000000000000000, LaunchCommonMatmulKernelHalfLayout00 },
 { 0x0000000000000010, LaunchCommonMatmulKernelHalfLayout01 },
 { 0x0000000000000100, LaunchCommonMatmulKernelHalfLayout10 },
@@ -227,8 +227,8 @@ bool PaddingMatmulB16Handler(TilingParams &params, PlatformInfo& platformInfo)
 {
     uint8_t kernelSerial = 2;
     if (params.paddingTagA || params.paddingTagB || params.paddingTagC) {
-        params.tilingKey.SetTilingKey(kernelSerial, 
-            params.layoutTagA, params.layoutTagB, 0, params.paddingTagA, params.paddingTagB, params.paddingTagC); 
+        params.tilingKey.SetTilingKey(kernelSerial,
+            params.layoutTagA, params.layoutTagB, 0, params.paddingTagA, params.paddingTagB, params.paddingTagC);
         return true;
     }
     return false;

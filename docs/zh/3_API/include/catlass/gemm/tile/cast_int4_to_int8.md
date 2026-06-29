@@ -45,6 +45,7 @@ TileCastInt4ToInt8(Arch::Resource<ArchTag> const &resource, Params const &params
 ```
 
 从 Resource UB buffer 分配双缓冲：
+
 - `ubInTensor[2]` × `COMPUTE_LEN / 2` bytes（INT4 紧凑存储输入）
 - `ubOutTensor[2]` × `COMPUTE_LEN` bytes（INT8 输出）
 - `ubWorkspace[2]` × `COMPUTE_LEN * sizeof(half)` bytes（中间转换用 half workspace）

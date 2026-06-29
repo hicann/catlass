@@ -78,7 +78,7 @@ Compare success.
 其对应关系如下表：
 
 | trans_a | trans_b | LayoutA             | LayoutB             |
-|---------|---------|---------------------|---------------------|
+| ------- | ------- | ------------------- | ------------------- |
 | 0       | 0       | layout::RowMajor    | layout::RowMajor    |
 | 0       | 1       | layout::RowMajor    | layout::ColumnMajor |
 | 1       | 0       | layout::ColumnMajor | layout::RowMajor    |

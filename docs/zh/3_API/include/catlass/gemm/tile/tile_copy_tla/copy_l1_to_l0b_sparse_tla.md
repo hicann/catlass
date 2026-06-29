@@ -29,8 +29,8 @@ struct CopyL1ToL0BSparseTla {
 
 ## 偏特化实现（全 AtlasA2）
 
-| 条件 | 说明 | 实现位置 | API 文档 |
-| :------ | :------ | :------ | :------ |
+| 条件             | 说明                            | 实现位置                     | API 文档                                                         |
+| :--------------- | :------------------------------ | :--------------------------- | :--------------------------------------------------------------- |
 | `isSparseEnalbd` | B matrix ColumnMajor→nZ + index | `atlasa2/copy_l1_to_l0b.hpp` | [copy_l1_to_l0b](../copy_l1_to_l0b/copy_l1_to_l0b_sparse_tla.md) |
 
 ## 调用接口

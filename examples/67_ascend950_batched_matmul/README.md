@@ -24,26 +24,30 @@ cd output/bin
 ```
 
 ## 使用说明
+
 BatchedMatmul当前支持的`DispatchPolicy`有`MmadPingpong`和`MmadMultiBatch`两种。
+
 ### MmadPingpong
+
 `DispatchPolicy MmadPingpong`支持以下几个模板参数：
 
-|模板参数|默认值|参数说明|
-|---------|-----------------|-----------------|
-|ArchTag| 无 | 指定架构型号 | 
-|enableUnitFlag| false | 是否开启Unitflag，开启L0C多缓冲时必须设置为false |
-|useHF32| false | 是否开启HF32，仅float类型支持 |
-|l0CStages| 1 | 指定L0C的缓冲区数量，设置为2即可开启L0C双缓冲|
-|enableL1Resident| false | 是否开启L1常驻 |
+| 模板参数         | 默认值 | 参数说明                                         |
+| ---------------- | ------ | ------------------------------------------------ |
+| ArchTag          | 无     | 指定架构型号                                     |
+| enableUnitFlag   | false  | 是否开启Unitflag，开启L0C多缓冲时必须设置为false |
+| useHF32          | false  | 是否开启HF32，仅float类型支持                    |
+| l0CStages        | 1      | 指定L0C的缓冲区数量，设置为2即可开启L0C双缓冲    |
+| enableL1Resident | false  | 是否开启L1常驻                                   |
 
 ### MmadMultiBatch
+
 `DispatchPolicy MmadMultiBatch`支持以下几个模板参数：
 
-|模板参数|默认值|参数说明|
-|---------|-----------------|-----------------|
-|ArchTag| 无 | 指定架构型号 | 
-|useHF32| false | 是否开启HF32，仅float类型支持 |
-|l0CStages| 2 | 指定L0C的缓冲区数量，设置为2即可开启L0C双缓冲|
+| 模板参数  | 默认值 | 参数说明                                      |
+| --------- | ------ | --------------------------------------------- |
+| ArchTag   | 无     | 指定架构型号                                  |
+| useHF32   | false  | 是否开启HF32，仅float类型支持                 |
+| l0CStages | 2      | 指定L0C的缓冲区数量，设置为2即可开启L0C双缓冲 |
 
 当前L0A、L0B与L0C的缓冲区数量支持分开设置，默认情况下L0A、L0B与L0C的Stages都设置为2，开启Double Buffer。以下情况可尝试将l0CStages调大，开启多缓冲：
 

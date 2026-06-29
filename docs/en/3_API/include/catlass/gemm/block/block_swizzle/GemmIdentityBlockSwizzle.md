@@ -1,5 +1,5 @@
 # Gemm Identity Block Swizzle
->
+
 > [Code location](../../../../../../../../include/catlass/gemm/block/block_swizzle.hpp)
 
 ## Description
@@ -12,16 +12,16 @@ As illustrated in the example below, assuming a hardware environment with 20 AI 
 
 ## Common Methods
 
-| Return Type  | Function Name| Input Parameters|Functions|
-| :------- | :------: |:------: |:------: |
-| -  |  GemmIdentityBlockSwizzle  |GemmCoord const &problemShape_, MatrixCoord const &tileMN_  |Constructor|
-| -  |  GemmIdentityBlockSwizzle  |GemmCoord const &problemShape_, MatrixCoord const &tileMN_, MatrixCoord const &loopsMN_  |Constructor|
-| void |  Update  |GemmCoord const &problemShape_, MatrixCoord const &tileMN_  |Updates `problemShape`, `tileMN` and `loopsMN`|
-| void |  Update  |GemmCoord const &problemShape_, MatrixCoord const &tileMN_, MatrixCoord const &loopsMN_  |Updates `problemShape`, `tileMN` and `loopsMN`|
-| uint32_t |  GetCoreLoops  |-  |Returns the total number of basic blocks (the product of the block counts in the $M$ and $N$ dimensions)|
-| uint32_t |  GetBatchIdx  |uint32_t taskIdx  |Calculates the batch ID to which the basic block corresponding to the input taskIdx belongs|
-| GemmCoord |  GetBlockCoord  |uint32_t taskIdx  |Calculates the coordinates (`blockCoord`) across each dimension for the basic block corresponding to the input taskIdx.|
-| GemmCoord |  GetActualBlockShape  |GemmCoord blockCoord  |Returns the actual shape of the basic block based on its coordinates (`blockCoord`)|
+| Return Type |      Function Name       |                                    Input Parameters                                     |                                                        Functions                                                        |
+| :---------- | :----------------------: | :-------------------------------------------------------------------------------------: | :---------------------------------------------------------------------------------------------------------------------: |
+| -           | GemmIdentityBlockSwizzle |               GemmCoord const &problemShape_, MatrixCoord const &tileMN_                |                                                       Constructor                                                       |
+| -           | GemmIdentityBlockSwizzle | GemmCoord const &problemShape_, MatrixCoord const &tileMN_, MatrixCoord const &loopsMN_ |                                                       Constructor                                                       |
+| void        |          Update          |               GemmCoord const &problemShape_, MatrixCoord const &tileMN_                |                                     Updates `problemShape`, `tileMN` and `loopsMN`                                      |
+| void        |          Update          | GemmCoord const &problemShape_, MatrixCoord const &tileMN_, MatrixCoord const &loopsMN_ |                                     Updates `problemShape`, `tileMN` and `loopsMN`                                      |
+| uint32_t    |       GetCoreLoops       |                                            -                                            |        Returns the total number of basic blocks (the product of the block counts in the $M$ and $N$ dimensions)         |
+| uint32_t    |       GetBatchIdx        |                                    uint32_t taskIdx                                     |               Calculates the batch ID to which the basic block corresponding to the input taskIdx belongs               |
+| GemmCoord   |      GetBlockCoord       |                                    uint32_t taskIdx                                     | Calculates the coordinates (`blockCoord`) across each dimension for the basic block corresponding to the input taskIdx. |
+| GemmCoord   |   GetActualBlockShape    |                                  GemmCoord blockCoord                                   |                   Returns the actual shape of the basic block based on its coordinates (`blockCoord`)                   |
 
 ## Example
 
@@ -29,7 +29,7 @@ As illustrated in the example below, assuming a hardware environment with 20 AI 
 
 See [basic_matmul](../../../../../../../../examples/00_basic_matmul/basic_matmul.cpp).
 
-```
+```cpp
 // Swizzle offset is 3 and direction is 0.
 using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
 
@@ -43,19 +43,19 @@ In the `void operator()<AscendC::AIC>` function of the kernel code (see [basic_m
 
 Instantiate BlockScheduler:
 
-```
+```cpp
 BlockScheduler matmulBlockScheduler(params.problemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
 ```
 
 Obtain the total loop count for the blocks:
 
-```
+```cpp
 uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
 ```
 
 Obtain the actual coordinates and shape of the current `block`:
 
-```
+```cpp
 for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()) {
         // Compute block location
         GemmCoord blockCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
@@ -70,13 +70,13 @@ In the `void operator()<AscendC::AIC>` function of the kernel code (see [grouped
 
 Instantiate BlockScheduler:
 
-```
+```cpp
 BlockScheduler blockScheduler;
 ```
 
 During group traversal, update the `blockScheduler` based on the shape of each group, and obtain the total number of basic blocks for a single group.
 
-```
+```cpp
 for (uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx) {
     ...
     blockScheduler.Update(inGroupProblemShape, L1TileShape::ToCoordMN());
@@ -87,7 +87,7 @@ for (uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx) {
 
 During the traversal of basic blocks within a single group, obtain the block coordinates and actual shape of the current block.
 
-```
+```cpp
 for (uint32_t loopIdx = startLoopIdx; loopIdx < coreLoops; loopIdx += coreNum) {
         GemmCoord blockCoordMNK = blockScheduler.GetBlockCoord(loopIdx);
         GemmCoord actualBlockShapeMNK = blockScheduler.GetActualBlockShape(blockCoordMNK);

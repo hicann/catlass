@@ -11,7 +11,7 @@ Tile components adopt highly optimized implementations that fully exploit hardwa
 - Optimization for different architectures
 - Efficient memory access patterns
 
-This document uses `TileMmad` as an example to dive into the code structure, main interfaces, and design ideas of tile components. It also covers commonalities of other tile components such as TileCopy.  
+This document uses `TileMmad` as an example to dive into the code structure, main interfaces, and design ideas of tile components. It also covers commonalities of other tile components such as TileCopy.
 
 ## 2. Template Assembly Mechanism
 
@@ -35,12 +35,12 @@ struct TileMmad {
 
 ### 2.1 Core Template Parameters
 
-| Parameter| Description|
-|--------|------|
-| ArchTag_ | Architecture tag used to distinguish different NPU architectures (e.g., 2201, 3510)|
-| AType_ | Type of matrix A, containing element type and layout information|
-| BType_ | Type of matrix B, containing element type and layout information|
-| BiasType_ | Type of bias, which defaults to a null value|
+| Parameter | Description                                                                         |
+| --------- | ----------------------------------------------------------------------------------- |
+| ArchTag_  | Architecture tag used to distinguish different NPU architectures (e.g., 2201, 3510) |
+| AType_    | Type of matrix A, containing element type and layout information                    |
+| BType_    | Type of matrix B, containing element type and layout information                    |
+| BiasType_ | Type of bias, which defaults to a null value                                        |
 
 These template parameters allow tile components to flexibly adapt to different hardware architectures and computation requirements.
 
@@ -51,7 +51,7 @@ Tile components define a series of exported types using the `using` keyword, ens
 ```cpp
 using ElementA = typename AType_::Element;
 using ElementB = typename BType_::Element;
-using ElementAccumulator = 
+using ElementAccumulator =
     typename Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
 ```
 
@@ -59,7 +59,7 @@ ElementAccumulatorSelector is a helper tool that automatically selects an approp
 
 ## 3. Core Data Structure
 
-Tile components typically contain few data members, relying mainly on template parameters and input parameters to perform computations. Take TileMmad as an example. It has no additional data members. All information required for computation is passed through template parameters and the parameters of the operator() method.  
+Tile components typically contain few data members, relying mainly on template parameters and input parameters to perform computations. Take TileMmad as an example. It has no additional data members. All information required for computation is passed through template parameters and the parameters of the operator() method.
 
 This design makes tile components highly lightweight and flexible for frequent calls.
 
@@ -93,6 +93,7 @@ void operator()(AscendC::LocalTensor<ElementAccumulator> const &l0CTensor,
 ```
 
 This method performs a basic matrix multiplication operation. It stores the result of multiplying l0ATensor and l0BTensor into l0CTensor. Parameter description:
+
 - l0CTensor: L0 cache tensor for the result matrix C
 - l0ATensor: L0 cache tensor for the input matrix A
 - l0BTensor: L0 cache tensor for the input matrix B

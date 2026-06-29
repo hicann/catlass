@@ -9,6 +9,7 @@
 `TileMmad` 使用 [AscendC::Mmad](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/API/ascendcopapi/atlasascendc_api_07_0249.html) 基础 API 完成矩阵乘加 `C += A * B`。操作数 A 在 L0A，B 在 L0B，C 在 L0C，排布格式分别为 zZ、nZ、zN。非 TLA 实现。
 
 支持两种调用模式：
+
 - 无 Bias：标准矩阵乘加
 - 带 Bias：将 BT 中的 Bias 加载到 L0C 后执行矩阵乘加
 
@@ -16,10 +17,10 @@
 
 ### 架构差异
 
-| 架构 | `kDirectionAlign` | `disableGemv` | 说明 |
-| :------ | :------ | :------ | :------ |
-| AtlasA2 (2201) | `float` + `ColumnMajor`/`nZ` L1A 时开启 | — | K 方向对齐优化 |
-| Ascend950 (3510) | — | L1A 为 `VectorLayout` 时 false，其他 true | GEMV 模式控制 |
+| 架构             | `kDirectionAlign`                       | `disableGemv`                             | 说明           |
+| :--------------- | :-------------------------------------- | :---------------------------------------- | :------------- |
+| AtlasA2 (2201)   | `float` + `ColumnMajor`/`nZ` L1A 时开启 | —                                         | K 方向对齐优化 |
+| Ascend950 (3510) | —                                       | L1A 为 `VectorLayout` 时 false，其他 true | GEMV 模式控制  |
 
 ## 模板原型
 

@@ -2,7 +2,7 @@
 
 [msDebug](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0062.html) is a tool for debugging operator programs running on NPUs. This tool provides operator developers with a mechanism for debugging operators on Ascend devices. Debugging methods include reading device memory and registers, as well as pausing and resuming program execution.
 
-- ⚠️ **Note**: If you are developing and debugging using containers, ensure that `/dev/drv_debug` is mapped into containers (refer to the [driver check guide](https://www.hiascend.com/document/caselibrary/detail/atlasopdev_0006)).  
+- ⚠️ **Note**: If you are developing and debugging using containers, ensure that `/dev/drv_debug` is mapped into containers (refer to the [driver check guide](https://www.hiascend.com/document/caselibrary/detail/atlasopdev_0006)).
 
 ## Examples
 
@@ -33,7 +33,7 @@ bash scripts/build.sh --debug --msdebug 00_basic_matmul
 - `--debug` controls the debug switch for both host and device code, while `--msdebug` controls the debug switch for device code only.
 - If only `--debug` is added, only host debugging is enabled, and only host code can be debugged with gdb/lldb.
 
-2. Switch to the `output/bin` directory where the executable file is compiled, and run the operator sample program using `msdebug`.
+1. Switch to the `output/bin` directory where the executable file is compiled, and run the operator sample program using `msdebug`.
 
 ```bash
 cd output/bin
@@ -49,7 +49,7 @@ This enables developers to debug Ascend kernels without being affected by potent
 (msdebug) target create "./00_basic_matmul"
 Current executable set to '/home/catlass/output/bin/00_basic_matmul' (aarch64).
 (msdebug) settings set -- target.run-args  "256" "512" "1024" "0"
-(msdebug) 
+(msdebug)
 ```
 
 ### Command Line Debugging
@@ -66,12 +66,12 @@ Breakpoint 2: where = 00_basic_matmul`Run(GemmOptions const&) + 2816 at basic_ma
 (msdebug) breakpoint list
 Current breakpoints:
 1: file = 'basic_matmul.cpp', line = 45, exact_match = 0, locations = 1
-  1.1: where = 00_basic_matmul`Run(GemmOptions const&) + 460 at basic_matmul.cpp:45:18, address = 00_basic_matmul[0x000000000016df8c], unresolved, hit count = 0 
+  1.1: where = 00_basic_matmul`Run(GemmOptions const&) + 460 at basic_matmul.cpp:45:18, address = 00_basic_matmul[0x000000000016df8c], unresolved, hit count = 0
 
 2: file = 'basic_matmul.cpp', line = 90, exact_match = 0, locations = 1
-  2.1: where = 00_basic_matmul`Run(GemmOptions const&) + 2816 at basic_matmul.cpp:101:39, address = 00_basic_matmul[0x000000000016e8c0], unresolved, hit count = 0 
+  2.1: where = 00_basic_matmul`Run(GemmOptions const&) + 2816 at basic_matmul.cpp:101:39, address = 00_basic_matmul[0x000000000016e8c0], unresolved, hit count = 0
 
-(msdebug) 
+(msdebug)
 ```
 
 Execute the command `r`. The program will run until the first breakpoint. Then execute `c` to proceed to the next breakpoint. Note that for multi-core programs, the operator program is typically dispatched to multiple accelerator cores for concurrent execution. Once one accelerator core hits a breakpoint, it will interrupt and notify the other accelerator cores to stop immediately. Therefore, other accelerator cores are not guaranteed to also stop at the same breakpoint simultaneously. The same breakpoint may also be hit again by other accelerator cores. Developers can use breakpoint disable/delete commands to prevent cores from repeatedly hitting the same breakpoint.
@@ -82,11 +82,11 @@ Process 813993 launched: '/home/catlass/output/bin/00_basic_matmul' (aarch64)
 Process 813993 stopped
 * thread #1, name = '00_basic_matmul', stop reason = breakpoint 1.1
     frame #0: 0x0000aaaaaac0df8c 00_basic_matmul`Run(options=0x0000ffffffffe340) at basic_matmul.cpp:45:18
-   42  
+   42
    43       uint32_t m = options.problemShape.m();
    44       uint32_t n = options.problemShape.n();
 -> 45       uint32_t k = options.problemShape.k();
-   46  
+   46
    47       size_t lenA = static_cast<size_t>(m) * k;
    48       size_t lenB = static_cast<size_t>(k) * n;
 (msdebug) c
@@ -95,7 +95,7 @@ Process 813993 stopped
 * thread #1, name = '00_basic_matmul', stop reason = breakpoint 2.1
     frame #0: 0x0000aaaaaac0e8c0 00_basic_matmul`Run(options=0x0000ffffffffe340) at basic_matmul.cpp:101:39
    98      using MatmulKernel = Gemm::Kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
-   99 
+   99
    100      using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
 -> 101      MatmulKernel::Arguments arguments{options.problemShape, deviceA, deviceB, deviceC};
    102      MatmulAdapter matmulOp;
@@ -105,8 +105,8 @@ Process 813993 stopped
 Process 813993 resuming
 [Launch of Kernel _ZN7Catlass13KernelAdapterINS_4Gemm6Kernel11BasicMatmulINS1_5Blo on Device 0]
 Compare success.
-Process 813993 exited with status = 0 (0x00000000) 
-(msdebug) 
+Process 813993 exited with status = 0 (0x00000000)
+(msdebug)
 ```
 
 #### Viewing Variables and Memory
@@ -118,11 +118,11 @@ Process 813993 launched: '/home/catlass/output/bin/00_basic_matmul' (aarch64)
 Process 813993 stopped
 * thread #1, name = '00_basic_matmul', stop reason = breakpoint 1.1
     frame #0: 0x0000aaaaaac0df8c 00_basic_matmul`Run(options=0x0000ffffffffe340) at basic_matmul.cpp:45:18
-   42  
+   42
    43       uint32_t m = options.problemShape.m();
    44       uint32_t n = options.problemShape.n();
 -> 45       uint32_t k = options.problemShape.k();
-   46  
+   46
    47       size_t lenA = static_cast<size_t>(m) * k;
    48       size_t lenB = static_cast<size_t>(k) * n;
 (msdebug) p n
@@ -140,12 +140,12 @@ Process 814339 stopped
 [Switching to focus on Kernel _ZN7Catlass13KernelAdapterINS_4Gemm6Kernel12SplitkMatmulINS1_5Bl, CoreId 0, Type aiv]
 * thread #1, name = '09_splitk_matmu', stop reason = breakpoint 2.1
     frame #0: 0x000000000000bf98 device_debugdata`_ZN7Catlass4Gemm6Kernel9ReduceAddINS_4Arch7AtlasA2EfDhLj8192EEclERKN7AscendC12GlobalTensorIDhEERKNS7_IfEEmj_mix_aiv(this=0x00000000001cf838, dst=0x00000000001cf930, src=0x00000000001cf908, elementCount=131072, splitkFactor=2) at splitk_matmul.hpp:136:19
-   133 
+   133
    134              AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(outputEventIds[bufferIndex]);
    135              AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(outputEventIds[bufferIndex]);
 -> 136              Ub2Gm(dst[loopIdx * tileLen], outputBuffer[bufferIndex], actualTileLen);
    137              AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(outputEventIds[bufferIndex]);
-   138 
+   138
    139              bufferIndex = (bufferIndex + 1) % BUFFER_NUM;
 (msdebug) p outputBuffer
 (AscendC::LocalTensor<__fp16>[2]) $2 = {
@@ -184,7 +184,7 @@ Process 814339 stopped
 0x00010008: {-104.875 -156 232 -100.75}
 0x00010010: {-47.4062 105.875 -322.5 -265.75}
 0x00010018: {260 200.125 -139.25 -190.625}
-(msdebug) 
+(msdebug)
 ```
 
 To debug line by line, run the `n` command to advance the program to the next line.
@@ -199,7 +199,7 @@ Process 814339 stopped
    135              AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(outputEventIds[bufferIndex]);
    136              Ub2Gm(dst[loopIdx * tileLen], outputBuffer[bufferIndex], actualTileLen);
 -> 137              AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(outputEventIds[bufferIndex]);
-   138 
+   138
    139              bufferIndex = (bufferIndex + 1) % BUFFER_NUM;
    140          }
 (msdebug) n
@@ -209,10 +209,10 @@ Process 814339 stopped
     frame #0: 0x000000000000c000 device_debugdata`_ZN7Catlass4Gemm6Kernel9ReduceAddINS_4Arch7AtlasA2EfDhLj8192EEclERKN7AscendC12GlobalTensorIDhEERKNS7_IfEEmj_mix_aiv(this=0x00000000001cf838, dst=0x00000000001cf930, src=0x00000000001cf908, elementCount=131072, splitkFactor=2) at splitk_matmul.hpp:139:28
    136              Ub2Gm(dst[loopIdx * tileLen], outputBuffer[bufferIndex], actualTileLen);
    137              AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(outputEventIds[bufferIndex]);
-   138 
+   138
 -> 139              bufferIndex = (bufferIndex + 1) % BUFFER_NUM;
    140          }
-   141 
+   141
    142          AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(inputEventIds[0]);
 (msdebug) n
 Process 814339 stopped
@@ -220,13 +220,13 @@ Process 814339 stopped
 * thread #1, name = '09_splitk_matmu', stop reason = step over
     frame #0: 0x000000000000c014 device_debugdata`_ZN7Catlass4Gemm6Kernel9ReduceAddINS_4Arch7AtlasA2EfDhLj8192EEclERKN7AscendC12GlobalTensorIDhEERKNS7_IfEEmj_mix_aiv(this=0x00000000001cf838, dst=0x00000000001cf930, src=0x00000000001cf908, elementCount=131072, splitkFactor=2) at splitk_matmul.hpp:96:68
    93           AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(accumulatorEventIds[1]);
-   94  
+   94
    95           uint32_t loops = (elementCount + tileLen - 1) / tileLen;
 -> 96           for (uint32_t loopIdx = aivId; loopIdx < loops; loopIdx += aivNum) {
    97               uint32_t actualTileLen = tileLen;
    98               if (loopIdx == loops - 1) {
    99                   actualTileLen = elementCount - loopIdx * tileLen;
-(msdebug) 
+(msdebug)
 ```
 
 To check all variables of the current stack frame, run the `var` command.
@@ -273,7 +273,7 @@ To check all variables of the current stack frame, run the `var` command.
 (uint32_t) tileLen = 2752
 (uint32_t) loops = 48
 (uint32_t) loopIdx = 26
-(msdebug) 
+(msdebug)
 ```
 
 #### Exiting Debugging
@@ -287,25 +287,25 @@ Quitting LLDB will kill one or more processes. Do you really want to proceed: [Y
 
 #### Common Commands
 
-|  Command |  Abbreviation |  Purpose |  Example |
-| ------ | ---------- | ------ | ------- |
-|  breakpoint filename:lineNo | b | Set a breakpoint.|  b add\_custom.cpp:85<br>b my\_function |
-|  run  | r | Perform running again.| r |
-|  continue | c |  Resume running.| c |
-|  print | p | Print variables.| p zLocal |
-|  frame variable | var | Print all variables in the current frame.| var |
-|  memory read | x | Read memory.<br>`-m` specifies the memory location. GM, UB, L0A, L0B, and L0C are supported.<br>`-f` specifies the [byte conversion format](#appendix).<br>`-s` specifies the number of bytes to be printed in each line.<br>`-c` specifies the number of lines to be printed.|  x -m GM -f float16[] 1000 -c 2 -s 128  |
-|  register read | re r | Read register values.<br>`-a` reads all register values.<br>`\$REG_NAME` reads the value of the register with the specified name.| register read -are r \$PC |
-|  thread step-over |  next<br>n                          |  Move to the next executable line of code in the same call stack.                                                                                                                             |  n |
-|  ascend info devices |  /  |  Query device information. |  ascend info devices |
-|  ascend info cores  |  /  |  Query AI Core information for an operator.|  ascend info cores  |
-|  ascend info tasks  |  /  |  Query task information for an operator. |  ascend info tasks  |
-|  ascend info stream  |  /    |  Query stream information for an operator.|  ascend info stream  |
-|  ascend info blocks  |  /  |  Query block information for an operator.<br>Optional parameter: `-d/–details` displays the code of all blocks at the current breakpoint.                                                                                       |  ascend info blocks  |
-|  ascend aic core  |  /  |  Switch the target cube core of the debugger.|  ascend aic 1  |
-|  ascend aiv core  |  /  |  Switch the target vector core of the debugger. |  ascend aiv 5 |
-|  target modules addkernel.o  |  image addkernel.o  |  Import operator debugging information when the PyTorch framework starts operators.<br>(Note: If this command is executed after the program has already been run with the `run` command,<br>an additional `image load` command is required to make the debugging information take effect.)|  image addAddCustom\_xxx.o  |
-|  target modules load –f kernel.o –s address  |  image load -f kernel.o -s address  |  Make the imported debugging information take effect after the program has run.                                                                                                                                      |  image load -f AddCustom\_xxx.o -s 0  |
+| Command                                    | Abbreviation                      | Purpose                                                                                                                                                                                                                                                                                   | Example                                |
+| ------------------------------------------ | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| breakpoint filename:lineNo                 | b                                 | Set a breakpoint.                                                                                                                                                                                                                                                                         | b add\_custom.cpp:85<br>b my\_function |
+| run                                        | r                                 | Perform running again.                                                                                                                                                                                                                                                                    | r                                      |
+| continue                                   | c                                 | Resume running.                                                                                                                                                                                                                                                                           | c                                      |
+| print                                      | p                                 | Print variables.                                                                                                                                                                                                                                                                          | p zLocal                               |
+| frame variable                             | var                               | Print all variables in the current frame.                                                                                                                                                                                                                                                 | var                                    |
+| memory read                                | x                                 | Read memory.<br>`-m` specifies the memory location. GM, UB, L0A, L0B, and L0C are supported.<br>`-f` specifies the [byte conversion format](#appendix).<br>`-s` specifies the number of bytes to be printed in each line.<br>`-c` specifies the number of lines to be printed.            | x -m GM -f float16[] 1000 -c 2 -s 128  |
+| register read                              | re r                              | Read register values.<br>`-a` reads all register values.<br>`\$REG_NAME` reads the value of the register with the specified name.                                                                                                                                                         | register read -are r \$PC              |
+| thread step-over                           | next<br>n                         | Move to the next executable line of code in the same call stack.                                                                                                                                                                                                                          | n                                      |
+| ascend info devices                        | /                                 | Query device information.                                                                                                                                                                                                                                                                 | ascend info devices                    |
+| ascend info cores                          | /                                 | Query AI Core information for an operator.                                                                                                                                                                                                                                                | ascend info cores                      |
+| ascend info tasks                          | /                                 | Query task information for an operator.                                                                                                                                                                                                                                                   | ascend info tasks                      |
+| ascend info stream                         | /                                 | Query stream information for an operator.                                                                                                                                                                                                                                                 | ascend info stream                     |
+| ascend info blocks                         | /                                 | Query block information for an operator.<br>Optional parameter: `-d/–details` displays the code of all blocks at the current breakpoint.                                                                                                                                                  | ascend info blocks                     |
+| ascend aic core                            | /                                 | Switch the target cube core of the debugger.                                                                                                                                                                                                                                              | ascend aic 1                           |
+| ascend aiv core                            | /                                 | Switch the target vector core of the debugger.                                                                                                                                                                                                                                            | ascend aiv 5                           |
+| target modules addkernel.o                 | image addkernel.o                 | Import operator debugging information when the PyTorch framework starts operators.<br>(Note: If this command is executed after the program has already been run with the `run` command,<br>an additional `image load` command is required to make the debugging information take effect.) | image addAddCustom\_xxx.o              |
+| target modules load –f kernel.o –s address | image load -f kernel.o -s address | Make the imported debugging information take effect after the program has run.                                                                                                                                                                                                            | image load -f AddCustom\_xxx.o -s 0    |
 
 ## Appendix
 

@@ -14,9 +14,9 @@ MX Scale 是一种 FP8 量化中使用的块级（block-wise）scale，以 `floa
 
 ## 引用的 Tile 组件
 
-| 成员别名 | 来源 |
-| :------ | :------ |
-| `CopyGmToL1A` ~ `CopyL1ToBT` | 继承自 `PackedTileCopyTla<ArchTag, ...>` |
+| 成员别名                     | 来源                                                     |
+| :--------------------------- | :------------------------------------------------------- |
+| `CopyGmToL1A` ~ `CopyL1ToBT` | 继承自 `PackedTileCopyTla<ArchTag, ...>`                 |
 | `CopyGmToL1MxScaleA`（新增） | `TileCopyTla<ArchTag, TensorMxScaleA, TensorL1MxScaleA>` |
 | `CopyGmToL1MxScaleB`（新增） | `TileCopyTla<ArchTag, TensorMxScaleB, TensorL1MxScaleB>` |
 

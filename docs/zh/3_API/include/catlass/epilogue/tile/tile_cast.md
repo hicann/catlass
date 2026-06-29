@@ -24,12 +24,12 @@ template <
 struct TileCast;
 ```
 
-| 模板参数 | 说明 |
-| :------ | :------ |
-| `ArchTag_` | 架构标签，通常为 `Arch::AtlasA2` 或 `Arch::Ascend950` |
-| `DstType_` | 目标数据类型，通过 `DstType_::Element` 获取元素类型 |
-| `SrcType_` | 源数据类型，通过 `SrcType_::Element` 获取元素类型 |
-| `TileShape_` | Tile 形状类型，通过 `TileShape_::COUNT` 获取元素总数 |
+| 模板参数     | 说明                                                  |
+| :----------- | :---------------------------------------------------- |
+| `ArchTag_`   | 架构标签，通常为 `Arch::AtlasA2` 或 `Arch::Ascend950` |
+| `DstType_`   | 目标数据类型，通过 `DstType_::Element` 获取元素类型   |
+| `SrcType_`   | 源数据类型，通过 `SrcType_::Element` 获取元素类型     |
+| `TileShape_` | Tile 形状类型，通过 `TileShape_::COUNT` 获取元素总数  |
 
 ## 调用接口
 
@@ -40,10 +40,10 @@ void operator()(
 )
 ```
 
-| 参数 | 说明 |
-| :------ | :------ |
+| 参数    | 说明                                       |
+| :------ | :----------------------------------------- |
 | `ubOut` | 目标 UB Tensor，类型为 `DstType_::Element` |
-| `ubIn` | 源 UB Tensor，类型为 `SrcType_::Element` |
+| `ubIn`  | 源 UB Tensor，类型为 `SrcType_::Element`   |
 
 内部通过 `AscendC::Cast(ubOut, ubIn, AscendC::RoundMode::CAST_RINT, TileShape::COUNT)` 实现类型转换。
 

@@ -23,12 +23,12 @@ kernels/common/
 
 `IsNeedPadding(layout, align)` 判断矩阵是否需要 padding：
 
-| 布局 | 条件 | 步幅检查 |
-|------|------|----------|
-| `RowMajor` | stride(0) < 65536 ? stride(0) % align != 0 : true | stride(0) = cols |
+| 布局          | 条件                                              | 步幅检查         |
+| ------------- | ------------------------------------------------- | ---------------- |
+| `RowMajor`    | stride(0) < 65536 ? stride(0) % align != 0 : true | stride(0) = cols |
 | `ColumnMajor` | stride(1) < 65536 ? stride(1) % align != 0 : true | stride(1) = rows |
-| `zN` | 始终 false（数据搬运层处理 padding） | — |
-| `nZ` | 始终 false（数据搬运层处理 padding） | — |
+| `zN`          | 始终 false（数据搬运层处理 padding）              | —                |
+| `nZ`          | 始终 false（数据搬运层处理 padding）              | —                |
 
 阈值 65536 和对齐参数 `align`（默认 256）以元素单位计。
 
@@ -47,6 +47,7 @@ RunKernel<Kernel>(args, stream, coreNum):
 ```
 
 `KERNEL_NAME` 和 `KERNEL_TYPE` 宏由 JIT 编译器设置：
+
 - `KERNEL_NAME` = 内核名（如 `"BasicMatmul"`）
 - `KERNEL_TYPE` = `__cube__` / `__vector__` / `__mix__(...)`
 
@@ -76,10 +77,10 @@ ApplyOptMacros(macros, m, n, k, isNzA, isTransA, isNzB, isTransB, align=256);
 
 生成的宏：
 
-| 宏 | 值 | 描述 |
-|-----|------|------|
-| `CATLASS_JIT_NEED_PADDING_A` | "0" / "1" | 矩阵 A 是否需要 padding |
-| `CATLASS_JIT_NEED_PADDING_B` | "0" / "1" | 矩阵 B 是否需要 padding |
+| 宏                            | 值                                      | 描述                             |
+| ----------------------------- | --------------------------------------- | -------------------------------- |
+| `CATLASS_JIT_NEED_PADDING_A`  | "0" / "1"                               | 矩阵 A 是否需要 padding          |
+| `CATLASS_JIT_NEED_PADDING_B`  | "0" / "1"                               | 矩阵 B 是否需要 padding          |
 | `CATLASS_JIT_BLOCK_SCHEDULER` | `BlockScheduler30` / `BlockScheduler31` | 调度器变体 (m > n → 30, 否则 31) |
 
 Padding 逻辑委托给 `common.h::IsNeedPadding`：

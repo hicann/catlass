@@ -12,6 +12,7 @@
 ## Function
 
 Performs the following mathematical calculation:
+
 $$
 out = ReLU(a × b)
 $$

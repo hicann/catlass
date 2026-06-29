@@ -1,5 +1,5 @@
 # Block Epilogue Visitor 偏特化
->
+
 > 代码位置：`include/catlass/epilogue/block/block_epilogue_visitor.hpp`
 
 ## 功能说明

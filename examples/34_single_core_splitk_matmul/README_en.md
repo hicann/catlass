@@ -2,18 +2,18 @@
 
 ## Description
 
- - Operator function: Optimized matrix multiplication computation. For details about the optimization strategy, see the [Single-Core Split-K Policy Description](./34_single_splitk_matmul.md).
+- Operator function: Optimized matrix multiplication computation. For details about the optimization strategy, see the [Single-Core Split-K Policy Description](./34_single_splitk_matmul.md).
 
 ## Parameters
 
 The command-line arguments for this sample include $M$, $N$, $K$, and `deviceId`, adhering to the identical structural criteria used in [00_basic_matmul Parameters](../00_basic_matmul/README.md#parameters).
 The underlying operator prototype is structured as follows:
 
-|Name|Class|Data Type|Dimensions|Format|Description|
-|---|---|---|---|---|---|
-|matA|inTensor|fp16\|bf16\|fp32|[m, k]|ND\|NZ|Left matrix; supports transposition.|
-|matB|inTensor|fp16\|bf16\|fp32|[k, n]|ND\|NZ|Right matrix; supports transposition.|
-|matC|outTensor|fp16\|bf16\|fp32|[m, n]|ND|Output matrix.|
+| Name | Class     | Data Type        | Dimensions | Format | Description                           |
+| ---- | --------- | ---------------- | ---------- | ------ | ------------------------------------- |
+| matA | inTensor  | fp16\|bf16\|fp32 | [m, k]     | ND\|NZ | Left matrix; supports transposition.  |
+| matB | inTensor  | fp16\|bf16\|fp32 | [k, n]     | ND\|NZ | Right matrix; supports transposition. |
+| matC | outTensor | fp16\|bf16\|fp32 | [m, n]     | ND     | Output matrix.                        |
 
 ## Constraints
 
@@ -27,7 +27,7 @@ The sample code is organized as follows:
 ├── 34_single_splitk_matmul
 │   ├── CMakeLists.txt           # CMake build file
 │   ├── single_core_splitk.cpp   # Main file
-│   └── README.md                
+│   └── README.md
 ```
 
 ## Example

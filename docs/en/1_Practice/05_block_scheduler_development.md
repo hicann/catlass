@@ -10,7 +10,7 @@ Block scheduler adopts a template-based design and supports multiple scheduling 
 - Snake scanning
 - Dynamic task allocation
 
-This document uses `GemmIdentityBlockSwizzle` as an example to dive into the code structure, main interfaces, and scheduling policies of the block swizzle.  
+This document uses `GemmIdentityBlockSwizzle` as an example to dive into the code structure, main interfaces, and scheduling policies of the block swizzle.
 
 ## 2. Template Assembly Mechanism
 
@@ -25,10 +25,10 @@ struct GemmIdentityBlockSwizzle {
 
 ### 2.1 Core Template Parameters
 
-| Parameter| Description|
-|--------|------|
-| SwizzleOffset | Offset for window-based scheduling, which defaults to 1|
-| SwizzleDirection | Scheduling direction. 0 (default) for Zn direction, 1 for Nz direction|
+| Parameter        | Description                                                            |
+| ---------------- | ---------------------------------------------------------------------- |
+| SwizzleOffset    | Offset for window-based scheduling, which defaults to 1                |
+| SwizzleDirection | Scheduling direction. 0 (default) for Zn direction, 1 for Nz direction |
 
 These template parameters are related to the **specific implementation** of scheduling algorithms. They allow users to flexibly configure the scheduling policies to adapt to different hardware architectures and performance requirements.
 
@@ -38,8 +38,8 @@ GemmIdentityBlockSwizzle contains the following core data members for maintainin
 
 ```cpp
 /// Data members
-GemmCoord problemShape;  // Problem shape, which contains M, N, K dimensions 
-MatrixCoord tileMN;      // Tile shape, which contains M and N dimensions 
+GemmCoord problemShape;  // Problem shape, which contains M, N, K dimensions
+MatrixCoord tileMN;      // Tile shape, which contains M and N dimensions
 MatrixCoord loopsMN;     // Loop counts for M and N dimensions
 ```
 
@@ -216,16 +216,16 @@ struct DynamicGemmIdentityBlockSwizzle : public GemmIdentityBlockSwizzle<>
 {
     uint32_t swizzleOffset{1};
     uint32_t swizzleDirection{0};
-    
+
     // Constructor and method
-    
+
     CATLASS_DEVICE
     void SetSwizzleParams(uint32_t swizzleOffset_, uint32_t swizzleDirection_)
     {
         swizzleOffset = swizzleOffset_;
         swizzleDirection = swizzleDirection_;
     }
-    
+
     // Overridden GetBlockCoord method
 };
 ```

@@ -28,8 +28,8 @@ struct TileCopyFAQTla {
 
 ## 偏特化实现（全 AtlasA2）
 
-| 方向 | 实现位置 | API 文档 |
-| :------ | :------ | :------ |
+| 方向                | 实现位置                    | API 文档                                               |
+| :------------------ | :-------------------------- | :----------------------------------------------------- |
 | GM RowMajor → L1 zN | `atlasa2/copy_gm_to_l1.hpp` | [copy_gm_to_l1](../copy_gm_to_l1/tile_copy_faq_tla.md) |
 
 与常规 `TileCopyTla` GM→L1 的区别：DataCopy 参数 `col * sizeof(Element)` 替代 `col * sizeof(Element) / ELE_NUM_PER_BLK`，直接逐列拷贝而非 32B 对齐块拷贝。

@@ -14,15 +14,15 @@
 
 ## 引用的 Tile 组件
 
-| 成员别名 | 引用的底层模板 | 说明 |
-| :------ | :------ | :------ |
-| `CopyGmToL1A` | `CopyGmToL1<ArchTag, AType>` | A 矩阵 GM→L1 |
-| `CopyGmToL1B` | `CopyGmToL1<ArchTag, BType>` | B 矩阵 GM→L1 |
-| `CopyL1ToL0A` | `CopyL1ToL0A<ArchTag, L1AType>` | A 矩阵 L1→L0A |
-| `CopyL1ToL0B` | `CopyL1ToL0B<ArchTag, L1BType>` | B 矩阵 L1→L0B |
-| `CopyL0CToGm` | `CopyL0CToGm<ArchTag, ElementAccumulator, CType, NO_QUANT>` | L0C→GM（非量化） |
-| `CopyGmToL1Bias` | `CopyGmToL1<ArchTag, ...>` 或 `void` | Bias GM→L1 |
-| `CopyL1ToBT` | `CopyL1ToBT<ArchTag, ...>` 或 `void` | Bias L1→BT |
+| 成员别名         | 引用的底层模板                                              | 说明             |
+| :--------------- | :---------------------------------------------------------- | :--------------- |
+| `CopyGmToL1A`    | `CopyGmToL1<ArchTag, AType>`                                | A 矩阵 GM→L1     |
+| `CopyGmToL1B`    | `CopyGmToL1<ArchTag, BType>`                                | B 矩阵 GM→L1     |
+| `CopyL1ToL0A`    | `CopyL1ToL0A<ArchTag, L1AType>`                             | A 矩阵 L1→L0A    |
+| `CopyL1ToL0B`    | `CopyL1ToL0B<ArchTag, L1BType>`                             | B 矩阵 L1→L0B    |
+| `CopyL0CToGm`    | `CopyL0CToGm<ArchTag, ElementAccumulator, CType, NO_QUANT>` | L0C→GM（非量化） |
+| `CopyGmToL1Bias` | `CopyGmToL1<ArchTag, ...>` 或 `void`                        | Bias GM→L1       |
+| `CopyL1ToBT`     | `CopyL1ToBT<ArchTag, ...>` 或 `void`                        | Bias L1→BT       |
 
 ## 模板原型
 
@@ -42,6 +42,7 @@ struct TileCopyWithPrologue;
 ## 成员类型推导
 
 与 `TileCopy` 基本一致，额外增加：
+
 ```cpp
 using PrologueA = PrologueA_;
 using PrologueB = PrologueB_;
@@ -49,10 +50,10 @@ using PrologueB = PrologueB_;
 
 ## 与 TileCopyWithPrologueDeqPerTensor 的区别
 
-| 模板 | CopyL0CToGm 量化粒度 | 适用场景 |
-| :------ | :------ | :------ |
-| `TileCopyWithPrologue` | `NO_QUANT`（默认） | Prologue 预处理，无需量化写回 |
-| `TileCopyWithPrologueDeqPerTensor` | `PER_TENSOR` | Prologue 反量化 + per-tensor 量化写回 |
+| 模板                               | CopyL0CToGm 量化粒度 | 适用场景                              |
+| :--------------------------------- | :------------------- | :------------------------------------ |
+| `TileCopyWithPrologue`             | `NO_QUANT`（默认）   | Prologue 预处理，无需量化写回         |
+| `TileCopyWithPrologueDeqPerTensor` | `PER_TENSOR`         | Prologue 反量化 + per-tensor 量化写回 |
 
 ## 调用示例
 

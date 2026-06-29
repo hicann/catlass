@@ -21,6 +21,7 @@
 
 - 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)，本用例为 Ascend950（3510）算子，编译时需加 `-DCATLASS_ARCH=3510`
 - 执行算子
+
 ```
 # 编译指定用例
 bash scripts/build.sh 53_ascend950_fp8_mx_matmul -DCATLASS_ARCH=3510
@@ -38,12 +39,15 @@ bash scripts/build.sh 53_ascend950_fp8_mx_matmul_aswt -DCATLASS_ARCH=3510
 # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID
 # Device ID可选，默认为0
 ```
+
 执行结果如下，说明精度比对成功。
+
 ```
 Compare success.
 ```
 
 ## 使用说明
+
 1、 `gen_data.py`的输入支持trans_a和trans_b，但53_ascend950_fp8_mx_matmul可执行文件不支持，仅仅是trans_a为0及trans_b为1的example示例。
 
 若要对应转置情况请修改example示例中的layout，因为layout隐式表征转置状态，即layout::RowMajor表示不转置，layout::ColumnMajor表示转置。
@@ -51,7 +55,7 @@ Compare success.
 其对应关系如下表：
 
 | trans_a | trans_b | LayoutA             | LayoutB             |
-|---------|---------|---------------------|---------------------|
+| ------- | ------- | ------------------- | ------------------- |
 | 0       | 0       | layout::RowMajor    | layout::RowMajor    |
 | 0       | 1       | layout::RowMajor    | layout::ColumnMajor |
 | 1       | 0       | layout::ColumnMajor | layout::RowMajor    |
@@ -70,16 +74,16 @@ MxScaleA、MxScaleB支持数据类型为float8_e8m0
 
 3、 MxMatmul默认使用的DispatchPolicy MxMmad支持以下几个模板参数：
 
-|模板参数|默认值|参数说明|
-|---------|-----------------|-----------------|
-|ArchTag| 无 | 指定架构型号 |
-|enableUnitFlag| false | 是否开启Unitflag，开启L0C多缓冲时必须设置为false |
-|l0CStages| 1 | 指定L0C的缓冲区数量，设置为2即可开启L0C双缓冲|
-|enableL1Resident| false | 是否开启L1常驻 |
-|l1AStages | 2 | L1上加载矩阵A的Buffer数量 |
-|l1BStages | 2 | L1上加载矩阵B的Buffer数量 |
-|l0AStages | 2 | L0上加载矩阵A的Buffer数量 |
-|l0BStages | 2 | L0上加载矩阵B的Buffer数量 |
+| 模板参数         | 默认值 | 参数说明                                         |
+| ---------------- | ------ | ------------------------------------------------ |
+| ArchTag          | 无     | 指定架构型号                                     |
+| enableUnitFlag   | false  | 是否开启Unitflag，开启L0C多缓冲时必须设置为false |
+| l0CStages        | 1      | 指定L0C的缓冲区数量，设置为2即可开启L0C双缓冲    |
+| enableL1Resident | false  | 是否开启L1常驻                                   |
+| l1AStages        | 2      | L1上加载矩阵A的Buffer数量                        |
+| l1BStages        | 2      | L1上加载矩阵B的Buffer数量                        |
+| l0AStages        | 2      | L0上加载矩阵A的Buffer数量                        |
+| l0BStages        | 2      | L0上加载矩阵B的Buffer数量                        |
 
 设矩阵Shape为`M N K`, L1上的分块大小为`m1 n1 k1`，M方向的分块数量`mTiles = CeilDiv(M, m1)`，N方向的分块数量`nTiles = CeilDiv(N, n1)`，总任务数为`taskBlocks = mTiles * nTiles`，在以下两种情况下可以选择开启enableL1Resident：
 

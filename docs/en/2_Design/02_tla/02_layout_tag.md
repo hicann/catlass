@@ -6,19 +6,19 @@ This document introduces `LayoutTag` in CATLASS, that is, the legacy layout syst
 
 `LayoutTag` is the layout implementation from the early versions of CATLASS, defined under the `Catlass::layout` namespace. Unlike the new `tla::Layout`, `LayoutTag` binds the layout type and parameters into **fixed struct types**. Each layout pattern corresponds to an independent struct.
 
-| LayoutTag | Description| RANK |
-| --- | --- | --- |
-| `RowMajor` | Row-major matrix layout| 2 |
-| `ColumnMajor` | Column-major matrix layout| 2 |
-| `VectorLayout` | One-dimensional vector layout| 1 |
-| `zN` | Row-major within fractal, column-major between fractals| 4 |
-| `nZ` | Column-major within fractal, row-major between fractals| 4 |
-| `zZ` | Row-major within fractal, row-major between fractals| 4 |
-| `nN` | Column-major within fractal, column-major between fractals| 4 |
-| `PaddingRowMajor` | Row-major tiled layout with padding| 4 |
-| `PaddingColumnMajor` | Column-major tiled layout with padding| 4 |
-| `NDC1HWC0` | 5D convolution tensor layout| 5 |
-| `KDC1KHKWN1N0C0` | 4D convolution weight layout| 4 |
+| LayoutTag            | Description                                                | RANK |
+| -------------------- | ---------------------------------------------------------- | ---- |
+| `RowMajor`           | Row-major matrix layout                                    | 2    |
+| `ColumnMajor`        | Column-major matrix layout                                 | 2    |
+| `VectorLayout`       | One-dimensional vector layout                              | 1    |
+| `zN`                 | Row-major within fractal, column-major between fractals    | 4    |
+| `nZ`                 | Column-major within fractal, row-major between fractals    | 4    |
+| `zZ`                 | Row-major within fractal, row-major between fractals       | 4    |
+| `nN`                 | Column-major within fractal, column-major between fractals | 4    |
+| `PaddingRowMajor`    | Row-major tiled layout with padding                        | 4    |
+| `PaddingColumnMajor` | Column-major tiled layout with padding                     | 4    |
+| `NDC1HWC0`           | 5D convolution tensor layout                               | 5    |
+| `KDC1KHKWN1N0C0`     | 4D convolution weight layout                               | 4    |
 
 The code of all LayoutTags is located in [`include/catlass/layout/matrix.hpp`](../../../../include/catlass/layout/matrix.hpp), [`vector.hpp`](../../../../include/catlass/layout/vector.hpp), and [`tensor.hpp`](../../../../include/catlass/layout/tensor.hpp), and is collectively referenced by [`include/catlass/layout/layout.hpp`](../../../../include/catlass/layout/layout.hpp).
 
@@ -45,7 +45,7 @@ template <class LayoutTag>
 auto MakeLayoutFromTag(LayoutTag const& tag);
 ```
 
-Internally, based on the specific type of LayoutTag, it extracts its `shape()` and `stride()` to construct the corresponding `tla::Layout`:  
+Internally, based on the specific type of LayoutTag, it extracts its `shape()` and `stride()` to construct the corresponding `tla::Layout`:
 
 - `RowMajor` → `Layout<Shape<rows, cols>, Stride<ldm, _1>>`
 - `ColumnMajor` → `Layout<Shape<rows, cols>, Stride<_1, ldm>>`
@@ -71,7 +71,7 @@ For fractal layouts (`zN`, `nZ` and `zZ`), `TagToLayout` calculates `ELE_NUM_PER
 
 ### Relationship Summary
 
-```
+```cpp
     LayoutTag (Old)                                    tla::Layout (New)
 ─────────────                       ────────────────
 RowMajor::MakeLayout(m, k)  ────►  MakeLayout<Element, RowMajor>(m, k)
@@ -86,15 +86,15 @@ In short, **LayoutTag is the specific layout type from the legacy system. New co
 
 All LayoutTags provide the following core interfaces:
 
-| Interface| Return Type| Description|
-| --- | --- | --- |
-| `MakeLayout<Element>(rows, cols)` | Its own type| Static factory method that constructs a layout based on element type and logical size.|
-| `GetOffset(coord)` | `LongIndex` | Computes the linear offset corresponding to a logical coordinate.|
-| `GetTileLayout(tileShape)` | Its own type| Returns a layout view of a sub-tile. Stride is inherited from the parent layout.|
-| `shape()` / `shape(idx)` | `Shape` / `Index` | Obtains the shape of the layout (which may include a tile structure).|
-| `stride()` / `stride(idx)` | `Stride` / `LongIndex` | Gets the stride along each dimension.|
-| `orgShape(idx)` | `Index` | Gets the logical original size (only available for fractal layouts).|
-| `Capacity()` | `LongIndex` | Returns the total number of elements occupied by the layout.|
+| Interface                         | Return Type            | Description                                                                            |
+| --------------------------------- | ---------------------- | -------------------------------------------------------------------------------------- |
+| `MakeLayout<Element>(rows, cols)` | Its own type           | Static factory method that constructs a layout based on element type and logical size. |
+| `GetOffset(coord)`                | `LongIndex`            | Computes the linear offset corresponding to a logical coordinate.                      |
+| `GetTileLayout(tileShape)`        | Its own type           | Returns a layout view of a sub-tile. Stride is inherited from the parent layout.       |
+| `shape()` / `shape(idx)`          | `Shape` / `Index`      | Obtains the shape of the layout (which may include a tile structure).                  |
+| `stride()` / `stride(idx)`        | `Stride` / `LongIndex` | Gets the stride along each dimension.                                                  |
+| `orgShape(idx)`                   | `Index`                | Gets the logical original size (only available for fractal layouts).                   |
+| `Capacity()`                      | `LongIndex`            | Returns the total number of elements occupied by the layout.                           |
 
 ## Detailed Explanation of Each LayoutTag
 
@@ -125,7 +125,7 @@ auto tag = RowMajor::MakeLayout<Element>(rows, cols);
 
 **GetOffset Calculation:**
 
-```
+```cpp
 offset = row * stride[0] + col
 ```
 
@@ -133,7 +133,7 @@ That is, `offset = row * ldm + col`.
 
 **Visualization**: The following uses a 3×4 matrix as an example to show the RowMajor memory layout.
 
-```
+```cpp
 Logical matrix (3 rows × 4 cols):
         col0  col1  col2  col3
 row0:   a00   a01   a02   a03
@@ -172,13 +172,13 @@ auto tag = ColumnMajor::MakeLayout<Element>(rows, cols);
 
 **GetOffset Calculation:**
 
-```
+```cpp
 offset = row + col * stride[1]
 ```
 
 **Visualization**: The following uses a 3×4 matrix as an example to show the ColumnMajor memory layout.
 
-```
+```cpp
 Logical matrix (3 rows × 4 cols):
         col0  col1  col2  col3
 row0:   a00   a01   a02   a03
@@ -221,19 +221,20 @@ struct zN {
 
 The shape structure is `(rowsInFractal, rowsByFractal, colsInFractal, colsByFractal)`, that is:
 
-```
+```cpp
 shape = (C0_NUM_PER_FRACTAL, rowsRound / C0_NUM_PER_FRACTAL,
          ELE_NUM_PER_C0,      colsRound / ELE_NUM_PER_C0)
 ```
 
 In the preceding information:
+
 - `C0_NUM_PER_FRACTAL` = 16 (number of rows in each fractal)
 - `ELE_NUM_PER_C0` = `BYTE_PER_C0 / sizeof(Element)` (number of elements in each C0 unit)
 - `ELE_NUM_PER_FRACTAL` = `BYTE_PER_FRACTAL / sizeof(Element)` (total number of elements in each fractal)
 
 **GetOffset Calculation:**
 
-```
+```cpp
 offset = (row / rowsInFractal) * strideRowsByFractal
        + (col / colsInFractal) * strideColsByFractal
        + (row % rowsInFractal) * strideRowsInFractal
@@ -242,7 +243,7 @@ offset = (row / rowsInFractal) * strideRowsByFractal
 
 **Visualization:** For ease of understanding, simplified parameters are used for demonstration (C0_NUM_PER_FRACTAL=2, ELE_NUM_PER_C0=2), with an original matrix of size 4 × 6:
 
-```
+```cpp
 Original logical matrix (4 rows × 6 cols):
         col0  col1  col2  col3  col4  col5
 row0:   a00   a01   a02   a03   a04   a05
@@ -288,7 +289,7 @@ The shape structure is `(ELE_NUM_PER_C0, rowsRound / ELE_NUM_PER_C0, C0_NUM_PER_
 
 **Visualization**: The following uses the same original matrix and fractal division as zN to compare the layout differences of nZ.
 
-```
+```cpp
 Original logical matrix (4 rows × 6 cols):
         col0  col1  col2  col3  col4  col5
 row0:   a00   a01   a02   a03   a04   a05
@@ -327,7 +328,7 @@ For example, F00 (fractal in row 0, column 0) is followed by F01 (fractal in row
 
 Using the same matrix can intuitively exhibit the differences between zN and nZ layouts:
 
-```
+```cpp
 Mapping from original matrix coordinates to memory addresses:
 
 Element   Coordinate   zN Offset   nZ Offset
@@ -360,12 +361,12 @@ nN is the transpose counterpart of `zZ`.
 
 ### Comparison of Four Fractal Layouts
 
-| Layout| Within Fractal| Between Fractals| Typical Use Case|
-| --- | --- | --- | --- |
-| `zN` | Row-major | Col-major | Matrix A input for CUBE core|
-| `nZ` | Col-major | Row-major | Matrix B input for CUBE core|
-| `zZ` | Row-major | Row-major | Special layout scenarios|
-| `nN` | Col-major | Col-major | Special layout scenarios|
+| Layout | Within Fractal | Between Fractals | Typical Use Case             |
+| ------ | -------------- | ---------------- | ---------------------------- |
+| `zN`   | Row-major      | Col-major        | Matrix A input for CUBE core |
+| `nZ`   | Col-major      | Row-major        | Matrix B input for CUBE core |
+| `zZ`   | Row-major      | Row-major        | Special layout scenarios     |
+| `nN`   | Col-major      | Col-major        | Special layout scenarios     |
 
 ### PaddingRowMajor / PaddingColumnMajor
 
@@ -426,11 +427,11 @@ LayoutTag is passed as a template parameter to components such as TileCopy, allo
 
 ## Recommendations for Choosing Between LayoutTag and tla::Layout
 
-| Scenario| Recommendation|
-| --- | --- |
-| Newly written kernel/tile code| Directly use `tla::Layout` and construct it using `MakeLayout(shape, stride)`.|
-| Compatibility with the legacy GEMM framework| Use LayoutTag as the template parameter and bridge it to `tla::Layout` internally using `MakeLayout<Element, LayoutTag>()`.|
-| Simple matrix multiplication (row-major/column-major)| Both work, but LayoutTag is more concise.|
-| Flexible layout customization| Use `tla::Layout`. LayoutTag supports only a few fixed patterns.|
+| Scenario                                              | Recommendation                                                                                                              |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Newly written kernel/tile code                        | Directly use `tla::Layout` and construct it using `MakeLayout(shape, stride)`.                                              |
+| Compatibility with the legacy GEMM framework          | Use LayoutTag as the template parameter and bridge it to `tla::Layout` internally using `MakeLayout<Element, LayoutTag>()`. |
+| Simple matrix multiplication (row-major/column-major) | Both work, but LayoutTag is more concise.                                                                                   |
+| Flexible layout customization                         | Use `tla::Layout`. LayoutTag supports only a few fixed patterns.                                                            |
 
 Core principle: LayoutTag is a shortcut for fixed layout patterns. `tla::Layout` is the general-purpose layout representation. For new code, primarily use `tla::Layout`, with LayoutTag serving as a compatibility layer and convenient entry point.

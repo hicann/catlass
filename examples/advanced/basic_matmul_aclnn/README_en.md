@@ -48,42 +48,42 @@ Sample code:
   - Add the architecture macro option `-DCATLASS_ARCH=${ARCH}`. `${ARCH}` indicates the ID of the corresponding architecture.
 - The default value varies according to the CANN version.
   - CANN version >= `9.0.0.beta2`
-  
-      ```diff
-      # ...
-      + npu_op_kernel_options(ascendc_kernels ALL OPTIONS -I${CATLASS_INCLUDE_PATH})
-      # ...
-      ```
+
+    ```diff
+    # ...
+    + npu_op_kernel_options(ascendc_kernels ALL OPTIONS -I${CATLASS_INCLUDE_PATH})
+    # ...
+    ```
 
   - CANN version < `9.0.0.beta2`
-  
-      ```diff
-      # set custom compile options
-      if ("${CMAKE_BUILD_TYPE}x" STREQUAL "Debugx")
-          add_ops_compile_options(ALL OPTIONS -g -O0)
-      endif()
-      + add_ops_compile_options(ALL OPTIONS -I${CATLASS_INCLUDE_PATH})
-      add_kernels_compile()
-      ```
+
+    ```diff
+    # set custom compile options
+    if ("${CMAKE_BUILD_TYPE}x" STREQUAL "Debugx")
+        add_ops_compile_options(ALL OPTIONS -g -O0)
+    endif()
+    + add_ops_compile_options(ALL OPTIONS -I${CATLASS_INCLUDE_PATH})
+    add_kernels_compile()
+    ```
 
 - The split compilation toolchain used by `msOpGen` projects does not support passing high-level C++ structures (such as `Catlass::GemmCoord`) directly as kernel entry-point parameters. To pass structured configuration parameters, serialize the field members through the `tiling` structural data buffer on the host, and reconstruct the concrete instance manually within the device kernel code.
 
-    ```cpp
-    // Correct
-    extern "C" __global__ __aicore__ void
-    catlass_basic_matmul(GM_ADDR self, GM_ADDR mat2, GM_ADDR out, GM_ADDR workspace, GM_ADDR tiling)
-    {
-        GET_TILING_DATA(tiling_data, tiling);
-        Catlass::GemmCoord problemShape{tiling_data.m, tiling_data.n, tiling_data.k};
-        // ...
-    }
-    // Unsupported currently
-    extern "C" __global__ __aicore__ void
-    catlass_basic_matmul(GM_ADDR self, GM_ADDR mat2, GM_ADDR out, GM_ADDR workspace,  Catlass::GemmCoord problemShape)
-    {
-        // ...
-    }
-    ```
+  ```cpp
+  // Correct
+  extern "C" __global__ __aicore__ void
+  catlass_basic_matmul(GM_ADDR self, GM_ADDR mat2, GM_ADDR out, GM_ADDR workspace, GM_ADDR tiling)
+  {
+      GET_TILING_DATA(tiling_data, tiling);
+      Catlass::GemmCoord problemShape{tiling_data.m, tiling_data.n, tiling_data.k};
+      // ...
+  }
+  // Unsupported currently
+  extern "C" __global__ __aicore__ void
+  catlass_basic_matmul(GM_ADDR self, GM_ADDR mat2, GM_ADDR out, GM_ADDR workspace,  Catlass::GemmCoord problemShape)
+  {
+      // ...
+  }
+  ```
 
 ## 4. Compilation and Deployment
 
@@ -124,11 +124,11 @@ target_link_directories(basic_matmul_aclnn PRIVATE
     # Directory of the custom operator library file
     $ENV{ASCEND_HOME_PATH}/opp/vendors/customize/op_api/lib/
 )
-target_link_libraries(basic_matmul_aclnn PRIVATE 
-    ascendcl 
+target_link_libraries(basic_matmul_aclnn PRIVATE
+    ascendcl
     nnopbase
     # Name of the custom operator library file
-    cust_opapi 
+    cust_opapi
 )
 ```
 

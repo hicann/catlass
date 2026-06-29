@@ -6,11 +6,11 @@
 
 本文主要覆盖三个样例：
 
-| 样例 | 路径 | 融合形态 |
-| --- | --- | --- |
-| quant_matmul | `examples/12_quant_matmul` | AIC执行int8 matmul，AIV执行per-token/per-channel反量化和写回 |
-| streamk_matmul | `examples/37_streamk_matmul` | AIC执行普通块和尾轮Stream-K块，AIV归约尾轮部分和 |
-| FAI | `examples/49_ascend950_flash_attention_infer` | AIC执行QK/PV，AIV执行Online Softmax/RescaleO |
+| 样例           | 路径                                          | 融合形态                                                     |
+| -------------- | --------------------------------------------- | ------------------------------------------------------------ |
+| quant_matmul   | `examples/12_quant_matmul`                    | AIC执行int8 matmul，AIV执行per-token/per-channel反量化和写回 |
+| streamk_matmul | `examples/37_streamk_matmul`                  | AIC执行普通块和尾轮Stream-K块，AIV归约尾轮部分和             |
+| FAI            | `examples/49_ascend950_flash_attention_infer` | AIC执行QK/PV，AIV执行Online Softmax/RescaleO                 |
 
 CV融合算子性能调优时不能只看单个阶段的算力利用率，它的调优收益来自阶段重叠，最终耗时通常由最长流水、流水空泡、核间长尾、GM workspace搬运和同步开销共同决定。
 
@@ -22,12 +22,12 @@ CV融合算子性能调优时不能只看单个阶段的算力利用率，它的
 
 采集数据时建议准备两组结果：
 
-| 数据 | 用途 |
-| --- | --- |
-| 融合kernel总耗时 | 判断整体收益和不同参数组合的最终效果 |
-| AIC/AIV/MTE/FixPipe流水占比 | 判断是Cube/Vector、搬运/写回成为瓶颈 |
-| 每核任务量或每核耗时 | 判断核间负载是否均衡 |
-| workspace大小和对齐信息 | 判断CV阶段间中间结果是否引入额外GM瓶颈 |
+| 数据                        | 用途                                   |
+| --------------------------- | -------------------------------------- |
+| 融合kernel总耗时            | 判断整体收益和不同参数组合的最终效果   |
+| AIC/AIV/MTE/FixPipe流水占比 | 判断是Cube/Vector、搬运/写回成为瓶颈   |
+| 每核任务量或每核耗时        | 判断核间负载是否均衡                   |
+| workspace大小和对齐信息     | 判断CV阶段间中间结果是否引入额外GM瓶颈 |
 
 如果需要观察更细的流水并行关系，可以结合[性能流水仿真](../evaluation/performance_tools.md#性能流水仿真)，重点看AIC和AIV之间是否存在长时间互等。
 
@@ -81,10 +81,10 @@ using MatmulKernel =
 
 该kernel的融合边界在`include/catlass/gemm/kernel/quant_matmul_multistage_workspace.hpp`中：
 
-| 阶段 | 执行单元 | 工作 |
-| --- | --- | --- |
-| Matmul | AIC | 读取A/B，执行int8 BlockMmad，FixPipe把int32中间结果写到workspace |
-| Epilogue | AIV | 从workspace读取int32，加载`scale`和`perTokenScale`，完成广播乘、类型转换和D写回 |
+| 阶段     | 执行单元 | 工作                                                                            |
+| -------- | -------- | ------------------------------------------------------------------------------- |
+| Matmul   | AIC      | 读取A/B，执行int8 BlockMmad，FixPipe把int32中间结果写到workspace                |
+| Epilogue | AIV      | 从workspace读取int32，加载`scale`和`perTokenScale`，完成广播乘、类型转换和D写回 |
 
 AIC和AIV在workspace槽位形成生产者-消费者流水。AIC写完当前stage后设置`flagAicFinishStoreList[stageId]`，AIV消费完成后设置`flagAivFinishComputeList[stageId]`，AIC在复用同一stage前等待AIV完成。
 
@@ -92,19 +92,19 @@ AIC和AIV在workspace槽位形成生产者-消费者流水。AIC写完当前stag
 
 如果Profiling显示AIC占比高，优先看matmul侧：
 
-| 现象 | 可能原因 | 调优方向 |
-| --- | --- | --- |
-| AIC长时间运行，AIV稀疏 | `L1TileShape`过小或基本块数量过多 | 增大M/N/K tile，减少循环次数 |
-| MTE2占比高 | A/B输入布局或stride不友好 | 检查A RowMajor、B ColumnMajor是否匹配业务输入 |
-| FixPipe占比高 | int32中间结果写workspace压力大 | 检查workspace地址对齐和stage布局 |
+| 现象                   | 可能原因                          | 调优方向                                      |
+| ---------------------- | --------------------------------- | --------------------------------------------- |
+| AIC长时间运行，AIV稀疏 | `L1TileShape`过小或基本块数量过多 | 增大M/N/K tile，减少循环次数                  |
+| MTE2占比高             | A/B输入布局或stride不友好         | 检查A RowMajor、B ColumnMajor是否匹配业务输入 |
+| FixPipe占比高          | int32中间结果写workspace压力大    | 检查workspace地址对齐和stage布局              |
 
 如果AIV占比高，优先看epilogue侧：
 
-| 现象 | 可能原因 | 调优方向 |
-| --- | --- | --- |
-| AIC频繁等待AIV释放stage | 反量化UB tile过小或Vector计算重 | 调整`EpilogueTileShape`、`ubStages`或减少scale搬运 |
-| scale/per-token scale搬运占比高 | scale访问重复，M/N tile不匹配 | 调整M/N tile，让scale复用和输出写回更连续 |
-| 尾块AIV耗时异常 | M/N不对齐导致UB和GM搬运尾块多 | 优先选择能降低尾块比例的TileShape |
+| 现象                            | 可能原因                        | 调优方向                                           |
+| ------------------------------- | ------------------------------- | -------------------------------------------------- |
+| AIC频繁等待AIV释放stage         | 反量化UB tile过小或Vector计算重 | 调整`EpilogueTileShape`、`ubStages`或减少scale搬运 |
+| scale/per-token scale搬运占比高 | scale访问重复，M/N tile不匹配   | 调整M/N tile，让scale复用和输出写回更连续          |
+| 尾块AIV耗时异常                 | M/N不对齐导致UB和GM搬运尾块多   | 优先选择能降低尾块比例的TileShape                  |
 
 **调优要点**
 
@@ -134,11 +134,11 @@ workspace过大时，GM访问和cache压力可能抵消融合收益。
 
 建议只有在下面条件同时满足时再增加stage：
 
-| 条件 | 说明 |
-| --- | --- |
-| AIC单块耗时短于AIV单块耗时 | AIC有机会通过提前计算覆盖AIV |
-| workspace带宽不是瓶颈 | 否则增加stage只会增加GM压力 |
-| 基本块数量足够多 | 太少时首尾flush开销占比高，增加stage收益有限 |
+| 条件                       | 说明                                         |
+| -------------------------- | -------------------------------------------- |
+| AIC单块耗时短于AIV单块耗时 | AIC有机会通过提前计算覆盖AIV                 |
+| workspace带宽不是瓶颈      | 否则增加stage只会增加GM压力                  |
+| 基本块数量足够多           | 太少时首尾flush开销占比高，增加stage收益有限 |
 
 **3. 调整BlockScheduler和Swizzle**
 
@@ -171,9 +171,9 @@ using ReduceAdd =
 
 Stream-K的详细原理可参考[StreamkMatmul说明](../../../../examples/102_dynamic_optimized_matmul/docs/zh/StreamkMatmul.md)。在CV融合视角下，它有两个关键点：
 
-| 优化 | CV融合含义 |
-| --- | --- |
-| 尾轮切K | AIC把尾轮拆成更多K slice，减少尾轮AIC空闲 |
+| 优化         | CV融合含义                                             |
+| ------------ | ------------------------------------------------------ |
+| 尾轮切K      | AIC把尾轮拆成更多K slice，减少尾轮AIC空闲              |
 | 提前计算尾轮 | AIC提前产生尾轮部分和，使AIV归约可以与后续Cube计算重叠 |
 
 **尾轮提前计算**
@@ -206,13 +206,13 @@ B = CeilDiv(M, m1) * CeilDiv(N, n1)
 
 其中`C`为AIC数量。可以按下面方式判断是否应该使用Stream-K：
 
-| 现象 | 判断 |
-| --- | --- |
-| `B % C == 0` | 无尾轮，Stream-K归约开销通常没有收益 |
-| `B < C` | M/N基本块太少，应优先考虑Split-K或更小M/N tile |
-| `B / C == 1` | 只有一轮普通块，提前尾轮可掩盖空间有限 |
-| 尾轮块数很少 | Stream-K更可能受益 |
-| K很短 | 切K后slice过少，AIV归约开销可能超过收益 |
+| 现象         | 判断                                           |
+| ------------ | ---------------------------------------------- |
+| `B % C == 0` | 无尾轮，Stream-K归约开销通常没有收益           |
+| `B < C`      | M/N基本块太少，应优先考虑Split-K或更小M/N tile |
+| `B / C == 1` | 只有一轮普通块，提前尾轮可掩盖空间有限         |
+| 尾轮块数很少 | Stream-K更可能受益                             |
+| K很短        | 切K后slice过少，AIV归约开销可能超过收益        |
 
 **调优要点**
 
@@ -240,12 +240,12 @@ streamk_work = tail_blocks * k_slices_per_block
 
 如果AIV归约成为瓶颈，可检查：
 
-| 参数 | 影响 |
-| --- | --- |
+| 参数             | 影响                                          |
+| ---------------- | --------------------------------------------- |
 | `L1TileShape::N` | 决定每行partial sum长度，影响UB一次可处理行数 |
-| `tail_blocks` | 决定需要归约的Stream-K块数量 |
-| `splitkSliceNum` | 决定每个输出块要累加多少份partial sum |
-| `computeLength` | 决定AIV每次搬运和归约的数据上限 |
+| `tail_blocks`    | 决定需要归约的Stream-K块数量                  |
+| `splitkSliceNum` | 决定每个输出块要累加多少份partial sum         |
+| `computeLength`  | 决定AIV每次搬运和归约的数据上限               |
 
 调优方向通常是避免过大的`L1TileShape::N`导致AIV每次只能处理很少行，同时避免过小tile导致AIC普通块效率下降。
 
@@ -263,11 +263,11 @@ max(2MB, L1TileShape::M * L1TileShape::N * sizeof(ElementAccumulator) * aicCoreN
 
 观察流水图时重点看三件事：
 
-| 目标 | 期望现象 |
-| --- | --- |
-| AIC尾轮提前 | Stream-K块不全部集中在kernel末尾 |
+| 目标        | 期望现象                                   |
+| ----------- | ------------------------------------------ |
+| AIC尾轮提前 | Stream-K块不全部集中在kernel末尾           |
 | AIV归约重叠 | AIV Add/Cast/MTE3与后续AIC BlockMmad有重叠 |
-| 末尾flush短 | kernel尾部只剩少量AIV归约和写回 |
+| 末尾flush短 | kernel尾部只剩少量AIV归约和写回            |
 
 如果AIV归约仍然集中在末尾，通常说明可提前计算的普通块不足、尾轮切分粒度不足或同步点过晚。
 
@@ -285,14 +285,14 @@ QK(AIC) -> Online Softmax(AIV) -> PV(AIC) -> RescaleO(AIV)
 
 FAI样例中的关键优化方向包括：
 
-| 方向 | 说明 |
-| --- | --- |
-| TileShape调整 | 增大`qSeqBase/kvSeqBase`可减少循环和同步次数，但会增加UB/L1/L0占用 |
-| CV流水 | 通过QK、Softmax、PV、RescaleO的跨块重叠减少AIC/AIV互等 |
-| 片上中转 | AIV将Softmax结果P从UB搬到AIC侧L1，避免`UB -> GM -> L1`中转 |
-| 多核负载均衡 | causal或稀疏mask下按有效block数切分，避免按q行均分造成长尾 |
-| Paged Attention | 检查block table、KV cache page连续性和对齐，避免MTE2跳读 |
-| FixPipe和workspace对齐 | 保证输出和workspace分段起始地址按512B等要求对齐 |
+| 方向                   | 说明                                                               |
+| ---------------------- | ------------------------------------------------------------------ |
+| TileShape调整          | 增大`qSeqBase/kvSeqBase`可减少循环和同步次数，但会增加UB/L1/L0占用 |
+| CV流水                 | 通过QK、Softmax、PV、RescaleO的跨块重叠减少AIC/AIV互等             |
+| 片上中转               | AIV将Softmax结果P从UB搬到AIC侧L1，避免`UB -> GM -> L1`中转         |
+| 多核负载均衡           | causal或稀疏mask下按有效block数切分，避免按q行均分造成长尾         |
+| Paged Attention        | 检查block table、KV cache page连续性和对齐，避免MTE2跳读           |
+| FixPipe和workspace对齐 | 保证输出和workspace分段起始地址按512B等要求对齐                    |
 
 更详细的参数解释、资源预算和调优路径可参考[FA算子性能优化](./FA_kernel_optimization.md)。
 
@@ -300,39 +300,39 @@ FAI样例中的关键优化方向包括：
 
 ### Tile和资源
 
-| 检查项 | 说明 |
-| --- | --- |
-| L1/L0/UB是否超限 | Tile变大前先计算静态buffer占用 |
-| M/N基本块数量 | 尽量避免`block_num < aicCoreNum`或尾轮过小 |
-| K方向切分粒度 | Stream-K和Split-K需要足够K slice才能均衡 |
-| epilogue tile | quant_matmul中AIV tile要和AIC输出tile配平 |
+| 检查项           | 说明                                       |
+| ---------------- | ------------------------------------------ |
+| L1/L0/UB是否超限 | Tile变大前先计算静态buffer占用             |
+| M/N基本块数量    | 尽量避免`block_num < aicCoreNum`或尾轮过小 |
+| K方向切分粒度    | Stream-K和Split-K需要足够K slice才能均衡   |
+| epilogue tile    | quant_matmul中AIV tile要和AIC输出tile配平  |
 
 ### CV流水
 
-| 检查项 | 说明 |
-| --- | --- |
-| AIC是否等待AIV | 可能是AIV计算、搬运或stage不足 |
-| AIV是否等待AIC | 可能是Cube、MTE2或FixPipe瓶颈 |
+| 检查项          | 说明                                           |
+| --------------- | ---------------------------------------------- |
+| AIC是否等待AIV  | 可能是AIV计算、搬运或stage不足                 |
+| AIV是否等待AIC  | 可能是Cube、MTE2或FixPipe瓶颈                  |
 | stage数是否合适 | stage过少覆盖不足，过多增加workspace和同步压力 |
-| 首尾flush占比 | 小shape或少循环时融合流水收益有限 |
+| 首尾flush占比   | 小shape或少循环时融合流水收益有限              |
 
 ### 搬运和对齐
 
-| 检查项 | 说明 |
-| --- | --- |
-| 输入layout | A/B/Q/K/V物理布局要匹配kernel的TLA/Layout定义 |
-| GM workspace | 起始地址和分段offset尽量保证512B对齐 |
-| stride | 连续维stride应满足高效DataCopy/FixPipe要求 |
-| 中间结果路径 | 优先片上中转；必须落GM时减少重复读写 |
+| 检查项       | 说明                                          |
+| ------------ | --------------------------------------------- |
+| 输入layout   | A/B/Q/K/V物理布局要匹配kernel的TLA/Layout定义 |
+| GM workspace | 起始地址和分段offset尽量保证512B对齐          |
+| stride       | 连续维stride应满足高效DataCopy/FixPipe要求    |
+| 中间结果路径 | 优先片上中转；必须落GM时减少重复读写          |
 
 ### 负载均衡
 
-| 检查项 | 说明 |
-| --- | --- |
-| 每核基本块数 | Matmul类先看M/N基本块分布 |
+| 检查项          | 说明                                |
+| --------------- | ----------------------------------- |
+| 每核基本块数    | Matmul类先看M/N基本块分布           |
 | 每核有效block数 | FAI causal/mask场景按有效块估算权重 |
-| 尾轮大小 | Stream-K重点看`B % C`和K slice数量 |
-| swizzle | Tile确定后再调swizzle方向和offset |
+| 尾轮大小        | Stream-K重点看`B % C`和K slice数量  |
+| swizzle         | Tile确定后再调swizzle方向和offset   |
 
 ## 4. 总结
 
@@ -340,8 +340,8 @@ CV融合算子的性能优化核心是“配平”和“覆盖”：让AIC和AIV
 
 三个样例的侧重点不同：
 
-| 样例 | 最重要的调优问题 |
-| --- | --- |
-| quant_matmul | AIC int8 matmul和AIV反量化是否配平，workspace stage是否合适 |
-| streamk_matmul | 尾轮是否足够不均衡，提前计算是否覆盖AIV归约 |
-| FAI | QK/Softmax/PV/RescaleO是否形成稳定流水，多核有效block是否均衡 |
+| 样例           | 最重要的调优问题                                              |
+| -------------- | ------------------------------------------------------------- |
+| quant_matmul   | AIC int8 matmul和AIV反量化是否配平，workspace stage是否合适   |
+| streamk_matmul | 尾轮是否足够不均衡，提前计算是否覆盖AIV归约                   |
+| FAI            | QK/Softmax/PV/RescaleO是否形成稳定流水，多核有效block是否均衡 |

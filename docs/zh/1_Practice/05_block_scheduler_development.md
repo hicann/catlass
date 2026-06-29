@@ -25,9 +25,9 @@ struct GemmIdentityBlockSwizzle {
 
 ### 2.1 核心模板参数
 
-| 参数名 | 描述 |
-|--------|------|
-| SwizzleOffset | 窗口化调度的偏移量，默认为1 |
+| 参数名           | 描述                                            |
+| ---------------- | ----------------------------------------------- |
+| SwizzleOffset    | 窗口化调度的偏移量，默认为1                     |
 | SwizzleDirection | 调度方向，0表示按Zn方向，1表示按Nz方向，默认为0 |
 
 这些模板参数与调度策略算法**具体实现**相关，允许用户灵活配置调度策略，以适应不同的硬件架构和性能需求。
@@ -216,16 +216,16 @@ struct DynamicGemmIdentityBlockSwizzle : public GemmIdentityBlockSwizzle<>
 {
     uint32_t swizzleOffset{1};
     uint32_t swizzleDirection{0};
-    
+
     // 构造函数和方法
-    
+
     CATLASS_DEVICE
     void SetSwizzleParams(uint32_t swizzleOffset_, uint32_t swizzleDirection_)
     {
         swizzleOffset = swizzleOffset_;
         swizzleDirection = swizzleDirection_;
     }
-    
+
     // 重写的GetBlockCoord方法
 };
 ```

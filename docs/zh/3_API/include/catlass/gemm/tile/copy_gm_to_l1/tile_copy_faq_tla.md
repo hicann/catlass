@@ -23,9 +23,9 @@ struct TileCopyFAQTla {
 };
 ```
 
-| 模板参数 | 说明 |
-| :------ | :------ |
-| `ArchTag` | 架构标签，仅支持 `Arch::AtlasA2` |
+| 模板参数    | 说明                                                                         |
+| :---------- | :--------------------------------------------------------------------------- |
+| `ArchTag`   | 架构标签，仅支持 `Arch::AtlasA2`                                             |
 | `TensorSrc` | 源 Tensor：`tla::Tensor<GlobalTensor<Element>, Layout, Coord, GM>`，3D shape |
 | `TensorDst` | 目标 Tensor：`tla::Tensor<LocalTensor<Element>, Layout, Coord, A1>`，zN 格式 |
 
@@ -33,9 +33,9 @@ struct TileCopyFAQTla {
 
 ### AtlasA2
 
-| 源 Shape | 目标 Layout | SFINAE 条件 | 说明 |
-| :------ | :------ | :------ | :------ |
-| 3D（ndNum, n, d） | zN | `iszN<LayoutDst>` | Nd2Nz 多矩阵转换，大 stride 回退逐行 |
+| 源 Shape          | 目标 Layout | SFINAE 条件       | 说明                                 |
+| :---------------- | :---------- | :---------------- | :----------------------------------- |
+| 3D（ndNum, n, d） | zN          | `iszN<LayoutDst>` | Nd2Nz 多矩阵转换，大 stride 回退逐行 |
 
 - `ndNum`：矩阵数量（对应 sequence length 维度）
 - `nValue`：行维度

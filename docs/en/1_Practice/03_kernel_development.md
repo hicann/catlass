@@ -34,15 +34,16 @@ public:
 
 ### 2.1 Core Template Parameters
 
-| Parameter| Description|
-|---------|------|
-| BlockMmad_ | The core computation component responsible for matrix multiplication|
-| BlockEpilogue_ | Responsible for epilogues of the computation results (e.g., activation functions, quantization)|
-| BlockScheduler_ | Responsible for scheduling and distributing computational tasks to different compute cores|
+| Parameter       | Description                                                                                     |
+| --------------- | ----------------------------------------------------------------------------------------------- |
+| BlockMmad_      | The core computation component responsible for matrix multiplication                            |
+| BlockEpilogue_  | Responsible for epilogues of the computation results (e.g., activation functions, quantization) |
+| BlockScheduler_ | Responsible for scheduling and distributing computational tasks to different compute cores      |
 
 ### 2.2 Type Export
 
 The types exported through the template parameters form the Kernel's core type system, which includes:
+
 - Architecture tag (ArchTag)
 - L1 cache tile shape (L1TileShape)
 - Data types (ElementA/B/C/Accumulator)
@@ -95,7 +96,7 @@ struct Params {
 
 ### 3.3 Parameter Conversion
 
-The `ToUnderlyingArguments` function converts `Arguments` to `Params`:  
+The `ToUnderlyingArguments` function converts `Arguments` to `Params`:
 
 ```cpp
 static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
@@ -112,7 +113,7 @@ static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
 
 ### 4.1 CanImplement
 
-Checks whether the current hardware and environment support the implementation of this Kernel:  
+Checks whether the current hardware and environment support the implementation of this Kernel:
 
 ```cpp
 static bool CanImplement(const Arguments &args)
@@ -123,7 +124,7 @@ static bool CanImplement(const Arguments &args)
 
 ### 4.2 GetWorkspaceSize
 
-Gets the workspace size required for Kernel execution:  
+Gets the workspace size required for Kernel execution:
 
 ```cpp
 static size_t GetWorkspaceSize(const Arguments &args)
@@ -134,7 +135,7 @@ static size_t GetWorkspaceSize(const Arguments &args)
 
 ### 4.3 operator()
 
-This is the Kernel's core execution function. It supports different core types (such as AIC, AIV) through template specialization:  
+This is the Kernel's core execution function. It supports different core types (such as AIC, AIV) through template specialization:
 
 ```cpp
 template <int32_t CORE_TYPE = g_coreType>
@@ -185,21 +186,24 @@ void operator()<AscendC::AIC>(Params const &params) {
 
 ## 5. Execution Flow Analysis
 
-The Kernel's execution flow divides into the following steps:  
+The Kernel's execution flow divides into the following steps:
 
 ### 5.1 Initializing the Scheduler
+
 ```cpp
 BlockScheduler matmulBlockScheduler(params.problemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
 uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
 ```
 
 ### 5.2 Initializing Resources and Compute Components
+
 ```cpp
 Arch::Resource<ArchTag> resource;
 BlockMmad blockMmad(resource);
 ```
 
 ### 5.3 Setting Global Memory Tensors
+
 ```cpp
 AscendC::GlobalTensor<ElementA> gmA;
 gmA.SetGlobalBuffer((__gm__ ElementA *)params.ptrA);
@@ -207,18 +211,19 @@ gmA.SetGlobalBuffer((__gm__ ElementA *)params.ptrA);
 ```
 
 ### 5.4 Looping Through Each Compute Block
+
 ```cpp
 for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()) {
     // 1. Compute block coordinates.
     GemmCoord blockCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
     GemmCoord actualBlockShape = matmulBlockScheduler.GetActualBlockShape(blockCoord);
-    
+
     // 2. Compute memory offsets.
     MatrixCoord offsetA{blockCoord.m() * L1TileShape::M, blockCoord.k() * L1TileShape::K};
     // Compute offsetB and offsetC...
     int64_t gmOffsetA = params.layoutA.GetOffset(offsetA);
     // Compute gmOffsetB and gmOffsetC...
-    
+
     // 3. Execute block-level matrix multiplication.
     blockMmad(gmA[gmOffsetA], params.layoutA,
               gmB[gmOffsetB], params.layoutB,
@@ -228,13 +233,14 @@ for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += 
 ```
 
 ### 5.5 Synchronization
+
 ```cpp
 AscendC::PipeBarrier<PIPE_ALL>();
 ```
 
 ## 6. Extensions and Differences Among Kernels
 
-By comparing `BasicMatmul`, `BatchedMatmul`, `QuantMatmul`, and `OptimizedMatmul`, you can see their commonalities and differences in the base structure:  
+By comparing `BasicMatmul`, `BatchedMatmul`, `QuantMatmul`, and `OptimizedMatmul`, you can see their commonalities and differences in the base structure:
 
 ### 6.1 BatchedMatmul Extension
 
@@ -250,7 +256,7 @@ struct Params {
     int64_t strideA;      // Added batch stride for matrix A
     GM_ADDR ptrB;
     LayoutB layoutB;
-    int64_t strideB;      // Added batch stride for matrix B 
+    int64_t strideB;      // Added batch stride for matrix B
     GM_ADDR ptrC;
     LayoutC layoutC;
     int64_t strideC;      // Added batch stride for matrix C
@@ -283,7 +289,7 @@ struct Params {
 
 ### 6.3 OptimizedMatmul Extension
 
-`OptimizedMatmul` adds prologue processing and a more complex parameter structure:  
+`OptimizedMatmul` adds prologue processing and a more complex parameter structure:
 
 ```cpp
 template <
@@ -317,4 +323,4 @@ The CATLASS GEMM Kernel adopts a highly modular and template-based design with t
 3. **Unified execution process**: All Kernels follow a similar execution flow, including initialization, scheduling, computation, and synchronization.
 4. **Scalability**: By extending the base structure, developers can easily implement advanced features such as batch processing, quantization, and optimization.
 
-This design allows the CATLASS template library to efficiently support a wide range of GEMM operations while ensuring code maintainability and extensibility.  
+This design allows the CATLASS template library to efficiently support a wide range of GEMM operations while ensuring code maintainability and extensibility.

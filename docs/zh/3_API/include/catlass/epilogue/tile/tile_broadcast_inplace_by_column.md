@@ -23,11 +23,11 @@ template <
 struct TileBroadcastInplaceByColumn;
 ```
 
-| 模板参数 | 说明 |
-| :------ | :------ |
-| `ArchTag_` | 架构标签 |
-| `ComputeType_` | 计算数据类型，通过 `ComputeType_::Element` 获取元素类型 |
-| `TileShape_` | Tile 形状，`TileShape_::ROW` 为行数，`TileShape_::COLUMN` 为列数 |
+| 模板参数       | 说明                                                             |
+| :------------- | :--------------------------------------------------------------- |
+| `ArchTag_`     | 架构标签                                                         |
+| `ComputeType_` | 计算数据类型，通过 `ComputeType_::Element` 获取元素类型          |
+| `TileShape_`   | Tile 形状，`TileShape_::ROW` 为行数，`TileShape_::COLUMN` 为列数 |
 
 ## 调用接口
 
@@ -37,8 +37,8 @@ void operator()(
 )
 ```
 
-| 参数 | 说明 |
-| :------ | :------ |
+| 参数      | 说明                                                    |
+| :-------- | :------------------------------------------------------ |
 | `ubInOut` | UB Tensor，输入为 (m, n) 矩阵，输出第一列被广播到所有列 |
 
 ## 调用示例

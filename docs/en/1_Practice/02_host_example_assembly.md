@@ -117,7 +117,7 @@ static void Run(const Options &options) {
     uint8_t *deviceA{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
-    
+
     // Allocate memory for matrix B on the device and copy matrix B to the device
     uint8_t *deviceB{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
@@ -142,7 +142,7 @@ static void Run(const Options &options) {
     using AType = Gemm::GemmType<half, LayoutA>;
     using BType = Gemm::GemmType<half, LayoutB>;
     using CType = Gemm::GemmType<half, LayoutC>;
-    
+
     // Define the component for performing matrix multiplication at the Block layer
     using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
     using BlockEpilogue = void;
@@ -152,7 +152,7 @@ static void Run(const Options &options) {
 
     // Specify the kernel
     using MatmulKernel = Gemm::Kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
-    
+
     // Define the Device layer adapter
     using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
     MatmulKernel::Arguments arguments{options.problemShape, deviceA, deviceB, deviceC};
@@ -179,11 +179,11 @@ static void Run(const Options &options) {
     if (sizeWorkspace > 0) {
         ACL_CHECK(aclrtFree(deviceWorkspace));
     }
-    
+
     // Move out the output data
     std::vector<fp16_t> hostC(lenC);
     ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
-    
+
     // Calculate precision benchmark and compare with output data
     std::vector<float> hostGolden(lenC);
     golden::ComputeMatmul(options.problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);

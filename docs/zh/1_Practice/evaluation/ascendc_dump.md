@@ -59,7 +59,7 @@ void operator()<AscendC::AIC>(Params const &params) {
 bash scripts/build.sh 00_basic_matmul
 ```
 
-2. 切换到可执行文件的编译目录`output/bin`下，直接执行算子样例程序。
+1. 切换到可执行文件的编译目录`output/bin`下，直接执行算子样例程序。
 
 ```bash
 cd output/bin

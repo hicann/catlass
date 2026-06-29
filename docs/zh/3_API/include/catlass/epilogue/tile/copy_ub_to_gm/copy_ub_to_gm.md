@@ -22,18 +22,18 @@ template <
 struct CopyUb2Gm;
 ```
 
-| 模板参数 | 说明 |
-| :------ | :------ |
-| `ArchTag` | 架构标签：`Arch::AtlasA2` 或 `Arch::Ascend950` |
-| `GmType` | GM 数据类型，`Gemm::GemmType<Element, Layout>`，Layout 决定 GM 输出格式 |
+| 模板参数  | 说明                                                                    |
+| :-------- | :---------------------------------------------------------------------- |
+| `ArchTag` | 架构标签：`Arch::AtlasA2` 或 `Arch::Ascend950`                          |
+| `GmType`  | GM 数据类型，`Gemm::GemmType<Element, Layout>`，Layout 决定 GM 输出格式 |
 
 ## 偏特化实现
 
-| 架构 | GM Layout | UB Layout | 说明 |
-| :------ | :------ | :------ | :------ |
-| AtlasA2 | `RowMajor` | `RowMajor` | 二维矩阵搬运，源 stride 按 C0 对齐 |
-| AtlasA2 | `VectorLayout` | `VectorLayout` | 一维向量搬运 |
-| Ascend950 | `RowMajor` | `RowMajor` | 二维矩阵搬运 |
+| 架构      | GM Layout      | UB Layout      | 说明                               |
+| :-------- | :------------- | :------------- | :--------------------------------- |
+| AtlasA2   | `RowMajor`     | `RowMajor`     | 二维矩阵搬运，源 stride 按 C0 对齐 |
+| AtlasA2   | `VectorLayout` | `VectorLayout` | 一维向量搬运                       |
+| Ascend950 | `RowMajor`     | `RowMajor`     | 二维矩阵搬运                       |
 
 ## 调用接口
 
@@ -46,12 +46,12 @@ void operator()(
 )
 ```
 
-| 参数 | 说明 |
-| :------ | :------ |
-| `dstTensor` | 目的 GM GlobalTensor |
-| `srcTensor` | 源 UB LocalTensor |
+| 参数        | 说明                                    |
+| :---------- | :-------------------------------------- |
+| `dstTensor` | 目的 GM GlobalTensor                    |
+| `srcTensor` | 源 UB LocalTensor                       |
 | `layoutDst` | 目的 GM 的 layout，包含 shape 和 stride |
-| `layoutSrc` | 源 UB 的 layout，包含 shape 和 stride |
+| `layoutSrc` | 源 UB 的 layout，包含 shape 和 stride   |
 
 ## 调用示例
 

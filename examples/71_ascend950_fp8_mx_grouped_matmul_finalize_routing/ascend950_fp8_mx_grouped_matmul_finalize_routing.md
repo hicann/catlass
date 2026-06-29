@@ -19,18 +19,19 @@
 ```
 
 其中：
+
 - AIC 侧完成 MX FP8 反量化 + 分组矩阵乘 + 可选 bias 累加，结果写入 GM workspace
 - AIV 侧完成后处理：输出清零、可选共享专家赋值、Logit 加权、Scatter Add 聚合
 
 ### 模板组装
 
-| 组件 | 模板类 | 说明 |
-|------|--------|------|
-| Kernel | [GroupedMxMatmulFinalizeRoutingTla](../../include/catlass/gemm/kernel/grouped_mx_matmul_finalize_routing_tla.hpp) | AIC/AIV双核协作，按group遍历，CrossCore Flag流水线同步 |
-| BlockMmad | [BlockMmadTla](../../include/catlass/gemm/block/block_mmad_pingpong_tla.hpp) | MX量化矩阵乘，DispatchPolicy=`MmadMx<Ascend950, true, 16>` |
-| TileCopy | [PackedMxTileCopyTla](../../include/catlass/gemm/block/block_mmad.hpp) | GM→L1→UB数据搬运 |
-| BlockEpilogue | [BlockEpilogueFinalizeRouting](../../include/catlass/epilogue/block/block_epilogue_finalize_routing.hpp) | 输出清零 + SharedInput赋值 + Logit加权 + Scatter Add |
-| BlockScheduler | [ColumnBlockSwizzle](../../include/catlass/gemm/block/block_swizzle.hpp) | 按列分块调度，分配到各AICore |
+| 组件           | 模板类                                                                                                            | 说明                                                       |
+| -------------- | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Kernel         | [GroupedMxMatmulFinalizeRoutingTla](../../include/catlass/gemm/kernel/grouped_mx_matmul_finalize_routing_tla.hpp) | AIC/AIV双核协作，按group遍历，CrossCore Flag流水线同步     |
+| BlockMmad      | [BlockMmadTla](../../include/catlass/gemm/block/block_mmad_pingpong_tla.hpp)                                      | MX量化矩阵乘，DispatchPolicy=`MmadMx<Ascend950, true, 16>` |
+| TileCopy       | [PackedMxTileCopyTla](../../include/catlass/gemm/block/block_mmad.hpp)                                            | GM→L1→UB数据搬运                                           |
+| BlockEpilogue  | [BlockEpilogueFinalizeRouting](../../include/catlass/epilogue/block/block_epilogue_finalize_routing.hpp)          | 输出清零 + SharedInput赋值 + Logit加权 + Scatter Add       |
+| BlockScheduler | [ColumnBlockSwizzle](../../include/catlass/gemm/block/block_swizzle.hpp)                                          | 按列分块调度，分配到各AICore                               |
 
 ### AIC/AIV双核协作
 
@@ -83,6 +84,7 @@ out (FP32)
 $$\text{out}[j + \text{sharedInputOffset}, :] = \text{sharedInputWeight} \times \text{Cast}_{\text{BF16} \to \text{FP32}}(\text{SharedInput}[j, :])$$
 
 实现步骤：
+
 1. 从GM加载BF16共享输入到UB
 2. Cast到FP32
 3. `Muls`乘以权重系数`sharedInputWeight`
@@ -100,29 +102,29 @@ $$\text{out}[j + \text{sharedInputOffset}, :] = \text{sharedInputWeight} \times 
 
 #### 常量表
 
-| 常量 | 值 | 含义 |
-|------|----|------|
-| `EPILOGUE_TILE_N` | `256` | AIV后处理N维度分块大小 |
-| `MAX_CLEAR_GM_COUNT` | `50K` | 单次清零GM的最大元素数 |
+| 常量                           | 值    | 含义                            |
+| ------------------------------ | ----- | ------------------------------- |
+| `EPILOGUE_TILE_N`              | `256` | AIV后处理N维度分块大小          |
+| `MAX_CLEAR_GM_COUNT`           | `50K` | 单次清零GM的最大元素数          |
 | `MAX_SOLVE_SHARED_INPUT_COUNT` | `20K` | 单次处理SharedInput的最大元素数 |
-| `MAX_VECTOR_REPEAT_COUNT` | `255` | Brcb单次最大重复次数 |
-| `AIV_SYNC_AIC_FLAG` | `4` | AIV→AIC同步Flag ID |
-| `AIC_SYNC_AIV_FLAG` | `6` | AIC→AIV同步Flag ID |
+| `MAX_VECTOR_REPEAT_COUNT`      | `255` | Brcb单次最大重复次数            |
+| `AIV_SYNC_AIC_FLAG`            | `4`   | AIV→AIC同步Flag ID              |
+| `AIC_SYNC_AIV_FLAG`            | `6`   | AIC→AIV同步Flag ID              |
 
 ### 计算公式
 
 #### 符号约定
 
-| 符号 | 含义 |
-|------|------|
-| $e$ | 专家数，即groupList的长度 |
-| $m$ | 总token数，即A的第一维 |
-| $k$ | 隐藏维度，即A的第二维 |
-| $n$ | 输出维度 |
-| $\text{batch}$ | 输出批次大小 |
-| $\text{bsdp}$ | 共享专家行数，$\text{bsdp} = \text{batch} / \text{dataParallelSize}$ |
-| $s_i$ | 第 $i$ 个专家处理的token起始索引 |
-| $m_i$ | 第 $i$ 个专家处理的token数 |
+| 符号           | 含义                                                                 |
+| -------------- | -------------------------------------------------------------------- |
+| $e$            | 专家数，即groupList的长度                                            |
+| $m$            | 总token数，即A的第一维                                               |
+| $k$            | 隐藏维度，即A的第二维                                                |
+| $n$            | 输出维度                                                             |
+| $\text{batch}$ | 输出批次大小                                                         |
+| $\text{bsdp}$  | 共享专家行数，$\text{bsdp} = \text{batch} / \text{dataParallelSize}$ |
+| $s_i$          | 第 $i$ 个专家处理的token起始索引                                     |
+| $m_i$          | 第 $i$ 个专家处理的token数                                           |
 
 #### 第一步：分组矩阵乘法（MX FP8）
 
@@ -158,7 +160,7 @@ $$\mathbb{1}_{\text{shared}}(r) = \begin{cases} 1, & \text{SharedInput} \neq \te
 
 ### Tile参数
 
-| 层级 | Shape (M×N×K) |
-|------|---------------|
+| 层级   | Shape (M×N×K)   |
+| ------ | --------------- |
 | L1Tile | 256 × 256 × 256 |
 | L0Tile | 256 × 256 × 128 |

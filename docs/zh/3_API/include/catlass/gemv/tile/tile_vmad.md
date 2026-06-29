@@ -18,22 +18,23 @@ template <class ArchTag, class AType, class XType, class YType, class BiasType =
 struct TileVmad;
 ```
 
-| 模板参数 | 说明 |
-| :------ | :------ |
-| `ArchTag` | 架构标签 |
-| `AType` | A 矩阵类型 `GemmType<ElementA, RowMajor/ColumnMajor>` |
-| `XType` | X 向量类型 `GemmType<ElementX, VectorLayout>` |
-| `YType` | Y 向量类型 `GemmType<ElementY, VectorLayout>` |
-| `BiasType` | 偏置类型，默认 `void` |
+| 模板参数   | 说明                                                  |
+| :--------- | :---------------------------------------------------- |
+| `ArchTag`  | 架构标签                                              |
+| `AType`    | A 矩阵类型 `GemmType<ElementA, RowMajor/ColumnMajor>` |
+| `XType`    | X 向量类型 `GemmType<ElementX, VectorLayout>`         |
+| `YType`    | Y 向量类型 `GemmType<ElementY, VectorLayout>`         |
+| `BiasType` | 偏置类型，默认 `void`                                 |
 
 ## 偏特化实现
 
-| 架构 | AType | 实现策略 | 特殊版本 |
-| :------ | :------ | :------ | :------ |
-| AtlasA2 | `RowMajor` | `Duplicate`→`MulAddDst`→`WholeReduceSum`→`Cast`→`Add` | float 版本：`Mul`+`MulAddDst` |
-| AtlasA2 | `ColumnMajor` | `Duplicate`→scalar 抖动→`Axpy`逐列→`Cast`→`Add` | float 版本同步 |
+| 架构    | AType         | 实现策略                                              | 特殊版本                      |
+| :------ | :------------ | :---------------------------------------------------- | :---------------------------- |
+| AtlasA2 | `RowMajor`    | `Duplicate`→`MulAddDst`→`WholeReduceSum`→`Cast`→`Add` | float 版本：`Mul`+`MulAddDst` |
+| AtlasA2 | `ColumnMajor` | `Duplicate`→scalar 抖动→`Axpy`逐列→`Cast`→`Add`       | float 版本同步                |
 
 **RowMajor 实现流程**：
+
 1. `Duplicate` 初始化累加缓冲区 temp 为 0
 2. 分块 `MulAddDst` 计算 `A[i:*n] * X[i:*n]`，累加到 temp
 3. `WholeReduceSum` 规约 temp 到列向量
@@ -41,6 +42,7 @@ struct TileVmad;
 5. `Add` 累加到 Y
 
 **ColumnMajor 实现流程**：
+
 1. `Duplicate` 初始化 temp 为 0
 2. 通过 `SetFlag/WaitFlag` 将向量 X 的值加载到 scalar 寄存器
 3. 逐列 `Axpy`（`temp += A[:,i] * pix[i]`）

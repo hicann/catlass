@@ -2,18 +2,18 @@
 
 ## 功能说明
 
- - 算子功能：优化的矩阵乘计算（优化策略详见[单核切K策略说明](./34_single_splitk_matmul.md)）
+- 算子功能：优化的矩阵乘计算（优化策略详见[单核切K策略说明](./34_single_splitk_matmul.md)）
 
 ## 参数说明
 
 本样例直调参数包括m, n, k, deviceId，与[00_basic_matmul参数](../00_basic_matmul/README.md#参数说明)条件一致。
 相应地，算子原型有如下设计：
 
-|名称/Name|类型/Class|数据类型/Dtype|维度/Dims|格式/Format|描述/Description|
-|---|---|---|---|---|---|
-|matA|inTensor|fp16\|bf16\|fp32|[m, k]|ND\|NZ|左矩阵，支持转置|
-|matB|inTensor|fp16\|bf16\|fp32|[k, n]|ND\|NZ|右矩阵，支持转置|
-|matC|outTensor|fp16\|bf16\|fp32|[m, n]|ND|输出矩阵|
+| 名称/Name | 类型/Class | 数据类型/Dtype   | 维度/Dims | 格式/Format | 描述/Description |
+| --------- | ---------- | ---------------- | --------- | ----------- | ---------------- |
+| matA      | inTensor   | fp16\|bf16\|fp32 | [m, k]    | ND\|NZ      | 左矩阵，支持转置 |
+| matB      | inTensor   | fp16\|bf16\|fp32 | [k, n]    | ND\|NZ      | 右矩阵，支持转置 |
+| matC      | outTensor  | fp16\|bf16\|fp32 | [m, n]    | ND          | 输出矩阵         |
 
 ## 约束说明
 
@@ -27,7 +27,7 @@
 ├── 34_single_splitk_matmul
 │   ├── CMakeLists.txt           # CMake编译文件
 │   ├── single_core_splitk.cpp   # 主文件
-│   └── README.md                
+│   └── README.md
 ```
 
 ## 使用示例

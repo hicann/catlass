@@ -113,6 +113,7 @@ static size_t GetWorkspaceSize(const Arguments &args) {
 ```
 
 **Code explanation**:
+
 - `L1TileShape::M/N`: Represents the shape of the L1 tile, i.e., the size of the matrix block processed by each AIC core at once.
 - `args.aicCoreNum`: Number of AIC cores involved in the computation.
 - `WORKSPACE_STAGES`: Number of stages for the workspace, used to implement pipeline parallelism between AIC and AIV.
@@ -128,7 +129,7 @@ template <>
 CATLASS_DEVICE
 void operator()<AscendC::AIC>(Params const &params) {
     // ... Initialization and preparation ...
-    
+
     AscendC::GlobalTensor<ElementC> gmC;
     gmC.SetGlobalBuffer(reinterpret_cast<__gm__ ElementC *>(params.ptrWorkspace));
     auto layoutC = layout::RowMajor{L1TileShape::M * coreNum * WORKSPACE_STAGES, L1TileShape::N};
@@ -139,7 +140,7 @@ void operator()<AscendC::AIC>(Params const &params) {
     // Loop through each matrix block.
     for (uint32_t loopIdx = coreIdx; loopIdx < coreLoops; loopIdx += coreNum) {
         // ... Compute block location and offsets ...
-        
+
         // Compute the workspace offset for the current stage.
         MatrixCoord offsetC{(stageId * coreNum + coreIdx) * L1TileShape::M, 0};
         int64_t gmOffsetC = layoutC.GetOffset(offsetC);
@@ -167,12 +168,13 @@ void operator()<AscendC::AIC>(Params const &params) {
         // Proceed to the next stage.
         stageId = (stageId + 1 < WORKSPACE_STAGES) ? (stageId + 1) : 0;
     }
-    
+
     // ... Subsequent synchronization and cleanup ...
 }
 ```
 
 **Code explanation**:
+
 - `gmC`: Global tensor pointing to the workspace
 - `layoutC`: Workspace layout in the RowMajor format
 - `stageId`: ID of the current workspace stage
@@ -190,7 +192,7 @@ template <>
 CATLASS_DEVICE
 void operator()<AscendC::AIV>(Params const &params) {
     // ... Initialization and preparation ...
-    
+
     AscendC::GlobalTensor<ElementC> gmC;
     gmC.SetGlobalBuffer(reinterpret_cast<__gm__ ElementC *>(params.ptrWorkspace));
     auto layoutC = layout::RowMajor{L1TileShape::M * coreNum * WORKSPACE_STAGES, L1TileShape::N};
@@ -201,7 +203,7 @@ void operator()<AscendC::AIV>(Params const &params) {
 
     for (uint32_t loopIdx = coreIdx; loopIdx < coreLoops; loopIdx += coreNum) {
         // ... Obtain the block coordinates and actual block shape ...
-        
+
         // Compute the workspace offset for the current stage.
         MatrixCoord offsetC{(stageId * coreNum + coreIdx) * L1TileShape::M, 0};
         int64_t gmOffsetC = layoutC.GetOffset(offsetC);
@@ -210,22 +212,23 @@ void operator()<AscendC::AIV>(Params const &params) {
 
         // Wait for the AIC core to complete the computation in the current stage.
         Arch::CrossCoreWaitFlag(flagAicFinishStoreList[stageId]);
-        
+
         // Perform epilogues.
         blockEpilogue(blockShapeMNK, blockCoordMNK, actualBlockShapeMNK, gmBlockC, layoutBlockC);
-        
+
         // Notify the AIC core that the computation in the current stage is complete.
         Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(flagAivFinishComputeList[stageId]);
 
         // Proceed to the next stage.
         stageId = (stageId + 1 < WORKSPACE_STAGES) ? (stageId + 1) : 0;
     }
-    
+
     // ... Subsequent synchronization and cleanup ...
 }
 ```
 
 **Code explanation**:
+
 - `gmC`: Global tensor pointing to the workspace, sharing the same workspace as the AIC core.
 - `layoutC`: Layout of the workspace, consistent with the AIC core.
 - `stageId`: ID of the current workspace stage, synchronized with the AIC core.
@@ -241,16 +244,16 @@ void operator()<AscendC::AIV>(Params const &params) {
 
 Using [EpilogueAtlasA2PerTokenDequant](../../../include/catlass/epilogue/block/block_epilogue_per_token_dequant.hpp) as an example, the template parameters of BlockEpilogue are shown in the table below:
 
-| Parameter| Type| Description|
-|-------|------|------|
-| DispatchPolicy | struct | Epilogue dispatch policy|
-| CType | typename | Element type of input matrix C|
-| ScaleType | typename | Type of the global scaling factor|
-| PerTokenScaleType | typename | Type of the per-token scaling factor|
-| DType | typename | Element type of output matrix D|
-| TileRowBroadcastMul | typename | Tile component for row broadcast multiplication|
-| TileBroadcastOneBlk | typename | Tile component for single-block broadcast|
-| TileCopy | typename | Tile component for data copy|
+| Parameter           | Type     | Description                                     |
+| ------------------- | -------- | ----------------------------------------------- |
+| DispatchPolicy      | struct   | Epilogue dispatch policy                        |
+| CType               | typename | Element type of input matrix C                  |
+| ScaleType           | typename | Type of the global scaling factor               |
+| PerTokenScaleType   | typename | Type of the per-token scaling factor            |
+| DType               | typename | Element type of output matrix D                 |
+| TileRowBroadcastMul | typename | Tile component for row broadcast multiplication |
+| TileBroadcastOneBlk | typename | Tile component for single-block broadcast       |
+| TileCopy            | typename | Tile component for data copy                    |
 
 ### 4.2 Core Methods
 

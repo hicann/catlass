@@ -1,6 +1,7 @@
 # Mxfp8 FlashAttention Infer Example Readme
 
 ## 代码组织
+
 ```
 ├── 72_ascend950_fp8_mx_flash_attention_infer
 │   ├── CMakeLists.txt           # CMake编译文件
@@ -12,16 +13,20 @@
 │   ├── fai_tiling.h             # Tiling计算实现
 │   └── README.md
 ```
+
 ## 功能说明
+
 本样例基于[49_ascend950_flash_attention_infer](../49_ascend950_flash_attention_infer/README.md)适配mxfp8输入，支持Q/K/V为`float8_e4m3_t`类型，并需要对应 `float8_e8m0_t`类型缩放因子输入。在非PA场景下，以BNSD为例，Q/K scale的shape为\[B, N, S, D/64, 2\],V scale的shape为\[B, N, S/64, D, 2\]。另外，本样例额外支持P静态量化开关，搭配P scale输入。
 
 ## 使用示例
-- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)   
 
-- 接下来，先执行`gen_data.py`，生成测试样例，测试用例需要从命令行输入, 执行该命令后会在当前路径下生成data目录，包含算子的输入数据和用于精度验证的golden数据。   
+- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)
+
+- 接下来，先执行`gen_data.py`，生成测试样例，测试用例需要从命令行输入, 执行该命令后会在当前路径下生成data目录，包含算子的输入数据和用于精度验证的golden数据。
 - 然后执行算子，这里要注意的是执行算子的输入shape和上面第一步生成数据的shape一致。
 
 以下是一个完整的shell脚本示例
+
 ```
 batch=1          # batch大小
 qSeqlen=177      # query序列长度
@@ -59,11 +64,13 @@ run_kernel
 ```
 
 执行结果如下，说明精度比对成功。
+
 ```
 Compare success.
 ```
 
 ## 样例约束
+
 - `kvSeqlen`仅支持为64的倍数
 - `embeddingSize`仅支持64/128
 - `isVariedLen`当前仅支持为0

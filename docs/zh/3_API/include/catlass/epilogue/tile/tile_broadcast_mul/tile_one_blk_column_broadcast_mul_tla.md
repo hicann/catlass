@@ -22,11 +22,11 @@ template <
 struct TileOneBlkColumnBroadcastMulTla;
 ```
 
-| 模板参数 | 说明 |
-| :------ | :------ |
-| `ArchTag_` | 架构标签 |
-| `ElementCompute_` | 计算元素类型，如 `half` |
-| `TileShape_` | Tile 形状，`Shape<ROW, COLUMN>` |
+| 模板参数          | 说明                            |
+| :---------------- | :------------------------------ |
+| `ArchTag_`        | 架构标签                        |
+| `ElementCompute_` | 计算元素类型，如 `half`         |
+| `TileShape_`      | Tile 形状，`Shape<ROW, COLUMN>` |
 
 ## 调用接口
 

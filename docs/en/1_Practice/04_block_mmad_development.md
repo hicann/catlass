@@ -4,7 +4,7 @@
 
 Block Matrix Multiply-Add (Block MMAD) is a core component in the CATLASS template library responsible for block matrix multiplication. It resides in the middle layer of the compute architecture. It interfaces with the Kernel layer above and the Tile layer below, efficiently loading data from global memory (GM) into local memory (L1/L0) and scheduling tile matrix multiplication tasks.
 
-Block MMAD adopts a highly modular and template-based design. It supports multiple scheduling strategies, tile shapes, and data types. This flexibility allows it to adapt to different hardware architectures and computational requirements. This document uses `BlockMmadPingpong` as an example.  
+Block MMAD adopts a highly modular and template-based design. It supports multiple scheduling strategies, tile shapes, and data types. This flexibility allows it to adapt to different hardware architectures and computational requirements. This document uses `BlockMmadPingpong` as an example.
 
 ## 2. Template Assembly Mechanism
 
@@ -29,15 +29,15 @@ struct BlockMmad {
 
 ### 2.1 Core Template Parameters
 
-| Parameter| Description|
-|--------|------|
-| DispatchPolicy | Scheduling policy that controls task distribution and execution flow|
-| L1TileShape | Shape of the tile at the L1 cache level, defining the M, N, and K dimensions|
-| L0TileShape | Shape of the tile at the L0 cache level, defining the M, N, and K dimensions|
-| AType/BType/CType | Data types and layout information for input matrices A, B, and output matrix C|
-| BiasType | (Optional) Bias data type|
-| TileCopy | Tile-level data copy component responsible for data transfer between memory levels|
-| TileMmad | Tile-level matrix multiplication component responsible for the actual computation|
+| Parameter         | Description                                                                        |
+| ----------------- | ---------------------------------------------------------------------------------- |
+| DispatchPolicy    | Scheduling policy that controls task distribution and execution flow               |
+| L1TileShape       | Shape of the tile at the L1 cache level, defining the M, N, and K dimensions       |
+| L0TileShape       | Shape of the tile at the L0 cache level, defining the M, N, and K dimensions       |
+| AType/BType/CType | Data types and layout information for input matrices A, B, and output matrix C     |
+| BiasType          | (Optional) Bias data type                                                          |
+| TileCopy          | Tile-level data copy component responsible for data transfer between memory levels |
+| TileMmad          | Tile-level matrix multiplication component responsible for the actual computation  |
 
 ### 2.2 Type Export
 
@@ -233,7 +233,7 @@ uint32_t kTileCount = CeilDiv<L1TileShape::K>(actualShape.k());
 for (uint32_t kLoopIdx = 0; kLoopIdx < kTileCount; kLoopIdx++) {
     uint32_t l1ListIdNext = (l1ListId + 1 < STAGES) ? (l1ListId + 1) : 0;
     uint32_t kActualNext{0};
-    
+
     // Preload the next batch of data to the L1 cache.
     if (kLoopIdx < kTileCount - 1) {
         // ... Preloading logic ...
@@ -262,7 +262,7 @@ for (int mPartIdx = 0; mPartIdx < mPartLoop; mPartIdx++) {
         // ... K-dimension loop ...
         for (int nPartIdx = 0; nPartIdx < nPartLoop; nPartIdx++) {
             // ... N-dimension loop ...
-            
+
             // Execute tile-level matrix multiplication.
             bool initC = ((kLoopIdx == 0) && (kPartIdx == 0));
             uint8_t unitFlag = 0b00;
@@ -330,4 +330,4 @@ Block MMAD is a key component in the CATLASS template library that connects the 
 4. **Automatic memory management**: Efficiently manages memory resources at different levels.
 5. **Flexible adaptation**: Supports different hardware architectures and computational requirements.
 
-The design of Block MMAD reflects the core ideas of modern high-performance compute libraries. Through elaborate pipeline design and memory management, Block MMAD unlocks hardware computational power to unleash matrix multiplication efficiency.  
+The design of Block MMAD reflects the core ideas of modern high-performance compute libraries. Through elaborate pipeline design and memory management, Block MMAD unlocks hardware computational power to unleash matrix multiplication efficiency.

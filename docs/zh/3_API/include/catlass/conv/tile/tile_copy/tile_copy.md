@@ -18,20 +18,20 @@ template <class ArchTag, class FmapType, class FilterType, class OutputType, cla
 struct TileCopy;
 ```
 
-| 模板参数 | 说明 |
-| :------ | :------ |
-| `ArchTag` | 架构标签 |
-| `FmapType` | Fmap 的 GemmType |
-| `FilterType` | Filter 的 GemmType |
-| `OutputType` | Output 的 GemmType |
-| `BiasType` | Bias 类型，默认 `void` |
+| 模板参数     | 说明                   |
+| :----------- | :--------------------- |
+| `ArchTag`    | 架构标签               |
+| `FmapType`   | Fmap 的 GemmType       |
+| `FilterType` | Filter 的 GemmType     |
+| `OutputType` | Output 的 GemmType     |
+| `BiasType`   | Bias 类型，默认 `void` |
 
 ## 成员类型定义
 
-| 成员类型 | 对应子组件 | 说明 |
-| :------ | :------ | :------ |
-| `CopyGmToL1A` | `Conv::Tile::CopyGmToL1<Arch, FmapType>` | Fmap: GM→L1 |
-| `CopyGmToL1B` | `Conv::Tile::CopyGmToL1<Arch, FilterType>` | Filter: GM→L1 |
-| `CopyL1ToL0A` | `Conv::Tile::CopyL1ToL0A<...>` | Fmap: L1→L0A (im2col) |
-| `CopyL1ToL0B` | `Conv::Tile::CopyL1ToL0B<...>` | Filter: L1→L0B |
-| `CopyL0CToGm` | `Conv::Tile::CopyL0CToGm<...>` | L0C→GM (含 Fixpipe/F322F16) |
+| 成员类型      | 对应子组件                                 | 说明                        |
+| :------------ | :----------------------------------------- | :-------------------------- |
+| `CopyGmToL1A` | `Conv::Tile::CopyGmToL1<Arch, FmapType>`   | Fmap: GM→L1                 |
+| `CopyGmToL1B` | `Conv::Tile::CopyGmToL1<Arch, FilterType>` | Filter: GM→L1               |
+| `CopyL1ToL0A` | `Conv::Tile::CopyL1ToL0A<...>`             | Fmap: L1→L0A (im2col)       |
+| `CopyL1ToL0B` | `Conv::Tile::CopyL1ToL0B<...>`             | Filter: L1→L0B              |
+| `CopyL0CToGm` | `Conv::Tile::CopyL0CToGm<...>`             | L0C→GM (含 Fixpipe/F322F16) |

@@ -1,5 +1,5 @@
 # Block MMAD Basic Template
->
+
 > [Code location](../../../../../../../include/catlass/gemm/block/block_mmad.hpp)
 
 [TOC]
@@ -12,7 +12,7 @@ Block-level MMAD computation, non-TLA implementation. The actual computation is 
 
 ### Template Description
 
-```
+```cpp
 template <
     class DispatchPolicy,   // Dispatch policy used
     class L1TileShape,      // L1 basic block

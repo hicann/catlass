@@ -11,7 +11,7 @@
 
 ## Function
 
-- Added dequantization functionality: convert input B matrix from `int8` to `fp16_t` (`half`), then perform dequantization: sum with `deqZeroPoint`, multiply by `deqScalar`, and then perform Matmul with matrix A. 
+- Added dequantization functionality: convert input B matrix from `int8` to `fp16_t` (`half`), then perform dequantization: sum with `deqZeroPoint`, multiply by `deqScalar`, and then perform Matmul with matrix A.
 - The current implementation only supports RowMajor and ColumnMajor data layouts.
 
 ## Example

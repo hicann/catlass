@@ -4,15 +4,13 @@
 
 ## Core Entry
 
-
-| Level    | Entry                                                                                                                                             | Purpose                                      |
-| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| Kernel | `BasicMatmulTlaVisitor`<br>Code path: include/catlass/gemm/kernel/basic_matmul_tla_visitor.hpp                                              | The AIC writes MMAD results to the Global Memory (GM) workspace, and the AIV subsequently executes the EVG pipeline.|
-| Kernel | `BasicMatmulTlaUbVisitor`<br>Code path: include/catlass/gemm/kernel/basic_matmul_tla_ub_visitor.hpp                                         | The AIC retains results in the Unified Buffer (UB), and the AIV executes the EVG pipeline directly within the UB.        |
-| Block  | `BlockEpilogue<EpilogueVisitor<...>, ArchTag, ComputeLength, EVG, ElementC>`<br>Code path: include/catlass/epilogue/block/block_epilogue_visitor.hpp| Coordinates tile slicing, double-buffering configurations, and three-phase pipeline scheduling.                    |
-| Fusion | `TreeVisitor`<br>Code path: include/catlass/epilogue/fusion/tree_visitor.hpp                                                                | Describes epilogue using a hierarchical tree structure definition.                               |
-| Fusion | `TopologicalVisitor`<br>Code path: include/catlass/epilogue/fusion/topological_visitor.hpp                                                   | Describes epilogue using a Directed Acyclic Graph (DAG) to enable intermediate result reuse.                      |
-
+| Level  | Entry                                                                                                                                                | Purpose                                                                                                              |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Kernel | `BasicMatmulTlaVisitor`<br>Code path: include/catlass/gemm/kernel/basic_matmul_tla_visitor.hpp                                                       | The AIC writes MMAD results to the Global Memory (GM) workspace, and the AIV subsequently executes the EVG pipeline. |
+| Kernel | `BasicMatmulTlaUbVisitor`<br>Code path: include/catlass/gemm/kernel/basic_matmul_tla_ub_visitor.hpp                                                  | The AIC retains results in the Unified Buffer (UB), and the AIV executes the EVG pipeline directly within the UB.    |
+| Block  | `BlockEpilogue<EpilogueVisitor<...>, ArchTag, ComputeLength, EVG, ElementC>`<br>Code path: include/catlass/epilogue/block/block_epilogue_visitor.hpp | Coordinates tile slicing, double-buffering configurations, and three-phase pipeline scheduling.                      |
+| Fusion | `TreeVisitor`<br>Code path: include/catlass/epilogue/fusion/tree_visitor.hpp                                                                         | Describes epilogue using a hierarchical tree structure definition.                                                   |
+| Fusion | `TopologicalVisitor`<br>Code path: include/catlass/epilogue/fusion/topological_visitor.hpp                                                           | Describes epilogue using a Directed Acyclic Graph (DAG) to enable intermediate result reuse.                         |
 
 ## Integration Sequence
 
@@ -228,16 +226,14 @@ The cache here only covers the current `visit<Stage>(...)` call, that is, the cu
 
 In the current implementation, the commonly used EVG nodes are as follows.
 
-
-| Node                                                     | Header File                        | Purpose                     |
-| ------------------------------------------------------- | --------------------------- | ----------------------- |
-| `VisitorAccLoad<Element, USE_UB_WORKSPACE>`             | `visitor_acc_load.hpp`      | Reads the GEMM result.             |
-| `VisitorAuxLoad<Element, Layout>`                       | `visitor_aux_load.hpp`      | Reads the input from the external GM.            |
-| `VisitorCompute<ComputeFn, ElementCompute, Scalars...>` | `visitor_compute.hpp`       | Performs element-wise computation.                 |
-| `VisitorCast<ElementTo, ElementFrom, RoundStyle>`       | `visitor_cast.hpp`          | Performs type conversion.                  |
-| `VisitorAuxStore<Element, Layout>`                      | `visitor_aux_store.hpp`     | Write the result back to the GM.               |
-| `VisitorRowBroadcast<Element, Layout>`                  | `visitor_row_broadcast.hpp` | Read the `1 × N` row vector and broadcast it to the tiles.|
-
+| Node                                                    | Header File                 | Purpose                                                    |
+| ------------------------------------------------------- | --------------------------- | ---------------------------------------------------------- |
+| `VisitorAccLoad<Element, USE_UB_WORKSPACE>`             | `visitor_acc_load.hpp`      | Reads the GEMM result.                                     |
+| `VisitorAuxLoad<Element, Layout>`                       | `visitor_aux_load.hpp`      | Reads the input from the external GM.                      |
+| `VisitorCompute<ComputeFn, ElementCompute, Scalars...>` | `visitor_compute.hpp`       | Performs element-wise computation.                         |
+| `VisitorCast<ElementTo, ElementFrom, RoundStyle>`       | `visitor_cast.hpp`          | Performs type conversion.                                  |
+| `VisitorAuxStore<Element, Layout>`                      | `visitor_aux_store.hpp`     | Write the result back to the GM.                           |
+| `VisitorRowBroadcast<Element, Layout>`                  | `visitor_row_broadcast.hpp` | Read the `1 × N` row vector and broadcast it to the tiles. |
 
 ## Phases and Placement Rules
 
@@ -270,16 +266,14 @@ The following describes the template parameters, placement positions, `Arguments
 
 It is more convenient to check the quick reference table first:
 
-
-| Node                   | Common Placement Position| Number of Inputs | Form Directly Written into `Arguments`| Special Restrictions                           |
-| --------------------- | ------ | ----- | -------------------- | ------------------------------- |
-| `VisitorAccLoad`      | Leaf node  | 0     | `{}`                 | Directly consumes MMAD UB results through the UB path.        |
-| `VisitorAuxLoad`      | Leaf node  | 0     | `{ptr, layout}`      | `layout` describes the entire tensor                |
-| `VisitorAuxStore`     | Root node   | 1     | `{ptr, layout}`      | Actually responsible for writing data back GM                    |
-| `VisitorCast`         | Intermediate node  | 1     | `{}`                 | Input type must match `ElementFrom`         |
-| `VisitorRowBroadcast` | Leaf node  | 0     | `{ptr, layout}`      | `layout` uses a 2D layout of `(1, n)`|
-| `VisitorCompute`      | Intermediate node  | 1 or more| `{}` or `{{...}}`    | All input types must match `ElementCompute`    |
-
+| Node                  | Common Placement Position | Number of Inputs | Form Directly Written into `Arguments` | Special Restrictions                                   |
+| --------------------- | ------------------------- | ---------------- | -------------------------------------- | ------------------------------------------------------ |
+| `VisitorAccLoad`      | Leaf node                 | 0                | `{}`                                   | Directly consumes MMAD UB results through the UB path. |
+| `VisitorAuxLoad`      | Leaf node                 | 0                | `{ptr, layout}`                        | `layout` describes the entire tensor                   |
+| `VisitorAuxStore`     | Root node                 | 1                | `{ptr, layout}`                        | Actually responsible for writing data back GM          |
+| `VisitorCast`         | Intermediate node         | 1                | `{}`                                   | Input type must match `ElementFrom`                    |
+| `VisitorRowBroadcast` | Leaf node                 | 0                | `{ptr, layout}`                        | `layout` uses a 2D layout of `(1, n)`                  |
+| `VisitorCompute`      | Intermediate node         | 1 or more        | `{}` or `{{...}}`                      | All input types must match `ElementCompute`            |
 
 ### VisitorAccLoad
 
@@ -566,14 +560,12 @@ VisitorCompute strictly validates that all incoming types equal ElementCompute. 
 
 `VisitorCompute` depends on the operator definitions in `operations.hpp`. The following are commonly used in the current implementation:
 
-
-| Type   | Operators                                    |
-| ----- | -------------------------------------- |
-| Unary   | `Exp`, `Relu`, `Silu`, `Sqrt`, `RsqrtFast`|
-| With scalar  | `LeakyRelu`, `Muls`, `Adds`             |
-| Binary or multi| `Add`, `Sub`, `Mul`, `Div`, `Max`, `Min`   |
-| Combination   | `AddRelu`                              |
-
+| Type            | Operators                                  |
+| --------------- | ------------------------------------------ |
+| Unary           | `Exp`, `Relu`, `Silu`, `Sqrt`, `RsqrtFast` |
+| With scalar     | `LeakyRelu`, `Muls`, `Adds`                |
+| Binary or multi | `Add`, `Sub`, `Mul`, `Div`, `Max`, `Min`   |
+| Combination     | `AddRelu`                                  |
 
 ## Key parameters of `BlockEpilogue`
 

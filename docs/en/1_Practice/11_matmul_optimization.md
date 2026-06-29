@@ -106,7 +106,7 @@ struct MmadAtlasA2Preload : public MmadAtlasA2 {
 
 ### TileShape Adjustment
 
-Under the constraints of (1) being a multiple of 16 and (2) not exceeding hardware limits, adjust the TileShape to achieve load balancing. To achieve optimal performance while simplifying the tiling policy, the current solution in the repository restricts `L0TileShape::M == L1TileShape::M` and `L0TileShape::N == L1TileShape::N` to reduce tuning complexity. It is advised to set `L0TileShape::K == 1/4 L1TileShape::K`.  
+Under the constraints of (1) being a multiple of 16 and (2) not exceeding hardware limits, adjust the TileShape to achieve load balancing. To achieve optimal performance while simplifying the tiling policy, the current solution in the repository restricts `L0TileShape::M == L1TileShape::M` and `L0TileShape::N == L1TileShape::N` to reduce tuning complexity. It is advised to set `L0TileShape::K == 1/4 L1TileShape::K`.
 
 - Case 1
 
@@ -145,7 +145,7 @@ For example, in Case 2, if matrix B were in RowMajor instead of zN layout, the p
 
 ### Swizzle Adjustment
 
-In CATLASS, [Swizzle](../2_Design/01_kernel_design/02_swizzle.md) describes the read/write order of matrices. It is referred to as `Gemm::Block::GemmIdentityBlockSwizzle<a, b>` using the notation `<a, b>`. When both matrices A and B are in `RowMajor` layout, `<3, 0>` is typically chosen when `m > n`, and `<3, 1>` when `m < n`. In general, the approach to adjusting `Swizzle` is to first determine the `SwizzleDirection` (`0` or `1`), then adjust the `SwizzleOffset`. In some scenarios, this can better achieve load balancing.  
+In CATLASS, [Swizzle](../2_Design/01_kernel_design/02_swizzle.md) describes the read/write order of matrices. It is referred to as `Gemm::Block::GemmIdentityBlockSwizzle<a, b>` using the notation `<a, b>`. When both matrices A and B are in `RowMajor` layout, `<3, 0>` is typically chosen when `m > n`, and `<3, 1>` when `m < n`. In general, the approach to adjusting `Swizzle` is to first determine the `SwizzleDirection` (`0` or `1`), then adjust the `SwizzleOffset`. In some scenarios, this can better achieve load balancing.
 
 - Case 1
 

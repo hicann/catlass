@@ -26,8 +26,8 @@ struct TileCopyDequantTla;
 
 ## 成员类型定义
 
-| 成员类型 | 说明 |
-| :------ | :------ |
+| 成员类型              | 说明                                     |
+| :-------------------- | :--------------------------------------- |
 | `CopyGmToUbC`（模板） | `CopyGm2UbTla<Arch, TensorC, TensorUbC>` |
 | `CopyGmToUbX`（模板） | `CopyGm2UbTla<Arch, TensorX, TensorUbX>` |
 | `CopyGmToUbY`（模板） | `CopyGm2UbTla<Arch, TensorY, TensorUbY>` |

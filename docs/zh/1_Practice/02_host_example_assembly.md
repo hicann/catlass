@@ -117,7 +117,7 @@ static void Run(const Options &options) {
     uint8_t *deviceA{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
-    
+
     // 申请B矩阵在device上的内存，并将B矩阵拷贝至device
     uint8_t *deviceB{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
@@ -142,7 +142,7 @@ static void Run(const Options &options) {
     using AType = Gemm::GemmType<half, LayoutA>;
     using BType = Gemm::GemmType<half, LayoutB>;
     using CType = Gemm::GemmType<half, LayoutC>;
-    
+
     // 定义Block层进行矩阵乘计算的组件
     using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType>;
     using BlockEpilogue = void;
@@ -152,7 +152,7 @@ static void Run(const Options &options) {
 
     // 指定kernel
     using MatmulKernel = Gemm::Kernel::BasicMatmul<BlockMmad, BlockEpilogue, BlockScheduler>;
-    
+
     // 定义Device层适配器
     using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
     MatmulKernel::Arguments arguments{options.problemShape, deviceA, deviceB, deviceC};
@@ -179,11 +179,11 @@ static void Run(const Options &options) {
     if (sizeWorkspace > 0) {
         ACL_CHECK(aclrtFree(deviceWorkspace));
     }
-    
+
     // 将输出数据搬出
     std::vector<fp16_t> hostC(lenC);
     ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, deviceC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
-    
+
     // 计算精度标杆并与输出数据比对
     std::vector<float> hostGolden(lenC);
     golden::ComputeMatmul(options.problemShape, hostA, layoutA, hostB, layoutB, hostGolden, layoutC);

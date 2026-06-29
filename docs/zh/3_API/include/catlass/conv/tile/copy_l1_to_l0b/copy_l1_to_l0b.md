@@ -18,14 +18,14 @@ template <class ArchTag, class L1Type, class L0Type = void>
 struct CopyL1ToL0B;
 ```
 
-| 模板参数 | 说明 |
-| :------ | :------ |
-| `ArchTag` | 架构标签 |
-| `L1Type` | `Gemm::GemmType<Element, CI1KHKWCOCI0>` |
-| `L0Type` | L0B 类型，默认 `void` |
+| 模板参数  | 说明                                    |
+| :-------- | :-------------------------------------- |
+| `ArchTag` | 架构标签                                |
+| `L1Type`  | `Gemm::GemmType<Element, CI1KHKWCOCI0>` |
+| `L0Type`  | L0B 类型，默认 `void`                   |
 
 ## 偏特化实现
 
-| 偏特化 | L1Type | LayoutSrc→LayoutDst | 说明 |
-| :------ | :------ | :------ | :------ |
-| A2 | `GemmType<Element, CI1KHKWCOCI0>` | CI1KHKWCOCI0→nZ | LoadData 2D，逐 KhKw 搬运 |
+| 偏特化 | L1Type                            | LayoutSrc→LayoutDst | 说明                      |
+| :----- | :-------------------------------- | :------------------ | :------------------------ |
+| A2     | `GemmType<Element, CI1KHKWCOCI0>` | CI1KHKWCOCI0→nZ     | LoadData 2D，逐 KhKw 搬运 |

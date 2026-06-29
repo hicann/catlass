@@ -36,11 +36,11 @@ struct CopyL0CToUBTla {
 
 ## 偏特化实现
 
-| CopyMode | M 处理 | N 处理 | dualDstCtl | 搬运指令 |
-| :------ | :------ | :------ | :------ | :------ |
-| `NO_SPLIT` | 原始 M | 原始 N | — | `AscendC::Fixpipe` + `CFG_ROW_MAJOR_UB` |
-| `SPLIT_M` | `RoundUp(M, 2)` | 原始 N | `1` | `AscendC::Fixpipe` + `CFG_ROW_MAJOR_UB` |
-| `SPLIT_N` | 原始 M | `RoundUp(N, 32)` | `2` | `AscendC::Fixpipe` + `CFG_ROW_MAJOR_UB` |
+| CopyMode   | M 处理          | N 处理           | dualDstCtl | 搬运指令                                |
+| :--------- | :-------------- | :--------------- | :--------- | :-------------------------------------- |
+| `NO_SPLIT` | 原始 M          | 原始 N           | —          | `AscendC::Fixpipe` + `CFG_ROW_MAJOR_UB` |
+| `SPLIT_M`  | `RoundUp(M, 2)` | 原始 N           | `1`        | `AscendC::Fixpipe` + `CFG_ROW_MAJOR_UB` |
+| `SPLIT_N`  | 原始 M          | `RoundUp(N, 32)` | `2`        | `AscendC::Fixpipe` + `CFG_ROW_MAJOR_UB` |
 
 ## 调用接口
 
@@ -54,6 +54,7 @@ void operator()(
 ```
 
 静态约束：
+
 - `TensorDst::Layout` 为 `RowMajor`
 - `TensorSrc::position == CO1`
 - `TensorDst::position == VECCALC`

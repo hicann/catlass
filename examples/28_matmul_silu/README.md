@@ -12,14 +12,19 @@
 ## 功能介绍
 
 SiLU:
+
 $$
 SiLU(x) = x \cdot Sigmoid(x)
 $$
+
 Sigmoid：
+
 $$
 Sigmoid(x)=\frac{1}{1+e^{-x}}
 $$
+
 因此计算函数为：
+
 $$
 x = a \times b\\
 out=\frac{x}{1+e^{-x}}

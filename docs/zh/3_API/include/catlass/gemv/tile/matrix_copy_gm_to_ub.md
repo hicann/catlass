@@ -19,25 +19,25 @@ template <class ArchTag, class GmType>
 struct MatrixCopyGmToUB;
 ```
 
-| 模板参数 | 说明 |
-| :------ | :------ |
-| `ArchTag` | 架构标签 |
-| `GmType` | `Gemm::GemmType<Element, RowMajor>` 或 `GemmType<Element, ColumnMajor>` |
+| 模板参数  | 说明                                                                    |
+| :-------- | :---------------------------------------------------------------------- |
+| `ArchTag` | 架构标签                                                                |
+| `GmType`  | `Gemm::GemmType<Element, RowMajor>` 或 `GemmType<Element, ColumnMajor>` |
 
 ## 偏特化实现
 
-| 架构 | GmType | 搬运策略 |
-| :------ | :------ | :------ |
-| AtlasA2 | `RowMajor` | 三级自适应（连续块 / 跨步块 / 单行） |
+| 架构    | GmType        | 搬运策略                             |
+| :------ | :------------ | :----------------------------------- |
+| AtlasA2 | `RowMajor`    | 三级自适应（连续块 / 跨步块 / 单行） |
 | AtlasA2 | `ColumnMajor` | 三级自适应（连续块 / 跨步块 / 单行） |
 
 **三级搬运策略**：
 
-| 策略 | 触发条件 | 方式 |
-| :------ | :------ | :------ |
+| 策略   | 触发条件                                        | 方式                                |
+| :----- | :---------------------------------------------- | :---------------------------------- |
 | 连续块 | 长度对齐 C0 且 stride 对齐 C0 且 stride < 65536 | 一次 `DataCopy`（blockCount = m/n） |
-| 跨步块 | 长度对齐 C0 且 stride×C0 < 65536 | C0 条 `DataCopy`，每条 stride 间隔 |
-| 单行 | 兜底 | 逐条 `DataCopy` |
+| 跨步块 | 长度对齐 C0 且 stride×C0 < 65536                | C0 条 `DataCopy`，每条 stride 间隔  |
+| 单行   | 兜底                                            | 逐条 `DataCopy`                     |
 
 ## 调用接口
 

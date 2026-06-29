@@ -14,10 +14,10 @@
 
 ## 引用的 Tile 组件
 
-| 成员别名 | 来源 |
-| :------ | :------ |
-| `CopyGmToL1A` ~ `CopyL1ToBT` | 继承自 `PackedTileCopyTla<...>` |
-| `CopyL0CToDst`（重写） | `CopyL0CToUBTla<ArchTag, TensorL0C, TensorC, CopyMode, DEQUANT_GRANULARITY, ReluEnable>` |
+| 成员别名                     | 来源                                                                                     |
+| :--------------------------- | :--------------------------------------------------------------------------------------- |
+| `CopyGmToL1A` ~ `CopyL1ToBT` | 继承自 `PackedTileCopyTla<...>`                                                          |
+| `CopyL0CToDst`（重写）       | `CopyL0CToUBTla<ArchTag, TensorL0C, TensorC, CopyMode, DEQUANT_GRANULARITY, ReluEnable>` |
 
 ## 模板原型
 

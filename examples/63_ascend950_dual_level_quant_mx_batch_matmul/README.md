@@ -49,21 +49,21 @@ python3 examples/63_ascend950_dual_level_quant_mx_batch_matmul/gen_data.py 1 102
 
 ## 核心组件
 
-| 组件 | 选型 |
-| --- | --- |
-| ArchTag | `Arch::Ascend950` |
-| Kernel | `DualLevelQuantMxBatchedMatmulTla` |
-| AIV BlockQuant | `BlockQuantDualLevelMx` |
-| TileCopy (Quant) | `TileCopyDualLevelQuantMx` |
-| BlockMmad | `BlockMmadTla` |
-| BlockScheduler | `GemmIdentityBlockSwizzle<3, 0/1>` |
-| DispatchPolicy | `MmadMx<Ascend950, true, 16>` |
-| L1TileShape | `Shape<Int<256>, Int<256>, Int<512>>` |
-| L0TileShape | `Shape<Int<256>, Int<256>, Int<256>>` |
-| ElementInput | `float16_t` |
-| ElementA/B | `float4_e2m1x2_t` |
-| ElementMxScale | `float8_e8m0_t` |
-| ElementC | `bfloat16_t` |
+| 组件             | 选型                                  |
+| ---------------- | ------------------------------------- |
+| ArchTag          | `Arch::Ascend950`                     |
+| Kernel           | `DualLevelQuantMxBatchedMatmulTla`    |
+| AIV BlockQuant   | `BlockQuantDualLevelMx`               |
+| TileCopy (Quant) | `TileCopyDualLevelQuantMx`            |
+| BlockMmad        | `BlockMmadTla`                        |
+| BlockScheduler   | `GemmIdentityBlockSwizzle<3, 0/1>`    |
+| DispatchPolicy   | `MmadMx<Ascend950, true, 16>`         |
+| L1TileShape      | `Shape<Int<256>, Int<256>, Int<512>>` |
+| L0TileShape      | `Shape<Int<256>, Int<256>, Int<256>>` |
+| ElementInput     | `float16_t`                           |
+| ElementA/B       | `float4_e2m1x2_t`                     |
+| ElementMxScale   | `float8_e8m0_t`                       |
+| ElementC         | `bfloat16_t`                          |
 
 ## 前置条件
 

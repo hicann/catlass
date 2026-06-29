@@ -38,7 +38,9 @@ python3 examples/71_ascend950_fp8_mx_grouped_matmul_finalize_routing/gen_data_co
 # 可执行文件名 | problem_count | M | N | K | trans_b | group_list_type | enable_bias | batch | data_parallel_size | enable_shared_input | shared_input_weight | shared_input_offset | quant_type | Device ID
 # Device ID 可选，默认为 0
 ```
+
 执行结果如下，说明精度比对成功。
+
 ```
 Compare success.
 ```
@@ -71,4 +73,3 @@ B转置的shape为(problem_count, n, k), MxScaleB的shape为(problem_count, n, c
 - groupList中未指定的部分将不会参与更新。如groupList为(3,4,5)，m为20，则仅前12行参与计算，其余行不影响输出。
 - 当前实现为 mix kernel，CMakeLists.txt 中通过 `catlass_example_add_executable(... mix ...)` 指定，编译时需开启 `L2_CACHE_HINT` 宏定义。
 - AIC/AIV通过CrossCore Flag实现tile粒度的流水线化交替执行，避免全局同步。
-
