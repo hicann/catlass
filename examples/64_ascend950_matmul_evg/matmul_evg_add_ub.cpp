@@ -53,8 +53,6 @@ static void Run(const Options &options) {
     using ElementB = float;
     using ElementC = float;
 
-    std::cout << "matmul_evg_add_ub: ElementA/B=fp16, ElementC/X/D=fp32, RowMajor" << std::endl;
-
     using LayoutTagA = layout::RowMajor;
     using LayoutTagB = layout::RowMajor;
     using LayoutTagC = layout::RowMajor;
@@ -126,7 +124,11 @@ static void Run(const Options &options) {
                        * CeilDiv(options.problemShape.n(), tla::get<1>(L1TileShape{}));
     uint32_t aicCoreUsed = min(aicCoreNum, taskNum);
 
-    constexpr uint32_t computeLength = (216*1024-Arch::Ascend950::L0C_SIZE/2)/2/2/sizeof(ElementC); //2为除accload外申请空间的节点数量，2代表缓冲区数量
+    constexpr uint32_t evgUbNodes = 2;    // AuxLoad + Compute；AccLoad(UB) / Store 不占
+    constexpr uint32_t evgUbStages = 2;   // epilogue 双缓冲
+    constexpr uint32_t evgUbBudget = ArchTag::UB_SIZE - ArchTag::L0C_SIZE / 2; // [0, L0C_SIZE/2) 存 MMAD 结果 C，EVG 仅用后半段 UB
+    constexpr uint32_t computeLength = RoundDown(
+        evgUbBudget / evgUbNodes / evgUbStages / sizeof(ElementC), BYTE_PER_C0); // 每槽元素上限，向下取 BYTE_PER_C0 整数倍
     
     using LayoutC = decltype(layoutC);
     using EpilogueDispatchPolicy = Epilogue::EpilogueVisitor<true>;

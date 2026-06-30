@@ -96,7 +96,10 @@ extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::
     using BlockMmad = Gemm::Block::BlockMmadTla<
         MmadDispatchPolicy, L1TileShape, L0TileShape, ElementA, ElementB, ElementC, void, TileCopy>;
 
-    constexpr uint32_t computeLength = 216 * 1024 / 2 / 2 / sizeof(ElementC);
+    constexpr uint32_t evgUbNodes = 2;    // AccLoad + Compute；Store 不占
+    constexpr uint32_t evgUbStages = 2;   // epilogue 双缓冲
+    constexpr uint32_t computeLength = RoundDown(
+        ArchTag::UB_SIZE / evgUbNodes / evgUbStages / sizeof(ElementC), BYTE_PER_C0); // 每槽元素上限，向下取 BYTE_PER_C0 整数倍
     using LayoutC = decltype(layoutC);
     using EVG = Epilogue::Fusion::TreeVisitor<
         Epilogue::Fusion::VisitorAuxStore<ElementC, LayoutC>,

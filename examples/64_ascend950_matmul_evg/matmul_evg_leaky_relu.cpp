@@ -66,19 +66,16 @@ static void Run(const Options &options) {
     size_t lenA = tagA.Capacity();
     size_t lenB = tagB.Capacity();
     size_t lenD = tagC.Capacity();
-    size_t lenX = lenD;
 
     size_t sizeA = lenA * sizeof(ElementA);
     size_t sizeB = lenB * sizeof(ElementB);
     size_t sizeD = lenD * sizeof(ElementC);
 
-    // Prepare input data A, B, and X
+    // Prepare input data A and B
     std::vector<ElementA> hostA(lenA);
     std::vector<ElementB> hostB(lenB);
-    std::vector<ElementC> hostX(lenX);
     golden::FillRandomData<ElementA>(hostA, -5.0f, 5.0f);
     golden::FillRandomData<ElementB>(hostB, -5.0f, 5.0f);
-    golden::FillRandomData<ElementC>(hostX, -5.0f, 5.0f);
 
     // Allocate device memory and copy data from host to device
     uint8_t *deviceA{nullptr};
@@ -89,10 +86,8 @@ static void Run(const Options &options) {
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    // The data of X is stored on deviceD to save storage space
     uint8_t *deviceD{nullptr};
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceD), sizeD, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMemcpy(deviceD, sizeD, hostX.data(), sizeD, ACL_MEMCPY_HOST_TO_DEVICE));
 
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
@@ -119,7 +114,10 @@ static void Run(const Options &options) {
     // 定义 EVG: D = LeakyRelu(C)
     // C 是 workspace（A*B 的结果，D 是最终输出（LeakyRelu(C) 的结果）
     
-    constexpr uint32_t computeLength = 216*1024/2/2/sizeof(ElementC); //2为申请空间的节点数量，2代表缓冲区数量
+    constexpr uint32_t evgUbNodes = 2;    // AccLoad + Compute；Store 不占
+    constexpr uint32_t evgUbStages = 2;   // epilogue 双缓冲
+    constexpr uint32_t computeLength = RoundDown(
+        ArchTag::UB_SIZE / evgUbNodes / evgUbStages / sizeof(ElementC), BYTE_PER_C0); // 每槽元素上限，向下取 BYTE_PER_C0 整数倍
     
     using LayoutC = decltype(layoutC);
     using EVG = Epilogue::Fusion::TreeVisitor<
@@ -139,13 +137,13 @@ static void Run(const Options &options) {
         ElementC
     >;
 
-    float leaky_relu_scalar = 0.1f;
+    constexpr float leakyReluAlpha = 0.1f;
 
     // 准备 EVG Arguments - 使用 TLA layout 对象
     typename EVG::Arguments evg_args{
         {
             {},
-            {{leaky_relu_scalar}}
+            {{leakyReluAlpha}}
         },
         {deviceD, layoutC}
     };
@@ -206,7 +204,7 @@ static void Run(const Options &options) {
 
     // Compute the golden result
     std::vector<float> hostGolden(lenD);
-    golden::ComputeMatmulElemWiseLeakyRelu(options.problemShape, hostA, tagA, hostB, tagB, hostGolden, tagC, leaky_relu_scalar);
+    golden::ComputeMatmulElemWiseLeakyRelu(options.problemShape, hostA, tagA, hostB, tagB, hostGolden, tagC, leakyReluAlpha);
 
     // Compare the result
     std::vector<uint64_t> errorIndices = golden::CompareData(hostD, hostGolden, k);

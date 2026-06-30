@@ -125,7 +125,10 @@ static void Run(const Options &options) {
     // 定义 EVG: D = C + rowbroadcast(X)
     // C 是 workspace（A*B 的结果），X 是 1xN 行向量（需要广播），D 是最终输出（C+rowbroadcast(X) 的结果）
     
-    constexpr uint32_t computeLength = 216*1024/3/2/sizeof(ElementC); //3为申请空间的节点数量，2代表缓冲区数量
+    constexpr uint32_t evgUbNodes = 3;    // AccLoad + RowBroadcast + Compute；Store 不占
+    constexpr uint32_t evgUbStages = 2;   // epilogue 双缓冲
+    constexpr uint32_t computeLength = RoundDown(
+        ArchTag::UB_SIZE / evgUbNodes / evgUbStages / sizeof(ElementC), BYTE_PER_C0); // 每槽元素上限，向下取 BYTE_PER_C0 整数倍
     
     using LayoutC = decltype(layoutC);
     using LayoutX = decltype(layoutX);

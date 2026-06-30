@@ -96,7 +96,10 @@ extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::
     using BlockMmad = Gemm::Block::BlockMmadTla<
         MmadDispatchPolicy, L1TileShape, L0TileShape, ElementA, ElementB, ElementC, void, TileCopy>;
 
-    constexpr uint32_t computeLength = 216 * 1024 / 6 / 2 / sizeof(ElementC);
+    constexpr uint32_t evgUbNodes = 8;    // 占 UB 的 Visitor 数（AccLoad + 7×Compute；Store 不占）
+    constexpr uint32_t evgUbStages = 2;   // epilogue 双缓冲
+    constexpr uint32_t computeLength = RoundDown(
+        ArchTag::UB_SIZE / evgUbNodes / evgUbStages / sizeof(ElementC), BYTE_PER_C0); // 每槽元素上限，向下取 BYTE_PER_C0 整数倍
     using LayoutC = decltype(layoutC);
 
     using Edges = tla::tuple<
@@ -104,13 +107,17 @@ extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::
         tla::seq<0>,
         tla::seq<1>,
         tla::seq<2>,
-        tla::seq<2>,
-        tla::seq<3, 4>,
-        tla::seq<5>>;
+        tla::seq<3>,
+        tla::seq<4>,
+        tla::seq<4>,
+        tla::seq<5, 6>,
+        tla::seq<7>>;
 
     using EVG = Epilogue::Fusion::TopologicalVisitor<
         Edges,
         Epilogue::Fusion::VisitorAccLoad<ElementC>,
+        Epilogue::Fusion::VisitorCompute<Epilogue::Fusion::Mins, ElementC, ElementC>,
+        Epilogue::Fusion::VisitorCompute<Epilogue::Fusion::Maxs, ElementC, ElementC>,
         Epilogue::Fusion::VisitorCompute<Epilogue::Fusion::Muls, ElementC, ElementC>,
         Epilogue::Fusion::VisitorCompute<Epilogue::Fusion::Exp, ElementC>,
         Epilogue::Fusion::VisitorCompute<Epilogue::Fusion::Adds, ElementC, ElementC>,
@@ -127,7 +134,7 @@ extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::
     uint8_t* deviceD = params->outputAddr[0];
 
     typename EVG::Arguments evg_args{
-        {}, {{2.0f}}, {}, {{-1.0f}}, {{1.0f}}, {}, {deviceD, layoutC}};
+        {}, {{8.8f}}, {{-8.8f}}, {{2.0f}}, {}, {{-1.0f}}, {{1.0f}}, {}, {deviceD, layoutC}};
 
     typename MatmulKernel::Arguments arguments{
         GemmCoord{m, n, k}, deviceA, layoutA, deviceB, layoutB, nullptr, layoutC, nullptr, evg_args};

@@ -141,6 +141,34 @@ struct Muls {
 };
 
 template <typename T>
+struct Maxs {
+    T scalarValue;
+
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<T>& dst,
+        uint32_t compute_length,
+        AscendC::LocalTensor<T> const& src
+    ) const {
+        AscendC::Maxs(dst, src, scalarValue, compute_length);
+    }
+};
+
+template <typename T>
+struct Mins {
+    T scalarValue;
+
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<T>& dst,
+        uint32_t compute_length,
+        AscendC::LocalTensor<T> const& src
+    ) const {
+        AscendC::Mins(dst, src, scalarValue, compute_length);
+    }
+};
+
+template <typename T>
 struct Add {
     template <typename... Inputs>
     CATLASS_DEVICE

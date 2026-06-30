@@ -91,7 +91,11 @@ void LaunchAddUbKernel(uint32_t blockNum, aclrtStream stream, const CatlassKerne
     using BlockMmad = Gemm::Block::BlockMmadTla<
         MmadDispatchPolicy, L1TileShape, L0TileShape, ElementA, ElementB, ElementC, void, TileCopy>;
 
-    constexpr uint32_t computeLength = (216 * 1024 - Arch::Ascend950::L0C_SIZE / 2) / 2 / 2 / sizeof(ElementC);
+    constexpr uint32_t evgUbNodes = 2;    // AuxLoad + Compute；AccLoad(UB) / Store 不占
+    constexpr uint32_t evgUbStages = 2;   // epilogue 双缓冲
+    constexpr uint32_t evgUbBudget = ArchTag::UB_SIZE - ArchTag::L0C_SIZE / 2; // [0, L0C_SIZE/2) 存 MMAD 结果 C，EVG 仅用后半段 UB
+    constexpr uint32_t computeLength = RoundDown(
+        evgUbBudget / evgUbNodes / evgUbStages / sizeof(ElementC), BYTE_PER_C0); // 每槽元素上限，向下取 BYTE_PER_C0 整数倍
     using LayoutC = decltype(layoutC);
     using EpilogueDispatchPolicy = Epilogue::EpilogueVisitor<true>;
     using EVG = Epilogue::Fusion::TreeVisitor<

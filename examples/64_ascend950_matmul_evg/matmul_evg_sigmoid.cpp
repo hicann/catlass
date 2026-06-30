@@ -115,7 +115,10 @@ static void Run(const Options &options) {
     // 定义 EVG: D = Sigmoid( C ) = 1 / (1 + e^-X) 
     using LayoutC = decltype(layoutC);
     
-    constexpr uint32_t computeLength = 216*1024/2/2/sizeof(ElementC); // 2为申请空间的节点数量，2代表缓冲区数量
+    constexpr uint32_t evgUbNodes = 2;    // AccLoad + Compute；Store 不占
+    constexpr uint32_t evgUbStages = 2;   // epilogue 双缓冲
+    constexpr uint32_t computeLength = RoundDown(
+        ArchTag::UB_SIZE / evgUbNodes / evgUbStages / sizeof(ElementC), BYTE_PER_C0); // 每槽元素上限，向下取 BYTE_PER_C0 整数倍
     
     using EVG = Epilogue::Fusion::TreeVisitor<
         Epilogue::Fusion::VisitorAuxStore<ElementC, LayoutC>,
