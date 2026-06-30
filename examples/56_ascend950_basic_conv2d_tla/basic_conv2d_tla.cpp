@@ -204,6 +204,10 @@ static void Run(Options const &options)
     Conv2dAdapter conv2d_op;
     if (conv2d_op.CanImplement(arguments) == Status::kInvalid) {
         std::cerr << "[ERROR]Conv2d op cannot be implemented: L1TileShape exceeds the L1 space!" << std::endl;
+
+        ACL_CHECK(aclrtDestroyStream(stream));
+        ACL_CHECK(aclrtResetDevice(options.deviceId));
+        ACL_CHECK(aclFinalize());
         return;
     }
     size_t sizeWorkspace = conv2d_op.GetWorkspaceSize(arguments);

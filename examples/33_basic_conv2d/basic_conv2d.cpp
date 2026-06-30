@@ -186,7 +186,14 @@ static void Run(Options const &options)
     using Conv2dAdapter = Conv::Device::DeviceConv<Conv2dKernel>;
     Conv2dKernel::Arguments arguments{options.problemParams, deviceFmap, deviceFilter, deviceOutput};
     Conv2dAdapter conv2d_op;
-    conv2d_op.CanImplement(arguments);
+    if (conv2d_op.CanImplement(arguments) == Status::kInvalid) {
+        std::cerr << "[ERROR]Conv2d op cannot be implemented: strideH/W or dilationH/W  should not be zero, or L1TileShape/L0TileShape exceeds the L1/L0 space!" << std::endl;
+
+        ACL_CHECK(aclrtDestroyStream(stream));
+        ACL_CHECK(aclrtResetDevice(options.deviceId));
+        ACL_CHECK(aclFinalize());
+        return;
+    }
     size_t sizeWorkspace = conv2d_op.GetWorkspaceSize(arguments);
     uint8_t *deviceWorkspace = nullptr;
     if (sizeWorkspace > 0) {

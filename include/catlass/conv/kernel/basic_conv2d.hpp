@@ -85,7 +85,11 @@ public:
 
     static bool CanImplement(const Arguments &args)
     {
-        return true;
+        if (args.problemShape.strideH() == 0 || args.problemShape.strideW() == 0 ||
+            args.problemShape.dilationH() == 0 || args.problemShape.dilationW() == 0) {
+            return false; 
+        }
+        return BlockConv2d::CanImplement(args.problemShape.getFilterParams());
     }
 
     static size_t GetWorkspaceSize(const Arguments &args)

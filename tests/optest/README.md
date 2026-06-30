@@ -40,6 +40,10 @@ Python API (`torch_catlass.ops.*`)
 - [x] 12_quant_matmul
 - [x] 13_basic_matmul_tla
 - [x] 14_optimized_matmul_tla
+- [x] 15_gemm
+- [x] 16_group_gemm
+- [x] 17_gemv_aiv
+- [x] 18_gemv_aic
 - [x] 19_mla
 - [x] 20_matmul_bias
 - [x] 21_basic_matmul_preload_zN
@@ -56,43 +60,35 @@ Python API (`torch_catlass.ops.*`)
 - [x] 32_w4a8_matmul
 - [x] 34_single_core_splitk_matmul
 - [x] 37_streamk_matmul
+- [x] 38_w4a4_per_token_per_channel_dequant
 - [x] 41_sparse_matmul_tla
 - [x] 42_quant_optimized_matmul_tla
 - [x] 43_ascend950_basic_matmul
 - [x] 44_quant_matmul_full_loadA_tla
 - [x] 45_strided_batched_matmul_tla
-- [x] 49_ascend950_flash_attention_infer
+- [x] 46_ascend950_matmul_fixpipe_opti (Ascend950)
+- [x] 47_ascend950_grouped_slice_m_dequant (Ascend950)
+- [x] 48_ascend950_grouped_slice_m_pt_pc_dequant (Ascend950)
+- [x] 50_ascend950_basic_matmul_gemv (Ascend950)
+- [x] 49_ascend950_flash_attention_infer (Ascend950)
+- [x] 51_ascend950_quant_per_group_per_block (Ascend950)
 - [x] 52_quant_multi_core_splitk_matmul_tla
 - [x] 53_ascend950_fp8_mx_matmul (Ascend950)
 - [x] 54_ascend950_fp4_mx_matmul (Ascend950)
+- [x] 55_ascend950_mx_grouped_slice_m (Ascend950)
+- [x] 57_ascend950_matmul_full_dequant (Ascend950)
 - [x] 58_ascend950_fp8_mx_batch_matmul (Ascend950)
 - [x] 59_ascend950_a8w4_mx_matmul (Ascend950)
-- [x] 61_ascend950_svd_quant_matmul (Ascend950)
-- [x] 63_ascend950_dual_level_quant_mx_batch_matmul (Ascend950)
+- [x] 60_ascend950_grouped_matmul_slice_m (Ascend950)
 - [x] 67_ascend950_batched_matmul (Ascend950)
-- [x] 70_ascend950_flash_attention_chunk_prefill (Ascend950)
-- [x] 71_ascend950_fp8_mx_grouped_matmul_finalize_routing (Ascend950)
-- [x] 72_ascend950_fp8_mx_flash_attention_infer (Ascend950)
 - [x] 73_ascend950_matmul_full_loadA (Ascend950)
 
 ### 暂未接入
 
-- [ ] 15_gemm
-- [ ] 16_group_gemm
-- [ ] 17_gemv_aiv
-- [ ] 18_gemv_aic
 - [ ] 24_conv_bias
 - [ ] 33_basic_conv2d
-- [ ] 38_w4a4_per_token_per_channel_dequant
-- [ ] 46_ascend950_matmul_fixpipe_opti
-- [ ] 47_ascend950_grouped_slice_m_dequant
-- [ ] 48_ascend950_grouped_slice_m_pt_pc_dequant
-- [ ] 50_ascend950_basic_matmul_gemv
-- [ ] 51_ascend950_quant_per_group_per_block
-- [ ] 55_ascend950_mx_grouped_slice_m
 - [ ] 56_ascend950_basic_conv2d_tla
-- [ ] 57_ascend950_matmul_full_dequant
-- [ ] 60_ascend950_grouped_matmul_slice_m
+- [ ] 70_ascend950_flash_attention_chunk_prefill (Ascend950)
 - [ ] 102_dynamic_optimized_matmul
 - [ ] 103_dynamic_optimized_quant_matmul_per_token_basic
 

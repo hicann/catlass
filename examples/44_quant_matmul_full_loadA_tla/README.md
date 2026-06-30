@@ -13,6 +13,8 @@
 ## 功能介绍
 
 该算子在12_quant_matmul基础上支持A矩阵全载，支持单核将A矩阵全部载入L1Cache并常驻，以减少A矩阵在部分矩阵计算场景中的重复搬运，提高性能。当前A矩阵全载模板暂不支持输入包含bias。
+注意：需满足下述约束：
+- 需满足约束: L1TileShape::M * k * 1B + L1TileShape::K * L1TileShape::N * L1_STAGES * 1B  不超过L1_SIZE。在当前配置下，输入矩阵k轴不应超过2048。
 
 ## 使用示例
 

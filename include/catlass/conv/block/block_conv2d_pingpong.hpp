@@ -112,6 +112,35 @@ public:
 
     static constexpr uint32_t K_FMAP_PER_FILTER = FilterL1TileShape::Cin1 / FmapL1TileShape::Cin1;
 
+    static bool CanImplement(Conv2dFilterParams const &filterParams)
+    {
+        uint32_t cin1L0Block = L0TileShape::K / (filterParams.kh() * filterParams.kw() * BYTE_PER_C0);
+        cin1L0Block = cin1L0Block > 1 ? cin1L0Block : 1;
+        uint32_t coutL0Block = RoundUp(L0TileShape::N, BYTE_PER_C0);
+        uint32_t coutBlock = RoundUp(FilterL1TileShape::Cout, BYTE_PER_C0);
+
+        uint32_t hiBlock = (FmapL1TileShape::Ho - 1) * filterParams.strideH()
+                  + (filterParams.kh() - 1) * filterParams.dilationH() + 1;
+        uint32_t wiBlock = (FmapL1TileShape::Wo - 1) * filterParams.strideW()
+                  + (filterParams.kw() - 1) * filterParams.dilationW() + 1;
+        uint32_t l1DataSize = L1A_STAGES * FmapL1TileShape::Cin1 * hiBlock * wiBlock * BYTE_PER_C0 + 
+            L1B_STAGES * FilterL1TileShape::Cin1 * filterParams.kh() * filterParams.kw() * FilterL1TileShape::Cout
+                   * BYTE_PER_C0;
+
+        uint32_t l0ADataSize = L0A_STAGES * FmapL1TileShape::Ho * FmapL1TileShape::Wo * (cin1L0Block * filterParams.kh() * filterParams.kw() * BYTE_PER_C0);
+        
+        uint32_t l0BDataSize = L0B_STAGES * (cin1L0Block * filterParams.kh() * filterParams.kw() * BYTE_PER_C0) *coutL0Block;
+
+        uint32_t l0cDataSize = FmapL1TileShape::Ho * FmapL1TileShape::Wo * coutBlock * sizeof(ElementOutput);
+
+        if (l1DataSize > ArchTag::L1_SIZE || l0ADataSize > ArchTag::L0A_SIZE || 
+            l0BDataSize > ArchTag::L0B_SIZE || l0cDataSize > ArchTag::L0C_SIZE) {
+            return false;
+        }
+
+        return true;
+    }
+
     /// Construct
     CATLASS_DEVICE
     BlockConv2d(Arch::Resource<ArchTag> &resource, const Conv2dFilterParams &filterParams_, uint32_t l1BufAddrStart = 0)
