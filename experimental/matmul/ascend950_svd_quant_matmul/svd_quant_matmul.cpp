@@ -37,7 +37,7 @@ using namespace Catlass;
 using namespace tla;
 
 // run this example in the <catlass-project-root-path>
-const std::string dataPath = "./examples/61_ascend950_svd_quant_matmul/data";
+const std::string dataPath = "./examples/ascend950_svd_quant_matmul/data";
 
 struct SvdQuantOptions {
     const std::string HELPER = "m n k r [device_id]";

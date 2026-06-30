@@ -1,15 +1,19 @@
-# Example 63: Dual-Level Quant MX Batch Matmul
+# Dual-Level Quant MX Batch Matmul
+
+> **注意**：本样例位于 `experimental/` 目录下，如需编译运行，请先将样例目录拷贝至 `examples/` 下，并在 `examples/CMakeLists.txt` 中添加样例名称 `ascend950_dual_level_quant_mx_batch_matmul`。
 
 本样例实现二级量化 + MX FP4 Batch Matmul。AIV 侧先将 A/B 全量量化到 workspace，然后通过 `AscendC::SyncAll<false>()` 通知 AIC 侧执行 MX FP4 matmul。
 
 ## 代码组织
 
 ```text
-63_ascend950_dual_level_quant_mx_batch_matmul/
-├── CMakeLists.txt
-├── README.md
-├── dual_level_quant_mx_batch_matmul.cpp
-└── gen_data.py
+experimental
+├── matmul
+│   ├── ascend950_dual_level_quant_mx_batch_matmul
+│   │   ├── CMakeLists.txt
+│   │   ├── README.md
+│   │   ├── dual_level_quant_mx_batch_matmul.cpp
+│   │   └── gen_data.py
 ```
 
 依赖的新增 CATLASS 头文件：
@@ -25,19 +29,19 @@ include/catlass/gemm/kernel/dual_level_quant_mx_batched_matmul_tla.hpp
 编译：
 
 ```bash
-bash scripts/build.sh 63_ascend950_dual_level_quant_mx_batch_matmul -DCATLASS_ARCH=3510
+bash scripts/build.sh ascend950_dual_level_quant_mx_batch_matmul -DCATLASS_ARCH=3510
 ```
 
 生成测试数据：
 
 ```bash
-python3 examples/63_ascend950_dual_level_quant_mx_batch_matmul/gen_data.py 1 1024 1024 1024
+python3 examples/ascend950_dual_level_quant_mx_batch_matmul/gen_data.py 1 1024 1024 1024
 ```
 
 执行算子：
 
 ```bash
-./output/bin/63_ascend950_dual_level_quant_mx_batch_matmul 1 1024 1024 1024 0
+./output/bin/ascend950_dual_level_quant_mx_batch_matmul 1 1024 1024 1024 0
 ```
 
 ## 约束说明

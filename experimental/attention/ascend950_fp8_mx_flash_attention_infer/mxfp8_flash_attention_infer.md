@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-CATLASS MXFP8 FlashAttention Infer 是基于 [49_ascend950_flash_attention_infer](../49_ascend950_flash_attention_infer/flash_attention_infer.md) 样例，额外适配以下两个独立特性的推理算子：
+CATLASS MXFP8 FlashAttention Infer 是基于 [49_ascend950_flash_attention_infer](../../../examples/49_ascend950_flash_attention_infer/flash_attention_infer.md) 样例，额外适配以下两个独立特性的推理算子：
 
 - **MXFP8（Microscaled FP8）量化**：Q、K、V 矩阵量化为 `float8_e4m3_t` 格式，并为每个分块（block size=32）提供 `float8_e8m0_t` 格式的 MX Scale 缩放因子，在 Cube 矩阵乘的 L1→L0 阶段完成反量化。同时，Online Softmax 在 FP32 精度下完成计算后，P 矩阵必定 cast 为 `float8_e4m3_t` 以配合后续 P×V 的 MXFP8 矩阵乘。
 - **P矩阵静态量化（可选）**：在 P 矩阵 cast 为 fp8 之前，额外乘以一个全局静态量化系数（pScale），实现 `P_fp8 = quantize(P_fp32 × pScale)`。由模板参数 `ENABLE_P_SCALE` 和命令行参数 `usePscale` 控制是否启用。
@@ -106,7 +106,7 @@ MXFP8（Microscale FP8）是一种基于分块的浮点量化方案：
 
 ### 3.3 Q×K^T（BMM1）的 MXFP8 矩阵乘
 
-Q×K^T 的 BlockMmad 从样例49的 [block_mmad_fai_qk_tla.hpp](../../include/catlass/gemm/block/block_mmad_fai_qk_tla.hpp) 切换到 MX 版本的 [block_mmad_fai_qk_mx_tla.hpp](../../include/catlass/gemm/block/block_mmad_fai_qk_mx_tla.hpp)，核心变化如下：
+Q×K^T 的 BlockMmad 从样例49的 [block_mmad_fai_qk_tla.hpp](../../../include/catlass/gemm/block/block_mmad_fai_qk_tla.hpp) 切换到 MX 版本的 [block_mmad_fai_qk_mx_tla.hpp](../../../include/catlass/gemm/block/block_mmad_fai_qk_mx_tla.hpp)，核心变化如下：
 
 | 对比项            | 样例49                     | 样例62 (MX版本)                                |
 | ----------------- | -------------------------- | ---------------------------------------------- |
@@ -161,7 +161,7 @@ Q×K^T 结果 (UB, float32)
 
 > **概念区分**：P 矩阵 cast 到 fp8 是 MXFP8 路径下为配合后续 P×V 矩阵乘的必选步骤（由 `ElementP` 类型为 `float8_e4m3_t` 决定），而 P 矩阵静态量化（`ENABLE_P_SCALE`/`usePscale`）是在 cast 之前额外乘一个 pScale 系数的可选特性。两者是不同层级的概念：cast 决定 P 的输出精度，静态量化决定 cast 前是否做 scale 调整。
 
-实现上，当 `ElementP` 为 `float8_e4m3_t` 类型时，[block_epilogue_fa_softmax_ascend950.hpp](../../include/catlass/epilogue/block/block_epilogue_fa_softmax_ascend950.hpp) 中的 Softmax 通过 `if constexpr` 选择 `ComputeExpSubSumFp8` 路径，直接在 UB 上将 exp 结果量化为 fp8 后输出到 L1：
+实现上，当 `ElementP` 为 `float8_e4m3_t` 类型时，[block_epilogue_fa_softmax_ascend950.hpp](../../../include/catlass/epilogue/block/block_epilogue_fa_softmax_ascend950.hpp) 中的 Softmax 通过 `if constexpr` 选择 `ComputeExpSubSumFp8` 路径，直接在 UB 上将 exp 结果量化为 fp8 后输出到 L1：
 
 ```cpp
 if constexpr (AscendC::IsSameType<ElementP, float8_e4m3_t>::value) {
@@ -177,7 +177,7 @@ if constexpr (AscendC::IsSameType<ElementP, float8_e4m3_t>::value) {
 
 ### 5.1 P 矩阵的特殊性
 
-P×V 的 BlockMmad 从样例49的 [block_mmad_fai_pv_tla.hpp](../../include/catlass/gemm/block/block_mmad_fai_pv_tla.hpp) 切换到 MX 版本的 [block_mmad_fai_pv_mx_tla.hpp](../../include/catlass/gemm/block/block_mmad_fai_pv_mx_tla.hpp)。
+P×V 的 BlockMmad 从样例49的 [block_mmad_fai_pv_tla.hpp](../../../include/catlass/gemm/block/block_mmad_fai_pv_tla.hpp) 切换到 MX 版本的 [block_mmad_fai_pv_mx_tla.hpp](../../../include/catlass/gemm/block/block_mmad_fai_pv_mx_tla.hpp)。
 
 与 Q×K^T 不同，P×V 矩阵乘中：
 
@@ -186,7 +186,7 @@ P×V 的 BlockMmad 从样例49的 [block_mmad_fai_pv_tla.hpp](../../include/catl
 
 ### 5.2 全1 Scale 初始化
 
-在 [block_mmad_fai_pv_mx_tla.hpp](../../include/catlass/gemm/block/block_mmad_fai_pv_mx_tla.hpp) 的构造函数中调用 `InitOneInL1MxScaleA()`：
+在 [block_mmad_fai_pv_mx_tla.hpp](../../../include/catlass/gemm/block/block_mmad_fai_pv_mx_tla.hpp) 的构造函数中调用 `InitOneInL1MxScaleA()`：
 
 ```cpp
 CATLASS_DEVICE

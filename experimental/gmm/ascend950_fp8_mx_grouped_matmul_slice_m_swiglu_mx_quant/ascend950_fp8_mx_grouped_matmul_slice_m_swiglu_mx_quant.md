@@ -37,11 +37,11 @@ $Q_i = quantize\_to\_element\_format(S_i/Qscale), \space i\space from\space 1\sp
 
 | 组件           | 模板类                                                                                                                       | 说明                                                       |
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| Kernel         | [GroupedMxMatmulSliceMSwigluMxQuantTla](../../include/catlass/gemm/kernel/grouped_mx_matmul_slice_m_swiglu_mx_quant_tla.hpp) | AIC/AIV双核协作，按group遍历，Slice-M分组调度              |
-| BlockMmad      | [BlockMmadTla](../../include/catlass/gemm/block/block_mmad_pingpong_tla.hpp)                                                 | MX量化矩阵乘，DispatchPolicy=`MmadMx<Ascend950, true, 16>` |
-| TileCopy       | [PackedMxTileCopyTlaToUB](../../include/catlass/gemm/block/block_mmad.hpp)                                                   | GM→L1→UB数据搬运，`SPLIT_M`模式                            |
-| BlockEpilogue  | [BlockEpilogue\<BlockEpilogueSwigluMxQuant\>](../../include/catlass/epilogue/block/block_epilogue_swiglu_mx_quant.hpp)       | SwiGLU激活 + MX FP8量化输出                                |
-| BlockScheduler | [GemmIdentityBlockSwizzle\<3,1\>](../../include/catlass/gemm/block/block_swizzle.hpp)                                        | 按(M,N)平铺分块，轮转分配到各AICore                        |
+| Kernel         | [GroupedMxMatmulSliceMSwigluMxQuantTla](../../../include/catlass/gemm/kernel/grouped_mx_matmul_slice_m_swiglu_mx_quant_tla.hpp) | AIC/AIV双核协作，按group遍历，Slice-M分组调度              |
+| BlockMmad      | [BlockMmadTla](../../../include/catlass/gemm/block/block_mmad_pingpong_tla.hpp)                                                 | MX量化矩阵乘，DispatchPolicy=`MmadMx<Ascend950, true, 16>` |
+| TileCopy       | [PackedMxTileCopyTlaToUB](../../../include/catlass/gemm/block/block_mmad.hpp)                                                   | GM→L1→UB数据搬运，`SPLIT_M`模式                            |
+| BlockEpilogue  | [BlockEpilogue\<BlockEpilogueSwigluMxQuant\>](../../../include/catlass/epilogue/block/block_epilogue_swiglu_mx_quant.hpp)       | SwiGLU激活 + MX FP8量化输出                                |
+| BlockScheduler | [GemmIdentityBlockSwizzle\<3,1\>](../../../include/catlass/gemm/block/block_swizzle.hpp)                                        | 按(M,N)平铺分块，轮转分配到各AICore                        |
 
 ### AIC/AIV双核协作
 

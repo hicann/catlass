@@ -8,6 +8,6 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # ----------------------------------------------------------------------------
 
-set_source_files_properties(dual_level_quant_mx_batch_matmul.cpp PROPERTIES LANGUAGE ASC)
-catlass_example_add_executable(63_ascend950_dual_level_quant_mx_batch_matmul cube dual_level_quant_mx_batch_matmul.cpp)
-target_compile_definitions(63_ascend950_dual_level_quant_mx_batch_matmul PRIVATE L2_CACHE_HINT)
+set_source_files_properties(fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant.cpp PROPERTIES LANGUAGE ASC)
+catlass_example_add_executable(ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant cube fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant.cpp)
+target_compile_definitions(ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant PRIVATE L2_CACHE_HINT)

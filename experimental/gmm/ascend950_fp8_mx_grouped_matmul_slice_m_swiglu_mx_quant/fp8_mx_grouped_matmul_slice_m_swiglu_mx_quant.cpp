@@ -45,7 +45,7 @@ using namespace tla;
 
 using Options = GroupedGemmOptions;
 
-static const std::string kExampleRoot = "./examples/65_ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant";
+static const std::string kExampleRoot = "./examples/ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant";
 static const std::string kDataRoot = kExampleRoot + "/data";
 
 static void Run(const Options &options)

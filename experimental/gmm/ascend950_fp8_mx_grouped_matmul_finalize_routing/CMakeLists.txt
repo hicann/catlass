@@ -8,6 +8,6 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # ----------------------------------------------------------------------------
 
-set_source_files_properties(fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant.cpp PROPERTIES LANGUAGE ASC)
-catlass_example_add_executable(65_ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant cube fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant.cpp)
-target_compile_definitions(65_ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant PRIVATE L2_CACHE_HINT)
+set_source_files_properties(fp8_mx_grouped_matmul_finalize_routing.cpp PROPERTIES LANGUAGE ASC)
+catlass_example_add_executable(ascend950_fp8_mx_grouped_matmul_finalize_routing mix fp8_mx_grouped_matmul_finalize_routing.cpp)
+target_compile_definitions(ascend950_fp8_mx_grouped_matmul_finalize_routing PRIVATE L2_CACHE_HINT)

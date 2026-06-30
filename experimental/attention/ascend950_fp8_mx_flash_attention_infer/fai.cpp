@@ -44,7 +44,7 @@ struct Options {
     uint32_t deviceId{0};
     uint32_t blockSize{128};
     string dataType = "half";
-    string dataPath = "../../examples/72_ascend950_fp8_mx_flash_attention_infer/data";
+    string dataPath = "../../examples/ascend950_fp8_mx_flash_attention_infer/data";
 
     Options() = default;
 

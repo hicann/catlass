@@ -1,5 +1,7 @@
 # SvdQuantMatmulTla Example Readme
 
+> **注意**：本样例位于 `experimental/` 目录下，如需编译运行，请先将样例目录拷贝至 `examples/` 下，并在 `examples/CMakeLists.txt` 中添加样例名称 `ascend950_svd_quant_matmul`。
+
 ## SvdQuant算法原理简介
 
 在量化前有原始的激活X，原始的权重W。给定一个Smooth参数进行变换，可将量化难度从激活转移到权重，该部分离线融合，无在线开销。
@@ -106,29 +108,30 @@ SvdQuant更多细节参考[SvdQuant论文](https://arxiv.org/abs/2411.05007)
 ## 代码组织
 
 ```
-examples
-├── 61_ascend950_svd_quant_matmul
-│   ├── CMakeLists.txt     # CMake编译文件
-│   ├── README.md
-│   ├── svd_quant_matmul.cpp    # 调用样例
-│   └── gen_data.py             # 数据生成脚本
+experimental
+├── matmul
+│   ├── ascend950_svd_quant_matmul
+│   │   ├── CMakeLists.txt     # CMake编译文件
+│   │   ├── README.md
+│   │   ├── svd_quant_matmul.cpp    # 调用样例
+│   │   └── gen_data.py             # 数据生成脚本
 ```
 
 ## 编译及运行
 
-- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)，本用例为 Ascend950（3510）算子，编译时需加 `-DCATLASS_ARCH=3510`。
+- 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../../docs/zh/1_Practice/01_quick_start.md#编译执行)，本用例为 Ascend950（3510）算子，编译时需加 `-DCATLASS_ARCH=3510`。
 
 ```shell
 # 编译指定用例
-bash scripts/build.sh 61_ascend950_svd_quant_matmul -DCATLASS_ARCH=3510
+bash scripts/build.sh ascend950_svd_quant_matmul -DCATLASS_ARCH=3510
 
-# 生成测试样例（在 examples/61_ascend950_svd_quant_matmul/data 下生成 input/ 与 golden/）
+# 生成测试样例（在 examples/ascend950_svd_quant_matmul/data 下生成 input/ 与 golden/）
 # 参数对应 m n k r
-python examples/61_ascend950_svd_quant_matmul/gen_data.py 256 256 512 32
+python examples/ascend950_svd_quant_matmul/gen_data.py 256 256 512 32
 
 # 执行测试样例
 # 输入参数分别对应 m, n, k, r, deviceId, deviceId可选，默认为0
-./output/bin/61_ascend950_svd_quant_matmul 256 256 512 32 0
+./output/bin/ascend950_svd_quant_matmul 256 256 512 32 0
 ```
 
 执行结果如下，说明精度比对成功。
@@ -140,7 +143,7 @@ Compare success.
 查看gen_data脚本可配参数
 
 ```bash
-python examples/61_ascend950_svd_quant_matmul/gen_data.py -h
+python examples/ascend950_svd_quant_matmul/gen_data.py -h
 
 positional arguments:
     m

@@ -864,7 +864,7 @@ if __name__ == "__main__":
     # 获取算子路径并执行算子用例
     current_dir = os.path.dirname(os.path.abspath(__file__))
     catlass_home_dir = os.path.dirname(os.path.dirname(current_dir))
-    op_path = os.path.join(catlass_home_dir, "output", "bin", "71_ascend950_fp8_mx_grouped_matmul_finalize_routing")
+    op_path = os.path.join(catlass_home_dir, "output", "bin", "ascend950_fp8_mx_grouped_matmul_finalize_routing")
 
     print("------计算npu------")
     result = subprocess.run(

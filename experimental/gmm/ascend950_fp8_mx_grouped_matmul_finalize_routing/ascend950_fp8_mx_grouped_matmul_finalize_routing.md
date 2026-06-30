@@ -27,11 +27,11 @@
 
 | 组件           | 模板类                                                                                                            | 说明                                                       |
 | -------------- | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| Kernel         | [GroupedMxMatmulFinalizeRoutingTla](../../include/catlass/gemm/kernel/grouped_mx_matmul_finalize_routing_tla.hpp) | AIC/AIV双核协作，按group遍历，CrossCore Flag流水线同步     |
-| BlockMmad      | [BlockMmadTla](../../include/catlass/gemm/block/block_mmad_pingpong_tla.hpp)                                      | MX量化矩阵乘，DispatchPolicy=`MmadMx<Ascend950, true, 16>` |
-| TileCopy       | [PackedMxTileCopyTla](../../include/catlass/gemm/block/block_mmad.hpp)                                            | GM→L1→UB数据搬运                                           |
-| BlockEpilogue  | [BlockEpilogueFinalizeRouting](../../include/catlass/epilogue/block/block_epilogue_finalize_routing.hpp)          | 输出清零 + SharedInput赋值 + Logit加权 + Scatter Add       |
-| BlockScheduler | [ColumnBlockSwizzle](../../include/catlass/gemm/block/block_swizzle.hpp)                                          | 按列分块调度，分配到各AICore                               |
+| Kernel         | [GroupedMxMatmulFinalizeRoutingTla](../../../include/catlass/gemm/kernel/grouped_mx_matmul_finalize_routing_tla.hpp) | AIC/AIV双核协作，按group遍历，CrossCore Flag流水线同步     |
+| BlockMmad      | [BlockMmadTla](../../../include/catlass/gemm/block/block_mmad_pingpong_tla.hpp)                                      | MX量化矩阵乘，DispatchPolicy=`MmadMx<Ascend950, true, 16>` |
+| TileCopy       | [PackedMxTileCopyTla](../../../include/catlass/gemm/block/block_mmad.hpp)                                            | GM→L1→UB数据搬运                                           |
+| BlockEpilogue  | [BlockEpilogueFinalizeRouting](../../../include/catlass/epilogue/block/block_epilogue_finalize_routing.hpp)          | 输出清零 + SharedInput赋值 + Logit加权 + Scatter Add       |
+| BlockScheduler | [ColumnBlockSwizzle](../../../include/catlass/gemm/block/block_swizzle.hpp)                                          | 按列分块调度，分配到各AICore                               |
 
 ### AIC/AIV双核协作
 

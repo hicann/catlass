@@ -1,5 +1,7 @@
 # MXFP8GroupedMatmulFinalizeRouting Example Readme
 
+> **注意**：本样例位于 `experimental/` 目录下，如需编译运行，请先将样例目录拷贝至 `examples/` 下，并在 `examples/CMakeLists.txt` 中添加样例名称 `ascend950_fp8_mx_grouped_matmul_finalize_routing`。
+
 ## 功能介绍
 
 - 演示 Ascend 950 上的 **Grouped MXFP8矩阵乘 + Finalize Routing** 融合算子：
@@ -12,29 +14,31 @@
 ## 代码组织
 
 ```
-├── 71_ascend950_fp8_mx_grouped_matmul_finalize_routing
-│   ├── CMakeLists.txt                          # CMake 编译配置
-│   ├── README.md
-│   ├── ascend950_fp8_mx_grouped_matmul_finalize_routing.md  # 设计文档
-│   ├── gen_data_compare.py                     # 生成 data/input/ 与 golden/，执行对比
-│   └── fp8_mx_grouped_matmul_finalize_routing.cpp      # 主程序
+experimental
+├── gmm
+│   ├── ascend950_fp8_mx_grouped_matmul_finalize_routing
+│   │   ├── CMakeLists.txt                          # CMake 编译配置
+│   │   ├── README.md
+│   │   ├── ascend950_fp8_mx_grouped_matmul_finalize_routing.md  # 设计文档
+│   │   ├── gen_data_compare.py                     # 生成 data/input/ 与 golden/，执行对比
+│   │   └── fp8_mx_grouped_matmul_finalize_routing.cpp      # 主程序
 ```
 
 ## 使用示例
 
-- 获取代码之后编译相应的算子可执行文件，可参考 [quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)，本用例为 Ascend950（3510）算子，编译时需加 `-DCATLASS_ARCH=3510`。
+- 获取代码之后编译相应的算子可执行文件，可参考 [quickstart](../../../docs/zh/1_Practice/01_quick_start.md#编译执行)，本用例为 Ascend950（3510）算子，编译时需加 `-DCATLASS_ARCH=3510`。
 - 执行算子
 
 ```
 # 编译指定用例
-bash scripts/build.sh 71_ascend950_fp8_mx_grouped_matmul_finalize_routing -DCATLASS_ARCH=3510
+bash scripts/build.sh ascend950_fp8_mx_grouped_matmul_finalize_routing -DCATLASS_ARCH=3510
 
-# 生成测试样例并执行精度对比（在 examples/71_ascend950_fp8_mx_grouped_matmul_finalize_routing/data 下生成 input/ 与 golden/）
-python3 examples/71_ascend950_fp8_mx_grouped_matmul_finalize_routing/gen_data_compare.py 4 128 128 128 0 0 0 16 2 0 0.0 0 float8_e5m2 0
+# 生成测试样例并执行精度对比（在 examples/ascend950_fp8_mx_grouped_matmul_finalize_routing/data 下生成 input/ 与 golden/）
+python3 examples/ascend950_fp8_mx_grouped_matmul_finalize_routing/gen_data_compare.py 4 128 128 128 0 0 0 16 2 0 0.0 0 float8_e5m2 0
 # 输入参数分别对应 problem_count, m, n, k, trans_b, group_list_type, enable_bias, batch, data_parallel_size, enable_shared_input, shared_input_weight, shared_input_offset, quant_type, device_id
 
 # 单独执行测试样例
-./output/bin/71_ascend950_fp8_mx_grouped_matmul_finalize_routing 4 128 128 128 0 0 0 16 2 0 0.0 0 float8_e5m2 0
+./output/bin/ascend950_fp8_mx_grouped_matmul_finalize_routing 4 128 128 128 0 0 0 16 2 0 0.0 0 float8_e5m2 0
 # 可执行文件名 | problem_count | M | N | K | trans_b | group_list_type | enable_bias | batch | data_parallel_size | enable_shared_input | shared_input_weight | shared_input_offset | quant_type | Device ID
 # Device ID 可选，默认为 0
 ```

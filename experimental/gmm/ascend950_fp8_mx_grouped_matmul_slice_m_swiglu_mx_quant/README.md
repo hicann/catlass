@@ -1,5 +1,7 @@
 # MXFP8GroupMatmulSliceMSwigluMxQuant Example Readme
 
+> **注意**：本样例位于 `experimental/` 目录下，如需编译运行，请先将样例目录拷贝至 `examples/` 下，并在 `examples/CMakeLists.txt` 中添加样例名称 `ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant`。
+
 ## 功能介绍
 
 - 演示 Ascend 950 上的 **Grouped MXFP8矩阵乘 + SwiGLU + MXFP8量化**：
@@ -10,29 +12,31 @@
 ## 代码组织
 
 ```
-├── 65_ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant
-│   ├── CMakeLists.txt                          # CMake 编译配置
-│   ├── README.md
-│   ├── gen_data.py                             # 生成 data/input/
-│   ├── compare.py                              # 计算golden，对比结果
-│   └── fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant.cpp      # 主程序
+experimental
+├── gmm
+│   ├── ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant
+│   │   ├── CMakeLists.txt                          # CMake 编译配置
+│   │   ├── README.md
+│   │   ├── gen_data.py                             # 生成 data/input/
+│   │   ├── compare.py                              # 计算golden，对比结果
+│   │   └── fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant.cpp      # 主程序
 ```
 
 ## 使用示例
 
-- 获取代码之后编译相应的算子可执行文件，可参考 [quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)，本用例为 Ascend950（3510）算子，编译时需加 `-DCATLASS_ARCH=3510`。
+- 获取代码之后编译相应的算子可执行文件，可参考 [quickstart](../../../docs/zh/1_Practice/01_quick_start.md#编译执行)，本用例为 Ascend950（3510）算子，编译时需加 `-DCATLASS_ARCH=3510`。
 - 执行算子
 
 ```
 # 编译指定用例
-bash scripts/build.sh 65_ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant -DCATLASS_ARCH=3510
+bash scripts/build.sh ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant -DCATLASS_ARCH=3510
 
-# 生成测试样例（在 examples/65_ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant/data 下生成 input/ 与 golden/）
-python3 examples/65_ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant/gen_data.py 4 256 512 1024
+# 生成测试样例（在 examples/ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant/data 下生成 input/ 与 golden/）
+python3 examples/ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant/gen_data.py 4 256 512 1024
 # 输入参数分别对应 problem_count， m， n， k，其中n需要128对齐，problem_count不超过1024
 
 # 执行测试样例
-./output/bin/65_ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant 4 256 512 1024 0
+./output/bin/ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant 4 256 512 1024 0
 # 可执行文件名 | problem_count | M | n | K | Device ID
 # Device ID 可选，默认为 0
 ```
@@ -61,9 +65,9 @@ B转置的shape为(problem_count, n, k), MxScaleB的shape为(problem_count, n, c
 输出Q的数据类型为float8_e4m3或float8_e5m2，与输入A、B保持一致，shape为(m, n/2)
 输出QScale的数据类型为float8_e8m0，shape为(problem_count, ceil((n/2)/64), 2)
 
-4、关于Mx量化矩阵乘的详细特征详见[53_ascend950_fp8_mx_matmul](../53_ascend950_fp8_mx_matmul/README.md)和[54_ascend950_fp4_mx_matmul](../54_ascend950_fp4_mx_matmul/README.md)中说明文档的相关内容。
+4、关于Mx量化矩阵乘的详细特征详见[53_ascend950_fp8_mx_matmul](../../../examples/53_ascend950_fp8_mx_matmul/README.md)和[54_ascend950_fp4_mx_matmul](../../../examples/54_ascend950_fp4_mx_matmul/README.md)中说明文档的相关内容。
 
 ## 特殊说明
 
-- 当前example中的L1TileShape(128,256,256)和L0TileShape(128,256,128)仅为样例[53_ascend950_fp8_mx_matmul](../53_ascend950_fp8_mx_matmul/README.md)的一半，原因在于在一次循环中需要进行两个block的matmul运算，这两次matmul的结果需要同时存在与UB上用来进行后续计算，同时后续的计算中也需要UB存放中间结果，当前场景下UB存放数据共使用约180K。因此，受限于UB大小，当前example的当前example中的L1TileShape和和L0TileShape仅为样例[53_ascend950_fp8_mx_matmul](../53_ascend950_fp8_mx_matmul/README.md)的一半。
+- 当前example中的L1TileShape(128,256,256)和L0TileShape(128,256,128)仅为样例[53_ascend950_fp8_mx_matmul](../../../examples/53_ascend950_fp8_mx_matmul/README.md)的一半，原因在于在一次循环中需要进行两个block的matmul运算，这两次matmul的结果需要同时存在与UB上用来进行后续计算，同时后续的计算中也需要UB存放中间结果，当前场景下UB存放数据共使用约180K。因此，受限于UB大小，当前example的当前example中的L1TileShape和和L0TileShape仅为样例[53_ascend950_fp8_mx_matmul](../../../examples/53_ascend950_fp8_mx_matmul/README.md)的一半。
 - groupList中未指定的部分将不会参与更新。如groupList为(3,4,5)，m为20，则Q[12:]和QScale[12:]的部分不会进行更新和初始化，其中数据为显存空间申请时的原数据。即Q和QScale的有效数据为Q[:12]和QScale[:12]。

@@ -49,7 +49,7 @@ using namespace tla;
 
 using Options = GroupedGemmOptions;
 
-static const std::string kDataRoot = "examples/63_ascend950_dual_level_quant_mx_batch_matmul/data";
+static const std::string kDataRoot = "examples/ascend950_dual_level_quant_mx_batch_matmul/data";
 
 template <typename T>
 bool SaveResult(const std::string &filename, const std::vector<T> &data) {
