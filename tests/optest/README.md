@@ -56,7 +56,6 @@ Python API (`torch_catlass.ops.*`)
 - [x] 32_w4a8_matmul
 - [x] 34_single_core_splitk_matmul
 - [x] 37_streamk_matmul
-- [x] 39_big_matmul_tla
 - [x] 41_sparse_matmul_tla
 - [x] 42_quant_optimized_matmul_tla
 - [x] 43_ascend950_basic_matmul

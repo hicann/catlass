@@ -135,7 +135,6 @@ set(EXAMPLE_ATLASA2
     34_single_core_splitk_matmul
     37_streamk_matmul
     38_w4a4_matmul_per_token_per_channel_dequant
-    39_big_matmul_tla
     40_flash_attention_infer_tla
     41_sparse_matmul_tla
     42_quant_optimized_matmul_tla

@@ -59,14 +59,6 @@ void BasicMatmul(const uint32_t blockNum, aclrtStream stream, const TParams& tPa
 void BasicMatmulTLA(const uint32_t aicCoreNum, aclrtStream stream, const KernelInfo& kernelInfo);
 
 /**
- * @brief 大尺寸 MatMul 2D Tiling kernel。
- * @param aicCoreNum AI Core 数量。
- * @param stream     ACL 计算流。
- * @param kernelInfo 通用 kernel 参数。
- */
-void BigMatmulTLA(const uint32_t aicCoreNum, aclrtStream stream, const KernelInfo& kernelInfo);
-
-/**
  * @brief MatMul + Add（逐元素加法 fused kernel）。
  * @param blockNum  启用的 AI Core 数量。
  * @param stream    ACL 计算流。

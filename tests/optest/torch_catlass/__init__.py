@@ -50,7 +50,6 @@ __all__ = [
     "small_matmul",
     "single_core_splitk_matmul",
     "streamk_matmul",
-    "big_matmul_tla",
     "sparse_matmul_tla",
     "quant_optimized_matmul_tla",
     "ascend950_basic_matmul",

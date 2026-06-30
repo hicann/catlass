@@ -308,11 +308,6 @@ void W4A4MatmulPerTokenPerChannelDequant(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
- * @brief Reserved JIT interface for example 39_big_matmul_tla.
- */
-void BigMatmulTLA(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
-
-/**
  * @brief Reserved JIT interface for example 41_sparse_matmul_tla.
  */
 void SparseMatmulTLA(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);

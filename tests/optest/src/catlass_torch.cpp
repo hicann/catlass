@@ -194,10 +194,6 @@ using StreamkMatmulOp = MatmulLike<CatlassKernel::StreamkMatmul>;
 static auto& streamk_matmul = StreamkMatmulOp::Run;
 REGISTER_TORCH_FUNC(streamk_matmul);
 
-using BigMatmulTLAOp = MatmulLike<CatlassKernel::BigMatmulTLA>;
-static auto& big_matmul_tla = BigMatmulTLAOp::Run;
-REGISTER_TORCH_FUNC(big_matmul_tla);
-
 using QuantOptimizedMatmulTLAOp = QuantMatmulLike<CatlassKernel::QuantOptimizedMatmulTLA>;
 static auto& quant_optimized_matmul_tla = QuantOptimizedMatmulTLAOp::Run;
 REGISTER_TORCH_FUNC(quant_optimized_matmul_tla);
