@@ -144,6 +144,15 @@ auto has_tuple_size(...) -> false_type;
 template <class T>
 struct is_tuple : decltype(detail::has_tuple_size((T*)0)){};
 
+template <class T>
+struct is_all_static : is_static<T> {};
+
+template <class... Ts>
+struct is_all_static<tuple<Ts...>> : bool_constant<(is_all_static<Ts>::value && ...)> {};
+
+template <class T>
+inline constexpr bool is_all_static_v = is_all_static<T>::value;
+
 template <class... T>
 struct tuple_size<tla::tuple<T...>> : std::integral_constant<size_t, sizeof...(T)> {};
 

@@ -102,6 +102,9 @@ struct tuple_size<T, std::void_t<typename std::tuple_size<T>::type>>
 template <class T>
 inline constexpr std::size_t tuple_size_v = tuple_size<T>::value;
 
+template <class... Args>
+inline constexpr bool dependent_false = false;
+
 } // namespace tla
 
 #endif // TLA_UTILS_TYPE_TRAITS_HPP
