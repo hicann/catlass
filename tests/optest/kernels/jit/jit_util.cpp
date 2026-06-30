@@ -24,7 +24,7 @@
 #include "jit_config.h"
 
 #ifndef ENABLE_ASCEND950
-#define ENABLE_ASCEND950
+#define ENABLE_ASCEND950 1
 #endif
 
 namespace fs = std::filesystem;
@@ -105,7 +105,7 @@ std::string GetCurrentNPUArch()
         case platform_ascendc::SocVersion::ASCEND910B:
         case platform_ascendc::SocVersion::ASCEND910_93:
             return "2201";
-#if defined(ENABLE_ASCEND950)
+#if ENABLE_ASCEND950
         case platform_ascendc::SocVersion::ASCEND950:
             return "3510";
 #endif

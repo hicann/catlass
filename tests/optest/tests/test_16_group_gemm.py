@@ -2,10 +2,12 @@ import pytest
 import torch
 import torch_npu
 
-pytestmark = pytest.mark.skipif(
+from common import only_on_2201
+
+pytestmark = [only_on_2201, pytest.mark.skipif(
     torch_npu.npu.device_count() <= 0,
     reason="torch-catlass integration tests require an available Ascend NPU",
-)
+)]
 
 
 def test_group_gemm():

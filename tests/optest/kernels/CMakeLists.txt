@@ -50,6 +50,10 @@ target_link_libraries(${_JIT_COMPILER_TARGET} PRIVATE
 install(TARGETS ${_JIT_COMPILER_TARGET}
     DESTINATION lib/jit)
 
+if(DISABLE_ASCEND950)
+    target_compile_definitions(${_JIT_COMPILER_TARGET} PRIVATE ENABLE_ASCEND950=0)
+endif()
+
 set(_JIT_KERNEL_ENTRIES "")
 set(_JIT_KERNEL_TEMPLATES "")
 

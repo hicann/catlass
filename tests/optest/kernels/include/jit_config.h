@@ -60,7 +60,7 @@ inline constexpr const char* kCcecSuffixes[] = {
  */
 inline std::vector<std::string> BaseFlags()
 {
-    return {"-std=c++17", "-O2", "-shared"};
+    return {"-std=c++17", "-O2", "-shared", "-fPIC"};
 }
 
 /**
