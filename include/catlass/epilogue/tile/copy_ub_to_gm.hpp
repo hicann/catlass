@@ -140,11 +140,6 @@ struct CopyUb2GmAligned<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>
 
 //////////////////////////// CopyUb2Gm(Ascend950, No TLA) ////////////////////////////
 
-template <class ArchTag, class GmType>
-struct CopyGm2UbQuant {
-    static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy gm to ub aligned, can not find the specialization.");
-};
-
 #if (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510) || (defined(__NPU_ARCH__) && __NPU_ARCH__ == 3510)
 //Partial specialization for CopyUb2Gm(Ascend950, no-tla), RowMajor in and RowMajor out.
 template <typename Element>
@@ -205,40 +200,6 @@ struct CopyUb2Gm<Arch::Ascend950, Gemm::GemmType<Element, layout::VectorLayout>>
                 srcTensor.template ReinterpretCast<int8_t>(), dataCopyParams);
         } else {
             AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams);
-        }
-    };
-};
-
-template <class ArchTag, typename Element>
-struct CopyGm2UbQuant<ArchTag, Gemm::GemmType<Element, layout::VectorLayout>> {
-    using LayoutSrc = layout::VectorLayout;
-    using LayoutDst = layout::VectorLayout;
-    using ElementInt8 = int8_t;
-
-    static constexpr uint32_t ELE_NUM_PER_BLK = BYTE_PER_BLK / sizeof(Element);
-
-    CATLASS_DEVICE
-    CopyGm2UbQuant() = default;
-
-    CATLASS_DEVICE
-    void operator()(
-        AscendC::LocalTensor<Element> const &dstTensor,
-        AscendC::GlobalTensor<Element> const &srcTensor,
-        layout::VectorLayout const &layoutDst,
-        layout::VectorLayout const &layoutSrc
-    )
-    {
-        if constexpr (std::is_same_v<Element, float>) {
-            AscendC::DataCopyExtParams dataCopyParams(1, layoutSrc.shape(0) * sizeof(Element), 0, 0, 0);
-            AscendC::DataCopyPadExtParams<Element> padParams(false, 0, 0, 0);
-            AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams, padParams);
-        } else {
-            AscendC::DataCopyExtParams dataCopyParams(1, layoutSrc.shape(0) * sizeof(ElementInt8), 0, 0, 0);
-            AscendC::DataCopyPadExtParams<ElementInt8> padParams(false, 0, 0, 0);
-            AscendC::DataCopyPad(
-                dstTensor.template ReinterpretCast<ElementInt8>(),
-                srcTensor.template ReinterpretCast<ElementInt8>(),
-                dataCopyParams, padParams);
         }
     };
 };

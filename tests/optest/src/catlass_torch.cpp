@@ -45,7 +45,6 @@
 #include "template/mx_grouped_matmul_swiglu_mx_quant.h"
 #include "template/a8w4_mx_matmul.h"
 #include "template/svd_quant_matmul.h"
-#include "template/ascend950_epilogue_quant_matmul.h"
 
 // ── Workspace allocator bridge ──
 // 通过 dlsym 注入到 g_catlassWorkspaceAlloc，使 JIT 模板分配 NPU tensor
@@ -346,16 +345,6 @@ REGISTER_TORCH_FUNC(ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant);
 using Ascend950TailMultiCoreSplitkMatmulOp = MatmulLike<CatlassKernel::Ascend950TailMultiCoreSplitkMatmul>;
 static auto& ascend950_tail_multi_core_splitk_matmul = Ascend950TailMultiCoreSplitkMatmulOp::Run;
 REGISTER_TORCH_FUNC(ascend950_tail_multi_core_splitk_matmul);
-
-using Ascend950Fp4MxMatmulPerTokenPerChannelOp =
-    Fp4MxMatmulPerTokenPerChannelLike<CatlassKernel::Ascend950Fp4MxMatmulPerTokenPerChannel>;
-static auto& ascend950_fp4_mx_matmul_pertoken_perchannel = Ascend950Fp4MxMatmulPerTokenPerChannelOp::Run;
-REGISTER_TORCH_FUNC(ascend950_fp4_mx_matmul_pertoken_perchannel);
-
-using Ascend950Fp8EpilogueQuantMatmulOp =
-    Fp8EpilogueQuantMatmulLike<CatlassKernel::Ascend950Fp8EpilogueQuantMatmul>;
-static auto& ascend950_fp8_epilogue_quant_matmul = Ascend950Fp8EpilogueQuantMatmulOp::Run;
-REGISTER_TORCH_FUNC(ascend950_fp8_epilogue_quant_matmul);
 using Ascend950GroupedMatmulSliceMPerTokenDequantOp =
     GroupedQuantMatmulLike<CatlassKernel::Ascend950GroupedMatmulSliceMPerTokenDequant, GmmSliceDir::M>;
 static auto& ascend950_grouped_matmul_slice_m_per_token_dequant = Ascend950GroupedMatmulSliceMPerTokenDequantOp::Run;

@@ -52,8 +52,6 @@ class BlockEpilogue {
 #include "catlass/epilogue/block/block_epilogue_dequant.hpp"
 #include "catlass/epilogue/block/block_epilogue_dual_level_quant_mx.hpp"
 #include "catlass/epilogue/block/block_epilogue_per_block_quant_tla.hpp"
-#include "catlass/epilogue/block/block_epilogue_per_token_dequant_ascend950.hpp"
-#include "catlass/epilogue/block/block_epilogue_per_token_per_channel_quant.hpp"
 #include "catlass/epilogue/block/block_epilogue_visitor.hpp"
 #include "catlass/epilogue/block/block_epilogue_swiglu_mx_quant.hpp"
 #include "catlass/epilogue/block/block_epilogue_finalize_routing.hpp"

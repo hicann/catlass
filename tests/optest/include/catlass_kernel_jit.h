@@ -493,18 +493,6 @@ void Ascend950MatmulFullLoadA(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
 /**
- * @brief JIT interface for example 74_ascend950_fp4_mx_matmul_pertoken_perchannel.
- */
-void Ascend950Fp4MxMatmulPerTokenPerChannel(
-    const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
-
-/**
- * @brief JIT interface for example 75_ascend950_fp8_epilogue_quant_matmul.
- */
-void Ascend950Fp8EpilogueQuantMatmul(
-    const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
-
-/**
  * @brief Reserved JIT interface for example 102_dynamic_optimized_matmul.
  */
 void DynamicOptimizedMatmul(

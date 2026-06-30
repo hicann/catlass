@@ -187,7 +187,7 @@ def ref_single_query_cached_kv_attention(
         out = out_normal
         out = out.reshape(-1, num_heads, head_size_vo)
 
-        out = torch.from_numpy(out).to(query.device)
+        out = torch.tensor(out, device=out.device)
         output.append(out) 
 
         cu_seqlen += q_seqlen

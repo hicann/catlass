@@ -80,8 +80,6 @@ __all__ = [
     "ascend950_multi_core_splitk_matmul",
     "ascend950_tail_multi_core_splitk_matmul",
     "ascend950_flash_attention_chunk_prefill",
-    "ascend950_fp4_mx_matmul_pertoken_perchannel",
-    "ascend950_fp8_epilogue_quant_matmul",
     "clear_jit_cache",
     "__version__",
     "__catlass_version__",
