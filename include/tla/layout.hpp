@@ -14,10 +14,16 @@
 #include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
 #include "catlass/numeric_size.hpp"
-#include "tla/numeric/integral_constant.hpp"
-#include "tla/numeric/math.hpp"
-#include "tla/tuple.hpp"
-#include "tla/int_tuple.hpp"
+#include "tla/integral/integral_constant.hpp"
+#include "tla/integral/integral_math.hpp"
+#include "tla/utils/math.hpp"
+#include "tla/tuple/tuple.hpp"
+#include "tla/tuple/tuple_algorithms.hpp"
+#include "tla/tuple/tuple_math.hpp"
+#include "tla/tuple/tuple_concepts.hpp"
+#include "tla/tuple/scaled_basis.hpp"
+#include "tla/utils/functional.hpp"
+#include "tla/stride.hpp"
 #include "catlass/layout/layout.hpp"
 
 namespace tla {
@@ -257,59 +263,6 @@ CATLASS_HOST_DEVICE constexpr
 auto depth(Layout<Shape, Stride, OriginShape> const& layout)
 {
     return depth(shape<Is...>(layout));
-}
-
-// Return the offset of coord
-template <class Coord, class Shape, class Stride>
-CATLASS_HOST_DEVICE constexpr
-auto crd2offset(Coord  const& coord, Shape  const& shape, Stride const& stride);
-
-namespace detail {
-
-template <class Coord, class Shape, class Stride, int... Is>
-CATLASS_HOST_DEVICE constexpr
-auto crd2offset_ttt(Coord  const& coord, Shape  const& shape, Stride const& stride, seq<Is...>)
-{
-    return (... + crd2offset(get<Is>(coord), get<Is>(shape), get<Is>(stride)));
-}
-
-template <class CInt, class STuple, class DTuple, int I0, int... Is>
-CATLASS_HOST_DEVICE constexpr
-auto crd2offset_itt(CInt const& coord, STuple const& shape, DTuple const& stride, seq<I0, Is...>)
-{
-    if constexpr (sizeof...(Is) == 0) {  // Avoid recursion and mod on single/last iter
-        return crd2offset(coord, get<I0>(shape), get<I0>(stride));
-    } else if constexpr (is_constant<0, CInt>::value) {
-        return crd2offset(_0{}, get<I0>(shape), get<I0>(stride)) +
-               (_0{} + ... + crd2offset(_0{}, get<Is>(shape), get<Is>(stride)));
-    } else {                             // General case
-        return crd2offset(coord % Product{}(get<I0>(shape)), get<I0>(shape), get<I0>(stride)) +
-               crd2offset_itt(coord / Product{}(get<I0>(shape)), shape, stride, seq<Is...>{});
-    }
-}
-
-} // end namespace detail
-
-template <class Coord, class Shape, class Stride>
-CATLASS_HOST_DEVICE constexpr
-auto crd2offset(Coord const& coord, Shape const& shape, Stride const& stride)
-{
-    if constexpr (is_tuple<Coord>::value) {
-        if constexpr (is_tuple<Shape>::value) {  // tuple tuple tuple
-            static_assert(tuple_size<Coord>::value == tuple_size<Shape>::value, "Mismatched Ranks");
-            static_assert(tuple_size<Coord>::value == tuple_size<Stride>::value, "Mismatched Ranks");
-            return detail::crd2offset_ttt(coord, shape, stride, tuple_seq<Coord>{});
-        } else {  // tuple "int" "int"
-            static_assert(sizeof(Coord) == 0, "Invalid parameters");
-        }
-    } else {
-        if constexpr (is_tuple<Shape>::value) {  // "int" tuple tuple
-            static_assert(tuple_size<Shape>::value == tuple_size<Stride>::value, "Mismatched Ranks");
-            return detail::crd2offset_itt(coord, shape, stride, tuple_seq<Shape>{});
-        } else {  // "int" "int" "int"
-            return coord * stride;
-        }
-    }
 }
 
 template <class Layout>
@@ -861,6 +814,107 @@ using PrependDimLayout_t = typename detail::PrependDimLayout<Layout, NewShapeT, 
 template <class Layout>
 using MakeBatchedLayout_t = PrependDimLayout_t<Layout>;
 
+///////////////////////////////////////////////////////////
+// Lowercase factory aliases (CuTe-style naming)
+///////////////////////////////////////////////////////////
+
+template <class... Ts>
+CATLASS_HOST_DEVICE constexpr auto make_shape(Ts const&... t)
+{
+    return MakeShape(t...);
+}
+
+template <class... Ts>
+CATLASS_HOST_DEVICE constexpr auto make_stride(Ts const&... t)
+{
+    return MakeStride(t...);
+}
+
+template <class... Ts>
+CATLASS_HOST_DEVICE constexpr auto make_coord(Ts const&... t)
+{
+    return MakeCoord(t...);
+}
+
+template <class Shape, class Stride>
+CATLASS_HOST_DEVICE constexpr auto make_layout(Shape const& shape, Stride const& stride)
+{
+    return MakeLayout(shape, stride);
+}
+
+template <class Shape, class Stride, class OriginShape>
+CATLASS_HOST_DEVICE constexpr auto make_layout(Shape const& shape, Stride const& stride, OriginShape const& origin)
+{
+    return MakeLayout(shape, stride, origin);
+}
+
+///////////////////////////////////////////////////////////
+// Codomain operations
+///////////////////////////////////////////////////////////
+
+// coshape: codomain shape of a layout mode.
+// For each selected mode: coshape = (shape - 1) * |stride| + 1.
+template <int... Is, class Shape, class Stride, class OriginShape>
+CATLASS_HOST_DEVICE constexpr auto coshape(Layout<Shape, Stride, OriginShape> const& layout)
+{
+    auto m1_shapes = transform_leaf(shape<Is...>(layout), [](auto s) { return s - Int<1>{}; });
+    auto abs_strides = transform_leaf(stride<Is...>(layout), abs_fn{});
+    auto co_coord = as_arithmetic_tuple(inner_product(m1_shapes, abs_strides));
+    return transform_leaf(co_coord, [](auto c) { return c + Int<1>{}; });
+}
+
+// cosize: codomain size (product of coshape).
+template <int... Is, class Shape, class Stride, class OriginShape>
+CATLASS_HOST_DEVICE constexpr auto cosize(Layout<Shape, Stride, OriginShape> const& layout)
+{
+    return size(coshape<Is...>(layout));
+}
+
+template <class Layout_>
+using cosize_t = decltype(cosize(std::declval<Layout_>()));
+
+///////////////////////////////////////////////////////////
+// Tag-dispatched make_layout (RowMajor / ColumnMajor only)
+///////////////////////////////////////////////////////////
+
+// make_layout<LayoutTag>(shape): 1-arg tag-dispatched layout construction.
+template <class LayoutTag, class Element = void, class Shape, TLA_REQUIRES(is_tuple<Shape>::value)>
+CATLASS_HOST_DEVICE constexpr auto make_layout(Shape const& shape)
+{
+    if constexpr (std::is_same_v<LayoutTag, Catlass::layout::RowMajor>) {
+        return make_layout(shape, compact_row_major(shape));
+    } else if constexpr (std::is_same_v<LayoutTag, Catlass::layout::ColumnMajor>) {
+        return make_layout(shape, compact_col_major(shape));
+    } else {
+        static_assert(!std::is_same_v<LayoutTag, LayoutTag>, "Unsupported LayoutTag for make_layout(shape).");
+    }
+}
+
+// make_layout<LayoutTag>(innerShape, outerShape): 2-arg batched layout construction.
+// The outer (batch) stride starts at cosize(innerLayout) and is column-major compact.
+// Scalar outerShape (e.g. batchSize) is wrapped in a 1-tuple for uniform handling.
+template <
+    class LayoutTag, class Element = void, class InnerShape, class OuterShape,
+    TLA_REQUIRES(is_tuple<InnerShape>::value && (is_tuple<OuterShape>::value || is_integral<OuterShape>::value))>
+CATLASS_HOST_DEVICE constexpr auto make_layout(InnerShape const& innerShape, OuterShape const& outerShape)
+{
+    const auto innerLayout = make_layout<LayoutTag, Element>(innerShape);
+    if constexpr (is_tuple<OuterShape>::value) {
+        const auto outerStride = compact_col_major(outerShape, cosize(innerLayout));
+        const auto outerLayout = make_layout(outerShape, outerStride);
+        return make_layout(
+            tuple_cat(innerLayout.shape(), outerLayout.shape()), tuple_cat(innerLayout.stride(), outerLayout.stride()),
+            tuple_cat(innerLayout.originShape(), outerLayout.originShape()));
+    } else {
+        const auto outerShapeTuple = make_tuple(outerShape);
+        const auto outerStride = compact_col_major(outerShapeTuple, cosize(innerLayout));
+        const auto outerLayout = make_layout(outerShapeTuple, outerStride);
+        return make_layout(
+            tuple_cat(innerLayout.shape(), outerLayout.shape()), tuple_cat(innerLayout.stride(), outerLayout.stride()),
+            tuple_cat(innerLayout.originShape(), outerLayout.originShape()));
+    }
+}
+
 } // end namespace tla
 
-# endif // TLA_LAYOUT_HPP
+#endif // TLA_LAYOUT_HPP

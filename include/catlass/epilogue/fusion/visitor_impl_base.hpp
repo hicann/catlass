@@ -14,7 +14,8 @@
 
 #include "catlass/catlass.hpp"
 #include "catlass/status.hpp"
-#include "tla/int_tuple.hpp"
+#include "tla/tuple/tuple_math.hpp"
+#include "tla/tuple/tuple_concepts.hpp"
 
 namespace Catlass::Epilogue::Fusion {
 
