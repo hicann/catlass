@@ -49,14 +49,8 @@ class TestPagedMLAttention():
         dtype: any
 
     @classmethod
-    def check_attr(cls, batch: int, q_seqlen_list: list, k_seqlen_list: list, num_blocks: int, block_size: int):
-        # 检查列表长度是否与 batch size 匹配
-        if len(q_seqlen_list) != batch or len(k_seqlen_list) != batch:
-            logging("[ERROR] The length of q_seqlen_list and k_seqlen_list must be equal to batch size.")
-            sys.exit()
-
-        # 检查缓存大小是否足够
-        if sum(k_seqlen_list) > num_blocks * block_size:
+    def check_attr(cls, batch: int, q_seqlen: int, kv_seqlen: int, num_blocks: int, block_size: int):
+        if batch * kv_seqlen > num_blocks * block_size:
             logging("[ERROR] the number of K and V tokens is too big to fit in the paged cache.")
             sys.exit()
 
@@ -64,18 +58,9 @@ class TestPagedMLAttention():
             logging("[ERROR] blockSize != 128 is not supported.")
             sys.exit()
 
-        # 检查每个 q_seqlen 是否在有效范围内 [1, 4]
-        for q_seqlen in q_seqlen_list:
-            if q_seqlen > 4 or q_seqlen < 1:
-                logging(f"[ERROR] q_seqlen value {q_seqlen} is not in the valid range of [1, 4].")
-                sys.exit()
-
-        # 检查每个 kv_seqlen 是否在有效范围内 [128, 16384]
-        for kv_seqlen in k_seqlen_list:
-            if kv_seqlen > 16384 or kv_seqlen < 128:
-                logging(f"[ERROR] kv_seqlen value {kv_seqlen} is not in the valid range of [128, 16384].")
-                sys.exit()
-
+        if q_seqlen > 4:
+            logging("[ERROR] q_seqlen > 4 is not supported.")
+            sys.exit()
 
     @classmethod
     def group_matmul(cls, head, kv_head, left, right):
@@ -116,7 +101,7 @@ class TestPagedMLAttention():
             sim_high = sim_high + (
                 mask[:sim_high.shape[-2], :sim_high.shape[-1]] * self.post_mask_factor
                 ).astype(np.float32)
-
+        
         # softmax
         p_high = self.softmax_numpy(sim_high)
         p = p_high.astype(query.dtype)
@@ -203,7 +188,7 @@ class TestPagedMLAttention():
 
         pre_mask_factor = -10000.0
         if gen_data_params.mask_type == 1:
-            mask = np.zeros(shape=(num_tokens, max_k_seqlen)).astype(gen_data_params.dtype)
+            mask = np.zeros(shape=(num_tokens, max_k_seqlen)).astype(np.float16)
             pre_qseqlen = 0
             for i in range(batch_size):
                 qseqlen = gen_data_params.q_seqlen_list[i]
@@ -241,35 +226,20 @@ class TestPagedMLAttention():
             os.path.join(WORKSPACE, "data", "kv_seqlen.bin"))
         if mask:
             mask.tofile(os.path.join(WORKSPACE, "data", "mask.bin"))
-        ref_output.astype(gen_data_params.dtype).tofile(os.path.join(WORKSPACE, "data", "cpu_low.bin"))
-        true_out.astype(np.float32).tofile(os.path.join(WORKSPACE, "data", "golden.bin"))
+        ref_output.astype(np.float32).tofile(os.path.join(WORKSPACE, "data", "golden.bin"))
 
 
 if __name__ == "__main__":
     os.makedirs(os.path.join(WORKSPACE, "data"), exist_ok=True)
 
-
-    # 修改命令行参数解析逻辑，以接受列表形式的输入
-    if len(sys.argv) != 8:
-        print("Usage: python gen_data.py <batchSize> \"<qSeqlen_list>\" \"<kvSeqlen_list>\" <qheadNum> <numBlock> <blockSize> <dtype>")
-        print("Example: python gen_data.py 4 \"1,2,3,4\" \"128,256,512,1024\" 16 16 128 half")
-        sys.exit(1)
-
     batch = int(sys.argv[1])
-
-    # 将逗号分隔的字符串解析为整数列表
-    q_seqlen_list_str = sys.argv[2]
-    kv_seqlen_list_str = sys.argv[3]
-    q_seqlen_list = [int(x.strip()) for x in q_seqlen_list_str.split(',')]
-    kv_seqlen_list = [int(x.strip()) for x in kv_seqlen_list_str.split(',')]
-
+    q_seqlen = int(sys.argv[2])
+    kv_seqlen = int(sys.argv[3])
     num_head = int(sys.argv[4])
     num_blocks = int(sys.argv[5])
     block_size = int(sys.argv[6])
     str_dtype = str(sys.argv[7])
-    max_kv_seqlen = max(kv_seqlen_list) if kv_seqlen_list else 0
-
-
+    max_kv_seqlen = kv_seqlen
     mask_type = 0
     kv_heads = 1
     embedding_size = 512
@@ -281,13 +251,13 @@ if __name__ == "__main__":
     else:
         logging("[ERROR] dtype must be half or bf16")
         sys.exit()
-
+    q_seqlen_list = [q_seqlen] * batch
+    kv_seqlen_list = [kv_seqlen] * batch
+    
     testObj = TestPagedMLAttention()
-
-    testObj.check_attr(batch, q_seqlen_list, kv_seqlen_list, num_blocks, block_size)
+    testObj.check_attr(batch, q_seqlen, kv_seqlen, num_blocks, block_size)
     gen_data_params = testObj.GenDataParams(q_seqlen_list, kv_seqlen_list, num_head,
                                             kv_heads, embedding_size, embedding_size_rope,
                                             num_blocks, block_size, mask_type, dtype)
-
     testObj.calc_data(gen_data_params)
 

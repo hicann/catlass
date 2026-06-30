@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "catlass/detail/alignment.hpp"
+
 using namespace std;
 namespace MLATiling {
 using AddrOffsets = struct AddressOffsetInfo {
@@ -31,17 +32,14 @@ using AddrOffsets = struct AddressOffsetInfo {
     uint64_t addrLSeqOffset = 0;
 };
 
-struct AddrOffsetPerBatch {
-    uint64_t qSeqOffset = 0;
-    uint64_t qSeqRopeOffset = 0;
-    uint64_t maskBatchOffset = 0;
-};
+inline uint32_t GetHigh32Bit(uint64_t v) {
+    return static_cast<uint32_t>(v >> NUM32);
+}
+inline uint32_t GetLow32Bit(uint64_t v) {
+    return static_cast<uint32_t>(v);
+}
 
-inline uint32_t GetHigh32Bit(uint64_t v) { return static_cast<uint32_t>(v >> NUM32); }
-inline uint32_t GetLow32Bit(uint64_t v) { return static_cast<uint32_t>(v); }
-
-void GetAddrOffsetMLA(uint32_t *tilingHost, const AddrOffsets &addrOffsets, const int32_t tilingOffset)
-{
+void GetAddrOffsetMLA(uint32_t *tilingHost, const AddrOffsets addrOffsets, const int32_t tilingOffset) {
     // Calculate address offset
     tilingHost[tilingOffset + NUM4] = GetHigh32Bit(addrOffsets.addrQSeqOffset);
     tilingHost[tilingOffset + NUM5] = GetLow32Bit(addrOffsets.addrQSeqOffset);
@@ -51,58 +49,46 @@ void GetAddrOffsetMLA(uint32_t *tilingHost, const AddrOffsets &addrOffsets, cons
     tilingHost[tilingOffset + NUM9] = GetLow32Bit(addrOffsets.addrMaskBatchOffset);
 }
 
-void GetMLATilingCommon(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *tilingHost, const std::vector<uint32_t>& sortedIndices,
-                        const std::vector<AddrOffsetPerBatch>& addrOffsetsPerBatch)
-{
+void GetMLATilingCommon(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *tilingHost) {
+    // Calculate the batch-related tiling parameters
     int32_t maxKVSeqlen = 0;
     int32_t maxQSeqlen = 0;
+    AddrOffsets addrOffsets{};
     for (int32_t seqIdx = 0; seqIdx < mlaInfo.batch; seqIdx++) {
-        uint32_t sortSeqIdx = sortedIndices[seqIdx];
-        int32_t qSeqLen = *(mlaInfo.qSeqLen + sortSeqIdx);
-        int32_t kvSeqlen = *(mlaInfo.kvSeqLen + sortSeqIdx);
-
-        qSeqLen = (kvSeqlen == 0) ? 0 : qSeqLen;
+        int32_t qSeqLen = *(mlaInfo.qSeqLen + seqIdx);
+        qSeqLen = (*(mlaInfo.kvSeqLen + seqIdx) == 0) ? 0 : qSeqLen;
         maxQSeqlen = std::max(maxQSeqlen, qSeqLen);
+        int32_t kvSeqlen = *(mlaInfo.kvSeqLen + seqIdx);
         maxKVSeqlen = std::max(maxKVSeqlen, kvSeqlen);
-
         int32_t tilingOffset = TILING_HEAD_SIZE + TILING_PARA_SIZE * seqIdx;
         tilingHost[tilingOffset] = static_cast<uint32_t>(qSeqLen);
         tilingHost[tilingOffset + NUM1] = static_cast<uint32_t>(kvSeqlen);
-        tilingHost[tilingOffset + NUM2] = static_cast<uint32_t>(sortSeqIdx);
         tilingHost[tilingOffset + NUM3] = static_cast<uint32_t>(mlaInfo.blockSize);
-
-        const auto &batchOffsets = addrOffsetsPerBatch[sortSeqIdx];
-        AddrOffsets addrOffsets{};
-        addrOffsets.addrQSeqOffset = batchOffsets.qSeqOffset;
-        addrOffsets.addrQSeqRopeOffset = batchOffsets.qSeqRopeOffset;
-        addrOffsets.addrMaskBatchOffset = batchOffsets.maskBatchOffset;
         GetAddrOffsetMLA(tilingHost, addrOffsets, tilingOffset);
+        uint64_t addressOffset = static_cast<uint64_t>(mlaInfo.numHeads * mlaInfo.embeddingSize * qSeqLen);
+        uint64_t addressMaskOffset = static_cast<uint64_t>(mlaInfo.maxKvSeqlen * qSeqLen);
+        uint64_t addressOffsetRope = static_cast<uint64_t>(mlaInfo.numHeads * mlaInfo.embeddingSizeRope * qSeqLen);
+        addrOffsets.addrQSeqOffset += addressOffset;
+        addrOffsets.addrQSeqRopeOffset += addressOffsetRope;
+        addrOffsets.addrMaskBatchOffset += addressMaskOffset;
     }
-
     tilingHost[TILING_MAX_KVSEQLEN] = maxKVSeqlen;
     tilingHost[TILING_MAX_QSEQLEN] = maxQSeqlen;
 }
 
-void GetMLATilingSpec(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *tilingHost, const std::vector<uint32_t>& sortedIndices,
-                      const std::vector<std::vector<uint32_t>>& realPreTaskNums)
-{
-    // TP1 scenario specialization.
+void GetMLATilingSpec(const MLAInfo &mmInfo, uint32_t &blockDim, uint32_t *tilingHost) {
+    // Tp1 senario specialization
     // Treat every Q token with 128 heads as one process, regardless of the mtp depth
     int32_t prevTaskNum = 0;
     int32_t maxKVSeqlen = 0;
-
-    for (int32_t i = 0; i < mlaInfo.batch; i++) {
-        uint32_t sortSeqIdx = sortedIndices[i];
-        int32_t qSeqLen = *(mlaInfo.qSeqLen + sortSeqIdx);
-        int32_t kvSeqlen = *(mlaInfo.kvSeqLen + sortSeqIdx);
-        const std::vector<uint32_t>& currentRealPreTaskNum = realPreTaskNums[sortSeqIdx];
-
-        maxKVSeqlen = (maxKVSeqlen > kvSeqlen) ? maxKVSeqlen : kvSeqlen;
-
+    for (int32_t seqIdx = 0; seqIdx < mmInfo.batch; seqIdx++) {
+        int32_t qSeqLen = mmInfo.qSeqLen == nullptr ? 1 : *(mmInfo.qSeqLen + seqIdx);
+        int32_t kvSeqlen = *(mmInfo.kvSeqLen + seqIdx);
+        maxKVSeqlen = std::max(maxKVSeqlen, kvSeqlen);
         for (int32_t qSeq = 0; qSeq < qSeqLen; qSeq++) {
             int32_t tilingOffset = TILING_HEAD_SIZE + PARA_TILING_ELENUM_SPEC * prevTaskNum;
-            tilingHost[tilingOffset] = sortSeqIdx;
-            tilingHost[tilingOffset + NUM1] = currentRealPreTaskNum[qSeq];
+            tilingHost[tilingOffset] = seqIdx;
+            tilingHost[tilingOffset + NUM1] = prevTaskNum;
             tilingHost[tilingOffset + NUM2] = kvSeqlen;
             prevTaskNum++;
         }
@@ -110,10 +96,9 @@ void GetMLATilingSpec(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *tili
     tilingHost[TILING_MAX_KVSEQLEN] = maxKVSeqlen;
 }
 
-int32_t GetQNBlockTile(const MLAInfo &mlaInfo, int32_t qSeqLen, uint32_t specStrategyFlag)
-{
+int32_t GetQNBlockTile(const MLAInfo &mlaInfo, int32_t qSeqLen, uint32_t specStrategyFlag) {
     int32_t tokenNum = qSeqLen;
-    if (specStrategyFlag) {
+    if (specStrategyFlag > 0) {
         tokenNum = NUM1;
     }
     int32_t tileListIdx = static_cast<int32_t>(std::ceil(std::log2(tokenNum)));
@@ -124,13 +109,17 @@ int32_t GetQNBlockTile(const MLAInfo &mlaInfo, int32_t qSeqLen, uint32_t specStr
     return qNBlockTile;
 }
 
-void GetTilingHead(const MLAInfo &mlaInfo, uint32_t *tilingHost, const uint32_t *torPtr, int32_t maxQseqlen,
-                   uint32_t specStrategyFlag)
-{
+void GetTilingHead(
+    const MLAInfo &mlaInfo,
+    uint32_t *tilingHost,
+    const uint32_t *torPtr,
+    int32_t maxQseqlen,
+    uint32_t specStrategyFlag
+) {
     // Calculating tiling parameters
     tilingHost[TILING_BATCH] = static_cast<uint32_t>(mlaInfo.batch);
     tilingHost[TILING_HEADSIZE] = static_cast<uint32_t>(TILING_HEAD_SIZE);
-    if (specStrategyFlag) {
+    if (specStrategyFlag > 0) {
         tilingHost[TILING_PARASIZE] = static_cast<uint32_t>(PARA_TILING_ELENUM_SPEC);
     } else {
         tilingHost[TILING_PARASIZE] = static_cast<uint32_t>(TILING_PARA_SIZE);
@@ -152,235 +141,115 @@ void GetTilingHead(const MLAInfo &mlaInfo, uint32_t *tilingHost, const uint32_t 
     tilingHost[TILING_TOTAL_QTOKENS] = static_cast<uint32_t>(mlaInfo.numTokens);
 }
 
-uint32_t GetKVSplitParam(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *tilingHost, const std::vector<uint32_t>& sortedIndices)
-{
-    bool isKVSplit = (tilingHost[TILING_BATCH] <= blockDim * SPLITKV_RATION && tilingHost[TILING_MAX_QSEQLEN] == 1);
-
-    if (!isKVSplit) {
+uint32_t GetKVSplitParam(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *tilingHost) {
+    // Calculate the tiling parameters related to flash decoding
+    bool isKVSplit = (tilingHost[TILING_MAX_KVSEQLEN] >= blockDim * KV_SEQLEN_SLICE * NUM2)
+                     && (tilingHost[TILING_BATCH] <= blockDim * SPLITKV_RATION && tilingHost[TILING_MAX_QSEQLEN] == 1);
+    if (tilingHost[TILING_NUMHEADS] == NUM128 || !isKVSplit) {
         tilingHost[TILING_KVCORENUM] = 1;
-        for (int32_t seqIdx = 0; seqIdx < mlaInfo.batch; seqIdx++) {
-            uint32_t sortSeqIdx = sortedIndices[seqIdx];
-            uint32_t kvSeqLen = *(mlaInfo.kvSeqLen + sortSeqIdx);
-            int32_t tilingOffset = seqIdx * TILING_PARA_SIZE + TILING_HEAD_SIZE;
-            tilingHost[tilingOffset + NUM15] = kvSeqLen;
-            tilingHost[tilingOffset + NUM16] = 1;
-        }
+        tilingHost[TILING_KVSPLIT] = tilingHost[TILING_MAX_KVSEQLEN];
+        std::cout << "TILING_KVSPLIT = " << tilingHost[TILING_KVSPLIT] << std::endl;
+        std::cout << "TILING_KVCORENUM = " << tilingHost[TILING_KVCORENUM] << std::endl;
         return tilingHost[TILING_BATCH];
     }
 
-    uint32_t MAX_KV_SPLIT_NUM = 20;
-    for (int32_t seqIdx = 0; seqIdx < mlaInfo.batch; seqIdx++) {
-        int32_t tilingOffset = seqIdx * TILING_PARA_SIZE + TILING_HEAD_SIZE;
-        uint32_t sortSeqIdx = sortedIndices[seqIdx];
-        uint32_t kvSeqLen = *(mlaInfo.kvSeqLen + sortSeqIdx);
+    uint32_t decoderBatch = tilingHost[TILING_BATCH];
+    uint32_t process = std::lcm(decoderBatch, blockDim);
+    uint32_t kvSplitCoreNum = process / decoderBatch;
 
-        uint32_t kvSeqAlign = RoundUp(kvSeqLen, static_cast<uint32_t>(mlaInfo.blockSize));
-        uint32_t kvSeqBlockNum = kvSeqAlign / mlaInfo.blockSize;
-        uint32_t kvBlockPerCore = CeilDiv(kvSeqBlockNum, MAX_KV_SPLIT_NUM);
-        uint32_t kvSplitPerCore = kvBlockPerCore * mlaInfo.blockSize;
-        uint32_t kvSplitCoreNum = CeilDiv(kvSeqLen, kvSplitPerCore);
-        tilingHost[tilingOffset + NUM15] = kvSplitPerCore;
-        tilingHost[tilingOffset + NUM16] = kvSplitCoreNum;
-    }
-    tilingHost[TILING_KVCORENUM] = MAX_KV_SPLIT_NUM;
-    std::cout << "TILING_MAX_KVCORENUM = " << tilingHost[TILING_KVCORENUM] << std::endl;
+    uint32_t kvSeqlenMaxAlign = RoundUp(tilingHost[TILING_MAX_KVSEQLEN], static_cast<uint32_t>(mlaInfo.blockSize));
+    uint32_t kvSeqBlockNum = kvSeqlenMaxAlign / mlaInfo.blockSize;
+    uint32_t kvBlockPerCore = CeilDiv(kvSeqBlockNum, kvSplitCoreNum);
+    uint32_t kvSplitPerCore = kvBlockPerCore * mlaInfo.blockSize;
+    kvSplitCoreNum = CeilDiv(tilingHost[TILING_MAX_KVSEQLEN], kvSplitPerCore);
+
+    tilingHost[TILING_KVSPLIT] = kvSplitPerCore;
+    tilingHost[TILING_KVCORENUM] = kvSplitCoreNum;
+    std::cout << "TILING_KVSPLIT = " << tilingHost[TILING_KVSPLIT] << std::endl;
+    std::cout << "TILING_KVCORENUM = " << tilingHost[TILING_KVCORENUM] << std::endl;
 
     // Set lOffsetInfo and OfdOffsetInfo
     AddrOffsets addrOffsets;
     for (int32_t seqIdx = 0; seqIdx < mlaInfo.batch; seqIdx++) {
-        uint32_t sortSeqIdx = sortedIndices[seqIdx];
-        uint32_t qSeqlen = *(mlaInfo.qSeqLen + sortSeqIdx);
-        uint32_t kvSeqLen = *(mlaInfo.kvSeqLen + sortSeqIdx);
-        qSeqlen = (kvSeqLen == 0) ? 0 : qSeqlen;
+        int32_t qSeqlen = 1;
+        qSeqlen = (*(mlaInfo.kvSeqLen + seqIdx) == 0) ? 0 : qSeqlen;
         int32_t tilingOffset = seqIdx * TILING_PARA_SIZE + TILING_HEAD_SIZE;
         tilingHost[tilingOffset + NUM11] = GetHigh32Bit(addrOffsets.addrLSeqOffset);
         tilingHost[tilingOffset + NUM12] = GetLow32Bit(addrOffsets.addrLSeqOffset);
         tilingHost[tilingOffset + NUM13] = GetHigh32Bit(addrOffsets.addrOFdSeqOffset);
         tilingHost[tilingOffset + NUM14] = GetLow32Bit(addrOffsets.addrOFdSeqOffset);
-        addrOffsets.addrLSeqOffset += static_cast<uint64_t>(mlaInfo.numHeads * qSeqlen * MAX_KV_SPLIT_NUM);
+        addrOffsets.addrLSeqOffset += static_cast<uint64_t>(mlaInfo.numHeads * qSeqlen * kvSplitCoreNum);
         addrOffsets.addrOFdSeqOffset += static_cast<uint64_t>(mlaInfo.numHeads * qSeqlen * mlaInfo.embeddingSize);
     }
 
-    return mlaInfo.batch * MAX_KV_SPLIT_NUM;
+    return decoderBatch * kvSplitCoreNum;
 }
 
-uint32_t GetKVSplitParamSpec(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *tilingHost, const std::vector<uint32_t>& sortedIndices)
-{
-    // TP1 scenario specialization.
+uint32_t GetKVSplitParamSpec(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *tilingHost) {
+    // Tp1 senario specialization
     // Calculate the tiling parameters related to flash decoding
     uint32_t totalTaskNumSpec = tilingHost[TILING_TOTAL_QTOKENS];
+
     uint32_t formerTaskNum = totalTaskNumSpec;
     uint32_t tailTaskNum = 0;
-    if (mlaInfo.numTokens % NUM20 <= NUM10 && mlaInfo.batch <= 40) {
-        uint32_t processLoop = totalTaskNumSpec / blockDim;
-        formerTaskNum = processLoop * blockDim;
-        tailTaskNum = totalTaskNumSpec - formerTaskNum;
+
+    uint32_t processLoop = totalTaskNumSpec / blockDim;
+    formerTaskNum = processLoop * blockDim;
+    tailTaskNum = totalTaskNumSpec - formerTaskNum;
+
+    if (tailTaskNum >= blockDim * SPLITKV_RATION) {
+        formerTaskNum = totalTaskNumSpec;
+        tailTaskNum = 0;
     }
 
     tilingHost[TILING_FORMERTASKNUM] = formerTaskNum;
     tilingHost[TILING_TAILTASKNUM] = tailTaskNum;
     std::cout << "TILING_FORMERTASKNUM = " << tilingHost[TILING_FORMERTASKNUM] << std::endl;
     std::cout << "TILING_TAILTASKNUM = " << tilingHost[TILING_TAILTASKNUM] << std::endl;
+
     if (tailTaskNum == 0) {
         tilingHost[TILING_KVCORENUM] = 1;
         tilingHost[TILING_KVSPLIT] = tilingHost[TILING_MAX_KVSEQLEN];
-        tilingHost[TILING_PROCESSNUM] = 0;
         std::cout << "TILING_KVSPLIT = " << tilingHost[TILING_KVSPLIT] << std::endl;
         std::cout << "TILING_KVCORENUM = " << tilingHost[TILING_KVCORENUM] << std::endl;
         return blockDim;
     }
 
-    const uint32_t MIN_TOKENS_PER_SPLIT = static_cast<uint32_t>(mlaInfo.blockSize * NUM4);
+    uint32_t process = std::lcm(tailTaskNum, blockDim);
+    uint32_t kvSplitCoreNum = process / tailTaskNum;
 
-    std::vector<uint32_t> alignedKvLens;
-    int32_t prevTaskNumTemp = 0;
-    for (int32_t seqIdx = 0; seqIdx < mlaInfo.batch; seqIdx++) {
-        uint32_t sortSeqIdx = sortedIndices[seqIdx];
-        uint32_t qSeqLen = *(mlaInfo.qSeqLen + sortSeqIdx);
-        if (prevTaskNumTemp + qSeqLen < formerTaskNum) {
-            prevTaskNumTemp += qSeqLen;
-            continue;
-        }
-        uint32_t kvSeqLen = *(mlaInfo.kvSeqLen + sortSeqIdx);
-        alignedKvLens.push_back(RoundUp(kvSeqLen, static_cast<uint32_t>(mlaInfo.blockSize)));
-    }
+    uint32_t kvSeqlenMaxAlign = RoundUp(tilingHost[TILING_MAX_KVSEQLEN], static_cast<uint32_t>(mlaInfo.blockSize));
+    uint32_t kvSeqBlockNum = kvSeqlenMaxAlign / mlaInfo.blockSize;
+    uint32_t kvBlockPerCore = CeilDiv(kvSeqBlockNum, kvSplitCoreNum);
+    uint32_t kvSplitPerCore = kvBlockPerCore * mlaInfo.blockSize;
+    kvSplitCoreNum = CeilDiv(tilingHost[TILING_MAX_KVSEQLEN], kvSplitPerCore);
 
-    uint32_t tailSeqCount = alignedKvLens.size();
-    std::vector<uint32_t> batchSplitNum(tailSeqCount, 1);
-    uint32_t totalAllocated = tailTaskNum;
-    while (totalAllocated < blockDim) {
-        int32_t maxLoadIdx = -1;
-        uint32_t maxLoad = 0;
+    tilingHost[TILING_KVSPLIT] = kvSplitPerCore;
+    tilingHost[TILING_KVCORENUM] = kvSplitCoreNum;
+    std::cout << "TILING_KVSPLIT = " << tilingHost[TILING_KVSPLIT] << std::endl;
+    std::cout << "TILING_KVCORENUM = " << tilingHost[TILING_KVCORENUM] << std::endl;
 
-        for (int32_t i = 0; i < tailSeqCount; i++) {
-            uint32_t currentLoad = alignedKvLens[i] / batchSplitNum[i];
-            uint32_t nextLoad = alignedKvLens[i] / (batchSplitNum[i] + 1);
-            if (nextLoad >= MIN_TOKENS_PER_SPLIT && currentLoad > maxLoad) {
-                maxLoad = currentLoad;
-                maxLoadIdx = i;
-            }
-        }
-
-        if (maxLoadIdx != -1) {
-            batchSplitNum[maxLoadIdx]++;
-        } else if (tailSeqCount > 0) {
-            int32_t longestIdx = 0;
-            for (int32_t i = 1; i < tailSeqCount; i++) {
-                if (alignedKvLens[i] > alignedKvLens[longestIdx]) {
-                    longestIdx = i;
-                }
-            }
-            batchSplitNum[longestIdx]++;
-        }
-        totalAllocated++;
-    }
-    uint32_t MAX_KV_SPLIT_NUM = 1;
-    for (uint32_t num : batchSplitNum) {
-        if (num > MAX_KV_SPLIT_NUM) {
-            MAX_KV_SPLIT_NUM = num;
-        }
-    }
-    uint32_t cuTaskVal = 0;
-    int32_t cuTaskIdx = 0;
-    tilingHost[CUTASK_START_OFFSET + cuTaskIdx++] = cuTaskVal;
-
+    // Set lOffsetInfo and OfdOffsetInfo
+    AddrOffsets addrOffsets;
     int32_t prevTaskNum = 0;
-    int32_t tailSeqIdx = 0;
     for (int32_t seqIdx = 0; seqIdx < mlaInfo.batch; seqIdx++) {
-        uint32_t sortSeqIdx = sortedIndices[seqIdx];
-        uint32_t qSeqLen = *(mlaInfo.qSeqLen + sortSeqIdx);
-        uint32_t kvSeqLen = *(mlaInfo.kvSeqLen + sortSeqIdx);
-
-        if (prevTaskNum + qSeqLen < formerTaskNum) {
-            prevTaskNum += qSeqLen;
-            continue;
-        }
-
-        uint32_t allocSplit = 1;
-        if (tailSeqIdx < tailSeqCount) {
-            allocSplit = batchSplitNum[tailSeqIdx++];
-        }
-
-        uint32_t kvSeqAlign = RoundUp(kvSeqLen, static_cast<uint32_t>(mlaInfo.blockSize));
-        uint32_t kvSeqBlockNum = kvSeqAlign / mlaInfo.blockSize;
-        uint32_t kvBlockPerCore = CeilDiv(kvSeqBlockNum, allocSplit);
-        uint32_t kvSplitPerCore = kvBlockPerCore * mlaInfo.blockSize;
-        uint32_t kvSplitCoreNum = CeilDiv(kvSeqLen, kvSplitPerCore);
-
-        for (int32_t qSeq = 0; qSeq < qSeqLen; qSeq++) {
-            if (prevTaskNum >= formerTaskNum) {
-                cuTaskVal += kvSplitCoreNum;
-                tilingHost[CUTASK_START_OFFSET + cuTaskIdx++] = cuTaskVal;
-                int32_t tilingOffset = TILING_HEAD_SIZE + PARA_TILING_ELENUM_SPEC * prevTaskNum;
-                tilingHost[tilingOffset + NUM15] = kvSplitPerCore;
-                tilingHost[tilingOffset + NUM16] = kvSplitCoreNum;
-            }
-            prevTaskNum++;
-        }
-    }
-    tilingHost[TILING_PROCESSNUM] = cuTaskVal;
-    tilingHost[CUTASK_START_OFFSET + cuTaskIdx++] = TILING_HEAD_SIZE;
-    tilingHost[TILING_KVCORENUM] = MAX_KV_SPLIT_NUM;
-    std::cout << "TILING_MAX_KVCORENUM = " << tilingHost[TILING_KVCORENUM] << std::endl;
-
-    AddrOffsets addrOffsets{};
-    prevTaskNum = 0;
-
-    for (int32_t seqIdx = 0; seqIdx < mlaInfo.batch; seqIdx++) {
-        uint32_t sortSeqIdx = sortedIndices[seqIdx];
-        uint32_t qSeqLen = *(mlaInfo.qSeqLen + sortSeqIdx);
+        int32_t qSeqLen = mlaInfo.qSeqLen == nullptr ? 1 : *(mlaInfo.qSeqLen + seqIdx);
         for (int32_t qSeq = 0; qSeq < qSeqLen; qSeq++) {
             int32_t tilingOffset = TILING_HEAD_SIZE + PARA_TILING_ELENUM_SPEC * prevTaskNum;
             tilingHost[tilingOffset + NUM11] = GetHigh32Bit(addrOffsets.addrLSeqOffset);
             tilingHost[tilingOffset + NUM12] = GetLow32Bit(addrOffsets.addrLSeqOffset);
             tilingHost[tilingOffset + NUM13] = GetHigh32Bit(addrOffsets.addrOFdSeqOffset);
             tilingHost[tilingOffset + NUM14] = GetLow32Bit(addrOffsets.addrOFdSeqOffset);
-            addrOffsets.addrLSeqOffset += static_cast<uint64_t>(mlaInfo.numHeads * MAX_KV_SPLIT_NUM);
+            addrOffsets.addrLSeqOffset += static_cast<uint64_t>(mlaInfo.numHeads * kvSplitCoreNum);
             addrOffsets.addrOFdSeqOffset += static_cast<uint64_t>(mlaInfo.numHeads * mlaInfo.embeddingSize);
             prevTaskNum++;
         }
     }
 
-    return tailTaskNum * MAX_KV_SPLIT_NUM;
+    return tailTaskNum * kvSplitCoreNum;
 }
 
-void swapIndices(std::vector<uint32_t>& indices, int i, int j) {
-    uint32_t temp = indices[i];
-    indices[i] = indices[j];
-    indices[j] = temp;
-}
-
-int partitionIndices(std::vector<uint32_t>& indices, const int32_t* kvSeqLen, const int32_t* qSeqLen, int low, int high) {
-    uint32_t pivotIndex = indices[high];
-    int32_t pivotKv = kvSeqLen[pivotIndex];
-    int32_t pivotQ = qSeqLen[pivotIndex];
-    int i = (low - 1);
-
-    for (int j = low; j <= high - 1; j++) {
-        uint32_t currIndex = indices[j];
-        int32_t currKv = kvSeqLen[currIndex];
-        int32_t currQ = qSeqLen[currIndex];
-
-        bool needSwap = (currKv > pivotKv) || (currKv == pivotKv && currQ > pivotQ);
-        if (needSwap) {
-            i++;
-            swapIndices(indices, i, j);
-        }
-    }
-    swapIndices(indices, i + 1, high);
-    return (i + 1);
-}
-
-void quickSortIndices(std::vector<uint32_t>& indices, const int32_t* kvSeqLen, const int32_t* qSeqLen, int low, int high) {
-    if (low < high) {
-        int pi = partitionIndices(indices, kvSeqLen, qSeqLen, low, high);
-        quickSortIndices(indices, kvSeqLen, qSeqLen, low, pi - 1);
-        quickSortIndices(indices, kvSeqLen, qSeqLen, pi + 1, high);
-    }
-}
-
-int32_t GetMLATilingParam(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *tilingHost)
-{
+int32_t GetMLATilingParam(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *tilingHost) {
     if (tilingHost == nullptr || mlaInfo.qSeqLen == nullptr || mlaInfo.kvSeqLen == nullptr) {
         cerr << "[ERROR] pointer tilingHost or seq is nullptr." << endl;
         return -1;
@@ -389,47 +258,6 @@ int32_t GetMLATilingParam(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *
         cerr << "[ERROR] blockSize != 128 is not supported." << endl;
         return -1;
     }
-
-    std::vector<AddrOffsetPerBatch> addrOffsetsPerBatch(mlaInfo.batch);
-    uint64_t currentQSeqOffset = 0;
-    uint64_t currentQSeqRopeOffset = 0;
-    uint64_t currentMaskBatchOffset = 0;
-
-    for (int32_t i = 0; i < mlaInfo.batch; ++i) {
-        int32_t qSeqLen = *(mlaInfo.qSeqLen + i);
-
-        uint64_t deltaQSeq = static_cast<uint64_t>(mlaInfo.numHeads * mlaInfo.embeddingSize * qSeqLen);
-        uint64_t deltaQSeqRope = static_cast<uint64_t>(mlaInfo.numHeads * mlaInfo.embeddingSizeRope * qSeqLen);
-        uint64_t deltaMaskBatch = static_cast<uint64_t>(mlaInfo.maxKvSeqlen * qSeqLen);
-
-        addrOffsetsPerBatch[i].qSeqOffset = currentQSeqOffset;
-        addrOffsetsPerBatch[i].qSeqRopeOffset = currentQSeqRopeOffset;
-        addrOffsetsPerBatch[i].maskBatchOffset = currentMaskBatchOffset;
-
-        currentQSeqOffset += deltaQSeq;
-        currentQSeqRopeOffset += deltaQSeqRope;
-        currentMaskBatchOffset += deltaMaskBatch;
-    }
-
-    std::vector<uint32_t> sortedIndices(mlaInfo.batch);
-    for (uint32_t i = 0; i < mlaInfo.batch; ++i) {
-        sortedIndices[i] = i;
-    }
-
-    std::vector<std::vector<uint32_t>> realPreTaskNums(mlaInfo.batch, std::vector<uint32_t>(NUM512));
-    int32_t preTaskNum = 0;
-    for (int32_t i = 0; i < mlaInfo.batch; ++i) {
-        uint32_t qSeqlen = static_cast<uint32_t>(*(mlaInfo.qSeqLen + i));
-        for (int32_t token = 0; token < qSeqlen; token++) {
-            realPreTaskNums[i][token] = preTaskNum;
-            preTaskNum++;
-        }
-    }
-
-    if (mlaInfo.numTokens > 0) {
-        quickSortIndices(sortedIndices, mlaInfo.kvSeqLen, mlaInfo.qSeqLen, 0, mlaInfo.batch - 1);
-    }
-
     int32_t maxQseqlen = 0;
     int32_t totalKvNumtokens = 0;
     for (int32_t seqIdx = 0; seqIdx < mlaInfo.batch; seqIdx++) {
@@ -449,17 +277,16 @@ int32_t GetMLATilingParam(const MLAInfo &mlaInfo, uint32_t &blockDim, uint32_t *
     float tor = static_cast<float>(1.0 / sqrt(1.0 * (mlaInfo.embeddingSize + mlaInfo.embeddingSizeRope)));
     uint32_t *torPtr = reinterpret_cast<uint32_t *>(&tor);
     uint32_t specStrategyFlag = (mlaInfo.numHeads == NUM128) ? 1 : 0;
-
-    if (specStrategyFlag) {
-        GetMLATilingSpec(mlaInfo, blockDim, tilingHost, sortedIndices, realPreTaskNums);
+    if (specStrategyFlag > 0) {
+        GetMLATilingSpec(mlaInfo, blockDim, tilingHost);
     } else {
-        GetMLATilingCommon(mlaInfo, blockDim, tilingHost, sortedIndices, addrOffsetsPerBatch);
+        GetMLATilingCommon(mlaInfo, blockDim, tilingHost);
     }
     GetTilingHead(mlaInfo, tilingHost, torPtr, maxQseqlen, specStrategyFlag);
-    if (specStrategyFlag) {
-        GetKVSplitParamSpec(mlaInfo, blockDim, tilingHost, sortedIndices);
+    if (specStrategyFlag > 0) {
+        GetKVSplitParamSpec(mlaInfo, blockDim, tilingHost);
     } else {
-        GetKVSplitParam(mlaInfo, blockDim, tilingHost, sortedIndices);
+        GetKVSplitParam(mlaInfo, blockDim, tilingHost);
     }
     return 0;
 }

@@ -33,7 +33,7 @@ struct BlockMmad {
     static_assert(DEPENDENT_FALSE<DispatchPolicy>, "BlockMmad is not implemented for this DispatchPolicy");
 };
 
-#if (defined (CATLASS_ARCH) && CATLASS_ARCH == 2201)
+#if (defined (CATLASS_ARCH) && CATLASS_ARCH == 2201)   
 /// new add for the reason that i am using the dispatchpolicy which is same as the policy of the optimized_matmul
 // so i add a new one class to avoid the conflict
 template <
@@ -137,9 +137,6 @@ struct BlockPrologue {
 #include "catlass/gemm/block/block_mmad_mla_pv.hpp"
 #include "catlass/gemm/block/block_mmad_mla_qk_tp1_spec.hpp"
 #include "catlass/gemm/block/block_mmad_mla_pv_tp1_spec.hpp"
-
-#include "catlass/gemm/block/block_mmad_amla_pv_tp1_spec.hpp"
-
 #include "catlass/gemm/block/block_mmad_preload.hpp"
 #include "catlass/gemm/block/block_mmad_preload_async.hpp"
 #include "catlass/gemm/block/block_mmad_preload_async_with_callback.hpp"

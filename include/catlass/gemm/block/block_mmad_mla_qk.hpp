@@ -7,6 +7,7 @@
  * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
  * See LICENSE in the root of the software repository for the full text of the License.
  */
+
 #ifndef CATLASS_GEMM_BLOCK_BLOCK_MMAD_MLA_QK_HPP
 #define CATLASS_GEMM_BLOCK_BLOCK_MMAD_MLA_QK_HPP
 
@@ -117,7 +118,7 @@ public:
         AscendC::GlobalTensor<ElementC> gC,
         LayoutA layoutA, LayoutA layoutARope, LayoutB layoutB, LayoutB layoutBRope, LayoutC layoutC,
         GemmCoord actualShape, MatrixCoord qShapeSingleNd,
-        uint32_t &qHeads, uint32_t &nIdx, uint32_t &pingpongIdx)
+        uint32_t &qHeads, uint32_t &nIdx)
     {
         uint32_t rowNum = actualShape.m();
         uint32_t kSeqTile = actualShape.n();
@@ -130,7 +131,7 @@ public:
         uint32_t tokenNumPerHead = rowNum / curHeadNum;
         uint32_t kSeqTileRound = RoundUp<L1BAlignHelper::N_ALIGNED>(kSeqTile);
         uint32_t rowNumRound = RoundUp<L1AAlignHelper::M_ALIGNED>(rowNum);
-        uint32_t l1KvPingPongFlag = pingpongIdx % 2;
+        uint32_t l1KvPingPongFlag = nIdx % 2;
 
         if (nIdx == 0) {
             // copy Q to L1
@@ -148,10 +149,10 @@ public:
                 l1ATensor[rowNumRound * embed], gARope,
                 layoutARopeInL1, layoutARopeSingleNd,
                 tokenNumPerHead, qHeads * embedRope, tokenNumPerHead, BLOCK_SIZE, rowNumRound);
-
             AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(EVENT_ID0);
             AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(EVENT_ID0);
         }
+
         AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1KvPingPongFlag);
         // copy K to L1
         LayoutBInL1 layoutBInL1 = LayoutBInL1::template MakeLayout<ElementB>(embed, kSeqTile);

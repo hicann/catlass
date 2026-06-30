@@ -116,7 +116,7 @@ public:
         AscendC::GlobalTensor<ElementA> gA,
         AscendC::GlobalTensor<ElementC> gC,
         LayoutA layoutA, LayoutB layoutB, LayoutC layoutC,
-        GemmCoord actualShape, uint32_t &nIdx, uint32_t &pingpongIdx, Arch::CrossCoreFlag softmaxReady, uint32_t &locPingPongIdx)
+        GemmCoord actualShape, uint32_t &nIdx, Arch::CrossCoreFlag softmaxReady)
     {
         uint32_t rowNum = actualShape.m();
         uint32_t vSeqTile = actualShape.k();
@@ -126,11 +126,11 @@ public:
         uint32_t rowNumRound = RoundUp<L1AAlignHelper::M_ALIGNED>(rowNum);
         uint32_t embedSplitSizeRound = RoundUp<L1BAlignHelper::N_ALIGNED>(embedSplitSize);
         uint32_t vSeqTileRound = RoundUp<L1BAlignHelper::K_ALIGNED>(vSeqTile);
-        uint32_t L1BPingPongFlag = (pingpongIdx - 1) % 2;
-        uint32_t L0APingPongFlag = (pingpongIdx - 1) % 2;
+        uint32_t L1BPingPongFlag = (nIdx - 1) % 2;
+        uint32_t L0APingPongFlag = (nIdx - 1) % 2;
 
         for (uint32_t embedSplitIdx = 0; embedSplitIdx < embedSplitLoopV; embedSplitIdx++) {
-            uint32_t L0CPingPongFlag = (locPingPongIdx) % 2;
+            uint32_t L0CPingPongFlag = (nIdx + embedSplitIdx) % 2;
             uint32_t L0BPingPongFlag = (embedSplitIdx + 1) % 2;
             AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(L0BPingPongFlag + 2);
             LayoutBInL1 layoutBInL1 = LayoutBInL1::template MakeLayout<ElementB>(vSeqTile, embed);
@@ -181,7 +181,6 @@ public:
                 gC[embedSplitIdx * embedSplitSizeRound], l0CTensor[L0CPingPongFlag],
                 layoutCSplitK, layoutInL0C);
             AscendC::SetFlag<AscendC::HardEvent::FIX_M>(L0CPingPongFlag);
-            locPingPongIdx++;
         }
     }
 

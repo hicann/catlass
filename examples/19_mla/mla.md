@@ -12,13 +12,13 @@ CATLASS MLA是基于CATLASS Gemm API实现的亲和昇腾AtlasA2硬件的Flash-M
 Tiling计算的逻辑位于[mla.cpp](./mla.cpp)文件中，在调用算子前，需要准备好tiling计算所需的各项参数，赋值给MLAInfo结构体，并调用`GetMLATilingParam`函数。[mla.cpp](./mla.cpp)中提供了一个示例
 
 ```c++
-// 准备Tiling计算所需的中间结构体以及HOST侧空间
+// 准备Tiling计算所需的中间结构体以及Host侧空间
 MLATiling::MLAInfo mlaInfo;
 ...
 MLATiling::GetMLATilingParam(mlaInfo, blockDim, (uint32_t *)tilingHost);
 ```
 
-`GetMLATilingParam`函数中，调用了两个函数`GetMLATilingCommon`与`GetMLATilingSpec`，分别对应了通用场景下/特化场景下的分核逻辑
+`GetMLATilingParam`函数中，调用了两个函数`GetMLATilingCommon`与`GetMLATilingSpec`，分别对应了通用场景下和特化场景下的分核逻辑
 
 ## Kernel
 
@@ -42,7 +42,7 @@ MLATiling::GetMLATilingParam(mlaInfo, blockDim, (uint32_t *)tilingHost);
 在本算子中，使用了Block和Tile层级组件来组装Kernel，具体步骤为：
 
 1. 组装attention计算中的两个BlockMmad（QK,PV）以及三个BlockEpilogue（softmax, rescaleO, flashDecoding）。
-2. 将Block组合在一起构建成`MLAKernel`，并在Kernel类中完成对各个Block的循环调用。
+2. 将Block组合在一起构建成`MLAKernel`，并在Kernel类中完成对各个Block的循环调用。  
 
 这一过程也体现在Kernel入口的代码中（以[mla_kernel.cpp](./mla_kernel.cpp)为例）：
 
@@ -73,7 +73,6 @@ using EpilogueMLARescaleO =
         Epilogue::Block::BlockEpilogue<Epilogue::EpilogueAtlasA2MLARescaleO, OType, OUpdateType, OTmpType>;
 
 // Epilogue Block模块, 实现Flash MLA中flash decoding
-using OType = Gemm::GemmType<ElementO, LayoutO>;
 using lType = Gemm::GemmType<ElementUpdate, LayoutUpdate>;
 constexpr uint32_t ComputeEleNum = 6144;
 using EpilogueMLAFDRescaleO =

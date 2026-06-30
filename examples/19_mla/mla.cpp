@@ -16,41 +16,25 @@
 #endif
 #include <fstream>
 #include <iostream>
-#include <sstream>
-#include <vector>
 // Helper methods to check for errors
 #include "golden.hpp"
 #include "helper.hpp"
 #include "mla_kernel.cpp"
 #include "mla_kernel_tp1_spec.cpp"
-#include "amla_kernel_tp1_spec.cpp"
 #include "mla_tiling.h"
 
 using namespace std;
 
-// Helper function to split comma-separated string into vector of uint32_t
-vector<uint32_t> splitSeqList(const string &seqStr) {
-    vector<uint32_t> seqList;
-    stringstream ss(seqStr);
-    string item;
-    while (getline(ss, item, ',')) {
-        seqList.push_back(static_cast<uint32_t>(stoul(item)));
-    }
-    return seqList;
-}
-
 // This code section describes the parameters to execute the run function.
 struct Options {
-    static constexpr auto HELPER =
-        "Usage: mla batch \"qSeqlenList\" \"kvSeqlenList\" numHeads numBlocks blockSize [--dtype DTYPE "
-        "--datapath DATA_PATH --device DEVICE_ID]\n"
-        "Example: ./19_mla 4 \"1,2,3,4\" \"128,256,512,1024\" 16 16 128\n";
+    static constexpr auto HELPER = "Usage: mla batch qSeqlen kvSeqlen numHeads numBlocks blockSize [--dtype DTYPE "
+                                   "--datapath DATA_PATH --device DEVICE_ID]\n";
     static constexpr auto MIN_ARGS = 7;
 
     // Define default value.
     uint32_t batch{0};
-    vector<uint32_t> qSeqlenList;
-    vector<uint32_t> kvSeqlenList;
+    uint32_t qSeqlen{0};
+    uint32_t kvSeqlen{0};
     uint32_t numHeads{0};
     uint32_t numBlocks{0};
     uint32_t blockSize{0};
@@ -77,15 +61,8 @@ struct Options {
         // Allocate arguments to parameters.
         uint32_t argIndex = 1;
         batch = atoi(argv[argIndex++]);
-        string qSeqStr = argv[argIndex++];
-        string kvSeqStr = argv[argIndex++];
-        qSeqlenList = splitSeqList(qSeqStr);
-        kvSeqlenList = splitSeqList(kvSeqStr);
-        if (qSeqlenList.size() != batch || kvSeqlenList.size() != batch) {
-            printf("Error: The number of elements in qSeqlenList and kvSeqlenList must match the batch size.\n");
-            printf(HELPER);
-            return -1;
-        }
+        qSeqlen = atoi(argv[argIndex++]);
+        kvSeqlen = atoi(argv[argIndex++]);
         numHeads = atoi(argv[argIndex++]);
         numBlocks = atoi(argv[argIndex++]);
         blockSize = atoi(argv[argIndex++]);
@@ -132,6 +109,8 @@ static void Run(const Options &options)
 
     // Parameters initialization.
     int32_t batch = options.batch;
+    int32_t qSeqlen = options.qSeqlen;
+    int32_t kvSeqlen = options.kvSeqlen;
     int32_t numHeads = options.numHeads;
     int32_t kvHeads = options.kvHeads;
     int32_t embeddingSize = options.embeddingSize;
@@ -141,38 +120,26 @@ static void Run(const Options &options)
     int32_t maskType = options.maskType;
     string dataType = options.dataType;
     string dataPath = options.dataPath;
-    int32_t maxKvSeqlen = 0;
-    if (!options.kvSeqlenList.empty()) {
-        maxKvSeqlen = options.kvSeqlenList[0];
-        for (size_t i = 1; i < options.kvSeqlenList.size(); ++i) {
-            if (options.kvSeqlenList[i] > maxKvSeqlen) {
-                maxKvSeqlen = options.kvSeqlenList[i];
-            }
-        }
-    }
+    int32_t maxKvSeqlen = kvSeqlen;
 
     if ((dataType != "half") && (dataType != "bf16")) {
         cerr << "[ERROR] dtype must be 'half' or 'bf16'." << endl;
         return;
     }
 
-    int32_t dTypeKey = (dataType == "half") ? 0 : 1;
-    int32_t specStraKey = (numHeads == MLATiling::NUM128) ? 1 : 0;
+    uint32_t dTypeKey = (dataType == "half") ? 0 : 1;
+    uint32_t specStraKey = (numHeads == MLATiling::NUM128) ? 1 : 0;
 
     // 3 bits for tilingKey(specStraKey : 1, dTypeKey : 2)
     uint32_t dTypeKeyBitLen = 2;
     uint32_t tilingKey = (specStraKey << dTypeKeyBitLen) + dTypeKey;
+    std::cout << "tilingKey : " << tilingKey << std::endl;
 
     // read qNtokens num
     void *qNtokens = nullptr;
     ACL_CHECK(aclrtMallocHost(&qNtokens, 1 * sizeof(int32_t)));
     ReadFile(dataPath + "/q_ntokens.bin", qNtokens, 1 * sizeof(int32_t));
     int32_t numTokens = static_cast<int32_t *>(qNtokens)[0];
-
-    if ((numHeads == MLATiling::NUM128) && (numTokens % aicCoreNum <= 10) && (batch <= 40)) {
-        tilingKey = (dTypeKey == 0) ? 7 : 8;
-    }
-    std::cout << "tilingKey : " << tilingKey << std::endl;
 
     // read qSeq
     void *qSeq = nullptr;
@@ -286,9 +253,9 @@ static void Run(const Options &options)
 
     ACL_CHECK(aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint32_t maxKvSplitCoreNum = *((uint32_t *)tilingHost + MLATiling::TILING_KVCORENUM);
-    uint64_t oFdSize = embeddingSize * numHeads * numTokens * maxKvSplitCoreNum * sizeof(float);
-    uint64_t lSize = numTokens * numHeads * maxKvSplitCoreNum * sizeof(float);
+    uint32_t kvSplitCoreNum = *((uint32_t *)tilingHost + MLATiling::TILING_KVCORENUM);
+    uint64_t oFdSize = embeddingSize * numHeads * numTokens * kvSplitCoreNum * sizeof(float);
+    uint64_t lSize = numTokens * numHeads * kvSplitCoreNum * sizeof(float);
 
     uint8_t *oCoreTmpDevice;
     ACL_CHECK(aclrtMalloc((void **)(&oCoreTmpDevice), oFdSize, ACL_MEM_MALLOC_HUGE_FIRST));
@@ -301,39 +268,26 @@ static void Run(const Options &options)
     ACL_CHECK(aclrtGetHardwareSyncAddr(reinterpret_cast<void**>(&hardwareSyncAddr)));
 
     // use Tp1Spec kernel to get better performance when numHeads = 128
-    switch (tilingKey) {
-        case 0:
-            MLA<half><<<blockDim, nullptr, stream>>>(hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice,
-                                                   blockTableDevice, oDevice, sDevice, pDevice, oTmpDevice,
-                                                   globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
-            break;
-        case 1:
-            MLA<bfloat16_t><<<blockDim, nullptr, stream>>>(hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice,
-                                                   blockTableDevice, oDevice, sDevice, pDevice, oTmpDevice,
-                                                   globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
-            break;
-        case 4:
-            AMLATp1Spec<half><<<blockDim, nullptr, stream>>>(hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice,
-                                                          blockTableDevice, oDevice, sDevice, pDevice, oTmpDevice,
-                                                          globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
-            break;
-        case 5:
-            AMLATp1Spec<bfloat16_t><<<blockDim, nullptr, stream>>>(hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice,
-                                                          blockTableDevice, oDevice, sDevice, pDevice, oTmpDevice,
-                                                          globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
-            break;
-        case 7:
-            MLATp1Spec<half><<<blockDim, nullptr, stream>>>(hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice,
-                                                        blockTableDevice, oDevice, sDevice, pDevice, oTmpDevice,
-                                                        globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
-            break;
-        case 8:
-            MLATp1Spec<bfloat16_t><<<blockDim, nullptr, stream>>>(hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice,
-                                                        blockTableDevice, oDevice, sDevice, pDevice, oTmpDevice,
-                                                        globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
-            break;
-        default:
-            break;
+    if (tilingKey == 0) {
+        MLAFp16<<<blockDim, nullptr, stream>>>(
+            hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oDevice, sDevice, pDevice,
+            oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice
+        );
+    } else if (tilingKey == 1) {
+        MLABf16<<<blockDim, nullptr, stream>>>(
+            hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oDevice, sDevice, pDevice,
+            oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice
+        );
+    } else if (tilingKey == 4) {
+        MLATp1SpecFp16<<<blockDim, nullptr, stream>>>(
+            hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oDevice, sDevice, pDevice,
+            oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice
+        );
+    } else if (tilingKey == 5) {
+        MLATp1SpecBf16<<<blockDim, nullptr, stream>>>(
+            hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oDevice, sDevice, pDevice,
+            oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice
+        );
     }
     ACL_CHECK(aclrtSynchronizeStream(stream));
     // Copy the result from device to host
@@ -350,22 +304,13 @@ static void Run(const Options &options)
     const size_t goldenSize = qoSize * 2;
     ReadFile(dataPath + "/golden.bin", goldenHost.data(), goldenSize);
 
-    // Compute the cpulow result
-    vector<float> cpulowHost(qoSize / sizeof(fp16_t));
-    const size_t cpulowSize = qoSize * 2;
-    ReadFile(dataPath + "/cpu_low.bin", cpulowHost.data(), cpulowSize);
-
-    // Compute error metrics
-    auto errorMetrics = (dataType == "half")
-        ? golden::ComputeErrorMetrics(oHostHalf, cpulowHost, goldenHost, 10.0, 2.0, 2.0)
-        : golden::ComputeErrorMetrics(oHostBf16, cpulowHost, goldenHost, 10.0, 2.0, 2.0);
-    if (errorMetrics.passed) {
+    // Compare the result
+    vector<uint64_t> errorIndices = (dataType == "half") ? golden::CompareData(oHostHalf, goldenHost, kvSeqlen)
+                                                         : golden::CompareData(oHostBf16, goldenHost, kvSeqlen);
+    if (errorIndices.empty()) {
         cout << "Compare success." << endl;
     } else {
-        cerr << "Error ratios exceed thresholds:" << endl;
-        cerr << "MARE ratio: " << errorMetrics.mareRatio << " (threshold: 10)" << endl;
-        cerr << "MERE ratio: " << errorMetrics.mereRatio << " (threshold: 2)" << endl;
-        cerr << "RMSE ratio: " << errorMetrics.rmseRatio << " (threshold: 2)" << endl;
+        cerr << "Compare failed. Error count: " << errorIndices.size() << endl;
     }
 
     // Free host memory allocations.

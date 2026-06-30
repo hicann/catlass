@@ -38,8 +38,6 @@ class BlockEpilogue {
 #include "catlass/epilogue/block/block_epilogue_gemv.hpp"
 #include "catlass/epilogue/block/block_epilogue_mla_tp1_softmax.hpp"
 #include "catlass/epilogue/block/block_epilogue_mla_tp1_rescale_o.hpp"
-#include "catlass/epilogue/block/block_epilogue_amla_tp1_softmax.hpp"
-#include "catlass/epilogue/block/block_epilogue_amla_tp1_rescale_o.hpp"
 #include "catlass/epilogue/block/block_epilogue_online_softmax_no_mask.hpp"
 #include "catlass/epilogue/block/block_epilogue_rescale_o_no_split_row.hpp"
 #include "catlass/epilogue/block/block_epilogue_w4a4_per_token_per_channel_dequant.hpp"

@@ -117,7 +117,7 @@ public:
                     AscendC::GlobalTensor<ElementB> gB, AscendC::GlobalTensor<ElementB> gBRope,
                     AscendC::GlobalTensor<int32_t> gblockTable, AscendC::GlobalTensor<ElementC> gC, LayoutA layoutA,
                     LayoutA layoutARope, LayoutB layoutB, LayoutB layoutBRope, LayoutC layoutC, GemmCoord actualShape,
-                    uint32_t &nIdx, uint32_t &nLoop, uint32_t &blockSize, uint32_t kvSeqlen, uint32_t &qkInLoopPingpongIdx, uint32_t &qkLoopPingpongIdx)
+                    uint32_t &nIdx, uint32_t &nLoop, uint32_t &blockSize, uint32_t kvSeqlen)
     {
         uint32_t rowNum = actualShape.m();
         uint32_t stackSeqTile = actualShape.n();
@@ -145,8 +145,8 @@ public:
         for (uint32_t blockStackIdx = 0; (blockStackIdx < UNIT_BLOCK_STACK_NUM) && ((nIdx + blockStackIdx) < nLoop);
              blockStackIdx++) {
             uint32_t nIdxActual = nIdx + blockStackIdx;
-            uint32_t L0CPingPongFlag = qkLoopPingpongIdx % 2;
-            uint32_t L1BRopePingPongFlag = qkLoopPingpongIdx % 2;
+            uint32_t L0CPingPongFlag = nIdxActual % 2;
+            uint32_t L1BRopePingPongFlag = nIdxActual % 2;
             if (nIdxActual == (nLoop - 1)) {
                 seqTile = (kvSeqlen - nIdxActual * blockSize);
                 seqTileRound = RoundUp<BLOCK_SIZE>(seqTile);
@@ -158,7 +158,7 @@ public:
             uint32_t embedSplitSize = EMBED_SPLIT_SIZE;
             uint32_t embedSplitLoopK = EMBED_SPLIT_LOOP;
             for (uint32_t embedSplitIdx = 0; embedSplitIdx < embedSplitLoopK; embedSplitIdx++) {
-                uint32_t L0ABPingPongFlag = (qkInLoopPingpongIdx) % 2;
+                uint32_t L0ABPingPongFlag = (blockStackIdx + embedSplitIdx) % 2;
                 uint32_t innerSplitIdxL12L0 = embedSplitIdx % 2;
                 uint32_t L1BPingPongFlag = embedSplitIdx / 2;
                 if (embedSplitIdx == 4) {
@@ -172,7 +172,6 @@ public:
                             layoutACatSplitKInL0, layoutACatSplitKInL1);
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(L0ABPingPongFlag);
 
-
                 if (embedSplitIdx == 0 || embedSplitIdx == 2) {
                     // copy K to l1b
                     AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(L1BPingPongFlag);
@@ -183,10 +182,8 @@ public:
                                 layoutUnitBSplitKInL1, layoutUnitBSplitK);
                     AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(L1BPingPongFlag);
                     AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(L1BPingPongFlag);
-
                 } else if (embedSplitIdx == 4) {
                     // copy KRope to L1
-
                     AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(L1BRopePingPongFlag + 2);
                     auto layoutUnitBRope = layoutBRope.GetTileLayout(MakeCoord(embedRope, seqTile));
                     LayoutBInL1 layoutBRopeInL1 = LayoutBInL1::template MakeLayout<ElementB>(embedRope, seqTile);
@@ -194,7 +191,6 @@ public:
                                 layoutUnitBRope);
                     AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(L1BRopePingPongFlag);
                     AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(L1BRopePingPongFlag);
-
                 }
                 // copy K to l0b
                 AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(L0ABPingPongFlag + 2);
@@ -209,13 +205,11 @@ public:
                                 layoutBCatSplitKInL1);
                 }
 
-
                 if (embedSplitIdx == 1 || embedSplitIdx == 3) {
                     AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(L1BPingPongFlag);
                 } else if (embedSplitIdx == 4) {
                     AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(L1BRopePingPongFlag + 2);
                 }
-
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(L0ABPingPongFlag + 2);
 
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_M>(L0ABPingPongFlag);
@@ -223,14 +217,11 @@ public:
                 if (embedSplitIdx == 0) {
                     AscendC::WaitFlag<AscendC::HardEvent::FIX_M>(L0CPingPongFlag);
                 }
-
                 // mmad
                 tileMmad(l0CTensor[L0CPingPongFlag], l0ATensor[L0ABPingPongFlag], l0BTensor[L0ABPingPongFlag],
                          rowNumRound, seqTile, embedSplitSize, embedSplitIdx == 0);
                 AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(L0ABPingPongFlag);
                 AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(L0ABPingPongFlag + 2);
-                qkInLoopPingpongIdx++;
-
             }
             // copy S to gm
             AscendC::SetFlag<AscendC::HardEvent::M_FIX>(L0CPingPongFlag);
@@ -241,7 +232,6 @@ public:
             // copy L0C to gm
             copyL0CToGm(gC[blockStackIdx * blockSize], l0CTensor[L0CPingPongFlag], layoutCSplitN, layoutInL0C);
             AscendC::SetFlag<AscendC::HardEvent::FIX_M>(L0CPingPongFlag);
-            qkLoopPingpongIdx++;
         }
     }
 
