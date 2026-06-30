@@ -791,6 +791,21 @@ def Tla_DivOp : Tla_VectorBinaryOp<"div",
     "Vector divide for tensor fragments",
     "Element-wise divide on tensor fragments / vector tiles.">;
 
+def Tla_WhereOp : Tla_Op<"where", [Pure]> {
+  let summary = "Vector select for tensor fragments";
+  let description = [{
+    Element-wise select on tensor fragments / vector tiles. For each lane the
+    result holds the corresponding lane of ``x`` where the predicate mask is
+    active and ``y`` elsewhere. ``x`` and ``y`` must share the same tensor type.
+  }];
+  let arguments = (ins Tla_MaskType:$mask, Tla_TensorType:$x, Tla_TensorType:$y);
+  let results = (outs Tla_TensorType:$result);
+  let assemblyFormat = [{
+    $mask `,` $x `,` $y attr-dict `:`
+    qualified(type($mask)) `,` type($x) `,` type($y) `->` type($result)
+  }];
+}
+
 def Tla_VectorOp : Tla_Op<"vector", [NoTerminator, SingleBlock]> {
   let summary = "Vector region";
   let description = [{

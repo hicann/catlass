@@ -33,6 +33,11 @@ from vector_op_harness import (
 #   mul: pattern M4 (multiples of 4)
 #   div: pattern H (first half)
 # (lane == element index within a VL-wide chunk).
+#
+# A fifth output exercises `tla.where` (lowered to ave.hir.vsel): it selects,
+# per lane, between the *unmasked* add and sub results using a pattern-H mask, so
+# lane i holds (a+b) on the first half of each chunk and (a-b) on the second
+# half. Every lane is defined (no zeroing), only the tail store bound applies.
 
 VECTOR_ELE = 400
 VL_ELE = 64
@@ -52,6 +57,7 @@ def masked_binary(
     mem_rsub: tla.Tensor,
     mem_rmul: tla.Tensor,
     mem_rdiv: tla.Tensor,
+    mem_rsel: tla.Tensor,
 ) -> None:
     ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.VECTOR)
     vec_done = tla.flag("vec_done", tla.arch.VECTOR, tla.arch.MTE3)
@@ -64,6 +70,7 @@ def masked_binary(
     rsub_gm = tla.tile_view(mem_rsub, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
     rmul_gm = tla.tile_view(mem_rmul, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
     rdiv_gm = tla.tile_view(mem_rdiv, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
+    rsel_gm = tla.tile_view(mem_rsel, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
 
     a_ub = _make_ub_tensor(allocator, a_gm)
     b_ub = _make_ub_tensor(allocator, b_gm)
@@ -71,6 +78,7 @@ def masked_binary(
     rsub_ub = _make_ub_tensor(allocator, rsub_gm)
     rmul_ub = _make_ub_tensor(allocator, rmul_gm)
     rdiv_ub = _make_ub_tensor(allocator, rdiv_gm)
+    rsel_ub = _make_ub_tensor(allocator, rsel_gm)
 
     tla.copy(a_ub, a_gm)
     tla.copy(b_ub, b_gm)
@@ -93,6 +101,7 @@ def masked_binary(
             rsub_t = _chunk(rsub_ub, i)
             rmul_t = _chunk(rmul_ub, i)
             rdiv_t = _chunk(rdiv_ub, i)
+            rsel_t = _chunk(rsel_ub, i)
 
             av = a_t.load()
             bv = b_t.load()
@@ -102,11 +111,18 @@ def masked_binary(
             m_sub = tla.create_mask(pattern=tla.mask.Q, dtype=_KERNEL_DTYPE)   # first quarter
             m_mul = tla.create_mask(pattern=tla.mask.M4, dtype=_KERNEL_DTYPE)  # multiples of 4
             m_div = tla.create_mask(pattern=tla.mask.H, dtype=_KERNEL_DTYPE)   # first half
+            m_sel = tla.create_mask(pattern=tla.mask.H, dtype=_KERNEL_DTYPE)   # first half
 
             radd_t.store(tla.add(av, bv, mask=m_add), mask=tail)
             rsub_t.store(tla.sub(av, bv, mask=m_sub), mask=tail)
             rmul_t.store(tla.mul(av, bv, mask=m_mul), mask=tail)
             rdiv_t.store(tla.div(av, bv, mask=m_div), mask=tail)
+
+            # Select between the unmasked add/sub results: first half of each
+            # chunk takes a+b, second half takes a-b (lowers to ave.hir.vsel).
+            sum_v = tla.add(av, bv)
+            diff_v = tla.sub(av, bv)
+            rsel_t.store(tla.where(m_sel, sum_v, diff_v), mask=tail)
 
     tla.set_flag(vec_done)
     tla.wait_flag(vec_done)
@@ -115,6 +131,7 @@ def masked_binary(
     tla.copy(rsub_gm, rsub_ub)
     tla.copy(rmul_gm, rmul_ub)
     tla.copy(rdiv_gm, rdiv_ub)
+    tla.copy(rsel_gm, rsel_ub)
     tla.pipe_barrier(tla.pipes.ALL)
 
 
@@ -173,7 +190,7 @@ def _compile_only_type_args(
     op_name: str, dtype_name: str, shape: tuple[int, ...] | None = None
 ) -> tuple[Any, ...]:
     tla_dtype, _, _ = _set_kernel_config(op_name, dtype_name, shape)
-    return make_type_args(tla_dtype, _KERNEL_SHAPE, 6)
+    return make_type_args(tla_dtype, _KERNEL_SHAPE, 7)
 
 
 def _make_inputs(args: Any, dtype_name: str, torch: Any) -> tuple[Any, ...]:
@@ -213,14 +230,19 @@ def _expected(op_name: str, inputs: tuple[Any, ...]) -> tuple[Any, ...]:
     keep_sub = lane < (VL_ELE // 4)   # pattern Q (first quarter)
     keep_mul = (lane % 4) == 0        # pattern M4 (multiples of 4)
     keep_div = lane < (VL_ELE // 2)   # pattern H (first half)
+    keep_sel = lane < (VL_ELE // 2)   # pattern H (first half -> add, else sub)
 
     # Masked-out lanes are zeroed by the masked binary intrinsics (see kernel).
     zero = torch.zeros_like(a)
+    # The select output has every lane defined: add_r where the H mask is active,
+    # sub_r elsewhere (no zeroing) -- matches tla.where / ave.hir.vsel.
+    sel_r = _merge(torch, add_r, sub_r, keep_sel)
     return (
         _merge(torch, add_r, zero, keep_add),
         _merge(torch, sub_r, zero, keep_sub),
         _merge(torch, mul_r, zero, keep_mul),
         _merge(torch, div_r, zero, keep_div),
+        sel_r,
     )
 
 
@@ -241,7 +263,7 @@ HARNESS = DirectVectorOpHarness(
         script_path=Path(__file__).resolve(),
         env_compile_jobs="MASKED_BINARY_COMPILE_JOBS",
         float_dtypes=frozenset({"f32", "f16"}),
-        output_count=4,
+        output_count=5,
     )
 )
 

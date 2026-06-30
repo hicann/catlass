@@ -626,6 +626,12 @@ static std::optional<VectorBinaryKind> getVectorBinaryKind(Operation *op) {
   return std::nullopt;
 }
 
+// True for the tla ops that produce a vector compute result inside a vec.func
+// region: the element-wise binary ops (add/sub/mul/div) and the where/select op.
+static bool isVectorComputeOp(Operation *op) {
+  return getVectorBinaryKind(op).has_value() || isa_and_nonnull<::tla::WhereOp>(op);
+}
+
 // The lhs/rhs/mask operands of a tla binary op (mask may be null). All four
 // binary ops share this operand layout.
 struct TlaBinaryOperands {
@@ -813,6 +819,19 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     if (!result)
       return failure();
     valueMap[op.getResult(0)] = result;
+    return success();
+  }
+
+  // tla.where: per-lane select. The mask predicates which lanes take `x`; the
+  // remaining lanes take `y`. Lowers to ave.hir.vsel(mask, x, y).
+  if (auto whereOp = dyn_cast<::tla::WhereOp>(op)) {
+    Value mask = valueMap.lookup(whereOp.getMask());
+    Value x = valueMap.lookup(whereOp.getX());
+    Value y = valueMap.lookup(whereOp.getY());
+    if (!mask || !x || !y)
+      return failure();
+    valueMap[whereOp.getResult()] =
+        b.create<hivmave::VFSelectOp>(loc, ctx.vecType, mask, x, y);
     return success();
   }
 
@@ -1165,7 +1184,7 @@ public:
         loads.push_back(load);
       } else if (auto store = dyn_cast<::tla::StoreOp>(op)) {
         stores.push_back(store);
-      } else if (getVectorBinaryKind(op)) {
+      } else if (isVectorComputeOp(op)) {
         computeOps.push_back(op);
       }
       return WalkResult::advance();
@@ -1180,16 +1199,24 @@ public:
     for (::tla::LoadOp load : loads)
       producedValues.insert(load.getResult());
     for (Operation *computeOp : computeOps) {
-      auto kind = getVectorBinaryKind(computeOp);
-      if (!kind || computeOp->getNumResults() != 1)
-        return rewriter.notifyMatchFailure(vecFuncOp, "unexpected tla binary op shape");
-      // lhs/rhs must be produced inside the region; the optional mask comes from
-      // tla.create_mask and is validated separately.
-      TlaBinaryOperands ops = getTlaBinaryOperands(computeOp);
-      if (!ops.lhs || !ops.rhs || !producedValues.contains(ops.lhs) ||
-          !producedValues.contains(ops.rhs))
-        return rewriter.notifyMatchFailure(
-            vecFuncOp, "expected binary op operand from tla.load or prior compute op");
+      if (computeOp->getNumResults() != 1)
+        return rewriter.notifyMatchFailure(vecFuncOp, "unexpected tla compute op shape");
+      // Tensor operands must be produced inside the region; mask operands come
+      // from tla.create_mask / tla.update_mask and are validated separately.
+      if (getVectorBinaryKind(computeOp)) {
+        TlaBinaryOperands ops = getTlaBinaryOperands(computeOp);
+        if (!ops.lhs || !ops.rhs || !producedValues.contains(ops.lhs) ||
+            !producedValues.contains(ops.rhs))
+          return rewriter.notifyMatchFailure(
+              vecFuncOp, "expected binary op operand from tla.load or prior compute op");
+      } else if (auto whereOp = dyn_cast<::tla::WhereOp>(computeOp)) {
+        if (!producedValues.contains(whereOp.getX()) ||
+            !producedValues.contains(whereOp.getY()))
+          return rewriter.notifyMatchFailure(
+              vecFuncOp, "expected tla.where operand from tla.load or prior compute op");
+      } else {
+        return rewriter.notifyMatchFailure(vecFuncOp, "unexpected tla compute op");
+      }
       producedValues.insert(computeOp->getResult(0));
     }
     for (::tla::StoreOp store : stores)

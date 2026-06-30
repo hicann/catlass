@@ -3165,6 +3165,45 @@ def div(
 
 
 @dsl_user_op
+def where(
+    mask: MaskSSA,
+    x: VectorSSA,
+    y: VectorSSA,
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> VectorSSA:
+    """Emit element-wise select for loaded vector SSA values.
+
+    Lanes where ``mask`` (a ``MaskSSA`` from ``tla.create_mask`` or
+    ``tla.update_mask``) is active take the corresponding lane of ``x``; the
+    remaining lanes take ``y``. ``x`` and ``y`` must have identical
+    ``!tla.tensor`` types. Lowers to ``ave.hir.vsel``.
+    """
+    _require_category("where", "mask", mask, "mask_ssa", 0)
+    _require_category("where", "x", x, "vector_ssa", 1)
+    _require_category("where", "y", y, "vector_ssa", 2)
+    _require_frontend_state("where")
+    _runtime._check_frontend_region_op("where", {"vector"})
+    x_value = _as_value(x)
+    y_value = _as_value(y)
+    if str(x_value.type) != str(y_value.type):
+        raise TlaLoweringError(
+            f"tla.where operands x and y must have identical !tla.tensor types; "
+            f"got {x_value.type} and {y_value.type}"
+        )
+    mask_value = _as_value(mask)
+    return VectorSSA(
+        _tla_ops_gen.where(
+            x_value.type,
+            mask_value,
+            x_value,
+            y_value,
+            loc=loc,
+        )
+    )
+
+
+@dsl_user_op
 def arch_block_idx(*, loc: mlir_ir.Location | None = None) -> TlaIndex:
     """Return block index in Tla execution model."""
     _require_frontend_state("arch.block_idx")
@@ -3280,6 +3319,7 @@ _require_generated("add")
 _require_generated("sub")
 _require_generated("mul")
 _require_generated("div")
+_require_generated("where")
 _require_generated("arch_block_idx")
 _require_generated("arch_sub_block_idx")
 _require_generated("arch_block_dim")
@@ -3484,6 +3524,7 @@ __all__ = [
     "sub",
     "mul",
     "div",
+    "where",
     "make_ptr",
     "recast_ptr",
     "make_shape",

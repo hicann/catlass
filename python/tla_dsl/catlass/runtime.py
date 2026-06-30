@@ -613,6 +613,7 @@ _CORE_API_EXPORTS = (
     "sub",
     "mul",
     "div",
+    "where",
     "make_ptr",
     "recast_ptr",
     "make_shape",
