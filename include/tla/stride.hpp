@@ -119,62 +119,29 @@ CATLASS_HOST_DEVICE constexpr auto compact_order(Shape const& shape, Order const
     return detail::compact_order_impl(shape, order, flat_shape, flat_order);
 }
 
-// Return the offset of coord
-template <class Coord, class Shape, class Stride>
-CATLASS_HOST_DEVICE constexpr auto crd2idx(Coord const& coord, Shape const& shape, Stride const& stride);
-
-namespace detail {
-
-template <class Coord, class Shape, class Stride, int... Is>
-CATLASS_HOST_DEVICE constexpr auto crd2idx_ttt(Coord const& coord, Shape const& shape, Stride const& stride, seq<Is...>)
-{
-    return (... + crd2idx(get<Is>(coord), get<Is>(shape), get<Is>(stride)));
-}
-
-template <class STuple, class DTuple, int... Is>
-CATLASS_HOST_DEVICE constexpr auto crd2idx_0tt(STuple const& shape, DTuple const& stride, seq<Is...>)
-{
-    return (_0{} + ... + crd2idx(_0{}, get<Is>(shape), get<Is>(stride)));
-}
-
-template <class CInt, class STuple, class DTuple, int I0, int... Is>
-CATLASS_HOST_DEVICE constexpr auto crd2idx_itt(
-    CInt const& coord, STuple const& shape, DTuple const& stride, seq<I0, Is...>)
-{
-    if constexpr (sizeof...(Is) == 0) {
-        return crd2idx(coord, get<I0>(shape), get<I0>(stride));
-    } else {
-        if constexpr (is_constant<0, CInt>::value) {
-            return crd2idx_0tt(shape, stride, seq<I0, Is...>{});
-        }
-        auto prod = product(get<I0>(shape));
-        return crd2idx(coord % prod, get<I0>(shape), get<I0>(stride)) +
-               crd2idx_itt(coord / prod, shape, stride, seq<Is...>{});
-    }
-}
-
-template <class CInt, class SInt, class DInt>
-CATLASS_HOST_DEVICE constexpr auto crd2idx_iii(CInt const& coord, SInt const& shape, DInt const& stride)
-{
-    return coord * stride;
-}
-
-} // end namespace detail
-
 template <class Coord, class Shape, class Stride>
 CATLASS_HOST_DEVICE constexpr auto crd2idx(Coord const& coord, Shape const& shape, Stride const& stride)
 {
     if constexpr (is_tuple<Coord>::value && is_tuple<Shape>::value) {
         static_assert(tuple_size<Coord>::value == tuple_size<Shape>::value, "Mismatched Ranks");
         static_assert(tuple_size<Coord>::value == tuple_size<Stride>::value, "Mismatched Ranks");
-        return detail::crd2idx_ttt(coord, shape, stride, tuple_seq<Coord>{});
+        return transform_apply(
+            coord, shape, stride, [](auto const& c, auto const& s, auto const& d) { return crd2idx(c, s, d); },
+            [](auto const&... xs) { return (... + xs); });
     } else if constexpr (is_tuple<Coord>::value) {
         static_assert(dependent_false<Coord>, "Invalid parameters");
     } else if constexpr (is_tuple<Shape>::value) {
         static_assert(tuple_size<Shape>::value == tuple_size<Stride>::value, "Mismatched Ranks");
-        return detail::crd2idx_itt(coord, shape, stride, tuple_seq<Shape>{});
+        if constexpr (is_constant<0, Coord>::value) {
+            return _0{};
+        }
+        auto zipped = transform(shape, stride, [](auto const& s, auto const& d) { return make_tuple(s, d); });
+        return get<1>(fold(zipped, make_tuple(coord, _0{}), [](auto const& acc, auto const& sd) {
+            auto prod = product(get<0>(sd));
+            return make_tuple(get<0>(acc) / prod, get<1>(acc) + crd2idx(get<0>(acc) % prod, get<0>(sd), get<1>(sd)));
+        }));
     } else {
-        return detail::crd2idx_iii(coord, shape, stride);
+        return coord * stride;
     }
 }
 
@@ -185,25 +152,6 @@ CATLASS_HOST_DEVICE constexpr auto crd2offset(Coord const& coord, Shape const& s
     return crd2idx(coord, shape, stride);
 }
 
-namespace detail {
-
-// crd2idx_tt: Horner's method for colexicographic enumeration without explicit strides.
-// i = c0 + s0 * (c1 + s1 * (c2 + s2 * ...))
-template <class CTuple, class STuple, int I0, int... Is>
-CATLASS_HOST_DEVICE constexpr auto crd2idx_tt(CTuple const& coord, STuple const& shape, seq<I0, Is...>)
-{
-    if constexpr (sizeof...(Is) == 0) {
-        return get<I0>(coord);
-    } else {
-        return get<I0>(coord) + get<I0>(shape) * crd2idx_tt(coord, shape, seq<Is...>{});
-    }
-}
-
-} // end namespace detail
-
-// crd2idx(c, s): map a coordinate within Shape to a linear index
-// via colexicographic enumeration (implicit strides = product of preceding dims).
-// i = c0 + s0 * (c1 + s1 * (c2 + s2 * ...))
 template <class Coord, class Shape>
 CATLASS_HOST_DEVICE constexpr auto crd2idx(Coord const& coord, Shape const& shape)
 {
@@ -211,7 +159,9 @@ CATLASS_HOST_DEVICE constexpr auto crd2idx(Coord const& coord, Shape const& shap
         static_assert(tuple_size<Coord>::value == tuple_size<Shape>::value, "Mismatched Ranks");
         auto flat_coord = flatten_to_tuple(coord);
         auto flat_shape = flatten_to_tuple(product_like(shape, coord));
-        return detail::crd2idx_tt(flat_coord, flat_shape, tuple_seq<decltype(flat_shape)>{});
+        auto zipped = transform(flat_coord, flat_shape, [](auto const& c, auto const& s) { return make_tuple(c, s); });
+        return fold_reverse(
+            zipped, _0{}, [](auto const& acc, auto const& cs) { return get<0>(cs) + get<1>(cs) * acc; });
     } else if constexpr (is_tuple<Coord>::value) {
         static_assert(dependent_false<Coord>, "Invalid parameters");
     } else {

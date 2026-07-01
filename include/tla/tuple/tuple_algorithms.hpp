@@ -203,6 +203,12 @@ CATLASS_HOST_DEVICE constexpr auto tapply_impl(T0&& t0, T1&& t1, F&& f, G&& g, s
     return g(f(get<I>(tla::forward<T0>(t0)), get<I>(tla::forward<T1>(t1)))...);
 }
 
+template <class T0, class T1, class T2, class F, class G, int... I>
+CATLASS_HOST_DEVICE constexpr auto tapply_impl(T0&& t0, T1&& t1, T2&& t2, F&& f, G&& g, seq<I...>)
+{
+    return g(f(get<I>(tla::forward<T0>(t0)), get<I>(tla::forward<T1>(t1)), get<I>(tla::forward<T2>(t2)))...);
+}
+
 } // end namespace detail
 
 // transform_apply: transform each element with f, then pack with g
@@ -226,6 +232,21 @@ CATLASS_HOST_DEVICE constexpr auto transform_apply(T0&& t0, T1&& t1, F&& f, G&& 
     }
 }
 
+template <class T0, class T1, class T2, class F, class G>
+CATLASS_HOST_DEVICE constexpr auto transform_apply(T0&& t0, T1&& t1, T2&& t2, F&& f, G&& g)
+{
+    if constexpr (is_tuple<remove_cvref_t<T0>>::value) {
+        static_assert(
+            tuple_size<remove_cvref_t<T0>>::value == tuple_size<remove_cvref_t<T1>>::value, "Mismatched tuple_size");
+        static_assert(
+            tuple_size<remove_cvref_t<T0>>::value == tuple_size<remove_cvref_t<T2>>::value, "Mismatched tuple_size");
+        return detail::tapply_impl(
+            tla::forward<T0>(t0), tla::forward<T1>(t1), tla::forward<T2>(t2), f, g, tuple_seq<T0>{});
+    } else {
+        return g(f(tla::forward<T0>(t0), tla::forward<T1>(t1), tla::forward<T2>(t2)));
+    }
+}
+
 // transform: apply f to each element, return new tuple
 template <class T, class F>
 CATLASS_HOST_DEVICE constexpr auto transform(T const& t, F&& f)
@@ -245,6 +266,19 @@ CATLASS_HOST_DEVICE constexpr auto transform(T0 const& t0, T1 const& t1, F&& f)
         return detail::tapply_impl(t0, t1, f, [](auto const&... a) { return tla::make_tuple(a...); }, tuple_seq<T0>{});
     } else {
         return f(t0, t1);
+    }
+}
+
+template <class T0, class T1, class T2, class F>
+CATLASS_HOST_DEVICE constexpr auto transform(T0 const& t0, T1 const& t1, T2 const& t2, F&& f)
+{
+    if constexpr (is_tuple<T0>::value) {
+        static_assert(tuple_size<T0>::value == tuple_size<T1>::value, "Mismatched tuple_size");
+        static_assert(tuple_size<T0>::value == tuple_size<T2>::value, "Mismatched tuple_size");
+        return detail::tapply_impl(
+            t0, t1, t2, f, [](auto const&... a) { return tla::make_tuple(a...); }, tuple_seq<T0>{});
+    } else {
+        return f(t0, t1, t2);
     }
 }
 
