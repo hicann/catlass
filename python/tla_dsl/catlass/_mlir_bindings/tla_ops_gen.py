@@ -613,6 +613,34 @@ def divs(result, lhs, rhs, *, mask=None, loc=None, ip=None) -> _ods_ir.Value:
   return _get_op_result_or_op_results(DivsOp(result=result, lhs=lhs, rhs=rhs, mask=mask, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
+class FullOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.full"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, value, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(value))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def value(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def full(result, value, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(FullOp(result=result, value=value, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
 class FlagOp(_ods_ir.OpView):
   OPERATION_NAME = "tla.flag"
 

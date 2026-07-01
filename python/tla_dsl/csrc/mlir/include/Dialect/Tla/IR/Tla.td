@@ -382,6 +382,19 @@ def Tla_BroadcastOp : Tla_Op<"broadcast", [Pure]> {
   }];
 }
 
+def Tla_FullOp : Tla_Op<"full", [Pure]> {
+  let summary = "Fill vector lanes with scalar";
+  let description = [{
+    Broadcast a scalar value into the vector helper register type selected by the
+    enclosing vector lowering context.
+  }];
+  let arguments = (ins AnyTypeOf<[I1, I8, I16, I32, I64, BF16, F16, F32]>:$value);
+  let results = (outs Tla_TensorType:$result);
+  let assemblyFormat = [{
+    $value attr-dict `:` type($value) `->` type($result)
+  }];
+}
+
 def Tla_CopyL0C2DstParamsOp : Tla_Op<"CopyL0C2DstParams", [Pure]> {
   let summary = "CopyL0C2DstParams op";
   let arguments = (ins 

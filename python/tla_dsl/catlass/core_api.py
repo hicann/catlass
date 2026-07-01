@@ -560,6 +560,11 @@ def _const_f32(value: float) -> mlir_ir.Value:
     return op.results[0]
 
 
+_FULL_SUPPORTED_DTYPES = frozenset(
+    ("i1", "i8", "i16", "i32", "i64", "bf16", "f16", "f32")
+)
+
+
 def _as_index_value(value: Any) -> mlir_ir.Value:
     resolved = _resolve_bound_value(value)
     if isinstance(resolved, mlir_ir.Value):
@@ -3069,6 +3074,67 @@ def broadcast(
     )
 
 
+@dsl_user_op
+def full(
+    value: Any,
+    dtype: Any,
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> VectorSSA:
+    """Create a 1-D vector SSA filled with a Python scalar literal."""
+    state = _runtime._current_frontend_state()
+    if state is None or not state.active_regions:
+        raise TlaCoreAPIError("tla.full is only allowed inside tla.vec.func")
+    _runtime._check_frontend_region_op("full", {"vector"})
+    _require_dtype("full", "dtype", dtype, 1)
+    if not (
+        isinstance(dtype, type)
+        and issubclass(dtype, Numeric)
+        and getattr(dtype, "dtype", "")
+    ):
+        _op_error(
+            "full",
+            f"invalid argument 'dtype' (position 1): expected concrete Numeric "
+            f"(e.g. tla.Float32), got {_type_name(dtype)}",
+        )
+    resolved = _resolve_bound_value(value)
+    if not isinstance(resolved, (bool, int, float, Scalar)):
+        _op_error("full", "value must be a Python scalar literal or typed scalar")
+    dtype_token = str(dtype.dtype).strip().lower()
+    if dtype_token not in _FULL_SUPPORTED_DTYPES:
+        _op_error(
+            "full",
+            f"unsupported vector element dtype {dtype.dtype}; supported dtypes are "
+            f"{', '.join(sorted(_FULL_SUPPORTED_DTYPES))}",
+        )
+    element_bytes = dtype_size_bytes(dtype_token)
+    lanes = 256 // element_bytes
+    desc = TlaTensorTypeDescriptor(
+        layout=TlaLayoutDescriptor(
+            shape=TlaIndexTreeType("shape", lanes),
+            stride=TlaIndexTreeType("stride", 1),
+            origin_shape=TlaIndexTreeType("shape", lanes),
+            layout_tag="row_major",
+        ),
+        coord=0,
+        element_type=dtype_token,
+        addrspace="ub",
+        ptr_alignment=_builtins.max(1, dtype_size_bytes(dtype_token)),
+    )
+    scalar_value = int(resolved) if isinstance(resolved, bool) else resolved
+    context = loc.context if loc is not None else mlir_ir.Context.current
+    scalar = _scalar_constant_for_element_type(
+        "full",
+        scalar_value,
+        desc.element_mlir_type(context),
+        loc=loc,
+    )
+    result = _tla_ops_gen.full(_coerce_type(desc), scalar, loc=loc)
+    _register_tla_tensor_type(result, desc)
+    _register_tla_tensor_metadata(result, desc.metadata())
+    return VectorSSA(result)
+
+
 def _emit_vector_binary(
     op_name: str,
     emitter: Any,
@@ -3722,6 +3788,7 @@ __all__ = [
     "vector",
     "mmad",
     "broadcast",
+    "full",
     "add",
     "sub",
     "mul",

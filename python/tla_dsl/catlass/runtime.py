@@ -609,6 +609,7 @@ _CORE_API_EXPORTS = (
     "vector",
     "mmad",
     "broadcast",
+    "full",
     "add",
     "sub",
     "mul",

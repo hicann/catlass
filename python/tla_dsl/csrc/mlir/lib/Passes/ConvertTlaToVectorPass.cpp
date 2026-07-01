@@ -909,6 +909,20 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     return success();
   }
 
+  if (auto fullOp = dyn_cast<::tla::FullOp>(op)) {
+    Value source = lookupOrCloneScalarValue(b, fullOp.getValue(), valueMap);
+    if (!source)
+      return failure();
+    if (source.getType() != ctx.elementType)
+      return fullOp.emitError("tla.full scalar type ")
+                 << source.getType() << " does not match vector element type "
+                 << ctx.elementType,
+             failure();
+    valueMap[fullOp.getResult()] =
+        b.create<hivmave::VFBroadcastScalarOp>(loc, ctx.vecType, source).getRes();
+    return success();
+  }
+
   if (auto info = getVectorBinaryInfo(&op)) {
     if (op.getNumResults() != 1)
       return failure();
@@ -1333,11 +1347,14 @@ public:
     // graph validation); the helper builder walks the region itself to carry
     // the control flow structure.
     SmallVector<::tla::LoadOp, 4> loads;
+    SmallVector<::tla::FullOp, 4> fulls;
     SmallVector<Operation *, 4> computeOps;
     SmallVector<::tla::StoreOp, 2> stores;
     vecFuncOp->walk([&](Operation *op) {
       if (auto load = dyn_cast<::tla::LoadOp>(op)) {
         loads.push_back(load);
+      } else if (auto full = dyn_cast<::tla::FullOp>(op)) {
+        fulls.push_back(full);
       } else if (auto store = dyn_cast<::tla::StoreOp>(op)) {
         stores.push_back(store);
       } else if (isVectorComputeOp(op)) {
@@ -1354,6 +1371,8 @@ public:
     DenseSet<Value> producedValues;
     for (::tla::LoadOp load : loads)
       producedValues.insert(load.getResult());
+    for (::tla::FullOp full : fulls)
+      producedValues.insert(full.getResult());
     for (Operation *computeOp : computeOps) {
       if (computeOp->getNumResults() != 1)
         return rewriter.notifyMatchFailure(vecFuncOp, "unexpected tla compute op shape");
