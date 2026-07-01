@@ -17,7 +17,6 @@ from . import core_api as core
 from .address_space import AddressSpace
 from .base_dsl.typing import Constexpr, JitArgument, Pointer
 from . import runtime as _runtime
-from . import core_api as _core_api  # noqa: F401
 from .base_dsl import BaseDSL, DSLLocation
 from .base_dsl.jit_executor import TlaJitExecutor as _TlaJitExecutor
 from . import params as _params

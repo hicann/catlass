@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins as _builtins
 import math
 from itertools import chain
 from typing import Any, Callable, Sequence, TypeAlias
@@ -437,7 +438,7 @@ class _MutexGuard:
     def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
         del exc, tb
         if self._state is not None and self._entered:
-            self._state.mutex_guard_depth = max(0, self._state.mutex_guard_depth - 1)
+            self._state.mutex_guard_depth = _builtins.max(0, self._state.mutex_guard_depth - 1)
         if exc_type is not None:
             return False
         if self._block is None:
@@ -870,7 +871,7 @@ def _refine_pointer_alignment(current_alignment: int, offset: Any) -> int:
     const_offset = _const_int_value(offset)
     if const_offset is None:
         return 1
-    return max(1, math.gcd(current_alignment, abs(const_offset)))
+    return _builtins.max(1, math.gcd(current_alignment, abs(const_offset)))
 
 
 def _register_tla_tensor_type(
@@ -1053,8 +1054,8 @@ def _materialize_layout_trees_from_origin(
     element_bytes = dtype_size_bytes(dtype)
     if element_bytes <= 0:
         return None
-    ele_num_per_c0 = max(1, _CATLASS_BYTE_PER_C0 // element_bytes)
-    ele_num_per_fractal = max(
+    ele_num_per_c0 = _builtins.max(1, _CATLASS_BYTE_PER_C0 // element_bytes)
+    ele_num_per_fractal = _builtins.max(
         1, (_CATLASS_BYTE_PER_C0 * _CATLASS_C0_NUM_PER_FRACTAL) // element_bytes
     )
     c0_num_per_fractal = _CATLASS_C0_NUM_PER_FRACTAL
@@ -1129,8 +1130,8 @@ def _remap_tensor_like_prefix_fields_for_layout_trees(
     element_bytes = dtype_size_bytes(dtype)
     if element_bytes <= 0:
         return None
-    ele_num_per_c0 = max(1, _CATLASS_BYTE_PER_C0 // element_bytes)
-    ele_num_per_fractal = max(
+    ele_num_per_c0 = _builtins.max(1, _CATLASS_BYTE_PER_C0 // element_bytes)
+    ele_num_per_fractal = _builtins.max(
         1, (_CATLASS_BYTE_PER_C0 * _CATLASS_C0_NUM_PER_FRACTAL) // element_bytes
     )
     c0_num_per_fractal = _CATLASS_C0_NUM_PER_FRACTAL
@@ -1680,14 +1681,14 @@ def _pack_tree(
         if isinstance(c, tuple):
             if len(c) == 0:
                 _op_error(op_name, "expected non-empty nested tuple in tree")
-            subs = [pack_one(x) for x in c]
+            child_packs = [pack_one(x) for x in c]
             dyns: list[mlir_ir.Value] = []
-            for _, d, _ in subs:
+            for _, d, _ in child_packs:
                 dyns.extend(d)
             return (
-                f"({','.join(ty for ty, _, _ in subs)})",
+                f"({','.join(ty for ty, _, _ in child_packs)})",
                 dyns,
-                tuple(tree for _, _, tree in subs),
+                tuple(tree for _, _, tree in child_packs),
             )
         _require_index(op_name, "leaf", c, 0)
         const = _const_int_value(c)
@@ -3096,71 +3097,259 @@ def _emit_vector_binary(
             f"tla.{op_name} operands must have identical !tla.tensor types; "
             f"got {lhs_value.type} and {rhs_value.type}"
         )
+    lhs_desc = _tla_tensor_type_for_mlir_value(lhs_value)
     mask_value = _as_value(mask) if mask is not None else None
-    return VectorSSA(
-        emitter(
-            lhs_value.type,
-            lhs_value,
-            rhs_value,
-            mask=mask_value,
-            loc=loc,
-        )
+    result = emitter(
+        lhs_value.type,
+        lhs_value,
+        rhs_value,
+        mask=mask_value,
+        loc=loc,
     )
+    _register_tla_tensor_type(result, lhs_desc)
+    return VectorSSA(result)
+
+
+def _is_scalar_literal(value: Any) -> bool:
+    resolved = _resolve_bound_value(value)
+    return isinstance(resolved, Scalar) or (
+        isinstance(resolved, (int, float)) and not isinstance(resolved, bool)
+    )
+
+
+def _scalar_constant_for_element_type(
+    op_name: str,
+    scalar: Any,
+    element_type: mlir_ir.Type,
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> mlir_ir.Value:
+    resolved = _resolve_bound_value(scalar)
+    if isinstance(resolved, Scalar):
+        resolved = resolved.value
+    if isinstance(resolved, bool) or not isinstance(resolved, (int, float)):
+        _op_error(
+            op_name,
+            f"invalid argument 'rhs' (position 1): expected scalar, got {_type_name(scalar)}",
+        )
+    if isinstance(element_type, mlir_ir.IndexType) or mlir_ir.IntegerType.isinstance(
+        element_type
+    ):
+        if isinstance(resolved, float) and not resolved.is_integer():
+            _op_error(
+                op_name,
+                f"invalid argument 'rhs' (position 1): expected integer scalar for "
+                f"{element_type}, got {resolved!r}",
+            )
+        return mlir_ir.Operation.create(
+            "arith.constant",
+            results=[element_type],
+            attributes={"value": mlir_ir.IntegerAttr.get(element_type, int(resolved))},
+            loc=loc,
+        ).results[0]
+    if (
+        mlir_ir.F16Type.isinstance(element_type)
+        or mlir_ir.F32Type.isinstance(element_type)
+        or mlir_ir.F64Type.isinstance(element_type)
+        or mlir_ir.BF16Type.isinstance(element_type)
+    ):
+        return mlir_ir.Operation.create(
+            "arith.constant",
+            results=[element_type],
+            attributes={"value": mlir_ir.FloatAttr.get(element_type, float(resolved))},
+            loc=loc,
+        ).results[0]
+    _op_error(
+        op_name, f"unsupported vector element type for scalar literal: {element_type}"
+    )
+
+
+def _emit_vector_scalar_binary(
+    op_name: str,
+    emitter: Any,
+    lhs: VectorSSA,
+    rhs: Any,
+    *,
+    mask: Any | None = None,
+    loc: mlir_ir.Location | None = None,
+) -> VectorSSA:
+    _require_category(op_name, "lhs", lhs, "vector_ssa", 0)
+    if not _is_scalar_literal(rhs):
+        _op_error(
+            op_name,
+            f"invalid argument 'rhs' (position 1): expected scalar, got {_type_name(rhs)}",
+        )
+    if mask is not None:
+        _require_category(op_name, "mask", mask, "mask_ssa", 2)
+    _require_frontend_state(op_name)
+    _runtime._check_frontend_region_op(op_name, {"vector"})
+    lhs_value = _as_value(lhs)
+    lhs_desc = _tla_tensor_type_for_mlir_value(lhs_value)
+    rhs_value = _scalar_constant_for_element_type(
+        op_name, rhs, lhs_desc.element_mlir_type(lhs_value.type.context), loc=loc
+    )
+    mask_value = _as_value(mask) if mask is not None else None
+    result = emitter(
+        lhs_value.type,
+        lhs_value,
+        rhs_value,
+        mask=mask_value,
+        loc=loc,
+    )
+    _register_tla_tensor_type(result, lhs_desc)
+    return VectorSSA(result)
+
+
+def _emit_commutative_vector_scalar_binary(
+    op_name: str,
+    lhs: Any,
+    rhs: Any,
+    *,
+    mask: Any | None = None,
+    loc: mlir_ir.Location | None = None,
+    scalar_op_name: str | None = None,
+) -> VectorSSA:
+    scalar_op_name = scalar_op_name or op_name
+    lhs_category = _category(lhs)
+    rhs_category = _category(rhs)
+    lhs_scalar = _is_scalar_literal(lhs)
+    rhs_scalar = _is_scalar_literal(rhs)
+    if lhs_category == "vector_ssa" and rhs_scalar:
+        return _emit_vector_scalar_binary(
+            op_name, getattr(_tla_ops_gen, scalar_op_name), lhs, rhs, mask=mask, loc=loc
+        )
+    if lhs_scalar and rhs_category == "vector_ssa":
+        return _emit_vector_scalar_binary(
+            op_name, getattr(_tla_ops_gen, scalar_op_name), rhs, lhs, mask=mask, loc=loc
+        )
+    _op_error(op_name, "expected vector-scalar operands")
+
+
+def _emit_vector_binary_or_scalar(
+    op_name: str,
+    vector_emitter: Any,
+    scalar_op_name: str,
+    lhs: Any,
+    rhs: Any,
+    *,
+    mask: Any | None = None,
+    loc: mlir_ir.Location | None = None,
+    commutative: bool = False,
+) -> VectorSSA:
+    lhs_category = _category(lhs)
+    rhs_category = _category(rhs)
+    lhs_scalar = _is_scalar_literal(lhs)
+    rhs_scalar = _is_scalar_literal(rhs)
+    if lhs_category == "vector_ssa" and rhs_category == "vector_ssa":
+        return _emit_vector_binary(op_name, vector_emitter, lhs, rhs, mask=mask, loc=loc)
+    if lhs_category == "vector_ssa" and rhs_scalar:
+        return _emit_vector_scalar_binary(
+            op_name, getattr(_tla_ops_gen, scalar_op_name), lhs, rhs, mask=mask, loc=loc
+        )
+    if commutative and lhs_scalar and rhs_category == "vector_ssa":
+        return _emit_vector_scalar_binary(
+            op_name, getattr(_tla_ops_gen, scalar_op_name), rhs, lhs, mask=mask, loc=loc
+        )
+    if lhs_category != "vector_ssa":
+        _require_category(op_name, "lhs", lhs, "vector_ssa", 0)
+    _op_error(op_name, "expected vector-vector or vector-scalar operands")
 
 
 @dsl_user_op
 def add(
-    lhs: VectorSSA,
-    rhs: VectorSSA,
+    lhs: Any,
+    rhs: Any,
     *,
     mask: MaskSSA | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> VectorSSA:
     """Emit element-wise add for loaded vector SSA values."""
-    return _emit_vector_binary(
-        "add", _tla_ops_gen.add, lhs, rhs, mask=mask, loc=loc
+    return _emit_vector_binary_or_scalar(
+        "add",
+        _tla_ops_gen.add,
+        "adds",
+        lhs,
+        rhs,
+        mask=mask,
+        loc=loc,
+        commutative=True,
     )
 
 
 @dsl_user_op
 def sub(
-    lhs: VectorSSA,
-    rhs: VectorSSA,
+    lhs: Any,
+    rhs: Any,
     *,
     mask: MaskSSA | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> VectorSSA:
     """Emit element-wise subtract for loaded vector SSA values."""
-    return _emit_vector_binary(
-        "sub", _tla_ops_gen.sub, lhs, rhs, mask=mask, loc=loc
+    return _emit_vector_binary_or_scalar(
+        "sub", _tla_ops_gen.sub, "subs", lhs, rhs, mask=mask, loc=loc
     )
 
 
 @dsl_user_op
 def mul(
-    lhs: VectorSSA,
-    rhs: VectorSSA,
+    lhs: Any,
+    rhs: Any,
     *,
     mask: MaskSSA | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> VectorSSA:
     """Emit element-wise multiply for loaded vector SSA values."""
-    return _emit_vector_binary(
-        "mul", _tla_ops_gen.mul, lhs, rhs, mask=mask, loc=loc
+    return _emit_vector_binary_or_scalar(
+        "mul",
+        _tla_ops_gen.mul,
+        "muls",
+        lhs,
+        rhs,
+        mask=mask,
+        loc=loc,
+        commutative=True,
+    )
+
+
+@dsl_user_op
+def max(
+    lhs: Any,
+    rhs: Any,
+    *,
+    mask: MaskSSA | None = None,
+    loc: mlir_ir.Location | None = None,
+) -> VectorSSA:
+    """Emit element-wise vector-scalar maximum for loaded vector SSA values."""
+    return _emit_commutative_vector_scalar_binary(
+        "max", lhs, rhs, mask=mask, loc=loc, scalar_op_name="maxs"
+    )
+
+
+@dsl_user_op
+def min(
+    lhs: Any,
+    rhs: Any,
+    *,
+    mask: MaskSSA | None = None,
+    loc: mlir_ir.Location | None = None,
+) -> VectorSSA:
+    """Emit element-wise vector-scalar minimum for loaded vector SSA values."""
+    return _emit_commutative_vector_scalar_binary(
+        "min", lhs, rhs, mask=mask, loc=loc, scalar_op_name="mins"
     )
 
 
 @dsl_user_op
 def div(
-    lhs: VectorSSA,
-    rhs: VectorSSA,
+    lhs: Any,
+    rhs: Any,
     *,
     mask: MaskSSA | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> VectorSSA:
     """Emit element-wise divide for loaded vector SSA values."""
-    return _emit_vector_binary(
-        "div", _tla_ops_gen.div, lhs, rhs, mask=mask, loc=loc
+    return _emit_vector_binary_or_scalar(
+        "div", _tla_ops_gen.div, "divs", lhs, rhs, mask=mask, loc=loc
     )
 
 
@@ -3191,16 +3380,17 @@ def where(
             f"tla.where operands x and y must have identical !tla.tensor types; "
             f"got {x_value.type} and {y_value.type}"
         )
+    x_desc = _tla_tensor_type_for_mlir_value(x_value)
     mask_value = _as_value(mask)
-    return VectorSSA(
-        _tla_ops_gen.where(
-            x_value.type,
-            mask_value,
-            x_value,
-            y_value,
-            loc=loc,
-        )
+    result = _tla_ops_gen.where(
+        x_value.type,
+        mask_value,
+        x_value,
+        y_value,
+        loc=loc,
     )
+    _register_tla_tensor_type(result, x_desc)
+    return VectorSSA(result)
 
 
 @dsl_user_op
@@ -3247,7 +3437,7 @@ def make_ptr(
     ctx = loc.context if loc is not None else mlir_ir.Context()
     pointee = dt.mlir_type(ctx)
     addr_token = _require_pointer_addrspace("make_ptr", mem_space, 2)
-    bytes_per_elt = max(1, int(dt.width) // 8)
+    bytes_per_elt = _builtins.max(1, int(dt.width) // 8)
     align = assumed_align if assumed_align is not None else bytes_per_elt
     if bytes_per_elt % align != 0 and align % bytes_per_elt != 0:
         _op_error(
@@ -3316,10 +3506,16 @@ _require_generated("vector")
 _require_generated("mmad")
 _require_generated("broadcast")
 _require_generated("add")
+_require_generated("adds")
 _require_generated("sub")
+_require_generated("subs")
 _require_generated("mul")
+_require_generated("muls")
+_require_generated("maxs")
+_require_generated("mins")
 _require_generated("div")
 _require_generated("where")
+_require_generated("divs")
 _require_generated("arch_block_idx")
 _require_generated("arch_sub_block_idx")
 _require_generated("arch_block_dim")
@@ -3412,7 +3608,7 @@ def _mask_elem_type(
 @dsl_user_op
 def create_mask(
     *,
-    pattern: Any,
+    pattern: Any | None = None,
     dtype: Any = Float32,
     loc: mlir_ir.Location | None = None,
 ) -> MaskSSA:
@@ -3469,9 +3665,15 @@ def update_mask(
     return MaskSSA(mask_value), _runtime._IndexExpr(new_true_shape)
 
 
-mask = _Namespace()
+_mask_namespace = _Namespace()
 for _mask_pattern_token in _MASK_PATTERN_TOKENS:
-    mask._set(_mask_pattern_token, _MaskPatternSentinel(_mask_pattern_token))
+    _mask_namespace._set(_mask_pattern_token, _MaskPatternSentinel(_mask_pattern_token))
+
+
+def __getattr__(name: str) -> Any:
+    if name == "mask":
+        return _mask_namespace
+    raise AttributeError(name)
 
 
 def _resolve_arch_layout_tag(value: Any | None, *, for_op: str) -> str:
@@ -3523,6 +3725,8 @@ __all__ = [
     "add",
     "sub",
     "mul",
+    "max",
+    "min",
     "div",
     "where",
     "make_ptr",

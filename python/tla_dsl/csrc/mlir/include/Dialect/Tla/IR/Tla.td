@@ -97,6 +97,9 @@ def Tla_ValueType : TypeDef<TlaDialect, "Value", []> {
   let hasCustomAssemblyFormat = 1;
 }
 
+def Tla_ScalarValueType : AnyTypeOf<[AnyInteger, AnyFloat, Index],
+    "TLA scalar SSA value type">;
+
 def Tla_BoolAttrAttr : DialectAttr<TlaDialect, CPred<"true">, "Builtin boolean attribute placeholder.">;
 
 def Tla_I64AttrAttr : DialectAttr<TlaDialect, CPred<"true">, "Builtin i64 attribute placeholder.">;
@@ -805,6 +808,47 @@ def Tla_WhereOp : Tla_Op<"where", [Pure]> {
     qualified(type($mask)) `,` type($x) `,` type($y) `->` type($result)
   }];
 }
+
+class Tla_VectorScalarBinaryOp<string mnemonic, string opSummary, string opDescription>
+    : Tla_Op<mnemonic, [Pure]> {
+  let summary = opSummary;
+  let description = opDescription # [{
+
+    The right-hand side is a scalar SSA value. An optional mask predicates which
+    lanes are computed; masked-out lanes are undefined/zeroed.
+  }];
+  let arguments = (ins Tla_TensorType:$lhs, Tla_ScalarValueType:$rhs,
+                       Optional<Tla_MaskType>:$mask);
+  let results = (outs Tla_TensorType:$result);
+  let assemblyFormat = [{
+    $lhs `,` $rhs (`mask` $mask^)? attr-dict `:`
+    type($lhs) `,` type($rhs) (`mask` qualified(type($mask))^)? `->` type($result)
+  }];
+}
+
+def Tla_AddsOp : Tla_VectorScalarBinaryOp<"adds",
+    "Vector-scalar add for tensor fragments",
+    "Element-wise add of a scalar to tensor fragments / vector tiles.">;
+
+def Tla_SubsOp : Tla_VectorScalarBinaryOp<"subs",
+    "Vector-scalar subtract for tensor fragments",
+    "Element-wise subtract of a scalar from tensor fragments / vector tiles.">;
+
+def Tla_MulsOp : Tla_VectorScalarBinaryOp<"muls",
+    "Vector-scalar multiply for tensor fragments",
+    "Element-wise multiply of tensor fragments / vector tiles by a scalar.">;
+
+def Tla_MaxsOp : Tla_VectorScalarBinaryOp<"maxs",
+    "Vector-scalar maximum for tensor fragments",
+    "Element-wise maximum of tensor fragments / vector tiles and a scalar.">;
+
+def Tla_MinsOp : Tla_VectorScalarBinaryOp<"mins",
+    "Vector-scalar minimum for tensor fragments",
+    "Element-wise minimum of tensor fragments / vector tiles and a scalar.">;
+
+def Tla_DivsOp : Tla_VectorScalarBinaryOp<"divs",
+    "Vector-scalar divide for tensor fragments",
+    "Element-wise divide of tensor fragments / vector tiles by a scalar.">;
 
 def Tla_VectorOp : Tla_Op<"vector", [NoTerminator, SingleBlock]> {
   let summary = "Vector region";

@@ -148,7 +148,9 @@ def _make_ub_tensor(allocator: Any, like_tensor: Any) -> Any:
 
 
 def _chunk(tensor: Any, chunk_idx: Any) -> Any:
-    return tla.tile_view(tensor, tla.make_shape(VL_ELE), tla.make_coord(chunk_idx))
+    return tla.tile_view(
+        tensor, tla.make_shape(VL_ELE), tla.make_coord(chunk_idx)
+    )
 
 
 def _operator_specs() -> dict[str, dict[str, Any]]:

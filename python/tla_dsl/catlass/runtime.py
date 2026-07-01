@@ -612,6 +612,8 @@ _CORE_API_EXPORTS = (
     "add",
     "sub",
     "mul",
+    "max",
+    "min",
     "div",
     "where",
     "make_ptr",

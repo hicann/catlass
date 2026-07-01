@@ -72,15 +72,22 @@ static FailureOr<int64_t> getElementByteWidth(Type elementType) {
   return failure();
 }
 
+static FailureOr<int64_t> getVectorLaneCount(Type elementType) {
+  auto elementBytes = getElementByteWidth(elementType);
+  if (failed(elementBytes) || *elementBytes <= 0)
+    return failure();
+  constexpr int64_t kVectorBytes = 256;
+  return kVectorBytes / *elementBytes;
+}
+
 static FailureOr<int64_t> getVectorLanesForMemref(MemRefType type) {
   if (type.getRank() != 1 && type.getRank() != 2)
     return failure();
   auto numElements = getStaticNumElements(type.getShape());
-  auto elementBytes = getElementByteWidth(type.getElementType());
-  if (failed(numElements) || failed(elementBytes) || *numElements <= 0 || *elementBytes <= 0)
+  auto lanesOr = getVectorLaneCount(type.getElementType());
+  if (failed(numElements) || failed(lanesOr) || *numElements <= 0)
     return failure();
-  constexpr int64_t kVectorBytes = 256;
-  int64_t lanes = kVectorBytes / *elementBytes;
+  int64_t lanes = *lanesOr;
   if (lanes <= 0 || *numElements > lanes)
     return failure();
   return lanes;
@@ -476,10 +483,9 @@ static FailureOr<Value> materializeCopySubview1D(PatternRewriter &rewriter, Loca
   auto info = parseTensorInfo(tensor.getType());
   if (failed(info))
     return failure();
-  if (info->shape.size() != 1 || info->coord.size() != 1 || !info->elementType.isF32() ||
-      info->layoutTag != "row_major")
+  if (info->shape.size() != 1 || info->coord.size() != 1 || info->layoutTag != "row_major")
     return failure();
-  if (info->shape[0] != 64 || info->coord[0] != 0)
+  if (info->shape[0] == ShapedType::kDynamic || info->coord[0] == ShapedType::kDynamic)
     return failure();
 
   auto baseMemref = materializeBaseMemref(rewriter, loc, tensor, handoffMemrefByTensor);
@@ -490,17 +496,19 @@ static FailureOr<Value> materializeCopySubview1D(PatternRewriter &rewriter, Loca
     return failure();
 
   auto ctx = rewriter.getContext();
+  int64_t subviewOffset = baseType.getDimSize(0) == info->shape[0] ? 0 : info->coord[0];
+  if (subviewOffset == 0 && baseType.hasStaticShape() && baseType.getDimSize(0) == info->shape[0])
+    return *baseMemref;
+
   auto layout = StridedLayoutAttr::get(ctx, ShapedType::kDynamic, ArrayRef<int64_t>{1});
-  auto subviewType = MemRefType::get({ShapedType::kDynamic}, baseType.getElementType(), layout,
-                                     baseType.getMemorySpace());
-  Value zero = rewriter.create<arith::ConstantIndexOp>(loc, 0);
-  Value size = rewriter.create<arith::ConstantIndexOp>(loc, 64);
-  auto dynamicEntries = DenseI64ArrayAttr::get(ctx, ArrayRef<int64_t>{ShapedType::kDynamic});
-  auto staticStride = DenseI64ArrayAttr::get(ctx, ArrayRef<int64_t>{1});
+  auto subviewType =
+      MemRefType::get({info->shape[0]}, baseType.getElementType(), layout, baseType.getMemorySpace());
+  Value offset = rewriter.create<arith::ConstantIndexOp>(loc, subviewOffset);
+  Value size = rewriter.create<arith::ConstantIndexOp>(loc, info->shape[0]);
+  Value stride = rewriter.create<arith::ConstantIndexOp>(loc, 1);
   return rewriter
-      .create<mlir::memref::SubViewOp>(loc, subviewType, *baseMemref, ValueRange{zero},
-                                       ValueRange{size}, ValueRange{}, dynamicEntries,
-                                       dynamicEntries, staticStride)
+      .create<mlir::memref::ReinterpretCastOp>(loc, subviewType, *baseMemref, offset,
+                                               ValueRange{size}, ValueRange{stride})
       .getResult();
 }
 
@@ -610,30 +618,10 @@ static std::string buildUniqueVectorHelperName(ModuleOp module, int &nextVectorR
   return helperName;
 }
 
-enum class VectorBinaryKind { Add, Sub, Mul, Div };
+enum class VectorBinaryKind { Add, Sub, Mul, Div, Max, Min };
+enum class VectorRhsKind { Vector, Scalar };
 
-static std::optional<VectorBinaryKind> getVectorBinaryKind(Operation *op) {
-  if (!op)
-    return std::nullopt;
-  if (isa<::tla::AddOp>(op))
-    return VectorBinaryKind::Add;
-  if (isa<::tla::SubOp>(op))
-    return VectorBinaryKind::Sub;
-  if (isa<::tla::MulOp>(op))
-    return VectorBinaryKind::Mul;
-  if (isa<::tla::DivOp>(op))
-    return VectorBinaryKind::Div;
-  return std::nullopt;
-}
-
-// True for the tla ops that produce a vector compute result inside a vec.func
-// region: the element-wise binary ops (add/sub/mul/div) and the where/select op.
-static bool isVectorComputeOp(Operation *op) {
-  return getVectorBinaryKind(op).has_value() || isa_and_nonnull<::tla::WhereOp>(op);
-}
-
-// The lhs/rhs/mask operands of a tla binary op (mask may be null). All four
-// binary ops share this operand layout.
+// The lhs/rhs/mask operands of a tla binary op.
 struct TlaBinaryOperands {
   Value lhs;
   Value rhs;
@@ -650,41 +638,122 @@ static TlaBinaryOperands getTlaBinaryOperands(Operation *op) {
     r.lhs = o.getLhs(); r.rhs = o.getRhs(); r.mask = o.getMask();
   } else if (auto o = dyn_cast<::tla::DivOp>(op)) {
     r.lhs = o.getLhs(); r.rhs = o.getRhs(); r.mask = o.getMask();
+  } else if (auto o = dyn_cast<::tla::AddsOp>(op)) {
+    r.lhs = o.getLhs(); r.rhs = o.getRhs(); r.mask = o.getMask();
+  } else if (auto o = dyn_cast<::tla::SubsOp>(op)) {
+    r.lhs = o.getLhs(); r.rhs = o.getRhs(); r.mask = o.getMask();
+  } else if (auto o = dyn_cast<::tla::MulsOp>(op)) {
+    r.lhs = o.getLhs(); r.rhs = o.getRhs(); r.mask = o.getMask();
+  } else if (auto o = dyn_cast<::tla::MaxsOp>(op)) {
+    r.lhs = o.getLhs(); r.rhs = o.getRhs(); r.mask = o.getMask();
+  } else if (auto o = dyn_cast<::tla::MinsOp>(op)) {
+    r.lhs = o.getLhs(); r.rhs = o.getRhs(); r.mask = o.getMask();
+  } else if (auto o = dyn_cast<::tla::DivsOp>(op)) {
+    r.lhs = o.getLhs(); r.rhs = o.getRhs(); r.mask = o.getMask();
   }
   return r;
 }
 
+struct VectorOpInfo {
+  VectorBinaryKind kind;
+  VectorRhsKind rhsKind;
+  StringRef mnemonic;
+  TlaBinaryOperands operands;
+};
+
+static std::optional<VectorOpInfo> getVectorBinaryInfo(Operation *op) {
+  if (!op)
+    return std::nullopt;
+  if (isa<::tla::AddOp>(op))
+    return VectorOpInfo{VectorBinaryKind::Add, VectorRhsKind::Vector, "add",
+                        getTlaBinaryOperands(op)};
+  if (isa<::tla::SubOp>(op))
+    return VectorOpInfo{VectorBinaryKind::Sub, VectorRhsKind::Vector, "sub",
+                        getTlaBinaryOperands(op)};
+  if (isa<::tla::MulOp>(op))
+    return VectorOpInfo{VectorBinaryKind::Mul, VectorRhsKind::Vector, "mul",
+                        getTlaBinaryOperands(op)};
+  if (isa<::tla::DivOp>(op))
+    return VectorOpInfo{VectorBinaryKind::Div, VectorRhsKind::Vector, "div",
+                        getTlaBinaryOperands(op)};
+  return std::nullopt;
+}
+
+static std::optional<VectorOpInfo> getVectorScalarBinaryInfo(Operation *op) {
+  if (!op)
+    return std::nullopt;
+  if (isa<::tla::AddsOp>(op))
+    return VectorOpInfo{VectorBinaryKind::Add, VectorRhsKind::Scalar, "adds",
+                        getTlaBinaryOperands(op)};
+  if (isa<::tla::SubsOp>(op))
+    return VectorOpInfo{VectorBinaryKind::Sub, VectorRhsKind::Scalar, "subs",
+                        getTlaBinaryOperands(op)};
+  if (isa<::tla::MulsOp>(op))
+    return VectorOpInfo{VectorBinaryKind::Mul, VectorRhsKind::Scalar, "muls",
+                        getTlaBinaryOperands(op)};
+  if (isa<::tla::MaxsOp>(op))
+    return VectorOpInfo{VectorBinaryKind::Max, VectorRhsKind::Scalar, "maxs",
+                        getTlaBinaryOperands(op)};
+  if (isa<::tla::MinsOp>(op))
+    return VectorOpInfo{VectorBinaryKind::Min, VectorRhsKind::Scalar, "mins",
+                        getTlaBinaryOperands(op)};
+  if (isa<::tla::DivsOp>(op))
+    return VectorOpInfo{VectorBinaryKind::Div, VectorRhsKind::Scalar, "divs",
+                        getTlaBinaryOperands(op)};
+  return std::nullopt;
+}
+
+static std::optional<VectorOpInfo> getAnyVectorOperationInfo(Operation *op) {
+  if (auto info = getVectorBinaryInfo(op))
+    return info;
+  if (auto info = getVectorScalarBinaryInfo(op))
+    return info;
+  return std::nullopt;
+}
+
+// The predicate-register width (b8/b16/b32) matching the element type.
+static hivmave::MaskWidth maskWidthForElement(Type elementType) {
+  unsigned bits = elementType.getIntOrFloatBitWidth();
+  if (bits <= 8)
+    return hivmave::MaskWidth::B8;
+  if (bits <= 16)
+    return hivmave::MaskWidth::B16;
+  return hivmave::MaskWidth::B32;
+}
+
+// True for the tla ops that produce a vector compute result inside a vec.func
+// region: the element-wise binary ops and the where/select op.
+static bool isVectorComputeOp(Operation *op) {
+  return getAnyVectorOperationInfo(op).has_value() || isa_and_nonnull<::tla::WhereOp>(op);
+}
+
 // Build the AVE vector op for a tla binary op. The mask predicates active lanes.
-// For div the signedness is carried as the TypeFn cast attribute (cast_unsigned
-// for unsigned integer element types, cast_signed otherwise).
+// For div the signedness is carried as the TypeFn cast attribute.
 static Value createVectorBinaryResult(OpBuilder &b, Location loc, VectorBinaryKind kind,
                                       Type elementType, VectorType vecType, Value lhs,
                                       Value rhs, Value mask) {
-  Value result;
   switch (kind) {
   case VectorBinaryKind::Add:
-    result = b.create<hivmave::VFAddOp>(loc, vecType, lhs, rhs, mask, /*pass_thru=*/nullptr);
-    break;
+    return b.create<hivmave::VFAddOp>(loc, vecType, lhs, rhs, mask, Value()).getResult();
   case VectorBinaryKind::Sub:
-    result = b.create<hivmave::VFSubOp>(loc, vecType, lhs, rhs, mask, /*pass_thru=*/nullptr);
-    break;
+    return b.create<hivmave::VFSubOp>(loc, vecType, lhs, rhs, mask, Value()).getResult();
   case VectorBinaryKind::Mul:
-    result = b.create<hivmave::VFMulOp>(loc, vecType, lhs, rhs, mask, /*pass_thru=*/nullptr);
-    break;
+    return b.create<hivmave::VFMulOp>(loc, vecType, lhs, rhs, mask, Value()).getResult();
   case VectorBinaryKind::Div: {
     auto cast = hivm::TypeFn::cast_signed;
     if (auto intType = dyn_cast<IntegerType>(elementType))
       if (intType.getSignedness() == IntegerType::Unsigned)
         cast = hivm::TypeFn::cast_unsigned;
-    result = b.create<hivmave::VFDivOp>(loc, vecType, lhs, rhs, mask,
-                                        hivm::TypeFnAttr::get(b.getContext(), cast),
-                                        /*pass_thru=*/nullptr);
-    break;
+    return b.create<hivmave::VFDivOp>(loc, vecType, lhs, rhs, mask,
+                                      hivm::TypeFnAttr::get(b.getContext(), cast), Value())
+        .getResult();
   }
+  case VectorBinaryKind::Max:
+    return b.create<hivmave::VFMaxOp>(loc, vecType, lhs, rhs, mask, Value()).getResult();
+  case VectorBinaryKind::Min:
+    return b.create<hivmave::VFMinOp>(loc, vecType, lhs, rhs, mask, Value()).getResult();
   }
-  if (!result)
-    return nullptr;
-  return result;
+  return nullptr;
 }
 
 // Shared state while re-creating a tla.vec.func body inside the helper function.
@@ -707,6 +776,48 @@ static Value lookupOrCloneScalarValue(OpBuilder &b, Value value,
   Operation *cloned = b.clone(*def);
   valueMap[value] = cloned->getResult(0);
   return cloned->getResult(0);
+}
+
+static FailureOr<Value> castScalarForVectorElement(Value scalar, Type elementType) {
+  if (scalar.getType() == elementType)
+    return scalar;
+  return failure();
+}
+
+static FailureOr<Value> materializeVectorScalarValue(OpBuilder &b, TlaBinaryOperands operands,
+                                                     DenseMap<Value, Value> &valueMap,
+                                                     VecLowerCtx &ctx) {
+  Value scalar = lookupOrCloneScalarValue(b, operands.rhs, valueMap);
+  if (!scalar)
+    return failure();
+  auto castScalar = castScalarForVectorElement(scalar, ctx.elementType);
+  if (failed(castScalar))
+    return failure();
+  return *castScalar;
+}
+
+static FailureOr<Value> createVectorScalarBinaryResult(OpBuilder &b, Location loc,
+                                                       VectorOpInfo info,
+                                                       VecLowerCtx &ctx, Value lhs,
+                                                       Value scalar, Value mask) {
+  if (info.kind == VectorBinaryKind::Add || info.kind == VectorBinaryKind::Mul ||
+      info.kind == VectorBinaryKind::Max || info.kind == VectorBinaryKind::Min) {
+    if (info.kind == VectorBinaryKind::Add)
+      return b.create<hivmave::VFAddsOp>(loc, ctx.vecType, lhs, scalar, mask, Value())
+          .getResult();
+    if (info.kind == VectorBinaryKind::Mul)
+      return b.create<hivmave::VFMulsOp>(loc, ctx.vecType, lhs, scalar, mask, Value())
+          .getResult();
+    if (info.kind == VectorBinaryKind::Max)
+      return b.create<hivmave::VFMaxsOp>(loc, ctx.vecType, lhs, scalar, mask, Value())
+          .getResult();
+    return b.create<hivmave::VFMinsOp>(loc, ctx.vecType, lhs, scalar, mask, Value())
+        .getResult();
+  }
+
+  Value rhs = b.create<vector::BroadcastOp>(loc, ctx.vecType, scalar).getResult();
+  return createVectorBinaryResult(b, loc, info.kind, ctx.elementType, ctx.vecType, lhs, rhs,
+                                  mask);
 }
 
 // Per-iteration element offset of a tile_view chunk, expressed against the
@@ -798,13 +909,15 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     return success();
   }
 
-  if (auto kind = getVectorBinaryKind(&op)) {
+  if (auto info = getVectorBinaryInfo(&op)) {
     if (op.getNumResults() != 1)
       return failure();
-    TlaBinaryOperands operands = getTlaBinaryOperands(&op);
+    TlaBinaryOperands operands = info->operands;
     Value lhs = valueMap.lookup(operands.lhs);
+    if (!lhs)
+      return failure();
     Value rhs = valueMap.lookup(operands.rhs);
-    if (!lhs || !rhs)
+    if (!rhs)
       return failure();
     Value mask;
     if (operands.mask) {
@@ -814,11 +927,36 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     } else {
       mask = b.create<hivmave::VFPgeOp>(loc, ctx.maskVecType, hivmave::PgePattern::ALL);
     }
-    Value result = createVectorBinaryResult(b, loc, *kind, ctx.elementType, ctx.vecType, lhs,
-                                            rhs, mask);
+    Value result = createVectorBinaryResult(b, loc, info->kind, ctx.elementType, ctx.vecType,
+                                            lhs, rhs, mask);
     if (!result)
       return failure();
     valueMap[op.getResult(0)] = result;
+    return success();
+  }
+
+  if (auto info = getVectorScalarBinaryInfo(&op)) {
+    if (op.getNumResults() != 1)
+      return failure();
+    TlaBinaryOperands operands = info->operands;
+    Value lhs = valueMap.lookup(operands.lhs);
+    if (!lhs)
+      return failure();
+    auto scalarOr = materializeVectorScalarValue(b, operands, valueMap, ctx);
+    if (failed(scalarOr))
+      return failure();
+    Value mask;
+    if (operands.mask) {
+      mask = valueMap.lookup(operands.mask);
+      if (!mask)
+        return failure();
+    } else {
+      mask = b.create<hivmave::VFPgeOp>(loc, ctx.maskVecType, hivmave::PgePattern::ALL);
+    }
+    auto result = createVectorScalarBinaryResult(b, loc, *info, ctx, lhs, *scalarOr, mask);
+    if (failed(result))
+      return failure();
+    valueMap[op.getResult(0)] = *result;
     return success();
   }
 
@@ -843,8 +981,11 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     if (!pattern)
       return maskOp.emitError("unknown tla.create_mask pattern: ") << maskOp.getPattern(),
              failure();
-    unsigned elemBits = maskOp.getDtype().getIntOrFloatBitWidth();
-    int64_t laneCount = (256 * 8) / static_cast<int64_t>(elemBits);
+    auto laneCountOr = getVectorLaneCount(maskOp.getDtype());
+    if (failed(laneCountOr))
+      return maskOp.emitError("unsupported tla.create_mask dtype: ") << maskOp.getDtype(),
+             failure();
+    int64_t laneCount = *laneCountOr;
     if (laneCount != ctx.lanes)
       return maskOp.emitError("tla.create_mask dtype implies ")
                  << laneCount << " lanes, but the vector region is " << ctx.lanes
@@ -864,8 +1005,11 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     Value trueShape = valueMap.lookup(updateMaskOp.getTrueShape());
     if (!trueShape)
       return failure();
-    unsigned elemBits = updateMaskOp.getDtype().getIntOrFloatBitWidth();
-    int64_t laneCount = (256 * 8) / static_cast<int64_t>(elemBits);
+    auto laneCountOr = getVectorLaneCount(updateMaskOp.getDtype());
+    if (failed(laneCountOr))
+      return updateMaskOp.emitError("unsupported tla.update_mask dtype: ")
+             << updateMaskOp.getDtype(), failure();
+    int64_t laneCount = *laneCountOr;
     if (laneCount != ctx.lanes)
       return updateMaskOp.emitError("tla.update_mask dtype implies ")
                  << laneCount << " lanes, but the vector region is " << ctx.lanes
@@ -889,6 +1033,10 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     Value source = valueMap.lookup(storeOp.getSource());
     if (!dest || !source)
       return failure();
+    auto destType = dyn_cast<MemRefType>(dest.getType());
+    auto sourceVectorType = dyn_cast<VectorType>(source.getType());
+    if (!destType || destType.getRank() != 1 || !sourceVectorType)
+      return failure();
     Value zero = b.create<arith::ConstantIndexOp>(loc, 0);
     Value mask;
     if (storeOp.getMask()) {
@@ -898,7 +1046,12 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     } else {
       mask = b.create<hivmave::VFPgeOp>(loc, ctx.maskVecType, hivmave::PgePattern::ALL);
     }
-    b.create<hivmave::VFMaskedStoreOp>(loc, dest, ValueRange{zero}, mask, source);
+    auto permutationMap =
+        AffineMap::getMinorIdentityMap(destType.getRank(), sourceVectorType.getRank(),
+                                       b.getContext());
+    auto inBounds = b.getBoolArrayAttr({destType.getDimSize(0) == ctx.lanes});
+    b.create<vector::TransferWriteOp>(loc, source, dest, ValueRange{zero},
+                                      AffineMapAttr::get(permutationMap), mask, inBounds);
     return success();
   }
 
@@ -1059,15 +1212,19 @@ static void collectVectorHelperOperands(Block *block, SmallVectorImpl<Value> &op
   }
 }
 
-// Collect unique scalar (int/index) values used inside the region but defined
-// outside it (e.g. a sub_block_idx/block_idx computed at the top of the kernel).
+// Collect unique scalar values used inside the region but defined outside it
+// (e.g. a sub_block_idx/block_idx computed at the top of the kernel, or a
+// vector-scalar RHS constant). Passing them into the helper avoids cloning float
+// constants into vector helpers where vector.broadcast can fold to illegal
+// vector arith.constant ops before the HIVMAVE conversion pipeline.
 // They are passed in as trailing scalar arguments rather than recomputed inside
 // the outlined vector function.
 static void collectVectorHelperScalarOperands(::tla::VecFuncOp vecFuncOp,
                                               SmallVectorImpl<Value> &scalars) {
   vecFuncOp.walk([&](Operation *op) {
     for (Value operand : op->getOperands()) {
-      if (!operand.getType().isIntOrIndex())
+      Type operandType = operand.getType();
+      if (!operandType.isIntOrIndex() && !isa<FloatType>(operandType))
         continue;
       Region *defRegion = operand.getParentRegion();
       if (defRegion && !vecFuncOp.getBody().isAncestor(defRegion) &&
@@ -1123,11 +1280,10 @@ static FailureOr<func::FuncOp> buildHelperFunc(ModuleOp module, func::FuncOp par
       return vectorOp->emitError("unsupported element type for vector binary helper: ")
              << tileElementType;
   }
-  auto elementBytes = getElementByteWidth(elementType);
-  if (failed(elementBytes) || *elementBytes <= 0)
+  auto lanesOr = getVectorLaneCount(elementType);
+  if (failed(lanesOr))
     return failure();
-  constexpr int64_t kVectorBytes = 256;
-  int64_t lanes = kVectorBytes / *elementBytes;
+  int64_t lanes = *lanesOr;
   if (lanes <= 0)
     return failure();
 
@@ -1201,14 +1357,17 @@ public:
     for (Operation *computeOp : computeOps) {
       if (computeOp->getNumResults() != 1)
         return rewriter.notifyMatchFailure(vecFuncOp, "unexpected tla compute op shape");
-      // Tensor operands must be produced inside the region; mask operands come
-      // from tla.create_mask / tla.update_mask and are validated separately.
-      if (getVectorBinaryKind(computeOp)) {
-        TlaBinaryOperands ops = getTlaBinaryOperands(computeOp);
-        if (!ops.lhs || !ops.rhs || !producedValues.contains(ops.lhs) ||
-            !producedValues.contains(ops.rhs))
+      if (auto info = getAnyVectorOperationInfo(computeOp)) {
+        // lhs/rhs must be produced inside the region; vector-scalar rhs is a
+        // scalar value captured or cloned into the helper.
+        // The optional mask comes from tla.create_mask and is validated separately.
+        TlaBinaryOperands ops = info->operands;
+        if (!ops.lhs || !ops.rhs || !producedValues.contains(ops.lhs))
           return rewriter.notifyMatchFailure(
               vecFuncOp, "expected binary op operand from tla.load or prior compute op");
+        if (info->rhsKind == VectorRhsKind::Vector && !producedValues.contains(ops.rhs))
+          return rewriter.notifyMatchFailure(
+              vecFuncOp, "expected binary op rhs from tla.load or prior compute op");
       } else if (auto whereOp = dyn_cast<::tla::WhereOp>(computeOp)) {
         if (!producedValues.contains(whereOp.getX()) ||
             !producedValues.contains(whereOp.getY()))
@@ -1305,7 +1464,6 @@ public:
         srcInfo->addressSpace == AddressSpace::ub && dstInfo->addressSpace == AddressSpace::gm;
     if (!isGmToUb && !isUbToGm)
       return failure();
-
     ArrayRef<int64_t> srcShapeHint = {};
     ArrayRef<int64_t> dstShapeHint = {};
     if (isGmToUb)

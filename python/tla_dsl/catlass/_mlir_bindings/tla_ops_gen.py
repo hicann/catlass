@@ -61,6 +61,44 @@ def add(result, lhs, rhs, *, mask=None, loc=None, ip=None) -> _ods_ir.Value:
   return _get_op_result_or_op_results(AddOp(result=result, lhs=lhs, rhs=rhs, mask=mask, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
+class AddsOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.adds"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, lhs, rhs, *, mask=None, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(lhs))
+    operands.append(_get_op_result_or_value(rhs))
+    if mask is not None: operands.append(_get_op_result_or_value(mask))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def lhs(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def rhs(self):
+    return self.operation.operands[1]
+
+  @builtins.property
+  def mask(self):
+    return None if len(self.operation.operands) < 3 else self.operation.operands[2]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def adds(result, lhs, rhs, *, mask=None, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(AddsOp(result=result, lhs=lhs, rhs=rhs, mask=mask, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
 class AllocPtrOp(_ods_ir.OpView):
   OPERATION_NAME = "tla.alloc_ptr"
 
@@ -537,6 +575,44 @@ def div(result, lhs, rhs, *, mask=None, loc=None, ip=None) -> _ods_ir.Value:
   return _get_op_result_or_op_results(DivOp(result=result, lhs=lhs, rhs=rhs, mask=mask, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
+class DivsOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.divs"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, lhs, rhs, *, mask=None, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(lhs))
+    operands.append(_get_op_result_or_value(rhs))
+    if mask is not None: operands.append(_get_op_result_or_value(mask))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def lhs(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def rhs(self):
+    return self.operation.operands[1]
+
+  @builtins.property
+  def mask(self):
+    return None if len(self.operation.operands) < 3 else self.operation.operands[2]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def divs(result, lhs, rhs, *, mask=None, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(DivsOp(result=result, lhs=lhs, rhs=rhs, mask=mask, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
 class FlagOp(_ods_ir.OpView):
   OPERATION_NAME = "tla.flag"
 
@@ -1005,6 +1081,82 @@ def make_tensor(result, ptr, layout, coord, *, loc=None, ip=None) -> _ods_ir.Val
   return _get_op_result_or_op_results(MakeTensorOp(result=result, ptr=ptr, layout=layout, coord=coord, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
+class MaxsOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.maxs"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, lhs, rhs, *, mask=None, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(lhs))
+    operands.append(_get_op_result_or_value(rhs))
+    if mask is not None: operands.append(_get_op_result_or_value(mask))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def lhs(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def rhs(self):
+    return self.operation.operands[1]
+
+  @builtins.property
+  def mask(self):
+    return None if len(self.operation.operands) < 3 else self.operation.operands[2]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def maxs(result, lhs, rhs, *, mask=None, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(MaxsOp(result=result, lhs=lhs, rhs=rhs, mask=mask, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
+class MinsOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.mins"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, lhs, rhs, *, mask=None, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(lhs))
+    operands.append(_get_op_result_or_value(rhs))
+    if mask is not None: operands.append(_get_op_result_or_value(mask))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def lhs(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def rhs(self):
+    return self.operation.operands[1]
+
+  @builtins.property
+  def mask(self):
+    return None if len(self.operation.operands) < 3 else self.operation.operands[2]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def mins(result, lhs, rhs, *, mask=None, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(MinsOp(result=result, lhs=lhs, rhs=rhs, mask=mask, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
 class MmadOp(_ods_ir.OpView):
   OPERATION_NAME = "tla.mmad"
 
@@ -1084,6 +1236,44 @@ class MulOp(_ods_ir.OpView):
 
 def mul(result, lhs, rhs, *, mask=None, loc=None, ip=None) -> _ods_ir.Value:
   return _get_op_result_or_op_results(MulOp(result=result, lhs=lhs, rhs=rhs, mask=mask, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
+class MulsOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.muls"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, lhs, rhs, *, mask=None, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(lhs))
+    operands.append(_get_op_result_or_value(rhs))
+    if mask is not None: operands.append(_get_op_result_or_value(mask))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def lhs(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def rhs(self):
+    return self.operation.operands[1]
+
+  @builtins.property
+  def mask(self):
+    return None if len(self.operation.operands) < 3 else self.operation.operands[2]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def muls(result, lhs, rhs, *, mask=None, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(MulsOp(result=result, lhs=lhs, rhs=rhs, mask=mask, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
 class MutexLockOp(_ods_ir.OpView):
@@ -1404,6 +1594,44 @@ class SubOp(_ods_ir.OpView):
 
 def sub(result, lhs, rhs, *, mask=None, loc=None, ip=None) -> _ods_ir.Value:
   return _get_op_result_or_op_results(SubOp(result=result, lhs=lhs, rhs=rhs, mask=mask, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
+class SubsOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.subs"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, lhs, rhs, *, mask=None, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(lhs))
+    operands.append(_get_op_result_or_value(rhs))
+    if mask is not None: operands.append(_get_op_result_or_value(mask))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def lhs(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def rhs(self):
+    return self.operation.operands[1]
+
+  @builtins.property
+  def mask(self):
+    return None if len(self.operation.operands) < 3 else self.operation.operands[2]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def subs(result, lhs, rhs, *, mask=None, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(SubsOp(result=result, lhs=lhs, rhs=rhs, mask=mask, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
 class TileViewOp(_ods_ir.OpView):

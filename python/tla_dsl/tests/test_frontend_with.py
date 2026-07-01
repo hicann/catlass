@@ -254,6 +254,26 @@ def vec_vector_ssa_kernel(lhs: tla.Tensor, rhs: tla.Tensor, dst: tla.Tensor) -> 
 
 
 @tla.kernel
+def chained_vector_vector_then_scalar_kernel() -> None:
+    allocator = tla.utils.LocalmemAllocator()
+
+    ptr = allocator.allocate(64 * 4, 32, tla.AddressSpace.ub)
+    f32_ptr = tla.recast_ptr(ptr, dtype=tla.Float32)
+
+    shape = tla.make_shape(64)
+    stride = tla.make_stride(1)
+    layout = tla.make_layout(shape, stride, layoutTag=tla.arch.RowMajor)
+    tensor = tla.make_tensor(f32_ptr, layout, coord=tla.make_coord(0))
+    tile = tla.tile_view(tensor, tla.make_shape(64), tla.make_coord(0))
+
+    with tla.vec.func(mode="simd"):
+        reg = tile.load()
+        tmp = tla.add(reg, reg)
+        out = tla.mul(tmp, 1.0)
+        tile.store(out)
+
+
+@tla.kernel
 def mutex_guard_vec_func_kernel(
     lhs: tla.Tensor, rhs: tla.Tensor, dst: tla.Tensor
 ) -> None:
@@ -437,6 +457,14 @@ def test_vec_vector_ssa_load_add_store_lowering() -> None:
     assert "tla.add" in mlir
     assert "tla.store" in mlir
     assert "tla.make_rmem_tensor" not in mlir
+
+
+def test_vec_vector_then_scalar_chaining_preserves_metadata() -> None:
+    mlir = chained_vector_vector_then_scalar_kernel.dump_mlir()
+
+    assert "tla.add" in mlir
+    assert "tla.muls" in mlir
+    assert "tla.store" in mlir
 
 
 def test_vec_store_rejects_raw_tensor() -> None:

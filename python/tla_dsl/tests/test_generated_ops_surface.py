@@ -56,6 +56,12 @@ def test_generated_binding_symbols_exist_for_wrapped_ops() -> None:
         "arch_block_dim",
         "recast_ptr",
         "hivm_memref_as_ptr",
+        "adds",
+        "subs",
+        "muls",
+        "maxs",
+        "mins",
+        "divs",
     )
     for symbol in required:
         assert hasattr(tla_ops_gen, symbol)
