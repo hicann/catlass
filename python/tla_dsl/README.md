@@ -226,6 +226,62 @@ python examples/end_to_end/basic_mmad/basic_matmul.py --run --device 0 --use-mut
 
 
 
+### 2.8 构建 API 文档（可选）
+
+TLA DSL API 文档位于 `python/tla_dsl/docs/`，由脚本动态解析 `catlass.core_api` 生成 Markdown，再通过 MkDocs 构建为带左侧导航栏的静态 HTML。
+
+#### 2.8.1 安装文档构建依赖
+
+若已经按 **§2.2** 激活环境，可直接安装项目提供的 `docs` 可选依赖：
+
+```bash
+cd "${CATLASS_ROOT}/python/tla_dsl"
+pip install -e ".[docs]"
+```
+
+#### 2.8.2 生成 API Reference Markdown
+
+```bash
+cd "${CATLASS_ROOT}/python/tla_dsl"
+python3 tools/generate_api_reference.py
+```
+
+生成结果：
+
+```text
+python/tla_dsl/docs/api-reference.md
+```
+
+#### 2.8.3 构建带左侧导航栏的静态 HTML
+
+```bash
+cd "${CATLASS_ROOT}/python/tla_dsl"
+python3 -m mkdocs build --strict
+```
+
+构建结果：
+
+```text
+python/tla_dsl/site/index.html
+```
+
+打开 `site/index.html` 即可在浏览器查看静态文档站。`site/` 是构建产物，已通过仓库 `.gitignore` 忽略。
+
+#### 2.8.4 本地实时预览
+
+开发文档时可以启动本地服务：
+
+```bash
+cd "${CATLASS_ROOT}/python/tla_dsl"
+python3 -m mkdocs serve
+```
+
+根据终端输出打开对应地址，通常为：
+
+```text
+http://127.0.0.1:8000/
+```
+
 ---
 
 ## 3. 版本状态说明
@@ -246,3 +302,4 @@ python examples/end_to_end/basic_mmad/basic_matmul.py --run --device 0 --use-mut
 | 依赖版本表、`python/tla_dsl/environment.yml`、`lit` 与 MLIR 19.1.7 同栈 | 上文 **2.2.1** |
 | 一键构建（`build.sh` / `hatch build`） | 上文 **2.5** |
 | 仅配置 MLIR 子目录（不跑完整 Catlass） | 见上文 **2.5** 的 **`./build.sh`** 或 `cmake` / `ninja` |
+| API 文档生成与 MkDocs 静态站点构建 | 上文 **2.8** |

@@ -43,6 +43,7 @@ dist/
 # hatch-vcs generated (see pyproject.toml [tool.hatch.build.hooks.vcs])
 python/tla_dsl/catlass/_version.py
 python/tla_dsl/.artifacts/
+python/tla_dsl/site/
 # data bin
 *.bin
 *.dat

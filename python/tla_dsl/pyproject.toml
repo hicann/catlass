@@ -13,6 +13,11 @@ authors = [
 ]
 dynamic = ["version"]
 
+[project.optional-dependencies]
+docs = [
+  "mkdocs>=1.6.1",
+]
+
 [tool.hatch.version]
 source = "vcs"
 raw-options = { version_scheme = "no-guess-dev", local_scheme = "node-and-date", fallback_version = "0.0.0" }
