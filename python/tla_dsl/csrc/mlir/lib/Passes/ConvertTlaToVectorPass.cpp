@@ -1057,10 +1057,6 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     Value source = valueMap.lookup(storeOp.getSource());
     if (!dest || !source)
       return failure();
-    auto destType = dyn_cast<MemRefType>(dest.getType());
-    auto sourceVectorType = dyn_cast<VectorType>(source.getType());
-    if (!destType || destType.getRank() != 1 || !sourceVectorType)
-      return failure();
     Value zero = b.create<arith::ConstantIndexOp>(loc, 0);
     Value mask;
     if (storeOp.getMask()) {
@@ -1070,12 +1066,8 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     } else {
       mask = b.create<hivmave::VFPgeOp>(loc, ctx.maskVecType, hivmave::PgePattern::ALL);
     }
-    auto permutationMap =
-        AffineMap::getMinorIdentityMap(destType.getRank(), sourceVectorType.getRank(),
-                                       b.getContext());
-    auto inBounds = b.getBoolArrayAttr({destType.getDimSize(0) == ctx.lanes});
-    b.create<vector::TransferWriteOp>(loc, source, dest, ValueRange{zero},
-                                      AffineMapAttr::get(permutationMap), mask, inBounds);
+    // Use the dedicated AVE masked store.
+    b.create<hivmave::VFMaskedStoreOp>(loc, dest, ValueRange{zero}, mask, source);
     return success();
   }
 

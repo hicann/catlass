@@ -432,6 +432,9 @@ class DirectVectorOpHarness:
                 expected_match = actual.eq(expected_output)
             output_matches.append(bool(expected_match.all()))
             mismatch = expected_match.logical_not().nonzero(as_tuple=False)
+            bad = [int(v) for v in mismatch.flatten().tolist()]
+            if bad:
+                print(f"[ALL-MISMATCH] output={output_index} count={len(bad)} indices={bad}")
             if first_mismatch is None and mismatch.numel():
                 index = int(mismatch[0].item())
                 first_mismatch = {
