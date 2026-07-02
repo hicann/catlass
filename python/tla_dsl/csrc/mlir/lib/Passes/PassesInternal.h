@@ -19,6 +19,7 @@ void registerTlaSyncToHivmPass();
 void registerTlaAllocPtrToHivmPointerCastPass();
 void registerTlaLowerMutexToStdPass();
 void registerTlaLowerToStdPass();
+void registerTlaPrologueEpiloguePass();
 
 std::unique_ptr<mlir::Pass> createTlaLowerMutexToStdPass();
 mlir::LogicalResult lowerTlaMutexToStd(

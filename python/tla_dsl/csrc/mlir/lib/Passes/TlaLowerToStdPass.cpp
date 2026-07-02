@@ -877,50 +877,6 @@ public:
            idxAttr.getInt() == expectedIdx;
   }
 
-  static llvm::StringMap<bool> collectVectorKernelNames(ModuleOp module) {
-    llvm::StringMap<bool> vectorKernelNames;
-    module.walk([&](::tla::FuncOp funcOp) {
-      bool isVectorKernel = false;
-      funcOp.walk([&](Operation *op) {
-        if (getTlaOpCoreKind(op) == HivmCoreKind::AIV) {
-          isVectorKernel = true;
-          return WalkResult::interrupt();
-        }
-        return WalkResult::advance();
-      });
-      if (!isVectorKernel)
-        return;
-      if (auto symName = funcOp->getAttrOfType<StringAttr>("sym_name"))
-        vectorKernelNames[symName.getValue()] = true;
-    });
-    return vectorKernelNames;
-  }
-
-  static void injectVectorCtrlPrologueIntoFuncs(ModuleOp module,
-                                                const llvm::StringMap<bool> &vectorKernelNames) {
-    for (func::FuncOp funcOp : module.getOps<func::FuncOp>()) {
-      if (funcOp.isDeclaration() || funcOp.empty())
-        continue;
-      auto it = vectorKernelNames.find(funcOp.getSymName());
-      if (it == vectorKernelNames.end() || !it->second)
-        continue;
-
-      Block &entry = funcOp.front();
-      OpBuilder builder = OpBuilder::atBlockBegin(&entry);
-      auto i64Type = builder.getI64Type();
-      auto getCtrl = getOrCreateRuntimeCall(module, "llvm.hivm.GET.CTRL", {}, {i64Type});
-      auto sbitset0 =
-          getOrCreateRuntimeCall(module, "llvm.hivm.SBITSET0", {i64Type, i64Type}, {i64Type});
-      auto setCtrl = getOrCreateRuntimeCall(module, "llvm.hivm.SET.CTRL", {i64Type}, {});
-
-      auto ctrl = builder.create<func::CallOp>(funcOp.getLoc(), getCtrl, ValueRange{}).getResult(0);
-      auto bit = builder.create<arith::ConstantIntOp>(funcOp.getLoc(), 56, 64);
-      auto updated = builder.create<func::CallOp>(funcOp.getLoc(), sbitset0, ValueRange{ctrl, bit})
-                         .getResult(0);
-      builder.create<func::CallOp>(funcOp.getLoc(), setCtrl, ValueRange{updated});
-    }
-  }
-
   // Return an existing private callee declaration or create it in-module.
   static func::FuncOp getOrCreateRuntimeCall(ModuleOp module, StringRef name,
                                              ArrayRef<Type> operandTypes,
@@ -1666,7 +1622,6 @@ public:
 
   void runOnOperation() override {
     ModuleOp module = getOperation();
-    llvm::StringMap<bool> vectorKernelNames = collectVectorKernelNames(module);
 
     // Defer erases to avoid invalidating active walks.
     SmallVector<Operation *, 8> toErase;
@@ -2866,8 +2821,6 @@ public:
         return;
       }
     }
-
-    injectVectorCtrlPrologueIntoFuncs(module, vectorKernelNames);
 
     // Final cleanup for all staged rewrites.
     DenseSet<Operation *> pendingErase;

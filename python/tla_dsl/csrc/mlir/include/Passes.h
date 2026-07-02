@@ -13,7 +13,7 @@ std::unique_ptr<mlir::Pass> createTlaSplitMixedFuncPass();
 std::unique_ptr<mlir::Pass> createTlaInferFuncCoreTypePass();
 std::unique_ptr<mlir::Pass> createTlaLowerToHivmPass();
 std::unique_ptr<mlir::Pass> createConvertTlaToVectorPass();
-std::unique_ptr<mlir::Pass> createAddKernelPrologueEpiloguePass();
+std::unique_ptr<mlir::Pass> createTlaPrologueEpiloguePass();
 
 void registerTlaPasses();
 void buildTlaPipeline(mlir::OpPassManager &pm);

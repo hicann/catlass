@@ -30,11 +30,14 @@ bool shouldOmitPureVectorEntryCoreAttrs(Operation *op, HivmCoreKind coreKind) {
 
 // Materialize the final HACC/HIVM entry attributes for a device function from
 // its core kind (hacc.entry, function_kind, hivm.func_core_type, mix_mode,
-// parallel_mode). Pure-vector entries are stripped back to just the entry attrs.
+// parallel_mode, and the C310 regbase target). Pure-vector entries are stripped
+// back to just the entry attrs (plus the target). This is the single place that
+// stamps the per-device-function HACC/HIVM entry metadata.
 void stampFunctionHaccHivmAttrs(Operation *op, HivmCoreKind coreKind) {
   if (isPrivateSymbol(op))
     return;
   MLIRContext *ctx = op->getContext();
+  setC310RegbaseTargetAttr(op, ctx);
   if (shouldOmitPureVectorEntryCoreAttrs(op, coreKind)) {
     setRequiredHaccEntryAttrs(op, ctx);
     op->removeAttr(hivm::TFuncCoreTypeAttr::name);
