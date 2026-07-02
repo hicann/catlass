@@ -638,6 +638,10 @@ static TlaBinaryOperands getTlaBinaryOperands(Operation *op) {
     r.lhs = o.getLhs(); r.rhs = o.getRhs(); r.mask = o.getMask();
   } else if (auto o = dyn_cast<::tla::DivOp>(op)) {
     r.lhs = o.getLhs(); r.rhs = o.getRhs(); r.mask = o.getMask();
+  } else if (auto o = dyn_cast<::tla::MaxOp>(op)) {
+    r.lhs = o.getLhs(); r.rhs = o.getRhs(); r.mask = o.getMask();
+  } else if (auto o = dyn_cast<::tla::MinOp>(op)) {
+    r.lhs = o.getLhs(); r.rhs = o.getRhs(); r.mask = o.getMask();
   } else if (auto o = dyn_cast<::tla::AddsOp>(op)) {
     r.lhs = o.getLhs(); r.rhs = o.getRhs(); r.mask = o.getMask();
   } else if (auto o = dyn_cast<::tla::SubsOp>(op)) {
@@ -675,6 +679,12 @@ static std::optional<VectorOpInfo> getVectorBinaryInfo(Operation *op) {
                         getTlaBinaryOperands(op)};
   if (isa<::tla::DivOp>(op))
     return VectorOpInfo{VectorBinaryKind::Div, VectorRhsKind::Vector, "div",
+                        getTlaBinaryOperands(op)};
+  if (isa<::tla::MaxOp>(op))
+    return VectorOpInfo{VectorBinaryKind::Max, VectorRhsKind::Vector, "max",
+                        getTlaBinaryOperands(op)};
+  if (isa<::tla::MinOp>(op))
+    return VectorOpInfo{VectorBinaryKind::Min, VectorRhsKind::Vector, "min",
                         getTlaBinaryOperands(op)};
   return std::nullopt;
 }

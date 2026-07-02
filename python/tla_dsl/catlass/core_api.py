@@ -3385,9 +3385,16 @@ def max(
     mask: MaskSSA | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> VectorSSA:
-    """Emit element-wise vector-scalar maximum for loaded vector SSA values."""
-    return _emit_commutative_vector_scalar_binary(
-        "max", lhs, rhs, mask=mask, loc=loc, scalar_op_name="maxs"
+    """Emit element-wise maximum for loaded vector SSA values."""
+    return _emit_vector_binary_or_scalar(
+        "max",
+        _tla_ops_gen.max,
+        "maxs",
+        lhs,
+        rhs,
+        mask=mask,
+        loc=loc,
+        commutative=True,
     )
 
 
@@ -3399,9 +3406,16 @@ def min(
     mask: MaskSSA | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> VectorSSA:
-    """Emit element-wise vector-scalar minimum for loaded vector SSA values."""
-    return _emit_commutative_vector_scalar_binary(
-        "min", lhs, rhs, mask=mask, loc=loc, scalar_op_name="mins"
+    """Emit element-wise minimum for loaded vector SSA values."""
+    return _emit_vector_binary_or_scalar(
+        "min",
+        _tla_ops_gen.min,
+        "mins",
+        lhs,
+        rhs,
+        mask=mask,
+        loc=loc,
+        commutative=True,
     )
 
 

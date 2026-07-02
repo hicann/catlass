@@ -807,6 +807,14 @@ def Tla_DivOp : Tla_VectorBinaryOp<"div",
     "Vector divide for tensor fragments",
     "Element-wise divide on tensor fragments / vector tiles.">;
 
+def Tla_MaxOp : Tla_VectorBinaryOp<"max",
+    "Vector maximum for tensor fragments",
+    "Element-wise maximum on tensor fragments / vector tiles.">;
+
+def Tla_MinOp : Tla_VectorBinaryOp<"min",
+    "Vector minimum for tensor fragments",
+    "Element-wise minimum on tensor fragments / vector tiles.">;
+
 def Tla_WhereOp : Tla_Op<"where", [Pure]> {
   let summary = "Vector select for tensor fragments";
   let description = [{

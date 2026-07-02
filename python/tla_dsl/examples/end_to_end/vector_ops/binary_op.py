@@ -94,6 +94,16 @@ def _operator_specs() -> dict[str, dict[str, Any]]:
             "default_atol": 1e-3,
             "nonzero_rhs": True,
         },
+        "max": {
+            "op": lambda lhs, rhs: tla.max(lhs, rhs),
+            "default_atol": 1e-4,
+            "nonzero_rhs": False,
+        },
+        "min": {
+            "op": lambda lhs, rhs: tla.min(lhs, rhs),
+            "default_atol": 1e-4,
+            "nonzero_rhs": False,
+        },
     }
 
 
@@ -163,6 +173,10 @@ def _expected(op_name: str, inputs: tuple[Any, ...]) -> Any:
         if not x.is_floating_point():
             return x.div(y, rounding_mode="trunc")
         return x / y
+    if op_name == "max":
+        return x.maximum(y)
+    if op_name == "min":
+        return x.minimum(y)
     raise AssertionError(op_name)
 
 

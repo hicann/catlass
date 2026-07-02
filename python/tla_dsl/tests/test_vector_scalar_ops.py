@@ -41,14 +41,6 @@ def bf16_scalar_literal_kernel(lhs: tla.Tensor) -> None:
 
 
 @tla.kernel
-def invalid_max_vector_rhs_kernel(lhs: tla.Tensor) -> None:
-    tile = tla.tile_view(lhs, tla.make_shape(64), tla.make_coord(0))
-    with tla.vec.func(mode="simd"):
-        reg = tile.load()
-        _ = tla.max(reg, reg)
-
-
-@tla.kernel
 def invalid_scalar_lhs_sub_kernel(lhs: tla.Tensor) -> None:
     tile = tla.tile_view(lhs, tla.make_shape(64), tla.make_coord(0))
     with tla.vec.func(mode="simd"):
@@ -103,11 +95,6 @@ def test_bf16_scalar_literal_uses_bf16_constant(
 
     assert any("arith.constant" in line and "bf16" in line for line in mlir.splitlines())
     assert "tla.adds" in mlir
-
-
-def test_scalar_only_vector_op_rejects_vector_rhs() -> None:
-    with pytest.raises(tla.TlaCoreAPIError, match="expected vector-scalar operands"):
-        invalid_max_vector_rhs_kernel.dump_mlir(type_args=(_vector_tensor(),))
 
 
 def test_noncommutative_vector_scalar_rejects_scalar_lhs() -> None:
