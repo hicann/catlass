@@ -58,6 +58,9 @@ tests/optest/torch_catlass/jit/
 tests/optest/torch_catlass/include/
 tests/optest/torch_catlass/_version.py
 
+# mkdocs
+site/
+
 # msprof
 OPPROF*/
 

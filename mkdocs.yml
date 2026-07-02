@@ -1,0 +1,54 @@
+site_name: CATLASS
+site_description: CANN Templates for Linear Algebra Subroutines
+site_url: https://cann-catlass.github.io/
+repo_url: https://gitcode.com/cann/catlass
+edit_uri: blob/doc_dev/
+
+theme:
+  name: material
+  language: zh
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.indexes
+    - navigation.top
+    - content.code.copy
+
+plugins:
+  - search
+  - i18n:
+      docs_structure: folder
+      languages:
+        - locale: zh
+          name: 中文
+          default: true
+          build: true
+        - locale: en
+          name: English
+          build: true
+          nav_translations:
+            项目介绍: Project Introduction
+            实践指南: Practice
+            设计总结: Design
+            API 参考: API Reference
+            算子示例: Examples
+            新版本: New Versions
+            常见问题: Q&A
+            版本日志: Changelog
+            贡献指南: Contributing
+            安全须知: Security Note
+
+hooks:
+  - hooks/prebuild.py
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight
+  - pymdownx.arithmatex:
+      generic: true
+  - toc:
+      permalink: true
+  - attr_list
+  - tables
