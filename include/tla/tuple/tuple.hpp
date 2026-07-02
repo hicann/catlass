@@ -145,6 +145,9 @@ template <class T>
 struct is_tuple : decltype(detail::has_tuple_size((T*)0)){};
 
 template <class T>
+inline constexpr bool is_tuple_v = is_tuple<T>::value;
+
+template <class T>
 struct is_all_static : is_static<T> {};
 
 template <class... Ts>

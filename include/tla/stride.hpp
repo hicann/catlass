@@ -61,12 +61,14 @@ CATLASS_HOST_DEVICE constexpr auto compact_row_major_impl(Shape const& shape, Cu
 template <class Shape, class Current>
 CATLASS_HOST_DEVICE constexpr auto compact_col_major(Shape const& shape, Current const& current)
 {
-    if constexpr (is_tuple<Current>::value) {
+    if constexpr (is_tuple_v<Shape> && is_tuple_v<Current>) {
         return transform(shape, current, [](auto const& s, auto const& c) { return compact_col_major(s, c); });
-    } else if constexpr (is_tuple<Shape>::value) {
+    } else if constexpr (is_tuple_v<Shape> && is_integral_v<Current>) {
         return detail::compact_col_major_impl(shape, current, tuple_seq<Shape>{});
-    } else {
+    } else if constexpr (is_integral_v<Shape> && is_integral_v<Current>) {
         return current;
+    } else {
+        static_assert(dependent_false<Shape>, "Invalid parameters");
     }
 }
 
@@ -76,12 +78,14 @@ CATLASS_HOST_DEVICE constexpr auto compact_col_major(Shape const& shape, Current
 template <class Shape, class Current>
 CATLASS_HOST_DEVICE constexpr auto compact_row_major(Shape const& shape, Current const& current)
 {
-    if constexpr (is_tuple<Current>::value) {
+    if constexpr (is_tuple_v<Shape> && is_tuple_v<Current>) {
         return transform(shape, current, [](auto const& s, auto const& c) { return compact_row_major(s, c); });
-    } else if constexpr (is_tuple<Shape>::value) {
+    } else if constexpr (is_tuple_v<Shape> && is_integral_v<Current>) {
         return detail::compact_row_major_impl(shape, current, tuple_rseq<Shape>{});
-    } else {
+    } else if constexpr (is_integral_v<Shape> && is_integral_v<Current>) {
         return current;
+    } else {
+        static_assert(dependent_false<Shape>, "Invalid parameters");
     }
 }
 
@@ -111,26 +115,28 @@ CATLASS_HOST_DEVICE constexpr auto compact_order_impl(
 
 } // end namespace detail
 
-template <class Shape, class Order, TLA_REQUIRES(is_all_static<remove_cvref_t<Order>>::value)>
+template <class Shape, class Order>
 CATLASS_HOST_DEVICE constexpr auto compact_order(Shape const& shape, Order const& order)
 {
+    static_assert(is_all_static<remove_cvref_t<Order>>::value, "Order must be all static");
     auto flat_shape = flatten_to_tuple(product_like(shape, order));
     auto flat_order = flatten_to_tuple(order);
-    return detail::compact_order_impl(shape, order, flat_shape, flat_order);
+    constexpr int n = tuple_size<remove_cvref_t<decltype(flat_order)>>::value;
+    auto unique_order = transform(make_range<0, n>{}, flat_order, [](auto I, auto v) { return v * Int<n>{} + I; });
+    auto new_order = unflatten(unique_order, order);
+    return detail::compact_order_impl(shape, new_order, flat_shape, unique_order);
 }
 
 template <class Coord, class Shape, class Stride>
 CATLASS_HOST_DEVICE constexpr auto crd2idx(Coord const& coord, Shape const& shape, Stride const& stride)
 {
-    if constexpr (is_tuple<Coord>::value && is_tuple<Shape>::value) {
+    if constexpr (is_tuple_v<Coord> && is_tuple_v<Shape> && is_tuple_v<Stride>) {
         static_assert(tuple_size<Coord>::value == tuple_size<Shape>::value, "Mismatched Ranks");
         static_assert(tuple_size<Coord>::value == tuple_size<Stride>::value, "Mismatched Ranks");
         return transform_apply(
             coord, shape, stride, [](auto const& c, auto const& s, auto const& d) { return crd2idx(c, s, d); },
             [](auto const&... xs) { return (... + xs); });
-    } else if constexpr (is_tuple<Coord>::value) {
-        static_assert(dependent_false<Coord>, "Invalid parameters");
-    } else if constexpr (is_tuple<Shape>::value) {
+    } else if constexpr (is_integral_v<Coord> && is_tuple_v<Shape> && is_tuple_v<Stride>) {
         static_assert(tuple_size<Shape>::value == tuple_size<Stride>::value, "Mismatched Ranks");
         if constexpr (is_constant<0, Coord>::value) {
             return _0{};
@@ -140,8 +146,10 @@ CATLASS_HOST_DEVICE constexpr auto crd2idx(Coord const& coord, Shape const& shap
             auto prod = product(get<0>(sd));
             return make_tuple(get<0>(acc) / prod, get<1>(acc) + crd2idx(get<0>(acc) % prod, get<0>(sd), get<1>(sd)));
         }));
-    } else {
+    } else if constexpr (is_integral_v<Coord> && is_integral_v<Shape> && is_integral_v<Stride>) {
         return coord * stride;
+    } else {
+        static_assert(dependent_false<Coord>, "Invalid parameters");
     }
 }
 
@@ -155,17 +163,60 @@ CATLASS_HOST_DEVICE constexpr auto crd2offset(Coord const& coord, Shape const& s
 template <class Coord, class Shape>
 CATLASS_HOST_DEVICE constexpr auto crd2idx(Coord const& coord, Shape const& shape)
 {
-    if constexpr (is_tuple<Coord>::value && is_tuple<Shape>::value) {
+    if constexpr (is_tuple_v<Coord> && is_tuple_v<Shape>) {
         static_assert(tuple_size<Coord>::value == tuple_size<Shape>::value, "Mismatched Ranks");
         auto flat_coord = flatten_to_tuple(coord);
         auto flat_shape = flatten_to_tuple(product_like(shape, coord));
         auto zipped = transform(flat_coord, flat_shape, [](auto const& c, auto const& s) { return make_tuple(c, s); });
         return fold_reverse(
             zipped, _0{}, [](auto const& acc, auto const& cs) { return get<0>(cs) + get<1>(cs) * acc; });
-    } else if constexpr (is_tuple<Coord>::value) {
-        static_assert(dependent_false<Coord>, "Invalid parameters");
-    } else {
+    } else if constexpr (is_integral_v<Coord> && (is_tuple_v<Shape> || is_integral_v<Shape>)) {
         return coord;
+    } else {
+        static_assert(dependent_false<Coord>, "Invalid parameters");
+    }
+}
+
+// idx2crd: inverse of crd2idx. Decomposes a flat index into a coordinate within <Shape, Stride>.
+// Shape and Stride are assumed congruent (same tuple structure).
+// - (tuple, tuple, tuple): each mode decomposed independently via element-wise recursion
+// - (int, tuple, tuple): the same index is applied to every mode
+// - (int, int, int): 1D base case: (idx / stride) % shape; shape == 1 short-circuits to 0
+template <class Index, class Shape, class Stride>
+CATLASS_HOST_DEVICE constexpr auto idx2crd(Index const& idx, Shape const& shape, Stride const& stride)
+{
+    if constexpr (is_tuple_v<Index> && is_tuple_v<Shape> && is_tuple_v<Stride>) {
+        static_assert(tuple_size<Index>::value == tuple_size<Shape>::value, "Mismatched Ranks");
+        static_assert(tuple_size<Index>::value == tuple_size<Stride>::value, "Mismatched Ranks");
+        return transform(
+            idx, shape, stride, [](auto const& i, auto const& s, auto const& d) { return idx2crd(i, s, d); });
+    } else if constexpr (is_integral_v<Index> && is_tuple_v<Shape> && is_tuple_v<Stride>) {
+        static_assert(tuple_size<Shape>::value == tuple_size<Stride>::value, "Mismatched Ranks");
+        return transform(shape, stride, [&](auto const& s, auto const& d) { return idx2crd(idx, s, d); });
+    } else if constexpr (is_integral_v<Index> && is_integral_v<Shape> && is_integral_v<Stride>) {
+        if constexpr (is_constant<1, Shape>::value) {
+            return _0{};
+        }
+        return (idx / stride) % shape;
+    } else {
+        static_assert(dependent_false<Index>, "Invalid parameters");
+    }
+}
+
+// idx2crd: inverse of crd2idx 2-arg. Decomposes a flat index into a coordinate within Shape
+// assuming compact column-major layout.
+template <class Index, class Shape>
+CATLASS_HOST_DEVICE constexpr auto idx2crd(Index const& idx, Shape const& shape)
+{
+    if constexpr (is_tuple_v<Index> && is_tuple_v<Shape>) {
+        static_assert(tuple_size<Index>::value == tuple_size<Shape>::value, "Mismatched Ranks");
+        return transform(idx, shape, [](auto const& i, auto const& s) { return idx2crd(i, s); });
+    } else if constexpr (is_integral_v<Index> && is_tuple_v<Shape>) {
+        return idx2crd(idx, shape, compact_col_major(shape));
+    } else if constexpr (is_integral_v<Index> && is_integral_v<Shape>) {
+        return idx;
+    } else {
+        static_assert(dependent_false<Index>, "Invalid parameters");
     }
 }
 

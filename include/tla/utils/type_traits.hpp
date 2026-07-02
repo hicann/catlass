@@ -102,6 +102,15 @@ struct tuple_size<T, std::void_t<typename std::tuple_size<T>::type>>
 template <class T>
 inline constexpr std::size_t tuple_size_v = tuple_size<T>::value;
 
+template <size_t I, class T, class = void>
+struct tuple_element;
+
+template <size_t I, class T>
+struct tuple_element<I, T, std::void_t<typename std::tuple_element<I, T>::type>> : std::tuple_element<I, T> {};
+
+template <size_t I, class T>
+using tuple_element_t = typename tuple_element<I, T>::type;
+
 template <class... Args>
 inline constexpr bool dependent_false = false;
 

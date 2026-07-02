@@ -21,7 +21,6 @@
 #include "tla/tuple/tuple_algorithms.hpp"
 #include "tla/tuple/tuple_math.hpp"
 #include "tla/tuple/tuple_concepts.hpp"
-#include "tla/tuple/scaled_basis.hpp"
 #include "tla/utils/functional.hpp"
 #include "tla/stride.hpp"
 #include "catlass/layout/layout.hpp"
@@ -859,7 +858,7 @@ CATLASS_HOST_DEVICE constexpr auto coshape(Layout<Shape, Stride, OriginShape> co
 {
     auto m1_shapes = transform_leaf(shape<Is...>(layout), [](auto s) { return s - Int<1>{}; });
     auto abs_strides = transform_leaf(stride<Is...>(layout), abs_fn{});
-    auto co_coord = as_arithmetic_tuple(inner_product(m1_shapes, abs_strides));
+    auto co_coord = inner_product(m1_shapes, abs_strides);
     return transform_leaf(co_coord, [](auto c) { return c + Int<1>{}; });
 }
 

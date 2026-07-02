@@ -41,21 +41,25 @@ struct MakeIntegerSequenceImpl<IntegerSequence<T, Ns...>, T, N, TLA_REQUIRES_T(N
 };
 
 template <typename T, T N>
-using MakeIntegerSequence = typename MakeIntegerSequenceImpl<IntegerSequence<T>, T, N>::type;
+using make_integer_sequence = typename MakeIntegerSequenceImpl<IntegerSequence<T>, T, N>::type;
+
+// integer_sequence
+template <class T, T... Ints>
+using integer_sequence = IntegerSequence<T, Ints...>;
 
 // index_sequence
 template <size_t... Ints>
-using index_sequence = IntegerSequence<size_t, Ints...>;
+using index_sequence = integer_sequence<size_t, Ints...>;
 
 template <size_t N>
-using make_index_sequence = MakeIntegerSequence<size_t, N>;
+using make_index_sequence = make_integer_sequence<size_t, N>;
 
 // int_sequence
 template <int... Ints>
-using int_sequence = IntegerSequence<int, Ints...>;
+using int_sequence = integer_sequence<int, Ints...>;
 
 template <int N>
-using make_int_sequence = MakeIntegerSequence<int, N>;
+using make_int_sequence = make_integer_sequence<int, N>;
 
 // Shortcuts
 template <int... Ints>
@@ -101,6 +105,23 @@ using tuple_seq = make_seq<tuple_size<tla::remove_cvref_t<Tuple>>::value>;
 
 template <class Tuple>
 using tuple_rseq = make_rseq<tuple_size<tla::remove_cvref_t<Tuple>>::value>;
+
+// tuple traits for integer_sequence
+template <class T, T... Ints>
+struct tuple_size<integer_sequence<T, Ints...>> : std::integral_constant<size_t, sizeof...(Ints)> {};
+
+template <size_t I, class T, T... Is>
+struct tuple_element<I, integer_sequence<T, Is...>> {
+    constexpr static T idx[sizeof...(Is)] = {Is...};
+    using type = integral_constant<T, idx[I]>;
+};
+
+template <size_t I, class T, T... Ints>
+CATLASS_HOST_DEVICE constexpr tuple_element_t<I, integer_sequence<T, Ints...>> get(integer_sequence<T, Ints...>)
+{
+    static_assert(I < sizeof...(Ints), "Index out of range");
+    return {};
+}
 
 } // end namespace tla
 
