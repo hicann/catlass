@@ -59,10 +59,10 @@ static void Run(Options const &options)
     using LayoutB = layout::RowMajor;
     using LayoutC = layout::RowMajor;
 
-    LayoutA layoutA{m, k};
+    LayoutA layoutA = LayoutA::MakeLayout<int8_t>(m, k);
     LayoutPrologueB layoutPrologueB{k, n, (n + 1) / 2 * 2};
 
-    LayoutC layoutC{m, n};
+    LayoutC layoutC = LayoutC::MakeLayout<half>(m, n);
 
     size_t lenA = static_cast<size_t>(m) * k;
     size_t lenB = static_cast<size_t>(k) * n;

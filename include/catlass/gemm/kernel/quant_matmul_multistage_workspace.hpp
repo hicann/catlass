@@ -122,11 +122,11 @@ public:
         uint32_t m = args.problemShape.m();
         uint32_t n = args.problemShape.n();
         uint32_t k = args.problemShape.k();
-        LayoutA layoutA{m, k};
-        LayoutB layoutB{k, n};
+        LayoutA layoutA = LayoutA::template MakeLayout<ElementA>(m, k);
+        LayoutB layoutB = LayoutB::template MakeLayout<ElementB>(k, n);
         LayoutScale layoutScale{n};
         LayoutPerTokenScale layoutPerTokenScale{m};
-        LayoutD layoutD{m, n};
+        LayoutD layoutD = LayoutD::template MakeLayout<ElementD>(m, n);
         Params params{args.problemShape,
             args.ptrA, layoutA,
             args.ptrB, layoutB,

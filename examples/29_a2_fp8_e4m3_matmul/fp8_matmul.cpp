@@ -70,11 +70,11 @@ static void Run(const Options &options) {
     using LayoutB = layout::RowMajor;
     using LayoutPrologueB = layout::RowMajor;
     using LayoutC = layout::RowMajor;
-    LayoutA layoutA{m, k};
-    LayoutPrologueA layoutPrologueA{m, k};
-    LayoutB layoutB{k, n};
-    LayoutPrologueB layoutPrologueB{k, n};
-    LayoutC layoutC{m, n};
+    LayoutA layoutA = LayoutA::MakeLayout<ElementA>(m, k);
+    LayoutPrologueA layoutPrologueA = LayoutPrologueA::MakeLayout<ElementPrologueA>(m, k);
+    LayoutB layoutB = LayoutB::MakeLayout<ElementB>(k, n);
+    LayoutPrologueB layoutPrologueB = LayoutPrologueB::MakeLayout<ElementPrologueB>(k, n);
+    LayoutC layoutC = LayoutC::MakeLayout<ElementC>(m, n);
 
     // input init
     half scalar = 1.0;

@@ -1101,8 +1101,8 @@ public:
     static size_t GetWorkspaceSize(const Arguments &args)
     {
         GemmCoord problemShape = args.problemShape;
-        LayoutA layoutA{problemShape.m(), problemShape.k()};
-        LayoutB layoutB{problemShape.k(), problemShape.n()};
+        LayoutA layoutA = LayoutA::template MakeLayout<ElementA>(problemShape.m(), problemShape.k());
+        LayoutB layoutB = LayoutB::template MakeLayout<ElementB>(problemShape.k(), problemShape.n());
         size_t sizeWA = GetWorkspaceLen(GetWorkspaceLayout(layoutA, args.align)) * args.elementSize;
         size_t sizeWB = GetWorkspaceLen(GetWorkspaceLayout(layoutB, args.align)) * args.elementSize;
         return sizeWA + sizeWB;
@@ -1114,9 +1114,9 @@ public:
         uint32_t m = problemShape.m();
         uint32_t n = problemShape.n();
         uint32_t k = problemShape.k();
-        LayoutA layoutA{m, k};
-        LayoutB layoutB{k, n};
-        LayoutC layoutC{m, n};
+        LayoutA layoutA = LayoutA::template MakeLayout<ElementA>(m, k);
+        LayoutB layoutB = LayoutB::template MakeLayout<ElementB>(k, n);
+        LayoutC layoutC = LayoutC::template MakeLayout<ElementC>(m, n);
         size_t sizeWA = GetWorkspaceLen(GetWorkspaceLayout(layoutA, args.align)) * args.elementSize;
         uint8_t *workspaceWB = workspace + sizeWA;
         Params params{problemShape,

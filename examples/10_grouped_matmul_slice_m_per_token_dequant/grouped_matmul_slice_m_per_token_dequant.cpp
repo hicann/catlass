@@ -130,7 +130,7 @@ static void Run(const Options &options) {
 
     using LayoutB = layout::RowMajor;
     layout::RowMajor layoutA{m, k};
-    LayoutB layoutB{k, n};
+    LayoutB layoutB = LayoutB::MakeLayout<int8_t>(k, n);
     layout::VectorLayout layoutScale{n};
     layout::VectorLayout layoutPerTokenScale{m};
     layout::RowMajor layoutD{m, n};

@@ -61,9 +61,9 @@ static void Run(const Options &options) {
     using LayoutPrologueB = layout::RowMajor;
     using LayoutB = layout::RowMajor;
     using LayoutC = layout::RowMajor;
-    LayoutA layoutA{m, k};
-    LayoutPrologueB layoutPrologueB{k, n};
-    LayoutC layoutC{m, n};
+    LayoutA layoutA = LayoutA::MakeLayout<ElementA>(m, k);
+    LayoutPrologueB layoutPrologueB = LayoutPrologueB::MakeLayout<ElementPrologueB>(k, n);
+    LayoutC layoutC = LayoutC::MakeLayout<ElementC>(m, n);
 
     half deqScalar = 1.5;
     half deqZeroPoint = 0.1;

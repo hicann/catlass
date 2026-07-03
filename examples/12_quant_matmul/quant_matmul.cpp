@@ -100,8 +100,8 @@ static void Run(const Options &options) {
 
     using LayoutA = layout::RowMajor;
     using LayoutB = layout::ColumnMajor;
-    LayoutA layoutA{m, k};
-    LayoutB layoutB{k, n};
+    LayoutA layoutA = LayoutA::MakeLayout<int8_t>(m, k);
+    LayoutB layoutB = LayoutB::MakeLayout<int8_t>(k, n);
     layout::VectorLayout layoutScale{n};
     layout::VectorLayout layoutPerTokenScale{m};
     layout::RowMajor layoutD{m, n};

@@ -186,8 +186,8 @@ public:
     static size_t GetWorkspaceSize(const Arguments &args)
     {
         GemmCoord problemShape = args.problemShape;
-        LayoutA layoutA{problemShape.m(), problemShape.k()};
-        LayoutB layoutB{problemShape.k(), problemShape.n()};
+        LayoutA layoutA = LayoutA::template MakeLayout<ElementA>(problemShape.m(), problemShape.k());
+        LayoutB layoutB = LayoutB::template MakeLayout<ElementB>(problemShape.k(), problemShape.n());
         size_t sizeWA = GetWorkspaceLen(GetWorkspaceLayout(layoutA, args.align)) * args.elementSize;
         size_t sizeWB = GetWorkspaceLen(GetWorkspaceLayout(layoutB, args.align)) * args.elementSize;
         size_t sizeWC = args.elementSize * args.problemShape.m() * args.problemShape.n() *
@@ -200,9 +200,9 @@ public:
 
     static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
     {
-        LayoutA layoutA{args.problemShape.m(), args.problemShape.k()};
-        LayoutB layoutB{args.problemShape.k(), args.problemShape.n()};
-        LayoutC layoutC{args.problemShape.m(), args.problemShape.n()};
+        LayoutA layoutA = LayoutA::template MakeLayout<ElementA>(args.problemShape.m(), args.problemShape.k());
+        LayoutB layoutB = LayoutB::template MakeLayout<ElementB>(args.problemShape.k(), args.problemShape.n());
+        LayoutC layoutC = LayoutC::template MakeLayout<ElementC>(args.problemShape.m(), args.problemShape.n());
 
         uint8_t *workspaceWA = nullptr;
         uint8_t *workspaceWB = nullptr;

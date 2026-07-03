@@ -100,9 +100,9 @@ public:
         uint32_t m = problemShape.m();
         uint32_t n = problemShape.n();
         uint32_t k = problemShape.k();
-        LayoutA layoutA{m, k};
-        LayoutB layoutB{k, n};
-        LayoutC layoutC{m, n};
+        LayoutA layoutA = LayoutA::template MakeLayout<ElementA>(m, k);
+        LayoutB layoutB = LayoutB::template MakeLayout<ElementB>(k, n);
+        LayoutC layoutC = LayoutC::template MakeLayout<ElementC>(m, n);
         // 传出
         typename BlockEpilogue::Params epilogueParams{workspace, layoutC, args.ptrD, layoutC};
         Params params{problemShape,

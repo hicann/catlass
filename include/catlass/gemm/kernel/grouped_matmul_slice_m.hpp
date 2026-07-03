@@ -95,9 +95,9 @@ public:
         uint32_t m = args.problemShape.m();
         uint32_t n = args.problemShape.n();
         uint32_t k = args.problemShape.k();
-        LayoutA layoutA{m, k};
-        LayoutB layoutB{k, n};
-        LayoutC layoutC{m, n};
+        LayoutA layoutA = LayoutA::template MakeLayout<ElementA>(m, k);
+        LayoutB layoutB = LayoutB::template MakeLayout<ElementB>(k, n);
+        LayoutC layoutC = LayoutC::template MakeLayout<ElementC>(m, n);
         Params params{args.problemShape, args.problemCount, args.ptrGroupList,
             args.ptrA, layoutA,
             args.ptrB, layoutB,

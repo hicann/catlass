@@ -98,9 +98,9 @@ public:
         int64_t strideA = static_cast<int64_t>(problemShape.m()) * problemShape.k();
         int64_t strideB = static_cast<int64_t>(problemShape.k()) * problemShape.n();
         int64_t strideC = static_cast<int64_t>(problemShape.m()) * problemShape.n();
-        LayoutA layoutA{args.problemShape.m(), args.problemShape.k()};
-        LayoutB layoutB{args.problemShape.k(), args.problemShape.n()};
-        LayoutC layoutC{args.problemShape.m(), args.problemShape.n()};
+        LayoutA layoutA = LayoutA::template MakeLayout<ElementA>(args.problemShape.m(), args.problemShape.k());
+        LayoutB layoutB = LayoutB::template MakeLayout<ElementB>(args.problemShape.k(), args.problemShape.n());
+        LayoutC layoutC = LayoutC::template MakeLayout<ElementC>(args.problemShape.m(), args.problemShape.n());
         Params params{args.batchCount,
             problemShape,
             args.ptrA,

@@ -262,8 +262,8 @@ public:
 
     static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
     {
-        LayoutA layoutA{args.problemShape.m(), args.problemShape.k()};
-        LayoutB layoutB{args.problemShape.k(), args.problemShape.n()};
+        LayoutA layoutA = LayoutA::template MakeLayout<ElementA>(args.problemShape.m(), args.problemShape.k());
+        LayoutB layoutB = LayoutB::template MakeLayout<ElementB>(args.problemShape.k(), args.problemShape.n());
         LayoutWA layoutWA = GetWorkspaceLayout(layoutA, args.align);
         LayoutWB layoutWB = GetWorkspaceLayout(layoutB, args.align);
         Params params{args.problemShape,
