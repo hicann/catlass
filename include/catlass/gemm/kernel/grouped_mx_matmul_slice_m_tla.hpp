@@ -38,8 +38,10 @@ public:
     using L1TileShape = typename BlockMmad::L1TileShape;
     using ElementA = typename BlockMmad::ElementA;
     using LayoutA = typename BlockMmad::LayoutA;
+    using LayoutTagA = typename BlockMmad::TileCopy::LayoutTagA;
     using ElementB = typename BlockMmad::ElementB;
     using LayoutB = typename BlockMmad::LayoutB;
+    using LayoutTagB = typename BlockMmad::TileCopy::LayoutTagB;
     using ElementMxScaleA = typename BlockMmad::TileCopy::ElementMxScaleA;
     using LayoutMxScaleA = typename BlockMmad::TileCopy::LayoutMxScaleA;
     using ElementMxScaleB = typename BlockMmad::TileCopy::ElementMxScaleB;
@@ -114,7 +116,6 @@ public:
 
     static bool CanImplement(const Arguments &args)
     {
-        using LayoutTagA = typename BlockMmad::TileCopy::LayoutTagA;
         return AscendC::Std::is_one_of_v<ElementA, float8_e4m3_t, float8_e5m2_t, float4_e2m1x2_t, float4_e1m2x2_t> &&
                AscendC::Std::is_one_of_v<ElementB, float8_e4m3_t, float8_e5m2_t, float4_e2m1x2_t, float4_e1m2x2_t> && 
                std::is_same_v<ElementMxScaleA, float8_e8m0_t> &&
@@ -238,7 +239,7 @@ public:
 
             totalM += inGroupProblemShape.m();
             if constexpr (AscendC::Std::is_one_of_v<ElementB, float4_e2m1x2_t, float4_e1m2x2_t>) {
-                gmGroupOffsetB += std::is_same_v<LayoutB, layout::ColumnMajor> ? 
+                gmGroupOffsetB += std::is_same_v<LayoutTagB, layout::ColumnMajor> ? 
                     static_cast<int64_t>(CeilDiv<2>(inGroupProblemShape.k())) * inGroupProblemShape.n() : 
                     static_cast<int64_t>(CeilDiv<2>(inGroupProblemShape.n())) * inGroupProblemShape.k();
             }else{
