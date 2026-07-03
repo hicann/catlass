@@ -8,7 +8,6 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#include <iostream>
 #include <gtest/gtest.h>
 #include "stub/ascendc_test_fixture.h"
 #include "stub/kernel_operator.h"
@@ -286,9 +285,6 @@ TEST_P(TileCopyL1ToL0BTlaTest, nZTonZTestDiffStride)
     
     L1ToL0BTensorSrc<Element, LayoutSrc> tensorL1(l1Src, layoutSrc);
     L1ToL0BTensorDst<Element, LayoutDst> tensorL0B(l0bDst, layoutDst);
-
-    std::cout << "tensor L0B orgShape" << tla::get<1>(tensorL0B.originShape()) <<
-        ", shape<1, 0> " << tla::get<1, 0>(tensorL0B.shape()) << std::endl;
 
     TileCopyTla<Arch::AtlasA2, decltype(tensorL1), decltype(tensorL0B)> copyL1ToL0B;
     copyL1ToL0B(tensorL0B, tensorL1);

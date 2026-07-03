@@ -60,6 +60,7 @@ if(DEFINED ENABLE_COVERAGE AND ENABLE_COVERAGE)
 
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     find_program(LCOV lcov REQUIRED)
+    find_program(GCOV gcov REQUIRED)
     find_program(GENHTML genhtml REQUIRED)
 
     set(COVERAGE_OUTPUT_DIR ${CMAKE_BINARY_DIR}/coverage)
@@ -68,13 +69,12 @@ if(DEFINED ENABLE_COVERAGE AND ENABLE_COVERAGE)
 
     add_custom_target(coverage_collect
         COMMAND ${CMAKE_COMMAND} -E make_directory ${COVERAGE_OUTPUT_DIR}
-        COMMAND ${LCOV} --capture --directory ${CMAKE_BINARY_DIR} --output-file ${COVERAGE_INFO_FILE}.raw --gcov-tool /usr/bin/gcov
+        COMMAND ${LCOV} --capture --directory ${CMAKE_BINARY_DIR} --output-file ${COVERAGE_INFO_FILE}.raw --gcov-tool ${GCOV}
         COMMAND ${LCOV} --remove ${COVERAGE_INFO_FILE}.raw
             '*/tests/*'
             '*/3rdparty/*'
-            '*/googletest/*'
             '/usr/*'
-            --output-file ${COVERAGE_INFO_FILE}
+            --output-file ${COVERAGE_INFO_FILE} --ignore-errors unused
         COMMAND ${GENHTML} ${COVERAGE_INFO_FILE} --output-directory ${COVERAGE_HTML_DIR}
         COMMAND ${LCOV} --list ${COVERAGE_INFO_FILE}
         COMMENT "Generating coverage report"

@@ -8,8 +8,6 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
- 
-#include <iostream>
 #include <gtest/gtest.h>
 #include "stub/ascendc_test_fixture.h"
 #include "stub/kernel_operator.h"

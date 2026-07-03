@@ -62,8 +62,9 @@ tests/unittest/catlass/gemm/tile
 
 以下是UT测试组件的构建要求：
 
-- `gcc` >= 7.5, < 13.0
+- `gcc` >= 7.5, <= 12.0
 - `cmake` >= 3.16
+- `lcov` >= 1.16 (可选)
 - `googletest` >= 1.14.0 (可自动拉取)
 
 ### 编译与测试

@@ -9,6 +9,5 @@
  */
 
 #if defined(CATLASS_ARCH) && CATLASS_ARCH == 3510
-#include "catlass/gemm/tile/ascend950/test_copy_l0c_to_ub.cpp"
 #include "catlass/gemm/tile/ascend950/test_copy_l0c_to_ub_tla.cpp"
 #endif
