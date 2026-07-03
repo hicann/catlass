@@ -112,19 +112,6 @@ def _cube_attr_kernel(mem_a: tla.Tensor, mem_b: tla.Tensor, mem_c: tla.Tensor) -
         tla.mmad(acc, lhs, rhs, init_c=False)
 
 
-def test_tla_blockidx_compile_lowers_to_hivm() -> None:
-    mlir_text = """module{
-    func.func @kernel_block.idx() {
-        %0 = tla.arch.block_idx -> index
-        return
-    }
-}
-"""
-
-    output = _run_tla_compile_ir_after_pass(mlir_text, "tla-lower-to-hivm")
-    assert "hivm.hir.get_block_idx" in output
-
-
 def test_cube_tla_compile_emits_minimal_hivm_attrs_after_tla_func_to_hacc() -> None:
     ta, tb, tc = _mmad_tensor_args()
     try:

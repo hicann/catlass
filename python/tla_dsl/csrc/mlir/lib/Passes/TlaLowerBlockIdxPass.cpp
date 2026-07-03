@@ -95,7 +95,7 @@ static FailureOr<func::FuncOp> lowerTlaFuncBoundaryToHivm(::tla::FuncOp op) {
     return failure();
   }
   if (funcType.getNumResults() != 0) {
-    op.emitError() << "tla-lower-to-hivm does not yet convert function results";
+    op.emitError() << "tla-lower-block-idx does not yet convert function results";
     return failure();
   }
 
@@ -163,12 +163,12 @@ static LogicalResult convertFuncFuncBoundaryToHivm(func::FuncOp funcOp) {
   return success();
 }
 
-class TlaLowerToHivmPass : public PassWrapper<TlaLowerToHivmPass, OperationPass<ModuleOp>> {
+class TlaLowerBlockIdxPass : public PassWrapper<TlaLowerBlockIdxPass, OperationPass<ModuleOp>> {
 public:
-  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TlaLowerToHivmPass)
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TlaLowerBlockIdxPass)
 
-  StringRef getArgument() const override { return "tla-lower-to-hivm"; }
-  StringRef getName() const override { return "TlaLowerToHivmPass"; }
+  StringRef getArgument() const override { return "tla-lower-block-idx"; }
+  StringRef getName() const override { return "TlaLowerBlockIdxPass"; }
   StringRef getDescription() const override {
     return "Lower Tla function boundaries and block ops to HIVM-compatible IR.";
   }
@@ -217,8 +217,8 @@ public:
 
 } // namespace
 
-std::unique_ptr<Pass> createTlaLowerToHivmPass() { return std::make_unique<TlaLowerToHivmPass>(); }
+std::unique_ptr<Pass> createTlaLowerBlockIdxPass() { return std::make_unique<TlaLowerBlockIdxPass>(); }
 
-void registerTlaLowerToHivmPass() { PassRegistration<TlaLowerToHivmPass>(); }
+void registerTlaLowerBlockIdxPass() { PassRegistration<TlaLowerBlockIdxPass>(); }
 
 } // namespace tla

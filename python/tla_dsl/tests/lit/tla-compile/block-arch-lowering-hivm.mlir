@@ -1,4 +1,4 @@
-// RUN: if %tla_compile %s --print-pipeline=mlir 2>&1 | grep -q tla-lower-to-hivm; then %tla_compile %s -o - | %filecheck %s --check-prefix=HIVM; else echo "tla-lower-to-hivm unavailable" | %filecheck %s --check-prefix=NOHIVM; fi
+// RUN: if %tla_compile %s --print-pipeline=mlir 2>&1 | grep -q tla-lower-block-idx; then %tla_compile %s -o - | %filecheck %s --check-prefix=HIVM; else echo "tla-lower-block-idx unavailable" | %filecheck %s --check-prefix=NOHIVM; fi
 
 module {
   func.func @kernel_block_arch_ops(%out: memref<1xindex>) {
@@ -23,4 +23,4 @@ module {
 // HIVM-NOT: tla.arch.block_dim
 // HIVM: return
 
-// NOHIVM: tla-lower-to-hivm unavailable
+// NOHIVM: tla-lower-block-idx unavailable

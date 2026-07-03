@@ -34,8 +34,8 @@ def test_tla_sync_to_hivm_lowers_pipe_sync_to_hivm_ops() -> None:
         text=True,
         env=env,
     )
-    if "tla-sync-to-hivm" not in (pipeline.stdout + pipeline.stderr):
-        pytest.skip("TlaCompile pipeline does not include tla-sync-to-hivm")
+    if "tla-lower-flag-barrier-to-hivm" not in (pipeline.stdout + pipeline.stderr):
+        pytest.skip("TlaCompile pipeline does not include tla-lower-flag-barrier-to-hivm")
 
     mlir_text = """module {
   tla.func @flags() {
@@ -73,8 +73,8 @@ def test_tla_sync_to_hivm_allocates_distinct_event_ids_for_same_pipe_pair() -> N
         text=True,
         env=env,
     )
-    if "tla-sync-to-hivm" not in (pipeline.stdout + pipeline.stderr):
-        pytest.skip("TlaCompile pipeline does not include tla-sync-to-hivm")
+    if "tla-lower-flag-barrier-to-hivm" not in (pipeline.stdout + pipeline.stderr):
+        pytest.skip("TlaCompile pipeline does not include tla-lower-flag-barrier-to-hivm")
 
     mlir_text = """module {
   tla.func @flags() {
@@ -127,8 +127,8 @@ def test_tla_sync_to_hivm_rejects_unsupported_cross_flag_mode() -> None:
         text=True,
         env=env,
     )
-    if "tla-sync-to-hivm" not in (pipeline.stdout + pipeline.stderr):
-        pytest.skip("TlaCompile pipeline does not include tla-sync-to-hivm")
+    if "tla-lower-flag-barrier-to-hivm" not in (pipeline.stdout + pipeline.stderr):
+        pytest.skip("TlaCompile pipeline does not include tla-lower-flag-barrier-to-hivm")
 
     mlir_text = """module {
   tla.func @flags() {

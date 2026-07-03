@@ -15,9 +15,9 @@ void registerTlaPasses() {
   registerTlaFuncToHaccPass();
   registerTlaSplitMixedFuncPass();
   registerTlaInferFuncCoreTypePass();
-  registerTlaLowerToHivmPass();
+  registerTlaLowerBlockIdxPass();
   registerConvertTlaToVectorPass();
-  registerTlaSyncToHivmPass();
+  registerTlaLowerFlagBarrierToHivmPass();
   registerTlaAllocPtrToHivmPointerCastPass();
   registerTlaLowerMutexToStdPass();
   registerTlaLowerToStdPass();
@@ -35,10 +35,10 @@ void buildTlaPipeline(OpPassManager &pm) {
   pm.addPass(createTlaInferFuncCoreTypePass());
   pm.addPass(createTlaFuncToHaccPass());
   pm.addPass(createTlaSplitMixedFuncPass());
-  pm.addPass(createTlaLowerToHivmPass());
-  pm.addPass(createTlaSyncToHivmPass());
   pm.addPass(createTlaAllocPtrToHivmPointerCastPass());
   pm.addPass(createConvertTlaToVectorPass());
+  pm.addPass(createTlaLowerBlockIdxPass());
+  pm.addPass(createTlaLowerFlagBarrierToHivmPass());
   pm.addPass(createTlaLowerMutexToStdPass());
   pm.addPass(createTlaLowerToStdPass());
   pm.addPass(createTlaPrologueEpiloguePass());

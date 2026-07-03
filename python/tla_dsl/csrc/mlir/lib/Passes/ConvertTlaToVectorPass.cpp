@@ -1730,20 +1730,17 @@ static void populateTlaToVectorPatterns(RewritePatternSet &patterns, ModuleOp mo
 
 // Per-core identity queries (block_idx / block_dim / sub_block_idx) must be
 // computed outside a tla.vec.func and passed in; emitting them inside the vector
-// region produces an op the vector backend cannot codegen. tla-lower-to-hivm runs
-// before this pass, so an in-region query already appears as its lowered hivm form
-// (block_idx -> hivm.get_block_idx, block_dim -> hivm.get_block_num,
-// sub_block_idx -> hivm.get_sub_block_idx); match both spellings.
+// region produces an op the vector backend cannot codegen. 
 static bool isIllegalVecFuncArchOp(Operation *op, StringRef &dslName) {
-  if (isa<::tla::BlockIdxOp, hivm::GetBlockIdxOp>(op)) {
+  if (isa<::tla::BlockIdxOp>(op)) {
     dslName = "tla.arch.block_idx";
     return true;
   }
-  if (isa<::tla::BlockDimOp, hivm::GetBlockNumOp>(op)) {
+  if (isa<::tla::BlockDimOp>(op)) {
     dslName = "tla.arch.block_dim";
     return true;
   }
-  if (isa<::tla::SubBlockIdxOp, hivm::GetSubBlockIdxOp>(op)) {
+  if (isa<::tla::SubBlockIdxOp>(op)) {
     dslName = "tla.arch.sub_block_idx";
     return true;
   }

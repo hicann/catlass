@@ -1,4 +1,4 @@
-// RUN: if %tla_compile %s --print-pipeline=mlir 2>&1 | grep -q tla-sync-to-hivm; then %tla_compile %s -o - | %filecheck %s --check-prefix=HIVM; else %tla_compile %s -o - | %filecheck %s --check-prefix=STD; fi
+// RUN: if %tla_compile %s --print-pipeline=mlir 2>&1 | grep -q tla-lower-flag-barrier-to-hivm; then %tla_compile %s -o - | %filecheck %s --check-prefix=HIVM; else %tla_compile %s -o - | %filecheck %s --check-prefix=STD; fi
 
 module {
   tla.func @pipe_barrier() {

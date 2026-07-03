@@ -3,11 +3,11 @@ add_library(TlaPasses
   TlaFuncToHaccPass.cpp
   TlaSplitMixedFuncPass.cpp
   TlaInferFuncCoreTypePass.cpp
-  TlaLowerToHivmPass.cpp
+  TlaLowerBlockIdxPass.cpp
   TlaAllocPtrToHivmPointerCastPass.cpp
   TlaLowerMutexToStdPass.cpp
   TlaLowerToStdPass.cpp
-  TlaSyncToHivmPass.cpp
+  TlaLowerFlagBarrierToHivmPass.cpp
   TlaPrologueEpiloguePass.cpp
   ConvertTlaToVectorPass.cpp
   ../Dialect/Tla/IR/TlaDialect.cpp

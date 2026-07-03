@@ -6,7 +6,7 @@ namespace {
 /// HIVM hardware exposes 8 event ids (0–7) per pipe pair for flag sync lowering.
 static constexpr int64_t kMaxHivmPipePairEventIndex = 7;
 
-class TlaSyncToHivmPass : public PassWrapper<TlaSyncToHivmPass, OperationPass<ModuleOp>> {
+class TlaLowerFlagBarrierToHivmPass : public PassWrapper<TlaLowerFlagBarrierToHivmPass, OperationPass<ModuleOp>> {
 private:
   struct PipePair {
     int32_t src;
@@ -78,6 +78,10 @@ private:
   }
 
   static FailureOr<hivm::TCoreType> inferCrossCoreFlagCore(Operation *op) {
+    // Derive the core from the enclosing function's hivm.func_core_type attribute
+    // (set by tla-infer-func-core-type and carried onto the AIC/AIV fragments by
+    // tla-split-mixed-func). This pass runs after convert-tla-to-vector, so the
+    // frontend tla.cube/tla.vector regions no longer exist to inspect.
     if (auto funcOp = op->getParentOfType<func::FuncOp>()) {
       auto coreType =
           funcOp->getAttrOfType<hivm::TFuncCoreTypeAttr>(hivm::TFuncCoreTypeAttr::name);
@@ -86,15 +90,9 @@ private:
       if (coreType && coreType.getFuncCoreType() == hivm::TFuncCoreType::AIV)
         return hivm::TCoreType::VECTOR;
     }
-
-    for (Operation *parent = op->getParentOp(); parent; parent = parent->getParentOp()) {
-      if (isa<::tla::CubeOp>(parent))
-        return hivm::TCoreType::CUBE;
-      if (isa<::tla::VectorOp, ::tla::VecFuncOp>(parent))
-        return hivm::TCoreType::VECTOR;
-    }
     op->emitError() << "expected " << op->getName().getStringRef()
-                    << " to be inside tla.cube/tla.vector or a split mixed function";
+                    << " to be in a function with an AIC/AIV hivm.func_core_type "
+                       "attribute (set by tla-infer-func-core-type)";
     return failure();
   }
 
@@ -268,10 +266,10 @@ private:
   }
 
 public:
-  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TlaSyncToHivmPass)
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TlaLowerFlagBarrierToHivmPass)
 
-  StringRef getArgument() const override { return "tla-sync-to-hivm"; }
-  StringRef getName() const override { return "TlaSyncToHivmPass"; }
+  StringRef getArgument() const override { return "tla-lower-flag-barrier-to-hivm"; }
+  StringRef getName() const override { return "TlaLowerFlagBarrierToHivmPass"; }
   StringRef getDescription() const override {
     return "Lower Tla pipe synchronization flags to HIVM synchronization ops.";
   }
@@ -501,8 +499,8 @@ public:
 
 } // namespace
 
-std::unique_ptr<Pass> createTlaSyncToHivmPass() { return std::make_unique<TlaSyncToHivmPass>(); }
+std::unique_ptr<Pass> createTlaLowerFlagBarrierToHivmPass() { return std::make_unique<TlaLowerFlagBarrierToHivmPass>(); }
 
-void registerTlaSyncToHivmPass() { PassRegistration<TlaSyncToHivmPass>(); }
+void registerTlaLowerFlagBarrierToHivmPass() { PassRegistration<TlaLowerFlagBarrierToHivmPass>(); }
 
 } // namespace tla
