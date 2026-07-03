@@ -12,7 +12,8 @@
 # End-to-end validation for python/tla_dsl/examples/end_to_end/basic_mmad (basic_matmul.py),
 # python/tla_dsl/examples/end_to_end/basic_vadd (basic_vadd.py),
 # python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed.py), and
-# python/tla_dsl/examples/end_to_end/vector_ops (masked_binary.py).
+# python/tla_dsl/examples/end_to_end/vector_ops (binary_op.py, masked_binary.py,
+# reduction_ops.py).
 #
 # Fixed toolchain paths relative to WORKSPACE_ROOT (= parent of catlass repo):
 #   CANN:             Ascend/9.1.0-beta.1/ascend-toolkit/set_env.sh
@@ -45,6 +46,8 @@ BASIC_MMAD_REL="examples/end_to_end/basic_mmad/basic_matmul.py"
 BASIC_VADD_REL="examples/end_to_end/basic_vadd/basic_vadd.py"
 BASIC_MIXED_REL="examples/end_to_end/basic_mixed/basic_mixed.py"
 MASKED_BINARY_REL="examples/end_to_end/vector_ops/masked_binary.py"
+BINARY_OP_REL="examples/end_to_end/vector_ops/binary_op.py"
+REDUCTION_OPS_REL="examples/end_to_end/vector_ops/reduction_ops.py"
 
 _ascendnpu_ir_dev_is_prebuilt() {
     local root="$1"
@@ -62,7 +65,9 @@ Run end-to-end validation for:
   - basic_mmad (basic_matmul.py --run --all-layouts --all-mmad-dtypes)
   - basic_vadd (basic_vadd.py --run --all-dtypes, plus mutex variants)
   - basic_mixed (basic_mixed.py --run)
+  - binary_op (binary_op.py <op> --run --all-dtypes for add/sub/mul/div/max/min)
   - masked_binary (masked_binary.py masked_binary --run --all-dtypes)
+  - reduction_ops (reduction_ops.py <op> --run for add/max/min)
 Runs basic_mmad default MNK plus m=1, n=2, k=3.
 Activates conda env "${CONDA_ENV}", sources CANN set_env.sh, exports AscendNPU-IR-Dev MLIR/LLVM
 env, then builds (optional) and runs the test.
@@ -248,6 +253,14 @@ if [[ ! -f "${TLA_DSL_DIR}/${MASKED_BINARY_REL}" ]]; then
     echo "error: missing ${MASKED_BINARY_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
+if [[ ! -f "${TLA_DSL_DIR}/${BINARY_OP_REL}" ]]; then
+    echo "error: missing ${BINARY_OP_REL} under ${TLA_DSL_DIR}" >&2
+    exit 1
+fi
+if [[ ! -f "${TLA_DSL_DIR}/${REDUCTION_OPS_REL}" ]]; then
+    echo "error: missing ${REDUCTION_OPS_REL} under ${TLA_DSL_DIR}" >&2
+    exit 1
+fi
 
 _run_basic_mmad_case() {
     local label="$1"
@@ -297,5 +310,31 @@ _run_masked_binary_case() {
 }
 
 _run_masked_binary_case
+
+_run_binary_op_case() {
+    local op="$1"
+    echo "==> Running binary_op validation [${op} all dtypes]: ${op} --run --all-dtypes --device ${DEVICE_ID}"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${BINARY_OP_REL}" "${op}" --run --all-dtypes --device "${DEVICE_ID}"
+    )
+}
+
+for _binary_op in add sub mul div max min; do
+    _run_binary_op_case "${_binary_op}"
+done
+
+_run_reduction_ops_case() {
+    local op="$1"
+    echo "==> Running reduction_ops validation [${op} f32]: ${op} --run --device ${DEVICE_ID}"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${REDUCTION_OPS_REL}" "${op}" --run --device "${DEVICE_ID}"
+    )
+}
+
+for _reduce_op in add max min; do
+    _run_reduction_ops_case "${_reduce_op}"
+done
 
 echo "==> run_dsl_test.sh finished successfully"

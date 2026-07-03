@@ -871,6 +871,20 @@ def Tla_DivsOp : Tla_VectorScalarBinaryOp<"divs",
     "Vector-scalar divide for tensor fragments",
     "Element-wise divide of tensor fragments / vector tiles by a scalar.">;
 
+def Tla_ReduceOp : Tla_Op<"reduce", [Pure]> {
+  let summary = "Vector reduction for tensor fragments";
+  let description = [{
+    Reduce a register-resident tensor fragment to a one-lane tensor fragment.
+  }];
+  let arguments = (ins Tla_TensorType:$operand, Optional<Tla_MaskType>:$mask,
+                       StrAttr:$kind);
+  let results = (outs Tla_TensorType:$result);
+  let assemblyFormat = [{
+    $operand (`mask` $mask^)? attr-dict `:`
+    type($operand) (`mask` qualified(type($mask))^)? `->` type($result)
+  }];
+}
+
 def Tla_VectorOp : Tla_Op<"vector", [NoTerminator, SingleBlock]> {
   let summary = "Vector region";
   let description = [{

@@ -80,6 +80,16 @@ static FailureOr<int64_t> getVectorLaneCount(Type elementType) {
   return kVectorBytes / *elementBytes;
 }
 
+static hivmave::VFPgeOp createAvePgeMask(OpBuilder &b, Location loc, VectorType maskType,
+                                         hivmave::PgePattern pattern) {
+  return b.create<hivmave::VFPgeOp>(loc, maskType, pattern);
+}
+
+static hivmave::VFPltOp createAvePltMask(OpBuilder &b, Location loc, VectorType maskType,
+                                         Value trueShape) {
+  return b.create<hivmave::VFPltOp>(loc, maskType, b.getIndexType(), trueShape);
+}
+
 static FailureOr<int64_t> getVectorLanesForMemref(MemRefType type) {
   if (type.getRank() != 1 && type.getRank() != 2)
     return failure();
@@ -621,6 +631,70 @@ static std::string buildUniqueVectorHelperName(ModuleOp module, int &nextVectorR
 enum class VectorBinaryKind { Add, Sub, Mul, Div, Max, Min };
 enum class VectorRhsKind { Vector, Scalar };
 
+static FailureOr<hivmave::CombiningKind>
+getAveReductionCombiningKind(::tla::ReduceOp reduceOp, Type elementType) {
+  auto kindAttr = reduceOp->getAttrOfType<StringAttr>("kind");
+  if (!kindAttr)
+    return reduceOp.emitError("tla.reduce requires string kind attribute"), failure();
+  StringRef kind = kindAttr.getValue();
+  if (kind == "add")
+    return hivmave::CombiningKind::ADD;
+  if (kind == "max") {
+    if (auto intType = dyn_cast<IntegerType>(elementType))
+      return intType.getSignedness() == IntegerType::Unsigned ? hivmave::CombiningKind::UMAX
+                                                              : hivmave::CombiningKind::MAX;
+    if (isa<FloatType>(elementType))
+      return hivmave::CombiningKind::MAX;
+  }
+  if (kind == "min") {
+    if (auto intType = dyn_cast<IntegerType>(elementType))
+      return intType.getSignedness() == IntegerType::Unsigned ? hivmave::CombiningKind::UMIN
+                                                              : hivmave::CombiningKind::MIN;
+    if (isa<FloatType>(elementType))
+      return hivmave::CombiningKind::MIN;
+  }
+  return reduceOp.emitError()
+             << "tla.reduce supports only add, max, and min reductions, got \""
+             << kind << "\"",
+         failure();
+}
+
+static bool isSupportedVectorReductionElementType(Type elementType) {
+  if (isa<Float16Type, Float32Type>(elementType))
+    return true;
+  auto intType = dyn_cast<IntegerType>(elementType);
+  if (!intType)
+    return false;
+  switch (intType.getWidth()) {
+  case 16:
+  case 32:
+    return true;
+  default:
+    return false;
+  }
+}
+
+static FailureOr<int64_t> getTlaTensorValidLaneCount(Type tensorType) {
+  auto info = parseTensorInfo(tensorType);
+  if (failed(info))
+    return failure();
+  return getStaticNumElements(info->originShape);
+}
+
+static LogicalResult validateVectorReduction(::tla::ReduceOp reduceOp, Type elementType) {
+  if (!isSupportedVectorReductionElementType(elementType))
+    return reduceOp.emitError()
+           << "tla.reduce unsupported reduction element type " << elementType;
+  auto resultValidLanes = getTlaTensorValidLaneCount(reduceOp->getResult(0).getType());
+  if (failed(resultValidLanes))
+    return reduceOp.emitError("failed to determine tla.reduce result valid lanes");
+  if (*resultValidLanes != 1)
+    return reduceOp.emitError()
+           << "expected tla.reduce result to have one valid lane, got "
+           << *resultValidLanes;
+  return success();
+}
+
 // The lhs/rhs/mask operands of a tla binary op.
 struct TlaBinaryOperands {
   Value lhs;
@@ -732,9 +806,10 @@ static hivmave::MaskWidth maskWidthForElement(Type elementType) {
 }
 
 // True for the tla ops that produce a vector compute result inside a vec.func
-// region: the element-wise binary ops and the where/select op.
+// region: element-wise binary ops, where/select, and reductions.
 static bool isVectorComputeOp(Operation *op) {
-  return getAnyVectorOperationInfo(op).has_value() || isa_and_nonnull<::tla::WhereOp>(op);
+  return getAnyVectorOperationInfo(op).has_value() ||
+         isa_and_nonnull<::tla::WhereOp>(op) || isa_and_nonnull<::tla::ReduceOp>(op);
 }
 
 // Build the AVE vector op for a tla binary op. The mask predicates active lanes.
@@ -764,6 +839,39 @@ static Value createVectorBinaryResult(OpBuilder &b, Location loc, VectorBinaryKi
     return b.create<hivmave::VFMinOp>(loc, vecType, lhs, rhs, mask, Value()).getResult();
   }
   return nullptr;
+}
+
+static FailureOr<Value> createVectorReductionResult(OpBuilder &b, Location loc,
+                                                    ::tla::ReduceOp reduceOp,
+                                                    Type elementType,
+                                                    VectorType vecType,
+                                                    Value operand,
+                                                    Value explicitMask) {
+  if (failed(validateVectorReduction(reduceOp, elementType)))
+    return failure();
+  auto aveKind = getAveReductionCombiningKind(reduceOp, elementType);
+  if (failed(aveKind))
+    return failure();
+  auto validLanes = getTlaTensorValidLaneCount(reduceOp.getOperand().getType());
+  if (failed(validLanes))
+    return reduceOp.emitError("failed to determine tla.reduce operand valid lanes"),
+           failure();
+  auto maskType = VectorType::get(vecType.getShape(), b.getI1Type());
+  Value activeMask = explicitMask;
+  if (!activeMask) {
+    Value trueShape = b.create<arith::ConstantIndexOp>(loc, *validLanes);
+    activeMask = createAvePltMask(b, loc, maskType, trueShape).getRes();
+  }
+
+  Value reducedVec =
+      b.create<hivmave::ReductionOp>(loc, vecType, *aveKind, operand, activeMask).getResult();
+  // ave.hir.reduction preserves the input vector shape and places the reduced
+  // value in lane 0; TLA reductions expose that single valid lane as vector<1xT>.
+  auto resultType = VectorType::get({1}, elementType);
+  auto resultMaskType = VectorType::get({1}, b.getI1Type());
+  Value resultMask =
+      createAvePgeMask(b, loc, resultMaskType, hivmave::PgePattern::ALL).getRes();
+  return b.create<hivmave::VFBroadcastVectorOp>(loc, resultType, reducedVec, resultMask, true).getRes();
 }
 
 // Shared state while re-creating a tla.vec.func body inside the helper function.
@@ -949,7 +1057,7 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
       if (!mask)
         return failure();
     } else {
-      mask = b.create<hivmave::VFPgeOp>(loc, ctx.maskVecType, hivmave::PgePattern::ALL);
+      mask = createAvePgeMask(b, loc, ctx.maskVecType, hivmave::PgePattern::ALL);
     }
     Value result = createVectorBinaryResult(b, loc, info->kind, ctx.elementType, ctx.vecType,
                                             lhs, rhs, mask);
@@ -975,7 +1083,7 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
       if (!mask)
         return failure();
     } else {
-      mask = b.create<hivmave::VFPgeOp>(loc, ctx.maskVecType, hivmave::PgePattern::ALL);
+      mask = createAvePgeMask(b, loc, ctx.maskVecType, hivmave::PgePattern::ALL);
     }
     auto result = createVectorScalarBinaryResult(b, loc, *info, ctx, lhs, *scalarOr, mask);
     if (failed(result))
@@ -994,6 +1102,26 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
       return failure();
     valueMap[whereOp.getResult()] =
         b.create<hivmave::VFSelectOp>(loc, ctx.vecType, mask, x, y);
+    return success();
+  }
+
+  if (auto reduceOp = dyn_cast<::tla::ReduceOp>(op)) {
+    if (op.getNumResults() != 1)
+      return failure();
+    Value operand = valueMap.lookup(reduceOp->getOperand(0));
+    if (!operand)
+      return failure();
+    Value mask;
+    if (reduceOp.getMask()) {
+      mask = valueMap.lookup(reduceOp.getMask());
+      if (!mask)
+        return failure();
+    }
+    auto result = createVectorReductionResult(b, loc, reduceOp, ctx.elementType,
+                                              ctx.vecType, operand, mask);
+    if (failed(result))
+      return failure();
+    valueMap[op.getResult(0)] = *result;
     return success();
   }
 
@@ -1016,7 +1144,7 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
                  << " lanes wide",
              failure();
     valueMap[maskOp.getResult()] =
-        b.create<hivmave::VFPgeOp>(loc, ctx.maskVecType, *pattern);
+        createAvePgeMask(b, loc, ctx.maskVecType, *pattern);
     return success();
   }
 
@@ -1039,8 +1167,7 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
                  << laneCount << " lanes, but the vector region is " << ctx.lanes
                  << " lanes wide",
              failure();
-    auto plt = b.create<hivmave::VFPltOp>(loc, ctx.maskVecType, b.getIndexType(),
-                                          trueShape);
+    auto plt = createAvePltMask(b, loc, ctx.maskVecType, trueShape);
     valueMap[updateMaskOp.getMask()] = plt.getRes();
     // new_true_shape = true_shape - lanes, which is exactly what plt computes.
     // We materialize it with index arithmetic rather than consuming plt's second
@@ -1064,9 +1191,8 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
       if (!mask)
         return failure();
     } else {
-      mask = b.create<hivmave::VFPgeOp>(loc, ctx.maskVecType, hivmave::PgePattern::ALL);
+      mask = createAvePgeMask(b, loc, ctx.maskVecType, hivmave::PgePattern::ALL);
     }
-    // Use the dedicated AVE masked store.
     b.create<hivmave::VFMaskedStoreOp>(loc, dest, ValueRange{zero}, mask, source);
     return success();
   }
@@ -1394,6 +1520,11 @@ public:
             !producedValues.contains(whereOp.getY()))
           return rewriter.notifyMatchFailure(
               vecFuncOp, "expected tla.where operand from tla.load or prior compute op");
+      } else if (auto reduceOp = dyn_cast<::tla::ReduceOp>(computeOp)) {
+        Value operand = reduceOp.getOperand();
+        if (!producedValues.contains(operand))
+          return rewriter.notifyMatchFailure(
+              vecFuncOp, "expected tla.reduce operand from tla.load or prior compute op");
       } else {
         return rewriter.notifyMatchFailure(vecFuncOp, "unexpected tla compute op");
       }

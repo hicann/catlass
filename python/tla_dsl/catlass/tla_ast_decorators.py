@@ -769,16 +769,17 @@ def _internal_frontend_if_expr(
         )
         false_spec = false_pytree_def[0][0]
         false_leaf_names = false_pytree_def[1]
+        result_types = [value.type for value in true_mlir]
+        result_type_names = [str(value_type) for value_type in result_types]
         _validate_if_expr_branch(
             false_mlir,
             false_spec,
             false_leaf_names,
             result_spec,
-            true_mlir,
+            result_type_names,
             true_leaf_names,
             "else",
         )
-        result_types = [value.type for value in true_mlir]
     execution_region.operation.erase()
 
     def create_if_op(_ir_values: list[Any]) -> Any:
@@ -803,7 +804,7 @@ def _internal_frontend_if_expr(
             true_spec,
             true_names,
             result_spec,
-            true_mlir,
+            result_type_names,
             true_leaf_names,
             "then",
         )
@@ -828,7 +829,7 @@ def _internal_frontend_if_expr(
             false_spec,
             false_names,
             result_spec,
-            true_mlir,
+            result_type_names,
             true_leaf_names,
             "else",
         )
@@ -836,7 +837,7 @@ def _internal_frontend_if_expr(
 
     return ScfGenerator().scf_execute_dynamic(
         op_type_name="if",
-        mix_iter_args=[true_probe],
+        mix_iter_args=[None],
         full_write_args_count=1,
         mix_iter_arg_names=["if expression"],
         create_op_func=create_if_op,
@@ -852,7 +853,7 @@ def _validate_if_expr_branch(
     actual_spec: tree_utils.FrontendIfTreeSpec,
     actual_names: list[str],
     expected_spec: tree_utils.FrontendIfTreeSpec,
-    expected_values: list[Any],
+    expected_type_names: list[str],
     expected_names: list[str],
     branch_name: str,
 ) -> None:
@@ -860,18 +861,20 @@ def _validate_if_expr_branch(
         raise TlaCoreAPIError(
             f"Conditional expression {branch_name} branch has incompatible structure"
         )
-    if len(actual_values) != len(expected_values):
+    if len(actual_values) != len(expected_type_names):
         raise TlaCoreAPIError(
             f"Conditional expression {branch_name} branch returned "
-            f"{len(actual_values)} value(s), expected {len(expected_values)}"
+            f"{len(actual_values)} value(s), expected {len(expected_type_names)}"
         )
-    for index, (actual, expected) in enumerate(zip(actual_values, expected_values)):
-        if str(actual.type) != str(expected.type):
+    for index, (actual, expected_type_name) in enumerate(
+        zip(actual_values, expected_type_names)
+    ):
+        if str(actual.type) != expected_type_name:
             leaf_name = actual_names[index] if index < len(actual_names) else None
             if leaf_name is None and index < len(expected_names):
                 leaf_name = expected_names[index]
             suffix = f" for {leaf_name!r}" if leaf_name is not None else ""
             raise TlaCoreAPIError(
                 f"Conditional expression {branch_name} branch result{suffix} has "
-                f"type {actual.type}, expected {expected.type}"
+                f"type {actual.type}, expected {expected_type_name}"
             )

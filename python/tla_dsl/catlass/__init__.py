@@ -73,6 +73,7 @@ fp16 = "f16"
 bf16 = "bf16"
 fp32 = "f32"
 params = _params
+ReductionOp = core.ReductionOp
 
 
 __all__ = [
@@ -136,6 +137,7 @@ __all__ = [
     "fp16",
     "bf16",
     "fp32",
+    "ReductionOp",
     *getattr(_runtime, "_CORE_API_EXPORTS", []),
 ]
 

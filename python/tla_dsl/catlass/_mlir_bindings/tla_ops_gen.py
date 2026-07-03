@@ -1565,6 +1565,53 @@ def recast_ptr(ptr, src, *, loc=None, ip=None) -> _ods_ir.Value:
   return _get_op_result_or_op_results(RecastPtrOp(ptr=ptr, src=src, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
+class ReduceOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.reduce"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, operand, kind, *, mask=None, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(operand))
+    if mask is not None: operands.append(_get_op_result_or_value(mask))
+    _ods_context = _ods_get_default_loc_context(loc)
+    attributes["kind"] = (kind if (
+    isinstance(kind, _ods_ir.Attribute) or
+    not _ods_ir.AttrBuilder.contains('StrAttr')) else
+      _ods_ir.AttrBuilder.get('StrAttr')(kind, context=_ods_context))
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def operand(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def mask(self):
+    return None if len(self.operation.operands) < 2 else self.operation.operands[1]
+
+  @builtins.property
+  def kind(self):
+    return self.operation.attributes["kind"]
+
+  @kind.setter
+  def kind(self, value):
+    if value is None:
+      raise ValueError("'None' not allowed as value for mandatory attributes")
+    self.operation.attributes["kind"] = value
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def reduce(result, operand, kind, *, mask=None, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(ReduceOp(result=result, operand=operand, kind=kind, mask=mask, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
 class ReturnOp(_ods_ir.OpView):
   OPERATION_NAME = "tla.return"
 

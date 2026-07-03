@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import builtins as _builtins
 import math
+from enum import Enum
 from itertools import chain
 from typing import Any, Callable, Sequence, TypeAlias
 
@@ -75,6 +76,35 @@ _PIPE_VALUES = {
 }
 _CROSS_MODE_VALUES = {"npu", "vectors_core", "single_core"}
 _MISSING = object()
+
+
+class ReductionOp(Enum):
+    ADD = "add"
+    MAX = "max"
+    MIN = "min"
+
+
+_SUPPORTED_REDUCTION_ELEMENT_TYPES = frozenset(
+    {
+        "f16",
+        "f32",
+        "i16",
+        "i32",
+        "u16",
+        "u32",
+    }
+)
+
+
+def _check_reduction_element_type_supported(op_name: str, element_type: str) -> None:
+    if element_type in _SUPPORTED_REDUCTION_ELEMENT_TYPES:
+        return
+    supported = ", ".join(sorted(_SUPPORTED_REDUCTION_ELEMENT_TYPES))
+    _op_error(
+        op_name,
+        f"unsupported reduction element type {element_type}; "
+        f"supported element types are {supported}",
+    )
 
 
 class _Shape:
@@ -321,6 +351,25 @@ class VectorSSA:
 
     def __truediv__(self, other: Any) -> "VectorSSA":
         return div(self, other)
+
+    @dsl_user_op
+    def reduce(
+        self,
+        kind: ReductionOp,
+        *,
+        mask: Any | None = None,
+        init_value: Any | None = None,
+        reduction_profile: Any | None = None,
+        loc: mlir_ir.Location | None = None,
+    ) -> Any:
+        return _emit_vector_reduce(
+            self,
+            kind,
+            mask=mask,
+            init_value=init_value,
+            reduction_profile=reduction_profile,
+            loc=loc,
+        )
 
 
 class MaskSSA:
@@ -3433,6 +3482,65 @@ def div(
     )
 
 
+def _reduction_result_descriptor(
+    operand_value: mlir_ir.Value,
+) -> TlaTensorTypeDescriptor:
+    operand_desc = _tla_tensor_type_for_mlir_value(operand_value)
+    return TlaTensorTypeDescriptor(
+        layout=TlaLayoutDescriptor(
+            shape=TlaIndexTreeType("shape", 1),
+            stride=TlaIndexTreeType("stride", 1),
+            origin_shape=TlaIndexTreeType("shape", 1),
+            layout_tag=operand_desc.layout_tag,
+        ),
+        coord=0,
+        element_type=operand_desc.element_type,
+        addrspace=operand_desc.addrspace,
+        ptr_alignment=operand_desc.ptr_alignment,
+    )
+
+
+def _emit_vector_reduce(
+    operand: VectorSSA,
+    kind: ReductionOp,
+    *,
+    mask: MaskSSA | None = None,
+    init_value: Any | None = None,
+    reduction_profile: Any | None = None,
+    loc: mlir_ir.Location | None = None,
+) -> VectorSSA:
+    op_name = "VectorSSA.reduce"
+    _require_category(op_name, "operand", operand, "vector_ssa", 0)
+    if mask is not None:
+        _require_category(op_name, "mask", mask, "mask_ssa", 1)
+    if init_value is not None:
+        raise NotImplementedError(f"{op_name} only supports init_value=None")
+    if reduction_profile is not None:
+        raise NotImplementedError(f"{op_name} only supports reduction_profile=None")
+    if not isinstance(kind, ReductionOp):
+        _op_error(
+            op_name,
+            "invalid argument 'kind' (position 1): "
+            f"expected ReductionOp, got {_type_name(kind)}",
+        )
+    _require_frontend_state(op_name)
+    _runtime._check_frontend_region_op(op_name, {"vector"})
+    operand_value = _as_value(operand)
+    operand_desc = _tla_tensor_type_for_mlir_value(operand_value)
+    _check_reduction_element_type_supported(op_name, operand_desc.element_type)
+    mask_value = _as_value(mask) if mask is not None else None
+    result_desc = _reduction_result_descriptor(operand_value)
+    result = _tla_ops_gen.reduce(
+        result_desc.to_mlir_type(operand_value.type.context),
+        operand_value,
+        kind.value,
+        mask=mask_value,
+        loc=loc,
+    )
+    _register_tla_tensor_type(result, result_desc)
+    return VectorSSA(result)
+
+
 @dsl_user_op
 def where(
     mask: MaskSSA,
@@ -3596,6 +3704,7 @@ _require_generated("mins")
 _require_generated("div")
 _require_generated("where")
 _require_generated("divs")
+_require_generated("reduce")
 _require_generated("arch_block_idx")
 _require_generated("arch_sub_block_idx")
 _require_generated("arch_block_dim")
@@ -3810,6 +3919,7 @@ __all__ = [
     "min",
     "div",
     "where",
+    "ReductionOp",
     "make_ptr",
     "recast_ptr",
     "make_shape",

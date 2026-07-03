@@ -108,13 +108,23 @@ def _operator_specs() -> dict[str, dict[str, Any]]:
 
 
 def _is_unsupported_case(op_name: str, dtype_name: str) -> bool:
-    return dtype_name == "i8" and op_name in {"mul", "div"}
+    if dtype_name == "i8" and op_name in {"mul", "div"}:
+        return True
+    # AVE vdiv rejects vector<128xbf16> (padded bf16 layout).
+    if dtype_name == "bf16" and op_name == "div":
+        return True
+    return False
 
 
 def _print_skip(op_name: str, dtype_name: str, shape: tuple[int, ...]) -> None:
+    if dtype_name == "i8" and op_name in {"mul", "div"}:
+        reason = "i8 is not supported for mul/div"
+    elif dtype_name == "bf16" and op_name == "div":
+        reason = "bf16 vector div is not supported by AVE vdiv"
+    else:
+        reason = "unsupported case"
     print(
-        f"skip op={op_name} dtype={dtype_name} shape={shape_label(shape)}: "
-        "i8 is not supported for mul/div"
+        f"skip op={op_name} dtype={dtype_name} shape={shape_label(shape)}: {reason}"
     )
 
 

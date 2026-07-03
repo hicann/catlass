@@ -290,6 +290,16 @@ def test_from_dlpack_row_major_metadata(device_type: int) -> None:
     tensor.prepare_for_launch()
 
 
+def test_from_dlpack_row_major_accepts_singleton_dim_stride_alias() -> None:
+    parsed = _device_dlpack_fields(shape=(1, 3), strides=(1, 1))
+    tensor = _from_dlpack_with_parsed(parsed, layout_tag=tla.arch.RowMajor)
+
+    assert tensor._shape_tuple == (1, 3)
+    assert tensor.layout_tag == "row_major"
+    assert tensor.stride == (3, 1)
+    assert tensor.origin_shape == (1, 3)
+
+
 def test_from_dlpack_column_major_row_major_physical() -> None:
     """``permute(1, 0).contiguous()``: row-major physical (k, m), logical (m, k)."""
     parsed = _device_dlpack_fields(shape=(3, 2), strides=(2, 1))

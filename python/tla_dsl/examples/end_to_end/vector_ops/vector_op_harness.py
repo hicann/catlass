@@ -71,6 +71,7 @@ class DirectVectorOpConfig:
     env_compile_jobs: str
     float_dtypes: frozenset[str]
     output_count: int = 1
+    launch_blocks: int = 1
 
 
 def shape_num_elements(shape: tuple[int, ...]) -> int:
@@ -534,7 +535,7 @@ class DirectVectorOpHarness:
         mode.add_argument("--run", action="store_true")
         mode.add_argument("--sweep", action="store_true")
         parser.add_argument("--device", type=int, default=2)
-        parser.add_argument("--block", type=int, default=1)
+        parser.add_argument("--block", type=int, default=None)
         parser.add_argument("--dtype", choices=self.config.all_dtypes, default="f32")
         parser.add_argument(
             "--shape",
@@ -588,6 +589,8 @@ class DirectVectorOpHarness:
 
     def main(self) -> int:
         args = self._build_parser().parse_args()
+        if args.block is None:
+            args.block = self.config.launch_blocks
         if args.atol is None:
             args.atol = self.config.operator_specs()[args.op]["default_atol"]
         if args.sizes is not None:
