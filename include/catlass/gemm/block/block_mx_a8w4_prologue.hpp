@@ -170,7 +170,7 @@ public:
                 kL1Offset_ = kLoopIdx * kUbSize_;
                 kUbLen_ = Min(kL1Len_ - static_cast<int32_t>(kL1Offset_), kUbSize_);
                 int64_t l1Offset = (l1BufIdx_ & 0x1) * L1_BUFFER_HALF_SIZE / sizeof(ElementOut) +
-                                   RoundUp(nL1Len_, AscendC::BLOCK_CUBE) * kL1Offset_ + nL1Offset_ * AscendC::ONE_BLK_SIZE;
+                                   RoundUp(nL1Size_, AscendC::BLOCK_CUBE) * kL1Offset_ + nL1Offset_ * AscendC::ONE_BLK_SIZE;
                 ProcessL1(tensorBlockB, l1Offset, tensorL1B);
             }
         }
@@ -202,8 +202,8 @@ public:
         intriParams.dstStride = 0;
         AscendC::DataCopyPadExtParams<ElementIn> padParams;
         intriParams.blockCount = nUbLen_;
-        intriParams.blockLen = kUbLen_ >> INT4_DTYPE_PARAM;
-        intriParams.srcStride = (kSize_ - kUbLen_) >> INT4_DTYPE_PARAM;
+        intriParams.blockLen = CeilDiv(kUbLen_, 2);
+        intriParams.srcStride = CeilDiv(kSize_, 2) - CeilDiv(kUbLen_, 2);
         uint64_t weightInOffset = ubBufIdx_ * (vecWeightInLen_ << INT4_DTYPE_PARAM) / L1B_STAGES;
         auto subTensorBlockB = tensorBlockB(tla::MakeCoord(kL1Offset_, nL1Offset_));
         DataCopyPad(
@@ -218,7 +218,7 @@ public:
         params.blockLen = nUbLen_;
         params.blockCount = CeilDiv(kUbLen_, static_cast<int32_t>(GROUP_SIZE));
         params.srcStride = 1 + RoundUp(nUbLen_, AscendC::BLOCK_CUBE) - nUbLen_;
-        params.dstStride = RoundUp(nL1Len_, AscendC::BLOCK_CUBE) - nUbLen_;
+        params.dstStride = RoundUp(nL1Size_, AscendC::BLOCK_CUBE) - nUbLen_;
         DataCopy(l1Local_[l1Offset], ubLocal, params);
     }
 
