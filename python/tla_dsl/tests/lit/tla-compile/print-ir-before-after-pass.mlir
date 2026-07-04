@@ -1,4 +1,4 @@
-// RUN: %tla_compile %s -o %t --mlir-print-ir-before=tla-func-to-hacc --mlir-print-ir-after=tla-func-to-hacc 2>&1 | %filecheck %s --check-prefix=HACC
+// RUN: %tla_compile %s -o %t --mlir-print-ir-before=tla-lower-func --mlir-print-ir-after=tla-lower-func 2>&1 | %filecheck %s --check-prefix=HACC
 // RUN: %tla_compile %s -o %t --mlir-print-ir-before=tla-lower-to-std --mlir-print-ir-after=tla-lower-to-std 2>&1 | %filecheck %s --check-prefix=LOWER
 
 module {
@@ -8,9 +8,9 @@ module {
 }
 
 // HACC: IR Dump Before
-// HACC-SAME: tla-func-to-hacc
+// HACC-SAME: tla-lower-func
 // HACC: IR Dump After
-// HACC-SAME: tla-func-to-hacc
+// HACC-SAME: tla-lower-func
 
 // LOWER: IR Dump Before
 // LOWER-SAME: tla-lower-to-std

@@ -39,10 +39,12 @@ def test_tla_sync_to_hivm_lowers_pipe_sync_to_hivm_ops() -> None:
 
     mlir_text = """module {
   tla.func @flags() {
-    %ready = tla.flag "ready" {src_pipe = #tla.pipe<mte2>, dst_pipe = #tla.pipe<mte1>} -> !tla.flag
-    tla.set_flag %ready : !tla.flag
-    tla.wait_flag %ready : !tla.flag
-    tla.pipe_barrier [#tla.pipe<all>]
+    "tla.vector"() ({
+      %ready = tla.flag "ready" {src_pipe = #tla.pipe<mte2>, dst_pipe = #tla.pipe<mte1>} -> !tla.flag
+      tla.set_flag %ready : !tla.flag
+      tla.wait_flag %ready : !tla.flag
+      tla.pipe_barrier [#tla.pipe<all>]
+    }) : () -> ()
     tla.return
   }
 }
@@ -78,12 +80,14 @@ def test_tla_sync_to_hivm_allocates_distinct_event_ids_for_same_pipe_pair() -> N
 
     mlir_text = """module {
   tla.func @flags() {
-    %ready = tla.flag "ready" {src_pipe = #tla.pipe<mte2>, dst_pipe = #tla.pipe<mte1>} -> !tla.flag
-    %done = tla.flag "done" {src_pipe = #tla.pipe<mte2>, dst_pipe = #tla.pipe<mte1>} -> !tla.flag
-    tla.set_flag %ready : !tla.flag
-    tla.wait_flag %ready : !tla.flag
-    tla.set_flag %done : !tla.flag
-    tla.wait_flag %done : !tla.flag
+    "tla.vector"() ({
+      %ready = tla.flag "ready" {src_pipe = #tla.pipe<mte2>, dst_pipe = #tla.pipe<mte1>} -> !tla.flag
+      %done = tla.flag "done" {src_pipe = #tla.pipe<mte2>, dst_pipe = #tla.pipe<mte1>} -> !tla.flag
+      tla.set_flag %ready : !tla.flag
+      tla.wait_flag %ready : !tla.flag
+      tla.set_flag %done : !tla.flag
+      tla.wait_flag %done : !tla.flag
+    }) : () -> ()
     tla.return
   }
 }
@@ -132,12 +136,14 @@ def test_tla_sync_to_hivm_rejects_unsupported_cross_flag_mode() -> None:
 
     mlir_text = """module {
   tla.func @flags() {
-    %cross = tla.cross_flag "cross" {
-      src_pipe = #tla.pipe<mte3>,
-      dst_pipe = #tla.pipe<scalar>,
-      mode = 0 : i64
-    } -> !tla.cross_flag
-    tla.cross_core_set_flag %cross : !tla.cross_flag
+    "tla.vector"() ({
+      %cross = tla.cross_flag "cross" {
+        src_pipe = #tla.pipe<mte3>,
+        dst_pipe = #tla.pipe<scalar>,
+        mode = 0 : i64
+      } -> !tla.cross_flag
+      tla.cross_core_set_flag %cross : !tla.cross_flag
+    }) : () -> ()
     tla.return
   }
 }

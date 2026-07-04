@@ -393,6 +393,7 @@ def Tla_FullOp : Tla_Op<"full", [Pure]> {
   let assemblyFormat = [{
     $value attr-dict `:` type($value) `->` type($result)
   }];
+  let hasVerifier = 1;
 }
 
 def Tla_CopyL0C2DstParamsOp : Tla_Op<"CopyL0C2DstParams", [Pure]> {
@@ -412,7 +413,10 @@ def Tla_CopyL0C2DstParamsOp : Tla_Op<"CopyL0C2DstParams", [Pure]> {
 def Tla_CopyOp : Tla_Op<"copy", []> {
   let summary = "Copy";
   let description = [{
-    Copy between tensors/views in different address spaces.
+    Copy between tensors/views in different address spaces. Cube data-path
+    copies (GM->L1, L1->L0A, L1->L0B, L0C->GM, L0C->UB, L1->UB) must be nested
+    inside a ``tla.cube`` region; vector staging copies (GM->UB, UB->GM, UB->L1)
+    must be nested inside a ``tla.vector`` region.
   }];
   let arguments = (ins
     Tla_TensorType:$dst, Tla_TensorType:$src,
@@ -420,6 +424,7 @@ def Tla_CopyOp : Tla_Op<"copy", []> {
   let assemblyFormat = [{
     $dst `,` $src (`,` $params^)? attr-dict `:` qualified(type($dst)) `,` qualified(type($src)) (`,` qualified(type($params))^)?
   }];
+  let hasVerifier = 1;
 }
 
 def Tla_CrossCoreSetFlagOp : Tla_Op<"cross_core_set_flag", []> {
@@ -431,6 +436,7 @@ def Tla_CrossCoreSetFlagOp : Tla_Op<"cross_core_set_flag", []> {
   let assemblyFormat = [{
     $flag attr-dict `:` qualified(type($flag))
   }];
+  let hasVerifier = 1;
 }
 
 def Tla_CrossCoreWaitFlagOp : Tla_Op<"cross_core_wait_flag", []> {
@@ -442,6 +448,7 @@ def Tla_CrossCoreWaitFlagOp : Tla_Op<"cross_core_wait_flag", []> {
   let assemblyFormat = [{
     $flag attr-dict `:` qualified(type($flag))
   }];
+  let hasVerifier = 1;
 }
 
 def Tla_CrossFlagOp : Tla_Op<"cross_flag", [Pure]> {
@@ -505,13 +512,15 @@ def Tla_FuncOp : Tla_Op<"func", []> {
 def Tla_LoadOp : Tla_Op<"load", []> {
   let summary = "Load";
   let description = [{
-    Load a tensor tile into vector SSA.
+    Load a tensor tile into vector SSA. Must be nested inside a ``tla.vec.func``
+    region.
   }];
   let arguments = (ins Tla_TensorType:$source);
   let results = (outs Tla_TensorType:$result);
   let assemblyFormat = [{
     $source attr-dict `:` type($source) `->` type($result)
   }];
+  let hasVerifier = 1;
 }
 
 // Scratch alloc uses a static ``size_bytes`` attribute (``i64``) on ``tla.alloc_ptr``.
@@ -580,13 +589,15 @@ def Tla_MakeTensorOp : Tla_Op<"make_tensor", [Pure]> {
 def Tla_MmadOp : Tla_Op<"mmad", []> {
   let summary = "Matrix multiply-accumulate";
   let description = [{
-    Perform a matrix multiply-accumulate on tensor views.
+    Perform a matrix multiply-accumulate on tensor views. Must be nested inside a
+    ``tla.cube`` region.
   }];
   let arguments = (ins Tla_TensorType:$acc, Tla_TensorType:$lhs, Tla_TensorType:$rhs, I1:$init_c, I64:$unit_flag);
   let assemblyFormat = [{
-    $acc `,` $lhs `,` $rhs `,` $init_c `,` $unit_flag attr-dict `:` 
+    $acc `,` $lhs `,` $rhs `,` $init_c `,` $unit_flag attr-dict `:`
     qualified(type($acc)) `,` qualified(type($lhs)) `,` qualified(type($rhs)) `,` type($init_c) `,` type($unit_flag)
   }];
+  let hasVerifier = 1;
 }
 
 def Tla_PipeBarrierOp : Tla_Op<"pipe_barrier", []> {
@@ -598,6 +609,7 @@ def Tla_PipeBarrierOp : Tla_Op<"pipe_barrier", []> {
   let assemblyFormat = [{
     `[` $pipe `]` attr-dict
   }];
+  let hasVerifier = 1;
 }
 
 def Tla_MutexOp : Tla_Op<"mutex", [Pure]> {
@@ -623,6 +635,7 @@ def Tla_MutexLockOp : Tla_Op<"mutex_lock", []> {
   let assemblyFormat = [{
     $mutex `[` $pipe `]` `:` qualified(type($mutex)) attr-dict
   }];
+  let hasVerifier = 1;
 }
 
 def Tla_MutexUnlockOp : Tla_Op<"mutex_unlock", []> {
@@ -634,6 +647,7 @@ def Tla_MutexUnlockOp : Tla_Op<"mutex_unlock", []> {
   let assemblyFormat = [{
     $mutex `[` $pipe `]` `:` qualified(type($mutex)) attr-dict
   }];
+  let hasVerifier = 1;
 }
 
 def Tla_MakeShapeOp : Tla_Op<"make_shape", [Pure]> {
@@ -707,13 +721,15 @@ def Tla_SetFlagOp : Tla_Op<"set_flag", []> {
   let assemblyFormat = [{
     $flag `:` qualified(type($flag)) attr-dict
   }];
+  let hasVerifier = 1;
 }
 
 def Tla_StoreOp : Tla_Op<"store", []> {
   let summary = "Store";
   let description = [{
     Register-fragment store marker on a tensor tile. An optional mask predicates
-    which lanes are written (masked-out lanes are left untouched).
+    which lanes are written (masked-out lanes are left untouched). Must be nested
+    inside a ``tla.vec.func`` region.
   }];
   let arguments = (ins Tla_TensorType:$dest, Tla_TensorType:$source,
                        Optional<Tla_MaskType>:$mask);
@@ -721,6 +737,7 @@ def Tla_StoreOp : Tla_Op<"store", []> {
     $dest `,` $source (`mask` $mask^)? attr-dict `:` type($dest) `,` type($source)
     (`mask` qualified(type($mask))^)?
   }];
+  let hasVerifier = 1;
 }
 
 def Tla_CreateMaskOp : Tla_Op<"create_mask", [Pure]> {
@@ -738,6 +755,7 @@ def Tla_CreateMaskOp : Tla_Op<"create_mask", [Pure]> {
   let assemblyFormat = [{
     attr-dict `:` qualified(type($result))
   }];
+  let hasVerifier = 1;
 }
 
 def Tla_UpdateMaskOp : Tla_Op<"update_mask", [Pure]> {
@@ -759,6 +777,7 @@ def Tla_UpdateMaskOp : Tla_Op<"update_mask", [Pure]> {
   let assemblyFormat = [{
     $true_shape `,` $dtype attr-dict `:` qualified(type($mask)) `,` type($new_true_shape)
   }];
+  let hasVerifier = 1;
 }
 
 def Tla_TileViewOp : Tla_Op<"tile_view", []> {
@@ -789,6 +808,7 @@ class Tla_VectorBinaryOp<string mnemonic, string opSummary, string opDescription
     $lhs `,` $rhs (`mask` $mask^)? attr-dict `:`
     type($lhs) `,` type($rhs) (`mask` qualified(type($mask))^)? `->` type($result)
   }];
+  let hasVerifier = 1;
 }
 
 def Tla_AddOp : Tla_VectorBinaryOp<"add",
@@ -828,6 +848,7 @@ def Tla_WhereOp : Tla_Op<"where", [Pure]> {
     $mask `,` $x `,` $y attr-dict `:`
     qualified(type($mask)) `,` type($x) `,` type($y) `->` type($result)
   }];
+  let hasVerifier = 1;
 }
 
 class Tla_VectorScalarBinaryOp<string mnemonic, string opSummary, string opDescription>
@@ -845,6 +866,7 @@ class Tla_VectorScalarBinaryOp<string mnemonic, string opSummary, string opDescr
     $lhs `,` $rhs (`mask` $mask^)? attr-dict `:`
     type($lhs) `,` type($rhs) (`mask` qualified(type($mask))^)? `->` type($result)
   }];
+  let hasVerifier = 1;
 }
 
 def Tla_AddsOp : Tla_VectorScalarBinaryOp<"adds",
@@ -896,9 +918,11 @@ def Tla_VectorOp : Tla_Op<"vector", [NoTerminator, SingleBlock]> {
 def Tla_VecFuncOp : Tla_Op<"vec.func", [NoTerminator, SingleBlock]> {
   let summary = "Vector compute function region";
   let description = [{
-    Group register-resident vector compute ops inside a vector region.
+    Group register-resident vector compute ops inside a vector region. Must be
+    nested inside a ``tla.vector`` region.
   }];
   let regions = (region AnyRegion:$body);
+  let hasVerifier = 1;
 }
 
 def Tla_WaitFlagOp : Tla_Op<"wait_flag", []> {
@@ -910,4 +934,5 @@ def Tla_WaitFlagOp : Tla_Op<"wait_flag", []> {
   let assemblyFormat = [{
     $flag `:` qualified(type($flag)) attr-dict
   }];
+  let hasVerifier = 1;
 }

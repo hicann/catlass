@@ -3,25 +3,31 @@
 module {
 
   tla.func @mutex_cube_pipe() {
-    %mutex = tla.mutex "l0c_ping" {id = 3 : i64} -> !tla.mutex
-    tla.mutex_lock %mutex [#tla.pipe<cube>] : !tla.mutex
-    tla.mutex_unlock %mutex [#tla.pipe<cube>] : !tla.mutex
+    "tla.cube"() ({
+      %mutex = tla.mutex "l0c_ping" {id = 3 : i64} -> !tla.mutex
+      tla.mutex_lock %mutex [#tla.pipe<cube>] : !tla.mutex
+      tla.mutex_unlock %mutex [#tla.pipe<cube>] : !tla.mutex
+    }) : () -> ()
     tla.return
   }
 
   tla.func @mutex_roundtrip() {
-    %mutex = tla.mutex "l0a_ping" {id = 7 : i64} -> !tla.mutex
-    tla.mutex_lock %mutex [#tla.pipe<mte2>] : !tla.mutex
-    tla.mutex_unlock %mutex [#tla.pipe<mte2>] : !tla.mutex
+    "tla.cube"() ({
+      %mutex = tla.mutex "l0a_ping" {id = 7 : i64} -> !tla.mutex
+      tla.mutex_lock %mutex [#tla.pipe<mte2>] : !tla.mutex
+      tla.mutex_unlock %mutex [#tla.pipe<mte2>] : !tla.mutex
+    }) : () -> ()
     tla.return
   }
 
   tla.func @mutex_vector_pipe_suffix() {
-    %mutex = tla.mutex "ub_ping" {id = 6 : i64} -> !tla.mutex
-    tla.mutex_lock %mutex [#tla.pipe<vector>] : !tla.mutex
-    tla.mutex_unlock %mutex [#tla.pipe<vector>] : !tla.mutex
-    tla.mutex_lock %mutex [#tla.pipe<mte3>] : !tla.mutex
-    tla.mutex_unlock %mutex [#tla.pipe<mte3>] : !tla.mutex
+    "tla.cube"() ({
+      %mutex = tla.mutex "ub_ping" {id = 6 : i64} -> !tla.mutex
+      tla.mutex_lock %mutex [#tla.pipe<vector>] : !tla.mutex
+      tla.mutex_unlock %mutex [#tla.pipe<vector>] : !tla.mutex
+      tla.mutex_lock %mutex [#tla.pipe<mte3>] : !tla.mutex
+      tla.mutex_unlock %mutex [#tla.pipe<mte3>] : !tla.mutex
+    }) : () -> ()
     tla.return
   }
 }

@@ -2,9 +2,11 @@
 
 module {
   tla.func @pipe_barrier() {
-    tla.pipe_barrier [#tla.pipe<mte2>]
-    tla.pipe_barrier [#tla.pipe<cube>]
-    tla.pipe_barrier [#tla.pipe<all>]
+    "tla.vector"() ({
+      tla.pipe_barrier [#tla.pipe<mte2>]
+      tla.pipe_barrier [#tla.pipe<cube>]
+      tla.pipe_barrier [#tla.pipe<all>]
+    }) : () -> ()
     tla.return
   }
 }

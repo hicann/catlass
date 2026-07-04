@@ -8,9 +8,8 @@ namespace tla {
 std::unique_ptr<mlir::Pass> createTlaAllocPtrToHivmPointerCastPass();
 std::unique_ptr<mlir::Pass> createTlaLowerToStdPass();
 std::unique_ptr<mlir::Pass> createTlaLowerFlagBarrierToHivmPass();
-std::unique_ptr<mlir::Pass> createTlaFuncToHaccPass();
+std::unique_ptr<mlir::Pass> createTlaLowerFuncPass();
 std::unique_ptr<mlir::Pass> createTlaSplitMixedFuncPass();
-std::unique_ptr<mlir::Pass> createTlaInferFuncCoreTypePass();
 std::unique_ptr<mlir::Pass> createTlaLowerBlockIdxPass();
 std::unique_ptr<mlir::Pass> createConvertTlaToVectorPass();
 std::unique_ptr<mlir::Pass> createTlaPrologueEpiloguePass();

@@ -34,17 +34,18 @@ def reduction_op(mem_x: tla.Tensor, mem_z: tla.Tensor) -> None:
     x_ub = tla.make_tensor_like(x_ptr, x_gm, tla.arch.RowMajor)
     z_ub = tla.make_tensor_like(z_ptr, z_gm, tla.arch.RowMajor)
 
-    tla.copy(x_ub, x_gm)
-    tla.set_flag(loaded)
-    tla.wait_flag(loaded)
-    with tla.vec.func(mode="simd"):
-        x_tile = tla.tile_view(x_ub, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
-        z_tile = tla.tile_view(z_ub, tla.make_shape(1), tla.make_coord(0))
-        z_tile.store(x_tile.load().reduce(_REDUCE_OP))
-    tla.set_flag(done)
-    tla.wait_flag(done)
-    tla.copy(z_gm, z_ub)
-    tla.pipe_barrier(tla.pipes.ALL)
+    with tla.vector():
+        tla.copy(x_ub, x_gm)
+        tla.set_flag(loaded)
+        tla.wait_flag(loaded)
+        with tla.vec.func(mode="simd"):
+            x_tile = tla.tile_view(x_ub, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
+            z_tile = tla.tile_view(z_ub, tla.make_shape(1), tla.make_coord(0))
+            z_tile.store(x_tile.load().reduce(_REDUCE_OP))
+        tla.set_flag(done)
+        tla.wait_flag(done)
+        tla.copy(z_gm, z_ub)
+        tla.pipe_barrier(tla.pipes.ALL)
 
 
 def _set_op(op: str) -> None:

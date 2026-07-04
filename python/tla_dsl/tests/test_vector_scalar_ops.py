@@ -22,38 +22,42 @@ def _vector_tensor(dtype: object = tla.Float32) -> tla.Tensor:
 @tla.kernel
 def vector_scalar_kernel(lhs: tla.Tensor) -> None:
     tile = tla.tile_view(lhs, tla.make_shape(64), tla.make_coord(0))
-    with tla.vec.func(mode="simd"):
-        reg = tile.load()
-        mask = tla.create_mask(pattern=tla.mask.H)
-        _ = tla.add(reg, 1.0)
-        _ = tla.sub(reg, 2.0)
-        _ = tla.mul(3.0, reg)
-        _ = tla.max(reg, 5.0)
-        _ = tla.min(6.0, reg)
-        _ = tla.div(reg, 4.0, mask=mask)
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            reg = tile.load()
+            mask = tla.create_mask(pattern=tla.mask.H)
+            _ = tla.add(reg, 1.0)
+            _ = tla.sub(reg, 2.0)
+            _ = tla.mul(3.0, reg)
+            _ = tla.max(reg, 5.0)
+            _ = tla.min(6.0, reg)
+            _ = tla.div(reg, 4.0, mask=mask)
 
 
 @tla.kernel
 def bf16_scalar_literal_kernel(lhs: tla.Tensor) -> None:
     tile = tla.tile_view(lhs, tla.make_shape(64), tla.make_coord(0))
-    with tla.vec.func(mode="simd"):
-        _ = tla.add(tile.load(), 1.0)
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            _ = tla.add(tile.load(), 1.0)
 
 
 @tla.kernel
 def invalid_scalar_lhs_sub_kernel(lhs: tla.Tensor) -> None:
     tile = tla.tile_view(lhs, tla.make_shape(64), tla.make_coord(0))
-    with tla.vec.func(mode="simd"):
-        reg = tile.load()
-        _ = tla.sub(3.0, reg)
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            reg = tile.load()
+            _ = tla.sub(3.0, reg)
 
 
 @tla.kernel
 def invalid_integer_scalar_fraction_kernel(lhs: tla.Tensor) -> None:
     tile = tla.tile_view(lhs, tla.make_shape(64), tla.make_coord(0))
-    with tla.vec.func(mode="simd"):
-        reg = tile.load()
-        _ = tla.add(reg, 1.9)
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            reg = tile.load()
+            _ = tla.add(reg, 1.9)
 
 
 def test_vector_scalar_symbols_are_exported() -> None:

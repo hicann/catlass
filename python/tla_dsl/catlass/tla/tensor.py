@@ -69,7 +69,7 @@ class _Tensor(TensorABC):
 
     @dsl_user_op
     def load(self, *, loc: mlir_ir.Location | None = None) -> Any:
-        """Load this tensor tile into vector SSA inside a vector region."""
+        """Load this tensor tile into vector SSA inside a tla.vec.func region."""
         from ..core_api import (
             VectorSSA,
             _as_value,
@@ -82,7 +82,7 @@ class _Tensor(TensorABC):
 
         loc = _normalize_user_loc(loc)
         _require_frontend_state("load")
-        _runtime._check_frontend_region_op("load", {"vector"})
+        _runtime._require_enclosing_region("load", "vec.func")
         source = _as_value(self)
         result = _tla_ops_gen.load(source.type, source, loc=loc)
         try:
@@ -111,7 +111,7 @@ class _Tensor(TensorABC):
         mask: Any | None = None,
         loc: mlir_ir.Location | None = None,
     ) -> None:
-        """Store a vector SSA value into this tensor tile inside a vector region.
+        """Store a vector SSA value into this tensor tile inside a tla.vec.func region.
 
         An optional ``mask`` (a ``MaskSSA`` from ``tla.create_mask`` or
         ``tla.update_mask``) predicates which lanes are written; masked-out lanes
@@ -129,7 +129,7 @@ class _Tensor(TensorABC):
         if mask is not None:
             _require_category("store", "mask", mask, "mask_ssa", 2)
         _require_frontend_state("store")
-        _runtime._check_frontend_region_op("store", {"vector"})
+        _runtime._require_enclosing_region("store", "vec.func")
         mask_val = _as_value(mask) if mask is not None else None
         _tla_ops_gen.store(_as_value(self), _as_value(value), mask=mask_val, loc=loc)
 

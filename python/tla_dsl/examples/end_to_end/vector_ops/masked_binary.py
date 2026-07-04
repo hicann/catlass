@@ -80,59 +80,60 @@ def masked_binary(
     rdiv_ub = _make_ub_tensor(allocator, rdiv_gm)
     rsel_ub = _make_ub_tensor(allocator, rsel_gm)
 
-    tla.copy(a_ub, a_gm)
-    tla.copy(b_ub, b_gm)
+    with tla.vector():
+        tla.copy(a_ub, a_gm)
+        tla.copy(b_ub, b_gm)
 
-    tla.set_flag(ub_loaded)
-    tla.wait_flag(ub_loaded)
-    with tla.vec.func(mode="simd"):
-        # Single loop over all chunks. The tail is handled *inside* the loop by a
-        # loop-carried counter `remaining` (seeded with VECTOR_ELE): each
-        # iteration `tla.update_mask` yields a `tail` mask (lane j active iff
-        # j < remaining) and decrements `remaining` by the lane count. This is
-        # all-true for fully in-bounds chunks and partial for the last one, so the
-        # tight 32B-aligned buffers are never written out of bounds. Every store
-        # is bounded by `tail`.
-        remaining = VECTOR_ELE
-        for i in tla.range(LOOPS):
-            a_t = _chunk(a_ub, i)
-            b_t = _chunk(b_ub, i)
-            radd_t = _chunk(radd_ub, i)
-            rsub_t = _chunk(rsub_ub, i)
-            rmul_t = _chunk(rmul_ub, i)
-            rdiv_t = _chunk(rdiv_ub, i)
-            rsel_t = _chunk(rsel_ub, i)
+        tla.set_flag(ub_loaded)
+        tla.wait_flag(ub_loaded)
+        with tla.vec.func(mode="simd"):
+            # Single loop over all chunks. The tail is handled *inside* the loop by a
+            # loop-carried counter `remaining` (seeded with VECTOR_ELE): each
+            # iteration `tla.update_mask` yields a `tail` mask (lane j active iff
+            # j < remaining) and decrements `remaining` by the lane count. This is
+            # all-true for fully in-bounds chunks and partial for the last one, so the
+            # tight 32B-aligned buffers are never written out of bounds. Every store
+            # is bounded by `tail`.
+            remaining = VECTOR_ELE
+            for i in tla.range(LOOPS):
+                a_t = _chunk(a_ub, i)
+                b_t = _chunk(b_ub, i)
+                radd_t = _chunk(radd_ub, i)
+                rsub_t = _chunk(rsub_ub, i)
+                rmul_t = _chunk(rmul_ub, i)
+                rdiv_t = _chunk(rdiv_ub, i)
+                rsel_t = _chunk(rsel_ub, i)
 
-            av = a_t.load()
-            bv = b_t.load()
+                av = a_t.load()
+                bv = b_t.load()
 
-            tail, remaining = tla.update_mask(remaining, dtype=_KERNEL_DTYPE)  # tail bound
-            m_add = tla.create_mask(pattern=tla.mask.H, dtype=_KERNEL_DTYPE)   # first half
-            m_sub = tla.create_mask(pattern=tla.mask.Q, dtype=_KERNEL_DTYPE)   # first quarter
-            m_mul = tla.create_mask(pattern=tla.mask.M4, dtype=_KERNEL_DTYPE)  # multiples of 4
-            m_div = tla.create_mask(pattern=tla.mask.H, dtype=_KERNEL_DTYPE)   # first half
-            m_sel = tla.create_mask(pattern=tla.mask.H, dtype=_KERNEL_DTYPE)   # first half
+                tail, remaining = tla.update_mask(remaining, dtype=_KERNEL_DTYPE)  # tail bound
+                m_add = tla.create_mask(pattern=tla.mask.H, dtype=_KERNEL_DTYPE)   # first half
+                m_sub = tla.create_mask(pattern=tla.mask.Q, dtype=_KERNEL_DTYPE)   # first quarter
+                m_mul = tla.create_mask(pattern=tla.mask.M4, dtype=_KERNEL_DTYPE)  # multiples of 4
+                m_div = tla.create_mask(pattern=tla.mask.H, dtype=_KERNEL_DTYPE)   # first half
+                m_sel = tla.create_mask(pattern=tla.mask.H, dtype=_KERNEL_DTYPE)   # first half
 
-            radd_t.store(tla.add(av, bv, mask=m_add), mask=tail)
-            rsub_t.store(tla.sub(av, bv, mask=m_sub), mask=tail)
-            rmul_t.store(tla.mul(av, bv, mask=m_mul), mask=tail)
-            rdiv_t.store(tla.div(av, bv, mask=m_div), mask=tail)
+                radd_t.store(tla.add(av, bv, mask=m_add), mask=tail)
+                rsub_t.store(tla.sub(av, bv, mask=m_sub), mask=tail)
+                rmul_t.store(tla.mul(av, bv, mask=m_mul), mask=tail)
+                rdiv_t.store(tla.div(av, bv, mask=m_div), mask=tail)
 
-            # Select between the unmasked add/sub results: first half of each
-            # chunk takes a+b, second half takes a-b (lowers to ave.hir.vsel).
-            sum_v = tla.add(av, bv)
-            diff_v = tla.sub(av, bv)
-            rsel_t.store(tla.where(m_sel, sum_v, diff_v), mask=tail)
+                # Select between the unmasked add/sub results: first half of each
+                # chunk takes a+b, second half takes a-b (lowers to ave.hir.vsel).
+                sum_v = tla.add(av, bv)
+                diff_v = tla.sub(av, bv)
+                rsel_t.store(tla.where(m_sel, sum_v, diff_v), mask=tail)
 
-    tla.set_flag(vec_done)
-    tla.wait_flag(vec_done)
+        tla.set_flag(vec_done)
+        tla.wait_flag(vec_done)
 
-    tla.copy(radd_gm, radd_ub)
-    tla.copy(rsub_gm, rsub_ub)
-    tla.copy(rmul_gm, rmul_ub)
-    tla.copy(rdiv_gm, rdiv_ub)
-    tla.copy(rsel_gm, rsel_ub)
-    tla.pipe_barrier(tla.pipes.ALL)
+        tla.copy(radd_gm, radd_ub)
+        tla.copy(rsub_gm, rsub_ub)
+        tla.copy(rmul_gm, rmul_ub)
+        tla.copy(rdiv_gm, rdiv_ub)
+        tla.copy(rsel_gm, rsel_ub)
+        tla.pipe_barrier(tla.pipes.ALL)
 
 
 def _make_ub_tensor(allocator: Any, like_tensor: Any) -> Any:

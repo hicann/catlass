@@ -102,6 +102,7 @@ def basic_mixed(
         tla.wait_flag(mmad_done)
         tla.copy(gm_c, l0_c)
         tla.cross_core_set_flag(fix_done)
+        tla.pipe_barrier(tla.pipes.ALL)
 
     with tla.vector():
         tla.cross_core_wait_flag(fix_done)
@@ -142,7 +143,7 @@ def basic_mixed(
             tla.wait_flag(vec_done)
             tla.copy(out_gm_chunk, result_chunk)
 
-    tla.pipe_barrier(tla.pipes.ALL)
+        tla.pipe_barrier(tla.pipes.ALL)
 
 
 def _compile_only_type_args() -> tuple[Any, Any, Any, Any]:

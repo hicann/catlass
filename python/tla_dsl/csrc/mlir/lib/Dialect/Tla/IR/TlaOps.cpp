@@ -1,6 +1,7 @@
 #include "Dialect/Tla/IR/TlaOps.h"
 #include "Dialect/Tla/IR/TlaAttrs.h"
 #include "Dialect/Tla/IR/TlaTypes.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OpImplementation.h"
@@ -35,6 +36,127 @@ mlir::LogicalResult HivmMemrefAsPtrOp::verify() {
     return emitOpError("expected rank-1 memref (HIVM pointer_cast lowering)");
   if (!mlir::isa<PtrType>(getResult().getType()))
     return emitOpError("result must be !tla.ptr");
+  return mlir::success();
+}
+
+// Walk the enclosing ops looking for an ancestor of type AncestorOp. The
+// required region may be several levels up (e.g. a compute op nested inside a
+// scf.for loop inside a tla.vec.func), so this checks all transitive parents
+// rather than just the immediate one.
+template <typename AncestorOp> static bool hasEnclosing(mlir::Operation *op) {
+  for (mlir::Operation *parent = op->getParentOp(); parent;
+       parent = parent->getParentOp())
+    if (mlir::isa<AncestorOp>(parent))
+      return true;
+  return false;
+}
+
+// The region-wrapper requirement is a frontend/authoring constraint, enforced
+// while ops still live in the tla.func container. Once tla-lower-func lowers
+// tla.func to func.func -- and convert-tla-to-vector / TlaSplitMixedFuncPass
+// inline the frontend tla.cube / tla.vector wrappers into the resulting
+// func.func (carrying the AIC/AIV/MIX core context on function attributes such
+// as hivm.func_core_type / hivm.part_of_mix / hacc.entry rather than a lexical
+// region) -- the lexical wrapper is legitimately gone. Ops already inside a
+// lowered func.func are therefore exempt; the constraint is fully enforced at
+// parse time and in the frontend, where ops are still under tla.func.
+static bool isInLoweredFunc(mlir::Operation *op) {
+  return op->getParentOfType<mlir::func::FuncOp>() != nullptr;
+}
+
+template <typename AncestorOp> static bool hasEnclosingRegion(mlir::Operation *op) {
+  return hasEnclosing<AncestorOp>(op) || isInLoweredFunc(op);
+}
+
+mlir::LogicalResult MmadOp::verify() {
+  if (!hasEnclosingRegion<CubeOp>(getOperation()))
+    return emitOpError("must be nested inside a tla.cube region");
+  return mlir::success();
+}
+
+mlir::LogicalResult VecFuncOp::verify() {
+  if (!hasEnclosingRegion<VectorOp>(getOperation()))
+    return emitOpError("must be nested inside a tla.vector region");
+  return mlir::success();
+}
+
+// Vector compute ops (element-wise vector-vector and vector-scalar arithmetic)
+// must live inside a tla.vec.func region.
+#define TLA_VERIFY_IN_VEC_FUNC(OpTy)                                            \
+  mlir::LogicalResult OpTy::verify() {                                          \
+    if (!hasEnclosingRegion<VecFuncOp>(getOperation()))                        \
+      return emitOpError("must be nested inside a tla.vec.func region");        \
+    return mlir::success();                                                     \
+  }
+
+TLA_VERIFY_IN_VEC_FUNC(AddOp)
+TLA_VERIFY_IN_VEC_FUNC(SubOp)
+TLA_VERIFY_IN_VEC_FUNC(MulOp)
+TLA_VERIFY_IN_VEC_FUNC(DivOp)
+TLA_VERIFY_IN_VEC_FUNC(MaxOp)
+TLA_VERIFY_IN_VEC_FUNC(MinOp)
+TLA_VERIFY_IN_VEC_FUNC(AddsOp)
+TLA_VERIFY_IN_VEC_FUNC(SubsOp)
+TLA_VERIFY_IN_VEC_FUNC(MulsOp)
+TLA_VERIFY_IN_VEC_FUNC(DivsOp)
+TLA_VERIFY_IN_VEC_FUNC(MaxsOp)
+TLA_VERIFY_IN_VEC_FUNC(MinsOp)
+TLA_VERIFY_IN_VEC_FUNC(LoadOp)
+TLA_VERIFY_IN_VEC_FUNC(StoreOp)
+TLA_VERIFY_IN_VEC_FUNC(FullOp)
+TLA_VERIFY_IN_VEC_FUNC(WhereOp)
+TLA_VERIFY_IN_VEC_FUNC(CreateMaskOp)
+TLA_VERIFY_IN_VEC_FUNC(UpdateMaskOp)
+
+#undef TLA_VERIFY_IN_VEC_FUNC
+
+// Synchronization/mutex/barrier ops must live inside a tla.cube or tla.vector
+// region (either core-kind region; not the func-level scope).
+#define TLA_VERIFY_IN_CUBE_OR_VECTOR(OpTy)                                     \
+  mlir::LogicalResult OpTy::verify() {                                          \
+    if (!hasEnclosingRegion<CubeOp>(getOperation()) &&                         \
+        !hasEnclosingRegion<VectorOp>(getOperation()))                         \
+      return emitOpError(                                                       \
+          "must be nested inside a tla.cube or tla.vector region");            \
+    return mlir::success();                                                     \
+  }
+
+TLA_VERIFY_IN_CUBE_OR_VECTOR(SetFlagOp)
+TLA_VERIFY_IN_CUBE_OR_VECTOR(WaitFlagOp)
+TLA_VERIFY_IN_CUBE_OR_VECTOR(CrossCoreSetFlagOp)
+TLA_VERIFY_IN_CUBE_OR_VECTOR(CrossCoreWaitFlagOp)
+TLA_VERIFY_IN_CUBE_OR_VECTOR(MutexLockOp)
+TLA_VERIFY_IN_CUBE_OR_VECTOR(MutexUnlockOp)
+TLA_VERIFY_IN_CUBE_OR_VECTOR(PipeBarrierOp)
+
+#undef TLA_VERIFY_IN_CUBE_OR_VECTOR
+
+mlir::LogicalResult CopyOp::verify() {
+  auto srcTy = mlir::dyn_cast<TlaTensorType>(getSrc().getType());
+  auto dstTy = mlir::dyn_cast<TlaTensorType>(getDst().getType());
+  if (!srcTy || !dstTy)
+    return mlir::success(); // Operand type verifier handles malformed tensors.
+  AddressSpace src = srcTy.getPtr().getAddrspace();
+  AddressSpace dst = dstTy.getPtr().getAddrspace();
+
+  // Cube data-path copies: GM->L1, L1->L0A, L1->L0B, L0C->GM, L0C->UB, L1->UB.
+  bool cubeRoute = (src == AddressSpace::gm && dst == AddressSpace::l1) ||
+                   (src == AddressSpace::l1 && dst == AddressSpace::l0a) ||
+                   (src == AddressSpace::l1 && dst == AddressSpace::l0b) ||
+                   (src == AddressSpace::l0c && dst == AddressSpace::gm) ||
+                   (src == AddressSpace::l0c && dst == AddressSpace::ub) ||
+                   (src == AddressSpace::l1 && dst == AddressSpace::ub);
+  // Vector staging copies: GM->UB, UB->GM, UB->L1.
+  bool vectorRoute = (src == AddressSpace::gm && dst == AddressSpace::ub) ||
+                     (src == AddressSpace::ub && dst == AddressSpace::gm) ||
+                     (src == AddressSpace::ub && dst == AddressSpace::l1);
+
+  if (cubeRoute && !hasEnclosingRegion<CubeOp>(getOperation()))
+    return emitOpError("copy between GM/L1/L0A/L0B/L0C/UB must be nested inside "
+                       "a tla.cube region");
+  if (vectorRoute && !hasEnclosingRegion<VectorOp>(getOperation()))
+    return emitOpError(
+        "copy between GM/UB/L1 must be nested inside a tla.vector region");
   return mlir::success();
 }
 

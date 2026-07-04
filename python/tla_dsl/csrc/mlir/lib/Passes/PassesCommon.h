@@ -133,7 +133,7 @@ inline std::optional<HivmCoreKind> getTlaOpCoreKind(Operation *op) {
 }
 
 // The function's core-type hint, persisted as the typed hivm.func_core_type
-// attribute by TlaInferFuncCoreTypePass. This is the single carrier of the
+// attribute by TlaLowerFuncPass. This is the single carrier of the
 // per-function AIC/AIV/MIX classification through the lowering pipeline.
 inline std::optional<HivmCoreKind> funcCoreKindHint(Operation *op) {
   if (!op)

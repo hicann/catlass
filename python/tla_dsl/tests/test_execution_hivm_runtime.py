@@ -208,7 +208,7 @@ def test_lower_tlair_module_to_mlir_uses_typed_extension(monkeypatch) -> None:
 
     lowered = compiler_bridge.lower_tlair_module_to_mlir(
         module,
-        mlir_print_ir_before=["tla-func-to-hacc"],
+        mlir_print_ir_before=["tla-lower-func"],
         mlir_print_ir_after=["tla-lower-to-std"],
         mlir_print_ir_before_all=True,
     )
@@ -218,7 +218,7 @@ def test_lower_tlair_module_to_mlir_uses_typed_extension(monkeypatch) -> None:
     assert calls == [
         (
             module,
-            ["tla-func-to-hacc"],
+            ["tla-lower-func"],
             ["tla-lower-to-std"],
             True,
             False,

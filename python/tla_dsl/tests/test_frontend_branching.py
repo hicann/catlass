@@ -98,12 +98,13 @@ def pointer_conditional_kernel(mem_a: tla.Tensor) -> None:
     ptr0 = tla.recast_ptr(ptr0, dtype=tla.Float16)
     ptr1 = allocator.allocate(16 * 4 * 2, 512, tla.AddressSpace.l1)
     ptr1 = tla.recast_ptr(ptr1, dtype=tla.Float16)
-    loop_range = tla.range(0, 2, 1)
-    for i in loop_range:
-        tile = tla.tile_view(root, tla.make_shape(16, 4), tla.make_coord(0, i))
-        selected = ptr0 if i == 0 else ptr1
-        local = tla.make_tensor_like(selected, tile, tla.arch.zN)
-        tla.copy(local, tile)
+    with tla.cube():
+        loop_range = tla.range(0, 2, 1)
+        for i in loop_range:
+            tile = tla.tile_view(root, tla.make_shape(16, 4), tla.make_coord(0, i))
+            selected = ptr0 if i == 0 else ptr1
+            local = tla.make_tensor_like(selected, tile, tla.arch.zN)
+            tla.copy(local, tile)
 
 
 @tla.kernel
@@ -113,11 +114,12 @@ def dynamic_mmad_init_kernel(
     acc = tla.tile_view(mem_c, tla.make_shape(16, 16), tla.make_coord(0, 0))
     lhs = tla.tile_view(mem_a, tla.make_shape(16, 16), tla.make_coord(0, 0))
     rhs = tla.tile_view(mem_b, tla.make_shape(16, 16), tla.make_coord(0, 0))
-    outer_range = tla.range(0, 2, 1)
-    for outer in outer_range:
-        inner_range = tla.range(0, 2, 1)
-        for inner in inner_range:
-            tla.mmad(acc, lhs, rhs, init_c=True if outer == 0 and inner == 0 else False)
+    with tla.cube():
+        outer_range = tla.range(0, 2, 1)
+        for outer in outer_range:
+            inner_range = tla.range(0, 2, 1)
+            for inner in inner_range:
+                tla.mmad(acc, lhs, rhs, init_c=True if outer == 0 and inner == 0 else False)
 
 @tla.kernel
 def dynamic_mmad_unit_flag_kernel(
@@ -126,12 +128,13 @@ def dynamic_mmad_unit_flag_kernel(
     acc = tla.tile_view(mem_c, tla.make_shape(16, 16), tla.make_coord(0, 0))
     lhs = tla.tile_view(mem_a, tla.make_shape(16, 16), tla.make_coord(0, 0))
     rhs = tla.tile_view(mem_b, tla.make_shape(16, 16), tla.make_coord(0, 0))
-    outer_range = tla.range(0, 2, 1)
-    for outer in outer_range:
-        inner_range = tla.range(0, 2, 1)
-        for inner in inner_range:
-            unit_flag = 0b11 if (outer == 1) and (inner == 1) else 0b10
-            tla.mmad(acc, lhs, rhs, init_c=False, unit_flag=unit_flag)
+    with tla.cube():
+        outer_range = tla.range(0, 2, 1)
+        for outer in outer_range:
+            inner_range = tla.range(0, 2, 1)
+            for inner in inner_range:
+                unit_flag = 0b11 if (outer == 1) and (inner == 1) else 0b10
+                tla.mmad(acc, lhs, rhs, init_c=False, unit_flag=unit_flag)
 
 @tla.kernel
 def dynamic_mmad_initc_unit_flag_kernel(
@@ -140,13 +143,14 @@ def dynamic_mmad_initc_unit_flag_kernel(
     acc = tla.tile_view(mem_c, tla.make_shape(16, 16), tla.make_coord(0, 0))
     lhs = tla.tile_view(mem_a, tla.make_shape(16, 16), tla.make_coord(0, 0))
     rhs = tla.tile_view(mem_b, tla.make_shape(16, 16), tla.make_coord(0, 0))
-    outer_range = tla.range(0, 2, 1)
-    for outer in outer_range:
-        inner_range = tla.range(0, 2, 1)
-        for inner in inner_range:
-            init_c = True if outer == 0 and inner == 0 else False
-            unit_flag = 0b11 if (outer == 1) and (inner == 1) else 0b10
-            tla.mmad(acc, lhs, rhs, init_c=init_c, unit_flag=unit_flag)
+    with tla.cube():
+        outer_range = tla.range(0, 2, 1)
+        for outer in outer_range:
+            inner_range = tla.range(0, 2, 1)
+            for inner in inner_range:
+                init_c = True if outer == 0 and inner == 0 else False
+                unit_flag = 0b11 if (outer == 1) and (inner == 1) else 0b10
+                tla.mmad(acc, lhs, rhs, init_c=init_c, unit_flag=unit_flag)
 
 @tla.kernel
 def inline_if_tuple_result_kernel(limit: int) -> None:
@@ -437,15 +441,16 @@ def statement_if_carried_pointer_kernel(mem_a: tla.Tensor) -> None:
     ptr0 = tla.recast_ptr(ptr0, dtype=tla.Float16)
     ptr1 = allocator.allocate(16 * 4 * 2, 512, tla.AddressSpace.l1)
     ptr1 = tla.recast_ptr(ptr1, dtype=tla.Float16)
-    for i in tla.range(0, 2, 1):
-        tile = tla.tile_view(root, tla.make_shape(16, 4), tla.make_coord(0, i))
-        selected = ptr0
-        if i == 0:
-            selected = ptr1
-        else:
+    with tla.cube():
+        for i in tla.range(0, 2, 1):
+            tile = tla.tile_view(root, tla.make_shape(16, 4), tla.make_coord(0, i))
             selected = ptr0
-        local = tla.make_tensor_like(selected, tile, tla.arch.zN)
-        tla.copy(local, tile)
+            if i == 0:
+                selected = ptr1
+            else:
+                selected = ptr0
+            local = tla.make_tensor_like(selected, tile, tla.arch.zN)
+            tla.copy(local, tile)
 
 
 @tla.kernel
@@ -456,19 +461,20 @@ def statement_if_mixed_index_pointer_kernel(mem_a: tla.Tensor) -> None:
     ptr0 = tla.recast_ptr(ptr0, dtype=tla.Float16)
     ptr1 = allocator.allocate(16 * 4 * 2, 512, tla.AddressSpace.l1)
     ptr1 = tla.recast_ptr(ptr1, dtype=tla.Float16)
-    for i in tla.range(0, 2, 1):
-        tile = tla.tile_view(root, tla.make_shape(16, 4), tla.make_coord(0, i))
-        coord = i
-        selected = ptr0
-        if i == 0:
-            coord = i + 1
-            selected = ptr1
-        else:
-            coord = i + 2
+    with tla.cube():
+        for i in tla.range(0, 2, 1):
+            tile = tla.tile_view(root, tla.make_shape(16, 4), tla.make_coord(0, i))
+            coord = i
             selected = ptr0
-        local = tla.make_tensor_like(selected, tile, tla.arch.zN)
-        tla.make_coord(coord, 0)
-        tla.copy(local, tile)
+            if i == 0:
+                coord = i + 1
+                selected = ptr1
+            else:
+                coord = i + 2
+                selected = ptr0
+            local = tla.make_tensor_like(selected, tile, tla.arch.zN)
+            tla.make_coord(coord, 0)
+            tla.copy(local, tile)
 
 
 @tla.kernel

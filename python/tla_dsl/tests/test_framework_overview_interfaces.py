@@ -496,7 +496,8 @@ def _kernel_mmad_interface_example(
     lhs: tla.Tensor, rhs: tla.Tensor, acc: tla.Tensor
 ) -> None:
     """Nested ``make_shape`` tuple trees for the frontend ``mmad`` contract."""
-    _ = tla.mmad(acc, lhs, rhs, init_c=True)
+    with tla.cube():
+        _ = tla.mmad(acc, lhs, rhs, init_c=True)
     # IR output:
     # module attributes {tla.module_exec_units = "cube"} {
     #   "tla.func"() ({
@@ -562,8 +563,9 @@ def _kernel_copy_gm_row_major_to_cbuf_zn(mem: tla.Tensor, mem_i8: tla.Tensor) ->
     ptr = allocator.allocate(32 * 32 * 4, 512, tla.AddressSpace.l1)
     ptr = tla.recast_ptr(ptr, dtype=tla.Float32)
     local = tla.make_tensor_like(ptr, tile_a, tla.arch.zN)
-    tla.copy(local, tile_a)
-    tla.copy(local, tile_b)
+    with tla.cube():
+        tla.copy(local, tile_a)
+        tla.copy(local, tile_b)
     # IR output:
     # module {
     #   "tla.func"() ({

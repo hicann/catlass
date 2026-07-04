@@ -2618,6 +2618,14 @@ def make_tensor_like(
     return _Tensor(out)
 
 
+# (src addrspace, dst addrspace) routes and the region each must be nested in.
+_COPY_CUBE_ROUTES = {
+    ("gm", "l1"), ("l1", "l0a"), ("l1", "l0b"), ("l0c", "gm"),
+    ("l0c", "ub"), ("l1", "ub"),
+}
+_COPY_VECTOR_ROUTES = {("gm", "ub"), ("ub", "gm"), ("ub", "l1")}
+
+
 @dsl_user_op
 def copy(dst: TileLike, src: TileLike, params: CopyParams | None = None, *, loc: mlir_ir.Location | None = None) -> None:
     """Copy between Tla tensor/view values.
@@ -2628,6 +2636,21 @@ def copy(dst: TileLike, src: TileLike, params: CopyParams | None = None, *, loc:
     _require_category("copy", "dst", dst, "tensor", 0)
     _require_category("copy", "src", src, "tensor", 1)
     _require_frontend_state("copy")
+
+    # Cube data-path copies (GM->L1, L1->L0A/L0B, L0C->GM, L0C->UB, L1->UB) must
+    # live in a tla.cube region; vector staging copies (GM<->UB, UB->L1) must
+    # live in a tla.vector region. Mirrors tla.copy's MLIR verifier. Reading .addrspace
+    # needs registered tensor metadata, which is unavailable for values carried
+    # through scf.if/scf.for; when it can't be resolved, skip the frontend check
+    # and let the MLIR verifier enforce placement.
+    try:
+        _route = (str(src.addrspace).lower(), str(dst.addrspace).lower())
+    except TlaLoweringError:
+        _route = None
+    if _route in _COPY_CUBE_ROUTES:
+        _runtime._require_enclosing_region("copy", "cube")
+    elif _route in _COPY_VECTOR_ROUTES:
+        _runtime._require_enclosing_region("copy", "vector")
 
     if src.addrspace == "l0c":
         if params is None:
@@ -2766,7 +2789,7 @@ def cross_core_set_flag(
         "cross_core_set_flag", "flag", cross_flag_value, "cross_flag", 0
     )
     _require_frontend_state("cross_core_set_flag")
-    _runtime._check_frontend_region_op("cross_core_set_flag", {"cube", "vector"})
+    _runtime._require_enclosing_cube_or_vector("cross_core_set_flag")
     return _tla_ops_gen.cross_core_set_flag(_as_value(cross_flag_value), loc=loc)
 
 
@@ -2779,7 +2802,7 @@ def cross_core_wait_flag(
         "cross_core_wait_flag", "flag", cross_flag_value, "cross_flag", 0
     )
     _require_frontend_state("cross_core_wait_flag")
-    _runtime._check_frontend_region_op("cross_core_wait_flag", {"cube", "vector"})
+    _runtime._require_enclosing_cube_or_vector("cross_core_wait_flag")
     return _tla_ops_gen.cross_core_wait_flag(_as_value(cross_flag_value), loc=loc)
 
 
@@ -2788,6 +2811,7 @@ def set_flag(flag_value: FlagLike, *, loc: mlir_ir.Location | None = None) -> No
     """Set a synchronization flag."""
     _require_category("set_flag", "flag", flag_value, "flag", 0)
     _require_frontend_state("set_flag")
+    _runtime._require_enclosing_cube_or_vector("set_flag")
     return _tla_ops_gen.set_flag(_as_value(flag_value), loc=loc)
 
 
@@ -2796,6 +2820,7 @@ def wait_flag(flag_value: FlagLike, *, loc: mlir_ir.Location | None = None) -> N
     """Wait on a synchronization flag."""
     _require_category("wait_flag", "flag", flag_value, "flag", 0)
     _require_frontend_state("wait_flag")
+    _runtime._require_enclosing_cube_or_vector("wait_flag")
     return _tla_ops_gen.wait_flag(_as_value(flag_value), loc=loc)
 
 
@@ -2804,6 +2829,7 @@ def pipe_barrier(pipe: PipeLike, *, loc: mlir_ir.Location | None = None) -> None
     """Insert a pipe barrier for a specific pipe."""
     _require_pipe("pipe_barrier", "pipe", pipe, 0)
     _require_frontend_state("pipe_barrier")
+    _runtime._require_enclosing_cube_or_vector("pipe_barrier")
     ctx = loc.context if loc is not None else mlir_ir.Context()
     pipe_value = str(_token(pipe)).lower()
     pipe_attr = mlir_ir.Attribute.parse(f"#tla.pipe<{pipe_value}>", context=ctx)
@@ -2874,6 +2900,7 @@ def mutex_lock(
     _require_category("mutex_lock", "mutex", mutex_value, "mutex", 0)
     _require_pipe("mutex_lock", "pipe", pipe, 1)
     _require_frontend_state("mutex_lock")
+    _runtime._require_enclosing_cube_or_vector("mutex_lock")
     return _emit_mutex_lock_op(mutex_value, pipe=pipe, loc=loc)
 
 
@@ -2886,6 +2913,7 @@ def mutex_unlock(
     _require_category("mutex_unlock", "mutex", mutex_value, "mutex", 0)
     _require_pipe("mutex_unlock", "pipe", pipe, 1)
     _require_frontend_state("mutex_unlock")
+    _runtime._require_enclosing_cube_or_vector("mutex_unlock")
     return _emit_mutex_unlock_op(mutex_value, pipe=pipe, loc=loc)
 
 
@@ -3058,6 +3086,7 @@ def mmad(
     _require_category("mmad", "lhs", lhs, "tensor", 1)
     _require_category("mmad", "rhs", rhs, "tensor", 2)
     _require_frontend_state("mmad")
+    _runtime._require_enclosing_region("mmad", "cube")
 
     if init_c is None:
         init_c = False
@@ -3134,7 +3163,7 @@ def full(
     state = _runtime._current_frontend_state()
     if state is None or not state.active_regions:
         raise TlaCoreAPIError("tla.full is only allowed inside tla.vec.func")
-    _runtime._check_frontend_region_op("full", {"vector"})
+    _runtime._require_enclosing_region("full", "vec.func")
     _require_dtype("full", "dtype", dtype, 1)
     if not (
         isinstance(dtype, type)
@@ -3204,7 +3233,7 @@ def _emit_vector_binary(
     if mask is not None:
         _require_category(op_name, "mask", mask, "mask_ssa", 2)
     _require_frontend_state(op_name)
-    _runtime._check_frontend_region_op(op_name, {"vector"})
+    _runtime._require_enclosing_region(op_name, "vec.func")
     lhs_value = _as_value(lhs)
     rhs_value = _as_value(rhs)
     if str(lhs_value.type) != str(rhs_value.type):
@@ -3297,7 +3326,7 @@ def _emit_vector_scalar_binary(
     if mask is not None:
         _require_category(op_name, "mask", mask, "mask_ssa", 2)
     _require_frontend_state(op_name)
-    _runtime._check_frontend_region_op(op_name, {"vector"})
+    _runtime._require_enclosing_region(op_name, "vec.func")
     lhs_value = _as_value(lhs)
     lhs_desc = _tla_tensor_type_for_mlir_value(lhs_value)
     rhs_value = _scalar_constant_for_element_type(
@@ -3524,7 +3553,7 @@ def _emit_vector_reduce(
             f"expected ReductionOp, got {_type_name(kind)}",
         )
     _require_frontend_state(op_name)
-    _runtime._check_frontend_region_op(op_name, {"vector"})
+    _runtime._require_enclosing_region(op_name, "vec.func")
     operand_value = _as_value(operand)
     operand_desc = _tla_tensor_type_for_mlir_value(operand_value)
     _check_reduction_element_type_supported(op_name, operand_desc.element_type)
@@ -3560,7 +3589,7 @@ def where(
     _require_category("where", "x", x, "vector_ssa", 1)
     _require_category("where", "y", y, "vector_ssa", 2)
     _require_frontend_state("where")
-    _runtime._check_frontend_region_op("where", {"vector"})
+    _runtime._require_enclosing_region("where", "vec.func")
     x_value = _as_value(x)
     y_value = _as_value(y)
     if str(x_value.type) != str(y_value.type):
@@ -3811,7 +3840,7 @@ def create_mask(
     if pattern is None:
         _op_error("create_mask", "pattern is required")
     _require_frontend_state("create_mask")
-    _runtime._check_frontend_region_op("create_mask", {"vector"})
+    _runtime._require_enclosing_region("create_mask", "vec.func")
     elem_type = _mask_elem_type("create_mask", dtype, loc)
     mask_ty = mlir_ir.Type.parse("!tla.mask")
     token = pattern._token if isinstance(pattern, _MaskPatternSentinel) else str(pattern)
@@ -3843,7 +3872,7 @@ def update_mask(
     match the enclosing vector region's element width.
     """
     _require_frontend_state("update_mask")
-    _runtime._check_frontend_region_op("update_mask", {"vector"})
+    _runtime._require_enclosing_region("update_mask", "vec.func")
     elem_type = _mask_elem_type("update_mask", dtype, loc)
     true_shape_value = _as_index_value(true_shape)
     mask_ty = mlir_ir.Type.parse("!tla.mask")

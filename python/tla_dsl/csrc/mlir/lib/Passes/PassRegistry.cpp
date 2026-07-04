@@ -12,9 +12,8 @@
 namespace tla {
 
 void registerTlaPasses() {
-  registerTlaFuncToHaccPass();
+  registerTlaLowerFuncPass();
   registerTlaSplitMixedFuncPass();
-  registerTlaInferFuncCoreTypePass();
   registerTlaLowerBlockIdxPass();
   registerConvertTlaToVectorPass();
   registerTlaLowerFlagBarrierToHivmPass();
@@ -25,15 +24,13 @@ void registerTlaPasses() {
 }
 
 void buildTlaPipeline(OpPassManager &pm) {
-  // Run before HIVM lowering so Tla function containers become func.func
-  // before downstream passes and tools inspect the module. Run again after
-  // tla-lower-to-std to repair required HACC/HIVM attrs on any func.func ops
-  // introduced or modified by later lowering.
-  // Establish AIC/AIV/MIX core types from the tla op structure up front, so the
-  // HACC attribute machinery and the mixed-func split consume a single,
-  // structure-derived classification instead of bespoke op observation.
-  pm.addPass(createTlaInferFuncCoreTypePass());
-  pm.addPass(createTlaFuncToHaccPass());
+  // Lower Tla function containers to func.func before HIVM lowering so
+  // downstream passes and tools inspect func.func. This single pass classifies
+  // each device function's AIC/AIV/MIX core type from its tla.cube/tla.vector
+  // regions, stamps the HACC/HIVM entry metadata, lowers tla.func to func.func,
+  // and tags the module core type -- one structure-derived classification the
+  // HACC machinery and the mixed-func split both consume.
+  pm.addPass(createTlaLowerFuncPass());
   pm.addPass(createTlaSplitMixedFuncPass());
   pm.addPass(createTlaAllocPtrToHivmPointerCastPass());
   pm.addPass(createConvertTlaToVectorPass());

@@ -938,6 +938,11 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
         )
 
     def visit_With(self, node: ast.With) -> Any:
+        # Names bound in the enclosing scope(s) before this region. A region body
+        # is hoisted into a nested function but is semantically an inline block
+        # sharing the enclosing scope, so enclosing names reassigned inside it
+        # must be threaded via ``nonlocal`` (see below).
+        enclosing_symbols = set(self._local_scope())
         for item in node.items:
             if isinstance(item.optional_vars, ast.Name):
                 self._scope_manager.add_to_scope(item.optional_vars.id)
@@ -961,6 +966,19 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
         region_mode = _region_mode_from_with_item(node.items[0])
 
         body_name = self._fresh(f"{region_name.replace('.', '_')}_body")
+        # The region body shares the enclosing scope semantically. Any enclosing
+        # variable reassigned inside the body -- most commonly the carried-value
+        # round-trip the if/for lowering emits (``x = internal_if(..., x, ...)``)
+        # for a mutex/flag that is method-invoked inside nested control flow --
+        # would otherwise be treated as a local of this nested function, so the
+        # read on the RHS raises UnboundLocalError. Declare those names nonlocal
+        # so they keep referring to the enclosing binding.
+        region_body: list[ast.stmt] = node.body or [ast.Pass()]
+        nonlocal_names = sorted(
+            enclosing_symbols & _assigned_names_from_statements(region_body)
+        )
+        if nonlocal_names:
+            region_body = [ast.Nonlocal(names=nonlocal_names), *region_body]
         body_fn = ast.FunctionDef(
             name=body_name,
             args=ast.arguments(
@@ -972,7 +990,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
                 vararg=None,
                 kwarg=None,
             ),
-            body=node.body or [ast.Pass()],
+            body=region_body,
             decorator_list=[],
             returns=None,
             type_comment=None,

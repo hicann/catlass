@@ -120,7 +120,7 @@ def test_cube_tla_compile_emits_minimal_hivm_attrs_after_tla_func_to_hacc() -> N
         _skip_if_mmad_rank2_tile_view_regression(exc)
         raise
 
-    output = _run_tla_compile_ir_after_pass(mlir_text, "tla-func-to-hacc")
+    output = _run_tla_compile_ir_after_pass(mlir_text, "tla-lower-func")
 
     assert "dlti.target_system_spec = #dlti.target_system_spec<" in output
     assert '#dlti.dl_entry<"ARCH", "dav-c310">' in output

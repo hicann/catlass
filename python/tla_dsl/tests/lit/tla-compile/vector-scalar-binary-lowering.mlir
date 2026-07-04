@@ -10,17 +10,19 @@ module {
     %src = builtin.unrealized_conversion_cast %src_memref : memref<64xf32, #hivm.address_space<ub>> to !vec
     %dst = builtin.unrealized_conversion_cast %dst_memref : memref<64xf32, #hivm.address_space<ub>> to !vec
     %cst = arith.constant 5.000000e+00 : f32
-    "tla.vec.func"() ({
-      %shape = "tla.make_shape"() : () -> !tla.shape<64>
-      %coord = "tla.make_coord"() : () -> !tla.coord<0>
-      %src_tile = "tla.tile_view"(%src, %shape, %coord) : (!vec, !tla.shape<64>, !tla.coord<0>) -> !vec
-      %dst_tile = "tla.tile_view"(%dst, %shape, %coord) : (!vec, !tla.shape<64>, !tla.coord<0>) -> !vec
-      %mask = "tla.create_mask"() {pattern = "M4", dtype = f32} : () -> !tla.mask
-      %v = tla.load %src_tile : !vec -> !vec
-      %mul = tla.muls %v, %cst mask %mask : !vec, f32 mask !tla.mask -> !vec
-      %max = tla.maxs %mul, %cst : !vec, f32 -> !vec
-      %out = tla.mins %max, %cst : !vec, f32 -> !vec
-      tla.store %dst_tile, %out : !vec, !vec
+    "tla.vector"() ({
+      "tla.vec.func"() ({
+        %shape = "tla.make_shape"() : () -> !tla.shape<64>
+        %coord = "tla.make_coord"() : () -> !tla.coord<0>
+        %src_tile = "tla.tile_view"(%src, %shape, %coord) : (!vec, !tla.shape<64>, !tla.coord<0>) -> !vec
+        %dst_tile = "tla.tile_view"(%dst, %shape, %coord) : (!vec, !tla.shape<64>, !tla.coord<0>) -> !vec
+        %mask = "tla.create_mask"() {pattern = "M4", dtype = f32} : () -> !tla.mask
+        %v = tla.load %src_tile : !vec -> !vec
+        %mul = tla.muls %v, %cst mask %mask : !vec, f32 mask !tla.mask -> !vec
+        %max = tla.maxs %mul, %cst : !vec, f32 -> !vec
+        %out = tla.mins %max, %cst : !vec, f32 -> !vec
+        tla.store %dst_tile, %out : !vec, !vec
+      }) : () -> ()
     }) : () -> ()
     return
   }

@@ -86,116 +86,117 @@ def basic_mmad_kernel(mem_a: tla.Tensor, mem_b: tla.Tensor, mem_c: tla.Tensor) -
     total_blocks = grid_m * grid_n
 
 
-    l1_buf_idx = c0
-    l0_buf_idx = c0
+    with tla.cube():
+        l1_buf_idx = c0
+        l0_buf_idx = c0
 
-    block_range = tla.range(tla.arch.block_idx(), total_blocks, tla.arch.block_dim())
-    for block_linear in block_range:
-        block_row = block_linear // grid_n
-        block_col = block_linear % grid_n
-        gm_a_by_core = tla.tile_view(
-            mem_a, tla.make_shape(l1_tm, k), tla.make_coord(block_row, c0)
-        )
-        gm_b_by_core = tla.tile_view(
-            mem_b, tla.make_shape(k, l1_tn), tla.make_coord(c0, block_col)
-        )
-        gm_c_by_core = tla.tile_view(
-            mem_c, tla.make_shape(l1_tm, l1_tn), tla.make_coord(block_row, block_col)
-        )
-
-        k_block = gm_a_by_core.origin_shape[1]
-        k_l1_count = (k_block + l1_tk - 1) // l1_tk
-        k_l1_range = tla.range(c0, k_l1_count, c1)
-
-        l0_c = tla.make_tensor_like(l0c_ptr, gm_c_by_core, dst_dtype=DTYPE_C)
-
-        for k_l1 in k_l1_range:
-            gm_a_l1 = tla.tile_view(
-                gm_a_by_core, tla.make_shape(l1_tm, l1_tk), tla.make_coord(c0, k_l1)
+        block_range = tla.range(tla.arch.block_idx(), total_blocks, tla.arch.block_dim())
+        for block_linear in block_range:
+            block_row = block_linear // grid_n
+            block_col = block_linear % grid_n
+            gm_a_by_core = tla.tile_view(
+                mem_a, tla.make_shape(l1_tm, k), tla.make_coord(block_row, c0)
             )
-            gm_b_l1 = tla.tile_view(
-                gm_b_by_core, tla.make_shape(l1_tk, l1_tn), tla.make_coord(k_l1, c0)
+            gm_b_by_core = tla.tile_view(
+                mem_b, tla.make_shape(k, l1_tn), tla.make_coord(c0, block_col)
+            )
+            gm_c_by_core = tla.tile_view(
+                mem_c, tla.make_shape(l1_tm, l1_tn), tla.make_coord(block_row, block_col)
             )
 
-            l1_a = tla.make_tensor_like(
-                l1a0_ptr if (l1_buf_idx == c0) else l1a1_ptr, gm_a_l1
-            )
-            l1_b = tla.make_tensor_like(
-                l1b0_ptr if (l1_buf_idx == c0) else l1b1_ptr, gm_b_l1
-            )
+            k_block = gm_a_by_core.origin_shape[1]
+            k_l1_count = (k_block + l1_tk - 1) // l1_tk
+            k_l1_range = tla.range(c0, k_l1_count, c1)
+
+            l0_c = tla.make_tensor_like(l0c_ptr, gm_c_by_core, dst_dtype=DTYPE_C)
+
+            for k_l1 in k_l1_range:
+                gm_a_l1 = tla.tile_view(
+                    gm_a_by_core, tla.make_shape(l1_tm, l1_tk), tla.make_coord(c0, k_l1)
+                )
+                gm_b_l1 = tla.tile_view(
+                    gm_b_by_core, tla.make_shape(l1_tk, l1_tn), tla.make_coord(k_l1, c0)
+                )
+
+                l1_a = tla.make_tensor_like(
+                    l1a0_ptr if (l1_buf_idx == c0) else l1a1_ptr, gm_a_l1
+                )
+                l1_b = tla.make_tensor_like(
+                    l1b0_ptr if (l1_buf_idx == c0) else l1b1_ptr, gm_b_l1
+                )
             
-            mutex_l1a = mutex_l1a0 if (l1_buf_idx == c0) else mutex_l1a1
-            mutex_l1a.lock(pipe=tla.arch.MTE2)
-            tla.copy(l1_a, gm_a_l1)
-            mutex_l1a.unlock(pipe=tla.arch.MTE2)
+                mutex_l1a = mutex_l1a0 if (l1_buf_idx == c0) else mutex_l1a1
+                mutex_l1a.lock(pipe=tla.arch.MTE2)
+                tla.copy(l1_a, gm_a_l1)
+                mutex_l1a.unlock(pipe=tla.arch.MTE2)
 
-            mutex_l1b = mutex_l1b0 if (l1_buf_idx == c0) else mutex_l1b1
-            mutex_l1b.lock(pipe=tla.arch.MTE2)
-            tla.copy(l1_b, gm_b_l1)
-            mutex_l1b.unlock(pipe=tla.arch.MTE2)
+                mutex_l1b = mutex_l1b0 if (l1_buf_idx == c0) else mutex_l1b1
+                mutex_l1b.lock(pipe=tla.arch.MTE2)
+                tla.copy(l1_b, gm_b_l1)
+                mutex_l1b.unlock(pipe=tla.arch.MTE2)
 
-            k_l0_count = (l1_a.origin_shape[1] + l0_tk - 1) // l0_tk
-            k_l0_range = tla.range(c0, k_l0_count, c1)
+                k_l0_count = (l1_a.origin_shape[1] + l0_tk - 1) // l0_tk
+                k_l0_range = tla.range(c0, k_l0_count, c1)
 
-            for k_l0 in k_l0_range:
-                l1_a_l0 = tla.tile_view(
-                    l1_a, tla.make_shape(l0_tm, l0_tk), tla.make_coord(c0, k_l0)
-                )
-                l1_b_l0 = tla.tile_view(
-                    l1_b, tla.make_shape(l0_tk, l0_tn), tla.make_coord(k_l0, c0)
-                )
+                for k_l0 in k_l0_range:
+                    l1_a_l0 = tla.tile_view(
+                        l1_a, tla.make_shape(l0_tm, l0_tk), tla.make_coord(c0, k_l0)
+                    )
+                    l1_b_l0 = tla.tile_view(
+                        l1_b, tla.make_shape(l0_tk, l0_tn), tla.make_coord(k_l0, c0)
+                    )
 
-                l0_a = tla.make_tensor_like(
-                    l0a0_ptr if (l0_buf_idx == c0) else l0a1_ptr, l1_a_l0
-                )
-                l0_b = tla.make_tensor_like(
-                    l0b0_ptr if (l0_buf_idx == c0) else l0b1_ptr, l1_b_l0
-                )
+                    l0_a = tla.make_tensor_like(
+                        l0a0_ptr if (l0_buf_idx == c0) else l0a1_ptr, l1_a_l0
+                    )
+                    l0_b = tla.make_tensor_like(
+                        l0b0_ptr if (l0_buf_idx == c0) else l0b1_ptr, l1_b_l0
+                    )
 
-                mutex_l0a = mutex_l0a0 if (l0_buf_idx == c0) else mutex_l0a1
-                mutex_l1a.lock(pipe=tla.arch.MTE1)
-                mutex_l0a.lock(pipe=tla.arch.MTE1)
-                tla.copy(l0_a, l1_a_l0)
-                mutex_l0a.unlock(pipe=tla.arch.MTE1)
-                mutex_l1a.unlock(pipe=tla.arch.MTE1)
+                    mutex_l0a = mutex_l0a0 if (l0_buf_idx == c0) else mutex_l0a1
+                    mutex_l1a.lock(pipe=tla.arch.MTE1)
+                    mutex_l0a.lock(pipe=tla.arch.MTE1)
+                    tla.copy(l0_a, l1_a_l0)
+                    mutex_l0a.unlock(pipe=tla.arch.MTE1)
+                    mutex_l1a.unlock(pipe=tla.arch.MTE1)
 
 
-                mutex_l0b = mutex_l0b0 if (l0_buf_idx == c0) else mutex_l0b1
-                mutex_l1b.lock(pipe=tla.arch.MTE1)
-                mutex_l0b.lock(pipe=tla.arch.MTE1)
-                tla.copy(l0_b, l1_b_l0)
-                mutex_l0b.unlock(pipe=tla.arch.MTE1)
-                mutex_l1b.unlock(pipe=tla.arch.MTE1)
+                    mutex_l0b = mutex_l0b0 if (l0_buf_idx == c0) else mutex_l0b1
+                    mutex_l1b.lock(pipe=tla.arch.MTE1)
+                    mutex_l0b.lock(pipe=tla.arch.MTE1)
+                    tla.copy(l0_b, l1_b_l0)
+                    mutex_l0b.unlock(pipe=tla.arch.MTE1)
+                    mutex_l1b.unlock(pipe=tla.arch.MTE1)
 
-                mutex_l0a.lock(pipe=tla.arch.CUBE)
-                mutex_l0b.lock(pipe=tla.arch.CUBE)
-                if not ENABLE_UNIT_FLAG:
-                    mutex_l0c.lock(pipe=tla.arch.CUBE)
+                    mutex_l0a.lock(pipe=tla.arch.CUBE)
+                    mutex_l0b.lock(pipe=tla.arch.CUBE)
+                    if not ENABLE_UNIT_FLAG:
+                        mutex_l0c.lock(pipe=tla.arch.CUBE)
 
-                init_c = True if k_l1 == 0 and k_l0 == 0 else False
-                unit_flag = 0
-                if ENABLE_UNIT_FLAG:
-                    if (k_l1 == k_l1_count - 1) and (k_l0 == k_l0_count - 1):
-                        unit_flag = 0b11
-                    else:
-                        unit_flag = 0b10
+                    init_c = True if k_l1 == 0 and k_l0 == 0 else False
+                    unit_flag = 0
+                    if ENABLE_UNIT_FLAG:
+                        if (k_l1 == k_l1_count - 1) and (k_l0 == k_l0_count - 1):
+                            unit_flag = 0b11
+                        else:
+                            unit_flag = 0b10
 
-                tla.mmad(l0_c, l0_a, l0_b, init_c=init_c, unit_flag=unit_flag)
+                    tla.mmad(l0_c, l0_a, l0_b, init_c=init_c, unit_flag=unit_flag)
 
-                if not ENABLE_UNIT_FLAG:
-                    mutex_l0c.unlock(pipe=tla.arch.CUBE)
-                mutex_l0b.unlock(pipe=tla.arch.CUBE)
-                mutex_l0a.unlock(pipe=tla.arch.CUBE)
+                    if not ENABLE_UNIT_FLAG:
+                        mutex_l0c.unlock(pipe=tla.arch.CUBE)
+                    mutex_l0b.unlock(pipe=tla.arch.CUBE)
+                    mutex_l0a.unlock(pipe=tla.arch.CUBE)
 
-                l0_buf_idx = c1 - l0_buf_idx
-            l1_buf_idx = c1 - l1_buf_idx
+                    l0_buf_idx = c1 - l0_buf_idx
+                l1_buf_idx = c1 - l1_buf_idx
 
-        if not ENABLE_UNIT_FLAG:
-            mutex_l0c.lock(pipe=tla.arch.FIX)
-            tla.copy(gm_c_by_core, l0_c)
-            mutex_l0c.unlock(pipe=tla.arch.FIX)
-        else:
-            tla.copy(gm_c_by_core, l0_c, tla.params.CopyL0C2DstParams(unit_flag=0b11))
+            if not ENABLE_UNIT_FLAG:
+                mutex_l0c.lock(pipe=tla.arch.FIX)
+                tla.copy(gm_c_by_core, l0_c)
+                mutex_l0c.unlock(pipe=tla.arch.FIX)
+            else:
+                tla.copy(gm_c_by_core, l0_c, tla.params.CopyL0C2DstParams(unit_flag=0b11))
 
 
 

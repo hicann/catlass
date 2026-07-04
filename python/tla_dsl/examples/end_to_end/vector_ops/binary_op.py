@@ -52,24 +52,26 @@ def binary_op(mem_x: tla.Tensor, mem_y: tla.Tensor, mem_z: tla.Tensor) -> None:
     y_ub = tla.make_tensor_like(y_ub_ptr, y_gm, tla.arch.RowMajor)
     z_ub = tla.make_tensor_like(z_ub_ptr, z_gm, tla.arch.RowMajor)
 
-    tla.copy(x_ub, x_gm)
-    tla.copy(y_ub, y_gm)
+    with tla.vector():
+        tla.copy(x_ub, x_gm)
+        tla.copy(y_ub, y_gm)
 
-    tla.set_flag(ub_loaded)
-    tla.wait_flag(ub_loaded)
-    with tla.vec.func(mode="simd"):
-        for i in tla.range(LOOPS):
-            x_tile = tla.tile_view(x_ub, tla.make_shape(VL_ELE), tla.make_coord(i))
-            y_tile = tla.tile_view(y_ub, tla.make_shape(VL_ELE), tla.make_coord(i))
-            z_tile = tla.tile_view(z_ub, tla.make_shape(VL_ELE), tla.make_coord(i))
+        tla.set_flag(ub_loaded)
+        tla.wait_flag(ub_loaded)
+        with tla.vec.func(mode="simd"):
+            for i in tla.range(LOOPS):
+                x_tile = tla.tile_view(x_ub, tla.make_shape(VL_ELE), tla.make_coord(i))
+                y_tile = tla.tile_view(y_ub, tla.make_shape(VL_ELE), tla.make_coord(i))
+                z_tile = tla.tile_view(z_ub, tla.make_shape(VL_ELE), tla.make_coord(i))
 
-            z_tile.store(_BINARY_OP(x_tile.load(), y_tile.load()))
+                z_tile.store(_BINARY_OP(x_tile.load(), y_tile.load()))
 
-    tla.set_flag(vec_done)
-    tla.wait_flag(vec_done)
+        tla.set_flag(vec_done)
+        tla.wait_flag(vec_done)
 
-    tla.copy(z_gm, z_ub)
-    tla.pipe_barrier(tla.pipes.ALL)
+        tla.copy(z_gm, z_ub)
+
+        tla.pipe_barrier(tla.pipes.ALL)
 
 
 def _operator_specs() -> dict[str, dict[str, Any]]:

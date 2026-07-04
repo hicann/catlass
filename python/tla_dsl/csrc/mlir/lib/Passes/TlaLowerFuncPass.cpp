@@ -56,33 +56,53 @@ void stampFunctionHaccHivmAttrs(Operation *op, HivmCoreKind coreKind) {
   op->setAttr(kParallelModeAttrName, StringAttr::get(ctx, "simd"));
 }
 
-// Infer each device function's core type (AIC/AIV/MIX) from the tla ops it
-// contains, then aggregate the module core type. Mirrors the design of
-// AscendNPU-IR-Dev's hivm InferFuncCoreType pass, but works on tla ops. The
-// per-function decision is ordered:
-//
-//   1. both a tla.vector and a tla.cube region present  -> MIX;
-//   1b. else both tla.mmad and tla.vec.func present      -> error: mixed work
-//      without the regions needed to split it;
-//   2. else tla.cube / tla.mmad present                 -> AIC;
-//   3. else tla.vector / tla.vec.func present           -> AIV;
-//   4. else fall back to on-chip scratch placement: any L1 alloc -> AIC,
-//      only-UB allocs -> AIV. The fallback avoids misclassifying a split mixed
-//      function whose shared allocations were duplicated into it, and only
-//      matters when no op pins the core type.
-class TlaInferFuncCoreTypePass
-    : public PassWrapper<TlaInferFuncCoreTypePass, OperationPass<ModuleOp>> {
-public:
-  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TlaInferFuncCoreTypePass)
+// Lower the tla.func / tla.return containers to func.func / func.return, copying
+// the (non-signature) HACC/HIVM attributes stamped above onto the new func.func.
+static LogicalResult lowerTlaFuncContainers(ModuleOp module, MLIRContext *ctx) {
+  ConversionTarget target(*ctx);
+  target.addLegalDialect<func::FuncDialect, ::tla::TlaDialect>();
+  target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
+  target.addIllegalOp<::tla::FuncOp, ::tla::ReturnOp>();
 
-  StringRef getArgument() const override { return "tla-infer-func-core-type"; }
-  StringRef getName() const override { return "TlaInferFuncCoreTypePass"; }
+  RewritePatternSet patterns(ctx);
+  patterns.add<LowerTlaFuncToFuncPattern<LowerTlaFuncToFuncAttrPolicy::CopyNonSignatureAttrs>,
+               LowerTlaReturnToFuncReturnPattern>(ctx);
+  return applyPartialConversion(module, target, std::move(patterns));
+}
+
+// Lower tla device functions to HACC func.func in a single step: classify each
+// device function's core type (AIC/AIV/MIX) from the tla.cube / tla.vector
+// regions it contains, stamp the per-function HACC/HIVM entry metadata, lower
+// the tla.func containers to func.func, and tag the module core type + C310
+// target.
+//
+// Region placement is mandatory (enforced by the tla op verifiers: tla.mmad and
+// cube-path copies live in tla.cube; tla.vec.func, the vector compute ops, and
+// GM<->UB copies live in tla.vector), so region presence alone determines the
+// core type:
+//
+//   both tla.cube and tla.vector present -> MIX
+//   tla.cube only                        -> AIC
+//   tla.vector only, or no region at all  -> AIV
+//
+// This runs before TlaSplitMixedFuncPass, so every function still has its
+// frontend regions intact here; the split fragments get their core type stamped
+// by that pass directly and are not re-classified.
+class TlaLowerFuncPass : public PassWrapper<TlaLowerFuncPass, OperationPass<ModuleOp>> {
+public:
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TlaLowerFuncPass)
+
+  StringRef getArgument() const override { return "tla-lower-func"; }
+  StringRef getName() const override { return "TlaLowerFuncPass"; }
   StringRef getDescription() const override {
-    return "Infer AIC/AIV/MIX core type for tla device functions and module.";
+    return "Lower tla.func device containers to HACC func.func: classify AIC/AIV/MIX "
+           "from tla.cube/tla.vector regions, stamp the per-function HACC/HIVM entry "
+           "attributes, and attach the module core type and C310 target attributes.";
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<func::FuncDialect, hacc::HACCDialect, hivm::HIVMDialect, ::tla::TlaDialect>();
+    registry.insert<mlir::DLTIDialect, hacc::HACCDialect, hivm::HIVMDialect, func::FuncDialect,
+                    ::tla::TlaDialect>();
   }
 
   // A function whose core type we should infer: skip declarations, private
@@ -97,86 +117,42 @@ public:
     return true;
   }
 
-  std::optional<HivmCoreKind> inferFuncCoreKind(Operation *funcOp) {
-    bool hasVector = false, hasCube = false, hasMmad = false, hasVecFunc = false;
-    bool sawUbAlloc = false, sawL1Alloc = false;
+  HivmCoreKind inferFuncCoreKind(Operation *funcOp) {
+    bool hasVector = false, hasCube = false;
     funcOp->walk([&](Operation *op) {
       if (isa<::tla::VectorOp>(op))
         hasVector = true;
       else if (isa<::tla::CubeOp>(op))
         hasCube = true;
-      else if (isa<::tla::MmadOp>(op))
-        hasMmad = true;
-      else if (isa<::tla::VecFuncOp>(op))
-        hasVecFunc = true;
-      else if (auto alloc = dyn_cast<::tla::AllocPtrOp>(op)) {
-        if (auto ptrTy = dyn_cast<::tla::PtrType>(alloc.getResult().getType())) {
-          sawUbAlloc |= ptrTy.getAddrspace() == AddressSpace::ub;
-          sawL1Alloc |= ptrTy.getAddrspace() == AddressSpace::l1;
-        }
-      }
       // MIX is terminal: once both regions are seen, no later op can change
       // the decision, so stop walking.
       return (hasVector && hasCube) ? WalkResult::interrupt()
                                     : WalkResult::advance();
     });
 
-    // Region kind decides the core type; with no region, op presence does.
-    //
-    // Both regions -> mixed.
     if (hasVector && hasCube)
       return HivmCoreKind::MIX;
-    // Cube region only -> AIC.
-    else if (!hasVector && hasCube)
+    if (hasCube)
       return HivmCoreKind::AIC;
-    // Vector region only -> AIV.
-    else if (hasVector && !hasCube)
-      return HivmCoreKind::AIV;
-    // No region: decide from the ops instead.
-    else if (!hasVector && !hasCube) {
-      // Cube and vector ops but no regions to split on: reject.
-      if (hasVecFunc && hasMmad) {
-        funcOp->emitError()
-            << "function has both tla.mmad (cube) and tla.vec.func (vector) work "
-               "but lacks the matching tla.vector/tla.cube regions to mark it mixed";
-        signalPassFailure();
-        return std::nullopt;
-      }
-      // Cube op only -> AIC.
-      else if (!hasVecFunc && hasMmad)
-        return HivmCoreKind::AIC;
-      // Vector op only -> AIV.
-      else if (hasVecFunc && !hasMmad)
-        return HivmCoreKind::AIV;
-      // No op either: fall back to scratch (L1 -> AIC, UB -> AIV).
-      else if (!hasVecFunc && !hasMmad) {
-        if (sawL1Alloc)
-          return HivmCoreKind::AIC;
-        else if (sawUbAlloc)
-          return HivmCoreKind::AIV;
-      }
-    }
-    // Fallback for empty kernels
+    // tla.vector only, or a region-less (empty / sync-only) function -> AIV.
     return HivmCoreKind::AIV;
   }
 
   void runOnOperation() override {
     ModuleOp module = getOperation();
     MLIRContext *ctx = &getContext();
-    std::optional<HivmCoreKind> moduleKind;
 
+    // 1. Classify + stamp each device function, aggregating the module core type.
+    //    Done on the tla.func containers so the attrs are carried onto func.func
+    //    by the CopyNonSignatureAttrs lowering below.
+    std::optional<HivmCoreKind> moduleKind;
     auto classify = [&](Operation *funcOp, Region &body) {
       if (!isInferableFunc(funcOp, body))
         return;
-      std::optional<HivmCoreKind> funcKind = inferFuncCoreKind(funcOp);
-      if (!funcKind)
-        return;
-      // A function with both cube and vector work (MIX) is a mixed-split
-      // candidate; that is derived downstream from func_core_type == MIX.
-      stampFunctionHaccHivmAttrs(funcOp, *funcKind);
-      moduleKind = promoteCoreKind(moduleKind, *funcKind);
+      HivmCoreKind funcKind = inferFuncCoreKind(funcOp);
+      stampFunctionHaccHivmAttrs(funcOp, funcKind);
+      moduleKind = promoteCoreKind(moduleKind, funcKind);
     };
-
     for (::tla::FuncOp funcOp : module.getOps<::tla::FuncOp>())
       classify(funcOp, funcOp.getBody());
     for (func::FuncOp funcOp : module.getOps<func::FuncOp>())
@@ -187,15 +163,21 @@ public:
     HivmCoreKind resolvedModuleKind = moduleKind.value_or(HivmCoreKind::AIV);
     module->setAttr(hivm::TModuleCoreTypeAttr::name,
                     hivm::TModuleCoreTypeAttr::get(ctx, toModuleCoreType(resolvedModuleKind)));
+
+    // 2. Lower the tla.func containers to func.func and attach the C310 module
+    //    target attributes.
+    if (failed(lowerTlaFuncContainers(module, ctx))) {
+      signalPassFailure();
+      return;
+    }
+    ensureC310TargetAttrs(module);
   }
 };
 
 } // namespace
 
-std::unique_ptr<Pass> createTlaInferFuncCoreTypePass() {
-  return std::make_unique<TlaInferFuncCoreTypePass>();
-}
+std::unique_ptr<Pass> createTlaLowerFuncPass() { return std::make_unique<TlaLowerFuncPass>(); }
 
-void registerTlaInferFuncCoreTypePass() { PassRegistration<TlaInferFuncCoreTypePass>(); }
+void registerTlaLowerFuncPass() { PassRegistration<TlaLowerFuncPass>(); }
 
 } // namespace tla

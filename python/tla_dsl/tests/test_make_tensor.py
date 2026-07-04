@@ -31,7 +31,8 @@ def make_tensor_default_coord_kernel(mem_in: tla.Tensor) -> None:
     local = tla.make_tensor(
         ptr, tla.make_layout(tla.make_shape(16, 16), tla.make_stride(16, 1))
     )
-    tla.copy(tile, local)
+    with tla.vector():
+        tla.copy(tile, local)
 
 
 def test_make_tensor_emits_op_with_explicit_coord() -> None:

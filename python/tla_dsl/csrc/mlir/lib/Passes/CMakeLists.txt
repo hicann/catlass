@@ -1,8 +1,7 @@
 add_library(TlaPasses
   PassRegistry.cpp
-  TlaFuncToHaccPass.cpp
+  TlaLowerFuncPass.cpp
   TlaSplitMixedFuncPass.cpp
-  TlaInferFuncCoreTypePass.cpp
   TlaLowerBlockIdxPass.cpp
   TlaAllocPtrToHivmPointerCastPass.cpp
   TlaLowerMutexToStdPass.cpp

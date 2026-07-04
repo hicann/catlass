@@ -127,21 +127,19 @@ def test_loc_none_without_frontend_state_raises() -> None:
 
 def test_representative_ops_work_without_explicit_loc() -> None:
     """Representative DSL ops across categories work with auto-captured location."""
+    # Region-requiring verbs (set_flag/wait_flag/pipe_barrier/cross_core_*/
+    # mutex_lock/unlock) can't be emitted here: they must be nested in a
+    # tla.cube/tla.vector region, and region ops are not enterable under
+    # _eager_capture. The auto-location path is identical for every dsl_user_op,
+    # so representative region-free ops across categories still exercise it.
     with runtime_mod._eager_capture() as state:
         sh = tla.make_shape(1, 2)
         tla.make_coord(0, 0)
         st = tla.make_stride(1, 100)
         tla.make_layout(sh, st)
-        f = tla.flag("ready")
-        tla.set_flag(f)
-        tla.wait_flag(f)
-        tla.pipe_barrier(tla.pipes.MTE3)
-        cf = tla.cross_flag("x", tla.pipes.MTE3, tla.pipes.SCALAR)
-        tla.cross_core_set_flag(cf)
-        tla.cross_core_wait_flag(cf)
-        mutex = tla.mutex(resource="l0a_ping", id=-1)
-        mutex.lock(pipe=tla.arch.MTE2)
-        mutex.unlock(pipe=tla.arch.MTE2)
+        tla.flag("ready")
+        tla.cross_flag("x", tla.pipes.MTE3, tla.pipes.SCALAR)
+        tla.mutex(resource="l0a_ping", id=-1)
 
     mlir = state.module.operation.get_asm(
         print_generic_op_form=True, assume_verified=False
@@ -150,14 +148,7 @@ def test_representative_ops_work_without_explicit_loc() -> None:
         "tla.make_shape",
         "tla.make_layout",
         "tla.flag",
-        "tla.set_flag",
-        "tla.wait_flag",
-        "tla.pipe_barrier",
         "tla.cross_flag",
-        "tla.cross_core_set_flag",
-        "tla.cross_core_wait_flag",
         "tla.mutex",
-        "tla.mutex_lock",
-        "tla.mutex_unlock",
     ):
         assert op_name in mlir

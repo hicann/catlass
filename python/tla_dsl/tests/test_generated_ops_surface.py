@@ -17,20 +17,21 @@ def _ops_surface_kernel(src: tla.Tensor, dst: tla.Tensor) -> None:
 
     tla.copy(src_tile, dst_tile)
 
-    ready = tla.flag("ready")
-    tla.set_flag(ready)
-    tla.wait_flag(ready)
-    cross = tla.cross_flag("x", tla.pipes.MTE3, tla.pipes.SCALAR)
-    tla.cross_core_set_flag(cross)
-    tla.cross_core_wait_flag(cross)
-    tla.pipe_barrier(tla.pipes.MTE3)
-    mutex_ping = tla.mutex(resource="l0a_ping", id=0)
-    mutex_pong = tla.mutex(resource="l0a_pong", id=1)
-    block_range = tla.range(0, 10, 1)
-    for idx in block_range:
-        mutex = mutex_ping if idx % 2 == 0 else mutex_pong
-        mutex.lock(pipe=tla.arch.MTE2)
-        mutex.unlock(pipe=tla.arch.MTE2)
+    with tla.vector():
+        ready = tla.flag("ready")
+        tla.set_flag(ready)
+        tla.wait_flag(ready)
+        cross = tla.cross_flag("x", tla.pipes.MTE3, tla.pipes.SCALAR)
+        tla.cross_core_set_flag(cross)
+        tla.cross_core_wait_flag(cross)
+        tla.pipe_barrier(tla.pipes.MTE3)
+        mutex_ping = tla.mutex(resource="l0a_ping", id=0)
+        mutex_pong = tla.mutex(resource="l0a_pong", id=1)
+        block_range = tla.range(0, 10, 1)
+        for idx in block_range:
+            mutex = mutex_ping if idx % 2 == 0 else mutex_pong
+            mutex.lock(pipe=tla.arch.MTE2)
+            mutex.unlock(pipe=tla.arch.MTE2)
 
 
 def test_generated_binding_symbols_exist_for_wrapped_ops() -> None:

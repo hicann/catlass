@@ -2,27 +2,29 @@
 
 module {
   tla.func @mutex_for_iter_arg_dynamic_if() {
-    %c0 = arith.constant 0 : index
-    %c1 = arith.constant 1 : index
-    %c2 = arith.constant 2 : index
-    %cond = arith.cmpi slt, %c0, %c1 : index
-    %mutex0 = tla.mutex "l1a0" {id = 4 : i64} -> !tla.mutex
-    %mutex1 = tla.mutex "l1a1" {id = 5 : i64} -> !tla.mutex
+    "tla.cube"() ({
+      %c0 = arith.constant 0 : index
+      %c1 = arith.constant 1 : index
+      %c2 = arith.constant 2 : index
+      %cond = arith.cmpi slt, %c0, %c1 : index
+      %mutex0 = tla.mutex "l1a0" {id = 4 : i64} -> !tla.mutex
+      %mutex1 = tla.mutex "l1a1" {id = 5 : i64} -> !tla.mutex
 
-    %chosen = scf.if %cond -> (!tla.mutex) {
-      scf.yield %mutex0 : !tla.mutex
-    } else {
-      scf.yield %mutex1 : !tla.mutex
-    }
+      %chosen = scf.if %cond -> (!tla.mutex) {
+        scf.yield %mutex0 : !tla.mutex
+      } else {
+        scf.yield %mutex1 : !tla.mutex
+      }
 
-    %result = scf.for %i = %c0 to %c2 step %c1
-        iter_args(%m = %chosen) -> (!tla.mutex) {
-      tla.mutex_lock %m [#tla.pipe<mte1>] : !tla.mutex
-      tla.mutex_unlock %m [#tla.pipe<mte1>] : !tla.mutex
-      scf.yield %m : !tla.mutex
-    }
+      %result = scf.for %i = %c0 to %c2 step %c1
+          iter_args(%m = %chosen) -> (!tla.mutex) {
+        tla.mutex_lock %m [#tla.pipe<mte1>] : !tla.mutex
+        tla.mutex_unlock %m [#tla.pipe<mte1>] : !tla.mutex
+        scf.yield %m : !tla.mutex
+      }
 
-    tla.mutex_lock %result [#tla.pipe<cube>] : !tla.mutex
+      tla.mutex_lock %result [#tla.pipe<cube>] : !tla.mutex
+    }) : () -> ()
     tla.return
   }
 }

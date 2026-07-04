@@ -2,19 +2,21 @@
 
 module {
   tla.func @mutex_if_dynamic_id() {
-    %c0 = arith.constant 0 : index
-    %c1 = arith.constant 1 : index
-    %cond = arith.cmpi slt, %c0, %c1 : index
-    %mutex0 = tla.mutex "l1a0" {id = 1 : i64} -> !tla.mutex
-    %mutex1 = tla.mutex "l1a1" {id = 2 : i64} -> !tla.mutex
+    "tla.cube"() ({
+      %c0 = arith.constant 0 : index
+      %c1 = arith.constant 1 : index
+      %cond = arith.cmpi slt, %c0, %c1 : index
+      %mutex0 = tla.mutex "l1a0" {id = 1 : i64} -> !tla.mutex
+      %mutex1 = tla.mutex "l1a1" {id = 2 : i64} -> !tla.mutex
 
-    %chosen = scf.if %cond -> (!tla.mutex) {
-      scf.yield %mutex0 : !tla.mutex
-    } else {
-      scf.yield %mutex1 : !tla.mutex
-    }
+      %chosen = scf.if %cond -> (!tla.mutex) {
+        scf.yield %mutex0 : !tla.mutex
+      } else {
+        scf.yield %mutex1 : !tla.mutex
+      }
 
-    tla.mutex_lock %chosen [#tla.pipe<mte2>] : !tla.mutex
+      tla.mutex_lock %chosen [#tla.pipe<mte2>] : !tla.mutex
+    }) : () -> ()
     tla.return
   }
 }

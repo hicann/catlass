@@ -116,12 +116,23 @@ def cube_static_kernel(mem_a: tla.Tensor, mem_b: tla.Tensor, mem_c: tla.Tensor) 
 
 
 @tla.kernel
-def mutex_guard_copy_kernel(dst: tla.Tensor, src: tla.Tensor) -> None:
+def mutex_guard_copy_cube_kernel(dst: tla.Tensor, src: tla.Tensor) -> None:
     mutex = tla.mutex(resource="copy_mutex", id=0)
     dst_tile = tla.tile_view(dst, tla.make_shape(16, 16), tla.make_coord(0, 0))
     src_tile = tla.tile_view(src, tla.make_shape(16, 16), tla.make_coord(0, 0))
-    with tla.mutex_guard(mutex):
-        tla.copy(dst_tile, src_tile)
+    with tla.cube():
+        with tla.mutex_guard(mutex):
+            tla.copy(dst_tile, src_tile)
+
+
+@tla.kernel
+def mutex_guard_copy_vec_kernel(dst: tla.Tensor, src: tla.Tensor) -> None:
+    mutex = tla.mutex(resource="copy_mutex", id=0)
+    dst_tile = tla.tile_view(dst, tla.make_shape(16, 16), tla.make_coord(0, 0))
+    src_tile = tla.tile_view(src, tla.make_shape(16, 16), tla.make_coord(0, 0))
+    with tla.vector():
+        with tla.mutex_guard(mutex):
+            tla.copy(dst_tile, src_tile)
 
 
 @tla.kernel
@@ -129,9 +140,10 @@ def mutex_guard_two_copy_kernel(dst: tla.Tensor, src: tla.Tensor) -> None:
     mutex = tla.mutex(resource="copy_mutex", id=0)
     dst_tile = tla.tile_view(dst, tla.make_shape(16, 16), tla.make_coord(0, 0))
     src_tile = tla.tile_view(src, tla.make_shape(16, 16), tla.make_coord(0, 0))
-    with tla.mutex_guard(mutex):
-        tla.copy(dst_tile, src_tile)
-        tla.copy(dst_tile, src_tile)
+    with tla.cube():
+        with tla.mutex_guard(mutex):
+            tla.copy(dst_tile, src_tile)
+            tla.copy(dst_tile, src_tile)
 
 
 @tla.kernel
@@ -142,9 +154,10 @@ def mutex_guard_mixed_pipe_kernel(
     gm_tile = tla.tile_view(gm, tla.make_shape(16, 16), tla.make_coord(0, 0))
     l1_tile = tla.tile_view(l1, tla.make_shape(16, 16), tla.make_coord(0, 0))
     l0a_tile = tla.tile_view(l0a, tla.make_shape(16, 16), tla.make_coord(0, 0))
-    with tla.mutex_guard(mutex):
-        tla.copy(l1_tile, gm_tile)
-        tla.copy(l0a_tile, l1_tile)
+    with tla.cube():
+        with tla.mutex_guard(mutex):
+            tla.copy(l1_tile, gm_tile)
+            tla.copy(l0a_tile, l1_tile)
 
 
 @tla.kernel
@@ -174,8 +187,9 @@ def mutex_guard_multi_mmad_kernel(
     mutex_l0a = tla.mutex(resource="l0a", id=0)
     mutex_l0b = tla.mutex(resource="l0b", id=1)
     mutex_l0c = tla.mutex(resource="l0c", id=2)
-    with tla.mutex_guard(mutex_l0a, mutex_l0b, mutex_l0c):
-        tla.mmad(acc, lhs, rhs, init_c=False)
+    with tla.cube():
+        with tla.mutex_guard(mutex_l0a, mutex_l0b, mutex_l0c):
+            tla.mmad(acc, lhs, rhs, init_c=False)
 
 
 @tla.kernel
@@ -186,11 +200,12 @@ def mutex_guard_dynamic_mutex_kernel(dst: tla.Tensor, src: tla.Tensor) -> None:
     mutex_l0a1 = tla.mutex(resource="l0a1", id=3)
     dst_tile = tla.tile_view(dst, tla.make_shape(16, 16), tla.make_coord(0, 0))
     src_tile = tla.tile_view(src, tla.make_shape(16, 16), tla.make_coord(0, 0))
-    for i in tla.range(0, 2, 1):
-        mutex_l1a = mutex_l1a0 if i == 0 else mutex_l1a1
-        mutex_l0a = mutex_l0a0 if i == 0 else mutex_l0a1
-        with tla.mutex_guard(mutex_l1a, mutex_l0a):
-            tla.copy(dst_tile, src_tile)
+    with tla.cube():
+        for i in tla.range(0, 2, 1):
+            mutex_l1a = mutex_l1a0 if i == 0 else mutex_l1a1
+            mutex_l0a = mutex_l0a0 if i == 0 else mutex_l0a1
+            with tla.mutex_guard(mutex_l1a, mutex_l0a):
+                tla.copy(dst_tile, src_tile)
 
 
 @tla.kernel
@@ -198,12 +213,13 @@ def mutex_guard_control_flow_body_kernel(dst: tla.Tensor, src: tla.Tensor) -> No
     mutex = tla.mutex(resource="cf_mutex", id=0)
     dst_tile = tla.tile_view(dst, tla.make_shape(16, 16), tla.make_coord(0, 0))
     src_tile = tla.tile_view(src, tla.make_shape(16, 16), tla.make_coord(0, 0))
-    for i in tla.range(0, 2, 1):
-        with tla.mutex_guard(mutex):
-            if i == 0:
-                tla.copy(dst_tile, src_tile)
-            else:
-                tla.copy(dst_tile, src_tile)
+    with tla.cube():
+        for i in tla.range(0, 2, 1):
+            with tla.mutex_guard(mutex):
+                if i == 0:
+                    tla.copy(dst_tile, src_tile)
+                else:
+                    tla.copy(dst_tile, src_tile)
 
 
 def _assert_guard_order(mlir: str, pipe: str) -> None:
@@ -220,26 +236,30 @@ def _mutex_operands(mlir: str, op_name: str) -> list[str]:
 
 @tla.kernel
 def vec_func_default_mode_kernel() -> None:
-    with tla.vec.func():
-        tla.make_coord(0)
+    with tla.vector():
+        with tla.vec.func():
+            tla.make_coord(0)
 
 
 @tla.kernel
 def vec_func_simd_mode_kernel() -> None:
-    with tla.vec.func(mode="simd"):
-        tla.make_coord(0)
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            tla.make_coord(0)
 
 
 @tla.kernel
 def vec_func_positional_mode_kernel() -> None:
-    with tla.vec.func("simd"):
-        tla.make_coord(0)
+    with tla.vector():
+        with tla.vec.func("simd"):
+            tla.make_coord(0)
 
 
 @tla.kernel
 def vec_func_unknown_keyword_kernel() -> None:
-    with tla.vec.func(foo="simd"):
-        tla.make_coord(0)
+    with tla.vector():
+        with tla.vec.func(foo="simd"):
+            tla.make_coord(0)
 
 
 @tla.kernel
@@ -247,10 +267,11 @@ def vec_vector_ssa_kernel(lhs: tla.Tensor, rhs: tla.Tensor, dst: tla.Tensor) -> 
     lhs_tile = tla.tile_view(lhs, tla.make_shape(64), tla.make_coord(0))
     rhs_tile = tla.tile_view(rhs, tla.make_shape(64), tla.make_coord(0))
     dst_tile = tla.tile_view(dst, tla.make_shape(64), tla.make_coord(0))
-    with tla.vec.func(mode="simd"):
-        lhs_reg = lhs_tile.load()
-        rhs_reg = rhs_tile.load()
-        dst_tile.store(tla.add(lhs_reg, rhs_reg))
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            lhs_reg = lhs_tile.load()
+            rhs_reg = rhs_tile.load()
+            dst_tile.store(tla.add(lhs_reg, rhs_reg))
 
 
 @tla.kernel
@@ -266,11 +287,12 @@ def chained_vector_vector_then_scalar_kernel() -> None:
     tensor = tla.make_tensor(f32_ptr, layout, coord=tla.make_coord(0))
     tile = tla.tile_view(tensor, tla.make_shape(64), tla.make_coord(0))
 
-    with tla.vec.func(mode="simd"):
-        reg = tile.load()
-        tmp = tla.add(reg, reg)
-        out = tla.mul(tmp, 1.0)
-        tile.store(out)
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            reg = tile.load()
+            tmp = tla.add(reg, reg)
+            out = tla.mul(tmp, 1.0)
+            tile.store(out)
 
 
 @tla.kernel
@@ -282,26 +304,29 @@ def mutex_guard_vec_func_kernel(
     rhs_tile = tla.tile_view(rhs, tla.make_shape(64), tla.make_coord(0))
     dst_tile = tla.tile_view(dst, tla.make_shape(64), tla.make_coord(0))
     with tla.mutex_guard(mutex):
-        with tla.vec.func(mode="simd"):
-            lhs_reg = lhs_tile.load()
-            rhs_reg = rhs_tile.load()
-            dst_tile.store(tla.add(lhs_reg, rhs_reg))
+        with tla.vector():
+            with tla.vec.func(mode="simd"):
+                lhs_reg = lhs_tile.load()
+                rhs_reg = rhs_tile.load()
+                dst_tile.store(tla.add(lhs_reg, rhs_reg))
 
 
 @tla.kernel
 def vec_store_rejects_raw_tensor_kernel(lhs: tla.Tensor, dst: tla.Tensor) -> None:
     lhs_tile = tla.tile_view(lhs, tla.make_shape(64), tla.make_coord(0))
     dst_tile = tla.tile_view(dst, tla.make_shape(64), tla.make_coord(0))
-    with tla.vec.func(mode="simd"):
-        dst_tile.store(lhs_tile)
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            dst_tile.store(lhs_tile)
 
 
 @tla.kernel
 def vec_add_rejects_raw_tensor_kernel(lhs: tla.Tensor, rhs: tla.Tensor) -> None:
     lhs_tile = tla.tile_view(lhs, tla.make_shape(64), tla.make_coord(0))
     rhs_tile = tla.tile_view(rhs, tla.make_shape(64), tla.make_coord(0))
-    with tla.vec.func(mode="simd"):
-        tla.add(lhs_tile, rhs_tile)
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            tla.add(lhs_tile, rhs_tile)
 
 
 def test_generic_with_as_binding_shadows_tla_range_alias() -> None:
@@ -326,28 +351,28 @@ def test_cube_region_lowering() -> None:
 def test_mutex_guard_copy_infers_mte2_from_gm_source() -> None:
     dst = _tensor_arg(tla.AddressSpace.l1)
     src = _tensor_arg(tla.AddressSpace.gm)
-    mlir = mutex_guard_copy_kernel.dump_mlir(type_args=(dst, src))
+    mlir = mutex_guard_copy_cube_kernel.dump_mlir(type_args=(dst, src))
     _assert_guard_order(mlir, "mte2")
 
 
 def test_mutex_guard_copy_infers_mte1_from_l1_source() -> None:
     dst = _tensor_arg(tla.AddressSpace.l0a)
     src = _tensor_arg(tla.AddressSpace.l1)
-    mlir = mutex_guard_copy_kernel.dump_mlir(type_args=(dst, src))
+    mlir = mutex_guard_copy_cube_kernel.dump_mlir(type_args=(dst, src))
     _assert_guard_order(mlir, "mte1")
 
 
 def test_mutex_guard_copy_infers_fix_from_l0c_source() -> None:
     dst = _tensor_arg(tla.AddressSpace.gm, dtype=tla.Float32)
     src = _tensor_arg(tla.AddressSpace.l0c, dtype=tla.Float32)
-    mlir = mutex_guard_copy_kernel.dump_mlir(type_args=(dst, src))
+    mlir = mutex_guard_copy_cube_kernel.dump_mlir(type_args=(dst, src))
     _assert_guard_order(mlir, "fix")
 
 
 def test_mutex_guard_copy_infers_mte3_from_ub_source() -> None:
     dst = _tensor_arg(tla.AddressSpace.gm)
     src = _tensor_arg(tla.AddressSpace.ub)
-    mlir = mutex_guard_copy_kernel.dump_mlir(type_args=(dst, src))
+    mlir = mutex_guard_copy_vec_kernel.dump_mlir(type_args=(dst, src))
     _assert_guard_order(mlir, "mte3")
 
 

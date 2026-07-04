@@ -89,159 +89,160 @@ def basic_mmad_kernel(mem_a: tla.Tensor, mem_b: tla.Tensor, mem_c: tla.Tensor) -
     grid_n = (n + l1_tn - 1) // l1_tn
     total_blocks = grid_m * grid_n
 
-    tla.set_flag(l1a0_copy_start)
-    tla.set_flag(l1a1_copy_start)
-    tla.set_flag(l1b0_copy_start)
-    tla.set_flag(l1b1_copy_start)
-    tla.set_flag(l0a0_copy_start)
-    tla.set_flag(l0a1_copy_start)
-    tla.set_flag(l0b0_copy_start)
-    tla.set_flag(l0b1_copy_start)
-    tla.set_flag(fix_done)
+    with tla.cube():
+        tla.set_flag(l1a0_copy_start)
+        tla.set_flag(l1a1_copy_start)
+        tla.set_flag(l1b0_copy_start)
+        tla.set_flag(l1b1_copy_start)
+        tla.set_flag(l0a0_copy_start)
+        tla.set_flag(l0a1_copy_start)
+        tla.set_flag(l0b0_copy_start)
+        tla.set_flag(l0b1_copy_start)
+        tla.set_flag(fix_done)
 
-    l1_buf_idx = c0
-    l0_buf_idx = c0
+        l1_buf_idx = c0
+        l0_buf_idx = c0
 
-    block_range = tla.range(tla.arch.block_idx(), total_blocks, tla.arch.block_dim())
-    for block_linear in block_range:
-        block_row = block_linear // grid_n
-        block_col = block_linear % grid_n
-        gm_a_by_core = tla.tile_view(
-            mem_a, tla.make_shape(l1_tm, k), tla.make_coord(block_row, c0)
-        )
-        gm_b_by_core = tla.tile_view(
-            mem_b, tla.make_shape(k, l1_tn), tla.make_coord(c0, block_col)
-        )
-        gm_c_by_core = tla.tile_view(
-            mem_c, tla.make_shape(l1_tm, l1_tn), tla.make_coord(block_row, block_col)
-        )
-
-        k_block = gm_a_by_core.origin_shape[1]
-        k_l1_count = (k_block + l1_tk - 1) // l1_tk
-        k_l1_range = tla.range(c0, k_l1_count, c1)
-
-        l0_c = tla.make_tensor_like(l0c_ptr, gm_c_by_core, dst_dtype=DTYPE_C)
-
-        if not ENABLE_UNIT_FLAG:
-            tla.wait_flag(fix_done)
-        for k_l1 in k_l1_range:
-            gm_a_l1 = tla.tile_view(
-                gm_a_by_core, tla.make_shape(l1_tm, l1_tk), tla.make_coord(c0, k_l1)
+        block_range = tla.range(tla.arch.block_idx(), total_blocks, tla.arch.block_dim())
+        for block_linear in block_range:
+            block_row = block_linear // grid_n
+            block_col = block_linear % grid_n
+            gm_a_by_core = tla.tile_view(
+                mem_a, tla.make_shape(l1_tm, k), tla.make_coord(block_row, c0)
             )
-            gm_b_l1 = tla.tile_view(
-                gm_b_by_core, tla.make_shape(l1_tk, l1_tn), tla.make_coord(k_l1, c0)
+            gm_b_by_core = tla.tile_view(
+                mem_b, tla.make_shape(k, l1_tn), tla.make_coord(c0, block_col)
+            )
+            gm_c_by_core = tla.tile_view(
+                mem_c, tla.make_shape(l1_tm, l1_tn), tla.make_coord(block_row, block_col)
             )
 
-            l1_a = tla.make_tensor_like(
-                l1a0_ptr if (l1_buf_idx == c0) else l1a1_ptr, gm_a_l1
-            )
-            l1_b = tla.make_tensor_like(
-                l1b0_ptr if (l1_buf_idx == c0) else l1b1_ptr, gm_b_l1
-            )
-            if l1_buf_idx == c0:
-                tla.wait_flag(l1a0_copy_start)
-            else:
-                tla.wait_flag(l1a1_copy_start)
-            tla.copy(l1_a, gm_a_l1)
-            if l1_buf_idx == c0:
-                tla.set_flag(l1a0_copy_end)
-            else:
-                tla.set_flag(l1a1_copy_end)
+            k_block = gm_a_by_core.origin_shape[1]
+            k_l1_count = (k_block + l1_tk - 1) // l1_tk
+            k_l1_range = tla.range(c0, k_l1_count, c1)
 
-            if l1_buf_idx == c0:
-                tla.wait_flag(l1b0_copy_start)
-            else:
-                tla.wait_flag(l1b1_copy_start)
-            tla.copy(l1_b, gm_b_l1)
-            if l1_buf_idx == c0:
-                tla.set_flag(l1b0_copy_end)
-            else:
-                tla.set_flag(l1b1_copy_end)
+            l0_c = tla.make_tensor_like(l0c_ptr, gm_c_by_core, dst_dtype=DTYPE_C)
 
-            k_l0_count = (l1_a.origin_shape[1] + l0_tk - 1) // l0_tk
-            k_l0_range = tla.range(c0, k_l0_count, c1)
-
-            for k_l0 in k_l0_range:
-                l1_a_l0 = tla.tile_view(
-                    l1_a, tla.make_shape(l0_tm, l0_tk), tla.make_coord(c0, k_l0)
+            if not ENABLE_UNIT_FLAG:
+                tla.wait_flag(fix_done)
+            for k_l1 in k_l1_range:
+                gm_a_l1 = tla.tile_view(
+                    gm_a_by_core, tla.make_shape(l1_tm, l1_tk), tla.make_coord(c0, k_l1)
                 )
-                l1_b_l0 = tla.tile_view(
-                    l1_b, tla.make_shape(l0_tk, l0_tn), tla.make_coord(k_l0, c0)
+                gm_b_l1 = tla.tile_view(
+                    gm_b_by_core, tla.make_shape(l1_tk, l1_tn), tla.make_coord(k_l1, c0)
                 )
 
-                l0_a = tla.make_tensor_like(
-                    l0a0_ptr if (l0_buf_idx == c0) else l0a1_ptr, l1_a_l0
+                l1_a = tla.make_tensor_like(
+                    l1a0_ptr if (l1_buf_idx == c0) else l1a1_ptr, gm_a_l1
                 )
-                l0_b = tla.make_tensor_like(
-                    l0b0_ptr if (l0_buf_idx == c0) else l0b1_ptr, l1_b_l0
+                l1_b = tla.make_tensor_like(
+                    l1b0_ptr if (l1_buf_idx == c0) else l1b1_ptr, gm_b_l1
                 )
-                if k_l0 == 0:
-                    if l1_buf_idx == c0:
-                        tla.wait_flag(l1a0_copy_end)
-                    else:
-                        tla.wait_flag(l1a1_copy_end)
-
-                if l0_buf_idx == c0:
-                    tla.wait_flag(l0a0_copy_start)
+                if l1_buf_idx == c0:
+                    tla.wait_flag(l1a0_copy_start)
                 else:
-                    tla.wait_flag(l0a1_copy_start)
-                tla.copy(l0_a, l1_a_l0)
-                if k_l0 == k_l0_count - 1:
-                    if l1_buf_idx == c0:
-                        tla.set_flag(l1a0_copy_start)
-                    else:
-                        tla.set_flag(l1a1_copy_start)
-
-                if k_l0 == 0:
-                    if l1_buf_idx == c0:
-                        tla.wait_flag(l1b0_copy_end)
-                    else:
-                        tla.wait_flag(l1b1_copy_end)
-                if l0_buf_idx == c0:
-                    tla.wait_flag(l0b0_copy_start)
+                    tla.wait_flag(l1a1_copy_start)
+                tla.copy(l1_a, gm_a_l1)
+                if l1_buf_idx == c0:
+                    tla.set_flag(l1a0_copy_end)
                 else:
-                    tla.wait_flag(l0b1_copy_start)
-                tla.copy(l0_b, l1_b_l0)
-                if k_l0 == k_l0_count - 1:
-                    if l1_buf_idx == c0:
-                        tla.set_flag(l1b0_copy_start)
-                    else:
-                        tla.set_flag(l1b1_copy_start)
+                    tla.set_flag(l1a1_copy_end)
 
-                tla.set_flag(l0_copy_end)
-                tla.wait_flag(l0_copy_end)
-
-                unit_flag = 0
-                if ENABLE_UNIT_FLAG:
-                    if (k_l1 == k_l1_count - 1) and (k_l0 == k_l0_count - 1):
-                        unit_flag = 0b11
-                    else:
-                        unit_flag = 0b10
-                init_c = True if k_l1 == 0 and k_l0 == 0 else False
-                tla.mmad(l0_c, l0_a, l0_b, init_c=init_c, unit_flag=unit_flag)
-                if l0_buf_idx == c0:
-                    tla.set_flag(l0a0_copy_start)
-                    tla.set_flag(l0b0_copy_start)
+                if l1_buf_idx == c0:
+                    tla.wait_flag(l1b0_copy_start)
                 else:
-                    tla.set_flag(l0a1_copy_start)
-                    tla.set_flag(l0b1_copy_start)
-                l0_buf_idx = c1 - l0_buf_idx
-            l1_buf_idx = c1 - l1_buf_idx
+                    tla.wait_flag(l1b1_copy_start)
+                tla.copy(l1_b, gm_b_l1)
+                if l1_buf_idx == c0:
+                    tla.set_flag(l1b0_copy_end)
+                else:
+                    tla.set_flag(l1b1_copy_end)
 
-        if not ENABLE_UNIT_FLAG:
-            tla.set_flag(mmad_done)
-            tla.wait_flag(mmad_done)
-            tla.copy(gm_c_by_core, l0_c)
-            tla.set_flag(fix_done)
-        else:
-            tla.copy(gm_c_by_core, l0_c, tla.params.CopyL0C2DstParams(unit_flag=0b11))
+                k_l0_count = (l1_a.origin_shape[1] + l0_tk - 1) // l0_tk
+                k_l0_range = tla.range(c0, k_l0_count, c1)
 
-    tla.wait_flag(l1a0_copy_start)
-    tla.wait_flag(l1a1_copy_start)
-    tla.wait_flag(l1b0_copy_start)
-    tla.wait_flag(l1b1_copy_start)
-    tla.wait_flag(l0a0_copy_start)
-    tla.wait_flag(l0a1_copy_start)
-    tla.wait_flag(l0b0_copy_start)
-    tla.wait_flag(l0b1_copy_start)
-    tla.wait_flag(fix_done)
+                for k_l0 in k_l0_range:
+                    l1_a_l0 = tla.tile_view(
+                        l1_a, tla.make_shape(l0_tm, l0_tk), tla.make_coord(c0, k_l0)
+                    )
+                    l1_b_l0 = tla.tile_view(
+                        l1_b, tla.make_shape(l0_tk, l0_tn), tla.make_coord(k_l0, c0)
+                    )
+
+                    l0_a = tla.make_tensor_like(
+                        l0a0_ptr if (l0_buf_idx == c0) else l0a1_ptr, l1_a_l0
+                    )
+                    l0_b = tla.make_tensor_like(
+                        l0b0_ptr if (l0_buf_idx == c0) else l0b1_ptr, l1_b_l0
+                    )
+                    if k_l0 == 0:
+                        if l1_buf_idx == c0:
+                            tla.wait_flag(l1a0_copy_end)
+                        else:
+                            tla.wait_flag(l1a1_copy_end)
+
+                    if l0_buf_idx == c0:
+                        tla.wait_flag(l0a0_copy_start)
+                    else:
+                        tla.wait_flag(l0a1_copy_start)
+                    tla.copy(l0_a, l1_a_l0)
+                    if k_l0 == k_l0_count - 1:
+                        if l1_buf_idx == c0:
+                            tla.set_flag(l1a0_copy_start)
+                        else:
+                            tla.set_flag(l1a1_copy_start)
+
+                    if k_l0 == 0:
+                        if l1_buf_idx == c0:
+                            tla.wait_flag(l1b0_copy_end)
+                        else:
+                            tla.wait_flag(l1b1_copy_end)
+                    if l0_buf_idx == c0:
+                        tla.wait_flag(l0b0_copy_start)
+                    else:
+                        tla.wait_flag(l0b1_copy_start)
+                    tla.copy(l0_b, l1_b_l0)
+                    if k_l0 == k_l0_count - 1:
+                        if l1_buf_idx == c0:
+                            tla.set_flag(l1b0_copy_start)
+                        else:
+                            tla.set_flag(l1b1_copy_start)
+
+                    tla.set_flag(l0_copy_end)
+                    tla.wait_flag(l0_copy_end)
+
+                    unit_flag = 0
+                    if ENABLE_UNIT_FLAG:
+                        if (k_l1 == k_l1_count - 1) and (k_l0 == k_l0_count - 1):
+                            unit_flag = 0b11
+                        else:
+                            unit_flag = 0b10
+                    init_c = True if k_l1 == 0 and k_l0 == 0 else False
+                    tla.mmad(l0_c, l0_a, l0_b, init_c=init_c, unit_flag=unit_flag)
+                    if l0_buf_idx == c0:
+                        tla.set_flag(l0a0_copy_start)
+                        tla.set_flag(l0b0_copy_start)
+                    else:
+                        tla.set_flag(l0a1_copy_start)
+                        tla.set_flag(l0b1_copy_start)
+                    l0_buf_idx = c1 - l0_buf_idx
+                l1_buf_idx = c1 - l1_buf_idx
+
+            if not ENABLE_UNIT_FLAG:
+                tla.set_flag(mmad_done)
+                tla.wait_flag(mmad_done)
+                tla.copy(gm_c_by_core, l0_c)
+                tla.set_flag(fix_done)
+            else:
+                tla.copy(gm_c_by_core, l0_c, tla.params.CopyL0C2DstParams(unit_flag=0b11))
+
+        tla.wait_flag(l1a0_copy_start)
+        tla.wait_flag(l1a1_copy_start)
+        tla.wait_flag(l1b0_copy_start)
+        tla.wait_flag(l1b1_copy_start)
+        tla.wait_flag(l0a0_copy_start)
+        tla.wait_flag(l0a1_copy_start)
+        tla.wait_flag(l0b0_copy_start)
+        tla.wait_flag(l0b1_copy_start)
+        tla.wait_flag(fix_done)

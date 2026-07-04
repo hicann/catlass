@@ -2,12 +2,14 @@
 
 module {
   tla.func @flags() {
-    %first = tla.flag "first" {src_pipe = #tla.pipe<mte2>, dst_pipe = #tla.pipe<mte1>} -> !tla.flag
-    %second = tla.flag "second" {src_pipe = #tla.pipe<mte1>, dst_pipe = #tla.pipe<mte2>} -> !tla.flag
-    tla.set_flag %first : !tla.flag
-    tla.set_flag %second : !tla.flag
-    tla.wait_flag %first : !tla.flag
-    tla.wait_flag %second : !tla.flag
+    "tla.vector"() ({
+      %first = tla.flag "first" {src_pipe = #tla.pipe<mte2>, dst_pipe = #tla.pipe<mte1>} -> !tla.flag
+      %second = tla.flag "second" {src_pipe = #tla.pipe<mte1>, dst_pipe = #tla.pipe<mte2>} -> !tla.flag
+      tla.set_flag %first : !tla.flag
+      tla.set_flag %second : !tla.flag
+      tla.wait_flag %first : !tla.flag
+      tla.wait_flag %second : !tla.flag
+    }) : () -> ()
     tla.return
   }
 }

@@ -220,7 +220,8 @@ def test_mmad_validates_operands_and_kwargs() -> None:
         lhs = tla.tile_view(mem_a, tla.make_shape(128, 64), tla.make_coord(0, 0))
         rhs = tla.tile_view(mem_b, tla.make_shape(64, 128), tla.make_coord(0, 0))
         acc = tla.tile_view(mem_c, tla.make_shape(128, 128), tla.make_coord(0, 0))
-        _ = tla.mmad(acc, lhs, rhs, init_c=True)
+        with tla.cube():
+            _ = tla.mmad(acc, lhs, rhs, init_c=True)
 
     try:
         mlir = kernel.dump_mlir(
@@ -267,7 +268,8 @@ def test_mmad_rejects_old_order_at_frontend() -> None:
         lhs = tla.tile_view(mem_a, tla.make_shape(128, 64), tla.make_coord(0, 0))
         rhs = tla.tile_view(mem_b, tla.make_shape(64, 128), tla.make_coord(0, 0))
         acc = tla.tile_view(mem_c, tla.make_shape(128, 128), tla.make_coord(0, 0))
-        _ = tla.mmad(lhs, rhs, acc, init_c=True)
+        with tla.cube():
+            _ = tla.mmad(lhs, rhs, acc, init_c=True)
 
     with pytest.raises(TlaLoweringError, match="unsupported tla.mmad tile addrspaces"):
         _ = kernel.dump_mlir(
@@ -307,7 +309,8 @@ def test_mmad_rejects_wrong_element_types_at_frontend() -> None:
         lhs = tla.tile_view(mem_a, tla.make_shape(128, 64), tla.make_coord(0, 0))
         rhs = tla.tile_view(mem_b, tla.make_shape(64, 128), tla.make_coord(0, 0))
         acc = tla.tile_view(mem_c, tla.make_shape(128, 128), tla.make_coord(0, 0))
-        _ = tla.mmad(acc, lhs, rhs, init_c=True)
+        with tla.cube():
+            _ = tla.mmad(acc, lhs, rhs, init_c=True)
 
     with pytest.raises(TlaLoweringError, match="unsupported tla.mmad element types"):
         _ = kernel.dump_mlir(
@@ -347,7 +350,8 @@ def test_mmad_rejects_wrong_shape_contract_at_frontend() -> None:
         lhs = tla.tile_view(mem_a, tla.make_shape(128, 64), tla.make_coord(0, 0))
         rhs = tla.tile_view(mem_b, tla.make_shape(32, 128), tla.make_coord(0, 0))
         acc = tla.tile_view(mem_c, tla.make_shape(128, 128), tla.make_coord(0, 0))
-        _ = tla.mmad(acc, lhs, rhs, init_c=True)
+        with tla.cube():
+            _ = tla.mmad(acc, lhs, rhs, init_c=True)
 
     with pytest.raises(TlaLoweringError) as excinfo:
         _ = kernel.dump_mlir(
@@ -391,7 +395,8 @@ def test_mmad_rejects_rhs_zn_layout_at_frontend() -> None:
         lhs = tla.tile_view(mem_a, tla.make_shape(128, 64), tla.make_coord(0, 0))
         rhs = tla.tile_view(mem_b, tla.make_shape(64, 128), tla.make_coord(0, 0))
         acc = tla.tile_view(mem_c, tla.make_shape(128, 128), tla.make_coord(0, 0))
-        _ = tla.mmad(acc, lhs, rhs, init_c=True)
+        with tla.cube():
+            _ = tla.mmad(acc, lhs, rhs, init_c=True)
 
     with pytest.raises(TlaLoweringError, match="unsupported tla.mmad operand layout"):
         _ = kernel.dump_mlir(
@@ -427,7 +432,8 @@ def test_mmad_rejects_unknown_kwarg() -> None:
         lhs = tla.tile_view(mem, tla.make_shape(1, 8), tla.make_coord(0, 0))
         rhs = tla.tile_view(mem, tla.make_shape(1, 8), tla.make_coord(0, 0))
         acc = tla.tile_view(mem, tla.make_shape(1, 8), tla.make_coord(0, 0))
-        _ = tla.mmad(acc, lhs, rhs, bad=True)
+        with tla.cube():
+            _ = tla.mmad(acc, lhs, rhs, bad=True)
 
     with runtime_mod._eager_capture():
         mem_arg = tla.Tensor(

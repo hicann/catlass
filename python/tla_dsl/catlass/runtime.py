@@ -62,8 +62,9 @@ class _FrontendEmitState:
     #: ``mlir.Value`` -> resolved tensor metadata fields (shape/stride/coord/origin_shape/...).
     tensor_metadata_by_value: dict[Any, dict[str, Any]] = field(default_factory=dict)
     mutex_guard_depth: int = 0
+    #: Stack of enclosing region wrappers, each one of "cube" / "vector" /
+    #: "vec.func" (the wrapper's own name).
     active_regions: list[str] = field(default_factory=list)
-    active_region_roles: list[str] = field(default_factory=list)
 
 
 _FRONTEND_EMIT_STATE: contextvars.ContextVar[_FrontendEmitState | None] = (
@@ -261,13 +262,37 @@ def _bind_frontend_category(value: Any, category: str) -> None:
     state.category_bindings[id(value)] = category
 
 
-def _check_frontend_region_op(op_name: str, allowed_regions: set[str]) -> None:
+def _has_enclosing_region(kind: str) -> bool:
+    """True if some enclosing region is ``kind`` (``cube`` / ``vector`` / ``vec.func``).
+
+    Walks all active region wrappers, so an op nested several levels deep (e.g.
+    inside an ``scf.for`` inside a ``tla.vec.func``) still matches. A ``tla.vec.func``
+    is always nested inside a ``tla.vector`` (enforced when it is entered), so a
+    ``"vector"`` requirement stays satisfied from inside a ``vec.func`` via the
+    enclosing region on the stack.
+    """
     state = _FRONTEND_EMIT_STATE.get()
-    if state is None or not state.active_regions:
-        return
-    region = state.active_regions[-1]
-    if region not in allowed_regions:
-        raise TlaCoreAPIError(f"tla.{op_name} is not allowed inside tla.{region}()")
+    if state is None:
+        return True  # No frontend state to inspect; defer to the MLIR verifier.
+    return kind in state.active_regions
+
+
+def _require_enclosing_region(op_name: str, kind: str) -> None:
+    """Require an enclosing ``tla.<kind>()`` region (cube / vector / vec.func)."""
+    if not _has_enclosing_region(kind):
+        raise TlaCoreAPIError(f"tla.{op_name} must be nested inside tla.{kind}()")
+
+
+def _require_enclosing_cube_or_vector(op_name: str) -> None:
+    """Require an enclosing tla.cube() or tla.vector() region (either core kind).
+
+    Used by synchronization/mutex/barrier ops, which must sit inside a core
+    region but not the bare tla.func scope. Mirrors the MLIR op verifier.
+    """
+    if not (_has_enclosing_region("cube") or _has_enclosing_region("vector")):
+        raise TlaCoreAPIError(
+            f"tla.{op_name} must be nested inside tla.cube() or tla.vector()"
+        )
 
 
 def _resolve_frontend_bound_category(value: Any) -> str | None:
@@ -558,11 +583,12 @@ def _internal_frontend_region(
 
     if kind not in {"cube", "vector", "vec.func"}:
         raise TlaIRNotExecutableError(f"Unsupported TLA region wrapper: {kind}")
-    exec_kind = "vector" if kind == "vec.func" else kind
     if mode is not None:
         if kind != "vec.func":
             raise TlaCoreAPIError(f"tla.{kind}: unexpected mode argument")
         _validate_vec_func_mode(mode)
+    if kind == "vec.func":
+        _require_enclosing_region("vec.func", "vector")
     mlir_loc = _capture_caller_location()
     op = mlir_ir.Operation.create(f"tla.{kind}", regions=1, loc=mlir_loc)
     if kind == "vec.func":
@@ -571,14 +597,12 @@ def _internal_frontend_region(
     state = _FRONTEND_EMIT_STATE.get()
     with mlir_ir.InsertionPoint(block):
         if state is not None:
-            state.active_regions.append(exec_kind)
-            state.active_region_roles.append("func" if kind == "vec.func" else "region")
+            state.active_regions.append(kind)
         try:
             body_fn()
         finally:
             if state is not None:
                 state.active_regions.pop()
-                state.active_region_roles.pop()
 
 
 utils = _Utils()

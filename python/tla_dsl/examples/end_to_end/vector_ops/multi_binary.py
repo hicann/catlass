@@ -62,78 +62,82 @@ def multi_binary(
     t_ub = _make_ub_tensor(allocator, t_gm)
     x_ub = _make_ub_tensor(allocator, x_gm)
 
-    tla.copy(a_ub, a_gm)
-    tla.copy(b_ub, b_gm)
-    tla.copy(c_ub, c_gm)
-    tla.copy(d_ub, d_gm)
-    tla.copy(e_ub, e_gm)
+    with tla.vector():
+        tla.copy(a_ub, a_gm)
+        tla.copy(b_ub, b_gm)
+        tla.copy(c_ub, c_gm)
+        tla.copy(d_ub, d_gm)
+        tla.copy(e_ub, e_gm)
 
-    tla.set_flag(ub_loaded)
-    tla.wait_flag(ub_loaded)
-    with tla.vec.func(mode="simd"):
-        # 2-iteration for-loop -> chunks 0, 1
-        for i in tla.range(2):
+        tla.set_flag(ub_loaded)
+        tla.wait_flag(ub_loaded)
+        with tla.vec.func(mode="simd"):
+            # 2-iteration for-loop -> chunks 0, 1. Loop-body values are named
+            # locally (lt/li/la/le/lx) so they are not treated as loop-carried
+            # values across the dynamic tla.range boundary.
+            for i in tla.range(2):
+                lt_chunk, l_inter, la_chunk, le_chunk, lx_chunk = _chunk_compute(
+                    a_ub, b_ub, c_ub, d_ub, e_ub, t_ub, x_ub, i
+                )
+                if block_idx == 0:
+                    lx_chunk.store(la_chunk.load() + l_inter - le_chunk.load())
+                else:
+                    lt_chunk.store(la_chunk.load() * l_inter + le_chunk.load())
+
+            # one operation outside the for loop -> chunk 2
             t_chunk, inter, a_chunk, e_chunk, x_chunk = _chunk_compute(
-                a_ub, b_ub, c_ub, d_ub, e_ub, t_ub, x_ub, i
+                a_ub, b_ub, c_ub, d_ub, e_ub, t_ub, x_ub, 2
             )
             if block_idx == 0:
                 x_chunk.store(a_chunk.load() + inter - e_chunk.load())
             else:
                 t_chunk.store(a_chunk.load() * inter + e_chunk.load())
 
-        # one operation outside the for loop -> chunk 2
-        t_chunk, inter, a_chunk, e_chunk, x_chunk = _chunk_compute(
-            a_ub, b_ub, c_ub, d_ub, e_ub, t_ub, x_ub, 2
-        )
-        if block_idx == 0:
-            x_chunk.store(a_chunk.load() + inter - e_chunk.load())
-        else:
-            t_chunk.store(a_chunk.load() * inter + e_chunk.load())
+            # 1-iteration for-loop -> chunk 3. Distinct loop-local names from the
+            # first loop so neither loop's values are read after its own boundary.
+            for j in tla.range(1):
+                jt_chunk, j_inter, ja_chunk, je_chunk, jx_chunk = _chunk_compute(
+                    a_ub, b_ub, c_ub, d_ub, e_ub, t_ub, x_ub, 3 + j
+                )
+                if block_idx == 0:
+                    jx_chunk.store(ja_chunk.load() + j_inter - je_chunk.load())
+                else:
+                    jt_chunk.store(ja_chunk.load() * j_inter + je_chunk.load())
 
-        # 1-iteration for-loop -> chunk 3
-        for j in tla.range(1):
+            # straight-line code again (outside any for loop) -> chunk 4
             t_chunk, inter, a_chunk, e_chunk, x_chunk = _chunk_compute(
-                a_ub, b_ub, c_ub, d_ub, e_ub, t_ub, x_ub, 3 + j
+                a_ub, b_ub, c_ub, d_ub, e_ub, t_ub, x_ub, 4
             )
             if block_idx == 0:
                 x_chunk.store(a_chunk.load() + inter - e_chunk.load())
             else:
                 t_chunk.store(a_chunk.load() * inter + e_chunk.load())
 
-        # straight-line code again (outside any for loop) -> chunk 4
-        t_chunk, inter, a_chunk, e_chunk, x_chunk = _chunk_compute(
-            a_ub, b_ub, c_ub, d_ub, e_ub, t_ub, x_ub, 4
-        )
+            # straight-line -> chunk 5
+            t_chunk, inter, a_chunk, e_chunk, x_chunk = _chunk_compute(
+                a_ub, b_ub, c_ub, d_ub, e_ub, t_ub, x_ub, 5
+            )
+            if block_idx == 0:
+                x_chunk.store(a_chunk.load() + inter - e_chunk.load())
+            else:
+                t_chunk.store(a_chunk.load() * inter + e_chunk.load())
+
+            # straight-line -> chunk 6
+            t_chunk, inter, a_chunk, e_chunk, x_chunk = _chunk_compute(
+                a_ub, b_ub, c_ub, d_ub, e_ub, t_ub, x_ub, 6
+            )
+            if block_idx == 0:
+                x_chunk.store(a_chunk.load() + inter - e_chunk.load())
+            else:
+                t_chunk.store(a_chunk.load() * inter + e_chunk.load())
+
+        tla.set_flag(vec_done)
+        tla.wait_flag(vec_done)
+
         if block_idx == 0:
-            x_chunk.store(a_chunk.load() + inter - e_chunk.load())
-        else:
-            t_chunk.store(a_chunk.load() * inter + e_chunk.load())
-
-        # straight-line -> chunk 5
-        t_chunk, inter, a_chunk, e_chunk, x_chunk = _chunk_compute(
-            a_ub, b_ub, c_ub, d_ub, e_ub, t_ub, x_ub, 5
-        )
-        if block_idx == 0:
-            x_chunk.store(a_chunk.load() + inter - e_chunk.load())
-        else:
-            t_chunk.store(a_chunk.load() * inter + e_chunk.load())
-
-        # straight-line -> chunk 6
-        t_chunk, inter, a_chunk, e_chunk, x_chunk = _chunk_compute(
-            a_ub, b_ub, c_ub, d_ub, e_ub, t_ub, x_ub, 6
-        )
-        if block_idx == 0:
-            x_chunk.store(a_chunk.load() + inter - e_chunk.load())
-        else:
-            t_chunk.store(a_chunk.load() * inter + e_chunk.load())
-
-    tla.set_flag(vec_done)
-    tla.wait_flag(vec_done)
-
-    if block_idx == 0:
-        tla.copy(x_gm, x_ub)
-    if block_idx == 1:
-        tla.copy(t_gm, t_ub)
+            tla.copy(x_gm, x_ub)
+        if block_idx == 1:
+            tla.copy(t_gm, t_ub)
     
     tla.pipe_barrier(tla.pipes.ALL)
 
@@ -285,6 +289,9 @@ HARNESS = DirectVectorOpHarness(
         env_compile_jobs="MULTI_BINARY_COMPILE_JOBS",
         float_dtypes=frozenset({"f32", "f16"}),
         output_count=2,
+        # multi_binary gates its two outputs on block_idx (block 0 -> x, block 1
+        # -> t), so both blocks must run for the result to be correct.
+        launch_blocks=2,
     )
 )
 

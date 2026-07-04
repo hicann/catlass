@@ -22,7 +22,8 @@ def copy_gm_to_cbuf_kernel(mem_in: tla.Tensor) -> None:
     ptr = allocator.allocate(32 * 32 * 4, 512, tla.AddressSpace.l1)
     ptr = tla.recast_ptr(ptr, dtype=tla.Float32)
     local = tla.make_tensor_like(ptr, tile, tla.arch.zN)
-    tla.copy(local, tile)
+    with tla.cube():
+        tla.copy(local, tile)
 
 
 def test_frontend_copy_gm_to_cbuf_lowers_to_runtime_call(tmp_path) -> None:

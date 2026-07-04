@@ -27,26 +27,29 @@ def _ub_tensor(
 def scalar_lane_full(src: tla.Tensor, dst: tla.Tensor) -> None:
     src_tile = tla.tile_view(src, tla.make_shape(64), tla.make_coord(0))
     dst_tile = tla.tile_view(dst, tla.make_shape(64), tla.make_coord(0))
-    with tla.vec.func(mode="simd"):
-        reg = src_tile.load()
-        out = reg + tla.full(0.0, tla.Float32)
-        dst_tile.store(out)
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            reg = src_tile.load()
+            out = reg + tla.full(0.0, tla.Float32)
+            dst_tile.store(out)
 
 
 @tla.kernel
 def full_int_literal(src: tla.Tensor, dst: tla.Tensor) -> None:
     src_tile = tla.tile_view(src, tla.make_shape(64), tla.make_coord(0))
     dst_tile = tla.tile_view(dst, tla.make_shape(64), tla.make_coord(0))
-    with tla.vec.func(mode="simd"):
-        dst_tile.store(src_tile.load() + tla.full(1, tla.Int32))
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            dst_tile.store(src_tile.load() + tla.full(1, tla.Int32))
 
 
 @tla.kernel
 def full_on_lhs(src: tla.Tensor, dst: tla.Tensor) -> None:
     src_tile = tla.tile_view(src, tla.make_shape(64), tla.make_coord(0))
     dst_tile = tla.tile_view(dst, tla.make_shape(64), tla.make_coord(0))
-    with tla.vec.func(mode="simd"):
-        dst_tile.store(tla.full(0.0, tla.Float32) + src_tile.load())
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            dst_tile.store(tla.full(0.0, tla.Float32) + src_tile.load())
 
 
 @tla.kernel
@@ -54,16 +57,18 @@ def full_index_ssa_is_rejected(src: tla.Tensor, dst: tla.Tensor) -> None:
     idx = tla.arch.block_idx()
     src_tile = tla.tile_view(src, tla.make_shape(64), tla.make_coord(0))
     dst_tile = tla.tile_view(dst, tla.make_shape(64), tla.make_coord(0))
-    with tla.vec.func(mode="simd"):
-        dst_tile.store(src_tile.load() + tla.full(idx, tla.Float32))
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            dst_tile.store(src_tile.load() + tla.full(idx, tla.Float32))
 
 
 @tla.kernel
 def full_string_dtype_is_rejected(src: tla.Tensor, dst: tla.Tensor) -> None:
     src_tile = tla.tile_view(src, tla.make_shape(64), tla.make_coord(0))
     dst_tile = tla.tile_view(dst, tla.make_shape(64), tla.make_coord(0))
-    with tla.vec.func(mode="simd"):
-        dst_tile.store(src_tile.load() + tla.full(0.0, "f32"))
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            dst_tile.store(src_tile.load() + tla.full(0.0, "f32"))
 
 
 def test_scalar_lane_full_emits_tlair(compiler_tlair: Any) -> None:

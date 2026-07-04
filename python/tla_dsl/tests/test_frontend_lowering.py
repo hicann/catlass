@@ -107,7 +107,8 @@ def bad_mmad_acc_dtype(mem_a: tla.Tensor) -> None:
     acc = tla.tile_view(mem_a, tla.make_shape(16, 16), tla.make_coord(0, 0))
     lhs = tla.tile_view(mem_a, tla.make_shape(16, 16), tla.make_coord(0, 0))
     rhs = tla.tile_view(mem_a, tla.make_shape(16, 16), tla.make_coord(0, 0))
-    tla.mmad(acc, lhs, rhs, acc_type=F64_TYPE)
+    with tla.cube():
+        tla.mmad(acc, lhs, rhs, acc_type=F64_TYPE)
 
 
 @tla.kernel
@@ -117,7 +118,8 @@ def cube_mmad_without_region_kernel(
     lhs = tla.tile_view(mem_a, tla.make_shape(16, 16), tla.make_coord(0, 0))
     rhs = tla.tile_view(mem_b, tla.make_shape(16, 16), tla.make_coord(0, 0))
     acc = tla.tile_view(mem_c, tla.make_shape(16, 16), tla.make_coord(0, 0))
-    tla.mmad(acc, lhs, rhs, init_c=False)
+    with tla.cube():
+        tla.mmad(acc, lhs, rhs, init_c=False)
 
 
 @tla.kernel
@@ -167,9 +169,10 @@ def bad_make_coord_non_index_arg(coord: "f16") -> None:
 
 @tla.kernel
 def pipe_barrier_kernel() -> None:
-    tla.pipe_barrier(tla.pipes.MTE2)
-    tla.pipe_barrier(tla.pipes.CUBE)
-    tla.pipe_barrier(tla.pipes.ALL)
+    with tla.vector():
+        tla.pipe_barrier(tla.pipes.MTE2)
+        tla.pipe_barrier(tla.pipes.CUBE)
+        tla.pipe_barrier(tla.pipes.ALL)
 
 
 @tla.kernel
@@ -210,12 +213,13 @@ def pointer_conditional_kernel(mem_a: tla.Tensor) -> None:
     ptr0 = tla.recast_ptr(ptr0, dtype=tla.Float16)
     ptr1 = allocator.allocate(16 * 4 * 2, 512, tla.AddressSpace.l1)
     ptr1 = tla.recast_ptr(ptr1, dtype=tla.Float16)
-    loop_range = tla.range(0, 2, 1)
-    for i in loop_range:
-        tile = tla.tile_view(root, tla.make_shape(16, 4), tla.make_coord(0, i))
-        selected = ptr0 if i == 0 else ptr1
-        tensor_like_zn = tla.make_tensor_like(selected, tile, tla.arch.zN)
-        tla.copy(tensor_like_zn, tile)
+    with tla.cube():
+        loop_range = tla.range(0, 2, 1)
+        for i in loop_range:
+            tile = tla.tile_view(root, tla.make_shape(16, 4), tla.make_coord(0, i))
+            selected = ptr0 if i == 0 else ptr1
+            tensor_like_zn = tla.make_tensor_like(selected, tile, tla.arch.zN)
+            tla.copy(tensor_like_zn, tile)
 
 
 @tla.kernel
@@ -225,13 +229,14 @@ def dynamic_mmad_initc_unit_flag_kernel(
     acc = tla.tile_view(mem_c, tla.make_shape(16, 16), tla.make_coord(0, 0))
     lhs = tla.tile_view(mem_a, tla.make_shape(16, 16), tla.make_coord(0, 0))
     rhs = tla.tile_view(mem_b, tla.make_shape(16, 16), tla.make_coord(0, 0))
-    outer_range = tla.range(0, 2, 1)
-    for outer in outer_range:
-        inner_range = tla.range(0, 2, 1)
-        for inner in inner_range:
-            init_c = True if outer == 0 and inner == 0 else False
-            unit_flag = 0b11 if (outer == 1) and (inner == 1) else 0b10
-            tla.mmad(acc, lhs, rhs, init_c=init_c, unit_flag=unit_flag)
+    with tla.cube():
+        outer_range = tla.range(0, 2, 1)
+        for outer in outer_range:
+            inner_range = tla.range(0, 2, 1)
+            for inner in inner_range:
+                init_c = True if outer == 0 and inner == 0 else False
+                unit_flag = 0b11 if (outer == 1) and (inner == 1) else 0b10
+                tla.mmad(acc, lhs, rhs, init_c=init_c, unit_flag=unit_flag)
 
 
 @tla.kernel
@@ -248,7 +253,8 @@ def f32_mmad_generated_addrspace_kernel(
     lhs = tla.make_tensor_like(l0a_ptr, gm_a, tla.arch.zN)
     rhs = tla.make_tensor_like(l0b_ptr, gm_b, tla.arch.nZ)
     acc = tla.make_tensor_like(l0c_ptr, gm_c, tla.arch.L0Clayout)
-    tla.mmad(acc, lhs, rhs, init_c=True)
+    with tla.cube():
+        tla.mmad(acc, lhs, rhs, init_c=True)
 
 
 @tla.kernel

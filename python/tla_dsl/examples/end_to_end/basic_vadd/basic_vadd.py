@@ -45,33 +45,34 @@ def basic_vadd(mem_x: tla.Tensor, mem_y: tla.Tensor, mem_z: tla.Tensor) -> None:
     y_ub = tla.make_tensor_like(y_ub_ptr, y_gm, tla.arch.RowMajor)
     z_ub = tla.make_tensor_like(z_ub_ptr, z_gm, tla.arch.RowMajor)
 
-    tla.copy(x_ub, x_gm)
-    tla.copy(y_ub, y_gm)
+    with tla.vector():
+        tla.copy(x_ub, x_gm)
+        tla.copy(y_ub, y_gm)
 
-    tla.set_flag(ub_loaded)
-    tla.wait_flag(ub_loaded)
-    with tla.vec.func(mode="simd"):
-        for i in tla.range(LOOPS):
-            x_tile = tla.tile_view(
-                x_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
-            )
-            y_tile = tla.tile_view(
-                y_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
-            )
-            z_tile = tla.tile_view(
-                z_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
-            )
+        tla.set_flag(ub_loaded)
+        tla.wait_flag(ub_loaded)
+        with tla.vec.func(mode="simd"):
+            for i in tla.range(LOOPS):
+                x_tile = tla.tile_view(
+                    x_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
+                )
+                y_tile = tla.tile_view(
+                    y_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
+                )
+                z_tile = tla.tile_view(
+                    z_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
+                )
 
-            x_reg = x_tile.load()
-            y_reg = y_tile.load()
-            z_reg = tla.add(x_reg, y_reg)
-            z_tile.store(z_reg)
+                x_reg = x_tile.load()
+                y_reg = y_tile.load()
+                z_reg = tla.add(x_reg, y_reg)
+                z_tile.store(z_reg)
 
-    tla.set_flag(vec_done)
-    tla.wait_flag(vec_done)
+        tla.set_flag(vec_done)
+        tla.wait_flag(vec_done)
 
-    tla.copy(z_gm, z_ub)
-    tla.pipe_barrier(tla.pipes.ALL)
+        tla.copy(z_gm, z_ub)
+        tla.pipe_barrier(tla.pipes.ALL)
 
 
 @tla.kernel
@@ -103,41 +104,42 @@ def basic_vadd_mutex(mem_x: tla.Tensor, mem_y: tla.Tensor, mem_z: tla.Tensor) ->
     y_ub = tla.make_tensor_like(y_ub_ptr, y_gm, tla.arch.RowMajor)
     z_ub = tla.make_tensor_like(z_ub_ptr, z_gm, tla.arch.RowMajor)
 
-    mutex_x_ub.lock(pipe=tla.arch.MTE2)
-    tla.copy(x_ub, x_gm)
-    mutex_x_ub.unlock(pipe=tla.arch.MTE2)
+    with tla.vector():
+        mutex_x_ub.lock(pipe=tla.arch.MTE2)
+        tla.copy(x_ub, x_gm)
+        mutex_x_ub.unlock(pipe=tla.arch.MTE2)
 
-    mutex_y_ub.lock(pipe=tla.arch.MTE2)
-    tla.copy(y_ub, y_gm)
-    mutex_y_ub.unlock(pipe=tla.arch.MTE2)
+        mutex_y_ub.lock(pipe=tla.arch.MTE2)
+        tla.copy(y_ub, y_gm)
+        mutex_y_ub.unlock(pipe=tla.arch.MTE2)
 
-    mutex_x_ub.lock(pipe=tla.arch.VECTOR)
-    mutex_y_ub.lock(pipe=tla.arch.VECTOR)
-    mutex_z_ub.lock(pipe=tla.arch.VECTOR)
-    with tla.vec.func(mode="simd"):
-        for i in tla.range(LOOPS):
-            x_tile = tla.tile_view(
-                x_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
-            )
-            y_tile = tla.tile_view(
-                y_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
-            )
-            z_tile = tla.tile_view(
-                z_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
-            )
+        mutex_x_ub.lock(pipe=tla.arch.VECTOR)
+        mutex_y_ub.lock(pipe=tla.arch.VECTOR)
+        mutex_z_ub.lock(pipe=tla.arch.VECTOR)
+        with tla.vec.func(mode="simd"):
+            for i in tla.range(LOOPS):
+                x_tile = tla.tile_view(
+                    x_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
+                )
+                y_tile = tla.tile_view(
+                    y_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
+                )
+                z_tile = tla.tile_view(
+                    z_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
+                )
 
-            x_reg = x_tile.load()
-            y_reg = y_tile.load()
-            z_reg = tla.add(x_reg, y_reg)
-            z_tile.store(z_reg)
-    mutex_z_ub.unlock(pipe=tla.arch.VECTOR)
-    mutex_y_ub.unlock(pipe=tla.arch.VECTOR)
-    mutex_x_ub.unlock(pipe=tla.arch.VECTOR)
+                x_reg = x_tile.load()
+                y_reg = y_tile.load()
+                z_reg = tla.add(x_reg, y_reg)
+                z_tile.store(z_reg)
+        mutex_z_ub.unlock(pipe=tla.arch.VECTOR)
+        mutex_y_ub.unlock(pipe=tla.arch.VECTOR)
+        mutex_x_ub.unlock(pipe=tla.arch.VECTOR)
 
-    mutex_z_ub.lock(pipe=tla.arch.MTE3)
-    tla.copy(z_gm, z_ub)
-    mutex_z_ub.unlock(pipe=tla.arch.MTE3)
-    tla.pipe_barrier(tla.pipes.ALL)
+        mutex_z_ub.lock(pipe=tla.arch.MTE3)
+        tla.copy(z_gm, z_ub)
+        mutex_z_ub.unlock(pipe=tla.arch.MTE3)
+        tla.pipe_barrier(tla.pipes.ALL)
 
 
 @tla.kernel
@@ -169,33 +171,34 @@ def basic_vadd_mutex_with(mem_x: tla.Tensor, mem_y: tla.Tensor, mem_z: tla.Tenso
     y_ub = tla.make_tensor_like(y_ub_ptr, y_gm, tla.arch.RowMajor)
     z_ub = tla.make_tensor_like(z_ub_ptr, z_gm, tla.arch.RowMajor)
 
-    with tla.mutex_guard(mutex_x_ub):
-        tla.copy(x_ub, x_gm)
+    with tla.vector():
+        with tla.mutex_guard(mutex_x_ub):
+            tla.copy(x_ub, x_gm)
 
-    with tla.mutex_guard(mutex_y_ub):
-        tla.copy(y_ub, y_gm)
+        with tla.mutex_guard(mutex_y_ub):
+            tla.copy(y_ub, y_gm)
 
-    with tla.mutex_guard(mutex_x_ub, mutex_y_ub, mutex_z_ub):
-        with tla.vec.func(mode="simd"):
-            for i in tla.range(LOOPS):
-                x_tile = tla.tile_view(
-                    x_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
-                )
-                y_tile = tla.tile_view(
-                    y_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
-                )
-                z_tile = tla.tile_view(
-                    z_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
-                )
+        with tla.mutex_guard(mutex_x_ub, mutex_y_ub, mutex_z_ub):
+            with tla.vec.func(mode="simd"):
+                for i in tla.range(LOOPS):
+                    x_tile = tla.tile_view(
+                        x_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
+                    )
+                    y_tile = tla.tile_view(
+                        y_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
+                    )
+                    z_tile = tla.tile_view(
+                        z_ub, tla.make_shape(VL_ELE), tla.make_coord(i)
+                    )
 
-                x_reg = x_tile.load()
-                y_reg = y_tile.load()
-                z_reg = tla.add(x_reg, y_reg)
-                z_tile.store(z_reg)
+                    x_reg = x_tile.load()
+                    y_reg = y_tile.load()
+                    z_reg = tla.add(x_reg, y_reg)
+                    z_tile.store(z_reg)
 
-    with tla.mutex_guard(mutex_z_ub):
-        tla.copy(z_gm, z_ub)
-    tla.pipe_barrier(tla.pipes.ALL)
+        with tla.mutex_guard(mutex_z_ub):
+            tla.copy(z_gm, z_ub)
+        tla.pipe_barrier(tla.pipes.ALL)
 
 
 def _dtype_config(dtype_name: str) -> tuple[type[Any], Any, float | int, int, int]:

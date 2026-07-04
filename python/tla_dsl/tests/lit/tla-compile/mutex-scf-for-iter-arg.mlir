@@ -2,19 +2,21 @@
 
 module {
   tla.func @mutex_for_iter_arg() {
-    %c0 = arith.constant 0 : index
-    %c1 = arith.constant 1 : index
-    %c2 = arith.constant 2 : index
-    %mutex = tla.mutex "l1a0" {id = 5 : i64} -> !tla.mutex
+    "tla.cube"() ({
+      %c0 = arith.constant 0 : index
+      %c1 = arith.constant 1 : index
+      %c2 = arith.constant 2 : index
+      %mutex = tla.mutex "l1a0" {id = 5 : i64} -> !tla.mutex
 
-    %result = scf.for %i = %c0 to %c2 step %c1
-        iter_args(%m = %mutex) -> (!tla.mutex) {
-      tla.mutex_lock %m [#tla.pipe<mte2>] : !tla.mutex
-      tla.mutex_unlock %m [#tla.pipe<mte2>] : !tla.mutex
-      scf.yield %m : !tla.mutex
-    }
+      %result = scf.for %i = %c0 to %c2 step %c1
+          iter_args(%m = %mutex) -> (!tla.mutex) {
+        tla.mutex_lock %m [#tla.pipe<mte2>] : !tla.mutex
+        tla.mutex_unlock %m [#tla.pipe<mte2>] : !tla.mutex
+        scf.yield %m : !tla.mutex
+      }
 
-    tla.mutex_lock %result [#tla.pipe<mte2>] : !tla.mutex
+      tla.mutex_lock %result [#tla.pipe<mte2>] : !tla.mutex
+    }) : () -> ()
     tla.return
   }
 }
