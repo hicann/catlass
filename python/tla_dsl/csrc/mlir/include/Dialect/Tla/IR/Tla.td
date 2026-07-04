@@ -265,7 +265,6 @@ def Tla_CopyL0C2DstParamsType : TypeDef<TlaDialect, "CopyL0C2DstParams", []> {
 def Tla_BinaryOpsTrait : NativeOpTrait<"::mlir::tla::trait::BinaryOps">;
 def Tla_BlockDimTrait : NativeOpTrait<"::mlir::tla::trait::BlockDim">;
 def Tla_BlockIdxTrait : NativeOpTrait<"::mlir::tla::trait::BlockIdx">;
-def Tla_BroadcastTrait : NativeOpTrait<"::mlir::tla::trait::Broadcast">;
 def Tla_ControlOpsTrait : NativeOpTrait<"::mlir::tla::trait::ControlOps">;
 def Tla_CopyTrait : NativeOpTrait<"::mlir::tla::trait::Copy">;
 def Tla_CrossCoreSetFlagTrait : NativeOpTrait<"::mlir::tla::trait::CrossCoreSetFlag">;
@@ -276,7 +275,6 @@ def Tla_CubeTernaryOpsTrait : NativeOpTrait<"::mlir::tla::trait::CubeTernaryOps"
 def Tla_DependentBinaryOpsTrait : NativeOpTrait<"::mlir::tla::trait::DependentBinaryOps">;
 def Tla_DependentUnaryOpsTrait : NativeOpTrait<"::mlir::tla::trait::DependentUnaryOps">;
 def Tla_FlagTrait : NativeOpTrait<"::mlir::tla::trait::Flag">;
-def Tla_FmaTrait : NativeOpTrait<"::mlir::tla::trait::Fma">;
 def Tla_IntermediateBinaryOpsTrait : NativeOpTrait<"::mlir::tla::trait::IntermediateBinaryOps">;
 def Tla_IntermediateMemoryOpsTrait : NativeOpTrait<"::mlir::tla::trait::IntermediateMemoryOps">;
 def Tla_IntermediateUnaryOpsTrait : NativeOpTrait<"::mlir::tla::trait::IntermediateUnaryOps">;
@@ -367,18 +365,6 @@ def Tla_RecastPtrOp : Tla_Op<"recast_ptr", [Pure]> {
   let results = (outs Tla_PtrType:$ptr);
   let assemblyFormat = [{
     $src attr-dict `:` qualified(type($src)) `->` qualified(type($ptr))
-  }];
-}
-
-def Tla_BroadcastOp : Tla_Op<"broadcast", [Pure]> {
-  let summary = "Broadcast";
-  let description = [{
-    Broadcast a scalar value into a vector tile value using a packed ``!tla.shape`` extent.
-  }];
-  let arguments = (ins Tla_ValueType:$value, Tla_ShapeType:$shape);
-  let results = (outs Tla_ValueType:$result);
-  let assemblyFormat = [{
-    $value `,` $shape attr-dict `:` qualified(type($value)) `,` qualified(type($shape)) `->` qualified(type($result))
   }];
 }
 
@@ -484,18 +470,6 @@ def Tla_FlagOp : Tla_Op<"flag", [Pure]> {
   let results = (outs Tla_FlagType:$flag);
   let assemblyFormat = [{
     $name attr-dict `->` qualified(type($flag))
-  }];
-}
-
-def Tla_FmaOp : Tla_Op<"fma", [Pure]> {
-  let summary = "FMA";
-  let description = [{
-    Fused multiply-add over register values.
-  }];
-  let arguments = (ins Tla_ValueType:$lhs, Tla_ValueType:$rhs, Tla_ValueType:$acc);
-  let results = (outs Tla_ValueType:$result);
-  let assemblyFormat = [{
-    $lhs `,` $rhs `,` $acc attr-dict `:` qualified(type($lhs)) `,` qualified(type($rhs)) `,` qualified(type($acc)) `->` qualified(type($result))
   }];
 }
 

@@ -469,7 +469,7 @@ class TlaIndex:
 
 
 class TlaShape:
-    """Marker for ``make_shape`` / ``!tla.shape<...>``; ``tla.tile_view`` / ``broadcast`` take this value."""
+    """Marker for ``make_shape`` / ``!tla.shape<...>``; ``tla.tile_view`` takes this value."""
 
 
 class TlaCoord:

@@ -3131,28 +3131,6 @@ def mmad(
 
 
 @dsl_user_op
-def broadcast(
-    value: ValueLike, shape: _Shape, *, loc: mlir_ir.Location | None = None
-) -> TlaValue:
-    """Broadcast a Tla value to a 2D shape."""
-    _require_category("broadcast", "value", value, "value", 0)
-    if not isinstance(shape, _Shape):
-        _op_error(
-            "broadcast",
-            f"invalid argument 'shape' (position 1): "
-            f"expected tla.make_shape result (TlaShape), got {_type_name(shape)}",
-        )
-    _require_frontend_state("broadcast")
-    value_operand = _as_value(value)
-    result_type = _tla_type_bridge.value_type_get(
-        value_operand.type.context, _tla_value_element_type(value_operand.type)
-    )
-    return _tla_ops_gen.broadcast(
-        result_type, value_operand, shape._shape_value, loc=loc
-    )
-
-
-@dsl_user_op
 def full(
     value: Any,
     dtype: Any,
@@ -3721,7 +3699,6 @@ _require_generated("mutex_unlock")
 _require_generated("cube")
 _require_generated("vector")
 _require_generated("mmad")
-_require_generated("broadcast")
 _require_generated("add")
 _require_generated("adds")
 _require_generated("sub")
@@ -3939,7 +3916,6 @@ __all__ = [
     "cube",
     "vector",
     "mmad",
-    "broadcast",
     "full",
     "add",
     "sub",

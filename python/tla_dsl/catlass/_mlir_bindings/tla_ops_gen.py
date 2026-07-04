@@ -182,39 +182,6 @@ def arch_block_idx(index, *, loc=None, ip=None) -> _ods_ir.Value:
   return _get_op_result_or_op_results(BlockIdxOp(index=index, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
-class BroadcastOp(_ods_ir.OpView):
-  OPERATION_NAME = "tla.broadcast"
-
-  _ODS_REGIONS = (0, True)
-
-  def __init__(self, result, value, shape, *, loc=None, ip=None):
-    operands = []
-    results = []
-    attributes = {}
-    regions = None
-    operands.append(_get_op_result_or_value(value))
-    operands.append(_get_op_result_or_value(shape))
-    _ods_context = _ods_get_default_loc_context(loc)
-    results.append(result)
-    _ods_successors = None
-    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
-
-  @builtins.property
-  def value(self):
-    return self.operation.operands[0]
-
-  @builtins.property
-  def shape(self):
-    return self.operation.operands[1]
-
-  @builtins.property
-  def result(self):
-    return self.operation.results[0]
-
-def broadcast(result, value, shape, *, loc=None, ip=None) -> _ods_ir.Value:
-  return _get_op_result_or_op_results(BroadcastOp(result=result, value=value, shape=shape, loc=loc, ip=ip))
-
-@_ods_cext.register_operation(_Dialect)
 class CopyL0C2DstParamsOp(_ods_ir.OpView):
   OPERATION_NAME = "tla.CopyL0C2DstParams"
 
@@ -676,44 +643,6 @@ class FlagOp(_ods_ir.OpView):
 
 def flag(flag, name, src_pipe, dst_pipe, *, loc=None, ip=None) -> _ods_ir.Value:
   return _get_op_result_or_op_results(FlagOp(flag=flag, name=name, src_pipe=src_pipe, dst_pipe=dst_pipe, loc=loc, ip=ip))
-
-@_ods_cext.register_operation(_Dialect)
-class FmaOp(_ods_ir.OpView):
-  OPERATION_NAME = "tla.fma"
-
-  _ODS_REGIONS = (0, True)
-
-  def __init__(self, result, lhs, rhs, acc, *, loc=None, ip=None):
-    operands = []
-    results = []
-    attributes = {}
-    regions = None
-    operands.append(_get_op_result_or_value(lhs))
-    operands.append(_get_op_result_or_value(rhs))
-    operands.append(_get_op_result_or_value(acc))
-    _ods_context = _ods_get_default_loc_context(loc)
-    results.append(result)
-    _ods_successors = None
-    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
-
-  @builtins.property
-  def lhs(self):
-    return self.operation.operands[0]
-
-  @builtins.property
-  def rhs(self):
-    return self.operation.operands[1]
-
-  @builtins.property
-  def acc(self):
-    return self.operation.operands[2]
-
-  @builtins.property
-  def result(self):
-    return self.operation.results[0]
-
-def fma(result, lhs, rhs, acc, *, loc=None, ip=None) -> _ods_ir.Value:
-  return _get_op_result_or_op_results(FmaOp(result=result, lhs=lhs, rhs=rhs, acc=acc, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
 class FullOp(_ods_ir.OpView):

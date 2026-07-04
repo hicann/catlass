@@ -29,12 +29,6 @@ public:
 };
 
 template <typename ConcreteType>
-class Broadcast : public ::mlir::OpTrait::TraitBase<ConcreteType, Broadcast> {
-public:
-  static constexpr ::llvm::StringLiteral getTraitName() { return "Broadcast"; }
-};
-
-template <typename ConcreteType>
 class ControlOps : public ::mlir::OpTrait::TraitBase<ConcreteType, ControlOps> {
 public:
   static constexpr ::llvm::StringLiteral getTraitName() { return "ControlOps"; }
@@ -92,11 +86,6 @@ template <typename ConcreteType>
 class Flag : public ::mlir::OpTrait::TraitBase<ConcreteType, Flag> {
 public:
   static constexpr ::llvm::StringLiteral getTraitName() { return "Flag"; }
-};
-
-template <typename ConcreteType> class Fma : public ::mlir::OpTrait::TraitBase<ConcreteType, Fma> {
-public:
-  static constexpr ::llvm::StringLiteral getTraitName() { return "Fma"; }
 };
 
 template <typename ConcreteType> class For : public ::mlir::OpTrait::TraitBase<ConcreteType, For> {
@@ -326,14 +315,12 @@ struct NamedOpFoldRules {
 inline constexpr NamedOpMetadata kOpMetadataByName[] = {
     {"tla.arch.block_dim", {"control", "scalar"}},
     {"tla.arch.block_idx", {"control", "scalar"}},
-    {"tla.broadcast", {"unary", "intermediate"}},
     {"tla.copy", {"binary", "dependent"}},
     {"tla.cross_core_set_flag", {"unary", "intermediate"}},
     {"tla.cross_core_wait_flag", {"unary", "intermediate"}},
     {"tla.cross_flag", {"unary", "intermediate"}},
     {"tla.cube", {"control", "intermediate"}},
     {"tla.flag", {"unary", "intermediate"}},
-    {"tla.fma", {"binary", "vector"}},
     {"tla.func", {"control", "intermediate"}},
     {"tla.inttoptr", {"unary", "intermediate"}},
     {"tla.recast_ptr", {"unary", "intermediate"}},
@@ -360,21 +347,8 @@ inline const OpMetadata *lookupOpMetadata(::llvm::StringRef opName) {
 
 inline constexpr FoldRuleSpan kEmptyFoldRules = {nullptr, 0};
 
-inline constexpr FoldRule ktla_fmaFoldRules[] = {
-    {"const-fma", "lhs, rhs, acc are compile-time constants",
-     "fold to arith.constant(lhs * rhs + acc)", ""},
-};
-
-inline constexpr NamedOpFoldRules kFoldRulesByOpName[] = {
-    {"tla.fma", {ktla_fmaFoldRules, sizeof(ktla_fmaFoldRules) / sizeof(FoldRule)}},
-};
-
 inline FoldRuleSpan lookupFoldRules(::llvm::StringRef opName) {
-  for (const auto &entry : kFoldRulesByOpName) {
-    if (entry.opName == opName) {
-      return entry.rules;
-    }
-  }
+  (void)opName;
   return kEmptyFoldRules;
 }
 
