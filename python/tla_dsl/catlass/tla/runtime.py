@@ -490,18 +490,16 @@ def from_dlpack(
     dtype_token = str(getattr(dtype, "dtype", "")).strip().lower()
     layout_token = _resolve_arch_layout_tag(resolved_layout, for_op="from_dlpack")
     if origin_shape is None:
-        row_major_invalid = (
+        row_major_compact = (
             len(phys_shape) == 2
-            and (
-                phys_strides[1] != 1
-                or (phys_shape[0] != 1 and phys_strides[0] != phys_shape[1])
-            )
+            and (phys_shape[1] == 1 or phys_strides[1] == 1)
+            and (phys_shape[0] == 1 or phys_strides[0] == phys_shape[1])
         )
         if (
             len(phys_shape) == 2
             and layout_token in ("row_major", "column_major")
             and (
-                (layout_token == "row_major" and row_major_invalid)
+                (layout_token == "row_major" and not row_major_compact)
                 or (
                     layout_token == "column_major"
                     and (phys_strides[1] != 1 or phys_strides[0] != phys_shape[1])

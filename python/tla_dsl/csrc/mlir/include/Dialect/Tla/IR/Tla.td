@@ -881,6 +881,40 @@ def Tla_ReduceOp : Tla_Op<"reduce", [Pure]> {
   }];
 }
 
+class Tla_VectorUnaryOp<string mnemonic, string opSummary, string opDescription>
+    : Tla_Op<mnemonic, [Pure]> {
+  let summary = opSummary;
+  let description = opDescription # [{
+
+    An optional mask predicates which lanes are computed; masked-out lanes are
+    undefined/zeroed.
+  }];
+  let arguments = (ins Tla_TensorType:$operand,
+                       Optional<Tla_MaskType>:$mask);
+  let results = (outs Tla_TensorType:$result);
+  let assemblyFormat = [{
+    $operand (`mask` $mask^)? attr-dict `:`
+    type($operand) (`mask` qualified(type($mask))^)?
+    `->` type($result)
+  }];
+}
+
+def Tla_ExpOp : Tla_VectorUnaryOp<"exp",
+    "Vector exponential for tensor fragments",
+    "Element-wise exponential on tensor fragments / vector tiles.">;
+
+def Tla_LogOp : Tla_VectorUnaryOp<"log",
+    "Vector natural logarithm for tensor fragments",
+    "Element-wise natural logarithm on tensor fragments / vector tiles.">;
+
+def Tla_SqrtOp : Tla_VectorUnaryOp<"sqrt",
+    "Vector square root for tensor fragments",
+    "Element-wise square root on tensor fragments / vector tiles.">;
+
+def Tla_AbsOp : Tla_VectorUnaryOp<"abs",
+    "Vector absolute value for tensor fragments",
+    "Element-wise absolute value on tensor fragments / vector tiles.">;
+
 def Tla_VectorOp : Tla_Op<"vector", [NoTerminator, SingleBlock]> {
   let summary = "Vector region";
   let description = [{

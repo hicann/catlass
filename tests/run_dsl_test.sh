@@ -13,7 +13,7 @@
 # python/tla_dsl/examples/end_to_end/basic_vadd (basic_vadd.py),
 # python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed.py), and
 # python/tla_dsl/examples/end_to_end/vector_ops (binary_op.py, masked_binary.py,
-# reduction_ops.py).
+# reduction_ops.py, unary_ops.py).
 #
 # Fixed toolchain paths relative to WORKSPACE_ROOT (= parent of catlass repo):
 #   CANN:             Ascend/9.1.0-beta.1/ascend-toolkit/set_env.sh
@@ -48,6 +48,7 @@ BASIC_MIXED_REL="examples/end_to_end/basic_mixed/basic_mixed.py"
 MASKED_BINARY_REL="examples/end_to_end/vector_ops/masked_binary.py"
 BINARY_OP_REL="examples/end_to_end/vector_ops/binary_op.py"
 REDUCTION_OPS_REL="examples/end_to_end/vector_ops/reduction_ops.py"
+UNARY_OPS_REL="examples/end_to_end/vector_ops/unary_ops.py"
 
 _ascendnpu_ir_dev_is_prebuilt() {
     local root="$1"
@@ -68,6 +69,7 @@ Run end-to-end validation for:
   - binary_op (binary_op.py <op> --run --all-dtypes for add/sub/mul/div/max/min)
   - masked_binary (masked_binary.py masked_binary --run --all-dtypes)
   - reduction_ops (reduction_ops.py <op> --run for add/max/min)
+  - unary_ops (unary_ops.py <op> --run --all-dtypes for exp/log/sqrt/abs/masked_unary/masked_abs)
 Runs basic_mmad default MNK plus m=1, n=2, k=3.
 Activates conda env "${CONDA_ENV}", sources CANN set_env.sh, exports AscendNPU-IR-Dev MLIR/LLVM
 env, then builds (optional) and runs the test.
@@ -261,6 +263,10 @@ if [[ ! -f "${TLA_DSL_DIR}/${REDUCTION_OPS_REL}" ]]; then
     echo "error: missing ${REDUCTION_OPS_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
+if [[ ! -f "${TLA_DSL_DIR}/${UNARY_OPS_REL}" ]]; then
+    echo "error: missing ${UNARY_OPS_REL} under ${TLA_DSL_DIR}" >&2
+    exit 1
+fi
 
 _run_basic_mmad_case() {
     local label="$1"
@@ -336,5 +342,38 @@ _run_reduction_ops_case() {
 for _reduce_op in add max min; do
     _run_reduction_ops_case "${_reduce_op}"
 done
+
+_run_unary_ops_case() {
+    local op="$1"
+    echo "==> Running unary_ops validation [${op} all dtypes]: ${op} --run --all-dtypes --device ${DEVICE_ID}"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${UNARY_OPS_REL}" "${op}" --run --all-dtypes --device "${DEVICE_ID}"
+    )
+}
+
+for _unary_op in exp log sqrt abs; do
+    _run_unary_ops_case "${_unary_op}"
+done
+
+_run_masked_unary_case() {
+    echo "==> Running unary_ops validation [masked_unary all dtypes]: masked_unary --run --all-dtypes --device ${DEVICE_ID}"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${UNARY_OPS_REL}" masked_unary --run --all-dtypes --device "${DEVICE_ID}"
+    )
+}
+
+_run_masked_unary_case
+
+_run_masked_abs_case() {
+    echo "==> Running unary_ops validation [masked_abs all integer dtypes]: masked_abs --run --all-dtypes --device ${DEVICE_ID}"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${UNARY_OPS_REL}" masked_abs --run --all-dtypes --device "${DEVICE_ID}"
+    )
+}
+
+_run_masked_abs_case
 
 echo "==> run_dsl_test.sh finished successfully"

@@ -138,6 +138,10 @@ __all__ = [
     "bf16",
     "fp32",
     "ReductionOp",
+    "exp",
+    "log",
+    "sqrt",
+    "abs",
     *getattr(_runtime, "_CORE_API_EXPORTS", []),
 ]
 

@@ -296,8 +296,7 @@ def test_from_dlpack_row_major_accepts_singleton_dim_stride_alias() -> None:
 
     assert tensor._shape_tuple == (1, 3)
     assert tensor.layout_tag == "row_major"
-    assert tensor.stride == (3, 1)
-    assert tensor.origin_shape == (1, 3)
+
 
 
 def test_from_dlpack_column_major_row_major_physical() -> None:

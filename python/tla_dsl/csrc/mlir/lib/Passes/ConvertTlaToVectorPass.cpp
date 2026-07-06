@@ -695,7 +695,78 @@ static LogicalResult validateVectorReduction(::tla::ReduceOp reduceOp, Type elem
   return success();
 }
 
-// The lhs/rhs/mask operands of a tla binary op.
+enum class VectorUnaryKind { Exp, Log, Sqrt, Abs };
+
+struct TlaUnaryOperands {
+  Value operand;
+  Value mask;
+};
+
+struct VectorUnaryInfo {
+  VectorUnaryKind kind;
+  StringRef name;
+  TlaUnaryOperands operands;
+};
+
+template <typename OpTy> static TlaUnaryOperands getTlaUnaryOperands(OpTy op) {
+  return TlaUnaryOperands{op.getOperand(), op.getMask()};
+}
+
+static std::optional<VectorUnaryInfo> getVectorUnaryInfo(Operation *op) {
+  if (!op)
+    return std::nullopt;
+  if (auto o = dyn_cast<::tla::ExpOp>(op))
+    return VectorUnaryInfo{VectorUnaryKind::Exp, "exp", getTlaUnaryOperands(o)};
+  if (auto o = dyn_cast<::tla::LogOp>(op))
+    return VectorUnaryInfo{VectorUnaryKind::Log, "log", getTlaUnaryOperands(o)};
+  if (auto o = dyn_cast<::tla::SqrtOp>(op))
+    return VectorUnaryInfo{VectorUnaryKind::Sqrt, "sqrt", getTlaUnaryOperands(o)};
+  if (auto o = dyn_cast<::tla::AbsOp>(op))
+    return VectorUnaryInfo{VectorUnaryKind::Abs, "abs", getTlaUnaryOperands(o)};
+  return std::nullopt;
+}
+
+static LogicalResult validateVectorUnaryElementType(Operation *op, VectorUnaryInfo info,
+                                                    Type elementType) {
+  switch (info.kind) {
+  case VectorUnaryKind::Exp:
+  case VectorUnaryKind::Log:
+  case VectorUnaryKind::Sqrt:
+    if (!isa<FloatType>(elementType))
+      return op->emitError() << "tla." << info.name
+                             << " requires floating-point element type, got "
+                             << elementType;
+    if (isa<BFloat16Type>(elementType))
+      return op->emitError() << "tla." << info.name
+                             << " does not support bf16 element type yet";
+    return success();
+  case VectorUnaryKind::Abs:
+    if (auto floatType = dyn_cast<FloatType>(elementType)) {
+      if (isa<BFloat16Type>(floatType))
+        return op->emitError() << "tla.abs does not support bf16 element type yet";
+      if (floatType.isF16() || floatType.isF32())
+        return success();
+      return op->emitError()
+             << "tla.abs requires f16 or f32 floating-point element type, got "
+             << elementType;
+    }
+    if (auto intType = dyn_cast<IntegerType>(elementType)) {
+      unsigned width = intType.getWidth();
+      if (width == 8 || width == 16 || width == 32)
+        return success();
+      return op->emitError()
+             << "tla.abs requires i8, i16, or i32 element type, got "
+             << elementType;
+    }
+    return op->emitError()
+           << "tla.abs requires f16/f32 or i8/i16/i32 element type, got "
+           << elementType;
+  }
+  return failure();
+}
+
+// The lhs/rhs/mask operands of a tla binary op (mask may be null). All four
+// binary ops share this operand layout.
 struct TlaBinaryOperands {
   Value lhs;
   Value rhs;
@@ -737,6 +808,11 @@ struct VectorOpInfo {
   VectorRhsKind rhsKind;
   StringRef mnemonic;
   TlaBinaryOperands operands;
+};
+
+struct AnyVectorOperationInfo {
+  std::optional<VectorOpInfo> binary;
+  std::optional<VectorUnaryInfo> unary;
 };
 
 static std::optional<VectorOpInfo> getVectorBinaryInfo(Operation *op) {
@@ -787,11 +863,13 @@ static std::optional<VectorOpInfo> getVectorScalarBinaryInfo(Operation *op) {
   return std::nullopt;
 }
 
-static std::optional<VectorOpInfo> getAnyVectorOperationInfo(Operation *op) {
+static std::optional<AnyVectorOperationInfo> getAnyVectorOperationInfo(Operation *op) {
   if (auto info = getVectorBinaryInfo(op))
-    return info;
+    return AnyVectorOperationInfo{*info, std::nullopt};
   if (auto info = getVectorScalarBinaryInfo(op))
-    return info;
+    return AnyVectorOperationInfo{*info, std::nullopt};
+  if (auto info = getVectorUnaryInfo(op))
+    return AnyVectorOperationInfo{std::nullopt, *info};
   return std::nullopt;
 }
 
@@ -806,14 +884,15 @@ static hivmave::MaskWidth maskWidthForElement(Type elementType) {
 }
 
 // True for the tla ops that produce a vector compute result inside a vec.func
-// region: element-wise binary ops, where/select, and reductions.
+// region: element-wise binary/unary ops, where/select, and reductions.
 static bool isVectorComputeOp(Operation *op) {
   return getAnyVectorOperationInfo(op).has_value() ||
          isa_and_nonnull<::tla::WhereOp>(op) || isa_and_nonnull<::tla::ReduceOp>(op);
 }
 
 // Build the AVE vector op for a tla binary op. The mask predicates active lanes.
-// For div the signedness is carried as the TypeFn cast attribute.
+// For div the signedness is carried as the TypeFn cast attribute (cast_unsigned
+// for unsigned integer element types, cast_signed otherwise).
 static Value createVectorBinaryResult(OpBuilder &b, Location loc, VectorBinaryKind kind,
                                       Type elementType, VectorType vecType, Value lhs,
                                       Value rhs, Value mask) {
@@ -873,6 +952,22 @@ static FailureOr<Value> createVectorReductionResult(OpBuilder &b, Location loc,
       createAvePgeMask(b, loc, resultMaskType, hivmave::PgePattern::ALL).getRes();
   return b.create<hivmave::VFBroadcastVectorOp>(loc, resultType, reducedVec, resultMask, true).getRes();
 }
+
+static Value createVectorUnaryResult(OpBuilder &b, Location loc, VectorUnaryKind kind,
+                                     VectorType vecType, Value operand, Value mask) {
+  switch (kind) {
+  case VectorUnaryKind::Exp:
+    return b.create<hivmave::VFExpOp>(loc, vecType, operand, mask, Value()).getResult();
+  case VectorUnaryKind::Log:
+    return b.create<hivmave::VFLnOp>(loc, vecType, operand, mask, Value()).getResult();
+  case VectorUnaryKind::Sqrt:
+    return b.create<hivmave::VFSqrtOp>(loc, vecType, operand, mask, Value()).getResult();
+  case VectorUnaryKind::Abs:
+    return b.create<hivmave::VFAbsOp>(loc, vecType, operand, mask, Value()).getResult();
+  }
+  return nullptr;
+}
+
 
 // Shared state while re-creating a tla.vec.func body inside the helper function.
 struct VecLowerCtx {
@@ -1122,6 +1217,30 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     if (failed(result))
       return failure();
     valueMap[op.getResult(0)] = *result;
+    return success();
+  }
+
+  if (auto info = getVectorUnaryInfo(&op)) {
+    if (op.getNumResults() != 1)
+      return failure();
+    if (failed(validateVectorUnaryElementType(&op, *info, ctx.elementType)))
+      return failure();
+    TlaUnaryOperands operands = info->operands;
+    Value operand = valueMap.lookup(operands.operand);
+    if (!operand)
+      return failure();
+    Value mask;
+    if (operands.mask) {
+      mask = valueMap.lookup(operands.mask);
+      if (!mask)
+        return failure();
+    } else {
+      mask = b.create<hivmave::VFPgeOp>(loc, ctx.maskVecType, hivmave::PgePattern::ALL);
+    }
+    Value result = createVectorUnaryResult(b, loc, info->kind, ctx.vecType, operand, mask);
+    if (!result)
+      return failure();
+    valueMap[op.getResult(0)] = result;
     return success();
   }
 
@@ -1504,17 +1623,24 @@ public:
     for (Operation *computeOp : computeOps) {
       if (computeOp->getNumResults() != 1)
         return rewriter.notifyMatchFailure(vecFuncOp, "unexpected tla compute op shape");
-      if (auto info = getAnyVectorOperationInfo(computeOp)) {
-        // lhs/rhs must be produced inside the region; vector-scalar rhs is a
-        // scalar value captured or cloned into the helper.
-        // The optional mask comes from tla.create_mask and is validated separately.
-        TlaBinaryOperands ops = info->operands;
-        if (!ops.lhs || !ops.rhs || !producedValues.contains(ops.lhs))
-          return rewriter.notifyMatchFailure(
-              vecFuncOp, "expected binary op operand from tla.load or prior compute op");
-        if (info->rhsKind == VectorRhsKind::Vector && !producedValues.contains(ops.rhs))
-          return rewriter.notifyMatchFailure(
-              vecFuncOp, "expected binary op rhs from tla.load or prior compute op");
+      if (auto anyInfo = getAnyVectorOperationInfo(computeOp)) {
+        if (auto info = anyInfo->binary) {
+          // lhs/rhs must be produced inside the region; vector-scalar rhs is a
+          // scalar value captured or cloned into the helper.
+          // The optional mask comes from tla.create_mask and is validated separately.
+          TlaBinaryOperands ops = info->operands;
+          if (!ops.lhs || !ops.rhs || !producedValues.contains(ops.lhs))
+            return rewriter.notifyMatchFailure(
+                vecFuncOp, "expected binary op operand from tla.load or prior compute op");
+          if (info->rhsKind == VectorRhsKind::Vector && !producedValues.contains(ops.rhs))
+            return rewriter.notifyMatchFailure(
+                vecFuncOp, "expected binary op rhs from tla.load or prior compute op");
+        } else if (auto unaryInfo = anyInfo->unary) {
+          TlaUnaryOperands ops = unaryInfo->operands;
+          if (!ops.operand || !producedValues.contains(ops.operand))
+            return rewriter.notifyMatchFailure(
+                vecFuncOp, "expected unary op operand from tla.load or prior compute op");
+        }
       } else if (auto whereOp = dyn_cast<::tla::WhereOp>(computeOp)) {
         if (!producedValues.contains(whereOp.getX()) ||
             !producedValues.contains(whereOp.getY()))

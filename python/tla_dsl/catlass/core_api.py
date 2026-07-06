@@ -3377,6 +3377,76 @@ def _emit_vector_binary_or_scalar(
     _op_error(op_name, "expected vector-vector or vector-scalar operands")
 
 
+_FLOAT_UNARY_ELEMENT_TYPES = frozenset({"f16", "f32"})
+_INTEGER_ABS_ELEMENT_TYPES = frozenset({"i8", "i16", "i32"})
+_ABS_ELEMENT_TYPES = _FLOAT_UNARY_ELEMENT_TYPES | _INTEGER_ABS_ELEMENT_TYPES
+
+
+def _emit_vector_unary(
+    op_name: str,
+    emitter: Any,
+    operand: VectorSSA,
+    *,
+    mask: MaskSSA | None = None,
+    loc: mlir_ir.Location | None = None,
+) -> VectorSSA:
+    _require_category(op_name, "operand", operand, "vector_ssa", 0)
+    if mask is not None:
+        _require_category(op_name, "mask", mask, "mask_ssa", 1)
+    _require_frontend_state(op_name)
+    _runtime._require_enclosing_region(op_name, "vec.func")
+    operand_value = _as_value(operand)
+    element_type = str(_tla_tensor_type_for_mlir_value(operand_value).element_type)
+    if op_name in {"exp", "log", "sqrt"}:
+        if element_type not in _FLOAT_UNARY_ELEMENT_TYPES:
+            _op_error(
+                op_name,
+                f"tla.{op_name} requires f16 or f32 element type, "
+                f"got {element_type}",
+            )
+    elif op_name == "abs" and element_type not in _ABS_ELEMENT_TYPES:
+        _op_error(
+            op_name,
+            "tla.abs requires f16/f32 or i8/i16/i32 element type, "
+            f"got {element_type}",
+        )
+    mask_value = _as_value(mask) if mask is not None else None
+    return VectorSSA(
+        emitter(
+            operand_value.type,
+            operand_value,
+            mask=mask_value,
+            loc=loc,
+        )
+    )
+
+
+def _make_unary_op(mnemonic: str) -> Callable[..., VectorSSA]:
+    @dsl_user_op
+    def _unary(
+        operand: VectorSSA,
+        *,
+        mask: MaskSSA | None = None,
+        loc: mlir_ir.Location | None = None,
+    ) -> VectorSSA:
+        return _emit_vector_unary(
+            mnemonic,
+            getattr(_tla_ops_gen, mnemonic),
+            operand,
+            mask=mask,
+            loc=loc,
+        )
+
+    _unary.__name__ = mnemonic
+    return _unary
+
+
+exp = _make_unary_op("exp")
+log = _make_unary_op("log")
+sqrt = _make_unary_op("sqrt")
+abs = _make_unary_op("abs")
+
+
 @dsl_user_op
 def add(
     lhs: Any,
@@ -3711,6 +3781,8 @@ _require_generated("div")
 _require_generated("where")
 _require_generated("divs")
 _require_generated("reduce")
+for _unary_op_name in ("exp", "log", "sqrt", "abs"):
+    _require_generated(_unary_op_name)
 _require_generated("arch_block_idx")
 _require_generated("arch_sub_block_idx")
 _require_generated("arch_block_dim")
@@ -3924,6 +3996,10 @@ __all__ = [
     "min",
     "div",
     "where",
+    "exp",
+    "log",
+    "sqrt",
+    "abs",
     "ReductionOp",
     "make_ptr",
     "recast_ptr",
