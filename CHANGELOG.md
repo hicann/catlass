@@ -2,6 +2,49 @@
 
 ## CATLASS 1.X
 
+### CATLASS 1.6.0
+
+- 关键特性
+  - 全面支持 **Ascend950**，新增全套 [Tile层组件](https://gitcode.com/cann/catlass/tree/v1.6.0/include/catlass/gemm/tile/ascend950)（文档见[Gemm/Tile类模板概述](https://gitcode.com/cann/catlass/blob/v1.6.0/docs/zh/3_API/include/catlass/gemm/tile/README.md)），兼容 Atlas A2/A3，并新增对 **AtlasA2/AtlasA3** 及 **Ascend950** 架构下Gemm类全量Tile层组件的[**单元测试**](https://gitcode.com/cann/catlass/blob/v1.6.0/tests/unittest/catlass/gemm/tile/README.md)
+  - 新增 [**MXFP8 / MXFP4 量化模板体系**](https://gitcode.com/cann/catlass/blob/v1.6.0/examples/53_ascend950_fp8_mx_matmul/README.md)，基于Ascend950架构支持 MXFP8/MXFP4 量化矩阵乘、A8W4 MX矩阵乘等样例
+  - 新增 [**基于Mutex 同步原语的 BlockMmad**](https://gitcode.com/cann/catlass/blob/v1.6.0/include/catlass/gemm/block/block_mmad_pingpong_mutex_tla.hpp)，提供更简化的block组件代码实现
+  - 新增 [**EVG 声明式后处理框架**](https://gitcode.com/cann/catlass/blob/v1.6.0/examples/64_ascend950_matmul_evg/README.md)，支持以声明式方式描述 Epilogue 后处理逻辑
+  - 支持使用 AscendC CMake 构建系统编译
+- 更多样例 （新增Ascend950 样例16个，AtlasA2/AtlasA3 样例1个）
+  - [Ascend950 Flash Attention Chunk Prefill](https://gitcode.com/cann/catlass/blob/v1.6.0/examples/70_ascend950_flash_attention_chunk_prefill/README.md)
+  - [Ascend950 MXFP8 Matmul](https://gitcode.com/cann/catlass/blob/v1.6.0/examples/53_ascend950_fp8_mx_matmul/README.md)
+  - [Ascend950 MXFP4 Matmul](https://gitcode.com/cann/catlass/blob/v1.6.0/examples/54_ascend950_fp4_mx_matmul/README.md)
+  - [Ascend950 A8W4 MX Matmul](https://gitcode.com/cann/catlass/blob/v1.6.0/examples/59_ascend950_a8w4_mx_matmul/README.md)
+  - [Ascend950 MXFP8 BatchMatmul](https://gitcode.com/cann/catlass/blob/v1.6.0/examples/58_ascend950_fp8_mx_batch_matmul/README.md)
+  - [Ascend950 MXFP8/MXFP4 GroupedMatmul](https://gitcode.com/cann/catlass/blob/v1.6.0/examples/55_ascend950_mx_grouped_matmul_slice_m/README.md)
+  - [Ascend950 Matmul Full Dequant](https://gitcode.com/cann/catlass/blob/v1.6.0/examples/57_ascend950_matmul_full_dequant/README.md)
+  - [Ascend950 Broadcast Matmul PerBlock Quant](https://gitcode.com/cann/catlass/blob/v1.6.0/examples/62_ascend950_broadcast_matmul_perblock_quant/README.md)
+  - [Ascend950 matmul Evg](https://gitcode.com/cann/catlass/blob/v1.6.0/examples/64_ascend950_matmul_evg/README.md)
+  - [Ascend950 GroupedMatmul](https://gitcode.com/cann/catlass/blob/v1.6.0/examples/60_ascend950_grouped_matmul_slice_m/README.md)
+  - [Ascend950 BatchedMatmul](https://gitcode.com/cann/catlass/blob/v1.6.0/examples/67_ascend950_batched_matmul/README.md)
+  - [Ascend950 Matmul FullLoadA](https://gitcode.com/cann/catlass/blob/v1.6.0/examples/73_ascend950_matmul_full_loadA/README.md)
+  - [Ascend950 StreamK Matmul](https://gitcode.com/cann/catlass/blob/v1.6.0/examples/66_ascend950_streamk_matmul/README.md)
+  - [Ascend950 MultiCoreSplitkMatmul](https://gitcode.com/cann/catlass/blob/v1.6.0/examples/68_ascend950_multi_core_splitk_matmul/README.md)
+  - [Ascend950 TailMultiCoreSplitkMatmul](https://gitcode.com/cann/catlass/blob/v1.6.0/examples/69_ascend950_tail_multi_core_splitk_matmul/README.md)
+  - [Ascend950 Conv2d](https://gitcode.com/cann/catlass/blob/v1.6.0/examples/56_ascend950_basic_conv2d_tla/README.md)
+  - [AtlasA2 Quant Matmul 多核切K](https://gitcode.com/cann/catlass/blob/v1.6.0/examples/52_quant_multi_core_splitk_matmul_tla/README.md)
+- 工具支持
+  - 新增 [算子级测试框架（optest）](https://gitcode.com/cann/catlass/blob/v1.6.0/tests/optest/README.md)，支持 JIT 与 Prebuilt 两种模式，使用弱符号机制统一 prebuilt kernel 加载，并完成 63 个存量及新增样例的 torch_catlass 测试接口接入，覆盖 Matmul、GroupedMatmul、FlashAttention等算子类型
+  - [msTuner 工具增强](https://gitcode.com/cann/catlass/blob/v1.6.0/tools/tuner/README.md)：支持 -xasc 编译及 Ascend950 架构寻优
+  - 新增 [Agent Skill 开发工具](https://gitcode.com/cann/catlass/blob/v1.6.0/.agents)，当前具备支持生成样例torch接口、生成样例optest交付件等场景的自动化功能
+  - 新增 CI/构建辅助设施：pre-commit 脚本、依赖描述文件等 
+- 文档资料
+  - 新增 [EVG 声明式后处理框架文档](https://gitcode.com/cann/catlass/tree/v1.6.0/docs/zh/2_Design/03_evg/01_evg_design.md)
+  - 新增 [存量非 TLA 算子向 Ascend950 平台迁移文档](https://gitcode.com/cann/catlass/tree/v1.6.0/docs/zh/1_Practice/others/migration_from_atlasA2_to_Ascend950_guideline.md)
+  - [tile 相关 API 文档](https://gitcode.com/cann/catlass/tree/v1.6.0/docs/zh/3_API/README.md) 补充完善
+  - 文档新增中英文目录，完成多轮低错整改及跳转链接修复
+- Bugfix&优化
+  - 将原本的fftsAddr替换为hardwareSyncAddr，使用aclrtGetHardwareSyncAddr接口获取
+  - 修复 EpilogueAtlasA2PerTokenDequant 同步缺少导致的 RAW 内存竞争问题
+  - 修复 quant_matmul TLA 版本针对 zN 输入的 Bug
+  - 修复 RemovePaddingNDAndCast 中 compute length 可能不对齐的问题
+  - 修复部分样例的 uint32/int32 溢出隐患
+
 ### CATLASS 1.5.0
 
 - 关键特性
