@@ -142,6 +142,7 @@ __all__ = [
     "log",
     "sqrt",
     "abs",
+    "neg",
     *getattr(_runtime, "_CORE_API_EXPORTS", []),
 ]
 

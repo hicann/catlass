@@ -25,17 +25,21 @@ _KERNEL_DTYPE = tla.Float32
 _KERNEL_ELEMENT_BYTES = 4
 _KERNEL_SHAPE = (VECTOR_ELE,)
 _DEFAULT_SENTINEL: float | int = -7
-_UNARY_MODE: Literal["unmasked_unary", "masked_unary", "masked_abs"] = "unmasked_unary"
+_UNARY_MODE: Literal[
+    "unmasked_unary", "masked_unary", "masked_abs", "masked_neg"
+] = "unmasked_unary"
 _UNARY_OP: Callable[[Any], Any] | None = None
 
-_UNMASKED_UNARY_OPS = ("exp", "log", "sqrt", "abs")
+_UNMASKED_UNARY_OPS = ("exp", "log", "sqrt", "abs", "neg")
 _OPERATOR_SPECS: dict[str, dict[str, Any]] = {
     "exp": {"op": tla.exp, "default_atol": 1e-3, "kind": "float"},
     "log": {"op": tla.log, "default_atol": 1e-4, "kind": "float"},
     "sqrt": {"op": tla.sqrt, "default_atol": 1e-4, "kind": "float"},
     "abs": {"op": tla.abs, "default_atol": 1e-4, "kind": "numeric"},
+    "neg": {"op": tla.neg, "default_atol": 1e-4, "kind": "numeric"},
     "masked_unary": {"default_atol": 1e-3},
     "masked_abs": {"default_atol": 1e-4},
+    "masked_neg": {"default_atol": 1e-4},
 }
 _SCRIPT_PATH = Path(__file__).resolve()
 
@@ -96,6 +100,14 @@ def vector_unary(
                     tail, remaining = tla.update_mask(remaining, dtype=_KERNEL_DTYPE)
                     lane_mask = tla.create_mask(pattern=tla.mask.H, dtype=_KERNEL_DTYPE)
                     z_t.store(tla.abs(x_t.load(), mask=lane_mask), mask=tail)
+            elif _UNARY_MODE == "masked_neg":
+                remaining = VECTOR_ELE
+                for i in tla.range(LOOPS):
+                    x_t = _chunk(x_ub, i)
+                    z_t = _chunk(z_ub, i)
+                    tail, remaining = tla.update_mask(remaining, dtype=_KERNEL_DTYPE)
+                    lane_mask = tla.create_mask(pattern=tla.mask.H, dtype=_KERNEL_DTYPE)
+                    z_t.store(tla.neg(x_t.load(), mask=lane_mask), mask=tail)
             else:
                 remaining = VECTOR_ELE
                 for i in tla.range(LOOPS):
@@ -132,6 +144,14 @@ def _operator_specs() -> dict[str, dict[str, Any]]:
     return _OPERATOR_SPECS
 
 
+def _expected_neg(x: Any) -> Any:
+    import torch
+
+    if x.dtype == torch.int16:
+        return x.to(torch.int32).neg().to(x.dtype)
+    return -x
+
+
 def _expected_unary(op_name: str, x: Any) -> Any:
     if op_name == "exp":
         return x.exp()
@@ -141,6 +161,8 @@ def _expected_unary(op_name: str, x: Any) -> Any:
         return x.sqrt()
     if op_name == "abs":
         return x.abs()
+    if op_name == "neg":
+        return _expected_neg(x)
     raise AssertionError(op_name)
 
 
@@ -160,10 +182,12 @@ def _is_unsupported_case(op_name: str, dtype_name: str) -> bool:
         return dtype_name not in _FLOAT_UNARY_DTYPES
     if op_name == "masked_abs":
         return dtype_name not in _INTEGER_DTYPES
+    if op_name == "masked_neg":
+        return dtype_name not in (_INTEGER_DTYPES | _FLOAT_UNARY_DTYPES)
     kind = _OPERATOR_SPECS[op_name]["kind"]
     if kind == "float":
         return dtype_name not in _FLOAT_UNARY_DTYPES
-    return dtype_name not in _INTEGER_DTYPES | _FLOAT_UNARY_DTYPES
+    return dtype_name not in (_INTEGER_DTYPES | _FLOAT_UNARY_DTYPES)
 
 
 def _print_skip(op_name: str, dtype_name: str, shape: tuple[int, ...]) -> None:
@@ -178,9 +202,19 @@ def _print_skip(op_name: str, dtype_name: str, shape: tuple[int, ...]) -> None:
         if kind == "float":
             reason = "float unary ops require f16 or f32 (bf16 unsupported by AVE intrinsics)"
         elif dtype_name == "bf16":
-            reason = "bf16 abs is not supported by AVE vabs intrinsics"
+            reason = f"bf16 {op_name} is not supported by AVE v{op_name} intrinsics"
         else:
             reason = "unsupported case"
+        print(
+            f"skip op={op_name} dtype={dtype_name} shape={shape_label(shape)}: {reason}"
+        )
+        return
+    if op_name == "masked_neg":
+        reason = (
+            "bf16 neg is not supported by AVE vneg intrinsics"
+            if dtype_name == "bf16"
+            else "unsupported case"
+        )
         print(
             f"skip op={op_name} dtype={dtype_name} shape={shape_label(shape)}: {reason}"
         )
@@ -209,8 +243,11 @@ def _set_kernel_config(
     elif op_name == "masked_unary":
         _UNARY_MODE = "masked_unary"
         _UNARY_OP = None
-    else:
+    elif op_name == "masked_abs":
         _UNARY_MODE = "masked_abs"
+        _UNARY_OP = None
+    else:
+        _UNARY_MODE = "masked_neg"
         _UNARY_OP = None
     return config.tla_dtype, config.torch_dtype, config.default_sentinel
 
@@ -274,6 +311,15 @@ def _expected(op_name: str, inputs: tuple[Any, ...]) -> tuple[Any, ...]:
         keep = lane < (VL_ELE // 2)
         zero = torch.zeros_like(x)
         return _pad_with_sentinel((torch.where(keep, abs_r, zero),), x)
+    if op_name == "masked_neg":
+        import torch
+
+        (x,) = inputs
+        neg_r = _expected_neg(x)
+        lane = torch.arange(VECTOR_ELE, device=x.device) % VL_ELE
+        keep = lane < (VL_ELE // 2)
+        zero = torch.zeros_like(x)
+        return _pad_with_sentinel((torch.where(keep, neg_r, zero),), x)
     raise SystemExit(f"unknown unary operator: {op_name}")
 
 

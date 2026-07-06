@@ -63,6 +63,7 @@ def test_generated_binding_symbols_exist_for_wrapped_ops() -> None:
         "maxs",
         "mins",
         "divs",
+        "neg",
     )
     for symbol in required:
         assert hasattr(tla_ops_gen, symbol)

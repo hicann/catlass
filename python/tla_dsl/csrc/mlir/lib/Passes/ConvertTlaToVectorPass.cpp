@@ -695,7 +695,7 @@ static LogicalResult validateVectorReduction(::tla::ReduceOp reduceOp, Type elem
   return success();
 }
 
-enum class VectorUnaryKind { Exp, Log, Sqrt, Abs };
+enum class VectorUnaryKind { Exp, Log, Sqrt, Abs, Neg };
 
 struct TlaUnaryOperands {
   Value operand;
@@ -723,6 +723,8 @@ static std::optional<VectorUnaryInfo> getVectorUnaryInfo(Operation *op) {
     return VectorUnaryInfo{VectorUnaryKind::Sqrt, "sqrt", getTlaUnaryOperands(o)};
   if (auto o = dyn_cast<::tla::AbsOp>(op))
     return VectorUnaryInfo{VectorUnaryKind::Abs, "abs", getTlaUnaryOperands(o)};
+  if (auto o = dyn_cast<::tla::NegOp>(op))
+    return VectorUnaryInfo{VectorUnaryKind::Neg, "neg", getTlaUnaryOperands(o)};
   return std::nullopt;
 }
 
@@ -741,13 +743,16 @@ static LogicalResult validateVectorUnaryElementType(Operation *op, VectorUnaryIn
                              << " does not support bf16 element type yet";
     return success();
   case VectorUnaryKind::Abs:
+  case VectorUnaryKind::Neg:
     if (auto floatType = dyn_cast<FloatType>(elementType)) {
       if (isa<BFloat16Type>(floatType))
-        return op->emitError() << "tla.abs does not support bf16 element type yet";
+        return op->emitError() << "tla." << info.name
+                               << " does not support bf16 element type yet";
       if (floatType.isF16() || floatType.isF32())
         return success();
       return op->emitError()
-             << "tla.abs requires f16 or f32 floating-point element type, got "
+             << "tla." << info.name
+             << " requires f16 or f32 floating-point element type, got "
              << elementType;
     }
     if (auto intType = dyn_cast<IntegerType>(elementType)) {
@@ -755,11 +760,12 @@ static LogicalResult validateVectorUnaryElementType(Operation *op, VectorUnaryIn
       if (width == 8 || width == 16 || width == 32)
         return success();
       return op->emitError()
-             << "tla.abs requires i8, i16, or i32 element type, got "
+             << "tla." << info.name
+             << " requires i8, i16, or i32 element type, got "
              << elementType;
     }
-    return op->emitError()
-           << "tla.abs requires f16/f32 or i8/i16/i32 element type, got "
+    return op->emitError() << "tla." << info.name
+           << " requires f16/f32 or i8/i16/i32 element type, got "
            << elementType;
   }
   return failure();
@@ -964,6 +970,8 @@ static Value createVectorUnaryResult(OpBuilder &b, Location loc, VectorUnaryKind
     return b.create<hivmave::VFSqrtOp>(loc, vecType, operand, mask, Value()).getResult();
   case VectorUnaryKind::Abs:
     return b.create<hivmave::VFAbsOp>(loc, vecType, operand, mask, Value()).getResult();
+  case VectorUnaryKind::Neg:
+    return b.create<hivmave::VFNegOp>(loc, vecType, operand, mask, Value()).getResult();
   }
   return nullptr;
 }

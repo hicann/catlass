@@ -3404,10 +3404,10 @@ def _emit_vector_unary(
                 f"tla.{op_name} requires f16 or f32 element type, "
                 f"got {element_type}",
             )
-    elif op_name == "abs" and element_type not in _ABS_ELEMENT_TYPES:
+    elif op_name in {"abs", "neg"} and element_type not in _ABS_ELEMENT_TYPES:
         _op_error(
             op_name,
-            "tla.abs requires f16/f32 or i8/i16/i32 element type, "
+            f"tla.{op_name} requires f16/f32 or i8/i16/i32 element type, "
             f"got {element_type}",
         )
     mask_value = _as_value(mask) if mask is not None else None
@@ -3445,6 +3445,7 @@ exp = _make_unary_op("exp")
 log = _make_unary_op("log")
 sqrt = _make_unary_op("sqrt")
 abs = _make_unary_op("abs")
+neg = _make_unary_op("neg")
 
 
 @dsl_user_op
@@ -3781,7 +3782,7 @@ _require_generated("div")
 _require_generated("where")
 _require_generated("divs")
 _require_generated("reduce")
-for _unary_op_name in ("exp", "log", "sqrt", "abs"):
+for _unary_op_name in ("exp", "log", "sqrt", "abs", "neg"):
     _require_generated(_unary_op_name)
 _require_generated("arch_block_idx")
 _require_generated("arch_sub_block_idx")
@@ -4000,6 +4001,7 @@ __all__ = [
     "log",
     "sqrt",
     "abs",
+    "neg",
     "ReductionOp",
     "make_ptr",
     "recast_ptr",

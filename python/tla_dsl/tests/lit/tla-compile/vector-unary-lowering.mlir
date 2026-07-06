@@ -19,7 +19,8 @@ module {
       %v1 = tla.exp %v0 : !fvec -> !fvec
       %v2 = tla.log %v1 : !fvec -> !fvec
       %v3 = tla.sqrt %v2 : !fvec -> !fvec
-      %v5 = tla.abs %v3 mask %mask : !fvec mask !tla.mask -> !fvec
+      %v4 = tla.neg %v3 : !fvec -> !fvec
+      %v5 = tla.abs %v4 mask %mask : !fvec mask !tla.mask -> !fvec
       tla.store %dst_tile, %v5 : !fvec, !fvec
     }) : () -> ()
     return
@@ -37,7 +38,8 @@ module {
       %dst_tile = "tla.tile_view"(%dst, %shape, %coord) : (!ivec, !tla.shape<64>, !tla.coord<0>) -> !ivec
       %v0 = tla.load %src_tile : !ivec -> !ivec
       %v1 = tla.abs %v0 : !ivec -> !ivec
-      tla.store %dst_tile, %v1 : !ivec, !ivec
+      %v2 = tla.neg %v1 : !ivec -> !ivec
+      tla.store %dst_tile, %v2 : !ivec, !ivec
     }) : () -> ()
     return
   }
@@ -47,10 +49,13 @@ module {
 // CHECK: ave.hir.vexp
 // CHECK: ave.hir.vln
 // CHECK: ave.hir.vsqrt
+// CHECK: ave.hir.vneg
 // CHECK: ave.hir.vabs
 // CHECK-LABEL: func.func private @vector_region_
 // CHECK: ave.hir.vabs
+// CHECK: ave.hir.vneg
 // CHECK-NOT: tla.exp
 // CHECK-NOT: tla.log
 // CHECK-NOT: tla.sqrt
 // CHECK-NOT: tla.abs
+// CHECK-NOT: tla.neg

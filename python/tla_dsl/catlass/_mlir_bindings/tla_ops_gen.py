@@ -1533,6 +1533,39 @@ def mutex_unlock(mutex, pipe, *, loc=None, ip=None) -> _ods_ir.Operation:
   return _get_op_result_or_op_results(MutexUnlockOp(mutex=mutex, pipe=pipe, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
+class NegOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.neg"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, operand, *, mask=None, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(operand))
+    if mask is not None: operands.append(_get_op_result_or_value(mask))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def operand(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def mask(self):
+    return None if len(self.operation.operands) < 2 else self.operation.operands[1]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def neg(result, operand, *, mask=None, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(NegOp(result=result, operand=operand, mask=mask, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
 class PipeBarrierOp(_ods_ir.OpView):
   OPERATION_NAME = "tla.pipe_barrier"
 

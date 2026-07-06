@@ -915,6 +915,10 @@ def Tla_AbsOp : Tla_VectorUnaryOp<"abs",
     "Vector absolute value for tensor fragments",
     "Element-wise absolute value on tensor fragments / vector tiles.">;
 
+def Tla_NegOp : Tla_VectorUnaryOp<"neg",
+    "Vector negate for tensor fragments",
+    "Element-wise negate on tensor fragments / vector tiles.">;
+
 def Tla_VectorOp : Tla_Op<"vector", [NoTerminator, SingleBlock]> {
   let summary = "Vector region";
   let description = [{

@@ -69,7 +69,7 @@ Run end-to-end validation for:
   - binary_op (binary_op.py <op> --run --all-dtypes for add/sub/mul/div/max/min)
   - masked_binary (masked_binary.py masked_binary --run --all-dtypes)
   - reduction_ops (reduction_ops.py <op> --run for add/max/min)
-  - unary_ops (unary_ops.py <op> --run --all-dtypes for exp/log/sqrt/abs/masked_unary/masked_abs)
+  - unary_ops (unary_ops.py <op> --run --all-dtypes for exp/log/sqrt/abs/neg/masked_unary/masked_abs/masked_neg)
 Runs basic_mmad default MNK plus m=1, n=2, k=3.
 Activates conda env "${CONDA_ENV}", sources CANN set_env.sh, exports AscendNPU-IR-Dev MLIR/LLVM
 env, then builds (optional) and runs the test.
@@ -352,7 +352,7 @@ _run_unary_ops_case() {
     )
 }
 
-for _unary_op in exp log sqrt abs; do
+for _unary_op in exp log sqrt abs neg; do
     _run_unary_ops_case "${_unary_op}"
 done
 
@@ -375,5 +375,15 @@ _run_masked_abs_case() {
 }
 
 _run_masked_abs_case
+
+_run_masked_neg_case() {
+    echo "==> Running unary_ops validation [masked_neg all numeric dtypes]: masked_neg --run --all-dtypes --device ${DEVICE_ID}"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${UNARY_OPS_REL}" masked_neg --run --all-dtypes --device "${DEVICE_ID}"
+    )
+}
+
+_run_masked_neg_case
 
 echo "==> run_dsl_test.sh finished successfully"
