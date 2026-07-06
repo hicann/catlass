@@ -42,7 +42,7 @@ struct coord_elem_is_underscore : tla::is_underscore<typename coord_elem_type<Co
 
 // Count underscores.
 template <class Coord, int I, class Enable = void>
-struct underscore_count_from : tla::integral_constant<int, 0> {};
+struct underscore_count_from : tla::C<0> {};
 template <class Coord, int I>
 struct underscore_count_from<Coord, I, std::enable_if_t<(I >= 0)>> {
     static constexpr int value =
@@ -50,8 +50,7 @@ struct underscore_count_from<Coord, I, std::enable_if_t<(I >= 0)>> {
 };
 template <class Coord>
 struct underscore_count
-    : tla::integral_constant<
-          int, underscore_count_from<Coord, (int)tla::tuple_size<tla::remove_cvref_t<Coord>>::value - 1>::value> {};
+    : tla::C<underscore_count_from<Coord, (int)tla::tuple_size<tla::remove_cvref_t<Coord>>::value - 1>::value> {};
 
 // Build index sequences for underscore dims (stable 0..R-1 recursion).
 template <class Coord, int I, int R, int... Is>

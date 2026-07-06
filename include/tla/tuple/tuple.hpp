@@ -136,7 +136,7 @@ CATLASS_HOST_DEVICE constexpr decltype(auto) get(T&& t) noexcept
 namespace detail {
 
 template <class T>
-auto has_tuple_size(T*) -> bool_constant<(0 <= tuple_size<T>::value)>;
+auto has_tuple_size(T*) -> Bool<(0 <= tuple_size<T>::value)>;
 auto has_tuple_size(...) -> false_type;
 
 } // end namespace detail
@@ -146,15 +146,6 @@ struct is_tuple : decltype(detail::has_tuple_size((T*)0)){};
 
 template <class T>
 inline constexpr bool is_tuple_v = is_tuple<T>::value;
-
-template <class T>
-struct is_all_static : is_static<T> {};
-
-template <class... Ts>
-struct is_all_static<tuple<Ts...>> : bool_constant<(is_all_static<Ts>::value && ...)> {};
-
-template <class T>
-inline constexpr bool is_all_static_v = is_all_static<T>::value;
 
 template <class... T>
 struct tuple_size<tla::tuple<T...>> : std::integral_constant<size_t, sizeof...(T)> {};

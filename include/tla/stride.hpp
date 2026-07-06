@@ -103,7 +103,7 @@ CATLASS_HOST_DEVICE constexpr auto compact_order_impl(
     Shape const& shape, Order const& order, FlatShape const& flat_shape, FlatOrder const& flat_order)
 {
     if constexpr (is_tuple<Order>::value) {
-        static_assert(tuple_size<Shape>::value == tuple_size<Order>::value, "Need equal rank of shape and order");
+        TLA_ASSERT_SAME_TUPLE_SIZE(Shape, Order);
         return transform(shape, order, [&](auto const& s, auto const& o) {
             return compact_order_impl(s, o, flat_shape, flat_order);
         });
@@ -118,7 +118,7 @@ CATLASS_HOST_DEVICE constexpr auto compact_order_impl(
 template <class Shape, class Order>
 CATLASS_HOST_DEVICE constexpr auto compact_order(Shape const& shape, Order const& order)
 {
-    static_assert(is_all_static<remove_cvref_t<Order>>::value, "Order must be all static");
+    static_assert(is_static<remove_cvref_t<Order>>::value, "Order must be all static");
     auto flat_shape = flatten_to_tuple(product_like(shape, order));
     auto flat_order = flatten_to_tuple(order);
     constexpr int n = tuple_size<remove_cvref_t<decltype(flat_order)>>::value;

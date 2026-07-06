@@ -113,7 +113,7 @@ struct tuple_size<integer_sequence<T, Ints...>> : std::integral_constant<size_t,
 template <size_t I, class T, T... Is>
 struct tuple_element<I, integer_sequence<T, Is...>> {
     constexpr static T idx[sizeof...(Is)] = {Is...};
-    using type = integral_constant<T, idx[I]>;
+    using type = C<idx[I]>;
 };
 
 template <size_t I, class T, T... Ints>

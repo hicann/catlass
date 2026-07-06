@@ -59,7 +59,7 @@ template <class IntTupleA, class IntTupleB>
 CATLASS_HOST_DEVICE constexpr auto Add(IntTupleA const& a, IntTupleB const& b)
 {
     if constexpr (is_tuple<IntTupleA>::value && is_tuple<IntTupleB>::value) {
-        static_assert(tuple_size<IntTupleA>::value == tuple_size<IntTupleB>::value, "Mismatched ranks");
+        TLA_ASSERT_SAME_TUPLE_SIZE(IntTupleA, IntTupleB);
         return transform(a, b, [](auto const& x, auto const& y) { return Add(x, y); });
     } else {
         return a + b;
@@ -172,7 +172,7 @@ template <class T0, class T1>
 CATLASS_HOST_DEVICE constexpr auto inner_product(T0 const& t0, T1 const& t1)
 {
     if constexpr (is_tuple<T0>::value && is_tuple<T1>::value) {
-        static_assert(tuple_size<T0>::value == tuple_size<T1>::value, "Mismatched ranks");
+        TLA_ASSERT_SAME_TUPLE_SIZE(T0, T1);
         return transform_apply(
             t0, t1, [](auto const& a, auto const& b) { return inner_product(a, b); },
             [](auto const&... v) { return (Int<0>{} + ... + v); });

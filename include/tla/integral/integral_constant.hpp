@@ -16,12 +16,12 @@
 
 namespace tla {
 
-// A constant value: short name and type-deduction for fast compilation
-template <auto v>
-struct C {
-    using type = C<v>;
-    static constexpr auto value = v;
-    using value_type = decltype(v);
+// Base type: std-conforming integral constant with explicit type enforcement
+template <class T, T v>
+struct integral_constant {
+    using type = integral_constant<T, v>;
+    static constexpr T value = v;
+    using value_type = T;
     CATLASS_HOST_DEVICE constexpr operator value_type() const noexcept
     {
         return value;
@@ -32,121 +32,93 @@ struct C {
     }
 };
 
-// Deprecate
-template <class T, T v>
-using constant = C<v>;
+// Simplified aliases: C (auto deduction), Bool (bool), Int (int)
+template <auto v>
+using C = integral_constant<decltype(v), v>;
 
 template <bool b>
-using bool_constant = C<b>;
-
-using true_type = bool_constant<true>;
-using false_type = bool_constant<false>;
-
-// A more std:: conforming integral_constant that enforces type but interops with C<v>
-template <class T, T v>
-struct integral_constant : C<v> {
-    using type = integral_constant<T, v>;
-    static constexpr T value = v;
-    using value_type = T;
-    CATLASS_HOST_DEVICE constexpr value_type operator()() const noexcept
-    {
-        return value;
-    }
-};
-
-// Use tla::is_std_integral<T> to match built-in integral types (int, int64_t, unsigned, etc)
-// Use tla::is_integral<T> to match both built-in integral types AND static integral types.
-
-template <class T>
-struct is_integral : bool_constant<is_std_integral<T>::value> {};
-template <auto v>
-struct is_integral<C<v>> : true_type {};
-template <class T, T v>
-struct is_integral<integral_constant<T, v>> : true_type {};
-
-template <class T>
-inline constexpr bool is_integral_v = is_integral<T>::value;
-
-// is_static detects if an (abstract) value is defined completely by its type (no members)
-template <class T>
-struct is_static : bool_constant<is_empty_v<remove_cvref_t<T>>> {};
-
-template <class T>
-inline constexpr bool is_static_v = is_static<T>::value;
-
-// is_constant detects if a type is a static integral type and if v is equal to a value
-
-template <auto n, class T>
-struct is_constant_base : false_type {};
-template <auto n, auto v>
-struct is_constant_base<n, C<v>> : bool_constant<v == n> {};
-template <auto n, class T, T v>
-struct is_constant_base<n, integral_constant<T, v>> : bool_constant<v == n> {};
-
-template <auto n, class T>
-struct is_constant : is_constant_base<n, remove_cvref_t<T>> {};
-
-template <auto n, class T>
-inline constexpr bool is_constant_v = is_constant<n, T>::value;
-
-// TLA_STATIC_CHECK(EXPR): if EXPR statically evaluates to C<false>, static_assert fails;
-// if EXPR is not a static constant (e.g., runtime bool), the check is skipped.
-#define TLA_STATIC_CHECK(...) static_assert(!is_constant_v<false, decltype(__VA_ARGS__)>, "static check failed.")
-
-//
-// Specializations
-//
+using Bool = C<b>;
 
 template <int v>
 using Int = C<v>;
 
-using _0 = Int<0>;
-using _1 = Int<1>;
-using _2 = Int<2>;
-using _3 = Int<3>;
-using _4 = Int<4>;
-using _5 = Int<5>;
-using _6 = Int<6>;
-using _7 = Int<7>;
-using _8 = Int<8>;
-using _9 = Int<9>;
-using _10 = Int<10>;
-using _12 = Int<12>;
-using _16 = Int<16>;
-using _24 = Int<24>;
-using _32 = Int<32>;
-using _48 = Int<48>;
-using _64 = Int<64>;
-using _96 = Int<96>;
-using _128 = Int<128>;
-using _192 = Int<192>;
-using _256 = Int<256>;
-using _384 = Int<384>;
-using _512 = Int<512>;
-using _768 = Int<768>;
-using _1024 = Int<1024>;
-using _2048 = Int<2048>;
-using _4096 = Int<4096>;
-using _8192 = Int<8192>;
-using _16384 = Int<16384>;
-using _32768 = Int<32768>;
-using _65536 = Int<65536>;
+// Bool type aliases
+using true_type = Bool<true>;
+using false_type = Bool<false>;
 
-// Underscore placeholder (for slicing semantics)
-// tla::_ is an empty tag for "take the whole dimension" in Coord/tensor indexing
+// Int type aliases
+#define TLA_INT_ALIAS(N) using _##N = Int<N>
+
+TLA_INT_ALIAS(0);
+TLA_INT_ALIAS(1);
+TLA_INT_ALIAS(2);
+TLA_INT_ALIAS(3);
+TLA_INT_ALIAS(4);
+TLA_INT_ALIAS(5);
+TLA_INT_ALIAS(6);
+TLA_INT_ALIAS(7);
+TLA_INT_ALIAS(8);
+TLA_INT_ALIAS(9);
+TLA_INT_ALIAS(10);
+TLA_INT_ALIAS(12);
+TLA_INT_ALIAS(16);
+TLA_INT_ALIAS(24);
+TLA_INT_ALIAS(32);
+TLA_INT_ALIAS(48);
+TLA_INT_ALIAS(64);
+TLA_INT_ALIAS(96);
+TLA_INT_ALIAS(128);
+TLA_INT_ALIAS(192);
+TLA_INT_ALIAS(256);
+TLA_INT_ALIAS(384);
+TLA_INT_ALIAS(512);
+TLA_INT_ALIAS(768);
+TLA_INT_ALIAS(1024);
+TLA_INT_ALIAS(2048);
+TLA_INT_ALIAS(4096);
+TLA_INT_ALIAS(8192);
+TLA_INT_ALIAS(16384);
+TLA_INT_ALIAS(32768);
+TLA_INT_ALIAS(65536);
+
+#undef TLA_INT_ALIAS
+
+// Type traits: classify and test integral constant types
+template <class T>
+struct is_integral : Bool<is_std_integral<T>::value> {};
+template <class T, T v>
+struct is_integral<integral_constant<T, v>> : true_type {};
+template <class T>
+inline constexpr bool is_integral_v = is_integral<T>::value;
+
+template <class T>
+struct is_static : Bool<is_empty_v<remove_cvref_t<T>>> {};
+template <class T>
+inline constexpr bool is_static_v = is_static<T>::value;
+
+template <auto n, class T>
+struct is_constant_base : false_type {};
+template <auto n, class T, T v>
+struct is_constant_base<n, integral_constant<T, v>> : Bool<v == n> {};
+template <auto n, class T>
+struct is_constant : is_constant_base<n, remove_cvref_t<T>> {};
+template <auto n, class T>
+inline constexpr bool is_constant_v = is_constant<n, T>::value;
+
+#define TLA_STATIC_CHECK(...) static_assert(!is_constant_v<false, decltype(__VA_ARGS__)>, "static check failed.")
+
+// Underscore placeholder: empty tag for "take the whole dimension" in Coord/tensor indexing
 struct Underscore {
     using type = Underscore;
 };
 
-// Treat Underscore as an integral type in the tla type system
 template <>
 struct is_integral<Underscore> : true_type {};
 
 inline constexpr Underscore _{};
 
 template <class T>
-struct is_underscore : bool_constant<is_same_v<remove_cvref_t<T>, Underscore>> {};
-
+struct is_underscore : Bool<is_same_v<remove_cvref_t<T>, Underscore>> {};
 template <class T>
 inline constexpr bool is_underscore_v = is_underscore<T>::value;
 

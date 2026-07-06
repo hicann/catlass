@@ -13,6 +13,7 @@
 
 #include "catlass/detail/macros.hpp"
 
+#include <cstddef>
 #include <type_traits>
 #include <tuple>
 
