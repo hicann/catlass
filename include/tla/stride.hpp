@@ -131,13 +131,13 @@ template <class Coord, class Shape, class Stride>
 CATLASS_HOST_DEVICE constexpr auto crd2idx(Coord const& coord, Shape const& shape, Stride const& stride)
 {
     if constexpr (is_tuple_v<Coord> && is_tuple_v<Shape> && is_tuple_v<Stride>) {
-        static_assert(tuple_size<Coord>::value == tuple_size<Shape>::value, "Mismatched Ranks");
-        static_assert(tuple_size<Coord>::value == tuple_size<Stride>::value, "Mismatched Ranks");
+        TLA_ASSERT_SAME_TUPLE_SIZE(Coord, Shape);
+        TLA_ASSERT_SAME_TUPLE_SIZE(Coord, Stride);
         return transform_apply(
             coord, shape, stride, [](auto const& c, auto const& s, auto const& d) { return crd2idx(c, s, d); },
             [](auto const&... xs) { return (... + xs); });
     } else if constexpr (is_integral_v<Coord> && is_tuple_v<Shape> && is_tuple_v<Stride>) {
-        static_assert(tuple_size<Shape>::value == tuple_size<Stride>::value, "Mismatched Ranks");
+        TLA_ASSERT_SAME_TUPLE_SIZE(Shape, Stride);
         if constexpr (is_constant<0, Coord>::value) {
             return _0{};
         }
@@ -164,7 +164,7 @@ template <class Coord, class Shape>
 CATLASS_HOST_DEVICE constexpr auto crd2idx(Coord const& coord, Shape const& shape)
 {
     if constexpr (is_tuple_v<Coord> && is_tuple_v<Shape>) {
-        static_assert(tuple_size<Coord>::value == tuple_size<Shape>::value, "Mismatched Ranks");
+        TLA_ASSERT_SAME_TUPLE_SIZE(Coord, Shape);
         auto flat_coord = flatten_to_tuple(coord);
         auto flat_shape = flatten_to_tuple(product_like(shape, coord));
         auto zipped = transform(flat_coord, flat_shape, [](auto const& c, auto const& s) { return make_tuple(c, s); });
@@ -186,12 +186,12 @@ template <class Index, class Shape, class Stride>
 CATLASS_HOST_DEVICE constexpr auto idx2crd(Index const& idx, Shape const& shape, Stride const& stride)
 {
     if constexpr (is_tuple_v<Index> && is_tuple_v<Shape> && is_tuple_v<Stride>) {
-        static_assert(tuple_size<Index>::value == tuple_size<Shape>::value, "Mismatched Ranks");
-        static_assert(tuple_size<Index>::value == tuple_size<Stride>::value, "Mismatched Ranks");
+        TLA_ASSERT_SAME_TUPLE_SIZE(Index, Shape);
+        TLA_ASSERT_SAME_TUPLE_SIZE(Index, Stride);
         return transform(
             idx, shape, stride, [](auto const& i, auto const& s, auto const& d) { return idx2crd(i, s, d); });
     } else if constexpr (is_integral_v<Index> && is_tuple_v<Shape> && is_tuple_v<Stride>) {
-        static_assert(tuple_size<Shape>::value == tuple_size<Stride>::value, "Mismatched Ranks");
+        TLA_ASSERT_SAME_TUPLE_SIZE(Shape, Stride);
         return transform(shape, stride, [&](auto const& s, auto const& d) { return idx2crd(idx, s, d); });
     } else if constexpr (is_integral_v<Index> && is_integral_v<Shape> && is_integral_v<Stride>) {
         if constexpr (is_constant<1, Shape>::value) {
@@ -209,7 +209,7 @@ template <class Index, class Shape>
 CATLASS_HOST_DEVICE constexpr auto idx2crd(Index const& idx, Shape const& shape)
 {
     if constexpr (is_tuple_v<Index> && is_tuple_v<Shape>) {
-        static_assert(tuple_size<Index>::value == tuple_size<Shape>::value, "Mismatched Ranks");
+        TLA_ASSERT_SAME_TUPLE_SIZE(Index, Shape);
         return transform(idx, shape, [](auto const& i, auto const& s) { return idx2crd(i, s); });
     } else if constexpr (is_integral_v<Index> && is_tuple_v<Shape>) {
         return idx2crd(idx, shape, compact_col_major(shape));

@@ -116,4 +116,7 @@ inline constexpr bool dependent_false = false;
 
 } // namespace tla
 
+#define TLA_ASSERT_SAME_TUPLE_SIZE(A, B) \
+    static_assert(::tla::tuple_size<A>::value == ::tla::tuple_size<B>::value, "tuple_size mismatch")
+
 #endif // TLA_UTILS_TYPE_TRAITS_HPP
