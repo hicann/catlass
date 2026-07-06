@@ -112,12 +112,17 @@ struct tuple_element<I, T, std::void_t<typename std::tuple_element<I, T>::type>>
 template <size_t I, class T>
 using tuple_element_t = typename tuple_element<I, T>::type;
 
+template <class T0, class... Ts>
+struct same_tuple_size : std::bool_constant<((::tla::tuple_size<Ts>::value == ::tla::tuple_size<T0>::value) && ...)> {};
+
+template <class... Ts>
+inline constexpr bool same_tuple_size_v = same_tuple_size<Ts...>::value;
+
 template <class... Args>
 inline constexpr bool dependent_false = false;
 
 } // namespace tla
 
-#define TLA_ASSERT_SAME_TUPLE_SIZE(A, B) \
-    static_assert(::tla::tuple_size<A>::value == ::tla::tuple_size<B>::value, "tuple_size mismatch")
+#define TLA_ASSERT_SAME_TUPLE_SIZE(...) static_assert(::tla::same_tuple_size_v<__VA_ARGS__>, "tuple_size mismatch")
 
 #endif // TLA_UTILS_TYPE_TRAITS_HPP

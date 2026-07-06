@@ -40,6 +40,7 @@ CATLASS_HOST_DEVICE constexpr auto apply_impl(T&& t, F&& f, seq<I...>)
 template <class T, class F>
 CATLASS_HOST_DEVICE constexpr auto apply(T&& t, F&& f)
 {
+    TLA_ASSERT_ALL_TUPLES(remove_cvref_t<T>);
     return detail::apply_impl(tla::forward<T>(t), f, tuple_seq<T>{});
 }
 
@@ -71,24 +72,27 @@ CATLASS_HOST_DEVICE constexpr auto wrap(T const& t)
 
 // select<I...>(t): select elements at the given indices into a new tuple
 template <size_t... I, class T>
-CATLASS_HOST_DEVICE constexpr auto select(T&& t)
+CATLASS_HOST_DEVICE constexpr auto select(T const& t)
 {
-    return make_tuple(get<I>(tla::forward<T>(t))...);
+    TLA_ASSERT_ALL_TUPLES(T);
+    return make_tuple(get<I>(t)...);
 }
 
 // take<B, E>(t): take elements in range [B, E)
 template <int B, int E, class T>
 CATLASS_HOST_DEVICE constexpr auto take(T const& t)
 {
+    TLA_ASSERT_ALL_TUPLES(T);
     static_assert(B <= E, "take: B must be <= E");
     return detail::apply_impl(t, [](auto const&... a) { return make_tuple(a...); }, make_range<B, E>{});
 }
 
-// repeat<N>(t): N copies of t in a tuple
+// repeat<N>(t): N=1 returns t as-is; N!=1 wraps N copies in a tuple
+// tuple_repeat<N>(t): always wraps N copies in a tuple
 namespace detail {
 
 template <size_t N, class T, size_t... I>
-CATLASS_HOST_DEVICE constexpr auto repeat_impl(T const& t, index_sequence<I...>)
+CATLASS_HOST_DEVICE constexpr auto tuple_repeat_impl(T const& t, index_sequence<I...>)
 {
     return make_tuple((void(I), t)...);
 }
@@ -96,9 +100,19 @@ CATLASS_HOST_DEVICE constexpr auto repeat_impl(T const& t, index_sequence<I...>)
 } // end namespace detail
 
 template <size_t N, class T>
+CATLASS_HOST_DEVICE constexpr auto tuple_repeat(T const& t)
+{
+    return detail::tuple_repeat_impl<N>(t, make_index_sequence<N>{});
+}
+
+template <size_t N, class T>
 CATLASS_HOST_DEVICE constexpr auto repeat(T const& t)
 {
-    return detail::repeat_impl<N>(t, make_index_sequence<N>{});
+    if constexpr (N == 1) {
+        return t;
+    } else {
+        return tuple_repeat<N>(t);
+    }
 }
 
 // tuple_cat: concatenate tuples
@@ -118,7 +132,7 @@ CATLASS_HOST_DEVICE constexpr tuple<> tuple_cat()
     return {};
 }
 
-template <class T, TLA_REQUIRES(is_tuple<remove_cvref_t<T>>::value)>
+template <class T, TLA_REQUIRES(is_tuple<T>::value)>
 CATLASS_HOST_DEVICE constexpr auto tuple_cat(T const& t)
 {
     return t;
@@ -127,7 +141,7 @@ CATLASS_HOST_DEVICE constexpr auto tuple_cat(T const& t)
 template <class T0, class T1>
 CATLASS_HOST_DEVICE constexpr auto tuple_cat(T0 const& t0, T1 const& t1)
 {
-    static_assert(is_tuple<T0>::value && is_tuple<T1>::value, "tuple_cat arguments must be tuples");
+    TLA_ASSERT_ALL_TUPLES(T0, T1);
     return detail::tuple_cat_impl(
         t0, t1, make_index_sequence<tuple_size<T0>::value>{}, make_index_sequence<tuple_size<T1>::value>{});
 }
@@ -135,9 +149,7 @@ CATLASS_HOST_DEVICE constexpr auto tuple_cat(T0 const& t0, T1 const& t1)
 template <class T0, class T1, class... Ts>
 CATLASS_HOST_DEVICE constexpr auto tuple_cat(T0 const& t0, T1 const& t1, Ts const&... ts)
 {
-    static_assert(
-        is_tuple<T0>::value && is_tuple<T1>::value && (is_tuple<Ts>::value && ...),
-        "tuple_cat arguments must be tuples");
+    TLA_ASSERT_ALL_TUPLES(T0, T1, Ts...);
     return tuple_cat(tuple_cat(t0, t1), ts...);
 }
 
@@ -153,19 +165,21 @@ CATLASS_HOST_DEVICE constexpr auto append_impl(Tuple const& t, T const& v, index
 } // end namespace detail
 
 // append(a, x): append single element to a tuple
-template <class T, class X, TLA_REQUIRES(is_tuple<remove_cvref_t<T>>::value)>
+template <class T, class X>
 CATLASS_HOST_DEVICE constexpr auto append(T const& a, X const& x)
 {
+    TLA_ASSERT_ALL_TUPLES(T);
     return detail::append_impl(a, x, make_index_sequence<tuple_size<T>::value>{});
 }
 
 // append<N>(a, x): pad a tuple to rank N by appending copies of x
-template <int N, class T, class X, TLA_REQUIRES(is_tuple<remove_cvref_t<T>>::value)>
+template <int N, class T, class X>
 CATLASS_HOST_DEVICE constexpr auto append(T const& a, X const& x)
 {
+    TLA_ASSERT_ALL_TUPLES(T);
     constexpr int S = tuple_size<T>::value;
     static_assert(N >= S, "append<N>: N must be >= tuple size");
-    return tuple_cat(a, repeat<N - S>(x));
+    return tuple_cat(a, tuple_repeat<N - S>(x));
 }
 
 // prepend: prepend a single element to the beginning of a tuple
@@ -179,9 +193,10 @@ CATLASS_HOST_DEVICE constexpr auto prepend_impl(Tuple const& t, T const& v, inde
 
 } // end namespace detail
 
-template <class T, class X, TLA_REQUIRES(is_tuple<remove_cvref_t<T>>::value)>
+template <class T, class X>
 CATLASS_HOST_DEVICE constexpr auto prepend(T const& t, X const& x)
 {
+    TLA_ASSERT_ALL_TUPLES(T);
     return detail::prepend_impl(t, x, make_index_sequence<tuple_size<T>::value>{});
 }
 
@@ -191,92 +206,54 @@ CATLASS_HOST_DEVICE constexpr auto prepend(T const& t, X const& x)
 
 namespace detail {
 
-template <class T, class F, class G, int... I>
-CATLASS_HOST_DEVICE constexpr auto tapply_impl(T&& t, F&& f, G&& g, seq<I...>)
+template <int I, class F, class T>
+CATLASS_HOST_DEVICE constexpr auto get_apply_impl(F&& f, T&& t)
 {
-    return g(f(get<I>(tla::forward<T>(t)))...);
+    return tla::apply(t, [&](auto&&... args) { return f(get<I>(tla::forward<decltype(args)>(args))...); });
 }
 
-template <class T0, class T1, class F, class G, int... I>
-CATLASS_HOST_DEVICE constexpr auto tapply_impl(T0&& t0, T1&& t1, F&& f, G&& g, seq<I...>)
+template <class F, class G, int... I, class... Ts>
+CATLASS_HOST_DEVICE constexpr auto transform_apply_impl(F&& f, G&& g, seq<I...>, Ts&&... ts)
 {
-    return g(f(get<I>(tla::forward<T0>(t0)), get<I>(tla::forward<T1>(t1)))...);
-}
-
-template <class T0, class T1, class T2, class F, class G, int... I>
-CATLASS_HOST_DEVICE constexpr auto tapply_impl(T0&& t0, T1&& t1, T2&& t2, F&& f, G&& g, seq<I...>)
-{
-    return g(f(get<I>(tla::forward<T0>(t0)), get<I>(tla::forward<T1>(t1)), get<I>(tla::forward<T2>(t2)))...);
+    auto tp = tla::make_tuple(tla::forward<Ts>(ts)...);
+    return g(get_apply_impl<I>(f, tp)...);
 }
 
 } // end namespace detail
 
 // transform_apply: transform each element with f, then pack with g
-template <class T, class F, class G>
-CATLASS_HOST_DEVICE constexpr auto transform_apply(T&& t, F&& f, G&& g)
+template <class F, class G, class T0, class... Ts>
+CATLASS_HOST_DEVICE constexpr auto transform_apply(F&& f, G&& g, T0&& t0, Ts&&... ts)
 {
-    if constexpr (is_tuple<remove_cvref_t<T>>::value) {
-        return detail::tapply_impl(tla::forward<T>(t), f, g, tuple_seq<T>{});
-    } else {
-        return g(f(tla::forward<T>(t)));
-    }
-}
-
-template <class T0, class T1, class F, class G>
-CATLASS_HOST_DEVICE constexpr auto transform_apply(T0&& t0, T1&& t1, F&& f, G&& g)
-{
+    TLA_ASSERT_SAME_TUPLE_SIZE(remove_cvref_t<T0>, remove_cvref_t<Ts>...);
     if constexpr (is_tuple<remove_cvref_t<T0>>::value) {
-        return detail::tapply_impl(tla::forward<T0>(t0), tla::forward<T1>(t1), f, g, tuple_seq<T0>{});
+        return detail::transform_apply_impl(f, g, tuple_seq<T0>{}, tla::forward<T0>(t0), tla::forward<Ts>(ts)...);
     } else {
-        return g(f(tla::forward<T0>(t0), tla::forward<T1>(t1)));
-    }
-}
-
-template <class T0, class T1, class T2, class F, class G>
-CATLASS_HOST_DEVICE constexpr auto transform_apply(T0&& t0, T1&& t1, T2&& t2, F&& f, G&& g)
-{
-    if constexpr (is_tuple<remove_cvref_t<T0>>::value) {
-        TLA_ASSERT_SAME_TUPLE_SIZE(remove_cvref_t<T0>, remove_cvref_t<T1>);
-        TLA_ASSERT_SAME_TUPLE_SIZE(remove_cvref_t<T0>, remove_cvref_t<T2>);
-        return detail::tapply_impl(
-            tla::forward<T0>(t0), tla::forward<T1>(t1), tla::forward<T2>(t2), f, g, tuple_seq<T0>{});
-    } else {
-        return g(f(tla::forward<T0>(t0), tla::forward<T1>(t1), tla::forward<T2>(t2)));
+        return g(f(tla::forward<T0>(t0), tla::forward<Ts>(ts)...));
     }
 }
 
 // transform: apply f to each element, return new tuple
-template <class T, class F>
-CATLASS_HOST_DEVICE constexpr auto transform(T const& t, F&& f)
+template <class F, class T0, class... Ts>
+CATLASS_HOST_DEVICE constexpr auto transform(F&& f, T0 const& t0, Ts const&... ts)
 {
-    if constexpr (is_tuple<T>::value) {
-        return detail::tapply_impl(t, f, [](auto const&... a) { return tla::make_tuple(a...); }, tuple_seq<T>{});
+    TLA_ASSERT_SAME_TUPLE_SIZE(T0, Ts...);
+    if constexpr (is_tuple<T0>::value) {
+        return detail::transform_apply_impl(
+            f, [](auto const&... a) { return tla::make_tuple(a...); }, tuple_seq<T0>{}, t0, ts...);
     } else {
-        return f(t);
+        return f(t0, ts...);
     }
 }
 
-template <class T0, class T1, class F>
-CATLASS_HOST_DEVICE constexpr auto transform(T0 const& t0, T1 const& t1, F&& f)
+// transform_leaf: recursively apply f to leaf (non-tuple) elements
+template <class F, class T0, class... Ts>
+CATLASS_HOST_DEVICE constexpr auto transform_leaf(F&& f, T0 const& t0, Ts const&... ts)
 {
     if constexpr (is_tuple<T0>::value) {
-        TLA_ASSERT_SAME_TUPLE_SIZE(T0, T1);
-        return detail::tapply_impl(t0, t1, f, [](auto const&... a) { return tla::make_tuple(a...); }, tuple_seq<T0>{});
+        return transform([&](auto const&... a) { return transform_leaf(f, a...); }, t0, ts...);
     } else {
-        return f(t0, t1);
-    }
-}
-
-template <class T0, class T1, class T2, class F>
-CATLASS_HOST_DEVICE constexpr auto transform(T0 const& t0, T1 const& t1, T2 const& t2, F&& f)
-{
-    if constexpr (is_tuple<T0>::value) {
-        TLA_ASSERT_SAME_TUPLE_SIZE(T0, T1);
-        TLA_ASSERT_SAME_TUPLE_SIZE(T0, T2);
-        return detail::tapply_impl(
-            t0, t1, t2, f, [](auto const&... a) { return tla::make_tuple(a...); }, tuple_seq<T0>{});
-    } else {
-        return f(t0, t1, t2);
+        return f(t0, ts...);
     }
 }
 
@@ -284,28 +261,7 @@ CATLASS_HOST_DEVICE constexpr auto transform(T0 const& t0, T1 const& t1, T2 cons
 template <class T, class F>
 CATLASS_HOST_DEVICE constexpr auto filter_tuple(T const& t, F&& f)
 {
-    return transform_apply(t, f, [](auto const&... a) { return tuple_cat(a...); });
-}
-
-// transform_leaf: recursively apply f to leaf (non-tuple) elements
-template <class T, class F>
-CATLASS_HOST_DEVICE constexpr auto transform_leaf(T const& t, F&& f)
-{
-    if constexpr (is_tuple<T>::value) {
-        return transform(t, [&](auto const& a) { return transform_leaf(a, f); });
-    } else {
-        return f(t);
-    }
-}
-
-template <class T0, class T1, class F>
-CATLASS_HOST_DEVICE constexpr auto transform_leaf(T0 const& t0, T1 const& t1, F&& f)
-{
-    if constexpr (is_tuple<T0>::value) {
-        return transform(t0, t1, [&](auto const& a, auto const& b) { return transform_leaf(a, b, f); });
-    } else {
-        return f(t0, t1);
-    }
+    return transform_apply(f, [](auto const&... a) { return tuple_cat(a...); }, t);
 }
 
 // ===========================================================================
@@ -447,6 +403,7 @@ CATLASS_HOST_DEVICE constexpr auto unflatten_impl(FlatTuple const& flat_tuple, T
 template <class FlatTuple, class TargetProfile>
 CATLASS_HOST_DEVICE constexpr auto unflatten(FlatTuple const& flat_tuple, TargetProfile const& target_profile)
 {
+    TLA_ASSERT_ALL_TUPLES(FlatTuple);
     auto result = detail::unflatten_impl(flat_tuple, target_profile);
     static_assert(rank_v<decltype(get<1>(result))> == 0, "unflatten: remainder must be empty");
     return get<0>(result);

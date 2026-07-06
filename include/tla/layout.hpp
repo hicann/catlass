@@ -167,7 +167,7 @@ auto MakeLayout(Shape const& shape, Stride const& stride)
     static_assert(is_tuple<Shape>::value || is_integral<Shape>::value);
     static_assert(is_tuple<Stride>::value || is_integral<Stride>::value);
     // 计算默认的 originShape：将 shape 扁平化为 depth=1，并将每个维度归一化为 uint32_t
-    return MakeLayout(shape, stride, tla::transform_apply(shape, Product{}, detail::UnpackedMakeOriginShapeU32{}));
+    return MakeLayout(shape, stride, tla::transform_apply(Product{}, detail::UnpackedMakeOriginShapeU32{}, shape));
 }
 
 // Convenience tags for common layouts
@@ -856,10 +856,10 @@ CATLASS_HOST_DEVICE constexpr auto make_layout(Shape const& shape, Stride const&
 template <int... Is, class Shape, class Stride, class OriginShape>
 CATLASS_HOST_DEVICE constexpr auto coshape(Layout<Shape, Stride, OriginShape> const& layout)
 {
-    auto m1_shapes = transform_leaf(shape<Is...>(layout), [](auto s) { return s - Int<1>{}; });
-    auto abs_strides = transform_leaf(stride<Is...>(layout), abs_fn{});
+    auto m1_shapes = transform_leaf([](auto s) { return s - Int<1>{}; }, shape<Is...>(layout));
+    auto abs_strides = transform_leaf(abs_fn{}, stride<Is...>(layout));
     auto co_coord = inner_product(m1_shapes, abs_strides);
-    return transform_leaf(co_coord, [](auto c) { return c + Int<1>{}; });
+    return transform_leaf([](auto c) { return c + Int<1>{}; }, co_coord);
 }
 
 // cosize: codomain size (product of coshape).

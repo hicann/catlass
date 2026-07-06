@@ -35,7 +35,6 @@ struct VisitorImplBase {
     to_underlying_arguments(ProblemShape const& problem_shape, Arguments const& args, void* workspace) {
         uint8_t* op_workspace = reinterpret_cast<uint8_t*>(workspace);
         return tla::transform_apply(
-            tla::tuple<Ops...>{}, args,
             [&](auto&& op_tag, auto const& op_args) {
                 using Op = typename tla::remove_cvref_t<decltype(op_tag)>;
                 auto ret = Op::to_underlying_arguments(problem_shape, op_args, op_workspace);
@@ -47,7 +46,8 @@ struct VisitorImplBase {
             },
             [](auto&&... op_params) -> tla::tuple<tla::remove_cvref_t<decltype(op_params)>...> { 
                 return tla::tuple<tla::remove_cvref_t<decltype(op_params)>...>(op_params...); 
-            }
+            },
+            tla::tuple<Ops...>{}, args
         );
     }
 
@@ -55,12 +55,12 @@ struct VisitorImplBase {
     static bool
     can_implement(ProblemShape const& problem_shape, Arguments const& args) {
         return tla::transform_apply(
-            tla::tuple<Ops...>{}, args,
             [&](auto&& op_tag, auto const& op_args) {
                 using Op = typename tla::remove_cvref_t<decltype(op_tag)>;
                 return Op::can_implement(problem_shape, op_args);
             },
-            [](auto&&... ok) { return (true && ... && ok); }
+            [](auto&&... ok) { return (true && ... && ok); },
+            tla::tuple<Ops...>{}, args
         );
     }
 
@@ -68,13 +68,13 @@ struct VisitorImplBase {
     static size_t
     get_workspace_size(ProblemShape const& problem_shape, Arguments const& args) {
         return tla::transform_apply(
-            tla::tuple<Ops...>{}, args,
             [&](auto&& op_tag, auto const& op_args) {
                 using Op = typename tla::remove_cvref_t<decltype(op_tag)>;
                 size_t sz = Op::get_workspace_size(problem_shape, op_args);
                 return (sz + 31) & ~31; // 32 字节对齐
             },
-            [](auto&&... rounded_sizes) { return (size_t{0} + ... + rounded_sizes); }
+            [](auto&&... rounded_sizes) { return (size_t{0} + ... + rounded_sizes); },
+            tla::tuple<Ops...>{}, args
         );
     }
 
@@ -86,7 +86,6 @@ struct VisitorImplBase {
         uint8_t* op_workspace = reinterpret_cast<uint8_t*>(workspace);
 
         return tla::transform_apply(
-            tla::tuple<Ops...>{}, args,
             [&](auto&& op_tag, auto const& op_args) {
                 if (status != Status::kSuccess) {
                     return status;
@@ -99,7 +98,8 @@ struct VisitorImplBase {
                 }
                 return status;
             },
-            [&](auto const&... ) { return status; }
+            [&](auto const&... ) { return status; },
+            tla::tuple<Ops...>{}, args
         );
     }
 
@@ -110,14 +110,14 @@ struct VisitorImplBase {
     VisitorImplBase(Params const& params)
         : ops(
             tla::transform_apply(
-                tla::tuple<Ops...>{}, params,
                 [](auto&& op_tag, auto const& op_params) {
                     using Op = typename tla::remove_cvref_t<decltype(op_tag)>;
                     return Op(op_params);
                 },
                 [](auto&&... built_ops) -> tla::tuple<tla::remove_cvref_t<decltype(built_ops)>...> { 
                     return tla::tuple<tla::remove_cvref_t<decltype(built_ops)>...>(built_ops...); 
-                }
+                },
+                tla::tuple<Ops...>{}, params
             )
         )
     {}

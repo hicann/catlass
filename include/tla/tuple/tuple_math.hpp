@@ -31,7 +31,7 @@ struct Product {
             if constexpr (tuple_size<IntTuple>::value == 0) {
                 return Int<1>{};
             } else {
-                return tla::transform_apply(a, Product{}, multiplies_unary_lfold{});
+                return tla::transform_apply(Product{}, multiplies_unary_lfold{}, a);
             }
         } else if constexpr (tla::is_integral<IntTuple>::value) {
             return a;
@@ -60,7 +60,7 @@ CATLASS_HOST_DEVICE constexpr auto Add(IntTupleA const& a, IntTupleB const& b)
 {
     if constexpr (is_tuple<IntTupleA>::value && is_tuple<IntTupleB>::value) {
         TLA_ASSERT_SAME_TUPLE_SIZE(IntTupleA, IntTupleB);
-        return transform(a, b, [](auto const& x, auto const& y) { return Add(x, y); });
+        return transform([](auto const& x, auto const& y) { return Add(x, y); }, a, b);
     } else {
         return a + b;
     }
@@ -84,7 +84,7 @@ CATLASS_HOST_DEVICE constexpr auto size(T const& t)
 template <class Tuple, class TupleG>
 CATLASS_HOST_DEVICE constexpr auto product_like(Tuple const& tuple, TupleG const& guide)
 {
-    return transform_leaf(guide, tuple, [](auto const&, auto const& t) { return product(t); });
+    return transform_leaf([](auto const&, auto const& t) { return product(t); }, guide, tuple);
 }
 
 // minimum: element-wise min (recursive, supports broadcasting)
@@ -92,11 +92,11 @@ template <class T0, class T1>
 CATLASS_HOST_DEVICE constexpr auto minimum(T0 const& t0, T1 const& t1)
 {
     if constexpr (is_tuple<T0>::value && is_tuple<T1>::value) {
-        return transform(t0, t1, [](auto const& a, auto const& b) { return minimum(a, b); });
+        return transform([](auto const& a, auto const& b) { return minimum(a, b); }, t0, t1);
     } else if constexpr (is_tuple<T0>::value) {
-        return transform(t0, [&](auto const& a) { return minimum(a, t1); });
+        return transform([&](auto const& a) { return minimum(a, t1); }, t0);
     } else if constexpr (is_tuple<T1>::value) {
-        return transform(t1, [&](auto const& b) { return minimum(t0, b); });
+        return transform([&](auto const& b) { return minimum(t0, b); }, t1);
     } else {
         return min(t0, t1);
     }
@@ -107,11 +107,11 @@ template <class T0, class T1>
 CATLASS_HOST_DEVICE constexpr auto maximum(T0 const& t0, T1 const& t1)
 {
     if constexpr (is_tuple<T0>::value && is_tuple<T1>::value) {
-        return transform(t0, t1, [](auto const& a, auto const& b) { return maximum(a, b); });
+        return transform([](auto const& a, auto const& b) { return maximum(a, b); }, t0, t1);
     } else if constexpr (is_tuple<T0>::value) {
-        return transform(t0, [&](auto const& a) { return maximum(a, t1); });
+        return transform([&](auto const& a) { return maximum(a, t1); }, t0);
     } else if constexpr (is_tuple<T1>::value) {
-        return transform(t1, [&](auto const& b) { return maximum(t0, b); });
+        return transform([&](auto const& b) { return maximum(t0, b); }, t1);
     } else {
         return max(t0, t1);
     }
@@ -122,11 +122,11 @@ template <class T0, class T1, TLA_REQUIRES(is_tuple<remove_cvref_t<T0>>::value |
 CATLASS_HOST_DEVICE constexpr auto clip_sub(T0 const& t0, T1 const& t1)
 {
     if constexpr (is_tuple<T0>::value && is_tuple<T1>::value) {
-        return transform(t0, t1, [](auto const& a, auto const& b) { return clip_sub(a, b); });
+        return transform([](auto const& a, auto const& b) { return clip_sub(a, b); }, t0, t1);
     } else if constexpr (is_tuple<T0>::value) {
-        return transform(t0, [&](auto const& a) { return clip_sub(a, t1); });
+        return transform([&](auto const& a) { return clip_sub(a, t1); }, t0);
     } else {
-        return transform(t1, [&](auto const& b) { return clip_sub(t0, b); });
+        return transform([&](auto const& b) { return clip_sub(t0, b); }, t1);
     }
 }
 
@@ -140,7 +140,7 @@ CATLASS_HOST_DEVICE constexpr auto ceil_div(T0 const& a, T1 const& b)
     if constexpr (is_tuple<T0>::value && is_tuple<T1>::value) {
         static_assert(tuple_size<T0>::value >= tuple_size<T1>::value, "Mismatched ranks");
         constexpr int R = tuple_size<T0>::value;
-        return transform(a, append<R>(b, Int<1>{}), [](auto const& x, auto const& y) { return ceil_div(x, y); });
+        return transform([](auto const& x, auto const& y) { return ceil_div(x, y); }, a, append<R>(b, Int<1>{}));
     } else if constexpr (is_tuple<T0>::value) {
         auto result = fold(a, make_tuple(make_tuple(), b), [](auto const& init, auto const& ai) {
             return make_tuple(append(get<0>(init), ceil_div(ai, get<1>(init))), ceil_div(get<1>(init), ai));
@@ -158,11 +158,11 @@ CATLASS_HOST_DEVICE constexpr auto round_up(T0 const& t0, T1 const& t1)
     if constexpr (is_tuple<T0>::value && is_tuple<T1>::value) {
         static_assert(tuple_size<T0>::value >= tuple_size<T1>::value, "Mismatched ranks");
         constexpr int R = tuple_size<T0>::value;
-        return transform(t0, append<R>(t1, Int<1>{}), [](auto const& a, auto const& b) { return round_up(a, b); });
+        return transform([](auto const& a, auto const& b) { return round_up(a, b); }, t0, append<R>(t1, Int<1>{}));
     } else if constexpr (is_tuple<T0>::value) {
-        return transform(t0, [&](auto const& a) { return round_up(a, t1); });
+        return transform([&](auto const& a) { return round_up(a, t1); }, t0);
     } else {
-        return transform(t1, [&](auto const& b) { return round_up(t0, b); });
+        return transform([&](auto const& b) { return round_up(t0, b); }, t1);
     }
 }
 
@@ -174,8 +174,8 @@ CATLASS_HOST_DEVICE constexpr auto inner_product(T0 const& t0, T1 const& t1)
     if constexpr (is_tuple<T0>::value && is_tuple<T1>::value) {
         TLA_ASSERT_SAME_TUPLE_SIZE(T0, T1);
         return transform_apply(
-            t0, t1, [](auto const& a, auto const& b) { return inner_product(a, b); },
-            [](auto const&... v) { return (Int<0>{} + ... + v); });
+            [](auto const& a, auto const& b) { return inner_product(a, b); },
+            [](auto const&... v) { return (Int<0>{} + ... + v); }, t0, t1);
     } else {
         return t0 * t1;
     }

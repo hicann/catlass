@@ -147,6 +147,12 @@ struct is_tuple : decltype(detail::has_tuple_size((T*)0)){};
 template <class T>
 inline constexpr bool is_tuple_v = is_tuple<T>::value;
 
+template <class... Ts>
+struct all_tuples : Bool<(is_tuple<Ts>::value && ...)> {};
+
+template <class... Ts>
+inline constexpr bool all_tuples_v = all_tuples<Ts...>::value;
+
 template <class... T>
 struct tuple_size<tla::tuple<T...>> : std::integral_constant<size_t, sizeof...(T)> {};
 
@@ -191,6 +197,8 @@ CATLASS_HOST_DEVICE constexpr bool operator!=(tuple<T...> const& a, tuple<U...> 
 }
 
 } // end namespace tla
+
+#define TLA_ASSERT_ALL_TUPLES(...) static_assert(::tla::all_tuples_v<__VA_ARGS__>, "arguments must be tuples")
 
 // Structured bindings support
 namespace std {

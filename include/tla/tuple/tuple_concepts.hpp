@@ -23,7 +23,7 @@ CATLASS_HOST_DEVICE constexpr auto evenly_divides(T0 const& t0, T1 const& t1)
 {
     if constexpr (is_tuple<T0>::value) {
         return transform_apply(
-            t0, t1, [](auto const& a, auto const& b) { return (a % b) == 0; }, [](auto... bs) { return (bs && ...); });
+            [](auto const& a, auto const& b) { return (a % b) == 0; }, [](auto... bs) { return (bs && ...); }, t0, t1);
     } else {
         return (t0 % t1) == 0;
     }

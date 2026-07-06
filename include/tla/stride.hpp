@@ -62,7 +62,7 @@ template <class Shape, class Current>
 CATLASS_HOST_DEVICE constexpr auto compact_col_major(Shape const& shape, Current const& current)
 {
     if constexpr (is_tuple_v<Shape> && is_tuple_v<Current>) {
-        return transform(shape, current, [](auto const& s, auto const& c) { return compact_col_major(s, c); });
+        return transform([](auto const& s, auto const& c) { return compact_col_major(s, c); }, shape, current);
     } else if constexpr (is_tuple_v<Shape> && is_integral_v<Current>) {
         return detail::compact_col_major_impl(shape, current, tuple_seq<Shape>{});
     } else if constexpr (is_integral_v<Shape> && is_integral_v<Current>) {
@@ -79,7 +79,7 @@ template <class Shape, class Current>
 CATLASS_HOST_DEVICE constexpr auto compact_row_major(Shape const& shape, Current const& current)
 {
     if constexpr (is_tuple_v<Shape> && is_tuple_v<Current>) {
-        return transform(shape, current, [](auto const& s, auto const& c) { return compact_row_major(s, c); });
+        return transform([](auto const& s, auto const& c) { return compact_row_major(s, c); }, shape, current);
     } else if constexpr (is_tuple_v<Shape> && is_integral_v<Current>) {
         return detail::compact_row_major_impl(shape, current, tuple_rseq<Shape>{});
     } else if constexpr (is_integral_v<Shape> && is_integral_v<Current>) {
@@ -104,9 +104,9 @@ CATLASS_HOST_DEVICE constexpr auto compact_order_impl(
 {
     if constexpr (is_tuple<Order>::value) {
         TLA_ASSERT_SAME_TUPLE_SIZE(Shape, Order);
-        return transform(shape, order, [&](auto const& s, auto const& o) {
-            return compact_order_impl(s, o, flat_shape, flat_order);
-        });
+        return transform(
+            [&](auto const& s, auto const& o) { return compact_order_impl(s, o, flat_shape, flat_order); }, shape,
+            order);
     } else {
         auto stride_start = order_stride_start(flat_shape, flat_order, order, tuple_seq<FlatShape>{});
         return compact_col_major(shape, stride_start);
@@ -122,7 +122,7 @@ CATLASS_HOST_DEVICE constexpr auto compact_order(Shape const& shape, Order const
     auto flat_shape = flatten_to_tuple(product_like(shape, order));
     auto flat_order = flatten_to_tuple(order);
     constexpr int n = tuple_size<remove_cvref_t<decltype(flat_order)>>::value;
-    auto unique_order = transform(make_range<0, n>{}, flat_order, [](auto I, auto v) { return v * Int<n>{} + I; });
+    auto unique_order = transform([](auto I, auto v) { return v * Int<n>{} + I; }, make_range<0, n>{}, flat_order);
     auto new_order = unflatten(unique_order, order);
     return detail::compact_order_impl(shape, new_order, flat_shape, unique_order);
 }
@@ -131,17 +131,16 @@ template <class Coord, class Shape, class Stride>
 CATLASS_HOST_DEVICE constexpr auto crd2idx(Coord const& coord, Shape const& shape, Stride const& stride)
 {
     if constexpr (is_tuple_v<Coord> && is_tuple_v<Shape> && is_tuple_v<Stride>) {
-        TLA_ASSERT_SAME_TUPLE_SIZE(Coord, Shape);
-        TLA_ASSERT_SAME_TUPLE_SIZE(Coord, Stride);
+        TLA_ASSERT_SAME_TUPLE_SIZE(Coord, Shape, Stride);
         return transform_apply(
-            coord, shape, stride, [](auto const& c, auto const& s, auto const& d) { return crd2idx(c, s, d); },
-            [](auto const&... xs) { return (... + xs); });
+            [](auto const& c, auto const& s, auto const& d) { return crd2idx(c, s, d); },
+            [](auto const&... xs) { return (... + xs); }, coord, shape, stride);
     } else if constexpr (is_integral_v<Coord> && is_tuple_v<Shape> && is_tuple_v<Stride>) {
         TLA_ASSERT_SAME_TUPLE_SIZE(Shape, Stride);
         if constexpr (is_constant<0, Coord>::value) {
             return _0{};
         }
-        auto zipped = transform(shape, stride, [](auto const& s, auto const& d) { return make_tuple(s, d); });
+        auto zipped = transform([](auto const& s, auto const& d) { return make_tuple(s, d); }, shape, stride);
         return get<1>(fold(zipped, make_tuple(coord, _0{}), [](auto const& acc, auto const& sd) {
             auto prod = product(get<0>(sd));
             return make_tuple(get<0>(acc) / prod, get<1>(acc) + crd2idx(get<0>(acc) % prod, get<0>(sd), get<1>(sd)));
@@ -167,7 +166,7 @@ CATLASS_HOST_DEVICE constexpr auto crd2idx(Coord const& coord, Shape const& shap
         TLA_ASSERT_SAME_TUPLE_SIZE(Coord, Shape);
         auto flat_coord = flatten_to_tuple(coord);
         auto flat_shape = flatten_to_tuple(product_like(shape, coord));
-        auto zipped = transform(flat_coord, flat_shape, [](auto const& c, auto const& s) { return make_tuple(c, s); });
+        auto zipped = transform([](auto const& c, auto const& s) { return make_tuple(c, s); }, flat_coord, flat_shape);
         return fold_reverse(
             zipped, _0{}, [](auto const& acc, auto const& cs) { return get<0>(cs) + get<1>(cs) * acc; });
     } else if constexpr (is_integral_v<Coord> && (is_tuple_v<Shape> || is_integral_v<Shape>)) {
@@ -186,13 +185,12 @@ template <class Index, class Shape, class Stride>
 CATLASS_HOST_DEVICE constexpr auto idx2crd(Index const& idx, Shape const& shape, Stride const& stride)
 {
     if constexpr (is_tuple_v<Index> && is_tuple_v<Shape> && is_tuple_v<Stride>) {
-        TLA_ASSERT_SAME_TUPLE_SIZE(Index, Shape);
-        TLA_ASSERT_SAME_TUPLE_SIZE(Index, Stride);
+        TLA_ASSERT_SAME_TUPLE_SIZE(Index, Shape, Stride);
         return transform(
-            idx, shape, stride, [](auto const& i, auto const& s, auto const& d) { return idx2crd(i, s, d); });
+            [](auto const& i, auto const& s, auto const& d) { return idx2crd(i, s, d); }, idx, shape, stride);
     } else if constexpr (is_integral_v<Index> && is_tuple_v<Shape> && is_tuple_v<Stride>) {
         TLA_ASSERT_SAME_TUPLE_SIZE(Shape, Stride);
-        return transform(shape, stride, [&](auto const& s, auto const& d) { return idx2crd(idx, s, d); });
+        return transform([&](auto const& s, auto const& d) { return idx2crd(idx, s, d); }, shape, stride);
     } else if constexpr (is_integral_v<Index> && is_integral_v<Shape> && is_integral_v<Stride>) {
         if constexpr (is_constant<1, Shape>::value) {
             return _0{};
@@ -210,7 +208,7 @@ CATLASS_HOST_DEVICE constexpr auto idx2crd(Index const& idx, Shape const& shape)
 {
     if constexpr (is_tuple_v<Index> && is_tuple_v<Shape>) {
         TLA_ASSERT_SAME_TUPLE_SIZE(Index, Shape);
-        return transform(idx, shape, [](auto const& i, auto const& s) { return idx2crd(i, s); });
+        return transform([](auto const& i, auto const& s) { return idx2crd(i, s); }, idx, shape);
     } else if constexpr (is_integral_v<Index> && is_tuple_v<Shape>) {
         return idx2crd(idx, shape, compact_col_major(shape));
     } else if constexpr (is_integral_v<Index> && is_integral_v<Shape>) {
