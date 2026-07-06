@@ -789,6 +789,44 @@ def func(sym_name, function_type, *, loc=None, ip=None) -> _ods_ir.Operation:
   return _get_op_result_or_op_results(FuncOp(sym_name=sym_name, function_type=function_type, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
+class GatherOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.gather"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, x, y, *, mask=None, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(x))
+    operands.append(_get_op_result_or_value(y))
+    if mask is not None: operands.append(_get_op_result_or_value(mask))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def x(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def y(self):
+    return self.operation.operands[1]
+
+  @builtins.property
+  def mask(self):
+    return None if len(self.operation.operands) < 3 else self.operation.operands[2]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def gather(result, x, y, *, mask=None, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(GatherOp(result=result, x=x, y=y, mask=mask, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
 class HivmMemrefAsPtrOp(_ods_ir.OpView):
   OPERATION_NAME = "tla.hivm_memref_as_ptr"
 

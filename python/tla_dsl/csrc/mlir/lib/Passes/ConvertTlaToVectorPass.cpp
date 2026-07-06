@@ -893,7 +893,8 @@ static hivmave::MaskWidth maskWidthForElement(Type elementType) {
 // region: element-wise binary/unary ops, where/select, and reductions.
 static bool isVectorComputeOp(Operation *op) {
   return getAnyVectorOperationInfo(op).has_value() ||
-         isa_and_nonnull<::tla::WhereOp>(op) || isa_and_nonnull<::tla::ReduceOp>(op);
+         isa_and_nonnull<::tla::WhereOp>(op) || isa_and_nonnull<::tla::ReduceOp>(op) ||
+         isa_and_nonnull<::tla::GatherOp>(op);
 }
 
 // Build the AVE vector op for a tla binary op. The mask predicates active lanes.
@@ -1228,6 +1229,37 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     return success();
   }
 
+  // tla.gather: per-lane indexed load from a UB tile.
+  //   x (tile_view → rank-1 memref) → VFGatherOp base
+  //   y (loaded index vector)        → index_vec
+  //   mask (optional)                → mask (all-true if absent)
+  if (auto gatherOp = dyn_cast<::tla::GatherOp>(op)) {
+    Value base = valueMap.lookup(gatherOp.getX());
+    Value indexVec = valueMap.lookup(gatherOp.getY());
+    if (!base || !indexVec)
+      return failure();
+    auto baseType = dyn_cast<MemRefType>(base.getType());
+    if (!baseType || baseType.getRank() != 1)
+      return failure();
+    auto elemByteWidth = getElementByteWidth(baseType.getElementType());
+    if (failed(elemByteWidth))
+      return failure();
+    int64_t numElems = 256 / *elemByteWidth;
+    auto resultVecType = VectorType::get(numElems, baseType.getElementType());
+    Value mask;
+    if (gatherOp.getMask()) {
+      mask = valueMap.lookup(gatherOp.getMask());
+      if (!mask)
+        return failure();
+    } else {
+      mask = b.create<hivmave::VFPgeOp>(loc, ctx.maskVecType, hivmave::PgePattern::ALL);
+    }
+    Value zero = b.create<arith::ConstantIndexOp>(loc, 0);
+    valueMap[gatherOp.getResult()] =
+        b.create<hivmave::VFGatherOp>(loc, resultVecType, base, ValueRange(zero), indexVec, mask);
+    return success();
+  }
+
   if (auto info = getVectorUnaryInfo(&op)) {
     if (op.getNumResults() != 1)
       return failure();
@@ -1459,8 +1491,8 @@ static LogicalResult lowerNestedVectorBlock(Block *sourceBlock, OpBuilder &b,
   return success();
 }
 
-// Collect, in body order, the unique full UB tensors that tla.load/tla.store
-// chunks reference. These become the helper's arguments.
+// Collect, in body order, the unique full UB tensors that tla.load/tla.store/
+// tla.gather chunks reference. These become the helper's arguments.
 static void collectVectorHelperOperands(Block *block, SmallVectorImpl<Value> &operands) {
   for (Operation &op : block->getOperations()) {
     if (auto loadOp = dyn_cast<::tla::LoadOp>(op)) {
@@ -1471,6 +1503,12 @@ static void collectVectorHelperOperands(Block *block, SmallVectorImpl<Value> &op
     }
     if (auto storeOp = dyn_cast<::tla::StoreOp>(op)) {
       Value root = getFullTensorOf(storeOp.getDest());
+      if (!llvm::is_contained(operands, root))
+        operands.push_back(root);
+      continue;
+    }
+    if (auto gatherOp = dyn_cast<::tla::GatherOp>(op)) {
+      Value root = getFullTensorOf(gatherOp.getX());
       if (!llvm::is_contained(operands, root))
         operands.push_back(root);
       continue;
@@ -1659,6 +1697,10 @@ public:
         if (!producedValues.contains(operand))
           return rewriter.notifyMatchFailure(
               vecFuncOp, "expected tla.reduce operand from tla.load or prior compute op");
+      } else if (auto gatherOp = dyn_cast<::tla::GatherOp>(computeOp)) {
+        if (!producedValues.contains(gatherOp.getY()))
+          return rewriter.notifyMatchFailure(
+              vecFuncOp, "expected tla.gather y operand from tla.load or prior compute op");
       } else {
         return rewriter.notifyMatchFailure(vecFuncOp, "unexpected tla compute op");
       }

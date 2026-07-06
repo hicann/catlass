@@ -809,6 +809,20 @@ def Tla_MinOp : Tla_VectorBinaryOp<"min",
     "Vector minimum for tensor fragments",
     "Element-wise minimum on tensor fragments / vector tiles.">;
 
+def Tla_GatherOp : Tla_Op<"gather", [Pure]> {
+  let summary = "Vector gather for tensor fragments";
+  let description = [{
+    Gathers elements from ``x`` to ``result``according to the indices in ``y``.
+  }];
+  let arguments = (ins Tla_TensorType:$x, Tla_TensorType:$y,
+                       Optional<Tla_MaskType>:$mask);
+  let results = (outs Tla_TensorType:$result);
+  let assemblyFormat = [{
+    $x `,` $y (`mask` $mask^)? attr-dict `:`
+    type($x) `,` type($y) (`mask` qualified(type($mask))^)? `->` type($result)
+  }];
+}
+
 def Tla_WhereOp : Tla_Op<"where", [Pure]> {
   let summary = "Vector select for tensor fragments";
   let description = [{

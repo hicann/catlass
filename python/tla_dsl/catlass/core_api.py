@@ -3660,6 +3660,96 @@ def where(
 
 
 @dsl_user_op
+def gather(
+    x: TileLike,
+    y: VectorSSA,
+    *,
+    mask: MaskSSA | None = None,
+    loc: mlir_ir.Location | None = None,
+) -> VectorSSA:
+    """Gather elements from a UB tensor according to vector indices.
+
+    ``x`` is a tensor view pointing to UB memory (from ``tla.tile_view``).
+    ``y`` is a vector of per-lane indices (from ``.load()``).
+    Returns a vector register with gathered elements.
+    """
+    _require_category("gather", "x", x, "tensor", 0)
+    _require_category("gather", "y", y, "vector_ssa", 1)
+    _require_frontend_state("gather")
+    _runtime._require_enclosing_region("gather", "vec.func")
+    x_value = _as_value(x)
+    y_value = _as_value(y)
+    x_desc = _tla_tensor_descriptor_from_type_or_value(x_value)
+    y_desc = _tla_tensor_descriptor_from_type_or_value(y_value)
+
+    # validate x addrspace is ub
+    if x_desc.addrspace.lower() != "ub":
+        _op_error(
+            "gather",
+            f"invalid argument 'x' (position 0): expected addrspace ub, got {x_desc.addrspace}",
+        )
+
+    # validate x element type
+    _GATHER_SUPPORTED_X_ELEM_TYPES = frozenset(
+        {
+            "i1",
+            "i8",
+            "u8",
+            "i16",
+            "u16",
+            "i32",
+            "u32",
+            "i64",
+            "u64",
+            "f16",
+            "bf16",
+            "f32",
+        }
+    )
+    if x_desc.element_type.lower() not in _GATHER_SUPPORTED_X_ELEM_TYPES:
+        _op_error(
+            "gather",
+            f"invalid argument 'x' (position 0): unsupported element type "
+            f"{x_desc.element_type}; supported types are "
+            f"{', '.join(sorted(_GATHER_SUPPORTED_X_ELEM_TYPES))}",
+        )
+
+    # validate y element type
+    _GATHER_SUPPORTED_Y_ELEM_TYPES = frozenset(
+        {
+            "i1",
+            "i8",
+            "u8",
+            "i16",
+            "u16",
+            "i32",
+            "u32",
+            "i64",
+            "u64",
+        }
+    )
+    if y_desc.element_type.lower() not in _GATHER_SUPPORTED_Y_ELEM_TYPES:
+        _op_error(
+            "gather",
+            f"invalid argument 'y' (position 1): unsupported element type "
+            f"{y_desc.element_type}; supported types are "
+            f"{', '.join(sorted(_GATHER_SUPPORTED_Y_ELEM_TYPES))}",
+        )
+    if mask is not None:
+        _require_category("gather", "mask", mask, "mask_ssa", 2)
+    mask_value = _as_value(mask) if mask is not None else None
+    result = _tla_ops_gen.gather(
+        x_value.type,
+        x_value,
+        y_value,
+        mask=mask_value,
+        loc=loc,
+    )
+    _register_tla_tensor_type(result, x_desc)
+    return VectorSSA(result)
+
+
+@dsl_user_op
 def arch_block_idx(*, loc: mlir_ir.Location | None = None) -> TlaIndex:
     """Return block index in Tla execution model."""
     _require_frontend_state("arch.block_idx")
@@ -4002,6 +4092,7 @@ __all__ = [
     "sqrt",
     "abs",
     "neg",
+    "gather",
     "ReductionOp",
     "make_ptr",
     "recast_ptr",

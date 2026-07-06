@@ -645,6 +645,7 @@ _CORE_API_EXPORTS = (
     "sqrt",
     "abs",
     "neg",
+    "gather",
     "make_ptr",
     "recast_ptr",
     "make_shape",
