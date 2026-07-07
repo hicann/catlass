@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_GEMM_BLOCK_BLOCK_MMAD_MLA_PV_TP1_SPEC_HPP
-#define CATLASS_GEMM_BLOCK_BLOCK_MMAD_MLA_PV_TP1_SPEC_HPP
+#ifndef CATLASS_GEMM_BLOCK_BLOCK_MMAD_AMLA_PV_TP1_SPEC_HPP
+#define CATLASS_GEMM_BLOCK_BLOCK_MMAD_AMLA_PV_TP1_SPEC_HPP
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/cross_core_sync.hpp"
@@ -18,8 +18,6 @@
 #include "catlass/gemm/dispatch_policy.hpp"
 #include "catlass/gemm/helper.hpp"
 #include "catlass/gemm_coord.hpp"
-#include "catlass/gemm/tile/tile_copy.hpp"
-#include "catlass/gemm/tile/tile_mmad.hpp"
 
 ////////////////////////////////////////////////////////////////////
 
@@ -36,7 +34,7 @@ template <
     class TileCopy_,
     class TileMmad_>
 struct BlockMmad<
-    MmadAtlasA2MLAPVTp1Spec,
+    MmadAtlasA2AMLAPVTp1Spec,
     L1TileShape_,
     L0TileShape_,
     AType_,
@@ -47,7 +45,7 @@ struct BlockMmad<
     TileMmad_> {
 public:
     // Type Aliases
-    using DispatchPolicy = MmadAtlasA2MLAPV;
+    using DispatchPolicy = MmadAtlasA2AMLAPVTp1Spec;
     using ArchTag = typename DispatchPolicy::ArchTag;
     using L1TileShape = L1TileShape_;
     using L0TileShape = L0TileShape_;
@@ -113,7 +111,8 @@ public:
     void operator()(AscendC::GlobalTensor<ElementA> gA, AscendC::GlobalTensor<ElementA> gB,
                     AscendC::GlobalTensor<int32_t> gblockTable, AscendC::GlobalTensor<ElementC> gC, LayoutA layoutA,
                     LayoutB layoutB, LayoutC layoutC, GemmCoord actualShape, uint32_t &nIdx, uint32_t &pingpongFlag, uint32_t &nLoop,
-                    uint32_t &blockSize, uint32_t kvSeqlen, Arch::CrossCoreFlag softmaxReady, uint32_t &pvLoopPingpongIdx)
+                    uint32_t &blockSize, uint32_t kvSeqlen, Arch::CrossCoreFlag softmaxReady, uint32_t &pvLoopPingpongIdx,
+                    Arch::CrossCoreFlag softmaxAutoAddReady)
     {
         uint32_t rowNum = actualShape.m();
         uint32_t stackSeqTile = actualShape.k();
@@ -194,9 +193,18 @@ public:
             auto blockShape = MakeCoord(rowNum, embedSplitSize);
             auto layoutInL0C = LayoutCInL0::MakeLayoutInL0C(blockShape);
             auto layoutCSplitN = layoutC.GetTileLayout(MakeCoord(rowNumRound, embedSplitSizeRound));
+            if (embedSplitIdx == 0) {
+                Arch::CrossCoreWaitFlag(softmaxAutoAddReady);
+            }
+            if ((nIdx - UNIT_BLOCK_STACK_NUM) != 0) {
+                AscendC::SetAtomicAdd<ElementC>();
+            }
             copyL0CToGm(gC[embedSplitIdx * embedSplitSizeRound], l0CTensor[L0CPingPongFlag], layoutCSplitN,
                         layoutInL0C);
             AscendC::SetFlag<AscendC::HardEvent::FIX_M>(L0CPingPongFlag);
+            if ((nIdx - UNIT_BLOCK_STACK_NUM) != 0) {
+                AscendC::SetAtomicNone();
+            }
         }
     }
 
@@ -220,4 +228,4 @@ protected:
 
 } // namespace Catlass::Gemm::block
 
-#endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_MLA_PV_TP1_SPEC_HPP
+#endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_AMLA_PV_TP1_SPEC_HPP

@@ -85,18 +85,26 @@ class CatlassExampleTest(unittest.TestCase):
 
     @only_on_2201
     def test_19_mla(self):
-        case_base = [str(i) for i in [1, 1, 128, 16, 16, 128]]
-        case_py = case_base + ["half"]
+        batch = 1
+        q_seqlen_list = "1"
+        kv_seqlen_list = "128"
+        num_heads = 16
+        num_blocks = 16
+        block_size = 128
+        dtype = "half"
+
+        # python gen_data.py batch "qSeqlen_list" "kvSeqlen_list" numHeads numBlocks blockSize dtype
+        case_py = [str(batch), q_seqlen_list, kv_seqlen_list,
+                   str(num_heads), str(num_blocks), str(block_size), dtype]
         ret = subprocess.run(
             ["python", os.path.join(CMAKE_EXAMPLES_PATH, "19_mla", "gen_data.py")]
             + case_py
         )
-        case_cpp = case_base + [
-            "--dtype",
-            "half",
-            "--datapath",
-            os.path.join(CMAKE_EXAMPLES_PATH, "19_mla", "data"),
-        ]
+        # ./19_mla batch "qSeqlen_list" "kvSeqlen_list" numHeads numBlocks blockSize --dtype half --datapath ...
+        case_cpp = [str(batch), q_seqlen_list, kv_seqlen_list,
+                    str(num_heads), str(num_blocks), str(block_size),
+                    "--dtype", dtype,
+                    "--datapath", os.path.join(CMAKE_EXAMPLES_PATH, "19_mla", "data")]
         self.run_case("19_mla", case_cpp)
 
     @only_on_2201

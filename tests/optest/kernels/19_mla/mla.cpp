@@ -20,6 +20,7 @@
 
 #include "mla_kernel.cpp"
 #include "mla_kernel_tp1_spec.cpp"
+#include "amla_kernel_tp1_spec.cpp"
 
 
 
@@ -139,25 +140,46 @@ void MLAImpl(const uint32_t blockNum, aclrtStream stream, const MlaParams &param
     uint8_t *lDevice;
     ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&lDevice), lSize, ACL_MEM_MALLOC_HUGE_FIRST));
 
+    if ((numHeads == MLATiling::NUM128) && (numTokens % blockNum <= 10) && (batch <= 40)) {
+        tilingKey = (dTypeKey == 0) ? 7 : 8;
+    }
+
     uint64_t hardwareSyncAddr{0};
     ACL_CHECK(aclrtGetHardwareSyncAddr(reinterpret_cast<void**>(&hardwareSyncAddr)));
 
-    if (tilingKey == 0) {
-        MLAFp16<<<blockDim, nullptr, stream>>>(
-            hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oScratchDevice, sDevice, pDevice,
-            oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
-    } else if (tilingKey == 1) {
-        MLABf16<<<blockDim, nullptr, stream>>>(
-            hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oScratchDevice, sDevice, pDevice,
-            oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
-    } else if (tilingKey == 4) {
-        MLATp1SpecFp16<<<blockDim, nullptr, stream>>>(
-            hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oScratchDevice, sDevice, pDevice,
-            oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
-    } else if (tilingKey == 5) {
-        MLATp1SpecBf16<<<blockDim, nullptr, stream>>>(
-            hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oScratchDevice, sDevice, pDevice,
-            oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
+    switch (tilingKey) {
+        case 0:
+            MLA<half><<<blockDim, nullptr, stream>>>(
+                hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oScratchDevice, sDevice,
+                pDevice, oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
+            break;
+        case 1:
+            MLA<bfloat16_t><<<blockDim, nullptr, stream>>>(
+                hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oScratchDevice, sDevice,
+                pDevice, oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
+            break;
+        case 4:
+            AMLATp1Spec<half><<<blockDim, nullptr, stream>>>(
+                hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oScratchDevice, sDevice,
+                pDevice, oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
+            break;
+        case 5:
+            AMLATp1Spec<bfloat16_t><<<blockDim, nullptr, stream>>>(
+                hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oScratchDevice, sDevice,
+                pDevice, oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
+            break;
+        case 7:
+            MLATp1Spec<half><<<blockDim, nullptr, stream>>>(
+                hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oScratchDevice, sDevice,
+                pDevice, oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
+            break;
+        case 8:
+            MLATp1Spec<bfloat16_t><<<blockDim, nullptr, stream>>>(
+                hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oScratchDevice, sDevice,
+                pDevice, oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
+            break;
+        default:
+            break;
     }
     ACL_CHECK(aclrtSynchronizeStream(stream));
 

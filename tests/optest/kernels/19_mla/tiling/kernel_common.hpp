@@ -8,14 +8,15 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
+
 #ifndef KERNEL_COMMON
 #define KERNEL_COMMON
-
-#include <cstdint>
 
 constexpr uint32_t QK_READY_ID = 1;
 constexpr uint32_t SOFTMAX_READY_ID = 2;
 constexpr uint32_t PV_READY_ID = 3;
+constexpr uint32_t PRE_AUTOADD_READY_ID = 0;
+constexpr uint32_t SM_AUTOADD_READY_ID = 7;
 constexpr uint32_t BLOCK_SIZE = 16;
 constexpr uint32_t TMP_SIZE = 65536;
 constexpr uint32_t TMP_SIZE_DECODER = 32768;
@@ -39,6 +40,8 @@ constexpr int32_t TILING_KVCORENUM = 16;
 constexpr int32_t TILING_TOTAL_QTOKENS = 18;
 constexpr int32_t TILING_FORMERTASKNUM = 19;
 constexpr int32_t TILING_TAILTASKNUM = 20;
+constexpr int32_t TILING_PROCESSNUM = 21;
+constexpr int32_t CUTASK_START_OFFSET = 25;
 constexpr int32_t TILING_BLOCKSIZE_CALC = 25;
 constexpr int32_t TILING_HEADDIM_K_SPLIT = 38;
 constexpr int32_t TILING_HEADDIM_V_SPLIT = 39;
