@@ -121,9 +121,9 @@ public:
     static bool CanImplement(const Arguments &args)
     {
         return AscendC::Std::is_one_of_v<ElementA, float8_e4m3_t, float8_e5m2_t, float4_e2m1x2_t, float4_e1m2x2_t> &&
-               AscendC::Std::is_one_of_v<ElementB, float8_e4m3_t, float8_e5m2_t, float4_e2m1x2_t, float4_e1m2x2_t> && 
+               AscendC::Std::is_one_of_v<ElementB, float8_e4m3_t, float8_e5m2_t, float4_e2m1x2_t, float4_e1m2x2_t> &&
                std::is_same_v<ElementMxScaleA, float8_e8m0_t> &&
-               std::is_same_v<ElementMxScaleB, float8_e8m0_t> && 
+               std::is_same_v<ElementMxScaleB, float8_e8m0_t> &&
                std::is_same_v<LayoutTagA, layout::RowMajor>;
     }
     static size_t GetWorkspaceSize(const Arguments &args)
@@ -189,10 +189,10 @@ public:
             if (currentM == 0) {
                 if constexpr (AscendC::Std::is_one_of_v<ElementB, float4_e2m1x2_t, float4_e1m2x2_t>) {
                     gmGroupOffsetB += std::is_same_v<LayoutTagB, layout::ColumnMajor> ?
-                        CeilDiv<2>(params.problemShape.k()) * params.problemShape.n() :
-                        CeilDiv<2>(params.problemShape.n()) * params.problemShape.k();
+                        static_cast<int64_t>(CeilDiv<2>(params.problemShape.k())) * params.problemShape.n() :
+                        static_cast<int64_t>(CeilDiv<2>(params.problemShape.n())) * params.problemShape.k();
                 } else {
-                    gmGroupOffsetB += params.problemShape.k() * params.problemShape.n();
+                    gmGroupOffsetB += static_cast<int64_t>(params.problemShape.k()) * params.problemShape.n();
                 }
                 gmGroupOffsetMxScaleB += mxScaleAlignedK * params.problemShape.n();
                 continue;
@@ -280,11 +280,11 @@ public:
 
             totalM += inGroupProblemShape.m();
             if constexpr (AscendC::Std::is_one_of_v<ElementB, float4_e2m1x2_t, float4_e1m2x2_t>) {
-                gmGroupOffsetB += std::is_same_v<LayoutB, layout::ColumnMajor> ?
-                    CeilDiv<2>(inGroupProblemShape.k()) * inGroupProblemShape.n() :
-                    CeilDiv<2>(inGroupProblemShape.n()) * inGroupProblemShape.k();
+                gmGroupOffsetB += std::is_same_v<LayoutTagB, layout::ColumnMajor> ?
+                    static_cast<int64_t>(CeilDiv<2>(inGroupProblemShape.k())) * inGroupProblemShape.n() :
+                    static_cast<int64_t>(CeilDiv<2>(inGroupProblemShape.n())) * inGroupProblemShape.k();
             } else {
-                gmGroupOffsetB += inGroupProblemShape.k() * inGroupProblemShape.n();
+                gmGroupOffsetB += static_cast<int64_t>(inGroupProblemShape.k()) * inGroupProblemShape.n();
             }
             gmGroupOffsetMxScaleA += inGroupProblemShape.m() * mxScaleAlignedK;
             gmGroupOffsetMxScaleB += mxScaleAlignedK * inGroupProblemShape.n();

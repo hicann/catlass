@@ -352,6 +352,29 @@ class CatlassExampleTest(unittest.TestCase):
             self._ret_check(ret)
 
     @only_on_3510
+    def test_55_ascend950_mx_grouped_matmul_slice_m_aswt_fp4_odd_n_transb(self):
+        case_py = [str(i) for i in [2, 588, 989, 1030, 1]] + [
+            "float4_e2m1fn_x2",
+            "0",
+            "--bin",
+            "55_ascend950_mx_grouped_matmul_slice_m_aswt",
+        ]
+        ret = subprocess.run(
+            [
+                "python",
+                os.path.join(
+                    CMAKE_EXAMPLES_PATH,
+                    "55_ascend950_mx_grouped_matmul_slice_m",
+                    "gen_data_compare.py",
+                ),
+            ] + case_py,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        self._ret_check(ret)
+        self.assertIn("Compare success", ret.stdout.decode())
+
+    @only_on_3510
     def test_57_ascend950_matmul_full_dequant(self):
         case_py = ["--shape"] + ["513 513 513"] + ["--x1_quant_mode"] + ["per_token"] + ["--x2_quant_mode"] + ["per_channel"]
         subprocess.run(
