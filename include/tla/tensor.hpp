@@ -14,6 +14,7 @@
 #include "catlass/arch/arch.hpp"
 #include "tla/layout.hpp"
 #include "tla/integral/integral_constant.hpp"
+#include "tla/integral/integral_sequence.hpp"
 #include "tla/integral/integral_math.hpp"
 #include "tla/tuple/tuple_math.hpp"
 #include "tla/tuple/tuple_algorithms.hpp"
@@ -101,6 +102,9 @@ CATLASS_HOST_DEVICE constexpr auto select_layout(Layout const& layout, seq<Is...
     auto origin_new = tla::MakeTuple(tla::get<Is>(layout.originShape())...);
     return tla::MakeLayout(shape_new, stride_new, origin_new);
 }
+
+template <size_t N>
+using MakeZeroTuple = decltype(tla::tuple_repeat<N>(tla::Int<0>{}));
 
 } // namespace detail
 

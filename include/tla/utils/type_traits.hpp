@@ -90,7 +90,7 @@ template <class T>
 using remove_cvref_t = typename remove_cvref<T>::type;
 
 // ---------------------------------------------------------------------------
-// tuple_size / tuple_size_v: tla-local wrapper around std::tuple_size
+// tuple_size / same_tuple_size: tla-local wrappers around std::tuple_size
 // ---------------------------------------------------------------------------
 
 template <class T, class = void>
@@ -103,6 +103,17 @@ struct tuple_size<T, std::void_t<typename std::tuple_size<T>::type>>
 template <class T>
 inline constexpr std::size_t tuple_size_v = tuple_size<T>::value;
 
+// same_tuple_size: true if all Ts have the same tuple_size as T0
+template <class T0, class... Ts>
+struct same_tuple_size : std::bool_constant<((tuple_size<Ts>::value == tuple_size<T0>::value) && ...)> {};
+
+template <class... Ts>
+inline constexpr bool same_tuple_size_v = same_tuple_size<Ts...>::value;
+
+// ---------------------------------------------------------------------------
+// tuple_element / tuple_element_t: tla-local wrapper around std::tuple_element
+// ---------------------------------------------------------------------------
+
 template <size_t I, class T, class = void>
 struct tuple_element;
 
@@ -112,11 +123,9 @@ struct tuple_element<I, T, std::void_t<typename std::tuple_element<I, T>::type>>
 template <size_t I, class T>
 using tuple_element_t = typename tuple_element<I, T>::type;
 
-template <class T0, class... Ts>
-struct same_tuple_size : std::bool_constant<((::tla::tuple_size<Ts>::value == ::tla::tuple_size<T0>::value) && ...)> {};
-
-template <class... Ts>
-inline constexpr bool same_tuple_size_v = same_tuple_size<Ts...>::value;
+// ---------------------------------------------------------------------------
+// dependent_false: always-false value dependent on template parameters
+// ---------------------------------------------------------------------------
 
 template <class... Args>
 inline constexpr bool dependent_false = false;

@@ -39,90 +39,95 @@ struct Product {
     }
 };
 
-namespace detail {
-
-template <size_t N, typename Sequence>
-struct MakeZeroTupleImpl;
-
-template <size_t N, size_t... Is>
-struct MakeZeroTupleImpl<N, tla::index_sequence<Is...>> {
-    using type = tla::tuple<tla::Int<Is * 0>...>;
-};
-
-template <size_t N>
-using MakeZeroTuple = typename MakeZeroTupleImpl<N, tla::make_index_sequence<N>>::type;
-
-} // end namespace detail
-
-// operator+: element-wise addition for tuples (recursive via transform)
-template <class T0, class T1, TLA_REQUIRES(is_tuple<T0>::value&& is_tuple<T1>::value)>
-CATLASS_HOST_DEVICE constexpr auto operator+(T0 const& a, T1 const& b)
-{
-    TLA_ASSERT_SAME_TUPLE_SIZE(T0, T1);
-    return transform(plus{}, a, b);
-}
-
-// product: compute the product of all elements (recursive)
 template <class T>
 CATLASS_HOST_DEVICE constexpr auto product(T const& t)
 {
     return Product{}(t);
 }
 
-// size: total element count (= product)
 template <class T>
 CATLASS_HOST_DEVICE constexpr auto size(T const& t)
 {
     return product(t);
 }
 
-// product_like: take product of tuple at the leaves of guide
-template <class Tuple, class TupleG>
-CATLASS_HOST_DEVICE constexpr auto product_like(Tuple const& tuple, TupleG const& guide)
+template <class T, class TG>
+CATLASS_HOST_DEVICE constexpr auto product_like(T const& t, TG const& g)
 {
-    return transform_leaf([](auto const&, auto const& t) { return product(t); }, guide, tuple);
+    return transform_leaf([](auto const&, auto const& x) { return product(x); }, g, t);
 }
+
+#define TLA_TUPLE_BINARY_OP(OP)                                                                                         \
+    template <class T0, class T1, TLA_REQUIRES(is_tuple_v<T0> || is_tuple_v<T1>)>                                       \
+    CATLASS_HOST_DEVICE constexpr auto operator OP(T0 const& a, T1 const& b)                                            \
+    {                                                                                                                   \
+        if constexpr (is_tuple_v<T0> && is_tuple_v<T1>) {                                                               \
+            TLA_ASSERT_SAME_TUPLE_SIZE(T0, T1);                                                                         \
+            return transform([](auto const& x, auto const& y) { return x OP y; }, a, b);                                \
+        } else if constexpr (is_tuple_v<T0> && is_integral_v<T1>) {                                                     \
+            return transform([&](auto const& x) { return x OP b; }, a);                                                 \
+        } else if constexpr (is_integral_v<T0> && is_tuple_v<T1>) {                                                     \
+            return transform([&](auto const& x) { return a OP x; }, b);                                                 \
+        } else {                                                                                                        \
+            static_assert(dependent_false<T0, T1>, "operator" #OP ": invalid operand types");                           \
+        }                                                                                                               \
+    }
+
+TLA_TUPLE_BINARY_OP(+);
+TLA_TUPLE_BINARY_OP(-);
+TLA_TUPLE_BINARY_OP(*);
+TLA_TUPLE_BINARY_OP(/);
+
+#undef TLA_TUPLE_BINARY_OP
 
 // minimum: element-wise min (recursive, supports broadcasting)
 template <class T0, class T1>
 CATLASS_HOST_DEVICE constexpr auto minimum(T0 const& t0, T1 const& t1)
 {
-    if constexpr (is_tuple<T0>::value && is_tuple<T1>::value) {
-        return transform([](auto const& a, auto const& b) { return minimum(a, b); }, t0, t1);
-    } else if constexpr (is_tuple<T0>::value) {
-        return transform([&](auto const& a) { return minimum(a, t1); }, t0);
-    } else if constexpr (is_tuple<T1>::value) {
-        return transform([&](auto const& b) { return minimum(t0, b); }, t1);
-    } else {
+    if constexpr (is_tuple_v<T0> && is_tuple_v<T1>) {
+        TLA_ASSERT_SAME_TUPLE_SIZE(T0, T1);
+        return transform([](auto const& x, auto const& y) { return minimum(x, y); }, t0, t1);
+    } else if constexpr (is_tuple_v<T0> && is_integral_v<T1>) {
+        return transform([&](auto const& x) { return minimum(x, t1); }, t0);
+    } else if constexpr (is_integral_v<T0> && is_tuple_v<T1>) {
+        return transform([&](auto const& x) { return minimum(t0, x); }, t1);
+    } else if constexpr (is_integral_v<T0> && is_integral_v<T1>) {
         return min(t0, t1);
+    } else {
+        static_assert(dependent_false<T0, T1>, "minimum: invalid operand types");
     }
 }
 
-// maximum: element-wise max (recursive, supports broadcasting)
 template <class T0, class T1>
 CATLASS_HOST_DEVICE constexpr auto maximum(T0 const& t0, T1 const& t1)
 {
-    if constexpr (is_tuple<T0>::value && is_tuple<T1>::value) {
-        return transform([](auto const& a, auto const& b) { return maximum(a, b); }, t0, t1);
-    } else if constexpr (is_tuple<T0>::value) {
-        return transform([&](auto const& a) { return maximum(a, t1); }, t0);
-    } else if constexpr (is_tuple<T1>::value) {
-        return transform([&](auto const& b) { return maximum(t0, b); }, t1);
-    } else {
+    if constexpr (is_tuple_v<T0> && is_tuple_v<T1>) {
+        TLA_ASSERT_SAME_TUPLE_SIZE(T0, T1);
+        return transform([](auto const& x, auto const& y) { return maximum(x, y); }, t0, t1);
+    } else if constexpr (is_tuple_v<T0> && is_integral_v<T1>) {
+        return transform([&](auto const& x) { return maximum(x, t1); }, t0);
+    } else if constexpr (is_integral_v<T0> && is_tuple_v<T1>) {
+        return transform([&](auto const& x) { return maximum(t0, x); }, t1);
+    } else if constexpr (is_integral_v<T0> && is_integral_v<T1>) {
         return max(t0, t1);
+    } else {
+        static_assert(dependent_false<T0, T1>, "maximum: invalid operand types");
     }
 }
 
 // clip_sub: element-wise clamping subtraction (recursive, supports broadcasting)
-template <class T0, class T1, TLA_REQUIRES(is_tuple<remove_cvref_t<T0>>::value || is_tuple<remove_cvref_t<T1>>::value)>
+template <class T0, class T1, TLA_REQUIRES(is_tuple_v<T0> || is_tuple_v<T1>)>
 CATLASS_HOST_DEVICE constexpr auto clip_sub(T0 const& t0, T1 const& t1)
 {
-    if constexpr (is_tuple<T0>::value && is_tuple<T1>::value) {
-        return transform([](auto const& a, auto const& b) { return clip_sub(a, b); }, t0, t1);
-    } else if constexpr (is_tuple<T0>::value) {
-        return transform([&](auto const& a) { return clip_sub(a, t1); }, t0);
+    if constexpr (is_tuple_v<T0> && is_tuple_v<T1>) {
+        TLA_ASSERT_SAME_TUPLE_SIZE(T0, T1);
+        return transform([](auto const& x, auto const& y) { return clip_sub(x, y); }, t0, t1);
+    } else if constexpr (is_tuple_v<T0> && is_integral_v<T1>) {
+        return transform([&](auto const& x) { return clip_sub(x, t1); }, t0);
+    } else if constexpr (is_integral_v<T0> && is_tuple_v<T1>) {
+        return transform([&](auto const& x) { return clip_sub(t0, x); }, t1);
     } else {
-        return transform([&](auto const& b) { return clip_sub(t0, b); }, t1);
+        static_assert(dependent_false<T0, T1>, "clip_sub: invalid operand types");
     }
 }
 
@@ -130,35 +135,39 @@ CATLASS_HOST_DEVICE constexpr auto clip_sub(T0 const& t0, T1 const& t1)
 // - both tuples: pad shorter with 1, element-wise
 // - tuple / scalar: cascading (divisor consumed across elements)
 // - scalar / tuple: product then divide
-template <class T0, class T1, TLA_REQUIRES(is_tuple<remove_cvref_t<T0>>::value || is_tuple<remove_cvref_t<T1>>::value)>
+template <class T0, class T1, TLA_REQUIRES(is_tuple_v<T0> || is_tuple_v<T1>)>
 CATLASS_HOST_DEVICE constexpr auto ceil_div(T0 const& a, T1 const& b)
 {
-    if constexpr (is_tuple<T0>::value && is_tuple<T1>::value) {
+    if constexpr (is_tuple_v<T0> && is_tuple_v<T1>) {
         static_assert(tuple_size<T0>::value >= tuple_size<T1>::value, "Mismatched ranks");
         constexpr int R = tuple_size<T0>::value;
         return transform([](auto const& x, auto const& y) { return ceil_div(x, y); }, a, append<R>(b, Int<1>{}));
-    } else if constexpr (is_tuple<T0>::value) {
+    } else if constexpr (is_tuple_v<T0> && is_integral_v<T1>) {
         auto result = fold([](auto const& init, auto const& ai) {
             return make_tuple(append(get<0>(init), ceil_div(ai, get<1>(init))), ceil_div(get<1>(init), ai));
         }, make_tuple(make_tuple(), b), a);
         return get<0>(result);
-    } else {
+    } else if constexpr (is_integral_v<T0> && is_tuple_v<T1>) {
         return ceil_div(a, product(b));
+    } else {
+        static_assert(dependent_false<T0, T1>, "ceil_div: invalid operand types");
     }
 }
 
 // round_up: element-wise round up to multiple (recursive, supports broadcasting)
-template <class T0, class T1, TLA_REQUIRES(is_tuple<remove_cvref_t<T0>>::value || is_tuple<remove_cvref_t<T1>>::value)>
+template <class T0, class T1, TLA_REQUIRES(is_tuple_v<T0> || is_tuple_v<T1>)>
 CATLASS_HOST_DEVICE constexpr auto round_up(T0 const& t0, T1 const& t1)
 {
-    if constexpr (is_tuple<T0>::value && is_tuple<T1>::value) {
+    if constexpr (is_tuple_v<T0> && is_tuple_v<T1>) {
         static_assert(tuple_size<T0>::value >= tuple_size<T1>::value, "Mismatched ranks");
         constexpr int R = tuple_size<T0>::value;
-        return transform([](auto const& a, auto const& b) { return round_up(a, b); }, t0, append<R>(t1, Int<1>{}));
-    } else if constexpr (is_tuple<T0>::value) {
-        return transform([&](auto const& a) { return round_up(a, t1); }, t0);
+        return transform([](auto const& x, auto const& y) { return round_up(x, y); }, t0, append<R>(t1, Int<1>{}));
+    } else if constexpr (is_tuple_v<T0> && is_integral_v<T1>) {
+        return transform([&](auto const& x) { return round_up(x, t1); }, t0);
+    } else if constexpr (is_integral_v<T0> && is_tuple_v<T1>) {
+        return transform([&](auto const& x) { return round_up(t0, x); }, t1);
     } else {
-        return transform([&](auto const& b) { return round_up(t0, b); }, t1);
+        static_assert(dependent_false<T0, T1>, "round_up: invalid operand types");
     }
 }
 
@@ -167,13 +176,15 @@ CATLASS_HOST_DEVICE constexpr auto round_up(T0 const& t0, T1 const& t1)
 template <class T0, class T1>
 CATLASS_HOST_DEVICE constexpr auto inner_product(T0 const& t0, T1 const& t1)
 {
-    if constexpr (is_tuple<T0>::value && is_tuple<T1>::value) {
+    if constexpr (is_tuple_v<T0> && is_tuple_v<T1>) {
         TLA_ASSERT_SAME_TUPLE_SIZE(T0, T1);
         return transform_apply(
-            [](auto const& a, auto const& b) { return inner_product(a, b); },
+            [](auto const& x, auto const& y) { return inner_product(x, y); },
             [](auto const&... v) { return (Int<0>{} + ... + v); }, t0, t1);
-    } else {
+    } else if constexpr (is_integral_v<T0> && is_integral_v<T1>) {
         return t0 * t1;
+    } else {
+        static_assert(dependent_false<T0, T1>, "inner_product: invalid operand types");
     }
 }
 
@@ -181,11 +192,14 @@ CATLASS_HOST_DEVICE constexpr auto inner_product(T0 const& t0, T1 const& t1)
 template <class T0, class T1>
 CATLASS_HOST_DEVICE constexpr auto evenly_divides(T0 const& t0, T1 const& t1)
 {
-    if constexpr (is_tuple<T0>::value) {
+    if constexpr (is_tuple_v<T0> && is_tuple_v<T1>) {
+        TLA_ASSERT_SAME_TUPLE_SIZE(T0, T1);
         return transform_apply(
-            [](auto const& a, auto const& b) { return (a % b) == 0; }, [](auto... bs) { return (bs && ...); }, t0, t1);
-    } else {
+            [](auto const& x, auto const& y) { return (x % y) == 0; }, [](auto... bs) { return (bs && ...); }, t0, t1);
+    } else if constexpr (is_integral_v<T0> && is_integral_v<T1>) {
         return (t0 % t1) == 0;
+    } else {
+        static_assert(dependent_false<T0, T1>, "evenly_divides: invalid operand types");
     }
 }
 
