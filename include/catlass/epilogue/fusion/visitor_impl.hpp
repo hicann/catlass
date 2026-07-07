@@ -16,7 +16,6 @@
 #include "catlass/epilogue/fusion/visitor_impl_base.hpp"
 #include "catlass/layout/layout.hpp"
 #include "tla/tuple/tuple_math.hpp"
-#include "tla/tuple/tuple_concepts.hpp"
 
 namespace Catlass::Epilogue::Fusion {
 
@@ -47,11 +46,11 @@ struct VisitorImpl : VisitorImplBase<Ops...> {
         Callbacks(CallbacksTuple&& cbs) : callbacks_tuple(static_cast<CallbacksTuple&&>(cbs)) {}
 
         CATLASS_DEVICE void begin_epilogue() {
-            tla::for_each(callbacks_tuple, [](auto& cb) { cb.begin_epilogue(); });
+            tla::for_each([](auto& cb) { cb.begin_epilogue(); }, callbacks_tuple);
         }
 
         CATLASS_DEVICE void end_epilogue() {
-            tla::for_each(callbacks_tuple, [](auto& cb) { cb.end_epilogue(); });
+            tla::for_each([](auto& cb) { cb.end_epilogue(); }, callbacks_tuple);
         }
     };
 

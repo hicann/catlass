@@ -141,10 +141,16 @@ CATLASS_HOST_DEVICE constexpr auto crd2idx(Coord const& coord, Shape const& shap
             return _0{};
         }
         auto zipped = transform([](auto const& s, auto const& d) { return make_tuple(s, d); }, shape, stride);
-        return get<1>(fold(zipped, make_tuple(coord, _0{}), [](auto const& acc, auto const& sd) {
-            auto prod = product(get<0>(sd));
-            return make_tuple(get<0>(acc) / prod, get<1>(acc) + crd2idx(get<0>(acc) % prod, get<0>(sd), get<1>(sd)));
-        }));
+        constexpr int N = tuple_size<Shape>::value;
+        const auto [remaining, result] =
+            fold([](auto const& acc, auto const& sd) {
+                const auto [rem, res] = acc;
+                const auto [s, d] = sd;
+                auto prod = product(s);
+                return make_tuple(rem / prod, res + crd2idx(rem % prod, s, d));
+            }, make_tuple(coord, _0{}), take<0, N - 1>(zipped));
+        const auto [s, d] = get<N - 1>(zipped);
+        return result + crd2idx(remaining, s, d);
     } else if constexpr (is_integral_v<Coord> && is_integral_v<Shape> && is_integral_v<Stride>) {
         return coord * stride;
     } else {
@@ -168,7 +174,7 @@ CATLASS_HOST_DEVICE constexpr auto crd2idx(Coord const& coord, Shape const& shap
         auto flat_shape = flatten_to_tuple(product_like(shape, coord));
         auto zipped = transform([](auto const& c, auto const& s) { return make_tuple(c, s); }, flat_coord, flat_shape);
         return fold_reverse(
-            zipped, _0{}, [](auto const& acc, auto const& cs) { return get<0>(cs) + get<1>(cs) * acc; });
+            [](auto const& acc, auto const& cs) { return get<0>(cs) + get<1>(cs) * acc; }, _0{}, zipped);
     } else if constexpr (is_integral_v<Coord> && (is_tuple_v<Shape> || is_integral_v<Shape>)) {
         return coord;
     } else {

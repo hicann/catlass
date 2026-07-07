@@ -54,16 +54,12 @@ using MakeZeroTuple = typename MakeZeroTupleImpl<N, tla::make_index_sequence<N>>
 
 } // end namespace detail
 
-// Add: element-wise addition (recursive)
-template <class IntTupleA, class IntTupleB>
-CATLASS_HOST_DEVICE constexpr auto Add(IntTupleA const& a, IntTupleB const& b)
+// operator+: element-wise addition for tuples (recursive via transform)
+template <class T0, class T1, TLA_REQUIRES(is_tuple<T0>::value&& is_tuple<T1>::value)>
+CATLASS_HOST_DEVICE constexpr auto operator+(T0 const& a, T1 const& b)
 {
-    if constexpr (is_tuple<IntTupleA>::value && is_tuple<IntTupleB>::value) {
-        TLA_ASSERT_SAME_TUPLE_SIZE(IntTupleA, IntTupleB);
-        return transform([](auto const& x, auto const& y) { return Add(x, y); }, a, b);
-    } else {
-        return a + b;
-    }
+    TLA_ASSERT_SAME_TUPLE_SIZE(T0, T1);
+    return transform(plus{}, a, b);
 }
 
 // product: compute the product of all elements (recursive)
@@ -142,9 +138,9 @@ CATLASS_HOST_DEVICE constexpr auto ceil_div(T0 const& a, T1 const& b)
         constexpr int R = tuple_size<T0>::value;
         return transform([](auto const& x, auto const& y) { return ceil_div(x, y); }, a, append<R>(b, Int<1>{}));
     } else if constexpr (is_tuple<T0>::value) {
-        auto result = fold(a, make_tuple(make_tuple(), b), [](auto const& init, auto const& ai) {
+        auto result = fold([](auto const& init, auto const& ai) {
             return make_tuple(append(get<0>(init), ceil_div(ai, get<1>(init))), ceil_div(get<1>(init), ai));
-        });
+        }, make_tuple(make_tuple(), b), a);
         return get<0>(result);
     } else {
         return ceil_div(a, product(b));
@@ -178,6 +174,18 @@ CATLASS_HOST_DEVICE constexpr auto inner_product(T0 const& t0, T1 const& t1)
             [](auto const&... v) { return (Int<0>{} + ... + v); }, t0, t1);
     } else {
         return t0 * t1;
+    }
+}
+
+// evenly_divides: check if t0 is evenly divisible by t1 (element-wise)
+template <class T0, class T1>
+CATLASS_HOST_DEVICE constexpr auto evenly_divides(T0 const& t0, T1 const& t1)
+{
+    if constexpr (is_tuple<T0>::value) {
+        return transform_apply(
+            [](auto const& a, auto const& b) { return (a % b) == 0; }, [](auto... bs) { return (bs && ...); }, t0, t1);
+    } else {
+        return (t0 % t1) == 0;
     }
 }
 

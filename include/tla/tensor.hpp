@@ -16,7 +16,6 @@
 #include "tla/integral/integral_constant.hpp"
 #include "tla/integral/integral_math.hpp"
 #include "tla/tuple/tuple_math.hpp"
-#include "tla/tuple/tuple_concepts.hpp"
 #include "tla/tuple/tuple_algorithms.hpp"
 
 namespace tla {
@@ -136,7 +135,7 @@ CATLASS_HOST_DEVICE constexpr auto slice_and_offset(
 
     // Compute base offset using zeros for underscores
     auto coord0 = detail::replace_underscore_with_zero(coord_arg);
-    auto full0 = Add(base_coord, coord0);
+    auto full0 = base_coord + coord0;
     auto offset = (int64_t)layout(full0);
 
     // Determine output dims (underscored dims) and build projected layout.
@@ -173,7 +172,7 @@ CATLASS_DEVICE constexpr auto GetTileImpl(TensorT const& tensor, CoordT const& c
     static_assert(is_tuple<ShapeT>::value && depth_v<ShapeT> == 1 && rank_v<ShapeT> == R, "Shape rank mismatch.");
 
     auto layoutNew = GetTileLayout(tensor.layout(), shape, coord);
-    auto coordNew = Add(tensor.coord(), coord);
+    auto coordNew = tensor.coord() + coord;
     return MakeTensor(tensor.data(), layoutNew, coordNew, Catlass::Arch::PositionType<TensorT::position>{});
 }
 
@@ -188,7 +187,7 @@ CATLASS_DEVICE constexpr auto TileViewImpl(
 
     auto elementOffset = HadamardU32(tileCoord, tileShape, tuple_seq<TileCoord>{});
     auto layoutNew = GetTileLayout(tensor.layout(), tileShape, elementOffset);
-    auto coordNew = Add(tensor.coord(), elementOffset);
+    auto coordNew = tensor.coord() + elementOffset;
     return MakeTensor(tensor.data(), layoutNew, coordNew, Catlass::Arch::PositionType<TensorT::position>{});
 }
 
@@ -289,13 +288,13 @@ struct Tensor {
                     data_new, layout_proj, CoordZ{});
             } else {
                 // No underscore: point view at coord() + coord_arg
-                auto full = Add(coord(), coord_arg);
+                auto full = coord() + coord_arg;
                 return data()[layout()(full)];
             }
         } else {
             // Scalar coordinate convenience (rank-1): treat it as a 1D coord tuple.
             static_assert(Layout::rank == 1, "Tensor::operator()(scalar) is only supported for rank-1 tensors.");
-            auto full = Add(coord(), MakeCoord(coord_arg));
+            auto full = coord() + MakeCoord(coord_arg);
             return data()[layout()(full)];
         }
     }

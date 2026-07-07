@@ -20,7 +20,6 @@
 #include "tla/tuple/tuple.hpp"
 #include "tla/tuple/tuple_algorithms.hpp"
 #include "tla/tuple/tuple_math.hpp"
-#include "tla/tuple/tuple_concepts.hpp"
 #include "tla/utils/functional.hpp"
 #include "tla/stride.hpp"
 #include "catlass/layout/layout.hpp"
