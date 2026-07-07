@@ -1,5 +1,6 @@
 #include "PassesCommon.h"
 #include "PassesInternal.h"
+#include "bishengir/Dialect/HIVM/IR/HIVM.h"
 #include "bishengir/Dialect/HIVMAVE/IR/HIVMAVE.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -1145,6 +1146,33 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     return success();
   }
 
+  if (auto arangeOp = dyn_cast<::tla::ArangeOp>(op)) {
+    Value start = lookupOrCloneScalarValue(b, arangeOp.getStart(), valueMap);
+    if (!start)
+      return failure();
+    if (isa<FloatType>(ctx.elementType))
+      return arangeOp.emitError("tla.arange does not support floating-point element types"),
+             failure();
+    if (start.getType() != ctx.elementType)
+      return arangeOp.emitError("tla.arange start type ")
+                 << start.getType() << " does not match vector element type "
+                 << ctx.elementType,
+             failure();
+    auto vciType = hivmave::VCIType::INCREASE;
+    if (arangeOp.getOrder() == "decrease")
+      vciType = hivmave::VCIType::DECREASE;
+    else if (arangeOp.getOrder() != "increase")
+      return arangeOp.emitError("unsupported tla.arange order: ")
+                 << arangeOp.getOrder(),
+             failure();
+    valueMap[arangeOp.getResult()] =
+        b.create<hivmave::VFVCIOp>(
+             loc, ctx.vecType, start,
+             hivmave::VCITypeAttr::get(b.getContext(), vciType))
+            .getRes();
+    return success();
+  }
+
   if (auto info = getVectorBinaryInfo(&op)) {
     if (op.getNumResults() != 1)
       return failure();
@@ -1641,6 +1669,7 @@ public:
     // the control flow structure.
     SmallVector<::tla::LoadOp, 4> loads;
     SmallVector<::tla::FullOp, 4> fulls;
+    SmallVector<::tla::ArangeOp, 4> aranges;
     SmallVector<Operation *, 4> computeOps;
     SmallVector<::tla::StoreOp, 2> stores;
     vecFuncOp->walk([&](Operation *op) {
@@ -1648,6 +1677,8 @@ public:
         loads.push_back(load);
       } else if (auto full = dyn_cast<::tla::FullOp>(op)) {
         fulls.push_back(full);
+      } else if (auto arange = dyn_cast<::tla::ArangeOp>(op)) {
+        aranges.push_back(arange);
       } else if (auto store = dyn_cast<::tla::StoreOp>(op)) {
         stores.push_back(store);
       } else if (isVectorComputeOp(op)) {
@@ -1666,6 +1697,8 @@ public:
       producedValues.insert(load.getResult());
     for (::tla::FullOp full : fulls)
       producedValues.insert(full.getResult());
+    for (::tla::ArangeOp arange : aranges)
+      producedValues.insert(arange.getResult());
     for (Operation *computeOp : computeOps) {
       if (computeOp->getNumResults() != 1)
         return rewriter.notifyMatchFailure(vecFuncOp, "unexpected tla compute op shape");

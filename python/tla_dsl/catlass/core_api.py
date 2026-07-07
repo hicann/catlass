@@ -613,6 +613,22 @@ _FULL_SUPPORTED_DTYPES = frozenset(
     ("i1", "i8", "i16", "i32", "i64", "bf16", "f16", "f32")
 )
 
+_ARANGE_SUPPORTED_DTYPES = frozenset(("i8", "i16", "i32", "i64"))
+_ARANGE_ORDERS = frozenset(("increase", "decrease"))
+
+# Width of one Ascend vector register tile in bytes. Must stay in sync with
+# ConvertTlaToVectorPass::kVectorBytes in csrc/mlir/lib/Passes/ConvertTlaToVectorPass.cpp.
+_VECTOR_REGISTER_BYTES = 256
+
+
+def _vector_lane_count(element_bytes: int) -> int:
+    """Return lane count for one vector register tile at the given element width."""
+    if element_bytes <= 0:
+        raise TlaCoreAPIError(
+            f"element size must be positive for vector lane count, got {element_bytes}"
+        )
+    return _VECTOR_REGISTER_BYTES // element_bytes
+
 
 def _as_index_value(value: Any) -> mlir_ir.Value:
     resolved = _resolve_bound_value(value)
@@ -3163,20 +3179,7 @@ def full(
             f"unsupported vector element dtype {dtype.dtype}; supported dtypes are "
             f"{', '.join(sorted(_FULL_SUPPORTED_DTYPES))}",
         )
-    element_bytes = dtype_size_bytes(dtype_token)
-    lanes = 256 // element_bytes
-    desc = TlaTensorTypeDescriptor(
-        layout=TlaLayoutDescriptor(
-            shape=TlaIndexTreeType("shape", lanes),
-            stride=TlaIndexTreeType("stride", 1),
-            origin_shape=TlaIndexTreeType("shape", lanes),
-            layout_tag="row_major",
-        ),
-        coord=0,
-        element_type=dtype_token,
-        addrspace="ub",
-        ptr_alignment=_builtins.max(1, dtype_size_bytes(dtype_token)),
-    )
+    desc = _vector_tile_descriptor(dtype, dtype_token=dtype_token)
     scalar_value = int(resolved) if isinstance(resolved, bool) else resolved
     context = loc.context if loc is not None else mlir_ir.Context.current
     scalar = _scalar_constant_for_element_type(
@@ -3186,6 +3189,114 @@ def full(
         loc=loc,
     )
     result = _tla_ops_gen.full(_coerce_type(desc), scalar, loc=loc)
+    _register_tla_tensor_type(result, desc)
+    _register_tla_tensor_metadata(result, desc.metadata())
+    return VectorSSA(result)
+
+
+def _vector_tile_descriptor(dtype: type[Numeric], *, dtype_token: str) -> TlaTensorTypeDescriptor:
+    element_bytes = dtype_size_bytes(dtype_token)
+    lanes = _vector_lane_count(element_bytes)
+    return TlaTensorTypeDescriptor(
+        layout=TlaLayoutDescriptor(
+            shape=TlaIndexTreeType("shape", lanes),
+            stride=TlaIndexTreeType("stride", 1),
+            origin_shape=TlaIndexTreeType("shape", lanes),
+            layout_tag="row_major",
+        ),
+        coord=0,
+        element_type=dtype_token,
+        addrspace="ub",
+        ptr_alignment=_builtins.max(1, element_bytes),
+    )
+
+
+@dsl_user_op
+def arange(
+    start: Any = 0,
+    *,
+    order: str = "increase",
+    dtype: Any,
+    loc: mlir_ir.Location | None = None,
+) -> VectorSSA:
+    """Create a 1-D vector SSA filled with ``start + lane`` (monotonic increase).
+
+    Maps directly to CANN ``Reg::Arange`` / AVE ``vci`` with ``INCREASE``;
+    adjacent lanes are always spaced by 1 (no ``step`` parameter).
+    """
+    op_name = "arange"
+    order = str(order).lower()
+    if order not in _ARANGE_ORDERS:
+        _op_error(
+            op_name,
+            f"order must be one of {sorted(_ARANGE_ORDERS)}; got {order!r}",
+        )
+    if order == "decrease":
+        _op_error(
+            op_name,
+            "order='decrease' is not supported for tla.arange; only 'increase' is available",
+        )
+    _require_dtype(op_name, "dtype", dtype, 2)
+    if not (
+        isinstance(dtype, type)
+        and issubclass(dtype, Numeric)
+        and getattr(dtype, "dtype", "")
+    ):
+        _op_error(
+            op_name,
+            f"invalid argument 'dtype' (position 2): expected concrete Numeric "
+            f"(e.g. tla.Float32), got {_type_name(dtype)}",
+        )
+    dtype_token = str(dtype.dtype).strip().lower()
+    if dtype_token not in _ARANGE_SUPPORTED_DTYPES:
+        _op_error(
+            op_name,
+            f"unsupported vector element dtype {dtype.dtype}; supported dtypes are "
+            f"{', '.join(sorted(_ARANGE_SUPPORTED_DTYPES))}",
+        )
+    _require_frontend_state(op_name)
+    _runtime._require_enclosing_region(op_name, "vec.func")
+    desc = _vector_tile_descriptor(dtype, dtype_token=dtype_token)
+    context = loc.context if loc is not None else mlir_ir.Context.current
+    element_type = desc.element_mlir_type(context)
+    const = _const_int_value(start)
+    if const is not None:
+        start_value = _scalar_constant_for_element_type(
+            op_name, const, element_type, loc=loc
+        )
+    else:
+        resolved = _resolve_bound_value(start)
+        if isinstance(resolved, mlir_ir.Value):
+            if resolved.type == element_type:
+                start_value = resolved
+            elif isinstance(resolved.type, mlir_ir.IndexType):
+                start_value = mlir_ir.Operation.create(
+                    "arith.index_cast",
+                    operands=[resolved],
+                    results=[element_type],
+                    loc=loc,
+                ).results[0]
+            else:
+                _op_error(
+                    op_name,
+                    "start must be an integer literal or index SSA value",
+                )
+        elif isinstance(resolved, _runtime._IndexExpr):
+            index_value = _runtime._coerce_index_value(resolved)
+            start_value = mlir_ir.Operation.create(
+                "arith.index_cast",
+                operands=[index_value],
+                results=[element_type],
+                loc=loc,
+            ).results[0]
+        else:
+            _op_error(
+                op_name,
+                "start must be an integer literal or index SSA value",
+            )
+    result = _tla_ops_gen.arange(
+        _coerce_type(desc), start_value, order=order, loc=loc
+    )
     _register_tla_tensor_type(result, desc)
     _register_tla_tensor_metadata(result, desc.metadata())
     return VectorSSA(result)
@@ -4080,6 +4191,7 @@ __all__ = [
     "vector",
     "mmad",
     "full",
+    "arange",
     "add",
     "sub",
     "mul",

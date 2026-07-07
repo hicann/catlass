@@ -1,0 +1,48 @@
+// RUN: sed -n '/^\/\/ BEGIN_EXP_OUTSIDE$/,/^\/\/ END_EXP_OUTSIDE$/p' %s | sed '1d;$d;s|^// ||' > %t.exp_outside.mlir && not %tla_compile %t.exp_outside.mlir -o %t 2>&1 | %filecheck %s --check-prefix=EXP_OUTSIDE
+// RUN: sed -n '/^\/\/ BEGIN_REDUCE_OUTSIDE$/,/^\/\/ END_REDUCE_OUTSIDE$/p' %s | sed '1d;$d;s|^// ||' > %t.reduce_outside.mlir && not %tla_compile %t.reduce_outside.mlir -o %t 2>&1 | %filecheck %s --check-prefix=REDUCE_OUTSIDE
+// RUN: sed -n '/^\/\/ BEGIN_ARANGE_OUTSIDE$/,/^\/\/ END_ARANGE_OUTSIDE$/p' %s | sed '1d;$d;s|^// ||' > %t.arange_outside.mlir && not %tla_compile %t.arange_outside.mlir -o %t 2>&1 | %filecheck %s --check-prefix=ARANGE_OUTSIDE
+
+// EXP_OUTSIDE: error:
+// EXP_OUTSIDE-SAME: 'tla.exp' op must be nested inside a tla.vec.func region
+// REDUCE_OUTSIDE: error:
+// REDUCE_OUTSIDE-SAME: 'tla.reduce' op must be nested inside a tla.vec.func region
+// ARANGE_OUTSIDE: error:
+// ARANGE_OUTSIDE-SAME: 'tla.arange' op must be nested inside a tla.vec.func region
+
+// BEGIN_EXP_OUTSIDE
+// !vec = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
+// module {
+//   tla.func @vector_exp_outside_vec_func(%arg0: !vec) {
+//     "tla.vector"() ({
+//       %out = tla.exp %arg0 : !vec -> !vec
+//     }) : () -> ()
+//     tla.return
+//   }
+// }
+// END_EXP_OUTSIDE
+
+// BEGIN_REDUCE_OUTSIDE
+// !vec = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
+// !reduced = !tla.tensor<!tla.layout<!tla.shape<1>, !tla.stride<1>, !tla.shape<1>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
+// module {
+//   tla.func @vector_reduce_outside_vec_func(%arg0: !vec) {
+//     "tla.vector"() ({
+//       %out = tla.reduce %arg0 {kind = "add"} : !vec -> !reduced
+//     }) : () -> ()
+//     tla.return
+//   }
+// }
+// END_REDUCE_OUTSIDE
+
+// BEGIN_ARANGE_OUTSIDE
+// !vec = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, row_major>, !tla.coord<0>, !tla.ptr<i32, ub, 4>>
+// module {
+//   tla.func @vector_arange_outside_vec_func() {
+//     "tla.vector"() ({
+//       %start = arith.constant 0 : i32
+//       %out = "tla.arange"(%start) {order = "increase"} : (i32) -> !vec
+//     }) : () -> ()
+//     tla.return
+//   }
+// }
+// END_ARANGE_OUTSIDE

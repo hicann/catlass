@@ -382,6 +382,24 @@ def Tla_FullOp : Tla_Op<"full", [Pure]> {
   let hasVerifier = 1;
 }
 
+def Tla_ArangeOp : Tla_Op<"arange", [Pure]> {
+  let summary = "Create monotonic lane indices in a vector register";
+  let description = [{
+    Fill the vector helper register with a monotonic sequence starting at
+    ``start``. With ``order = increase`` (default) lanes hold ``start``,
+    ``start + 1``, ...; with ``order = decrease`` lanes hold ``start``,
+    ``start - 1``, .... Lowers to AVE ``vci`` with ``INCREASE`` / ``DECREASE``.
+    The Python API currently accepts only ``order = increase``.
+  }];
+  let arguments = (ins AnyTypeOf<[I8, I16, I32, I64]>:$start,
+                       StrAttr:$order);
+  let results = (outs Tla_TensorType:$result);
+  let assemblyFormat = [{
+    $start attr-dict `:` type($start) `->` type($result)
+  }];
+  let hasVerifier = 1;
+}
+
 def Tla_CopyL0C2DstParamsOp : Tla_Op<"CopyL0C2DstParams", [Pure]> {
   let summary = "CopyL0C2DstParams op";
   let arguments = (ins 
@@ -893,6 +911,7 @@ def Tla_ReduceOp : Tla_Op<"reduce", [Pure]> {
     $operand (`mask` $mask^)? attr-dict `:`
     type($operand) (`mask` qualified(type($mask))^)? `->` type($result)
   }];
+  let hasVerifier = 1;
 }
 
 class Tla_VectorUnaryOp<string mnemonic, string opSummary, string opDescription>
@@ -911,6 +930,7 @@ class Tla_VectorUnaryOp<string mnemonic, string opSummary, string opDescription>
     type($operand) (`mask` qualified(type($mask))^)?
     `->` type($result)
   }];
+  let hasVerifier = 1;
 }
 
 def Tla_ExpOp : Tla_VectorUnaryOp<"exp",

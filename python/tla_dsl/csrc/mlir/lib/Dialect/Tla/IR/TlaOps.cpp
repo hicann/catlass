@@ -107,8 +107,24 @@ TLA_VERIFY_IN_VEC_FUNC(FullOp)
 TLA_VERIFY_IN_VEC_FUNC(WhereOp)
 TLA_VERIFY_IN_VEC_FUNC(CreateMaskOp)
 TLA_VERIFY_IN_VEC_FUNC(UpdateMaskOp)
+TLA_VERIFY_IN_VEC_FUNC(ExpOp)
+TLA_VERIFY_IN_VEC_FUNC(LogOp)
+TLA_VERIFY_IN_VEC_FUNC(SqrtOp)
+TLA_VERIFY_IN_VEC_FUNC(AbsOp)
+TLA_VERIFY_IN_VEC_FUNC(NegOp)
+TLA_VERIFY_IN_VEC_FUNC(ReduceOp)
 
 #undef TLA_VERIFY_IN_VEC_FUNC
+
+mlir::LogicalResult ArangeOp::verify() {
+  if (!hasEnclosingRegion<VecFuncOp>(getOperation()))
+    return emitOpError("must be nested inside a tla.vec.func region");
+  auto order = getOrderAttr().getValue();
+  if (order != "increase" && order != "decrease")
+    return emitOpError("unsupported arange order '")
+           << order << "'; expected 'increase' or 'decrease'";
+  return mlir::success();
+}
 
 // Synchronization/mutex/barrier ops must live inside a tla.cube or tla.vector
 // region (either core-kind region; not the func-level scope).

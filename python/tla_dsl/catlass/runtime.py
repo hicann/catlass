@@ -633,6 +633,7 @@ _CORE_API_EXPORTS = (
     "vector",
     "mmad",
     "full",
+    "arange",
     "add",
     "sub",
     "mul",

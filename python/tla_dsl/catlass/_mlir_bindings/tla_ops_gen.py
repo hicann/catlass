@@ -169,6 +169,48 @@ def alloc_ptr(ptr, size_bytes, *, loc=None, ip=None) -> _ods_ir.Value:
   return _get_op_result_or_op_results(AllocPtrOp(ptr=ptr, size_bytes=size_bytes, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
+class ArangeOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.arange"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, start, order, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(start))
+    _ods_context = _ods_get_default_loc_context(loc)
+    attributes["order"] = (order if (
+    isinstance(order, _ods_ir.Attribute) or
+    not _ods_ir.AttrBuilder.contains('StrAttr')) else
+      _ods_ir.AttrBuilder.get('StrAttr')(order, context=_ods_context))
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def start(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def order(self):
+    return self.operation.attributes["order"]
+
+  @order.setter
+  def order(self, value):
+    if value is None:
+      raise ValueError("'None' not allowed as value for mandatory attributes")
+    self.operation.attributes["order"] = value
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def arange(result, start, order, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(ArangeOp(result=result, start=start, order=order, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
 class BlockDimOp(_ods_ir.OpView):
   OPERATION_NAME = "tla.arch.block_dim"
 
