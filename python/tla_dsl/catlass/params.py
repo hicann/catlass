@@ -65,3 +65,84 @@ class CopyL0C2DstParams(CopyParams):
                 raise TlaLoweringError(
                     f"{cls_name}.quant_tensor must be a tensor, got {type(self.quant_tensor).__name__}"
                 )
+
+
+# ---------------------------------------------------------------------------
+# CastParams: the four knobs of a tla.cast (VectorSSA.to). The enum member
+# *values* are the MLIR-asm keywords; the integer codes match the
+# I32EnumAttrCase values in Tla.td and the order in the tla.cast trait array.
+# ---------------------------------------------------------------------------
+
+
+class RegSlot(enum.Enum):
+    """Packed-register position the narrow cast result lands in.
+
+    For a 2x-width cast (e.g. f32->f16, i32<->i16) this maps to the AVE even/odd
+    ``part`` (only ZERO=part_even / ONE=part_odd are valid there). For a 4x-width
+    cast (i32<->i8) it maps to the AVE pack pattern ``pp`` and all four values
+    select the pack quarter: ZERO=pp0, ONE=pp1, TWO=pp2, THREE=pp3.
+    """
+
+    ZERO = "zero"    # part_even / pp0
+    ONE = "one"      # part_odd  / pp1
+    TWO = "two"      # pp2 (4x casts only)
+    THREE = "three"  # pp3 (4x casts only)
+
+    def __str__(self) -> str:
+        return self.value
+
+
+class SatMode(enum.Enum):
+    """Overflow behaviour of the cast (AVE ``sat`` BoolAttr)."""
+
+    UNKNOWN = "unknown"
+    SAT = "sat"
+    NOSAT = "nosat"
+
+    def __str__(self) -> str:
+        return self.value
+
+
+class RoundMode(enum.Enum):
+    """Rounding applied on precision loss (HIVM ``round_mode``)."""
+
+    CAST_ROUND = "cast_round"   # round to nearest, tie away from zero
+    CAST_FLOOR = "cast_floor"   # round toward -inf
+    CAST_CEIL = "cast_ceil"     # round toward +inf
+    CAST_TRUNC = "cast_trunc"   # round toward zero
+
+    def __str__(self) -> str:
+        return self.value
+
+
+_REG_SLOT_CODE = {RegSlot.ZERO: 0, RegSlot.ONE: 1, RegSlot.TWO: 2, RegSlot.THREE: 3}
+_SAT_MODE_CODE = {SatMode.UNKNOWN: 0, SatMode.SAT: 1, SatMode.NOSAT: 2}
+_ROUND_MODE_CODE = {
+    RoundMode.CAST_ROUND: 0,
+    RoundMode.CAST_FLOOR: 1,
+    RoundMode.CAST_CEIL: 2,
+    RoundMode.CAST_TRUNC: 3,
+}
+
+
+@dataclass(frozen=True)
+class CastParams:
+    """The three knobs of a ``tla.cast`` (``VectorSSA.to``).
+
+    Args:
+        reg_slot: destination packed-register position (:class:`RegSlot`).
+        sat_mode: overflow behaviour (:class:`SatMode`).
+        round_mode: rounding on precision loss (:class:`RoundMode`).
+    """
+
+    reg_slot: RegSlot = RegSlot.ZERO
+    sat_mode: SatMode = SatMode.NOSAT
+    round_mode: RoundMode = RoundMode.CAST_ROUND
+
+    def codes(self) -> list[int]:
+        """The three enum codes for the tla.cast DenseI32ArrayAttr, in order."""
+        return [
+            _REG_SLOT_CODE[self.reg_slot],
+            _SAT_MODE_CODE[self.sat_mode],
+            _ROUND_MODE_CODE[self.round_mode],
+        ]

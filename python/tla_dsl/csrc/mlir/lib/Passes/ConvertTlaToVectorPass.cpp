@@ -895,7 +895,7 @@ static hivmave::MaskWidth maskWidthForElement(Type elementType) {
 static bool isVectorComputeOp(Operation *op) {
   return getAnyVectorOperationInfo(op).has_value() ||
          isa_and_nonnull<::tla::WhereOp>(op) || isa_and_nonnull<::tla::ReduceOp>(op) ||
-         isa_and_nonnull<::tla::GatherOp>(op);
+         isa_and_nonnull<::tla::GatherOp>(op) || isa_and_nonnull<::tla::CastOp>(op);
 }
 
 // Build the AVE vector op for a tla binary op. The mask predicates active lanes.
@@ -926,6 +926,135 @@ static Value createVectorBinaryResult(OpBuilder &b, Location loc, VectorBinaryKi
     return b.create<hivmave::VFMinOp>(loc, vecType, lhs, rhs, mask, Value()).getResult();
   }
   return nullptr;
+}
+
+// An all-lanes-active predicate for a vector of the given width.
+static Value allTrueMaskFor(OpBuilder &b, Location loc, VectorType vecType) {
+  auto maskType = VectorType::get(vecType.getShape(), b.getI1Type());
+  return createAvePgeMask(b, loc, maskType, hivmave::PgePattern::ALL);
+}
+
+// Map the tla.cast round mode onto the HIVM round_mode attribute.
+static hivm::RoundModeAttr mapCastRoundMode(OpBuilder &b, ::RoundMode mode) {
+  hivm::RoundMode hv = hivm::RoundMode::ROUND;
+  switch (mode) {
+  case ::RoundMode::cast_round: hv = hivm::RoundMode::ROUND; break;
+  case ::RoundMode::cast_floor: hv = hivm::RoundMode::FLOOR; break;
+  case ::RoundMode::cast_ceil: hv = hivm::RoundMode::CEIL; break;
+  case ::RoundMode::cast_trunc: hv = hivm::RoundMode::TRUNC; break;
+  }
+  return hivm::RoundModeAttr::get(b.getContext(), hv);
+}
+
+// Map the tla.cast register layout onto the AVE VCVT part (even/odd) attribute.
+static hivmave::VCVT_PartTypeAttr mapCastPart(OpBuilder &b, ::RegSlot layout) {
+  auto part = layout == ::RegSlot::one ? hivmave::VCVT_PartType::PART_ODD
+                                              : hivmave::VCVT_PartType::PART_EVEN;
+  return hivmave::VCVT_PartTypeAttr::get(b.getContext(), part);
+}
+
+// Map the tla.cast register layout onto the AVE pack pattern (pp0..pp3) used by
+// 4x-width int casts (i32<->i8). reg_slot zero/one/two/three -> pp0/pp1/pp2/pp3.
+static hivmave::VCVT_PPTypeAttr mapCastPP(OpBuilder &b, ::RegSlot layout) {
+  hivmave::VCVT_PPType pp;
+  switch (layout) {
+  case ::RegSlot::one: pp = hivmave::VCVT_PPType::PP1; break;
+  case ::RegSlot::two: pp = hivmave::VCVT_PPType::PP2; break;
+  case ::RegSlot::three: pp = hivmave::VCVT_PPType::PP3; break;
+  case ::RegSlot::zero:
+  default: pp = hivmave::VCVT_PPType::PP0; break;
+  }
+  return hivmave::VCVT_PPTypeAttr::get(b.getContext(), pp);
+}
+
+// Element types the tla.cast lowering can emit AVE ops for: signed/signless
+// integers i8/i16/i32/i64 and floats f16/bf16/f32. Unsigned integers, i1 (bool)
+// and f64 have no AVE cast path and are rejected (the front-end rejects them too;
+// this guards hand-written / non-front-end IR).
+static bool isSupportedCastElementType(Type t) {
+  if (auto f = dyn_cast<FloatType>(t))
+    return f.getWidth() == 16 || f.getWidth() == 32;  // f16/bf16/f32, not f64
+  if (auto i = dyn_cast<IntegerType>(t)) {
+    if (i.isUnsigned() || i.getWidth() == 1)  // unsigned / bool
+      return false;
+    unsigned w = i.getWidth();
+    return w == 8 || w == 16 || w == 32 || w == 64;
+  }
+  return false;
+}
+
+// Build the AVE cast op for a tla.cast, dispatching by (src, dst) element kind.
+// The trait supplies rounding, saturation and register layout; the mask (source
+// width) predicates active lanes.
+static FailureOr<Value> createVectorCastResult(OpBuilder &b, Location loc,
+                                               VectorType srcVecType,
+                                               VectorType dstVecType,
+                                               ArrayRef<int32_t> trait, Value src,
+                                               Value mask) {
+  // trait codes: [0] reg_slot, [1] sat_mode, [2] round_mode.
+  Type s = srcVecType.getElementType();
+  Type d = dstVecType.getElementType();
+  auto rnd = mapCastRoundMode(b, static_cast<::RoundMode>(trait[2]));
+  BoolAttr sat = b.getBoolAttr(static_cast<::SatMode>(trait[1]) == ::SatMode::sat);
+  auto part = mapCastPart(b, static_cast<::RegSlot>(trait[0]));
+
+  bool sFloat = isa<FloatType>(s);
+  bool dFloat = isa<FloatType>(d);
+  unsigned sb = s.getIntOrFloatBitWidth();
+  unsigned db = d.getIntOrFloatBitWidth();
+  // For same-width float<->int conversions the packed even/odd part does not
+  // apply (src and dst occupy the full register); pass a null part attribute,
+  // matching the arith->AVE lowering.
+  hivmave::VCVT_PartTypeAttr partOrNull = (sb == db) ? hivmave::VCVT_PartTypeAttr() : part;
+
+  if (sFloat && dFloat) {
+    if (db < sb)
+      return b.create<hivmave::VFTruncFOp>(loc, dstVecType, src, mask, rnd, sat, part)
+          .getResult();
+    // Widening float cast (e.g. f16 -> f32) takes no rounding/saturation.
+    return b.create<hivmave::VFExtFOp>(loc, dstVecType, src, mask, part).getResult();
+  }
+  if (sFloat && !dFloat)
+    return b.create<hivmave::VFFpToSIntOp>(loc, dstVecType, src, mask, rnd, sat, partOrNull)
+        .getResult();
+  if (!sFloat && dFloat) {
+    // int -> float: the ISA does not allow #rnd and #part together. A same-width
+    // source carries the round mode (rounding may be needed, e.g. i32->f32); a
+    // width-changing widen/narrow carries the even/odd part with no round mode
+    // (i16->f32 is exact). i64 sources carry both, matching the arith lowering.
+    if (sb == db)
+      return b.create<hivmave::VFSIntToFpOp>(loc, dstVecType, src, mask, rnd,
+                                             hivmave::VCVT_PartTypeAttr())
+          .getResult();
+    if (sb == 64)
+      return b.create<hivmave::VFSIntToFpOp>(loc, dstVecType, src, mask, rnd, part)
+          .getResult();
+    return b.create<hivmave::VFSIntToFpOp>(loc, dstVecType, src, mask,
+                                           hivm::RoundModeAttr(), part)
+        .getResult();
+  }
+  // int -> int (signed). A 2x width step (e.g. i32<->i16, i16<->i8) uses the
+  // even/odd `part`; a 4x step (i32<->i8) uses the pack-pattern `pp` (PP0)
+  // instead, matching the arith->AVE lowering. Integer casts do not round.
+  auto uni = hivm::UnsignedModeAttr::get(b.getContext(), hivm::UnsignedMode::SI2SI);
+  auto pp = mapCastPP(b, static_cast<::RegSlot>(trait[0]));
+  if (db < sb) {
+    if (sb / db >= 4)
+      return b.create<hivmave::VFTruncIOp>(loc, dstVecType, src, mask, sat,
+                                           hivmave::VCVT_PartTypeAttr(), pp,
+                                           hivm::UnsignedModeAttr())
+          .getResult();
+    return b.create<hivmave::VFTruncIOp>(loc, dstVecType, src, mask, sat, part,
+                                         hivmave::VCVT_PPTypeAttr(), uni)
+        .getResult();
+  }
+  if (db / sb >= 4)
+    return b.create<hivmave::VFExtSIOp>(loc, dstVecType, src, mask,
+                                        hivmave::VCVT_PartTypeAttr(), pp)
+        .getResult();
+  return b.create<hivmave::VFExtSIOp>(loc, dstVecType, src, mask, part,
+                                      hivmave::VCVT_PPTypeAttr())
+      .getResult();
 }
 
 static FailureOr<Value> createVectorReductionResult(OpBuilder &b, Location loc,
@@ -1132,6 +1261,53 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     return success();
   }
 
+  // tla.cast: element-type conversion. The source vector already carries its
+  // width; the destination width is one full 256-byte register's worth of the
+  // target element type. The cast op picks the AVE cast (vtruncf / vfptosi /
+  // vsitofp / vtrunci / ...) from the (src,dst) element kinds.
+  if (auto castOp = dyn_cast<::tla::CastOp>(op)) {
+    Value src = valueMap.lookup(castOp.getSource());
+    if (!src)
+      return failure();
+    auto srcVecType = dyn_cast<VectorType>(src.getType());
+    if (!srcVecType)
+      return castOp.emitError("tla.cast source is not a vector value"), failure();
+    auto dstInfo = parseTensorInfo(castOp.getResult().getType());
+    if (failed(dstInfo))
+      return castOp.emitError("failed to parse tla.cast result element type"), failure();
+    auto dstLanesOr = getVectorLaneCount(dstInfo->elementType);
+    if (failed(dstLanesOr))
+      return castOp.emitError("unsupported tla.cast destination element type"), failure();
+    auto dstVecType = VectorType::get({*dstLanesOr}, dstInfo->elementType);
+    // Reject casts whose source or destination element type has no AVE cast path
+    // (unsigned integers, i1/bool, f64) rather than emitting invalid AVE IR.
+    if (!isSupportedCastElementType(srcVecType.getElementType()) ||
+        !isSupportedCastElementType(dstVecType.getElementType()))
+      return castOp.emitError("unsupported tla.cast element type: only signed "
+                              "integers (i8/i16/i32/i64) and floats (f16/bf16/f32) "
+                              "are supported; unsigned, bool and f64 are not"),
+             failure();
+    ArrayRef<int32_t> trait = castOp.getTrait();
+    if (trait.size() != 3)
+      return castOp.emitError("tla.cast trait must have 3 codes"), failure();
+    // An optional mask predicates the source lanes of the AVE cast; all-true when
+    // none is given.
+    Value mask;
+    if (castOp.getMask()) {
+      mask = valueMap.lookup(castOp.getMask());
+      if (!mask)
+        return failure();
+    } else {
+      mask = allTrueMaskFor(b, loc, srcVecType);
+    }
+    auto result =
+        createVectorCastResult(b, loc, srcVecType, dstVecType, trait, src, mask);
+    if (failed(result))
+      return castOp.emitError("unsupported tla.cast element type conversion"), failure();
+    valueMap[castOp.getResult()] = *result;
+    return success();
+  }
+
   if (auto fullOp = dyn_cast<::tla::FullOp>(op)) {
     Value source = lookupOrCloneScalarValue(b, fullOp.getValue(), valueMap);
     if (!source)
@@ -1183,15 +1359,21 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     Value rhs = valueMap.lookup(operands.rhs);
     if (!rhs)
       return failure();
+    // Derive the vector width from the operands: a cast may have produced a
+    // vector of a different lane width than the enclosing region's element type.
+    auto opVecType = dyn_cast<VectorType>(lhs.getType());
+    if (!opVecType)
+      return failure();
+    Type opElemType = opVecType.getElementType();
     Value mask;
     if (operands.mask) {
       mask = valueMap.lookup(operands.mask);
       if (!mask)
         return failure();
     } else {
-      mask = createAvePgeMask(b, loc, ctx.maskVecType, hivmave::PgePattern::ALL);
+      mask = allTrueMaskFor(b, loc, opVecType);
     }
-    Value result = createVectorBinaryResult(b, loc, info->kind, ctx.elementType, ctx.vecType,
+    Value result = createVectorBinaryResult(b, loc, info->kind, opElemType, opVecType,
                                             lhs, rhs, mask);
     if (!result)
       return failure();
@@ -1734,6 +1916,10 @@ public:
         if (!producedValues.contains(gatherOp.getY()))
           return rewriter.notifyMatchFailure(
               vecFuncOp, "expected tla.gather y operand from tla.load or prior compute op");
+      } else if (auto castOp = dyn_cast<::tla::CastOp>(computeOp)) {
+        if (!producedValues.contains(castOp.getSource()))
+          return rewriter.notifyMatchFailure(
+              vecFuncOp, "expected tla.cast source from tla.load or prior compute op");
       } else {
         return rewriter.notifyMatchFailure(vecFuncOp, "unexpected tla compute op");
       }

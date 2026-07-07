@@ -256,6 +256,53 @@ def Tla_L0C2UBModeAttr : Tla_EnumAttr<"L0C2UBMode", "l0c2ub_mode"> {
   }];
 }
 
+// ---------------------------------------------------------------------------
+// CastParams: the four knobs of a tla.cast, matching CastParams in the Python
+// front-end (catlass/params.py). The enum keywords are the MLIR-asm tokens.
+// ---------------------------------------------------------------------------
+
+// RegSlot: which half of a packed register a narrow result lands in
+// 2x casts use zero=part_even / one=part_odd; 4x casts (i32<->i8) map all four
+// values onto the pack pattern zero=pp0 / one=pp1 / two=pp2 / three=pp3.
+def Tla_RegSlot_Zero : I32EnumAttrCase<"zero", 0>;
+def Tla_RegSlot_One : I32EnumAttrCase<"one", 1>;
+def Tla_RegSlot_Two : I32EnumAttrCase<"two", 2>;
+def Tla_RegSlot_Three : I32EnumAttrCase<"three", 3>;
+def Tla_RegSlotEnum : Tla_I32Enum<"RegSlot", "Packed-register position for a narrow cast result.", [
+  Tla_RegSlot_Zero,
+  Tla_RegSlot_One,
+  Tla_RegSlot_Two,
+  Tla_RegSlot_Three
+]>;
+
+// SatMode: overflow behaviour of the cast (AVE `sat` BoolAttr).
+def Tla_SatMode_Unknown : I32EnumAttrCase<"unknown", 0>;
+def Tla_SatMode_Sat : I32EnumAttrCase<"sat", 1>;
+def Tla_SatMode_Nosat : I32EnumAttrCase<"nosat", 2>;
+def Tla_SatModeEnum : Tla_I32Enum<"SatMode", "Cast saturation behaviour on overflow.", [
+  Tla_SatMode_Unknown,
+  Tla_SatMode_Sat,
+  Tla_SatMode_Nosat
+]>;
+
+// RoundMode: rounding applied on precision loss (HIVM round_mode).
+def Tla_RoundMode_CastRound : I32EnumAttrCase<"cast_round", 0>;
+def Tla_RoundMode_CastFloor : I32EnumAttrCase<"cast_floor", 1>;
+def Tla_RoundMode_CastCeil : I32EnumAttrCase<"cast_ceil", 2>;
+def Tla_RoundMode_CastTrunc : I32EnumAttrCase<"cast_trunc", 3>;
+def Tla_RoundModeEnum : Tla_I32Enum<"RoundMode", "Cast rounding mode on precision loss.", [
+  Tla_RoundMode_CastRound,
+  Tla_RoundMode_CastFloor,
+  Tla_RoundMode_CastCeil,
+  Tla_RoundMode_CastTrunc
+]>;
+
+// The three cast knobs are carried on tla.cast as a builtin DenseI32ArrayAttr of
+// three enum codes, in this fixed order (see catlass/params.py):
+//   [0] reg_slot (RegSlot)   [1] sat_mode (SatMode)   [2] round_mode (RoundMode)
+// A builtin array attr round-trips textually through every pass; the enum
+// definitions above give the C++ enum types the lowering casts the codes to.
+
 def Tla_CopyL0C2DstParamsType : TypeDef<TlaDialect, "CopyL0C2DstParams", []> {
   let mnemonic = "copy_l0c2dst_params";
   let summary = "CopyL0C2DstParams for tla.copy.";
@@ -838,6 +885,23 @@ def Tla_GatherOp : Tla_Op<"gather", [Pure]> {
   let assemblyFormat = [{
     $x `,` $y (`mask` $mask^)? attr-dict `:`
     type($x) `,` type($y) (`mask` qualified(type($mask))^)? `->` type($result)
+  }];
+}
+
+def Tla_CastOp : Tla_Op<"cast", [Pure]> {
+  let summary = "Vector element-type conversion for tensor fragments";
+  let description = [{
+    Convert a register-resident tensor fragment from one element type to another
+    (e.g. ``f32`` -> ``f16``, ``f32`` -> ``i32``). The ``trait`` attribute carries
+    the cast knobs (rounding, saturation, register slot). An optional mask
+    predicates which lanes are converted.
+  }];
+  let arguments = (ins Tla_TensorType:$source, DenseI32ArrayAttr:$trait,
+                       Optional<Tla_MaskType>:$mask);
+  let results = (outs Tla_TensorType:$result);
+  let assemblyFormat = [{
+    $source `,` $trait (`mask` $mask^)? attr-dict `:`
+    type($source) (`mask` qualified(type($mask))^)? `->` type($result)
   }];
 }
 

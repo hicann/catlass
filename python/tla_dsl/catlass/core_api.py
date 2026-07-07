@@ -15,6 +15,13 @@ from mlir._mlir_libs._mlir import (  # type: ignore[import-not-found]
 from mlir.dialects import arith as _mlir_arith  # type: ignore[import-not-found]
 
 from . import _tla_type_bridge
+from .params import CastParams
+
+# Element-type tokens the tla.cast lowering supports: signed ints and the AVE
+# float set. Unsigned ints, Bool (i1) and Float64 (f64) are rejected by VectorSSA.to.
+_CAST_SUPPORTED_DTYPES = frozenset(
+    {"i8", "i16", "i32", "i64", "f16", "bf16", "f32"}
+)
 from ._mlir_bindings import tla_ops_gen as _tla_ops_gen
 from .base_dsl import ast_helpers as _ast_helpers
 from .base_dsl.op import dsl_user_op, _capture_user_loc
@@ -370,6 +377,74 @@ class VectorSSA:
             reduction_profile=reduction_profile,
             loc=loc,
         )
+
+    @dsl_user_op
+    def to(
+        self,
+        dst_type: Any,
+        params: CastParams,
+        mask: Any | None = None,
+        *,
+        loc: mlir_ir.Location | None = None,
+    ) -> Any:
+        """Convert this register-resident vector to ``dst_type`` (element-type cast).
+
+        ``dst_type`` is a concrete Numeric element type; only the types the AVE
+        cast lowering supports are allowed: signed integers (``tla.Int8`` ..
+        ``tla.Int64``) and floats ``tla.Float16`` / ``tla.BFloat16`` /
+        ``tla.Float32``. Unsigned integers, ``tla.Bool`` (i1) and ``tla.Float64``
+        are rejected. ``params`` is a required
+        :class:`~catlass.params.CastParams` selecting rounding / saturation /
+        register slot; ``mask`` optionally predicates which lanes convert. Lowers
+        to ``tla.cast`` and must be used inside a ``tla.vec.func`` region.
+        """
+        _require_category("cast", "operand", self, "vector_ssa", 0)
+        if not (
+            isinstance(dst_type, type)
+            and issubclass(dst_type, Numeric)
+            and dst_type.dtype
+        ):
+            _op_error(
+                "cast",
+                f"invalid argument 'dst_type' (position 0): expected a concrete "
+                f"Numeric element type, got {_type_name(dst_type)}",
+            )
+        # The lowering only emits signed-int and {f16,bf16,f32} AVE cast paths, so
+        # reject unsigned ints, Bool (i1) and Float64 up front (rather than
+        # emitting AVE IR the backend cannot legalize / would treat as signed).
+        if dst_type.dtype not in _CAST_SUPPORTED_DTYPES:
+            _op_error(
+                "cast",
+                f"unsupported cast target dtype '{dst_type.dtype}': tla.cast "
+                f"supports signed integers (i8/i16/i32/i64) and floats "
+                f"(f16/bf16/f32); unsigned, bool and f64 are not supported",
+            )
+        if not isinstance(params, CastParams):
+            _op_error(
+                "cast",
+                f"invalid argument 'params' (position 1): expected CastParams, "
+                f"got {_type_name(params)}",
+            )
+        if mask is not None:
+            _require_category("cast", "mask", mask, "mask_ssa", 2)
+        _require_frontend_state("cast")
+        _runtime._require_enclosing_region("cast", "vec.func")
+        operand_value = _as_value(self)
+        context = operand_value.type.context
+        src_desc = _tla_tensor_type_for_mlir_value(operand_value)
+        result_desc = src_desc.with_updates(element_type=_dtype_to_str(dst_type))
+        with context:
+            trait_attr = mlir_ir.DenseI32ArrayAttr.get(params.codes())
+        mask_value = _as_value(mask) if mask is not None else None
+        result = _tla_ops_gen.cast(
+            result_desc.to_mlir_type(context),
+            operand_value,
+            trait_attr,
+            mask=mask_value,
+            loc=loc,
+        )
+        _register_tla_tensor_type(result, result_desc)
+        return VectorSSA(result)
 
 
 class MaskSSA:
