@@ -1090,6 +1090,38 @@ def load(result, source, *, load_dist=None, unaligned_ub_access=None, loc=None, 
   return _get_op_result_or_op_results(LoadOp(result=result, source=source, load_dist=load_dist, unaligned_ub_access=unaligned_ub_access, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
+class LocalMemBarOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.local_mem_bar"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, barrier_kind, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    _ods_context = _ods_get_default_loc_context(loc)
+    attributes["barrier_kind"] = (barrier_kind if (
+    isinstance(barrier_kind, _ods_ir.Attribute) or
+    not _ods_ir.AttrBuilder.contains('I64Attr')) else
+      _ods_ir.AttrBuilder.get('I64Attr')(barrier_kind, context=_ods_context))
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def barrier_kind(self):
+    return self.operation.attributes["barrier_kind"]
+
+  @barrier_kind.setter
+  def barrier_kind(self, value):
+    if value is None:
+      raise ValueError("'None' not allowed as value for mandatory attributes")
+    self.operation.attributes["barrier_kind"] = value
+
+def local_mem_bar(barrier_kind, *, loc=None, ip=None) -> _ods_ir.Operation:
+  return _get_op_result_or_op_results(LocalMemBarOp(barrier_kind=barrier_kind, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
 class LogOp(_ods_ir.OpView):
   OPERATION_NAME = "tla.log"
 

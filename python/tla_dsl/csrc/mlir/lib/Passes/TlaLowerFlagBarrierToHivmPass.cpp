@@ -1,10 +1,30 @@
 #include "PassesCommon.h"
+#include "bishengir/Dialect/HIVMAVE/IR/HIVMAVE.h"
 
 namespace tla {
 namespace {
 
 /// HIVM hardware exposes 8 event ids (0–7) per pipe pair for flag sync lowering.
 static constexpr int64_t kMaxHivmPipePairEventIndex = 7;
+
+class LocalMemBarOpRewrite : public OpRewritePattern<::tla::LocalMemBarOp> {
+public:
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(::tla::LocalMemBarOp op,
+                                PatternRewriter &rewriter) const override {
+    auto barrierKind = op.getBarrierKind();
+    if (barrierKind < 0 || barrierKind > 11) {
+      return op.emitError() << "barrier_kind " << barrierKind
+                            << " is out of range [0, 11]";
+    }
+    Value encodedVal = rewriter.create<arith::ConstantIntOp>(
+        op.getLoc(), barrierKind, 32);
+    rewriter.create<hivmave::VFMemBarOp>(op.getLoc(), encodedVal);
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
 
 class TlaLowerFlagBarrierToHivmPass : public PassWrapper<TlaLowerFlagBarrierToHivmPass, OperationPass<ModuleOp>> {
 private:
@@ -483,6 +503,13 @@ public:
         signalPassFailure();
         return;
       }
+    }
+
+    RewritePatternSet localBarrierPatterns(&getContext());
+    localBarrierPatterns.add<LocalMemBarOpRewrite>(&getContext());
+    if (failed(applyPatternsGreedily(module, std::move(localBarrierPatterns)))) {
+      signalPassFailure();
+      return;
     }
 
     ConversionTarget target(getContext());

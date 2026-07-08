@@ -628,6 +628,7 @@ _CORE_API_EXPORTS = (
     "set_flag",
     "wait_flag",
     "pipe_barrier",
+    "local_mem_bar",
     "mutex",
     "mutex_guard",
     "range",

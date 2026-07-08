@@ -199,6 +199,17 @@ TLA_VERIFY_IN_CUBE_OR_VECTOR(PipeBarrierOp)
 
 #undef TLA_VERIFY_IN_CUBE_OR_VECTOR
 
+mlir::LogicalResult LocalMemBarOp::verify() {
+  auto kind = getBarrierKind();
+  if (kind < 0 || kind > 11)
+    return emitOpError("barrier_kind ") << kind << " is out of range [0, 11]";
+  if (!hasEnclosingRegion<CubeOp>(getOperation()) &&
+      !hasEnclosingRegion<VectorOp>(getOperation()))
+    return emitOpError(
+        "must be nested inside a tla.cube or tla.vector region");
+  return mlir::success();
+}
+
 mlir::LogicalResult CopyOp::verify() {
   auto srcTy = mlir::dyn_cast<TlaTensorType>(getSrc().getType());
   auto dstTy = mlir::dyn_cast<TlaTensorType>(getDst().getType());

@@ -325,6 +325,7 @@ inline constexpr NamedOpMetadata kOpMetadataByName[] = {
     {"tla.inttoptr", {"unary", "intermediate"}},
     {"tla.recast_ptr", {"unary", "intermediate"}},
     {"tla.load", {"unary", "dependent"}},
+    {"tla.local_mem_bar", {"unary", "intermediate"}},
     {"tla.mmad", {"binary", "cube"}},
     {"tla.pipe_barrier", {"unary", "intermediate"}},
     {"tla.return", {"control", "intermediate"}},

@@ -743,6 +743,18 @@ def Tla_MutexUnlockOp : Tla_Op<"mutex_unlock", []> {
   let hasVerifier = 1;
 }
 
+def Tla_LocalMemBarOp : Tla_Op<"local_mem_bar", []> {
+  let summary = "Local memory barrier";
+  let description = [{
+    Apply a synchronization barrier to the specified memory type.
+    The ``barrier_kind`` is an encoded I32 immediate that selects the
+    src/dst pair (see hivmave.membar for the encoding scheme).
+  }];
+  let arguments = (ins I64Attr:$barrier_kind);
+  let assemblyFormat = "$barrier_kind attr-dict";
+  let hasVerifier = 1;
+}
+
 def Tla_MakeShapeOp : Tla_Op<"make_shape", [Pure]> {
   let summary = "Shape value";
   let description = [{

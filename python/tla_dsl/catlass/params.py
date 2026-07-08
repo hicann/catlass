@@ -180,3 +180,11 @@ class CastParams:
             _SAT_MODE_CODE[self.sat_mode],
             _ROUND_MODE_CODE[self.round_mode],
         ]
+
+class MemType(enum.IntEnum):
+    VEC_STORE = 0
+    VEC_LOAD = 1
+    SCALAR_STORE = 2
+    SCALAR_LOAD = 3
+    VEC_ALL = 4
+    SCALAR_ALL = 5

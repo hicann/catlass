@@ -62,7 +62,7 @@ from .types import (
     Scalar,
     dtype_size_bytes,
 )
-from .params import CopyParams, CopyL0C2DstParams, QuantMode, L0C2UBMode
+from .params import CopyParams, CopyL0C2DstParams, QuantMode, L0C2UBMode, MemType
 
 
 _PIPE_VALUES = {
@@ -3060,7 +3060,37 @@ def mutex_unlock(
     _runtime._require_enclosing_cube_or_vector("mutex_unlock")
     return _emit_mutex_unlock_op(mutex_value, pipe=pipe, loc=loc)
 
-
+@dsl_user_op
+def local_mem_bar(
+    src:MemType,
+    dst:MemType,
+    *,
+    loc: mlir_ir.Location | None = None,
+):
+    # MemType pair → encoded I32 imm (matching hivmave.membar encoding)
+    _local_mem_bar_barrier_kind = {
+        (MemType.VEC_STORE, MemType.VEC_LOAD): 1,
+        (MemType.VEC_LOAD, MemType.VEC_STORE): 2,
+        (MemType.VEC_STORE, MemType.VEC_STORE): 3,
+        (MemType.VEC_STORE, MemType.SCALAR_LOAD): 5,
+        (MemType.VEC_STORE, MemType.SCALAR_STORE): 7,
+        (MemType.VEC_LOAD, MemType.SCALAR_STORE): 6,
+        (MemType.SCALAR_STORE, MemType.VEC_LOAD): 9,
+        (MemType.SCALAR_STORE, MemType.VEC_STORE): 11,
+        (MemType.SCALAR_LOAD, MemType.VEC_STORE): 10,
+        (MemType.VEC_ALL, MemType.VEC_ALL): 0,
+        (MemType.VEC_ALL, MemType.SCALAR_ALL): 4,
+        (MemType.SCALAR_ALL, MemType.VEC_ALL): 8,
+    }
+    # check support
+    if (src, dst) not in _local_mem_bar_barrier_kind:
+        _op_error(
+            "local_mem_bar",
+            f"unsupported src and dst: {src.name} and {dst.name}",
+        )
+    _require_frontend_state("local_mem_bar")
+    _runtime._require_enclosing_region("local_mem_bar", "vec.func")
+    _tla_ops_gen.local_mem_bar(_local_mem_bar_barrier_kind[(src, dst)], loc=loc)
 @dsl_user_op
 def range(
     start: IndexLike,
