@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import inspect
 from typing import Any
 
 import pytest
@@ -1348,3 +1349,71 @@ def test_statement_if_active_object_method_call_lowers_as_carried_value() -> Non
 def test_statement_if_rejects_active_object_method_call_structure_change() -> None:
     with pytest.raises(tla.TlaCoreAPIError, match="'values'.*structure"):
         _ = bad_statement_if_active_object_method_call_kernel.dump_mlir(type_args=(2,))
+
+@tla.kernel
+def dynamic_if_bad_list_index_kernel() -> None:
+    idx = tla.arch.block_idx()
+    values = [0, 1]
+    if idx == 0:
+        values[idx]
+
+
+def _source_line(fn: Any, needle: str) -> int:
+    source_lines, first_lineno = inspect.getsourcelines(fn.fn)
+    for offset, line in enumerate(source_lines):
+        if needle in line:
+            return first_lineno + offset
+    raise AssertionError(f"Unable to find source line containing {needle!r}")
+
+
+def test_dynamic_if_then_error_reports_original_source_location() -> None:
+    line = _source_line(dynamic_if_bad_list_index_kernel, "values[idx]")
+    with pytest.raises(Exception) as excinfo:
+        dynamic_if_bad_list_index_kernel.dump_mlir()
+    message = str(excinfo.value)
+    assert "Execution-mode lowering failed in dynamic if then-region" in message
+    assert f"{__file__}:{line}" in message
+    assert "source: values[idx]" in message
+    assert "list indices" in message
+    assert "_IndexExpr" in message
+
+
+@tla.kernel
+def dynamic_if_constexpr_bool_bad_list_index_kernel(flag: tla.Constexpr[bool]) -> None:
+    idx = tla.arch.block_idx()
+    values = [0, 1]
+    if flag:
+        values[idx]
+
+
+def test_constexpr_if_body_error_reports_original_source_location() -> None:
+    line = _source_line(dynamic_if_constexpr_bool_bad_list_index_kernel, "values[idx]")
+    with pytest.raises(Exception) as excinfo:
+        dynamic_if_constexpr_bool_bad_list_index_kernel.dump_mlir(type_args=(True,))
+    message = str(excinfo.value)
+    assert "Execution-mode lowering failed in dynamic if then-region" in message
+    assert f"{__file__}:{line}" in message
+    assert "source: values[idx]" in message
+    assert "list indices" in message
+    assert "_IndexExpr" in message
+
+
+@tla.kernel
+def dynamic_if_expr_bad_list_index_kernel() -> None:
+    idx = tla.arch.block_idx()
+    values = [0, 1]
+    result = values[idx] if idx == 0 else 0
+    tla.make_coord(result, 0)
+
+
+def test_dynamic_if_expr_error_reports_original_source_location() -> None:
+    line = _source_line(dynamic_if_expr_bad_list_index_kernel, "values[idx]")
+    with pytest.raises(Exception) as excinfo:
+        dynamic_if_expr_bad_list_index_kernel.dump_mlir()
+    message = str(excinfo.value)
+    assert "Execution-mode lowering failed in conditional expression then-region" in message
+    assert f"{__file__}:{line}" in message
+    assert "source: result = values[idx] if idx == 0 else 0" in message
+    assert "list indices" in message
+    assert "_IndexExpr" in message
+

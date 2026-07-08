@@ -28,6 +28,8 @@ _INTERNAL_MAX = "__tladsl_internal_max__"
 _INTERNAL_CF_SYMBOL_CHECK = "__tladsl_internal_cf_symbol_check__"
 _INTERNAL_INDEX_ADD = "__tladsl_internal_index_add__"
 _INTERNAL_INDEX_SUB = "__tladsl_internal_index_sub__"
+_INTERNAL_ATTACH_SOURCE_INFO = "__tladsl_internal_attach_source_info__"
+_SOURCE_INFO_ATTR = "__tladsl_source_info__"
 _WHILE_SELECTOR = "while_selector"
 _WHILE_EXECUTOR = "while_executor"
 _BUILTIN_REDIRECTS = {
@@ -113,12 +115,22 @@ class ScopeManager:
 
 
 class _FrontendControlFlowTransformer(ast.NodeTransformer):
-    def __init__(self, global_symbols: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        global_symbols: dict[str, Any] | None = None,
+        *,
+        filename: str = "<unknown>",
+        line_offset: int = 0,
+        source_text: str = "",
+    ) -> None:
         self._counter = 0
         self._range_alias_stack: list[set[str]] = []
         self._scope_manager = ScopeManager.create()
         self._following_loads_stack: list[set[str]] = []
         self._global_symbols = global_symbols or {}
+        self._filename = filename
+        self._line_offset = line_offset
+        self._source_text = source_text
         self._tla_range_names = _tla_function_names_from_globals(
             self._global_symbols, "range"
         )
@@ -135,6 +147,62 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
     def _fresh(self, prefix: str) -> str:
         self._counter += 1
         return f"__tladsl_{prefix}_{self._counter}"
+
+    def _source_info_dict(
+        self,
+        generated_name: str,
+        node: ast.AST,
+        *,
+        construct: str,
+        region: str,
+    ) -> ast.Dict:
+        source = ast.get_source_segment(self._source_text, node) or ""
+        source = next((line.strip() for line in source.splitlines() if line.strip()), "")
+        return ast.Dict(
+            keys=[
+                ast.Constant(value="filename"),
+                ast.Constant(value="lineno"),
+                ast.Constant(value="col_offset"),
+                ast.Constant(value="line_offset"),
+                ast.Constant(value="construct"),
+                ast.Constant(value="region"),
+                ast.Constant(value="generated_name"),
+                ast.Constant(value="source"),
+            ],
+            values=[
+                ast.Constant(value=self._filename),
+                ast.Constant(value=self._line_offset + int(getattr(node, "lineno", 0) or 0)),
+                ast.Constant(value=int(getattr(node, "col_offset", 0) or 0)),
+                ast.Constant(value=self._line_offset),
+                ast.Constant(value=construct),
+                ast.Constant(value=region),
+                ast.Constant(value=generated_name),
+                ast.Constant(value=source),
+            ],
+        )
+
+    def _source_info_stmt(
+        self,
+        function_name: str,
+        node: ast.AST,
+        *,
+        construct: str,
+        region: str,
+    ) -> ast.stmt:
+        info = self._source_info_dict(
+            function_name, node, construct=construct, region=region
+        )
+        stmt = ast.Assign(
+            targets=[
+                ast.Attribute(
+                    value=ast.Name(id=function_name, ctx=ast.Load()),
+                    attr=_SOURCE_INFO_ATTR,
+                    ctx=ast.Store(),
+                )
+            ],
+            value=info,
+        )
+        return ast.copy_location(stmt, node)
 
     def _range_aliases(self) -> set[str]:
         if not self._range_alias_stack:
@@ -402,7 +470,15 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
             self._local_scope(),
         ):
             result.append(_cf_symbol_check_stmt(node.iter))
-        result.extend([*negative_step_prelude, range_assign, body_fn, helper_stmt])
+        result.extend([
+            *negative_step_prelude,
+            range_assign,
+            body_fn,
+            self._source_info_stmt(
+                body_name, node, construct="dynamic for", region="body"
+            ),
+            helper_stmt,
+        ])
         return result
 
     def _rewrite_negative_step_range(self, node: ast.For) -> list[ast.stmt]:
@@ -550,9 +626,25 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
         else_name = self._fresh("if_else") if node.orelse or carried_names else None
 
         then_fn = self._branch_function(then_name, carried_names, then_body)
-        result: list[ast.stmt] = [then_fn]
+        result: list[ast.stmt] = [
+            then_fn,
+            self._source_info_stmt(
+                then_name,
+                node.body[0] if node.body else node,
+                construct="dynamic if",
+                region="then-region",
+            ),
+        ]
         if else_name is not None:
             result.append(self._branch_function(else_name, carried_names, else_body))
+            result.append(
+                self._source_info_stmt(
+                    else_name,
+                    node.orelse[0] if node.orelse else node,
+                    construct="dynamic if",
+                    region="else-region",
+                )
+            )
 
         helper_call = ast.Call(
             func=ast.Name(id=_INTERNAL_IF, ctx=ast.Load()),
@@ -691,6 +783,16 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
         )
         ast.copy_location(execute_call, node)
 
+        before_info = self._source_info_stmt(
+            before_name, node.test, construct="dynamic while", region="condition-region"
+        )
+        after_info = self._source_info_stmt(
+            after_name,
+            node.body[0] if node.body else node,
+            construct="dynamic while",
+            region="body-region",
+        )
+
         region_fn = ast.FunctionDef(
             name=region_name,
             args=ast.arguments(
@@ -702,7 +804,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
                 vararg=None,
                 kwarg=None,
             ),
-            body=[before_fn, after_fn, ast.Return(value=execute_call)],
+            body=[before_fn, before_info, after_fn, after_info, ast.Return(value=execute_call)],
             decorator_list=[
                 ast.Call(
                     func=ast.Name(id=_WHILE_SELECTOR, ctx=ast.Load()),
@@ -821,7 +923,35 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
         return ast.copy_location(
             ast.Call(
                 func=ast.Name(id=_INTERNAL_IF_EXPR, ctx=ast.Load()),
-                args=[test, then_fn, else_fn],
+                args=[
+                    test,
+                    ast.Call(
+                        func=ast.Name(id=_INTERNAL_ATTACH_SOURCE_INFO, ctx=ast.Load()),
+                        args=[
+                            then_fn,
+                            self._source_info_dict(
+                                "<if expression then>",
+                                node.body,
+                                construct="conditional expression",
+                                region="then-region",
+                            ),
+                        ],
+                        keywords=[],
+                    ),
+                    ast.Call(
+                        func=ast.Name(id=_INTERNAL_ATTACH_SOURCE_INFO, ctx=ast.Load()),
+                        args=[
+                            else_fn,
+                            self._source_info_dict(
+                                "<if expression else>",
+                                node.orelse,
+                                construct="conditional expression",
+                                region="else-region",
+                            ),
+                        ],
+                        keywords=[],
+                    ),
+                ],
                 keywords=[],
             ),
             node,
@@ -1012,7 +1142,16 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
             )
         )
         ast.copy_location(helper_call, node)
-        return [body_fn, helper_call]
+        return [
+            body_fn,
+            self._source_info_stmt(
+                body_name,
+                node.body[0] if node.body else node,
+                construct=f"tla.{region_name}",
+                region="region-body",
+            ),
+            helper_call,
+        ]
 
 
 def maybe_transform_for_lowering(
@@ -1035,9 +1174,12 @@ def maybe_transform_for_lowering(
     """Return a transformed callable when source-driven control-flow lowering is needed."""
 
     try:
-        source = inspect.getsource(fn)
+        source_lines, first_lineno = inspect.getsourcelines(fn)
     except (OSError, IOError, TypeError):
         return fn
+    source = "".join(source_lines)
+    filename = inspect.getsourcefile(fn) or "<unknown>"
+    line_offset = int(first_lineno) - 1
 
     if (
         "tla.range" not in source
@@ -1059,16 +1201,20 @@ def maybe_transform_for_lowering(
     ):
         return fn
 
-    module_ast = ast.parse(
-        textwrap.dedent(source), filename=inspect.getsourcefile(fn) or "<unknown>"
-    )
+    source = textwrap.dedent(source)
+    module_ast = ast.parse(source, filename=filename)
     target = _find_function_def(module_ast, fn.__name__)
     if target is None:
         return fn
 
     target.decorator_list = []
     exec_globals = dict(fn.__globals__)
-    transformed = _FrontendControlFlowTransformer(exec_globals).visit(module_ast)
+    transformed = _FrontendControlFlowTransformer(
+        exec_globals,
+        filename=filename,
+        line_offset=line_offset,
+        source_text=source,
+    ).visit(module_ast)
     ast.fix_missing_locations(transformed)
 
     exec_globals[_INTERNAL_FOR] = internal_for
@@ -1087,6 +1233,7 @@ def maybe_transform_for_lowering(
     exec_globals[_INTERNAL_CF_SYMBOL_CHECK] = _cf_symbol_check
     exec_globals[_INTERNAL_INDEX_ADD] = _index_add
     exec_globals[_INTERNAL_INDEX_SUB] = _index_sub
+    exec_globals[_INTERNAL_ATTACH_SOURCE_INFO] = _attach_source_info
     from .ast_helpers import while_executor, while_selector
 
     exec_globals[_WHILE_EXECUTOR] = while_executor
@@ -1095,7 +1242,7 @@ def maybe_transform_for_lowering(
     namespace: dict[str, Any] = {}
     code = compile(
         transformed,
-        filename=inspect.getsourcefile(fn) or "<unknown>",
+        filename=filename,
         mode="exec",
     )
     exec(code, exec_globals, namespace)
@@ -1105,6 +1252,13 @@ def maybe_transform_for_lowering(
     rewritten.__defaults__ = fn.__defaults__
     rewritten.__kwdefaults__ = getattr(fn, "__kwdefaults__", None)
     rewritten.__annotations__ = dict(getattr(fn, "__annotations__", {}))
+    rewritten.__tladsl_source_info__ = {
+        "filename": filename,
+        "line_offset": line_offset,
+        "generated_name": rewritten.__name__,
+        "construct": "kernel body",
+        "region": "frontend-execution",
+    }
     rewritten.__module__ = fn.__module__
     rewritten.__qualname__ = fn.__qualname__
     return rewritten
@@ -1343,6 +1497,11 @@ def _index_sub(lhs: Any, rhs: Any) -> Any:
     from catlass import runtime as _runtime
 
     return _runtime._IndexExpr(_runtime._coerce_index_value(lhs)) - rhs
+
+
+def _attach_source_info(fn: Any, info: dict[str, Any]) -> Any:
+    setattr(fn, _SOURCE_INFO_ATTR, info)
+    return fn
 
 
 def _cf_symbol_check(symbol: Any) -> None:

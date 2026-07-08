@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import builtins
+import linecache
+import types
 from typing import Any, Callable
 
 from . import runtime as _runtime
@@ -17,6 +19,78 @@ _coerce_bool_value = _runtime._coerce_bool_value
 _coerce_index_value = _runtime._coerce_index_value
 _const_i1 = _runtime._const_i1
 _resolve_frontend_bound_value = _runtime._resolve_frontend_bound_value
+_SOURCE_INFO_ATTR = "__tladsl_source_info__"
+
+
+class FrontendControlFlowLoweringError(RuntimeError):
+    """Raised when an AST-generated control-flow helper fails during lowering."""
+
+
+def _source_info_for(fn: Callable[..., Any]) -> dict[str, Any] | None:
+    info = getattr(fn, _SOURCE_INFO_ATTR, None)
+    return info if isinstance(info, dict) else None
+
+
+def _traceback_lineno_for_code(exc: BaseException, code: types.CodeType) -> int | None:
+    tb = exc.__traceback__
+    best: int | None = None
+    while tb is not None:
+        if tb.tb_frame.f_code is code:
+            best = int(tb.tb_lineno)
+        tb = tb.tb_next
+    return best
+
+
+def _format_control_flow_error(fn: Callable[..., Any], exc: Exception) -> str | None:
+    info = _source_info_for(fn)
+    if info is None:
+        return None
+    filename = str(info.get("filename") or "<unknown>")
+    line_offset = int(info.get("line_offset") or 0)
+    fallback_lineno = int(info.get("lineno") or 0)
+    helper_lineno = _traceback_lineno_for_code(exc, fn.__code__)
+    lineno = line_offset + helper_lineno if helper_lineno is not None else fallback_lineno
+    if lineno <= 0:
+        lineno = fallback_lineno
+    source = linecache.getline(filename, lineno).strip()
+    if not source:
+        source = str(info.get("source") or "")
+    construct = str(info.get("construct") or "control flow")
+    region = str(info.get("region") or "region")
+    message = f"Execution-mode lowering failed in {construct} {region} at {filename}:{lineno}"
+    if source:
+        message += f"\n  source: {source}"
+    message += f"\n  reason: {type(exc).__name__}: {exc}"
+    return message
+
+
+def _wrap_control_flow_exception(fn: Callable[..., Any], exc: Exception) -> Exception | None:
+    if isinstance(exc, FrontendControlFlowLoweringError):
+        return exc
+    message = _format_control_flow_error(fn, exc)
+    if message is None:
+        return None
+    try:
+        from .execution_lowering import TlaLoweringError
+    except ImportError:  # pragma: no cover - defensive for partial imports
+        TlaLoweringError = ()  # type: ignore[assignment]
+    if isinstance(exc, TlaCoreAPIError):
+        return TlaCoreAPIError(message)
+    if TlaLoweringError and isinstance(exc, TlaLoweringError):
+        return TlaLoweringError(message)
+    return FrontendControlFlowLoweringError(message)
+
+
+def _call_with_control_flow_source(fn: Callable[..., Any], *args: Any) -> Any:
+    try:
+        return fn(*args)
+    except FrontendControlFlowLoweringError:
+        raise
+    except Exception as exc:
+        wrapped = _wrap_control_flow_exception(fn, exc)
+        if wrapped is None:
+            raise
+        raise wrapped from exc
 
 
 def _loop_unroll_attr(**kwargs: Any) -> Any:
@@ -244,7 +318,9 @@ def _internal_frontend_for(
         carried_args = _core_api.pack_from_irvalue(
             block_args[1:], carried_pytree_def, carried_values, len(carried_values)
         )
-        body_result = body_fn(_IndexExpr(block_args[0]), *carried_args)
+        body_result = _call_with_control_flow_source(
+            body_fn, _IndexExpr(block_args[0]), *carried_args
+        )
         return tree_utils.extract_frontend_if_yields(
             body_result,
             carried_values,
@@ -304,7 +380,7 @@ def _while_execute_dynamic(
         before_args = _core_api.pack_from_irvalue(
             block_args, pytree_def, mix_iter_args, full_write_args_count
         )
-        return while_before_block(*before_args)
+        return _call_with_control_flow_source(while_before_block, *before_args)
 
     def before_terminator(
         cond_and_results: Any,
@@ -341,7 +417,7 @@ def _while_execute_dynamic(
         after_args = _core_api.pack_from_irvalue(
             block_args, pytree_def, mix_iter_args, full_write_args_count
         )
-        return while_after_block(*after_args)
+        return _call_with_control_flow_source(while_after_block, *after_args)
 
     return ScfGenerator().scf_execute_dynamic(
         op_type_name="while",
@@ -656,7 +732,7 @@ def _internal_frontend_if(
         selected = then_fn if condition else else_fn
         if selected is None:
             return tree_utils.return_carried_values(carried_values)
-        result = selected(*carried_values)
+        result = _call_with_control_flow_source(selected, *carried_values)
         return tree_utils.normalize_frontend_if_result_with_names(
             result, carried_values, carried_names_tuple, carried_specs
         )
@@ -682,7 +758,7 @@ def _internal_frontend_if(
         then_args = _core_api.pack_from_irvalue(
             ir_values, pytree_def, mix_iter_args, full_write_args_count
         )
-        then_result = then_fn(*then_args)
+        then_result = _call_with_control_flow_source(then_fn, *then_args)
         return tree_utils.extract_frontend_if_yields(
             then_result,
             carried_values,
@@ -720,7 +796,7 @@ def _internal_frontend_if(
             else_args = _core_api.pack_from_irvalue(
                 ir_values, pytree_def, mix_iter_args, full_write_args_count
             )
-            else_result = else_fn(*else_args)
+            else_result = _call_with_control_flow_source(else_fn, *else_args)
             return tree_utils.extract_frontend_if_yields(
                 else_result,
                 carried_values,
@@ -750,20 +826,21 @@ def _internal_frontend_if_expr(
     from . import core_api as _core_api
 
     if isinstance(condition, bool):
-        return true_fn() if condition else false_fn()
+        selected = true_fn if condition else false_fn
+        return _call_with_control_flow_source(selected)
 
     cond = _coerce_bool_value(condition)
 
     execution_region = scf.ExecuteRegionOp(result=[])
     execution_region.region.blocks.append()
     with mlir_ir.InsertionPoint(execution_region.region.blocks[0]):
-        true_probe = true_fn()
+        true_probe = _call_with_control_flow_source(true_fn)
         true_mlir, result_pytree_def = _core_api.unpack_to_irvalue(
             [true_probe], "if expression", 1, ["if expression"]
         )
         result_spec = result_pytree_def[0][0]
         true_leaf_names = result_pytree_def[1]
-        false_probe = false_fn()
+        false_probe = _call_with_control_flow_source(false_fn)
         false_mlir, false_pytree_def = _core_api.unpack_to_irvalue(
             [false_probe], "if expression", 1, ["if expression"]
         )
@@ -793,7 +870,7 @@ def _internal_frontend_if_expr(
         _mix_iter_args: list[Any] | tuple[Any, ...],
         _full_write_args_count: int,
     ) -> list[Any]:
-        true_result = true_fn()
+        true_result = _call_with_control_flow_source(true_fn)
         true_values, true_pytree_def = _core_api.unpack_to_irvalue(
             [true_result], "if expression", 1, ["if expression"]
         )
@@ -818,7 +895,7 @@ def _internal_frontend_if_expr(
         _mix_iter_args: list[Any] | tuple[Any, ...],
         _full_write_args_count: int,
     ) -> list[Any]:
-        false_result = false_fn()
+        false_result = _call_with_control_flow_source(false_fn)
         false_values, false_pytree_def = _core_api.unpack_to_irvalue(
             [false_result], "if expression", 1, ["if expression"]
         )

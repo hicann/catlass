@@ -599,7 +599,9 @@ def _internal_frontend_region(
         if state is not None:
             state.active_regions.append(kind)
         try:
-            body_fn()
+            from . import tla_ast_decorators as _ast_decorators
+
+            _ast_decorators._call_with_control_flow_source(body_fn)
         finally:
             if state is not None:
                 state.active_regions.pop()

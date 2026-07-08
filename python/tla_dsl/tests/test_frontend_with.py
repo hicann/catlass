@@ -1,4 +1,5 @@
 import builtins
+import inspect
 import re
 from typing import Any
 
@@ -502,3 +503,31 @@ def test_vec_add_rejects_raw_tensor() -> None:
     lhs, rhs, _ = _vector_tensor_args()
     with pytest.raises(runtime_mod.TlaCoreAPIError, match="expected vector_ssa"):
         vec_add_rejects_raw_tensor_kernel.dump_mlir(type_args=(lhs, rhs))
+
+@tla.kernel
+def cube_region_bad_list_index_kernel() -> None:
+    idx = tla.arch.block_idx()
+    values = [0, 1]
+    with tla.cube():
+        values[idx]
+
+
+def _source_line(fn: Any, needle: str) -> int:
+    source_lines, first_lineno = inspect.getsourcelines(fn.fn)
+    for offset, line in enumerate(source_lines):
+        if needle in line:
+            return first_lineno + offset
+    raise AssertionError(f"Unable to find source line containing {needle!r}")
+
+
+def test_frontend_region_error_reports_original_source_location() -> None:
+    line = _source_line(cube_region_bad_list_index_kernel, "values[idx]")
+    with pytest.raises(Exception) as excinfo:
+        cube_region_bad_list_index_kernel.dump_mlir()
+    message = str(excinfo.value)
+    assert "Execution-mode lowering failed in tla.cube region-body" in message
+    assert f"{__file__}:{line}" in message
+    assert "source: values[idx]" in message
+    assert "list indices" in message
+    assert "_IndexExpr" in message
+

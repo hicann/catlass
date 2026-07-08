@@ -1,4 +1,5 @@
 import builtins
+import inspect
 from dataclasses import dataclass
 from typing import Any
 
@@ -778,3 +779,30 @@ def test_execution_only_mode_handles_python_range_loop() -> None:
         type_args=(mem_a,),
     )
     assert mlir.count("tla.make_coord") == 4
+
+@tla.kernel
+def dynamic_for_bad_list_index_kernel(limit: int) -> None:
+    values = [0, 1]
+    for i in tla.range(0, limit, 1):
+        values[i]
+
+
+def _source_line(fn: Any, needle: str) -> int:
+    source_lines, first_lineno = inspect.getsourcelines(fn.fn)
+    for offset, line in enumerate(source_lines):
+        if needle in line:
+            return first_lineno + offset
+    raise AssertionError(f"Unable to find source line containing {needle!r}")
+
+
+def test_dynamic_for_body_error_reports_original_source_location() -> None:
+    line = _source_line(dynamic_for_bad_list_index_kernel, "values[i]")
+    with pytest.raises(Exception) as excinfo:
+        dynamic_for_bad_list_index_kernel.dump_mlir(type_args=(4,))
+    message = str(excinfo.value)
+    assert "Execution-mode lowering failed in dynamic for body" in message
+    assert f"{__file__}:{line}" in message
+    assert "source: values[i]" in message
+    assert "list indices" in message
+    assert "_IndexExpr" in message
+

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import linecache
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
@@ -23,6 +24,40 @@ class TlaLoweringError(RuntimeError):
 
 class UnsupportedExecutionLowering(RuntimeError):
     """Raised when execution-mode lowering cannot safely handle a function."""
+
+
+_SOURCE_INFO_ATTR = "__tladsl_source_info__"
+
+
+def _traceback_lineno_for_code(exc: BaseException, code: Any) -> int | None:
+    tb = exc.__traceback__
+    best: int | None = None
+    while tb is not None:
+        if tb.tb_frame.f_code is code:
+            best = int(tb.tb_lineno)
+        tb = tb.tb_next
+    return best
+
+
+def _format_execution_source_error(fn: Any, exc: Exception) -> str | None:
+    info = getattr(fn, _SOURCE_INFO_ATTR, None)
+    if not isinstance(info, dict):
+        return None
+    filename = str(info.get("filename") or "<unknown>")
+    line_offset = int(info.get("line_offset") or 0)
+    lineno = _traceback_lineno_for_code(exc, fn.__code__)
+    if lineno is None:
+        return None
+    source_lineno = line_offset + lineno
+    source = linecache.getline(filename, source_lineno).strip()
+    message = (
+        f"Execution-mode lowering failed while running `{fn.__name__}` "
+        f"at {filename}:{source_lineno}"
+    )
+    if source:
+        message += f"\n  source: {source}"
+    message += f"\n  reason: {type(exc).__name__}: {exc}"
+    return message
 
 
 @dataclass
@@ -226,10 +261,15 @@ def _build_tla_func(
                 raise
             except TlaLoweringError:
                 raise
+            except ast_decorators.FrontendControlFlowLoweringError as exc:
+                raise UnsupportedExecutionLowering(str(exc)) from exc
             except Exception as exc:
-                raise UnsupportedExecutionLowering(
-                    f"Execution-mode lowering failed while running `{fn.__name__}`: {exc}"
-                ) from exc
+                message = _format_execution_source_error(fn, exc)
+                if message is None:
+                    message = (
+                        f"Execution-mode lowering failed while running `{fn.__name__}`: {exc}"
+                    )
+                raise UnsupportedExecutionLowering(message) from exc
         mlir_ir.Operation.create("tla.return", loc=fn_loc)
 
 
