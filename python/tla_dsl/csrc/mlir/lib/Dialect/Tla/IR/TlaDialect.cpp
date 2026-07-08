@@ -159,6 +159,20 @@ Attribute TlaDialect::parseAttribute(DialectAsmParser &parser, Type type) const 
     return ::tla::L0C2UBModeAttr::get(getContext(), *symbolized);
   }
 
+  if (attrTag == "load_dist") {
+    if (parser.parseLess())
+      return {};
+    StringRef distKeyword;
+    if (parser.parseKeyword(&distKeyword) || parser.parseGreater())
+      return {};
+    auto symbolized = ::symbolizeLoadDist(distKeyword);
+    if (!symbolized) {
+      parser.emitError(parser.getNameLoc()) << "invalid tla.load_dist value: " << distKeyword;
+      return {};
+    }
+    return ::tla::LoadDistAttr::get(getContext(), *symbolized);
+  }
+
   StringRef mnemonic = attrTag;
   Attribute value;
   OptionalParseResult parseResult = generatedAttributeParser(parser, &mnemonic, type, value);

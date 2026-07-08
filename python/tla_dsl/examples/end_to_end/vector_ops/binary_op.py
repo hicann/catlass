@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 import catlass as tla
+from catlass.params import LoadDist, NormalLoadParams, UnalignLoadParams
 
 from vector_op_harness import (
     DirectVectorOpConfig,
@@ -22,6 +23,9 @@ _KERNEL_DTYPE = tla.Float32
 _KERNEL_ELEMENT_BYTES = 4
 _KERNEL_SHAPE = (VECTOR_ELE,)
 _BINARY_OP: Callable[[Any, Any], Any] | None = None
+_X_LOAD_PARAMS: NormalLoadParams | UnalignLoadParams = NormalLoadParams()
+_X_TILE_ELE = 0
+_STORE_LOADED_X_ONLY = False
 
 
 @tla.kernel
@@ -59,12 +63,20 @@ def binary_op(mem_x: tla.Tensor, mem_y: tla.Tensor, mem_z: tla.Tensor) -> None:
         tla.set_flag(ub_loaded)
         tla.wait_flag(ub_loaded)
         with tla.vec.func(mode="simd"):
+            x_extent = _X_TILE_ELE if _X_TILE_ELE > 0 else VL_ELE
             for i in tla.range(LOOPS):
-                x_tile = tla.tile_view(x_ub, tla.make_shape(VL_ELE), tla.make_coord(i))
+                x_tile = tla.tile_view(
+                    x_ub, tla.make_shape(x_extent), tla.make_coord(i)
+                )
                 y_tile = tla.tile_view(y_ub, tla.make_shape(VL_ELE), tla.make_coord(i))
                 z_tile = tla.tile_view(z_ub, tla.make_shape(VL_ELE), tla.make_coord(i))
 
-                z_tile.store(_BINARY_OP(x_tile.load(), y_tile.load()))
+                if _STORE_LOADED_X_ONLY:
+                    z_tile.store(x_tile.load(_X_LOAD_PARAMS))
+                else:
+                    z_tile.store(
+                        _BINARY_OP(x_tile.load(_X_LOAD_PARAMS), y_tile.load())
+                    )
 
         tla.set_flag(vec_done)
         tla.wait_flag(vec_done)
@@ -106,20 +118,39 @@ def _operator_specs() -> dict[str, dict[str, Any]]:
             "default_atol": 1e-4,
             "nonzero_rhs": False,
         },
+        "add_unalign": {
+            "op": lambda lhs, rhs: lhs + rhs,
+            "default_atol": 0,
+            "x_load": UnalignLoadParams(),
+        },
+        "add_brc_b32": {
+            "op": lambda lhs, rhs: lhs + rhs,
+            "default_atol": 1e-4,
+            "x_load": NormalLoadParams(load_dist=LoadDist.DIST_BRC_B32),
+            "x_tile_ele": 1,
+            "dtypes": ("f32",),
+        },
     }
 
 
 def _is_unsupported_case(op_name: str, dtype_name: str) -> bool:
+    spec = _operator_specs().get(op_name, {})
+    allowed = spec.get("dtypes")
+    if allowed is not None and dtype_name not in allowed:
+        return True
     if dtype_name == "i8" and op_name in {"mul", "div"}:
         return True
-    # AVE vdiv rejects vector<128xbf16> (padded bf16 layout).
     if dtype_name == "bf16" and op_name == "div":
         return True
     return False
 
 
 def _print_skip(op_name: str, dtype_name: str, shape: tuple[int, ...]) -> None:
-    if dtype_name == "i8" and op_name in {"mul", "div"}:
+    spec = _operator_specs().get(op_name, {})
+    allowed = spec.get("dtypes")
+    if allowed is not None and dtype_name not in allowed:
+        reason = f"{op_name} only supports {', '.join(allowed)}"
+    elif dtype_name == "i8" and op_name in {"mul", "div"}:
         reason = "i8 is not supported for mul/div"
     elif dtype_name == "bf16" and op_name == "div":
         reason = "bf16 vector div is not supported by AVE vdiv"
@@ -134,19 +165,24 @@ def _set_kernel_config(
     op_name: str, dtype_name: str, shape: tuple[int, ...] | None = None
 ) -> tuple[type[Any], Any, float | int]:
     global VL_ELE, LOOPS, VECTOR_ELE, _KERNEL_DTYPE, _KERNEL_ELEMENT_BYTES
-    global _KERNEL_SHAPE, _BINARY_OP
+    global _KERNEL_SHAPE, _BINARY_OP, _X_LOAD_PARAMS, _X_TILE_ELE, _STORE_LOADED_X_ONLY
     specs = _operator_specs()
     if op_name not in specs:
         choices = ", ".join(sorted(specs))
         raise SystemExit(f"unknown binary operator {op_name!r}; expected one of: {choices}")
-    config = vector_kernel_config(dtype_name, shape, ALL_DTYPES)
+    spec = specs[op_name]
+    allowed = spec.get("dtypes", ALL_DTYPES)
+    config = vector_kernel_config(dtype_name, shape, allowed)
     VECTOR_ELE = config.vector_elements
     _KERNEL_SHAPE = shape if shape is not None else (VECTOR_ELE,)
     VL_ELE = config.lanes
     LOOPS = config.loops
     _KERNEL_DTYPE = config.tla_dtype
     _KERNEL_ELEMENT_BYTES = config.element_bytes
-    _BINARY_OP = specs[op_name]["op"]
+    _BINARY_OP = spec["op"]
+    _X_LOAD_PARAMS = spec.get("x_load", NormalLoadParams())
+    _X_TILE_ELE = spec.get("x_tile_ele", 0)
+    _STORE_LOADED_X_ONLY = spec.get("store_loaded_x_only", False)
     return config.tla_dtype, config.torch_dtype, config.default_sentinel
 
 
@@ -159,7 +195,9 @@ def _compile_only_type_args(
 
 def _make_inputs(args: Any, dtype_name: str, torch: Any) -> tuple[Any, Any]:
     _, _, _ = _set_kernel_config(args.op, dtype_name, args.shape)
-    dtype = vector_kernel_config(dtype_name, args.shape, ALL_DTYPES).torch_dtype
+    dtype = vector_kernel_config(
+        dtype_name, args.shape, _operator_specs()[args.op].get("dtypes", ALL_DTYPES)
+    ).torch_dtype
     device = "npu"
     if dtype_name in {"i8", "i16", "i32"}:
         arange = torch.arange(VECTOR_ELE, dtype=torch.int32, device=device)
@@ -175,7 +213,14 @@ def _make_inputs(args: Any, dtype_name: str, torch: Any) -> tuple[Any, Any]:
 
 def _expected(op_name: str, inputs: tuple[Any, ...]) -> Any:
     x, y = inputs
-    if op_name == "add":
+    if op_name == "add_brc_b32":
+        out = y.clone()
+        for i in range(LOOPS):
+            start = i * VL_ELE
+            end = min(start + VL_ELE, x.numel())
+            out[start:end] = x[i] + y[start:end]
+        return out
+    if op_name in {"add", "add_unalign"}:
         return x + y
     if op_name == "sub":
         return x - y

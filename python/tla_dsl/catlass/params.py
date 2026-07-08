@@ -27,6 +27,40 @@ class CopyParams:
     pass
 
 
+class PostMode:
+    POST_MODE_NORMAL = "norm"
+    POST_MODE_UPDATE = "update"
+
+
+class LoadDist:
+    DIST_NORM = "norm"
+    DIST_BRC_B32 = "brc_b32"
+
+
+class LoadParams:
+    """Marker annotation for tensor tile load params."""
+
+    pass
+
+
+@dataclass
+class NormalLoadParams(LoadParams):
+    """Default aligned vector load."""
+
+    load_dist: str = LoadDist.DIST_NORM
+    post_mode: str = PostMode.POST_MODE_NORMAL
+    post_update_stride: int = 0
+
+
+@dataclass
+class UnalignLoadParams(LoadParams):
+    """Unaligned UB vector load (lowers with ``unaligned_ub_access``)."""
+
+    is_pre: bool = False
+    post_mode: str = PostMode.POST_MODE_NORMAL
+    post_update_stride: int = 0
+
+
 @dataclass
 class CopyL0C2DstParams(CopyParams):
     unit_flag: int = 0

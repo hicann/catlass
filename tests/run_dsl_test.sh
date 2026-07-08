@@ -74,7 +74,7 @@ Run end-to-end validation for:
   - basic_mmad (basic_matmul.py --run --all-layouts --all-mmad-dtypes)
   - basic_vadd (basic_vadd.py --run --all-dtypes, plus mutex variants)
   - basic_mixed (basic_mixed.py --run)
-  - binary_op (binary_op.py <op> --run --all-dtypes for add/sub/mul/div/max/min)
+  - binary_op (binary_op.py <op> --run --all-dtypes for add/sub/mul/div/max/min/add_unalign/add_brc_b32)
   - masked_binary (masked_binary.py masked_binary --run --all-dtypes)
   - mask_logic (mask_logic.py mask_logic --run --all-dtypes)
   - reduction_ops (reduction_ops.py <op> --run for add/max/min)
@@ -359,7 +359,7 @@ _run_binary_op_case() {
     )
 }
 
-for _binary_op in add sub mul div max min; do
+for _binary_op in add sub mul div max min add_unalign add_brc_b32; do
     _run_binary_op_case "${_binary_op}"
 done
 

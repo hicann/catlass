@@ -68,39 +68,76 @@ class _Tensor(TensorABC):
         return str(_tensor_metadata_field(self.value, "layout_tag"))
 
     @dsl_user_op
-    def load(self, *, loc: mlir_ir.Location | None = None) -> Any:
+    def load(
+        self,
+        params: Any | None = None,
+        *,
+        loc: mlir_ir.Location | None = None,
+    ) -> Any:
         """Load this tensor tile into vector SSA inside a tla.vec.func region."""
         from ..core_api import (
             VectorSSA,
             _as_value,
+            _coerce_type,
             _register_tla_tensor_metadata,
             _register_tla_tensor_type,
             _require_frontend_state,
             _tla_tensor_type_for_mlir_value,
-            _tensor_metadata_field,
+            _vector_lane_count,
         )
+        from ..execution_lowering import TlaLoweringError
+        from ..params import LoadDist, NormalLoadParams, PostMode, UnalignLoadParams
+        from ..types import dtype_size_bytes
 
         loc = _normalize_user_loc(loc)
         _require_frontend_state("load")
         _runtime._require_enclosing_region("load", "vec.func")
-        source = _as_value(self)
-        result = _tla_ops_gen.load(source.type, source, loc=loc)
-        try:
-            _register_tla_tensor_type(result, _tla_tensor_type_for_mlir_value(source))
-            _register_tla_tensor_metadata(
-                result,
-                {
-                    "shape": _tensor_metadata_field(source, "shape"),
-                    "stride": _tensor_metadata_field(source, "stride"),
-                    "coord": _tensor_metadata_field(source, "coord"),
-                    "origin_shape": _tensor_metadata_field(source, "origin_shape"),
-                    "dtype": _tensor_metadata_field(source, "dtype"),
-                    "addrspace": _tensor_metadata_field(source, "addrspace"),
-                    "layout_tag": _tensor_metadata_field(source, "layout_tag"),
-                },
+        if params is None:
+            params = NormalLoadParams()
+        elif not isinstance(params, (NormalLoadParams, UnalignLoadParams)):
+            raise TlaLoweringError(
+                "load params must be NormalLoadParams or UnalignLoadParams, "
+                f"got {type(params).__name__}"
             )
-        except Exception:
-            pass
+
+        if params.post_mode != PostMode.POST_MODE_NORMAL:
+            raise NotImplementedError(
+                f"currently unsupported post_mode {params.post_mode!r}"
+            )
+        if params.post_update_stride != 0:
+            raise NotImplementedError(
+                f"currently unsupported post_update_stride {params.post_update_stride}"
+            )
+        if isinstance(params, UnalignLoadParams) and params.is_pre:
+            raise NotImplementedError(
+                f"currently unsupported is_pre {params.is_pre}"
+            )
+
+        load_kwargs: dict[str, Any] = {"loc": loc}
+        if isinstance(params, UnalignLoadParams):
+            load_kwargs["unaligned_ub_access"] = True
+        elif isinstance(params, NormalLoadParams) and params.load_dist != LoadDist.DIST_NORM:
+            ctx = loc.context if loc is not None else mlir_ir.Context.current
+            load_kwargs["load_dist"] = mlir_ir.Attribute.parse(
+                f"#tla.load_dist<{params.load_dist}>",
+                context=ctx,
+            )
+
+        source = _as_value(self)
+        source_desc = _tla_tensor_type_for_mlir_value(source)
+        result_desc = source_desc
+        if (
+            isinstance(params, NormalLoadParams)
+            and params.load_dist == LoadDist.DIST_BRC_B32
+        ):
+            lanes = _vector_lane_count(dtype_size_bytes(source_desc.element_type))
+            result_desc = source_desc.with_updates(
+                shape=lanes, stride=1, origin_shape=lanes
+            )
+
+        result = _tla_ops_gen.load(_coerce_type(result_desc), source, **load_kwargs)
+        _register_tla_tensor_type(result, result_desc)
+        _register_tla_tensor_metadata(result, result_desc.metadata())
         return VectorSSA(result)
 
     @dsl_user_op

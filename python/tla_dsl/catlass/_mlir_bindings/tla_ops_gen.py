@@ -1029,13 +1029,19 @@ class LoadOp(_ods_ir.OpView):
 
   _ODS_REGIONS = (0, True)
 
-  def __init__(self, result, source, *, loc=None, ip=None):
+  def __init__(self, result, source, *, load_dist=None, unaligned_ub_access=None, loc=None, ip=None):
     operands = []
     results = []
     attributes = {}
     regions = None
     operands.append(_get_op_result_or_value(source))
     _ods_context = _ods_get_default_loc_context(loc)
+    if load_dist is not None: attributes["load_dist"] = (load_dist if (
+        isinstance(load_dist, _ods_ir.Attribute) or
+        not _ods_ir.AttrBuilder.contains('Tla_LoadDistAttr')) else
+          _ods_ir.AttrBuilder.get('Tla_LoadDistAttr')(load_dist, context=_ods_context))
+    if bool(unaligned_ub_access): attributes["unaligned_ub_access"] = _ods_ir.UnitAttr.get(
+      _ods_get_default_loc_context(loc))
     results.append(result)
     _ods_successors = None
     super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
@@ -1045,11 +1051,43 @@ class LoadOp(_ods_ir.OpView):
     return self.operation.operands[0]
 
   @builtins.property
+  def load_dist(self):
+    if "load_dist" not in self.operation.attributes:
+      return None
+    return self.operation.attributes["load_dist"]
+
+  @load_dist.setter
+  def load_dist(self, value):
+    if value is not None:
+      self.operation.attributes["load_dist"] = value
+    elif "load_dist" in self.operation.attributes:
+      del self.operation.attributes["load_dist"]
+
+  @load_dist.deleter
+  def load_dist(self):
+    del self.operation.attributes["load_dist"]
+
+  @builtins.property
+  def unaligned_ub_access(self):
+    return "unaligned_ub_access" in self.operation.attributes
+
+  @unaligned_ub_access.setter
+  def unaligned_ub_access(self, value):
+    if bool(value):
+      self.operation.attributes["unaligned_ub_access"] = _ods_ir.UnitAttr.get()
+    elif "unaligned_ub_access" in self.operation.attributes:
+      del self.operation.attributes["unaligned_ub_access"]
+
+  @unaligned_ub_access.deleter
+  def unaligned_ub_access(self):
+    del self.operation.attributes["unaligned_ub_access"]
+
+  @builtins.property
   def result(self):
     return self.operation.results[0]
 
-def load(result, source, *, loc=None, ip=None) -> _ods_ir.Value:
-  return _get_op_result_or_op_results(LoadOp(result=result, source=source, loc=loc, ip=ip))
+def load(result, source, *, load_dist=None, unaligned_ub_access=None, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(LoadOp(result=result, source=source, load_dist=load_dist, unaligned_ub_access=unaligned_ub_access, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
 class LogOp(_ods_ir.OpView):

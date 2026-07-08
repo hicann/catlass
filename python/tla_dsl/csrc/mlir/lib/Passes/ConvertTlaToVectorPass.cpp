@@ -91,6 +91,28 @@ static hivmave::VFPltOp createAvePltMask(OpBuilder &b, Location loc, VectorType 
   return b.create<hivmave::VFPltOp>(loc, maskType, b.getIndexType(), trueShape);
 }
 
+static hivmave::LoadDist mapTlaLoadDistToAve(::LoadDist dist) {
+  switch (dist) {
+  case ::LoadDist::norm:
+    return hivmave::LoadDist::NORM;
+  case ::LoadDist::brc_b32:
+    return hivmave::LoadDist::BRC_B32;
+  }
+  llvm_unreachable("unsupported tla.load load_dist");
+}
+
+static hivmave::VFLoadOp createVFLoad(OpBuilder &b, Location loc, VectorType vecType,
+                                      Value memref, Value index, hivmave::LoadDist pattern,
+                                      bool unaligned) {
+  auto load = b.create<hivmave::VFLoadOp>(loc, vecType, memref, ValueRange{index});
+  if (pattern != hivmave::LoadDist::NORM)
+    load.setPattern(pattern);
+  if (unaligned)
+    load->setAttr(hivmave::UnalignedAttr::name,
+                  hivmave::UnalignedAttr::get(b.getContext()));
+  return load;
+}
+
 static FailureOr<int64_t> getVectorLanesForMemref(MemRefType type) {
   if (type.getRank() != 1 && type.getRank() != 2)
     return failure();
@@ -1338,8 +1360,13 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     if (!source)
       return failure();
     Value zero = b.create<arith::ConstantIndexOp>(loc, 0);
+    hivmave::LoadDist pattern = hivmave::LoadDist::NORM;
+    if (auto loadDistAttr = loadOp.getLoadDist())
+      pattern = mapTlaLoadDistToAve(loadDistAttr->getLoadDist());
     valueMap[loadOp.getResult()] =
-        b.create<hivmave::VFLoadOp>(loc, ctx.vecType, source, ValueRange{zero}).getRes();
+        createVFLoad(b, loc, ctx.vecType, source, zero, pattern,
+                     loadOp.getUnalignedUbAccess().value_or(false))
+            .getRes();
     return success();
   }
 

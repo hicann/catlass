@@ -256,6 +256,21 @@ def Tla_L0C2UBModeAttr : Tla_EnumAttr<"L0C2UBMode", "l0c2ub_mode"> {
   }];
 }
 
+// LoadDist Enum Attr
+def Tla_LoadDist_Norm : I32EnumAttrCase<"norm", 0>;
+def Tla_LoadDist_BrcB32 : I32EnumAttrCase<"brc_b32", 1>;
+def Tla_LoadDistEnum : Tla_I32Enum<"LoadDist", "Load distribution for tla.load.", [
+  Tla_LoadDist_Norm,
+  Tla_LoadDist_BrcB32
+]>;
+def Tla_LoadDistAttr : Tla_EnumAttr<"LoadDist", "load_dist"> {
+  let parameters = (ins EnumParameter<Tla_LoadDistEnum>:$load_dist);
+  let assemblyFormat = "`<` params `>`";
+  let description = [{
+    Broadcast/load distribution pattern for tla.load.
+  }];
+}
+
 // ---------------------------------------------------------------------------
 // CastParams: the four knobs of a tla.cast, matching CastParams in the Python
 // front-end (catlass/params.py). The enum keywords are the MLIR-asm tokens.
@@ -552,9 +567,12 @@ def Tla_LoadOp : Tla_Op<"load", []> {
   let summary = "Load";
   let description = [{
     Load a tensor tile into vector SSA. Must be nested inside a ``tla.vec.func``
-    region.
+    region. When ``unaligned_ub_access`` is set, lowers to ``ave.hir.vload`` with
+    unaligned UB access (``vldas``/``vldus`` inserted by the HIVMAVE pipeline).
   }];
-  let arguments = (ins Tla_TensorType:$source);
+  let arguments = (ins Tla_TensorType:$source,
+                       OptionalAttr<Tla_LoadDistAttr>:$load_dist,
+                       OptionalAttr<UnitAttr>:$unaligned_ub_access);
   let results = (outs Tla_TensorType:$result);
   let assemblyFormat = [{
     $source attr-dict `:` type($source) `->` type($result)
