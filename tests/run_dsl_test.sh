@@ -13,7 +13,7 @@
 # python/tla_dsl/examples/end_to_end/basic_vadd (basic_vadd.py),
 # python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed.py), and
 # python/tla_dsl/examples/end_to_end/vector_ops (binary_op.py, masked_binary.py,
-# mask_logic.py, reduction_ops.py, unary_ops.py, arange_op.py).
+# mask_logic.py, reduction_ops.py, compare_mask.py, unary_ops.py, arange_op.py).
 #
 # Fixed toolchain paths relative to WORKSPACE_ROOT (= parent of catlass repo):
 #   CANN:             Ascend/9.1.0-beta.1/ascend-toolkit/set_env.sh
@@ -49,6 +49,12 @@ MASKED_BINARY_REL="examples/end_to_end/vector_ops/masked_binary.py"
 MASK_LOGIC_REL="examples/end_to_end/vector_ops/mask_logic.py"
 BINARY_OP_REL="examples/end_to_end/vector_ops/binary_op.py"
 REDUCTION_OPS_REL="examples/end_to_end/vector_ops/reduction_ops.py"
+COMPARE_MASK_REL="examples/end_to_end/vector_ops/compare_mask.py"
+COMPARE_MASK_OPS=(
+    vector_vector_lt vector_vector_le vector_vector_gt vector_vector_ge vector_vector_eq vector_vector_ne
+    vector_scalar_gt vector_scalar_ge
+    masked_vector_vector_lt cmp_masked_fused static_dynamic_lt
+)
 UNARY_OPS_REL="examples/end_to_end/vector_ops/unary_ops.py"
 ARANGE_OP_REL="examples/end_to_end/vector_ops/arange_op.py"
 
@@ -72,6 +78,7 @@ Run end-to-end validation for:
   - masked_binary (masked_binary.py masked_binary --run --all-dtypes)
   - mask_logic (mask_logic.py mask_logic --run --all-dtypes)
   - reduction_ops (reduction_ops.py <op> --run for add/max/min)
+  - compare_mask (compare_mask.py <op> --run --all-dtypes for each compare-mask op)
   - unary_ops (unary_ops.py <op> --run --all-dtypes for exp/log/sqrt/abs/neg/masked_unary/masked_abs/masked_neg)
   - arange_op (arange_op.py increase --run --all-dtypes)
 Runs basic_mmad default MNK plus m=1, n=2, k=3.
@@ -271,6 +278,10 @@ if [[ ! -f "${TLA_DSL_DIR}/${REDUCTION_OPS_REL}" ]]; then
     echo "error: missing ${REDUCTION_OPS_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
+if [[ ! -f "${TLA_DSL_DIR}/${COMPARE_MASK_REL}" ]]; then
+    echo "error: missing ${COMPARE_MASK_REL} under ${TLA_DSL_DIR}" >&2
+    exit 1
+fi
 if [[ ! -f "${TLA_DSL_DIR}/${UNARY_OPS_REL}" ]]; then
     echo "error: missing ${UNARY_OPS_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
@@ -363,6 +374,19 @@ _run_reduction_ops_case() {
 
 for _reduce_op in add max min; do
     _run_reduction_ops_case "${_reduce_op}"
+done
+
+_run_compare_mask_case() {
+    local op="$1"
+    echo "==> Running compare_mask validation [${op}]: ${op} --run --all-dtypes --device ${DEVICE_ID}"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${COMPARE_MASK_REL}" "${op}" --run --all-dtypes --device "${DEVICE_ID}"
+    )
+}
+
+for _compare_mask_op in "${COMPARE_MASK_OPS[@]}"; do
+    _run_compare_mask_case "${_compare_mask_op}"
 done
 
 _run_unary_ops_case() {

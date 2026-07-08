@@ -83,6 +83,19 @@ _PIPE_VALUES = {
 }
 _CROSS_MODE_VALUES = {"npu", "vectors_core", "single_core"}
 _MISSING = object()
+_SUPPORTED_COMPARE_ELEMENT_TYPES = frozenset({"f16", "f32", "i32", "u32"})
+_MASK_CMP_MODES = ("lt", "le", "gt", "ge", "eq", "ne")
+
+
+def _check_compare_element_type_supported(op_name: str, element_type: str) -> None:
+    if element_type in _SUPPORTED_COMPARE_ELEMENT_TYPES:
+        return
+    supported = ", ".join(sorted(_SUPPORTED_COMPARE_ELEMENT_TYPES))
+    _op_error(
+        op_name,
+        f"unsupported compare element type {element_type}; "
+        f"supported element types are {supported}",
+    )
 
 
 class ReductionOp(Enum):
@@ -448,7 +461,7 @@ class VectorSSA:
 
 
 class MaskSSA:
-    """Frontend proxy for a vector predicate/mask SSA value (`!tla.mask`)."""
+    """Frontend proxy for a vector mask SSA value (`!tla.mask`)."""
 
     def __init__(self, value: mlir_ir.Value) -> None:
         if not isinstance(value, mlir_ir.Value):
@@ -3389,7 +3402,7 @@ def _emit_vector_binary(
     """Shared lowering for element-wise vector-vector binary ops.
 
     Optional ``mask`` (a ``MaskSSA`` from ``tla.create_mask`` or
-    ``tla.update_mask``) predicates which lanes are computed; masked-out lanes
+    ``tla.update_mask``) controls which lanes are computed; masked-out lanes
     are undefined/zeroed.
     """
     _require_category(op_name, "lhs", lhs, "vector_ssa", 0)
@@ -3955,6 +3968,58 @@ def _emit_logic_binary(
     )
 
 
+def _tla_mask_type(context: mlir_ir.Context) -> mlir_ir.Type:
+    """Return ``!tla.mask`` parsed in the same MLIR context as the surrounding SSA values."""
+    _tla_type_bridge.load_tla_dialect(context)
+    return mlir_ir.Type.parse("!tla.mask", context=context)
+
+
+@dsl_user_op
+def cmp(
+    lhs: VectorSSA,
+    rhs: Any,
+    mode: str,
+    *,
+    mask: MaskSSA | None = None,
+    loc: mlir_ir.Location | None = None,
+) -> MaskSSA:
+    """Return a mask for element-wise vector compare."""
+    mode = str(mode).lower()
+    if mode not in _MASK_CMP_MODES:
+        _op_error(
+            "cmp",
+            f"mode must be one of {_MASK_CMP_MODES}; got {mode!r}",
+        )
+    _require_category("cmp", "lhs", lhs, "vector_ssa", 0)
+    rhs_category = _category(rhs)
+    rhs_scalar = _is_scalar_literal(rhs)
+    if rhs_category != "vector_ssa" and not rhs_scalar:
+        _op_error(
+            "cmp",
+            f"invalid argument 'rhs' (position 1): expected vector or scalar, got {_type_name(rhs)}",
+        )
+    if mask is not None:
+        _require_category("cmp", "mask", mask, "mask_ssa", 2)
+    _require_frontend_state("cmp")
+    _runtime._require_enclosing_region("cmp", "vec.func")
+    lhs_value = _as_value(lhs)
+    if rhs_category == "vector_ssa":
+        rhs_value = _as_value(rhs)
+    else:
+        lhs_desc = _tla_tensor_type_for_mlir_value(lhs_value)
+        rhs_value = _scalar_constant_for_element_type(
+            "cmp", rhs, lhs_desc.element_mlir_type(lhs_value.type.context), loc=loc
+        )
+        _check_compare_element_type_supported("cmp", lhs_desc.element_type)
+    mask_ty = _tla_mask_type(lhs_value.type.context)
+    mask_value = _as_value(mask) if mask is not None else None
+    return MaskSSA(
+        _tla_ops_gen.cmp(
+            mask_ty, lhs_value, rhs_value, mode, mask=mask_value, loc=loc
+        )
+    )
+
+
 @dsl_user_op
 def not_(
     src_reg: Any,
@@ -4227,6 +4292,7 @@ _require_generated("divs")
 _require_generated("reduce")
 for _unary_op_name in ("exp", "log", "sqrt", "abs", "neg"):
     _require_generated(_unary_op_name)
+_require_generated("cmp")
 _require_generated("arch_block_idx")
 _require_generated("arch_sub_block_idx")
 _require_generated("arch_block_dim")
@@ -4323,7 +4389,7 @@ def create_mask(
     dtype: Any = Float32,
     loc: mlir_ir.Location | None = None,
 ) -> MaskSSA:
-    """Create a vector predicate mask inside a vector region from a fixed pattern.
+    """Create a vector mask inside a vector region from a fixed pattern.
 
     ``pattern=tla.mask.ALL`` (or ``VL8``, ``H``, ``Q``, ``M4``, ...) emits a
     fixed AVE pge pattern. ``dtype`` (default ``f32``) fixes the mask lane count
@@ -4351,7 +4417,7 @@ def update_mask(
     *,
     loc: mlir_ir.Location | None = None,
 ) -> tuple[MaskSSA, Any]:
-    """Create a tail predicate mask and the remaining element count.
+    """Create a tail mask and the remaining element count.
 
     Maps to AVE ``plt``. Given ``true_shape`` (the number of elements still to
     process), returns ``(mask, new_true_shape)`` where ``mask`` activates lane
@@ -4452,6 +4518,7 @@ __all__ = [
     "neg",
     "gather",
     "ReductionOp",
+    "cmp",
     "make_ptr",
     "recast_ptr",
     "make_shape",

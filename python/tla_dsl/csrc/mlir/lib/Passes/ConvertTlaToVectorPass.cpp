@@ -922,7 +922,7 @@ static std::optional<AnyVectorOperationInfo> getAnyVectorOperationInfo(Operation
   return std::nullopt;
 }
 
-// The predicate-register width (b8/b16/b32) matching the element type.
+// The mask-register width (b8/b16/b32) matching the element type.
 static hivmave::MaskWidth maskWidthForElement(Type elementType) {
   unsigned bits = elementType.getIntOrFloatBitWidth();
   if (bits <= 8)
@@ -930,6 +930,17 @@ static hivmave::MaskWidth maskWidthForElement(Type elementType) {
   if (bits <= 16)
     return hivmave::MaskWidth::B16;
   return hivmave::MaskWidth::B32;
+}
+
+static std::optional<hivmave::CmpType> mapCmpMode(StringRef mode) {
+  return llvm::StringSwitch<std::optional<hivmave::CmpType>>(mode)
+      .Case("lt", hivmave::CmpType::LT)
+      .Case("le", hivmave::CmpType::LE)
+      .Case("gt", hivmave::CmpType::GT)
+      .Case("ge", hivmave::CmpType::GE)
+      .Case("eq", hivmave::CmpType::EQ)
+      .Case("ne", hivmave::CmpType::NE)
+      .Default(std::nullopt);
 }
 
 // True for the tla ops that produce a vector compute result inside a vec.func
@@ -969,7 +980,7 @@ static Value createMaskLogicBinaryResult(OpBuilder &b, Location loc,
 }
 
 
-// Build the AVE vector op for a tla binary op. The mask predicates active lanes.
+// Build the AVE vector op for a tla binary op. The mask controls active lanes.
 // For div the signedness is carried as the TypeFn cast attribute (cast_unsigned
 // for unsigned integer element types, cast_signed otherwise).
 static Value createVectorBinaryResult(OpBuilder &b, Location loc, VectorBinaryKind kind,
@@ -1477,7 +1488,7 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     return success();
   }
 
-  // tla.where: per-lane select. The mask predicates which lanes take `x`; the
+  // tla.where: per-lane select. The mask controls which lanes take `x`; the
   // remaining lanes take `y`. Lowers to ave.hir.vsel(mask, x, y).
   if (auto whereOp = dyn_cast<::tla::WhereOp>(op)) {
     Value mask = valueMap.lookup(whereOp.getMask());
@@ -1599,7 +1610,7 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     return success();
   }
 
-  // tla.create_mask: build the predicate vector for the enclosing region from a
+  // tla.create_mask: build the mask vector for the enclosing region from a
   // fixed pattern -> ave.hir.pge<PATTERN>. The dtype attr fixes the lane count
   // (256 bytes / element size) and must match the vector region width.
   if (auto maskOp = dyn_cast<::tla::CreateMaskOp>(op)) {
@@ -1622,7 +1633,7 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     return success();
   }
 
-  // tla.update_mask: tail predicate + remaining count. Lowers to ave.hir.plt,
+  // tla.update_mask: tail mask + remaining count. Lowers to ave.hir.plt,
   // whose mask result drives masked stores and whose second result
   // (true_shape - lanes) is threaded back as the loop-carried tail counter.
   // The dtype attr fixes the lane count (256 bytes / element size) and must
@@ -1650,6 +1661,41 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     Value lanesValue = b.create<arith::ConstantIndexOp>(loc, ctx.lanes);
     valueMap[updateMaskOp.getNewTrueShape()] =
         b.create<arith::SubIOp>(loc, trueShape, lanesValue);
+    return success();
+  }
+
+  if (auto cmpOp = dyn_cast<::tla::CmpOp>(op)) {
+    Value lhs = valueMap.lookup(cmpOp.getLhs());
+    if (!lhs)
+      return failure();
+    auto cmpType = mapCmpMode(cmpOp.getMode());
+    if (!cmpType)
+      return cmpOp.emitError("unknown tla.cmp mode: ") << cmpOp.getMode(),
+             failure();
+    Value mask;
+    if (cmpOp.getMask()) {
+      mask = valueMap.lookup(cmpOp.getMask());
+      if (!mask)
+        return failure();
+    } else {
+      mask = b.create<hivmave::VFPgeOp>(loc, ctx.maskVecType, hivmave::PgePattern::ALL);
+    }
+    if (isa<::tla::TlaTensorType>(cmpOp.getRhs().getType())) {
+      Value rhs = valueMap.lookup(cmpOp.getRhs());
+      if (!rhs)
+        return failure();
+      valueMap[cmpOp.getResult()] =
+          b.create<hivmave::VFCmpOp>(loc, ctx.maskVecType, *cmpType, lhs, rhs, mask);
+    } else {
+      Value rhs = lookupOrCloneScalarValue(b, cmpOp.getRhs(), valueMap);
+      if (!rhs)
+        return failure();
+      auto scalarOr = castScalarForVectorElement(rhs, ctx.elementType);
+      if (failed(scalarOr))
+        return failure();
+      valueMap[cmpOp.getResult()] =
+          b.create<hivmave::VFCmpS>(loc, ctx.maskVecType, *cmpType, lhs, *scalarOr, mask);
+    }
     return success();
   }
 

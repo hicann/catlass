@@ -304,6 +304,58 @@ def cast(result, source, trait, *, mask=None, loc=None, ip=None) -> _ods_ir.Valu
   return _get_op_result_or_op_results(CastOp(result=result, source=source, trait=trait, mask=mask, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
+class CmpOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.cmp"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, lhs, rhs, mode, *, mask=None, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(lhs))
+    operands.append(_get_op_result_or_value(rhs))
+    if mask is not None: operands.append(_get_op_result_or_value(mask))
+    _ods_context = _ods_get_default_loc_context(loc)
+    attributes["mode"] = (mode if (
+    isinstance(mode, _ods_ir.Attribute) or
+    not _ods_ir.AttrBuilder.contains('StrAttr')) else
+      _ods_ir.AttrBuilder.get('StrAttr')(mode, context=_ods_context))
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def lhs(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def rhs(self):
+    return self.operation.operands[1]
+
+  @builtins.property
+  def mask(self):
+    return None if len(self.operation.operands) < 3 else self.operation.operands[2]
+
+  @builtins.property
+  def mode(self):
+    return self.operation.attributes["mode"]
+
+  @mode.setter
+  def mode(self, value):
+    if value is None:
+      raise ValueError("'None' not allowed as value for mandatory attributes")
+    self.operation.attributes["mode"] = value
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def cmp(result, lhs, rhs, mode, *, mask=None, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(CmpOp(result=result, lhs=lhs, rhs=rhs, mode=mode, mask=mask, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
 class CopyL0C2DstParamsOp(_ods_ir.OpView):
   OPERATION_NAME = "tla.CopyL0C2DstParams"
 

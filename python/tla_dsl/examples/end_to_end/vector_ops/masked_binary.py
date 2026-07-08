@@ -227,7 +227,7 @@ def _expected(op_name: str, inputs: tuple[Any, ...]) -> tuple[Any, ...]:
     else:
         div_r = a.div(b, rounding_mode="trunc")
 
-    # Per-op keep predicates matching the kernel's masks (lane = idx % VL_ELE).
+    # Per-op keep masks matching the kernel's masks (lane = idx % VL_ELE).
     lane = torch.arange(VECTOR_ELE, device=a.device) % VL_ELE
     keep_add = lane < (VL_ELE // 2)   # pattern H (first half)
     keep_sub = lane < (VL_ELE // 4)   # pattern Q (first quarter)

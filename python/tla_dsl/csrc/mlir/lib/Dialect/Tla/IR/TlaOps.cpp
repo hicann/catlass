@@ -5,11 +5,36 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OpImplementation.h"
+#include "llvm/ADT/StringSwitch.h"
 
 #define GET_OP_CLASSES
 #include "tla/Ops.cpp.inc"
 
 namespace tla {
+
+template <typename TreeType>
+static mlir::LogicalResult getIndexTreeLeavesForVerify(
+    mlir::Operation *op, TreeType treeType,
+    llvm::SmallVectorImpl<int64_t> &leaves, llvm::StringRef name) {
+  if (failed(getTlaIndexTreeLeaves(treeType.getTree(), leaves)))
+    return op->emitOpError() << "failed to decode " << name;
+  return mlir::success();
+}
+
+static bool isSupportedCmpElementType(mlir::Type elementType) {
+  if (elementType.isF16() || elementType.isF32())
+    return true;
+  auto intType = mlir::dyn_cast<mlir::IntegerType>(elementType);
+  return intType && (intType.isSignless() || intType.isUnsigned()) &&
+         intType.getWidth() == 32;
+}
+
+static bool isSupportedCmpMode(llvm::StringRef mode) {
+  return llvm::StringSwitch<bool>(mode)
+      .Cases("lt", "le", "gt", "ge", true)
+      .Cases("eq", "ne", true)
+      .Default(false);
+}
 
 mlir::LogicalResult AllocPtrOp::verify() {
   auto resTy = llvm::dyn_cast<PtrType>(getResult().getType());
@@ -38,6 +63,7 @@ mlir::LogicalResult HivmMemrefAsPtrOp::verify() {
     return emitOpError("result must be !tla.ptr");
   return mlir::success();
 }
+
 
 // Walk the enclosing ops looking for an ancestor of type AncestorOp. The
 // required region may be several levels up (e.g. a compute op nested inside a
@@ -177,6 +203,39 @@ mlir::LogicalResult CopyOp::verify() {
   if (vectorRoute && !hasEnclosingRegion<VectorOp>(getOperation()))
     return emitOpError(
         "copy between GM/UB/L1 must be nested inside a tla.vector region");
+  return mlir::success();
+}
+
+mlir::LogicalResult CmpOp::verify() {
+  if (!hasEnclosingRegion<VecFuncOp>(getOperation()))
+    return emitOpError("must be nested inside a tla.vec.func region");
+  if (!isSupportedCmpMode(getMode()))
+    return emitOpError()
+           << "mode must be one of lt, le, gt, ge, eq, ne, got \""
+           << getMode() << "\"";
+
+  auto lhsType = getLhs().getType();
+  auto lhsPtr = lhsType.getPtr();
+  mlir::Type lhsElementType = lhsPtr.getPointee();
+  if (!isSupportedCmpElementType(lhsElementType))
+    return emitOpError() << "unsupported compare element type "
+                         << lhsElementType;
+
+  auto rhsType = getRhs().getType();
+  auto rhsTensorType = mlir::dyn_cast<::tla::TlaTensorType>(rhsType);
+  if (!rhsTensorType) {
+    if (rhsType != lhsElementType)
+      return emitOpError() << "scalar operand must have element type "
+                           << lhsElementType << ", got " << rhsType;
+    return mlir::success();
+  }
+
+  auto rhsPtr = rhsTensorType.getPtr();
+  mlir::Type rhsElementType = rhsPtr.getPointee();
+  if (lhsElementType != rhsElementType)
+    return emitOpError() << "operands must have the same element type, got "
+                         << lhsElementType << " and " << rhsElementType;
+
   return mlir::success();
 }
 

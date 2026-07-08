@@ -8,6 +8,7 @@ add_library(TlaPasses
   TlaLowerToStdPass.cpp
   TlaLowerFlagBarrierToHivmPass.cpp
   TlaPrologueEpiloguePass.cpp
+  TlaLowerAVEToRegbaseIntrinsPass.cpp
   ConvertTlaToVectorPass.cpp
   ../Dialect/Tla/IR/TlaDialect.cpp
   ../Dialect/Tla/IR/TlaAttrs.cpp

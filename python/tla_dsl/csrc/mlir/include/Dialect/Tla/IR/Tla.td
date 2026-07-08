@@ -33,7 +33,7 @@ def Tla_FlagType : TypeDef<TlaDialect, "Flag", []> {
 
 def Tla_MaskType : TypeDef<TlaDialect, "Mask", []> {
   let mnemonic = "mask";
-  let summary = "Vector element-wise predicate/mask for conditional vector ops.";
+  let summary = "Vector element-wise mask for conditional vector ops.";
   let assemblyFormat = "";
 }
 
@@ -766,7 +766,7 @@ def Tla_SetFlagOp : Tla_Op<"set_flag", []> {
 def Tla_StoreOp : Tla_Op<"store", []> {
   let summary = "Store";
   let description = [{
-    Register-fragment store marker on a tensor tile. An optional mask predicates
+    Register-fragment store marker on a tensor tile. An optional mask controls
     which lanes are written (masked-out lanes are left untouched). Must be nested
     inside a ``tla.vec.func`` region.
   }];
@@ -780,9 +780,9 @@ def Tla_StoreOp : Tla_Op<"store", []> {
 }
 
 def Tla_CreateMaskOp : Tla_Op<"create_mask", [Pure]> {
-  let summary = "Create a vector predicate mask from a fixed pattern";
+  let summary = "Create a vector mask from a fixed pattern";
   let description = [{
-    Create an element-wise predicate mask from a fixed AVE ``pge`` pattern, e.g.
+    Create an element-wise mask from a fixed AVE ``pge`` pattern, e.g.
     ``ALL``, ``ALLF``, ``VL8`` (lowest 8 lanes), ``H`` (lowest half), ``Q``
     (lowest quarter), ``M3``/``M4`` (multiples of 3/4).
 
@@ -798,10 +798,10 @@ def Tla_CreateMaskOp : Tla_Op<"create_mask", [Pure]> {
 }
 
 def Tla_UpdateMaskOp : Tla_Op<"update_mask", [Pure]> {
-  let summary = "Tail predicate mask plus the remaining element count";
+  let summary = "Tail mask plus the remaining element count";
   let description = [{
     Tail-loop helper mapping to AVE ``plt``. Given the number of elements still
-    to process (``true_shape``), produce a predicate mask (lane ``i`` is active
+    to process (``true_shape``), produce a mask (lane ``i`` is active
     iff ``i < true_shape``, saturating to all-true once ``true_shape`` reaches
     the lane count) together with the remaining count after this iteration,
     ``new_true_shape = true_shape - lanes`` where ``lanes = 256 bytes / dtype
@@ -870,6 +870,26 @@ def Tla_MaskXorOp : Tla_MaskBinaryOp<"mask_xor",
     "Predicate mask XOR",
     "Element-wise logical XOR on predicate masks.">;
 
+def Tla_CmpOp : Tla_Op<"cmp", [Pure]> {
+  let summary = "Create a mask by comparing a vector with a vector or scalar";
+  let description = [{
+    Data-dependent mask: lane ``i`` is true when ``lhs[i] <mode> rhs[i]``.
+    ``rhs`` may be a vector tensor or scalar SSA value. ``mode`` is one of
+    ``lt``, ``le``, ``gt``, ``ge``, ``eq``, ``ne``. An optional mask controls
+    which lanes participate in the compare.
+  }];
+  let arguments = (ins Tla_TensorType:$lhs,
+                       AnyTypeOf<[Tla_TensorType, Tla_ScalarValueType]>:$rhs,
+                       StrAttr:$mode,
+                       Optional<Tla_MaskType>:$mask);
+  let results = (outs Tla_MaskType:$result);
+  let hasVerifier = 1;
+  let assemblyFormat = [{
+    $mode $lhs `,` $rhs (`mask` $mask^)? attr-dict `:`
+    type($lhs) `,` type($rhs) (`mask` qualified(type($mask))^)? `->` qualified(type($result))
+  }];
+}
+
 def Tla_TileViewOp : Tla_Op<"tile_view", []> {
   let summary = "Tile view";
   let description = [{
@@ -888,7 +908,7 @@ class Tla_VectorBinaryOp<string mnemonic, string opSummary, string opDescription
   let summary = opSummary;
   let description = opDescription # [{
 
-    An optional mask predicates which lanes are computed; masked-out lanes are
+    An optional mask controls which lanes are computed; masked-out lanes are
     undefined/zeroed.
   }];
   let arguments = (ins Tla_TensorType:$lhs, Tla_TensorType:$rhs,
@@ -960,7 +980,7 @@ def Tla_WhereOp : Tla_Op<"where", [Pure]> {
   let summary = "Vector select for tensor fragments";
   let description = [{
     Element-wise select on tensor fragments / vector tiles. For each lane the
-    result holds the corresponding lane of ``x`` where the predicate mask is
+    result holds the corresponding lane of ``x`` where the mask is
     active and ``y`` elsewhere. ``x`` and ``y`` must share the same tensor type.
   }];
   let arguments = (ins Tla_MaskType:$mask, Tla_TensorType:$x, Tla_TensorType:$y);
@@ -977,7 +997,7 @@ class Tla_VectorScalarBinaryOp<string mnemonic, string opSummary, string opDescr
   let summary = opSummary;
   let description = opDescription # [{
 
-    The right-hand side is a scalar SSA value. An optional mask predicates which
+    The right-hand side is a scalar SSA value. An optional mask controls which
     lanes are computed; masked-out lanes are undefined/zeroed.
   }];
   let arguments = (ins Tla_TensorType:$lhs, Tla_ScalarValueType:$rhs,
@@ -1034,7 +1054,7 @@ class Tla_VectorUnaryOp<string mnemonic, string opSummary, string opDescription>
   let summary = opSummary;
   let description = opDescription # [{
 
-    An optional mask predicates which lanes are computed; masked-out lanes are
+    An optional mask controls which lanes are computed; masked-out lanes are
     undefined/zeroed.
   }];
   let arguments = (ins Tla_TensorType:$operand,

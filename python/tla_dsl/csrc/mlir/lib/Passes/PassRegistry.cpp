@@ -21,6 +21,7 @@ void registerTlaPasses() {
   registerTlaLowerMutexToStdPass();
   registerTlaLowerToStdPass();
   registerTlaPrologueEpiloguePass();
+  registerTlaLowerAVEToRegbaseIntrinsPass();
 }
 
 void buildTlaPipeline(OpPassManager &pm) {
@@ -47,6 +48,7 @@ void buildTlaPipeline(OpPassManager &pm) {
   pm.addPass(mlir::createConvertHIVMAVEToStandardPass());
   pm.addPass(mlir::memref::createExpandStridedMetadataPass());
   pm.addPass(mlir::createConvertHIVMAVEToAVEIntrinPass());
+  pm.addPass(createTlaLowerAVEToRegbaseIntrinsPass());
   pm.addPass(createConvertSCFToCFPass());
 }
 

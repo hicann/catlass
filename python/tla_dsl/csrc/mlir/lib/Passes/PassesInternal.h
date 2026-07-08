@@ -19,8 +19,10 @@ void registerTlaAllocPtrToHivmPointerCastPass();
 void registerTlaLowerMutexToStdPass();
 void registerTlaLowerToStdPass();
 void registerTlaPrologueEpiloguePass();
+void registerTlaLowerAVEToRegbaseIntrinsPass();
 
 std::unique_ptr<mlir::Pass> createTlaLowerMutexToStdPass();
+std::unique_ptr<mlir::Pass> createTlaLowerAVEToRegbaseIntrinsPass();
 mlir::LogicalResult lowerTlaMutexToStd(
     mlir::ModuleOp module,
     std::function<mlir::Value(mlir::Operation *, int64_t, unsigned)>

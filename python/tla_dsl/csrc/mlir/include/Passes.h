@@ -13,6 +13,7 @@ std::unique_ptr<mlir::Pass> createTlaSplitMixedFuncPass();
 std::unique_ptr<mlir::Pass> createTlaLowerBlockIdxPass();
 std::unique_ptr<mlir::Pass> createConvertTlaToVectorPass();
 std::unique_ptr<mlir::Pass> createTlaPrologueEpiloguePass();
+std::unique_ptr<mlir::Pass> createTlaLowerAVEToRegbaseIntrinsPass();
 
 void registerTlaPasses();
 void buildTlaPipeline(mlir::OpPassManager &pm);

@@ -114,7 +114,7 @@ class _Tensor(TensorABC):
         """Store a vector SSA value into this tensor tile inside a tla.vec.func region.
 
         An optional ``mask`` (a ``MaskSSA`` from ``tla.create_mask`` or
-        ``tla.update_mask``) predicates which lanes are written; masked-out lanes
+        ``tla.update_mask``) controls which lanes are written; masked-out lanes
         are left untouched. Only a ``MaskSSA`` is accepted (validated below); a
         ``mask`` here is typed ``Any`` to avoid a circular import of ``MaskSSA``.
         """

@@ -651,6 +651,7 @@ _CORE_API_EXPORTS = (
     "abs",
     "neg",
     "gather",
+    "cmp",
     "make_ptr",
     "recast_ptr",
     "make_shape",

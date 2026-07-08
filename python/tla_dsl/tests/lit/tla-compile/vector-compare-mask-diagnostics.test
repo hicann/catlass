@@ -1,0 +1,51 @@
+// RUN: sed -n '/^\/\/ BEGIN_BAD_MODE$/,/^\/\/ END_BAD_MODE$/p' %s | sed '1d;$d;s|^// ||' > %t.bad_mode.mlir && not %tla_compile %t.bad_mode.mlir -o %t 2>&1 | %filecheck %s --check-prefix=BAD-MODE
+// RUN: sed -n '/^\/\/ BEGIN_TYPE_MISMATCH$/,/^\/\/ END_TYPE_MISMATCH$/p' %s | sed '1d;$d;s|^// ||' > %t.type_mismatch.mlir && not %tla_compile %t.type_mismatch.mlir -o %t 2>&1 | %filecheck %s --check-prefix=TYPE-MISMATCH
+// RUN: sed -n '/^\/\/ BEGIN_SCALAR_MISMATCH$/,/^\/\/ END_SCALAR_MISMATCH$/p' %s | sed '1d;$d;s|^// ||' > %t.scalar_mismatch.mlir && not %tla_compile %t.scalar_mismatch.mlir -o %t 2>&1 | %filecheck %s --check-prefix=SCALAR-MISMATCH
+// RUN: sed -n '/^\/\/ BEGIN_UNSUPPORTED$/,/^\/\/ END_UNSUPPORTED$/p' %s | sed '1d;$d;s|^// ||' > %t.unsupported.mlir && not %tla_compile %t.unsupported.mlir -o %t 2>&1 | %filecheck %s --check-prefix=UNSUPPORTED-TYPE
+
+// BAD-MODE: 'tla.cmp' op mode must be one of lt, le, gt, ge, eq, ne, got "between"
+// TYPE-MISMATCH: 'tla.cmp' op operands must have the same element type
+// SCALAR-MISMATCH: 'tla.cmp' op scalar operand must have element type 'f32', got 'i32'
+// UNSUPPORTED-TYPE: 'tla.cmp' op unsupported compare element type
+// UNSUPPORTED-TYPE-SAME: bf16
+
+// BEGIN_BAD_MODE
+// !vec = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
+// module {
+//   func.func @bad_mode(%lhs: !vec, %rhs: !vec) {
+//     "tla.vec.func"() ({ %mask = tla.cmp "between" %lhs, %rhs : !vec, !vec -> !tla.mask }) : () -> ()
+//     return
+//   }
+// }
+// END_BAD_MODE
+
+// BEGIN_TYPE_MISMATCH
+// !f32vec = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
+// !i32vec = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, row_major>, !tla.coord<0>, !tla.ptr<i32, ub, 4>>
+// module {
+//   func.func @type_mismatch(%lhs: !f32vec, %rhs: !i32vec) {
+//     "tla.vec.func"() ({ %mask = tla.cmp "lt" %lhs, %rhs : !f32vec, !i32vec -> !tla.mask }) : () -> ()
+//     return
+//   }
+// }
+// END_TYPE_MISMATCH
+
+// BEGIN_SCALAR_MISMATCH
+// !vec = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, row_major>, !tla.coord<0>, !tla.ptr<f32, ub, 4>>
+// module {
+//   func.func @scalar_mismatch(%lhs: !vec, %rhs: i32) {
+//     "tla.vec.func"() ({ %mask = tla.cmp "lt" %lhs, %rhs : !vec, i32 -> !tla.mask }) : () -> ()
+//     return
+//   }
+// }
+// END_SCALAR_MISMATCH
+
+// BEGIN_UNSUPPORTED
+// !vec = !tla.tensor<!tla.layout<!tla.shape<64>, !tla.stride<1>, !tla.shape<64>, row_major>, !tla.coord<0>, !tla.ptr<bf16, ub, 2>>
+// module {
+//   func.func @unsupported(%lhs: !vec, %rhs: !vec) {
+//     "tla.vec.func"() ({ %mask = tla.cmp "lt" %lhs, %rhs : !vec, !vec -> !tla.mask }) : () -> ()
+//     return
+//   }
+// }
+// END_UNSUPPORTED
