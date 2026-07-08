@@ -819,6 +819,57 @@ def Tla_UpdateMaskOp : Tla_Op<"update_mask", [Pure]> {
   let hasVerifier = 1;
 }
 
+class Tla_MaskUnaryOp<string mnemonic, string opSummary, string opDescription>
+    : Tla_Op<mnemonic, [Pure]> {
+  let summary = opSummary;
+  let description = opDescription # [{
+
+    The ``mask`` operand predicates which lanes are computed; masked-out lanes
+    are undefined/zeroed.
+  }];
+  let arguments = (ins Tla_MaskType:$src, Tla_MaskType:$mask);
+  let results = (outs Tla_MaskType:$result);
+  let assemblyFormat = [{
+    $src `,` $mask attr-dict `:`
+    qualified(type($src)) `,` qualified(type($mask)) `->` qualified(type($result))
+  }];
+  let hasVerifier = 1;
+}
+
+class Tla_MaskBinaryOp<string mnemonic, string opSummary, string opDescription>
+    : Tla_Op<mnemonic, [Pure]> {
+  let summary = opSummary;
+  let description = opDescription # [{
+
+    The ``mask`` operand predicates which lanes are computed; masked-out lanes
+    are undefined/zeroed.
+  }];
+  let arguments = (ins Tla_MaskType:$lhs, Tla_MaskType:$rhs, Tla_MaskType:$mask);
+  let results = (outs Tla_MaskType:$result);
+  let assemblyFormat = [{
+    $lhs `,` $rhs `,` $mask attr-dict `:`
+    qualified(type($lhs)) `,` qualified(type($rhs)) `,` qualified(type($mask))
+    `->` qualified(type($result))
+  }];
+  let hasVerifier = 1;
+}
+
+def Tla_MaskNotOp : Tla_MaskUnaryOp<"mask_not",
+    "Predicate mask NOT",
+    "Element-wise logical NOT on predicate masks.">;
+
+def Tla_MaskAndOp : Tla_MaskBinaryOp<"mask_and",
+    "Predicate mask AND",
+    "Element-wise logical AND on predicate masks.">;
+
+def Tla_MaskOrOp : Tla_MaskBinaryOp<"mask_or",
+    "Predicate mask OR",
+    "Element-wise logical OR on predicate masks.">;
+
+def Tla_MaskXorOp : Tla_MaskBinaryOp<"mask_xor",
+    "Predicate mask XOR",
+    "Element-wise logical XOR on predicate masks.">;
+
 def Tla_TileViewOp : Tla_Op<"tile_view", []> {
   let summary = "Tile view";
   let description = [{

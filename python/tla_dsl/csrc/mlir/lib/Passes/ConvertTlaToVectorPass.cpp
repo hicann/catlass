@@ -631,6 +631,7 @@ static std::string buildUniqueVectorHelperName(ModuleOp module, int &nextVectorR
 
 enum class VectorBinaryKind { Add, Sub, Mul, Div, Max, Min };
 enum class VectorRhsKind { Vector, Scalar };
+enum class MaskLogicBinaryKind { And, Or, Xor };
 
 static FailureOr<hivmave::CombiningKind>
 getAveReductionCombiningKind(::tla::ReduceOp reduceOp, Type elementType) {
@@ -817,9 +818,23 @@ struct VectorOpInfo {
   TlaBinaryOperands operands;
 };
 
+struct MaskLogicUnaryInfo {
+  Value src;
+  Value mask;
+};
+
+struct MaskLogicBinaryInfo {
+  MaskLogicBinaryKind kind;
+  Value lhs;
+  Value rhs;
+  Value mask;
+};
+
 struct AnyVectorOperationInfo {
   std::optional<VectorOpInfo> binary;
   std::optional<VectorUnaryInfo> unary;
+  std::optional<MaskLogicUnaryInfo> maskUnary;
+  std::optional<MaskLogicBinaryInfo> maskBinary;
 };
 
 static std::optional<VectorOpInfo> getVectorBinaryInfo(Operation *op) {
@@ -870,13 +885,40 @@ static std::optional<VectorOpInfo> getVectorScalarBinaryInfo(Operation *op) {
   return std::nullopt;
 }
 
+static std::optional<MaskLogicUnaryInfo> getMaskLogicUnaryInfo(Operation *op) {
+  if (!op)
+    return std::nullopt;
+  if (auto maskNotOp = dyn_cast<::tla::MaskNotOp>(op))
+    return MaskLogicUnaryInfo{maskNotOp.getSrc(), maskNotOp.getMask()};
+  return std::nullopt;
+}
+
+static std::optional<MaskLogicBinaryInfo> getMaskLogicBinaryInfo(Operation *op) {
+  if (!op)
+    return std::nullopt;
+  if (auto maskAndOp = dyn_cast<::tla::MaskAndOp>(op))
+    return MaskLogicBinaryInfo{MaskLogicBinaryKind::And, maskAndOp.getLhs(),
+                               maskAndOp.getRhs(), maskAndOp.getMask()};
+  if (auto maskOrOp = dyn_cast<::tla::MaskOrOp>(op))
+    return MaskLogicBinaryInfo{MaskLogicBinaryKind::Or, maskOrOp.getLhs(),
+                               maskOrOp.getRhs(), maskOrOp.getMask()};
+  if (auto maskXorOp = dyn_cast<::tla::MaskXorOp>(op))
+    return MaskLogicBinaryInfo{MaskLogicBinaryKind::Xor, maskXorOp.getLhs(),
+                               maskXorOp.getRhs(), maskXorOp.getMask()};
+  return std::nullopt;
+}
+
 static std::optional<AnyVectorOperationInfo> getAnyVectorOperationInfo(Operation *op) {
   if (auto info = getVectorBinaryInfo(op))
-    return AnyVectorOperationInfo{*info, std::nullopt};
+    return AnyVectorOperationInfo{*info, std::nullopt, std::nullopt, std::nullopt};
   if (auto info = getVectorScalarBinaryInfo(op))
-    return AnyVectorOperationInfo{*info, std::nullopt};
+    return AnyVectorOperationInfo{*info, std::nullopt, std::nullopt, std::nullopt};
   if (auto info = getVectorUnaryInfo(op))
-    return AnyVectorOperationInfo{std::nullopt, *info};
+    return AnyVectorOperationInfo{std::nullopt, *info, std::nullopt, std::nullopt};
+  if (auto info = getMaskLogicUnaryInfo(op))
+    return AnyVectorOperationInfo{std::nullopt, std::nullopt, *info, std::nullopt};
+  if (auto info = getMaskLogicBinaryInfo(op))
+    return AnyVectorOperationInfo{std::nullopt, std::nullopt, std::nullopt, *info};
   return std::nullopt;
 }
 
@@ -891,12 +933,41 @@ static hivmave::MaskWidth maskWidthForElement(Type elementType) {
 }
 
 // True for the tla ops that produce a vector compute result inside a vec.func
-// region: element-wise binary/unary ops, where/select, and reductions.
+// region: element-wise binary/unary ops, mask logic, where/select,
+// reductions, and gather.
 static bool isVectorComputeOp(Operation *op) {
   return getAnyVectorOperationInfo(op).has_value() ||
          isa_and_nonnull<::tla::WhereOp>(op) || isa_and_nonnull<::tla::ReduceOp>(op) ||
          isa_and_nonnull<::tla::GatherOp>(op) || isa_and_nonnull<::tla::CastOp>(op);
 }
+
+static hivmave::MaskWidthAttr maskWidthAttrForElement(OpBuilder &b, Type elementType) {
+  return hivmave::MaskWidthAttr::get(b.getContext(), maskWidthForElement(elementType));
+}
+
+static Value createMaskNotResult(OpBuilder &b, Location loc, VectorType maskVecType,
+                                      Type elementType, Value src, Value mask) {
+  return b.create<hivmave::PregNotOp>(loc, maskVecType,
+                                      maskWidthAttrForElement(b, elementType), src, mask)
+      .getRes();
+}
+
+static Value createMaskLogicBinaryResult(OpBuilder &b, Location loc,
+                                              MaskLogicBinaryKind kind,
+                                              VectorType maskVecType, Type elementType,
+                                              Value lhs, Value rhs, Value mask) {
+  auto width = maskWidthAttrForElement(b, elementType);
+  switch (kind) {
+  case MaskLogicBinaryKind::And:
+    return b.create<hivmave::PregAndOp>(loc, maskVecType, width, lhs, rhs, mask).getRes();
+  case MaskLogicBinaryKind::Or:
+    return b.create<hivmave::PregOrOp>(loc, maskVecType, width, lhs, rhs, mask).getRes();
+  case MaskLogicBinaryKind::Xor:
+    return b.create<hivmave::PregXorOp>(loc, maskVecType, width, lhs, rhs, mask).getRes();
+  }
+  llvm_unreachable("unknown mask binary logic kind");
+}
+
 
 // Build the AVE vector op for a tla binary op. The mask predicates active lanes.
 // For div the signedness is carried as the TypeFn cast attribute (cast_unsigned
@@ -1419,6 +1490,40 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     return success();
   }
 
+  if (auto maskNotOp = dyn_cast<::tla::MaskNotOp>(op)) {
+    Value src = valueMap.lookup(maskNotOp.getSrc());
+    Value mask = valueMap.lookup(maskNotOp.getMask());
+    if (!src || !mask)
+      return failure();
+    valueMap[maskNotOp.getResult()] = createMaskNotResult(
+        b, loc, ctx.maskVecType, ctx.elementType, src, mask);
+    return success();
+  }
+
+  auto lowerMaskLogicBinary = [&](Value result, Value lhsOperand, Value rhsOperand,
+                                  Value maskOperand, MaskLogicBinaryKind kind) {
+    Value lhs = valueMap.lookup(lhsOperand);
+    Value rhs = valueMap.lookup(rhsOperand);
+    Value mask = valueMap.lookup(maskOperand);
+    if (!lhs || !rhs || !mask)
+      return failure();
+    valueMap[result] = createMaskLogicBinaryResult(
+        b, loc, kind, ctx.maskVecType, ctx.elementType, lhs, rhs, mask);
+    return success();
+  };
+
+  if (auto maskAndOp = dyn_cast<::tla::MaskAndOp>(op))
+    return lowerMaskLogicBinary(maskAndOp.getResult(), maskAndOp.getLhs(), maskAndOp.getRhs(),
+                                maskAndOp.getMask(), MaskLogicBinaryKind::And);
+
+  if (auto maskOrOp = dyn_cast<::tla::MaskOrOp>(op))
+    return lowerMaskLogicBinary(maskOrOp.getResult(), maskOrOp.getLhs(), maskOrOp.getRhs(),
+                                maskOrOp.getMask(), MaskLogicBinaryKind::Or);
+
+  if (auto maskXorOp = dyn_cast<::tla::MaskXorOp>(op))
+    return lowerMaskLogicBinary(maskXorOp.getResult(), maskXorOp.getLhs(), maskXorOp.getRhs(),
+                                maskXorOp.getMask(), MaskLogicBinaryKind::Xor);
+
   if (auto reduceOp = dyn_cast<::tla::ReduceOp>(op)) {
     if (op.getNumResults() != 1)
       return failure();
@@ -1851,6 +1956,8 @@ public:
     // the control flow structure.
     SmallVector<::tla::LoadOp, 4> loads;
     SmallVector<::tla::FullOp, 4> fulls;
+    SmallVector<::tla::CreateMaskOp, 4> createMasks;
+    SmallVector<::tla::UpdateMaskOp, 4> updateMasks;
     SmallVector<::tla::ArangeOp, 4> aranges;
     SmallVector<Operation *, 4> computeOps;
     SmallVector<::tla::StoreOp, 2> stores;
@@ -1859,6 +1966,10 @@ public:
         loads.push_back(load);
       } else if (auto full = dyn_cast<::tla::FullOp>(op)) {
         fulls.push_back(full);
+      } else if (auto createMask = dyn_cast<::tla::CreateMaskOp>(op)) {
+        createMasks.push_back(createMask);
+      } else if (auto updateMask = dyn_cast<::tla::UpdateMaskOp>(op)) {
+        updateMasks.push_back(updateMask);
       } else if (auto arange = dyn_cast<::tla::ArangeOp>(op)) {
         aranges.push_back(arange);
       } else if (auto store = dyn_cast<::tla::StoreOp>(op)) {
@@ -1875,10 +1986,15 @@ public:
     // Validate the graph: every compute operand and store source must come from
     // a tla.load result or a prior compute result inside this region.
     DenseSet<Value> producedValues;
+    DenseSet<Value> producedMaskValues;
     for (::tla::LoadOp load : loads)
       producedValues.insert(load.getResult());
     for (::tla::FullOp full : fulls)
       producedValues.insert(full.getResult());
+    for (::tla::CreateMaskOp createMask : createMasks)
+      producedMaskValues.insert(createMask.getResult());
+    for (::tla::UpdateMaskOp updateMask : updateMasks)
+      producedMaskValues.insert(updateMask.getMask());
     for (::tla::ArangeOp arange : aranges)
       producedValues.insert(arange.getResult());
     for (Operation *computeOp : computeOps) {
@@ -1901,6 +2017,25 @@ public:
           if (!ops.operand || !producedValues.contains(ops.operand))
             return rewriter.notifyMatchFailure(
                 vecFuncOp, "expected unary op operand from tla.load or prior compute op");
+        } else if (auto maskUnary = anyInfo->maskUnary) {
+          if (!maskUnary->src || !maskUnary->mask ||
+              !producedMaskValues.contains(maskUnary->src) ||
+              !producedMaskValues.contains(maskUnary->mask))
+            return rewriter.notifyMatchFailure(
+                vecFuncOp, "expected mask unary operands from create/update mask or "
+                           "prior mask compute op");
+          producedMaskValues.insert(computeOp->getResult(0));
+        } else if (auto maskBinary = anyInfo->maskBinary) {
+          if (!maskBinary->lhs || !maskBinary->rhs || !maskBinary->mask ||
+              !producedMaskValues.contains(maskBinary->lhs) ||
+              !producedMaskValues.contains(maskBinary->rhs) ||
+              !producedMaskValues.contains(maskBinary->mask))
+            return rewriter.notifyMatchFailure(
+                vecFuncOp, "expected mask binary operands from create/update mask or "
+                           "prior mask compute op");
+          producedMaskValues.insert(computeOp->getResult(0));
+        } else {
+          return rewriter.notifyMatchFailure(vecFuncOp, "unexpected tla compute op");
         }
       } else if (auto whereOp = dyn_cast<::tla::WhereOp>(computeOp)) {
         if (!producedValues.contains(whereOp.getX()) ||

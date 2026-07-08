@@ -6,6 +6,27 @@ from catlass._mlir_bindings import tla_ops_gen
 
 
 @tla.kernel
+def _mask_logic_surface_kernel(src: tla.Tensor, dst: tla.Tensor) -> None:
+    src_tile = tla.tile_view(src, tla.make_shape(64), tla.make_coord(0))
+    dst_tile = tla.tile_view(dst, tla.make_shape(64), tla.make_coord(0))
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            reg = src_tile.load()
+            zero = tla.sub(reg, reg)
+            all_mask = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
+            h_mask = tla.create_mask(pattern=tla.mask.H, dtype=tla.Float32)
+            q_mask = tla.create_mask(pattern=tla.mask.Q, dtype=tla.Float32)
+            not_mask = tla.not_(q_mask, all_mask)
+            and_mask = tla.and_(h_mask, q_mask, all_mask)
+            or_mask = tla.or_(h_mask, q_mask, all_mask)
+            xor_mask = tla.xor(h_mask, q_mask, all_mask)
+            tmp0 = tla.where(not_mask, reg, zero)
+            tmp1 = tla.where(and_mask, tmp0, zero)
+            tmp2 = tla.where(or_mask, tmp1, zero)
+            dst_tile.store(tla.where(xor_mask, tmp2, zero), mask=all_mask)
+
+
+@tla.kernel
 def _ops_surface_kernel(src: tla.Tensor, dst: tla.Tensor) -> None:
     shape = tla.make_shape(1, 16)
     coord = tla.make_coord(0, 0)
@@ -63,10 +84,32 @@ def test_generated_binding_symbols_exist_for_wrapped_ops() -> None:
         "maxs",
         "mins",
         "divs",
+        "mask_xor",
+        "mask_or",
+        "mask_and",
+        "mask_not",
         "neg",
     )
     for symbol in required:
         assert hasattr(tla_ops_gen, symbol)
+
+
+def test_mask_logic_public_dispatch_emits_mask_ops() -> None:
+    with runtime_mod._eager_capture():
+        src = tla.Tensor(
+            tla.make_shape(64), tla.Float32, origin_shape=tla.make_shape(64)
+        )
+        dst = tla.Tensor(
+            tla.make_shape(64), tla.Float32, origin_shape=tla.make_shape(64)
+        )
+    mlir = _mask_logic_surface_kernel.dump_mlir(type_args=(src, dst))
+    for op_name in (
+        "tla.mask_not",
+        "tla.mask_and",
+        "tla.mask_or",
+        "tla.mask_xor",
+    ):
+        assert op_name in mlir
 
 
 def test_public_api_exports_representative_helpers() -> None:
@@ -81,6 +124,10 @@ def test_public_api_exports_representative_helpers() -> None:
     assert callable(tla.arch.block_idx)
     assert callable(tla.utils.LocalmemAllocator)
     assert callable(tla.recast_ptr)
+    assert callable(tla.not_)
+    assert callable(tla.and_)
+    assert callable(tla.or_)
+    assert callable(tla.xor)
     assert tla.arch.FIX is tla.pipes.FIX
     assert tla.pipes.ALL is not None
 

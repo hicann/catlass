@@ -3845,6 +3845,169 @@ def where(
     return VectorSSA(result)
 
 
+def _emit_mask_logic_unary(
+    op_name: str,
+    emitter: Any,
+    src_reg: MaskSSA,
+    mask: MaskSSA,
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> MaskSSA:
+    _require_category(op_name, "src_reg", src_reg, "mask_ssa", 0)
+    _require_category(op_name, "mask", mask, "mask_ssa", 1)
+    _require_frontend_state(op_name)
+    _runtime._require_enclosing_region(op_name, "vec.func")
+    mask_ty = mlir_ir.Type.parse("!tla.mask")
+    return MaskSSA(emitter(mask_ty, _as_value(src_reg), _as_value(mask), loc=loc))
+
+
+def _emit_mask_logic_binary(
+    op_name: str,
+    emitter: Any,
+    src0_reg: MaskSSA,
+    src1_reg: MaskSSA,
+    mask: MaskSSA,
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> MaskSSA:
+    _require_category(op_name, "src0_reg", src0_reg, "mask_ssa", 0)
+    _require_category(op_name, "src1_reg", src1_reg, "mask_ssa", 1)
+    _require_category(op_name, "mask", mask, "mask_ssa", 2)
+    _require_frontend_state(op_name)
+    _runtime._require_enclosing_region(op_name, "vec.func")
+    mask_ty = mlir_ir.Type.parse("!tla.mask")
+    return MaskSSA(
+        emitter(mask_ty, _as_value(src0_reg), _as_value(src1_reg), _as_value(mask), loc=loc)
+    )
+
+
+def _emit_regtensor_logic_unary(
+    op_name: str,
+    src_reg: VectorSSA,
+    mask: MaskSSA,
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> VectorSSA:
+    del src_reg, mask, loc
+    raise NotImplementedError(
+        f"tla.{op_name} RegTensor logical operation is not implemented yet"
+    )
+
+
+def _emit_regtensor_logic_binary(
+    op_name: str,
+    src0_reg: VectorSSA,
+    src1_reg: VectorSSA,
+    mask: MaskSSA,
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> VectorSSA:
+    del src0_reg, src1_reg, mask, loc
+    raise NotImplementedError(
+        f"tla.{op_name} RegTensor logical operation is not implemented yet"
+    )
+
+
+def _emit_logic_unary(
+    op_name: str,
+    mask_emitter: Any,
+    src_reg: Any,
+    mask: Any,
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> MaskSSA | VectorSSA:
+    src_category = _category(src_reg)
+    if src_category == "mask_ssa":
+        return _emit_mask_logic_unary(op_name, mask_emitter, src_reg, mask, loc=loc)
+    if src_category == "vector_ssa":
+        _require_category(op_name, "mask", mask, "mask_ssa", 1)
+        return _emit_regtensor_logic_unary(op_name, src_reg, mask, loc=loc)
+    _require_categories(op_name, "src_reg", src_reg, ("mask_ssa", "vector_ssa"), 0)
+    raise AssertionError("unreachable")
+
+
+def _emit_logic_binary(
+    op_name: str,
+    mask_emitter: Any,
+    src0_reg: Any,
+    src1_reg: Any,
+    mask: Any,
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> MaskSSA | VectorSSA:
+    src0_category = _category(src0_reg)
+    src1_category = _category(src1_reg)
+    if src0_category == "mask_ssa" and src1_category == "mask_ssa":
+        return _emit_mask_logic_binary(
+            op_name, mask_emitter, src0_reg, src1_reg, mask, loc=loc
+        )
+    if src0_category == "vector_ssa" and src1_category == "vector_ssa":
+        _require_category(op_name, "mask", mask, "mask_ssa", 2)
+        return _emit_regtensor_logic_binary(op_name, src0_reg, src1_reg, mask, loc=loc)
+    expected = ("mask_ssa", "vector_ssa")
+    if src0_category not in expected:
+        _require_categories(op_name, "src0_reg", src0_reg, expected, 0)
+    if src1_category not in expected:
+        _require_categories(op_name, "src1_reg", src1_reg, expected, 1)
+    _op_error(
+        op_name,
+        "src0_reg and src1_reg must both be MaskReg values or both be RegTensor values",
+    )
+
+
+@dsl_user_op
+def not_(
+    src_reg: Any,
+    mask: Any,
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> MaskSSA | VectorSSA:
+    """Emit element-wise logical NOT for MaskReg or RegTensor SSA values."""
+    return _emit_logic_unary("not_", _tla_ops_gen.mask_not, src_reg, mask, loc=loc)
+
+
+@dsl_user_op
+def and_(
+    src0_reg: Any,
+    src1_reg: Any,
+    mask: Any,
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> MaskSSA | VectorSSA:
+    """Emit element-wise logical AND for MaskReg or RegTensor SSA values."""
+    return _emit_logic_binary(
+        "and_", _tla_ops_gen.mask_and, src0_reg, src1_reg, mask, loc=loc
+    )
+
+
+@dsl_user_op
+def or_(
+    src0_reg: Any,
+    src1_reg: Any,
+    mask: Any,
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> MaskSSA | VectorSSA:
+    """Emit element-wise logical OR for MaskReg or RegTensor SSA values."""
+    return _emit_logic_binary(
+        "or_", _tla_ops_gen.mask_or, src0_reg, src1_reg, mask, loc=loc
+    )
+
+
+@dsl_user_op
+def xor(
+    src0_reg: Any,
+    src1_reg: Any,
+    mask: Any,
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> MaskSSA | VectorSSA:
+    """Emit element-wise logical XOR for MaskReg or RegTensor SSA values."""
+    return _emit_logic_binary(
+        "xor", _tla_ops_gen.mask_xor, src0_reg, src1_reg, mask, loc=loc
+    )
+
+
 @dsl_user_op
 def gather(
     x: TileLike,
@@ -4056,6 +4219,10 @@ _require_generated("maxs")
 _require_generated("mins")
 _require_generated("div")
 _require_generated("where")
+_require_generated("mask_not")
+_require_generated("mask_and")
+_require_generated("mask_or")
+_require_generated("mask_xor")
 _require_generated("divs")
 _require_generated("reduce")
 for _unary_op_name in ("exp", "log", "sqrt", "abs", "neg"):
@@ -4274,6 +4441,10 @@ __all__ = [
     "min",
     "div",
     "where",
+    "not_",
+    "and_",
+    "or_",
+    "xor",
     "exp",
     "log",
     "sqrt",

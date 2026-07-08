@@ -13,7 +13,7 @@
 # python/tla_dsl/examples/end_to_end/basic_vadd (basic_vadd.py),
 # python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed.py), and
 # python/tla_dsl/examples/end_to_end/vector_ops (binary_op.py, masked_binary.py,
-# reduction_ops.py, unary_ops.py, arange_op.py).
+# mask_logic.py, reduction_ops.py, unary_ops.py, arange_op.py).
 #
 # Fixed toolchain paths relative to WORKSPACE_ROOT (= parent of catlass repo):
 #   CANN:             Ascend/9.1.0-beta.1/ascend-toolkit/set_env.sh
@@ -46,6 +46,7 @@ BASIC_MMAD_REL="examples/end_to_end/basic_mmad/basic_matmul.py"
 BASIC_VADD_REL="examples/end_to_end/basic_vadd/basic_vadd.py"
 BASIC_MIXED_REL="examples/end_to_end/basic_mixed/basic_mixed.py"
 MASKED_BINARY_REL="examples/end_to_end/vector_ops/masked_binary.py"
+MASK_LOGIC_REL="examples/end_to_end/vector_ops/mask_logic.py"
 BINARY_OP_REL="examples/end_to_end/vector_ops/binary_op.py"
 REDUCTION_OPS_REL="examples/end_to_end/vector_ops/reduction_ops.py"
 UNARY_OPS_REL="examples/end_to_end/vector_ops/unary_ops.py"
@@ -69,6 +70,7 @@ Run end-to-end validation for:
   - basic_mixed (basic_mixed.py --run)
   - binary_op (binary_op.py <op> --run --all-dtypes for add/sub/mul/div/max/min)
   - masked_binary (masked_binary.py masked_binary --run --all-dtypes)
+  - mask_logic (mask_logic.py mask_logic --run --all-dtypes)
   - reduction_ops (reduction_ops.py <op> --run for add/max/min)
   - unary_ops (unary_ops.py <op> --run --all-dtypes for exp/log/sqrt/abs/neg/masked_unary/masked_abs/masked_neg)
   - arange_op (arange_op.py increase --run --all-dtypes)
@@ -257,6 +259,10 @@ if [[ ! -f "${TLA_DSL_DIR}/${MASKED_BINARY_REL}" ]]; then
     echo "error: missing ${MASKED_BINARY_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
+if [[ ! -f "${TLA_DSL_DIR}/${MASK_LOGIC_REL}" ]]; then
+    echo "error: missing ${MASK_LOGIC_REL} under ${TLA_DSL_DIR}" >&2
+    exit 1
+fi
 if [[ ! -f "${TLA_DSL_DIR}/${BINARY_OP_REL}" ]]; then
     echo "error: missing ${BINARY_OP_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
@@ -322,6 +328,16 @@ _run_masked_binary_case() {
 }
 
 _run_masked_binary_case
+
+_run_mask_logic_case() {
+    echo "==> Running mask_logic validation [all dtypes]: mask_logic --run --all-dtypes --device ${DEVICE_ID}"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${MASK_LOGIC_REL}" mask_logic --run --all-dtypes --device "${DEVICE_ID}"
+    )
+}
+
+_run_mask_logic_case
 
 _run_binary_op_case() {
     local op="$1"
