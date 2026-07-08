@@ -402,16 +402,164 @@ static FailureOr<Value> getMakeTensorLikeFlatMemref(Value tensor) {
     ptr = makeTensor.getPtr();
   else
     return failure();
-  if (auto bridge = ptr.getDefiningOp<::tla::HivmMemrefAsPtrOp>())
+  // Look through tla.ptr_add / tla.tensor_ptr to the underlying base memref. The offset
+  // is not applied here (this lookup is for static type discovery only); the offset is
+  // materialized in `materializeBaseMemref` via `resolvePtrToFlatMemref`.
+  Value cur = ptr;
+  while (auto pa = cur.getDefiningOp<::tla::PtrAddOp>())
+    cur = pa.getPtr();
+  if (auto tensorPtr = cur.getDefiningOp<::tla::TensorPtrOp>()) {
+    Value src = tensorPtr.getSrc();
+    if (isa<MemRefType>(src.getType()))
+      cur = src;
+    else
+      return failure();
+  }
+  if (auto bridge = cur.getDefiningOp<::tla::HivmMemrefAsPtrOp>())
     return bridge.getMemref();
-  if (auto ptrCast = ptr.getDefiningOp<UnrealizedConversionCastOp>()) {
+  if (auto ptrCast = cur.getDefiningOp<UnrealizedConversionCastOp>()) {
     if (ptrCast.getNumOperands() == 1 && isa<MemRefType>(ptrCast.getOperand(0).getType()))
       return ptrCast.getOperand(0);
   }
   return failure();
 }
 
+// Resolve a ``!tla.ptr`` (possibly through ``tla.ptr_add`` / ``tla.tensor_ptr``) to its
+// underlying rank-1 base memref, applying any accumulated element offset via
+// ``memref.reinterpret_cast``. Mirrors the ptr_add lowering in TlaLowerToStdPass so the
+// vector path (``tla.vec.func`` with an offset ``make_tensor_like`` pointer) lowers the
+// same way as the cube path.
+// For a GM linear-layout tensor with static origin_shape, fill `originDims` and
+// contiguous strides (row-major trailing product / column-major leading product).
+// Returns true if filled; false otherwise (non-GM, packed layout, or dynamic origin).
+static bool tryGmOriginLayout(Type tensorTy, SmallVectorImpl<int64_t> &originDims,
+                              SmallVectorImpl<int64_t> &contigStrides) {
+  auto info = parseTensorInfo(tensorTy);
+  if (failed(info) || info->originShape.empty())
+    return false;
+  if (info->addressSpace != AddressSpace::gm)
+    return false;
+  if (info->layoutTag != "row_major" && info->layoutTag != "column_major")
+    return false;
+  if (llvm::any_of(info->originShape,
+                   [](int64_t d) { return d == ShapedType::kDynamic; }))
+    return false;
+  unsigned rank = info->originShape.size();
+  originDims.assign(info->originShape.begin(), info->originShape.end());
+  contigStrides.assign(rank, 1);
+  if (info->layoutTag == "row_major") {
+    int64_t acc = 1;
+    for (int i = rank - 1; i >= 0; --i) {
+      contigStrides[i] = acc;
+      acc *= originDims[i];
+    }
+  } else {
+    int64_t acc = 1;
+    for (unsigned i = 0; i < rank; ++i) {
+      contigStrides[i] = acc;
+      acc *= originDims[i];
+    }
+  }
+  return true;
+}
+
+static FailureOr<Value> resolvePtrToFlatMemref(PatternRewriter &rewriter, Location loc,
+                                                Value ptr) {
+  Value totalOff = rewriter.create<arith::ConstantIndexOp>(loc, 0);
+  Value cur = ptr;
+  while (auto pa = cur.getDefiningOp<::tla::PtrAddOp>()) {
+    Value o = pa.getOffset();
+    if (!o.getType().isIndex())
+      o = rewriter.create<arith::IndexCastOp>(loc, rewriter.getIndexType(), o);
+    totalOff = rewriter.create<arith::AddIOp>(loc, totalOff, o);
+    cur = pa.getPtr();
+  }
+  if (auto tensorPtr = cur.getDefiningOp<::tla::TensorPtrOp>()) {
+    Value src = tensorPtr.getSrc();
+    if (isa<MemRefType>(src.getType()))
+      cur = src;
+    else
+      return failure();
+  }
+  Value baseMemref;
+  if (auto bridge = cur.getDefiningOp<::tla::HivmMemrefAsPtrOp>())
+    baseMemref = bridge.getMemref();
+  else if (auto ptrCast = cur.getDefiningOp<UnrealizedConversionCastOp>()) {
+    if (ptrCast.getNumOperands() != 1 || !isa<MemRefType>(ptrCast.getOperand(0).getType()))
+      return failure();
+    baseMemref = ptrCast.getOperand(0);
+  } else
+    return failure();
+
+  auto baseMt = cast<MemRefType>(baseMemref.getType());
+  if (baseMt.getRank() != 1)
+    return failure();
+  // GM pointers: produce a memref whose rank matches the consuming tensor's
+  // origin_shape (sizes = origin dims, strides = contiguous from origin). The consuming
+  // tensor is the make_tensor / make_tensor_like whose ptr operand this is. Other
+  // address spaces keep the flat 1D dynamic view.
+  SmallVector<int64_t, 4> originDims, contigStrides;
+  bool gmMultiDim = false;
+  for (Operation *user : ptr.getUsers()) {
+    if (isa<::tla::MakeTensorOp, ::tla::MakeTensorLikeOp>(user) &&
+        user->getNumResults() == 1) {
+      gmMultiDim =
+          tryGmOriginLayout(user->getResult(0).getType(), originDims, contigStrides);
+      break;
+    }
+  }
+  if (gmMultiDim) {
+    SmallVector<Value> sizes, strides;
+    for (unsigned i = 0, e = originDims.size(); i < e; ++i) {
+      sizes.push_back(rewriter.create<arith::ConstantIndexOp>(loc, originDims[i]));
+      strides.push_back(rewriter.create<arith::ConstantIndexOp>(loc, contigStrides[i]));
+    }
+    auto stridedLayout =
+        StridedLayoutAttr::get(rewriter.getContext(), ShapedType::kDynamic, contigStrides);
+    auto resultTy = MemRefType::get(originDims, baseMt.getElementType(), stridedLayout,
+                                    baseMt.getMemorySpace());
+    return rewriter
+        .create<mlir::memref::ReinterpretCastOp>(loc, resultTy, baseMemref, totalOff,
+                                                 sizes, strides)
+        .getResult();
+  }
+  // Non-GM: flat 1D dynamic view. No offset -> return the base memref directly.
+  if (auto c = totalOff.getDefiningOp<arith::ConstantIndexOp>())
+    if (c.value() == 0)
+      return baseMemref;
+  Value size = rewriter.create<mlir::memref::DimOp>(loc, baseMemref, 0);
+  Value one = rewriter.create<arith::ConstantIndexOp>(loc, 1);
+  auto offTy = MemRefType::get({ShapedType::kDynamic}, baseMt.getElementType(), AffineMap(),
+                               baseMt.getMemorySpace());
+  return rewriter
+      .create<mlir::memref::ReinterpretCastOp>(loc, offTy, baseMemref, totalOff,
+                                               ValueRange{size}, ValueRange{one})
+      .getResult();
+}
+
 static FailureOr<MemRefType> getVectorHelperArgMemrefType(Value operand) {
+  // GM ptr_add / tensor_ptr operands: match resolvePtrToFlatMemref's multi-dim type
+  // (origin_shape rank with contiguous strides). Otherwise the memref.cast at the
+  // helper call site (multi-dim origin view -> flat alloc type) is cast-incompatible.
+  Value ptr;
+  if (auto mtl = operand.getDefiningOp<::tla::MakeTensorLikeOp>())
+    ptr = mtl.getPtr();
+  else if (auto mt = operand.getDefiningOp<::tla::MakeTensorOp>())
+    ptr = mt.getPtr();
+  if (ptr && (ptr.getDefiningOp<::tla::PtrAddOp>() ||
+              ptr.getDefiningOp<::tla::TensorPtrOp>())) {
+    SmallVector<int64_t, 4> originDims, contigStrides;
+    if (tryGmOriginLayout(operand.getType(), originDims, contigStrides)) {
+      auto flat = getMakeTensorLikeFlatMemref(operand);
+      if (succeeded(flat)) {
+        auto flatType = cast<MemRefType>((*flat).getType());
+        auto stridedLayout = StridedLayoutAttr::get(operand.getContext(),
+                                                    ShapedType::kDynamic, contigStrides);
+        return MemRefType::get(originDims, flatType.getElementType(), stridedLayout,
+                               flatType.getMemorySpace());
+      }
+    }
+  }
   if (auto flat = getMakeTensorLikeFlatMemref(operand); succeeded(flat)) {
     if (auto flatType = dyn_cast<MemRefType>((*flat).getType());
         flatType && flatType.getRank() == 1 && flatType.hasStaticShape())
@@ -461,6 +609,15 @@ materializeBaseMemref(PatternRewriter &rewriter, Location loc, Value tensor,
         return castMemrefToExpected(rewriter, loc, ptrCast.getOperand(0), *expected);
       }
     }
+    if (ptr.getDefiningOp<::tla::PtrAddOp>() || ptr.getDefiningOp<::tla::TensorPtrOp>()) {
+      FailureOr<Value> base = resolvePtrToFlatMemref(rewriter, loc, ptr);
+      if (succeeded(base)) {
+        auto expected = getBridgedTensorMemrefType(tensor);
+        if (failed(expected))
+          return failure();
+        return castMemrefToExpected(rewriter, loc, *base, *expected);
+      }
+    }
     return failure();
   }
 
@@ -478,6 +635,15 @@ materializeBaseMemref(PatternRewriter &rewriter, Location loc, Value tensor,
         if (failed(expected))
           return failure();
         return castMemrefToExpected(rewriter, loc, ptrCast.getOperand(0), *expected);
+      }
+    }
+    if (ptr.getDefiningOp<::tla::PtrAddOp>() || ptr.getDefiningOp<::tla::TensorPtrOp>()) {
+      FailureOr<Value> base = resolvePtrToFlatMemref(rewriter, loc, ptr);
+      if (succeeded(base)) {
+        auto expected = getBridgedTensorMemrefType(tensor);
+        if (failed(expected))
+          return failure();
+        return castMemrefToExpected(rewriter, loc, *base, *expected);
       }
     }
     return failure();
@@ -1309,8 +1475,8 @@ static FailureOr<Value> lowerTileViewInHelper(OpBuilder &b, Location loc,
   if (!source)
     return tileView.emitError("failed to map tla.tile_view source in vector helper"), failure();
   auto sourceType = dyn_cast<MemRefType>(source.getType());
-  if (!sourceType || sourceType.getRank() != 1)
-    return tileView.emitError("expected rank-1 memref source for vector tile_view"), failure();
+  if (!sourceType)
+    return tileView.emitError("expected memref source for vector tile_view"), failure();
   auto offset = materializeCoordOffsetInHelper(b, loc, tileView.getCoord(), valueMap);
   if (failed(offset))
     return tileView.emitError("failed to materialize tile_view coordinate"), failure();
@@ -2170,7 +2336,21 @@ public:
       if (failed(type))
         return rewriter.notifyMatchFailure(
             vecFuncOp, "failed to type UB memref for vector helper call");
-      FailureOr<Value> base = getMakeTensorLikeFlatMemref(tensor);
+      // If the operand is a make_tensor/make_tensor_like whose ptr is a ptr_add /
+      // tensor_ptr, materialize the base memref WITH the element offset applied
+      // (resolvePtrToFlatMemref). Otherwise prefer the zero-offset flat-memref lookup,
+      // which emits no extra IR.
+      Value ptr;
+      if (auto mtl = tensor.getDefiningOp<::tla::MakeTensorLikeOp>())
+        ptr = mtl.getPtr();
+      else if (auto mt = tensor.getDefiningOp<::tla::MakeTensorOp>())
+        ptr = mt.getPtr();
+      FailureOr<Value> base = failure();
+      if (ptr && (ptr.getDefiningOp<::tla::PtrAddOp>() ||
+                  ptr.getDefiningOp<::tla::TensorPtrOp>()))
+        base = resolvePtrToFlatMemref(rewriter, vecFuncOp.getLoc(), ptr);
+      if (failed(base))
+        base = getMakeTensorLikeFlatMemref(tensor);
       if (failed(base))
         base = materializeBaseMemref(rewriter, vecFuncOp.getLoc(), tensor,
                                      /*handoffMemrefByTensor=*/nullptr);
@@ -2333,7 +2513,7 @@ static void populateTlaToVectorPatterns(RewritePatternSet &patterns, ModuleOp mo
 
 // Per-core identity queries (block_idx / block_dim / sub_block_idx) must be
 // computed outside a tla.vec.func and passed in; emitting them inside the vector
-// region produces an op the vector backend cannot codegen. 
+// region produces an op the vector backend cannot codegen.
 static bool isIllegalVecFuncArchOp(Operation *op, StringRef &dslName) {
   if (isa<::tla::BlockIdxOp>(op)) {
     dslName = "tla.arch.block_idx";

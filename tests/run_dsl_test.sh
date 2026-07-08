@@ -9,7 +9,7 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 #
-# End-to-end validation for python/tla_dsl/examples/end_to_end/basic_mmad (basic_matmul.py),
+# End-to-end validation for python/tla_dsl/examples/end_to_end/basic_mmad (basic_matmul.py, basic_mmad_ptr.py),
 # python/tla_dsl/examples/end_to_end/basic_vadd (basic_vadd.py),
 # python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed.py), and
 # python/tla_dsl/examples/end_to_end/vector_ops (binary_op.py, masked_binary.py,
@@ -43,6 +43,7 @@ DEVICE_ID="${DEVICE_ID:-1}"
 SKIP_PREPARE="${SKIP_PREPARE:-0}"
 
 BASIC_MMAD_REL="examples/end_to_end/basic_mmad/basic_matmul.py"
+BASIC_MMAD_PTR_REL="examples/end_to_end/basic_mmad/basic_mmad_ptr.py"
 BASIC_VADD_REL="examples/end_to_end/basic_vadd/basic_vadd.py"
 BASIC_MIXED_REL="examples/end_to_end/basic_mixed/basic_mixed.py"
 MASKED_BINARY_REL="examples/end_to_end/vector_ops/masked_binary.py"
@@ -72,6 +73,7 @@ Usage: $(basename "$0") [options]
 
 Run end-to-end validation for:
   - basic_mmad (basic_matmul.py --run --all-layouts --all-mmad-dtypes)
+  - basic_mmad_ptr (basic_mmad_ptr.py --run)
   - basic_vadd (basic_vadd.py --run --all-dtypes, plus mutex variants)
   - basic_mixed (basic_mixed.py --run)
   - binary_op (binary_op.py <op> --run --all-dtypes for add/sub/mul/div/max/min/add_unalign/add_brc_b32)
@@ -254,6 +256,10 @@ if [[ ! -f "${TLA_DSL_DIR}/${BASIC_MMAD_REL}" ]]; then
     echo "error: missing ${BASIC_MMAD_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
+if [[ ! -f "${TLA_DSL_DIR}/${BASIC_MMAD_PTR_REL}" ]]; then
+    echo "error: missing ${BASIC_MMAD_PTR_REL} under ${TLA_DSL_DIR}" >&2
+    exit 1
+fi
 if [[ ! -f "${TLA_DSL_DIR}/${BASIC_VADD_REL}" ]]; then
     echo "error: missing ${BASIC_VADD_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
@@ -305,6 +311,16 @@ _run_basic_mmad_case "default MNK"
 _run_basic_mmad_case "m=1 n=2 k=3" --m 1 --n 2 --k 3
 _run_basic_mmad_case "mutex mode" --use-mutex
 _run_basic_mmad_case "mutex with mode" --use-mutex-with
+
+_run_basic_mmad_ptr_case() {
+    echo "==> Running basic_mmad_ptr validation [ptr + offset -> make_tensor]: --run --device ${DEVICE_ID}"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${BASIC_MMAD_PTR_REL}" --run --device "${DEVICE_ID}"
+    )
+}
+
+_run_basic_mmad_ptr_case
 
 _run_basic_vadd_case() {
     local label="$1"

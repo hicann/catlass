@@ -218,6 +218,24 @@ def _build_tla_func(
     class _ArgProxy:
         __slots__ = ()
 
+        @property
+        def ptr(self) -> Any:
+            """``arg.ptr`` for kernel-argument proxies — mirrors ``_Tensor.ptr``.
+
+            Resolves the proxy to its block-argument SSA value and emits
+            ``tla.tensor_ptr`` so ``lhs.ptr + offset`` works in execution-mode
+            lowering the same way as on a frontend ``_Tensor``.
+            """
+            from .base_dsl.op import _capture_user_loc
+            from .core_api import _as_value, _emit_tensor_ptr
+
+            loc = (
+                _capture_user_loc()
+                if runtime_mod._current_frontend_state() is not None
+                else None
+            )
+            return _emit_tensor_ptr(_as_value(self), loc)
+
     proxies = [_ArgProxy() for _ in runtime_arg_names]
     call_args_for_fn = list(call_args)
     idx = 0

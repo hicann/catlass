@@ -112,6 +112,11 @@ def ptr_alignment(ptr_type: mlir_ir.Type) -> int:
     return int(_load_bridge_extension().ptr_alignment(ptr_type))
 
 
+def tensor_ptr_type_get(tensor_type: mlir_ir.Type) -> mlir_ir.Type:
+    """Return the ``!tla.ptr`` type embedded in a ``!tla.tensor<...>`` type."""
+    return _load_bridge_extension().tensor_ptr_type_get(tensor_type)
+
+
 def layout_type_from_components_get(
     context: mlir_ir.Context,
     shape_type: mlir_ir.Type,

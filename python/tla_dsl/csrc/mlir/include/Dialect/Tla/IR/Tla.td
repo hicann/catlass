@@ -100,6 +100,9 @@ def Tla_ValueType : TypeDef<TlaDialect, "Value", []> {
 def Tla_ScalarValueType : AnyTypeOf<[AnyInteger, AnyFloat, Index],
     "TLA scalar SSA value type">;
 
+def Tla_IntegerOrIndexType : AnyTypeOf<[AnyInteger, Index],
+    "TLA integer-or-index SSA value type">;
+
 def Tla_BoolAttrAttr : DialectAttr<TlaDialect, CPred<"true">, "Builtin boolean attribute placeholder.">;
 
 def Tla_I64AttrAttr : DialectAttr<TlaDialect, CPred<"true">, "Builtin i64 attribute placeholder.">;
@@ -428,6 +431,39 @@ def Tla_RecastPtrOp : Tla_Op<"recast_ptr", [Pure]> {
   let assemblyFormat = [{
     $src attr-dict `:` qualified(type($src)) `->` qualified(type($ptr))
   }];
+}
+
+def Tla_TensorPtrOp : Tla_Op<"tensor_ptr", [Pure]> {
+  let summary = "Extract the backing pointer from a tla.tensor";
+  let description = [{
+    Yields the ``!tla.ptr`` SSA value backing a ``!tla.tensor``. The source may also be a
+    builtin ``memref`` (e.g. a kernel argument already bridged to memref during lowering),
+    mirroring ``tla.tile_view``'s source handling. The result pointer type is the tensor's
+    embedded pointer type (pointee, address space, alignment); it is built client-side and
+    verified to match.
+  }];
+  let arguments = (ins AnyTypeOf<[Tla_TensorType, AnyMemRef]>:$src);
+  let results = (outs Tla_PtrType:$ptr);
+  let assemblyFormat = [{
+    $src attr-dict `:` qualified(type($src)) `->` qualified(type($ptr))
+  }];
+  let hasVerifier = 1;
+}
+
+def Tla_PtrAddOp : Tla_Op<"ptr_add", [Pure]> {
+  let summary = "Offset a tla.ptr by a scalar element count";
+  let description = [{
+    Returns a ``!tla.ptr`` advanced by ``offset`` **elements** of the pointer's pointee
+    type (not bytes). The result preserves the source pointee type and address space;
+    alignment is refined conservatively from a known constant offset (gcd), otherwise
+    dropped to 1. The offset operand is an integer-or-index scalar SSA value.
+  }];
+  let arguments = (ins Tla_PtrType:$ptr, Tla_IntegerOrIndexType:$offset);
+  let results = (outs Tla_PtrType:$result);
+  let assemblyFormat = [{
+    $ptr `,` $offset attr-dict `:` qualified(type($ptr)) `,` type($offset) `->` qualified(type($result))
+  }];
+  let hasVerifier = 1;
 }
 
 def Tla_FullOp : Tla_Op<"full", [Pure]> {

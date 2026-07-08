@@ -158,6 +158,11 @@ unsigned ptrAlignment(MlirType ptrType) {
   return ptr.getAlignment();
 }
 
+MlirType tensorPtrTypeGet(MlirType tensorType) {
+  auto tensor = checkedTlaType<::tla::TlaTensorType>(tensorType, "!tla.tensor type");
+  return toMlirType(tensor.getPtr(), "tla.tensor backing ptr type");
+}
+
 MlirType layoutTypeFromComponentsGet(MlirContext context, MlirType shapeType, MlirType strideType,
                                      py::object originShapeType, const std::string &layoutText) {
   MLIRContext *ctx = bridgeContext(context);
@@ -367,6 +372,7 @@ PYBIND11_MODULE(_tla_type_bridge_native, m) {
   m.def("ptr_pointee_type_get", &ptrPointeeTypeGet, py::arg("ptr_type"));
   m.def("ptr_addrspace", &ptrAddrspace, py::arg("ptr_type"));
   m.def("ptr_alignment", &ptrAlignment, py::arg("ptr_type"));
+  m.def("tensor_ptr_type_get", &tensorPtrTypeGet, py::arg("tensor_type"));
   m.def("value_element_type_get", &valueElementTypeGet, py::arg("value_type"));
   m.def("lower_to_mlir", &lowerToMlir, py::arg("module"), py::arg("mlir_print_ir_before"),
         py::arg("mlir_print_ir_after"), py::arg("mlir_print_ir_before_all"),

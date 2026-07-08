@@ -64,6 +64,28 @@ mlir::LogicalResult HivmMemrefAsPtrOp::verify() {
   return mlir::success();
 }
 
+mlir::LogicalResult TensorPtrOp::verify() {
+  auto resTy = mlir::dyn_cast<PtrType>(getPtr().getType());
+  if (!resTy)
+    return emitOpError("result must be !tla.ptr");
+  if (auto tensorTy = mlir::dyn_cast<TlaTensorType>(getSrc().getType())) {
+    if (tensorTy.getPtr() != resTy)
+      return emitOpError("result ptr type must match the tensor's embedded pointer type");
+  }
+  return mlir::success();
+}
+
+mlir::LogicalResult PtrAddOp::verify() {
+  auto srcTy = mlir::dyn_cast<PtrType>(getPtr().getType());
+  auto resTy = mlir::dyn_cast<PtrType>(getResult().getType());
+  if (!srcTy || !resTy)
+    return emitOpError("operands and result must be !tla.ptr");
+  if (srcTy.getPointee() != resTy.getPointee())
+    return emitOpError("result pointee type must match the source pointer's pointee");
+  if (srcTy.getAddrspace() != resTy.getAddrspace())
+    return emitOpError("result address space must match the source pointer's address space");
+  return mlir::success();
+}
 
 // Walk the enclosing ops looking for an ancestor of type AncestorOp. The
 // required region may be several levels up (e.g. a compute op nested inside a

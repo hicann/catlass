@@ -327,6 +327,46 @@ class _Pointer(PointerABC):
         """Address space of ``!tla.ptr`` (same as :attr:`memspace`)."""
         return AddressSpace.from_mlir_token(self._ptr_ty.addrspace)
 
+    def __add__(self, other: Any) -> "_Pointer":
+        """Offset this pointer by a scalar **element count** (``ptr + n`` / ``n + ptr``).
+
+        Advances the pointer by ``other`` elements of its pointee type (not bytes),
+        preserving the pointee type and address space. ``other`` may be a Python ``int``
+        or an integer/index SSA value (e.g. a ``tla.range`` loop index).
+        """
+        _require_frontend_state("ptr_add")
+        _require_category("ptr_add", "ptr", self, "pointer", 0)
+        loc = _capture_user_loc()
+        ctx = loc.context if loc is not None else mlir_ir.Context()
+        alloc_size_bytes = getattr(self, "_alloc_size_bytes", None)
+        p = _coerce_pointer_arg(self)
+        src_ty = p._ptr_ty
+
+        offset_value = _as_index_value(other)
+        offset_ty = offset_value.type
+        if not (
+            isinstance(offset_ty, mlir_ir.IndexType)
+            or isinstance(offset_ty, mlir_ir.IntegerType)
+        ):
+            _op_error(
+                "ptr_add",
+                f"offset must be an integer or index SSA value, got {offset_ty}",
+            )
+
+        out_ptr_ty = PtrType.get(
+            src_ty.pointee, src_ty.addrspace, src_ty.alignment, context=ctx
+        )
+        op = mlir_ir.Operation.create(
+            "tla.ptr_add",
+            operands=[p.value, offset_value],
+            results=[out_ptr_ty],
+            loc=loc,
+        )
+        return _Pointer(op.results[0], alloc_size_bytes=alloc_size_bytes)
+
+    def __radd__(self, other: Any) -> "_Pointer":
+        return self.__add__(other)
+
 
 class VectorSSA:
     """Frontend proxy for loaded vector SSA values."""
@@ -4255,6 +4295,26 @@ def recast_ptr(
         _tla_ops_gen.recast_ptr(out_ptr_ty, p.value, loc=loc, ip=None),
         alloc_size_bytes=alloc_size_bytes,
     )
+
+
+def _emit_tensor_ptr(
+    source: mlir_ir.Value, loc: mlir_ir.Location | None = None
+) -> _Pointer:
+    """Emit ``tla.tensor_ptr`` extracting the backing ``!tla.ptr`` of a tensor value.
+
+    Shared by :meth:`catlass.tla.tensor._Tensor.ptr` and the execution-mode
+    ``_ArgProxy.ptr`` so kernel-argument proxies support ``arg.ptr`` the same way as
+    frontend ``_Tensor`` values.
+    """
+    _require_frontend_state("tensor_ptr")
+    ptr_ty = _tla_type_bridge.tensor_ptr_type_get(source.type)
+    op = mlir_ir.Operation.create(
+        "tla.tensor_ptr",
+        operands=[source],
+        results=[ptr_ty],
+        loc=loc,
+    )
+    return _Pointer(op.results[0])
 
 
 _require_generated("tile_view")

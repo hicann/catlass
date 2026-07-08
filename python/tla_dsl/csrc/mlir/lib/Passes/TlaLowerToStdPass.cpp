@@ -656,13 +656,27 @@ public:
   // If ptr is lowered by tla-alloc-ptr-to-hivm-pointer-cast, return static 1D element count.
   static FailureOr<int64_t> getStatic1DElementCountFromHivmPtrBridge(Value ptrValue) {
     Value cur = ptrValue;
-    if (auto bridge = cur.getDefiningOp<::tla::HivmMemrefAsPtrOp>())
-      cur = bridge.getMemref();
-    else if (auto ucc = cur.getDefiningOp<UnrealizedConversionCastOp>())
-      cur = ucc->getOperand(0);
+    // Look through tla.ptr_add / tla.tensor_ptr chains to reach the underlying
+    // hivm_memref_as_ptr-backed base; the offset does not change the static count.
+    while (true) {
+      if (auto bridge = cur.getDefiningOp<::tla::HivmMemrefAsPtrOp>())
+        cur = bridge.getMemref();
+      else if (auto ucc = cur.getDefiningOp<UnrealizedConversionCastOp>())
+        cur = ucc->getOperand(0);
+      else if (auto ptrAdd = cur.getDefiningOp<::tla::PtrAddOp>())
+        cur = ptrAdd.getPtr();
+      else if (auto tensorPtr = cur.getDefiningOp<::tla::TensorPtrOp>())
+        cur = tensorPtr.getSrc();
+      else
+        break;
+    }
     if (auto pc = cur.getDefiningOp<hivm::PointerCastOp>()) {
       auto mr = dyn_cast<MemRefType>(pc.getResult().getType());
       if (mr && mr.getRank() == 1 && mr.getDimSize(0) != ShapedType::kDynamic)
+        return mr.getShape()[0];
+    }
+    if (auto mr = dyn_cast<MemRefType>(cur.getType())) {
+      if (mr.getRank() == 1 && mr.getDimSize(0) != ShapedType::kDynamic)
         return mr.getShape()[0];
     }
     return failure();
@@ -680,6 +694,20 @@ public:
       return castMemrefToType(rewriter, loc, desc.base, memrefType);
 
     if (allocatorState) {
+      if (auto ptrAdd = desc.base.getDefiningOp<::tla::PtrAddOp>()) {
+        FailureOr<Value> ptrResult =
+            materializePtrValueAsMemref(rewriter, loc, desc.base, memrefType, diagnosticOp);
+        if (succeeded(ptrResult)) {
+          pushStagedErase(allocatorState->toErase, ptrAdd.getOperation());
+          return *ptrResult;
+        }
+      }
+      if (auto tensorPtr = desc.base.getDefiningOp<::tla::TensorPtrOp>()) {
+        diagnosticOp->emitError()
+            << "tla.tensor_ptr must be resolved to its base before tensor materialization; "
+               "ensure tla-alloc-ptr-to-hivm-pointer-cast ran";
+        return failure();
+      }
       if (auto ptrBridge = dyn_cast_or_null<::tla::HivmMemrefAsPtrOp>(desc.base.getDefiningOp())) {
         FailureOr<Value> ptrResult = materializePtrValueAsMemref(
             rewriter, loc, ptrBridge.getResult(), memrefType, diagnosticOp);
@@ -915,6 +943,42 @@ public:
     return rewriter.create<mlir::memref::CastOp>(loc, memrefType, value).getResult();
   }
 
+  // Flatten a (possibly multi-dimensional) contiguous memref to a rank-1 view over the
+  // same element storage. Used to bridge a kernel-arg memref into the rank-1 form expected
+  // by `tla.hivm_memref_as_ptr` when extracting a tensor's backing pointer.
+  static Value flattenMemrefTo1D(PatternRewriter &rewriter, Location loc, Value memref) {
+    auto mt = cast<MemRefType>(memref.getType());
+    if (mt.getRank() == 1)
+      return memref;
+    Value size;
+    int64_t staticSize = 1;
+    bool allStatic = true;
+    for (int64_t dim : mt.getShape()) {
+      if (dim == ShapedType::kDynamic) {
+        allStatic = false;
+        break;
+      }
+      staticSize *= dim;
+    }
+    if (allStatic) {
+      size = rewriter.create<arith::ConstantIndexOp>(loc, staticSize);
+    } else {
+      size = rewriter.create<arith::ConstantIndexOp>(loc, 1);
+      for (unsigned i = 0, e = mt.getRank(); i < e; ++i) {
+        Value dim = rewriter.create<mlir::memref::DimOp>(loc, memref, i);
+        size = rewriter.create<arith::MulIOp>(loc, size, dim);
+      }
+    }
+    Value zero = rewriter.create<arith::ConstantIndexOp>(loc, 0);
+    Value one = rewriter.create<arith::ConstantIndexOp>(loc, 1);
+    auto flatTy = MemRefType::get({ShapedType::kDynamic}, mt.getElementType(), AffineMap(),
+                                  mt.getMemorySpace());
+    return rewriter
+        .create<mlir::memref::ReinterpretCastOp>(loc, flatTy, memref, zero, ValueRange{size},
+                                                 ValueRange{one})
+        .getResult();
+  }
+
   static FailureOr<Value> materializeCallOperandAsType(PatternRewriter &rewriter,
                                                        func::CallOp callOp, Value operand,
                                                        Type expectedType) {
@@ -1067,6 +1131,103 @@ public:
       Value src = bridge.getMemref();
       if (isa<MemRefType>(src.getType()))
         return castMemrefToType(rewriter, loc, src, memrefType);
+    }
+    if (auto ptrAdd = ptrValue.getDefiningOp<::tla::PtrAddOp>()) {
+      // Flatten a ptr_add chain to (basePtr, totalElementOffset) and materialize the
+      // underlying hivm_memref_as_ptr base memref with the combined element offset.
+      Value totalOff = rewriter.create<arith::ConstantIndexOp>(loc, 0);
+      Value cur = ptrValue;
+      while (auto pa = cur.getDefiningOp<::tla::PtrAddOp>()) {
+        Value o = pa.getOffset();
+        if (!o.getType().isIndex())
+          o = rewriter.create<arith::IndexCastOp>(loc, rewriter.getIndexType(), o);
+        totalOff = rewriter.create<arith::AddIOp>(loc, totalOff, o);
+        cur = pa.getPtr();
+      }
+      if (auto bridge = cur.getDefiningOp<::tla::HivmMemrefAsPtrOp>()) {
+        Value baseMemref = bridge.getMemref();
+        if (!isa<MemRefType>(baseMemref.getType())) {
+          diagnosticOp->emitError() << "ptr_add base hivm_memref_as_ptr operand must be a memref";
+          return failure();
+        }
+        auto baseMt = cast<MemRefType>(baseMemref.getType());
+        if (baseMt.getRank() != 1) {
+          diagnosticOp->emitError() << "ptr_add base memref must be rank-1, got " << baseMt;
+          return failure();
+        }
+        Value one = rewriter.create<arith::ConstantIndexOp>(loc, 1);
+        MemRefType resultTy = memrefType;
+        SmallVector<Value> sizes, strides;
+        bool derivedFromOrigin = false;
+        // For GM pointers, produce a memref whose rank matches the origin_shape of the
+        // tla.tensor consuming this ptr_add (the make_tensor / make_tensor_like whose ptr
+        // operand this is): sizes = origin dims, strides = contiguous strides from the
+        // origin (row-major / column-major). Other address spaces keep the flat 1D view
+        // of the bridged base memref type.
+        for (Operation *user : ptrValue.getUsers()) {
+          Type tensorTy;
+          if (isa<::tla::MakeTensorOp, ::tla::MakeTensorLikeOp>(user) &&
+              user->getNumResults() == 1)
+            tensorTy = user->getResult(0).getType();
+          if (!tensorTy)
+            continue;
+          auto info = decodeTileTypeInfo(tensorTy);
+          if (failed(info) || info->originShapeDims.empty())
+            break;
+          bool allStatic = llvm::none_of(info->originShapeDims,
+                                         [](int64_t d) { return d == ShapedType::kDynamic; });
+          if (!allStatic)
+            break;
+          if (info->tlaAddressSpace == AddressSpace::gm &&
+              isLinearLayout(info->layoutTag)) {
+            unsigned rank = info->originShapeDims.size();
+            SmallVector<int64_t, 4> contig(rank, 1);
+            if (info->layoutTag == TensorLayoutTag::RowMajor) {
+              int64_t acc = 1;
+              for (int i = rank - 1; i >= 0; --i) {
+                contig[i] = acc;
+                acc *= info->originShapeDims[i];
+              }
+            } else {  // ColumnMajor
+              int64_t acc = 1;
+              for (unsigned i = 0; i < rank; ++i) {
+                contig[i] = acc;
+                acc *= info->originShapeDims[i];
+              }
+            }
+            for (unsigned i = 0; i < rank; ++i) {
+              sizes.push_back(
+                  rewriter.create<arith::ConstantIndexOp>(loc, info->originShapeDims[i]));
+              strides.push_back(rewriter.create<arith::ConstantIndexOp>(loc, contig[i]));
+            }
+            auto stridedLayout = mlir::StridedLayoutAttr::get(rewriter.getContext(),
+                                                              ShapedType::kDynamic, contig);
+            resultTy = MemRefType::get(info->originShapeDims, baseMt.getElementType(),
+                                       stridedLayout, baseMt.getMemorySpace());
+            derivedFromOrigin = true;
+          }
+          break;
+        }
+        if (!derivedFromOrigin) {
+          // Flat 1D view (non-GM, packed layout, or dynamic origin): bridged base type.
+          Value size;
+          if (memrefType.hasStaticShape())
+            size = rewriter.create<arith::ConstantIndexOp>(loc, memrefType.getDimSize(0));
+          else
+            size = rewriter.create<mlir::memref::DimOp>(loc, baseMemref, 0);
+          sizes.push_back(size);
+          strides.push_back(one);
+          resultTy = memrefType;
+        }
+        return rewriter
+            .create<mlir::memref::ReinterpretCastOp>(loc, resultTy, baseMemref, totalOff,
+                                                     sizes, strides)
+            .getResult();
+      }
+      diagnosticOp->emitError()
+          << "tla.ptr_add base must resolve to a `tla.hivm_memref_as_ptr`-backed pointer; got "
+          << cur;
+      return failure();
     }
     diagnosticOp->emitError()
         << "pointer memref materialization expects `tla.hivm_memref_as_ptr` (from "
@@ -2646,6 +2807,54 @@ public:
       }
     });
 
+    // Stage 1.5: lower tla.tensor_ptr to its source's backing pointer/memref.
+    // After Stage 1, every tensor value (make_tensor/make_tensor_like/tile_view results
+    // and kernel-arg block arguments) has a TensorDescriptor whose `base` is the underlying
+    // !tla.ptr (for make_tensor*) or memref (for kernel args / memref-backed tile_views).
+    // tensor_ptr is replaced by that base (if already a !tla.ptr) or by a
+    // hivm_memref_as_ptr wrapping a flattened 1D view of the base memref. This must run
+    // before copy / subview materialization, which look through ptr_add to a
+    // hivm_memref_as_ptr-backed base.
+    {
+      SmallVector<::tla::TensorPtrOp, 8> tensorPtrOps;
+      module.walk([&](::tla::TensorPtrOp op) { tensorPtrOps.push_back(op); });
+      for (::tla::TensorPtrOp op : tensorPtrOps) {
+        if (!op || !op->getBlock() || llvm::is_contained(toErase, op.getOperation()))
+          continue;
+        Value src = op.getSrc();
+        Value base;
+        if (isa<MemRefType>(src.getType())) {
+          base = src;
+        } else {
+          auto it = tensorDescriptorByValue.find(src);
+          if (it == tensorDescriptorByValue.end()) {
+            op->emitError() << "tla.tensor_ptr source has no resolved base descriptor; "
+                               "extract ptr only from a tile_view/make_tensor/make_tensor_like "
+                               "result or a kernel-arg tensor";
+            signalPassFailure();
+            return;
+          }
+          base = it->second.base;
+        }
+        PatternRewriter rewriter(op.getContext());
+        rewriter.setInsertionPoint(op);
+        Value replacement;
+        if (isa<::tla::PtrType>(base.getType())) {
+          replacement = base;
+        } else if (isa<MemRefType>(base.getType())) {
+          Value flat = flattenMemrefTo1D(rewriter, op.getLoc(), base);
+          replacement = rewriter.create<::tla::HivmMemrefAsPtrOp>(
+              op.getLoc(), op.getPtr().getType(), flat);
+        } else {
+          op->emitError() << "tla.tensor_ptr source base has unsupported type " << base.getType();
+          signalPassFailure();
+          return;
+        }
+        op.getResult().replaceAllUsesWith(replacement);
+        pushStagedErase(toErase, op.getOperation());
+      }
+    }
+
     // Stage 2: descriptor-driven tla.copy lowering.
     // Supported v1 routes emit runtime calls.
     // Unsupported combinations stay as tla.copy with explicit remarks.
@@ -2878,7 +3087,7 @@ public:
                         ::tla::ReturnOp, ::tla::MutexOp,
                         ::tla::MutexLockOp, ::tla::MutexUnlockOp, ::tla::CrossFlagOp,
                         ::tla::CrossCoreSetFlagOp, ::tla::CrossCoreWaitFlagOp, ::tla::CubeOp,
-                        ::tla::VectorOp, ::tla::MmadOp>();
+                        ::tla::VectorOp, ::tla::MmadOp, ::tla::TensorPtrOp, ::tla::PtrAddOp>();
     target.addDynamicallyLegalOp<::tla::MakeShapeOp, ::tla::MakeCoordOp, ::tla::MakeStrideOp,
                                  ::tla::MakeLayoutOp, ::tla::AllocPtrOp, ::tla::RecastPtrOp>(
         [](Operation *op) { return !hasNoResultUses(op); });
@@ -2897,7 +3106,8 @@ public:
           .add<EraseDeadTensorBridgeCastPattern, EraseDeadOpPattern<::tla::MakeShapeOp>,
                EraseDeadOpPattern<::tla::MakeCoordOp>, EraseDeadOpPattern<::tla::MakeStrideOp>,
                EraseDeadOpPattern<::tla::MakeLayoutOp>, EraseDeadOpPattern<::tla::AllocPtrOp>,
-               EraseDeadOpPattern<::tla::RecastPtrOp>, EraseDeadOpPattern<mlir::memref::SubViewOp>
+               EraseDeadOpPattern<::tla::RecastPtrOp>, EraseDeadOpPattern<mlir::memref::SubViewOp>,
+               EraseDeadOpPattern<::tla::TensorPtrOp>, EraseDeadOpPattern<::tla::PtrAddOp>
 #if defined(TLA_DSL_ENABLE_HIVM)
                ,
                EraseDeadOpPattern<hivm::PointerCastOp>

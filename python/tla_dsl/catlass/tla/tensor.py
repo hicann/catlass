@@ -67,6 +67,24 @@ class _Tensor(TensorABC):
     def layout_tag(self) -> str:
         return str(_tensor_metadata_field(self.value, "layout_tag"))
 
+    @property
+    def ptr(self) -> Any:
+        """Return the backing ``!tla.ptr`` of this tensor.
+
+        The result is a :class:`~catlass.core_api._Pointer` and supports element-count
+        offset arithmetic via ``+`` (e.g. ``a.ptr + 16`` advances by 16 elements), which
+        can be fed to :func:`tla.make_tensor` to construct a tensor at an offset address.
+        """
+        from ..base_dsl.op import _capture_user_loc
+        from ..core_api import _as_value, _emit_tensor_ptr
+
+        loc = (
+            _capture_user_loc()
+            if _runtime._current_frontend_state() is not None
+            else None
+        )
+        return _emit_tensor_ptr(_as_value(self), loc)
+
     @dsl_user_op
     def load(
         self,
