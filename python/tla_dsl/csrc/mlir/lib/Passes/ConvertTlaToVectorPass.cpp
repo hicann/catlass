@@ -1144,18 +1144,39 @@ static hivmave::MaskWidthAttr maskWidthAttrForElement(OpBuilder &b, Type element
   return hivmave::MaskWidthAttr::get(b.getContext(), maskWidthForElement(elementType));
 }
 
+// The mask-register width implied by a predicate vector's lane count. A mask
+// vector<Nxi1> predicates a 256-byte compute register, so each lane covers
+// 256/N bytes: 64 lanes -> B32, 128 -> B16, 256 -> B8. This lets mask-logic ops
+// pick their width from the mask operand itself rather than a region element
+// type.
+static hivmave::MaskWidth maskWidthForMaskVec(VectorType maskVecType) {
+  int64_t lanes = maskVecType.getNumElements();
+  if (lanes <= 0)
+    return hivmave::MaskWidth::B32;
+  int64_t bytesPerLane = 256 / lanes;
+  if (bytesPerLane <= 1)
+    return hivmave::MaskWidth::B8;
+  if (bytesPerLane <= 2)
+    return hivmave::MaskWidth::B16;
+  return hivmave::MaskWidth::B32;
+}
+
+static hivmave::MaskWidthAttr maskWidthAttrForMaskVec(OpBuilder &b, VectorType maskVecType) {
+  return hivmave::MaskWidthAttr::get(b.getContext(), maskWidthForMaskVec(maskVecType));
+}
+
 static Value createMaskNotResult(OpBuilder &b, Location loc, VectorType maskVecType,
-                                      Type elementType, Value src, Value mask) {
+                                      Value src, Value mask) {
   return b.create<hivmave::PregNotOp>(loc, maskVecType,
-                                      maskWidthAttrForElement(b, elementType), src, mask)
+                                      maskWidthAttrForMaskVec(b, maskVecType), src, mask)
       .getRes();
 }
 
 static Value createMaskLogicBinaryResult(OpBuilder &b, Location loc,
                                               MaskLogicBinaryKind kind,
-                                              VectorType maskVecType, Type elementType,
+                                              VectorType maskVecType,
                                               Value lhs, Value rhs, Value mask) {
-  auto width = maskWidthAttrForElement(b, elementType);
+  auto width = maskWidthAttrForMaskVec(b, maskVecType);
   switch (kind) {
   case MaskLogicBinaryKind::And:
     return b.create<hivmave::PregAndOp>(loc, maskVecType, width, lhs, rhs, mask).getRes();
@@ -1378,13 +1399,32 @@ static Value createVectorUnaryResult(OpBuilder &b, Location loc, VectorUnaryKind
 }
 
 
-// Shared state while re-creating a tla.vec.func body inside the helper function.
+// The per-op vector width bundle (one 256-byte register's worth of a given
+// element type). Derived fresh for each op from its own operands/result rather
+// than shared across the region, so a single vec.func body can mix element
+// widths (as tla.cast requires).
 struct VecLowerCtx {
   int64_t lanes;
   Type elementType;
   VectorType vecType;
   VectorType maskVecType;
 };
+
+// Build the per-op {lanes, elementType, vecType, maskVecType} for a given
+// element type. Each op derives its own types this way rather than reusing a
+// region-global width: a tla.cast may have produced operands whose element
+// width (hence lane count, at a fixed 256-byte register) differs from the
+// region's, and same-256-byte register can hold f32 (64), f16 (128) or i8
+// (256) lanes.
+static FailureOr<VecLowerCtx> deriveVecCtxForElement(Type elementType) {
+  auto lanesOr = getVectorLaneCount(elementType);
+  if (failed(lanesOr) || *lanesOr <= 0)
+    return failure();
+  int64_t lanes = *lanesOr;
+  auto i1Type = IntegerType::get(elementType.getContext(), 1);
+  return VecLowerCtx{lanes, elementType, VectorType::get({lanes}, elementType),
+                     VectorType::get({lanes}, i1Type)};
+}
 
 // Return the value already mapped into the helper, or clone an arith.constant
 // on demand (loop bounds / index math constants are pulled in lazily this way).
@@ -1468,7 +1508,7 @@ static FailureOr<Value> materializeCoordOffsetInHelper(OpBuilder &b, Location lo
 // mapped full-size helper argument, at the chunk's per-iteration element offset.
 static FailureOr<Value> lowerTileViewInHelper(OpBuilder &b, Location loc,
                                               ::tla::TileViewOp tileView,
-                                              DenseMap<Value, Value> &valueMap, int64_t lanes) {
+                                              DenseMap<Value, Value> &valueMap) {
   Value source = valueMap.lookup(getFullTensorOf(tileView.getSource()));
   if (!source)
     source = valueMap.lookup(tileView.getSource());
@@ -1477,6 +1517,12 @@ static FailureOr<Value> lowerTileViewInHelper(OpBuilder &b, Location loc,
   auto sourceType = dyn_cast<MemRefType>(source.getType());
   if (!sourceType)
     return tileView.emitError("expected memref source for vector tile_view"), failure();
+  // The tile is one 256-byte register's worth of the source element type; its
+  // lane count follows that element type, independent of any region width.
+  auto lanesOr = getVectorLaneCount(sourceType.getElementType());
+  if (failed(lanesOr))
+    return tileView.emitError("unsupported element type for vector tile_view"), failure();
+  int64_t lanes = *lanesOr;
   auto offset = materializeCoordOffsetInHelper(b, loc, tileView.getCoord(), valueMap);
   if (failed(offset))
     return tileView.emitError("failed to materialize tile_view coordinate"), failure();
@@ -1493,12 +1539,14 @@ static FailureOr<Value> lowerTileViewInHelper(OpBuilder &b, Location loc,
 }
 
 static LogicalResult lowerNestedVectorBlock(Block *sourceBlock, OpBuilder &b,
-                                            DenseMap<Value, Value> &valueMap, VecLowerCtx &ctx);
+                                            DenseMap<Value, Value> &valueMap);
 
 // Re-create one vec.func body op inside the helper: tla ops become AVE vector
-// ops; scf control flow and index arithmetic are carried verbatim.
+// ops; scf control flow and index arithmetic are carried verbatim. Each op
+// derives its own vector/mask width from its operands or result element type,
+// so a single region may mix element widths (e.g. across tla.cast).
 static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
-                                         DenseMap<Value, Value> &valueMap, VecLowerCtx &ctx) {
+                                         DenseMap<Value, Value> &valueMap) {
   Location loc = op.getLoc();
 
   // make_shape / make_coord feed only tile_view offsets (recomputed below); map
@@ -1514,7 +1562,7 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
   }
 
   if (auto tileView = dyn_cast<::tla::TileViewOp>(op)) {
-    auto tile = lowerTileViewInHelper(b, loc, tileView, valueMap, ctx.lanes);
+    auto tile = lowerTileViewInHelper(b, loc, tileView, valueMap);
     if (failed(tile))
       return failure();
     valueMap[tileView.getResult()] = *tile;
@@ -1525,12 +1573,21 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     Value source = valueMap.lookup(loadOp.getSource());
     if (!source)
       return failure();
+    // The loaded vector's element type comes from the tile memref, not the
+    // region-global width: a load feeding a differently-typed op keeps its own
+    // dtype.
+    auto sourceType = dyn_cast<MemRefType>(source.getType());
+    if (!sourceType)
+      return failure();
+    auto opCtx = deriveVecCtxForElement(sourceType.getElementType());
+    if (failed(opCtx))
+      return failure();
     Value zero = b.create<arith::ConstantIndexOp>(loc, 0);
     hivmave::LoadDist pattern = hivmave::LoadDist::NORM;
     if (auto loadDistAttr = loadOp.getLoadDist())
       pattern = mapTlaLoadDistToAve(loadDistAttr->getLoadDist());
     valueMap[loadOp.getResult()] =
-        createVFLoad(b, loc, ctx.vecType, source, zero, pattern,
+        createVFLoad(b, loc, opCtx->vecType, source, zero, pattern,
                      loadOp.getUnalignedUbAccess().value_or(false))
             .getRes();
     return success();
@@ -1587,13 +1644,21 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     Value source = lookupOrCloneScalarValue(b, fullOp.getValue(), valueMap);
     if (!source)
       return failure();
-    if (source.getType() != ctx.elementType)
+    // No vector operand to key off: the broadcast width comes from the result
+    // tensor's element type.
+    auto resultInfo = parseTensorInfo(fullOp.getResult().getType());
+    if (failed(resultInfo))
+      return fullOp.emitError("failed to parse tla.full result element type"), failure();
+    auto opCtx = deriveVecCtxForElement(resultInfo->elementType);
+    if (failed(opCtx))
+      return fullOp.emitError("unsupported tla.full result element type"), failure();
+    if (source.getType() != opCtx->elementType)
       return fullOp.emitError("tla.full scalar type ")
                  << source.getType() << " does not match vector element type "
-                 << ctx.elementType,
+                 << opCtx->elementType,
              failure();
     valueMap[fullOp.getResult()] =
-        b.create<hivmave::VFBroadcastScalarOp>(loc, ctx.vecType, source).getRes();
+        b.create<hivmave::VFBroadcastScalarOp>(loc, opCtx->vecType, source).getRes();
     return success();
   }
 
@@ -1601,13 +1666,20 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     Value start = lookupOrCloneScalarValue(b, arangeOp.getStart(), valueMap);
     if (!start)
       return failure();
-    if (isa<FloatType>(ctx.elementType))
+    // Width comes from the result tensor's element type.
+    auto resultInfo = parseTensorInfo(arangeOp.getResult().getType());
+    if (failed(resultInfo))
+      return arangeOp.emitError("failed to parse tla.arange result element type"), failure();
+    auto opCtx = deriveVecCtxForElement(resultInfo->elementType);
+    if (failed(opCtx))
+      return arangeOp.emitError("unsupported tla.arange result element type"), failure();
+    if (isa<FloatType>(opCtx->elementType))
       return arangeOp.emitError("tla.arange does not support floating-point element types"),
              failure();
-    if (start.getType() != ctx.elementType)
+    if (start.getType() != opCtx->elementType)
       return arangeOp.emitError("tla.arange start type ")
                  << start.getType() << " does not match vector element type "
-                 << ctx.elementType,
+                 << opCtx->elementType,
              failure();
     auto vciType = hivmave::VCIType::INCREASE;
     if (arangeOp.getOrder() == "decrease")
@@ -1618,7 +1690,7 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
              failure();
     valueMap[arangeOp.getResult()] =
         b.create<hivmave::VFVCIOp>(
-             loc, ctx.vecType, start,
+             loc, opCtx->vecType, start,
              hivmave::VCITypeAttr::get(b.getContext(), vciType))
             .getRes();
     return success();
@@ -1663,7 +1735,14 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     Value lhs = valueMap.lookup(operands.lhs);
     if (!lhs)
       return failure();
-    auto scalarOr = materializeVectorScalarValue(b, operands, valueMap, ctx);
+    // Element type follows the lhs vector operand, not the region width.
+    auto lhsTy = dyn_cast<VectorType>(lhs.getType());
+    if (!lhsTy)
+      return failure();
+    auto opCtx = deriveVecCtxForElement(lhsTy.getElementType());
+    if (failed(opCtx))
+      return failure();
+    auto scalarOr = materializeVectorScalarValue(b, operands, valueMap, *opCtx);
     if (failed(scalarOr))
       return failure();
     Value mask;
@@ -1672,9 +1751,9 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
       if (!mask)
         return failure();
     } else {
-      mask = createAvePgeMask(b, loc, ctx.maskVecType, hivmave::PgePattern::ALL);
+      mask = createAvePgeMask(b, loc, opCtx->maskVecType, hivmave::PgePattern::ALL);
     }
-    auto result = createVectorScalarBinaryResult(b, loc, *info, ctx, lhs, *scalarOr, mask);
+    auto result = createVectorScalarBinaryResult(b, loc, *info, *opCtx, lhs, *scalarOr, mask);
     if (failed(result))
       return failure();
     valueMap[op.getResult(0)] = *result;
@@ -1689,8 +1768,15 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     Value y = valueMap.lookup(whereOp.getY());
     if (!mask || !x || !y)
       return failure();
+    // Result width follows the selected vectors' element type.
+    auto xTy = dyn_cast<VectorType>(x.getType());
+    if (!xTy)
+      return failure();
+    auto opCtx = deriveVecCtxForElement(xTy.getElementType());
+    if (failed(opCtx))
+      return failure();
     valueMap[whereOp.getResult()] =
-        b.create<hivmave::VFSelectOp>(loc, ctx.vecType, mask, x, y);
+        b.create<hivmave::VFSelectOp>(loc, opCtx->vecType, mask, x, y);
     return success();
   }
 
@@ -1699,8 +1785,12 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     Value mask = valueMap.lookup(maskNotOp.getMask());
     if (!src || !mask)
       return failure();
+    // Width follows the predicate operand's own lane count.
+    auto maskVecType = dyn_cast<VectorType>(src.getType());
+    if (!maskVecType)
+      return failure();
     valueMap[maskNotOp.getResult()] = createMaskNotResult(
-        b, loc, ctx.maskVecType, ctx.elementType, src, mask);
+        b, loc, maskVecType, src, mask);
     return success();
   }
 
@@ -1711,8 +1801,11 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     Value mask = valueMap.lookup(maskOperand);
     if (!lhs || !rhs || !mask)
       return failure();
+    auto maskVecType = dyn_cast<VectorType>(lhs.getType());
+    if (!maskVecType)
+      return failure();
     valueMap[result] = createMaskLogicBinaryResult(
-        b, loc, kind, ctx.maskVecType, ctx.elementType, lhs, rhs, mask);
+        b, loc, kind, maskVecType, lhs, rhs, mask);
     return success();
   };
 
@@ -1734,14 +1827,21 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     Value operand = valueMap.lookup(reduceOp->getOperand(0));
     if (!operand)
       return failure();
+    // Reduction width follows the operand vector's element type.
+    auto operandTy = dyn_cast<VectorType>(operand.getType());
+    if (!operandTy)
+      return failure();
+    auto opCtx = deriveVecCtxForElement(operandTy.getElementType());
+    if (failed(opCtx))
+      return failure();
     Value mask;
     if (reduceOp.getMask()) {
       mask = valueMap.lookup(reduceOp.getMask());
       if (!mask)
         return failure();
     }
-    auto result = createVectorReductionResult(b, loc, reduceOp, ctx.elementType,
-                                              ctx.vecType, operand, mask);
+    auto result = createVectorReductionResult(b, loc, reduceOp, opCtx->elementType,
+                                              opCtx->vecType, operand, mask);
     if (failed(result))
       return failure();
     valueMap[op.getResult(0)] = *result;
@@ -1771,7 +1871,9 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
       if (!mask)
         return failure();
     } else {
-      mask = b.create<hivmave::VFPgeOp>(loc, ctx.maskVecType, hivmave::PgePattern::ALL);
+      // Predicate follows the gathered vector's own lane count.
+      auto maskVecType = VectorType::get({numElems}, b.getI1Type());
+      mask = b.create<hivmave::VFPgeOp>(loc, maskVecType, hivmave::PgePattern::ALL);
     }
     Value zero = b.create<arith::ConstantIndexOp>(loc, 0);
     valueMap[gatherOp.getResult()] =
@@ -1782,11 +1884,18 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
   if (auto info = getVectorUnaryInfo(&op)) {
     if (op.getNumResults() != 1)
       return failure();
-    if (failed(validateVectorUnaryElementType(&op, *info, ctx.elementType)))
-      return failure();
     TlaUnaryOperands operands = info->operands;
     Value operand = valueMap.lookup(operands.operand);
     if (!operand)
+      return failure();
+    // Element type / width follow the operand vector.
+    auto operandTy = dyn_cast<VectorType>(operand.getType());
+    if (!operandTy)
+      return failure();
+    auto opCtx = deriveVecCtxForElement(operandTy.getElementType());
+    if (failed(opCtx))
+      return failure();
+    if (failed(validateVectorUnaryElementType(&op, *info, opCtx->elementType)))
       return failure();
     Value mask;
     if (operands.mask) {
@@ -1794,64 +1903,52 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
       if (!mask)
         return failure();
     } else {
-      mask = b.create<hivmave::VFPgeOp>(loc, ctx.maskVecType, hivmave::PgePattern::ALL);
+      mask = b.create<hivmave::VFPgeOp>(loc, opCtx->maskVecType, hivmave::PgePattern::ALL);
     }
-    Value result = createVectorUnaryResult(b, loc, info->kind, ctx.vecType, operand, mask);
+    Value result = createVectorUnaryResult(b, loc, info->kind, opCtx->vecType, operand, mask);
     if (!result)
       return failure();
     valueMap[op.getResult(0)] = result;
     return success();
   }
 
-  // tla.create_mask: build the mask vector for the enclosing region from a
-  // fixed pattern -> ave.hir.pge<PATTERN>. The dtype attr fixes the lane count
-  // (256 bytes / element size) and must match the vector region width.
+  // tla.create_mask: build a mask vector from a fixed pattern ->
+  // ave.hir.pge<PATTERN>. The op's own dtype attr fixes the lane count
+  // (256 bytes / element size) and hence the i1 mask width.
   if (auto maskOp = dyn_cast<::tla::CreateMaskOp>(op)) {
     auto pattern = hivmave::symbolizePgePattern(maskOp.getPattern());
     if (!pattern)
       return maskOp.emitError("unknown tla.create_mask pattern: ") << maskOp.getPattern(),
              failure();
-    auto laneCountOr = getVectorLaneCount(maskOp.getDtype());
-    if (failed(laneCountOr))
+    auto opCtx = deriveVecCtxForElement(maskOp.getDtype());
+    if (failed(opCtx))
       return maskOp.emitError("unsupported tla.create_mask dtype: ") << maskOp.getDtype(),
              failure();
-    int64_t laneCount = *laneCountOr;
-    if (laneCount != ctx.lanes)
-      return maskOp.emitError("tla.create_mask dtype implies ")
-                 << laneCount << " lanes, but the vector region is " << ctx.lanes
-                 << " lanes wide",
-             failure();
     valueMap[maskOp.getResult()] =
-        createAvePgeMask(b, loc, ctx.maskVecType, *pattern);
+        createAvePgeMask(b, loc, opCtx->maskVecType, *pattern);
     return success();
   }
 
   // tla.update_mask: tail mask + remaining count. Lowers to ave.hir.plt,
   // whose mask result drives masked stores and whose second result
   // (true_shape - lanes) is threaded back as the loop-carried tail counter.
-  // The dtype attr fixes the lane count (256 bytes / element size) and must
-  // match the enclosing vector region width.
+  // The op's own dtype attr fixes the lane count (256 bytes / element size)
+  // and hence the i1 mask width and the tail decrement.
   if (auto updateMaskOp = dyn_cast<::tla::UpdateMaskOp>(op)) {
     Value trueShape = valueMap.lookup(updateMaskOp.getTrueShape());
     if (!trueShape)
       return failure();
-    auto laneCountOr = getVectorLaneCount(updateMaskOp.getDtype());
-    if (failed(laneCountOr))
+    auto opCtx = deriveVecCtxForElement(updateMaskOp.getDtype());
+    if (failed(opCtx))
       return updateMaskOp.emitError("unsupported tla.update_mask dtype: ")
              << updateMaskOp.getDtype(), failure();
-    int64_t laneCount = *laneCountOr;
-    if (laneCount != ctx.lanes)
-      return updateMaskOp.emitError("tla.update_mask dtype implies ")
-                 << laneCount << " lanes, but the vector region is " << ctx.lanes
-                 << " lanes wide",
-             failure();
-    auto plt = createAvePltMask(b, loc, ctx.maskVecType, trueShape);
+    auto plt = createAvePltMask(b, loc, opCtx->maskVecType, trueShape);
     valueMap[updateMaskOp.getMask()] = plt.getRes();
     // new_true_shape = true_shape - lanes, which is exactly what plt computes.
     // We materialize it with index arithmetic rather than consuming plt's second
     // result: that result is i32 in hardware but typed index, so carrying it
     // through the loop would leave an unfoldable i32<->index unrealized cast.
-    Value lanesValue = b.create<arith::ConstantIndexOp>(loc, ctx.lanes);
+    Value lanesValue = b.create<arith::ConstantIndexOp>(loc, opCtx->lanes);
     valueMap[updateMaskOp.getNewTrueShape()] =
         b.create<arith::SubIOp>(loc, trueShape, lanesValue);
     return success();
@@ -1860,6 +1957,14 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
   if (auto cmpOp = dyn_cast<::tla::CmpOp>(op)) {
     Value lhs = valueMap.lookup(cmpOp.getLhs());
     if (!lhs)
+      return failure();
+    // The compare's operand width fixes both the input vectors and the i1 mask
+    // result width.
+    auto lhsTy = dyn_cast<VectorType>(lhs.getType());
+    if (!lhsTy)
+      return failure();
+    auto opCtx = deriveVecCtxForElement(lhsTy.getElementType());
+    if (failed(opCtx))
       return failure();
     auto cmpType = mapCmpMode(cmpOp.getMode());
     if (!cmpType)
@@ -1871,23 +1976,23 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
       if (!mask)
         return failure();
     } else {
-      mask = b.create<hivmave::VFPgeOp>(loc, ctx.maskVecType, hivmave::PgePattern::ALL);
+      mask = b.create<hivmave::VFPgeOp>(loc, opCtx->maskVecType, hivmave::PgePattern::ALL);
     }
     if (isa<::tla::TlaTensorType>(cmpOp.getRhs().getType())) {
       Value rhs = valueMap.lookup(cmpOp.getRhs());
       if (!rhs)
         return failure();
       valueMap[cmpOp.getResult()] =
-          b.create<hivmave::VFCmpOp>(loc, ctx.maskVecType, *cmpType, lhs, rhs, mask);
+          b.create<hivmave::VFCmpOp>(loc, opCtx->maskVecType, *cmpType, lhs, rhs, mask);
     } else {
       Value rhs = lookupOrCloneScalarValue(b, cmpOp.getRhs(), valueMap);
       if (!rhs)
         return failure();
-      auto scalarOr = castScalarForVectorElement(rhs, ctx.elementType);
+      auto scalarOr = castScalarForVectorElement(rhs, opCtx->elementType);
       if (failed(scalarOr))
         return failure();
       valueMap[cmpOp.getResult()] =
-          b.create<hivmave::VFCmpS>(loc, ctx.maskVecType, *cmpType, lhs, *scalarOr, mask);
+          b.create<hivmave::VFCmpS>(loc, opCtx->maskVecType, *cmpType, lhs, *scalarOr, mask);
     }
     return success();
   }
@@ -1904,7 +2009,14 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
       if (!mask)
         return failure();
     } else {
-      mask = createAvePgeMask(b, loc, ctx.maskVecType, hivmave::PgePattern::ALL);
+      // The all-true predicate follows the stored vector's own lane count.
+      auto sourceTy = dyn_cast<VectorType>(source.getType());
+      if (!sourceTy)
+        return failure();
+      auto opCtx = deriveVecCtxForElement(sourceTy.getElementType());
+      if (failed(opCtx))
+        return failure();
+      mask = createAvePgeMask(b, loc, opCtx->maskVecType, hivmave::PgePattern::ALL);
     }
     b.create<hivmave::VFMaskedStoreOp>(loc, dest, ValueRange{zero}, mask, source);
     return success();
@@ -1952,7 +2064,7 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
               newArg = nb.create<arith::IndexCastOp>(nloc, nb.getIndexType(), newArg);
             nestedMap[regionIterArgs[i]] = newArg;
           }
-          if (failed(lowerNestedVectorBlock(forOp.getBody(), nb, nestedMap, ctx))) {
+          if (failed(lowerNestedVectorBlock(forOp.getBody(), nb, nestedMap))) {
             bodyStatus = failure();
             nb.create<scf::YieldOp>(nloc, iterArgs);
             return;
@@ -1999,12 +2111,12 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     auto newIf = b.create<scf::IfOp>(loc, TypeRange{}, cond, hasElse);
     DenseMap<Value, Value> thenMap = valueMap;
     OpBuilder tb(newIf.thenBlock()->getTerminator());
-    if (failed(lowerNestedVectorBlock(ifOp.thenBlock(), tb, thenMap, ctx)))
+    if (failed(lowerNestedVectorBlock(ifOp.thenBlock(), tb, thenMap)))
       return failure();
     if (hasElse) {
       DenseMap<Value, Value> elseMap = valueMap;
       OpBuilder eb(newIf.elseBlock()->getTerminator());
-      if (failed(lowerNestedVectorBlock(ifOp.elseBlock(), eb, elseMap, ctx)))
+      if (failed(lowerNestedVectorBlock(ifOp.elseBlock(), eb, elseMap)))
         return failure();
     }
     return success();
@@ -2033,13 +2145,13 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
 }
 
 static LogicalResult lowerNestedVectorBlock(Block *sourceBlock, OpBuilder &b,
-                                            DenseMap<Value, Value> &valueMap, VecLowerCtx &ctx) {
+                                            DenseMap<Value, Value> &valueMap) {
   for (Operation &op : sourceBlock->getOperations()) {
     // Terminators are reproduced by the enclosing op (scf.for/scf.if) or by
     // buildHelperFunc's func.return.
     if (op.hasTrait<OpTrait::IsTerminator>())
       continue;
-    if (failed(lowerNestedVectorOp(op, b, valueMap, ctx)))
+    if (failed(lowerNestedVectorOp(op, b, valueMap)))
       return failure();
   }
   return success();
@@ -2129,24 +2241,21 @@ static FailureOr<func::FuncOp> buildHelperFunc(ModuleOp module, func::FuncOp par
   auto funcType = moduleBuilder.getFunctionType(functionInputs, TypeRange{});
 
   // The per-iteration vector tile is one 256-byte register's worth of elements.
-  // A single VecLowerCtx (lanes/vecType/mask) is built from this element type and
-  // reused for every op, so for now all operand tiles are expected to share one
-  // element type; validate that each tile operand is a supported int/float type
-  // (the trailing scalar args are index/int and are handled separately). This runs
-  // before the helper is created so a validation failure leaks no partial IR.
-  Type elementType = cast<MemRefType>(functionInputs.front()).getElementType();
+  // Each op inside the helper derives its own width from its operands/result,
+  // so tiles may carry different element types within one region (e.g. a f32
+  // load feeding a tla.cast to f16). Validate only that each tile operand is a
+  // supported int/float type (the trailing scalar args are index/int and are
+  // handled separately). This runs before the helper is created so a validation
+  // failure leaks no partial IR.
   for (size_t i = 0; i < helperOperands.size(); ++i) {
     Type tileElementType = cast<MemRefType>(functionInputs[i]).getElementType();
     if (!isa<IntegerType>(tileElementType) && !isa<FloatType>(tileElementType))
       return vectorOp->emitError("unsupported element type for vector binary helper: ")
              << tileElementType;
+    if (failed(getVectorLaneCount(tileElementType)))
+      return vectorOp->emitError("unsupported element width for vector helper tile: ")
+             << tileElementType;
   }
-  auto lanesOr = getVectorLaneCount(elementType);
-  if (failed(lanesOr))
-    return failure();
-  int64_t lanes = *lanesOr;
-  if (lanes <= 0)
-    return failure();
 
   std::string helperName = buildUniqueVectorHelperName(module, nextVectorRegionId);
   auto helper = moduleBuilder.create<func::FuncOp>(vectorOp->getLoc(), helperName, funcType);
@@ -2159,15 +2268,13 @@ static FailureOr<func::FuncOp> buildHelperFunc(ModuleOp module, func::FuncOp par
   Block *entry = helper.addEntryBlock();
   OpBuilder b = OpBuilder::atBlockBegin(entry);
 
-  VecLowerCtx lowerCtx{lanes, elementType, VectorType::get({lanes}, elementType),
-                       VectorType::get({lanes}, b.getI1Type())};
   DenseMap<Value, Value> valueMap;
   for (auto [i, operand] : llvm::enumerate(helperOperands))
     valueMap[operand] = entry->getArgument(i);
   // Captured scalars map to their trailing block arguments.
   for (auto [j, scalar] : llvm::enumerate(scalarOperands))
     valueMap[scalar] = entry->getArgument(helperOperands.size() + j);
-  if (failed(lowerNestedVectorBlock(body, b, valueMap, lowerCtx))) {
+  if (failed(lowerNestedVectorBlock(body, b, valueMap))) {
     // Discard the partially-built helper so an unsupported construct fails
     // cleanly (the vec.func is left intact) instead of leaking malformed IR.
     helper.erase();
