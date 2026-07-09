@@ -22,55 +22,84 @@
 
 namespace tla {
 
-// Implementation of product as a function object
+// is_int_tuple: true if T is an integral, or a tuple whose elements are all is_int_tuple (recursive)
+template <class T>
+struct is_int_tuple : is_integral<T> {};
+
+template <class... Ts>
+struct is_int_tuple<tla::tuple<Ts...>> : Bool<(is_int_tuple<Ts>::value && ...)> {};
+
+template <class T>
+inline constexpr bool is_int_tuple_v = is_int_tuple<T>::value;
+
+// ---------------------------------------------------------------------------
+// Product / product / size / product_like: aggregation over tuple elements
+// ---------------------------------------------------------------------------
+
 struct Product {
-    template <class IntTuple>
-    CATLASS_HOST_DEVICE constexpr auto operator()(IntTuple const& a) const
+    template <class T>
+    CATLASS_HOST_DEVICE constexpr auto operator()(T const& a) const
     {
-        if constexpr (is_tuple<IntTuple>::value) {
-            if constexpr (tuple_size<IntTuple>::value == 0) {
+        if constexpr (is_tuple_v<T>) {
+            if constexpr (tuple_size_v<T> == 0) {
                 return Int<1>{};
             } else {
-                return tla::transform_apply(Product{}, multiplies_unary_lfold{}, a);
+                return transform_apply(Product{}, multiplies_unary_lfold{}, a);
             }
-        } else if constexpr (tla::is_integral<IntTuple>::value) {
+        } else if constexpr (is_integral_v<T>) {
             return a;
+        } else {
+            static_assert(dependent_false<T>, "Product: invalid operand type");
         }
     }
 };
 
+// product: multiply all elements (recursive, empty tuple = 1)
 template <class T>
 CATLASS_HOST_DEVICE constexpr auto product(T const& t)
 {
     return Product{}(t);
 }
 
+// size: total element count (alias for product)
 template <class T>
 CATLASS_HOST_DEVICE constexpr auto size(T const& t)
 {
     return product(t);
 }
 
+// product_like: product of leaves in t, guided by structure of g
 template <class T, class TG>
 CATLASS_HOST_DEVICE constexpr auto product_like(T const& t, TG const& g)
 {
     return transform_leaf([](auto const&, auto const& x) { return product(x); }, g, t);
 }
 
-#define TLA_TUPLE_BINARY_OP(OP)                                                                                         \
-    template <class T0, class T1, TLA_REQUIRES(is_tuple_v<T0> || is_tuple_v<T1>)>                                       \
-    CATLASS_HOST_DEVICE constexpr auto operator OP(T0 const& a, T1 const& b)                                            \
-    {                                                                                                                   \
-        if constexpr (is_tuple_v<T0> && is_tuple_v<T1>) {                                                               \
-            TLA_ASSERT_SAME_TUPLE_SIZE(T0, T1);                                                                         \
-            return transform([](auto const& x, auto const& y) { return x OP y; }, a, b);                                \
-        } else if constexpr (is_tuple_v<T0> && is_integral_v<T1>) {                                                     \
-            return transform([&](auto const& x) { return x OP b; }, a);                                                 \
-        } else if constexpr (is_integral_v<T0> && is_tuple_v<T1>) {                                                     \
-            return transform([&](auto const& x) { return a OP x; }, b);                                                 \
-        } else {                                                                                                        \
-            static_assert(dependent_false<T0, T1>, "operator" #OP ": invalid operand types");                           \
-        }                                                                                                               \
+// product_each: product of each element (one-level flatten)
+template <class T>
+CATLASS_HOST_DEVICE constexpr auto product_each(T const& t)
+{
+    return transform(Product{}, wrap(t));
+}
+
+// ---------------------------------------------------------------------------
+// Arithmetic operators: element-wise +, -, *, / with scalar broadcasting
+// ---------------------------------------------------------------------------
+
+#define TLA_TUPLE_BINARY_OP(OP)                                                               \
+    template <class T0, class T1, TLA_REQUIRES(is_tuple_v<T0> || is_tuple_v<T1>)>             \
+    CATLASS_HOST_DEVICE constexpr auto operator OP(T0 const& a, T1 const& b)                  \
+    {                                                                                         \
+        if constexpr (is_tuple_v<T0> && is_tuple_v<T1>) {                                     \
+            TLA_ASSERT_SAME_TUPLE_SIZE(T0, T1);                                               \
+            return transform([](auto const& x, auto const& y) { return x OP y; }, a, b);      \
+        } else if constexpr (is_tuple_v<T0> && is_integral_v<T1>) {                           \
+            return transform([&](auto const& x) { return x OP b; }, a);                       \
+        } else if constexpr (is_integral_v<T0> && is_tuple_v<T1>) {                           \
+            return transform([&](auto const& x) { return a OP x; }, b);                       \
+        } else {                                                                              \
+            static_assert(dependent_false<T0, T1>, "operator" #OP ": invalid operand types"); \
+        }                                                                                     \
     }
 
 TLA_TUPLE_BINARY_OP(+);
@@ -98,6 +127,7 @@ CATLASS_HOST_DEVICE constexpr auto minimum(T0 const& t0, T1 const& t1)
     }
 }
 
+// maximum: element-wise max (recursive, supports broadcasting)
 template <class T0, class T1>
 CATLASS_HOST_DEVICE constexpr auto maximum(T0 const& t0, T1 const& t1)
 {
@@ -143,9 +173,11 @@ CATLASS_HOST_DEVICE constexpr auto ceil_div(T0 const& a, T1 const& b)
         constexpr int R = tuple_size<T0>::value;
         return transform([](auto const& x, auto const& y) { return ceil_div(x, y); }, a, append<R>(b, Int<1>{}));
     } else if constexpr (is_tuple_v<T0> && is_integral_v<T1>) {
-        auto result = fold([](auto const& init, auto const& ai) {
-            return make_tuple(append(get<0>(init), ceil_div(ai, get<1>(init))), ceil_div(get<1>(init), ai));
-        }, make_tuple(make_tuple(), b), a);
+        auto result = fold(
+            [](auto const& init, auto const& ai) {
+                return make_tuple(append(get<0>(init), ceil_div(ai, get<1>(init))), ceil_div(get<1>(init), ai));
+            },
+            make_tuple(make_tuple(), b), a);
         return get<0>(result);
     } else if constexpr (is_integral_v<T0> && is_tuple_v<T1>) {
         return ceil_div(a, product(b));

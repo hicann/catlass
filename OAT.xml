@@ -13,7 +13,7 @@
         <licensefile></licensefile>
         <policylist>
             <policy name="projectPolicy" desc="">
-                <policyitem type="license" name="cann License" path=".*" desc="CANN 协议"/>
+                <policyitem type="license" name="CANN-2.0" path=".*" desc="CANN 协议"/>
                 <policyitem type="copyright" name="*" path=".*" rule="may" group="defaultGroup" filefilter="copyrightPolicyFilter" desc=""/>
             </policy>
         </policylist>
@@ -22,13 +22,14 @@
                 <filteritem type="filepath" name="OWNERS" desc="CATLASS仓管理成员"/>
                 <filteritem type="filepath" name="Third_Party_Open_Source_Software_Notice" desc="第三方使用"/>
                 <filteritem type="filepath" name="LICENSE" desc="无需License头检测"/>
+                <filteritem type="filepath" name=".pre-commit-config.yaml" desc="pre-commit配置文件无需添加版权头"/>
             </filefilter>
             <filefilter name="defaultPolicyFilter" desc="Filters for compatibility，license header policies">
                 <!--Void/-->
             </filefilter>
             <filefilter name="copyrightPolicyFilter" desc="Filters for copyright header policies">
                 <filteritem type="filepath" name="OWNERS" desc="CATLASS仓管理成员，无需添加版权头"/>
-                <filteritem type="filepath" name=".clang-format|.gitignore|Third_Party_Open_Source_Software_Notice" desc="无需添加版权头"/>
+                <filteritem type="filepath" name=".clang-format|.gitignore|Third_Party_Open_Source_Software_Notice|.pre-commit-config.yaml" desc="无需添加版权头"/>
                 <filteritem type="filepath" name=".gitcode/ISSUE_TEMPLATE/*.yml" desc="Issue 模板无需添加版权头"/>
                 <filteritem type="filepath" name="*.md" desc="Markdown文档无需添加版权头"/>
             </filefilter>

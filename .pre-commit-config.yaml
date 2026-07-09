@@ -1,5 +1,5 @@
 repos:
-  - repo: https://gitcode.com/pre-commit/mirrors-clang-format
+  - repo: https://gitcode.com/pre-commit-clang/mirrors-clang-format
     rev: v16.0.0
     hooks:
       - id: clang-format
@@ -13,5 +13,5 @@ repos:
         language: system
         pass_filenames: true
         types: [file]
-        stages: [commit]
+        stages: [pre-commit]
         verbose: true

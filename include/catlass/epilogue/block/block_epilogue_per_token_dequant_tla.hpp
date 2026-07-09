@@ -1,12 +1,12 @@
 /**
- * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * CANN Open Software License Agreement Version 2.0 (the "License").
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
- */
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd.
+ * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+ * CANN Open Software License Agreement Version 2.0 (the "License").
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
+ */
 
 #ifndef CATLASS_EPILOGUE_BLOCK_EPILOGUE_PER_TOKEN_DEQUANT_TLA_HPP
 #define CATLASS_EPILOGUE_BLOCK_EPILOGUE_PER_TOKEN_DEQUANT_TLA_HPP
@@ -25,29 +25,12 @@
 namespace Catlass::Epilogue::Block {
 
 template <
-    uint32_t UB_STAGES_,
-    class ElementC_,
-    class ElementScale_,
-    class ElementPerTokenScale_,
-    class ElementD_,
-    class TileRowBroadcastMul_,
-    class TileBroadcastOneBlk_,
-    class TileOneBlkColumnBroadcastMul_,
-    class TileCopy_,
-    class EpilogueTileSwizzle_
->
-class BlockEpilogue <
-    EpilogueAtlasA2PerTokenDequantTla<UB_STAGES_>,
-    ElementC_,
-    ElementScale_,
-    ElementPerTokenScale_,
-    ElementD_,
-    TileRowBroadcastMul_,
-    TileBroadcastOneBlk_,
-    TileOneBlkColumnBroadcastMul_,
-    TileCopy_,
-    EpilogueTileSwizzle_
-> {
+    uint32_t UB_STAGES_, class ElementC_, class ElementScale_, class ElementPerTokenScale_, class ElementD_,
+    class TileRowBroadcastMul_, class TileBroadcastOneBlk_, class TileOneBlkColumnBroadcastMul_, class TileCopy_,
+    class EpilogueTileSwizzle_>
+class BlockEpilogue<
+    EpilogueAtlasA2PerTokenDequantTla<UB_STAGES_>, ElementC_, ElementScale_, ElementPerTokenScale_, ElementD_,
+    TileRowBroadcastMul_, TileBroadcastOneBlk_, TileOneBlkColumnBroadcastMul_, TileCopy_, EpilogueTileSwizzle_> {
 public:
     using DispatchPolicy = EpilogueAtlasA2PerTokenDequantTla<UB_STAGES_>;
     using ArchTag = typename DispatchPolicy::ArchTag;
@@ -66,14 +49,14 @@ public:
 
     // Check data infos
     static_assert(
-        std::is_same_v<ElementC, int32_t> && (std::is_same_v<ElementD, half> || std::is_same_v<ElementD, bfloat16_t>) &&
-            std::is_same_v<ElementScale, ElementD> && std::is_same_v<ElementPerTokenScale, ElementD>,
-        "The element type template parameters of BlockEpilogue are wrong"
-    );
+        std::is_same_v<ElementC, int32_t> &&
+            (std::is_same_v<ElementD, half> ||
+             std::is_same_v<ElementD, bfloat16_t>)&&std::is_same_v<ElementScale, ElementD> &&
+            std::is_same_v<ElementPerTokenScale, ElementD>,
+        "The element type template parameters of BlockEpilogue are wrong");
     static_assert(
         tla::detail::isRowMajor<LayoutC>::value && tla::detail::isRowMajor<LayoutD>::value,
-        "The layout template parameters of BlockEpilogue are wrong"
-    );
+        "The layout template parameters of BlockEpilogue are wrong");
 
     // Tile compute ops
     using TileRowBroadcastMul = TileRowBroadcastMul_;
@@ -88,18 +71,15 @@ public:
 
     static_assert(
         TileShape::ROW == TileBroadcastOneBlk::COMPUTE_LENGTH &&
-        std::is_same_v<TileShape, typename TileOneBlkColumnBroadcastMul::TileShape>,
-        "TileShape must be consistent for all tile compute ops"
-    );
+            std::is_same_v<TileShape, typename TileOneBlkColumnBroadcastMul::TileShape>,
+        "TileShape must be consistent for all tile compute ops");
 
     static_assert(
-        (UB_STAGES * (TileShape::COUNT * sizeof(ElementC) + TileShape::COLUMN * sizeof(ElementScale)
-                + TileShape::ROW * sizeof(ElementPerTokenScale) + TileShape::COUNT * sizeof(ElementD))
-            + (TileShape::COUNT + TileShape::COLUMN + TileShape::COUNT + TileShape::ROW) * sizeof(float)
-            + TileShape::ROW * BYTE_PER_BLK)
-        <= ArchTag::UB_SIZE,
-        "TileShape is too large to fit in UB"
-    );
+        (UB_STAGES * (TileShape::COUNT * sizeof(ElementC) + TileShape::COLUMN * sizeof(ElementScale) +
+                      TileShape::ROW * sizeof(ElementPerTokenScale) + TileShape::COUNT * sizeof(ElementD)) +
+         (TileShape::COUNT + TileShape::COLUMN + TileShape::COUNT + TileShape::ROW) * sizeof(float) +
+         TileShape::ROW * BYTE_PER_BLK) <= ArchTag::UB_SIZE,
+        "TileShape is too large to fit in UB");
 
     struct Params {
         GM_ADDR ptrScale{nullptr};
@@ -112,7 +92,8 @@ public:
     };
 
     CATLASS_DEVICE
-    BlockEpilogue(Arch::Resource<ArchTag> const &resource, Params const &params = Params{}, uint32_t sharedUbSize = 0) : params(params)
+    BlockEpilogue(Arch::Resource<ArchTag> const& resource, Params const& params = Params{}, uint32_t sharedUbSize = 0)
+        : params(params)
     {
         uint32_t ubOffset = sharedUbSize;
         int32_t eventVMTE2 = 0;
@@ -168,17 +149,15 @@ public:
     }
 
     CATLASS_DEVICE
-    void UpdateParams(Params const &params_)
+    void UpdateParams(Params const& params_)
     {
         params = params_;
     }
 
     template <class TensorC, class TensorScale, class TensorPerTokenScaleScale, class TensorD>
-    CATLASS_DEVICE
-    void operator() (
-        TensorC &tensorBlockC, TensorScale &tensorBlockScale, TensorPerTokenScaleScale &tensorBlockPerTokenScaleScale,
-        TensorD &tensorBlockD, GemmCoord const &actualBlockShapeMNK, Callback &&callback = Callback{}
-    )
+    CATLASS_DEVICE void operator()(
+        TensorC& tensorBlockC, TensorScale& tensorBlockScale, TensorPerTokenScaleScale& tensorBlockPerTokenScaleScale,
+        TensorD& tensorBlockD, GemmCoord const& actualBlockShapeMNK, Callback&& callback = Callback{})
     {
         if (actualBlockShapeMNK.k() == 0) {
             return;
@@ -213,13 +192,12 @@ public:
             // build tensor C block in GM
             auto tensorSubBlockC = GetTile(
                 tensorBlockC, tla::MakeCoord(tileOffsetInBlockRow, tileOffsetInBlockColumn),
-                tla::MakeShape(actualTileShape.row(), actualTileShape.column())
-            );
+                tla::MakeShape(actualTileShape.row(), actualTileShape.column()));
             // build tensor C block in UB
-            auto &ubC = ubCList[ubListId];
+            auto& ubC = ubCList[ubListId];
             auto layoutUbC = tla::MakeLayout(
-                tla::MakeShape(actualTileShape.row(), actualTileShape.column()), tla::MakeStride(ubTileStride, tla::Int<1>{})
-            );
+                tla::MakeShape(actualTileShape.row(), actualTileShape.column()),
+                tla::MakeStride(ubTileStride, tla::Int<1>{}));
             auto tensorUbC = tla::MakeTensor(ubC, layoutUbC, Arch::PositionUB{});
             // copy tensor C from GM to UB
             AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(eventUbCVMTE2List[ubListId]);
@@ -230,13 +208,11 @@ public:
             // build tensor Scale block in GM
             auto tensorSubBlockScale = GetTile(
                 tensorBlockScale, tla::MakeCoord(0, tileOffsetInBlockColumn),
-                tla::MakeShape(tla::Int<1>{}, actualTileShape.column())
-            );
+                tla::MakeShape(tla::Int<1>{}, actualTileShape.column()));
             // build tensor Scale block in UB
-            auto &ubScale = ubScaleList[ubListId];
+            auto& ubScale = ubScaleList[ubListId];
             auto layoutUbScale = tla::MakeLayout(
-                tla::MakeShape(tla::Int<1>{}, actualTileShape.column()), tla::MakeStride(ubTileStride, tla::Int<1>{})
-            );
+                tla::MakeShape(tla::Int<1>{}, actualTileShape.column()), tla::MakeStride(ubTileStride, tla::Int<1>{}));
             auto tensorUbScale = tla::MakeTensor(ubScale, layoutUbScale, Arch::PositionUB{});
             // copy tensor Scale from GM to UB
             AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(eventUbScaleVMTE2List[ubListId]);
@@ -247,13 +223,11 @@ public:
             // build tensor PerTokenScale block in GM
             auto tensorSubBlockPerTokenScale = GetTile(
                 tensorBlockPerTokenScaleScale, tla::MakeCoord(0, tileOffsetInBlockRow),
-                tla::MakeShape(1, actualTileShape.row())
-            );
+                tla::MakeShape(1, actualTileShape.row()));
             // build tensor PerTokenScale block in UB
-            auto &ubPerTokenScale = ubPerTokenScaleList[ubListId];
+            auto& ubPerTokenScale = ubPerTokenScaleList[ubListId];
             auto layoutUbPerTokenScale = tla::MakeLayout(
-                tla::MakeShape(tla::Int<1>{}, actualTileShape.row()), tla::MakeStride(ubTileStrideRow, tla::Int<1>{})
-            );
+                tla::MakeShape(tla::Int<1>{}, actualTileShape.row()), tla::MakeStride(ubTileStrideRow, tla::Int<1>{}));
             auto tensorUbPerTokenScale = tla::MakeTensor(ubPerTokenScale, layoutUbPerTokenScale, Arch::PositionUB{});
             // copy tensor PerTokenScale from GM to UB
             AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(eventUbPerTokenScaleVMTE2List[ubListId]);
@@ -262,14 +236,16 @@ public:
 
             ///////////////////////////////////////////////////
             auto tensorUbScaleFp32 = tla::MakeTensor(ubScaleFp32, layoutUbScale, Arch::PositionUB{});
-            auto tensorUbPerTokenScaleFp32 = tla::MakeTensor(ubPerTokenScaleFp32, layoutUbPerTokenScale, Arch::PositionUB{});
+            auto tensorUbPerTokenScaleFp32 =
+                tla::MakeTensor(ubPerTokenScaleFp32, layoutUbPerTokenScale, Arch::PositionUB{});
             auto tensorUbCFp32 = tla::MakeTensor(ubCFp32, layoutUbC, Arch::PositionUB{});
             auto tensorUbMul = tla::MakeTensor(ubMul, layoutUbC, Arch::PositionUB{});
-            
+
             auto layoutUbPerTokenScaleBrcb = tla::MakeLayout(
-                tla::MakeShape(actualTileShape.row(), ELE_NUM_PER_BLK), tla::MakeStride(ELE_NUM_PER_BLK, tla::Int<1>{})
-            );
-            auto tensorUbPerTokenScaleFp32Brcb = tla::MakeTensor(ubPerTokenScaleFp32Brcb, layoutUbPerTokenScaleBrcb, Arch::PositionUB{});
+                tla::MakeShape(actualTileShape.row(), ELE_NUM_PER_BLK),
+                tla::MakeStride(ELE_NUM_PER_BLK, tla::Int<1>{}));
+            auto tensorUbPerTokenScaleFp32Brcb =
+                tla::MakeTensor(ubPerTokenScaleFp32Brcb, layoutUbPerTokenScaleBrcb, Arch::PositionUB{});
             auto tensorUbPerTokenMul = tla::MakeTensor(ubPerTokenMul, layoutUbC, Arch::PositionUB{});
 
             AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(eventUbCMTE2VList[ubListId]);
@@ -291,7 +267,7 @@ public:
             tileOneBlkColumnBroadcastMul(tensorUbPerTokenMul, tensorUbMul, tensorUbPerTokenScaleFp32Brcb);
             AscendC::PipeBarrier<PIPE_V>();
 
-            auto &ubD = ubDList[ubListId];
+            auto& ubD = ubDList[ubListId];
 
             AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(eventUbDMTE3VList[ubListId]);
             AscendC::Cast(ubD, ubPerTokenMul, AscendC::RoundMode::CAST_RINT, TileShape::COUNT);
@@ -300,8 +276,7 @@ public:
             // build tensor D block in GM
             auto tensorSubBlockD = GetTile(
                 tensorBlockD, tla::MakeCoord(tileOffsetInBlockRow, tileOffsetInBlockColumn),
-                tla::MakeShape(actualTileShape.row(), actualTileShape.column())
-            );
+                tla::MakeShape(actualTileShape.row(), actualTileShape.column()));
             // build tensor D block in UB
             auto tensorUbD = tla::MakeTensor(ubD, layoutUbC, Arch::PositionUB{});
 
@@ -345,27 +320,11 @@ private:
 };
 
 template <
-    uint32_t UB_STAGES_,
-    class ElementC_,
-    class ElementD_,
-    class TileRowBroadcastMul_,
-    class TileBroadcastOneBlk_,
-    class TileOneBlkColumnBroadcastMul_,
-    class TileCopy_,
-    class EpilogueTileSwizzle_
->
-class BlockEpilogue <
-    EpilogueAtlasA2PerTokenDequantTla<UB_STAGES_>,
-    ElementC_,
-    float,
-    float,
-    ElementD_,
-    TileRowBroadcastMul_,
-    TileBroadcastOneBlk_,
-    TileOneBlkColumnBroadcastMul_,
-    TileCopy_,
-    EpilogueTileSwizzle_
-> {
+    uint32_t UB_STAGES_, class ElementC_, class ElementD_, class TileRowBroadcastMul_, class TileBroadcastOneBlk_,
+    class TileOneBlkColumnBroadcastMul_, class TileCopy_, class EpilogueTileSwizzle_>
+class BlockEpilogue<
+    EpilogueAtlasA2PerTokenDequantTla<UB_STAGES_>, ElementC_, float, float, ElementD_, TileRowBroadcastMul_,
+    TileBroadcastOneBlk_, TileOneBlkColumnBroadcastMul_, TileCopy_, EpilogueTileSwizzle_> {
 public:
     using DispatchPolicy = EpilogueAtlasA2PerTokenDequantTla<UB_STAGES_>;
     using ArchTag = typename DispatchPolicy::ArchTag;
@@ -384,14 +343,12 @@ public:
 
     // Check data infos
     static_assert(
-        std::is_same_v<ElementC, int32_t> && (std::is_same_v<ElementD, half> || std::is_same_v<ElementD, bfloat16_t> ||
-            std::is_same_v<ElementD, float>),
-        "The element type template parameters of BlockEpilogue are wrong"
-    );
+        std::is_same_v<ElementC, int32_t> &&
+            (std::is_same_v<ElementD, half> || std::is_same_v<ElementD, bfloat16_t> || std::is_same_v<ElementD, float>),
+        "The element type template parameters of BlockEpilogue are wrong");
     static_assert(
         tla::detail::isRowMajor<LayoutC>::value && tla::detail::isRowMajor<LayoutD>::value,
-        "The layout template parameters of BlockEpilogue are wrong"
-    );
+        "The layout template parameters of BlockEpilogue are wrong");
 
     // Tile compute ops
     using TileRowBroadcastMul = TileRowBroadcastMul_;
@@ -406,18 +363,14 @@ public:
 
     static_assert(
         TileShape::ROW == TileBroadcastOneBlk::COMPUTE_LENGTH &&
-        std::is_same_v<TileShape, typename TileOneBlkColumnBroadcastMul::TileShape>,
-        "TileShape must be consistent for all tile compute ops"
-    );
+            std::is_same_v<TileShape, typename TileOneBlkColumnBroadcastMul::TileShape>,
+        "TileShape must be consistent for all tile compute ops");
 
     static_assert(
-        (UB_STAGES * (TileShape::COUNT * sizeof(ElementC) + TileShape::COLUMN * sizeof(ElementScale)
-                + TileShape::ROW * sizeof(ElementPerTokenScale) + TileShape::COUNT * sizeof(ElementD))
-            + (TileShape::COUNT + TileShape::COUNT) * sizeof(float)
-            + TileShape::ROW * BYTE_PER_BLK)
-        <= ArchTag::UB_SIZE,
-        "TileShape is too large to fit in UB"
-    );
+        (UB_STAGES * (TileShape::COUNT * sizeof(ElementC) + TileShape::COLUMN * sizeof(ElementScale) +
+                      TileShape::ROW * sizeof(ElementPerTokenScale) + TileShape::COUNT * sizeof(ElementD)) +
+         (TileShape::COUNT + TileShape::COUNT) * sizeof(float) + TileShape::ROW * BYTE_PER_BLK) <= ArchTag::UB_SIZE,
+        "TileShape is too large to fit in UB");
 
     struct Params {
         GM_ADDR ptrScale{nullptr};
@@ -430,7 +383,8 @@ public:
     };
 
     CATLASS_DEVICE
-    BlockEpilogue(Arch::Resource<ArchTag> const &resource, Params const &params = Params{}, uint32_t sharedUbSize = 0) : params(params)
+    BlockEpilogue(Arch::Resource<ArchTag> const& resource, Params const& params = Params{}, uint32_t sharedUbSize = 0)
+        : params(params)
     {
         uint32_t ubOffset = sharedUbSize;
         int32_t eventVMTE2 = 0;
@@ -482,17 +436,15 @@ public:
     }
 
     CATLASS_DEVICE
-    void UpdateParams(Params const &params_)
+    void UpdateParams(Params const& params_)
     {
         params = params_;
     }
 
     template <class TensorC, class TensorScale, class TensorPerTokenScaleScale, class TensorD>
-    CATLASS_DEVICE
-    void operator() (
-        TensorC &tensorBlockC, TensorScale &tensorBlockScale, TensorPerTokenScaleScale &tensorBlockPerTokenScaleScale,
-        TensorD &tensorBlockD, GemmCoord const &actualBlockShapeMNK, Callback &&callback = Callback{}
-    )
+    CATLASS_DEVICE void operator()(
+        TensorC& tensorBlockC, TensorScale& tensorBlockScale, TensorPerTokenScaleScale& tensorBlockPerTokenScaleScale,
+        TensorD& tensorBlockD, GemmCoord const& actualBlockShapeMNK, Callback&& callback = Callback{})
     {
         if (actualBlockShapeMNK.k() == 0) {
             return;
@@ -527,13 +479,12 @@ public:
             // build tensor C block in GM
             auto tensorSubBlockC = GetTile(
                 tensorBlockC, tla::MakeCoord(tileOffsetInBlockRow, tileOffsetInBlockColumn),
-                tla::MakeShape(actualTileShape.row(), actualTileShape.column())
-            );
+                tla::MakeShape(actualTileShape.row(), actualTileShape.column()));
             // build tensor C block in UB
-            auto &ubC = ubCList[ubListId];
+            auto& ubC = ubCList[ubListId];
             auto layoutUbC = tla::MakeLayout(
-                tla::MakeShape(actualTileShape.row(), actualTileShape.column()), tla::MakeStride(ubTileStride, tla::Int<1>{})
-            );
+                tla::MakeShape(actualTileShape.row(), actualTileShape.column()),
+                tla::MakeStride(ubTileStride, tla::Int<1>{}));
             auto tensorUbC = tla::MakeTensor(ubC, layoutUbC, Arch::PositionUB{});
             // copy tensor C from GM to UB
             AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(eventUbCVMTE2List[ubListId]);
@@ -544,13 +495,11 @@ public:
             // build tensor Scale block in GM
             auto tensorSubBlockScale = GetTile(
                 tensorBlockScale, tla::MakeCoord(0, tileOffsetInBlockColumn),
-                tla::MakeShape(tla::Int<1>{}, actualTileShape.column())
-            );
+                tla::MakeShape(tla::Int<1>{}, actualTileShape.column()));
             // build tensor Scale block in UB
-            auto &ubScale = ubScaleList[ubListId];
+            auto& ubScale = ubScaleList[ubListId];
             auto layoutUbScale = tla::MakeLayout(
-                tla::MakeShape(tla::Int<1>{}, actualTileShape.column()), tla::MakeStride(ubTileStride, tla::Int<1>{})
-            );
+                tla::MakeShape(tla::Int<1>{}, actualTileShape.column()), tla::MakeStride(ubTileStride, tla::Int<1>{}));
             auto tensorUbScale = tla::MakeTensor(ubScale, layoutUbScale, Arch::PositionUB{});
             // copy tensor Scale from GM to UB
             AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(eventUbScaleVMTE2List[ubListId]);
@@ -561,13 +510,11 @@ public:
             // build tensor PerTokenScale block in GM
             auto tensorSubBlockPerTokenScale = GetTile(
                 tensorBlockPerTokenScaleScale, tla::MakeCoord(0, tileOffsetInBlockRow),
-                tla::MakeShape(tla::Int<1>{}, actualTileShape.row())
-            );
+                tla::MakeShape(tla::Int<1>{}, actualTileShape.row()));
             // build tensor PerTokenScale block in UB
-            auto &ubPerTokenScale = ubPerTokenScaleList[ubListId];
+            auto& ubPerTokenScale = ubPerTokenScaleList[ubListId];
             auto layoutUbPerTokenScale = tla::MakeLayout(
-                tla::MakeShape(tla::Int<1>{}, actualTileShape.row()), tla::MakeStride(ubTileStrideRow, tla::Int<1>{})
-            );
+                tla::MakeShape(tla::Int<1>{}, actualTileShape.row()), tla::MakeStride(ubTileStrideRow, tla::Int<1>{}));
             auto tensorUbPerTokenScale = tla::MakeTensor(ubPerTokenScale, layoutUbPerTokenScale, Arch::PositionUB{});
             // copy tensor PerTokenScale from GM to UB
             AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(eventUbPerTokenScaleVMTE2List[ubListId]);
@@ -577,11 +524,12 @@ public:
             ///////////////////////////////////////////////////
             auto tensorUbCFp32 = tla::MakeTensor(ubCFp32, layoutUbC, Arch::PositionUB{});
             auto tensorUbMul = tla::MakeTensor(ubMul, layoutUbC, Arch::PositionUB{});
-            
+
             auto layoutUbPerTokenScaleBrcb = tla::MakeLayout(
-                tla::MakeShape(actualTileShape.row(), ELE_NUM_PER_BLK), tla::MakeStride(ELE_NUM_PER_BLK, tla::Int<1>{})
-            );
-            auto tensorUbPerTokenScaleBrcb = tla::MakeTensor(ubPerTokenScaleBrcb, layoutUbPerTokenScaleBrcb, Arch::PositionUB{});
+                tla::MakeShape(actualTileShape.row(), ELE_NUM_PER_BLK),
+                tla::MakeStride(ELE_NUM_PER_BLK, tla::Int<1>{}));
+            auto tensorUbPerTokenScaleBrcb =
+                tla::MakeTensor(ubPerTokenScaleBrcb, layoutUbPerTokenScaleBrcb, Arch::PositionUB{});
             auto tensorUbPerTokenMul = tla::MakeTensor(ubPerTokenMul, layoutUbC, Arch::PositionUB{});
 
             AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(eventUbCMTE2VList[ubListId]);
@@ -599,7 +547,7 @@ public:
             AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(eventUbPerTokenScaleVMTE2List[ubListId]);
 
             // build tensor D block in UB
-            auto &ubD = ubDList[ubListId];
+            auto& ubD = ubDList[ubListId];
             auto tensorUbD = tla::MakeTensor(ubD, layoutUbC, Arch::PositionUB{});
 
             if constexpr (std::is_same_v<ElementD, float>) {
@@ -628,8 +576,7 @@ public:
             // build tensor D block in GM
             auto tensorSubBlockD = GetTile(
                 tensorBlockD, tla::MakeCoord(tileOffsetInBlockRow, tileOffsetInBlockColumn),
-                tla::MakeShape(actualTileShape.row(), actualTileShape.column())
-            );
+                tla::MakeShape(actualTileShape.row(), actualTileShape.column()));
 
             AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(eventUbDVMTE3List[ubListId]);
             copyUbToGmD(tensorSubBlockD, tensorUbD);
@@ -669,25 +616,11 @@ private:
 };
 
 template <
-    uint32_t UB_STAGES_,
-    class TileShape_,
-    class ElementSrc_,
-    class ElementScale_,
-    class ElementPerToken_,
-    class ElementDst_,
-    class TilePerTokenDequant_,
-    class TileCopy_
->
-class BlockEpilogue <
-    EpilogueAscend950PerTokenDequantTla <UB_STAGES_>,
-    TileShape_,
-    ElementSrc_,
-    ElementScale_,
-    ElementPerToken_,
-    ElementDst_,
-    TilePerTokenDequant_,
-    TileCopy_
-> {
+    uint32_t UB_STAGES_, class TileShape_, class ElementSrc_, class ElementScale_, class ElementPerToken_,
+    class ElementDst_, class TilePerTokenDequant_, class TileCopy_>
+class BlockEpilogue<
+    EpilogueAscend950PerTokenDequantTla<UB_STAGES_>, TileShape_, ElementSrc_, ElementScale_, ElementPerToken_,
+    ElementDst_, TilePerTokenDequant_, TileCopy_> {
 public:
     using DispatchPolicy = EpilogueAscend950PerTokenDequantTla<UB_STAGES_>;
     using ArchTag = typename DispatchPolicy::ArchTag;
@@ -710,14 +643,13 @@ public:
     static constexpr uint32_t BLOCK_SIZE = TileShape::COUNT / CV_RATIO;
 
     static_assert(
-        UB_STAGES * (BLOCK_SIZE  * sizeof(ElementSrc) + TileShape::COLUMN / CV_RATIO * sizeof(ElementScale)
-                + TileShape::ROW / CV_RATIO * sizeof(ElementPerToken))
-        <= ArchTag::UB_SIZE,
-        "TileShape is too large to fit in UB"
-    );
+        UB_STAGES * (BLOCK_SIZE * sizeof(ElementSrc) + TileShape::COLUMN / CV_RATIO * sizeof(ElementScale) +
+                     TileShape::ROW / CV_RATIO * sizeof(ElementPerToken)) <=
+            ArchTag::UB_SIZE,
+        "TileShape is too large to fit in UB");
 
     CATLASS_DEVICE
-    BlockEpilogue(Arch::Resource<ArchTag> const &resource, uint32_t &ubOffset)
+    BlockEpilogue(Arch::Resource<ArchTag> const& resource, uint32_t& ubOffset)
     {
         int32_t eventVMTE2 = 0;
         int32_t eventMTE2V = 0;
@@ -752,15 +684,9 @@ public:
         }
     }
 
-    template<class TensorDst, class TensorSrc, class TensorScale, class TensorPerToken>
-    CATLASS_DEVICE
-    void operator() (
-        TensorDst gmDequantOut,
-        TensorSrc ubGmmRes,
-        TensorScale gmScale,
-        TensorPerToken gmPerToken,
-        uint32_t ubListId
-    )
+    template <class TensorDst, class TensorSrc, class TensorScale, class TensorPerToken>
+    CATLASS_DEVICE void operator()(
+        TensorDst gmDequantOut, TensorSrc ubGmmRes, TensorScale gmScale, TensorPerToken gmPerToken, uint32_t ubListId)
     {
         using CopyGmToUbScale = typename TileCopy::template CopyGmToUbX<TensorScale>;
         using CopyGmToUbPerToken = typename TileCopy::template CopyGmToUbY<TensorPerToken>;
@@ -770,29 +696,18 @@ public:
         CopyGmToUbPerToken copyGmToUbPerToken;
         CopyUbToGmDequant copyUbToGmDequant;
         TilePerTokenDequant tilePerTokenDequant;
-        
+
         uint32_t m = tla::get<0>(ubGmmRes.shape());
         uint32_t n = tla::get<1>(ubGmmRes.shape());
 
-        auto scaleLayout = tla::MakeLayout<ElementScale>(n);
-        auto ubScale = tla::MakeTensor(
-            ubScaleList[ubListId],
-            scaleLayout,
-            Arch::PositionUB{}
-        );
+        auto scaleLayout = tla::MakeLayout(n);
+        auto ubScale = tla::MakeTensor(ubScaleList[ubListId], scaleLayout, Arch::PositionUB{});
 
-        auto perTokenLayout = tla::MakeLayout<ElementPerToken>(m);
-        auto ubPerToken= tla::MakeTensor(
-            ubPerTokenList[ubListId],
-            perTokenLayout,
-            Arch::PositionUB{}
-        );  
-        
+        auto perTokenLayout = tla::MakeLayout(m);
+        auto ubPerToken = tla::MakeTensor(ubPerTokenList[ubListId], perTokenLayout, Arch::PositionUB{});
+
         auto ubDequantOut = tla::MakeTensor(
-            ubGmmRes.data().template ReinterpretCast<ElementDst>(),
-            ubGmmRes.layout(),
-            Arch::PositionUB{}
-        );
+            ubGmmRes.data().template ReinterpretCast<ElementDst>(), ubGmmRes.layout(), Arch::PositionUB{});
 
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(eventUbScaleVMTE2List[ubListId]);
         copyGmToUbScale(ubScale, gmScale);
@@ -827,6 +742,6 @@ private:
     int32_t eventUbDVMTE3List[UB_STAGES];
 };
 
-}  // namespace Catlass::Epilogue::Block
+} // namespace Catlass::Epilogue::Block
 
-#endif  // CATLASS_EPILOGUE_BLOCK_EPILOGUE_PER_TOKEN_DEQUANT_TLA_HPP
+#endif // CATLASS_EPILOGUE_BLOCK_EPILOGUE_PER_TOKEN_DEQUANT_TLA_HPP
