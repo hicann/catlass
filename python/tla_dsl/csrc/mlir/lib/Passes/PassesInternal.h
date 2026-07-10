@@ -13,11 +13,12 @@ namespace tla {
 void registerTlaLowerFuncPass();
 void registerTlaSplitMixedFuncPass();
 void registerTlaLowerBlockIdxPass();
-void registerConvertTlaToVectorPass();
+void registerTlaVectorRegionPass();
 void registerTlaLowerFlagBarrierToHivmPass();
 void registerTlaAllocPtrToHivmPointerCastPass();
 void registerTlaLowerMutexToStdPass();
-void registerTlaLowerToStdPass();
+void registerTlaCubeRegionPass();
+void registerTlaFinalizeMemrefPass();
 void registerTlaPrologueEpiloguePass();
 void registerTlaLowerAVEToRegbaseIntrinsPass();
 

@@ -39,13 +39,16 @@
 // CHECK-LABEL: func.func @ptr_extract_kernel
 // CHECK-DAG: llvm.mlir.constant(4 : index)
 // CHECK-DAG: llvm.mlir.constant(8 : index)
-// L1 alloc-backed pointer (1024 B / 4 = 256 f32) advanced by 8 elements; non-GM keeps
-// the flat 1D view (bridged base memref type, 256 f32 = the physical alloc).
+// L1 alloc-backed pointer (1024 B / 4 = 256 f32). The copy lowering emits its
+// pointer_cast first, then the operand offset views in operand order (GM src, then L1
+// dst).
 // CHECK: hivm.hir.pointer_cast{{.*}} : memref<256xf32, #hivm.address_space<cbuf>>
-// CHECK: memref.reinterpret_cast{{.*}} : memref<256xf32, #hivm.address_space<cbuf>> to memref<256xf32, #hivm.address_space<cbuf>>
 // GM kernel-arg tile.ptr() + 4: the offset view matches the consuming tensor's
 // origin_shape rank (8x8, row-major contiguous strides [8,1]).
 // CHECK: memref.reinterpret_cast %arg0 to offset:{{.*}} : memref<16x16xf32, #hivm.address_space<gm>> to memref<8x8xf32, strided<[8, 1], offset: ?>, #hivm.address_space<gm>>
+// L1 dst advanced by 8 elements; non-GM keeps the flat 1D view (bridged base memref
+// type, 256 f32 = the physical alloc).
+// CHECK: memref.reinterpret_cast{{.*}} : memref<256xf32, #hivm.address_space<cbuf>> to memref<256xf32, #hivm.address_space<cbuf>>
 // The tla-level pointer ops must be fully lowered away.
 // CHECK-NOT: "tla.tensor_ptr"
 // CHECK-NOT: "tla.ptr_add"

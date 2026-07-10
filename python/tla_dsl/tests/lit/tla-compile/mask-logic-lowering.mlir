@@ -1,4 +1,4 @@
-// RUN: %tla_compile %s -o - --mlir-print-ir-after=tla-to-vector 2>&1 | %filecheck %s
+// RUN: %tla_compile %s -o - --mlir-print-ir-after=tla-vector-region 2>&1 | %filecheck %s
 
 // CHECK: ave.hir.preg.not
 // CHECK: ave.hir.preg.and

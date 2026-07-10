@@ -63,7 +63,7 @@ def test_mask_logic_bindings_and_public_ops_emit_mlir(
 def test_mask_logic_ops_are_in_mask_logic_info() -> None:
     pass_source = Path(
         __file__
-    ).parents[1] / "csrc/mlir/lib/Passes/ConvertTlaToVectorPass.cpp"
+    ).parents[1] / "csrc/mlir/lib/Passes/TlaVectorRegionPass.cpp"
     source = pass_source.read_text(encoding="utf-8")
     start = source.index("static std::optional<MaskLogicUnaryInfo> getMaskLogicUnaryInfo")
     end = source.index(

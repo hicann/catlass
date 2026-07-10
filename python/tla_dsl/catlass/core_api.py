@@ -745,7 +745,7 @@ _ARANGE_SUPPORTED_DTYPES = frozenset(("i8", "i16", "i32", "i64"))
 _ARANGE_ORDERS = frozenset(("increase", "decrease"))
 
 # Width of one Ascend vector register tile in bytes. Must stay in sync with
-# ConvertTlaToVectorPass::kVectorBytes in csrc/mlir/lib/Passes/ConvertTlaToVectorPass.cpp.
+# TlaVectorRegionPass::kVectorBytes in csrc/mlir/lib/Passes/TlaVectorRegionPass.cpp.
 _VECTOR_REGISTER_BYTES = 256
 
 

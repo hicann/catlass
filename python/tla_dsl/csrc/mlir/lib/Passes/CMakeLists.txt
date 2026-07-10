@@ -5,11 +5,13 @@ add_library(TlaPasses
   TlaLowerBlockIdxPass.cpp
   TlaAllocPtrToHivmPointerCastPass.cpp
   TlaLowerMutexToStdPass.cpp
-  TlaLowerToStdPass.cpp
+  TlaFinalizeMemrefPass.cpp
+  TlaCubeRegionPass.cpp
+  TlaTensorToMemref.cpp
   TlaLowerFlagBarrierToHivmPass.cpp
   TlaPrologueEpiloguePass.cpp
   TlaLowerAVEToRegbaseIntrinsPass.cpp
-  ConvertTlaToVectorPass.cpp
+  TlaVectorRegionPass.cpp
   ../Dialect/Tla/IR/TlaDialect.cpp
   ../Dialect/Tla/IR/TlaAttrs.cpp
   ../Dialect/Tla/IR/TlaOps.cpp

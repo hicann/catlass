@@ -100,7 +100,7 @@ private:
   static FailureOr<hivm::TCoreType> inferCrossCoreFlagCore(Operation *op) {
     // Derive the core from the enclosing function's hivm.func_core_type attribute
     // (set by tla-infer-func-core-type and carried onto the AIC/AIV fragments by
-    // tla-split-mixed-func). This pass runs after convert-tla-to-vector, so the
+    // tla-split-mixed-func). This pass runs after tla-vector-region, so the
     // frontend tla.cube/tla.vector regions no longer exist to inspect.
     if (auto funcOp = op->getParentOfType<func::FuncOp>()) {
       auto coreType =

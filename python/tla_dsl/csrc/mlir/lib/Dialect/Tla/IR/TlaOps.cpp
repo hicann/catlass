@@ -101,7 +101,7 @@ template <typename AncestorOp> static bool hasEnclosing(mlir::Operation *op) {
 
 // The region-wrapper requirement is a frontend/authoring constraint, enforced
 // while ops still live in the tla.func container. Once tla-lower-func lowers
-// tla.func to func.func -- and convert-tla-to-vector / TlaSplitMixedFuncPass
+// tla.func to func.func -- and tla-vector-region / TlaSplitMixedFuncPass
 // inline the frontend tla.cube / tla.vector wrappers into the resulting
 // func.func (carrying the AIC/AIV/MIX core context on function attributes such
 // as hivm.func_core_type / hivm.part_of_mix / hacc.entry rather than a lexical

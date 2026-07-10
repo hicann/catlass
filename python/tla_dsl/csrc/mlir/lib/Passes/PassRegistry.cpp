@@ -15,11 +15,12 @@ void registerTlaPasses() {
   registerTlaLowerFuncPass();
   registerTlaSplitMixedFuncPass();
   registerTlaLowerBlockIdxPass();
-  registerConvertTlaToVectorPass();
+  registerTlaVectorRegionPass();
   registerTlaLowerFlagBarrierToHivmPass();
   registerTlaAllocPtrToHivmPointerCastPass();
   registerTlaLowerMutexToStdPass();
-  registerTlaLowerToStdPass();
+  registerTlaCubeRegionPass();
+  registerTlaFinalizeMemrefPass();
   registerTlaPrologueEpiloguePass();
   registerTlaLowerAVEToRegbaseIntrinsPass();
 }
@@ -34,11 +35,12 @@ void buildTlaPipeline(OpPassManager &pm) {
   pm.addPass(createTlaLowerFuncPass());
   pm.addPass(createTlaSplitMixedFuncPass());
   pm.addPass(createTlaAllocPtrToHivmPointerCastPass());
-  pm.addPass(createConvertTlaToVectorPass());
+  pm.addPass(createTlaVectorRegionPass());
+  pm.addPass(createTlaCubeRegionPass());
+  pm.addPass(createTlaFinalizeMemrefPass());
   pm.addPass(createTlaLowerBlockIdxPass());
   pm.addPass(createTlaLowerFlagBarrierToHivmPass());
   pm.addPass(createTlaLowerMutexToStdPass());
-  pm.addPass(createTlaLowerToStdPass());
   pm.addPass(createTlaPrologueEpiloguePass());
   pm.addPass(createCSEPass());
   pm.addPass(mlir::createVectorToHIVMAVEConversionPass());

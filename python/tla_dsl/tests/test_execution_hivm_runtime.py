@@ -209,7 +209,7 @@ def test_lower_tlair_module_to_mlir_uses_typed_extension(monkeypatch) -> None:
     lowered = compiler_bridge.lower_tlair_module_to_mlir(
         module,
         mlir_print_ir_before=["tla-lower-func"],
-        mlir_print_ir_after=["tla-lower-to-std"],
+        mlir_print_ir_after=["tla-finalize-memref"],
         mlir_print_ir_before_all=True,
     )
 
@@ -219,7 +219,7 @@ def test_lower_tlair_module_to_mlir_uses_typed_extension(monkeypatch) -> None:
         (
             module,
             ["tla-lower-func"],
-            ["tla-lower-to-std"],
+            ["tla-finalize-memref"],
             True,
             False,
         )
