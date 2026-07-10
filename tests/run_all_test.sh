@@ -51,6 +51,9 @@ fi
 # optest
 bash "$SCRIPT_PATH/run_optest.sh"
 
+# catlass_cppgen
+bash "$SCRIPT_PATH/run_cppgen.sh"
+
 # unittest
 bash "$BUILD_SCRIPT_PATH" --clean --tests catlass_unittest || exit 1
 $SCRIPT_PATH/../build/tests/unittest/catlass_unittest_"$CATLASS_ARCH"
