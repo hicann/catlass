@@ -22,7 +22,7 @@ K_DIM = 32
 VECTOR_TILE_M = 16
 VECTOR_TILE_N = 32
 VECTOR_REG_TILE_M = 2
-ROW_TILE_BYTES = VECTOR_REG_TILE_M * VECTOR_TILE_N * 4
+UB_TILE_BYTES = VECTOR_TILE_M * VECTOR_TILE_N * 4
 L1_STAGE_BYTES = 256 * 1024
 L0A_BYTES = 32 * 32 * 4
 L0B_BYTES = 32 * 32 * 4
@@ -47,7 +47,7 @@ def basic_mixed(
     ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.VECTOR)
     vec_done = tla.flag("vec_done", tla.arch.VECTOR, tla.arch.MTE3)
 
-    fix_done = tla.cross_flag("fix_done", tla.arch.FIX, tla.arch.SCALAR)
+    fix_done = tla.cross_flag("fix_done", tla.arch.FIX, tla.arch.VECTOR)
 
     allocator = tla.utils.LocalmemAllocator()
 
@@ -62,11 +62,11 @@ def basic_mixed(
     l0c_ptr = allocator.allocate(L0C_BYTES, 512, tla.AddressSpace.l0c)
     l0c_ptr = tla.recast_ptr(l0c_ptr, dtype=tla.Float32)
 
-    out_ub_ptr = allocator.allocate(ROW_TILE_BYTES, 256, tla.AddressSpace.ub)
-    out_ub_ptr = tla.recast_ptr(out_ub_ptr, dtype=tla.Float32)
-    addend_ub_ptr = allocator.allocate(ROW_TILE_BYTES, 256, tla.AddressSpace.ub)
+    c_ub_ptr = allocator.allocate(UB_TILE_BYTES, 256, tla.AddressSpace.ub)
+    c_ub_ptr = tla.recast_ptr(c_ub_ptr, dtype=tla.Float32)
+    addend_ub_ptr = allocator.allocate(UB_TILE_BYTES, 256, tla.AddressSpace.ub)
     addend_ub_ptr = tla.recast_ptr(addend_ub_ptr, dtype=tla.Float32)
-    result_ub_ptr = allocator.allocate(ROW_TILE_BYTES, 256, tla.AddressSpace.ub)
+    result_ub_ptr = allocator.allocate(UB_TILE_BYTES, 256, tla.AddressSpace.ub)
     result_ub_ptr = tla.recast_ptr(result_ub_ptr, dtype=tla.Float32)
 
     with tla.cube():
@@ -100,48 +100,62 @@ def basic_mixed(
 
         tla.set_flag(mmad_done)
         tla.wait_flag(mmad_done)
-        tla.copy(gm_c, l0_c)
+
+        ub_c = tla.make_tensor_like(c_ub_ptr, l0_c, tla.arch.RowMajor)
+        tla.copy(ub_c, l0_c, tla.params.CopyL0C2DstParams(
+            l0c2ub_mode=tla.params.L0C2UBMode.SPLIT_M
+        ))
+
         tla.cross_core_set_flag(fix_done)
         tla.pipe_barrier(tla.pipes.ALL)
 
     with tla.vector():
+        vec_idx = tla.arch.sub_block_idx()
+
+        gm_result = tla.tile_view(
+            out,
+            tla.make_shape(VECTOR_TILE_M, VECTOR_TILE_N),
+            tla.make_coord(vec_idx, 0)
+        )
+        gm_addend = tla.tile_view(
+            addend,
+            tla.make_shape(VECTOR_TILE_M, VECTOR_TILE_N),
+            tla.make_coord(vec_idx, 0)
+        )
+        ub_result = tla.make_tensor_like(result_ub_ptr, gm_result, tla.arch.RowMajor)
+        ub_addend = tla.make_tensor_like(addend_ub_ptr, gm_addend, tla.arch.RowMajor)
+
+        tla.set_flag(ub_load_ready)
+        tla.wait_flag(ub_load_ready)
+        tla.copy(ub_addend, gm_addend)
+        tla.set_flag(ub_loaded)
+        tla.wait_flag(ub_loaded)
+
+        ub_c = tla.make_tensor_like(c_ub_ptr, gm_result, tla.arch.RowMajor)
         tla.cross_core_wait_flag(fix_done)
 
-        vector_tile_row = tla.arch.sub_block_idx()
-
-        for row_idx in tla.range_constexpr(0, VECTOR_TILE_M, VECTOR_REG_TILE_M):
-            row_tile_idx = vector_tile_row * 8 + row_idx // 2
-            out_gm_chunk = tla.tile_view(
-                out,
-                tla.make_shape(VECTOR_REG_TILE_M, VECTOR_TILE_N),
-                tla.make_coord(row_tile_idx, 0),
-            )
-            addend_gm_chunk = tla.tile_view(
-                addend,
-                tla.make_shape(VECTOR_REG_TILE_M, VECTOR_TILE_N),
-                tla.make_coord(row_tile_idx, 0),
-            )
-            out_chunk = tla.make_tensor_like(out_ub_ptr, out_gm_chunk, tla.arch.RowMajor)
-            addend_chunk = tla.make_tensor_like(
-                addend_ub_ptr, addend_gm_chunk, tla.arch.RowMajor
-            )
-            result_chunk = tla.make_tensor_like(
-                result_ub_ptr, out_gm_chunk, tla.arch.RowMajor
-            )
-
-            tla.set_flag(ub_load_ready)
-            tla.wait_flag(ub_load_ready)
-            tla.copy(out_chunk, out_gm_chunk)
-            tla.copy(addend_chunk, addend_gm_chunk)
-            tla.set_flag(ub_loaded)
-            tla.wait_flag(ub_loaded)
-
+        for row_tile_idx in tla.range_constexpr(0, VECTOR_TILE_M//VECTOR_REG_TILE_M, 1):
             with tla.vec.func(mode="simd"):
-                result_chunk.store(out_chunk.load() + addend_chunk.load())
+                c_chunk = tla.tile_view(
+                    ub_c,
+                    tla.make_shape(VECTOR_REG_TILE_M, VECTOR_TILE_N),
+                    tla.make_coord(row_tile_idx, 0)
+                )
+                addend_chunk = tla.tile_view(
+                    ub_addend,
+                    tla.make_shape(VECTOR_REG_TILE_M, VECTOR_TILE_N),
+                    tla.make_coord(row_tile_idx, 0)
+                )
+                result_chunk = tla.tile_view(
+                    ub_result,
+                    tla.make_shape(VECTOR_REG_TILE_M, VECTOR_TILE_N),
+                    tla.make_coord(row_tile_idx, 0)
+                )
+                result_chunk.store(c_chunk.load() + addend_chunk.load())
 
-            tla.set_flag(vec_done)
-            tla.wait_flag(vec_done)
-            tla.copy(out_gm_chunk, result_chunk)
+        tla.set_flag(vec_done)
+        tla.wait_flag(vec_done)
+        tla.copy(gm_result, ub_result)
 
         tla.pipe_barrier(tla.pipes.ALL)
 

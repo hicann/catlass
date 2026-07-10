@@ -33,8 +33,8 @@ void buildTlaPipeline(OpPassManager &pm) {
   // and tags the module core type -- one structure-derived classification the
   // HACC machinery and the mixed-func split both consume.
   pm.addPass(createTlaLowerFuncPass());
-  pm.addPass(createTlaSplitMixedFuncPass());
   pm.addPass(createTlaAllocPtrToHivmPointerCastPass());
+  pm.addPass(createTlaSplitMixedFuncPass());
   pm.addPass(createTlaVectorRegionPass());
   pm.addPass(createTlaCubeRegionPass());
   pm.addPass(createTlaFinalizeMemrefPass());

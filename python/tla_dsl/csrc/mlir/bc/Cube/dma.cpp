@@ -3,6 +3,7 @@
 #include "catlass/arch/arch.hpp"
 #include "catlass/gemm/tile/copy_gm_to_l1.hpp"
 #include "catlass/gemm/tile/copy_l0c_to_gm.hpp"
+#include "catlass/gemm/tile/copy_l0c_to_ub.hpp"
 #include "catlass/gemm/tile/copy_l1_to_l0a.hpp"
 #include "catlass/gemm/tile/copy_l1_to_l0b.hpp"
 #include "catlass/layout/layout.hpp"
@@ -151,6 +152,16 @@ CATLASS_DEVICE auto makeGMTensor(memref_t<__gm__ T, 2> *memref,
                            makeRowMajorTlaLayout<T>(desc),
                            makeTlaTileCoord(desc),
                            Catlass::Arch::PositionGM{});
+}
+
+template <typename T, size_t Dim>
+CATLASS_DEVICE auto makeUBTensor(memref_t<__ubuf__ T, Dim> *memref,
+                                 const TensorDesc2D &desc) {
+    return tla::MakeTensor(AscendC::LocalTensor<T>(AscendC::TPosition::VECCALC,
+                                localAddr(memref), elementCount(memref)),
+                           makeRowMajorTlaLayout<T>(desc),
+                           makeTlaTileCoord(desc),
+                           Catlass::Arch::PositionUB{});
 }
 
 CATLASS_DEVICE auto makeColumnMajorTlaLayout(const TensorDesc2D &desc) {
@@ -322,6 +333,23 @@ CATLASS_DEVICE void copyCcFloatToGmRowMajorCast(
     Catlass::Gemm::Tile::CopyL0CToGmTla<ArchTag, decltype(srcTensor),
                                         decltype(dstTensor)>{}(dstTensor,
                                                                srcTensor, unitFlag);
+}
+
+template <class ArchTag, typename ElementSrc, typename ElementDst,
+    Catlass::Gemm::Tile::CopyL0CToUBMode l0c2ubMode>
+CATLASS_DEVICE void copyCcToUbufRowMajor(
+    memref_t<__cc__ ElementSrc, 1> *src, memref_t<__ubuf__ ElementDst, 1> *dst,
+    const TensorDesc4D &srcDesc, const TensorDesc2D &dstDesc, uint8_t unitFlag, uint8_t subBlockId) {
+    auto srcTensor = makeL0CTensor(src, srcDesc);
+    auto dstTensor = makeUBTensor(dst, dstDesc);
+    if constexpr (l0c2ubMode == Catlass::Gemm::Tile::CopyL0CToUBMode::NO_SPLIT) {
+        Catlass::Gemm::Tile::CopyL0CToUBTla<ArchTag, decltype(srcTensor), decltype(dstTensor), l0c2ubMode>{}(
+                                            dstTensor, srcTensor, (bool)subBlockId, unitFlag);
+    } else if constexpr (l0c2ubMode == Catlass::Gemm::Tile::CopyL0CToUBMode::SPLIT_M ||
+        l0c2ubMode == Catlass::Gemm::Tile::CopyL0CToUBMode::SPLIT_N) {
+        Catlass::Gemm::Tile::CopyL0CToUBTla<ArchTag, decltype(srcTensor), decltype(dstTensor), l0c2ubMode>{}(
+                                            dstTensor, srcTensor, unitFlag);
+    }
 }
 
 template <class ArchTag, typename T>
@@ -520,6 +548,37 @@ void _mlir_ciface_copy_cc_to_gm_row_major_bf16(
                          (uint32_t)dstCoord0, (uint32_t)dstCoord1, (uint32_t)dstOrgShape0, (uint32_t)dstOrgShape1},
         unitFlag);
 }
+
+using bf16 = bfloat16_t;
+
+#define REGISTER_CC_TO_UBUF_ROW(mode, MODE, DTypeSrc, DTypeDst)                                                      \
+[aicore] __attribute__((always_inline))                                                                              \
+void _mlir_ciface_copy_cc_to_ubuf_row_major_##mode##_##DTypeDst(                                                     \
+    memref_t<__cc__ DTypeSrc, 1> *src, memref_t<__ubuf__ DTypeDst, 1> *dst,                                          \
+    int64_t srcShape0, int64_t srcShape1, int64_t srcShape2,                                                         \
+    int64_t srcShape3, int64_t srcStride0, int64_t srcStride1,                                                       \
+    int64_t srcStride2, int64_t srcStride3, int64_t srcCoord0,                                                       \
+    int64_t srcCoord1, int64_t srcOrgShape0, int64_t srcOrgShape1,                                                   \
+    int64_t dstShape0, int64_t dstShape1, int64_t dstStride0,                                                        \
+    int64_t dstStride1, int64_t dstCoord0, int64_t dstCoord1,                                                        \
+    int64_t dstOrgShape0, int64_t dstOrgShape1, uint8_t unitFlag,                                                    \
+    uint8_t subBlockId) {                                                                                            \
+    copyCcToUbufRowMajor<Catlass::Arch::Ascend950, DTypeSrc, DTypeDst, Catlass::Gemm::Tile::CopyL0CToUBMode::MODE>(  \
+        src, dst,                                                                                                    \
+        TensorDesc4D{(uint32_t)srcShape0, (uint32_t)srcShape1, (uint32_t)srcShape2, (uint32_t)srcShape3, srcStride0, \
+                       srcStride1, srcStride2, srcStride3, (uint32_t)srcCoord0, (uint32_t)srcCoord1,                 \
+                       (uint32_t)srcOrgShape0, (uint32_t)srcOrgShape1},                                              \
+        TensorDesc2D{(uint32_t)dstShape0, (uint32_t)dstShape1, dstStride0, dstStride1,                               \
+                         (uint32_t)dstCoord0, (uint32_t)dstCoord1, (uint32_t)dstOrgShape0, (uint32_t)dstOrgShape1},  \
+        unitFlag, subBlockId);                                                                                       \
+}
+
+REGISTER_CC_TO_UBUF_ROW(nosplit, NO_SPLIT, float, float)
+REGISTER_CC_TO_UBUF_ROW(nosplit, NO_SPLIT, float, half)
+REGISTER_CC_TO_UBUF_ROW(nosplit, NO_SPLIT, float, bf16)
+// split mode src=dst
+REGISTER_CC_TO_UBUF_ROW(splitm, SPLIT_M, float, float)
+REGISTER_CC_TO_UBUF_ROW(splitn, SPLIT_N, float, float)
 
 [aicore] __attribute__((always_inline))
 void _mlir_ciface_copy_cc_to_gm_zN_float(

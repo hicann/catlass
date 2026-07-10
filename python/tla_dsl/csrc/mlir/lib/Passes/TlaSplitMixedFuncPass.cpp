@@ -32,9 +32,10 @@ struct MixedRegionTopology {
 
 enum class SplitSide { AIC, AIV };
 
-static constexpr std::array<StringLiteral, 8> kAllowedLeafOpsOutsideMixedRegions = {
+static constexpr std::array<StringLiteral, 10> kAllowedLeafOpsOutsideMixedRegions = {
     "tla.alloc_ptr",          "tla.recast_ptr", "tla.arch.block_idx", "tla.arch.block_dim",
-    "tla.arch.sub_block_idx", "tla.flag",       "tla.cross_flag",     "arith.constant"};
+    "tla.arch.sub_block_idx", "tla.flag",       "tla.cross_flag",     "arith.constant", 
+    "hivm.hir.pointer_cast", "tla.hivm_memref_as_ptr"};
 
 static bool containsCubeRegion(Operation *op) {
   if (isa<::tla::CubeOp>(op))

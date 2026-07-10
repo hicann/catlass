@@ -1,3 +1,4 @@
+#include "Dialect/Tla/IR/TlaAttrs.h"
 #include "PassesCommon.h"
 #include "PassesInternal.h"
 #include "Passes/TlaTensorToMemref.h"
@@ -42,7 +43,7 @@ namespace {
   static std::string getCopyRouteCallee(MLIRContext *ctx, StringRef srcAddrspace,
                                         StringRef dstAddrspace, TensorLayoutTag srcLayout,
                                         TensorLayoutTag dstLayout, StringRef srcElementType,
-                                        StringRef dstElementType) {
+                                        StringRef dstElementType, StringRef extraDesc="") {
     FailureOr<hivm::AddressSpace> srcSpace = resolveHivmAddressSpace(ctx, srcAddrspace);
     FailureOr<hivm::AddressSpace> dstSpace = resolveHivmAddressSpace(ctx, dstAddrspace);
     if (failed(srcSpace) || failed(dstSpace))
@@ -119,6 +120,16 @@ namespace {
         return {};
       return Twine("copy_cc_to_gm_row_major_").concat(suffix).str();
     }
+    // L0C (fp32 MMAD acc) -> UB row-major: dst may be f32 / f16 / bf16 (narrowing on fixpipe).
+    if (*srcSpace == hivm::AddressSpace::L0C && *dstSpace == hivm::AddressSpace::UB &&
+        srcLayout == TensorLayoutTag::L0C && dstLayout == TensorLayoutTag::RowMajor) {
+      if (srcElementType != "f32")
+        return {};
+      StringRef suffix = copyRuntimeElemSuffix(dstElem);
+      if (suffix.empty())
+        return {};
+      return Twine("copy_cc_to_ubuf_row_major_").concat(extraDesc).concat("_").concat(suffix).str();
+    }
     return {};
   }
 
@@ -188,6 +199,7 @@ namespace {
            name.starts_with("copy_cbuf_nZ_to_ca_zN_") ||
            name.starts_with("copy_cbuf_zN_to_cb_nZ_") ||
            name.starts_with("copy_cbuf_nZ_to_cb_nZ_") ||
+           name.starts_with("copy_cc_to_ubuf_row_major_") ||
            name.starts_with("copy_cc_to_gm_row_major_");
   }
 
@@ -470,16 +482,61 @@ namespace {
         return ::tla::castMemrefToType(rewriter, op.getLoc(), *baseMemref,
                                                    runtimeType);
       };
+
+      StringRef extraDesc = "";
+      struct L0C2DstInfo {
+        uint8_t unitFlag = 0;
+        bool relu_enable = false;
+        QuantMode quantMode = QuantMode::NO_QUANT;
+        L0C2UBMode l0c2UbMode = L0C2UBMode::NO_SPLIT_VEC_0;
+        uint8_t subBlockId = 0;
+      } l0c2DstInfo;
+      if (srcAddrspace == "l0c") {
+        auto params = op->getOperand(2);
+        auto l0c2DstParamsOp = dyn_cast<::tla::CopyL0C2DstParamsOp>(params.getDefiningOp());
+        if (!l0c2DstParamsOp) {
+          op.emitError() << "expected tla.CopyL0C2DstParams as third operand";
+          return failure();
+        }
+        l0c2DstInfo.unitFlag = static_cast<uint8_t>(l0c2DstParamsOp.getUnitFlag());
+        l0c2DstInfo.relu_enable = l0c2DstParamsOp.getReluEnable();
+        l0c2DstInfo.quantMode = l0c2DstParamsOp.getQuantMode().getQuantMode();
+        if (dstAddrspace == "ub") {
+          l0c2DstInfo.l0c2UbMode = l0c2DstParamsOp.getL0c2ubMode().getL0c2ubMode();
+          StringRef splitMode = "nosplit";
+          switch (l0c2DstInfo.l0c2UbMode) {
+            case L0C2UBMode::NO_SPLIT_VEC_0:
+              break;
+            case L0C2UBMode::NO_SPLIT_VEC_1:
+              l0c2DstInfo.subBlockId = 1;
+              splitMode = "nosplit";
+              break;
+            case L0C2UBMode::SPLIT_M:
+              splitMode = "splitm";
+              break;
+            case L0C2UBMode::SPLIT_N:
+              splitMode = "splitn";
+              break;
+          }
+          if ((l0c2DstInfo.l0c2UbMode==L0C2UBMode::SPLIT_M || l0c2DstInfo.l0c2UbMode==L0C2UBMode::SPLIT_N)
+              && (srcDesc.elementType != dstDesc.elementType)) {
+              op->emitError("When copy l0c to ub with split mode, src and dst type must be same");
+              return failure();
+          }
+          extraDesc = splitMode;
+        }
+      }
+
       std::string calleeName = getCopyRouteCallee(
           op.getContext(), srcAddrspace, dstAddrspace, srcDesc.layoutTag, dstDesc.layoutTag,
-          srcDesc.elementType, dstDesc.elementType);
+          srcDesc.elementType, dstDesc.elementType, extraDesc);
       if (!calleeName.empty()) {
-        bool l0cGmNarrow = srcAddrspace == "l0c" && dstAddrspace == "gm" &&
+        bool l0c2DstNarrow = srcAddrspace == "l0c" && (dstAddrspace == "gm" || dstAddrspace == "ub") &&
                            srcDesc.layoutTag == TensorLayoutTag::L0C &&
                            dstDesc.layoutTag == TensorLayoutTag::RowMajor &&
                            srcDesc.elementType == "f32" &&
                            (dstDesc.elementType == "f16" || dstDesc.elementType == "bf16");
-        if (!rankOk || (!sameElem && !l0cGmNarrow)) {
+        if (!rankOk || (!sameElem && !l0c2DstNarrow)) {
           op.emitError() << "tla.copy supported route has src/dst descriptor metadata mismatch "
                             "(rank/element type)";
           return failure();
@@ -499,16 +556,15 @@ namespace {
         SmallVector<Value, 22> operands = {*srcRuntimeMemref, *dstRuntimeMemref};
         operands.append(payload.begin(), payload.end());
         if (srcAddrspace == "l0c") {
-          auto params = op->getOperand(2);
-          auto paramsOpPtr = params.getDefiningOp();
-          uint8_t unitFlagVal = 0;
-          auto unitFlagAttr = paramsOpPtr->getAttr("unit_flag");
-          if (auto intAttr = llvm::dyn_cast_or_null<IntegerAttr>(unitFlagAttr)) {
-            unitFlagVal = static_cast<uint8_t>(intAttr.getInt());
+          auto i8Type = rewriter.getI8Type();
+          auto unitFlagVal = rewriter.create<arith::ConstantIntOp>(op.getLoc(), l0c2DstInfo.unitFlag, 8);
+          operandTypes.push_back(i8Type);
+          operands.push_back(unitFlagVal);
+          if (dstAddrspace == "ub") {
+            auto subBlockIdVal = rewriter.create<arith::ConstantIntOp>(op.getLoc(), l0c2DstInfo.subBlockId, 8);
+            operandTypes.push_back(i8Type);
+            operands.push_back(subBlockIdVal);
           }
-          auto unitFlagConst = rewriter.create<arith::ConstantIntOp>(op.getLoc(), unitFlagVal, 8);
-          operands.push_back(unitFlagConst);
-          operandTypes.push_back(rewriter.getI8Type());
         }
         auto callee = getOrCreateRuntimeCall(module, calleeName, operandTypes);
         rewriter.create<func::CallOp>(op.getLoc(), callee, operands);

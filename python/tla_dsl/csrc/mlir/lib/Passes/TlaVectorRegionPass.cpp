@@ -761,25 +761,60 @@ static FailureOr<Value> createVectorScalarBinaryResult(OpBuilder &b, Location lo
 }
 
 // Per-iteration element offset of a tile_view chunk, expressed against the
-// helper's (cloned) index arithmetic.
-static FailureOr<Value> materializeCoordOffsetInHelper(OpBuilder &b, Location loc, Value coord,
-                                                       DenseMap<Value, Value> &valueMap) {
+// helper's (cloned) index arithmetic. Handles both rank-1 and rank-2 coords.
+// For rank-2, computes flat offset = row * rowStride + col.
+static FailureOr<Value> materializeCoordOffsetInHelper(OpBuilder &b, Location loc,
+                                                        ::tla::TileViewOp tileView,
+                                                        DenseMap<Value, Value> &valueMap) {
+  Value coord = tileView.getCoord();
   auto coordType = dyn_cast<::tla::CoordType>(coord.getType());
   if (!coordType)
     return failure();
-  SmallVector<int64_t, 1> leaves;
-  if (failed(::tla::getTlaIndexTreeLeaves(coordType.getTree(), leaves)) || leaves.size() != 1)
+  SmallVector<int64_t, 2> leaves;
+  if (failed(::tla::getTlaIndexTreeLeaves(coordType.getTree(), leaves)))
     return failure();
-  if (leaves[0] != ShapedType::kDynamic)
-    return b.create<arith::ConstantIndexOp>(loc, leaves[0]).getResult();
 
-  auto makeCoord = coord.getDefiningOp<::tla::MakeCoordOp>();
-  if (!makeCoord || makeCoord.getDynElems().size() != 1)
-    return failure();
-  Value mapped = lookupOrCloneScalarValue(b, *makeCoord.getDynElems().begin(), valueMap);
-  if (!mapped || !mapped.getType().isIndex())
-    return failure();
-  return mapped;
+  if (leaves.size() == 1) {
+    if (leaves[0] != ShapedType::kDynamic)
+      return b.create<arith::ConstantIndexOp>(loc, leaves[0]).getResult();
+    auto makeCoord = coord.getDefiningOp<::tla::MakeCoordOp>();
+    if (!makeCoord || makeCoord.getDynElems().size() != 1)
+      return failure();
+    Value mapped = lookupOrCloneScalarValue(b, *makeCoord.getDynElems().begin(), valueMap);
+    if (!mapped || !mapped.getType().isIndex())
+      return failure();
+    return mapped;
+  }
+
+  if (leaves.size() == 2) {
+    auto info = parseTensorInfo(tileView.getResult().getType());
+    if (failed(info) || info->strides.size() != 2)
+      return failure();
+    // Flattening row-major 2D -> 1D requires dense layout: stride[1]=1, stride[0]=shape[1].
+    if (info->strides[1] != 1 || info->strides[0] != info->shape[1])
+      return failure();
+    auto makeCoord = coord.getDefiningOp<::tla::MakeCoordOp>();
+    auto dynElems = makeCoord ? makeCoord.getDynElems() : ValueRange{};
+    unsigned dynIdx = 0;
+    SmallVector<Value, 2> coordVals;
+    for (int64_t leaf : leaves) {
+      if (leaf != ShapedType::kDynamic) {
+        coordVals.push_back(b.create<arith::ConstantIndexOp>(loc, leaf));
+      } else {
+        if (!makeCoord || dynIdx >= dynElems.size())
+          return failure();
+        Value mapped = lookupOrCloneScalarValue(b, dynElems[dynIdx++], valueMap);
+        if (!mapped || !mapped.getType().isIndex())
+          return failure();
+        coordVals.push_back(mapped);
+      }
+    }
+    Value rowStride = b.create<arith::ConstantIndexOp>(loc, info->strides[0]);
+    Value rowOffset = b.create<arith::MulIOp>(loc, coordVals[0], rowStride);
+    return b.create<arith::AddIOp>(loc, rowOffset, coordVals[1]).getResult();
+  }
+
+  return failure();
 }
 
 // Lower a tla.tile_view inside the helper to a 256-byte (lanes-wide) tile of the
@@ -793,6 +828,7 @@ static FailureOr<Value> lowerTileViewInHelper(OpBuilder &b, Location loc,
   if (!source)
     return tileView.emitError("failed to map tla.tile_view source in vector helper"), failure();
   auto sourceType = dyn_cast<MemRefType>(source.getType());
+
   if (!sourceType)
     return tileView.emitError("expected memref source for vector tile_view"), failure();
   // The tile is one 256-byte register's worth of the source element type; its
@@ -801,9 +837,13 @@ static FailureOr<Value> lowerTileViewInHelper(OpBuilder &b, Location loc,
   if (failed(lanesOr))
     return tileView.emitError("unsupported element type for vector tile_view"), failure();
   int64_t lanes = *lanesOr;
-  auto offset = materializeCoordOffsetInHelper(b, loc, tileView.getCoord(), valueMap);
+  auto offset = materializeCoordOffsetInHelper(b, loc, tileView, valueMap);
   if (failed(offset))
     return tileView.emitError("failed to materialize tile_view coordinate"), failure();
+
+  if (!sourceType || sourceType.getRank() != 1)
+    return tileView.emitError("expected rank-1 memref source for vector tile_view"), failure();
+
   auto layout =
       StridedLayoutAttr::get(b.getContext(), ShapedType::kDynamic, ArrayRef<int64_t>{1});
   auto tileType =

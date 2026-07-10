@@ -5,6 +5,7 @@ import pytest
 
 import catlass as tla
 import catlass.runtime as runtime_mod
+from catlass.execution_lowering import TlaLoweringError
 
 
 def _require_hivm_tla_compile() -> pathlib.Path:
@@ -68,3 +69,38 @@ def test_frontend_copy_gm_to_cbuf_lowers_to_runtime_call(tmp_path) -> None:
     assert '"tla.copy"' not in lowered
     assert '"tla.alloc_ptr"' not in lowered
     assert '"tla.recast_ptr"' not in lowered
+
+
+@tla.kernel
+def copy_l0c_to_ub_split_mismatch_dtype_kernel(gm_c: tla.Tensor) -> None:
+    """L0C(f32)->UB(f16) with SPLIT_M, dtype mismatch must be rejected."""
+    allocator = tla.utils.LocalmemAllocator()
+    l0c_ptr = allocator.allocate(32 * 32 * 4, 512, tla.AddressSpace.l0c)
+    l0c_ptr = tla.recast_ptr(l0c_ptr, dtype=tla.Float32)
+    l0c = tla.make_tensor_like(l0c_ptr, gm_c, tla.arch.L0Clayout, dst_dtype=tla.Float32)
+    ub_ptr = allocator.allocate(16 * 32 * 4, 256, tla.AddressSpace.ub)
+    ub_ptr = tla.recast_ptr(ub_ptr, dtype=tla.Float16)
+    ub = tla.make_tensor_like(ub_ptr, gm_c, tla.arch.RowMajor)
+    with tla.cube():
+        tla.copy(
+            ub, l0c,
+            tla.params.CopyL0C2DstParams(l0c2ub_mode=tla.params.L0C2UBMode.SPLIT_M),
+        )
+
+
+def test_copy_l0c_to_ub_split_mismatch_dtype_raises() -> None:
+    """L0C->UB copy with SPLIT_M where src(f32) != dst(f16) must raise TlaLoweringError."""
+    with runtime_mod._eager_capture():
+        gm_c = tla.Tensor(
+            tla.make_shape(32, 32),
+            tla.Float16,
+            origin_shape=tla.make_shape(32, 32),
+            coord=tla.make_coord(0, 0),
+            stride=tla.make_stride(32, 1),
+            layout_tag=tla.arch.RowMajor,
+        )
+    with pytest.raises(
+        TlaLoweringError,
+        match=r"When copy l0c to ub with split mode, src and dst dtype must be same",
+    ):
+        copy_l0c_to_ub_split_mismatch_dtype_kernel.dump_mlir(type_args=(gm_c,))

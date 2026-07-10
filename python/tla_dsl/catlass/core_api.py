@@ -2805,8 +2805,9 @@ def copy(dst: TileLike, src: TileLike, params: CopyParams | None = None, *, loc:
                 raise NotImplementedError(f"currently unsupported quant mode {params.quant_mode}")
             if params.relu_enable != False:
                 raise NotImplementedError(f"currently unsupported relu_enable {params.relu_enable}")
-            if dst.addrspace == "ub" and params.l0c2ub_mode != L0C2UBMode.NO_SPLIT_VEC_0:
-                raise NotImplementedError(f"currently unsupported l0c2ub_mode {params.l0c2ub_mode}")
+            if (dst.addrspace == "ub") and (src.dtype != dst.dtype) and (
+                params.l0c2ub_mode == L0C2UBMode.SPLIT_M or params.l0c2ub_mode == L0C2UBMode.SPLIT_N):
+                raise TlaLoweringError(f"When copy l0c to ub with split mode, src and dst dtype must be same , got {src.dtype} {dst.dtype}")
 
             ctx = loc.context if loc is not None else mlir_ir.Context.current
             quant_mode_attr = mlir_ir.Attribute.parse(f"#tla.quant_mode<{params.quant_mode}>", context=ctx)
