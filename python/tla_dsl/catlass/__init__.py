@@ -143,6 +143,8 @@ __all__ = [
     "sqrt",
     "abs",
     "neg",
+    "interleave",
+    "deinterleave",
     *getattr(_runtime, "_CORE_API_EXPORTS", []),
 ]
 

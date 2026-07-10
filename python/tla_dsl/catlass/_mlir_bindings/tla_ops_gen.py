@@ -1024,6 +1024,82 @@ def inttoptr(ptr, addr, *, loc=None, ip=None) -> _ods_ir.Value:
   return _get_op_result_or_op_results(IntToPtrOp(ptr=ptr, addr=addr, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
+class InterleaveOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.interleave"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, dst0, dst1, src0, src1, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(src0))
+    operands.append(_get_op_result_or_value(src1))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(dst0)
+    results.append(dst1)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def src0(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def src1(self):
+    return self.operation.operands[1]
+
+  @builtins.property
+  def dst0(self):
+    return self.operation.results[0]
+
+  @builtins.property
+  def dst1(self):
+    return self.operation.results[1]
+
+def interleave(dst0, dst1, src0, src1, *, loc=None, ip=None) -> _Sequence[_ods_ir.Value]:
+  return _get_op_result_or_op_results(InterleaveOp(dst0=dst0, dst1=dst1, src0=src0, src1=src1, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
+class DeInterleaveOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.deinterleave"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, dst0, dst1, src0, src1, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(src0))
+    operands.append(_get_op_result_or_value(src1))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(dst0)
+    results.append(dst1)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def src0(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def src1(self):
+    return self.operation.operands[1]
+
+  @builtins.property
+  def dst0(self):
+    return self.operation.results[0]
+
+  @builtins.property
+  def dst1(self):
+    return self.operation.results[1]
+
+def deinterleave(dst0, dst1, src0, src1, *, loc=None, ip=None) -> _Sequence[_ods_ir.Value]:
+  return _get_op_result_or_op_results(DeInterleaveOp(dst0=dst0, dst1=dst1, src0=src0, src1=src1, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
 class LoadOp(_ods_ir.OpView):
   OPERATION_NAME = "tla.load"
 

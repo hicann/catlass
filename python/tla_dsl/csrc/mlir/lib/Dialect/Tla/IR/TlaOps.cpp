@@ -128,6 +128,34 @@ mlir::LogicalResult VecFuncOp::verify() {
   return mlir::success();
 }
 
+mlir::LogicalResult InterleaveOp::verify() {
+  if (!hasEnclosingRegion<VecFuncOp>(getOperation()))
+    return emitOpError("must be nested inside a tla.vec.func region");
+
+  if (getSrc0().getType() != getSrc1().getType())
+    return emitOpError("requires src0 and src1 to have identical !tla.tensor types");
+
+  if (getDst0().getType() != getSrc0().getType() ||
+      getDst1().getType() != getSrc0().getType())
+    return emitOpError("requires dst0/dst1 to have the same !tla.tensor type as inputs");
+
+  return mlir::success();
+}
+
+mlir::LogicalResult DeinterleaveOp::verify() {
+  if (!hasEnclosingRegion<VecFuncOp>(getOperation()))
+    return emitOpError("must be nested inside a tla.vec.func region");
+
+  if (getSrc0().getType() != getSrc1().getType())
+    return emitOpError("requires src0 and src1 to have identical !tla.tensor types");
+
+  if (getDst0().getType() != getSrc0().getType() ||
+      getDst1().getType() != getSrc0().getType())
+    return emitOpError("requires dst0/dst1 to have the same !tla.tensor type as inputs");
+
+  return mlir::success();
+}
+
 // Vector compute ops (element-wise vector-vector and vector-scalar arithmetic)
 // must live inside a tla.vec.func region.
 #define TLA_VERIFY_IN_VEC_FUNC(OpTy)                                            \

@@ -90,6 +90,8 @@ def test_generated_binding_symbols_exist_for_wrapped_ops() -> None:
         "mask_not",
         "neg",
         "cmp",
+        "interleave",
+        "deinterleave",
     )
     for symbol in required:
         assert hasattr(tla_ops_gen, symbol)

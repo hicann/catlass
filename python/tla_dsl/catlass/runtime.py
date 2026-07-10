@@ -653,6 +653,8 @@ _CORE_API_EXPORTS = (
     "sqrt",
     "abs",
     "neg",
+    "interleave",
+    "deinterleave",
     "gather",
     "cmp",
     "make_ptr",

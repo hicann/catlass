@@ -13,7 +13,8 @@
 # python/tla_dsl/examples/end_to_end/basic_vadd (basic_vadd.py),
 # python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed.py), and
 # python/tla_dsl/examples/end_to_end/vector_ops (binary_op.py, masked_binary.py,
-# mask_logic.py, reduction_ops.py, compare_mask.py, unary_ops.py, arange_op.py).
+# mask_logic.py, reduction_ops.py, compare_mask.py, unary_ops.py, arange_op.py,
+# interleave_op.py).
 #
 # Fixed toolchain paths relative to WORKSPACE_ROOT (= parent of catlass repo):
 #   CANN:             Ascend/9.1.0-beta.1/ascend-toolkit/set_env.sh
@@ -58,6 +59,7 @@ COMPARE_MASK_OPS=(
 )
 UNARY_OPS_REL="examples/end_to_end/vector_ops/unary_ops.py"
 ARANGE_OP_REL="examples/end_to_end/vector_ops/arange_op.py"
+INTERLEAVE_OP_REL="examples/end_to_end/vector_ops/interleave_op.py"
 
 _ascendnpu_ir_dev_is_prebuilt() {
     local root="$1"
@@ -83,6 +85,7 @@ Run end-to-end validation for:
   - compare_mask (compare_mask.py <op> --run --all-dtypes for each compare-mask op)
   - unary_ops (unary_ops.py <op> --run --all-dtypes for exp/log/sqrt/abs/neg/masked_unary/masked_abs/masked_neg)
   - arange_op (arange_op.py increase --run --all-dtypes)
+  - interleave_op (interleave_op.py interleave/deinterleave --run --all-dtypes)
 Runs basic_mmad default MNK plus m=1, n=2, k=3.
 Activates conda env "${CONDA_ENV}", sources CANN set_env.sh, exports AscendNPU-IR-Dev MLIR/LLVM
 env, then builds (optional) and runs the test.
@@ -457,5 +460,25 @@ _run_arange_op_case() {
 }
 
 _run_arange_op_case
+
+_run_interleave_op_case() {
+    echo "==> Running interleave_op validation [interleave all dtypes]: interleave --run --all-dtypes --device ${DEVICE_ID}"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${INTERLEAVE_OP_REL}" interleave --run --all-dtypes --device "${DEVICE_ID}"
+    )
+}
+
+_run_interleave_op_case
+
+_run_deinterleave_op_case() {
+    echo "==> Running interleave_op validation [deinterleave all dtypes]: deinterleave --run --all-dtypes --device ${DEVICE_ID}"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${INTERLEAVE_OP_REL}" deinterleave --run --all-dtypes --device "${DEVICE_ID}"
+    )
+}
+
+_run_deinterleave_op_case
 
 echo "==> run_dsl_test.sh finished successfully"

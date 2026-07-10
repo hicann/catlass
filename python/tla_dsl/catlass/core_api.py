@@ -3714,6 +3714,94 @@ abs = _make_unary_op("abs")
 neg = _make_unary_op("neg")
 
 
+_INTERLEAVE_ELEMENT_TYPES = frozenset(
+    {
+        "i8",
+        "i16",
+        "i32",
+        "i64",
+        "f16",
+        "bf16",
+        "f32",
+    }
+)
+
+@dsl_user_op
+def interleave(
+    src0: VectorSSA,
+    src1: VectorSSA,
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> tuple[VectorSSA, VectorSSA]:
+    _require_category("interleave", "src0", src0, "vector_ssa", 0)
+    _require_category("interleave", "src1", src1, "vector_ssa", 1)
+    _require_frontend_state("interleave")
+    _runtime._require_enclosing_region("interleave", "vec.func")
+
+    src0_value = _as_value(src0)
+    src1_value = _as_value(src1)
+    
+    src_desc = _tla_tensor_type_for_mlir_value(src0_value)
+    element_type = str(src_desc.element_type).lower()
+    if element_type not in _INTERLEAVE_ELEMENT_TYPES:
+        _op_error(
+            "interleave",
+            f"unsupported element type {src_desc.element_type}; supported types are "
+            f"{', '.join(sorted(_INTERLEAVE_ELEMENT_TYPES))}",
+        )
+    
+    dst0_value, dst1_value = _tla_ops_gen.interleave(
+        src0_value.type,
+        src0_value.type,
+        src0_value,
+        src1_value,
+        loc=loc,
+    )
+
+    _register_tla_tensor_type(dst0_value, src_desc)
+    _register_tla_tensor_type(dst1_value, src_desc)
+
+    return VectorSSA(dst0_value), VectorSSA(dst1_value)
+    
+
+@dsl_user_op
+def deinterleave(
+    src0: VectorSSA,
+    src1: VectorSSA,
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> tuple[VectorSSA, VectorSSA]:
+    _require_category("deinterleave", "src0", src0, "vector_ssa", 0)
+    _require_category("deinterleave", "src1", src1, "vector_ssa", 1)
+    _require_frontend_state("deinterleave")
+    _runtime._require_enclosing_region("deinterleave", "vec.func")
+
+    src0_value = _as_value(src0)
+    src1_value = _as_value(src1)
+
+    src_desc = _tla_tensor_type_for_mlir_value(src0_value)
+    element_type = str(src_desc.element_type).lower()
+    if element_type not in _INTERLEAVE_ELEMENT_TYPES:
+        _op_error(
+            "deinterleave",
+            f"unsupported element type {src_desc.element_type}; supported types are "
+            f"{', '.join(sorted(_INTERLEAVE_ELEMENT_TYPES))}",
+        )
+
+    dst0_value, dst1_value = _tla_ops_gen.deinterleave(
+        src0_value.type,
+        src0_value.type,
+        src0_value,
+        src1_value,
+        loc=loc,
+    )
+
+    _register_tla_tensor_type(dst0_value, src_desc)
+    _register_tla_tensor_type(dst1_value, src_desc)
+
+    return VectorSSA(dst0_value), VectorSSA(dst1_value)
+
+
 @dsl_user_op
 def add(
     lhs: Any,
@@ -4372,6 +4460,8 @@ _require_generated("mask_or")
 _require_generated("mask_xor")
 _require_generated("divs")
 _require_generated("reduce")
+_require_generated("interleave")
+_require_generated("deinterleave")
 for _unary_op_name in ("exp", "log", "sqrt", "abs", "neg"):
     _require_generated(_unary_op_name)
 _require_generated("cmp")
@@ -4598,6 +4688,8 @@ __all__ = [
     "sqrt",
     "abs",
     "neg",
+    "interleave",
+    "deinterleave",
     "gather",
     "ReductionOp",
     "cmp",
