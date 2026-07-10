@@ -28,6 +28,59 @@ struct CopyUb2L1Tla {
     static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported CopyUb2L1Tla, can not find the specialization.");
 };
 
+/// Partial specialization for CopyUbToL1, Ascend950, RowMajor in and zN out.
+template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
+struct CopyUb2L1Tla<
+    Arch::Ascend950, tla::Tensor<AscendC::LocalTensor<ElementSrc>, LayoutSrc, CoordSrc, AscendC::TPosition::VECCALC>,
+    tla::Tensor<AscendC::LocalTensor<ElementDst>, LayoutDst, CoordDst, AscendC::TPosition::A1>,
+    std::enable_if_t<tla::detail::isRowMajor<LayoutSrc>::value && tla::detail::iszN<ElementDst, LayoutDst>::value>> {
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(ElementSrc);
+
+    // Mehtods
+
+    CATLASS_DEVICE
+    CopyUb2L1Tla() = default;
+
+    template <class TensorDst, class TensorSrc>
+    CATLASS_DEVICE void operator()(TensorDst const& dstTensor, TensorSrc const& srcTensor)
+    {
+        static_assert(
+            tla::detail::isRowMajor<typename TensorSrc::Layout>::value &&
+                tla::detail::iszN<typename TensorDst::Element, typename TensorDst::Layout>::value &&
+                TensorSrc::position == AscendC::TPosition::VECCALC && TensorDst::position == AscendC::TPosition::A1,
+            "The input parameters do not match. TensorSrc must be VECCALC and RowMajor, while TensorDst must be L1 and "
+            "zN");
+
+        const uint32_t nValue = tla::get<0>(srcTensor.shape());
+        const uint32_t dValue = tla::get<1>(srcTensor.shape());
+        const uint32_t srcDValue = tla::get<0>(srcTensor.stride());
+        const uint32_t dstNzNStride = tla::get<0, 0>(dstTensor.stride()) / ELE_NUM_PER_C0;
+        const uint32_t dstNzC0Stride = tla::get<1, 1>(dstTensor.stride()) / ELE_NUM_PER_C0;
+
+        auto dstOffset = dstTensor.layout()(dstTensor.coord());
+        auto srcOffset = srcTensor.layout()(srcTensor.coord());
+
+        uint32_t rows = nValue;
+        uint32_t cols = RoundUp<BYTE_PER_BLK>(dValue * sizeof(ElementSrc)) / BYTE_PER_BLK;
+        if (cols > rows) {
+            for (uint32_t i = 0; i < rows; i++) {
+                uint32_t dst = i * dstNzNStride * BYTE_PER_BLK / sizeof(ElementDst);
+                uint32_t src = i * srcDValue;
+                AscendC::DataCopyParams dataCopyParams(cols, 1, 0, dstNzC0Stride - 1);
+                AscendC::DataCopy(dstTensor.data()[dstOffset + dst], srcTensor.data()[srcOffset + src], dataCopyParams);
+            }
+        } else {
+            for (uint32_t i = 0; i < cols; i++) {
+                uint32_t dst = i * dstNzC0Stride * BYTE_PER_BLK / sizeof(ElementDst);
+                uint32_t src = i * BYTE_PER_BLK / sizeof(ElementSrc);
+                AscendC::DataCopyParams dataCopyParams(
+                    rows, 1, srcDValue * sizeof(ElementSrc) / BYTE_PER_BLK - 1, dstNzNStride - 1);
+                AscendC::DataCopy(dstTensor.data()[dstOffset + dst], srcTensor.data()[srcOffset + src], dataCopyParams);
+            }
+        }
+    }
+};
+
 /// Partial specialization for Ascend950, zN in and zN out.
 template <class ElementSrc, class ElementDst, class LayoutSrc, class LayoutDst, class CoordSrc, class CoordDst>
 struct CopyUb2L1Tla<Arch::Ascend950,

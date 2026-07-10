@@ -56,6 +56,15 @@ namespace {
     // addrspace-only names.
     // Current TLA MLIR carries explicit layout tags through tla.make_tensor_like and
     // optionally on tla.tile_view.
+    if (*srcSpace == hivm::AddressSpace::UB && *dstSpace == hivm::AddressSpace::L1 &&
+        srcLayout == TensorLayoutTag::RowMajor && dstLayout == TensorLayoutTag::zN) {
+      if (srcElementType != dstElem)
+        return {};
+      StringRef suffix = copyRuntimeElemSuffix(srcElementType);
+      if (suffix.empty())
+        return {};
+      return Twine("copy_ubuf_row_major_to_cbuf_zN_").concat(suffix).str();
+    }
     if (*srcSpace == hivm::AddressSpace::GM && *dstSpace == hivm::AddressSpace::L1 &&
         srcLayout == TensorLayoutTag::RowMajor && dstLayout == TensorLayoutTag::zN) {
       if (srcElementType != dstElem)
@@ -204,7 +213,9 @@ namespace {
   }
 
   static bool isAivTemplateRuntimeCall(StringRef name) {
-    return name == "copy_gm_to_ubuf_1d_float" || name == "copy_ubuf_to_gm_1d_float";
+    return name == "copy_gm_to_ubuf_1d_float" ||
+           name == "copy_ubuf_to_gm_1d_float" ||
+           name.starts_with("copy_ubuf_row_major_to_cbuf_zN_");
   }
 
   static void annotateAicTemplateRuntimeCall(func::FuncOp func) {
