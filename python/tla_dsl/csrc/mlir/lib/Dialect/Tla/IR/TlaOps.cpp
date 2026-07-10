@@ -142,7 +142,7 @@ mlir::LogicalResult InterleaveOp::verify() {
   return mlir::success();
 }
 
-mlir::LogicalResult DeinterleaveOp::verify() {
+mlir::LogicalResult DeInterleaveOp::verify() {
   if (!hasEnclosingRegion<VecFuncOp>(getOperation()))
     return emitOpError("must be nested inside a tla.vec.func region");
 

@@ -1126,7 +1126,7 @@ def Tla_InterleaveOp : Tla_Op<"interleave", [Pure]> {
   let hasVerifier = 1;
 }
 
-def Tla_DeinterleaveOp : Tla_Op<"deinterleave", [Pure]> {
+def Tla_DeInterleaveOp : Tla_Op<"deinterleave", [Pure]> {
   let summary = "Vector deinterleave for tensor fragments";
   let arguments = (ins Tla_TensorType:$src0, Tla_TensorType:$src1);
   let results = (outs Tla_TensorType:$dst0, Tla_TensorType:$dst1);

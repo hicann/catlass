@@ -419,7 +419,7 @@ static bool isVectorComputeOp(Operation *op) {
          isa_and_nonnull<::tla::GatherOp>(op) ||
          isa_and_nonnull<::tla::CastOp>(op) ||
          isa_and_nonnull<::tla::InterleaveOp>(op) ||
-         isa_and_nonnull<::tla::DeinterleaveOp>(op);
+         isa_and_nonnull<::tla::DeInterleaveOp>(op);
 }
 
 static hivmave::MaskWidthAttr maskWidthAttrForElement(OpBuilder &b, Type elementType) {
@@ -1173,7 +1173,7 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
   if (auto interleaveOp = dyn_cast<::tla::InterleaveOp>(op)) {
     if (op.getNumResults() != 2)
       return failure();
-    
+
     Value src0 = valueMap.lookup(interleaveOp.getSrc0());
     Value src1 = valueMap.lookup(interleaveOp.getSrc1());
     if (!src0 || !src1)
@@ -1183,7 +1183,7 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     auto src1Type = dyn_cast<VectorType>(src1.getType());
     if (!src0Type || !src1Type || src0Type != src1Type)
       return failure();
-    
+
     auto aveOp = b.create<hivmave::VFInterleaveOp>(
       loc,
       TypeRange{src0Type, src1Type},
@@ -1194,12 +1194,12 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     return success();
   }
 
-  if (auto deinterleaveOp = dyn_cast<::tla::DeinterleaveOp>(op)) {
+  if (auto deInterleaveOp = dyn_cast<::tla::DeInterleaveOp>(op)) {
     if (op.getNumResults() != 2)
       return failure();
 
-    Value src0 = valueMap.lookup(deinterleaveOp.getSrc0());
-    Value src1 = valueMap.lookup(deinterleaveOp.getSrc1());
+    Value src0 = valueMap.lookup(deInterleaveOp.getSrc0());
+    Value src1 = valueMap.lookup(deInterleaveOp.getSrc1());
     if (!src0 || !src1)
       return failure();
 
@@ -1715,7 +1715,7 @@ public:
       producedValues.insert(arange.getResult());
     for (Operation *computeOp : computeOps) {
       if (isa<::tla::InterleaveOp>(computeOp) ||
-          isa<::tla::DeinterleaveOp>(computeOp)) {
+          isa<::tla::DeInterleaveOp>(computeOp)) {
         if (computeOp->getNumResults() != 2)
           return rewriter.notifyMatchFailure(
               vecFuncOp, "unexpected two-result tla compute op shape");
@@ -1774,9 +1774,9 @@ public:
             !producedValues.contains(interleaveOp.getSrc1()))
           return rewriter.notifyMatchFailure(
             vecFuncOp, "expected tla.interleave operands from tla.load or prior compute op");
-      } else if (auto deinterleaveOp = dyn_cast<::tla::DeinterleaveOp>(computeOp)) {
-        if (!producedValues.contains(deinterleaveOp.getSrc0()) ||
-            !producedValues.contains(deinterleaveOp.getSrc1()))
+      } else if (auto deInterleaveOp = dyn_cast<::tla::DeInterleaveOp>(computeOp)) {
+        if (!producedValues.contains(deInterleaveOp.getSrc0()) ||
+            !producedValues.contains(deInterleaveOp.getSrc1()))
           return rewriter.notifyMatchFailure(
             vecFuncOp, "expected tla.deinterleave operands from tla.load or prior compute op");
       } else if (auto gatherOp = dyn_cast<::tla::GatherOp>(computeOp)) {
