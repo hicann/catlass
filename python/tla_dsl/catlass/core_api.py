@@ -3484,11 +3484,6 @@ def _emit_vector_binary(
     _runtime._require_enclosing_region(op_name, "vec.func")
     lhs_value = _as_value(lhs)
     rhs_value = _as_value(rhs)
-    if str(lhs_value.type) != str(rhs_value.type):
-        raise TlaLoweringError(
-            f"tla.{op_name} operands must have identical !tla.tensor types; "
-            f"got {lhs_value.type} and {rhs_value.type}"
-        )
     lhs_desc = _tla_tensor_type_for_mlir_value(lhs_value)
     mask_value = _as_value(mask) if mask is not None else None
     result = emitter(
@@ -3681,14 +3676,15 @@ def _emit_vector_unary(
             f"got {element_type}",
         )
     mask_value = _as_value(mask) if mask is not None else None
-    return VectorSSA(
-        emitter(
-            operand_value.type,
-            operand_value,
-            mask=mask_value,
-            loc=loc,
-        )
+    result_desc = _tla_tensor_type_for_mlir_value(operand_value)
+    result = emitter(
+        operand_value.type,
+        operand_value,
+        mask=mask_value,
+        loc=loc,
     )
+    _register_tla_tensor_type(result, result_desc)
+    return VectorSSA(result)
 
 
 def _make_unary_op(mnemonic: str) -> Callable[..., VectorSSA]:
@@ -3911,11 +3907,6 @@ def where(
     _runtime._require_enclosing_region("where", "vec.func")
     x_value = _as_value(x)
     y_value = _as_value(y)
-    if str(x_value.type) != str(y_value.type):
-        raise TlaLoweringError(
-            f"tla.where operands x and y must have identical !tla.tensor types; "
-            f"got {x_value.type} and {y_value.type}"
-        )
     x_desc = _tla_tensor_type_for_mlir_value(x_value)
     mask_value = _as_value(mask)
     result = _tla_ops_gen.where(
