@@ -3669,7 +3669,7 @@ def _emit_vector_unary(
                 f"tla.{op_name} requires f16 or f32 element type, "
                 f"got {element_type}",
             )
-    elif op_name in {"abs", "neg"} and element_type not in _ABS_ELEMENT_TYPES:
+    elif op_name in {"abs", "neg", "not_"} and element_type not in _ABS_ELEMENT_TYPES:
         _op_error(
             op_name,
             f"tla.{op_name} requires f16/f32 or i8/i16/i32 element type, "
@@ -3800,6 +3800,28 @@ def deinterleave(
     _register_tla_tensor_type(dst1_value, src_desc)
 
     return VectorSSA(dst0_value), VectorSSA(dst1_value)
+
+
+@dsl_user_op
+def not_(
+    operand: Any,
+    *,
+    mask: MaskSSA | None = None,
+    loc: mlir_ir.Location | None = None,
+) -> VectorSSA:
+    if _category(operand) == "mask_ssa":
+        if mask is None:
+            _op_error("not_", "missing required mask operand")
+        return _emit_mask_logic_unary(
+            "not_", _tla_ops_gen.mask_not, operand, mask, loc=loc
+        )
+    return _emit_vector_unary(
+        "not_",
+        _tla_ops_gen.reg_not,
+        operand,
+        mask=mask,
+        loc=loc,
+    )
 
 
 @dsl_user_op
@@ -4044,80 +4066,6 @@ def _emit_mask_logic_binary(
     )
 
 
-def _emit_regtensor_logic_unary(
-    op_name: str,
-    src_reg: VectorSSA,
-    mask: MaskSSA,
-    *,
-    loc: mlir_ir.Location | None = None,
-) -> VectorSSA:
-    del src_reg, mask, loc
-    raise NotImplementedError(
-        f"tla.{op_name} RegTensor logical operation is not implemented yet"
-    )
-
-
-def _emit_regtensor_logic_binary(
-    op_name: str,
-    src0_reg: VectorSSA,
-    src1_reg: VectorSSA,
-    mask: MaskSSA,
-    *,
-    loc: mlir_ir.Location | None = None,
-) -> VectorSSA:
-    del src0_reg, src1_reg, mask, loc
-    raise NotImplementedError(
-        f"tla.{op_name} RegTensor logical operation is not implemented yet"
-    )
-
-
-def _emit_logic_unary(
-    op_name: str,
-    mask_emitter: Any,
-    src_reg: Any,
-    mask: Any,
-    *,
-    loc: mlir_ir.Location | None = None,
-) -> MaskSSA | VectorSSA:
-    src_category = _category(src_reg)
-    if src_category == "mask_ssa":
-        return _emit_mask_logic_unary(op_name, mask_emitter, src_reg, mask, loc=loc)
-    if src_category == "vector_ssa":
-        _require_category(op_name, "mask", mask, "mask_ssa", 1)
-        return _emit_regtensor_logic_unary(op_name, src_reg, mask, loc=loc)
-    _require_categories(op_name, "src_reg", src_reg, ("mask_ssa", "vector_ssa"), 0)
-    raise AssertionError("unreachable")
-
-
-def _emit_logic_binary(
-    op_name: str,
-    mask_emitter: Any,
-    src0_reg: Any,
-    src1_reg: Any,
-    mask: Any,
-    *,
-    loc: mlir_ir.Location | None = None,
-) -> MaskSSA | VectorSSA:
-    src0_category = _category(src0_reg)
-    src1_category = _category(src1_reg)
-    if src0_category == "mask_ssa" and src1_category == "mask_ssa":
-        return _emit_mask_logic_binary(
-            op_name, mask_emitter, src0_reg, src1_reg, mask, loc=loc
-        )
-    if src0_category == "vector_ssa" and src1_category == "vector_ssa":
-        _require_category(op_name, "mask", mask, "mask_ssa", 2)
-        return _emit_regtensor_logic_binary(op_name, src0_reg, src1_reg, mask, loc=loc)
-    expected = ("mask_ssa", "vector_ssa")
-    if src0_category not in expected:
-        _require_categories(op_name, "src0_reg", src0_reg, expected, 0)
-    if src1_category not in expected:
-        _require_categories(op_name, "src1_reg", src1_reg, expected, 1)
-    _op_error(
-        op_name,
-        "src0_reg and src1_reg must both be MaskReg values or both be RegTensor values",
-    )
-
-
 def _tla_mask_type(context: mlir_ir.Context) -> mlir_ir.Type:
     """Return ``!tla.mask`` parsed in the same MLIR context as the surrounding SSA values."""
     _tla_type_bridge.load_tla_dialect(context)
@@ -4171,17 +4119,6 @@ def cmp(
 
 
 @dsl_user_op
-def not_(
-    src_reg: Any,
-    mask: Any,
-    *,
-    loc: mlir_ir.Location | None = None,
-) -> MaskSSA | VectorSSA:
-    """Emit element-wise logical NOT for MaskReg or RegTensor SSA values."""
-    return _emit_logic_unary("not_", _tla_ops_gen.mask_not, src_reg, mask, loc=loc)
-
-
-@dsl_user_op
 def and_(
     src0_reg: Any,
     src1_reg: Any,
@@ -4190,8 +4127,25 @@ def and_(
     loc: mlir_ir.Location | None = None,
 ) -> MaskSSA | VectorSSA:
     """Emit element-wise logical AND for MaskReg or RegTensor SSA values."""
-    return _emit_logic_binary(
-        "and_", _tla_ops_gen.mask_and, src0_reg, src1_reg, mask, loc=loc
+    src0_category = _category(src0_reg)
+    src1_category = _category(src1_reg)
+    if src0_category == "mask_ssa" and src1_category == "mask_ssa":
+        return _emit_mask_logic_binary(
+            "and_", _tla_ops_gen.mask_and, src0_reg, src1_reg, mask, loc=loc
+        )
+    if src0_category == "vector_ssa" and src1_category == "vector_ssa":
+        _require_category("and_", "mask", mask, "mask_ssa", 2)
+        return _emit_vector_binary(
+            "and_", _tla_ops_gen.reg_and, src0_reg, src1_reg, mask=mask, loc=loc
+        )
+    expected = ("mask_ssa", "vector_ssa")
+    if src0_category not in expected:
+        _require_categories("and_", "src0_reg", src0_reg, expected, 0)
+    if src1_category not in expected:
+        _require_categories("and_", "src1_reg", src1_reg, expected, 1)
+    _op_error(
+        "and_",
+        "src0_reg and src1_reg must both be MaskReg values or both be RegTensor values",
     )
 
 
@@ -4204,8 +4158,25 @@ def or_(
     loc: mlir_ir.Location | None = None,
 ) -> MaskSSA | VectorSSA:
     """Emit element-wise logical OR for MaskReg or RegTensor SSA values."""
-    return _emit_logic_binary(
-        "or_", _tla_ops_gen.mask_or, src0_reg, src1_reg, mask, loc=loc
+    src0_category = _category(src0_reg)
+    src1_category = _category(src1_reg)
+    if src0_category == "mask_ssa" and src1_category == "mask_ssa":
+        return _emit_mask_logic_binary(
+            "or_", _tla_ops_gen.mask_or, src0_reg, src1_reg, mask, loc=loc
+        )
+    if src0_category == "vector_ssa" and src1_category == "vector_ssa":
+        _require_category("or_", "mask", mask, "mask_ssa", 2)
+        return _emit_vector_binary(
+            "or_", _tla_ops_gen.reg_or, src0_reg, src1_reg, mask=mask, loc=loc
+        )
+    expected = ("mask_ssa", "vector_ssa")
+    if src0_category not in expected:
+        _require_categories("or_", "src0_reg", src0_reg, expected, 0)
+    if src1_category not in expected:
+        _require_categories("or_", "src1_reg", src1_reg, expected, 1)
+    _op_error(
+        "or_",
+        "src0_reg and src1_reg must both be MaskReg values or both be RegTensor values",
     )
 
 
@@ -4218,8 +4189,25 @@ def xor(
     loc: mlir_ir.Location | None = None,
 ) -> MaskSSA | VectorSSA:
     """Emit element-wise logical XOR for MaskReg or RegTensor SSA values."""
-    return _emit_logic_binary(
-        "xor", _tla_ops_gen.mask_xor, src0_reg, src1_reg, mask, loc=loc
+    src0_category = _category(src0_reg)
+    src1_category = _category(src1_reg)
+    if src0_category == "mask_ssa" and src1_category == "mask_ssa":
+        return _emit_mask_logic_binary(
+            "xor", _tla_ops_gen.mask_xor, src0_reg, src1_reg, mask, loc=loc
+        )
+    if src0_category == "vector_ssa" and src1_category == "vector_ssa":
+        _require_category("xor", "mask", mask, "mask_ssa", 2)
+        return _emit_vector_binary(
+            "xor", _tla_ops_gen.reg_xor, src0_reg, src1_reg, mask=mask, loc=loc
+        )
+    expected = ("mask_ssa", "vector_ssa")
+    if src0_category not in expected:
+        _require_categories("xor", "src0_reg", src0_reg, expected, 0)
+    if src1_category not in expected:
+        _require_categories("xor", "src1_reg", src1_reg, expected, 1)
+    _op_error(
+        "xor",
+        "src0_reg and src1_reg must both be MaskReg values or both be RegTensor values",
     )
 
 
@@ -4458,6 +4446,10 @@ _require_generated("mask_not")
 _require_generated("mask_and")
 _require_generated("mask_or")
 _require_generated("mask_xor")
+_require_generated("reg_not")
+_require_generated("reg_and")
+_require_generated("reg_or")
+_require_generated("reg_xor")
 _require_generated("divs")
 _require_generated("reduce")
 _require_generated("interleave")

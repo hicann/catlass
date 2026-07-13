@@ -1176,6 +1176,22 @@ def Tla_NegOp : Tla_VectorUnaryOp<"neg",
     "Vector negate for tensor fragments",
     "Element-wise negate on tensor fragments / vector tiles.">;
 
+def Tla_RegNotOp : Tla_VectorUnaryOp<"reg_not",
+    "RegTensor bitwise NOT",
+    "Element-wise bitwise NOT on RegTensor values.">;
+
+def Tla_RegAndOp : Tla_VectorBinaryOp<"reg_and",
+    "RegTensor bitwise AND",
+    "Element-wise bitwise AND on RegTensor values.">;
+
+def Tla_RegOrOp : Tla_VectorBinaryOp<"reg_or",
+    "RegTensor bitwise OR",
+    "Element-wise bitwise OR on RegTensor values.">;
+
+def Tla_RegXorOp : Tla_VectorBinaryOp<"reg_xor",
+    "RegTensor bitwise XOR",
+    "Element-wise bitwise XOR on RegTensor values.">;
+
 def Tla_VectorOp : Tla_Op<"vector", [NoTerminator, SingleBlock]> {
   let summary = "Vector region";
   let description = [{

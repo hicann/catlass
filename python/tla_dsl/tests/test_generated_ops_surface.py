@@ -16,7 +16,7 @@ def _mask_logic_surface_kernel(src: tla.Tensor, dst: tla.Tensor) -> None:
             all_mask = tla.create_mask(pattern=tla.mask.ALL, dtype=tla.Float32)
             h_mask = tla.create_mask(pattern=tla.mask.H, dtype=tla.Float32)
             q_mask = tla.create_mask(pattern=tla.mask.Q, dtype=tla.Float32)
-            not_mask = tla.not_(q_mask, all_mask)
+            not_mask = tla.not_(q_mask, mask=all_mask)
             and_mask = tla.and_(h_mask, q_mask, all_mask)
             or_mask = tla.or_(h_mask, q_mask, all_mask)
             xor_mask = tla.xor(h_mask, q_mask, all_mask)

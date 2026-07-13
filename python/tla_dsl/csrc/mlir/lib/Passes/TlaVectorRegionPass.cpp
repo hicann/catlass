@@ -95,7 +95,7 @@ static std::string buildUniqueVectorHelperName(ModuleOp module, int &nextVectorR
   return helperName;
 }
 
-enum class VectorBinaryKind { Add, Sub, Mul, Div, Max, Min };
+enum class VectorBinaryKind { Add, Sub, Mul, Div, Max, Min, And, Or, Xor };
 enum class VectorRhsKind { Vector, Scalar };
 enum class MaskLogicBinaryKind { And, Or, Xor };
 
@@ -163,7 +163,7 @@ static LogicalResult validateVectorReduction(::tla::ReduceOp reduceOp, Type elem
   return success();
 }
 
-enum class VectorUnaryKind { Exp, Log, Sqrt, Abs, Neg };
+enum class VectorUnaryKind { Exp, Log, Sqrt, Abs, Neg, Not };
 
 struct TlaUnaryOperands {
   Value operand;
@@ -193,6 +193,8 @@ static std::optional<VectorUnaryInfo> getVectorUnaryInfo(Operation *op) {
     return VectorUnaryInfo{VectorUnaryKind::Abs, "abs", getTlaUnaryOperands(o)};
   if (auto o = dyn_cast<::tla::NegOp>(op))
     return VectorUnaryInfo{VectorUnaryKind::Neg, "neg", getTlaUnaryOperands(o)};
+  if (auto o = dyn_cast<::tla::RegNotOp>(op))
+    return VectorUnaryInfo{VectorUnaryKind::Not, "not", getTlaUnaryOperands(o)};
   return std::nullopt;
 }
 
@@ -235,6 +237,8 @@ static LogicalResult validateVectorUnaryElementType(Operation *op, VectorUnaryIn
     return op->emitError() << "tla." << info.name
            << " requires f16/f32 or i8/i16/i32 element type, got "
            << elementType;
+  case VectorUnaryKind::Not:
+    return success();
   }
   return failure();
 }
@@ -272,6 +276,12 @@ static TlaBinaryOperands getTlaBinaryOperands(Operation *op) {
   } else if (auto o = dyn_cast<::tla::MinsOp>(op)) {
     r.lhs = o.getLhs(); r.rhs = o.getRhs(); r.mask = o.getMask();
   } else if (auto o = dyn_cast<::tla::DivsOp>(op)) {
+    r.lhs = o.getLhs(); r.rhs = o.getRhs(); r.mask = o.getMask();
+  } else if (auto o = dyn_cast<::tla::RegAndOp>(op)) {
+    r.lhs = o.getLhs(); r.rhs = o.getRhs(); r.mask = o.getMask();
+  } else if (auto o = dyn_cast<::tla::RegOrOp>(op)) {
+    r.lhs = o.getLhs(); r.rhs = o.getRhs(); r.mask = o.getMask();
+  } else if (auto o = dyn_cast<::tla::RegXorOp>(op)) {
     r.lhs = o.getLhs(); r.rhs = o.getRhs(); r.mask = o.getMask();
   }
   return r;
@@ -323,6 +333,15 @@ static std::optional<VectorOpInfo> getVectorBinaryInfo(Operation *op) {
                         getTlaBinaryOperands(op)};
   if (isa<::tla::MinOp>(op))
     return VectorOpInfo{VectorBinaryKind::Min, VectorRhsKind::Vector, "min",
+                        getTlaBinaryOperands(op)};
+  if (isa<::tla::RegAndOp>(op))
+    return VectorOpInfo{VectorBinaryKind::And, VectorRhsKind::Vector, "and",
+                        getTlaBinaryOperands(op)};
+  if (isa<::tla::RegOrOp>(op))
+    return VectorOpInfo{VectorBinaryKind::Or, VectorRhsKind::Vector, "or",
+                        getTlaBinaryOperands(op)};
+  if (isa<::tla::RegXorOp>(op))
+    return VectorOpInfo{VectorBinaryKind::Xor, VectorRhsKind::Vector, "xor",
                         getTlaBinaryOperands(op)};
   return std::nullopt;
 }
@@ -497,6 +516,12 @@ static Value createVectorBinaryResult(OpBuilder &b, Location loc, VectorBinaryKi
     return b.create<hivmave::VFMaxOp>(loc, vecType, lhs, rhs, mask, Value()).getResult();
   case VectorBinaryKind::Min:
     return b.create<hivmave::VFMinOp>(loc, vecType, lhs, rhs, mask, Value()).getResult();
+  case VectorBinaryKind::And:
+    return b.create<hivmave::VFAndOp>(loc, vecType, lhs, rhs, mask, Value()).getResult();
+  case VectorBinaryKind::Or:
+    return b.create<hivmave::VFOrOp>(loc, vecType, lhs, rhs, mask, Value()).getResult();
+  case VectorBinaryKind::Xor:
+    return b.create<hivmave::VFXorOp>(loc, vecType, lhs, rhs, mask, Value()).getResult();
   }
   return nullptr;
 }
@@ -676,6 +701,8 @@ static Value createVectorUnaryResult(OpBuilder &b, Location loc, VectorUnaryKind
     return b.create<hivmave::VFAbsOp>(loc, vecType, operand, mask, Value()).getResult();
   case VectorUnaryKind::Neg:
     return b.create<hivmave::VFNegOp>(loc, vecType, operand, mask, Value()).getResult();
+  case VectorUnaryKind::Not:
+    return b.create<hivmave::VFNotOp>(loc, vecType, operand, mask, Value()).getResult();
   }
   return nullptr;
 }
