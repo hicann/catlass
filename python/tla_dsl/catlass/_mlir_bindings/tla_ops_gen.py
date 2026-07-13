@@ -2399,6 +2399,39 @@ def sqrt(result, operand, *, mask=None, loc=None, ip=None) -> _ods_ir.Value:
   return _get_op_result_or_op_results(SqrtOp(result=result, operand=operand, mask=mask, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
+class SqueezeOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.squeeze"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, src, mask, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(src))
+    operands.append(_get_op_result_or_value(mask))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def src(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def mask(self):
+    return self.operation.operands[1]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def squeeze(result, src, mask, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(SqueezeOp(result=result, src=src, mask=mask, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
 class StoreOp(_ods_ir.OpView):
   OPERATION_NAME = "tla.store"
 

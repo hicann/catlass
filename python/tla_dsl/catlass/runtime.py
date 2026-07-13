@@ -644,6 +644,7 @@ _CORE_API_EXPORTS = (
     "min",
     "div",
     "where",
+    "squeeze",
     "not_",
     "and_",
     "or_",

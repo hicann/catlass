@@ -1028,6 +1028,21 @@ def Tla_GatherOp : Tla_Op<"gather", [Pure]> {
   }];
 }
 
+def Tla_SqueezeOp : Tla_Op<"squeeze", [Pure]> {
+  let summary = "Mask-compress vector lanes into low indices";
+  let description = [{
+  Copy lanes of ``src`` selected by ``mask`` into ``result`` starting at lane 0.
+  Remaining lanes in ``result`` are zeroed. This matches AscendC ``Squeeze``
+  semantics (valid elements packed from low to high, not value-sorted).
+  }];
+  let arguments = (ins Tla_TensorType:$src, Tla_MaskType:$mask);
+  let results = (outs Tla_TensorType:$result);
+  let assemblyFormat = [{
+    $src `,` $mask attr-dict `:`
+    type($src) `,` qualified(type($mask)) `->` type($result)
+  }];
+}
+
 def Tla_CastOp : Tla_Op<"cast", [Pure]> {
   let summary = "Vector element-type conversion for tensor fragments";
   let description = [{

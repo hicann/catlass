@@ -4100,6 +4100,36 @@ def where(
     return VectorSSA(result)
 
 
+@dsl_user_op
+def squeeze(
+    src: VectorSSA,
+    mask: MaskSSA,
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> VectorSSA:
+    """Pack lanes of ``src`` selected by ``mask`` into low indices of the result.
+
+    Lanes where ``mask`` is inactive are dropped; the remaining selected lanes
+    are written contiguously from lane 0. Trailing lanes in the result vector
+    are zeroed. This matches AscendC ``Squeeze`` semantics.
+    """
+    _require_category("squeeze", "src", src, "vector_ssa", 0)
+    _require_category("squeeze", "mask", mask, "mask_ssa", 1)
+    _require_frontend_state("squeeze")
+    _runtime._require_enclosing_region("squeeze", "vec.func")
+    src_value = _as_value(src)
+    mask_value = _as_value(mask)
+    src_desc = _tla_tensor_type_for_mlir_value(src_value)
+    result = _tla_ops_gen.squeeze(
+        src_value.type,
+        src_value,
+        mask_value,
+        loc=loc,
+    )
+    _register_tla_tensor_type(result, src_desc)
+    return VectorSSA(result)
+
+
 def _emit_mask_logic_unary(
     op_name: str,
     emitter: Any,
@@ -4556,6 +4586,7 @@ _require_generated("maxs")
 _require_generated("mins")
 _require_generated("div")
 _require_generated("where")
+_require_generated("squeeze")
 _require_generated("mask_not")
 _require_generated("mask_and")
 _require_generated("mask_or")
@@ -4785,6 +4816,7 @@ __all__ = [
     "min",
     "div",
     "where",
+    "squeeze",
     "not_",
     "and_",
     "or_",

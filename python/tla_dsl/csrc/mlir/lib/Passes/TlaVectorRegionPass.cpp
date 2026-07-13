@@ -434,11 +434,47 @@ static std::optional<hivmave::CmpType> mapCmpMode(StringRef mode) {
 static bool isVectorComputeOp(Operation *op) {
   return getAnyVectorOperationInfo(op).has_value() ||
          isa_and_nonnull<::tla::WhereOp>(op) ||
+         isa_and_nonnull<::tla::SqueezeOp>(op) ||
          isa_and_nonnull<::tla::ReduceOp>(op) ||
          isa_and_nonnull<::tla::GatherOp>(op) ||
          isa_and_nonnull<::tla::CastOp>(op) ||
          isa_and_nonnull<::tla::InterleaveOp>(op) ||
          isa_and_nonnull<::tla::DeInterleaveOp>(op);
+}
+
+static std::string getSqueezeLibraryCallName(Type elementType) {
+  if (elementType.isF32())
+    return "vsqueeze_float";
+  if (elementType.isF16())
+    return "vsqueeze_half";
+  if (auto intType = dyn_cast<IntegerType>(elementType))
+    if (intType.getWidth() == 32)
+      return "vsqueeze_int32_t";
+  return {};
+}
+
+static func::FuncOp getOrCreateSqueezeLibraryCall(ModuleOp module, Location loc,
+                                                  VectorType vecType, VectorType pregType,
+                                                  StringRef calleeName) {
+  if (auto existing = module.lookupSymbol<func::FuncOp>(calleeName))
+    return existing;
+  OpBuilder moduleBuilder(module.getBodyRegion());
+  auto fnType = FunctionType::get(module.getContext(), {vecType, pregType}, {vecType});
+  auto callee = moduleBuilder.create<func::FuncOp>(loc, calleeName, fnType);
+  callee.setPrivate();
+  callee->setAttr("llvm.emit_c_interface", UnitAttr::get(module.getContext()));
+  return callee;
+}
+
+static Value castMaskToPregType(OpBuilder &b, Location loc, Value mask,
+                                VectorType pregVecType) {
+  if (mask.getType() == pregVecType)
+    return mask;
+  return b.create<UnrealizedConversionCastOp>(loc, pregVecType, mask).getResult(0);
+}
+
+static VectorType fullPregVecType(MLIRContext *ctx) {
+  return VectorType::get({256}, IntegerType::get(ctx, 1));
 }
 
 static hivmave::MaskWidthAttr maskWidthAttrForElement(OpBuilder &b, Type elementType) {
@@ -716,6 +752,7 @@ struct VecLowerCtx {
   int64_t lanes;
   Type elementType;
   VectorType vecType;
+  // Per-lane mask (vector<lanes x i1>) for AVE HIR ops such as vcmp/preg logic.
   VectorType maskVecType;
 };
 
@@ -887,14 +924,14 @@ static FailureOr<Value> lowerTileViewInHelper(OpBuilder &b, Location loc,
       .getResult();
 }
 
-static LogicalResult lowerNestedVectorBlock(Block *sourceBlock, OpBuilder &b,
+static LogicalResult lowerNestedVectorBlock(Block *sourceBlock, OpBuilder &b, ModuleOp module,
                                             DenseMap<Value, Value> &valueMap);
 
 // Re-create one vec.func body op inside the helper: tla ops become AVE vector
 // ops; scf control flow and index arithmetic are carried verbatim. Each op
 // derives its own vector/mask width from its operands or result element type,
 // so a single region may mix element widths (e.g. across tla.cast).
-static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
+static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp module,
                                          DenseMap<Value, Value> &valueMap) {
   Location loc = op.getLoc();
 
@@ -1126,6 +1163,33 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
       return failure();
     valueMap[whereOp.getResult()] =
         b.create<hivmave::VFSelectOp>(loc, opCtx->vecType, mask, x, y);
+    return success();
+  }
+
+  // tla.squeeze: mask-compress src lanes via linked bitcode (vsqz). Uses
+  // NO_STORE_REG; STORE_REG + StoreUnAlign streaming writeback is not exposed
+  // until unaligned store (StoreUnAlign/StoreUnAlignPost) is available in TLA.
+  if (auto squeezeOp = dyn_cast<::tla::SqueezeOp>(op)) {
+    Value src = valueMap.lookup(squeezeOp.getSrc());
+    Value mask = valueMap.lookup(squeezeOp.getMask());
+    if (!src || !mask)
+      return failure();
+    auto srcTy = dyn_cast<VectorType>(src.getType());
+    if (!srcTy)
+      return failure();
+    auto opCtx = deriveVecCtxForElement(srcTy.getElementType());
+    if (failed(opCtx))
+      return failure();
+    std::string calleeName = getSqueezeLibraryCallName(srcTy.getElementType());
+    if (calleeName.empty())
+      return squeezeOp.emitError("unsupported element type for tla.squeeze: ")
+             << srcTy.getElementType(), failure();
+    VectorType pregVecType = fullPregVecType(b.getContext());
+    Value preg = castMaskToPregType(b, loc, mask, pregVecType);
+    auto callee = getOrCreateSqueezeLibraryCall(module, loc, opCtx->vecType, pregVecType,
+                                                calleeName);
+    Value result = b.create<func::CallOp>(loc, callee, ValueRange{src, preg}).getResult(0);
+    valueMap[squeezeOp.getResult()] = result;
     return success();
   }
 
@@ -1466,7 +1530,7 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
               newArg = nb.create<arith::IndexCastOp>(nloc, nb.getIndexType(), newArg);
             nestedMap[regionIterArgs[i]] = newArg;
           }
-          if (failed(lowerNestedVectorBlock(forOp.getBody(), nb, nestedMap))) {
+          if (failed(lowerNestedVectorBlock(forOp.getBody(), nb, module, nestedMap))) {
             bodyStatus = failure();
             nb.create<scf::YieldOp>(nloc, iterArgs);
             return;
@@ -1513,12 +1577,12 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
     auto newIf = b.create<scf::IfOp>(loc, TypeRange{}, cond, hasElse);
     DenseMap<Value, Value> thenMap = valueMap;
     OpBuilder tb(newIf.thenBlock()->getTerminator());
-    if (failed(lowerNestedVectorBlock(ifOp.thenBlock(), tb, thenMap)))
+    if (failed(lowerNestedVectorBlock(ifOp.thenBlock(), tb, module, thenMap)))
       return failure();
     if (hasElse) {
       DenseMap<Value, Value> elseMap = valueMap;
       OpBuilder eb(newIf.elseBlock()->getTerminator());
-      if (failed(lowerNestedVectorBlock(ifOp.elseBlock(), eb, elseMap)))
+      if (failed(lowerNestedVectorBlock(ifOp.elseBlock(), eb, module, elseMap)))
         return failure();
     }
     return success();
@@ -1546,14 +1610,14 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
   return failure();
 }
 
-static LogicalResult lowerNestedVectorBlock(Block *sourceBlock, OpBuilder &b,
+static LogicalResult lowerNestedVectorBlock(Block *sourceBlock, OpBuilder &b, ModuleOp module,
                                             DenseMap<Value, Value> &valueMap) {
   for (Operation &op : sourceBlock->getOperations()) {
     // Terminators are reproduced by the enclosing op (scf.for/scf.if) or by
     // buildHelperFunc's func.return.
     if (op.hasTrait<OpTrait::IsTerminator>())
       continue;
-    if (failed(lowerNestedVectorOp(op, b, valueMap)))
+    if (failed(lowerNestedVectorOp(op, b, module, valueMap)))
       return failure();
   }
   return success();
@@ -1676,7 +1740,7 @@ static FailureOr<func::FuncOp> buildHelperFunc(ModuleOp module, func::FuncOp par
   // Captured scalars map to their trailing block arguments.
   for (auto [j, scalar] : llvm::enumerate(scalarOperands))
     valueMap[scalar] = entry->getArgument(helperOperands.size() + j);
-  if (failed(lowerNestedVectorBlock(body, b, valueMap))) {
+  if (failed(lowerNestedVectorBlock(body, b, module, valueMap))) {
     // Discard the partially-built helper so an unsupported construct fails
     // cleanly (the vec.func is left intact) instead of leaking malformed IR.
     helper.erase();
@@ -1796,6 +1860,14 @@ public:
             !producedValues.contains(whereOp.getY()))
           return rewriter.notifyMatchFailure(
               vecFuncOp, "expected tla.where operand from tla.load or prior compute op");
+      } else if (auto squeezeOp = dyn_cast<::tla::SqueezeOp>(computeOp)) {
+        if (!producedValues.contains(squeezeOp.getSrc()))
+          return rewriter.notifyMatchFailure(
+              vecFuncOp, "expected tla.squeeze src from tla.load or prior compute op");
+        if (!producedMaskValues.contains(squeezeOp.getMask()))
+          return rewriter.notifyMatchFailure(
+              vecFuncOp, "expected tla.squeeze mask from create/update mask or "
+                         "prior mask compute op");
       } else if (auto reduceOp = dyn_cast<::tla::ReduceOp>(computeOp)) {
         Value operand = reduceOp.getOperand();
         if (!producedValues.contains(operand))

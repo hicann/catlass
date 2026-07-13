@@ -14,7 +14,8 @@
 # python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed.py), and
 # python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed_ub2l1.py).
 # python/tla_dsl/examples/end_to_end/vector_ops (binary_op.py, masked_binary.py,
-# logic_ops.py, reduction_ops.py, compare_mask.py, unary_ops.py, arange_op.py).
+# logic_ops.py, reduction_ops.py, compare_mask.py, unary_ops.py, arange_op.py,
+# interleave_op.py, squeeze_op.py).
 #
 # Fixed toolchain paths relative to WORKSPACE_ROOT (= parent of catlass repo):
 #   CANN:             Ascend/9.1.0-beta.1/ascend-toolkit/set_env.sh
@@ -61,6 +62,7 @@ COMPARE_MASK_OPS=(
 UNARY_OPS_REL="examples/end_to_end/vector_ops/unary_ops.py"
 ARANGE_OP_REL="examples/end_to_end/vector_ops/arange_op.py"
 INTERLEAVE_OP_REL="examples/end_to_end/vector_ops/interleave_op.py"
+SQUEEZE_OP_REL="examples/end_to_end/vector_ops/squeeze_op.py"
 
 _ascendnpu_ir_dev_is_prebuilt() {
     local root="$1"
@@ -87,6 +89,7 @@ Run end-to-end validation for:
   - unary_ops (unary_ops.py <op> --run --all-dtypes for exp/log/sqrt/abs/neg/masked_unary/masked_abs/masked_neg)
   - arange_op (arange_op.py increase --run --all-dtypes)
   - interleave_op (interleave_op.py interleave/deinterleave --run --all-dtypes)
+  - squeeze_op (squeeze_op.py squeeze --run --all-dtypes)
 Runs basic_mmad default MNK plus m=1, n=2, k=3.
 Activates conda env "${CONDA_ENV}", sources CANN set_env.sh, exports AscendNPU-IR-Dev MLIR/LLVM
 env, then builds (optional) and runs the test.
@@ -304,6 +307,10 @@ if [[ ! -f "${TLA_DSL_DIR}/${ARANGE_OP_REL}" ]]; then
     echo "error: missing ${ARANGE_OP_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
+if [[ ! -f "${TLA_DSL_DIR}/${SQUEEZE_OP_REL}" ]]; then
+    echo "error: missing ${SQUEEZE_OP_REL} under ${TLA_DSL_DIR}" >&2
+    exit 1
+fi
 
 _run_basic_mmad_case() {
     local label="$1"
@@ -495,5 +502,15 @@ _run_deinterleave_op_case() {
 }
 
 _run_deinterleave_op_case
+
+_run_squeeze_op_case() {
+    echo "==> Running squeeze_op validation [squeeze all dtypes]: squeeze --run --all-dtypes --device ${DEVICE_ID}"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${SQUEEZE_OP_REL}" squeeze --run --all-dtypes --device "${DEVICE_ID}"
+    )
+}
+
+_run_squeeze_op_case
 
 echo "==> run_dsl_test.sh finished successfully"
