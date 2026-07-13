@@ -658,6 +658,7 @@ _CORE_API_EXPORTS = (
     "gather",
     "cmp",
     "make_ptr",
+    "allocate",
     "recast_ptr",
     "make_shape",
     "make_coord",

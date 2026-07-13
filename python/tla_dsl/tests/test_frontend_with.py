@@ -277,10 +277,7 @@ def vec_vector_ssa_kernel(lhs: tla.Tensor, rhs: tla.Tensor, dst: tla.Tensor) -> 
 
 @tla.kernel
 def chained_vector_vector_then_scalar_kernel() -> None:
-    allocator = tla.utils.LocalmemAllocator()
-
-    ptr = allocator.allocate(64 * 4, 32, tla.AddressSpace.ub)
-    f32_ptr = tla.recast_ptr(ptr, dtype=tla.Float32)
+    f32_ptr = tla.allocate(64, tla.Float32, tla.AddressSpace.ub, 32)
 
     shape = tla.make_shape(64)
     stride = tla.make_stride(1)

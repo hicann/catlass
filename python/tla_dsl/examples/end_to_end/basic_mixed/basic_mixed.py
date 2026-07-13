@@ -49,25 +49,15 @@ def basic_mixed(
 
     fix_done = tla.cross_flag("fix_done", tla.arch.FIX, tla.arch.VECTOR)
 
-    allocator = tla.utils.LocalmemAllocator()
+    l1a_ptr = tla.allocate(L1_STAGE_BYTES // 4, tla.Float32, tla.AddressSpace.l1, 512)
+    l1b_ptr = tla.allocate(L1_STAGE_BYTES // 4, tla.Float32, tla.AddressSpace.l1, 512)
+    l0a_ptr = tla.allocate(L0A_BYTES // 4, tla.Float32, tla.AddressSpace.l0a, 512)
+    l0b_ptr = tla.allocate(L0B_BYTES // 4, tla.Float32, tla.AddressSpace.l0b, 512)
+    l0c_ptr = tla.allocate(L0C_BYTES // 4, tla.Float32, tla.AddressSpace.l0c, 512)
 
-    l1a_ptr = allocator.allocate(L1_STAGE_BYTES, 512, tla.AddressSpace.l1)
-    l1a_ptr = tla.recast_ptr(l1a_ptr, dtype=tla.Float32)
-    l1b_ptr = allocator.allocate(L1_STAGE_BYTES, 512, tla.AddressSpace.l1)
-    l1b_ptr = tla.recast_ptr(l1b_ptr, dtype=tla.Float32)
-    l0a_ptr = allocator.allocate(L0A_BYTES, 512, tla.AddressSpace.l0a)
-    l0a_ptr = tla.recast_ptr(l0a_ptr, dtype=tla.Float32)
-    l0b_ptr = allocator.allocate(L0B_BYTES, 512, tla.AddressSpace.l0b)
-    l0b_ptr = tla.recast_ptr(l0b_ptr, dtype=tla.Float32)
-    l0c_ptr = allocator.allocate(L0C_BYTES, 512, tla.AddressSpace.l0c)
-    l0c_ptr = tla.recast_ptr(l0c_ptr, dtype=tla.Float32)
-
-    c_ub_ptr = allocator.allocate(UB_TILE_BYTES, 256, tla.AddressSpace.ub)
-    c_ub_ptr = tla.recast_ptr(c_ub_ptr, dtype=tla.Float32)
-    addend_ub_ptr = allocator.allocate(UB_TILE_BYTES, 256, tla.AddressSpace.ub)
-    addend_ub_ptr = tla.recast_ptr(addend_ub_ptr, dtype=tla.Float32)
-    result_ub_ptr = allocator.allocate(UB_TILE_BYTES, 256, tla.AddressSpace.ub)
-    result_ub_ptr = tla.recast_ptr(result_ub_ptr, dtype=tla.Float32)
+    c_ub_ptr = tla.allocate(UB_TILE_BYTES // 4, tla.Float32, tla.AddressSpace.ub, 256)
+    addend_ub_ptr = tla.allocate(UB_TILE_BYTES // 4, tla.Float32, tla.AddressSpace.ub, 256)
+    result_ub_ptr = tla.allocate(UB_TILE_BYTES // 4, tla.Float32, tla.AddressSpace.ub, 256)
 
     with tla.cube():
         gm_a = tla.tile_view(lhs, tla.make_shape(M_DIM, K_DIM), tla.make_coord(0, 0))

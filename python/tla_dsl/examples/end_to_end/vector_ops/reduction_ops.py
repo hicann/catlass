@@ -19,18 +19,10 @@ _REDUCE_OP = tla.ReductionOp.ADD
 def reduction_op(mem_x: tla.Tensor, mem_z: tla.Tensor) -> None:
     loaded = tla.flag("loaded", tla.arch.MTE2, tla.arch.VECTOR)
     done = tla.flag("done", tla.arch.VECTOR, tla.arch.MTE3)
-    allocator = tla.utils.LocalmemAllocator()
-
     x_gm = tla.tile_view(mem_x, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
     z_gm = tla.tile_view(mem_z, tla.make_shape(1), tla.make_coord(0))
-    x_ptr = tla.recast_ptr(
-        allocator.allocate(VECTOR_ELE * ELEMENT_BYTES, 256, tla.AddressSpace.ub),
-        dtype=tla.Float32,
-    )
-    z_ptr = tla.recast_ptr(
-        allocator.allocate(ELEMENT_BYTES, 256, tla.AddressSpace.ub),
-        dtype=tla.Float32,
-    )
+    x_ptr = tla.allocate(VECTOR_ELE, tla.Float32, tla.AddressSpace.ub, 256)
+    z_ptr = tla.allocate(1, tla.Float32, tla.AddressSpace.ub, 256)
     x_ub = tla.make_tensor_like(x_ptr, x_gm, tla.arch.RowMajor)
     z_ub = tla.make_tensor_like(z_ptr, z_gm, tla.arch.RowMajor)
 

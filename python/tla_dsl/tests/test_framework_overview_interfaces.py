@@ -263,6 +263,25 @@ def test_interface_localmem_allocator_allocate() -> None:
     assert "<i8, l0c, 256>" in mlir
 
 
+@tla.kernel
+def _kernel_allocate_typed_ptr() -> None:
+    _ = tla.allocate((16, 16), tla.Float16, tla.AddressSpace.l1, 512)
+    _ = tla.allocate(128, tla.Float32, tla.AddressSpace.ub, 256)
+    _ = tla.allocate(((2, 4), 8), tla.Int16, tla.AddressSpace.l0c, 128)
+
+
+def test_interface_allocate_typed_ptr() -> None:
+    """tla.allocate emits typed alloc_ptr directly, without tla.recast_ptr."""
+    mlir = _kernel_allocate_typed_ptr.dump_mlir()
+    assert mlir.count("tla.alloc_ptr") == 3
+    assert "tla.recast_ptr" not in mlir
+    assert "size_bytes = 512" in mlir
+    assert "size_bytes = 128" in mlir
+    assert "!tla.ptr<f16, l1, 512>" in mlir
+    assert "!tla.ptr<f32, ub, 256>" in mlir
+    assert "!tla.ptr<i16, l0c, 128>" in mlir
+
+
 # -----------------------------------------------------------------------------
 # 7. tile_view → tla.tile_view (+ tla.make_shape / tla.make_coord)
 #    make_tensor_like → tla.make_tensor_like (layoutTag StrAttr + result tensor type)

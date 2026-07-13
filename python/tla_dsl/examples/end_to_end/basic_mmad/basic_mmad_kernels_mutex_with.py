@@ -58,27 +58,17 @@ def basic_mmad_kernel(mem_a: tla.Tensor, mem_b: tla.Tensor, mem_c: tla.Tensor) -
 
     mutex_l0c  = tla.mutex(resource="l0c", id=8)
 
-    mem_allocator = tla.utils.LocalmemAllocator()
-    l1a0_ptr = mem_allocator.allocate(_elem_bytes(l1_tm * l1_tk, DTYPE_A), 512, tla.AddressSpace.l1)
-    l1a0_ptr = tla.recast_ptr(l1a0_ptr, dtype=DTYPE_A)
-    l1a1_ptr = mem_allocator.allocate(_elem_bytes(l1_tm * l1_tk, DTYPE_A), 512, tla.AddressSpace.l1)
-    l1a1_ptr = tla.recast_ptr(l1a1_ptr, dtype=DTYPE_A)
-    l1b0_ptr = mem_allocator.allocate(_elem_bytes(l1_tk * l1_tn, DTYPE_B), 512, tla.AddressSpace.l1)
-    l1b0_ptr = tla.recast_ptr(l1b0_ptr, dtype=DTYPE_B)
-    l1b1_ptr = mem_allocator.allocate(_elem_bytes(l1_tk * l1_tn, DTYPE_B), 512, tla.AddressSpace.l1)
-    l1b1_ptr = tla.recast_ptr(l1b1_ptr, dtype=DTYPE_B)
+    l1a0_ptr = tla.allocate((l1_tm, l1_tk), DTYPE_A, tla.AddressSpace.l1, 512)
+    l1a1_ptr = tla.allocate((l1_tm, l1_tk), DTYPE_A, tla.AddressSpace.l1, 512)
+    l1b0_ptr = tla.allocate((l1_tk, l1_tn), DTYPE_B, tla.AddressSpace.l1, 512)
+    l1b1_ptr = tla.allocate((l1_tk, l1_tn), DTYPE_B, tla.AddressSpace.l1, 512)
 
-    l0a0_ptr = mem_allocator.allocate(_elem_bytes(l0_tm * l0_tk, DTYPE_A), 512, tla.AddressSpace.l0a)
-    l0a0_ptr = tla.recast_ptr(l0a0_ptr, dtype=DTYPE_A)
-    l0a1_ptr = mem_allocator.allocate(_elem_bytes(l0_tm * l0_tk, DTYPE_A), 512, tla.AddressSpace.l0a)
-    l0a1_ptr = tla.recast_ptr(l0a1_ptr, dtype=DTYPE_A)
-    l0b0_ptr = mem_allocator.allocate(_elem_bytes(l0_tk * l0_tn, DTYPE_B), 512, tla.AddressSpace.l0b)
-    l0b0_ptr = tla.recast_ptr(l0b0_ptr, dtype=DTYPE_B)
-    l0b1_ptr = mem_allocator.allocate(_elem_bytes(l0_tk * l0_tn, DTYPE_B), 512, tla.AddressSpace.l0b)
-    l0b1_ptr = tla.recast_ptr(l0b1_ptr, dtype=DTYPE_B)
+    l0a0_ptr = tla.allocate((l0_tm, l0_tk), DTYPE_A, tla.AddressSpace.l0a, 512)
+    l0a1_ptr = tla.allocate((l0_tm, l0_tk), DTYPE_A, tla.AddressSpace.l0a, 512)
+    l0b0_ptr = tla.allocate((l0_tk, l0_tn), DTYPE_B, tla.AddressSpace.l0b, 512)
+    l0b1_ptr = tla.allocate((l0_tk, l0_tn), DTYPE_B, tla.AddressSpace.l0b, 512)
 
-    l0c_ptr = mem_allocator.allocate(_elem_bytes(l0_tm * l0_tn, DTYPE_C), 512, tla.AddressSpace.l0c)
-    l0c_ptr = tla.recast_ptr(l0c_ptr, dtype=DTYPE_C)
+    l0c_ptr = tla.allocate((l0_tm, l0_tn), DTYPE_C, tla.AddressSpace.l0c, 512)
 
     grid_m = (m + l1_tm - 1) // l1_tm
     grid_n = (n + l1_tn - 1) // l1_tn

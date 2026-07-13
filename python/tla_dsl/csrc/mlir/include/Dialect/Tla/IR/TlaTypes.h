@@ -6,6 +6,7 @@
 #include "mlir/IR/Types.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Support/Casting.h"
 
 #define GET_TYPEDEF_CLASSES
 #include "tla/Types.h.inc"
@@ -13,6 +14,20 @@
 namespace tla {
 ::mlir::LogicalResult getTlaIndexTreeLeaves(::llvm::ArrayRef<int64_t> tree,
                                             ::llvm::SmallVectorImpl<int64_t> &leaves);
+
+inline int64_t getByteSizeOfFixedWidthScalarType(::mlir::Type type) {
+  if (type.isBF16() || type.isF16())
+    return 2;
+  if (type.isF32())
+    return 4;
+  if (type.isF64())
+    return 8;
+  if (auto intTy = ::llvm::dyn_cast<::mlir::IntegerType>(type)) {
+    if (intTy.getWidth() % 8 == 0)
+      return intTy.getWidth() / 8;
+  }
+  return 0;
+}
 
 using coord = ::mlir::Type;
 using cross_flag = ::mlir::Type;

@@ -16,22 +16,6 @@ static FailureOr<uint64_t> alignUpCheckedU64(uint64_t value, uint64_t alignment)
   return value + addend;
 }
 
-static int64_t getByteSizeOfElementType(Type t) {
-  if (t.isBF16())
-    return 2;
-  if (t.isF16())
-    return 2;
-  if (t.isF32())
-    return 4;
-  if (t.isF64())
-    return 8;
-  if (auto it = dyn_cast<IntegerType>(t)) {
-    if (it.getWidth() % 8 == 0)
-      return it.getWidth() / 8;
-  }
-  return 0;
-}
-
 struct TlaAllocPtrOffsetState {
   llvm::StringMap<uint64_t> nextOffsetByAddrspace;
   llvm::DenseMap<mlir::Value, uint64_t> offsetByAllocResult;
@@ -127,7 +111,7 @@ public:
         auto dstPtrTy = dyn_cast<::tla::PtrType>(recast.getType());
         if (!dstPtrTy)
           continue;
-        int64_t elemB = getByteSizeOfElementType(dstPtrTy.getPointee());
+        int64_t elemB = getByteSizeOfFixedWidthScalarType(dstPtrTy.getPointee());
         if (elemB <= 0) {
           recast.emitError() << "recast_ptr result pointee is not a fixed-width scalar type for "
                                 "1D memref pointer_cast lowering";
@@ -189,14 +173,20 @@ public:
             signalPassFailure();
             return;
           }
-          if (ptrTy.getPointee() != IntegerType::get(ptrTy.getContext(), 8)) {
-            alloc->emitError()
-                << "tla-alloc-ptr-to-hivm-pointer-cast: alloc still in use and not i8-typed; add "
-                   "recast_ptr or use only tla.recast_ptr from alloc to fixed-width scalars";
+          int64_t elemB = getByteSizeOfFixedWidthScalarType(ptrTy.getPointee());
+          if (elemB <= 0) {
+            alloc->emitError() << "alloc_ptr result pointee is not a fixed-width scalar type for "
+                                  "1D memref pointer_cast lowering";
             signalPassFailure();
             return;
           }
           int64_t sizeB = alloc.getSizeBytesAttr().getInt();
+          if (sizeB % elemB != 0) {
+            alloc->emitError() << "alloc size_bytes is not a multiple of result pointee type size";
+            signalPassFailure();
+            return;
+          }
+          int64_t numElems = sizeB / elemB;
           MLIRContext *ctx = alloc->getContext();
           FailureOr<uint64_t> off = assignOrGetAllocPtrOffsetForPass(alloc, st);
           if (failed(off) || *off > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
@@ -205,10 +195,10 @@ public:
             return;
           }
           auto loc = alloc.getLoc();
-          auto i8 = IntegerType::get(ctx, 8);
-          FailureOr<MemRefType> mref = hivmMemref1D(ctx, sizeB, i8, ptrTy.getAddrspace());
+          FailureOr<MemRefType> mref =
+              hivmMemref1D(ctx, numElems, ptrTy.getPointee(), ptrTy.getAddrspace());
           if (failed(mref)) {
-            alloc->emitError() << "failed HIVM i8 memref for alloc";
+            alloc->emitError() << "failed HIVM memref for alloc_ptr lowering";
             signalPassFailure();
             return;
           }

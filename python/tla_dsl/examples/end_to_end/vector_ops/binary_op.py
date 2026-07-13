@@ -33,24 +33,13 @@ def binary_op(mem_x: tla.Tensor, mem_y: tla.Tensor, mem_z: tla.Tensor) -> None:
     ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.VECTOR)
     vec_done = tla.flag("vec_done", tla.arch.VECTOR, tla.arch.MTE3)
 
-    allocator = tla.utils.LocalmemAllocator()
-
     x_gm = tla.tile_view(mem_x, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
     y_gm = tla.tile_view(mem_y, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
     z_gm = tla.tile_view(mem_z, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
 
-    x_ub_ptr = allocator.allocate(
-        VECTOR_ELE * _KERNEL_ELEMENT_BYTES, 256, tla.AddressSpace.ub
-    )
-    y_ub_ptr = allocator.allocate(
-        VECTOR_ELE * _KERNEL_ELEMENT_BYTES, 256, tla.AddressSpace.ub
-    )
-    z_ub_ptr = allocator.allocate(
-        VECTOR_ELE * _KERNEL_ELEMENT_BYTES, 256, tla.AddressSpace.ub
-    )
-    x_ub_ptr = tla.recast_ptr(x_ub_ptr, dtype=_KERNEL_DTYPE)
-    y_ub_ptr = tla.recast_ptr(y_ub_ptr, dtype=_KERNEL_DTYPE)
-    z_ub_ptr = tla.recast_ptr(z_ub_ptr, dtype=_KERNEL_DTYPE)
+    x_ub_ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
+    y_ub_ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
+    z_ub_ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 256)
 
     x_ub = tla.make_tensor_like(x_ub_ptr, x_gm, tla.arch.RowMajor)
     y_ub = tla.make_tensor_like(y_ub_ptr, y_gm, tla.arch.RowMajor)

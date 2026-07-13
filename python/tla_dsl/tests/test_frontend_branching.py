@@ -94,11 +94,8 @@ def inline_if_static_true_lazy_kernel() -> None:
 @tla.kernel
 def pointer_conditional_kernel(mem_a: tla.Tensor) -> None:
     root = tla.tile_view(mem_a, tla.make_shape(16, 8), tla.make_coord(0, 0))
-    allocator = tla.utils.LocalmemAllocator()
-    ptr0 = allocator.allocate(16 * 4 * 2, 512, tla.AddressSpace.l1)
-    ptr0 = tla.recast_ptr(ptr0, dtype=tla.Float16)
-    ptr1 = allocator.allocate(16 * 4 * 2, 512, tla.AddressSpace.l1)
-    ptr1 = tla.recast_ptr(ptr1, dtype=tla.Float16)
+    ptr0 = tla.allocate((16, 4), tla.Float16, tla.AddressSpace.l1, 512)
+    ptr1 = tla.allocate((16, 4), tla.Float16, tla.AddressSpace.l1, 512)
     with tla.cube():
         loop_range = tla.range(0, 2, 1)
         for i in loop_range:
@@ -437,11 +434,8 @@ def statement_if_inside_region_kernel(limit: int) -> None:
 @tla.kernel
 def statement_if_carried_pointer_kernel(mem_a: tla.Tensor) -> None:
     root = tla.tile_view(mem_a, tla.make_shape(16, 8), tla.make_coord(0, 0))
-    allocator = tla.utils.LocalmemAllocator()
-    ptr0 = allocator.allocate(16 * 4 * 2, 512, tla.AddressSpace.l1)
-    ptr0 = tla.recast_ptr(ptr0, dtype=tla.Float16)
-    ptr1 = allocator.allocate(16 * 4 * 2, 512, tla.AddressSpace.l1)
-    ptr1 = tla.recast_ptr(ptr1, dtype=tla.Float16)
+    ptr0 = tla.allocate((16, 4), tla.Float16, tla.AddressSpace.l1, 512)
+    ptr1 = tla.allocate((16, 4), tla.Float16, tla.AddressSpace.l1, 512)
     with tla.cube():
         for i in tla.range(0, 2, 1):
             tile = tla.tile_view(root, tla.make_shape(16, 4), tla.make_coord(0, i))
@@ -457,11 +451,8 @@ def statement_if_carried_pointer_kernel(mem_a: tla.Tensor) -> None:
 @tla.kernel
 def statement_if_mixed_index_pointer_kernel(mem_a: tla.Tensor) -> None:
     root = tla.tile_view(mem_a, tla.make_shape(16, 8), tla.make_coord(0, 0))
-    allocator = tla.utils.LocalmemAllocator()
-    ptr0 = allocator.allocate(16 * 4 * 2, 512, tla.AddressSpace.l1)
-    ptr0 = tla.recast_ptr(ptr0, dtype=tla.Float16)
-    ptr1 = allocator.allocate(16 * 4 * 2, 512, tla.AddressSpace.l1)
-    ptr1 = tla.recast_ptr(ptr1, dtype=tla.Float16)
+    ptr0 = tla.allocate((16, 4), tla.Float16, tla.AddressSpace.l1, 512)
+    ptr1 = tla.allocate((16, 4), tla.Float16, tla.AddressSpace.l1, 512)
     with tla.cube():
         for i in tla.range(0, 2, 1):
             tile = tla.tile_view(root, tla.make_shape(16, 4), tla.make_coord(0, i))

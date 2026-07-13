@@ -24,9 +24,7 @@ def make_tensor_makeptr_kernel() -> None:
 @tla.kernel
 def make_tensor_default_coord_kernel(mem_in: tla.Tensor) -> None:
     tile = tla.tile_view(mem_in, tla.make_shape(16, 16), tla.make_coord(0, 0))
-    allocator = tla.utils.LocalmemAllocator()
-    ptr = allocator.allocate(16 * 16 * 4, 256, tla.AddressSpace.ub)
-    ptr = tla.recast_ptr(ptr, dtype=tla.Float32)
+    ptr = tla.allocate((16, 16), tla.Float32, tla.AddressSpace.ub, 256)
     # coord omitted: must default to a zero coord matching the rank-2 layout.
     local = tla.make_tensor(
         ptr, tla.make_layout(tla.make_shape(16, 16), tla.make_stride(16, 1))

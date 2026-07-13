@@ -62,8 +62,6 @@ def masked_binary(
     ub_loaded = tla.flag("ub_loaded", tla.arch.MTE2, tla.arch.VECTOR)
     vec_done = tla.flag("vec_done", tla.arch.VECTOR, tla.arch.MTE3)
 
-    allocator = tla.utils.LocalmemAllocator()
-
     a_gm = tla.tile_view(mem_a, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
     b_gm = tla.tile_view(mem_b, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
     radd_gm = tla.tile_view(mem_radd, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
@@ -72,13 +70,13 @@ def masked_binary(
     rdiv_gm = tla.tile_view(mem_rdiv, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
     rsel_gm = tla.tile_view(mem_rsel, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
 
-    a_ub = _make_ub_tensor(allocator, a_gm)
-    b_ub = _make_ub_tensor(allocator, b_gm)
-    radd_ub = _make_ub_tensor(allocator, radd_gm)
-    rsub_ub = _make_ub_tensor(allocator, rsub_gm)
-    rmul_ub = _make_ub_tensor(allocator, rmul_gm)
-    rdiv_ub = _make_ub_tensor(allocator, rdiv_gm)
-    rsel_ub = _make_ub_tensor(allocator, rsel_gm)
+    a_ub = _make_ub_tensor(a_gm)
+    b_ub = _make_ub_tensor(b_gm)
+    radd_ub = _make_ub_tensor(radd_gm)
+    rsub_ub = _make_ub_tensor(rsub_gm)
+    rmul_ub = _make_ub_tensor(rmul_gm)
+    rdiv_ub = _make_ub_tensor(rdiv_gm)
+    rsel_ub = _make_ub_tensor(rsel_gm)
 
     with tla.vector():
         tla.copy(a_ub, a_gm)
@@ -136,16 +134,12 @@ def masked_binary(
         tla.pipe_barrier(tla.pipes.ALL)
 
 
-def _make_ub_tensor(allocator: Any, like_tensor: Any) -> Any:
+def _make_ub_tensor(like_tensor: Any) -> Any:
     # Tight 32-byte alignment (one UB block): no per-buffer slack, so the partial
     # last chunk must be tail-masked (see kernel). 512/256 alignment is no longer
     # used here.
-    ptr = allocator.allocate(
-        VECTOR_ELE * _KERNEL_ELEMENT_BYTES, 32, tla.AddressSpace.ub
-    )
-    return tla.make_tensor_like(
-        tla.recast_ptr(ptr, dtype=_KERNEL_DTYPE), like_tensor, tla.arch.RowMajor
-    )
+    ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, 32)
+    return tla.make_tensor_like(ptr, like_tensor, tla.arch.RowMajor)
 
 
 def _chunk(tensor: Any, chunk_idx: Any) -> Any:

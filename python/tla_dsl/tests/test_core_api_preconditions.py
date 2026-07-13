@@ -137,6 +137,63 @@ def test_allocator_public_surface_does_not_expose_loc() -> None:
     assert "loc" not in inspect.signature(allocator.allocate).parameters
 
 
+def test_allocate_returns_typed_pointer_metadata() -> None:
+    with runtime_mod._eager_capture():
+        ptr = tla.allocate((2, 4), tla.Float16, tla.AddressSpace.l1, 512)
+        assert _category(ptr) == "pointer"
+        assert ptr.dtype is tla.Float16
+        assert ptr.value_type is tla.Float16
+        assert ptr.addrspace == AddressSpace.l1
+        assert ptr.alignment == 512
+        assert getattr(ptr, "_alloc_size_bytes") == 16
+
+
+def test_allocate_rejects_invalid_dtype() -> None:
+    with runtime_mod._eager_capture():
+        with pytest.raises(tla.TlaCoreAPIError, match="tla.allocate"):
+            tla.allocate(16, "f16", tla.AddressSpace.l1, 512)
+
+
+def test_allocate_rejects_bool_dtype() -> None:
+    with runtime_mod._eager_capture():
+        with pytest.raises(tla.TlaCoreAPIError, match="byte-addressable"):
+            tla.allocate(16, tla.Bool, tla.AddressSpace.l1, 512)
+
+
+def test_allocate_rejects_non_local_addrspace() -> None:
+    with runtime_mod._eager_capture():
+        with pytest.raises(tla.TlaCoreAPIError, match="tla.allocate"):
+            tla.allocate(16, tla.Float16, tla.AddressSpace.gm, 512)
+
+
+def test_allocate_rejects_invalid_alignment() -> None:
+    with runtime_mod._eager_capture():
+        with pytest.raises(tla.TlaCoreAPIError, match="byte_alignment"):
+            tla.allocate(16, tla.Float16, tla.AddressSpace.l1, 0)
+
+
+def test_allocate_rejects_non_positive_shape() -> None:
+    with runtime_mod._eager_capture():
+        with pytest.raises(tla.TlaCoreAPIError, match="strictly positive"):
+            tla.allocate((16, 0), tla.Float16, tla.AddressSpace.l1, 512)
+
+
+@tla.kernel
+def _bad_dynamic_allocate_shape(dim: tla.types.TlaIndex) -> None:
+    _ = tla.allocate(dim, tla.Float16, tla.AddressSpace.l1, 512)
+
+
+def test_allocate_rejects_dynamic_shape() -> None:
+    with pytest.raises(TlaLoweringError, match="static shape"):
+        _bad_dynamic_allocate_shape.dump_mlir(type_args=(4,))
+
+
+def test_allocate_rejects_size_overflow() -> None:
+    with runtime_mod._eager_capture():
+        with pytest.raises(TlaLoweringError, match="size_bytes"):
+            tla.allocate(2**63, tla.Float16, tla.AddressSpace.l1, 512)
+
+
 def test_cross_flag_requires_valid_mode() -> None:
     with runtime_mod._eager_capture():
         with pytest.raises(tla.TlaCoreAPIError, match="tla.cross_flag"):

@@ -40,16 +40,19 @@ mlir::LogicalResult AllocPtrOp::verify() {
   auto resTy = llvm::dyn_cast<PtrType>(getResult().getType());
   if (!resTy)
     return emitOpError("result must be !tla.ptr");
-  auto i8 = mlir::IntegerType::get(getContext(), 8);
-  if (resTy.getPointee() != i8)
-    return emitOpError("alloc_ptr requires !tla.ptr<i8, ...> result");
   if (resTy.getAlignment() == 0)
     return emitOpError("result pointer alignment must be positive");
   auto ms = resTy.getAddrspace();
   if (ms == AddressSpace::generic || ms == AddressSpace::gm)
     return emitOpError("alloc_ptr requires on-chip !tla.ptr (l1, l0a, l0b, l0c, ub)");
-  if (getSizeBytesAttr().getInt() <= 0)
+  int64_t sizeBytes = getSizeBytesAttr().getInt();
+  if (sizeBytes <= 0)
     return emitOpError("size_bytes must be positive");
+  int64_t elemBytes = getByteSizeOfFixedWidthScalarType(resTy.getPointee());
+  if (elemBytes <= 0)
+    return emitOpError("alloc_ptr pointee must be a fixed-width scalar type");
+  if (sizeBytes % elemBytes != 0)
+    return emitOpError("size_bytes must be a multiple of result pointee type size");
   return mlir::success();
 }
 

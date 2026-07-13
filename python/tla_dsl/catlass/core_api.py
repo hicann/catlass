@@ -2300,6 +2300,76 @@ def _require_dtype(op_name: str, name: str, value: Any, position: int) -> None:
     )
 
 
+def _require_byte_alignment(op_name: str, value: Any, position: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        _op_error(
+            op_name,
+            f"invalid argument 'byte_alignment' (position {position}): expected positive_int, "
+            f"got {_type_name(value)}",
+        )
+    return int(value)
+
+
+def _require_allocation_dtype(op_name: str, dtype: Any) -> tuple[type[Numeric], int]:
+    if (
+        not isinstance(dtype, type)
+        or not issubclass(dtype, Numeric)
+        or not getattr(dtype, "dtype", "")
+    ):
+        _op_error(
+            op_name,
+            f"invalid argument 'dtype' (position 1): expected concrete Numeric "
+            f"(e.g. tla.Float32), got {_type_name(dtype)}",
+        )
+    width = int(getattr(dtype, "width", 0) or 0)
+    if width <= 0 or width % 8 != 0:
+        _op_error(
+            op_name,
+            f"unsupported allocation dtype {dtype.dtype}; expected byte-addressable "
+            "fixed-width scalar Numeric",
+        )
+    element_bytes = dtype_size_bytes(str(dtype.dtype))
+    if element_bytes <= 0:
+        _op_error(
+            op_name,
+            f"unsupported allocation dtype {dtype.dtype}; expected byte-addressable "
+            "fixed-width scalar Numeric",
+        )
+    return dtype, element_bytes
+
+
+def _static_allocation_size_bytes(
+    op_name: str,
+    shape: ShapeLike,
+    dtype: type[Numeric],
+    element_bytes: int,
+) -> int:
+    _check_shape(shape)
+    num_elements = 1
+    for dim in _flatten_tla_tuple(shape):
+        dim_const = _const_int_value(dim)
+        if dim_const is None:
+            raise TlaLoweringError(
+                f"tla.{op_name} requires a static shape (compile-time constants); "
+                "dynamic shapes are not supported."
+            )
+        if dim_const <= 0:
+            _op_error(
+                op_name,
+                f"Expected size in shape to be strictly positive, but got {dim_const}",
+            )
+        num_elements *= int(dim_const)
+
+    size_bytes = num_elements * element_bytes
+    if size_bytes <= 0 or size_bytes > 9_223_372_036_854_775_807:
+        raise TlaLoweringError(
+            f"tla.{op_name} allocation size_bytes must be in [1, 2**63-1] "
+            f"for tla.alloc_ptr {{size_bytes : i64}}; got {size_bytes} "
+            f"for dtype {dtype.dtype}"
+        )
+    return size_bytes
+
+
 @dsl_user_op
 def make_shape(
     *components: IndexTree,
@@ -4326,6 +4396,50 @@ def arch_block_dim(*, loc: mlir_ir.Location | None = None) -> TlaIndex:
 
 
 @dsl_user_op
+def allocate(
+    shape: ShapeLike,
+    dtype: type[Numeric],
+    mem_scope: AddressSpace,
+    byte_alignment: int,
+    *,
+    loc: mlir_ir.Location | None = None,
+) -> PointerTypeHint:
+    """Allocate static on-chip scratch memory and return a typed ``!tla.ptr``.
+
+    ``shape`` is an element shape (or element count), not bytes. It must be fully
+    static; ``size_bytes`` is computed as ``prod(shape) * sizeof(dtype)`` and
+    stored on the resulting ``tla.alloc_ptr`` op.
+    """
+    _require_frontend_state("allocate")
+    dtype, element_bytes = _require_allocation_dtype("allocate", dtype)
+    align = _require_byte_alignment("allocate", byte_alignment, 3)
+    addr_token = _require_pointer_addrspace("allocate", mem_scope, 2)
+    if mem_scope in (AddressSpace.generic, AddressSpace.gm):
+        _op_error(
+            "allocate",
+            "invalid argument 'mem_scope' (position 2): expected on-chip AddressSpace "
+            "(l1, l0a, l0b, l0c, ub)",
+        )
+    size_bytes = _static_allocation_size_bytes(
+        "allocate", shape, dtype, element_bytes
+    )
+
+    ctx = loc.context if loc is not None else mlir_ir.Context.current
+    ptr_ty = PtrType.get(dtype.mlir_type(ctx), addr_token, align, context=ctx)
+    i64_ty = mlir_ir.IntegerType.get_signless(64, context=ctx)
+    op = mlir_ir.Operation.create(
+        "tla.alloc_ptr",
+        operands=[],
+        results=[ptr_ty],
+        attributes={
+            "size_bytes": mlir_ir.IntegerAttr.get(i64_ty, size_bytes),
+        },
+        loc=loc,
+    )
+    return _Pointer(op.results[0], alloc_size_bytes=size_bytes)
+
+
+@dsl_user_op
 def make_ptr(
     dtype: type[Numeric] | None,
     value: int | mlir_ir.Value,
@@ -4686,6 +4800,7 @@ __all__ = [
     "ReductionOp",
     "cmp",
     "make_ptr",
+    "allocate",
     "recast_ptr",
     "make_shape",
     "make_coord",

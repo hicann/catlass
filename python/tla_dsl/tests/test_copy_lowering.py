@@ -19,9 +19,7 @@ def _require_hivm_tla_compile() -> pathlib.Path:
 @tla.kernel
 def copy_gm_to_cbuf_kernel(mem_in: tla.Tensor) -> None:
     tile = tla.tile_view(mem_in, tla.make_shape(32, 32), tla.make_coord(1, 1))
-    allocator = tla.utils.LocalmemAllocator()
-    ptr = allocator.allocate(32 * 32 * 4, 512, tla.AddressSpace.l1)
-    ptr = tla.recast_ptr(ptr, dtype=tla.Float32)
+    ptr = tla.allocate((32, 32), tla.Float32, tla.AddressSpace.l1, 512)
     local = tla.make_tensor_like(ptr, tile, tla.arch.zN)
     with tla.cube():
         tla.copy(local, tile)

@@ -44,8 +44,6 @@ def multi_binary(
 
     block_idx = tla.arch.block_idx()
 
-    allocator = tla.utils.LocalmemAllocator()
-
     a_gm = tla.tile_view(mem_a, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
     b_gm = tla.tile_view(mem_b, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
     c_gm = tla.tile_view(mem_c, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
@@ -54,13 +52,13 @@ def multi_binary(
     t_gm = tla.tile_view(mem_t, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
     x_gm = tla.tile_view(mem_x, tla.make_shape(VECTOR_ELE), tla.make_coord(0))
 
-    a_ub = _make_ub_tensor(allocator, a_gm)
-    b_ub = _make_ub_tensor(allocator, b_gm)
-    c_ub = _make_ub_tensor(allocator, c_gm)
-    d_ub = _make_ub_tensor(allocator, d_gm)
-    e_ub = _make_ub_tensor(allocator, e_gm)
-    t_ub = _make_ub_tensor(allocator, t_gm)
-    x_ub = _make_ub_tensor(allocator, x_gm)
+    a_ub = _make_ub_tensor(a_gm)
+    b_ub = _make_ub_tensor(b_gm)
+    c_ub = _make_ub_tensor(c_gm)
+    d_ub = _make_ub_tensor(d_gm)
+    e_ub = _make_ub_tensor(e_gm)
+    t_ub = _make_ub_tensor(t_gm)
+    x_ub = _make_ub_tensor(x_gm)
 
     with tla.vector():
         tla.copy(a_ub, a_gm)
@@ -142,14 +140,10 @@ def multi_binary(
     tla.pipe_barrier(tla.pipes.ALL)
 
 
-def _make_ub_tensor(allocator: Any, like_tensor: Any) -> Any:
+def _make_ub_tensor(like_tensor: Any) -> Any:
     alignment = 512 if _KERNEL_ELEMENT_BYTES == 8 else 256
-    ptr = allocator.allocate(
-        VECTOR_ELE * _KERNEL_ELEMENT_BYTES, alignment, tla.AddressSpace.ub
-    )
-    return tla.make_tensor_like(
-        tla.recast_ptr(ptr, dtype=_KERNEL_DTYPE), like_tensor, tla.arch.RowMajor
-    )
+    ptr = tla.allocate(VECTOR_ELE, _KERNEL_DTYPE, tla.AddressSpace.ub, alignment)
+    return tla.make_tensor_like(ptr, like_tensor, tla.arch.RowMajor)
 
 
 def _chunk(tensor: Any, chunk_idx: Any) -> Any:

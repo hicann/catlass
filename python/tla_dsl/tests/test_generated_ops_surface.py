@@ -32,8 +32,7 @@ def _ops_surface_kernel(src: tla.Tensor, dst: tla.Tensor) -> None:
     coord = tla.make_coord(0, 0)
     src_tile = tla.tile_view(src, shape, coord)
     dst_tile = tla.tile_view(dst, shape, coord)
-    allocator = tla.utils.LocalmemAllocator()
-    local_ptr = allocator.allocate(1 * 16 * 2, 32, tla.AddressSpace.l1)
+    local_ptr = tla.allocate((1, 16), tla.Float16, tla.AddressSpace.l1, 32)
     _ = local_ptr
 
     tla.copy(src_tile, dst_tile)
@@ -126,6 +125,7 @@ def test_public_api_exports_representative_helpers() -> None:
     assert callable(tla.range_constexpr)
     assert callable(tla.arch.block_idx)
     assert callable(tla.utils.LocalmemAllocator)
+    assert callable(tla.allocate)
     assert callable(tla.recast_ptr)
     assert callable(tla.not_)
     assert callable(tla.and_)
