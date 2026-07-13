@@ -37,6 +37,34 @@ class LoadDist:
     DIST_BRC_B32 = "brc_b32"
 
 
+class StoreDist:
+    DIST_NORM = "norm"
+    DIST_BRC_B32 = "brc_b32"
+
+
+class StoreParams:
+    """Marker annotation for tensor tile store params."""
+
+    pass
+
+
+@dataclass
+class NormalStoreParams(StoreParams):
+    """Default aligned vector store."""
+
+    store_dist: str = StoreDist.DIST_NORM
+    post_mode: str = PostMode.POST_MODE_NORMAL
+    post_update_stride: int = 0
+
+
+@dataclass
+class UnalignStoreParams(StoreParams):
+    """Unaligned UB vector store (lowers with ``unaligned_ub_access``)."""
+
+    post_mode: str = PostMode.POST_MODE_NORMAL
+    post_update_stride: int = 0
+
+
 class LoadParams:
     """Marker annotation for tensor tile load params."""
 

@@ -833,11 +833,14 @@ def Tla_StoreOp : Tla_Op<"store", []> {
   let summary = "Store";
   let description = [{
     Register-fragment store marker on a tensor tile. An optional mask controls
-    which lanes are written (masked-out lanes are left untouched). Must be nested
-    inside a ``tla.vec.func`` region.
+    which lanes are written (masked-out lanes are left untouched). When
+    ``unaligned_ub_access`` is set, lowers to ``ave.hir.vstore`` with unaligned
+    UB access (``vstas``/``vstus`` inserted by the HIVMAVE pipeline).
+    Must be nested inside a ``tla.vec.func`` region.
   }];
   let arguments = (ins Tla_TensorType:$dest, Tla_TensorType:$source,
-                       Optional<Tla_MaskType>:$mask);
+                       Optional<Tla_MaskType>:$mask,
+                       OptionalAttr<UnitAttr>:$unaligned_ub_access);
   let assemblyFormat = [{
     $dest `,` $source (`mask` $mask^)? attr-dict `:` type($dest) `,` type($source)
     (`mask` qualified(type($mask))^)?

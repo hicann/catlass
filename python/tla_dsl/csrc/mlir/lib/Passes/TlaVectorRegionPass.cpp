@@ -1401,21 +1401,26 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b,
       return failure();
     Value zero = b.create<arith::ConstantIndexOp>(loc, 0);
     Value mask;
+    auto sourceTy = dyn_cast<VectorType>(source.getType());
+    if (!sourceTy)
+      return failure();
+    auto opCtx = deriveVecCtxForElement(sourceTy.getElementType());
+    if (failed(opCtx))
+      return failure();
     if (storeOp.getMask()) {
       mask = valueMap.lookup(storeOp.getMask());
       if (!mask)
         return failure();
     } else {
-      // The all-true predicate follows the stored vector's own lane count.
-      auto sourceTy = dyn_cast<VectorType>(source.getType());
-      if (!sourceTy)
-        return failure();
-      auto opCtx = deriveVecCtxForElement(sourceTy.getElementType());
-      if (failed(opCtx))
-        return failure();
       mask = createAvePgeMask(b, loc, opCtx->maskVecType, hivmave::PgePattern::ALL);
     }
-    b.create<hivmave::VFMaskedStoreOp>(loc, dest, ValueRange{zero}, mask, source);
+    if (storeOp.getUnalignedUbAccess().value_or(false)) {
+      auto store = b.create<hivmave::VFMaskedStoreOp>(loc, dest, ValueRange{zero}, mask, source);
+      store->setAttr(hivmave::UnalignedAttr::name,
+                     hivmave::UnalignedAttr::get(b.getContext()));
+    } else {
+      b.create<hivmave::VFMaskedStoreOp>(loc, dest, ValueRange{zero}, mask, source);
+    }
     return success();
   }
 

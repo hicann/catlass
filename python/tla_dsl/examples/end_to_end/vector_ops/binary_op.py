@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 import catlass as tla
-from catlass.params import LoadDist, NormalLoadParams, UnalignLoadParams
+from catlass.params import LoadDist, NormalLoadParams, UnalignLoadParams, NormalStoreParams, UnalignStoreParams
 
 from vector_op_harness import (
     DirectVectorOpConfig,
@@ -24,6 +24,7 @@ _KERNEL_ELEMENT_BYTES = 4
 _KERNEL_SHAPE = (VECTOR_ELE,)
 _BINARY_OP: Callable[[Any, Any], Any] | None = None
 _X_LOAD_PARAMS: NormalLoadParams | UnalignLoadParams = NormalLoadParams()
+_X_STORE_PARAMS: NormalStoreParams | UnalignStoreParams = NormalStoreParams()
 _X_TILE_ELE = 0
 _STORE_LOADED_X_ONLY = False
 
@@ -61,10 +62,11 @@ def binary_op(mem_x: tla.Tensor, mem_y: tla.Tensor, mem_z: tla.Tensor) -> None:
                 z_tile = tla.tile_view(z_ub, tla.make_shape(VL_ELE), tla.make_coord(i))
 
                 if _STORE_LOADED_X_ONLY:
-                    z_tile.store(x_tile.load(_X_LOAD_PARAMS))
+                    z_tile.store(x_tile.load(_X_LOAD_PARAMS), _X_STORE_PARAMS)
                 else:
                     z_tile.store(
-                        _BINARY_OP(x_tile.load(_X_LOAD_PARAMS), y_tile.load())
+                        _BINARY_OP(x_tile.load(_X_LOAD_PARAMS), y_tile.load()),
+                        _X_STORE_PARAMS,
                     )
 
         tla.set_flag(vec_done)
@@ -111,6 +113,7 @@ def _operator_specs() -> dict[str, dict[str, Any]]:
             "op": lambda lhs, rhs: lhs + rhs,
             "default_atol": 0,
             "x_load": UnalignLoadParams(),
+            "x_store": UnalignStoreParams(),
         },
         "add_brc_b32": {
             "op": lambda lhs, rhs: lhs + rhs,
@@ -154,7 +157,7 @@ def _set_kernel_config(
     op_name: str, dtype_name: str, shape: tuple[int, ...] | None = None
 ) -> tuple[type[Any], Any, float | int]:
     global VL_ELE, LOOPS, VECTOR_ELE, _KERNEL_DTYPE, _KERNEL_ELEMENT_BYTES
-    global _KERNEL_SHAPE, _BINARY_OP, _X_LOAD_PARAMS, _X_TILE_ELE, _STORE_LOADED_X_ONLY
+    global _KERNEL_SHAPE, _BINARY_OP, _X_LOAD_PARAMS, _X_STORE_PARAMS, _X_TILE_ELE, _STORE_LOADED_X_ONLY
     specs = _operator_specs()
     if op_name not in specs:
         choices = ", ".join(sorted(specs))
@@ -170,6 +173,7 @@ def _set_kernel_config(
     _KERNEL_ELEMENT_BYTES = config.element_bytes
     _BINARY_OP = spec["op"]
     _X_LOAD_PARAMS = spec.get("x_load", NormalLoadParams())
+    _X_STORE_PARAMS = spec.get("x_store", NormalStoreParams())
     _X_TILE_ELE = spec.get("x_tile_ele", 0)
     _STORE_LOADED_X_ONLY = spec.get("store_loaded_x_only", False)
     return config.tla_dtype, config.torch_dtype, config.default_sentinel

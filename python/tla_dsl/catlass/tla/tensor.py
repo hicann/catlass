@@ -162,13 +162,16 @@ class _Tensor(TensorABC):
     def store(
         self,
         value: Any,
+        params: Any | None = None,
         *,
         mask: Any | None = None,
         loc: mlir_ir.Location | None = None,
     ) -> None:
         """Store a vector SSA value into this tensor tile inside a tla.vec.func region.
 
-        An optional ``mask`` (a ``MaskSSA`` from ``tla.create_mask`` or
+        An optional ``params`` controls store mode: use ``NormalStoreParams()``
+        (the default) for aligned store, or ``UnalignStoreParams()`` for unaligned
+        UB access. An optional ``mask`` (a ``MaskSSA`` from ``tla.create_mask`` or
         ``tla.update_mask``) controls which lanes are written; masked-out lanes
         are left untouched. Only a ``MaskSSA`` is accepted (validated below); a
         ``mask`` here is typed ``Any`` to avoid a circular import of ``MaskSSA``.
@@ -178,16 +181,29 @@ class _Tensor(TensorABC):
             _require_category,
             _require_frontend_state,
         )
+        from ..execution_lowering import TlaLoweringError
+        from ..params import NormalStoreParams, StoreParams, UnalignStoreParams
 
         loc = _normalize_user_loc(loc)
         _require_category("store", "value", value, "vector_ssa", 1)
         if mask is not None:
             _require_category("store", "mask", mask, "mask_ssa", 2)
+        if params is None:
+            params = NormalStoreParams()
+        elif not isinstance(params, (NormalStoreParams, UnalignStoreParams)):
+            raise TlaLoweringError(
+                "store params must be NormalStoreParams or UnalignStoreParams, "
+                f"got {type(params).__name__}"
+            )
         _require_frontend_state("store")
         _runtime._require_enclosing_region("store", "vec.func")
         mask_val = _as_value(mask) if mask is not None else None
-        _tla_ops_gen.store(_as_value(self), _as_value(value), mask=mask_val, loc=loc)
-
+        store_kwargs: dict[str, Any] = {"loc": loc}
+        if isinstance(params, UnalignStoreParams):
+            store_kwargs["unaligned_ub_access"] = True
+        _tla_ops_gen.store(
+            _as_value(self), _as_value(value), mask=mask_val, **store_kwargs
+        )
 
 def _normalize_user_loc(loc: mlir_ir.Location | None) -> mlir_ir.Location | None:
     if loc is None and _runtime._current_frontend_state() is not None:

@@ -2404,7 +2404,7 @@ class StoreOp(_ods_ir.OpView):
 
   _ODS_REGIONS = (0, True)
 
-  def __init__(self, dest, source, *, mask=None, loc=None, ip=None):
+  def __init__(self, dest, source, *, mask=None, unaligned_ub_access=None, loc=None, ip=None):
     operands = []
     results = []
     attributes = {}
@@ -2413,6 +2413,8 @@ class StoreOp(_ods_ir.OpView):
     operands.append(_get_op_result_or_value(source))
     if mask is not None: operands.append(_get_op_result_or_value(mask))
     _ods_context = _ods_get_default_loc_context(loc)
+    if bool(unaligned_ub_access): attributes["unaligned_ub_access"] = _ods_ir.UnitAttr.get(
+      _ods_get_default_loc_context(loc))
     _ods_successors = None
     super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
 
@@ -2428,8 +2430,23 @@ class StoreOp(_ods_ir.OpView):
   def mask(self):
     return None if len(self.operation.operands) < 3 else self.operation.operands[2]
 
-def store(dest, source, *, mask=None, loc=None, ip=None) -> _ods_ir.Operation:
-  return _get_op_result_or_op_results(StoreOp(dest=dest, source=source, mask=mask, loc=loc, ip=ip))
+  @builtins.property
+  def unaligned_ub_access(self):
+    return "unaligned_ub_access" in self.operation.attributes
+
+  @unaligned_ub_access.setter
+  def unaligned_ub_access(self, value):
+    if bool(value):
+      self.operation.attributes["unaligned_ub_access"] = _ods_ir.UnitAttr.get()
+    elif "unaligned_ub_access" in self.operation.attributes:
+      del self.operation.attributes["unaligned_ub_access"]
+
+  @unaligned_ub_access.deleter
+  def unaligned_ub_access(self):
+    del self.operation.attributes["unaligned_ub_access"]
+
+def store(dest, source, *, mask=None, unaligned_ub_access=None, loc=None, ip=None) -> _ods_ir.Operation:
+  return _get_op_result_or_op_results(StoreOp(dest=dest, source=source, mask=mask, unaligned_ub_access=unaligned_ub_access, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
 class SubBlockIdxOp(_ods_ir.OpView):
