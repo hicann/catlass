@@ -2638,14 +2638,29 @@ def make_tensor(
             f"{coord_rank}, expected {shape_rank})"
         )
 
+    # Type trees spell dynamic leaves as ``None`` (``?`` in the ``!tla.tensor`` type);
+    # the dynamic SSA values themselves travel in the make_shape / make_stride /
+    # make_coord operands bundled into ``layout._layout_value`` / ``coord._coord_value``,
+    # so the type only needs to mark which leaves are dynamic - same approach as
+    # ``_format_tensor_type_descriptor`` (``tile_view``). The index trees above (which
+    # carry the concrete ``int`` / ``_IndexExpr`` leaf values) back the metadata below.
+    shape_type_tree = _components_to_type_tree(layout._shape._components)
+    stride_type_tree = _components_to_type_tree(layout._stride._components)
+    origin_type_tree = (
+        _components_to_type_tree(layout._origin_shape._components)
+        if layout._origin_shape is not None
+        else shape_type_tree
+    )
+    coord_type_tree = _components_to_type_tree(coord._components)
+
     result_desc = TlaTensorTypeDescriptor(
         layout=TlaLayoutDescriptor(
-            shape=TlaIndexTreeType("shape", shape_tree),
-            stride=TlaIndexTreeType("stride", stride_tree),
-            origin_shape=TlaIndexTreeType("shape", origin_tree),
+            shape=TlaIndexTreeType("shape", shape_type_tree),
+            stride=TlaIndexTreeType("stride", stride_type_tree),
+            origin_shape=TlaIndexTreeType("shape", origin_type_tree),
             layout_tag=layout._layout_tag,
         ),
-        coord=coord_tree,
+        coord=coord_type_tree,
         element_type=dtype,
         addrspace=addr,
         ptr_alignment=ptr_ty.alignment,
@@ -2659,7 +2674,22 @@ def make_tensor(
     out = op.results[0]
     _register_tla_tensor_type(out, result_desc)
     try:
-        _register_tla_tensor_metadata(out, result_desc.metadata())
+        # Metadata carries the concrete leaf values (``int`` / ``_IndexExpr``) so that
+        # downstream ops can do coord arithmetic on dynamic leaves; equivalent to
+        # ``result_desc.metadata()`` for the static fields but preserving ``_IndexExpr``
+        # for dynamic shape/stride/coord/origin (like ``tile_view`` does).
+        _register_tla_tensor_metadata(
+            out,
+            {
+                "shape": shape_tree,
+                "stride": stride_tree,
+                "coord": coord_tree,
+                "origin_shape": origin_tree,
+                "dtype": dtype,
+                "addrspace": addr,
+                "layout_tag": layout._layout_tag,
+            },
+        )
     except Exception:
         # Metadata property access falls back to type parsing when unavailable.
         pass

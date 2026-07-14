@@ -73,6 +73,39 @@ def test_make_tensor_rank1_default_coord_is_single_zero() -> None:
     assert "!tla.coord<0,0>" not in mlir
 
 
+def test_make_tensor_accepts_dynamic_shape_leaf() -> None:
+    """A dynamic shape/stride leaf (``_IndexExpr`` from a tla.range induction variable)
+    must be accepted, not rejected as index-type metadata.
+
+    Regression: ``make_tensor`` previously built its ``TlaIndexTreeType`` from the raw
+    index tree (which carries ``_IndexExpr`` for dynamic leaves) and failed with
+    ``TypeError: ... expects static int leaves or None for dynamic leaves; got _IndexExpr``.
+    The dynamic SSA value travels in the make_shape/make_stride operand; the tensor type
+    only spells the leaf as ``?`` (``None``), exactly like ``tile_view``.
+    """
+
+    @tla.kernel
+    def _dynamic_kernel() -> None:
+        ptr = tla.make_ptr(tla.Float32, 4096, mem_space=tla.AddressSpace.ub)
+        for i in tla.range(0, 8, 1):
+            local = tla.make_tensor(
+                ptr,
+                tla.make_layout(tla.make_shape(16, i), tla.make_stride(i, 1)),
+            )
+            _ = local
+
+    mlir = _dynamic_kernel.dump_mlir()
+    assert "tla.make_tensor" in mlir
+    # Dynamic leaf is spelled `?` in the shape/stride type, not a static int.
+    assert "!tla.shape<16,?>" in mlir
+    assert "!tla.stride<?,1>" in mlir
+    # The make_shape op carries the dynamic SSA value as an operand (a static leaf would
+    # be a nullary `tla.make_shape -> ...`); the dynamic value travels here, not in the type.
+    assert "tla.make_shape %" in mlir
+    assert "tla.make_stride %" in mlir
+
+
+
 # --- Preconditions ------------------------------------------------------------
 
 
