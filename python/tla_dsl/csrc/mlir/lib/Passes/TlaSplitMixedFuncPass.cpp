@@ -11,12 +11,10 @@
 #include "PassesCommon.h"
 #include "PassesInternal.h"
 
-#include "mlir/Dialect/SCF/IR/SCF.h"
-#include "mlir/IR/IRMapping.h"
-#include "llvm/ADT/SmallPtrSet.h"
-
 namespace tla {
 namespace {
+
+enum class SplitSide { AIC, AIV };
 
 static bool isMixedSplitCandidate(func::FuncOp funcOp) {
   if (funcOp.isDeclaration() || isPrivateSymbol(funcOp))
@@ -25,283 +23,139 @@ static bool isMixedSplitCandidate(func::FuncOp funcOp) {
   return coreType && coreType.getFuncCoreType() == hivm::TFuncCoreType::MIX;
 }
 
-struct MixedRegionTopology {
-  SmallVector<Operation *, 8> aicRoots;
-  SmallVector<Operation *, 8> aivRoots;
-};
-
-enum class SplitSide { AIC, AIV };
-
-static constexpr std::array<StringLiteral, 10> kAllowedLeafOpsOutsideMixedRegions = {
-    "tla.alloc_ptr",          "tla.recast_ptr", "tla.arch.block_idx", "tla.arch.block_dim",
-    "tla.arch.sub_block_idx", "tla.flag",       "tla.cross_flag",     "arith.constant", 
-    "hivm.hir.pointer_cast", "tla.hivm_memref_as_ptr"};
-
-static bool containsCubeRegion(Operation *op) {
-  if (isa<::tla::CubeOp>(op))
-    return true;
-  return op->walk([&](::tla::CubeOp) { return WalkResult::interrupt(); }).wasInterrupted();
+static bool isCoreRegionWrapper(Operation *op) {
+  return isa<::tla::CubeOp, ::tla::VectorOp>(op);
 }
 
-static bool containsVectorRegion(Operation *op) {
-  if (isa<::tla::VectorOp>(op))
-    return true;
-  return op->walk([&](::tla::VectorOp) { return WalkResult::interrupt(); }).wasInterrupted();
+static bool isNestedWithin(Operation *op, Operation *ancestor) {
+  for (Operation *current = op; current; current = current->getParentOp()) {
+    if (current == ancestor)
+      return true;
+  }
+  return false;
 }
 
-static bool isAllowedPipeBarrierOutsideMixedRegion(Operation *op) {
-  auto barrier = dyn_cast<::tla::PipeBarrierOp>(op);
-  return barrier && stringifyPipe(barrier.getPipe().getPipe()) == "all";
-}
-
-static bool isAllowedSpecialCaseOutsideMixedRegion(Operation *op) {
-  return isAllowedPipeBarrierOutsideMixedRegion(op);
-}
-
-static bool isAllowedLeafOutsideMixedRegion(Operation *op) {
-  StringRef name = op->getName().getStringRef();
-  if (llvm::is_contained(kAllowedLeafOpsOutsideMixedRegions, name))
-    return true;
-  return isAllowedSpecialCaseOutsideMixedRegion(op);
-}
-
-static LogicalResult validateAllowedOpsOutsideMixedRegions(Block &block);
-
-static LogicalResult validateAllowedOpOutsideMixedRegions(Operation *op) {
-  if (isa<::tla::CubeOp, ::tla::VectorOp>(op))
-    return success();
-  if (auto forOp = dyn_cast<scf::ForOp>(op))
-    return validateAllowedOpsOutsideMixedRegions(*forOp.getBody());
-  if (isAllowedLeafOutsideMixedRegion(op))
-    return success();
-
-  return op->emitOpError() << "is not allowed outside tla.cube or tla.vector in a mixed kernel";
-}
-
-static LogicalResult validateAllowedOpsOutsideMixedRegions(Block &block) {
-  for (Operation &op : block.without_terminator()) {
-    if (failed(validateAllowedOpOutsideMixedRegions(&op)))
-      return failure();
+static LogicalResult validateValueUsesWithinScope(Value value, Operation *scope) {
+  for (Operation *user : value.getUsers()) {
+    if (!isNestedWithin(user, scope)) {
+      return scope->emitOpError()
+             << "defines an SSA value that escapes its scope to operation '"
+             << user->getName().getStringRef() << "'";
+    }
   }
   return success();
 }
 
-static FailureOr<MixedRegionTopology> analyzeMixedRegionTopology(func::FuncOp funcOp) {
+static LogicalResult validateScopeValuesDoNotEscape(Operation *scope) {
+  LogicalResult result = success();
+  scope->walk([&](Operation *nested) {
+    for (Value value : nested->getResults()) {
+      if (failed(validateValueUsesWithinScope(value, scope))) {
+        result = failure();
+        return WalkResult::interrupt();
+      }
+    }
+    for (Region &region : nested->getRegions()) {
+      for (Block &block : region) {
+        for (BlockArgument argument : block.getArguments()) {
+          if (failed(validateValueUsesWithinScope(argument, scope))) {
+            result = failure();
+            return WalkResult::interrupt();
+          }
+        }
+      }
+    }
+    return WalkResult::advance();
+  });
+  return result;
+}
+
+static LogicalResult validateMixedFunction(func::FuncOp funcOp) {
   if (funcOp.getBody().empty())
+    return funcOp.emitOpError() << "mixed function must have a body";
+
+  bool hasCube = false;
+  bool hasVector = false;
+  LogicalResult result = success();
+  funcOp.walk([&](Operation *op) {
+    if (!isCoreRegionWrapper(op))
+      return WalkResult::advance();
+
+    hasCube |= isa<::tla::CubeOp>(op);
+    hasVector |= isa<::tla::VectorOp>(op);
+    for (Operation *parent = op->getParentOp(); parent && parent != funcOp.getOperation();
+         parent = parent->getParentOp()) {
+      if (isCoreRegionWrapper(parent)) {
+        result = op->emitOpError()
+                 << "tla.cube and tla.vector scopes must not be nested in a mixed kernel";
+        return WalkResult::interrupt();
+      }
+    }
+
+    if (failed(validateScopeValuesDoNotEscape(op))) {
+      result = failure();
+      return WalkResult::interrupt();
+    }
+    return WalkResult::advance();
+  });
+  if (failed(result))
     return failure();
 
-  Block &entry = funcOp.getBody().front();
-  SmallVector<Operation *, 8> aicRoots;
-  SmallVector<Operation *, 8> aivRoots;
-
-  for (Operation &op : entry.without_terminator()) {
-    if (containsCubeRegion(&op))
-      aicRoots.push_back(&op);
-    if (containsVectorRegion(&op))
-      aivRoots.push_back(&op);
+  if (!hasCube || !hasVector) {
+    return funcOp.emitOpError()
+           << "MIX function requires at least one tla.cube and one tla.vector scope";
   }
-
-  if (aicRoots.empty() || aivRoots.empty())
-    return failure();
-
-  return MixedRegionTopology{aicRoots, aivRoots};
+  return success();
 }
 
-static void collectReferencedValues(Operation *op, SmallVectorImpl<Value> &values) {
-  values.append(op->operand_begin(), op->operand_end());
-  for (Region &region : op->getRegions()) {
-    for (Block &block : region) {
-      for (Operation &nested : block)
-        collectReferencedValues(&nested, values);
-    }
-  }
-}
-
-static FailureOr<SmallVector<Operation *, 16>>
-computeOrderedTopLevelSlice(Block &entry, ArrayRef<Operation *> roots) {
-  SmallPtrSet<Operation *, 16> required;
-  SmallVector<Operation *, 16> worklist;
-  for (Operation *root : roots) {
-    if (required.insert(root).second)
-      worklist.push_back(root);
-  }
-
-  while (!worklist.empty()) {
-    Operation *current = worklist.pop_back_val();
-    SmallVector<Value> referencedValues;
-    collectReferencedValues(current, referencedValues);
-    for (Value value : referencedValues) {
-      if (auto blockArg = dyn_cast<BlockArgument>(value)) {
-        if (blockArg.getOwner() == &entry)
-          continue;
-        continue;
-      }
-
-      Operation *def = value.getDefiningOp();
-      if (!def)
-        continue;
-
-      Operation *topLevel = def;
-      while (topLevel && topLevel->getBlock() != &entry)
-        topLevel = topLevel->getParentOp();
-      if (!topLevel || topLevel->getBlock() != &entry)
-        return failure();
-      if (required.insert(topLevel).second)
-        worklist.push_back(topLevel);
-    }
-  }
-
-  SmallVector<Operation *, 16> ordered;
-  for (Operation &op : entry.without_terminator()) {
-    if (required.contains(&op))
-      ordered.push_back(&op);
-  }
-  return ordered;
-}
-
-static bool containsRegionForSide(Operation *op, SplitSide side) {
-  return side == SplitSide::AIC ? containsCubeRegion(op) : containsVectorRegion(op);
-}
-
-static bool isRegionWrapperForSide(Operation *op, SplitSide side) {
-  return side == SplitSide::AIC ? isa<::tla::CubeOp>(op) : isa<::tla::VectorOp>(op);
-}
-
-static FailureOr<SmallVector<Operation *, 16>>
-computeOrderedBlockSlice(Block &block, ArrayRef<Operation *> roots) {
-  SmallPtrSet<Operation *, 16> required;
-  SmallVector<Operation *, 16> worklist;
-  for (Operation *root : roots) {
-    if (required.insert(root).second)
-      worklist.push_back(root);
-  }
-
-  while (!worklist.empty()) {
-    Operation *current = worklist.pop_back_val();
-    SmallVector<Value> referencedValues;
-    collectReferencedValues(current, referencedValues);
-    for (Value value : referencedValues) {
-      if (auto blockArg = dyn_cast<BlockArgument>(value)) {
-        if (blockArg.getOwner() == &block)
-          continue;
-        continue;
-      }
-
-      Operation *def = value.getDefiningOp();
-      if (!def)
-        continue;
-
-      Operation *blockLocal = def;
-      while (blockLocal && blockLocal->getBlock() != &block)
-        blockLocal = blockLocal->getParentOp();
-      if (!blockLocal || blockLocal->getBlock() != &block)
-        continue;
-      if (required.insert(blockLocal).second)
-        worklist.push_back(blockLocal);
-    }
-  }
-
-  SmallVector<Operation *, 16> ordered;
-  for (Operation &op : block.without_terminator()) {
-    if (required.contains(&op))
-      ordered.push_back(&op);
-  }
-  return ordered;
-}
-
-static LogicalResult filterBlockForSide(Block &block, SplitSide side);
-
-static LogicalResult filterOperationRegionsForSide(Operation *op, SplitSide side) {
-  if (isRegionWrapperForSide(op, side))
-    return success();
-
-  for (Region &region : op->getRegions()) {
-    for (Block &nestedBlock : region) {
-      if (failed(filterBlockForSide(nestedBlock, side)))
-        return failure();
+static LogicalResult validateSplitSymbolNames(ModuleOp module, func::FuncOp funcOp) {
+  SymbolTable symbolTable(module);
+  for (StringRef suffix : {StringRef("_mix_aic"), StringRef("_mix_aiv")}) {
+    std::string splitName = (funcOp.getSymName() + suffix).str();
+    if (symbolTable.lookup(splitName)) {
+      return funcOp.emitOpError() << "cannot split mixed function because symbol @" << splitName
+                                  << " already exists";
     }
   }
   return success();
 }
 
-static LogicalResult filterBlockForSide(Block &block, SplitSide side) {
-  SmallVector<Operation *, 16> roots;
-  for (Operation &op : block.without_terminator()) {
-    if (containsRegionForSide(&op, side))
-      roots.push_back(&op);
-  }
-  if (roots.empty())
-    return success();
+static bool containsCubeRegion(func::FuncOp funcOp) {
+  return funcOp.walk([&](::tla::CubeOp) { return WalkResult::interrupt(); }).wasInterrupted();
+}
 
-  FailureOr<SmallVector<Operation *, 16>> ordered = computeOrderedBlockSlice(block, roots);
-  if (failed(ordered))
-    return failure();
+static bool containsVectorRegion(func::FuncOp funcOp) {
+  return funcOp.walk([&](::tla::VectorOp) { return WalkResult::interrupt(); }).wasInterrupted();
+}
 
-  SmallPtrSet<Operation *, 16> keep(ordered->begin(), ordered->end());
-  SmallVector<Operation *, 16> eraseList;
-  for (Operation &op : block.without_terminator()) {
-    if (!keep.contains(&op))
-      eraseList.push_back(&op);
+static void eraseOppositeScopes(func::FuncOp funcOp, SplitSide side) {
+  SmallVector<Operation *, 8> eraseList;
+  if (side == SplitSide::AIC) {
+    funcOp.walk([&](::tla::VectorOp vectorOp) { eraseList.push_back(vectorOp); });
+  } else {
+    funcOp.walk([&](::tla::CubeOp cubeOp) { eraseList.push_back(cubeOp); });
   }
   for (Operation *op : llvm::reverse(eraseList))
     op->erase();
-
-  for (Operation *op : *ordered) {
-    if (!op->getBlock())
-      continue;
-    if (failed(filterOperationRegionsForSide(op, side)))
-      return failure();
-  }
-  return success();
 }
 
-static bool isDroppableUnusedSplitHelper(Operation *op) {
-  StringRef name = op->getName().getStringRef();
-  return name == "tla.flag" || name == "tla.cross_flag" || name == "tla.alloc_ptr" ||
-         name == "tla.recast_ptr";
+static void eraseUnusedSplitFlags(func::FuncOp funcOp) {
+  SmallVector<Operation *, 8> eraseList;
+  funcOp.walk([&](::tla::FlagOp flagOp) {
+    if (flagOp->use_empty())
+      eraseList.push_back(flagOp);
+  });
+  for (Operation *op : eraseList)
+    op->erase();
 }
 
-static void eraseUnusedSplitHelpers(Block &entry) {
-  bool changed = true;
-  while (changed) {
-    changed = false;
-    for (Operation &op : llvm::make_early_inc_range(entry.without_terminator())) {
-      if (op.use_empty() && isDroppableUnusedSplitHelper(&op)) {
-        op.erase();
-        changed = true;
-      }
-    }
-  }
-}
+static func::FuncOp createSplitFunction(func::FuncOp source, StringRef newName,
+                                        SplitSide side) {
+  auto newFunc = cast<func::FuncOp>(source->clone());
+  newFunc.setSymName(newName);
 
-static void inlineFrontendVectorRegionWrappers(func::FuncOp funcOp) {
-  // Every tla.vector op is a frontend-authored wrapper region; inline it.
-  SmallVector<::tla::VectorOp, 4> wrappers;
-  funcOp.walk([&](::tla::VectorOp vectorOp) { wrappers.push_back(vectorOp); });
-
-  IRRewriter rewriter(funcOp.getContext());
-  for (::tla::VectorOp vectorOp : wrappers) {
-    if (!vectorOp || vectorOp.getBody().empty())
-      continue;
-    Block *body = &vectorOp.getBody().front();
-    rewriter.inlineBlockBefore(body, vectorOp->getBlock(), vectorOp->getIterator());
-    rewriter.eraseOp(vectorOp);
-  }
-}
-
-static FailureOr<func::FuncOp> createSplitFunctionLike(func::FuncOp source, StringRef newName,
-                                                       ArrayRef<Operation *> orderedOps,
-                                                       HivmCoreKind coreKind) {
   MLIRContext *ctx = source.getContext();
-  auto newType = source.getFunctionType();
-  auto newFunc = func::FuncOp::create(source.getLoc(), newName, newType);
-  for (NamedAttribute attr : source->getAttrs()) {
-    StringRef name = attr.getName().getValue();
-    if (name == SymbolTable::getSymbolAttrName() || name == "function_type")
-      continue;
-    newFunc->setAttr(attr.getName(), attr.getValue());
-  }
-
+  HivmCoreKind coreKind = side == SplitSide::AIC ? HivmCoreKind::AIC : HivmCoreKind::AIV;
   setRequiredHaccEntryAttrs(newFunc, ctx);
   setC310RegbaseTargetAttr(newFunc, ctx);
   newFunc->setAttr(hivm::TFuncCoreTypeAttr::name,
@@ -311,25 +165,22 @@ static FailureOr<func::FuncOp> createSplitFunctionLike(func::FuncOp source, Stri
   newFunc->setAttr(hivm::TPartOfMixAttr::name, UnitAttr::get(ctx));
   newFunc->setAttr(hivm::VFModeAttr::name, hivm::VFModeAttr::get(ctx, hivm::VFMode::SIMD));
 
-  Block *newEntry = newFunc.addEntryBlock();
-  IRMapping mapper;
-  OpBuilder builder(newEntry, newEntry->begin());
-  for (auto [oldArg, newArg] : llvm::zip_equal(source.getArguments(), newEntry->getArguments()))
-    mapper.map(oldArg, newArg);
-  SplitSide side = coreKind == HivmCoreKind::AIC ? SplitSide::AIC : SplitSide::AIV;
-  for (Operation *op : orderedOps) {
-    Operation *cloned = builder.clone(*op, mapper);
-    if (failed(filterOperationRegionsForSide(cloned, side))) {
-      newFunc.emitError()
-          << "frontend-declared mixed split could not isolate nested region ownership";
-      return failure();
-    }
-  }
-  if (side == SplitSide::AIV)
-    inlineFrontendVectorRegionWrappers(newFunc);
-  eraseUnusedSplitHelpers(*newEntry);
-  builder.create<func::ReturnOp>(source.getLoc());
+  eraseOppositeScopes(newFunc, side);
+  eraseUnusedSplitFlags(newFunc);
   return newFunc;
+}
+
+static LogicalResult validateSplitPostconditions(func::FuncOp source, func::FuncOp aicFunc,
+                                                 func::FuncOp aivFunc) {
+  if (containsVectorRegion(aicFunc) || !containsCubeRegion(aicFunc)) {
+    return source.emitOpError()
+           << "failed to prepare AIC split: expected cube scopes and no vector scopes";
+  }
+  if (containsCubeRegion(aivFunc) || !containsVectorRegion(aivFunc)) {
+    return source.emitOpError()
+           << "failed to prepare AIV split: expected vector scopes and no cube scopes";
+  }
+  return success();
 }
 
 class TlaSplitMixedFuncPass : public PassWrapper<TlaSplitMixedFuncPass, OperationPass<ModuleOp>> {
@@ -343,8 +194,8 @@ public:
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<func::FuncDialect, scf::SCFDialect, ::tla::TlaDialect, hacc::HACCDialect,
-                    hivm::HIVMDialect, hivm_regbaseintrins::HIVMRegbaseIntrinsDialect>();
+    registry.insert<func::FuncDialect, ::tla::TlaDialect, hacc::HACCDialect, hivm::HIVMDialect,
+                    hivm_regbaseintrins::HIVMRegbaseIntrinsDialect>();
   }
 
   void runOnOperation() override {
@@ -355,45 +206,34 @@ public:
         candidates.push_back(funcOp);
     }
 
+    // Validate every MIX function before modifying the module, so an invalid
+    // function cannot leave earlier candidates partially split.
     for (func::FuncOp funcOp : candidates) {
-      if (failed(validateAllowedOpsOutsideMixedRegions(funcOp.getBody().front()))) {
+      if (failed(validateMixedFunction(funcOp)) ||
+          failed(validateSplitSymbolNames(module, funcOp))) {
         signalPassFailure();
         return;
       }
+    }
 
-      FailureOr<MixedRegionTopology> topology = analyzeMixedRegionTopology(funcOp);
-      if (failed(topology)) {
-        funcOp.emitError()
-            << "frontend-declared mixed split requires at least one tla.cube and one tla.vector "
-               "region";
-        signalPassFailure();
-        return;
-      }
-      FailureOr<SmallVector<Operation *, 16>> aicOps =
-          computeOrderedTopLevelSlice(funcOp.getBody().front(), topology->aicRoots);
-      FailureOr<SmallVector<Operation *, 16>> aivOps =
-          computeOrderedTopLevelSlice(funcOp.getBody().front(), topology->aivRoots);
-      if (failed(aicOps) || failed(aivOps)) {
-        funcOp.emitError()
-            << "frontend-declared mixed split could not compute a valid top-level slice for split "
-               "functions";
+    for (func::FuncOp funcOp : candidates) {
+      std::string aicName = (funcOp.getSymName() + "_mix_aic").str();
+      std::string aivName = (funcOp.getSymName() + "_mix_aiv").str();
+      func::FuncOp aicFunc = createSplitFunction(funcOp, aicName, SplitSide::AIC);
+      func::FuncOp aivFunc = createSplitFunction(funcOp, aivName, SplitSide::AIV);
+
+      // Both detached clones must be valid before either is inserted and the
+      // source symbol is replaced.
+      if (failed(validateSplitPostconditions(funcOp, aicFunc, aivFunc))) {
+        aicFunc->destroy();
+        aivFunc->destroy();
         signalPassFailure();
         return;
       }
 
       OpBuilder builder(funcOp);
-      FailureOr<func::FuncOp> aicFunc =
-          createSplitFunctionLike(funcOp, (funcOp.getSymName() + "_mix_aic").str(), *aicOps,
-                                  HivmCoreKind::AIC);
-      FailureOr<func::FuncOp> aivFunc =
-          createSplitFunctionLike(funcOp, (funcOp.getSymName() + "_mix_aiv").str(), *aivOps,
-                                  HivmCoreKind::AIV);
-      if (failed(aicFunc) || failed(aivFunc)) {
-        signalPassFailure();
-        return;
-      }
-      builder.insert(*aicFunc);
-      builder.insert(*aivFunc);
+      builder.insert(aicFunc);
+      builder.insert(aivFunc);
       funcOp.erase();
     }
   }

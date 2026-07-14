@@ -45,7 +45,9 @@ def _require_hivm_tla_compile() -> pathlib.Path:
     return tla_compile
 
 
-def _run_tla_compile_ir_after_pass(mlir_text: str, pass_name: str) -> str:
+def _run_tla_compile_ir_after_pass(
+    mlir_text: str, pass_name: str, *, require_success: bool = False
+) -> str:
     tla_compile = _require_hivm_tla_compile()
     with tempfile.TemporaryDirectory() as tmpdir:
         input_path = pathlib.Path(tmpdir) / "input.mlir"
@@ -64,9 +66,31 @@ def _run_tla_compile_ir_after_pass(mlir_text: str, pass_name: str) -> str:
             text=True,
         )
         output = result.stdout + result.stderr
+        if require_success:
+            assert result.returncode == 0, output
         assert "IR Dump After" in output, output
         assert f"({pass_name})" in output, output
         return output
+
+
+
+def _extract_function(ir_dump: str, name: str) -> str:
+    marker = f"func.func @{name}("
+    start = ir_dump.index(marker)
+    next_function = ir_dump.find("\n  func.func @", start + len(marker))
+    module_end = ir_dump.find("\n}", start + len(marker))
+    ends = [position for position in (next_function, module_end) if position != -1]
+    assert ends, ir_dump[start:]
+    return ir_dump[start : min(ends)]
+
+
+def _dump_after_mixed_split(
+    kernel: object, *, type_args: tuple[object, ...] = ()
+) -> str:
+    mlir_text = kernel.dump_mlir(type_args=type_args)
+    return _run_tla_compile_ir_after_pass(
+        mlir_text, "tla-split-mixed-func", require_success=True
+    )
 
 
 def _mmad_tensor_args() -> tuple[tla.Tensor, tla.Tensor, tla.Tensor]:
@@ -112,6 +136,95 @@ def _cube_attr_kernel(mem_a: tla.Tensor, mem_b: tla.Tensor, mem_c: tla.Tensor) -
         tla.mmad(acc, lhs, rhs, init_c=False)
 
 
+@tla.kernel
+def _split_cube_only_kernel() -> None:
+    seed = tla.arch.block_idx()
+    value = seed + 7
+    with tla.cube():
+        tla.pipe_barrier(tla.pipes.CUBE)
+    tla.make_coord(value)
+
+
+@tla.kernel
+def _split_vector_only_kernel() -> None:
+    seed = tla.arch.block_idx()
+    value = seed + 8
+    with tla.vector():
+        tla.pipe_barrier(tla.pipes.MTE2)
+    tla.make_coord(value)
+
+
+@tla.kernel
+def _split_no_scope_kernel() -> None:
+    seed = tla.arch.block_idx()
+    value = seed + 9
+    tla.make_coord(value)
+
+
+@tla.kernel
+def _mixed_interleaved_scopes_kernel() -> None:
+    seed = tla.arch.block_idx()
+    before = seed + 101
+    with tla.cube():
+        tla.pipe_barrier(tla.pipes.CUBE)
+    between = before + 102
+    with tla.vector():
+        tla.pipe_barrier(tla.pipes.MTE2)
+    middle = between + 103
+    with tla.cube():
+        tla.pipe_barrier(tla.pipes.CUBE)
+    after = middle + 104
+    with tla.vector():
+        tla.pipe_barrier(tla.pipes.MTE2)
+    tail = after + 105
+    tla.make_coord(tail)
+
+
+@tla.kernel
+def _mixed_if_branches_kernel() -> None:
+    seed = tla.arch.block_idx()
+    before = seed + 201
+    branch_value = before
+    if before > 0:
+        branch_value = before + 202
+        with tla.cube():
+            tla.pipe_barrier(tla.pipes.CUBE)
+        branch_value = branch_value + 203
+    else:
+        branch_value = before + 204
+        with tla.vector():
+            tla.pipe_barrier(tla.pipes.MTE2)
+        branch_value = branch_value + 205
+    tail = branch_value + 206
+    tla.make_coord(tail)
+
+
+@tla.kernel
+def _mixed_for_kernel(limit: int) -> None:
+    state = 0
+    for index in tla.range(0, limit, 1):
+        state = index + 301
+        with tla.cube():
+            tla.pipe_barrier(tla.pipes.CUBE)
+        with tla.vector():
+            tla.pipe_barrier(tla.pipes.MTE2)
+    tla.make_coord(state)
+
+
+@tla.kernel
+def _mixed_while_kernel(limit: int) -> None:
+    index = 0
+    state = 0
+    while index < limit:
+        state = state + 401
+        with tla.cube():
+            tla.pipe_barrier(tla.pipes.CUBE)
+        with tla.vector():
+            tla.pipe_barrier(tla.pipes.MTE2)
+        index = index + 1
+    tla.make_coord(state)
+
+
 def test_cube_tla_compile_emits_minimal_hivm_attrs_after_tla_func_to_hacc() -> None:
     ta, tb, tc = _mmad_tensor_args()
     try:
@@ -128,3 +241,73 @@ def test_cube_tla_compile_emits_minimal_hivm_attrs_after_tla_func_to_hacc() -> N
     assert "hivm.module_core_type = #hivm.module_core_type<AIC>" in output
     assert "hacc.entry" in output
     assert "hacc.function_kind = #hacc.function_kind<DEVICE>" in output
+
+
+def test_non_mixed_functions_are_not_split() -> None:
+    for kernel, name in (
+        (_split_cube_only_kernel, "_split_cube_only_kernel"),
+        (_split_vector_only_kernel, "_split_vector_only_kernel"),
+        (_split_no_scope_kernel, "_split_no_scope_kernel"),
+    ):
+        output = _dump_after_mixed_split(kernel)
+        assert f"func.func @{name}(" in output
+        assert f"@{name}_mix_aic" not in output
+        assert f"@{name}_mix_aiv" not in output
+
+
+def test_mixed_split_preserves_interleaved_scopes_and_all_scalar_operations() -> None:
+    output = _dump_after_mixed_split(_mixed_interleaved_scopes_kernel)
+    aic = _extract_function(output, "_mixed_interleaved_scopes_kernel_mix_aic")
+    aiv = _extract_function(output, "_mixed_interleaved_scopes_kernel_mix_aiv")
+
+    assert aic.count("tla.cube") == 2
+    assert "tla.vector" not in aic
+    assert aiv.count("tla.vector") == 2
+    assert "tla.cube" not in aiv
+    for marker in (101, 102, 103, 104, 105):
+        assert f"arith.constant {marker}" in aic
+        assert f"arith.constant {marker}" in aiv
+    assert aic.count("arith.addi") == 5
+    assert aiv.count("arith.addi") == 5
+
+
+def test_mixed_split_preserves_if_and_scalar_logic_in_opposite_scope_branch() -> None:
+    output = _dump_after_mixed_split(_mixed_if_branches_kernel)
+    aic = _extract_function(output, "_mixed_if_branches_kernel_mix_aic")
+    aiv = _extract_function(output, "_mixed_if_branches_kernel_mix_aiv")
+
+    assert aic.count("scf.if") == 1
+    assert aiv.count("scf.if") == 1
+    assert aic.count("scf.yield") == 2
+    assert aiv.count("scf.yield") == 2
+    assert aic.count("tla.cube") == 1
+    assert "tla.vector" not in aic
+    assert aiv.count("tla.vector") == 1
+    assert "tla.cube" not in aiv
+    for marker in (201, 202, 203, 204, 205, 206):
+        assert f"arith.constant {marker}" in aic
+        assert f"arith.constant {marker}" in aiv
+
+
+@pytest.mark.parametrize(
+    ("kernel", "name", "control_flow"),
+    (
+        (_mixed_for_kernel, "_mixed_for_kernel", "scf.for"),
+        (_mixed_while_kernel, "_mixed_while_kernel", "scf.while"),
+    ),
+)
+def test_mixed_split_preserves_loop_carried_control_flow(
+    kernel: object, name: str, control_flow: str
+) -> None:
+    output = _dump_after_mixed_split(kernel, type_args=(4,))
+    aic = _extract_function(output, f"{name}_mix_aic")
+    aiv = _extract_function(output, f"{name}_mix_aiv")
+
+    assert control_flow in aic
+    assert control_flow in aiv
+    assert "scf.yield" in aic
+    assert "scf.yield" in aiv
+    assert aic.count("tla.cube") == 1
+    assert "tla.vector" not in aic
+    assert aiv.count("tla.vector") == 1
+    assert "tla.cube" not in aiv
