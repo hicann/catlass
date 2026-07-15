@@ -739,54 +739,6 @@ public:
       return;
     }
 
-    // Stage 1.5: lower tla.tensor_ptr to its source's backing pointer/memref. After
-    // descriptor derivation every tensor value has a TensorDescriptor whose `base` is
-    // the underlying !tla.ptr (make_tensor*) or memref (kernel arg / memref-backed
-    // tile_view). tensor_ptr is replaced by that base (already a !tla.ptr) or by a
-    // hivm_memref_as_ptr wrapping a flattened 1-D view of the base memref. Must run
-    // before copy / subview materialization, which look through ptr_add to a
-    // hivm_memref_as_ptr-backed base.
-    {
-      SmallVector<::tla::TensorPtrOp, 8> tensorPtrOps;
-      module.walk([&](::tla::TensorPtrOp op) { tensorPtrOps.push_back(op); });
-      for (::tla::TensorPtrOp op : tensorPtrOps) {
-        if (!op || !op->getBlock() || llvm::is_contained(toErase, op.getOperation()))
-          continue;
-        Value src = op.getSrc();
-        Value base;
-        if (isa<MemRefType>(src.getType())) {
-          base = src;
-        } else {
-          auto it = tensorDescriptorByValue.find(src);
-          if (it == tensorDescriptorByValue.end()) {
-            op->emitError() << "tla.tensor_ptr source has no resolved base descriptor; "
-                               "extract ptr only from a tile_view/make_tensor/make_tensor_like "
-                               "result or a kernel-arg tensor";
-            signalPassFailure();
-            return;
-          }
-          base = it->second.base;
-        }
-        PatternRewriter rewriter(op.getContext());
-        rewriter.setInsertionPoint(op);
-        Value replacement;
-        if (isa<::tla::PtrType>(base.getType())) {
-          replacement = base;
-        } else if (isa<MemRefType>(base.getType())) {
-          Value flat = ::tla::flattenMemrefTo1D(rewriter, op.getLoc(), base);
-          replacement = rewriter.create<::tla::HivmMemrefAsPtrOp>(op.getLoc(),
-                                                                  op.getResult().getType(), flat);
-        } else {
-          op->emitError() << "tla.tensor_ptr source base has unsupported type "
-                          << base.getType();
-          signalPassFailure();
-          return;
-        }
-        op.getResult().replaceAllUsesWith(replacement);
-        ::tla::pushStagedErase(toErase, op.getOperation());
-      }
-    }
-
     // Stage 2: descriptor-driven tla.copy lowering (supported v1 routes -> runtime
     // calls; unsupported combinations stay as tla.copy and fail legalization later).
     LowerTlaCopyPattern lowerCopy(&getContext(), module, tensorDescriptorByValue, toErase,

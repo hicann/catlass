@@ -17,7 +17,7 @@ void registerTlaPasses() {
   registerTlaLowerBlockIdxPass();
   registerTlaVectorRegionPass();
   registerTlaLowerFlagBarrierToHivmPass();
-  registerTlaAllocPtrToHivmPointerCastPass();
+  registerTlaLowerPtrPass();
   registerTlaLowerMutexToStdPass();
   registerTlaCubeRegionPass();
   registerTlaFinalizeMemrefPass();
@@ -33,7 +33,7 @@ void buildTlaPipeline(OpPassManager &pm) {
   // and tags the module core type -- one structure-derived classification the
   // HACC machinery and the mixed-func split both consume.
   pm.addPass(createTlaLowerFuncPass());
-  pm.addPass(createTlaAllocPtrToHivmPointerCastPass());
+  pm.addPass(createTlaLowerPtrPass());
   pm.addPass(createTlaSplitMixedFuncPass());
   pm.addPass(createTlaVectorRegionPass());
   pm.addPass(createTlaCubeRegionPass());

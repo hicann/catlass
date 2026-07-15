@@ -3,7 +3,7 @@ add_library(TlaPasses
   TlaLowerFuncPass.cpp
   TlaSplitMixedFuncPass.cpp
   TlaLowerBlockIdxPass.cpp
-  TlaAllocPtrToHivmPointerCastPass.cpp
+  TlaLowerPtrPass.cpp
   TlaLowerMutexToStdPass.cpp
   TlaFinalizeMemrefPass.cpp
   TlaCubeRegionPass.cpp
@@ -35,9 +35,12 @@ target_link_libraries(TlaPasses
     MLIRFuncDialect
     MLIRArithDialect
     MLIRArithTransforms
+    MLIRControlFlowDialect
     MLIRAffineToStandard
     MLIRAffineTransforms
     MLIRSCFDialect
+    MLIRSCFTransforms
+    MLIRFuncTransforms
     MLIRDestinationStyleOpInterface
     MLIRLinalgDialect
     MLIRMathDialect

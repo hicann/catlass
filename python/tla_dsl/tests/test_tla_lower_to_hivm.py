@@ -225,6 +225,83 @@ def _mixed_while_kernel(limit: int) -> None:
     tla.make_coord(state)
 
 
+@tla.kernel
+def _pointer_if_kernel(mem_a: tla.Tensor) -> None:
+    root = tla.tile_view(mem_a, tla.make_shape(16, 8), tla.make_coord(0, 0))
+    ptr0 = tla.allocate((16, 4), tla.Float16, tla.AddressSpace.l1, 512)
+    ptr1 = tla.allocate((16, 4), tla.Float16, tla.AddressSpace.l1, 512)
+    with tla.cube():
+        for i in tla.range(0, 2, 1):
+            tile = tla.tile_view(root, tla.make_shape(16, 4), tla.make_coord(0, i))
+            selected = ptr0
+            tag = i
+            if i == 0:
+                selected = ptr1
+                tag = i + 1
+            else:
+                selected = ptr0
+                tag = i + 2
+            local = tla.make_tensor_like(selected, tile, tla.arch.zN)
+            tla.make_coord(tag, 0)
+            tla.copy(local, tile)
+
+
+@tla.kernel
+def _loop_carried_pointer_same_capacity_kernel(mem_a: tla.Tensor) -> None:
+    root = tla.tile_view(mem_a, tla.make_shape(16, 4), tla.make_coord(0, 0))
+    ptr0 = tla.allocate((32, 4), tla.Float16, tla.AddressSpace.l1, 512)
+    ptr1 = tla.allocate((32, 4), tla.Float16, tla.AddressSpace.l1, 512)
+    selected = ptr0
+    with tla.cube():
+        for i in tla.range(0, 2, 1):
+            local = tla.make_tensor_like(selected, root, tla.arch.zN)
+            tla.copy(local, root)
+            if i == 0:
+                selected = ptr1
+
+
+@tla.kernel
+def _loop_carried_pointer_changed_capacity_kernel(mem_a: tla.Tensor) -> None:
+    root = tla.tile_view(mem_a, tla.make_shape(16, 4), tla.make_coord(0, 0))
+    ptr0 = tla.allocate((32, 4), tla.Float16, tla.AddressSpace.l1, 512)
+    ptr1 = tla.allocate((16, 4), tla.Float16, tla.AddressSpace.l1, 512)
+    selected = ptr0
+    with tla.cube():
+        for i in tla.range(0, 2, 1):
+            local = tla.make_tensor_like(selected, root, tla.arch.zN)
+            tla.copy(local, root)
+            if i == 0:
+                selected = ptr1
+
+
+@tla.kernel
+def _vector_pitched_tile_view_kernel() -> None:
+    ptr = tla.allocate((2, 128), tla.Float32, tla.AddressSpace.ub, 256)
+    parent = tla.make_tensor(
+        ptr,
+        tla.make_layout(tla.make_shape(2, 128), tla.make_stride(128, 1)),
+    )
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            chunk = tla.tile_view(parent, tla.make_shape(1, 64), tla.make_coord(1, 0))
+            value = chunk.load()
+            chunk.store(value)
+
+
+@tla.kernel
+def _vector_dynamic_pitched_tile_view_kernel(pitch: int) -> None:
+    ptr = tla.allocate((2, 128), tla.Float32, tla.AddressSpace.ub, 256)
+    parent = tla.make_tensor(
+        ptr,
+        tla.make_layout(tla.make_shape(2, pitch), tla.make_stride(pitch, 1)),
+    )
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            chunk = tla.tile_view(parent, tla.make_shape(1, 64), tla.make_coord(1, 0))
+            value = chunk.load()
+            chunk.store(value)
+
+
 def test_cube_tla_compile_emits_minimal_hivm_attrs_after_tla_func_to_hacc() -> None:
     ta, tb, tc = _mmad_tensor_args()
     try:
@@ -311,3 +388,78 @@ def test_mixed_split_preserves_loop_carried_control_flow(
     assert "tla.vector" not in aic
     assert aiv.count("tla.vector") == 1
     assert "tla.cube" not in aiv
+
+
+def test_pointer_if_mixed_results_compile_through_tla_lower_ptr() -> None:
+    with runtime_mod._eager_capture():
+        mem = tla.Tensor(
+            tla.make_shape(16, 8),
+            tla.Float16,
+            origin_shape=tla.make_shape(16, 8),
+        )
+    mlir_text = _pointer_if_kernel.dump_mlir(type_args=(mem,))
+    output = _run_tla_compile_ir_after_pass(
+        mlir_text, "tla-lower-ptr", require_success=True
+    )
+
+    assert "scf.if" in output
+    assert "-> (i64, index)" in output
+    assert "tla.inttoptr" in output
+    assert "tla.alloc_ptr" not in output
+
+
+@pytest.mark.parametrize(
+    ("kernel", "expected_storage_elements"),
+    (
+        (_loop_carried_pointer_same_capacity_kernel, 128),
+        (_loop_carried_pointer_changed_capacity_kernel, 64),
+    ),
+)
+def test_loop_carried_pointer_consumed_in_body_compiles_with_safe_capacity(
+    kernel: object, expected_storage_elements: int
+) -> None:
+    with runtime_mod._eager_capture():
+        mem = tla.Tensor(
+            tla.make_shape(16, 4),
+            tla.Float16,
+            origin_shape=tla.make_shape(16, 4),
+        )
+    mlir_text = kernel.dump_mlir(type_args=(mem,))
+    assert "scf.for" in mlir_text
+    assert "iter_args(" in mlir_text
+    assert "tla.make_tensor_like %arg" in mlir_text
+    assert "!tla.ptr<f16, l1, 512>" in mlir_text
+
+    output = _run_tla_compile_ir_after_pass(
+        mlir_text, "tla-cube-region", require_success=True
+    )
+    pointer_cast_lines = [
+        line for line in output.splitlines() if "hivm.hir.pointer_cast" in line
+    ]
+    expected_type = (
+        f"memref<{expected_storage_elements}xf16, "
+        "#hivm.address_space<cbuf>>"
+    )
+    assert any(expected_type in line for line in pointer_cast_lines), output
+
+
+def test_vector_tile_view_uses_static_parent_pitch_in_flat_offset() -> None:
+    mlir_text = _vector_pitched_tile_view_kernel.dump_mlir()
+    assert "!tla.shape<1,64>" in mlir_text
+    assert "!tla.stride<128,1>" in mlir_text
+
+    output = _run_tla_compile_ir_after_pass(
+        mlir_text, "tla-vector-region", require_success=True
+    )
+    assert "arith.constant 128 : index" in output
+
+
+def test_vector_tile_view_captures_dynamic_parent_pitch() -> None:
+    mlir_text = _vector_dynamic_pitched_tile_view_kernel.dump_mlir(type_args=(128,))
+    assert "!tla.stride<?,1>" in mlir_text
+    assert "tla.make_stride %" in mlir_text
+
+    output = _run_tla_compile_ir_after_pass(
+        mlir_text, "tla-vector-region", require_success=True
+    )
+    assert "arith.muli" in output

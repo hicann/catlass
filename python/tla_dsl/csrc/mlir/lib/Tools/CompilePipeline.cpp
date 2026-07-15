@@ -12,6 +12,7 @@
 #include "mlir/Conversion/MemRefToLLVM/MemRefToLLVM.h"
 #include "mlir/Conversion/Passes.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/DLTI/DLTI.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -797,8 +798,9 @@ static bool rewriteGMRawPointerABI(llvm::Module &module, const GMFunctionArgMap 
 namespace tla::tools {
 
 void registerTlaCompileDialectsAndTranslations(DialectRegistry &registry) {
-  registry.insert<arith::ArithDialect, mlir::DLTIDialect, func::FuncDialect, scf::SCFDialect,
-                  LLVM::LLVMDialect, ::mlir::memref::MemRefDialect, vector::VectorDialect,
+  registry.insert<arith::ArithDialect, cf::ControlFlowDialect, mlir::DLTIDialect,
+                  func::FuncDialect, scf::SCFDialect, LLVM::LLVMDialect,
+                  ::mlir::memref::MemRefDialect, vector::VectorDialect,
                   ::tla::TlaDialect>();
   registry.insert<hacc::HACCDialect, hivm::HIVMDialect, hivmave::AVEDialect,
                   hivm_regbaseintrins::HIVMRegbaseIntrinsDialect>();
@@ -817,6 +819,7 @@ void registerTlaCompileTranslationsAndInterfaces(DialectRegistry &registry) {
 
 void loadTlaCompileDialects(MLIRContext &context) {
   context.getOrLoadDialect<arith::ArithDialect>();
+  context.getOrLoadDialect<cf::ControlFlowDialect>();
   context.getOrLoadDialect<mlir::DLTIDialect>();
   context.getOrLoadDialect<func::FuncDialect>();
   context.getOrLoadDialect<scf::SCFDialect>();

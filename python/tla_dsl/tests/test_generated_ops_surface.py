@@ -76,7 +76,6 @@ def test_generated_binding_symbols_exist_for_wrapped_ops() -> None:
         "arch_block_idx",
         "arch_block_dim",
         "recast_ptr",
-        "hivm_memref_as_ptr",
         "adds",
         "subs",
         "muls",
@@ -94,6 +93,8 @@ def test_generated_binding_symbols_exist_for_wrapped_ops() -> None:
     )
     for symbol in required:
         assert hasattr(tla_ops_gen, symbol)
+    assert not hasattr(tla_ops_gen, "hivm_memref_as_ptr")
+    assert not hasattr(tla_ops_gen, "HivmMemrefAsPtrOp")
 
 
 def test_mask_logic_public_dispatch_emits_mask_ops() -> None:

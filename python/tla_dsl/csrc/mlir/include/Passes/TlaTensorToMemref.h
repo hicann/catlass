@@ -10,18 +10,15 @@
 // declared here rather than re-deriving the memref itself. See
 // tla-memref-cleanup.md for the full plan.
 //
-// Producer/consumer contract with the ptr-lowering domain: the `!tla.ptr` that
-// backs a `tla.make_tensor{,_like}` is produced as a `tla.hivm_memref_as_ptr`
-// (wrapping a `hivm.pointer_cast` over a 1-D memref) by the
-// `tla-alloc-ptr-to-hivm-pointer-cast` pass. The base-memref materializers in
-// this module consume that bridge. `hivmMemref1D` in
-// TlaAllocPtrToHivmPointerCastPass stays in the ptr-lowering domain and is
-// intentionally NOT part of this header.
+// Producer/consumer contract with the ptr-lowering domain: `tla-lower-ptr`
+// represents pointer SSA and structural control-flow carriers as i64 byte
+// addresses. It rematerializes `tla.inttoptr` only at
+// `tla.make_tensor{,_like}` boundaries. The base-memref materializers in this
+// module consume that boundary and build consumer-local memref descriptors.
 
 #include "Dialect/Tla/IR/TlaOps.h"   // ::tla::TileViewOp
 #include "Dialect/Tla/IR/TlaTypes.h" // ::AddressSpace, ::LayoutTag, getTlaIndexTreeLeaves
 
-#include "mlir/Dialect/SCF/IR/SCF.h" // scf::IfOp
 #include "mlir/IR/Block.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h" // mlir::ModuleOp
@@ -44,9 +41,14 @@
 
 namespace tla {
 
-/// Staged deletes for bridge casts / control-flow wrappers during lowering.
-/// `tla.alloc_ptr` offsets are assigned in `tla-alloc-ptr-to-hivm-pointer-cast`
-/// (always run before the region + finalize passes via `buildTlaPipeline`).
+/// Discardable metadata carried by lowered alloc addresses until tensor views
+/// have recovered the static allocation capacity. Removed by finalize.
+inline constexpr llvm::StringLiteral kAllocSizeBytesMetadataAttrName =
+    "tla.alloc_size_bytes";
+
+/// Staged deletes for temporary tensor materializations during lowering.
+/// `tla.alloc_ptr` offsets are assigned by `tla-lower-ptr`, which always runs
+/// before the region and finalize passes via `buildTlaPipeline`.
 /// Defined here (rather than forward-declared) so `TlaTensorMemrefLowering`'s
 /// tile-producer methods below have the complete type.
 struct AllocatorOffsetState {
@@ -269,10 +271,8 @@ mlir::FailureOr<TensorDescriptor> buildTileViewResultDescriptorFromParent(
     mlir::Value sh0, mlir::Value sh1, ConstantFactory getConstant);
 
 // ---------------------------------------------------------------------------
-// Base-memref materialization: turn a descriptor's `base` (a memref, or a
-// `!tla.ptr` bridged as `tla.hivm_memref_as_ptr`, possibly behind an
-// scf.if / UnrealizedConversionCast) into a concrete memref of the wanted type.
-// Bridge/ptr wrappers consumed along the way are queued into `toErase`.
+// Base-memref materialization: turn a descriptor base (a memref or an
+// address-backed `!tla.ptr`) into a concrete memref of the wanted type.
 // ---------------------------------------------------------------------------
 
 void pushStagedErase(llvm::SmallVectorImpl<mlir::Operation *> *toErase, mlir::Operation *op);
@@ -285,39 +285,20 @@ bool hasOnlyStagedResultUsers(mlir::Operation *op, llvm::ArrayRef<mlir::Operatio
 void stageDeadTileProducers(mlir::ModuleOp module,
                             llvm::SmallVectorImpl<mlir::Operation *> &toErase);
 
-/// If `ptrValue` came from `tla-alloc-ptr-to-hivm-pointer-cast`, return the
-/// static 1-D element count of its backing memref.
-mlir::FailureOr<int64_t> getStatic1DElementCountFromHivmPtrBridge(mlir::Value ptrValue);
-
 /// Wrap `desc.base` in an UnrealizedConversionCast to the bridged memref type
-/// (last-resort materialization when no ptr/memref unwrap applies).
+/// (last-resort materialization when the base is not already address- or memref-backed).
 mlir::Value createFallbackBaseMemrefCast(mlir::OpBuilder &builder, mlir::Location loc,
                                          const TensorDescriptor &desc);
 
-/// Flatten a (possibly multi-dimensional) contiguous memref to a rank-1 dynamic
-/// view over the same element storage (identity if already rank-1). Used to bridge
-/// a kernel-arg memref into the rank-1 form `tla.hivm_memref_as_ptr` expects when
-/// resolving a `tla.tensor_ptr` source.
-mlir::Value flattenMemrefTo1D(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value memref);
-
-/// Materialize a `!tla.ptr` value (expected: `tla.hivm_memref_as_ptr`, or a
-/// `tla.ptr_add` / `tla.tensor_ptr` chain over one) as a memref of `memrefType`,
-/// applying any accumulated `ptr_add` element offset. Emits a diagnostic on
-/// `diagnosticOp` on failure.
-mlir::FailureOr<mlir::Value> materializePtrValueAsMemref(mlir::OpBuilder &builder, mlir::Location loc,
-                                                         mlir::Value ptrValue,
-                                                         mlir::MemRefType memrefType,
-                                                         mlir::Operation *diagnosticOp);
-
-/// Rewrite an `scf.if` yielding a `!tla.ptr` into one yielding `memrefType`.
-mlir::FailureOr<mlir::Value> materializePtrIfAsMemref(mlir::OpBuilder &builder, mlir::Location loc,
-                                                      mlir::scf::IfOp ifOp,
-                                                      mlir::MemRefType memrefType,
-                                                      AllocatorOffsetState &allocatorState,
-                                                      mlir::Operation *diagnosticOp);
+/// Materialize the `tla.inttoptr` boundary produced by `tla-lower-ptr` as
+/// `memrefType`. `dynamicSizes` describes dynamic dimensions of `memrefType`.
+mlir::FailureOr<mlir::Value> materializePtrValueAsMemref(
+    mlir::OpBuilder &builder, mlir::Location loc, mlir::Value ptrValue,
+    mlir::MemRefType memrefType, mlir::Operation *diagnosticOp,
+    mlir::ValueRange dynamicSizes = {});
 
 /// Materialize `desc.base` as a concrete memref of `desc.bridgedBaseMemrefType`,
-/// unwrapping ptr/if/cast wrappers (queued into `allocatorState->toErase`).
+/// using the pointer address in the descriptor.
 mlir::FailureOr<mlir::Value> materializeDescriptorBaseMemref(mlir::OpBuilder &builder,
                                                              mlir::Location loc,
                                                              const TensorDescriptor &desc,
@@ -388,11 +369,8 @@ materializeTileViewMemref(mlir::PatternRewriter &rewriter, mlir::Location loc, m
                           ::tla::TileViewOp tileView, bool useVectorHelperType = false,
                           llvm::DenseMap<mlir::Value, mlir::Value> *loweredMemrefByValue = nullptr);
 
-/// Flat 1-D memref backing a `tla.make_tensor{,_like}` (unwrap the ptr bridge).
-mlir::FailureOr<mlir::Value> getMakeTensorLikeFlatMemref(mlir::Value tensor);
-
 /// Materialize the base memref a tensor/tile views into (handoff cache, ptr
-/// unwrap, tile-view recursion).
+/// materialization and tile-view recursion).
 mlir::FailureOr<mlir::Value>
 materializeBaseMemref(mlir::PatternRewriter &rewriter, mlir::Location loc, mlir::Value tensor,
                       llvm::DenseMap<mlir::Value, mlir::Value> *loweredMemrefByValue = nullptr);

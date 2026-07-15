@@ -13,6 +13,7 @@ target_link_libraries(TlaCompilePipeline
     MLIRSupport
     MLIRFuncDialect
     MLIRArithDialect
+    MLIRControlFlowDialect
     MLIRSCFDialect
     MLIRMemRefDialect
     MLIRMemRefTransforms

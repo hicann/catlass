@@ -828,6 +828,36 @@ static FailureOr<Value> createVectorScalarBinaryResult(OpBuilder &b, Location lo
                                   mask);
 }
 
+// Materialize the row-major pitch used to flatten a rank-2 tile_view inside
+// the outlined vector helper. Static pitches become constants. A dynamic pitch
+// must come from the root make_tensor's make_stride and is captured as a helper
+// scalar operand by collectVectorHelperScalarOperands.
+static FailureOr<Value> materializeRowMajorPitchInHelper(OpBuilder &b, Location loc,
+                                                          Value tensor,
+                                                          DenseMap<Value, Value> &valueMap) {
+  auto info = parseTensorInfo(tensor.getType());
+  if (failed(info) || info->strides.size() != 2 || info->strides[1] != 1)
+    return failure();
+  if (info->strides[0] != ShapedType::kDynamic)
+    return b.create<arith::ConstantIndexOp>(loc, info->strides[0]).getResult();
+
+  Value root = getFullTensorOf(tensor);
+  auto makeTensor = root.getDefiningOp<::tla::MakeTensorOp>();
+  if (!makeTensor)
+    return failure();
+  auto makeLayout = makeTensor.getLayout().getDefiningOp<::tla::MakeLayoutOp>();
+  if (!makeLayout)
+    return failure();
+  auto makeStride = makeLayout.getStride().getDefiningOp<::tla::MakeStrideOp>();
+  if (!makeStride || makeStride.getDynElems().size() != 1)
+    return failure();
+
+  Value mapped = lookupOrCloneScalarValue(b, makeStride.getDynElems().front(), valueMap);
+  if (!mapped || !mapped.getType().isIndex())
+    return failure();
+  return mapped;
+}
+
 // Per-iteration element offset of a tile_view chunk, expressed against the
 // helper's (cloned) index arithmetic. Handles both rank-1 and rank-2 coords.
 // For rank-2, computes flat offset = row * rowStride + col.
@@ -858,8 +888,9 @@ static FailureOr<Value> materializeCoordOffsetInHelper(OpBuilder &b, Location lo
     auto info = parseTensorInfo(tileView.getResult().getType());
     if (failed(info) || info->strides.size() != 2)
       return failure();
-    // Flattening row-major 2D -> 1D requires dense layout: stride[1]=1, stride[0]=shape[1].
-    if (info->strides[1] != 1 || info->strides[0] != info->shape[1])
+    // Flattening row-major 2D -> 1D: col-stride must be 1. Row-stride may be the
+    // parent row pitch (static or dynamic, e.g. nRound).
+    if (info->strides[1] != 1)
       return failure();
     auto makeCoord = coord.getDefiningOp<::tla::MakeCoordOp>();
     auto dynElems = makeCoord ? makeCoord.getDynElems() : ValueRange{};
@@ -877,8 +908,10 @@ static FailureOr<Value> materializeCoordOffsetInHelper(OpBuilder &b, Location lo
         coordVals.push_back(mapped);
       }
     }
-    Value rowStride = b.create<arith::ConstantIndexOp>(loc, info->strides[0]);
-    Value rowOffset = b.create<arith::MulIOp>(loc, coordVals[0], rowStride);
+    auto rowStrideOr = materializeRowMajorPitchInHelper(b, loc, tileView.getResult(), valueMap);
+    if (failed(rowStrideOr))
+      return failure();
+    Value rowOffset = b.create<arith::MulIOp>(loc, coordVals[0], *rowStrideOr);
     return b.create<arith::AddIOp>(loc, rowOffset, coordVals[1]).getResult();
   }
 
@@ -1651,6 +1684,30 @@ static void collectVectorHelperOperands(Block *block, SmallVectorImpl<Value> &op
   }
 }
 
+// Collect dynamic row pitches from root make_tensor operands. A pitch is
+// type metadata on tile_view results, so it is not otherwise a direct operand
+// of the outlined vec.func body.
+static void collectRootTensorStrideScalars(Value rootTensor, ::tla::VecFuncOp vecFuncOp,
+                                           SmallVectorImpl<Value> &scalars) {
+  auto makeTensor = rootTensor.getDefiningOp<::tla::MakeTensorOp>();
+  if (!makeTensor)
+    return;
+  auto makeLayout = makeTensor.getLayout().getDefiningOp<::tla::MakeLayoutOp>();
+  if (!makeLayout)
+    return;
+  auto makeStride = makeLayout.getStride().getDefiningOp<::tla::MakeStrideOp>();
+  if (!makeStride)
+    return;
+  for (Value value : makeStride.getDynElems()) {
+    if (!value.getType().isIndex())
+      continue;
+    Region *defRegion = value.getParentRegion();
+    if (defRegion && !vecFuncOp.getBody().isAncestor(defRegion) &&
+        !llvm::is_contained(scalars, value))
+      scalars.push_back(value);
+  }
+}
+
 // Collect unique scalar values used inside the region but defined outside it
 // (e.g. a sub_block_idx/block_idx computed at the top of the kernel, or a
 // vector-scalar RHS constant). Passing them into the helper avoids cloning float
@@ -1670,6 +1727,13 @@ static void collectVectorHelperScalarOperands(::tla::VecFuncOp vecFuncOp,
           !llvm::is_contained(scalars, operand))
         scalars.push_back(operand);
     }
+  });
+  vecFuncOp.walk([&](::tla::TileViewOp tileView) {
+    auto info = parseTensorInfo(tileView.getResult().getType());
+    if (succeeded(info) && info->strides.size() == 2 &&
+        info->strides[0] == ShapedType::kDynamic && info->strides[1] == 1)
+      collectRootTensorStrideScalars(getFullTensorOf(tileView.getResult()), vecFuncOp,
+                                     scalars);
   });
 }
 
@@ -1934,28 +1998,25 @@ public:
       if (failed(type))
         return rewriter.notifyMatchFailure(
             vecFuncOp, "failed to type UB memref for vector helper call");
-      // If the operand is a make_tensor/make_tensor_like whose ptr is a ptr_add /
-      // tensor_ptr, materialize the base memref WITH the element offset applied via the
-      // shared ptr resolver (materializePtrValueAsMemref). Otherwise prefer the
-      // zero-offset flat-memref lookup, which emits no extra IR.
+      // Materialize address-backed make_tensor operands at the call site.
       Value ptr;
       if (auto mtl = tensor.getDefiningOp<::tla::MakeTensorLikeOp>())
         ptr = mtl.getPtr();
       else if (auto mt = tensor.getDefiningOp<::tla::MakeTensorOp>())
         ptr = mt.getPtr();
       FailureOr<Value> base = failure();
-      if (ptr && (ptr.getDefiningOp<::tla::PtrAddOp>() ||
-                  ptr.getDefiningOp<::tla::TensorPtrOp>())) {
+      if (ptr) {
+        if (!ptr.getDefiningOp<::tla::IntToPtrOp>())
+          return rewriter.notifyMatchFailure(
+              vecFuncOp, "expected pointer lowered to tla.inttoptr boundary");
         base = materializePtrValueAsMemref(rewriter, vecFuncOp.getLoc(), ptr, *type,
                                            vecFuncOp.getOperation());
         if (failed(base))
           return rewriter.notifyMatchFailure(
-              vecFuncOp, "failed to materialize offset ptr base for vector helper call");
+              vecFuncOp, "failed to materialize address-backed vector helper operand");
       } else {
-        base = getMakeTensorLikeFlatMemref(tensor);
-        if (failed(base))
-          base = materializeBaseMemref(rewriter, vecFuncOp.getLoc(), tensor,
-                                       /*loweredMemrefByValue=*/nullptr);
+        base = materializeBaseMemref(rewriter, vecFuncOp.getLoc(), tensor,
+                                     /*loweredMemrefByValue=*/nullptr);
         if (failed(base))
           return rewriter.notifyMatchFailure(
               vecFuncOp, "failed to materialize UB memref for vector helper call");

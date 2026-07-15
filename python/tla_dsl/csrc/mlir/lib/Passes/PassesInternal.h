@@ -15,7 +15,7 @@ void registerTlaSplitMixedFuncPass();
 void registerTlaLowerBlockIdxPass();
 void registerTlaVectorRegionPass();
 void registerTlaLowerFlagBarrierToHivmPass();
-void registerTlaAllocPtrToHivmPointerCastPass();
+void registerTlaLowerPtrPass();
 void registerTlaLowerMutexToStdPass();
 void registerTlaCubeRegionPass();
 void registerTlaFinalizeMemrefPass();

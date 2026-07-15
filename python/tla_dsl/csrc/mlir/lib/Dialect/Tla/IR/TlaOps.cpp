@@ -56,17 +56,6 @@ mlir::LogicalResult AllocPtrOp::verify() {
   return mlir::success();
 }
 
-mlir::LogicalResult HivmMemrefAsPtrOp::verify() {
-  auto mr = mlir::dyn_cast<mlir::MemRefType>(getMemref().getType());
-  if (!mr)
-    return emitOpError("operand must be a memref");
-  if (mr.getRank() != 1)
-    return emitOpError("expected rank-1 memref (HIVM pointer_cast lowering)");
-  if (!mlir::isa<PtrType>(getResult().getType()))
-    return emitOpError("result must be !tla.ptr");
-  return mlir::success();
-}
-
 mlir::LogicalResult TensorPtrOp::verify() {
   auto resTy = mlir::dyn_cast<PtrType>(getPtr().getType());
   if (!resTy)

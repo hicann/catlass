@@ -149,7 +149,12 @@ def Tla_PtrAddressSpaceAttr : Tla_EnumAttr<"PtrAddressSpace", "ptr_address_space
 
 
 def Tla_PtrType : TypeDef<TlaDialect, "Ptr", []> {
-  let summary = "Pointer value (pointee type, address space, element alignment in bytes).";
+  let summary = "First-class pointer SSA value (pointee, address space, alignment).";
+  let description = [{
+    A logical pointer that can flow through function calls, branches, and SCF
+    region arguments/results like any other SSA value. ``tla-lower-ptr`` converts
+    structural pointer carriers atomically to ``i64`` byte addresses.
+  }];
   let mnemonic = "ptr";
   let parameters = (ins
     TypeParameter<"::mlir::Type", "Logical pointee / value element type.">:$pointee,
@@ -408,9 +413,10 @@ def Tla_SubBlockIdxOp : Tla_Op<"arch.sub_block_idx", [Pure]> {
 def Tla_IntToPtrOp : Tla_Op<"inttoptr", [Pure]> {
   let summary = "Integer SSA to tla.ptr (``tla.inttoptr`` parity)";
   let description = [{
-    Reinterprets the bit pattern of an integer-like SSA value as a pointer of the
-    given ``!tla.ptr`` result type. This op is carried in Tla IR for frontend parity;
-    lowering to downstream representations is not part of the TlaIR emission path.
+    Reinterprets an integer-like SSA address as the given ``!tla.ptr`` type.
+    ``tla-lower-ptr`` normally converts it back to an ``i64`` byte address; an
+    instance may remain temporarily at a ``tla.make_tensor{,_like}`` boundary so
+    tensor lowering can construct a consumer-local memref descriptor.
   }];
   let arguments = (ins AnyType:$addr);
   let results = (outs Tla_PtrType:$ptr);
@@ -620,32 +626,17 @@ def Tla_LoadOp : Tla_Op<"load", []> {
 def Tla_AllocPtrOp : Tla_Op<"alloc_ptr", [Pure]> {
   let summary = "Static on-chip scratch bytes";
   let description = [{
-    Reserves ``size_bytes`` bytes of on-chip scratch. Address space and element alignment appear
-    **only** on the result ``!tla.ptr<pointee, addrspace, align>`` type (no duplicate
-    ``mem_space`` / ``alignment`` attributes). HIVM lowering materializes allocator-backed
-    pointer uses as ``hivm.hir.pointer_cast`` plus ``tla.hivm_memref_as_ptr`` with assigned offsets.
+    Reserves one statically assigned ``size_bytes`` on-chip scratch slot. The slot
+    lifetime is the whole kernel: executing an alloc nested in a region or loop
+    yields the same address on every dynamic execution. Address space and element
+    alignment appear only on ``!tla.ptr<pointee, addrspace, align>``.
+    ``tla-lower-ptr`` replaces the result with its static ``i64`` byte address.
   }];
   let arguments = (ins I64Attr:$size_bytes);
   let results = (outs Tla_PtrType:$ptr);
   let assemblyFormat = [{
     `{` `size_bytes` `=` $size_bytes `}` attr-dict `->` qualified(type($ptr))
   }];
-  let hasVerifier = 1;
-}
-
-def Tla_HivmMemrefAsPtrOp : Tla_Op<"hivm_memref_as_ptr", [Pure]> {
-  let summary = "Bridge HIVM memref from pointer_cast to !tla.ptr";
-  let description = [{
-    Emitted by ``tla-alloc-ptr-to-hivm-pointer-cast``: wraps the rank-1 memref produced by
-    ``hivm.hir.pointer_cast`` as a ``!tla.ptr`` for remaining Tla IR. Named op instead of
-    ``builtin.unrealized_conversion_cast`` so failures and ``mlir-opt`` dumps identify this edge.
-    Lowered away in ``tla-lower-to-std`` when tensor descriptors materialize the memref base.
-    The operand is spelled as a generic type in ODS (avoids pulling ``BuiltinTypes.td`` into
-    ``Tla.td``); ``HivmMemrefAsPtrOp::verify`` requires a rank-1 ``memref``.
-  }];
-  let arguments = (ins AnyType:$memref);
-  let results = (outs Tla_PtrType:$ptr);
-  let assemblyFormat = "$memref attr-dict `:` type($memref) `->` qualified(type($ptr))";
   let hasVerifier = 1;
 }
 

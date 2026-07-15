@@ -289,27 +289,24 @@ public:
                            mlir::memref::MemRefDialect, scf::SCFDialect, hivm::HIVMDialect>();
     target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
     // Assert the tensor / tile / region / compute ops this pass depends on being
-    // gone are indeed gone (lowered upstream by tla-vector-region /
-    // tla-cube-region / tla-lower-func). tla.mutex / tla.cross_* are intentionally
-    // NOT asserted: they are lowered by tla-lower-mutex-to-std /
-    // tla-lower-flag-barrier-to-hivm, which now run AFTER this pass, so they are
-    // still present when finalize runs (left legal via markUnknownOpDynamicallyLegal
-    // and untouched).
+    // gone are indeed gone. Pointer producers and transforms must already have
+    // been eliminated by tla-lower-ptr; do not DCE them here, because that would
+    // hide an upstream lowering failure. tla.mutex / tla.cross_* are
+    // intentionally NOT asserted: they are lowered by
+    // tla-lower-mutex-to-std / tla-lower-flag-barrier-to-hivm, which run AFTER
+    // this pass, so they are still present when finalize runs.
     target.addIllegalOp<::tla::TileViewOp, ::tla::CopyOp, ::tla::MakeTensorLikeOp,
                         ::tla::MakeTensorOp, ::tla::LoadOp, ::tla::StoreOp, ::tla::FuncOp,
                         ::tla::ReturnOp, ::tla::CubeOp, ::tla::VectorOp, ::tla::MmadOp,
-                        ::tla::TensorPtrOp, ::tla::PtrAddOp>();
+                        ::tla::AllocPtrOp, ::tla::RecastPtrOp, ::tla::TensorPtrOp,
+                        ::tla::PtrAddOp>();
     target.addDynamicallyLegalOp<::tla::MakeShapeOp, ::tla::MakeCoordOp, ::tla::MakeStrideOp,
-                                 ::tla::MakeLayoutOp, ::tla::AllocPtrOp, ::tla::RecastPtrOp>(
+                                 ::tla::MakeLayoutOp, ::tla::IntToPtrOp>(
         [](Operation *op) { return !hasNoResultUses(op); });
     target.addDynamicallyLegalOp<UnrealizedConversionCastOp>(
         [](UnrealizedConversionCastOp op) { return !isDeadTensorBridgeCast(op); });
     target.addDynamicallyLegalOp<mlir::memref::SubViewOp>(
         [](mlir::memref::SubViewOp op) { return !hasNoResultUses(op.getOperation()); });
-    // tla.hivm_memref_as_ptr scaffolding is DCE'd here (the cleanup pass) rather
-    // than in the region passes, so those may leave dead ptr bridges behind.
-    target.addDynamicallyLegalOp<::tla::HivmMemrefAsPtrOp>(
-        [](::tla::HivmMemrefAsPtrOp op) { return !hasNoResultUses(op.getOperation()); });
     target.addDynamicallyLegalOp<hivm::PointerCastOp>(
         [](hivm::PointerCastOp op) { return !hasNoResultUses(op.getOperation()); });
 
@@ -318,10 +315,9 @@ public:
       patterns
           .add<EraseDeadTensorBridgeCastPattern, EraseDeadOpPattern<::tla::MakeShapeOp>,
                EraseDeadOpPattern<::tla::MakeCoordOp>, EraseDeadOpPattern<::tla::MakeStrideOp>,
-               EraseDeadOpPattern<::tla::MakeLayoutOp>, EraseDeadOpPattern<::tla::AllocPtrOp>,
-               EraseDeadOpPattern<::tla::RecastPtrOp>, EraseDeadOpPattern<mlir::memref::SubViewOp>,
-               EraseDeadOpPattern<::tla::HivmMemrefAsPtrOp>, EraseDeadOpPattern<::tla::TensorPtrOp>,
-               EraseDeadOpPattern<::tla::PtrAddOp>, EraseDeadOpPattern<hivm::PointerCastOp>>(
+               EraseDeadOpPattern<::tla::MakeLayoutOp>, EraseDeadOpPattern<::tla::IntToPtrOp>,
+               EraseDeadOpPattern<mlir::memref::SubViewOp>,
+               EraseDeadOpPattern<hivm::PointerCastOp>>(
               &getContext());
       if (failed(applyPartialConversion(module, target, std::move(patterns)))) {
         signalPassFailure();
@@ -329,6 +325,9 @@ public:
       }
     }
     eraseDeadMaterializations(module);
+    module.walk([](Operation *op) {
+      op->removeAttr(kAllocSizeBytesMetadataAttrName);
+    });
   }
 };
 

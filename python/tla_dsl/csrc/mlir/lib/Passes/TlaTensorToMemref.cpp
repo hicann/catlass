@@ -3,6 +3,8 @@
 #include "PassesCommon.h"
 #include "mlir/Dialect/Utils/ReshapeOpsUtils.h" // ReassociationIndices
 
+#include "llvm/ADT/DenseSet.h"
+
 #include <array>
 
 namespace tla {
@@ -587,94 +589,12 @@ void pushStagedErase(llvm::SmallVectorImpl<mlir::Operation *> &toErase, mlir::Op
   toErase.push_back(op);
 }
 
-// The `!tla.ptr` -> backing-memref contract. A ptr produced by
-// `tla-alloc-ptr-to-hivm-pointer-cast` is either a `tla.hivm_memref_as_ptr`
-// wrapping a memref, or an `UnrealizedConversionCast` of a single memref
-// operand (a momentary bridge). Return that backing memref; failure if `ptr`
-// is neither form. This is the single owner of the unwrap idiom.
-static mlir::FailureOr<mlir::Value> unwrapPtrBackingMemref(mlir::Value ptr) {
-  // Peel tla.ptr_add / tla.tensor_ptr to reach the underlying pointer/memref. The
-  // ptr_add offset is NOT applied here: this unwrap is for static type/shape
-  // discovery only (the offset is materialized by materializePtrValueAsMemref).
-  mlir::Value cur = ptr;
-  while (true) {
-    if (auto pa = cur.getDefiningOp<::tla::PtrAddOp>())
-      cur = pa.getPtr();
-    else if (auto tp = cur.getDefiningOp<::tla::TensorPtrOp>())
-      cur = tp.getSrc();
-    else
-      break;
-  }
-  if (auto bridge = cur.getDefiningOp<::tla::HivmMemrefAsPtrOp>()) {
-    if (isa<MemRefType>(bridge.getMemref().getType()))
-      return bridge.getMemref();
-  }
-  if (auto cast = cur.getDefiningOp<UnrealizedConversionCastOp>()) {
-    if (cast.getNumOperands() == 1 && isa<MemRefType>(cast.getOperand(0).getType()))
-      return cast.getOperand(0);
-  }
-  // tla.tensor_ptr whose source is a kernel-arg memref resolves to it directly.
-  if (isa<MemRefType>(cur.getType()))
-    return cur;
-  return failure();
-}
-
-mlir::FailureOr<int64_t> getStatic1DElementCountFromHivmPtrBridge(mlir::Value ptrValue) {
-  auto backing = unwrapPtrBackingMemref(ptrValue);
-  if (failed(backing))
-    return failure();
-  if (auto pc = backing->getDefiningOp<hivm::PointerCastOp>()) {
-    auto mr = dyn_cast<MemRefType>(pc.getResult().getType());
-    if (mr && mr.getRank() == 1 && mr.getDimSize(0) != ShapedType::kDynamic)
-      return mr.getShape()[0];
-  }
-  // Directly a rank-1 static memref (e.g. tensor_ptr-backed): the offset from any
-  // peeled ptr_add does not change the static element count.
-  if (auto mr = dyn_cast<MemRefType>(backing->getType());
-      mr && mr.getRank() == 1 && mr.getDimSize(0) != ShapedType::kDynamic)
-    return mr.getShape()[0];
-  return failure();
-}
-
 mlir::Value createFallbackBaseMemrefCast(mlir::OpBuilder &builder, mlir::Location loc,
                                          const TensorDescriptor &desc) {
   return builder
       .create<UnrealizedConversionCastOp>(loc, TypeRange{desc.bridgedBaseMemrefType},
                                           ValueRange{desc.base})
       .getResult(0);
-}
-
-mlir::Value flattenMemrefTo1D(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value memref) {
-  auto mt = cast<MemRefType>(memref.getType());
-  if (mt.getRank() == 1)
-    return memref;
-  Value size;
-  int64_t staticSize = 1;
-  bool allStatic = true;
-  for (int64_t dim : mt.getShape()) {
-    if (dim == ShapedType::kDynamic) {
-      allStatic = false;
-      break;
-    }
-    staticSize *= dim;
-  }
-  if (allStatic) {
-    size = builder.create<arith::ConstantIndexOp>(loc, staticSize);
-  } else {
-    size = builder.create<arith::ConstantIndexOp>(loc, 1);
-    for (unsigned i = 0, e = mt.getRank(); i < e; ++i) {
-      Value dim = builder.create<mlir::memref::DimOp>(loc, memref, i);
-      size = builder.create<arith::MulIOp>(loc, size, dim);
-    }
-  }
-  Value zero = builder.create<arith::ConstantIndexOp>(loc, 0);
-  Value one = builder.create<arith::ConstantIndexOp>(loc, 1);
-  auto flatTy = MemRefType::get({ShapedType::kDynamic}, mt.getElementType(), AffineMap(),
-                                mt.getMemorySpace());
-  return builder
-      .create<mlir::memref::ReinterpretCastOp>(loc, flatTy, memref, zero, ValueRange{size},
-                                               ValueRange{one})
-      .getResult();
 }
 
 // For a GM linear-layout tensor with a static origin_shape, fill `originDims` and the
@@ -711,163 +631,147 @@ static bool tryGmOriginLayout(mlir::Type tensorTy, llvm::SmallVectorImpl<int64_t
   return true;
 }
 
-// Walk a `!tla.ptr` chain of tla.ptr_add (accumulating the element offset) and an optional
-// tla.tensor_ptr, down to the underlying rank-1 base memref. Returns {baseMemref, offset}.
-static mlir::FailureOr<std::pair<mlir::Value, mlir::Value>>
-resolvePtrChainToBaseAndOffset(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value ptr) {
-  Value totalOff = builder.create<arith::ConstantIndexOp>(loc, 0);
-  Value cur = ptr;
-  while (auto pa = cur.getDefiningOp<::tla::PtrAddOp>()) {
-    Value o = pa.getOffset();
-    if (!o.getType().isIndex())
-      o = builder.create<arith::IndexCastOp>(loc, builder.getIndexType(), o);
-    totalOff = builder.create<arith::AddIOp>(loc, totalOff, o);
-    cur = pa.getPtr();
-  }
-  if (auto tp = cur.getDefiningOp<::tla::TensorPtrOp>()) {
-    Value src = tp.getSrc();
-    if (!isa<MemRefType>(src.getType()))
-      return failure();
-    cur = src;
-  }
-  Value base;
-  if (auto bridge = cur.getDefiningOp<::tla::HivmMemrefAsPtrOp>())
-    base = bridge.getMemref();
-  else if (auto cast = cur.getDefiningOp<UnrealizedConversionCastOp>()) {
-    if (cast.getNumOperands() != 1 || !isa<MemRefType>(cast.getOperand(0).getType()))
-      return failure();
-    base = cast.getOperand(0);
-  } else if (isa<MemRefType>(cur.getType()))
-    base = cur;
-  else
+// Allocation capacity is optional provenance, not part of pointer identity.
+// Preserve it only across joins whose alternatives prove the same capacity;
+// otherwise tensor consumers build a view from their own shape/layout.
+static FailureOr<int64_t>
+inferStaticAllocationSizeBytes(
+    Value address, llvm::DenseSet<Value> visiting,
+    llvm::DenseMap<Value, int64_t> assumedCapacities =
+        llvm::DenseMap<Value, int64_t>()) {
+  if (auto assumed = assumedCapacities.find(address);
+      assumed != assumedCapacities.end())
+    return assumed->second;
+  if (!visiting.insert(address).second)
     return failure();
-  auto baseMt = dyn_cast<MemRefType>(base.getType());
-  if (!baseMt || baseMt.getRank() != 1)
+
+  if (auto blockArg = dyn_cast<BlockArgument>(address)) {
+    if (auto forOp = dyn_cast_or_null<scf::ForOp>(
+            blockArg.getOwner()->getParentOp())) {
+      unsigned argNumber = blockArg.getArgNumber();
+      if (blockArg.getOwner() == forOp.getBody() && argNumber > 0 &&
+          argNumber - 1 < forOp.getInitArgs().size()) {
+        unsigned iterArgNumber = argNumber - 1;
+        auto initSize = inferStaticAllocationSizeBytes(
+            forOp.getInitArgs()[iterArgNumber], visiting, assumedCapacities);
+        auto yield = dyn_cast<scf::YieldOp>(forOp.getBody()->getTerminator());
+        if (failed(initSize) || !yield ||
+            iterArgNumber >= yield.getNumOperands())
+          return failure();
+
+        // Prove the init capacity is a loop invariant. The current block
+        // argument may occur recursively in the backedge expression, so use
+        // the candidate capacity while checking that every yielded source
+        // preserves it.
+        assumedCapacities[blockArg] = *initSize;
+        auto yieldSize = inferStaticAllocationSizeBytes(
+            yield.getOperand(iterArgNumber), std::move(visiting),
+            std::move(assumedCapacities));
+        if (succeeded(yieldSize) && *yieldSize == *initSize)
+          return *initSize;
+      }
+    }
     return failure();
-  return std::make_pair(base, totalOff);
-}
-
-// Apply `offset` to rank-1 `base`, producing either a multi-dimensional origin-shaped view
-// (GM linear tensor with static origin) or a flat 1-D view. `consumingTensorType` is the
-// tla.tensor whose ptr this is (drives the GM origin shape). Shared by the vector and cube
-// ptr-lowering paths.
-static mlir::Value applyPtrOffsetView(mlir::OpBuilder &builder, mlir::Location loc,
-                                      mlir::Value base, mlir::Value offset,
-                                      mlir::Type consumingTensorType, mlir::MemRefType flatType) {
-  auto baseMt = cast<MemRefType>(base.getType());
-  llvm::SmallVector<int64_t, 4> originDims, contigStrides;
-  if (consumingTensorType && tryGmOriginLayout(consumingTensorType, originDims, contigStrides)) {
-    llvm::SmallVector<Value> sizes, strides;
-    for (unsigned i = 0, e = originDims.size(); i < e; ++i) {
-      sizes.push_back(builder.create<arith::ConstantIndexOp>(loc, originDims[i]));
-      strides.push_back(builder.create<arith::ConstantIndexOp>(loc, contigStrides[i]));
-    }
-    auto layout =
-        StridedLayoutAttr::get(builder.getContext(), ShapedType::kDynamic, contigStrides);
-    auto resultTy =
-        MemRefType::get(originDims, baseMt.getElementType(), layout, baseMt.getMemorySpace());
-    return builder
-        .create<mlir::memref::ReinterpretCastOp>(loc, resultTy, base, offset, sizes, strides)
-        .getResult();
   }
-  // Flat 1-D view (non-GM, packed layout, or dynamic origin). Prefer the caller's rank-1
-  // bridged type so a statically-shaped base keeps its shape (the cube path); otherwise a
-  // dynamic 1-D view (the vector path reshapes downstream). No offset -> return base.
-  MemRefType resultTy =
-      (flatType && flatType.getRank() == 1)
-          ? flatType
-          : MemRefType::get({ShapedType::kDynamic}, baseMt.getElementType(), AffineMap(),
-                            baseMt.getMemorySpace());
-  if (auto c = offset.getDefiningOp<arith::ConstantIndexOp>(); c && c.value() == 0 &&
-      resultTy == baseMt)
-    return base;
-  Value size = resultTy.hasStaticShape()
-                   ? builder.create<arith::ConstantIndexOp>(loc, resultTy.getDimSize(0)).getResult()
-                   : builder.create<mlir::memref::DimOp>(loc, base, 0).getResult();
-  Value one = builder.create<arith::ConstantIndexOp>(loc, 1);
-  return builder
-      .create<mlir::memref::ReinterpretCastOp>(loc, resultTy, base, offset, ValueRange{size},
-                                               ValueRange{one})
-      .getResult();
-}
 
-// The consuming tla.tensor of a `!tla.ptr` (the make_tensor / make_tensor_like whose ptr
-// operand it is), used to drive the GM origin-shaped view. Null if none.
-static mlir::Type consumingTensorTypeOfPtr(mlir::Value ptr) {
-  for (Operation *user : ptr.getUsers())
-    if (isa<::tla::MakeTensorOp, ::tla::MakeTensorLikeOp>(user) && user->getNumResults() == 1)
-      return user->getResult(0).getType();
-  return {};
-}
-
-mlir::FailureOr<mlir::Value> materializePtrValueAsMemref(mlir::OpBuilder &builder, mlir::Location loc,
-                                                         mlir::Value ptrValue,
-                                                         mlir::MemRefType memrefType,
-                                                         mlir::Operation *diagnosticOp) {
-  if (auto bridge = ptrValue.getDefiningOp<::tla::HivmMemrefAsPtrOp>()) {
-    Value src = bridge.getMemref();
-    if (isa<MemRefType>(src.getType()))
-      return castMemrefToType(builder, loc, src, memrefType);
+  Operation *def = address.getDefiningOp();
+  if (!def)
+    return failure();
+  if (auto size =
+          def->getAttrOfType<IntegerAttr>(kAllocSizeBytesMetadataAttrName))
+    return size.getInt();
+  if (auto cast = dyn_cast<UnrealizedConversionCastOp>(def)) {
+    if (cast.getNumOperands() == 1)
+      return inferStaticAllocationSizeBytes(cast.getOperand(0),
+                                            std::move(visiting),
+                                            std::move(assumedCapacities));
   }
-  // tla.ptr_add / tla.tensor_ptr chain: resolve to (base, element offset) and apply the
-  // offset as an origin-shaped or flat reinterpret. Unified across the vector and cube
-  // lowering paths.
-  if (ptrValue.getDefiningOp<::tla::PtrAddOp>() ||
-      ptrValue.getDefiningOp<::tla::TensorPtrOp>()) {
-    auto baseAndOff = resolvePtrChainToBaseAndOffset(builder, loc, ptrValue);
-    if (failed(baseAndOff)) {
-      diagnosticOp->emitError()
-          << "tla.ptr_add/tla.tensor_ptr base must resolve to a rank-1 "
-             "`tla.hivm_memref_as_ptr`-backed pointer; got: "
-          << ptrValue;
+
+  // The Python frontend represents pointer-valued joins with structured SCF.
+  // Do not claim provenance support for arith.select, which tla-lower-ptr does
+  // not convert.
+  if (auto ifOp = dyn_cast<scf::IfOp>(def)) {
+    unsigned resultNumber = cast<OpResult>(address).getResultNumber();
+    scf::YieldOp thenYield = ifOp.thenYield();
+    scf::YieldOp elseYield = ifOp.elseYield();
+    if (!thenYield || !elseYield || resultNumber >= thenYield.getNumOperands() ||
+        resultNumber >= elseYield.getNumOperands())
       return failure();
-    }
-    return applyPtrOffsetView(builder, loc, baseAndOff->first, baseAndOff->second,
-                              consumingTensorTypeOfPtr(ptrValue), memrefType);
+    auto thenSize = inferStaticAllocationSizeBytes(
+        thenYield.getOperand(resultNumber), visiting, assumedCapacities);
+    auto elseSize = inferStaticAllocationSizeBytes(
+        elseYield.getOperand(resultNumber), std::move(visiting),
+        std::move(assumedCapacities));
+    if (succeeded(thenSize) && succeeded(elseSize) &&
+        *thenSize == *elseSize)
+      return *thenSize;
+    return failure();
   }
-  diagnosticOp->emitError()
-      << "pointer memref materialization expects `tla.hivm_memref_as_ptr` (from "
-         "`tla-alloc-ptr-to-hivm-pointer-cast`); got unsupported ptr def: "
-      << ptrValue;
+  if (auto forOp = dyn_cast<scf::ForOp>(def)) {
+    unsigned resultNumber = cast<OpResult>(address).getResultNumber();
+    if (resultNumber >= forOp.getInitArgs().size())
+      return failure();
+    auto initSize = inferStaticAllocationSizeBytes(
+        forOp.getInitArgs()[resultNumber], visiting, assumedCapacities);
+    auto yield = dyn_cast<scf::YieldOp>(forOp.getBody()->getTerminator());
+    if (failed(initSize) || !yield || resultNumber >= yield.getNumOperands())
+      return failure();
+
+    assumedCapacities[forOp.getRegionIterArg(resultNumber)] = *initSize;
+    auto yieldSize = inferStaticAllocationSizeBytes(
+        yield.getOperand(resultNumber), std::move(visiting),
+        std::move(assumedCapacities));
+    if (succeeded(yieldSize) && *initSize == *yieldSize)
+      return *initSize;
+  }
   return failure();
 }
 
-mlir::FailureOr<mlir::Value> materializePtrIfAsMemref(mlir::OpBuilder &builder, mlir::Location loc,
-                                                      mlir::scf::IfOp ifOp,
-                                                      mlir::MemRefType memrefType,
-                                                      AllocatorOffsetState &allocatorState,
-                                                      mlir::Operation *diagnosticOp) {
-  if (ifOp->getNumResults() != 1 || !isa<::tla::PtrType>(ifOp.getResult(0).getType()))
+static FailureOr<int64_t> getStaticAllocationElementCount(Value ptr) {
+  auto ptrType = dyn_cast<::tla::PtrType>(ptr.getType());
+  auto intToPtr = ptr.getDefiningOp<::tla::IntToPtrOp>();
+  if (!ptrType || !intToPtr)
     return failure();
-
-  scf::YieldOp thenYield = ifOp.thenYield();
-  scf::YieldOp elseYield = ifOp.elseYield();
-  if (!thenYield || !elseYield || thenYield.getNumOperands() != 1 ||
-      elseYield.getNumOperands() != 1)
+  auto sizeBytes = inferStaticAllocationSizeBytes(intToPtr.getAddr(), {});
+  int64_t elementBytes = getByteSizeOfFixedWidthScalarType(ptrType.getPointee());
+  if (failed(sizeBytes) || *sizeBytes < 0 || elementBytes <= 0 ||
+      *sizeBytes % elementBytes != 0)
     return failure();
+  return *sizeBytes / elementBytes;
+}
 
-  auto newIf = builder.create<scf::IfOp>(loc, TypeRange{memrefType}, ifOp.getCondition(),
-                                         /*withElseRegion=*/true);
-  {
-    OpBuilder::InsertionGuard guard(builder);
-    builder.setInsertionPointToEnd(newIf.thenBlock());
-    FailureOr<Value> thenMemref = materializePtrValueAsMemref(
-        builder, thenYield.getLoc(), thenYield.getOperand(0), memrefType, diagnosticOp);
-    if (failed(thenMemref))
-      return failure();
-    builder.create<scf::YieldOp>(thenYield.getLoc(), ValueRange{*thenMemref});
+mlir::FailureOr<mlir::Value>
+materializePtrValueAsMemref(mlir::OpBuilder &builder, mlir::Location loc,
+                            mlir::Value ptrValue, mlir::MemRefType memrefType,
+                            mlir::Operation *diagnosticOp,
+                            mlir::ValueRange dynamicSizes) {
+  auto intToPtr = ptrValue.getDefiningOp<::tla::IntToPtrOp>();
+  if (!intToPtr) {
+    diagnosticOp->emitError()
+        << "pointer memref materialization expects the `tla.inttoptr` "
+           "boundary produced by `tla-lower-ptr`; got: "
+        << ptrValue;
+    return failure();
   }
-  {
-    OpBuilder::InsertionGuard guard(builder);
-    builder.setInsertionPointToEnd(newIf.elseBlock());
-    FailureOr<Value> elseMemref = materializePtrValueAsMemref(
-        builder, elseYield.getLoc(), elseYield.getOperand(0), memrefType, diagnosticOp);
-    if (failed(elseMemref))
-      return failure();
-    builder.create<scf::YieldOp>(elseYield.getLoc(), ValueRange{*elseMemref});
+
+  unsigned expectedDynamicSizes = llvm::count_if(
+      memrefType.getShape(),
+      [](int64_t dim) { return dim == ShapedType::kDynamic; });
+  if (dynamicSizes.size() != expectedDynamicSizes) {
+    diagnosticOp->emitError()
+        << "pointer_cast materialization expected " << expectedDynamicSizes
+        << " dynamic sizes, got " << dynamicSizes.size();
+    return failure();
   }
-  pushStagedErase(allocatorState.toErase, ifOp.getOperation());
-  return newIf.getResult(0);
+  Value address = castValueToI64(builder, loc, intToPtr.getAddr());
+  if (!address.getType().isInteger(64)) {
+    diagnosticOp->emitError()
+        << "tla.inttoptr address must lower to i64, got " << address.getType();
+    return failure();
+  }
+  return builder
+      .create<hivm::PointerCastOp>(loc, memrefType, address, dynamicSizes)
+      .getResult();
 }
 
 mlir::FailureOr<mlir::Value> materializeDescriptorBaseMemref(mlir::OpBuilder &builder,
@@ -882,59 +786,49 @@ mlir::FailureOr<mlir::Value> materializeDescriptorBaseMemref(mlir::OpBuilder &bu
   if (isa<MemRefType>(desc.base.getType()))
     return castMemrefToType(builder, loc, desc.base, memrefType);
 
+  if (isa<::tla::PtrType>(desc.base.getType())) {
+    if (auto allocationElements = getStaticAllocationElementCount(desc.base);
+        succeeded(allocationElements)) {
+      auto allocationType = MemRefType::get(
+          {*allocationElements}, memrefType.getElementType(), AffineMap(),
+          memrefType.getMemorySpace());
+      return materializePtrValueAsMemref(builder, loc, desc.base,
+                                         allocationType, diagnosticOp);
+    }
+
+    SmallVector<Value, 2> dynamicSizes;
+    for (auto [index, dim] : llvm::enumerate(memrefType.getShape())) {
+      if (dim != ShapedType::kDynamic)
+        continue;
+      if (memrefType.getRank() == 1) {
+        dynamicSizes.push_back(builder.create<arith::MulIOp>(
+            loc, desc.originShape0, desc.originShape1));
+      } else if (index == 0) {
+        dynamicSizes.push_back(desc.shape0);
+      } else if (index == 1) {
+        dynamicSizes.push_back(desc.shape1);
+      } else {
+        diagnosticOp->emitError()
+            << "cannot derive dynamic pointer_cast size for memref dimension "
+            << index;
+        return failure();
+      }
+    }
+    return materializePtrValueAsMemref(builder, loc, desc.base, memrefType,
+                                       diagnosticOp, dynamicSizes);
+  }
+
   if (allocatorState) {
-    if (auto ptrAdd = desc.base.getDefiningOp<::tla::PtrAddOp>()) {
-      FailureOr<Value> ptrResult =
-          materializePtrValueAsMemref(builder, loc, desc.base, memrefType, diagnosticOp);
-      if (succeeded(ptrResult)) {
-        pushStagedErase(allocatorState->toErase, ptrAdd.getOperation());
-        return *ptrResult;
-      }
-    }
-    if (desc.base.getDefiningOp<::tla::TensorPtrOp>()) {
-      diagnosticOp->emitError()
-          << "tla.tensor_ptr must be resolved to its base before tensor materialization; "
-             "ensure tla-cube-region's tensor_ptr lowering ran";
-      return failure();
-    }
-    if (auto ptrBridge = dyn_cast_or_null<::tla::HivmMemrefAsPtrOp>(desc.base.getDefiningOp())) {
-      FailureOr<Value> ptrResult = materializePtrValueAsMemref(
-          builder, loc, ptrBridge.getResult(), memrefType, diagnosticOp);
-      if (succeeded(ptrResult)) {
-        pushStagedErase(allocatorState->toErase, ptrBridge.getOperation());
-        return *ptrResult;
-      }
-    }
-    if (auto ifOp = desc.base.getDefiningOp<scf::IfOp>()) {
-      FailureOr<Value> ifResult = materializePtrIfAsMemref(builder, loc, ifOp, memrefType,
-                                                           *allocatorState, diagnosticOp);
-      if (succeeded(ifResult))
-        return *ifResult;
-    }
-    auto castOp = dyn_cast_or_null<UnrealizedConversionCastOp>(desc.base.getDefiningOp());
-    if (castOp && castOp->getNumOperands() == 1) {
-      Value source = castOp->getOperand(0);
-      if (isa<MemRefType>(source.getType())) {
-        FailureOr<Value> cast = castMemrefToType(builder, loc, source, memrefType);
-        if (failed(cast))
-          return failure();
-        pushStagedErase(allocatorState->toErase, castOp.getOperation());
-        return *cast;
-      }
-      if (auto ifOp = source.getDefiningOp<scf::IfOp>()) {
-        FailureOr<Value> ifResult = materializePtrIfAsMemref(builder, loc, ifOp, memrefType,
-                                                             *allocatorState, diagnosticOp);
-        if (succeeded(ifResult)) {
-          pushStagedErase(allocatorState->toErase, castOp.getOperation());
-          return *ifResult;
-        }
-      }
-      FailureOr<Value> ptrResult =
-          materializePtrValueAsMemref(builder, loc, source, memrefType, diagnosticOp);
-      if (succeeded(ptrResult)) {
-        pushStagedErase(allocatorState->toErase, castOp.getOperation());
-        return *ptrResult;
-      }
+    auto castOp = dyn_cast_or_null<UnrealizedConversionCastOp>(
+        desc.base.getDefiningOp());
+    if (castOp && castOp->getNumOperands() == 1 &&
+        isa<MemRefType>(castOp->getOperand(0).getType())) {
+      FailureOr<Value> cast = castMemrefToType(
+          builder, loc, castOp->getOperand(0), memrefType);
+      if (failed(cast))
+        return failure();
+      pushStagedErase(allocatorState->toErase, castOp.getOperation());
+      return *cast;
     }
   }
   return createFallbackBaseMemrefCast(builder, loc, desc);
@@ -968,13 +862,26 @@ getOrMaterializeDescriptorBaseMemref(mlir::OpBuilder &builder, mlir::Location lo
   if (!memrefType)
     return failure();
 
+  // A proven alloc capacity describes one kernel-lifetime allocation object,
+  // so its descriptor is shape-independent and safe to cache by pointer SSA.
+  // Otherwise an inttoptr descriptor is a consumer-local view whose dynamic
+  // sizes may be defined inside the current region/loop; materialize it at the
+  // caller's insertion point and do not cache it by address alone.
+  bool isIntToPtr = static_cast<bool>(
+      desc.base.getDefiningOp<::tla::IntToPtrOp>());
+  bool hasStaticAllocation =
+      succeeded(getStaticAllocationElementCount(desc.base));
+  if (isIntToPtr && !hasStaticAllocation)
+    return materializeDescriptorBaseMemref(builder, loc, desc, allocatorState,
+                                           diagnosticOp);
+
   auto it = baseMemrefCache.find(desc.base);
   if (it != baseMemrefCache.end()) {
+    if (isIntToPtr)
+      return it->second;
     // Return the cached base consistently with the first materialization below,
     // which returns it un-cast. A `memref.cast` to `memrefType` is only valid when
-    // the ranks match; for a ptr_add-derived GM origin-shaped view (rank != the flat
-    // bridged base type) casting would be ill-formed, so hand back the cached view
-    // directly (the subview builder keys off its rank).
+    // the ranks match; otherwise hand back the cached view directly.
     if (auto cachedType = dyn_cast<MemRefType>(it->second.getType());
         cachedType && cachedType.getRank() == memrefType.getRank())
       return castMemrefToType(builder, loc, it->second, memrefType);
@@ -1321,17 +1228,6 @@ FailureOr<Value> materializeTileViewMemref(PatternRewriter &rewriter, Location l
       .getResult();
 }
 
-FailureOr<Value> getMakeTensorLikeFlatMemref(Value tensor) {
-  Value ptr;
-  if (auto makeTensorLike = tensor.getDefiningOp<::tla::MakeTensorLikeOp>())
-    ptr = makeTensorLike.getPtr();
-  else if (auto makeTensor = tensor.getDefiningOp<::tla::MakeTensorOp>())
-    ptr = makeTensor.getPtr();
-  else
-    return failure();
-  return unwrapPtrBackingMemref(ptr);
-}
-
 // The `!tla.ptr` operand of a make_tensor / make_tensor_like tensor, or null.
 static Value ptrOfMakeTensor(Value tensor) {
   if (auto mtl = tensor.getDefiningOp<::tla::MakeTensorLikeOp>())
@@ -1342,31 +1238,34 @@ static Value ptrOfMakeTensor(Value tensor) {
 }
 
 FailureOr<MemRefType> getVectorHelperArgMemrefType(Value operand) {
-  // GM ptr_add / tensor_ptr operands: match the origin-shaped multi-dim view
-  // materializePtrValueAsMemref produces (origin dims + contiguous strides), so the
-  // helper-call-site cast (origin view -> flat alloc type) stays cast-compatible.
-  if (Value ptr = ptrOfMakeTensor(operand);
-      ptr && (ptr.getDefiningOp<::tla::PtrAddOp>() || ptr.getDefiningOp<::tla::TensorPtrOp>())) {
+  Value ptr = ptrOfMakeTensor(operand);
+  if (ptr && !ptr.getDefiningOp<::tla::IntToPtrOp>())
+    return failure();
+
+  auto bridged = getBridgedTensorMemrefType(operand);
+  if (failed(bridged))
+    return failure();
+  if (ptr) {
+    if (auto allocationElements = getStaticAllocationElementCount(ptr);
+        succeeded(allocationElements))
+      return MemRefType::get({*allocationElements}, bridged->getElementType(),
+                             AffineMap(), bridged->getMemorySpace());
+
     SmallVector<int64_t, 4> originDims, contigStrides;
     if (tryGmOriginLayout(operand.getType(), originDims, contigStrides)) {
-      if (auto flat = getMakeTensorLikeFlatMemref(operand); succeeded(flat)) {
-        auto flatType = cast<MemRefType>((*flat).getType());
-        auto stridedLayout =
-            StridedLayoutAttr::get(operand.getContext(), ShapedType::kDynamic, contigStrides);
-        return MemRefType::get(originDims, flatType.getElementType(), stridedLayout,
-                               flatType.getMemorySpace());
-      }
+      auto stridedLayout = StridedLayoutAttr::get(
+          operand.getContext(), ShapedType::kDynamic, contigStrides);
+      return MemRefType::get(originDims, bridged->getElementType(),
+                             stridedLayout, bridged->getMemorySpace());
     }
   }
-  if (auto flat = getMakeTensorLikeFlatMemref(operand); succeeded(flat)) {
-    if (auto flatType = dyn_cast<MemRefType>((*flat).getType());
-        flatType && flatType.getRank() == 1 && flatType.hasStaticShape())
-      return flatType;
-  }
-  auto bridged = getBridgedTensorMemrefType(operand);
-  if (failed(bridged) || bridged->getRank() != 1)
+  if (bridged->getRank() == 1)
+    return *bridged;
+  auto viewElements = getStaticNumElements(bridged->getShape());
+  if (bridged->getRank() != 2 || failed(viewElements))
     return failure();
-  return *bridged;
+  return MemRefType::get({*viewElements}, bridged->getElementType(),
+                         AffineMap(), bridged->getMemorySpace());
 }
 
 FailureOr<Value>
@@ -1380,25 +1279,20 @@ materializeBaseMemref(PatternRewriter &rewriter, Location loc, Value tensor,
       return castToBridgedType(rewriter, loc, castOp.getOperand(0), tensor);
   }
 
-  // tla.make_tensor{,_like}: the tensor views its ptr's backing memref. If the ptr is a
-  // tla.ptr_add / tla.tensor_ptr, materialize the base WITH the element offset applied
-  // (materializePtrValueAsMemref); otherwise the zero-offset flat-memref lookup suffices.
-  if (isa_and_nonnull<::tla::MakeTensorLikeOp, ::tla::MakeTensorOp>(tensor.getDefiningOp())) {
+  // tla.make_tensor{,_like} is a consumer-local view of its pointer address.
+  if (isa_and_nonnull<::tla::MakeTensorLikeOp, ::tla::MakeTensorOp>(
+          tensor.getDefiningOp())) {
     Value ptr = ptrOfMakeTensor(tensor);
-    if (ptr && (ptr.getDefiningOp<::tla::PtrAddOp>() || ptr.getDefiningOp<::tla::TensorPtrOp>())) {
-      auto expectedMt = getBridgedTensorMemrefType(tensor);
-      if (failed(expectedMt))
-        return failure();
-      FailureOr<Value> base = materializePtrValueAsMemref(rewriter, loc, ptr, *expectedMt,
-                                                          tensor.getDefiningOp());
-      if (failed(base))
-        return failure();
-      return castToBridgedType(rewriter, loc, *base, tensor);
-    }
-    auto flat = getMakeTensorLikeFlatMemref(tensor);
-    if (failed(flat))
+    if (!ptr || !ptr.getDefiningOp<::tla::IntToPtrOp>())
       return failure();
-    return castToBridgedType(rewriter, loc, *flat, tensor);
+    auto expected = getBridgedTensorMemrefType(tensor);
+    if (failed(expected))
+      return failure();
+    auto base = materializePtrValueAsMemref(
+        rewriter, loc, ptr, *expected, tensor.getDefiningOp());
+    if (failed(base))
+      return failure();
+    return castToBridgedType(rewriter, loc, *base, tensor);
   }
 
   if (auto tileView = tensor.getDefiningOp<::tla::TileViewOp>()) {
@@ -1478,17 +1372,57 @@ FailureOr<Value> materializeCopySubviewRank2(
       shape[1] <= 0 || shape[1] == ShapedType::kDynamic)
     return failure();
 
-  if (succeeded(getMakeTensorLikeFlatMemref(tensor))) {
-    auto flatMemref = *getMakeTensorLikeFlatMemref(tensor);
+  auto viewElements = getStaticNumElements(shape);
+  if (failed(viewElements))
+    return failure();
+
+  Value flatMemref;
+  if (Value ptr = ptrOfMakeTensor(tensor);
+      ptr && ptr.getDefiningOp<::tla::IntToPtrOp>()) {
+    auto allocationElements = getStaticAllocationElementCount(ptr);
+    auto bridged = getBridgedTensorMemrefType(tensor);
+    if (succeeded(bridged)) {
+      int64_t storageElements = succeeded(allocationElements)
+                                    ? *allocationElements
+                                    : *viewElements;
+      auto flatType = MemRefType::get(
+          {storageElements}, bridged->getElementType(), AffineMap(),
+          bridged->getMemorySpace());
+      auto materialized = materializePtrValueAsMemref(
+          rewriter, loc, ptr, flatType, tensor.getDefiningOp());
+      if (succeeded(materialized))
+        flatMemref = *materialized;
+    }
+  }
+  if (flatMemref) {
     auto flatType = dyn_cast<MemRefType>(flatMemref.getType());
     if (!flatType || flatType.getRank() != 1)
       return failure();
+    if (flatType.hasStaticShape() && flatType.getDimSize(0) < *viewElements)
+      return failure();
+
+    Value viewMemref = flatMemref;
+    if (!flatType.hasStaticShape() || flatType.getDimSize(0) != *viewElements) {
+      auto viewType = MemRefType::get(
+          {*viewElements}, flatType.getElementType(), AffineMap(),
+          flatType.getMemorySpace());
+      Value zero = rewriter.create<arith::ConstantIndexOp>(loc, 0);
+      Value size = rewriter.create<arith::ConstantIndexOp>(loc, *viewElements);
+      Value one = rewriter.create<arith::ConstantIndexOp>(loc, 1);
+      viewMemref = rewriter
+                       .create<mlir::memref::ReinterpretCastOp>(
+                           loc, viewType, flatMemref, zero, ValueRange{size},
+                           ValueRange{one})
+                       .getResult();
+      flatType = viewType;
+    }
+
     auto expandedType = MemRefType::get({shape[0], shape[1]},
                                         flatType.getElementType(), MemRefLayoutAttrInterface{},
                                         flatType.getMemorySpace());
     auto expanded = rewriter
                         .create<mlir::memref::ExpandShapeOp>(
-                            loc, expandedType, flatMemref,
+                            loc, expandedType, viewMemref,
                             ArrayRef<ReassociationIndices>{ReassociationIndices{0, 1}})
                         .getResult();
     Value zero = rewriter.create<arith::ConstantIndexOp>(loc, 0);
@@ -1940,7 +1874,7 @@ mlir::LogicalResult TlaTensorMemrefLowering::deriveDescriptors(mlir::ModuleOp mo
         }
 
         int64_t flatElemCount = ShapedType::kDynamic;
-        if (auto n = getStatic1DElementCountFromHivmPtrBridge(ptrValue); succeeded(n) && *n > 0) {
+        if (auto n = getStaticAllocationElementCount(ptrValue); succeeded(n) && *n > 0) {
           flatElemCount = *n;
         } else if (childInfo->originShapeDims.size() >= 2 &&
                    childInfo->originShapeDims[0] != ShapedType::kDynamic &&
@@ -2241,7 +2175,7 @@ mlir::LogicalResult TlaTensorMemrefLowering::deriveDescriptors(mlir::ModuleOp mo
         // length from an HIVM pointer-cast bridge (allocator-backed ptr), else multiply
         // the first two origin_shape dims (e.g. inttoptr-backed ptr with static layout).
         int64_t flatElemCount = ShapedType::kDynamic;
-        if (auto n = getStatic1DElementCountFromHivmPtrBridge(ptrValue); succeeded(n) && *n > 0) {
+        if (auto n = getStaticAllocationElementCount(ptrValue); succeeded(n) && *n > 0) {
           flatElemCount = *n;
         } else if (childInfo->originShapeDims.size() >= 2 &&
                    childInfo->originShapeDims[0] != ShapedType::kDynamic &&
