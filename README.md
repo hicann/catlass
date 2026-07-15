@@ -120,6 +120,7 @@ CATLASS所需的软硬件环境依赖如下：
   - `gcc` >= 7.5, < 13.0
   - `cmake` >= 3.16
   - `python` >= 3.8, < 3.12
+  （如需编译[单元测试](tests/unittest/catlass/gemm/tile/README.md#环境要求)，需 `gcc` <= 12.0）
 
 不同CATLASS发行版可支持的硬件平台及所需的最低[CANN](https://www.hiascend.com/developer/download/community/result?module=cann)版本如下表：
 
@@ -140,7 +141,7 @@ CATLASS所需的软硬件环境依赖如下：
 | Ubuntu 20.04.5                 | 8.5.0       | 9.3   | 3.16    | 3.10     |
 | Ubuntu 22.04.5                 | 8.5.0       | 11.3  | 3.22    | 3.10     |
 | openEuler 22.03 SP4            | 8.5.0       | 10.3  | 3.22    | 3.10     |
-| Ubuntu 22.04.5 （编译950样例） | 9.0.0.beta2 | 11.3  | 3.22    | 3.10     |
+| Ubuntu 22.04.5 （编译950样例） | 9.0.0 | 11.3  | 3.22    | 3.10     |
 
 ## 👥 合作贡献者
 

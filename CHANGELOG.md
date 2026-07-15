@@ -2,6 +2,16 @@
 
 ## CATLASS 1.X
 
+### CATLASS 1.6.1
+
+- 关键特性
+ - 新增 [`catlass_cppgen`](https://gitcode.com/cann/catlass/blob/v1.6.1/python/catlass_cppgen/README.md)，一个基于Python编写的代码生成框架，用于构建和生成 CATLASS C++ 核函数代码，支持[`EVG`](https://gitcode.com/cann/catlass/blob/v1.6.1/docs/zh/2_Design/03_evg/01_evg_design.md)特性。
+- 文档资料
+ - 在[Tile组件单元测试文档](https://gitcode.com/cann/catlass/blob/v1.6.1/tests/unittest/catlass/gemm/tile/README.md)中添加 `gcc` <= 12.0 约束
+- Bugfix&优化
+ - [MLA](https://gitcode.com/cann/catlass/blob/v1.6.1/examples/19_mla/README.md)加入 `AMLATp1Spec` 特化Kernel模板，采取KV-split 均衡分核策略，并修复golden类型读取错误问题
+ - 修复 Ascend950MxGroupedMatmulSliceM 在 MxFp4 类型和transB场景下的精度问题
+
 ### CATLASS 1.6.0
 
 - 关键特性
@@ -32,7 +42,7 @@
   - 新增 [算子级测试框架（optest）](https://gitcode.com/cann/catlass/blob/v1.6.0/tests/optest/README.md)，支持 JIT 与 Prebuilt 两种模式，使用弱符号机制统一 prebuilt kernel 加载，并完成 63 个存量及新增样例的 torch_catlass 测试接口接入，覆盖 Matmul、GroupedMatmul、FlashAttention等算子类型
   - [msTuner 工具增强](https://gitcode.com/cann/catlass/blob/v1.6.0/tools/tuner/README.md)：支持 -xasc 编译及 Ascend950 架构寻优
   - 新增 [Agent Skill 开发工具](https://gitcode.com/cann/catlass/blob/v1.6.0/.agents)，当前具备支持生成样例torch接口、生成样例optest交付件等场景的自动化功能
-  - 新增 CI/构建辅助设施：pre-commit 脚本、依赖描述文件等 
+  - 新增 CI/构建辅助设施：pre-commit 脚本、依赖描述文件等
 - 文档资料
   - 新增 [EVG 声明式后处理框架文档](https://gitcode.com/cann/catlass/tree/v1.6.0/docs/zh/2_Design/03_evg/01_evg_design.md)
   - 新增 [存量非 TLA 算子向 Ascend950 平台迁移文档](https://gitcode.com/cann/catlass/tree/v1.6.0/docs/zh/1_Practice/others/migration_from_atlasA2_to_Ascend950_guideline.md)
