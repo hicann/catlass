@@ -46,9 +46,10 @@ repos:
     rev: v0.14.14
     hooks:
       - id: ruff-check
-        args: ["--output-format", "github", "--fix"]
+        args: ["--output-format", "github", "--fix", "--line-length", "120"]
         types: [python]
         exclude: ^build/|tests/3rdparty/
+
       - id: ruff-format
         types: [python]
         exclude: ^build/|tests/3rdparty/

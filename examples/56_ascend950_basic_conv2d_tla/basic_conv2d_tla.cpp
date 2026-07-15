@@ -34,8 +34,9 @@
 using namespace Catlass;
 
 struct Options {
-    const std::string HELPER = "56_ascend950_basic_conv2d_tla batch, hi, wi, cin, cout, kh, kw, padLeft, padRight, padTop, "
-                               "padBottom, strideH, strideW, dilationH, dilationW [device_id]";
+    const std::string HELPER =
+        "56_ascend950_basic_conv2d_tla batch, hi, wi, cin, cout, kh, kw, padLeft, padRight, padTop, "
+        "padBottom, strideH, strideW, dilationH, dilationW [device_id]";
 
     uint32_t dataSizes[5] = {2, 33, 43, 112, 80}; // {batch, hi, wi, cin, cout}
     uint8_t filterSizes[2] = {3, 3};              // {kh, kw}
@@ -48,9 +49,10 @@ struct Options {
 
     Options() = default;
 
-    int Parse(int argc, const char **argv)
+    int Parse(int argc, const char** argv)
     {
-        enum class ArgsIndex {
+        enum class ArgsIndex
+        {
             BATCH_INDEX = 1,
             HI_INDEX,
             WI_INDEX,
@@ -70,8 +72,8 @@ struct Options {
             ARGS_MAX
         };
 
-        if (argc > static_cast<uint32_t>(ArgsIndex::ARGS_MAX)
-            || argc <= static_cast<uint32_t>(ArgsIndex::DILATIONW_INDEX)) {
+        if (argc > static_cast<uint32_t>(ArgsIndex::ARGS_MAX) ||
+            argc <= static_cast<uint32_t>(ArgsIndex::DILATIONW_INDEX)) {
             std::cerr << HELPER << std::endl;
             return 0;
         }
@@ -101,14 +103,8 @@ struct Options {
     }
 };
 
-static void Run(Options const &options)
+static void Run(Options const& options)
 {
-    aclrtStream stream{nullptr};
-
-    ACL_CHECK(aclInit(nullptr));
-    ACL_CHECK(aclrtSetDevice(options.deviceId));
-    ACL_CHECK(aclrtCreateStream(&stream));
-
     uint32_t c0 = options.problemParams.C0;
     uint32_t batch = options.problemParams.batch();
     uint32_t hi = options.problemParams.hi();
@@ -132,11 +128,23 @@ static void Run(Options const &options)
     uint32_t strideW = options.problemParams.strideW();
 
     if (dilationH == 0 || dilationW == 0 || strideH == 0 || strideW == 0 ||
-        (hi + padTop + padBottom <= dilationH * (kh - 1) + 1) || 
+        (hi + padTop + padBottom <= dilationH * (kh - 1) + 1) ||
         (wi + padLeft + padRight <= dilationW * (kw - 1) + 1)) {
         std::cerr << "[ERROR]Invalid input parameters!" << std::endl;
         return;
     }
+
+    aclrtStream stream{nullptr};
+
+    ACL_CHECK(aclInit(nullptr));
+    ACL_CHECK(aclrtSetDevice(options.deviceId));
+    ACL_CHECK(aclrtCreateStream(&stream));
+
+    const auto releaseAclEarly = [&]() {
+        ACL_CHECK(aclrtDestroyStream(stream));
+        ACL_CHECK(aclrtResetDevice(options.deviceId));
+        ACL_CHECK(aclFinalize());
+    };
 
     size_t lenFmap = batch * cin1 * hi * wi * c0;
     size_t lenFilter = cin1 * kh * kw * cout * c0;
@@ -162,16 +170,16 @@ static void Run(Options const &options)
     golden::FillRandomData<fp16_t>(hostFmap, -1.0f, 1.0f);
     golden::FillRandomData<fp16_t>(hostFilter, -1.0f, 1.0f);
 
-    uint8_t *deviceFmap{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceFmap), sizeFmap, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceFmap{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceFmap), sizeFmap, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceFmap, sizeFmap, hostFmap.data(), sizeFmap, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceFilter{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceFilter), sizeFilter, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceFilter{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceFilter), sizeFilter, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceFilter, sizeFilter, hostFilter.data(), sizeFilter, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceOutput{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceOutput), sizeOutput, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceOutput{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceOutput), sizeOutput, ACL_MEM_MALLOC_HUGE_FIRST));
 
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
@@ -205,15 +213,16 @@ static void Run(Options const &options)
     if (conv2d_op.CanImplement(arguments) == Status::kInvalid) {
         std::cerr << "[ERROR]Conv2d op cannot be implemented: L1TileShape exceeds the L1 space!" << std::endl;
 
-        ACL_CHECK(aclrtDestroyStream(stream));
-        ACL_CHECK(aclrtResetDevice(options.deviceId));
-        ACL_CHECK(aclFinalize());
+        ACL_CHECK(aclrtFree(deviceFmap));
+        ACL_CHECK(aclrtFree(deviceFilter));
+        ACL_CHECK(aclrtFree(deviceOutput));
+        releaseAclEarly();
         return;
     }
     size_t sizeWorkspace = conv2d_op.GetWorkspaceSize(arguments);
-    uint8_t *deviceWorkspace = nullptr;
+    uint8_t* deviceWorkspace = nullptr;
     if (sizeWorkspace > 0) {
-        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
     }
     conv2d_op.Initialize(arguments, deviceWorkspace);
     conv2d_op(stream, aicCoreNum);
@@ -227,8 +236,7 @@ static void Run(Options const &options)
 
     std::vector<float> hostGolden(lenOutput);
     golden::ComputeConv2d(
-        options.problemParams, hostFmap, layoutFmap, hostFilter, layoutFilter, hostGolden, layoutOutput
-    );
+        options.problemParams, hostFmap, layoutFmap, hostFilter, layoutFilter, hostGolden, layoutOutput);
     golden::ClearInvalidOutput(hostOutput, options.problemParams);
 
     std::vector<uint64_t> errorIndices = golden::CompareData(hostOutput, hostGolden, cin1 * kh * kw * c0);
@@ -247,7 +255,7 @@ static void Run(Options const &options)
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv)
+int main(int argc, const char** argv)
 {
     Options options;
     if (options.Parse(argc, argv) != 0) {

@@ -23,7 +23,6 @@ namespace CatlassKernel {
 
 // Forward declarations for prebuilt kernel parameter types (defined in upstream headers).
 struct KernelInfo;
-struct ConvKernelInfo;
 struct FAKernelInfo;
 struct W4A4QuantMatmulKernelInfo;
 struct GemmKernelInfo;
@@ -129,14 +128,6 @@ void GroupedMatmulSliceKPerTokenDequant(const uint32_t aicCoreNum, aclrtStream s
  * @param kernelInfo 通用 kernel 参数。
  */
 void QuantMatmul(const uint32_t blockNum, aclrtStream stream, const KernelInfo& kernelInfo);
-
-/**
- * @brief 卷积 + Bias fused kernel。
- * @param blockNum  启用的 AI Core 数量。
- * @param stream    ACL 计算流。
- * @param kernelInfo 卷积 kernel 参数。
- */
-void ConvBias(uint32_t blockNum, aclrtStream stream, ConvKernelInfo kernelInfo);
 
 /**
  * @brief W4A4 量化 MatMul kernel。

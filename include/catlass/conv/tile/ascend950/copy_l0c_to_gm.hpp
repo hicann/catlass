@@ -22,22 +22,14 @@
 namespace Catlass::Conv::Tile {
 
 template <
-    class ArchTag,
-    class TensorSrc,
-    class TensorDst,
-    ScaleGranularity DEQUANT_GRANULARITY = ScaleGranularity::NO_QUANT,
+    class ArchTag, class TensorSrc, class TensorDst, ScaleGranularity DEQUANT_GRANULARITY = ScaleGranularity::NO_QUANT,
     bool ReluEnable = false>
 struct CopyL0CToGmTla {
     static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy l0c to gm, can not find the specialization.");
 };
 
 template <class TensorSrc_, class TensorDst_, bool ReluEnable_>
-struct CopyL0CToGmTla<
-    Catlass::Arch::Ascend950,
-    TensorSrc_,
-    TensorDst_,
-    ScaleGranularity::NO_QUANT,
-    ReluEnable_> {
+struct CopyL0CToGmTla<Catlass::Arch::Ascend950, TensorSrc_, TensorDst_, ScaleGranularity::NO_QUANT, ReluEnable_> {
     using ArchTag = Catlass::Arch::Ascend950;
     using ElementDst = typename TensorDst_::Element;
     using ElementSrc = typename TensorSrc_::Element;
@@ -47,19 +39,18 @@ struct CopyL0CToGmTla<
     static constexpr uint32_t ELE_NUM_PER_C0 = BytesToBits(BYTE_PER_C0) / SizeOfBits<ElementDst>::value;
 
     template <class TensorDst, class TensorSrc>
-    CATLASS_DEVICE 
-    void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor, uint8_t unitFlag = 0)
+    CATLASS_DEVICE void operator()(TensorDst const& dstTensor, TensorSrc const& srcTensor, uint8_t unitFlag = 0)
     {
         // compute sizes
         uint32_t coutRound = tla::get<1, 0>(srcTensor.shape()) * tla::get<1, 1>(srcTensor.shape());
         uint32_t howoRound = tla::get<0, 0>(srcTensor.shape()) * tla::get<0, 1>(srcTensor.shape());
         uint32_t hoActual = tla::get<2>(dstTensor.shape());
         uint32_t woActual = tla::get<3>(dstTensor.shape());
-  
-        AscendC::FixpipeParamsArch3510<AscendC::CO2Layout::NZ> intriParams;
+
+        AscendC::FixpipeParamsC310<AscendC::CO2Layout::NZ> intriParams;
 
         // Fixpipe layout information
-        intriParams.nSize = coutRound; 
+        intriParams.nSize = coutRound;
         intriParams.mSize = woActual;
         intriParams.srcStride = howoRound;
         intriParams.dstStride = tla::get<1>(dstTensor.stride());

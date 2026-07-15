@@ -19,6 +19,7 @@
 #include "catlass_kernel_prebuilt.h"
 #include "common/register.h"
 #include "common/workspace.h"
+#include "template/basic_conv2d.h"
 #include "template/batched_matmul.h"
 #include "template/flash_attention.h"
 #include "template/flash_attention_chunk_prefill.h"
@@ -38,6 +39,7 @@
 #include "template/strided_batched_matmul.h"
 #include "template/w4a4_matmul_per_token_per_channel_dequant.h"
 #include "template/w4a8_matmul.h"
+#include "template/ascend950_basic_conv2d_tla.h"
 #include "template/ascend950_mxfp8_flash_attention.h"
 #include "template/broadcast_matmul_perblock_quant.h"
 #include "template/gemm.h"
@@ -45,6 +47,7 @@
 #include "template/mx_grouped_matmul_swiglu_mx_quant.h"
 #include "template/a8w4_mx_matmul.h"
 #include "template/svd_quant_matmul.h"
+#include "template/conv_bias.h"
 
 // ── Workspace allocator bridge ──
 // 通过 dlsym 注入到 g_catlassWorkspaceAlloc，使 JIT 模板分配 NPU tensor
@@ -55,7 +58,8 @@
 namespace {
 static std::vector<at::Tensor> g_wsPool;
 
-uint8_t* wsAlloc(size_t size) {
+uint8_t* wsAlloc(size_t size)
+{
     auto opts = at::TensorOptions().dtype(torch::kInt8).device(torch_npu::utils::get_npu_device_type());
     auto t = at::empty({static_cast<int64_t>(size)}, opts);
     auto* p = static_cast<uint8_t*>(const_cast<void*>(t.storage().data()));
@@ -63,7 +67,8 @@ uint8_t* wsAlloc(size_t size) {
     return p;
 }
 
-uint8_t* wsAllocFromHost(const void* hostData, size_t size) {
+uint8_t* wsAllocFromHost(const void* hostData, size_t size)
+{
     auto opts = at::TensorOptions().dtype(torch::kInt8).device(torch_npu::utils::get_npu_device_type());
     auto dst = at::empty({static_cast<int64_t>(size)}, opts);
     auto* p = static_cast<uint8_t*>(const_cast<void*>(dst.storage().data()));
@@ -72,22 +77,30 @@ uint8_t* wsAllocFromHost(const void* hostData, size_t size) {
     return p;
 }
 
-void wsFree(uint8_t* p, size_t) {
+void wsFree(uint8_t* p, size_t)
+{
     for (auto it = g_wsPool.begin(); it != g_wsPool.end(); ++it)
-        if (it->storage().data() == p) { g_wsPool.erase(it); break; }
+        if (it->storage().data() == p) {
+            g_wsPool.erase(it);
+            break;
+        }
 }
 
 struct _WsInit {
-    _WsInit() {
-        auto sa = (void (*)( decltype(wsAlloc)*))dlsym(RTLD_DEFAULT, "CatlassSetWorkspaceAlloc");
-        auto sf = (void (*)( decltype(wsFree)*)) dlsym(RTLD_DEFAULT, "CatlassSetWorkspaceFree");
-        auto sc = (void (*)( decltype(wsAllocFromHost)*))dlsym(RTLD_DEFAULT, "CatlassSetWorkspaceAllocFromHost");
-        if (sa) sa(wsAlloc);
-        if (sf) sf(wsFree);
-        if (sc) sc(wsAllocFromHost);
+    _WsInit()
+    {
+        auto sa = (void (*)(decltype(wsAlloc)*))dlsym(RTLD_DEFAULT, "CatlassSetWorkspaceAlloc");
+        auto sf = (void (*)(decltype(wsFree)*))dlsym(RTLD_DEFAULT, "CatlassSetWorkspaceFree");
+        auto sc = (void (*)(decltype(wsAllocFromHost)*))dlsym(RTLD_DEFAULT, "CatlassSetWorkspaceAllocFromHost");
+        if (sa)
+            sa(wsAlloc);
+        if (sf)
+            sf(wsFree);
+        if (sc)
+            sc(wsAllocFromHost);
     }
 } _wsInit;
-}
+} // namespace
 
 namespace CatlassKernelWrapper {
 
@@ -237,6 +250,9 @@ using A2Fp8E4M3MatmulOp = MatmulLike<CatlassKernel::A2Fp8E4M3Matmul>;
 static auto& a2_fp8_e4m3_matmul = A2Fp8E4M3MatmulOp::Run;
 REGISTER_TORCH_FUNC(a2_fp8_e4m3_matmul);
 
+static auto& basic_conv2d = BasicConv2dOp::Run;
+REGISTER_TORCH_FUNC(basic_conv2d);
+
 static auto& mla = MlaOp::Run;
 REGISTER_TORCH_FUNC(mla);
 
@@ -260,7 +276,8 @@ using W4A8MatmulOp = W4A8MatmulLike<CatlassKernel::W4A8Matmul>;
 static auto& w4a8_matmul = W4A8MatmulOp::Run;
 REGISTER_TORCH_FUNC(w4a8_matmul);
 
-using W4A4MatmulPerTokenPerChannelDequantOp = W4A4MatmulPerTokenPerChannelDequantLike<CatlassKernel::W4A4MatmulPerTokenPerChannelDequant>;
+using W4A4MatmulPerTokenPerChannelDequantOp =
+    W4A4MatmulPerTokenPerChannelDequantLike<CatlassKernel::W4A4MatmulPerTokenPerChannelDequant>;
 static auto& w4a4_matmul_per_token_per_channel_dequant = W4A4MatmulPerTokenPerChannelDequantOp::Run;
 REGISTER_TORCH_FUNC(w4a4_matmul_per_token_per_channel_dequant);
 
@@ -280,7 +297,8 @@ using Ascend950BasicMatmulGemvOp = MatmulLike<CatlassKernel::Ascend950BasicMatmu
 static auto& ascend950_basic_matmul_gemv = Ascend950BasicMatmulGemvOp::Run;
 REGISTER_TORCH_FUNC(ascend950_basic_matmul_gemv);
 
-using Ascend950QuantMatmulPerGroupPerBlockTLAOp = QuantPerGroupPerBlockMatmulLike<CatlassKernel::Ascend950QuantMatmulPerGroupPerBlockTLA>;
+using Ascend950QuantMatmulPerGroupPerBlockTLAOp =
+    QuantPerGroupPerBlockMatmulLike<CatlassKernel::Ascend950QuantMatmulPerGroupPerBlockTLA>;
 static auto& ascend950_quant_matmul_per_group_per_block_tla = Ascend950QuantMatmulPerGroupPerBlockTLAOp::Run;
 REGISTER_TORCH_FUNC(ascend950_quant_matmul_per_group_per_block_tla);
 
@@ -352,13 +370,11 @@ static auto& ascend950_grouped_matmul_slice_m_per_tensor_per_channel_dequant =
     Ascend950GroupedMatmulSliceMPerTensorPerChannelDequantOp::Run;
 REGISTER_TORCH_FUNC(ascend950_grouped_matmul_slice_m_per_tensor_per_channel_dequant);
 
-using Ascend950MxGroupedMatmulSliceMOp =
-    MxGroupedMatmulLike<CatlassKernel::Ascend950MxGroupedMatmulSliceM>;
+using Ascend950MxGroupedMatmulSliceMOp = MxGroupedMatmulLike<CatlassKernel::Ascend950MxGroupedMatmulSliceM>;
 static auto& ascend950_mx_grouped_matmul_slice_m = Ascend950MxGroupedMatmulSliceMOp::Run;
 REGISTER_TORCH_FUNC(ascend950_mx_grouped_matmul_slice_m);
 
-using Ascend950GroupedMatmulSliceMOp =
-    GroupedMatmulLike<CatlassKernel::Ascend950GroupedMatmulSliceM, GmmSliceDir::M>;
+using Ascend950GroupedMatmulSliceMOp = GroupedMatmulLike<CatlassKernel::Ascend950GroupedMatmulSliceM, GmmSliceDir::M>;
 static auto& ascend950_grouped_matmul_slice_m = Ascend950GroupedMatmulSliceMOp::Run;
 REGISTER_TORCH_FUNC(ascend950_grouped_matmul_slice_m);
 
@@ -369,5 +385,11 @@ REGISTER_TORCH_FUNC(ascend950_fp8_mx_grouped_matmul_finalize_routing);
 
 static auto& ascend950_flash_attention_chunk_prefill = Ascend950FlashAttentionChunkPrefillOp::Run;
 REGISTER_TORCH_FUNC(ascend950_flash_attention_chunk_prefill);
+
+static auto& ascend950_basic_conv2d_tla = Ascend950BasicConv2dTLAOp::Run;
+REGISTER_TORCH_FUNC(ascend950_basic_conv2d_tla);
+
+static auto& conv_bias = ConvBiasOp::Run;
+REGISTER_TORCH_FUNC(conv_bias);
 
 } // namespace CatlassKernelWrapper

@@ -10,10 +10,10 @@
 
 import pytest
 import torch
-import torch_npu
-import torch_catlass
 
+import torch_catlass
 from common import only_on_2201
+
 
 @only_on_2201
 def test_basic_matmul():
@@ -28,6 +28,7 @@ def test_basic_matmul():
     print(f"Input A sample: {a[0, :5]}")
     print(f"Input B sample: {b[0, :5]}")
 
+    torch_catlass.clear_jit_cache()
     result = torch_catlass.basic_matmul(a, b, "float16", False, False, False, False)
     expected = torch.matmul(a, b)
 
@@ -42,6 +43,7 @@ def test_basic_matmul():
     assert torch.allclose(result, expected, rtol=rtol, atol=atol), (
         f"Results not close: max diff = {(result - expected).abs().max().item()}"
     )
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-s"])

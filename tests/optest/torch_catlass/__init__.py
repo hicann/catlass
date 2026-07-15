@@ -69,6 +69,7 @@ __all__ = [
     "ascend950_batched_matmul",
     "ascend950_streamk_matmul",
     "flash_attention_infer",
+    "conv_bias",
     "flash_attention_infer_tla",
     "ascend950_flash_attention_infer",
     "ascend950_fp8_mx_flash_attention_infer",
@@ -94,8 +95,8 @@ def enable_mssanitizer():
 
 def clear_jit_cache():
     """Remove all JIT-compiled kernel cache files on disk."""
-    import shutil
     import glob as _glob
+    import shutil
 
     cache_dir = os.environ.get("CATLASS_JIT_CACHE_DIR", "")
     if cache_dir and os.path.isdir(cache_dir):

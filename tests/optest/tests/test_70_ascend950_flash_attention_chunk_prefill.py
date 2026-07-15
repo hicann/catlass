@@ -8,36 +8,25 @@
 # the software repository for the full text of the License.
 
 
+import numpy as np
 import pytest
 import torch
-import torch_npu
+
 import torch_catlass
-import numpy as np
-import re
+from common import only_on_3510
 
-def _is_ascend950() -> bool:
-    if torch_npu.npu.device_count() <= 0:
-        return False
-    name = torch_npu.npu.get_device_name()
-    return bool(re.search(r"Ascend950(PR|DT)", name, re.I))
-
-
-pytestmark = pytest.mark.skipif(
-    not _is_ascend950(),
-    reason="example 70_ascend950_flash_attention_chunk_prefill requires Ascend 950 NPU",
-)
 
 def group_matmul(head, kv_head, left, right):
     group_num = head // kv_head
     score = None
     for i in range(kv_head):
-        group_score = np.matmul(left[i * group_num:(i + 1) * group_num, :, :].astype(np.float32),
-                                right[i:(i + 1), :, :].astype(np.float32))
-        if score is None:
-            score = group_score
-        else:
-            score = np.concatenate((score, group_score), 0)
+        group_score = np.matmul(
+            left[i * group_num : (i + 1) * group_num, :, :].astype(np.float32),
+            right[i : (i + 1), :, :].astype(np.float32),
+        )
+        score = group_score if score is None else np.concatenate((score, group_score), 0)
     return score
+
 
 def softmax_numpy(sim):
     row_max = np.max(sim, axis=-1, keepdims=True)
@@ -48,13 +37,8 @@ def softmax_numpy(sim):
     lse = np.squeeze((np.log(row_sum) + row_max), axis=-1)
     return soft_res, lse, row_max
 
-def softmax1(
-    qk_result,
-    is_first,
-    gm,
-    is_kvs_last_loop,
-    data_type = np.float16
-):
+
+def softmax1(qk_result, is_first, gm, is_kvs_last_loop, data_type=np.float16):
     sim = qk_result
     lm = np.max(sim, axis=-1, keepdims=True)
     if is_first:
@@ -72,32 +56,8 @@ def softmax1(
 
     return sim_sub, row_sum, dm, gm
 
-def qkMM1(
-    query,
-    key
-):
-    result = None
-    qk_k = key.shape[1]
-    for qk_k_split in range(0, qk_k, 128):
-        sub_k = 128
-        if qk_k_split == 512:
-            sub_k = 64
-        query_k = query[:, :, qk_k_split: qk_k_split + sub_k]
-        key_k = key[:, qk_k_split: qk_k_split + sub_k, :]
-        result_split = group_matmul(query_k.shape[0], key_k.shape[0], query_k, key_k)
-        if result is None:
-            result = result_split
-        else:
-            result = result + result_split
-    return result
 
-def ref_masked_attention(
-        query,
-        key,
-        value,
-        scale: float,
-        mask
-):
+def ref_masked_attention(query, key, value, scale: float, mask):
     query = query.numpy()
     mask = mask.numpy()
     query = np.transpose(query, (1, 0, 2))
@@ -106,12 +66,10 @@ def ref_masked_attention(
     sim_low_prec = sim_high.astype(np.float16) * np.float16(scale)
     sim_high = sim_high * scale
     if mask is not None:
-        sim_high = sim_high + (
-            mask[:sim_high.shape[-2], :sim_high.shape[-1]]
-            ).astype(np.float32)
-        sim_low_prec = sim_low_prec + (
-            mask[:sim_high.shape[-2], :sim_high.shape[-1]]
-            ).astype(np.float16)
+        sim_high = sim_high + (mask[: sim_high.shape[-2], : sim_high.shape[-1]]).astype(np.float32)
+        sim_low_prec = sim_low_prec + (mask[: sim_high.shape[-2], : sim_high.shape[-1]]).astype(
+            np.float16
+        )
 
     p_high, lse_high, gm = softmax_numpy(sim_high)
     p_low_prec, lse_low_prec, gm_low_prec = softmax_numpy(sim_low_prec)
@@ -120,7 +78,7 @@ def ref_masked_attention(
     p = p_high.astype(query.dtype)
     p_high = p_high.astype(np.float32)
     value = np.transpose(value, (1, 0, 2))
-    
+
     out_low_prec = group_matmul(query.shape[0], key.shape[0], p_low_prec, value)
     out_high = group_matmul(query.shape[0], key.shape[0], p_high, value)
     out = group_matmul(query.shape[0], key.shape[0], p, value)
@@ -130,6 +88,7 @@ def ref_masked_attention(
     out_low_prec = out_low_prec.astype(np.float16)
     out = out.astype(query.dtype)
     return out, out_high, out_low_prec, lse, lse_high, gm
+
 
 def ref_single_query_cached_kv_attention(
     query,
@@ -143,7 +102,7 @@ def ref_single_query_cached_kv_attention(
     kv_heads,
     qk_head_size,
     v_head_size,
-    block_size
+    block_size,
 ):
     num_heads = num_heads
     kv_heads = kv_heads
@@ -161,11 +120,11 @@ def ref_single_query_cached_kv_attention(
         print(f"batch:{i}")
         print(f"q_seqlen:{q_seqlen}")
         print(f"k_seqlen:{k_seqlen}")
-        q = query[cu_seqlen:(cu_seqlen + q_seqlen), :, :]
+        q = query[cu_seqlen : (cu_seqlen + q_seqlen), :, :]
         keys = []
         values = []
         block_table = block_tables[i]
-        
+
         for j in range(k_seqlen):
             block_number = int(block_table[j // block_size])
             block_offset = j % block_size
@@ -178,22 +137,23 @@ def ref_single_query_cached_kv_attention(
         keys = np.stack(keys, axis=0)
         values = np.stack(values, axis=0)
 
-        scale = 1.0 / (head_size_qk ** 0.5)
+        scale = 1.0 / (head_size_qk**0.5)
 
-        mask = global_mask[cu_seqlen:(cu_seqlen + q_seqlen), :]
+        mask = global_mask[cu_seqlen : (cu_seqlen + q_seqlen), :]
 
         out_normal, _, out_low_prec, lse, _, gm = ref_masked_attention(q, keys, values, scale, mask)
 
         out = out_normal
         out = out.reshape(-1, num_heads, head_size_vo)
 
-        out = torch.tensor(out, device=out.device)
-        output.append(out) 
+        output.append(torch.tensor(out))
 
         cu_seqlen += q_seqlen
         kv_seqlen_now += k_seqlen
     return torch.cat(output, dim=0).to(query.dtype)
 
+
+@only_on_3510
 def test_ascend950_ascend950_flash_attention_chunk_prefill_paged_mask():
     """Compare ascend950 flash attention chunkprefill against a PyTorch reference implementation."""
     torch.manual_seed(1)
@@ -226,9 +186,7 @@ def test_ascend950_ascend950_flash_attention_chunk_prefill_paged_mask():
 
     block_table = []
     for i in range(batch):
-        block_table.append(
-            [max_num_blocks_per_seq * i + j for j in range(max_num_blocks_per_seq)]
-        )
+        block_table.append([max_num_blocks_per_seq * i + j for j in range(max_num_blocks_per_seq)])
     block_table = torch.tensor(block_table, dtype=torch.int32, device="npu")
 
     actual_seq_lengths = torch.tensor(q_seqlen_list_npu, dtype=torch.int64, device="npu")
@@ -261,7 +219,7 @@ def test_ascend950_ascend950_flash_attention_chunk_prefill_paged_mask():
         block_size,
         num_blocks,
         cache_layout,
-        sparse_mode
+        sparse_mode,
     )
 
     expected = ref_single_query_cached_kv_attention(
@@ -276,7 +234,7 @@ def test_ascend950_ascend950_flash_attention_chunk_prefill_paged_mask():
         kv_heads,
         qk_head_dim,
         v_head_dim,
-        block_size
+        block_size,
     )
 
     assert result.shape == (num_tokens, num_heads, qk_head_dim)

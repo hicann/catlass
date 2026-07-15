@@ -11,11 +11,9 @@
 
 ## 功能说明
 
-- 算子功能：完成基础卷积计算
+- 算子功能：完成基础2D版本卷积计算（使用[`TLA`](../../docs/zh/2_Design/02_tla/01_layout.md)语义）
+- 该用例总体设计与[`33_basic_conv2d`](../33_basic_conv2d/README.md)相同，区别为使用了TLA相关抽象，条件约束与[`BasicConv2d` 约束](../33_basic_conv2d/README.md#功能说明)一致，注意在Ascend950硬件条件下，`L0C_SIZE`为256K。
 
-## 示例说明
-
-该用例总体设计与[`_basic_matmul`](../33_basic_conv2d/README.md)相同，区别为使用了TLA相关抽象，因此提供相关示例说明
 
 ## 使用示例
 
