@@ -124,6 +124,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
         source_text: str = "",
     ) -> None:
         self._counter = 0
+        self._reserved_names: set[str] = set()
         self._range_alias_stack: list[set[str]] = []
         self._scope_manager = ScopeManager.create()
         self._following_loads_stack: list[set[str]] = []
@@ -144,9 +145,18 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
             self._global_symbols
         )
 
+    def visit_Module(self, node: ast.Module) -> Any:
+        self._reserved_names.update(_identifier_names(node))
+        return self.generic_visit(node)
+
     def _fresh(self, prefix: str) -> str:
-        self._counter += 1
-        return f"__tladsl_{prefix}_{self._counter}"
+        while True:
+            self._counter += 1
+            name = f"__tladsl_{prefix}_{self._counter}"
+            if name in self._reserved_names:
+                continue
+            self._reserved_names.add(name)
+            return name
 
     def _source_info_dict(
         self,
@@ -725,7 +735,7 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
             [
                 ast.Return(
                     value=ast.List(
-                        elts=[self.visit(node.test), _names_list(carried_names)],
+                        elts=[node.test, _names_list(carried_names)],
                         ctx=ast.Load(),
                     )
                 )
@@ -970,18 +980,26 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
 
         lhs = node.values[0]
         for rhs in node.values[1:]:
-            lhs = ast.copy_location(
-                ast.IfExp(
-                    test=_static_bool_equals(lhs, short_circuit_value),
-                    body=lhs,
-                    orelse=ast.Call(
-                        func=ast.Name(id=helper, ctx=ast.Load()),
-                        args=[lhs, rhs],
-                        keywords=[],
-                    ),
-                ),
-                node,
+            lhs_name = self._fresh("bool_op_lhs")
+            bound_lhs = ast.NamedExpr(
+                target=ast.Name(id=lhs_name, ctx=ast.Store()),
+                value=lhs,
             )
+            ast.copy_location(bound_lhs, lhs)
+            short_circuit = ast.IfExp(
+                test=ast.Compare(
+                    left=bound_lhs,
+                    ops=[ast.Is()],
+                    comparators=[short_circuit_value],
+                ),
+                body=ast.Name(id=lhs_name, ctx=ast.Load()),
+                orelse=ast.Call(
+                    func=ast.Name(id=helper, ctx=ast.Load()),
+                    args=[ast.Name(id=lhs_name, ctx=ast.Load()), rhs],
+                    keywords=[],
+                ),
+            )
+            lhs = ast.copy_location(short_circuit, node)
         return lhs
 
     def visit_UnaryOp(self, node: ast.UnaryOp) -> Any:
@@ -1667,26 +1685,26 @@ def _compare_op_name(op: ast.cmpop) -> str:
     raise SyntaxError(f"unsupported comparison operator: {type(op).__name__}")
 
 
-def _static_bool_equals(value: ast.AST, expected: ast.Constant) -> ast.BoolOp:
-    return ast.BoolOp(
-        op=ast.And(),
-        values=[
-            ast.Compare(
-                left=ast.Call(
-                    func=ast.Name(id="type", ctx=ast.Load()),
-                    args=[value],
-                    keywords=[],
-                ),
-                ops=[ast.Eq()],
-                comparators=[ast.Name(id="bool", ctx=ast.Load())],
-            ),
-            ast.Compare(
-                left=value,
-                ops=[ast.Eq()],
-                comparators=[expected],
-            ),
-        ],
-    )
+def _identifier_names(node: ast.AST) -> set[str]:
+    names: set[str] = set()
+    for item in ast.walk(node):
+        if isinstance(item, ast.Name):
+            names.add(item.id)
+        elif isinstance(item, ast.arg):
+            names.add(item.arg)
+        elif isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(item.name)
+        elif isinstance(item, ast.alias):
+            names.add(item.asname or item.name.split(".", 1)[0])
+        elif isinstance(item, ast.ExceptHandler) and item.name is not None:
+            names.add(item.name)
+        elif isinstance(item, (ast.Global, ast.Nonlocal)):
+            names.update(item.names)
+        elif isinstance(item, (ast.MatchAs, ast.MatchStar)) and item.name is not None:
+            names.add(item.name)
+        elif isinstance(item, ast.MatchMapping) and item.rest is not None:
+            names.add(item.rest)
+    return names
 
 
 def _function_arg_names(args: ast.arguments) -> set[str]:

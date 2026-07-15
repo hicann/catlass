@@ -40,6 +40,20 @@ def statement_while_carried_index_kernel(limit: int) -> None:
 
 
 @tla.kernel
+def statement_while_compound_bool_kernel(limit: int) -> None:
+    i = 0
+    while (
+        i < limit
+        and i < 1024
+        and i >= 0
+        and i != 1025
+        and i <= 1024
+    ):
+        i = i + 1
+    tla.make_coord(i, 0)
+
+
+@tla.kernel
 def statement_while_structured_carried_kernel(limit: int) -> None:
     state = (0, 1)
     while state[0] < limit:
@@ -226,6 +240,13 @@ def test_statement_while_carried_index_lowers_to_scf_while() -> None:
     assert "scf.condition" in mlir
     assert "scf.yield" in mlir
     assert "tla.make_coord" in mlir
+
+
+def test_statement_while_compound_bool_condition_is_lowered_once() -> None:
+    mlir = statement_while_compound_bool_kernel.dump_mlir(type_args=(4,))
+    assert "scf.while" in mlir
+    assert mlir.count("arith.cmpi") == 5
+    assert mlir.count("arith.andi") == 4
 
 
 def test_statement_while_structured_carried_value_lowers_to_scf_while() -> None:

@@ -369,6 +369,20 @@ def statement_if_bool_op_kernel(limit: int) -> None:
             tla.make_coord(i, 0)
 
 
+@tla.kernel
+def statement_if_bool_op_and_name_collision_kernel(limit: int) -> None:
+    __tladsl_bool_op_lhs_1 = False
+    if limit > 0 and __tladsl_bool_op_lhs_1:
+        tla.make_coord(0, 0)
+
+
+@tla.kernel
+def statement_if_bool_op_or_name_collision_kernel(limit: int) -> None:
+    __tladsl_bool_op_lhs_1 = True
+    if limit < 0 or __tladsl_bool_op_lhs_1:
+        tla.make_coord(0, 0)
+
+
 def _raise_if_evaluated() -> bool:
     raise AssertionError("short-circuited boolean RHS was evaluated")
 
@@ -1081,6 +1095,18 @@ def test_statement_if_predicate_bool_ops_lower() -> None:
     mlir = statement_if_bool_op_kernel.dump_mlir(type_args=(2,))
     assert "arith.andi" in mlir
     assert "scf.if" in mlir
+
+
+def test_bool_op_and_generated_name_does_not_capture_user_name() -> None:
+    mlir = statement_if_bool_op_and_name_collision_kernel.dump_mlir(type_args=(4,))
+    assert "arith.constant false" in mlir
+    assert "arith.andi" in mlir
+
+
+def test_bool_op_or_generated_name_does_not_capture_user_name() -> None:
+    mlir = statement_if_bool_op_or_name_collision_kernel.dump_mlir(type_args=(4,))
+    assert "arith.constant true" in mlir
+    assert "arith.ori" in mlir
 
 
 def test_static_false_and_short_circuits_rhs() -> None:
