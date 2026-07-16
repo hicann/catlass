@@ -18,17 +18,22 @@
 # interleave_op.py, squeeze_op.py).
 # python/tla_dsl/examples/end_to_end/tensor_index (scalar_index_control_flow.py).
 #
-# Fixed toolchain paths relative to WORKSPACE_ROOT (= parent of catlass repo):
-#   CANN:             Ascend/9.1.0-beta.1/ascend-toolkit/set_env.sh
-#   AscendNPU-IR-Dev: AscendNPU-IR-Dev/
-#   TLA DSL:          catlass/python/tla_dsl/
+# Toolchain paths (env overrides first; directory-layout fallbacks last):
+#   CANN:             ASCEND_HOME_PATH (source set_env.sh if not already in env)
+#                     → WORKSPACE_ROOT/Ascend/9.1.0-beta.1/ascend-toolkit/set_env.sh
+#   AscendNPU-IR-Dev: TLA_DSL_PREBUILT_ASCENDNPU_IR
+#                     → TLA_DSL_ASCENDNPU_IR_ROOT
+#                     → WORKSPACE_ROOT/AscendNPU-IR-Dev
+#                     → TLA_DSL_DIR/3rdparty/AscendNPU-IR-Dev
+#   TLA DSL:          TLA_DSL_DIR → CATDSL_ROOT/python/tla_dsl
 #
 # CANN 9.1+ ships hivmc-a5 in toolkit; no separate HIVMC sibling is required.
 # LLVM/MLIR come from AscendNPU-IR-Dev build/install, not from conda.
 #
 # Usage:
-#   bash catlass_DSL/tests/run_dsl_test.sh
-#   bash catlass_DSL/tests/run_dsl_test.sh --skip-prepare --device 0
+#   bash tests/run_dsl_test.sh
+#   bash tests/run_dsl_test.sh --device 0
+#   TLA_DSL_PREBUILT_ASCENDNPU_IR=/path/to/AscendNPU-IR-Dev bash tests/run_dsl_test.sh --device 0
 
 set -euo pipefail
 
@@ -37,13 +42,34 @@ CATDSL_ROOT="$(realpath "${SCRIPT_PATH}/..")"
 WORKSPACE_ROOT="${ASCEND_CATLASS_DSL_ROOT:-$(dirname "${CATDSL_ROOT}")}"
 
 TLA_DSL_DIR="${TLA_DSL_DIR:-${CATDSL_ROOT}/python/tla_dsl}"
-CANN_SET_ENV_SH="${WORKSPACE_ROOT}/Ascend/9.1.0-beta.1/ascend-toolkit/set_env.sh"
-TLA_DSL_PREBUILT_ASCENDNPU_IR="${WORKSPACE_ROOT}/AscendNPU-IR-Dev"
-TLA_DSL_ASCENDNPU_IR_ROOT="${WORKSPACE_ROOT}/AscendNPU-IR-Dev"
+
+_resolve_cann_set_env_sh() {
+    if [[ -n "${ASCEND_HOME_PATH:-}" && -f "${ASCEND_HOME_PATH}/set_env.sh" ]]; then
+        printf '%s\n' "${ASCEND_HOME_PATH}/set_env.sh"
+        return 0
+    fi
+    local fallback="${WORKSPACE_ROOT}/Ascend/9.1.0-beta.1/ascend-toolkit/set_env.sh"
+    if [[ -f "${fallback}" ]]; then
+        printf '%s\n' "${fallback}"
+        return 0
+    fi
+    return 1
+}
+
+# Prefer env for AscendNPU-IR-Dev; fall back to monorepo sibling, then in-tree 3rdparty.
+if [[ -z "${TLA_DSL_PREBUILT_ASCENDNPU_IR:-}" ]]; then
+    if [[ -n "${TLA_DSL_ASCENDNPU_IR_ROOT:-}" ]]; then
+        TLA_DSL_PREBUILT_ASCENDNPU_IR="${TLA_DSL_ASCENDNPU_IR_ROOT}"
+    elif [[ -d "${WORKSPACE_ROOT}/AscendNPU-IR-Dev" ]]; then
+        TLA_DSL_PREBUILT_ASCENDNPU_IR="${WORKSPACE_ROOT}/AscendNPU-IR-Dev"
+    else
+        TLA_DSL_PREBUILT_ASCENDNPU_IR="${TLA_DSL_DIR}/3rdparty/AscendNPU-IR-Dev"
+    fi
+fi
+TLA_DSL_ASCENDNPU_IR_ROOT="${TLA_DSL_ASCENDNPU_IR_ROOT:-${TLA_DSL_PREBUILT_ASCENDNPU_IR}}"
 
 CONDA_ENV="${CONDA_ENV:-ascend-catlass-dsl}"
 DEVICE_ID="${DEVICE_ID:-1}"
-SKIP_PREPARE="${SKIP_PREPARE:-0}"
 
 BASIC_MMAD_REL="examples/end_to_end/basic_mmad/basic_matmul.py"
 BASIC_MMAD_PTR_REL="examples/end_to_end/basic_mmad/basic_mmad_ptr.py"
@@ -96,12 +122,11 @@ Run end-to-end validation for:
     loop/dynamic-if/constexpr-if, vec.func)
 Runs basic_mmad default MNK plus m=1, n=2, k=3.
 Activates conda env "${CONDA_ENV}", sources CANN set_env.sh, exports AscendNPU-IR-Dev MLIR/LLVM
-env, then builds (optional) and runs the test.
+env, runs ./build.sh, then runs the test.
 
 Options:
   -h, --help              Show this help
   --device ID             NPU device id (default: ${DEVICE_ID})
-  --skip-prepare          Skip git submodule update and ./build.sh
 
 Paths (auto from script location):
   WORKSPACE_ROOT=${WORKSPACE_ROOT}   (override: ASCEND_CATLASS_DSL_ROOT)
@@ -109,16 +134,23 @@ Paths (auto from script location):
   TLA_DSL_DIR=${TLA_DSL_DIR}
   CONDA_ENV=${CONDA_ENV}
 
-Toolchain (fixed, relative to WORKSPACE_ROOT=${WORKSPACE_ROOT}):
-  CANN_SET_ENV_SH                Ascend/9.1.0-beta.1/ascend-toolkit/set_env.sh
-  TLA_DSL_PREBUILT_ASCENDNPU_IR  AscendNPU-IR-Dev
-  TLA_DSL_ASCENDNPU_IR_ROOT      AscendNPU-IR-Dev
-  ASCEND_HOME_PATH               (default: ${ASCEND_HOME_PATH:-<after CANN source>})
+Toolchain (env first, layout fallback last):
+  ASCEND_HOME_PATH               current: ${ASCEND_HOME_PATH:-<unset>}
+    resolve: ASCEND_HOME_PATH/set_env.sh
+             → WORKSPACE_ROOT/Ascend/9.1.0-beta.1/ascend-toolkit/set_env.sh
+    note: sourcing CANN set_env.sh sets ASCEND_HOME_PATH automatically
+  TLA_DSL_PREBUILT_ASCENDNPU_IR  current: ${TLA_DSL_PREBUILT_ASCENDNPU_IR}
+  TLA_DSL_ASCENDNPU_IR_ROOT      current: ${TLA_DSL_ASCENDNPU_IR_ROOT}
+    resolve: TLA_DSL_PREBUILT_ASCENDNPU_IR → TLA_DSL_ASCENDNPU_IR_ROOT
+             → WORKSPACE_ROOT/AscendNPU-IR-Dev
+             → TLA_DSL_DIR/3rdparty/AscendNPU-IR-Dev
   MLIR_DIR                       (default: ${MLIR_DIR:-<after Dev export>})
 
 Example:
   bash ${SCRIPT_PATH}/run_dsl_test.sh
-  SKIP_PREPARE=1 bash ${SCRIPT_PATH}/run_dsl_test.sh --device 0
+  bash ${SCRIPT_PATH}/run_dsl_test.sh --device 0
+  TLA_DSL_PREBUILT_ASCENDNPU_IR=/path/to/AscendNPU-IR-Dev \\
+    bash ${SCRIPT_PATH}/run_dsl_test.sh --device 0
 EOF
 }
 
@@ -131,9 +163,6 @@ while [[ $# -gt 0 ]]; do
         --device)
             shift
             DEVICE_ID="${1:?--device requires an argument}"
-            ;;
-        --skip-prepare)
-            SKIP_PREPARE=1
             ;;
         *)
             echo "error: unknown argument: $1" >&2
@@ -178,7 +207,7 @@ _export_ascendnpu_ir_dev_mlir_env() {
 _export_cann_build_env() {
     if [[ -z "${ASCEND_HOME_PATH:-}" ]]; then
         local toolkit_dir
-        toolkit_dir="$(dirname "${CANN_SET_ENV_SH}")"
+        toolkit_dir="$(dirname "${_cann_set_env_sh}")"
         if [[ -d "${toolkit_dir}/latest" ]]; then
             ASCEND_HOME_PATH="$(realpath "${toolkit_dir}/latest")"
         else
@@ -242,13 +271,16 @@ fi
 echo "==> Activating conda env: ${CONDA_ENV}"
 _activate_conda
 
-if [[ ! -f "${CANN_SET_ENV_SH}" ]]; then
-    echo "error: CANN set_env.sh not found: ${CANN_SET_ENV_SH}" >&2
+if ! _cann_set_env_sh="$(_resolve_cann_set_env_sh)"; then
+    echo "error: CANN set_env.sh not found." >&2
+    echo "       Set ASCEND_HOME_PATH to your CANN toolkit root (with set_env.sh)," >&2
+    echo "       or source CANN set_env.sh before running this script," >&2
+    echo "       or place CANN at ${WORKSPACE_ROOT}/Ascend/9.1.0-beta.1/ascend-toolkit/set_env.sh" >&2
     exit 1
 fi
-echo "==> Sourcing CANN: ${CANN_SET_ENV_SH}"
+echo "==> Sourcing CANN: ${_cann_set_env_sh}"
 # shellcheck disable=SC1090
-source "${CANN_SET_ENV_SH}"
+source "${_cann_set_env_sh}"
 
 echo "==> Exporting CANN build env"
 _export_cann_build_env
@@ -257,11 +289,7 @@ _export_toolchain_env
 
 echo "==> Using TLA_DSL_DIR=${TLA_DSL_DIR}"
 
-if [[ "${SKIP_PREPARE}" != "1" ]]; then
-    _prepare_tla_dsl
-else
-    echo "==> SKIP_PREPARE=1: skipping submodule update and build.sh"
-fi
+_prepare_tla_dsl
 
 if [[ ! -f "${TLA_DSL_DIR}/${BASIC_MMAD_REL}" ]]; then
     echo "error: missing ${BASIC_MMAD_REL} under ${TLA_DSL_DIR}" >&2

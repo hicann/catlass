@@ -1657,75 +1657,6 @@ def maxs(result, lhs, rhs, *, mask=None, loc=None, ip=None) -> _ods_ir.Value:
   return _get_op_result_or_op_results(MaxsOp(result=result, lhs=lhs, rhs=rhs, mask=mask, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
-class ScalarLoadOp(_ods_ir.OpView):
-  OPERATION_NAME = "tla.scalar_load"
-
-  _ODS_REGIONS = (0, True)
-
-  def __init__(self, result, source, indices, *, loc=None, ip=None):
-    operands = []
-    results = []
-    attributes = {}
-    regions = None
-    operands.append(_get_op_result_or_value(source))
-    operands.extend(_get_op_results_or_values(indices))
-    _ods_context = _ods_get_default_loc_context(loc)
-    results.append(result)
-    _ods_successors = None
-    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
-
-  @builtins.property
-  def source(self):
-    return self.operation.operands[0]
-
-  @builtins.property
-  def indices(self):
-    _ods_variadic_group_length = len(self.operation.operands) - 2 + 1
-    return self.operation.operands[1:1 + _ods_variadic_group_length]
-
-  @builtins.property
-  def result(self):
-    return self.operation.results[0]
-
-def scalar_load(result, source, indices, *, loc=None, ip=None) -> _ods_ir.Value:
-  return _get_op_result_or_op_results(ScalarLoadOp(result=result, source=source, indices=indices, loc=loc, ip=ip))
-
-@_ods_cext.register_operation(_Dialect)
-class ScalarStoreOp(_ods_ir.OpView):
-  OPERATION_NAME = "tla.scalar_store"
-
-  _ODS_REGIONS = (0, True)
-
-  def __init__(self, dest, indices, value, *, loc=None, ip=None):
-    operands = []
-    results = []
-    attributes = {}
-    regions = None
-    operands.append(_get_op_result_or_value(dest))
-    operands.extend(_get_op_results_or_values(indices))
-    operands.append(_get_op_result_or_value(value))
-    _ods_context = _ods_get_default_loc_context(loc)
-    _ods_successors = None
-    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
-
-  @builtins.property
-  def dest(self):
-    return self.operation.operands[0]
-
-  @builtins.property
-  def indices(self):
-    _ods_variadic_group_length = len(self.operation.operands) - 3 + 1
-    return self.operation.operands[1:1 + _ods_variadic_group_length]
-
-  @builtins.property
-  def value(self):
-    _ods_variadic_group_length = len(self.operation.operands) - 3 + 1
-    return self.operation.operands[2 + _ods_variadic_group_length - 1]
-
-def scalar_store(dest, indices, value, *, loc=None, ip=None) -> _ods_ir.Operation:
-  return _get_op_result_or_op_results(ScalarStoreOp(dest=dest, indices=indices, value=value, loc=loc, ip=ip))
-
-@_ods_cext.register_operation(_Dialect)
 class MinOp(_ods_ir.OpView):
   OPERATION_NAME = "tla.min"
 
@@ -2382,6 +2313,75 @@ class ReturnOp(_ods_ir.OpView):
 
 def return_(*, loc=None, ip=None) -> _ods_ir.Operation:
   return _get_op_result_or_op_results(ReturnOp(loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
+class ScalarLoadOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.scalar_load"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, source, indices, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(source))
+    operands.extend(_get_op_results_or_values(indices))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def source(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def indices(self):
+    _ods_variadic_group_length = len(self.operation.operands) - 2 + 1
+    return self.operation.operands[1:1 + _ods_variadic_group_length]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def scalar_load(result, source, indices, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(ScalarLoadOp(result=result, source=source, indices=indices, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
+class ScalarStoreOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.scalar_store"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, dest, indices, value, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(dest))
+    operands.extend(_get_op_results_or_values(indices))
+    operands.append(_get_op_result_or_value(value))
+    _ods_context = _ods_get_default_loc_context(loc)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def dest(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def indices(self):
+    _ods_variadic_group_length = len(self.operation.operands) - 3 + 1
+    return self.operation.operands[1:1 + _ods_variadic_group_length]
+
+  @builtins.property
+  def value(self):
+    _ods_variadic_group_length = len(self.operation.operands) - 3 + 1
+    return self.operation.operands[2 + _ods_variadic_group_length - 1]
+
+def scalar_store(dest, indices, value, *, loc=None, ip=None) -> _ods_ir.Operation:
+  return _get_op_result_or_op_results(ScalarStoreOp(dest=dest, indices=indices, value=value, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
 class SetFlagOp(_ods_ir.OpView):

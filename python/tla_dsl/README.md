@@ -224,7 +224,29 @@ python examples/end_to_end/basic_mmad/basic_matmul.py --run --device 0 --all-lay
 python examples/end_to_end/basic_mmad/basic_matmul.py --run --device 0 --use-mutex
 ```
 
+#### 一键端到端回归：`tests/run_dsl_test.sh`
 
+```bash
+bash tests/run_dsl_test.sh --device 0
+```
+
+脚本会激活 conda、source CANN、导出 AscendNPU-IR-Dev 环境，**强制执行** `./build.sh` 后再跑上板用例。
+
+需要设置的环境变量：
+
+- `ASCEND_HOME_PATH`（指向 CANN toolkit 根目录）。在运行前执行 `source /path/to/ascend-toolkit/set_env.sh`，会**自动设置** `ASCEND_HOME_PATH`
+- `TLA_DSL_PREBUILT_ASCENDNPU_IR`（已构建的 AscendNPU-IR-Dev 根目录）
+
+可选：
+
+- `DEVICE_ID`（默认 `1`，也可用 `--device`）
+- `CONDA_ENV`（默认 `ascend-catlass-dsl`）
+
+```bash
+source /path/to/ascend-toolkit/set_env.sh
+export TLA_DSL_PREBUILT_ASCENDNPU_IR=/path/to/AscendNPU-IR-Dev
+bash tests/run_dsl_test.sh --device 0
+```
 
 ### 2.8 构建 API 文档（可选）
 
@@ -302,4 +324,5 @@ http://127.0.0.1:8000/
 | 依赖版本表、`python/tla_dsl/environment.yml`、`lit` 与 MLIR 19.1.7 同栈 | 上文 **2.2.1** |
 | 一键构建（`build.sh` / `hatch build`） | 上文 **2.5** |
 | 仅配置 MLIR 子目录（不跑完整 Catlass） | 见上文 **2.5** 的 **`./build.sh`** 或 `cmake` / `ninja` |
+| 一键上板端到端回归（`tests/run_dsl_test.sh`） | 上文 **2.7**「一键端到端回归」 |
 | API 文档生成与 MkDocs 静态站点构建 | 上文 **2.8** |
