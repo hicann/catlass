@@ -46,10 +46,9 @@ def _format_control_flow_error(fn: Callable[..., Any], exc: Exception) -> str | 
     if info is None:
         return None
     filename = str(info.get("filename") or "<unknown>")
-    line_offset = int(info.get("line_offset") or 0)
     fallback_lineno = int(info.get("lineno") or 0)
     helper_lineno = _traceback_lineno_for_code(exc, fn.__code__)
-    lineno = line_offset + helper_lineno if helper_lineno is not None else fallback_lineno
+    lineno = helper_lineno if helper_lineno is not None else fallback_lineno
     if lineno <= 0:
         lineno = fallback_lineno
     source = linecache.getline(filename, lineno).strip()

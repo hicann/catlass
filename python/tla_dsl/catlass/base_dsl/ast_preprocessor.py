@@ -173,7 +173,6 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
                 ast.Constant(value="filename"),
                 ast.Constant(value="lineno"),
                 ast.Constant(value="col_offset"),
-                ast.Constant(value="line_offset"),
                 ast.Constant(value="construct"),
                 ast.Constant(value="region"),
                 ast.Constant(value="generated_name"),
@@ -183,7 +182,6 @@ class _FrontendControlFlowTransformer(ast.NodeTransformer):
                 ast.Constant(value=self._filename),
                 ast.Constant(value=self._line_offset + int(getattr(node, "lineno", 0) or 0)),
                 ast.Constant(value=int(getattr(node, "col_offset", 0) or 0)),
-                ast.Constant(value=self._line_offset),
                 ast.Constant(value=construct),
                 ast.Constant(value=region),
                 ast.Constant(value=generated_name),
@@ -1234,6 +1232,8 @@ def maybe_transform_for_lowering(
         source_text=source,
     ).visit(module_ast)
     ast.fix_missing_locations(transformed)
+    if line_offset:
+        ast.increment_lineno(transformed, line_offset)
 
     exec_globals[_INTERNAL_FOR] = internal_for
     exec_globals[_INTERNAL_REGION] = internal_region
@@ -1272,7 +1272,6 @@ def maybe_transform_for_lowering(
     rewritten.__annotations__ = dict(getattr(fn, "__annotations__", {}))
     rewritten.__tladsl_source_info__ = {
         "filename": filename,
-        "line_offset": line_offset,
         "generated_name": rewritten.__name__,
         "construct": "kernel body",
         "region": "frontend-execution",

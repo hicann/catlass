@@ -44,15 +44,13 @@ def _format_execution_source_error(fn: Any, exc: Exception) -> str | None:
     if not isinstance(info, dict):
         return None
     filename = str(info.get("filename") or "<unknown>")
-    line_offset = int(info.get("line_offset") or 0)
     lineno = _traceback_lineno_for_code(exc, fn.__code__)
     if lineno is None:
         return None
-    source_lineno = line_offset + lineno
-    source = linecache.getline(filename, source_lineno).strip()
+    source = linecache.getline(filename, lineno).strip()
     message = (
         f"Execution-mode lowering failed while running `{fn.__name__}` "
-        f"at {filename}:{source_lineno}"
+        f"at {filename}:{lineno}"
     )
     if source:
         message += f"\n  source: {source}"

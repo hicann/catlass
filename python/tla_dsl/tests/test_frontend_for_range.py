@@ -795,6 +795,26 @@ def _source_line(fn: Any, needle: str) -> int:
     raise AssertionError(f"Unable to find source line containing {needle!r}")
 
 
+def test_dynamic_for_body_operation_uses_original_source_location() -> None:
+    line = _source_line(make_coord_from_for_index_ok, "tla.make_coord(i, 0)")
+    lowered = BaseDSL()._lower(
+        make_coord_from_for_index_ok.fn,
+        kind=make_coord_from_for_index_ok.kind,
+        options=dict(make_coord_from_for_index_ok.options),
+        type_args=(4,),
+        location=make_coord_from_for_index_ok.decorator_location,
+    )
+    with lowered.context:
+        mlir = lowered.module.operation.get_asm(
+            print_generic_op_form=True,
+            assume_verified=False,
+            enable_debug_info=True,
+        )
+
+    assert "__tladsl_loop_body_" in mlir
+    assert f'"{__file__}":{line}:' in mlir
+
+
 def test_dynamic_for_body_error_reports_original_source_location() -> None:
     line = _source_line(dynamic_for_bad_list_index_kernel, "values[i]")
     with pytest.raises(Exception) as excinfo:
