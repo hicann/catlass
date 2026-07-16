@@ -121,32 +121,41 @@ mlir::LogicalResult VecFuncOp::verify() {
   return mlir::success();
 }
 
+static mlir::LogicalResult
+verifyInterleaveLikeElementTypes(mlir::Operation *op, TlaTensorType src0Type,
+                                 TlaTensorType src1Type, TlaTensorType dst0Type,
+                                 TlaTensorType dst1Type) {
+  mlir::Type src0ElementType = src0Type.getPtr().getPointee();
+  mlir::Type src1ElementType = src1Type.getPtr().getPointee();
+  mlir::Type dst0ElementType = dst0Type.getPtr().getPointee();
+  mlir::Type dst1ElementType = dst1Type.getPtr().getPointee();
+  if (src0ElementType != src1ElementType ||
+      src0ElementType != dst0ElementType || src0ElementType != dst1ElementType)
+    return op->emitOpError()
+           << "requires all operands and results to have the same element "
+              "type, got "
+           << "src0=" << src0ElementType << ", src1=" << src1ElementType
+           << ", dst0=" << dst0ElementType << ", dst1=" << dst1ElementType;
+
+  return mlir::success();
+}
+
 mlir::LogicalResult InterleaveOp::verify() {
   if (!hasEnclosingRegion<VecFuncOp>(getOperation()))
     return emitOpError("must be nested inside a tla.vec.func region");
 
-  if (getSrc0().getType() != getSrc1().getType())
-    return emitOpError("requires src0 and src1 to have identical !tla.tensor types");
-
-  if (getDst0().getType() != getSrc0().getType() ||
-      getDst1().getType() != getSrc0().getType())
-    return emitOpError("requires dst0/dst1 to have the same !tla.tensor type as inputs");
-
-  return mlir::success();
+  return verifyInterleaveLikeElementTypes(
+      getOperation(), getSrc0().getType(), getSrc1().getType(),
+      getDst0().getType(), getDst1().getType());
 }
 
 mlir::LogicalResult DeInterleaveOp::verify() {
   if (!hasEnclosingRegion<VecFuncOp>(getOperation()))
     return emitOpError("must be nested inside a tla.vec.func region");
 
-  if (getSrc0().getType() != getSrc1().getType())
-    return emitOpError("requires src0 and src1 to have identical !tla.tensor types");
-
-  if (getDst0().getType() != getSrc0().getType() ||
-      getDst1().getType() != getSrc0().getType())
-    return emitOpError("requires dst0/dst1 to have the same !tla.tensor type as inputs");
-
-  return mlir::success();
+  return verifyInterleaveLikeElementTypes(
+      getOperation(), getSrc0().getType(), getSrc1().getType(),
+      getDst0().getType(), getDst1().getType());
 }
 
 // Vector compute ops (element-wise vector-vector and vector-scalar arithmetic)

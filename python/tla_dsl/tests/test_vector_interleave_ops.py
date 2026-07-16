@@ -1,16 +1,23 @@
 from __future__ import annotations
 
+import pytest
+from mlir import ir as mlir_ir
+
 import catlass as tla
 import catlass.runtime as runtime_mod
+from catlass.base_dsl import BaseDSL
 
 
-def _vector_tensor(dtype: type[tla.Numeric] = tla.Float32) -> tla.Tensor:
+def _vector_tensor(
+    dtype: type[tla.Numeric] = tla.Float32,
+    size: int = 64,
+) -> tla.Tensor:
     with runtime_mod._eager_capture():
         return tla.Tensor(
-            tla.make_shape(64),
+            tla.make_shape(size),
             dtype,
             addrspace=tla.AddressSpace.ub,
-            origin_shape=tla.make_shape(64),
+            origin_shape=tla.make_shape(size),
             layout_tag=tla.arch.RowMajor,
         )
 
@@ -53,6 +60,28 @@ def vector_deinterleave_kernel(
             dst1_tile.store(out1)
 
 
+@tla.kernel
+def vector_interleave_distinct_coords_kernel(
+    src: tla.Tensor,
+    dst: tla.Tensor,
+) -> None:
+    src0_tile = tla.tile_view(src, tla.make_shape(64), tla.make_coord(0))
+    src1_tile = tla.tile_view(src, tla.make_shape(64), tla.make_coord(1))
+    dst0_tile = tla.tile_view(dst, tla.make_shape(64), tla.make_coord(0))
+    dst1_tile = tla.tile_view(dst, tla.make_shape(64), tla.make_coord(1))
+
+    with tla.vector():
+        with tla.vec.func(mode="simd"):
+            src0 = src0_tile.load()
+            src1 = src1_tile.load()
+            interleaved0, interleaved1 = tla.interleave(src0, src1)
+            deinterleaved0, deinterleaved1 = tla.deinterleave(src0, src1)
+            dst0_tile.store(interleaved0)
+            dst1_tile.store(interleaved1)
+            dst0_tile.store(deinterleaved0)
+            dst1_tile.store(deinterleaved1)
+
+
 def test_vector_interleave_public_export_exists() -> None:
     assert callable(tla.interleave)
     assert callable(tla.deinterleave)
@@ -60,7 +89,9 @@ def test_vector_interleave_public_export_exists() -> None:
 
 def test_vector_interleave_emits_tla_op() -> None:
     tensor = _vector_tensor()
-    mlir = vector_interleave_kernel.dump_mlir(type_args=(tensor, tensor, tensor, tensor))
+    mlir = vector_interleave_kernel.dump_mlir(
+        type_args=(tensor, tensor, tensor, tensor)
+    )
 
     assert "tla.interleave" in mlir
     assert "tla.vector" in mlir
@@ -84,9 +115,40 @@ def test_vector_deinterleave_emits_tla_op() -> None:
     assert mlir.index("tla.vec.func") < mlir.index("tla.deinterleave")
 
     deinterleave_lines = [
-        line
-        for line in mlir.splitlines()
-        if "tla.deinterleave" in line
+        line for line in mlir.splitlines() if "tla.deinterleave" in line
     ]
     assert len(deinterleave_lines) == 1
     assert "->" in deinterleave_lines[0]
+
+
+def test_vector_interleave_ops_accept_distinct_tensor_coordinates() -> None:
+    tensor = _vector_tensor(size=128)
+    lowered = BaseDSL()._lower(
+        vector_interleave_distinct_coords_kernel.fn,
+        kind=vector_interleave_distinct_coords_kernel.kind,
+        options=dict(vector_interleave_distinct_coords_kernel.options),
+        type_args=(tensor, tensor),
+        location=vector_interleave_distinct_coords_kernel.decorator_location,
+    )
+
+    assert lowered.module.operation.verify()
+    mlir = lowered.asm()
+    assert mlir.count("tla.interleave") == 1
+    assert mlir.count("tla.deinterleave") == 1
+
+
+def test_vector_interleave_ops_reject_mismatched_element_types() -> None:
+    f32_tensor = _vector_tensor(tla.Float32)
+    f16_tensor = _vector_tensor(tla.Float16)
+
+    for kernel in (vector_interleave_kernel, vector_deinterleave_kernel):
+        lowered = BaseDSL()._lower(
+            kernel.fn,
+            kind=kernel.kind,
+            options=dict(kernel.options),
+            type_args=(f32_tensor, f16_tensor, f32_tensor, f32_tensor),
+            location=kernel.decorator_location,
+        )
+
+        with pytest.raises(mlir_ir.MLIRError, match="same element type"):
+            lowered.module.operation.verify()
