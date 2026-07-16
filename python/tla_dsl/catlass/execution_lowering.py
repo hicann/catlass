@@ -236,6 +236,30 @@ def _build_tla_func(
             )
             return _emit_tensor_ptr(_as_value(self), loc)
 
+        def __getitem__(self, crd: Any) -> Any:
+            """Tensor indexing for kernel-argument proxies."""
+            from .base_dsl.op import _capture_user_loc
+            from .tla.tensor import _Tensor
+
+            loc = (
+                _capture_user_loc()
+                if runtime_mod._current_frontend_state() is not None
+                else None
+            )
+            return _Tensor.__getitem__(self, crd, loc=loc)
+
+        def __setitem__(self, crd: Any, data: Any) -> None:
+            """Scalar store for kernel-argument proxies."""
+            from .base_dsl.op import _capture_user_loc
+            from .tla.tensor import _Tensor
+
+            loc = (
+                _capture_user_loc()
+                if runtime_mod._current_frontend_state() is not None
+                else None
+            )
+            return _Tensor.__setitem__(self, crd, data, loc=loc)
+
     proxies = [_ArgProxy() for _ in runtime_arg_names]
     call_args_for_fn = list(call_args)
     idx = 0
@@ -278,6 +302,8 @@ def _build_tla_func(
             except runtime_mod.TlaCoreAPIError:
                 raise
             except TlaLoweringError:
+                raise
+            except ValueError:
                 raise
             except ast_decorators.FrontendControlFlowLoweringError as exc:
                 raise UnsupportedExecutionLowering(str(exc)) from exc

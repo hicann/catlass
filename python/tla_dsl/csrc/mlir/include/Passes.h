@@ -10,6 +10,7 @@ std::unique_ptr<mlir::Pass> createTlaCubeRegionPass();
 std::unique_ptr<mlir::Pass> createTlaFinalizeMemrefPass();
 std::unique_ptr<mlir::Pass> createTlaLowerFlagBarrierToHivmPass();
 std::unique_ptr<mlir::Pass> createTlaLowerFuncPass();
+std::unique_ptr<mlir::Pass> createTlaLowerScalarAccessPass();
 std::unique_ptr<mlir::Pass> createTlaSplitMixedFuncPass();
 std::unique_ptr<mlir::Pass> createTlaLowerBlockIdxPass();
 std::unique_ptr<mlir::Pass> createTlaVectorRegionPass();

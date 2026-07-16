@@ -13,6 +13,7 @@ namespace tla {
 
 void registerTlaPasses() {
   registerTlaLowerFuncPass();
+  registerTlaLowerScalarAccessPass();
   registerTlaSplitMixedFuncPass();
   registerTlaLowerBlockIdxPass();
   registerTlaVectorRegionPass();
@@ -35,6 +36,9 @@ void buildTlaPipeline(OpPassManager &pm) {
   pm.addPass(createTlaLowerFuncPass());
   pm.addPass(createTlaLowerPtrPass());
   pm.addPass(createTlaSplitMixedFuncPass());
+  // All ScalarSSA (bridged memref + descriptor !tla.tensor) -> memref.load/store
+  // before region outlining. Cube still re-derives descriptors for copy/mmad.
+  pm.addPass(createTlaLowerScalarAccessPass());
   pm.addPass(createTlaVectorRegionPass());
   pm.addPass(createTlaCubeRegionPass());
   pm.addPass(createTlaFinalizeMemrefPass());

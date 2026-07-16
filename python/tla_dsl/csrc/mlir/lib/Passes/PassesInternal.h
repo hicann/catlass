@@ -11,6 +11,7 @@
 namespace tla {
 
 void registerTlaLowerFuncPass();
+void registerTlaLowerScalarAccessPass();
 void registerTlaSplitMixedFuncPass();
 void registerTlaLowerBlockIdxPass();
 void registerTlaVectorRegionPass();

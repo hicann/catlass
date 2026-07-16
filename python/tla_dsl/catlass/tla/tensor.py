@@ -10,6 +10,7 @@ from .. import _tla_type_bridge
 from .._mlir_bindings import tla_ops_gen as _tla_ops_gen
 from ..base_dsl.op import dsl_user_op
 from .. import runtime as _runtime
+from ..base_dsl.typing import Bool, Numeric, ScalarSSA
 from .typing import Tensor as TensorABC
 
 
@@ -58,6 +59,13 @@ class _Tensor(TensorABC):
     @property
     def dtype(self) -> str:
         return str(_tensor_metadata_field(self.value, "dtype"))
+
+    @property
+    def element_type(self) -> type[Numeric]:
+        from ..core_api import _tla_tensor_descriptor_from_type_or_value
+
+        parent = _tla_tensor_descriptor_from_type_or_value(self.value)
+        return Numeric.from_mlir_type(parent.element_mlir_type())
 
     @property
     def addrspace(self) -> str:
@@ -204,6 +212,161 @@ class _Tensor(TensorABC):
         _tla_ops_gen.store(
             _as_value(self), _as_value(value), mask=mask_val, **store_kwargs
         )
+
+    def _check_can_scalar_load_store(self) -> None:
+        """Phase-1 ``scalar_load``/``scalar_store`` preconditions (GM only; not ``tla.load``/``tla.store``)."""
+        if self.addrspace not in ("gm",):
+            raise ValueError(f"{self!r} doesn't support scalar_load/store")
+        if self.layout_tag not in ("row_major", "column_major"):
+            raise ValueError(
+                f"{self!r} doesn't support scalar_load/store (layout={self.layout_tag!r})"
+            )
+
+
+    def _check_can_dereference(self) -> None:
+        sub_byte_types = (Bool,)
+        if self.element_type.width % 8 != 0 and self.element_type not in sub_byte_types:
+            raise ValueError(
+                f"Sub-byte scalar dereference not supported for type {self.element_type.__name__}"
+            )
+
+    @dsl_user_op
+    def __getitem__(
+        self,
+        crd: Any,
+        *,
+        loc: mlir_ir.Location | None = None,
+    ) -> Any:
+        """Access tensor elements at scalar coordinates."""
+        from ..core_api import (
+            _as_index_value,
+            _as_value,
+            _flatten_tla_tuple,
+            _op_error,
+            _require_category,
+            _require_frontend_state,
+            _tla_tensor_descriptor_from_type_or_value,
+        )
+        from ..execution_lowering import TlaLoweringError
+
+        loc = _normalize_user_loc(loc)
+        if crd is None or (type(crd) is tuple and any(part is None for part in crd)):
+            raise TlaLoweringError(
+                "tensor indexing does not support None/underscore coordinates; "
+                "use scalar indices only"
+            )
+
+        _require_category("scalar_load", "source", self, "tensor", 0)
+        _require_frontend_state("scalar_load")
+        if type(crd) is tuple and not crd:
+            _op_error("scalar_load", "expected at least one index")
+
+        source_value = _as_value(self)
+        parent = _tla_tensor_descriptor_from_type_or_value(source_value)
+        if isinstance(self, _Tensor):
+            self._check_can_scalar_load_store()
+            self._check_can_dereference()
+        else:
+            if parent.addrspace not in ("gm",):
+                raise ValueError("tensor doesn't support scalar_load")
+            elem_numeric = Numeric.from_mlir_type(parent.element_mlir_type())
+            sub_byte_types = (Bool,)
+            if elem_numeric.width % 8 != 0 and elem_numeric not in sub_byte_types:
+                raise ValueError(
+                    "Sub-byte scalar dereference not supported for type "
+                    f"{elem_numeric.__name__}"
+                )
+        if parent.layout_tag not in ("row_major", "column_major"):
+            raise TlaLoweringError(
+                "tla.scalar_load currently supports row_major/column_major only"
+            )
+
+        flat_shape = _flatten_tla_tuple(parent.shape)
+        index_values = [
+            _as_index_value(part) for part in (crd if type(crd) is tuple else (crd,))
+        ]
+        if len(index_values) != len(flat_shape) or len(flat_shape) not in (1, 2):
+            raise TlaLoweringError(
+                "tla.scalar_load index rank must match tensor logical rank "
+                f"(shape rank {len(flat_shape)}, index rank {len(index_values)})"
+            )
+
+        elem_type = parent.element_mlir_type()
+        result = _tla_ops_gen.scalar_load(
+            elem_type,
+            source_value,
+            index_values,
+            loc=loc,
+        )
+        if str(result.type) != str(elem_type):
+            raise TlaLoweringError(
+                f"tla.scalar_load result type mismatch: expected {elem_type}, got {result.type}"
+            )
+        return ScalarSSA.from_mlir_type(elem_type, result)
+
+    @dsl_user_op
+    def __setitem__(
+        self,
+        crd: Any,
+        data: Any,
+        *,
+        loc: mlir_ir.Location | None = None,
+    ) -> None:
+        """Set tensor elements at specified coordinates."""
+        from ..core_api import (
+            _as_index_value,
+            _as_value,
+            _flatten_tla_tuple,
+            _op_error,
+            _require_category,
+            _require_frontend_state,
+            _tla_tensor_descriptor_from_type_or_value,
+        )
+        from ..execution_lowering import TlaLoweringError
+
+        loc = _normalize_user_loc(loc)
+        if crd is None or (type(crd) is tuple and any(part is None for part in crd)):
+            raise TlaLoweringError(
+                "tensor indexing does not support None/underscore coordinates; "
+                "use scalar indices only"
+            )
+
+        _require_category("scalar_store", "dest", self, "tensor", 0)
+        _require_frontend_state("scalar_store")
+        if type(crd) is tuple and not crd:
+            _op_error("scalar_store", "expected at least one index")
+        _require_category("scalar_store", "value", data, "scalar_ssa", 1)
+
+        dest_value = _as_value(self)
+        parent = _tla_tensor_descriptor_from_type_or_value(dest_value)
+        if isinstance(self, _Tensor):
+            self._check_can_scalar_load_store()
+            self._check_can_dereference()
+        else:
+            if parent.addrspace not in ("gm",):
+                raise ValueError("tensor doesn't support scalar_store")
+        if parent.layout_tag not in ("row_major", "column_major"):
+            raise TlaLoweringError(
+                "tla.scalar_store currently supports row_major/column_major only"
+            )
+
+        flat_shape = _flatten_tla_tuple(parent.shape)
+        index_values = [
+            _as_index_value(part) for part in (crd if type(crd) is tuple else (crd,))
+        ]
+        if len(index_values) != len(flat_shape) or len(flat_shape) not in (1, 2):
+            raise TlaLoweringError(
+                "tla.scalar_store index rank must match tensor logical rank "
+                f"(shape rank {len(flat_shape)}, index rank {len(index_values)})"
+            )
+
+        elem_type = parent.element_mlir_type()
+        store_value = _as_value(data)
+        if str(store_value.type) != str(elem_type):
+            raise TlaLoweringError(
+                f"tla.scalar_store value type mismatch: expected {elem_type}, got {store_value.type}"
+            )
+        _tla_ops_gen.scalar_store(dest_value, index_values, store_value, loc=loc)
 
 def _normalize_user_loc(loc: mlir_ir.Location | None) -> mlir_ir.Location | None:
     if loc is None and _runtime._current_frontend_state() is not None:

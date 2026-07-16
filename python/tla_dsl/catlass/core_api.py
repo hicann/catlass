@@ -25,7 +25,7 @@ _CAST_SUPPORTED_DTYPES = frozenset(
 from ._mlir_bindings import tla_ops_gen as _tla_ops_gen
 from .base_dsl import ast_helpers as _ast_helpers
 from .base_dsl.op import dsl_user_op, _capture_user_loc
-from .base_dsl.typing import Float32, Int8, Numeric
+from .base_dsl.typing import Float32, Int8, Numeric, ScalarSSA
 from .base_dsl.typing import Pointer as PointerABC
 from .base_dsl.typing import Pointer as PointerTypeHint
 from .tla.tensor import normalize_tile_view_coord
@@ -206,7 +206,7 @@ IndexTree: TypeAlias = IndexLike | tuple["IndexTree", ...]
 ShapeLike: TypeAlias = IndexTree
 CoordLike: TypeAlias = IndexTree
 StrideLike: TypeAlias = IndexTree
-ValueLike: TypeAlias = Scalar | mlir_ir.Value
+ValueLike: TypeAlias = Scalar | ScalarSSA | mlir_ir.Value
 TileLike: TypeAlias = mlir_ir.Value
 MemrefLike: TypeAlias = Tensor | mlir_ir.Value
 FlagLike: TypeAlias = mlir_ir.Value
@@ -867,6 +867,8 @@ def _as_value(value: Any) -> mlir_ir.Value:
         resolved = _resolve_bound_value(resolved.value)
     if isinstance(resolved, VectorSSA):
         resolved = _resolve_bound_value(resolved.value)
+    if isinstance(resolved, ScalarSSA):
+        resolved = _resolve_bound_value(resolved.value)
     if isinstance(resolved, _MutexValue):
         resolved = _resolve_bound_value(resolved.value)
     if isinstance(resolved, mlir_ir.Value):
@@ -1316,11 +1318,21 @@ def _remap_tensor_like_prefix_fields_for_layout_trees(
 ) -> tuple[tuple[Any, ...], tuple[Any, ...], tuple[Any, ...], tuple[Any, ...]] | None:
     """Derive shape/stride/coord/origin as nested tuple trees for ``layout`` (TLA-style when fractal).
 
-    ``origin_shape`` must be a flat ``(M, N)`` Tla index tree with ``int`` or ``None`` leaves.
-    ``None`` represents an unknown dimension, spelled ``?`` in MLIR. **coord** is always
-    ``(0, 0)``. Naming follows ``tla::GetTileLayout`` / fractal ``MakeLayout`` (``rows`` /
-    ``cols`` / ``ELE_NUM_PER_C0`` / ``C0_NUM_PER_FRACTAL``).
+    ``origin_shape`` must be a flat ``(N,)`` or ``(M, N)`` Tla index tree with ``int`` or
+    ``None`` leaves. ``None`` represents an unknown dimension, spelled ``?`` in MLIR.
+    Rank-1 ``row_major`` uses ``(N):(1)``, ``coord=(0,)``. Rank-2 **coord** is always
+    ``(0, 0)``. Naming follows ``tla::GetTileLayout`` / fractal ``MakeLayout``
+    (``rows`` / ``cols`` / ``ELE_NUM_PER_C0`` / ``C0_NUM_PER_FRACTAL``).
     """
+    if isinstance(origin_shape, tuple) and len(origin_shape) == 1:
+        length = origin_shape[0]
+        if isinstance(length, tuple):
+            return None
+        layout_tag = layout.strip()
+        if layout_tag == "row_major":
+            return ((length,), (1,), (0,), (length,))
+        return None
+
     origin_pair = _flat_dim_pair_from_tree(origin_shape)
     if origin_pair == (None, None) and origin_shape != (None, None):
         return None
@@ -2436,6 +2448,7 @@ def make_layout(
         )
     _require_frontend_state("make_layout")
     layout_token = _resolve_arch_layout_tag(layoutTag, for_op="make_layout")
+    # Rank/layout consistency is enforced by C++ LayoutType::verify via LayoutType.get.
     shape_val = shape._shape_value
     stride_val = stride._stride_value
     origin_for_type: mlir_ir.Value | None = (

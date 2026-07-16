@@ -222,7 +222,6 @@ LogicalResult StrideType::verify(function_ref<InFlightDiagnostic()> emitError,
 
 LogicalResult LayoutType::verify(function_ref<InFlightDiagnostic()> emitError, ShapeType shape,
                                  StrideType stride, ShapeType origin, LayoutTag layoutTag) {
-  (void)layoutTag;
   if (!shape || !stride || !origin)
     return emitError() << "tla.layout shape, stride, and origin must be non-null";
   SmallVector<int64_t, 8> shapeLeaves;

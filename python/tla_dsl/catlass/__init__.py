@@ -15,7 +15,7 @@ from . import types as types
 from .tla.runtime import _Tensor
 from . import core_api as core
 from .address_space import AddressSpace
-from .base_dsl.typing import Constexpr, JitArgument, Pointer
+from .base_dsl.typing import Constexpr, JitArgument, Pointer, ScalarSSA
 from . import runtime as _runtime
 from .base_dsl import BaseDSL, DSLLocation
 from .base_dsl.jit_executor import TlaJitExecutor as _TlaJitExecutor
@@ -112,6 +112,7 @@ __all__ = [
     "Pointer",
     "Scalar",
     "Numeric",
+    "ScalarSSA",
     "Bool",
     "Int8",
     "Int16",

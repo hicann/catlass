@@ -752,7 +752,6 @@ struct VecLowerCtx {
   int64_t lanes;
   Type elementType;
   VectorType vecType;
-  // Per-lane mask (vector<lanes x i1>) for AVE HIR ops such as vcmp/preg logic.
   VectorType maskVecType;
 };
 
@@ -1511,6 +1510,7 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
     } else {
       mask = createAvePgeMask(b, loc, opCtx->maskVecType, hivmave::PgePattern::ALL);
     }
+    // store_unalign (this PR): mark AVE masked-store as unaligned UB access.
     if (storeOp.getUnalignedUbAccess().value_or(false)) {
       auto store = b.create<hivmave::VFMaskedStoreOp>(loc, dest, ValueRange{zero}, mask, source);
       store->setAttr(hivmave::UnalignedAttr::name,
@@ -1637,6 +1637,40 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
     return success();
   }
 
+  // GM scalar accesses lowered by tla-lower-scalar-access before outlining.
+  if (auto memLoad = dyn_cast<mlir::memref::LoadOp>(op)) {
+    Value mem = valueMap.lookup(memLoad.getMemRef());
+    if (!mem)
+      return failure();
+    SmallVector<Value, 2> indices;
+    for (Value idx : memLoad.getIndices()) {
+      Value mapped = lookupOrCloneScalarValue(b, idx, valueMap);
+      if (!mapped)
+        return failure();
+      indices.push_back(mapped);
+    }
+    valueMap[memLoad.getResult()] =
+        b.create<mlir::memref::LoadOp>(loc, mem, indices).getResult();
+    return success();
+  }
+  if (auto memStore = dyn_cast<mlir::memref::StoreOp>(op)) {
+    Value mem = valueMap.lookup(memStore.getMemRef());
+    Value val = valueMap.lookup(memStore.getValue());
+    if (!val)
+      val = lookupOrCloneScalarValue(b, memStore.getValue(), valueMap);
+    if (!mem || !val)
+      return failure();
+    SmallVector<Value, 2> indices;
+    for (Value idx : memStore.getIndices()) {
+      Value mapped = lookupOrCloneScalarValue(b, idx, valueMap);
+      if (!mapped)
+        return failure();
+      indices.push_back(mapped);
+    }
+    b.create<mlir::memref::StoreOp>(loc, val, mem, indices);
+    return success();
+  }
+
   if (op.hasTrait<OpTrait::IsTerminator>())
     return success();
 
@@ -1676,6 +1710,19 @@ static void collectVectorHelperOperands(Block *block, SmallVectorImpl<Value> &op
       Value root = getFullTensorOf(gatherOp.getX());
       if (!llvm::is_contained(operands, root))
         operands.push_back(root);
+      continue;
+    }
+    // Bridged GM scalar accesses (after tla-lower-scalar-access) appear as memref.load/store.
+    if (auto memLoad = dyn_cast<mlir::memref::LoadOp>(op)) {
+      Value mem = memLoad.getMemRef();
+      if (!llvm::is_contained(operands, mem))
+        operands.push_back(mem);
+      continue;
+    }
+    if (auto memStore = dyn_cast<mlir::memref::StoreOp>(op)) {
+      Value mem = memStore.getMemRef();
+      if (!llvm::is_contained(operands, mem))
+        operands.push_back(mem);
       continue;
     }
     for (Region &region : op.getRegions())
@@ -1760,6 +1807,11 @@ static FailureOr<func::FuncOp> buildHelperFunc(ModuleOp module, func::FuncOp par
   SmallVector<Type> functionInputs;
   functionInputs.reserve(helperOperands.size());
   for (Value operand : helperOperands) {
+    // Already-bridged GM memrefs (scalar_load/store) keep their concrete type.
+    if (auto mt = dyn_cast<MemRefType>(operand.getType())) {
+      functionInputs.push_back(mt);
+      continue;
+    }
     auto operandType = getVectorHelperArgMemrefType(operand);
     if (failed(operandType))
       return failure();
@@ -1855,9 +1907,20 @@ public:
       }
       return WalkResult::advance();
     });
-    if (stores.empty())
-      return rewriter.notifyMatchFailure(
-          vecFuncOp, "expected tla.vec.func body with a tla.store");
+    if (stores.empty()) {
+      // Scalar-only (or empty) VF cannot be outlined as a BiSheng helper — that
+      // path requires tla.store. If there is also no tile load/compute, inline
+      // the body into the parent (same as tla.vector flattening) so GM
+      // scalar_load/store + scf stay legal for later convert-scf-to-cf.
+      if (!loads.empty() || !fulls.empty() || !createMasks.empty() ||
+          !updateMasks.empty() || !aranges.empty() || !computeOps.empty())
+        return rewriter.notifyMatchFailure(
+            vecFuncOp, "expected tla.vec.func body with a tla.store");
+      rewriter.inlineBlockBefore(body, vecFuncOp->getBlock(),
+                                 vecFuncOp->getIterator());
+      rewriter.eraseOp(vecFuncOp);
+      return success();
+    }
 
     // Validate the graph: every compute operand and store source must come from
     // a tla.load result or a prior compute result inside this region.
@@ -1994,6 +2057,11 @@ public:
     SmallVector<Value, 8> callOperands;
     callOperands.reserve(helperOperands.size());
     for (Value tensor : helperOperands) {
+      // Bridged GM memref operands (from scalar_load/store) are passed as-is.
+      if (isa<MemRefType>(tensor.getType())) {
+        callOperands.push_back(tensor);
+        continue;
+      }
       auto type = getVectorHelperArgMemrefType(tensor);
       if (failed(type))
         return rewriter.notifyMatchFailure(

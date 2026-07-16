@@ -68,6 +68,91 @@ class Numeric(ABC):
             raise TypeError(f"unsupported element type for Numeric: {ty!r}") from exc
 
 
+class ScalarSSA:
+    """Kernel SSA wrapper for scalar numeric values.
+
+    Host-side ``Float32(x)`` still returns :class:`catlass.types.Scalar`; use
+    :meth:`ScalarSSA.from_value` or :meth:`ScalarSSA.from_mlir_type` for dynamic
+    kernel values.
+    """
+
+    __slots__ = ("value", "_numeric_type", "__tla_category__")
+
+    def __init__(self, value: mlir_ir.Value, numeric_type: type[Numeric]) -> None:
+        if not isinstance(value, mlir_ir.Value):
+            raise TypeError(
+                f"ScalarSSA expects mlir.ir.Value, got {type(value).__name__}"
+            )
+        if not numeric_type.dtype:
+            raise TypeError("ScalarSSA requires a concrete Numeric element type")
+        self.value = value
+        self._numeric_type = numeric_type
+        self.__tla_category__ = "scalar_ssa"
+        from .. import runtime as _runtime
+
+        _runtime._bind_frontend_value(self, value)
+        _runtime._bind_frontend_category(self, "scalar_ssa")
+        _runtime._bind_frontend_category(value, "scalar_ssa")
+
+    @classmethod
+    def from_value(
+        cls,
+        value: mlir_ir.Value,
+        numeric_type: type[Numeric] | None = None,
+    ) -> "ScalarSSA":
+        """Wrap an existing MLIR SSA scalar ``Value`` as a typed frontend object."""
+        if not isinstance(value, mlir_ir.Value):
+            raise TypeError(
+                f"ScalarSSA.from_value expects mlir.ir.Value, "
+                f"got {type(value).__name__}"
+            )
+        if numeric_type is None:
+            numeric_type = Numeric.from_mlir_type(value.type)
+        elif not numeric_type.dtype:
+            raise TypeError("ScalarSSA.from_value requires a concrete Numeric type")
+        return cls(value, numeric_type)
+
+    @classmethod
+    def from_mlir_type(cls, ty: mlir_ir.Type, value: mlir_ir.Value) -> "ScalarSSA":
+        return cls.from_value(value, Numeric.from_mlir_type(ty))
+
+    @property
+    def dtype(self) -> type[Numeric]:
+        return self._numeric_type
+
+    @property
+    def element_type(self) -> str:
+        return self._numeric_type.dtype
+
+    def ir_value(self) -> mlir_ir.Value:
+        return self.value
+
+    # Dynamic ``if`` / SCF region carry: flatten to the underlying SSA value and
+    # rebuild a typed ScalarSSA so ``tensor[i] = value`` still sees scalar_ssa.
+    def __extract_mlir_values__(self) -> tuple[mlir_ir.Value, ...]:
+        return (self.value,)
+
+    def __new_from_mlir_values__(self, values: list[Any] | tuple[Any, ...]) -> "ScalarSSA":
+        if len(values) != 1:
+            raise TypeError(
+                f"ScalarSSA expects 1 MLIR value after dynamic if, got {len(values)}"
+            )
+        return type(self)(values[0], self._numeric_type)
+
+    def __repr__(self) -> str:
+        return f"{self._numeric_type.__name__}(<{self.value.type}>)"
+
+    def __int__(self) -> int:
+        raise TypeError(
+            f"{self._numeric_type.__name__} SSA cannot be converted to Python int"
+        )
+
+    def __index__(self) -> int:
+        raise TypeError(
+            f"{self._numeric_type.__name__} SSA cannot be used as a Python index"
+        )
+
+
 def _elem_token_to_mlir_type(token: str) -> mlir_ir.Type:
     token = token.strip().lower()
     if token == "index":
@@ -246,6 +331,7 @@ class Pointer(ABC):
 
 __all__ = [
     "Numeric",
+    "ScalarSSA",
     "Bool",
     "Int8",
     "Int16",

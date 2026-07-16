@@ -963,6 +963,37 @@ def Tla_TileViewOp : Tla_Op<"tile_view", []> {
   }];
 }
 
+def Tla_ScalarLoadOp : Tla_Op<"scalar_load", []> {
+  let summary = "Scalar tensor element read (GM)";
+  let description = [{
+    Read one GM scalar from ``!tla.tensor`` or bridged ``memref``. Distinct from
+    ``tla.load`` (vector tile). Lowered by ``tla-lower-scalar-access`` to
+    ``memref.load``. Phase-1: GM ``row_major`` / ``column_major``; index count
+    must equal the logical rank (1 or 2).
+  }];
+  let arguments = (ins AnyTypeOf<[Tla_TensorType, AnyMemRef]>:$source, Variadic<Index>:$indices);
+  let results = (outs AnyType:$result);
+  let hasVerifier = 1;
+  let assemblyFormat = [{
+    $source `[` $indices `]` attr-dict `:` type($source) `->` type($result)
+  }];
+}
+
+def Tla_ScalarStoreOp : Tla_Op<"scalar_store", []> {
+  let summary = "Scalar tensor element write (GM)";
+  let description = [{
+    Write one GM scalar to ``!tla.tensor`` or bridged ``memref``. Distinct from
+    ``tla.store`` (vector tile). Lowered by ``tla-lower-scalar-access`` to
+    ``memref.store``. Phase-1: GM ``row_major`` / ``column_major``; index count
+    must equal the logical rank (1 or 2).
+  }];
+  let arguments = (ins AnyTypeOf<[Tla_TensorType, AnyMemRef]>:$dest, Variadic<Index>:$indices, AnyType:$value);
+  let hasVerifier = 1;
+  let assemblyFormat = [{
+    $dest `[` $indices `]` `,` $value attr-dict `:` type($dest) `,` type($value)
+  }];
+}
+
 class Tla_VectorBinaryOp<string mnemonic, string opSummary, string opDescription>
     : Tla_Op<mnemonic, [Pure]> {
   let summary = opSummary;

@@ -16,6 +16,7 @@
 # python/tla_dsl/examples/end_to_end/vector_ops (binary_op.py, masked_binary.py,
 # logic_ops.py, reduction_ops.py, compare_mask.py, unary_ops.py, arange_op.py,
 # interleave_op.py, squeeze_op.py).
+# python/tla_dsl/examples/end_to_end/tensor_index (scalar_index_control_flow.py).
 #
 # Fixed toolchain paths relative to WORKSPACE_ROOT (= parent of catlass repo):
 #   CANN:             Ascend/9.1.0-beta.1/ascend-toolkit/set_env.sh
@@ -63,6 +64,7 @@ UNARY_OPS_REL="examples/end_to_end/vector_ops/unary_ops.py"
 ARANGE_OP_REL="examples/end_to_end/vector_ops/arange_op.py"
 INTERLEAVE_OP_REL="examples/end_to_end/vector_ops/interleave_op.py"
 SQUEEZE_OP_REL="examples/end_to_end/vector_ops/squeeze_op.py"
+SCALAR_INDEX_CONTROL_FLOW_REL="examples/end_to_end/tensor_index/scalar_index_control_flow.py"
 
 _ascendnpu_ir_dev_is_prebuilt() {
     local root="$1"
@@ -90,6 +92,8 @@ Run end-to-end validation for:
   - arange_op (arange_op.py increase --run --all-dtypes)
   - interleave_op (interleave_op.py interleave/deinterleave --run --all-dtypes)
   - squeeze_op (squeeze_op.py squeeze --run --all-dtypes)
+  - scalar_index_control_flow (scalar_index_control_flow.py: GM scalar read/write,
+    loop/dynamic-if/constexpr-if, vec.func)
 Runs basic_mmad default MNK plus m=1, n=2, k=3.
 Activates conda env "${CONDA_ENV}", sources CANN set_env.sh, exports AscendNPU-IR-Dev MLIR/LLVM
 env, then builds (optional) and runs the test.
@@ -311,6 +315,10 @@ if [[ ! -f "${TLA_DSL_DIR}/${SQUEEZE_OP_REL}" ]]; then
     echo "error: missing ${SQUEEZE_OP_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
+if [[ ! -f "${TLA_DSL_DIR}/${SCALAR_INDEX_CONTROL_FLOW_REL}" ]]; then
+    echo "error: missing ${SCALAR_INDEX_CONTROL_FLOW_REL} under ${TLA_DSL_DIR}" >&2
+    exit 1
+fi
 
 _run_basic_mmad_case() {
     local label="$1"
@@ -512,5 +520,15 @@ _run_squeeze_op_case() {
 }
 
 _run_squeeze_op_case
+
+_run_scalar_index_control_flow_case() {
+    echo "==> Running scalar_index_control_flow validation [GM scalar indexing]: --device ${DEVICE_ID}"
+    (
+        cd "${TLA_DSL_DIR}"
+        python "${SCALAR_INDEX_CONTROL_FLOW_REL}" --device "${DEVICE_ID}"
+    )
+}
+
+_run_scalar_index_control_flow_case
 
 echo "==> run_dsl_test.sh finished successfully"

@@ -295,7 +295,7 @@ public:
     // intentionally NOT asserted: they are lowered by
     // tla-lower-mutex-to-std / tla-lower-flag-barrier-to-hivm, which run AFTER
     // this pass, so they are still present when finalize runs.
-    target.addIllegalOp<::tla::TileViewOp, ::tla::CopyOp, ::tla::MakeTensorLikeOp,
+    target.addIllegalOp<::tla::TileViewOp, ::tla::ScalarLoadOp, ::tla::ScalarStoreOp, ::tla::CopyOp, ::tla::MakeTensorLikeOp,
                         ::tla::MakeTensorOp, ::tla::LoadOp, ::tla::StoreOp, ::tla::FuncOp,
                         ::tla::ReturnOp, ::tla::CubeOp, ::tla::VectorOp, ::tla::MmadOp,
                         ::tla::AllocPtrOp, ::tla::RecastPtrOp, ::tla::TensorPtrOp,

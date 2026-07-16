@@ -1,6 +1,7 @@
 add_library(TlaPasses
   PassRegistry.cpp
   TlaLowerFuncPass.cpp
+  TlaLowerScalarAccessPass.cpp
   TlaSplitMixedFuncPass.cpp
   TlaLowerBlockIdxPass.cpp
   TlaLowerPtrPass.cpp
