@@ -52,28 +52,20 @@ public:
         // Methods
         CATLASS_HOST_DEVICE
         Params()
-        {
-        }
+        {}
 
         CATLASS_HOST_DEVICE
         Params(
-            Conv2dParams const &problemShape_,
-            GM_ADDR ptrFmap_,
-            LayoutFmap layoutFmap_,
-            GM_ADDR ptrFilter_,
-            LayoutFilter layoutFilter_,
-            GM_ADDR ptrOutput_,
-            LayoutOutput layoutOutput_
-        )
-            : problemShape(problemShape_)
-            , ptrFmap(ptrFmap_)
-            , layoutFmap(layoutFmap_)
-            , ptrFilter(ptrFilter_)
-            , layoutFilter(layoutFilter_)
-            , ptrOutput(ptrOutput_)
-            , layoutOutput(layoutOutput_)
-        {
-        }
+            Conv2dParams const& problemShape_, GM_ADDR ptrFmap_, LayoutFmap layoutFmap_, GM_ADDR ptrFilter_,
+            LayoutFilter layoutFilter_, GM_ADDR ptrOutput_, LayoutOutput layoutOutput_)
+            : problemShape(problemShape_),
+              ptrFmap(ptrFmap_),
+              layoutFmap(layoutFmap_),
+              ptrFilter(ptrFilter_),
+              layoutFilter(layoutFilter_),
+              ptrOutput(ptrOutput_),
+              layoutOutput(layoutOutput_)
+        {}
     };
 
     struct Arguments {
@@ -83,21 +75,21 @@ public:
         GM_ADDR ptrOutput;
     };
 
-    static bool CanImplement(const Arguments &args)
+    static bool CanImplement(const Arguments& args)
     {
         if (args.problemShape.strideH() == 0 || args.problemShape.strideW() == 0 ||
             args.problemShape.dilationH() == 0 || args.problemShape.dilationW() == 0) {
-            return false; 
+            return false;
         }
         return BlockConv2d::CanImplement(args.problemShape.getFilterParams());
     }
 
-    static size_t GetWorkspaceSize(const Arguments &args)
+    static size_t GetWorkspaceSize(const Arguments& args)
     {
         return 0;
     }
 
-    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    static Params ToUnderlyingArguments(const Arguments& args, uint8_t* workspace)
     {
         LayoutFmap layoutFmap{
             args.problemShape.batch(), args.problemShape.cin1(), args.problemShape.hi(), args.problemShape.wi(),
@@ -116,20 +108,18 @@ public:
     // Methods
     CATLASS_DEVICE
     BasicConv2d()
-    {
-    }
+    {}
 
     template <int32_t CORE_TYPE = g_coreType>
-    CATLASS_DEVICE void operator()(Params const &params);
+    CATLASS_DEVICE void operator()(Params const& params);
 
     /// Executes one Conv2d
     template <>
-    CATLASS_DEVICE void operator()<AscendC::AIC>(Params const &params)
+    CATLASS_DEVICE void operator()<AscendC::AIC>(Params const& params)
     {
         BlockScheduler conv2dBlockScheduler(
             params.problemShape.getPostIm2colShape(),
-            MakeCoord(FmapL1TileShape::Ho, FmapL1TileShape::Wo, FilterL1TileShape::Cout)
-        );
+            MakeCoord(FmapL1TileShape::Ho, FmapL1TileShape::Wo, FilterL1TileShape::Cout));
         uint32_t loops = conv2dBlockScheduler.GetLoops();
 
         Arch::Resource<ArchTag> resource;
@@ -137,11 +127,11 @@ public:
 
         // Represent the full gm
         AscendC::GlobalTensor<ElementFmap> gmFmap;
-        gmFmap.SetGlobalBuffer((__gm__ ElementFmap *)params.ptrFmap);
+        gmFmap.SetGlobalBuffer((__gm__ ElementFmap*)params.ptrFmap);
         AscendC::GlobalTensor<ElementFilter> gmFilter;
-        gmFilter.SetGlobalBuffer((__gm__ ElementFilter *)params.ptrFilter);
+        gmFilter.SetGlobalBuffer((__gm__ ElementFilter*)params.ptrFilter);
         AscendC::GlobalTensor<ElementOutput> gmOutput;
-        gmOutput.SetGlobalBuffer((__gm__ ElementOutput *)params.ptrOutput);
+        gmOutput.SetGlobalBuffer((__gm__ ElementOutput*)params.ptrOutput);
 
         for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < loops; loopIdx += AscendC::GetBlockNum()) {
             // Compute block location
@@ -153,8 +143,8 @@ public:
             // Compute indices of hi
             uint32_t hoStart = blockCoord.h() * FmapL1TileShape::Ho;
             int32_t hiStart = hoStart * params.problemShape.strideH() - params.problemShape.padTop();
-            int32_t hiEnd = hiStart + (actualBlockShape.h() - 1) * params.problemShape.strideH()
-                            + (params.problemShape.kh() - 1) * params.problemShape.dilationH();
+            int32_t hiEnd = hiStart + (actualBlockShape.h() - 1) * params.problemShape.strideH() +
+                            (params.problemShape.kh() - 1) * params.problemShape.dilationH();
             if (hiStart < 0) {
                 blockPadTop = 0 - hiStart;
                 hiStart = 0;
@@ -168,8 +158,8 @@ public:
             // Compute indexes of wi
             uint32_t woStart = blockCoord.w() * FmapL1TileShape::Wo;
             int32_t wiStart = woStart * params.problemShape.strideW() - params.problemShape.padLeft();
-            int32_t wiEnd = wiStart + (actualBlockShape.w() - 1) * params.problemShape.strideW()
-                            + (params.problemShape.kw() - 1) * params.problemShape.dilationW();
+            int32_t wiEnd = wiStart + (actualBlockShape.w() - 1) * params.problemShape.strideW() +
+                            (params.problemShape.kw() - 1) * params.problemShape.dilationW();
             if (wiStart < 0) {
                 blockPadLeft = 0 - wiStart;
                 wiStart = 0;
@@ -198,16 +188,14 @@ public:
             // Compute block-scoped matrix multiply-add
             blockConv2d(
                 gmFmap[gmOffsetFmap], params.layoutFmap, gmFilter[gmOffsetFilter], params.layoutFilter,
-                gmOutput[gmOffsetOutput], params.layoutOutput, actualConv2dBlockShape, blockPadList
-            );
+                gmOutput[gmOffsetOutput], params.layoutOutput, actualConv2dBlockShape, blockPadList);
         }
         AscendC::PipeBarrier<PIPE_ALL>();
     }
 
     template <>
-    CATLASS_DEVICE void operator()<AscendC::AIV>(Params const &params)
-    {
-    }
+    CATLASS_DEVICE void operator()<AscendC::AIV>(Params const& params)
+    {}
 };
 
 } // namespace Catlass::Conv::Kernel

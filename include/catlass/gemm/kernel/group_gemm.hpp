@@ -20,65 +20,59 @@
 #include "catlass/epilogue/tile/copy_ub_to_gm.hpp"
 #include "catlass/gemm/helper.hpp"
 
-namespace Catlass::Gemm::Kernel{
+namespace Catlass::Gemm::Kernel {
 
 namespace detail {
 
 template <class T>
-CATLASS_DEVICE void UnpackListParam(T *const dst, GM_ADDR src, uint32_t len)
+CATLASS_DEVICE void UnpackListParam(T* const dst, GM_ADDR src, uint32_t len)
 {
     for (uint32_t i = 0; i * sizeof(uint64_t) < len * sizeof(T); ++i) {
-        reinterpret_cast<uint64_t *>(dst)[i] = reinterpret_cast<__gm__ uint64_t *>(src)[i];
+        reinterpret_cast<uint64_t*>(dst)[i] = reinterpret_cast<__gm__ uint64_t*>(src)[i];
     }
 }
 
-}  // namespace detail
+} // namespace detail
 
-template<
-    class ArchTag_,
-    class Element_,
-    class Layout_,
-    uint32_t COMPUTE_LENGTH
->
+template <class ArchTag_, class Element_, class Layout_, uint32_t COMPUTE_LENGTH>
 struct PaddingMatrixND {
 public:
     using ArchTag = ArchTag_;
     using Element = Element_;
     using Layout = Layout_;
-    using CopyGm2Ub = Catlass::Epilogue::Tile::CopyGm2Ub<
-        ArchTag, Gemm::GemmType<Element, Catlass::layout::RowMajor>>;
-    using CopyUb2Gm = Catlass::Epilogue::Tile::CopyUb2Gm<
-        ArchTag, Gemm::GemmType<Element, Catlass::layout::RowMajor>>;
+    using CopyGm2Ub = Catlass::Epilogue::Tile::CopyGm2Ub<ArchTag, Gemm::GemmType<Element, Catlass::layout::RowMajor>>;
+    using CopyUb2Gm = Catlass::Epilogue::Tile::CopyUb2Gm<ArchTag, Gemm::GemmType<Element, Catlass::layout::RowMajor>>;
     using ComputeLayout = Catlass::layout::RowMajor;
 
     CopyGm2Ub copyGm2Ub;
     CopyUb2Gm copyUb2Gm;
 
     CATLASS_DEVICE
-    PaddingMatrixND(Arch::Resource<ArchTag> &resource)
+    PaddingMatrixND(Arch::Resource<ArchTag>& resource)
     {
         int64_t bufferOffset = 0;
-        for (uint32_t i = 0; i < BUFFER_NUM; i++) {  //
+        for (uint32_t i = 0; i < BUFFER_NUM; i++) { //
             inputBuffer[i] = resource.ubBuf.template GetBufferByByte<Element>(bufferOffset * sizeof(Element));
             bufferOffset += COMPUTE_LENGTH;
         }
     }
 
     CATLASS_DEVICE
-    ComputeLayout GetPaddingComputeLayout(layout::RowMajor const &layout)
+    ComputeLayout GetPaddingComputeLayout(layout::RowMajor const& layout)
     {
         return ComputeLayout(layout.shape(0), layout.shape(1), layout.stride(0));
     }
 
     CATLASS_DEVICE
-    ComputeLayout GetPaddingComputeLayout(layout::ColumnMajor const &layout)
+    ComputeLayout GetPaddingComputeLayout(layout::ColumnMajor const& layout)
     {
         return ComputeLayout(layout.shape(1), layout.shape(0), layout.stride(1));
     }
 
     CATLASS_DEVICE
-    void operator()(AscendC::GlobalTensor<Element> const &dst, AscendC::GlobalTensor<Element> const &src,
-        Layout layoutDst, Layout layoutSrc)
+    void operator()(
+        AscendC::GlobalTensor<Element> const& dst, AscendC::GlobalTensor<Element> const& src, Layout layoutDst,
+        Layout layoutSrc)
     {
         ComputeLayout computeLayoutSrc = GetPaddingComputeLayout(layoutSrc);
         ComputeLayout computeLayoutDst = GetPaddingComputeLayout(layoutDst);
@@ -121,7 +115,7 @@ public:
                 AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[bufferIndex]);
                 ComputeLayout dstLayout = computeLayoutDst.GetTileLayout(MatrixCoord(1, actualDataNum));
                 ComputeLayout srcLayout = computeLayoutSrc.GetTileLayout(MatrixCoord(1, actualDataNum));
-                ComputeLayout &ubLayout = dstLayout;
+                ComputeLayout& ubLayout = dstLayout;
                 copyGm2Ub(inputBuffer[bufferIndex], src[gmSrcOffset], ubLayout, srcLayout);
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE3>(eventIds[bufferIndex]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE3>(eventIds[bufferIndex]);
@@ -145,7 +139,7 @@ public:
                 AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(eventIds[bufferIndex]);
                 ComputeLayout dstLayout = computeLayoutDst.GetTileLayout(MatrixCoord(actualTilesNum, tileLen));
                 ComputeLayout srcLayout = computeLayoutSrc.GetTileLayout(MatrixCoord(actualTilesNum, tileLen));
-                ComputeLayout &ubLayout = dstLayout;
+                ComputeLayout& ubLayout = dstLayout;
                 copyGm2Ub(inputBuffer[bufferIndex], src[gmSrcOffset], ubLayout, srcLayout);
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE3>(eventIds[bufferIndex]);
                 AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE3>(eventIds[bufferIndex]);
@@ -160,23 +154,19 @@ public:
     }
 
     CATLASS_DEVICE
-    ~PaddingMatrixND() {}
+    ~PaddingMatrixND()
+    {}
 
 private:
     static const uint32_t BUFFER_NUM = 2;
     AscendC::LocalTensor<Element> inputBuffer[BUFFER_NUM];
     AscendC::TEventID eventIds[BUFFER_NUM] = {EVENT_ID0, EVENT_ID1};
-    uint32_t bufferIndex{ 0 };
+    uint32_t bufferIndex{0};
     static_assert(BUFFER_NUM * COMPUTE_LENGTH * sizeof(Element) <= ArchTag::UB_SIZE, "Excedding the UB space!");
 };
 
-
-template<
-    class BlockGemm_,
-    class BlockEpilogue_ ,
-    class BlockScheduler_ = void
->
-class KernelGroupGemm{
+template <class BlockGemm_, class BlockEpilogue_, class BlockScheduler_ = void>
+class KernelGroupGemm {
 public:
     using BlockGemm = BlockGemm_;
     using ArchTag = typename BlockGemm::ArchTag;
@@ -232,20 +222,34 @@ public:
 
         // Methods
         CATLASS_HOST_DEVICE
-        Params() {}
+        Params()
+        {}
 
         CATLASS_HOST_DEVICE
-        Params(uint32_t problemCount_, GM_ADDR ptrProblemShape_, GM_ADDR alpha_, GM_ADDR beta_, GM_ADDR ptrA_,
+        Params(
+            uint32_t problemCount_, GM_ADDR ptrProblemShape_, GM_ADDR alpha_, GM_ADDR beta_, GM_ADDR ptrA_,
             GM_ADDR ptrLayoutA_, GM_ADDR ptrB_, GM_ADDR ptrLayoutB_, GM_ADDR ptrWorkspace_, GM_ADDR ptrLayoutWorkspace_,
             GM_ADDR ptrWA_, GM_ADDR ptrLayoutWA_, GM_ADDR ptrWB_, GM_ADDR ptrLayoutWB_, GM_ADDR ptrX_, GM_ADDR ptrD_)
-            : problemCount(problemCount_), ptrProblemShape(ptrProblemShape_), alpha(alpha_), beta(beta_), ptrA(ptrA_),
-              ptrLayoutA(ptrLayoutA_), ptrB(ptrB_), ptrLayoutB(ptrLayoutB_), ptrWorkspace(ptrWorkspace_),
-              ptrLayoutWorkspace(ptrLayoutWorkspace_), ptrWA(ptrWA_), ptrLayoutWA(ptrLayoutWA_), ptrWB(ptrWB_),
-              ptrLayoutWB(ptrLayoutWB_), ptrX(ptrX_), ptrD(ptrD_)
+            : problemCount(problemCount_),
+              ptrProblemShape(ptrProblemShape_),
+              alpha(alpha_),
+              beta(beta_),
+              ptrA(ptrA_),
+              ptrLayoutA(ptrLayoutA_),
+              ptrB(ptrB_),
+              ptrLayoutB(ptrLayoutB_),
+              ptrWorkspace(ptrWorkspace_),
+              ptrLayoutWorkspace(ptrLayoutWorkspace_),
+              ptrWA(ptrWA_),
+              ptrLayoutWA(ptrLayoutWA_),
+              ptrWB(ptrWB_),
+              ptrLayoutWB(ptrLayoutWB_),
+              ptrX(ptrX_),
+              ptrD(ptrD_)
         {}
     };
 
-    struct Arguments{
+    struct Arguments {
         uint32_t problemCount;
         GM_ADDR ptrProblemShape;
         GM_ADDR alpha;
@@ -264,42 +268,32 @@ public:
         GM_ADDR ptrD;
     };
 
-    static bool CanImplement(const Arguments &args)
+    static bool CanImplement(const Arguments& args)
     {
         return true;
     }
 
-    static size_t GetWorkspaceSize(const Arguments &args)
+    static size_t GetWorkspaceSize(const Arguments& args)
     {
         return 0;
     }
 
-    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    static Params ToUnderlyingArguments(const Arguments& args, uint8_t* workspace)
     {
-        Params params{args.problemCount,
-            args.ptrProblemShape,
-            args.alpha,
-            args.beta,
-            args.ptrA,
-            args.ptrLayoutA,
-            args.ptrB,
-            args.ptrLayoutB,
-            args.ptrWorkspace,
-            args.ptrLayoutWorkspace,
-            args.ptrWA,
-            args.ptrLayoutWA,
-            args.ptrWB,
-            args.ptrLayoutWB,
-            args.ptrX,
-            args.ptrD};
+        Params params{args.problemCount, args.ptrProblemShape,    args.alpha, args.beta,
+                      args.ptrA,         args.ptrLayoutA,         args.ptrB,  args.ptrLayoutB,
+                      args.ptrWorkspace, args.ptrLayoutWorkspace, args.ptrWA, args.ptrLayoutWA,
+                      args.ptrWB,        args.ptrLayoutWB,        args.ptrX,  args.ptrD};
         return params;
     }
 
     CATLASS_DEVICE
-    KernelGroupGemm() {}
+    KernelGroupGemm()
+    {}
 
     CATLASS_DEVICE
-    ~KernelGroupGemm() {}
+    ~KernelGroupGemm()
+    {}
 
     CATLASS_DEVICE
     size_t GetWorkspaceLen(layout::RowMajor layout)
@@ -314,12 +308,11 @@ public:
     }
 
     template <int32_t CORE_TYPE = g_coreType>
-    CATLASS_DEVICE
-    void operator()(Params &params) {}
+    CATLASS_DEVICE void operator()(Params& params)
+    {}
 
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIC>(Params &params)
+    CATLASS_DEVICE void operator()<AscendC::AIC>(Params& params)
     {
         GemmCoord problemShapeList[MAX_TENSOR_COUNT];
         LayoutA layoutAList[MAX_TENSOR_COUNT];
@@ -352,15 +345,15 @@ public:
             LayoutB layoutWB = layoutWBList[groupIdx];
             Arch::CrossCoreWaitFlag(flagAivFinishPadding);
             AscendC::GlobalTensor<ElementA> gmA;
-            gmA.SetGlobalBuffer((__gm__ ElementA *)params.ptrWA);
+            gmA.SetGlobalBuffer((__gm__ ElementA*)params.ptrWA);
             AscendC::GlobalTensor<ElementB> gmB;
-            gmB.SetGlobalBuffer((__gm__ ElementB *)params.ptrWB);
+            gmB.SetGlobalBuffer((__gm__ ElementB*)params.ptrWB);
             AscendC::GlobalTensor<ElementC> gmC;
-            gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrWorkspace);
+            gmC.SetGlobalBuffer((__gm__ ElementC*)params.ptrWorkspace);
             uint32_t M = problemShape.m();
             uint32_t N = problemShape.n();
             uint32_t K = problemShape.k();
-            #pragma unroll
+#pragma unroll
             for (uint32_t i = 0; i < l0CBlockNum; i++) {
                 AscendC::SetFlag<AscendC::HardEvent::FIX_M>((int32_t)i);
             }
@@ -408,12 +401,8 @@ public:
                 MatrixCoord gmTileNextBOffset{0, nNextGmBlockIdx * maxNPerBlock};
                 auto gmTileNextB = gmB[inGroupOffsetB + layoutWB.GetOffset(gmTileNextBOffset)];
                 blockGemm(
-                    gmTileA, layoutWA,
-                    gmTileB, layoutWB,
-                    gmTileC, layoutWorkspace,
-                    gmTileNextA, gmTileNextB,
-                    actualShape, nextActualShape, isFirstBlock, hasNextBlock, singleIdx
-                );
+                    gmTileA, layoutWA, gmTileB, layoutWB, gmTileC, layoutWorkspace, gmTileNextA, gmTileNextB,
+                    actualShape, nextActualShape, isFirstBlock, hasNextBlock, singleIdx);
                 Arch::CrossCoreSetFlagWithReverse<0x2, PIPE_FIX>(flagAicFinishStore);
                 AscendC::SetFlag<AscendC::HardEvent::FIX_M>((int32_t)singleIdx);
                 singleIdx = (singleIdx + 1) % l0CBlockNum;
@@ -422,7 +411,7 @@ public:
             inGroupOffsetB += GetWorkspaceLen(layoutWB);
             inGroupOffsetWorkspace += static_cast<int64_t>(problemShape.m()) * problemShape.n();
             startCoreIdx = (startCoreIdx + coreLoops) % coreNum;
-            #pragma unroll
+#pragma unroll
             for (uint32_t i = 0; i < l0CBlockNum; i++) {
                 AscendC::WaitFlag<AscendC::HardEvent::FIX_M>((int32_t)i);
             }
@@ -431,8 +420,7 @@ public:
     }
 
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIV>(Params &params)
+    CATLASS_DEVICE void operator()<AscendC::AIV>(Params& params)
     {
         GemmCoord problemShapeList[MAX_TENSOR_COUNT];
         LayoutA layoutAList[MAX_TENSOR_COUNT];
@@ -463,12 +451,12 @@ public:
         Arch::Resource<ArchTag> resource;
         AscendC::GlobalTensor<ElementA> gmA;
         AscendC::GlobalTensor<ElementA> gmWA;
-        gmA.SetGlobalBuffer(reinterpret_cast<__gm__ ElementA *>(params.ptrA));
-        gmWA.SetGlobalBuffer(reinterpret_cast<__gm__ ElementA *>(params.ptrWA));
+        gmA.SetGlobalBuffer(reinterpret_cast<__gm__ ElementA*>(params.ptrA));
+        gmWA.SetGlobalBuffer(reinterpret_cast<__gm__ ElementA*>(params.ptrWA));
         AscendC::GlobalTensor<ElementB> gmB;
         AscendC::GlobalTensor<ElementB> gmWB;
-        gmB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB *>(params.ptrB));
-        gmWB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB *>(params.ptrWB));
+        gmB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB*>(params.ptrB));
+        gmWB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB*>(params.ptrWB));
         PaddingA paddingA(resource);
         PaddingB paddingB(resource);
         AscendC::GlobalTensor<ElementC> gmC;
@@ -528,6 +516,6 @@ private:
     static constexpr Arch::FlagID FLAG_AIV_FINISH_STORE = 0;
     Arch::CrossCoreFlag flagAivFinishPadding{FLAG_AIV_FINISH_STORE};
 };
-}
+} // namespace Catlass::Gemm::Kernel
 
 #endif // CATLASS_GEMM_KERNEL_GROUP_GEMM_HPP

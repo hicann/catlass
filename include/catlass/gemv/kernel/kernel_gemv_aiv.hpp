@@ -20,10 +20,7 @@
 namespace Catlass::Gemv::Kernel {
 
 // template for gemv kernel, Compute z = αAx + βy
-template <
-    class BlockGemv_,
-    class BlockEpilogue_
->
+template <class BlockGemv_, class BlockEpilogue_>
 class KernelGemvAiv {
 public:
     using BlockGemv = BlockGemv_;
@@ -36,7 +33,6 @@ public:
     using ElementY = typename BlockGemv::ElementY;
     using LayoutY = typename BlockGemv::LayoutY;
     using ElementAccumulator = typename BlockGemv::ElementAccumulator;
-
 
     /// Parameters structure
     struct Params {
@@ -55,16 +51,28 @@ public:
 
         // Methods
         CATLASS_HOST_DEVICE
-        Params() {}
+        Params()
+        {}
 
         CATLASS_HOST_DEVICE
-        Params(GemvCoord const &problemShape_,  GM_ADDR ptrA_, LayoutA layoutA_,  GM_ADDR ptrX_,LayoutX layoutX_,
-        GM_ADDR ptrY_,LayoutY layoutY_,GM_ADDR ptrZ_,float alpha_,float beta_,uint32_t split_)
-            : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrX(ptrX_),layoutX(layoutX_),
-            ptrY(ptrY_),layoutY(layoutY_),ptrZ(ptrZ_),alpha(alpha_),beta(beta_),split(split_) {}
+        Params(
+            GemvCoord const& problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrX_, LayoutX layoutX_,
+            GM_ADDR ptrY_, LayoutY layoutY_, GM_ADDR ptrZ_, float alpha_, float beta_, uint32_t split_)
+            : problemShape(problemShape_),
+              ptrA(ptrA_),
+              layoutA(layoutA_),
+              ptrX(ptrX_),
+              layoutX(layoutX_),
+              ptrY(ptrY_),
+              layoutY(layoutY_),
+              ptrZ(ptrZ_),
+              alpha(alpha_),
+              beta(beta_),
+              split(split_)
+        {}
     };
 
-    //TODO: add arguments
+    // TODO: add arguments
     struct Arguments {
         GemvCoord problemShape;
         GM_ADDR ptrA;
@@ -76,17 +84,17 @@ public:
         uint32_t split;
     };
 
-    static bool CanImplement(const Arguments &args)
+    static bool CanImplement(const Arguments& args)
     {
         return true;
     }
 
-    static size_t GetWorkspaceSize(const Arguments &args)
+    static size_t GetWorkspaceSize(const Arguments& args)
     {
         return sizeof(ElementY) * args.problemShape.m();
     }
 
-    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    static Params ToUnderlyingArguments(const Arguments& args, uint8_t* workspace)
     {
         GemvCoord problemShape = args.problemShape;
         uint32_t m = problemShape.m();
@@ -94,36 +102,26 @@ public:
         LayoutA layoutA{m, n};
         LayoutX layoutX{n};
         LayoutY layoutY{m};
-        Params params{problemShape,
-            args.ptrA,
-            layoutA,
-            args.ptrX,
-            layoutX,
-            args.ptrY,
-            layoutY,
-            args.ptrZ,
-            args.alpha,
-            args.beta,
-            args.split};
+        Params params{problemShape, args.ptrA, layoutA,    args.ptrX, layoutX,   args.ptrY,
+                      layoutY,      args.ptrZ, args.alpha, args.beta, args.split};
         return params;
     }
 
     // Methods
     CATLASS_DEVICE
-    KernelGemvAiv() {}
+    KernelGemvAiv()
+    {}
 
     template <int32_t CORE_TYPE = g_coreType>
-    CATLASS_DEVICE
-    void operator()(Params const &params) {};
+    CATLASS_DEVICE void operator()(Params const& params) {};
 
     /// Executes one Matmul
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIC>(Params const &params) {}
+    CATLASS_DEVICE void operator()<AscendC::AIC>(Params const& params)
+    {}
 
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIV>(Params const &params)
+    CATLASS_DEVICE void operator()<AscendC::AIV>(Params const& params)
     {
         AscendC::SetAtomicNone();
         Arch::Resource<ArchTag> resource;
@@ -150,21 +148,21 @@ public:
 
         // Represent the full gm
         AscendC::GlobalTensor<ElementA> gmA;
-        gmA.SetGlobalBuffer((__gm__ ElementA *)params.ptrA);
+        gmA.SetGlobalBuffer((__gm__ ElementA*)params.ptrA);
         AscendC::GlobalTensor<ElementX> gmX;
-        gmX.SetGlobalBuffer((__gm__ ElementX *)params.ptrX);
+        gmX.SetGlobalBuffer((__gm__ ElementX*)params.ptrX);
         AscendC::GlobalTensor<ElementY> gmY;
-        gmY.SetGlobalBuffer((__gm__ ElementY *)params.ptrY);
+        gmY.SetGlobalBuffer((__gm__ ElementY*)params.ptrY);
         AscendC::GlobalTensor<ElementY> gmZ;
-        gmZ.SetGlobalBuffer((__gm__ ElementY *)params.ptrZ);
+        gmZ.SetGlobalBuffer((__gm__ ElementY*)params.ptrZ);
         uint32_t aiv_num = AscendC::GetBlockNum() * AscendC::GetTaskRation();
         for (uint32_t loop_id = 0; loop_id < loopnum; loop_id++) {
             uint32_t aiv_id = AscendC::GetBlockIdx();
             if (loop_id % aiv_num != aiv_id)
                 continue;
-            uint32_t m_actual = ((int32_t)loop_id > (int32_t)(loopnum - params.split - 1))
-                                        ? params.problemShape.m() - ((loop_id / params.split) * maxmPerBlock_round)
-                                        : maxmPerBlock_round;
+            uint32_t m_actual = ((int32_t)loop_id > (int32_t)(loopnum - params.split - 1)) ?
+                                    params.problemShape.m() - ((loop_id / params.split) * maxmPerBlock_round) :
+                                    maxmPerBlock_round;
             uint32_t n_actual = params.problemShape.n();
 
             if constexpr (std::is_same_v<LayoutA, Catlass::layout::ColumnMajor>) {
@@ -186,19 +184,15 @@ public:
 
             float realbeta = (loop_id % params.split == 0) ? Realbeta : 0.0f;
 
-            blockGemv(gmA[offset_matrix], params.layoutA,
-                gmX[offset_vector_in], params.layoutX,
-                gmY[offset_vector_out], params.layoutY,
-                gmZ[offset_vector_out],
-                actualBlockShape,
-                params.alpha,
-                realbeta);
+            blockGemv(
+                gmA[offset_matrix], params.layoutA, gmX[offset_vector_in], params.layoutX, gmY[offset_vector_out],
+                params.layoutY, gmZ[offset_vector_out], actualBlockShape, params.alpha, realbeta);
         }
 
         AscendC::PipeBarrier<PIPE_ALL>();
     }
 };
 
-}
+} // namespace Catlass::Gemv::Kernel
 
 #endif // CATLASS_GEMV_KERNEL_GEMV_AIV_HPP

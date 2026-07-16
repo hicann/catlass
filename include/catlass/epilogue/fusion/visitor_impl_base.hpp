@@ -18,9 +18,10 @@
 
 namespace Catlass::Epilogue::Fusion {
 
-enum class VisitStage : uint8_t {
-    LOAD = 0,      
-    COMPUTE = 1,   
+enum class VisitStage : uint8_t
+{
+    LOAD = 0,
+    COMPUTE = 1,
     STORE = 2,
 };
 
@@ -30,8 +31,9 @@ struct VisitorImplBase {
     using Params = tla::tuple<typename Ops::Params...>;
 
     template <class ProblemShape>
-    static constexpr Params
-    to_underlying_arguments(ProblemShape const& problem_shape, Arguments const& args, void* workspace) {
+    static constexpr Params to_underlying_arguments(
+        ProblemShape const& problem_shape, Arguments const& args, void* workspace)
+    {
         uint8_t* op_workspace = reinterpret_cast<uint8_t*>(workspace);
         return tla::transform_apply(
             tla::tuple<Ops...>{}, args,
@@ -44,28 +46,26 @@ struct VisitorImplBase {
                 }
                 return ret;
             },
-            [](auto&&... op_params) -> tla::tuple<tla::remove_cvref_t<decltype(op_params)>...> { 
-                return tla::tuple<tla::remove_cvref_t<decltype(op_params)>...>(op_params...); 
-            }
-        );
+            [](auto&&... op_params) -> tla::tuple<tla::remove_cvref_t<decltype(op_params)>...> {
+                return tla::tuple<tla::remove_cvref_t<decltype(op_params)>...>(op_params...);
+            });
     }
 
     template <class ProblemShape>
-    static bool
-    can_implement(ProblemShape const& problem_shape, Arguments const& args) {
+    static bool can_implement(ProblemShape const& problem_shape, Arguments const& args)
+    {
         return tla::transform_apply(
             tla::tuple<Ops...>{}, args,
             [&](auto&& op_tag, auto const& op_args) {
                 using Op = typename tla::remove_cvref_t<decltype(op_tag)>;
                 return Op::can_implement(problem_shape, op_args);
             },
-            [](auto&&... ok) { return (true && ... && ok); }
-        );
+            [](auto&&... ok) { return (true && ... && ok); });
     }
 
     template <class ProblemShape>
-    static size_t
-    get_workspace_size(ProblemShape const& problem_shape, Arguments const& args) {
+    static size_t get_workspace_size(ProblemShape const& problem_shape, Arguments const& args)
+    {
         return tla::transform_apply(
             tla::tuple<Ops...>{}, args,
             [&](auto&& op_tag, auto const& op_args) {
@@ -73,14 +73,13 @@ struct VisitorImplBase {
                 size_t sz = Op::get_workspace_size(problem_shape, op_args);
                 return (sz + 31) & ~31; // 32 字节对齐
             },
-            [](auto&&... rounded_sizes) { return (size_t{0} + ... + rounded_sizes); }
-        );
+            [](auto&&... rounded_sizes) { return (size_t{0} + ... + rounded_sizes); });
     }
 
     // 为每个节点按树序进行工作区初始化，分配并前进指针。
     template <class ProblemShape>
-    static Status
-    initialize_workspace(ProblemShape const& problem_shape, Arguments const& args, void* workspace) {
+    static Status initialize_workspace(ProblemShape const& problem_shape, Arguments const& args, void* workspace)
+    {
         Status status = Status::kSuccess;
         uint8_t* op_workspace = reinterpret_cast<uint8_t*>(workspace);
 
@@ -98,27 +97,24 @@ struct VisitorImplBase {
                 }
                 return status;
             },
-            [&](auto const&... ) { return status; }
-        );
+            [&](auto const&...) { return status; });
     }
 
     CATLASS_HOST_DEVICE
-    VisitorImplBase() {}
+    VisitorImplBase()
+    {}
 
     CATLASS_HOST_DEVICE
     VisitorImplBase(Params const& params)
-        : ops(
-            tla::transform_apply(
-                tla::tuple<Ops...>{}, params,
-                [](auto&& op_tag, auto const& op_params) {
-                    using Op = typename tla::remove_cvref_t<decltype(op_tag)>;
-                    return Op(op_params);
-                },
-                [](auto&&... built_ops) -> tla::tuple<tla::remove_cvref_t<decltype(built_ops)>...> { 
-                    return tla::tuple<tla::remove_cvref_t<decltype(built_ops)>...>(built_ops...); 
-                }
-            )
-        )
+        : ops(tla::transform_apply(
+              tla::tuple<Ops...>{}, params,
+              [](auto&& op_tag, auto const& op_params) {
+                  using Op = typename tla::remove_cvref_t<decltype(op_tag)>;
+                  return Op(op_params);
+              },
+              [](auto&&... built_ops) -> tla::tuple<tla::remove_cvref_t<decltype(built_ops)>...> {
+                  return tla::tuple<tla::remove_cvref_t<decltype(built_ops)>...>(built_ops...);
+              }))
     {}
 
     tla::tuple<Ops...> ops;

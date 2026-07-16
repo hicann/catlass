@@ -41,7 +41,7 @@ using Options = GemmOptions;
 // Default data root when running from build output (e.g. output/bin), aligned with gen_data.py (WORKSPACE/data).
 static const std::string kDataRoot = "../../examples/54_ascend950_fp4_mx_matmul/data";
 
-static void Run(const Options &options)
+static void Run(const Options& options)
 {
     aclrtStream stream{nullptr};
 
@@ -121,32 +121,32 @@ static void Run(const Options &options)
         }
     }
 
-    uint8_t *deviceA{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceA{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceB{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceB{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceMxScaleA{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceMxScaleA), sizeMxScaleA, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceMxScaleA{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceMxScaleA), sizeMxScaleA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceMxScaleA, sizeMxScaleA, hostMxScaleA.data(), sizeMxScaleA, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceMxScaleB{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceMxScaleB), sizeMxScaleB, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceMxScaleB{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceMxScaleB), sizeMxScaleB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceMxScaleB, sizeMxScaleB, hostMxScaleB.data(), sizeMxScaleB, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceC{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceC{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
-    uint8_t *deviceBias{nullptr};
+    uint8_t* deviceBias{nullptr};
     if constexpr (!std::is_void_v<ElementBias>) {
-        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceBias), sizeBias, ACL_MEM_MALLOC_HUGE_FIRST));
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceBias), sizeBias, ACL_MEM_MALLOC_HUGE_FIRST));
         ACL_CHECK(aclrtMemcpy(deviceBias, sizeBias, hostBias.data(), sizeBias, ACL_MEMCPY_HOST_TO_DEVICE));
     }
 
-    uint8_t *deviceWorkspace{nullptr};
+    uint8_t* deviceWorkspace{nullptr};
 
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
@@ -184,8 +184,7 @@ static void Run(const Options &options)
 
     MatmulKernel::Arguments arguments{
         options.problemShape, deviceA,        layoutA,        deviceB, layoutB, deviceMxScaleA,
-        layoutMxScaleA,       deviceMxScaleB, layoutMxScaleB, deviceC, layoutC, deviceBias
-    };
+        layoutMxScaleA,       deviceMxScaleB, layoutMxScaleB, deviceC, layoutC, deviceBias};
 
     MatmulAdapter matmulOp;
     if (matmulOp.CanImplement(arguments) == Status::kInvalid) {
@@ -193,7 +192,7 @@ static void Run(const Options &options)
     }
     sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
     if (sizeWorkspace > 0) {
-        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
     }
     matmulOp.Initialize(arguments, deviceWorkspace);
     matmulOp(stream, aicCoreUsed);
@@ -247,7 +246,7 @@ static void Run(const Options &options)
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv)
+int main(int argc, const char** argv)
 {
     Options options;
     if (options.Parse(argc, argv) != 0) {

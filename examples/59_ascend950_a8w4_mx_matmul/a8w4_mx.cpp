@@ -37,7 +37,7 @@ using Options = GemmOptions;
 // Default data root when running from build output (e.g. output/bin), aligned with gen_data.py (WORKSPACE/data).
 static const std::string kDataRoot = "./examples/59_ascend950_a8w4_mx_matmul/data";
 
-static void Run(const Options &options)
+static void Run(const Options& options)
 {
     aclrtStream stream{nullptr};
 
@@ -104,7 +104,7 @@ static void Run(const Options &options)
         ACL_CHECK(aclrtResetDevice(options.deviceId));
         ACL_CHECK(aclFinalize());
     };
-    //file read
+    // file read
     if (!ReadFile(kDataRoot + "/input/a_8.bin", hostA.data(), sizeA)) {
         releaseAclEarly();
         return;
@@ -129,32 +129,32 @@ static void Run(const Options &options)
     }
 
     // device
-    uint8_t *deviceA{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceA{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceB{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceB{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceMxScaleA{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceMxScaleA), sizeMxScaleA, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceMxScaleA{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceMxScaleA), sizeMxScaleA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceMxScaleA, sizeMxScaleA, hostMxScaleA.data(), sizeMxScaleA, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceMxScaleB{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceMxScaleB), sizeMxScaleB, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceMxScaleB{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceMxScaleB), sizeMxScaleB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceMxScaleB, sizeMxScaleB, hostMxScaleB.data(), sizeMxScaleB, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceC{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceC{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
-    uint8_t *deviceBias{nullptr};
+    uint8_t* deviceBias{nullptr};
     if constexpr (!std::is_void_v<ElementBias>) {
-        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceBias), sizeBias, ACL_MEM_MALLOC_HUGE_FIRST));
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceBias), sizeBias, ACL_MEM_MALLOC_HUGE_FIRST));
         ACL_CHECK(aclrtMemcpy(deviceBias, sizeBias, hostBias.data(), sizeBias, ACL_MEMCPY_HOST_TO_DEVICE));
     }
 
-    uint8_t *deviceWorkspace{nullptr};
+    uint8_t* deviceWorkspace{nullptr};
 
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
@@ -182,31 +182,32 @@ static void Run(const Options &options)
 
     // tile
     using TileCopy = Gemm::Tile::PackedMxA8W4TileCopyTla<
-        ArchTag, ElementA, LayoutA, ElementPrologueB, LayoutPrologueB, ElementB, LayoutB, ElementMxScale, decltype(layoutMxScaleA), ElementMxScale,
-        decltype(layoutMxScaleB), ElementC, LayoutC, ElementBias, false, Gemm::Tile::ScaleGranularity::PER_TENSOR>;
+        ArchTag, ElementA, LayoutA, ElementPrologueB, LayoutPrologueB, ElementB, LayoutB, ElementMxScale,
+        decltype(layoutMxScaleA), ElementMxScale, decltype(layoutMxScaleB), ElementC, LayoutC, ElementBias, false,
+        Gemm::Tile::ScaleGranularity::PER_TENSOR>;
 
     // BlockMmad
     using BlockMmad = Gemm::Block::BlockMmadA8W4Mx<
-        DispatchPolicyMmad, L1TileShape, L0TileShape, ElementA, ElementB, ElementC, ElementPrologueB, ElementBias, TileCopy>;
+        DispatchPolicyMmad, L1TileShape, L0TileShape, ElementA, ElementB, ElementC, ElementPrologueB, ElementBias,
+        TileCopy>;
 
-    using BlockPrologue = Gemm::Block::BlockPrologue<
-        DispatchPolicyPrologue, PrologueSrcType, PrologueDstType, L1TileShape, TileCopy>;
+    using BlockPrologue =
+        Gemm::Block::BlockPrologue<DispatchPolicyPrologue, PrologueSrcType, PrologueDstType, L1TileShape, TileCopy>;
 
     // Epilogue
     using BlockEpilogue = void;
 
-    //Swizzle offset is 3 and direction is 0.
-    using BlockScheduler=  typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
+    // Swizzle offset is 3 and direction is 0.
+    using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
 
     // kernel level
     using MatmulKernel = Gemm::Kernel::A8W4MxMatmul<BlockMmad, BlockPrologue, BlockEpilogue, BlockScheduler>;
 
     using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
 
-    MatmulKernel::Arguments arguments{
-        options.problemShape, deviceA,        layoutA,        deviceB, layoutprologueB, deviceMxScaleA,
-        layoutMxScaleA,       deviceMxScaleB, layoutMxScaleB, deviceC, layoutC, deviceBias
-    };
+    MatmulKernel::Arguments arguments{options.problemShape, deviceA,        layoutA,        deviceB,
+                                      layoutprologueB,      deviceMxScaleA, layoutMxScaleA, deviceMxScaleB,
+                                      layoutMxScaleB,       deviceC,        layoutC,        deviceBias};
 
     uint32_t taskNum = CeilDiv(options.problemShape.m(), tla::get<0>(L1TileShape{})) *
                        CeilDiv(options.problemShape.n(), tla::get<1>(L1TileShape{}));
@@ -216,7 +217,7 @@ static void Run(const Options &options)
     matmulOp.CanImplement(arguments);
     sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
     if (sizeWorkspace > 0) {
-        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
     }
     matmulOp.Initialize(arguments, deviceWorkspace);
     matmulOp(stream, aicCoreUsed);
@@ -270,7 +271,7 @@ static void Run(const Options &options)
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv)
+int main(int argc, const char** argv)
 {
     Options options;
     if (options.Parse(argc, argv) != 0) {

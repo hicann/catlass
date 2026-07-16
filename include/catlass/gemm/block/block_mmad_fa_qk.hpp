@@ -26,25 +26,9 @@ namespace Catlass::Gemm::Block {
 ////////////////////////////////////////////////////////////////////
 
 template <
-    class L1TileShape_,
-    class L0TileShape_,
-    class AType_,
-    class BType_,
-    class CType_,
-    class BiasType_,
-    class TileCopy_,
+    class L1TileShape_, class L0TileShape_, class AType_, class BType_, class CType_, class BiasType_, class TileCopy_,
     class TileMmad_>
-struct BlockMmad <
-    MmadAtlasA2FAQK,
-    L1TileShape_,
-    L0TileShape_,
-    AType_,
-    BType_,
-    CType_,
-    BiasType_,
-    TileCopy_,
-    TileMmad_>
-{
+struct BlockMmad<MmadAtlasA2FAQK, L1TileShape_, L0TileShape_, AType_, BType_, CType_, BiasType_, TileCopy_, TileMmad_> {
 public:
     // Type Aliases
     using DispatchPolicy = MmadAtlasA2FAQK;
@@ -89,7 +73,7 @@ public:
 
     /// Construct
     CATLASS_DEVICE
-    BlockMmad(Arch::Resource<ArchTag> &resource, uint32_t l1BufAddrStart = 0)
+    BlockMmad(Arch::Resource<ArchTag>& resource, uint32_t l1BufAddrStart = 0)
     {
         for (uint32_t i = 0; i < STAGES; i++) {
             l1ATensor[i] = resource.l1Buf.template GetBufferByByte<ElementA>(l1BufAddrStart + L1A_SIZE * i);
@@ -123,11 +107,8 @@ public:
     /// Perform a block-scoped matrix multiply-accumulate
     CATLASS_DEVICE
     void operator()(
-        AscendC::GlobalTensor<ElementA> gA,
-        AscendC::GlobalTensor<ElementB> gB,
-        AscendC::GlobalTensor<ElementC> gC,
-        LayoutA layoutA, LayoutB layoutB, LayoutC layoutC,
-        GemmCoord actualShape, uint32_t &pingpongFlag, bool isFirst)
+        AscendC::GlobalTensor<ElementA> gA, AscendC::GlobalTensor<ElementB> gB, AscendC::GlobalTensor<ElementC> gC,
+        LayoutA layoutA, LayoutB layoutB, LayoutC layoutC, GemmCoord actualShape, uint32_t& pingpongFlag, bool isFirst)
     {
         LayoutAInL1 layoutAInL1 = LayoutAInL1::template MakeLayout<ElementA>(L1TileShape::M, L1TileShape::K);
         LayoutBInL1 layoutBInL1 = LayoutBInL1::template MakeLayout<ElementB>(L1TileShape::K, L1TileShape::N);
@@ -195,6 +176,6 @@ protected:
 
 ////////////////////////////////////////////////////////////////////
 
-}  // namespace Catlass::Gemm::Block
+} // namespace Catlass::Gemm::Block
 
-#endif  // CATLASS_GEMM_BLOCK_BLOCK_MMAD_FA_QK_HPP
+#endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_FA_QK_HPP

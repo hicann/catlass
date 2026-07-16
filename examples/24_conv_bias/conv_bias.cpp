@@ -44,8 +44,10 @@ struct Options {
 
     Options() = default;
 
-    int Parse(int argc, const char **argv) {
-        enum class ArgsIndex {
+    int Parse(int argc, const char** argv)
+    {
+        enum class ArgsIndex
+        {
             BATCH_INDEX = 1,
             DI_INDEX,
             CIN1_INDEX,
@@ -69,8 +71,8 @@ struct Options {
             ARGS_MAX
         };
 
-        if (argc > static_cast<uint32_t>(ArgsIndex::ARGS_MAX)
-            || argc < static_cast<uint32_t>(ArgsIndex::DEVICE_ID_INDEX)) {
+        if (argc > static_cast<uint32_t>(ArgsIndex::ARGS_MAX) ||
+            argc < static_cast<uint32_t>(ArgsIndex::DEVICE_ID_INDEX)) {
             std::cerr << HELPER << std::endl;
             return 0;
         }
@@ -103,7 +105,8 @@ struct Options {
     }
 };
 
-static void Run(const Options &options) {
+static void Run(const Options& options)
+{
     aclrtStream stream{nullptr};
 
     ACL_CHECK(aclInit(nullptr));
@@ -112,8 +115,7 @@ static void Run(const Options &options) {
 
     Conv3dParams problemShape = Conv3dParams::MakeConvCoord(
         options.fmapRelated.data(), options.filterRelated.data(), options.pads.data(), options.strides.data(),
-        options.dilations.data()
-    );
+        options.dilations.data());
 
     uint32_t n = problemShape.batch();
     uint32_t di = problemShape.di();
@@ -156,20 +158,20 @@ static void Run(const Options &options) {
     ReadFile("./data/weight.bin", hostFilter.data(), sizeFilter);
     ReadFile("./data/bias.bin", hostBias.data(), sizeBias);
 
-    uint8_t *deviceFmap{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceFmap), sizeFmap, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceFmap{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceFmap), sizeFmap, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceFmap, sizeFmap, hostFmap.data(), sizeFmap, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceFilter{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceFilter), sizeFilter, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceFilter{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceFilter), sizeFilter, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceFilter, sizeFilter, hostFilter.data(), sizeFilter, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceBias{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceBias), sizeBias, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceBias{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceBias), sizeBias, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceBias, sizeBias, hostBias.data(), sizeBias, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceOut{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceOut), sizeOut, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceOut{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceOut), sizeOut, ACL_MEM_MALLOC_HUGE_FIRST));
 
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
@@ -210,9 +212,9 @@ static void Run(const Options &options) {
     ConvAdapter conv_op;
     conv_op.CanImplement(arguments);
     size_t sizeWorkspace = conv_op.GetWorkspaceSize(arguments);
-    uint8_t *deviceWorkspace = nullptr;
+    uint8_t* deviceWorkspace = nullptr;
     if (sizeWorkspace > 0) {
-        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
     }
     conv_op.Initialize(arguments, deviceWorkspace);
     conv_op(stream, aicCoreNum);
@@ -245,7 +247,8 @@ static void Run(const Options &options) {
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv) {
+int main(int argc, const char** argv)
+{
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;

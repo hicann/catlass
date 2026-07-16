@@ -20,21 +20,25 @@ from catlass_cppgen.catlass.arch.arch import Arch
 
 class BasicMatmulKernel(GemmKernelBase):
     _KERNEL_NAME_BASE = "BasicMatmulTla"
-    _FEATURES = {"is_support_evg": True, "is_support_relu": True, "slice_axis": None, "is_mix": False}
-    
+    _FEATURES = {
+        "is_support_evg": True,
+        "is_support_relu": True,
+        "slice_axis": None,
+        "is_mix": False,
+    }
+
     def __init__(self, **kwargs):
         """初始化 BasicMatmulKernel.
-        
+
         relu_enable 现在通过 tune() 方法设置，默认为 False。
         """
         super().__init__(**kwargs)
-    
+
     _INCLUDES = [
         "catlass/catlass.hpp",
         "catlass/arch/arch.hpp",
         "catlass/layout/layout.hpp",
         "catlass/status.hpp",
-
         "catlass/gemm/block/block_mmad.hpp",
         "catlass/gemm/block/block_swizzle.hpp",
         "catlass/gemm/dispatch_policy.hpp",
@@ -43,7 +47,6 @@ class BasicMatmulKernel(GemmKernelBase):
         "catlass/gemm_coord.hpp",
         "catlass/matrix_coord.hpp",
         "tla/layout.hpp",
-        
         "catlass/gemm/kernel/basic_matmul_tla.hpp",
     ]
     _KERNEL_NAME = "{arch_name}_{kernel_name}_{dispatch_policy_name}_{swizzle_name}_{l1_tile_shape_str}_{l0_tile_shape_str}"
@@ -73,7 +76,7 @@ class BasicMatmulKernel(GemmKernelBase):
     using LayoutTagB = {layout_B};
     using LayoutTagC = layout::RowMajor;
     using ElementBias = {element_Bias};
-   
+
     using TileCopy = Gemm::Tile::PackedTileCopyTla<ArchTag, ElementA, LayoutTagA, ElementB, LayoutTagB, ElementC, LayoutTagC, ElementBias, {relu_enable}>;
     using BlockMmad = Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, ElementA, ElementB, ElementC, ElementBias, TileCopy>;
     using BlockEpilogue = void;
@@ -104,23 +107,33 @@ class BasicMatmulKernel(GemmKernelBase):
             self.element_C.data_size(),
         )
         if self.arch_tag == Arch.AtlasA2:
-            l1_m, l1_n, l1_k, l0_k = 128, 256, 512//element_max_size, 128//element_max_size
+            l1_m, l1_n, l1_k, l0_k = (
+                128,
+                256,
+                512 // element_max_size,
+                128 // element_max_size,
+            )
         elif self.arch_tag == Arch.Ascend950:
-            l1_m, l1_n, l1_k, l0_k = 256, 256, 512//element_max_size, 128//element_max_size
+            l1_m, l1_n, l1_k, l0_k = (
+                256,
+                256,
+                512 // element_max_size,
+                128 // element_max_size,
+            )
         if self.element_Bias is not None and self.element_Bias != "void":
             l1_m -= 16
         return GemmShape(l1_m, l1_n, l1_k), GemmShape(l1_m, l1_n, l0_k)
-    
+
     def get_default_dispatch_policy_list(self) -> List[MmadPingpong]:
         """获取 BasicMatmulKernel 的默认 dispatch_policy 列表.
-        
+
         :return: 包含默认 dispatch_policy 的列表，列表的第一个元素 [0] 是默认策略.
         :rtype: List[MmadPingpong]
         """
         return [MmadPingpong(arch_tag=self.arch_tag, enable_unit_flag=True)]
-    
+
     def get_render_params(self, use_constexpr: bool = True) -> Dict[str, Any]:
         """获取渲染参数，包括 kernel 名称格式化参数."""
         params = super().get_render_params(use_constexpr)
-        params['relu_enable'] = 'true' if self.relu_enable else 'false'
+        params["relu_enable"] = "true" if self.relu_enable else "false"
         return self._add_kernel_name_params(params, self._KERNEL_NAME_BASE)

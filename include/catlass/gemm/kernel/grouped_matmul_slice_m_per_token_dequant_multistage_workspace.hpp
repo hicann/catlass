@@ -23,12 +23,7 @@
 namespace Catlass::Gemm::Kernel {
 
 template <
-    class BlockMmad_,
-    class BlockEpilogue_,
-    class BlockScheduler_,
-    uint32_t WORKSPACE_STAGES_,
-    class ElementGroupList_
->
+    class BlockMmad_, class BlockEpilogue_, class BlockScheduler_, uint32_t WORKSPACE_STAGES_, class ElementGroupList_>
 class GroupedMatmulSliceMPerTokenDequantMultiStageWorkspace {
 public:
     using BlockMmad = BlockMmad_;
@@ -60,71 +55,71 @@ public:
         // Data members
         GemmCoord problemShape;
         uint32_t problemCount;
-        __gm__ ElementGroupList_ *ptrGroupList;
-        __gm__ ElementA *ptrA;
+        __gm__ ElementGroupList_* ptrGroupList;
+        __gm__ ElementA* ptrA;
         LayoutA layoutA;
-        __gm__ ElementB *ptrB;
+        __gm__ ElementB* ptrB;
         LayoutB layoutB;
-        __gm__ ElementScale *ptrScale;
+        __gm__ ElementScale* ptrScale;
         LayoutScale layoutScale;
-        __gm__ ElementPerTokenScale *ptrPerTokenScale;
+        __gm__ ElementPerTokenScale* ptrPerTokenScale;
         LayoutPerTokenScale layoutPerTokenScale;
-        __gm__ ElementD *ptrD;
+        __gm__ ElementD* ptrD;
         LayoutD layoutD;
         GM_ADDR ptrWorkspace;
 
         // Methods
         CATLASS_HOST_DEVICE
-        Params() {}
+        Params()
+        {}
 
         CATLASS_HOST_DEVICE
         Params(
-            GemmCoord problemShape_, uint32_t problemCount_, GM_ADDR ptrGroupList_,
-            GM_ADDR ptrA_, LayoutA layoutA_,
-            GM_ADDR ptrB_, LayoutB layoutB_,
-            GM_ADDR ptrScale_, LayoutScale layoutScale_,
-            GM_ADDR ptrPerTokenScale_, LayoutPerTokenScale layoutPerTokenScale_,
-            GM_ADDR ptrD_, LayoutD layoutD_,
-            GM_ADDR ptrWorkspace_
-        ) : problemShape(problemShape_),
-            problemCount(problemCount_), ptrGroupList(reinterpret_cast<__gm__ ElementGroupList *>(ptrGroupList_)),
-            ptrA(reinterpret_cast<__gm__ ElementA *>(ptrA_)), layoutA(layoutA_),
-            ptrB(reinterpret_cast<__gm__ ElementB *>(ptrB_)), layoutB(layoutB_),
-            ptrScale(reinterpret_cast<__gm__ ElementScale *>(ptrScale_)), layoutScale(layoutScale_),
-            ptrPerTokenScale(reinterpret_cast<__gm__ ElementPerTokenScale *>(ptrPerTokenScale_)),
-            layoutPerTokenScale(layoutPerTokenScale_),
-            ptrD(reinterpret_cast<__gm__ ElementD *>(ptrD_)), layoutD(layoutD_),
-            ptrWorkspace(ptrWorkspace_)
-        {
-        }
+            GemmCoord problemShape_, uint32_t problemCount_, GM_ADDR ptrGroupList_, GM_ADDR ptrA_, LayoutA layoutA_,
+            GM_ADDR ptrB_, LayoutB layoutB_, GM_ADDR ptrScale_, LayoutScale layoutScale_, GM_ADDR ptrPerTokenScale_,
+            LayoutPerTokenScale layoutPerTokenScale_, GM_ADDR ptrD_, LayoutD layoutD_, GM_ADDR ptrWorkspace_)
+            : problemShape(problemShape_),
+              problemCount(problemCount_),
+              ptrGroupList(reinterpret_cast<__gm__ ElementGroupList*>(ptrGroupList_)),
+              ptrA(reinterpret_cast<__gm__ ElementA*>(ptrA_)),
+              layoutA(layoutA_),
+              ptrB(reinterpret_cast<__gm__ ElementB*>(ptrB_)),
+              layoutB(layoutB_),
+              ptrScale(reinterpret_cast<__gm__ ElementScale*>(ptrScale_)),
+              layoutScale(layoutScale_),
+              ptrPerTokenScale(reinterpret_cast<__gm__ ElementPerTokenScale*>(ptrPerTokenScale_)),
+              layoutPerTokenScale(layoutPerTokenScale_),
+              ptrD(reinterpret_cast<__gm__ ElementD*>(ptrD_)),
+              layoutD(layoutD_),
+              ptrWorkspace(ptrWorkspace_)
+        {}
     };
 
     struct Arguments {
         GemmCoord problemShape;
         uint32_t problemCount;
         uint32_t aicCoreNum;
-        uint8_t *ptrGroupList;
-        uint8_t *ptrA;
-        uint8_t *ptrB;
-        uint8_t *ptrScale;
-        uint8_t *ptrPerTokenScale;
-        uint8_t *ptrD;
+        uint8_t* ptrGroupList;
+        uint8_t* ptrA;
+        uint8_t* ptrB;
+        uint8_t* ptrScale;
+        uint8_t* ptrPerTokenScale;
+        uint8_t* ptrD;
     };
 
-    static bool CanImplement(const Arguments &args)
+    static bool CanImplement(const Arguments& args)
     {
         return true;
     }
 
-    static size_t GetWorkspaceSize(const Arguments &args)
+    static size_t GetWorkspaceSize(const Arguments& args)
     {
-        size_t lenWorkspace = static_cast<size_t>(L1TileShape::M) * L1TileShape::N *
-            args.aicCoreNum * WORKSPACE_STAGES;
+        size_t lenWorkspace = static_cast<size_t>(L1TileShape::M) * L1TileShape::N * args.aicCoreNum * WORKSPACE_STAGES;
         size_t sizeWorkspace = lenWorkspace * sizeof(uint32_t);
         return sizeWorkspace;
     }
 
-    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    static Params ToUnderlyingArguments(const Arguments& args, uint8_t* workspace)
     {
         uint32_t m = args.problemShape.m();
         uint32_t n = args.problemShape.n();
@@ -134,12 +129,9 @@ public:
         LayoutScale layoutScale{n};
         LayoutPerTokenScale layoutPerTokenScale{m};
         LayoutD layoutD = LayoutD::template MakeLayout<ElementD>(m, n);
-        Params params{args.problemShape, args.problemCount, args.ptrGroupList,
-            args.ptrA, layoutA,
-            args.ptrB, layoutB,
-            args.ptrScale, layoutScale,
-            args.ptrPerTokenScale, layoutPerTokenScale,
-            args.ptrD, layoutD, workspace};
+        Params params{args.problemShape,   args.problemCount, args.ptrGroupList, args.ptrA,   layoutA,
+                      args.ptrB,           layoutB,           args.ptrScale,     layoutScale, args.ptrPerTokenScale,
+                      layoutPerTokenScale, args.ptrD,         layoutD,           workspace};
         return params;
     }
 
@@ -157,12 +149,10 @@ public:
     }
 
     template <int32_t CORE_TYPE = g_coreType>
-    CATLASS_DEVICE
-    void operator()(Params const &params);
+    CATLASS_DEVICE void operator()(Params const& params);
 
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIC>(Params const &params)
+    CATLASS_DEVICE void operator()<AscendC::AIC>(Params const& params)
     {
         AscendC::ICachePreLoad(1);
         BlockScheduler blockScheduler;
@@ -180,7 +170,7 @@ public:
         int64_t gmGroupOffsetB = 0;
 
         AscendC::GlobalTensor<ElementC> gmC;
-        gmC.SetGlobalBuffer(reinterpret_cast<__gm__ ElementC *>(params.ptrWorkspace));
+        gmC.SetGlobalBuffer(reinterpret_cast<__gm__ ElementC*>(params.ptrWorkspace));
         auto layoutC = layout::RowMajor{L1TileShape::M * coreNum * WORKSPACE_STAGES, L1TileShape::N};
 
         uint32_t stageId = 0;
@@ -188,7 +178,7 @@ public:
         uint32_t startCoreIdx = 0;
         for (uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx) {
             uint32_t currentM = (groupIdx == 0) ? groupList.GetValue(groupIdx) :
-                (groupList.GetValue(groupIdx) - groupList.GetValue(groupIdx - 1));
+                                                  (groupList.GetValue(groupIdx) - groupList.GetValue(groupIdx - 1));
             GemmCoord inGroupProblemShape{currentM, params.problemShape.n(), params.problemShape.k()};
 
             LayoutA layoutA = params.layoutA.GetTileLayout(inGroupProblemShape.GetCoordMK());
@@ -230,20 +220,13 @@ public:
                 // Compute block-scoped matrix multiply-add
                 if constexpr (BlockMmad::DispatchPolicy::ASYNC) {
                     blockMmad(
-                        gmA[gmGroupOffsetA + gmOffsetA], layoutA,
-                        gmB[gmOffsetB], layoutB,
-                        gmC[gmOffsetC], layoutC,
-                        actualBlockShape,
-                        callbackBeforeFixpipe, callbackAfterFixpipe
-                    );
+                        gmA[gmGroupOffsetA + gmOffsetA], layoutA, gmB[gmOffsetB], layoutB, gmC[gmOffsetC], layoutC,
+                        actualBlockShape, callbackBeforeFixpipe, callbackAfterFixpipe);
                 } else {
                     callbackBeforeFixpipe();
                     blockMmad(
-                        gmA[gmGroupOffsetA + gmOffsetA], layoutA,
-                        gmB[gmOffsetB], layoutB,
-                        gmC[gmOffsetC], layoutC,
-                        actualBlockShape
-                    );
+                        gmA[gmGroupOffsetA + gmOffsetA], layoutA, gmB[gmOffsetB], layoutB, gmC[gmOffsetC], layoutC,
+                        actualBlockShape);
                     callbackAfterFixpipe();
                 }
 
@@ -261,8 +244,8 @@ public:
         }
 
         while (stageUsed > 0) {
-            uint32_t aivComputeStageId = (stageId >= stageUsed) ?
-                (stageId - stageUsed) : (stageId + WORKSPACE_STAGES - stageUsed);
+            uint32_t aivComputeStageId =
+                (stageId >= stageUsed) ? (stageId - stageUsed) : (stageId + WORKSPACE_STAGES - stageUsed);
             Arch::CrossCoreWaitFlag(flagAivFinishComputeList[aivComputeStageId]);
             --stageUsed;
         }
@@ -271,8 +254,7 @@ public:
     }
 
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIV>(Params const &params)
+    CATLASS_DEVICE void operator()<AscendC::AIV>(Params const& params)
     {
         AscendC::ICachePreLoad(1);
         BlockScheduler blockScheduler;
@@ -288,14 +270,14 @@ public:
         groupList.SetGlobalBuffer(params.ptrGroupList);
 
         AscendC::GlobalTensor<ElementC> gmC;
-        gmC.SetGlobalBuffer(reinterpret_cast<__gm__ ElementC *>(params.ptrWorkspace));
+        gmC.SetGlobalBuffer(reinterpret_cast<__gm__ ElementC*>(params.ptrWorkspace));
         auto layoutC = layout::RowMajor{L1TileShape::M * coreNum * WORKSPACE_STAGES, L1TileShape::N};
 
         uint32_t stageId = 0;
         uint32_t startCoreIdx = 0;
         for (uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx) {
             uint32_t currentM = (groupIdx == 0) ? groupList.GetValue(groupIdx) :
-                (groupList.GetValue(groupIdx) - groupList.GetValue(groupIdx - 1));
+                                                  (groupList.GetValue(groupIdx) - groupList.GetValue(groupIdx - 1));
             GemmCoord inGroupProblemShape{currentM, params.problemShape.n(), params.problemShape.k()};
 
             LayoutScale layoutScale = params.layoutScale;
@@ -304,10 +286,12 @@ public:
             LayoutD layoutD = params.layoutD.GetTileLayout(inGroupProblemShape.GetCoordMN());
 
             EpilogueParams epilogueParams{
-                params.ptrScale + gmGroupOffsetScale, layoutScale,
-                params.ptrPerTokenScale + gmGroupOffsetPerTokenScale, layoutPerTokenScale,
-                params.ptrD + gmGroupOffsetD, layoutD
-            };
+                params.ptrScale + gmGroupOffsetScale,
+                layoutScale,
+                params.ptrPerTokenScale + gmGroupOffsetPerTokenScale,
+                layoutPerTokenScale,
+                params.ptrD + gmGroupOffsetD,
+                layoutD};
 
             blockScheduler.Update(inGroupProblemShape, L1TileShape::ToCoordMN());
             blockEpilogue.UpdateParams(epilogueParams);
@@ -346,8 +330,8 @@ private:
     friend struct AicSetFunc;
 
     struct AicWaitFunc {
-        using MatmulKernel = GroupedMatmulSliceMPerTokenDequantMultiStageWorkspace<BlockMmad, BlockEpilogue, BlockScheduler,
-            WORKSPACE_STAGES, ElementGroupList>;
+        using MatmulKernel = GroupedMatmulSliceMPerTokenDequantMultiStageWorkspace<
+            BlockMmad, BlockEpilogue, BlockScheduler, WORKSPACE_STAGES, ElementGroupList>;
 
         CATLASS_DEVICE
         AicWaitFunc() = default;
@@ -358,13 +342,13 @@ private:
             Arch::CrossCoreWaitFlag(ptr->flagAivFinishComputeList[stageId]);
         }
 
-        MatmulKernel *ptr{nullptr};
+        MatmulKernel* ptr{nullptr};
         uint32_t stageId;
     };
 
     struct AicSetFunc {
-        using MatmulKernel = GroupedMatmulSliceMPerTokenDequantMultiStageWorkspace<BlockMmad, BlockEpilogue, BlockScheduler,
-            WORKSPACE_STAGES, ElementGroupList>;
+        using MatmulKernel = GroupedMatmulSliceMPerTokenDequantMultiStageWorkspace<
+            BlockMmad, BlockEpilogue, BlockScheduler, WORKSPACE_STAGES, ElementGroupList>;
 
         CATLASS_DEVICE
         AicSetFunc() = default;
@@ -375,7 +359,7 @@ private:
             Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(ptr->flagAicFinishStoreList[stageId]);
         }
 
-        MatmulKernel *ptr{nullptr};
+        MatmulKernel* ptr{nullptr};
         uint32_t stageId;
     };
 

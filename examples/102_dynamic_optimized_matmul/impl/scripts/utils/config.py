@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # -----------------------------------------------------------------------------------------------------------
 # Copyright (c) 2025 Huawei Technologies Co., Ltd.
-# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 # CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
 # THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
@@ -10,7 +10,6 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
-import os
 
 class Config:
     WRAPPER_CODE_PATH = "../wrapper"
@@ -20,10 +19,10 @@ class Config:
     LAYOUT_TAG_SET = list(LAYOUT_TAG_MAP.keys())
 
     PADDING_TAG_MAP = {
-        0: "PaddingTag::NO_PADDING", 
+        0: "PaddingTag::NO_PADDING",
         1: "PaddingTag::PADDING_ND",
         2: "PaddingTag::PADDING_BLOCK_ND",
-        3: "PaddingTag::PADDING_NZ"
+        3: "PaddingTag::PADDING_NZ",
     }
 
     KERNEL_SERIAL_MAP = {
@@ -62,6 +61,6 @@ class Config:
         result = []
         for i, c in enumerate(name):
             if c.isupper() and i > 0:
-                result.append('_')
+                result.append("_")
             result.append(c.lower())
         return "".join(result)

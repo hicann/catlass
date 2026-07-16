@@ -100,4 +100,3 @@ gemm = Gemm(...)
 gemm = gemm.to_evg(evg_config=evg_config)
 ```
  - 直接调用`evg(fn_src, example_inputs)` 生成 EVG 定义，如上述[使用示例](###使用示例)所示。
-

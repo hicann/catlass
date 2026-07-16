@@ -15,24 +15,18 @@
 
 namespace Catlass::Epilogue::Tile {
 
-template <
-    class ArchTag_,
-    class ComputeType_,
-    uint32_t COMPUTE_LENGTH_
->
+template <class ArchTag_, class ComputeType_, uint32_t COMPUTE_LENGTH_>
 struct TileBroadcastOneBlk {
     using ArchTag = ArchTag_;
     using ElementCompute = typename ComputeType_::Element;
     static constexpr uint32_t COMPUTE_LENGTH = COMPUTE_LENGTH_;
 
     CATLASS_DEVICE
-    TileBroadcastOneBlk() {}
+    TileBroadcastOneBlk()
+    {}
 
     CATLASS_DEVICE
-    void operator()(
-        AscendC::LocalTensor<ElementCompute> const &ubOut,
-        AscendC::LocalTensor<ElementCompute> const &ubIn
-    )
+    void operator()(AscendC::LocalTensor<ElementCompute> const& ubOut, AscendC::LocalTensor<ElementCompute> const& ubIn)
     {
         constexpr uint32_t maxRepeatNum = 255;
         constexpr uint32_t eleNumPerBlk = BYTE_PER_BLK / sizeof(ElementCompute);
@@ -46,30 +40,23 @@ struct TileBroadcastOneBlk {
             uint32_t residueM = COMPUTE_LENGTH - offset;
             uint32_t computeM = (residueM > eleNumPerCompute) ? eleNumPerCompute : residueM;
             uint8_t repeatTimes = static_cast<uint8_t>(CeilDiv<BLK_NUM_PER_VECTOR_FRACTAL>(computeM));
-            AscendC::Brcb(
-                ubOut[offset * eleNumPerBlk], ubIn[offset],
-                repeatTimes, repeatParams
-            );
+            AscendC::Brcb(ubOut[offset * eleNumPerBlk], ubIn[offset], repeatTimes, repeatParams);
         }
     }
 };
 
-template <
-    class ArchTag_,
-    class ElementCompute_,
-    uint32_t COMPUTE_LENGTH_
->
+template <class ArchTag_, class ElementCompute_, uint32_t COMPUTE_LENGTH_>
 struct TileBroadcastOneBlkTla {
     using ArchTag = ArchTag_;
     using ElementCompute = ElementCompute_;
     static constexpr uint32_t COMPUTE_LENGTH = COMPUTE_LENGTH_;
 
     CATLASS_DEVICE
-    TileBroadcastOneBlkTla() {}
+    TileBroadcastOneBlkTla()
+    {}
 
-    template<class TensorUbOut, class TensorUbIn>
-    CATLASS_DEVICE
-    void operator()(TensorUbOut &ubOut, TensorUbIn &ubIn)
+    template <class TensorUbOut, class TensorUbIn>
+    CATLASS_DEVICE void operator()(TensorUbOut& ubOut, TensorUbIn& ubIn)
     {
         constexpr uint32_t maxRepeatNum = 255;
         constexpr uint32_t eleNumPerBlk = BYTE_PER_BLK / sizeof(ElementCompute);
@@ -87,9 +74,8 @@ struct TileBroadcastOneBlkTla {
             uint32_t computeM = (residueM > eleNumPerCompute) ? eleNumPerCompute : residueM;
             uint8_t repeatTimes = static_cast<uint8_t>(CeilDiv<BLK_NUM_PER_VECTOR_FRACTAL>(computeM));
             AscendC::Brcb(
-                ubOut.data()[ubOutOffset + offset * eleNumPerBlk], ubIn.data()[ubInOffset + offset],
-                repeatTimes, repeatParams
-            );
+                ubOut.data()[ubOutOffset + offset * eleNumPerBlk], ubIn.data()[ubInOffset + offset], repeatTimes,
+                repeatParams);
         }
     }
 };

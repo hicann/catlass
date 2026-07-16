@@ -4,8 +4,9 @@
  * This file is a part of the CANN Open Software.
  * Licensed under CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+ * BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE. See LICENSE in the root of
+ * the software repository for the full text of the License.
  */
 
 #ifndef CATLASS_GEMM_KERNEL_QUANT_MATMUL_FULL_LOADA_TLA_HPP
@@ -24,12 +25,7 @@
 namespace Catlass::Gemm::Kernel {
 
 // Template for Matmul kernel. Compute C = A * B
-template <
-    class BlockMmad_,
-    class BlockEpilogue_,
-    class BlockScheduler_, 
-    uint32_t WORKSPACE_STAGES_
->
+template <class BlockMmad_, class BlockEpilogue_, class BlockScheduler_, uint32_t WORKSPACE_STAGES_>
 class QuantMatmulFullLoadATla {
 public:
     using BlockMmad = BlockMmad_;
@@ -64,11 +60,11 @@ public:
      * @brief Kernel arguments for the host side
      */
     struct BlockMmadArguments {
-        GM_ADDR ptrA{nullptr};          ///< The global memory address of matrix A
+        GM_ADDR ptrA{nullptr}; ///< The global memory address of matrix A
         LayoutA layoutA;
-        GM_ADDR ptrB{nullptr};          ///< The global memory address of matrix B
+        GM_ADDR ptrB{nullptr}; ///< The global memory address of matrix B
         LayoutB layoutB;
-        GM_ADDR ptrBias{nullptr};          ///< The global memory address of bias
+        GM_ADDR ptrBias{nullptr}; ///< The global memory address of bias
     };
 
     using BlockMmadParams = BlockMmadArguments;
@@ -94,39 +90,42 @@ public:
         Arguments() = default;
     };
 
-    static bool CanImplement(const Arguments &args)
+    static bool CanImplement(const Arguments& args)
     {
-        uint32_t L1UsedSpace = L1_TILE_M * args.problemShape.k() * sizeof(ElementA) +
-                               L1_TILE_K * L1_TILE_N * 2 * sizeof(ElementB);
+        uint32_t L1UsedSpace =
+            L1_TILE_M * args.problemShape.k() * sizeof(ElementA) + L1_TILE_K * L1_TILE_N * 2 * sizeof(ElementB);
         if (L1UsedSpace > ArchTag::L1_SIZE) {
             return false;
         }
         return true;
     }
 
-    static size_t GetWorkspaceSize(const Arguments &args)
+    static size_t GetWorkspaceSize(const Arguments& args)
     {
         size_t lenWorkspace = static_cast<size_t>(L1_TILE_M) * L1_TILE_N * args.aicCoreNum * WORKSPACE_STAGES;
         size_t sizeWorkspace = lenWorkspace * sizeof(ElementC);
         return sizeWorkspace;
     }
 
-    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    static Params ToUnderlyingArguments(const Arguments& args, uint8_t* workspace)
     {
-        BlockMmadParams mmadParams = {args.mmadArgs.ptrA, args.mmadArgs.layoutA,
-                                      args.mmadArgs.ptrB, args.mmadArgs.layoutB, 
-                                      args.mmadArgs.ptrBias};
-        EpilogueParams epiParams = {args.epiArgs.ptrScale, args.epiArgs.layoutScale,
-                                    args.epiArgs.ptrPerTokenScale, args.epiArgs.layoutPerTokenScale,
-                                    args.epiArgs.ptrD, args.epiArgs.layoutD};
+        BlockMmadParams mmadParams = {
+            args.mmadArgs.ptrA, args.mmadArgs.layoutA, args.mmadArgs.ptrB, args.mmadArgs.layoutB,
+            args.mmadArgs.ptrBias};
+        EpilogueParams epiParams = {args.epiArgs.ptrScale,
+                                    args.epiArgs.layoutScale,
+                                    args.epiArgs.ptrPerTokenScale,
+                                    args.epiArgs.layoutPerTokenScale,
+                                    args.epiArgs.ptrD,
+                                    args.epiArgs.layoutD};
         // mmad params with epilogue takes workspaceGm as output
- 	    Params params = {args.problemShape, args.aicCoreNum, mmadParams, epiParams, workspace};
+        Params params = {args.problemShape, args.aicCoreNum, mmadParams, epiParams, workspace};
         return params;
     }
 
     // Methods
     CATLASS_DEVICE
-    QuantMatmulFullLoadATla() 
+    QuantMatmulFullLoadATla()
     {
         Arch::FlagID flagId = 0;
         for (uint32_t stageId = 0; stageId < WORKSPACE_STAGES; ++stageId) {
@@ -138,24 +137,22 @@ public:
     }
 
     template <int32_t CORE_TYPE = g_coreType>
-    CATLASS_DEVICE
-    void operator()(Params const &params);
+    CATLASS_DEVICE void operator()(Params const& params);
 
     /// Executes one Matmul
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIC>(Params const &params)
+    CATLASS_DEVICE void operator()<AscendC::AIC>(Params const& params)
     {
         BlockScheduler matmulBlockScheduler(params.problemShape, MakeCoord(L1_TILE_M, L1_TILE_N));
         uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
 
         // Represent the full gm
         AscendC::GlobalTensor<ElementA> gmA;
-        gmA.SetGlobalBuffer((__gm__ ElementA *)params.mmadParams.ptrA);
+        gmA.SetGlobalBuffer((__gm__ ElementA*)params.mmadParams.ptrA);
         AscendC::GlobalTensor<ElementB> gmB;
-        gmB.SetGlobalBuffer((__gm__ ElementB *)params.mmadParams.ptrB);
+        gmB.SetGlobalBuffer((__gm__ ElementB*)params.mmadParams.ptrB);
         AscendC::GlobalTensor<ElementC> gmC;
-        gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrWorkspace);
+        gmC.SetGlobalBuffer((__gm__ ElementC*)params.ptrWorkspace);
 
         // Matrix A or Matrix B does not have duplicate data reads. Setting L2 Cache to Disable,
         // data reads will bypass L2 Cache.
@@ -169,7 +166,7 @@ public:
         using GlobalTensorBiasType = std::conditional_t<std::is_void_v<ElementBias>, uint8_t, ElementBias>;
         AscendC::GlobalTensor<GlobalTensorBiasType> gmBias;
         if constexpr (!std::is_void_v<ElementBias>) {
-            gmBias.SetGlobalBuffer((__gm__ ElementBias *)params.mmadParams.ptrBias);
+            gmBias.SetGlobalBuffer((__gm__ ElementBias*)params.mmadParams.ptrBias);
         }
 
         auto layoutBias = tla::MakeLayout(params.problemShape.n());
@@ -203,16 +200,18 @@ public:
             Callback callbackAfterFixpipe = MakeCallback(&aicSetFuncList[stageId]);
 
             // Make tiled views
-            auto tensorBlockA = GetTileA(tensorA, blockCoord.m() * L1_TILE_M, blockCoord.k() * L1_TILE_K,
-                                        actualBlockShape.m(), actualBlockShape.k());
-            auto tensorBlockB = GetTile(tensorB,
-                                        tla::MakeCoord(blockCoord.k() * L1_TILE_K, blockCoord.n() * L1_TILE_N),
-                                        tla::MakeShape(actualBlockShape.k(), actualBlockShape.n()));
-            auto tensorBlockC = GetTile(tensorC,
-                                        tla::MakeCoord((stageId * coreNum + coreIdx) * L1_TILE_M, 0),
-                                        tla::MakeShape(actualBlockShape.m(), actualBlockShape.n()));
+            auto tensorBlockA = GetTileA(
+                tensorA, blockCoord.m() * L1_TILE_M, blockCoord.k() * L1_TILE_K, actualBlockShape.m(),
+                actualBlockShape.k());
+            auto tensorBlockB = GetTile(
+                tensorB, tla::MakeCoord(blockCoord.k() * L1_TILE_K, blockCoord.n() * L1_TILE_N),
+                tla::MakeShape(actualBlockShape.k(), actualBlockShape.n()));
+            auto tensorBlockC = GetTile(
+                tensorC, tla::MakeCoord((stageId * coreNum + coreIdx) * L1_TILE_M, 0),
+                tla::MakeShape(actualBlockShape.m(), actualBlockShape.n()));
 
-            int64_t gmOffsetA = params.mmadParams.layoutA(tla::MakeCoord(blockCoord.m() * L1_TILE_M, blockCoord.k() * L1_TILE_K));
+            int64_t gmOffsetA =
+                params.mmadParams.layoutA(tla::MakeCoord(blockCoord.m() * L1_TILE_M, blockCoord.k() * L1_TILE_K));
 
             // Judge whether the current blockA is already on L1Cache
             bool isFirstBlock = (loopIdx == AscendC::GetBlockIdx());
@@ -234,8 +233,7 @@ public:
                 callbackAfterFixpipe();
             } else {
                 auto tensorBlockBias = GetTile(
-                    tensorBias, tla::MakeCoord(blockCoord.n() * L1_TILE_N), tla::MakeShape(actualBlockShape.n())
-                );
+                    tensorBias, tla::MakeCoord(blockCoord.n() * L1_TILE_N), tla::MakeShape(actualBlockShape.n()));
                 callbackBeforeFixpipe();
                 blockMmad(tensorBlockA, tensorBlockB, tensorBlockC, actualBlockShape, needLoadL1, tensorBlockBias);
                 callbackAfterFixpipe();
@@ -248,8 +246,8 @@ public:
         }
 
         while (stageUsed > 0) {
-            uint32_t aivComputeStageId = (stageId >= stageUsed) ?
-                (stageId - stageUsed) : (stageId + WORKSPACE_STAGES - stageUsed);
+            uint32_t aivComputeStageId =
+                (stageId >= stageUsed) ? (stageId - stageUsed) : (stageId + WORKSPACE_STAGES - stageUsed);
             Arch::CrossCoreWaitFlag(flagAivFinishComputeList[aivComputeStageId]);
             --stageUsed;
         }
@@ -258,15 +256,14 @@ public:
     }
 
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIV>(Params const &params) 
+    CATLASS_DEVICE void operator()<AscendC::AIV>(Params const& params)
     {
         AscendC::GlobalTensor<ElementA> gmA;
-        gmA.SetGlobalBuffer(reinterpret_cast<__gm__ ElementA *>(params.mmadParams.ptrA));
+        gmA.SetGlobalBuffer(reinterpret_cast<__gm__ ElementA*>(params.mmadParams.ptrA));
         auto tensorA = tla::MakeTensor(gmA, params.mmadParams.layoutA, Arch::PositionGM{});
 
         AscendC::GlobalTensor<ElementB> gmB;
-        gmB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB *>(params.mmadParams.ptrB));
+        gmB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB*>(params.mmadParams.ptrB));
         auto tensorB = tla::MakeTensor(gmB, params.mmadParams.layoutB, Arch::PositionGM{});
 
         BlockScheduler blockScheduler;
@@ -276,20 +273,22 @@ public:
         uint32_t coreNum = AscendC::GetBlockNum();
 
         AscendC::GlobalTensor<ElementC> gmC;
-        gmC.SetGlobalBuffer(reinterpret_cast<__gm__ ElementC *>(params.ptrWorkspace));
+        gmC.SetGlobalBuffer(reinterpret_cast<__gm__ ElementC*>(params.ptrWorkspace));
         auto layoutC = tla::MakeLayout<ElementC, layout::RowMajor>(L1_TILE_M * coreNum * WORKSPACE_STAGES, L1_TILE_N);
         auto tensorC = tla::MakeTensor(gmC, layoutC, Arch::PositionGM{});
 
         AscendC::GlobalTensor<ElementScale> gmScale;
-        gmScale.SetGlobalBuffer(reinterpret_cast<__gm__ ElementScale *>(params.epiParams.ptrScale));
+        gmScale.SetGlobalBuffer(reinterpret_cast<__gm__ ElementScale*>(params.epiParams.ptrScale));
         auto tensorScale = tla::MakeTensor(gmScale, params.epiParams.layoutScale, Arch::PositionGM{});
 
         AscendC::GlobalTensor<ElementPerTokenScale> gmPerTokenScale;
-        gmPerTokenScale.SetGlobalBuffer(reinterpret_cast<__gm__ ElementPerTokenScale *>(params.epiParams.ptrPerTokenScale));
-        auto tensorPerTokenScale = tla::MakeTensor(gmPerTokenScale, params.epiParams.layoutPerTokenScale, Arch::PositionGM{});
+        gmPerTokenScale.SetGlobalBuffer(
+            reinterpret_cast<__gm__ ElementPerTokenScale*>(params.epiParams.ptrPerTokenScale));
+        auto tensorPerTokenScale =
+            tla::MakeTensor(gmPerTokenScale, params.epiParams.layoutPerTokenScale, Arch::PositionGM{});
 
         AscendC::GlobalTensor<ElementD> gmD;
-        gmD.SetGlobalBuffer(reinterpret_cast<__gm__ ElementD *>(params.epiParams.ptrD));
+        gmD.SetGlobalBuffer(reinterpret_cast<__gm__ ElementD*>(params.epiParams.ptrD));
         auto tensorD = tla::MakeTensor(gmD, params.epiParams.layoutD, Arch::PositionGM{});
 
         uint32_t stageId = 0;
@@ -304,27 +303,23 @@ public:
 
             auto tensorBlockC = GetTile(
                 tensorC, tla::MakeCoord((stageId * coreNum + coreIdx) * L1_TILE_M, 0),
-                tla::MakeShape(actualBlockShapeMNK.m(), actualBlockShapeMNK.n())
-            );
-            
+                tla::MakeShape(actualBlockShapeMNK.m(), actualBlockShapeMNK.n()));
+
             auto tensorBlockScale = GetTile(
                 tensorScale, tla::MakeCoord(0, blockCoord.n() * L1_TILE_N),
-                tla::MakeShape(tla::Int<1>{}, actualBlockShapeMNK.n())
-            );
-            
+                tla::MakeShape(tla::Int<1>{}, actualBlockShapeMNK.n()));
+
             auto tensorBlockPerTokenScaleScale = GetTile(
                 tensorPerTokenScale, tla::MakeCoord(0, blockCoord.m() * L1_TILE_M),
-                tla::MakeShape(tla::Int<1>{}, actualBlockShapeMNK.m())
-            );
-            
+                tla::MakeShape(tla::Int<1>{}, actualBlockShapeMNK.m()));
+
             auto tensorBlockD = GetTile(
                 tensorD, tla::MakeCoord(blockCoord.m() * L1_TILE_M, blockCoord.n() * L1_TILE_N),
-                tla::MakeShape(actualBlockShapeMNK.m(), actualBlockShapeMNK.n())
-            );
+                tla::MakeShape(actualBlockShapeMNK.m(), actualBlockShapeMNK.n()));
 
             Arch::CrossCoreWaitFlag(flagAicFinishStoreList[stageId]);
-            blockEpilogue(tensorBlockC, tensorBlockScale, tensorBlockPerTokenScaleScale,
-                        tensorBlockD, actualBlockShapeMNK);
+            blockEpilogue(
+                tensorBlockC, tensorBlockScale, tensorBlockPerTokenScaleScale, tensorBlockD, actualBlockShapeMNK);
             Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(flagAivFinishComputeList[stageId]);
 
             stageId = (stageId + 1 < WORKSPACE_STAGES) ? (stageId + 1) : 0;
@@ -349,7 +344,7 @@ private:
             Arch::CrossCoreWaitFlag(ptr->flagAivFinishComputeList[stageId]);
         }
 
-        MatmulKernel *ptr{nullptr};
+        MatmulKernel* ptr{nullptr};
         uint32_t stageId;
     };
 
@@ -365,7 +360,7 @@ private:
             Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(ptr->flagAicFinishStoreList[stageId]);
         }
 
-        MatmulKernel *ptr{nullptr};
+        MatmulKernel* ptr{nullptr};
         uint32_t stageId;
     };
 
@@ -378,11 +373,11 @@ private:
     static constexpr Arch::FlagID FLAG_AIV_FINISH_STORE = 4;
     Arch::CrossCoreFlag flagAivFinishPadding{FLAG_AIV_FINISH_STORE};
     Arch::Resource<ArchTag> resource;
-    
-    template<class TensorA>
-    CATLASS_DEVICE auto GetTileA(TensorA &tensorA, uint32_t mIndex, uint32_t kIndex, uint32_t mSize, uint32_t kSize)
+
+    template <class TensorA>
+    CATLASS_DEVICE auto GetTileA(TensorA& tensorA, uint32_t mIndex, uint32_t kIndex, uint32_t mSize, uint32_t kSize)
     {
-        if constexpr(tla::detail::isVector<LayoutA>::value) {
+        if constexpr (tla::detail::isVector<LayoutA>::value) {
             return GetTile(tensorA, tla::MakeCoord(kIndex), tla::MakeShape(kSize));
         } else {
             return GetTile(tensorA, tla::MakeCoord(mIndex, kIndex), tla::MakeShape(mSize, kSize));

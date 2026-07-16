@@ -7,6 +7,22 @@
 1. 提交PR时，请按照PR模板仔细填写本次PR的业务背景、目的、方案等信息。
 2. 若您的修改不是简单的bug修复，而是涉及到新增特性、新增接口、新增配置参数或者修改代码流程等，请务必先通过[Issue](https://gitcode.com/cann/community#%E6%8F%90%E4%BA%A4issue%E5%A4%84%E7%90%86issue%E4%BB%BB%E5%8A%A1)进行方案讨论，以避免您的代码被拒绝合入。若您不确定本次修改是否可被归为“简单的bug修复”，亦可通过提交Issue进行方案讨论。
 
+提交前请在本地完成代码检查，避免因格式或静态检查问题阻塞PR。
+
+首次使用需安装并挂载到 git hook：
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+此后每次 `git commit` 都会自动触发检查。也可手动运行：
+
+```bash
+pre-commit run --all-files   # 检查全部文件
+pre-commit run               # 仅检查已暂存文件
+```
+
 开发者贡献场景主要包括：
 
 - Bug修复

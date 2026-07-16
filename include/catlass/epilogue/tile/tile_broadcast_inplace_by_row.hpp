@@ -21,20 +21,18 @@ template <
     /// Compute data type
     class ComputeType_,
     /// Length of the compute buffer
-    class TileShape_
->
+    class TileShape_>
 struct TileBroadcastInplaceByRow {
     using ArchTag = ArchTag_;
     using ElementCompute = typename ComputeType_::Element;
     using TileShape = TileShape_;
 
     CATLASS_DEVICE
-    TileBroadcastInplaceByRow() {}
+    TileBroadcastInplaceByRow()
+    {}
 
     CATLASS_DEVICE
-    void operator()(
-        AscendC::LocalTensor<ElementCompute> const &ubInOut
-    )
+    void operator()(AscendC::LocalTensor<ElementCompute> const& ubInOut)
     {
         constexpr uint32_t eleNumPerVectorFractal = BYTE_PER_VECTOR_FRACTAL / sizeof(ElementCompute);
 

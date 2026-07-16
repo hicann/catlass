@@ -48,9 +48,10 @@ template <
 struct TileCopyDynamicOptimized : public Catlass::Gemm::Tile::TileCopy<ArchTag, AType, BType, CType, BiasType> {
     using CopyGmToL1A = typename Catlass::Gemm::Tile::CopyGmToL1DynamicOptimized<ArchTag, AType>;
     using CopyGmToL1B = typename Catlass::Gemm::Tile::CopyGmToL1DynamicOptimized<ArchTag, BType>;
-}; 
+};
 
-static void Run(const Options &options) {
+static void Run(const Options& options)
+{
     aclrtStream stream{nullptr};
 
     ACL_CHECK(aclInit(nullptr));
@@ -82,42 +83,45 @@ static void Run(const Options &options) {
     LayoutB layoutB = LayoutB::template MakeLayout<ElementB>(k, n);
     LayoutC layoutC = LayoutC::template MakeLayout<ElementC>(m, n);
 
-    using ArchTag = Arch::AtlasA2;   
+    using ArchTag = Arch::AtlasA2;
 
     // Padding objects
-    using ElementAccumulator = typename Catlass::Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
-    
-    constexpr PaddingTag paddingTagA = (std::is_same_v<LayoutA, layout::zN> || std::is_same_v<LayoutA, layout::nZ>)
-                                           ? PaddingTag::NO_PADDING
-                                           : PaddingTag::PADDING_NZ;
-    constexpr PaddingTag paddingTagB = (std::is_same_v<LayoutB, layout::zN> || std::is_same_v<LayoutB, layout::nZ>)
-                                           ? PaddingTag::NO_PADDING
-                                           : PaddingTag::PADDING_NZ;
+    using ElementAccumulator =
+        typename Catlass::Gemm::helper::ElementAccumulatorSelector<ElementA, ElementB>::ElementAccumulator;
+
+    constexpr PaddingTag paddingTagA = (std::is_same_v<LayoutA, layout::zN> || std::is_same_v<LayoutA, layout::nZ>) ?
+                                           PaddingTag::NO_PADDING :
+                                           PaddingTag::PADDING_NZ;
+    constexpr PaddingTag paddingTagB = (std::is_same_v<LayoutB, layout::zN> || std::is_same_v<LayoutB, layout::nZ>) ?
+                                           PaddingTag::NO_PADDING :
+                                           PaddingTag::PADDING_NZ;
     constexpr PaddingTag paddingTagC = PaddingTag::NO_PADDING;
     using PaddingBuilderA = Catlass::Gemm::Kernel::PaddingBuilder<paddingTagA, ArchTag, ElementA, LayoutA>;
     using PaddingBuilderB = Catlass::Gemm::Kernel::PaddingBuilder<paddingTagB, ArchTag, ElementB, LayoutB>;
     using PaddingA = typename PaddingBuilderA::Padding;
     using PaddingB = typename PaddingBuilderB::Padding;
-    using RemovePaddingNDAndCast_ = Catlass::Gemm::Kernel::RemovePaddingNDAndCast<paddingTagC, ArchTag, ElementAccumulator, ElementC, LayoutC>;
-    using RemovePaddingNDAndCastC = std::conditional_t<paddingTagC == PaddingTag::PADDING_ND || !std::is_same_v<ElementAccumulator, ElementC>,
-        RemovePaddingNDAndCast_, void>;
-    
+    using RemovePaddingNDAndCast_ =
+        Catlass::Gemm::Kernel::RemovePaddingNDAndCast<paddingTagC, ArchTag, ElementAccumulator, ElementC, LayoutC>;
+    using RemovePaddingNDAndCastC = std::conditional_t<
+        paddingTagC == PaddingTag::PADDING_ND || !std::is_same_v<ElementAccumulator, ElementC>, RemovePaddingNDAndCast_,
+        void>;
+
     std::vector<fp16_t> hostA(lenA);
     std::vector<fp16_t> hostB(lenB);
     golden::FillRandomData<fp16_t>(hostA, -5.0f, 5.0f);
     golden::FillRandomData<fp16_t>(hostB, -5.0f, 5.0f);
 
     // Malloc memory on device
-    uint8_t *deviceA{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceA{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceB{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceB{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceC{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceC{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
     // Prepare hardware sync address
     uint64_t hardwareSyncAddr{0};
@@ -133,16 +137,18 @@ static void Run(const Options &options) {
 
     constexpr bool enableUnitFlag = false;
     constexpr uint32_t l0CStages = 2;
-    if ( m > n) {
+    if (m > n) {
         constexpr uint32_t l1AStages = 2;
         constexpr uint32_t l1BStages = 1;
         using L1TileShape = GemmShape<128, 256, 512>;
         using L0TileShape = GemmShape<128, 128, 128>;
 
-        using DispatchPolicy = Catlass::Gemm::MmadAtlasA2SingleCoreSplitk<l1AStages, l1BStages, l0CStages, enableUnitFlag>;
+        using DispatchPolicy =
+            Catlass::Gemm::MmadAtlasA2SingleCoreSplitk<l1AStages, l1BStages, l0CStages, enableUnitFlag>;
         using BlockScheduler = typename Catlass::Gemm::Block::SingleCoreSplitkGemmIdentityBlockSwizzle<20, 0>;
-        using BlockMmad = Catlass::Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType, void, TileCopy>;
-        
+        using BlockMmad = Catlass::Gemm::Block::BlockMmad<
+            DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType, void, TileCopy>;
+
         using MatmulKernel = Catlass::Gemm::Kernel::SingleCoreSplitkMatmul<
             PaddingA, PaddingB, BlockMmad, BlockEpilogue, BlockScheduler, RemovePaddingNDAndCastC>;
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
@@ -150,15 +156,17 @@ static void Run(const Options &options) {
 
         MatmulAdapter matmulOp;
         RunAdapter(matmulOp, arguments, stream, aicCoreNum, hardwareSyncAddr);
-    }else {
+    } else {
         constexpr uint32_t l1AStages = 1;
         constexpr uint32_t l1BStages = 2;
         using L1TileShape = GemmShape<256, 128, 512>;
         using L0TileShape = GemmShape<128, 128, 128>;
 
-        using DispatchPolicy = Catlass::Gemm::MmadAtlasA2SingleCoreSplitk<l1AStages, l1BStages, l0CStages, enableUnitFlag>;
+        using DispatchPolicy =
+            Catlass::Gemm::MmadAtlasA2SingleCoreSplitk<l1AStages, l1BStages, l0CStages, enableUnitFlag>;
         using BlockScheduler = typename Catlass::Gemm::Block::SingleCoreSplitkGemmIdentityBlockSwizzle<20, 1>;
-        using BlockMmad = Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType, void, TileCopy>;
+        using BlockMmad =
+            Gemm::Block::BlockMmad<DispatchPolicy, L1TileShape, L0TileShape, AType, BType, CType, void, TileCopy>;
 
         using MatmulKernel = Catlass::Gemm::Kernel::SingleCoreSplitkMatmul<
             PaddingA, PaddingB, BlockMmad, BlockEpilogue, BlockScheduler, RemovePaddingNDAndCastC>;
@@ -181,7 +189,7 @@ static void Run(const Options &options) {
     } else {
         std::cerr << "Compare failed. Error count: " << errorIndices.size() << std::endl;
     }
-    
+
     ACL_CHECK(aclrtFree(deviceA));
     ACL_CHECK(aclrtFree(deviceB));
     ACL_CHECK(aclrtFree(deviceC));
@@ -190,7 +198,8 @@ static void Run(const Options &options) {
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv) {
+int main(int argc, const char** argv)
+{
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;

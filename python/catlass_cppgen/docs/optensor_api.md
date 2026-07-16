@@ -514,4 +514,3 @@ kernels = gemm_plan.get_kernels(A=a_op, B=b_op)  # 使用 a_op 指定的值
    - 正确处理 batched tensor 的维度
 
 通过合理使用这些输入方式，可以高效地进行代码生成和 kernel 调优。
-

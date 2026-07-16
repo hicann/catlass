@@ -19,10 +19,7 @@ constexpr uint32_t STRIDE_LIMIT = 65536;
 
 namespace Catlass::Gemv::Tile {
 
-template <
-    class ArchTag_,
-    class VType_
->
+template <class ArchTag_, class VType_>
 struct VecCopyGmToUB {
     using Element = typename VType_::Element;
     static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
@@ -33,21 +30,15 @@ struct VecCopyGmToUB {
     VecCopyGmToUB() {};
 
     CATLASS_DEVICE
-    void operator()(
-    AscendC::LocalTensor<Element> dstTensor,
-    AscendC::GlobalTensor<Element> srcTensor,
-    uint32_t len
-) {
-    AscendC::DataCopyParams params;
-    params.blockCount = 1;
-    params.blockLen = CeilDiv(len, ELE_NUM_PER_C0);
-    params.srcStride = 0;
-    params.dstStride = 0;
-    AscendC::DataCopy(
-        dstTensor,
-        srcTensor,
-        params);
-}
+    void operator()(AscendC::LocalTensor<Element> dstTensor, AscendC::GlobalTensor<Element> srcTensor, uint32_t len)
+    {
+        AscendC::DataCopyParams params;
+        params.blockCount = 1;
+        params.blockLen = CeilDiv(len, ELE_NUM_PER_C0);
+        params.srcStride = 0;
+        params.dstStride = 0;
+        AscendC::DataCopy(dstTensor, srcTensor, params);
+    }
 };
 } // namespace Catlass::Gemv::Tile
 

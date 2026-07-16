@@ -7,21 +7,18 @@
 # BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE. See LICENSE in the root of
 # the software repository for the full text of the License.
 
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from catlass_cppgen.catlass.layout.layout import Layout
 from catlass_cppgen.kernel.kernel_base import KernelBase
 from catlass_cppgen.common.data_type import DataType
 from catlass_cppgen.catlass.arch.arch import Arch
-from catlass_cppgen.catlass.gemm_coord import GemmCoord
-from catlass_cppgen.catlass.gemm.dispatch_policy import (
-    MmadAtlasA2Pingpong,
-    MmadPingpong,
-)
 from catlass_cppgen.catlass.evg_extension import evg as generate_evg
 
 if TYPE_CHECKING:
-    from catlass_cppgen.kernel.gemm.basic_matmul_tla_visitor import BasicMatmulTlaVisitorKernel
+    from catlass_cppgen.kernel.gemm.basic_matmul_tla_visitor import (
+        BasicMatmulTlaVisitorKernel,
+    )
 
 
 class GemmKernelBase(KernelBase):
@@ -41,7 +38,8 @@ class GemmKernelBase(KernelBase):
         K: Optional[int] = None,
         N: Optional[int] = None,
         evg: Optional[Dict[str, Any]] = None,
-        *args, **kwargs
+        *args,
+        **kwargs,
     ):
         self.element_A = element_A
         self.element_B = element_B
@@ -57,12 +55,12 @@ class GemmKernelBase(KernelBase):
         self.K = K
         self.N = N
         self.evg = evg
-        
+
         super().__init__(*args, **kwargs)
 
     def get_render_params(self, use_constexpr: bool = True) -> Dict[str, Any]:
         """获取渲染参数，包括动态生成的 dispatch_policy C++ 代码.
-        
+
         :param use_constexpr: 当为 True 时，生成包含常量声明的完整代码块；当为 False 时，只生成 using 语句（使用变量名）
         :return: 渲染参数字典.
         :rtype: Dict[str, Any]
@@ -86,9 +84,9 @@ class GemmKernelBase(KernelBase):
             "N": self.N,
             "slice_axis": self.slice_axis,
         }
-        if params.get('element_Bias') is None:
-            params['element_Bias'] = "void"
-        
+        if params.get("element_Bias") is None:
+            params["element_Bias"] = "void"
+
         if len(self.dispatch_policy) == 0:
             raise ValueError("dispatch_policy cannot be empty")
         dispatch_policy = self.dispatch_policy[0]
@@ -102,12 +100,14 @@ class GemmKernelBase(KernelBase):
                 example_inputs=example_inputs,
             )
             # 将生成的 EVG 信息添加到字典中，同时保留原先内容
-            self.evg.update({
-                "callback_name": callback_name,
-                "evg_args": evg_args,
-                "evg_str": evg_str,
-                "arg_renames": arg_renames,
-            })
+            self.evg.update(
+                {
+                    "callback_name": callback_name,
+                    "evg_args": evg_args,
+                    "evg_str": evg_str,
+                    "arg_renames": arg_renames,
+                }
+            )
             params["evg_args"] = evg_args
             params["evg_str"] = evg_str
             params["evg_callback_name"] = callback_name  # 添加 callback_name 到渲染参数
@@ -126,35 +126,45 @@ class GemmKernelBase(KernelBase):
 
         if isinstance(result, tuple):
             const_decls, template_str = result
-            params['constexpr_declarations'] = "\n".join([f"    {decl}" for decl in const_decls])
-            params['dispatch_policy_template'] = f"{template_str}"
+            params["constexpr_declarations"] = "\n".join(
+                [f"    {decl}" for decl in const_decls]
+            )
+            params["dispatch_policy_template"] = f"{template_str}"
         else:
-            params['constexpr_declarations'] = ""
-            params['dispatch_policy_template'] = result
-        
+            params["constexpr_declarations"] = ""
+            params["dispatch_policy_template"] = result
+
         return params
-    
-    def _add_kernel_name_params(self, params: Dict[str, Any], kernel_name_base: str) -> Dict[str, Any]:
+
+    def _add_kernel_name_params(
+        self, params: Dict[str, Any], kernel_name_base: str
+    ) -> Dict[str, Any]:
         """添加用于格式化 kernel 名称的参数.
-        
+
         :param params: 渲染参数字典.
         :param kernel_name_base: kernel 名称基础（如 "BasicMatmulTla", "GroupedMatmulSliceMTla"）.
         :return: 添加了格式化参数的参数字典.
         """
-        params['arch_name'] = self.arch_tag.name
-        params['kernel_name'] = kernel_name_base
-        
+        params["arch_name"] = self.arch_tag.name
+        params["kernel_name"] = kernel_name_base
+
         # dispatch_policy 名称只使用类名
-        params['dispatch_policy_name'] = self.dispatch_policy[0].__class__.__name__
-        params['swizzle_name'] = "GemmIdentityBlockSwizzle_3_0"
-        params['l1_tile_shape_str'] = f"{self.l1_tile_shape.m}_{self.l1_tile_shape.n}_{self.l1_tile_shape.k}"
-        params['l0_tile_shape_str'] = f"{self.l0_tile_shape.m}_{self.l0_tile_shape.n}_{self.l0_tile_shape.k}"
-        
+        params["dispatch_policy_name"] = self.dispatch_policy[0].__class__.__name__
+        params["swizzle_name"] = "GemmIdentityBlockSwizzle_3_0"
+        params["l1_tile_shape_str"] = (
+            f"{self.l1_tile_shape.m}_{self.l1_tile_shape.n}_{self.l1_tile_shape.k}"
+        )
+        params["l0_tile_shape_str"] = (
+            f"{self.l0_tile_shape.m}_{self.l0_tile_shape.n}_{self.l0_tile_shape.k}"
+        )
+
         return params
-    
-    def to_evg(self, evg_config: Dict[str, Any]) -> Optional['BasicMatmulTlaVisitorKernel']:
+
+    def to_evg(
+        self, evg_config: Dict[str, Any]
+    ) -> Optional["BasicMatmulTlaVisitorKernel"]:
         """将支持 EVG 的 kernel 转换为 EVG 版本.
-        
+
         :param evg_config: EVG 配置，包含 'fn_src' 和 'example_inputs'
         :type evg_config: Dict[str, Any]
         :return: 如果当前 kernel 支持 EVG，返回 BasicMatmulTlaVisitorKernel 实例；否则返回 None
@@ -163,10 +173,12 @@ class GemmKernelBase(KernelBase):
         # 检查是否支持 EVG 特性
         if not self._features.get("is_support_evg", False):
             return None
-        
+
         # 延迟导入以避免循环导入
-        from catlass_cppgen.kernel.gemm.basic_matmul_tla_visitor import BasicMatmulTlaVisitorKernel
-        
+        from catlass_cppgen.kernel.gemm.basic_matmul_tla_visitor import (
+            BasicMatmulTlaVisitorKernel,
+        )
+
         # 创建 BasicMatmulTlaVisitorKernel 实例，传递相同的参数和 EVG 配置
         evg_kernel = BasicMatmulTlaVisitorKernel(
             element_accumulator=self.element_accumulator,
@@ -184,12 +196,12 @@ class GemmKernelBase(KernelBase):
             N=self.N,
             evg=evg_config,
         )
-        
+
         # 设置 tile shape 和 dispatch_policy
         evg_kernel.tune(
             l1_tile_shape=self.l1_tile_shape,
             l0_tile_shape=self.l0_tile_shape,
             dispatch_policy=self.dispatch_policy,
         )
-        
+
         return evg_kernel

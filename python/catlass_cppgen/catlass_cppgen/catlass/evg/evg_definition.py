@@ -11,15 +11,21 @@ from __future__ import annotations
 
 from copy import deepcopy
 from collections import Counter
-from typing import TYPE_CHECKING, Any, Callable, List, Set, Union
+from typing import TYPE_CHECKING, Set
 
 import networkx as nx
-from sympy import Expr, Symbol
+from sympy import Expr
 
-from catlass_cppgen.common.data_type import DataType
 from ..library import BroadcastType, EpilogueOpVectorToScalar
-from .node import (CastNode, ComputeNode, ConstantNode, LoadNode, NodeBase,
-                   StoreNode, TopoVisitorNode)
+from .node import (
+    CastNode,
+    ComputeNode,
+    ConstantNode,
+    LoadNode,
+    NodeBase,
+    StoreNode,
+    TopoVisitorNode,
+)
 from .node_impl import NoOpImpl
 
 if TYPE_CHECKING:
@@ -46,6 +52,7 @@ def EliminateDupAndDeadNodes(dag: EpilogueVisitorGraph):
     This modifies the graph in-place via the existing `add_node`, `remove_node`,
     `add_edge`, `remove_edge`, `get_sorted_inputs`, `get_outputs`, and similar helpers.
     """
+
     # Helper to build a canonical signature for a node.
     def node_signature(node):
         # Gather ordered input ids (by edge pos)
@@ -97,7 +104,7 @@ def EliminateDupAndDeadNodes(dag: EpilogueVisitorGraph):
     for node in dag.topological_nodes():
         node_info = tuple(dag.get_inputs(node))
         signature_map[node] = node_info
-    
+
     def simplify_graph(signature_map):
         modified = False
         for node in signature_map:
@@ -169,7 +176,9 @@ def ScalarOpsIdentification(dag: EpilogueVisitorGraph):
             for input_node in input_nodes:
                 if isinstance(input_node, ConstantNode):
                     node.fn = EpilogueOpVectorToScalar[node.fn]
-                    node._scalar_values[f"{node.name}_scalar_{len(node._scalar_values)}"] = (input_node.value, input_node.metadata.element)
+                    node._scalar_values[
+                        f"{node.name}_scalar_{len(node._scalar_values)}"
+                    ] = (input_node.value, input_node.metadata.element)
                     dag.remove_edge(input_node, node)
                     dag.remove_node(input_node)
 
@@ -180,6 +189,7 @@ def InferShape(dag: EpilogueVisitorGraph):
     - Uses lexicographical topological order so inputs are inferred before users.
     - Broadcasts shapes using left-padding with 1s, then matching dimensions from the end.
     """
+
     def pad_left(shape_list, target_len):
         # returns a new list padded on the left with 1s to target_len
         if shape_list is None:
@@ -227,7 +237,9 @@ def InferShape(dag: EpilogueVisitorGraph):
                     result_rev.append(dim_a)
                 else:
                     # construct helpful error message listing input shapes
-                    shapes_msg = ", ".join(f"{inp.name}{tuple(inp.metadata.shape)}" for inp in inputs)
+                    shapes_msg = ", ".join(
+                        f"{inp.name}{tuple(inp.metadata.shape)}" for inp in inputs
+                    )
                     raise RuntimeError(f"Dimension mismatch between {shapes_msg}.")
             # reverse result_rev to get normal order
             shape = list(reversed(result_rev))
@@ -296,30 +308,28 @@ def BroadcastPropagation(dag: EpilogueVisitorGraph):
             continue
 
         out_shapes = [out.metadata.shape for out in outputs]
-        # Note: for one input, it may have different shape of outputs, 
+        # Note: for one input, it may have different shape of outputs,
         # e.g. one computation is (m, n) = (m, n) + (n,); one computation is (n,) = (n,) + constant
         # In this case, we should broadcast it to the largest shape. And set all outputs' shape to the largest shape,
         # which means, in the example, we need to set (n,) = (n,) + constant -> (m, n) = (m, n) + constant
         dst_shape = max(out_shapes, key=len)
         for out_node in outputs:
             out_node.metadata.shape = dst_shape
-        
+
         # May modified, if reduce ops is implemented in future.
         src_shape = node.metadata.shape
         if len(dst_shape) < len(src_shape):
             dst_shape = src_shape
             for out in outputs:
                 out.metadata.shape = src_shape
-        
+
         ok, row_broadcast, col_broadcast = check_broadcast(src_shape, dst_shape)
         if not ok:
             raise RuntimeError(
                 f"Node '{node.name}' shape {src_shape} cannot be broadcast to output shape {dst_shape}"
             )
         if col_broadcast:
-            raise RuntimeError(
-                "EVG does not support ColumnBroadcast yet!"
-            )
+            raise RuntimeError("EVG does not support ColumnBroadcast yet!")
         if row_broadcast:
             node.metadata.broadcast = BroadcastType.RowBroadcast
             if len(node.metadata.shape) == 1:
@@ -344,7 +354,9 @@ def DynamicShapeTransfer(dag: EpilogueVisitorGraph):
         # substituted as a whole before its substring "s20" gets matched, e.g.
         # dict {"s20": "m", "2*s20": "n"} should turn "2*s20" into "n", not "2*m".
         sorted_substitution = sorted(
-            dag.symbol_shape_substitution_dict.items(), key=lambda kv: len(kv[0]), reverse=True
+            dag.symbol_shape_substitution_dict.items(),
+            key=lambda kv: len(kv[0]),
+            reverse=True,
         )
         for shape_i in node.metadata.shape:
             shape_i = str(shape_i)
@@ -369,19 +381,22 @@ def SetNodeImpl(dag: EpilogueVisitorGraph):
         if isinstance(node.impl, NoOpImpl):
             input_nodes = dag.get_inputs(node)
             if len(input_nodes) != 1:
-                raise ValueError(f"Node {node.name} with NoOpImpl must have exactly one input node")
+                raise ValueError(
+                    f"Node {node.name} with NoOpImpl must have exactly one input node"
+                )
             in_node = input_nodes[0]
             for out_node in dag.get_outputs(node):
                 pos = dag.get_edge_pos(node, out_node)
                 dag.add_edge(in_node, out_node, pos)
                 dag.remove_edge(node, out_node)
             dag.remove_node(node)
-            
+
 
 def DAG2Tree(dag: EpilogueVisitorGraph):
     """
     Transform a DAG to Tree by fusing subgraphs containing nodes with multiple outputs.
     """
+
     def _find_lca(node: NodeBase):
         output_nodes = list(dag.get_outputs(node))
         if not output_nodes:
@@ -453,9 +468,10 @@ def DAG2Tree(dag: EpilogueVisitorGraph):
         for node in nodes_to_fuse:
             dag.remove_node(node)
 
-
     def topo_fuse_graph(dag):
-        multiple_output_nodes = [node for node in dag.topological_nodes() if dag.out_degree(node) > 1]
+        multiple_output_nodes = [
+            node for node in dag.topological_nodes() if dag.out_degree(node) > 1
+        ]
         for node in multiple_output_nodes:
             if not (dag.has_node(node) and dag.out_degree(node) > 1):
                 continue
@@ -467,7 +483,9 @@ def DAG2Tree(dag: EpilogueVisitorGraph):
                 raise NotImplementedError("No LCA found.")
 
             _fuse_subgraph(nodes_to_fuse, lca)
-            new_multiple_output_nodes = [node for node in dag.topological_nodes() if dag.out_degree(node) > 1]
+            new_multiple_output_nodes = [
+                node for node in dag.topological_nodes() if dag.out_degree(node) > 1
+            ]
             if tuple(new_multiple_output_nodes) != tuple(multiple_output_nodes):
                 topo_fuse_graph(dag)
 
@@ -539,9 +557,11 @@ using EVG{node.type_name} = Catlass::Epilogue::Fusion::TreeVisitor<
 
         # define the edge tuple
         edges_str = "tla::tuple<\n"
-        for snode in subgraph_nodes[:-node.lca_output_count]:
+        for snode in subgraph_nodes[: -node.lca_output_count]:
             sorted_input_nodes = subgraph.get_sorted_inputs(snode)
-            sorted_input_ids = [str(subgraph_nodes.index(i_node)) for i_node in sorted_input_nodes]
+            sorted_input_ids = [
+                str(subgraph_nodes.index(i_node)) for i_node in sorted_input_nodes
+            ]
             edge_str = "        tla::seq<" + ", ".join(sorted_input_ids) + ">,\n"
             edges_str += edge_str
         parts = edges_str.rsplit(",", 1)
@@ -550,7 +570,7 @@ using EVG{node.type_name} = Catlass::Epilogue::Fusion::TreeVisitor<
 
         # define the nodes list
         tv_nodes_str_list = []
-        for snode in subgraph_nodes[:-node.lca_output_count]:
+        for snode in subgraph_nodes[: -node.lca_output_count]:
             if snode.disabled:
                 tv_nodes_str_list.append(f"    {self.get_visitor_name(snode)}")
             else:
@@ -609,11 +629,19 @@ class EVGArg:
         """
         nodes_element_dict = {}
         self.dag.get_storage_nodes(nodes_element_dict)
-        nodes_length_str = "(" + " + ".join([f"({num} * sizeof({element.value}))" for element, num in nodes_element_dict.items()]) + ")"
+        nodes_length_str = (
+            "("
+            + " + ".join(
+                [
+                    f"({num} * sizeof({element.value}))"
+                    for element, num in nodes_element_dict.items()
+                ]
+            )
+            + ")"
+        )
         return f"""
 constexpr uint32_t computeLength = 216 * 1024 / {nodes_length_str} / 2 / 32 * 32;
 """
-
 
     def generate_node_args(
         self, node: NodeBase, graph: EpilogueVisitorGraph, hierarchical_count=0
@@ -661,9 +689,7 @@ constexpr uint32_t computeLength = 216 * 1024 / {nodes_length_str} / 2 / 32 * 32
             )
             result += input_arg
         result += (
-            self._generate_indent(hierarchical_count + 1)
-            + node.impl.args_decl
-            + ",\n"
+            self._generate_indent(hierarchical_count + 1) + node.impl.args_decl + ",\n"
         )
         if input_nodes:
             result = self._remove_last_comma(result)
@@ -675,10 +701,10 @@ constexpr uint32_t computeLength = 216 * 1024 / {nodes_length_str} / 2 / 32 * 32
     ) -> str:
         """generating the topo graph's arguments"""
         subgraph = node.subgraph
-        output_node = node.output_node
+        output_node = node.output_node  # noqa: F841
 
         # find all reachable nodes in the topo subgraphs
-        reachable_nodes = subgraph.topological_nodes()[:-node.lca_output_count]
+        reachable_nodes = subgraph.topological_nodes()[: -node.lca_output_count]
         result = self._generate_indent(hierarchical_count - 1) + "{\n"
         for node in reachable_nodes:
             if node not in topo_inputs:

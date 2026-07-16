@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # -----------------------------------------------------------------------------------------------------------
 # Copyright (c) 2025 Huawei Technologies Co., Ltd.
-# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 # CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
 # THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
@@ -15,8 +15,8 @@ import itertools
 
 from utils.config import Config
 
-class PaddingStreamkMatmulTemplate:
 
+class PaddingStreamkMatmulTemplate:
     TEMPLATE = """
 #include "kernel/padding_streamk_matmul_kernel.h"
 void {launch_kernel_func_name}(aclrtStream& stream, uint64_t hardwareSyncAddr,
@@ -47,7 +47,7 @@ size_t {get_workspace_func_name}(TilingParams& tilingParams)
     using LayoutC = {layout_c};
     constexpr PaddingTag paddingTagA = {padding_tag_a};
     constexpr PaddingTag paddingTagB = {padding_tag_b};
-    return PaddingStreamkMatmulKernelGetWorkspaceSize<ArchTag, ElementA, LayoutA, ElementB, LayoutB, ElementC, 
+    return PaddingStreamkMatmulKernelGetWorkspaceSize<ArchTag, ElementA, LayoutA, ElementB, LayoutB, ElementC,
         LayoutC, paddingTagA, paddingTagB>(tilingParams);
 }}
 """
@@ -55,15 +55,18 @@ size_t {get_workspace_func_name}(TilingParams& tilingParams)
 
     @staticmethod
     def gen_code(dtype, kernel_info):
-
-        kernel_serial = Config.KERNEL_SERIAL_MAP[PaddingStreamkMatmulTemplate.KERNEL_NAME]
+        kernel_serial = Config.KERNEL_SERIAL_MAP[
+            PaddingStreamkMatmulTemplate.KERNEL_NAME
+        ]
 
         PADDING_TAG_SET_A = [0, 3]
         PADDING_TAG_SET_B = [0, 3]
         combinations = list(
             itertools.product(
-                Config.LAYOUT_TAG_SET, Config.LAYOUT_TAG_SET,
-                PADDING_TAG_SET_A, PADDING_TAG_SET_B
+                Config.LAYOUT_TAG_SET,
+                Config.LAYOUT_TAG_SET,
+                PADDING_TAG_SET_A,
+                PADDING_TAG_SET_B,
             )
         )
         for l_tag_a, l_tag_b, p_tag_a, p_tag_b in combinations:
@@ -80,7 +83,9 @@ size_t {get_workspace_func_name}(TilingParams& tilingParams)
             )
             # store tilingKey and kernel name
             kernel_info[
-                Config.get_tiling_key(kernel_serial, dtype, l_tag_a, l_tag_b, 0, p_tag_a, p_tag_b, 0)
+                Config.get_tiling_key(
+                    kernel_serial, dtype, l_tag_a, l_tag_b, 0, p_tag_a, p_tag_b, 0
+                )
             ] = kernel_func_name
             # launch_kernel_fun_name can be LaunchPaddingStreamkMatmulKernelHalfLayout00
             launch_kernel_func_name = "Launch" + kernel_func_name

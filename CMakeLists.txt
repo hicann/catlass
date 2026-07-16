@@ -23,15 +23,17 @@ endif()
 
 include(cmake/funcs.cmake)
 
-if(NOT DEFINED NPU_MODEL OR NPU_MODEL STREQUAL "")
+if((NOT DEFINED NPU_MODEL OR NPU_MODEL STREQUAL "")
+        OR (NOT DEFINED CANN_VERSION OR CANN_VERSION STREQUAL ""))
     get_cann_version_and_soc_name()
-    if(NOT DEFINED NPU_MODEL OR NPU_MODEL STREQUAL "")
-        message(WARNING "Failed to get NPU_MODEL. Simulator or aclnn example may not work.\nYou can set NPU_MODEL manually by -DNPU_MODEL=Ascendxxxyy.")
-    endif()
+endif()
+
+if(NOT DEFINED NPU_MODEL OR NPU_MODEL STREQUAL "")
+    message(WARNING "Failed to detect NPU_MODEL. Simulator or aclnn examples may not run correctly.\nYou can set NPU_MODEL manually by -DNPU_MODEL=Ascendxxxyy.")
 endif()
 
 if(NOT DEFINED CANN_VERSION OR CANN_VERSION STREQUAL "")
-    message(WARNING "Failed to get CANN_VERSION.")
+    message(WARNING "Failed to detect CANN_VERSION. Version compatibility checks will be skipped.")
 endif()
 
 set(CATLASS_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/include)

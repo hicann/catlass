@@ -22,12 +22,7 @@
 
 namespace Catlass::Gemm::Kernel {
 
-template <
-    class BlockMmadTla_,
-    class BlockEpilogue_,
-    class BlockScheduler_,
-    class ElementGroupList_
->
+template <class BlockMmadTla_, class BlockEpilogue_, class BlockScheduler_, class ElementGroupList_>
 class GroupedMatmulSliceMTla {
 public:
     using BlockMmadTla = BlockMmadTla_;
@@ -51,73 +46,76 @@ public:
     struct Params {
         GemmCoord problemShape;
         uint32_t problemCount;
-        __gm__ ElementGroupList *ptrGroupList;
-        __gm__ ElementA *ptrA;
+        __gm__ ElementGroupList* ptrGroupList;
+        __gm__ ElementA* ptrA;
         LayoutA layoutA;
-        __gm__ ElementB *ptrB;
+        __gm__ ElementB* ptrB;
         LayoutB layoutB;
-        __gm__ ElementC *ptrC;
+        __gm__ ElementC* ptrC;
         LayoutC layoutC;
 
         CATLASS_HOST_DEVICE
-        Params() {}
+        Params()
+        {}
 
         CATLASS_HOST_DEVICE
         Params(
-            GemmCoord const &problemShape_, uint32_t problemCount_, GM_ADDR ptrGroupList_,
-            GM_ADDR ptrA_, LayoutA const &layoutA_,
-            GM_ADDR ptrB_, LayoutB const &layoutB_,
-            GM_ADDR ptrC_, LayoutC const &layoutC_
-        ) : problemShape(problemShape_),
-            problemCount(problemCount_), ptrGroupList(reinterpret_cast<__gm__ ElementGroupList *>(ptrGroupList_)),
-            ptrA(reinterpret_cast<__gm__ ElementA *>(ptrA_)), layoutA(layoutA_),
-            ptrB(reinterpret_cast<__gm__ ElementB *>(ptrB_)), layoutB(layoutB_),
-            ptrC(reinterpret_cast<__gm__ ElementC *>(ptrC_)), layoutC(layoutC_)
-        {
-        }
+            GemmCoord const& problemShape_, uint32_t problemCount_, GM_ADDR ptrGroupList_, GM_ADDR ptrA_,
+            LayoutA const& layoutA_, GM_ADDR ptrB_, LayoutB const& layoutB_, GM_ADDR ptrC_, LayoutC const& layoutC_)
+            : problemShape(problemShape_),
+              problemCount(problemCount_),
+              ptrGroupList(reinterpret_cast<__gm__ ElementGroupList*>(ptrGroupList_)),
+              ptrA(reinterpret_cast<__gm__ ElementA*>(ptrA_)),
+              layoutA(layoutA_),
+              ptrB(reinterpret_cast<__gm__ ElementB*>(ptrB_)),
+              layoutB(layoutB_),
+              ptrC(reinterpret_cast<__gm__ ElementC*>(ptrC_)),
+              layoutC(layoutC_)
+        {}
     };
 
     struct Arguments {
         GemmCoord problemShape;
         uint32_t problemCount;
-        uint8_t *ptrGroupList;
-        uint8_t *ptrA; LayoutA layoutA;
-        uint8_t *ptrB; LayoutB layoutB;
-        uint8_t *ptrC; LayoutC layoutC;
+        uint8_t* ptrGroupList;
+        uint8_t* ptrA;
+        LayoutA layoutA;
+        uint8_t* ptrB;
+        LayoutB layoutB;
+        uint8_t* ptrC;
+        LayoutC layoutC;
     };
 
-    static bool CanImplement(const Arguments &args)
+    static bool CanImplement(const Arguments& args)
     {
         return true;
     }
 
-    static size_t GetWorkspaceSize(const Arguments &args)
+    static size_t GetWorkspaceSize(const Arguments& args)
     {
         return 0;
     }
 
-    static Params ToUnderlyingArguments(const Arguments &args, void *workspace)
+    static Params ToUnderlyingArguments(const Arguments& args, void* workspace)
     {
-        Params params{args.problemShape, args.problemCount, args.ptrGroupList,
-            args.ptrA, args.layoutA,
-            args.ptrB, args.layoutB,
-            args.ptrC, args.layoutC};
+        Params params{args.problemShape, args.problemCount, args.ptrGroupList, args.ptrA,   args.layoutA,
+                      args.ptrB,         args.layoutB,      args.ptrC,         args.layoutC};
         return params;
     }
 
     CATLASS_HOST_DEVICE
-    GroupedMatmulSliceMTla() {}
+    GroupedMatmulSliceMTla()
+    {}
 
     CATLASS_HOST_DEVICE
-    ~GroupedMatmulSliceMTla() {}
+    ~GroupedMatmulSliceMTla()
+    {}
 
     template <int32_t CORE_TYPE = g_coreType>
-    CATLASS_DEVICE
-    void operator()(Params const &params);
+    CATLASS_DEVICE void operator()(Params const& params);
 
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIC>(Params const &params)
+    CATLASS_DEVICE void operator()<AscendC::AIC>(Params const& params)
     {
         BlockScheduler blockScheduler;
         Arch::Resource<ArchTag> resource;
@@ -139,7 +137,7 @@ public:
         auto tensorC = tla::MakeTensor(gmC, params.layoutC, Arch::PositionGM{});
         for (uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx) {
             uint32_t currentM = (groupIdx == 0) ? groupList.GetValue(groupIdx) :
-                (groupList.GetValue(groupIdx) - groupList.GetValue(groupIdx - 1));
+                                                  (groupList.GetValue(groupIdx) - groupList.GetValue(groupIdx - 1));
 
             GemmCoord inGroupProblemShape{currentM, params.problemShape.n(), params.problemShape.k()};
 
@@ -164,20 +162,17 @@ public:
                 GemmCoord blockCoord = blockScheduler.GetBlockCoord(loopIdx);
                 GemmCoord actualBlockShape = blockScheduler.GetActualBlockShape(blockCoord);
 
-                auto tensorBlockA = GetTile(tensorA,
-                                            tla::MakeCoord(totalM + blockCoord.m() * L1_TILE_M, blockCoord.k() * L1_TILE_K),
-                                            tla::MakeShape(actualBlockShape.m(), actualBlockShape.k()));
-                auto tensorBlockB = GetTile(tensorB,
-                                            tla::MakeCoord(blockCoord.k() * L1_TILE_K, blockCoord.n() * L1_TILE_N),
-                                            tla::MakeShape(actualBlockShape.k(), actualBlockShape.n()));
-                auto tensorBlockC = GetTile(tensorC,
-                                            tla::MakeCoord(totalM + blockCoord.m() * L1_TILE_M, blockCoord.n() * L1_TILE_N),
-                                            tla::MakeShape(actualBlockShape.m(), actualBlockShape.n()));
+                auto tensorBlockA = GetTile(
+                    tensorA, tla::MakeCoord(totalM + blockCoord.m() * L1_TILE_M, blockCoord.k() * L1_TILE_K),
+                    tla::MakeShape(actualBlockShape.m(), actualBlockShape.k()));
+                auto tensorBlockB = GetTile(
+                    tensorB, tla::MakeCoord(blockCoord.k() * L1_TILE_K, blockCoord.n() * L1_TILE_N),
+                    tla::MakeShape(actualBlockShape.k(), actualBlockShape.n()));
+                auto tensorBlockC = GetTile(
+                    tensorC, tla::MakeCoord(totalM + blockCoord.m() * L1_TILE_M, blockCoord.n() * L1_TILE_N),
+                    tla::MakeShape(actualBlockShape.m(), actualBlockShape.n()));
 
-                blockMmadTla(
-                    tensorBlockA, tensorBlockB, tensorBlockC,
-                    actualBlockShape
-                );
+                blockMmadTla(tensorBlockA, tensorBlockB, tensorBlockC, actualBlockShape);
             }
             totalM += inGroupProblemShape.m();
             gmGroupOffsetB += static_cast<int64_t>(inGroupProblemShape.k()) * inGroupProblemShape.n();
@@ -193,10 +188,8 @@ public:
     }
 
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIV>(Params const &params)
-    {
-    }
+    CATLASS_DEVICE void operator()<AscendC::AIV>(Params const& params)
+    {}
 };
 
 } // namespace Catlass::Gemm::Kernel

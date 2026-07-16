@@ -23,23 +23,16 @@
 namespace Catlass::Gemm::Kernel {
 
 // Template for Batched Matmul kernel. Compute batched C = A * B
-template <
-    class BlockMmad_,
-    class BlockEpilogue_,
-    class BlockScheduler_,
-    class Enable = void
->
+template <class BlockMmad_, class BlockEpilogue_, class BlockScheduler_, class Enable = void>
 class BatchedMatmulTla {
-    static_assert(DEPENDENT_FALSE<typename BlockMmad_::DispatchPolicy>,
+    static_assert(
+        DEPENDENT_FALSE<typename BlockMmad_::DispatchPolicy>,
         "BatchedMatmulTla is not implemented for this DispatchPolicy");
 };
 
-template <
-    class BlockMmad_,
-    class BlockEpilogue_,
-    class BlockScheduler_
->
-class BatchedMatmulTla<BlockMmad_, BlockEpilogue_, BlockScheduler_,
+template <class BlockMmad_, class BlockEpilogue_, class BlockScheduler_>
+class BatchedMatmulTla<
+    BlockMmad_, BlockEpilogue_, BlockScheduler_,
     std::enable_if_t<!std::is_same_v<
         typename BlockMmad_::DispatchPolicy,
         MmadMultiBatch<typename BlockMmad_::ArchTag, BlockMmad_::USE_HF32_MODE, BlockMmad_::L0C_STAGES>>>> {
@@ -82,35 +75,45 @@ public:
         {}
 
         CATLASS_HOST_DEVICE
-        Params(uint32_t batchCount_, GemmCoord const &problemShape_,
-               GM_ADDR ptrA_, LayoutA layoutA_, int64_t strideA_,
-               GM_ADDR ptrB_, LayoutB layoutB_, int64_t strideB_,
-               GM_ADDR ptrC_, LayoutC layoutC_, int64_t strideC_)
-            : batchCount(batchCount_), problemShape(problemShape_),
-              ptrA(ptrA_), layoutA(layoutA_), strideA(strideA_),
-              ptrB(ptrB_), layoutB(layoutB_), strideB(strideB_),
-              ptrC(ptrC_), layoutC(layoutC_), strideC(strideC_) {}
+        Params(
+            uint32_t batchCount_, GemmCoord const& problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, int64_t strideA_,
+            GM_ADDR ptrB_, LayoutB layoutB_, int64_t strideB_, GM_ADDR ptrC_, LayoutC layoutC_, int64_t strideC_)
+            : batchCount(batchCount_),
+              problemShape(problemShape_),
+              ptrA(ptrA_),
+              layoutA(layoutA_),
+              strideA(strideA_),
+              ptrB(ptrB_),
+              layoutB(layoutB_),
+              strideB(strideB_),
+              ptrC(ptrC_),
+              layoutC(layoutC_),
+              strideC(strideC_)
+        {}
     };
 
     struct Arguments {
         uint32_t batchCount;
         GemmCoord problemShape;
-        GM_ADDR ptrA; LayoutA layoutA;
-        GM_ADDR ptrB; LayoutB layoutB;
-        GM_ADDR ptrC; LayoutC layoutC;
+        GM_ADDR ptrA;
+        LayoutA layoutA;
+        GM_ADDR ptrB;
+        LayoutB layoutB;
+        GM_ADDR ptrC;
+        LayoutC layoutC;
     };
 
-    static bool CanImplement(const Arguments &args)
+    static bool CanImplement(const Arguments& args)
     {
         return true;
     }
 
-    static size_t GetWorkspaceSize(const Arguments &args)
+    static size_t GetWorkspaceSize(const Arguments& args)
     {
         return 0;
     }
 
-    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    static Params ToUnderlyingArguments(const Arguments& args, uint8_t* workspace)
     {
         GemmCoord problemShape = args.problemShape;
         uint32_t m = problemShape.m();
@@ -119,32 +122,22 @@ public:
         int64_t strideA = m * k;
         int64_t strideB = k * n;
         int64_t strideC = m * n;
-        Params params{args.batchCount,
-            problemShape,
-            args.ptrA,
-            args.layoutA,
-            strideA,
-            args.ptrB,
-            args.layoutB,
-            strideB,
-            args.ptrC,
-            args.layoutC,
-            strideC};
+        Params params{args.batchCount, problemShape, args.ptrA, args.layoutA, strideA, args.ptrB,
+                      args.layoutB,    strideB,      args.ptrC, args.layoutC, strideC};
         return params;
     }
 
     // Methods
     CATLASS_DEVICE
-    BatchedMatmulTla() {}
+    BatchedMatmulTla()
+    {}
 
     template <int32_t CORE_TYPE = g_coreType>
-    CATLASS_DEVICE
-    void operator()(Params const &params);
+    CATLASS_DEVICE void operator()(Params const& params);
 
     /// Executes one BatchedMatmul
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIC>(Params const &params)
+    CATLASS_DEVICE void operator()<AscendC::AIC>(Params const& params)
     {
         BlockScheduler matmulBlockScheduler(params.problemShape, MakeCoord(L1_TILE_M, L1_TILE_N));
         uint32_t coreLoops = params.batchCount * matmulBlockScheduler.GetCoreLoops();
@@ -154,11 +147,11 @@ public:
 
         // Represent the full gm
         AscendC::GlobalTensor<ElementA> gmA;
-        gmA.SetGlobalBuffer((__gm__ ElementA *)params.ptrA);
+        gmA.SetGlobalBuffer((__gm__ ElementA*)params.ptrA);
         AscendC::GlobalTensor<ElementB> gmB;
-        gmB.SetGlobalBuffer((__gm__ ElementB *)params.ptrB);
+        gmB.SetGlobalBuffer((__gm__ ElementB*)params.ptrB);
         AscendC::GlobalTensor<ElementC> gmC;
-        gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrC);
+        gmC.SetGlobalBuffer((__gm__ ElementC*)params.ptrC);
 
         for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()) {
             // Compute block location
@@ -179,16 +172,13 @@ public:
             // Make tiled views
             auto tensorBlockA = GetTile(
                 tensorA, tla::MakeCoord(blockCoord.m() * L1_TILE_M, blockCoord.k() * L1_TILE_K),
-                tla::MakeShape(actualBlockShape.m(), actualBlockShape.k())
-            );
+                tla::MakeShape(actualBlockShape.m(), actualBlockShape.k()));
             auto tensorBlockB = GetTile(
                 tensorB, tla::MakeCoord(blockCoord.k() * L1_TILE_K, blockCoord.n() * L1_TILE_N),
-                tla::MakeShape(actualBlockShape.k(), actualBlockShape.n())
-            );
+                tla::MakeShape(actualBlockShape.k(), actualBlockShape.n()));
             auto tensorBlockC = GetTile(
                 tensorC, tla::MakeCoord(blockCoord.m() * L1_TILE_M, blockCoord.n() * L1_TILE_N),
-                tla::MakeShape(actualBlockShape.m(), actualBlockShape.n())
-            );
+                tla::MakeShape(actualBlockShape.m(), actualBlockShape.n()));
 
             // Compute block-scoped matrix multiply-add
             blockMmad(tensorBlockA, tensorBlockB, tensorBlockC, actualBlockShape);
@@ -198,16 +188,13 @@ public:
     }
 
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIV>(Params const &params) {}
+    CATLASS_DEVICE void operator()<AscendC::AIV>(Params const& params)
+    {}
 };
 
-template <
-    class BlockMmad_,
-    class BlockEpilogue_,
-    class BlockScheduler_
->
-class BatchedMatmulTla<BlockMmad_, BlockEpilogue_, BlockScheduler_,
+template <class BlockMmad_, class BlockEpilogue_, class BlockScheduler_>
+class BatchedMatmulTla<
+    BlockMmad_, BlockEpilogue_, BlockScheduler_,
     std::enable_if_t<std::is_same_v<
         typename BlockMmad_::DispatchPolicy,
         MmadMultiBatch<typename BlockMmad_::ArchTag, BlockMmad_::USE_HF32_MODE, BlockMmad_::L0C_STAGES>>>> {
@@ -262,35 +249,45 @@ public:
         {}
 
         CATLASS_HOST_DEVICE
-        Params(uint32_t batchCount_, GemmCoord const &problemShape_,
-               GM_ADDR ptrA_, LayoutA layoutA_, int64_t strideA_,
-               GM_ADDR ptrB_, LayoutB layoutB_, int64_t strideB_,
-               GM_ADDR ptrC_, LayoutC layoutC_, int64_t strideC_)
-            : batchCount(batchCount_), problemShape(problemShape_),
-              ptrA(ptrA_), layoutA(layoutA_), strideA(strideA_),
-              ptrB(ptrB_), layoutB(layoutB_), strideB(strideB_),
-              ptrC(ptrC_), layoutC(layoutC_), strideC(strideC_) {}
+        Params(
+            uint32_t batchCount_, GemmCoord const& problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, int64_t strideA_,
+            GM_ADDR ptrB_, LayoutB layoutB_, int64_t strideB_, GM_ADDR ptrC_, LayoutC layoutC_, int64_t strideC_)
+            : batchCount(batchCount_),
+              problemShape(problemShape_),
+              ptrA(ptrA_),
+              layoutA(layoutA_),
+              strideA(strideA_),
+              ptrB(ptrB_),
+              layoutB(layoutB_),
+              strideB(strideB_),
+              ptrC(ptrC_),
+              layoutC(layoutC_),
+              strideC(strideC_)
+        {}
     };
 
     struct Arguments {
         uint32_t batchCount;
         GemmCoord problemShape;
-        GM_ADDR ptrA; LayoutA layoutA;
-        GM_ADDR ptrB; LayoutB layoutB;
-        GM_ADDR ptrC; LayoutC layoutC;
+        GM_ADDR ptrA;
+        LayoutA layoutA;
+        GM_ADDR ptrB;
+        LayoutB layoutB;
+        GM_ADDR ptrC;
+        LayoutC layoutC;
     };
 
-    static bool CanImplement(const Arguments &args)
+    static bool CanImplement(const Arguments& args)
     {
         return true;
     }
 
-    static size_t GetWorkspaceSize(const Arguments &args)
+    static size_t GetWorkspaceSize(const Arguments& args)
     {
         return 0;
     }
 
-    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    static Params ToUnderlyingArguments(const Arguments& args, uint8_t* workspace)
     {
         GemmCoord problemShape = args.problemShape;
         uint32_t m = problemShape.m();
@@ -299,36 +296,27 @@ public:
         int64_t strideA = m * k;
         int64_t strideB = k * n;
         int64_t strideC = m * n;
-        Params params{args.batchCount,
-            problemShape,
-            args.ptrA,
-            args.layoutA,
-            strideA,
-            args.ptrB,
-            args.layoutB,
-            strideB,
-            args.ptrC,
-            args.layoutC,
-            strideC};
+        Params params{args.batchCount, problemShape, args.ptrA, args.layoutA, strideA, args.ptrB,
+                      args.layoutB,    strideB,      args.ptrC, args.layoutC, strideC};
         return params;
     }
 
     // Methods
     CATLASS_DEVICE
-    BatchedMatmulTla() {}
+    BatchedMatmulTla()
+    {}
 
     template <int32_t CORE_TYPE = g_coreType>
-    CATLASS_DEVICE
-    void operator()(Params const &params);
+    CATLASS_DEVICE void operator()(Params const& params);
 
     /// Executes one BatchedMatmul
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIC>(Params const &params)
+    CATLASS_DEVICE void operator()<AscendC::AIC>(Params const& params)
     {
         uint32_t maxL1Batch = ArchTag::L1_SIZE / BlockMmad::STAGES / (L1A_TILE_SIZE + L1B_TILE_SIZE);
         uint32_t maxL0Batch = AscendC::Std::min(
-            AscendC::Std::min(ArchTag::L0A_SIZE / BlockMmad::STAGES / L0A_TILE_SIZE,
+            AscendC::Std::min(
+                ArchTag::L0A_SIZE / BlockMmad::STAGES / L0A_TILE_SIZE,
                 ArchTag::L0B_SIZE / BlockMmad::STAGES / L0B_TILE_SIZE),
             ArchTag::L0C_SIZE / BlockMmad::STAGES / L0C_TILE_SIZE);
         uint32_t blockIdx = AscendC::GetBlockIdx();
@@ -345,16 +333,16 @@ public:
 
         // Represent the full gm
         AscendC::GlobalTensor<ElementA> gmA;
-        gmA.SetGlobalBuffer((__gm__ ElementA *)params.ptrA);
+        gmA.SetGlobalBuffer((__gm__ ElementA*)params.ptrA);
         AscendC::GlobalTensor<ElementB> gmB;
-        gmB.SetGlobalBuffer((__gm__ ElementB *)params.ptrB);
+        gmB.SetGlobalBuffer((__gm__ ElementB*)params.ptrB);
         AscendC::GlobalTensor<ElementC> gmC;
-        gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrC);
+        gmC.SetGlobalBuffer((__gm__ ElementC*)params.ptrC);
 
         bool isFirstBlock = true;
         for (uint32_t loopIdx = blockIdx; loopIdx < coreLoops; loopIdx += blockNum) {
-            uint32_t actualL1Batch = (loopIdx == coreLoops - 1) ? (params.batchCount - loopIdx * maxL1Batch)
-                                                                : maxL1Batch;
+            uint32_t actualL1Batch =
+                (loopIdx == coreLoops - 1) ? (params.batchCount - loopIdx * maxL1Batch) : maxL1Batch;
             uint32_t batchIdx = loopIdx * maxL1Batch;
             int64_t batchOffsetA = batchIdx * params.strideA;
             int64_t batchOffsetB = batchIdx * params.strideB;
@@ -371,8 +359,8 @@ public:
             bool hasNextBlock = false;
             if (nextLoopIdx < coreLoops) {
                 hasNextBlock = true;
-                nextActualL1Batch = (nextLoopIdx == coreLoops - 1) ? (params.batchCount - nextLoopIdx * maxL1Batch)
-                                                                   : maxL1Batch;
+                nextActualL1Batch =
+                    (nextLoopIdx == coreLoops - 1) ? (params.batchCount - nextLoopIdx * maxL1Batch) : maxL1Batch;
                 uint32_t nextBatchIdx = nextLoopIdx * maxL1Batch;
                 nextBatchOffsetA = nextBatchIdx * params.strideA;
                 nextBatchOffsetB = nextBatchIdx * params.strideB;
@@ -383,8 +371,7 @@ public:
             // Compute block-scoped matrix multiply-add
             blockMmad(
                 tensorA, tensorB, tensorC, nextTensorA, nextTensorB, actualBlockShape, actualL1Batch, nextActualL1Batch,
-                maxL0Batch, isFirstBlock, hasNextBlock
-            );
+                maxL0Batch, isFirstBlock, hasNextBlock);
             isFirstBlock = false;
         }
 
@@ -392,8 +379,8 @@ public:
     }
 
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIV>(Params const &params) {}
+    CATLASS_DEVICE void operator()<AscendC::AIV>(Params const& params)
+    {}
 };
 
 } // namespace Catlass::Gemm::Kernel

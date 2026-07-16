@@ -104,7 +104,12 @@ class ComputeNode(NodeBase):
 
 class CastNode(NodeBase):
     def __init__(
-        self, name: str, metadata: NodeMetadata, from_element, to_element, round_type=CastType.NONE
+        self,
+        name: str,
+        metadata: NodeMetadata,
+        from_element,
+        to_element,
+        round_type=CastType.NONE,
     ):
         super().__init__(name, metadata)
         self.from_element = from_element

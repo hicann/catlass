@@ -23,11 +23,7 @@
 
 namespace Catlass::Gemm::Kernel {
 
-template <
-    class BlockMmad_,
-    class BlockEpilogue_,
-    class BlockScheduler_
->
+template <class BlockMmad_, class BlockEpilogue_, class BlockScheduler_>
 class W8A16Matmul {
 public:
     using BlockMmad = BlockMmad_;
@@ -64,22 +60,24 @@ public:
 
         // Methods
         CATLASS_HOST_DEVICE
-        Params() {}
+        Params()
+        {}
 
         CATLASS_HOST_DEVICE
         Params(
-            GemmCoord const &problemShape_,
-            GM_ADDR ptrA_, LayoutA const &layoutA_,
-            GM_ADDR ptrPrologueB_, LayoutPrologueB const &layoutPrologueB_,
-            GM_ADDR ptrC_, LayoutC const &layoutC_,
-            MmadParams const &mmadParams_,
-            GM_ADDR ptrWorkspace_
-        ):  problemShape(problemShape_),
-            ptrA(ptrA_), layoutA(layoutA_),
-            ptrPrologueB(ptrPrologueB_), layoutPrologueB(layoutPrologueB_),
-            ptrC(ptrC_), layoutC(layoutC_),
-            mmadParams(mmadParams_),
-            ptrWorkspace(ptrWorkspace_) {}
+            GemmCoord const& problemShape_, GM_ADDR ptrA_, LayoutA const& layoutA_, GM_ADDR ptrPrologueB_,
+            LayoutPrologueB const& layoutPrologueB_, GM_ADDR ptrC_, LayoutC const& layoutC_,
+            MmadParams const& mmadParams_, GM_ADDR ptrWorkspace_)
+            : problemShape(problemShape_),
+              ptrA(ptrA_),
+              layoutA(layoutA_),
+              ptrPrologueB(ptrPrologueB_),
+              layoutPrologueB(layoutPrologueB_),
+              ptrC(ptrC_),
+              layoutC(layoutC_),
+              mmadParams(mmadParams_),
+              ptrWorkspace(ptrWorkspace_)
+        {}
     };
 
     struct Arguments {
@@ -95,41 +93,42 @@ public:
         uint32_t aicoreNum;
     };
 
-    static bool CanImplement(const Arguments &args)
+    static bool CanImplement(const Arguments& args)
     {
         return true;
     }
 
-    static size_t GetWorkspaceSize(Arguments const &args)
+    static size_t GetWorkspaceSize(Arguments const& args)
     {
         return BlockMmad::STAGES * L1TileShape::K * L1TileShape::N * sizeof(ElementB) * args.aicoreNum;
     }
 
-    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    static Params ToUnderlyingArguments(const Arguments& args, uint8_t* workspace)
     {
         Params params{
             args.problemShape,
-            args.deviceA, args.layoutA,
-            args.devicePrologueB, args.layoutPrologueB,
-            args.deviceC, args.layoutC,
+            args.deviceA,
+            args.layoutA,
+            args.devicePrologueB,
+            args.layoutPrologueB,
+            args.deviceC,
+            args.layoutC,
             {{}, {args.deqScalar, args.deqZeroPoint}, {}},
-            workspace
-        };
+            workspace};
         return params;
     }
 
     // Methods
     CATLASS_DEVICE
-    W8A16Matmul() {}
+    W8A16Matmul()
+    {}
 
     template <int32_t CORE_TYPE = g_coreType>
-    CATLASS_DEVICE
-    void operator()(Params const &params);
+    CATLASS_DEVICE void operator()(Params const& params);
 
     /// Executes matmul
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIC>(Params const &params)
+    CATLASS_DEVICE void operator()<AscendC::AIC>(Params const& params)
     {
         auto aicoreNum = AscendC::GetBlockNum();
         auto aicoreIdx = AscendC::GetBlockIdx();
@@ -142,15 +141,15 @@ public:
 
         // Load A from workspace
         AscendC::GlobalTensor<ElementA> gmA;
-        gmA.SetGlobalBuffer(reinterpret_cast<__gm__ ElementA *>(params.ptrA));
+        gmA.SetGlobalBuffer(reinterpret_cast<__gm__ ElementA*>(params.ptrA));
 
         LayoutB layoutBlockB{L1TileShape::K, L1TileShape::N};
         auto gmOffsetB = aicoreIdx * layoutBlockB.Capacity() * BlockMmad::STAGES;
         AscendC::GlobalTensor<ElementB> gmBlockB;
-        gmBlockB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB *>(params.ptrWorkspace) + gmOffsetB);
+        gmBlockB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB*>(params.ptrWorkspace) + gmOffsetB);
 
         AscendC::GlobalTensor<ElementC> gmC;
-        gmC.SetGlobalBuffer(reinterpret_cast<__gm__ ElementC *>(params.ptrC));
+        gmC.SetGlobalBuffer(reinterpret_cast<__gm__ ElementC*>(params.ptrC));
 
         for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()) {
             auto blockIdxCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
@@ -162,18 +161,12 @@ public:
             auto gmBlockC = gmC[params.layoutC.GetOffset(offsetCoord.GetCoordMN())];
             auto layoutBlockC = params.layoutC.GetTileLayout(actualBlockShape.GetCoordMN());
 
-            blockMmad(
-                gmBlockA, layoutBlockA,
-                gmBlockB, layoutBlockB,
-                gmBlockC, layoutBlockC,
-                actualBlockShape
-            );
+            blockMmad(gmBlockA, layoutBlockA, gmBlockB, layoutBlockB, gmBlockC, layoutBlockC, actualBlockShape);
         }
     }
 
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIV>(Params const &params)
+    CATLASS_DEVICE void operator()<AscendC::AIV>(Params const& params)
     {
         auto aicoreNum = AscendC::GetBlockNum();
         auto aicoreIdx = AscendC::GetBlockIdx() / AscendC::GetSubBlockNum();
@@ -182,12 +175,12 @@ public:
         BlockScheduler matmulBlockScheduler(params.problemShape, L1TileShape::ToCoordMN());
 
         AscendC::GlobalTensor<ElementPrologueB> gmPrologueB;
-        gmPrologueB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementPrologueB *>(params.ptrPrologueB));
+        gmPrologueB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementPrologueB*>(params.ptrPrologueB));
 
         LayoutB layoutBlockB{L1TileShape::K, L1TileShape::N};
         auto gmOffsetB = aicoreIdx * layoutBlockB.Capacity() * BlockMmad::STAGES;
         AscendC::GlobalTensor<ElementB> gmBlockB;
-        gmBlockB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB *>(params.ptrWorkspace) + gmOffsetB);
+        gmBlockB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB*>(params.ptrWorkspace) + gmOffsetB);
 
         uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
         for (uint32_t loopIdx = aicoreIdx; loopIdx < coreLoops; loopIdx += aicoreNum) {
@@ -200,11 +193,7 @@ public:
             auto layoutBlockPrologueB = params.layoutPrologueB.GetTileLayout(actualBlockShape.GetCoordKN());
 
             // Compute block-scoped matrix multiply-add
-            blockMmad.Prologue(
-                gmBlockPrologueB, layoutBlockPrologueB,
-                gmBlockB, layoutBlockB,
-                actualBlockShape
-            );
+            blockMmad.Prologue(gmBlockPrologueB, layoutBlockPrologueB, gmBlockB, layoutBlockB, actualBlockShape);
         }
     }
 

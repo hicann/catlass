@@ -27,8 +27,9 @@ struct ConvBase {
 using ConvAtlasA2 = ConvBase<Arch::AtlasA2, false>;
 using ConvAtlasA2Async = ConvBase<Arch::AtlasA2, true>;
 
-template <uint32_t L1A_STAGES_, uint32_t L1B_STAGES_, uint32_t L0A_STAGES_, uint32_t L0B_STAGES_,
-    uint32_t L0C_STAGES_, bool ENABLE_UNIT_FLAG_>
+template <
+    uint32_t L1A_STAGES_, uint32_t L1B_STAGES_, uint32_t L0A_STAGES_, uint32_t L0B_STAGES_, uint32_t L0C_STAGES_,
+    bool ENABLE_UNIT_FLAG_>
 struct ConvAtlasA2Pingpong : public ConvAtlasA2 {
     static constexpr uint32_t L1A_STAGES = L1A_STAGES_;
     static constexpr uint32_t L1B_STAGES = L1B_STAGES_;
@@ -38,7 +39,8 @@ struct ConvAtlasA2Pingpong : public ConvAtlasA2 {
     static constexpr bool ENABLE_UNIT_FLAG = ENABLE_UNIT_FLAG_;
 };
 
-template <class ArchTag_, uint32_t L1A_STAGES_, uint32_t L1B_STAGES_, uint32_t L0A_STAGES_, uint32_t L0B_STAGES_,
+template <
+    class ArchTag_, uint32_t L1A_STAGES_, uint32_t L1B_STAGES_, uint32_t L0A_STAGES_, uint32_t L0B_STAGES_,
     uint32_t L0C_STAGES_, bool ENABLE_UNIT_FLAG_>
 struct ConvPingpong : public ConvBase<ArchTag_, false> {
     static constexpr uint32_t L1A_STAGES = L1A_STAGES_;
@@ -49,6 +51,6 @@ struct ConvPingpong : public ConvBase<ArchTag_, false> {
     static constexpr bool ENABLE_UNIT_FLAG = ENABLE_UNIT_FLAG_;
 };
 
-}  // namespace Catlass::Conv
+} // namespace Catlass::Conv
 
-#endif  // CATLASS_CONV_DISPATCH_POLICY_HPP
+#endif // CATLASS_CONV_DISPATCH_POLICY_HPP

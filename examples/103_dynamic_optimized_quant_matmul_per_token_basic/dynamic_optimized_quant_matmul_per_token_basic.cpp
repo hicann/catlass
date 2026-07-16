@@ -16,14 +16,14 @@
 #include "catlass/layout/layout.hpp"
 #include "dynamic_optimized_matmul_w8a8.h"
 
-
-static void Run(aclrtStream &stream, uint32_t m, uint32_t n, uint32_t k, LayoutTag layoutTagA, LayoutTag layoutTagB,
-    PlatformInfo &platformInfo)
+static void Run(
+    aclrtStream& stream, uint32_t m, uint32_t n, uint32_t k, LayoutTag layoutTagA, LayoutTag layoutTagB,
+    PlatformInfo& platformInfo)
 {
     uint32_t m_ori = m;
     uint32_t n_ori = n;
     uint32_t k_ori = k;
-    
+
     LayoutTag layoutTagC = LayoutTag::TagRowMajor;
     TilingParams tilingParams{m, n, k, layoutTagA, layoutTagB, layoutTagC};
     DoTilingAndSelectKernel<fp16_t>(tilingParams, platformInfo);
@@ -55,22 +55,22 @@ static void Run(aclrtStream &stream, uint32_t m, uint32_t n, uint32_t k, LayoutT
 
     uint8_t *dA, *dB, *dC, *dW, *dScale, *dPerTokenScale, *dTilingParams;
 
-    ACL_CHECK(aclrtMalloc((void **)&dA, sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMalloc((void **)&dB, sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMalloc((void **)&dC, sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMalloc((void **)&dScale, sizeScale, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMalloc((void **)&dPerTokenScale, sizePerTokenScale, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMalloc((void **)&dTilingParams, sizeof(TilingParams), ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc((void**)&dA, sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc((void**)&dB, sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc((void**)&dC, sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc((void**)&dScale, sizeScale, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc((void**)&dPerTokenScale, sizePerTokenScale, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc((void**)&dTilingParams, sizeof(TilingParams), ACL_MEM_MALLOC_HUGE_FIRST));
 
     ACL_CHECK(aclrtMemcpy(dA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
     ACL_CHECK(aclrtMemcpy(dB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
     ACL_CHECK(aclrtMemcpy(dScale, sizeScale, hostScale.data(), sizeScale, ACL_MEMCPY_HOST_TO_DEVICE));
-    ACL_CHECK(aclrtMemcpy(dPerTokenScale, sizePerTokenScale, hostPerTokenScale.data(),
-        sizePerTokenScale, ACL_MEMCPY_HOST_TO_DEVICE));
+    ACL_CHECK(aclrtMemcpy(
+        dPerTokenScale, sizePerTokenScale, hostPerTokenScale.data(), sizePerTokenScale, ACL_MEMCPY_HOST_TO_DEVICE));
 
     size_t workspaceSize = DynamicOptimizedMatmulGetWorkspace(tilingParams);
     if (workspaceSize > 0) {
-        ACL_CHECK(aclrtMalloc((void **)&dW, workspaceSize, ACL_MEM_MALLOC_HUGE_FIRST));
+        ACL_CHECK(aclrtMalloc((void**)&dW, workspaceSize, ACL_MEM_MALLOC_HUGE_FIRST));
     }
 
     uint64_t hardwareSyncAddr{0};
@@ -79,7 +79,8 @@ static void Run(aclrtStream &stream, uint32_t m, uint32_t n, uint32_t k, LayoutT
     ACL_CHECK(aclrtMemcpy(
         dTilingParams, sizeof(TilingParams), &tilingParams, sizeof(TilingParams), ACL_MEMCPY_HOST_TO_DEVICE));
 
-    ExecuteDynamicOptimizedMatmul(stream, hardwareSyncAddr, dA, dB, dC, dW, dScale, dPerTokenScale, dTilingParams, tilingParams);
+    ExecuteDynamicOptimizedMatmul(
+        stream, hardwareSyncAddr, dA, dB, dC, dW, dScale, dPerTokenScale, dTilingParams, tilingParams);
     ACL_CHECK(aclrtSynchronizeStream(stream));
 
     ACL_CHECK(aclrtMemcpy(hostC.data(), sizeC, dC, sizeC, ACL_MEMCPY_DEVICE_TO_HOST));
@@ -93,33 +94,29 @@ static void Run(aclrtStream &stream, uint32_t m, uint32_t n, uint32_t k, LayoutT
         Catlass::layout::RowMajor layoutB{k, n};
         Catlass::layout::RowMajor layoutC{m, n};
         Catlass::golden::QuantMatmul(
-            problemShape, hostA, layoutA, hostB, layoutB, 
-            hostScale, layoutScale, hostPerTokenScale, layoutPerTokenScale, hostGolden, layoutC
-        );
+            problemShape, hostA, layoutA, hostB, layoutB, hostScale, layoutScale, hostPerTokenScale,
+            layoutPerTokenScale, hostGolden, layoutC);
     } else if (layoutTagA == LayoutTag::TagRowMajor && layoutTagB == LayoutTag::TagColumnMajor) {
         Catlass::layout::RowMajor layoutA{m, k};
         Catlass::layout::ColumnMajor layoutB{k, n};
         Catlass::layout::RowMajor layoutC{m, n};
         Catlass::golden::QuantMatmul(
-            problemShape, hostA, layoutA, hostB, layoutB, 
-            hostScale, layoutScale, hostPerTokenScale, layoutPerTokenScale, hostGolden, layoutC
-        );
+            problemShape, hostA, layoutA, hostB, layoutB, hostScale, layoutScale, hostPerTokenScale,
+            layoutPerTokenScale, hostGolden, layoutC);
     } else if (layoutTagA == LayoutTag::TagColumnMajor && layoutTagB == LayoutTag::TagRowMajor) {
         Catlass::layout::ColumnMajor layoutA{m, k};
         Catlass::layout::RowMajor layoutB{k, n};
         Catlass::layout::RowMajor layoutC{m, n};
         Catlass::golden::QuantMatmul(
-            problemShape, hostA, layoutA, hostB, layoutB, 
-            hostScale, layoutScale, hostPerTokenScale, layoutPerTokenScale, hostGolden, layoutC
-        );
+            problemShape, hostA, layoutA, hostB, layoutB, hostScale, layoutScale, hostPerTokenScale,
+            layoutPerTokenScale, hostGolden, layoutC);
     } else {
         Catlass::layout::ColumnMajor layoutA{m, k};
         Catlass::layout::ColumnMajor layoutB{k, n};
         Catlass::layout::RowMajor layoutC{m, n};
         Catlass::golden::QuantMatmul(
-            problemShape, hostA, layoutA, hostB, layoutB, 
-            hostScale, layoutScale, hostPerTokenScale, layoutPerTokenScale, hostGolden, layoutC
-        );
+            problemShape, hostA, layoutA, hostB, layoutB, hostScale, layoutScale, hostPerTokenScale,
+            layoutPerTokenScale, hostGolden, layoutC);
     }
     std::vector<uint64_t> errorIndices = Catlass::golden::CompareData(hostC, hostGolden, k);
     if (errorIndices.empty()) {
@@ -139,7 +136,7 @@ static void Run(aclrtStream &stream, uint32_t m, uint32_t n, uint32_t k, LayoutT
     }
 }
 
-int main(int argc, const char **argv)
+int main(int argc, const char** argv)
 {
     const uint32_t deviceId = std::atoi(argv[argc - 1]);
     ACL_CHECK(aclrtSetDevice(deviceId));

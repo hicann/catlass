@@ -39,13 +39,14 @@ using ScalarType = float;
 
 using Options = GemvOptions;
 template <class ElementRandom>
-void FillRandomScalarData(ElementRandom &scalarData, ElementRandom low, ElementRandom high) {
+void FillRandomScalarData(ElementRandom& scalarData, ElementRandom low, ElementRandom high)
+{
     scalarData = static_cast<ElementRandom>(
-        low + (static_cast<ElementRandom>(rand()) / static_cast<ElementRandom>(RAND_MAX)) * (high - low)
-    );
+        low + (static_cast<ElementRandom>(rand()) / static_cast<ElementRandom>(RAND_MAX)) * (high - low));
 }
 
-static void Run(Options options) {
+static void Run(Options options)
+{
     aclrtStream stream{nullptr};
     ACL_CHECK(aclInit(nullptr));
     ACL_CHECK(aclrtSetDevice(options.deviceId));
@@ -84,19 +85,19 @@ static void Run(Options options) {
     golden::FillRandomData(hostA, -1.0f, 1.0f);
     golden::FillRandomData(hostX, -1.0f, 1.0f);
     golden::FillRandomData(hostY, -1.0f, 1.0f);
-    uint8_t *deviceA{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceA{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceX{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceX), sizeX, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceX{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceX), sizeX, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceX, sizeX, hostX.data(), sizeX, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceZ{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceZ), sizeZ, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceZ{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceZ), sizeZ, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceZ, sizeZ, hostY.data(), sizeZ, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceWorkspace{nullptr};
+    uint8_t* deviceWorkspace{nullptr};
 
     // Prepare hardware sync address
     uint64_t hardwareSyncAddr{0};
@@ -156,8 +157,7 @@ static void Run(Options options) {
     std::vector<float> hostGolden(lenZ);
 
     golden::ComputeGemv(
-        options.problemShape, alpha, beta, hostA, layoutA, hostX, layoutX, hostY, layoutZ, hostGolden, layoutZ
-    );
+        options.problemShape, alpha, beta, hostA, layoutA, hostX, layoutX, hostY, layoutZ, hostGolden, layoutZ);
 
     std::vector<uint64_t> errorIndices = golden::CompareData(hostRes, hostGolden, m);
 
@@ -180,7 +180,8 @@ static void Run(Options options) {
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv) {
+int main(int argc, const char** argv)
+{
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;

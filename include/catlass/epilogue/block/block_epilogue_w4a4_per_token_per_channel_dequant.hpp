@@ -24,22 +24,11 @@
 namespace Catlass::Epilogue::Block {
 
 template <
-    class CType_,
-    class PerTokenScaleType_,
-    class DType_,
-    class TileBroadcastOneBlk_,
-    class TileOneBlkColumnBroadcastMul_,
-    class TileCopy_,
-    class EpilogueTileSwizzle_>
+    class CType_, class PerTokenScaleType_, class DType_, class TileBroadcastOneBlk_,
+    class TileOneBlkColumnBroadcastMul_, class TileCopy_, class EpilogueTileSwizzle_>
 class BlockEpilogue<
-    EpilogueAtlasA2W4A4PerTokenPerChannelDequant,
-    CType_,
-    PerTokenScaleType_,
-    DType_,
-    TileBroadcastOneBlk_,
-    TileOneBlkColumnBroadcastMul_,
-    TileCopy_,
-    EpilogueTileSwizzle_> {
+    EpilogueAtlasA2W4A4PerTokenPerChannelDequant, CType_, PerTokenScaleType_, DType_, TileBroadcastOneBlk_,
+    TileOneBlkColumnBroadcastMul_, TileCopy_, EpilogueTileSwizzle_> {
 public:
     using DispatchPolicy = EpilogueAtlasA2W4A4PerTokenPerChannelDequant;
     using ArchTag = typename DispatchPolicy::ArchTag;
@@ -66,59 +55,50 @@ public:
 
     // Check
     static_assert(
-        std::is_same_v<ElementC, half> && std::is_same_v<ElementD, bfloat16_t>
-            && std::is_same_v<ElementPerTokenScale, float>,
+        std::is_same_v<ElementC, half> && std::is_same_v<ElementD, bfloat16_t> &&
+            std::is_same_v<ElementPerTokenScale, float>,
         "Accumulator type (`ElementC`) should be half, output type (`ElementD`) should be bfloat16_t while "
-        "perTokenScale type should be float"
-    );
+        "perTokenScale type should be float");
     static_assert(
-        std::is_same_v<LayoutC, layout::RowMajor> && std::is_same_v<LayoutPerTokenScale, layout::VectorLayout>
-            && std::is_same_v<LayoutD, layout::RowMajor>,
-        "The layout template parameters of BlockEpilogue are wrong"
-    );
+        std::is_same_v<LayoutC, layout::RowMajor> && std::is_same_v<LayoutPerTokenScale, layout::VectorLayout> &&
+            std::is_same_v<LayoutD, layout::RowMajor>,
+        "The layout template parameters of BlockEpilogue are wrong");
 
     static_assert(
-        TileShape::ROW == TileBroadcastOneBlk::COMPUTE_LENGTH,
-        "TileShape must be consistent for all tile compute ops"
-    );
+        TileShape::ROW == TileBroadcastOneBlk::COMPUTE_LENGTH, "TileShape must be consistent for all tile compute ops");
 
     static_assert(TileShape::ROW % 16 == 0, "Epilogue TileShape::ROW must be divisible by 16");
 
     static_assert(
-        /*ubC*/ TileShape::COUNT * sizeof(ElementC) + /*ubPerTokenScale*/ TileShape::ROW * sizeof(ElementPerTokenScale)
-                + /*ubD*/ TileShape::COUNT * sizeof(ElementD)
-                + /*ubCFp32 & ubPerTokenScaleBrcb*/ 2 * TileShape::COUNT * sizeof(float)
-            <= ArchTag::UB_SIZE,
-        "TileShape is too large to fit in UB"
-    );
+        /*ubC*/ TileShape::COUNT * sizeof(ElementC) +
+                /*ubPerTokenScale*/ TileShape::ROW * sizeof(ElementPerTokenScale) +
+                /*ubD*/ TileShape::COUNT * sizeof(ElementD) +
+                /*ubCFp32 & ubPerTokenScaleBrcb*/ 2 * TileShape::COUNT * sizeof(float) <=
+            ArchTag::UB_SIZE,
+        "TileShape is too large to fit in UB");
 
     struct Params {
-        __gm__ ElementPerTokenScale *ptrPerTokenScale{nullptr};
+        __gm__ ElementPerTokenScale* ptrPerTokenScale{nullptr};
         LayoutPerTokenScale layoutPerTokenScale{};
-        __gm__ ElementD *ptrD{nullptr};
+        __gm__ ElementD* ptrD{nullptr};
         LayoutD layoutD{};
 
         CATLASS_DEVICE
-        Params(){};
+        Params() {};
 
         CATLASS_DEVICE
         Params(
-            __gm__ ElementPerTokenScale *ptrPerTokenScale_,
-            LayoutPerTokenScale const &layoutPerTokenScale_,
-            __gm__ ElementD *ptrD_,
-            LayoutD const &layoutD_
-        )
-            : ptrPerTokenScale(ptrPerTokenScale_)
-            , layoutPerTokenScale(layoutPerTokenScale_)
-            , ptrD(ptrD_)
-            , layoutD(layoutD_)
-        {
-        }
+            __gm__ ElementPerTokenScale* ptrPerTokenScale_, LayoutPerTokenScale const& layoutPerTokenScale_,
+            __gm__ ElementD* ptrD_, LayoutD const& layoutD_)
+            : ptrPerTokenScale(ptrPerTokenScale_),
+              layoutPerTokenScale(layoutPerTokenScale_),
+              ptrD(ptrD_),
+              layoutD(layoutD_)
+        {}
     };
 
     CATLASS_DEVICE
-    BlockEpilogue(Arch::Resource<ArchTag> const &resource, Params const &params = Params{})
-        : params(params)
+    BlockEpilogue(Arch::Resource<ArchTag> const& resource, Params const& params = Params{}) : params(params)
     {
         size_t ubCOffset = 0;
         size_t ubPerTokenScaleOffset = ubCOffset + TileShape::COUNT * sizeof(ElementC);
@@ -147,20 +127,15 @@ public:
     }
 
     CATLASS_DEVICE
-    void UpdateParams(Params const &params_)
+    void UpdateParams(Params const& params_)
     {
         params = params_;
     }
 
     CATLASS_DEVICE
     void operator()(
-        GemmCoord const &blockShapeMNK,
-        GemmCoord const &blockCoordMNK,
-        GemmCoord const &actualBlockShapeMNK,
-        AscendC::GlobalTensor<ElementC> const &gmBlockC,
-        LayoutC const &layoutBlockC,
-        Callback &&callback = Callback{}
-    )
+        GemmCoord const& blockShapeMNK, GemmCoord const& blockCoordMNK, GemmCoord const& actualBlockShapeMNK,
+        AscendC::GlobalTensor<ElementC> const& gmBlockC, LayoutC const& layoutBlockC, Callback&& callback = Callback{})
     {
         if (actualBlockShapeMNK.k() == 0) {
             return;
@@ -207,13 +182,11 @@ public:
             auto gmTilePerTokenScale = gmPerTokenScale[params.layoutPerTokenScale.GetOffset(perTokenScaleTileOffset)];
             auto layoutGmTilePerTokenScale = params.layoutPerTokenScale.GetTileLayout(perTokenScaleTileShape);
 
-            auto layoutUbPerTokenScale = LayoutPerTokenScale::template MakeLayoutInUb<ElementPerTokenScale>(
-                perTokenScaleTileShape
-            );
+            auto layoutUbPerTokenScale =
+                LayoutPerTokenScale::template MakeLayoutInUb<ElementPerTokenScale>(perTokenScaleTileShape);
 
             copyGmToUbPerTokenScale(
-                ubPerTokenScale, gmTilePerTokenScale, layoutUbPerTokenScale, layoutGmTilePerTokenScale
-            );
+                ubPerTokenScale, gmTilePerTokenScale, layoutUbPerTokenScale, layoutGmTilePerTokenScale);
             AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(eventID);
 
             AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(eventID);

@@ -9,3 +9,8 @@
 
 from catlass_cppgen.kernel.kernel_base import KernelBase
 from catlass_cppgen.kernel.visitor_kernel_base import VisitorKernelBase
+
+__all__ = [
+    "KernelBase",
+    "VisitorKernelBase",
+]

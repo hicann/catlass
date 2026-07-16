@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # -----------------------------------------------------------------------------------------------------------
 # Copyright (c) 2026 Huawei Technologies Co., Ltd.
-# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 # CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
 # THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
@@ -15,8 +15,8 @@ import itertools
 
 from utils.config import Config
 
-class PerTokenMatmulTemplate:
 
+class PerTokenMatmulTemplate:
     TEMPLATE = """
 #include "kernel/per_token_matmul_kernel.h"
 void {launch_kernel_func_name}(aclrtStream& stream, uint64_t hardwareSyncAddr,
@@ -49,13 +49,10 @@ size_t {get_workspace_func_name}(TilingParams& tilingParams)
 
     @staticmethod
     def gen_code(dtype, kernel_info):
-
         kernel_serial = Config.KERNEL_SERIAL_MAP[PerTokenMatmulTemplate.KERNEL_NAME]
 
         combinations = list(
-            itertools.product(
-                Config.LAYOUT_TAG_SET, Config.LAYOUT_TAG_SET
-            )
+            itertools.product(Config.LAYOUT_TAG_SET, Config.LAYOUT_TAG_SET)
         )
         for l_tag_a, l_tag_b in combinations:
             # kernel_fun_name can be PerTokenMatmulHalfLayout00
@@ -92,7 +89,7 @@ size_t {get_workspace_func_name}(TilingParams& tilingParams)
                 element_c=element_c,
                 layout_a=layout_a,
                 layout_b=layout_b,
-                layout_c=layout_c
+                layout_c=layout_c,
             )
 
             with open(os.path.join(Config.WRAPPER_CODE_PATH, file_name), "w") as f:

@@ -11,41 +11,43 @@ from abc import abstractmethod
 import warnings
 from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar, Union
 
-from catlass_cppgen.catlass.gemm_coord import GemmCoord, GemmShape
+from catlass_cppgen.catlass.gemm_coord import GemmShape
 from catlass_cppgen.common.typing import GM_ADDR
-from catlass_cppgen.common.data_type import DataType
 from catlass_cppgen.common.utils import get_type_name
 
 DispatchPolicy = TypeVar("DispatchPolicy")
 BlockScheduler = TypeVar("BlockScheduler")
 
+
 def _get_deprecated_arg(kwargs: Dict, key: Any, sub_key: Optional[str] = None) -> Any:
     if key in kwargs:
         warnings.warn(
-            f"{key!r} is deprecated." + (f" Use {sub_key!r} instead." if sub_key else ""),
+            f"{key!r} is deprecated."
+            + (f" Use {sub_key!r} instead." if sub_key else ""),
             DeprecationWarning,
-            stacklevel=3
-            )
+            stacklevel=3,
+        )
         v = kwargs.pop(key)
     else:
         v = None
     return v
 
+
 class KernelBase:
     """Kernel Base Class"""
-    _INCLUDES: List[str] = [] # 头文件引入
-    _PARAMS_DEVICE: List[Tuple[str, Type]] = [] # 核函数参数
-    _KERNEL_NAME: str = "" # 核函数名
-    _DISPATCH_POLICY: str = "" # dispatch policy模板
-    _KERNEL_TEMPLATE: str = "" # 核函数模板
-    _INPUT_TEMPLATE: str = "" # 输入模板（用于定义 m, k, n 等变量）
-    _LAYOUT_TEMPLATE: str = "" # layout模板
-    _ADDITIONAL_DEFINITIONS_TEMPLATE: str = "" # 额外定义模板
-    _FEATURES: Dict[str, Any] = {} # 核函数特性字典
+
+    _INCLUDES: List[str] = []  # 头文件引入
+    _PARAMS_DEVICE: List[Tuple[str, Type]] = []  # 核函数参数
+    _KERNEL_NAME: str = ""  # 核函数名
+    _DISPATCH_POLICY: str = ""  # dispatch policy模板
+    _KERNEL_TEMPLATE: str = ""  # 核函数模板
+    _INPUT_TEMPLATE: str = ""  # 输入模板（用于定义 m, k, n 等变量）
+    _LAYOUT_TEMPLATE: str = ""  # layout模板
+    _ADDITIONAL_DEFINITIONS_TEMPLATE: str = ""  # 额外定义模板
+    _FEATURES: Dict[str, Any] = {}  # 核函数特性字典
     # 参数插入映射：在哪些参数名之后插入什么参数
     # 例如：{"layoutA": "strideA", "layoutB": "strideB"} 表示在 layoutA 后插入 strideA
-    _PARAMS_INSERTIONS: Dict[str, str] = {} # 参数插入映射
-
+    _PARAMS_INSERTIONS: Dict[str, str] = {}  # 参数插入映射
 
     def __init__(self, *args, **kwargs):
         self.l1_tile_shape, self.l0_tile_shape = self.get_default_tile_shape()
@@ -61,13 +63,13 @@ class KernelBase:
     @abstractmethod
     def get_default_tile_shape(self) -> Tuple[GemmShape, GemmShape]:
         pass
-    
+
     def get_default_dispatch_policy_list(self) -> List[DispatchPolicy]:
         """获取默认的 dispatch_policy 列表.
-        
+
         子类可以重写此方法以定义自己的默认 dispatch_policy 列表。
         如果子类不重写，默认返回空列表。
-        
+
         :return: 默认的 dispatch_policy 列表.
         :rtype: List[DispatchPolicy]
         """
@@ -89,20 +91,23 @@ class KernelBase:
     def is_support(self, feature: str) -> bool:
         """检查是否支持某个特性"""
         pass
-    
+
     def __getattr__(self, name: str) -> Any:
         """通过属性方式访问特性值"""
         # 对于特殊属性（如 __setstate__, __getstate__ 等），直接抛出 AttributeError
         # 避免干扰 deepcopy、pickle 等内部操作
-        if name.startswith('__') and name.endswith('__'):
-            raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
-        
+        if name.startswith("__") and name.endswith("__"):
+            raise AttributeError(
+                f"'{self.__class__.__name__}' object has no attribute '{name}'"
+            )
+
         # 直接检查 __dict__ 而不是使用 hasattr，避免递归
         # _features 在 __init__ 中总是会被初始化，所以可以直接检查
         if "_features" in self.__dict__ and name in self._features:
             return self._features[name]
-        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
-
+        raise AttributeError(
+            f"'{self.__class__.__name__}' object has no attribute '{name}'"
+        )
 
     """tune interface"""
 
@@ -122,7 +127,9 @@ class KernelBase:
         """
         self.l0_tile_shape = l0_tile_shape
 
-    def set_dispatch_policy(self, dispatch_policy: Union[DispatchPolicy, List[DispatchPolicy]]):
+    def set_dispatch_policy(
+        self, dispatch_policy: Union[DispatchPolicy, List[DispatchPolicy]]
+    ):
         """设置Dispatch Policy.
 
         :param dispatch_policy: Dispatch Policy 或 Dispatch Policy 列表。如果传入单个 policy，会转换为包含该 policy 的列表。
@@ -131,9 +138,10 @@ class KernelBase:
         if isinstance(dispatch_policy, list):
             self.dispatch_policy = dispatch_policy
         else:
-            
-            self.dispatch_policy = [dispatch_policy] if dispatch_policy is not None else []
-    
+            self.dispatch_policy = (
+                [dispatch_policy] if dispatch_policy is not None else []
+            )
+
     def get_dispatch_policy(self) -> List[DispatchPolicy]:
         """获取Dispatch Policy 列表.
 
@@ -170,17 +178,17 @@ class KernelBase:
         """
         if not self.dispatch_policy:
             raise ValueError("dispatch_policy 列表为空，无法设置 use_hf32_mode")
-        
+
         policies_with_hf32 = []
         policies_without_hf32 = []
-        
+
         for policy in self.dispatch_policy:
-            if hasattr(policy, 'use_hf32_mode'):
+            if hasattr(policy, "use_hf32_mode"):
                 policy.use_hf32_mode = is_hf32
                 policies_with_hf32.append(policy.__class__.__name__)
             else:
                 policies_without_hf32.append(policy.__class__.__name__)
-        
+
         if not policies_with_hf32:
             policy_names = ", ".join(policies_without_hf32)
             raise ValueError(
@@ -192,17 +200,21 @@ class KernelBase:
         self,
         l1_tile_shape: Optional[GemmShape] = None,
         l0_tile_shape: Optional[GemmShape] = None,
-        dispatch_policy: Optional[Union[DispatchPolicy, List[DispatchPolicy]]] = None,  # reserved
+        dispatch_policy: Optional[
+            Union[DispatchPolicy, List[DispatchPolicy]]
+        ] = None,  # reserved
         block_scheduler: Optional[BlockScheduler] = None,  # reserved
         relu_enable: Optional[bool] = None,
         is_hf32: Optional[bool] = None,
-        **kwargs
+        **kwargs,
     ):
         if_hf32 = _get_deprecated_arg(kwargs, "if_hf32", "is_hf32")
         if is_hf32 is None and if_hf32 is not None:
             is_hf32 = if_hf32
         elif if_hf32 is not None and if_hf32 != is_hf32:
-            raise ValueError("There is a conflict between suggested 'is_hf32' and deprecated 'if_hf32'.")
+            raise ValueError(
+                "There is a conflict between suggested 'is_hf32' and deprecated 'if_hf32'."
+            )
 
         self.set_l1_tile_shape(l1_tile_shape or self.l1_tile_shape)
         self.set_l0_tile_shape(l0_tile_shape or self.l0_tile_shape)
@@ -215,6 +227,7 @@ class KernelBase:
             self.set_use_hf32_mode(is_hf32)
 
     """codegen interface"""
+
     @abstractmethod
     def get_render_params(self) -> Dict[str, Any]:
         pass
@@ -271,31 +284,36 @@ class KernelBase:
             if hasattr(value, "value"):
                 value = value.value
             render_params[key] = str(value)
-        result = self._DISPATCH_POLICY.format(**render_params) + self._KERNEL_TEMPLATE.format(**render_params)
+        result = self._DISPATCH_POLICY.format(
+            **render_params
+        ) + self._KERNEL_TEMPLATE.format(**render_params)
         return result
 
     def gen_input_template(self) -> str:
         """生成输入变量定义代码.
         生成包含 M, K, N 等输入变量的定义代码块.
-        
+
         :return: 输入变量定义代码，如果不存在 _INPUT_TEMPLATE 则返回空字符串.
         :rtype: str
         """
-        if not hasattr(self.__class__, "_INPUT_TEMPLATE") or not self.__class__._INPUT_TEMPLATE:
+        if (
+            not hasattr(self.__class__, "_INPUT_TEMPLATE")
+            or not self.__class__._INPUT_TEMPLATE
+        ):
             return ""
-        
+
         render_params = self.get_render_params()
         for key, value in render_params.items():
             if hasattr(value, "value"):
                 value = value.value
             render_params[key] = str(value)
-        
+
         return self.__class__._INPUT_TEMPLATE.format(**render_params)
 
     def gen_layout_template(self) -> str:
         """生成 layout 相关信息代码.
         生成包含 M, K, N 定义和 layout tag 的代码块.
-        
+
         :return: layout 相关代码.
         :rtype: str
         """
@@ -310,9 +328,9 @@ class KernelBase:
 
     def _insert_params_recursive(self, param: str, params_list: List[str]) -> None:
         """递归插入参数.
-        
+
         如果 param 在 _PARAMS_INSERTIONS 中，插入对应的参数，并递归检查插入的参数。
-        
+
         :param param: 当前参数名.
         :type param: str
         :param params_list: 参数列表（会被修改）.
@@ -326,11 +344,11 @@ class KernelBase:
 
     def transform_params_for_construction(self, params_str: str) -> str:
         """转换参数列表用于构造 Params 对象.
-        
+
         子类可以重写此方法来修改参数列表，例如在特定参数后插入额外的参数。
         支持链式插入：如果插入的参数本身也在 _PARAMS_INSERTIONS 中，会继续插入。
         例如：在 layoutA 后插入 strideA，在 strideA 后插入 strideB。
-        
+
         :param params_str: 原始参数字符串，格式如 "param1, param2, param3".
         :type params_str: str
         :return: 转换后的参数字符串.
@@ -346,14 +364,14 @@ class KernelBase:
 
     def _gen_kernel_params_for_def(self) -> str:
         """生成函数定义时的参数列表，只包含 GM_ADDR 类型的参数和 M, N, K.
-        
+
         :return: 函数定义参数列表.
         :rtype: str
         """
         # 只包含 GM_ADDR 类型的参数
         gm_addr_params = [
-            (type_str, var_name) 
-            for type_str, var_name in self._PARAMS_DEVICE 
+            (type_str, var_name)
+            for type_str, var_name in self._PARAMS_DEVICE
             if type_str == GM_ADDR
         ]
         result = ", ".join(

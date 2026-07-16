@@ -18,8 +18,9 @@ using namespace CatlassKernelWrapper;
 TORCH_LIBRARY(CatlassTorch, m)
 {
     m.def("basic_matmul(Tensor mat1, Tensor mat2, str c) -> Tensor")
-        .def("grouped_matmul(Tensor mat1, Tensor mat2, Tensor groupList, str c, bool trans_a, bool trans_b, bool "
-             "split) -> Tensor")
+        .def(
+            "grouped_matmul(Tensor mat1, Tensor mat2, Tensor groupList, str c, bool trans_a, bool trans_b, bool "
+            "split) -> Tensor")
         .def("optimized_matmul(Tensor mat1, Tensor mat2, str c) -> Tensor");
 }
 

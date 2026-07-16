@@ -10,17 +10,9 @@
 import unittest
 from catlass_cppgen.catlass.layout.layout import (
     Coord,
-    Layout,
     RowMajor,
     ColumnMajor,
-    PaddingRowMajor,
-    PaddingColumnMajor,
     VectorLayout,
-    PrivateLayout,
-    nZ,
-    zN,
-    zZ,
-    nN,
 )
 import random
 
@@ -149,6 +141,7 @@ class TestPrivateLayouts(unittest.TestCase):
 
     def test_nn_value(self):
         pass
+
     def test_private_layout_subclasses(self):
         pass
 

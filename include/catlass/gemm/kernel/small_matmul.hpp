@@ -21,11 +21,7 @@
 namespace Catlass::Gemm::Kernel {
 
 // Template for Matmul kernel. Compute C = A * B
-template <
-    class BlockMmad_,
-    class BlockEpilogue_,
-    class BlockScheduler_
->
+template <class BlockMmad_, class BlockEpilogue_, class BlockScheduler_>
 class SmallMatmul {
 public:
     using BlockMmad = BlockMmad_;
@@ -57,10 +53,17 @@ public:
         {}
 
         CATLASS_HOST_DEVICE
-        Params(GemmCoord const &problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_,
-               LayoutB layoutB_, GM_ADDR ptrC_, LayoutC layoutC_)
-            : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_), layoutB(layoutB_),
-              ptrC(ptrC_), layoutC(layoutC_) {}
+        Params(
+            GemmCoord const& problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_, LayoutB layoutB_,
+            GM_ADDR ptrC_, LayoutC layoutC_)
+            : problemShape(problemShape_),
+              ptrA(ptrA_),
+              layoutA(layoutA_),
+              ptrB(ptrB_),
+              layoutB(layoutB_),
+              ptrC(ptrC_),
+              layoutC(layoutC_)
+        {}
     };
 
     struct Arguments {
@@ -70,17 +73,17 @@ public:
         GM_ADDR ptrC;
     };
 
-    static bool CanImplement(const Arguments &args)
+    static bool CanImplement(const Arguments& args)
     {
         return true;
     }
 
-    static size_t GetWorkspaceSize(const Arguments &args)
+    static size_t GetWorkspaceSize(const Arguments& args)
     {
         return 0;
     }
 
-    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    static Params ToUnderlyingArguments(const Arguments& args, uint8_t* workspace)
     {
         LayoutA layoutA = LayoutA::template MakeLayout<ElementA>(args.problemShape.m(), args.problemShape.k());
         LayoutB layoutB = LayoutB::template MakeLayout<ElementB>(args.problemShape.k(), args.problemShape.n());
@@ -91,22 +94,23 @@ public:
 
     // Methods
     CATLASS_DEVICE
-    SmallMatmul() {}
+    SmallMatmul()
+    {}
 
     /// Executes one Matmul
     CATLASS_DEVICE
-    void operator()(Params const &params)
+    void operator()(Params const& params)
     {
         Arch::Resource<ArchTag> resource;
         BlockMmad blockMmad(resource);
 
         // Represent the full gm
         AscendC::GlobalTensor<ElementA> gmA;
-        gmA.SetGlobalBuffer((__gm__ ElementA *)params.ptrA);
+        gmA.SetGlobalBuffer((__gm__ ElementA*)params.ptrA);
         AscendC::GlobalTensor<ElementB> gmB;
-        gmB.SetGlobalBuffer((__gm__ ElementB *)params.ptrB);
+        gmB.SetGlobalBuffer((__gm__ ElementB*)params.ptrB);
         AscendC::GlobalTensor<ElementC> gmC;
-        gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrC);
+        gmC.SetGlobalBuffer((__gm__ ElementC*)params.ptrC);
 
         uint32_t mLoops = (params.problemShape.m() + L1TileShape::M - 1) / L1TileShape::M;
         uint32_t nLoops = (params.problemShape.n() + L1TileShape::N - 1) / L1TileShape::N;
@@ -118,9 +122,11 @@ public:
             // Compute block location
             GemmCoord blockCoord{loopIdx / nLoops, loopIdx % nLoops, 0};
             uint32_t mActual = (blockCoord.m() == (mLoops - 1)) ?
-                (params.problemShape.m() - blockCoord.m()  * L1TileShape::M) : L1TileShape::M;
+                                   (params.problemShape.m() - blockCoord.m() * L1TileShape::M) :
+                                   L1TileShape::M;
             uint32_t nActual = (blockCoord.n() == (nLoops - 1)) ?
-                (params.problemShape.n() - blockCoord.n()  * L1TileShape::N) : L1TileShape::N;
+                                   (params.problemShape.n() - blockCoord.n() * L1TileShape::N) :
+                                   L1TileShape::N;
             GemmCoord actualBlockShape{mActual, nActual, params.problemShape.k()};
 
             // Compute initial location in logical coordinates
@@ -132,10 +138,9 @@ public:
             int64_t gmOffsetC = params.layoutC.GetOffset(offsetC);
 
             // Compute block-scoped matrix multiply-add
-            blockMmad(gmA[gmOffsetA], params.layoutA,
-                      gmB[gmOffsetB], params.layoutB,
-                      gmC[gmOffsetC], params.layoutC,
-                      actualBlockShape);
+            blockMmad(
+                gmA[gmOffsetA], params.layoutA, gmB[gmOffsetB], params.layoutB, gmC[gmOffsetC], params.layoutC,
+                actualBlockShape);
         }
 
         AscendC::PipeBarrier<PIPE_ALL>();

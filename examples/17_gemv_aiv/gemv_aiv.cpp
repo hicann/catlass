@@ -36,7 +36,8 @@ using ScalarType = float;
 
 using Options = GemvOptions;
 
-static uint32_t getSplictNum(bool trans, uint32_t M, uint32_t N, uint32_t M1, uint32_t N1, uint32_t maxSplict) {
+static uint32_t getSplictNum(bool trans, uint32_t M, uint32_t N, uint32_t M1, uint32_t N1, uint32_t maxSplict)
+{
     uint32_t CORENUM = 20;
     uint32_t splitNum = 1;
     uint32_t maxOccupancy = 0;
@@ -70,13 +71,14 @@ static uint32_t getSplictNum(bool trans, uint32_t M, uint32_t N, uint32_t M1, ui
 }
 
 template <class ElementRandom>
-void FillRandomScalarData(ElementRandom &scalarData, ElementRandom low, ElementRandom high) {
+void FillRandomScalarData(ElementRandom& scalarData, ElementRandom low, ElementRandom high)
+{
     scalarData = static_cast<ElementRandom>(
-        low + (static_cast<ElementRandom>(rand()) / static_cast<ElementRandom>(RAND_MAX)) * (high - low)
-    );
+        low + (static_cast<ElementRandom>(rand()) / static_cast<ElementRandom>(RAND_MAX)) * (high - low));
 }
 
-static void Run(Options options) {
+static void Run(Options options)
+{
     aclrtStream stream{nullptr};
     ACL_CHECK(aclInit(nullptr));
     ACL_CHECK(aclrtSetDevice(options.deviceId));
@@ -118,20 +120,20 @@ static void Run(Options options) {
     golden::FillRandomData(hostX, -1.0f, 1.0f);
     golden::FillRandomData(hostY, -1.0f, 1.0f);
 
-    uint8_t *deviceA{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceA{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceX{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceX), sizeX, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceX{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceX), sizeX, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceX, sizeX, hostX.data(), sizeX, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceY{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceY), sizeY, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceY{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceY), sizeY, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceY, sizeY, hostY.data(), sizeY, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceZ{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceZ), sizeY, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceZ{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceZ), sizeY, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceZ, sizeY, hostY.data(), sizeY, ACL_MEMCPY_HOST_TO_DEVICE));
 
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAiv();
@@ -165,8 +167,7 @@ static void Run(Options options) {
 
     std::vector<float> hostGolden(lenY);
     golden::ComputeGemv(
-        options.problemShape, alpha, beta, hostA, layoutA, hostX, layoutX, hostY, layoutY, hostGolden, layoutY
-    );
+        options.problemShape, alpha, beta, hostA, layoutA, hostX, layoutX, hostY, layoutY, hostGolden, layoutY);
     std::vector<uint64_t> errorIndices = golden::CompareData(hostRes, hostGolden, m);
     if (errorIndices.empty()) {
         std::cout << "Compare success." << std::endl;
@@ -184,7 +185,8 @@ static void Run(Options options) {
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv) {
+int main(int argc, const char** argv)
+{
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;

@@ -20,17 +20,24 @@ from catlass_cppgen.common.utils import infer_layout_from_stride, get_tensor_dat
 
 class OpTensor:
     """OpTensor类是op的输入输出tensor的抽象，用于表示op的输入输出tensor
-    
+
     该类提供了统一的tensor抽象，可以从torch.Tensor或np.ndarray创建，
     或直接通过shape和stride创建（避免实例化），并自动推断数据类型和布局信息。
-    
+
     参数:
     dtype: DataType, tensor的数据类型
     layout: Layout, tensor的布局
     shape: tuple[int, ...], tensor的完整形状
     data_ptr: Optional[ctypes.c_void_p], tensor的数据指针
     """
-    def __init__(self, dtype: DataType, layout: Layout, shape: Optional[tuple[int, ...]] = None, data_ptr: Optional[ctypes.c_void_p] = None):
+
+    def __init__(
+        self,
+        dtype: DataType,
+        layout: Layout,
+        shape: Optional[tuple[int, ...]] = None,
+        data_ptr: Optional[ctypes.c_void_p] = None,
+    ):
         self.dtype = dtype
         self.layout = layout
         self._shape = shape if shape is not None else layout.shape
@@ -44,12 +51,12 @@ class OpTensor:
         dtype: DataType,
     ) -> "OpTensor":
         """直接从 shape 和 stride 创建 OpTensor（避免实例化 tensor）
-        
+
         参数:
         shape: tensor 的形状（可以是 2D 或 3D，支持 batched）
         stride: tensor 的步长
         dtype: tensor 的数据类型
-        
+
         返回:
         OpTensor 对象
         """
@@ -60,18 +67,18 @@ class OpTensor:
 
     @classmethod
     def from_tensor(
-        cls, 
-        tensor: SupportedTensor, 
+        cls,
+        tensor: SupportedTensor,
         layout: Optional[Layout] = None,
-        dtype: Optional[DataType] = None
+        dtype: Optional[DataType] = None,
     ) -> "OpTensor":
         """从 torch.Tensor 或 np.ndarray 创建 OpTensor
-        
+
         参数:
         tensor: torch.Tensor 或 np.ndarray
         layout: 可选的 Layout，如果不提供则从 tensor 的 stride 推断
         dtype: 可选的 DataType，如果不提供则从 tensor 的 dtype 推断
-        
+
         返回:
         OpTensor 对象
         """

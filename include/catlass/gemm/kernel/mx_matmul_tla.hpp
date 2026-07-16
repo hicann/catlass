@@ -69,64 +69,55 @@ public:
 
         // Methods
         CATLASS_HOST_DEVICE
-        Params() {}
+        Params()
+        {}
 
         CATLASS_HOST_DEVICE
         Params(
-            GemmCoord const &problemShape_,
-            GM_ADDR ptrA_,
-            LayoutA layoutA_,
-            GM_ADDR ptrB_,
-            LayoutB layoutB_,
-            GM_ADDR ptrMxScaleA_,
-            LayoutMxScaleA layoutMxScaleA_,
-            GM_ADDR ptrMxScaleB_,
-            LayoutMxScaleB layoutMxScaleB_,
-            GM_ADDR ptrC_,
-            LayoutC layoutC_,
-            GM_ADDR ptrBias_ = nullptr
-        )
-            : problemShape(problemShape_)
-            , ptrA(ptrA_)
-            , layoutA(layoutA_)
-            , ptrB(ptrB_)
-            , layoutB(layoutB_)
-            , ptrMxScaleA(ptrMxScaleA_)
-            , layoutMxScaleA(layoutMxScaleA_)
-            , ptrMxScaleB(ptrMxScaleB_)
-            , layoutMxScaleB(layoutMxScaleB_)
-            , ptrC(ptrC_)
-            , layoutC(layoutC_)
-            , ptrBias(ptrBias_)
+            GemmCoord const& problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_, LayoutB layoutB_,
+            GM_ADDR ptrMxScaleA_, LayoutMxScaleA layoutMxScaleA_, GM_ADDR ptrMxScaleB_, LayoutMxScaleB layoutMxScaleB_,
+            GM_ADDR ptrC_, LayoutC layoutC_, GM_ADDR ptrBias_ = nullptr)
+            : problemShape(problemShape_),
+              ptrA(ptrA_),
+              layoutA(layoutA_),
+              ptrB(ptrB_),
+              layoutB(layoutB_),
+              ptrMxScaleA(ptrMxScaleA_),
+              layoutMxScaleA(layoutMxScaleA_),
+              ptrMxScaleB(ptrMxScaleB_),
+              layoutMxScaleB(layoutMxScaleB_),
+              ptrC(ptrC_),
+              layoutC(layoutC_),
+              ptrBias(ptrBias_)
         {}
     };
 
     struct Arguments {
         GemmCoord problemShape;
-        uint8_t *ptrA;
+        uint8_t* ptrA;
         LayoutA layoutA;
-        uint8_t *ptrB;
+        uint8_t* ptrB;
         LayoutB layoutB;
-        uint8_t *ptrMxScaleA;
+        uint8_t* ptrMxScaleA;
         LayoutMxScaleA layoutMxScaleA;
-        uint8_t *ptrMxScaleB;
+        uint8_t* ptrMxScaleB;
         LayoutMxScaleB layoutMxScaleB;
-        uint8_t *ptrC;
+        uint8_t* ptrC;
         LayoutC layoutC;
-        uint8_t *ptrBias{nullptr};
+        uint8_t* ptrBias{nullptr};
     };
 
-    static bool CanImplement(const Arguments &args)
+    static bool CanImplement(const Arguments& args)
     {
         return true;
     }
 
-    static size_t GetWorkspaceSize(const Arguments &args)
+    static size_t GetWorkspaceSize(const Arguments& args)
     {
         return 0;
     }
 
-    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    static Params ToUnderlyingArguments(const Arguments& args, uint8_t* workspace)
     {
         Params params{args.problemShape,   args.ptrA,        args.layoutA,        args.ptrB,
                       args.layoutB,        args.ptrMxScaleA, args.layoutMxScaleA, args.ptrMxScaleB,
@@ -142,14 +133,15 @@ class MxMatmulTla {
         DEPENDENT_FALSE<BlockScheduler_>,
         "Unsupported BlockScheduler for MxMatmulTla. "
         "Please use Gemm::Block::GemmIdentityBlockSwizzle<...> or "
-        "Gemm::Block::BlockSchedulerAswt<...>."
-    );
+        "Gemm::Block::BlockSchedulerAswt<...>.");
 };
 
 template <class BlockMmad_, class BlockEpilogue_, class L1TileShape_, class L0TileShape_, bool isGmm_>
 class MxMatmulTla<BlockMmad_, BlockEpilogue_, Gemm::Block::BlockSchedulerAswt<L1TileShape_, L0TileShape_, isGmm_>>
-    : public MxMatmulTlaBase<BlockMmad_, BlockEpilogue_, Gemm::Block::BlockSchedulerAswt<L1TileShape_, L0TileShape_, isGmm_>> {
-    using Base = MxMatmulTlaBase<BlockMmad_, BlockEpilogue_, Gemm::Block::BlockSchedulerAswt<L1TileShape_, L0TileShape_, isGmm_>>;
+    : public MxMatmulTlaBase<
+          BlockMmad_, BlockEpilogue_, Gemm::Block::BlockSchedulerAswt<L1TileShape_, L0TileShape_, isGmm_>> {
+    using Base = MxMatmulTlaBase<
+        BlockMmad_, BlockEpilogue_, Gemm::Block::BlockSchedulerAswt<L1TileShape_, L0TileShape_, isGmm_>>;
 
 public:
     using Params = typename Base::Params;
@@ -172,15 +164,14 @@ public:
     using BlockScheduler = typename Base::BlockScheduler;
 
     CATLASS_DEVICE
-    MxMatmulTla() {}
+    MxMatmulTla()
+    {}
 
     template <int32_t CORE_TYPE = g_coreType>
-    CATLASS_DEVICE
-    void operator()(Params const &params);
+    CATLASS_DEVICE void operator()(Params const& params);
 
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIC>(Params const &params)
+    CATLASS_DEVICE void operator()<AscendC::AIC>(Params const& params)
     {
         int64_t curBlockIdx = AscendC::GetBlockIdx();
         int64_t blockNum = AscendC::GetBlockNum();
@@ -200,15 +191,15 @@ public:
         BlockMmad blockMmad(resource);
 
         AscendC::GlobalTensor<ElementA> gmA;
-        gmA.SetGlobalBuffer((__gm__ ElementA *)params.ptrA);
+        gmA.SetGlobalBuffer((__gm__ ElementA*)params.ptrA);
         AscendC::GlobalTensor<ElementB> gmB;
-        gmB.SetGlobalBuffer((__gm__ ElementB *)params.ptrB);
+        gmB.SetGlobalBuffer((__gm__ ElementB*)params.ptrB);
         AscendC::GlobalTensor<ElementMxScaleA> gmMxScaleA;
-        gmMxScaleA.SetGlobalBuffer((__gm__ ElementMxScaleA *)params.ptrMxScaleA);
+        gmMxScaleA.SetGlobalBuffer((__gm__ ElementMxScaleA*)params.ptrMxScaleA);
         AscendC::GlobalTensor<ElementMxScaleB> gmMxScaleB;
-        gmMxScaleB.SetGlobalBuffer((__gm__ ElementMxScaleB *)params.ptrMxScaleB);
+        gmMxScaleB.SetGlobalBuffer((__gm__ ElementMxScaleB*)params.ptrMxScaleB);
         AscendC::GlobalTensor<ElementC> gmC;
-        gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrC);
+        gmC.SetGlobalBuffer((__gm__ ElementC*)params.ptrC);
 
         if (CeilDiv(params.problemShape.m(), Base::L1_TILE_M) == 1) {
             gmB.SetL2CacheHint(AscendC::CacheMode::CACHE_MODE_DISABLE);
@@ -220,7 +211,7 @@ public:
         using GlobalTensorBiasType = std::conditional_t<std::is_void_v<ElementBias>, uint8_t, ElementBias>;
         AscendC::GlobalTensor<GlobalTensorBiasType> gmBias;
         if constexpr (!std::is_void_v<ElementBias>) {
-            gmBias.SetGlobalBuffer((__gm__ ElementBias *)params.ptrBias);
+            gmBias.SetGlobalBuffer((__gm__ ElementBias*)params.ptrBias);
         }
 
         auto layoutBias = tla::MakeLayout(params.problemShape.n());
@@ -247,40 +238,27 @@ public:
             uint32_t mOffset = blkElemCoord.m();
             uint32_t nOffset = blkElemCoord.n();
 
-            auto tensorBlockA = GetTile(
-                tensorA, tla::MakeCoord(mOffset, 0),
-                tla::MakeShape(blockShape.m(), blockShape.k())
-            );
-            auto tensorBlockB = GetTile(
-                tensorB, tla::MakeCoord(0, nOffset),
-                tla::MakeShape(blockShape.k(), blockShape.n())
-            );
+            auto tensorBlockA =
+                GetTile(tensorA, tla::MakeCoord(mOffset, 0), tla::MakeShape(blockShape.m(), blockShape.k()));
+            auto tensorBlockB =
+                GetTile(tensorB, tla::MakeCoord(0, nOffset), tla::MakeShape(blockShape.k(), blockShape.n()));
             auto tensorBlockMxScaleA = GetTile(
                 tensorMxScaleA, tla::MakeCoord(mOffset, 0),
-                tla::MakeShape(blockShape.m(), CeilDiv<MX_SCALE_GROUP_NUM>(blockShape.k()))
-            );
+                tla::MakeShape(blockShape.m(), CeilDiv<MX_SCALE_GROUP_NUM>(blockShape.k())));
             auto tensorBlockMxScaleB = GetTile(
                 tensorMxScaleB, tla::MakeCoord(0, nOffset),
-                tla::MakeShape(CeilDiv<MX_SCALE_GROUP_NUM>(blockShape.k()), blockShape.n())
-            );
-            auto tensorBlockC = GetTile(
-                tensorC, tla::MakeCoord(mOffset, nOffset),
-                tla::MakeShape(blockShape.m(), blockShape.n())
-            );
+                tla::MakeShape(CeilDiv<MX_SCALE_GROUP_NUM>(blockShape.k()), blockShape.n()));
+            auto tensorBlockC =
+                GetTile(tensorC, tla::MakeCoord(mOffset, nOffset), tla::MakeShape(blockShape.m(), blockShape.n()));
 
             if constexpr (std::is_void_v<ElementBias>) {
-                blockMmad(tensorBlockA, tensorBlockB, tensorBlockC, blockShape, tensorBlockMxScaleA, tensorBlockMxScaleB);
+                blockMmad(
+                    tensorBlockA, tensorBlockB, tensorBlockC, blockShape, tensorBlockMxScaleA, tensorBlockMxScaleB);
             } else {
                 auto tensorBlockBias = GetTile(tensorBias, tla::MakeCoord(nOffset), tla::MakeShape(blockShape.n()));
                 blockMmad(
-                    tensorBlockA,
-                    tensorBlockB,
-                    tensorBlockC,
-                    blockShape,
-                    tensorBlockMxScaleA,
-                    tensorBlockMxScaleB,
-                    tensorBlockBias
-                );
+                    tensorBlockA, tensorBlockB, tensorBlockC, blockShape, tensorBlockMxScaleA, tensorBlockMxScaleB,
+                    tensorBlockBias);
             }
         }
 
@@ -288,19 +266,16 @@ public:
     }
 
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIV>(Params const &params)
+    CATLASS_DEVICE void operator()<AscendC::AIV>(Params const& params)
     {}
 };
 
 template <class BlockMmad_, class BlockEpilogue_, uint32_t SwizzleOffset, uint32_t SwizzleDirection>
 class MxMatmulTla<BlockMmad_, BlockEpilogue_, Gemm::Block::GemmIdentityBlockSwizzle<SwizzleOffset, SwizzleDirection>>
     : public MxMatmulTlaBase<
-          BlockMmad_,
-          BlockEpilogue_,
-          Gemm::Block::GemmIdentityBlockSwizzle<SwizzleOffset, SwizzleDirection>> {
-    using Base =
-        MxMatmulTlaBase<BlockMmad_, BlockEpilogue_, Gemm::Block::GemmIdentityBlockSwizzle<SwizzleOffset, SwizzleDirection>>;
+          BlockMmad_, BlockEpilogue_, Gemm::Block::GemmIdentityBlockSwizzle<SwizzleOffset, SwizzleDirection>> {
+    using Base = MxMatmulTlaBase<
+        BlockMmad_, BlockEpilogue_, Gemm::Block::GemmIdentityBlockSwizzle<SwizzleOffset, SwizzleDirection>>;
 
 public:
     using Params = typename Base::Params;
@@ -327,15 +302,14 @@ public:
     static constexpr uint32_t L1_TILE_K = Base::L1_TILE_K;
 
     CATLASS_DEVICE
-    MxMatmulTla() {}
+    MxMatmulTla()
+    {}
 
     template <int32_t CORE_TYPE = g_coreType>
-    CATLASS_DEVICE
-    void operator()(Params const &params);
+    CATLASS_DEVICE void operator()(Params const& params);
 
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIC>(Params const &params)
+    CATLASS_DEVICE void operator()<AscendC::AIC>(Params const& params)
     {
         BlockScheduler matmulBlockScheduler(params.problemShape, MakeCoord(L1_TILE_M, L1_TILE_N));
         uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
@@ -344,15 +318,15 @@ public:
         BlockMmad blockMmad(resource);
 
         AscendC::GlobalTensor<ElementA> gmA;
-        gmA.SetGlobalBuffer((__gm__ ElementA *)params.ptrA);
+        gmA.SetGlobalBuffer((__gm__ ElementA*)params.ptrA);
         AscendC::GlobalTensor<ElementB> gmB;
-        gmB.SetGlobalBuffer((__gm__ ElementB *)params.ptrB);
+        gmB.SetGlobalBuffer((__gm__ ElementB*)params.ptrB);
         AscendC::GlobalTensor<ElementMxScaleA> gmMxScaleA;
-        gmMxScaleA.SetGlobalBuffer((__gm__ ElementMxScaleA *)params.ptrMxScaleA);
+        gmMxScaleA.SetGlobalBuffer((__gm__ ElementMxScaleA*)params.ptrMxScaleA);
         AscendC::GlobalTensor<ElementMxScaleB> gmMxScaleB;
-        gmMxScaleB.SetGlobalBuffer((__gm__ ElementMxScaleB *)params.ptrMxScaleB);
+        gmMxScaleB.SetGlobalBuffer((__gm__ ElementMxScaleB*)params.ptrMxScaleB);
         AscendC::GlobalTensor<ElementC> gmC;
-        gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrC);
+        gmC.SetGlobalBuffer((__gm__ ElementC*)params.ptrC);
 
         if (CeilDiv(params.problemShape.m(), L1_TILE_M) == 1) {
             gmB.SetL2CacheHint(AscendC::CacheMode::CACHE_MODE_DISABLE);
@@ -364,7 +338,7 @@ public:
         using GlobalTensorBiasType = std::conditional_t<std::is_void_v<ElementBias>, uint8_t, ElementBias>;
         AscendC::GlobalTensor<GlobalTensorBiasType> gmBias;
         if constexpr (!std::is_void_v<ElementBias>) {
-            gmBias.SetGlobalBuffer((__gm__ ElementBias *)params.ptrBias);
+            gmBias.SetGlobalBuffer((__gm__ ElementBias*)params.ptrBias);
         }
 
         auto layoutBias = tla::MakeLayout(params.problemShape.n());
@@ -381,39 +355,32 @@ public:
 
             auto tensorBlockA = GetTile(
                 tensorA, tla::MakeCoord(blockCoord.m() * L1_TILE_M, blockCoord.k() * L1_TILE_K),
-                tla::MakeShape(actualBlockShape.m(), actualBlockShape.k())
-            );
+                tla::MakeShape(actualBlockShape.m(), actualBlockShape.k()));
             auto tensorBlockB = GetTile(
                 tensorB, tla::MakeCoord(blockCoord.k() * L1_TILE_K, blockCoord.n() * L1_TILE_N),
-                tla::MakeShape(actualBlockShape.k(), actualBlockShape.n())
-            );
+                tla::MakeShape(actualBlockShape.k(), actualBlockShape.n()));
             auto tensorBlockMxScaleA = GetTile(
                 tensorMxScaleA,
                 tla::MakeCoord(blockCoord.m() * L1_TILE_M, blockCoord.k() * L1_TILE_K / MX_SCALE_GROUP_NUM),
-                tla::MakeShape(actualBlockShape.m(), CeilDiv<MX_SCALE_GROUP_NUM>(actualBlockShape.k()))
-            );
+                tla::MakeShape(actualBlockShape.m(), CeilDiv<MX_SCALE_GROUP_NUM>(actualBlockShape.k())));
             auto tensorBlockMxScaleB = GetTile(
                 tensorMxScaleB,
                 tla::MakeCoord(blockCoord.k() * L1_TILE_K / MX_SCALE_GROUP_NUM, blockCoord.n() * L1_TILE_N),
-                tla::MakeShape(CeilDiv<MX_SCALE_GROUP_NUM>(actualBlockShape.k()), actualBlockShape.n())
-            );
+                tla::MakeShape(CeilDiv<MX_SCALE_GROUP_NUM>(actualBlockShape.k()), actualBlockShape.n()));
             auto tensorBlockC = GetTile(
                 tensorC, tla::MakeCoord(blockCoord.m() * L1_TILE_M, blockCoord.n() * L1_TILE_N),
-                tla::MakeShape(actualBlockShape.m(), actualBlockShape.n())
-            );
+                tla::MakeShape(actualBlockShape.m(), actualBlockShape.n()));
 
             if constexpr (std::is_void_v<ElementBias>) {
                 blockMmad(
-                    tensorBlockA, tensorBlockB, tensorBlockC, actualBlockShape, tensorBlockMxScaleA, tensorBlockMxScaleB
-                );
+                    tensorBlockA, tensorBlockB, tensorBlockC, actualBlockShape, tensorBlockMxScaleA,
+                    tensorBlockMxScaleB);
             } else {
                 auto tensorBlockBias = GetTile(
-                    tensorBias, tla::MakeCoord(blockCoord.n() * L1_TILE_N), tla::MakeShape(actualBlockShape.n())
-                );
+                    tensorBias, tla::MakeCoord(blockCoord.n() * L1_TILE_N), tla::MakeShape(actualBlockShape.n()));
                 blockMmad(
                     tensorBlockA, tensorBlockB, tensorBlockC, actualBlockShape, tensorBlockMxScaleA,
-                    tensorBlockMxScaleB, tensorBlockBias
-                );
+                    tensorBlockMxScaleB, tensorBlockBias);
             }
         }
 
@@ -421,8 +388,7 @@ public:
     }
 
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIV>(Params const &params)
+    CATLASS_DEVICE void operator()<AscendC::AIV>(Params const& params)
     {}
 };
 

@@ -33,7 +33,8 @@ using namespace Catlass;
 
 using Options = GroupedGemmOptions;
 
-static void Run(const Options &options) {
+static void Run(const Options& options)
+{
     aclrtStream stream{nullptr};
 
     ACL_CHECK(aclInit(nullptr));
@@ -56,21 +57,21 @@ static void Run(const Options &options) {
     // allocate memory of A and copy to device side
     std::vector<fp16_t> hostA(lenA, 1.0);
     golden::FillRandomData<fp16_t>(hostA, -5, 5);
-    uint8_t *deviceA{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceA{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
 
     // allocate memory of B and copy to device side
     std::vector<fp16_t> hostB(lenB, 1.0);
     golden::FillRandomData<fp16_t>(hostB, -5, 5);
-    uint8_t *deviceB{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceB{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
 
     // allocate memory of C
     std::vector<fp16_t> hostC(lenC);
-    uint8_t *deviceC{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceC{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
     using LayoutA = layout::RowMajor; // can be RowMajor or ColumnMajor
     using LayoutB = layout::RowMajor; // can be RowMajor or ColumnMajor
@@ -105,7 +106,7 @@ static void Run(const Options &options) {
         MatmulKernel::Arguments arguments{batchCount, options.problemShape, deviceA, deviceB, deviceC};
         MatmulAdapter matmulOp;
 
-        uint8_t *deviceWorkspace{nullptr};
+        uint8_t* deviceWorkspace{nullptr};
         matmulOp.Initialize(arguments, deviceWorkspace);
         matmulOp(stream, aicCoreNum);
         ACL_CHECK(aclrtSynchronizeStream(stream));
@@ -122,7 +123,7 @@ static void Run(const Options &options) {
         MatmulKernel::Arguments arguments{batchCount, options.problemShape, deviceA, deviceB, deviceC};
         MatmulAdapter matmulOp;
 
-        uint8_t *deviceWorkspace{nullptr};
+        uint8_t* deviceWorkspace{nullptr};
         matmulOp.Initialize(arguments, deviceWorkspace);
         matmulOp(stream, aicCoreNum);
         ACL_CHECK(aclrtSynchronizeStream(stream));
@@ -149,7 +150,8 @@ static void Run(const Options &options) {
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv) {
+int main(int argc, const char** argv)
+{
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;

@@ -96,14 +96,12 @@ EpilogueOpTag = {
     EpilogueOp.Mul: "Catlass::Epilogue::Fusion::Mul",
     EpilogueOp.Muls: "Catlass::Epilogue::Fusion::Muls",
     EpilogueOp.Sub: "Catlass::Epilogue::Fusion::Sub",
-
     # activation op
     EpilogueOp.LeakyRelu: "Catlass::Epilogue::Fusion::LeakyRelu",
     EpilogueOp.Prelu: "Catlass::Epilogue::Fusion::Prelu",
     EpilogueOp.Relu: "Catlass::Epilogue::Fusion::Relu",
     EpilogueOp.Sigmoid: "Catlass::Epilogue::Fusion::Sigmoid",
     EpilogueOp.Silu: "Catlass::Epilogue::Fusion::Silu",
-
     # tensor
     EpilogueOp.Maxs: "Catlass::Epilogue::Fusion::Maxs",
     EpilogueOp.Mins: "Catlass::Epilogue::Fusion::Mins",
@@ -124,13 +122,14 @@ EpilogueScalarOp = {
 
 
 class CastType(enum.Enum):
-    NONE = enum_auto()    # When there is precision loss in conversion, it means RINT mode; when there is no precision loss, it means no rounding
-    RINT = enum_auto()    # round to nearest even (bankers' rounding)
-    FLOOR = enum_auto()   # round towards negative infinity
-    CEIL = enum_auto()    # round towards positive infinity 
-    ROUND = enum_auto()   # round half away from zero
-    TRUNC = enum_auto()   # round half away from zero
-    ODD = enum_auto()     # Von Neumann rounding, round to nearest odd
+    NONE = enum_auto()  # When there is precision loss in conversion, it means RINT mode; when there is no precision loss, it means no rounding
+    RINT = enum_auto()  # round to nearest even (bankers' rounding)
+    FLOOR = enum_auto()  # round towards negative infinity
+    CEIL = enum_auto()  # round towards positive infinity
+    ROUND = enum_auto()  # round half away from zero
+    TRUNC = enum_auto()  # round half away from zero
+    ODD = enum_auto()  # Von Neumann rounding, round to nearest odd
+
 
 CastTypeTag = {
     CastType.NONE: "AscendC::RoundMode::CAST_NONE",

@@ -34,15 +34,12 @@ struct CopyL1ToL0B<ArchTag, Catlass::Gemm::GemmType<Element, layout::CI1KHKWCOCI
     static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
 
     CATLASS_DEVICE
-    CopyL1ToL0B(){};
+    CopyL1ToL0B() {};
 
     CATLASS_DEVICE
     void operator()(
-        AscendC::LocalTensor<Element> dstTensor,
-        AscendC::LocalTensor<Element> srcTensor,
-        LayoutDst const &layoutDst,
-        LayoutSrc const &layoutSrc
-    )
+        AscendC::LocalTensor<Element> dstTensor, AscendC::LocalTensor<Element> srcTensor, LayoutDst const& layoutDst,
+        LayoutSrc const& layoutSrc)
     {
         AscendC::LoadData2DParams loadDataParams;
 
@@ -56,8 +53,7 @@ struct CopyL1ToL0B<ArchTag, Catlass::Gemm::GemmType<Element, layout::CI1KHKWCOCI
 
         for (uint32_t i = 0; i < layoutDst.shape(1); i++) {
             AscendC::LoadData(
-                dstTensor[i * layoutDst.stride(1)], srcTensor[i * layoutSrc.shape(3) * ELE_NUM_PER_C0], loadDataParams
-            );
+                dstTensor[i * layoutDst.stride(1)], srcTensor[i * layoutSrc.shape(3) * ELE_NUM_PER_C0], loadDataParams);
         }
     }
 };
@@ -71,10 +67,10 @@ struct CopyL1ToL0BTla {
     // Methods
 
     CATLASS_DEVICE
-    CopyL1ToL0BTla(){};
+    CopyL1ToL0BTla() {};
 
     template <class TensorDst, class TensorSrc>
-    CATLASS_DEVICE void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor)
+    CATLASS_DEVICE void operator()(TensorDst const& dstTensor, TensorSrc const& srcTensor)
     {
         AscendC::LoadData2DParams loadDataParams;
 

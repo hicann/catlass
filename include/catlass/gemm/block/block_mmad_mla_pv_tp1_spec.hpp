@@ -27,24 +27,10 @@ namespace Catlass::Gemm::Block {
 ////////////////////////////////////////////////////////////////////
 
 template <
-    class L1TileShape_,
-    class L0TileShape_,
-    class AType_,
-    class BType_,
-    class CType_,
-    class BiasType_,
-    class TileCopy_,
+    class L1TileShape_, class L0TileShape_, class AType_, class BType_, class CType_, class BiasType_, class TileCopy_,
     class TileMmad_>
 struct BlockMmad<
-    MmadAtlasA2MLAPVTp1Spec,
-    L1TileShape_,
-    L0TileShape_,
-    AType_,
-    BType_,
-    CType_,
-    BiasType_,
-    TileCopy_,
-    TileMmad_> {
+    MmadAtlasA2MLAPVTp1Spec, L1TileShape_, L0TileShape_, AType_, BType_, CType_, BiasType_, TileCopy_, TileMmad_> {
 public:
     // Type Aliases
     using DispatchPolicy = MmadAtlasA2MLAPV;
@@ -91,7 +77,7 @@ public:
 
     /// Construct
     CATLASS_DEVICE
-    BlockMmad(Arch::Resource<ArchTag> &resource, uint32_t l1BufAddrStart = L1_PV_ADDR_START)
+    BlockMmad(Arch::Resource<ArchTag>& resource, uint32_t l1BufAddrStart = L1_PV_ADDR_START)
     {
         // Allocate L1 memory space
         for (uint32_t i = 0; i < STAGES; i++) {
@@ -106,14 +92,17 @@ public:
 
     /// Destructor
     CATLASS_DEVICE
-    ~BlockMmad() {}
+    ~BlockMmad()
+    {}
 
     /// Perform a block-scoped matrix multiply-accumulate
     CATLASS_DEVICE
-    void operator()(AscendC::GlobalTensor<ElementA> gA, AscendC::GlobalTensor<ElementA> gB,
-                    AscendC::GlobalTensor<int32_t> gblockTable, AscendC::GlobalTensor<ElementC> gC, LayoutA layoutA,
-                    LayoutB layoutB, LayoutC layoutC, GemmCoord actualShape, uint32_t &nIdx, uint32_t &pingpongFlag, uint32_t &nLoop,
-                    uint32_t &blockSize, uint32_t kvSeqlen, Arch::CrossCoreFlag softmaxReady, uint32_t &pvLoopPingpongIdx)
+    void operator()(
+        AscendC::GlobalTensor<ElementA> gA, AscendC::GlobalTensor<ElementA> gB,
+        AscendC::GlobalTensor<int32_t> gblockTable, AscendC::GlobalTensor<ElementC> gC, LayoutA layoutA,
+        LayoutB layoutB, LayoutC layoutC, GemmCoord actualShape, uint32_t& nIdx, uint32_t& pingpongFlag,
+        uint32_t& nLoop, uint32_t& blockSize, uint32_t kvSeqlen, Arch::CrossCoreFlag softmaxReady,
+        uint32_t& pvLoopPingpongIdx)
     {
         uint32_t rowNum = actualShape.m();
         uint32_t stackSeqTile = actualShape.k();
@@ -155,8 +144,9 @@ public:
 
                 LayoutBInL0 layoutUnitBSplitNInL0 = LayoutBInL0::template MakeLayout<ElementB>(seqTile, embedSplitSize);
                 // copy V from L1 to L0B
-                copyL1ToL0B(l0BTensor[L0ABPingPongFlag], l1BTensor[L1ABPingPongFlag], layoutUnitBSplitNInL0,
-                            layoutUnitBSplitNInL1);
+                copyL1ToL0B(
+                    l0BTensor[L0ABPingPongFlag], l1BTensor[L1ABPingPongFlag], layoutUnitBSplitNInL0,
+                    layoutUnitBSplitNInL1);
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(L1ABPingPongFlag + 4);
                 if (embedSplitIdx == 0 && blockStackIdx == 0) {
                     Arch::CrossCoreWaitFlag(softmaxReady);
@@ -165,16 +155,16 @@ public:
                 auto layoutASplitK = layoutA.GetTileLayout(MakeCoord(rowNum, seqTile));
                 LayoutAInL1 layoutASplitKInL1 = LayoutAInL1::template MakeLayout<ElementA>(rowNum, seqTile);
                 // copy P to L1
-                copyGmToL1A(l1ATensor[L1ABPingPongFlag], gA[blockStackIdx * blockSize], layoutASplitKInL1,
-                            layoutASplitK);
+                copyGmToL1A(
+                    l1ATensor[L1ABPingPongFlag], gA[blockStackIdx * blockSize], layoutASplitKInL1, layoutASplitK);
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(EVENT_ID7);
 
                 // copy P to l0a
                 AscendC::WaitFlag<AscendC::HardEvent::MTE2_MTE1>(EVENT_ID7);
                 AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(L0ABPingPongFlag);
                 LayoutAInL0 layoutASplitKInL0 = LayoutAInL0::template MakeLayout<ElementA>(rowNum, seqTile);
-                copyL1ToL0A(l0ATensor[L0ABPingPongFlag], l1ATensor[L1ABPingPongFlag], layoutASplitKInL0,
-                            layoutASplitKInL1);
+                copyL1ToL0A(
+                    l0ATensor[L0ABPingPongFlag], l1ATensor[L1ABPingPongFlag], layoutASplitKInL0, layoutASplitKInL1);
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(L1ABPingPongFlag + 6);
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_M>(L0ABPingPongFlag);
                 // mmad
@@ -182,8 +172,9 @@ public:
                 if (blockStackIdx == 0) {
                     AscendC::WaitFlag<AscendC::HardEvent::FIX_M>(L0CPingPongFlag);
                 }
-                tileMmad(l0CTensor[L0CPingPongFlag], l0ATensor[L0ABPingPongFlag], l0BTensor[L0ABPingPongFlag],
-                         rowNumRound, embedSplitSize, seqTile, blockStackIdx == 0);
+                tileMmad(
+                    l0CTensor[L0CPingPongFlag], l0ATensor[L0ABPingPongFlag], l0BTensor[L0ABPingPongFlag], rowNumRound,
+                    embedSplitSize, seqTile, blockStackIdx == 0);
                 AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(L0ABPingPongFlag + 2);
                 AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(L0ABPingPongFlag);
                 pvLoopPingpongIdx++;
@@ -194,8 +185,8 @@ public:
             auto blockShape = MakeCoord(rowNum, embedSplitSize);
             auto layoutInL0C = LayoutCInL0::MakeLayoutInL0C(blockShape);
             auto layoutCSplitN = layoutC.GetTileLayout(MakeCoord(rowNumRound, embedSplitSizeRound));
-            copyL0CToGm(gC[embedSplitIdx * embedSplitSizeRound], l0CTensor[L0CPingPongFlag], layoutCSplitN,
-                        layoutInL0C);
+            copyL0CToGm(
+                gC[embedSplitIdx * embedSplitSizeRound], l0CTensor[L0CPingPongFlag], layoutCSplitN, layoutInL0C);
             AscendC::SetFlag<AscendC::HardEvent::FIX_M>(L0CPingPongFlag);
         }
     }
@@ -218,6 +209,6 @@ protected:
 
 ////////////////////////////////////////////////////////////////////
 
-} // namespace Catlass::Gemm::block
+} // namespace Catlass::Gemm::Block
 
 #endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_MLA_PV_TP1_SPEC_HPP

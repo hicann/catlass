@@ -20,7 +20,8 @@
 
 namespace Catlass::Conv::Tile {
 
-enum class ScaleGranularity {
+enum class ScaleGranularity
+{
     UNDEFINED = -1,
     NO_QUANT = 0,
     PER_TENSOR,
@@ -29,9 +30,7 @@ enum class ScaleGranularity {
 };
 
 template <
-    class ArchTag,
-    class ElementSrc,
-    class ElementDst,
+    class ArchTag, class ElementSrc, class ElementDst,
     ScaleGranularity DEQUANT_GRANULARITY = ScaleGranularity::NO_QUANT>
 struct CopyL0CToGmQuantMode {
     static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy l0c to gm, can not find the specialization.");
@@ -50,22 +49,16 @@ struct CopyL0CToGmQuantMode<Catlass::Arch::AtlasA2, float, bfloat16_t, ScaleGran
 };
 
 template <
-    class ArchTag,
-    class ElementAccumulator,
-    class GmType,
-    ScaleGranularity DEQUANT_GRANULARITY = ScaleGranularity::NO_QUANT,
-    bool ReluEnable = false>
+    class ArchTag, class ElementAccumulator, class GmType,
+    ScaleGranularity DEQUANT_GRANULARITY = ScaleGranularity::NO_QUANT, bool ReluEnable = false>
 struct CopyL0CToGm {
     static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy l0c to gm, can not find the specialization.");
 };
 
 template <class ElementAccumulator_, class ElementDst_, bool ReluEnable_>
 struct CopyL0CToGm<
-    Catlass::Arch::AtlasA2,
-    ElementAccumulator_,
-    Gemm::GemmType<ElementDst_, layout::NC1HWC0>,
-    ScaleGranularity::NO_QUANT,
-    ReluEnable_> {
+    Catlass::Arch::AtlasA2, ElementAccumulator_, Gemm::GemmType<ElementDst_, layout::NC1HWC0>,
+    ScaleGranularity::NO_QUANT, ReluEnable_> {
     using ArchTag = Catlass::Arch::AtlasA2;
     using ElementDst = ElementDst_;
     using ElementSrc = ElementAccumulator_;
@@ -78,11 +71,9 @@ struct CopyL0CToGm<
 
     CATLASS_DEVICE
     void operator()(
-        AscendC::GlobalTensor<ElementDst> const &dst,
-        AscendC::LocalTensor<ElementSrc> const &src,
-        LayoutDst const &dstLayout,
-        uint8_t unitFlag = 0
-    ) // (Batch, Cout1, Ho, Wo, C0)
+        AscendC::GlobalTensor<ElementDst> const& dst, AscendC::LocalTensor<ElementSrc> const& src,
+        LayoutDst const& dstLayout,
+        uint8_t unitFlag = 0) // (Batch, Cout1, Ho, Wo, C0)
     {
         // compute sizes
         uint32_t cout1Actual = dstLayout.shape(1);
@@ -104,8 +95,7 @@ struct CopyL0CToGm<
                 woActual,  // mSize
                 howoRound, // srcStride
                 HoWo,      // dstStride
-                reluEn
-            );
+                reluEn);
             fixPipeParams.quantPre = quantPre;
             AscendC::Fixpipe<ElementDst, ElementSrc, AscendC::CFG_NZ>(dst[gmOffset], src[l0Offset], fixPipeParams);
         }
@@ -114,22 +104,14 @@ struct CopyL0CToGm<
 
 ///////////////////////////////////////////TileCopyTla//////////////////////////////////////////////////////
 template <
-    class ArchTag,
-    class TensorSrc,
-    class TensorDst,
-    ScaleGranularity DEQUANT_GRANULARITY = ScaleGranularity::NO_QUANT,
+    class ArchTag, class TensorSrc, class TensorDst, ScaleGranularity DEQUANT_GRANULARITY = ScaleGranularity::NO_QUANT,
     bool ReluEnable = false>
 struct CopyL0CToGmTla {
     static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy l0c to gm, can not find the specialization.");
 };
 
 template <class TensorSrc_, class TensorDst_, bool ReluEnable_>
-struct CopyL0CToGmTla<
-    Catlass::Arch::AtlasA2,
-    TensorSrc_,
-    TensorDst_,
-    ScaleGranularity::NO_QUANT,
-    ReluEnable_> {
+struct CopyL0CToGmTla<Catlass::Arch::AtlasA2, TensorSrc_, TensorDst_, ScaleGranularity::NO_QUANT, ReluEnable_> {
     using ArchTag = Catlass::Arch::AtlasA2;
     using ElementDst = typename TensorDst_::Element;
     using ElementSrc = typename TensorSrc_::Element;
@@ -139,19 +121,18 @@ struct CopyL0CToGmTla<
     static constexpr uint32_t ELE_NUM_PER_C0 = BytesToBits(BYTE_PER_C0) / SizeOfBits<ElementDst>::value;
 
     template <class TensorDst, class TensorSrc>
-    CATLASS_DEVICE 
-    void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor, uint8_t unitFlag = 0)
+    CATLASS_DEVICE void operator()(TensorDst const& dstTensor, TensorSrc const& srcTensor, uint8_t unitFlag = 0)
     {
         // compute sizes
         uint32_t coutRound = tla::get<1, 0>(srcTensor.shape()) * tla::get<1, 1>(srcTensor.shape());
         uint32_t howoRound = tla::get<0, 0>(srcTensor.shape()) * tla::get<0, 1>(srcTensor.shape());
         uint32_t hoActual = tla::get<2>(dstTensor.shape());
         uint32_t woActual = tla::get<3>(dstTensor.shape());
-  
+
         AscendC::FixpipeParamsV220 intriParams;
 
         // Fixpipe layout information
-        intriParams.nSize = coutRound; 
+        intriParams.nSize = coutRound;
         intriParams.mSize = woActual;
         intriParams.srcStride = howoRound;
         intriParams.dstStride = tla::get<1>(dstTensor.stride()) / ELE_NUM_PER_C0;

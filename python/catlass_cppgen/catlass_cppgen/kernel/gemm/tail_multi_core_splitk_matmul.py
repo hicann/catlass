@@ -7,7 +7,7 @@
 # BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE. See LICENSE in the root of
 # the software repository for the full text of the License.
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 from catlass_cppgen.kernel.gemm.gemm_base import GemmKernelBase
 from catlass_cppgen.catlass.gemm_coord import GemmCoord, GemmShape
 from catlass_cppgen.catlass.layout.layout import Layout
@@ -20,15 +20,19 @@ from catlass_cppgen.catlass.gemm.dispatch_policy import (
 
 class TailMultiCoreSplitkMatmulKernel(GemmKernelBase):
     _KERNEL_NAME_BASE = "TailMultiCoreSplitkMatmulTla"
-    _FEATURES = {"is_support_evg": False, "is_support_relu": False, "slice_axis": "K", "is_mix": True}
-    
+    _FEATURES = {
+        "is_support_evg": False,
+        "is_support_relu": False,
+        "slice_axis": "K",
+        "is_mix": True,
+    }
+
     _INCLUDES = [
         "catlass/catlass.hpp",
         "catlass/arch/arch.hpp",
         "catlass/layout/layout.hpp",
         "catlass/status.hpp",
         "tla/layout.hpp",
-
         "catlass/gemm/block/block_mmad.hpp",
         "catlass/gemm/block/block_swizzle.hpp",
         "catlass/gemm/dispatch_policy.hpp",
@@ -36,7 +40,6 @@ class TailMultiCoreSplitkMatmulKernel(GemmKernelBase):
         "catlass/gemm/device/device_gemm.hpp",
         "catlass/gemm_coord.hpp",
         "catlass/matrix_coord.hpp",
-        
         "catlass/gemm/kernel/tail_multi_core_splitk_matmul_tla.hpp",
     ]
     _KERNEL_NAME = "{arch_name}_{kernel_name}_{dispatch_policy_name}_{swizzle_name}_{l1_tile_shape_str}_{l0_tile_shape_str}"
@@ -68,7 +71,7 @@ class TailMultiCoreSplitkMatmulKernel(GemmKernelBase):
     using LayoutTagA = {layout_A};
     using LayoutTagB = {layout_B};
     using LayoutTagC = layout::RowMajor;
-   
+
     using TileCopy = Gemm::Tile::PackedTileCopyTla<ArchTag, ElementA, LayoutTagA, ElementB, LayoutTagB, ElementC, LayoutTagC, ElementBias>;
     using BlockMmad = Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, ElementA, ElementB, ElementC, ElementBias, TileCopy>;
     using BlockEpilogue = void;
@@ -91,9 +94,9 @@ class TailMultiCoreSplitkMatmulKernel(GemmKernelBase):
     auto layoutB = tla::MakeLayoutFromTag(tagB);
     auto layoutC = tla::MakeLayoutFromTag(tagC);
 """
-        
+
     def get_default_tile_shape(self) -> Tuple[GemmShape, GemmShape]:
-        element_max_size = max(
+        element_max_size = max(  # noqa: F841
             self.element_A.data_size(),
             self.element_B.data_size(),
             self.element_C.data_size(),
@@ -103,15 +106,15 @@ class TailMultiCoreSplitkMatmulKernel(GemmKernelBase):
             return GemmShape(240, 256, 128), GemmShape(240, 256, 32)
         else:
             return GemmShape(256, 256, 128), GemmShape(256, 256, 32)
-    
+
     def get_default_dispatch_policy_list(self) -> List:
         """获取 TailMultiCoreSplitkMatmulKernel 的默认 dispatch_policy 列表.
-        
+
         :return: 包含默认 dispatch_policy 的列表，列表的第一个元素 [0] 是默认策略.
         :rtype: List
         """
         return [MmadPingpong(arch_tag=self.arch_tag, enable_unit_flag=True)]
-    
+
     def get_render_params(self, use_constexpr: bool = True) -> Dict[str, Any]:
         """获取渲染参数，包括 kernel 名称格式化参数."""
         params = super().get_render_params(use_constexpr)

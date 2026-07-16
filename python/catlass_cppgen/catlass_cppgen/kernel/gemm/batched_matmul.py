@@ -21,14 +21,18 @@ from catlass_cppgen.catlass.gemm.dispatch_policy import (
 class BatchedMatmulKernel(GemmKernelBase):
     slice_axis = None
     _KERNEL_NAME_BASE = "BatchedMatmulTla"
-    _FEATURES = {"is_support_evg": False, "is_support_relu": False, "slice_axis": None, "is_mix": True}
-    
+    _FEATURES = {
+        "is_support_evg": False,
+        "is_support_relu": False,
+        "slice_axis": None,
+        "is_mix": True,
+    }
+
     _INCLUDES = [
         "catlass/catlass.hpp",
         "catlass/arch/arch.hpp",
         "catlass/layout/layout.hpp",
         "catlass/status.hpp",
-
         "catlass/gemm/block/block_mmad.hpp",
         "catlass/gemm/block/block_swizzle.hpp",
         "catlass/gemm/dispatch_policy.hpp",
@@ -36,9 +40,7 @@ class BatchedMatmulKernel(GemmKernelBase):
         "catlass/gemm/device/device_gemm.hpp",
         "catlass/gemm_coord.hpp",
         "catlass/matrix_coord.hpp",
-
         "tla/layout.hpp",
-
         "catlass/gemm/kernel/batched_matmul_tla.hpp",
     ]
     _KERNEL_NAME = "{arch_name}_{kernel_name}_{dispatch_policy_name}_{swizzle_name}_{l1_tile_shape_str}_{l0_tile_shape_str}"
@@ -67,7 +69,7 @@ class BatchedMatmulKernel(GemmKernelBase):
     using LayoutTagA = {layout_A};
     using LayoutTagB = {layout_B};
     using LayoutTagC = layout::RowMajor;
-   
+
     using TileCopy = Gemm::Tile::PackedTileCopyTla<ArchTag, ElementA, LayoutTagA, ElementB, LayoutTagB, ElementC, LayoutTagC>;
     using BlockMmad = Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, ElementA, ElementB, ElementC, void, TileCopy>;
     using BlockEpilogue = void;
@@ -105,7 +107,7 @@ class BatchedMatmulKernel(GemmKernelBase):
 
     def __init__(self, batchCount: Optional[int] = None, **kwargs):
         """初始化 BatchedMatmulKernel.
-        
+
         :param batchCount: 批处理数量，如果为 None 则使用默认值 1
         :param kwargs: 传递给父类的其他参数，包括 M, K, N 等
         """
@@ -127,22 +129,22 @@ class BatchedMatmulKernel(GemmKernelBase):
         else:
             l1_m, l1_n, l1_k, l0_k = 256, 256, 128, 32
         return GemmShape(l1_m, l1_n, l1_k), GemmShape(l1_m, l1_n, l0_k)
-    
+
     def get_default_dispatch_policy_list(self) -> List:
         """获取 BatchedMatmulKernel 的默认 dispatch_policy 列表.
-        
+
         :return: 包含默认 dispatch_policy 的列表，列表的第一个元素 [0] 是默认策略.
         :rtype: List
         """
         return [MmadPingpong(arch_tag=self.arch_tag, enable_unit_flag=True)]
-    
+
     def get_render_params(self, use_constexpr: bool = True) -> Dict[str, Any]:
         """获取渲染参数，包括动态生成的 dispatch_policy C++ 代码.
-        
+
         :param use_constexpr: 当为 True 时，生成包含常量声明的完整代码块；当为 False 时，只生成 using 语句（使用变量名）
         :return: 渲染参数字典.
         :rtype: Dict[str, Any]
         """
         params = super().get_render_params(use_constexpr)
-        params['batchCount'] = self.batchCount
+        params["batchCount"] = self.batchCount
         return self._add_kernel_name_params(params, self._KERNEL_NAME_BASE)

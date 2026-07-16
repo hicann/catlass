@@ -21,14 +21,18 @@ from catlass_cppgen.catlass.gemm.dispatch_policy import (
 
 class GroupedMatmulSliceMKernel(GemmKernelBase):
     _KERNEL_NAME_BASE = "GroupedMatmulSliceMTla"
-    _FEATURES = {"is_support_evg": False, "is_support_relu": True, "slice_axis": "M", "is_mix": True}
-    
+    _FEATURES = {
+        "is_support_evg": False,
+        "is_support_relu": True,
+        "slice_axis": "M",
+        "is_mix": True,
+    }
+
     _INCLUDES = [
         "catlass/catlass.hpp",
         "catlass/arch/arch.hpp",
         "catlass/layout/layout.hpp",
         "catlass/status.hpp",
-
         "catlass/gemm/block/block_mmad.hpp",
         "catlass/gemm/block/block_swizzle.hpp",
         "catlass/gemm/dispatch_policy.hpp",
@@ -36,7 +40,6 @@ class GroupedMatmulSliceMKernel(GemmKernelBase):
         "catlass/gemm/device/device_gemm.hpp",
         "catlass/gemm_coord.hpp",
         "catlass/matrix_coord.hpp",
-        
         "catlass/gemm/kernel/grouped_matmul_slice_m_tla.hpp",
         "tla/layout.hpp",
     ]
@@ -67,7 +70,7 @@ class GroupedMatmulSliceMKernel(GemmKernelBase):
     using LayoutTagA = {layout_A};
     using LayoutTagB = {layout_B};
     using LayoutTagC = layout::RowMajor;
-   
+
     using TileCopy = Gemm::Tile::PackedTileCopyTla<ArchTag, ElementA, LayoutTagA, ElementB, LayoutTagB, ElementC, LayoutTagC, void, {relu_enable}>;
     using BlockMmadTla = Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, ElementA, ElementB, ElementC, void, TileCopy>;
     using BlockEpilogue = void;
@@ -92,29 +95,36 @@ class GroupedMatmulSliceMKernel(GemmKernelBase):
     auto layoutC = tla::MakeLayoutFromTag(tagC);
 """
 
-    def __init__(self, problemCount: Optional[int] = None, groupList_element: Optional[DataType] = None, **kwargs):
+    def __init__(
+        self,
+        problemCount: Optional[int] = None,
+        groupList_element: Optional[DataType] = None,
+        **kwargs,
+    ):
         """初始化 GroupedMatmulSliceMKernel.
-        
+
         :param problemCount: 问题数量，如果为 None 则使用默认值 1
         :param groupList_element: groupList 的数据类型，如果为 None 则使用默认值 int64_t
         :param kwargs: 传递给父类的其他参数，包括 M, K, N 等
         """
         super().__init__(**kwargs)
         self.problemCount = problemCount if problemCount is not None else 1
-        self.groupList_element = groupList_element if groupList_element is not None else DataType.INT64
+        self.groupList_element = (
+            groupList_element if groupList_element is not None else DataType.INT64
+        )
 
     def get_default_tile_shape(self) -> Tuple[GemmShape, GemmShape]:
         """获取默认的 tile shape.
-        
+
         根据 grouped_matmul_slice_m.cpp 中的设置：
         L1TileShape = Shape<Int<256>, Int<256>, Int<256>>
         L0TileShape = Shape<Int<256>, Int<256>, Int<64>>
         """
         return GemmShape(256, 256, 256), GemmShape(256, 256, 64)
-    
+
     def get_default_dispatch_policy_list(self) -> List:
         """获取 GroupedMatmulSliceMKernel 的默认 dispatch_policy 列表.
-        
+
         :return: 包含默认 dispatch_policy 的列表，列表的第一个元素 [0] 是默认策略.
         :rtype: List
         """
@@ -122,15 +132,15 @@ class GroupedMatmulSliceMKernel(GemmKernelBase):
 
     def get_render_params(self, use_constexpr: bool = True) -> Dict[str, Any]:
         """获取渲染参数，包括动态生成的 dispatch_policy C++ 代码.
-        
+
         :param use_constexpr: 当为 True 时，生成包含常量声明的完整代码块；当为 False 时，只生成 using 语句（使用变量名）
         :return: 渲染参数字典.
         :rtype: Dict[str, Any]
         """
         params = super().get_render_params(use_constexpr)
-        params['problemCount'] = self.problemCount
+        params["problemCount"] = self.problemCount
         # 将 groupList_element 转换为 C++ 类型字符串
-        params['groupList_element_type'] = get_type_name(self.groupList_element)
+        params["groupList_element_type"] = get_type_name(self.groupList_element)
         # 添加 relu_enable 参数
-        params['relu_enable'] = 'true' if self.relu_enable else 'false'
+        params["relu_enable"] = "true" if self.relu_enable else "false"
         return self._add_kernel_name_params(params, self._KERNEL_NAME_BASE)

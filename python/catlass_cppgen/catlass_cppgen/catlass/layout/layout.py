@@ -11,9 +11,11 @@ from abc import ABC, abstractmethod
 from math import prod
 from typing import Iterable
 
+
 class Coord:
     def __init__(self, value: Iterable[int]):
         self.idx = tuple(value)
+
 
 class Layout(ABC):
     value: str = ""
@@ -86,17 +88,20 @@ class PaddingRowMajor(Layout):
     def __init__(self, shape: tuple[int, int], block_shape: tuple[int, int]):
         super().__init__(
             (
-                block_shape[0], 
-                (shape[0] + block_shape[0] - 1)//(block_shape[0]),
-                block_shape[1], 
-                (shape[1] + block_shape[1] - 1)//(block_shape[1])
+                block_shape[0],
+                (shape[0] + block_shape[0] - 1) // (block_shape[0]),
+                block_shape[1],
+                (shape[1] + block_shape[1] - 1) // (block_shape[1]),
             ),
             (
                 block_shape[1],
-                block_shape[0] * block_shape[1] * (shape[1] + block_shape[1] - 1)//(block_shape[1]),
-                1, 
-                block_shape[0] * block_shape[1]
-            )
+                block_shape[0]
+                * block_shape[1]
+                * (shape[1] + block_shape[1] - 1)
+                // (block_shape[1]),
+                1,
+                block_shape[0] * block_shape[1],
+            ),
         )
 
     def is_need_padding(self, align: int) -> bool:
@@ -109,17 +114,20 @@ class PaddingColumnMajor(Layout):
     def __init__(self, shape: tuple[int, int], block_shape: tuple[int, int]):
         super().__init__(
             (
-                block_shape[0], 
-                (shape[0] + block_shape[0] - 1)//(block_shape[0]),
-                block_shape[1], 
-                (shape[1] + block_shape[1] - 1)//(block_shape[1])
+                block_shape[0],
+                (shape[0] + block_shape[0] - 1) // (block_shape[0]),
+                block_shape[1],
+                (shape[1] + block_shape[1] - 1) // (block_shape[1]),
             ),
             (
-                1, 
-                block_shape[0] * block_shape[1], 
-                block_shape[1], 
-                block_shape[1] * block_shape[0] * (shape[0] + block_shape[0] - 1)//(block_shape[0])
-            )
+                1,
+                block_shape[0] * block_shape[1],
+                block_shape[1],
+                block_shape[1]
+                * block_shape[0]
+                * (shape[0] + block_shape[0] - 1)
+                // (block_shape[0]),
+            ),
         )
 
     def is_need_padding(self, align: int) -> bool:
@@ -135,6 +143,7 @@ class VectorLayout(Layout):
     def is_need_padding(self, align: int) -> bool:
         """检查向量布局是否需要 padding"""
         return False
+
 
 class PrivateLayout(Layout):
     def is_need_padding(self, align: int) -> bool:

@@ -24,25 +24,20 @@ namespace Catlass::Epilogue::Tile {
 /// @tparam ArchTag_ is the architecture tag.
 /// @tparam ComputeType_ includes the element type and layout information.
 /// @tparam TileShape_ is the shape (m, n).
-template <
-    class ArchTag_,
-    class ComputeType_,
-    class TileShape_
->
+template <class ArchTag_, class ComputeType_, class TileShape_>
 struct TileRowBroadcastMul {
     using ArchTag = ArchTag_;
     using ElementCompute = typename ComputeType_::Element;
     using TileShape = TileShape_;
 
     CATLASS_DEVICE
-    TileRowBroadcastMul() {}
+    TileRowBroadcastMul()
+    {}
 
     CATLASS_DEVICE
     void operator()(
-        AscendC::LocalTensor<ElementCompute> const &ubOut,
-        AscendC::LocalTensor<ElementCompute> const &ubIn0,
-        AscendC::LocalTensor<ElementCompute> const &ubIn1
-    )
+        AscendC::LocalTensor<ElementCompute> const& ubOut, AscendC::LocalTensor<ElementCompute> const& ubIn0,
+        AscendC::LocalTensor<ElementCompute> const& ubIn1)
     {
         constexpr uint32_t maxRepeatTimes = 255;
         constexpr uint32_t eleNumPerBlk = BYTE_PER_BLK / sizeof(ElementCompute);
@@ -65,33 +60,26 @@ struct TileRowBroadcastMul {
                 uint32_t residueN = TileShape::COLUMN - colOffset;
                 uint64_t mask = (residueN > colNumPerCompute) ? colNumPerCompute : residueN;
                 AscendC::Mul(
-                    ubOut[rowOffset * TileShape::COLUMN + colOffset],
-                    ubIn0[rowOffset * TileShape::COLUMN + colOffset],
-                    ubIn1[colOffset],
-                    mask, repeatTimes, repeatParams
-                );
+                    ubOut[rowOffset * TileShape::COLUMN + colOffset], ubIn0[rowOffset * TileShape::COLUMN + colOffset],
+                    ubIn1[colOffset], mask, repeatTimes, repeatParams);
             }
         }
     }
 };
 
 // TLA version of TileRowBroadcastMul
-template <
-    class ArchTag_,
-    class ElementCompute_,
-    class TileShape_
->
+template <class ArchTag_, class ElementCompute_, class TileShape_>
 struct TileRowBroadcastMulTla {
     using ArchTag = ArchTag_;
     using ElementCompute = ElementCompute_;
     using TileShape = TileShape_;
 
     CATLASS_DEVICE
-    TileRowBroadcastMulTla() {}
+    TileRowBroadcastMulTla()
+    {}
 
-    template<class TensorUbOut, class TensorUbIn0, class TensorUbIn1>
-    CATLASS_DEVICE
-    void operator()(TensorUbOut const &ubOut, TensorUbIn0 const &ubIn0, TensorUbIn1 const &ubIn1)
+    template <class TensorUbOut, class TensorUbIn0, class TensorUbIn1>
+    CATLASS_DEVICE void operator()(TensorUbOut const& ubOut, TensorUbIn0 const& ubIn0, TensorUbIn1 const& ubIn1)
     {
         constexpr uint32_t maxRepeatTimes = 255;
         constexpr uint32_t eleNumPerBlk = BYTE_PER_BLK / sizeof(ElementCompute);
@@ -120,9 +108,7 @@ struct TileRowBroadcastMulTla {
                 AscendC::Mul(
                     ubOut.data()[ubOutOffset + rowOffset * TileShape::COLUMN + colOffset],
                     ubIn0.data()[ubIn0Offset + rowOffset * TileShape::COLUMN + colOffset],
-                    ubIn1.data()[ubIn1Offset + colOffset],
-                    mask, repeatTimes, repeatParams
-                );
+                    ubIn1.data()[ubIn1Offset + colOffset], mask, repeatTimes, repeatParams);
             }
         }
     }
@@ -133,25 +119,20 @@ struct TileRowBroadcastMulTla {
 /// @tparam ArchTag_ is the architecture tag.
 /// @tparam ComputeType_ includes the element type and layout information.
 /// @tparam TileShape_ is the shape (m, n).
-template <
-    class ArchTag_,
-    class ComputeType_,
-    class TileShape_
->
+template <class ArchTag_, class ComputeType_, class TileShape_>
 struct TileOneBlkColumnBroadcastMul {
     using ArchTag = ArchTag_;
     using ElementCompute = typename ComputeType_::Element;
     using TileShape = TileShape_;
 
     CATLASS_DEVICE
-    TileOneBlkColumnBroadcastMul() {}
+    TileOneBlkColumnBroadcastMul()
+    {}
 
     CATLASS_DEVICE
     void operator()(
-        AscendC::LocalTensor<ElementCompute> const &ubOut,
-        AscendC::LocalTensor<ElementCompute> const &ubIn0,
-        AscendC::LocalTensor<ElementCompute> const &ubIn1
-    )
+        AscendC::LocalTensor<ElementCompute> const& ubOut, AscendC::LocalTensor<ElementCompute> const& ubIn0,
+        AscendC::LocalTensor<ElementCompute> const& ubIn1)
     {
         constexpr uint32_t maxRepeatNum = 255;
         constexpr uint32_t eleNumPerBlk = BYTE_PER_BLK / sizeof(ElementCompute);
@@ -172,36 +153,29 @@ struct TileOneBlkColumnBroadcastMul {
             uint64_t mask = ((residueM > rowNumPerCompute) ? rowNumPerCompute : residueM) * eleNumPerBlk;
             for (uint32_t colOffset = 0; colOffset < TileShape::COLUMN; colOffset += colNumPerCompute) {
                 uint32_t residueN = TileShape::COLUMN - colOffset;
-                uint8_t repeatTimes = static_cast<uint8_t>(
-                    ((residueN > colNumPerCompute) ? colNumPerCompute : residueN) / eleNumPerBlk);
+                uint8_t repeatTimes =
+                    static_cast<uint8_t>(((residueN > colNumPerCompute) ? colNumPerCompute : residueN) / eleNumPerBlk);
                 AscendC::Mul(
-                    ubOut[rowOffset * TileShape::COLUMN + colOffset],
-                    ubIn0[rowOffset * TileShape::COLUMN + colOffset],
-                    ubIn1[rowOffset * eleNumPerBlk],
-                    mask, repeatTimes, repeatParams
-                );
+                    ubOut[rowOffset * TileShape::COLUMN + colOffset], ubIn0[rowOffset * TileShape::COLUMN + colOffset],
+                    ubIn1[rowOffset * eleNumPerBlk], mask, repeatTimes, repeatParams);
             }
         }
     }
 };
 
 // TLA version of TileOneBlkColumnBroadcastMul
-template <
-    class ArchTag_,
-    class ElementCompute_,
-    class TileShape_
->
+template <class ArchTag_, class ElementCompute_, class TileShape_>
 struct TileOneBlkColumnBroadcastMulTla {
     using ArchTag = ArchTag_;
     using ElementCompute = ElementCompute_;
     using TileShape = TileShape_;
 
     CATLASS_DEVICE
-    TileOneBlkColumnBroadcastMulTla() {}
+    TileOneBlkColumnBroadcastMulTla()
+    {}
 
-    template<class TensorUbOut, class TensorUbIn0, class TensorUbIn1>
-    CATLASS_DEVICE
-    void operator()(TensorUbOut const &ubOut, TensorUbIn0 const &ubIn0, TensorUbIn1 const &ubIn1)
+    template <class TensorUbOut, class TensorUbIn0, class TensorUbIn1>
+    CATLASS_DEVICE void operator()(TensorUbOut const& ubOut, TensorUbIn0 const& ubIn0, TensorUbIn1 const& ubIn1)
     {
         constexpr uint32_t maxRepeatNum = 255;
         constexpr uint32_t eleNumPerBlk = BYTE_PER_BLK / sizeof(ElementCompute);
@@ -226,14 +200,12 @@ struct TileOneBlkColumnBroadcastMulTla {
             uint64_t mask = ((residueM > rowNumPerCompute) ? rowNumPerCompute : residueM) * eleNumPerBlk;
             for (uint32_t colOffset = 0; colOffset < TileShape::COLUMN; colOffset += colNumPerCompute) {
                 uint32_t residueN = TileShape::COLUMN - colOffset;
-                uint8_t repeatTimes = static_cast<uint8_t>(
-                    ((residueN > colNumPerCompute) ? colNumPerCompute : residueN) / eleNumPerBlk);
+                uint8_t repeatTimes =
+                    static_cast<uint8_t>(((residueN > colNumPerCompute) ? colNumPerCompute : residueN) / eleNumPerBlk);
                 AscendC::Mul(
                     ubOut.data()[ubOutOffset + rowOffset * TileShape::COLUMN + colOffset],
                     ubIn0.data()[ubIn0Offset + rowOffset * TileShape::COLUMN + colOffset],
-                    ubIn1.data()[ubIn1Offset + rowOffset * eleNumPerBlk],
-                    mask, repeatTimes, repeatParams
-                );
+                    ubIn1.data()[ubIn1Offset + rowOffset * eleNumPerBlk], mask, repeatTimes, repeatParams);
             }
         }
     }

@@ -15,17 +15,16 @@
 #include <torch_npu/csrc/framework/utils/CalcuOpUtil.h>
 #include <torch_npu/csrc/framework/utils/OpAdapter.h>
 
-#define RUN_NPU_FUNC(func, ...)                                                                                        \
-    do {                                                                                                               \
-        if ((func) == nullptr) {                                                                                       \
-            throw std::runtime_error(                                                                                  \
-                std::string("Function pointer is null at ") + __FILE__ + ":" + std::to_string(__LINE__) + " in "       \
-                + #func                                                                                                \
-            );                                                                                                         \
-        }                                                                                                              \
-        at_npu::native::OpCommand::RunOpApiV2(#func, [=]() -> int {                                                    \
-            func(__VA_ARGS__);                                                                                         \
-            return 0;                                                                                                  \
-        });                                                                                                            \
+#define RUN_NPU_FUNC(func, ...)                                                                                    \
+    do {                                                                                                           \
+        if ((func) == nullptr) {                                                                                   \
+            throw std::runtime_error(                                                                              \
+                std::string("Function pointer is null at ") + __FILE__ + ":" + std::to_string(__LINE__) + " in " + \
+                #func);                                                                                            \
+        }                                                                                                          \
+        at_npu::native::OpCommand::RunOpApiV2(#func, [=]() -> int {                                                \
+            func(__VA_ARGS__);                                                                                     \
+            return 0;                                                                                              \
+        });                                                                                                        \
     } while (false)
 #endif

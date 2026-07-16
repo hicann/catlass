@@ -16,9 +16,6 @@ from catlass_cppgen.catlass.gemm_coord import GemmShape
 from catlass_cppgen.catlass.arch.arch import Arch
 from catlass_cppgen.catlass.gemm.dispatch_policy import (
     MmadPingpong,
-    MmadPreloadAsyncWithCallback,
-    MmadMultiBatch,
-    MmadAtlasA2Pingpong,
 )
 from catlass_cppgen.kernel.gemm import (
     BasicMatmulKernel,
@@ -39,48 +36,55 @@ def find_kernel_by_type(kernels, kernel_type):
             return kernel
     return None
 
+
 class TestGemm(unittest.TestCase):
     def setUp(self):
         self.check = TestAssertions(self)
 
     def test_basic_matmul_kernel(self):
         a = OpTensor.from_shape_stride(
-            shape=(128, 256),
-            stride=(256, 1),
-            dtype=DataType.FLOAT
+            shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
         )
         b = OpTensor.from_shape_stride(
-            shape=(256, 384),
-            stride=(384, 1),
-            dtype=DataType.FLOAT
+            shape=(256, 384), stride=(384, 1), dtype=DataType.FLOAT
         )
 
-        gemm_plan = Gemm(atlas_arch=Arch.Ascend950, element=DataType.FLOAT, layout=RowMajor, A=a, B=b)
+        gemm_plan = Gemm(
+            atlas_arch=Arch.Ascend950, element=DataType.FLOAT, layout=RowMajor, A=a, B=b
+        )
         kernels = gemm_plan.get_kernels()
-        
+
         # 根据类型查找 kernel，而不是使用固定索引
         basic_kernel = find_kernel_by_type(kernels, BasicMatmulKernel)
         if basic_kernel is None:
-            raise ValueError(f"No kernel named 'BasicMatmulKernel' found, available kernel list: {[type(k).__name__ for k in kernels]}")
+            raise ValueError(
+                f"No kernel named 'BasicMatmulKernel' found, available kernel list: {[type(k).__name__ for k in kernels]}"
+            )
 
         # 基础特征检查
         self.assertEqual(type(basic_kernel), BasicMatmulKernel)
-        self.assertFalse(basic_kernel.relu_enable) # default to False
+        self.assertFalse(basic_kernel.relu_enable)  # default to False
 
         basic_kernel.tune(
-            GemmShape(128, 256, 64), 
             GemmShape(128, 256, 64),
-            dispatch_policy=MmadPingpong(arch_tag=Arch.Ascend950)
+            GemmShape(128, 256, 64),
+            dispatch_policy=MmadPingpong(arch_tag=Arch.Ascend950),
         )
 
         params = basic_kernel.gen_params_device(def_mode=False)
-        self.check.test_params(params, (
-            "problemShape", 
-            "deviceA", "layoutA",
-            "deviceB", "layoutB",
-            "deviceC", "layoutC",
-            "deviceBias"
-        ))
+        self.check.test_params(
+            params,
+            (
+                "problemShape",
+                "deviceA",
+                "layoutA",
+                "deviceB",
+                "layoutB",
+                "deviceC",
+                "layoutC",
+                "deviceBias",
+            ),
+        )
 
         kernel_str = basic_kernel.gen_kernel_template()
 
@@ -96,30 +100,32 @@ class TestGemm(unittest.TestCase):
 
     def test_batched_matmul(self):
         a = OpTensor.from_shape_stride(
-            shape=(8, 128, 256),
-            stride=(32768, 256, 1),
-            dtype=DataType.FLOAT
+            shape=(8, 128, 256), stride=(32768, 256, 1), dtype=DataType.FLOAT
         )
         b = OpTensor.from_shape_stride(
-            shape=(8, 256, 384),
-            stride=(98304, 384, 1),
-            dtype=DataType.FLOAT
+            shape=(8, 256, 384), stride=(98304, 384, 1), dtype=DataType.FLOAT
         )
-        gemm_plan = Gemm(atlas_arch=Arch.Ascend950, element_C=DataType.FLOAT, core_num=8, A=a, B=b)
+        gemm_plan = Gemm(
+            atlas_arch=Arch.Ascend950, element_C=DataType.FLOAT, core_num=8, A=a, B=b
+        )
         kernels = gemm_plan.get_kernels()
 
         batched_kernel = find_kernel_by_type(kernels, BatchedMatmulKernel)
         if batched_kernel is None:
-            raise ValueError(f"No kernel named 'BatchedMatmulKernel' found, available kernel list: {[type(k).__name__ for k in kernels]}")
+            raise ValueError(
+                f"No kernel named 'BatchedMatmulKernel' found, available kernel list: {[type(k).__name__ for k in kernels]}"
+            )
 
         # 基础特征检查
         self.assertEqual(type(batched_kernel), BatchedMatmulKernel)
-        self.assertFalse(batched_kernel.relu_enable) # default to False
+        self.assertFalse(batched_kernel.relu_enable)  # default to False
 
         batched_kernel.tune(
-            GemmShape(128, 256, 64), 
             GemmShape(128, 256, 64),
-            dispatch_policy=MmadPingpong(arch_tag=Arch.Ascend950, enable_unit_flag=True)
+            GemmShape(128, 256, 64),
+            dispatch_policy=MmadPingpong(
+                arch_tag=Arch.Ascend950, enable_unit_flag=True
+            ),
         )
 
         kernel_str = batched_kernel.gen_kernel_template()
@@ -136,22 +142,22 @@ class TestGemm(unittest.TestCase):
 
     def test_basic_matmul_kernel_with_relu(self):
         a = OpTensor.from_shape_stride(
-            shape=(128, 256),
-            stride=(256, 1),
-            dtype=DataType.FLOAT
+            shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
         )
         b = OpTensor.from_shape_stride(
-            shape=(256, 384),
-            stride=(384, 1),
-            dtype=DataType.FLOAT
+            shape=(256, 384), stride=(384, 1), dtype=DataType.FLOAT
         )
 
-        gemm_plan = Gemm(atlas_arch=Arch.Ascend950, element=DataType.FLOAT, layout=RowMajor, A=a, B=b)
+        gemm_plan = Gemm(
+            atlas_arch=Arch.Ascend950, element=DataType.FLOAT, layout=RowMajor, A=a, B=b
+        )
         kernels = gemm_plan.get_kernels()
 
         basic_kernel = find_kernel_by_type(kernels, BasicMatmulKernel)
         if basic_kernel is None:
-            raise ValueError(f"No kernel named 'BasicMatmulKernel' found, available kernel list: {[type(k).__name__ for k in kernels]}")
+            raise ValueError(
+                f"No kernel named 'BasicMatmulKernel' found, available kernel list: {[type(k).__name__ for k in kernels]}"
+            )
 
         self.assertEqual(type(basic_kernel), BasicMatmulKernel)
         self.assertFalse(basic_kernel.relu_enable)
@@ -160,7 +166,7 @@ class TestGemm(unittest.TestCase):
             GemmShape(128, 256, 64),
             GemmShape(128, 256, 64),
             dispatch_policy=MmadPingpong(arch_tag=Arch.Ascend950),
-            relu_enable=True
+            relu_enable=True,
         )
         self.assertTrue(basic_kernel.relu_enable)
 
@@ -178,22 +184,22 @@ class TestGemm(unittest.TestCase):
 
     def test_basic_matmul_kernel_with_is_hf32(self):
         a = OpTensor.from_shape_stride(
-            shape=(128, 256),
-            stride=(256, 1),
-            dtype=DataType.FLOAT
+            shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
         )
         b = OpTensor.from_shape_stride(
-            shape=(256, 384),
-            stride=(384, 1),
-            dtype=DataType.FLOAT
+            shape=(256, 384), stride=(384, 1), dtype=DataType.FLOAT
         )
 
-        gemm_plan = Gemm(atlas_arch=Arch.Ascend950, element=DataType.FLOAT, layout=RowMajor, A=a, B=b)
+        gemm_plan = Gemm(
+            atlas_arch=Arch.Ascend950, element=DataType.FLOAT, layout=RowMajor, A=a, B=b
+        )
         kernels = gemm_plan.get_kernels()
 
         basic_kernel = find_kernel_by_type(kernels, BasicMatmulKernel)
         if basic_kernel is None:
-            raise ValueError(f"No kernel named 'BasicMatmulKernel' found, available kernel list: {[type(k).__name__ for k in kernels]}")
+            raise ValueError(
+                f"No kernel named 'BasicMatmulKernel' found, available kernel list: {[type(k).__name__ for k in kernels]}"
+            )
 
         self.assertEqual(type(basic_kernel), BasicMatmulKernel)
 
@@ -201,7 +207,7 @@ class TestGemm(unittest.TestCase):
             GemmShape(128, 256, 64),
             GemmShape(128, 256, 64),
             dispatch_policy=MmadPingpong(arch_tag=Arch.Ascend950),
-            is_hf32=True
+            is_hf32=True,
         )
         self.assertTrue(basic_kernel.dispatch_policy[0].use_hf32_mode)
 
@@ -219,49 +225,53 @@ class TestGemm(unittest.TestCase):
 
     def test_matmul_with_bias(self):
         a = OpTensor.from_shape_stride(
-            shape=(128, 256),
-            stride=(256, 1),
-            dtype=DataType.FLOAT
+            shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
         )
         b = OpTensor.from_shape_stride(
-            shape=(256, 384),
-            stride=(384, 1),
-            dtype=DataType.FLOAT
+            shape=(256, 384), stride=(384, 1), dtype=DataType.FLOAT
         )
         bias = OpTensor.from_shape_stride(
-            shape=(384,),
-            stride=(1,),
-            dtype=DataType.FLOAT
+            shape=(384,), stride=(1,), dtype=DataType.FLOAT
         )
 
         gemm_plan = Gemm(
             atlas_arch=Arch.Ascend950,
             element=DataType.FLOAT,
             layout=RowMajor,
-            A=a, B=b, Bias=bias
+            A=a,
+            B=b,
+            Bias=bias,
         )
         kernels = gemm_plan.get_kernels()
 
         basic_kernel = find_kernel_by_type(kernels, BasicMatmulKernel)
         if basic_kernel is None:
-            raise ValueError(f"No kernel named 'BasicMatmulKernel' found, available kernel list: {[type(k).__name__ for k in kernels]}")
+            raise ValueError(
+                f"No kernel named 'BasicMatmulKernel' found, available kernel list: {[type(k).__name__ for k in kernels]}"
+            )
 
         self.assertEqual(type(basic_kernel), BasicMatmulKernel)
 
         basic_kernel.tune(
             GemmShape(128, 256, 64),
             GemmShape(128, 256, 64),
-            dispatch_policy=MmadPingpong(arch_tag=Arch.Ascend950)
+            dispatch_policy=MmadPingpong(arch_tag=Arch.Ascend950),
         )
 
         params = basic_kernel.gen_params_device(def_mode=False)
-        self.check.test_params(params, (
-            "problemShape",
-            "deviceA", "layoutA",
-            "deviceB", "layoutB",
-            "deviceC", "layoutC",
-            "deviceBias"
-        ))
+        self.check.test_params(
+            params,
+            (
+                "problemShape",
+                "deviceA",
+                "layoutA",
+                "deviceB",
+                "layoutB",
+                "deviceC",
+                "layoutC",
+                "deviceBias",
+            ),
+        )
 
         kernel_str = basic_kernel.gen_kernel_template()
 
@@ -277,59 +287,60 @@ class TestGemm(unittest.TestCase):
 
     def test_tile_shape_with_bias(self):
         a = OpTensor.from_shape_stride(
-            shape=(128, 256),
-            stride=(256, 1),
-            dtype=DataType.FLOAT
+            shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
         )
         b = OpTensor.from_shape_stride(
-            shape=(256, 384),
-            stride=(384, 1),
-            dtype=DataType.FLOAT
+            shape=(256, 384), stride=(384, 1), dtype=DataType.FLOAT
         )
         bias = OpTensor.from_shape_stride(
-            shape=(384,),
-            stride=(1,),
-            dtype=DataType.FLOAT
+            shape=(384,), stride=(1,), dtype=DataType.FLOAT
         )
 
         gemm_plan_without_bias = Gemm(
-            atlas_arch=Arch.Ascend950,
-            element=DataType.FLOAT,
-            layout=RowMajor,
-            A=a, B=b
+            atlas_arch=Arch.Ascend950, element=DataType.FLOAT, layout=RowMajor, A=a, B=b
         )
         kernels_without_bias = gemm_plan_without_bias.get_kernels()
-        basic_kernel_without_bias = find_kernel_by_type(kernels_without_bias, BasicMatmulKernel)
+        basic_kernel_without_bias = find_kernel_by_type(
+            kernels_without_bias, BasicMatmulKernel
+        )
         if basic_kernel_without_bias is None:
-            raise ValueError(f"No kernel named 'BasicMatmulKernel' found, available kernel list: {[type(k).__name__ for k in kernels_without_bias]}")
+            raise ValueError(
+                f"No kernel named 'BasicMatmulKernel' found, available kernel list: {[type(k).__name__ for k in kernels_without_bias]}"
+            )
 
         default_shape_no_bias = basic_kernel_without_bias.get_default_tile_shape()
-        self.assertEqual(default_shape_no_bias, (GemmShape(256, 256, 128), GemmShape(256, 256, 32)))
+        self.assertEqual(
+            default_shape_no_bias, (GemmShape(256, 256, 128), GemmShape(256, 256, 32))
+        )
 
         gemm_plan_with_bias = Gemm(
             atlas_arch=Arch.Ascend950,
             element=DataType.FLOAT,
             layout=RowMajor,
-            A=a, B=b, Bias=bias
+            A=a,
+            B=b,
+            Bias=bias,
         )
         kernels_with_bias = gemm_plan_with_bias.get_kernels()
-        basic_kernel_with_bias = find_kernel_by_type(kernels_with_bias, BasicMatmulKernel)
+        basic_kernel_with_bias = find_kernel_by_type(
+            kernels_with_bias, BasicMatmulKernel
+        )
         if basic_kernel_with_bias is None:
-            raise ValueError(f"No kernel named 'BasicMatmulKernel' found, available kernel list: {[type(k).__name__ for k in kernels_with_bias]}")
+            raise ValueError(
+                f"No kernel named 'BasicMatmulKernel' found, available kernel list: {[type(k).__name__ for k in kernels_with_bias]}"
+            )
 
         default_shape_with_bias = basic_kernel_with_bias.get_default_tile_shape()
-        self.assertEqual(default_shape_with_bias, (GemmShape(240, 256, 128), GemmShape(240, 256, 32)))
+        self.assertEqual(
+            default_shape_with_bias, (GemmShape(240, 256, 128), GemmShape(240, 256, 32))
+        )
 
     def test_streamk_matmul(self):
         a = OpTensor.from_shape_stride(
-            shape=(1280, 3000),
-            stride=(3000, 1),
-            dtype=DataType.FLOAT
+            shape=(1280, 3000), stride=(3000, 1), dtype=DataType.FLOAT
         )
         b = OpTensor.from_shape_stride(
-            shape=(3000, 256),
-            stride=(256, 1),
-            dtype=DataType.FLOAT
+            shape=(3000, 256), stride=(256, 1), dtype=DataType.FLOAT
         )
 
         gemm_plan = Gemm(
@@ -337,13 +348,16 @@ class TestGemm(unittest.TestCase):
             element=DataType.FLOAT,
             layout=RowMajor,
             core_num=8,
-            A=a, B=b
+            A=a,
+            B=b,
         )
         kernels = gemm_plan.get_kernels()
 
         streamk_kernel = find_kernel_by_type(kernels, StreamkMatmulKernel)
         if streamk_kernel is None:
-            raise ValueError(f"No kernel named 'StreamkMatmulKernel' found, available kernel list: {[type(k).__name__ for k in kernels]}")
+            raise ValueError(
+                f"No kernel named 'StreamkMatmulKernel' found, available kernel list: {[type(k).__name__ for k in kernels]}"
+            )
 
         self.assertEqual(type(streamk_kernel), StreamkMatmulKernel)
         self.assertEqual(streamk_kernel.slice_axis, "K")
@@ -352,7 +366,9 @@ class TestGemm(unittest.TestCase):
         streamk_kernel.tune(
             GemmShape(256, 256, 128),
             GemmShape(256, 256, 32),
-            dispatch_policy=MmadPingpong(arch_tag=Arch.Ascend950, enable_unit_flag=True)
+            dispatch_policy=MmadPingpong(
+                arch_tag=Arch.Ascend950, enable_unit_flag=True
+            ),
         )
 
         kernel_str = streamk_kernel.gen_kernel_template()
@@ -369,14 +385,10 @@ class TestGemm(unittest.TestCase):
 
     def test_multi_core_splitk_matmul_kernel(self):
         a = OpTensor.from_shape_stride(
-            shape=(256, 3000),
-            stride=(3000, 1),
-            dtype=DataType.FLOAT
+            shape=(256, 3000), stride=(3000, 1), dtype=DataType.FLOAT
         )
         b = OpTensor.from_shape_stride(
-            shape=(3000, 256),
-            stride=(256, 1),
-            dtype=DataType.FLOAT
+            shape=(3000, 256), stride=(256, 1), dtype=DataType.FLOAT
         )
 
         gemm_plan = Gemm(
@@ -384,13 +396,16 @@ class TestGemm(unittest.TestCase):
             element=DataType.FLOAT,
             layout=RowMajor,
             core_num=8,
-            A=a, B=b
+            A=a,
+            B=b,
         )
         kernels = gemm_plan.get_kernels()
 
         splitk_kernel = find_kernel_by_type(kernels, MultiCoreSplitkMatmulKernel)
         if splitk_kernel is None:
-            raise ValueError(f"No kernel named 'MultiCoreSplitkMatmulKernel' found, available kernel list: {[type(k).__name__ for k in kernels]}")
+            raise ValueError(
+                f"No kernel named 'MultiCoreSplitkMatmulKernel' found, available kernel list: {[type(k).__name__ for k in kernels]}"
+            )
 
         self.assertEqual(type(splitk_kernel), MultiCoreSplitkMatmulKernel)
         self.assertEqual(splitk_kernel.slice_axis, "K")
@@ -399,7 +414,9 @@ class TestGemm(unittest.TestCase):
         splitk_kernel.tune(
             GemmShape(256, 256, 128),
             GemmShape(256, 256, 32),
-            dispatch_policy=MmadPingpong(arch_tag=Arch.Ascend950, enable_unit_flag=True)
+            dispatch_policy=MmadPingpong(
+                arch_tag=Arch.Ascend950, enable_unit_flag=True
+            ),
         )
 
         kernel_str = splitk_kernel.gen_kernel_template()
@@ -416,14 +433,10 @@ class TestGemm(unittest.TestCase):
 
     def test_tail_multi_core_splitk_matmul_kernel(self):
         a = OpTensor.from_shape_stride(
-            shape=(768, 3000),
-            stride=(3000, 1),
-            dtype=DataType.FLOAT
+            shape=(768, 3000), stride=(3000, 1), dtype=DataType.FLOAT
         )
         b = OpTensor.from_shape_stride(
-            shape=(3000, 768),
-            stride=(768, 1),
-            dtype=DataType.FLOAT
+            shape=(3000, 768), stride=(768, 1), dtype=DataType.FLOAT
         )
 
         gemm_plan = Gemm(
@@ -431,13 +444,18 @@ class TestGemm(unittest.TestCase):
             element=DataType.FLOAT,
             layout=RowMajor,
             core_num=8,
-            A=a, B=b
+            A=a,
+            B=b,
         )
         kernels = gemm_plan.get_kernels()
 
-        tail_splitk_kernel = find_kernel_by_type(kernels, TailMultiCoreSplitkMatmulKernel)
+        tail_splitk_kernel = find_kernel_by_type(
+            kernels, TailMultiCoreSplitkMatmulKernel
+        )
         if tail_splitk_kernel is None:
-            raise ValueError(f"No kernel named 'TailMultiCoreSplitkMatmulKernel' found, available kernel list: {[type(k).__name__ for k in kernels]}")
+            raise ValueError(
+                f"No kernel named 'TailMultiCoreSplitkMatmulKernel' found, available kernel list: {[type(k).__name__ for k in kernels]}"
+            )
 
         self.assertEqual(type(tail_splitk_kernel), TailMultiCoreSplitkMatmulKernel)
         self.assertEqual(tail_splitk_kernel.slice_axis, "K")
@@ -446,7 +464,9 @@ class TestGemm(unittest.TestCase):
         tail_splitk_kernel.tune(
             GemmShape(256, 256, 128),
             GemmShape(256, 256, 32),
-            dispatch_policy=MmadPingpong(arch_tag=Arch.Ascend950, enable_unit_flag=True)
+            dispatch_policy=MmadPingpong(
+                arch_tag=Arch.Ascend950, enable_unit_flag=True
+            ),
         )
 
         kernel_str = tail_splitk_kernel.gen_kernel_template()
@@ -463,14 +483,10 @@ class TestGemm(unittest.TestCase):
 
     def test_basic_matmul_tla_visitor_kernel(self):
         a = OpTensor.from_shape_stride(
-            shape=(128, 256),
-            stride=(256, 1),
-            dtype=DataType.FLOAT
+            shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
         )
         b = OpTensor.from_shape_stride(
-            shape=(256, 384),
-            stride=(384, 1),
-            dtype=DataType.FLOAT
+            shape=(256, 384), stride=(384, 1), dtype=DataType.FLOAT
         )
 
         function_source = """
@@ -480,14 +496,10 @@ def epilogue(accum):
 """
         example_inputs = {
             "accum": OpTensor.from_shape_stride(
-                shape=(128, 384),
-                stride=(384, 1),
-                dtype=DataType.FLOAT
+                shape=(128, 384), stride=(384, 1), dtype=DataType.FLOAT
             ),
             "temp": OpTensor.from_shape_stride(
-                shape=(128, 384),
-                stride=(384, 1),
-                dtype=DataType.FLOAT
+                shape=(128, 384), stride=(384, 1), dtype=DataType.FLOAT
             ),
         }
 
@@ -501,13 +513,16 @@ def epilogue(accum):
             evg_config=evg_config,
             element=DataType.FLOAT,
             layout=RowMajor,
-            A=a, B=b
+            A=a,
+            B=b,
         )
         kernels = gemm_plan.get_kernels()
 
         visitor_kernel = find_kernel_by_type(kernels, BasicMatmulTlaVisitorKernel)
         if visitor_kernel is None:
-            raise ValueError(f"No kernel named 'BasicMatmulTlaVisitorKernel' found, available kernel list: {[type(k).__name__ for k in kernels]}")
+            raise ValueError(
+                f"No kernel named 'BasicMatmulTlaVisitorKernel' found, available kernel list: {[type(k).__name__ for k in kernels]}"
+            )
 
         self.assertEqual(type(visitor_kernel), BasicMatmulTlaVisitorKernel)
         self.assertEqual(visitor_kernel.slice_axis, None)
@@ -516,7 +531,7 @@ def epilogue(accum):
         visitor_kernel.tune(
             GemmShape(128, 256, 64),
             GemmShape(128, 256, 64),
-            dispatch_policy=MmadPingpong(arch_tag=Arch.Ascend950)
+            dispatch_policy=MmadPingpong(arch_tag=Arch.Ascend950),
         )
 
         kernel_str = visitor_kernel.gen_kernel_template()
@@ -533,14 +548,10 @@ def epilogue(accum):
 
     def test_basic_matmul_tla_visitor_kernel_with_constant(self):
         a = OpTensor.from_shape_stride(
-            shape=(128, 256),
-            stride=(256, 1),
-            dtype=DataType.FLOAT
+            shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
         )
         b = OpTensor.from_shape_stride(
-            shape=(256, 384),
-            stride=(384, 1),
-            dtype=DataType.FLOAT
+            shape=(256, 384), stride=(384, 1), dtype=DataType.FLOAT
         )
 
         function_source = """
@@ -551,14 +562,10 @@ def epilogue(accum):
 """
         example_inputs = {
             "accum": OpTensor.from_shape_stride(
-                shape=(128, 384),
-                stride=(384, 1),
-                dtype=DataType.FLOAT
+                shape=(128, 384), stride=(384, 1), dtype=DataType.FLOAT
             ),
             "result": OpTensor.from_shape_stride(
-                shape=(128, 384),
-                stride=(384, 1),
-                dtype=DataType.FLOAT
+                shape=(128, 384), stride=(384, 1), dtype=DataType.FLOAT
             ),
         }
 
@@ -572,20 +579,23 @@ def epilogue(accum):
             evg_config=evg_config,
             element=DataType.FLOAT,
             layout=RowMajor,
-            A=a, B=b
+            A=a,
+            B=b,
         )
         kernels = gemm_plan.get_kernels()
 
         visitor_kernel = find_kernel_by_type(kernels, BasicMatmulTlaVisitorKernel)
         if visitor_kernel is None:
-            raise ValueError(f"No kernel named 'BasicMatmulTlaVisitorKernel' found, available kernel list: {[type(k).__name__ for k in kernels]}")
+            raise ValueError(
+                f"No kernel named 'BasicMatmulTlaVisitorKernel' found, available kernel list: {[type(k).__name__ for k in kernels]}"
+            )
 
         self.assertEqual(type(visitor_kernel), BasicMatmulTlaVisitorKernel)
 
         visitor_kernel.tune(
             GemmShape(128, 256, 64),
             GemmShape(128, 256, 64),
-            dispatch_policy=MmadPingpong(arch_tag=Arch.Ascend950)
+            dispatch_policy=MmadPingpong(arch_tag=Arch.Ascend950),
         )
 
         kernel_str = visitor_kernel.gen_kernel_template()
@@ -602,27 +612,22 @@ def epilogue(accum):
 
     def test_to_evg_method(self):
         a = OpTensor.from_shape_stride(
-            shape=(128, 256),
-            stride=(256, 1),
-            dtype=DataType.FLOAT
+            shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
         )
         b = OpTensor.from_shape_stride(
-            shape=(256, 384),
-            stride=(384, 1),
-            dtype=DataType.FLOAT
+            shape=(256, 384), stride=(384, 1), dtype=DataType.FLOAT
         )
 
         gemm_plan = Gemm(
-            atlas_arch=Arch.Ascend950,
-            element=DataType.FLOAT,
-            layout=RowMajor,
-            A=a, B=b
+            atlas_arch=Arch.Ascend950, element=DataType.FLOAT, layout=RowMajor, A=a, B=b
         )
         kernels = gemm_plan.get_kernels()
 
         basic_kernel = find_kernel_by_type(kernels, BasicMatmulKernel)
         if basic_kernel is None:
-            raise ValueError(f"No kernel named 'BasicMatmulKernel' found, available kernel list: {[type(k).__name__ for k in kernels]}")
+            raise ValueError(
+                f"No kernel named 'BasicMatmulKernel' found, available kernel list: {[type(k).__name__ for k in kernels]}"
+            )
 
         self.assertEqual(type(basic_kernel), BasicMatmulKernel)
 
@@ -636,19 +641,13 @@ def epilogue(accum, bias):
 """
         example_inputs = {
             "accum": OpTensor.from_shape_stride(
-                shape=(128, 384),
-                stride=(384, 1),
-                dtype=DataType.FLOAT
+                shape=(128, 384), stride=(384, 1), dtype=DataType.FLOAT
             ),
             "bias": OpTensor.from_shape_stride(
-                shape=(1, 384),
-                stride=(384, 1),
-                dtype=DataType.FLOAT
+                shape=(1, 384), stride=(384, 1), dtype=DataType.FLOAT
             ),
             "result": OpTensor.from_shape_stride(
-                shape=(128, 384),
-                stride=(384, 1),
-                dtype=DataType.FLOAT
+                shape=(128, 384), stride=(384, 1), dtype=DataType.FLOAT
             ),
         }
 
@@ -660,7 +659,7 @@ def epilogue(accum, bias):
         basic_kernel.tune(
             GemmShape(128, 256, 64),
             GemmShape(128, 256, 64),
-            dispatch_policy=MmadPingpong(arch_tag=Arch.Ascend950)
+            dispatch_policy=MmadPingpong(arch_tag=Arch.Ascend950),
         )
 
         evg_kernel = basic_kernel.to_evg(evg_config)
@@ -682,14 +681,10 @@ def epilogue(accum, bias):
 
     def test_to_evg_unsupported_kernel(self):
         a = OpTensor.from_shape_stride(
-            shape=(256, 3000),
-            stride=(3000, 1),
-            dtype=DataType.FLOAT
+            shape=(256, 3000), stride=(3000, 1), dtype=DataType.FLOAT
         )
         b = OpTensor.from_shape_stride(
-            shape=(3000, 256),
-            stride=(256, 1),
-            dtype=DataType.FLOAT
+            shape=(3000, 256), stride=(256, 1), dtype=DataType.FLOAT
         )
 
         gemm_plan = Gemm(
@@ -697,13 +692,16 @@ def epilogue(accum, bias):
             element=DataType.FLOAT,
             layout=RowMajor,
             core_num=8,
-            A=a, B=b
+            A=a,
+            B=b,
         )
         kernels = gemm_plan.get_kernels()
 
         splitk_kernel = find_kernel_by_type(kernels, MultiCoreSplitkMatmulKernel)
         if splitk_kernel is None:
-            raise ValueError(f"No kernel named 'MultiCoreSplitkMatmulKernel' found, available kernel list: {[type(k).__name__ for k in kernels]}")
+            raise ValueError(
+                f"No kernel named 'MultiCoreSplitkMatmulKernel' found, available kernel list: {[type(k).__name__ for k in kernels]}"
+            )
 
         self.assertEqual(type(splitk_kernel), MultiCoreSplitkMatmulKernel)
 
@@ -714,14 +712,10 @@ def epilogue(accum, bias):
             "fn_src": "def epilogue(accum): return accum\n",
             "example_inputs": {
                 "accum": OpTensor.from_shape_stride(
-                    shape=(256, 256),
-                    stride=(256, 1),
-                    dtype=DataType.FLOAT
+                    shape=(256, 256), stride=(256, 1), dtype=DataType.FLOAT
                 ),
                 "result": OpTensor.from_shape_stride(
-                    shape=(256, 256),
-                    stride=(256, 1),
-                    dtype=DataType.FLOAT
+                    shape=(256, 256), stride=(256, 1), dtype=DataType.FLOAT
                 ),
             },
         }
@@ -729,7 +723,8 @@ def epilogue(accum, bias):
         result = splitk_kernel.to_evg(evg_config)
         self.assertIsNone(result)
 
-###################################### 
+
+######################################
 
 
 if __name__ == "__main__":

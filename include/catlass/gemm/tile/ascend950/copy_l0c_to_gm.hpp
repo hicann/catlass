@@ -20,12 +20,9 @@ namespace Catlass::Gemm::Tile {
 
 template <class TensorSrc_, class ElementDst_, class LayoutDst_, class CoordDst_, bool ReluEnable_>
 struct CopyL0CToGmTla<
-    Catlass::Arch::Ascend950,
-    TensorSrc_,
+    Catlass::Arch::Ascend950, TensorSrc_,
     tla::Tensor<AscendC::GlobalTensor<ElementDst_>, LayoutDst_, CoordDst_, AscendC::TPosition::GM>,
-    ScaleGranularity::NO_QUANT,
-    ReluEnable_,
-    std::enable_if_t<tla::detail::isRowMajor<LayoutDst_>::value>> {
+    ScaleGranularity::NO_QUANT, ReluEnable_, std::enable_if_t<tla::detail::isRowMajor<LayoutDst_>::value>> {
     using ArchTag = Catlass::Arch::Ascend950;
     using ElementDst = ElementDst_;
     using ElementSrc = typename TensorSrc_::Element;
@@ -34,13 +31,12 @@ struct CopyL0CToGmTla<
     static constexpr auto reluEn = ReluEnable_;
 
     template <class TensorDst, class TensorSrc>
-    CATLASS_DEVICE void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor, uint8_t unitFlag = 0)
+    CATLASS_DEVICE void operator()(TensorDst const& dstTensor, TensorSrc const& srcTensor, uint8_t unitFlag = 0)
     {
         static_assert(
-            tla::detail::isRowMajor<typename TensorDst::Layout>::value && TensorSrc::position == AscendC::TPosition::CO1
-                && TensorDst::position == AscendC::TPosition::GM,
-            "The input parameters do not match. TensorSrc must be L0C, while TensorDst must be GM and RowMajor"
-        );
+            tla::detail::isRowMajor<typename TensorDst::Layout>::value &&
+                TensorSrc::position == AscendC::TPosition::CO1 && TensorDst::position == AscendC::TPosition::GM,
+            "The input parameters do not match. TensorSrc must be L0C, while TensorDst must be GM and RowMajor");
 
         AscendC::DataCopyCO12DstParams intriParams;
 
@@ -61,14 +57,13 @@ struct CopyL0CToGmTla<
     }
 
     template <class TensorDst, class TensorSrc>
-    CATLASS_DEVICE void
-    operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor, uint32_t l0Batch, uint32_t dstNdStride)
+    CATLASS_DEVICE void operator()(
+        TensorDst const& dstTensor, TensorSrc const& srcTensor, uint32_t l0Batch, uint32_t dstNdStride)
     {
         static_assert(
-            tla::detail::isRowMajor<typename TensorDst::Layout>::value && TensorSrc::position == AscendC::TPosition::CO1
-                && TensorDst::position == AscendC::TPosition::GM,
-            "The input parameters do not match. TensorSrc must be L0C, while TensorDst must be GM and RowMajor"
-        );
+            tla::detail::isRowMajor<typename TensorDst::Layout>::value &&
+                TensorSrc::position == AscendC::TPosition::CO1 && TensorDst::position == AscendC::TPosition::GM,
+            "The input parameters do not match. TensorSrc must be L0C, while TensorDst must be GM and RowMajor");
 
         const uint32_t L0CM = tla::get<0, 0>(srcTensor.shape()) * tla::get<0, 1>(srcTensor.shape());
         const uint32_t L0CN = tla::get<1, 0>(srcTensor.shape()) * tla::get<1, 1>(srcTensor.shape());
@@ -112,12 +107,9 @@ struct CopyL0CToGmTla<
 
 template <class TensorSrc_, class ElementDst_, class LayoutDst_, class CoordDst_, bool ReluEnable_>
 struct CopyL0CToGmTla<
-    Catlass::Arch::Ascend950,
-    TensorSrc_,
+    Catlass::Arch::Ascend950, TensorSrc_,
     tla::Tensor<AscendC::GlobalTensor<ElementDst_>, LayoutDst_, CoordDst_, AscendC::TPosition::GM>,
-    ScaleGranularity::NO_QUANT,
-    ReluEnable_,
-    std::enable_if_t<tla::detail::iszN<ElementDst_, LayoutDst_>::value>> {
+    ScaleGranularity::NO_QUANT, ReluEnable_, std::enable_if_t<tla::detail::iszN<ElementDst_, LayoutDst_>::value>> {
     using ArchTag = Catlass::Arch::Ascend950;
     using ElementDst = ElementDst_;
     using ElementSrc = typename TensorSrc_::Element;
@@ -126,13 +118,12 @@ struct CopyL0CToGmTla<
     static constexpr auto reluEn = ReluEnable_;
 
     template <class TensorDst, class TensorSrc>
-    CATLASS_DEVICE void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor, uint8_t unitFlag = 0)
+    CATLASS_DEVICE void operator()(TensorDst const& dstTensor, TensorSrc const& srcTensor, uint8_t unitFlag = 0)
     {
         static_assert(
-            tla::detail::iszN<typename TensorDst::Element, typename TensorDst::Layout>::value
-            && TensorSrc::position == AscendC::TPosition::CO1 && TensorDst::position == AscendC::TPosition::GM,
-            "The input parameters do not match. TensorSrc must be L0C, while TensorDst must be GM and zN"
-        );
+            tla::detail::iszN<typename TensorDst::Element, typename TensorDst::Layout>::value &&
+                TensorSrc::position == AscendC::TPosition::CO1 && TensorDst::position == AscendC::TPosition::GM,
+            "The input parameters do not match. TensorSrc must be L0C, while TensorDst must be GM and zN");
 
         AscendC::DataCopyCO12DstParams intriParams;
 
@@ -158,12 +149,9 @@ struct CopyL0CToGmTla<
 
 template <class TensorSrc_, class ElementDst_, class LayoutDst_, class CoordDst_, bool ReluEnable_>
 struct CopyL0CToGmTla<
-    Catlass::Arch::Ascend950,
-    TensorSrc_,
+    Catlass::Arch::Ascend950, TensorSrc_,
     tla::Tensor<AscendC::GlobalTensor<ElementDst_>, LayoutDst_, CoordDst_, AscendC::TPosition::GM>,
-    ScaleGranularity::PER_TENSOR,
-    ReluEnable_,
-    std::enable_if_t<tla::detail::isRowMajor<LayoutDst_>::value>> {
+    ScaleGranularity::PER_TENSOR, ReluEnable_, std::enable_if_t<tla::detail::isRowMajor<LayoutDst_>::value>> {
     using ArchTag = Catlass::Arch::Ascend950;
     using ElementDst = ElementDst_;
     using ElementSrc = typename TensorSrc_::Element;
@@ -189,18 +177,16 @@ struct CopyL0CToGmTla<
     CopyL0CToGmTla() = default;
 
     CATLASS_DEVICE
-    CopyL0CToGmTla(Params const &params_) : params(params_) {};
+    CopyL0CToGmTla(Params const& params_) : params(params_) {};
 
     template <class TensorDst, class TensorSrc>
-    CATLASS_DEVICE 
-    void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor, uint8_t unitFlag = 0)
+    CATLASS_DEVICE void operator()(TensorDst const& dstTensor, TensorSrc const& srcTensor, uint8_t unitFlag = 0)
     {
         static_assert(
-            tla::detail::isRowMajor<typename TensorDst::Layout>::value && TensorSrc::position == AscendC::TPosition::CO1
-                && TensorDst::position == AscendC::TPosition::GM,
-            "The input parameters do not match. TensorSrc must be L0C, while TensorDst must be GM and RowMajor"
-        );
-        
+            tla::detail::isRowMajor<typename TensorDst::Layout>::value &&
+                TensorSrc::position == AscendC::TPosition::CO1 && TensorDst::position == AscendC::TPosition::GM,
+            "The input parameters do not match. TensorSrc must be L0C, while TensorDst must be GM and RowMajor");
+
         AscendC::FixpipeParamsC310 intriParams;
 
         // Fixpipe layout information
@@ -226,12 +212,9 @@ struct CopyL0CToGmTla<
 
 template <class TensorSrc_, class ElementDst_, class LayoutDst_, class CoordDst_, bool ReluEnable_>
 struct CopyL0CToGmTla<
-    Catlass::Arch::Ascend950,
-    TensorSrc_,
+    Catlass::Arch::Ascend950, TensorSrc_,
     tla::Tensor<AscendC::GlobalTensor<ElementDst_>, LayoutDst_, CoordDst_, AscendC::TPosition::GM>,
-    ScaleGranularity::PER_CHANNEL,
-    ReluEnable_,
-    std::enable_if_t<tla::detail::isRowMajor<LayoutDst_>::value>> {
+    ScaleGranularity::PER_CHANNEL, ReluEnable_, std::enable_if_t<tla::detail::isRowMajor<LayoutDst_>::value>> {
     using ArchTag = Catlass::Arch::Ascend950;
     using ElementDst = ElementDst_;
     using ElementSrc = typename TensorSrc_::Element;
@@ -240,14 +223,13 @@ struct CopyL0CToGmTla<
     static constexpr auto reluEn = ReluEnable_;
 
     template <class TensorDst, class TensorSrc, class TensorQuant>
-    CATLASS_DEVICE 
-    void operator()(TensorDst const &dstTensor, TensorSrc const &srcTensor, TensorQuant const &quantTensor, uint8_t unitFlag = 0)
+    CATLASS_DEVICE void operator()(
+        TensorDst const& dstTensor, TensorSrc const& srcTensor, TensorQuant const& quantTensor, uint8_t unitFlag = 0)
     {
         static_assert(
-            tla::detail::isRowMajor<typename TensorDst::Layout>::value && TensorSrc::position == AscendC::TPosition::CO1
-                && TensorDst::position == AscendC::TPosition::GM,
-            "The input parameters do not match. TensorSrc must be L0C, while TensorDst must be GM and RowMajor"
-        );
+            tla::detail::isRowMajor<typename TensorDst::Layout>::value &&
+                TensorSrc::position == AscendC::TPosition::CO1 && TensorDst::position == AscendC::TPosition::GM,
+            "The input parameters do not match. TensorSrc must be L0C, while TensorDst must be GM and RowMajor");
 
         AscendC::FixpipeParamsC310 intriParams;
 
@@ -273,24 +255,17 @@ struct CopyL0CToGmTla<
 };
 
 ////////////////////////////////////CopyL0CToGm(No-TLA, Ascend950)////////////////////////////////////////////////
-template <
-    class ElementAccumulator_,
-    class ElementDst_,
-    bool ReluEnable_
->
-struct CopyL0CToGm<Catlass::Arch::Ascend950,
-                   ElementAccumulator_,
-                   Gemm::GemmType<ElementDst_, layout::RowMajor>,
-                   ScaleGranularity::NO_QUANT,
-                   ReluEnable_>
-{
+template <class ElementAccumulator_, class ElementDst_, bool ReluEnable_>
+struct CopyL0CToGm<
+    Catlass::Arch::Ascend950, ElementAccumulator_, Gemm::GemmType<ElementDst_, layout::RowMajor>,
+    ScaleGranularity::NO_QUANT, ReluEnable_> {
     using ArchTag = Catlass::Arch::Ascend950;
     using ElementDst = ElementDst_;
     using ElementSrc = ElementAccumulator_;
     using LayoutSrc = Catlass::layout::zN;
     using LayoutDst = Catlass::layout::RowMajor;
-    static constexpr auto quantPre = CopyL0CToDstQuantMode<ArchTag, ElementSrc, ElementDst,
-        ScaleGranularity::NO_QUANT>::VALUE;
+    static constexpr auto quantPre =
+        CopyL0CToDstQuantMode<ArchTag, ElementSrc, ElementDst, ScaleGranularity::NO_QUANT>::VALUE;
     static constexpr auto reluEn = ReluEnable_;
 
     struct Params {};
@@ -300,11 +275,12 @@ struct CopyL0CToGm<Catlass::Arch::Ascend950,
     CopyL0CToGm() = default;
 
     CATLASS_DEVICE
-    CopyL0CToGm(Params const &params_) : params(params_) {};
+    CopyL0CToGm(Params const& params_) : params(params_) {};
 
     CATLASS_DEVICE
-    void operator()(AscendC::GlobalTensor<ElementDst> const &dst, AscendC::LocalTensor<ElementSrc> const &src,
-        LayoutDst const &dstLayout, LayoutSrc const &srcLayout, uint8_t unitFlag = 0)
+    void operator()(
+        AscendC::GlobalTensor<ElementDst> const& dst, AscendC::LocalTensor<ElementSrc> const& src,
+        LayoutDst const& dstLayout, LayoutSrc const& srcLayout, uint8_t unitFlag = 0)
     {
         AscendC::DataCopyCO12DstParams intriParams;
 
@@ -323,24 +299,17 @@ struct CopyL0CToGm<Catlass::Arch::Ascend950,
     }
 };
 
-template <
-    class ElementAccumulator_,
-    class ElementDst_,
-    bool ReluEnable_
->
-struct CopyL0CToGm<Catlass::Arch::Ascend950,
-                   ElementAccumulator_,
-                   Gemm::GemmType<ElementDst_, layout::RowMajor>,
-                   ScaleGranularity::PER_TENSOR,
-                   ReluEnable_>
-{
+template <class ElementAccumulator_, class ElementDst_, bool ReluEnable_>
+struct CopyL0CToGm<
+    Catlass::Arch::Ascend950, ElementAccumulator_, Gemm::GemmType<ElementDst_, layout::RowMajor>,
+    ScaleGranularity::PER_TENSOR, ReluEnable_> {
     using ArchTag = Catlass::Arch::Ascend950;
     using ElementDst = ElementDst_;
     using ElementSrc = ElementAccumulator_;
     using LayoutSrc = Catlass::layout::zN;
     using LayoutDst = Catlass::layout::RowMajor;
-    static constexpr auto quantPre = CopyL0CToDstQuantMode<ArchTag, ElementSrc, ElementDst,
-        ScaleGranularity::PER_TENSOR>::VALUE;
+    static constexpr auto quantPre =
+        CopyL0CToDstQuantMode<ArchTag, ElementSrc, ElementDst, ScaleGranularity::PER_TENSOR>::VALUE;
     static constexpr auto reluEn = ReluEnable_;
 
     struct Params {
@@ -361,11 +330,12 @@ struct CopyL0CToGm<Catlass::Arch::Ascend950,
     CopyL0CToGm() = default;
 
     CATLASS_DEVICE
-    CopyL0CToGm(Params const &params_) : params(params_) {};
+    CopyL0CToGm(Params const& params_) : params(params_) {};
 
     CATLASS_DEVICE
-    void operator()(AscendC::GlobalTensor<ElementDst> const &dst, AscendC::LocalTensor<ElementSrc> const &src,
-        LayoutDst const &dstLayout, LayoutSrc const &srcLayout, uint8_t unitFlag = 0)
+    void operator()(
+        AscendC::GlobalTensor<ElementDst> const& dst, AscendC::LocalTensor<ElementSrc> const& src,
+        LayoutDst const& dstLayout, LayoutSrc const& srcLayout, uint8_t unitFlag = 0)
     {
         AscendC::FixpipeParamsC310 intriParams;
 
@@ -386,24 +356,17 @@ struct CopyL0CToGm<Catlass::Arch::Ascend950,
     }
 };
 
-template <
-    class ElementAccumulator_,
-    class ElementDst_,
-    bool ReluEnable_
->
-struct CopyL0CToGm<Catlass::Arch::Ascend950,
-                   ElementAccumulator_,
-                   Gemm::GemmType<ElementDst_, layout::RowMajor>,
-                   ScaleGranularity::PER_CHANNEL,
-                   ReluEnable_>
-{
+template <class ElementAccumulator_, class ElementDst_, bool ReluEnable_>
+struct CopyL0CToGm<
+    Catlass::Arch::Ascend950, ElementAccumulator_, Gemm::GemmType<ElementDst_, layout::RowMajor>,
+    ScaleGranularity::PER_CHANNEL, ReluEnable_> {
     using ArchTag = Catlass::Arch::Ascend950;
     using ElementDst = ElementDst_;
     using ElementSrc = ElementAccumulator_;
     using LayoutSrc = Catlass::layout::zN;
     using LayoutDst = Catlass::layout::RowMajor;
-    static constexpr auto quantPre = CopyL0CToDstQuantMode<ArchTag, ElementSrc, ElementDst,
-        ScaleGranularity::PER_CHANNEL>::VALUE;
+    static constexpr auto quantPre =
+        CopyL0CToDstQuantMode<ArchTag, ElementSrc, ElementDst, ScaleGranularity::PER_CHANNEL>::VALUE;
     static constexpr auto reluEn = ReluEnable_;
 
     struct Params {};
@@ -413,11 +376,13 @@ struct CopyL0CToGm<Catlass::Arch::Ascend950,
     CopyL0CToGm() = default;
 
     CATLASS_DEVICE
-    CopyL0CToGm(Params const &params_) : params(params_) {};
+    CopyL0CToGm(Params const& params_) : params(params_) {};
 
     CATLASS_DEVICE
-    void operator()(AscendC::GlobalTensor<ElementDst> const &dst, AscendC::LocalTensor<ElementSrc> const &src, AscendC::LocalTensor<uint64_t> const &scale,
-        LayoutDst const &dstLayout, LayoutSrc const &srcLayout, uint8_t unitFlag = 0)
+    void operator()(
+        AscendC::GlobalTensor<ElementDst> const& dst, AscendC::LocalTensor<ElementSrc> const& src,
+        AscendC::LocalTensor<uint64_t> const& scale, LayoutDst const& dstLayout, LayoutSrc const& srcLayout,
+        uint8_t unitFlag = 0)
     {
         AscendC::FixpipeParamsC310 intriParams;
 
@@ -437,24 +402,17 @@ struct CopyL0CToGm<Catlass::Arch::Ascend950,
     }
 };
 
-template <
-    class ElementAccumulator_,
-    class ElementDst_,
-    bool ReluEnable_
->
-struct CopyL0CToGm<Catlass::Arch::Ascend950,
-                   ElementAccumulator_,
-                   Gemm::GemmType<ElementDst_, layout::zN>,
-                   ScaleGranularity::NO_QUANT,
-                   ReluEnable_>
-{
+template <class ElementAccumulator_, class ElementDst_, bool ReluEnable_>
+struct CopyL0CToGm<
+    Catlass::Arch::Ascend950, ElementAccumulator_, Gemm::GemmType<ElementDst_, layout::zN>, ScaleGranularity::NO_QUANT,
+    ReluEnable_> {
     using ArchTag = Catlass::Arch::Ascend950;
     using ElementDst = ElementDst_;
     using ElementSrc = ElementAccumulator_;
     using LayoutSrc = Catlass::layout::zN;
     using LayoutDst = Catlass::layout::zN;
-    static constexpr auto quantPre = CopyL0CToDstQuantMode<ArchTag, ElementSrc, ElementDst,
-        ScaleGranularity::NO_QUANT>::VALUE;
+    static constexpr auto quantPre =
+        CopyL0CToDstQuantMode<ArchTag, ElementSrc, ElementDst, ScaleGranularity::NO_QUANT>::VALUE;
     static constexpr auto reluEn = ReluEnable_;
 
     struct Params {};
@@ -464,11 +422,12 @@ struct CopyL0CToGm<Catlass::Arch::Ascend950,
     CopyL0CToGm() = default;
 
     CATLASS_DEVICE
-    CopyL0CToGm(Params const &params_) : params(params_) {};
+    CopyL0CToGm(Params const& params_) : params(params_) {};
 
     CATLASS_DEVICE
-    void operator()(AscendC::GlobalTensor<ElementDst> const &dst, AscendC::LocalTensor<ElementSrc> const &src,
-        LayoutDst const &dstLayout, LayoutSrc const &srcLayout, uint8_t unitFlag = 0)
+    void operator()(
+        AscendC::GlobalTensor<ElementDst> const& dst, AscendC::LocalTensor<ElementSrc> const& src,
+        LayoutDst const& dstLayout, LayoutSrc const& srcLayout, uint8_t unitFlag = 0)
     {
         AscendC::DataCopyCO12DstParams intriParams;
 
@@ -490,24 +449,17 @@ struct CopyL0CToGm<Catlass::Arch::Ascend950,
     }
 };
 
-template <
-    class ElementAccumulator_,
-    class ElementDst_,
-    bool ReluEnable_
->
-struct CopyL0CToGm<Catlass::Arch::Ascend950,
-                   ElementAccumulator_,
-                   Gemm::GemmType<ElementDst_, layout::NDC1HWC0>,
-                   ScaleGranularity::NO_QUANT,
-                   ReluEnable_>
-{
+template <class ElementAccumulator_, class ElementDst_, bool ReluEnable_>
+struct CopyL0CToGm<
+    Catlass::Arch::Ascend950, ElementAccumulator_, Gemm::GemmType<ElementDst_, layout::NDC1HWC0>,
+    ScaleGranularity::NO_QUANT, ReluEnable_> {
     using ArchTag = Catlass::Arch::Ascend950;
     using ElementDst = ElementDst_;
     using ElementSrc = ElementAccumulator_;
     using LayoutSrc = Catlass::layout::zN;
     using LayoutDst = Catlass::layout::NDC1HWC0;
-    static constexpr auto quantPre = CopyL0CToDstQuantMode<ArchTag, ElementSrc, ElementDst,
-        ScaleGranularity::NO_QUANT>::VALUE;
+    static constexpr auto quantPre =
+        CopyL0CToDstQuantMode<ArchTag, ElementSrc, ElementDst, ScaleGranularity::NO_QUANT>::VALUE;
     static constexpr auto reluEn = ReluEnable_;
 
     struct Params {};
@@ -517,11 +469,12 @@ struct CopyL0CToGm<Catlass::Arch::Ascend950,
     CopyL0CToGm() = default;
 
     CATLASS_DEVICE
-    CopyL0CToGm(Params const &params_) : params(params_) {};
+    CopyL0CToGm(Params const& params_) : params(params_) {};
 
     CATLASS_DEVICE
-    void operator()(AscendC::GlobalTensor<ElementDst> const &dst, AscendC::LocalTensor<ElementSrc> const &src,
-        LayoutDst const &dstLayout, LayoutSrc const &srcLayout, uint8_t unitFlag = 0)
+    void operator()(
+        AscendC::GlobalTensor<ElementDst> const& dst, AscendC::LocalTensor<ElementSrc> const& src,
+        LayoutDst const& dstLayout, LayoutSrc const& srcLayout, uint8_t unitFlag = 0)
     {
         AscendC::FixpipeParamsV220 intriParams;
 
@@ -530,8 +483,7 @@ struct CopyL0CToGm<Catlass::Arch::Ascend950,
         intriParams.srcStride = srcLayout.stride(3) / srcLayout.shape(2);
         intriParams.dstStride = dstLayout.shape(1) * dstLayout.shape(2);
 
-        if constexpr (AscendC::IsSameType<ElementSrc, float>::value &&
-                      AscendC::IsSameType<ElementDst, float>::value) {
+        if constexpr (AscendC::IsSameType<ElementSrc, float>::value && AscendC::IsSameType<ElementDst, float>::value) {
             intriParams.isChannelSplit = true;
         }
 

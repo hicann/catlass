@@ -17,19 +17,20 @@
 namespace CatlassKernelWrapper::GroupedMatmulLike {
 using namespace CatlassKernel;
 using OutputType = at::Tensor;
-KernelInfo GetKernelInfo(const at::Tensor &mat1, const at::Tensor &mat2, const at::Tensor &groupList,
-                         const std::string &outDType, const bool transA, const bool transB, const bool splitK)
+KernelInfo GetKernelInfo(
+    const at::Tensor& mat1, const at::Tensor& mat2, const at::Tensor& groupList, const std::string& outDType,
+    const bool transA, const bool transB, const bool splitK)
 {
     KernelInfo kernelInfo;
     // set input addr
     kernelInfo.inputAddr.resize(3);
-    kernelInfo.inputAddr[0] = static_cast<uint8_t *>(mat1.data_ptr());
-    kernelInfo.inputAddr[1] = static_cast<uint8_t *>(mat2.data_ptr());
-    kernelInfo.inputAddr[2] = static_cast<uint8_t *>(groupList.data_ptr());
+    kernelInfo.inputAddr[0] = static_cast<uint8_t*>(mat1.data_ptr());
+    kernelInfo.inputAddr[1] = static_cast<uint8_t*>(mat2.data_ptr());
+    kernelInfo.inputAddr[2] = static_cast<uint8_t*>(groupList.data_ptr());
     // calculate groupList sum
     at::Tensor groupListHost = groupList.to(torch::kCPU).to(torch::kInt64);
-    std::vector<int64_t> groupListVec(groupListHost.data_ptr<int64_t>(),
-                                      groupListHost.data_ptr<int64_t>() + groupListHost.numel());
+    std::vector<int64_t> groupListVec(
+        groupListHost.data_ptr<int64_t>(), groupListHost.data_ptr<int64_t>() + groupListHost.numel());
     kernelInfo.g = groupListVec.size();
     int64_t groupListSum = groupListVec[kernelInfo.g - 1];
 
@@ -123,18 +124,18 @@ KernelInfo GetKernelInfo(const at::Tensor &mat1, const at::Tensor &mat2, const a
     }
     return kernelInfo;
 };
-OutputType AllocOutput(KernelInfo &kernelInfo)
+OutputType AllocOutput(KernelInfo& kernelInfo)
 {
     OutputType output;
     if (kernelInfo.split == KernelInfo::GMMSplit::SPLIT_M) {
         output = GetOutputTensor({kernelInfo.M, kernelInfo.n}, AclDtypeToTorchDtype(kernelInfo.outputDataType));
     }
     if (kernelInfo.split == KernelInfo::GMMSplit::SPLIT_K) {
-        output = GetOutputTensor({kernelInfo.g, kernelInfo.m, kernelInfo.n},
-                                 AclDtypeToTorchDtype(kernelInfo.outputDataType));
+        output = GetOutputTensor(
+            {kernelInfo.g, kernelInfo.m, kernelInfo.n}, AclDtypeToTorchDtype(kernelInfo.outputDataType));
     }
     kernelInfo.outputAddr.resize(1);
-    kernelInfo.outputAddr[0] = static_cast<uint8_t *>(const_cast<void *>(output.storage().data()));
+    kernelInfo.outputAddr[0] = static_cast<uint8_t*>(const_cast<void*>(output.storage().data()));
     return output;
 };
 } // namespace CatlassKernelWrapper::GroupedMatmulLike

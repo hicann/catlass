@@ -55,8 +55,8 @@ CATLASS_DEVICE void CatlassBasicMatmulTemplate(GemmCoord problemShape, GM_ADDR g
 }
 } // namespace Catlass
 
-extern "C" __global__ __aicore__ void
-catlass_basic_matmul(GM_ADDR self, GM_ADDR mat2, GM_ADDR out, GM_ADDR workspace, GM_ADDR tiling)
+extern "C" __global__ __aicore__ void catlass_basic_matmul(
+    GM_ADDR self, GM_ADDR mat2, GM_ADDR out, GM_ADDR workspace, GM_ADDR tiling)
 {
     GET_TILING_DATA(tiling_data, tiling);
     // user kernel impl

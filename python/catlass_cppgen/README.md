@@ -170,7 +170,7 @@ kernels = gemm.get_kernels()
 
 # 3. [可选] 可以显式指定使用的Kernel组件（以`BasicMatmulKernel`为例）
 from catlass_cppgen.kernel.gemm import BasicMatmulKernel
-kernel = find_kernel_by_type(kernels, BasicMatmulKernel) 
+kernel = find_kernel_by_type(kernels, BasicMatmulKernel)
 # 非定向指定: kernel = kernels[0]
 
 # 4. [可选] 调优 Tile 形状与调度策略

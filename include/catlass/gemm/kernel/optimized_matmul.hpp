@@ -23,13 +23,7 @@
 
 namespace Catlass::Gemm::Kernel {
 
-template <
-    class PrologueA,
-    class PrologueB,
-    class BlockMmad_,
-    class BlockEpilogue_,
-    class BlockScheduler_
->
+template <class PrologueA, class PrologueB, class BlockMmad_, class BlockEpilogue_, class BlockScheduler_>
 class OptimizedMatmul {
 public:
     using BlockMmad = BlockMmad_;
@@ -39,11 +33,11 @@ public:
     using LayoutWA = typename BlockMmad::LayoutA;
     using LayoutWB = typename BlockMmad::LayoutB;
 
-    template<class T>
+    template <class T>
     struct LayoutHelper {
         using type = typename T::LayoutIn;
     };
-    template<>
+    template <>
     struct LayoutHelper<void> {
         using type = void;
     };
@@ -72,16 +66,24 @@ public:
 
         // Methods
         CATLASS_HOST_DEVICE
-        ParamsBase() {}
+        ParamsBase()
+        {}
 
         CATLASS_HOST_DEVICE
-        ParamsBase(GemmCoord const &problemShape_,
-               GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_, LayoutB layoutB_, GM_ADDR ptrC_, LayoutC layoutC_)
-            : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_), layoutB(layoutB_),
-              ptrC(ptrC_), layoutC(layoutC_) {}
+        ParamsBase(
+            GemmCoord const& problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_, LayoutB layoutB_,
+            GM_ADDR ptrC_, LayoutC layoutC_)
+            : problemShape(problemShape_),
+              ptrA(ptrA_),
+              layoutA(layoutA_),
+              ptrB(ptrB_),
+              layoutB(layoutB_),
+              ptrC(ptrC_),
+              layoutC(layoutC_)
+        {}
     };
 
-    template<bool IsPaddingA = true, bool IsPaddingB = true>
+    template <bool IsPaddingA = true, bool IsPaddingB = true>
     struct KernelParams : public ParamsBase {
         // Data members
         using LayoutWA = typename BlockMmad::LayoutA;
@@ -94,17 +96,22 @@ public:
 
         // Methods
         CATLASS_HOST_DEVICE
-        KernelParams() {}
+        KernelParams()
+        {}
 
         CATLASS_HOST_DEVICE
-        KernelParams(GemmCoord const &problemShape_,
-               GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_, LayoutB layoutB_, GM_ADDR ptrC_, LayoutC layoutC_,
-               GM_ADDR ptrWA_, LayoutWA layoutWA_, GM_ADDR ptrWB_, LayoutWB layoutWB_)
+        KernelParams(
+            GemmCoord const& problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_, LayoutB layoutB_,
+            GM_ADDR ptrC_, LayoutC layoutC_, GM_ADDR ptrWA_, LayoutWA layoutWA_, GM_ADDR ptrWB_, LayoutWB layoutWB_)
             : ParamsBase(problemShape_, ptrA_, layoutA_, ptrB_, layoutB_, ptrC_, layoutC_),
-            ptrWA(ptrWA_), layoutWA(layoutWA_), ptrWB(ptrWB_), layoutWB(layoutWB_) {}
+              ptrWA(ptrWA_),
+              layoutWA(layoutWA_),
+              ptrWB(ptrWB_),
+              layoutWB(layoutWB_)
+        {}
     };
 
-    template<>
+    template <>
     struct KernelParams<true, false> : public ParamsBase {
         // Data members
         using LayoutWA = typename BlockMmad::LayoutA;
@@ -114,48 +121,58 @@ public:
 
         // Methods
         CATLASS_HOST_DEVICE
-        KernelParams() {}
+        KernelParams()
+        {}
 
         CATLASS_HOST_DEVICE
-        KernelParams(GemmCoord const &problemShape_,
-               GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_, LayoutB layoutB_, GM_ADDR ptrC_, LayoutC layoutC_,
-               GM_ADDR ptrWA_, LayoutWA layoutWA_)
+        KernelParams(
+            GemmCoord const& problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_, LayoutB layoutB_,
+            GM_ADDR ptrC_, LayoutC layoutC_, GM_ADDR ptrWA_, LayoutWA layoutWA_)
             : ParamsBase(problemShape_, ptrA_, layoutA_, ptrB_, layoutB_, ptrC_, layoutC_),
-            ptrWA(ptrWA_), layoutWA(layoutWA_) {}
+              ptrWA(ptrWA_),
+              layoutWA(layoutWA_)
+        {}
     };
 
-    template<>
+    template <>
     struct KernelParams<false, true> : public ParamsBase {
         // Data members
         using LayoutWB = typename BlockMmad::LayoutB;
 
         GM_ADDR ptrWB;
-        LayoutWB layoutWB;;
+        LayoutWB layoutWB;
+        ;
 
         // Methods
         CATLASS_HOST_DEVICE
-        KernelParams() {}
+        KernelParams()
+        {}
 
         CATLASS_HOST_DEVICE
-        KernelParams(GemmCoord const &problemShape_,
-               GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_, LayoutB layoutB_, GM_ADDR ptrC_, LayoutC layoutC_,
-               GM_ADDR ptrWB_, LayoutWB layoutWB_)
+        KernelParams(
+            GemmCoord const& problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_, LayoutB layoutB_,
+            GM_ADDR ptrC_, LayoutC layoutC_, GM_ADDR ptrWB_, LayoutWB layoutWB_)
             : ParamsBase(problemShape_, ptrA_, layoutA_, ptrB_, layoutB_, ptrC_, layoutC_),
-            ptrWB(ptrWB_), layoutWB(layoutWB_) {}
+              ptrWB(ptrWB_),
+              layoutWB(layoutWB_)
+        {}
     };
 
-    template<>
+    template <>
     struct KernelParams<false, false> : public ParamsBase {
         // Methods
         CATLASS_HOST_DEVICE
-        KernelParams() {}
+        KernelParams()
+        {}
 
         CATLASS_HOST_DEVICE
-        KernelParams(GemmCoord const &problemShape_,
-               GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_, LayoutB layoutB_, GM_ADDR ptrC_, LayoutC layoutC_)
-            : ParamsBase(problemShape_, ptrA_, layoutA_, ptrB_, layoutB_, ptrC_, layoutC_) {}
+        KernelParams(
+            GemmCoord const& problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_, LayoutB layoutB_,
+            GM_ADDR ptrC_, LayoutC layoutC_)
+            : ParamsBase(problemShape_, ptrA_, layoutA_, ptrB_, layoutB_, ptrC_, layoutC_)
+        {}
     };
-    
+
     using Params = KernelParams<!std::is_void_v<PrologueA>, !std::is_void_v<PrologueB>>;
 
     struct Arguments {
@@ -165,12 +182,12 @@ public:
         GM_ADDR ptrC;
     };
 
-    static bool CanImplement(const Arguments &args)
+    static bool CanImplement(const Arguments& args)
     {
         return true;
     }
 
-    static size_t GetWorkspaceSize(const Arguments &args)
+    static size_t GetWorkspaceSize(const Arguments& args)
     {
         constexpr bool isPaddingA = !std::is_void_v<PrologueA>;
         constexpr bool isPaddingB = !std::is_void_v<PrologueB>;
@@ -178,33 +195,31 @@ public:
         if constexpr (isPaddingA) {
             if constexpr (PrologueA::paddingTag == PaddingTag::PADDING_BLOCK_ND) {
                 workspaceSize += PrologueA::GetWorkspaceSize(
-                        args.problemShape.m(), args.problemShape.k(), L1TileShape::M, L1TileShape::K);
+                    args.problemShape.m(), args.problemShape.k(), L1TileShape::M, L1TileShape::K);
             } else if constexpr (PrologueA::paddingTag == PaddingTag::PADDING_ND) {
                 // Optimal bandwidth for 512 Byte aligned reads
-                workspaceSize += PrologueA::GetWorkspaceSize(
-                        args.problemShape.m(), args.problemShape.k(), 512 / sizeof(ElementA));
+                workspaceSize +=
+                    PrologueA::GetWorkspaceSize(args.problemShape.m(), args.problemShape.k(), 512 / sizeof(ElementA));
             } else if constexpr (PrologueA::paddingTag == PaddingTag::PADDING_NZ) {
-                workspaceSize += PrologueA::GetWorkspaceSize(
-                        args.problemShape.m(), args.problemShape.k());
+                workspaceSize += PrologueA::GetWorkspaceSize(args.problemShape.m(), args.problemShape.k());
             }
         }
         if constexpr (isPaddingB) {
             if constexpr (PrologueB::paddingTag == PaddingTag::PADDING_BLOCK_ND) {
                 workspaceSize += PrologueB::GetWorkspaceSize(
-                        args.problemShape.k(), args.problemShape.n(), L1TileShape::K, L1TileShape::N);
+                    args.problemShape.k(), args.problemShape.n(), L1TileShape::K, L1TileShape::N);
             } else if constexpr (PrologueB::paddingTag == PaddingTag::PADDING_ND) {
                 // Optimal bandwidth for 512 Byte aligned reads
-                workspaceSize += PrologueB::GetWorkspaceSize(
-                        args.problemShape.k(), args.problemShape.n(), 512 / sizeof(ElementB));
+                workspaceSize +=
+                    PrologueB::GetWorkspaceSize(args.problemShape.k(), args.problemShape.n(), 512 / sizeof(ElementB));
             } else if constexpr (PrologueB::paddingTag == PaddingTag::PADDING_NZ) {
-                workspaceSize += PrologueB::GetWorkspaceSize(
-                        args.problemShape.k(), args.problemShape.n());
+                workspaceSize += PrologueB::GetWorkspaceSize(args.problemShape.k(), args.problemShape.n());
             }
         }
         return workspaceSize;
     }
 
-    static auto ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    static auto ToUnderlyingArguments(const Arguments& args, uint8_t* workspace)
     {
         constexpr bool isPaddingA = !std::is_void_v<PrologueA>;
         constexpr bool isPaddingB = !std::is_void_v<PrologueB>;
@@ -212,21 +227,20 @@ public:
         LayoutB layoutB = LayoutB::template MakeLayout<ElementB>(args.problemShape.k(), args.problemShape.n());
         LayoutC layoutC = LayoutC::template MakeLayout<ElementC>(args.problemShape.m(), args.problemShape.n());
 
-        uint8_t *gmWA = nullptr;
-        uint8_t *gmWB = nullptr;
+        uint8_t* gmWA = nullptr;
+        uint8_t* gmWB = nullptr;
         size_t sizeWA = 0;
         if constexpr (isPaddingA) {
             gmWA = workspace;
             if constexpr (PrologueA::paddingTag == PaddingTag::PADDING_BLOCK_ND) {
                 sizeWA += PrologueA::GetWorkspaceSize(
-                        args.problemShape.m(), args.problemShape.k(), L1TileShape::M, L1TileShape::K);
+                    args.problemShape.m(), args.problemShape.k(), L1TileShape::M, L1TileShape::K);
             } else if constexpr (PrologueA::paddingTag == PaddingTag::PADDING_ND) {
                 // Optimal bandwidth for 512 Byte aligned reads
-                sizeWA += PrologueA::GetWorkspaceSize(
-                        args.problemShape.m(), args.problemShape.k(), 512 / sizeof(ElementA));
+                sizeWA +=
+                    PrologueA::GetWorkspaceSize(args.problemShape.m(), args.problemShape.k(), 512 / sizeof(ElementA));
             } else if constexpr (PrologueA::paddingTag == PaddingTag::PADDING_NZ) {
-                sizeWA += PrologueA::GetWorkspaceSize(
-                        args.problemShape.m(), args.problemShape.k());
+                sizeWA += PrologueA::GetWorkspaceSize(args.problemShape.m(), args.problemShape.k());
             }
         }
         if constexpr (isPaddingB) {
@@ -252,8 +266,8 @@ public:
             } else if constexpr (PrologueB::paddingTag == PaddingTag::PADDING_NZ) {
                 layoutWB = PrologueB::GetWorkspaceLayout(layoutB);
             }
-            Params params{args.problemShape, args.ptrA, layoutA, args.ptrB, layoutB, args.ptrC, layoutC, 
-                gmWA, layoutWA, gmWB, layoutWB};
+            Params params{args.problemShape, args.ptrA, layoutA,  args.ptrB, layoutB, args.ptrC,
+                          layoutC,           gmWA,      layoutWA, gmWB,      layoutWB};
             return params;
         } else if constexpr (isPaddingA) {
             typename PrologueA::LayoutOut layoutWA;
@@ -265,8 +279,8 @@ public:
             } else if constexpr (PrologueA::paddingTag == PaddingTag::PADDING_NZ) {
                 layoutWA = PrologueA::GetWorkspaceLayout(layoutA);
             }
-            Params params{args.problemShape, args.ptrA, layoutA, args.ptrB, layoutB, args.ptrC, layoutC,
-                gmWA, layoutWA};
+            Params params{args.problemShape, args.ptrA, layoutA, args.ptrB, layoutB,
+                          args.ptrC,         layoutC,   gmWA,    layoutWA};
             return params;
         } else if constexpr (isPaddingB) {
             typename PrologueB::LayoutOut layoutWB;
@@ -278,32 +292,31 @@ public:
             } else if constexpr (PrologueB::paddingTag == PaddingTag::PADDING_NZ) {
                 layoutWB = PrologueB::GetWorkspaceLayout(layoutB);
             }
-            Params params{args.problemShape, args.ptrA, layoutA, args.ptrB, layoutB, args.ptrC, layoutC,
-                gmWB, layoutWB};
+            Params params{args.problemShape, args.ptrA, layoutA, args.ptrB, layoutB,
+                          args.ptrC,         layoutC,   gmWB,    layoutWB};
             return params;
         } else {
             Params params{args.problemShape, args.ptrA, layoutA, args.ptrB, layoutB, args.ptrC, layoutC};
             return params;
-        }  
+        }
     }
 
     // Methods
     CATLASS_DEVICE
-    OptimizedMatmul() {}
+    OptimizedMatmul()
+    {}
 
     template <int32_t CORE_TYPE = g_coreType>
-    CATLASS_DEVICE
-    void operator()(Params const &params);
+    CATLASS_DEVICE void operator()(Params const& params);
 
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIV>(Params const &params)
+    CATLASS_DEVICE void operator()<AscendC::AIV>(Params const& params)
     {
         if constexpr (!std::is_void_v<PrologueA>) {
             AscendC::GlobalTensor<ElementA> gmA;
             AscendC::GlobalTensor<ElementA> gmWA;
-            gmA.SetGlobalBuffer(reinterpret_cast<__gm__ ElementA *>(params.ptrA));
-            gmWA.SetGlobalBuffer(reinterpret_cast<__gm__ ElementA *>(params.ptrWA));
+            gmA.SetGlobalBuffer(reinterpret_cast<__gm__ ElementA*>(params.ptrA));
+            gmWA.SetGlobalBuffer(reinterpret_cast<__gm__ ElementA*>(params.ptrWA));
             PrologueA prologueA(resource);
             prologueA(gmWA, gmA, params.layoutWA, params.layoutA);
         }
@@ -311,8 +324,8 @@ public:
         if constexpr (!std::is_void_v<PrologueB>) {
             AscendC::GlobalTensor<ElementB> gmB;
             AscendC::GlobalTensor<ElementB> gmWB;
-            gmB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB *>(params.ptrB));
-            gmWB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB *>(params.ptrWB));
+            gmB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB*>(params.ptrB));
+            gmWB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB*>(params.ptrWB));
             PrologueB prologueB(resource);
             prologueB(gmWB, gmB, params.layoutWB, params.layoutB);
             // 0x0 synchronization control between AI Core
@@ -327,8 +340,7 @@ public:
 
     /// Executes matmul
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIC>(Params const &params)
+    CATLASS_DEVICE void operator()<AscendC::AIC>(Params const& params)
     {
         if constexpr (!std::is_void_v<PrologueA> || !std::is_void_v<PrologueB>) {
             Catlass::Arch::CrossCoreWaitFlag(flagAivFinishPadding);
@@ -343,22 +355,22 @@ public:
         // Represent the full gm
         AscendC::GlobalTensor<ElementA> gmA;
         if constexpr (std::is_void_v<PrologueA>) {
-            gmA.SetGlobalBuffer((__gm__ ElementA *)params.ptrA);
+            gmA.SetGlobalBuffer((__gm__ ElementA*)params.ptrA);
             layoutA = params.layoutA;
         } else {
-            gmA.SetGlobalBuffer((__gm__ ElementA *)params.ptrWA);
+            gmA.SetGlobalBuffer((__gm__ ElementA*)params.ptrWA);
             layoutA = params.layoutWA;
         }
         AscendC::GlobalTensor<ElementB> gmB;
         if constexpr (std::is_void_v<PrologueB>) {
-            gmB.SetGlobalBuffer((__gm__ ElementB *)params.ptrB);
+            gmB.SetGlobalBuffer((__gm__ ElementB*)params.ptrB);
             layoutB = params.layoutB;
         } else {
-            gmB.SetGlobalBuffer((__gm__ ElementB *)params.ptrWB);
+            gmB.SetGlobalBuffer((__gm__ ElementB*)params.ptrWB);
             layoutB = params.layoutWB;
         }
         AscendC::GlobalTensor<ElementC> gmC;
-        gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrC);
+        gmC.SetGlobalBuffer((__gm__ ElementC*)params.ptrC);
 
         BlockMmad blockMmad(resource);
 
@@ -391,11 +403,8 @@ public:
 
             // Compute block-scoped matrix multiply-add
             blockMmad(
-                gmA[gmOffsetA], layoutA,
-                gmB[gmOffsetB], layoutB,
-                gmC[gmOffsetC], params.layoutC,
-                gmA[gmOffsetNextA], gmB[gmOffsetNextB],
-                actualBlockShape, nextActualBlockShape, isFirstBlock, hasNextBlock);
+                gmA[gmOffsetA], layoutA, gmB[gmOffsetB], layoutB, gmC[gmOffsetC], params.layoutC, gmA[gmOffsetNextA],
+                gmB[gmOffsetNextB], actualBlockShape, nextActualBlockShape, isFirstBlock, hasNextBlock);
         }
 
         AscendC::PipeBarrier<PIPE_ALL>();

@@ -19,7 +19,7 @@
 #include "launch_map.h"
 
 template <class DType>
-void DoW8A8Tiling(TilingParams &tilingParams, PlatformInfo &platformInfo)
+void DoW8A8Tiling(TilingParams& tilingParams, PlatformInfo& platformInfo)
 {
     uint32_t layoutTagA = tilingParams.layoutTagA;
     uint32_t layoutTagB = tilingParams.layoutTagB;
@@ -28,32 +28,33 @@ void DoW8A8Tiling(TilingParams &tilingParams, PlatformInfo &platformInfo)
 }
 
 template <class DType>
-void SelectW8A8Kernel(TilingParams &tilingParams, PlatformInfo &platformInfo)
+void SelectW8A8Kernel(TilingParams& tilingParams, PlatformInfo& platformInfo)
 {
     SelectKernelB8(tilingParams, platformInfo);
 }
 
 template <class DType>
-void DoTilingAndSelectKernel(TilingParams &tilingParams, PlatformInfo &platformInfo)
+void DoTilingAndSelectKernel(TilingParams& tilingParams, PlatformInfo& platformInfo)
 {
     DoW8A8Tiling<DType>(tilingParams, platformInfo);
     SelectW8A8Kernel<DType>(tilingParams, platformInfo);
 }
 
-size_t DynamicOptimizedMatmulGetWorkspace(TilingParams &tilingParams)
+size_t DynamicOptimizedMatmulGetWorkspace(TilingParams& tilingParams)
 {
     return getWorkspaceFuncMap[tilingParams.tilingKey.value](tilingParams);
 }
 
-void ExecuteDynamicOptimizedMatmul(aclrtStream &stream, uint64_t hardwareSyncAddr, uint8_t *dA, uint8_t *dB, uint8_t *dC,
-    uint8_t *dW, uint8_t *dScale, uint8_t *dPerTokenScale, uint8_t *dTilingParams, TilingParams &tilingParams)
+void ExecuteDynamicOptimizedMatmul(
+    aclrtStream& stream, uint64_t hardwareSyncAddr, uint8_t* dA, uint8_t* dB, uint8_t* dC, uint8_t* dW, uint8_t* dScale,
+    uint8_t* dPerTokenScale, uint8_t* dTilingParams, TilingParams& tilingParams)
 {
-
-    launchKernelFuncMap[tilingParams.tilingKey.value](stream, hardwareSyncAddr, dA, dB, dC, dW, dScale, dPerTokenScale, dTilingParams, tilingParams);
+    launchKernelFuncMap[tilingParams.tilingKey.value](
+        stream, hardwareSyncAddr, dA, dB, dC, dW, dScale, dPerTokenScale, dTilingParams, tilingParams);
 }
 
 template <class DType>
-void PrintTilingParams(TilingParams &tilingParams, PlatformInfo& platformInfo)
+void PrintTilingParams(TilingParams& tilingParams, PlatformInfo& platformInfo)
 {
     std::cout << std::dec << "┌─────────────────────────────────────────────┐\n"
               << "│            Tiling Parameters                │\n"
@@ -84,4 +85,4 @@ void PrintTilingParams(TilingParams &tilingParams, PlatformInfo& platformInfo)
     std::cout << std::dec << "Kernel Func Name : " << funcNameMap[tilingParams.tilingKey.value] << std::endl;
 }
 
-#endif  // CATLASS_DYNAMIC_OPTIMIZED_MATMUL_W8A8_H
+#endif // CATLASS_DYNAMIC_OPTIMIZED_MATMUL_W8A8_H

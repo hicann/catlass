@@ -22,5 +22,5 @@ class OperationBase:
         return self.get_kernels()[0]
 
     @abstractmethod
-    def can_implement(self)->bool:
+    def can_implement(self) -> bool:
         pass

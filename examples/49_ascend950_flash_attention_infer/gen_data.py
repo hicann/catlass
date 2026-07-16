@@ -3,7 +3,7 @@
 # ----------------------------------------------------------------------------
 # Copyright (c) 2026 Huawei Technologies Co., Ltd.
 # This file is a part of the CANN Open Software.
-# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 # CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
 # THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
@@ -18,10 +18,12 @@ import numpy as np
 import random
 from ml_dtypes import bfloat16
 from dataclasses import dataclass
+
 np.random.seed(1)
 
 
 WORKSPACE = os.path.dirname(os.path.abspath(__file__))
+
 
 def gen_seqlen(max_q_seqlen: int, max_kv_seqlen: int, is_varied_len: int, batch: int):
     q_seqlen_list = []
@@ -37,8 +39,8 @@ def gen_seqlen(max_q_seqlen: int, max_kv_seqlen: int, is_varied_len: int, batch:
             kv_seqlen_list.append(kv_seq)
     return q_seqlen_list, kv_seqlen_list
 
-class TestFlashAttentionInfer():
 
+class TestFlashAttentionInfer:
     @dataclass
     class AttentionInputs:
         query: any
@@ -65,7 +67,9 @@ class TestFlashAttentionInfer():
         kv_dtype: int
 
     @classmethod
-    def check_attr(cls, batch: int, q_seqlen: int, kv_seqlen: int, num_blocks: int, block_size: int):
+    def check_attr(
+        cls, batch: int, q_seqlen: int, kv_seqlen: int, num_blocks: int, block_size: int
+    ):
         if q_seqlen > kv_seqlen:
             logging("[ERROR] q_seqlen cannot exceed kv_seqlen.")
             sys.exit()
@@ -75,8 +79,10 @@ class TestFlashAttentionInfer():
         group_num = head // kv_head
         score = None
         for i in range(kv_head):
-            group_score = np.matmul(left[i * group_num:(i + 1) * group_num, :, :],
-                                    right[i:(i + 1), :, :]).astype(np.float32)
+            group_score = np.matmul(
+                left[i * group_num : (i + 1) * group_num, :, :],
+                right[i : (i + 1), :, :],
+            ).astype(np.float32)
             if score is None:
                 score = group_score
             else:
@@ -92,30 +98,35 @@ class TestFlashAttentionInfer():
         soft_res = sim_sub / row_sum
         return soft_res
 
-    def ref_masked_attention(self,
-            query,  # (q_seqlen, num_heads, head_size)
-            key,    # (k_seqlen, kv_heads, head_size)
-            value,
-            scale: float,
-            mask    # (q_seqlen, k_seqlen)
+    def ref_masked_attention(
+        self,
+        query,  # (q_seqlen, num_heads, head_size)
+        key,  # (k_seqlen, kv_heads, head_size)
+        value,
+        scale: float,
+        mask,  # (q_seqlen, k_seqlen)
     ):
         # Q * K.T
         query = np.transpose(query, (1, 0, 2))
         key = np.transpose(key, (1, 2, 0))
-        sim_high = self.group_matmul(query.shape[0], key.shape[0], query, key)  # (head_num, q_seqlen, k_seqlen)
+        sim_high = self.group_matmul(
+            query.shape[0], key.shape[0], query, key
+        )  # (head_num, q_seqlen, k_seqlen)
         sim_high = sim_high * scale
         post_mask_factor = -3e38
         if mask is not None:
-            sim_high = sim_high + (
-                mask[:sim_high.shape[-2], :sim_high.shape[-1]]
-                ).astype(np.float32) * post_mask_factor
-        
+            sim_high = (
+                sim_high
+                + (mask[: sim_high.shape[-2], : sim_high.shape[-1]]).astype(np.float32)
+                * post_mask_factor
+            )
+
         # softmax
         p_high = self.softmax_numpy(sim_high)
         p = p_high.astype(query.dtype)
         p_high = p_high.astype(np.float32)
         value = np.transpose(value, (1, 0, 2))
-        
+
         out_high = self.group_matmul(query.shape[0], key.shape[0], p_high, value)
         out = self.group_matmul(query.shape[0], key.shape[0], p, value)
         out_high = np.transpose(out_high, (1, 0, 2))
@@ -123,7 +134,9 @@ class TestFlashAttentionInfer():
         out = out.astype(query.dtype)
         return out, out_high
 
-    def ref_single_query_cached_kv_attention(self, attention_inputs: AttentionInputs, output, true_out) -> None:
+    def ref_single_query_cached_kv_attention(
+        self, attention_inputs: AttentionInputs, output, true_out
+    ) -> None:
         num_heads = attention_inputs.shape_param.num_heads
         kv_heads = attention_inputs.shape_param.kv_heads
         head_size_qk = attention_inputs.shape_param.head_size
@@ -136,14 +149,14 @@ class TestFlashAttentionInfer():
         for i in range(batch):
             q_seqlen = int(attention_inputs.q_seqlen_list[i])
             k_seqlen = int(attention_inputs.k_seqlen_list[i])
-            q = attention_inputs.query[cu_seqlen:(cu_seqlen + q_seqlen), :, :]
+            q = attention_inputs.query[cu_seqlen : (cu_seqlen + q_seqlen), :, :]
             keys = None
             values = None
             if attention_inputs.shape_param.kv_dtype == 1:
                 keys = []
                 values = []
                 block_table = attention_inputs.block_tables[i]
-                for j in range(k_seqlen): # j 每个k token拼接
+                for j in range(k_seqlen):  # j 每个k token拼接
                     block_number = int(block_table[j // block_size])
                     block_offset = j % block_size
 
@@ -157,18 +170,24 @@ class TestFlashAttentionInfer():
                 keys = np.stack(keys, axis=0)
                 values = np.stack(values, axis=0)
             elif attention_inputs.shape_param.kv_dtype == 0:
-                keys = attention_inputs.key_cache[kv_seqlen_now: kv_seqlen_now + k_seqlen, :, :]
-                values = attention_inputs.value_cache[kv_seqlen_now: kv_seqlen_now + k_seqlen, :, :]
-            scale = 1.0 / (head_size_qk ** 0.5)
+                keys = attention_inputs.key_cache[
+                    kv_seqlen_now : kv_seqlen_now + k_seqlen, :, :
+                ]
+                values = attention_inputs.value_cache[
+                    kv_seqlen_now : kv_seqlen_now + k_seqlen, :, :
+                ]
+            scale = 1.0 / (head_size_qk**0.5)
             if attention_inputs.mask_type > 0:
-                mask = attention_inputs.global_mask[cu_seqlen:(cu_seqlen + q_seqlen), :]
+                mask = attention_inputs.global_mask[
+                    cu_seqlen : (cu_seqlen + q_seqlen), :
+                ]
             else:
                 mask = None
             out, out_high = self.ref_masked_attention(q, keys, values, scale, mask)
             out = out.reshape(-1, num_heads, head_size_vo)
             out_high = out_high.reshape(-1, num_heads, head_size_vo)
-            output[cu_seqlen: cu_seqlen + q_seqlen, :, :] = out
-            true_out[cu_seqlen: cu_seqlen + q_seqlen, :, :] = out_high
+            output[cu_seqlen : cu_seqlen + q_seqlen, :, :] = out
+            true_out[cu_seqlen : cu_seqlen + q_seqlen, :, :] = out_high
             cu_seqlen += q_seqlen
             kv_seqlen_now += k_seqlen
 
@@ -182,22 +201,41 @@ class TestFlashAttentionInfer():
         num_tokens = np.array(gen_data_params.q_seqlen_list).sum()
         num_kv_tokens = np.array(gen_data_params.k_seqlen_list).sum()
         batch_size = len(gen_data_params.q_seqlen_list)
-        query = np.random.uniform(q_min_range, q_max_range,
-            size=(num_tokens, gen_data_params.num_heads, head_size_qk)).astype(gen_data_params.dtype)
+        query = np.random.uniform(
+            q_min_range,
+            q_max_range,
+            size=(num_tokens, gen_data_params.num_heads, head_size_qk),
+        ).astype(gen_data_params.dtype)
         max_k_seqlen = max(gen_data_params.k_seqlen_list)
-        block_tables = []   # (num_tokens, max_num_blocks_per_seq)
-        layout = 'TND'
+        block_tables = []  # (num_tokens, max_num_blocks_per_seq)
+        layout = "TND"
         key_cache = None
         value_cache = None
         if gen_data_params.kv_dtype == 1:
-            key_cache = np.random.uniform(kv_min_range, kv_max_range,
-                size=(gen_data_params.num_blocks, gen_data_params.block_size,
-                gen_data_params.kv_heads, head_size_qk)).astype(gen_data_params.dtype)
+            key_cache = np.random.uniform(
+                kv_min_range,
+                kv_max_range,
+                size=(
+                    gen_data_params.num_blocks,
+                    gen_data_params.block_size,
+                    gen_data_params.kv_heads,
+                    head_size_qk,
+                ),
+            ).astype(gen_data_params.dtype)
 
-            value_cache = np.random.uniform(kv_min_range, kv_max_range,
-                size=(gen_data_params.num_blocks, gen_data_params.block_size,
-                gen_data_params.kv_heads, head_size_vo)).astype(gen_data_params.dtype)
-            max_num_blocks_per_seq = (max_k_seqlen + gen_data_params.block_size - 1) // gen_data_params.block_size
+            value_cache = np.random.uniform(
+                kv_min_range,
+                kv_max_range,
+                size=(
+                    gen_data_params.num_blocks,
+                    gen_data_params.block_size,
+                    gen_data_params.kv_heads,
+                    head_size_vo,
+                ),
+            ).astype(gen_data_params.dtype)
+            max_num_blocks_per_seq = (
+                max_k_seqlen + gen_data_params.block_size - 1
+            ) // gen_data_params.block_size
             for i in range(batch_size):
                 block_table = [
                     max_num_blocks_per_seq * i + j
@@ -205,19 +243,43 @@ class TestFlashAttentionInfer():
                 ]
                 block_tables.append(block_table)
         elif gen_data_params.kv_dtype == 0:
-            if layout == 'TND':
-                key_cache = np.random.uniform(kv_min_range, kv_max_range,
-                    size=(num_kv_tokens, gen_data_params.kv_heads, head_size_qk)).astype(gen_data_params.dtype)
-                value_cache = np.random.uniform(kv_min_range, kv_max_range,
-                    size=(num_kv_tokens, gen_data_params.kv_heads, head_size_vo)).astype(gen_data_params.dtype)
-            elif layout == 'BSND':
-                key_cache = np.random.uniform(kv_min_range, kv_max_range,
-                    size=(batch_size, max_k_seqlen, gen_data_params.kv_heads, head_size_qk)).astype(gen_data_params.dtype)
-                value_cache = np.random.uniform(kv_min_range, kv_max_range,
-                    size=(batch_size, max_k_seqlen, gen_data_params.kv_heads, head_size_vo)).astype(gen_data_params.dtype)
-        
+            if layout == "TND":
+                key_cache = np.random.uniform(
+                    kv_min_range,
+                    kv_max_range,
+                    size=(num_kv_tokens, gen_data_params.kv_heads, head_size_qk),
+                ).astype(gen_data_params.dtype)
+                value_cache = np.random.uniform(
+                    kv_min_range,
+                    kv_max_range,
+                    size=(num_kv_tokens, gen_data_params.kv_heads, head_size_vo),
+                ).astype(gen_data_params.dtype)
+            elif layout == "BSND":
+                key_cache = np.random.uniform(
+                    kv_min_range,
+                    kv_max_range,
+                    size=(
+                        batch_size,
+                        max_k_seqlen,
+                        gen_data_params.kv_heads,
+                        head_size_qk,
+                    ),
+                ).astype(gen_data_params.dtype)
+                value_cache = np.random.uniform(
+                    kv_min_range,
+                    kv_max_range,
+                    size=(
+                        batch_size,
+                        max_k_seqlen,
+                        gen_data_params.kv_heads,
+                        head_size_vo,
+                    ),
+                ).astype(gen_data_params.dtype)
+
         if gen_data_params.mask_type > 0:
-            mask = np.zeros(shape=(num_tokens, max_k_seqlen)).astype(gen_data_params.dtype)
+            mask = np.zeros(shape=(num_tokens, max_k_seqlen)).astype(
+                gen_data_params.dtype
+            )
             pre_qseqlen = 0
             for i in range(batch_size):
                 qseqlen = gen_data_params.q_seqlen_list[i]
@@ -226,10 +288,17 @@ class TestFlashAttentionInfer():
                 tri = np.ones((max_seq_len, max_seq_len))
                 tri = np.triu(tri, 1).astype(gen_data_params.dtype)
                 if gen_data_params.mask_type == 1:
-                    mask[pre_qseqlen : (pre_qseqlen + qseqlen), 0 : kseqlen] = tri[0 : qseqlen, 0 : kseqlen] #left up
+                    mask[pre_qseqlen : (pre_qseqlen + qseqlen), 0:kseqlen] = tri[
+                        0:qseqlen, 0:kseqlen
+                    ]  # left up
                 else:
-                    mask[pre_qseqlen : (pre_qseqlen + qseqlen), max_seq_len - kseqlen: max_seq_len] = \
-                        tri[max_seq_len - qseqlen : max_seq_len, max_seq_len - kseqlen : max_seq_len] #right down
+                    mask[
+                        pre_qseqlen : (pre_qseqlen + qseqlen),
+                        max_seq_len - kseqlen : max_seq_len,
+                    ] = tri[
+                        max_seq_len - qseqlen : max_seq_len,
+                        max_seq_len - kseqlen : max_seq_len,
+                    ]  # right down
                 pre_qseqlen += qseqlen
             mask = mask.astype(gen_data_params.dtype)
         elif gen_data_params.mask_type == 0:
@@ -239,29 +308,48 @@ class TestFlashAttentionInfer():
         ref_output = np.zeros(shape_out, dtype=gen_data_params.dtype)
         true_out = np.zeros(shape_out, dtype=np.float32)
 
-        attention_inputs = self.AttentionInputs(query, key_cache, value_cache, block_tables,
-            gen_data_params.q_seqlen_list, gen_data_params.k_seqlen_list, mask, gen_data_params.mask_type, gen_data_params)
-        
+        attention_inputs = self.AttentionInputs(
+            query,
+            key_cache,
+            value_cache,
+            block_tables,
+            gen_data_params.q_seqlen_list,
+            gen_data_params.k_seqlen_list,
+            mask,
+            gen_data_params.mask_type,
+            gen_data_params,
+        )
+
         self.ref_single_query_cached_kv_attention(
             attention_inputs,
             ref_output,
             true_out,
         )
 
-        num_tokens.astype(np.int32).tofile(os.path.join(WORKSPACE, "data", "q_ntokens.bin"))
-        num_kv_tokens.astype(np.int32).tofile(os.path.join(WORKSPACE, "data", "kv_ntokens.bin"))
+        num_tokens.astype(np.int32).tofile(
+            os.path.join(WORKSPACE, "data", "q_ntokens.bin")
+        )
+        num_kv_tokens.astype(np.int32).tofile(
+            os.path.join(WORKSPACE, "data", "kv_ntokens.bin")
+        )
         query.tofile(os.path.join(WORKSPACE, "data", "q.bin"))
         key_cache.tofile(os.path.join(WORKSPACE, "data", "k.bin"))
         value_cache.tofile(os.path.join(WORKSPACE, "data", "v.bin"))
-        np.array(block_tables).astype(np.int32).tofile(os.path.join(WORKSPACE, "data", "block_table.bin"))
+        np.array(block_tables).astype(np.int32).tofile(
+            os.path.join(WORKSPACE, "data", "block_table.bin")
+        )
         np.array(gen_data_params.q_seqlen_list).astype(np.int64).tofile(
-            os.path.join(WORKSPACE, "data", "q_seqlen.bin"))
+            os.path.join(WORKSPACE, "data", "q_seqlen.bin")
+        )
         np.array(gen_data_params.k_seqlen_list).astype(np.int64).tofile(
-            os.path.join(WORKSPACE, "data", "kv_seqlen.bin"))
+            os.path.join(WORKSPACE, "data", "kv_seqlen.bin")
+        )
         if mask is not None:
             mask_out = mask.astype(np.uint8)
             mask_out.tofile(os.path.join(WORKSPACE, "data", "mask.bin"))
-        ref_output.astype(np.float32).tofile(os.path.join(WORKSPACE, "data", "golden.bin"))
+        ref_output.astype(np.float32).tofile(
+            os.path.join(WORKSPACE, "data", "golden.bin")
+        )
 
 
 if __name__ == "__main__":
@@ -286,14 +374,24 @@ if __name__ == "__main__":
         logging("[ERROR] dtype must be half or bf16")
         sys.exit()
 
-    q_seqlen_list, kv_seqlen_list = gen_seqlen(q_seqlen, kv_seqlen, is_varied_len, batch)
-    
+    q_seqlen_list, kv_seqlen_list = gen_seqlen(
+        q_seqlen, kv_seqlen, is_varied_len, batch
+    )
+
     max_kv_seqlen = max(kv_seqlen_list)
     num_blocks = batch * ((max_kv_seqlen + block_size - 1) // block_size)
-    
-    testObj = TestFlashAttentionInfer()
-    gen_data_params = testObj.GenDataParams(q_seqlen_list, kv_seqlen_list, num_head,
-                                            kv_heads, embedding_size,
-                                            num_blocks, block_size, mask_type, dtype, kv_dtype)
-    testObj.calc_data(gen_data_params)
 
+    testObj = TestFlashAttentionInfer()
+    gen_data_params = testObj.GenDataParams(
+        q_seqlen_list,
+        kv_seqlen_list,
+        num_head,
+        kv_heads,
+        embedding_size,
+        num_blocks,
+        block_size,
+        mask_type,
+        dtype,
+        kv_dtype,
+    )
+    testObj.calc_data(gen_data_params)

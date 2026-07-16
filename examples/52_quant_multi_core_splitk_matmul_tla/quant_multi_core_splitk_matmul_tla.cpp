@@ -41,7 +41,7 @@ using namespace tla;
 
 using Options = GemmOptions;
 
-static void Run(const Options &options)
+static void Run(const Options& options)
 {
     aclrtStream stream{nullptr};
     ACL_CHECK(aclInit(nullptr));
@@ -102,26 +102,29 @@ static void Run(const Options &options)
     golden::FillRandomData(hostScale, 0.0, 1.0);
     golden::FillRandomData(hostPerTokenScale, 0.0, 1.0);
 
-    uint8_t *deviceA{nullptr};
-    uint8_t *deviceB{nullptr};
-    uint8_t *deviceScale{nullptr};
-    uint8_t *devicePerTokenScale{nullptr};
-    uint8_t *deviceD{nullptr};
-    uint8_t *deviceWorkspace{nullptr};
+    uint8_t* deviceA{nullptr};
+    uint8_t* deviceB{nullptr};
+    uint8_t* deviceScale{nullptr};
+    uint8_t* devicePerTokenScale{nullptr};
+    uint8_t* deviceD{nullptr};
+    uint8_t* deviceWorkspace{nullptr};
 
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceScale), sizeScale, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceScale), sizeScale, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceScale, sizeScale, hostScale.data(), sizeScale, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&devicePerTokenScale), sizePerTokenScale, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(aclrtMemcpy(devicePerTokenScale, sizePerTokenScale, hostPerTokenScale.data(), sizePerTokenScale, ACL_MEMCPY_HOST_TO_DEVICE));
+    ACL_CHECK(
+        aclrtMalloc(reinterpret_cast<void**>(&devicePerTokenScale), sizePerTokenScale, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMemcpy(
+        devicePerTokenScale, sizePerTokenScale, hostPerTokenScale.data(), sizePerTokenScale,
+        ACL_MEMCPY_HOST_TO_DEVICE));
 
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceD), sizeD, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceD), sizeD, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemset(deviceD, sizeD, 0, sizeD));
 
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
@@ -147,69 +150,41 @@ static void Run(const Options &options)
     using ElementCompute = float;
     using EpilogueTileShape = MatrixShape<32, 256>;
 
-    using TileRowBroadcastMul =
-        Epilogue::Tile::TileRowBroadcastMulTla<ArchTag, ElementCompute, EpilogueTileShape>;
-    using TileBroadcastOneBlk =
-        Epilogue::Tile::TileBroadcastOneBlkTla<ArchTag, ElementCompute, EpilogueTileShape::ROW>;
+    using TileRowBroadcastMul = Epilogue::Tile::TileRowBroadcastMulTla<ArchTag, ElementCompute, EpilogueTileShape>;
+    using TileBroadcastOneBlk = Epilogue::Tile::TileBroadcastOneBlkTla<ArchTag, ElementCompute, EpilogueTileShape::ROW>;
     using TileOneBlkColumnBroadcastMul =
         Epilogue::Tile::TileOneBlkColumnBroadcastMulTla<ArchTag, ElementCompute, EpilogueTileShape>;
 
     using EpilogueTileCopy = Epilogue::Tile::TileCopyDequantTla<
-        ArchTag,
-        ElementC,
-        LayoutTagC,
-        ElementScale,
-        LayoutTagScale,
-        ElementPerTokenScale,
-        LayoutTagPerTokenScale,
-        ElementD,
-        LayoutTagD>;
+        ArchTag, ElementC, LayoutTagC, ElementScale, LayoutTagScale, ElementPerTokenScale, LayoutTagPerTokenScale,
+        ElementD, LayoutTagD>;
 
     using EpilogueTileScheduler = Epilogue::Tile::EpilogueHorizontalTileSwizzle;
 
     using BlockEpilogue = Epilogue::Block::BlockEpilogue<
-        EpilogueDispatchPolicy,
-        ElementC,
-        ElementScale,
-        ElementPerTokenScale,
-        ElementD,
-        TileRowBroadcastMul,
-        TileBroadcastOneBlk,
-        TileOneBlkColumnBroadcastMul,
-        EpilogueTileCopy,
-        EpilogueTileScheduler>;
+        EpilogueDispatchPolicy, ElementC, ElementScale, ElementPerTokenScale, ElementD, TileRowBroadcastMul,
+        TileBroadcastOneBlk, TileOneBlkColumnBroadcastMul, EpilogueTileCopy, EpilogueTileScheduler>;
 
     using ElementAccumulator = typename BlockMmad::ElementAccumulator;
     static constexpr uint32_t computeLength = 192 * 1024 / sizeof(ElementAccumulator);
-    using ReduceAdd = Catlass::Gemm::Kernel::SplitkReduceAdd<
-        ArchTag, ElementAccumulator, ElementC, 1, computeLength >;
+    using ReduceAdd = Catlass::Gemm::Kernel::SplitkReduceAdd<ArchTag, ElementAccumulator, ElementC, 1, computeLength>;
 
     using BlockScheduler = typename Gemm::Block::SplitkGemmIdentityBlockSwizzle<3, 0>;
 
-    using MatmulKernel = Gemm::Kernel::QuantMultiCoreSplitkMatmulTla<
-        BlockMmad, BlockEpilogue, BlockScheduler, ReduceAdd>;
+    using MatmulKernel =
+        Gemm::Kernel::QuantMultiCoreSplitkMatmulTla<BlockMmad, BlockEpilogue, BlockScheduler, ReduceAdd>;
     using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
 
-    typename MatmulKernel::Arguments arguments{
-        options.problemShape,
-        aicCoreNum,
-        deviceA,
-        deviceB,
-        deviceScale,
-        devicePerTokenScale,
-        deviceD,
-        layoutA,
-        layoutB,
-        layoutScale,
-        layoutPerTokenScale,
-        layoutD};
+    typename MatmulKernel::Arguments arguments{options.problemShape, aicCoreNum, deviceA, deviceB, deviceScale,
+                                               devicePerTokenScale,  deviceD,    layoutA, layoutB, layoutScale,
+                                               layoutPerTokenScale,  layoutD};
 
     MatmulAdapter matmulOp;
     matmulOp.CanImplement(arguments);
     size_t sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
 
     if (sizeWorkspace > 0) {
-        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
         ACL_CHECK(aclrtMemset(deviceWorkspace, sizeWorkspace, 0, sizeWorkspace));
     }
 
@@ -222,17 +197,8 @@ static void Run(const Options &options)
 
     std::vector<float> hostGolden(lenD);
     golden::QuantMatmul(
-        options.problemShape,
-        hostA,
-        tagA,
-        hostB,
-        tagB,
-        hostScale,
-        tagScale,
-        hostPerTokenScale,
-        tagPerTokenScale,
-        hostGolden,
-        tagD);
+        options.problemShape, hostA, tagA, hostB, tagB, hostScale, tagScale, hostPerTokenScale, tagPerTokenScale,
+        hostGolden, tagD);
 
     std::vector<uint64_t> errorIndices = golden::CompareData(hostD, hostGolden, k);
     if (errorIndices.empty()) {
@@ -255,7 +221,7 @@ static void Run(const Options &options)
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv)
+int main(int argc, const char** argv)
 {
     Options options;
     if (options.Parse(argc, argv) != 0) {

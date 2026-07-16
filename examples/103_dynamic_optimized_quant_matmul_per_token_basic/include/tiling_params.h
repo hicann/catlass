@@ -13,7 +13,11 @@
 
 #include <cstdint>
 
-enum class LayoutTag : uint8_t { TagRowMajor = 0, TagColumnMajor = 1};
+enum class LayoutTag : uint8_t
+{
+    TagRowMajor = 0,
+    TagColumnMajor = 1
+};
 
 /*
  * Bit field layout description (little-endian):
@@ -32,31 +36,63 @@ enum class LayoutTag : uint8_t { TagRowMajor = 0, TagColumnMajor = 1};
 union TilingKey {
     uint64_t value;
     struct {
-        uint64_t layoutTagC : 4;  // 0-3
-        uint64_t layoutTagB : 4;  // 4-7
-        uint64_t layoutTagA : 4;  // 8-11
-        uint64_t reserveBit : 40; // 12-51 May be used in the future
-        uint64_t dtype : 4;       // 52-55
+        uint64_t layoutTagC : 4;           // 0-3
+        uint64_t layoutTagB : 4;           // 4-7
+        uint64_t layoutTagA : 4;           // 8-11
+        uint64_t reserveBit : 40;          // 12-51 May be used in the future
+        uint64_t dtype : 4;                // 52-55
         uint64_t templateKernelSerial : 8; // 56-63
     } bits;
 
-    TilingKey() : value(0) {}
-    TilingKey(uint64_t v) : value(v) {}
+    TilingKey() : value(0)
+    {}
+    TilingKey(uint64_t v) : value(v)
+    {}
 
-    uint8_t GetLayoutTagA() const {return bits.layoutTagA;}
-    uint8_t GetLayoutTagB() const {return bits.layoutTagB;}
-    uint8_t GetLayoutTagC() const {return bits.layoutTagC;}
-    uint8_t GetDtype() const {return bits.dtype;}
-    uint8_t GetKernelSerial() const {return bits.templateKernelSerial;}
+    uint8_t GetLayoutTagA() const
+    {
+        return bits.layoutTagA;
+    }
+    uint8_t GetLayoutTagB() const
+    {
+        return bits.layoutTagB;
+    }
+    uint8_t GetLayoutTagC() const
+    {
+        return bits.layoutTagC;
+    }
+    uint8_t GetDtype() const
+    {
+        return bits.dtype;
+    }
+    uint8_t GetKernelSerial() const
+    {
+        return bits.templateKernelSerial;
+    }
 
-    void SetKernelSerial(uint8_t kernelSerial) { bits.templateKernelSerial = kernelSerial;}
-    void SetLayoutTagA(uint8_t layoutTagA) { bits.layoutTagA = layoutTagA & 0xF; }
-    void SetLayoutTagB(uint8_t layoutTagB) { bits.layoutTagB = layoutTagB & 0xF; }
-    void SetLayoutTagC(uint8_t layoutTagC) { bits.layoutTagC = layoutTagC & 0xF; }
-    void SetDtype(uint8_t dtype) { bits.dtype = dtype & 0xF; }
+    void SetKernelSerial(uint8_t kernelSerial)
+    {
+        bits.templateKernelSerial = kernelSerial;
+    }
+    void SetLayoutTagA(uint8_t layoutTagA)
+    {
+        bits.layoutTagA = layoutTagA & 0xF;
+    }
+    void SetLayoutTagB(uint8_t layoutTagB)
+    {
+        bits.layoutTagB = layoutTagB & 0xF;
+    }
+    void SetLayoutTagC(uint8_t layoutTagC)
+    {
+        bits.layoutTagC = layoutTagC & 0xF;
+    }
+    void SetDtype(uint8_t dtype)
+    {
+        bits.dtype = dtype & 0xF;
+    }
 
-    void SetTilingKey(uint8_t kernelSerial, uint8_t layoutTagA, uint8_t layoutTagB, uint8_t layoutTagC,
-        uint8_t dtype = 0)
+    void SetTilingKey(
+        uint8_t kernelSerial, uint8_t layoutTagA, uint8_t layoutTagB, uint8_t layoutTagC, uint8_t dtype = 0)
     {
         SetKernelSerial(kernelSerial);
         SetLayoutTagA(layoutTagA);
@@ -91,12 +127,17 @@ struct TilingParams {
     uint8_t blockDim{0};
     TilingKey tilingKey{0};
 
-    TilingParams() {}
+    TilingParams()
+    {}
 
-    TilingParams(uint32_t m_, uint32_t n_, uint32_t k_, 
-        LayoutTag layoutTagA_, LayoutTag layoutTagB_, LayoutTag layoutTagC_)
-        : m(m_), n(n_), k(k_), layoutTagA(static_cast<uint8_t>(layoutTagA_)),
-          layoutTagB(static_cast<uint8_t>(layoutTagB_)), layoutTagC(static_cast<uint8_t>(layoutTagC_))
+    TilingParams(
+        uint32_t m_, uint32_t n_, uint32_t k_, LayoutTag layoutTagA_, LayoutTag layoutTagB_, LayoutTag layoutTagC_)
+        : m(m_),
+          n(n_),
+          k(k_),
+          layoutTagA(static_cast<uint8_t>(layoutTagA_)),
+          layoutTagB(static_cast<uint8_t>(layoutTagB_)),
+          layoutTagC(static_cast<uint8_t>(layoutTagC_))
     {
         strideA = k;
         strideB = n;
@@ -112,15 +153,23 @@ struct TilingParams {
         }
     }
 
-    TilingParams(uint32_t m_, uint32_t n_, uint32_t k_, size_t strideA_, size_t strideB_, size_t strideC_,
-        LayoutTag layoutTagA_, LayoutTag layoutTagB_, LayoutTag layoutTagC_)
-        : m(m_), n(n_), k(k_), strideA(strideA_), strideB(strideB_), strideC(strideC_),
-          layoutTagA(static_cast<uint8_t>(layoutTagA_)), layoutTagB(static_cast<uint8_t>(layoutTagB_)),
+    TilingParams(
+        uint32_t m_, uint32_t n_, uint32_t k_, size_t strideA_, size_t strideB_, size_t strideC_, LayoutTag layoutTagA_,
+        LayoutTag layoutTagB_, LayoutTag layoutTagC_)
+        : m(m_),
+          n(n_),
+          k(k_),
+          strideA(strideA_),
+          strideB(strideB_),
+          strideC(strideC_),
+          layoutTagA(static_cast<uint8_t>(layoutTagA_)),
+          layoutTagB(static_cast<uint8_t>(layoutTagB_)),
           layoutTagC(static_cast<uint8_t>(layoutTagC_))
     {}
 
-    void SetParams(uint32_t m_, uint32_t n_, uint32_t k_, size_t strideA_, size_t strideB_, size_t strideC_,
-        LayoutTag layoutTagA_, LayoutTag layoutTagB_, LayoutTag layoutTagC_)
+    void SetParams(
+        uint32_t m_, uint32_t n_, uint32_t k_, size_t strideA_, size_t strideB_, size_t strideC_, LayoutTag layoutTagA_,
+        LayoutTag layoutTagB_, LayoutTag layoutTagC_)
     {
         m = m_;
         n = n_;
@@ -133,7 +182,8 @@ struct TilingParams {
         layoutTagC = static_cast<uint8_t>(layoutTagC_);
     }
 
-    void SetParams(uint32_t m_, uint32_t n_, uint32_t k_, LayoutTag layoutTagA_, LayoutTag layoutTagB_, LayoutTag layoutTagC_)
+    void SetParams(
+        uint32_t m_, uint32_t n_, uint32_t k_, LayoutTag layoutTagA_, LayoutTag layoutTagB_, LayoutTag layoutTagC_)
     {
         m = m_;
         n = n_;

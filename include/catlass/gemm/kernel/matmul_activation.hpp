@@ -21,11 +21,7 @@
 namespace Catlass::Gemm::Kernel {
 
 // Template for matmul add kernel. Compute C(fp32) = A * B, D = Cast(Activation(C))
-template <
-    class BlockMmad_,
-    class BlockEpilogue_,
-    class BlockScheduler_
->
+template <class BlockMmad_, class BlockEpilogue_, class BlockScheduler_>
 class MatmulActivation {
 public:
     // BlockMmad的内核
@@ -47,8 +43,9 @@ public:
 
     using BlockScheduler = BlockScheduler_;
 
-    static_assert(std::is_same_v<typename BlockEpilogue::ElementC, ElementC> &&
-        std::is_same_v<typename BlockEpilogue::LayoutC, LayoutC>,
+    static_assert(
+        std::is_same_v<typename BlockEpilogue::ElementC, ElementC> &&
+            std::is_same_v<typename BlockEpilogue::LayoutC, LayoutC>,
         "The CType of Mmad and Epilogue should be consistent.");
 
     /// Parameters structure
@@ -64,16 +61,21 @@ public:
 
         // Methods
         CATLASS_HOST_DEVICE
-        Params() {}
+        Params()
+        {}
 
         CATLASS_HOST_DEVICE
         Params(
-            GemmCoord const &problemShape_,
-            GM_ADDR ptrA_, LayoutA const &layoutA_,
-            GM_ADDR ptrB_, LayoutB const &layoutB_,
-            GM_ADDR ptrWorkspace_, EpilogueParams const &epilogueParams_
-        ) : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_), layoutB(layoutB_),
-            ptrWorkspace(ptrWorkspace_), epilogueParams(epilogueParams_) {}
+            GemmCoord const& problemShape_, GM_ADDR ptrA_, LayoutA const& layoutA_, GM_ADDR ptrB_,
+            LayoutB const& layoutB_, GM_ADDR ptrWorkspace_, EpilogueParams const& epilogueParams_)
+            : problemShape(problemShape_),
+              ptrA(ptrA_),
+              layoutA(layoutA_),
+              ptrB(ptrB_),
+              layoutB(layoutB_),
+              ptrWorkspace(ptrWorkspace_),
+              epilogueParams(epilogueParams_)
+        {}
     };
 
     struct Arguments {
@@ -84,17 +86,17 @@ public:
         GM_ADDR ptrD;
     };
 
-    static bool CanImplement(const Arguments &args)
+    static bool CanImplement(const Arguments& args)
     {
         return true;
     }
 
-    static size_t GetWorkspaceSize(const Arguments &args)
+    static size_t GetWorkspaceSize(const Arguments& args)
     {
         return args.elementSize * args.problemShape.m() * args.problemShape.n();
     }
 
-    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    static Params ToUnderlyingArguments(const Arguments& args, uint8_t* workspace)
     {
         GemmCoord problemShape = args.problemShape;
         uint32_t m = problemShape.m();
@@ -105,25 +107,22 @@ public:
         LayoutC layoutC = LayoutC::template MakeLayout<ElementC>(m, n);
         // 传出
         typename BlockEpilogue::Params epilogueParams{workspace, layoutC, args.ptrD, layoutC};
-        Params params{problemShape,
-            args.ptrA, layoutA, // A矩阵
-            args.ptrB, layoutB, // B矩阵
-            workspace,
-            epilogueParams};
+        Params params{problemShape, args.ptrA,     layoutA, // A矩阵
+                      args.ptrB,    layoutB,                // B矩阵
+                      workspace,    epilogueParams};
         return params;
     }
 
     // Methods
     CATLASS_DEVICE
-    MatmulActivation() {}
+    MatmulActivation()
+    {}
 
     template <int32_t CORE_TYPE = g_coreType>
-    CATLASS_DEVICE
-    void operator()(Params const &params);
+    CATLASS_DEVICE void operator()(Params const& params);
 
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIC>(Params const &params)
+    CATLASS_DEVICE void operator()<AscendC::AIC>(Params const& params)
     {
         BlockScheduler matmulBlockScheduler(params.problemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
         uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
@@ -132,11 +131,11 @@ public:
 
         // Represent the full gm
         AscendC::GlobalTensor<ElementA> gmA;
-        gmA.SetGlobalBuffer((__gm__ ElementA *)params.ptrA);
+        gmA.SetGlobalBuffer((__gm__ ElementA*)params.ptrA);
         AscendC::GlobalTensor<ElementB> gmB;
-        gmB.SetGlobalBuffer((__gm__ ElementB *)params.ptrB);
+        gmB.SetGlobalBuffer((__gm__ ElementB*)params.ptrB);
         AscendC::GlobalTensor<ElementC> gmC;
-        gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrWorkspace);
+        gmC.SetGlobalBuffer((__gm__ ElementC*)params.ptrWorkspace);
         layout::RowMajor layoutC(params.problemShape.m(), params.problemShape.n());
 
         for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()) {
@@ -154,9 +153,7 @@ public:
 
             // Compute block-scoped matrix multiply-add
             blockMmad(
-                gmA[gmOffsetA], params.layoutA,
-                gmB[gmOffsetB], params.layoutB,
-                gmC[gmOffsetC], layoutC,
+                gmA[gmOffsetA], params.layoutA, gmB[gmOffsetB], params.layoutB, gmC[gmOffsetC], layoutC,
                 actualBlockShape);
 
             Arch::CrossCoreSetFlagWithReverse<0x2, PIPE_FIX>(flagAicFinishStore);
@@ -166,8 +163,7 @@ public:
     }
 
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIV>(Params const &params)
+    CATLASS_DEVICE void operator()<AscendC::AIV>(Params const& params)
     {
         BlockScheduler matmulBlockScheduler(params.problemShape, MakeCoord(L1TileShape::M, L1TileShape::N));
         uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
@@ -176,7 +172,7 @@ public:
 
         // Represent the full gm
         AscendC::GlobalTensor<ElementC> gmC;
-        gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrWorkspace);
+        gmC.SetGlobalBuffer((__gm__ ElementC*)params.ptrWorkspace);
         layout::RowMajor layoutC(params.problemShape.m(), params.problemShape.n());
 
         // Get aicore information

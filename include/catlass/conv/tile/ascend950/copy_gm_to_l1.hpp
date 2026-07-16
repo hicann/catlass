@@ -28,13 +28,10 @@ struct CopyGmToL1ATla {
     // Methods
 
     CATLASS_DEVICE
-    CopyGmToL1ATla(){};
+    CopyGmToL1ATla() {};
 
     template <class TensorDst, class TensorSrc>
-    CATLASS_DEVICE void operator()(
-        TensorDst const &dstTensor,
-        TensorSrc const &srcTensor
-    )
+    CATLASS_DEVICE void operator()(TensorDst const& dstTensor, TensorSrc const& srcTensor)
     {
         uint32_t cin1Actual = tla::get<1>(srcTensor.shape());
         uint32_t hiActual = tla::get<2>(srcTensor.shape());
@@ -50,12 +47,11 @@ struct CopyGmToL1ATla {
             AscendC::DataCopy(
                 dstTensor.data()[dstOffset], srcTensor.data()[srcOffset],
                 {
-                    static_cast<uint16_t>(hiActual), // blockCount 连续传输数据块个数
-                    static_cast<uint16_t>(wiActual), // blockLen 每个连续传输数据块长度(32Bytes)
+                    static_cast<uint16_t>(hiActual),         // blockCount 连续传输数据块个数
+                    static_cast<uint16_t>(wiActual),         // blockLen 每个连续传输数据块长度(32Bytes)
                     static_cast<uint16_t>(wiOrg - wiActual), // srcStride 相邻连续数据块的间隔(32Bytes)
-                    0  // dstStride 相邻连续数据块间的间隔(32Bytes)
-                }
-            );
+                    0                                        // dstStride 相邻连续数据块间的间隔(32Bytes)
+                });
             srcOffset += srcStrideCin1;
             dstOffset += dstStrideCin1;
         }
@@ -70,13 +66,10 @@ struct CopyGmToL1BTla {
     // Methods
 
     CATLASS_DEVICE
-    CopyGmToL1BTla(){};
+    CopyGmToL1BTla() {};
 
     template <class TensorDst, class TensorSrc>
-    CATLASS_DEVICE void operator()(
-        TensorDst const &dstTensor,
-        TensorSrc const &srcTensor
-    )
+    CATLASS_DEVICE void operator()(TensorDst const& dstTensor, TensorSrc const& srcTensor)
     {
         uint32_t cin1Actual = tla::get<0>(srcTensor.shape());
         uint32_t KhKw = tla::get<1>(srcTensor.shape()) * tla::get<2>(srcTensor.shape());
@@ -90,12 +83,11 @@ struct CopyGmToL1BTla {
         AscendC::DataCopy(
             dstTensor.data()[dstOffset], srcTensor.data()[srcOffset],
             AscendC::DataCopyParams(
-                cin1Actual * KhKw,  // blockCount 连续传输数据块个数
-                coutActual, // blockLen 每个连续传输数据块长度
-                coutOrg - coutActual, // 源操作数，相邻连续数据块的间隔(32Bytes)
+                cin1Actual * KhKw,     // blockCount 连续传输数据块个数
+                coutActual,            // blockLen 每个连续传输数据块长度
+                coutOrg - coutActual,  // 源操作数，相邻连续数据块的间隔(32Bytes)
                 coutRound - coutActual // 目的操作数，相邻连续数据块间的间隔(32Bytes)
-            )
-        );
+                ));
     }
 };
 

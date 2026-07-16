@@ -9,27 +9,32 @@
 
 import warnings
 from typing import List, Type, Optional, Dict, Any
-import torch
-import numpy as np
 import math
 
 from catlass_cppgen.op.op import OperationBase
-from catlass_cppgen.common.typing import SupportedDataType, SupportedTensor
+from catlass_cppgen.common.typing import SupportedDataType
 from catlass_cppgen.common.op_tensor import OpTensor
 from catlass_cppgen.catlass.layout.layout import Layout, RowMajor
-from catlass_cppgen.common.data_type import DataType, get_default_accumulator
+from catlass_cppgen.common.data_type import get_default_accumulator
 from catlass_cppgen.common.utils import extract_info
 from catlass_cppgen.catlass.arch.arch import Arch
 from catlass_cppgen.kernel.gemm.gemm_base import GemmKernelBase
 from catlass_cppgen.kernel.gemm.basic_matmul import BasicMatmulKernel
 from catlass_cppgen.kernel.gemm.batched_matmul import BatchedMatmulKernel
-from catlass_cppgen.kernel.gemm.multi_core_splitk_matmul import MultiCoreSplitkMatmulKernel
+from catlass_cppgen.kernel.gemm.multi_core_splitk_matmul import (
+    MultiCoreSplitkMatmulKernel,
+)
 from catlass_cppgen.kernel.gemm.streamk_matmul import StreamkMatmulKernel
 
-from catlass_cppgen.kernel.gemm.tail_multi_core_splitk_matmul import TailMultiCoreSplitkMatmulKernel
-from catlass_cppgen.kernel.gemm.basic_matmul_tla_visitor import BasicMatmulTlaVisitorKernel
+from catlass_cppgen.kernel.gemm.tail_multi_core_splitk_matmul import (
+    TailMultiCoreSplitkMatmulKernel,
+)
+from catlass_cppgen.kernel.gemm.basic_matmul_tla_visitor import (
+    BasicMatmulTlaVisitorKernel,
+)
 
-_CORE_NUM = 8 # Default core num
+_CORE_NUM = 8  # Default core num
+
 
 class Gemm(OperationBase):
     # 类属性类型注解
@@ -42,7 +47,7 @@ class Gemm(OperationBase):
     N: Optional[int]
     batch_count: Optional[int]
     is_batched: Optional[bool]
-    
+
     def __init__(
         self,
         alpha: float = 1.0,
@@ -70,22 +75,26 @@ class Gemm(OperationBase):
         self.B = B
         self.Bias = Bias
         self.C = C
-        
+
         # 如果传入了 A 和 B OpTensor，从它们中提取信息
         if A is not None and B is not None:
             # 从 OpTensor 中提取 shape、element、layout 信息
-            A_shape, element_A_from_tensor, layout_A_from_tensor, _ = extract_info(A, element_A or element, layout_A or layout)
-            B_shape, element_B_from_tensor, layout_B_from_tensor, _ = extract_info(B, element_B or element, layout_B or layout)
-            
+            A_shape, element_A_from_tensor, layout_A_from_tensor, _ = extract_info(
+                A, element_A or element, layout_A or layout
+            )
+            B_shape, element_B_from_tensor, layout_B_from_tensor, _ = extract_info(
+                B, element_B or element, layout_B or layout
+            )
+
             # 确定最终使用的 element 和 layout（传入的参数优先，否则使用 OpTensor 中的信息）
             element_A = element_A_from_tensor or element_A or element
             element_B = element_B_from_tensor or element_B or element
             layout_A = layout_A_from_tensor or layout_A or layout
             layout_B = layout_B_from_tensor or layout_B or layout
-            
+
             # 判断是否 batched
             is_batched = len(A_shape) == 3 and len(B_shape) == 3
-            
+
             # 提取 M, K, N
             if is_batched:
                 if A_shape[0] != B_shape[0]:
@@ -101,7 +110,7 @@ class Gemm(OperationBase):
                 self.M = A_shape[0]
                 self.K = A_shape[1]
                 self.N = B_shape[1]
-            
+
             self.is_batched = is_batched
         else:
             if element is None and not all([element_A, element_B, element_C]):
@@ -112,35 +121,41 @@ class Gemm(OperationBase):
                 raise ValueError(
                     "must provide 'layout', or specify layout_A, layout_B separately"
                 )
-            
+
             element_A = element_A or element
             element_B = element_B or element
             layout_A = layout_A or layout
             layout_B = layout_B or layout
-            
+
             self.batch_count = None
             self.M = None
             self.K = None
             self.N = None
             self.is_batched = None
-        
+
         # 如果传入了 Bias OpTensor，从它中提取信息
         if Bias is not None:
-            _, element_Bias_from_tensor, layout_Bias_from_tensor, _ = extract_info(Bias, element_Bias, layout_Bias)
+            _, element_Bias_from_tensor, layout_Bias_from_tensor, _ = extract_info(
+                Bias, element_Bias, layout_Bias
+            )
             element_Bias = element_Bias_from_tensor or element_Bias
             layout_Bias = layout_Bias_from_tensor or layout_Bias
-        
+
         # 如果传入了 C OpTensor，从它中提取信息
         if C is not None:
-            _, element_C_from_tensor, layout_C_from_tensor, _ = extract_info(C, element_C or element, None)
+            _, element_C_from_tensor, layout_C_from_tensor, _ = extract_info(
+                C, element_C or element, None
+            )
             element_C = element_C_from_tensor or element_C or element
-        
+
         self.element_A = element_A
         self.element_B = element_B
         self.element_Bias = element_Bias
         self.element_C = element_C or element
         if element_accumulator is None and not all([self.element_A, self.element_B]):
-            raise ValueError("element_accumulator must be provided, or element_A, element_B should be given both so that accumulator type can be auto-derived")
+            raise ValueError(
+                "element_accumulator must be provided, or element_A, element_B should be given both so that accumulator type can be auto-derived"
+            )
         self.element_accumulator = element_accumulator or get_default_accumulator(
             self.element_A, self.element_B
         )
@@ -162,6 +177,7 @@ class Gemm(OperationBase):
             _override_hint = "override by passing 'core_num' to Gemm()"
             try:
                 from triton.runtime.driver import driver
+
                 device = driver.active.get_current_device()
                 prop = driver.active.utils.get_device_properties(device)
                 core_num = prop["num_aicore"]
@@ -170,7 +186,7 @@ class Gemm(OperationBase):
                     "'triton' is not installed on your environment, cannot obtain driver info."
                     f"core_num defaults to ({_CORE_NUM}). ({_override_hint})",
                     RuntimeWarning,
-                    stacklevel=2
+                    stacklevel=2,
                 )
                 core_num = _CORE_NUM
             except Exception as e:
@@ -178,37 +194,43 @@ class Gemm(OperationBase):
                     "An unexpected error occurred; "
                     f"core_num defaults to ({_CORE_NUM}). ({_override_hint})\nError details: {e!r}",
                     RuntimeWarning,
-                    stacklevel=2
+                    stacklevel=2,
                 )
                 core_num = _CORE_NUM
 
         self.core_num = core_num
-        
+
         # 如果 evg_config 不为 None，必须包含 fn_src 和 example_inputs
         if evg_config is not None:
             if "fn_src" not in evg_config or "example_inputs" not in evg_config:
-                raise ValueError("evg_config must contain 'fn_src' and 'example_inputs'")
+                raise ValueError(
+                    "evg_config must contain 'fn_src' and 'example_inputs'"
+                )
         self.evg = evg_config
 
     def can_implement(self) -> bool:
-        return math.isclose(self.alpha, 1.0) and (math.isclose(self.beta, 0.0) or math.isclose(self.beta, 1.0))
+        return math.isclose(self.alpha, 1.0) and (
+            math.isclose(self.beta, 0.0) or math.isclose(self.beta, 1.0)
+        )
 
     def get_kernels(self) -> List[GemmKernelBase]:
         # 必须使用 __init__ 中传入的 A 和 B
         if self.A is None or self.B is None:
             raise ValueError("A 和 B 必须在 Gemm.__init__ 中传入")
-        
+
         # 判断是否 batched 和提取 M, K, N（使用 __init__ 中保存的值）
         if self.M is None or self.K is None or self.N is None:
-            raise ValueError("无法确定 M, K, N，请确保在 Gemm.__init__ 中传入了 A 和 B OpTensor")
-        
+            raise ValueError(
+                "无法确定 M, K, N，请确保在 Gemm.__init__ 中传入了 A 和 B OpTensor"
+            )
+
         # 如果 layout_C 还是类（未实例化），则实例化它
         if isinstance(self.layout_C, type) and issubclass(self.layout_C, Layout):
             self.layout_C = self.layout_C((self.M, self.N))
-        
+
         # 只提取 Bias 的 shape（用于后续判断）
         Bias_shape = self.Bias.shape if self.Bias is not None else None
-        
+
         params = {
             # 不传递 tensor 对象，只传递元数据（使用 OpTensor 时避免实例化）
             "element_accumulator": self.element_accumulator,
@@ -230,7 +252,7 @@ class Gemm(OperationBase):
 
         if self.evg is not None:
             return [BasicMatmulTlaVisitorKernel(**params)]
-        
+
         if self.is_batched:
             # BatchedMatmul不支持Bias，带Bias的话返回空列表
             if self.element_Bias is not None:
@@ -238,7 +260,11 @@ class Gemm(OperationBase):
             return [BatchedMatmulKernel(**params)]
         else:
             if math.isclose(self.alpha, 1.0) and math.isclose(self.beta, 0.0):
-                if self.element_Bias is not None and Bias_shape is not None and len(Bias_shape) > 1:
+                if (
+                    self.element_Bias is not None
+                    and Bias_shape is not None
+                    and len(Bias_shape) > 1
+                ):
                     return []
                 _threshold1 = 4096
                 _threshold2 = 2048
@@ -251,7 +277,9 @@ class Gemm(OperationBase):
                     )
                     if num_task <= (0.5 * self.core_num):
                         res.append(MultiCoreSplitkMatmulKernel(**params))
-                    elif num_task <= (0.9 * self.core_num) or (num_task % self.core_num) <= (0.9 * self.core_num):
+                    elif num_task <= (0.9 * self.core_num) or (
+                        num_task % self.core_num
+                    ) <= (0.9 * self.core_num):
                         res.append(StreamkMatmulKernel(**params))
                     if num_task > self.core_num and num_task < (1.5 * self.core_num):
                         res.append(TailMultiCoreSplitkMatmulKernel(**params))

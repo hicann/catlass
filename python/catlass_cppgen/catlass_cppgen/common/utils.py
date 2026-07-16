@@ -13,17 +13,22 @@ import torch
 import numpy as np
 
 from catlass_cppgen.common.data_type import DataType
-from catlass_cppgen.catlass.layout.layout import Layout, RowMajor, ColumnMajor, VectorLayout
+from catlass_cppgen.catlass.layout.layout import (
+    Layout,
+    RowMajor,
+    ColumnMajor,
+    VectorLayout,
+)
 from catlass_cppgen.common.typing import SupportedTensor
 
 
 def infer_layout_from_stride(shape: tuple[int, ...], stride: tuple[int, ...]) -> Layout:
     """从 shape 和 stride 推断 Layout 类型
-    
+
     参数:
     shape: tensor 的形状
     stride: tensor 的步长
-    
+
     返回:
     Layout 对象
     """
@@ -57,10 +62,10 @@ def infer_layout_from_stride(shape: tuple[int, ...], stride: tuple[int, ...]) ->
 
 def get_tensor_data_ptr(tensor: SupportedTensor) -> Optional[ctypes.c_void_p]:
     """从 torch.Tensor 或 np.ndarray 获取数据指针
-    
+
     参数:
     tensor: torch.Tensor 或 np.ndarray
-    
+
     返回:
     ctypes.c_void_p 数据指针，如果无法获取则返回 None
     """
@@ -70,14 +75,15 @@ def get_tensor_data_ptr(tensor: SupportedTensor) -> Optional[ctypes.c_void_p]:
         return ctypes.c_void_p(tensor.ctypes.data)
     return None
 
+
 def extract_info(tensor, default_element, default_layout):
     """从 OpTensor 或实际 tensor 中提取信息
-    
+
     参数:
     tensor: OpTensor、torch.Tensor、np.ndarray 或 None
     default_element: 默认的数据类型
     default_layout: 默认的布局类型
-    
+
     返回:
     tuple: (shape, element, layout, tensor_obj)
         - shape: tensor 的形状
@@ -87,7 +93,7 @@ def extract_info(tensor, default_element, default_layout):
     """
     # 延迟导入以避免循环导入
     from catlass_cppgen.common.op_tensor import OpTensor
-    
+
     if tensor is None:
         return None, None, None, None
     if isinstance(tensor, OpTensor):
@@ -109,6 +115,7 @@ def extract_info(tensor, default_element, default_layout):
         layout = default_layout
         return shape, element, layout, tensor  # 传递 tensor 对象以保持兼容
 
+
 def _get_cpp_value(value: any) -> str:
     """将 Python 值转换为 C++ 代码字符串."""
     if isinstance(value, bool):
@@ -118,8 +125,8 @@ def _get_cpp_value(value: any) -> str:
 
 def _snake_to_camel(snake_str: str) -> str:
     """将蛇形命名转换为驼峰命名."""
-    components = snake_str.split('_')
-    return components[0] + ''.join(word.capitalize() for word in components[1:])
+    components = snake_str.split("_")
+    return components[0] + "".join(word.capitalize() for word in components[1:])
 
 
 def _get_cpp_type(value: any) -> str:
@@ -134,9 +141,9 @@ def _get_cpp_type(value: any) -> str:
 
 def get_type_name(type_str) -> str:
     """获取类型的名称字符串.
-    
+
     对于 DataType 枚举，返回其 value；对于字符串，直接返回；对于其他类型，返回其 __name__.
-    
+
     :param type_str: 类型对象，可以是 DataType 枚举、字符串或其他类型.
     :return: 类型的名称字符串.
     :rtype: str

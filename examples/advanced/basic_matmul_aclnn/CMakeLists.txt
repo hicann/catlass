@@ -26,7 +26,7 @@ if(NOT EXISTS ${MSOPGEN_PROJECT_SOURCE_DIR})
         COMMAND chmod 644 ${CMAKE_CURRENT_BINARY_DIR}/tmp/catlass_basic_matmul.json
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     )
-    
+
     if(DEFINED CANN_VERSION)
         string(SUBSTRING ${CANN_VERSION} 0 1 CANN_MAJOR_VERSION)
         if(CANN_MAJOR_VERSION LESS 9 OR CANN_VERSION STREQUAL "9.0.0.beta1")
@@ -95,5 +95,3 @@ install(TARGETS basic_matmul_aclnn
 install(CODE "message(STATUS \"Before executing example for aclnn interfaces, \")" COMPONENT basic_matmul_aclnn)
 install(CODE "message(STATUS \"1. Install ${CMAKE_INSTALL_PREFIX}/run/${PACKAGE_NAME}. \")" COMPONENT basic_matmul_aclnn)
 install(CODE "message(STATUS \"2. Follow installation logs to set environment variables. \")" COMPONENT basic_matmul_aclnn)
-
-

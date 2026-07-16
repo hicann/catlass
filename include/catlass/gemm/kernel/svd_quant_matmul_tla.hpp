@@ -1495,7 +1495,7 @@ public:
             if (loopIdx < normalBlockNum23) {
                 blockCoord = matmulBlockScheduler23.GetBlockCoord(loopIdx);
                 coord = GemmCoord{blockCoord.m() * L1_TILE_M, blockCoord.n() * L1_TILE_N, 0};
-                actualBlockShape3 = matmulBlockScheduler23.GetActualBlockShape(blockCoord);   // m1 n1 k
+                actualBlockShape3 = matmulBlockScheduler23.GetActualBlockShape(blockCoord); // m1 n1 k
                 actualBlockShape2 =
                     GemmCoord{actualBlockShape3.m(), actualBlockShape3.n(), params.problemRank}; // m1 n1 r
             } else {

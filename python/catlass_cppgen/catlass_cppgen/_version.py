@@ -8,21 +8,23 @@
 # the software repository for the full text of the License.
 
 """版本号管理模块，自动生成带时间戳的版本号"""
+
 from datetime import datetime
 
 # 基础版本号
 BASE_VERSION = "0.1.0"
 
+
 def get_version():
     """
     生成带时间戳的版本号
-    
+
     格式: {BASE_VERSION}+{YYYYMMDDHHMMSS}
     例如: 0.1.0+20240101120000
     """
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
     return f"{BASE_VERSION}+{timestamp}"
 
+
 # 在构建时生成版本号
 __version__ = get_version()
-

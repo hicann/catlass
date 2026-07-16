@@ -20,21 +20,8 @@
 
 namespace Catlass::Epilogue::Block {
 
-template <
-    class CType_,
-    class XType_,
-    class DType_,
-    class TileElemWiseEpilogue_,
-    class TileCopy_
->
-class BlockEpilogue <
-    EpilogueAtlasA2ElemWiseOneSource,
-    CType_,
-    XType_,
-    DType_,
-    TileElemWiseEpilogue_,
-    TileCopy_
-> {
+template <class CType_, class XType_, class DType_, class TileElemWiseEpilogue_, class TileCopy_>
+class BlockEpilogue<EpilogueAtlasA2ElemWiseOneSource, CType_, XType_, DType_, TileElemWiseEpilogue_, TileCopy_> {
 public:
     // Type aliases
     using DispatchPolicy = EpilogueAtlasA2ElemWiseOneSource;
@@ -54,13 +41,16 @@ public:
     static constexpr uint32_t OPERANDS_NUM = DispatchPolicy::OPERANDS_NUM;
 
     // Check the element type of C, X and D
-    static_assert(std::is_same_v<ElementC, ElementD> && std::is_same_v<ElementX, ElementD>,
+    static_assert(
+        std::is_same_v<ElementC, ElementD> && std::is_same_v<ElementX, ElementD>,
         "Element type of C, X and D must be the same");
     using ElementCompute = ElementD;
 
     // Check the layout type of C, X and D
-    static_assert(std::is_same_v<LayoutC, layout::RowMajor> && std::is_same_v<LayoutX, layout::RowMajor> &&
-        std::is_same_v<LayoutD, layout::RowMajor>, "Layout type of C, X and D must be RowMajor");
+    static_assert(
+        std::is_same_v<LayoutC, layout::RowMajor> && std::is_same_v<LayoutX, layout::RowMajor> &&
+            std::is_same_v<LayoutD, layout::RowMajor>,
+        "Layout type of C, X and D must be RowMajor");
     using LayoutComputeInUb = layout::RowMajor;
 
     // Check if ArchTag is matched
@@ -76,15 +66,17 @@ public:
         LayoutD layoutD;
 
         CATLASS_HOST_DEVICE
-        Params() {}
+        Params()
+        {}
 
         CATLASS_HOST_DEVICE
-        Params(GM_ADDR ptrX_, LayoutX const &layoutX_, GM_ADDR ptrD_, LayoutD const &layoutD_)
-            : ptrX(ptrX_), layoutX(layoutX_), ptrD(ptrD_), layoutD(layoutD_) {}
+        Params(GM_ADDR ptrX_, LayoutX const& layoutX_, GM_ADDR ptrD_, LayoutD const& layoutD_)
+            : ptrX(ptrX_), layoutX(layoutX_), ptrD(ptrD_), layoutD(layoutD_)
+        {}
     };
 
     CATLASS_DEVICE
-    BlockEpilogue(Arch::Resource<ArchTag> &resource, Params const &params) : params(params)
+    BlockEpilogue(Arch::Resource<ArchTag>& resource, Params const& params) : params(params)
     {
         ubC = resource.ubBuf.template GetBufferByByte<ElementC>(0);
         ubX = resource.ubBuf.template GetBufferByByte<ElementX>(COMPUTE_LENGTH * sizeof(ElementC));
@@ -103,13 +95,9 @@ public:
     }
 
     CATLASS_DEVICE
-    void operator() (
-        GemmCoord const &blockShapeMNK,
-        GemmCoord const &blockCoordMNK,
-        GemmCoord const &actualBlockShapeMNK,
-        AscendC::GlobalTensor<ElementCompute> const &gmBlockC,
-        LayoutX const &layoutBlockC
-    )
+    void operator()(
+        GemmCoord const& blockShapeMNK, GemmCoord const& blockCoordMNK, GemmCoord const& actualBlockShapeMNK,
+        AscendC::GlobalTensor<ElementCompute> const& gmBlockC, LayoutX const& layoutBlockC)
     {
         // Calculate the offset of the current block
         MatrixCoord blockShape = blockShapeMNK.GetCoordMN();
@@ -120,11 +108,10 @@ public:
         // Calculate the offset and the shape of the current subblock
         MatrixCoord subblockShape{
             CeilDiv(actualBlockShape.row(), static_cast<uint32_t>(AscendC::GetSubBlockNum())),
-            actualBlockShape.column()
-        };
-        MatrixCoord subblockCoord{ AscendC::GetSubBlockIdx(), 0 };
-        MatrixCoord actualSubblockShape = MatrixCoord::Min(
-            subblockShape, actualBlockShape - subblockCoord * subblockShape);
+            actualBlockShape.column()};
+        MatrixCoord subblockCoord{AscendC::GetSubBlockIdx(), 0};
+        MatrixCoord actualSubblockShape =
+            MatrixCoord::Min(subblockShape, actualBlockShape - subblockCoord * subblockShape);
         MatrixCoord subblockOffset = subblockCoord * subblockShape;
 
         // Get the data and layout of C
@@ -133,13 +120,13 @@ public:
 
         // Get the data and layout of X
         AscendC::GlobalTensor<ElementX> gmX;
-        gmX.SetGlobalBuffer(reinterpret_cast<__gm__ ElementX *>(params.ptrX));
+        gmX.SetGlobalBuffer(reinterpret_cast<__gm__ ElementX*>(params.ptrX));
         auto gmSubblockX = gmX[params.layoutX.GetOffset(blockOffset + subblockOffset)];
         auto layoutSubblockX = params.layoutX.GetTileLayout(actualSubblockShape);
 
         // Get the data and layout of D
         AscendC::GlobalTensor<ElementD> gmD;
-        gmD.SetGlobalBuffer(reinterpret_cast<__gm__ ElementD *>(params.ptrD));
+        gmD.SetGlobalBuffer(reinterpret_cast<__gm__ ElementD*>(params.ptrD));
         auto gmSubblockD = gmD[params.layoutD.GetOffset(blockOffset + subblockOffset)];
         auto layoutSubblockD = params.layoutD.GetTileLayout(actualSubblockShape);
 
@@ -178,6 +165,6 @@ private:
     CopyUbToGmD copyUbToGmD;
 };
 
-}  // namespace Catlass::Epilogue::Block
+} // namespace Catlass::Epilogue::Block
 
-#endif  // CATLASS_EPILOGUE_BLOCK_EPILOGUE_ELEMWISE_ONE_SOURCE_HPP
+#endif // CATLASS_EPILOGUE_BLOCK_EPILOGUE_ELEMWISE_ONE_SOURCE_HPP

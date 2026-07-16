@@ -19,10 +19,11 @@ from catlass_cppgen.catlass.evg_extension import evg
 
 from assertion_helper import TestEvgAssertions
 
+
 class TestBaseOp(unittest.TestCase):
     def setUp(self):
         self.check = TestEvgAssertions(self)
-    
+
     def test_codegen_with_evg_direct(self):
         fn_src = """
 def epilogue(accum, bias):
@@ -31,23 +32,19 @@ def epilogue(accum, bias):
 """
         example_inputs = {
             "accum": OpTensor.from_shape_stride(
-                shape=(128, 256),
-                stride=(256, 1),
-                dtype=DataType.FLOAT
+                shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
             ),
             "bias": OpTensor.from_shape_stride(
-                shape=(1, 256),
-                stride=(256, 1),
-                dtype=DataType.FLOAT
+                shape=(1, 256), stride=(256, 1), dtype=DataType.FLOAT
             ),
             "result": OpTensor.from_shape_stride(
-                shape=(128, 256),
-                stride=(256, 1),
-                dtype=DataType.FLOAT
+                shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
             ),
         }
 
-        from catlass_cppgen.kernel.gemm.basic_matmul_tla_visitor import BasicMatmulTlaVisitorKernel
+        from catlass_cppgen.kernel.gemm.basic_matmul_tla_visitor import (
+            BasicMatmulTlaVisitorKernel,
+        )
 
         kernel = BasicMatmulTlaVisitorKernel(
             element_accumulator=DataType.FLOAT,
@@ -64,7 +61,7 @@ def epilogue(accum, bias):
             evg={
                 "fn_src": fn_src,
                 "example_inputs": example_inputs,
-            }
+            },
         )
 
         evg_template = kernel.gen_evg_template()
@@ -78,19 +75,19 @@ def epilogue(accum, bias):
         self.check.test_layout(kernel_template, "RowMajor", "TagC")
 
         self.check.test_arch_tag(kernel_template, Arch.Ascend950)
-        
+
         self.check.test_accu_dtype(evg_template, DataType.FLOAT)
         self.check.test_layout(evg_template, "RowMajor", "TagBias")
         self.check.test_boardcast(evg_template, "Bias", BroadcastType.RowBroadcast)
         self.check.test_visitor_compute(evg_template, EpilogueOp.Add)
-        self.check.test_tree_visitor(evg_template, (
-            "Compute0, Accum, Bias", 
-            "Result, EVGCompute0"
-            )
+        self.check.test_tree_visitor(
+            evg_template, ("Compute0, Accum, Bias", "Result, EVGCompute0")
         )
 
     def test_codegen_without_evg(self):
-        from catlass_cppgen.kernel.gemm.basic_matmul_tla_visitor import BasicMatmulTlaVisitorKernel
+        from catlass_cppgen.kernel.gemm.basic_matmul_tla_visitor import (
+            BasicMatmulTlaVisitorKernel,
+        )
 
         kernel = BasicMatmulTlaVisitorKernel(
             element_accumulator=DataType.FLOAT,
@@ -118,8 +115,12 @@ def epilogue(accum, bias):
         self.check.test_arch_tag(kernel_template, Arch.Ascend950)
 
     def test_codegen_with_evg(self):
-        a = OpTensor.from_shape_stride(shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT)
-        b = OpTensor.from_shape_stride(shape=(256, 384), stride=(384, 1), dtype=DataType.FLOAT)
+        a = OpTensor.from_shape_stride(
+            shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
+        )
+        b = OpTensor.from_shape_stride(
+            shape=(256, 384), stride=(384, 1), dtype=DataType.FLOAT
+        )
 
         fn_src = """
 def epilogue(accum, bias):
@@ -127,9 +128,15 @@ def epilogue(accum, bias):
     return result
 """
         example_inputs = {
-            "accum": OpTensor.from_shape_stride(shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT),
-            "bias": OpTensor.from_shape_stride(shape=(1, 256), stride=(256, 1), dtype=DataType.FLOAT),
-            "result": OpTensor.from_shape_stride(shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT),
+            "accum": OpTensor.from_shape_stride(
+                shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
+            ),
+            "bias": OpTensor.from_shape_stride(
+                shape=(1, 256), stride=(256, 1), dtype=DataType.FLOAT
+            ),
+            "result": OpTensor.from_shape_stride(
+                shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
+            ),
         }
 
         gemm_plan = Gemm(
@@ -137,12 +144,16 @@ def epilogue(accum, bias):
             element=DataType.FLOAT,
             layout=RowMajor,
             evg_config={"fn_src": fn_src, "example_inputs": example_inputs},
-            A=a, B=b
+            A=a,
+            B=b,
         )
         kernels = gemm_plan.get_kernels()
         kernel = kernels[0]
 
-        from catlass_cppgen.kernel.gemm.basic_matmul_tla_visitor import BasicMatmulTlaVisitorKernel
+        from catlass_cppgen.kernel.gemm.basic_matmul_tla_visitor import (
+            BasicMatmulTlaVisitorKernel,
+        )
+
         self.assertIsInstance(kernel, BasicMatmulTlaVisitorKernel)
 
         evg_template = kernel.gen_evg_template()
@@ -160,15 +171,17 @@ def epilogue(accum, bias):
         self.check.test_layout(evg_template, "RowMajor", "TagBias")
         self.check.test_boardcast(evg_template, "Bias", BroadcastType.RowBroadcast)
         self.check.test_visitor_compute(evg_template, EpilogueOp.Add)
-        self.check.test_tree_visitor(evg_template, (
-            "Compute0, Accum, Bias",
-            "Result, EVGCompute0"
-            )
+        self.check.test_tree_visitor(
+            evg_template, ("Compute0, Accum, Bias", "Result, EVGCompute0")
         )
 
     def test_tune_functionality(self):
-        a = OpTensor.from_shape_stride(shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT)
-        b = OpTensor.from_shape_stride(shape=(256, 384), stride=(384, 1), dtype=DataType.FLOAT)
+        a = OpTensor.from_shape_stride(
+            shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
+        )
+        b = OpTensor.from_shape_stride(
+            shape=(256, 384), stride=(384, 1), dtype=DataType.FLOAT
+        )
 
         fn_src = """
 def epilogue(accum, bias):
@@ -176,9 +189,15 @@ def epilogue(accum, bias):
     return result
 """
         example_inputs = {
-            "accum": OpTensor.from_shape_stride(shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT),
-            "bias": OpTensor.from_shape_stride(shape=(1, 256), stride=(256, 1), dtype=DataType.FLOAT),
-            "result": OpTensor.from_shape_stride(shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT),
+            "accum": OpTensor.from_shape_stride(
+                shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
+            ),
+            "bias": OpTensor.from_shape_stride(
+                shape=(1, 256), stride=(256, 1), dtype=DataType.FLOAT
+            ),
+            "result": OpTensor.from_shape_stride(
+                shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
+            ),
         }
 
         gemm_plan = Gemm(
@@ -186,7 +205,8 @@ def epilogue(accum, bias):
             element=DataType.FLOAT,
             layout=RowMajor,
             evg_config={"fn_src": fn_src, "example_inputs": example_inputs},
-            A=a, B=b
+            A=a,
+            B=b,
         )
         kernels = gemm_plan.get_kernels()
         kernel = kernels[0]
@@ -219,10 +239,8 @@ def epilogue(accum, bias):
         self.check.test_layout(evg_template, "RowMajor", "TagBias")
         self.check.test_boardcast(evg_template, "Bias", BroadcastType.RowBroadcast)
         self.check.test_visitor_compute(evg_template, EpilogueOp.Add)
-        self.check.test_tree_visitor(evg_template, (
-            "Compute0, Accum, Bias",
-            "Result, EVGCompute0"
-            )
+        self.check.test_tree_visitor(
+            evg_template, ("Compute0, Accum, Bias", "Result, EVGCompute0")
         )
 
 
@@ -233,14 +251,10 @@ class TestEvgOp(unittest.TestCase):
     def setUp(self):
         self.check = TestEvgAssertions(self)
 
-    def _build_evg(self,
-        fn_src: str, 
-        inputs: str,
-        output_dtype: DataType = DataType.FLOAT):
-        callback_name, evg_args, evg_str, _ = evg(
-            fn_src=fn_src,
-            example_inputs=inputs
-        )
+    def _build_evg(
+        self, fn_src: str, inputs: str, output_dtype: DataType = DataType.FLOAT
+    ):
+        callback_name, evg_args, evg_str, _ = evg(fn_src=fn_src, example_inputs=inputs)
         self.assertEqual(callback_name, "EVGResult")  # fixed callback
 
         return evg_str, evg_args
@@ -252,19 +266,23 @@ def epilogue(accum, bias):
     return result
 """
         inputs = {
-            "accum": OpTensor.from_shape_stride(shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT),
-            "bias": OpTensor.from_shape_stride(shape=(1, 256), stride=(256, 1), dtype=DataType.FLOAT),
-            "result": OpTensor.from_shape_stride(shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT),
+            "accum": OpTensor.from_shape_stride(
+                shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
+            ),
+            "bias": OpTensor.from_shape_stride(
+                shape=(1, 256), stride=(256, 1), dtype=DataType.FLOAT
+            ),
+            "result": OpTensor.from_shape_stride(
+                shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
+            ),
         }
         evg_str, _ = self._build_evg(fn_src, inputs)
         self.check.test_accu_dtype(evg_str, DataType.FLOAT)
         self.check.test_layout(evg_str, "RowMajor", "TagBias")
         self.check.test_boardcast(evg_str, "Bias", BroadcastType.RowBroadcast)
         self.check.test_visitor_compute(evg_str, EpilogueOp.Add)
-        self.check.test_tree_visitor(evg_str, (
-            "Compute0, Accum, Bias", 
-            "Result, EVGCompute0"
-            )
+        self.check.test_tree_visitor(
+            evg_str, ("Compute0, Accum, Bias", "Result, EVGCompute0")
         )
 
     def test_evg_mul(self):
@@ -274,18 +292,22 @@ def epilogue(accum, scale):
     return result
 """
         inputs = {
-            "accum": OpTensor.from_shape_stride(shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT),
-            "scale": OpTensor.from_shape_stride(shape=(1, 256), stride=(256, 1), dtype=DataType.FLOAT),
-            "result": OpTensor.from_shape_stride(shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT),
+            "accum": OpTensor.from_shape_stride(
+                shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
+            ),
+            "scale": OpTensor.from_shape_stride(
+                shape=(1, 256), stride=(256, 1), dtype=DataType.FLOAT
+            ),
+            "result": OpTensor.from_shape_stride(
+                shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
+            ),
         }
         evg_str, _ = self._build_evg(fn_src, inputs)
         self.check.test_accu_dtype(evg_str, DataType.FLOAT)
         self.check.test_boardcast(evg_str, "Scale", BroadcastType.RowBroadcast)
         self.check.test_visitor_compute(evg_str, EpilogueOp.Mul)
-        self.check.test_tree_visitor(evg_str, (
-            "Compute0, Accum, Scale",
-            "Result, EVGCompute0"
-            )
+        self.check.test_tree_visitor(
+            evg_str, ("Compute0, Accum, Scale", "Result, EVGCompute0")
         )
 
     def test_evg_relu(self):
@@ -295,16 +317,18 @@ def epilogue(accum):
     return result
 """
         inputs = {
-            "accum": OpTensor.from_shape_stride(shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT),
-            "result": OpTensor.from_shape_stride(shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT),
+            "accum": OpTensor.from_shape_stride(
+                shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
+            ),
+            "result": OpTensor.from_shape_stride(
+                shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
+            ),
         }
         evg_str, _ = self._build_evg(fn_src, inputs)
         self.check.test_accu_dtype(evg_str, DataType.FLOAT)
         self.check.test_visitor_compute(evg_str, EpilogueOp.Relu)
-        self.check.test_tree_visitor(evg_str, (
-            "Compute0, Accum",
-            "Result, EVGCompute0"
-            )
+        self.check.test_tree_visitor(
+            evg_str, ("Compute0, Accum", "Result, EVGCompute0")
         )
 
     def test_evg_leaky_relu(self):
@@ -314,18 +338,22 @@ def epilogue(accum, alpha):
     return result
 """
         inputs = {
-            "accum": OpTensor.from_shape_stride(shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT),
-            "alpha": OpTensor.from_shape_stride(shape=(1, 256), stride=(256, 1), dtype=DataType.FLOAT),
-            "result": OpTensor.from_shape_stride(shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT),
+            "accum": OpTensor.from_shape_stride(
+                shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
+            ),
+            "alpha": OpTensor.from_shape_stride(
+                shape=(1, 256), stride=(256, 1), dtype=DataType.FLOAT
+            ),
+            "result": OpTensor.from_shape_stride(
+                shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
+            ),
         }
         evg_str, _ = self._build_evg(fn_src, inputs)
         self.check.test_accu_dtype(evg_str, DataType.FLOAT)
         self.check.test_boardcast(evg_str, "Alpha", BroadcastType.RowBroadcast)
         self.check.test_visitor_compute(evg_str, EpilogueOp.LeakyRelu)
-        self.check.test_tree_visitor(evg_str, (
-            "Compute0, Accum, Alpha",
-            "Result, EVGCompute0"
-            )
+        self.check.test_tree_visitor(
+            evg_str, ("Compute0, Accum, Alpha", "Result, EVGCompute0")
         )
 
     def test_evg_prelu(self):
@@ -335,18 +363,22 @@ def epilogue(accum, weight):
     return result
 """
         inputs = {
-            "accum": OpTensor.from_shape_stride(shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT),
-            "weight": OpTensor.from_shape_stride(shape=(1, 256), stride=(256, 1), dtype=DataType.FLOAT),
-            "result": OpTensor.from_shape_stride(shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT),
+            "accum": OpTensor.from_shape_stride(
+                shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
+            ),
+            "weight": OpTensor.from_shape_stride(
+                shape=(1, 256), stride=(256, 1), dtype=DataType.FLOAT
+            ),
+            "result": OpTensor.from_shape_stride(
+                shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
+            ),
         }
         evg_str, _ = self._build_evg(fn_src, inputs)
         self.check.test_accu_dtype(evg_str, DataType.FLOAT)
         self.check.test_boardcast(evg_str, "Weight", BroadcastType.RowBroadcast)
         self.check.test_visitor_compute(evg_str, EpilogueOp.Prelu)
-        self.check.test_tree_visitor(evg_str, (
-            "Compute0, Accum, Weight",
-            "Result, EVGCompute0"
-            )
+        self.check.test_tree_visitor(
+            evg_str, ("Compute0, Accum, Weight", "Result, EVGCompute0")
         )
 
     def test_evg_sigmoid(self):
@@ -356,16 +388,18 @@ def epilogue(accum):
     return result
 """
         inputs = {
-            "accum": OpTensor.from_shape_stride(shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT),
-            "result": OpTensor.from_shape_stride(shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT),
+            "accum": OpTensor.from_shape_stride(
+                shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
+            ),
+            "result": OpTensor.from_shape_stride(
+                shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
+            ),
         }
         evg_str, _ = self._build_evg(fn_src, inputs)
         self.check.test_accu_dtype(evg_str, DataType.FLOAT)
         self.check.test_visitor_compute(evg_str, EpilogueOp.Sigmoid)
-        self.check.test_tree_visitor(evg_str, (
-            "Compute0, Accum",
-            "Result, EVGCompute0"
-            )
+        self.check.test_tree_visitor(
+            evg_str, ("Compute0, Accum", "Result, EVGCompute0")
         )
 
     def test_evg_cast(self):
@@ -375,16 +409,18 @@ def epilogue(accum):
     return result
 """
         inputs = {
-            "accum": OpTensor.from_shape_stride(shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT),
-            "result": OpTensor.from_shape_stride(shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT16),
+            "accum": OpTensor.from_shape_stride(
+                shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
+            ),
+            "result": OpTensor.from_shape_stride(
+                shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT16
+            ),
         }
         evg_str, _ = self._build_evg(fn_src, inputs)
         self.check.test_accu_dtype(evg_str, DataType.FLOAT)
         self.check.test_visitor_compute(evg_str, EpilogueOp.Cast)
-        self.check.test_tree_visitor(evg_str, (
-            "Compute0, Accum",
-            "Result, EVGCompute0"
-            )
+        self.check.test_tree_visitor(
+            evg_str, ("Compute0, Accum", "Result, EVGCompute0")
         )
 
     def test_evg_relu_add(self):
@@ -395,23 +431,27 @@ def epilogue(accum, bias):
     return result
 """
         inputs = {
-            "accum": OpTensor.from_shape_stride(shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT),
-            "bias": OpTensor.from_shape_stride(shape=(1, 256), stride=(256, 1), dtype=DataType.FLOAT),
-            "result": OpTensor.from_shape_stride(shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT),
+            "accum": OpTensor.from_shape_stride(
+                shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
+            ),
+            "bias": OpTensor.from_shape_stride(
+                shape=(1, 256), stride=(256, 1), dtype=DataType.FLOAT
+            ),
+            "result": OpTensor.from_shape_stride(
+                shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
+            ),
         }
         evg_str, _ = self._build_evg(fn_src, inputs)
         self.check.test_accu_dtype(evg_str, DataType.FLOAT)
         self.check.test_boardcast(evg_str, "Bias", BroadcastType.RowBroadcast)
         self.check.test_visitor_compute(evg_str, [EpilogueOp.Relu, EpilogueOp.Add])
-        self.check.test_tree_visitor(evg_str, (
-            "Compute0, Accum",
-            "Compute1, EVGCompute0, Bias",
-            "Result, EVGCompute1"
-            )
+        self.check.test_tree_visitor(
+            evg_str,
+            ("Compute0, Accum", "Compute1, EVGCompute0, Bias", "Result, EVGCompute1"),
         )
 
 
-###################################### 
+######################################
 
 
 if __name__ == "__main__":

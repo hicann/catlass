@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # -----------------------------------------------------------------------------------------------------------
 # Copyright (c) 2025 Huawei Technologies Co., Ltd.
-# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 # CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
 # THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
@@ -15,8 +15,8 @@ import itertools
 
 from utils.config import Config
 
-class SmallMatmulTemplate:
 
+class SmallMatmulTemplate:
     TEMPLATE = """
 #include "kernel/small_matmul_kernel.h"
 void {launch_kernel_func_name}(aclrtStream& stream, uint64_t hardwareSyncAddr,
@@ -63,7 +63,9 @@ size_t {get_workspace_func_name}(TilingParams& tilingParams)
                 + str(l_tag_b)
             )
             kernel_info[
-                Config.get_tiling_key(kernel_serial, dtype, l_tag_a, l_tag_b, 0, 0, 0, 0)
+                Config.get_tiling_key(
+                    kernel_serial, dtype, l_tag_a, l_tag_b, 0, 0, 0, 0
+                )
             ] = kernel_func_name
             launch_kernel_func_name = "Launch" + kernel_func_name
             get_workspace_func_name = kernel_func_name + "GetWorkspaceSize"
@@ -88,9 +90,13 @@ size_t {get_workspace_func_name}(TilingParams& tilingParams)
             )
 
             fname = os.path.join(Config.WRAPPER_CODE_PATH, file_name)
-            try: os.remove(fname)
-            except FileNotFoundError: pass
+            try:
+                os.remove(fname)
+            except FileNotFoundError:
+                pass
 
-            fd = os.open(fname, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o550) # r-xr-x---
+            fd = os.open(
+                fname, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o550
+            )  # r-xr-x---
             with os.fdopen(fd, "w") as f:
                 f.write(content)

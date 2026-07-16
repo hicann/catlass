@@ -36,6 +36,7 @@ __all__ = [
     "GemmShape",
     "GemmCoord",
     "Shape",
+    "MmadBase",
     "MmadAtlasA2",
     "MmadAtlasA2Async",
     "MmadAtlasA2Pingpong",

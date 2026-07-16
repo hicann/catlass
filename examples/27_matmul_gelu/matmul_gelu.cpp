@@ -36,7 +36,8 @@ using namespace Catlass;
 
 using Options = GemmOptions;
 
-static void Run(const Options &options) {
+static void Run(const Options& options)
+{
     aclrtStream stream{nullptr};
 
     ACL_CHECK(aclInit(nullptr));
@@ -71,17 +72,17 @@ static void Run(const Options &options) {
     golden::FillRandomData<fp16_t>(hostB, -5.0f, 5.0f);
 
     // Allocate device memory and copy data from host to device
-    uint8_t *deviceA{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceA{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceB{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceB{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
 
     // The data of X is stored on deviceD to save storage space
-    uint8_t *deviceD{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceD), sizeD, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceD{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceD), sizeD, ACL_MEM_MALLOC_HUGE_FIRST));
 
     // Prepare hardware sync address
     uint64_t hardwareSyncAddr{0};
@@ -121,8 +122,7 @@ static void Run(const Options &options) {
         // Kernel level
         using MatmulKernel = Gemm::Kernel::MatmulActivation<BlockMmad, BlockEpilogue, BlockScheduler>;
         // Prepare params
-        typename MatmulKernel::Arguments arguments{
-            options.problemShape, sizeof(float), deviceA, deviceB, deviceD};
+        typename MatmulKernel::Arguments arguments{options.problemShape, sizeof(float), deviceA, deviceB, deviceD};
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
         MatmulAdapter matmulOp;
         RunAdapter(matmulOp, arguments, stream, aicCoreNum, hardwareSyncAddr);
@@ -133,8 +133,7 @@ static void Run(const Options &options) {
         // Kernel level
         using MatmulKernel = Gemm::Kernel::MatmulActivation<BlockMmad, BlockEpilogue, BlockScheduler>;
         // Prepare params
-        typename MatmulKernel::Arguments arguments{
-            options.problemShape, sizeof(float), deviceA, deviceB, deviceD};
+        typename MatmulKernel::Arguments arguments{options.problemShape, sizeof(float), deviceA, deviceB, deviceD};
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
         MatmulAdapter matmulOp;
         RunAdapter(matmulOp, arguments, stream, aicCoreNum, hardwareSyncAddr);
@@ -165,7 +164,8 @@ static void Run(const Options &options) {
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv) {
+int main(int argc, const char** argv)
+{
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;

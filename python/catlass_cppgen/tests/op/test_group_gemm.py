@@ -15,7 +15,9 @@ from catlass_cppgen.common.data_type import DataType
 from catlass_cppgen.catlass.layout.layout import RowMajor, ColumnMajor, VectorLayout
 from catlass_cppgen.catlass.gemm_coord import GemmShape
 from catlass_cppgen.catlass.arch.arch import Arch
-from catlass_cppgen.kernel.group_gemm.grouped_matmul_slice_m import GroupedMatmulSliceMKernel
+from catlass_cppgen.kernel.group_gemm.grouped_matmul_slice_m import (
+    GroupedMatmulSliceMKernel,
+)
 from catlass_cppgen.common.op_tensor import OpTensor
 
 from assertion_helper import TestAssertions
@@ -29,26 +31,27 @@ class TestGroupGemm(unittest.TestCase):
         problemCount = 4
         M, K, N = 128, 256, 384
         a = OpTensor.from_shape_stride(
-            shape=(M, K),
-            stride=(K, 1),
-            dtype=DataType.FLOAT
+            shape=(M, K), stride=(K, 1), dtype=DataType.FLOAT
         )
         # B 是 3D tensor: [problemCount, k, n] = [4, 256, 384]
         b = OpTensor.from_shape_stride(
-            shape=(problemCount, K, N),
-            stride=(K * N, N, 1),
-            dtype=DataType.FLOAT
+            shape=(problemCount, K, N), stride=(K * N, N, 1), dtype=DataType.FLOAT
         )
         # 创建 groupList OpTensor（一维，int64_t 类型）
         groupList = OpTensor(
             dtype=DataType.INT64,
             layout=VectorLayout(problemCount),  # 4 个 group
-            shape=(problemCount,)
+            shape=(problemCount,),
         )
 
         group_gemm_plan = GroupGemm(
-            atlas_arch=Arch.Ascend950, element=DataType.FLOAT, layout=RowMajor,
-            core_num=8, A=a, B=b, groupList=groupList
+            atlas_arch=Arch.Ascend950,
+            element=DataType.FLOAT,
+            layout=RowMajor,
+            core_num=8,
+            A=a,
+            B=b,
+            groupList=groupList,
         )
         kernels = group_gemm_plan.get_kernels()
         self.assertEqual(len(kernels), 1)
@@ -69,15 +72,24 @@ class TestGroupGemm(unittest.TestCase):
         self.check.test_arch_tag(kernel_str, Arch.Ascend950)
 
     def test_group_gemm_codegen_float16(self):
-        groupList = OpTensor.from_shape_stride(shape=(2,), stride=(1,), dtype=DataType.INT64)
-        A = OpTensor.from_shape_stride(shape=(64, 512), stride=(512, 1), dtype=DataType.FLOAT16)
+        groupList = OpTensor.from_shape_stride(
+            shape=(2,), stride=(1,), dtype=DataType.INT64
+        )
+        A = OpTensor.from_shape_stride(
+            shape=(64, 512), stride=(512, 1), dtype=DataType.FLOAT16
+        )
         B = OpTensor.from_shape_stride(
             shape=(2, 512, 256), stride=(131072, 256, 1), dtype=DataType.FLOAT16
         )
 
         gemm_plan = GroupGemm(
-            atlas_arch=Arch.AtlasA2, element=DataType.FLOAT16, layout=RowMajor,
-            core_num=8, A=A, B=B, groupList=groupList
+            atlas_arch=Arch.AtlasA2,
+            element=DataType.FLOAT16,
+            layout=RowMajor,
+            core_num=8,
+            A=A,
+            B=B,
+            groupList=groupList,
         )
         kernels = gemm_plan.get_kernels()
         gemm_kernel = kernels[0]
@@ -87,45 +99,73 @@ class TestGroupGemm(unittest.TestCase):
         self.check.test_element_dtype(kernel_str, DataType.FLOAT16)
 
     def test_group_gemm_codegen_column_major(self):
-        groupList = OpTensor.from_shape_stride(shape=(2,), stride=(1,), dtype=DataType.INT64)
-        A = OpTensor.from_shape_stride(shape=(64, 512), stride=(1, 64), dtype=DataType.FLOAT)
+        groupList = OpTensor.from_shape_stride(
+            shape=(2,), stride=(1,), dtype=DataType.INT64
+        )
+        A = OpTensor.from_shape_stride(
+            shape=(64, 512), stride=(1, 64), dtype=DataType.FLOAT
+        )
         B = OpTensor.from_shape_stride(
             shape=(2, 512, 256), stride=(131072, 1, 512), dtype=DataType.FLOAT
         )
 
         gemm_plan = GroupGemm(
-            atlas_arch=Arch.AtlasA2, element=DataType.FLOAT, layout=ColumnMajor,
-            core_num=8, A=A, B=B, groupList=groupList
+            atlas_arch=Arch.AtlasA2,
+            element=DataType.FLOAT,
+            layout=ColumnMajor,
+            core_num=8,
+            A=A,
+            B=B,
+            groupList=groupList,
         )
         kernels = gemm_plan.get_kernels()
         self.assertEqual(len(kernels), 1)
         self.assertIsInstance(kernels[0], GroupedMatmulSliceMKernel)
 
     def test_group_gemm_missing_grouplist(self):
-        A = OpTensor.from_shape_stride(shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT)
-        B = OpTensor.from_shape_stride(shape=(256, 512), stride=(512, 1), dtype=DataType.FLOAT)
+        A = OpTensor.from_shape_stride(
+            shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
+        )
+        B = OpTensor.from_shape_stride(
+            shape=(256, 512), stride=(512, 1), dtype=DataType.FLOAT
+        )
 
         with self.assertRaises(ValueError):
             GroupGemm(
-                atlas_arch=Arch.AtlasA2, element=DataType.FLOAT, layout=RowMajor,
-                core_num=8, A=A, B=B
+                atlas_arch=Arch.AtlasA2,
+                element=DataType.FLOAT,
+                layout=RowMajor,
+                core_num=8,
+                A=A,
+                B=B,
             )
 
     def test_group_gemm_grouplist_shape_mismatch(self):
-        groupList = OpTensor.from_shape_stride(shape=(3,), stride=(1,), dtype=DataType.INT64)
-        A = OpTensor.from_shape_stride(shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT)
+        groupList = OpTensor.from_shape_stride(
+            shape=(3,), stride=(1,), dtype=DataType.INT64
+        )
+        A = OpTensor.from_shape_stride(
+            shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
+        )
         B = OpTensor.from_shape_stride(
             shape=(2, 256, 512), stride=(131072, 512, 1), dtype=DataType.FLOAT
         )
 
         with self.assertRaises(ValueError):
             GroupGemm(
-                atlas_arch=Arch.AtlasA2, element=DataType.FLOAT, layout=RowMajor,
-                core_num=8, A=A, B=B, groupList=groupList
+                atlas_arch=Arch.AtlasA2,
+                element=DataType.FLOAT,
+                layout=RowMajor,
+                core_num=8,
+                A=A,
+                B=B,
+                groupList=groupList,
             )
 
     def test_group_gemm_a_not_2d(self):
-        groupList = OpTensor.from_shape_stride(shape=(2,), stride=(1,), dtype=DataType.INT64)
+        groupList = OpTensor.from_shape_stride(
+            shape=(2,), stride=(1,), dtype=DataType.INT64
+        )
         A = OpTensor.from_shape_stride(
             shape=(2, 128, 256), stride=(32768, 256, 1), dtype=DataType.FLOAT
         )
@@ -135,39 +175,69 @@ class TestGroupGemm(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             GroupGemm(
-                atlas_arch=Arch.AtlasA2, element=DataType.FLOAT, layout=RowMajor,
-                core_num=8, A=A, B=B, groupList=groupList
+                atlas_arch=Arch.AtlasA2,
+                element=DataType.FLOAT,
+                layout=RowMajor,
+                core_num=8,
+                A=A,
+                B=B,
+                groupList=groupList,
             )
 
     def test_group_gemm_can_implement(self):
-        groupList = OpTensor.from_shape_stride(shape=(2,), stride=(1,), dtype=DataType.INT64)
-        A = OpTensor.from_shape_stride(shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT)
+        groupList = OpTensor.from_shape_stride(
+            shape=(2,), stride=(1,), dtype=DataType.INT64
+        )
+        A = OpTensor.from_shape_stride(
+            shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
+        )
         B = OpTensor.from_shape_stride(
             shape=(2, 256, 512), stride=(131072, 512, 1), dtype=DataType.FLOAT
         )
 
         gemm_plan = GroupGemm(
-            atlas_arch=Arch.AtlasA2, element=DataType.FLOAT, layout=RowMajor,
-            core_num=8, A=A, B=B, groupList=groupList
+            atlas_arch=Arch.AtlasA2,
+            element=DataType.FLOAT,
+            layout=RowMajor,
+            core_num=8,
+            A=A,
+            B=B,
+            groupList=groupList,
         )
         self.assertTrue(gemm_plan.can_implement())
 
         gemm_plan2 = GroupGemm(
-            atlas_arch=Arch.AtlasA2, element=DataType.FLOAT, layout=RowMajor,
-            core_num=8, A=A, B=B, groupList=groupList, alpha=2.0, beta=0.5
+            atlas_arch=Arch.AtlasA2,
+            element=DataType.FLOAT,
+            layout=RowMajor,
+            core_num=8,
+            A=A,
+            B=B,
+            groupList=groupList,
+            alpha=2.0,
+            beta=0.5,
         )
         self.assertFalse(gemm_plan2.can_implement())
 
     def test_group_gemm_includes(self):
-        groupList = OpTensor.from_shape_stride(shape=(2,), stride=(1,), dtype=DataType.INT64)
-        A = OpTensor.from_shape_stride(shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT)
+        groupList = OpTensor.from_shape_stride(
+            shape=(2,), stride=(1,), dtype=DataType.INT64
+        )
+        A = OpTensor.from_shape_stride(
+            shape=(128, 256), stride=(256, 1), dtype=DataType.FLOAT
+        )
         B = OpTensor.from_shape_stride(
             shape=(2, 256, 512), stride=(131072, 512, 1), dtype=DataType.FLOAT
         )
 
         gemm_plan = GroupGemm(
-            atlas_arch=Arch.AtlasA2, element=DataType.FLOAT, layout=RowMajor,
-            core_num=8, A=A, B=B, groupList=groupList
+            atlas_arch=Arch.AtlasA2,
+            element=DataType.FLOAT,
+            layout=RowMajor,
+            core_num=8,
+            A=A,
+            B=B,
+            groupList=groupList,
         )
         kernels = gemm_plan.get_kernels()
         includes = kernels[0].gen_includes()

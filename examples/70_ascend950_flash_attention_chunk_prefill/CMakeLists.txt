@@ -15,4 +15,3 @@ set_source_files_properties(${FAI_SOURCES} PROPERTIES LANGUAGE ASC)
 catlass_example_add_executable(70_ascend950_flash_attention_chunk_prefill mix ${FAI_SOURCES})
 target_include_directories(70_ascend950_flash_attention_chunk_prefill PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(70_ascend950_flash_attention_chunk_prefill PRIVATE m)
-

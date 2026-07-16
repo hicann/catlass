@@ -4,8 +4,9 @@
  * This file is a part of the CANN Open Software.
  * Licensed under CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- * See LICENSE in the root of the software repository for the full text of the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
+ * BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE. See LICENSE in the root of
+ * the software repository for the full text of the License.
  */
 
 #ifndef CATLASS_GEMM_KERNEL_MATMUL_FULL_LOADA_TLA_HPP
@@ -22,11 +23,7 @@
 namespace Catlass::Gemm::Kernel {
 
 // Template for Matmul kernel. Compute C = A * B
-template <
-    class BlockMmad_,
-    class BlockEpilogue_,
-    class BlockScheduler_
->
+template <class BlockMmad_, class BlockEpilogue_, class BlockScheduler_>
 class MatmulFullLoadATla {
 public:
     using BlockMmad = BlockMmad_;
@@ -62,27 +59,36 @@ public:
 
         // Methods
         CATLASS_HOST_DEVICE
-        Params() {}
+        Params()
+        {}
 
         CATLASS_HOST_DEVICE
-        Params(GemmCoord const &problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_,
-               LayoutB layoutB_, GM_ADDR ptrC_, LayoutC layoutC_, GM_ADDR ptrBias_ = nullptr)
-            : problemShape(problemShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_), layoutB(layoutB_),
-              ptrC(ptrC_), layoutC(layoutC_), ptrBias(ptrBias_) {}
+        Params(
+            GemmCoord const& problemShape_, GM_ADDR ptrA_, LayoutA layoutA_, GM_ADDR ptrB_, LayoutB layoutB_,
+            GM_ADDR ptrC_, LayoutC layoutC_, GM_ADDR ptrBias_ = nullptr)
+            : problemShape(problemShape_),
+              ptrA(ptrA_),
+              layoutA(layoutA_),
+              ptrB(ptrB_),
+              layoutB(layoutB_),
+              ptrC(ptrC_),
+              layoutC(layoutC_),
+              ptrBias(ptrBias_)
+        {}
     };
 
     struct Arguments {
         GemmCoord problemShape;
-        uint8_t *ptrA;
+        uint8_t* ptrA;
         LayoutA layoutA;
-        uint8_t *ptrB;
+        uint8_t* ptrB;
         LayoutB layoutB;
-        uint8_t *ptrC;
+        uint8_t* ptrC;
         LayoutC layoutC;
-        uint8_t *ptrBias{nullptr};
+        uint8_t* ptrBias{nullptr};
     };
 
-    static bool CanImplement(const Arguments &args)
+    static bool CanImplement(const Arguments& args)
     {
         uint32_t L1UsedSpace = L1_TILE_M * args.problemShape.k() * sizeof(ElementA) +
                                L1_TILE_K * L1_TILE_N * L1B_STAGES * sizeof(ElementB);
@@ -92,33 +98,29 @@ public:
         return true;
     }
 
-    static size_t GetWorkspaceSize(const Arguments &args)
+    static size_t GetWorkspaceSize(const Arguments& args)
     {
         return 0;
     }
 
-    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    static Params ToUnderlyingArguments(const Arguments& args, uint8_t* workspace)
     {
-        Params params{args.problemShape,
-            args.ptrA, args.layoutA,
-            args.ptrB, args.layoutB,
-            args.ptrC, args.layoutC,
-            args.ptrBias};
+        Params params{args.problemShape, args.ptrA, args.layoutA, args.ptrB,
+                      args.layoutB,      args.ptrC, args.layoutC, args.ptrBias};
         return params;
     }
 
     // Methods
     CATLASS_DEVICE
-    MatmulFullLoadATla() {}
+    MatmulFullLoadATla()
+    {}
 
     template <int32_t CORE_TYPE = g_coreType>
-    CATLASS_DEVICE
-    void operator()(Params const &params);
+    CATLASS_DEVICE void operator()(Params const& params);
 
     /// Executes one Matmul
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIC>(Params const &params)
+    CATLASS_DEVICE void operator()<AscendC::AIC>(Params const& params)
     {
         BlockScheduler matmulBlockScheduler(params.problemShape, MakeCoord(L1_TILE_M, L1_TILE_N));
         uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
@@ -128,11 +130,11 @@ public:
 
         // Represent the full gm
         AscendC::GlobalTensor<ElementA> gmA;
-        gmA.SetGlobalBuffer((__gm__ ElementA *)params.ptrA);
+        gmA.SetGlobalBuffer((__gm__ ElementA*)params.ptrA);
         AscendC::GlobalTensor<ElementB> gmB;
-        gmB.SetGlobalBuffer((__gm__ ElementB *)params.ptrB);
+        gmB.SetGlobalBuffer((__gm__ ElementB*)params.ptrB);
         AscendC::GlobalTensor<ElementC> gmC;
-        gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrC);
+        gmC.SetGlobalBuffer((__gm__ ElementC*)params.ptrC);
 
         // Matrix A or Matrix B does not have duplicate data reads. Setting L2 Cache to Disable,
         // data reads will bypass L2 Cache.
@@ -146,7 +148,7 @@ public:
         using GlobalTensorBiasType = std::conditional_t<std::is_void_v<ElementBias>, uint8_t, ElementBias>;
         AscendC::GlobalTensor<GlobalTensorBiasType> gmBias;
         if constexpr (!std::is_void_v<ElementBias>) {
-            gmBias.SetGlobalBuffer((__gm__ ElementBias *)params.ptrBias);
+            gmBias.SetGlobalBuffer((__gm__ ElementBias*)params.ptrBias);
         }
 
         auto layoutBias = tla::MakeLayout(params.problemShape.n());
@@ -165,14 +167,15 @@ public:
             GemmCoord actualBlockShape = matmulBlockScheduler.GetActualBlockShape(blockCoord);
 
             // Make tiled views
-            auto tensorBlockA = GetTileA(tensorA, blockCoord.m() * L1_TILE_M, blockCoord.k() * L1_TILE_K,
-                                        actualBlockShape.m(), actualBlockShape.k());
-            auto tensorBlockB = GetTile(tensorB,
-                                        tla::MakeCoord(blockCoord.k() * L1_TILE_K, blockCoord.n() * L1_TILE_N),
-                                        tla::MakeShape(actualBlockShape.k(), actualBlockShape.n()));
-            auto tensorBlockC = GetTile(tensorC,
-                                        tla::MakeCoord(blockCoord.m() * L1_TILE_M, blockCoord.n() * L1_TILE_N),
-                                        tla::MakeShape(actualBlockShape.m(), actualBlockShape.n()));
+            auto tensorBlockA = GetTileA(
+                tensorA, blockCoord.m() * L1_TILE_M, blockCoord.k() * L1_TILE_K, actualBlockShape.m(),
+                actualBlockShape.k());
+            auto tensorBlockB = GetTile(
+                tensorB, tla::MakeCoord(blockCoord.k() * L1_TILE_K, blockCoord.n() * L1_TILE_N),
+                tla::MakeShape(actualBlockShape.k(), actualBlockShape.n()));
+            auto tensorBlockC = GetTile(
+                tensorC, tla::MakeCoord(blockCoord.m() * L1_TILE_M, blockCoord.n() * L1_TILE_N),
+                tla::MakeShape(actualBlockShape.m(), actualBlockShape.n()));
 
             int64_t gmOffsetA = blockCoord.m() * L1_TILE_M * tla::get<0>(tensorA.stride()) + blockCoord.k() * L1_TILE_K;
 
@@ -194,8 +197,7 @@ public:
                 blockMmad(tensorBlockA, tensorBlockB, tensorBlockC, actualBlockShape, needLoadL1);
             } else {
                 auto tensorBlockBias = GetTile(
-                    tensorBias, tla::MakeCoord(blockCoord.n() * L1_TILE_N), tla::MakeShape(actualBlockShape.n())
-                );
+                    tensorBias, tla::MakeCoord(blockCoord.n() * L1_TILE_N), tla::MakeShape(actualBlockShape.n()));
                 blockMmad(tensorBlockA, tensorBlockB, tensorBlockC, actualBlockShape, needLoadL1, tensorBlockBias);
             }
         }
@@ -208,11 +210,12 @@ public:
     }
 
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIV>(Params const &params) {}
+    CATLASS_DEVICE void operator()<AscendC::AIV>(Params const& params)
+    {}
+
 private:
-    template<class TensorA>
-    CATLASS_DEVICE auto GetTileA(TensorA &tensorA, uint32_t mIndex, uint32_t kIndex, uint32_t mSize, uint32_t kSize)
+    template <class TensorA>
+    CATLASS_DEVICE auto GetTileA(TensorA& tensorA, uint32_t mIndex, uint32_t kIndex, uint32_t mSize, uint32_t kSize)
     {
         if constexpr (tla::detail::isVector<LayoutA>::value) {
             return GetTile(tensorA, tla::MakeCoord(kIndex), tla::MakeShape(kSize));

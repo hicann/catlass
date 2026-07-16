@@ -7,7 +7,7 @@
  * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
  * See LICENSE in the root of the software repository for the full text of the License.
  */
- 
+
 #ifndef EXAMPLES_COMMON_GOLDEN_FILL_DATA_HPP
 #define EXAMPLES_COMMON_GOLDEN_FILL_DATA_HPP
 
@@ -21,8 +21,8 @@ namespace Catlass::golden {
 template <class Element, class ElementRandom>
 void GenRandomData(Element& data, ElementRandom low, ElementRandom high)
 {
-    ElementRandom randomValue = low +
-        (static_cast<ElementRandom>(rand()) / static_cast<ElementRandom>(RAND_MAX)) * (high - low);
+    ElementRandom randomValue =
+        low + (static_cast<ElementRandom>(rand()) / static_cast<ElementRandom>(RAND_MAX)) * (high - low);
     data = static_cast<Element>(randomValue);
 }
 
@@ -30,8 +30,8 @@ template <class Element, class ElementRandom>
 void FillRandomData(std::vector<Element>& data, ElementRandom low, ElementRandom high)
 {
     for (uint64_t i = 0; i < data.size(); ++i) {
-        ElementRandom randomValue = low +
-            (static_cast<ElementRandom>(rand()) / static_cast<ElementRandom>(RAND_MAX)) * (high - low);
+        ElementRandom randomValue =
+            low + (static_cast<ElementRandom>(rand()) / static_cast<ElementRandom>(RAND_MAX)) * (high - low);
         data[i] = static_cast<Element>(randomValue);
     }
 }
@@ -45,24 +45,23 @@ void FillRandomData<int8_t, int>(std::vector<int8_t>& data, int low, int high)
     }
 }
 
-
 template <typename T>
 void QuickSort(std::vector<T>& arr, int left, int right)
 {
     std::stack<std::pair<int, int>> stk;
     stk.push({left, right});
-    
+
     while (!stk.empty()) {
         auto [l, r] = stk.top();
         stk.pop();
-        
+
         if (l >= r) {
             continue;
         }
-        
+
         T pivot = arr[(l + r) / 2];
         int i = l;
-        int j = r;  
+        int j = r;
         while (i <= j) {
             while (arr[i] < pivot) {
                 i++;
@@ -117,7 +116,7 @@ std::vector<T> GenerateAverageGroupList(uint32_t m, uint32_t problemCount)
     for (int i = 0; i < problemCount; ++i) {
         if constexpr (isCumsum) {
             groupList[i] = groupSize * (i + 1);
-        }else {
+        } else {
             groupList[i] = groupSize;
         }
     }

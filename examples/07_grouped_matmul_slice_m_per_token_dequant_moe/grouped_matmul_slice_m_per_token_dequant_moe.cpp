@@ -37,7 +37,8 @@ using namespace Catlass;
 
 using Options = GroupedGemmOptions;
 
-static void Run(const Options &options) {
+static void Run(const Options& options)
+{
     aclrtStream stream{nullptr};
     ACL_CHECK(aclInit(nullptr));
     ACL_CHECK(aclrtSetDevice(options.deviceId));
@@ -72,31 +73,31 @@ static void Run(const Options &options) {
     auto groupList = golden::GenerateGroupList(m, problemCount);
 
     size_t sizeGroupList = problemCount * sizeof(uint32_t);
-    uint8_t *deviceGroupList{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceGroupList), sizeGroupList, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceGroupList{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceGroupList), sizeGroupList, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceGroupList, sizeGroupList, groupList.data(), sizeGroupList, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceA{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceA{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceB{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceB{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceScale{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceScale), sizeScale, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceScale{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceScale), sizeScale, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceScale, sizeScale, hostScale.data(), sizeScale, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *devicePerTokenScale{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&devicePerTokenScale), sizePerTokenScale, ACL_MEM_MALLOC_HUGE_FIRST)
-    );
+    uint8_t* devicePerTokenScale{nullptr};
+    ACL_CHECK(
+        aclrtMalloc(reinterpret_cast<void**>(&devicePerTokenScale), sizePerTokenScale, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(
-        devicePerTokenScale, sizePerTokenScale, hostPerTokenScale.data(), sizePerTokenScale, ACL_MEMCPY_HOST_TO_DEVICE
-    ));
+        devicePerTokenScale, sizePerTokenScale, hostPerTokenScale.data(), sizePerTokenScale,
+        ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceD{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceD), sizeD, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceD{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceD), sizeD, ACL_MEM_MALLOC_HUGE_FIRST));
 
     using LayoutA = layout::RowMajor;
     using LayoutB = layout::RowMajor;
@@ -170,9 +171,9 @@ static void Run(const Options &options) {
     matmulOp.CanImplement(arguments);
     // get workspace
     size_t sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
-    uint8_t *deviceWorkspace{nullptr};
+    uint8_t* deviceWorkspace{nullptr};
     if (sizeWorkspace > 0) {
-        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
     }
     matmulOp.Initialize(arguments, deviceWorkspace);
     matmulOp(stream, aicCoreNum, hardwareSyncAddr);
@@ -185,8 +186,7 @@ static void Run(const Options &options) {
     std::vector<float> hostGolden(lenD);
     golden::ComputeGroupedMatmulPerTokenDequant(
         options.problemShape, problemCount, groupList, hostA, layoutA, hostB, layoutB, hostScale, layoutScale,
-        hostPerTokenScale, layoutPerTokenScale, hostGolden, layoutD
-    );
+        hostPerTokenScale, layoutPerTokenScale, hostGolden, layoutD);
 
     std::vector<uint64_t> errorIndices = golden::CompareData(hostD, hostGolden, k, groupList[problemCount - 1] * n);
     if (errorIndices.empty()) {
@@ -208,7 +208,8 @@ static void Run(const Options &options) {
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv) {
+int main(int argc, const char** argv)
+{
     Options options;
     if (options.Parse(argc, argv) == 0) {
         Run(options);

@@ -29,7 +29,8 @@
 using namespace std;
 
 // Helper function to split comma-separated string into vector of uint32_t
-vector<uint32_t> splitSeqList(const string &seqStr) {
+vector<uint32_t> splitSeqList(const string& seqStr)
+{
     vector<uint32_t> seqList;
     stringstream ss(seqStr);
     string item;
@@ -66,7 +67,7 @@ struct Options {
     Options() = default;
 
     // Define function to parse the command-line arguments.
-    int Parse(int argc, const char **argv)
+    int Parse(int argc, const char** argv)
     {
         // The number of arguments must >= 7.
         if (argc < MIN_ARGS) {
@@ -106,13 +107,13 @@ struct Options {
     }
 };
 
-static void AllocMem(uint8_t **host, uint8_t **device, size_t size)
+static void AllocMem(uint8_t** host, uint8_t** device, size_t size)
 {
-    ACL_CHECK(aclrtMallocHost(reinterpret_cast<void **>(host), size));
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(device), size, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMallocHost(reinterpret_cast<void**>(host), size));
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(device), size, ACL_MEM_MALLOC_HUGE_FIRST));
 }
 
-static void FreeMem(uint8_t *host, uint8_t *device)
+static void FreeMem(uint8_t* host, uint8_t* device)
 {
     ACL_CHECK(aclrtFreeHost(host));
     ACL_CHECK(aclrtFree(device));
@@ -120,7 +121,7 @@ static void FreeMem(uint8_t *host, uint8_t *device)
 
 // Allocate several matrices in NPU device memory and call a
 // CATLASS MLA kernel.
-static void Run(const Options &options)
+static void Run(const Options& options)
 {
     aclrtStream stream{nullptr};
     ACL_CHECK(aclInit(nullptr));
@@ -164,10 +165,10 @@ static void Run(const Options &options)
     uint32_t tilingKey = (specStraKey << dTypeKeyBitLen) + dTypeKey;
 
     // read qNtokens num
-    void *qNtokens = nullptr;
+    void* qNtokens = nullptr;
     ACL_CHECK(aclrtMallocHost(&qNtokens, 1 * sizeof(int32_t)));
     ReadFile(dataPath + "/q_ntokens.bin", qNtokens, 1 * sizeof(int32_t));
-    int32_t numTokens = static_cast<int32_t *>(qNtokens)[0];
+    int32_t numTokens = static_cast<int32_t*>(qNtokens)[0];
 
     if ((numHeads == MLATiling::NUM128) && (numTokens % aicCoreNum <= 10) && (batch <= 40)) {
         tilingKey = (dTypeKey == 0) ? 7 : 8;
@@ -175,98 +176,93 @@ static void Run(const Options &options)
     std::cout << "tilingKey : " << tilingKey << std::endl;
 
     // read qSeq
-    void *qSeq = nullptr;
+    void* qSeq = nullptr;
     ACL_CHECK(aclrtMallocHost(&qSeq, batch * sizeof(int32_t)));
     ReadFile(dataPath + "/q_seqlen.bin", qSeq, batch * sizeof(int32_t));
 
     // read kvSeq num
-    void *kvSeq = nullptr;
+    void* kvSeq = nullptr;
     ACL_CHECK(aclrtMallocHost(&kvSeq, batch * sizeof(int32_t)));
     ReadFile(dataPath + "/kv_seqlen.bin", kvSeq, batch * sizeof(int32_t));
 
     uint64_t qoSize = (uint64_t)numTokens * (uint64_t)numHeads * (uint64_t)embeddingSize * sizeof(fp16_t);
     uint64_t qRopeSize = (uint64_t)numTokens * (uint64_t)numHeads * (uint64_t)embeddingSizeRope * sizeof(fp16_t);
-    uint64_t kvSize = (uint64_t)numBlocks * (uint64_t)blockSize * (uint64_t)kvHeads * (uint64_t)embeddingSize
-                      * sizeof(fp16_t);
-    uint64_t kRopeSize = (uint64_t)numBlocks * (uint64_t)blockSize * (uint64_t)kvHeads * (uint64_t)embeddingSizeRope
-                         * sizeof(fp16_t);
+    uint64_t kvSize =
+        (uint64_t)numBlocks * (uint64_t)blockSize * (uint64_t)kvHeads * (uint64_t)embeddingSize * sizeof(fp16_t);
+    uint64_t kRopeSize =
+        (uint64_t)numBlocks * (uint64_t)blockSize * (uint64_t)kvHeads * (uint64_t)embeddingSizeRope * sizeof(fp16_t);
     uint64_t maskSize = (uint64_t)numTokens * (uint64_t)maxKvSeqlen * sizeof(fp16_t);
-    uint64_t blockTableSize = static_cast<uint64_t>(
-        batch * ((maxKvSeqlen + blockSize - 1) / blockSize) * sizeof(int32_t)
-    );
+    uint64_t blockTableSize =
+        static_cast<uint64_t>(batch * ((maxKvSeqlen + blockSize - 1) / blockSize) * sizeof(int32_t));
     uint32_t tilingSize = (MLATiling::TILING_HEAD_SIZE + batch * MLATiling::TILING_PARA_SIZE) * sizeof(int32_t);
     if (specStraKey > 0) {
         tilingSize = (MLATiling::TILING_HEAD_SIZE + numTokens * MLATiling::TILING_PARA_SIZE) * sizeof(int32_t);
     }
 
     // Allocate matrices in host and device memory and load Matrix q.
-    uint8_t *qHost;
-    uint8_t *qDevice;
+    uint8_t* qHost;
+    uint8_t* qDevice;
     AllocMem(&qHost, &qDevice, qoSize);
     ReadFile(dataPath + "/q.bin", qHost, qoSize);
     ACL_CHECK(aclrtMemcpy(qDevice, qoSize, qHost, qoSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
     // Allocate matrices in host and device memory and load Matrix q_rope.
-    uint8_t *qRopeHost;
-    uint8_t *qRopeDevice;
+    uint8_t* qRopeHost;
+    uint8_t* qRopeDevice;
     AllocMem(&qRopeHost, &qRopeDevice, qRopeSize);
     ReadFile(dataPath + "/q_rope.bin", qRopeHost, qRopeSize);
     ACL_CHECK(aclrtMemcpy(qRopeDevice, qRopeSize, qRopeHost, qRopeSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
     // Allocate matrices in host and device memory and load Matrix k.
-    uint8_t *kHost;
-    uint8_t *kDevice;
+    uint8_t* kHost;
+    uint8_t* kDevice;
     AllocMem(&kHost, &kDevice, kvSize);
     ReadFile(dataPath + "/k.bin", kHost, kvSize);
     ACL_CHECK(aclrtMemcpy(kDevice, kvSize, kHost, kvSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
     // Allocate matrices in host and device memory and load Matrix k_rope.
-    uint8_t *kRopeHost;
-    uint8_t *kRopeDevice;
+    uint8_t* kRopeHost;
+    uint8_t* kRopeDevice;
     AllocMem(&kRopeHost, &kRopeDevice, kRopeSize);
     ReadFile(dataPath + "/k_rope.bin", kRopeHost, kRopeSize);
     ACL_CHECK(aclrtMemcpy(kRopeDevice, kRopeSize, kRopeHost, kRopeSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
     // Allocate matrices in host and device memory and load Matrix block_table.
-    uint8_t *blockTableHost;
-    uint8_t *blockTableDevice;
+    uint8_t* blockTableHost;
+    uint8_t* blockTableDevice;
     AllocMem(&blockTableHost, &blockTableDevice, blockTableSize);
     ReadFile(dataPath + "/block_table.bin", blockTableHost, blockTableSize);
     ACL_CHECK(aclrtMemcpy(blockTableDevice, blockTableSize, blockTableHost, blockTableSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
     // Allocate matrices in device memory for workspace.
-    uint8_t *sDevice;
+    uint8_t* sDevice;
     ACL_CHECK(aclrtMalloc(
-        (void **)(&sDevice), aicCoreNum * MLATiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(float) * MLATiling::NUM2,
-        ACL_MEM_MALLOC_HUGE_FIRST
-    ));
+        (void**)(&sDevice), aicCoreNum * MLATiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(float) * MLATiling::NUM2,
+        ACL_MEM_MALLOC_HUGE_FIRST));
 
-    uint8_t *pDevice;
+    uint8_t* pDevice;
     ACL_CHECK(aclrtMalloc(
-        (void **)(&pDevice), aicCoreNum * MLATiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(fp16_t) * MLATiling::NUM2,
-        ACL_MEM_MALLOC_HUGE_FIRST
-    ));
+        (void**)(&pDevice), aicCoreNum * MLATiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(fp16_t) * MLATiling::NUM2,
+        ACL_MEM_MALLOC_HUGE_FIRST));
 
-    uint8_t *oTmpDevice;
+    uint8_t* oTmpDevice;
     ACL_CHECK(aclrtMalloc(
-        (void **)(&oTmpDevice), aicCoreNum * MLATiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(float) * MLATiling::NUM2,
-        ACL_MEM_MALLOC_HUGE_FIRST
-    ));
+        (void**)(&oTmpDevice), aicCoreNum * MLATiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(float) * MLATiling::NUM2,
+        ACL_MEM_MALLOC_HUGE_FIRST));
 
-    uint8_t *globaloDevice;
+    uint8_t* globaloDevice;
     ACL_CHECK(aclrtMalloc(
-        (void **)(&globaloDevice), aicCoreNum * MLATiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(float),
-        ACL_MEM_MALLOC_HUGE_FIRST
-    ));
+        (void**)(&globaloDevice), aicCoreNum * MLATiling::WORKSPACE_BLOCK_SIZE_DB * sizeof(float),
+        ACL_MEM_MALLOC_HUGE_FIRST));
 
-    uint8_t *oDevice{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&oDevice), static_cast<size_t>(qoSize), ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* oDevice{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&oDevice), static_cast<size_t>(qoSize), ACL_MEM_MALLOC_HUGE_FIRST));
 
-    uint8_t *tilingDevice;
-    ACL_CHECK(aclrtMalloc((void **)(&tilingDevice), tilingSize, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* tilingDevice;
+    ACL_CHECK(aclrtMalloc((void**)(&tilingDevice), tilingSize, ACL_MEM_MALLOC_HUGE_FIRST));
 
     // get tiling
-    void *tilingHost = nullptr;
+    void* tilingHost = nullptr;
     ACL_CHECK(aclrtMallocHost(&tilingHost, tilingSize));
     uint32_t blockDim = aicCoreNum;
 
@@ -280,21 +276,21 @@ static void Run(const Options &options)
     mlaInfo.maxKvSeqlen = maxKvSeqlen;
     mlaInfo.kvHeads = kvHeads;
     mlaInfo.batch = batch;
-    mlaInfo.qSeqLen = static_cast<int32_t *>(qSeq);
-    mlaInfo.kvSeqLen = static_cast<int32_t *>(kvSeq);
-    MLATiling::GetMLATilingParam(mlaInfo, blockDim, (uint32_t *)tilingHost);
+    mlaInfo.qSeqLen = static_cast<int32_t*>(qSeq);
+    mlaInfo.kvSeqLen = static_cast<int32_t*>(kvSeq);
+    MLATiling::GetMLATilingParam(mlaInfo, blockDim, (uint32_t*)tilingHost);
 
     ACL_CHECK(aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint32_t maxKvSplitCoreNum = *((uint32_t *)tilingHost + MLATiling::TILING_KVCORENUM);
+    uint32_t maxKvSplitCoreNum = *((uint32_t*)tilingHost + MLATiling::TILING_KVCORENUM);
     uint64_t oFdSize = embeddingSize * numHeads * numTokens * maxKvSplitCoreNum * sizeof(float);
     uint64_t lSize = numTokens * numHeads * maxKvSplitCoreNum * sizeof(float);
 
-    uint8_t *oCoreTmpDevice;
-    ACL_CHECK(aclrtMalloc((void **)(&oCoreTmpDevice), oFdSize, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* oCoreTmpDevice;
+    ACL_CHECK(aclrtMalloc((void**)(&oCoreTmpDevice), oFdSize, ACL_MEM_MALLOC_HUGE_FIRST));
 
-    uint8_t *lDevice;
-    ACL_CHECK(aclrtMalloc((void **)(&lDevice), lSize, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* lDevice;
+    ACL_CHECK(aclrtMalloc((void**)(&lDevice), lSize, ACL_MEM_MALLOC_HUGE_FIRST));
 
     // Prepare hardware sync address
     uint64_t hardwareSyncAddr{0};
@@ -303,34 +299,34 @@ static void Run(const Options &options)
     // use Tp1Spec kernel to get better performance when numHeads = 128
     switch (tilingKey) {
         case 0:
-            MLA<half><<<blockDim, nullptr, stream>>>(hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice,
-                                                   blockTableDevice, oDevice, sDevice, pDevice, oTmpDevice,
-                                                   globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
+            MLA<half><<<blockDim, nullptr, stream>>>(
+                hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oDevice, sDevice,
+                pDevice, oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
             break;
         case 1:
-            MLA<bfloat16_t><<<blockDim, nullptr, stream>>>(hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice,
-                                                   blockTableDevice, oDevice, sDevice, pDevice, oTmpDevice,
-                                                   globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
+            MLA<bfloat16_t><<<blockDim, nullptr, stream>>>(
+                hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oDevice, sDevice,
+                pDevice, oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
             break;
         case 4:
-            AMLATp1Spec<half><<<blockDim, nullptr, stream>>>(hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice,
-                                                          blockTableDevice, oDevice, sDevice, pDevice, oTmpDevice,
-                                                          globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
+            AMLATp1Spec<half><<<blockDim, nullptr, stream>>>(
+                hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oDevice, sDevice,
+                pDevice, oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
             break;
         case 5:
-            AMLATp1Spec<bfloat16_t><<<blockDim, nullptr, stream>>>(hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice,
-                                                          blockTableDevice, oDevice, sDevice, pDevice, oTmpDevice,
-                                                          globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
+            AMLATp1Spec<bfloat16_t><<<blockDim, nullptr, stream>>>(
+                hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oDevice, sDevice,
+                pDevice, oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
             break;
         case 7:
-            MLATp1Spec<half><<<blockDim, nullptr, stream>>>(hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice,
-                                                        blockTableDevice, oDevice, sDevice, pDevice, oTmpDevice,
-                                                        globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
+            MLATp1Spec<half><<<blockDim, nullptr, stream>>>(
+                hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oDevice, sDevice,
+                pDevice, oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
             break;
         case 8:
-            MLATp1Spec<bfloat16_t><<<blockDim, nullptr, stream>>>(hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice,
-                                                        blockTableDevice, oDevice, sDevice, pDevice, oTmpDevice,
-                                                        globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
+            MLATp1Spec<bfloat16_t><<<blockDim, nullptr, stream>>>(
+                hardwareSyncAddr, qDevice, qRopeDevice, kDevice, kRopeDevice, blockTableDevice, oDevice, sDevice,
+                pDevice, oTmpDevice, globaloDevice, oCoreTmpDevice, lDevice, tilingDevice);
             break;
         default:
             break;
@@ -362,9 +358,9 @@ static void Run(const Options &options)
     }
 
     // Compute error metrics
-    auto errorMetrics = (dataType == "half")
-        ? golden::ComputeErrorMetrics(oHostHalf, cpulowHost, goldenHost, 10.0, 2.0, 2.0)
-        : golden::ComputeErrorMetrics(oHostBf16, cpulowHost, goldenHost, 10.0, 2.0, 2.0);
+    auto errorMetrics = (dataType == "half") ?
+                            golden::ComputeErrorMetrics(oHostHalf, cpulowHost, goldenHost, 10.0, 2.0, 2.0) :
+                            golden::ComputeErrorMetrics(oHostBf16, cpulowHost, goldenHost, 10.0, 2.0, 2.0);
     if (errorMetrics.passed) {
         cout << "Compare success." << endl;
     } else {
@@ -401,7 +397,7 @@ static void Run(const Options &options)
 
 /// Entry point to mla example.
 
-int main(int argc, const char **argv)
+int main(int argc, const char** argv)
 {
     Options options;
     if (options.Parse(argc, argv) != 0) {

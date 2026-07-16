@@ -23,30 +23,11 @@
 namespace Catlass::Gemm::Block {
 
 template <
-    uint32_t L1A_STAGES_, 
-    uint32_t L1B_STAGES_, 
-    uint32_t L0C_STAGES_,
-    bool ENABLE_UNIT_FLAG_,
-    class L1TileShape_,
-    class L0TileShape_,
-    class AType_,
-    class BType_,
-    class CType_,
-    class BiasType_,
-    class TileCopy_,
-    class TileMmad_
->
+    uint32_t L1A_STAGES_, uint32_t L1B_STAGES_, uint32_t L0C_STAGES_, bool ENABLE_UNIT_FLAG_, class L1TileShape_,
+    class L0TileShape_, class AType_, class BType_, class CType_, class BiasType_, class TileCopy_, class TileMmad_>
 struct BlockMmad<
-    MmadAtlasA2SingleCoreSplitk<L1A_STAGES_, L1B_STAGES_, L0C_STAGES_, ENABLE_UNIT_FLAG_>,
-    L1TileShape_, 
-    L0TileShape_, 
-    AType_, 
-    BType_, 
-    CType_, 
-    BiasType_, 
-    TileCopy_, 
-    TileMmad_
-> {
+    MmadAtlasA2SingleCoreSplitk<L1A_STAGES_, L1B_STAGES_, L0C_STAGES_, ENABLE_UNIT_FLAG_>, L1TileShape_, L0TileShape_,
+    AType_, BType_, CType_, BiasType_, TileCopy_, TileMmad_> {
 public:
     // Type Aliases
     using DispatchPolicy = MmadAtlasA2SingleCoreSplitk<L1A_STAGES_, L1B_STAGES_, L0C_STAGES_, ENABLE_UNIT_FLAG_>;
@@ -81,14 +62,14 @@ public:
     static constexpr uint32_t L1B_STAGES = DispatchPolicy::L1B_STAGES;
     static constexpr uint32_t L0AB_STAGES = DispatchPolicy::L0AB_STAGES;
     static constexpr uint32_t L0C_STAGES = DispatchPolicy::L0C_STAGES;
-    
+
     static constexpr uint32_t L1A_SIZE = L1TileShape::M * L1TileShape::K * sizeof(ElementA);
     static constexpr uint32_t L1B_SIZE = L1TileShape::K * L1TileShape::N * sizeof(ElementB);
     static constexpr uint32_t L0C_SIZE = L0TileShape::M * L0TileShape::N * sizeof(ElementC);
-    
-    // Check L1A & L1B 
-    static_assert((L1A_SIZE * L1A_STAGES + L1B_SIZE * L1B_STAGES) <= ArchTag::L1_SIZE,
-                    "L1TileShape exceeding the L1 space!");
+
+    // Check L1A & L1B
+    static_assert(
+        (L1A_SIZE * L1A_STAGES + L1B_SIZE * L1B_STAGES) <= ArchTag::L1_SIZE, "L1TileShape exceeding the L1 space!");
 
     static constexpr uint32_t L0A_TILE_SIZE = L0TileShape::M * L0TileShape::K * sizeof(ElementA);
     static constexpr uint32_t L0B_TILE_SIZE = L0TileShape::K * L0TileShape::N * sizeof(ElementB);
@@ -102,9 +83,10 @@ public:
     static_assert(L0TileShape::M <= L1TileShape::M, "L0TileShape::M cannot exceed L1TileShape::M");
     static_assert(L0TileShape::N <= L1TileShape::N, "L0TileShape::N cannot exceed L1TileShape::N");
     // 32B (256b) aligned
-    static_assert(Gemm::helper::TileShapeAlignChecker<L1TileShape, L0TileShape, ElementA, ElementB>::_ALIGN == 256, 
+    static_assert(
+        Gemm::helper::TileShapeAlignChecker<L1TileShape, L0TileShape, ElementA, ElementB>::_ALIGN == 256,
         "Tile shape must be 32B aligned.");
-    
+
     static constexpr uint32_t L0A_PINGPONG_BUF_SIZE = ArchTag::L0A_SIZE / L0AB_STAGES;
     static constexpr uint32_t L0B_PINGPONG_BUF_SIZE = ArchTag::L0B_SIZE / L0AB_STAGES;
     static constexpr uint32_t L0C_PINGPONG_BUF_SIZE = ArchTag::L0C_SIZE / L0C_STAGES;
@@ -114,7 +96,7 @@ public:
 
     /// Construct
     CATLASS_DEVICE
-    BlockMmad(Arch::Resource<ArchTag> &resource, uint32_t l1BufAddrStart = 0)
+    BlockMmad(Arch::Resource<ArchTag>& resource, uint32_t l1BufAddrStart = 0)
     {
         uint32_t l1AOffset = l1BufAddrStart;
         uint32_t l1BOffset = l1BufAddrStart + L1A_SIZE * L1A_STAGES;
@@ -129,7 +111,7 @@ public:
             l1BEventList[i] = i + L1A_STAGES;
             AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[i]);
         }
-        
+
         for (uint32_t i = 0; i < L0AB_STAGES; i++) {
             l0ATensorList[i] = resource.l0ABuf.template GetBufferByByte<ElementA>(L0A_PINGPONG_BUF_SIZE * i);
             l0BTensorList[i] = resource.l0BBuf.template GetBufferByByte<ElementB>(L0B_PINGPONG_BUF_SIZE * i);
@@ -155,7 +137,7 @@ public:
         for (uint32_t i = 0; i < L1B_STAGES; i++) {
             AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[i]);
         }
-        
+
         for (uint32_t i = 0; i < L0AB_STAGES; i++) {
             AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[i]);
             AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[i]);
@@ -167,11 +149,12 @@ public:
 
     /// Perform a block-scoped matrix multiply-accumulate
     CATLASS_DEVICE
-    void operator()(AscendC::GlobalTensor<ElementA> const &gmBlockA, LayoutA const &layoutA,
-        AscendC::GlobalTensor<ElementB> const &gmBlockB, LayoutB const &layoutB,
-        AscendC::GlobalTensor<ElementC> const &gmBlockC, LayoutC const &layoutC,
-        AscendC::GlobalTensor<ElementA> const &gmNextBlockA, AscendC::GlobalTensor<ElementB> const &gmNextBlockB,
-        GemmCoord const &actualShape, GemmCoord const &actualShapeNext, bool needLoadNextA, bool needLoadNextB,
+    void operator()(
+        AscendC::GlobalTensor<ElementA> const& gmBlockA, LayoutA const& layoutA,
+        AscendC::GlobalTensor<ElementB> const& gmBlockB, LayoutB const& layoutB,
+        AscendC::GlobalTensor<ElementC> const& gmBlockC, LayoutC const& layoutC,
+        AscendC::GlobalTensor<ElementA> const& gmNextBlockA, AscendC::GlobalTensor<ElementB> const& gmNextBlockB,
+        GemmCoord const& actualShape, GemmCoord const& actualShapeNext, bool needLoadNextA, bool needLoadNextB,
         bool atomicAdd)
     {
         auto layoutAInL1 = LayoutAInL1::template MakeLayout<ElementA>(L1TileShape::M, L1TileShape::K);
@@ -225,8 +208,10 @@ public:
         for (uint32_t l1mLoopIdx = 0; l1mLoopIdx < l1mLoops; l1mLoopIdx++) {
             for (uint32_t l1nLoopIdx = 0; l1nLoopIdx < l1nLoops; l1nLoopIdx++) {
                 // layoutAInL0
-                uint32_t mActual = (l1mLoopIdx < l1mLoops - 1) ? L0TileShape::M : (actualShape.m() - l1mLoopIdx * L0TileShape::M);
-                uint32_t nActual = (l1nLoopIdx < l1nLoops - 1) ? L0TileShape::N : (actualShape.n() - l1nLoopIdx * L0TileShape::N);
+                uint32_t mActual =
+                    (l1mLoopIdx < l1mLoops - 1) ? L0TileShape::M : (actualShape.m() - l1mLoopIdx * L0TileShape::M);
+                uint32_t nActual =
+                    (l1nLoopIdx < l1nLoops - 1) ? L0TileShape::N : (actualShape.n() - l1nLoopIdx * L0TileShape::N);
                 uint32_t mRound = RoundUp<L1AAlignHelper::M_ALIGNED>(mActual);
                 uint32_t nRound = RoundUp<L1BAlignHelper::N_ALIGNED>(nActual);
                 auto layoutInL0C = LayoutCInL0::MakeLayoutInL0C(MakeCoord(mRound, nRound));
@@ -318,7 +303,7 @@ public:
                     // Notify to move the next L0B tile
                     AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0BBufId]);
                     l0BBufId = (l0BBufId + 1 < L0AB_STAGES) ? (l0BBufId + 1) : 0;
-                    
+
                     AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0AEventList[l0ABufId]);
                     l0ABufId = (l0ABufId + 1 < L0AB_STAGES) ? (l0ABufId + 1) : 0;
                 }
@@ -388,6 +373,6 @@ protected:
     CopyL0CToGm copyL0CToGm;
 };
 
-}  // namespace Catlass::Gemm::Block
+} // namespace Catlass::Gemm::Block
 
-#endif  // CATLASS_GEMM_BLOCK_BLOCK_MMAD_SINGLE_CORE_SPLITK_HPP
+#endif // CATLASS_GEMM_BLOCK_BLOCK_MMAD_SINGLE_CORE_SPLITK_HPP

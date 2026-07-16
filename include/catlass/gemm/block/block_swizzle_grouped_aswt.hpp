@@ -66,11 +66,13 @@ struct GemmGroupedAswtTailSplitSwizzle {
     /// Methods --------------------------------------------------------------------------------
 
     CATLASS_DEVICE
-    GemmGroupedAswtTailSplitSwizzle() {}
+    GemmGroupedAswtTailSplitSwizzle()
+    {}
 
     CATLASS_DEVICE
     GemmGroupedAswtTailSplitSwizzle(uint32_t baseM, uint32_t baseN)
-        : baseM_(baseM), baseN_(baseN),
+        : baseM_(baseM),
+          baseN_(baseN),
           blockNum_(AscendC::GetBlockNum()),
           blockIdx_(AscendC::GetBlockIdx()),
           endBlockIdx_(AscendC::GetBlockNum() - 1)
@@ -90,7 +92,7 @@ struct GemmGroupedAswtTailSplitSwizzle {
 
     /// Start a new group. Recomputes window params (cached on m/n) and rolls the core window.
     CATLASS_DEVICE
-    void UpdateNextProblem(GemmCoord const &problemShape)
+    void UpdateNextProblem(GemmCoord const& problemShape)
     {
         k_ = problemShape.k();
         if (m_ != problemShape.m() || n_ != problemShape.n()) {
@@ -203,7 +205,7 @@ struct GemmGroupedAswtTailSplitSwizzle {
 
     /// Advance to this core's next tile. Returns false once the core has no more work.
     CATLASS_DEVICE
-    bool GetTileIdx(GemmCoord &blockCoord)
+    bool GetTileIdx(GemmCoord& blockCoord)
     {
         if (round_ == 0 || roundIdx_ > round_ - 1) {
             return false;
@@ -221,8 +223,7 @@ struct GemmGroupedAswtTailSplitSwizzle {
         // Apply the startBlockIdx offset.
         if (blockIdx_ < startBlockIdx_) {
             index += bn - sbi;
-        } else if (tailCnt_ > 1 &&
-                   static_cast<int64_t>(endBlockIdx_) + 1 >= tc * static_cast<int64_t>(totalCnt_)) {
+        } else if (tailCnt_ > 1 && static_cast<int64_t>(endBlockIdx_) + 1 >= tc * static_cast<int64_t>(totalCnt_)) {
             index -= (tbb + ((sbi - tbb) / tc) * tc) / tc;
         } else {
             index -= sbi;
@@ -252,7 +253,7 @@ struct GemmGroupedAswtTailSplitSwizzle {
 
     /// Tile shape (and tail-split sub-tile offsets) for the coord returned by GetTileIdx().
     CATLASS_DEVICE
-    AswtBlockShape GetBlockShape(GemmCoord const &blockCoord)
+    AswtBlockShape GetBlockShape(GemmCoord const& blockCoord)
     {
         uint32_t singleCoreM = (blockCoord.m() != (mCnt_ - 1)) ? baseM_ : mBaseTail_;
         uint32_t singleCoreN = (blockCoord.n() != (nCnt_ - 1)) ? baseN_ : nBaseTail_;
@@ -283,6 +284,6 @@ struct GemmGroupedAswtTailSplitSwizzle {
     }
 };
 
-}  // namespace Catlass::Gemm::Block
+} // namespace Catlass::Gemm::Block
 
-#endif  // CATLASS_GEMM_BLOCK_BLOCK_SWIZZLE_GROUPED_ASWT_HPP
+#endif // CATLASS_GEMM_BLOCK_BLOCK_SWIZZLE_GROUPED_ASWT_HPP

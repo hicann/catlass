@@ -10,76 +10,76 @@
 
 ### 主要方法
 
-- `get_default_tile_shape(self) -> Tuple[GemmShape, GemmShape]`  
+- `get_default_tile_shape(self) -> Tuple[GemmShape, GemmShape]`
   *抽象方法。* 返回 kernel 的默认 L1 和 L0 tile 形状。
 
-- `get_workspace_size(self) -> int`  
+- `get_workspace_size(self) -> int`
   返回 kernel 所需的工作区大小（默认 0）。
 
-- `need_workspace(self) -> bool`  
+- `need_workspace(self) -> bool`
   是否需要外部工作区（默认为 `False`）。
 
-- `get_core_num(self) -> int`  
+- `get_core_num(self) -> int`
   返回 kernel 使用的核心数（默认 0）。
 
-- `get_default_dispatch_policy_list(self) -> List[DispatchPolicy]`  
+- `get_default_dispatch_policy_list(self) -> List[DispatchPolicy]`
   获取默认的 dispatch_policy 列表。子类可以重写此方法以定义自己的默认 dispatch_policy 列表。如果子类不重写，默认返回空列表。
 
 #### 调优接口
 
-- `set_l1_tile_shape(self, l1_tile_shape: GemmShape)`  
+- `set_l1_tile_shape(self, l1_tile_shape: GemmShape)`
   设置 L1 tile 形状。
 
-- `set_l0_tile_shape(self, l0_tile_shape: GemmShape)`  
+- `set_l0_tile_shape(self, l0_tile_shape: GemmShape)`
   设置 L0 tile 形状。
 
-- `set_dispatch_policy(self, dispatch_policy: Union[DispatchPolicy, List[DispatchPolicy]])`  
+- `set_dispatch_policy(self, dispatch_policy: Union[DispatchPolicy, List[DispatchPolicy]])`
   设置 dispatch policy。可以传入单个 policy 或 policy 列表。如果传入单个 policy，会自动转换为包含该 policy 的列表。
 
-- `get_dispatch_policy(self) -> List[DispatchPolicy]`  
+- `get_dispatch_policy(self) -> List[DispatchPolicy]`
   获取 dispatch policy 列表。每个算子类（如 `BasicMatmulKernel`）可以定义自己的默认 dispatch_policy 列表，通过重写 `get_default_dispatch_policy_list()` 方法。
-  
+
   如果未显式设置，会自动使用算子类定义的默认列表。列表的第一个元素 `[0]` 是默认策略。
   目前默认返回只包含一个 policy 的列表，但接口设计支持未来扩展为多个 policy。
 
-- `set_block_scheduler(self, block_scheduler)`  
+- `set_block_scheduler(self, block_scheduler)`
   设置 block scheduler（保留参数）。
 
-- `tune(self, l1_tile_shape: Optional[GemmShape] = None, l0_tile_shape: Optional[GemmShape] = None, dispatch_policy: Optional[Union[DispatchPolicy, List[DispatchPolicy]]] = None, block_scheduler: Optional[BlockScheduler] = None)`  
+- `tune(self, l1_tile_shape: Optional[GemmShape] = None, l0_tile_shape: Optional[GemmShape] = None, dispatch_policy: Optional[Union[DispatchPolicy, List[DispatchPolicy]]] = None, block_scheduler: Optional[BlockScheduler] = None)`
   一次性调优 kernel 的 tile 形状和调度策略。所有参数均为可选，如果为 `None` 则使用当前值或默认值。
 
 #### 特性支持查询
 
-- `is_support(self, feature: str) -> bool`  
+- `is_support(self, feature: str) -> bool`
   查询该 kernel 是否支持某特性。
 
-- `is_support_evg(self) -> bool`  
+- `is_support_evg(self) -> bool`
   查询该 kernel 是否支持 `evg` 特性。
 
-- `is_support_hf32(self) -> bool`  
+- `is_support_hf32(self) -> bool`
   查询该 kernel 是否支持 `hf32` 特性。
 
 #### 代码生成与渲染
 
-- `get_render_params(self) -> Dict[str, Any]`  
+- `get_render_params(self) -> Dict[str, Any]`
   *抽象方法。* 返回用于模板渲染的参数字典。
 
-- `gen_includes(self) -> str`  
+- `gen_includes(self) -> str`
   生成 C++ 的 `#include` 文件头，根据 kernel 需求自动拉齐。
 
-- `gen_kernel_name(self) -> str`  
+- `gen_kernel_name(self) -> str`
   根据参数生成 kernel 的函数名。
 
-- `gen_params_device(self, def_mode: bool = False) -> str`  
+- `gen_params_device(self, def_mode: bool = False) -> str`
   生成 device 端函数参数列表，`def_mode=True` 用于函数定义，否则用于调用。
 
-- `gen_kernel_template(self) -> str`  
+- `gen_kernel_template(self) -> str`
   使用渲染参数填充 kernel 模板，生成核函数"核心代码块"。
 
-- `gen_layout_template(self) -> str`  
+- `gen_layout_template(self) -> str`
   生成 layout 相关信息代码，包括 M, K, N 的定义和 layout tag 的创建。
 
-- `codegen(self) -> str`  
+- `codegen(self) -> str`
   生成完整 C++ kernel，包括头文件、函数签名、参数、代码块与 kernel 启动。
 
 ---
@@ -166,25 +166,25 @@ def test_basic_matmul_kernel():
     gemm_plan = Gemm(atlas_arch=Arch.Ascend950, element=DataType.FLOAT, layout=RowMajor)
     kernels = gemm_plan.get_kernels(A=a, B=b)
     basic_kernel = kernels[0]  # BasicMatmulKernel
-    
+
     basic_kernel.tune(
-        GemmShape(128, 256, 64), 
+        GemmShape(128, 256, 64),
         GemmShape(128, 256, 64),
         dispatch_policy=MmadPingpong(arch_tag=Arch.Ascend950)
     )
-    
+
     # 生成头文件
     print("Includes:")
     print(basic_kernel.gen_includes())
-    
+
     # 生成核函数参数（定义模式）
     print("Params (def_mode=True):")
     print(basic_kernel.gen_params_device(def_mode=True))
-    
+
     # 生成核函数模板
     print("Kernel Template:")
     print(basic_kernel.gen_kernel_template())
-    
+
     # 生成 layout 模板
     print("Layout Template:")
     print(basic_kernel.gen_layout_template())
@@ -219,25 +219,25 @@ def test_batched_matmul_kernel():
     gemm_plan = Gemm(atlas_arch=Arch.Ascend950, element=DataType.FLOAT, layout=RowMajor)
     kernels = gemm_plan.get_kernels(A=a, B=b)
     batched_kernel = kernels[0]  # BatchedMatmulKernel
-    
+
     batched_kernel.tune(
-        GemmShape(128, 256, 64), 
+        GemmShape(128, 256, 64),
         GemmShape(128, 256, 64),
         dispatch_policy=MmadPingpong(arch_tag=Arch.Ascend950, enable_unit_flag=True)
     )
-    
+
     # 生成头文件
     print("Includes:")
     print(batched_kernel.gen_includes())
-    
+
     # 生成核函数参数（定义模式）
     print("Params (def_mode=True):")
     print(batched_kernel.gen_params_device(def_mode=True))
-    
+
     # 生成核函数模板
     print("Kernel Template:")
     print(batched_kernel.gen_kernel_template())
-    
+
     # 生成 layout 模板（包含 stride 信息）
     print("Layout Template:")
     print(batched_kernel.gen_layout_template())
@@ -271,26 +271,26 @@ def test_streamk_matmul_kernel():
     gemm_plan = Gemm(atlas_arch=Arch.Ascend950, element=DataType.FLOAT, layout=RowMajor)
     kernels = gemm_plan.get_kernels(A=a, B=b)
     streamk_kernel = kernels[2]  # StreamkMatmulKernel（索引可能因实现而异）
-    
+
     # StreamK kernel 默认使用较大的 tile shape，并指定 dispatch_policy
     streamk_kernel.tune(
-        GemmShape(256, 256, 128), 
+        GemmShape(256, 256, 128),
         GemmShape(256, 256, 32),
         dispatch_policy=MmadPingpong(arch_tag=Arch.Ascend950, enable_unit_flag=True)
     )
-    
+
     # 生成头文件
     print("Includes:")
     print(streamk_kernel.gen_includes())
-    
+
     # 生成核函数参数（定义模式，包含 aicCoreNum 参数）
     print("Params (def_mode=True):")
     print(streamk_kernel.gen_params_device(def_mode=True))
-    
+
     # 生成核函数模板
     print("Kernel Template:")
     print(streamk_kernel.gen_kernel_template())
-    
+
     # 生成 layout 模板
     print("Layout Template:")
     print(streamk_kernel.gen_layout_template())
@@ -324,26 +324,26 @@ def test_multi_core_splitk_matmul_kernel():
     gemm_plan = Gemm(atlas_arch=Arch.Ascend950, element=DataType.FLOAT, layout=RowMajor)
     kernels = gemm_plan.get_kernels(A=a, B=b)
     splitk_kernel = kernels[1]  # MultiCoreSplitkMatmulKernel（索引可能因实现而异）
-    
+
     # SplitK kernel 默认使用较大的 tile shape，并指定 dispatch_policy
     splitk_kernel.tune(
-        GemmShape(256, 256, 128), 
+        GemmShape(256, 256, 128),
         GemmShape(256, 256, 32),
         dispatch_policy=MmadPingpong(arch_tag=Arch.Ascend950, enable_unit_flag=True)
     )
-    
+
     # 生成头文件
     print("Includes:")
     print(splitk_kernel.gen_includes())
-    
+
     # 生成核函数参数（定义模式，包含 aicCoreNum 参数）
     print("Params (def_mode=True):")
     print(splitk_kernel.gen_params_device(def_mode=True))
-    
+
     # 生成核函数模板
     print("Kernel Template:")
     print(splitk_kernel.gen_kernel_template())
-    
+
     # 生成 layout 模板
     print("Layout Template:")
     print(splitk_kernel.gen_layout_template())
@@ -377,26 +377,26 @@ def test_tail_multi_core_splitk_matmul_kernel():
     gemm_plan = Gemm(atlas_arch=Arch.Ascend950, element=DataType.FLOAT, layout=RowMajor)
     kernels = gemm_plan.get_kernels(A=a, B=b)
     tail_splitk_kernel = kernels[3]  # TailMultiCoreSplitkMatmulKernel（索引可能因实现而异）
-    
+
     # Tail SplitK kernel 默认使用较大的 tile shape，并指定 dispatch_policy
     tail_splitk_kernel.tune(
-        GemmShape(256, 256, 128), 
+        GemmShape(256, 256, 128),
         GemmShape(256, 256, 32),
         dispatch_policy=MmadPingpong(arch_tag=Arch.Ascend950, enable_unit_flag=True)
     )
-    
+
     # 生成头文件
     print("Includes:")
     print(tail_splitk_kernel.gen_includes())
-    
+
     # 生成核函数参数（定义模式，包含 aicCoreNum 参数）
     print("Params (def_mode=True):")
     print(tail_splitk_kernel.gen_params_device(def_mode=True))
-    
+
     # 生成核函数模板
     print("Kernel Template:")
     print(tail_splitk_kernel.gen_kernel_template())
-    
+
     # 生成 layout 模板
     print("Layout Template:")
     print(tail_splitk_kernel.gen_layout_template())
@@ -419,7 +419,7 @@ def test_grouped_matmul_slice_m_kernel():
     # 分组 GEMM：每个问题的 A 和 B 矩阵维度相同
     # 使用 OpTensor.from_shape_stride 创建输入（避免实例化实际 tensor 数据）
     from catlass_cppgen.catlass.layout.layout import VectorLayout
-    
+
     a = OpTensor.from_shape_stride(
         shape=(128, 256),  # 单个问题的 A 矩阵
         stride=(256, 1),   # RowMajor stride: (n, 1)
@@ -437,30 +437,30 @@ def test_grouped_matmul_slice_m_kernel():
         layout=VectorLayout(4),  # 4 个 group
         shape=(4,)
     )
-    
+
     group_gemm_plan = GroupGemm(atlas_arch=Arch.Ascend950, element=DataType.FLOAT, layout=RowMajor)
     kernels = group_gemm_plan.get_kernels(A=a, B=b, groupList=groupList)
     grouped_kernel = kernels[0]  # GroupedMatmulSliceMKernel
-    
+
     # Grouped kernel 默认使用较大的 tile shape，并指定 dispatch_policy
     grouped_kernel.tune(
-        GemmShape(256, 256, 256), 
+        GemmShape(256, 256, 256),
         GemmShape(256, 256, 64),
         dispatch_policy=MmadPingpong(arch_tag=Arch.Ascend950, enable_unit_flag=True)
     )
-    
+
     # 生成头文件
     print("Includes:")
     print(grouped_kernel.gen_includes())
-    
+
     # 生成核函数参数（定义模式，包含 problemCount 和 deviceGroupList 参数）
     print("Params (def_mode=True):")
     print(grouped_kernel.gen_params_device(def_mode=True))
-    
+
     # 生成核函数模板
     print("Kernel Template:")
     print(grouped_kernel.gen_kernel_template())
-    
+
     # 生成 layout 模板
     print("Layout Template:")
     print(grouped_kernel.gen_layout_template())
@@ -475,6 +475,3 @@ def test_grouped_matmul_slice_m_kernel():
 - `codegen()` 方法整合所有渲染环节，一键输出最终 C++ kernel 源码。
 
 更多细节与二次开发见 [`kernel_base.py`](../catlass_cppgen/kernel/kernel_base.py)。
-
-
-

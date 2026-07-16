@@ -15,16 +15,14 @@
 #include "tla/numeric/integral_constant.hpp"
 
 template <uint32_t ALIGN, typename T>
-CATLASS_HOST_DEVICE
-constexpr T RoundUp(const T &val)
+CATLASS_HOST_DEVICE constexpr T RoundUp(const T& val)
 {
     static_assert(ALIGN != 0, "ALIGN must not be 0");
     return (val + ALIGN - 1) / ALIGN * ALIGN;
 }
 
 template <class T, class U>
-CATLASS_HOST_DEVICE
-constexpr auto RoundUp(T const &val, U const &align)
+CATLASS_HOST_DEVICE constexpr auto RoundUp(T const& val, U const& align)
 {
     if constexpr (tla::is_static<T>::value && tla::is_static<U>::value) { // Int, Int
         constexpr uint32_t res = (T::value + U::value - 1) / U::value * U::value;
@@ -39,16 +37,14 @@ constexpr auto RoundUp(T const &val, U const &align)
 }
 
 template <uint32_t ALIGN, typename T>
-CATLASS_HOST_DEVICE
-constexpr T RoundDown(const T val)
+CATLASS_HOST_DEVICE constexpr T RoundDown(const T val)
 {
     static_assert(ALIGN != 0, "ALIGN must not be 0");
     return val / ALIGN * ALIGN;
 }
 
 template <class T, class U>
-CATLASS_HOST_DEVICE
-constexpr auto RoundDown(T const &val, U const &align)
+CATLASS_HOST_DEVICE constexpr auto RoundDown(T const& val, U const& align)
 {
     if constexpr (tla::is_static<T>::value && tla::is_static<U>::value) { // Int, Int
         constexpr uint32_t res = T::value / U::value * U::value;
@@ -63,16 +59,14 @@ constexpr auto RoundDown(T const &val, U const &align)
 }
 
 template <uint32_t DIVISOR, typename T>
-CATLASS_HOST_DEVICE
-constexpr T CeilDiv(const T dividend)
+CATLASS_HOST_DEVICE constexpr T CeilDiv(const T dividend)
 {
     static_assert(DIVISOR != 0, "DIVISOR must not be 0");
     return (dividend + DIVISOR - 1) / DIVISOR;
 }
 
 template <class T, class U>
-CATLASS_HOST_DEVICE
-constexpr auto CeilDiv(T const &dividend, U const &divisor)
+CATLASS_HOST_DEVICE constexpr auto CeilDiv(T const& dividend, U const& divisor)
 {
     if constexpr (tla::is_static<T>::value && tla::is_static<U>::value) { // Int, Int
         constexpr uint32_t res = (T::value + U::value - 1) / U::value;
@@ -87,8 +81,8 @@ constexpr auto CeilDiv(T const &dividend, U const &divisor)
 }
 
 template <class T, class U>
-CATLASS_HOST_DEVICE
-constexpr auto Max(T const &a, U const &b) {
+CATLASS_HOST_DEVICE constexpr auto Max(T const& a, U const& b)
+{
     if (a > b) {
         return a;
     } else {
@@ -97,8 +91,8 @@ constexpr auto Max(T const &a, U const &b) {
 }
 
 template <class T, class U>
-CATLASS_HOST_DEVICE
-constexpr auto Min(T const &a, U const &b) {
+CATLASS_HOST_DEVICE constexpr auto Min(T const& a, U const& b)
+{
     if (a < b) {
         return a;
     } else {
@@ -106,4 +100,4 @@ constexpr auto Min(T const &a, U const &b) {
     }
 }
 
-#endif  // CATLASS_DETAIL_ALIGNMENT_HPP
+#endif // CATLASS_DETAIL_ALIGNMENT_HPP

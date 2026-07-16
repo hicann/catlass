@@ -36,7 +36,7 @@ using namespace tla;
 
 using Options = GroupedGemmOptions;
 
-void Run(Options const &options)
+void Run(Options const& options)
 {
     aclrtStream stream{nullptr};
     ACL_CHECK(aclInit(nullptr));
@@ -67,25 +67,25 @@ void Run(Options const &options)
     auto groupList = golden::GenerateGroupList<int64_t>(m, problemCount);
 
     size_t sizeGroupList = problemCount * sizeof(int64_t);
-    uint8_t *deviceGroupList{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceGroupList), sizeGroupList, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceGroupList{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceGroupList), sizeGroupList, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceGroupList, sizeGroupList, groupList.data(), sizeGroupList, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceA{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceA{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceB{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceB{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceC{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceC{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
 
     size_t sizeWorkspace = 0;
-    uint8_t *deviceWorkspace{nullptr};
+    uint8_t* deviceWorkspace{nullptr};
     using ElementA = half;
     using ElementB = half;
     using ElementC = half;
@@ -105,22 +105,22 @@ void Run(Options const &options)
 
     using TileCopy =
         Gemm::Tile::PackedTileCopyTla<ArchTag, ElementA, LayoutTagA, ElementB, LayoutTagB, ElementC, LayoutTagC>;
-    using BlockMmadTla = Gemm::Block::BlockMmadTla<DispatchPolicy, L1TileShape, L0TileShape, ElementA, ElementB, ElementC, void, TileCopy>;
+    using BlockMmadTla = Gemm::Block::BlockMmadTla<
+        DispatchPolicy, L1TileShape, L0TileShape, ElementA, ElementB, ElementC, void, TileCopy>;
     using BlockEpilogue = void;
     if (m / problemCount >= n) {
         using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
         using MatmulKernel = Gemm::Kernel::GroupedMatmulSliceMTla<BlockMmadTla, BlockEpilogue, BlockScheduler, int64_t>;
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
         MatmulKernel::Arguments arguments{
-            options.problemShape, problemCount, deviceGroupList, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC
-        };
+            options.problemShape, problemCount, deviceGroupList, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC};
 
         MatmulAdapter matmul_op;
         matmul_op.CanImplement(arguments);
         sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
         if (sizeWorkspace > 0) {
             ACL_CHECK(
-                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+                aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
         }
         matmul_op.Initialize(arguments, deviceWorkspace);
         matmul_op(stream, aicCoreNum);
@@ -129,15 +129,14 @@ void Run(Options const &options)
         using MatmulKernel = Gemm::Kernel::GroupedMatmulSliceMTla<BlockMmadTla, BlockEpilogue, BlockScheduler, int64_t>;
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
         MatmulKernel::Arguments arguments{
-            options.problemShape, problemCount, deviceGroupList, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC
-        };
+            options.problemShape, problemCount, deviceGroupList, deviceA, layoutA, deviceB, layoutB, deviceC, layoutC};
 
         MatmulAdapter matmul_op;
         matmul_op.CanImplement(arguments);
         sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
         if (sizeWorkspace > 0) {
             ACL_CHECK(
-                aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+                aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
         }
         matmul_op.Initialize(arguments, deviceWorkspace);
         matmul_op(stream, aicCoreNum);
@@ -161,8 +160,8 @@ void Run(Options const &options)
     }
 
     std::vector<float> hostGolden(lenC);
-    golden::ComputeGroupedMatmul(problemCount, problemShapeList, hostA, layoutAList,
-        hostB, layoutBList, hostGolden, layoutCList);
+    golden::ComputeGroupedMatmul(
+        problemCount, problemShapeList, hostA, layoutAList, hostB, layoutBList, hostGolden, layoutCList);
 
     std::vector<uint64_t> errorIndices = golden::CompareData(hostC, hostGolden, k, groupList[problemCount - 1] * n);
     if (errorIndices.empty()) {
@@ -184,7 +183,7 @@ void Run(Options const &options)
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv)
+int main(int argc, const char** argv)
 {
     Options options;
     if (options.Parse(argc, argv) == 0) {

@@ -14,22 +14,32 @@ Base class for Python EVG fronted
 from __future__ import annotations
 
 import ast
-import inspect
 import itertools
 import textwrap
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Dict, List, Union, Any, Tuple
 
 import networkx as nx
-from sympy import Expr, Symbol
+from sympy import Expr
 from contextlib import contextmanager
 
 from catlass_cppgen.common.data_type import DataType
 from .evg.evg_definition import EVGArg, EVGDef
-from .evg.node import (CastNode, ComputeNode, ConstantNode, LoadNode, NodeBase,
-                       NodeMetadata, StoreNode, TopoVisitorNode)
-from .library import *
+from .evg.node import (
+    CastNode,
+    ComputeNode,
+    ConstantNode,
+    LoadNode,
+    NodeBase,
+    NodeMetadata,
+    StoreNode,
+    TopoVisitorNode,
+)
+from .library import EpilogueOp
 
-_as_tuple = lambda x: x if isinstance(x, tuple) else (x,)
+
+def _as_tuple(x: Union[Tuple, Any]) -> Tuple:
+    return x if isinstance(x, tuple) else (x,)
+
 
 def _get_tensor_element(tensor) -> DataType:
     """
@@ -37,7 +47,7 @@ def _get_tensor_element(tensor) -> DataType:
     仅支持 OpTensor
     """
     from catlass_cppgen.common.op_tensor import OpTensor
-    
+
     if not isinstance(tensor, OpTensor):
         raise TypeError(f"Unsupported tensor type: {type(tensor)}. Expected OpTensor")
     return tensor.dtype
@@ -47,6 +57,7 @@ class EpilogueVisitorGraph:
     """
     Helper class for constructing a DAG from Python EVG function
     """
+
     def __init__(self):
         self._graph = nx.DiGraph()
         self.nodes_map = {}  # a little fragile
@@ -134,7 +145,9 @@ class EpilogueVisitorGraph:
         return list(self._graph.predecessors(node))
 
     def get_sorted_inputs(self, node: NodeBase) -> List[NodeBase]:
-        input_nodes = {self.get_edge_pos(pnode, node): pnode for pnode in self.get_inputs(node)}
+        input_nodes = {
+            self.get_edge_pos(pnode, node): pnode for pnode in self.get_inputs(node)
+        }
         return [input_nodes[key] for key in sorted(input_nodes.keys())]
 
     def all_reachable_nodes(self, node: NodeBase) -> List[NodeBase]:
@@ -166,11 +179,17 @@ class EpilogueVisitorGraph:
             # Obviously, we do not suppose to subtitute all 1s to "n"
             # NOTE: The whole shape expression maps to a single dynamic dimension tag (m/n),
             #       e.g. shape '2*s20' maps to 'm' (not '2*m')
-            if isinstance(traced_tensor.shape[0], Expr) and traced_tensor.shape[0].free_symbols:
+            if (
+                isinstance(traced_tensor.shape[0], Expr)
+                and traced_tensor.shape[0].free_symbols
+            ):
                 self.symbol_shape_substitution_dict[str(traced_tensor.shape[0])] = "m"
-            if isinstance(traced_tensor.shape[1], Expr) and traced_tensor.shape[1].free_symbols:
+            if (
+                isinstance(traced_tensor.shape[1], Expr)
+                and traced_tensor.shape[1].free_symbols
+            ):
                 self.symbol_shape_substitution_dict[str(traced_tensor.shape[1])] = "n"
-        
+
         metadata = NodeMetadata(
             op=op,
             shape=traced_tensor.shape,
@@ -245,11 +264,11 @@ class EpilogueVisitorGraph:
         return name
 
 
-
 class PythonEVGParser(EpilogueVisitorGraph, ast.NodeVisitor):
     """
     Transform a Python EVG function to DAG
     """
+
     def __init__(self):
         """
         e.g. example_inputs = {
@@ -286,7 +305,7 @@ class PythonEVGParser(EpilogueVisitorGraph, ast.NodeVisitor):
 
     @contextmanager
     def _return_context(self):
-        self.visiting_return = True # Set visit Flag to be True
+        self.visiting_return = True  # Set visit Flag to be True
         try:
             yield
         finally:

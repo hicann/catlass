@@ -21,8 +21,9 @@
 
 namespace Catlass::Gemm::Kernel {
 
-template <class PrologueA_, class PrologueB_, class BlockMmad_, 
-    class BlockEpilogue_, class BlockScheduler_, class RemovePaddingC_>
+template <
+    class PrologueA_, class PrologueB_, class BlockMmad_, class BlockEpilogue_, class BlockScheduler_,
+    class RemovePaddingC_>
 class DynamicPaddingCommonMatmul {
 public:
     using PrologueA = PrologueA_;
@@ -37,11 +38,11 @@ public:
 
     using LayoutC = typename BlockMmad::LayoutC;
 
-    template<class T>
+    template <class T>
     struct LayoutHelper {
         using type = typename T::LayoutIn;
     };
-    template<>
+    template <>
     struct LayoutHelper<void> {
         using type = void;
     };
@@ -76,12 +77,23 @@ public:
         {}
 
         CATLASS_HOST_DEVICE
-        Params(GemmCoord const &problemShape_, GemmCoord const &l1TileShape_, GM_ADDR ptrA_, LayoutA& layoutA_,
+        Params(
+            GemmCoord const& problemShape_, GemmCoord const& l1TileShape_, GM_ADDR ptrA_, LayoutA& layoutA_,
             GM_ADDR ptrB_, LayoutB& layoutB_, GM_ADDR ptrC_, LayoutC& layoutC_, GM_ADDR ptrWA_, GM_ADDR ptrWB_,
             GM_ADDR ptrWC_, uint32_t swizzleOffset_, uint32_t swizzleDirection_)
-            : problemShape(problemShape_), l1TileShape(l1TileShape_), ptrA(ptrA_), layoutA(layoutA_), ptrB(ptrB_),
-              layoutB(layoutB_), ptrC(ptrC_), layoutC(layoutC_), ptrWA(ptrWA_), ptrWB(ptrWB_), ptrWC(ptrWC_),
-              swizzleOffset(swizzleOffset_), swizzleDirection(swizzleDirection_)
+            : problemShape(problemShape_),
+              l1TileShape(l1TileShape_),
+              ptrA(ptrA_),
+              layoutA(layoutA_),
+              ptrB(ptrB_),
+              layoutB(layoutB_),
+              ptrC(ptrC_),
+              layoutC(layoutC_),
+              ptrWA(ptrWA_),
+              ptrWB(ptrWB_),
+              ptrWC(ptrWC_),
+              swizzleOffset(swizzleOffset_),
+              swizzleDirection(swizzleDirection_)
         {}
     };
 
@@ -91,23 +103,22 @@ public:
     {}
 
     template <int32_t CORE_TYPE = g_coreType>
-    CATLASS_DEVICE
-    void operator()(Params const &params, Catlass::Arch::Resource<ArchTag> &resource);
+    CATLASS_DEVICE void operator()(Params const& params, Catlass::Arch::Resource<ArchTag>& resource);
 
-    template<>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIV>(Params const &params, Catlass::Arch::Resource<ArchTag> &resource)
+    template <>
+    CATLASS_DEVICE void operator()<AscendC::AIV>(Params const& params, Catlass::Arch::Resource<ArchTag>& resource)
     {
-         if constexpr (!std::is_void_v<PrologueA>) {
+        if constexpr (!std::is_void_v<PrologueA>) {
             AscendC::GlobalTensor<ElementA> gmA;
             AscendC::GlobalTensor<ElementA> gmWA;
-            gmA.SetGlobalBuffer(reinterpret_cast<__gm__ ElementA *>(params.ptrA));
-            gmWA.SetGlobalBuffer(reinterpret_cast<__gm__ ElementA *>(params.ptrWA));
+            gmA.SetGlobalBuffer(reinterpret_cast<__gm__ ElementA*>(params.ptrA));
+            gmWA.SetGlobalBuffer(reinterpret_cast<__gm__ ElementA*>(params.ptrWA));
             typename BlockMmad::LayoutA layoutWA;
             if constexpr (PrologueA::paddingTag == Catlass::Gemm::Kernel::PaddingTag::PADDING_ND) {
                 layoutWA = PrologueA::GetWorkspaceLayout(params.layoutA, 512 / sizeof(ElementA));
             } else if constexpr (PrologueA::paddingTag == Catlass::Gemm::Kernel::PaddingTag::PADDING_BLOCK_ND) {
-                layoutWA = PrologueA::GetWorkspaceLayout(params.layoutA, params.l1TileShape.m(), params.l1TileShape.k());
+                layoutWA =
+                    PrologueA::GetWorkspaceLayout(params.layoutA, params.l1TileShape.m(), params.l1TileShape.k());
             } else if constexpr (PrologueA::paddingTag == Catlass::Gemm::Kernel::PaddingTag::PADDING_NZ) {
                 layoutWA = PrologueA::GetWorkspaceLayout(params.layoutA);
             }
@@ -118,13 +129,14 @@ public:
         if constexpr (!std::is_void_v<PrologueB>) {
             AscendC::GlobalTensor<ElementB> gmB;
             AscendC::GlobalTensor<ElementB> gmWB;
-            gmB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB *>(params.ptrB));
-            gmWB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB *>(params.ptrWB));
+            gmB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB*>(params.ptrB));
+            gmWB.SetGlobalBuffer(reinterpret_cast<__gm__ ElementB*>(params.ptrWB));
             typename BlockMmad::LayoutB layoutWB;
             if constexpr (PrologueB::paddingTag == Catlass::Gemm::Kernel::PaddingTag::PADDING_ND) {
                 layoutWB = PrologueB::GetWorkspaceLayout(params.layoutB, 512 / sizeof(ElementB));
             } else if constexpr (PrologueB::paddingTag == Catlass::Gemm::Kernel::PaddingTag::PADDING_BLOCK_ND) {
-                layoutWB = PrologueB::GetWorkspaceLayout(params.layoutB, params.l1TileShape.k(), params.l1TileShape.n());
+                layoutWB =
+                    PrologueB::GetWorkspaceLayout(params.layoutB, params.l1TileShape.k(), params.l1TileShape.n());
             } else if constexpr (PrologueB::paddingTag == Catlass::Gemm::Kernel::PaddingTag::PADDING_NZ) {
                 layoutWB = PrologueB::GetWorkspaceLayout(params.layoutB);
             }
@@ -142,8 +154,8 @@ public:
             Catlass::Arch::CrossCoreBarrier<0x0, PIPE_MTE3>();
             AscendC::GlobalTensor<ElementC> gmC;
             AscendC::GlobalTensor<ElementC> gmWC;
-            gmC.SetGlobalBuffer(reinterpret_cast<__gm__ ElementC *>(params.ptrC));
-            gmWC.SetGlobalBuffer(reinterpret_cast<__gm__ ElementC *>(params.ptrWC));
+            gmC.SetGlobalBuffer(reinterpret_cast<__gm__ ElementC*>(params.ptrC));
+            gmWC.SetGlobalBuffer(reinterpret_cast<__gm__ ElementC*>(params.ptrWC));
             LayoutC layoutWC = RemovePaddingC::GetWorkspaceLayout(params.layoutC, 512 / sizeof(ElementC));
             RemovePaddingC removePaddingC(resource);
             removePaddingC(gmC, gmWC, params.layoutC, layoutWC);
@@ -153,15 +165,16 @@ public:
     }
 
     /// Executes matmul
-    template<>
-    CATLASS_DEVICE void operator()<AscendC::AIC>(Params const &params, Catlass::Arch::Resource<ArchTag> &resource)
+    template <>
+    CATLASS_DEVICE void operator()<AscendC::AIC>(Params const& params, Catlass::Arch::Resource<ArchTag>& resource)
     {
         if constexpr (!std::is_void_v<PrologueA> || !std::is_void_v<PrologueB>) {
             Catlass::Arch::CrossCoreWaitFlag(flagAivFinishPadding);
         }
 
-        BlockScheduler matmulBlockScheduler(params.problemShape,
-            MakeCoord(params.l1TileShape.m(), params.l1TileShape.n()), params.swizzleOffset, params.swizzleDirection);
+        BlockScheduler matmulBlockScheduler(
+            params.problemShape, MakeCoord(params.l1TileShape.m(), params.l1TileShape.n()), params.swizzleOffset,
+            params.swizzleDirection);
         uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
 
         typename BlockMmad::LayoutA layoutA;
@@ -171,10 +184,10 @@ public:
         // Represent the full gm
         AscendC::GlobalTensor<ElementA> gmA;
         if constexpr (std::is_void_v<PrologueA>) {
-            gmA.SetGlobalBuffer((__gm__ ElementA *)params.ptrA);
+            gmA.SetGlobalBuffer((__gm__ ElementA*)params.ptrA);
             layoutA = params.layoutA;
         } else {
-            gmA.SetGlobalBuffer((__gm__ ElementA *)params.ptrWA);
+            gmA.SetGlobalBuffer((__gm__ ElementA*)params.ptrWA);
             if constexpr (PrologueA::paddingTag == Catlass::Gemm::Kernel::PaddingTag::PADDING_ND) {
                 layoutA = PrologueA::GetWorkspaceLayout(params.layoutA, 512 / sizeof(ElementA));
             } else if constexpr (PrologueA::paddingTag == Catlass::Gemm::Kernel::PaddingTag::PADDING_BLOCK_ND) {
@@ -185,10 +198,10 @@ public:
         }
         AscendC::GlobalTensor<ElementB> gmB;
         if constexpr (std::is_void_v<PrologueB>) {
-            gmB.SetGlobalBuffer((__gm__ ElementB *)params.ptrB);
+            gmB.SetGlobalBuffer((__gm__ ElementB*)params.ptrB);
             layoutB = params.layoutB;
         } else {
-            gmB.SetGlobalBuffer((__gm__ ElementB *)params.ptrWB);
+            gmB.SetGlobalBuffer((__gm__ ElementB*)params.ptrWB);
             if constexpr (PrologueB::paddingTag == Catlass::Gemm::Kernel::PaddingTag::PADDING_ND) {
                 layoutB = PrologueB::GetWorkspaceLayout(params.layoutB, 512 / sizeof(ElementB));
             } else if constexpr (PrologueB::paddingTag == Catlass::Gemm::Kernel::PaddingTag::PADDING_BLOCK_ND) {
@@ -199,10 +212,10 @@ public:
         }
         AscendC::GlobalTensor<ElementC> gmC;
         if constexpr (std::is_void_v<RemovePaddingC>) {
-            gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrC);
+            gmC.SetGlobalBuffer((__gm__ ElementC*)params.ptrC);
             layoutC = params.layoutC;
         } else {
-            gmC.SetGlobalBuffer((__gm__ ElementC *)params.ptrWC);
+            gmC.SetGlobalBuffer((__gm__ ElementC*)params.ptrWC);
             layoutC = RemovePaddingC::GetWorkspaceLayout(params.layoutC, 512 / sizeof(ElementC));
         }
 
@@ -214,7 +227,6 @@ public:
         GemmCoord nextActualBlockShape;
 
         for (uint32_t loopIdx = AscendC::GetBlockIdx(); loopIdx < coreLoops; loopIdx += AscendC::GetBlockNum()) {
-
             bool isFirstBlock = (loopIdx == AscendC::GetBlockIdx());
             if (isFirstBlock) {
                 blockCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
@@ -247,24 +259,16 @@ public:
             int64_t gmOffsetNextB = layoutB.GetOffset(coordNextB);
 
             // Compute block-scoped matrix multiply-add
-            blockMmad(gmA[gmOffsetA],
-                layoutA,
-                gmB[gmOffsetB],
-                layoutB,
-                gmC[gmOffsetC],
-                layoutC,
-                gmA[gmOffsetNextA],
-                gmB[gmOffsetNextB],
-                actualBlockShape,
-                nextActualBlockShape,
-                isFirstBlock,
-                hasNextBlock);
+            blockMmad(
+                gmA[gmOffsetA], layoutA, gmB[gmOffsetB], layoutB, gmC[gmOffsetC], layoutC, gmA[gmOffsetNextA],
+                gmB[gmOffsetNextB], actualBlockShape, nextActualBlockShape, isFirstBlock, hasNextBlock);
         }
         if constexpr (!std::is_void_v<RemovePaddingC>) {
             Catlass::Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(flagAicFinish);
         }
         AscendC::PipeBarrier<PIPE_ALL>();
     }
+
 private:
     static constexpr Arch::FlagID FLAG_AIV_FINISH_STORE = 0;
     Arch::CrossCoreFlag flagAivFinishPadding{FLAG_AIV_FINISH_STORE};
@@ -272,6 +276,6 @@ private:
     Arch::CrossCoreFlag flagAicFinish{FLAG_AIC_FINISH};
 };
 
-}  // namespace Catlass::Gemm::Kernel
+} // namespace Catlass::Gemm::Kernel
 
-#endif  // CATLASS_GEMM_KERNEL_DYNAMIC_PADDING_COMMON_MATMUL_HPP
+#endif // CATLASS_GEMM_KERNEL_DYNAMIC_PADDING_COMMON_MATMUL_HPP

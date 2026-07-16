@@ -37,7 +37,8 @@ using namespace tla;
 
 using Options = GemmOptions;
 
-static void Run(const Options &options) {
+static void Run(const Options& options)
+{
     aclrtStream stream{nullptr};
 
     ACL_CHECK(aclInit(nullptr));
@@ -81,17 +82,17 @@ static void Run(const Options &options) {
     golden::FillRandomData<ElementC>(hostX, -5.0f, 5.0f);
 
     // Allocate device memory and copy data from host to device
-    uint8_t *deviceA{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceA{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceB{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceB{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
 
     // The data of X is stored on deviceD to save storage space
-    uint8_t *deviceD{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceD), sizeD, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceD{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceD), sizeD, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceD, sizeD, hostX.data(), sizeD, ACL_MEMCPY_HOST_TO_DEVICE));
 
     // Get the number of cube cores of the current hardware
@@ -105,7 +106,7 @@ static void Run(const Options &options) {
     using MmadDispatchPolicy = Gemm::MmadPingpong<ArchTag, enableUnitFlag>;
     using L1TileShape = Shape<Int<256>, Int<256>, Int<128>>;
     using L0TileShape = Shape<Int<256>, Int<256>, Int<32>>;
-    
+
     // Create TLA layouts for kernel usage
     auto layoutA = tla::MakeLayout<ElementA, LayoutTagA>(m, k);
     auto layoutB = tla::MakeLayout<ElementB, LayoutTagB>(k, n);
@@ -119,47 +120,39 @@ static void Run(const Options &options) {
 
     // 定义 EVG: D = C + X
     // C 是 workspace（A*B 的结果），D 是最终输出（C+X 的结果）
-    
-    uint32_t taskNum = CeilDiv(options.problemShape.m(), tla::get<0>(L1TileShape{}))
-                       * CeilDiv(options.problemShape.n(), tla::get<1>(L1TileShape{}));
+
+    uint32_t taskNum = CeilDiv(options.problemShape.m(), tla::get<0>(L1TileShape{})) *
+                       CeilDiv(options.problemShape.n(), tla::get<1>(L1TileShape{}));
     uint32_t aicCoreUsed = min(aicCoreNum, taskNum);
 
-    constexpr uint32_t evgUbNodes = 2;    // AuxLoad + Compute；AccLoad(UB) / Store 不占
-    constexpr uint32_t evgUbStages = 2;   // epilogue 双缓冲
-    constexpr uint32_t evgUbBudget = ArchTag::UB_SIZE - ArchTag::L0C_SIZE / 2; // [0, L0C_SIZE/2) 存 MMAD 结果 C，EVG 仅用后半段 UB
+    constexpr uint32_t evgUbNodes = 2;  // AuxLoad + Compute；AccLoad(UB) / Store 不占
+    constexpr uint32_t evgUbStages = 2; // epilogue 双缓冲
+    constexpr uint32_t evgUbBudget =
+        ArchTag::UB_SIZE - ArchTag::L0C_SIZE / 2; // [0, L0C_SIZE/2) 存 MMAD 结果 C，EVG 仅用后半段 UB
     constexpr uint32_t computeLength = RoundDown(
-        evgUbBudget / evgUbNodes / evgUbStages / sizeof(ElementC), BYTE_PER_C0); // 每槽元素上限，向下取 BYTE_PER_C0 整数倍
-    
+        evgUbBudget / evgUbNodes / evgUbStages / sizeof(ElementC),
+        BYTE_PER_C0); // 每槽元素上限，向下取 BYTE_PER_C0 整数倍
+
     using LayoutC = decltype(layoutC);
     using EpilogueDispatchPolicy = Epilogue::EpilogueVisitor<true>;
     using EVG = Epilogue::Fusion::TreeVisitor<
         Epilogue::Fusion::VisitorAuxStore<ElementC, LayoutC>,
         Epilogue::Fusion::TreeVisitor<
             Epilogue::Fusion::VisitorCompute<Epilogue::Fusion::Add, ElementC>,
-            Epilogue::Fusion::VisitorAccLoad<ElementC, EpilogueDispatchPolicy::USE_UB_WORKSPACE>,  // 加载 C (workspace)，使用 EpilogueDispatchPolicy 成员值
-            Epilogue::Fusion::VisitorAuxLoad<ElementC, LayoutC>   // 加载 X
-        >
-    >;
+            Epilogue::Fusion::VisitorAccLoad<
+                ElementC, EpilogueDispatchPolicy::USE_UB_WORKSPACE>, // 加载 C
+                                                                     // (workspace)，使用
+                                                                     // EpilogueDispatchPolicy
+                                                                     // 成员值
+            Epilogue::Fusion::VisitorAuxLoad<ElementC, LayoutC>      // 加载 X
+            >>;
 
     // Block level, define BlockEpilogue with EVG
-    using BlockEpilogue = Epilogue::Block::BlockEpilogue<
-        EpilogueDispatchPolicy,
-        ArchTag,
-        Int<computeLength>,
-        EVG,
-        ElementC
-    >;
+    using BlockEpilogue =
+        Epilogue::Block::BlockEpilogue<EpilogueDispatchPolicy, ArchTag, Int<computeLength>, EVG, ElementC>;
 
     // 准备 EVG Arguments - 使用 TLA layout 对象
-    typename EVG::Arguments evg_args{
-        {
-            {},
-            {deviceD, layoutC},
-            {}
-        },
-        {deviceD, layoutC}
-    };
-
+    typename EVG::Arguments evg_args{{{}, {deviceD, layoutC}, {}}, {deviceD, layoutC}};
 
     std::vector<ElementC> hostD(lenD);
     if (m > n) {
@@ -169,14 +162,15 @@ static void Run(const Options &options) {
         // Kernel level (TLA version)
         using MatmulKernel = Gemm::Kernel::BasicMatmulTlaUbVisitor<BlockMmad, BlockEpilogue, BlockScheduler>;
         // Prepare params
-        typename MatmulKernel::Arguments arguments{options.problemShape, deviceA, layoutA, deviceB, layoutB, nullptr, {}, nullptr, evg_args};
+        typename MatmulKernel::Arguments arguments{
+            options.problemShape, deviceA, layoutA, deviceB, layoutB, nullptr, {}, nullptr, evg_args};
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
         MatmulAdapter matmulOp;
         size_t sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
-        uint8_t *deviceWorkspace{nullptr};
+        uint8_t* deviceWorkspace{nullptr};
         if (sizeWorkspace > 0) {
-            ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
-            );
+            ACL_CHECK(
+                aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
         }
         matmulOp.Initialize(arguments, deviceWorkspace);
         matmulOp(stream, aicCoreUsed);
@@ -194,14 +188,15 @@ static void Run(const Options &options) {
         // Kernel level (TLA version)
         using MatmulKernel = Gemm::Kernel::BasicMatmulTlaUbVisitor<BlockMmad, BlockEpilogue, BlockScheduler>;
         // Prepare params
-        typename MatmulKernel::Arguments arguments{options.problemShape, deviceA, layoutA, deviceB, layoutB, nullptr, {}, nullptr, evg_args};
+        typename MatmulKernel::Arguments arguments{
+            options.problemShape, deviceA, layoutA, deviceB, layoutB, nullptr, {}, nullptr, evg_args};
         using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
         MatmulAdapter matmulOp;
         size_t sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
-        uint8_t *deviceWorkspace{nullptr};
+        uint8_t* deviceWorkspace{nullptr};
         if (sizeWorkspace > 0) {
-            ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
-            );
+            ACL_CHECK(
+                aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
         }
         matmulOp.Initialize(arguments, deviceWorkspace);
         matmulOp(stream, aicCoreUsed);
@@ -216,8 +211,7 @@ static void Run(const Options &options) {
 
     // Compute the golden result (fp32 reference: matmul in fp32, then add X)
     std::vector<float> hostGolden(lenD);
-    golden::ComputeMatmulElemWiseAdd(
-        options.problemShape, hostA, tagA, hostB, tagB, hostX, hostGolden, tagC);
+    golden::ComputeMatmulElemWiseAdd(options.problemShape, hostA, tagA, hostB, tagB, hostX, hostGolden, tagC);
 
     // Compare the result
     std::vector<uint64_t> errorIndices = golden::CompareData(hostD, hostGolden, k);
@@ -236,7 +230,8 @@ static void Run(const Options &options) {
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv) {
+int main(int argc, const char** argv)
+{
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;

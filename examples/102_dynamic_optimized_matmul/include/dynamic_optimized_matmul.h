@@ -19,7 +19,7 @@
 #include "launch_map.h"
 
 template <class DType>
-void DoTiling(TilingParams &tilingParams, PlatformInfo &platformInfo)
+void DoTiling(TilingParams& tilingParams, PlatformInfo& platformInfo)
 {
     uint32_t layoutTagA = tilingParams.layoutTagA;
     uint32_t layoutTagB = tilingParams.layoutTagB;
@@ -28,32 +28,33 @@ void DoTiling(TilingParams &tilingParams, PlatformInfo &platformInfo)
 }
 
 template <class DType>
-void SelectKernel(TilingParams &tilingParams, PlatformInfo &platformInfo)
+void SelectKernel(TilingParams& tilingParams, PlatformInfo& platformInfo)
 {
     SelectKernelB16(tilingParams, platformInfo);
 }
 
 template <class DType>
-void DoTilingAndSelectKernel(TilingParams &tilingParams, PlatformInfo &platformInfo)
+void DoTilingAndSelectKernel(TilingParams& tilingParams, PlatformInfo& platformInfo)
 {
     DoTiling<DType>(tilingParams, platformInfo);
     SelectKernel<DType>(tilingParams, platformInfo);
 }
 
-size_t DynamicOptimizedMatmulGetWorkspace(TilingParams &tilingParams)
+size_t DynamicOptimizedMatmulGetWorkspace(TilingParams& tilingParams)
 {
     return getWorkspaceFuncMap[tilingParams.tilingKey.value](tilingParams);
 }
 
-void ExecuteDynamicOptimizedMatmul(aclrtStream &stream, uint64_t hardwareSyncAddr, uint8_t *dA, uint8_t *dB, uint8_t *dC,
-    uint8_t *dW, uint8_t *dTilingParams, TilingParams &tilingParams)
+void ExecuteDynamicOptimizedMatmul(
+    aclrtStream& stream, uint64_t hardwareSyncAddr, uint8_t* dA, uint8_t* dB, uint8_t* dC, uint8_t* dW,
+    uint8_t* dTilingParams, TilingParams& tilingParams)
 {
-
-    launchKernelFuncMap[tilingParams.tilingKey.value](stream, hardwareSyncAddr, dA, dB, dC, dW, dTilingParams, tilingParams);
+    launchKernelFuncMap[tilingParams.tilingKey.value](
+        stream, hardwareSyncAddr, dA, dB, dC, dW, dTilingParams, tilingParams);
 }
 
 template <class DType>
-void PrintTilingParams(TilingParams &tilingParams, PlatformInfo& platformInfo)
+void PrintTilingParams(TilingParams& tilingParams, PlatformInfo& platformInfo)
 {
     uint32_t bytePerC0 = 32;
     uint32_t c0NumPerFractal = 16;
@@ -104,4 +105,4 @@ void PrintTilingParams(TilingParams &tilingParams, PlatformInfo& platformInfo)
     std::cout << "Kernel Func Name : " << funcNameMap[tilingParams.tilingKey.value] << std::endl;
 }
 
-#endif  // CATLASS_DYNAMIC_OPTIMIZED_MATMUL_H
+#endif // CATLASS_DYNAMIC_OPTIMIZED_MATMUL_H

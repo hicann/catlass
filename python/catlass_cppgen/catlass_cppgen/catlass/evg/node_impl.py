@@ -9,7 +9,6 @@
 
 from re import sub
 
-from catlass_cppgen.common.data_type import DataType
 from ..library import LayoutTag, CastTypeTag, EpilogueOpTag
 
 
@@ -79,6 +78,7 @@ class NoOpImpl(ImplBase):
     """
     The NoOpImpl does nothing but forward its inputs to users.
     """
+
     def __init__(self, node):
         super().__init__(node)
 
@@ -92,9 +92,9 @@ class AccLoadImpl(ImplBase):
         if self._type_decl is not None:
             return self._type_decl
 
-#         self._type_decl = f"""
-# using {self.type_name} = Catlass::Epilogue::Fusion::VisitorAccLoad<{self.element.value}, EpilogueDispatchPolicy::USE_UB_WORKSPACE>;
-# """
+        #         self._type_decl = f"""
+        # using {self.type_name} = Catlass::Epilogue::Fusion::VisitorAccLoad<{self.element.value}, EpilogueDispatchPolicy::USE_UB_WORKSPACE>;
+        # """
         self._type_decl = f"""
 using {self.type_name} = Catlass::Epilogue::Fusion::VisitorAccLoad<{self.element.value}>;
 """
@@ -216,7 +216,9 @@ class ScalarComputeImpl(ComputeImplBase):
         self._type_decl += f"""
 using {self.type_name} = Catlass::Epilogue::Fusion::VisitorCompute<
     {EpilogueOpTag[self.fn]}, {self.compute_element.value},"""
-        self._type_decl +=  ", ".join([item[1].value for _, item in self.scalar_values.items()])
+        self._type_decl += ", ".join(
+            [item[1].value for _, item in self.scalar_values.items()]
+        )
         self._type_decl += """
 >;
 """

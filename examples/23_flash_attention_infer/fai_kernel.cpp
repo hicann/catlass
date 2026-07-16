@@ -24,15 +24,10 @@
 using namespace Catlass;
 
 template <
-    class BlockMmadQK,
-    class BlockMmadPV,
-    class BlockMmadQKTail,
-    class BlockMmadPVTail,
-    class EpilogueOnlineSoftmax,
-    class EpilogueRescaleO,
-    bool PAGED_CACHE_FLAG>
+    class BlockMmadQK, class BlockMmadPV, class BlockMmadQKTail, class BlockMmadPVTail, class EpilogueOnlineSoftmax,
+    class EpilogueRescaleO, bool PAGED_CACHE_FLAG>
 class FAInferKernel {
-  public:
+public:
     using ArchTag = typename BlockMmadQK::ArchTag;
     using L1TileShape = typename BlockMmadQK::L1TileShape;
     using ElementQ = typename BlockMmadQK::ElementA;
@@ -58,14 +53,15 @@ class FAInferKernel {
 
     // Methods
     CATLASS_DEVICE
-    FAInferKernel() {
-    }
+    FAInferKernel()
+    {}
 
     template <int32_t CORE_TYPE = g_coreType>
-    CATLASS_DEVICE void operator()(FAIKernelParams const &params);
+    CATLASS_DEVICE void operator()(FAIKernelParams const& params);
 
     template <>
-    CATLASS_DEVICE void operator()<AscendC::AIC>(FAIKernelParams const &params) {
+    CATLASS_DEVICE void operator()<AscendC::AIC>(FAIKernelParams const& params)
+    {
         AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(EVENT_ID0);
         AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(EVENT_ID1);
         AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(EVENT_ID2);
@@ -84,16 +80,15 @@ class FAInferKernel {
         AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(EVENT_ID5);
         AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(EVENT_ID6);
         AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(EVENT_ID7);
-        static constexpr uint32_t L1_QK_SIZE = BlockMmadQK::L1TileShape::M * BlockMmadQK::L1TileShape::K
-                                                   * sizeof(ElementQ)
-                                               + BlockMmadQK::L1TileShape::N * BlockMmadQK::L1TileShape::K
-                                                     * sizeof(ElementK) * 2;
+        static constexpr uint32_t L1_QK_SIZE =
+            BlockMmadQK::L1TileShape::M * BlockMmadQK::L1TileShape::K * sizeof(ElementQ) +
+            BlockMmadQK::L1TileShape::N * BlockMmadQK::L1TileShape::K * sizeof(ElementK) * 2;
         BlockMmadQK blockMmadQK(resource);
         BlockMmadPV blockMmadPV(resource, L1_QK_SIZE);
 
         BlockMmadQKTail blockMmadQKTail(resource);
         BlockMmadPVTail blockMmadPVTail(resource, L1_QK_SIZE);
-        __gm__ FATilingData *fATilingData = reinterpret_cast<__gm__ FATilingData *>(params.tiling);
+        __gm__ FATilingData* fATilingData = reinterpret_cast<__gm__ FATilingData*>(params.tiling);
         uint64_t mm1OutSize = fATilingData->mm1OutSize;
         uint64_t smOnlineOutSize = fATilingData->smOnlineOutSize;
         uint32_t batch = fATilingData->batch;
@@ -109,23 +104,23 @@ class FAInferKernel {
         float scaleValue = fATilingData->scaleValue;
 
         AscendC::GlobalTensor<ElementQ> gQ;
-        gQ.SetGlobalBuffer((__gm__ ElementQ *)params.q);
+        gQ.SetGlobalBuffer((__gm__ ElementQ*)params.q);
         AscendC::GlobalTensor<ElementK> gK;
-        gK.SetGlobalBuffer((__gm__ ElementK *)params.k);
+        gK.SetGlobalBuffer((__gm__ ElementK*)params.k);
         AscendC::GlobalTensor<ElementK> gV;
-        gV.SetGlobalBuffer((__gm__ ElementK *)params.v);
+        gV.SetGlobalBuffer((__gm__ ElementK*)params.v);
         AscendC::GlobalTensor<int32_t> gBlockTable;
-        gBlockTable.SetGlobalBuffer((__gm__ int32_t *)(params.blockTables));
+        gBlockTable.SetGlobalBuffer((__gm__ int32_t*)(params.blockTables));
         AscendC::GlobalTensor<int64_t> gActualQseqlen;
-        gActualQseqlen.SetGlobalBuffer((__gm__ int64_t *)params.actualQseqlen);
+        gActualQseqlen.SetGlobalBuffer((__gm__ int64_t*)params.actualQseqlen);
         AscendC::GlobalTensor<int64_t> gActualKvseqlen;
-        gActualKvseqlen.SetGlobalBuffer((__gm__ int64_t *)params.actualKvseqlen);
+        gActualKvseqlen.SetGlobalBuffer((__gm__ int64_t*)params.actualKvseqlen);
         AscendC::GlobalTensor<ElementS> gS;
-        gS.SetGlobalBuffer((__gm__ ElementS *)params.s);
+        gS.SetGlobalBuffer((__gm__ ElementS*)params.s);
         AscendC::GlobalTensor<ElementP> gP;
-        gP.SetGlobalBuffer((__gm__ ElementP *)params.p);
+        gP.SetGlobalBuffer((__gm__ ElementP*)params.p);
         AscendC::GlobalTensor<ElementOTmp> gOTmp;
-        gOTmp.SetGlobalBuffer((__gm__ ElementOTmp *)params.oTemp);
+        gOTmp.SetGlobalBuffer((__gm__ ElementOTmp*)params.oTemp);
 
         uint64_t strideQO = qHeads * embed;
         uint64_t strideKV = kvHeads * embed;
@@ -187,11 +182,11 @@ class FAInferKernel {
             uint64_t gmQOffset = qBOffset + qSBlockIdx * curQSBlockTile * strideQO + qHeadIdx * embed;
             uint64_t gmKOffset = kBOffset + kvHeadIdx * embed;
             uint64_t gmVOffset = vBOffset + kvHeadIdx * embed;
-            uint32_t qSBlockSize = (qSBlockIdx == (curQSBlockNum - 1)) ? (qSeqlen - qSBlockIdx * curQSBlockTile)
-                                                                       : curQSBlockTile;
-            uint32_t qNBlockSize = (qNBlockIdxCurGroup == (qNBlockNumPerGroup - 1))
-                                       ? (groupSize - qNBlockIdxCurGroup * curQNBlockTile)
-                                       : curQNBlockTile;
+            uint32_t qSBlockSize =
+                (qSBlockIdx == (curQSBlockNum - 1)) ? (qSeqlen - qSBlockIdx * curQSBlockTile) : curQSBlockTile;
+            uint32_t qNBlockSize = (qNBlockIdxCurGroup == (qNBlockNumPerGroup - 1)) ?
+                                       (groupSize - qNBlockIdxCurGroup * curQNBlockTile) :
+                                       curQNBlockTile;
             uint32_t rowNum = qSBlockSize * qNBlockSize;
             uint32_t rowNumRound = AlignUp(rowNum, BLOCK_SIZE);
             uint32_t noSkipKvS = kvSeqlen;
@@ -211,8 +206,8 @@ class FAInferKernel {
             uint32_t stackSeqTile;
             uint32_t stackSeqTileRound = blockStackNum * 128;
             int32_t preLaunch = 2;
-            int32_t totalStackSeqNum = (maskType != 0) ? (CeilDiv(noMaskKvS, blockStackNum * pagedBlockSize) + 1)
-                                                       : CeilDiv(noMaskKvS, blockStackNum * pagedBlockSize);
+            int32_t totalStackSeqNum = (maskType != 0) ? (CeilDiv(noMaskKvS, blockStackNum * pagedBlockSize) + 1) :
+                                                         CeilDiv(noMaskKvS, blockStackNum * pagedBlockSize);
             int32_t stackSeqCount = 0;
 
             LayoutQ layoutQTemp(rowNum, embed);
@@ -227,20 +222,18 @@ class FAInferKernel {
                         stackSeqTile = pagedBlockSize * blockStackNum;
                     }
                     uint32_t SWorkSpacePingPongFlag = stackSeqCount % (preLaunch + 1);
-                    uint64_t gmSOffset = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1)
-                                         + SWorkSpacePingPongFlag * WORKSPACE_BLOCK_SIZE_DB;
+                    uint64_t gmSOffset = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) +
+                                         SWorkSpacePingPongFlag * WORKSPACE_BLOCK_SIZE_DB;
                     GemmCoord actualBlockShapeQK{rowNum, stackSeqTile, embed};
                     if constexpr (!PAGED_CACHE_FLAG) {
                         blockMmadQK(
                             gQ[gmQOffset], gK[gmKOffset], gS[gmSOffset], gBlockTable, layoutQTemp, layoutKTemp,
-                            actualBlockShapeQK, kvSIdx, kvSLoopNumNoMask, pagedBlockSize, noMaskKvS, strideKV
-                        );
+                            actualBlockShapeQK, kvSIdx, kvSLoopNumNoMask, pagedBlockSize, noMaskKvS, strideKV);
                     } else {
                         blockMmadQK(
                             gQ[gmQOffset], gK[gmKOffset], gS[gmSOffset], gBlockTable[blockBOffset], layoutQTemp,
                             layoutKTemp, actualBlockShapeQK, kvSIdx, kvSLoopNumNoMask, pagedBlockSize, noMaskKvS,
-                            strideKV
-                        );
+                            strideKV);
                     }
                     Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(qkReady);
                 }
@@ -252,24 +245,22 @@ class FAInferKernel {
                         stackSeqTile = pagedBlockSize * blockStackNum;
                     }
                     uint32_t PVWorkSpacePingPongFlag = (stackSeqCount - preLaunch) % (preLaunch + 1);
-                    uint64_t gmPOffset = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1)
-                                         + PVWorkSpacePingPongFlag * WORKSPACE_BLOCK_SIZE_DB;
-                    uint64_t gmOTmpOffset = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1)
-                                            + PVWorkSpacePingPongFlag * WORKSPACE_BLOCK_SIZE_DB;
+                    uint64_t gmPOffset = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) +
+                                         PVWorkSpacePingPongFlag * WORKSPACE_BLOCK_SIZE_DB;
+                    uint64_t gmOTmpOffset = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) +
+                                            PVWorkSpacePingPongFlag * WORKSPACE_BLOCK_SIZE_DB;
                     LayoutP layoutPTemp(rowNum, stackSeqTileRound);
                     GemmCoord actualBlockShapePV{rowNum, embed, stackSeqTile};
                     if constexpr (!PAGED_CACHE_FLAG) {
                         blockMmadPV(
                             gP[gmPOffset], gV[gmVOffset], gOTmp[gmOTmpOffset], gBlockTable, layoutPTemp, layoutVTemp,
                             actualBlockShapePV, nowkvSIdx, kvSLoopNumNoMask, pagedBlockSize, noMaskKvS, strideKV,
-                            softmaxReady
-                        );
+                            softmaxReady);
                     } else {
                         blockMmadPV(
                             gP[gmPOffset], gV[gmVOffset], gOTmp[gmOTmpOffset], gBlockTable[blockBOffset], layoutPTemp,
                             layoutVTemp, actualBlockShapePV, nowkvSIdx, kvSLoopNumNoMask, pagedBlockSize, noMaskKvS,
-                            strideKV, softmaxReady
-                        );
+                            strideKV, softmaxReady);
                     }
                     Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(pvReady);
                 }
@@ -284,34 +275,33 @@ class FAInferKernel {
              */
 
             // deal secondary loop conditions
-            uint32_t maskedStartIdx = (maskType != 0) ? ((noMaskTailS != 0) ? (kvSLoopNumNoMask - 1) : kvSLoopNumNoMask)
-                                                      : AlignUp(kvSLoopNumNoMask, blockStackNum);
+            uint32_t maskedStartIdx = (maskType != 0) ?
+                                          ((noMaskTailS != 0) ? (kvSLoopNumNoMask - 1) : kvSLoopNumNoMask) :
+                                          AlignUp(kvSLoopNumNoMask, blockStackNum);
             uint32_t noMaskTailInteStackNum = (noMaskKvS / pagedBlockSize) % blockStackNum;
-            noMaskTailInteStackNum = (noMaskTailInteStackNum != 0) ? noMaskTailInteStackNum
-                                                                   : ((noMaskTailS != 0) ? 0 : blockStackNum);
-            uint32_t preLaunchStackNum = (maskType != 0) ? ((preLaunch - 1) * blockStackNum + noMaskTailInteStackNum)
-                                                         : (preLaunch * blockStackNum);
+            noMaskTailInteStackNum =
+                (noMaskTailInteStackNum != 0) ? noMaskTailInteStackNum : ((noMaskTailS != 0) ? 0 : blockStackNum);
+            uint32_t preLaunchStackNum = (maskType != 0) ? ((preLaunch - 1) * blockStackNum + noMaskTailInteStackNum) :
+                                                           (preLaunch * blockStackNum);
 
             // masked kvSeqlen loop
             for (uint32_t kvSIdx = maskedStartIdx; kvSIdx < kvSLoopNumTotal + preLaunchStackNum;) {
                 if ((kvSIdx < kvSLoopNumTotal) && (stackSeqCount <= totalStackSeqNum - 1)) {
                     stackSeqTile = maskedKvS;
                     uint32_t SWorkSpacePingPongFlag = stackSeqCount % (preLaunch + 1);
-                    uint64_t gmSOffset = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1)
-                                         + SWorkSpacePingPongFlag * WORKSPACE_BLOCK_SIZE_DB;
+                    uint64_t gmSOffset = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) +
+                                         SWorkSpacePingPongFlag * WORKSPACE_BLOCK_SIZE_DB;
                     GemmCoord actualBlockShapeQK{rowNum, stackSeqTile, embed};
                     if constexpr (!PAGED_CACHE_FLAG) {
                         blockMmadQKTail(
                             gQ[gmQOffset], gK[gmKOffset], gS[gmSOffset], gBlockTable, layoutQTemp, layoutKTemp,
                             actualBlockShapeQK, kvSIdx, kvSLoopNumTotal, pagedBlockSize, noSkipKvS, strideKV,
-                            noMaskTailS, 1
-                        );
+                            noMaskTailS, 1);
                     } else {
                         blockMmadQKTail(
                             gQ[gmQOffset], gK[gmKOffset], gS[gmSOffset], gBlockTable[blockBOffset], layoutQTemp,
                             layoutKTemp, actualBlockShapeQK, kvSIdx, kvSLoopNumTotal, pagedBlockSize, noSkipKvS,
-                            strideKV, noMaskTailS, 1
-                        );
+                            strideKV, noMaskTailS, 1);
                     }
                     Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(qkReady);
                 }
@@ -327,10 +317,10 @@ class FAInferKernel {
                         stackSeqTile = pagedBlockSize * blockStackNum;
                     }
                     uint32_t PVWorkSpacePingPongFlag = (stackSeqCount - preLaunch) % (preLaunch + 1);
-                    uint64_t gmPOffset = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1)
-                                         + PVWorkSpacePingPongFlag * WORKSPACE_BLOCK_SIZE_DB;
-                    uint64_t gmOTmpOffset = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1)
-                                            + PVWorkSpacePingPongFlag * WORKSPACE_BLOCK_SIZE_DB;
+                    uint64_t gmPOffset = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) +
+                                         PVWorkSpacePingPongFlag * WORKSPACE_BLOCK_SIZE_DB;
+                    uint64_t gmOTmpOffset = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) +
+                                            PVWorkSpacePingPongFlag * WORKSPACE_BLOCK_SIZE_DB;
                     LayoutP layoutPTemp(rowNum, stackSeqTileRound);
                     GemmCoord actualBlockShapePV{rowNum, embed, stackSeqTile};
 
@@ -339,28 +329,24 @@ class FAInferKernel {
                             blockMmadPVTail(
                                 gP[gmPOffset], gV[gmVOffset], gOTmp[gmOTmpOffset], gBlockTable, layoutPTemp,
                                 layoutVTemp, actualBlockShapePV, delayedKvSIdx, kvSLoopNumTotal, pagedBlockSize,
-                                noSkipKvS, strideKV, softmaxReady, noMaskTailS, 1
-                            );
+                                noSkipKvS, strideKV, softmaxReady, noMaskTailS, 1);
                         } else {
                             blockMmadPVTail(
                                 gP[gmPOffset], gV[gmVOffset], gOTmp[gmOTmpOffset], gBlockTable[blockBOffset],
                                 layoutPTemp, layoutVTemp, actualBlockShapePV, delayedKvSIdx, kvSLoopNumTotal,
-                                pagedBlockSize, noSkipKvS, strideKV, softmaxReady, noMaskTailS, 1
-                            );
+                                pagedBlockSize, noSkipKvS, strideKV, softmaxReady, noMaskTailS, 1);
                         }
                     } else { // 不加mask
                         if constexpr (!PAGED_CACHE_FLAG) {
                             blockMmadPV(
                                 gP[gmPOffset], gV[gmVOffset], gOTmp[gmOTmpOffset], gBlockTable, layoutPTemp,
                                 layoutVTemp, actualBlockShapePV, delayedKvSIdx, kvSLoopNumNoMask, pagedBlockSize,
-                                noMaskKvS, strideKV, softmaxReady
-                            );
+                                noMaskKvS, strideKV, softmaxReady);
                         } else {
                             blockMmadPV(
                                 gP[gmPOffset], gV[gmVOffset], gOTmp[gmOTmpOffset], gBlockTable[blockBOffset],
                                 layoutPTemp, layoutVTemp, actualBlockShapePV, delayedKvSIdx, kvSLoopNumNoMask,
-                                pagedBlockSize, noMaskKvS, strideKV, softmaxReady
-                            );
+                                pagedBlockSize, noMaskKvS, strideKV, softmaxReady);
                         }
                     }
                     Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(pvReady);
@@ -397,7 +383,8 @@ class FAInferKernel {
     }
 
     template <>
-    CATLASS_DEVICE void operator()<AscendC::AIV>(FAIKernelParams const &params) {
+    CATLASS_DEVICE void operator()<AscendC::AIV>(FAIKernelParams const& params)
+    {
         AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID0);
         AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(EVENT_ID1);
         AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID2);
@@ -412,7 +399,7 @@ class FAInferKernel {
         AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID2);
 
         // Get tiling parameters
-        __gm__ FATilingData *fATilingData = reinterpret_cast<__gm__ FATilingData *>(params.tiling);
+        __gm__ FATilingData* fATilingData = reinterpret_cast<__gm__ FATilingData*>(params.tiling);
         uint64_t mm1OutSize = fATilingData->mm1OutSize;
         uint64_t smOnlineOutSize = fATilingData->smOnlineOutSize;
         uint64_t mm2OutSize = fATilingData->mm2OutSize;
@@ -428,21 +415,21 @@ class FAInferKernel {
         float scaleValue = fATilingData->scaleValue;
         // Get the memory offset address of the input on Global Memory
         AscendC::GlobalTensor<ElementMask> gMask;
-        gMask.SetGlobalBuffer((__gm__ ElementMask *)params.mask);
+        gMask.SetGlobalBuffer((__gm__ ElementMask*)params.mask);
         AscendC::GlobalTensor<int64_t> gActualQseqlen;
-        gActualQseqlen.SetGlobalBuffer((__gm__ int64_t *)params.actualQseqlen);
+        gActualQseqlen.SetGlobalBuffer((__gm__ int64_t*)params.actualQseqlen);
         AscendC::GlobalTensor<int64_t> gActualKvseqlen;
-        gActualKvseqlen.SetGlobalBuffer((__gm__ int64_t *)params.actualKvseqlen);
+        gActualKvseqlen.SetGlobalBuffer((__gm__ int64_t*)params.actualKvseqlen);
         AscendC::GlobalTensor<ElementO> gO;
-        gO.SetGlobalBuffer((__gm__ ElementO *)params.o);
+        gO.SetGlobalBuffer((__gm__ ElementO*)params.o);
         AscendC::GlobalTensor<ElementS> gS;
-        gS.SetGlobalBuffer((__gm__ ElementS *)params.s);
+        gS.SetGlobalBuffer((__gm__ ElementS*)params.s);
         AscendC::GlobalTensor<ElementP> gP;
-        gP.SetGlobalBuffer((__gm__ ElementP *)params.p);
+        gP.SetGlobalBuffer((__gm__ ElementP*)params.p);
         AscendC::GlobalTensor<ElementOTmp> gOTmp;
-        gOTmp.SetGlobalBuffer((__gm__ ElementOTmp *)params.oTemp);
+        gOTmp.SetGlobalBuffer((__gm__ ElementOTmp*)params.oTemp);
         AscendC::GlobalTensor<ElementOTmp> gOUpdate;
-        gOUpdate.SetGlobalBuffer((__gm__ ElementOTmp *)params.oUpdate);
+        gOUpdate.SetGlobalBuffer((__gm__ ElementOTmp*)params.oUpdate);
 
         uint32_t groupSize = qHeads / kvHeads;
         uint32_t embedRound = RoundUp(embed, BLOCK_SIZE);
@@ -492,11 +479,11 @@ class FAInferKernel {
             uint32_t oNOffset = qStartNIdx * embed;
             int64_t gmOffsetO = oBatchOffset + oSOffset + oNOffset;
 
-            uint32_t qSBlockSize = (qSBlockIdx == (curQSBlockNum - 1)) ? (qSeqlen - qSBlockIdx * curQSBlockTile)
-                                                                       : curQSBlockTile;
-            uint32_t qNBlockSize = (qNBlockIdxCurGroup == (qNBlockNumPerGroup - 1))
-                                       ? (groupSize - qNBlockIdxCurGroup * curQNBlockTile)
-                                       : curQNBlockTile;
+            uint32_t qSBlockSize =
+                (qSBlockIdx == (curQSBlockNum - 1)) ? (qSeqlen - qSBlockIdx * curQSBlockTile) : curQSBlockTile;
+            uint32_t qNBlockSize = (qNBlockIdxCurGroup == (qNBlockNumPerGroup - 1)) ?
+                                       (groupSize - qNBlockIdxCurGroup * curQNBlockTile) :
+                                       curQNBlockTile;
             uint32_t rowNum = qSBlockSize * qNBlockSize;
             uint32_t rowNumRound = RoundUp(rowNum, BLOCK_SIZE);
 
@@ -517,13 +504,12 @@ class FAInferKernel {
             uint32_t stackSeqTilePad = blockStackNum * pagedBlockSize;
             uint32_t stackSeqTile;
             int32_t preLaunch = 2;
-            int32_t totalStackSeqNum = (maskType != 0) ? (CeilDiv(noMaskKvS, blockStackNum * pagedBlockSize) + 1)
-                                                       : CeilDiv(noMaskKvS, blockStackNum * pagedBlockSize);
+            int32_t totalStackSeqNum = (maskType != 0) ? (CeilDiv(noMaskKvS, blockStackNum * pagedBlockSize) + 1) :
+                                                         CeilDiv(noMaskKvS, blockStackNum * pagedBlockSize);
             int32_t stackSeqCount = 0;
 
             // no mask kvSeqlen loop
             for (uint32_t kvSIdx = 0; kvSIdx < kvSLoopNumNoMask; kvSIdx += blockStackNum) {
-
                 if (kvSIdx + blockStackNum > kvSLoopNumNoMask - 1) {
                     stackSeqTile = noMaskKvS - kvSIdx * pagedBlockSize;
                 } else {
@@ -543,8 +529,7 @@ class FAInferKernel {
                 // online softmax
                 epilogueOnlineSoftmax(
                     gP[gmOffsetP], gS[gmOffsetS], layOutP, layOutS, actualBlockShapeQK, (stackSeqCount == 0),
-                    qSBlockSize, qNBlockSize, curStackTileMod
-                );
+                    qSBlockSize, qNBlockSize, curStackTileMod);
                 Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(softmaxReady);
 
                 if (kvSIdx >= preLaunch * blockStackNum) {
@@ -558,14 +543,13 @@ class FAInferKernel {
                     LayoutOTmp layoutOTmp(rowNum, embed, embedRound);
                     GemmCoord actualBlockShapePV{rowNum, embed, stackSeqTile};
                     uint32_t curStackTileMod = (stackSeqCount - preLaunch) % (preLaunch + 1);
-                    uint32_t gmOffsetOTmp = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1)
-                                            + curStackTileMod * WORKSPACE_BLOCK_SIZE_DB;
+                    uint32_t gmOffsetOTmp =
+                        coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) + curStackTileMod * WORKSPACE_BLOCK_SIZE_DB;
                     Arch::CrossCoreWaitFlag(pvReady);
                     // rescale O
                     epilogueRescaleO(
                         gO[gmOffsetO], gOTmp[gmOffsetOTmp], layoutO, layoutOTmp, actualBlockShapePV, qSBlockSize,
-                        qNBlockSize, (stackSeqCount - preLaunch == 0), 0, curStackTileMod
-                    );
+                        qNBlockSize, (stackSeqCount - preLaunch == 0), 0, curStackTileMod);
                 }
                 stackSeqCount++;
             }
@@ -576,13 +560,14 @@ class FAInferKernel {
              * stage1(Qk^t/SMOnline) of the last (prelaunch+1) base blocks
              */
             // deal secondary loop conditions
-            uint32_t maskedStartIdx = (maskType != 0) ? ((noMaskTailS != 0) ? (kvSLoopNumNoMask - 1) : kvSLoopNumNoMask)
-                                                      : AlignUp(kvSLoopNumNoMask, blockStackNum);
+            uint32_t maskedStartIdx = (maskType != 0) ?
+                                          ((noMaskTailS != 0) ? (kvSLoopNumNoMask - 1) : kvSLoopNumNoMask) :
+                                          AlignUp(kvSLoopNumNoMask, blockStackNum);
             uint32_t noMaskTailInteStackNum = (noMaskKvS / pagedBlockSize) % blockStackNum;
-            noMaskTailInteStackNum = (noMaskTailInteStackNum != 0) ? noMaskTailInteStackNum
-                                                                   : ((noMaskTailS != 0) ? 0 : blockStackNum);
-            uint32_t preLaunchStackNum = (maskType != 0) ? ((preLaunch - 1) * blockStackNum + noMaskTailInteStackNum)
-                                                         : (preLaunch * blockStackNum);
+            noMaskTailInteStackNum =
+                (noMaskTailInteStackNum != 0) ? noMaskTailInteStackNum : ((noMaskTailS != 0) ? 0 : blockStackNum);
+            uint32_t preLaunchStackNum = (maskType != 0) ? ((preLaunch - 1) * blockStackNum + noMaskTailInteStackNum) :
+                                                           (preLaunch * blockStackNum);
             // masked kvSeqlen loop
             for (uint32_t kvSIdx = maskedStartIdx; kvSIdx < kvSLoopNumTotal + preLaunchStackNum;) {
                 if ((kvSIdx < kvSLoopNumTotal) && (stackSeqCount <= totalStackSeqNum - 1)) {
@@ -600,8 +585,7 @@ class FAInferKernel {
                     // online softmax
                     epilogueOnlineSoftmax(
                         gP[gmOffsetP], gS[gmOffsetS], gMask, layOutP, layOutS, layOutMask, actualBlockShapeQK,
-                        (stackSeqCount == 0), qSBlockSize, qNBlockSize, curStackTileMod, qkReady
-                    );
+                        (stackSeqCount == 0), qSBlockSize, qNBlockSize, curStackTileMod, qkReady);
                     Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(softmaxReady);
                 }
                 if (kvSIdx >= preLaunchStackNum) {
@@ -617,15 +601,14 @@ class FAInferKernel {
                     LayoutOTmp layoutOTmp(rowNum, embed, embedRound);
                     GemmCoord actualBlockShapePV{rowNum, embed, stackSeqTile};
                     uint32_t curStackTileMod = (stackSeqCount - preLaunch) % (preLaunch + 1);
-                    uint32_t gmOffsetOTmp = coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1)
-                                            + curStackTileMod * WORKSPACE_BLOCK_SIZE_DB;
+                    uint32_t gmOffsetOTmp =
+                        coreIdx * WORKSPACE_BLOCK_SIZE_DB * (preLaunch + 1) + curStackTileMod * WORKSPACE_BLOCK_SIZE_DB;
                     Arch::CrossCoreWaitFlag(pvReady);
                     // rescale O
                     epilogueRescaleO(
                         gO[gmOffsetO], gOTmp[gmOffsetOTmp], layoutO, layoutOTmp, actualBlockShapePV, qSBlockSize,
                         qNBlockSize, (stackSeqCount - preLaunch == 0),
-                        (stackSeqCount - preLaunch == totalStackSeqNum - 1), curStackTileMod
-                    );
+                        (stackSeqCount - preLaunch == totalStackSeqNum - 1), curStackTileMod);
                 }
                 if ((maskType != 0) && (stackSeqCount - preLaunch == totalStackSeqNum - 2)) {
                     kvSIdx += noMaskTailInteStackNum;
@@ -650,7 +633,7 @@ class FAInferKernel {
         AscendC::WaitFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID3);
     }
 
-  private:
+private:
     Arch::Resource<ArchTag> resource;
     Arch::CrossCoreFlag qkReady{QK_READY_ID};
     Arch::CrossCoreFlag softmaxReady{SOFTMAX_READY_ID};
@@ -658,21 +641,9 @@ class FAInferKernel {
 };
 
 extern "C" CATLASS_GLOBAL void FAInferFp16(
-    uint64_t hardwareSyncAddr,
-    GM_ADDR q,
-    GM_ADDR k,
-    GM_ADDR v,
-    GM_ADDR mask,
-    GM_ADDR blockTables,
-    GM_ADDR o,
-    GM_ADDR actualQseqlen,
-    GM_ADDR actualKvseqlen,
-    GM_ADDR s,
-    GM_ADDR p,
-    GM_ADDR oTemp,
-    GM_ADDR oUpdate,
-    GM_ADDR tiling
-) {
+    uint64_t hardwareSyncAddr, GM_ADDR q, GM_ADDR k, GM_ADDR v, GM_ADDR mask, GM_ADDR blockTables, GM_ADDR o,
+    GM_ADDR actualQseqlen, GM_ADDR actualKvseqlen, GM_ADDR s, GM_ADDR p, GM_ADDR oTemp, GM_ADDR oUpdate, GM_ADDR tiling)
+{
     AscendC::SetSyncBaseAddr(hardwareSyncAddr);
 
     using ArchTag = Arch::AtlasA2;
@@ -748,21 +719,9 @@ extern "C" CATLASS_GLOBAL void FAInferFp16(
 }
 
 extern "C" CATLASS_GLOBAL void FAInferBf16(
-    uint64_t hardwareSyncAddr,
-    GM_ADDR q,
-    GM_ADDR k,
-    GM_ADDR v,
-    GM_ADDR mask,
-    GM_ADDR blockTables,
-    GM_ADDR o,
-    GM_ADDR actualQseqlen,
-    GM_ADDR actualKvseqlen,
-    GM_ADDR s,
-    GM_ADDR p,
-    GM_ADDR oTemp,
-    GM_ADDR oUpdate,
-    GM_ADDR tiling
-) {
+    uint64_t hardwareSyncAddr, GM_ADDR q, GM_ADDR k, GM_ADDR v, GM_ADDR mask, GM_ADDR blockTables, GM_ADDR o,
+    GM_ADDR actualQseqlen, GM_ADDR actualKvseqlen, GM_ADDR s, GM_ADDR p, GM_ADDR oTemp, GM_ADDR oUpdate, GM_ADDR tiling)
+{
     AscendC::SetSyncBaseAddr(hardwareSyncAddr);
 
     using ArchTag = Arch::AtlasA2;

@@ -23,22 +23,10 @@
 namespace Catlass::Epilogue::Block {
 
 template <
-    class CType_,
-    class YType_,
-    class ZType_,
-    class TileElemWiseEpilogueAdd_,
-    class TileElemWiseEpilogueMuls_,
-    class TileCopy_
->
+    class CType_, class YType_, class ZType_, class TileElemWiseEpilogueAdd_, class TileElemWiseEpilogueMuls_,
+    class TileCopy_>
 class BlockEpilogue<
-    EpilogueAtlasA2Gemv,
-    CType_,
-    YType_,
-    ZType_,
-    TileElemWiseEpilogueAdd_,
-    TileElemWiseEpilogueMuls_,
-    TileCopy_
-> {
+    EpilogueAtlasA2Gemv, CType_, YType_, ZType_, TileElemWiseEpilogueAdd_, TileElemWiseEpilogueMuls_, TileCopy_> {
 public:
     using DispatchPolicy = EpilogueAtlasA2Gemv;
     using ArchTag = typename DispatchPolicy::ArchTag;
@@ -61,18 +49,22 @@ public:
 
     static constexpr bool isNeedCast = !std::is_same<ElementC, ElementY>::value;
 
-    using ElementCompute = typename Catlass::Gemm::helper::ElementAccumulatorSelector<ElementY, ElementZ>::ElementAccumulator;
+    using ElementCompute =
+        typename Catlass::Gemm::helper::ElementAccumulatorSelector<ElementY, ElementZ>::ElementAccumulator;
     using ElementScalar = ElementCompute;
     using TensorCoord = layout::VectorLayout::TensorCoord;
 
     // check the layout of Y, C and Z
-    static_assert(std::is_same_v<LayoutY, layout::VectorLayout> && std::is_same_v<LayoutC, layout::VectorLayout> &&
-        std::is_same_v<LayoutZ, layout::VectorLayout>,"Layout type of Y, C and Z must be VectorLayout");
+    static_assert(
+        std::is_same_v<LayoutY, layout::VectorLayout> && std::is_same_v<LayoutC, layout::VectorLayout> &&
+            std::is_same_v<LayoutZ, layout::VectorLayout>,
+        "Layout type of Y, C and Z must be VectorLayout");
 
     using LayoutComputeInUb = layout::VectorLayout;
 
     // Check if ArchTag is matched
-    static_assert(std::is_same_v<typename TileElemWiseEpilogueMuls::ArchTag, ArchTag>, "Tile epilogue's ArchTag mismatch");
+    static_assert(
+        std::is_same_v<typename TileElemWiseEpilogueMuls::ArchTag, ArchTag>, "Tile epilogue's ArchTag mismatch");
 
     struct Params {
         ElementScalar alpha;
@@ -84,15 +76,18 @@ public:
 
         // Methods
         CATLASS_HOST_DEVICE
-        Params() {}
+        Params()
+        {}
 
         CATLASS_HOST_DEVICE
-        Params(ElementScalar alpha_, ElementScalar beta_, GM_ADDR ptrY_, LayoutC layoutY_, GM_ADDR ptrZ_, LayoutZ layoutZ_)
-            : alpha(alpha_), beta(beta_), ptrY(ptrY_), layoutY(layoutY_), ptrZ(ptrZ_), layoutZ(layoutZ_) {}
+        Params(
+            ElementScalar alpha_, ElementScalar beta_, GM_ADDR ptrY_, LayoutC layoutY_, GM_ADDR ptrZ_, LayoutZ layoutZ_)
+            : alpha(alpha_), beta(beta_), ptrY(ptrY_), layoutY(layoutY_), ptrZ(ptrZ_), layoutZ(layoutZ_)
+        {}
     };
 
     CATLASS_DEVICE
-    BlockEpilogue(Arch::Resource<ArchTag>& resource, Params const& params): params(params)
+    BlockEpilogue(Arch::Resource<ArchTag>& resource, Params const& params) : params(params)
     {
         ubC = resource.ubBuf.template GetBufferByByte<ElementC>(0);
         ubY = resource.ubBuf.template GetBufferByByte<ElementY>(COMPUTE_LENGTH * sizeof(ElementC));
@@ -112,20 +107,17 @@ public:
 
     CATLASS_DEVICE
     void operator()(
-        TensorCoord const& blockOffsetMN,
-        TensorCoord const& actualBlockShapeMN,
-        AscendC::GlobalTensor<ElementCompute> const& gmBlockC,
-        LayoutC const& layoutBlockC)
+        TensorCoord const& blockOffsetMN, TensorCoord const& actualBlockShapeMN,
+        AscendC::GlobalTensor<ElementCompute> const& gmBlockC, LayoutC const& layoutBlockC)
     {
         TensorCoord actualBlockShape = actualBlockShapeMN;
         TensorCoord blockOffset = blockOffsetMN;
 
-        TensorCoord subblockShape{
-            CeilDiv(actualBlockShape[0], static_cast<uint32_t>(AscendC::GetSubBlockNum()))
-        };
+        TensorCoord subblockShape{CeilDiv(actualBlockShape[0], static_cast<uint32_t>(AscendC::GetSubBlockNum()))};
         TensorCoord subblockCoord{static_cast<uint32_t>(AscendC::GetSubBlockIdx())};
 
-        TensorCoord actualSubblockShape = TensorCoord::Min(subblockShape, actualBlockShape - subblockCoord * subblockShape);
+        TensorCoord actualSubblockShape =
+            TensorCoord::Min(subblockShape, actualBlockShape - subblockCoord * subblockShape);
         TensorCoord subblockOffset = subblockCoord * subblockShape;
 
         // Get the data and layout of C
@@ -212,6 +204,6 @@ private:
     CopyUbToGmZ copyUbToGmZ;
 };
 
-}  // namespace Catlass::Epilogue::Block
+} // namespace Catlass::Epilogue::Block
 
-#endif  // CATLASS_EPILOGUE_BLOCK_EPILOGUE_GEMV_HPP
+#endif // CATLASS_EPILOGUE_BLOCK_EPILOGUE_GEMV_HPP

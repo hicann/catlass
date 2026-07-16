@@ -27,24 +27,10 @@ namespace Catlass::Gemm::Block {
 ////////////////////////////////////////////////////////////////////
 
 template <
-    class L1TileShape_,
-    class L0TileShape_,
-    class AType_,
-    class BType_,
-    class CType_,
-    class BiasType_,
-    class TileCopy_,
+    class L1TileShape_, class L0TileShape_, class AType_, class BType_, class CType_, class BiasType_, class TileCopy_,
     class TileMmad_>
 struct BlockMmad<
-    MmadAtlasA2MLAPV,
-    L1TileShape_,
-    L0TileShape_,
-    AType_,
-    BType_,
-    CType_,
-    BiasType_,
-    TileCopy_,
-    TileMmad_> {
+    MmadAtlasA2MLAPV, L1TileShape_, L0TileShape_, AType_, BType_, CType_, BiasType_, TileCopy_, TileMmad_> {
 public:
     // Type Aliases
     using DispatchPolicy = MmadAtlasA2MLAPV;
@@ -92,14 +78,12 @@ public:
 
     /// Construct
     CATLASS_DEVICE
-    BlockMmad(Arch::Resource<ArchTag> &resource, uint32_t l1BufAddrStart = 0)
+    BlockMmad(Arch::Resource<ArchTag>& resource, uint32_t l1BufAddrStart = 0)
     {
         // Allocate L1 memory space
-        l1ATensor =
-            resource.l1Buf.template GetBufferByByte<ElementA>(l1BufAddrStart + L1A_SIZE + L1B_SIZE * STAGES);
+        l1ATensor = resource.l1Buf.template GetBufferByByte<ElementA>(l1BufAddrStart + L1A_SIZE + L1B_SIZE * STAGES);
         for (uint32_t i = 0; i < STAGES; i++) {
-            l1BTensor[i] =
-                resource.l1Buf.template GetBufferByByte<ElementB>(l1BufAddrStart + L1A_SIZE + L1B_SIZE * i);
+            l1BTensor[i] = resource.l1Buf.template GetBufferByByte<ElementB>(l1BufAddrStart + L1A_SIZE + L1B_SIZE * i);
             l0ATensor[i] = resource.l0ABuf.template GetBufferByByte<ElementA>(L0A_PINGPONG_BUF_SIZE * i);
             l0BTensor[i] = resource.l0BBuf.template GetBufferByByte<ElementB>(L0B_PINGPONG_BUF_SIZE * i);
             l0CTensor[i] = resource.l0CBuf.template GetBufferByByte<ElementAccumulator>(L0C_PINGPONG_BUF_SIZE * i);
@@ -108,15 +92,15 @@ public:
 
     /// Destructor
     CATLASS_DEVICE
-    ~BlockMmad() {}
+    ~BlockMmad()
+    {}
 
     /// Perform a block-scoped matrix multiply-accumulate
     CATLASS_DEVICE
     void operator()(
-        AscendC::GlobalTensor<ElementA> gA,
-        AscendC::GlobalTensor<ElementC> gC,
-        LayoutA layoutA, LayoutB layoutB, LayoutC layoutC,
-        GemmCoord actualShape, uint32_t &nIdx, uint32_t &pingpongIdx, Arch::CrossCoreFlag softmaxReady, uint32_t &locPingPongIdx)
+        AscendC::GlobalTensor<ElementA> gA, AscendC::GlobalTensor<ElementC> gC, LayoutA layoutA, LayoutB layoutB,
+        LayoutC layoutC, GemmCoord actualShape, uint32_t& nIdx, uint32_t& pingpongIdx, Arch::CrossCoreFlag softmaxReady,
+        uint32_t& locPingPongIdx)
     {
         uint32_t rowNum = actualShape.m();
         uint32_t vSeqTile = actualShape.k();
@@ -138,8 +122,7 @@ public:
             // copy V from L1 to L0B
             copyL1ToL0B(
                 l0BTensor[L0BPingPongFlag],
-                l1BTensor[L1BPingPongFlag][embedSplitIdx * vSeqTileRound * EMBED_SPLIT_SIZE],
-                layoutBInL0, layoutBInL1);
+                l1BTensor[L1BPingPongFlag][embedSplitIdx * vSeqTileRound * EMBED_SPLIT_SIZE], layoutBInL0, layoutBInL1);
             if (embedSplitIdx == embedSplitLoopV - 1) {
                 AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(L1BPingPongFlag);
             }
@@ -164,8 +147,8 @@ public:
             AscendC::WaitFlag<AscendC::HardEvent::FIX_M>(L0CPingPongFlag);
             // mmad
             tileMmad(
-                l0CTensor[L0CPingPongFlag], l0ATensor[L0APingPongFlag], l0BTensor[L0BPingPongFlag],
-                rowNumRound, embedSplitSize, vSeqTile);
+                l0CTensor[L0CPingPongFlag], l0ATensor[L0APingPongFlag], l0BTensor[L0BPingPongFlag], rowNumRound,
+                embedSplitSize, vSeqTile);
             AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(L0BPingPongFlag + 2);
             if (embedSplitIdx == embedSplitLoopV - 1) {
                 AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(L0APingPongFlag);
@@ -178,8 +161,7 @@ public:
             auto layoutCSplitK = layoutC.GetTileLayout(MakeCoord(rowNumRound, embedSplitSizeRound));
             // copy Otmp to gm
             copyL0CToGm(
-                gC[embedSplitIdx * embedSplitSizeRound], l0CTensor[L0CPingPongFlag],
-                layoutCSplitK, layoutInL0C);
+                gC[embedSplitIdx * embedSplitSizeRound], l0CTensor[L0CPingPongFlag], layoutCSplitK, layoutInL0C);
             AscendC::SetFlag<AscendC::HardEvent::FIX_M>(L0CPingPongFlag);
             locPingPongIdx++;
         }

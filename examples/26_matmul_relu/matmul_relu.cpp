@@ -7,7 +7,7 @@
  * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
  * See LICENSE in the root of the software repository for the full text of the License.
  */
- 
+
 // By setting the K_MAX_SHAPE_DIM macro, the dimension of the AscendC Tensor's ShapeInfo is configured to 0,
 // optimizing stack space. If you need to use the ShapeInfo of the AscendC Tensor, please undefine this macro.
 #ifndef K_MAX_SHAPE_DIM
@@ -52,19 +52,18 @@ using DispatchPolicy = Gemm::MmadAtlasA2Preload<ENABLE_UNIT_FLAG, ENABLE_SHUFFLE
 // L1TileShape using GemmShape<256, 128, 256> can achieve better performance.
 using L1TileShape = std::conditional_t<
     std::is_same_v<LayoutA, layout::ColumnMajor> && std::is_same_v<LayoutB, layout::ColumnMajor>,
-    GemmShape<256, 128, 256>,
-    GemmShape<128, 256, 256>>;
+    GemmShape<256, 128, 256>, GemmShape<128, 256, 256>>;
 using L0TileShape = std::conditional_t<
     std::is_same_v<LayoutA, layout::ColumnMajor> && std::is_same_v<LayoutB, layout::ColumnMajor>,
-    GemmShape<256, 128, 64>,
-    GemmShape<128, 256, 64>>;
+    GemmShape<256, 128, 64>, GemmShape<128, 256, 64>>;
 using BlockScheduler30 = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 0>;
 using BlockScheduler31 = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
 using BlockEpilogue = void;
 
 using Options = GemmOptions;
 
-static void Run(const Options &options) {
+static void Run(const Options& options)
+{
     aclrtStream stream{nullptr};
 
     ACL_CHECK(aclInit(nullptr));
@@ -92,12 +91,12 @@ static void Run(const Options &options) {
     // PaddingTag can be NO_PADDING, PADDING_BLOCK_ND, or PADDING_ND.
     using PaddingTag = Catlass::Gemm::Kernel::PaddingTag;
     // Layout zN or layout nZ does not require padding operation.
-    constexpr PaddingTag paddingTagA = (std::is_same_v<LayoutA, layout::zN> || std::is_same_v<LayoutA, layout::nZ>)
-                                           ? PaddingTag::NO_PADDING
-                                           : PaddingTag::PADDING_BLOCK_ND;
-    constexpr PaddingTag paddingTagB = (std::is_same_v<LayoutB, layout::zN> || std::is_same_v<LayoutB, layout::nZ>)
-                                           ? PaddingTag::NO_PADDING
-                                           : PaddingTag::PADDING_BLOCK_ND;
+    constexpr PaddingTag paddingTagA = (std::is_same_v<LayoutA, layout::zN> || std::is_same_v<LayoutA, layout::nZ>) ?
+                                           PaddingTag::NO_PADDING :
+                                           PaddingTag::PADDING_BLOCK_ND;
+    constexpr PaddingTag paddingTagB = (std::is_same_v<LayoutB, layout::zN> || std::is_same_v<LayoutB, layout::nZ>) ?
+                                           PaddingTag::NO_PADDING :
+                                           PaddingTag::PADDING_BLOCK_ND;
     static const uint32_t COMPUTE_LENGTH_A = 96 * 1024 / sizeof(ElementA);
     using PaddingBuilderA =
         Catlass::Gemm::Kernel::PaddingBuilder<paddingTagA, ArchTag, ElementA, LayoutA, COMPUTE_LENGTH_A>;
@@ -112,16 +111,16 @@ static void Run(const Options &options) {
     golden::FillRandomData<fp16_t>(hostA, -5.0f, 5.0f);
     golden::FillRandomData<fp16_t>(hostB, -5.0f, 5.0f);
 
-    uint8_t *deviceA{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceA{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceB{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceB{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceC{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceC{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceC), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
     // Prepare hardware sync address
     uint64_t hardwareSyncAddr{0};
@@ -253,7 +252,8 @@ static void Run(const Options &options) {
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv) {
+int main(int argc, const char** argv)
+{
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;

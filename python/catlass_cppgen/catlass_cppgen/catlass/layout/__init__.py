@@ -22,6 +22,7 @@ from catlass_cppgen.catlass.layout.layout import (
 )
 
 __all__ = [
+    "Layout",
     "Coord",
     "RowMajor",
     "ColumnMajor",

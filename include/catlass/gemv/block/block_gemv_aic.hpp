@@ -24,28 +24,11 @@
 namespace Catlass::Gemv::Block {
 
 template <
-    bool ENABLE_UNIT_FLAG_,
-    bool ENABLE_SHUFFLE_K_,
-    class L1TileShape_,
-    class L0TileShape_,
-    class AType_,
-    class XType_,
-    class YType_,
-    class BiasType_,
-    class TileCopy_,
-    class TileMmad_
->
+    bool ENABLE_UNIT_FLAG_, bool ENABLE_SHUFFLE_K_, class L1TileShape_, class L0TileShape_, class AType_, class XType_,
+    class YType_, class BiasType_, class TileCopy_, class TileMmad_>
 struct BlockGemv<
-    Gemm::MmadAtlasA2Preload<ENABLE_UNIT_FLAG_, ENABLE_SHUFFLE_K_>,
-    L1TileShape_,
-    L0TileShape_,
-    AType_,
-    XType_,
-    YType_,
-    BiasType_,
-    TileCopy_,
-    TileMmad_
-> {
+    Gemm::MmadAtlasA2Preload<ENABLE_UNIT_FLAG_, ENABLE_SHUFFLE_K_>, L1TileShape_, L0TileShape_, AType_, XType_, YType_,
+    BiasType_, TileCopy_, TileMmad_> {
 public:
     // Type Aliases
     using DispatchPolicy = Gemm::MmadAtlasA2Preload<ENABLE_UNIT_FLAG_, ENABLE_SHUFFLE_K_>;
@@ -142,10 +125,9 @@ public:
         AscendC::GlobalTensor<ElementX> const& gmBlockX, LayoutX const& layoutX,
         AscendC::GlobalTensor<ElementA> const& gmBlockA, LayoutA const& layoutA,
         AscendC::GlobalTensor<ElementY> const& gmBlockY, LayoutY const& layoutY,
-        AscendC::GlobalTensor<ElementX> const& gmNextBlockX,
-        AscendC::GlobalTensor<ElementA> const& gmNextBlockA,
-        GemvCoord const& actualShape, GemvCoord const& actualShapeNext,
-        bool isFirstBlock, bool hasNextBlock, uint32_t singleIdx)
+        AscendC::GlobalTensor<ElementX> const& gmNextBlockX, AscendC::GlobalTensor<ElementA> const& gmNextBlockA,
+        GemvCoord const& actualShape, GemvCoord const& actualShapeNext, bool isFirstBlock, bool hasNextBlock,
+        uint32_t singleIdx)
     {
         auto layoutXInL1 = LayoutXInL1::template MakeLayout<ElementX>(L1XAlignHelper::M_ALIGNED, L1TileShape::N);
         auto layoutAInL1 = LayoutAInL1::template MakeLayout<ElementA>(L1TileShape::M, L1TileShape::N);
@@ -197,8 +179,8 @@ public:
             // preload next tile from GM to L1
             if (shuffleKIdx != lastTileIdx) {
                 uint32_t shuffleKIdxNext = (startTileIdx + nLoopIdx + 1) % nTileCount;
-                nActualNext = (shuffleKIdxNext < nTileCount - 1) ? L1TileShape::N
-                                                                 : (actualShape.n() - shuffleKIdxNext * L1TileShape::N);
+                nActualNext = (shuffleKIdxNext < nTileCount - 1) ? L1TileShape::N :
+                                                                   (actualShape.n() - shuffleKIdxNext * L1TileShape::N);
                 nRoundNext = RoundUp<L1AAlignHelper::N_ALIGNED>(nActualNext);
 
                 // Get L1 tensor
@@ -232,8 +214,9 @@ public:
                 auto l1BTensor = l1BTensorList[l1ListIdNext];
 
                 // Get GM tensor for next stage
-                nActualNext = (firstTileIdxNext < nTileCountNext - 1)
-                    ? L1TileShape::N : (actualShapeNext.n() - firstTileIdxNext * L1TileShape::N);
+                nActualNext = (firstTileIdxNext < nTileCountNext - 1) ?
+                                  L1TileShape::N :
+                                  (actualShapeNext.n() - firstTileIdxNext * L1TileShape::N);
                 nRoundNext = RoundUp<L1AAlignHelper::N_ALIGNED>(nActualNext);
 
                 // Get GM tile
@@ -360,6 +343,6 @@ protected:
     CopyL0CToGm copyL0CToGm;
 };
 
-}  // namespace Catlass::Gemv::Block
+} // namespace Catlass::Gemv::Block
 
-#endif  // CATLASS_GEMV_BLOCK_BLOCK_GEMV_AIC_HPP
+#endif // CATLASS_GEMV_BLOCK_BLOCK_GEMV_AIC_HPP

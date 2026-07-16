@@ -98,13 +98,13 @@ class DataType(Enum):
 
         # 如果传入的是其他类型（非 torch.dtype），返回 UNDEFINED
         return cls.UNDEFINED
-    
+
     def data_size(self) -> int:
         """获取数据类型的字节大小
-        
+
         Returns:
             int: 数据类型的字节大小
-            
+
         Raises:
             ValueError: 如果数据类型的大小未定义
         """
@@ -124,19 +124,33 @@ class DataType(Enum):
 def get_default_accumulator(data_type_A: DataType, data_type_B: DataType) -> DataType:
     """获取默认的累加器数据类型"""
     if data_type_A == DataType.UNDEFINED or data_type_B == DataType.UNDEFINED:
-        raise ValueError("accumulator dtype cannot be derived when A or B is DataType.UNDEFINED")
+        raise ValueError(
+            "accumulator dtype cannot be derived when A or B is DataType.UNDEFINED"
+        )
     if data_type_A == DataType.AUTO and data_type_B == DataType.AUTO:
-        raise ValueError("accumulator dtype cannot be derived when A and B are both DataType.AUTO")
+        raise ValueError(
+            "accumulator dtype cannot be derived when A and B are both DataType.AUTO"
+        )
 
     if data_type_A == DataType.AUTO:
-        warnings.warn("The dtype of A is auto-derived from B since A is DataType.AUTO", UserWarning, stacklevel=2)
+        warnings.warn(
+            "The dtype of A is auto-derived from B since A is DataType.AUTO",
+            UserWarning,
+            stacklevel=2,
+        )
         data_type_A = data_type_B
     if data_type_B == DataType.AUTO:
-        warnings.warn("The dtype of B is auto-derived from A since B is DataType.AUTO", UserWarning, stacklevel=2)
+        warnings.warn(
+            "The dtype of B is auto-derived from A since B is DataType.AUTO",
+            UserWarning,
+            stacklevel=2,
+        )
         data_type_B = data_type_A
 
     if data_type_A != data_type_B:
-        raise ValueError(f"Accumulator type cannot be derived when the dtype of A and B are not the same")
+        raise ValueError(
+            "Accumulator type cannot be derived when the dtype of A and B are not the same"
+        )
 
     accumulator_map = {
         (DataType.FLOAT16, DataType.FLOAT16): DataType.FLOAT,

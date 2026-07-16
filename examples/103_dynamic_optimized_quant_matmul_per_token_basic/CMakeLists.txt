@@ -36,7 +36,7 @@ if(COMPILE_DYNAMIC_QBMM_OPTIMIZED_MATMUL)
         DEPENDS ${AUTO_GEN_CODE_SRC}
         COMMENT "Generate wrapper code, launch_map.h ...done"
     )
-    
+
     add_compile_definitions(TILING_KEY_VAR)
     file(GLOB CATLASS_SHARED_LIB_SRC CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/impl/wrapper/*.cpp)
     set_source_files_properties(${CATLASS_SHARED_LIB_SRC} PROPERTIES LANGUAGE ASC)

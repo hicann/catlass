@@ -42,8 +42,10 @@ struct BroadcastMatmulOptions : public GroupedGemmOptions {
 
     BroadcastMatmulOptions() = default;
 
-    int Parse(int argc, const char **argv) {
-        enum class ArgsIndex {
+    int Parse(int argc, const char** argv)
+    {
+        enum class ArgsIndex
+        {
             BATCH_COUNT = 1,
             M_INDEX,
             N_INDEX,
@@ -52,8 +54,7 @@ struct BroadcastMatmulOptions : public GroupedGemmOptions {
             ARGS_MAX
         };
 
-        if (argc > static_cast<uint32_t>(ArgsIndex::ARGS_MAX)
-            || argc < static_cast<uint32_t>(ArgsIndex::K_INDEX)) {
+        if (argc > static_cast<uint32_t>(ArgsIndex::ARGS_MAX) || argc < static_cast<uint32_t>(ArgsIndex::K_INDEX)) {
             std::cerr << TOSTRING(CATLASS_EXAMPLE_NAME) << " " << HELPER << std::endl;
             return -1;
         }
@@ -73,13 +74,14 @@ struct BroadcastMatmulOptions : public GroupedGemmOptions {
 using Options = BroadcastMatmulOptions;
 
 template <typename T>
-bool ReadFile(const std::string &filename, T *data, size_t size) {
+bool ReadFile(const std::string& filename, T* data, size_t size)
+{
     std::ifstream file(filename, std::ios::binary);
     if (!file) {
         std::cerr << "Failed to open file: " << filename << std::endl;
         return false;
     }
-    file.read(reinterpret_cast<char *>(data), size);
+    file.read(reinterpret_cast<char*>(data), size);
     if (!file) {
         std::cerr << "Failed to read file: " << filename << std::endl;
         return false;
@@ -89,13 +91,14 @@ bool ReadFile(const std::string &filename, T *data, size_t size) {
 }
 
 template <typename T>
-bool SaveResult(const std::string &filename, const T *data, size_t size) {
+bool SaveResult(const std::string& filename, const T* data, size_t size)
+{
     std::ofstream file(filename, std::ios::binary);
     if (!file) {
         std::cerr << "Failed to open file for write: " << filename << std::endl;
         return false;
     }
-    file.write(reinterpret_cast<const char *>(data), size);
+    file.write(reinterpret_cast<const char*>(data), size);
     if (!file) {
         std::cerr << "Failed to write file: " << filename << std::endl;
         return false;
@@ -104,7 +107,7 @@ bool SaveResult(const std::string &filename, const T *data, size_t size) {
     return true;
 }
 
-static void Run(const Options &options)
+static void Run(const Options& options)
 {
     aclrtStream stream{nullptr};
 
@@ -158,20 +161,20 @@ static void Run(const Options &options)
         return;
     }
 
-    uint8_t *deviceA{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceA{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceB{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceB{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceDst{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceDst), sizeDst, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceDst{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceDst), sizeDst, ACL_MEM_MALLOC_HUGE_FIRST));
 
-    uint8_t *deviceScale{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceScale), sizeScale, ACL_MEM_MALLOC_HUGE_FIRST));
-    uint8_t *deviceWorkspace{nullptr};
+    uint8_t* deviceScale{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceScale), sizeScale, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceWorkspace{nullptr};
 
     // Get the number of cube cores of the current hardware
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
@@ -181,7 +184,7 @@ static void Run(const Options &options)
     constexpr bool useHF32 = false;
     constexpr uint32_t l0CStages = 1;
     constexpr bool enableL1Resident = true;
-    
+
     using DispatchPolicy = Gemm::MmadPingpong<ArchTag, enableUnitFlag, useHF32, l0CStages, enableL1Resident>;
     using L1TileShape = Shape<Int<128>, Int<128>, Int<128>>;
     using L0TileShape = Shape<Int<128>, Int<128>, Int<128>>;
@@ -197,12 +200,7 @@ static void Run(const Options &options)
 
     using TilePerBlockQuant = Epilogue::Tile::TilePerBlockQuant<ArchTag, ElementC, ElementDst, ElementScale>;
     using BlockEpilogue = Epilogue::Block::BlockEpilogue<
-        Epilogue::EpilogueAscend950PerBlockQuantTla<1>,
-        ElementC,
-        ElementDst,
-        ElementScale,
-        TilePerBlockQuant
-    >;
+        Epilogue::EpilogueAscend950PerBlockQuantTla<1>, ElementC, ElementDst, ElementScale, TilePerBlockQuant>;
 
     // Swizzle offset is 3 and direction is 1.
     using BlockScheduler = typename Gemm::Block::GemmIdentityBlockSwizzle<3, 1>;
@@ -212,8 +210,8 @@ static void Run(const Options &options)
 
     using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
 
-    MatmulKernel::Arguments arguments{batchCount, options.problemShape, deviceA, layoutA, deviceB, layoutB,
-                                      layoutC, deviceDst, deviceScale};
+    MatmulKernel::Arguments arguments{batchCount, options.problemShape, deviceA, layoutA, deviceB, layoutB, layoutC,
+                                      deviceDst,  deviceScale};
 
     MatmulAdapter matmul_op;
     if (matmul_op.CanImplement(arguments) != Status::kSuccess) {
@@ -223,9 +221,7 @@ static void Run(const Options &options)
     }
     sizeWorkspace = matmul_op.GetWorkspaceSize(arguments);
     if (sizeWorkspace > 0) {
-        ACL_CHECK(
-            aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
-        );
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
     }
     matmul_op.Initialize(arguments, deviceWorkspace);
     matmul_op(stream, aicCoreNum);
@@ -253,7 +249,7 @@ static void Run(const Options &options)
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv)
+int main(int argc, const char** argv)
 {
     Options options;
     if (options.Parse(argc, argv) != 0) {

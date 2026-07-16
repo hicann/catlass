@@ -21,12 +21,7 @@
 
 namespace Catlass::Gemm::Kernel {
 
-template <
-    class BlockMmad_,
-    class BlockEpilogue_,
-    class BlockScheduler_,
-    class ElementGroupList_
->
+template <class BlockMmad_, class BlockEpilogue_, class BlockScheduler_, class ElementGroupList_>
 class GroupedMatmulSliceKPerTokenDequant {
 public:
     using BlockMmad = BlockMmad_;
@@ -57,7 +52,8 @@ public:
     friend class AivWaitSync;
 
     struct AicFinishSync {
-        using MatmulKernel = GroupedMatmulSliceKPerTokenDequant<BlockMmad, BlockEpilogue, BlockScheduler, ElementGroupList>;
+        using MatmulKernel =
+            GroupedMatmulSliceKPerTokenDequant<BlockMmad, BlockEpilogue, BlockScheduler, ElementGroupList>;
 
         CATLASS_DEVICE
         void operator()() const
@@ -65,11 +61,12 @@ public:
             Arch::CrossCoreSetFlagWithReverse<0x2, PIPE_FIX>(ptr->flagAicFinishStore);
         }
 
-        MatmulKernel *ptr;
+        MatmulKernel* ptr;
     };
 
     struct AivWaitSync {
-        using MatmulKernel = GroupedMatmulSliceKPerTokenDequant<BlockMmad, BlockEpilogue, BlockScheduler, ElementGroupList>;
+        using MatmulKernel =
+            GroupedMatmulSliceKPerTokenDequant<BlockMmad, BlockEpilogue, BlockScheduler, ElementGroupList>;
 
         CATLASS_DEVICE
         void operator()() const
@@ -77,7 +74,7 @@ public:
             Arch::CrossCoreWaitFlagWithReverse<0x2, PIPE_MTE3>(ptr->flagAicFinishStore);
         }
 
-        MatmulKernel *ptr;
+        MatmulKernel* ptr;
     };
 
     /// Parameters structure
@@ -85,62 +82,63 @@ public:
         // Data members
         GemmCoord problemShape;
         uint32_t problemCount;
-        __gm__ ElementGroupList *ptrGroupList;
-        __gm__ ElementA *ptrA;
+        __gm__ ElementGroupList* ptrGroupList;
+        __gm__ ElementA* ptrA;
         LayoutA layoutA;
-        __gm__ ElementB *ptrB;
+        __gm__ ElementB* ptrB;
         LayoutB layoutB;
-        __gm__ ElementScale *ptrScale;
+        __gm__ ElementScale* ptrScale;
         LayoutScale layoutScale;
-        __gm__ ElementPerTokenScale *ptrPerTokenScale;
+        __gm__ ElementPerTokenScale* ptrPerTokenScale;
         LayoutPerTokenScale layoutPerTokenScale;
-        __gm__ ElementD *ptrD;
+        __gm__ ElementD* ptrD;
         LayoutD layoutD;
         GM_ADDR ptrWorkspace;
 
         // Methods
         CATLASS_HOST_DEVICE
-        Params() {}
+        Params()
+        {}
 
         CATLASS_HOST_DEVICE
         Params(
-            GemmCoord problemShape_, uint32_t problemCount_, GM_ADDR ptrGroupList_,
-            GM_ADDR ptrA_, LayoutA layoutA_,
-            GM_ADDR ptrB_, LayoutB layoutB_,
-            GM_ADDR ptrScale_, LayoutScale layoutScale_,
-            GM_ADDR ptrPerTokenScale_, LayoutPerTokenScale layoutPerTokenScale_,
-            GM_ADDR ptrD_, LayoutD layoutD_,
-            GM_ADDR ptrWorkspace_
-        ) : problemShape(problemShape_),
-            problemCount(problemCount_), ptrGroupList(reinterpret_cast<__gm__ ElementGroupList *>(ptrGroupList_)),
-            ptrA(reinterpret_cast<__gm__ ElementA *>(ptrA_)), layoutA(layoutA_),
-            ptrB(reinterpret_cast<__gm__ ElementB *>(ptrB_)), layoutB(layoutB_),
-            ptrScale(reinterpret_cast<__gm__ ElementScale *>(ptrScale_)), layoutScale(layoutScale_),
-            ptrPerTokenScale(reinterpret_cast<__gm__ ElementPerTokenScale *>(ptrPerTokenScale_)),
-            layoutPerTokenScale(layoutPerTokenScale_),
-            ptrD(reinterpret_cast<__gm__ ElementD *>(ptrD_)), layoutD(layoutD_),
-            ptrWorkspace(ptrWorkspace_)
-        {
-        }
+            GemmCoord problemShape_, uint32_t problemCount_, GM_ADDR ptrGroupList_, GM_ADDR ptrA_, LayoutA layoutA_,
+            GM_ADDR ptrB_, LayoutB layoutB_, GM_ADDR ptrScale_, LayoutScale layoutScale_, GM_ADDR ptrPerTokenScale_,
+            LayoutPerTokenScale layoutPerTokenScale_, GM_ADDR ptrD_, LayoutD layoutD_, GM_ADDR ptrWorkspace_)
+            : problemShape(problemShape_),
+              problemCount(problemCount_),
+              ptrGroupList(reinterpret_cast<__gm__ ElementGroupList*>(ptrGroupList_)),
+              ptrA(reinterpret_cast<__gm__ ElementA*>(ptrA_)),
+              layoutA(layoutA_),
+              ptrB(reinterpret_cast<__gm__ ElementB*>(ptrB_)),
+              layoutB(layoutB_),
+              ptrScale(reinterpret_cast<__gm__ ElementScale*>(ptrScale_)),
+              layoutScale(layoutScale_),
+              ptrPerTokenScale(reinterpret_cast<__gm__ ElementPerTokenScale*>(ptrPerTokenScale_)),
+              layoutPerTokenScale(layoutPerTokenScale_),
+              ptrD(reinterpret_cast<__gm__ ElementD*>(ptrD_)),
+              layoutD(layoutD_),
+              ptrWorkspace(ptrWorkspace_)
+        {}
     };
 
     struct Arguments {
         GemmCoord problemShape;
         uint32_t problemCount;
-        uint8_t *ptrGroupList;
-        uint8_t *ptrA;
-        uint8_t *ptrB;
-        uint8_t *ptrScale;
-        uint8_t *ptrPerTokenScale;
-        uint8_t *ptrD;
+        uint8_t* ptrGroupList;
+        uint8_t* ptrA;
+        uint8_t* ptrB;
+        uint8_t* ptrScale;
+        uint8_t* ptrPerTokenScale;
+        uint8_t* ptrD;
     };
 
-    static bool CanImplement(const Arguments &args)
+    static bool CanImplement(const Arguments& args)
     {
         return true;
     }
 
-    static size_t GetWorkspaceSize(const Arguments &args)
+    static size_t GetWorkspaceSize(const Arguments& args)
     {
         uint32_t m = args.problemShape.m();
         uint32_t n = args.problemShape.n();
@@ -150,7 +148,7 @@ public:
         return sizeWorkspace;
     }
 
-    static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
+    static Params ToUnderlyingArguments(const Arguments& args, uint8_t* workspace)
     {
         uint32_t m = args.problemShape.m();
         uint32_t n = args.problemShape.n();
@@ -160,26 +158,22 @@ public:
         LayoutScale layoutScale{n};
         LayoutPerTokenScale layoutPerTokenScale{m};
         LayoutD layoutD = LayoutD::template MakeLayout<ElementD>(m, n);
-        Params params{args.problemShape, args.problemCount, args.ptrGroupList,
-            args.ptrA, layoutA,
-            args.ptrB, layoutB,
-            args.ptrScale, layoutScale,
-            args.ptrPerTokenScale, layoutPerTokenScale,
-            args.ptrD, layoutD, workspace};
+        Params params{args.problemShape,   args.problemCount, args.ptrGroupList, args.ptrA,   layoutA,
+                      args.ptrB,           layoutB,           args.ptrScale,     layoutScale, args.ptrPerTokenScale,
+                      layoutPerTokenScale, args.ptrD,         layoutD,           workspace};
         return params;
     }
 
     // Methods
     CATLASS_DEVICE
-    GroupedMatmulSliceKPerTokenDequant() {}
+    GroupedMatmulSliceKPerTokenDequant()
+    {}
 
     template <int32_t CORE_TYPE = g_coreType>
-    CATLASS_DEVICE
-    void operator()(Params const &params);
+    CATLASS_DEVICE void operator()(Params const& params);
 
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIC>(Params const &params)
+    CATLASS_DEVICE void operator()<AscendC::AIC>(Params const& params)
     {
         BlockScheduler blockScheduler;
         BlockMmad blockMmad(resource);
@@ -190,7 +184,7 @@ public:
         AscendC::GlobalTensor<ElementB> gmB;
         gmB.SetGlobalBuffer(params.ptrB);
         AscendC::GlobalTensor<ElementC> gmC;
-        gmC.SetGlobalBuffer(reinterpret_cast<__gm__ ElementC *>(params.ptrWorkspace));
+        gmC.SetGlobalBuffer(reinterpret_cast<__gm__ ElementC*>(params.ptrWorkspace));
         AscendC::GlobalTensor<ElementGroupList> groupList;
         groupList.SetGlobalBuffer(params.ptrGroupList);
 
@@ -205,7 +199,7 @@ public:
         uint32_t startCoreIdx = 0;
         for (uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx) {
             uint32_t currentK = (groupIdx == 0) ? groupList.GetValue(groupIdx) :
-                (groupList.GetValue(groupIdx) - groupList.GetValue(groupIdx - 1));
+                                                  (groupList.GetValue(groupIdx) - groupList.GetValue(groupIdx - 1));
             GemmCoord inGroupProblemShape{params.problemShape.m(), params.problemShape.n(), currentK};
 
             LayoutA layoutA = params.layoutA.GetTileLayout(inGroupProblemShape.GetCoordMK());
@@ -234,18 +228,12 @@ public:
                 // Compute block-scoped matrix multiply-add
                 if constexpr (BlockMmad::DispatchPolicy::ASYNC) {
                     blockMmad(
-                        gmA[gmGroupOffsetA + gmOffsetA], layoutA,
-                        gmB[gmGroupOffsetB + gmOffsetB], layoutB,
-                        gmC[gmGroupOffsetC + gmOffsetC], layoutC,
-                        actualBlockShape, MakeCallback(&aicFinishSync)
-                    );
+                        gmA[gmGroupOffsetA + gmOffsetA], layoutA, gmB[gmGroupOffsetB + gmOffsetB], layoutB,
+                        gmC[gmGroupOffsetC + gmOffsetC], layoutC, actualBlockShape, MakeCallback(&aicFinishSync));
                 } else {
                     blockMmad(
-                        gmA[gmGroupOffsetA + gmOffsetA], layoutA,
-                        gmB[gmGroupOffsetB + gmOffsetB], layoutB,
-                        gmC[gmGroupOffsetC + gmOffsetC], layoutC,
-                        actualBlockShape
-                    );
+                        gmA[gmGroupOffsetA + gmOffsetA], layoutA, gmB[gmGroupOffsetB + gmOffsetB], layoutB,
+                        gmC[gmGroupOffsetC + gmOffsetC], layoutC, actualBlockShape);
                     aicFinishSync();
                 }
             }
@@ -265,8 +253,7 @@ public:
     }
 
     template <>
-    CATLASS_DEVICE
-    void operator()<AscendC::AIV>(Params const &params)
+    CATLASS_DEVICE void operator()<AscendC::AIV>(Params const& params)
     {
         BlockScheduler blockScheduler;
         BlockEpilogue blockEpilogue(resource);
@@ -279,7 +266,7 @@ public:
         int64_t gmGroupOffsetD = 0;
 
         AscendC::GlobalTensor<ElementC> gmC;
-        gmC.SetGlobalBuffer(reinterpret_cast<__gm__ ElementC *>(params.ptrWorkspace));
+        gmC.SetGlobalBuffer(reinterpret_cast<__gm__ ElementC*>(params.ptrWorkspace));
         AscendC::GlobalTensor<ElementGroupList> groupList;
         groupList.SetGlobalBuffer(params.ptrGroupList);
 
@@ -288,7 +275,7 @@ public:
         uint32_t startCoreIdx = 0;
         for (uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx) {
             uint32_t currentK = (groupIdx == 0) ? groupList.GetValue(groupIdx) :
-                (groupList.GetValue(groupIdx) - groupList.GetValue(groupIdx - 1));
+                                                  (groupList.GetValue(groupIdx) - groupList.GetValue(groupIdx - 1));
             GemmCoord inGroupProblemShape{params.problemShape.m(), params.problemShape.n(), currentK};
 
             LayoutC layoutC = LayoutC(inGroupProblemShape.m(), inGroupProblemShape.n());
@@ -298,10 +285,12 @@ public:
             LayoutD layoutD = params.layoutD.GetTileLayout(inGroupProblemShape.GetCoordMN());
 
             EpilogueParams epilogueParams{
-                params.ptrScale + gmGroupOffsetScale, layoutScale,
-                params.ptrPerTokenScale + gmGroupOffsetPerTokenScale, layoutPerTokenScale,
-                params.ptrD + gmGroupOffsetD, layoutD
-            };
+                params.ptrScale + gmGroupOffsetScale,
+                layoutScale,
+                params.ptrPerTokenScale + gmGroupOffsetPerTokenScale,
+                layoutPerTokenScale,
+                params.ptrD + gmGroupOffsetD,
+                layoutD};
 
             blockScheduler.Update(inGroupProblemShape, L1TileShape::ToCoordMN());
             blockEpilogue.UpdateParams(epilogueParams);
@@ -318,10 +307,8 @@ public:
                 auto layoutBlockC = layoutC.GetTileLayout(actualBlockShapeMNK.GetCoordMN());
 
                 blockEpilogue(
-                    blockShapeMNK, blockCoordMNK,
-                    actualBlockShapeMNK, gmBlockC,
-                    layoutBlockC, MakeCallback(&aicFinishSync)
-                );
+                    blockShapeMNK, blockCoordMNK, actualBlockShapeMNK, gmBlockC, layoutBlockC,
+                    MakeCallback(&aicFinishSync));
             }
 
             gmGroupOffsetC += static_cast<int64_t>(inGroupProblemShape.m()) * inGroupProblemShape.n();

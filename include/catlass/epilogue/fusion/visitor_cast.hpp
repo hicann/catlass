@@ -28,26 +28,28 @@ struct VisitorCast : VisitorImpl<> {
     struct Params {};
 
     template <class ProblemShape>
-    static constexpr Params
-    to_underlying_arguments(ProblemShape const&, Arguments const&, void*) {
+    static constexpr Params to_underlying_arguments(ProblemShape const&, Arguments const&, void*)
+    {
         return Params();
     }
 
     template <class ProblemShape>
-    static size_t
-    get_workspace_size(ProblemShape const&, Arguments const&) {
+    static size_t get_workspace_size(ProblemShape const&, Arguments const&)
+    {
         return 0;
     }
 
     template <class ProblemShape>
-    static bool
-    can_implement(ProblemShape const&, Arguments const&) {
+    static bool can_implement(ProblemShape const&, Arguments const&)
+    {
         return true;
     }
 
-    VisitorCast() {}
+    VisitorCast()
+    {}
 
-    VisitorCast(Params const&) {}
+    VisitorCast(Params const&)
+    {}
 
     struct Callbacks : EmptyCallbacks {
         AscendC::LocalTensor<ElementTo> ubOut;
@@ -55,15 +57,15 @@ struct VisitorCast : VisitorImpl<> {
 
         CATLASS_DEVICE
         Callbacks(AscendC::LocalTensor<ElementTo> ubOut_, uint32_t compute_length_)
-            : ubOut(ubOut_), compute_length(compute_length_) {}
+            : ubOut(ubOut_), compute_length(compute_length_)
+        {}
 
         template <VisitStage Stage, class ArchTag, class TensorC, typename ElementInput>
         CATLASS_DEVICE AscendC::LocalTensor<ElementTo> const& visit(
-            TensorC const& /*tensorTile*/,    // 不使用
-            MatrixCoord const& /*alignedTileShape*/,   // 不使用
-            MatrixCoord const& /*globalOffset*/,
-            AscendC::LocalTensor<ElementInput> const& input
-        ) {
+            TensorC const& /*tensorTile*/,           // 不使用
+            MatrixCoord const& /*alignedTileShape*/, // 不使用
+            MatrixCoord const& /*globalOffset*/, AscendC::LocalTensor<ElementInput> const& input)
+        {
             static_assert(std::is_same_v<ElementInput, ElementFrom>, "VisitorCast: input type mismatch");
             static_assert(!std::is_same_v<ElementInput, ElementTo>, "VisitorCast: no need to cast");
             if constexpr (Stage == VisitStage::COMPUTE) {
@@ -75,11 +77,8 @@ struct VisitorCast : VisitorImpl<> {
     };
 
     template <class ArchTag>
-    CATLASS_DEVICE auto get_callbacks(
-        Arch::Resource<ArchTag>& resource,
-        uint32_t& ub_offset,
-        uint32_t compute_length
-    ) {
+    CATLASS_DEVICE auto get_callbacks(Arch::Resource<ArchTag>& resource, uint32_t& ub_offset, uint32_t compute_length)
+    {
         auto ubOut = resource.ubBuf.template GetBufferByByte<ElementTo>(ub_offset);
         ub_offset += compute_length * sizeof(ElementTo);
         assert(ub_offset <= ArchTag::UB_SIZE);
@@ -92,5 +91,3 @@ struct VisitorCast : VisitorImpl<> {
 } // namespace Catlass::Epilogue::Fusion
 
 #endif
-
-

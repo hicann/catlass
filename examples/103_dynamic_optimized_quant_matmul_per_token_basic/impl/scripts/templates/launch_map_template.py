@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # -----------------------------------------------------------------------------------------------------------
 # Copyright (c) 2026 Huawei Technologies Co., Ltd.
-# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 # CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
 # THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
@@ -11,6 +11,7 @@
 # -----------------------------------------------------------------------------------------------------------
 
 import os
+
 
 class LaunchMapTemplate:
     TEMPLATE = """
@@ -29,8 +30,8 @@ class LaunchMapTemplate:
 
 {declare_list}
 
-std::unordered_map<uint64_t, void(*)(aclrtStream&, uint64_t, 
-    uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, TilingParams&)> launchKernelFuncMap = {{ 
+std::unordered_map<uint64_t, void(*)(aclrtStream&, uint64_t,
+    uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, TilingParams&)> launchKernelFuncMap = {{
 {launch_func_list}
 }};
 
@@ -71,11 +72,14 @@ std::unordered_map<uint64_t, std::string> funcNameMap = {{
         )
 
         launch_file = os.path.join("../../include", "launch_map.h")
-        try: os.remove(launch_file)
-        except FileNotFoundError: pass
+        try:
+            os.remove(launch_file)
+        except FileNotFoundError:
+            pass
 
-        fd = os.open(launch_file, os.O_CREAT | os.O_WRONLY \
-                                | os.O_TRUNC, 0o550) # r-xr-x---
+        fd = os.open(
+            launch_file, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o550
+        )  # r-xr-x---
         try:
             with os.fdopen(fd, "w") as f:
                 f.write(content)

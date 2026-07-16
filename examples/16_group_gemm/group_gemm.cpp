@@ -51,8 +51,10 @@ struct Options {
 
     Options() = default;
 
-    int Parse(int argc, const char **argv) {
-        enum class ArgsIndex {
+    int Parse(int argc, const char** argv)
+    {
+        enum class ArgsIndex
+        {
             GROUPCNT_INDEX = 1,
             MLIST_INDEX,
             NLIST_INDEX,
@@ -61,8 +63,8 @@ struct Options {
             ARGS_MAX
         };
 
-        if (argc > static_cast<uint32_t>(ArgsIndex::ARGS_MAX)
-            || argc <= static_cast<uint32_t>(ArgsIndex::KLIST_INDEX)) {
+        if (argc > static_cast<uint32_t>(ArgsIndex::ARGS_MAX) ||
+            argc <= static_cast<uint32_t>(ArgsIndex::KLIST_INDEX)) {
             std::cerr << HELPER << std::endl;
             return -1;
         }
@@ -85,9 +87,10 @@ struct Options {
     }
 
 private:
-    void parseList(const char *str, std::vector<uint32_t> &list) {
-        char *copy = strdup(str);
-        char *token = std::strtok(copy, ",");
+    void parseList(const char* str, std::vector<uint32_t>& list)
+    {
+        char* copy = strdup(str);
+        char* token = std::strtok(copy, ",");
         while (token != nullptr) {
             list.push_back(std::atoi(token));
             token = std::strtok(nullptr, ",");
@@ -96,37 +99,44 @@ private:
     }
 };
 
-inline layout::RowMajor GetWorkspaceLayout(layout::RowMajor layout, uint32_t align) {
+inline layout::RowMajor GetWorkspaceLayout(layout::RowMajor layout, uint32_t align)
+{
     if (align == 0) {
         return layout;
     }
     return layout::RowMajor(layout.shape(0), layout.shape(1), RoundUp(layout.shape(1), align));
 }
 
-inline layout::ColumnMajor GetWorkspaceLayout(layout::ColumnMajor layout, uint32_t align) {
+inline layout::ColumnMajor GetWorkspaceLayout(layout::ColumnMajor layout, uint32_t align)
+{
     if (align == 0) {
         return layout;
     }
     return layout::ColumnMajor(layout.shape(0), layout.shape(1), RoundUp(layout.shape(0), align));
 }
 
-inline size_t GetWorkspaceLen(layout::RowMajor layout) {
+inline size_t GetWorkspaceLen(layout::RowMajor layout)
+{
     return layout.shape(0) * layout.stride(0);
 }
 
-inline size_t GetWorkspaceLen(layout::ColumnMajor layout) {
+inline size_t GetWorkspaceLen(layout::ColumnMajor layout)
+{
     return layout.shape(1) * layout.stride(1);
 }
 
-inline bool IsSameStride(layout::RowMajor layout1, layout::RowMajor layout2) {
+inline bool IsSameStride(layout::RowMajor layout1, layout::RowMajor layout2)
+{
     return layout1.stride(0) == layout2.stride(0);
 }
 
-inline bool IsSameStride(layout::ColumnMajor layout1, layout::ColumnMajor layout2) {
+inline bool IsSameStride(layout::ColumnMajor layout1, layout::ColumnMajor layout2)
+{
     return layout1.stride(1) == layout2.stride(1);
 }
 
-static void Run(Options &options) {
+static void Run(Options& options)
+{
     aclrtStream stream{nullptr};
     ACL_CHECK(aclInit(nullptr));
     ACL_CHECK(aclrtSetDevice(options.deviceId));
@@ -182,79 +192,72 @@ static void Run(Options &options) {
     golden::FillRandomData(hostB, -1.0f, 1.0f);
     golden::FillRandomData(hostX, -1.0f, 1.0f);
 
-    uint8_t *deviceAlpha{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceAlpha), scalarSize, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceAlpha{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceAlpha), scalarSize, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceAlpha, scalarSize, hostAlpha.data(), scalarSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceBeta{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceBeta), scalarSize, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceBeta{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceBeta), scalarSize, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceBeta, scalarSize, hostBeta.data(), scalarSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceA{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceA{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
     size_t sizeWA = allMKCntPadding * sizeof(fp16_t);
-    uint8_t *deviceWA{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWA), sizeWA, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceWA{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceWA), sizeWA, ACL_MEM_MALLOC_HUGE_FIRST));
 
-    uint8_t *deviceB{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceB{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
     size_t sizeWB = allKNCntPadding * sizeof(fp16_t);
-    uint8_t *deviceWB{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWB), sizeWB, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceWB{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceWB), sizeWB, ACL_MEM_MALLOC_HUGE_FIRST));
 
-    uint8_t *deviceX{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceX), sizeX, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceX{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceX), sizeX, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceX, sizeX, hostX.data(), sizeX, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *gmWorkspace{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&gmWorkspace), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* gmWorkspace{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&gmWorkspace), sizeC, ACL_MEM_MALLOC_HUGE_FIRST));
 
-    uint8_t *problemShapeListDevice{nullptr};
+    uint8_t* problemShapeListDevice{nullptr};
     size_t sizeProblemShapeList = problemShapeList.size() * sizeof(GemmCoord);
-    ACL_CHECK(
-        aclrtMalloc(reinterpret_cast<void **>(&problemShapeListDevice), sizeProblemShapeList, ACL_MEM_MALLOC_HUGE_FIRST)
-    );
+    ACL_CHECK(aclrtMalloc(
+        reinterpret_cast<void**>(&problemShapeListDevice), sizeProblemShapeList, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(
         problemShapeListDevice, sizeProblemShapeList, problemShapeList.data(), sizeProblemShapeList,
-        ACL_MEMCPY_HOST_TO_DEVICE
-    ));
+        ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *layoutAListDevice{nullptr};
+    uint8_t* layoutAListDevice{nullptr};
     size_t sizeLayoutAList = layoutAList.size() * sizeof(LayoutA);
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&layoutAListDevice), sizeLayoutAList, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(
-        aclrtMemcpy(layoutAListDevice, sizeLayoutAList, layoutAList.data(), sizeLayoutAList, ACL_MEMCPY_HOST_TO_DEVICE)
-    );
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&layoutAListDevice), sizeLayoutAList, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMemcpy(
+        layoutAListDevice, sizeLayoutAList, layoutAList.data(), sizeLayoutAList, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *layoutBListDevice{nullptr};
+    uint8_t* layoutBListDevice{nullptr};
     size_t sizeLayoutBList = layoutBList.size() * sizeof(LayoutB);
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&layoutBListDevice), sizeLayoutBList, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(
-        aclrtMemcpy(layoutBListDevice, sizeLayoutBList, layoutBList.data(), sizeLayoutBList, ACL_MEMCPY_HOST_TO_DEVICE)
-    );
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&layoutBListDevice), sizeLayoutBList, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMemcpy(
+        layoutBListDevice, sizeLayoutBList, layoutBList.data(), sizeLayoutBList, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *layoutXListDevice{nullptr};
+    uint8_t* layoutXListDevice{nullptr};
     size_t sizeLayoutXList = layoutXList.size() * sizeof(LayoutX);
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&layoutXListDevice), sizeLayoutXList, ACL_MEM_MALLOC_HUGE_FIRST));
-    ACL_CHECK(
-        aclrtMemcpy(layoutXListDevice, sizeLayoutXList, layoutXList.data(), sizeLayoutXList, ACL_MEMCPY_HOST_TO_DEVICE)
-    );
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&layoutXListDevice), sizeLayoutXList, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMemcpy(
+        layoutXListDevice, sizeLayoutXList, layoutXList.data(), sizeLayoutXList, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *layoutWAListDevice{nullptr};
+    uint8_t* layoutWAListDevice{nullptr};
     size_t sizeLayoutWAList = layoutWAList.size() * sizeof(LayoutA);
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&layoutWAListDevice), sizeLayoutWAList, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&layoutWAListDevice), sizeLayoutWAList, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(
-        layoutWAListDevice, sizeLayoutWAList, layoutWAList.data(), sizeLayoutWAList, ACL_MEMCPY_HOST_TO_DEVICE
-    ));
+        layoutWAListDevice, sizeLayoutWAList, layoutWAList.data(), sizeLayoutWAList, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *layoutWBListDevice{nullptr};
+    uint8_t* layoutWBListDevice{nullptr};
     size_t sizeLayoutWBList = layoutWBList.size() * sizeof(LayoutB);
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&layoutWBListDevice), sizeLayoutWBList, ACL_MEM_MALLOC_HUGE_FIRST));
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&layoutWBListDevice), sizeLayoutWBList, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(
-        layoutWBListDevice, sizeLayoutWBList, layoutWBList.data(), sizeLayoutWBList, ACL_MEMCPY_HOST_TO_DEVICE
-    ));
+        layoutWBListDevice, sizeLayoutWBList, layoutWBList.data(), sizeLayoutWBList, ACL_MEMCPY_HOST_TO_DEVICE));
 
     // Prepare hardware sync address
     uint64_t hardwareSyncAddr{0};
@@ -300,8 +303,7 @@ static void Run(Options &options) {
     std::vector<float> hostGolden(allMNCnt);
     golden::ComputeGroupGemm(
         groupCnt, problemShapeList, hostAlpha, hostBeta, hostA, layoutAList, hostB, layoutBList, hostX, layoutXList,
-        hostGolden, layoutXList
-    );
+        hostGolden, layoutXList);
 
     std::vector<uint64_t> errorIndices = golden::CompareData(hostRes, hostGolden, allMNCnt);
     if (errorIndices.empty()) {
@@ -330,7 +332,8 @@ static void Run(Options &options) {
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv) {
+int main(int argc, const char** argv)
+{
     Options options;
     if (options.Parse(argc, argv) != 0) {
         return -1;

@@ -40,7 +40,8 @@ constexpr uint32_t workspaceStages = 2;
 
 using Options = GemmOptions;
 
-static void Run(const Options &options) {
+static void Run(const Options& options)
+{
     aclrtStream stream{nullptr};
     ACL_CHECK(aclInit(nullptr));
     ACL_CHECK(aclrtSetDevice(options.deviceId));
@@ -74,29 +75,29 @@ static void Run(const Options &options) {
     golden::FillRandomData(hostScale, 0.0, 1.0);         // Fill with random data, ranging from 0.0 to 1.0
     golden::FillRandomData(hostPerTokenScale, 0.0, 1.0); // Fill with random data, ranging from 0.0 to 1.0
 
-    uint8_t *deviceA{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceA{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceA), sizeA, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceA, sizeA, hostA.data(), sizeA, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceB{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceB{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceB), sizeB, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceB, sizeB, hostB.data(), sizeB, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceScale{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceScale), sizeScale, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceScale{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceScale), sizeScale, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(deviceScale, sizeScale, hostScale.data(), sizeScale, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *devicePerTokenScale{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&devicePerTokenScale), sizePerTokenScale, ACL_MEM_MALLOC_HUGE_FIRST)
-    );
+    uint8_t* devicePerTokenScale{nullptr};
+    ACL_CHECK(
+        aclrtMalloc(reinterpret_cast<void**>(&devicePerTokenScale), sizePerTokenScale, ACL_MEM_MALLOC_HUGE_FIRST));
     ACL_CHECK(aclrtMemcpy(
-        devicePerTokenScale, sizePerTokenScale, hostPerTokenScale.data(), sizePerTokenScale, ACL_MEMCPY_HOST_TO_DEVICE
-    ));
+        devicePerTokenScale, sizePerTokenScale, hostPerTokenScale.data(), sizePerTokenScale,
+        ACL_MEMCPY_HOST_TO_DEVICE));
 
-    uint8_t *deviceD{nullptr};
-    ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceD), sizeD, ACL_MEM_MALLOC_HUGE_FIRST));
+    uint8_t* deviceD{nullptr};
+    ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceD), sizeD, ACL_MEM_MALLOC_HUGE_FIRST));
 
-    uint8_t *deviceWorkspace{nullptr};
+    uint8_t* deviceWorkspace{nullptr};
 
     using LayoutA = layout::RowMajor;
     using LayoutB = layout::ColumnMajor;
@@ -167,8 +168,8 @@ static void Run(const Options &options) {
         matmulOp.CanImplement(arguments);
         sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
         if (sizeWorkspace > 0) {
-            ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
-            );
+            ACL_CHECK(
+                aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
         }
         matmulOp.Initialize(arguments, deviceWorkspace);
         matmulOp(stream, aicCoreNum, hardwareSyncAddr);
@@ -188,8 +189,8 @@ static void Run(const Options &options) {
         matmulOp.CanImplement(arguments);
         sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
         if (sizeWorkspace > 0) {
-            ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST)
-            );
+            ACL_CHECK(
+                aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
         }
         matmulOp.Initialize(arguments, deviceWorkspace);
         matmulOp(stream, aicCoreNum, hardwareSyncAddr);
@@ -202,8 +203,7 @@ static void Run(const Options &options) {
     std::vector<float> hostGolden(lenD);
     golden::QuantMatmul(
         options.problemShape, hostA, layoutA, hostB, layoutB, hostScale, layoutScale, hostPerTokenScale,
-        layoutPerTokenScale, hostGolden, layoutD
-    );
+        layoutPerTokenScale, hostGolden, layoutD);
 
     std::vector<uint64_t> errorIndices = golden::CompareData(hostD, hostGolden, k);
     if (errorIndices.empty()) {
@@ -226,7 +226,8 @@ static void Run(const Options &options) {
     ACL_CHECK(aclFinalize());
 }
 
-int main(int argc, const char **argv) {
+int main(int argc, const char** argv)
+{
     Options options;
     if (options.Parse(argc, argv) == 0) {
         Run(options);

@@ -20,7 +20,7 @@
 
 using fp16_t = op::fp16_t;
 
-void DoTilingB16Layout00(TilingParams &tilingParams, PlatformInfo& platformInfo)
+void DoTilingB16Layout00(TilingParams& tilingParams, PlatformInfo& platformInfo)
 {
     uint32_t m = tilingParams.m;
     uint32_t n = tilingParams.n;
@@ -58,7 +58,7 @@ void DoTilingB16Layout00(TilingParams &tilingParams, PlatformInfo& platformInfo)
     SetTile(tilingParams, m1, n1, k1);
 }
 
-void DoTilingB16Layout01(TilingParams &tilingParams, PlatformInfo& platformInfo)
+void DoTilingB16Layout01(TilingParams& tilingParams, PlatformInfo& platformInfo)
 {
     uint32_t m = tilingParams.m;
     uint32_t n = tilingParams.n;
@@ -71,10 +71,10 @@ void DoTilingB16Layout01(TilingParams &tilingParams, PlatformInfo& platformInfo)
         m1 = 256;
         n1 = 128;
         BalanceWorkload(m, n, m1, n1, 64, platformInfo);
-        BalanceWorkload(n, m, n1, m1, 64, platformInfo); 
+        BalanceWorkload(n, m, n1, m1, 64, platformInfo);
     } else {
         BalanceWorkload(n, m, n1, m1, 64, platformInfo);
-        BalanceWorkload(m, n, m1, n1, 64, platformInfo); 
+        BalanceWorkload(m, n, m1, n1, 64, platformInfo);
     }
     uint32_t maxBlocks = RoundUp(CeilDiv(m, m1) * CeilDiv(n, n1), platformInfo.coreNum);
     if (m < n) {
@@ -87,7 +87,7 @@ void DoTilingB16Layout01(TilingParams &tilingParams, PlatformInfo& platformInfo)
             }
         }
         BalanceWorkload(m, n, m1, n1, 64, platformInfo);
-        BalanceWorkload(n, m, n1, m1, 64, platformInfo); 
+        BalanceWorkload(n, m, n1, m1, 64, platformInfo);
     } else {
         uint32_t m1t = m1;
         while (JudgeSpace<fp16_t>(m1t + 16, n1, k1, platformInfo)) {
@@ -98,7 +98,7 @@ void DoTilingB16Layout01(TilingParams &tilingParams, PlatformInfo& platformInfo)
             }
         }
         BalanceWorkload(n, m, n1, m1, 64, platformInfo);
-        BalanceWorkload(m, n, m1, n1, 64, platformInfo); 
+        BalanceWorkload(m, n, m1, n1, 64, platformInfo);
     }
     if (k >= 65536) {
         if (m < n || (ratio < 0.1 && n >= 256)) {
@@ -113,7 +113,7 @@ void DoTilingB16Layout01(TilingParams &tilingParams, PlatformInfo& platformInfo)
     SetTile(tilingParams, m1, n1, k1);
 }
 
-void DoTilingB16Layout10(TilingParams &tilingParams, PlatformInfo& platformInfo)
+void DoTilingB16Layout10(TilingParams& tilingParams, PlatformInfo& platformInfo)
 {
     uint32_t m = tilingParams.m;
     uint32_t n = tilingParams.n;
@@ -159,10 +159,10 @@ void DoTilingB16Layout10(TilingParams &tilingParams, PlatformInfo& platformInfo)
     m1 = m1 / 16 * 16;
     n1 = n1 / 16 * 16;
     k1 = GetMaxK1<fp16_t>(m1, n1, platformInfo);
-    SetTile(tilingParams, m1, n1, k1); 
+    SetTile(tilingParams, m1, n1, k1);
 }
 
-void DoTilingB16Layout11(TilingParams &tilingParams, PlatformInfo& platformInfo)
+void DoTilingB16Layout11(TilingParams& tilingParams, PlatformInfo& platformInfo)
 {
     uint32_t m = tilingParams.m;
     uint32_t n = tilingParams.n;
@@ -206,7 +206,7 @@ void DoTilingB16Layout11(TilingParams &tilingParams, PlatformInfo& platformInfo)
     SetTile(tilingParams, m1, n1, k1);
 }
 
-using FuncType = void (*)(TilingParams &tilingParams, PlatformInfo& platformInfo);
+using FuncType = void (*)(TilingParams& tilingParams, PlatformInfo& platformInfo);
 std::array<std::array<FuncType, 2>, 2> DoTilingB16 = {
     {{{DoTilingB16Layout00, DoTilingB16Layout01}}, {{DoTilingB16Layout10, DoTilingB16Layout11}}}};
-#endif  // ADJUST_TILING_B16_H
+#endif // ADJUST_TILING_B16_H

@@ -10,3 +10,9 @@
 from catlass_cppgen.op.op import OperationBase
 from catlass_cppgen.op.gemm import Gemm
 from catlass_cppgen.op.group_gemm import GroupGemm
+
+__all__ = [
+    "OperationBase",
+    "Gemm",
+    "GroupGemm",
+]

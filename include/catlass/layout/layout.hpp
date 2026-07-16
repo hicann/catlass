@@ -16,4 +16,4 @@
 #include "catlass/layout/vector.hpp"
 #include "catlass/layout/tensor.hpp"
 
-#endif  // CATLASS_LAYOUT_LAYOUT_HPP
+#endif // CATLASS_LAYOUT_LAYOUT_HPP

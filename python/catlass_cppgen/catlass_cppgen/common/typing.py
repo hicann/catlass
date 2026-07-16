@@ -10,21 +10,28 @@
 from __future__ import annotations
 
 import ctypes
-from typing import Union
+from typing import TYPE_CHECKING, Union
 import torch
 import numpy as np
+
+if TYPE_CHECKING:
+    from catlass_cppgen.common.op_tensor import OpTensor
+
+    _SupportedTensor = Union[torch.Tensor, np.ndarray, OpTensor]
+else:
+    _SupportedTensor = Union[torch.Tensor, np.ndarray]
 
 """
 类型预留
 """
 
-# 使用字符串形式避免循环导入，from __future__ import annotations 会自动处理
-SupportedTensor = Union[torch.Tensor, np.ndarray, "OpTensor"]  # type: ignore[name-defined]
+SupportedTensor = _SupportedTensor
 SupportedDataType = Union[torch.dtype, np.dtype]
 
 
 class GM_ADDR(ctypes.c_void_p):
     pass
+
 
 # 未实现
 class EpilogueParams(ctypes.c_void_p):

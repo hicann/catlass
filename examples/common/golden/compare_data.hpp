@@ -27,13 +27,10 @@ struct ErrorMetrics {
 
 // Compute error metrics for NPU result vs CPU result against high-precision golden reference
 // hostC: NPU output, hostCpu: same-precision CPU result, hostGolden: high-precision reference
-template<class ElementC, class ElementCpu, class ElementGolden>
+template <class ElementC, class ElementCpu, class ElementGolden>
 ErrorMetrics ComputeErrorMetrics(
-    const std::vector<ElementC>& hostC,
-    const std::vector<ElementCpu>& hostCpu,
-    const std::vector<ElementGolden>& hostGolden,
-    double mareThreshold = 5,
-    double mereThreshold = 1.5,
+    const std::vector<ElementC>& hostC, const std::vector<ElementCpu>& hostCpu,
+    const std::vector<ElementGolden>& hostGolden, double mareThreshold = 5, double mereThreshold = 1.5,
     double rmseThreshold = 1.5)
 {
     const double epsilon = 1e-7;
@@ -90,9 +87,9 @@ ErrorMetrics ComputeErrorMetrics(
     return {passed, mareRatio, mereRatio, rmseRatio};
 }
 
-template<class ElementResult, class ElementCompare>
-std::vector<uint64_t> CompareData(const std::vector<ElementResult>& result, const std::vector<ElementCompare>& expect,
-    uint32_t computeNum)
+template <class ElementResult, class ElementCompare>
+std::vector<uint64_t> CompareData(
+    const std::vector<ElementResult>& result, const std::vector<ElementCompare>& expect, uint32_t computeNum)
 {
     const uint32_t computeNumThreshold = 2048;
     const float rtolGeneral = 1.0f / 256;
@@ -111,9 +108,9 @@ std::vector<uint64_t> CompareData(const std::vector<ElementResult>& result, cons
     return errorIndices;
 }
 
-template<>
-std::vector<uint64_t> CompareData(const std::vector<int32_t>& result, const std::vector<int32_t>& expect,
-    uint32_t computeNum)
+template <>
+std::vector<uint64_t> CompareData(
+    const std::vector<int32_t>& result, const std::vector<int32_t>& expect, uint32_t computeNum)
 {
     using ElementCompare = int32_t;
     std::vector<uint64_t> errorIndices;
@@ -128,15 +125,15 @@ std::vector<uint64_t> CompareData(const std::vector<int32_t>& result, const std:
     return errorIndices;
 }
 
-template<class ElementResult>
-std::vector<uint64_t> CompareDataBfloat16(const std::vector<ElementResult>& result, const std::vector<float>& expect,
-    uint32_t computeNum)
+template <class ElementResult>
+std::vector<uint64_t> CompareDataBfloat16(
+    const std::vector<ElementResult>& result, const std::vector<float>& expect, uint32_t computeNum)
 {
     /*
      * 高性能 浮点计算通过标准：
      * 计算次数<2048, errThres = 2^{-7}
      * 大于>2048, errThres = 2^{-6}
-     * 
+     *
      * 当$abs(golden)>=smallValThres$时，使用相对误差校验：
      * $$
      *  RE = \frac { abs(actual - golden)} { abs{golden} + 1e^{-7}} \le errThres
@@ -144,12 +141,12 @@ std::vector<uint64_t> CompareDataBfloat16(const std::vector<ElementResult>& resu
      * 反之，采用绝对误差校验：
      * $$
      *  AE= abs(actual - golden) \le errThres
-     * $$ 
+     * $$
      * 判断公式：
      * $$
-     *  \left \| actual - expected \right\| \le 
+     *  \left \| actual - expected \right\| \le
           errThres \times \max(smallValThres, abs(expected))
-     * $$ 
+     * $$
     */
     using ElementCompare = float;
     const uint32_t computeNumThreshold = 2048;
@@ -171,9 +168,10 @@ std::vector<uint64_t> CompareDataBfloat16(const std::vector<ElementResult>& resu
 }
 
 // Compare for GroupedMatmul slicing M
-template<class ElementResult, class ElementCompare>
-std::vector<uint64_t> CompareData(const std::vector<ElementResult>& result, const std::vector<ElementCompare>& expect,
-    uint32_t computeNum, uint32_t validNum)
+template <class ElementResult, class ElementCompare>
+std::vector<uint64_t> CompareData(
+    const std::vector<ElementResult>& result, const std::vector<ElementCompare>& expect, uint32_t computeNum,
+    uint32_t validNum)
 {
     const uint32_t computeNumThreshold = 2048;
     const float rtolGeneral = 1.0f / 256;
@@ -193,9 +191,10 @@ std::vector<uint64_t> CompareData(const std::vector<ElementResult>& result, cons
 }
 
 // Compare for GroupedMatmul slicing K
-template<class ElementResult, class ElementCompare, class T>
-std::vector<uint64_t> CompareData(const std::vector<ElementResult>& result, const std::vector<ElementCompare>& expect,
-    uint32_t computeNum, const std::vector<T>& groupList, uint32_t stride)
+template <class ElementResult, class ElementCompare, class T>
+std::vector<uint64_t> CompareData(
+    const std::vector<ElementResult>& result, const std::vector<ElementCompare>& expect, uint32_t computeNum,
+    const std::vector<T>& groupList, uint32_t stride)
 {
     const uint32_t computeNumThreshold = 2048;
     const float rtolGeneral = 1.0f / 256;
@@ -212,7 +211,8 @@ std::vector<uint64_t> CompareData(const std::vector<ElementResult>& result, cons
             continue;
         }
         for (uint64_t i = 0; i < stride; ++i) {
-            if (currentIndex >= result.size()) break;
+            if (currentIndex >= result.size())
+                break;
             ElementCompare actualValue = static_cast<ElementCompare>(result[currentIndex]);
             ElementCompare expectValue = expect[currentIndex];
             ElementCompare diff = std::fabs(actualValue - expectValue);
@@ -226,6 +226,6 @@ std::vector<uint64_t> CompareData(const std::vector<ElementResult>& result, cons
     return errorIndices;
 }
 
-}  // namespace Catlass::golden
+} // namespace Catlass::golden
 
-#endif  // EXAMPLES_COMMON_GOLDEN_COMPARE_DATA_HPP
+#endif // EXAMPLES_COMMON_GOLDEN_COMPARE_DATA_HPP

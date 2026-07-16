@@ -37,8 +37,10 @@ struct GemmOptions {
 
     GemmOptions() = default;
 
-    int Parse(int argc, const char **argv) {
-        enum class ArgsIndex {
+    int Parse(int argc, const char** argv)
+    {
+        enum class ArgsIndex
+        {
             M_INDEX = 1,
             N_INDEX,
             K_INDEX,
@@ -46,8 +48,8 @@ struct GemmOptions {
             ARGS_MAX
         };
 
-        if (argc > static_cast<uint32_t>(ArgsIndex::ARGS_MAX)
-            || argc < static_cast<uint32_t>(ArgsIndex::DEVICE_ID_INDEX)) {
+        if (argc > static_cast<uint32_t>(ArgsIndex::ARGS_MAX) ||
+            argc < static_cast<uint32_t>(ArgsIndex::DEVICE_ID_INDEX)) {
             std::cerr << TOSTRING(CATLASS_EXAMPLE_NAME) << " " << HELPER << std::endl;
             return -1;
         }
@@ -75,16 +77,18 @@ struct GemvOptions {
 
     GemvOptions() = default;
 
-    int Parse(int argc, const char **argv) {
-        enum class ArgsIndex {
+    int Parse(int argc, const char** argv)
+    {
+        enum class ArgsIndex
+        {
             M_INDEX = 1,
             N_INDEX,
             DEVICE_ID_INDEX,
             ARGS_MAX
         };
 
-        if (argc > static_cast<uint32_t>(ArgsIndex::ARGS_MAX)
-            || argc < static_cast<uint32_t>(ArgsIndex::DEVICE_ID_INDEX)) {
+        if (argc > static_cast<uint32_t>(ArgsIndex::ARGS_MAX) ||
+            argc < static_cast<uint32_t>(ArgsIndex::DEVICE_ID_INDEX)) {
             std::cerr << TOSTRING(CATLASS_EXAMPLE_NAME) << " " << HELPER << std::endl;
             return -1;
         }
@@ -112,8 +116,10 @@ struct GroupedGemmOptions {
 
     GroupedGemmOptions() = default;
 
-    int Parse(int argc, const char **argv) {
-        enum class ArgsIndex {
+    int Parse(int argc, const char** argv)
+    {
+        enum class ArgsIndex
+        {
             GROUP_COUNT = 1,
             M_INDEX,
             N_INDEX,
@@ -122,8 +128,8 @@ struct GroupedGemmOptions {
             ARGS_MAX
         };
 
-        if (argc > static_cast<uint32_t>(ArgsIndex::ARGS_MAX)
-            || argc < static_cast<uint32_t>(ArgsIndex::DEVICE_ID_INDEX)) {
+        if (argc > static_cast<uint32_t>(ArgsIndex::ARGS_MAX) ||
+            argc < static_cast<uint32_t>(ArgsIndex::DEVICE_ID_INDEX)) {
             std::cerr << TOSTRING(CATLASS_EXAMPLE_NAME) << " " << HELPER << std::endl;
             return -1;
         }

@@ -29,18 +29,19 @@ using op::bfloat16;
 using op::fp16_t;
 
 // Macro function for unwinding acl errors.
-#define ACL_CHECK(status)                                                                                              \
-    do {                                                                                                               \
-        aclError error = status;                                                                                       \
-        if (error != ACL_ERROR_NONE) {                                                                                 \
-            std::cerr << __FILE__ << ":" << __LINE__ << " aclError:" << error << std::endl;                            \
-        }                                                                                                              \
+#define ACL_CHECK(status)                                                                   \
+    do {                                                                                    \
+        aclError error = status;                                                            \
+        if (error != ACL_ERROR_NONE) {                                                      \
+            std::cerr << __FILE__ << ":" << __LINE__ << " aclError:" << error << std::endl; \
+        }                                                                                   \
     } while (0)
 
 /**
  * Function for read file.
  */
-inline bool ReadFile(const std::string &filePath, void *buffer, size_t bufferSize) {
+inline bool ReadFile(const std::string& filePath, void* buffer, size_t bufferSize)
+{
     if (buffer == nullptr) {
         printf("Read file %s failed. Buffer is nullptr.\n", filePath.c_str());
         return false;
@@ -54,7 +55,7 @@ inline bool ReadFile(const std::string &filePath, void *buffer, size_t bufferSiz
     }
 
     // Load file data in buffer
-    std::filebuf *buf = fd.rdbuf();
+    std::filebuf* buf = fd.rdbuf();
     size_t size = buf->pubseekoff(0, std::ios::end, std::ios::in);
     if (size == 0) {
         printf("File %s size is 0\n", filePath.c_str());
@@ -65,22 +66,19 @@ inline bool ReadFile(const std::string &filePath, void *buffer, size_t bufferSiz
         return false;
     }
     buf->pubseekpos(0, std::ios::in);
-    buf->sgetn(static_cast<char *>(buffer), size);
+    buf->sgetn(static_cast<char*>(buffer), size);
     return true;
 }
 
 template <class Adapter>
 inline void RunAdapter(
-    Adapter opAdapter,
-    typename Adapter::Arguments args,
-    aclrtStream stream,
-    uint32_t coreNum,
-    uint64_t hardwareSyncAddr = 0
-) {
+    Adapter opAdapter, typename Adapter::Arguments args, aclrtStream stream, uint32_t coreNum,
+    uint64_t hardwareSyncAddr = 0)
+{
     size_t sizeWorkspace = opAdapter.GetWorkspaceSize(args);
-    uint8_t *deviceWorkspace = nullptr;
+    uint8_t* deviceWorkspace = nullptr;
     if (sizeWorkspace > 0) {
-        ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
+        ACL_CHECK(aclrtMalloc(reinterpret_cast<void**>(&deviceWorkspace), sizeWorkspace, ACL_MEM_MALLOC_HUGE_FIRST));
     }
     opAdapter.Initialize(args, deviceWorkspace);
     opAdapter(stream, coreNum, hardwareSyncAddr);
@@ -91,7 +89,8 @@ inline void RunAdapter(
 }
 
 namespace Catlass {
-inline bool IsNeedPadding(layout::RowMajor layout, uint32_t align) {
+inline bool IsNeedPadding(layout::RowMajor layout, uint32_t align)
+{
     // If the stride is greater than 65536, padding is required to reduce the stride.
     if (layout.stride(0) < 65536) {
         return layout.stride(0) % align != 0;
@@ -100,7 +99,8 @@ inline bool IsNeedPadding(layout::RowMajor layout, uint32_t align) {
     }
 }
 
-inline bool IsNeedPadding(layout::ColumnMajor layout, uint32_t align) {
+inline bool IsNeedPadding(layout::ColumnMajor layout, uint32_t align)
+{
     // If the stride is greater than 65536, padding is required to reduce the stride.
     if (layout.stride(1) < 65536) {
         return layout.stride(1) % align != 0;
@@ -109,11 +109,13 @@ inline bool IsNeedPadding(layout::ColumnMajor layout, uint32_t align) {
     }
 }
 
-inline bool IsNeedPadding(layout::zN layout, uint32_t align) {
+inline bool IsNeedPadding(layout::zN layout, uint32_t align)
+{
     return false;
 }
 
-inline bool IsNeedPadding(layout::nZ layout, uint32_t align) {
+inline bool IsNeedPadding(layout::nZ layout, uint32_t align)
+{
     return false;
 }
 } // namespace Catlass

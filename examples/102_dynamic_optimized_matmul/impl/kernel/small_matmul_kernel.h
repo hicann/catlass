@@ -39,37 +39,38 @@ struct TileCopyDynamicOptimized : public Catlass::Gemm::Tile::TileCopy<ArchTag, 
 };
 
 template <class ArchTag, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC>
-CATLASS_GLOBAL __attribute__((aic)) void SmallMatmulKernel(__gm__ uint8_t *__restrict__ gmA,
-    __gm__ uint8_t *__restrict__ gmB, __gm__ uint8_t *__restrict__ gmC, __gm__ uint8_t *__restrict__ tilingData)
+CATLASS_GLOBAL __attribute__((aic)) void SmallMatmulKernel(
+    __gm__ uint8_t* __restrict__ gmA, __gm__ uint8_t* __restrict__ gmB, __gm__ uint8_t* __restrict__ gmC,
+    __gm__ uint8_t* __restrict__ tilingData)
 {
     Catlass::Arch::Resource<ArchTag> resource;
 
     /*
-    * Load tiling parameters from global memory (tilingData) to local array tilingParams
-    * 
-    * tilingData memory layout corresponds to tilingParams as follows:
-    * --------------------------------------------------------------------------------
-    * | Offset | Size | Variable         | Type      | Description                   |
-    * |--------|------|------------------|-----------|-------------------------------|
-    * | 0-7    | 8    | strideA          | uint64_t  | matrix A stride               |
-    * | 8-15   | 8    | strideB          | uint64_t  | matrix B stride               |
-    * | 16-23  | 8    | strideC          | uint64_t  | matrix C stride               |
-    * | 24-27  | 4    | m                | uint32_t  | matrix M dimension            |
-    * | 28-31  | 4    | n                | uint32_t  | matrix N dimension            |
-    * | 32-35  | 4    | k                | uint32_t  | matrix K dimension            |
-    * | 36-37  | 2    | m1               | uint16_t  | l1 mTile(16-bit to save space)|
-    * | 38-39  | 2    | n1               | uint16_t  | l1 nTile(16-bit to save space)|
-    * | 40-41  | 2    | k1               | uint16_t  | l1 kTile(16-bit to save space)|
-    * | 42-47  | 4    | (reserved)       | -         | unused                        |
-    * --------------------------------------------------------------------------------
-    */
+     * Load tiling parameters from global memory (tilingData) to local array tilingParams
+     *
+     * tilingData memory layout corresponds to tilingParams as follows:
+     * --------------------------------------------------------------------------------
+     * | Offset | Size | Variable         | Type      | Description                   |
+     * |--------|------|------------------|-----------|-------------------------------|
+     * | 0-7    | 8    | strideA          | uint64_t  | matrix A stride               |
+     * | 8-15   | 8    | strideB          | uint64_t  | matrix B stride               |
+     * | 16-23  | 8    | strideC          | uint64_t  | matrix C stride               |
+     * | 24-27  | 4    | m                | uint32_t  | matrix M dimension            |
+     * | 28-31  | 4    | n                | uint32_t  | matrix N dimension            |
+     * | 32-35  | 4    | k                | uint32_t  | matrix K dimension            |
+     * | 36-37  | 2    | m1               | uint16_t  | l1 mTile(16-bit to save space)|
+     * | 38-39  | 2    | n1               | uint16_t  | l1 nTile(16-bit to save space)|
+     * | 40-41  | 2    | k1               | uint16_t  | l1 kTile(16-bit to save space)|
+     * | 42-47  | 4    | (reserved)       | -         | unused                        |
+     * --------------------------------------------------------------------------------
+     */
 
     // This kernel only needs to read TILING_PARAMS_BYTES bytes of data.
     constexpr uint32_t TILING_PARAMS_BYTES = 42;
     uint8_t tilingParams[TILING_PARAMS_BYTES];
     ReadTilingParams(tilingParams, tilingData, TILING_PARAMS_BYTES);
 
-    // The byte size of the TilingParams structure may exceed TILING_PARAMS_BYTES. 
+    // The byte size of the TilingParams structure may exceed TILING_PARAMS_BYTES.
     // Please avoid using pointers to access data beyond TILING_PARAMS_BYTES !!!
     TilingParams* tiling = (TilingParams*)(tilingParams);
 
@@ -111,17 +112,18 @@ CATLASS_GLOBAL __attribute__((aic)) void SmallMatmulKernel(__gm__ uint8_t *__res
 }
 
 template <class ArchTag, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC>
-void LaunchSmallMatmulKernel(aclrtStream &stream, uint64_t hardwareSyncAddr, uint8_t *dA, uint8_t *dB, uint8_t *dC,
-    uint8_t *dTilingParams, TilingParams &tilingParams)
+void LaunchSmallMatmulKernel(
+    aclrtStream& stream, uint64_t hardwareSyncAddr, uint8_t* dA, uint8_t* dB, uint8_t* dC, uint8_t* dTilingParams,
+    TilingParams& tilingParams)
 {
     SmallMatmulKernel<ArchTag, ElementA, LayoutA, ElementB, LayoutB, ElementC, LayoutC>
         <<<tilingParams.blockDim, nullptr, stream>>>(dA, dB, dC, dTilingParams);
 }
 
 template <class ArchTag, class ElementA, class LayoutA, class ElementB, class LayoutB, class ElementC, class LayoutC>
-size_t SmallMatmulKernelGetWorkspaceSize(TilingParams &tilingParams)
+size_t SmallMatmulKernelGetWorkspaceSize(TilingParams& tilingParams)
 {
     return 0;
 }
 
-#endif  // SMALL_MATMUL_KERNEL_H
+#endif // SMALL_MATMUL_KERNEL_H

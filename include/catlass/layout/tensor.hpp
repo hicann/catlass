@@ -50,28 +50,14 @@ public:
 
     CATLASS_HOST_DEVICE
     NC1HWC0(
-        Index batch,
-        Index c1,
-        Index h,
-        Index w,
-        Index c0,
-        LongIndex strideBatch,
-        LongIndex strideC1,
-        LongIndex strideH,
-        LongIndex strideW,
-        LongIndex strideC0
-    )
-        : shape_(MakeCoord(batch, c1, h, w, c0))
-        , stride_(MakeCoord(strideBatch, strideC1, strideH, strideW, strideC0))
-    {
-    }
+        Index batch, Index c1, Index h, Index w, Index c0, LongIndex strideBatch, LongIndex strideC1, LongIndex strideH,
+        LongIndex strideW, LongIndex strideC0)
+        : shape_(MakeCoord(batch, c1, h, w, c0)), stride_(MakeCoord(strideBatch, strideC1, strideH, strideW, strideC0))
+    {}
 
     CATLASS_HOST_DEVICE
-    NC1HWC0(Shape shape, Stride stride)
-        : shape_(shape)
-        , stride_(stride)
-    {
-    }
+    NC1HWC0(Shape shape, Stride stride) : shape_(shape), stride_(stride)
+    {}
 
     /// Make the layout of a coordinate (batch, c1, h, w, c0)
     template <class Element>
@@ -83,16 +69,16 @@ public:
     /// Returns the offset of a coordinate in linear memory.
     /// Assumes coordinate has convention (batch, c1, h, w, c0)
     CATLASS_HOST_DEVICE
-    LongIndex GetOffset(Conv2dFmapCoord const &coord) const
+    LongIndex GetOffset(Conv2dFmapCoord const& coord) const
     {
-        return LongIndex(coord.batch()) * stride_[0] + LongIndex(coord.c1()) * stride_[1]
-               + LongIndex(coord.h()) * stride_[2] + LongIndex(coord.w()) * stride_[3]
-               + LongIndex(coord.c0()) * stride_[4];
+        return LongIndex(coord.batch()) * stride_[0] + LongIndex(coord.c1()) * stride_[1] +
+               LongIndex(coord.h()) * stride_[2] + LongIndex(coord.w()) * stride_[3] +
+               LongIndex(coord.c0()) * stride_[4];
     }
 
     /// Returns the layout of a tile.
     CATLASS_HOST_DEVICE
-    NC1HWC0 GetTileLayout(Conv2dFmapCoord const &tileShape) const
+    NC1HWC0 GetTileLayout(Conv2dFmapCoord const& tileShape) const
     {
         return NC1HWC0(tileShape, stride());
     }
@@ -106,7 +92,7 @@ public:
 
     /// Returns the shape of the layout
     CATLASS_HOST_DEVICE
-    Shape &shape()
+    Shape& shape()
     {
         return shape_;
     }
@@ -120,7 +106,7 @@ public:
 
     /// Returns the shape of the layout
     CATLASS_HOST_DEVICE
-    typename Shape::Index &shape(int idx)
+    typename Shape::Index& shape(int idx)
     {
         return shape_[idx];
     }
@@ -134,7 +120,7 @@ public:
 
     /// Returns the stride of the layout
     CATLASS_HOST_DEVICE
-    Stride &stride()
+    Stride& stride()
     {
         return stride_;
     }
@@ -148,7 +134,7 @@ public:
 
     /// Returns the stride of the layout
     CATLASS_HOST_DEVICE
-    typename Stride::Index &stride(int idx)
+    typename Stride::Index& stride(int idx)
     {
         return stride_[idx];
     }
@@ -200,28 +186,15 @@ public:
 
     CATLASS_HOST_DEVICE
     CI1KHKWCOCI0(
-        Index cin1,
-        Index kh,
-        Index kw,
-        Index cout,
-        Index c0,
-        LongIndex strideCin1,
-        LongIndex strideKh,
-        LongIndex strideKw,
-        LongIndex strideCout,
-        LongIndex strideC0
-    )
-        : shape_(MakeCoord(cin1, kh, kw, cout, c0))
-        , stride_(MakeCoord(strideCin1, strideKh, strideKw, strideCout, strideC0))
-    {
-    }
+        Index cin1, Index kh, Index kw, Index cout, Index c0, LongIndex strideCin1, LongIndex strideKh,
+        LongIndex strideKw, LongIndex strideCout, LongIndex strideC0)
+        : shape_(MakeCoord(cin1, kh, kw, cout, c0)),
+          stride_(MakeCoord(strideCin1, strideKh, strideKw, strideCout, strideC0))
+    {}
 
     CATLASS_HOST_DEVICE
-    CI1KHKWCOCI0(Shape shape, Stride stride)
-        : shape_(shape)
-        , stride_(stride)
-    {
-    }
+    CI1KHKWCOCI0(Shape shape, Stride stride) : shape_(shape), stride_(stride)
+    {}
 
     /// Make the layout of a coordinate (cin1, h, w, c0)
     template <class Element>
@@ -233,16 +206,16 @@ public:
     /// Returns the offset of a coordinate in linear memory.
     /// Assumes coordinate has convention (cin1, kh, kw, cout, c0)
     CATLASS_HOST_DEVICE
-    LongIndex GetOffset(Conv2dFilterCoord const &coord) const
+    LongIndex GetOffset(Conv2dFilterCoord const& coord) const
     {
-        return LongIndex(coord.cin1()) * stride_[0] + LongIndex(coord.kh()) * stride_[1]
-               + LongIndex(coord.kw()) * stride_[2] + LongIndex(coord.cout()) * stride_[3]
-               + LongIndex(coord.c0()) * stride_[4];
+        return LongIndex(coord.cin1()) * stride_[0] + LongIndex(coord.kh()) * stride_[1] +
+               LongIndex(coord.kw()) * stride_[2] + LongIndex(coord.cout()) * stride_[3] +
+               LongIndex(coord.c0()) * stride_[4];
     }
 
     /// Returns the layout of a tile.
     CATLASS_HOST_DEVICE
-    CI1KHKWCOCI0 GetTileLayout(Conv2dFilterCoord const &tileShape) const
+    CI1KHKWCOCI0 GetTileLayout(Conv2dFilterCoord const& tileShape) const
     {
         return CI1KHKWCOCI0(tileShape, stride());
     }
@@ -256,7 +229,7 @@ public:
 
     /// Returns the shape of the layout
     CATLASS_HOST_DEVICE
-    Shape &shape()
+    Shape& shape()
     {
         return shape_;
     }
@@ -270,7 +243,7 @@ public:
 
     /// Returns the shape of the layout
     CATLASS_HOST_DEVICE
-    typename Shape::Index &shape(int idx)
+    typename Shape::Index& shape(int idx)
     {
         return shape_[idx];
     }
@@ -284,7 +257,7 @@ public:
 
     /// Returns the stride of the layout
     CATLASS_HOST_DEVICE
-    Stride &stride()
+    Stride& stride()
     {
         return stride_;
     }
@@ -298,7 +271,7 @@ public:
 
     /// Returns the stride of the layout
     CATLASS_HOST_DEVICE
-    typename Stride::Index &stride(int idx)
+    typename Stride::Index& stride(int idx)
     {
         return stride_[idx];
     }

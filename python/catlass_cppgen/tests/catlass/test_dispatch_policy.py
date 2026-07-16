@@ -42,7 +42,7 @@ class TestMmadPingpong(unittest.TestCase):
             enable_unit_flag=True,
             use_hf32_mode=True,
             l0c_stages=2,
-            enable_l1_resident=True
+            enable_l1_resident=True,
         )
         self.assertEqual(mmad.arch_tag, Arch.Ascend950)
         self.assertFalse(mmad.async_)
@@ -71,7 +71,7 @@ class TestMmadPreloadAsyncWithCallback(unittest.TestCase):
             l0c_stages=1,
             enable_unit_flag=True,
             enable_shuffle_k=True,
-            use_hf32_mode=True
+            use_hf32_mode=True,
         )
         self.assertEqual(mmad.arch_tag, Arch.Ascend950)
         self.assertTrue(mmad.async_)
@@ -81,11 +81,7 @@ class TestMmadPreloadAsyncWithCallback(unittest.TestCase):
 
 class TestMmadMultiBatch(unittest.TestCase):
     def test_mmad_multi_batch(self):
-        mmad = MmadMultiBatch(
-            arch_tag=Arch.Ascend950,
-            use_hf32_mode=True,
-            l0c_stages=3
-        )
+        mmad = MmadMultiBatch(arch_tag=Arch.Ascend950, use_hf32_mode=True, l0c_stages=3)
         self.assertEqual(mmad.arch_tag, Arch.Ascend950)
         self.assertFalse(mmad.async_)
         self.assertEqual(mmad.stages, 2)
