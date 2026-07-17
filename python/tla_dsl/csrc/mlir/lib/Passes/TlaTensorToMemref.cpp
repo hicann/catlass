@@ -2199,10 +2199,11 @@ mlir::LogicalResult TlaTensorMemrefLowering::deriveDescriptors(mlir::ModuleOp mo
 
         // Materialize index-tree leaves from the operand defining ops. Static leaves
         // become constants; dynamic leaves are pulled from tla.make_shape/make_stride/
-        // make_coord dyn-elems in leaf order. A derived dynamic leaf that is not directly
-        // operand-backed (e.g. rank-1 linear stride0 = extent*stride with dynamic extent)
-        // is rejected with a clear error. ``childInfo`` already promotes rank-1 linear to
-        // rank-2, so the leading synthetic ``1``/``0`` leaves are static here.
+        // make_coord dyn-elems in leaf order. ``childInfo`` already promotes rank-1
+        // linear to rank-2, so the leading synthetic ``1``/``0`` leaves are static
+        // here. The promoted leading stride may be derived (extent * elemStride) and
+        // is not present on make_stride — that case is handled after shape leaves are
+        // available (see stride materialization below).
         auto materializeLeaves = [&](Value packedValue, ArrayRef<int64_t> leaves,
                                      StringRef kind) -> FailureOr<SmallVector<Value, 4>> {
           SmallVector<Value, 4> result;
@@ -2250,10 +2251,63 @@ mlir::LogicalResult TlaTensorMemrefLowering::deriveDescriptors(mlir::ModuleOp mo
 
         auto shapeLeaves =
             materializeLeaves(makeLayout.getShape(), childInfo->shapeDims, "shape");
-        auto strideLeaves =
-            materializeLeaves(makeLayout.getStride(), childInfo->strideDims, "stride");
+        if (failed(shapeLeaves)) {
+          derivationFailed = true;
+          return;
+        }
+
+        // Rank-1 linear layout is normalized to rank-2 as shape=(1,E), stride=(E*S,S).
+        // When E is dynamic, stride0 becomes a derived `?` that is not on make_stride.
+        // Recover it as extent * elemStride from the already-materialized shape leaf.
+        FailureOr<SmallVector<Value, 4>> strideLeaves;
+        {
+          unsigned strideDynLeafCount = 0;
+          for (int64_t leaf : childInfo->strideDims)
+            if (leaf == ShapedType::kDynamic)
+              ++strideDynLeafCount;
+          SmallVector<Value, 4> strideDynElems;
+          if (auto mst = makeLayout.getStride().getDefiningOp<::tla::MakeStrideOp>())
+            strideDynElems.append(mst.getDynElems().begin(), mst.getDynElems().end());
+
+          bool needsDerivedLeadingStride =
+              strideDynLeafCount > 0 && strideDynElems.size() < strideDynLeafCount &&
+              childInfo->shapeDims.size() == 2 && childInfo->strideDims.size() == 2 &&
+              childInfo->shapeDims[0] == 1 &&
+              childInfo->strideDims[0] == ShapedType::kDynamic;
+          if (needsDerivedLeadingStride) {
+            // Remaining make_stride dyn-elems (if any) back the trailing element stride.
+            unsigned trailingDynNeeded =
+                childInfo->strideDims[1] == ShapedType::kDynamic ? 1u : 0u;
+            if (strideDynElems.size() < trailingDynNeeded) {
+              op->emitError()
+                  << "tla.make_tensor stride has a derived dynamic leaf that is not "
+                     "directly operand-backed (e.g. rank-1 stride with dynamic extent); "
+                     "pass explicit leaves via tla.make_stride";
+              derivationFailed = true;
+              return;
+            }
+            Value elemStride =
+                childInfo->strideDims[1] == ShapedType::kDynamic
+                    ? strideDynElems[0]
+                    : getOrCreateConstant(op, childInfo->strideDims[1], 0);
+            if (!elemStride.getType().isIndex()) {
+              op->emitError() << "tla.make_tensor stride dynamic operands must be index type";
+              derivationFailed = true;
+              return;
+            }
+            OpBuilder builder(op);
+            Value extent = (*shapeLeaves)[1];
+            Value leading =
+                builder.create<arith::MulIOp>(op->getLoc(), extent, elemStride).getResult();
+            strideLeaves = SmallVector<Value, 4>{leading, elemStride};
+          } else {
+            strideLeaves =
+                materializeLeaves(makeLayout.getStride(), childInfo->strideDims, "stride");
+          }
+        }
+
         auto coordLeaves = materializeLeaves(coordValue, childInfo->coordDims, "coord");
-        if (failed(shapeLeaves) || failed(strideLeaves) || failed(coordLeaves)) {
+        if (failed(strideLeaves) || failed(coordLeaves)) {
           derivationFailed = true;
           return;
         }

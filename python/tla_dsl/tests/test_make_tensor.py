@@ -105,6 +105,29 @@ def test_make_tensor_accepts_dynamic_shape_leaf() -> None:
     assert "tla.make_stride %" in mlir
 
 
+def test_make_tensor_rank1_dynamic_extent_emits_tlair() -> None:
+    """Rank-1 make_tensor(shape=m, stride=1) must emit dynamic extent TLAIR.
+
+    The TensorToMemref fix for derived leading-stride SSA is covered by the lit
+    test ``make-tensor-rank1-dynamic-extent.mlir`` (full TlaCompile pipeline).
+    """
+
+    @tla.kernel
+    def _rank1_dyn_kernel() -> None:
+        ptr = tla.make_ptr(tla.Float32, 4096, mem_space=tla.AddressSpace.ub)
+        for m in tla.range(1, 9, 1):
+            local = tla.make_tensor(
+                ptr,
+                tla.make_layout(tla.make_shape(m), tla.make_stride(1)),
+            )
+            _ = local
+
+    mlir = _rank1_dyn_kernel.dump_mlir()
+    assert "tla.make_tensor" in mlir
+    assert "!tla.shape<?>" in mlir
+    assert "!tla.stride<1>" in mlir
+    assert "tla.make_shape %" in mlir
+
 
 # --- Preconditions ------------------------------------------------------------
 
