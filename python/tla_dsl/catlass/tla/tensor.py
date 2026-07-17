@@ -230,6 +230,45 @@ class _Tensor(TensorABC):
                 f"Sub-byte scalar dereference not supported for type {self.element_type.__name__}"
             )
 
+    def _cvt_to_dest(
+        self,
+        data: Any,
+        dest_element_type: mlir_ir.Type,
+        *,
+        loc: mlir_ir.Location | None = None,
+    ) -> mlir_ir.Value:
+        """Same-kind upcast / type check for typed ``Scalar`` (CuTeDSL ``_Tensor._cvt_to_dest``)."""
+        from ..base_dsl.typing import _TOKEN_TO_NUMERIC, _mlir_type_to_elem_token
+        from ..core_api import _op_error, _scalar_constant_for_element_type
+        from ..types import Scalar
+
+        if not isinstance(data, Scalar):
+            raise TypeError(f"expected Scalar, got {type(data).__name__}")
+        src_token = data.dtype.strip().lower()
+        dest_token = _mlir_type_to_elem_token(dest_element_type)
+        src_cls = _TOKEN_TO_NUMERIC.get(src_token)
+        dest_cls = _TOKEN_TO_NUMERIC.get(dest_token)
+        if src_cls is None or dest_cls is None:
+            if src_token != dest_token:
+                _op_error(
+                    "scalar_store",
+                    f"type mismatch, store {src_token} to Tensor with element type {dest_token}",
+                )
+            return _scalar_constant_for_element_type(
+                "scalar_store", data.value, dest_element_type, loc=loc
+            )
+        src_is_float = src_token.startswith("f") or src_token == "bf16"
+        dest_is_float = dest_token.startswith("f") or dest_token == "bf16"
+        same_kind = src_is_float == dest_is_float
+        if same_kind and dest_cls.width >= src_cls.width:
+            return _scalar_constant_for_element_type(
+                "scalar_store", data.value, dest_element_type, loc=loc
+            )
+        _op_error(
+            "scalar_store",
+            f"type mismatch, store {src_token} to Tensor with element type {dest_token}",
+        )
+
     @dsl_user_op
     def __getitem__(
         self,
@@ -312,17 +351,27 @@ class _Tensor(TensorABC):
         *,
         loc: mlir_ir.Location | None = None,
     ) -> None:
-        """Set tensor elements at specified coordinates."""
+        """Set tensor elements at specified coordinates.
+
+        ``data`` may be a ``ScalarSSA`` (e.g. from ``tensor[j]``), a bare Python
+        ``int``/``float`` literal (converted to the tensor element type), or a typed
+        ``Scalar`` (e.g. ``tla.Float32(1.0)``; CuTeDSL ``_cvt_to_dest`` rules).
+        """
         from ..core_api import (
             _as_index_value,
             _as_value,
+            _category,
             _flatten_tla_tuple,
             _op_error,
             _require_category,
             _require_frontend_state,
+            _resolve_bound_value,
+            _scalar_constant_for_element_type,
             _tla_tensor_descriptor_from_type_or_value,
+            _type_name,
         )
         from ..execution_lowering import TlaLoweringError
+        from ..types import Scalar
 
         loc = _normalize_user_loc(loc)
         if crd is None or (type(crd) is tuple and any(part is None for part in crd)):
@@ -335,7 +384,6 @@ class _Tensor(TensorABC):
         _require_frontend_state("scalar_store")
         if type(crd) is tuple and not crd:
             _op_error("scalar_store", "expected at least one index")
-        _require_category("scalar_store", "value", data, "scalar_ssa", 1)
 
         dest_value = _as_value(self)
         parent = _tla_tensor_descriptor_from_type_or_value(dest_value)
@@ -361,7 +409,21 @@ class _Tensor(TensorABC):
             )
 
         elem_type = parent.element_mlir_type()
-        store_value = _as_value(data)
+        resolved = _resolve_bound_value(data)
+        if _category(data) == "scalar_ssa":
+            store_value = _as_value(data)
+        elif isinstance(resolved, Scalar):
+            store_value = _Tensor._cvt_to_dest(self, resolved, elem_type, loc=loc)
+        elif isinstance(resolved, (int, float)) and not isinstance(resolved, bool):
+            store_value = _scalar_constant_for_element_type(
+                "scalar_store", resolved, elem_type, loc=loc
+            )
+        else:
+            _op_error(
+                "scalar_store",
+                f"invalid argument 'value' (position 1): expected scalar_ssa or "
+                f"scalar literal, got {_type_name(data)}",
+            )
         if str(store_value.type) != str(elem_type):
             raise TlaLoweringError(
                 f"tla.scalar_store value type mismatch: expected {elem_type}, got {store_value.type}"

@@ -6,6 +6,7 @@ Layout notes (Phase-1 ``scalar_load`` / ``scalar_store``):
 
 Control-flow patterns in this example:
 - Static 1D/2D scalar read + store (no loop)
+- Python scalar literal store (``out[i] = 1.1125``)
 - ``tla.range`` loop copy
 - Dynamic ``if`` selecting read index (index merge, load after branch)
 - Dynamic ``if`` selecting scalar *values* (ScalarSSA carried through ``scf.if``)
@@ -38,6 +39,13 @@ def scalar_index_static_kernel(
     elem_2d = meta[ROW, SCALAR_COL]
     markers[0, 0] = elem_1d
     markers[0, 1] = elem_2d
+
+
+@tla.kernel
+def scalar_index_literal_store_kernel(out: tla.Tensor) -> None:
+    """Python float/int literals stored via scalar indexing."""
+    out[0] = 1.1125
+    out[1] = 42
 
 
 @tla.kernel
@@ -142,6 +150,25 @@ def _run_static_1d_2d(args: argparse.Namespace, torch, device: str) -> int:
         print(f"static_1d_2d_failed expected={expected_markers.tolist()} actual={markers.tolist()}")
         return 1
     print("static_1d_2d_ok=True")
+    return 0
+
+
+def _run_literal_store(args: argparse.Namespace, torch, device: str) -> int:
+    out = torch.full((2,), -1.0, dtype=torch.float32, device=device)
+    out_t = _gm_vector_contiguous(out)
+    artifact = tla.compile(
+        scalar_index_literal_store_kernel,
+        out_t,
+        cache_dir=args.cache_dir,
+        force_recompile=args.force_recompile,
+    )
+    artifact(out_t, block=args.block)
+    torch.npu.synchronize()
+    expected = torch.tensor([1.1125, 42.0], dtype=torch.float32, device=device)
+    if not torch.allclose(out, expected, rtol=0.0, atol=1e-4):
+        print(f"literal_store_failed expected={expected.tolist()} actual={out.tolist()}")
+        return 1
+    print("literal_store_ok=True")
     return 0
 
 
@@ -291,6 +318,7 @@ def run(args: argparse.Namespace) -> int:
 
         runners = (
             lambda: _run_static_1d_2d(args, torch, device),
+            lambda: _run_literal_store(args, torch, device),
             lambda: _run_loop_copy(args, torch, meta_t, out_t, out),
             lambda: _run_dynamic_if(args, torch, meta_t, out_t, out),
             lambda: _run_value_through_dynamic_if(args, torch, device),

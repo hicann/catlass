@@ -3641,10 +3641,27 @@ def _scalar_constant_for_element_type(
                 f"invalid argument 'rhs' (position 1): expected integer scalar for "
                 f"{element_type}, got {resolved!r}",
             )
+        int_value = int(resolved)
+        # Range check before IntegerAttr.get (signed bounds for signless, like CuTe Integer.min/max).
+        if isinstance(element_type, mlir_ir.IndexType):
+            lo, hi = -(2**63), 2**63 - 1
+        else:
+            int_ty = mlir_ir.IntegerType(element_type)
+            width = int(int_ty.width)
+            if int_ty.is_unsigned:
+                lo, hi = 0, 2**width - 1
+            else:
+                lo, hi = -(2 ** (width - 1)), 2 ** (width - 1) - 1
+        if not (lo <= int_value <= hi):
+            _op_error(
+                op_name,
+                f"integer scalar {int_value} out of range for {element_type} "
+                f"(valid range [{lo}, {hi}])",
+            )
         return mlir_ir.Operation.create(
             "arith.constant",
             results=[element_type],
-            attributes={"value": mlir_ir.IntegerAttr.get(element_type, int(resolved))},
+            attributes={"value": mlir_ir.IntegerAttr.get(element_type, int_value)},
             loc=loc,
         ).results[0]
     if (

@@ -36,6 +36,11 @@ def _kernel_scalar_store_1d(out: tla.Tensor, meta: tla.Tensor) -> None:
     out[0] = elem
 
 
+@tla.kernel
+def _kernel_scalar_store_float_literal(out: tla.Tensor) -> None:
+    out[0] = 1.1125
+
+
 def _gm_tensor_1d(length: int, *, dtype: type = tla.Int32) -> tla.Tensor:
     with runtime_mod._eager_capture():
         return tla.Tensor(
@@ -117,6 +122,76 @@ def test_tensor_scalar_store_emits_tla_scalar_store_1d() -> None:
     assert "tla.scalar_load" in mlir
 
 
+def test_tensor_scalar_store_python_literals() -> None:
+    """Bare int/float literals: emit constant+store; cast to element type; reject bad cases."""
+    out_f32 = _gm_tensor_1d(4, dtype=tla.Float32)
+    mlir = _kernel_scalar_store_float_literal.dump_mlir(type_args=(out_f32,))
+    assert "arith.constant" in mlir
+    assert "1.1125" in mlir or "1.112500" in mlir
+    assert "tla.scalar_store" in mlir
+
+    out_f16 = _gm_tensor_1d(4, dtype=tla.Float16)
+    mlir_f16 = _kernel_scalar_store_float_literal.dump_mlir(type_args=(out_f16,))
+    assert "f16" in mlir_f16
+    assert "tla.scalar_store" in mlir_f16
+
+    out_i8 = _gm_tensor_1d(4, dtype=tla.Int8)
+
+    @tla.kernel
+    def k_ok(o: tla.Tensor) -> None:
+        o[0] = 127
+        o[1] = -128
+
+    @tla.kernel
+    def k_oob(o: tla.Tensor) -> None:
+        o[0] = 128
+
+    @tla.kernel
+    def k_bad_float(o: tla.Tensor) -> None:
+        o[0] = 1.5
+
+    assert "tla.scalar_store" in k_ok.dump_mlir(type_args=(out_i8,))
+    with pytest.raises(Exception, match="out of range"):
+        k_oob.dump_mlir(type_args=(out_i8,))
+    with pytest.raises(Exception, match="expected integer scalar"):
+        k_bad_float.dump_mlir(type_args=(_gm_tensor_1d(4, dtype=tla.Int32),))
+
+
+def test_tensor_scalar_store_typed_scalar() -> None:
+    """Typed Scalar keeps dtype: match/upcast OK; cross-kind rejected."""
+    out_f32 = _gm_tensor_1d(4, dtype=tla.Float32)
+    out_i32 = _gm_tensor_1d(4, dtype=tla.Int32)
+
+    @tla.kernel
+    def k_match(o: tla.Tensor) -> None:
+        o[0] = tla.Float32(1.1125)
+
+    @tla.kernel
+    def k_upcast(o: tla.Tensor) -> None:
+        o[0] = tla.Int16(7)
+
+    @tla.kernel
+    def k_mismatch(o: tla.Tensor) -> None:
+        o[0] = tla.Float32(1)
+
+    assert "tla.scalar_store" in k_match.dump_mlir(type_args=(out_f32,))
+    assert "tla.scalar_store" in k_upcast.dump_mlir(type_args=(out_i32,))
+    with pytest.raises(Exception, match="type mismatch"):
+        k_mismatch.dump_mlir(type_args=(out_i32,))
+
+
+def test_tensor_scalar_store_rejects_non_scalar_value() -> None:
+    out = _gm_tensor_1d(4, dtype=tla.Float32)
+    meta = _gm_tensor_1d(8, dtype=tla.Float32)
+
+    @tla.kernel
+    def k(o: tla.Tensor, m: tla.Tensor) -> None:
+        o[0] = m  # tensor, not scalar
+
+    with pytest.raises(Exception, match="expected scalar_ssa or scalar literal"):
+        k.dump_mlir(type_args=(out, meta))
+
+
 @tla.kernel
 def _kernel_scalar_value_through_dynamic_if(
     out: tla.Tensor,
@@ -185,6 +260,7 @@ def test_tensor_indexing_allows_vector_region_frontend() -> None:
 
     mlir = k.dump_mlir(type_args=(meta,))
     assert "tla.scalar_load" in mlir
+
 
 def test_scalar_load_rejects_ub_tensor() -> None:
     with runtime_mod._eager_capture():
