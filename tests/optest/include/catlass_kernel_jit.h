@@ -444,14 +444,14 @@ void Ascend950GroupedMatmulSliceM(
  * Selects the JIT template via ``params.evgType`` (e.g. add, add_ub, bias, leaky_relu, ...).
  */
 void MatmulEvg(const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulEvgParams& params);
- 
+
 /**
  * @brief JIT interface for example 67_ascend950_batched_matmul.
  */
 void Ascend950BatchedMatmul(
     const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const MatmulParams& params);
 
-/** 
+/**
  * @brief Reserved JIT interface for example 65_ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant.
  */
 void Ascend950Fp8MxGroupedMatmulSliceMSwigluMxQuant(
@@ -478,8 +478,13 @@ struct GroupedMxFinalizeRoutingParams : public MatmulParams {
  * @brief Reserved JIT interface for example 71_ascend950_fp8_mx_grouped_matmul_finalize_routing.
  */
 void Ascend950Fp8MxGroupedMatmulFinalizeRouting(
-    const uint32_t blockNum, aclrtStream stream, const TParams& tParams,
-    const GroupedMxFinalizeRoutingParams& params);
+    const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GroupedMxFinalizeRoutingParams& params);
+
+/**
+ * @brief Reserved JIT interface for example 71_ascend950_fp8_mx_grouped_matmul_finalize_routing (no_deter variant).
+ */
+void Ascend950Fp8MxGroupedMatmulFinalizeRoutingNoDeter(
+    const uint32_t blockNum, aclrtStream stream, const TParams& tParams, const GroupedMxFinalizeRoutingParams& params);
 
 /**
  * @brief JIT interface for example 73_ascend950_matmul_full_loadA.

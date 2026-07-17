@@ -22,6 +22,9 @@ from .ascend950_fp8_mx_flash_attention_infer import (
 from .ascend950_fp8_mx_grouped_matmul_finalize_routing import (  # example 71
     ascend950_fp8_mx_grouped_matmul_finalize_routing,
 )
+from .ascend950_fp8_mx_grouped_matmul_finalize_routing_no_deter import (  # example 71 no_deter
+    ascend950_fp8_mx_grouped_matmul_finalize_routing_no_deter,
+)
 from .ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant import (
     ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant,  # example 65
 )
@@ -175,6 +178,7 @@ __all__ = [
     "ascend950_tail_multi_core_splitk_matmul",  # example 69
     "ascend950_flash_attention_chunk_prefill",  # example 70
     "ascend950_fp8_mx_grouped_matmul_finalize_routing",  # example 71
+    "ascend950_fp8_mx_grouped_matmul_finalize_routing_no_deter",  # example 71 no_deter
     "ascend950_basic_conv2d_tla",  # example 56
     "ascend950_matmul_full_loadA",  # example 73
 ]

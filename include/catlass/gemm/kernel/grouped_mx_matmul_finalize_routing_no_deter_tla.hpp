@@ -1,23 +1,23 @@
 /**
- * This program is free software, you can redistribute it and/or modify.
- * Copyright (c) 2026 Huawei Technologies Co., Ltd.
- * This file is a part of the CANN Open Software.
- * Licensed under CANN Open Software License Agreement Version 2.0 (the "License").
+ * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+ * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
- * BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE. See LICENSE in the root of
- * the software repository for the full text of the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE. See
+ * LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_GEMM_KERNEL_GROUPED_MX_MATMUL_FINALIZE_ROUTING_TLA_HPP
-#define CATLASS_GEMM_KERNEL_GROUPED_MX_MATMUL_FINALIZE_ROUTING_TLA_HPP
+#ifndef CATLASS_GEMM_KERNEL_GROUPED_MX_MATMUL_FINALIZE_ROUTING_NO_DETER_TLA_HPP
+#define CATLASS_GEMM_KERNEL_GROUPED_MX_MATMUL_FINALIZE_ROUTING_NO_DETER_TLA_HPP
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/resource.hpp"
 #include "catlass/coord.hpp"
 #include "catlass/gemm_coord.hpp"
 #include "catlass/matrix_coord.hpp"
-#include "catlass/epilogue/block/block_epilogue_finalize_routing.hpp"
+#include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/block/block_swizzle_grouped_aswt.hpp"
+#include "catlass/epilogue/block/block_epilogue_finalize_routing_no_deter.hpp"
 #include "tla/layout.hpp"
 #include "tla/tensor.hpp"
 
@@ -25,9 +25,20 @@ namespace Catlass::Gemm::Kernel {
 
 #if (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510)
 
+// Mix (AIC+AIV) grouped MX matmul kernel variant driven by GemmGroupedAswtTailSplitSwizzle.
+//
+// 与 GroupedMxMatmulFinalizeRoutingTla 的差异（仅调度方式）：
+//   * AIC/AIV 两侧的 BlockScheduler 由 ColumnBlockSwizzle 换成
+//     GemmGroupedAswtTailSplitSwizzle：采用滚动核分配 + 窗口调度，
+//     startBlockIdx_ 跨 group 滚动，提升多核利用率和尾块负载均衡。
+//   * AswtTailSplit 支持尾部 tile 多核拆分（UpdateTailTile），
+//     最后一个 group 在满足条件时自动启用。
+//   * GetBlockShape 返回 AswtBlockShape{m, n, mOffset, nOffset}，
+//     tile 坐标需加上 mOffset/nOffset 偏移。
+//   * 其余（workspace 布局、AIC/AIV 同步、AIV SubBlock 列分裂）保持不变。
 template <
     class BlockMmad_, class BlockEpilogue_, class BlockScheduler_, class ElementGroupList_, class ElementSharedInput_>
-class GroupedMxMatmulFinalizeRoutingTla {
+class GroupedMxMatmulFinalizeRoutingNoDeterTla {
 public:
     using BlockMmad = BlockMmad_;
     using ArchTag = typename BlockMmad::ArchTag;
@@ -156,9 +167,8 @@ public:
 
     static size_t GetWorkspaceSize(const Arguments& args)
     {
-        int64_t lenWorkspace = static_cast<int64_t>(L1_TILE_M) * L1_TILE_N * args.aicCoreNum;
-        int64_t sizeWorkspace = lenWorkspace * sizeof(ElementC);
-        return sizeWorkspace;
+        // AIC 直写 AIV UB，不再需要 GM workspace
+        return 0;
     }
 
     static Params ToUnderlyingArguments(const Arguments& args, uint8_t* workspace)
@@ -191,7 +201,7 @@ public:
     }
 
     CATLASS_DEVICE
-    GroupedMxMatmulFinalizeRoutingTla()
+    GroupedMxMatmulFinalizeRoutingNoDeterTla()
     {}
 
     template <int32_t CORE_TYPE = g_coreType>
@@ -202,12 +212,10 @@ public:
     {
         AscendC::ICachePreLoad(1);
         BlockMmad blockMmad(resource);
+        BlockEpilogue blockEpilogue(resource);
 
         AscendC::GlobalTensor<ElementA> gmA;
         gmA.SetGlobalBuffer((__gm__ ElementA*)params.ptrA);
-
-        AscendC::GlobalTensor<ElementC> gmC;
-        gmC.SetGlobalBuffer((__gm__ ElementC*)params.ptrC);
 
         AscendC::GlobalTensor<ElementGroupList> groupList;
         groupList.SetGlobalBuffer(params.ptrGroupList);
@@ -218,16 +226,30 @@ public:
         int64_t mxScaleAlignedK =
             static_cast<int64_t>(CeilDiv<MX_BASEK_FACTOR>(params.problemShape.k()) * MX_SCALE_COPY_GROUP_NUM);
         uint32_t coreIdx = AscendC::GetBlockIdx();
+        uint32_t coreNum = AscendC::GetBlockNum();
 
         int64_t totalM = 0;
 
         auto tensorA = tla::MakeTensor(gmA, params.layoutA, Arch::PositionGM{});
-        auto tensorC = tla::MakeTensor(gmC[coreIdx * L1_TILE_M * L1_TILE_N], params.layoutC, Arch::PositionGM{});
 
-        int64_t tailOffset = 0;
+        // AIC 直写 AIV UB：通过 epilogue 获取 UB tensor，创建 PositionUB 的 tla tensor
+        auto ubLocalTemp = blockEpilogue.GetL0c2UbTensor();
+        AscendC::LocalTensor<ElementC> cUb_;
+        cUb_.SetAddr(ubLocalTemp.address_);
+        auto alignN = RoundUp(static_cast<uint32_t>(params.problemShape.n()), 8u);
+        auto layoutUb = tla::MakeLayout(
+            tla::MakeShape(static_cast<uint32_t>(params.problemShape.m()), alignN),
+            tla::MakeStride(static_cast<int64_t>(alignN), tla::Int<1>{}),
+            tla::MakeShape(
+                static_cast<uint32_t>(params.problemShape.m()), static_cast<uint32_t>(params.problemShape.n())));
+        auto tensorC = tla::MakeTensor(cUb_, layoutUb, Arch::PositionUB{});
+
         uint32_t ubListId = 0;
-        ubGmmResList[ubListId] = resource.ubBuf.template GetBufferByByte<ElementC>(0);
 
+        // AswtTailSplit scheduler: rolling core assignment across groups with window scheduling.
+        BlockScheduler scheduler(L1_TILE_M, L1_TILE_N);
+
+        bool isFirstTile = true;
         uint32_t lastGroupIdx = 0;
         for (uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx) {
             uint32_t groupValue = groupList.GetValue(groupIdx);
@@ -241,11 +263,13 @@ public:
             auto layoutMxScaleA = tla::MakeMxScaleLayout<ElementMxScaleA, layout::RowMajor, false>(
                 inGroupProblemShape.m(), CeilDiv<MX_SCALE_GROUP_NUM>(inGroupProblemShape.k()));
 
-            BlockScheduler matmulBlockScheduler(inGroupProblemShape, MakeCoord(L1_TILE_M, L1_TILE_N));
-            uint32_t coreLoops = matmulBlockScheduler.GetCoreLoops();
+            scheduler.UpdateNextProblem(inGroupProblemShape);
 
-            if (groupIdx == 0) {
-                tailOffset = matmulBlockScheduler.GetTailOffset();
+            // Last group: split the tail tiles to fill the otherwise idle cores of the final wave.
+            bool isLastGroup = (groupIdx + 1 == params.problemCount);
+            bool doTailSplit = isLastGroup && scheduler.NeedTailSplit();
+            if (doTailSplit) {
+                scheduler.UpdateTailTile();
             }
 
             AscendC::GlobalTensor<ElementB> gmB;
@@ -261,9 +285,6 @@ public:
             if constexpr (!std::is_void_v<ElementBias>) {
                 gmBias.SetGlobalBuffer((__gm__ ElementBias*)params.ptrBias + gmGroupOffsetBias);
             }
-            if (CeilDiv(currentM, L1_TILE_M) == 1) {
-                gmB.SetL2CacheHint(AscendC::CacheMode::CACHE_MODE_DISABLE);
-            }
 
             auto tensorB = tla::MakeTensor(gmB, params.layoutB, Arch::PositionGM{});
             auto tensorMxScaleA = tla::MakeTensor(gmMxScaleA, layoutMxScaleA, Arch::PositionGM{});
@@ -271,52 +292,54 @@ public:
             auto layoutBias = tla::MakeLayout(params.problemShape.n());
             auto tensorBias = tla::MakeTensor(gmBias, layoutBias, Arch::PositionGM{});
 
-            for (uint32_t loopIdx = 0; loopIdx < coreLoops; ++loopIdx) {
-                GemmCoord blockCoord = matmulBlockScheduler.GetBlockCoord(loopIdx);
-                GemmCoord actualBlockShape = matmulBlockScheduler.GetActualBlockShape(blockCoord);
-                if (actualBlockShape.n() == 0)
+            // AswtTailSplit: 滚动核分配 + 窗口调度。AIC/AIV 必须使用完全相同的
+            // 遍历范围与顺序，以保证 AIV 读取的 UB 数据与 AIC Fixpipe 写入的块一一对应。
+            GemmCoord blockCoord;
+            while (scheduler.GetTileIdx(blockCoord)) {
+                auto shape = scheduler.GetBlockShape(blockCoord);
+                if (shape.m == 0 || shape.n == 0) {
                     continue;
-
-                int64_t realNStart = blockCoord.n() * L1_TILE_N;
-                if (matmulBlockScheduler.GetIsTail(loopIdx)) {
-                    realNStart += tailOffset;
                 }
+
+                uint32_t mInGroup = blockCoord.m() * L1_TILE_M + shape.mOffset;
+                uint32_t nOffset = blockCoord.n() * L1_TILE_N + shape.nOffset;
+                int64_t mGlobal = totalM + static_cast<int64_t>(mInGroup);
+                GemmCoord actualBlockShape{shape.m, shape.n, inGroupProblemShape.k()};
 
                 auto tensorBlockA = GetTile(
-                    tensorA, tla::MakeCoord(totalM + blockCoord.m() * L1_TILE_M, blockCoord.k() * L1_TILE_K),
-                    tla::MakeShape(actualBlockShape.m(), actualBlockShape.k()));
+                    tensorA, tla::MakeCoord(mGlobal, static_cast<uint32_t>(0)),
+                    tla::MakeShape(shape.m, inGroupProblemShape.k()));
 
                 auto tensorBlockB = GetTile(
-                    tensorB, tla::MakeCoord(blockCoord.k() * L1_TILE_K, realNStart),
-                    tla::MakeShape(actualBlockShape.k(), actualBlockShape.n()));
+                    tensorB, tla::MakeCoord(static_cast<uint32_t>(0), nOffset),
+                    tla::MakeShape(inGroupProblemShape.k(), shape.n));
 
-                auto layoutWorkSpace = tla::MakeLayout(
-                    tla::MakeShape(actualBlockShape.m(), actualBlockShape.n()),
-                    tla::MakeStride(actualBlockShape.n(), tla::Int<1>{}));
-                auto tensorBlockC =
-                    tla::MakeTensor(gmC[coreIdx * L1_TILE_M * L1_TILE_N], layoutWorkSpace, Arch::PositionGM{});
+                alignN = RoundUp(static_cast<uint32_t>(shape.n), 8u);
+                layoutUb = tla::MakeLayout(
+                    tla::MakeShape(static_cast<uint32_t>(shape.m), alignN),
+                    tla::MakeStride(static_cast<int64_t>(alignN), tla::Int<1>{}),
+                    tla::MakeShape(static_cast<uint32_t>(shape.m), static_cast<uint32_t>(shape.n)));
+                auto tensorBlockC = tla::MakeTensor(cUb_, layoutUb, Arch::PositionUB{});
+
                 auto tensorBlockMxScaleA = GetTile(
-                    tensorMxScaleA,
-                    tla::MakeCoord(blockCoord.m() * L1_TILE_M, blockCoord.k() * L1_TILE_K / MX_SCALE_GROUP_NUM),
-                    tla::MakeShape(actualBlockShape.m(), CeilDiv<MX_SCALE_GROUP_NUM>(actualBlockShape.k())));
+                    tensorMxScaleA, tla::MakeCoord(mInGroup, static_cast<uint32_t>(0)),
+                    tla::MakeShape(shape.m, CeilDiv<MX_SCALE_GROUP_NUM>(inGroupProblemShape.k())));
 
                 auto tensorBlockMxScaleB = GetTile(
-                    tensorMxScaleB, tla::MakeCoord(blockCoord.k() * L1_TILE_K / MX_SCALE_GROUP_NUM, realNStart),
-                    tla::MakeShape(CeilDiv<MX_SCALE_GROUP_NUM>(actualBlockShape.k()), actualBlockShape.n()));
+                    tensorMxScaleB, tla::MakeCoord(static_cast<uint32_t>(0), nOffset),
+                    tla::MakeShape(CeilDiv<MX_SCALE_GROUP_NUM>(inGroupProblemShape.k()), shape.n));
 
                 if constexpr (!std::is_void_v<ElementBias>) {
-                    auto tensorBlockBias =
-                        GetTile(tensorBias, tla::MakeCoord(realNStart), tla::MakeShape(actualBlockShape.n()));
+                    auto tensorBlockBias = GetTile(tensorBias, tla::MakeCoord(nOffset), tla::MakeShape(shape.n));
                     blockMmad.template operator()<AIC_SYNC_AIV_MODE_2>(
-                        tensorBlockA, tensorBlockB, tensorBlockC, actualBlockShape, (groupIdx != 0 || loopIdx != 0),
-                        AIV_SYNC_AIC_FLAG + ubListId, AIC_SYNC_AIV_FLAG + ubListId, tensorBlockMxScaleA,
-                        tensorBlockMxScaleB, tensorBlockBias);
+                        tensorBlockA, tensorBlockB, tensorBlockC, actualBlockShape, true, AIV_SYNC_AIC_FLAG + ubListId,
+                        AIC_SYNC_AIV_FLAG + ubListId, tensorBlockMxScaleA, tensorBlockMxScaleB, tensorBlockBias);
                 } else {
                     blockMmad.template operator()<AIC_SYNC_AIV_MODE_2>(
-                        tensorBlockA, tensorBlockB, tensorBlockC, actualBlockShape, (groupIdx != 0 || loopIdx != 0),
-                        AIV_SYNC_AIC_FLAG + ubListId, AIC_SYNC_AIV_FLAG + ubListId, tensorBlockMxScaleA,
-                        tensorBlockMxScaleB);
+                        tensorBlockA, tensorBlockB, tensorBlockC, actualBlockShape, true, AIV_SYNC_AIC_FLAG + ubListId,
+                        AIC_SYNC_AIV_FLAG + ubListId, tensorBlockMxScaleA, tensorBlockMxScaleB);
                 }
+                isFirstTile = false;
             }
 
             totalM += inGroupProblemShape.m();
@@ -326,6 +349,12 @@ public:
             }
             gmGroupOffsetMxScaleA += inGroupProblemShape.m() * mxScaleAlignedK;
             gmGroupOffsetMxScaleB += mxScaleAlignedK * inGroupProblemShape.n();
+        }
+
+        // 如果该核从未进入循环（无任务分配），需主动 SetFlag 以避免 AIV 侧 final WaitFlag 死锁
+        if (isFirstTile) {
+            AscendC::CrossCoreWaitFlag<AIC_SYNC_AIV_MODE_2>(AIV_SYNC_AIC_FLAG + ubListId);
+            AscendC::CrossCoreSetFlag<AIC_SYNC_AIV_MODE_2, PIPE_MTE3>(AIC_SYNC_AIV_FLAG + ubListId);
         }
 
         AscendC::CrossCoreWaitFlag<AIC_SYNC_AIV_MODE_2>(AIV_SYNC_AIC_FLAG + ubListId);
@@ -340,19 +369,28 @@ public:
     CATLASS_DEVICE void operator()<AscendC::AIV>(Params const& params)
     {
         AscendC::ICachePreLoad(1);
-        BlockScheduler blockScheduler(params.problemShape, MakeCoord(L1_TILE_M, L1_TILE_N));
+        // mix kernel: AIV 的 GetBlockIdx() 返回子核级索引（0 ~ 2*aicCoreNum-1），
+        // 需折叠到 block 级别以与 AIC 侧的 taskIdx 遍历对齐，确保 AIV 读取的 UB
+        // 数据与 AIC 写入的块完全一致（同一 blockCoord / actualBlockShape）。
+        // 注意：GetBlockNum() 始终返回 AIC 核总数（aicCoreNum），无需除以 subBlockNum。
+        uint32_t subBlockNum = AscendC::GetSubBlockNum();
+        uint32_t coreIdx = AscendC::GetBlockIdx();
+        uint32_t coreNum = AscendC::GetBlockNum();
+        if (subBlockNum != 1) {
+            coreIdx /= subBlockNum;
+        }
+
         OutSplitScheduler outSplitScheduler;
         BlockEpilogue blockEpilogue(resource);
 
-        uint32_t coreIdx = AscendC::GetBlockIdx();
-        uint32_t coreNum = AscendC::GetBlockNum();
+        // AIV 侧原始（子核级）coreIdx/coreNum，用于 ClearOutTile / AssignSharedInputTile
+        // 的 batch 维切分（这部分按子核并行，与 AIC 调度无关）。
+        uint32_t rawCoreIdx = AscendC::GetBlockIdx();
+        uint32_t rawCoreNum = AscendC::GetBlockNum();
         int64_t gmGroupOffset = 0;
 
         AscendC::GlobalTensor<ElementGroupList> groupList;
         groupList.SetGlobalBuffer(params.ptrGroupList);
-
-        AscendC::GlobalTensor<ElementC> gmC;
-        gmC.SetGlobalBuffer(reinterpret_cast<__gm__ ElementC*>(params.ptrC));
 
         AscendC::GlobalTensor<ElementC> gmLogit;
         gmLogit.SetGlobalBuffer(reinterpret_cast<__gm__ ElementC*>(params.ptrLogit));
@@ -362,19 +400,17 @@ public:
         gmOut.SetGlobalBuffer(reinterpret_cast<__gm__ ElementC*>(params.ptrOut));
         int64_t totalM = 0;
         uint32_t ubListId = 0;
-        ubGmmResList[ubListId] = resource.ubBuf.template GetBufferByByte<ElementC>(0);
 
-        int64_t tailOffset = 0;
         blockEpilogue.Update(params.problemShape);
 
-        MatrixCoord outSplitCoord = outSplitScheduler.GetTask(params.batchSize, coreIdx, coreNum);
+        MatrixCoord outSplitCoord = outSplitScheduler.GetTask(params.batchSize, rawCoreIdx, rawCoreNum);
         blockEpilogue.ClearOutTile(
             gmOut[static_cast<int64_t>(outSplitCoord.row()) * params.problemShape.n()], outSplitCoord);
 
         if constexpr (!std::is_void_v<ElementSharedInput>) {
             AscendC::GlobalTensor<ElementSharedInput> gmSharedInput;
             gmSharedInput.SetGlobalBuffer(reinterpret_cast<__gm__ ElementSharedInput*>(params.ptrSharedInput));
-            auto outSharedSplitCoord = outSplitScheduler.GetTask(params.bsdp, coreIdx, coreNum);
+            auto outSharedSplitCoord = outSplitScheduler.GetTask(params.bsdp, rawCoreIdx, rawCoreNum);
             AscendC::SyncAll();
             blockEpilogue.AssignSharedInputTile(
                 gmSharedInput[static_cast<int64_t>(outSharedSplitCoord.row()) * params.problemShape.n()],
@@ -385,7 +421,10 @@ public:
         }
 
         AscendC::SyncAll();
+        AscendC::CrossCoreSetFlag<AIC_SYNC_AIV_MODE_2, PIPE_MTE3>(AIV_SYNC_AIC_FLAG + ubListId);
+        BlockScheduler blockScheduler(L1_TILE_M, L1_TILE_N);
         uint32_t lastGroupIdx = 0;
+        bool didAnyWork = false;
         for (uint32_t groupIdx = 0; groupIdx < params.problemCount; ++groupIdx) {
             uint32_t groupValue = groupList.GetValue(groupIdx);
             uint32_t currentM = groupValue;
@@ -395,42 +434,46 @@ public:
             }
             GemmCoord inGroupProblemShape{currentM, params.problemShape.n(), params.problemShape.k()};
 
-            blockScheduler.Update(inGroupProblemShape, MakeCoord(L1_TILE_M, L1_TILE_N));
+            blockScheduler.UpdateNextProblem(inGroupProblemShape);
             blockEpilogue.Update(inGroupProblemShape);
-            uint32_t coreLoops = blockScheduler.GetCoreLoops();
 
-            if (groupIdx == 0) {
-                tailOffset = blockScheduler.GetTailOffset();
+            // Last group: split the tail tiles to fill the otherwise idle cores of the final wave.
+            bool isLastGroup = (groupIdx + 1 == params.problemCount);
+            bool doTailSplit = isLastGroup && blockScheduler.NeedTailSplit();
+            if (doTailSplit) {
+                blockScheduler.UpdateTailTile();
             }
-            for (uint32_t loopIdx = 0; loopIdx < coreLoops; ++loopIdx) {
-                GemmCoord blockCoord = blockScheduler.GetBlockCoord(loopIdx);
-                GemmCoord actualBlockShape = blockScheduler.GetActualBlockShape(blockCoord);
-                if (actualBlockShape.n() == 0) {
+
+            GemmCoord blockCoord;
+            while (blockScheduler.GetTileIdx(blockCoord)) {
+                auto shape = blockScheduler.GetBlockShape(blockCoord);
+                if (shape.m == 0 || shape.n == 0) {
                     continue;
                 }
-                int64_t realNStart = blockCoord.n() * L1_TILE_N;
-                if (blockScheduler.GetIsTail(loopIdx)) {
-                    realNStart += tailOffset;
-                }
-                uint32_t coreZeroN = CeilDiv(actualBlockShape.n(), 2);
-                uint32_t coreOneN = actualBlockShape.n() - coreZeroN;
-                uint32_t curN = AscendC::GetSubBlockIdx() == 0 ? coreZeroN : coreOneN;
-                uint32_t curNOffset = AscendC::GetSubBlockIdx() == 0 ? 0 : coreZeroN;
+                uint32_t mInGroup = blockCoord.m() * L1_TILE_M + shape.mOffset;
+                uint32_t nOffset = blockCoord.n() * L1_TILE_N + shape.nOffset;
+                // 按 M 维切分：AIV0 处理 (m+1)/2 行，AIV1 处理剩余行
+                uint32_t coreZeroM = CeilDiv(shape.m, 2);
+                uint32_t coreOneM = shape.m - coreZeroM;
+                uint32_t curM = AscendC::GetSubBlockIdx() == 0 ? coreZeroM : coreOneM;
+                uint32_t curMOffset = AscendC::GetSubBlockIdx() == 0 ? 0 : coreZeroM;
 
-                realNStart += curNOffset;
-                int64_t gmOffsetC = coreIdx / 2 * L1_TILE_M * L1_TILE_N + curNOffset;
-                int64_t gmOffsetLogit = gmGroupOffset + blockCoord.m() * L1_TILE_M;
-                GemmCoord workBlockShape = GemmCoord{actualBlockShape.m(), curN, 0};
-                GemmCoord gmmBlockShape = GemmCoord{actualBlockShape.m(), actualBlockShape.n(), 0};
+                int64_t gmOffsetLogit = gmGroupOffset + mInGroup + curMOffset;
+                GemmCoord workBlockShape = GemmCoord{curM, shape.n, 0};
 
-                blockEpilogue.template LogitScatterAddTile<AIC_SYNC_AIV_MODE_2>(
-                    ubGmmResList[ubListId], gmC[gmOffsetC], gmLogit[gmOffsetLogit], gmRowIndex[gmOffsetLogit],
-                    gmOut[realNStart], workBlockShape, gmmBlockShape, AIC_SYNC_AIV_FLAG + ubListId,
-                    AIV_SYNC_AIC_FLAG + ubListId);
+                blockEpilogue.template LogitScatterAddTileFromUb<AIC_SYNC_AIV_MODE_2>(
+                    gmLogit[gmOffsetLogit], gmRowIndex[gmOffsetLogit], gmOut[nOffset], workBlockShape,
+                    AIC_SYNC_AIV_FLAG + ubListId, AIV_SYNC_AIC_FLAG + ubListId);
+                didAnyWork = true;
             }
 
             totalM += inGroupProblemShape.m();
             gmGroupOffset += inGroupProblemShape.m();
+        }
+
+        // 如果该核从未进入循环（无任务分配），需主动 SetFlag 以避免 AIC 侧 final WaitFlag 死锁
+        if (!didAnyWork) {
+            AscendC::CrossCoreSetFlag<AIC_SYNC_AIV_MODE_2, PIPE_MTE3>(AIV_SYNC_AIC_FLAG + ubListId);
         }
 
         AscendC::PipeBarrier<PIPE_ALL>();
@@ -438,7 +481,6 @@ public:
 
 private:
     Arch::Resource<ArchTag> resource;
-    AscendC::LocalTensor<ElementC> ubGmmResList[UB_STAGES];
     constexpr static uint16_t AIC_SYNC_AIV_MODE_2 = 2;
     constexpr static uint16_t AIV_SYNC_AIC_FLAG = 4;
     constexpr static uint16_t AIC_SYNC_AIV_FLAG = 6;
@@ -471,4 +513,4 @@ private:
 
 } // namespace Catlass::Gemm::Kernel
 
-#endif // CATLASS_GEMM_KERNEL_GROUPED_MX_MATMUL_FINALIZE_ROUTING_TLA_HPP
+#endif // CATLASS_GEMM_KERNEL_GROUPED_MX_MATMUL_FINALIZE_ROUTING_NO_DETER_TLA_HPP

@@ -74,7 +74,7 @@ struct GemmGroupedAswtTailSplitSwizzle {
         : baseM_(baseM),
           baseN_(baseN),
           blockNum_(AscendC::GetBlockNum()),
-          blockIdx_(AscendC::GetBlockIdx()),
+          blockIdx_(AscendC::GetBlockIdx() / AscendC::GetSubBlockNum()),
           endBlockIdx_(AscendC::GetBlockNum() - 1)
     {
         // Tail-split N min alignment. For TransB (ColumnMajor weight) aclnn uses BLOCK_CUBE; for

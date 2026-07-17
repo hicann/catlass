@@ -13,3 +13,9 @@ add_kernel(NAME ascend950_fp8_mx_grouped_matmul_finalize_routing
     KERNEL_TYPE jit
     ${CMAKE_CURRENT_SOURCE_DIR}/fp8_mx_grouped_matmul_finalize_routing.cpp
     TEMPLATE ${CMAKE_CURRENT_SOURCE_DIR}/fp8_mx_grouped_matmul_finalize_routing_impl.cpp)
+
+add_kernel(NAME ascend950_fp8_mx_grouped_matmul_finalize_routing_no_deter
+    NPU_ARCH_LIST 3510
+    KERNEL_TYPE jit
+    ${CMAKE_CURRENT_SOURCE_DIR}/fp8_mx_grouped_matmul_finalize_routing_no_deter.cpp
+    TEMPLATE ${CMAKE_CURRENT_SOURCE_DIR}/fp8_mx_grouped_matmul_finalize_routing_no_deter_impl.cpp)

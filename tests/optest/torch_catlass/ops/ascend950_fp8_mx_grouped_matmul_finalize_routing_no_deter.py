@@ -2,7 +2,7 @@ import torch
 from torch import Tensor
 
 
-def ascend950_fp8_mx_grouped_matmul_finalize_routing(
+def ascend950_fp8_mx_grouped_matmul_finalize_routing_no_deter(
     mat1: Tensor,
     mat2: Tensor,
     mx_scale_a: Tensor,
@@ -20,12 +20,14 @@ def ascend950_fp8_mx_grouped_matmul_finalize_routing(
     trans_a: bool = False,
     trans_b: bool = False,
 ) -> Tensor:
-    """Run CATLASS Ascend950 MX FP8 grouped matmul + finalize routing on NPU tensors.
+    """Run CATLASS Ascend950 MX FP8 grouped matmul + finalize routing (non-deterministic) on NPU tensors.
 
-    Source: example 71_ascend950_fp8_mx_grouped_matmul_finalize_routing.
+    Source: example 71_ascend950_fp8_mx_grouped_matmul_finalize_routing (no_deter variant).
 
     Computes grouped MX-FP8 matmul with logit-weighted scatter-add aggregation,
     optional bias, and optional shared-input contribution (MoE routing post-process).
+    Uses non-deterministic scheduling (GemmGroupedAswtTailSplitSwizzle) for
+    potentially higher throughput.
 
     Args:
         mat1: Left input (float8_e4m3fn or float8_e5m2), shape ``(M, K)``.
@@ -48,7 +50,7 @@ def ascend950_fp8_mx_grouped_matmul_finalize_routing(
     Returns:
         FP32 output tensor with shape ``(batch, N)``.
     """
-    return torch.ops.catlass.ascend950_fp8_mx_grouped_matmul_finalize_routing(
+    return torch.ops.catlass.ascend950_fp8_mx_grouped_matmul_finalize_routing_no_deter(
         mat1,
         mat2,
         mx_scale_a,

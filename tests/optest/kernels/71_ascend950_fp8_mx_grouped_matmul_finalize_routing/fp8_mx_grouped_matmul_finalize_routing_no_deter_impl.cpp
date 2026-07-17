@@ -19,11 +19,12 @@ using std::size_t;
 
 #include <kernel_operator.h>
 
-#include "catlass/gemm/kernel/grouped_mx_matmul_finalize_routing_tla.hpp"
+#include "catlass/gemm/kernel/grouped_mx_matmul_finalize_routing_no_deter_tla.hpp"
 #include "catlass/arch/arch.hpp"
 #include "catlass/catlass.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/block/block_swizzle_grouped_aswt.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 #include "catlass/layout/layout.hpp"
@@ -93,7 +94,7 @@ extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::
     uint32_t batch = params->batch;
     uint32_t mxScaleK = CeilDiv<Catlass::MX_SCALE_GROUP_NUM>(k);
 
-    uint32_t aicCoreUsed = std::min(blockNum, n);
+    uint32_t aicCoreUsed = blockNum;
 
     Catlass::GemmCoord problemShape{m, n, k};
 
@@ -114,21 +115,21 @@ extern "C" void run(uint32_t blockNum, aclrtStream stream, const CatlassKernel::
     auto layoutMxScaleB = tla::MakeMxScaleLayout<ElementMxScale, LayoutTagB, true>(mxScaleK, n);
     auto layoutC = tla::MakeLayout<ElementC, LayoutTagC>(m, n);
 
-    using vecTileShape = Catlass::MatrixShape<tla::get<0>(L1TileShape{}), tla::get<1>(L1TileShape{}) / 2>;
+    using vecTileShape = Catlass::MatrixShape<tla::get<0>(L1TileShape{}) / 2, tla::get<1>(L1TileShape{})>;
 
-    using TileCopy = Catlass::Gemm::Tile::PackedMxTileCopyTla<
+    using TileCopy = Catlass::Gemm::Tile::PackedMxTileCopyTlaToUB<
         ArchTag, ElementA, LayoutTagA, ElementB, LayoutTagB, ElementMxScale, decltype(layoutMxScaleA), ElementMxScale,
-        decltype(layoutMxScaleB), ElementC, LayoutTagC, ElementBias>;
+        decltype(layoutMxScaleB), ElementC, LayoutTagC, ElementBias, Catlass::Gemm::Tile::CopyL0CToUBMode::SPLIT_M>;
     using BlockMmad = Catlass::Gemm::Block::BlockMmadMxFinalizeRoutingTla<
         DispatchPolicy, L1TileShape, L0TileShape, ElementA, ElementB, ElementC, ElementBias, TileCopy>;
 
     constexpr uint32_t UB_STAGES = 1;
     using EpilogueDispatchPolicy = Catlass::Epilogue::EpilogueAscend950FinalizeRouting<UB_STAGES>;
-    using BlockEpilogue = Catlass::Epilogue::Block::BlockEpilogueFinalizeRouting<
+    using BlockEpilogue = Catlass::Epilogue::Block::BlockEpilogueFinalizeRoutingNoDeter<
         EpilogueDispatchPolicy, ArchTag, vecTileShape, ElementC, ElementRowIndex, ElementSharedInput>;
 
-    using BlockScheduler = typename Catlass::Gemm::Block::ColumnBlockSwizzle;
-    using MatmulKernel = Catlass::Gemm::Kernel::GroupedMxMatmulFinalizeRoutingTla<
+    using BlockScheduler = typename Catlass::Gemm::Block::GemmGroupedAswtTailSplitSwizzle<>;
+    using MatmulKernel = Catlass::Gemm::Kernel::GroupedMxMatmulFinalizeRoutingNoDeterTla<
         BlockMmad, BlockEpilogue, BlockScheduler, ElementGroupList, ElementSharedInput>;
 
     typename MatmulKernel::Arguments arguments{

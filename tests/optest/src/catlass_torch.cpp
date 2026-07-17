@@ -383,6 +383,12 @@ using Ascend950Fp8MxGroupedMatmulFinalizeRoutingOp =
 static auto& ascend950_fp8_mx_grouped_matmul_finalize_routing = Ascend950Fp8MxGroupedMatmulFinalizeRoutingOp::Run;
 REGISTER_TORCH_FUNC(ascend950_fp8_mx_grouped_matmul_finalize_routing);
 
+using Ascend950Fp8MxGroupedMatmulFinalizeRoutingNoDeterOp =
+    MxGroupedMatmulFinalizeRoutingLike<CatlassKernel::Ascend950Fp8MxGroupedMatmulFinalizeRoutingNoDeter>;
+static auto& ascend950_fp8_mx_grouped_matmul_finalize_routing_no_deter =
+    Ascend950Fp8MxGroupedMatmulFinalizeRoutingNoDeterOp::Run;
+REGISTER_TORCH_FUNC(ascend950_fp8_mx_grouped_matmul_finalize_routing_no_deter);
+
 static auto& ascend950_flash_attention_chunk_prefill = Ascend950FlashAttentionChunkPrefillOp::Run;
 REGISTER_TORCH_FUNC(ascend950_flash_attention_chunk_prefill);
 

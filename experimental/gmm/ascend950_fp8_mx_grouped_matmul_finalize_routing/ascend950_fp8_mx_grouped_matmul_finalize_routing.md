@@ -25,6 +25,8 @@
 
 ### 模板组装
 
+#### 确定性版
+
 | 组件           | 模板类                                                                                                            | 说明                                                       |
 | -------------- | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
 | Kernel         | [GroupedMxMatmulFinalizeRoutingTla](../../../include/catlass/gemm/kernel/grouped_mx_matmul_finalize_routing_tla.hpp) | AIC/AIV双核协作，按group遍历，CrossCore Flag流水线同步     |
@@ -33,9 +35,19 @@
 | BlockEpilogue  | [BlockEpilogueFinalizeRouting](../../../include/catlass/epilogue/block/block_epilogue_finalize_routing.hpp)          | 输出清零 + SharedInput赋值 + Logit加权 + Scatter Add       |
 | BlockScheduler | [ColumnBlockSwizzle](../../../include/catlass/gemm/block/block_swizzle.hpp)                                          | 按列分块调度，分配到各AICore                               |
 
+#### 非确定性版（no_deter）
+
+| 组件 | 模板类 | 说明 |
+|------|--------|------|
+| Kernel | [GroupedMxMatmulFinalizeRoutingNoDeterTla](../../../include/catlass/gemm/kernel/grouped_mx_matmul_finalize_routing_no_deter_tla.hpp) | AIC/AIV双核协作，采用ASWT滚动调度，CrossCore Flag流水线同步 |
+| BlockMmad | [BlockMmadTla](../../../include/catlass/gemm/block/block_mmad_pingpong_tla.hpp) | MX量化矩阵乘，DispatchPolicy=`MmadMx<Ascend950, true, 16>`（与确定性版相同） |
+| TileCopy | [PackedMxTileCopyTla](../../../include/catlass/gemm/block/block_mmad.hpp) | GM→L1→UB数据搬运（与确定性版相同） |
+| BlockEpilogue | [BlockEpilogueFinalizeRoutingNoDeter](../../../include/catlass/epilogue/block/block_epilogue_finalize_routing_no_deter.hpp) | 输出清零 + SharedInput赋值 + Logit加权 + Scatter Add，AIV按M维切分 |
+| BlockScheduler | [GemmGroupedAswtTailSplitSwizzle](../../../include/catlass/gemm/block/block_swizzle_grouped_aswt.hpp) | 滚动核分配 + 窗口调度，支持尾块多核拆分 |
+
 ### AIC/AIV双核协作
 
-- **AIC**：遍历所有group，对每个group按ColumnBlockSwizzle分配tile任务，执行MX FP8矩阵乘（含可选bias），结果写入GM workspace。通过`CrossCoreSetFlag(6)`通知AIV结果就绪，`CrossCoreWaitFlag(4)`等待AIV消费完毕。
+- **AIC**：遍历所有group，对每个group按BlockScheduler分配tile任务（确定性版使用`ColumnBlockSwizzle`，非确定性版使用`GemmGroupedAswtTailSplitSwizzle`），执行MX FP8矩阵乘（含可选bias），结果写入GM workspace。通过`CrossCoreSetFlag(6)`通知AIV结果就绪，`CrossCoreWaitFlag(4)`等待AIV消费完毕。
 - **AIV**：
   1. **预处理阶段**：清零输出区域（`ClearOutTile`），可选地加载共享专家输出（`AssignSharedInputTile`）
   2. **后处理阶段**：通过`CrossCoreWaitFlag(6)`等待AIC完成当前tile，从workspace读取GMM结果，执行Logit加权（`Muls`）+ Scatter Add（原子累加到输出），完成后`CrossCoreSetFlag(4)`通知AIC
@@ -51,9 +63,10 @@ AIV:  ──WaitFlag(6)──[后处理 tile 0]──SetFlag(4)──WaitFlag(6)
 - Flag ID `6`（`AIC_SYNC_AIV_FLAG`）：AIC → AIV 方向
 - 使用 `AIC_SYNC_AIV_MODE_2` 模式，实现tile粒度的流水线化交替执行
 
-#### AIV SubBlock列分裂
+#### AIV SubBlock分裂
 
-每个AIC核配2个AIV子核（通过`GetSubBlockIdx`），N维度一分为二并行处理，`vecTileShape`为`MatrixShape<L1_M, L1_N/2>`。
+- **确定性版**：每个AIC核配2个AIV子核（通过`GetSubBlockIdx`），**N维**一分为二并行处理，`vecTileShape`为`MatrixShape<L1_M, L1_N/2>`。
+- **非确定性版（no_deter）**：每个AIC核配2个AIV子核，**M维**一分为二并行处理，`vecTileShape`为`MatrixShape<L1_M/2, L1_N>`。
 
 ### Finalize Routing详细设计
 
@@ -164,3 +177,35 @@ $$\mathbb{1}_{\text{shared}}(r) = \begin{cases} 1, & \text{SharedInput} \neq \te
 | ------ | --------------- |
 | L1Tile | 256 × 256 × 256 |
 | L0Tile | 256 × 256 × 128 |
+
+### 非确定性版（no_deter）设计差异
+
+非确定性版（`fp8_mx_grouped_matmul_finalize_routing_no_deter.cpp`）与确定性版共享相同的计算逻辑（MX FP8反量化 + 分组矩阵乘 + Finalize Routing），仅在**调度方式**和**AIV后处理切分方向**上有所不同。
+
+#### 调度器：GemmGroupedAswtTailSplitSwizzle
+
+确定性版使用 `ColumnBlockSwizzle` 按列分块调度，每个 group 的 tile 按固定列顺序分配给 AICore。
+
+非确定性版改用 [GemmGroupedAswtTailSplitSwizzle](../../../include/catlass/gemm/block/block_swizzle_grouped_aswt.hpp)，主要特性：
+
+1. **滚动核分配**：`startBlockIdx_` 跨 group 滚动，避免所有 group 的起始核固定对齐，提升多核利用率
+2. **窗口调度**：通过滑动窗口限制同时在飞的 tile 数，降低资源竞争
+3. **尾块多核拆分（UpdateTailTile）**：最后一个 group 的尾部 tile 在满足条件时可拆分到多个核并行处理，改善负载均衡
+4. **AswtBlockShape**：`GetBlockShape` 返回 `AswtBlockShape{m, n, mOffset, nOffset}`，tile 坐标需加上 mOffset/nOffset 偏移
+
+#### AIV后处理切分方向
+
+| 对比项 | 确定性版 | 非确定性版 |
+|--------|---------|-----------|
+| AIV SubBlock切分 | N维一分为二（2个子核各处理 N/2 列） | M维一分为二（2个子核各处理 M/2 行） |
+| `vecTileShape` | `MatrixShape<L1_M, L1_N/2>` | `MatrixShape<L1_M/2, L1_N>` |
+| BlockEpilogue | `BlockEpilogueFinalizeRouting` | `BlockEpilogueFinalizeRoutingNoDeter` |
+
+#### 同步协议
+
+AIC/AIV 的 CrossCore Flag 同步协议（Flag 4/6、`AIC_SYNC_AIV_MODE_2`）与确定性版完全一致，workspace 布局和数据流也相同。
+
+#### 适用场景
+
+- **确定性版**：适用于对输出确定性（bit-exact reproducibility）有严格要求的场景
+- **非确定性版**：适用于对确定性无要求、追求更高多核利用率和吞吐的场景，尤其在 group 数较多或尾部 tile 负载不均时优势更明显

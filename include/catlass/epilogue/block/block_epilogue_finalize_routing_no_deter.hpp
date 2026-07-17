@@ -8,8 +8,8 @@
  * See LICENSE in the root of the software repository for the full text of the License.
  */
 
-#ifndef CATLASS_EPILOGUE_BLOCK_BLOCK_EPILOGUE_FINALIZE_ROUTING_HPP
-#define CATLASS_EPILOGUE_BLOCK_BLOCK_EPILOGUE_FINALIZE_ROUTING_HPP
+#ifndef CATLASS_EPILOGUE_BLOCK_BLOCK_EPILOGUE_FINALIZE_ROUTING_NO_DETER_HPP
+#define CATLASS_EPILOGUE_BLOCK_BLOCK_EPILOGUE_FINALIZE_ROUTING_NO_DETER_HPP
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/resource.hpp"
@@ -23,10 +23,13 @@
 
 namespace Catlass::Epilogue::Block {
 using namespace Catlass::Epilogue::Tile;
+// 非确定性版本的 BlockEpilogue，AIV 侧按 M 维切分（而非原版的 N 维切分）。
+// VecTileShape 的 ROW 为子核处理的 M 行数（通常为 L1_TILE_M/2），
+// COLUMN 为完整 N 宽度（L1_TILE_N）。
 template <
     class DispatchPolicy_, class ArchTag_, class VecTileShape_, class ElementC_, class ElementRowIndex_,
     class ElementSharedInput_>
-class BlockEpilogueFinalizeRouting {
+class BlockEpilogueFinalizeRoutingNoDeter {
 public:
     using DispatchPolicy = DispatchPolicy_;
     using ArchTag = ArchTag_;
@@ -45,15 +48,14 @@ public:
     static constexpr uint32_t ONE_DATA_BLOCK_SIZE = 32;
     static constexpr uint32_t ONE_BLOCK_ELEMENT = ONE_DATA_BLOCK_SIZE / sizeof(ElementC); // 8
     static constexpr uint32_t ONE_REPEAT_ELEMENT = ONE_REPEAT_SIZE / sizeof(ElementC);    // 64
-    static constexpr uint32_t MAX_VECTOR_REPEAT_COUNT = 255;
-    static constexpr uint32_t MAX_REPEAT_SPLIT_HALF = (MAX_VECTOR_REPEAT_COUNT + 1) / 2;
+    static constexpr uint32_t MAX_OUTPUT_M_UB = 32;
 
     static constexpr size_t UB_BUF_GMM_BYTES = EPILOGUE_TILE_M * EPILOGUE_TILE_N * sizeof(ElementC);
     static constexpr size_t UB_BUF_ROW_INDEX_BYTES = EPILOGUE_TILE_M * sizeof(ElementRowIndex);
     static constexpr size_t UB_BUF_LOGIT_BYTES = EPILOGUE_TILE_M * sizeof(ElementC);
-    static constexpr size_t UB_BUF_LOGIT_BRCB_BYTES = UB_BUF_LOGIT_BYTES * ONE_BLOCK_ELEMENT;
+    static constexpr size_t UB_BUF_OUT_CHUNK_BYTES = MAX_OUTPUT_M_UB * EPILOGUE_TILE_N * sizeof(ElementC);
     static constexpr size_t UB_PER_STAGE =
-        UB_BUF_GMM_BYTES + UB_BUF_LOGIT_BYTES + UB_BUF_LOGIT_BRCB_BYTES + UB_BUF_ROW_INDEX_BYTES;
+        UB_BUF_GMM_BYTES + UB_BUF_LOGIT_BYTES + UB_BUF_ROW_INDEX_BYTES + 2 * UB_BUF_OUT_CHUNK_BYTES;
 
     static constexpr size_t MAX_CLEAR_GM_COUNT = 50 * 1024;
 
@@ -64,10 +66,14 @@ public:
     static constexpr size_t UB_PER_STAGE_SHARED_INPUT =
         UB_BUF_SHARED_INPUT + UB_BUF_SHARED_INPUT_CAST + UB_BUF_SHARED_OUTPUT;
 
-    static_assert(UB_STAGES * UB_PER_STAGE <= ArchTag::UB_SIZE, "UB budget exceeded for BlockEpilogueFinalizeRouting");
+    static_assert(
+        UB_STAGES * UB_PER_STAGE <= ArchTag::UB_SIZE, "UB budget exceeded for BlockEpilogueFinalizeRoutingNoDeter");
     static_assert(
         UB_STAGES * UB_PER_STAGE_SHARED_INPUT <= ArchTag::UB_SIZE,
-        "UB budget exceeded for BlockEpilogueFinalizeRouting");
+        "UB budget exceeded for BlockEpilogueFinalizeRoutingNoDeter");
+    // ubBufClearGm 在 clear 阶段独占 UB，计算完成后才复用给 shared-input 阶段，
+    // 故单独校验其不超过 UB 总容量即可，避免调参后隐性溢出。
+    static_assert(MAX_CLEAR_GM_COUNT * sizeof(ElementC) <= ArchTag::UB_SIZE, "ubBufClearGm exceeds UB size");
 
     GemmCoord problemShape;
     using LayoutTagMatric = layout::RowMajor;
@@ -91,13 +97,13 @@ public:
     CopySharedInputGm2UbVec copySharedGm2UbVec;
 
     CATLASS_DEVICE
-    BlockEpilogueFinalizeRouting(Arch::Resource<ArchTag>& resource)
+    BlockEpilogueFinalizeRoutingNoDeter(Arch::Resource<ArchTag>& resource)
     {
         AllocateUbBuffers(resource);
     }
 
     CATLASS_DEVICE
-    ~BlockEpilogueFinalizeRouting()
+    ~BlockEpilogueFinalizeRoutingNoDeter()
     {}
     CATLASS_DEVICE
     void Update(GemmCoord const& problemShape_)
@@ -160,26 +166,26 @@ public:
         }
     }
 
+    CATLASS_DEVICE
+    AscendC::LocalTensor<ElementC> GetL0c2UbTensor()
+    {
+        return l0cOutUb_;
+    }
+
+    // AIC 直写 UB 版本：数据已通过 Fixpipe 写入 ubBufGmm，跳过 GM→UB 拷贝。
     template <uint16_t SYNC_MODE>
-    CATLASS_DEVICE void LogitScatterAddTile(
-        AscendC::LocalTensor<ElementC> const& ubBufGmm1, AscendC::GlobalTensor<ElementC> const& gmmInputTile,
+    CATLASS_DEVICE void LogitScatterAddTileFromUb(
         AscendC::GlobalTensor<ElementC> const& gmLogitTile,
         AscendC::GlobalTensor<ElementRowIndex> const& gmRowIndexTile, AscendC::GlobalTensor<ElementC> const& gmOutTile,
-        GemmCoord const& tileShape, GemmCoord const& gmmTileShape, uint16_t waitFlagId, uint16_t setFlagId)
+        GemmCoord const& tileShape, uint16_t waitFlagId, uint16_t setFlagId)
     {
-        if (tileShape.n() == 0) {
+        if (tileShape.m() == 0 || tileShape.n() == 0) {
             AscendC::CrossCoreWaitFlag<SYNC_MODE>(waitFlagId);
             AscendC::CrossCoreSetFlag<SYNC_MODE, PIPE_MTE3>(setFlagId);
             return;
         }
-        auto layoutGmmSrc = LayoutTagMatric(tileShape.m(), tileShape.n(), LayoutTagMatric::LongIndex(gmmTileShape.n()));
-        auto layoutGmmDst =
-            LayoutTagMatric(tileShape.m(), tileShape.n(), LayoutTagMatric::LongIndex(RoundUp(tileShape.n(), 8)));
-        AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
-        AscendC::WaitFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID0);
+        // === 阶段 A：等待 AIC Fixpipe 完成，数据已在 ubBufGmm 中 ===
         AscendC::CrossCoreWaitFlag<SYNC_MODE>(waitFlagId);
-        copyGm2UbMatrix(ubBufGmm, gmmInputTile, layoutGmmDst, layoutGmmSrc);
-        AscendC::CrossCoreSetFlag<SYNC_MODE, PIPE_MTE2>(setFlagId);
 
         auto layoutVecSrc = LayoutTagVec(tileShape.m());
         auto layoutVecDst = LayoutTagVec(tileShape.m());
@@ -189,57 +195,53 @@ public:
         AscendC::SetFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
         AscendC::WaitFlag<AscendC::HardEvent::MTE2_V>(EVENT_ID1);
 
-        bool isOverRepeatMax = tileShape.m() > MAX_VECTOR_REPEAT_COUNT;
-        uint32_t repeatCount = isOverRepeatMax ? MAX_VECTOR_REPEAT_COUNT : tileShape.m();
-
-        if (isOverRepeatMax) {
-            AscendC::Brcb(ubBufLogitBrcb, ubBufLogit, MAX_REPEAT_SPLIT_HALF, {1, ONE_BLOCK_ELEMENT});
-            AscendC::Brcb(
-                ubBufLogitBrcb[MAX_REPEAT_SPLIT_HALF * ONE_BLOCK_ELEMENT], ubBufLogit[MAX_REPEAT_SPLIT_HALF],
-                MAX_REPEAT_SPLIT_HALF, {1, ONE_BLOCK_ELEMENT});
-        } else {
-            AscendC::Brcb(ubBufLogitBrcb, ubBufLogit, repeatCount, {1, ONE_BLOCK_ELEMENT});
-        }
-        AscendC::PipeBarrier<PIPE_V>();
-        uint8_t dstRepStrideIn = RoundUp(tileShape.n(), ALIGNED_VALUE) / ONE_BLOCK_ELEMENT;
-        AscendC::BinaryRepeatParams repeatParams{1, 1, 0, dstRepStrideIn, dstRepStrideIn, 1};
-        for (size_t idx = 0; idx < tileShape.n() / ONE_REPEAT_ELEMENT; idx++) {
-            AscendC::Mul(
-                ubBufGmm[idx * ONE_REPEAT_ELEMENT], ubBufGmm[idx * ONE_REPEAT_ELEMENT], ubBufLogitBrcb,
-                ONE_REPEAT_ELEMENT, repeatCount, repeatParams);
-        }
-        if (tileShape.n() % ONE_REPEAT_ELEMENT != 0) {
-            AscendC::Mul(
-                ubBufGmm[tileShape.n() / ONE_REPEAT_ELEMENT * ONE_REPEAT_ELEMENT],
-                ubBufGmm[tileShape.n() / ONE_REPEAT_ELEMENT * ONE_REPEAT_ELEMENT], ubBufLogitBrcb,
-                tileShape.n() % ONE_REPEAT_ELEMENT, repeatCount, repeatParams);
-        }
-        if (isOverRepeatMax) {
-            AscendC::Mul(
-                ubBufGmm[repeatCount * dstRepStrideIn * ONE_BLOCK_ELEMENT],
-                ubBufGmm[repeatCount * dstRepStrideIn * ONE_BLOCK_ELEMENT],
-                ubBufLogitBrcb[repeatCount * ONE_BLOCK_ELEMENT], ONE_REPEAT_ELEMENT,
-                CeilDiv(tileShape.n(), ONE_REPEAT_ELEMENT), {1, 1, 0, 8, 8, 0});
-        }
-        AscendC::PipeBarrier<PIPE_V>();
+        // === 阶段 B：分块流水循环（VFDoLogitMuls → outUb ping/pong → MTE3 写出） ===
+        uint64_t alignN = CeilDiv(tileShape.n(), (uint64_t)ONE_BLOCK_ELEMENT) * ONE_BLOCK_ELEMENT;
+        uint64_t vlForFloatNumber = 256 / sizeof(ElementC);
+        auto repeatTimesRe = CeilDiv(tileShape.n(), (uint32_t)vlForFloatNumber);
+        uint32_t loopNumY = CeilDiv(tileShape.m(), MAX_OUTPUT_M_UB);
+        uint32_t remainM = (tileShape.m() % MAX_OUTPUT_M_UB != 0) ? tileShape.m() % MAX_OUTPUT_M_UB : MAX_OUTPUT_M_UB;
         auto layoutMatricOutSrc = LayoutTagMatric(1, tileShape.n());
         auto layoutMatricOutDst = LayoutTagMatric(1, tileShape.n());
-        AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID2);
-        AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID2);
 
-        AscendC::SetFlag<AscendC::HardEvent::MTE2_S>(EVENT_ID3);
-        AscendC::WaitFlag<AscendC::HardEvent::MTE2_S>(EVENT_ID3);
+        AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(0);
+        AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(1);
+        yCrossPingPongID_ = 0;
+
         AscendC::SetAtomicAdd<ElementC>();
-        for (size_t idx = 0; idx < tileShape.m(); idx++) {
-            int64_t resRowIdx = ubBufRowIndex.GetValue(idx);
-            int64_t ubOffset = idx * RoundUp(tileShape.n(), ALIGNED_VALUE);
-            AscendC::SetFlag<AscendC::HardEvent::S_MTE3>(EVENT_ID4);
-            AscendC::WaitFlag<AscendC::HardEvent::S_MTE3>(EVENT_ID4);
-            copyUb2GmMatrix(
-                gmOutTile[resRowIdx * problemShape.n()], ubBufGmm[ubOffset], layoutMatricOutDst, layoutMatricOutSrc);
-            AscendC::PipeBarrier<PIPE_MTE3>();
+        for (uint32_t i = 0; i < loopNumY; i++) {
+            AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(yCrossPingPongID_);
+            uint32_t chunkM = (i == loopNumY - 1) ? remainM : MAX_OUTPUT_M_UB;
+            auto outUb = yCrossPingPongID_ == 0 ? outUbPing_ : outUbPong_;
+            uint32_t chunkRowOffset = i * MAX_OUTPUT_M_UB;
+
+            VFDoLogitMuls(
+                chunkRowOffset * alignN, chunkRowOffset, chunkM, repeatTimesRe, (__ubuf__ ElementC*)outUb.GetPhyAddr(),
+                ubBufGmm, ubBufLogit, alignN, vlForFloatNumber, tileShape.n());
+
+            AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(yCrossPingPongID_);
+            // 最后一次迭代：ubBufGmm 已读完，通知 AIC 可写下一 tile（与 MTE3 写出并行）
+            if (i == loopNumY - 1) {
+                AscendC::CrossCoreSetFlag<SYNC_MODE, PIPE_V>(setFlagId);
+            }
+            AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(yCrossPingPongID_);
+
+            AscendC::SetFlag<AscendC::HardEvent::MTE2_S>(EVENT_ID3);
+            AscendC::WaitFlag<AscendC::HardEvent::MTE2_S>(EVENT_ID3);
+            for (uint32_t j = 0; j < chunkM; j++) {
+                int64_t resRowIdx = ubBufRowIndex.GetValue(chunkRowOffset + j);
+                int64_t ubOffset = j * alignN;
+                AscendC::SetFlag<AscendC::HardEvent::S_MTE3>(EVENT_ID4);
+                AscendC::WaitFlag<AscendC::HardEvent::S_MTE3>(EVENT_ID4);
+                copyUb2GmMatrix(
+                    gmOutTile[resRowIdx * problemShape.n()], outUb[ubOffset], layoutMatricOutDst, layoutMatricOutSrc);
+            }
+            AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(yCrossPingPongID_);
+            yCrossPingPongID_ = (yCrossPingPongID_ + 1) & 1;
         }
         AscendC::DisableDmaAtomic();
+        AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(0);
+        AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(1);
     }
 
 private:
@@ -250,8 +252,42 @@ private:
 
     AscendC::LocalTensor<ElementC> ubBufGmm;
     AscendC::LocalTensor<ElementC> ubBufLogit;
-    AscendC::LocalTensor<ElementC> ubBufLogitBrcb;
     AscendC::LocalTensor<ElementRowIndex> ubBufRowIndex;
+    AscendC::LocalTensor<ElementC> outUbPing_;
+    AscendC::LocalTensor<ElementC> outUbPong_;
+    AscendC::LocalTensor<ElementC> l0cOutUb_;
+    uint16_t yCrossPingPongID_ = 0;
+
+    // 使用 __VEC_SCOPE__ + MicroAPI 实现 Logit 乘法（参考 block_epilogue_finalize_routing.h）
+    // 通过 DIST_BRC_B32 内联广播 logit 值，避免单独的 Brcb 步骤
+    CATLASS_DEVICE
+    void VFDoLogitMuls(
+        uint32_t offsetRe, uint32_t offsetLogit, uint16_t repeatTimesLogit, uint16_t repeatTimesRe,
+        __ubuf__ ElementC* outUbAddr, AscendC::LocalTensor<ElementC> gmmUb, AscendC::LocalTensor<ElementC> logitUb,
+        uint64_t alignN, uint64_t vlForFloatNumber, uint32_t actualN)
+    {
+        __ubuf__ ElementC* gmmUbAddr = (__ubuf__ ElementC*)gmmUb.GetPhyAddr();
+        __ubuf__ ElementC* logitUbAddr = (__ubuf__ ElementC*)logitUb.GetPhyAddr();
+        gmmUbAddr += offsetRe;
+        logitUbAddr += offsetLogit;
+        __VEC_SCOPE__
+        {
+            AscendC::MicroAPI::RegTensor<ElementC> vregLogit;
+            AscendC::MicroAPI::RegTensor<ElementC> vregRe, vDstReg;
+            AscendC::MicroAPI::MaskReg mask;
+            for (uint16_t i = 0; i < repeatTimesLogit; ++i) {
+                AscendC::MicroAPI::DataCopy<ElementC, AscendC::MicroAPI::LoadDist::DIST_BRC_B32>(
+                    vregLogit, logitUbAddr + i);
+                uint32_t elementNum = actualN;
+                for (uint16_t j = 0; j < repeatTimesRe; ++j) {
+                    mask = AscendC::MicroAPI::UpdateMask<ElementC>(elementNum);
+                    AscendC::MicroAPI::DataCopy(vregRe, gmmUbAddr + i * alignN + j * vlForFloatNumber);
+                    AscendC::MicroAPI::Mul(vDstReg, vregLogit, vregRe, mask);
+                    AscendC::MicroAPI::DataCopy(outUbAddr + i * alignN + j * vlForFloatNumber, vDstReg, mask);
+                }
+            }
+        }
+    }
 
     CATLASS_DEVICE
     void AllocateUbBuffers(Arch::Resource<ArchTag>& resource)
@@ -267,13 +303,16 @@ private:
 
         offset = 0;
         ubBufGmm = resource.ubBuf.template GetBufferByByte<ElementC>(offset);
+        l0cOutUb_ = ubBufGmm;
         offset += UB_BUF_GMM_BYTES;
         ubBufRowIndex = resource.ubBuf.template GetBufferByByte<ElementRowIndex>(offset);
         offset += UB_BUF_ROW_INDEX_BYTES;
         ubBufLogit = resource.ubBuf.template GetBufferByByte<ElementC>(offset);
         offset += UB_BUF_LOGIT_BYTES;
-        ubBufLogitBrcb = resource.ubBuf.template GetBufferByByte<ElementC>(offset);
-        offset += UB_BUF_LOGIT_BRCB_BYTES;
+        outUbPing_ = resource.ubBuf.template GetBufferByByte<ElementC>(offset);
+        offset += UB_BUF_OUT_CHUNK_BYTES;
+        outUbPong_ = resource.ubBuf.template GetBufferByByte<ElementC>(offset);
+        offset += UB_BUF_OUT_CHUNK_BYTES;
     }
 };
 
@@ -281,4 +320,4 @@ private:
 
 #endif // (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510)
 
-#endif // CATLASS_EPILOGUE_BLOCK_BLOCK_EPILOGUE_FINALIZE_ROUTING_HPP
+#endif // CATLASS_EPILOGUE_BLOCK_BLOCK_EPILOGUE_FINALIZE_ROUTING_NO_DETER_HPP

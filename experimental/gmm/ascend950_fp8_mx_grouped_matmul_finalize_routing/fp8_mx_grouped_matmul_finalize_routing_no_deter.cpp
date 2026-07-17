@@ -4,9 +4,9 @@
  * This file is a part of the CANN Open Software.
  * Licensed under CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
- * BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE. See LICENSE in the root of
- * the software repository for the full text of the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE. See LICENSE in
+ * the root of the software repository for the full text of the License.
  */
 
 #ifndef K_MAX_SHAPE_DIM
@@ -23,8 +23,9 @@
 #include "catlass/arch/arch.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/block/block_swizzle_grouped_aswt.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
-#include "catlass/gemm/kernel/grouped_mx_matmul_finalize_routing_tla.hpp"
+#include "catlass/gemm/kernel/grouped_mx_matmul_finalize_routing_no_deter_tla.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 #include "catlass/layout/layout.hpp"
 #include "catlass/status.hpp"
@@ -99,6 +100,11 @@ struct GroupedGemmFinalizeRoutingOptions : public GroupedGemmOptions {
             deviceId = std::atoi(argv[static_cast<uint32_t>(ArgsIndex::DEVICE_ID_INDEX)]);
         }
 
+        if (dataParallelSize == 0) {
+            std::cerr << "Invalid data_parallel_size: must not be 0" << std::endl;
+            return -1;
+        }
+
         if (quantDataTypes.end() == std::find(quantDataTypes.begin(), quantDataTypes.end(), quantDataType)) {
             std::cerr << "Invalid quantData type: " << quantDataType << std::endl;
             return -1;
@@ -141,8 +147,8 @@ bool SaveResult(const std::string& filename, const std::vector<T>& data, const s
 }
 
 template <
-    class ElementA, class ElementB, class L1TileShape, class L0TileShape, bool transB = false, bool enableBias = false,
-    bool enableSharedInput = false>
+    typename ElementA, class ElementB, class L1TileShape, class L0TileShape, bool transB = false,
+    bool enableBias = false, bool enableSharedInput = false>
 void MxGroupedMatmulFinalizeRouting(Options const& options)
 {
     aclrtStream stream{nullptr};
@@ -321,8 +327,8 @@ void MxGroupedMatmulFinalizeRouting(Options const& options)
         releaseAcl();
     };
 
+    // GemmGroupedAswtTailSplitSwizzle: 滚动核分配 + 窗口调度，支持尾块拆分。
     auto aicCoreNum = platform_ascendc::PlatformAscendCManager::GetInstance()->GetCoreNumAic();
-    aicCoreNum = aicCoreNum > n ? n : aicCoreNum;
 
     using ArchTag = Arch::Ascend950;
     constexpr bool enableUnitFlag = true;
@@ -333,19 +339,19 @@ void MxGroupedMatmulFinalizeRouting(Options const& options)
     auto layoutMxScaleA = tla::MakeMxScaleLayout<ElementMxScale, LayoutTagA, false>(m, mxScaleK);
     auto layoutMxScaleB = tla::MakeMxScaleLayout<ElementMxScale, LayoutTagB, true>(mxScaleK, n);
     auto layoutC = tla::MakeLayout<ElementC, LayoutTagC>(m, n);
-    using vecTileShape = MatrixShape<tla::get<0>(L1TileShape{}), tla::get<1>(L1TileShape{}) / 2>;
+    using vecTileShape = MatrixShape<tla::get<0>(L1TileShape{}) / 2, tla::get<1>(L1TileShape{})>;
 
-    using TileCopy = Gemm::Tile::PackedMxTileCopyTla<
+    using TileCopy = Gemm::Tile::PackedMxTileCopyTlaToUB<
         ArchTag, ElementA, LayoutTagA, ElementB, LayoutTagB, ElementMxScale, decltype(layoutMxScaleA), ElementMxScale,
-        decltype(layoutMxScaleB), ElementC, LayoutTagC, ElementBias>;
+        decltype(layoutMxScaleB), ElementC, LayoutTagC, ElementBias, Gemm::Tile::CopyL0CToUBMode::SPLIT_M>;
     using BlockMmad = Gemm::Block::BlockMmadMxFinalizeRoutingTla<
         DispatchPolicy, L1TileShape, L0TileShape, ElementA, ElementB, ElementC, ElementBias, TileCopy>;
     constexpr uint32_t UB_STAGES = 1;
     using EpilogueDispatchPolicy = Epilogue::EpilogueAscend950FinalizeRouting<UB_STAGES>;
-    using BlockEpilogue = Epilogue::Block::BlockEpilogueFinalizeRouting<
+    using BlockEpilogue = Epilogue::Block::BlockEpilogueFinalizeRoutingNoDeter<
         EpilogueDispatchPolicy, ArchTag, vecTileShape, ElementC, ElementRowIndex, ElementSharedInput>;
-    using BlockScheduler = typename Gemm::Block::ColumnBlockSwizzle;
-    using MatmulKernel = Gemm::Kernel::GroupedMxMatmulFinalizeRoutingTla<
+    using BlockScheduler = typename Gemm::Block::GemmGroupedAswtTailSplitSwizzle<>;
+    using MatmulKernel = Gemm::Kernel::GroupedMxMatmulFinalizeRoutingNoDeterTla<
         BlockMmad, BlockEpilogue, BlockScheduler, ElementGroupList, ElementSharedInput>;
     using MatmulAdapter = Gemm::Device::DeviceGemm<MatmulKernel>;
     typename MatmulKernel::Arguments arguments{
