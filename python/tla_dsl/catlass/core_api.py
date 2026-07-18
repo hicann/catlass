@@ -3143,6 +3143,12 @@ def pipe_barrier(pipe: PipeLike, *, loc: mlir_ir.Location | None = None) -> None
     _runtime._require_enclosing_cube_or_vector("pipe_barrier")
     ctx = loc.context if loc is not None else mlir_ir.Context()
     pipe_value = str(_token(pipe)).lower()
+    cube_pipes = [ "cube", "mte1", "mte2", "fix", "all" ]
+    vector_pipes = [ "mte2", "mte3", "all" ] # NOTE: arch 3510 do not support pipe_barrier<pipe_v> specific
+    if _runtime._has_enclosing_region("cube") and pipe_value not in cube_pipes:
+        raise TlaLoweringError(f"in cube pipe_barrier only support {cube_pipes}, got {pipe_value}")
+    elif _runtime._has_enclosing_region("vector") and pipe_value not in vector_pipes:
+        raise TlaLoweringError(f"in vector pipe_barrier only support {vector_pipes}, got {pipe_value}")
     pipe_attr = mlir_ir.Attribute.parse(f"#tla.pipe<{pipe_value}>", context=ctx)
     return _tla_ops_gen.pipe_barrier(pipe_attr, loc=loc)
 

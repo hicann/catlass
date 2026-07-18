@@ -167,13 +167,33 @@ def bad_make_coord_float_component() -> None:
 def bad_make_coord_non_index_arg(coord: "f16") -> None:
     tla.make_coord(coord, 0)
 
+@tla.kernel
+def pipe_barrier_aic_kernel() -> None:
+    with tla.cube():
+        tla.pipe_barrier(tla.pipes.CUBE)
+        tla.pipe_barrier(tla.pipes.MTE1)
+        tla.pipe_barrier(tla.pipes.MTE2)
+        tla.pipe_barrier(tla.pipes.FIX)
+        tla.pipe_barrier(tla.pipes.ALL)
 
 @tla.kernel
-def pipe_barrier_kernel() -> None:
+def pipe_barrier_aiv_kernel() -> None:
     with tla.vector():
         tla.pipe_barrier(tla.pipes.MTE2)
-        tla.pipe_barrier(tla.pipes.CUBE)
+        tla.pipe_barrier(tla.pipes.MTE3)
         tla.pipe_barrier(tla.pipes.ALL)
+
+
+@tla.kernel
+def bad_pipe_barrier_aic_mte3_kernel() -> None:
+    with tla.cube():
+        tla.pipe_barrier(tla.pipes.MTE3)
+
+
+@tla.kernel
+def bad_pipe_barrier_aiv_cube_kernel() -> None:
+    with tla.vector():
+        tla.pipe_barrier(tla.pipes.CUBE)
 
 
 @tla.kernel
@@ -459,24 +479,42 @@ def test_make_coord_rejects_non_index_arg() -> None:
     with pytest.raises(tla.TlaCoreAPIError, match="tla.make_coord"):
         _ = bad_make_coord_non_index_arg.dump_mlir(type_args=(1.0,))
 
-
-def test_pipe_barrier_lowers_pipe_attr(compiler_tlair) -> None:
-    mlir = compiler_tlair(pipe_barrier_kernel)
-    assert "#tla.pipe<mte2>" in mlir
+def test_aic_pipe_barrier_lowers_pipe_attr(compiler_tlair) -> None:
+    mlir = compiler_tlair(pipe_barrier_aic_kernel)
     assert "#tla.pipe<cube>" in mlir
+    assert "#tla.pipe<mte1>" in mlir
+    assert "#tla.pipe<mte2>" in mlir
+    assert "#tla.pipe<fix>" in mlir
     assert "#tla.pipe<all>" in mlir
 
 
+def test_aiv_pipe_barrier_lowers_pipe_attr(compiler_tlair) -> None:
+    mlir = compiler_tlair(pipe_barrier_aiv_kernel)
+    assert "#tla.pipe<mte2>" in mlir
+    assert "#tla.pipe<mte3>" in mlir
+    assert "#tla.pipe<all>" in mlir
+
+
+def test_aic_pipe_barrier_rejects_mte3(compiler_tlair) -> None:
+    with pytest.raises(TlaLoweringError, match="pipe_barrier"):
+        compiler_tlair(bad_pipe_barrier_aic_mte3_kernel)
+
+
+def test_aiv_pipe_barrier_rejects_cube(compiler_tlair) -> None:
+    with pytest.raises(TlaLoweringError, match="pipe_barrier"):
+        compiler_tlair(bad_pipe_barrier_aiv_cube_kernel)
+
+
 def test_kernel_captures_decorator_site_location() -> None:
-    location = pipe_barrier_kernel.decorator_location
+    location = pipe_barrier_aiv_kernel.decorator_location
     assert location is not None
     assert location.filename.endswith("test_frontend_lowering.py")
     assert location.function_name == "<module>"
-    source_lines, first_lineno = inspect.getsourcelines(pipe_barrier_kernel.fn)
+    source_lines, first_lineno = inspect.getsourcelines(pipe_barrier_aiv_kernel.fn)
     expected_lines = {
         first_lineno + offset
         for offset, line in enumerate(source_lines)
-        if line.lstrip().startswith(("@tla.kernel", "def pipe_barrier_kernel"))
+        if line.lstrip().startswith(("@tla.kernel", "def pipe_barrier_aiv_kernel"))
     }
     assert location.lineno in expected_lines
 
