@@ -36,7 +36,7 @@ DynamicOptimizedMatmul dynamically determines the tiling parameters based on the
 - After obtaining the code, compile the operator executable file. For details, see [Template Library Quick Start](../../docs/en/1_Practice/01_quick_start.md#build-and-execution).
 - Execute the operator.
 
-```
+```bash
 # Compiling a specified case
 bash scripts/build.sh 102_dynamic_optimized_matmul
 # For dynamic library compilation, you need to manually add the dynamic library path to LD_LIBRARY_PATH.
@@ -49,7 +49,7 @@ cd output/bin
 
 If the following result is displayed, precision verification is successful.
 
-```
+```bash
 Compare success.
 ```
 

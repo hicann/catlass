@@ -13,7 +13,7 @@
 
 ## 代码组织
 
-```
+```text
 experimental
 ├── gmm
 │   ├── ascend950_fp8_mx_grouped_matmul_finalize_routing
@@ -33,7 +33,7 @@ experimental
 
 ### 确定性版
 
-```
+```bash
 # 编译
 bash scripts/build.sh ascend950_fp8_mx_grouped_matmul_finalize_routing -DCATLASS_ARCH=3510
 
@@ -59,16 +59,16 @@ python3 examples/ascend950_fp8_mx_grouped_matmul_finalize_routing/gen_data_compa
 
 执行结果如下，说明精度比对成功。
 
-```
+```text
 Compare success.
 ```
 
 ## 使用说明
 
 1、本 example 完成 grouped MX 量化矩阵乘 + Finalize Routing 融合操作：
-C = (MxScaleA * A) @ (MxScaleB * B) + Bias
-out[rowIndex[p], :] += logit[p] * C[p, :]
-若启用SharedInput：out[offset:offset+bsdp, :] += sharedInputWeight * SharedInput
+C = (MxScaleA \* A) @ (MxScaleB \* B) + Bias
+out[rowIndex[p], :] += logit[p] \* C[p, :]
+若启用SharedInput：out[offset:offset+bsdp, :] += sharedInputWeight \* SharedInput
 
 2、输入B及其scale支持转置且两者转置状态须保持一致。`gen_data_compare.py`会根据`trans_b`参数生成对应格式的数据。因为layout隐式表征转置状态，即layout::RowMajor表示不转置，layout::ColumnMajor表示转置。
 

@@ -14,7 +14,7 @@ The CATLASS operator template library uses a layered design. It divides the impl
 
 The template library allows for flexible development. Developers can reuse preset patterns to quickly set up basic functions, modify modules for custom needs, or swap components to create custom pipelines. This design ensures high performance and gives developers enough flexibility and scalability.
 
-![](../figures/api_custom.png)
+![](../../zh/figures/api_custom.png)
 
 ## Project Directory
 

@@ -24,7 +24,7 @@ totalLoops = batch * ceilDiv(Ho, 8) * ceilDiv(Wo, 12) * ceilDiv(Cout, 96)
 
 Conv算子极致性能调优建议按以下顺序推进：
 
-1. 先用基础模板跑通正确性，记录`Batch/Hi/Wi/Cin/Cout/Kh/Kw`、pads/ strides/dilations、数据类型、可用AIC核数。
+1. 先用基础模板跑通正确性，记录`Batch/Hi/Wi/Cin/Cout/Kh/Kw`、pads/strides/dilations、数据类型、可用AIC核数。
 2. 使用`msprof op`获取上板性能数据，判断主要瓶颈是Cube利用率不足、MTE2读带宽不足、MTE3/Fixpipe写出不足，还是Vector后处理不足。
 3. 计算任务块数量，判断与AIC核数的匹配程度。
 4. 对当前瓶颈做单点优化（任务块 → Tile Shape → Multi Buffer → 边界处理），避免一次叠加多个特性。
@@ -65,14 +65,14 @@ uint32_t totalLoops = batch * hoTiles * woTiles * coTiles;
 
 **调整 Swizzle 参数实现尾轮均衡。**`Conv2dIdentityBlockSwizzle<offset, direction>`的两种direction：
 
--`direction = 0`（默认）：按`Ho → Wo → Cout`顺序遍历。适合`hoTiles * woTiles`较大的场景。
-\-`direction = 1`：按`Cout → Ho → Wo`顺序遍历。适合`coTiles`较大的场景。
+- `direction = 0`（默认）：按`Ho → Wo → Cout`顺序遍历。适合`hoTiles * woTiles`较大的场景。
+- `direction = 1`：按`Cout → Ho → Wo`顺序遍历。适合`coTiles`较大的场景。
 
 `SwizzleOffset`控制Swizzle块大小，通过改变任务分配顺序让尾轮工作更均匀地分布在核间。
 
 **经验判断**
 
--`totalLoops`在`[48, 96)`区间时，尾轮负载不均问题最突出。
+- `totalLoops`在`[48, 96)`区间时，尾轮负载不均问题最突出。
 
 - 若`totalLoops`刚好是48的整数倍，Swizzle调整通常无收益。
 - 小batch场景（batch=1）更容易出现任务块不足，需优先考虑减小tile shape。
@@ -113,14 +113,14 @@ L1空间预算的粗略估算：
 | ---------- | ------------------------------------------- | ------------------- |
 | L1A Fmap   | `Ho × Wo × Cin1 × C0 × sizeof(fp16)`        | 3倍单stage          |
 | L1B Filter | `Cin1 × Kh × Kw × Cout × C0 × sizeof(fp16)` | 3倍单stage          |
-| 合计       | —                                           | 需 < 512KB (L1容量) |
+| 合计       | —                                           | 需 < 512KB（L1容量）|
 
 **经验判断**
 
 - 当Profiling显示MTE2占比高且Cube利用率偏低时，优先增大stage数。
 - L0C流水`L0C_STAGES=2`收益在K循环较长的场景更明显（Cin1较大）。
 - L1 stage从2增加到3时，需确认L1能容纳所有buffer。若超限，可考虑减小Fmap或Filter的tile shape以降低单stage大小。
-  \-`conv_bias`样例使用`L1A=1, L1B=1, L0C=1, UnitFlag=true`，无双缓冲但有unit flag。说明非流水场景不需要L1双缓冲，但L0C unit flag对写出仍有帮助。
+- `conv_bias`样例使用`L1A=1, L1B=1, L0C=1, UnitFlag=true`，无双缓冲但有unit flag。说明非流水场景不需要L1双缓冲，但L0C unit flag对写出仍有帮助。
 
 ### 案例三：Tile Shape选择与调优
 
@@ -167,7 +167,7 @@ Filter重复读取次数 ≈ batch × hoTiles × woTiles × cin1Tiles × (coTile
 - 三者需联动调整：增大Fmap/Filter tile后L1占用上升，若无法支持多stage，可先保持stage=2，减小tile shape或增大stage tradeoff。
 - L0TileShape的M/N应尽量与L1TileShape的对应维度对齐，避免尾块过小。例如`FmapL1TileShape::Ho=16`时，L0的M最好能整除16（如16或32）。
 - Cube bound时优先增大L0TileShape；MTE2 bound时优先增大L1TileShape。
-- 可使用`msTuner_CATLASS`自动搜索最优组合，搜索空间建议控制在5000以内。
+- 可使用CATLASS的`msTuner`自动搜索最优组合，搜索空间建议控制在5000以内。
 
 ### 案例四：Padding与边界处理优化
 

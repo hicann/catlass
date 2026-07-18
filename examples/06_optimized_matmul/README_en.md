@@ -2,7 +2,7 @@
 
 ## Code Organization
 
-```
+```text
 ├── 06_optimized_matmul
 │   ├── CMakeLists.txt # CMake build file
 │   ├── README.md
@@ -18,7 +18,7 @@ This example demonstrates optimized matrix multiplication. Compared to the `00_b
 - After obtaining the code, compile the operator executable file. For details, see [Template Library Quick Start](../../docs/en/1_Practice/01_quick_start.md#build-and-execution).
 - Execute the operator.
 
-```
+```bash
 # Compile a specified test case.
 bash scripts/build.sh 06_optimized_matmul
 cd output/bin
@@ -29,7 +29,7 @@ cd output/bin
 
 If the following result is displayed, precision verification is successful.
 
-```
+```text
 Compare success.
 ```
 
@@ -49,7 +49,7 @@ In this example, the default padding action uses `PADDING_NZ`. You can switch th
                                            : PaddingTag::PADDING_NZ;
 ```
 
-The `COMPUTE_LENGTH` allocated in the UB under the `PADDING_NZ` policy is 48 KB:
+The `COMPUTE_LENGTH` allocated in the UB under the `PADDING_NZ` policy is 48KB:
 
 ```cpp
 static const uint32_t COMPUTE_LENGTH_A = 48 * 1024 / sizeof(ElementA);
@@ -70,7 +70,7 @@ static const uint32_t COMPUTE_LENGTH_B = 48 * 1024 / sizeof(ElementB);
 +                                          : PaddingTag::PADDING_BLOCK_ND;
 ```
 
-The `COMPUTE_LENGTH` allocated in the UB scales up to 96 KB under the `PADDING_BLOCK_ND` policy:
+The `COMPUTE_LENGTH` allocated in the UB scales up to 96KB under the `PADDING_BLOCK_ND` policy:
 
 ```diff
 -static const uint32_t COMPUTE_LENGTH_A = 48 * 1024 / sizeof(ElementA);

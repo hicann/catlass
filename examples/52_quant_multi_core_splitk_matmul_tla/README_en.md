@@ -2,7 +2,7 @@
 
 ## Code Organization
 
-```
+```text
 ├── 52_quant_multi_core_splitk_matmul_tla
 │   ├── CMakeLists.txt     # CMake build file
 │   ├── README.md
@@ -19,7 +19,7 @@ This template is used for quantization multi-core K splitting. By splitting K, m
 - After obtaining the code, build the operator executable file. For details, see [Template Library Quick Start](../../docs/en/1_Practice/01_quick_start.md#build-and-execution).
 - Execute the operator.
 
-```
+```bash
 # Build a specified test case.
 bash scripts/build.sh 52_quant_multi_core_splitk_matmul_tla
 cd output/bin
@@ -30,6 +30,6 @@ cd output/bin
 
 If the following information is displayed, the accuracy comparison is successful.
 
-```
+```text
 Compare success.
 ```

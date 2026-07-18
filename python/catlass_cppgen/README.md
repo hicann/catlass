@@ -81,7 +81,9 @@
 ### 2.3 EVG 后处理 (Epilogue Visitor Graph)
 
 支持通过EVG(Epilogue Visitor Graph)框架实现后处理功能，支持的后处理类别包括：
+
  - **单一计算环节**：可通过运算符或函数调用表达以下算子：
+
    | 类别 | 算子 | 写法示例 |
    |------|------|----------|
    | 二元运算 | add | `accum + bias` |
@@ -95,6 +97,7 @@
    | 激活函数 | silu | `silu(accum)` |
    | 比较/选择 | max / min | `max(a, b)` / `min(a, b)` |
    | 类型转换 | cast | `cast(accum, "float16", "float")` |
+
    | 常量 | constant | `constant(1.0, "float")` |
  - **组合计算**：支持多个计算节点拼接；
  - **广播计算**：支持行广播计算。
@@ -104,6 +107,7 @@
 ### 3.1 从源码安装
 
 1. **构建分发包**：
+
    ```bash
    pip install build
    python -m build
@@ -111,10 +115,13 @@
    这会在 `dist/` 目录下生成 `.whl` 和 `.tar.gz` 文件。
 
 2. **安装分发包**：
+
    ```bash
    pip install dist/catlass_cppgen-*.whl
+
    ```
    或者：
+
    ```bash
    pip install dist/catlass_cppgen-*.tar.gz
    ```
@@ -122,6 +129,7 @@
 3. **直接安装（开发模式）**：
    ```bash
    pip install -e .
+
    ```
 
 ### 3.2 从本地目录安装
@@ -129,6 +137,7 @@
 如果您想直接从项目目录安装：
 ```bash
 pip install .
+
 ```
 
 ## 4. 使用示例
@@ -144,7 +153,7 @@ Kernel 对象（调优与特性查询）
 
 详细参考使用示例和 API 文档请参考下述文档：
  - [Kernel API 基础文档](docs/kernel_api.md)
- - [OpTensor API 基础文档](docs/input_methods.md)
+ - OpTensor API 基础文档（文档暂缺）
  - [EVG API 基础文档](docs/evg_api.md)
 
 ### 4.1 基础 GEMM
@@ -206,7 +215,6 @@ group_gemm = GroupGemm(atlas_arch=Arch.Ascend950, A=a, B=b_3d, groupList=groupLi
 kernels = group_gemm.get_kernels()
 kernels[0].tune(GemmShape(256, 256, 256), GemmShape(256, 256, 64))
 ```
-
 
 ### 4.3 EVG 后处理
 

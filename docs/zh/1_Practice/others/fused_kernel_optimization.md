@@ -200,7 +200,7 @@ Stream-K尾轮切分后，如果等所有普通块完成后再让AIV归约，Vec
 Stream-K适用于尾轮负载不均衡的shape，经验判断如下：
 
 ```text
-B = CeilDiv(M, m1) * CeilDiv(N, n1)
+B = CeilDiv(M, m1) * CeilDiv(N, n1) # m1/n1为切分任务块的L1TileShape::M/N取值
 当 B / C > 1 且 B % C <= C * 0.8 时，可能收益较好
 ```
 

@@ -109,6 +109,8 @@ static Params ToUnderlyingArguments(const Arguments &args, uint8_t *workspace)
 }
 ```
 
+`ToUnderlyingArguments`函数由`DeviceGemm`类的`Initialize`函数内部调用。
+
 ## 4. 关键函数解析
 
 ### 4.1 CanImplement

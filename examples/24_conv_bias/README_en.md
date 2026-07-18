@@ -2,7 +2,7 @@
 
 ## Code Organization
 
-```
+```text
 ├── 24_conv_bias
 │   ├── CMakeLists.txt # CMake build file
 │   ├── README.md
@@ -44,7 +44,7 @@
 - After obtaining the code, compile the operator executable file. For details, see [Template Library Quick Start](../../docs/en/1_Practice/01_quick_start.md#build-and-execution).
 - Step 1: Execute `gen_data.py` with the command line to generate test vectors and validation assets.
 
-```
+```text
 # python3 ./examples/24_conv_bias/gen_data.py |batch|cin|di|hi|wi|cout|kd|kh|kw|sD|sH|sW|dD|dH|dW|pD|pH|pW|dtype
 # The final parameter explicitly defines the precision: float16 or bfloat16
 python3 ./examples/24_conv_bias/gen_data.py 32 64 1 32 48 128 1 1 1 1 1 1 1 1 1 0 0 0 float16
@@ -52,7 +52,7 @@ python3 ./examples/24_conv_bias/gen_data.py 32 64 1 32 48 128 1 1 1 1 1 1 1 1 1 
 
 After the command is executed, a data directory is generated in the current path, containing the operator input data and the golden data used for accuracy verification.
 
-```
+```text
 ├── data
 │   ├── fmap.bin   # Input feature map (NDC1HWC0 private layout: [batch, di, cin1, hi, wi, cin0], where cin0 = 16, cin1 = ceilDiv(cin, cin0))
 │   ├── weight.bin  # Convolution weight (FRACTAL_Z_3D private layout: [kdc1khkw, n1, n0, cin0], where n0 = 16, n1 = ceilDiv(cout, n0))
@@ -62,7 +62,7 @@ After the command is executed, a data directory is generated in the current path
 
 - Step 2: Execute the operator. Note that the input shape of the operator must match the shape of the data generated in the first step.
 
-```
+```bash
 # Compile a specified test case.
 bash scripts/build.sh 24_conv_bias
 cd output/bin
@@ -73,6 +73,6 @@ cd output/bin
 
 If the following result is displayed, precision verification is successful.
 
-```
+```text
 Compare success.
 ```

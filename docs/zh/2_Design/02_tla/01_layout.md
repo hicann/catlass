@@ -127,7 +127,7 @@ TLA 以 [`tla::tuple`](../../../../include/tla/tuple.hpp) 为基础。它与 `st
 
 在昇腾 CUBE 核内部，常见内部格式包括 `zN`、`nZ`、`zZ`、`nN`、`L0C` 等；在 GEMV、Scale、Bias 等场景中，也会使用一维 `VectorLayout`。
 
-```c++
+```cpp
 using namespace tla;
 
 // 1. 直接给 shape 和 stride，originShape 由系统推导
@@ -251,7 +251,7 @@ stride = ((4, 16), (1, 32))
 auto shape  = Shape<Shape<_4, _2>, Shape<_4, _3>>{};
 auto stride = Stride<Stride<_4, _16>, Stride<_1, _32>>{};
 
-print(crd2offset(tla::MakeCoord(1, 5), shape, stride));  // 37
+std::cout << crd2offset(tla::MakeCoord(1, 5), shape, stride) << std::endl;  // 37
 ```
 
 这段代码表示：在一个逻辑大小为 `(8, 12)`、底层按分形格式排布的矩阵中，逻辑坐标 `(1, 5)` 对应的线性索引为 `37`。

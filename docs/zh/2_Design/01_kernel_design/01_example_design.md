@@ -2,7 +2,7 @@
 
 本文档汇总当前一些样例的设计思路和代码拆解，读者可按照个人兴趣查阅具体内容。
 
-- [102_泛化Matmul工程](../../../../examples/102_dynamic_optimized_matmul/README.md)-根据shape动态确定Tiling参数，并尝试选择最好的模板进行计算，尽力获取最优性能。
+- [102_泛化Matmul工程](../../../../examples/102_dynamic_optimized_matmul/README.md) - 根据shape动态确定Tiling参数，并尝试选择最好的模板进行计算，尽力获取最优性能。
   - [CommonMatmul模板](../../../../examples/102_dynamic_optimized_matmul/docs/zh/CommonMatmul.md)
   - [MultiCoreSplitkMatmul多核切K模板](../../../../examples/102_dynamic_optimized_matmul/docs/zh/MultiCoreSplitkMatmul.md)
   - [StreamkMatmul模板](../../../../examples/102_dynamic_optimized_matmul/docs/zh/StreamkMatmul.md)

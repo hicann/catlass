@@ -15,7 +15,7 @@ This document describes in detail the Kernel implementation of the Flash Attenti
 
 The Flash Attention Infer operator implements the following calculation process:
 
-```
+```text
 O = FlashAttention(Q, K, V, mask)
   = softmax(Q * K^T / sqrt(d)) * V
 ```
@@ -153,12 +153,12 @@ class FAInferKernel {
 
 | Variable Name                       | Type                     | Description                                  |
 | ----------------------------------- | ------------------------ | -------------------------------------------- |
-| `bmm1TensorList[NUM2]`              | LocalTensor<ElementS>    | Double buffer for BMM1 results (S matrix)    |
-| `bmm2TensorList[NUM2]`              | LocalTensor<ElementOTmp> | Double buffer for BMM2 results (O temporary) |
-| `mm2AL1TensorList[KERNEL_TASK_NUM]` | LocalTensor<ElementP>    | L1 cache for MM2 input (P matrix)            |
-| `expUb[KERNEL_TASK_NUM]`            | LocalTensor<ElementS>    | UB cache for exp values                      |
-| `sumUb[KERNEL_TASK_NUM]`            | LocalTensor<ElementS>    | UB cache for sum values                      |
-| `maxUb[KERNEL_TASK_NUM]`            | LocalTensor<ElementS>    | UB cache for max values                      |
+| `bmm1TensorList[NUM2]`              | `LocalTensor<ElementS>`    | Double buffer for BMM1 results (S matrix)    |
+| `bmm2TensorList[NUM2]`              | `LocalTensor<ElementOTmp>` | Double buffer for BMM2 results (O temporary) |
+| `mm2AL1TensorList[KERNEL_TASK_NUM]` | `LocalTensor<ElementP>`    | L1 cache for MM2 input (P matrix)            |
+| `expUb[KERNEL_TASK_NUM]`            | `LocalTensor<ElementS>`    | UB cache for exp values                      |
+| `sumUb[KERNEL_TASK_NUM]`            | `LocalTensor<ElementS>`    | UB cache for sum values                      |
+| `maxUb[KERNEL_TASK_NUM]`            | `LocalTensor<ElementS>`    | UB cache for max values                      |
 | `constInfo`                         | ConstInfo                | Constant information                         |
 | `runInfo[4]`                        | RunInfo                  | Runtime information (circular buffer)        |
 | `runParam`                          | RunParamStr              | Runtime parameters                           |
@@ -169,7 +169,7 @@ class FAInferKernel {
 
 #### 3.3.1 Memory Layout
 
-```
+```text
 +------------------------+  ubBufAddrStart = 0
 | bmm1TensorList[0]      |  MM1_RESULT_SIZE = 64 * 128 * sizeof(float) = 32KB
 +------------------------+
@@ -203,7 +203,7 @@ class FAInferKernel {
 
 #### 3.3.2 L1 Memory Layout
 
-```
+```text
 +------------------------+  l1BufAddrStart = 0
 | mm2AL1TensorList[0]    |  MM2_LEFT_SIZE = 128 * 128 * sizeof(Dtype) = 32KB
 +------------------------+
@@ -319,7 +319,7 @@ int32_t GetFATilingParam(const FAInfo &faInfo, uint32_t blockDim, FATilingData& 
 
 **Algorithm Flow**:
 
-```
+```text
 1. Fill input parameters (FillInputParams)
    ├─ Copy basic information (batch, qHeads, kvHeads, seqSize, etc.)
    ├─ Calculate groupSize = qHeads / kvHeads
@@ -371,7 +371,7 @@ int32_t GetFATilingParam(const FAInfo &faInfo, uint32_t blockDim, FATilingData& 
 
 **Algorithm Flow**:
 
-```
+```text
 Initialization:
   bnAxisStartIdx[MAX_CORE_NUM] = 0
   qSeqAxisStartIdx[MAX_CORE_NUM] = 0
@@ -422,7 +422,7 @@ CATLASS_DEVICE void Init(FAIKernelParams const& params)
 
 **Flow**:
 
-```
+```text
 1. Get current Core index
    ├─ AIC: blockIdx = GetBlockIdx()
    └─ AIV: blockIdx = GetBlockIdx() >> 1
@@ -465,7 +465,7 @@ CATLASS_DEVICE void operator()(FAIKernelParams const &params)
 
 **Flow**:
 
-```
+```text
 1. Initialization
    ├─ Init(params)
    ├─ Create BlockMmadQK instance
@@ -678,7 +678,7 @@ constexpr uint64_t MM2_RES_INTRA_EVENT[2] = {7, 8};  // BMM2 internal synchroniz
 
 #### 6.2.2 Synchronization Flow
 
-```
+```text
 Step 1: AIC executes Q*K^T
   ├─ Wait for L0C availability
   ├─ Execute Cube computation
@@ -737,7 +737,7 @@ struct BlockMmadTla<MmadFAIQK<Arch::Ascend950, ...>, ...> {
 
 #### 7.2.1 L1 Memory Layout
 
-```
+```text
 +------------------------+  l1BufAddrStart
 | L1A[Stage 0]         |  L1A_TILE_SIZE = 128 * 128 * sizeof(Dtype) = 32KB
 +------------------------+
@@ -753,7 +753,7 @@ struct BlockMmadTla<MmadFAIQK<Arch::Ascend950, ...>, ...> {
 
 #### 7.2.2 L0 Memory Layout
 
-```
+```text
 L0A Buffer:
 +------------------------+
 | L0A[Stage 0]         |  L0A_TILE_SIZE = 128 * 128 * sizeof(Dtype) = 32KB
@@ -780,7 +780,7 @@ L0C Buffer:
 
 #### 7.3.1 Pipeline Stages
 
-```
+```cpp
 Stage:  GM → L1  → L0  → Cube → L0C → UB
 ```
 
@@ -894,7 +894,7 @@ class BlockEpilogue<EpilogueAscend950FASoftmax<ATTENTION_MASK_FLAG_>, ...> {
 
 #### 8.2.1 UB Memory Layout
 
-```
+```text
 +------------------------+
 | expSumUb              |  HALF_VEC_SIZE = 64 * sizeof(float) = 256B
 +------------------------+
@@ -916,13 +916,13 @@ class BlockEpilogue<EpilogueAscend950FASoftmax<ATTENTION_MASK_FLAG_>, ...> {
 
 Standard Softmax:
 
-```
+```text
 P[i,j] = exp(S[i,j] - max(S[i,:])) / sum(exp(S[i,:] - max(S[i,:])))
 ```
 
 Online Softmax (step-by-step calculation):
 
-```
+```text
 Initialization:
   max[i] = -inf
   sum[i] = 0
@@ -1002,7 +1002,7 @@ void operator()(TensorDst &vf1OutL1, LocalTensor<ElementS>&sumUb, ...) {
 
 ## 9. BlockMmadPV: P*V Matrix Multiplication
 
-### 9.1 **Class Definition**:
+### 9.1 **Class Definition**
 
 **Location**:`block_mmad_fai_pv_tla.hpp:43-317`
 
@@ -1104,7 +1104,7 @@ void operator()(TensorA& tensorA, TensorB& tensorB, TensorC& tensorC, ...) {
 
 ## 10. EpilogueRescaleO: O Update and Normalization
 
-### 10.1 **Class Definition**:
+### 10.1 **Class Definition**
 
 **Location**:`block_epilogue_fa_rescale_o_ascend950.hpp:29-216`
 
@@ -1121,7 +1121,7 @@ class BlockEpilogue<EpilogueAscend950FARescaleO, ...> {
 
 ### 10.2 Memory Layout
 
-```
+```text
 +------------------------+
 | vf2OutUb              |  VEC2_UB_SIZE = 64 * 128 * sizeof(float) = 32KB
 +------------------------+
@@ -1133,13 +1133,13 @@ class BlockEpilogue<EpilogueAscend950FARescaleO, ...> {
 
 Standard Flash Attention:
 
-```
+```text
 O = softmax(Q * K^T / sqrt(d)) * V
 ```
 
 Online calculation:
 
-```
+```text
 Initialization:
   O[i] = 0
   max[i] = -inf

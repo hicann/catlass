@@ -8,7 +8,7 @@
 
 ### Description
 
-Performs matrix multiply-accumulate ($C += A \times B$) operations using the [AscendC::mmad basic API](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/API/ascendcopapi/atlasascendc_api_07_0249.html). Matrices A, B, and C correspond to data residing in L0A, L0B, and L0C, respectively. The data layout formats for the A, B, and C matrices are zZ, nZ, and zN, respectively. This is a non-TLA implementation.
+Performs matrix multiply-accumulate ($C += A \times B$) operations using the [AscendC::mmad basic API](https://www.hiascend.com/document/detail/en/canncommercial/850/API/ascendcopapi/atlasascendc_api_07_0249.html). Matrices A, B, and C correspond to data residing in L0A, L0B, and L0C, respectively. The data layout formats for the A, B, and C matrices are zZ, nZ, and zN, respectively. This is a non-TLA implementation.
 
 ### Prototype
 
@@ -63,7 +63,7 @@ For details, see the usage method in [block_mmad_pingpong](../../../../../../../
 
 ### Description
 
-Performs matrix multiply-accumulate ($C += A \times B$) operations using the [AscendC::mmad basic API](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/API/ascendcopapi/atlasascendc_api_07_0249.html). Matrices A, B, and C correspond to data residing in L0A, L0B, and L0C, respectively. The data layout formats for the A, B, and C matrices are zZ, nZ, and zN, respectively. This is a TLA implementation and does not support bias.
+Performs matrix multiply-accumulate ($C += A \times B$) operations using the [AscendC::mmad basic API](https://www.hiascend.com/document/detail/en/canncommercial/850/API/ascendcopapi/atlasascendc_api_07_0249.html). Matrices A, B, and C correspond to data residing in L0A, L0B, and L0C, respectively. The data layout formats for the A, B, and C matrices are zZ, nZ, and zN, respectively. This is a TLA implementation and does not support bias.
 
 ### Prototype
 

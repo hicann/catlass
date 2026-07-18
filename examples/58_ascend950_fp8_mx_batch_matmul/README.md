@@ -8,7 +8,7 @@
 
 ## 代码组织
 
-```
+```text
 ├── 58_ascend950_fp8_mx_batch_matmul
 │   ├── CMakeLists.txt      # CMake 编译配置
 │   ├── README.md
@@ -21,7 +21,7 @@
 - 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)，本用例为 Ascend950（3510）算子，编译时需加 `-DCATLASS_ARCH=3510`
 - 执行算子
 
-```
+```bash
 # 编译指定用例
 bash scripts/build.sh 58_ascend950_fp8_mx_batch_matmul -DCATLASS_ARCH=3510
 # 生成测试样例（在 examples/58_ascend950_fp8_mx_batch_matmul/data 下生成 input/ 与 golden/）
@@ -37,7 +37,7 @@ python3 examples/58_ascend950_fp8_mx_batch_matmul/gen_data.py 5 256 512 1024 0 1
 
 执行结果如下，说明精度比对成功。
 
-```
+```cpp
 Compare success.
 ```
 

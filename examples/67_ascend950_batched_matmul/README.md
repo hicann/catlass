@@ -2,7 +2,7 @@
 
 ## 代码组织
 
-```
+```text
 ├── 67_ascend950_batched_matmul
 │   ├── CMakeLists.txt     # CMake编译文件
 │   ├── README.md
@@ -14,7 +14,7 @@
 - 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#编译执行)
 - 执行算子
 
-```
+```bash
 # 编译指定用例
 bash scripts/build.sh 67_ascend950_batched_matmul
 cd output/bin
@@ -53,6 +53,6 @@ BatchedMatmul当前支持的`DispatchPolicy`有`MmadPingpong`和`MmadMultiBatch`
 
 设矩阵Shape为`M N K`, L0上的分块大小为`m0 n0 k0`，L0A的分块大小`l0ATileSize = m0 * k0 * sizeof(ElementA)`, L0B的分块大小`l0BTileSize = n0 * k0 * sizeof(ElementB)`, L0C的分块大小`l0CTileSize = m0 * n0 * sizeof(ElementC)`。
 
-则L0A一次能放下的batch数`l0ABatches = L0A_SIZE / l0ABStages / l0ATileSize`，L0B一次能放下的batch数`l0BBatches = L0B_SIZE / l0ABStages / l0BTileSize`，L0B一次能放下的batch数`l0CBatches = L0C_SIZE / l0CStages / l0CTileSize`。
+则L0A一次能放下的batch数`l0ABatches = L0A_SIZE / l0ABStages / l0ATileSize`，L0B一次能放下的batch数`l0BBatches = L0B_SIZE / l0ABStages / l0BTileSize`，L0C一次能放下的batch数`l0CBatches = L0C_SIZE / l0CStages / l0CTileSize`。
 
 当`l0CBatches`明显大于`l0ABatches`与`l0BBatches`时，可考虑将l0CStages调大，开启多缓冲。

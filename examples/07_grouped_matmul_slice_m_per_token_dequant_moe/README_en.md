@@ -2,7 +2,7 @@
 
 ## Code Organization
 
-```
+```text
 ├── 07_grouped_matmul_slice_m_per_token_dequant_moe
 │   ├── CMakeLists.txt     #CMake build file
 │   ├── README.md
@@ -21,7 +21,7 @@ Due to the large number of configuration parameters for `GroupedMatmul`, this ex
 - After obtaining the code, compile the operator executable file. For details, see [Template Library Quick Start](../../docs/en/1_Practice/01_quick_start.md#build-and-execution).
 - Execute the operator.
 
-```
+```bash
 # Compile a specified test case.
 bash scripts/build.sh 07_grouped_matmul_slice_m_per_token_dequant_moe
 cd output/bin
@@ -32,6 +32,6 @@ cd output/bin
 
 If the following result is displayed, precision verification is successful.
 
-```
+```text
 Compare success.
 ```

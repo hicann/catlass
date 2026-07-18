@@ -2,7 +2,7 @@
 
 ## Code Organization
 
-```
+```text
 ├── 16_group_gemm
 │   ├── CMakeLists.txt # CMake build file
 │   ├── README.md
@@ -14,7 +14,7 @@
 - After obtaining the code, compile the operator executable file. For details, see [Template Library Quick Start](../../docs/en/1_Practice/01_quick_start.md#build-and-execution).
 - Execute the operator.
 
-```
+```bash
 # Compile a specified test case.
 bash scripts/build.sh 16_group_gemm
 cd output/bin
@@ -25,6 +25,6 @@ cd output/bin
 
 If the following result is displayed, precision verification is successful.
 
-```
+```text
 Compare success.
 ```

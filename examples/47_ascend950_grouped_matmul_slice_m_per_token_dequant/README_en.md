@@ -2,7 +2,7 @@
 
 ## Code Organization
 
-```
+```text
 ├── 47_ascend950_grouped_matmul_slice_m_per_token_dequant
 │   ├── CMakeLists.txt # CMake build file
 │   ├── README.md
@@ -35,7 +35,7 @@ This CV fusion operator implements grouped matrix multiplication and dequantizat
 - After obtaining the code, compile the corresponding operator executable file. For details, see [Template Library Quick Start](../../docs/en/1_Practice/01_quick_start.md#). This test case is an Ascend 950 operator. During compilation, you need to add `DCATLASS_ARCH=3510`.
 - Execute the operator.
 
-```
+```bash
 # Compile a specified test case.
 bash scripts/build.sh 47_ascend950_grouped_matmul_slice_m_per_token_dequant -DCATLASS_ARCH=3510
 cd output/bin
@@ -47,6 +47,6 @@ cd output/bin
 
 If the following result is displayed, precision verification is successful.
 
-```
+```text
 Compare success.
 ```

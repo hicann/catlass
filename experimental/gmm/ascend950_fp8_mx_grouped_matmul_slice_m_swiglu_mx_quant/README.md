@@ -11,7 +11,7 @@
 
 ## 代码组织
 
-```
+```text
 experimental
 ├── gmm
 │   ├── ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant
@@ -27,7 +27,7 @@ experimental
 - 获取代码之后编译相应的算子可执行文件，可参考 [quickstart](../../../docs/zh/1_Practice/01_quick_start.md#编译执行)，本用例为 Ascend950（3510）算子，编译时需加 `-DCATLASS_ARCH=3510`。
 - 执行算子
 
-```
+```bash
 # 编译指定用例
 bash scripts/build.sh ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant -DCATLASS_ARCH=3510
 
@@ -43,14 +43,14 @@ python3 examples/ascend950_fp8_mx_grouped_matmul_slice_m_swiglu_mx_quant/gen_dat
 
 执行结果如下，说明精度比对成功。
 
-```
+```text
 Compare success.
 ```
 
 ## 使用说明
 
 1、本 example 完成 grouped MX 量化矩阵乘 + SwiGLU + 在线 MX 量化输出：
-C = (MxScaleA * A) @ (MxScaleB * B)
+C = (MxScaleA \* A) @ (MxScaleB \* B)
 act,gate = C
 S = Swish(act) * gate
 Q, QScale = MXQuant(S)
@@ -69,5 +69,5 @@ B转置的shape为(problem_count, n, k), MxScaleB的shape为(problem_count, n, c
 
 ## 特殊说明
 
-- 当前example中的L1TileShape(128,256,256)和L0TileShape(128,256,128)仅为样例[53_ascend950_fp8_mx_matmul](../../../examples/53_ascend950_fp8_mx_matmul/README.md)的一半，原因在于在一次循环中需要进行两个block的matmul运算，这两次matmul的结果需要同时存在与UB上用来进行后续计算，同时后续的计算中也需要UB存放中间结果，当前场景下UB存放数据共使用约180K。因此，受限于UB大小，当前example的当前example中的L1TileShape和和L0TileShape仅为样例[53_ascend950_fp8_mx_matmul](../../../examples/53_ascend950_fp8_mx_matmul/README.md)的一半。
+- 当前example中的L1TileShape(128,256,256)和L0TileShape(128,256,128)仅为样例[53_ascend950_fp8_mx_matmul](../../../examples/53_ascend950_fp8_mx_matmul/README.md)的一半，原因在于在一次循环中需要进行两个block的matmul运算，这两次matmul的结果需要同时存在于UB上用来进行后续计算，同时后续的计算中也需要UB存放中间结果，当前场景下UB存放数据共使用约180K。因此，受限于UB大小，当前example的L1TileShape和L0TileShape仅为样例[53_ascend950_fp8_mx_matmul](../../../examples/53_ascend950_fp8_mx_matmul/README.md)的一半。
 - groupList中未指定的部分将不会参与更新。如groupList为(3,4,5)，m为20，则Q[12:]和QScale[12:]的部分不会进行更新和初始化，其中数据为显存空间申请时的原数据。即Q和QScale的有效数据为Q[:12]和QScale[:12]。

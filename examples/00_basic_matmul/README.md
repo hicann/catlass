@@ -49,7 +49,7 @@ BasicMatmul所涉及的关键模板参数如下:
 
 ## 代码组织
 
-```
+```text
 ├── 00_basic_matmul
 │   ├── CMakeLists.txt   # CMake编译文件
 │   ├── README.md
@@ -60,27 +60,27 @@ BasicMatmul所涉及的关键模板参数如下:
 
 1. 编译样例代码，并编译生成相应的算子可执行文件。
 
-```
-bash scripts/build.sh 00_basic_matmul
-```
+    ```bash
+    bash scripts/build.sh 00_basic_matmul
+    ```
 
-1. 切换到可执行文件的编译目录`output/bin`下，执行算子样例程序。测试样例数据随机生成，尺寸从命令行输入。
+2. 切换到可执行文件的编译目录`output/bin`下，执行算子样例程序。测试样例数据随机生成，尺寸从命令行输入。
 
-```
-cd output/bin
-./00_basic_matmul 256 512 1024 0
-```
+    ```bash
+    cd output/bin
+    ./00_basic_matmul 256 512 1024 0
+    ```
 
-• 256：矩阵m轴
+    • 256：矩阵m轴
 
-• 512：n轴
+    • 512：n轴
 
-• 1024：k轴
+    • 1024：k轴
 
-• 0：Device ID，可选，默认为0
+    • 0：Device ID，可选，默认为0
 
-执行结果如下，说明样例执行成功。
+    执行结果如下，说明样例执行成功。
 
-```
-Compare success.
-```
+    ```text
+    Compare success.
+    ```

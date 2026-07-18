@@ -40,7 +40,7 @@ struct TileMmad {
 | ArchTag_  | Architecture tag used to distinguish different NPU architectures (e.g., 2201, 3510) |
 | AType_    | Type of matrix A, containing element type and layout information                    |
 | BType_    | Type of matrix B, containing element type and layout information                    |
-| BiasType_ | Type of bias, which defaults to a null value                                        |
+| BiasType_ | Type of bias, which defaults to an empty type                                       |
 
 These template parameters allow tile components to flexibly adapt to different hardware architectures and computation requirements.
 

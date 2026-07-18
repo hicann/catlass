@@ -32,7 +32,7 @@ tests/unittest/catlass/gemm/tile
 
 本套测试采用**打桩（stub）单元测试**方式，**不依赖真实 NPU 硬件**即可在主机侧（Host）编译运行：将被测组件实际调用的`AscendC`基础API（如 `DataCopy` / `LoadData` / `Fixpipe` / `Mmad` 等）替换为打桩实现，每次调用会被 `AscendCCallLogger` 单例记录下来，测试用例据此断言被测组件调用的逻辑正确性。
 
-整体分为四层，自上而下依次为：
+整体分为三层，自上而下依次为：
 
 - 测试用例层（`test_tile_*.cpp`，基于已有的Fixture，构造`layout/tensor`、调用被测组件、捕获日志并断言）
 - 打桩层（`tests/unittest/stub/*.h`，拦截并记录 `AscendC`基础API调用
@@ -78,7 +78,7 @@ bash scripts/build.sh --tests catlass_unittest
 bash scripts/build.sh --tests catlass_unittest -DENABLE_COVERAGE=ON
 ```
 
-默认在`build/test/unittest/`下生成可执行文件，并以代际编号区分，分别执行如下：
+默认在`build/tests/unittest/`下生成可执行文件，并以代际编号区分，分别执行如下：
 
 ```bash
 # AtlasA2 代际下Tile组件单元测试

@@ -59,7 +59,7 @@ $$
 scaleX = 2 ** (log_{2} (abs(X') / qmax))
 $$
 
-其中qamx是外部传入的参数，后续不用像标准实现一样减去emax。
+其中qmax是外部传入的参数，后续不用像标准实现一样减去emax。
 
 SvdQuant更多细节参考[SvdQuant论文](https://arxiv.org/abs/2411.05007)
 
@@ -107,7 +107,7 @@ SvdQuant更多细节参考[SvdQuant论文](https://arxiv.org/abs/2411.05007)
 
 ## 代码组织
 
-```
+```text
 experimental
 ├── matmul
 │   ├── ascend950_svd_quant_matmul
@@ -136,7 +136,7 @@ python examples/ascend950_svd_quant_matmul/gen_data.py 256 256 512 32
 
 执行结果如下，说明精度比对成功。
 
-```
+```bash
 Compare success.
 ```
 
@@ -168,7 +168,7 @@ options:
 
 3个DispatchPolicy参数顺序与默认值如下：
 
-1. `Gemm::MmadSvd1`
+1、`Gemm::MmadSvd1`
 
 | 模板参数             | 默认值  | 参数说明                                                                     |
 | -------------------- | ------- | ---------------------------------------------------------------------------- |
@@ -181,7 +181,7 @@ options:
 | `L0A_STAGES`         | `2`     | L0 上加载矩阵 A 的 buffer 数量                                               |
 | `L0B_STAGES`         | `2`     | L0 上加载矩阵 B 的 buffer 数量                                               |
 
-2. `Gemm::MmadSvd2`
+2、`Gemm::MmadSvd2`
 
 | 模板参数           | 默认值  | 参数说明                                                                     |
 | ------------------ | ------- | ---------------------------------------------------------------------------- |
@@ -193,7 +193,7 @@ options:
 | `L0A_STAGES`       | `2`     | L0 上加载矩阵 A 的 buffer 数量                                               |
 | `L0B_STAGES`       | `2`     | L0 上加载矩阵 B 的 buffer 数量                                               |
 
-3. `Gemm::MmadSvd3`
+3、`Gemm::MmadSvd3`
 
 | 模板参数            | 默认值  | 参数说明                                                                                                            |
 | ------------------- | ------- | ------------------------------------------------------------------------------------------------------------------- |
@@ -261,7 +261,7 @@ struct TilingTag2Config<SvdQuantTilingTag::Small> {
 
 ### Mmad2+Mmad3 部分的负载均衡优化
 
-Mmad2的problemShape为`{m, n, r}`，输入类型为`fp16/bf161`，Mmad3的problemShape为`{m, n, k}`， 输入类型为mxfp4，输出的shape是一样的，可以共用BlockSwizzle进行任务划分。
+Mmad2的problemShape为`{m, n, r}`，输入类型为`fp16/bf16`，Mmad3的problemShape为`{m, n, k}`， 输入类型为mxfp4，输出的shape是一样的，可以共用BlockSwizzle进行任务划分。
 kernel层伪代码如下
 
 ```cpp

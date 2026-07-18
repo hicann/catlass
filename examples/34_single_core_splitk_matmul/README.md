@@ -23,7 +23,7 @@
 
 本样例组织结构如下：
 
-```
+```text
 ├── 34_single_splitk_matmul
 │   ├── CMakeLists.txt           # CMake编译文件
 │   ├── single_core_splitk.cpp   # 主文件
@@ -32,14 +32,14 @@
 
 ## 使用示例
 
-1. 编译样例代码，生成相应的算子可执行文件。
+1、 编译样例代码，生成相应的算子可执行文件。
 
 ```bash
 # 编译指定用例
 bash scripts/build.sh 34_single_core_splitk_matmul
 ```
 
-2. 切换到可执行文件的编译目录`output/bin`下，并执行算子样例程序。类似于基础样例[00_basic_matmul](../00_basic_matmul/README.md)，测试数据根据命令行输入尺寸随机生成。
+2、 切换到可执行文件的编译目录`output/bin`下，并执行算子样例程序。类似于基础样例[00_basic_matmul](../00_basic_matmul/README.md)，测试数据根据命令行输入尺寸随机生成。
 
 ```bash
 cd output/bin
@@ -58,6 +58,6 @@ cd output/bin
 
 执行结果如下，说明精度比对成功。
 
-```
+```text
 Compare success.
 ```

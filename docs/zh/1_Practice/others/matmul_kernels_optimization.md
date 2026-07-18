@@ -75,7 +75,7 @@ Matmul极致性能调优建议按以下顺序推进：
 MTE2 bound往往来自三类问题：
 
 - A/B矩阵被多个C block重复读取。
-- RowMajor/ColumnMajor输入的stride非512B对齐，随路格式转换搬运效率低。
+- RowMajor/ColumnMajor输入的stride非512Byte对齐，随路格式转换搬运效率低。
 - 多核在同一时间访问相同GM地址，产生读取冲突。
 
 **优化一：Padding前处理**
@@ -88,7 +88,7 @@ MTE2 bound往往来自三类问题：
 | `PADDING_BLOCK_ND` | 按L1 tile粒度重排         | stride很大或tile内访问需规整   |
 | `PADDING_NZ`       | 转成贴近L1读取的zN/nZ排布 | 随路转换损失较大或泛化性能优先 |
 
-参考[06_optimized_matmul](../../../../examples/06_optimized_matmul/optimized_matmul.cpp)和[102_dynamic_optimized_matmul/doc/CommonMatmul.md](../../../../examples/102_dynamic_optimized_matmul/doc/CommonMatmul.md)。实际选择时建议用模型估算：
+参考[06_optimized_matmul](../../../../examples/06_optimized_matmul/optimized_matmul.cpp)和[102_dynamic_optimized_matmul/doc/CommonMatmul.md](../../../../examples/102_dynamic_optimized_matmul/docs/zh/CommonMatmul.md)。实际选择时建议用模型估算：
 
 ```text
 不 Padding 耗时 ~= AIC 非对齐读取量 / 非对齐有效带宽

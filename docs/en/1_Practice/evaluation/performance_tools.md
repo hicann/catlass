@@ -1,28 +1,28 @@
 # Tuning Performance in a CATLASS Sample Project
 
-CANN provides performance tuning tools for two operator development scenarios: single-operator and whole-network. These tools are [**msProf**](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html) and [**Profiling**](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/devaids/Profiling/atlasprofiling_16_0010.html).
+CANN provides performance tuning tools for two operator development scenarios: single-operator and whole-network. These tools are [**msProf**](https://www.hiascend.com/document/detail/en/canncommercial/850/devaids/optool/atlasopdev_16_0082.html) and [**Profiling**](https://www.hiascend.com/document/detail/en/canncommercial/850/devaids/Profiling/atlasprofiling_16_0010.html).
 
 ## Performance Tuning Tool Overview
 
 ### msProf
 
-[msProf](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html) is a single-operator profiler. The corresponding commands are `msprof op` and `msopprof`.
+[msProf](https://www.hiascend.com/document/detail/en/canncommercial/850/devaids/optool/atlasopdev_16_0082.html) is a single-operator profiler. The corresponding commands are `msprof op` and `msopprof`.
 
-[msProf](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html) collects and analyzes key profile data of operators running on Ascend AI processors. Based on the output profile data, you can quickly locate software and hardware performance bottlenecks in operators, improving the efficiency of operator profiling.
+[msProf](https://www.hiascend.com/document/detail/en/canncommercial/850/devaids/optool/atlasopdev_16_0082.html) collects and analyzes key profile data of operators running on Ascend AI processors. Based on the output profile data, you can quickly locate software and hardware performance bottlenecks in operators, improving the efficiency of operator profiling.
 
 Profile data can currently be collected and automatically parsed based on various running modes (onboard or simulation) and file formats (executable files or operator binary `.o` files).
 
 ### Profiling Overview
 
-[Profiling](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/devaids/Profiling/atlasprofiling_16_0010.html) is a whole-network profiler. Its corresponding command is `msprof`.
+[Profiling](https://www.hiascend.com/document/detail/en/canncommercial/850/devaids/Profiling/atlasprofiling_16_0010.html) is a whole-network profiler. Its corresponding command is `msprof`.
 
-[Profiling](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/devaids/Profiling/atlasprofiling_16_0010.html) collects and parses the AI job runtime profile data, system data of Ascend AI processors, and other required data.
+[Profiling](https://www.hiascend.com/document/detail/en/canncommercial/850/devaids/Profiling/atlasprofiling_16_0010.html) collects and parses the AI job runtime profile data, system data of Ascend AI processors, and other required data.
 
 The basic `msprof` profiling commands query the basic information about profiling, including parameter description, AI job file, data storage path, and custom environment variables.
 
 ## Single-Operator Profiling Using `msProf`
 
-Using `00_basic_matmul` as an example, this section demonstrates the profiling process using [msProf](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html).
+Using `00_basic_matmul` as an example, this section demonstrates the profiling process using [msProf](https://www.hiascend.com/document/detail/en/canncommercial/850/devaids/optool/atlasopdev_16_0082.html).
 
 ### Onboard Profiling
 
@@ -48,7 +48,7 @@ Common parameters:
 | `--warm-up`      | No               | Specifies the number of warm-up times (for chip frequency increasing).                                    | Integer (default: 5)                        | For small shape scenarios, consider increasing to 30. |
 | `--output`       | No               | Specifies the data output path.                                                                           | Valid path (default: the current directory) | Ensure that the path is writable.                     |
 
-For more parameters, see [msProf Overview](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html).
+For more parameters, see [msProf Overview](https://www.hiascend.com/document/detail/en/canncommercial/850/devaids/optool/atlasopdev_16_0082.html).
 
 - ⚠ Precautions
   - The tool reads the performance of the first operator by default. When debugging with the example, results can be obtained directly. If integrating with another project where other operators may exist (even if you test only one operator), results may not be obtained if the operator name is not specified with `--kernel-name` during profiling.
@@ -84,32 +84,32 @@ Through simulation, you can obtain visual data such as **pipeline diagrams**, **
 
 1. Add the `--simulator` option to the build script to compile the operator in `simulator` mode.
 
-```bash
-bash scripts/build.sh --simulator 00_basic_matmul
-```
+    ```bash
+    bash scripts/build.sh --simulator 00_basic_matmul
+    ```
 
-- This option does not actually change the built binary program. The difference is whether it outputs the simulator path prompt in step 2.
+    - This option does not actually change the built binary program. The difference is whether it outputs the simulator path prompt in step 2.
 
-1. After the build completes, load the simulator binary path based on the prompt.
+2. After the build completes, load the simulator binary path based on the prompt.
 
-```bash
-# Execute based on the actual output from step 1.
-export LD_LIBRARY_PATH=/usr/local/Ascend/ascend-toolkit/latest/tools/simulator/Ascendxxxyy/lib:$LD_LIBRARY_PATH
-export LD_PRELOAD=/usr/local/Ascend/ascend-toolkit/latest/tools/simulator/Ascendxxxyy/lib/libruntime_camodel.so:/usr/local/Ascend/ascend-toolkit/latest/tools/simulator/Ascendxxxyy/lib/libnpu_drv_camodel.so
-```
+    ```bash
+    # Execute based on the actual output from step 1.
+    export LD_LIBRARY_PATH=/usr/local/Ascend/ascend-toolkit/latest/tools/simulator/Ascendxxxyy/lib:$LD_LIBRARY_PATH
+    export LD_PRELOAD=/usr/local/Ascend/ascend-toolkit/latest/tools/simulator/Ascendxxxyy/lib/libruntime_camodel.so:/usr/local/Ascend/ascend-toolkit/latest/tools/simulator/Ascendxxxyy/lib/libnpu_drv_camodel.so
+    ```
 
-1. Change to the executable build directory `output/bin` and execute the operator sample program using `msprof op simulator`.
+3. Change to the executable build directory `output/bin` and execute the operator sample program using `msprof op simulator`.
 
-```bash
-cd output/bin
-# Executable file name | Matrix M-axis | N-axis | K-axis | Device ID (optional)
-msprof op simulator ./00_basic_matmul 256 512 1024 0
-```
+    ```bash
+    cd output/bin
+    # Executable file name | Matrix M-axis | N-axis | K-axis | Device ID (optional)
+    msprof op simulator ./00_basic_matmul 256 512 1024 0
+    ```
 
-- ⚠ Precautions
-  - To view **code hotspot maps**, add `add_compile_options("SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-Xaicore-start -g -Xaicore-end")` to `examples/CMakeLists.txt`.
-  - If a large number of obvious `Vector` operations (such as `Add` and `Div`) are mapped to `Scalar` operations in the profiling results, causing significant anomalies in the results (`vector_ratio<10%`, `scalar>90%`), this is due to the compilation optimization level. You can add `add_compile_options($<$<COMPILE_LANGUAGE:ASCEND>:"-Xaicore-start -O3 -Xaicore-end">)` to `examples/CMakeLists.txt`.
-  - Simulation can only run on card 0; the NPU ID cannot be specified.
+    - ⚠ Precautions
+      - To view **code hotspot maps**, add `add_compile_options("SHELL:$<$<COMPILE_LANGUAGE:ASCEND>:-Xaicore-start -g -Xaicore-end")` to `examples/CMakeLists.txt`.
+      - If a large number of obvious `Vector` operations (such as `Add` and `Div`) are mapped to `Scalar` operations in the profiling results, causing significant anomalies in the results (`vector_ratio<10%`, `scalar>90%`), this is due to the compilation optimization level. You can add `add_compile_options($<$<COMPILE_LANGUAGE:ASCEND>:"-Xaicore-start -O3 -Xaicore-end">)` to `examples/CMakeLists.txt`.
+      - Simulation can only run on card 0; the NPU ID cannot be specified.
 
 #### Simulation Data Description
 
@@ -140,8 +140,8 @@ Obtain the `visualize_data.bin` file from the `simulator` output folder and load
 
 Choose the appropriate tool based on your browser:
 
-- [Edge Trace Viewer](edge://tracing) (Microsoft Edge)
-- [Chrome Trace Viewer](chrome://tracing) (Google Chrome or Chrome-based browsers)
+- Edge Trace Viewer（在 Edge 浏览器地址栏输入 `edge://tracing`） (Microsoft Edge)
+- Chrome Trace Viewer（在 Chrome 浏览器地址栏输入 `chrome://tracing`） (Google Chrome or Chrome-based browsers)
 - [Perfetto](https://ui.perfetto.dev/) (general)
 
 Import the `trace.json` file to view the simulation instruction pipeline chart.
@@ -162,7 +162,7 @@ Data collected by msProf can be imported into [MindStudio Insight](https://www.h
 
 ## Whole-Network Profiling
 
-Although CATLASS only provides single-operator call examples, the single-operator call examples can also be analyzed for performance using [Profiling](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/devaids/Profiling/atlasprofiling_16_0010.html).
+Although CATLASS only provides single-operator call examples, the single-operator call examples can also be analyzed for performance using [Profiling](https://www.hiascend.com/document/detail/en/canncommercial/850/devaids/Profiling/atlasprofiling_16_0010.html).
 
 The following uses `00_basic_matmul` as an example.
 
@@ -170,16 +170,16 @@ The following uses `00_basic_matmul` as an example.
 
 1. Following [Quick Start](../01_quick_start.md), enable the tool's build switch `--enable_profiling` to enable the `Profiling API` for building the operator sample.
 
-```bash
-bash scripts/build.sh --enable_profiling 00_basic_matmul
-```
+    ```bash
+    bash scripts/build.sh --enable_profiling 00_basic_matmul
+    ```
 
-1. Change to the executable build directory `output/bin` and execute the operator sample program with `msProf`.
+2. Change to the executable build directory `output/bin` and execute the operator sample program with `msProf`.
 
-```bash
-cd output/bin
-# Executable file name | Matrix M-axis | N-axis | K-axis | Device ID (optional)
-msprof ./00_basic_matmul 256 512 1024 0
-```
+    ```bash
+    cd output/bin
+    # Executable file name | Matrix M-axis | N-axis | K-axis | Device ID (optional)
+    msprof ./00_basic_matmul 256 512 1024 0
+    ```
 
-For details about the functions of each profile data file, see [msProf Profile Data File Reference](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/devaids/Profiling/atlasprofiling_16_0057.html).
+For details about the functions of each profile data file, see [msProf Profile Data File Reference](https://www.hiascend.com/document/detail/en/canncommercial/850/devaids/Profiling/atlasprofiling_16_0057.html).

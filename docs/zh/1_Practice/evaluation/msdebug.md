@@ -2,7 +2,7 @@
 
 [msDebug](https://www.hiascend.com/document/redirect/CannCommunityToolMsdebug)是用于调试在NPU侧运行的算子程序的一个工具，该工具向算子开发人员提供了在昇腾设备上调试算子的手段。调试手段包括了读取昇腾设备内存与寄存器、暂停与恢复程序运行状态等。
 
-- ⚠️ **注意** 若在容器环境进行开发调试，请保证`/dev/drv_debug`映射至容器内（参考[驱动检查](https://www.hiascend.com/document/caselibrary/detail/atlasopdev_0006)）
+- ⚠️ **注意** 若在容器环境中进行开发调试，请保证`/dev/drv_debug`映射至容器内（参考[驱动检查](https://www.hiascend.com/document/caselibrary/detail/atlasopdev_0006)）
 
 ## 使用示例
 
@@ -10,7 +10,7 @@
 
 ### 使能驱动的调试功能
 
-参考[msDebug工具概述](https://www.hiascend.com/document/redirect/CannCommunityToolMsdebug)，以`debug`模式安装驱动，或在`full`模式安装的驱动下执行`echo 1 > /proc/debug_switch`打开调试通道。
+参考[msDebug工具概述](https://www.hiascend.com/document/redirect/CannCommunityToolMsdebug)，以`debug`模式安装驱动，或在`full`模式下安装驱动，执行`echo 1 > /proc/debug_switch`打开调试通道。
 
 为了避免出现安全问题，请勿在生产环境启用调试通道。
 
@@ -26,31 +26,31 @@ terminate called after throwing an instance of 'MSDEBUG_ERROR_CODE'
 
 1. 基于[快速上手](../01_quick_start.md)，打开工具的编译开关`--debug --msdebug`，使能`debug`与`msdebug`编译算子样例。
 
-```bash
-bash scripts/build.sh --debug --msdebug 00_basic_matmul
-```
+    ```bash
+    bash scripts/build.sh --debug --msdebug 00_basic_matmul
+    ```
 
-- `--debug`同时控制host与device侧代码的debug开关，`--msdebug`控制device侧代码的debug开关。
-- 若只增加`--debug`，只会启用host的调试功能，仅能用gdb/lldb调试host侧代码。
+    - `--debug`同时控制host与device侧代码的debug开关，`--msdebug`控制device侧代码的debug开关。
+    - 若只增加`--debug`，只会启用host的调试功能，仅能用gdb/lldb调试host侧代码。
 
-1. 切换到可执行文件的编译目录 `output/bin` 下，使用`msdebug`执行算子样例程序。
+2. 切换到可执行文件的编译目录 `output/bin` 下，使用`msdebug`执行算子样例程序。
 
-```bash
-cd output/bin
-# 可执行文件名 |矩阵m轴|n轴|k轴|Device ID（可选）
-msdebug ./00_basic_matmul 256 512 1024 0
-```
+    ```bash
+    cd output/bin
+    # 可执行文件名 |矩阵m轴|n轴|k轴|Device ID（可选）
+    msdebug ./00_basic_matmul 256 512 1024 0
+    ```
 
-```bash
-msdebug ./00_basic_matmul 256 512 1024 0
-msdebug(MindStudio Debugger) is part of MindStudio Operator-dev Tools.
-The tool provides developers with a mechanism for debugging Ascend kernels running on actual hardware.
-This enables developers to debug Ascend kernels without being affected by potential changes brought by simulation and emulation environments.
-(msdebug) target create "./00_basic_matmul"
-Current executable set to '/home/catlass/output/bin/00_basic_matmul' (aarch64).
-(msdebug) settings set -- target.run-args  "256" "512" "1024" "0"
-(msdebug)
-```
+    ```bash
+    msdebug ./00_basic_matmul 256 512 1024 0
+    msdebug(MindStudio Debugger) is part of MindStudio Operator-dev Tools.
+    The tool provides developers with a mechanism for debugging Ascend kernels running on actual hardware.
+    This enables developers to debug Ascend kernels without being affected by potential changes brought by simulation and emulation environments.
+    (msdebug) target create "./00_basic_matmul"
+    Current executable set to '/home/catlass/output/bin/00_basic_matmul' (aarch64).
+    (msdebug) settings set -- target.run-args  "256" "512" "1024" "0"
+    (msdebug)
+    ```
 
 ### 命令行调试
 
@@ -174,12 +174,12 @@ Process 814339 stopped
     }
   }
 }
-(msdebug) x -m UB -f float16[] 65536 -c 4 -s 4 # 在UB内存中从65536的地址分打印4行4字节的fp16数据
+(msdebug) x -m UB -f float16[] 65536 -c 4 -s 4 # 在UB内存中从65536的地址分批打印4行4字节的fp16数据
 0x00010000: {355.5 188.75}
 0x00010004: {244.125 -364.75}
 0x00010008: {-104.875 -156}
 0x0001000c: {232 -100.75}
-(msdebug) x -m UB -f float16[] 65536 -c 4 -s 8 # 在UB内存中从65536的地址分打印4行8字节的fp16数据
+(msdebug) x -m UB -f float16[] 65536 -c 4 -s 8 # 在UB内存中从65536的地址分批打印4行8字节的fp16数据
 0x00010000: {355.5 188.75 244.125 -364.75}
 0x00010008: {-104.875 -156 232 -100.75}
 0x00010010: {-47.4062 105.875 -322.5 -265.75}
@@ -295,16 +295,16 @@ Quitting LLDB will kill one or more processes. Do you really want to proceed: [Y
 | print                                      | p                                 | 打印变量                                                                                                                                          | p zLocal                               |
 | frame variable                             | var                               | 打印当前帧所有变量                                                                                                                                | var                                    |
 | memory read                                | x                                 | 读内存<br>-m 指定内存位置，支持GM/UB/L0A/L0B/L0C<br>-f 指定[字节转换格式](#附录)<br>-s 指定每行打印字节数<br>-c 指定打印的行数                    | x -m GM -f float16[] 1000 -c 2 -s 128  |
-| register read                              | re r                              | 读取寄存器值<br>-a 读取所有寄存器值<br>\$REG\_NAME 读取指定名称的寄存器值                                                                         | register read -are r \$PC              |
+| register read                              | re r                              | 读取寄存器值<br/>-a 读取所有寄存器值<br/>\$REG\_NAME 读取指定名称的寄存器值                                                                         | register read -are r \$PC              |
 | thread step-over                           | next<br>n                         | 在同一个调用栈中，移动到下一个可执行的代码行                                                                                                      | n                                      |
 | ascend info devices                        | /                                 | 查询device信息                                                                                                                                    | ascend info devices                    |
 | ascend info cores                          | /                                 | 查询算子所运行的aicore相关信息                                                                                                                    | ascend info cores                      |
 | ascend info tasks                          | /                                 | 查询算子所运行的task相关信息                                                                                                                      | ascend info tasks                      |
 | ascend info stream                         | /                                 | 查询算子所运行的stream相关信息                                                                                                                    | ascend info stream                     |
-| ascend info blocks                         | /                                 | 查询算子所运行的block相关信息<br>可选参数： -d/–details显示所有blocks当前中断处代码                                                               | ascend info blocks                     |
+| ascend info blocks                         | /                                 | 查询算子所运行的block相关信息<br>可选参数： -d/–-details显示所有blocks当前中断处代码                                                               | ascend info blocks                     |
 | ascend aic core                            | /                                 | 切换调试器所聚焦的cube核                                                                                                                          | ascend aic 1                           |
 | ascend aiv core                            | /                                 | 切换调试器所聚焦的vector核                                                                                                                        | ascend aiv 5                           |
-| target modules addkernel.o                 | image addkernel.o                 | PyTorch框架拉起算子时，导入算子调试信息 <br>（注：当程序执行run命令后再执行本命令导入调试信息，<br>则还需额外执行image load命令以使调试信息生效） | image addAddCustom\_xxx.o              |
+| target modules addkernel.o                 | image addkernel.o                 | PyTorch框架拉起算子时，导入算子调试信息 <br>（注：当程序执行run命令后再执行本命令导入调试信息，<br>则还需额外执行image load命令以使调试信息生效） | image addCustom\_xxx.o              |
 | target modules load -f kernel.o -s address | image load -f kernel.o -s address | 在程序运行后，使导入的调试信息生效                                                                                                                | image load -f AddCustom\_xxx.o -s 0    |
 
 ## 附录

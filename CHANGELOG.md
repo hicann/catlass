@@ -47,7 +47,7 @@
   - 新增 [EVG 声明式后处理框架文档](https://gitcode.com/cann/catlass/tree/v1.6.0/docs/zh/2_Design/03_evg/01_evg_design.md)
   - 新增 [存量非 TLA 算子向 Ascend950 平台迁移文档](https://gitcode.com/cann/catlass/tree/v1.6.0/docs/zh/1_Practice/others/migration_from_atlasA2_to_Ascend950_guideline.md)
   - [tile 相关 API 文档](https://gitcode.com/cann/catlass/tree/v1.6.0/docs/zh/3_API/README.md) 补充完善
-  - 文档新增中英文目录，完成多轮低错整改及跳转链接修复
+  - 文档新增中英文目录，完成多轮纠错整改及跳转链接修复
 - Bugfix&优化
   - 将原本的fftsAddr替换为hardwareSyncAddr，使用aclrtGetHardwareSyncAddr接口获取
   - 修复 EpilogueAtlasA2PerTokenDequant 同步缺少导致的 RAW 内存竞争问题
@@ -81,7 +81,7 @@
   - [Python 扩展](https://gitcode.com/cann/catlass/tree/v1.5.0/examples/python_extension/README.md) 支持 `build.sh` 编译选项传入，并支持异步模式；更新设备侧取指针等接入方式
   - [msTuner\_CATLASS](https://gitcode.com/cann/catlass/tree/v1.5.0/tools/tuner/README.md) 扩展 GEMM 配置与搜索空间；[MatmulGelu](https://gitcode.com/cann/catlass/blob/v1.5.0/examples/27_matmul_gelu/README.md) 样例接入寻优示例
 - 文档资料
-  - 文档目录与资源路径调整（如 **figures** 目录），并做低错与内容修订
+  - 文档目录与资源路径调整（如 **figures** 目录），并做纠错与内容修订
   - 泛化工程补充 **MultiCoreSplitK**、**StreamK**、**单核切 K** 等相关说明文档
   - 修复 [ascendc\_dump 文档](https://gitcode.com/cann/catlass/blob/v1.5.0/docs/1_Practice/evaluation_tools/ascendc_dump.md) 中的错误表述
 - Bugfix&优化

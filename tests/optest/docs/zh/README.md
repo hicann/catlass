@@ -2,7 +2,7 @@
 
 ## 目录结构
 
-```
+```text
 docs/zh/
 ├── README.md                          ← 本文：目录索引
 ├── 1_Architecture/                    ← 架构总览

@@ -4,7 +4,7 @@
 
 ## 文件布局
 
-```
+```text
 src/
 ├── CMakeLists.txt
 ├── common/
@@ -71,7 +71,7 @@ RUN_NPU_FUNC(func, blockNum, stream, tParams, params)
 
 `MatmulLike<KernelFunc>` 和 `QuantMatmulLike<KernelFunc>` 封装 matmul 通用流程：
 
-```
+```cpp
 GetKernelInfo(mat1, mat2, ...) ──→ 填充 TParams + MatmulParams
        │
        ▼

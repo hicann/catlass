@@ -1,6 +1,6 @@
 # Using msDebug in a CATLASS Sample Project
 
-[msDebug](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0062.html) is a tool for debugging operator programs running on NPUs. This tool provides operator developers with a mechanism for debugging operators on Ascend devices. Debugging methods include reading device memory and registers, as well as pausing and resuming program execution.
+[msDebug](https://www.hiascend.com/document/detail/en/canncommercial/850/devaids/optool/atlasopdev_16_0062.html) is a tool for debugging operator programs running on NPUs. This tool provides operator developers with a mechanism for debugging operators on Ascend devices. Debugging methods include reading device memory and registers, as well as pausing and resuming program execution.
 
 - ⚠️ **Note**: If you are developing and debugging using containers, ensure that `/dev/drv_debug` is mapped into containers (refer to the [driver check guide](https://www.hiascend.com/document/caselibrary/detail/atlasopdev_0006)).
 
@@ -10,7 +10,7 @@ The following uses `00_basic_matmul` as an example to describe how to use msDebu
 
 ### Enabling the Driver's Debugging Function
 
-Refer to the [msDebug overview](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0062.html) to install the driver in `debug` mode, or execute `echo 1 > /proc/debug_switch` to enable the debug channel on a driver installed in `full` mode.
+Refer to the [msDebug overview](https://www.hiascend.com/document/detail/en/canncommercial/850/devaids/optool/atlasopdev_16_0062.html) to install the driver in `debug` mode, or execute `echo 1 > /proc/debug_switch` to enable the debug channel on a driver installed in `full` mode.
 
 To avoid security issues, do not enable the debug channel in production environments.
 
@@ -26,31 +26,31 @@ terminate called after throwing an instance of 'MSDEBUG_ERROR_CODE'
 
 1. Following [Quick Start](../01_quick_start.md), enable the compilation switch `--debug --msdebug` of the tool to enable the `debug` and `msdebug` compilation of the operator sample.
 
-```bash
-bash scripts/build.sh --debug --msdebug 00_basic_matmul
-```
+    ```bash
+    bash scripts/build.sh --debug --msdebug 00_basic_matmul
+    ```
 
-- `--debug` controls the debug switch for both host and device code, while `--msdebug` controls the debug switch for device code only.
-- If only `--debug` is added, only host debugging is enabled, and only host code can be debugged with gdb/lldb.
+    - `--debug` controls the debug switch for both host and device code, while `--msdebug` controls the debug switch for device code only.
+    - If only `--debug` is added, only host debugging is enabled, and only host code can be debugged with gdb/lldb.
 
-1. Switch to the `output/bin` directory where the executable file is compiled, and run the operator sample program using `msdebug`.
+2. Switch to the `output/bin` directory where the executable file is compiled, and run the operator sample program using `msdebug`.
 
-```bash
-cd output/bin
-# Executable file name | Matrix M-axis | N-axis | K-axis | Device ID (optional)
-msdebug ./00_basic_matmul 256 512 1024 0
-```
+    ```bash
+    cd output/bin
+    # Executable file name | Matrix M-axis | N-axis | K-axis | Device ID (optional)
+    msdebug ./00_basic_matmul 256 512 1024 0
+    ```
 
-```bash
-msdebug ./00_basic_matmul 256 512 1024 0
-msdebug(MindStudio Debugger) is part of MindStudio Operator-dev Tools.
-The tool provides developers with a mechanism for debugging Ascend kernels running on actual hardware.
-This enables developers to debug Ascend kernels without being affected by potential changes brought by simulation and emulation environments.
-(msdebug) target create "./00_basic_matmul"
-Current executable set to '/home/catlass/output/bin/00_basic_matmul' (aarch64).
-(msdebug) settings set -- target.run-args  "256" "512" "1024" "0"
-(msdebug)
-```
+    ```bash
+    msdebug ./00_basic_matmul 256 512 1024 0
+    msdebug(MindStudio Debugger) is part of MindStudio Operator-dev Tools.
+    The tool provides developers with a mechanism for debugging Ascend kernels running on actual hardware.
+    This enables developers to debug Ascend kernels without being affected by potential changes brought by simulation and emulation environments.
+    (msdebug) target create "./00_basic_matmul"
+    Current executable set to '/home/catlass/output/bin/00_basic_matmul' (aarch64).
+    (msdebug) settings set -- target.run-args  "256" "512" "1024" "0"
+    (msdebug)
+    ```
 
 ### Command Line Debugging
 
@@ -295,7 +295,7 @@ Quitting LLDB will kill one or more processes. Do you really want to proceed: [Y
 | print                                      | p                                 | Print variables.                                                                                                                                                                                                                                                                          | p zLocal                               |
 | frame variable                             | var                               | Print all variables in the current frame.                                                                                                                                                                                                                                                 | var                                    |
 | memory read                                | x                                 | Read memory.<br>`-m` specifies the memory location. GM, UB, L0A, L0B, and L0C are supported.<br>`-f` specifies the [byte conversion format](#appendix).<br>`-s` specifies the number of bytes to be printed in each line.<br>`-c` specifies the number of lines to be printed.            | x -m GM -f float16[] 1000 -c 2 -s 128  |
-| register read                              | re r                              | Read register values.<br>`-a` reads all register values.<br>`\$REG_NAME` reads the value of the register with the specified name.                                                                                                                                                         | register read -are r \$PC              |
+| register read                              | re r                              | Read register values.<br/>`-a` reads all register values.<br/>`\$REG_NAME` reads the value of the register with the specified name.                                                                                                                                                         | register read -are r \$PC              |
 | thread step-over                           | next<br>n                         | Move to the next executable line of code in the same call stack.                                                                                                                                                                                                                          | n                                      |
 | ascend info devices                        | /                                 | Query device information.                                                                                                                                                                                                                                                                 | ascend info devices                    |
 | ascend info cores                          | /                                 | Query AI Core information for an operator.                                                                                                                                                                                                                                                | ascend info cores                      |

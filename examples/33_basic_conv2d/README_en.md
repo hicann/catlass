@@ -2,7 +2,7 @@
 
 ## Code Organization
 
-```
+```text
 ├── 33_basic_conv2d
 │   ├── CMakeLists.txt # CMake build file
 │   ├── README.md
@@ -14,7 +14,7 @@
 - After obtaining the code, build the operator executable file. For details, see [Template Library Quick Start](../../docs/en/1_Practice/01_quick_start.md#build-and-execution).
 - Execute the operator.
 
-```
+```bash
 # Build a specified test case.
 bash scripts/build.sh 33_basic_conv2d
 cd ./output/bin
@@ -25,6 +25,6 @@ cd ./output/bin
 
 If the following result is displayed, the accuracy verification is successful.
 
-```
+```text
 Compare success.
 ```

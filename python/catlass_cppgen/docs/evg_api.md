@@ -85,18 +85,23 @@ print(evg_str)        # using Result = Catlass::Epilogue::Fusion::VisitorAuStore
 ## EVG 使用参考
 
 在`catlass_cppgen`中，要使用 EVG 特性，有下述三种办法：
+
  - 在创建kernel时直接通过 `Gemm(evg_config=...)` 传入，参考示例：
+
 ```python
 evg_config = {
     "fn_src": "def epilogue(accum, bias):\n    return relu(accum + bias)",
     "example_inputs": {"accum": ..., "bias": ..., "result": ...},
 }
 gemm = Gemm(..., evg_config=evg_config, A=a, B=b)
+
 ```
  - 对已有 Kernel 直接调用 `to_evg(evg_config)`，参考示例：
+
 ```python
 gemm = Gemm(...)
 
 gemm = gemm.to_evg(evg_config=evg_config)
 ```
- - 直接调用`evg(fn_src, example_inputs)` 生成 EVG 定义，如上述[使用示例](###使用示例)所示。
+
+ - 直接调用`evg(fn_src, example_inputs)` 生成 EVG 定义，如上述[使用示例](#使用示例)所示。

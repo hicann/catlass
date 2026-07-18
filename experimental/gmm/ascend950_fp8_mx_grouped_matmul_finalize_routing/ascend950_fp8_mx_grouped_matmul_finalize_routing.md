@@ -4,7 +4,7 @@
 
 ### 算子流程
 
-```
+```text
 (A * MxScaleA) @ (B * MxScaleB) + Bias → C(m,n)    [AIC: Grouped MX FP8 Matmul]
         ↓ Write to GM Workspace
    C_workspace(m,n)
@@ -54,7 +54,7 @@
 
 #### 同步协议
 
-```
+```text
 AIC:  ──[计算 tile 0]──SetFlag(6)──[计算 tile 1]──SetFlag(6)──...──WaitFlag(4)──
 AIV:  ──WaitFlag(6)──[后处理 tile 0]──SetFlag(4)──WaitFlag(6)──[后处理 tile 1]──...
 ```
@@ -74,7 +74,7 @@ AIV:  ──WaitFlag(6)──[后处理 tile 0]──SetFlag(4)──WaitFlag(6)
 
 Finalize Routing是MoE（Mixture of Experts）推理中的关键后处理步骤，将分组矩阵乘的结果按路由权重加权后聚合到输出张量。整个过程在AIV上执行，分为四个阶段：
 
-```
+```text
 GMM结果 (workspace, FP32)
     ↓ ClearOutTile        清零输出区域
     ↓ AssignSharedInput   (可选) 共享专家输出赋值

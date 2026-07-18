@@ -2,7 +2,7 @@
 
 ## Code Organization
 
-```
+```text
 ├── 48_ascend950_grouped_matmul_slice_m_per_tensor_per_channel_dequant
 │   ├── CMakeLists.txt # CMake build file
 │   ├── README.md
@@ -37,7 +37,7 @@ Fixpipe provides two different granularities of quantization/dequantization mode
 - After obtaining the code, compile the corresponding operator executable file. For details, see [Template Library Quick Start](../../docs/en/1_Practice/01_quick_start.md#build-and-execution). This test case is an Ascend 950 operator. During compilation, you need to add -DCATLASS_ARCH=3510.
 - Execute the operator.
 
-```
+```bash
 # Compiling a specified case
 bash scripts/build.sh 48_ascend950_grouped_matmul_slice_m_per_tensor_per_channel_dequant -DCATLASS_ARCH=3510
 cd output/bin
@@ -50,7 +50,7 @@ cd output/bin
 
 If the following result is displayed, the accuracy verification is successful.
 
-```
+```text
 Compare success.
 ```
 

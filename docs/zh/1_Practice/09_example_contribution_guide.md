@@ -61,7 +61,7 @@ examples/${id}_${op_name}/
 
 ### 2.4 编译测试
 
-使用以下命令编译和测试（以A2为例）：
+使用以下命令编译和测试（以Atlas A2为例，编译选项`-DCATLASS_ARCH`不指定时默认为`2201`架构（Atlas A2/Atlas A3产品））：
 
 ```bash
 # 编译算子样例

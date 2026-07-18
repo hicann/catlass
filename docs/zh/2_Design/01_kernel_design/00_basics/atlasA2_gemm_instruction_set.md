@@ -43,9 +43,9 @@
 
 1. GM->L1
 
-使用DataCopy进行数据搬运，具体参入配置如下。参数具体含义详见相关链接
+使用DataCopy进行数据搬运，具体参数配置如下。参数具体含义详见相关链接
 
-```c++
+```cpp
 nd2nzA1Params.ndNum = 1;
 nd2nzA1Params.nValue = m;   //40
 nd2nzA1Params.dValue = k;   //56
@@ -64,7 +64,7 @@ nd2nzA1Params.dstNzMatrixStride = 0;
 
 由于A-Rowmajor的情况下，小分形也是RowMajor的，所以使用LoadData接口
 
-```c++
+```cpp
 __aicore__ inline void SplitA()
 {
     AscendC::LocalTensor<T> a1Local = inQueueA1.DeQue<T>();
@@ -102,7 +102,7 @@ __aicore__ inline void SplitA()
 
 配置Nd2NzParams结构体成员时需要注意，源操作数的shape为(K, M), dstNzC0Stride的单位为32B，该参数取值为L1上zN矩阵的对齐后的行数，也就是K轴对齐到FractalShape\[0]后的长度
 
-```c++
+```cpp
 nd2nzA1Params.ndNum = 1;
 nd2nzA1Params.nValue = k;
 nd2nzA1Params.dValue = m;
@@ -121,7 +121,7 @@ if constexpr (AscendC::IsSameType<T, half>::value && AscendC::IsSameType<U, floa
 
 如图2所示，以M轴方向作为外轴进行for循环，以K轴方向作为内轴来配置loadDataParams.repeatTimes。在这里对于srcoffset和dstoffset的值为CeilDivision(k, FractalShape\[0]) \* fractalSize
 
-```c++
+```cpp
 uint32_t dstOffset = CeilDivision(k, fractalShape[0]) * fractalSize;
 uint32_t srcOffset = CeilDivision(k, fractalShape[0]) * fractalSize;
 // Nz -> Zz
@@ -148,7 +148,7 @@ for (int i = 0; i < CeilDivision(m, fractalShape[1]); ++i) {
 
 矩阵在GM、L1、L0A上的数据排布分别是RowMajor，nZ和zZ，从nZ到zZ的小分形是转置的，所以需要调用LoadDataWithTranspose接口。如图3所示，以M轴方向作为外轴进行for循环，以K轴方向作为内轴来配置loadDataParams.repeatTimes。需要注意的是，由于转置时连续两个分形合并成一个方阵，因此loadDataParams.repeatTimes=CeilDivision(k, fractalShape\[0] \* fractalNum)。另外，如图2所示，L0A中转置前处于同一个方阵中的两个分形在L1的物理排布上是连续的，转置后前一个分形结束的地址与后一个分形其实地址的间隔为CeilDivision(k, fractalShape\[1]) - 1，单位是512B(16\*32)
 
-```c++
+```cpp
 // dstoffset要根据A矩阵在L0上，宽度方向的对齐来求解
 uint32_t dstOffset = CeilDivision(k, fractalShape[1]) * fractalSize * fractalNum;
 // srcoffset要根据A矩阵在L1上，高度方向的对齐来求解
@@ -177,7 +177,7 @@ for (int i = 0; i < CeilDivision(m, fractalShape[1]); ++i) {
 
 配置Nd2NzParams结构体成员时，需要追忆，源操作数的shape为(K, M), dstNzC0Stride的单位为32B，该参数取值为L1矩阵转置后的对齐后的行数，也就是K轴对齐到FractalShape\[0]的长度
 
-```c++
+```cpp
 nd2nzA1Params.ndNum = 1;
 nd2nzA1Params.nValue = k;
 nd2nzA1Params.dValue = m;
@@ -238,7 +238,7 @@ loadDataParams.enTranspose = true;
 
 配置Nd2NzParams结构体成员时，需要注意，源操作数的shape为(K, N)，dstNzC0Stride的单位为32B，该参数取值为L1上分形对齐后的行数
 
-```c++
+```cpp
 nd2nzB1Params.ndNum = 1;
 nd2nzB1Params.nValue = k;
 nd2nzB1Params.dValue = n;
@@ -259,7 +259,7 @@ L1上分形到L0上分形发生转置，且为fp16数据类型方阵，使用Loa
 
 如图5所示，以K轴为外轴进行for循环，以N轴方向作为内轴配置loadDataParams.repeatTimes
 
-```c++
+```cpp
 uint32_t dstOffset = CeilDivision(n, fractalShape[0] * fractalNum) * fractalSize * fractalNum;
 uint32_t srcOffset = fractalSize * fractalNum;
 // Nz -> Zn
@@ -281,7 +281,7 @@ for (int i = 0; i < CeilDivision(k, fractalShape[0] * fractalNum); ++i) {
 
 配置Nd2NzParams结构体的成员时，需要注意的是源操作数的shape为(K, N), dstNzC0Stride的单位为32B，该参数取值为L1上矩阵对齐后的行数
 
-```c++
+```cpp
 nd2nzB1Params.ndNum = 1;
 nd2nzB1Params.nValue = k;
 nd2nzB1Params.dValue = n;
@@ -302,7 +302,7 @@ nd2nzB1Params.dstNzMatrixStride = 0;
 
 如图6所示，以K轴方向作为外轴进行for循环，以N轴方向作为N轴来配置loadDataParams.repeatTimes。需要注意的是，由于转置时连续两个分形和行为一个方阵因此loadDataPrams.repeatTimes=CeilDivision(k, fractalShape\[0]\*fractalNum)。另外，如图6所示，L0A中转置前同一块方阵中的两个分形在L1上是连续的，转置后依然是连续的，因此前一个分形地址和后一个分形地址的间隔为0
 
-```c++
+```cpp
 uint32_t dstOffset = CeilDivision(n, fractalShape[0] * fractalNum) * fractalSize * fractalNum;
 uint32_t srcOffset = fractalSize * fractalNum;
 AscendC::LoadData2dTransposeParams loadDataParams;
@@ -326,7 +326,7 @@ for (int i = 0; i < CeilDivision(k, fractalShape[0] * fractalNum); ++i) {
 
 配置Nd2NzParams结构体成员时，需要注意源操作数的shape为(K, N), dstNzC0Stride的单位为32B，该参数为L1上矩阵对齐后的行数
 
-```c++
+```cpp
 nd2nzB1Params.ndNum = 1;
 nd2nzB1Params.nValue = k;
 nd2nzB1Params.dValue = n;
@@ -347,7 +347,7 @@ fp32数据类型的搬运需要针对Load3Dv2指令的接口进行相应配置
 
 根据Load3Dv2指令完成img2col的过程，可知 img2col后B矩阵高度为ho \* wo,根据ho和wo的计算公式，代入卷积核宽度、卷积核滑动步长、卷积核膨胀系数等参数可知：B矩阵的高度为 CeilAlign(k, fractalShape\[0])；img2col后B矩阵宽度为ci \* kh \* kw，代入kh=1,kw=1，可知B矩阵的宽度为CeilAlign(n, fractalShape\[1])。需要注意的是 loadDataParams.enTranspose 配置仅仅对A矩阵有效，对B矩阵取值为true或者false不会影响功能。
 
-```c++
+```cpp
 loadDataParams.l1H = CeilAlign(k, fractalShape[0]);
 loadDataParams.l1W = 1;
 loadDataParams.channelSize = CeilAlign(n, fractalShape[1]);
@@ -373,7 +373,7 @@ loadDataParams.fMatrixCtrl = false;
 
 根据数据排布具体情况配置DataParams，使用DataCopy进行数据搬运
 
-```c++
+```cpp
 nd2nzB1Params.ndNum = 1;
 nd2nzB1Params.nValue = n;
 nd2nzB1Params.dValue = k;
@@ -393,7 +393,7 @@ nd2nzB1Params.dstNzMatrixStride = 0;
 
 如图7所示，以K轴方向作为外轴进行for循环，以N轴方向作为内轴来配置loadDataParams.repeatTimes。如图所示，srcoffset是L1上B矩阵K轴方向每循环一次时LocalTensor的地址偏移量，dstoffset是在L0B上B矩阵按K轴方向循环一次LocalTensor的地址偏移量。由于L1上的B矩阵与L0B上的B矩阵等价，因此srcOffset和dstOffset取值相同
 
-```c++
+```cpp
 __aicore__ inline void SplitB()
 {
     AscendC::LocalTensor<T> b1Local = inQueueB1.DeQue<T>();
@@ -430,7 +430,7 @@ __aicore__ inline void SplitB()
 
 通过Fixpipe指令进行搬运时，需要配置MmadParams的结构体成员，具体的含义可参考[Fixpipe-数据搬运-矩阵计算（ISASI）-基础API-Ascend C算子开发接口-API-CANN商用版8.5.0开发文档-昇腾社区](https://www.hiascend.com/document/detail/zh/canncommercial/850/API/ascendcopapi/atlasascendc_api_07_0251.html)。其中，fixpipeParams.srcStride的单位是32/sizeof(T)个元素，其含义是源NZ矩阵中相邻小分型的其实地址偏移(RowMajor)矩阵中同一行的元素在源NZ矩阵中处于相邻的Z排布，该参数的取值是L0C上C矩阵M轴向16对齐后的长度
 
-```c++
+```cpp
 AscendC::FixpipeParamsV220 fixpipeParams;
 fixpipeParams.nSize = n;
 fixpipeParams.mSize = m;
@@ -479,7 +479,7 @@ fixpipeParams.dstNdStride = 0;
 
 ![图9: A矩阵转置，float数据类型下，K轴实际对齐情况](https://raw.gitcode.com/user-images/assets/9091846/717fe7f3-2267-4603-8e45-a894ad6f5569/AscendC-basic-knowledge-image-8.png)
 
-```c++
+```cpp
 AscendC::MmadParams mmadParams;
 // 左矩阵Height
 mmadParams.m = m;

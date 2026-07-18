@@ -2,7 +2,7 @@
 
 ## Code Organization
 
-```
+```text
 ├── 17_gemv_aiv
 │   ├── CMakeLists.txt # CMake build file
 │   ├── README.md
@@ -11,10 +11,10 @@
 
 ## Example
 
-- After obtaining the code, build the operator executable file. For details, see [Template Library Quick Start](../../docsen/1_Practice/01_quick_start.md#build-and-execution).
+- After obtaining the code, build the operator executable file. For details, see [Template Library Quick Start](../../docs/en/1_Practice/01_quick_start.md#build-and-execution).
 - Execute the operator.
 
-```
+```bash
 # Build a specified test case.
 bash scripts/build.sh 17_gemv_aiv
 cd output/bin
@@ -25,6 +25,6 @@ cd output/bin
 
 If the following information is displayed, the accuracy comparison is successful.
 
-```
+```text
 Compare success.
 ```

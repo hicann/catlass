@@ -4,7 +4,7 @@
 
 ## 代码组织
 
-```
+```text
 experimental
 ├── attention
 │   ├── ascend950_fp8_mx_flash_attention_infer
@@ -31,7 +31,7 @@ experimental
 
 以下是一个完整的shell脚本示例
 
-```
+```text
 batch=1          # batch大小
 qSeqlen=177      # query序列长度
 kvSeqlen=512     # key/value序列长度
@@ -69,7 +69,7 @@ run_kernel
 
 执行结果如下，说明精度比对成功。
 
-```
+```text
 Compare success.
 ```
 

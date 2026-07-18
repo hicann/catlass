@@ -2,7 +2,7 @@
 
 ## Code Organization
 
-```
+```text
 ├── 44_quant_matmul_full_loadA_tla
 │   ├── CMakeLists.txt     # CMake build file
 │   ├── README.md
@@ -19,7 +19,7 @@ Based on 12_quant_matmul, this operator supports full loading of matrix A. A sin
 - After obtaining the code, build the operator executable file. For details, see [Template Library Quick Start](../../docs/en/1_Practice/01_quick_start.md#build-and-execution).
 - Execute the operator.
 
-```
+```bash
 # Build a specified test case.
 bash scripts/build.sh 44_quant_matmul_full_loadA_tla
 cd output/bin
@@ -30,6 +30,6 @@ cd output/bin
 
 If the following information is displayed, the accuracy comparison is successful.
 
-```
+```text
 Compare success.
 ```

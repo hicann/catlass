@@ -8,7 +8,7 @@
 
 ## Code Organization
 
-```
+```text
 ├── 53_ascend950_fp8_mx_matmul
 │ ├── CMakeLists.txt # CMake build configuration
 │   ├── README.md
@@ -22,7 +22,7 @@
 - After obtaining the code, build the corresponding operator executable file. For details, see [Template Library Quick Start](../../docs/en/1_Practice/01_quick_start.md#). This test case is an Ascend 950 (3510) operator. During compilation, you need to add -DCATLASS_ARCH=3510.
 - Execute the operator.
 
-```
+```bash
 # Build a specified test case.
 bash scripts/build.sh 53_ascend950_fp8_mx_matmul -DCATLASS_ARCH=3510
 # Generate test case (generates input/ and golden/ under examples/53_ascend950_fp8_mx_matmul/data)
@@ -42,13 +42,13 @@ bash scripts/build.sh 53_ascend950_fp8_mx_matmul_aswt -DCATLASS_ARCH=3510
 
 If the following information is displayed, the accuracy comparison is successful.
 
-```
+```cpp
 Compare success.
 ```
 
 ## Instructions
 
-1. `gen_data.py` supports trans_a and trans_b as input, but the 53_ascend950_fp8_mx_matmul executable does not support them. This example only covers the case where trans_a is 0 and trans_b is 1.
+`gen_data.py` supports trans_a and trans_b as input, but the 53_ascend950_fp8_mx_matmul executable does not support them. This example only covers the case where trans_a is 0 and trans_b is 1.
 
 To handle transposed cases, modify the layout in the example, as the layout implicitly represents the transpose state: layout::RowMajor means no transpose, while layout::ColumnMajor means transpose.
 
@@ -61,10 +61,11 @@ The table below lists the kernels and applicable systems.
 | 1       | 0       | layout::ColumnMajor | layout::RowMajor    |
 | 1       | 1       | layout::ColumnMajor | layout::ColumnMajor |
 
-2. This example performs MX quantized matrix multiplication:
-   C = (MxScaleA x A) * (MxScaleB x B) + Bias
-   Supported data types for A and B are float8_e4m3 or float8_e5m2
-   Supported data type for MxScaleA and MxScaleB is float8_e8m0
+This example performs MX quantized matrix multiplication:
+
+- C = (MxScaleA x A) * (MxScaleB x B) + Bias
+- Supported data types for A and B are float8_e4m3 or float8_e5m2
+- Supported data type for MxScaleA and MxScaleB is float8_e8m0
 
 The data layout requirements for MxScaleA and MxScaleB are as follows:
 When A is RowMajor, the shape of MxScaleA is (m, ceil(k/64), 2)
@@ -72,7 +73,7 @@ When A is ColumnMajor, the shape of MxScaleA is (ceil(k/64), m, 2)
 When B is RowMajor, the shape of MxScaleB is (ceil(k/64), n, 2)
 When B is ColumnMajor, the shape of MxScaleB is (n, ceil(k/64), 2)
 
-3. The DispatchPolicy MxMmad used by default in MxMatmul supports the following template parameters:
+The DispatchPolicy MxMmad used by default in MxMatmul supports the following template parameters:
 
 | Template Parameter | Default Value | Parameters                                                                                              |
 | ------------------ | ------------- | ------------------------------------------------------------------------------------------------------- |

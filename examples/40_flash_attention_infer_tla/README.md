@@ -2,7 +2,7 @@
 
 ## 代码组织
 
-```
+```text
 ├── 40_flash_attention_infer_tla
 │   ├── CMakeLists.txt # CMake构建配置文件
 │   ├── gen_data.py
@@ -22,7 +22,7 @@
 
 以下是一个完整的shell脚本示例
 
-```
+```text
 batch=1           # batch大小
 qSeqlen=177       # query序列长度
 kvSeqlen=512      # key/value序列长度
@@ -59,6 +59,6 @@ run_kernel
 
 执行结果如下，说明精度比对成功。
 
-```
+```text
 Compare success.
 ```

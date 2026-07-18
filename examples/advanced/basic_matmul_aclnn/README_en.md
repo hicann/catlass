@@ -6,7 +6,7 @@ The following guide uses `basic_matmul` to demonstrate the end-to-end integratio
 
 ## 1. Creating an Operator Project
 
-Refer to the [Operator Project Creation Guide](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/opdevg/Ascendcopdevg/atlas_ascendc_10_0060.html) to define your operator prototype JSON file and generate the base engineering code.
+Refer to the [Operator Project Creation Guide](https://www.hiascend.com/document/detail/en/canncommercial/850/opdevg/Ascendcopdevg/atlas_ascendc_10_0060.html) to define your operator prototype JSON file and generate the base engineering code.
 
 ### Defining JSON
 
@@ -26,9 +26,9 @@ msopgen gen -i catlass_basic_matmul.json -c ai_core-<soc_version> -lan cpp -out 
 
 ## 2. Implementing Host-side Code
 
-Refer to [Host-Side Tiling Implementation - Basic Process](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/opdevg/Ascendcopdevg/atlas_ascendc_10_00021.html) to implement the TilingFunc logic.
+Refer to [Host-Side Tiling Implementation - Basic Process](https://www.hiascend.com/document/detail/en/canncommercial/850/opdevg/Ascendcopdevg/atlas_ascendc_10_00021.html) to implement the TilingFunc logic.
 
-To support **operator graph fusion**, refer to [Integrating Operators into a GE Graph](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/opdevg/Ascendcopdevg/atlas_ascendc_10_0078.html) to implement `InferShape` and `InferDataType`.
+To support **operator graph fusion**, refer to [Integrating Operators into a GE Graph](https://www.hiascend.com/document/detail/en/canncommercial/850/opdevg/Ascendcopdevg/atlas_ascendc_10_0078.html) to implement `InferShape` and `InferDataType`.
 
 Sample code:
 [op_host/catlass_basic_matmul.cpp](./op_host/catlass_basic_matmul.cpp)
@@ -36,7 +36,7 @@ Sample code:
 
 ## 3. Implementing Device-side Code
 
-Refer to [Operator Implementation on the Kernel](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/opdevg/Ascendcopdevg/atlas_ascendc_10_0063.html) to write your device kernel code.
+Refer to [Operator Implementation on the Kernel](https://www.hiascend.com/document/detail/en/canncommercial/850/opdevg/Ascendcopdevg/atlas_ascendc_10_0063.html) to write your device kernel code.
 
 Sample code:
 [op_kernel/catlass_basic_matmul.cpp](./op_kernel/catlass_basic_matmul.cpp)
@@ -87,7 +87,7 @@ Sample code:
 
 ## 4. Compilation and Deployment
 
-Refer to [Operator Project Building](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/opdevg/Ascendcopdevg/atlas_ascendc_10_0068.html) and [OPP Deployment](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/opdevg/Ascendcopdevg/atlas_ascendc_10_0069.html) to build and install your custom operator implementation, then set the necessary environment variables.
+Refer to [Operator Project Building](https://www.hiascend.com/document/detail/en/canncommercial/850/opdevg/Ascendcopdevg/atlas_ascendc_10_0068.html) and [OPP Deployment](https://www.hiascend.com/document/detail/en/canncommercial/850/opdevg/Ascendcopdevg/atlas_ascendc_10_0069.html) to build and install your custom operator implementation, then set the necessary environment variables.
 
 Generally, callers must include the header file `aclnn_catlass_basic_matmul.h` and link against the compiled `dynamic library libcust_opapi.so`. Assuming standard deployment paths, these artifacts are placed in the following locations:
 
@@ -100,7 +100,7 @@ Utilize these locations when configuring target dependencies in your custom `Mak
 
 ## 5. Invocation
 
-Refer to the [API Overview](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/API/aolapi/operatorlist_00001.html) to familiarize yourself with foundational aclnn calling paradigms, then reference [basic_matmul_aclnn.cpp](./basic_matmul_aclnn.cpp) for invocation.
+Refer to the [API Overview](https://www.hiascend.com/document/detail/en/canncommercial/850/API/aolapi/operatorlist_00001.html) to familiarize yourself with foundational aclnn calling paradigms, then reference [basic_matmul_aclnn.cpp](./basic_matmul_aclnn.cpp) for invocation.
 
 You can compile `CMakeLists.txt` as follows:
 

@@ -2,7 +2,7 @@
 
 ## Code Organization
 
-```
+```text
 ├── 40_flash_attention_infer_tla
 │   ├── CMakeLists.txt # CMake build configuration file
 │   ├── gen_data.py
@@ -22,7 +22,7 @@
 
 The following is a complete shell script example.
 
-```
+```text
 batch=1
 qSeqlen=177
 kvSeqlen=512
@@ -63,6 +63,6 @@ run_kernel
 
 If the following result is displayed, precision verification is successful.
 
-```
+```text
 Compare success.
 ```

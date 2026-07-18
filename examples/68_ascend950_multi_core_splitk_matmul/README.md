@@ -2,7 +2,7 @@
 
 ## 代码组织
 
-```
+```text
 ├── 68_ascend950_multi_core_splitk_matmul
 │   ├── CMakeLists.txt     # CMake编译文件
 │   ├── README.md
@@ -24,7 +24,7 @@ cd output/bin
 
 执行结果如下，说明精度比对成功。
 
-```
+```text
 Compare success.
 ```
 

@@ -2,7 +2,7 @@
 
 ## 包结构
 
-```
+```text
 torch_catlass/
 ├── __init__.py          # 入口：库加载、版本、架构检测
 ├── _version.py          # 构建时自动生成的版本字符串 (由 build.sh)
@@ -14,7 +14,7 @@ torch_catlass/
 
 ## 初始化序列
 
-```
+```text
 import torch_catlass
   │
   ├── _version.py ──→ os.environ["TORCH_CATLASS_VERSION"]

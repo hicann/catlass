@@ -4,7 +4,7 @@
 
 ## Code Organization
 
-```
+```text
 ├── 43_ascend950_basic_matmul
 │   ├── CMakeLists.txt     # CMake build file
 │   ├── README.md
@@ -16,7 +16,7 @@
 - After obtaining the code, build the corresponding operator executable. See [Template Library Quick Start](../../docs/en/1_Practice/01_quick_start.md#build-and-execution). This case is a 950 operator, and `-DCATLASS_ARCH=3510` must be added during build.
 - Run the operator.
 
-```
+```bash
 # Build the specified case
 bash scripts/build.sh 43_ascend950_basic_matmul -DCATLASS_ARCH=3510
 cd output/bin
@@ -27,7 +27,7 @@ cd output/bin
 
 The execution result is as follows, indicating that the precision comparison succeeds.
 
-```
+```text
 Compare success.
 ```
 

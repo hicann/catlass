@@ -109,8 +109,8 @@ The following structures and key functions are implemented in the [kernel layer]
 - [struct Arguments](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#L116): encapsulates the parameters passed from the host side.
 - [static size_t GetWorkspaceSize](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#L128): pre-calculates the space required for alignment.
 - [static Params ToUnderlyingArguments](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#L150): parses the input parameters on the host side into the `Params` structure on the operator side.
-- [void operator()<AscendC::AIV>](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#L204): execution code for the AIV (Vector) part.
-- [void operator()<AscendC::AIC>](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#L253): execution code for the AIC (Cube) part.
+- [void operator()`<AscendC::AIV>`](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#L204): execution code for the AIV (Vector) part.
+- [void operator()`<AscendC::AIC>`](../../include/catlass/gemm/kernel/single_core_slicek_matmul.hpp#L253): execution code for the AIC (Cube) part.
 
 ## AIV/AIC Computation Process
 
@@ -254,6 +254,6 @@ However, it should be noted that if the M and N dimensions are too small, or if 
 Note:
 
 - The benchmark refers to the [BasicMatmul](../00_basic_matmul/README.md) operator.
-- All recorded metrics represent the total execution time of the kernel function, collected with the [`msprof`](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/devaids/optool/atlasopdev_16_0082.html) profiling tool.
+- All recorded metrics represent the total execution time of the kernel function, collected with the [`msprof`](https://www.hiascend.com/document/detail/en/canncommercial/850/devaids/optool/atlasopdev_16_0082.html) profiling tool.
 - In the preceding test case, matrices A, B, and C are in `layout::RowMajor` format.
 - Test environment: The NPU model is 910B2, and the CANN package version is 8.2.RC1.

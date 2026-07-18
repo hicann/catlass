@@ -41,7 +41,7 @@ The CATLASS GMM_sliceM_perToken_Dequant sample operator is implemented based on 
 - [Set DispatchPolicy](../10_grouped_matmul_slice_m_per_token_dequant/grouped_matmul_slice_m_per_token_dequant.cpp#L152) to [MmadAtlasA2PreloadAsyncWithCallback](../../docs/en/2_Design/01_kernel_design/03_dispatch_policies.md), that is, select the BlockMmad component.
 - Set [L1TileShape and L0TileShape](../../docs/en/2_Design/01_kernel_design/03_dispatch_policies.md) to split the basic block into cores and L1/L0 blocks. Note that there are structural constraints between the settings of `TileShape` and `DispatchPolicy`. For example, when L1::M=128 and L1::K=128, `l0AStages` cannot exceed 4 to avoid exceeding the L0A capacity size, which would otherwise be intercepted by static verification on the BlockMmad side during sample compilation. For details about `TileShape` computation, see [TileShape constraints](../../docs/en/1_Practice/11_matmul_optimization.md).
 - [Set blockMmad input and output types](../../docs/en/2_Design/01_kernel_design/03_dispatch_policies.md).
-- To specifically use `CopyGmToL1GMMPTD` to perform the `CopyGmToL1A `action, a new `TileCopyMmad` is [redefined](../10_grouped_matmul_slice_m_per_token_dequant/grouped_matmul_slice_m_per_token_dequant.cpp#L49) and [assembled](../10_grouped_matmul_slice_m_per_token_dequant/grouped_matmul_slice_m_per_token_dequant.cpp#L161). If `CopyGmToL1GMMPTD` is not enabled, this step can be skipped, and BlockMmad will use the default `TileCopyMmad.
+- To specifically use `CopyGmToL1GMMPTD` to perform the `CopyGmToL1A` action, a new `TileCopyMmad` is [redefined](../10_grouped_matmul_slice_m_per_token_dequant/grouped_matmul_slice_m_per_token_dequant.cpp#L49) and [assembled](../10_grouped_matmul_slice_m_per_token_dequant/grouped_matmul_slice_m_per_token_dequant.cpp#L161). If `CopyGmToL1GMMPTD` is not enabled, this step can be skipped, and BlockMmad will use the default `TileCopyMmad`.
 - [Assemble BlockMMAD](../10_grouped_matmul_slice_m_per_token_dequant/grouped_matmul_slice_m_per_token_dequant.cpp#L162) using the above template input parameters.
 
 ### Assembling blockEpilogue
@@ -68,7 +68,7 @@ The CATLASS GMM_sliceM_perToken_Dequant sample operator is implemented based on 
 - [Allocate the workspace](../10_grouped_matmul_slice_m_per_token_dequant/grouped_matmul_slice_m_per_token_dequant.cpp#L206).
 - [Initialize the adapter operator](../10_grouped_matmul_slice_m_per_token_dequant/grouped_matmul_slice_m_per_token_dequant.cpp#L208). Note that for operators involving inter-core synchronization, you need to [initialize fftsAddr](../10_grouped_matmul_slice_m_per_token_dequant/grouped_matmul_slice_m_per_token_dequant.cpp#L138) and pass it when executing the MatmulAdapter.
 
-```
+```cpp
 // Prepare FFTS address
     uint64_t fftsAddr{0};
     uint32_t fftsLen{0};
@@ -95,8 +95,8 @@ The CATLASS GMM_sliceM_perToken_Dequant sample operator is implemented based on 
 - [struct Arguments](../../include/catlass/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp#L104): input parameters on the host side
 - [static Params ToUnderlyingArguments](../../include/catlass/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp#L129): parses the host-side input Arguments into Params, which is called by the adapter during operator initialization
 - [static size_t GetWorkspaceSize](../../include/catlass/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp#L121): calculates the workspace required for operator execution based on Arguments
-- [void operator()<AscendC::AIC>](../../include/catlass/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp#L167): AIC execution code
-- [void operator()<AscendC::AIV>](../../include/catlass/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp#L277): AIV execution code
+- [void operator()`<AscendC::AIC>`](../../include/catlass/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp#L167): AIC execution code
+- [void operator()`<AscendC::AIV>`](../../include/catlass/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp#L277): AIV execution code
 - [struct AicWaitFunc](../../include/catlass/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp#L350): encapsulates the inter-core synchronization of the AIC waiting for the MTE3 transfer completion of the AIV. The MmadAtlasA2PreloadAsyncWithCallback solution is used on the AIC. Therefore, the callback needs to be passed into the blockMmad side, and the blockMmad determines when to invoke the inter-core synchronization.
 - [struct AicSetFunc](../../include/catlass/gemm/kernel/grouped_matmul_slice_m_per_token_dequant_multistage_workspace.hpp#L367): encapsulates the inter-core synchronization of the AIV waiting for the completion of FIXPIPE transfer by the AIC.
 

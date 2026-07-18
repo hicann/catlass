@@ -2,7 +2,7 @@
 
 ## Code Organization
 
-```
+```text
 ├── 32_w4a8_matmul
 │   ├── CMakeLists.txt # CMake build file
 │   ├── gen_data.py
@@ -24,7 +24,7 @@
 
 The following is a complete shell script example (executed in the sample directory `./examples/32_w4a8_matmul`):
 
-```
+```text
 m=860
 k=5712
 n=4535
@@ -54,6 +54,6 @@ run_kernel
 
 If the following result is displayed, precision verification is successful.
 
-```
+```text
 Compare success.
 ```

@@ -2,7 +2,7 @@
 
 ## Code Organization
 
-```
+```text
 ├── 19_mla
 │   ├── CMakeLists.txt # CMake build file
 │   ├── gen_data.py
@@ -18,7 +18,7 @@
 - After obtaining the code, compile the operator executable file. For details, see [Template Library Quick Start](../../docs/en/1_Practice/01_quick_start.md#build-and-execution).
 - Step 1: Execute `gen_data.py` with the command line to generate test vectors and validation assets.
 
-```
+```bash
 # Execute in the ./examples/19_mla directory.
 python gen_data.py 1 1 128 16 16 128 half
 # Input parameters map to: batchSize, qSeqlen, kvSeqlen, qheadNum, numBlock, and blockSize.
@@ -30,7 +30,7 @@ python gen_data.py 1 1 128 16 16 128 half
 
 After the command is executed, a data directory is generated in the current path, containing the operator input data and the golden data used for accuracy verification.
 
-```
+```text
 ├── data
 │   ├── block_table.bin
 │   ├── golden.bin
@@ -45,7 +45,7 @@ After the command is executed, a data directory is generated in the current path
 
 Step 2: Execute the operator. Note that the input shape of the operator must match the shape of the data generated in the first step.
 
-```
+```bash
 # Compile the specified test case from the root of the CATLASS repository
 bash scripts/build.sh 19_mla
 cd output/bin
@@ -56,6 +56,6 @@ cd output/bin
 
 If the following result is displayed, precision verification is successful.
 
-```
+```text
 Compare success.
 ```

@@ -26,52 +26,22 @@ Host侧代码通常包含以下几个核心部分：
 ```cpp
 // 引入必要的头文件
 #include "catlass/gemm/kernel/basic_matmul.hpp"
-#include "helper.hpp"
-#include "golden.hpp"
 #include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
 #include "catlass/gemm/block/block_mmad.hpp"
 #include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/device/device_gemm.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
 #include "catlass/gemm/gemm_type.hpp"
 #include "catlass/layout/layout.hpp"
 #include "catlass/status.hpp"
-#include "catlass/gemm/device/device_gemm.hpp"
+#include "golden.hpp"
+#include "helper.hpp"
 
 using namespace Catlass;
 
-// 解析输入参数
-struct Options {
-    const std::string HELPER = "basic_matmul m n k [device_id]";
+using Options = GemmOptions;
 
-    GemmCoord problemShape{128, 128, 128};
-    int32_t deviceId{0};
-
-    Options() = default;
-
-    int Parse(int argc, const char **argv) {
-        enum ArgsIndex {
-            M_INDEX = 1,
-            N_INDEX,
-            K_INDEX,
-            DEVICE_ID_INDEX,
-            ARGS_MAX
-        };
-
-        if (argc > ARGS_MAX || argc <= K_INDEX) {
-            std::cerr << HELPER << std::endl;
-            return -1;
-        }
-
-        problemShape.m() = std::atoi(argv[M_INDEX]);
-        problemShape.n() = std::atoi(argv[N_INDEX]);
-        problemShape.k() = std::atoi(argv[K_INDEX]);
-        if (argc == ARGS_MAX) {
-            deviceId = std::atoi(argv[DEVICE_ID_INDEX]);
-        }
-        return 0;
-    }
-};
 ```
 
 ### 核心实现
@@ -298,7 +268,7 @@ ACL_CHECK(aclrtMalloc(reinterpret_cast<void **>(&deviceC), sizeC, ACL_MEM_MALLOC
 
 这部分代码主要完成以下工作：
 
-- 选择架构和调度策略（Atlas A2/Atlas A3产品设置`ArchTag = Arch::AtlasA2`，Ascend 950PR/Ascend 950DT产品使用`ArchTag = Arch::Ascend950`）
+- 选择架构和调度策略（Atlas A2/A3 产品设置 `ArchTag = Arch::AtlasA2`，Ascend 950PR/950DT 产品使用 `ArchTag = Arch::Ascend950`）
 - 定义Tile形状
 - 组装Block层和Kernel层组件
 - 初始化Device层适配器
@@ -334,7 +304,7 @@ MatmulKernel::Arguments arguments{options.problemShape, deviceA, deviceB, device
 
 // 执行模板样例
 MatmulAdapter matmulOp;
-matmulOp.CanImplement(arguments);
+// matmulOp.CanImplement(arguments); //BasicMatmul 不涉及参数校验，可以不执行CanImplement并校验返回值
 size_t sizeWorkspace = matmulOp.GetWorkspaceSize(arguments);
 uint8_t *deviceWorkspace = nullptr;
 if (sizeWorkspace > 0) {
@@ -416,13 +386,22 @@ set(EXAMPLE_ATLASA2
 )
 ```
 
-完成CANN包安装和CANN环境使能后，执行编译命令（若为Ascend950，需要添加`-DCATLASS_ARCH=3510`）：
+完成CANN包安装和CANN环境使能后，执行编译命令（若为 Ascend 950PR/950DT，需要添加`-DCATLASS_ARCH=3510`）：
 
 ```bash
 bash scripts/build.sh basic_matmul
 ```
 
 ### 运行
+
+运行参数说明：
+
+| 参数 | 含义 | 类型 | 取值范围 |
+|------|------|------|---------|
+| m | 矩阵 A 的行数 | 正整数 | ≥ 1 |
+| n | 矩阵 B 的列数 | 正整数 | ≥ 1 |
+| k | 矩阵 A 的列数 / 矩阵 B 的行数 | 正整数 | ≥ 1 |
+| device_id | 设备 ID | 非负整数 | 0 ~ 设备总数-1，默认 0 |
 
 ```bash
 cd output/bin
@@ -431,6 +410,6 @@ cd output/bin
 
 获得回显
 
-```bash
+```text
 Compare success.
 ```

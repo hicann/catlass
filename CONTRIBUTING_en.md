@@ -29,7 +29,7 @@ Developer contribution scenarios include:
 
   If you find some bugs in this project and want to fix them, you are welcome to create an issue for feedback and tracking.
 
-  You can create a `Bug-Report` issue to describe the bug according to the [Submitting an Issue/Handling an Issue Task](https://gitcode.com/cann/community#Submitting-an-Issue/Handling-an-Issue-Task]) guide, and then enter "/assign" or "/assign @yourself" in the comment box to assign the Issue to yourself for handling.
+  You can create a `Bug-Report` issue to describe the bug according to the [Submitting an Issue/Handling an Issue Task](https://gitcode.com/cann/community#Submitting-an-Issue/Handling-an-Issue-Task) guide, and then enter "/assign" or "/assign @yourself" in the comment box to assign the Issue to yourself for handling.
 
 - Contributing New Operator Examples
 
@@ -55,7 +55,7 @@ Developer contribution scenarios include:
 
   If you have new feature implementations for a certain part of the template library code, you are welcome to propose new ideas and designs in an Issue.
 
-  You can create a `Requirement|Suggestion` Issue to describe the new feature design by following the instructions in [Submitting an Issue/Handling an Issue Task](https://gitcode.com/cann/community#Submitting-an-Issue/Handling-an-Issue-Task) an Issue/Handling an Issue Task. Project members will communicate with you to confirm the design and provide a suitable location under `include/catlass/` for you to contribute your feature code.
+  You can create a `Requirement|Suggestion` Issue to describe the new feature design by following the instructions in [Submitting an Issue/Handling an Issue Task](https://gitcode.com/cann/community#Submitting-an-Issue/Handling-an-Issue-Task). Project members will communicate with you to confirm the design and provide a suitable location under `include/catlass/` for you to contribute your feature code.
 
   In addition, you need to comment /assign or /assign @yourself in the submitted Issue to claim the Issue and complete the code upload in the future.
 

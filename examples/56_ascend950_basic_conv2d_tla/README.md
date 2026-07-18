@@ -2,7 +2,7 @@
 
 ## 代码组织
 
-```
+```text
 ├── 56_ascend950_basic_conv2d_tla
 │   ├── CMakeLists.txt   # CMake编译文件
 │   ├── README.md
@@ -20,7 +20,7 @@
 - 获取代码之后编译相应的算子可执行文件，可参考[quickstart](../../docs/zh/1_Practice/01_quick_start.md#算子编译)，本用例为Ascend 950算子，编译时需加-DCATLASS_ARCH=3510
 - 执行算子
 
-```
+```bash
 # 编译指定用例
 bash scripts/build.sh 56_ascend950_basic_conv2d_tla -DCATLASS_ARCH=3510
 cd ./output/bin
@@ -31,6 +31,6 @@ cd ./output/bin
 
 执行结果如下，表明精度验证通过。
 
-```
+```text
 Compare success.
 ```

@@ -51,7 +51,7 @@ $$
 
 ## 代码组织
 
-```
+```text
 ├── 38_w4a4_matmul_per_token_per_channel_dequant
 │   ├── CMakeLists.txt # CMake编译文件
 │   ├── gen_data.py
@@ -73,7 +73,7 @@ $$
 
 以下是一个完整的shell脚本示例
 
-```
+```bash
 # 编译算子
 bash scripts/build.sh 38_w4a4_matmul_per_token_per_channel_dequant
 
@@ -85,12 +85,13 @@ cd ../..
 
 # 进行测试
 cd output/bin/
+# 可执行文件名 |矩阵m轴|n轴|k轴|Device ID
 ./38_w4a4_matmul_per_token_per_channel_dequant 256 512 1024 0
 ```
 
 执行结果如下，说明精度比对成功。
 
-```
+```cpp
 Compare success.
 ```
 
@@ -105,7 +106,7 @@ Compare success.
 
 并在生成测试例时补充`transB`参数置1（默认为0），完整测试过程如下：
 
-```
+```bash
 # 算子编译
 bash scripts/build.sh 38_w4a4_matmul_per_token_per_channel_dequant --clean
 
@@ -118,5 +119,6 @@ cd ../..
 
 # 进行测试
 cd output/bin/
+# 可执行文件名 |矩阵m轴|n轴|k轴|Device ID
 ./38_w4a4_matmul_per_token_per_channel_dequant 256 512 1024 0
 ```

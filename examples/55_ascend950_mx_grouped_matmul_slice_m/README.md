@@ -9,7 +9,7 @@
 
 ## 代码组织
 
-```
+```text
 ├── 55_ascend950_mx_grouped_matmul_slice_m
 │   ├── CMakeLists.txt              # CMake 编译配置
 │   ├── README.md
@@ -43,7 +43,7 @@ python3 examples/55_ascend950_mx_grouped_matmul_slice_m/gen_data_compare.py \
 
 执行结果如下，说明精度（使用双精度标准）比对成功：
 
-```
+```text
 ------ 开始比较 ------
 比较结果：Compare success.
 ```

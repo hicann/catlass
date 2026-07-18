@@ -18,7 +18,7 @@
 
 ### 2.1 工程说明
 
-泛化量化Matmul工程结构说明可参考：[工程结构说明](../102_dynamic_optimized_matmul/doc/工程结构介绍.md)。本工程遵循与样例102类似的模板生成、Tiling计算、模板选择等流程，并根据量化Matmul计算特点进行了适配修改。
+泛化量化Matmul工程结构说明可参考：[工程结构说明](../102_dynamic_optimized_matmul/docs/zh/工程结构介绍.md)。本工程遵循与样例102类似的模板生成、Tiling计算、模板选择等流程，并根据量化Matmul计算特点进行了适配修改。
 
 工程编译前会调用python脚本生成代码，具体包括调用各模板的外围代码，以及launch_map.h(包含tilingKey和具体Kernel的映射关系)。
 
@@ -83,7 +83,7 @@ cd output/bin
 
 执行结果如下，说明精度比对成功。
 
-```
+```text
 Compare success.
 ```
 

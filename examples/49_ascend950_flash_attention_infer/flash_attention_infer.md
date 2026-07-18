@@ -15,7 +15,7 @@ CATLASS FlashAttention Infer是基于CATLASS Gemm API实现的亲和昇腾Ascend
 
 Flash Attention Infer 算子实现以下计算流程：
 
-```
+```text
 O = FlashAttention(Q, K, V, mask)
   = softmax(Q * K^T / sqrt(d)) * V
 ```
@@ -149,12 +149,12 @@ class FAInferKernel {
 
 | 变量名                              | 类型                     | 说明                    |
 | ----------------------------------- | ------------------------ | ----------------------- |
-| `bmm1TensorList[NUM2]`              | LocalTensor<ElementS>    | BMM1结果（S矩阵）双缓存 |
-| `bmm2TensorList[NUM2]`              | LocalTensor<ElementOTmp> | BMM2结果（O临时）双缓存 |
-| `mm2AL1TensorList[KERNEL_TASK_NUM]` | LocalTensor<ElementP>    | MM2输入（P矩阵）L1缓存  |
-| `expUb[KERNEL_TASK_NUM]`            | LocalTensor<ElementS>    | exp值UB缓存             |
-| `sumUb[KERNEL_TASK_NUM]`            | LocalTensor<ElementS>    | sum值UB缓存             |
-| `maxUb[KERNEL_TASK_NUM]`            | LocalTensor<ElementS>    | max值UB缓存             |
+| `bmm1TensorList[NUM2]`              | `LocalTensor<ElementS>`    | BMM1结果（S矩阵）双缓存 |
+| `bmm2TensorList[NUM2]`              | `LocalTensor<ElementOTmp>` | BMM2结果（O临时）双缓存 |
+| `mm2AL1TensorList[KERNEL_TASK_NUM]` | `LocalTensor<ElementP>`    | MM2输入（P矩阵）L1缓存  |
+| `expUb[KERNEL_TASK_NUM]`            | `LocalTensor<ElementS>`    | exp值UB缓存             |
+| `sumUb[KERNEL_TASK_NUM]`            | `LocalTensor<ElementS>`    | sum值UB缓存             |
+| `maxUb[KERNEL_TASK_NUM]`            | `LocalTensor<ElementS>`    | max值UB缓存             |
 | `constInfo`                         | ConstInfo                | 常量信息                |
 | `runInfo[4]`                        | RunInfo                  | 运行时信息（环形缓存）  |
 | `runParam`                          | RunParamStr              | 运行参数                |
@@ -165,7 +165,7 @@ class FAInferKernel {
 
 #### 3.3.1 UB内存布局
 
-```
+```text
 +------------------------+  ubBufAddrStart = 0
 | bmm1TensorList[0]      |  MM1_RESULT_SIZE = 64 * 128 * sizeof(float) = 32KB
 +------------------------+
@@ -199,7 +199,7 @@ class FAInferKernel {
 
 #### 3.3.2 L1内存布局
 
-```
+```text
 +------------------------+  l1BufAddrStart = 0
 | mm2AL1TensorList[0]    |  MM2_LEFT_SIZE = 128 * 128 * sizeof(Dtype) = 32KB
 +------------------------+
@@ -315,7 +315,7 @@ int32_t GetFATilingParam(const FAInfo &faInfo, uint32_t blockDim, FATilingData& 
 
 **算法流程**：
 
-```
+```text
 1. 填充输入参数（FillInputParams）
    ├─ 复制基本信息（batch, qHeads, kvHeads, seqSize等）
    ├─ 计算groupSize = qHeads / kvHeads
@@ -367,7 +367,7 @@ int32_t GetFATilingParam(const FAInfo &faInfo, uint32_t blockDim, FATilingData& 
 
 **算法流程**：
 
-```
+```text
 初始化:
   bnAxisStartIdx[MAX_CORE_NUM] = 0
   qSeqAxisStartIdx[MAX_CORE_NUM] = 0
@@ -418,7 +418,7 @@ CATLASS_DEVICE void Init(FAIKernelParams const& params)
 
 **流程**：
 
-```
+```text
 1. 获取当前Core索引
    ├─ AIC: blockIdx = GetBlockIdx()
    └─ AIV: blockIdx = GetBlockIdx() >> 1
@@ -461,7 +461,7 @@ CATLASS_DEVICE void operator()(FAIKernelParams const &params)
 
 **流程**：
 
-```
+```text
 1. 初始化
    ├─ Init(params)
    ├─ 创建BlockMmadQK实例
@@ -674,7 +674,7 @@ constexpr uint64_t MM2_RES_INTRA_EVENT[2] = {7, 8};  // BMM2内部同步
 
 #### 6.2.2 同步流程
 
-```
+```text
 Step 1: AIC执行Q*K^T
   ├─ 等待L0C可用
   ├─ 执行Cube计算
@@ -733,7 +733,7 @@ struct BlockMmadTla<MmadFAIQK<Arch::Ascend950, ...>, ...> {
 
 #### 7.2.1 L1内存布局
 
-```
+```text
 +------------------------+  l1BufAddrStart
 | L1A[Stage 0]         |  L1A_TILE_SIZE = 128 * 128 * sizeof(Dtype) = 32KB
 +------------------------+
@@ -749,7 +749,7 @@ struct BlockMmadTla<MmadFAIQK<Arch::Ascend950, ...>, ...> {
 
 #### 7.2.2 L0内存布局
 
-```
+```text
 L0A Buffer:
 +------------------------+
 | L0A[Stage 0]         |  L0A_TILE_SIZE = 128 * 128 * sizeof(Dtype) = 32KB
@@ -776,7 +776,7 @@ L0C Buffer:
 
 #### 7.3.1 流水线阶段
 
-```
+```cpp
 Stage:  GM → L1  → L0  → Cube → L0C → UB
 ```
 
@@ -890,7 +890,7 @@ class BlockEpilogue<EpilogueAscend950FASoftmax<ATTENTION_MASK_FLAG_>, ...> {
 
 #### 8.2.1 UB内存布局
 
-```
+```text
 +------------------------+
 | expSumUb              |  HALF_VEC_SIZE = 64 * sizeof(float) = 256B
 +------------------------+
@@ -912,13 +912,13 @@ class BlockEpilogue<EpilogueAscend950FASoftmax<ATTENTION_MASK_FLAG_>, ...> {
 
 标准Softmax：
 
-```
+```text
 P[i,j] = exp(S[i,j] - max(S[i,:])) / sum(exp(S[i,:] - max(S[i,:])))
 ```
 
 在线Softmax（分步计算）：
 
-```
+```text
 初始化:
   max[i] = -inf
   sum[i] = 0
@@ -1117,7 +1117,7 @@ class BlockEpilogue<EpilogueAscend950FARescaleO, ...> {
 
 ### 10.2 内存布局
 
-```
+```text
 +------------------------+
 | vf2OutUb              |  VEC2_UB_SIZE = 64 * 128 * sizeof(float) = 32KB
 +------------------------+
@@ -1129,13 +1129,13 @@ class BlockEpilogue<EpilogueAscend950FARescaleO, ...> {
 
 标准Flash Attention：
 
-```
+```text
 O = softmax(Q * K^T / sqrt(d)) * V
 ```
 
 在线计算：
 
-```
+```text
 初始化:
   O[i] = 0
   max[i] = -inf

@@ -24,6 +24,7 @@
 ### 方式1: 直接构造函数
 
 **方法签名：**
+
 ```python
 OpTensor(
     dtype: DataType,
@@ -86,6 +87,7 @@ print(f"A (FLOAT16): dtype={a_op_fp16.dtype}")
 ### 方式2: from_shape_stride 类方法
 
 **方法签名：**
+
 ```python
 @classmethod
 OpTensor.from_shape_stride(
@@ -145,6 +147,7 @@ print(f"A (batched): shape={a_op.shape}, layout={a_op.layout}")
 ### 方式3: from_tensor 类方法
 
 **方法签名：**
+
 ```python
 @classmethod
 OpTensor.from_tensor(

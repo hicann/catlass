@@ -2,7 +2,7 @@
 
 ## 代码组织
 
-```
+```text
 ├── 32_w4a8_matmul
 │   ├── CMakeLists.txt # CMake编译文件
 │   ├── gen_data.py
@@ -24,7 +24,7 @@
 
 以下是一个完整的shell脚本示例（在样例目录`./examples/32_w4a8_matmul`下执行）
 
-```
+```text
 m=860
 k=5712
 n=4535
@@ -54,6 +54,6 @@ run_kernel
 
 执行结果如下，说明精度比对成功。
 
-```
+```text
 Compare success.
 ```

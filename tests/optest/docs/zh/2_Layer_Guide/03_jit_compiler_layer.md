@@ -4,7 +4,7 @@ JIT 编译层在运行时编译 Ascend C 内核模板，并将编译产物 `.so`
 
 ## 文件布局
 
-```
+```text
 kernels/
 ├── include/
 │   ├── jit_compiler.h          # JitCompiler 单例（公开 API）
@@ -24,7 +24,7 @@ kernels/
 
 ## JIT 编译管线
 
-```
+```text
 用户代码
    │
    ├── 填充 TParams + MatmulParams
@@ -73,7 +73,7 @@ kernels/
 
 ## 内核 UUID 生成 (jit_compiler.cpp)
 
-```
+```text
 makeKernelUuid(macros):
   1. 收集 MacroMap 中所有宏
   2. 添加 "__ARCH__" = npuArch_ (如 "2201")
@@ -144,7 +144,7 @@ extern "C" void run(uint32_t blockNum, aclrtStream stream,
 
 `JitMacroGenerator<TParams>` 从 `TParams` 生成宏：
 
-```
+```text
 appendTo(macros, tParams):
   ├── CATLASS_JIT_ELEMENT_{A|B|C|D} = dtype 字符串
   ├── CATLASS_JIT_LAYOUT_{A|B} = layout 字符串（RowMajor/ColumnMajor/zN/nZ）
@@ -153,7 +153,7 @@ appendTo(macros, tParams):
 
 部分与OptimizedMatmul相关的运行时派生的宏由 `ApplyOptMacros()` 添加：
 
-```
+```text
 ApplyOptMacros(macros, m, n, k, isNzA, transA, isNzB, transB):
   ├── CATLASS_JIT_NEED_PADDING_A = "0" | "1"
   ├── CATLASS_JIT_NEED_PADDING_B = "0" | "1"

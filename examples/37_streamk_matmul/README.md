@@ -2,7 +2,7 @@
 
 ## 代码组织
 
-```
+```text
 ├── 37_streamk_matmul
 │   ├── CMakeLists.txt     # CMake编译文件
 │   ├── README.md
@@ -25,7 +25,7 @@ cd output/bin
 
 执行结果如下，说明精度比对成功。
 
-```
+```text
 Compare success.
 ```
 

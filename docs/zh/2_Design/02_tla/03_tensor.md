@@ -76,7 +76,7 @@ TLA `Tensor` 提供以下常用接口：
 - `.originShape()`：返回 `layout.originShape()`。
 - `(coord0, coord1, ...)`：按坐标索引或切片。
 
-## 统一理解三类“坐标”
+## 统一理解三类坐标
 
 TLA 文档中最容易混淆的是几类不同的“坐标”。下面给出统一约定。
 
@@ -156,8 +156,8 @@ tensor.data()[tensor.layout()(tensor.coord() + coord_arg)]
 例如，对 3D 张量 `A(B, M, K)`：
 
 ```cpp
-auto A2 = A3(b, tla::_, tla::_);  // 3D -> 2D，得到 (M, K) 视图
-auto A1 = A2(r, tla::_) // 2D -> 1D，得到 (K)视图
+auto A2 = A(b, tla::_, tla::_);  // 3D -> 2D，得到 (M, K) 视图
+auto A1 = A2(r, tla::_); // 2D -> 1D，得到 (K)视图
 ```
 
 ![Origin_Shape-tensor_2.png](https://raw.gitcode.com/user-images/assets/7631999/dd1a947a-2371-4e6e-9fef-51a5ceb1556a/Origin_Shape-tensor_2.png "Origin_Shape-tensor_2.png")
@@ -244,13 +244,13 @@ auto tensorTileA = tla::TileView(
 
 `TileView` 与 `GetTile` 可以直接按下面的等式理解：
 
-```cpp
+```text
 TileView(t, tileCoord, tileShape) = GetTile(t, tileCoord ⊙ tileShape, tileShape)
 ```
 
 这里的 `⊙` 表示逐维相乘，例如：
 
-```cpp
+```text
 (1, 2) ⊙ (64, 128) = (64, 256)
 ```
 
@@ -307,7 +307,7 @@ for (uint32_t kTile = 0; kTile < kTiles; ++kTile) {
 
 `MakeTensorLike` 用于创建一个“逻辑尺寸与 `likeTensor` 一致”的新 Tensor。最常见的用途是：从一个已有 tile 视图出发，在另一层内存中构造对应 Tensor，并自动继承其 `originShape()`。
 
-在未指定layoutBase时，行为为根据 LayoutTagDst 决定布局，从 LikeTensor::Element 推断 ElementDst，从 likeTensor 的 originShape 提取尺寸。调用MakeLayout<ElementDst, LayoutTagDst>(originShape())构造目标 layout（可能会因分型布局合法要求对shape进行以分型为粒度的向上取整）。
+在未指定layoutBase时，行为为根据 LayoutTagDst 决定布局，从 LikeTensor::Element 推断 ElementDst，从 likeTensor 的 originShape 提取尺寸。调用MakeLayout<ElementDst, LayoutTagDst>(originShape())构造目标 layout（可能会因分形布局合法要求对shape进行以分形为粒度的向上取整）。
 
 指定layoutBase时，使用MakeLayout(layoutBase.shape(), layoutBase.stride(), likeTensor.originShape())构造目标layout。
 

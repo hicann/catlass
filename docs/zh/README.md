@@ -4,7 +4,7 @@
 
 > 代码实践，指导开发者按步骤上手CATLASS各层级代码开发和使用，逐渐具备完整算子开发、测试、调优、模型使用的能力。
 
-- [01_quick_start](./1_Practice/01_quick_start.md)：介绍模板库的环境准备，和提供的算子样例的编译执行。
+- [01_quick_start](./1_Practice/01_quick_start.md)：**模板库快速上手**。介绍模板库的环境准备，和提供的算子样例的编译执行
 - [02_host_example_assembly](./1_Practice/02_host_example_assembly.md)：host侧组装matmul讲解
 - [03_kernel_development](./1_Practice/03_kernel_development.md)：kernel代码拆解，展示模板组装机制、arguments、params及关键函数等代码
 - [04_block_mmad_development](./1_Practice/04_block_mmad_development.md)：block_mmad代码拆解，模板组装机制、主要接口说明
@@ -13,7 +13,7 @@
 - [07_epilogue_adaptation](./1_Practice/07_epilogue_adaptation.md)：gemm算子的host/kernel层适配epilogue，及epilogue的block/tile开发
 - [08_evaluation](./1_Practice/08_evaluation.md)：调测工具使用，精度问题定位，性能瓶颈分析
 - [09_example_contribution_guide](./1_Practice/09_example_contribution_guide.md)：完整样例的设计、开发、测试、合入流程
-- [10_innovative_example_development_guide](./1_Practice/10_innovative_example_development_guide.md)：创新样例的开发流程指引
+- [10_innovative_example_development_guide](./1_Practice/10_innovative_example_development_guide.md)：**创新样例开发流程指南**
 - [11_matmul_optimization](./1_Practice/11_matmul_optimization.md)：介绍模板库下的基础调优方式，包括如何通过Tiling调参、应用不同的Dispatch策略的方式，快速获得性能提升。
 - 12_example_integration：样例适配、接入到整网的方式（待贡献）
 - evaluation（folder）：调测相关
@@ -43,7 +43,7 @@
   - [01_example_design](./2_Design/01_kernel_design/01_example_design.md)：库上样例设计文档一览（将各样例文档放到样例文件夹内，此处只做归纳、牵引）
   - [02_swizzle](./2_Design/01_kernel_design/02_swizzle.md)：对模板库中`Swizzle`策略的基本介绍，这影响了AI Core上计算基本块间的顺序。
   - [03_dispatch_policies](./2_Design/01_kernel_design/03_dispatch_policies.md)：对模板库在`Block`层面上`BlockMmad`中的一个重要模板参数`DispatchPolicy`的介绍。
-  - [04_matmul_summary](./2_Design/01_kernel_design/04_matmul_summary.md)：对模板库的`examples`目录内已有的`matmul`模板设计进行介绍，包含样例模板清单、理论模板清单、工程优化清单、模板应用浅述，可用于matmul性能调优时参考。
+  - [04_matmul_summary](./2_Design/01_kernel_design/04_matmul_summary.md)：**矩阵乘模板总结**。对模板库的`examples`目录内已有的`matmul`模板设计进行介绍，包含样例模板清单、理论模板清单、工程优化清单、模板应用浅述，可用于matmul性能调优时参考。
   - [05_aswt](./2_Design/01_kernel_design/05_aswt.md)：自适应滑窗tiling策略说明
   - 06_quant_summary：低精度专题（待贡献）
 - 02_tla：

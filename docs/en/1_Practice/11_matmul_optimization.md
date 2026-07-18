@@ -8,13 +8,13 @@ For tuning methods, there are two categories: basic and custom. This document fo
 
 ## Matmul Fundamentals
 
-### Basic Block Tiling of Matrix C for on Cores
+### Basic Block Tiling of Matrix C for Cores
 
 First, the task partitioning logic for each core. Samples in the repository such as [00_basic_matmul](../../../examples/00_basic_matmul/basic_matmul.cpp) and [06_optimized_matmul](../../../examples/06_optimized_matmul/optimized_matmul.cpp) all tile matrix C into basic blocks before assigning them to cores. Matrix C is tiled along the M and N axes based on `L1TileShape::M` and `L1TileShape::N`, resulting in `CeilDiv(M, L1TileShape::M) * CeilDiv(N, L1TileShape::N)` basic blocks. These basic blocks are then assigned to cube cores according to the [swizzle policy](../2_Design/01_kernel_design/02_swizzle.md).
 
 ### Matmul Hardware Visualization
 
-See [Basic Architecture](https://www.hiascend.com/document/detail/en/CANNCommunityEdition/850/opdevg/Ascendcopdevg/atlas_ascendc_10_0008.html).
+See [Basic Architecture](https://www.hiascend.com/document/detail/en/canncommercial/850/opdevg/Ascendcopdevg/atlas_ascendc_10_0008.html).
 The following figure shows the hardware architecture involved in basic Matmul tiling, data movement, and computation. Because double buffering is enabled, two tiles of data are stored in L1/L0A/L0B.
 
 <img src="https://www.hiascend.com/doc_center/source/zh/canncommercial/850/opdevg/Ascendcopdevg/figure/zh-cn_image_0000002502735896.png" width="80%">
@@ -154,7 +154,7 @@ Context: Matrix A RowMajor, matrix B zN, M: 160, N: 6144, K: 2048, FP16 input an
 Using 21_basic_matmul_preload_zN with default L1TileShape<128,256,256> and L0TileShape<128,256,64>, and swizzle set to <3, 1>, the execution time is **40.6 µs**. Setting swizzle to <4, 1> results in an execution time of **35.3 µs**.
 
 Basic block analysis: The M-axis is tiled into two blocks of lengths 128 and 32, and the N-axis is tiled into 24 blocks of length 256, resulting in a total of 48 basic blocks. The figure below shows the assignment of basic blocks to AIC cores for swizzle <3, 1> and swizzle <4, 1>. With swizzle <3, 1>, cores 1, 2, 5, and 6 have a maximum task size along the M-axis of (128 + 128 + 32). With swizzle <4, 1>, cores 12, 13, 14, and 15 have a maximum task size along the M-axis of (128 + 128), achieving better load balance.
-<img src="../figures/catlass_optimize_guidance/swizzle_case.png" width="100%">
+<img src="../../zh/figures/catlass_optimize_guidance/swizzle_case.png" width="100%">
 
 ### Brief Overview of Custom Tuning
 

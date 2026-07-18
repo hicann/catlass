@@ -2,7 +2,7 @@
 
 ## 代码组织
 
-```
+```text
 ├── 20_matmul_bias
 │   ├── CMakeLists.txt   # CMake编译文件
 │   ├── README.md
@@ -21,7 +21,7 @@ using L0TileShape = GemmShape<112, 128, 64>;
 
 - 执行算子
 
-```
+```bash
 # 编译指定用例
 bash scripts/build.sh 20_matmul_bias
 cd output/bin
@@ -32,6 +32,6 @@ cd output/bin
 
 执行结果如下，说明精度比对成功。
 
-```
+```text
 Compare success.
 ```

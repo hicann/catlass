@@ -8,7 +8,7 @@
 
 ## Code Organization
 
-```
+```text
 ├── 54_ascend950_fp4_mx_matmul
 │   ├── CMakeLists.txt     # CMake build file
 │   ├── README.md
@@ -22,7 +22,7 @@
 - After obtaining the code, compile the corresponding operator executable. See [Template Library Quick Start](../../docs/en/1_Practice/01_quick_start.md#compilation-and-execution). This case is an Ascend 950 (3510) operator, so add `-DCATLASS_ARCH=3510` during compilation. The L1 tile is 256×256×448, and L0 is 256×256×128, to meet the 512 KiB L1 and L0 capacity constraints. Do not increase the L1 K dimension arbitrarily; otherwise, `L1TileShape exceeding the L1 space` may occur.
 - Run the operator.
 
-```
+```bash
 # Compile the specified case
 bash scripts/build.sh 54_ascend950_fp4_mx_matmul -DCATLASS_ARCH=3510
 # Generate test cases (generate input/ and golden/ under examples/54_ascend950_fp4_mx_matmul/data)
@@ -42,13 +42,13 @@ bash scripts/build.sh 54_ascend950_fp4_mx_matmul_aswt -DCATLASS_ARCH=3510
 
 The execution result is as follows, indicating that the precision comparison succeeds.
 
-```
+```cpp
 Compare success.
 ```
 
 ## Usage Notes
 
-1. `gen_data.py` supports trans_a and trans_b as inputs, but the 54_ascend950_fp4_mx_matmul executable does not. It is only an example where trans_a is 0 and trans_b is 1.
+`gen_data.py` supports trans_a and trans_b as inputs, but the 54_ascend950_fp4_mx_matmul executable does not. It is only an example where trans_a is 0 and trans_b is 1.
 
 To support the corresponding transposition case, modify the layout in the example, because layout implicitly represents the transposition state. That is, layout::RowMajor indicates no transposition, and layout::ColumnMajor indicates transposition.
 
@@ -61,10 +61,10 @@ The corresponding relationship is shown in the following table:
 | 1       | 0       | layout::ColumnMajor | layout::RowMajor    |
 | 1       | 1       | layout::ColumnMajor | layout::ColumnMajor |
 
-2. This example completes MX quantized matrix multiplication:
-   C = (MxScaleA x A) * (MxScaleB x B) + Bias
-   A and B support the float4_e1m2 or float4_e2m1 data type.
-   MxScaleA and MxScaleB support the float8_e8m0 data type.
+This example completes MX quantized matrix multiplication:
+- C = (MxScaleA x A) * (MxScaleB x B) + Bias
+- A and B support the float4_e1m2 or float4_e2m1 data type.
+- MxScaleA and MxScaleB support the float8_e8m0 data type.
 
 The data layout requirements for MxScaleA and MxScaleB are as follows:
 When A is RowMajor, the shape of MxScaleA is (m, ceil(k/64), 2).
@@ -72,7 +72,7 @@ When A is ColumnMajor, the shape of MxScaleA is (ceil(k/64), m, 2).
 When B is RowMajor, the shape of MxScaleB is (ceil(k/64), n, 2).
 When B is ColumnMajor, the shape of MxScaleB is (n, ceil(k/64), 2).
 
-3. The DispatchPolicy used by `MxMatmulTla` with `BlockMmadTla` is **`Gemm::MmadMx`** (defined in `include/catlass/gemm/dispatch_policy.hpp`). The template parameter order and default values are as follows:
+The DispatchPolicy used by `MxMatmulTla` with `BlockMmadTla` is **`Gemm::MmadMx`** (defined in `include/catlass/gemm/dispatch_policy.hpp`). The template parameter order and default values are as follows:
 
 | Template Parameter   | Default Value | Parameter Description                                                                                                                                                                   |
 | -------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

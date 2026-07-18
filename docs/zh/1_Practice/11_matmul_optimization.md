@@ -2,7 +2,7 @@
 
 ## CATLASS样例定位
 
-CATLASS算子模板库的定位，是针对GEMM类算子提供的模板样例库，与通常的算子库有所区别。 在通常的算子库中，会针对一类问题的不同的输入样例做泛化性的优化考虑，以提供在大多数场景下较优的开箱性能。 模板库当前主要的目标，是针对不同输入提供模板样例，以便在不同输入下快速自定义开发出高性能算子，理论上并不提供相较于算子库最优的泛化性能。 例如，对于matmul场景，CANN中的matmul算子或调用接口着重通过直接调用提供泛化场景性能；而在模板库中，通过提供basic-matmul, optimized-matmul, splitk-matmul, padding-splitk-matmul等等多种matmul以示例在不同输入场景下如何自定义定制开发以获取最优性能。 代码仓上的多个matmul样例针对不同输入case有不同的适用范围以及调优手段，可按需定制以获取最优性能。
+CATLASS算子模板库的定位，是针对GEMM类算子提供的模板样例库，与通常的算子库有所区别。在通常的算子库中，会针对一类问题的不同的输入样例做泛化性的优化考虑，以提供在大多数场景下较优的开箱性能。 模板库当前主要的目标，是针对不同输入提供模板样例，以便在不同输入下快速自定义开发出高性能算子，理论上并不提供相较于算子库最优的泛化性能。 例如，对于matmul场景，CANN中的matmul算子或调用接口着重通过直接调用提供泛化场景性能；而在模板库中，通过提供basic-matmul, optimized-matmul, splitk-matmul, padding-splitk-matmul等等多种matmul以示例在不同输入场景下如何自定义定制开发以获取最优性能。 代码仓上的多个matmul样例针对不同输入case有不同的适用范围以及调优手段，可按需定制以获取最优性能。
 
 对于调优方法来说，总体分为**基础调优**和**进阶定制**两大类，本篇文章重点介绍第一类基础调优的方式，通过tiling调参及kernel组合的方式快速获得性能提升。
 
@@ -31,22 +31,22 @@ CATLASS算子模板库的定位，是针对GEMM类算子提供的模板样例库
 L1大小512KB
 L1实际占用 = L1::M * L1::K * 2(Byte) * 2(doubleBuffer) + L1::K * L1::N * 2(Byte) * 2(doubleBuffer)
         = 128 * 256 * 2 * 2 + 256 * 256 * 2 * 2
-        = 393216 B = 384 KB = 3/4 L1_SIZE
+        = 393216 Byte = 384 KB = 3/4 L1_SIZE
 
 L0A大小64KB
 L0A实际占用 = L0::M * L0::K * 2(Byte) * 2(doubleBuffer)
         = 128 * 64 * 2 * 2
-        = 32768 B = 32 KB = 1/2 L0A_SIZE
+        = 32768 Byte = 32 KB = 1/2 L0A_SIZE
 
 L0B大小64KB
 L0B实际占用 = L0::K * L0::N * 2(Byte) * 2(doubleBuffer)
         = 64 * 256 * 2 * 2
-        = 65536 B = 64 KB = 1 L0B_SIZE
+        = 65536 Byte = 64 KB = 1 L0B_SIZE
 
 L0C大小128KB
 L0C实际占用 = L0::M * L0::N * 4(Byte)
         = 128 * 256 * 4
-        = 131072 B = 128 KB = 1 L0C_SIZE
+        = 131072 Byte = 128 KB = 1 L0C_SIZE
 ```
 
 - 场景二：fp32输入输出，L1TileShape<128,128,256>，L0TileShape<128,128,64>
@@ -55,22 +55,22 @@ L0C实际占用 = L0::M * L0::N * 4(Byte)
 L1大小512KB
 L1实际占用 = L1::M * L1::K * 4(Byte) * 2(doubleBuffer) + L1::K * L1::N * 4(Byte) * 2(doubleBuffer)
         = 128 * 256 * 4 * 2 + 128 * 256 * 4 * 2
-        = 524288 B = 512 KB = 1 L1_SIZE
+        = 524288 Byte = 512 KB = 1 L1_SIZE
 
 L0A大小64KB
 L0A实际占用 = L0::M * L0::K * 4(Byte) * 2(doubleBuffer)
         = 128 * 64 * 4 * 2
-        = 65536 B = 64 KB = 1 L0A_SIZE
+        = 65536 Byte = 64 KB = 1 L0A_SIZE
 
 L0B大小64KB
 L0B实际占用 = L0::K * L0::N * 4(Byte) * 2(doubleBuffer)
         = 64 * 128 * 4 * 2
-        = 65536 B = 64 KB = 1 L0B_SIZE
+        = 65536 Byte = 64 KB = 1 L0B_SIZE
 
 L0C大小128KB
 L0C实际占用 = L0::M * L0::N * 4(Byte)
         = 128 * 128 * 4
-        = 65536 B = 64 KB = 1/2 L0C_SIZE
+        = 65536 Byte = 64 KB = 1/2 L0C_SIZE
 ```
 
 ## 调优策略
