@@ -124,7 +124,7 @@ def basic_mixed(
         ub_c = tla.make_tensor_like(c_ub_ptr, gm_result, tla.arch.RowMajor)
         tla.cross_core_wait_flag(fix_done)
 
-        for row_tile_idx in tla.range_constexpr(0, VECTOR_TILE_M//VECTOR_REG_TILE_M, 1):
+        for row_tile_idx in tla.range(0, VECTOR_TILE_M//VECTOR_REG_TILE_M, 1):
             with tla.vec.func(mode="simd"):
                 c_chunk = tla.tile_view(
                     ub_c,

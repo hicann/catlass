@@ -54,21 +54,6 @@ static hivmave::VFLoadOp createVFLoad(OpBuilder &b, Location loc, VectorType vec
 
 
 
-static FailureOr<Value> createZeroValue(OpBuilder &builder, Location loc, Type elementType) {
-  if (elementType.isF32())
-    return builder.create<arith::ConstantOp>(loc, builder.getF32FloatAttr(0.0)).getResult();
-  if (elementType.isF16())
-    return builder.create<arith::ConstantOp>(loc, builder.getF16FloatAttr(0.0)).getResult();
-  if (isa<BFloat16Type>(elementType))
-    return builder.create<arith::ConstantOp>(loc, builder.getFloatAttr(elementType, 0.0))
-        .getResult();
-  if (auto intType = dyn_cast<IntegerType>(elementType))
-    return builder.create<arith::ConstantOp>(loc, builder.getIntegerAttr(intType, 0)).getResult();
-  return failure();
-}
-
-
-
 
 
 
@@ -1956,68 +1941,63 @@ private:
 
 class LowerCopyPattern : public OpRewritePattern<::tla::CopyOp> {
 public:
-  explicit LowerCopyPattern(MLIRContext *context, DenseMap<Value, Value> &loweredMemrefByValue)
+  LowerCopyPattern(MLIRContext *context, DenseMap<Value, Value> &loweredMemrefByValue)
       : OpRewritePattern<::tla::CopyOp>(context, /*benefit=*/3),
         loweredMemrefByValue(loweredMemrefByValue) {}
 
   LogicalResult matchAndRewrite(::tla::CopyOp copyOp, PatternRewriter &rewriter) const override {
-    auto dstInfo = parseTensorInfo(copyOp.getDst().getType());
-    auto srcInfo = parseTensorInfo(copyOp.getSrc().getType());
-    if (failed(dstInfo) || failed(srcInfo))
-      return failure();
+    if (copyOp->getNumOperands() != 2 || copyOp->getNumResults() != 0)
+      return rewriter.notifyMatchFailure(
+          copyOp, "expected tla.copy with 2 operands and 0 results");
 
-    bool isGmToUb =
-        srcInfo->addressSpace == AddressSpace::gm && dstInfo->addressSpace == AddressSpace::ub;
-    bool isUbToGm =
-        srcInfo->addressSpace == AddressSpace::ub && dstInfo->addressSpace == AddressSpace::gm;
-    if (!isGmToUb && !isUbToGm)
-      return failure();
-    ArrayRef<int64_t> srcShapeHint = {};
-    ArrayRef<int64_t> dstShapeHint = {};
-    if (isGmToUb)
-      dstShapeHint = srcInfo->shape;
-    if (isUbToGm)
-      srcShapeHint = dstInfo->shape;
-    auto srcSubview =
-        materializeCopySubview(rewriter, copyOp.getLoc(), copyOp.getSrc(),
-                               &loweredMemrefByValue, srcShapeHint);
-    auto dstSubview =
-        materializeCopySubview(rewriter, copyOp.getLoc(), copyOp.getDst(),
-                               &loweredMemrefByValue, dstShapeHint);
-    if (failed(srcSubview) || failed(dstSubview))
-      return failure();
+    Value dstTile = copyOp.getDst();
+    Value srcTile = copyOp.getSrc();
+    auto dstDescOp = dstTile.getDefiningOp<::tla::TensorDescOp>();
+    auto srcDescOp = srcTile.getDefiningOp<::tla::TensorDescOp>();
+    if (!dstDescOp || !srcDescOp)
+      return rewriter.notifyMatchFailure(
+          copyOp, "expected tla.tensor_desc operand materialized by tla-lower-tensor-desc");
+    auto dstDescOr = ::tla::descriptorFromTensorDescOp(dstDescOp);
+    auto srcDescOr = ::tla::descriptorFromTensorDescOp(srcDescOp);
+    const TensorDescriptor &dstDesc = *dstDescOr;
+    const TensorDescriptor &srcDesc = *srcDescOr;
 
-    if (isGmToUb) {
-      auto padModeAttr = rewriter.getAttr<hivm::PadModeAttr>(hivm::PadMode::PadValue);
-      Value zeroIndex = rewriter.create<arith::ConstantIndexOp>(copyOp.getLoc(), 0);
-      auto dstMemrefType = dyn_cast<MemRefType>((*dstSubview).getType());
-      if (!dstMemrefType)
+    std::string calleeName = ::tla::getCopyRouteCallee(
+        copyOp.getContext(), srcDesc.addrspace, dstDesc.addrspace, srcDesc.layoutTag,
+        dstDesc.layoutTag, srcDesc.elementType, dstDesc.elementType);
+    if (calleeName.empty())
+      return rewriter.notifyMatchFailure(
+          copyOp, "unsupported tla.copy route (vector pass handles gm<->ub and ub->l1)");
+
+    auto buildRuntimeMemref = [&](const TensorDescriptor &desc) -> FailureOr<Value> {
+      FailureOr<Value> baseMemref = ::tla::getOrMaterializeDescriptorBaseMemref(
+          rewriter, copyOp.getLoc(), desc, copyOp.getOperation(), loweredMemrefByValue);
+      if (failed(baseMemref))
         return failure();
-      auto zeroValue = createZeroValue(rewriter, copyOp.getLoc(), dstMemrefType.getElementType());
-      if (failed(zeroValue))
+      auto baseType = dyn_cast<MemRefType>((*baseMemref).getType());
+      if (!baseType)
         return failure();
-      auto load = rewriter.create<hivm::LoadOp>(copyOp.getLoc(), TypeRange{}, *srcSubview,
-                                                *dstSubview, padModeAttr, *zeroValue, zeroIndex);
-      load->removeAttr("init_out_buffer");
-      load->removeAttr("may_implicit_transpose_with_last_axis");
-      loweredMemrefByValue[copyOp.getDst()] = *dstSubview;
-      rewriter.eraseOp(copyOp);
-      return success();
-    }
-
-    if (isUbToGm) {
-      loweredMemrefByValue[copyOp.getSrc()] = *srcSubview;
-      if (auto dstSubviewOp = (*dstSubview).getDefiningOp<mlir::memref::SubViewOp>())
-        dstSubviewOp->setAttr("to_be_bubbled_slice", UnitAttr::get(rewriter.getContext()));
-      auto store =
-          rewriter.create<hivm::StoreOp>(copyOp.getLoc(), TypeRange{}, *srcSubview, *dstSubview);
-      if (srcInfo->shape.size() == 2)
-        store->setAttr("tiled_op", UnitAttr::get(rewriter.getContext()));
-      rewriter.eraseOp(copyOp);
-      return success();
-    }
-
-    return failure();
+      MemRefType runtimeType = ::tla::getDynamicStridedMemrefType(baseType);
+      return ::tla::castMemrefToType(rewriter, copyOp.getLoc(), *baseMemref, runtimeType);
+    };
+    FailureOr<Value> srcRuntimeMemref = buildRuntimeMemref(srcDesc);
+    FailureOr<Value> dstRuntimeMemref = buildRuntimeMemref(dstDesc);
+    if (failed(srcRuntimeMemref) || failed(dstRuntimeMemref))
+      return failure();
+    SmallVector<Value, 20> payload =
+        ::tla::buildCopyPayloadForRoute(rewriter, copyOp.getLoc(), srcDesc, dstDesc);
+    SmallVector<Type, 22> operandTypes = {(*srcRuntimeMemref).getType(),
+                                          (*dstRuntimeMemref).getType()};
+    operandTypes.reserve(2 + payload.size());
+    for (Value v : payload)
+      operandTypes.push_back(v.getType());
+    SmallVector<Value, 22> operands = {*srcRuntimeMemref, *dstRuntimeMemref};
+    operands.append(payload.begin(), payload.end());
+    auto callee = ::tla::getOrCreateRuntimeCall(copyOp->getParentOfType<ModuleOp>(), calleeName,
+                                                 operandTypes);
+    rewriter.create<func::CallOp>(copyOp.getLoc(), callee, operands);
+    rewriter.eraseOp(copyOp);
+    return success();
   }
 
 private:
@@ -2126,109 +2106,6 @@ public:
                     ::tla::TlaDialect>();
   }
 
-  // Lower every UB->L1 tla.copy in `funcOp` to its vector-core runtime template
-  // (copy_ubuf_row_major_to_cbuf_zN_*), descriptor-driven and using the shared
-  // copy-route helpers. Reads only the tla.tensor_desc ops materialized by
-  // tla-lower-tensor-desc. No-op if the function has no UB->L1 copy.
-  LogicalResult lowerUbToL1Copies(func::FuncOp funcOp) {
-    Operation *root = funcOp.getOperation();
-    SmallVector<::tla::CopyOp, 4> ubToL1;
-    root->walk([&](::tla::CopyOp op) {
-      if (op->getNumOperands() != 2)
-        return;
-      auto dstInfo = ::tla::decodeTileTypeInfo(op->getOperand(0).getType());
-      auto srcInfo = ::tla::decodeTileTypeInfo(op->getOperand(1).getType());
-      if (succeeded(dstInfo) && succeeded(srcInfo) && srcInfo->addressSpace == "ub" &&
-          dstInfo->addressSpace == "l1")
-        ubToL1.push_back(op);
-    });
-    if (ubToL1.empty())
-      return success();
-
-    ::tla::TlaTensorMemrefLowering lowering;
-    SmallVector<Operation *, 8> toErase;
-    if (failed(::tla::collectMaterializedTensorDescriptors(funcOp, lowering.descriptorByValue)))
-      return failure();
-    auto &descByValue = lowering.descriptorByValue;
-
-    for (::tla::CopyOp op : ubToL1) {
-      if (!op || !op->getBlock())
-        continue;
-      auto dstIt = descByValue.find(op->getOperand(0));
-      auto srcIt = descByValue.find(op->getOperand(1));
-      if (dstIt == descByValue.end() || srcIt == descByValue.end()) {
-        op.emitError() << "missing descriptor for UB->L1 tla.copy operand";
-        return failure();
-      }
-      const TensorDescriptor &dstDesc = dstIt->second;
-      const TensorDescriptor &srcDesc = srcIt->second;
-      PatternRewriter rewriter(op.getContext());
-      rewriter.setInsertionPoint(op);
-      std::string calleeName = ::tla::getCopyRouteCallee(
-          op.getContext(), srcDesc.addrspace, dstDesc.addrspace, srcDesc.layoutTag,
-          dstDesc.layoutTag, srcDesc.elementType, dstDesc.elementType);
-      if (calleeName.empty()) {
-        op.emitError() << "unsupported UB->L1 tla.copy route";
-        return failure();
-      }
-      auto buildRuntimeMemref = [&](const TensorDescriptor &desc) -> FailureOr<Value> {
-        FailureOr<Value> base = ::tla::getOrMaterializeDescriptorBaseMemref(
-            rewriter, op.getLoc(), desc, op.getOperation(), lowering.loweredMemrefByValue);
-        if (failed(base))
-          return failure();
-        auto baseType = dyn_cast<MemRefType>((*base).getType());
-        if (!baseType)
-          return failure();
-        return ::tla::castMemrefToType(rewriter, op.getLoc(), *base,
-                                       ::tla::getDynamicStridedMemrefType(baseType));
-      };
-      FailureOr<Value> srcMemref = buildRuntimeMemref(srcDesc);
-      FailureOr<Value> dstMemref = buildRuntimeMemref(dstDesc);
-      if (failed(srcMemref) || failed(dstMemref))
-        return failure();
-      SmallVector<Value, 20> payload =
-          ::tla::buildCopyPayloadForRoute(rewriter, op.getLoc(), srcDesc, dstDesc);
-      SmallVector<Type, 22> operandTypes = {(*srcMemref).getType(), (*dstMemref).getType()};
-      for (Value v : payload)
-        operandTypes.push_back(v.getType());
-      SmallVector<Value, 22> operands = {*srcMemref, *dstMemref};
-      operands.append(payload.begin(), payload.end());
-      auto callee = ::tla::getOrCreateRuntimeCall(funcOp->getParentOfType<ModuleOp>(), calleeName,
-                                                  operandTypes);
-      rewriter.create<func::CallOp>(op.getLoc(), callee, operands);
-      ::tla::pushStagedErase(toErase, op.getOperation());
-    }
-
-    // Stage dead tensor descriptors that feed only lowered copies, then flush
-    // them with the copies and ptr scaffolding staged by base-memref
-    // materialization. Descriptors still used by vec.func stay.
-    ::tla::stageDeadTensorDescriptors(root, toErase);
-    DenseSet<Operation *> pendingErase;
-    for (Operation *op : toErase)
-      if (op && op->getBlock())
-        pendingErase.insert(op);
-    bool progress = true;
-    while (progress && !pendingErase.empty()) {
-      progress = false;
-      for (Operation *op : toErase) {
-        if (!op || !pendingErase.contains(op) || !op->getBlock())
-          continue;
-        bool hasLiveResultUses = false;
-        for (Value result : op->getResults())
-          if (!result.use_empty()) {
-            hasLiveResultUses = true;
-            break;
-          }
-        if (hasLiveResultUses)
-          continue;
-        pendingErase.erase(op);
-        op->erase();
-        progress = true;
-      }
-    }
-    return success();
-  }
-
   void runOnOperation() override {
     ModuleOp module = getOperation();
 
@@ -2258,13 +2135,9 @@ public:
         return;
       }
       inlineVectorRegionWrappers(funcOp);
-      // UB->L1 copies are vector-core data movement (bc/Vector); lower them here
-      // from materialized descriptors rather than in the cube pass.
-      if (failed(lowerUbToL1Copies(funcOp))) {
-        signalPassFailure();
-        return;
-      }
-      // Fresh per-function cache for vector-helper memref materialization.
+      // Fresh per-function lowering state: the base-memref handoff cache shared
+      // by LowerCopyPattern (gm<->ub / ub->l1 cifax runtime calls) and the
+      // vec.func helper operand materialization.
       ::tla::TlaTensorMemrefLowering lowering;
       RewritePatternSet patterns(&getContext());
       populateTlaToVectorPatterns(patterns, module, nextVectorRegionId,

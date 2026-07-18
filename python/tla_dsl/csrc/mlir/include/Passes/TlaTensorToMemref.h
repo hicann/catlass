@@ -157,15 +157,8 @@ mlir::FailureOr<mlir::Value>
 materializeBaseMemref(mlir::PatternRewriter &rewriter, mlir::Location loc, mlir::Value tensor,
                       llvm::DenseMap<mlir::Value, mlir::Value> *loweredMemrefByValue = nullptr);
 
-/// Try the 1-D copy subview, then the rank-2 form.
-mlir::FailureOr<mlir::Value>
-materializeCopySubview(mlir::PatternRewriter &rewriter, mlir::Location loc, mlir::Value tensor,
-                       llvm::DenseMap<mlir::Value, mlir::Value> *loweredMemrefByValue = nullptr,
-                       llvm::ArrayRef<int64_t> concreteShape = {});
-
 /// Build a rank-1, `numElements`-wide reinterpret_cast of `baseMemref` at element
-/// `offset` (dynamic stride-1 layout). Shared by the copy-subview lowering and the
-/// vector helper's per-lane tiles.
+/// `offset` (dynamic stride-1 layout). Used by the vector helper's per-lane tiles.
 mlir::Value materializeFlatReinterpretSubview(mlir::OpBuilder &builder, mlir::Location loc,
                                               mlir::Value baseMemref, mlir::Value offset,
                                               int64_t numElements);

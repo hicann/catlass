@@ -55,9 +55,19 @@ def basic_mmad_ptr(
     l0c_ptr = tla.recast_ptr(l0c_ptr, dtype=tla.Float32)
 
     with tla.cube():
-        gm_a = tla.make_tensor(lhs.ptr + 32 * K_DIM + 32, tla.make_layout(tla.make_shape(L1_M_DIM, L1_K_DIM), tla.make_stride(K_DIM, 1)))
-        gm_b = tla.make_tensor(32 + rhs.ptr, tla.make_layout(tla.make_shape(L1_K_DIM, L1_N_DIM), tla.make_stride(N_DIM, 1)))
-        gm_c = tla.tile_view(out, tla.make_shape(L1_M_DIM, L1_N_DIM), tla.make_coord(0, 0))
+        gm_a = tla.make_tensor(
+            32 + lhs.ptr + 32 * K_DIM,
+            tla.make_layout(tla.make_shape(L1_M_DIM, L1_K_DIM),
+                            tla.make_stride(K_DIM, 1))
+        )
+        gm_b = tla.tile_view(
+            rhs, tla.make_shape(L1_K_DIM, L1_N_DIM), tla.make_coord(1, 0)
+        )
+        gm_c = tla.make_tensor(
+            out.ptr,
+            tla.make_layout(tla.make_shape(L1_K_DIM, L1_N_DIM),
+                            tla.make_stride(L1_N_DIM, 1))
+        )
         l1_a = tla.make_tensor_like(l1a_ptr, gm_a, tla.arch.zN)
         l1_b = tla.make_tensor_like(l1b_ptr, gm_b, tla.arch.zN)
         tla.copy(l1_a, gm_a)
@@ -109,7 +119,7 @@ def _compile_only_type_args() -> tuple[Any, Any, Any, Any]:
     with runtime_mod._eager_capture():
         lhs_shape = tla.make_shape(M_DIM, K_DIM)
         rhs_shape = tla.make_shape(K_DIM, N_DIM)
-        out_shape = tla.make_shape(M_DIM, N_DIM)
+        out_shape = tla.make_shape(L1_M_DIM, L1_N_DIM)
         return (
             tla.Tensor(
                 lhs_shape,
@@ -132,7 +142,7 @@ def _compile_only_type_args() -> tuple[Any, Any, Any, Any]:
                 tla.Float32,
                 origin_shape=out_shape,
                 coord=tla.make_coord(0, 0),
-                stride=tla.make_stride(N_DIM, 1),
+                stride=tla.make_stride(L1_N_DIM, 1),
                 layout_tag=tla.arch.RowMajor,
             )
         )
@@ -185,7 +195,7 @@ def run(args: argparse.Namespace) -> int:
         rhs = torch.rand(K_DIM, N_DIM, dtype=torch.float32, device="cpu")
         out = torch.full((L1_M_DIM, L1_N_DIM), -9.0, dtype=torch.float32, device="npu")
         lhs_part = lhs[32:, 32:]
-        rhs_part = rhs[:32, 32:]
+        rhs_part = rhs[32:, :32]
         expected = lhs_part @ rhs_part
 
         tla_lhs = _create_tla_tensor(lhs.npu(), M_DIM ,K_DIM)

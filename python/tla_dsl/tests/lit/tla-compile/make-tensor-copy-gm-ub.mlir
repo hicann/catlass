@@ -20,11 +20,10 @@ module {
   }
 }
 
-// make_tensor's ptr operand is materialized to a typed 16x16 ub memref via
-// pointer_cast + reinterpret_cast (shape/stride/offset carried as the descriptor's
-// SSA operands, then cast to the dynamic runtime memref type).
+// CHECK-LABEL: func.func private @copy_ub_row_major_to_gm_row_major_float
+// CHECK-SAME: hivm.func_core_type = #hivm.func_core_type<AIV>
 // CHECK-LABEL: func.func @make_tensor_copy_kernel
 // CHECK: hivm.hir.pointer_cast{{.*}} : memref<256xf32, #hivm.address_space<ub>>
-// CHECK: memref.reinterpret_cast{{.*}} to memref<16x16xf32, strided<[?, ?], offset: ?>, #hivm.address_space<ub>>
+// CHECK: call @copy_ub_row_major_to_gm_row_major_float
 // CHECK-NOT: tla.make_tensor
-// CHECK: call @store_ubuf_to_gm_2d_float
+// CHECK-NOT: memref.reinterpret_cast

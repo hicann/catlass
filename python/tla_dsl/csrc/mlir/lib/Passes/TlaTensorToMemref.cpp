@@ -152,6 +152,16 @@ mlir::FailureOr<mlir::Value> materializeDescriptorBaseMemref(mlir::OpBuilder &bu
     return castMemrefToType(builder, loc, desc.base, memrefType);
 
   if (isa<::tla::PtrType>(desc.base.getType())) {
+    // GM row/column-major copies back ciface stubs that take a rank-2 memref_t
+    // Materialize a rank-2 identity memref sized by the tile shape.
+    if (desc.addrspace == "gm" && isLinearLayout(desc.layoutTag)) {
+      auto allocType = MemRefType::get(
+          {ShapedType::kDynamic, ShapedType::kDynamic},
+          memrefType.getElementType(), AffineMap(), memrefType.getMemorySpace());
+      SmallVector<Value, 2> dynamicSizes = {desc.shape0, desc.shape1};
+      return materializePtrValueAsMemref(builder, loc, desc.base, allocType,
+                                         diagnosticOp, dynamicSizes);
+    }
     if (auto allocationElements = getStaticAllocationElementCount(desc.base);
         succeeded(allocationElements)) {
       auto allocationType = MemRefType::get(
@@ -365,27 +375,6 @@ static FailureOr<Value> castToBridgedType(PatternRewriter &rewriter, Location lo
   return castMemrefToExpected(rewriter, loc, src, *expected);
 }
 
-// Build a rank-2 `memref.subview` of `base` at (`coord0`, `coord1`) with sizes
-// `shape` and a `{rowStride, 1}` strided layout. The shared subview core used by
-// both the tile-view and copy-subview rank-2 materializers.
-static Value buildRank2CoordSubview(PatternRewriter &rewriter, Location loc, Value base,
-                                    ArrayRef<int64_t> shape, int64_t rowStride, Value coord0,
-                                    Value coord1) {
-  auto baseType = cast<MemRefType>(base.getType());
-  auto subviewLayout = StridedLayoutAttr::get(rewriter.getContext(), ShapedType::kDynamic,
-                                              ArrayRef<int64_t>{rowStride, 1});
-  auto subviewType =
-      MemRefType::get(shape, baseType.getElementType(), subviewLayout, baseType.getMemorySpace());
-  SmallVector<int64_t> staticOffsets{ShapedType::kDynamic, ShapedType::kDynamic};
-  SmallVector<int64_t> staticSizes{shape.begin(), shape.end()};
-  SmallVector<int64_t> staticStrides{1, 1};
-  return rewriter
-      .create<mlir::memref::SubViewOp>(loc, subviewType, base, ValueRange{coord0, coord1},
-                                       ValueRange{}, ValueRange{}, staticOffsets, staticSizes,
-                                       staticStrides)
-      .getResult();
-}
-
 
 // The `!tla.ptr` operand of a make_tensor / make_tensor_like tensor (or the base
 // of a tla.tensor_desc when it is a ptr), or null.
@@ -473,8 +462,7 @@ materializeBaseMemref(PatternRewriter &rewriter, Location loc, Value tensor,
 }
 
 // Build a rank-1, `numElements`-wide reinterpret_cast of `baseMemref` at element
-// `offset` (dynamic stride-1 layout). Single flat-tile subview constructor shared
-// by the copy-subview lowering and the vector helper's per-lane tiles.
+// `offset` (dynamic stride-1 layout). Used by the vector helper's per-lane tiles.
 Value materializeFlatReinterpretSubview(OpBuilder &builder, Location loc, Value baseMemref,
                                         Value offset, int64_t numElements) {
   auto baseType = cast<MemRefType>(baseMemref.getType());
@@ -488,141 +476,6 @@ Value materializeFlatReinterpretSubview(OpBuilder &builder, Location loc, Value 
       .create<mlir::memref::ReinterpretCastOp>(loc, tileType, baseMemref, offset,
                                                ValueRange{size}, ValueRange{stride})
       .getResult();
-}
-
-static FailureOr<Value> materializeCopySubview1D(PatternRewriter &rewriter, Location loc,
-                                                 Value tensor,
-                                                 DenseMap<Value, Value> *loweredMemrefByValue) {
-  auto info = parseTensorInfo(tensor.getType());
-  if (failed(info))
-    return failure();
-  if (info->shape.size() != 1 || info->coord.size() != 1 || info->layoutTag != "row_major")
-    return failure();
-  if (info->shape[0] == ShapedType::kDynamic || info->coord[0] == ShapedType::kDynamic)
-    return failure();
-
-  auto baseMemref = materializeBaseMemref(rewriter, loc, tensor, loweredMemrefByValue);
-  if (failed(baseMemref))
-    return failure();
-  auto baseType = dyn_cast<MemRefType>((*baseMemref).getType());
-  if (!baseType || baseType.getRank() != 1)
-    return failure();
-
-  int64_t subviewOffset = baseType.getDimSize(0) == info->shape[0] ? 0 : info->coord[0];
-  if (subviewOffset == 0 && baseType.hasStaticShape() && baseType.getDimSize(0) == info->shape[0])
-    return *baseMemref;
-
-  Value offset = rewriter.create<arith::ConstantIndexOp>(loc, subviewOffset);
-  return materializeFlatReinterpretSubview(rewriter, loc, *baseMemref, offset, info->shape[0]);
-}
-
-static FailureOr<Value> materializeCopySubviewRank2(
-    PatternRewriter &rewriter, Location loc, Value tensor,
-    DenseMap<Value, Value> *loweredMemrefByValue, ArrayRef<int64_t> concreteShape) {
-  auto info = parseTensorInfo(tensor.getType());
-  if (failed(info))
-    return failure();
-  if (info->shape.size() != 2 || info->coord.size() != 2 || info->strides.size() != 2 ||
-      info->layoutTag != "row_major")
-    return failure();
-  SmallVector<int64_t, 2> shape(info->shape.begin(), info->shape.end());
-  if (!concreteShape.empty()) {
-    if (concreteShape.size() != 2)
-      return failure();
-    shape.assign(concreteShape.begin(), concreteShape.end());
-  }
-  if (shape[0] <= 0 || shape[0] == ShapedType::kDynamic ||
-      shape[1] <= 0 || shape[1] == ShapedType::kDynamic)
-    return failure();
-
-  auto viewElements = getStaticNumElements(shape);
-  if (failed(viewElements))
-    return failure();
-
-  // tla.tensor_desc: materialize the base memref (inttoptr ptr-backed flat buffer
-  // or a kernel-arg memref) and take a coord-aware rank-2 subview at the
-  // descriptor's (row_offset, col_offset). Handles both a rank-1 flat base
-  // (reinterpret_cast with the descriptor's strides) and a rank-2 base (subview).
-  if (auto descOp = tensor.getDefiningOp<::tla::TensorDescOp>()) {
-    Value base;
-    Value ptr = ptrOfTensorDesc(tensor); // descOp.getBase() when it is a !tla.ptr
-    if (ptr && ptr.getDefiningOp<::tla::IntToPtrOp>()) {
-      auto allocationElements = getStaticAllocationElementCount(ptr);
-      auto bridged = getBridgedTensorMemrefType(tensor);
-      if (failed(bridged))
-        return failure();
-      int64_t storageElements = succeeded(allocationElements) ? *allocationElements
-                                                              : *viewElements;
-      auto flatType = MemRefType::get(
-          {storageElements}, bridged->getElementType(), AffineMap(),
-          bridged->getMemorySpace());
-      auto materialized = materializePtrValueAsMemref(
-          rewriter, loc, ptr, flatType, tensor.getDefiningOp());
-      if (failed(materialized))
-        return failure();
-      base = *materialized;
-    } else if (isa<MemRefType>(descOp.getBase().getType())) {
-      base = descOp.getBase(); // kernel-arg memref base
-    } else {
-      return failure();
-    }
-
-    auto baseType = dyn_cast<MemRefType>(base.getType());
-    if (!baseType)
-      return failure();
-    if (baseType.getRank() == 1) {
-      // Flat ptr-backed base (UB/L1): reinterpret the tile shape directly at the
-      // descriptor's (row,col) offset with the descriptor's strides. Unlike an
-      // expand_shape to the tile shape, this views a sub-tile of a larger
-      // allocation correctly -- no element-count constraint, and the real row
-      // stride (full buffer width) comes from the descriptor, not the tile width.
-      Value rowStride = descOp.getStride0();
-      Value colStride = descOp.getStride1();
-      Value flatOffset = rewriter.create<arith::AddIOp>(
-          loc, rewriter.create<arith::MulIOp>(loc, descOp.getRowOffset(), rowStride),
-          descOp.getColOffset());
-      auto layout = StridedLayoutAttr::get(
-          rewriter.getContext(), ShapedType::kDynamic,
-          ArrayRef<int64_t>{ShapedType::kDynamic, ShapedType::kDynamic});
-      auto tileType =
-          MemRefType::get(shape, baseType.getElementType(), layout, baseType.getMemorySpace());
-      Value s0 = rewriter.create<arith::ConstantIndexOp>(loc, shape[0]);
-      Value s1 = rewriter.create<arith::ConstantIndexOp>(loc, shape[1]);
-      Value tile = rewriter
-                       .create<mlir::memref::ReinterpretCastOp>(
-                           loc, tileType, base, flatOffset, ValueRange{s0, s1},
-                           ValueRange{rowStride, colStride})
-                       .getResult();
-      if (loweredMemrefByValue)
-        (*loweredMemrefByValue)[tensor] = tile;
-      return tile;
-    }
-    if (baseType.getRank() != 2)
-      return failure();
-    int64_t rowStride = baseType.hasStaticShape() ? baseType.getDimSize(1) : info->strides[0];
-    if (rowStride <= 0 || rowStride == ShapedType::kDynamic)
-      rowStride = ShapedType::kDynamic;
-    Value subview = buildRank2CoordSubview(rewriter, loc, base, shape, rowStride,
-                                           descOp.getRowOffset(), descOp.getColOffset());
-    if (loweredMemrefByValue)
-      (*loweredMemrefByValue)[tensor] = subview;
-    return subview;
-  }
-
-  // Every rank-2 copy operand is a tla.tensor_desc (produced by tla-lower-tensor-desc)
-  // and handled above; nothing else reaches here.
-  return failure();
-}
-
-FailureOr<Value> materializeCopySubview(PatternRewriter &rewriter, Location loc,
-                                               Value tensor,
-                                               DenseMap<Value, Value> *loweredMemrefByValue,
-                                               ArrayRef<int64_t> concreteShape) {
-  if (auto subview = materializeCopySubview1D(rewriter, loc, tensor, loweredMemrefByValue);
-      succeeded(subview))
-    return subview;
-  return materializeCopySubviewRank2(rewriter, loc, tensor, loweredMemrefByValue,
-                                     concreteShape);
 }
 
 // ---------------------------------------------------------------------------
@@ -683,6 +536,12 @@ static StringRef copyRuntimeElemSuffix(StringRef elementType) {
     return "half";
   if (elementType == "bf16")
     return "bf16";
+  if (elementType == "i8")
+    return "int8_t";
+  if (elementType == "i16")
+    return "int16_t";
+  if (elementType == "i32")
+    return "int32_t";
   return {};
 }
 
@@ -706,7 +565,27 @@ std::string getCopyRouteCallee(MLIRContext *ctx, StringRef srcAddrspace, StringR
     StringRef suffix = copyRuntimeElemSuffix(srcElementType);
     if (suffix.empty())
       return {};
-    return Twine("copy_ubuf_row_major_to_cbuf_zN_").concat(suffix).str();
+    return Twine("copy_ub_row_major_to_l1_zN_").concat(suffix).str();
+  }
+  // GM (row-major) -> UB (row-major): vector-core staging load.
+  if (*srcSpace == hivm::AddressSpace::GM && *dstSpace == hivm::AddressSpace::UB &&
+      srcLayout == TensorLayoutTag::RowMajor && dstLayout == TensorLayoutTag::RowMajor) {
+    if (srcElementType != dstElem)
+      return {};
+    StringRef suffix = copyRuntimeElemSuffix(srcElementType);
+    if (suffix.empty())
+      return {};
+    return Twine("copy_gm_row_major_to_ub_row_major_").concat(suffix).str();
+  }
+  // UB (row-major) -> GM (row-major): vector-core staging store.
+  if (*srcSpace == hivm::AddressSpace::UB && *dstSpace == hivm::AddressSpace::GM &&
+      srcLayout == TensorLayoutTag::RowMajor && dstLayout == TensorLayoutTag::RowMajor) {
+    if (srcElementType != dstElem)
+      return {};
+    StringRef suffix = copyRuntimeElemSuffix(srcElementType);
+    if (suffix.empty())
+      return {};
+    return Twine("copy_ub_row_major_to_gm_row_major_").concat(suffix).str();
   }
   if (*srcSpace == hivm::AddressSpace::GM && *dstSpace == hivm::AddressSpace::L1 &&
       srcLayout == TensorLayoutTag::RowMajor && dstLayout == TensorLayoutTag::zN) {
@@ -853,7 +732,9 @@ static bool isAicTemplateRuntimeCall(StringRef name) {
 }
 
 static bool isAivTemplateRuntimeCall(StringRef name) {
-  return name.starts_with("copy_ubuf_row_major_to_cbuf_zN_");
+  return name.starts_with("copy_ub_row_major_to_l1_zN_") ||
+         name.starts_with("copy_gm_row_major_to_ub_row_major_") ||
+         name.starts_with("copy_ub_row_major_to_gm_row_major_");
 }
 
 static void annotateAicTemplateRuntimeCall(func::FuncOp func) {

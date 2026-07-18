@@ -119,7 +119,7 @@ def nested_ub_subtile_copy_kernel(mem_in: tla.Tensor, mem_out: tla.Tensor) -> No
 
 
 def test_nested_ub_subtile_copy_lowers(tmp_path) -> None:
-    """A sub-tile of a larger UB allocation lowers via reinterpret_cast, not expand_shape."""
+    """GM<->UB staging copies lower to vector-core (AIV) cifax runtime calls."""
     tla_compile = _require_hivm_tla_compile()
     with runtime_mod._eager_capture():
         mem_in = tla.Tensor(
@@ -144,8 +144,12 @@ def test_nested_ub_subtile_copy_lowers(tmp_path) -> None:
         check=True,
     )
     lowered = result.stdout
-    assert "memref.expand_shape" not in lowered
-    assert "memref.reinterpret_cast" in lowered
+    # The kernel issues both a GM->UB and a UB->GM staging copy; each lowers to its
+    # own inlinable AIV cifax runtime template (bc/Vector/dma.cpp).
+    assert "copy_gm_row_major_to_ub_row_major_float" in lowered
+    assert "copy_ub_row_major_to_gm_row_major_float" in lowered
+    assert "hivm.func_core_type = #hivm.func_core_type<AIV>" in lowered
+    assert '"tla.copy"' not in lowered
 
 
 @tla.kernel
@@ -162,7 +166,7 @@ def ptradd_ub_subtile_copy_kernel(mem_in: tla.Tensor, mem_src: tla.Tensor) -> No
 
 
 def test_ptradd_ub_subtile_copy_applies_ptr_offset(tmp_path) -> None:
-    """The ptr_add offset is preserved when materializing a UB sub-tile."""
+    """The ptr_add offset is preserved in the cifax base pointer_cast and tile payload."""
     tla_compile = _require_hivm_tla_compile()
     with runtime_mod._eager_capture():
         mem_in = tla.Tensor(
@@ -193,9 +197,12 @@ def test_ptradd_ub_subtile_copy_applies_ptr_offset(tmp_path) -> None:
         check=True,
     )
     out = result.stdout + result.stderr  # print-ir-after goes to stderr
-    assert "memref.expand_shape" not in out
-    # ptr_add contributes 64 bytes to the base; tile coordinate remains offset 2080.
-    assert "memref.reinterpret_cast" in out
-    assert "offset: [%c2080]" in out
-    assert "strides: [%c64, %c1]" in out
+    # GM->UB staging copy lowers to the AIV cifax runtime template.
+    assert "copy_gm_row_major_to_ub_row_major_float" in out
+    assert "hivm.func_core_type = #hivm.func_core_type<AIV>" in out
+    # ptr_add contributes 64 bytes (16 f32 elements) to the UB base pointer_cast;
+    # the UB sub-tile (coord (1,1) of a 64-wide buffer) carries stride0=64 and
+    # absCoord (32,32) in the i64 payload, so the stub computes the flat offset
+    # (32*64+32 = 2080) from absCoord/stride at runtime.
     assert "arith.constant 64 : i64" in out
+    assert '"tla.copy"' not in out

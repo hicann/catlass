@@ -39,10 +39,12 @@
 // CHECK-LABEL: func.func @ptr_extract_kernel
 // CHECK-DAG: llvm.mlir.constant(16 : i64)
 // CHECK-DAG: llvm.mlir.constant(32 : i64)
-// Both offset pointers are materialized as 8x8 consumer views (64 f32); the
-// allocation capacity remains an allocation-safety property, not pointer type state.
+// The L1 (cbuf) pointer is materialized as a rank-1 allocation view (64 f32);
+// the GM row-major pointer is materialized as a rank-2 tile view (8x8) to
+// match the ciface stub's memref_t<__gm__ T, 2> descriptor rank. The static
+// allocation capacity remains an allocation-safety property, not pointer type.
 // CHECK: hivm.hir.pointer_cast{{.*}} : memref<64xf32, #hivm.address_space<cbuf>>
-// CHECK: hivm.hir.pointer_cast{{.*}} : memref<64xf32, #hivm.address_space<gm>>
+// CHECK: hivm.hir.pointer_cast{{.*}} : memref<?x?xf32, #hivm.address_space<gm>>
 // The tla-level pointer ops must be fully lowered away.
 // CHECK-NOT: "tla.tensor_ptr"
 // CHECK-NOT: "tla.ptr_add"

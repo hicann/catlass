@@ -132,10 +132,10 @@ struct CopyGm2UbTla<Arch::Ascend950,
             "while TensorDst must be UB and RowMajor");
 
         AscendC::DataCopyExtParams dataCopyParams(
-            tla::get<0>(srcTensor.shape()),
-            tla::get<1>(srcTensor.shape()) * sizeof(ElementSrc),
-            (tla::get<0>(srcTensor.stride()) - tla::get<1>(srcTensor.shape())) * sizeof(ElementSrc),
-            (tla::get<0>(dstTensor.stride()) - tla::get<1>(dstTensor.shape())) / ELE_NUM_PER_BLK,
+            tla::get<0>(srcTensor.originShape()),
+            tla::get<1>(srcTensor.originShape()) * sizeof(ElementSrc),
+            (tla::get<0>(srcTensor.stride()) - tla::get<1>(srcTensor.originShape())) * sizeof(ElementSrc),
+            (tla::get<0>(dstTensor.stride()) - tla::get<1>(srcTensor.originShape())) / ELE_NUM_PER_BLK,
             0
         );
         AscendC::DataCopyPadExtParams<ElementSrc> padParams(false, 0, 0, 0);
