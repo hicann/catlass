@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import builtins as _builtins
 import math
+import warnings
 from enum import Enum
 from itertools import chain
 from typing import Any, Callable, Iterable, Sequence, TypeAlias
@@ -2760,15 +2761,26 @@ def make_tensor_like(
     **origin_shape** tree; nested origin trees skip remap. **shape** and **stride** are recomputed
     from that pair (e.g. ``zN`` nested 2×2 fractal spelling). **coord** is always ``0,0`` for
     every layout tag that participates in remap; **origin_shape** in the result matches the same
-    flat logical pair. The tensor address space follows the pointer's memspace, with L0 pointer
-    names remapped to tensor ABI names. ``dst_dtype`` may override the element type
-    using a concrete :class:`~catlass.base_dsl.typing.Numeric` (e.g. ``tla.Float32``) or
-    an ``mlir_ir.Type``; string dtype tokens are not accepted.
+    flat logical pair. The tensor element type defaults to ``ptr``'s ``!tla.ptr``
+    pointee, while its address space follows the pointer's memspace; L0 pointer names
+    are remapped to tensor ABI names. ``like`` supplies only the tensor
+    shape/layout/coord structure. ``dst_dtype`` is deprecated but continues to override
+    the pointer element type when provided; it will be removed in a future release. It
+    accepts a concrete
+    :class:`~catlass.base_dsl.typing.Numeric` (e.g. ``tla.Float32``) or an
+    ``mlir_ir.Type``; string dtype tokens are not accepted.
     The ``ptr`` operand is required by
     ``tla.make_tensor_like`` for lowering to attach backing storage.
     """
     _require_category("make_tensor_like", "like", like, "tensor", 1)
     if dst_dtype is not None:
+        warnings.warn(
+            "tla.make_tensor_like argument `dst_dtype` is deprecated and will be "
+            "removed in a future release; it currently overrides the element type, "
+            "so use a typed `ptr` instead.",
+            category=FutureWarning,
+            stacklevel=3,
+        )
         _require_dtype("make_tensor_like", "dst_dtype", dst_dtype, 3)
     _require_frontend_state("make_tensor_like")
     ptr_value = _as_value(ptr)
@@ -2780,13 +2792,6 @@ def make_tensor_like(
             "tla.make_tensor_like expects ``like`` to carry structured Tla tensor metadata; "
             f"got {str(like_value.type)!r}"
         ) from exc
-    dtype = like_type.element_type
-    if dst_dtype is not None:
-        dtype = _dtype_to_str(dst_dtype).lower()
-    if dtype not in {"f16", "bf16", "f32", "i32", "i16", "i1", "i8"}:
-        raise TlaLoweringError(
-            f"tla.make_tensor_like expects a supported element type, got [{dtype}]"
-        )
     if not PtrType.isinstance(ptr_value.type):
         _op_error(
             "make_tensor_like",
@@ -2794,6 +2799,20 @@ def make_tensor_like(
         )
     # Keep frontend MLIR pointer spelling aligned with the pointer operand.
     ptr_ty = PtrType(ptr_value.type)
+    if dst_dtype is not None:
+        dtype = _dtype_to_str(dst_dtype).lower()
+    else:
+        try:
+            dtype = _dtype_to_str(ptr_ty.pointee).lower()
+        except TypeError as exc:
+            raise TlaLoweringError(
+                "tla.make_tensor_like cannot derive element type from ptr pointee "
+                f"{ptr_ty.pointee}"
+            ) from exc
+    if dtype not in {"f16", "bf16", "f32", "i32", "i16", "i1", "i8"}:
+        raise TlaLoweringError(
+            f"tla.make_tensor_like expects a supported element type, got [{dtype}]"
+        )
     addr = ptr_ty.addrspace
 
     # Infer layout if not provided

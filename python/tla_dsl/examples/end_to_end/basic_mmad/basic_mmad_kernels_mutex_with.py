@@ -15,7 +15,7 @@ from catlass.types import dtype_size_bytes
 # GM / tile element types for this kernel. ``basic_matmul.py`` mutates DTYPE_A/B/GM_C before
 # ``tla.compile`` so host type_args and on-device recast_ptr agree with ``tla.mmad``.
 # Cube MMAD always accumulates in fp32 on L0C: ``DTYPE_C`` is always Float32 for ``l0c_ptr``
-# and for ``make_tensor_like(..., dst_dtype=DTYPE_C)``. ``DTYPE_GM_C`` is the GM C matrix
+# and therefore for ``make_tensor_like(l0c_ptr, ...)``. ``DTYPE_GM_C`` is the GM C matrix
 # element type (f32, or narrowed f16/bf16); ``tla.copy(gm_c, l0_c)`` lowers to
 # copy_cc_to_gm_row_major_float | _half | _bf16 accordingly.
 DTYPE_A = tla.Float16
@@ -97,7 +97,7 @@ def basic_mmad_kernel(mem_a: tla.Tensor, mem_b: tla.Tensor, mem_c: tla.Tensor) -
             k_l1_count = (k_block + l1_tk - 1) // l1_tk
             k_l1_range = tla.range(c0, k_l1_count, c1)
 
-            l0_c = tla.make_tensor_like(l0c_ptr, gm_c_by_core, dst_dtype=DTYPE_C)
+            l0_c = tla.make_tensor_like(l0c_ptr, gm_c_by_core)
 
             for k_l1 in k_l1_range:
                 gm_a_l1 = tla.tile_view(

@@ -75,7 +75,7 @@ def copy_l0c_to_ub_split_mismatch_dtype_kernel(gm_c: tla.Tensor) -> None:
     allocator = tla.utils.LocalmemAllocator()
     l0c_ptr = allocator.allocate(32 * 32 * 4, 512, tla.AddressSpace.l0c)
     l0c_ptr = tla.recast_ptr(l0c_ptr, dtype=tla.Float32)
-    l0c = tla.make_tensor_like(l0c_ptr, gm_c, tla.arch.L0Clayout, dst_dtype=tla.Float32)
+    l0c = tla.make_tensor_like(l0c_ptr, gm_c, tla.arch.L0Clayout)
     ub_ptr = allocator.allocate(16 * 32 * 4, 256, tla.AddressSpace.ub)
     ub_ptr = tla.recast_ptr(ub_ptr, dtype=tla.Float16)
     ub = tla.make_tensor_like(ub_ptr, gm_c, tla.arch.RowMajor)

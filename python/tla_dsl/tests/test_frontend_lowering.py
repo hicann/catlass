@@ -59,6 +59,7 @@ def alloc_ptr_kernel(mem_a: tla.Tensor) -> None:
     gm_tile = tla.tile_view(mem_a, tla.make_shape(16, 16), tla.make_coord(0, 0))
     allocator = tla.utils.LocalmemAllocator()
     ptr = allocator.allocate(16 * 16 * 2, 512, tla.AddressSpace.l1)
+    ptr = tla.recast_ptr(ptr, dtype=tla.Float16)
     local_tile = tla.make_tensor_like(ptr, gm_tile, tla.arch.zN)
     _ = local_tile
     tla.copy(gm_tile, gm_tile)
@@ -246,10 +247,9 @@ def f32_mmad_generated_addrspace_kernel(
     gm_a = tla.tile_view(mem_a, tla.make_shape(32, 32), tla.make_coord(0, 0))
     gm_b = tla.tile_view(mem_b, tla.make_shape(32, 32), tla.make_coord(0, 0))
     gm_c = tla.tile_view(mem_c, tla.make_shape(32, 32), tla.make_coord(0, 0))
-    allocator = tla.utils.LocalmemAllocator()
-    l0a_ptr = allocator.allocate(32 * 32 * 4, 512, tla.AddressSpace.l0a)
-    l0b_ptr = allocator.allocate(32 * 32 * 4, 512, tla.AddressSpace.l0b)
-    l0c_ptr = allocator.allocate(32 * 32 * 4, 512, tla.AddressSpace.l0c)
+    l0a_ptr = tla.allocate((32, 32), tla.Float32, tla.AddressSpace.l0a, 512)
+    l0b_ptr = tla.allocate((32, 32), tla.Float32, tla.AddressSpace.l0b, 512)
+    l0c_ptr = tla.allocate((32, 32), tla.Float32, tla.AddressSpace.l0c, 512)
     lhs = tla.make_tensor_like(l0a_ptr, gm_a, tla.arch.zN)
     rhs = tla.make_tensor_like(l0b_ptr, gm_b, tla.arch.nZ)
     acc = tla.make_tensor_like(l0c_ptr, gm_c, tla.arch.L0Clayout)
@@ -336,6 +336,7 @@ def test_allocator_api_emits_raw_alloc_and_tensor_reconstruction_ops() -> None:
         )
     mlir = alloc_ptr_kernel.dump_mlir(type_args=(mem,))
     assert "tla.alloc_ptr" in mlir
+    assert "tla.recast_ptr" in mlir
     assert "tla.make_tensor_like" in mlir
     assert (
         "<!tla.layout<!tla.shape<(16,1),(16,1)>, !tla.stride<(16,256),(1,256)>, !tla.shape<16,16>, zN>, !tla.coord<0,0>, !tla.ptr<f16, l1, 512>>"

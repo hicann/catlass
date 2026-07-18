@@ -393,8 +393,8 @@ public:
       }
       CrossFlagInfo &info = insert.first->second;
       if (info.id < 0) {
-        if (nextCrossFlagId > 10) {
-          flagOp->emitError() << "cross flag id exhausted (max id 10, 11 flags)";
+        if (nextCrossFlagId > 15) {
+          flagOp->emitError() << "cross flag id exhausted (max 16 cross flags)";
           signalPassFailure();
           return;
         }
