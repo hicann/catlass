@@ -6,7 +6,7 @@ import builtins as _builtins
 import math
 from enum import Enum
 from itertools import chain
-from typing import Any, Callable, Sequence, TypeAlias
+from typing import Any, Callable, Iterable, Sequence, TypeAlias
 
 from mlir import ir as mlir_ir  # type: ignore[assignment]
 from mlir._mlir_libs._mlir import (  # type: ignore[import-not-found]
@@ -930,7 +930,7 @@ def unpack_to_irvalue(
     names = tuple(
         mixed_value_names
         if mixed_value_names is not None
-        else (str(index) for index in range(len(mixed_values)))
+        else (str(index) for index in _builtins.range(len(mixed_values)))
     )
     specs: list[Any] = []
     ir_values: list[mlir_ir.Value] = []
@@ -948,17 +948,51 @@ def unpack_to_irvalue(
     return ir_values, (specs, leaf_names)
 
 
+def _collect_tla_tensor_type_metadata(
+    ir_values: list[mlir_ir.Value] | tuple[mlir_ir.Value, ...],
+) -> list[TlaTensorTypeDescriptor | None]:
+    return [
+        _tla_tensor_type_for_mlir_value(value)
+        if _tla_type_bridge.type_is_tensor(value.type)
+        else None
+        for value in ir_values
+    ]
+
+
 def pack_from_irvalue(
     ir_values: list[mlir_ir.Value] | tuple[mlir_ir.Value, ...],
     pytree_def: tuple[list[Any], list[str]],
     mixed_values: list[Any] | tuple[Any, ...],
     full_write_args_count: int = 0,
+    tensor_type_metadata: list[TlaTensorTypeDescriptor | None] | None = None,
 ) -> list[Any]:
     """Rebuild frontend values from MLIR values produced by dynamic SCF ops."""
-    del mixed_values, full_write_args_count
+    del full_write_args_count
     from .base_dsl.utils import tree_utils
 
     specs, _ = pytree_def
+    if tensor_type_metadata is None:
+        source_values, _ = unpack_to_irvalue(
+            mixed_values, "SCF tensor metadata propagation"
+        )
+        tensor_type_metadata = _collect_tla_tensor_type_metadata(source_values)
+    if len(tensor_type_metadata) != len(ir_values):
+        raise TlaCoreAPIError(
+            "Dynamic SCF result count does not match its carried value metadata"
+        )
+    for result, tensor_type in zip(ir_values, tensor_type_metadata, strict=True):
+        if not _tla_type_bridge.type_is_tensor(result.type):
+            continue
+        if tensor_type is None:
+            raise TlaCoreAPIError(
+                "Dynamic SCF tensor result is missing structured type metadata"
+            )
+        # SCF already requires every carried edge to have the same MLIR tensor
+        # type. Preserve that structured type model on block arguments and
+        # results so they remain valid inputs to tile_view/make_tensor_like.
+        # The _Tensor tree reconstruction below restores runtime descriptor
+        # leaves from the accompanying SCF-carried index SSA values.
+        _register_tla_tensor_type(result, tensor_type)
     wrapped = [_wrap_frontend_value(value) for value in ir_values]
     return list(tree_utils.rebuild_frontend_if_carried_values(wrapped, specs))
 
@@ -1600,7 +1634,7 @@ def _crop_origin_shape_type_tree(
     return (out[0], out[1])
 
 
-def _metadata_from_type_tree(tree: Any, dynamic_values: Sequence[Any]) -> Any:
+def _metadata_from_type_tree(tree: Any, dynamic_values: Iterable[Any]) -> Any:
     dyn_iter = iter(dynamic_values)
 
     def walk(node: Any) -> Any:

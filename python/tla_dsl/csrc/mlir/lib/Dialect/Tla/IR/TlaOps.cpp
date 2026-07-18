@@ -80,6 +80,18 @@ mlir::LogicalResult PtrAddOp::verify() {
   return mlir::success();
 }
 
+mlir::LogicalResult TensorDescOp::verify() {
+  // `packed` is empty for a linear (row-major/column-major) layout, or exactly
+  // the 8 zN/nZ leaves [packed_shape0..3, packed_stride0..3] for a packed
+  // layout. tla.tensor_desc is the single tile-descriptor op all tile producers
+  // lower into.
+  size_t n = getPacked().size();
+  if (n != 0 && n != 8)
+    return emitOpError("packed operands must be 0 (linear layout) or 8 "
+                       "[packed_shape0..3, packed_stride0..3]");
+  return mlir::success();
+}
+
 // Walk the enclosing ops looking for an ancestor of type AncestorOp. The
 // required region may be several levels up (e.g. a compute op nested inside a
 // scf.for loop inside a tla.vec.func), so this checks all transitive parents

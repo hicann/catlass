@@ -1,5 +1,6 @@
 import pathlib
 import os
+import re
 import subprocess
 import tempfile
 
@@ -275,6 +276,196 @@ def _loop_carried_pointer_changed_capacity_kernel(mem_a: tla.Tensor) -> None:
 
 
 @tla.kernel
+def _tensor_if_mixed_base_carrier_kernel(
+    mem_a: tla.Tensor, mem_b: tla.Tensor, choice: int
+) -> None:
+    left = tla.tile_view(mem_a, tla.make_shape(32, 32), tla.make_coord(0, 0))
+    right = tla.make_tensor(
+        mem_b.ptr,
+        tla.make_layout(tla.make_shape(32, 32), tla.make_stride(128, 1)),
+    )
+    ptr = tla.allocate((32, 32), tla.Float32, tla.AddressSpace.l1, 512)
+    with tla.cube():
+        selected = left
+        if choice == 0:
+            selected = left
+        else:
+            selected = right
+        selected_view = tla.tile_view(
+            selected, tla.make_shape(32, 32), tla.make_coord(0, 0)
+        )
+        nested_view = tla.tile_view(
+            selected_view, tla.make_shape(32, 32), tla.make_coord(0, 0)
+        )
+        local = tla.make_tensor_like(ptr, nested_view, tla.arch.zN)
+        tla.copy(local, nested_view)
+
+
+@tla.kernel
+def _tensor_if_packed_carrier_kernel(mem_a: tla.Tensor, choice: int) -> None:
+    root = tla.tile_view(mem_a, tla.make_shape(16, 16), tla.make_coord(0, 0))
+    first = tla.make_tensor_like(
+        tla.allocate((16, 16), tla.Float32, tla.AddressSpace.l1, 512),
+        root,
+        tla.arch.zN,
+    )
+    second = tla.make_tensor_like(
+        tla.allocate((16, 16), tla.Float32, tla.AddressSpace.l1, 512),
+        root,
+        tla.arch.zN,
+    )
+    with tla.cube():
+        selected = first
+        if choice == 0:
+            selected = first
+        else:
+            selected = second
+        selected_view = tla.tile_view(
+            selected, tla.make_shape(16, 16), tla.make_coord(0, 0)
+        )
+        tla.copy(selected_view, root)
+
+
+def _make_dynamic_metadata_tensor(value: int):
+    layout = tla.make_layout(
+        tla.make_shape(2, value),
+        tla.make_stride(value, 1),
+        origin_shape=tla.make_shape(2, value),
+    )
+    return tla.make_tensor(
+        tla.allocate((2, 128), tla.Float32, tla.AddressSpace.ub, 256),
+        layout,
+        tla.make_coord(0, value),
+    )
+
+
+@tla.kernel
+def _tensor_if_dynamic_metadata_access_kernel(
+    first_value: int, second_value: int, choice: int
+) -> None:
+    first = _make_dynamic_metadata_tensor(first_value)
+    second = _make_dynamic_metadata_tensor(second_value)
+    selected = first if choice == 0 else second
+    tla.make_shape(selected.shape[1], selected.origin_shape[1])
+    tla.make_stride(selected.stride[0])
+    tla.make_coord(selected.coord[1])
+
+
+@tla.kernel
+def _tensor_statement_if_dynamic_metadata_access_kernel(
+    first_value: int, second_value: int, choice: int
+) -> None:
+    first = _make_dynamic_metadata_tensor(first_value)
+    second = _make_dynamic_metadata_tensor(second_value)
+    selected = first
+    if choice == 0:
+        selected = first
+    else:
+        selected = second
+    tla.make_shape(selected.shape[1])
+
+
+@tla.kernel
+def _tensor_for_dynamic_metadata_access_kernel(
+    first_value: int, second_value: int, limit: int
+) -> None:
+    first = _make_dynamic_metadata_tensor(first_value)
+    second = _make_dynamic_metadata_tensor(second_value)
+    selected = first
+    for _ in tla.range(0, limit, 1):
+        selected = second
+    tla.make_shape(selected.shape[1])
+
+
+@tla.kernel
+def _tensor_while_dynamic_metadata_access_kernel(
+    first_value: int, second_value: int, limit: int
+) -> None:
+    first = _make_dynamic_metadata_tensor(first_value)
+    second = _make_dynamic_metadata_tensor(second_value)
+    selected = first
+    index = 0
+    while index < limit:
+        selected = second
+        index = index + 1
+    tla.make_shape(selected.shape[1])
+
+
+@tla.kernel
+def _tensor_if_dynamic_stride_carrier_kernel(
+    first_pitch: int, second_pitch: int, choice: int
+) -> None:
+    shape = tla.make_shape(2, 128)
+    first_layout = tla.make_layout(shape, tla.make_stride(first_pitch, 1))
+    second_layout = tla.make_layout(shape, tla.make_stride(second_pitch, 1))
+    first = tla.make_tensor(
+        tla.allocate((2, 128), tla.Float32, tla.AddressSpace.ub, 256), first_layout
+    )
+    second = tla.make_tensor(
+        tla.allocate((2, 128), tla.Float32, tla.AddressSpace.ub, 256), second_layout
+    )
+    with tla.vector():
+        selected = first if choice == 0 else second
+        with tla.vec.func(mode="simd"):
+            full_view = tla.tile_view(
+                selected, tla.make_shape(2, 128), tla.make_coord(0, 0)
+            )
+            chunk = tla.tile_view(
+                full_view, tla.make_shape(1, 64), tla.make_coord(1, 0)
+            )
+            value = chunk.load()
+            chunk.store(value)
+
+
+@tla.kernel
+def _tensor_for_carrier_kernel(mem_a: tla.Tensor, limit: int) -> None:
+    source = tla.tile_view(mem_a, tla.make_shape(16, 16), tla.make_coord(0, 0))
+    layout = tla.make_layout(tla.make_shape(16, 16), tla.make_stride(16, 1))
+    first = tla.make_tensor(
+        tla.allocate((16, 16), tla.Float32, tla.AddressSpace.ub, 256), layout
+    )
+    second = tla.make_tensor(
+        tla.allocate((16, 16), tla.Float32, tla.AddressSpace.ub, 256), layout
+    )
+    selected = first
+    with tla.vector():
+        for i in tla.range(0, limit, 1):
+            if i == 0:
+                selected = second
+            else:
+                selected = first
+        selected_view = tla.tile_view(
+            selected, tla.make_shape(16, 16), tla.make_coord(0, 0)
+        )
+        tla.copy(selected_view, source)
+
+
+@tla.kernel
+def _tensor_while_carrier_kernel(mem_a: tla.Tensor, limit: int) -> None:
+    source = tla.tile_view(mem_a, tla.make_shape(16, 16), tla.make_coord(0, 0))
+    layout = tla.make_layout(tla.make_shape(16, 16), tla.make_stride(16, 1))
+    first = tla.make_tensor(
+        tla.allocate((16, 16), tla.Float32, tla.AddressSpace.ub, 256), layout
+    )
+    second = tla.make_tensor(
+        tla.allocate((16, 16), tla.Float32, tla.AddressSpace.ub, 256), layout
+    )
+    index = 0
+    selected = first
+    with tla.vector():
+        while index < limit:
+            if index == 0:
+                selected = second
+            else:
+                selected = first
+            index = index + 1
+        selected_view = tla.tile_view(
+            selected, tla.make_shape(16, 16), tla.make_coord(0, 0)
+        )
+        tla.copy(selected_view, source)
+
+
+@tla.kernel
 def _vector_pitched_tile_view_kernel() -> None:
     ptr = tla.allocate((2, 128), tla.Float32, tla.AddressSpace.ub, 256)
     parent = tla.make_tensor(
@@ -430,6 +621,13 @@ def test_loop_carried_pointer_consumed_in_body_compiles_with_safe_capacity(
     assert "tla.make_tensor_like %arg" in mlir_text
     assert "!tla.ptr<f16, l1, 512>" in mlir_text
 
+    desc_output = _run_tla_compile_ir_after_pass(
+        mlir_text, "tla-lower-tensor-desc", require_success=True
+    )
+    assert desc_output.count("tla.tensor_desc") >= 2
+    assert "tla.tile_view" not in desc_output
+    assert "tla.make_tensor_like" not in desc_output
+
     output = _run_tla_compile_ir_after_pass(
         mlir_text, "tla-cube-region", require_success=True
     )
@@ -441,6 +639,136 @@ def test_loop_carried_pointer_consumed_in_body_compiles_with_safe_capacity(
         "#hivm.address_space<cbuf>>"
     )
     assert any(expected_type in line for line in pointer_cast_lines), output
+
+
+@pytest.mark.parametrize(
+    ("kernel", "control_flow", "tensor_arg_count", "producer"),
+    (
+        (_tensor_if_mixed_base_carrier_kernel, "scf.if", 2, "tla.make_tensor "),
+        (_tensor_if_packed_carrier_kernel, "scf.if", 1, "tla.make_tensor_like"),
+        (_tensor_for_carrier_kernel, "scf.for", 1, "tla.make_tensor "),
+        (_tensor_while_carrier_kernel, "scf.while", 1, "tla.make_tensor "),
+    ),
+)
+def test_tensor_valued_scf_carrier_is_materialized_as_descriptor_fields(
+    kernel: object, control_flow: str, tensor_arg_count: int, producer: str
+) -> None:
+    with runtime_mod._eager_capture():
+        mem = tla.Tensor(
+            tla.make_shape(128, 128),
+            tla.Float32,
+            origin_shape=tla.make_shape(128, 128),
+        )
+    type_args = (mem,) * tensor_arg_count + (2,)
+    mlir_text = kernel.dump_mlir(type_args=type_args)
+    assert control_flow in mlir_text
+    assert "!tla.tensor" in mlir_text
+    assert producer in mlir_text
+
+    output = _run_tla_compile_ir_after_pass(
+        mlir_text, "tla-lower-tensor-desc", require_success=True
+    )
+    assert "tla.tensor_desc" in output
+    assert "tla.tile_view" not in output
+    assert "tla.make_tensor " not in output
+    assert "tla.make_tensor_like" not in output
+    carrier_lines = [
+        line
+        for line in output.splitlines()
+        if any(
+            op in line
+            for op in (
+                "scf.if",
+                "scf.for",
+                "scf.while",
+                "scf.condition",
+                "scf.yield",
+            )
+        )
+    ]
+    assert carrier_lines
+    assert all("!tla.tensor" not in line for line in carrier_lines), output
+
+
+def test_tensor_scf_carrier_preserves_dynamic_descriptor_fields() -> None:
+    mlir_text = _tensor_if_dynamic_stride_carrier_kernel.dump_mlir(
+        type_args=(128, 96, 1)
+    )
+    assert "!tla.stride<?,1>" in mlir_text
+    assert "scf.if" in mlir_text
+
+    output = _run_tla_compile_ir_after_pass(
+        mlir_text, "tla-lower-tensor-desc", require_success=True
+    )
+    assert "tla.tensor_desc" in output
+    assert "tla.tile_view" not in output
+    assert "tla.make_tensor " not in output
+    carrier_lines = [
+        line for line in output.splitlines() if "scf.if" in line or "scf.yield" in line
+    ]
+    assert carrier_lines
+    assert all("!tla.tensor" not in line for line in carrier_lines), output
+
+
+@pytest.mark.parametrize(
+    ("kernel", "control_flow", "result_count", "metadata_consumers"),
+    (
+        (
+            _tensor_if_dynamic_metadata_access_kernel,
+            "scf.if",
+            5,
+            (
+                "tla.make_shape {result}#1, {result}#4",
+                "tla.make_stride {result}#2",
+                "tla.make_coord {result}#3",
+            ),
+        ),
+        (
+            _tensor_statement_if_dynamic_metadata_access_kernel,
+            "scf.if",
+            5,
+            ("tla.make_shape {result}#1",),
+        ),
+        (
+            _tensor_for_dynamic_metadata_access_kernel,
+            "scf.for",
+            5,
+            ("tla.make_shape {result}#1",),
+        ),
+        (
+            _tensor_while_dynamic_metadata_access_kernel,
+            "scf.while",
+            6,
+            ("tla.make_shape {result}#2",),
+        ),
+    ),
+)
+def test_tensor_scf_carrier_preserves_dynamic_metadata_ssa(
+    kernel: object,
+    control_flow: str,
+    result_count: int,
+    metadata_consumers: tuple[str, ...],
+) -> None:
+    mlir_text = kernel.dump_mlir(type_args=(128, 96, 2))
+    match = re.search(
+        rf"(%[A-Za-z0-9_]+):{result_count} = {re.escape(control_flow)}",
+        mlir_text,
+    )
+    assert match is not None, mlir_text
+    result = match.group(1)
+    for consumer in metadata_consumers:
+        assert consumer.format(result=result) in mlir_text
+
+    output = _run_tla_compile_ir_after_pass(
+        mlir_text, "tla-lower-tensor-desc", require_success=True
+    )
+    carrier_lines = [
+        line
+        for line in output.splitlines()
+        if any(op in line for op in ("scf.if", "scf.for", "scf.while", "scf.yield"))
+    ]
+    assert carrier_lines
+    assert all("!tla.tensor" not in line for line in carrier_lines), output
 
 
 def test_vector_tile_view_uses_static_parent_pitch_in_flat_offset() -> None:
@@ -458,6 +786,15 @@ def test_vector_tile_view_captures_dynamic_parent_pitch() -> None:
     mlir_text = _vector_dynamic_pitched_tile_view_kernel.dump_mlir(type_args=(128,))
     assert "!tla.stride<?,1>" in mlir_text
     assert "tla.make_stride %" in mlir_text
+
+    desc_output = _run_tla_compile_ir_after_pass(
+        mlir_text, "tla-lower-tensor-desc", require_success=True
+    )
+    assert '"tla.vec.func"' in desc_output
+    assert desc_output.count("tla.tensor_desc") >= 2
+    assert "tla.tile_view" not in desc_output
+    assert "tla.make_tensor " not in desc_output
+    assert "tla.make_tensor_like" not in desc_output
 
     output = _run_tla_compile_ir_after_pass(
         mlir_text, "tla-vector-region", require_success=True

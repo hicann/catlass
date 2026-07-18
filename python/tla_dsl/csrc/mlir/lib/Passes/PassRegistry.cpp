@@ -15,6 +15,7 @@ void registerTlaPasses() {
   registerTlaLowerFuncPass();
   registerTlaLowerScalarAccessPass();
   registerTlaSplitMixedFuncPass();
+  registerTlaLowerTensorDescPass();
   registerTlaLowerBlockIdxPass();
   registerTlaVectorRegionPass();
   registerTlaLowerFlagBarrierToHivmPass();
@@ -37,8 +38,12 @@ void buildTlaPipeline(OpPassManager &pm) {
   pm.addPass(createTlaLowerPtrPass());
   pm.addPass(createTlaSplitMixedFuncPass());
   // All ScalarSSA (bridged memref + descriptor !tla.tensor) -> memref.load/store
-  // before region outlining. Cube still re-derives descriptors for copy/mmad.
+  // before region outlining. GM-kernel-arg only; tile producers are left intact.
   pm.addPass(createTlaLowerScalarAccessPass());
+  // Materialize tensor-view producer chains as tla.tensor_desc before region
+  // passes consume them. Runs after tla-lower-ptr so descriptor bases use the
+  // bridged memref or !tla.ptr produced by the standard pipeline.
+  pm.addPass(createTlaLowerTensorDescPass());
   pm.addPass(createTlaVectorRegionPass());
   pm.addPass(createTlaCubeRegionPass());
   pm.addPass(createTlaFinalizeMemrefPass());

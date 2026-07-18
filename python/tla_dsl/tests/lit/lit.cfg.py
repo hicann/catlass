@@ -2,6 +2,7 @@ import os
 import glob
 import shutil
 import subprocess
+import sys
 
 import lit.formats
 
@@ -69,9 +70,22 @@ if existing_path:
     path_entries.append(existing_path)
 config.environment["PATH"] = os.pathsep.join(path_entries)
 
+python_path_entries = [os.path.dirname(os.path.dirname(config.tla_lit_source_dir))]
+ascendnpu_ir_root = getattr(config, "tla_ascendnpu_ir_root", "")
+mlir_python_root = os.path.join(
+    ascendnpu_ir_root, "build", "install", "python_packages", "mlir_core"
+)
+if os.path.isdir(mlir_python_root):
+    python_path_entries.append(mlir_python_root)
+existing_python_path = os.environ.get("PYTHONPATH", "")
+if existing_python_path:
+    python_path_entries.append(existing_python_path)
+config.environment["PYTHONPATH"] = os.pathsep.join(python_path_entries)
+
 config.filecheck_tool = filecheck_tool
 config.substitutions.append(("%tla_compile", config.tla_compile_tool))
 config.substitutions.append(("%filecheck", config.filecheck_tool))
 config.substitutions.append(("%tla_lit_src", config.tla_lit_source_dir))
+config.substitutions.append(("%python", sys.executable))
 
 config.environment["FILECHECK_OPTS"] = "-enable-var-scope --allow-unused-prefixes=false"

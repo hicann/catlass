@@ -3,6 +3,9 @@ add_library(TlaPasses
   TlaLowerFuncPass.cpp
   TlaLowerScalarAccessPass.cpp
   TlaSplitMixedFuncPass.cpp
+  TlaLowerTensorDescPass.cpp
+  TlaTensorDescDerivation.cpp
+  TlaTensorDescriptor.cpp
   TlaLowerBlockIdxPass.cpp
   TlaLowerPtrPass.cpp
   TlaLowerMutexToStdPass.cpp

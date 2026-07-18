@@ -14,6 +14,16 @@ from ..base_dsl.typing import Bool, Numeric, ScalarSSA
 from .typing import Tensor as TensorABC
 
 
+def _dynamic_metadata_values(type_tree: Any, metadata_tree: Any) -> list[Any]:
+    """Return runtime values corresponding to dynamic leaves in a type tree."""
+    if isinstance(type_tree, tuple):
+        values: list[Any] = []
+        for type_child, metadata_child in zip(type_tree, metadata_tree, strict=True):
+            values.extend(_dynamic_metadata_values(type_child, metadata_child))
+        return values
+    return [metadata_tree] if type_tree is None else []
+
+
 class _Tensor(TensorABC):
     """Frontend proxy for an SSA ``!tla.tensor`` value."""
 
@@ -38,7 +48,56 @@ class _Tensor(TensorABC):
         return [self.value.type]
 
     def __extract_mlir_values__(self) -> list[Any]:
-        return [self.value]
+        """Flatten this tensor and the SSA leaves of its dynamic metadata."""
+        from ..core_api import _tla_tensor_type_for_mlir_value
+
+        tensor_type = _tla_tensor_type_for_mlir_value(self.value)
+        values: list[Any] = [self.value]
+        for field, type_tree in (
+            ("shape", tensor_type.shape),
+            ("stride", tensor_type.stride),
+            ("coord", tensor_type.coord),
+            ("origin_shape", tensor_type.origin_shape),
+        ):
+            values.extend(
+                _dynamic_metadata_values(
+                    type_tree, _tensor_metadata_field(self.value, field)
+                )
+            )
+        return values
+
+    def __new_from_mlir_values__(self, values: list[Any]) -> "_Tensor":
+        """Rebuild an SCF-carried tensor and register its selected metadata."""
+        from ..core_api import (
+            _metadata_from_type_tree,
+            _register_tla_tensor_metadata,
+            _register_tla_tensor_type,
+            _tla_tensor_type_for_mlir_value,
+        )
+
+        expected_count = len(self.__extract_mlir_values__())
+        if len(values) != expected_count:
+            raise ValueError(
+                f"Tensor expects {expected_count} MLIR values, got {len(values)}"
+            )
+        result = _Tensor(values[0])
+        tensor_type = _tla_tensor_type_for_mlir_value(self.value)
+        _register_tla_tensor_type(result.value, tensor_type)
+
+        dynamic_values = iter(_runtime._IndexExpr(value) for value in values[1:])
+        metadata = {
+            "shape": _metadata_from_type_tree(tensor_type.shape, dynamic_values),
+            "stride": _metadata_from_type_tree(tensor_type.stride, dynamic_values),
+            "coord": _metadata_from_type_tree(tensor_type.coord, dynamic_values),
+            "origin_shape": _metadata_from_type_tree(
+                tensor_type.origin_shape, dynamic_values
+            ),
+            "dtype": tensor_type.element_type,
+            "addrspace": tensor_type.addrspace,
+            "layout_tag": tensor_type.layout_tag,
+        }
+        _register_tla_tensor_metadata(result.value, metadata)
+        return result
 
     @property
     def shape(self) -> Any:

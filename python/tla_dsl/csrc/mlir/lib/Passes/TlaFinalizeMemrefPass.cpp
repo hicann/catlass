@@ -2,11 +2,11 @@
 #include "PassesInternal.h"
 #include "Passes/TlaTensorToMemref.h"
 
-// tla-finalize-memref: finalize the tla.tensor -> memref lowering. First bridge
-// the function ABI (func signatures + func.call surfaces tla.tensor -> memref,
-// redirecting the tensor->memref arg casts the region passes created), then DCE
-// the dead scaffolding + unrealized casts the region passes left behind. Last
-// pass in the memref-lowering sequence.
+// tla-finalize-memref: finalize the tla.tensor -> memref lowering. Bridges the
+// function ABI (func signatures + func.call surfaces tla.tensor -> memref,
+// redirecting the tensor->memref arg casts from the region passes), then DCEs the
+// dead scaffolding + unrealized casts left by the region passes. Last pass in the
+// memref-lowering sequence.
 
 namespace tla {
 namespace {
@@ -291,7 +291,9 @@ public:
     // Assert the tensor / tile / region / compute ops this pass depends on being
     // gone are indeed gone. Pointer producers and transforms must already have
     // been eliminated by tla-lower-ptr; do not DCE them here, because that would
-    // hide an upstream lowering failure. tla.mutex / tla.cross_* are
+    // hide an upstream lowering failure. tla.tensor_desc is the exception: the
+    // region passes materialize tile memrefs from it but may leave the op itself
+    // dead, so it is DCE'd (not asserted). tla.mutex / tla.cross_* are
     // intentionally NOT asserted: they are lowered by
     // tla-lower-mutex-to-std / tla-lower-flag-barrier-to-hivm, which run AFTER
     // this pass, so they are still present when finalize runs.
@@ -301,7 +303,7 @@ public:
                         ::tla::AllocPtrOp, ::tla::RecastPtrOp, ::tla::TensorPtrOp,
                         ::tla::PtrAddOp>();
     target.addDynamicallyLegalOp<::tla::MakeShapeOp, ::tla::MakeCoordOp, ::tla::MakeStrideOp,
-                                 ::tla::MakeLayoutOp, ::tla::IntToPtrOp>(
+                                 ::tla::MakeLayoutOp, ::tla::IntToPtrOp, ::tla::TensorDescOp>(
         [](Operation *op) { return !hasNoResultUses(op); });
     target.addDynamicallyLegalOp<UnrealizedConversionCastOp>(
         [](UnrealizedConversionCastOp op) { return !isDeadTensorBridgeCast(op); });
@@ -316,7 +318,7 @@ public:
           .add<EraseDeadTensorBridgeCastPattern, EraseDeadOpPattern<::tla::MakeShapeOp>,
                EraseDeadOpPattern<::tla::MakeCoordOp>, EraseDeadOpPattern<::tla::MakeStrideOp>,
                EraseDeadOpPattern<::tla::MakeLayoutOp>, EraseDeadOpPattern<::tla::IntToPtrOp>,
-               EraseDeadOpPattern<mlir::memref::SubViewOp>,
+               EraseDeadOpPattern<mlir::memref::SubViewOp>, EraseDeadOpPattern<::tla::TensorDescOp>,
                EraseDeadOpPattern<hivm::PointerCastOp>>(
               &getContext());
       if (failed(applyPartialConversion(module, target, std::move(patterns)))) {

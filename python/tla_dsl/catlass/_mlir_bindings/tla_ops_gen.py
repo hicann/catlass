@@ -2622,6 +2622,80 @@ def subs(result, lhs, rhs, *, mask=None, loc=None, ip=None) -> _ods_ir.Value:
   return _get_op_result_or_op_results(SubsOp(result=result, lhs=lhs, rhs=rhs, mask=mask, loc=loc, ip=ip))
 
 @_ods_cext.register_operation(_Dialect)
+class TensorDescOp(_ods_ir.OpView):
+  OPERATION_NAME = "tla.tensor_desc"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, result, base, row_offset, col_offset, stride0, stride1, shape0, shape1, origin_shape0, origin_shape1, packed, *, loc=None, ip=None):
+    operands = []
+    results = []
+    attributes = {}
+    regions = None
+    operands.append(_get_op_result_or_value(base))
+    operands.append(_get_op_result_or_value(row_offset))
+    operands.append(_get_op_result_or_value(col_offset))
+    operands.append(_get_op_result_or_value(stride0))
+    operands.append(_get_op_result_or_value(stride1))
+    operands.append(_get_op_result_or_value(shape0))
+    operands.append(_get_op_result_or_value(shape1))
+    operands.append(_get_op_result_or_value(origin_shape0))
+    operands.append(_get_op_result_or_value(origin_shape1))
+    operands.extend(_get_op_results_or_values(packed))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results.append(result)
+    _ods_successors = None
+    super().__init__(self.build_generic(attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip))
+
+  @builtins.property
+  def base(self):
+    return self.operation.operands[0]
+
+  @builtins.property
+  def row_offset(self):
+    return self.operation.operands[1]
+
+  @builtins.property
+  def col_offset(self):
+    return self.operation.operands[2]
+
+  @builtins.property
+  def stride0(self):
+    return self.operation.operands[3]
+
+  @builtins.property
+  def stride1(self):
+    return self.operation.operands[4]
+
+  @builtins.property
+  def shape0(self):
+    return self.operation.operands[5]
+
+  @builtins.property
+  def shape1(self):
+    return self.operation.operands[6]
+
+  @builtins.property
+  def origin_shape0(self):
+    return self.operation.operands[7]
+
+  @builtins.property
+  def origin_shape1(self):
+    return self.operation.operands[8]
+
+  @builtins.property
+  def packed(self):
+    _ods_variadic_group_length = len(self.operation.operands) - 10 + 1
+    return self.operation.operands[9:9 + _ods_variadic_group_length]
+
+  @builtins.property
+  def result(self):
+    return self.operation.results[0]
+
+def tensor_desc(result, base, row_offset, col_offset, stride0, stride1, shape0, shape1, origin_shape0, origin_shape1, packed, *, loc=None, ip=None) -> _ods_ir.Value:
+  return _get_op_result_or_op_results(TensorDescOp(result=result, base=base, row_offset=row_offset, col_offset=col_offset, stride0=stride0, stride1=stride1, shape0=shape0, shape1=shape1, origin_shape0=origin_shape0, origin_shape1=origin_shape1, packed=packed, loc=loc, ip=ip))
+
+@_ods_cext.register_operation(_Dialect)
 class TensorPtrOp(_ods_ir.OpView):
   OPERATION_NAME = "tla.tensor_ptr"
 

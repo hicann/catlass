@@ -160,6 +160,7 @@ class ScfGenerator:
         initial_ir_values: list[Any] | None = None,
         initial_pytree_def: tuple[list[Any], list[str]] | None = None,
         initial_ir_types: list[Any] | None = None,
+        result_tensor_type_metadata: list[Any] | None = None,
         block_term_op_builder: dict[Callable[..., Any], Callable[..., None]]
         | None = None,
     ) -> Any:
@@ -248,7 +249,11 @@ class ScfGenerator:
                     region_values = unpack_and_validate_region_values(region_result)
                     scf.YieldOp(region_values)
         final_results = _core_api.pack_from_irvalue(
-            list(op.results), pytree_def, mix_iter_args, full_write_args_count
+            list(op.results),
+            pytree_def,
+            mix_iter_args,
+            full_write_args_count,
+            tensor_type_metadata=result_tensor_type_metadata,
         )
         return tree_utils.return_carried_values(final_results)
 
@@ -846,6 +851,9 @@ def _internal_frontend_if_expr(
         false_spec = false_pytree_def[0][0]
         false_leaf_names = false_pytree_def[1]
         result_types = [value.type for value in true_mlir]
+        result_tensor_type_metadata = _core_api._collect_tla_tensor_type_metadata(
+            true_mlir
+        )
         result_type_names = [str(value_type) for value_type in result_types]
         _validate_if_expr_branch(
             false_mlir,
@@ -921,6 +929,7 @@ def _internal_frontend_if_expr(
         initial_ir_values=[None] * len(result_types),
         initial_pytree_def=result_pytree_def,
         initial_ir_types=result_types,
+        result_tensor_type_metadata=result_tensor_type_metadata,
     )
 
 

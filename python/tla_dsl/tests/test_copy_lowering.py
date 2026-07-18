@@ -102,3 +102,100 @@ def test_copy_l0c_to_ub_split_mismatch_dtype_raises() -> None:
         match=r"When copy l0c to ub with split mode, src and dst dtype must be same",
     ):
         copy_l0c_to_ub_split_mismatch_dtype_kernel.dump_mlir(type_args=(gm_c,))
+
+
+@tla.kernel
+def nested_ub_subtile_copy_kernel(mem_in: tla.Tensor, mem_out: tla.Tensor) -> None:
+    allocator = tla.utils.LocalmemAllocator()
+    gm_in = tla.tile_view(mem_in, tla.make_shape(64, 64), tla.make_coord(0, 0))
+    gm_out = tla.tile_view(mem_out, tla.make_shape(32, 32), tla.make_coord(0, 0))
+    ub_ptr = allocator.allocate(64 * 64 * 4, 256, tla.AddressSpace.ub)
+    ub_ptr = tla.recast_ptr(ub_ptr, dtype=tla.Float32)
+    ub_root = tla.make_tensor_like(ub_ptr, gm_in, tla.arch.RowMajor)
+    ub_tile = tla.tile_view(ub_root, tla.make_shape(32, 32), tla.make_coord(1, 1))
+    with tla.vector():
+        tla.copy(ub_root, gm_in)
+        tla.copy(gm_out, ub_tile)
+
+
+def test_nested_ub_subtile_copy_lowers(tmp_path) -> None:
+    """A sub-tile of a larger UB allocation lowers via reinterpret_cast, not expand_shape."""
+    tla_compile = _require_hivm_tla_compile()
+    with runtime_mod._eager_capture():
+        mem_in = tla.Tensor(
+            tla.make_shape(64, 64),
+            tla.Float32,
+            origin_shape=tla.make_shape(64, 64),
+        )
+        mem_out = tla.Tensor(
+            tla.make_shape(32, 32),
+            tla.Float32,
+            origin_shape=tla.make_shape(32, 32),
+        )
+
+    mlir = nested_ub_subtile_copy_kernel.dump_mlir(type_args=(mem_in, mem_out))
+    input_path = tmp_path / "nested_ub_subtile_copy.mlir"
+    input_path.write_text(mlir)
+
+    result = subprocess.run(
+        [str(tla_compile), str(input_path), "-o", "-"],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    lowered = result.stdout
+    assert "memref.expand_shape" not in lowered
+    assert "memref.reinterpret_cast" in lowered
+
+
+@tla.kernel
+def ptradd_ub_subtile_copy_kernel(mem_in: tla.Tensor, mem_src: tla.Tensor) -> None:
+    gm_root = tla.tile_view(mem_in, tla.make_shape(64, 64), tla.make_coord(0, 0))
+    gm_src = tla.tile_view(mem_src, tla.make_shape(32, 32), tla.make_coord(0, 0))
+    allocator = tla.utils.LocalmemAllocator()
+    ub_ptr = allocator.allocate((64 * 64 + 16) * 4, 256, tla.AddressSpace.ub)
+    ub_ptr = tla.recast_ptr(ub_ptr, dtype=tla.Float32) + 16
+    ub_root = tla.make_tensor_like(ub_ptr, gm_root, tla.arch.RowMajor)
+    ub_tile = tla.tile_view(ub_root, tla.make_shape(32, 32), tla.make_coord(1, 1))
+    with tla.vector():
+        tla.copy(ub_tile, gm_src)
+
+
+def test_ptradd_ub_subtile_copy_applies_ptr_offset(tmp_path) -> None:
+    """The ptr_add offset is preserved when materializing a UB sub-tile."""
+    tla_compile = _require_hivm_tla_compile()
+    with runtime_mod._eager_capture():
+        mem_in = tla.Tensor(
+            tla.make_shape(64, 64),
+            tla.Float32,
+            origin_shape=tla.make_shape(64, 64),
+        )
+        mem_src = tla.Tensor(
+            tla.make_shape(32, 32),
+            tla.Float32,
+            origin_shape=tla.make_shape(32, 32),
+        )
+
+    mlir = ptradd_ub_subtile_copy_kernel.dump_mlir(type_args=(mem_in, mem_src))
+    input_path = tmp_path / "ptradd_ub_subtile.mlir"
+    input_path.write_text(mlir)
+    output_path = tmp_path / "out.mlir"
+    result = subprocess.run(
+        [
+            str(tla_compile),
+            str(input_path),
+            "-o",
+            str(output_path),
+            "--mlir-print-ir-after=tla-finalize-memref",
+        ],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    out = result.stdout + result.stderr  # print-ir-after goes to stderr
+    assert "memref.expand_shape" not in out
+    # ptr_add contributes 64 bytes to the base; tile coordinate remains offset 2080.
+    assert "memref.reinterpret_cast" in out
+    assert "offset: [%c2080]" in out
+    assert "strides: [%c64, %c1]" in out
+    assert "arith.constant 64 : i64" in out

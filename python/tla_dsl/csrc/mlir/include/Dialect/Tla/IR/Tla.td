@@ -670,6 +670,34 @@ def Tla_MakeTensorOp : Tla_Op<"make_tensor", [Pure]> {
   }];
 }
 
+def Tla_TensorDescOp : Tla_Op<"tensor_desc", [Pure]> {
+  let summary = "A tile's fully-resolved tensor descriptor as a single op";
+  let description = [{
+    Materialized by ``tla-lower-tensor-desc`` from a tensor-view producer chain.
+    ``base`` is the resolved root storage: either a builtin ``memref`` kernel
+    argument or a ``!tla.ptr`` whose pointer transforms have already been applied.
+    The remaining operands are the descriptor's SSA-valued coordinates, strides,
+    shapes, and origin shapes. ``packed`` is empty for a linear layout or contains
+    ``[packed_shape0..3, packed_stride0..3]`` for a packed layout.
+
+    Downstream passes consume this op without interpreting the producer chain.
+  }];
+  let arguments = (ins
+    AnyTypeOf<[Tla_PtrType, AnyMemRef]>:$base,
+    Index:$row_offset, Index:$col_offset,
+    Index:$stride0, Index:$stride1,
+    Index:$shape0, Index:$shape1,
+    Index:$origin_shape0, Index:$origin_shape1,
+    Variadic<Index>:$packed);
+  let results = (outs Tla_TensorType:$result);
+  let assemblyFormat = [{
+    $base `[` $row_offset `,` $col_offset `,` $stride0 `,` $stride1 `,` $shape0 `,`
+    $shape1 `,` $origin_shape0 `,` $origin_shape1 `]` (`packed` `[` $packed^ `]`)?
+    attr-dict `:` functional-type(operands, results)
+  }];
+  let hasVerifier = 1;
+}
+
 def Tla_MmadOp : Tla_Op<"mmad", []> {
   let summary = "Matrix multiply-accumulate";
   let description = [{

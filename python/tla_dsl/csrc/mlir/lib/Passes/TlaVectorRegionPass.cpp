@@ -12,7 +12,7 @@
 
 namespace tla {
 namespace {
-// ParsedTensorInfo + parseTensorInfo now live in the shared header
+// ParsedTensorInfo + parseTensorInfo live in the shared header
 // Passes/TlaTensorToMemref.h (raw, non-normalized decode). Unqualified uses below
 // resolve to ::tla:: via namespace lookup.
 
@@ -53,15 +53,6 @@ static hivmave::VFLoadOp createVFLoad(OpBuilder &b, Location loc, VectorType vec
 }
 
 
-
-// The full UB tensor that a tile_view chunk views into. tla.load/tla.store
-// operate on per-iteration chunk tile_views; the helper argument is the whole
-// tensor those chunks come from.
-static Value getFullTensorOf(Value tile) {
-  while (auto tileView = tile.getDefiningOp<::tla::TileViewOp>())
-    tile = tileView.getSource();
-  return tile;
-}
 
 static FailureOr<Value> createZeroValue(OpBuilder &builder, Location loc, Type elementType) {
   if (elementType.isF32())
@@ -827,135 +818,6 @@ static FailureOr<Value> createVectorScalarBinaryResult(OpBuilder &b, Location lo
                                   mask);
 }
 
-// Materialize the row-major pitch used to flatten a rank-2 tile_view inside
-// the outlined vector helper. Static pitches become constants. A dynamic pitch
-// must come from the root make_tensor's make_stride and is captured as a helper
-// scalar operand by collectVectorHelperScalarOperands.
-static FailureOr<Value> materializeRowMajorPitchInHelper(OpBuilder &b, Location loc,
-                                                          Value tensor,
-                                                          DenseMap<Value, Value> &valueMap) {
-  auto info = parseTensorInfo(tensor.getType());
-  if (failed(info) || info->strides.size() != 2 || info->strides[1] != 1)
-    return failure();
-  if (info->strides[0] != ShapedType::kDynamic)
-    return b.create<arith::ConstantIndexOp>(loc, info->strides[0]).getResult();
-
-  Value root = getFullTensorOf(tensor);
-  auto makeTensor = root.getDefiningOp<::tla::MakeTensorOp>();
-  if (!makeTensor)
-    return failure();
-  auto makeLayout = makeTensor.getLayout().getDefiningOp<::tla::MakeLayoutOp>();
-  if (!makeLayout)
-    return failure();
-  auto makeStride = makeLayout.getStride().getDefiningOp<::tla::MakeStrideOp>();
-  if (!makeStride || makeStride.getDynElems().size() != 1)
-    return failure();
-
-  Value mapped = lookupOrCloneScalarValue(b, makeStride.getDynElems().front(), valueMap);
-  if (!mapped || !mapped.getType().isIndex())
-    return failure();
-  return mapped;
-}
-
-// Per-iteration element offset of a tile_view chunk, expressed against the
-// helper's (cloned) index arithmetic. Handles both rank-1 and rank-2 coords.
-// For rank-2, computes flat offset = row * rowStride + col.
-static FailureOr<Value> materializeCoordOffsetInHelper(OpBuilder &b, Location loc,
-                                                        ::tla::TileViewOp tileView,
-                                                        DenseMap<Value, Value> &valueMap) {
-  Value coord = tileView.getCoord();
-  auto coordType = dyn_cast<::tla::CoordType>(coord.getType());
-  if (!coordType)
-    return failure();
-  SmallVector<int64_t, 2> leaves;
-  if (failed(::tla::getTlaIndexTreeLeaves(coordType.getTree(), leaves)))
-    return failure();
-
-  if (leaves.size() == 1) {
-    if (leaves[0] != ShapedType::kDynamic)
-      return b.create<arith::ConstantIndexOp>(loc, leaves[0]).getResult();
-    auto makeCoord = coord.getDefiningOp<::tla::MakeCoordOp>();
-    if (!makeCoord || makeCoord.getDynElems().size() != 1)
-      return failure();
-    Value mapped = lookupOrCloneScalarValue(b, *makeCoord.getDynElems().begin(), valueMap);
-    if (!mapped || !mapped.getType().isIndex())
-      return failure();
-    return mapped;
-  }
-
-  if (leaves.size() == 2) {
-    auto info = parseTensorInfo(tileView.getResult().getType());
-    if (failed(info) || info->strides.size() != 2)
-      return failure();
-    // Flattening row-major 2D -> 1D: col-stride must be 1. Row-stride may be the
-    // parent row pitch (static or dynamic, e.g. nRound).
-    if (info->strides[1] != 1)
-      return failure();
-    auto makeCoord = coord.getDefiningOp<::tla::MakeCoordOp>();
-    auto dynElems = makeCoord ? makeCoord.getDynElems() : ValueRange{};
-    unsigned dynIdx = 0;
-    SmallVector<Value, 2> coordVals;
-    for (int64_t leaf : leaves) {
-      if (leaf != ShapedType::kDynamic) {
-        coordVals.push_back(b.create<arith::ConstantIndexOp>(loc, leaf));
-      } else {
-        if (!makeCoord || dynIdx >= dynElems.size())
-          return failure();
-        Value mapped = lookupOrCloneScalarValue(b, dynElems[dynIdx++], valueMap);
-        if (!mapped || !mapped.getType().isIndex())
-          return failure();
-        coordVals.push_back(mapped);
-      }
-    }
-    auto rowStrideOr = materializeRowMajorPitchInHelper(b, loc, tileView.getResult(), valueMap);
-    if (failed(rowStrideOr))
-      return failure();
-    Value rowOffset = b.create<arith::MulIOp>(loc, coordVals[0], *rowStrideOr);
-    return b.create<arith::AddIOp>(loc, rowOffset, coordVals[1]).getResult();
-  }
-
-  return failure();
-}
-
-// Lower a tla.tile_view inside the helper to a 256-byte (lanes-wide) tile of the
-// mapped full-size helper argument, at the chunk's per-iteration element offset.
-static FailureOr<Value> lowerTileViewInHelper(OpBuilder &b, Location loc,
-                                              ::tla::TileViewOp tileView,
-                                              DenseMap<Value, Value> &valueMap) {
-  Value source = valueMap.lookup(getFullTensorOf(tileView.getSource()));
-  if (!source)
-    source = valueMap.lookup(tileView.getSource());
-  if (!source)
-    return tileView.emitError("failed to map tla.tile_view source in vector helper"), failure();
-  auto sourceType = dyn_cast<MemRefType>(source.getType());
-
-  if (!sourceType)
-    return tileView.emitError("expected memref source for vector tile_view"), failure();
-  // The tile is one 256-byte register's worth of the source element type; its
-  // lane count follows that element type, independent of any region width.
-  auto lanesOr = getVectorLaneCount(sourceType.getElementType());
-  if (failed(lanesOr))
-    return tileView.emitError("unsupported element type for vector tile_view"), failure();
-  int64_t lanes = *lanesOr;
-  auto offset = materializeCoordOffsetInHelper(b, loc, tileView, valueMap);
-  if (failed(offset))
-    return tileView.emitError("failed to materialize tile_view coordinate"), failure();
-
-  if (!sourceType || sourceType.getRank() != 1)
-    return tileView.emitError("expected rank-1 memref source for vector tile_view"), failure();
-
-  auto layout =
-      StridedLayoutAttr::get(b.getContext(), ShapedType::kDynamic, ArrayRef<int64_t>{1});
-  auto tileType =
-      MemRefType::get({lanes}, sourceType.getElementType(), layout, sourceType.getMemorySpace());
-  Value size = b.create<arith::ConstantIndexOp>(loc, lanes);
-  Value stride = b.create<arith::ConstantIndexOp>(loc, 1);
-  return b
-      .create<mlir::memref::ReinterpretCastOp>(loc, tileType, source, *offset, ValueRange{size},
-                                               ValueRange{stride})
-      .getResult();
-}
-
 static LogicalResult lowerNestedVectorBlock(Block *sourceBlock, OpBuilder &b, ModuleOp module,
                                             DenseMap<Value, Value> &valueMap);
 
@@ -967,23 +829,45 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
                                          DenseMap<Value, Value> &valueMap) {
   Location loc = op.getLoc();
 
-  // make_shape / make_coord feed only tile_view offsets (recomputed below); map
-  // them to themselves so lookups succeed.
-  if (isa<::tla::MakeShapeOp, ::tla::MakeCoordOp>(op)) {
-    valueMap[op.getResult(0)] = op.getResult(0);
+  // make_shape / make_coord are dead after tla-lower-tensor-desc (their leaves
+  // were folded into tensor_desc operands); skip them. (tla-finalize-memref
+  // erases them.)
+  if (isa<::tla::MakeShapeOp, ::tla::MakeCoordOp>(op))
     return success();
-  }
 
   if (auto constant = dyn_cast<arith::ConstantOp>(op)) {
     valueMap[constant.getResult()] = b.clone(op)->getResult(0);
     return success();
   }
 
-  if (auto tileView = dyn_cast<::tla::TileViewOp>(op)) {
-    auto tile = lowerTileViewInHelper(b, loc, tileView, valueMap);
-    if (failed(tile))
+  // tla.tensor_desc (produced by tla-lower-tensor-desc, the sole descriptor
+  // producer): consume it directly. The descriptor's row_offset / col_offset /
+  // stride0 already encode the tile's position and pitch, so there is no
+  // tile_view -> make_tensor producer chain to re-walk. Carve a lanes-wide
+  // (256-byte) flat subview of the helper's base-memref arg at the flat offset
+  // row_offset * stride0 + col_offset.
+  if (auto descOp = dyn_cast<::tla::TensorDescOp>(op)) {
+    Value baseMemref = valueMap.lookup(descOp.getResult());
+    if (!baseMemref)
+      return descOp.emitError("failed to map tla.tensor_desc base in vector helper"),
+             failure();
+    auto sourceType = dyn_cast<MemRefType>(baseMemref.getType());
+    if (!sourceType || sourceType.getRank() != 1)
+      return descOp.emitError("expected rank-1 base memref for vector tensor_desc"),
+             failure();
+    auto lanesOr = getVectorLaneCount(sourceType.getElementType());
+    if (failed(lanesOr))
+      return descOp.emitError("unsupported element type for vector tensor_desc"),
+             failure();
+    Value rowOff = lookupOrCloneScalarValue(b, descOp.getRowOffset(), valueMap);
+    Value colOff = lookupOrCloneScalarValue(b, descOp.getColOffset(), valueMap);
+    Value stride0 = lookupOrCloneScalarValue(b, descOp.getStride0(), valueMap);
+    if (!rowOff || !colOff || !stride0)
       return failure();
-    valueMap[tileView.getResult()] = *tile;
+    Value flatOffset = b.create<arith::AddIOp>(
+        loc, b.create<arith::MulIOp>(loc, rowOff, stride0), colOff);
+    valueMap[descOp.getResult()] =
+        ::tla::materializeFlatReinterpretSubview(b, loc, baseMemref, flatOffset, *lanesOr);
     return success();
   }
 
@@ -1671,6 +1555,26 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
     return success();
   }
 
+  // Index/scalar arithmetic (arith.*) feeding tensor_desc offset/stride operands:
+  // clone with operands remapped. tla-lower-tensor-desc emits the abs-coord/origin
+  // arithmetic (addi/subi/minsi) for dynamic-coord tile_views; static cases fold
+  // to constants (createOrFold) and are handled by the arith::ConstantOp arm above.
+  if (op.getDialect()->getNamespace() ==
+      arith::ArithDialect::getDialectNamespace()) {
+    IRMapping mapper;
+    for (Value operand : op.getOperands()) {
+      Value mapped = lookupOrCloneScalarValue(b, operand, valueMap);
+      if (!mapped)
+        return failure();
+      mapper.map(operand, mapped);
+    }
+    Operation *cloned = b.clone(op, mapper);
+    for (auto [oldResult, newResult] :
+         llvm::zip(op.getResults(), cloned->getResults()))
+      valueMap[oldResult] = newResult;
+    return success();
+  }
+
   if (op.hasTrait<OpTrait::IsTerminator>())
     return success();
 
@@ -1690,68 +1594,53 @@ static LogicalResult lowerNestedVectorBlock(Block *sourceBlock, OpBuilder &b, Mo
   return success();
 }
 
-// Collect, in body order, the unique full UB tensors that tla.load/tla.store/
-// tla.gather chunks reference. These become the helper's arguments.
+// Add `source` as a helper operand unless one already covers it. A tla.tensor_desc
+// tile is covered by another tensor_desc sharing the same base (different per-lane
+// tiles of one root share a single helper memref arg); a raw memref is covered by
+// itself. tla-lower-tensor-desc is the sole descriptor producer, so every tile
+// source is a tensor_desc (or a raw memref for bridged GM scalar accesses).
+static void addVectorHelperOperand(Value source, SmallVectorImpl<Value> &operands) {
+  if (auto descOp = source.getDefiningOp<::tla::TensorDescOp>()) {
+    Value base = descOp.getBase();
+    for (Value v : operands)
+      if (auto d = v.getDefiningOp<::tla::TensorDescOp>(); d && d.getBase() == base)
+        return;
+    operands.push_back(source);
+    return;
+  }
+  if (!llvm::is_contained(operands, source))
+    operands.push_back(source);
+}
+
+// Collect, in body order, the unique base memrefs that tla.load/tla.store/
+// tla.gather chunks and bridged GM scalar accesses reference. These become the
+// helper's arguments.
 static void collectVectorHelperOperands(Block *block, SmallVectorImpl<Value> &operands) {
   for (Operation &op : block->getOperations()) {
     if (auto loadOp = dyn_cast<::tla::LoadOp>(op)) {
-      Value root = getFullTensorOf(loadOp.getSource());
-      if (!llvm::is_contained(operands, root))
-        operands.push_back(root);
+      addVectorHelperOperand(loadOp.getSource(), operands);
       continue;
     }
     if (auto storeOp = dyn_cast<::tla::StoreOp>(op)) {
-      Value root = getFullTensorOf(storeOp.getDest());
-      if (!llvm::is_contained(operands, root))
-        operands.push_back(root);
+      addVectorHelperOperand(storeOp.getDest(), operands);
       continue;
     }
     if (auto gatherOp = dyn_cast<::tla::GatherOp>(op)) {
-      Value root = getFullTensorOf(gatherOp.getX());
-      if (!llvm::is_contained(operands, root))
-        operands.push_back(root);
+      addVectorHelperOperand(gatherOp.getX(), operands);
       continue;
     }
     // Bridged GM scalar accesses (after tla-lower-scalar-access) appear as memref.load/store.
     if (auto memLoad = dyn_cast<mlir::memref::LoadOp>(op)) {
-      Value mem = memLoad.getMemRef();
-      if (!llvm::is_contained(operands, mem))
-        operands.push_back(mem);
+      addVectorHelperOperand(memLoad.getMemRef(), operands);
       continue;
     }
     if (auto memStore = dyn_cast<mlir::memref::StoreOp>(op)) {
-      Value mem = memStore.getMemRef();
-      if (!llvm::is_contained(operands, mem))
-        operands.push_back(mem);
+      addVectorHelperOperand(memStore.getMemRef(), operands);
       continue;
     }
     for (Region &region : op.getRegions())
       for (Block &nested : region)
         collectVectorHelperOperands(&nested, operands);
-  }
-}
-
-// Collect dynamic row pitches from root make_tensor operands. A pitch is
-// type metadata on tile_view results, so it is not otherwise a direct operand
-// of the outlined vec.func body.
-static void collectRootTensorStrideScalars(Value rootTensor, ::tla::VecFuncOp vecFuncOp,
-                                           SmallVectorImpl<Value> &scalars) {
-  auto makeTensor = rootTensor.getDefiningOp<::tla::MakeTensorOp>();
-  if (!makeTensor)
-    return;
-  auto makeLayout = makeTensor.getLayout().getDefiningOp<::tla::MakeLayoutOp>();
-  if (!makeLayout)
-    return;
-  auto makeStride = makeLayout.getStride().getDefiningOp<::tla::MakeStrideOp>();
-  if (!makeStride)
-    return;
-  for (Value value : makeStride.getDynElems()) {
-    if (!value.getType().isIndex())
-      continue;
-    Region *defRegion = value.getParentRegion();
-    if (defRegion && !vecFuncOp.getBody().isAncestor(defRegion) &&
-        !llvm::is_contained(scalars, value))
-      scalars.push_back(value);
   }
 }
 
@@ -1769,19 +1658,26 @@ static void collectVectorHelperScalarOperands(::tla::VecFuncOp vecFuncOp,
       Type operandType = operand.getType();
       if (!operandType.isIntOrIndex() && !isa<FloatType>(operandType))
         continue;
+      // Index/integer constants defined outside vec.func are cloned inline by
+      // lookupOrCloneScalarValue rather than passed as helper args. This keeps
+      // static tile offsets/strides (now tensor_desc operands, materialized at
+      // function scope by tla-lower-tensor-desc) as constants inside the helper
+      // instead of bloating the helper signature. Float constants are still
+      // passed as args (see the comment above re: vector.broadcast folding).
+      if (operandType.isIntOrIndex() &&
+          operand.getDefiningOp<arith::ConstantOp>())
+        continue;
       Region *defRegion = operand.getParentRegion();
       if (defRegion && !vecFuncOp.getBody().isAncestor(defRegion) &&
           !llvm::is_contained(scalars, operand))
         scalars.push_back(operand);
     }
   });
-  vecFuncOp.walk([&](::tla::TileViewOp tileView) {
-    auto info = parseTensorInfo(tileView.getResult().getType());
-    if (succeeded(info) && info->strides.size() == 2 &&
-        info->strides[0] == ShapedType::kDynamic && info->strides[1] == 1)
-      collectRootTensorStrideScalars(getFullTensorOf(tileView.getResult()), vecFuncOp,
-                                     scalars);
-  });
+  // tla-lower-tensor-desc is the sole descriptor producer: every tile inside
+  // vec.func is a tensor_desc whose stride/offset operands -- and the arith
+  // (addi/subi/minsi) that computes them from the parent's leaves -- are already
+  // captured by the generic walk above. No dedicated tile_view / make_stride
+  // scalar collection is needed.
 }
 
 // Build a vector_region helper for a tla.vec.func body. The helper receives one
@@ -1856,6 +1752,18 @@ static FailureOr<func::FuncOp> buildHelperFunc(ModuleOp module, func::FuncOp par
   // Captured scalars map to their trailing block arguments.
   for (auto [j, scalar] : llvm::enumerate(scalarOperands))
     valueMap[scalar] = entry->getArgument(helperOperands.size() + j);
+  // helperOperands holds one representative tensor_desc per unique base (see
+  // addVectorHelperOperand). Every other vec.func-internal tensor_desc sharing
+  // that base must resolve to the same helper memref arg so the TensorDescOp arm
+  // in lowerNestedVectorOp can map it.
+  DenseMap<Value, Value> baseToArg;
+  for (Value operand : helperOperands)
+    if (auto d = operand.getDefiningOp<::tla::TensorDescOp>())
+      baseToArg[d.getBase()] = valueMap[operand];
+  vecFuncOp.walk([&](::tla::TensorDescOp desc) {
+    if (auto it = baseToArg.find(desc.getBase()); it != baseToArg.end())
+      valueMap[desc.getResult()] = it->second;
+  });
   if (failed(lowerNestedVectorBlock(body, b, module, valueMap))) {
     // Discard the partially-built helper so an unsupported construct fails
     // cleanly (the vec.func is left intact) instead of leaking malformed IR.
@@ -2051,7 +1959,7 @@ public:
       return rewriter.notifyMatchFailure(vecFuncOp, "failed to build vector helper function");
     auto helper = *helperOr;
 
-    // The for/if control flow now lives inside the helper, so this is a single
+    // The for/if control flow lives inside the helper, so this is a single
     // call (passing the full UB memrefs) that replaces the whole vec.func region.
     rewriter.setInsertionPoint(vecFuncOp);
     SmallVector<Value, 8> callOperands;
@@ -2066,12 +1974,15 @@ public:
       if (failed(type))
         return rewriter.notifyMatchFailure(
             vecFuncOp, "failed to type UB memref for vector helper call");
-      // Materialize address-backed make_tensor operands at the call site.
+      // Materialize address-backed tla.tensor_desc operands at the call site.
+      // tla-lower-tensor-desc is the sole descriptor producer, so every helper
+      // operand here is a tensor_desc (raw memrefs were passed through above);
+      // materialize its inttoptr base as a rank-1 helper arg when ptr-backed.
       Value ptr;
-      if (auto mtl = tensor.getDefiningOp<::tla::MakeTensorLikeOp>())
-        ptr = mtl.getPtr();
-      else if (auto mt = tensor.getDefiningOp<::tla::MakeTensorOp>())
-        ptr = mt.getPtr();
+      if (auto descOp = tensor.getDefiningOp<::tla::TensorDescOp>()) {
+        if (llvm::isa<::tla::PtrType>(descOp.getBase().getType()))
+          ptr = descOp.getBase();
+      }
       FailureOr<Value> base = failure();
       if (ptr) {
         if (!ptr.getDefiningOp<::tla::IntToPtrOp>())
@@ -2190,10 +2101,6 @@ public:
 
   LogicalResult matchAndRewrite(::tla::VectorOp vectorOp,
                                 PatternRewriter &rewriter) const override {
-    // Every tla.vector op is a frontend-authored wrapper region; inline its body
-    // into the parent block and erase the wrapper. An empty / region-less wrapper
-    // is simply erased. tla-vector-region is the sole owner of tla.vector
-    // flattening (the finalize pass no longer touches it).
     if (vectorOp->getNumRegions() == 0 || vectorOp.getBody().empty()) {
       rewriter.eraseOp(vectorOp);
       return success();
@@ -2211,8 +2118,12 @@ static void inlineVectorRegionWrappers(func::FuncOp funcOp) {
 
   IRRewriter rewriter(funcOp.getContext());
   for (::tla::VectorOp vectorOp : wrappers) {
-    if (!vectorOp || vectorOp.getBody().empty())
+    if (!vectorOp)
       continue;
+    if (vectorOp->getNumRegions() == 0 || vectorOp.getBody().empty()) {
+      rewriter.eraseOp(vectorOp);
+      continue;
+    }
     Block *body = &vectorOp.getBody().front();
     rewriter.inlineBlockBefore(body, vectorOp->getBlock(), vectorOp->getIterator());
     rewriter.eraseOp(vectorOp);
@@ -2228,9 +2139,9 @@ static void populateTlaToVectorPatterns(RewritePatternSet &patterns, ModuleOp mo
                                           loweredMemrefByValue);
   patterns.add<LowerCopyPattern>(ctx, loweredMemrefByValue);
   // NOTE: no dead-tla-scaffolding DCE here. tla-vector-region lowers ops but
-  // deliberately leaves the momentary tensor / tile_view / ptr-bridge scaffolding
-  // and unrealized casts in place; the downstream cleanup pass (currently
-  // tla-finalize-memref) is responsible for DCE'ing them.
+  // deliberately leaves the momentary tensor / ptr-bridge scaffolding and
+  // unrealized casts in place; the downstream cleanup pass (tla-finalize-memref)
+  // is responsible for DCE'ing them.
 }
 
 // Per-core identity queries (block_idx / block_dim / sub_block_idx) must be
@@ -2285,6 +2196,109 @@ public:
                     ::tla::TlaDialect>();
   }
 
+  // Lower every UB->L1 tla.copy in `funcOp` to its vector-core runtime template
+  // (copy_ubuf_row_major_to_cbuf_zN_*), descriptor-driven and using the shared
+  // copy-route helpers. Reads only the tla.tensor_desc ops materialized by
+  // tla-lower-tensor-desc. No-op if the function has no UB->L1 copy.
+  LogicalResult lowerUbToL1Copies(func::FuncOp funcOp) {
+    Operation *root = funcOp.getOperation();
+    SmallVector<::tla::CopyOp, 4> ubToL1;
+    root->walk([&](::tla::CopyOp op) {
+      if (op->getNumOperands() != 2)
+        return;
+      auto dstInfo = ::tla::decodeTileTypeInfo(op->getOperand(0).getType());
+      auto srcInfo = ::tla::decodeTileTypeInfo(op->getOperand(1).getType());
+      if (succeeded(dstInfo) && succeeded(srcInfo) && srcInfo->addressSpace == "ub" &&
+          dstInfo->addressSpace == "l1")
+        ubToL1.push_back(op);
+    });
+    if (ubToL1.empty())
+      return success();
+
+    ::tla::TlaTensorMemrefLowering lowering;
+    SmallVector<Operation *, 8> toErase;
+    if (failed(::tla::collectMaterializedTensorDescriptors(funcOp, lowering.descriptorByValue)))
+      return failure();
+    auto &descByValue = lowering.descriptorByValue;
+
+    for (::tla::CopyOp op : ubToL1) {
+      if (!op || !op->getBlock())
+        continue;
+      auto dstIt = descByValue.find(op->getOperand(0));
+      auto srcIt = descByValue.find(op->getOperand(1));
+      if (dstIt == descByValue.end() || srcIt == descByValue.end()) {
+        op.emitError() << "missing descriptor for UB->L1 tla.copy operand";
+        return failure();
+      }
+      const TensorDescriptor &dstDesc = dstIt->second;
+      const TensorDescriptor &srcDesc = srcIt->second;
+      PatternRewriter rewriter(op.getContext());
+      rewriter.setInsertionPoint(op);
+      std::string calleeName = ::tla::getCopyRouteCallee(
+          op.getContext(), srcDesc.addrspace, dstDesc.addrspace, srcDesc.layoutTag,
+          dstDesc.layoutTag, srcDesc.elementType, dstDesc.elementType);
+      if (calleeName.empty()) {
+        op.emitError() << "unsupported UB->L1 tla.copy route";
+        return failure();
+      }
+      auto buildRuntimeMemref = [&](const TensorDescriptor &desc) -> FailureOr<Value> {
+        FailureOr<Value> base = ::tla::getOrMaterializeDescriptorBaseMemref(
+            rewriter, op.getLoc(), desc, op.getOperation(), lowering.loweredMemrefByValue);
+        if (failed(base))
+          return failure();
+        auto baseType = dyn_cast<MemRefType>((*base).getType());
+        if (!baseType)
+          return failure();
+        return ::tla::castMemrefToType(rewriter, op.getLoc(), *base,
+                                       ::tla::getDynamicStridedMemrefType(baseType));
+      };
+      FailureOr<Value> srcMemref = buildRuntimeMemref(srcDesc);
+      FailureOr<Value> dstMemref = buildRuntimeMemref(dstDesc);
+      if (failed(srcMemref) || failed(dstMemref))
+        return failure();
+      SmallVector<Value, 20> payload =
+          ::tla::buildCopyPayloadForRoute(rewriter, op.getLoc(), srcDesc, dstDesc);
+      SmallVector<Type, 22> operandTypes = {(*srcMemref).getType(), (*dstMemref).getType()};
+      for (Value v : payload)
+        operandTypes.push_back(v.getType());
+      SmallVector<Value, 22> operands = {*srcMemref, *dstMemref};
+      operands.append(payload.begin(), payload.end());
+      auto callee = ::tla::getOrCreateRuntimeCall(funcOp->getParentOfType<ModuleOp>(), calleeName,
+                                                  operandTypes);
+      rewriter.create<func::CallOp>(op.getLoc(), callee, operands);
+      ::tla::pushStagedErase(toErase, op.getOperation());
+    }
+
+    // Stage dead tensor descriptors that feed only lowered copies, then flush
+    // them with the copies and ptr scaffolding staged by base-memref
+    // materialization. Descriptors still used by vec.func stay.
+    ::tla::stageDeadTensorDescriptors(root, toErase);
+    DenseSet<Operation *> pendingErase;
+    for (Operation *op : toErase)
+      if (op && op->getBlock())
+        pendingErase.insert(op);
+    bool progress = true;
+    while (progress && !pendingErase.empty()) {
+      progress = false;
+      for (Operation *op : toErase) {
+        if (!op || !pendingErase.contains(op) || !op->getBlock())
+          continue;
+        bool hasLiveResultUses = false;
+        for (Value result : op->getResults())
+          if (!result.use_empty()) {
+            hasLiveResultUses = true;
+            break;
+          }
+        if (hasLiveResultUses)
+          continue;
+        pendingErase.erase(op);
+        op->erase();
+        progress = true;
+      }
+    }
+    return success();
+  }
+
   void runOnOperation() override {
     ModuleOp module = getOperation();
 
@@ -2314,10 +2328,13 @@ public:
         return;
       }
       inlineVectorRegionWrappers(funcOp);
-      // Unified lower-once cache: the vector (raw-parse) path uses the same
-      // TlaTensorMemrefLowering::loweredMemrefByValue that the cube (descriptor)
-      // path uses, so both models share a single lower-once mechanism. Fresh per
-      // function, matching the previous per-func handoff cache.
+      // UB->L1 copies are vector-core data movement (bc/Vector); lower them here
+      // from materialized descriptors rather than in the cube pass.
+      if (failed(lowerUbToL1Copies(funcOp))) {
+        signalPassFailure();
+        return;
+      }
+      // Fresh per-function cache for vector-helper memref materialization.
       ::tla::TlaTensorMemrefLowering lowering;
       RewritePatternSet patterns(&getContext());
       populateTlaToVectorPatterns(patterns, module, nextVectorRegionId,
@@ -2328,15 +2345,8 @@ public:
       }
     }
 
-    // Safety net: inline any tla.vector wrappers the per-function loop did not
-    // reach. `module.getOps<func::FuncOp>()` enumerates only the outer module's
-    // direct functions, so functions nested in sub-modules (e.g. a file with more
-    // than one top-level `module {}`, which the parser wraps in an outer module)
-    // are skipped above. tla-vector-region is the sole owner of tla.vector
-    // flattening -- the finalize pass only asserts it is gone -- so sweep the whole
-    // module tree here to inline whatever is left. A leftover wrapper is
-    // frontend-authored scaffolding (barrier-only regions carry no tla.vec.func),
-    // so inlining its body fully lowers it.
+    // `module.getOps<func::FuncOp>()` visits only direct functions. Inline any
+    // wrapper in nested modules so finalize never sees frontend scaffolding.
     SmallVector<::tla::VectorOp, 4> leftover;
     module.walk([&](::tla::VectorOp vectorOp) { leftover.push_back(vectorOp); });
     IRRewriter rewriter(module.getContext());
