@@ -197,14 +197,6 @@ TLA_VERIFY_IN_VEC_FUNC(FullOp)
 TLA_VERIFY_IN_VEC_FUNC(WhereOp)
 TLA_VERIFY_IN_VEC_FUNC(CreateMaskOp)
 TLA_VERIFY_IN_VEC_FUNC(UpdateMaskOp)
-TLA_VERIFY_IN_VEC_FUNC(MaskNotOp)
-TLA_VERIFY_IN_VEC_FUNC(MaskAndOp)
-TLA_VERIFY_IN_VEC_FUNC(MaskOrOp)
-TLA_VERIFY_IN_VEC_FUNC(MaskXorOp)
-TLA_VERIFY_IN_VEC_FUNC(RegNotOp)
-TLA_VERIFY_IN_VEC_FUNC(RegAndOp)
-TLA_VERIFY_IN_VEC_FUNC(RegOrOp)
-TLA_VERIFY_IN_VEC_FUNC(RegXorOp)
 TLA_VERIFY_IN_VEC_FUNC(ExpOp)
 TLA_VERIFY_IN_VEC_FUNC(LogOp)
 TLA_VERIFY_IN_VEC_FUNC(SqrtOp)
@@ -213,6 +205,62 @@ TLA_VERIFY_IN_VEC_FUNC(NegOp)
 TLA_VERIFY_IN_VEC_FUNC(ReduceOp)
 
 #undef TLA_VERIFY_IN_VEC_FUNC
+
+mlir::LogicalResult BitwiseNotOp::verify() {
+  if (!hasEnclosingRegion<VecFuncOp>(getOperation()))
+    return emitOpError("must be nested inside a tla.vec.func region");
+
+  auto operandTensor = mlir::dyn_cast<TlaTensorType>(getOperand().getType());
+  auto resultTensor = mlir::dyn_cast<TlaTensorType>(getResult().getType());
+  bool operandIsTensor = static_cast<bool>(operandTensor);
+  bool resultIsTensor = static_cast<bool>(resultTensor);
+  if (operandIsTensor != resultIsTensor)
+    return emitOpError(
+        "requires operand and result to have the same !tla.tensor or !tla.mask category");
+
+  if (operandIsTensor &&
+      operandTensor.getPtr().getPointee() != resultTensor.getPtr().getPointee())
+    return emitOpError(
+        "requires !tla.tensor operand and result to have identical element types");
+  return mlir::success();
+}
+
+template <typename OpTy>
+static mlir::LogicalResult verifyBitwiseBinaryOp(OpTy op) {
+  if (!hasEnclosingRegion<VecFuncOp>(op.getOperation()))
+    return op.emitOpError("must be nested inside a tla.vec.func region");
+
+  auto lhsTensor = mlir::dyn_cast<TlaTensorType>(op.getLhs().getType());
+  auto rhsTensor = mlir::dyn_cast<TlaTensorType>(op.getRhs().getType());
+  auto resultTensor = mlir::dyn_cast<TlaTensorType>(op.getResult().getType());
+  bool lhsIsTensor = static_cast<bool>(lhsTensor);
+  bool rhsIsTensor = static_cast<bool>(rhsTensor);
+  bool resultIsTensor = static_cast<bool>(resultTensor);
+  if (lhsIsTensor != rhsIsTensor || lhsIsTensor != resultIsTensor)
+    return op.emitOpError(
+        "requires lhs, rhs, and result to have the same !tla.tensor or !tla.mask category");
+
+  if (lhsIsTensor) {
+    mlir::Type lhsElementType = lhsTensor.getPtr().getPointee();
+    if (rhsTensor.getPtr().getPointee() != lhsElementType ||
+        resultTensor.getPtr().getPointee() != lhsElementType)
+      return op.emitOpError(
+          "requires !tla.tensor lhs, rhs, and result to have identical element types");
+  }
+  return mlir::success();
+}
+
+mlir::LogicalResult BitwiseAndOp::verify() {
+  return verifyBitwiseBinaryOp(*this);
+}
+
+mlir::LogicalResult BitwiseOrOp::verify() {
+  return verifyBitwiseBinaryOp(*this);
+}
+
+mlir::LogicalResult BitwiseXorOp::verify() {
+  return verifyBitwiseBinaryOp(*this);
+}
 
 mlir::LogicalResult ArangeOp::verify() {
   if (!hasEnclosingRegion<VecFuncOp>(getOperation()))

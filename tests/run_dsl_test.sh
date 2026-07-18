@@ -14,7 +14,7 @@
 # python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed.py), and
 # python/tla_dsl/examples/end_to_end/basic_mixed (basic_mixed_ub2l1.py).
 # python/tla_dsl/examples/end_to_end/vector_ops (binary_op.py, masked_binary.py,
-# logic_ops.py, reduction_ops.py, compare_mask.py, unary_ops.py, arange_op.py,
+# bitwise_ops.py, reduction_ops.py, compare_mask.py, unary_ops.py, arange_op.py,
 # interleave_op.py, squeeze_op.py).
 # python/tla_dsl/examples/end_to_end/tensor_index (scalar_index_control_flow.py).
 #
@@ -77,7 +77,7 @@ BASIC_VADD_REL="examples/end_to_end/basic_vadd/basic_vadd.py"
 BASIC_MIXED_REL="examples/end_to_end/basic_mixed/basic_mixed.py"
 BASIC_MIXED_UB2L1_REL="examples/end_to_end/basic_mixed/basic_mixed_ub2l1.py"
 MASKED_BINARY_REL="examples/end_to_end/vector_ops/masked_binary.py"
-LOGIC_OPS_REL="examples/end_to_end/vector_ops/logic_ops.py"
+BITWISE_OPS_REL="examples/end_to_end/vector_ops/bitwise_ops.py"
 BINARY_OP_REL="examples/end_to_end/vector_ops/binary_op.py"
 REDUCTION_OPS_REL="examples/end_to_end/vector_ops/reduction_ops.py"
 COMPARE_MASK_REL="examples/end_to_end/vector_ops/compare_mask.py"
@@ -111,7 +111,7 @@ Run end-to-end validation for:
   - basic_mixed (basic_mixed.py --run, basic_mixed_ub2l1.py --run)
   - binary_op (binary_op.py <op> --run --all-dtypes for add/sub/mul/div/max/min/add_unalign/add_brc_b32)
   - masked_binary (masked_binary.py masked_binary --run --all-dtypes)
-  - logic_ops (logic_ops.py logic_ops --run --all-dtypes)
+  - bitwise_ops (bitwise_ops.py bitwise_ops --run --all-dtypes)
   - reduction_ops (reduction_ops.py <op> --run for add/max/min)
   - compare_mask (compare_mask.py <op> --run --all-dtypes for each compare-mask op)
   - unary_ops (unary_ops.py <op> --run --all-dtypes for exp/log/sqrt/abs/neg/masked_unary/masked_abs/masked_neg)
@@ -315,8 +315,8 @@ if [[ ! -f "${TLA_DSL_DIR}/${MASKED_BINARY_REL}" ]]; then
     echo "error: missing ${MASKED_BINARY_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
-if [[ ! -f "${TLA_DSL_DIR}/${LOGIC_OPS_REL}" ]]; then
-    echo "error: missing ${LOGIC_OPS_REL} under ${TLA_DSL_DIR}" >&2
+if [[ ! -f "${TLA_DSL_DIR}/${BITWISE_OPS_REL}" ]]; then
+    echo "error: missing ${BITWISE_OPS_REL} under ${TLA_DSL_DIR}" >&2
     exit 1
 fi
 if [[ ! -f "${TLA_DSL_DIR}/${BINARY_OP_REL}" ]]; then
@@ -417,15 +417,15 @@ _run_masked_binary_case() {
 
 _run_masked_binary_case
 
-_run_logic_ops_case() {
-    echo "==> Running logic_ops validation [all dtypes]: logic_ops --run --all-dtypes --device ${DEVICE_ID}"
+_run_bitwise_ops_case() {
+    echo "==> Running bitwise_ops validation [all dtypes]: bitwise_ops --run --all-dtypes --device ${DEVICE_ID}"
     (
         cd "${TLA_DSL_DIR}"
-        python "${LOGIC_OPS_REL}" logic_ops --run --all-dtypes --device "${DEVICE_ID}"
+        python "${BITWISE_OPS_REL}" bitwise_ops --run --all-dtypes --device "${DEVICE_ID}"
     )
 }
 
-_run_logic_ops_case
+_run_bitwise_ops_case
 
 _run_binary_op_case() {
     local op="$1"

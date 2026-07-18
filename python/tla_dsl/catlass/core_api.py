@@ -3809,6 +3809,7 @@ def _emit_vector_binary_or_scalar(
 _FLOAT_UNARY_ELEMENT_TYPES = frozenset({"f16", "f32"})
 _INTEGER_ABS_ELEMENT_TYPES = frozenset({"i8", "i16", "i32"})
 _ABS_ELEMENT_TYPES = _FLOAT_UNARY_ELEMENT_TYPES | _INTEGER_ABS_ELEMENT_TYPES
+_BITWISE_UNARY_TYPES = _ABS_ELEMENT_TYPES
 
 
 def _emit_vector_unary(
@@ -3833,7 +3834,7 @@ def _emit_vector_unary(
                 f"tla.{op_name} requires f16 or f32 element type, "
                 f"got {element_type}",
             )
-    elif op_name in {"abs", "neg", "not_"} and element_type not in _ABS_ELEMENT_TYPES:
+    elif op_name in {"abs", "neg"} and element_type not in _ABS_ELEMENT_TYPES:
         _op_error(
             op_name,
             f"tla.{op_name} requires f16/f32 or i8/i16/i32 element type, "
@@ -3967,21 +3968,15 @@ def deinterleave(
 
 
 @dsl_user_op
-def not_(
+def bitwise_not(
     operand: Any,
     *,
     mask: MaskSSA | None = None,
     loc: mlir_ir.Location | None = None,
-) -> VectorSSA:
-    if _category(operand) == "mask_ssa":
-        if mask is None:
-            _op_error("not_", "missing required mask operand")
-        return _emit_mask_logic_unary(
-            "not_", _tla_ops_gen.mask_not, operand, mask, loc=loc
-        )
-    return _emit_vector_unary(
-        "not_",
-        _tla_ops_gen.reg_not,
+) -> MaskSSA | VectorSSA:
+    return _emit_bitwise_unary(
+        "bitwise_not",
+        _tla_ops_gen.bitwise_not,
         operand,
         mask=mask,
         loc=loc,
@@ -4224,40 +4219,87 @@ def squeeze(
     return VectorSSA(result)
 
 
-def _emit_mask_logic_unary(
+def _emit_bitwise_unary(
     op_name: str,
     emitter: Any,
-    src_reg: MaskSSA,
-    mask: MaskSSA,
+    operand: Any,
     *,
+    mask: MaskSSA | None = None,
     loc: mlir_ir.Location | None = None,
-) -> MaskSSA:
-    _require_category(op_name, "src_reg", src_reg, "mask_ssa", 0)
-    _require_category(op_name, "mask", mask, "mask_ssa", 1)
+) -> MaskSSA | VectorSSA:
+    operand_category = _category(operand)
+    expected = ("mask_ssa", "vector_ssa")
+    if operand_category not in expected:
+        _require_categories(op_name, "operand", operand, expected, 0)
+    if mask is not None:
+        _require_category(op_name, "mask", mask, "mask_ssa", 1)
     _require_frontend_state(op_name)
     _runtime._require_enclosing_region(op_name, "vec.func")
-    mask_ty = mlir_ir.Type.parse("!tla.mask")
-    return MaskSSA(emitter(mask_ty, _as_value(src_reg), _as_value(mask), loc=loc))
+    operand_value = _as_value(operand)
+    mask_value = _as_value(mask) if mask is not None else None
+    if operand_category == "mask_ssa":
+        return MaskSSA(
+            emitter(operand_value.type, operand_value, mask=mask_value, loc=loc)
+        )
 
-
-def _emit_mask_logic_binary(
-    op_name: str,
-    emitter: Any,
-    src0_reg: MaskSSA,
-    src1_reg: MaskSSA,
-    mask: MaskSSA,
-    *,
-    loc: mlir_ir.Location | None = None,
-) -> MaskSSA:
-    _require_category(op_name, "src0_reg", src0_reg, "mask_ssa", 0)
-    _require_category(op_name, "src1_reg", src1_reg, "mask_ssa", 1)
-    _require_category(op_name, "mask", mask, "mask_ssa", 2)
-    _require_frontend_state(op_name)
-    _runtime._require_enclosing_region(op_name, "vec.func")
-    mask_ty = mlir_ir.Type.parse("!tla.mask")
-    return MaskSSA(
-        emitter(mask_ty, _as_value(src0_reg), _as_value(src1_reg), _as_value(mask), loc=loc)
+    result_desc = _tla_tensor_type_for_mlir_value(operand_value)
+    element_type = str(result_desc.element_type)
+    if element_type not in _BITWISE_UNARY_TYPES:
+        _op_error(
+            op_name,
+            f"tla.{op_name} requires f16/f32 or i8/i16/i32 element type, "
+            f"got {element_type}",
+        )
+    result = emitter(
+        operand_value.type,
+        operand_value,
+        mask=mask_value,
+        loc=loc,
     )
+    _register_tla_tensor_type(result, result_desc)
+    return VectorSSA(result)
+
+
+def _emit_bitwise_binary(
+    op_name: str,
+    emitter: Any,
+    src0_reg: Any,
+    src1_reg: Any,
+    *,
+    mask: Any | None = None,
+    loc: mlir_ir.Location | None = None,
+) -> MaskSSA | VectorSSA:
+    src0_category = _category(src0_reg)
+    src1_category = _category(src1_reg)
+    expected = ("mask_ssa", "vector_ssa")
+    if src0_category not in expected:
+        _require_categories(op_name, "src0_reg", src0_reg, expected, 0)
+    if src1_category not in expected:
+        _require_categories(op_name, "src1_reg", src1_reg, expected, 1)
+    if src0_category != src1_category:
+        _op_error(
+            op_name,
+            "src0_reg and src1_reg must both be MaskReg values or both be RegTensor values",
+        )
+    if mask is not None:
+        _require_category(op_name, "mask", mask, "mask_ssa", 2)
+    _require_frontend_state(op_name)
+    _runtime._require_enclosing_region(op_name, "vec.func")
+    src0_value = _as_value(src0_reg)
+    mask_value = _as_value(mask) if mask is not None else None
+    result = emitter(
+        src0_value.type,
+        src0_value,
+        _as_value(src1_reg),
+        mask=mask_value,
+        loc=loc,
+    )
+    if src0_category == "mask_ssa":
+        return MaskSSA(result)
+
+    result_desc = _tla_tensor_type_for_mlir_value(src0_value)
+    _register_tla_tensor_type(result, result_desc)
+    return VectorSSA(result)
 
 
 def _tla_mask_type(context: mlir_ir.Context) -> mlir_ir.Type:
@@ -4313,95 +4355,59 @@ def cmp(
 
 
 @dsl_user_op
-def and_(
+def bitwise_and(
     src0_reg: Any,
     src1_reg: Any,
-    mask: Any,
     *,
+    mask: Any | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> MaskSSA | VectorSSA:
-    """Emit element-wise logical AND for MaskReg or RegTensor SSA values."""
-    src0_category = _category(src0_reg)
-    src1_category = _category(src1_reg)
-    if src0_category == "mask_ssa" and src1_category == "mask_ssa":
-        return _emit_mask_logic_binary(
-            "and_", _tla_ops_gen.mask_and, src0_reg, src1_reg, mask, loc=loc
-        )
-    if src0_category == "vector_ssa" and src1_category == "vector_ssa":
-        _require_category("and_", "mask", mask, "mask_ssa", 2)
-        return _emit_vector_binary(
-            "and_", _tla_ops_gen.reg_and, src0_reg, src1_reg, mask=mask, loc=loc
-        )
-    expected = ("mask_ssa", "vector_ssa")
-    if src0_category not in expected:
-        _require_categories("and_", "src0_reg", src0_reg, expected, 0)
-    if src1_category not in expected:
-        _require_categories("and_", "src1_reg", src1_reg, expected, 1)
-    _op_error(
-        "and_",
-        "src0_reg and src1_reg must both be MaskReg values or both be RegTensor values",
+    """Emit element-wise bitwise AND for MaskReg or RegTensor SSA values."""
+    return _emit_bitwise_binary(
+        "bitwise_and",
+        _tla_ops_gen.bitwise_and,
+        src0_reg,
+        src1_reg,
+        mask=mask,
+        loc=loc,
     )
 
 
 @dsl_user_op
-def or_(
+def bitwise_or(
     src0_reg: Any,
     src1_reg: Any,
-    mask: Any,
     *,
+    mask: Any | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> MaskSSA | VectorSSA:
-    """Emit element-wise logical OR for MaskReg or RegTensor SSA values."""
-    src0_category = _category(src0_reg)
-    src1_category = _category(src1_reg)
-    if src0_category == "mask_ssa" and src1_category == "mask_ssa":
-        return _emit_mask_logic_binary(
-            "or_", _tla_ops_gen.mask_or, src0_reg, src1_reg, mask, loc=loc
-        )
-    if src0_category == "vector_ssa" and src1_category == "vector_ssa":
-        _require_category("or_", "mask", mask, "mask_ssa", 2)
-        return _emit_vector_binary(
-            "or_", _tla_ops_gen.reg_or, src0_reg, src1_reg, mask=mask, loc=loc
-        )
-    expected = ("mask_ssa", "vector_ssa")
-    if src0_category not in expected:
-        _require_categories("or_", "src0_reg", src0_reg, expected, 0)
-    if src1_category not in expected:
-        _require_categories("or_", "src1_reg", src1_reg, expected, 1)
-    _op_error(
-        "or_",
-        "src0_reg and src1_reg must both be MaskReg values or both be RegTensor values",
+    """Emit element-wise bitwise OR for MaskReg or RegTensor SSA values."""
+    return _emit_bitwise_binary(
+        "bitwise_or",
+        _tla_ops_gen.bitwise_or,
+        src0_reg,
+        src1_reg,
+        mask=mask,
+        loc=loc,
     )
 
 
 @dsl_user_op
-def xor(
+def bitwise_xor(
     src0_reg: Any,
     src1_reg: Any,
-    mask: Any,
     *,
+    mask: Any | None = None,
     loc: mlir_ir.Location | None = None,
 ) -> MaskSSA | VectorSSA:
-    """Emit element-wise logical XOR for MaskReg or RegTensor SSA values."""
-    src0_category = _category(src0_reg)
-    src1_category = _category(src1_reg)
-    if src0_category == "mask_ssa" and src1_category == "mask_ssa":
-        return _emit_mask_logic_binary(
-            "xor", _tla_ops_gen.mask_xor, src0_reg, src1_reg, mask, loc=loc
-        )
-    if src0_category == "vector_ssa" and src1_category == "vector_ssa":
-        _require_category("xor", "mask", mask, "mask_ssa", 2)
-        return _emit_vector_binary(
-            "xor", _tla_ops_gen.reg_xor, src0_reg, src1_reg, mask=mask, loc=loc
-        )
-    expected = ("mask_ssa", "vector_ssa")
-    if src0_category not in expected:
-        _require_categories("xor", "src0_reg", src0_reg, expected, 0)
-    if src1_category not in expected:
-        _require_categories("xor", "src1_reg", src1_reg, expected, 1)
-    _op_error(
-        "xor",
-        "src0_reg and src1_reg must both be MaskReg values or both be RegTensor values",
+    """Emit element-wise bitwise XOR for MaskReg or RegTensor SSA values."""
+    return _emit_bitwise_binary(
+        "bitwise_xor",
+        _tla_ops_gen.bitwise_xor,
+        src0_reg,
+        src1_reg,
+        mask=mask,
+        loc=loc,
     )
 
 
@@ -4681,14 +4687,10 @@ _require_generated("mins")
 _require_generated("div")
 _require_generated("where")
 _require_generated("squeeze")
-_require_generated("mask_not")
-_require_generated("mask_and")
-_require_generated("mask_or")
-_require_generated("mask_xor")
-_require_generated("reg_not")
-_require_generated("reg_and")
-_require_generated("reg_or")
-_require_generated("reg_xor")
+_require_generated("bitwise_not")
+_require_generated("bitwise_and")
+_require_generated("bitwise_or")
+_require_generated("bitwise_xor")
 _require_generated("divs")
 _require_generated("reduce")
 _require_generated("interleave")
@@ -4911,10 +4913,10 @@ __all__ = [
     "div",
     "where",
     "squeeze",
-    "not_",
-    "and_",
-    "or_",
-    "xor",
+    "bitwise_not",
+    "bitwise_and",
+    "bitwise_or",
+    "bitwise_xor",
     "exp",
     "log",
     "sqrt",

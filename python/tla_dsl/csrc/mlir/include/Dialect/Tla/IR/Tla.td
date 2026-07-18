@@ -907,56 +907,61 @@ def Tla_UpdateMaskOp : Tla_Op<"update_mask", [Pure]> {
   let hasVerifier = 1;
 }
 
-class Tla_MaskUnaryOp<string mnemonic, string opSummary, string opDescription>
+class Tla_BitwiseUnaryOp<string mnemonic, string opSummary, string opDescription>
     : Tla_Op<mnemonic, [Pure]> {
   let summary = opSummary;
   let description = opDescription # [{
 
     The ``mask`` operand predicates which lanes are computed; masked-out lanes
-    are undefined/zeroed.
+    are undefined/zeroed. When omitted, all lanes are active.
   }];
-  let arguments = (ins Tla_MaskType:$src, Tla_MaskType:$mask);
-  let results = (outs Tla_MaskType:$result);
+  let arguments = (ins AnyTypeOf<[Tla_TensorType, Tla_MaskType]>:$operand,
+                       Optional<Tla_MaskType>:$mask);
+  let results = (outs AnyTypeOf<[Tla_TensorType, Tla_MaskType]>:$result);
   let assemblyFormat = [{
-    $src `,` $mask attr-dict `:`
-    qualified(type($src)) `,` qualified(type($mask)) `->` qualified(type($result))
-  }];
-  let hasVerifier = 1;
-}
-
-class Tla_MaskBinaryOp<string mnemonic, string opSummary, string opDescription>
-    : Tla_Op<mnemonic, [Pure]> {
-  let summary = opSummary;
-  let description = opDescription # [{
-
-    The ``mask`` operand predicates which lanes are computed; masked-out lanes
-    are undefined/zeroed.
-  }];
-  let arguments = (ins Tla_MaskType:$lhs, Tla_MaskType:$rhs, Tla_MaskType:$mask);
-  let results = (outs Tla_MaskType:$result);
-  let assemblyFormat = [{
-    $lhs `,` $rhs `,` $mask attr-dict `:`
-    qualified(type($lhs)) `,` qualified(type($rhs)) `,` qualified(type($mask))
+    $operand (`mask` $mask^)? attr-dict `:`
+    qualified(type($operand)) (`mask` qualified(type($mask))^)?
     `->` qualified(type($result))
   }];
   let hasVerifier = 1;
 }
 
-def Tla_MaskNotOp : Tla_MaskUnaryOp<"mask_not",
-    "Predicate mask NOT",
-    "Element-wise logical NOT on predicate masks.">;
+class Tla_BitwiseBinaryOp<string mnemonic, string opSummary, string opDescription>
+    : Tla_Op<mnemonic, [Pure]> {
+  let summary = opSummary;
+  let description = opDescription # [{
 
-def Tla_MaskAndOp : Tla_MaskBinaryOp<"mask_and",
-    "Predicate mask AND",
-    "Element-wise logical AND on predicate masks.">;
+    The ``mask`` operand predicates which lanes are computed; masked-out lanes
+    are undefined/zeroed. When omitted, all lanes are active.
+  }];
+  let arguments = (ins AnyTypeOf<[Tla_TensorType, Tla_MaskType]>:$lhs,
+                       AnyTypeOf<[Tla_TensorType, Tla_MaskType]>:$rhs,
+                       Optional<Tla_MaskType>:$mask);
+  let results = (outs AnyTypeOf<[Tla_TensorType, Tla_MaskType]>:$result);
+  let assemblyFormat = [{
+    $lhs `,` $rhs (`mask` $mask^)? attr-dict `:`
+    qualified(type($lhs)) `,` qualified(type($rhs))
+    (`mask` qualified(type($mask))^)?
+    `->` qualified(type($result))
+  }];
+  let hasVerifier = 1;
+}
 
-def Tla_MaskOrOp : Tla_MaskBinaryOp<"mask_or",
-    "Predicate mask OR",
-    "Element-wise logical OR on predicate masks.">;
+def Tla_BitwiseNotOp : Tla_BitwiseUnaryOp<"bitwise_not",
+    "Element-wise bitwise NOT",
+    "Element-wise bitwise NOT on MaskReg or RegTensor values.">;
 
-def Tla_MaskXorOp : Tla_MaskBinaryOp<"mask_xor",
-    "Predicate mask XOR",
-    "Element-wise logical XOR on predicate masks.">;
+def Tla_BitwiseAndOp : Tla_BitwiseBinaryOp<"bitwise_and",
+    "Element-wise bitwise AND",
+    "Element-wise bitwise AND on MaskReg or RegTensor values.">;
+
+def Tla_BitwiseOrOp : Tla_BitwiseBinaryOp<"bitwise_or",
+    "Element-wise bitwise OR",
+    "Element-wise bitwise OR on MaskReg or RegTensor values.">;
+
+def Tla_BitwiseXorOp : Tla_BitwiseBinaryOp<"bitwise_xor",
+    "Element-wise bitwise XOR",
+    "Element-wise bitwise XOR on MaskReg or RegTensor values.">;
 
 def Tla_CmpOp : Tla_Op<"cmp", [Pure]> {
   let summary = "Create a mask by comparing a vector with a vector or scalar";
@@ -1243,22 +1248,6 @@ def Tla_AbsOp : Tla_VectorUnaryOp<"abs",
 def Tla_NegOp : Tla_VectorUnaryOp<"neg",
     "Vector negate for tensor fragments",
     "Element-wise negate on tensor fragments / vector tiles.">;
-
-def Tla_RegNotOp : Tla_VectorUnaryOp<"reg_not",
-    "RegTensor bitwise NOT",
-    "Element-wise bitwise NOT on RegTensor values.">;
-
-def Tla_RegAndOp : Tla_VectorBinaryOp<"reg_and",
-    "RegTensor bitwise AND",
-    "Element-wise bitwise AND on RegTensor values.">;
-
-def Tla_RegOrOp : Tla_VectorBinaryOp<"reg_or",
-    "RegTensor bitwise OR",
-    "Element-wise bitwise OR on RegTensor values.">;
-
-def Tla_RegXorOp : Tla_VectorBinaryOp<"reg_xor",
-    "RegTensor bitwise XOR",
-    "Element-wise bitwise XOR on RegTensor values.">;
 
 def Tla_VectorOp : Tla_Op<"vector", [NoTerminator, SingleBlock]> {
   let summary = "Vector region";

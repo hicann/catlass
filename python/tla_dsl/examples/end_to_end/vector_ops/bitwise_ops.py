@@ -20,11 +20,11 @@ ALL_DTYPES = ("f16", "bf16", "f32", "i32", "i16", "i8")
 _KERNEL_DTYPE = tla.Int32
 _KERNEL_ELEMENT_BYTES = 4
 _KERNEL_SHAPE = (VECTOR_ELE,)
-_REG_NOT_SUPPORTED = True
+_SUPPORTS_REG_NOT = True
 
 
 @tla.kernel
-def logic_ops(
+def bitwise_ops(
     mem_a: tla.Tensor,
     mem_b: tla.Tensor,
     mem_mask_not: tla.Tensor,
@@ -70,7 +70,7 @@ def logic_ops(
         tla.set_flag(ub_loaded)
         tla.wait_flag(ub_loaded)
         with tla.vec.func(mode="simd"):
-            if _REG_NOT_SUPPORTED:
+            if _SUPPORTS_REG_NOT:
                 remaining = VECTOR_ELE
                 for i in tla.range(LOOPS):
                     a_t = _chunk(a_ub, i)
@@ -91,16 +91,16 @@ def logic_ops(
                     m_q = tla.create_mask(pattern=tla.mask.Q, dtype=_KERNEL_DTYPE)
                     m_m4 = tla.create_mask(pattern=tla.mask.M4, dtype=_KERNEL_DTYPE)
 
-                    reg_not = tla.not_(av, mask=tail)
-                    zero = tla.and_(av, reg_not, tail)
-                    reg_and = tla.and_(av, bv, tail)
-                    reg_or = tla.or_(av, bv, tail)
-                    reg_xor = tla.xor(av, bv, tail)
+                    reg_not = tla.bitwise_not(av, mask=tail)
+                    zero = tla.bitwise_and(av, reg_not)
+                    reg_and = tla.bitwise_and(av, bv, mask=tail)
+                    reg_or = tla.bitwise_or(av, bv)
+                    reg_xor = tla.bitwise_xor(av, bv, mask=tail)
 
-                    mask_not = tla.not_(m_q, mask=tail)
-                    mask_and = tla.and_(m_h, m_m4, tail)
-                    mask_or = tla.or_(m_q, m_m4, tail)
-                    mask_xor = tla.xor(m_h, m_m4, tail)
+                    mask_not = tla.bitwise_not(m_q)
+                    mask_and = tla.bitwise_and(m_h, m_m4, mask=tail)
+                    mask_or = tla.bitwise_or(m_q, m_m4)
+                    mask_xor = tla.bitwise_xor(m_h, m_m4, mask=tail)
 
                     mask_not_t.store(tla.where(mask_not, av, zero), mask=tail)
                     mask_and_t.store(tla.where(mask_and, av, zero), mask=tail)
@@ -132,14 +132,14 @@ def logic_ops(
                     m_m4 = tla.create_mask(pattern=tla.mask.M4, dtype=_KERNEL_DTYPE)
 
                     zero = tla.sub(av, av)
-                    reg_and = tla.and_(av, bv, tail)
-                    reg_or = tla.or_(av, bv, tail)
-                    reg_xor = tla.xor(av, bv, tail)
+                    reg_and = tla.bitwise_and(av, bv, mask=tail)
+                    reg_or = tla.bitwise_or(av, bv)
+                    reg_xor = tla.bitwise_xor(av, bv, mask=tail)
 
-                    mask_not = tla.not_(m_q, mask=tail)
-                    mask_and = tla.and_(m_h, m_m4, tail)
-                    mask_or = tla.or_(m_q, m_m4, tail)
-                    mask_xor = tla.xor(m_h, m_m4, tail)
+                    mask_not = tla.bitwise_not(m_q, mask=tail)
+                    mask_and = tla.bitwise_and(m_h, m_m4, mask=tail)
+                    mask_or = tla.bitwise_or(m_q, m_m4)
+                    mask_xor = tla.bitwise_xor(m_h, m_m4, mask=tail)
 
                     mask_not_t.store(tla.where(mask_not, av, zero), mask=tail)
                     mask_and_t.store(tla.where(mask_and, av, zero), mask=tail)
@@ -178,7 +178,7 @@ def _chunk(tensor: Any, chunk_idx: Any) -> Any:
 
 
 def _operator_specs() -> dict[str, dict[str, Any]]:
-    return {"logic_ops": {"default_atol": 0}}
+    return {"bitwise_ops": {"default_atol": 0}}
 
 
 def _is_unsupported_case(op_name: str, dtype_name: str) -> bool:
@@ -195,9 +195,9 @@ def _set_kernel_config(
     op_name: str, dtype_name: str, shape: tuple[int, ...] | None = None
 ) -> tuple[type[Any], Any, float | int]:
     global VL_ELE, LOOPS, VECTOR_ELE, _KERNEL_DTYPE, _KERNEL_ELEMENT_BYTES
-    global _KERNEL_SHAPE, _REG_NOT_SUPPORTED
+    global _KERNEL_SHAPE, _SUPPORTS_REG_NOT
     if op_name not in _operator_specs():
-        raise SystemExit("unknown logic operator")
+        raise SystemExit("unknown bitwise operator")
     config = vector_kernel_config(dtype_name, shape, ALL_DTYPES)
     VECTOR_ELE = config.vector_elements
     _KERNEL_SHAPE = shape if shape is not None else (VECTOR_ELE,)
@@ -205,7 +205,7 @@ def _set_kernel_config(
     LOOPS = config.loops
     _KERNEL_DTYPE = config.tla_dtype
     _KERNEL_ELEMENT_BYTES = config.element_bytes
-    _REG_NOT_SUPPORTED = dtype_name != "bf16"
+    _SUPPORTS_REG_NOT = dtype_name != "bf16"
     return config.tla_dtype, config.torch_dtype, config.default_sentinel
 
 
@@ -270,7 +270,7 @@ def _expected(op_name: str, inputs: tuple[Any, ...]) -> tuple[Any, ...]:
         _select(torch, a, h & m4),
         _select(torch, a, q | m4),
         _select(torch, a, h ^ m4),
-        _bitwise_unary(torch, a) if _REG_NOT_SUPPORTED else a,
+        _bitwise_unary(torch, a) if _SUPPORTS_REG_NOT else a,
         _bitwise_binary(torch, torch.bitwise_and, a, b),
         _bitwise_binary(torch, torch.bitwise_or, a, b),
         _bitwise_binary(torch, torch.bitwise_xor, a, b),
@@ -279,8 +279,8 @@ def _expected(op_name: str, inputs: tuple[Any, ...]) -> tuple[Any, ...]:
 
 HARNESS = DirectVectorOpHarness(
     DirectVectorOpConfig(
-        description="Compile and run predicate-mask and RegTensor logic kernels.",
-        kernel=logic_ops,
+        description="Compile and run predicate-mask and RegTensor bitwise kernels.",
+        kernel=bitwise_ops,
         all_dtypes=ALL_DTYPES,
         operator_specs=_operator_specs,
         set_kernel_config=_set_kernel_config,
@@ -292,7 +292,7 @@ HARNESS = DirectVectorOpHarness(
         unsupported_case=_is_unsupported_case,
         print_skip=_print_skip,
         script_path=Path(__file__),
-        env_compile_jobs="TLADSL_LOGIC_OPS_COMPILE_JOBS",
+        env_compile_jobs="TLADSL_BITWISE_OPS_COMPILE_JOBS",
         float_dtypes=frozenset({"f16", "bf16", "f32"}),
         output_count=8,
     )
