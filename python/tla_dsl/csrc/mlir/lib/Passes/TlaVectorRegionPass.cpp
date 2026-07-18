@@ -30,6 +30,15 @@ static hivmave::VFPltOp createAvePltMask(OpBuilder &b, Location loc, VectorType 
   return b.create<hivmave::VFPltOp>(loc, maskType, b.getIndexType(), trueShape);
 }
 
+static LogicalResult lowerLocalMemBar(OpBuilder &b, ::tla::LocalMemBarOp op) {
+  int64_t barrierKind = op.getBarrierKind();
+  if (barrierKind < 0 || barrierKind > 11)
+    return op.emitError("barrier_kind ") << barrierKind << " is out of range [0, 11]";
+  Value encoded = b.create<arith::ConstantIntOp>(op.getLoc(), barrierKind, 32);
+  b.create<hivmave::VFMemBarOp>(op.getLoc(), encoded);
+  return success();
+}
+
 static hivmave::LoadDist mapTlaLoadDistToAve(::LoadDist dist) {
   switch (dist) {
   case ::LoadDist::norm:
@@ -839,6 +848,13 @@ static LogicalResult lowerNestedVectorOp(Operation &op, OpBuilder &b, ModuleOp m
                      loadOp.getUnalignedUbAccess().value_or(false))
             .getRes();
     return success();
+  }
+
+  // Preserve local-memory ordering while outlining a vec.func into its AVE
+  // helper. Every operation in the source region must be recreated explicitly;
+  // otherwise helper construction fails and leaves the whole vec.func behind.
+  if (auto localMemBarOp = dyn_cast<::tla::LocalMemBarOp>(op)) {
+    return lowerLocalMemBar(b, localMemBarOp);
   }
 
   // tla.cast: element-type conversion. The source vector already carries its
@@ -2163,6 +2179,23 @@ public:
       Block *body = &vectorOp.getBody().front();
       rewriter.inlineBlockBefore(body, vectorOp->getBlock(), vectorOp->getIterator());
       rewriter.eraseOp(vectorOp);
+    }
+
+    // Barrier-only vec.func regions are inlined rather than outlined, and raw
+    // TLAIR may place local barriers directly in a vector wrapper. Lower those
+    // remaining operations here as well so this pass is the single owner of
+    // tla.local_mem_bar lowering.
+    SmallVector<::tla::LocalMemBarOp, 4> localMemBars;
+    module.walk([&](::tla::LocalMemBarOp op) { localMemBars.push_back(op); });
+    for (::tla::LocalMemBarOp op : localMemBars) {
+      if (!op->getBlock())
+        continue;
+      rewriter.setInsertionPoint(op);
+      if (failed(lowerLocalMemBar(rewriter, op))) {
+        signalPassFailure();
+        return;
+      }
+      rewriter.eraseOp(op);
     }
   }
 
